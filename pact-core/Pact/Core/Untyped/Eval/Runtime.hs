@@ -32,6 +32,8 @@ module Pact.Core.Untyped.Eval.Runtime
  , MonadCEKEnv(..)
  , CondFrame(..)
  , MonadCEK
+ , Closure(..)
+ , EvalResult(..)
  ) where
 
 
@@ -72,6 +74,10 @@ type CEKEnv b i m = RAList (CEKValue b i m)
 -- | List of builtins
 type BuiltinEnv b i m = b -> BuiltinFn b i m
 
+data Closure b i m =
+  Closure !(EvalTerm b i) !(CEKEnv b i m)
+  deriving Show
+
 -- | The type of our semantic runtime values
 data CEKValue b i m
   = VLiteral !Literal
@@ -79,8 +85,13 @@ data CEKValue b i m
   | VClosure !(EvalTerm b i) !(CEKEnv b i m)
   | VNative !(BuiltinFn b i m)
   | VGuard !(Guard FullyQualifiedName (CEKValue b i m))
-  | VError !Text
+  -- | VError !Text
   deriving (Show)
+
+data EvalResult b i m
+  = EvalValue (CEKValue b i m)
+  | VError Text
+  deriving Show
 
 type MonadCEK b i m = (MonadCEKEnv b i m, MonadError (PactError i) m, Default i)
 
@@ -138,6 +149,13 @@ data CondFrame b i
   | IfFrame (EvalTerm b i) (EvalTerm b i)
   deriving Show
 
+data ApplyOp b i m
+  = FoldArg (CEKEnv b i m) (EvalTerm b i) (EvalTerm b i)
+  | FoldInitial (CEKEnv b i m) (Closure b i m) (EvalTerm b i)
+  | FoldApply (CEKEnv b i m) (Closure b i m) [EvalTerm b i] [CEKValue b i m]
+  | MapArg (CEKEnv b i m) (EvalTerm b i)
+  | MapApply 
+
 data Cont b i m
   = Fn (CEKValue b i m) (Cont b i m)
   | Arg (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
@@ -191,8 +209,8 @@ instance (Show i, Show b, Pretty b) => Pretty (CEKValue b i m) where
     VNative b ->
       P.angles $ "native" <+> pretty b
     VGuard _ -> P.angles "guard#"
-    VError e ->
-      ("error " <> pretty e)
+    -- VError e ->
+    --   ("error " <> pretty e)
 
 makeLenses ''CEKRuntimeEnv
 

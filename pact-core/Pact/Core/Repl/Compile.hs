@@ -7,15 +7,10 @@
 
 module Pact.Core.Repl.Compile
  ( InterpretOutput(..)
---  , interpretExprNew
---  , interpretProgramNew
---  , interpretProgramFileNew
  , interpretExprLisp
  , interpretProgramLisp
  , interpretProgramFileLisp
---  , newInterpretBundle
  , lispInterpretBundle
---  , interpretExprTypeNew
  , interpretExprTypeLisp
  , InterpretBundle(..)
  ) where
@@ -54,6 +49,7 @@ import qualified Pact.Core.Syntax.Lisp.Parser as Lisp
 data InterpretOutput b i
   = InterpretValue (CEKValue b i (ReplEvalM ReplCoreBuiltin LineInfo))
   | InterpretLog Text
+  | InterpretError Text
   deriving Show
 
 -- | Auxiliary type
@@ -141,7 +137,7 @@ interpretProgramLisp source = do
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ Lisp.parseProgram lexx
-  let f a = runDesugarTopLevelLisp Proxy pactdb loaded a
+  let f = runDesugarTopLevelLisp Proxy pactdb loaded
   traverse (f >=> interpretTopLevel) parsed
 
 interpretTopLevel
@@ -179,7 +175,11 @@ interpretTopLevel (DesugarOutput desugared loaded deps) = do
                  , _cekLoaded = _loAllLoaded loaded
                  , _cekGasModel = freeGasEnv }
           rState = ReplEvalState cekEnv
-      value <- liftEither =<< liftIO (runReplCEK rEnv rState resolved)
-      replLoaded .= loaded
-      pure (InterpretValue value)
+      -- Todo: Fix this with `returnCEKValue`
+      liftIO (runReplCEK rEnv rState resolved) >>= liftEither >>= \case
+        VError txt ->
+          pure (InterpretError txt)
+        v -> do
+          replLoaded .= loaded
+          pure (InterpretValue v)
     -- TLInterface _ -> error "interfaces not yet supported"

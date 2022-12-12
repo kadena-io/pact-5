@@ -30,7 +30,7 @@ $alpha = [a-zA-Z]
 $special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
 @ident = [$alpha][$alpha $digit \-]*
 @integer = [\-]?[$digit]+
-@comment = [\;][\;][.]*[\n]
+@comment = [\;][.]*[\n]
 
 
 tokens :-

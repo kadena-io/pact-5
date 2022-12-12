@@ -1027,7 +1027,7 @@ inferTerm = \case
         (te1, e1', pe1) <- inferTerm e1
         (te2, e2', pe2) <- inferTerm e2
         unify te1 te2 i
-        pure (TyBool, CIf c' e1' e2', pc ++ pe1 ++ pe2)
+        pure (te1, CIf c' e1' e2', pc ++ pe1 ++ pe2)
   IR.Builtin b i -> do
     let tyImported = typeOfBuiltin b
     (ty, tvs, preds) <- instantiateImported tyImported i

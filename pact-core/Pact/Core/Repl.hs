@@ -55,6 +55,7 @@ main = do
   displayOutput = \case
     InterpretValue v -> outputStrLn (show (pretty v))
     InterpretLog t -> outputStrLn (T.unpack t)
+    InterpretError t -> outputStrLn ("Intepreter Error: " <> T.unpack t)
   catch' bundle ma = catchAll ma (\e -> outputStrLn (show e) *> loop bundle)
   loop bundle = do
     minput <- fmap T.pack <$> getInputLine "pact>"
