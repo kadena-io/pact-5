@@ -30,6 +30,7 @@ module Pact.Core.Untyped.Eval.Runtime
  , checkPactValueType
  , CEKErrorHandler(..)
  , MonadCEKEnv(..)
+ , CondFrame(..)
  , MonadCEK
  ) where
 
@@ -131,11 +132,18 @@ data ExecutionMode
   | Local
   deriving (Eq, Show, Bounded, Enum)
 
+data CondFrame b i
+  = AndFrame (EvalTerm b i)
+  | OrFrame (EvalTerm b i)
+  | IfFrame (EvalTerm b i) (EvalTerm b i)
+  deriving Show
+
 data Cont b i m
   = Fn (CEKValue b i m) (Cont b i m)
   | Arg (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   | SeqC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   | ListC (CEKEnv b i m) [EvalTerm b i] [CEKValue b i m] (Cont b i m)
+  | CondC (CEKEnv b i m) (CondFrame b i) (Cont b i m)
   | Mt
   deriving Show
 

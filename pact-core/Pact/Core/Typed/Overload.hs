@@ -15,6 +15,7 @@ module Pact.Core.Typed.Overload
  , runOverloadReplTopLevel
  , runOverloadProgram
  , runOverloadReplProgram
+ , SolveOverload(..)
  ) where
 
 import Control.Lens
@@ -68,6 +69,8 @@ resolveTerm = \case
     TyApp <$> resolveTerm l <*> pure rs <*> pure i
   Sequence e1 e2 i ->
     Sequence <$> resolveTerm e1 <*> resolveTerm e2 <*> pure i
+  Conditional o i ->
+    Conditional <$> traverse resolveTerm o <*> pure i
   ListLit tn ts i ->
     ListLit tn <$> traverse resolveTerm ts <*> pure i
   Constant lit i ->
@@ -242,10 +245,10 @@ solveCoreOverload i b tys preds = case b of
     singlePred preds i (specializeNumOp i negateResolve) "Negate"
   RawAbs ->
     singlePred preds i (specializeNumOp i absResolve) "Abs"
-  RawAnd ->
-    pure (Builtin AndBool i)
-  RawOr ->
-    pure (Builtin OrBool i)
+  -- RawAnd ->
+  --   pure (Builtin AndBool i)
+  -- RawOr ->
+  --   pure (Builtin OrBool i)
   RawNot ->
     pure (Builtin NotBool i)
   RawEq ->
@@ -311,11 +314,11 @@ solveCoreOverload i b tys preds = case b of
       let bt = Builtin ZipList i
       pure (TyApp bt (t1:|[t2, t3]) i)
     _ -> throwOverloadError "Zip" i
-  RawIf -> case tys of
-    [t1] -> do
-      let bt = Builtin IfElse i
-      pure (TyApp bt (t1:|[]) i)
-    _ -> throwOverloadError "If" i
+  -- RawIf -> case tys of
+  --   [t1] -> do
+  --     let bt = Builtin IfElse i
+  --     pure (TyApp bt (t1:|[]) i)
+  --   _ -> throwOverloadError "If" i
   RawIntToStr -> error "Todo: implement"
   RawStrToInt -> error "Todo: implement"
   RawFold -> case tys of
@@ -552,7 +555,7 @@ resolveTopLevel
 resolveTopLevel = \case
   TLModule m -> TLModule <$> resolveModule m
   TLTerm t -> TLTerm <$> resolveTerm t
-  _ -> error "unimplemented"
+  -- _ -> error "unimplemented"
 
 resolveProgram
   :: SolveOverload raw reso

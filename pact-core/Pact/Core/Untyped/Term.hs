@@ -36,6 +36,7 @@ import Data.Void
 import Data.Foldable(foldl')
 import qualified Data.Set as Set
 
+import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.Type
@@ -132,7 +133,7 @@ data IfDef name builtin info
 
 data TopLevel name builtin info
   = TLModule (Module name builtin info)
-  | TLInterface (Interface name builtin info)
+  -- | TLInterface (Interface name builtin info)
   | TLTerm (Term name builtin info)
   deriving Show
 
@@ -166,6 +167,8 @@ data Term name builtin info
   -- ^ Constant/Literal values
   | Sequence (Term name builtin info) (Term name builtin info) info
   -- ^ (e_1 e_2 .. e_n)
+  | Conditional (Conditional (Term name builtin info)) info
+  -- ^ Special nodes for If, And and Or.
   | Builtin builtin info
   -- ^ Built-in functions (or natives)
   | Constant Literal info
@@ -201,6 +204,8 @@ fromIRTerm = \case
     Constant lit i
   IR.Sequence e1 e2 i ->
     Sequence (fromIRTerm e1) (fromIRTerm e2) i
+  IR.Conditional c i ->
+    Conditional (fromIRTerm <$> c) i
   IR.ListLit v i ->
     ListLit (fromIRTerm <$> v) i
   IR.Try e1 e2 i ->
@@ -250,7 +255,7 @@ fromIRTopLevel
   -> TopLevel name builtin info
 fromIRTopLevel = \case
   IR.TLModule m -> TLModule (fromIRModule m)
-  IR.TLInterface _ -> error "todo: implement interfaces"
+  -- IR.TLInterface _ -> error "todo: implement interfaces"
   IR.TLTerm e -> TLTerm (fromIRTerm e)
 
 instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
@@ -264,6 +269,7 @@ instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
     Builtin b _ -> pretty b
     Constant l _ -> pretty l
     Sequence e1 e2 _ -> Pretty.parens ("seq" <+> pretty e1 <+> pretty e2)
+    Conditional c _ -> pretty c
     ListLit li _ ->
       Pretty.brackets $
       Pretty.hsep $
@@ -291,8 +297,7 @@ termInfo f = \case
   Lam term i -> Lam term <$> f i
   App t1 t2 i -> App t1 t2 <$> f i
   Sequence e1 e2 i -> Sequence e1 e2 <$> f i
-  -- ObjectLit obj i -> ObjectLit obj <$> f i
-  -- ObjectOp o i -> ObjectOp o <$> f i
+  Conditional c i -> Conditional c <$> f i
   ListLit v i -> ListLit v <$> f i
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i
@@ -300,3 +305,5 @@ termInfo f = \case
     Try e1 e2 <$> f i
   Error e i ->
     Error e <$> f i
+  -- ObjectLit obj i -> ObjectLit obj <$> f i
+  -- ObjectOp o i -> ObjectOp o <$> f i

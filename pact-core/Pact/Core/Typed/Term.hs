@@ -145,7 +145,7 @@ data IfDef name tyname builtin info
 
 data TopLevel name tyname builtin info
   = TLModule (Module name tyname builtin info)
-  | TLInterface (Interface name tyname builtin info)
+  -- | TLInterface (Interface name tyname builtin info)
   | TLTerm (Term name tyname builtin info)
   deriving Show
 
@@ -183,6 +183,8 @@ data Term name tyname builtin info
   -- /\a. e where a is a type variable
   | Sequence (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ Blocks (to be replaced by Seq)
+  | Conditional (Conditional (Term name tyname builtin info)) info
+  -- ^ Conditional exprs
   | ListLit (Type tyname) [Term name tyname builtin info] info
   -- ^ List literals
   | Try (Term name tyname builtin info) (Term name tyname builtin info) info
@@ -244,6 +246,7 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
       "/\\" <> Pretty.hsep (pretty <$> ns) <> "." <+> pretty term
     Sequence e1 e2 _ ->
       Pretty.parens ("seq" <+> pretty e1 <+> pretty e2)
+    Conditional c _ -> pretty c
     ListLit ty li _ ->
       Pretty.brackets (Pretty.hsep $ Pretty.punctuate Pretty.comma $ (pretty <$> li)) <> if null li then prettyTyApp ty else mempty
     Builtin b _ -> pretty b
@@ -278,6 +281,8 @@ termBuiltin f = \case
     TyAbs ne <$> termBuiltin f te <*> pure info
   Sequence te te' info ->
     Sequence <$> termBuiltin f te <*> termBuiltin f te' <*> pure info
+  Conditional o info ->
+    Conditional <$> traverse (termBuiltin f) o <*> pure info
   ListLit ty tes info ->
     ListLit ty <$> traverse (termBuiltin f) tes <*> pure info
   Try te te' info ->
@@ -301,6 +306,8 @@ termInfo f = \case
     TyAbs ns e <$> f i
   Sequence e1 e2 i ->
     Sequence e1 e2 <$> f i
+  Conditional o info ->
+    Conditional o <$> f info
   ListLit ty v i ->
     ListLit ty v <$> f i
   Builtin b i ->
@@ -328,6 +335,8 @@ instance Plated (Term name tyname builtin info) where
       ListLit ty <$> traverse f ts <*> pure i
     Sequence e1 e2 i ->
       Sequence <$> f e1 <*> f e2 <*> pure i
+    Conditional o i ->
+      Conditional <$> traverse (plate f) o <*> pure i
     Builtin b i -> pure (Builtin b i)
     Constant l i -> pure (Constant l i)
     Try e1 e2 i ->

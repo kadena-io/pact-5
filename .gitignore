@@ -20,6 +20,7 @@ docs/kr/_build
 log/
 /deleteme.sqllite
 /.pact-history
+/.pc-history
 /result
 public
 .ghc.environment.*

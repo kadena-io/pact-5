@@ -58,24 +58,24 @@ import qualified Pact.Core.Untyped.Term as Term
 import System.Console.Haskeline.Completion
 
 data ReplDebugFlag
-  = DebugLexer
-  | DebugParser
-  | DebugDesugar
-  | DebugTypechecker
-  | DebugTypecheckerType
-  | DebugSpecializer
-  | DebugUntyped
+  = ReplDebugLexer
+  | ReplDebugParser
+  | ReplDebugDesugar
+  | ReplDebugTypechecker
+  | ReplDebugTypecheckerType
+  | ReplDebugSpecializer
+  | ReplDebugUntyped
   deriving (Show, Eq, Ord, Enum, Bounded)
 
 prettyReplFlag :: ReplDebugFlag -> String
 prettyReplFlag = \case
-  DebugLexer -> "lexer"
-  DebugParser -> "parser"
-  DebugDesugar -> "desugar"
-  DebugTypechecker -> "tc-term"
-  DebugTypecheckerType -> "tc-type"
-  DebugSpecializer -> "specializer"
-  DebugUntyped -> "untyped-core"
+  ReplDebugLexer -> "lexer"
+  ReplDebugParser -> "parser"
+  ReplDebugDesugar -> "desugar"
+  ReplDebugTypechecker -> "tc-term"
+  ReplDebugTypecheckerType -> "tc-type"
+  ReplDebugSpecializer -> "specializer"
+  ReplDebugUntyped -> "untyped-core"
 
 newtype ReplM b a
   = ReplT { unReplT :: ExceptT (PactError LineInfo) (ReaderT (IORef (ReplState b)) IO) a }
@@ -125,13 +125,13 @@ type ReplParser = MP.Parsec Void Text
 
 replFlag :: ReplParser ReplDebugFlag
 replFlag =
-  (DebugLexer <$ MP.chunk "lexer") <|>
-  (DebugParser <$ MP.chunk "parser") <|>
-  (DebugDesugar <$ MP.chunk "desugar") <|>
-  (DebugTypechecker <$ MP.chunk "tc-term") <|>
-  (DebugTypecheckerType <$ MP.chunk "tc-type") <|>
-  (DebugSpecializer <$ MP.chunk "specializer") <|>
-  (DebugUntyped <$ MP.chunk "untyped-core")
+  (ReplDebugLexer <$ MP.chunk "lexer") <|>
+  (ReplDebugParser <$ MP.chunk "parser") <|>
+  (ReplDebugDesugar <$ MP.chunk "desugar") <|>
+  (ReplDebugTypechecker <$ MP.chunk "tc-term") <|>
+  (ReplDebugTypecheckerType <$ MP.chunk "tc-type") <|>
+  (ReplDebugSpecializer <$ MP.chunk "specializer") <|>
+  (ReplDebugUntyped <$ MP.chunk "untyped-core")
 
 replAction :: ReplParser ReplAction
 replAction =
@@ -161,25 +161,25 @@ parseReplAction = MP.parseMaybe replAction
 
 printDebug :: Pretty a => a -> ReplDebugFlag -> IO ()
 printDebug a = \case
-  DebugLexer -> do
+  ReplDebugLexer -> do
     putStrLn "----------- Lexer output -----------------"
     print (pretty a)
-  DebugParser -> do
+  ReplDebugParser -> do
     putStrLn "----------- Parser output ----------------"
     print (pretty a)
-  DebugDesugar -> do
+  ReplDebugDesugar -> do
     putStrLn "----------- Desugar output ---------------"
     print (pretty a)
-  DebugTypechecker -> do
+  ReplDebugTypechecker -> do
     putStrLn "----------- Typechecker output -----------"
     print (pretty a)
-  DebugTypecheckerType -> do
+  ReplDebugTypecheckerType -> do
     putStrLn "----------- Inferred type output ---------"
     print (pretty a)
-  DebugSpecializer -> do
+  ReplDebugSpecializer -> do
     putStrLn "----------- Specializer output -----------"
     print (pretty a)
-  DebugUntyped -> do
+  ReplDebugUntyped -> do
     putStrLn "----------- Untyped core output ----------"
     print (pretty a)
 

@@ -20,6 +20,7 @@ module Pact.Core.Builtin
  , CoreBuiltin(..)
  , ReplRawBuiltin
  , ReplCoreBuiltin
+ , Conditional(..)
  )where
 
 import Data.Text(Text)
@@ -27,10 +28,25 @@ import Data.Map.Strict(Map)
 
 import qualified Data.Map.Strict as Map
 
-import Pact.Core.Pretty(Pretty(..))
+import Pact.Core.Pretty
 
 type ReplRawBuiltin = ReplBuiltin RawBuiltin
 type ReplCoreBuiltin = ReplBuiltin CoreBuiltin
+
+data Conditional o
+  = CAnd o o
+  | COr o o
+  | CIf o o o
+  deriving (Show, Eq, Functor, Foldable, Traversable)
+
+instance Pretty o => Pretty (Conditional o) where
+  pretty = \case
+    CAnd o o' ->
+      parens ("and" <+> pretty o <+> pretty o')
+    COr o o' ->
+      parens ("or" <+> pretty o <+> pretty o')
+    CIf o o' o3 ->
+      parens ("if" <+> pretty o <+> pretty o' <+> pretty o3)
 
 -- Todo: Objects to be added later @ a later milestone
 -- data ObjectOp o
@@ -153,8 +169,8 @@ data RawBuiltin
   | RawNegate
   | RawAbs
   -- Boolean Ops
-  | RawAnd
-  | RawOr
+  -- | RawAnd
+  -- | RawOr
   | RawNot
   -- Equality and Comparisons
   | RawEq
@@ -190,7 +206,7 @@ data RawBuiltin
   | RawMap
   | RawFilter
   | RawZip
-  | RawIf
+  -- | RawIf
   | RawIntToStr
   | RawStrToInt
   | RawFold
@@ -224,8 +240,8 @@ rawBuiltinToText = \case
   RawNegate -> "negate"
   RawAbs -> "abs"
   -- Bolean ops
-  RawAnd -> "and"
-  RawOr -> "or"
+  -- RawAnd -> "and"
+  -- RawOr -> "or"
   RawNot -> "not"
   -- Eq
   RawEq -> "(=)"
@@ -260,7 +276,7 @@ rawBuiltinToText = \case
   -- general
   RawMap -> "map"
   RawFilter -> "filter"
-  RawIf -> "if"
+  -- RawIf -> "if"
   RawIntToStr -> "int-to-str"
   RawStrToInt -> "str-to-int"
   RawFold -> "fold"
@@ -292,8 +308,8 @@ instance BuiltinArity RawBuiltin where
     RawNegate -> 1
     RawAbs -> 1
     -- Boolean Ops ->
-    RawAnd -> 2
-    RawOr -> 2
+    -- RawAnd -> 2
+    -- RawOr -> 2
     RawNot -> 1
     -- Equality and Comparisons ->
     RawEq -> 2
@@ -329,7 +345,7 @@ instance BuiltinArity RawBuiltin where
     RawMap -> 2
     RawFilter -> 2
     RawZip -> 3
-    RawIf -> 3
+    -- RawIf -> 3
     RawIntToStr -> 2
     RawStrToInt -> 2
     RawFold -> 3
@@ -507,7 +523,7 @@ data CoreBuiltin
   | LTInt
   | LEQInt
   -- If
-  | IfElse
+  -- | IfElse
   -- Decimal ops
   -- Decimal add
   | AddDec
@@ -537,8 +553,8 @@ data CoreBuiltin
   | LTDec
   | LEQDec
   -- Bool Comparisons
-  | AndBool
-  | OrBool
+  -- | AndBool
+  -- | OrBool
   | NotBool
   -- other bool ops
   | EqBool
@@ -639,7 +655,7 @@ instance BuiltinArity CoreBuiltin where
     GEQInt -> 2
     LTInt -> 2
     LEQInt -> 2
-    IfElse -> 3
+    -- IfElse -> 3
     AddDec -> 2
     SubDec -> 2
     DivDec -> 2
@@ -660,8 +676,8 @@ instance BuiltinArity CoreBuiltin where
     GEQDec -> 2
     LTDec -> 2
     LEQDec -> 2
-    AndBool -> 2
-    OrBool -> 2
+    -- AndBool -> 2
+    -- OrBool -> 2
     NotBool -> 1
     EqBool -> 2
     NeqBool -> 2
@@ -749,7 +765,7 @@ coreBuiltinToText = \case
   LTInt -> "ltInt"
   LEQInt -> "leqInt"
   -- If
-  IfElse -> "ifElse"
+  -- IfElse -> "ifElse"
   -- Decimal ops
   -- Decimal add
   AddDec -> "addDec"
@@ -779,8 +795,8 @@ coreBuiltinToText = \case
   LTDec -> "ltDec"
   LEQDec -> "leqDec"
   -- Bool Comparisons
-  AndBool -> "andBool"
-  OrBool -> "orBool"
+  -- AndBool -> "andBool"
+  -- OrBool -> "orBool"
   NotBool -> "notBool"
   -- other bool ops
   EqBool -> "eqBool"

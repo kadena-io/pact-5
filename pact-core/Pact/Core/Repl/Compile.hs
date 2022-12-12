@@ -24,6 +24,7 @@ import Control.Lens
 import Control.Monad.Except
 import Data.Text as Text
 import Data.ByteString(ByteString)
+import Data.Proxy
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.ByteString as B
@@ -78,23 +79,23 @@ interpretExprLisp source = do
   pactdb <- use replPactDb
   loaded <- use replLoaded
   lexx <- liftEither (Lisp.lexer source)
-  debugIfFlagSet DebugLexer lexx
+  debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ Lisp.parseExpr lexx
-  debugIfFlagSet DebugParser parsed
-  desugared <- runDesugarTermLisp pactdb loaded parsed
+  debugIfFlagSet ReplDebugParser parsed
+  desugared <- runDesugarTermLisp Proxy pactdb loaded parsed
   interpretExpr desugared
 
 interpretExpr
   :: DesugarOutput ReplCoreBuiltin LineInfo (IR.Term Name ReplRawBuiltin LineInfo)
   -> ReplM ReplCoreBuiltin (ReplCEKValue CoreBuiltin LineInfo)
 interpretExpr (DesugarOutput desugared loaded' _) = do
-  (ty, typed) <- liftEither (runInferTerm loaded' (replBuiltinType rawBuiltinType) desugared)
-  debugIfFlagSet DebugTypecheckerType ty
-  debugIfFlagSet DebugTypechecker typed
+  (ty, typed) <- liftEither (runInferTerm loaded' desugared)
+  debugIfFlagSet ReplDebugTypecheckerType ty
+  debugIfFlagSet ReplDebugTypechecker typed
   resolved <- liftEither (runOverloadTerm typed)
-  debugIfFlagSet DebugSpecializer resolved
+  debugIfFlagSet ReplDebugSpecializer resolved
   let untyped = fromTypedTerm resolved
-  debugIfFlagSet DebugUntyped untyped
+  debugIfFlagSet ReplDebugUntyped untyped
   evalGas <- use replGas
   evalLog <- use replEvalLog
   let rEnv = ReplEvalEnv evalGas evalLog
@@ -113,19 +114,19 @@ interpretExprTypeLisp source = do
   pactdb <- use replPactDb
   loaded <- use replLoaded
   lexx <- liftEither (Lisp.lexer source)
-  debugIfFlagSet DebugLexer lexx
+  debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ Lisp.parseExpr lexx
-  debugIfFlagSet DebugParser parsed
-  desugared <- runDesugarTermLisp pactdb loaded parsed
+  debugIfFlagSet ReplDebugParser parsed
+  desugared <- runDesugarTermLisp Proxy pactdb loaded parsed
   interpretExprType desugared
 
 interpretExprType
   :: DesugarOutput ReplCoreBuiltin LineInfo (IR.Term Name ReplRawBuiltin LineInfo)
   -> ReplM ReplCoreBuiltin (TypeScheme NamedDeBruijn)
 interpretExprType (DesugarOutput desugared loaded' _) = do
-  (ty, typed) <- either (error . show) pure (runInferTerm loaded' (replBuiltinType rawBuiltinType) desugared)
-  debugIfFlagSet DebugTypecheckerType ty
-  debugIfFlagSet DebugTypechecker typed
+  (ty, typed) <- either (error . show) pure (runInferTerm loaded' desugared)
+  debugIfFlagSet ReplDebugTypecheckerType ty
+  debugIfFlagSet ReplDebugTypechecker typed
   pure ty
 
 interpretProgramFileLisp :: FilePath -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin LineInfo]
@@ -138,9 +139,9 @@ interpretProgramLisp source = do
   loaded <- use replLoaded
   pactdb <- use replPactDb
   lexx <- liftEither (Lisp.lexer source)
-  debugIfFlagSet DebugLexer lexx
+  debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ Lisp.parseProgram lexx
-  let f a = runDesugarTopLevelLisp pactdb loaded a
+  let f a = runDesugarTopLevelLisp Proxy pactdb loaded a
   traverse (f >=> interpretTopLevel) parsed
 
 interpretTopLevel
@@ -148,8 +149,7 @@ interpretTopLevel
   -> ReplM ReplCoreBuiltin (InterpretOutput ReplCoreBuiltin LineInfo)
 interpretTopLevel (DesugarOutput desugared loaded deps) = do
   p <- use replPactDb
-  let btyp = replBuiltinType rawBuiltinType
-  typechecked <- liftEither (runInferTopLevel loaded btyp desugared)
+  typechecked <- liftEither (runInferTopLevel loaded desugared)
   overloaded <- liftEither (runOverloadTopLevel typechecked)
   case fromTypedTopLevel overloaded of
     TLModule m -> do
@@ -182,4 +182,4 @@ interpretTopLevel (DesugarOutput desugared loaded deps) = do
       value <- liftEither =<< liftIO (runReplCEK rEnv rState resolved)
       replLoaded .= loaded
       pure (InterpretValue value)
-    TLInterface _ -> error "interfaces not yet supported"
+    -- TLInterface _ -> error "interfaces not yet supported"

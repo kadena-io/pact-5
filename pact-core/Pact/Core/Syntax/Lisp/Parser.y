@@ -96,8 +96,8 @@ import Pact.Core.Syntax.Lisp.LexUtils
   '#'        { PosToken TokenObjRemove _ }
   '&'        { PosToken TokenBitAnd _ }
   '|'        { PosToken TokenBitOr _ }
-  '&&'       { PosToken TokenAnd _ }
-  '||'       { PosToken TokenOr _ }
+  and        { PosToken TokenAnd _ }
+  or         { PosToken TokenOr _ }
   IDENT      { PosToken (TokenIdent _) _ }
   NUM        { PosToken (TokenNumber _) _ }
   STR        { PosToken (TokenString _) _ }
@@ -244,7 +244,9 @@ LamExpr :: { LineInfo -> ParsedExpr }
   : lam '(' LamArgs ')' Expr { Lam ln0 (reverse $3) $5 }
 
 IfExpr :: { LineInfo -> ParsedExpr }
-  : if Expr Expr Expr { If $2 $3 $4 }
+  : if Expr Expr Expr { Conditional (CEIf $2 $3 $4) }
+  | and Expr Expr { Conditional (CEAnd $2 $3) }
+  | or Expr Expr { Conditional (CEOr $2 $3) }
 
 TryExpr :: { LineInfo -> ParsedExpr }
   : try Expr Expr { Try $2 $3 }
@@ -289,9 +291,9 @@ Atom :: { ParsedExpr }
   | '(' ')' { Constant LUnit (_ptInfo $1) }
 
 Operator :: { ParsedExpr }
-  : '&&' { Operator AndOp (_ptInfo $1) }
-  | '||' { Operator OrOp (_ptInfo $1) }
-  | '==' { Operator EQOp (_ptInfo $1) }
+  -- : '&&' { Operator AndOp (_ptInfo $1) }
+  -- | '||' { Operator OrOp (_ptInfo $1) }
+  : '==' { Operator EQOp (_ptInfo $1) }
   | '!=' { Operator NEQOp (_ptInfo $1) }
   | '>'  { Operator GTOp (_ptInfo $1) }
   | '>=' { Operator GEQOp (_ptInfo $1) }

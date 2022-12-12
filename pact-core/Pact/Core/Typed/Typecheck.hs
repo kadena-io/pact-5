@@ -15,6 +15,7 @@ import Data.List.NonEmpty(NonEmpty(..))
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
 
+import Pact.Core.Builtin
 import Pact.Core.Typed.Term
 import Pact.Core.Type
 
@@ -129,6 +130,26 @@ typecheck' = \case
   -- Γ ⊢  {e_1:t_1,...,e_n:t_n} : t_n
   Sequence e1 e2 _ ->
     typecheck' e1 *> typecheck' e2
+
+  Conditional c _ -> case c of
+    CAnd t1 t2 -> do
+      t1ty <- typecheck' t1
+      t2ty <- typecheck' t2
+      unless (t1ty == t2ty && t2ty == TyBool) $ throwError "mismatch"
+      pure TyBool
+    COr t1 t2 -> do
+      t1ty <- typecheck' t1
+      t2ty <- typecheck' t2
+      unless (t1ty == t2ty && t2ty == TyBool) $ throwError "mismatch"
+      pure TyBool
+    CIf cond e1 e2 -> do
+      condTy <- typecheck' cond
+      unless (condTy == TyBool) $ throwError "mismatch"
+      te1 <- typecheck' e1
+      te2 <- typecheck' e2
+      unless (te1 == te2) $ throwError "mismatch"
+      pure te1
+
   -- k : p ∈ K                (where K = builtin types, constants)
   -- ------------------------ (T-Const)
   -- Γ ⊢ k : Prim p

@@ -94,6 +94,7 @@ library
     Pact.Core.Errors
     Pact.Core.Persistence
     Pact.Core.PactValue
+    Pact.Core.Debug
 
     -- Common syntax
     Pact.Core.Syntax.Common

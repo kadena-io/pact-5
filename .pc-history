@@ -1,0 +1,6 @@
+:r
+(or true (error "asdf"))
+(or false (error "asdf"))
+(and false (error "asdf"))
+:r
+(and true false)

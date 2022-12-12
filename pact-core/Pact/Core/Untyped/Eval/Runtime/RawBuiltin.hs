@@ -82,11 +82,11 @@ binaryIntFn op = mkBuiltinFn \case
 --   _ -> failInvariant "binary decimal function"
 -- {-# INLINE binaryDecFn #-}
 
-binaryBoolFn :: (BuiltinArity b, MonadCEK b i m) => (Bool -> Bool -> Bool) -> b -> BuiltinFn b i m
-binaryBoolFn op = mkBuiltinFn \case
-  [VLiteral (LBool l), VLiteral (LBool r)] -> pure (VLiteral (LBool (op l r)))
-  _ -> failInvariant "binary bool function"
-{-# INLINE binaryBoolFn #-}
+-- binaryBoolFn :: (BuiltinArity b, MonadCEK b i m) => (Bool -> Bool -> Bool) -> b -> BuiltinFn b i m
+-- binaryBoolFn op = mkBuiltinFn \case
+--   [VLiteral (LBool l), VLiteral (LBool r)] -> pure (VLiteral (LBool (op l r)))
+--   _ -> failInvariant "binary bool function"
+-- {-# INLINE binaryBoolFn #-}
 
 -- compareIntFn :: (BuiltinArity b, MonadCEK b i m) => (Integer -> Integer -> Bool) -> b -> BuiltinFn b i m
 -- compareIntFn op = mkBuiltinFn \case
@@ -267,11 +267,11 @@ ceilingDec = roundingFn ceiling
 ---------------------------
 -- bool ops
 ---------------------------
-andBool :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
-andBool = binaryBoolFn (&&)
+-- andBool :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- andBool = binaryBoolFn (&&)
 
-orBool :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
-orBool = binaryBoolFn (||)
+-- orBool :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- orBool = binaryBoolFn (||)
 
 notBool :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
 notBool = mkBuiltinFn \case
@@ -754,11 +754,11 @@ listAccess = mkBuiltinFn \case
 -- Other Core forms
 -----------------------------------
 
-coreIf :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
-coreIf = mkBuiltinFn \case
-  [VLiteral (LBool b), VClosure tbody tenv, VClosure fbody fenv] ->
-    if b then eval tenv tbody else  eval fenv fbody
-  _ -> failInvariant "if"
+-- coreIf :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreIf = mkBuiltinFn \case
+--   [VLiteral (LBool b), VClosure tbody tenv, VClosure fbody fenv] ->
+--     if b then eval tenv tbody else  eval fenv fbody
+--   _ -> failInvariant "if"
 
 coreB64Encode :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
 coreB64Encode = mkBuiltinFn \case
@@ -793,8 +793,8 @@ rawBuiltinRuntime = \case
   RawNegate -> negateBuiltin RawNegate
   RawAbs -> absBuiltin RawAbs
   -- Boolean Ops
-  RawAnd -> andBool RawAnd
-  RawOr -> orBool RawOr
+  -- RawAnd -> andBool RawAnd
+  -- RawOr -> orBool RawOr
   RawNot -> notBool RawNot
   -- Equality and Comparisons
   RawEq -> eqBuiltin RawEq
@@ -830,7 +830,7 @@ rawBuiltinRuntime = \case
   RawMap -> coreMap RawMap
   RawFilter -> coreFilter RawFilter
   RawZip -> coreZip RawZip
-  RawIf -> coreIf RawIf
+  -- RawIf -> coreIf RawIf
   RawIntToStr -> unimplemented
   RawStrToInt -> unimplemented
   RawFold -> coreFold RawFold

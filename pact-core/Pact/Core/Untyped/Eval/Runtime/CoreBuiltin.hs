@@ -277,11 +277,11 @@ sqrtDec = unaryDecFn (f2Dec . sqrt . dec2F)
 ---------------------------
 -- bool ops
 ---------------------------
-andBool :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
-andBool = binaryBoolFn (&&)
+-- andBool :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- andBool = binaryBoolFn (&&)
 
-orBool :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
-orBool = binaryBoolFn (||)
+-- orBool :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- orBool = binaryBoolFn (||)
 
 notBool :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
 notBool = mkBuiltinFn \case
@@ -704,11 +704,11 @@ listAccess = mkBuiltinFn \case
 -- Other Core forms
 -----------------------------------
 
-coreIf :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
-coreIf = mkBuiltinFn \case
-  [VLiteral (LBool b), VClosure tbody tenv, VClosure fbody fenv] ->
-    if b then eval tenv tbody else  eval fenv fbody
-  _ -> failInvariant "if"
+-- coreIf :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreIf = mkBuiltinFn \case
+--   [VLiteral (LBool b), VClosure tbody tenv, VClosure fbody fenv] ->
+--     if b then eval tenv tbody else  eval fenv fbody
+--   _ -> failInvariant "if"
 
 coreB64Encode :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
 coreB64Encode = mkBuiltinFn \case
@@ -764,7 +764,7 @@ coreBuiltinRuntime = \case
   -- IntShow inst
   ShowInt -> showInt ShowInt
   -- If
-  IfElse -> coreIf IfElse
+  -- IfElse -> coreIf IfElse
   -- Decimal ops
   -- Add + Num
   AddDec -> addDec AddDec
@@ -792,8 +792,8 @@ coreBuiltinRuntime = \case
   LTDec -> ltDec LTDec
   LEQDec -> leqDec LEQDec
   -- Bool Ops
-  AndBool -> andBool AndBool
-  OrBool -> orBool OrBool
+  -- AndBool -> andBool AndBool
+  -- OrBool -> orBool OrBool
   NotBool -> notBool NotBool
   -- Bool Equality
   EqBool -> eqBool EqBool
@@ -900,7 +900,7 @@ coreBuiltinLiftedRuntime f = \case
   -- IntShow inst
   ShowInt -> showInt (f ShowInt)
   -- If
-  IfElse -> coreIf (f IfElse)
+  -- IfElse -> coreIf (f IfElse)
   -- Decimal ops
   -- Add + Num
   AddDec -> addDec (f AddDec)
@@ -928,8 +928,8 @@ coreBuiltinLiftedRuntime f = \case
   LTDec -> ltDec (f LTDec)
   LEQDec -> leqDec (f LEQDec)
   -- Bool Ops
-  AndBool -> andBool (f AndBool)
-  OrBool -> orBool (f OrBool)
+  -- AndBool -> andBool (f AndBool)
+  -- OrBool -> orBool (f OrBool)
   NotBool -> notBool (f NotBool)
   -- Bool Equality
   EqBool -> eqBool (f EqBool)

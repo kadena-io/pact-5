@@ -1,10 +1,4 @@
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveTraversable #-}
 
 module Pact.Core.Untyped.Utils where
 
@@ -32,6 +26,8 @@ fromTypedTerm = \case
     fromTypedTerm term
   Typed.Sequence e1 e2 i ->
     Sequence (fromTypedTerm e1) (fromTypedTerm e2) i
+  Typed.Conditional c i ->
+    Conditional (fromTypedTerm <$> c) i
   Typed.ListLit _ vec i ->
     ListLit (fromTypedTerm <$> vec) i
   Typed.Try e1 e2 i ->
@@ -81,7 +77,18 @@ fromTypedTopLevel
 fromTypedTopLevel = \case
   Typed.TLModule m ->
     TLModule (fromTypedModule m)
-  Typed.TLInterface _ ->
-    error "todo: implement interfaces"
+  -- Typed.TLInterface _ ->
+  --   error "todo: implement interfaces"
+  Typed.TLTerm e ->
+    TLTerm (fromTypedTerm e)
+
+fromTypedReplTopLevel
+  :: Typed.TopLevel name tyname builtin info
+  -> TopLevel name builtin info
+fromTypedReplTopLevel = \case
+  Typed.TLModule m ->
+    TLModule (fromTypedModule m)
+  -- Typed.TLInterface _ ->
+  --   error "todo: implement interfaces"
   Typed.TLTerm e ->
     TLTerm (fromTypedTerm e)

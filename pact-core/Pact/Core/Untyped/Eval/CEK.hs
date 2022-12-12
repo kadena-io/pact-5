@@ -41,9 +41,11 @@ import qualified Data.RAList as RAList
 import qualified Data.Text as T
 import qualified Data.Vector as V
 
+import Pact.Core.Builtin
 import Pact.Core.Names
 import Pact.Core.Errors
 import Pact.Core.Gas
+import Pact.Core.Literal
 
 import Pact.Core.Untyped.Term
 import Pact.Core.Untyped.Eval.Runtime
@@ -116,6 +118,13 @@ eval = evalCEK Mt CEKNoHandler
   evalCEK cont handler env (Sequence e1 e2 _) = do
     chargeNodeGas SeqNode
     evalCEK (SeqC env e2 cont) handler env e1
+  evalCEK cont handler env (Conditional c _) = case c of
+    CAnd te te' ->
+      evalCEK (CondC env (AndFrame te') cont) handler env te
+    COr te te' ->
+      evalCEK (CondC env (OrFrame te') cont) handler env te
+    CIf cond e1 e2 ->
+      evalCEK (CondC env (IfFrame e1 e2) cont) handler env cond
   evalCEK cont handler env (ListLit ts _) = do
     chargeNodeGas ListNode
     case ts of
@@ -148,6 +157,18 @@ eval = evalCEK Mt CEKNoHandler
     applyLam fn arg cont handler
   returnCEK (SeqC env e cont) handler _ =
     evalCEK cont handler env e
+  returnCEK (CondC env frame cont) handler v = case v of
+    (VLiteral (LBool b)) -> case frame of
+      AndFrame te ->
+        if b then evalCEK cont handler env te
+        else pure v
+      OrFrame te ->
+        if b then pure v
+        else evalCEK cont handler env te
+      IfFrame ifExpr elseExpr ->
+        if b then evalCEK cont handler env ifExpr
+        else evalCEK cont handler env elseExpr
+    _ -> failInvariant "Evaluation of conditional expression yielded non-boolean value"
   returnCEK (ListC env args vals cont) handler v = do
     case args of
       [] ->

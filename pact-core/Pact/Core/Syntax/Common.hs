@@ -36,10 +36,7 @@ data BinaryOp
   | NEQOp
   | BitAndOp
   | BitOrOp
-  | AndOp
-  | OrOp
   deriving Show
-
 
 instance Pretty BinaryOp where
   pretty = \case
@@ -55,18 +52,17 @@ instance Pretty BinaryOp where
     NEQOp -> "!="
     BitAndOp -> "&"
     BitOrOp -> "|"
-    AndOp -> "and"
-    OrOp -> "or"
-
 
 -- Todo: type constructors aren't 1-1 atm.
 data Type
   = TyPrim PrimType
   | TyFun Type Type
   | TyList Type
+  deriving Show
+
   -- | TyObject (Map Field Type)
   -- | TyCap
-  deriving Show
+
 
 pattern TyInt :: Type
 pattern TyInt = TyPrim PrimInt
@@ -170,13 +166,6 @@ data Module e i
 data TopLevel e i
   = TLModule (Module e i)
   | TLTerm e
-  deriving Show
-
-data ReplTopLevel e i
-  = RTLModule (Module e i)
-  | RTLDefun (Defun e i)
-  | RTLDefConst (DefConst e i)
-  | RTLTerm e
   deriving Show
 
 data Interface e i

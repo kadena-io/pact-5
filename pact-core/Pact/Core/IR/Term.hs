@@ -13,16 +13,22 @@
 module Pact.Core.IR.Term where
 
 import Control.Lens
+import Data.Foldable(fold)
 import Data.Void(Void)
 import Data.Text(Text)
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.Set as Set
+import qualified Data.List.NonEmpty as NE
 
+import Pact.Core.Builtin
 import Pact.Core.Hash
 import Pact.Core.Literal
 import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Imports
+import Pact.Core.Pretty
+
+import qualified Pact.Core.Syntax.Lisp.ParseTree as Lisp
 
 data Defun name builtin info
   = Defun
@@ -99,16 +105,17 @@ data IfDef name builtin info
 
 data TopLevel name builtin info
   = TLModule (Module name builtin info)
-  | TLInterface (Interface name builtin info)
+  -- | TLInterface (Interface name builtin info)
   | TLTerm (Term name builtin info)
   deriving Show
 
 data ReplTopLevel name builtin info
   = RTLModule (Module name builtin info)
-  | RTLInterface (Interface name builtin info)
+  -- | RTLInterface (Interface name builtin info)
   | RTLDefConst (DefConst name builtin info)
   | RTLDefun (Defun name builtin info)
   | RTLTerm (Term name builtin info)
+  | RTLReplSpecial (Lisp.ReplSpecialForm info)
   deriving Show
 
 
@@ -125,6 +132,8 @@ data Term name builtin info
   -- ^ (e1 e2)
   | Sequence (Term name builtin info)  (Term name builtin info) info
   -- ^ error term , error "blah"
+  | Conditional (Conditional (Term name builtin info)) info
+  -- ^ Conditional terms
   | Builtin builtin info
   -- ^ Built-in ops, e.g (+)
   | Constant Literal info
@@ -141,6 +150,33 @@ data Term name builtin info
   -- ^ Primitive object operations
   deriving (Show, Functor)
 
+instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
+  pretty = \case
+    Var name _ -> pretty name
+    Lam ne te _ ->
+      parens ("lambda" <+> parens (fold (NE.intersperse ":" (prettyLamArg <$> ne))) <+> pretty te)
+    Let name m_ty te te' _ ->
+      parens $ "let" <+> parens (pretty name <> prettyTyAnn m_ty <+> pretty te) <+> pretty te'
+    App te ne _ ->
+      parens (pretty te <+> hsep (NE.toList (pretty <$> ne)))
+    Sequence te te' _ ->
+      parens ("seq" <+> pretty te <+> pretty te')
+    Conditional o _ ->
+      pretty o
+    Builtin builtin _ -> pretty builtin
+    Constant lit _ ->
+      pretty lit
+    ListLit tes _ ->
+      pretty tes
+    Try te te' _ ->
+      parens ("try" <+> pretty te <+> pretty te')
+    Error txt _ ->
+      parens ("error" <> pretty txt)
+    where
+    prettyTyAnn = maybe mempty ((":" <>) . pretty)
+    prettyLamArg (n, arg) =
+      pretty n <> prettyTyAnn arg
+
 
 ----------------------------
 -- Aliases for convenience
@@ -156,6 +192,8 @@ termInfo f = \case
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i
   Sequence e1 e2 i -> Sequence e1 e2 <$> f i
+  Conditional o i ->
+    Conditional o <$> f i
   ListLit l i  -> ListLit l <$> f i
   Try e1 e2 i -> Try e1 e2 <$> f i
   Error t i -> Error t <$> f i
@@ -171,6 +209,8 @@ instance Plated (Term name builtin info) where
     Builtin b i -> pure (Builtin b i)
     Constant l i -> pure (Constant l i)
     Sequence e1 e2 i -> Sequence <$> f e1 <*> f e2 <*> pure i
+    Conditional o i ->
+      Conditional <$> traverse (plate f) o <*> pure i
     ListLit m i -> ListLit <$> traverse f m <*> pure i
     Try e1 e2 i ->
       Try <$> f e1 <*> f e2 <*> pure i

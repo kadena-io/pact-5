@@ -11,6 +11,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE InstanceSigs #-}
 
 
 -- |
@@ -24,11 +25,11 @@
 module Pact.Core.IR.Typecheck
  ( runInferProgram
  , runInferTerm
+ , runInferTermNonGen
  , runInferModule
  , runInferTopLevel
  , runInferReplProgram
- , rawBuiltinType
- , replBuiltinType
+ , TypeOfBuiltin(..)
  ) where
 
 import Control.Lens hiding (Level)
@@ -90,8 +91,6 @@ data TCState s b
   { _tcSupply :: UniqueSupply s
   -- ^ Supply for fresh variables.
   , _tcVarEnv :: RAList (Type (TvRef s))
-  -- Variable environment for locally bound and top level names
-  , _tcBuiltins :: b -> TypeScheme NamedDeBruijn
   -- ^ Builtins map, that uses the enum instance
   , _tcFree :: Map ModuleName (Map Text (Type Void))
   -- ^ Free variables
@@ -129,6 +128,8 @@ type TypedReplTopLevel b i = Typed.OverloadedReplTopLevel NamedDeBruijn b i
 
 type TypedModule b i = Typed.OverloadedModule NamedDeBruijn b i
 
+-- | Our inference monad, where we can plumb through generalization "regions",
+-- our variable environment and our "supply" of unique names
 newtype InferM s b i a =
   InferT (ExceptT (PactError i) (ReaderT (TCState s b) (ST s)) a)
   deriving
@@ -136,6 +137,246 @@ newtype InferM s b i a =
     , MonadReader (TCState s b)
     , MonadError (PactError i))
   via (ExceptT (PactError i) (ReaderT (TCState s b) (ST s)))
+
+class TypeOfBuiltin b where
+  typeOfBuiltin :: b -> TypeScheme NamedDeBruijn
+
+instance TypeOfBuiltin RawBuiltin where
+  typeOfBuiltin = \case
+    -- Num Op
+    -- forall a. Num a => a -> a -> a
+    RawAdd ->
+      addBinopType
+    -- forall a. Num a => a -> a -> a
+    RawSub ->
+      numBinopType
+    -- forall a. Num a => a -> a -> a
+    RawMultiply ->
+      numBinopType
+    -- forall a. Num a => a -> a -> a
+    RawDivide ->
+      numBinopType
+    -- forall a. Num a => a -> a
+    RawNegate ->
+      unaryNumType
+    -- forall a. Num a => a -> a -> a
+    RawAbs ->
+      unaryNumType
+    -- Bool ops
+    -- bool -> bool
+    RawNot ->
+      TypeScheme [] [] (TyBool :~> TyBool)
+    -- Eq ops
+    -- forall a. Eq a => a -> a -> Bool
+    RawEq ->
+      eqTyp
+    -- forall a. Num a => a -> a -> Bool
+    RawNeq ->
+      eqTyp
+    -- Ord ops
+    -- forall a. Ord a => a -> a -> Bool
+    RawGT ->
+      ordTyp
+    -- forall a. Ord a => a -> a -> Bool
+    RawGEQ ->
+      ordTyp
+    -- forall a. Ord a => a -> a -> Bool
+    RawLT ->
+      ordTyp
+    -- forall a. Ord a => a -> a -> Bool
+    RawLEQ ->
+      ordTyp
+    -- Integer ops
+    -- integer -> integer -> integer
+    RawBitwiseAnd ->
+      binaryInt
+    -- integer -> integer -> integer
+    RawBitwiseOr ->
+      binaryInt
+    -- integer -> integer -> integer
+    RawBitwiseXor ->
+      binaryInt
+    -- integer -> integer
+    RawBitwiseFlip ->
+      unaryInt
+    -- integer -> integer -> integer
+    RawMod ->
+      binaryInt
+    -- integer -> integer
+    RawBitShift ->
+      unaryInt
+    -- Rounding ops
+    -- decimal -> integer
+    RawRound ->
+      roundingFn
+    -- decimal -> integer
+    RawCeiling ->
+      roundingFn
+    -- decimal -> integer
+    RawFloor ->
+      roundingFn
+    -- Fractional
+    -- forall a. Fractional a => a -> decimal
+    RawExp ->
+      unaryFractional
+    -- forall a. Fractional a => a -> decimal
+    RawLn ->
+      unaryFractional
+    -- forall a. Fractional a => a -> decimal
+    RawSqrt ->
+      unaryFractional
+    -- forall a. Fractional a => a -> a -> a
+    RawLogBase ->
+      let aVar = nd "a" 0
+          a = TyVar aVar
+      in TypeScheme [aVar] [Pred Fractional a] (a :~> a :~> a)
+    -- ListLike
+    RawConcat ->
+      let aVar = nd "a" 0
+          a = TyVar aVar
+      in TypeScheme [aVar] [Pred ListLike a] (TyList a :~> a)
+    RawTake ->
+      takeDropTy
+    RawDrop ->
+      takeDropTy
+    RawLength ->
+      let aVar = nd "a" 0
+          a = TyVar aVar
+      in TypeScheme [aVar] [Pred ListLike a] (a :~> TyInt)
+    RawReverse ->
+      let aVar = nd "a" 0
+          a = TyVar aVar
+      in TypeScheme [aVar] [Pred ListLike a] (a :~> a)
+    -- General
+    RawMap ->
+      let aVar = nd "a" 1
+          bVar = nd "b" 0
+          a = TyVar aVar
+          b = TyVar bVar
+      in TypeScheme [aVar, bVar] [] ((a :~> b) :~> TyList a :~> TyList b)
+    RawFold ->
+      let aVar = nd "a" 1
+          bVar = nd "b" 0
+          a = TyVar aVar
+          b = TyVar bVar
+      in TypeScheme [aVar, bVar] [] ((a :~> b :~> a) :~> a :~> TyList b :~> a)
+    RawFilter ->
+      let aVar = nd "a" 0
+          a = TyVar aVar
+      in TypeScheme [aVar] [] ((a :~> TyBool) :~> TyList a :~> TyList a)
+    RawZip ->
+      let aVar = nd "a" 2
+          a = TyVar aVar
+          bVar = nd "b" 1
+          b = TyVar bVar
+          cVar = nd "c" 0
+          c = TyVar cVar
+      in TypeScheme [aVar, bVar, cVar] [] ((a :~> b :~> c) :~> TyList a :~> TyList b :~> TyList c)
+    -- RawIf ->
+    --   let aVar = nd "a" 0
+    --       a = TyVar aVar
+    --   in TypeScheme [aVar] [] (TyBool :~> (TyUnit :~> a) :~> (TyUnit :~> a) :~> a)
+    RawIntToStr ->
+      TypeScheme [] [] (TyInt :~> TyString)
+    RawStrToInt ->
+      TypeScheme  [] [] (TyString :~> TyInt)
+    RawDistinct ->
+      let aVar  = nd "a" 0
+          a = TyVar aVar
+      in TypeScheme [aVar] [Pred Eq a] (TyList a :~> TyList a)
+    RawEnforce ->
+      TypeScheme [] [] (TyBool :~> TyString :~> TyUnit)
+    RawEnforceOne -> error "todo"
+    RawEnumerate ->
+      TypeScheme [] [] (TyInt :~> TyInt :~> TyList TyInt)
+    RawEnumerateStepN ->
+      TypeScheme [] [] (TyInt :~> TyInt :~> TyInt :~> TyList TyInt)
+    RawShow ->
+      let aVar = nd "a" 0
+          a = TyVar aVar
+      in TypeScheme [aVar] [Pred Show a] (a :~> TyString)
+    RawReadInteger ->
+      TypeScheme [] [] (TyString :~> TyInt)
+    RawReadDecimal ->
+      TypeScheme [] [] (TyString :~> TyDecimal)
+    RawReadString ->
+      TypeScheme [] [] (TyString :~> TyString)
+    -- RawReadKeyset ->
+    --   TypeScheme [] [] (TyString :~> TyGuard)
+    -- RawEnforceGuard ->
+    --   TypeScheme [] [] (TyGuard :~> TyUnit)
+    -- RawKeysetRefGuard ->
+    --   TypeScheme [] [] (TyString :~> TyGuard)
+    -- RawCreateUserGuard -> let
+    --   a = nd "a" 0
+    --   in TypeScheme [a] [] ((TyUnit :~> TyVar a) :~> TyGuard)
+    RawListAccess -> let
+      a = nd "a" 0
+      in TypeScheme [a] [] (TyInt :~> TyList (TyVar a) :~> TyVar a)
+    RawB64Encode ->
+      TypeScheme [] [] (TyString :~> TyString)
+    RawB64Decode ->
+      TypeScheme [] [] (TyString :~> TyString)
+    where
+    nd b a = NamedDeBruijn a b
+    unaryNumType =
+      let aVar = nd "a" 0
+          a = TyVar aVar
+      in TypeScheme [aVar] [Pred Num a] (a :~> a)
+    unaryFractional =
+      let aVar = nd "a" 0
+          a = TyVar aVar
+      in TypeScheme [aVar] [Pred Fractional a] (a :~> TyDecimal)
+    addBinopType =
+      let aVar = nd "a" 0
+          a = TyVar aVar
+      in TypeScheme [aVar] [Pred Add a] (a :~> a :~> a)
+    numBinopType =
+      let aVar = nd "a" 0
+          a = TyVar aVar
+      in TypeScheme [aVar] [Pred Num a] (a :~> a :~> a)
+    eqTyp =
+      let aVar = nd "a" 0
+          a = TyVar aVar
+      in TypeScheme [aVar] [Pred Eq a] (a :~> a :~> TyBool)
+    ordTyp =
+      let aVar = nd "a" 0
+          a = TyVar aVar
+      in TypeScheme [aVar] [Pred Ord a] (a :~> a :~> TyBool)
+    unaryInt = TypeScheme [] [] (TyInt :~> TyInt)
+    -- integer -> integer -> integer
+    binaryInt = TypeScheme [] [] (TyInt :~> TyInt :~> TyInt)
+    -- decimal -> integer
+    roundingFn = TypeScheme [] [] (TyDecimal :~> TyInt)
+    -- bool -> bool -> bool
+    -- binaryBool = TypeScheme [] [] (TyBool :~> TyBool :~> TyBool)
+    -- forall a. ListLike a => int -> a -> a
+    takeDropTy =
+      let aVar = nd "a" 0
+          a = TyVar aVar
+      in TypeScheme [aVar] [Pred ListLike a] (TyInt :~> a :~> a)
+
+instance TypeOfBuiltin b => TypeOfBuiltin (ReplBuiltin b) where
+  typeOfBuiltin = \case
+    RBuiltinWrap b -> typeOfBuiltin b
+    RExpect -> let
+      aVar = nd "a" 0
+      aTv = TyVar aVar
+      in TypeScheme [aVar] [Pred Eq aTv, Pred Show aTv] (TyString :~> aTv :~> (TyUnit :~> aTv) :~> TyString)
+    RExpectFailure -> let
+      aVar = nd "a" 0
+      aTv = TyVar aVar
+      in TypeScheme [aVar] [] (TyString :~> (TyUnit :~> aTv) :~> TyString)
+    RExpectThat -> let
+      aVar = nd "a" 0
+      aTv = TyVar aVar
+      in TypeScheme [aVar] [] (TyString :~> (aTv :~> TyBool) :~> aTv :~> TyString)
+    RPrint -> let
+      aVar = nd "a" 0
+      aTv = TyVar aVar
+      in TypeScheme [aVar] [Pred Show aTv] (aTv :~> TyUnit)
+    where
+    nd b a = NamedDeBruijn a b
 
 liftST :: ST s a -> InferM s b i a
 liftST action = InferT (ExceptT (Right <$> ReaderT (const action)))
@@ -169,6 +410,8 @@ _dbgTypedTerm = \case
     pure (Typed.TyAbs tys' term' i)
   Typed.Sequence e1 e2 i ->
     Typed.Sequence <$> _dbgTypedTerm e1 <*> _dbgTypedTerm e2 <*> pure i
+  Typed.Conditional c i ->
+    Typed.Conditional <$> traverse _dbgTypedTerm c <*> pure i
   Typed.Try e1 e2 i ->
     Typed.Try <$> _dbgTypedTerm e1 <*> _dbgTypedTerm e2 <*> pure i
   Typed.Error t e i ->
@@ -438,11 +681,10 @@ toHnfs ps i = do
   pure (concat pss)
 
 simplify :: [Pred (TvRef s)] -> InferM s b i [Pred (TvRef s)]
-
 simplify = loop []
   where
   loop rs [] = pure rs
-  loop rs (p:ps) = entail (rs ++ rs) p >>= \cond ->
+  loop rs (p:ps) = entail (rs ++ ps) p >>= \cond ->
     if cond then loop rs ps else loop (p:rs) ps
 
 reduce :: [Pred (TvRef s)]-> i -> InferM s b i [Pred (TvRef s)]
@@ -695,7 +937,10 @@ liftType :: Type Void -> Type a
 liftType = fmap absurd
 
 -- Todo: bidirectionality
-inferTerm :: IRTerm b i -> InferM s b i (TCType s, TCTerm s b i, [TCPred s])
+inferTerm
+  :: (TypeOfBuiltin b)
+  => IRTerm b i
+  -> InferM s b i (TCType s, TCTerm s b i, [TCPred s])
 inferTerm = \case
   IR.Var irn@(Name n nk) i -> case nk of
     NBound u -> do
@@ -762,8 +1007,29 @@ inferTerm = \case
     (te2, e2', pe2) <- inferTerm e2
     pure (te2, Typed.Sequence e1' e2' i, pe1 ++ pe2)
   -- Todo: Here, convert to dictionary
+  IR.Conditional cond i -> over _2 (`Typed.Conditional` i) <$>
+    case cond of
+      CAnd e1 e2 -> do
+        (te1, e1', pe1) <- inferTerm e1
+        unify te1 TyBool i
+        (te2, e2', pe2) <- inferTerm e2
+        unify te2 TyBool i
+        pure (TyBool, CAnd e1' e2', pe1 ++ pe2)
+      COr e1 e2 -> do
+        (te1, e1', pe1) <- inferTerm e1
+        unify te1 TyBool i
+        (te2, e2', pe2) <- inferTerm e2
+        unify te2 TyBool i
+        pure (TyBool, COr e1' e2', pe1 ++ pe2)
+      CIf c e1 e2 -> do
+        (tc, c', pc) <- inferTerm c
+        unify tc TyBool i
+        (te1, e1', pe1) <- inferTerm e1
+        (te2, e2', pe2) <- inferTerm e2
+        unify te1 te2 i
+        pure (TyBool, CIf c' e1' e2', pc ++ pe1 ++ pe2)
   IR.Builtin b i -> do
-    tyImported <- views tcBuiltins ($ b)
+    let tyImported = typeOfBuiltin b
     (ty, tvs, preds) <- instantiateImported tyImported i
     let tvs' = TyVar <$> tvs
     let term' = Typed.Builtin (b, tvs', preds) i
@@ -795,7 +1061,8 @@ inferTerm = \case
 -- We can't generalize yet since
 -- we're not allowing type schemes just yet.
 inferDefun
-  :: IR.Defun Name b i
+  :: TypeOfBuiltin b
+  => IR.Defun Name b i
   -> InferM s b i (TypedDefun b i)
 inferDefun (IR.Defun name dfTy term info) = do
   enterLevel
@@ -808,7 +1075,8 @@ inferDefun (IR.Defun name dfTy term info) = do
   pure (Typed.Defun name (liftType dfTy) fterm info)
 
 inferDefConst
-  :: IR.DefConst Name b i
+  :: TypeOfBuiltin b
+  => IR.DefConst Name b i
   -> InferM s b i (TypedDefConst b i)
 inferDefConst (IR.DefConst name dcTy term info) = do
   enterLevel
@@ -822,7 +1090,8 @@ inferDefConst (IR.DefConst name dcTy term info) = do
   pure (Typed.DefConst name rty' fterm info)
 
 inferDef
-  :: IR.Def Name b i
+  :: TypeOfBuiltin b
+  => IR.Def Name b i
   -> InferM s b i (TypedDef b i)
 inferDef = \case
   IR.Dfun d -> Typed.Dfun <$> inferDefun d
@@ -830,7 +1099,8 @@ inferDef = \case
   -- IR.DCap d -> Typed.DCap <$> inferDefCap d
 
 inferModule
-  :: IR.Module Name b i
+  :: TypeOfBuiltin b
+  => IR.Module Name b i
   -> InferM s b i (TypedModule b i)
 inferModule (IR.Module mname defs blessed imports impl mh) = do
   -- gov' <- traverse (dbjName [] 0 . toOName ) gov
@@ -847,15 +1117,20 @@ inferModule (IR.Module mname defs blessed imports impl mh) = do
 
 -- | Note: debruijnizeType will
 -- ensure that terms that are generic will fail
-inferTermNonGen :: IRTerm b i -> InferM s b i (TypedTerm b i)
+inferTermNonGen
+  :: TypeOfBuiltin b
+  => IRTerm b i
+  -> InferM s b i (TypeScheme NamedDeBruijn, TypedTerm b i)
 inferTermNonGen t = do
   (ty, t', preds) <- inferTerm t
   checkReducible preds (view IR.termInfo t)
-  _ <- noTypeVariables (view IR.termInfo t) ty
-  noTyVarsinTerm (view IR.termInfo t) t'
+  tys <- noTypeVariables (view IR.termInfo t) ty
+  tt <- noTyVarsinTerm (view IR.termInfo t) t'
+  pure (TypeScheme [] [] tys, tt)
 
 inferTermGen
-  :: IRTerm b i
+  :: TypeOfBuiltin b
+  => IRTerm b i
   -> InferM s b i (TypeScheme NamedDeBruijn, TypedGenTerm b i)
 inferTermGen term = do
   let info = view IR.termInfo term
@@ -871,30 +1146,35 @@ inferTermGen term = do
   pure (dbjTyScheme, dbjTerm)
 
 inferTopLevel
-  :: IR.TopLevel Name b i
+  :: TypeOfBuiltin b
+  => IR.TopLevel Name b i
   -> InferM s b i (TypedTopLevel b i)
 inferTopLevel = \case
   IR.TLModule m -> Typed.TLModule <$> inferModule m
-  IR.TLTerm m -> Typed.TLTerm <$> inferTermNonGen m
-  IR.TLInterface _ -> error "todo: implement interface inference"
+  IR.TLTerm m -> Typed.TLTerm . snd <$> inferTermNonGen m
+  -- IR.TLInterface _ -> error "todo: implement interface inference"
 
 inferReplTopLevel
-  :: IR.ReplTopLevel Name b i
+  :: TypeOfBuiltin b
+  => IR.ReplTopLevel Name b i
   -> InferM s b i (TypedReplTopLevel b i)
 inferReplTopLevel = \case
   IR.RTLModule m -> Typed.RTLModule <$> inferModule m
-  IR.RTLTerm m -> Typed.RTLTerm <$> inferTermNonGen m
+  IR.RTLTerm m -> Typed.RTLTerm . snd <$> inferTermNonGen m
   IR.RTLDefun dfn -> Typed.RTLDefun <$> inferDefun dfn
   IR.RTLDefConst dconst -> Typed.RTLDefConst <$> inferDefConst dconst
-  IR.RTLInterface _ -> error "todo: implement interface inference"
+  IR.RTLReplSpecial _rsf -> undefined
+  -- IR.RTLInterface _ -> error "todo: implement interface inference"
 
 inferProgram
-  :: [IR.TopLevel Name b i]
+  :: TypeOfBuiltin b
+  => [IR.TopLevel Name b i]
   -> InferM s b i [TypedTopLevel b i]
 inferProgram = traverse inferTopLevel
 
 inferReplProgram
-  :: [IR.ReplTopLevel Name b i]
+  :: TypeOfBuiltin b
+  => [IR.ReplTopLevel Name b i]
   -> InferM s b i [TypedReplTopLevel b i]
 inferReplProgram = traverse inferReplTopLevel
 
@@ -954,6 +1234,8 @@ debruijnizeTermTypes info = dbj [] 0
       pure (Typed.TyApp e' args' i)
     Typed.Sequence e1 e2 i ->
       Typed.Sequence <$> dbj env depth e1 <*> dbj env depth e2 <*> pure i
+    Typed.Conditional c i ->
+      Typed.Conditional <$> traverse (dbj env depth) c <*> pure i
     Typed.Try e1 e2 i ->
       Typed.Try <$> dbj env depth e1 <*> dbj env depth e2 <*> pure i
     Typed.Error t e i -> do
@@ -1029,6 +1311,8 @@ noTyVarsinTerm info = \case
       <*> pure i
   Typed.Sequence e1 e2 i ->
     Typed.Sequence <$> noTyVarsinTerm info e1 <*> noTyVarsinTerm info e2 <*> pure i
+  Typed.Conditional c i ->
+    Typed.Conditional <$> traverse (noTyVarsinTerm info) c <*> pure i
   Typed.ListLit ty li i ->
     Typed.ListLit <$> noTypeVariables info ty <*> traverse (noTyVarsinTerm info) li <*> pure i
   Typed.Try e1 e2 i ->
@@ -1099,222 +1383,6 @@ dbjTyp i env depth = \case
 -- -----------------------------------------
 -- --- Built-in type wiring
 -- ------------------------------------------
-replBuiltinType :: (b -> TypeScheme NamedDeBruijn) -> ReplBuiltin b -> TypeScheme NamedDeBruijn
-replBuiltinType f = \case
-  RBuiltinWrap b -> f b
-  RExpect -> let
-    aVar = nd "a" 0
-    aTv = TyVar aVar
-    in TypeScheme [aVar] [Pred Eq aTv, Pred Show aTv] (TyString :~> aTv :~> (TyUnit :~> aTv) :~> TyString)
-  RExpectFailure -> let
-    aVar = nd "a" 0
-    aTv = TyVar aVar
-    in TypeScheme [aVar] [] (TyString :~> (TyUnit :~> aTv) :~> TyString)
-  RExpectThat -> let
-    aVar = nd "a" 0
-    aTv = TyVar aVar
-    in TypeScheme [aVar] [] (TyString :~> (aTv :~> TyBool) :~> aTv :~> TyString)
-  RPrint -> let
-    aVar = nd "a" 0
-    aTv = TyVar aVar
-    in TypeScheme [aVar] [Pred Show aTv] (aTv :~> TyUnit)
-  where
-  nd b a = NamedDeBruijn a b
-
--- -- todo: debruijnize automatically
-rawBuiltinType :: RawBuiltin -> TypeScheme NamedDeBruijn
-rawBuiltinType = \case
-  -- Add
-  RawAdd ->
-    addBinopType
-  -- Num
-  RawSub ->
-    numBinopType
-  RawMultiply ->
-    numBinopType
-  RawDivide ->
-    numBinopType
-  RawNegate ->
-    unaryNumType
-  RawAbs ->
-    unaryNumType
-  -- Bool ops
-  RawAnd ->
-    binaryBool
-  RawOr ->
-    binaryBool
-  RawNot ->
-    TypeScheme [] [] (TyBool :~> TyBool)
-  -- Eq ops
-  RawEq ->
-    eqTyp
-  RawNeq ->
-    eqTyp
-  -- Ord ops
-  RawGT ->
-    ordTyp
-  RawGEQ ->
-    ordTyp
-  RawLT ->
-    ordTyp
-  RawLEQ ->
-    ordTyp
-  -- Integer ops
-  RawBitwiseAnd ->
-    binaryInt
-  RawBitwiseOr ->
-    binaryInt
-  RawBitwiseXor ->
-    binaryInt
-  RawBitwiseFlip ->
-    unaryInt
-  RawMod ->
-    binaryInt
-  RawBitShift ->
-    unaryInt
-  -- Rounding ops
-  RawRound ->
-    roundingFn
-  RawCeiling ->
-    roundingFn
-  RawFloor ->
-    roundingFn
-  -- Fractional
-  RawExp ->
-    unaryFractional
-  RawLn ->
-    unaryFractional
-  RawSqrt ->
-    unaryFractional
-  RawLogBase ->
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [Pred Fractional a] (a :~> a :~> a)
-  -- ListLike
-  RawConcat ->
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [Pred ListLike a] (TyList a :~> a)
-  RawTake ->
-    takeDropTy
-  RawDrop ->
-    takeDropTy
-  RawLength ->
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [Pred ListLike a] (a :~> TyInt)
-  RawReverse ->
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [Pred ListLike a] (a :~> a)
-  -- General
-  RawMap ->
-    let aVar = nd "a" 1
-        bVar = nd "b" 0
-        a = TyVar aVar
-        b = TyVar bVar
-    in TypeScheme [aVar, bVar] [] ((a :~> b) :~> TyList a :~> TyList b)
-  RawFold ->
-    let aVar = nd "a" 1
-        bVar = nd "b" 0
-        a = TyVar aVar
-        b = TyVar bVar
-    in TypeScheme [aVar, bVar] [] ((a :~> b :~> a) :~> a :~> TyList b :~> a)
-  RawFilter ->
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [] ((a :~> TyBool) :~> TyList a :~> TyList a)
-  RawZip ->
-    let aVar = nd "a" 2
-        a = TyVar aVar
-        bVar = nd "b" 1
-        b = TyVar bVar
-        cVar = nd "c" 0
-        c = TyVar cVar
-    in TypeScheme [aVar, bVar, cVar] [] ((a :~> b :~> c) :~> TyList a :~> TyList b :~> TyList c)
-  RawIf ->
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [] (TyBool :~> (TyUnit :~> a) :~> (TyUnit :~> a) :~> a)
-  RawIntToStr ->
-    TypeScheme [] [] (TyInt :~> TyString)
-  RawStrToInt ->
-    TypeScheme  [] [] (TyString :~> TyInt)
-  RawDistinct ->
-    let aVar  = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [Pred Eq a] (TyList a :~> TyList a)
-  RawEnforce ->
-    TypeScheme [] [] (TyBool :~> TyString :~> TyUnit)
-  RawEnforceOne -> error "todo"
-  RawEnumerate ->
-    TypeScheme [] [] (TyInt :~> TyInt :~> TyList TyInt)
-  RawEnumerateStepN ->
-    TypeScheme [] [] (TyInt :~> TyInt :~> TyInt :~> TyList TyInt)
-  RawShow ->
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [Pred Show a] (a :~> TyString)
-  RawReadInteger ->
-    TypeScheme [] [] (TyString :~> TyInt)
-  RawReadDecimal ->
-    TypeScheme [] [] (TyString :~> TyDecimal)
-  RawReadString ->
-    TypeScheme [] [] (TyString :~> TyString)
-  -- RawReadKeyset ->
-  --   TypeScheme [] [] (TyString :~> TyGuard)
-  -- RawEnforceGuard ->
-  --   TypeScheme [] [] (TyGuard :~> TyUnit)
-  -- RawKeysetRefGuard ->
-  --   TypeScheme [] [] (TyString :~> TyGuard)
-  -- RawCreateUserGuard -> let
-  --   a = nd "a" 0
-  --   in TypeScheme [a] [] ((TyUnit :~> TyVar a) :~> TyGuard)
-  RawListAccess -> let
-    a = nd "a" 0
-    in TypeScheme [a] [] (TyInt :~> TyList (TyVar a) :~> TyVar a)
-  RawB64Encode ->
-    TypeScheme [] [] (TyString :~> TyString)
-  RawB64Decode ->
-    TypeScheme [] [] (TyString :~> TyString)
-  where
-  nd b a = NamedDeBruijn a b
-  unaryNumType =
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [Pred Num a] (a :~> a)
-  unaryFractional =
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [Pred Fractional a] (a :~> TyDecimal)
-  addBinopType =
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [Pred Add a] (a :~> a :~> a)
-  numBinopType =
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [Pred Num a] (a :~> a :~> a)
-  eqTyp =
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [Pred Eq a] (a :~> a :~> TyBool)
-  ordTyp =
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [Pred Ord a] (a :~> a :~> TyBool)
-  unaryInt = TypeScheme [] [] (TyInt :~> TyInt)
-  -- integer -> integer -> integer
-  binaryInt = TypeScheme [] [] (TyInt :~> TyInt :~> TyInt)
-  -- decimal -> integer
-  roundingFn = TypeScheme [] [] (TyDecimal :~> TyInt)
-  -- bool -> bool -> bool
-  binaryBool = TypeScheme [] [] (TyBool :~> TyBool :~> TyBool)
-  -- forall a. ListLike a => int -> a -> a
-  takeDropTy =
-    let aVar = nd "a" 0
-        a = TyVar aVar
-    in TypeScheme [aVar] [Pred ListLike a] (TyInt :~> a :~> a)
 
 mkFree :: Loaded builtin info -> Map ModuleName (Map Text (Type Void))
 mkFree loaded = let
@@ -1325,59 +1393,58 @@ mkFree loaded = let
 
 runInfer
   :: Loaded b' i'
-  -> (b -> TypeScheme NamedDeBruijn)
   -> InferM s b i a
   -> ST s (Either (PactError i) a)
-runInfer loaded bfn (InferT act) = do
+runInfer loaded (InferT act) = do
   uref <- newSTRef 0
   lref <- newSTRef 1
-  let tcs = TCState uref mempty bfn (mkFree loaded) lref
+  let tcs = TCState uref mempty (mkFree loaded) lref
   runReaderT (runExceptT act) tcs
 
 runInferTerm
-  :: Loaded b' i'
-  -> (b -> TypeScheme NamedDeBruijn)
+  :: TypeOfBuiltin b
+  => Loaded b' i'
   -> IRTerm b i
   -> Either (PactError i) (TypeScheme NamedDeBruijn, TypedGenTerm b i)
-runInferTerm loaded bfn term0 = runST $
-  runInfer loaded bfn $ inferTermGen term0
+runInferTerm loaded term0 = runST $
+  runInfer loaded $ inferTermGen term0
 
 runInferTermNonGen
-  :: Loaded b' i'
-  -> (b -> TypeScheme NamedDeBruijn)
+  :: TypeOfBuiltin b
+  => Loaded b' i'
   -> IRTerm b i
-  -> Either (PactError i) (TypedTerm b i)
-runInferTermNonGen loaded bfn term0 = runST $
-  runInfer loaded bfn $ inferTermNonGen term0
+  -> Either (PactError i) (TypeScheme NamedDeBruijn, TypedTerm b i)
+runInferTermNonGen loaded term0 = runST $
+  runInfer loaded $ inferTermNonGen term0
 
 runInferModule
-  :: Loaded b' i'
-  -> (b -> TypeScheme NamedDeBruijn)
+  :: TypeOfBuiltin b
+  => Loaded b' i'
   -> IRModule b i
   -> Either (PactError i) (TypedModule b i)
-runInferModule loaded bfn term0 =
-  runST $ runInfer loaded bfn (inferModule term0)
+runInferModule loaded term0 =
+  runST $ runInfer loaded (inferModule term0)
 
 runInferTopLevel
-  :: Loaded b' i'
-  -> (b -> TypeScheme NamedDeBruijn)
+  :: TypeOfBuiltin b
+  => Loaded b' i'
   -> IR.TopLevel Name b i
   -> Either (PactError i) (TypedTopLevel b i)
-runInferTopLevel l bfn tl =
-  runST $ runInfer l bfn (inferTopLevel tl)
+runInferTopLevel l tl =
+  runST $ runInfer l (inferTopLevel tl)
 
 runInferProgram
-  :: Loaded b' i'
-  -> (b -> TypeScheme NamedDeBruijn)
+  :: TypeOfBuiltin b
+  => Loaded b' i'
   -> [IR.TopLevel Name b info]
   -> Either (PactError info) [TypedTopLevel b info]
-runInferProgram l bfn prog =
-  runST $ runInfer l bfn $ inferProgram prog
+runInferProgram l prog =
+  runST $ runInfer l $ inferProgram prog
 
 runInferReplProgram
-  :: Loaded b' i'
-  -> (b -> TypeScheme NamedDeBruijn)
+  :: TypeOfBuiltin b
+  => Loaded b' i'
   -> [IR.ReplTopLevel Name b info]
   -> Either (PactError info) [TypedReplTopLevel b info]
-runInferReplProgram l bfn prog =
-  runST $ runInfer l bfn $ inferReplProgram prog
+runInferReplProgram l prog =
+  runST $ runInfer l $ inferReplProgram prog
