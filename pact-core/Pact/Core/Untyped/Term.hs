@@ -167,7 +167,7 @@ data Term name builtin info
   -- ^ Constant/Literal values
   | Sequence (Term name builtin info) (Term name builtin info) info
   -- ^ (e_1 e_2 .. e_n)
-  | Conditional (Conditional (Term name builtin info)) info
+  | Conditional (BuiltinForm (Term name builtin info)) info
   -- ^ Special nodes for If, And and Or.
   | Builtin builtin info
   -- ^ Built-in functions (or natives)

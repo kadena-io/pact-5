@@ -79,6 +79,6 @@ runReplCEK
   => ReplEvalEnv b i
   -> ReplEvalState b i
   -> EvalTerm b i
-  -> IO (Either (PactError i) (CEKValue b i (ReplEvalM b i)))
+  -> IO (Either (PactError i) (EvalResult b i (ReplEvalM b i)))
 runReplCEK env st term =
   runReplEvalM env st (eval mempty term)

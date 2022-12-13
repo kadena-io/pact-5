@@ -1,3 +1,5 @@
+{-# LANGUAGE BlockArguments #-}
+
 module Pact.Core.Repl.Runtime.ReplBuiltin where
 
 import Control.Monad.Except
@@ -16,9 +18,12 @@ import Pact.Core.Untyped.Eval.Runtime.CoreBuiltin
 
 import Pact.Core.Repl.Runtime
 
-type ReplCEKValue b i = CEKValue (ReplBuiltin b) i (ReplEvalM (ReplBuiltin b) i)
-type ReplBuiltinFn b i = BuiltinFn (ReplBuiltin b) i (ReplEvalM (ReplBuiltin b) i)
 type ReplBM b i = ReplEvalM (ReplBuiltin b) i
+type ReplCont b i = Cont (ReplBuiltin b) i (ReplBM b i)
+type ReplHandler b i = CEKErrorHandler (ReplBuiltin b) i (ReplBM b i)
+type ReplCEKValue b i = CEKValue (ReplBuiltin b) i (ReplBM b i)
+type ReplEvalResult b i = EvalResult (ReplBuiltin b) i (ReplBM b i)
+type ReplBuiltinFn b i = BuiltinFn (ReplBuiltin b) i (ReplBM b i)
 
 asBool :: MonadCEK b i m => CEKValue b i m -> m Bool
 asBool (VLiteral (LBool b)) = pure b
@@ -28,12 +33,22 @@ asString :: MonadCEK b i m => CEKValue b i m -> m Text
 asString (VLiteral (LString b)) = pure b
 asString _ = failInvariant "asString"
 
+-- Show functions injected by the compiler are
+-- not a recoverable thing from an invariant standpoint
+enforceValue
+  :: MonadCEK b i m
+  => EvalResult b i m
+  -> m (CEKValue b i m)
+enforceValue = \case
+  EvalValue v -> pure v
+  _ -> failInvariant "Error"
+
 tryError :: MonadError a m => m b -> m (Either a b)
 tryError ma = catchError (Right <$> ma) (pure . Left)
 
 mkReplBuiltinFn
   :: (BuiltinArity b)
-  => ([ReplCEKValue b i] -> ReplBM b i (ReplCEKValue b i))
+  => (ReplCont b i -> ReplHandler b i -> [ReplCEKValue b i] -> ReplBM b i (ReplEvalResult b i))
   -> ReplBuiltin b
   -> ReplBuiltinFn b i
 mkReplBuiltinFn fn b =
@@ -41,46 +56,51 @@ mkReplBuiltinFn fn b =
 {-# INLINE mkReplBuiltinFn #-}
 
 corePrint :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i
-corePrint = mkReplBuiltinFn $ \case
+corePrint = mkReplBuiltinFn \cont handler -> \case
   [showInst, v] -> do
-    showed <- asString =<< unsafeApplyOne showInst v
-    liftIO $ putStrLn $ T.unpack showed
-    pure (VLiteral LUnit)
+    unsafeApplyOne showInst v >>= \case
+      EvalValue (VLiteral (LString showed)) -> do
+        liftIO $ putStrLn $ T.unpack showed
+        returnCEKValue cont handler (VLiteral LUnit)
+      ve@VError{} -> returnCEK cont handler ve
+      EvalValue _ -> failInvariant "Print"
   _ -> failInvariant "Print"
 
 coreExpect :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i
-coreExpect = mkReplBuiltinFn $ \case
+coreExpect = mkReplBuiltinFn \cont handler -> \case
   [eqFn, showFn, VLiteral (LString msg), v1, clo@VClosure{}] -> do
-    v2 <- unsafeApplyOne clo (VLiteral LUnit)
-    unsafeApplyTwo eqFn v1 v2 >>= asBool >>= \case
-       False -> do
-        v1s <- asString =<< unsafeApplyOne showFn v1
-        v2s <- asString =<< unsafeApplyOne showFn v2
-        pure $ VError $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
-       True -> do
-        pure (VLiteral (LString ("Expect: success " <> msg)))
+    unsafeApplyOne clo (VLiteral LUnit) >>= \case
+       EvalValue v2 -> do
+        unsafeApplyTwo eqFn v1 v2 >>= enforceValue >>= asBool >>= \case
+          False -> do
+            v1s <- asString =<< enforceValue =<< unsafeApplyOne showFn v1
+            v2s <- asString =<< enforceValue =<< unsafeApplyOne showFn v2
+            pure $ VError $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
+          True -> returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
+       v -> returnCEK cont handler v
   _ -> failInvariant "Expect"
 
 coreExpectThat :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i
-coreExpectThat = mkReplBuiltinFn $ \case
+coreExpectThat = mkReplBuiltinFn \cont handler -> \case
   [VLiteral (LString msg), vclo, v] -> do
-    unsafeApplyOne vclo v >>= asBool >>= \case
-      True -> do
-        pure (VLiteral (LString ("Expect-that: success " <> msg)))
-      False -> do
-        pure (VLiteral (LString ("FAILURE: Expect-that: Did not satisfy condition: " <> msg)))
+    unsafeApplyOne vclo v >>= \case
+      EvalValue (VLiteral (LBool b)) ->
+        if b then returnCEKValue cont handler (VLiteral (LString ("Expect-that: success " <> msg)))
+        else returnCEKValue cont handler  (VLiteral (LString ("FAILURE: Expect-that: Did not satisfy condition: " <> msg)))
+      EvalValue _ -> failInvariant "Expect"
+      ve@VError{} -> returnCEK cont handler ve
   _ -> failInvariant "Expect"
 
 coreExpectFailure :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i
-coreExpectFailure = mkReplBuiltinFn $ \case
+coreExpectFailure = mkReplBuiltinFn \cont handler -> \case
   [VLiteral (LString toMatch), vclo] -> do
     tryError (unsafeApplyOne vclo (VLiteral LUnit)) >>= \case
       Right (VError _e) ->
-        pure $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
+        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
       Left _err -> do
-        pure $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
+        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
       Right _ ->
-        pure $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result"
+        returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result"
   _ -> failInvariant "Expect-failure"
 
 

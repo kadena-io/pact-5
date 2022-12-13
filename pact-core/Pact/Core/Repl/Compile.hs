@@ -56,7 +56,7 @@ data InterpretOutput b i
 -- to assist in swapping from the lisp frontend
 data InterpretBundle
   = InterpretBundle
-  { expr :: ByteString -> ReplM ReplCoreBuiltin (ReplCEKValue CoreBuiltin LineInfo)
+  { expr :: ByteString -> ReplM ReplCoreBuiltin (ReplEvalResult CoreBuiltin LineInfo)
   , exprType :: ByteString -> ReplM ReplCoreBuiltin (TypeScheme NamedDeBruijn)
   , program :: ByteString -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin LineInfo]
   }
@@ -70,7 +70,7 @@ lispInterpretBundle =
 
 interpretExprLisp
   :: ByteString
-  -> ReplM ReplCoreBuiltin (ReplCEKValue CoreBuiltin LineInfo)
+  -> ReplM ReplCoreBuiltin (ReplEvalResult CoreBuiltin LineInfo)
 interpretExprLisp source = do
   pactdb <- use replPactDb
   loaded <- use replLoaded
@@ -83,7 +83,7 @@ interpretExprLisp source = do
 
 interpretExpr
   :: DesugarOutput ReplCoreBuiltin LineInfo (IR.Term Name ReplRawBuiltin LineInfo)
-  -> ReplM ReplCoreBuiltin (ReplCEKValue CoreBuiltin LineInfo)
+  -> ReplM ReplCoreBuiltin (ReplEvalResult CoreBuiltin LineInfo)
 interpretExpr (DesugarOutput desugared loaded' _) = do
   (ty, typed) <- liftEither (runInferTerm loaded' desugared)
   debugIfFlagSet ReplDebugTypecheckerType ty
@@ -179,7 +179,7 @@ interpretTopLevel (DesugarOutput desugared loaded deps) = do
       liftIO (runReplCEK rEnv rState resolved) >>= liftEither >>= \case
         VError txt ->
           pure (InterpretError txt)
-        v -> do
+        EvalValue v -> do
           replLoaded .= loaded
           pure (InterpretValue v)
     -- TLInterface _ -> error "interfaces not yet supported"

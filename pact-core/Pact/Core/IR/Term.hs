@@ -132,7 +132,7 @@ data Term name builtin info
   -- ^ (e1 e2)
   | Sequence (Term name builtin info)  (Term name builtin info) info
   -- ^ error term , error "blah"
-  | Conditional (Conditional (Term name builtin info)) info
+  | Conditional (BuiltinForm (Term name builtin info)) info
   -- ^ Conditional terms
   | Builtin builtin info
   -- ^ Built-in ops, e.g (+)

@@ -20,7 +20,7 @@ module Pact.Core.Builtin
  , CoreBuiltin(..)
  , ReplRawBuiltin
  , ReplCoreBuiltin
- , Conditional(..)
+ , BuiltinForm(..)
  )where
 
 import Data.Text(Text)
@@ -33,13 +33,16 @@ import Pact.Core.Pretty
 type ReplRawBuiltin = ReplBuiltin RawBuiltin
 type ReplCoreBuiltin = ReplBuiltin CoreBuiltin
 
-data Conditional o
+data BuiltinForm o
   = CAnd o o
   | COr o o
   | CIf o o o
+  -- | CFold o o o
+  -- | CMap o o
+  -- | CZip o o o
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
-instance Pretty o => Pretty (Conditional o) where
+instance Pretty o => Pretty (BuiltinForm o) where
   pretty = \case
     CAnd o o' ->
       parens ("and" <+> pretty o <+> pretty o')
@@ -47,6 +50,12 @@ instance Pretty o => Pretty (Conditional o) where
       parens ("or" <+> pretty o <+> pretty o')
     CIf o o' o3 ->
       parens ("if" <+> pretty o <+> pretty o' <+> pretty o3)
+    -- CFold e1 e2 e3 ->
+    --   parens ("fold" <+> pretty e1 <+> pretty e2 <+> pretty e3)
+    -- CMap e1 e2 ->
+    --   parens ("map" <+> pretty e1 <+> pretty e2)
+    -- CZip e1 e2 e3 ->
+    --   parens ("zip" <+> pretty e1 <+> pretty e2 <+> pretty e3)
 
 -- Todo: Objects to be added later @ a later milestone
 -- data ObjectOp o

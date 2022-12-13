@@ -183,7 +183,7 @@ data Term name tyname builtin info
   -- /\a. e where a is a type variable
   | Sequence (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ Blocks (to be replaced by Seq)
-  | Conditional (Conditional (Term name tyname builtin info)) info
+  | Conditional (BuiltinForm (Term name tyname builtin info)) info
   -- ^ Conditional exprs
   | ListLit (Type tyname) [Term name tyname builtin info] info
   -- ^ List literals

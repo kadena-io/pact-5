@@ -149,7 +149,6 @@ typecheck' = \case
       te2 <- typecheck' e2
       unless (te1 == te2) $ throwError "mismatch"
       pure te1
-
   -- k : p ∈ K                (where K = builtin types, constants)
   -- ------------------------ (T-Const)
   -- Γ ⊢ k : Prim p

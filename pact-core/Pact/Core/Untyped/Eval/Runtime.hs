@@ -34,6 +34,7 @@ module Pact.Core.Untyped.Eval.Runtime
  , MonadCEK
  , Closure(..)
  , EvalResult(..)
+ , ApplyOp(..)
  ) where
 
 
@@ -124,14 +125,14 @@ runEvalT s (EvalM action) = runReaderT (runExceptT action) s
 data BuiltinFn b i m
   = BuiltinFn
   { _native :: b
-  , _nativeFn :: (MonadCEK b i m) => [CEKValue b i m] -> m (CEKValue b i m)
+  , _nativeFn :: (MonadCEK b i m) => Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m)
   , _nativeArity :: {-# UNPACK #-} !Int
   , _nativeAppliedArgs :: [CEKValue b i m]
   }
 
 mkBuiltinFn
   :: (BuiltinArity b)
-  => ([CEKValue b i m] -> m (CEKValue b i m))
+  => (Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m))
   -> b
   -> BuiltinFn b i m
 mkBuiltinFn fn b =
@@ -154,7 +155,8 @@ data ApplyOp b i m
   | FoldInitial (CEKEnv b i m) (Closure b i m) (EvalTerm b i)
   | FoldApply (CEKEnv b i m) (Closure b i m) [EvalTerm b i] [CEKValue b i m]
   | MapArg (CEKEnv b i m) (EvalTerm b i)
-  | MapApply 
+  | MapApply (CEKEnv b i m) [EvalTerm b i] [CEKValue b i m]
+  deriving Show
 
 data Cont b i m
   = Fn (CEKValue b i m) (Cont b i m)

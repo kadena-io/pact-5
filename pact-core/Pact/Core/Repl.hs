@@ -35,6 +35,7 @@ import Pact.Core.Pretty
 import Pact.Core.Builtin
 import Pact.Core.Errors
 import Pact.Core.Info
+import Pact.Core.Untyped.Eval.Runtime
 
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
@@ -100,7 +101,9 @@ main = do
           RAExecuteExpr src -> catch' bundle $ do
             eout <- lift (tryError (expr bundle (T.encodeUtf8 src)))
             case eout of
-              Right out -> displayOutput (InterpretValue out)
+              Right out -> case out of
+                EvalValue v -> displayOutput (InterpretValue v)
+                VError e -> displayOutput (InterpretError e)
               Left err -> let
                 rs = ReplSource "(interactive)" input
                 in outputStrLn (T.unpack (replError rs err))
