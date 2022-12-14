@@ -190,6 +190,16 @@ test-suite hspec
   default-language: Haskell2010
   ghc-options:      -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
 
+  default-extensions:
+    OverloadedStrings
+    ViewPatterns
+    LambdaCase
+    TupleSections
+    BangPatterns
+    ScopedTypeVariables
+    FlexibleContexts
+    FlexibleInstances
+
   build-depends:
     , aeson
     , attoparsec
@@ -198,8 +208,6 @@ test-suite hspec
     , bytestring
     , containers
     , data-default
-    , hspec
-    , hspec-core
     , unordered-containers
     , Decimal
     , QuickCheck
@@ -207,9 +215,7 @@ test-suite hspec
     , directory
     , exceptions
     , hedgehog >= 1.0.1 && < 1.2
-    , hspec-golden >= 0.1.0.2
     , http-client
-    , hw-hspec-hedgehog == 0.1.*
     , intervals
     , mmorph
     , neat-interpolation
@@ -228,7 +234,7 @@ test-suite hspec
     , pact-core
     , vector
     , tasty
-    , tasty-hspec
+    , tasty-hunit
 
   other-modules:
     , Pact.Core.Test.Repl

@@ -45,7 +45,7 @@ main = do
   pactDb <- mockPactDb
   g <- newIORef mempty
   evalLog <- newIORef Nothing
-  ref <- newIORef (ReplState mempty emptyLoaded pactDb g evalLog)
+  ref <- newIORef (ReplState mempty mempty pactDb g evalLog)
   runReplT ref (runInputT replSettings (loop lispInterpretBundle)) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
@@ -56,7 +56,6 @@ main = do
   displayOutput = \case
     InterpretValue v -> outputStrLn (show (pretty v))
     InterpretLog t -> outputStrLn (T.unpack t)
-    InterpretError t -> outputStrLn ("Intepreter Error: " <> T.unpack t)
   catch' bundle ma = catchAll ma (\e -> outputStrLn (show e) *> loop bundle)
   loop bundle = do
     minput <- fmap T.pack <$> getInputLine "pact>"
@@ -103,7 +102,8 @@ main = do
             case eout of
               Right out -> case out of
                 EvalValue v -> displayOutput (InterpretValue v)
-                VError e -> displayOutput (InterpretError e)
+                VError e ->
+                  outputStrLn ("Intepreter Error: " <> T.unpack e)
               Left err -> let
                 rs = ReplSource "(interactive)" input
                 in outputStrLn (T.unpack (replError rs err))

@@ -1,6 +1,12 @@
 module Main where
 
--- import Test.Hspec
+import Test.Tasty
+
+import qualified Pact.Core.Test.Repl as ReplTests
 
 main :: IO ()
-main = pure ()
+main = do
+  replTests <- ReplTests.tests
+  defaultMain $ testGroup "pactTests"
+    [ replTests
+    ]

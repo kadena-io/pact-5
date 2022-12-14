@@ -240,4 +240,4 @@ instance MonadCEKEnv b i (EvalM b i) where
     liftIO $ modifyIORef' r (fmap ((msg, g):))
   cekChargeGas g = do
     r <- view emGas
-    liftIO (modifyIORef' r (+ g))
+    liftIO (modifyIORef' r (<> g))

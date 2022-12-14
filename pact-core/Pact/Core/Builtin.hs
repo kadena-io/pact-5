@@ -707,7 +707,7 @@ instance BuiltinArity CoreBuiltin where
     -- EqObj -> 2
     -- NeqObj -> 2
     EqList -> 3
-    NeqList -> 2
+    NeqList -> 3
     GTList -> 2
     GEQList -> 2
     LTList -> 2

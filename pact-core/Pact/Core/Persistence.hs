@@ -17,7 +17,6 @@ module Pact.Core.Persistence
  , loToplevel
  , loAllLoaded
  , mockPactDb
- , emptyLoaded
  ) where
 
 import Control.Lens
@@ -76,8 +75,12 @@ data Loaded b i
 makeLenses ''ModuleData
 makeLenses ''Loaded
 
-emptyLoaded :: Loaded b i
-emptyLoaded = Loaded mempty mempty mempty
+instance Semigroup (Loaded b i) where
+  (Loaded ms tl al) <> (Loaded ms' tl' al') =
+    Loaded (ms <> ms') (tl <> tl') (al <> al')
+
+instance Monoid (Loaded b i) where
+  mempty = Loaded mempty mempty mempty
 
 mockPactDb :: (MonadIO m1, MonadIO m2) => m1 (PactDb m2 b i)
 mockPactDb = do

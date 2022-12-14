@@ -65,7 +65,7 @@ instance MonadCEKEnv b i (ReplEvalM b i) where
     liftIO $ modifyIORef' r (fmap ((msg, g):))
   cekChargeGas g = do
     r <- view emGas
-    liftIO (modifyIORef' r (+ g))
+    liftIO (modifyIORef' r (<> g))
 
 runReplEvalM
   :: ReplEvalEnv b i

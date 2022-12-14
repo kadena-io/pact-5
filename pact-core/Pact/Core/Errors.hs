@@ -184,7 +184,10 @@ data ExecutionError
   -- ^ Some form of decoding error
   | GasExceeded Text
   -- ^ Gas went past the gas limit
-  | FatalExecutionError Text
+  | InvariantFailure Text
+  -- ^ Invariant violation in execution. This is a fatal Error.
+  | ExecutionError Text
+  -- ^ Error raised by the program that went unhandled
   deriving Show
 
 instance RenderError ExecutionError where
@@ -203,13 +206,16 @@ instance RenderError ExecutionError where
       tConcatSpace ["Decoding error:", txt]
     -- Todo: probably enhance this data type
     GasExceeded txt -> txt
-    FatalExecutionError txt ->
-      tConcatSpace ["Fatal execution error:", txt]
+    InvariantFailure txt ->
+      tConcatSpace ["Fatal execution error, invariant violated:", txt]
+    ExecutionError txt ->
+      tConcatSpace ["Program encountered an unhandled raised error: " <> txt]
+
 
 instance Exception ExecutionError
 
 -- data FatalPactError
---   = FatalExecutionError Text
+--   = InvariantFailure Text
 --   | FatalOverloadError Text
 --   | FatalParserError Text
 --   deriving Show
@@ -218,7 +224,7 @@ instance Exception ExecutionError
 
 -- instance RenderError FatalPactError where
 --   renderError = \case
---     FatalExecutionError txt ->
+--     InvariantFailure txt ->
 --       tConcatSpace ["Fatal Execution Error", txt]
 --     FatalOverloadError txt ->
 --       tConcatSpace ["Fatal Overload Error", txt]

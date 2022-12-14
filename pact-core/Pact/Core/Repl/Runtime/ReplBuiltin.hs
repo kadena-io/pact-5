@@ -6,10 +6,10 @@ import Control.Monad.Except
 import Data.Default
 import Data.Text(Text)
 import qualified Data.Text as T
--- import qualified Data.Text.Prettyprint.Doc as Pretty
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
+import Pact.Core.Gas
 -- import Pact.Core.Errors
 
 import Pact.Core.Untyped.Eval.Runtime
@@ -58,12 +58,11 @@ mkReplBuiltinFn fn b =
 corePrint :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i
 corePrint = mkReplBuiltinFn \cont handler -> \case
   [showInst, v] -> do
-    unsafeApplyOne showInst v >>= \case
-      EvalValue (VLiteral (LString showed)) -> do
+    unsafeApplyOne showInst v >>= enforceValue >>= \case
+     VLiteral (LString showed) -> do
         liftIO $ putStrLn $ T.unpack showed
         returnCEKValue cont handler (VLiteral LUnit)
-      ve@VError{} -> returnCEK cont handler ve
-      EvalValue _ -> failInvariant "Print"
+     _ -> failInvariant "Print"
   _ -> failInvariant "Print"
 
 coreExpect :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i
@@ -75,7 +74,7 @@ coreExpect = mkReplBuiltinFn \cont handler -> \case
           False -> do
             v1s <- asString =<< enforceValue =<< unsafeApplyOne showFn v1
             v2s <- asString =<< enforceValue =<< unsafeApplyOne showFn v2
-            pure $ VError $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
+            returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
           True -> returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
        v -> returnCEK cont handler v
   _ -> failInvariant "Expect"
@@ -117,3 +116,9 @@ replCoreBuiltinRuntime = \case
   RExpectThat -> coreExpectThat RExpectThat
   RPrint -> corePrint RPrint
 
+defaultReplState :: Default i => ReplEvalState (ReplBuiltin CoreBuiltin) i
+defaultReplState = ReplEvalState $
+  CEKRuntimeEnv
+  { _cekBuiltins = replCoreBuiltinRuntime
+  , _cekLoaded = mempty
+  , _cekGasModel = freeGasEnv }

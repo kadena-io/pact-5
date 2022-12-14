@@ -33,7 +33,7 @@ newtype Gas
   = Gas Word64
   deriving (Eq, Ord, Show)
   deriving (Semigroup, Monoid) via (Sum Word64)
-  deriving (Semiring, Enum, Num, Real, Integral) via Word64
+  deriving (Semiring, Enum) via Word64
 
 type GasLimit = Gas
 type GasPrice = Rational
@@ -50,13 +50,13 @@ data NodeType
 
 nodeGas :: NodeType -> Gas
 nodeGas = \case
-  VarNode -> 1
-  LamNode -> 1
-  AppNode -> 1
-  SeqNode -> 1
-  BuiltinNode -> 1
-  ConstantNode -> 1
-  ListNode -> 1
+  VarNode -> Gas 1
+  LamNode -> Gas 1
+  AppNode -> Gas 1
+  SeqNode -> Gas 1
+  BuiltinNode -> Gas 1
+  ConstantNode -> Gas 1
+  ListNode -> Gas 1
 
 
 data GasModel b
@@ -83,12 +83,12 @@ constantGasModel unitPrice =
   { _gmName = "unitGasModel"
   , _gmDesc = "GasModel with constant cost " <> T.pack (show unitPrice)
   , _gmNatives = const unitPrice
-  , _gmNodes = if unitPrice > 0 then nodeGas else const 0
+  , _gmNodes = if unitPrice > Gas 0 then nodeGas else const (Gas 0)
   }
 
 freeGasModel :: GasModel b
-freeGasModel = constantGasModel 0
+freeGasModel = constantGasModel (Gas 0)
 
 freeGasEnv :: GasEnv b
 freeGasEnv =
-  GasEnv 1 1 freeGasModel
+  GasEnv (Gas 1) 1 freeGasModel

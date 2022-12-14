@@ -145,7 +145,6 @@ typeOfLit = TyPrim . \case
   LInteger{} -> PrimInt
   LDecimal{} -> PrimDecimal
   LBool{} -> PrimBool
-  LTime{} -> PrimTime
   LUnit -> PrimUnit
 
 renderType :: (Pretty n) => Type n -> Text

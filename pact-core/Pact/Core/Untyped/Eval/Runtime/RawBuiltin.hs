@@ -479,7 +479,7 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- unsafeEqLiteral (LBool i) (LBool i') = i == i'
 -- unsafeEqLiteral (LTime i) (LTime i') = i == i'
 -- unsafeEqLiteral _ _ =
---   throw (FatalExecutionError "invariant failed in literal EQ")
+--   throw (InvariantFailure "invariant failed in literal EQ")
 
 -- -- unsafeNeqLiteral :: Literal -> Literal -> Bool
 -- -- unsafeNeqLiteral a b = not (unsafeEqLiteral a b)
@@ -487,7 +487,7 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- unsafeEqCEKValue :: CEKValue b i m -> CEKValue b i m -> Bool
 -- unsafeEqCEKValue (VLiteral l) (VLiteral l') = unsafeEqLiteral l l'
 -- unsafeEqCEKValue (VList l) (VList l') =  V.length l == V.length l' &&  and (V.zipWith unsafeEqCEKValue l l')
--- unsafeEqCEKValue _ _ = throw (FatalExecutionError "invariant failed in value Eq")
+-- unsafeEqCEKValue _ _ = throw (InvariantFailure "invariant failed in value Eq")
 
 -- unsafeNeqCEKValue :: CEKValue b i m -> CEKValue b i m -> Bool
 -- unsafeNeqCEKValue a b = not (unsafeEqCEKValue a b)

@@ -225,12 +225,12 @@ applyLam _ _ _ _ = failInvariant' "Applying value to non-function" def
 
 failInvariant :: MonadCEK b i m => Text -> m a
 failInvariant b =
-  let e = PEExecutionError (FatalExecutionError b) def
+  let e = PEExecutionError (InvariantFailure b) def
   in throwError e
 
 failInvariant' :: MonadCEK b i m => Text -> i -> m a
 failInvariant' b i =
-  let e = PEExecutionError (FatalExecutionError b) i
+  let e = PEExecutionError (InvariantFailure b) i
   in throwError e
 
 throwExecutionError' :: (MonadCEK b i m) => ExecutionError -> m a
