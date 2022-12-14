@@ -24,6 +24,7 @@ import System.Console.Haskeline
 import Data.IORef
 import Data.Foldable(traverse_)
 import Data.Text(Text)
+import Data.Default(def)
 
 import qualified Data.ByteString as B
 import qualified Data.Text as T
@@ -54,7 +55,7 @@ main = do
   where
   replSettings = Settings (replCompletion rawBuiltinNames) (Just ".pc-history") True
   displayOutput = \case
-    InterpretValue v -> outputStrLn (show (pretty v))
+    InterpretValue v _ -> outputStrLn (show (pretty v))
     InterpretLog t -> outputStrLn (T.unpack t)
   catch' bundle ma = catchAll ma (\e -> outputStrLn (show e) *> loop bundle)
   loop bundle = do
@@ -101,7 +102,7 @@ main = do
             eout <- lift (tryError (expr bundle (T.encodeUtf8 src)))
             case eout of
               Right out -> case out of
-                EvalValue v -> displayOutput (InterpretValue v)
+                EvalValue v -> displayOutput (InterpretValue v def)
                 VError e ->
                   outputStrLn ("Intepreter Error: " <> T.unpack e)
               Left err -> let

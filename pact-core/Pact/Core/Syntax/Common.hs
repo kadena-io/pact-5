@@ -14,16 +14,16 @@ import Pact.Core.Type(PrimType(..))
 import Pact.Core.Imports
 
 
-data UnaryOp
-  = NegateOp
-  | ComplementOp
-  deriving Show
+-- data UnaryOp
+--   = NegateOp
+--   | ComplementOp
+--   deriving Show
 
-instance Pretty UnaryOp where
-  pretty NegateOp = "-"
-  pretty ComplementOp = "~"
+-- instance Pretty UnaryOp where
+--   pretty NegateOp = "-"
+--   pretty ComplementOp = "~"
 
-data BinaryOp
+data Operator
   = AddOp
   | SubOp
   | MultOp
@@ -36,9 +36,13 @@ data BinaryOp
   | NEQOp
   | BitAndOp
   | BitOrOp
+  | BitComplementOp
+  | AndOp
+  | OrOp
+  | NegateOp
   deriving Show
 
-instance Pretty BinaryOp where
+instance Pretty Operator where
   pretty = \case
     AddOp -> "+"
     SubOp -> "-"
@@ -52,6 +56,10 @@ instance Pretty BinaryOp where
     NEQOp -> "!="
     BitAndOp -> "&"
     BitOrOp -> "|"
+    AndOp -> "and"
+    OrOp -> "or"
+    NegateOp -> "negate"
+    BitComplementOp -> "~"
 
 -- Todo: type constructors aren't 1-1 atm.
 data Type

@@ -291,9 +291,9 @@ Atom :: { ParsedExpr }
   | '(' ')' { Constant LUnit (_ptInfo $1) }
 
 Operator :: { ParsedExpr }
-  -- : '&&' { Operator AndOp (_ptInfo $1) }
-  -- | '||' { Operator OrOp (_ptInfo $1) }
-  : '==' { Operator EQOp (_ptInfo $1) }
+  : and { Operator AndOp (_ptInfo $1) }
+  | or { Operator OrOp (_ptInfo $1) }
+  | '==' { Operator EQOp (_ptInfo $1) }
   | '!=' { Operator NEQOp (_ptInfo $1) }
   | '>'  { Operator GTOp (_ptInfo $1) }
   | '>=' { Operator GEQOp (_ptInfo $1) }

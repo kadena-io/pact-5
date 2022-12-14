@@ -51,7 +51,7 @@ data Expr i
   | Conditional (Cond (Expr i)) i
   | App (Expr i) [Expr i] i
   | Block (NonEmpty (Expr i)) i
-  | Operator BinaryOp i
+  | Operator Operator i
   | List [Expr i] i
   | Constant Literal i
   | Try (Expr i) (Expr i) i

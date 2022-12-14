@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      :  Pact.Core.IR.Term
@@ -181,6 +182,28 @@ instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
 ----------------------------
 -- Aliases for convenience
 ----------------------------
+termBuiltin :: Traversal (Term n b i) (Term n b' i) b b'
+termBuiltin f = \case
+  Var n i -> pure (Var n i)
+  Lam ne te i ->
+    Lam ne <$> termBuiltin f te <*> pure i
+  Let n m_ty te te' i ->
+    Let n m_ty <$> termBuiltin f te <*> termBuiltin f te' <*> pure i
+  App te ne i ->
+    App <$> termBuiltin f te <*> traverse (termBuiltin f) ne <*> pure i
+  Sequence te te' i ->
+    Sequence <$> termBuiltin f te <*> termBuiltin f te' <*> pure i
+  Conditional bf i ->
+    Conditional <$> traverse (termBuiltin f) bf <*> pure i
+  Builtin b i ->
+    Builtin <$> f b <*> pure i
+  Constant lit i ->
+    pure (Constant lit i)
+  ListLit tes i ->
+    ListLit <$> traverse (termBuiltin f) tes <*> pure i
+  Try te te' i ->
+    Try <$> termBuiltin f te <*> termBuiltin f te' <*> pure i
+  Error txt i -> pure (Error txt i)
 
 termInfo :: Lens' (Term name builtin info) info
 termInfo f = \case
@@ -215,3 +238,5 @@ instance Plated (Term name builtin info) where
     Try e1 e2 i ->
       Try <$> f e1 <*> f e2 <*> pure i
     Error e i -> pure (Error e i)
+
+makePrisms ''Term

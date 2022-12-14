@@ -124,18 +124,82 @@ dsOut f (DesugarOutput a l d) =
 
 class DesugarBuiltin b where
   reservedNatives :: Map Text b
-  desugarBinary :: Common.BinaryOp -> b
-  desugarUnary :: Common.UnaryOp -> b
+  desugarOperator :: i -> Common.Operator -> Term ParsedName b i
+  desugarAppArity :: i -> b -> NonEmpty (Term ParsedName b i) -> Term ParsedName b i
 
 instance DesugarBuiltin RawBuiltin where
   reservedNatives = rawBuiltinMap
-  desugarBinary = desugarBinary'
-  desugarUnary = desugarUnary'
+  desugarOperator info = \case
+    Common.AddOp ->
+      Builtin RawAdd info
+    Common.SubOp ->
+      Builtin RawSub info
+    Common.MultOp ->
+      Builtin RawMultiply info
+    Common.DivOp ->
+      Builtin RawDivide info
+    Common.GTOp ->
+      Builtin RawGT info
+    Common.GEQOp ->
+      Builtin RawGEQ info
+    Common.LTOp ->
+      Builtin RawLT info
+    Common.LEQOp ->
+      Builtin RawLEQ info
+    Common.EQOp ->
+      Builtin RawEq info
+    Common.NEQOp ->
+      Builtin RawNeq info
+    Common.BitAndOp ->
+      Builtin RawBitwiseAnd info
+    Common.BitOrOp ->
+      Builtin RawBitwiseOr info
+    Common.BitComplementOp ->
+      Builtin RawBitwiseFlip info
+    -- Manual eta expansion for and as well as Or
+    Common.AndOp -> let
+      arg1 = BN (BareName "#andArg1")
+      arg2 = BN (BareName "#andArg2")
+      in Lam ((arg1, Just TyBool) :| [(arg2, Just TyBool)]) (Conditional (CAnd (Var arg1 info) (Var arg2 info)) info) info
+    Common.OrOp -> let
+      arg1 = BN (BareName "#orArg1")
+      arg2 = BN (BareName "#orArg2")
+      in Lam ((arg1, Just TyBool) :| [(arg2, Just TyBool)]) (Conditional (COr (Var arg1 info) (Var arg2 info)) info) info
+    Common.NegateOp ->
+      Builtin RawNegate info
+  -- Todo:
+  -- Builtins of known arity differences we are yet to support:
+  --  str-to-int
+  --  read (db, later milestone)
+  --  select (db, later milestone)
+  --  floor
+  --  log
+  --
+  desugarAppArity i raw ne = desugarAppArityRaw id i raw ne
+
+desugarAppArityRaw
+  :: (RawBuiltin -> builtin)
+  -> info
+  -> RawBuiltin
+  -> NonEmpty (Term name builtin info)
+  -> Term name builtin info
+desugarAppArityRaw f i RawEnumerate (e1 :| [e2, e3]) =
+    App (Builtin (f RawEnumerateStepN) i) (e1 :| [e2, e3]) i
+desugarAppArityRaw f i b args =
+    App (Builtin (f b) i) args i
 
 instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
   reservedNatives = replRawBuiltinMap
-  desugarBinary = RBuiltinWrap . desugarBinary'
-  desugarUnary = RBuiltinWrap . desugarUnary'
+  desugarOperator i dsg =
+    over termBuiltin RBuiltinWrap $ desugarOperator i dsg
+  desugarAppArity i (RBuiltinWrap b) ne =
+    desugarAppArityRaw RBuiltinWrap i b ne
+  desugarAppArity i RExpect (e1 :| [e2, e3]) | isn't _Lam e3 =
+    App (Builtin RExpect i) (e1 :| [e2, suspendTerm e3]) i
+  desugarAppArity i RExpectFailure (e1 :| [e2]) | isn't _Lam e2 =
+    App (Builtin RExpectFailure i) (e1 :| [suspendTerm e2]) i
+  desugarAppArity i b ne =
+    App (Builtin b i) ne i
 
 throwDesugarError :: MonadError (PactError i) m => DesugarError -> i -> RenamerT m b i a
 throwDesugarError de = liftRenamerT . throwError . PEDesugarError de
@@ -205,9 +269,10 @@ desugarLispTerm = \case
       e' = desugarLispTerm e
       h' = desugarLispTerm h
       hs' = fmap desugarLispTerm hs
-    in App e' (h' :| hs') i
-  Lisp.Operator bop i ->
-    Builtin (desugarBinary bop) i
+    in case e' of
+      Builtin b _ -> desugarAppArity i b (h' :| hs')
+      _ -> App e' (h' :| hs')i
+  Lisp.Operator bop i -> desugarOperator i bop
   Lisp.List e1 i ->
     ListLit (desugarLispTerm <$> e1) i
   Lisp.Constant l i ->
@@ -221,10 +286,13 @@ desugarLispTerm = \case
     Let (BN (BareName n)) (desugarType <$> mty) (desugarLispTerm expr) term i
   isReservedNative n =
     Map.member n (reservedNatives @b)
-  -- suspend i e = let
-  --   name = BN (BareName "#arg")
-  --   e' = desugarLispTerm e
-  --   in Lam ((name, Just TyUnit) :| []) e' i
+
+suspendTerm
+  :: Term ParsedName builtin info
+  -> Term ParsedName builtin info
+suspendTerm e' = let
+  name = BN (BareName "#arg")
+  in Lam ((name, Just TyUnit) :| []) e' (view termInfo e')
 
 desugarDefun :: (DesugarTerm term b i) => Common.Defun term i -> Defun ParsedName b i
 desugarDefun (Common.Defun defname [] rt body i) = let
@@ -299,25 +367,25 @@ desugarType = \case
     TyList (desugarType t)
   -- Common.TyCap -> TyCap
 
-desugarUnary' :: Common.UnaryOp -> RawBuiltin
-desugarUnary' = \case
-  Common.NegateOp -> RawNegate
-  Common.ComplementOp -> RawBitwiseFlip
+-- desugarUnary' :: Common.UnaryOp -> RawBuiltin
+-- desugarUnary' = \case
+--   Common.NegateOp -> RawNegate
+--   Common.ComplementOp -> RawBitwiseFlip
 
-desugarBinary' :: Common.BinaryOp -> RawBuiltin
-desugarBinary' = \case
-  Common.AddOp -> RawAdd
-  Common.SubOp -> RawSub
-  Common.MultOp -> RawMultiply
-  Common.DivOp -> RawDivide
-  Common.GTOp -> RawGT
-  Common.GEQOp -> RawGEQ
-  Common.LTOp -> RawLT
-  Common.LEQOp -> RawLEQ
-  Common.EQOp -> RawEq
-  Common.NEQOp -> RawNeq
-  Common.BitAndOp -> RawBitwiseAnd
-  Common.BitOrOp -> RawBitwiseOr
+-- desugarBinary' :: Common.BinaryOp -> RawBuiltin
+-- desugarBinary' = \case
+--   Common.AddOp -> RawAdd
+--   Common.SubOp -> RawSub
+--   Common.MultOp -> RawMultiply
+--   Common.DivOp -> RawDivide
+--   Common.GTOp -> RawGT
+--   Common.GEQOp -> RawGEQ
+--   Common.LTOp -> RawLT
+--   Common.LEQOp -> RawLEQ
+--   Common.EQOp -> RawEq
+--   Common.NEQOp -> RawNeq
+--   Common.BitAndOp -> RawBitwiseAnd
+--   Common.BitOrOp -> RawBitwiseOr
   -- Common.AndOp -> RawAnd
   -- Common.OrOp -> RawOr
 
