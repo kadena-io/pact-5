@@ -237,4 +237,4 @@ test-suite hspec
     , tasty-hunit
 
   other-modules:
-    , Pact.Core.Test.Repl
+    , Pact.Core.Test.ReplTests

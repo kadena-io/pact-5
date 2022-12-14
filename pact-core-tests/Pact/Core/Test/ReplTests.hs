@@ -1,4 +1,4 @@
-module Pact.Core.Test.Repl where
+module Pact.Core.Test.ReplTests where
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -24,8 +24,6 @@ import Pact.Core.Info
 
 import Pact.Core.Untyped.Eval.Runtime
 
-import Pact.Core.Repl.Runtime
-import Pact.Core.Repl.Runtime.ReplBuiltin
 import Pact.Core.Repl.Utils
 import Pact.Core.Repl.Compile
 

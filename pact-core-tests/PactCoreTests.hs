@@ -2,7 +2,7 @@ module Main where
 
 import Test.Tasty
 
-import qualified Pact.Core.Test.Repl as ReplTests
+import qualified Pact.Core.Test.ReplTests as ReplTests
 
 main :: IO ()
 main = do
