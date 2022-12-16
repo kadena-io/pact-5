@@ -71,7 +71,7 @@ lispInterpretBundle =
     InterpretBundle
   { expr = interpretExprLisp
   , exprType = interpretExprTypeLisp
-  , program = interpretProgramLisp }
+  , program = compileAndInterpretProgram }
 
 interpretExprLisp
   :: ByteString
@@ -90,6 +90,7 @@ interpretExpr
   :: DesugarOutput ReplCoreBuiltin LineInfo (IR.Term Name ReplRawBuiltin LineInfo)
   -> ReplM ReplCoreBuiltin (ReplEvalResult CoreBuiltin LineInfo)
 interpretExpr (DesugarOutput desugared loaded' _) = do
+  debugIfFlagSet ReplDebugDesugar desugared
   (ty, typed) <- liftEither (runInferTerm loaded' desugared)
   debugIfFlagSet ReplDebugTypecheckerType ty
   debugIfFlagSet ReplDebugTypechecker typed
@@ -125,6 +126,7 @@ interpretExprType
   :: DesugarOutput ReplCoreBuiltin LineInfo (IR.Term Name ReplRawBuiltin LineInfo)
   -> ReplM ReplCoreBuiltin (TypeScheme NamedDeBruijn)
 interpretExprType (DesugarOutput desugared loaded' _) = do
+  debugIfFlagSet ReplDebugDesugar desugared
   (ty, typed) <- either (error . show) pure (runInferTerm loaded' desugared)
   debugIfFlagSet ReplDebugTypecheckerType ty
   debugIfFlagSet ReplDebugTypechecker typed
@@ -159,10 +161,16 @@ compileProgram source = do
   pipe pactdb tl = do
     lastLoaded <- get
     (DesugarOutput desugared loaded' deps) <- lift (runDesugarTopLevelLisp (Proxy @ReplRawBuiltin) pactdb lastLoaded tl)
-    put loaded'
     typechecked <- liftEither (runInferTopLevel loaded' desugared)
+    put (getTypedLoaded loaded' typechecked)
     overloaded <- liftEither (runOverloadTopLevel typechecked)
     pure (DesugarOutput overloaded loaded' deps)
+  getTypedLoaded loaded = \case
+    Typed.TLModule m ->
+      let toFqn df = FullyQualifiedName (Typed._mName m) (Typed.defName df) (Typed._mHash m)
+          newTLs = Map.fromList $ (\df -> (toFqn df, Typed.defType df)) <$> Typed._mDefs m
+      in over loAllTyped (Map.union newTLs) loaded
+    _ -> loaded
 
 compileAndInterpretProgram
   :: ByteString
@@ -170,8 +178,10 @@ compileAndInterpretProgram
 compileAndInterpretProgram source = do
   compileProgram source >>= traverse interpret
   where
-  interpret (DesugarOutput tl loaded deps) = do
+  interpret (DesugarOutput tl l deps) = do
     pdb <- use replPactDb
+    replLoaded <>= l
+    loaded <- use replLoaded
     case fromTypedTopLevel tl of
       TLModule m -> do
         let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded loaded)
@@ -179,10 +189,10 @@ compileAndInterpretProgram source = do
         _writeModule pdb mdata
         let out = "Loaded module " <> renderModuleName (_mName m)
             newLoaded = Map.fromList $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
-            loaded' =
-              over loModules (Map.insert (_mName m) mdata) $
-              over loAllLoaded (Map.union newLoaded) loaded
-        replLoaded %= (loaded' <>)
+            loadNewModule =
+              over loModules (Map.insert (_mName m) mdata) .
+              over loAllLoaded (Map.union newLoaded)
+        replLoaded %= loadNewModule
         pure (InterpretLog out)
         where
         toFqDep modName mhash defn =

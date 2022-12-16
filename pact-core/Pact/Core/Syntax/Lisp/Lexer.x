@@ -38,6 +38,7 @@ tokens :-
     $white+;
     -- Keywords
     let          { token TokenLet }
+    let\*        { token TokenLet }
     in           { token TokenIn }
     if           { token TokenIf }
     else         { token TokenElse }
@@ -68,8 +69,8 @@ tokens :-
     unit         { token TokenTyUnit }
     and          { token TokenAnd }
     or           { token TokenOr }
-    at           { token TokenObjAccess }
-    remove       { token TokenObjRemove }
+    -- at           { token TokenObjAccess }
+    -- remove       { token TokenObjRemove }
     try          { token TokenTry }
     error        { token TokenError }
     progn        { token TokenBlockIntro }
@@ -87,7 +88,7 @@ tokens :-
     \.           { token TokenDot }
     \:           { token TokenColon }
     \=\>         { token TokenLambdaArrow}
-    \=\=         { token TokenEq }
+    \=           { token TokenEq }
     \!\=         { token TokenNeq }
     -- \=           { token TokenAssign }
     \>\=         { token TokenGEQ }

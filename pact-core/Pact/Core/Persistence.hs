@@ -15,6 +15,7 @@ module Pact.Core.Persistence
  , Loaded(..)
  , loModules
  , loToplevel
+ , loAllTyped
  , loAllLoaded
  , mockPactDb
  ) where
@@ -22,9 +23,11 @@ module Pact.Core.Persistence
 import Control.Lens
 import Data.Text(Text)
 import Data.IORef
+import Data.Void
 import Data.Map.Strict(Map)
 import Control.Monad.IO.Class
 
+import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Untyped.Term
 import Pact.Core.Guards
@@ -69,6 +72,7 @@ data Loaded b i
   = Loaded
   { _loModules :: Map ModuleName (ModuleData b i)
   , _loToplevel :: Map Text FullyQualifiedName
+  , _loAllTyped :: Map FullyQualifiedName (Type Void)
   , _loAllLoaded :: Map FullyQualifiedName (EvalDef b i)
   } deriving Show
 
@@ -76,11 +80,11 @@ makeLenses ''ModuleData
 makeLenses ''Loaded
 
 instance Semigroup (Loaded b i) where
-  (Loaded ms tl al) <> (Loaded ms' tl' al') =
-    Loaded (ms <> ms') (tl <> tl') (al <> al')
+  (Loaded ms tl ts al) <> (Loaded ms' tl' ts' al') =
+    Loaded (ms <> ms') (tl <> tl') (ts <> ts') (al <> al')
 
 instance Monoid (Loaded b i) where
-  mempty = Loaded mempty mempty mempty
+  mempty = Loaded mempty mempty mempty mempty
 
 mockPactDb :: (MonadIO m1, MonadIO m2) => m1 (PactDb m2 b i)
 mockPactDb = do

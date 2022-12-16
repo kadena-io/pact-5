@@ -62,7 +62,6 @@ import Pact.Core.Errors
 import Pact.Core.Persistence
 import qualified Pact.Core.IR.Term as IR
 import qualified Pact.Core.Typed.Term as Typed
-import qualified Pact.Core.Untyped.Term as Untyped
 
 -- inference based on https://okmij.org/ftp/ML/generalization.html
 -- Note: Type inference levels in the types
@@ -92,7 +91,8 @@ data TCState s b
   -- ^ Supply for fresh variables.
   , _tcVarEnv :: RAList (Type (TvRef s))
   -- ^ Builtins map, that uses the enum instance
-  , _tcFree :: Map ModuleName (Map Text (Type Void))
+  -- , _tcFree :: Map ModuleName (Map Text (Type Void))
+  , _tcFree :: Map FullyQualifiedName (Type Void)
   -- ^ Free variables
   , _tcLevel :: STRef s Level
   -- ^ Type Variable "Region"
@@ -313,10 +313,15 @@ instance TypeOfBuiltin RawBuiltin where
     RawListAccess -> let
       a = nd "a" 0
       in TypeScheme [a] [] (TyInt :~> TyList (TyVar a) :~> TyVar a)
+    RawMakeList -> let
+      a = nd "a" 0
+      in TypeScheme [a] [] (TyInt :~>  TyVar a :~> TyList (TyVar a))
     RawB64Encode ->
       TypeScheme [] [] (TyString :~> TyString)
     RawB64Decode ->
       TypeScheme [] [] (TyString :~> TyString)
+    RawStrToList ->
+      TypeScheme [] [] (TyString :~> TyList TyString)
     where
     nd b a = NamedDeBruijn a b
     unaryNumType =
@@ -951,7 +956,7 @@ inferTerm = \case
         Nothing ->
           throwTypecheckError (TCUnboundTermVariable n) i
     NTopLevel mn _mh ->
-      views tcFree (preview (ix mn . ix n)) >>= \case
+      view (tcFree . at (FullyQualifiedName mn n _mh)) >>= \case
         Just ty -> do
           let newVar = Typed.Var irn i
           pure (liftType ty, newVar, [])
@@ -1104,15 +1109,15 @@ inferModule
   -> InferM s b i (TypedModule b i)
 inferModule (IR.Module mname defs blessed imports impl mh) = do
   -- gov' <- traverse (dbjName [] 0 . toOName ) gov
-  fv <- Map.insert mname mempty <$> view tcFree
+  fv <- view tcFree
   (defs', _) <- foldlM infer' ([], fv) defs
   pure (Typed.Module mname (reverse defs') blessed imports impl mh)
   where
   infer' (xs, m) d = do
     def' <- local (set tcFree m) (inferDef d)
-    let name' = Typed.defName def'
+    let name' = FullyQualifiedName mname (Typed.defName def') mh
         ty = liftType (Typed.defType def')
-        m' = Map.adjust (Map.insert name' ty) mname  m
+        m' = Map.insert name' ty  m
     pure (def':xs, m')
 
 -- | Note: debruijnizeType will
@@ -1384,12 +1389,12 @@ dbjTyp i env depth = \case
 -- --- Built-in type wiring
 -- ------------------------------------------
 
-mkFree :: Loaded builtin info -> Map ModuleName (Map Text (Type Void))
-mkFree loaded = let
-  tl = _loModules loaded
-  toTy d = (Untyped.defName d, Untyped.defType d)
-  mdefs =  Untyped._mDefs . _mdModule <$> tl
-  in Map.fromList . fmap toTy <$> mdefs
+-- mkFree :: Loaded builtin info -> Map ModuleName (Map Text (Type Void))
+-- mkFree loaded = let
+--   tl = _loModules loaded
+--   toTy d = (Untyped.defName d, Untyped.defType d)
+--   mdefs =  Untyped._mDefs . _mdModule <$> tl
+--   in Map.fromList . fmap toTy <$> mdefs
 
 runInfer
   :: Loaded b' i'
@@ -1398,7 +1403,7 @@ runInfer
 runInfer loaded (InferT act) = do
   uref <- newSTRef 0
   lref <- newSTRef 1
-  let tcs = TCState uref mempty (mkFree loaded) lref
+  let tcs = TCState uref mempty (_loAllTyped loaded) lref
   runReaderT (runExceptT act) tcs
 
 runInferTerm

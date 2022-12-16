@@ -363,6 +363,12 @@ concatStr = mkBuiltinFn \cont handler -> \case
     returnCEKValue cont handler (VLiteral (LString (T.concat (V.toList li'))))
   _ -> failInvariant "concatStr"
 
+strToList :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+strToList = mkBuiltinFn \cont handler -> \case
+  [VLiteral (LString s)] -> do
+    let v = (VList (V.fromList ((VLiteral . LString . T.singleton <$> T.unpack s))))
+    returnCEKValue cont handler v
+  _ -> failInvariant "concatStr"
 
 ---------------------------
 -- Unit ops
@@ -554,33 +560,51 @@ reverseList = mkBuiltinFn \cont handler -> \case
 
 coreEnumerate :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
 coreEnumerate = mkBuiltinFn \cont handler -> \case
-  [VLiteral (LInteger from), VLiteral (LInteger to)] -> enum' from to
-    where
-      toVecList = VList . fmap (VLiteral . LInteger)
-      enum' from' to'
-        | to' >= from' = returnCEKValue cont handler $ toVecList $ V.enumFromN from' (fromIntegral (to' - from' + 1))
-        | otherwise = returnCEKValue cont handler $ toVecList $ V.enumFromStepN from' (-1) (fromIntegral (from' - to' + 1))
+  [VLiteral (LInteger from), VLiteral (LInteger to)] -> do
+    v <- createEnumerateList from to (if from > to then -1 else 1)
+    returnCEKValue cont handler (VList (VLiteral . LInteger <$> v))
   _ -> failInvariant "enumerate"
 
+createEnumerateList
+  :: (MonadCEK b i m)
+  => Integer
+  -- ^ from
+  -> Integer
+  -- ^ to
+  -> Integer
+  -- ^ Step
+  -> m (Vector Integer)
+createEnumerateList from to inc
+  | from == to = pure (V.singleton from)
+  | inc == 0 = pure mempty
+  | from < to, from + inc < from =
+    throwExecutionError' (EnumerationError "enumerate: increment diverges below from interval bounds.")
+  | from > to, from + inc > from =
+    throwExecutionError' (EnumerationError "enumerate: increment diverges above from interval bounds.")
+  | otherwise = let
+    step = succ (abs (from - to) `div` abs inc)
+    in pure $ V.enumFromStepN from inc (fromIntegral step)
 
 coreEnumerateStepN :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
 coreEnumerateStepN = mkBuiltinFn \cont handler -> \case
-  [VLiteral (LInteger from), VLiteral (LInteger to), VLiteral (LInteger s)] -> enum' from to s
-    where
-    toVecList = VList . fmap (VLiteral . LInteger)
-    enum' from' to' step
-      | to' > from' && step > 0 =
-        returnCEKValue cont handler
-        $ toVecList
-        $ V.enumFromStepN from' step (fromIntegral ((to' - from' + 1) `quot` step))
-      | from' > to' && step < 0 =
-        returnCEKValue cont handler
-        $ toVecList
-        $ V.enumFromStepN from' step (fromIntegral ((from' - to' + 1) `quot` step))
-      | from' == to' && step == 0 =
-        returnCEKValue cont handler
-        $ toVecList $ V.singleton from'
-      | otherwise = throwExecutionError' (EnumeratationError "enumerate outside interval bounds")
+  [VLiteral (LInteger from), VLiteral (LInteger to), VLiteral (LInteger inc)] -> do
+    v <- createEnumerateList from to inc
+    returnCEKValue cont handler (VList (VLiteral . LInteger <$> v))
+    -- where
+    -- toVecList = VList . fmap (VLiteral . LInteger)
+    -- enum' from' to' step
+    --   | to' > from' && step > 0 =
+    --     returnCEKValue cont handler
+    --     $ toVecList
+    --     $ V.enumFromStepN from' step (fromIntegral ((to' - from' + 1) `quot` step))
+    --   | from' > to' && step < 0 =
+    --     returnCEKValue cont handler
+    --     $ toVecList
+    --     $ V.enumFromStepN from' step (fromIntegral ((from' - to' + 1) `quot` step))
+    --   | from' == to' && step == 0 =
+    --     returnCEKValue cont handler
+    --     $ toVecList $ V.singleton from'
+    --   | otherwise = throwExecutionError' (EnumeratationError "enumerate outside interval bounds")
   _ -> failInvariant "enumerate-step"
 
 concatList :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
@@ -590,6 +614,23 @@ concatList = mkBuiltinFn \cont handler -> \case
     returnCEKValue cont handler (VList (V.concat (V.toList li')))
   _ -> failInvariant "takeList"
 
+makeList :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+makeList = mkBuiltinFn \cont handler -> \case
+  [VLiteral (LInteger i), v] -> do
+    returnCEKValue cont handler (VList (V.fromList (replicate (fromIntegral i) v)))
+  _ -> failInvariant "makeList"
+
+listAccess :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+listAccess = mkBuiltinFn \cont handler -> \case
+  [VLiteral (LInteger i), VList vec] ->
+    case vec V.!? fromIntegral i of
+      Just v -> returnCEKValue cont handler v
+      _ -> throwExecutionError' (ArrayOutOfBoundsException (V.length vec) (fromIntegral i))
+  _ -> failInvariant "list-access"
+
+-----------------------------------
+-- try-related ops
+-----------------------------------
 
 coreEnforce :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
 coreEnforce = mkBuiltinFn \cont handler -> \case
@@ -729,14 +770,6 @@ coreEnforce = mkBuiltinFn \cont handler -> \case
 -- createUserGuard = mkBuiltinFn \case
 --   [v@VClosure{}] -> pure (VGuard (GUserGuard v))
 --   _ -> failInvariant "create-user-guard"
-
-listAccess :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
-listAccess = mkBuiltinFn \cont handler -> \case
-  [VLiteral (LInteger i), VList vec] ->
-    case vec V.!? fromIntegral i of
-      Just v -> returnCEKValue cont handler v
-      _ -> throwExecutionError' (ArrayOutOfBoundsException (V.length vec) (fromIntegral i))
-  _ -> failInvariant "list-access"
 
 -----------------------------------
 -- Other Core forms
@@ -900,8 +933,10 @@ coreBuiltinRuntime = \case
   -- KeysetRefGuard -> coreKeysetRefGuard KeysetRefGuard
   -- CreateUserGuard -> createUserGuard CreateUserGuard
   ListAccess -> listAccess ListAccess
+  MakeList -> makeList MakeList
   B64Encode -> coreB64Encode B64Encode
   B64Decode -> coreB64Decode B64Decode
+  StrToList -> strToList StrToList
 
 coreBuiltinLiftedRuntime
   :: (MonadCEK b i m, BuiltinArity b)
@@ -1036,5 +1071,7 @@ coreBuiltinLiftedRuntime f = \case
   -- KeysetRefGuard -> coreKeysetRefGuard KeysetRefGuard
   -- CreateUserGuard -> createUserGuard CreateUserGuard
   ListAccess -> listAccess (f ListAccess)
+  MakeList -> makeList (f MakeList)
   B64Encode -> coreB64Encode (f B64Encode)
   B64Decode -> coreB64Decode (f B64Decode)
+  StrToList -> strToList (f StrToList)

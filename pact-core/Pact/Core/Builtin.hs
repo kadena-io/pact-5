@@ -234,8 +234,10 @@ data RawBuiltin
   -- | RawKeysetRefGuard
   -- | RawCreateUserGuard
   | RawListAccess
+  | RawMakeList
   | RawB64Encode
   | RawB64Decode
+  | RawStrToList
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 rawBuiltinToText :: RawBuiltin -> Text
@@ -304,8 +306,10 @@ rawBuiltinToText = \case
   -- RawKeysetRefGuard -> "keyset-ref-guard"
   -- RawCreateUserGuard -> "create-user-guard"
   RawListAccess -> "at"
+  RawMakeList -> "make-list"
   RawB64Encode -> "base64-encode"
   RawB64Decode -> "base64-decode"
+  RawStrToList -> "str-to-list"
 
 instance BuiltinArity RawBuiltin where
   builtinArity = \case
@@ -373,8 +377,10 @@ instance BuiltinArity RawBuiltin where
     -- RawKeysetRefGuard -> 1
     -- RawCreateUserGuard -> 1
     RawListAccess -> 2
+    RawMakeList -> 2
     RawB64Encode -> 1
     RawB64Decode -> 1
+    RawStrToList -> 1
 
 rawBuiltinNames :: [Text]
 rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]
@@ -630,9 +636,12 @@ data CoreBuiltin
   -- | EnforceGuard
   -- | KeysetRefGuard
   -- | CreateUserGuard
+  -- List ops
   | ListAccess
+  | MakeList
   | B64Encode
   | B64Decode
+  | StrToList
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 
@@ -739,8 +748,10 @@ instance BuiltinArity CoreBuiltin where
     -- KeysetRefGuard -> 1
     -- CreateUserGuard -> 1
     ListAccess -> 2
+    MakeList -> 2
     B64Encode -> 1
     B64Decode -> 1
+    StrToList -> 1
 
 coreBuiltinToText :: CoreBuiltin -> Text
 coreBuiltinToText = \case
@@ -873,5 +884,7 @@ coreBuiltinToText = \case
   -- KeysetRefGuard -> "keyset-ref-guard"
   -- CreateUserGuard -> "create-user-guard"
   ListAccess -> "at"
+  MakeList -> "make-list"
   B64Encode -> "base64-encode"
   B64Decode -> "base64-decode"
+  StrToList -> "str-to-list"

@@ -235,18 +235,27 @@ SExpr :: { LineInfo -> ParsedExpr }
   | GenAppExpr { $1 }
   | SuspendExpr { $1 }
 
+List :: { ParsedExpr }
+  : '[' ListExprs ']' { List $2 (_ptInfo $1) }
+
+ListExprs :: { [ParsedExpr] }
+  : Expr MCommaExpr { $1:(reverse $2) }
+  | {- empty -} { [] }
+
+MCommaExpr :: { [ParsedExpr] }
+  : ',' ExprCommaSep { $2 }
+  | AppList { $1 }
+
 ExprCommaSep :: { [ParsedExpr] }
   : ExprCommaSep ',' Expr { $3:$1 }
   | Expr { [$1] }
-  | {- empty -} { [] }
+  -- | {- empty -} { [] }
 
 LamExpr :: { LineInfo -> ParsedExpr }
   : lam '(' LamArgs ')' Expr { Lam ln0 (reverse $3) $5 }
 
 IfExpr :: { LineInfo -> ParsedExpr }
   : if Expr Expr Expr { Conditional (CEIf $2 $3 $4) }
-  | and Expr Expr { Conditional (CEAnd $2 $3) }
-  | or Expr Expr { Conditional (CEOr $2 $3) }
 
 TryExpr :: { LineInfo -> ParsedExpr }
   : try Expr Expr { Try $2 $3 }
@@ -338,9 +347,6 @@ FieldPairs :: { [(Field, ParsedExpr)] }
   : FieldPairs ',' FieldPair { $3 : $1 }
   | FieldPair { [$1] }
   | {- empty -} { [] }
-
-List :: { ParsedExpr }
-  : '[' ExprCommaSep ']' { List (reverse $2) (_ptInfo $1) }
 
 {
 

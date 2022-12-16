@@ -345,10 +345,14 @@ solveCoreOverload i b tys preds = case b of
     pure (Builtin ReadString i)
   RawListAccess ->
     pure (Builtin ListAccess i)
+  RawMakeList ->
+    pure (Builtin MakeList i)
   RawB64Encode ->
     pure (Builtin B64Encode i)
   RawB64Decode ->
     pure (Builtin B64Decode i)
+  RawStrToList ->
+    pure (Builtin StrToList i)
     -- Addition
     -- Note, we can also sanity check this here.
     -- (+) Add instances for base types + dynamic access

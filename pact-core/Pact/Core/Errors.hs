@@ -178,7 +178,7 @@ data ExecutionError
   -- ^ Array index out of bounds <length> <index>
   | ArithmeticException Text
   -- ^ Arithmetic error <cause>
-  | EnumeratationError Text
+  | EnumerationError Text
   -- ^ Enumeration error (e.g incorrect bounds with step
   | DecodeError Text
   -- ^ Some form of decoding error
@@ -200,7 +200,7 @@ instance RenderError ExecutionError where
       , tParens (T.pack (show ix))]
     ArithmeticException txt ->
       tConcatSpace ["Arithmetic exception:", txt]
-    EnumeratationError txt ->
+    EnumerationError txt ->
       tConcatSpace ["Enumeration error:", txt]
     DecodeError txt ->
       tConcatSpace ["Decoding error:", txt]

@@ -260,10 +260,14 @@ desugarLispTerm = \case
     v@Var{} ->
       let arg = Constant LUnit i :| []
       in App v arg i
-    v@Lam{} ->
-      let arg = Constant LUnit i :| []
-      in App v arg i
     e' -> e'
+  Lisp.App (Lisp.Operator o oi) [e1, e2] i -> case o of
+    Common.AndOp ->
+      Conditional (CAnd (desugarTerm e1) (desugarTerm e2)) i
+    Common.OrOp ->
+      Conditional (COr (desugarTerm e1) (desugarTerm e2)) i
+    _ ->
+      App (desugarOperator oi o) (desugarTerm e1 :| [desugarTerm e2]) i
   Lisp.App e (h:hs) i ->
     let
       e' = desugarLispTerm e
@@ -463,7 +467,9 @@ lookupModuleMember modName name i = do
         Just irtl -> do
           let memberTerms = Map.fromList (toFqDep mhash <$> Term._mDefs module_)
               allDeps = Map.union memberTerms (_mdDependencies md)
+              allTyped = Term.defType <$> memberTerms
           rsLoaded %= over loModules (Map.insert modName md) . over loAllLoaded (Map.union allDeps)
+          rsLoaded . loAllTyped <>= allTyped
           rsModuleBinds %= Map.insert modName depMap
           rsDependencies %= Set.insert modName
           pure (Name name irtl)

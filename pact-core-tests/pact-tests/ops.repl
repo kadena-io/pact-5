@@ -45,14 +45,14 @@
 (expect "<= decimal decimal" true (<= 11.0 11.0))
 (expect "> decimal decimal" true (> 11.0 10.0))
 (expect ">= decimal decimal" true (>= 11.1 11.0))
-(expect "= decimal decimal" true (== 10.0 10.0))
+(expect "= decimal decimal" true (= 10.0 10.0))
 (expect "!= decimal decimal" true (!= 10.0 10.1))
 
 (expect "< integer integer" true (< 10 11))
 (expect "<= integer integer" true (<= 11 11))
 (expect "> integer integer" true (> 11 10))
 (expect ">= integer integer" true (>= 12 11))
-(expect "= integer integer" true (== 10 10))
+(expect "= integer integer" true (= 10 10))
 (expect "!= integer integer" true (!= 10 88))
 
 ; Todo: typecheck failures here
@@ -73,10 +73,10 @@
 (expect "<= string string" true (<= "a" "a"))
 (expect "> string string" true (> "b" "a"))
 (expect ">= string string" true (>= "ba" "a"))
-(expect "= string string" true (== "hello" "hello"))
+(expect "= string string" true (= "hello" "hello"))
 (expect "!= string string" true (!= "hello" "goodbye"))
 
-(expect "= bool bool" true (== true true))
+(expect "= bool bool" true (= true true))
 (expect "!= bool bool" true (!= false true))
 
 ;; (interface ix (defun f:bool ()))
@@ -106,7 +106,7 @@
 ;  (expect "floor 1 prec" 100.1 (ceiling 100.01 1)))
 
 "===== list equality"
-(expect "= list list" true (== [1, 2, 3] [1, 2, 3]))
+(expect "= list list" true (= [1, 2, 3] [1, 2, 3]))
 ;  (expect "not = list list" false (= [1, 3, 2] [1, 2, 3]))
 ;  (expect "not != list list" false (!= [1, 2, 3] [1, 2, 3]))
 ;  (expect "!= list list" true (!= [1, 3, 2] [1, 2, 3]))
