@@ -197,11 +197,17 @@ data IfDef e i
   | IFDConst (DefConst e i)
   deriving Show
 
+instance Pretty e => Pretty (DefConst e i) where
+  pretty (DefConst dcn dcty term _) =
+    parens ("defconst" <+> pretty dcn <> mprettyTy dcty <+> pretty term)
+    where
+    mprettyTy = maybe mempty ((":" <>) . pretty)
+
 instance Pretty Arg where
   pretty (Arg n ty) =
     pretty n <> ":" <+> pretty ty
 
 instance Pretty e => Pretty (Defun e i) where
   pretty (Defun n args rettype term _) =
-    "defun" <+> pretty n <+> parens (prettyCommaSep args)
-      <> ":" <+> pretty rettype <+> "=" <+> pretty term
+    parens ("defun" <+> pretty n <+> parens (prettyCommaSep args)
+      <> ":" <+> pretty rettype <+> "=" <+> pretty term)

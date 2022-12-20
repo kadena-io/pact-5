@@ -136,7 +136,7 @@ interpretExprType (DesugarOutput desugared loaded' _) = do
 -- Small internal debugging function for playing with file loading within
 -- this module
 loadFile :: FilePath -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin LineInfo]
-loadFile source = liftIO (B.readFile source) >>= interpretProgram
+loadFile source = liftIO (B.readFile source) >>= interpretReplProgram
 
 compileProgram
   :: ByteString
@@ -159,6 +159,7 @@ compileProgram source = do
     overloaded <- liftEither (runOverloadTopLevel typechecked)
     pure (DesugarOutput overloaded loadedWithTc deps)
 
+
 interpretReplProgram
   :: ByteString
   -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin LineInfo]
@@ -169,10 +170,21 @@ interpretReplProgram source = do
   parsed <- liftEither $ Lisp.parseReplProgram lexx
   concat <$> traverse (pipe pactdb) parsed
   where
+  debugIfLispExpr = \case
+    Lisp.RTLTerm t -> debugIfFlagSet ReplDebugParser t
+    _ -> pure ()
+  debugIfIRExpr flag = \case
+    IR.RTLTerm t -> debugIfFlagSet flag t
+    _ -> pure ()
+  debugIfTypedExpr flag = \case
+    Typed.RTLTerm t -> debugIfFlagSet flag t
+    _ -> pure ()
+  -- debugIfUntyped flag = \case
+  --   RTLTerm t -> debugIfFlagSet flag t
+  --   _ -> pure ()
   tcExpr loaded pdb e = do
     (DesugarOutput desugared loaded' _) <- runDesugarTermLisp (Proxy @ReplRawBuiltin) pdb loaded e
     pure (runInferTerm loaded' desugared)
-
   pipe pactdb = \case
     Lisp.RTL rtl -> pure <$> pipe' pactdb rtl
     Lisp.RTLReplSpecial rsf -> case rsf of
@@ -198,11 +210,15 @@ interpretReplProgram source = do
             let errMsg = "FAILURE: expect-typecheck-failure: " <> msg <> ". Expression successfully typechecked when expected to fail: " <> exprRender
             in pure [InterpretValue (VString errMsg) i]
   pipe' pactdb tl = do
+    debugIfLispExpr tl
     lastLoaded <- use replLoaded
     (DesugarOutput desugared loaded' deps) <- runDesugarReplTopLevel (Proxy @ReplRawBuiltin) pactdb lastLoaded tl
+    debugIfIRExpr ReplDebugDesugar desugared
     (typechecked, loadedWithTc) <- liftEither (runInferReplTopLevel loaded' desugared)
+    debugIfTypedExpr ReplDebugTypechecker typechecked
     replLoaded .= loadedWithTc
     overloaded <- liftEither (runOverloadReplTopLevel typechecked)
+    debugIfTypedExpr ReplDebugSpecializer overloaded
     interpret (DesugarOutput overloaded loadedWithTc deps)
   interpret (DesugarOutput tl _ deps) = do
     pdb <- use replPactDb
@@ -224,6 +240,7 @@ interpretReplProgram source = do
           let fqn = FullyQualifiedName modName (defName defn) mhash
           in (fqn, defn)
       RTLTerm te -> do
+        debugIfFlagSet ReplDebugUntyped te
         let i = view termInfo te
         evalGas <- use replGas
         evalLog <- use replEvalLog

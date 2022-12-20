@@ -70,7 +70,7 @@ main = do
             file = T.unpack txt
             in catch' $ do
               source <- liftIO (B.readFile file)
-              eout <- lift $ tryError $ interpretProgram source
+              eout <- lift $ tryError $ interpretReplProgram source
               case eout of
                 Right vs -> traverse_ displayOutput vs
                 Left err -> let
