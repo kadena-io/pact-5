@@ -23,12 +23,11 @@
 -- HM type inference for core IR.
 --
 module Pact.Core.IR.Typecheck
- ( runInferProgram
- , runInferTerm
+ ( runInferTerm
  , runInferTermNonGen
  , runInferModule
  , runInferTopLevel
- , runInferReplProgram
+ , runInferReplTopLevel
  , TypeOfBuiltin(..)
  ) where
 
@@ -159,6 +158,8 @@ instance TypeOfBuiltin RawBuiltin where
     -- forall a. Num a => a -> a
     RawNegate ->
       unaryNumType
+    RawPow ->
+      numBinopType
     -- forall a. Num a => a -> a -> a
     RawAbs ->
       unaryNumType
@@ -1091,7 +1092,7 @@ inferDefConst (IR.DefConst name dcTy term info) = do
   fterm <- noTyVarsinTerm info term'
   let dcTy' = liftType <$> dcTy
   _ <- maybe (pure ()) (\dct -> unify dct termTy info) dcTy'
-  rty' <- noTypeVariables info (maybe termTy id dcTy')
+  rty' <- ensureNoTyVars info (maybe termTy id dcTy')
   pure (Typed.DefConst name rty' fterm info)
 
 inferDef
@@ -1129,7 +1130,7 @@ inferTermNonGen
 inferTermNonGen t = do
   (ty, t', preds) <- inferTerm t
   checkReducible preds (view IR.termInfo t)
-  tys <- noTypeVariables (view IR.termInfo t) ty
+  tys <- ensureNoTyVars (view IR.termInfo t) ty
   tt <- noTyVarsinTerm (view IR.termInfo t) t'
   pure (TypeScheme [] [] tys, tt)
 
@@ -1152,36 +1153,45 @@ inferTermGen term = do
 
 inferTopLevel
   :: TypeOfBuiltin b
-  => IR.TopLevel Name b i
-  -> InferM s b i (TypedTopLevel b i)
-inferTopLevel = \case
-  IR.TLModule m -> Typed.TLModule <$> inferModule m
-  IR.TLTerm m -> Typed.TLTerm . snd <$> inferTermNonGen m
+  => Loaded reso i
+  -> IR.TopLevel Name b i
+  -> InferM s b i (TypedTopLevel b i, Loaded reso i)
+inferTopLevel loaded = \case
+  IR.TLModule m -> do
+    tcm <- inferModule m
+    let toFqn df = FullyQualifiedName (Typed._mName tcm) (Typed.defName df) (Typed._mHash tcm)
+        newTLs = Map.fromList $ (\df -> (toFqn df, Typed.defType df)) <$> Typed._mDefs tcm
+        loaded' = over loAllTyped (Map.union newTLs) loaded
+    pure (Typed.TLModule tcm, loaded')
+  IR.TLTerm m -> (, loaded) . Typed.TLTerm . snd <$> inferTermNonGen m
   -- IR.TLInterface _ -> error "todo: implement interface inference"
 
 inferReplTopLevel
   :: TypeOfBuiltin b
-  => IR.ReplTopLevel Name b i
-  -> InferM s b i (TypedReplTopLevel b i)
-inferReplTopLevel = \case
-  IR.RTLModule m -> Typed.RTLModule <$> inferModule m
-  IR.RTLTerm m -> Typed.RTLTerm . snd <$> inferTermNonGen m
-  IR.RTLDefun dfn -> Typed.RTLDefun <$> inferDefun dfn
-  IR.RTLDefConst dconst -> Typed.RTLDefConst <$> inferDefConst dconst
-  IR.RTLReplSpecial _rsf -> undefined
+  => Loaded reso i
+  -> IR.ReplTopLevel Name b i
+  -> InferM s b i (TypedReplTopLevel b i, Loaded reso i)
+inferReplTopLevel loaded = \case
+  IR.RTLModule m ->  do
+    tcm <- inferModule m
+    let toFqn df = FullyQualifiedName (Typed._mName tcm) (Typed.defName df) (Typed._mHash tcm)
+        newTLs = Map.fromList $ (\df -> (toFqn df, Typed.defType df)) <$> Typed._mDefs tcm
+        loaded' = over loAllTyped (Map.union newTLs) loaded
+    pure (Typed.RTLModule tcm, loaded')
+  IR.RTLTerm m -> (, loaded) . Typed.RTLTerm . snd <$> inferTermNonGen m
+  -- Todo: if we don't update the module hash to update linking,
+  -- repl defuns and defconsts will break invariants about
+  IR.RTLDefun dfn -> do
+    dfn' <- inferDefun dfn
+    let newFqn = FullyQualifiedName replModuleName (Typed._dfunName dfn') replModuleHash
+    let loaded' = over loAllTyped (Map.insert newFqn (Typed._dfunType dfn')) loaded
+    pure (Typed.RTLDefun dfn', loaded')
+  IR.RTLDefConst dconst -> do
+    dc <- inferDefConst dconst
+    let newFqn = FullyQualifiedName replModuleName (Typed._dcName dc) replModuleHash
+    let loaded' = over loAllTyped (Map.insert newFqn (Typed._dcType dc)) loaded
+    pure (Typed.RTLDefConst dc, loaded')
   -- IR.RTLInterface _ -> error "todo: implement interface inference"
-
-inferProgram
-  :: TypeOfBuiltin b
-  => [IR.TopLevel Name b i]
-  -> InferM s b i [TypedTopLevel b i]
-inferProgram = traverse inferTopLevel
-
-inferReplProgram
-  :: TypeOfBuiltin b
-  => [IR.ReplTopLevel Name b i]
-  -> InferM s b i [TypedReplTopLevel b i]
-inferReplProgram = traverse inferReplTopLevel
 
 
 -- | Transform types into their debruijn-indexed version
@@ -1266,27 +1276,27 @@ nameTvs info depth (nt, i) = readTvRef nt >>= \case
   _ ->
     throwTypecheckError (TCInvariantFailure "Found unbound variable during generalization") info
 
-noTypeVariables
+ensureNoTyVars
   :: i
   -> TCType s
   -> InferM s b i (Type a)
-noTypeVariables i = \case
+ensureNoTyVars i = \case
   TyVar n -> readTvRef n >>= \case
-    Link ty -> noTypeVariables i ty
+    Link ty -> ensureNoTyVars i ty
     _ ->
       throwTypecheckError (DisabledGeneralization "Inferred generic signature") i
   TyPrim p -> pure (TyPrim p)
-  TyFun l r -> TyFun <$> noTypeVariables i l <*> noTypeVariables i r
-  TyList l -> TyList <$> noTypeVariables i l
+  TyFun l r -> TyFun <$> ensureNoTyVars i l <*> ensureNoTyVars i r
+  TyList l -> TyList <$> ensureNoTyVars i l
   TyGuard -> pure TyGuard
   TyForall _ _ ->
     throwTypecheckError (TCInvariantFailure "Encountered universal quantification emitted by the typechecker. Impossible") i
 
-noTyVarsinPred
+ensureNoTyVarsPred
   :: i
   -> TCPred s
   -> InferM s b i (Pred NamedDeBruijn)
-noTyVarsinPred i (Pred tc ty) = Pred tc <$> noTypeVariables i ty
+ensureNoTyVarsPred i (Pred tc ty) = Pred tc <$> ensureNoTyVars i ty
 
 noTyVarsinTerm
   :: i
@@ -1296,14 +1306,14 @@ noTyVarsinTerm info = \case
   Typed.Var n i ->
     pure (Typed.Var n i)
   Typed.Lam nts e i ->
-    Typed.Lam <$> (traversed._2) (noTypeVariables info) nts <*> noTyVarsinTerm info e <*> pure i
+    Typed.Lam <$> (traversed._2) (ensureNoTyVars info) nts <*> noTyVarsinTerm info e <*> pure i
   Typed.App e args i ->
     Typed.App <$> noTyVarsinTerm info e <*> traverse (noTyVarsinTerm info) args <*> pure i
   Typed.Let n e1 e2 i ->
     Typed.Let n <$> noTyVarsinTerm info e1 <*> noTyVarsinTerm info e2 <*> pure i
   Typed.Builtin (b, ty, p) i -> do
-    ty' <- traverse (noTypeVariables info) ty
-    p' <- traverse (noTyVarsinPred info) p
+    ty' <- traverse (ensureNoTyVars info) ty
+    p' <- traverse (ensureNoTyVarsPred info) p
     pure $ Typed.Builtin (b, ty', p') i
   Typed.TyAbs _ns _e _i ->
     throwTypecheckError (DisabledGeneralization "Generic terms are disabled") info
@@ -1312,18 +1322,18 @@ noTyVarsinTerm info = \case
   Typed.TyApp l tys i ->
     Typed.TyApp
       <$> noTyVarsinTerm info l
-      <*> traverse (noTypeVariables info) tys
+      <*> traverse (ensureNoTyVars info) tys
       <*> pure i
   Typed.Sequence e1 e2 i ->
     Typed.Sequence <$> noTyVarsinTerm info e1 <*> noTyVarsinTerm info e2 <*> pure i
   Typed.Conditional c i ->
     Typed.Conditional <$> traverse (noTyVarsinTerm info) c <*> pure i
   Typed.ListLit ty li i ->
-    Typed.ListLit <$> noTypeVariables info ty <*> traverse (noTyVarsinTerm info) li <*> pure i
+    Typed.ListLit <$> ensureNoTyVars info ty <*> traverse (noTyVarsinTerm info) li <*> pure i
   Typed.Try e1 e2 i ->
     Typed.Try <$> noTyVarsinTerm info e1 <*> noTyVarsinTerm info e2 <*> pure i
   Typed.Error t e i ->
-    Typed.Error <$> noTypeVariables info t <*> pure e <*> pure i
+    Typed.Error <$> ensureNoTyVars info t <*> pure e <*> pure i
 
 -- dbjName
 --   :: [(TvRef s, NamedDeBruijn)]
@@ -1432,24 +1442,17 @@ runInferModule loaded term0 =
 
 runInferTopLevel
   :: TypeOfBuiltin b
-  => Loaded b' i'
+  => Loaded reso i
   -> IR.TopLevel Name b i
-  -> Either (PactError i) (TypedTopLevel b i)
+  -> Either (PactError i) (TypedTopLevel b i, Loaded reso i)
 runInferTopLevel l tl =
-  runST $ runInfer l (inferTopLevel tl)
+  runST $ runInfer l (inferTopLevel l tl)
 
-runInferProgram
-  :: TypeOfBuiltin b
-  => Loaded b' i'
-  -> [IR.TopLevel Name b info]
-  -> Either (PactError info) [TypedTopLevel b info]
-runInferProgram l prog =
-  runST $ runInfer l $ inferProgram prog
 
-runInferReplProgram
+runInferReplTopLevel
   :: TypeOfBuiltin b
-  => Loaded b' i'
-  -> [IR.ReplTopLevel Name b info]
-  -> Either (PactError info) [TypedReplTopLevel b info]
-runInferReplProgram l prog =
-  runST $ runInfer l $ inferReplProgram prog
+  => Loaded reso i
+  -> IR.ReplTopLevel Name b i
+  -> Either (PactError i) (TypedReplTopLevel b i, Loaded reso i)
+runInferReplTopLevel l tl =
+  runST $ runInfer l (inferReplTopLevel l tl)

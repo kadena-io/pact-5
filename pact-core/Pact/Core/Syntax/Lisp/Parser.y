@@ -65,6 +65,9 @@ import Pact.Core.Syntax.Lisp.LexUtils
   err        { PosToken TokenError _ }
   try        { PosToken TokenTry _ }
   suspend    { PosToken TokenSuspend _ }
+  load       { PosToken TokenLoad _ }
+  tc         { PosToken TokenTypechecks _ }
+  tcfail     { PosToken TokenTypecheckFailure _ }
   '{'        { PosToken TokenOpenBrace _ }
   '}'        { PosToken TokenCloseBrace _ }
   '('        { PosToken TokenOpenParens _ }
@@ -96,6 +99,8 @@ import Pact.Core.Syntax.Lisp.LexUtils
   '#'        { PosToken TokenObjRemove _ }
   '&'        { PosToken TokenBitAnd _ }
   '|'        { PosToken TokenBitOr _ }
+  '~'        { PosToken TokenBitComplement _}
+  pow        { PosToken TokenPow _}
   and        { PosToken TokenAnd _ }
   or         { PosToken TokenOr _ }
   IDENT      { PosToken (TokenIdent _) _ }
@@ -106,7 +111,6 @@ import Pact.Core.Syntax.Lisp.LexUtils
 
 
 
--- Programs will always end with a virtual semi
 Program :: { [ParsedTopLevel] }
   : ProgramList { reverse $1 }
 
@@ -114,22 +118,33 @@ ProgramList :: { [ParsedTopLevel] }
   : ProgramList TopLevel { $2:$1 }
   | {- empty -} { [] }
 
-ReplProgram :: { [ParsedReplTopLevel] }
+ReplProgram :: { [ReplSpecialTL LineInfo] }
   : ReplProgramList { reverse $1 }
 
-ReplProgramList :: { [ParsedReplTopLevel] }
-  : ReplProgramList ReplTopLevel { $2:$1 }
+ReplProgramList :: { [ReplSpecialTL LineInfo] }
+  : ReplProgramList RTL { $2:$1 }
   | {- empty -} { [] }
 
 TopLevel :: { ParsedTopLevel }
   : Module { TLModule $1 }
   | Expr { TLTerm $1 }
 
+RTL :: { ReplSpecialTL LineInfo }
+  : ReplTopLevel { RTL $1 }
+  | '(' ReplSpecial ')' { RTLReplSpecial  ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
+
 ReplTopLevel :: { ParsedReplTopLevel }
   : Module { RTLModule $1 }
   | '(' Defun ')' { RTLDefun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefConst ')' { RTLDefConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | Expr { RTLTerm $1 }
+
+
+ReplSpecial :: { LineInfo -> ReplSpecialForm LineInfo }
+  : load STR BOOLEAN { ReplLoad (getStr $2) $3 }
+  | load STR { ReplLoad (getStr $2) False }
+  | tc STR Expr { ReplTypechecks (getStr $2) $3 }
+  | tcfail STR Expr { ReplTypecheckFail (getStr $2) $3 }
 
 Module :: { ParsedModule }
   : '(' module IDENT Exts Defs ')'
@@ -314,10 +329,16 @@ Operator :: { ParsedExpr }
   | '/'  { Operator DivOp (_ptInfo $1) }
   | '&'  { Operator BitAndOp (_ptInfo $1) }
   | '|'  { Operator BitOrOp (_ptInfo $1) }
+  | '~'  { Operator BitComplementOp (_ptInfo $1) }
+  | pow  { Operator PowOp (_ptInfo $1) }
 
 Bool :: { ParsedExpr }
   : true { Constant (LBool True) (_ptInfo $1) }
   | false { Constant (LBool False) (_ptInfo $1) }
+
+BOOLEAN :: { Bool }
+  : true { True }
+  | false { False }
 
 Name :: { ParsedExpr }
   : IDENT '.' ModQual  { mkQualName (getIdent $1) $3 (_ptInfo $1) }

@@ -39,6 +39,7 @@ data Operator
   | BitComplementOp
   | AndOp
   | OrOp
+  | PowOp
   | NegateOp
   deriving Show
 
@@ -58,6 +59,7 @@ instance Pretty Operator where
     BitOrOp -> "|"
     AndOp -> "and"
     OrOp -> "or"
+    PowOp -> "^"
     NegateOp -> "negate"
     BitComplementOp -> "~"
 

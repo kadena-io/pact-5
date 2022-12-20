@@ -145,17 +145,6 @@ data ReplTopLevel name builtin info
   | RTLTerm (Term name builtin info)
   deriving Show
 
-{-
-
-V0 = Today's Pact
-V1 = Theme: simple, modular, more efficientNamedDeBruijn
-==> Syntactic term, bijective with source
-==> Desugared
-==> Renamed
-==> Overload resolution
-==> Type-checked term, now with inferred types
--}
-
 -- | Untyped pact core terms
 data Term name builtin info
   = Var name info
@@ -176,13 +165,15 @@ data Term name builtin info
   | ListLit [Term name builtin info] info
   -- ^ [e_1, e_2, .., e_n]
   | Try (Term name builtin info) (Term name builtin info) info
-  -- ^ Error catching
+  -- ^ try (catch expr) (try-expr)
   | Error Text info
+  -- ^ Error catching
+  deriving (Show, Functor)
   -- | ObjectLit (Map Field (Term name builtin info)) info
   -- ^ {f_1:e_1, .., f_n:e_n}
   -- | ObjectOp (ObjectOp (Term name builtin info)) info
   -- Object access, update and remove
-  deriving (Show, Functor)
+
 
 -- Post Typecheck terms + modules
 type EvalTerm b i = Term Name b i

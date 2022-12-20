@@ -54,20 +54,20 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- ----------------------------------------------------------------------
 
 -- -- -- Todo: runtime error
--- unaryIntFn :: (BuiltinArity b, MonadCEK b i m) => (Integer -> Integer) -> b -> BuiltinFn b i m
+-- unaryIntFn :: (BuiltinArity b, MonadEval b i m) => (Integer -> Integer) -> b -> BuiltinFn b i m
 -- unaryIntFn op = mkBuiltinFn \cont handler -> \case
 --   [VLiteral (LInteger i)] -> returnCEKValue cont handler (VLiteral (LInteger (op i)))
 --   _ -> failInvariant "unary int function"
 -- {-# INLINABLE unaryIntFn #-}
 
--- -- unaryDecFn :: (BuiltinArity b, MonadCEK b i m) => (Decimal -> Decimal) -> b -> BuiltinFn b i m
+-- -- unaryDecFn :: (BuiltinArity b, MonadEval b i m) => (Decimal -> Decimal) -> b -> BuiltinFn b i m
 -- -- unaryDecFn op = mkBuiltinFn \case
 -- --   [VLiteral (LDecimal i)] -> pure (VLiteral (LDecimal (op i)))
 -- --   _ -> failInvariant "unary decimal function"
 -- -- {-# INLINE unaryDecFn #-}
 
 -- binaryIntFn
---   :: (BuiltinArity b, MonadCEK b i m)
+--   :: (BuiltinArity b, MonadEval b i m)
 --   => (Integer -> Integer -> Integer)
 --   -> b
 --   -> BuiltinFn b i m
@@ -76,37 +76,37 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 --   _ -> failInvariant "binary int function"
 -- {-# INLINE binaryIntFn #-}
 
--- -- binaryDecFn :: (BuiltinArity b, MonadCEK b i m) => (Decimal -> Decimal -> Decimal) -> b -> BuiltinFn b i m
+-- -- binaryDecFn :: (BuiltinArity b, MonadEval b i m) => (Decimal -> Decimal -> Decimal) -> b -> BuiltinFn b i m
 -- -- binaryDecFn op = mkBuiltinFn \case
 -- --   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LDecimal (op i i')))
 -- --   _ -> failInvariant "binary decimal function"
 -- -- {-# INLINE binaryDecFn #-}
 
--- -- binaryBoolFn :: (BuiltinArity b, MonadCEK b i m) => (Bool -> Bool -> Bool) -> b -> BuiltinFn b i m
+-- -- binaryBoolFn :: (BuiltinArity b, MonadEval b i m) => (Bool -> Bool -> Bool) -> b -> BuiltinFn b i m
 -- -- binaryBoolFn op = mkBuiltinFn \case
 -- --   [VLiteral (LBool l), VLiteral (LBool r)] -> pure (VLiteral (LBool (op l r)))
 -- --   _ -> failInvariant "binary bool function"
 -- -- {-# INLINE binaryBoolFn #-}
 
--- -- compareIntFn :: (BuiltinArity b, MonadCEK b i m) => (Integer -> Integer -> Bool) -> b -> BuiltinFn b i m
+-- -- compareIntFn :: (BuiltinArity b, MonadEval b i m) => (Integer -> Integer -> Bool) -> b -> BuiltinFn b i m
 -- -- compareIntFn op = mkBuiltinFn \case
 -- --   [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LBool (op i i')))
 -- --   _ -> failInvariant "int cmp function"
 -- -- {-# INLINE compareIntFn #-}
 
--- -- compareDecFn :: (BuiltinArity b, MonadCEK b i m) => (Decimal -> Decimal -> Bool) -> b -> BuiltinFn b i m
+-- -- compareDecFn :: (BuiltinArity b, MonadEval b i m) => (Decimal -> Decimal -> Bool) -> b -> BuiltinFn b i m
 -- -- compareDecFn op = mkBuiltinFn \case
 -- --   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LBool (op i i')))
 -- --   _ -> failInvariant "dec cmp function"
 -- -- {-# INLINE compareDecFn #-}
 
--- -- compareStrFn :: (BuiltinArity b, MonadCEK b i m) => (Text -> Text -> Bool) -> b -> BuiltinFn b i m
+-- -- compareStrFn :: (BuiltinArity b, MonadEval b i m) => (Text -> Text -> Bool) -> b -> BuiltinFn b i m
 -- -- compareStrFn op = mkBuiltinFn \case
 -- --   [VLiteral (LString i), VLiteral (LString i')] -> pure (VLiteral (LBool (op i i')))
 -- --   _ -> failInvariant "str cmp function"
 -- -- {-# INLINE compareStrFn #-}
 
--- roundingFn :: (BuiltinArity b, MonadCEK b i m) => (Rational -> Integer) -> b -> BuiltinFn b i m
+-- roundingFn :: (BuiltinArity b, MonadEval b i m) => (Rational -> Integer) -> b -> BuiltinFn b i m
 -- roundingFn op = mkBuiltinFn \case
 --   [VLiteral (LDecimal i)] -> pure (VLiteral (LInteger (truncate (roundTo' op 0 i))))
 --   _ -> failInvariant "rounding function"
@@ -115,82 +115,82 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- ---------------------------------
 -- -- integer ops
 -- ------------------------------
--- -- addInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- addInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- addInt = binaryIntFn (+)
 
--- -- subInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- subInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- subInt = binaryIntFn (-)
 
--- -- mulInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- mulInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- mulInt = binaryIntFn (*)
 
--- -- divInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- divInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- divInt = binaryIntFn quot
 
--- -- negateInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- negateInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- negateInt = unaryIntFn negate
 
--- -- modInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- modInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- modInt = binaryIntFn mod
 
--- -- eqInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- eqInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- eqInt = compareIntFn (==)
 
--- -- neqInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- neqInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- neqInt = compareIntFn (/=)
 
--- -- gtInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- gtInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- gtInt = compareIntFn (>)
 
--- -- ltInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- ltInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- ltInt = compareIntFn (<)
 
--- -- geqInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- geqInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- geqInt = compareIntFn (>=)
 
--- -- leqInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- leqInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- leqInt = compareIntFn (<=)
 
--- -- bitAndInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- bitAndInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- bitAndInt = binaryIntFn (.&.)
 
--- -- bitOrInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- bitOrInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- bitOrInt = binaryIntFn (.|.)
 
--- -- bitComplementInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- bitComplementInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- bitComplementInt = unaryIntFn complement
 
--- -- bitXorInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- bitXorInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- bitXorInt = binaryIntFn xor
 
--- -- bitShiftInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- bitShiftInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- bitShiftInt = mkBuiltinFn \case
 -- --   [VLiteral (LInteger i), VLiteral (LInteger s)] ->
 -- --     pure (VLiteral (LInteger (shift i (fromIntegral s))))
 -- --   _ -> failInvariant "bit-shift-int"
 
--- -- absInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- absInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- absInt = unaryIntFn abs
 
--- -- expInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- expInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- expInt = mkBuiltinFn \case
 -- --   [VLiteral (LInteger i)] ->
 -- --     pure (VLiteral (LDecimal (f2Dec (exp (fromIntegral i)))))
 -- --   _ -> failInvariant "expInt"
 
--- -- lnInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- lnInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- lnInt = mkBuiltinFn \case
 -- --   [VLiteral (LInteger i)] ->
 -- --     pure (VLiteral (LDecimal (f2Dec (log (fromIntegral i)))))
 -- --   _ -> failInvariant "lnInt"
 
--- -- sqrtInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- sqrtInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- sqrtInt = mkBuiltinFn \case
 -- --   [VLiteral (LInteger i)] ->
 -- --     pure (VLiteral (LDecimal (f2Dec (sqrt (fromIntegral i)))))
 -- --   _ -> failInvariant "sqrtInt"
 
--- -- showInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- showInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- showInt = mkBuiltinFn \case
 -- --   [VLiteral (LInteger i)] ->
 -- --     pure (VLiteral (LString (T.pack (show i))))
@@ -200,40 +200,40 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- -- double ops
 -- -- -------------------------
 
--- -- addDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- addDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- addDec = binaryDecFn (+)
 
--- -- subDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- subDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- subDec = binaryDecFn (-)
 
--- -- mulDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- mulDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- mulDec = binaryDecFn (*)
 
--- -- divDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- divDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- divDec = binaryDecFn (/)
 
--- -- negateDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- negateDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- negateDec = unaryDecFn negate
 
--- -- absDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- absDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- absDec = unaryDecFn abs
 
--- -- eqDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- eqDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- eqDec = compareDecFn (==)
 
--- -- neqDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- neqDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- neqDec = compareDecFn (/=)
 
--- -- gtDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- gtDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- gtDec = compareDecFn (>)
 
--- -- geqDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- geqDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- geqDec = compareDecFn (>=)
 
--- -- ltDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- ltDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- ltDec = compareDecFn (<)
 
--- -- leqDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- leqDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- leqDec = compareDecFn (<=)
 
 -- -- showDec :: CoreBuiltin -> BuiltinFn CoreBuiltin i
@@ -248,11 +248,11 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- f2Dec :: Double -> Decimal
 -- f2Dec = fromRational . toRational
 
--- roundDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- roundDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- roundDec = roundingFn round
--- floorDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- floorDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- floorDec = roundingFn floor
--- ceilingDec :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- ceilingDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- ceilingDec = roundingFn ceiling
 
 -- -- expDec :: CoreBuiltin -> BuiltinFn CoreBuiltin i
@@ -267,13 +267,13 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- ---------------------------
 -- -- bool ops
 -- ---------------------------
--- -- andBool :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- andBool :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- andBool = binaryBoolFn (&&)
 
--- -- orBool :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- orBool :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- orBool = binaryBoolFn (||)
 
--- notBool :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- notBool :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- notBool = mkBuiltinFn \case
 --   [VLiteral (LBool i)] -> pure (VLiteral (LBool (not i)))
 --   _ -> failInvariant "notBool"
@@ -287,82 +287,82 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- -- showBool :: CoreBuiltin -> BuiltinFn CoreBuiltin i
 -- -- showBool = mkBuiltinFn \case
 -- --   [VLiteral (LBool i)] -> do
--- --     let out = if i then "true" else "false"addInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- --     let out = if i then "true" else "false"addInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- addInt = binaryIntFn (+)
 
--- -- subInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- subInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- subInt = binaryIntFn (-)
 
--- -- mulInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- mulInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- mulInt = binaryIntFn (*)
 
--- -- divInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- divInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- divInt = binaryIntFn quot
 
--- -- negateInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- negateInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- negateInt = unaryIntFn negate
 
--- -- modInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- modInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- modInt = binaryIntFn mod
 
--- -- eqInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- eqInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- eqInt = compareIntFn (==)
 
--- -- neqInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- neqInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- neqInt = compareIntFn (/=)
 
--- -- gtInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- gtInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- gtInt = compareIntFn (>)
 
--- -- ltInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- ltInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- ltInt = compareIntFn (<)
 
--- -- geqInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- geqInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- geqInt = compareIntFn (>=)
 
--- -- leqInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- leqInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- leqInt = compareIntFn (<=)
 
--- bitAndInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- bitAndInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- bitAndInt = binaryIntFn (.&.)
 
--- bitOrInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- bitOrInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- bitOrInt = binaryIntFn (.|.)
 
--- bitComplementInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- bitComplementInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- bitComplementInt = unaryIntFn complement
 
--- bitXorInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- bitXorInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- bitXorInt = binaryIntFn xor
 
--- bitShiftInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- bitShiftInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- bitShiftInt = mkBuiltinFn \case
 --   [VLiteral (LInteger i), VLiteral (LInteger s)] ->
 --     pure (VLiteral (LInteger (shift i (fromIntegral s))))
 --   _ -> failInvariant "bit-shift-int"
 
--- -- absInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- absInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- absInt = unaryIntFn abs
 
--- -- expInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- expInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- expInt = mkBuiltinFn \case
 -- --   [VLiteral (LInteger i)] ->
 -- --     pure (VLiteral (LDecimal (f2Dec (exp (fromIntegral i)))))
 -- --   _ -> failInvariant "expInt"
 
--- -- lnInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- lnInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- lnInt = mkBuiltinFn \case
 -- --   [VLiteral (LInteger i)] ->
 -- --     pure (VLiteral (LDecimal (f2Dec (log (fromIntegral i)))))
 -- --   _ -> failInvariant "lnInt"
 
--- -- sqrtInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- sqrtInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- sqrtInt = mkBuiltinFn \case
 -- --   [VLiteral (LInteger i)] ->
 -- --     pure (VLiteral (LDecimal (f2Dec (sqrt (fromIntegral i)))))
 -- --   _ -> failInvariant "sqrtInt"
 
--- -- showInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- showInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- showInt = mkBuiltinFn \case
 -- --   [VLiteral (LInteger i)] ->
 -- --     pure (VLiteral (LString (T.pack (show i))))
@@ -458,11 +458,11 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- ------------------------------
 -- --- conversions + unsafe ops
 -- ------------------------------
--- asBool :: MonadCEK b i m => CEKValue b i m -> m Bool
+-- asBool :: MonadEval b i m => CEKValue b i m -> m Bool
 -- asBool (VLiteral (LBool b)) = pure b
 -- asBool _ = failInvariant "asBool"
 
--- asString :: MonadCEK b i m => CEKValue b i m -> m Text
+-- asString :: MonadEval b i m => CEKValue b i m -> m Text
 -- asString (VLiteral (LString b)) = pure b
 -- asString _ = failInvariant "asString"
 
@@ -515,7 +515,7 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- --       pure (VLiteral (LBool (or v')))
 -- --   _ -> failInvariant "neqList"
 
--- coreZip :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreZip :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreZip = mkBuiltinFn \case
 --   [clo, VList l, VList r] -> do
 --     v' <- V.zipWithM (unsafeApplyTwo clo) l r
@@ -535,14 +535,14 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- --     pure (VLiteral (LString out))
 -- --   _ -> failInvariant "showList"
 
--- coreMap :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreMap :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreMap = mkBuiltinFn \case
 --   [fn, VList li] -> do
 --     li' <- traverse (unsafeApplyOne fn) li
 --     pure (VList li')
 --   _ -> failInvariant "map"
 
--- coreFilter :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreFilter :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreFilter = mkBuiltinFn \case
 --   [fn, VList li] -> do
 --     let applyOne' arg = unsafeApplyOne fn arg >>= asBool
@@ -550,13 +550,13 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 --     pure (VList li')
 --   _ -> failInvariant "filter"
 
--- coreFold :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreFold :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreFold = mkBuiltinFn \case
 --   [fn, initElem, VList li] -> V.foldM' (unsafeApplyTwo fn) initElem li
 --   _ -> failInvariant "fold"
 
 
--- coreLength :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreLength :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreLength = mkBuiltinFn \case
 --   [VLiteral (LString t)] -> do
 --     pure (VLiteral (LInteger (fromIntegral (T.length t))))
@@ -587,7 +587,7 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- --     pure (VList (V.reverse li))
 --   -- _ -> failInvariant "takeList"
 
--- coreEnumerate :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreEnumerate :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreEnumerate = mkBuiltinFn \case
 --   [VLiteral (LInteger from'), VLiteral (LInteger to')] -> enum' from' to'
 --   _ -> failInvariant "enumerate"
@@ -597,7 +597,7 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 --     | to' >= from' = pure $ toVecList $ V.enumFromN from' (fromIntegral (to' - from' + 1))
 --     | otherwise = pure $ toVecList $ V.enumFromStepN from' (-1) (fromIntegral (from' - to' + 1))
 
--- coreEnumerateStepN :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreEnumerateStepN :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreEnumerateStepN = mkBuiltinFn \case
 --   [VLiteral (LInteger from'), VLiteral (LInteger to'), VLiteral (LInteger step)] -> enum' from' to' step
 --   _ -> failInvariant "enumerate-step"
@@ -609,7 +609,7 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 --     | from' == to' && step == 0 = pure $ toVecList $ V.singleton from'
 --     | otherwise = throwExecutionError' (EnumeratationError "enumerate outside interval bounds")
 
--- coreTake :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreTake :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreTake = mkBuiltinFn \case
 --   [VLiteral (LInteger i), VLiteral (LString t)] -> do
 --     pure (VLiteral (LString (T.take (fromIntegral i) t)))
@@ -617,7 +617,7 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 --     pure (VList (V.take (fromIntegral i) li))
 --   _ -> failInvariant "takeStr"
 
--- coreDrop :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreDrop :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreDrop = mkBuiltinFn \case
 --   [VLiteral (LInteger i), VLiteral (LString t)] -> do
 --     pure (VLiteral (LString (T.drop (fromIntegral i) t)))
@@ -625,7 +625,7 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 --     pure (VList (V.drop (fromIntegral i) li))
 --   _ -> failInvariant "dropStr"
 
--- coreReverse :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreReverse :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreReverse = mkBuiltinFn \case
 --   [VList li] ->
 --     pure (VList (V.reverse li))
@@ -633,21 +633,21 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 --     pure (VLiteral (LString (T.reverse s)))
 --   _ -> failInvariant "takeList"
 
--- coreConcat :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreConcat :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreConcat = mkBuiltinFn \case
 --   [VList li] -> do
 --     li' <- traverse asString li
 --     pure (VLiteral (LString (T.concat (V.toList li'))))
 --   _ -> failInvariant "concatStr"
 
--- coreEnforce :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreEnforce :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreEnforce = mkBuiltinFn \case
 --   [VLiteral (LBool b), VLiteral (LString s)] ->
 --     if b then pure (VLiteral LUnit)
 --     else pure (VError s)
 --   _ -> failInvariant "enforce"
 
--- -- coreEnforceOne :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- coreEnforceOne :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- coreEnforceOne = mkBuiltinFn \case
 -- --   [VList v, VLiteral (LString msg)] ->
 -- --     enforceFail msg (V.toList v)
@@ -668,7 +668,7 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- -- readError field expected =
 -- --   "invalid value at field " <> field <> " expected: " <> expected
 
--- -- coreReadInteger :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- coreReadInteger :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- coreReadInteger = mkBuiltinFn \case
 -- --   [VLiteral (LString s)] ->
 -- --     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
@@ -678,7 +678,7 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- --       _ -> throwM (ReadException ("no field at key " <> s))
 -- --   _ -> failInvariant "read-integer"
 
--- -- coreReadString :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- coreReadString :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- coreReadString = mkBuiltinFn \case
 -- --   [VLiteral (LString s)] ->
 -- --     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
@@ -688,7 +688,7 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- --       _ -> throwM (ReadException ("no field at key " <> s))
 -- --   _ -> failInvariant "read-string"
 
--- -- coreReadDecimal :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- coreReadDecimal :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- coreReadDecimal = mkBuiltinFn \case
 -- --   [VLiteral (LString s)] ->
 -- --     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
@@ -698,12 +698,12 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- --       _ -> throwM (ReadException ("no field at key " <> s))
 -- --   _ -> failInvariant "read-decimal"
 
--- -- coreKeysetRefGuard :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- coreKeysetRefGuard :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- coreKeysetRefGuard = mkBuiltinFn \case
 -- --   [VLiteral (LString s)] -> pure (VGuard (GKeySetRef (KeySetName s)))
 -- --   _ -> failInvariant "keyset-ref-guard"
 
--- -- coreEnforceGuard :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- coreEnforceGuard :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- coreEnforceGuard = mkBuiltinFn \case
 -- --   [VGuard v] -> case v of
 -- --     GKeyset ks -> enforceKeySet ks
@@ -736,12 +736,12 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- --     _ -> failInvariant "expected a function returning unit"
 -- --   _ -> failInvariant "invalid type for user closure"
 
--- -- createUserGuard :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- createUserGuard :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- createUserGuard = mkBuiltinFn \case
 -- --   [v@VClosure{}] -> pure (VGuard (GUserGuard v))
 -- --   _ -> failInvariant "create-user-guard"
 
--- listAccess :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- listAccess :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- listAccess = mkBuiltinFn \case
 --   [VLiteral (LInteger i), VList vec] ->
 --     case vec V.!? fromIntegral i of
@@ -754,20 +754,20 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- -- Other Core forms
 -- -----------------------------------
 
--- -- coreIf :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- -- coreIf :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- -- coreIf = mkBuiltinFn \case
 -- --   [VLiteral (LBool b), VClosure tbody tenv, VClosure fbody fenv] ->
 -- --     if b then eval tenv tbody else  eval fenv fbody
 -- --   _ -> failInvariant "if"
 
--- coreB64Encode :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreB64Encode :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreB64Encode = mkBuiltinFn \case
 --   [VLiteral (LString l)] ->
 --     pure $ VLiteral $ LString $ toB64UrlUnpaddedText $ T.encodeUtf8 l
 --   _ -> failInvariant "base64-encode"
 
 
--- coreB64Decode :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreB64Decode :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreB64Decode = mkBuiltinFn \case
 --   [VLiteral (LString s)] -> case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
 --     Left{} -> throwExecutionError' (DecodeError "invalid b64 encoding")
@@ -783,7 +783,7 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- unimplemented :: BuiltinFn b i m
 -- unimplemented = error "unimplemented"
 
--- rawBuiltinRuntime :: MonadCEK RawBuiltin i m => RawBuiltin -> BuiltinFn RawBuiltin i m
+-- rawBuiltinRuntime :: MonadEval RawBuiltin i m => RawBuiltin -> BuiltinFn RawBuiltin i m
 -- rawBuiltinRuntime = \case
   -- RawAdd -> addBuiltin RawAdd
   -- Num
@@ -858,7 +858,7 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 -- rawBuiltinRuntime = Array.arrayFromList (rawBuiltinFn <$> [minBound .. maxBound])
 
 -- TODO: Coercions between int/double
--- addBuiltin :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- addBuiltin :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- addBuiltin = mkBuiltinFn \case
 --   [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LInteger (i + i')))
 --   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LDecimal (i + i')))
@@ -868,49 +868,49 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 
 -- TODO: Coercions between int/double
 -- Todo: factor defn
--- subBuiltin :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- subBuiltin :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- subBuiltin = mkBuiltinFn \case
 --   [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LInteger (i - i')))
 --   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LDecimal (i - i')))
 --   _ -> failInvariant "sub"
 
 -- TODO: Coercions between int/double
--- mulBuiltin :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- mulBuiltin :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- mulBuiltin = mkBuiltinFn \case
 --   [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LInteger (i * i')))
 --   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LDecimal (i * i')))
 --   _ -> failInvariant "mul"
 
--- divBuiltin :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- divBuiltin :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- divBuiltin = mkBuiltinFn \case
 --   [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LInteger (quot i i')))
 --   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LDecimal (i / i')))
 --   _ -> failInvariant "div"
 
--- modBuiltin :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- modBuiltin :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- modBuiltin = mkBuiltinFn \case
 --   [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LInteger (mod i i')))
 --   _ -> failInvariant "div"
 
--- eqBuiltin :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- eqBuiltin :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- eqBuiltin = mkBuiltinFn \case
 --   [l, r] -> pure (VLiteral (LBool (unsafeEqCEKValue l r)))
 --   _ -> failInvariant "eq"
 
 -- --
--- neqBuiltin :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- neqBuiltin :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- neqBuiltin = mkBuiltinFn \case
 --   [l, r] -> pure (VLiteral (LBool (unsafeNeqCEKValue l r)))
 --   _ -> failInvariant "neq"
 
--- gtBuiltin :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- gtBuiltin :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- gtBuiltin = mkBuiltinFn \case
 --   [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LBool (i > i')))
 --   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LBool (i > i')))
 --   [VLiteral (LString i), VLiteral (LString i')] -> pure (VLiteral (LBool (i > i')))
 --   _ -> failInvariant "gt"
 
--- ltBuiltin :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- ltBuiltin :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- ltBuiltin = mkBuiltinFn \case
 --   [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LBool (i < i')))
 --   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LBool (i < i')))
@@ -918,7 +918,7 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 --   _ -> failInvariant "lt"
 
 
--- geqBuiltin :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- geqBuiltin :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- geqBuiltin = mkBuiltinFn \case
 --   [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LBool (i >= i')))
 --   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LBool (i >= i')))
@@ -926,20 +926,20 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 --   _ -> failInvariant "geq"
 
 
--- leqBuiltin :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- leqBuiltin :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- leqBuiltin = mkBuiltinFn \case
 --   [VLiteral (LInteger i), VLiteral (LInteger i')] -> pure (VLiteral (LBool (i <= i')))
 --   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> pure (VLiteral (LBool (i <= i')))
 --   [VLiteral (LString i), VLiteral (LString i')] -> pure (VLiteral (LBool (i <= i')))
 --   _ -> failInvariant "lt"
 
--- absBuiltin :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- absBuiltin :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- absBuiltin = mkBuiltinFn \case
 --   [VLiteral (LInteger i)] -> pure (VLiteral (LInteger (abs i)))
 --   [VLiteral (LDecimal i)] -> pure (VLiteral (LDecimal (abs i)))
 --   _ -> failInvariant "cmp function"
 
--- negateBuiltin :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- negateBuiltin :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- negateBuiltin = mkBuiltinFn \case
 --   [VLiteral (LInteger i)] -> pure (VLiteral (LInteger (negate i)))
 --   [VLiteral (LDecimal i)] -> pure (VLiteral (LDecimal (negate i)))
@@ -949,21 +949,21 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 --- Transcendentals!!!
 -- Note: use musl
 ----------------------------------------------------------------
--- coreExp :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreExp :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreExp = mkBuiltinFn \case
 --   [VLiteral (LInteger i)] ->
 --     pure (VLiteral (LDecimal (f2Dec (exp (fromIntegral i)))))
 --   [VLiteral (LDecimal i)] -> pure (VLiteral (LDecimal ((f2Dec . exp . dec2F) i)))
 --   _ -> failInvariant "expInt"
 
--- coreLn :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreLn :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreLn = mkBuiltinFn \case
 --   [VLiteral (LInteger i)] ->
 --     pure (VLiteral (LDecimal (f2Dec (log (fromIntegral i)))))
 --   [VLiteral (LDecimal i)] -> pure (VLiteral (LDecimal ((f2Dec . log . dec2F) i)))
 --   _ -> failInvariant "lnInt"
 
--- coreSqrt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- coreSqrt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- coreSqrt = mkBuiltinFn \case
 --   [VLiteral (LInteger i)] ->
 --     pure (VLiteral (LDecimal (f2Dec (sqrt (fromIntegral i)))))
@@ -976,25 +976,25 @@ module Pact.Core.Untyped.Eval.Runtime.RawBuiltin where
 --     pure (VLiteral (LDecimal (f2Dec (op (fromIntegral i)))))
 --   _ -> failInvariant "expInt"
 
--- expInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- expInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- expInt = mkBuiltinFn \case
 --   [VLiteral (LInteger i)] ->
 --     pure (VLiteral (LDecimal (f2Dec (exp (fromIntegral i)))))
 --   _ -> failInvariant "expInt"
 
--- lnInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- lnInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- lnInt = mkBuiltinFn \case
 --   [VLiteral (LInteger i)] ->
 --     pure (VLiteral (LDecimal (f2Dec (log (fromIntegral i)))))
 --   _ -> failInvariant "lnInt"
 
--- sqrtInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- sqrtInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- sqrtInt = mkBuiltinFn \case
 --   [VLiteral (LInteger i)] ->
 --     pure (VLiteral (LDecimal (f2Dec (sqrt (fromIntegral i)))))
 --   _ -> failInvariant "sqrtInt"
 
--- showInt :: (BuiltinArity b, MonadCEK b i m) => b -> BuiltinFn b i m
+-- showInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 -- showInt = mkBuiltinFn \case
 --   [VLiteral (LInteger i)] ->
 --     pure (VLiteral (LString (T.pack (show i))))

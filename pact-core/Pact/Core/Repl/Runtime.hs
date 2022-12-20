@@ -58,7 +58,7 @@ newtype ReplEvalM b i a =
 makeLenses ''ReplEvalEnv
 makeLenses ''ReplEvalState
 
-instance MonadCEKEnv b i (ReplEvalM b i) where
+instance MonadEvalEnv b i (ReplEvalM b i) where
   cekReadEnv = use reEnv
   cekLogGas msg g = do
     r <- view emGasLog

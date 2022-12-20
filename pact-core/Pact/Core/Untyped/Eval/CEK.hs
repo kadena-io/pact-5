@@ -53,7 +53,7 @@ import Pact.Core.Literal
 import Pact.Core.Untyped.Term
 import Pact.Core.Untyped.Eval.Runtime
 
--- chargeGas :: MonadCEK b i m => Gas -> m ()
+-- chargeGas :: MonadEval b i m => Gas -> m ()
 -- chargeGas g = do
   -- ref <- view cekGas
   -- gCurr <- liftIO (readIORef ref)
@@ -62,14 +62,14 @@ import Pact.Core.Untyped.Eval.Runtime
   --     msg = "Gas Limit (" <> T.pack (show gLimit) <> ") exceeeded: " <> T.pack (show gUsed)
   -- when (gUsed > gLimit) $ throwM (GasExceeded msg)
 
-chargeNodeGas :: MonadCEK b i m => NodeType -> m ()
+chargeNodeGas :: MonadEval b i m => NodeType -> m ()
 chargeNodeGas nt = do
   gm <- view (cekGasModel . geGasModel . gmNodes) <$> cekReadEnv
   cekChargeGas (gm nt)
   -- gm <- view (cekGasModel . geGasModel . gmNodes)
   -- chargeGas (gm nt)
 
-chargeNative :: MonadCEK b i m => b -> m ()
+chargeNative :: MonadEval b i m => b -> m ()
 chargeNative native = do
   gm <- view (cekGasModel . geGasModel . gmNatives) <$> cekReadEnv
   cekChargeGas (gm native)
@@ -80,14 +80,14 @@ chargeNative native = do
 -- Todo: `traverse` usage should be perf tested.
 -- It might be worth making `Arg` frames incremental, as opposed to a traverse call
 eval
-  :: forall b i m. (MonadCEK b i m)
+  :: forall b i m. (MonadEval b i m)
   => CEKEnv b i m
   -> EvalTerm b i
   -> m (EvalResult b i m)
 eval = evalCEK Mt CEKNoHandler
 
 evalCEK
-  :: (MonadCEK b i m)
+  :: (MonadEval b i m)
   => Cont b i m
   -> CEKErrorHandler b i m
   -> CEKEnv b i m
@@ -141,7 +141,7 @@ evalCEK cont handler env (Try e1 rest _) = do
 evalCEK _ handler _ (Error e _) =
   returnCEK Mt handler (VError e)
 
-returnCEK :: (MonadCEK b i m)
+returnCEK :: (MonadEval b i m)
   => Cont b i m
   -> CEKErrorHandler b i m
   -> EvalResult b i m
@@ -157,7 +157,7 @@ returnCEK cont handler v = case v of
   EvalValue v' -> returnCEKValue cont handler v'
 
 returnCEKValue
-  :: (MonadCEK b i m)
+  :: (MonadEval b i m)
   => Cont b i m
   -> CEKErrorHandler b i m
   -> CEKValue b i m
@@ -198,7 +198,7 @@ returnCEKValue (ListC env args vals cont) handler v = do
       evalCEK (ListC env es (v:vals) cont) handler env e
 
 applyLam
-  :: (MonadCEK b i m)
+  :: (MonadEval b i m)
   => CEKValue b i m
   -> CEKValue b i m
   -> Cont b i m
@@ -214,7 +214,7 @@ applyLam (VNative (BuiltinFn b fn arity args)) arg cont handler
 applyLam _ _ _ _ = failInvariant' "Applying value to non-function" def
 
 -- runCEK
---   :: forall b i m. MonadCEK b i m
+--   :: forall b i m. MonadEval b i m
 --   => CEKRuntimeEnv b i m
 --   -- ^ runtime environment
 --   -> EvalTerm b i
@@ -223,21 +223,21 @@ applyLam _ _ _ _ = failInvariant' "Applying value to non-function" def
 -- runCEK env term =
 --   runEvalT env (eval RAList.Nil term)
 
-failInvariant :: MonadCEK b i m => Text -> m a
+failInvariant :: MonadEval b i m => Text -> m a
 failInvariant b =
   let e = PEExecutionError (InvariantFailure b) def
   in throwError e
 
-failInvariant' :: MonadCEK b i m => Text -> i -> m a
+failInvariant' :: MonadEval b i m => Text -> i -> m a
 failInvariant' b i =
   let e = PEExecutionError (InvariantFailure b) i
   in throwError e
 
-throwExecutionError' :: (MonadCEK b i m) => ExecutionError -> m a
+throwExecutionError' :: (MonadEval b i m) => ExecutionError -> m a
 throwExecutionError' e = throwError (PEExecutionError e def)
 
 unsafeApplyOne
-  :: MonadCEK b i m
+  :: MonadEval b i m
   => CEKValue b i m
   -> CEKValue b i m
   -> m (EvalResult b i m)
@@ -248,7 +248,7 @@ unsafeApplyOne (VNative (BuiltinFn b fn arity args)) arg =
 unsafeApplyOne _ _ = failInvariant "Applied argument to non-closure in native"
 
 unsafeApplyTwo
-  :: MonadCEK b i m
+  :: MonadEval b i m
   => CEKValue b i m
   -> CEKValue b i m
   -> CEKValue b i m

@@ -31,6 +31,8 @@ $special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
 @ident = [$alpha][$alpha $digit \-]*
 @integer = [\-]?[$digit]+
 @comment = [\;][.]*[\n]
+@tc = expect\-typechecks
+@tcfail = expect\-typecheck\-failure
 
 
 tokens :-
@@ -69,6 +71,9 @@ tokens :-
     unit         { token TokenTyUnit }
     and          { token TokenAnd }
     or           { token TokenOr }
+    load         { token TokenLoad }
+    @tc          { token TokenTypechecks }
+    @tcfail      { token TokenTypecheckFailure }
     -- at           { token TokenObjAccess }
     -- remove       { token TokenObjRemove }
     try          { token TokenTry }
@@ -90,7 +95,6 @@ tokens :-
     \=\>         { token TokenLambdaArrow}
     \=           { token TokenEq }
     \!\=         { token TokenNeq }
-    -- \=           { token TokenAssign }
     \>\=         { token TokenGEQ }
     \>           { token TokenGT }
     \<\=         { token TokenLEQ }
@@ -100,9 +104,11 @@ tokens :-
     \*           { token TokenMult }
     \/           { token TokenDiv }
     \&           { token TokenBitAnd }
-    \|           { token TokenBitAnd }
+    \|           { token TokenBitOr }
+    \~           { token TokenBitComplement }
     \"           { stringLiteral }
     \-\>         { token TokenTyArrow }
+    \^           { token TokenPow }
 
 {
 -- TODO: non-horrible errors

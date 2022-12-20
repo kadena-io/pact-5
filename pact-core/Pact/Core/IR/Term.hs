@@ -29,8 +29,6 @@ import Pact.Core.Names
 import Pact.Core.Imports
 import Pact.Core.Pretty
 
-import qualified Pact.Core.Syntax.Lisp.ParseTree as Lisp
-
 data Defun name builtin info
   = Defun
   { _dfunName :: Text
@@ -116,7 +114,6 @@ data ReplTopLevel name builtin info
   | RTLDefConst (DefConst name builtin info)
   | RTLDefun (Defun name builtin info)
   | RTLTerm (Term name builtin info)
-  | RTLReplSpecial (Lisp.ReplSpecialForm info)
   deriving Show
 
 

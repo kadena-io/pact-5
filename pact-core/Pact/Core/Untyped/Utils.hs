@@ -83,12 +83,14 @@ fromTypedTopLevel = \case
     TLTerm (fromTypedTerm e)
 
 fromTypedReplTopLevel
-  :: Typed.TopLevel name tyname builtin info
-  -> TopLevel name builtin info
+  :: Typed.ReplTopLevel name tyname builtin info
+  -> ReplTopLevel name builtin info
 fromTypedReplTopLevel = \case
-  Typed.TLModule m ->
-    TLModule (fromTypedModule m)
-  -- Typed.TLInterface _ ->
-  --   error "todo: implement interfaces"
-  Typed.TLTerm e ->
-    TLTerm (fromTypedTerm e)
+  Typed.RTLModule m ->
+    RTLModule (fromTypedModule m)
+  Typed.RTLDefun de ->
+    RTLDefun (fromTypedDefun de)
+  Typed.RTLDefConst dc ->
+    RTLDefConst (fromTypedDConst dc)
+  Typed.RTLTerm te ->
+    RTLTerm (fromTypedTerm te)

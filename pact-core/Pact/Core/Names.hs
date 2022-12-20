@@ -37,6 +37,9 @@ module Pact.Core.Names
  , OverloadedName(..)
  , FullyQualifiedName(..)
  , TableName(..)
+ , replRawModuleName
+ , replModuleName
+ , replModuleHash
  ) where
 
 import Control.Lens
@@ -219,3 +222,15 @@ instance Pretty NamedDeBruijn where
 
 newtype TableName = TableName Text
   deriving (Eq, Show)
+
+-- | Constants for resolving repl things
+replRawModuleName :: Text
+replRawModuleName = "#repl"
+
+-- | Repl module
+replModuleName :: ModuleName
+replModuleName = ModuleName replRawModuleName Nothing
+
+replModuleHash :: ModuleHash
+replModuleHash = ModuleHash (Hash "#repl")
+

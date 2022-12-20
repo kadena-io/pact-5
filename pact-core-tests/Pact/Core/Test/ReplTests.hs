@@ -75,7 +75,7 @@ runReplTest file src = do
             , _replGas = gasRef
             , _replEvalLog = gasLog }
   stateRef <- newIORef rstate
-  runReplT stateRef (compileAndInterpretProgram src) >>= \case
+  runReplT stateRef (interpretReplProgram src) >>= \case
     Left e -> let
       errRender = renderPactError e
       rendered = replError (ReplSource (T.pack file) (decodeUtf8 src)) errRender (view peInfo e)

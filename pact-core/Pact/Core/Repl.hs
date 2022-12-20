@@ -24,7 +24,6 @@ import System.Console.Haskeline
 import Data.IORef
 import Data.Foldable(traverse_)
 import Data.Text(Text)
-import Data.Default(def)
 
 import qualified Data.ByteString as B
 import qualified Data.Text as T
@@ -36,7 +35,6 @@ import Pact.Core.Pretty
 import Pact.Core.Builtin
 import Pact.Core.Errors
 import Pact.Core.Info
-import Pact.Core.Untyped.Eval.Runtime
 
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
@@ -47,7 +45,7 @@ main = do
   g <- newIORef mempty
   evalLog <- newIORef Nothing
   ref <- newIORef (ReplState mempty mempty pactDb g evalLog)
-  runReplT ref (runInputT replSettings (loop lispInterpretBundle)) >>= \case
+  runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
       putStrLn $ T.unpack $ replError (ReplSource "(interactive)" "") err
@@ -57,58 +55,55 @@ main = do
   displayOutput = \case
     InterpretValue v _ -> outputStrLn (show (pretty v))
     InterpretLog t -> outputStrLn (T.unpack t)
-  catch' bundle ma = catchAll ma (\e -> outputStrLn (show e) *> loop bundle)
-  loop bundle = do
+  catch' ma = catchAll ma (\e -> outputStrLn (show e) *> loop)
+  loop = do
     minput <- fmap T.pack <$> getInputLine "pact>"
     case minput of
       Nothing -> outputStrLn "goodbye"
-      Just input | T.null input -> loop bundle
+      Just input | T.null input -> loop
       Just input -> case parseReplAction (T.strip input) of
         Nothing -> do
           outputStrLn "Error: Expected command [:load, :type, :syntax, :debug] or expression"
-          loop bundle
+          loop
         Just ra -> case ra of
           RALoad txt -> let
             file = T.unpack txt
-            in catch' bundle $ do
+            in catch' $ do
               source <- liftIO (B.readFile file)
-              eout <- lift $ tryError $ program bundle source
+              eout <- lift $ tryError $ interpretProgram source
               case eout of
                 Right vs -> traverse_ displayOutput vs
                 Left err -> let
                   rs = ReplSource (T.pack file) (T.decodeUtf8 source)
                   in outputStrLn (T.unpack (replError rs err))
-              loop bundle
-          RASetLispSyntax -> loop lispInterpretBundle
-          RASetNewSyntax -> loop lispInterpretBundle
-          RATypecheck inp -> catch' bundle  $ do
+              loop
+          RASetLispSyntax -> loop
+          RASetNewSyntax -> loop
+          RATypecheck inp -> catch' $ do
             let inp' = T.strip inp
-            out <- lift (exprType bundle (T.encodeUtf8 inp'))
+            out <- lift (interpretExprTypeLisp (T.encodeUtf8 inp'))
             outputStrLn (show (pretty out))
-            loop bundle
+            loop
           RASetFlag flag -> do
             lift (replFlags %= Set.insert flag)
             outputStrLn $ unwords ["set debug flag for", prettyReplFlag flag]
-            loop bundle
+            loop
           RADebugAll -> do
             lift (replFlags .= Set.fromList [minBound .. maxBound])
             outputStrLn $ unwords ["set all debug flags"]
-            loop bundle
+            loop
           RADebugNone -> do
             lift (replFlags .= Set.empty)
             outputStrLn $ unwords ["Remove all debug flags"]
-            loop bundle
-          RAExecuteExpr src -> catch' bundle $ do
-            eout <- lift (tryError (expr bundle (T.encodeUtf8 src)))
+            loop
+          RAExecuteExpr src -> catch' $ do
+            eout <- lift (tryError (interpretReplProgram (T.encodeUtf8 src)))
             case eout of
-              Right out -> case out of
-                EvalValue v -> displayOutput (InterpretValue v def)
-                VError e ->
-                  outputStrLn ("Intepreter Error: " <> T.unpack e)
+              Right out -> traverse_ displayOutput out
               Left err -> let
                 rs = ReplSource "(interactive)" input
                 in outputStrLn (T.unpack (replError rs err))
-            loop bundle
+            loop
 
 tryError :: MonadError a m => m b -> m (Either a b)
 tryError ma =

@@ -25,18 +25,18 @@ type ReplCEKValue b i = CEKValue (ReplBuiltin b) i (ReplBM b i)
 type ReplEvalResult b i = EvalResult (ReplBuiltin b) i (ReplBM b i)
 type ReplBuiltinFn b i = BuiltinFn (ReplBuiltin b) i (ReplBM b i)
 
-asBool :: MonadCEK b i m => CEKValue b i m -> m Bool
+asBool :: MonadEval b i m => CEKValue b i m -> m Bool
 asBool (VLiteral (LBool b)) = pure b
 asBool _ = failInvariant "asBool"
 
-asString :: MonadCEK b i m => CEKValue b i m -> m Text
+asString :: MonadEval b i m => CEKValue b i m -> m Text
 asString (VLiteral (LString b)) = pure b
 asString _ = failInvariant "asString"
 
 -- Show functions injected by the compiler are
 -- not a recoverable thing from an invariant standpoint
 enforceValue
-  :: MonadCEK b i m
+  :: MonadEval b i m
   => EvalResult b i m
   -> m (CEKValue b i m)
 enforceValue = \case

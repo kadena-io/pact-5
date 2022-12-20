@@ -97,10 +97,12 @@ data Token
   | TokenMinus
   | TokenMult
   | TokenDiv
+  | TokenPow
   | TokenObjAccess
   | TokenObjRemove
   | TokenBitAnd
   | TokenBitOr
+  | TokenBitComplement
   | TokenAnd
   | TokenOr
   | TokenIdent !Text
@@ -110,6 +112,10 @@ data Token
   | TokenFalse
   | TokenBlockIntro
   | TokenSuspend
+  -- Repl-specific tokens
+  | TokenLoad
+  | TokenTypechecks
+  | TokenTypecheckFailure
   -- Layout
   | TokenEOF
   deriving (Eq, Show)
@@ -268,10 +274,12 @@ renderTokenText = \case
   TokenMinus -> "-"
   TokenMult -> "*"
   TokenDiv -> "/"
+  TokenPow -> "^"
   TokenObjAccess -> "@"
   TokenObjRemove -> "#"
   TokenBitAnd -> "&"
   TokenBitOr -> "|"
+  TokenBitComplement -> "~"
   TokenBlockIntro -> "progn"
   TokenAnd -> "and"
   TokenOr -> "or"
@@ -282,6 +290,10 @@ renderTokenText = \case
   TokenFalse -> "false"
   TokenEOF -> "EOF"
   TokenSuspend -> "suspend"
+  TokenLoad -> "load"
+  TokenTypechecks -> "typechecks"
+  TokenTypecheckFailure -> "typecheck-failure"
+
 
 
 instance Pretty Token where

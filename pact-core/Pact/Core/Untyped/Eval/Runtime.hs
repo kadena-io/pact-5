@@ -10,6 +10,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE InstanceSigs #-}
 
 
@@ -29,12 +30,16 @@ module Pact.Core.Untyped.Eval.Runtime
  , fromPactValue
  , checkPactValueType
  , CEKErrorHandler(..)
- , MonadCEKEnv(..)
+ , MonadEvalEnv(..)
  , CondFrame(..)
- , MonadCEK
+ , MonadEval
  , Closure(..)
  , EvalResult(..)
- , ApplyOp(..)
+ , pattern VString
+ , pattern VInteger
+ , pattern VDecimal
+ , pattern VUnit
+ , pattern VBool
  ) where
 
 
@@ -46,6 +51,7 @@ import Data.Void
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Data.Default
+import Data.Decimal(Decimal)
 -- import Data.Set(Set)
 import Data.Vector(Vector)
 import Data.RAList(RAList)
@@ -86,17 +92,32 @@ data CEKValue b i m
   | VClosure !(EvalTerm b i) !(CEKEnv b i m)
   | VNative !(BuiltinFn b i m)
   | VGuard !(Guard FullyQualifiedName (CEKValue b i m))
-  -- | VError !Text
   deriving (Show)
+
+pattern VString :: Text -> CEKValue b i m
+pattern VString txt = VLiteral (LString txt)
+
+pattern VInteger :: Integer -> CEKValue b i m
+pattern VInteger txt = VLiteral (LInteger txt)
+
+pattern VUnit :: CEKValue b i m
+pattern VUnit = VLiteral LUnit
+
+pattern VBool :: Bool -> CEKValue b i m
+pattern VBool b = VLiteral (LBool b)
+
+pattern VDecimal :: Decimal -> CEKValue b i m
+pattern VDecimal d = VLiteral (LDecimal d)
+
 
 data EvalResult b i m
   = EvalValue (CEKValue b i m)
   | VError Text
   deriving Show
 
-type MonadCEK b i m = (MonadCEKEnv b i m, MonadError (PactError i) m, Default i)
+type MonadEval b i m = (MonadEvalEnv b i m, MonadError (PactError i) m, Default i)
 
-class (Monad m) => MonadCEKEnv b i m | m -> b, m -> i where
+class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
   cekReadEnv :: m (CEKRuntimeEnv b i m)
   cekLogGas :: Text -> Gas -> m ()
   cekChargeGas :: Gas -> m ()
@@ -125,7 +146,7 @@ runEvalT s (EvalM action) = runReaderT (runExceptT action) s
 data BuiltinFn b i m
   = BuiltinFn
   { _native :: b
-  , _nativeFn :: (MonadCEK b i m) => Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m)
+  , _nativeFn :: (MonadEval b i m) => Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m)
   , _nativeArity :: {-# UNPACK #-} !Int
   , _nativeAppliedArgs :: [CEKValue b i m]
   }
@@ -148,14 +169,6 @@ data CondFrame b i
   = AndFrame (EvalTerm b i)
   | OrFrame (EvalTerm b i)
   | IfFrame (EvalTerm b i) (EvalTerm b i)
-  deriving Show
-
-data ApplyOp b i m
-  = FoldArg (CEKEnv b i m) (EvalTerm b i) (EvalTerm b i)
-  | FoldInitial (CEKEnv b i m) (Closure b i m) (EvalTerm b i)
-  | FoldApply (CEKEnv b i m) (Closure b i m) [EvalTerm b i] [CEKValue b i m]
-  | MapArg (CEKEnv b i m) (EvalTerm b i)
-  | MapApply (CEKEnv b i m) [EvalTerm b i] [CEKValue b i m]
   deriving Show
 
 data Cont b i m
@@ -233,7 +246,7 @@ checkPactValueType ty = \case
 
 makeLenses ''EvalMEnv
 
-instance MonadCEKEnv b i (EvalM b i) where
+instance MonadEvalEnv b i (EvalM b i) where
   cekReadEnv = view emRuntimeEnv
   cekLogGas msg g = do
     r <- view emGasLog

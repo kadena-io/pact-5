@@ -37,9 +37,6 @@ data BuiltinForm o
   = CAnd o o
   | COr o o
   | CIf o o o
-  -- | CFold o o o
-  -- | CMap o o
-  -- | CZip o o o
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 instance Pretty o => Pretty (BuiltinForm o) where
@@ -177,6 +174,7 @@ data RawBuiltin
   | RawDivide
   | RawNegate
   | RawAbs
+  | RawPow
   -- Boolean Ops
   -- | RawAnd
   -- | RawOr
@@ -243,13 +241,14 @@ data RawBuiltin
 rawBuiltinToText :: RawBuiltin -> Text
 rawBuiltinToText = \case
   -- Addition
-  RawAdd -> "(+)"
+  RawAdd -> "add"
   -- Num
-  RawSub -> "(-)"
-  RawMultiply -> "(*)"
-  RawDivide -> "(/)"
+  RawSub -> "subtract"
+  RawMultiply -> "mult"
+  RawDivide -> "div"
   RawNegate -> "negate"
   RawAbs -> "abs"
+  RawPow -> "pow"
   -- Bolean ops
   -- RawAnd -> "and"
   -- RawOr -> "or"
@@ -277,7 +276,7 @@ rawBuiltinToText = \case
   RawExp -> "exp"
   RawLn -> "ln"
   RawSqrt -> "sqrt"
-  RawLogBase -> "logBase"
+  RawLogBase -> "log"
   -- ListLike
   RawLength -> "length"
   RawTake -> "take"
@@ -320,6 +319,7 @@ instance BuiltinArity RawBuiltin where
     RawDivide -> 2
     RawNegate -> 1
     RawAbs -> 1
+    RawPow -> 2
     -- Boolean Ops ->
     -- RawAnd -> 2
     -- RawOr -> 2
@@ -516,6 +516,7 @@ data CoreBuiltin
   | MulInt
   | NegateInt
   | AbsInt
+  | PowInt
   -- Int fractional
   | ExpInt
   | LnInt
@@ -548,6 +549,7 @@ data CoreBuiltin
   | MulDec
   | NegateDec
   | AbsDec
+  | PowDec
   -- Decimal rounding ops
   | RoundDec
   | CeilingDec
@@ -654,6 +656,7 @@ instance BuiltinArity CoreBuiltin where
     SubInt -> 2
     DivInt -> 2
     MulInt -> 2
+    PowInt -> 2
     NegateInt -> 1
     AbsInt -> 1
     ExpInt -> 1
@@ -678,6 +681,7 @@ instance BuiltinArity CoreBuiltin where
     SubDec -> 2
     DivDec -> 2
     MulDec -> 2
+    PowDec -> 2
     NegateDec -> 1
     AbsDec -> 1
     RoundDec -> 1
@@ -763,6 +767,7 @@ coreBuiltinToText = \case
   MulInt -> "mulInt"
   NegateInt -> "negateInt"
   AbsInt -> "absInt"
+  PowInt -> "powInt"
   -- Int fractional
   ExpInt -> "expInt"
   LnInt -> "lnInt"
@@ -795,6 +800,7 @@ coreBuiltinToText = \case
   MulDec -> "mulDec"
   NegateDec -> "negateDec"
   AbsDec -> "absDec"
+  PowDec -> "powDec"
   -- Decimal rounding ops
   RoundDec -> "roundDec"
   CeilingDec -> "ceilingDec"

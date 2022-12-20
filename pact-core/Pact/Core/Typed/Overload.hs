@@ -245,6 +245,8 @@ solveCoreOverload i b tys preds = case b of
     singlePred preds i (specializeNumOp i negateResolve) "Negate"
   RawAbs ->
     singlePred preds i (specializeNumOp i absResolve) "Abs"
+  RawPow ->
+    singlePred preds i (specializeNumOp i powResolve) "Pow"
   -- RawAnd ->
   --   pure (Builtin AndBool i)
   -- RawOr ->
@@ -353,157 +355,6 @@ solveCoreOverload i b tys preds = case b of
     pure (Builtin B64Decode i)
   RawStrToList ->
     pure (Builtin StrToList i)
-    -- Addition
-    -- Note, we can also sanity check this here.
-    -- (+) Add instances for base types + dynamic access
-    -- (RawAdd, [_], [p]) ->
-    --   specializeAdd i p
-
-    -- -- (-) Num instances
-    -- (RawSub, [_], [p]) ->
-    --   specializeNumOp i subResolve p
-
-    -- -- (*) Instances + Dynamic access
-    -- (RawMultiply, [_], [p]) ->
-    --   specializeNumOp i mulResolve p
-
-    -- -- (/) instances + dynamic access
-    -- (RawDivide, [_], [p]) ->
-    --   specializeNumOp i divResolve p
-    -- -- (negate) instances + dynamic access
-    -- (RawNegate, [_], [p]) ->
-    --   specializeNumOp i negateResolve p
-
-    -- (RawAbs, [_], [p]) ->
-    --   specializeNumOp i absResolve p
-    -- -- bool ops
-    -- (RawAnd, [] , []) ->
-    --   pure (Builtin AndBool i)
-    -- (RawOr, [], []) ->
-    --   pure (Builtin OrBool i)
-    -- (RawNot, [], []) ->
-    --   pure (Builtin NotBool i)
-    -- -- (==) instance + dyn access
-    -- -- TODO: TIME
-    -- (RawEq, [_], [p]) ->
-    --   specializeEq i RawEq eqResolve p
-    -- -- (/=) instance + dyn access
-    -- (RawNeq, [_], [p]) ->
-    --   specializeEq i RawNeq neqResolve p
-    -- -- Ord : GT (>) instances
-    -- -- todo: time
-    -- (RawGT, [_], [p]) ->
-    --   specializeOrd i RawGT gtResolve p
-    -- -- Ord : GEQ
-    -- (RawGEQ, [_], [p]) ->
-    --   specializeOrd i RawGEQ geqResolve p
-    -- -- Ord: LT
-    -- (RawLT, [_], [p]) ->
-    --   specializeOrd i RawLT ltResolve p
-    -- -- Ord : LEQ
-    -- (RawLEQ, [_], [p]) ->
-    --   specializeOrd i RawLEQ leqResolve p
-
-    -- (RawBitwiseAnd, _, _) ->
-    --   pure (Builtin BitAndInt i)
-
-    -- (RawBitwiseOr, _, _) ->
-    --   pure (Builtin BitOrInt i)
-
-    -- (RawBitwiseXor, _, _) ->
-    --   pure (Builtin BitXorInt i)
-
-    -- (RawBitwiseFlip, _, _) ->
-    --   pure (Builtin BitComplementInt i)
-
-    -- (RawBitShift, _,  _) ->
-    --   pure (Builtin BitShiftInt i)
-    -- (RawRound, [], []) ->
-    --   pure (Builtin RoundDec i)
-    -- (RawCeiling, [], []) ->
-    --   pure (Builtin CeilingDec i)
-    -- (RawFloor, [], []) ->
-    --   pure (Builtin FloorDec i)
-    -- -- Fractional instnaces
-    -- (RawExp, [_], [p]) ->
-    --   specializeFracOp i expResolve p
-    -- (RawLn, [_], [p]) ->
-    --   specializeFracOp i lnResolve p
-    -- (RawSqrt, [_], [p]) ->
-    --   specializeFracOp i sqrtResolve p
-    -- (RawLogBase, [_], [p]) ->
-    --   specializeFracOp i logBaseResolve p
-    -- -- ListLike instances
-    -- (RawLength, [_], [p]) ->
-    --   specializeListLikeOp i lengthResolve p
-    -- (RawTake, [_], [p]) ->
-    --   specializeListLikeOp i takeResolve p
-    -- (RawDrop, [_], [p]) ->
-    --   specializeListLikeOp i dropResolve p
-    -- (RawConcat, [_], [p]) ->
-    --   specializeListLikeOp i concatResolve p
-    -- (RawReverse, [_], [p]) ->
-    --   specializeListLikeOp i reverseResolve p
-    -- Todo: overload logbase
-    -- (RawMod, [], []) ->
-    --   pure (Builtin ModInt i)
-    -- -- General
-    -- (RawMap, [t1, t2], []) -> do
-    --   let b = Builtin MapList i
-    --   pure (TyApp b (t1:|[t2]) i)
-    -- (RawFilter, [t1], []) ->  do
-    --   let b = Builtin FilterList i
-    --   pure (TyApp b (t1:|[]) i)
-    -- (RawZip, [t1, t2, t3], []) ->  do
-    --   let b = Builtin ZipList i
-    --   pure (TyApp b (t1:|[t2, t3]) i)
-    -- (RawIf, [t1], []) -> do
-    --   let b = Builtin IfElse i
-    --   pure (TyApp b (t1:|[]) i)
-    -- (RawShow, [TyInt], _) ->
-    --   pure (Builtin ShowInt i)
-    -- (RawShow, [TyDecimal], _) ->
-    --   pure (Builtin ShowDec i)
-    -- (RawShow, [TyString], _) ->
-    --   pure (Builtin ShowStr i)
-    -- (RawShow, [TyUnit], _) ->
-    --   pure (Builtin ShowUnit i)
-    -- (RawShow, [TyBool], _) ->
-    --   pure (Builtin ShowBool i)
-    -- (RawShow, [TyList t], [_]) -> do
-    --   b <- solveOverload i (RawShow, [t], [Pred Show t])
-    --   let a1Var = Name "" (NBound 0)
-    --       a1 = (a1Var, t)
-    --       app = App (Builtin ShowList i) (b :| [Var a1Var i]) i
-    --   pure (Lam (a1 :| []) app i)
-    -- (RawEnumerate, [], []) ->
-    --   pure (Builtin Enumerate i)
-    -- (RawEnumerateStepN, [], []) ->
-    --   pure (Builtin EnumerateStepN i)
-    -- (RawFold, [l, r], []) ->
-    --   let b = Builtin FoldList i
-    --   in pure (TyApp b (l :| [r]) i)
-    -- (RawReadInteger, _, _) ->
-    --   pure (Builtin ReadInteger i)
-    -- (RawReadDecimal, _, _) ->
-    --   pure (Builtin ReadDecimal i)
-    -- (RawReadString, _, _) ->
-    --   pure (Builtin ReadString i)
-    -- (RawReadKeyset, _, _) ->
-    --   pure (Builtin ReadKeyset i)
-    -- (RawEnforceGuard, _, _) ->
-    --   pure (Builtin EnforceGuard  i)
-    -- (RawKeysetRefGuard, _, _) ->
-    --   pure (Builtin KeysetRefGuard i)
-    -- (RawCreateUserGuard, _, _) ->
-    --   pure (Builtin CreateUserGuard i)
-    -- (RawListAccess, _, _) ->
-    --   pure (Builtin ListAccess i)
-    -- (RawB64Encode, _, _) ->
-    --   pure (Builtin B64Encode i)
-    -- (RawB64Decode, _, _) ->
-    --   pure (Builtin B64Decode i)
-    -- _ -> throwOverloadError "could not resolve overload" i
 
 singlePred :: [t] -> i -> (t -> OverloadM i a) -> String -> OverloadM i a
 singlePred preds i f msg = case preds of
@@ -565,7 +416,7 @@ resolveProgram
   :: SolveOverload raw reso
   => [OverloadedTopLevel tyname raw info]
   -> OverloadM info [TopLevel Name tyname reso info]
-resolveProgram  = traverse resolveTopLevel
+resolveProgram = traverse resolveTopLevel
 
 resolveReplTopLevel
   :: SolveOverload raw reso
@@ -659,6 +510,13 @@ absResolve =
   { _nrRawName = "abs"
   , _nrIntInstance = AbsInt
   , _nrDecInstance = AbsDec }
+
+powResolve :: NumResolution
+powResolve =
+  NumResolution
+  { _nrRawName = "pow"
+  , _nrIntInstance = PowInt
+  , _nrDecInstance = PowDec }
 
 negateResolve :: NumResolution
 negateResolve =

@@ -18,7 +18,6 @@ module Pact.Core.Typed.Term
  , TopLevel(..)
  , ReplTopLevel(..)
  , Literal(..)
- , TyVarType(..)
  , termInfo
  , termBuiltin
  -- Post-overload
@@ -157,11 +156,6 @@ data ReplTopLevel name tyname builtin info
   | RTLTerm (Term name tyname builtin info)
   deriving Show
 
-data TyVarType
-  = TyVarType
-  | RowVarType
-  deriving Show
-
 -- | Typed pact core terms
 data Term name tyname builtin info
   = Var name info
@@ -191,7 +185,7 @@ data Term name tyname builtin info
   -- ^ Error handling
   | Error (Type tyname) Text info
   -- ^ Error term
-  deriving (Show, Functor)
+  deriving (Show, Functor, Foldable, Traversable)
 
 -- Post Typecheck terms + modules
 type OverloadedTerm tyname b i =

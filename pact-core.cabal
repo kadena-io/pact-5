@@ -130,7 +130,7 @@ library
     Pact.Core.Repl.Compile
 
 
-executable pact-core-repl
+executable repl
   main-is: pact-core/Pact/Core/Repl.hs
 
   build-depends:

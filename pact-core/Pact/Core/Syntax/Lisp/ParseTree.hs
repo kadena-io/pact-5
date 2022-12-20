@@ -60,16 +60,20 @@ data Expr i
   deriving Show
 
 data ReplSpecialForm i
-  = ReplLoad Text i
-  | ReplTypechecks (Expr i) i
-  | ReplTypecheckFail (Expr i) i
+  = ReplLoad Text Bool i
+  | ReplTypechecks Text (Expr i) i
+  | ReplTypecheckFail Text (Expr i) i
+  deriving Show
+
+data ReplSpecialTL i
+  = RTL (ReplTopLevel i)
+  | RTLReplSpecial (ReplSpecialForm i)
   deriving Show
 
 data ReplTopLevel i
   = RTLModule (Module (Expr i) i)
   | RTLDefun (Defun (Expr i) i)
   | RTLDefConst (DefConst (Expr i) i)
-  | RTLReplSpecial (ReplSpecialForm i)
   | RTLTerm (Expr i)
   deriving Show
 
