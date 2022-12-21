@@ -166,8 +166,6 @@ returnCEKValue Mt handler v =
   case handler of
     CEKNoHandler -> return (EvalValue v)
     CEKHandler _env _term cont' handler' -> returnCEKValue cont' handler' v
-      -- VError{} -> evalCEK cont' handler' env term
-      -- _ ->
 -- Error terms that don't simply returnt the empty continuation
 -- "Zero out" the continuation up to the latest handler
 -- returnCEKValue _cont handler v@VError{} =
@@ -212,16 +210,6 @@ applyLam (VNative (BuiltinFn b fn arity args)) arg cont handler
     fn cont handler (reverse (arg:args))
   | otherwise = returnCEKValue cont handler (VNative (BuiltinFn b fn (arity - 1) (arg:args)))
 applyLam _ _ _ _ = failInvariant' "Applying value to non-function" def
-
--- runCEK
---   :: forall b i m. MonadEval b i m
---   => CEKRuntimeEnv b i m
---   -- ^ runtime environment
---   -> EvalTerm b i
---   -- ^ Term to evaluate
---   -> m (CEKValue b i m)
--- runCEK env term =
---   runEvalT env (eval RAList.Nil term)
 
 failInvariant :: MonadEval b i m => Text -> m a
 failInvariant b =
