@@ -118,6 +118,8 @@ instance Pretty (Expr i) where
     Conditional c _ -> pretty c
     -- If cond e1 e2 _ ->
     --   parens ("if" <+> pretty cond <+> "then" <+> pretty e1 <+> "else" <+> pretty e2)
+    App e1 [] _ ->
+      parens (pretty e1)
     App e1 nel _ ->
       parens (pretty e1 <+> hsep (pretty <$> nel))
     Operator b _ -> pretty b

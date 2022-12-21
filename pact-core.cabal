@@ -134,44 +134,41 @@ executable repl
   main-is: pact-core/Pact/Core/Repl.hs
 
   build-depends:
-    , Decimal >= 0.4.2 && < 0.6
-    , aeson >= 0.11.3.0 && < 1.6
-    , attoparsec >= 0.13.0.2 && < 0.15
-    , base >=4.9.0.0 && < 4.16
-    , base16-bytestring >=0.1.1.6 && < 0.2
-    , base64-bytestring >= 1.0.0.1 && < 1.2.0.0
-    , bytestring >=0.10.8.1 && < 0.12
-    , containers >= 0.5.7 && < 0.7
-    , data-default >= 0.7.1.1 && < 0.8
-    , deepseq >= 1.4.2.0 && < 1.5
-    , directory >= 1.2.6.2 && < 1.4
-    , exceptions >= 0.8.3 && < 0.11
-    , filepath >= 1.4.1.0 && < 1.5
-    , hashable >= 1.2.4.0 && < 1.3.3.0
-    , lens >= 4.14 && < 5.1
-    , lens-aeson >= 1.0.0.5 && < 1.2
-    , mtl >= 2.2.1 && < 2.4
-    , pact-time >= 0.2
-    , prettyprinter >= 1.2 && < 1.6.1
-    , prettyprinter-ansi-terminal >= 1.1 && < 1.2
-    , reflection
-    , safe >= 0.3.11 && < 0.4
-    , semigroupoids >= 5.0
-    , text >= 1.2.2.1 && < 1.3
-    , transformers >= 0.5.2.0 && < 0.6
-    , unordered-containers >= 0.2.7.2 && <= 0.2.15.0
-    , utf8-string >= 1.0.1.1 && < 1.1
-    , vector >= 0.11.0.0 && < 0.13
-    , vector-algorithms >= 0.7
-    , megaparsec >= 9
+    , Decimal
+    , aeson
+    , attoparsec
+    , base
+    , base16-bytestring
+    , base64-bytestring
+    , bytestring
+    , containers
+    , data-default
+    , deepseq
+    , directory
+    , exceptions
+    , filepath
+    , hashable
+    , lens
+    , lens-aeson
+    , mtl
+    , pact-time
+    , prettyprinter
+    , prettyprinter-ansi-terminal
+    , safe
+    , semigroupoids
+    , text
+    , transformers
+    , unordered-containers
+    , utf8-string
+    , vector
+    , vector-algorithms
+    , megaparsec
     , pact-core
-    , criterion >= 1.1.4 && < 1.6
+    , criterion
     , cryptonite
-    , direct-sqlite == 2.3.27
+    , direct-sqlite
     , memory
-    , safe-exceptions >= 0.1.5.0 && < 0.2
-    , statistics >= 0.13.3 && < 0.16
-    , parser-combinators
+    , safe-exceptions
     , yaml
     , ralist
     , primitive
@@ -214,14 +211,14 @@ test-suite core-tests
     , deepseq
     , directory
     , exceptions
-    , hedgehog >= 1.0.1 && < 1.2
+    , hedgehog
     , http-client
     , intervals
     , mmorph
     , neat-interpolation
     , sbv
     , servant-client
-    , temporary >= 1.3
+    , temporary
     , yaml
     , base16-bytestring
     , directory

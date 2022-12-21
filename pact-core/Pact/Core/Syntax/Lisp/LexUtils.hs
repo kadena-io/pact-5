@@ -46,14 +46,10 @@ data PosToken =
 data Token
   -- Keywords
   = TokenLet
-  | TokenIn
   | TokenIf
-  | TokenThen
-  | TokenElse
   | TokenLambda
   | TokenTry
   | TokenError
-  | TokenLambdaArrow
   | TokenModule
   | TokenKeyGov
   | TokenCapGov
@@ -226,14 +222,10 @@ runLexerT (LexerM act) s = evalStateT act (initState s)
 renderTokenText :: Token -> Text
 renderTokenText = \case
   TokenLet -> "let"
-  TokenIn -> "in"
   TokenIf -> "if"
-  TokenThen -> "then"
-  TokenElse -> "else"
   TokenLambda -> "lambda"
   TokenTry -> "try"
   TokenError -> "error"
-  TokenLambdaArrow -> "=>"
   TokenModule -> "module"
   TokenKeyGov -> "keyGov"
   TokenCapGov -> "capGov"

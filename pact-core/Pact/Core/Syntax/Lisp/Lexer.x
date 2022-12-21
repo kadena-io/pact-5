@@ -41,10 +41,7 @@ tokens :-
     -- Keywords
     let          { token TokenLet }
     let\*        { token TokenLet }
-    in           { token TokenIn }
     if           { token TokenIf }
-    else         { token TokenElse }
-    then         { token TokenThen }
     defun        { token TokenDefun }
     defcap       { token TokenDefCap }
     defconst     { token TokenDefConst }
@@ -92,7 +89,6 @@ tokens :-
     \,           { token TokenComma }
     \.           { token TokenDot }
     \:           { token TokenColon }
-    \=\>         { token TokenLambdaArrow}
     \=           { token TokenEq }
     \!\=         { token TokenNeq }
     \>\=         { token TokenGEQ }
