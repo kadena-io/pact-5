@@ -48,7 +48,9 @@ tokens :-
     defschema    { token TokenDefSchema }
     deftable     { token TokenDefTable }
     defcap       { token TokenDefCap }
+    defpact      { token TokenDefPact }
     interface    { token TokenInterface }
+    import       { token TokenImport }
     module       { token TokenModule }
     bless        { token TokenBless }
     implements   { token TokenImplements }
