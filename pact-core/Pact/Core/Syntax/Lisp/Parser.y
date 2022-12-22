@@ -95,8 +95,6 @@ import Pact.Core.Syntax.Lisp.LexUtils
   '-'        { PosToken TokenMinus _}
   '*'        { PosToken TokenMult _ }
   '/'        { PosToken TokenDiv _ }
-  '@'        { PosToken TokenObjAccess _ }
-  '#'        { PosToken TokenObjRemove _ }
   '&'        { PosToken TokenBitAnd _ }
   '|'        { PosToken TokenBitOr _ }
   '~'        { PosToken TokenBitComplement _}

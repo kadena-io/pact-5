@@ -94,8 +94,6 @@ data Token
   | TokenMult
   | TokenDiv
   | TokenPow
-  | TokenObjAccess
-  | TokenObjRemove
   | TokenBitAnd
   | TokenBitOr
   | TokenBitComplement
@@ -267,8 +265,6 @@ renderTokenText = \case
   TokenMult -> "*"
   TokenDiv -> "/"
   TokenPow -> "^"
-  TokenObjAccess -> "@"
-  TokenObjRemove -> "#"
   TokenBitAnd -> "&"
   TokenBitOr -> "|"
   TokenBitComplement -> "~"
@@ -283,8 +279,8 @@ renderTokenText = \case
   TokenEOF -> "EOF"
   TokenSuspend -> "suspend"
   TokenLoad -> "load"
-  TokenTypechecks -> "typechecks"
-  TokenTypecheckFailure -> "typecheck-failure"
+  TokenTypechecks -> "expect-typechecks"
+  TokenTypecheckFailure -> "expect-typecheck-failure"
 
 
 

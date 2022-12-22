@@ -4,6 +4,7 @@ import Test.Tasty
 import Test.Tasty.Hedgehog
 import Hedgehog
 
+import Control.Applicative ((<|>))
 import Data.Text.Prettyprint.Doc
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
@@ -39,7 +40,7 @@ token_gen = Gen.choice $ unary ++ [ ident, number, string]
       pure . TokenNumber $ T.pack $ show n
     ident = do
       pref <- Gen.alpha
-      suff <- Gen.string (Range.constant 0 16) Gen.alphaNum  
+      suff <- Gen.string (Range.constant 0 16) (Gen.constant '-' <|> Gen.alphaNum)
       pure . TokenIdent . T.pack $ pref : suff
     unary = Gen.constant 
       <$> [ TokenLet
@@ -91,8 +92,6 @@ token_gen = Gen.choice $ unary ++ [ ident, number, string]
           , TokenMult
           , TokenDiv
           , TokenPow
-          --, TokenObjAccess
-          --, TokenObjRemove
           , TokenBitAnd
           , TokenBitOr
           , TokenBitComplement
@@ -103,11 +102,9 @@ token_gen = Gen.choice $ unary ++ [ ident, number, string]
           , TokenBlockIntro
           , TokenSuspend
           -- Repl-specific tokens
-          -- , TokenLoad
-          -- , TokenTypechecks
-          -- , TokenTypecheckFailure
-          -- Layout
-          --, TokenEOF
+          , TokenLoad
+          , TokenTypechecks
+          , TokenTypecheckFailure
           ]
 
 lexer :: Property
