@@ -22,7 +22,7 @@ import Pact.Core.Syntax.Common
 
 data Binder i =
   Binder Text (Maybe Type) (Expr i)
-  deriving Show
+  deriving (Show, Eq)
 
 instance Pretty (Binder i) where
   pretty (Binder ident ty e) =
@@ -32,7 +32,7 @@ data Cond e
   = CEAnd e e
   | CEOr e e
   | CEIf e e e
-  deriving (Show, Functor)
+  deriving (Show, Eq, Functor)
 
 instance Pretty e => Pretty (Cond e) where
   pretty = \case
@@ -57,7 +57,7 @@ data Expr i
   | Try (Expr i) (Expr i) i
   | Suspend (Expr i) i
   | Error Text i
-  deriving Show
+  deriving (Show, Eq)
 
 data ReplSpecialForm i
   = ReplLoad Text Bool i

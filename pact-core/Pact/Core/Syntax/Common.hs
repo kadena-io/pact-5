@@ -41,7 +41,7 @@ data Operator
   | OrOp
   | PowOp
   | NegateOp
-  deriving Show
+  deriving (Show, Eq, Enum, Bounded)
 
 instance Pretty Operator where
   pretty = \case
@@ -68,7 +68,7 @@ data Type
   = TyPrim PrimType
   | TyFun Type Type
   | TyList Type
-  deriving Show
+  deriving (Show, Eq)
 
   -- | TyObject (Map Field Type)
   -- | TyCap
