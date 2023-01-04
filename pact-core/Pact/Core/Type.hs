@@ -40,7 +40,7 @@ data PrimType =
   PrimBool |
   PrimString |
   PrimUnit
-  deriving (Eq,Ord,Show)
+  deriving (Eq,Ord,Show, Enum, Bounded)
 
 instance Pretty PrimType where
   pretty = \case
