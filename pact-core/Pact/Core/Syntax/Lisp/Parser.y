@@ -77,7 +77,6 @@ import Pact.Core.Syntax.Lisp.LexUtils
   ','        { PosToken TokenComma _ }
   ':'        { PosToken TokenColon _ }
   '.'        { PosToken TokenDot _ }
-  TYLIST     { PosToken TokenTyList _ }
   TYTABLE    { PosToken TokenTyTable _ }
   TYINTEGER  { PosToken TokenTyInteger _ }
   TYDECIMAL  { PosToken TokenTyDecimal _ }
@@ -196,11 +195,6 @@ Type :: { Type }
   -- : '(' TyArrows '->' Type1 ')' { foldr TyFun $4 (reverse $2) }
   : '[' Type ']' { TyList $2 }
   | AtomicType { $1 }
-
--- Type1 :: { Type }
---   : TYLIST Type { TyList $2 }
-  -- | '{' RowType '}' { TyObject (Map.fromList $2) }
-  -- | AtomicType { $1 }
 
 -- TyArrows :: { [Type] }
 --   : TyArrows '->' Type1 { $3:$1 }

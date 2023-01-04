@@ -74,7 +74,6 @@ data Token
   | TokenColon
   | TokenDot
   -- Types
-  | TokenTyList
   | TokenTyTable
   | TokenTyInteger
   | TokenTyDecimal
@@ -246,7 +245,6 @@ renderTokenText = \case
   TokenComma -> ","
   TokenColon -> ":"
   TokenDot -> "."
-  TokenTyList -> "list"
   TokenTyTable -> "table"
   TokenTyInteger -> "integer"
   TokenTyDecimal -> "decimal"
