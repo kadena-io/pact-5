@@ -40,7 +40,6 @@ data Operator
   | AndOp
   | OrOp
   | PowOp
-  | NegateOp
   deriving (Show, Eq, Enum, Bounded)
 
 instance Pretty Operator where
@@ -53,14 +52,13 @@ instance Pretty Operator where
     GEQOp -> ">="
     LTOp -> "<"
     LEQOp -> "<="
-    EQOp -> "=="
+    EQOp -> "="
     NEQOp -> "!="
     BitAndOp -> "&"
     BitOrOp -> "|"
     AndOp -> "and"
     OrOp -> "or"
     PowOp -> "^"
-    NegateOp -> "negate"
     BitComplementOp -> "~"
 
 -- Todo: type constructors aren't 1-1 atm.

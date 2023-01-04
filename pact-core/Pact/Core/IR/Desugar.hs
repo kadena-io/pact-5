@@ -166,8 +166,6 @@ instance DesugarBuiltin RawBuiltin where
       arg2 = BN (BareName "#orArg2")
       in Lam ((arg1, Just TyBool) :| [(arg2, Just TyBool)]) (Conditional (COr (Var arg1 info) (Var arg2 info)) info) info
     Common.PowOp -> Builtin RawPow info
-    Common.NegateOp ->
-      Builtin RawNegate info
   -- Todo:
   -- Builtins of known arity differences we are yet to support:
   --  str-to-int
