@@ -47,7 +47,7 @@ instance Pretty e => Pretty (Cond e) where
 data Expr i
   = Var ParsedName i
   | LetIn (NonEmpty (Binder i)) (Expr i) i
-  | Lam ParsedName [(Text, Maybe Type)] (Expr i) i
+  | Lam [(Text, Maybe Type)] (Expr i) i
   | Conditional (Cond (Expr i)) i
   | App (Expr i) [Expr i] i
   | Block (NonEmpty (Expr i)) i
@@ -82,8 +82,8 @@ termInfo f = \case
   Var n i -> Var n <$> f i
   LetIn bnds e1 i ->
     LetIn bnds e1 <$> f i
-  Lam n nel e i ->
-    Lam n nel e <$> f i
+  Lam nel e i ->
+    Lam nel e <$> f i
   Conditional c i ->
     Conditional c <$> f i
   -- If e1 e2 e3 i ->
@@ -113,7 +113,7 @@ instance Pretty (Expr i) where
     Var n _ -> pretty n
     LetIn bnds e _ ->
       parens ("let" <+> parens (pretty bnds) <> pretty e)
-    Lam _ nel e _ ->
+    Lam nel e _ ->
       parens ("lambda" <+> parens (renderLamTypes nel) <+> pretty e)
     Conditional c _ -> pretty c
     -- If cond e1 e2 _ ->

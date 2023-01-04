@@ -222,17 +222,12 @@ desugarLispTerm = \case
     let
       expr' = desugarLispTerm expr
     in foldr (binderToLet i) expr' binders
-  Lisp.Lam _name [] body i -> let
+  Lisp.Lam [] body i -> let
     n = BN (BareName "#unitLamArg")
     nty = Just TyUnit
     body' = desugarLispTerm body
     in Lam (pure (n, nty)) body' i
-  Lisp.Suspend body i -> let
-    n = BN (BareName "#unitLamArg")
-    nty = Just TyUnit
-    body' = desugarLispTerm body
-    in Lam (pure (n, nty)) body' i
-  Lisp.Lam _name (x:xs) body i ->
+  Lisp.Lam (x:xs) body i ->
     let
       nsts = x :| xs
       (ns, ts) = NE.unzip nsts
@@ -240,6 +235,11 @@ desugarLispTerm = \case
       ts' = fmap desugarType <$> ts
       body' = desugarLispTerm body
     in Lam (NE.zip ns' ts') body' i
+  Lisp.Suspend body i -> let
+    n = BN (BareName "#unitLamArg")
+    nty = Just TyUnit
+    body' = desugarLispTerm body
+    in Lam (pure (n, nty)) body' i
   Lisp.Conditional c i -> (`Conditional` i) $ case desugarLispTerm <$> c of
     Lisp.CEAnd e1 e2 ->
       CAnd e1 e2

@@ -265,7 +265,7 @@ ExprCommaSep :: { [ParsedExpr] }
   -- | {- empty -} { [] }
 
 LamExpr :: { LineInfo -> ParsedExpr }
-  : lam '(' LamArgs ')' Expr { Lam ln0 (reverse $3) $5 }
+  : lam '(' LamArgs ')' Expr { Lam (reverse $3) $5 }
 
 IfExpr :: { LineInfo -> ParsedExpr }
   : if Expr Expr Expr { Conditional (CEIf $2 $3 $4) }
@@ -410,7 +410,7 @@ mkBlock = \case
     i = combineSpans (NE.head nel) (NE.last nel)
     in Block nel i
 
-ln0 = BN (BareName "")
+-- ln0 = BN (BareName "")
 
 mkBarename tx = BN (BareName tx)
 

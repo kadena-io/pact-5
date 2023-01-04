@@ -66,7 +66,7 @@ main = do
           outputStrLn "Error: Expected command [:load, :type, :syntax, :debug] or expression"
           loop
         Just ra -> case ra of
-          RALoad txt -> let
+          RALoad txt -> let 
             file = T.unpack txt
             in catch' $ do
               source <- liftIO (B.readFile file)
