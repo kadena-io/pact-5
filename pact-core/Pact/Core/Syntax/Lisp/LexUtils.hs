@@ -227,7 +227,7 @@ renderTokenText = \case
   TokenKeyGov -> "keyGov"
   TokenCapGov -> "capGov"
   TokenInterface -> "interface"
-  TokenImport -> "import"
+  TokenImport -> "use"
   TokenDefun -> "defun"
   TokenDefConst -> "defconst"
   TokenDefCap -> "defcap"

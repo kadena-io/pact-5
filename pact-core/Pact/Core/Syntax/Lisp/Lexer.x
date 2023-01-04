@@ -50,7 +50,6 @@ tokens :-
     defcap       { token TokenDefCap }
     defpact      { token TokenDefPact }
     interface    { token TokenInterface }
-    import       { token TokenImport }
     module       { token TokenModule }
     bless        { token TokenBless }
     implements   { token TokenImplements }
