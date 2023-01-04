@@ -112,9 +112,9 @@ instance Pretty (Expr i) where
   pretty = \case
     Var n _ -> pretty n
     LetIn bnds e _ ->
-      parens ("let" <+> parens (pretty bnds) <> pretty e)
+      parens ("let" <+> parens (pretty bnds) <+> pretty e)
     Lam nel e _ ->
-      parens ("lambda" <+> parens (renderLamTypes nel) <+> pretty e)
+      parens ("lambda" <+> parens (renderLamTypes nel) <> pretty e)
     Conditional c _ -> pretty c
     -- If cond e1 e2 _ ->
     --   parens ("if" <+> pretty cond <+> "then" <+> pretty e1 <+> "else" <+> pretty e2)

@@ -169,18 +169,17 @@ exprGen = Gen.recursive Gen.choice
   , (`Lisp.Block` ()) <$> Gen.nonEmpty (Range.linear 1 8) (Gen.subterm exprGen id)
   , (`Lisp.List` ()) <$> Gen.list (Range.linear 1 8) (Gen.subterm exprGen id)
   , lamGen
-  , Gen.subtermM exprGen letGen
-  --, Gen.subtermM3 exprGen exprGen exprGen condGen
+  --, Gen.subtermM exprGen letGen
+  , Gen.subtermM3 exprGen exprGen exprGen condGen
   ]
   where
     lamGen = do
-      (Lisp.Var n _) <- varGen
       par <- Gen.list (Range.linear 0 8) $ do
         i <- identGen
         ty <- Gen.maybe typeGen
         pure (i, ty)
       expr <- Gen.subterm exprGen id
-      pure $ Lisp.Lam n par expr ()
+      pure $ Lisp.Lam par expr ()
 
     letGen inner = do
       binders <- Gen.nonEmpty (Range.constant 1 8) binderGen
@@ -199,7 +198,7 @@ exprGen = Gen.recursive Gen.choice
       expr <- Gen.subterm exprGen id
       pure $ Lisp.Binder name ty expr
 
-    condGen a b c = Gen.choice [pure $ Lisp.CEAnd a b, pure $ Lisp.CEOr a b, pure $ Lisp.CEIf a b c] 
+    condGen a b c = (`Lisp.Conditional` ()) <$> Gen.choice [pure $ Lisp.CEAnd a b, pure $ Lisp.CEOr a b, pure $ Lisp.CEIf a b c] 
       
 
 parserRoundtrip :: Property
