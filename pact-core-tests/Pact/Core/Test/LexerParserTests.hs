@@ -9,7 +9,7 @@ import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
-import qualified Data.ByteString.Char8 as BS 
+import qualified Data.ByteString.Char8 as BS
 import Data.Decimal(DecimalRaw(..))
 import Pact.Core.Names
 import Pact.Core.Syntax.Common
@@ -21,11 +21,11 @@ import Pact.Core.Syntax.Lisp.LexUtils (Token(..))
 import Pact.Core.Literal
 
 
-showPretty :: Pretty a => a -> BS.ByteString 
-showPretty = BS.pack . show . pretty 
+showPretty :: Pretty a => a -> BS.ByteString
+showPretty = BS.pack . show . pretty
 
 tokenToSrc :: Token -> BS.ByteString
-tokenToSrc = \case 
+tokenToSrc = \case
   TokenString s -> "\"" <> showPretty s <> "\""
   TokenIdent n  -> encodeUtf8 n
   TokenNumber n -> encodeUtf8 n
@@ -44,7 +44,7 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
     number = do
       n <- Gen.int $ Range.linear (-1000) 1000
       pure . TokenNumber $ T.pack $ show n
-    unary = Gen.constant 
+    unary = Gen.constant
       <$> [ TokenLet
           , TokenIf
           , TokenLambda
@@ -152,7 +152,7 @@ constantGen = (`Lisp.Constant` ()) <$> Gen.choice
 
 operatorGen :: ParserGen
 operatorGen = Gen.choice $ (\x -> pure (Lisp.Operator x ())) <$> [minBound .. ]
-  
+
 exprGen :: ParserGen
 exprGen = Gen.recursive Gen.choice
   [ varGen
@@ -169,8 +169,8 @@ exprGen = Gen.recursive Gen.choice
   , (`Lisp.Block` ()) <$> Gen.nonEmpty (Range.linear 1 8) (Gen.subterm exprGen id)
   , (`Lisp.List` ()) <$> Gen.list (Range.linear 1 8) (Gen.subterm exprGen id)
   , lamGen
-  --, Gen.subtermM exprGen letGen
-  , Gen.subtermM3 exprGen exprGen exprGen condGen
+  , Gen.subtermM exprGen letGen
+  , Gen.subterm3 exprGen exprGen exprGen (\a b c -> Lisp.If a b c ())
   ]
   where
     lamGen = do
@@ -186,27 +186,25 @@ exprGen = Gen.recursive Gen.choice
       pure $ Lisp.LetIn binders inner ()
 
     typeGen :: Gen Type
-    typeGen = Gen.choice [pt, ft, lt]
+    typeGen = Gen.choice [pt, lt]
       where
         pt = Gen.choice $ Gen.constant . TyPrim <$> [minBound ..]
-        ft = Gen.subterm2 typeGen typeGen TyFun
+        -- ft = Gen.subterm2 typeGen typeGen TyFun
         lt = Gen.subterm typeGen TyList
-    
+
     binderGen = do
       name <- identGen
       ty <- Gen.maybe typeGen
       expr <- Gen.subterm exprGen id
       pure $ Lisp.Binder name ty expr
 
-    condGen a b c = (`Lisp.Conditional` ()) <$> Gen.choice [pure $ Lisp.CEAnd a b, pure $ Lisp.CEOr a b, pure $ Lisp.CEIf a b c] 
-      
 
 parserRoundtrip :: Property
 parserRoundtrip = property $ do
   ptok <- forAll exprGen
   res <- evalEither $ Lisp.parseExpr =<< Lisp.lexer (parsedExprToSrc ptok)
   ptok === toUnitExpr res
-  
+
 tests :: TestTree
 tests = testGroup "Lexer and Parser Tests"
   [ testProperty "lexer roundtrip" lexerRoundtrip

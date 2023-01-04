@@ -30,6 +30,9 @@ instance Pretty Literal where
   pretty = \case
     LString t -> dquotes (pretty t)
     LInteger i -> pretty i
-    LDecimal d -> pretty (show d)
+    LDecimal d ->
+      if roundTo 0 d == d then
+        pretty (show (roundTo 0 d)) <> ".0"
+      else pretty (show d)
     LUnit -> "()"
     LBool b -> if b then "true" else "false"

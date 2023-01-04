@@ -28,27 +28,21 @@ instance Pretty (Binder i) where
   pretty (Binder ident ty e) =
     parens $ pretty ident <> maybe mempty ((":" <>) . pretty) ty <+> pretty e
 
-data Cond e
-  = CEAnd e e
-  | CEOr e e
-  | CEIf e e e
-  deriving (Show, Eq, Functor)
-
-instance Pretty e => Pretty (Cond e) where
-  pretty = \case
-    CEAnd e1 e2 ->
-      parens ("and" <+> pretty e1 <+> pretty e2)
-    CEOr e1 e2 ->
-      parens ("or" <+> pretty e1 <+> pretty e2)
-    CEIf e1 e2 e3 ->
-      parens ("if" <+> pretty e1 <+> pretty e2 <+> pretty e3)
+-- instance Pretty e => Pretty (Cond e) where
+--   pretty = \case
+--     CEAnd e1 e2 ->
+--       parens ("and" <+> pretty e1 <+> pretty e2)
+--     CEOr e1 e2 ->
+--       parens ("or" <+> pretty e1 <+> pretty e2)
+--     CEIf e1 e2 e3 ->
+--       parens ("if" <+> pretty e1 <+> pretty e2 <+> pretty e3)
 
 
 data Expr i
   = Var ParsedName i
   | LetIn (NonEmpty (Binder i)) (Expr i) i
   | Lam [(Text, Maybe Type)] (Expr i) i
-  | Conditional (Cond (Expr i)) i
+  | If (Expr i) (Expr i) (Expr i) i
   | App (Expr i) [Expr i] i
   | Block (NonEmpty (Expr i)) i
   | Operator Operator i
@@ -84,10 +78,8 @@ termInfo f = \case
     LetIn bnds e1 <$> f i
   Lam nel e i ->
     Lam nel e <$> f i
-  Conditional c i ->
-    Conditional c <$> f i
-  -- If e1 e2 e3 i ->
-  --   If e1 e2 e3 <$> f i
+  If e1 e2 e3 i ->
+    If e1 e2 e3 <$> f i
   App e1 args i ->
     App e1 args <$> f i
   Block nel i ->
@@ -112,12 +104,11 @@ instance Pretty (Expr i) where
   pretty = \case
     Var n _ -> pretty n
     LetIn bnds e _ ->
-      parens ("let" <+> parens (pretty bnds) <+> pretty e)
+      parens ("let" <+> parens (hsep (NE.toList (pretty <$> bnds))) <+> pretty e)
     Lam nel e _ ->
-      parens ("lambda" <+> parens (renderLamTypes nel) <> pretty e)
-    Conditional c _ -> pretty c
-    -- If cond e1 e2 _ ->
-    --   parens ("if" <+> pretty cond <+> "then" <+> pretty e1 <+> "else" <+> pretty e2)
+      parens ("lambda" <+> parens (renderLamTypes nel) <+> pretty e)
+    If cond e1 e2 _ ->
+      parens ("if" <+> pretty cond <+> pretty e1 <+> pretty e2)
     App e1 [] _ ->
       parens (pretty e1)
     App e1 nel _ ->
@@ -149,5 +140,5 @@ instance Pretty (Expr i) where
     where
     renderLamPair (n, mt) = case mt of
       Nothing -> pretty n
-      Just t -> parens $ pretty n <+> ":" <+> pretty t
+      Just t -> pretty n <> ":" <> pretty t
     renderLamTypes = fold . intersperse " " . fmap renderLamPair

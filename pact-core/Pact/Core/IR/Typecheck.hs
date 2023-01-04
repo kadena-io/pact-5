@@ -567,7 +567,7 @@ ordInst = \case
     PrimInt -> pure (Just [])
     PrimDecimal -> pure (Just [])
     PrimString -> pure (Just [])
-    PrimTime -> pure (Just [])
+    -- PrimTime -> pure (Just [])
     PrimUnit -> pure (Just [])
     _ -> pure Nothing
   TyList t -> pure (Just [Pred Ord t])

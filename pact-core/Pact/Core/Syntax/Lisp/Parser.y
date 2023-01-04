@@ -194,12 +194,13 @@ ArgList :: { [Arg] }
 
 Type :: { Type }
   -- : '(' TyArrows '->' Type1 ')' { foldr TyFun $4 (reverse $2) }
-  : Type1 { $1 }
-
-Type1 :: { Type }
-  : TYLIST Type { TyList $2 }
-  -- | '{' RowType '}' { TyObject (Map.fromList $2) }
+  : '[' Type ']' { TyList $2 }
   | AtomicType { $1 }
+
+-- Type1 :: { Type }
+--   : TYLIST Type { TyList $2 }
+  -- | '{' RowType '}' { TyObject (Map.fromList $2) }
+  -- | AtomicType { $1 }
 
 -- TyArrows :: { [Type] }
 --   : TyArrows '->' Type1 { $3:$1 }
@@ -268,7 +269,7 @@ LamExpr :: { LineInfo -> ParsedExpr }
   : lam '(' LamArgs ')' Expr { Lam (reverse $3) $5 }
 
 IfExpr :: { LineInfo -> ParsedExpr }
-  : if Expr Expr Expr { Conditional (CEIf $2 $3 $4) }
+  : if Expr Expr Expr { If $2 $3 $4 }
 
 TryExpr :: { LineInfo -> ParsedExpr }
   : try Expr Expr { Try $2 $3 }

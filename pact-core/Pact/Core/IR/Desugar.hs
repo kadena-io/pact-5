@@ -240,13 +240,8 @@ desugarLispTerm = \case
     nty = Just TyUnit
     body' = desugarLispTerm body
     in Lam (pure (n, nty)) body' i
-  Lisp.Conditional c i -> (`Conditional` i) $ case desugarLispTerm <$> c of
-    Lisp.CEAnd e1 e2 ->
-      CAnd e1 e2
-    Lisp.CEOr e1 e2 ->
-      COr e1 e2
-    Lisp.CEIf e1 e2 e3 ->
-      CIf e1 e2 e3
+  Lisp.If e1 e2 e3 i ->
+      Conditional (CIf (desugarLispTerm e1) (desugarLispTerm e2) (desugarLispTerm e3)) i
   Lisp.App e [] i -> case desugarLispTerm e of
     v@Var{} ->
       let arg = Constant LUnit i :| []
@@ -354,8 +349,8 @@ desugarModule (Common.Module mname extdecls defs) = let
 desugarType :: Common.Type -> Type a
 desugarType = \case
   Common.TyPrim p -> TyPrim p
-  Common.TyFun l r ->
-    TyFun (desugarType l) (desugarType r)
+  -- Common.TyFun l r ->
+  --   TyFun (desugarType l) (desugarType r)
   -- Common.TyObject o ->
   --   let o' = desugarType <$> o
   --   in TyRow (RowTy o' Nothing)

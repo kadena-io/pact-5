@@ -64,13 +64,8 @@ instance Pretty Operator where
 -- Todo: type constructors aren't 1-1 atm.
 data Type
   = TyPrim PrimType
-  | TyFun Type Type
   | TyList Type
   deriving (Show, Eq)
-
-  -- | TyObject (Map Field Type)
-  -- | TyCap
-
 
 pattern TyInt :: Type
 pattern TyInt = TyPrim PrimInt
@@ -78,8 +73,8 @@ pattern TyInt = TyPrim PrimInt
 pattern TyDecimal :: Type
 pattern TyDecimal = TyPrim PrimDecimal
 
-pattern TyTime :: Type
-pattern TyTime = TyPrim PrimTime
+-- pattern TyTime :: Type
+-- pattern TyTime = TyPrim PrimTime
 
 pattern TyBool :: Type
 pattern TyBool = TyPrim PrimBool
@@ -94,20 +89,7 @@ pattern TyUnit = TyPrim PrimUnit
 instance Pretty Type where
   pretty = \case
     TyPrim prim -> pretty prim
-    TyFun l r -> case l of
-      TyFun _ _ ->
-        parens (pretty l) <+> "->" <+> pretty r
-      _ -> pretty l <+> "->" <+> pretty r
-    TyList t -> "List" <+> renderListParens t (pretty t)
-    -- TyObject fields ->
-    --   "{" <> fold (intersperse ", " $ renderMapObjs <$> Map.toList fields) <> "}"
-    -- TyCap -> "Capability"
-    where
-    -- renderMapObjs (Field f, t) = pretty f <+> ":" <+> pretty t
-    renderListParens = \case
-      TyList _ -> parens
-      TyFun _ _ -> parens
-      _ -> id
+    TyList t -> brackets (pretty t)
 
 
 ----------------------------------------------------
