@@ -1,33 +1,18 @@
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-{-# HLINT ignore "Use camelCase" #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 module Pact.Core.Test.LexerParserTests where
-
-import Debug.Trace -- rs (2022-12-23): Remove
-
 
 import Test.Tasty
 import Test.Tasty.Hedgehog
 import Hedgehog
-
-import Control.Monad.State
 import Control.Applicative ((<|>))
 import Data.Text.Prettyprint.Doc
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
-
-import Data.Default (def)
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
-
 import qualified Data.ByteString.Char8 as BS 
---import Data.String (fromString)
 import Data.Decimal(DecimalRaw(..))
-
-import Pact.Core.Info
 import Pact.Core.Names
 import Pact.Core.Syntax.Common
-import qualified Pact.Core.Type as Core
 import qualified Pact.Core.Syntax.Lisp.Lexer as Lisp
 import qualified Pact.Core.Syntax.Lisp.LexUtils as Lisp
 import qualified Pact.Core.Syntax.Lisp.ParseTree as Lisp
@@ -57,7 +42,7 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
   where
     string = TokenString <$> Gen.text (Range.linear 0 16) Gen.alphaNum
     number = do
-      n <- Gen.int $ Range.linear (-1000) (1000)
+      n <- Gen.int $ Range.linear (-1000) 1000
       pure . TokenNumber $ T.pack $ show n
     unary = Gen.constant 
       <$> [ TokenLet
@@ -124,32 +109,17 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
           , TokenTypecheckFailure
           ]
 
-lexer_roundtrip :: Property
-lexer_roundtrip = property $ do
+lexerRoundtrip :: Property
+lexerRoundtrip = property $ do
   toks <- forAll $ Gen.list (Range.constant 0 10) tokenGen
-  ptoks <- evalEither $ Lisp.lexer (BS.unlines $ (tokenToSrc <$> toks))
+  ptoks <- evalEither $ Lisp.lexer (BS.unlines (tokenToSrc <$> toks))
   toks === (Lisp._ptToken <$> ptoks)
 
 
 type ParserGen = Gen (Lisp.Expr ())
 
 toUnitExpr :: Lisp.ParsedExpr -> Lisp.Expr ()
-toUnitExpr = \case
-    Lisp.Var n _ -> Lisp.Var n ()
-    Lisp.LetIn nel e _ -> Lisp.LetIn (binderToUnit <$> nel) (toUnitExpr e) ()
-    Lisp.Lam n ty expr _ -> Lisp.Lam n ty (toUnitExpr expr) ()
-    Lisp.Conditional c _ -> Lisp.Conditional (toUnitExpr <$> c) ()
-    Lisp.App a xs _ -> Lisp.App (toUnitExpr a) (toUnitExpr <$> xs) ()
-    Lisp.Block xs _ -> Lisp.Block (toUnitExpr <$> xs) ()
-    Lisp.Operator op _ -> Lisp.Operator op ()
-    Lisp.List xs _ -> Lisp.List (toUnitExpr <$> xs) ()
-    Lisp.Constant lit _ -> Lisp.Constant lit ()
-    Lisp.Try a b _ -> Lisp.Try (toUnitExpr a) (toUnitExpr b) ()
-    Lisp.Suspend a _ -> Lisp.Suspend (toUnitExpr a) ()
-    Lisp.Error t _ -> Lisp.Error t ()
-    where
-      binderToUnit (Lisp.Binder t ty e) = Lisp.Binder t ty (toUnitExpr e)
-
+toUnitExpr = fmap $ const ()
 
 parsedExprToSrc :: Lisp.Expr () -> BS.ByteString
 parsedExprToSrc = BS.pack . show . pretty
@@ -181,25 +151,7 @@ constantGen = (`Lisp.Constant` ()) <$> Gen.choice
 
 
 operatorGen :: ParserGen
-operatorGen = Gen.choice $ (\x -> pure (Lisp.Operator x ())) <$>
-  [ AddOp
-  , SubOp
-  , MultOp
-  , DivOp
-  , GTOp
-  , GEQOp
-  , LTOp
-  , LEQOp
-  --, EQOp
-  , NEQOp
-  , BitAndOp
-  , BitOrOp
-  , BitComplementOp
-  , AndOp
-  , OrOp
-  , PowOp
-  --, NegateOp
-  ]
+operatorGen = Gen.choice $ (\x -> pure (Lisp.Operator x ())) <$> [minBound .. ]
   
 exprGen :: ParserGen
 exprGen = Gen.recursive Gen.choice
@@ -211,14 +163,14 @@ exprGen = Gen.recursive Gen.choice
   -- recursive ones
   [ Gen.subterm exprGen (`Lisp.Suspend` ())
   , Gen.subterm2 exprGen exprGen (\x y -> Lisp.Try x y ())
-  --, Gen.subtermM exprGen letGen
-  --, Gen.subtermM3 exprGen exprGen exprGen (\a b c -> condGen a b c >>= (\x -> pure $ Lisp.Conditional x ()))
   , Gen.subtermM exprGen $ \x -> do
       xs <- Gen.list (Range.linear 0 8) exprGen
       pure $ Lisp.App x xs ()
   , (`Lisp.Block` ()) <$> Gen.nonEmpty (Range.linear 1 8) (Gen.subterm exprGen id)
   , (`Lisp.List` ()) <$> Gen.list (Range.linear 1 8) (Gen.subterm exprGen id)
   , lamGen
+  , Gen.subtermM exprGen letGen
+  --, Gen.subtermM3 exprGen exprGen exprGen condGen
   ]
   where
     lamGen = do
@@ -226,7 +178,7 @@ exprGen = Gen.recursive Gen.choice
       par <- Gen.list (Range.linear 0 8) $ do
         i <- identGen
         ty <- Gen.maybe typeGen
-        pure $ (i, ty)
+        pure (i, ty)
       expr <- Gen.subterm exprGen id
       pure $ Lisp.Lam n par expr ()
 
@@ -237,14 +189,7 @@ exprGen = Gen.recursive Gen.choice
     typeGen :: Gen Type
     typeGen = Gen.choice [pt, ft, lt]
       where
-        pt = Gen.choice $ Gen.constant . TyPrim <$>
-          [ Core.PrimInt
-          , Core.PrimDecimal
-          , Core.PrimTime
-          , Core.PrimBool
-          , Core.PrimString
-          , Core.PrimUnit
-          ]
+        pt = Gen.choice $ Gen.constant . TyPrim <$> [minBound ..]
         ft = Gen.subterm2 typeGen typeGen TyFun
         lt = Gen.subterm typeGen TyList
     
@@ -257,14 +202,14 @@ exprGen = Gen.recursive Gen.choice
     condGen a b c = Gen.choice [pure $ Lisp.CEAnd a b, pure $ Lisp.CEOr a b, pure $ Lisp.CEIf a b c] 
       
 
-parser_roundtrip :: Property
-parser_roundtrip = property $ do
+parserRoundtrip :: Property
+parserRoundtrip = property $ do
   ptok <- forAll exprGen
   res <- evalEither $ Lisp.parseExpr =<< Lisp.lexer (parsedExprToSrc ptok)
   ptok === toUnitExpr res
   
 tests :: TestTree
 tests = testGroup "Lexer and Parser Tests"
-  [ testProperty "lexer roundtrip" lexer_roundtrip
-  , testProperty "parser roundtrip" $ withTests (1000 :: TestLimit) parser_roundtrip
+  [ testProperty "lexer roundtrip" lexerRoundtrip
+  , testProperty "parser roundtrip" $ withTests (1000 :: TestLimit) parserRoundtrip
   ]
