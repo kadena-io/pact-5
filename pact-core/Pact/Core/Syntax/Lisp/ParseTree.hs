@@ -28,16 +28,6 @@ instance Pretty (Binder i) where
   pretty (Binder ident ty e) =
     parens $ pretty ident <> maybe mempty ((":" <>) . pretty) ty <+> pretty e
 
--- instance Pretty e => Pretty (Cond e) where
---   pretty = \case
---     CEAnd e1 e2 ->
---       parens ("and" <+> pretty e1 <+> pretty e2)
---     CEOr e1 e2 ->
---       parens ("or" <+> pretty e1 <+> pretty e2)
---     CEIf e1 e2 e3 ->
---       parens ("if" <+> pretty e1 <+> pretty e2 <+> pretty e3)
-
-
 data Expr i
   = Var ParsedName i
   | LetIn (NonEmpty (Binder i)) (Expr i) i

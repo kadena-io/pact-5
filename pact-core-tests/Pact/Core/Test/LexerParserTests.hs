@@ -185,11 +185,9 @@ exprGen = Gen.recursive Gen.choice
       pure $ Lisp.LetIn binders inner ()
 
     typeGen :: Gen Type
-    typeGen = Gen.choice [pt, lt]
-      where
-        pt = Gen.choice $ Gen.constant . TyPrim <$> [minBound ..]
-        -- ft = Gen.subterm2 typeGen typeGen TyFun
-        lt = Gen.subterm typeGen TyList
+    typeGen = Gen.recursive Gen.choice
+      (Gen.constant . TyPrim <$> [minBound ..])
+      [TyList <$> typeGen]
 
     binderGen = do
       name <- identGen

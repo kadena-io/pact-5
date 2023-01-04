@@ -349,8 +349,6 @@ desugarModule (Common.Module mname extdecls defs) = let
 desugarType :: Common.Type -> Type a
 desugarType = \case
   Common.TyPrim p -> TyPrim p
-  -- Common.TyFun l r ->
-  --   TyFun (desugarType l) (desugarType r)
   -- Common.TyObject o ->
   --   let o' = desugarType <$> o
   --   in TyRow (RowTy o' Nothing)
