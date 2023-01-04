@@ -100,7 +100,7 @@ instance Pretty QualifiedName where
 data ParsedName
   = QN QualifiedName
   | BN BareName
-  deriving Show
+  deriving (Show, Eq)
 
 rawParsedName :: ParsedName -> Text
 rawParsedName (BN (BareName n)) = n

@@ -74,7 +74,6 @@ data Token
   | TokenColon
   | TokenDot
   -- Types
-  | TokenTyList
   | TokenTyTable
   | TokenTyInteger
   | TokenTyDecimal
@@ -94,8 +93,6 @@ data Token
   | TokenMult
   | TokenDiv
   | TokenPow
-  | TokenObjAccess
-  | TokenObjRemove
   | TokenBitAnd
   | TokenBitOr
   | TokenBitComplement
@@ -230,7 +227,7 @@ renderTokenText = \case
   TokenKeyGov -> "keyGov"
   TokenCapGov -> "capGov"
   TokenInterface -> "interface"
-  TokenImport -> "import"
+  TokenImport -> "use"
   TokenDefun -> "defun"
   TokenDefConst -> "defconst"
   TokenDefCap -> "defcap"
@@ -248,7 +245,6 @@ renderTokenText = \case
   TokenComma -> ","
   TokenColon -> ":"
   TokenDot -> "."
-  TokenTyList -> "list"
   TokenTyTable -> "table"
   TokenTyInteger -> "integer"
   TokenTyDecimal -> "decimal"
@@ -267,8 +263,6 @@ renderTokenText = \case
   TokenMult -> "*"
   TokenDiv -> "/"
   TokenPow -> "^"
-  TokenObjAccess -> "@"
-  TokenObjRemove -> "#"
   TokenBitAnd -> "&"
   TokenBitOr -> "|"
   TokenBitComplement -> "~"
@@ -283,8 +277,8 @@ renderTokenText = \case
   TokenEOF -> "EOF"
   TokenSuspend -> "suspend"
   TokenLoad -> "load"
-  TokenTypechecks -> "typechecks"
-  TokenTypecheckFailure -> "typecheck-failure"
+  TokenTypechecks -> "expect-typechecks"
+  TokenTypecheckFailure -> "expect-typecheck-failure"
 
 
 

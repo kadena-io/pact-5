@@ -10,7 +10,7 @@ module Pact.Core.Type
  , TypeScheme(..)
  , pattern TyInt
  , pattern TyDecimal
- , pattern TyTime
+--  , pattern TyTime
  , pattern TyBool
  , pattern TyString
  , pattern TyUnit
@@ -36,17 +36,17 @@ import qualified Pact.Core.Pretty as Pretty
 data PrimType =
   PrimInt |
   PrimDecimal |
-  PrimTime |
+  -- PrimTime |
   PrimBool |
   PrimString |
   PrimUnit
-  deriving (Eq,Ord,Show)
+  deriving (Eq,Ord,Show, Enum, Bounded)
 
 instance Pretty PrimType where
   pretty = \case
     PrimInt -> "integer"
     PrimDecimal -> "decimal"
-    PrimTime -> "time"
+    -- PrimTime -> "time"
     PrimBool -> "bool"
     PrimString -> "string"
     PrimUnit -> "unit"
@@ -84,8 +84,8 @@ pattern TyInt = TyPrim PrimInt
 pattern TyDecimal :: Type n
 pattern TyDecimal = TyPrim PrimDecimal
 
-pattern TyTime :: Type n
-pattern TyTime = TyPrim PrimTime
+-- pattern TyTime :: Type n
+-- pattern TyTime = TyPrim PrimTime
 
 pattern TyBool :: Type n
 pattern TyBool = TyPrim PrimBool

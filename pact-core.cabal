@@ -229,9 +229,12 @@ test-suite core-tests
     , text
     , transformers
     , pact-core
+    , prettyprinter
     , vector
     , tasty
     , tasty-hunit
+    , tasty-hedgehog
 
   other-modules:
     , Pact.Core.Test.ReplTests
+    , Pact.Core.Test.LexerParserTests

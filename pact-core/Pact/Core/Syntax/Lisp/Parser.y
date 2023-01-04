@@ -77,7 +77,6 @@ import Pact.Core.Syntax.Lisp.LexUtils
   ','        { PosToken TokenComma _ }
   ':'        { PosToken TokenColon _ }
   '.'        { PosToken TokenDot _ }
-  TYLIST     { PosToken TokenTyList _ }
   TYTABLE    { PosToken TokenTyTable _ }
   TYINTEGER  { PosToken TokenTyInteger _ }
   TYDECIMAL  { PosToken TokenTyDecimal _ }
@@ -95,8 +94,6 @@ import Pact.Core.Syntax.Lisp.LexUtils
   '-'        { PosToken TokenMinus _}
   '*'        { PosToken TokenMult _ }
   '/'        { PosToken TokenDiv _ }
-  '@'        { PosToken TokenObjAccess _ }
-  '#'        { PosToken TokenObjRemove _ }
   '&'        { PosToken TokenBitAnd _ }
   '|'        { PosToken TokenBitOr _ }
   '~'        { PosToken TokenBitComplement _}
@@ -196,11 +193,7 @@ ArgList :: { [Arg] }
 
 Type :: { Type }
   -- : '(' TyArrows '->' Type1 ')' { foldr TyFun $4 (reverse $2) }
-  : Type1 { $1 }
-
-Type1 :: { Type }
-  : TYLIST Type { TyList $2 }
-  -- | '{' RowType '}' { TyObject (Map.fromList $2) }
+  : '[' Type ']' { TyList $2 }
   | AtomicType { $1 }
 
 -- TyArrows :: { [Type] }
@@ -270,7 +263,7 @@ LamExpr :: { LineInfo -> ParsedExpr }
   : lam '(' LamArgs ')' Expr { Lam (reverse $3) $5 }
 
 IfExpr :: { LineInfo -> ParsedExpr }
-  : if Expr Expr Expr { Conditional (CEIf $2 $3 $4) }
+  : if Expr Expr Expr { If $2 $3 $4 }
 
 TryExpr :: { LineInfo -> ParsedExpr }
   : try Expr Expr { Try $2 $3 }

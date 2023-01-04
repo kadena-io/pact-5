@@ -48,12 +48,12 @@ tokens :-
     defschema    { token TokenDefSchema }
     deftable     { token TokenDefTable }
     defcap       { token TokenDefCap }
+    defpact      { token TokenDefPact }
     interface    { token TokenInterface }
     module       { token TokenModule }
     bless        { token TokenBless }
     implements   { token TokenImplements }
     use          { token TokenImport }
-    list         { token TokenTyList }
     true         { token TokenTrue }
     false        { token TokenFalse }
     keyGov       { token TokenKeyGov }
