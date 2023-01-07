@@ -169,11 +169,6 @@ data Term name builtin info
   | Error Text info
   -- ^ Error catching
   deriving (Show, Functor)
-  -- | ObjectLit (Map Field (Term name builtin info)) info
-  -- ^ {f_1:e_1, .., f_n:e_n}
-  -- | ObjectOp (ObjectOp (Term name builtin info)) info
-  -- Object access, update and remove
-
 
 -- Post Typecheck terms + modules
 type EvalTerm b i = Term Name b i

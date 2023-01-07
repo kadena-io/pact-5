@@ -205,7 +205,7 @@ instance TypeOfBuiltin RawBuiltin where
       binaryInt
     -- integer -> integer
     RawBitShift ->
-      unaryInt
+      binaryInt
     -- Rounding ops
     -- decimal -> integer
     RawRound ->

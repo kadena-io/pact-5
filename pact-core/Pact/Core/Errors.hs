@@ -184,6 +184,8 @@ data ExecutionError
   -- ^ Some form of decoding error
   | GasExceeded Text
   -- ^ Gas went past the gas limit
+  | FloatingPointError Text
+  -- ^ Floating point operation exception
   | InvariantFailure Text
   -- ^ Invariant violation in execution. This is a fatal Error.
   | ExecutionError Text
@@ -204,6 +206,8 @@ instance RenderError ExecutionError where
       tConcatSpace ["Enumeration error:", txt]
     DecodeError txt ->
       tConcatSpace ["Decoding error:", txt]
+    FloatingPointError txt ->
+      tConcatSpace ["Floating point error:", txt]
     -- Todo: probably enhance this data type
     GasExceeded txt -> txt
     InvariantFailure txt ->
