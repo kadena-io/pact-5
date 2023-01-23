@@ -45,16 +45,6 @@ data DefConst name builtin info
   , _dcInfo :: info
   } deriving Show
 
--- data DefCap name builtin info
---   = DefCap
---   { _dcapName :: Text
---   , _dcapArgs :: [Text]
---   , _dcapTerm :: Term name builtin info
---   , _dcapCapType :: CapType name
---   , _dcapType :: Type Void
---   , _dcapInfo :: info
---   } deriving Show
-
 data Def name builtin info
   = Dfun (Defun name builtin info)
   | DConst (DefConst name builtin info)
@@ -64,10 +54,20 @@ defName :: Def name b i -> Text
 defName (Dfun d) = _dfunName d
 defName (DConst d) = _dcName d
 
+ifDefName :: IfDef name builtin i -> Text
+ifDefName = \case
+  IfDfun ifd -> _ifdName ifd
+  IfDConst dc -> _dcName dc
+
 defInfo :: Def name b i -> i
 defInfo = \case
   Dfun de -> _dfunInfo de
   DConst dc -> _dcInfo dc
+
+ifDefInfo :: IfDef name b i -> i
+ifDefInfo = \case
+  IfDfun de -> _ifdInfo de
+  IfDConst dc -> _dcInfo dc
 
 -- TODO:
 -- Support module guards
@@ -85,32 +85,32 @@ data Module name builtin info
 
 data Interface name builtin info
   = Interface
-  { _ifName :: name
+  { _ifName :: ModuleName
   , _ifDefns :: [IfDef name builtin info]
-  , _ifHash :: Hash
+  , _ifHash :: ModuleHash
   } deriving Show
 
-data IfDefun name info
+data IfDefun info
   = IfDefun
-  { _ifdName :: name
+  { _ifdName :: Text
   , _ifdType :: Type Void
   , _ifdInfo :: info
   } deriving Show
 
 data IfDef name builtin info
-  = IfDfun (IfDefun name info)
+  = IfDfun (IfDefun info)
   | IfDConst (DefConst name builtin info)
   deriving Show
 
 data TopLevel name builtin info
   = TLModule (Module name builtin info)
-  -- | TLInterface (Interface name builtin info)
+  | TLInterface (Interface name builtin info)
   | TLTerm (Term name builtin info)
   deriving Show
 
 data ReplTopLevel name builtin info
   = RTLModule (Module name builtin info)
-  -- | RTLInterface (Interface name builtin info)
+  | RTLInterface (Interface name builtin info)
   | RTLDefConst (DefConst name builtin info)
   | RTLDefun (Defun name builtin info)
   | RTLTerm (Term name builtin info)
@@ -142,10 +142,6 @@ data Term name builtin info
   -- ^ try (catch expr) (try-expr)
   | Error Text info
   -- ^ Error term
-  -- | ObjectOp (ObjectOp (Term name builtin info)) info
-  -- ^ Object literals
-  -- | ObjectLit (Map Field (Term name builtin info)) info
-  -- ^ Primitive object operations
   deriving (Show, Functor)
 
 instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
@@ -237,3 +233,4 @@ instance Plated (Term name builtin info) where
     Error e i -> pure (Error e i)
 
 makePrisms ''Term
+makePrisms ''IfDef

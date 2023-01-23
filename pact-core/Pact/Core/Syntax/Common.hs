@@ -13,16 +13,6 @@ import Pact.Core.Pretty
 import Pact.Core.Type(PrimType(..))
 import Pact.Core.Imports
 
-
--- data UnaryOp
---   = NegateOp
---   | ComplementOp
---   deriving Show
-
--- instance Pretty UnaryOp where
---   pretty NegateOp = "-"
---   pretty ComplementOp = "~"
-
 data Operator
   = AddOp
   | SubOp
@@ -136,7 +126,6 @@ data Managed
 data Def e i
   = Dfun (Defun e i)
   | DConst (DefConst e i)
-  -- | DCap (DefCap e i)
   deriving Show
 
 data ExtDecl
@@ -155,12 +144,13 @@ data Module e i
 
 data TopLevel e i
   = TLModule (Module e i)
+  | TLInterface (Interface e i)
   | TLTerm e
   deriving Show
 
 data Interface e i
   = Interface
-  { _ifName :: Text
+  { _ifName :: ModuleName
   , _ifDefns :: [IfDef e i]
   } deriving Show
 
@@ -168,13 +158,13 @@ data IfDefun i
   = IfDefun
   { _ifdName :: Text
   , _ifdArgs :: [Arg]
-  , _ifdType :: Type
+  , _ifdRetType :: Type
   , _ifdInfo :: i
   } deriving Show
 
 data IfDef e i
   = IfDfun (IfDefun i)
-  | IFDConst (DefConst e i)
+  | IfDConst (DefConst e i)
   deriving Show
 
 instance Pretty e => Pretty (DefConst e i) where

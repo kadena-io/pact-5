@@ -679,21 +679,6 @@ coreEnumerateStepN = mkBuiltinFn \cont handler -> \case
   [VLiteral (LInteger from), VLiteral (LInteger to), VLiteral (LInteger inc)] -> do
     v <- createEnumerateList from to inc
     returnCEKValue cont handler (VList (VLiteral . LInteger <$> v))
-    -- where
-    -- toVecList = VList . fmap (VLiteral . LInteger)
-    -- enum' from' to' step
-    --   | to' > from' && step > 0 =
-    --     returnCEKValue cont handler
-    --     $ toVecList
-    --     $ V.enumFromStepN from' step (fromIntegral ((to' - from' + 1) `quot` step))
-    --   | from' > to' && step < 0 =
-    --     returnCEKValue cont handler
-    --     $ toVecList
-    --     $ V.enumFromStepN from' step (fromIntegral ((from' - to' + 1) `quot` step))
-    --   | from' == to' && step == 0 =
-    --     returnCEKValue cont handler
-    --     $ toVecList $ V.singleton from'
-    --   | otherwise = throwExecutionError' (EnumeratationError "enumerate outside interval bounds")
   _ -> failInvariant "enumerate-step"
 
 concatList :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m

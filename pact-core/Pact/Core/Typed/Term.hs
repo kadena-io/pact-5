@@ -1,10 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Pact.Core.Typed.Term
  ( Defun(..)
@@ -24,10 +22,12 @@ module Pact.Core.Typed.Term
  , OverloadedTerm
  , OverloadedDefun
  , OverloadedDefConst
+ , OverloadedIfDef
  , OverloadedDef
  , OverloadedModule
  , OverloadedTopLevel
  , OverloadedReplTopLevel
+ , OverloadedInterface
  -- On-chain eval terms
  , CoreEvalTerm
  , CoreEvalDefun
@@ -39,6 +39,9 @@ module Pact.Core.Typed.Term
  , defName
  , defType
  , defTerm
+ -- Prisms and lenses
+ , _IfDfun
+ , _IfDConst
  ) where
 
 import Control.Lens
@@ -74,16 +77,6 @@ data DefConst name tyname builtin info
   , _dcInfo :: info
   } deriving Show
 
--- data DefCap name tyname builtin info
---   = DefCap
---   { _dcapName :: Text
---   , _dcapArgs :: [Text]
---   , _dcapTerm :: Term name tyname builtin info
---   , _dcapCapType :: CapType name
---   , _dcapType :: Type tyname
---   , _dcapInfo :: info
---   } deriving Show
-
 data Def name tyname builtin info
   = Dfun (Defun name tyname builtin info)
   | DConst (DefConst name tyname builtin info)
@@ -110,7 +103,6 @@ defTerm :: Def name tyname builtin info -> Term name tyname builtin info
 defTerm = \case
   Dfun d -> _dfunTerm d
   DConst d -> _dcTerm d
-  -- DCap d -> _dcapTerm d
 
 data Module name tyname builtin info
   = Module
@@ -125,9 +117,9 @@ data Module name tyname builtin info
 
 data Interface name tyname builtin info
   = Interface
-  { _ifName :: name
+  { _ifName :: ModuleName
   , _ifDefns :: [IfDef name tyname builtin info]
-  , _ifHash :: Hash
+  , _ifHash :: ModuleHash
   } deriving Show
 
 data IfDefun name info
@@ -139,18 +131,18 @@ data IfDefun name info
 
 data IfDef name tyname builtin info
   = IfDfun (IfDefun name info)
-  | IFDConst (DefConst name tyname builtin info)
+  | IfDConst (DefConst name tyname builtin info)
   deriving Show
 
 data TopLevel name tyname builtin info
   = TLModule (Module name tyname builtin info)
-  -- | TLInterface (Interface name tyname builtin info)
+  | TLInterface (Interface name tyname builtin info)
   | TLTerm (Term name tyname builtin info)
   deriving Show
 
 data ReplTopLevel name tyname builtin info
   = RTLModule (Module name tyname builtin info)
-  -- | RTLInterface (Interface name builtin info)
+  | RTLInterface (Interface name tyname builtin info)
   | RTLDefun (Defun name tyname builtin info)
   | RTLDefConst (DefConst name tyname builtin info)
   | RTLTerm (Term name tyname builtin info)
@@ -200,8 +192,14 @@ type OverloadedDefConst tyname b i =
 type OverloadedDef tyname b i =
   Def Name tyname (b, [Type tyname], [Pred tyname]) i
 
+type OverloadedIfDef tyname b i =
+  IfDef Name tyname (b, [Type tyname], [Pred tyname]) i
+
 type OverloadedModule tyname b i =
   Module Name tyname (b, [Type tyname], [Pred tyname]) i
+
+type OverloadedInterface tyname b i =
+  Interface Name tyname (b, [Type tyname], [Pred tyname]) i
 
 type OverloadedTopLevel tyname b i =
   TopLevel Name tyname (b, [Type tyname], [Pred tyname]) i
@@ -341,3 +339,5 @@ instance Plated (Term name tyname builtin info) where
     -- ObjectOp oop i ->
     --   ObjectOp <$> traverse f oop <*> pure i
 
+makePrisms ''IfDef
+makePrisms ''Def

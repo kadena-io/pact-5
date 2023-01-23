@@ -29,7 +29,7 @@ import Control.Monad.Except
 import Control.Lens hiding (List,ix)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
--- import Data.List(findIndex)
+import Data.Maybe(mapMaybe)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Set(Set)
 import Data.Graph(stronglyConnComp, SCC(..))
@@ -303,24 +303,16 @@ desugarDefConst (Common.DefConst n mty e i) = let
   e' = desugarTerm e
   in DefConst n mty' e' i
 
--- desugarDefCap :: DesugarTerm expr builtin info => Common.DefCap expr info -> DefCap ParsedName builtin info
--- desugarDefCap (Common.DefCap dn argList managed term i) = let
---   managed' = maybe Unmanaged fromCommonCap managed
---   lamArgs = (\(Common.Arg n ty) -> (BN (BareName n), Just (desugarType ty))) <$> argList
---   -- term' = Lam lamArgs (desugarTerm term) i
---   capType = foldr TyFun TyCap (desugarType . Common._argType <$> argList)
---   in case lamArgs of
---     [] -> DefCap dn [] (desugarTerm term) managed' capType i
---     (arg:args) ->  DefCap dn [] (Lam (arg :| args) (desugarTerm term) i) managed' capType i
---   where
---   fromCommonCap = \case
---     Common.AutoManaged -> AutomanagedCap
---     Common.Managed t pn -> case findIndex ((== t) . Common._argName) argList of
---       Nothing -> error "invalid managed cap decl"
---       Just n -> let
---         ty' = desugarType $ Common._argType (argList !! n)
---         in ManagedCap n ty' pn
-
+desugarIfDef :: (DesugarTerm term b i) => Common.IfDef term i -> IfDef ParsedName b i
+desugarIfDef = \case
+  Common.IfDfun (Common.IfDefun n args rty i) -> IfDfun $ case args of
+    [] -> let
+      dty = TyUnit :~> desugarType rty
+      in IfDefun n dty i
+    _ ->
+      let dty = foldr TyFun (desugarType rty) $ fmap (desugarType . Common._argType) args
+      in IfDefun n dty i
+  Common.IfDConst dc -> IfDConst (desugarDefConst dc)
 
 desugarDef :: (DesugarTerm term b i) => Common.Def term i -> Def ParsedName b i
 desugarDef = \case
@@ -345,6 +337,11 @@ desugarModule (Common.Module mname extdecls defs) = let
     Common.ExtImplements mn -> split (accI, accB, mn:accImp) hs
   split (a, b, c) [] = (reverse a, b, reverse c)
 
+desugarInterface :: (DesugarTerm term b i) => Common.Interface term i -> Interface ParsedName b i
+desugarInterface (Common.Interface ifn ifdefns) = let
+  defs' = desugarIfDef <$> ifdefns
+  mhash = ModuleHash (Hash "placeholder")
+  in Interface ifn defs' mhash
 
 desugarType :: Common.Type -> Type a
 desugarType = \case
@@ -400,7 +397,11 @@ defSCC :: ModuleName -> Def Name b i1 -> Set Text
 defSCC mn = \case
   Dfun d -> defunSCC mn d
   DConst d -> defConstSCC mn d
-  -- DCap d -> defCapSCC mn d
+
+ifDefSCC :: ModuleName -> IfDef Name b i1 -> Set Text
+ifDefSCC mn = \case
+  IfDfun _ -> mempty
+  IfDConst d -> defConstSCC mn d
 
 liftRenamerT :: Monad m => m a -> RenamerT m cb ci a
 liftRenamerT ma = RenamerT (lift (lift ma))
@@ -559,7 +560,15 @@ renameDef
 renameDef = \case
   Dfun d -> Dfun <$> renameDefun d
   DConst d -> DConst <$> renameDefConst d
-  -- DCap d -> DCap <$> renameDefCap d
+
+
+renameIfDef
+  :: (MonadError (PactError i) m)
+  => IfDef ParsedName b' i
+  -> RenamerT m b i (IfDef Name b' i)
+renameIfDef = \case
+  IfDfun d -> pure (IfDfun d)
+  IfDConst d -> IfDConst <$> renameDefConst d
 
 resolveName
   :: (MonadError (PactError i) m)
@@ -633,6 +642,34 @@ renameModule (Module mname defs blessed imp implements mhash) = do
   where
   mkScc def = (def, defName def, Set.toList (defSCC mname def))
 
+-- | Todo: support imports
+-- Todo:
+renameInterface
+  :: (MonadError (PactError i) m)
+  => Interface ParsedName b' i
+  -> RenamerT m b i (Interface Name b' i)
+renameInterface (Interface ifn defs ih) = do
+  let dcs = mapMaybe (preview _IfDConst) defs
+      rawDefNames = _dcName <$> dcs
+      defMap = Map.fromList $ (, NTopLevel ifn ih) <$> rawDefNames
+      fqns = Map.fromList $ (\n -> (n, FullyQualifiedName ifn n ih)) <$> rawDefNames
+  -- `maybe all of this next section should be in a block laid out by the
+  -- `locally reBinds`
+  rsModuleBinds %= Map.insert ifn defMap
+  rsLoaded . loToplevel %= Map.union fqns
+  defs' <- locally reBinds (Map.union defMap) $ traverse renameIfDef defs
+  let scc = mkScc <$> defs'
+  defs'' <- forM (stronglyConnComp scc) \case
+    AcyclicSCC d -> pure d
+    CyclicSCC d ->
+      -- todo: just in case, match on `d` because it makes no sense for there to be an empty cycle
+      -- but all uses of `head` are still scary
+      throwDesugarError (RecursionDetected ifn (ifDefName <$> d)) (ifDefInfo (head d))
+  -- mgov' <- locally reBinds (Map.union defMap) $ traverse (resolveBareName' . rawParsedName) mgov
+  pure (Interface ifn defs'' ih)
+  where
+  mkScc def = (def, ifDefName def, Set.toList (ifDefSCC ifn def))
+
 runRenamerM
   :: RenamerState b i
   -> RenamerEnv m b i
@@ -688,6 +725,18 @@ runDesugarModule'
 runDesugarModule' _ pdb loaded m  = let
   desugared = desugarModule m
   in runDesugar' pdb loaded (renameModule desugared)
+
+runDesugarInterface
+  :: (DesugarTerm term raw i, MonadError (PactError i) m)
+  => Proxy raw
+  -> PactDb m reso i
+  -> Loaded reso i
+  -> Common.Interface term i
+  -> m (DesugarOutput reso i (Interface Name raw i))
+runDesugarInterface _ pdb loaded m  = let
+  desugared = desugarInterface m
+  in runDesugar' pdb loaded (renameInterface desugared)
+
 
 -- runDesugarDefun
 --   :: (MonadError (PactError i) m, DesugarTerm term raw i)
@@ -752,6 +801,7 @@ runDesugarTopLevel
 runDesugarTopLevel proxy pdb loaded = \case
   Common.TLModule m -> over dsOut TLModule <$> runDesugarModule' proxy pdb loaded m
   Common.TLTerm e -> over dsOut TLTerm <$> runDesugarTerm proxy pdb loaded e
+  Common.TLInterface i -> over dsOut TLInterface <$> runDesugarInterface proxy pdb loaded i
 
 
 runDesugarReplTopLevel

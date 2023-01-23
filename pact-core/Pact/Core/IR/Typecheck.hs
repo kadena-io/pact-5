@@ -44,6 +44,7 @@ import Data.RAList(RAList)
 import Data.Foldable(traverse_, foldlM)
 import Data.Functor(($>))
 import Data.STRef
+import Data.Maybe(mapMaybe)
 import Data.Map(Map)
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
@@ -84,7 +85,7 @@ newtype TvRef s =
   TvRef (STRef s (Tv s))
   deriving Eq
 
-data TCState s b
+data TCEnv s b
   = TCState
   { _tcSupply :: UniqueSupply s
   -- ^ Supply for fresh variables.
@@ -97,7 +98,7 @@ data TCState s b
   -- ^ Type Variable "Region"
   }
 
-makeLenses ''TCState
+makeLenses ''TCEnv
 
 type TCType s = Type (TvRef s)
 type TCPred s = Pred (TvRef s)
@@ -130,12 +131,12 @@ type TypedModule b i = Typed.OverloadedModule NamedDeBruijn b i
 -- | Our inference monad, where we can plumb through generalization "regions",
 -- our variable environment and our "supply" of unique names
 newtype InferM s b i a =
-  InferT (ExceptT (PactError i) (ReaderT (TCState s b) (ST s)) a)
+  InferT (ExceptT (PactError i) (ReaderT (TCEnv s b) (ST s)) a)
   deriving
     ( Functor, Applicative, Monad
-    , MonadReader (TCState s b)
+    , MonadReader (TCEnv s b)
     , MonadError (PactError i))
-  via (ExceptT (PactError i) (ReaderT (TCState s b) (ST s)))
+  via (ExceptT (PactError i) (ReaderT (TCEnv s b) (ST s)))
 
 class TypeOfBuiltin b where
   typeOfBuiltin :: b -> TypeScheme NamedDeBruijn
@@ -1121,6 +1122,9 @@ inferModule (IR.Module mname defs blessed imports impl mh) = do
         m' = Map.insert name' ty  m
     pure (def':xs, m')
 
+inferInterface :: IR.Interface name builtin info -> a
+inferInterface (IR.Interface _n _defns _h) = error "todo"
+
 -- | Note: debruijnizeType will
 -- ensure that terms that are generic will fail
 inferTermNonGen
@@ -1164,7 +1168,12 @@ inferTopLevel loaded = \case
         loaded' = over loAllTyped (Map.union newTLs) loaded
     pure (Typed.TLModule tcm, loaded')
   IR.TLTerm m -> (, loaded) . Typed.TLTerm . snd <$> inferTermNonGen m
-  -- IR.TLInterface _ -> error "todo: implement interface inference"
+  IR.TLInterface i -> do
+    tci <- inferInterface i
+    let toFqn dc = FullyQualifiedName (Typed._ifName tci) (Typed._dcName dc) (Typed._ifHash tci)
+        newTLs = Map.fromList $ fmap (\df -> (toFqn df, Typed._dcType df)) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
+        loaded' = over loAllTyped (Map.union newTLs) loaded
+    pure (Typed.TLInterface tci, loaded')
 
 inferReplTopLevel
   :: TypeOfBuiltin b
@@ -1191,7 +1200,12 @@ inferReplTopLevel loaded = \case
     let newFqn = FullyQualifiedName replModuleName (Typed._dcName dc) replModuleHash
     let loaded' = over loAllTyped (Map.insert newFqn (Typed._dcType dc)) loaded
     pure (Typed.RTLDefConst dc, loaded')
-  -- IR.RTLInterface _ -> error "todo: implement interface inference"
+  IR.RTLInterface i -> do
+    tci <- inferInterface i
+    let toFqn dc = FullyQualifiedName (Typed._ifName tci) (Typed._dcName dc) (Typed._ifHash tci)
+        newTLs = Map.fromList $ fmap (\df -> (toFqn df, Typed._dcType df)) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
+        loaded' = over loAllTyped (Map.union newTLs) loaded
+    pure (Typed.RTLInterface tci, loaded')
 
 
 -- | Transform types into their debruijn-indexed version

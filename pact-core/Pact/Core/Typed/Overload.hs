@@ -392,7 +392,16 @@ resolveDef
 resolveDef = \case
   Dfun d -> Dfun <$> resolveDefun d
   DConst d -> DConst <$> resolveDefConst d
-  -- DCap d -> DCap <$> resolveDefCap d
+
+resolveIfDef
+  :: SolveOverload raw reso
+  => OverloadedIfDef tyname raw info
+  -> OverloadM info (IfDef Name tyname reso info)
+resolveIfDef = \case
+  IfDfun df -> pure (IfDfun df)
+  IfDConst dc ->
+    IfDConst <$> resolveDefConst dc
+
 
 resolveModule
   :: SolveOverload raw reso
@@ -400,8 +409,16 @@ resolveModule
   -> OverloadM info (Module Name tyname reso info)
 resolveModule m = do
   defs' <- traverse resolveDef (_mDefs m)
-  -- let gov' = unsafeToTLName <$> _mGovernance m
   pure m{_mDefs=defs'}
+
+resolveInterface
+  :: SolveOverload raw reso
+  => OverloadedInterface tyname raw info
+  -> OverloadM info (Interface Name tyname reso info)
+resolveInterface m = do
+  defs' <- traverse resolveIfDef (_ifDefns m)
+  pure m{_ifDefns=defs'}
+
 
 resolveTopLevel
   :: SolveOverload raw reso
@@ -410,7 +427,7 @@ resolveTopLevel
 resolveTopLevel = \case
   TLModule m -> TLModule <$> resolveModule m
   TLTerm t -> TLTerm <$> resolveTerm t
-  -- _ -> error "unimplemented"
+  TLInterface i -> TLInterface <$> resolveInterface i
 
 resolveProgram
   :: SolveOverload raw reso
@@ -424,6 +441,8 @@ resolveReplTopLevel
   -> OverloadM info (ReplTopLevel Name tyname reso info)
 resolveReplTopLevel = \case
   RTLModule m -> RTLModule <$> resolveModule m
+  RTLInterface i ->
+    RTLInterface <$> resolveInterface i
   RTLTerm t -> RTLTerm <$> resolveTerm t
   RTLDefun d -> RTLDefun <$> resolveDefun d
   RTLDefConst d -> RTLDefConst <$> resolveDefConst d

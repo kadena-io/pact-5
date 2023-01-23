@@ -13,6 +13,7 @@ module Pact.Core.Untyped.Term
  , defType
  , defName
  , defTerm
+ , ifDefName
  , Module(..)
  , Interface(..)
  , IfDefun(..)
@@ -63,21 +64,10 @@ data DefConst name builtin info
   , _dcInfo :: info
   } deriving Show
 
--- data DefCap name builtin info
---   = DefCap
---   { _dcapName :: Text
---   , _dcapArgs :: [Text]
---   , _dcapTerm :: Term name builtin info
---   , _dcapCapType :: CapType name
---   , _dcapType :: Type NamedDeBruijn
---   , _dcapInfo :: info
---   } deriving Show
-
 data Def name builtin info
   = Dfun (Defun name builtin info)
   | DConst (DefConst name builtin info)
   deriving Show
-  -- | DCap (DefCap name builtin info)
 
 -- DCap (DefCap name builtin info)
 -- DPact (DefPact name builtin info)
@@ -87,24 +77,25 @@ defType :: Def name builtin info -> Type Void
 defType = \case
   Dfun d -> _dfunType d
   DConst d -> _dcType d
-  -- DCap d -> _dcapType d
 
 defName :: Def name builtin i -> Text
 defName = \case
   Dfun d -> _dfunName d
   DConst d -> _dcName d
-  -- DCap d -> _dcapName d
+
+ifDefName :: IfDef name builtin i -> Text
+ifDefName = \case
+  IfDfun ifd -> _ifdName ifd
+  IfDConst dc -> _dcName dc
 
 defTerm :: Def name builtin info -> Term name builtin info
 defTerm = \case
   Dfun d -> _dfunTerm d
   DConst d -> _dcTerm d
-  -- DCap d -> _dcapTerm d
 
 data Module name builtin info
   = Module
   { _mName :: ModuleName
-  -- , _mGovernance :: Governance name
   , _mDefs :: [Def name builtin info]
   , _mBlessed :: !(Set.Set ModuleHash)
   , _mImports :: [Import]
@@ -114,32 +105,32 @@ data Module name builtin info
 
 data Interface name builtin info
   = Interface
-  { _ifName :: name
+  { _ifName :: ModuleName
   , _ifDefns :: [IfDef name builtin info]
-  , _ifHash :: Hash
+  , _ifHash :: ModuleHash
   } deriving Show
 
-data IfDefun name info
+data IfDefun info
   = IfDefun
-  { _ifdName :: name
+  { _ifdName :: Text
   , _ifdType :: Type NamedDeBruijn
   , _ifdInfo :: info
   } deriving Show
 
 data IfDef name builtin info
-  = IfDfun (IfDefun name info)
-  | IFDConst (DefConst name builtin info)
+  = IfDfun (IfDefun info)
+  | IfDConst (DefConst name builtin info)
   deriving Show
 
 data TopLevel name builtin info
   = TLModule (Module name builtin info)
-  -- | TLInterface (Interface name builtin info)
+  | TLInterface (Interface name builtin info)
   | TLTerm (Term name builtin info)
   deriving Show
 
 data ReplTopLevel name builtin info
   = RTLModule (Module name builtin info)
-  -- | RTLInterface (Interface name builtin info)
+  | RTLInterface (Interface name builtin info)
   | RTLDefun (Defun name builtin info)
   | RTLDefConst (DefConst name builtin info)
   | RTLTerm (Term name builtin info)
@@ -198,10 +189,6 @@ fromIRTerm = \case
     Try (fromIRTerm e1) (fromIRTerm e2) i
   IR.Error e i ->
     Error e i
-  -- IR.ObjectLit m i ->
-  --   ObjectLit (fromIRTerm <$> m) i
-  -- IR.ObjectOp oo i ->
-  --   ObjectOp (fromIRTerm <$> oo) i
 
 ---------
 fromIRDefun
@@ -215,12 +202,6 @@ fromIRDConst
   -> DefConst name builtin info
 fromIRDConst (IR.DefConst n ty term i) =
   DefConst n (maybe TyUnit (fmap absurd) ty) (fromIRTerm term) i
-
--- fromIRDCap
---   :: IR.DefCap name builtin info
---   -> DefCap name builtin info
--- fromIRDCap (IR.DefCap name args term captype ty info) =
---   DefCap name args (fromIRTerm term) captype (absurd <$> ty) info
 
 fromIRDef
   :: IR.Def name builtin info
@@ -241,7 +222,7 @@ fromIRTopLevel
   -> TopLevel name builtin info
 fromIRTopLevel = \case
   IR.TLModule m -> TLModule (fromIRModule m)
-  -- IR.TLInterface _ -> error "todo: implement interfaces"
+  IR.TLInterface _ -> error "todo: implement interfaces"
   IR.TLTerm e -> TLTerm (fromIRTerm e)
 
 instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where

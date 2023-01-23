@@ -265,6 +265,7 @@ interpretReplProgram source = do
         let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
         replLoaded . loAllLoaded %= Map.insert fqn (DConst dc)
         pure $ InterpretLog $ "Loaded repl defconst: " <> _dcName dc
+      RTLInterface _ -> error "interface stub"
 
 
 interpretProgram
@@ -293,6 +294,7 @@ interpretProgram source = do
         toFqDep modName mhash defn =
           let fqn = FullyQualifiedName modName (defName defn) mhash
           in (fqn, defn)
+      TLInterface _ -> error "interace stub"
       TLTerm te -> do
         let i = view termInfo te
         evalGas <- use replGas

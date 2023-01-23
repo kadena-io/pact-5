@@ -77,8 +77,8 @@ fromTypedTopLevel
 fromTypedTopLevel = \case
   Typed.TLModule m ->
     TLModule (fromTypedModule m)
-  -- Typed.TLInterface _ ->
-  --   error "todo: implement interfaces"
+  Typed.TLInterface _ ->
+    error "todo: implement interfaces"
   Typed.TLTerm e ->
     TLTerm (fromTypedTerm e)
 
@@ -94,3 +94,4 @@ fromTypedReplTopLevel = \case
     RTLDefConst (fromTypedDConst dc)
   Typed.RTLTerm te ->
     RTLTerm (fromTypedTerm te)
+  Typed.RTLInterface _ -> error "interfaces"
