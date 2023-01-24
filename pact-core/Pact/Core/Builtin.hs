@@ -346,7 +346,7 @@ instance BuiltinArity RawBuiltin where
     RawExp -> 1
     RawLn -> 1
     RawSqrt -> 1
-    RawLogBase -> 1
+    RawLogBase -> 2
     -- List like ->
     RawLength -> 1
     RawTake -> 2
@@ -431,7 +431,7 @@ data ReplBuiltin b
 instance BuiltinArity b => BuiltinArity (ReplBuiltin b) where
   builtinArity = \case
     RBuiltinWrap b -> builtinArity b
-    RExpect -> 5
+    RExpect -> 3
     RExpectFailure -> 2
     RExpectThat -> 3
     RPrint -> 2

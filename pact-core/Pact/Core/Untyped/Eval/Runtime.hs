@@ -92,7 +92,9 @@ data CEKValue b i m
   | VClosure !(EvalTerm b i) !(CEKEnv b i m)
   | VNative !(BuiltinFn b i m)
   | VGuard !(Guard FullyQualifiedName (CEKValue b i m))
-  deriving (Show)
+  deriving Show
+
+
 
 pattern VString :: Text -> CEKValue b i m
 pattern VString txt = VLiteral (LString txt)

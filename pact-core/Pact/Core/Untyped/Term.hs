@@ -28,6 +28,7 @@ module Pact.Core.Untyped.Term
  , fromIRDef
  , fromIRModule
  , fromIRTopLevel
+ , fromIRReplTopLevel
  , termInfo
  ) where
 
@@ -172,7 +173,7 @@ fromIRTerm = \case
   IR.Lam nsts body i ->
     foldr (\_ t -> Lam t i) (fromIRTerm body) nsts
   IR.Let _ _ e1 e2 i ->
-    App (Lam (fromIRTerm e1) i) (fromIRTerm e2) i
+    App (Lam (fromIRTerm e2) i) (fromIRTerm e1) i
   IR.App fn apps i ->
     foldl' (\f arg -> App f (fromIRTerm arg) i) (fromIRTerm fn) apps
   IR.Builtin b i ->
@@ -224,6 +225,17 @@ fromIRTopLevel = \case
   IR.TLModule m -> TLModule (fromIRModule m)
   IR.TLInterface _ -> error "todo: implement interfaces"
   IR.TLTerm e -> TLTerm (fromIRTerm e)
+
+fromIRReplTopLevel
+  :: IR.ReplTopLevel name builtin info
+  -> ReplTopLevel name builtin info
+fromIRReplTopLevel = \case
+  IR.RTLModule m -> RTLModule (fromIRModule m)
+  IR.RTLInterface _-> error "todo: implement interfaces"
+  IR.RTLTerm e -> RTLTerm (fromIRTerm e)
+  IR.RTLDefun df -> RTLDefun (fromIRDefun df)
+  IR.RTLDefConst dc -> RTLDefConst (fromIRDConst dc)
+
 
 instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
   pretty = \case

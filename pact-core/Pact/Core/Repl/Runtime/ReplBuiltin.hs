@@ -15,6 +15,10 @@ import Pact.Core.Gas
 import Pact.Core.Untyped.Eval.Runtime
 import Pact.Core.Untyped.Eval.CEK
 import Pact.Core.Untyped.Eval.Runtime.CoreBuiltin
+import Pact.Core.Untyped.Eval.Runtime.RawBuiltin(rawBuiltinLiftedRuntime)
+
+import qualified Pact.Core.Untyped.Eval.Runtime.RawBuiltin as RawBuiltin
+
 
 import Pact.Core.Repl.Runtime
 
@@ -79,6 +83,20 @@ coreExpect = mkReplBuiltinFn \cont handler -> \case
        v -> returnCEK cont handler v
   _ -> failInvariant "Expect"
 
+rawExpect :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i
+rawExpect = mkReplBuiltinFn \cont handler -> \case
+  [VLiteral (LString msg), v1, clo@VClosure{}] -> do
+    unsafeApplyOne clo (VLiteral LUnit) >>= \case
+       EvalValue v2 -> do
+        case RawBuiltin.valueEq v1 v2 of
+          False -> do
+            let v1s = RawBuiltin.prettyShowValue v1
+                v2s = RawBuiltin.prettyShowValue v2
+            returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
+          True -> returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
+       v -> returnCEK cont handler v
+  _ -> failInvariant "Expect"
+
 coreExpectThat :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i
 coreExpectThat = mkReplBuiltinFn \cont handler -> \case
   [VLiteral (LString msg), vclo, v] -> do
@@ -112,6 +130,18 @@ replCoreBuiltinRuntime = \case
   RBuiltinWrap cb ->
     coreBuiltinLiftedRuntime RBuiltinWrap cb
   RExpect -> coreExpect RExpect
+  RExpectFailure -> coreExpectFailure RExpectFailure
+  RExpectThat -> coreExpectThat RExpectThat
+  RPrint -> corePrint RPrint
+
+replRawBuiltinRuntime
+  :: (Default i)
+  => ReplBuiltin RawBuiltin
+  -> ReplBuiltinFn RawBuiltin i
+replRawBuiltinRuntime = \case
+  RBuiltinWrap cb ->
+    rawBuiltinLiftedRuntime RBuiltinWrap cb
+  RExpect -> rawExpect RExpect
   RExpectFailure -> coreExpectFailure RExpectFailure
   RExpectThat -> coreExpectThat RExpectThat
   RPrint -> corePrint RPrint

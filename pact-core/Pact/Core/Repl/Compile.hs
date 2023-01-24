@@ -34,11 +34,11 @@ import Pact.Core.Gas
 import Pact.Core.Names
 import Pact.Core.Repl.Utils
 import Pact.Core.Untyped.Term
-import Pact.Core.Untyped.Utils
+-- import Pact.Core.Untyped.Utils
 import Pact.Core.IR.Desugar
 import Pact.Core.IR.Typecheck
 import Pact.Core.Type
-import Pact.Core.Typed.Overload
+-- import Pact.Core.Typed.Overload
 import Pact.Core.Errors
 
 
@@ -48,13 +48,13 @@ import Pact.Core.Repl.Runtime.ReplBuiltin
 
 import qualified Pact.Core.Pretty as Pretty
 import qualified Pact.Core.IR.Term as IR
-import qualified Pact.Core.Typed.Term as Typed
+-- import qualified Pact.Core.Typed.Term as Typed
 import qualified Pact.Core.Syntax.Lisp.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lisp.Lexer as Lisp
 import qualified Pact.Core.Syntax.Lisp.Parser as Lisp
 
 data InterpretOutput b i
-  = InterpretValue (CEKValue b i (ReplEvalM ReplCoreBuiltin LineInfo)) LineInfo
+  = InterpretValue (CEKValue b i (ReplEvalM ReplRawBuiltin LineInfo)) LineInfo
   | InterpretLog Text
   deriving Show
 
@@ -62,9 +62,9 @@ data InterpretOutput b i
 -- to assist in swapping from the lisp frontend
 data InterpretBundle
   = InterpretBundle
-  { expr :: ByteString -> ReplM ReplCoreBuiltin (ReplEvalResult CoreBuiltin LineInfo)
-  , exprType :: ByteString -> ReplM ReplCoreBuiltin (TypeScheme NamedDeBruijn)
-  , program :: ByteString -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin LineInfo]
+  { expr :: ByteString -> ReplM ReplRawBuiltin (ReplEvalResult RawBuiltin LineInfo)
+  , exprType :: ByteString -> ReplM ReplRawBuiltin (TypeScheme NamedDeBruijn)
+  , program :: ByteString -> ReplM ReplRawBuiltin [InterpretOutput ReplRawBuiltin LineInfo]
   }
 
 lispInterpretBundle :: InterpretBundle
@@ -76,7 +76,7 @@ lispInterpretBundle =
 
 interpretExprLisp
   :: ByteString
-  -> ReplM ReplCoreBuiltin (ReplEvalResult CoreBuiltin LineInfo)
+  -> ReplM ReplRawBuiltin (ReplEvalResult RawBuiltin LineInfo)
 interpretExprLisp source = do
   pactdb <- use replPactDb
   loaded <- use replLoaded
@@ -88,22 +88,22 @@ interpretExprLisp source = do
   interpretExpr desugared
 
 interpretExpr
-  :: DesugarOutput ReplCoreBuiltin LineInfo (IR.Term Name ReplRawBuiltin LineInfo)
-  -> ReplM ReplCoreBuiltin (ReplEvalResult CoreBuiltin LineInfo)
+  :: DesugarOutput ReplRawBuiltin LineInfo (IR.Term Name ReplRawBuiltin LineInfo)
+  -> ReplM ReplRawBuiltin (ReplEvalResult RawBuiltin LineInfo)
 interpretExpr (DesugarOutput desugared loaded' _) = do
   debugIfFlagSet ReplDebugDesugar desugared
-  (ty, typed) <- liftEither (runInferTerm loaded' desugared)
-  debugIfFlagSet ReplDebugTypecheckerType ty
-  debugIfFlagSet ReplDebugTypechecker typed
-  resolved <- liftEither (runOverloadTerm typed)
-  debugIfFlagSet ReplDebugSpecializer resolved
-  let untyped = fromTypedTerm resolved
+  -- (ty, typed) <- liftEither (runInferTerm loaded' desugared)
+  -- debugIfFlagSet ReplDebugTypecheckerType ty
+  -- debugIfFlagSet ReplDebugTypechecker typed
+  -- resolved <- liftEither (runOverloadTerm typed)
+  -- debugIfFlagSet ReplDebugSpecializer resolved
+  let untyped = fromIRTerm desugared
   debugIfFlagSet ReplDebugUntyped untyped
   evalGas <- use replGas
   evalLog <- use replEvalLog
   let rEnv = ReplEvalEnv evalGas evalLog
       cekEnv = CEKRuntimeEnv
-             { _cekBuiltins = replCoreBuiltinRuntime
+             { _cekBuiltins = replRawBuiltinRuntime
              , _cekLoaded = _loAllLoaded loaded'
              , _cekGasModel = freeGasEnv }
       rState = ReplEvalState cekEnv
@@ -112,7 +112,7 @@ interpretExpr (DesugarOutput desugared loaded' _) = do
   pure value
 
 
-interpretExprTypeLisp :: ByteString -> ReplM ReplCoreBuiltin (TypeScheme NamedDeBruijn)
+interpretExprTypeLisp :: ByteString -> ReplM ReplRawBuiltin (TypeScheme NamedDeBruijn)
 interpretExprTypeLisp source = do
   pactdb <- use replPactDb
   loaded <- use replLoaded
@@ -124,8 +124,8 @@ interpretExprTypeLisp source = do
   interpretExprType desugared
 
 interpretExprType
-  :: DesugarOutput ReplCoreBuiltin LineInfo (IR.Term Name ReplRawBuiltin LineInfo)
-  -> ReplM ReplCoreBuiltin (TypeScheme NamedDeBruijn)
+  :: DesugarOutput ReplRawBuiltin LineInfo (IR.Term Name ReplRawBuiltin LineInfo)
+  -> ReplM ReplRawBuiltin (TypeScheme NamedDeBruijn)
 interpretExprType (DesugarOutput desugared loaded' _) = do
   debugIfFlagSet ReplDebugDesugar desugared
   (ty, typed) <- liftEither (runInferTerm loaded' desugared)
@@ -135,12 +135,12 @@ interpretExprType (DesugarOutput desugared loaded' _) = do
 
 -- Small internal debugging function for playing with file loading within
 -- this module
-loadFile :: FilePath -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin LineInfo]
+loadFile :: FilePath -> ReplM ReplRawBuiltin [InterpretOutput ReplRawBuiltin LineInfo]
 loadFile source = liftIO (B.readFile source) >>= interpretReplProgram
 
 compileProgram
   :: ByteString
-  -> ReplM ReplCoreBuiltin [DesugarOutput ReplCoreBuiltin LineInfo (Typed.TopLevel Name NamedDeBruijn ReplCoreBuiltin LineInfo)]
+  -> ReplM ReplRawBuiltin [DesugarOutput ReplRawBuiltin LineInfo (TopLevel Name ReplRawBuiltin LineInfo)]
 compileProgram source = do
   loaded <- use replLoaded
   pactdb <- use replPactDb
@@ -154,15 +154,18 @@ compileProgram source = do
   pipe pactdb tl = do
     lastLoaded <- use replLoaded
     (DesugarOutput desugared loaded' deps) <- runDesugarTopLevelLisp (Proxy @ReplRawBuiltin) pactdb lastLoaded tl
-    (typechecked, loadedWithTc) <- liftEither (runInferTopLevel loaded' desugared)
-    replLoaded .= loadedWithTc
-    overloaded <- liftEither (runOverloadTopLevel typechecked)
-    pure (DesugarOutput overloaded loadedWithTc deps)
+    replLoaded .= loaded'
+    pure (DesugarOutput (fromIRTopLevel desugared) loaded' deps)
+
+    -- (typechecked, loadedWithTc) <- liftEither (runInferTopLevel loaded' desugared)
+    -- replLoaded .= loadedWithTc
+    -- overloaded <- liftEither (runOverloadTopLevel typechecked)
+    -- pure (DesugarOutput overloaded loadedWithTc deps)
 
 
 interpretReplProgram
   :: ByteString
-  -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin LineInfo]
+  -> ReplM ReplRawBuiltin [InterpretOutput ReplRawBuiltin LineInfo]
 interpretReplProgram source = do
   pactdb <- use replPactDb
   lexx <- liftEither (Lisp.lexer source)
@@ -176,9 +179,9 @@ interpretReplProgram source = do
   debugIfIRExpr flag = \case
     IR.RTLTerm t -> debugIfFlagSet flag t
     _ -> pure ()
-  debugIfTypedExpr flag = \case
-    Typed.RTLTerm t -> debugIfFlagSet flag t
-    _ -> pure ()
+  -- debugIfTypedExpr flag = \case
+  --   Typed.RTLTerm t -> debugIfFlagSet flag t
+  --   _ -> pure ()
   -- debugIfUntyped flag = \case
   --   RTLTerm t -> debugIfFlagSet flag t
   --   _ -> pure ()
@@ -214,16 +217,17 @@ interpretReplProgram source = do
     lastLoaded <- use replLoaded
     (DesugarOutput desugared loaded' deps) <- runDesugarReplTopLevel (Proxy @ReplRawBuiltin) pactdb lastLoaded tl
     debugIfIRExpr ReplDebugDesugar desugared
-    (typechecked, loadedWithTc) <- liftEither (runInferReplTopLevel loaded' desugared)
-    debugIfTypedExpr ReplDebugTypechecker typechecked
-    replLoaded .= loadedWithTc
-    overloaded <- liftEither (runOverloadReplTopLevel typechecked)
-    debugIfTypedExpr ReplDebugSpecializer overloaded
-    interpret (DesugarOutput overloaded loadedWithTc deps)
+    replLoaded .= loaded'
+    -- (typechecked, loadedWithTc) <- liftEither (runInferReplTopLevel loaded' desugared)
+    -- debugIfTypedExpr ReplDebugTypechecker typechecked
+    -- replLoaded .= loadedWithTc
+    -- overloaded <- liftEither (runOverloadReplTopLevel typechecked)
+    -- debugIfTypedExpr ReplDebugSpecializer overloaded
+    interpret (DesugarOutput desugared loaded' deps)
   interpret (DesugarOutput tl _ deps) = do
     pdb <- use replPactDb
     loaded <- use replLoaded
-    case fromTypedReplTopLevel tl of
+    case fromIRReplTopLevel tl of
       RTLModule m -> do
         let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded loaded)
             mdata = ModuleData m deps'
@@ -246,7 +250,7 @@ interpretReplProgram source = do
         evalLog <- use replEvalLog
         let rEnv = ReplEvalEnv evalGas evalLog
             cekEnv = CEKRuntimeEnv
-                  { _cekBuiltins = replCoreBuiltinRuntime
+                  { _cekBuiltins = replRawBuiltinRuntime
                   , _cekLoaded = _loAllLoaded loaded
                   , _cekGasModel = freeGasEnv }
             rState = ReplEvalState cekEnv
@@ -270,7 +274,7 @@ interpretReplProgram source = do
 
 interpretProgram
   :: ByteString
-  -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin LineInfo]
+  -> ReplM ReplRawBuiltin [InterpretOutput ReplRawBuiltin LineInfo]
 interpretProgram source = do
   compileProgram source >>= traverse interpret
   where
@@ -278,7 +282,7 @@ interpretProgram source = do
     pdb <- use replPactDb
     replLoaded <>= l
     loaded <- use replLoaded
-    case fromTypedTopLevel tl of
+    case tl of
       TLModule m -> do
         let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded loaded)
             mdata = ModuleData m deps'
@@ -301,7 +305,7 @@ interpretProgram source = do
         evalLog <- use replEvalLog
         let rEnv = ReplEvalEnv evalGas evalLog
             cekEnv = CEKRuntimeEnv
-                  { _cekBuiltins = replCoreBuiltinRuntime
+                  { _cekBuiltins = replRawBuiltinRuntime
                   , _cekLoaded = _loAllLoaded loaded
                   , _cekGasModel = freeGasEnv }
             rState = ReplEvalState cekEnv
