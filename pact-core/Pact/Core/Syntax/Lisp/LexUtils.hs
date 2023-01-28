@@ -105,6 +105,7 @@ data Token
   | TokenFalse
   | TokenBlockIntro
   | TokenSuspend
+  | TokenDynAcc
   -- Repl-specific tokens
   | TokenLoad
   | TokenTypechecks
@@ -252,6 +253,7 @@ renderTokenText = \case
   TokenTyBool -> "bool"
   TokenTyUnit -> "unit"
   TokenTyArrow -> "->"
+  TokenDynAcc -> "::"
   TokenEq -> "="
   TokenNeq -> "!="
   TokenGT -> ">"

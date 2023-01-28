@@ -88,6 +88,7 @@ tokens :-
     \]           { token TokenCloseBracket }
     \,           { token TokenComma }
     \.           { token TokenDot }
+    \:\:         { token TokenDynAcc }
     \:           { token TokenColon }
     \=           { token TokenEq }
     \!\=         { token TokenNeq }

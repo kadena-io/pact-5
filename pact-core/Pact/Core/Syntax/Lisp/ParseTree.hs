@@ -40,6 +40,7 @@ data Expr i
   | Constant Literal i
   | Try (Expr i) (Expr i) i
   | Suspend (Expr i) i
+  | DynAccess (Expr i) Text i
   | Error Text i
   deriving (Show, Eq, Functor)
 
@@ -83,6 +84,7 @@ termInfo f = \case
   Suspend e i ->
     Suspend e <$> f i
   -- ObjectOp o i -> ObjectOp o <$> f i
+  DynAccess e fn i -> DynAccess e fn <$> f i
   Constant l i ->
     Constant l <$> f i
   Try e1 e2 i ->
@@ -114,6 +116,8 @@ instance Pretty (Expr i) where
       parens ("try" <+> pretty e1 <+> pretty e2)
     Error e _ ->
       parens ("error \"" <> pretty e <> "\"")
+    DynAccess e f _ ->
+      pretty e <> "::" <> pretty f
     Suspend e _ ->
       parens ("suspend" <+> pretty e)
     -- UnaryOp uop e1 _ ->

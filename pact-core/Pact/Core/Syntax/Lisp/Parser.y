@@ -75,6 +75,7 @@ import Pact.Core.Syntax.Lisp.LexUtils
   '['        { PosToken TokenOpenBracket _ }
   ']'        { PosToken TokenCloseBracket _ }
   ','        { PosToken TokenComma _ }
+  '::'       { PosToken TokenDynAcc _ }
   ':'        { PosToken TokenColon _ }
   '.'        { PosToken TokenDot _ }
   TYTABLE    { PosToken TokenTyTable _ }
@@ -232,6 +233,7 @@ BlockBody :: { [ParsedExpr] }
 Expr :: { ParsedExpr }
   : '(' SExpr ')' { $2 (combineSpan (_ptInfo $1) (_ptInfo $3)) }
   | Atom { $1 }
+  | Expr '::' IDENT { DynAccess $1 (getIdent $3) (combineSpan (view termInfo $1) (_ptInfo $3)) }
 
 SExpr :: { LineInfo -> ParsedExpr }
   : LamExpr { $1 }

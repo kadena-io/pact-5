@@ -27,6 +27,7 @@ module Pact.Core.Untyped.Eval.Runtime
  , cekBuiltins
  , cekLoaded
  , cekGasModel
+ , cekMHashes
  , fromPactValue
  , checkPactValueType
  , CEKErrorHandler(..)
@@ -65,7 +66,7 @@ import Pact.Core.Gas
 import Pact.Core.PactValue
 import Pact.Core.Errors
 import Pact.Core.Builtin
--- import Pact.Core.Hash
+import Pact.Core.Hash
 import Pact.Core.Untyped.Term
 import Pact.Core.Literal
 -- import Pact.Core.Persistence
@@ -91,6 +92,7 @@ data CEKValue b i m
   | VList !(Vector (CEKValue b i m))
   | VClosure !(EvalTerm b i) !(CEKEnv b i m)
   | VNative !(BuiltinFn b i m)
+  | VModRef ModuleName [ModuleName]
   | VGuard !(Guard FullyQualifiedName (CEKValue b i m))
   deriving Show
 
@@ -148,7 +150,7 @@ runEvalT s (EvalM action) = runReaderT (runExceptT action) s
 data BuiltinFn b i m
   = BuiltinFn
   { _native :: b
-  , _nativeFn :: (MonadEval b i m) => Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m)
+  , _nativeFn :: Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m)
   , _nativeArity :: {-# UNPACK #-} !Int
   , _nativeAppliedArgs :: [CEKValue b i m]
   }
@@ -179,6 +181,7 @@ data Cont b i m
   | SeqC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   | ListC (CEKEnv b i m) [EvalTerm b i] [CEKValue b i m] (Cont b i m)
   | CondC (CEKEnv b i m) (CondFrame b i) (Cont b i m)
+  | DynInvokeC (CEKEnv b i m) Text (Cont b i m)
   | Mt
   deriving Show
 
@@ -191,8 +194,9 @@ data CEKErrorHandler b i m
 data CEKRuntimeEnv b i m
   = CEKRuntimeEnv
   { _cekBuiltins :: BuiltinEnv b i m
-  , _cekLoaded :: CEKTLEnv b i
   , _cekGasModel :: GasEnv b
+  , _cekLoaded :: CEKTLEnv b i
+  , _cekMHashes :: Map ModuleName ModuleHash
   --   _cekGas :: IORef Gas
   -- , _cekEvalLog :: IORef (Maybe [(Text, Gas)])
   -- , _ckeData :: EnvData PactValue
@@ -226,6 +230,8 @@ instance (Show i, Show b, Pretty b) => Pretty (CEKValue b i m) where
     VNative b ->
       P.angles $ "native" <+> pretty b
     VGuard _ -> P.angles "guard#"
+    VModRef mn _ ->
+      "modref" <> P.braces (pretty mn)
     -- VError e ->
     --   ("error " <> pretty e)
 

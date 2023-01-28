@@ -121,10 +121,10 @@ data ReplTopLevel name builtin info
 data Term name builtin info
   = Var name info
   -- ^ single variables e.g x
-  | Lam (NonEmpty (name, Maybe (Type Void))) (Term name builtin info) info
+  | Lam (NonEmpty (Text, Maybe (Type Void))) (Term name builtin info) info
   -- ^ $f = \x.e
   -- Lambdas are named for the sake of the callstack.
-  | Let name (Maybe (Type Void)) (Term name builtin info) (Term name builtin info) info
+  | Let Text (Maybe (Type Void)) (Term name builtin info) (Term name builtin info) info
   -- ^ let x = e1 in e2
   | App (Term name builtin info) (NonEmpty (Term name builtin info)) info
   -- ^ (e1 e2)
@@ -140,6 +140,8 @@ data Term name builtin info
   -- ^ List Literals
   | Try (Term name builtin info) (Term name builtin info) info
   -- ^ try (catch expr) (try-expr)
+  | DynInvoke (Term name builtin info) Text info
+  -- ^ dynamic module reference invocation m::f
   | Error Text info
   -- ^ Error term
   deriving (Show, Functor)
@@ -164,6 +166,8 @@ instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
       pretty tes
     Try te te' _ ->
       parens ("try" <+> pretty te <+> pretty te')
+    DynInvoke n t _ ->
+      pretty n <> "::" <> pretty t
     Error txt _ ->
       parens ("error" <> pretty txt)
     where
@@ -196,6 +200,8 @@ termBuiltin f = \case
     ListLit <$> traverse (termBuiltin f) tes <*> pure i
   Try te te' i ->
     Try <$> termBuiltin f te <*> termBuiltin f te' <*> pure i
+  DynInvoke n t i ->
+    DynInvoke <$> termBuiltin f n <*> pure t <*> pure i
   Error txt i -> pure (Error txt i)
 
 termInfo :: Lens' (Term name builtin info) info
@@ -212,6 +218,7 @@ termInfo f = \case
     Conditional o <$> f i
   ListLit l i  -> ListLit l <$> f i
   Try e1 e2 i -> Try e1 e2 <$> f i
+  DynInvoke n t i -> DynInvoke n t <$> f i
   Error t i -> Error t <$> f i
   -- ObjectLit m i -> ObjectLit m <$> f i
   -- ObjectOp o i -> ObjectOp o <$> f i
@@ -230,6 +237,8 @@ instance Plated (Term name builtin info) where
     ListLit m i -> ListLit <$> traverse f m <*> pure i
     Try e1 e2 i ->
       Try <$> f e1 <*> f e2 <*> pure i
+    DynInvoke n t i ->
+      pure (DynInvoke n t i)
     Error e i -> pure (Error e i)
 
 makePrisms ''Term

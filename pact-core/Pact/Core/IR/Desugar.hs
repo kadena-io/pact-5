@@ -158,13 +158,13 @@ instance DesugarBuiltin RawBuiltin where
       Builtin RawBitwiseFlip info
     -- Manual eta expansion for and as well as Or
     Common.AndOp -> let
-      arg1 = BN (BareName "#andArg1")
-      arg2 = BN (BareName "#andArg2")
-      in Lam ((arg1, Just TyBool) :| [(arg2, Just TyBool)]) (Conditional (CAnd (Var arg1 info) (Var arg2 info)) info) info
+      arg1 = "#andArg1"
+      arg2 = "#andArg2"
+      in Lam ((arg1, Just TyBool) :| [(arg2, Just TyBool)]) (Conditional (CAnd (Var (BN (BareName arg1)) info) (Var (BN (BareName arg2)) info)) info) info
     Common.OrOp -> let
-      arg1 = BN (BareName "#orArg1")
-      arg2 = BN (BareName "#orArg2")
-      in Lam ((arg1, Just TyBool) :| [(arg2, Just TyBool)]) (Conditional (COr (Var arg1 info) (Var arg2 info)) info) info
+      arg1 = "#orArg1"
+      arg2 = "#orArg2"
+      in Lam ((arg1, Just TyBool) :| [(arg2, Just TyBool)]) (Conditional (COr (Var (BN (BareName arg1)) info) (Var (BN (BareName arg2)) info)) info) info
     Common.PowOp -> Builtin RawPow info
   -- Todo:
   -- Builtins of known arity differences we are yet to support:
@@ -223,7 +223,7 @@ desugarLispTerm = \case
       expr' = desugarLispTerm expr
     in foldr (binderToLet i) expr' binders
   Lisp.Lam [] body i -> let
-    n = BN (BareName "#unitLamArg")
+    n = "#unitLamArg"
     nty = Just TyUnit
     body' = desugarLispTerm body
     in Lam (pure (n, nty)) body' i
@@ -231,12 +231,11 @@ desugarLispTerm = \case
     let
       nsts = x :| xs
       (ns, ts) = NE.unzip nsts
-      ns' = BN . BareName <$> ns
       ts' = fmap desugarType <$> ts
       body' = desugarLispTerm body
-    in Lam (NE.zip ns' ts') body' i
+    in Lam (NE.zip ns ts') body' i
   Lisp.Suspend body i -> let
-    n = BN (BareName "#unitLamArg")
+    n = "#unitLamArg"
     nty = Just TyUnit
     body' = desugarLispTerm body
     in Lam (pure (n, nty)) body' i
@@ -263,6 +262,8 @@ desugarLispTerm = \case
       Builtin b _ -> desugarAppArity i b (h' :| hs')
       _ -> App e' (h' :| hs')i
   Lisp.Operator bop i -> desugarOperator i bop
+  Lisp.DynAccess e fn i ->
+    DynInvoke (desugarTerm e) fn i
   Lisp.List e1 i ->
     ListLit (desugarLispTerm <$> e1) i
   Lisp.Constant l i ->
@@ -273,27 +274,25 @@ desugarLispTerm = \case
     Error e i
   where
   binderToLet i (Lisp.Binder n mty expr) term =
-    Let (BN (BareName n)) (desugarType <$> mty) (desugarLispTerm expr) term i
+    Let n (desugarType <$> mty) (desugarLispTerm expr) term i
   isReservedNative n =
     Map.member n (reservedNatives @b)
 
 suspendTerm
   :: Term ParsedName builtin info
   -> Term ParsedName builtin info
-suspendTerm e' = let
-  name = BN (BareName "#arg")
-  in Lam ((name, Just TyUnit) :| []) e' (view termInfo e')
+suspendTerm e' =
+  Lam (("#suspendarg", Just TyUnit) :| []) e' (view termInfo e')
 
 desugarDefun :: (DesugarTerm term b i) => Common.Defun term i -> Defun ParsedName b i
 desugarDefun (Common.Defun defname [] rt body i) = let
   dfnType = TyFun TyUnit (desugarType rt)
-  lamName = BN (BareName defname)
-  body' = Lam ((lamName, Just TyUnit) :| []) (desugarTerm body) i
+  body' = Lam ((defname, Just TyUnit) :| []) (desugarTerm body) i
   in Defun defname dfnType body' i
 desugarDefun (Common.Defun defname (arg:args) rt body i) = let
   neArgs = arg :| args
   dfnType = foldr TyFun (desugarType rt) (desugarType . Common._argType <$> neArgs)
-  lamArgs = (\(Common.Arg n ty) -> (BN (BareName n), Just (desugarType ty))) <$> neArgs
+  lamArgs = (\(Common.Arg n ty) -> (n, Just (desugarType ty))) <$> neArgs
   body' = Lam lamArgs (desugarTerm body) i
   in Defun defname dfnType body' i
 
@@ -379,6 +378,7 @@ termSCC currM = conn
     Constant{} -> Set.empty
     ListLit v _ -> foldMap conn v
     Try e1 e2 _ -> Set.union (conn e1) (conn e2)
+    DynInvoke m _ _ -> conn m
     Error {} -> Set.empty
     -- ObjectLit o _ -> foldMap conn o
     -- ObjectOp o _ -> foldMap conn o
@@ -405,6 +405,15 @@ ifDefSCC mn = \case
 
 liftRenamerT :: Monad m => m a -> RenamerT m cb ci a
 liftRenamerT ma = RenamerT (lift (lift ma))
+
+lookupModule
+  :: MonadError (PactError i) m
+  => ModuleName
+  -> i
+  -> RenamerT m b i (ModuleData b i)
+lookupModule mn i = view rePactDb >>= liftRenamerT . (`_readModule` mn) >>= \case
+   Nothing -> throwDesugarError (NoSuchModule mn) i
+   Just md -> pure md
 
 -- | Look up a qualified name in the pact db
 -- if it's there, great! We will load the module into the scope of
@@ -457,30 +466,29 @@ renameTerm
   => Term ParsedName b' i
   -> RenamerT m b i (Term Name b' i)
 renameTerm (Var n i) = (`Var` i) <$> resolveName n i
+-- Todo: what happens when an argument is shadowed?
 renameTerm (Lam nsts body i) = do
   depth <- view reVarDepth
   let (pns, ts) = NE.unzip nsts
       len = fromIntegral (NE.length nsts)
       newDepth = depth + len
       ixs = NE.fromList [depth .. newDepth - 1]
-      ns = rawParsedName <$> pns
-  let m = Map.fromList $ NE.toList $ NE.zip ns (NBound <$> ixs)
-      ns' = NE.zipWith (\ix n -> Name n (NBound ix)) ixs ns
+      -- ns = rawParsedName <$> pns
+  let m = Map.fromList $ NE.toList $ NE.zip pns (NBound <$> ixs)
+      -- ns' = NE.zipWith (\ix n -> Name n (NBound ix)) ixs ns
   term' <- local (inEnv m newDepth) (renameTerm body)
-  pure (Lam (NE.zip ns' ts) term' i)
+  pure (Lam (NE.zip pns ts) term' i)
   where
   inEnv m depth =
     over reBinds (Map.union m) .
     set reVarDepth depth
 renameTerm (Let name mt e1 e2 i) = do
   depth <- view reVarDepth
-  let rawName = rawParsedName name
-      name' = Name rawName (NBound depth)
-      inEnv = over reVarDepth succ .
-              over reBinds (Map.insert rawName (NBound depth))
+  let inEnv = over reVarDepth succ .
+              over reBinds (Map.insert name (NBound depth))
   e1' <- renameTerm e1
   e2' <- local inEnv (renameTerm e2)
-  pure (Let name' mt e1' e2' i)
+  pure (Let name mt e1' e2' i)
 renameTerm (App fn apps i) = do
   fn' <- renameTerm fn
   apps' <- traverse renameTerm apps
@@ -495,6 +503,8 @@ renameTerm (Constant l i) =
   pure (Constant l i)
 renameTerm (ListLit v i) = do
   ListLit <$> traverse renameTerm v <*> pure i
+renameTerm (DynInvoke te t i) =
+  DynInvoke <$> renameTerm te <*> pure t <*> pure i
 renameTerm (Try e1 e2 i) = do
   Try <$> renameTerm e1 <*> renameTerm e2 <*> pure i
 renameTerm (Error e i) = pure (Error e i)
@@ -595,7 +605,11 @@ resolveBare (BareName bn) i = views reBinds (Map.lookup bn) >>= \case
     _ -> pure (Name bn nk)
   Nothing -> uses (rsLoaded . loToplevel) (Map.lookup bn) >>= \case
     Just fqn -> pure (Name bn (NTopLevel (_fqModule fqn) (_fqHash fqn)))
-    Nothing -> throwDesugarError (UnboundTermVariable bn) i
+    Nothing -> do
+      let mn = ModuleName bn Nothing
+      md <- lookupModule mn i
+      let implementeds = view (mdModule . Term.mImplemented) md
+      pure (Name bn (NModRef mn implementeds))
 
 -- resolveBareName' :: Text -> RenamerM b i Name
 -- resolveBareName' bn = views reBinds (Map.lookup bn) >>= \case

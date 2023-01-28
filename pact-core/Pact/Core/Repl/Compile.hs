@@ -101,11 +101,13 @@ interpretExpr (DesugarOutput desugared loaded' _) = do
   debugIfFlagSet ReplDebugUntyped untyped
   evalGas <- use replGas
   evalLog <- use replEvalLog
+  mhashes <- uses (replLoaded . loModules) (fmap (view (mdModule . mHash)))
   let rEnv = ReplEvalEnv evalGas evalLog
       cekEnv = CEKRuntimeEnv
              { _cekBuiltins = replRawBuiltinRuntime
              , _cekLoaded = _loAllLoaded loaded'
-             , _cekGasModel = freeGasEnv }
+             , _cekGasModel = freeGasEnv
+             , _cekMHashes = mhashes }
       rState = ReplEvalState cekEnv
   value <- liftEither =<< liftIO (runReplCEK rEnv rState untyped)
   replLoaded .= loaded'
@@ -248,11 +250,14 @@ interpretReplProgram source = do
         let i = view termInfo te
         evalGas <- use replGas
         evalLog <- use replEvalLog
+        -- todo: cache?
+        mhashes <- uses (replLoaded . loModules) (fmap (view (mdModule . mHash)))
         let rEnv = ReplEvalEnv evalGas evalLog
             cekEnv = CEKRuntimeEnv
                   { _cekBuiltins = replRawBuiltinRuntime
                   , _cekLoaded = _loAllLoaded loaded
-                  , _cekGasModel = freeGasEnv }
+                  , _cekGasModel = freeGasEnv
+                  , _cekMHashes = mhashes }
             rState = ReplEvalState cekEnv
         -- Todo: Fix this with `returnCEKValue`
         liftIO (runReplCEK rEnv rState te) >>= liftEither >>= \case
@@ -303,11 +308,13 @@ interpretProgram source = do
         let i = view termInfo te
         evalGas <- use replGas
         evalLog <- use replEvalLog
+        mhashes <- uses (replLoaded . loModules) (fmap (view (mdModule . mHash)))
         let rEnv = ReplEvalEnv evalGas evalLog
             cekEnv = CEKRuntimeEnv
                   { _cekBuiltins = replRawBuiltinRuntime
                   , _cekLoaded = _loAllLoaded loaded
-                  , _cekGasModel = freeGasEnv }
+                  , _cekGasModel = freeGasEnv
+                  , _cekMHashes = mhashes }
             rState = ReplEvalState cekEnv
         -- Todo: Fix this with `returnCEKValue`
         liftIO (runReplCEK rEnv rState te) >>= liftEither >>= \case

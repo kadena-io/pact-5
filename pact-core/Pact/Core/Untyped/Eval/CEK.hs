@@ -33,10 +33,6 @@ module Pact.Core.Untyped.Eval.CEK
 
 import Control.Lens
 import Control.Monad.Except
--- import Control.Monad(when)
--- import Control.Monad.Catch
--- import Control.Monad.IO.Class
--- import Data.IORef
 import Data.Default
 import Data.Text(Text)
 import qualified Data.Map.Strict as Map
@@ -102,9 +98,11 @@ evalCEK cont handler env (Var n info)  = do
     -- Top level names are not closures, so we wipe the env
     NTopLevel mname mh -> do
       let fqn = FullyQualifiedName mname (_nName n) mh
-      cekReadEnv >>= \renv -> case views cekLoaded (Map.lookup fqn) renv of
+      cekReadEnv >>= \renv -> case Map.lookup fqn (view cekLoaded renv) of
         Just d -> evalCEK cont handler RAList.Nil (defTerm d)
         Nothing -> failInvariant' ("top level name " <> T.pack (show fqn) <> " not in scope") info
+    NModRef m ifs ->
+      returnCEKValue cont handler (VModRef m ifs)
 evalCEK cont handler _env (Constant l _) = do
   chargeNodeGas ConstantNode
   returnCEKValue cont handler (VLiteral l)
@@ -136,6 +134,8 @@ evalCEK cont handler env (ListLit ts _) = do
 evalCEK cont handler env (Try e1 rest _) = do
   let handler' = CEKHandler env e1 cont handler
   evalCEK Mt handler' env rest
+evalCEK cont handler env (DynInvoke n fn _) =
+  evalCEK (DynInvokeC env fn cont) handler env n
 -- Error terms ignore the current cont
 evalCEK _ handler _ (Error e _) =
   returnCEK Mt handler (VError e)
@@ -193,6 +193,18 @@ returnCEKValue (ListC env args vals cont) handler v = do
       returnCEKValue cont handler (VList (V.fromList (reverse (v:vals))))
     e:es ->
       evalCEK (ListC env es (v:vals) cont) handler env e
+-- Todo: note over here we might want to typecheck
+-- Todo: inline the variable lookup instead of calling EvalCEK directly,
+-- as we can provide a better error message this way.
+returnCEKValue (DynInvokeC env fn cont) handler v = case v of
+  VModRef mn _ -> do
+    -- Todo: for when persistence is implemented
+    -- here is where we would incur module loading
+    cekReadEnv >>= \e -> case view (cekMHashes . at mn) e of
+      Just mh ->
+        evalCEK cont handler env (Var (Name fn (NTopLevel mn mh)) def)
+      Nothing -> failInvariant "No such module"
+  _ -> failInvariant "Not a modref"
 
 applyLam
   :: (MonadEval b i m)

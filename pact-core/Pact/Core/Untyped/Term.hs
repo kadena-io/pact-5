@@ -2,9 +2,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Pact.Core.Untyped.Term
  ( Defun(..)
@@ -30,6 +29,12 @@ module Pact.Core.Untyped.Term
  , fromIRTopLevel
  , fromIRReplTopLevel
  , termInfo
+ , mName
+ , mDefs
+ , mBlessed
+ , mImports
+ , mImplemented
+ , mHash
  ) where
 
 import Control.Lens
@@ -158,9 +163,11 @@ data Term name builtin info
   -- ^ [e_1, e_2, .., e_n]
   | Try (Term name builtin info) (Term name builtin info) info
   -- ^ try (catch expr) (try-expr)
+  | DynInvoke (Term name builtin info) Text info
+  -- ^ dynamic module reference invocation m::f
   | Error Text info
   -- ^ Error catching
-  deriving (Show, Functor)
+  deriving (Show, Functor, Foldable, Traversable)
 
 -- Post Typecheck terms + modules
 type EvalTerm b i = Term Name b i
@@ -188,6 +195,8 @@ fromIRTerm = \case
     ListLit (fromIRTerm <$> v) i
   IR.Try e1 e2 i ->
     Try (fromIRTerm e1) (fromIRTerm e2) i
+  IR.DynInvoke n t i ->
+    DynInvoke (fromIRTerm n) t i
   IR.Error e i ->
     Error e i
 
@@ -255,6 +264,8 @@ instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
       Pretty.punctuate Pretty.comma (pretty <$> li)
     Try e1 e2 _ ->
       Pretty.parens ("try" <+> pretty e1 <+> pretty e2)
+    DynInvoke n t _ ->
+      pretty n <> "::" <> pretty t
     Error e _ ->
       Pretty.parens ("error \"" <> pretty e <> "\"")
     -- ObjectLit (Map.toList -> obj) _ ->
@@ -282,7 +293,8 @@ termInfo f = \case
   Constant l i -> Constant l <$> f i
   Try e1 e2 i ->
     Try e1 e2 <$> f i
+  DynInvoke n t i -> DynInvoke n t <$> f i
   Error e i ->
     Error e <$> f i
-  -- ObjectLit obj i -> ObjectLit obj <$> f i
-  -- ObjectOp o i -> ObjectOp o <$> f i
+
+makeLenses ''Module

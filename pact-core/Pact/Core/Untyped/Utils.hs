@@ -32,6 +32,8 @@ fromTypedTerm = \case
     ListLit (fromTypedTerm <$> vec) i
   Typed.Try e1 e2 i ->
     Try (fromTypedTerm e1) (fromTypedTerm e2) i
+  Typed.DynInvoke term t i ->
+    DynInvoke (fromTypedTerm term) t i
   Typed.Error _ e i -> Error e i
   -- Typed.ObjectLit m i ->
   --   ObjectLit (fromTypedTerm <$> m) i

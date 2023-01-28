@@ -35,6 +35,7 @@ import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Errors
 import Pact.Core.Hash
+import Pact.Core.Names
 import Pact.Core.Pretty(pretty)
 
 import Pact.Core.Untyped.Eval.Runtime
@@ -211,6 +212,7 @@ prettyShowValue = \case
   VClosure _ _ -> "<#closure>"
   VNative _ -> "<#nativefn>"
   VGuard _ -> "<#guard>"
+  VModRef mn _ -> "modRef{" <> (_mnName mn) <> "}"
 
 rawNeq :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 rawNeq = mkBuiltinFn \cont handler -> \case

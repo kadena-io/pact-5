@@ -152,12 +152,12 @@ data ReplTopLevel name tyname builtin info
 data Term name tyname builtin info
   = Var name info
   -- ^ single variables, e.g the term `x`
-  | Lam (NonEmpty (name, Type tyname)) (Term name tyname builtin info) info
+  | Lam (NonEmpty (Text, Type tyname)) (Term name tyname builtin info) info
   -- ^ f = \a b c -> e
   -- All lambdas, even anonymous ones, are named, for the sake of them adding a stack frame
   | App (Term name tyname builtin info) (NonEmpty (Term name tyname builtin info)) info
   -- let n = e1 in e2
-  | Let name (Term name tyname builtin info) (Term name tyname builtin info) info
+  | Let Text (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ (e_1 e_2 .. e_n)
   | Builtin builtin info
   -- ^ Built-in functions (or natives)
@@ -173,6 +173,8 @@ data Term name tyname builtin info
   -- ^ Conditional exprs
   | ListLit (Type tyname) [Term name tyname builtin info] info
   -- ^ List literals
+  | DynInvoke (Term name tyname builtin info) Text info
+  -- ^ Dynamic invoke.
   | Try (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ Error handling
   | Error (Type tyname) Text info
@@ -245,6 +247,7 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
     Constant l _ -> pretty l
     Try e1 e2 _ ->
       Pretty.parens ("try" <+> pretty e1 <+> pretty e2)
+    DynInvoke{} -> error "implement dyn invoke"
     Error _ e _ ->
       Pretty.parens ("error \"" <> pretty e <> "\"")
     where
@@ -279,6 +282,8 @@ termBuiltin f = \case
     ListLit ty <$> traverse (termBuiltin f) tes <*> pure info
   Try te te' info ->
     Try <$> termBuiltin f te <*> termBuiltin f te' <*> pure info
+  DynInvoke te t i ->
+    DynInvoke <$> termBuiltin f te <*> pure t <*> pure i
   Error ty txt info ->
     pure (Error ty txt info)
 
@@ -308,6 +313,7 @@ termInfo f = \case
     Constant l <$> f i
   Try e1 e2 i ->
     Try e1 e2 <$> f i
+  DynInvoke t e i -> DynInvoke t e <$> f i
   Error t e i ->
     Error t e <$> f i
   -- ObjectLit obj i -> ObjectLit obj <$> f i
@@ -333,6 +339,8 @@ instance Plated (Term name tyname builtin info) where
     Constant l i -> pure (Constant l i)
     Try e1 e2 i ->
       Try <$> f e1 <*> f e2 <*> pure i
+    DynInvoke e1 t i ->
+      DynInvoke <$> f e1 <*> pure t <*> pure i
     Error t e i -> pure (Error t e i)
     -- ObjectLit tm i ->
     --   ObjectLit <$> traverse f tm <*> pure i

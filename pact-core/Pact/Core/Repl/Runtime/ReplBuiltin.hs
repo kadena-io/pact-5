@@ -151,4 +151,5 @@ defaultReplState = ReplEvalState $
   CEKRuntimeEnv
   { _cekBuiltins = replCoreBuiltinRuntime
   , _cekLoaded = mempty
-  , _cekGasModel = freeGasEnv }
+  , _cekGasModel = freeGasEnv
+  , _cekMHashes = mempty }

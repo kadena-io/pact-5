@@ -32,7 +32,7 @@ module Pact.Core.Names
  , ndName
  , DeBruijn
  , TypeName(..)
- , rawParsedName
+--  , rawParsedName
  , ONameKind(..)
  , OverloadedName(..)
  , FullyQualifiedName(..)
@@ -102,9 +102,9 @@ data ParsedName
   | BN BareName
   deriving (Show, Eq)
 
-rawParsedName :: ParsedName -> Text
-rawParsedName (BN (BareName n)) = n
-rawParsedName (QN qn) = _qnName qn
+-- rawParsedName :: ParsedName -> Text
+-- rawParsedName (BN (BareName n)) = n
+-- rawParsedName (QN qn) = _qnName qn
 
 instance Pretty ParsedName where
   pretty = \case
@@ -124,6 +124,7 @@ type Supply = Int
 data IRNameKind
   = IRBound
   | IRTopLevel ModuleName ModuleHash
+  | IRModuleRef ModuleName
   deriving (Show, Eq, Ord)
 
 data IRName
@@ -165,6 +166,7 @@ data Name
 data NameKind
   = NBound DeBruijn
   | NTopLevel ModuleName ModuleHash
+  | NModRef ModuleName [ModuleName]
   deriving (Show, Eq, Ord)
 
 data FullyQualifiedName
@@ -215,6 +217,7 @@ instance Pretty Name where
   pretty (Name n nk) = case nk of
     NBound dix -> pretty n <> "<" <> pretty dix <> ">"
     NTopLevel mn _mh -> pretty mn <> "." <> pretty n
+    NModRef m _ -> pretty m
 
 instance Pretty NamedDeBruijn where
   pretty (NamedDeBruijn _i _n) =

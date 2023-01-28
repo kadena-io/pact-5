@@ -399,11 +399,11 @@ _dbgTypedTerm = \case
   Typed.Lam nel body i -> do
     nel' <- (traversed._2) _dbgType nel
     body' <- _dbgTypedTerm body
-    pure (Typed.Lam (over (mapped._1) _nName nel') body' i)
+    pure (Typed.Lam nel' body' i)
   Typed.App fn body i ->
     Typed.App <$> _dbgTypedTerm fn <*> traverse _dbgTypedTerm body <*> pure i
   Typed.Let n e1 e2 i ->
-    Typed.Let (_nName n) <$> _dbgTypedTerm e1 <*> _dbgTypedTerm e2 <*> pure i
+    Typed.Let n <$> _dbgTypedTerm e1 <*> _dbgTypedTerm e2 <*> pure i
   Typed.Builtin (b, tys, preds) i -> do
     tys' <- traverse _dbgType tys
     preds' <- traverse _dbgPred preds
@@ -423,6 +423,8 @@ _dbgTypedTerm = \case
     Typed.Try <$> _dbgTypedTerm e1 <*> _dbgTypedTerm e2 <*> pure i
   Typed.Error t e i ->
     Typed.Error <$> _dbgType t <*> pure e <*> pure i
+  Typed.DynInvoke n t i ->
+    Typed.DynInvoke <$> _dbgTypedTerm n <*> pure t <*> pure i
   Typed.ListLit ty li i ->
     Typed.ListLit <$> _dbgType ty <*> traverse _dbgTypedTerm li <*> pure i
   -- Typed.ObjectLit obj i ->
@@ -978,6 +980,7 @@ inferTerm = \case
           --     pure (ty, newVar, [])
         Nothing ->
           throwTypecheckError (TCUnboundFreeVariable mn n) i
+    NModRef{} -> error "implement modref"
   IR.Lam nts e i -> do
     let names = fst <$> nts
     ntys <- traverse withTypeInfo nts
@@ -1060,6 +1063,7 @@ inferTerm = \case
     (te2, e2', p2)<- inferTerm e2
     unify te1 te2 i
     pure (te1, Typed.Try e1' e2' i, p1 ++ p2)
+  IR.DynInvoke{} -> error "implement"
   IR.Error e i -> do
     ty <- TyVar <$> newTvRef
     pure (ty, Typed.Error ty e i, [])
@@ -1272,6 +1276,8 @@ debruijnizeTermTypes info = dbj [] 0
       pure (Typed.Error ty e i)
     Typed.ListLit ty v i ->
       Typed.ListLit <$> dbjTyp info env depth ty <*> traverse (dbj env depth) v <*> pure i
+    Typed.DynInvoke n t i ->
+      Typed.DynInvoke <$> dbj env depth n <*> pure t <*> pure i
     Typed.Builtin (b, tys, preds) i -> do
       tys' <- traverse (dbjTyp info env depth) tys
       preds' <- traverse (dbjPred info env depth) preds
@@ -1346,6 +1352,8 @@ noTyVarsinTerm info = \case
     Typed.ListLit <$> ensureNoTyVars info ty <*> traverse (noTyVarsinTerm info) li <*> pure i
   Typed.Try e1 e2 i ->
     Typed.Try <$> noTyVarsinTerm info e1 <*> noTyVarsinTerm info e2 <*> pure i
+  Typed.DynInvoke e1 t i ->
+    Typed.DynInvoke <$> noTyVarsinTerm info e1 <*> pure t <*> pure i
   Typed.Error t e i ->
     Typed.Error <$> ensureNoTyVars info t <*> pure e <*> pure i
 

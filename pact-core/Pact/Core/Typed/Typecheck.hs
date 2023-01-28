@@ -12,16 +12,21 @@ import Control.Monad.Reader
 import Control.Monad.Except
 import Data.Foldable(foldlM)
 import Data.List.NonEmpty(NonEmpty(..))
+import Data.Map.Strict(Map)
+import Data.RAList(RAList)
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
+import qualified Data.RAList as RAList
 
 import Pact.Core.Builtin
 import Pact.Core.Typed.Term
+import Pact.Core.Names
 import Pact.Core.Type
 
 
-data TCEnv name tyname builtin = TCEnv
-  { _tcVarEnv :: Map.Map name (Type tyname)
+data TCEnv tyname builtin = TCEnv
+  { _tcLocalVarEnv :: RAList (Type tyname)
+  , _tcFreeVarEnv :: Map FullyQualifiedName (Type tyname)
   , _tcBuiltin :: builtin -> Type tyname }
 
 makeLenses ''TCEnv
@@ -37,7 +42,7 @@ typeUnifies (TyForall as ty) (TyForall as' ty') =
   in typeUnifies (substInTy env ty) ty'
 typeUnifies _ _ = False
 
-applyFunctionType :: (Ord n, MonadError String f) => Type n -> (Type n) -> f (Type n)
+applyFunctionType :: (Ord n, MonadError String f) => Type n -> Type n -> f (Type n)
 applyFunctionType (TyFun l r) l'
   | typeUnifies l l' = pure r
   | otherwise  = throwError "function type mismatch"
@@ -61,25 +66,37 @@ substInTy s (TyFun l r) =
 substInTy _ t = t
 
 typecheck'
-  :: (MonadReader (TCEnv name tyname builtin) m,
+  :: (MonadReader (TCEnv tyname builtin) m,
       MonadError String m,
-      Ord tyname, Ord name, Show tyname)
-  => Term name tyname builtin info
+      Ord tyname, Show tyname)
+  => Term Name tyname builtin info
   -> m (Type tyname)
 typecheck' = \case
   --   x:t ∈ Γ
   -- ----------- (T-Var)
   --  Γ ⊢ x:t
-  Var n _ -> do
-    view (tcVarEnv . at n) >>= \case
-      Nothing -> throwError "Found free var"
-      Just k -> pure k
+  Var n _ -> case _nKind n of
+    NBound wo ->
+      views tcLocalVarEnv (`RAList.lookup` wo) >>= \case
+        Nothing -> throwError "Found free var"
+        Just k -> pure k
+    NTopLevel mn mh ->
+      view (tcFreeVarEnv . at (FullyQualifiedName mn (_nName n) mh)) >>= \case
+        Nothing -> throwError "Found free var"
+        Just k -> pure k
+    NModRef _mn _ -> error "implement modrevs "
+
+    -- view (tcVarEnv . at n) >>= \case
+    --   Nothing -> throwError "Found free var"
+    --   Just k -> pure k
   -- Γ, x:t1 ⊢ e:t2
   -- ------------------- (T-Abs)
   -- Γ ⊢ (λx:t1.e):t1→t2
   Lam args term _ -> do
     -- let inEnv e = foldl' (\m (n', t') -> Map.insert n' t' m) e args
-    ret <- locally tcVarEnv (Map.union (Map.fromList (NE.toList args))) (typecheck' term)
+    let env' = RAList.fromList $ view _2 <$> NE.toList args
+    ret <- locally tcLocalVarEnv (env' <>) (typecheck' term)
+    -- ret <- locally tcVarEnv (Map.union (Map.fromList (NE.toList args))) (typecheck' term)
     pure $ foldr TyFun ret (snd <$> args)
   -- Γ ⊢ x:t1→t2     Γ ⊢ y:t1
   -- ------------------------ (T-App  )
@@ -91,9 +108,9 @@ typecheck' = \case
   -- Γ ⊢ e1:t1    Γ, n:t1 ⊢ e:t2
   -- ------------------- (T-Abs)
   -- Γ ⊢ let n = e1 in e2 : t2
-  Let n e1 e2 _ -> do
+  Let _n e1 e2 _ -> do
     t1 <- typecheck' e1
-    locally tcVarEnv (Map.insert n t1) $ typecheck' e2
+    locally tcLocalVarEnv (RAList.cons t1) $ typecheck' e2
   -- Γ ⊢ x:∀X.t1
   -- ------------------------ (T-TApp)
   -- Γ ⊢ x[τ]:t1[X→τ]
@@ -154,6 +171,7 @@ typecheck' = \case
   -- Γ ⊢ k : Prim p
   Constant l _ ->
     pure (typeOfLit l)
+  DynInvoke{} -> error "implement dyn ref"
 
   Try e1 e2 _ -> do
     te1 <- typecheck' e1
