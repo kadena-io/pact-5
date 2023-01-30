@@ -125,6 +125,7 @@ ReplProgramList :: { [ReplSpecialTL LineInfo] }
 
 TopLevel :: { ParsedTopLevel }
   : Module { TLModule $1 }
+  | Interface { TLInterface $1 }
   | Expr { TLTerm $1 }
 
 RTL :: { ReplSpecialTL LineInfo }
@@ -133,6 +134,7 @@ RTL :: { ReplSpecialTL LineInfo }
 
 ReplTopLevel :: { ParsedReplTopLevel }
   : Module { RTLModule $1 }
+  | Interface { RTLInterface $1 }
   | '(' Defun ')' { RTLDefun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefConst ')' { RTLDefConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | Expr { RTLTerm $1 }
@@ -147,6 +149,11 @@ ReplSpecial :: { LineInfo -> ReplSpecialForm LineInfo }
 Module :: { ParsedModule }
   : '(' module IDENT Exts Defs ')'
     { Module (ModuleName (getIdent $3) Nothing) (reverse $4) (NE.fromList (reverse $5)) }
+
+Interface :: { ParsedInterface }
+  : '(' Interface IDENT IfDefs ')'
+    { Interface (ModuleName (getIdent $3) Nothing) (reverse $4) }
+
 
 -- Module :: { ParsedModule }
 --   : '(' module IDENT '(' Gov ')' Exts Defs ')'
@@ -171,6 +178,19 @@ Defs :: { [ParsedDef] }
 Def :: { ParsedDef }
   : '(' Defun ')' { Dfun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefConst ')' { DConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
+
+IfDefs :: { [ParsedIfDef] }
+  : IfDefs IfDef { $2:$1 }
+  | IfDef { [$1] }
+
+IfDef :: { ParsedIfDef }
+  : '(' IfDefun ')' { IfDfun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
+  | '(' DefConst ')' { IfDConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
+
+-- ident = $2,
+IfDefun :: { LineInfo -> IfDefun LineInfo }
+  : defun IDENT ':' Type '(' ArgList ')'
+    { IfDefun (getIdent $2) (reverse $6) $4 }
 
 ImportList :: { Maybe [Text] }
   : '[' ImportNames ']' { Just (reverse $2) }

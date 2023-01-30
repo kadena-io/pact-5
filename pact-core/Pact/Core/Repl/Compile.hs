@@ -101,7 +101,7 @@ interpretExpr (DesugarOutput desugared loaded' _) = do
   debugIfFlagSet ReplDebugUntyped untyped
   evalGas <- use replGas
   evalLog <- use replEvalLog
-  mhashes <- uses (replLoaded . loModules) (fmap (view (mdModule . mHash)))
+  mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
   let rEnv = ReplEvalEnv evalGas evalLog
       cekEnv = CEKRuntimeEnv
              { _cekBuiltins = replRawBuiltinRuntime
@@ -251,7 +251,7 @@ interpretReplProgram source = do
         evalGas <- use replGas
         evalLog <- use replEvalLog
         -- todo: cache?
-        mhashes <- uses (replLoaded . loModules) (fmap (view (mdModule . mHash)))
+        mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
         let rEnv = ReplEvalEnv evalGas evalLog
             cekEnv = CEKRuntimeEnv
                   { _cekBuiltins = replRawBuiltinRuntime
@@ -308,7 +308,7 @@ interpretProgram source = do
         let i = view termInfo te
         evalGas <- use replGas
         evalLog <- use replEvalLog
-        mhashes <- uses (replLoaded . loModules) (fmap (view (mdModule . mHash)))
+        mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
         let rEnv = ReplEvalEnv evalGas evalLog
             cekEnv = CEKRuntimeEnv
                   { _cekBuiltins = replRawBuiltinRuntime

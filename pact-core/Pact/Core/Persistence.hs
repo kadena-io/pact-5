@@ -9,8 +9,6 @@
 
 module Pact.Core.Persistence
  ( ModuleData(..)
- , mdModule
- , mdDependencies
  , PactDb(..)
  , Loaded(..)
  , loModules
@@ -18,6 +16,8 @@ module Pact.Core.Persistence
  , loAllTyped
  , loAllLoaded
  , mockPactDb
+ , mdModuleName
+ , mdModuleHash
  ) where
 
 import Control.Lens
@@ -31,6 +31,7 @@ import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Untyped.Term
 import Pact.Core.Guards
+import Pact.Core.Hash
 
 import qualified Data.Map.Strict as Map
 
@@ -38,10 +39,29 @@ import qualified Data.Map.Strict as Map
 -- in our backend.
 -- That is: All module definitions, as well as
 data ModuleData b i
-  = ModuleData
-  { _mdModule :: EvalModule b i
-  , _mdDependencies :: Map FullyQualifiedName (EvalDef b i)
-  } deriving Show
+  = ModuleData (EvalModule b i) (Map FullyQualifiedName (EvalDef b i))
+  -- { _mdModule :: EvalModule b i
+  -- , _mdDependencies :: Map FullyQualifiedName (EvalDef b i)
+  -- }
+  | InterfaceData (EvalInterface b i) (Map FullyQualifiedName (EvalDef b i))
+  deriving Show
+  -- { _ifInterface :: EvalInterface b i
+  -- , _ifDependencies :: Map FullyQualifiedName (EvalDefConst b i)
+  -- } deriving Show
+
+mdModuleName :: Lens' (ModuleData b i) ModuleName
+mdModuleName f = \case
+  ModuleData ev deps ->
+    mName f ev <&> \ev' -> ModuleData ev' deps
+  InterfaceData iface deps ->
+    ifName f iface <&> \ev' -> InterfaceData ev' deps
+
+mdModuleHash :: Lens' (ModuleData b i) ModuleHash
+mdModuleHash f = \case
+  ModuleData ev deps ->
+    mHash f ev <&> \ev' -> ModuleData ev' deps
+  InterfaceData iface deps ->
+    ifHash f iface <&> \ev' -> InterfaceData ev' deps
 
 type FQKS = KeySet FullyQualifiedName
 
@@ -76,7 +96,6 @@ data Loaded b i
   , _loAllLoaded :: Map FullyQualifiedName (EvalDef b i)
   } deriving Show
 
-makeLenses ''ModuleData
 makeLenses ''Loaded
 
 instance Semigroup (Loaded b i) where
@@ -109,6 +128,6 @@ mockPactDb = do
     pure (Map.lookup mn m)
 
   writeMod ref md = let
-    mname = _mName (_mdModule md)
+    mname = view mdModuleName md
     in modifyIORef' ref (Map.insert mname md)
 

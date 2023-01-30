@@ -98,6 +98,8 @@ data DesugarError
   | UnboundTypeVariable Text
   | NoSuchModuleMember ModuleName Text
   | NoSuchModule ModuleName
+  | NoSuchInterface ModuleName
+  | ImplementationError ModuleName ModuleName Text
   | RecursionDetected ModuleName [Text]
   | UnresolvedQualName QualifiedName
   deriving Show
@@ -114,6 +116,15 @@ instance RenderError DesugarError where
       tConcatSpace ["Module", renderModuleName mn, "has no such member:", txt]
     NoSuchModule mn ->
       tConcatSpace ["Cannot find module: ", renderModuleName mn]
+    NoSuchInterface mn ->
+      tConcatSpace ["Cannot find interface: ", renderModuleName mn]
+    ImplementationError mn1 mn2 defn ->
+      tConcatSpace [ "Module"
+                   , renderModuleName mn1
+                   , "does not correctly implement the function"
+                   , defn
+                   , "from Interface"
+                   , renderModuleName mn2]
     RecursionDetected mn txts ->
       tConcatSpace
       ["Recursive cycle detected in Module"

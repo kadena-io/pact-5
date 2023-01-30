@@ -55,6 +55,7 @@ instance Pretty Operator where
 data Type
   = TyPrim PrimType
   | TyList Type
+  -- | TyModule ModuleName
   deriving (Show, Eq)
 
 pattern TyInt :: Type

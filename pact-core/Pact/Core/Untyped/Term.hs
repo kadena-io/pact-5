@@ -22,19 +22,28 @@ module Pact.Core.Untyped.Term
  , Term(..)
  , EvalTerm
  , EvalModule
+ , EvalInterface
  , EvalDef
+ , EvalDefConst
  , fromIRTerm
  , fromIRDef
  , fromIRModule
  , fromIRTopLevel
  , fromIRReplTopLevel
  , termInfo
+ -- Module Lenses
  , mName
  , mDefs
  , mBlessed
  , mImports
  , mImplemented
  , mHash
+ -- Interface lenses
+ , ifName
+ , ifDefns
+ , ifHash
+ , _IfDfun
+ , _IfDConst
  ) where
 
 import Control.Lens
@@ -171,8 +180,10 @@ data Term name builtin info
 
 -- Post Typecheck terms + modules
 type EvalTerm b i = Term Name b i
+type EvalDefConst b i = DefConst Name b i
 type EvalDef b i = Def Name b i
 type EvalModule b i = Module Name b i
+type EvalInterface b i = Interface Name b i
 
 fromIRTerm :: IR.Term n b i -> Term n b i
 fromIRTerm = \case
@@ -298,3 +309,5 @@ termInfo f = \case
     Error e <$> f i
 
 makeLenses ''Module
+makeLenses ''Interface
+makePrisms ''IfDef

@@ -40,6 +40,7 @@ import Data.IORef
 import Data.Set(Set)
 import Data.Text(Text)
 import Data.List(isPrefixOf)
+import Data.Maybe(mapMaybe)
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
@@ -223,7 +224,12 @@ replCompletion natives =
         [tlns, moduleNames, prefixed, natives, cmds]
     pure $ simpleCompletion <$> Set.toList (Set.filter (str `isPrefixOf`) allNames)
   where
-  defNames = fmap Term.defName . Term._mDefs . _mdModule
+  defNames = \case
+    ModuleData md _ ->
+      Term.defName <$> Term._mDefs md
+    InterfaceData iface _ ->
+      fmap Term._dcName $ mapMaybe (preview Term._IfDConst) $ Term._ifDefns iface
+    -- fmap Term.defName . Term._mDefs . _mdModule
   toPrefixed m =
     concat $ prefixF <$> Map.toList m
   prefixF (mn, ems) = let

@@ -35,6 +35,8 @@ type ParsedDef = Def ParsedExpr LineInfo
 type ParsedDefConst = DefConst ParsedExpr LineInfo
 type ParsedModule = Module ParsedExpr LineInfo
 type ParsedTopLevel = TopLevel ParsedExpr LineInfo
+type ParsedIfDef = IfDef ParsedExpr LineInfo
+type ParsedInterface = Interface ParsedExpr LineInfo
 type ParsedReplTopLevel = ReplTopLevel LineInfo
 
 data PosToken =

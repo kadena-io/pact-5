@@ -57,6 +57,7 @@ data ReplSpecialTL i
 
 data ReplTopLevel i
   = RTLModule (Module (Expr i) i)
+  | RTLInterface (Interface (Expr i) i)
   | RTLDefun (Defun (Expr i) i)
   | RTLDefConst (DefConst (Expr i) i)
   | RTLTerm (Expr i)
