@@ -22,6 +22,7 @@ import Control.Monad.Except
 import Data.Text(Text)
 import Data.ByteString(ByteString)
 import Data.Proxy
+import Data.Maybe(mapMaybe)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.ByteString as B
@@ -274,7 +275,22 @@ interpretReplProgram source = do
         let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
         replLoaded . loAllLoaded %= Map.insert fqn (DConst dc)
         pure $ InterpretLog $ "Loaded repl defconst: " <> _dcName dc
-      RTLInterface _ -> error "interface stub"
+      RTLInterface iface -> do
+        let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded loaded)
+            mdata = InterfaceData iface deps'
+        _writeModule pdb mdata
+        let out = "Loaded iface " <> renderModuleName (_ifName iface)
+            newLoaded = Map.fromList $ toFqDep (_ifName iface) (_ifHash iface)
+                        <$> mapMaybe (fmap DConst . preview _IfDConst) (_ifDefns iface)
+            loadNewModule =
+              over loModules (Map.insert (_ifName iface) mdata) .
+              over loAllLoaded (Map.union newLoaded)
+        replLoaded %= loadNewModule
+        pure (InterpretLog out)
+        where
+        toFqDep modName mhash defn =
+          let fqn = FullyQualifiedName modName (defName defn) mhash
+          in (fqn, defn)
 
 
 interpretProgram

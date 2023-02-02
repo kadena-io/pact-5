@@ -151,7 +151,7 @@ Module :: { ParsedModule }
     { Module (ModuleName (getIdent $3) Nothing) (reverse $4) (NE.fromList (reverse $5)) }
 
 Interface :: { ParsedInterface }
-  : '(' Interface IDENT IfDefs ')'
+  : '(' interface IDENT IfDefs ')'
     { Interface (ModuleName (getIdent $3) Nothing) (reverse $4) }
 
 

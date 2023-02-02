@@ -128,7 +128,7 @@ data Interface name builtin info
 data IfDefun info
   = IfDefun
   { _ifdName :: Text
-  , _ifdType :: Type NamedDeBruijn
+  , _ifdType :: Type Void
   , _ifdInfo :: info
   } deriving Show
 
@@ -218,6 +218,10 @@ fromIRDefun
 fromIRDefun (IR.Defun n ty term i) =
   Defun n (fmap absurd ty) (fromIRTerm term) i
 
+fromIRIfDefun :: IR.IfDefun info -> IfDefun info
+fromIRIfDefun (IR.IfDefun dfn ty i) =
+  IfDefun dfn ty i
+
 fromIRDConst
   :: IR.DefConst name builtin info
   -> DefConst name builtin info
@@ -232,18 +236,32 @@ fromIRDef = \case
   IR.DConst d -> DConst (fromIRDConst d)
   -- IR.DCap d -> DCap (fromIRDCap d)
 
+fromIRIfDef
+  :: IR.IfDef name builtin info
+  -> IfDef name builtin info
+fromIRIfDef = \case
+  IR.IfDfun d -> IfDfun (fromIRIfDefun d)
+  IR.IfDConst d -> IfDConst (fromIRDConst d)
+
 fromIRModule
   :: IR.Module name builtin info
   -> Module name builtin info
 fromIRModule (IR.Module mn defs blessed imports implements hs) =
   Module mn (fromIRDef <$> defs) blessed imports implements hs
 
+fromIRInterface
+  :: IR.Interface name builtin info
+  -> Interface name builtin info
+fromIRInterface (IR.Interface ifn ifdefs ifhash) =
+  Interface ifn (fromIRIfDef <$> ifdefs) ifhash
+
 fromIRTopLevel
   :: IR.TopLevel name builtin info
   -> TopLevel name builtin info
 fromIRTopLevel = \case
   IR.TLModule m -> TLModule (fromIRModule m)
-  IR.TLInterface _ -> error "todo: implement interfaces"
+  IR.TLInterface iface ->
+    TLInterface (fromIRInterface iface)
   IR.TLTerm e -> TLTerm (fromIRTerm e)
 
 fromIRReplTopLevel
@@ -251,11 +269,10 @@ fromIRReplTopLevel
   -> ReplTopLevel name builtin info
 fromIRReplTopLevel = \case
   IR.RTLModule m -> RTLModule (fromIRModule m)
-  IR.RTLInterface _-> error "todo: implement interfaces"
+  IR.RTLInterface iface -> RTLInterface (fromIRInterface iface)
   IR.RTLTerm e -> RTLTerm (fromIRTerm e)
   IR.RTLDefun df -> RTLDefun (fromIRDefun df)
   IR.RTLDefConst dc -> RTLDefConst (fromIRDConst dc)
-
 
 instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
   pretty = \case

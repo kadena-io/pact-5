@@ -34,6 +34,7 @@ import Data.List.NonEmpty(NonEmpty(..))
 import Data.Set(Set)
 import Data.Graph(stronglyConnComp, SCC(..))
 import Data.Proxy
+import Data.Foldable(find, traverse_)
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
@@ -727,17 +728,36 @@ renameModule (Module mname defs blessed imp implements mhash) = do
       -- todo: just in case, match on `d` because it makes no sense for there to be an empty cycle
       -- but all uses of `head` are still scary
       throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (head d))
-  -- mgov' <- locally reBinds (Map.union defMap) $ traverse (resolveBareName' . rawParsedName) mgov
+  traverse_ (checkImplements mname defs) implements
   pure (Module mname defs'' blessed imp implements mhash)
   where
   mkScc def = (def, defName def, Set.toList (defSCC mname def))
 
--- checkImplements origmod ifName =
---   view rePactDb >>= liftRenamerT . (`_readModule` mn) >>= \case
---   Just (InterfaceData in' depmap) -> do
---     loadInterface' in' depmap
---     traverse_ checkImplementedMember (Term._ifDefns in') orig
---   Nothing -> error "BOOOOOOOOOM"
+checkImplements
+  :: (Monad m, Foldable t)
+  => ModuleName
+  -> t (Def name builtin info) -> ModuleName -> RenamerT m b i ()
+checkImplements mn defs ifName =
+  use (rsLoaded . loModules . at ifName) >>= \case
+    Just (InterfaceData in' _depmap) ->
+      traverse_ checkImplementedMember (Term._ifDefns in')
+    -- Todo: lift into DesugarError (technically name resolution error but this is fine)
+    Just _ -> error "found module, expected to implement interface"
+    Nothing -> view rePactDb >>= liftRenamerT . (`_readModule` mn) >>= \case
+      Just (InterfaceData in' depmap) -> do
+        loadInterface' in' depmap
+        traverse_ checkImplementedMember (Term._ifDefns in')
+      Just _ -> error "found module, expected to implement interface"
+      Nothing -> error "no such interface"
+  where
+  checkImplementedMember = \case
+    Term.IfDConst{} -> pure ()
+    Term.IfDfun ifd ->
+      case find (\df -> Term._ifdName ifd == defName df) defs of
+        Just (Dfun v) ->
+          when (_dfunType v /= Term._ifdType ifd) $ error "BOOM"
+        Just _ -> error "not implemented"
+        Nothing -> error "not implemented"
 
 -- | Todo: support imports
 -- Todo:
