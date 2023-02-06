@@ -10,7 +10,7 @@ data LineInfo
   { _liLine :: !Int
   , _liColumn :: !Int
   , _liSpan :: !Int
-  } deriving (Eq, Show)
+  } deriving (Eq, Show, Ord)
 
 instance Default LineInfo where
   def = LineInfo 0 0 0
