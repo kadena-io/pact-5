@@ -89,14 +89,15 @@
 (expect "= bool bool" true (= true true))
 (expect "!= bool bool" true (!= false true))
 
-;  (interface ix (defun f:bool ()))
+"Module references"
+(interface ix (defun f:bool ()))
 ;  (interface iy (defun f:bool ()))
-;  (module mx g (defcap g () true) (implements ix) (defun f:bool () true))
-;  (module my g (defcap g () true) (implements iy) (defun f:bool () true))
+(module mx (implements ix) (defun f:bool () true))
+(module my (implements ix) (defun f:bool () true))
 ;  (module ny g (defcap g () true) (implements iy) (defun f:bool () true))
 
-;  (expect "= module{ix} module{ix}" true (= mx mx))
-;  (expect "!= module{ix} module{ix}" true (!= my mx))
+(expect "= module{ix} module{ix}" true (= mx mx))
+(expect "!= module{ix} module{ix}" true (!= my mx))
 
 "===== math"
 (expect "abs" 10.23 (abs -10.23))

@@ -94,7 +94,16 @@ data CEKValue b i m
   | VNative !(BuiltinFn b i m)
   | VModRef ModuleName [ModuleName]
   | VGuard !(Guard FullyQualifiedName (CEKValue b i m))
-  deriving Show
+  -- deriving Show
+
+instance Show (CEKValue b i m) where
+  show = \case
+    VLiteral lit -> show lit
+    VList vec -> show vec
+    VClosure _ _ -> "closure<>"
+    VNative _ -> "native<>"
+    VModRef mn mns -> "modRef" <> show mn <> show mns
+    VGuard _ -> "guard_"
 
 
 

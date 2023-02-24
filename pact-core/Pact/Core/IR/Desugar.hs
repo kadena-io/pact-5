@@ -346,6 +346,8 @@ desugarType = \case
   Common.TyPrim p -> TyPrim p
   Common.TyList t ->
     TyList (desugarType t)
+  Common.TyModRef mr ->
+    TyModRef mr
 
 -----------------------------------------------------------
 -- Renaming
@@ -401,18 +403,35 @@ ifDefSCC mn = \case
 liftRenamerT :: Monad m => m a -> RenamerT m cb ci a
 liftRenamerT ma = RenamerT (lift (lift ma))
 
-lookupModule
+resolveModuleName
   :: MonadError (PactError i) m
   => ModuleName
   -> i
   -> RenamerT m b i (ModuleData b i)
-lookupModule mn i = view rePactDb >>= liftRenamerT . (`_readModule` mn) >>= \case
-   Nothing -> throwDesugarError (NoSuchModule mn) i
-   Just md -> case md of
-     ModuleData module_ depmap ->
-      md <$ loadModule' module_ depmap
-     InterfaceData in' depmap ->
-      md <$ loadInterface' in' depmap
+resolveModuleName mn i =
+  use (rsLoaded . loModules . at mn) >>= \case
+    Just md -> pure md
+    Nothing ->
+      view rePactDb >>= liftRenamerT . (`_readModule` mn) >>= \case
+      Nothing -> throwDesugarError (NoSuchModule mn) i
+      Just md -> case md of
+        ModuleData module_ depmap ->
+          md <$ loadModule' module_ depmap
+        InterfaceData in' depmap ->
+          md <$ loadInterface' in' depmap
+
+-- lookupModule
+--   :: MonadError (PactError i) m
+--   => ModuleName
+--   -> i
+--   -> RenamerT m b i (ModuleData b i)
+-- lookupModule mn i = view rePactDb >>= liftRenamerT . (`_readModule` mn) >>= \case
+--    Nothing -> throwDesugarError (NoSuchModule mn) i
+--    Just md -> case md of
+--      ModuleData module_ depmap ->
+--       md <$ loadModule' module_ depmap
+--      InterfaceData in' depmap ->
+--       md <$ loadInterface' in' depmap
 
 toFqDep
   :: ModuleName
@@ -532,6 +551,15 @@ lookupModuleMember modName name i = do
   where
   toDepMap mhash def = (Term.defName def, NTopLevel modName mhash)
 
+resolveTyModRef
+  :: MonadError (PactError i) m
+  => i
+  -> Type n
+  -> RenamerT m b i (Type n)
+resolveTyModRef i = transformM \case
+  TyModRef tmr ->
+     TyModRef tmr <$ resolveModuleName tmr i
+  a -> pure a
 
 -- Rename a term (that is part of a module)
 -- emitting the list of dependent calls
@@ -551,6 +579,7 @@ renameTerm (Lam nsts body i) = do
   let m = Map.fromList $ NE.toList $ NE.zip pns (NBound <$> ixs)
       -- ns' = NE.zipWith (\ix n -> Name n (NBound ix)) ixs ns
   term' <- local (inEnv m newDepth) (renameTerm body)
+  _ <- (traversed . _Just) (resolveTyModRef i) ts
   pure (Lam (NE.zip pns ts) term' i)
   where
   inEnv m depth =
@@ -561,6 +590,7 @@ renameTerm (Let name mt e1 e2 i) = do
   let inEnv = over reVarDepth succ .
               over reBinds (Map.insert name (NBound depth))
   e1' <- renameTerm e1
+  _ <- _Just (resolveTyModRef i) mt
   e2' <- local inEnv (renameTerm e2)
   pure (Let name mt e1' e2' i)
 renameTerm (App fn apps i) = do
@@ -681,7 +711,7 @@ resolveBare (BareName bn) i = views reBinds (Map.lookup bn) >>= \case
     Just fqn -> pure (Name bn (NTopLevel (_fqModule fqn) (_fqHash fqn)))
     Nothing -> do
       let mn = ModuleName bn Nothing
-      lookupModule mn i >>= \case
+      resolveModuleName mn i >>= \case
         ModuleData md _ -> do
           let implementeds = view Term.mImplemented md
           pure (Name bn (NModRef mn implementeds))

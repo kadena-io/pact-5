@@ -42,6 +42,7 @@ module Pact.Core.Untyped.Term
  , ifName
  , ifDefns
  , ifHash
+ , findIfDef
  , _IfDfun
  , _IfDConst
  ) where
@@ -49,7 +50,7 @@ module Pact.Core.Untyped.Term
 import Control.Lens
 import Data.Text(Text)
 import Data.Void
-import Data.Foldable(foldl')
+import Data.Foldable(foldl', find)
 import qualified Data.Set as Set
 
 import Pact.Core.Builtin
@@ -211,7 +212,6 @@ fromIRTerm = \case
   IR.Error e i ->
     Error e i
 
----------
 fromIRDefun
   :: IR.Defun name builtin info
   -> Defun name builtin info
@@ -273,6 +273,10 @@ fromIRReplTopLevel = \case
   IR.RTLTerm e -> RTLTerm (fromIRTerm e)
   IR.RTLDefun df -> RTLDefun (fromIRDefun df)
   IR.RTLDefConst dc -> RTLDefConst (fromIRDConst dc)
+
+findIfDef :: Text -> Interface name builtin info -> Maybe (IfDef name builtin info)
+findIfDef f iface =
+  find ((== f) . ifDefName) (_ifDefns iface)
 
 instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
   pretty = \case

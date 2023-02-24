@@ -164,6 +164,7 @@ specializeEq i raw reso (Pred _ t) = case t of
   TyString -> pure (Builtin (_erStrInstance reso) i)
   TyUnit -> pure (Builtin (_erUnitInstance reso) i)
   TyBool -> pure (Builtin (_erBoolInstance reso) i)
+  TyModRef _ -> pure (Builtin (_erModRefInstance reso) i)
   TyList t' ->
     listEqualityInstance i raw (_erListInstance reso) (Pred Eq t')
   _ -> throwOverloadError "unable to resolve overload for Eq Operation" i
@@ -476,6 +477,7 @@ data EqResolution
   , _erUnitInstance :: CoreBuiltin
   , _erBoolInstance :: CoreBuiltin
   , _erListInstance :: CoreBuiltin
+  , _erModRefInstance :: CoreBuiltin
   } deriving Show
 
 data OrdResolution
@@ -557,6 +559,7 @@ eqResolve =
   , _erUnitInstance = EqUnit
   , _erBoolInstance = EqBool
   , _erListInstance = EqList
+  , _erModRefInstance = EqModRef
   }
 
 neqResolve :: EqResolution
@@ -569,6 +572,7 @@ neqResolve =
   , _erUnitInstance = NeqUnit
   , _erBoolInstance = NeqBool
   , _erListInstance = NeqList
+  , _erModRefInstance = NeqModRef
   }
 
 -- Ord instances

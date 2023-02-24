@@ -47,6 +47,12 @@ fromTypedDefun
 fromTypedDefun (Typed.Defun n ty term i) =
   Defun n ty (fromTypedTerm term) i
 
+fromTypedIfDefun
+  :: Typed.IfDefun name info
+  -> IfDefun info
+fromTypedIfDefun (Typed.IfDefun n ty i) =
+  IfDefun n ty i
+
 fromTypedDConst
   :: Typed.DefConst name tyname builtin info
   -> DefConst name builtin info
@@ -67,11 +73,25 @@ fromTypedDef = \case
   Typed.DConst d -> DConst (fromTypedDConst d)
   -- Typed.DCap d -> DCap (fromTypedDCap d)
 
+fromTypedIfDef
+  :: Typed.IfDef name tyname builtin info
+  -> IfDef name builtin info
+fromTypedIfDef = \case
+  Typed.IfDfun d -> IfDfun (fromTypedIfDefun d)
+  Typed.IfDConst d ->
+    IfDConst (fromTypedDConst d)
+
 fromTypedModule
   :: Typed.Module name tyname builtin info
   -> Module name builtin info
 fromTypedModule (Typed.Module mn defs blessed imports implements hs) =
   Module mn (fromTypedDef <$> defs) blessed imports implements hs
+
+fromTypedInterface
+  :: Typed.Interface name tyname builtin info
+  -> Interface name builtin info
+fromTypedInterface (Typed.Interface ifname ifdefs ifh) =
+  Interface ifname (fromTypedIfDef <$> ifdefs) ifh
 
 fromTypedTopLevel
   :: Typed.TopLevel name tyname builtin info
@@ -79,8 +99,8 @@ fromTypedTopLevel
 fromTypedTopLevel = \case
   Typed.TLModule m ->
     TLModule (fromTypedModule m)
-  Typed.TLInterface _ ->
-    error "todo: implement interfaces"
+  Typed.TLInterface iface ->
+    TLInterface (fromTypedInterface iface)
   Typed.TLTerm e ->
     TLTerm (fromTypedTerm e)
 
@@ -96,4 +116,5 @@ fromTypedReplTopLevel = \case
     RTLDefConst (fromTypedDConst dc)
   Typed.RTLTerm te ->
     RTLTerm (fromTypedTerm te)
-  Typed.RTLInterface _ -> error "interfaces"
+  Typed.RTLInterface i ->
+    RTLInterface (fromTypedInterface i)

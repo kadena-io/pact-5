@@ -428,10 +428,12 @@ data ReplBuiltin b
   -- | RLoad
   deriving (Eq, Show)
 
+-- NOTE: Maybe `ReplBuiltin` is not a great abstraction, given
+-- expect arity changes based on whether it's corebuiltin or rawbuiltin
 instance BuiltinArity b => BuiltinArity (ReplBuiltin b) where
   builtinArity = \case
     RBuiltinWrap b -> builtinArity b
-    RExpect -> 3
+    RExpect -> 5
     RExpectFailure -> 2
     RExpectThat -> 3
     RPrint -> 2
@@ -626,6 +628,9 @@ data CoreBuiltin
   | EqUnit
   | NeqUnit
   | ShowUnit
+  -- Module references
+  | EqModRef
+  | NeqModRef
   -- Others
   | Enforce
   | EnforceOne
@@ -740,6 +745,9 @@ instance BuiltinArity CoreBuiltin where
     EqUnit -> 2
     NeqUnit -> 2
     ShowUnit -> 1
+    -- Module references
+    EqModRef -> 2
+    NeqModRef -> 2
     Enforce -> 2
     EnforceOne -> 2
     Enumerate -> 2
@@ -877,6 +885,9 @@ coreBuiltinToText = \case
   EqUnit -> "eqUnit"
   NeqUnit -> "neqUnit"
   ShowUnit -> "showUnit"
+  -- Module references
+  EqModRef -> "eqModRef"
+  NeqModRef -> "neqModRef"
   -- Others
   Enforce -> "enforce"
   EnforceOne -> "enforceOn"

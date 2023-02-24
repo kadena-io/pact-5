@@ -81,7 +81,7 @@ coreExpect = mkReplBuiltinFn \cont handler -> \case
             returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
           True -> returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
        v -> returnCEK cont handler v
-  _ -> failInvariant "Expect"
+  e -> failInvariant $ "Expect" <> T.pack (show e)
 
 rawExpect :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i
 rawExpect = mkReplBuiltinFn \cont handler -> \case

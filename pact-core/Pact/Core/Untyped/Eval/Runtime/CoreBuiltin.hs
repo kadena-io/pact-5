@@ -846,6 +846,22 @@ coreEnforce = mkBuiltinFn \cont handler -> \case
 --   _ -> failInvariant "create-user-guard"
 
 -----------------------------------
+-- Module references
+-----------------------------------
+eqModRef :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
+eqModRef = mkBuiltinFn \cont handler -> \case
+  [VModRef m1 _,  VModRef m2 _] ->
+    returnCEKValue cont handler $ VBool (m1 == m2)
+  vals -> failInvariant $ "base64-encode" <> T.pack (show vals)
+
+neqModRef :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
+neqModRef = mkBuiltinFn \cont handler -> \case
+  [VModRef m1 _,  VModRef m2 _] ->
+    returnCEKValue cont handler $ VBool (m1 /= m2)
+  _ -> failInvariant "base64-encode"
+
+
+-----------------------------------
 -- Other Core forms
 -----------------------------------
 
@@ -993,6 +1009,8 @@ coreBuiltinRuntime = \case
   EqUnit -> eqUnit EqUnit
   NeqUnit -> neqUnit NeqUnit
   ShowUnit -> showUnit ShowUnit
+  EqModRef -> eqModRef EqModRef
+  NeqModRef -> neqModRef NeqModRef
   Enforce -> coreEnforce Enforce
   EnforceOne -> unimplemented
     -- coreEnforceOne EnforceOne
@@ -1133,6 +1151,8 @@ coreBuiltinLiftedRuntime f = \case
   EqUnit -> eqUnit (f EqUnit)
   NeqUnit -> neqUnit (f NeqUnit)
   ShowUnit -> showUnit (f ShowUnit)
+  EqModRef -> eqModRef (f EqModRef)
+  NeqModRef -> neqModRef (f NeqModRef)
   Enforce -> coreEnforce (f Enforce)
   EnforceOne -> unimplemented
     -- coreEnforceOne EnforceOne

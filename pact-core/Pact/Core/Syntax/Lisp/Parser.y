@@ -215,6 +215,7 @@ ArgList :: { [Arg] }
 Type :: { Type }
   -- : '(' TyArrows '->' Type1 ')' { foldr TyFun $4 (reverse $2) }
   : '[' Type ']' { TyList $2 }
+  | module '{' ModQual '}' { TyModRef (mkModName $3) }
   | AtomicType { $1 }
 
 -- TyArrows :: { [Type] }

@@ -3,6 +3,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module Pact.Core.Type
  ( PrimType(..)
@@ -23,12 +24,14 @@ module Pact.Core.Type
  , renderPred
  ) where
 
+import Control.Lens
 import Data.Text(Text)
-import Data.List.NonEmpty(NonEmpty)
+import Data.List.NonEmpty(NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 
 import Pact.Core.Literal
+import Pact.Core.Names
 import Pact.Core.Pretty(Pretty(..), (<+>))
 
 import qualified Pact.Core.Pretty as Pretty
@@ -75,8 +78,20 @@ data Type n
   -- ^ List aka [a]
   | TyGuard
   -- ^ Type of Guards.
+  | TyModRef ModuleName
+  -- ^ Module references
   | TyForall (NonEmpty n) (Type n)
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+instance Plated (Type n) where
+  plate f = \case
+    TyVar n -> pure (TyVar n)
+    TyPrim pt -> pure (TyPrim pt)
+    TyFun ty ty' -> TyFun <$> f ty <*> f ty'
+    TyList ty -> TyList <$> f ty
+    TyGuard -> pure TyGuard
+    TyModRef mn -> pure (TyModRef mn)
+    TyForall ne ty -> TyForall ne <$> f ty
 
 pattern TyInt :: Type n
 pattern TyInt = TyPrim PrimInt
@@ -170,6 +185,8 @@ instance Pretty n => Pretty (Type n) where
       liParens t@TyVar{} = pretty t
       liParens t@TyPrim{} = pretty t
       liParens t = Pretty.parens (pretty t)
+    TyModRef mr ->
+      "module" <> Pretty.braces (pretty mr)
     TyForall as ty ->
       "∀" <> render (NE.toList as) "*" <> "." <> pretty ty
       where

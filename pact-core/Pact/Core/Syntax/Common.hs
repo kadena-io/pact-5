@@ -55,6 +55,7 @@ instance Pretty Operator where
 data Type
   = TyPrim PrimType
   | TyList Type
+  | TyModRef ModuleName
   -- | TyModule ModuleName
   deriving (Show, Eq)
 
@@ -81,6 +82,7 @@ instance Pretty Type where
   pretty = \case
     TyPrim prim -> pretty prim
     TyList t -> brackets (pretty t)
+    TyModRef mn -> "module" <> braces (pretty mn)
 
 
 ----------------------------------------------------
