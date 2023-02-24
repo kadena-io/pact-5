@@ -91,13 +91,14 @@
 
 "Module references"
 (interface ix (defun f:bool ()))
-;  (interface iy (defun f:bool ()))
+(interface iy (defun f:bool ()))
 (module mx (implements ix) (defun f:bool () true))
 (module my (implements ix) (defun f:bool () true))
-;  (module ny g (defcap g () true) (implements iy) (defun f:bool () true))
+(module ny (implements iy) (defun f:bool () true))
 
 (expect "= module{ix} module{ix}" true (= mx mx))
 (expect "!= module{ix} module{ix}" true (!= my mx))
+(expect-typecheck-failure "equality on module references implementing the incorrect interface" (= mx ny))
 
 "===== math"
 (expect "abs" 10.23 (abs -10.23))
