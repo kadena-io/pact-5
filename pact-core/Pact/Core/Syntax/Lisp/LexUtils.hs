@@ -25,18 +25,17 @@ import qualified Data.Text as T
 import Pact.Core.Info
 import Pact.Core.Errors
 import Pact.Core.Pretty (Pretty(..))
-import Pact.Core.Syntax.Common
 import Pact.Core.Syntax.Lisp.ParseTree
 
 type ParserT = Either PactErrorI
 type ParsedExpr = Expr LineInfo
-type ParsedDefun = Defun ParsedExpr LineInfo
-type ParsedDef = Def ParsedExpr LineInfo
-type ParsedDefConst = DefConst ParsedExpr LineInfo
-type ParsedModule = Module ParsedExpr LineInfo
-type ParsedTopLevel = TopLevel ParsedExpr LineInfo
-type ParsedIfDef = IfDef ParsedExpr LineInfo
-type ParsedInterface = Interface ParsedExpr LineInfo
+type ParsedDefun = Defun LineInfo
+type ParsedDef = Def LineInfo
+type ParsedDefConst = DefConst LineInfo
+type ParsedModule = Module LineInfo
+type ParsedTopLevel = TopLevel LineInfo
+type ParsedIfDef = IfDef LineInfo
+type ParsedInterface = Interface LineInfo
 type ParsedReplTopLevel = ReplTopLevel LineInfo
 
 data PosToken =
@@ -57,6 +56,7 @@ data Token
   | TokenCapGov
   | TokenInterface
   | TokenImport
+  -- Def keyowrds
   | TokenDefun
   | TokenDefConst
   | TokenDefCap

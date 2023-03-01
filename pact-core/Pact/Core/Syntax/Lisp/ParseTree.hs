@@ -17,8 +17,245 @@ import qualified Data.List.NonEmpty as NE
 import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.Pretty
+import Pact.Core.Type(PrimType(..))
+import Pact.Core.Imports
 
-import Pact.Core.Syntax.Common
+
+data Operator
+  = AddOp
+  | SubOp
+  | MultOp
+  | DivOp
+  | GTOp
+  | GEQOp
+  | LTOp
+  | LEQOp
+  | EQOp
+  | NEQOp
+  | BitAndOp
+  | BitOrOp
+  | BitComplementOp
+  | AndOp
+  | OrOp
+  | PowOp
+  deriving (Show, Eq, Enum, Bounded)
+
+instance Pretty Operator where
+  pretty = \case
+    AddOp -> "+"
+    SubOp -> "-"
+    MultOp -> "*"
+    DivOp -> "/"
+    GTOp -> ">"
+    GEQOp -> ">="
+    LTOp -> "<"
+    LEQOp -> "<="
+    EQOp -> "="
+    NEQOp -> "!="
+    BitAndOp -> "&"
+    BitOrOp -> "|"
+    AndOp -> "and"
+    OrOp -> "or"
+    PowOp -> "^"
+    BitComplementOp -> "~"
+
+-- Todo: type constructors aren't 1-1 atm.
+data Type
+  = TyPrim PrimType
+  | TyList Type
+  | TyPolyList
+  | TyModRef ModuleName
+  | TyGuard
+  | TyKeyset
+  | TyObject QualifiedName
+  | TyPolyObject
+  deriving (Show, Eq)
+
+pattern TyInt :: Type
+pattern TyInt = TyPrim PrimInt
+
+pattern TyDecimal :: Type
+pattern TyDecimal = TyPrim PrimDecimal
+
+-- pattern TyTime :: Type
+-- pattern TyTime = TyPrim PrimTime
+
+pattern TyBool :: Type
+pattern TyBool = TyPrim PrimBool
+
+pattern TyString :: Type
+pattern TyString = TyPrim PrimString
+
+pattern TyUnit :: Type
+pattern TyUnit = TyPrim PrimUnit
+
+-- | Do we render parenthesis for the type if it shows nested in another
+instance Pretty Type where
+  pretty = \case
+    TyPrim prim -> pretty prim
+    TyList t -> brackets (pretty t)
+    TyModRef mn -> "module" <> braces (pretty mn)
+    TyPolyList -> "list"
+    TyGuard -> "guard"
+    TyKeyset -> "keyset"
+    TyObject qn -> "object" <> brackets (pretty qn)
+    TyPolyObject -> "object"
+
+
+----------------------------------------------------
+-- Common structures
+----------------------------------------------------
+
+data Arg
+  = Arg
+  { _argName :: Text
+  , _argType :: Type }
+  deriving Show
+
+data Defun i
+  = Defun
+  { _dfunName :: !Text
+  , _dfunArgs :: ![Arg]
+  , _dfunDocs :: Text
+  , _dfunRetType :: !Type
+  , _dfunTerm :: !(Expr i)
+  , _dfunInfo :: i
+  } deriving Show
+
+data DefConst i
+  = DefConst
+  { _dcName :: Text
+  , _dcType :: Maybe Type
+  , _dcTerm :: Expr i
+  , _dcInfo :: i
+  } deriving Show
+
+data DefCap i
+  = DefCap
+  { _dcapName :: Text
+  , _dcapArgs :: ![Arg]
+  , _dcapTerm :: Expr i
+  , _dcapInfo :: i
+  } deriving Show
+
+data DefSchema i
+  = DefSchema
+  { _dscName :: Text
+  , _dscArgs :: [Arg]
+  , _dscInfo :: i
+  } deriving Show
+
+data DefTable i
+  = DefTable
+  { _dtName :: Text
+  , _dtSchema :: Text
+  } deriving Show
+
+data PactStep i
+  = Step (Expr i)
+  deriving Show
+
+data DefPact i
+  = DefPact
+  { _dpName :: Text
+  , _dpArgs :: [Arg]
+  , _dpSteps :: [PactStep i]
+  , _dpInfo :: i
+  } deriving Show
+
+data Managed
+  = AutoManaged
+  | Managed Text ParsedName
+  deriving (Show)
+
+data Def i
+  = Dfun (Defun i)
+  | DConst (DefConst i)
+  | DCap (DefCap i)
+  | DSchema (DefSchema i)
+  | DTable (DefTable i)
+  | DPact (DefPact i)
+  deriving Show
+
+data ExtDecl
+  = ExtBless Text
+  | ExtImport Import
+  | ExtImplements ModuleName
+  deriving Show
+
+data Module i
+  = Module
+  { _mName :: ModuleName
+  -- , _mGovernance :: Governance Text
+  , _mExternal :: [ExtDecl]
+  , _mDefs :: NonEmpty (Def i)
+  } deriving Show
+
+data TopLevel i
+  = TLModule (Module i)
+  | TLInterface (Interface i)
+  | TLTerm (Expr i)
+  deriving Show
+
+data Interface i
+  = Interface
+  { _ifName :: ModuleName
+  , _ifDefns :: [IfDef i]
+  } deriving Show
+
+data IfDefun i
+  = IfDefun
+  { _ifdName :: Text
+  , _ifdArgs :: [Arg]
+  , _ifdRetType :: Type
+  , _ifdInfo :: i
+  } deriving Show
+
+data IfDefCap i
+  = IfDefCap
+  { _ifdcName :: Text
+  , _ifdcArgs :: [Arg]
+  , _ifdcRetType :: Type
+  , _ifdcInfo :: i
+  } deriving Show
+
+data IfDefPact i
+  = IfDefPact
+  { _ifdpName :: Text
+  , _ifdpArgs :: [Arg]
+  , _ifdpRetType :: Type
+  , _ifdpInfo :: i
+  } deriving Show
+
+
+-- Interface definitions may be one of:
+--   Defun sig
+--   Defconst
+--   Defschema
+--   Defpact sig
+--   Defcap Sig
+data IfDef i
+  = IfDfun (IfDefun i)
+  | IfDConst (DefConst i)
+  | IfDCap (IfDefCap i)
+  | IfDSchema (DefSchema i)
+  | IfDPact (IfDefPact i)
+  deriving Show
+
+instance Pretty (DefConst i) where
+  pretty (DefConst dcn dcty term _) =
+    parens ("defconst" <+> pretty dcn <> mprettyTy dcty <+> pretty term)
+    where
+    mprettyTy = maybe mempty ((":" <>) . pretty)
+
+instance Pretty Arg where
+  pretty (Arg n ty) =
+    pretty n <> ":" <+> pretty ty
+
+instance Pretty (Defun i) where
+  pretty (Defun n args _ rettype term _) =
+    parens ("defun" <+> pretty n <+> parens (prettyCommaSep args)
+      <> ":" <+> pretty rettype <+> "=" <+> pretty term)
 
 data Binder i =
   Binder Text (Maybe Type) (Expr i)
@@ -56,10 +293,10 @@ data ReplSpecialTL i
   deriving Show
 
 data ReplTopLevel i
-  = RTLModule (Module (Expr i) i)
-  | RTLInterface (Interface (Expr i) i)
-  | RTLDefun (Defun (Expr i) i)
-  | RTLDefConst (DefConst (Expr i) i)
+  = RTLModule (Module i)
+  | RTLInterface (Interface i)
+  | RTLDefun (Defun i)
+  | RTLDefConst (DefConst i)
   | RTLTerm (Expr i)
   deriving Show
 

@@ -94,9 +94,6 @@ library
     Pact.Core.PactValue
     Pact.Core.Debug
 
-    -- Common syntax
-    Pact.Core.Syntax.Common
-
      -- Syntax modules
     Pact.Core.Syntax.Lisp.ParseTree
     Pact.Core.Syntax.Lisp.Lexer
