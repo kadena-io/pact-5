@@ -26,7 +26,6 @@ import Pact.Core.Type(PrimType(..))
 import Pact.Core.Guards
 import Pact.Core.Imports
 import Pact.Core.Errors
-import Pact.Core.Syntax.Common
 import Pact.Core.Syntax.Lisp.ParseTree
 import Pact.Core.Syntax.Lisp.LexUtils
 
@@ -206,7 +205,7 @@ DefConst :: { LineInfo -> ParsedDefConst }
 -- ident = $2,
 Defun :: { LineInfo -> ParsedDefun }
   : defun IDENT ':' Type '(' ArgList ')'  Block
-    { Defun (getIdent $2) (reverse $6) $4 $8 }
+    { Defun (getIdent $2) (reverse $6) "" $4 $8 }
 
 ArgList :: { [Arg] }
   : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }

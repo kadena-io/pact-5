@@ -48,7 +48,6 @@ import Pact.Core.Persistence
 import Pact.Core.Errors
 import Pact.Core.IR.Term
 
-import qualified Pact.Core.Syntax.Common as Common
 import qualified Pact.Core.Syntax.Lisp.ParseTree as Lisp
 import qualified Pact.Core.Untyped.Term as Term
 
@@ -125,48 +124,48 @@ dsOut f (DesugarOutput a l d) =
 
 class DesugarBuiltin b where
   reservedNatives :: Map Text b
-  desugarOperator :: i -> Common.Operator -> Term ParsedName b i
+  desugarOperator :: i -> Lisp.Operator -> Term ParsedName b i
   desugarAppArity :: i -> b -> NonEmpty (Term ParsedName b i) -> Term ParsedName b i
 
 instance DesugarBuiltin RawBuiltin where
   reservedNatives = rawBuiltinMap
   desugarOperator info = \case
-    Common.AddOp ->
+    Lisp.AddOp ->
       Builtin RawAdd info
-    Common.SubOp ->
+    Lisp.SubOp ->
       Builtin RawSub info
-    Common.MultOp ->
+    Lisp.MultOp ->
       Builtin RawMultiply info
-    Common.DivOp ->
+    Lisp.DivOp ->
       Builtin RawDivide info
-    Common.GTOp ->
+    Lisp.GTOp ->
       Builtin RawGT info
-    Common.GEQOp ->
+    Lisp.GEQOp ->
       Builtin RawGEQ info
-    Common.LTOp ->
+    Lisp.LTOp ->
       Builtin RawLT info
-    Common.LEQOp ->
+    Lisp.LEQOp ->
       Builtin RawLEQ info
-    Common.EQOp ->
+    Lisp.EQOp ->
       Builtin RawEq info
-    Common.NEQOp ->
+    Lisp.NEQOp ->
       Builtin RawNeq info
-    Common.BitAndOp ->
+    Lisp.BitAndOp ->
       Builtin RawBitwiseAnd info
-    Common.BitOrOp ->
+    Lisp.BitOrOp ->
       Builtin RawBitwiseOr info
-    Common.BitComplementOp ->
+    Lisp.BitComplementOp ->
       Builtin RawBitwiseFlip info
     -- Manual eta expansion for and as well as Or
-    Common.AndOp -> let
+    Lisp.AndOp -> let
       arg1 = "#andArg1"
       arg2 = "#andArg2"
       in Lam ((arg1, Just TyBool) :| [(arg2, Just TyBool)]) (Conditional (CAnd (Var (BN (BareName arg1)) info) (Var (BN (BareName arg2)) info)) info) info
-    Common.OrOp -> let
+    Lisp.OrOp -> let
       arg1 = "#orArg1"
       arg2 = "#orArg2"
       in Lam ((arg1, Just TyBool) :| [(arg2, Just TyBool)]) (Conditional (COr (Var (BN (BareName arg1)) info) (Var (BN (BareName arg2)) info)) info) info
-    Common.PowOp -> Builtin RawPow info
+    Lisp.PowOp -> Builtin RawPow info
   -- Todo:
   -- Builtins of known arity differences we are yet to support:
   --  str-to-int
@@ -205,12 +204,6 @@ throwDesugarError :: MonadError (PactError i) m => DesugarError -> i -> RenamerT
 throwDesugarError de = liftRenamerT . throwError . PEDesugarError de
 
 -- type DesugarTerm term b i = (?desugarTerm :: term -> Term ParsedName Text b i)
-class DesugarTerm term b i where
-  desugarTerm  :: term -> Term ParsedName b i
-
-instance DesugarBuiltin b => DesugarTerm (Lisp.Expr i) b i where
-  desugarTerm = desugarLispTerm
-
 desugarLispTerm :: forall b i. DesugarBuiltin b => Lisp.Expr i -> Term ParsedName b i
 desugarLispTerm = \case
   Lisp.Var (BN n) i | isReservedNative (_bnName n) ->
@@ -248,12 +241,12 @@ desugarLispTerm = \case
       in App v arg i
     e' -> e'
   Lisp.App (Lisp.Operator o oi) [e1, e2] i -> case o of
-    Common.AndOp ->
-      Conditional (CAnd (desugarTerm e1) (desugarTerm e2)) i
-    Common.OrOp ->
-      Conditional (COr (desugarTerm e1) (desugarTerm e2)) i
+    Lisp.AndOp ->
+      Conditional (CAnd (desugarLispTerm e1) (desugarLispTerm e2)) i
+    Lisp.OrOp ->
+      Conditional (COr (desugarLispTerm e1) (desugarLispTerm e2)) i
     _ ->
-      App (desugarOperator oi o) (desugarTerm e1 :| [desugarTerm e2]) i
+      App (desugarOperator oi o) (desugarLispTerm e1 :| [desugarLispTerm e2]) i
   Lisp.App e (h:hs) i ->
     let
       e' = desugarLispTerm e
@@ -264,7 +257,7 @@ desugarLispTerm = \case
       _ -> App e' (h' :| hs')i
   Lisp.Operator bop i -> desugarOperator i bop
   Lisp.DynAccess e fn i ->
-    DynInvoke (desugarTerm e) fn i
+    DynInvoke (desugarLispTerm e) fn i
   Lisp.List e1 i ->
     ListLit (desugarLispTerm <$> e1) i
   Lisp.Constant l i ->
@@ -285,43 +278,45 @@ suspendTerm
 suspendTerm e' =
   Lam (("#suspendarg", Just TyUnit) :| []) e' (view termInfo e')
 
-desugarDefun :: (DesugarTerm term b i) => Common.Defun term i -> Defun ParsedName b i
-desugarDefun (Common.Defun defname [] rt body i) = let
+desugarDefun :: (DesugarBuiltin b) => Lisp.Defun i -> Defun ParsedName b i
+desugarDefun (Lisp.Defun defname [] _ rt body i) = let
   dfnType = TyFun TyUnit (desugarType rt)
-  body' = Lam ((defname, Just TyUnit) :| []) (desugarTerm body) i
+  body' = Lam ((defname, Just TyUnit) :| []) (desugarLispTerm body) i
   in Defun defname dfnType body' i
-desugarDefun (Common.Defun defname (arg:args) rt body i) = let
+desugarDefun (Lisp.Defun defname (arg:args) _ rt body i) = let
   neArgs = arg :| args
-  dfnType = foldr TyFun (desugarType rt) (desugarType . Common._argType <$> neArgs)
-  lamArgs = (\(Common.Arg n ty) -> (n, Just (desugarType ty))) <$> neArgs
-  body' = Lam lamArgs (desugarTerm body) i
+  dfnType = foldr TyFun (desugarType rt) (desugarType . Lisp._argType <$> neArgs)
+  lamArgs = (\(Lisp.Arg n ty) -> (n, Just (desugarType ty))) <$> neArgs
+  body' = Lam lamArgs (desugarLispTerm body) i
   in Defun defname dfnType body' i
 
-desugarDefConst :: (DesugarTerm term b i) => Common.DefConst term i -> DefConst ParsedName b i
-desugarDefConst (Common.DefConst n mty e i) = let
+desugarDefConst :: (DesugarBuiltin b) => Lisp.DefConst i -> DefConst ParsedName b i
+desugarDefConst (Lisp.DefConst n mty e i) = let
   mty' = desugarType <$> mty
-  e' = desugarTerm e
+  e' = desugarLispTerm e
   in DefConst n mty' e' i
 
-desugarIfDef :: (DesugarTerm term b i) => Common.IfDef term i -> IfDef ParsedName b i
+desugarIfDef :: (DesugarBuiltin b) => Lisp.IfDef i -> IfDef ParsedName b i
 desugarIfDef = \case
-  Common.IfDfun (Common.IfDefun n args rty i) -> IfDfun $ case args of
+  Lisp.IfDfun (Lisp.IfDefun n args rty i) -> IfDfun $ case args of
     [] -> let
       dty = TyUnit :~> desugarType rty
       in IfDefun n dty i
     _ ->
-      let dty = foldr TyFun (desugarType rty) $ fmap (desugarType . Common._argType) args
+      let dty = foldr TyFun (desugarType rty) $ fmap (desugarType . Lisp._argType) args
       in IfDefun n dty i
-  Common.IfDConst dc -> IfDConst (desugarDefConst dc)
+  Lisp.IfDConst dc -> IfDConst (desugarDefConst dc)
+  _ -> error "unimplemented"
 
-desugarDef :: (DesugarTerm term b i) => Common.Def term i -> Def ParsedName b i
+desugarDef :: (DesugarBuiltin b) => Lisp.Def i -> Def ParsedName b i
 desugarDef = \case
-  Common.Dfun d -> Dfun (desugarDefun d)
-  Common.DConst d -> DConst (desugarDefConst d)
+  Lisp.Dfun d -> Dfun (desugarDefun d)
+  Lisp.DConst d -> DConst (desugarDefConst d)
+  _ -> error "unimplemented"
 
 -- Todo: Module hashing, either on
-desugarModule :: (DesugarTerm term b i) => Common.Module term i -> Module ParsedName b i
-desugarModule (Common.Module mname extdecls defs) = let
+desugarModule :: (DesugarBuiltin b) => Lisp.Module i -> Module ParsedName b i
+desugarModule (Lisp.Module mname extdecls defs) = let
   (imports, blessed, implemented) = splitExts extdecls
   defs' = desugarDef <$> NE.toList defs
   mhash = ModuleHash (Hash "placeholder")
@@ -330,24 +325,25 @@ desugarModule (Common.Module mname extdecls defs) = let
   splitExts = split ([], Set.empty, [])
   split (accI, accB, accImp) (h:hs) = case h of
     -- todo: implement bless hashes
-    Common.ExtBless _ -> split (accI, accB, accImp) hs
-    Common.ExtImport i -> split (i:accI, accB, accImp) hs
-    Common.ExtImplements mn -> split (accI, accB, mn:accImp) hs
+    Lisp.ExtBless _ -> split (accI, accB, accImp) hs
+    Lisp.ExtImport i -> split (i:accI, accB, accImp) hs
+    Lisp.ExtImplements mn -> split (accI, accB, mn:accImp) hs
   split (a, b, c) [] = (reverse a, b, reverse c)
 
-desugarInterface :: (DesugarTerm term b i) => Common.Interface term i -> Interface ParsedName b i
-desugarInterface (Common.Interface ifn ifdefns) = let
+desugarInterface :: (DesugarBuiltin b) => Lisp.Interface i -> Interface ParsedName b i
+desugarInterface (Lisp.Interface ifn ifdefns) = let
   defs' = desugarIfDef <$> ifdefns
   mhash = ModuleHash (Hash "placeholder")
   in Interface ifn defs' mhash
 
-desugarType :: Common.Type -> Type a
+desugarType :: Lisp.Type -> Type a
 desugarType = \case
-  Common.TyPrim p -> TyPrim p
-  Common.TyList t ->
+  Lisp.TyPrim p -> TyPrim p
+  Lisp.TyList t ->
     TyList (desugarType t)
-  Common.TyModRef mr ->
+  Lisp.TyModRef mr ->
     TyModRef mr
+  _ -> error "Unimplemented"
 
 -----------------------------------------------------------
 -- Renaming
@@ -855,33 +851,33 @@ runDesugar' pdb loaded act = do
   pure (DesugarOutput renamed loaded' deps)
 
 runDesugarTerm
-  :: (DesugarTerm term raw i, MonadError (PactError i) m)
+  :: (MonadError (PactError i) m, DesugarBuiltin raw)
   => Proxy raw
   -> PactDb m reso i
   -> Loaded reso i
-  -> term
+  -> Lisp.Expr i
   -> m (DesugarOutput reso i (Term Name raw i))
 runDesugarTerm _ pdb loaded e = let
-  desugared = desugarTerm e
+  desugared = desugarLispTerm e
   in runDesugar' pdb loaded (renameTerm desugared)
 
 runDesugarModule'
-  :: (DesugarTerm term raw i, MonadError (PactError i) m)
+  :: (MonadError (PactError i) m, DesugarBuiltin raw)
   => Proxy raw
   -> PactDb m reso i
   -> Loaded reso i
-  -> Common.Module term i
+  -> Lisp.Module i
   -> m (DesugarOutput reso i (Module Name raw i))
 runDesugarModule' _ pdb loaded m  = let
   desugared = desugarModule m
   in runDesugar' pdb loaded (renameModule desugared)
 
 runDesugarInterface
-  :: (DesugarTerm term raw i, MonadError (PactError i) m)
+  :: (MonadError (PactError i) m, DesugarBuiltin raw)
   => Proxy raw
   -> PactDb m reso i
   -> Loaded reso i
-  -> Common.Interface term i
+  -> Lisp.Interface i
   -> m (DesugarOutput reso i (Interface Name raw i))
 runDesugarInterface _ pdb loaded m  = let
   desugared = desugarInterface m
@@ -893,7 +889,7 @@ runDesugarInterface _ pdb loaded m  = let
 --   => Proxy raw
 --   -> PactDb m reso i
 --   -> Loaded reso i
---   -> Common.Defun term i
+--   -> Lisp.Defun term i
 --   -> m (DesugarOutput reso i (Defun Name raw i))
 -- runDesugarDefun _ pdb loaded df = let
 --   d = desugarDefun df
@@ -904,7 +900,7 @@ runDesugarInterface _ pdb loaded m  = let
 --   => Proxy raw
 --   -> PactDb m reso i
 --   -> Loaded reso i
---   -> Common.DefConst term i
+--   -> Lisp.DefConst term i
 --   -> m (DesugarOutput reso i (DefConst Name raw i))
 -- runDesugarDefConst _ pdb loaded df = let
 --   d = desugarDefConst df
@@ -912,22 +908,22 @@ runDesugarInterface _ pdb loaded m  = let
 
 
 runDesugarReplDefun
-  :: (MonadError (PactError i) m, DesugarTerm term raw i)
+  :: (MonadError (PactError i) m, DesugarBuiltin raw)
   => Proxy raw
   -> PactDb m reso i
   -> Loaded reso i
-  -> Common.Defun term i
+  -> Lisp.Defun i
   -> m (DesugarOutput reso i (Defun Name raw i))
 runDesugarReplDefun _ pdb loaded df = let
   d = desugarDefun df
   in runDesugar' pdb loaded (renameReplDefun d)
 
 runDesugarReplDefConst
-  :: (MonadError (PactError i) m, DesugarTerm term raw i)
+  :: (MonadError (PactError i) m, DesugarBuiltin raw)
   => Proxy raw
   -> PactDb m reso i
   -> Loaded reso i
-  -> Common.DefConst term i
+  -> Lisp.DefConst i
   -> m (DesugarOutput reso i (DefConst Name raw i))
 runDesugarReplDefConst _ pdb loaded df = let
   d = desugarDefConst df
@@ -937,21 +933,21 @@ runDesugarReplDefConst _ pdb loaded df = let
 -- runDesugarModule
 --   :: (DesugarTerm term b' i)
 --   => Loaded b i
---   -> Common.Module term i
+--   -> Lisp.Module term i
 --   -> IO (DesugarOutput b i (Module Name TypeVar b' i))
 -- runDesugarModule loaded = runDesugarModule' loaded 0
 
 runDesugarTopLevel
-  :: (DesugarTerm term raw i, MonadError (PactError i) m)
+  :: (MonadError (PactError i) m, DesugarBuiltin raw)
   => Proxy raw
   -> PactDb m reso i
   -> Loaded reso i
-  -> Common.TopLevel term i
+  -> Lisp.TopLevel i
   -> m (DesugarOutput reso i (TopLevel Name raw i))
 runDesugarTopLevel proxy pdb loaded = \case
-  Common.TLModule m -> over dsOut TLModule <$> runDesugarModule' proxy pdb loaded m
-  Common.TLTerm e -> over dsOut TLTerm <$> runDesugarTerm proxy pdb loaded e
-  Common.TLInterface i -> over dsOut TLInterface <$> runDesugarInterface proxy pdb loaded i
+  Lisp.TLModule m -> over dsOut TLModule <$> runDesugarModule' proxy pdb loaded m
+  Lisp.TLTerm e -> over dsOut TLTerm <$> runDesugarTerm proxy pdb loaded e
+  Lisp.TLInterface i -> over dsOut TLInterface <$> runDesugarInterface proxy pdb loaded i
 
 
 runDesugarReplTopLevel
@@ -978,7 +974,7 @@ runDesugarReplTopLevel proxy pdb loaded = \case
 --   :: (DesugarTerm term b' i)
 --   => PactDb b i
 --   -> Loaded b i
---   -> Common.TopLevel term i
+--   -> Lisp.TopLevel term i
 --   -> IO (DesugarOutput b i (TopLevel Name b' i))
 -- runDesugarTopLevel pdb loaded = runDesugarTopLevel' pdb loaded
 
@@ -999,6 +995,6 @@ runDesugarTopLevelLisp
   => Proxy raw
   -> PactDb m reso i
   -> Loaded reso i
-  -> Common.TopLevel (Lisp.Expr i) i
+  -> Lisp.TopLevel i
   -> m (DesugarOutput reso i (TopLevel Name raw i))
 runDesugarTopLevelLisp = runDesugarTopLevel
