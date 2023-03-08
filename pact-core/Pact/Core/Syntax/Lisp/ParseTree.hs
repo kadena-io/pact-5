@@ -112,13 +112,20 @@ data Arg
   , _argType :: Type }
   deriving Show
 
+data MArg
+  = MArg
+  { _margName :: Text
+  , _margType :: Maybe Type }
+  deriving Show
+
 data Defun i
   = Defun
   { _dfunName :: !Text
-  , _dfunArgs :: ![Arg]
-  , _dfunDocs :: Text
-  , _dfunRetType :: !Type
+  , _dfunArgs :: ![MArg]
+  , _dfunRetType :: Maybe Type
   , _dfunTerm :: !(Expr i)
+  , _dfunDocs :: Maybe Text
+  , _dfunModel :: Maybe [Expr i]
   , _dfunInfo :: i
   } deriving Show
 
@@ -127,14 +134,18 @@ data DefConst i
   { _dcName :: Text
   , _dcType :: Maybe Type
   , _dcTerm :: Expr i
+  , _dcDocs :: Maybe Text
   , _dcInfo :: i
   } deriving Show
 
 data DefCap i
   = DefCap
   { _dcapName :: Text
-  , _dcapArgs :: ![Arg]
+  , _dcapArgs :: ![MArg]
+  , _dcapRetType :: Maybe Type
   , _dcapTerm :: Expr i
+  , _dcapDocs :: Maybe Text
+  , _dcapModel :: Maybe [Expr i]
   , _dcapInfo :: i
   } deriving Show
 
@@ -142,13 +153,17 @@ data DefSchema i
   = DefSchema
   { _dscName :: Text
   , _dscArgs :: [Arg]
+  , _dscDocs :: Maybe Text
+  , _dscModel :: Maybe [Expr i]
   , _dscInfo :: i
   } deriving Show
 
 data DefTable i
   = DefTable
   { _dtName :: Text
-  , _dtSchema :: Text
+  , _dtSchema :: ParsedName
+  , _dtDocs :: Maybe Text
+  , _dtInfo :: i
   } deriving Show
 
 data PactStep i
@@ -158,8 +173,10 @@ data PactStep i
 data DefPact i
   = DefPact
   { _dpName :: Text
-  , _dpArgs :: [Arg]
+  , _dpArgs :: [MArg]
   , _dpSteps :: [PactStep i]
+  , _dpDocs :: Maybe Text
+  , _dpModel :: Maybe [Expr i]
   , _dpInfo :: i
   } deriving Show
 
@@ -189,6 +206,8 @@ data Module i
   -- , _mGovernance :: Governance Text
   , _mExternal :: [ExtDecl]
   , _mDefs :: NonEmpty (Def i)
+  , _mDoc :: Maybe Text
+  , _mModel :: Maybe [Expr i]
   } deriving Show
 
 data TopLevel i
@@ -201,6 +220,8 @@ data Interface i
   = Interface
   { _ifName :: ModuleName
   , _ifDefns :: [IfDef i]
+  , _ifDocs :: Maybe Text
+  , _ifModel :: Maybe [Expr i]
   } deriving Show
 
 data IfDefun i
@@ -208,6 +229,8 @@ data IfDefun i
   { _ifdName :: Text
   , _ifdArgs :: [Arg]
   , _ifdRetType :: Type
+  , _ifdDocs :: Maybe Text
+  , _ifdModel :: Maybe [Expr i]
   , _ifdInfo :: i
   } deriving Show
 
@@ -216,6 +239,8 @@ data IfDefCap i
   { _ifdcName :: Text
   , _ifdcArgs :: [Arg]
   , _ifdcRetType :: Type
+  , _ifdcDocs :: Maybe Text
+  , _ifdcModel :: Maybe [Expr i]
   , _ifdcInfo :: i
   } deriving Show
 
@@ -224,6 +249,8 @@ data IfDefPact i
   { _ifdpName :: Text
   , _ifdpArgs :: [Arg]
   , _ifdpRetType :: Type
+  , _ifdpDocs :: Maybe Text
+  , _ifdpModel :: Maybe [Expr i]
   , _ifdpInfo :: i
   } deriving Show
 
@@ -243,7 +270,7 @@ data IfDef i
   deriving Show
 
 instance Pretty (DefConst i) where
-  pretty (DefConst dcn dcty term _) =
+  pretty (DefConst dcn dcty term _ _) =
     parens ("defconst" <+> pretty dcn <> mprettyTy dcty <+> pretty term)
     where
     mprettyTy = maybe mempty ((":" <>) . pretty)
@@ -252,8 +279,12 @@ instance Pretty Arg where
   pretty (Arg n ty) =
     pretty n <> ":" <+> pretty ty
 
+instance Pretty MArg where
+  pretty (MArg n mty) =
+    pretty n <> maybe mempty (\ty -> ":" <+> pretty ty) mty
+
 instance Pretty (Defun i) where
-  pretty (Defun n args _ rettype term _) =
+  pretty (Defun n args rettype term _ _ _) =
     parens ("defun" <+> pretty n <+> parens (prettyCommaSep args)
       <> ":" <+> pretty rettype <+> "=" <+> pretty term)
 
@@ -278,6 +309,8 @@ data Expr i
   | Try (Expr i) (Expr i) i
   | Suspend (Expr i) i
   | DynAccess (Expr i) Text i
+  | Object [(Field, Expr i)] i
+  | Binding [(Field, Text)] [Expr i] i
   | Error Text i
   deriving (Show, Eq, Functor)
 
@@ -313,7 +346,7 @@ termInfo f = \case
     App e1 args <$> f i
   Block nel i ->
     Block nel <$> f i
-  -- Object m i -> Object m <$> f i
+  Object m i -> Object m <$> f i
   -- UnaryOp _op e i -> UnaryOp _op e <$> f i
   Operator op i ->
     Operator op <$> f i
@@ -329,6 +362,8 @@ termInfo f = \case
     Try e1 e2 <$> f i
   Error t i ->
     Error t <$> f i
+  Binding t e i ->
+    Binding t e <$> f i
 
 instance Pretty (Expr i) where
   pretty = \case
@@ -358,17 +393,9 @@ instance Pretty (Expr i) where
       pretty e <> "::" <> pretty f
     Suspend e _ ->
       parens ("suspend" <+> pretty e)
-    -- UnaryOp uop e1 _ ->
-    --   pretty uop <> pretty e1
-    -- Object m _ ->
-    --   "{" <> prettyObj m <> "}"
-    -- ObjectOp op _ -> case op of
-    --   ObjectAccess f o ->
-    --     pretty o <> "->" <> pretty f
-    --   ObjectRemove f o ->
-    --     pretty o <> "#" <> pretty f
-    --   ObjectExtend f u o ->
-    --     pretty o <> braces (pretty f <> ":=" <> pretty u)
+    Object m _ ->
+      "{" <> pretty m <> "}"
+    Binding{} -> error "boom"
     where
     renderLamPair (n, mt) = case mt of
       Nothing -> pretty n

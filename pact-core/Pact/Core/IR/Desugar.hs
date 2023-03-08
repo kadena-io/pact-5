@@ -266,6 +266,7 @@ desugarLispTerm = \case
     Try (desugarLispTerm e1) (desugarLispTerm e2) i
   Lisp.Error e i ->
     Error e i
+  _ -> error "implement rest (parser covering whole syntax"
   where
   binderToLet i (Lisp.Binder n mty expr) term =
     Let n (desugarType <$> mty) (desugarLispTerm expr) term i
@@ -278,27 +279,34 @@ suspendTerm
 suspendTerm e' =
   Lam (("#suspendarg", Just TyUnit) :| []) e' (view termInfo e')
 
+-- Todo: remove this monkey patch
+enforceArg :: Lisp.MArg -> Lisp.Arg
+enforceArg (Lisp.MArg n (Just ty)) = Lisp.Arg n ty
+enforceArg _ = error "expected type ann arg"
+
+
 desugarDefun :: (DesugarBuiltin b) => Lisp.Defun i -> Defun ParsedName b i
-desugarDefun (Lisp.Defun defname [] _ rt body i) = let
+desugarDefun (Lisp.Defun defname [] (Just rt) body _ _ i) = let
   dfnType = TyFun TyUnit (desugarType rt)
   body' = Lam ((defname, Just TyUnit) :| []) (desugarLispTerm body) i
   in Defun defname dfnType body' i
-desugarDefun (Lisp.Defun defname (arg:args) _ rt body i) = let
+desugarDefun (Lisp.Defun defname (fmap enforceArg -> (arg:args)) (Just rt) body _ _ i) = let
   neArgs = arg :| args
   dfnType = foldr TyFun (desugarType rt) (desugarType . Lisp._argType <$> neArgs)
   lamArgs = (\(Lisp.Arg n ty) -> (n, Just (desugarType ty))) <$> neArgs
   body' = Lam lamArgs (desugarLispTerm body) i
   in Defun defname dfnType body' i
+desugarDefun _ = error "error here"
 
 desugarDefConst :: (DesugarBuiltin b) => Lisp.DefConst i -> DefConst ParsedName b i
-desugarDefConst (Lisp.DefConst n mty e i) = let
+desugarDefConst (Lisp.DefConst n mty e _ i) = let
   mty' = desugarType <$> mty
   e' = desugarLispTerm e
   in DefConst n mty' e' i
 
 desugarIfDef :: (DesugarBuiltin b) => Lisp.IfDef i -> IfDef ParsedName b i
 desugarIfDef = \case
-  Lisp.IfDfun (Lisp.IfDefun n args rty i) -> IfDfun $ case args of
+  Lisp.IfDfun (Lisp.IfDefun n args rty _ _ i) -> IfDfun $ case args of
     [] -> let
       dty = TyUnit :~> desugarType rty
       in IfDefun n dty i
@@ -316,7 +324,7 @@ desugarDef = \case
 
 -- Todo: Module hashing, either on
 desugarModule :: (DesugarBuiltin b) => Lisp.Module i -> Module ParsedName b i
-desugarModule (Lisp.Module mname extdecls defs) = let
+desugarModule (Lisp.Module mname extdecls defs _ _) = let
   (imports, blessed, implemented) = splitExts extdecls
   defs' = desugarDef <$> NE.toList defs
   mhash = ModuleHash (Hash "placeholder")
@@ -331,7 +339,7 @@ desugarModule (Lisp.Module mname extdecls defs) = let
   split (a, b, c) [] = (reverse a, b, reverse c)
 
 desugarInterface :: (DesugarBuiltin b) => Lisp.Interface i -> Interface ParsedName b i
-desugarInterface (Lisp.Interface ifn ifdefns) = let
+desugarInterface (Lisp.Interface ifn ifdefns _ _) = let
   defs' = desugarIfDef <$> ifdefns
   mhash = ModuleHash (Hash "placeholder")
   in Interface ifn defs' mhash

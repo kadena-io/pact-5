@@ -56,6 +56,8 @@ import Pact.Core.Syntax.Lisp.LexUtils
   defcap     { PosToken TokenDefCap _ }
   defconst   { PosToken TokenDefConst _ }
   defschema  { PosToken TokenDefSchema _ }
+  deftable   { PosToken TokenDefTable _ }
+  defpact    { PosToken TokenDefPact _ }
   bless      { PosToken TokenBless _}
   implements { PosToken TokenImplements _ }
   true       { PosToken TokenTrue _ }
@@ -65,6 +67,10 @@ import Pact.Core.Syntax.Lisp.LexUtils
   try        { PosToken TokenTry _ }
   suspend    { PosToken TokenSuspend _ }
   load       { PosToken TokenLoad _ }
+  docAnn     { PosToken TokenDocAnn _ }
+  modelAnn   { PosToken TokenModelAnn _ }
+  step       { PosToken TokenStep _ }
+  steprb     { PosToken TokenStepWithRollback _ }
   tc         { PosToken TokenTypechecks _ }
   tcfail     { PosToken TokenTypecheckFailure _ }
   '{'        { PosToken TokenOpenBrace _ }
@@ -76,6 +82,7 @@ import Pact.Core.Syntax.Lisp.LexUtils
   ','        { PosToken TokenComma _ }
   '::'       { PosToken TokenDynAcc _ }
   ':'        { PosToken TokenColon _ }
+  ':='       { PosToken TokenBindAssign _ }
   '.'        { PosToken TokenDot _ }
   TYTABLE    { PosToken TokenTyTable _ }
   TYINTEGER  { PosToken TokenTyInteger _ }
@@ -103,10 +110,9 @@ import Pact.Core.Syntax.Lisp.LexUtils
   IDENT      { PosToken (TokenIdent _) _ }
   NUM        { PosToken (TokenNumber _) _ }
   STR        { PosToken (TokenString _) _ }
+  TICK       { PosToken (TokenSingleTick _) _}
 
 %%
-
-
 
 Program :: { [ParsedTopLevel] }
   : ProgramList { reverse $1 }
@@ -146,12 +152,12 @@ ReplSpecial :: { LineInfo -> ReplSpecialForm LineInfo }
   | tcfail STR Expr { ReplTypecheckFail (getStr $2) $3 }
 
 Module :: { ParsedModule }
-  : '(' module IDENT Exts Defs ')'
-    { Module (ModuleName (getIdent $3) Nothing) (reverse $4) (NE.fromList (reverse $5)) }
+  : '(' module IDENT MDocOrModel Exts Defs ')'
+    { Module (ModuleName (getIdent $3) Nothing) (reverse $5) (NE.fromList (reverse $6)) (fst $4) (snd $4)}
 
 Interface :: { ParsedInterface }
-  : '(' interface IDENT IfDefs ')'
-    { Interface (ModuleName (getIdent $3) Nothing) (reverse $4) }
+  : '(' interface IDENT MDocOrModel IfDefs ')'
+    { Interface (ModuleName (getIdent $3) Nothing) (reverse $5) (fst $4) (snd $4) }
 
 
 -- Module :: { ParsedModule }
@@ -177,6 +183,10 @@ Defs :: { [ParsedDef] }
 Def :: { ParsedDef }
   : '(' Defun ')' { Dfun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefConst ')' { DConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
+  | '(' Defcap ')'  { DCap ($2 (combineSpan (_ptInfo $1) (_ptInfo $3)))  }
+  | '(' Defschema ')' { DSchema ($2 (combineSpan (_ptInfo $1) (_ptInfo $3)))  }
+  | '(' Deftable ')' { DTable ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
+
 
 IfDefs :: { [ParsedIfDef] }
   : IfDefs IfDef { $2:$1 }
@@ -188,8 +198,16 @@ IfDef :: { ParsedIfDef }
 
 -- ident = $2,
 IfDefun :: { LineInfo -> IfDefun LineInfo }
-  : defun IDENT ':' Type '(' ArgList ')'
-    { IfDefun (getIdent $2) (reverse $6) $4 }
+  : defun IDENT ':' Type '(' ArgList ')' MDocOrModel
+    { IfDefun (getIdent $2) (reverse $6) $4 (fst $8) (snd $8) }
+
+IfDefCap :: { LineInfo -> IfDefCap LineInfo }
+  : defcap IDENT ':' Type '(' ArgList ')' MDocOrModel
+    { IfDefCap (getIdent $2) (reverse $6) $4 (fst $8) (snd $8) }
+
+IfDefPact :: { LineInfo -> IfDefPact LineInfo }
+  : defpact IDENT ':' Type '(' ArgList ')' MDocOrModel
+    { IfDefPact (getIdent $2) (reverse $6) $4 (fst $8) (snd $8) }
 
 ImportList :: { Maybe [Text] }
   : '[' ImportNames ']' { Just (reverse $2) }
@@ -200,26 +218,41 @@ ImportNames :: { [Text] }
   | {- empty -} { [] }
 
 DefConst :: { LineInfo -> ParsedDefConst }
-  : defconst IDENT MTypeAnn Expr { DefConst (getIdent $2) $3 $4 }
+  : defconst IDENT MTypeAnn Expr MDoc { DefConst (getIdent $2) $3 $4 $5 }
 
--- ident = $2,
+-- All defs
 Defun :: { LineInfo -> ParsedDefun }
-  : defun IDENT ':' Type '(' ArgList ')'  Block
-    { Defun (getIdent $2) (reverse $6) "" $4 $8 }
+  : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel Block
+    { Defun (getIdent $2) (reverse $5) $3 $8 (fst $7) (snd $7) }
+
+Defschema :: { LineInfo -> DefSchema LineInfo }
+  : defschema IDENT MDocOrModel NEArgList
+    { DefSchema (getIdent $2) (reverse $4) (fst $3) (snd $3) }
+
+Deftable :: { LineInfo -> DefTable LineInfo }
+  : deftable IDENT '{' ParsedName '}' MDoc { DefTable (getIdent $2) $4 $6 }
+
+Defcap :: { LineInfo -> DefCap LineInfo }
+  : defcap IDENT MTypeAnn '(' MArgs ')' MDocOrModel  Block
+    { DefCap (getIdent $2) (reverse $5) $3 $8 (fst $7) (snd $7) }
+
+
+MArgs :: { [MArg] }
+  : MArgs IDENT ':' Type { (MArg (getIdent $2) (Just $4)):$1 }
+  | MArgs IDENT {  (MArg (getIdent $2) Nothing):$1 }
+  | {- empty -} { [] }
+
+NEArgList :: { [Arg] }
+  : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
 
 ArgList :: { [Arg] }
   : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
   | {- empty -} { [] }
 
 Type :: { Type }
-  -- : '(' TyArrows '->' Type1 ')' { foldr TyFun $4 (reverse $2) }
   : '[' Type ']' { TyList $2 }
   | module '{' ModQual '}' { TyModRef (mkModName $3) }
   | AtomicType { $1 }
-
--- TyArrows :: { [Type] }
---   : TyArrows '->' Type1 { $3:$1 }
---   | Type1 { [$1] }
 
 AtomicType :: { Type }
   : PrimType { TyPrim $1 }
@@ -238,6 +271,33 @@ PrimType :: { PrimType }
   | TYSTRING  { PrimString }
   | TYUNIT    { PrimUnit }
   | TYBOOL    { PrimBool }
+
+-- Annotations
+DocAnn :: { Text }
+  : docAnn STR { getStr $2 }
+
+DocStr :: { Text }
+  : STR { getStr $1 }
+
+ModelExprs :: { [ParsedExpr] }
+  : ModelExprs Expr { $2:$1 }
+  | {- empty -} { [] }
+
+ModelAnn :: { [Expr LineInfo] }
+  : modelAnn '[' ModelExprs ']' { reverse $3 }
+
+MDocOrModel :: { (Maybe Text, Maybe [Expr LineInfo])}
+  : DocAnn ModelAnn { (Just $1, Just $2)}
+  | ModelAnn DocAnn { (Just $2, Just $1) }
+  | DocAnn { (Just $1, Nothing)}
+  | ModelAnn { (Nothing, Just $1)}
+  | DocStr { (Just $1, Nothing) }
+  | {- empty -} { (Nothing, Nothing) }
+
+MDoc :: { Maybe Text }
+  : DocAnn { Just $1 }
+  | DocStr { Just $1 }
+  | {- empty -} { Nothing }
 
 MTypeAnn :: { Maybe Type }
   : ':' Type { Just $2 }
@@ -318,15 +378,30 @@ ProgNExpr :: { LineInfo -> ParsedExpr }
 
 AppList :: { [ParsedExpr] }
   : AppList Expr { $2:$1 }
+  | Binding { [$1] }
   | {- empty -} { [] }
 
+Binding :: { ParsedExpr }
+  : '{' BindPairs '}' BlockBody { Binding $2 $4 (_ptInfo $1)}
+
+BindPair :: { (Field, Text) }
+  : STR ':=' IDENT { (Field (getStr $1), getIdent $3) }
+  | TICK ':=' IDENT { (Field (getTick $1), getIdent $3) }
+
+BindPairs :: { [(Field, Text)] }
+  : BindPairs ',' BindPair { $3 : $1 }
+  | BindPair { [$1] }
+  -- | {- empty -} { [] }
+
+
 Atom :: { ParsedExpr }
-  : Name { $1 }
+  : Var { $1 }
   | Number { $1 }
   | String { $1 }
   | List { $1 }
   | Bool { $1 }
   | Operator { $1 }
+  | Object { $1 }
   | '(' ')' { Constant LUnit (_ptInfo $1) }
 
 Operator :: { ParsedExpr }
@@ -355,9 +430,13 @@ BOOLEAN :: { Bool }
   : true { True }
   | false { False }
 
-Name :: { ParsedExpr }
-  : IDENT '.' ModQual  { mkQualName (getIdent $1) $3 (_ptInfo $1) }
+Var :: { ParsedExpr }
+  : IDENT '.' ModQual  { Var (mkQualName (getIdent $1) $3) (_ptInfo $1) }
   | IDENT { Var (mkBarename (getIdent $1)) (_ptInfo $1) }
+
+ParsedName :: { ParsedName }
+  : IDENT '.' ModQual { mkQualName (getIdent $1) $3 }
+  | IDENT { mkBarename (getIdent $1) }
 
 ModQual :: { (Text, Maybe Text) }
   : IDENT '.' IDENT { (getIdent $1, Just (getIdent $3)) }
@@ -369,15 +448,17 @@ Number :: { ParsedExpr }
 
 String :: { ParsedExpr }
  : STR  { Constant (LString (getStr $1)) (_ptInfo $1) }
+ | TICK { Constant (LString (getTick $1)) (_ptInfo $1) }
 
--- Object :: { ParsedExpr }
---   : '{' ObjectBody '}' { Object $2 (_ptInfo $1) }
+Object :: { ParsedExpr }
+  : '{' ObjectBody '}' { Object $2 (combineSpan (_ptInfo $1) (_ptInfo $3)) }
 
--- ObjectBody
---   : FieldPairs { Map.fromList $1 }
+ObjectBody :: { [(Field, ParsedExpr)] }
+  : FieldPairs { $1 }
 
 FieldPair :: { (Field, ParsedExpr) }
-  : IDENT ':' Expr { (Field (getIdent $1), $3) }
+  : STR ':' Expr { (Field (getStr $1), $3) }
+  | TICK ':' Expr { (Field (getTick $1), $3) }
 
 FieldPairs :: { [(Field, ParsedExpr)] }
   : FieldPairs ',' FieldPair { $3 : $1 }
@@ -394,6 +475,7 @@ combineSpans lexpr rexpr =
 getIdent (PosToken (TokenIdent x) _) = x
 getNumber (PosToken (TokenNumber x) _) = x
 getStr (PosToken (TokenString x) _ ) = x
+getTick (PosToken (TokenSingleTick x) _) = x
 getIdentField = Field . getIdent
 
 mkIntegerConstant n i =
@@ -409,13 +491,13 @@ mkDecimal num dec i = do
   let out = Decimal (fromIntegral prec) (f (strToNum (strToNum 0 num') dec))
   pure $ Constant (LDecimal out) i
 
-mkQualName ns (mod, (Just ident)) info =
+mkQualName ns (mod, (Just ident)) =
   let ns' = NamespaceName ns
       qn = QualifiedName ident (ModuleName mod (Just ns'))
-  in Var (QN qn) info
-mkQualName mod (ident, Nothing) info =
+  in QN qn
+mkQualName mod (ident, Nothing) =
   let qn = QualifiedName ident (ModuleName mod Nothing)
-  in Var (QN qn) info
+  in QN qn
 
 mkModName (ident, Nothing) = ModuleName ident Nothing
 mkModName (ns, Just ident) = ModuleName ident (Just (NamespaceName ns))

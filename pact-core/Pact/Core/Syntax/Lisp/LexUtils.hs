@@ -56,7 +56,9 @@ data Token
   | TokenCapGov
   | TokenInterface
   | TokenImport
-  -- Def keyowrds
+  | TokenStep
+  | TokenStepWithRollback
+  -- Def keywords
   | TokenDefun
   | TokenDefConst
   | TokenDefCap
@@ -65,6 +67,9 @@ data Token
   | TokenDefTable
   | TokenBless
   | TokenImplements
+  -- Annotations
+  | TokenDocAnn
+  | TokenModelAnn
   -- Delimiters
   | TokenOpenBrace -- {
   | TokenCloseBrace -- }
@@ -100,6 +105,7 @@ data Token
   | TokenBitComplement
   | TokenAnd
   | TokenOr
+  | TokenSingleTick !Text
   | TokenIdent !Text
   | TokenNumber !Text
   | TokenString !Text
@@ -108,6 +114,7 @@ data Token
   | TokenBlockIntro
   | TokenSuspend
   | TokenDynAcc
+  | TokenBindAssign
   -- Repl-specific tokens
   | TokenLoad
   | TokenTypechecks
@@ -231,12 +238,16 @@ renderTokenText = \case
   TokenCapGov -> "capGov"
   TokenInterface -> "interface"
   TokenImport -> "use"
+  TokenStep -> "step"
+  TokenStepWithRollback -> "step-with-rollback"
   TokenDefun -> "defun"
   TokenDefConst -> "defconst"
   TokenDefCap -> "defcap"
   TokenDefPact -> "defpact"
   TokenDefSchema -> "defschema"
   TokenDefTable -> "deftable"
+  TokenDocAnn -> "@doc"
+  TokenModelAnn -> "@model"
   TokenBless -> "bless"
   TokenImplements -> "implements"
   TokenOpenBrace -> "{"
@@ -255,6 +266,7 @@ renderTokenText = \case
   TokenTyBool -> "bool"
   TokenTyUnit -> "unit"
   TokenTyArrow -> "->"
+  TokenBindAssign -> ":="
   TokenDynAcc -> "::"
   TokenEq -> "="
   TokenNeq -> "!="
@@ -275,6 +287,7 @@ renderTokenText = \case
   TokenOr -> "or"
   TokenIdent t -> "ident<" <> t <> ">"
   TokenNumber n -> "number<" <> n <> ">"
+  TokenSingleTick s -> "\'" <> s
   TokenString s -> "\"" <> s <> "\""
   TokenTrue -> "true"
   TokenFalse -> "false"

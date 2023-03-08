@@ -40,12 +40,19 @@ import qualified Pact.Core.Typed.Term as Typed
 import qualified Pact.Core.Untyped.Term as Untyped
 -- import qualified Pact.Core.Syntax.Lisp.ParseTree as Lisp
 
+import qualified Pact.Core.Syntax.Lisp.LexUtils as Lisp
 import qualified Pact.Core.Syntax.Lisp.Lexer as Lisp
 import qualified Pact.Core.Syntax.Lisp.Parser as Lisp
 
 type HasCompileEnv raw reso m
   = ( MonadError PactErrorI m, DesugarBuiltin raw, TypeOfBuiltin raw
     , SolveOverload raw reso, Pretty raw, Pretty reso, PhaseDebug m)
+
+_parseOnly
+  :: ByteString -> Either PactErrorI [Lisp.ParsedTopLevel]
+_parseOnly source = do
+  lexed <- liftEither (Lisp.lexer source)
+  liftEither (Lisp.parseProgram lexed)
 
 compileTypedExprGen :: forall raw reso m
   . (HasCompileEnv raw reso m)

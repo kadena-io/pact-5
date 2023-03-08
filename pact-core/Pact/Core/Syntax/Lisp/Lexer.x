@@ -9,6 +9,7 @@ module Pact.Core.Syntax.Lisp.Lexer(lexer, runLexerIO) where
 
 import Control.Monad.State.Strict
 import Control.Exception(throwIO)
+import Data.Char(isSpace)
 import Data.Text(Text)
 import Data.ByteString(ByteString)
 import Data.ByteString.Internal(w2c)
@@ -30,9 +31,11 @@ $alpha = [a-zA-Z]
 $special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
 @ident = [$alpha][$alpha $digit \-]*
 @integer = [\-]?[$digit]+
+@singletick = [\'][$alpha][$alpha $digit \-]*
 @comment = [\;][.]*[\n]
 @tc = expect\-typechecks
 @tcfail = expect\-typecheck\-failure
+@steprb = step\-with\-rollback
 
 
 tokens :-
@@ -69,6 +72,10 @@ tokens :-
     and          { token TokenAnd }
     or           { token TokenOr }
     load         { token TokenLoad }
+    \@doc        { token TokenDocAnn }
+    \@model      { token TokenModelAnn}
+    @steprb      { token TokenStepWithRollback}
+    step         { token TokenStep }
     @tc          { token TokenTypechecks }
     @tcfail      { token TokenTypecheckFailure }
     -- at           { token TokenObjAccess }
@@ -80,6 +87,7 @@ tokens :-
 
     @integer     { emit TokenNumber }
     @ident       { emit TokenIdent }
+    @singletick  { emit TokenSingleTick }
     \(           { token TokenOpenParens }
     \)           { token TokenCloseParens }
     \{           { token TokenOpenBrace }
@@ -88,6 +96,7 @@ tokens :-
     \]           { token TokenCloseBracket }
     \,           { token TokenComma }
     \.           { token TokenDot }
+    \:\=         { token TokenBindAssign }
     \:\:         { token TokenDynAcc }
     \:           { token TokenColon }
     \=           { token TokenEq }
@@ -146,9 +155,17 @@ stringLiteral _ = do
     | c == '\r' = throwLexerError' $ StringLiteralError "carriage return in string literal"
     | c == '\"' = reverse acc <$ put rest
     | otherwise = loop (c:acc) rest
+  multiLine acc inp =
+    case alexGetByte inp of
+      Just (w2c -> c, rest)
+        | isSpace c -> multiLine acc rest
+        | c == '\\' -> loop acc rest
+        | otherwise -> throwLexerError' $ StringLiteralError "Invalid multiline string"
+      Nothing -> throwLexerError' $ StringLiteralError "did not close string literal"
   escape acc inp =
     case alexGetByte inp of
       Just (w2c -> c, rest)
+        | c == '\n' -> multiLine acc rest
         | c == 'n' -> loop ('\n':acc) rest
         | c == 't' -> loop ('\t':acc) rest
         | c == '\\' -> loop ('\\':acc) rest
