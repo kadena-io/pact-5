@@ -15,7 +15,7 @@ import Data.Proxy
 import Data.ByteString(ByteString)
 -- import qualified Data.Map.Strict as Map
 -- import qualified Data.Set as Set
--- import qualified Data.ByteString as B
+import qualified Data.ByteString as B
 
 import Pact.Core.Debug
 import Pact.Core.Info
@@ -44,6 +44,8 @@ import qualified Pact.Core.Syntax.Lisp.LexUtils as Lisp
 import qualified Pact.Core.Syntax.Lisp.Lexer as Lisp
 import qualified Pact.Core.Syntax.Lisp.Parser as Lisp
 
+import Debug.Trace
+
 type HasCompileEnv raw reso m
   = ( MonadError PactErrorI m, DesugarBuiltin raw, TypeOfBuiltin raw
     , SolveOverload raw reso, Pretty raw, Pretty reso, PhaseDebug m)
@@ -52,7 +54,11 @@ _parseOnly
   :: ByteString -> Either PactErrorI [Lisp.ParsedTopLevel]
 _parseOnly source = do
   lexed <- liftEither (Lisp.lexer source)
+  traceM (show (Lisp._ptToken <$> lexed))
   liftEither (Lisp.parseProgram lexed)
+
+_parseOnlyFile :: FilePath -> IO (Either PactErrorI [Lisp.ParsedTopLevel])
+_parseOnlyFile fp = _parseOnly <$> B.readFile fp
 
 compileTypedExprGen :: forall raw reso m
   . (HasCompileEnv raw reso m)

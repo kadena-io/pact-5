@@ -29,7 +29,7 @@ $lower = [ a-z ]
 $digit = [ 0-9 ]
 $alpha = [a-zA-Z]
 $special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
-@ident = [$alpha][$alpha $digit \-]*
+@ident = [$alpha][$alpha $digit \- \_]*
 @integer = [\-]?[$digit]+
 @singletick = [\'][$alpha][$alpha $digit \-]*
 @comment = [\;][.]*[\n]
@@ -42,8 +42,8 @@ tokens :-
     @comment;
     $white+;
     -- Keywords
-    let          { token TokenLet }
     let\*        { token TokenLet }
+    let          { token TokenLet }
     if           { token TokenIf }
     defun        { token TokenDefun }
     defcap       { token TokenDefCap }
@@ -52,6 +52,7 @@ tokens :-
     deftable     { token TokenDefTable }
     defcap       { token TokenDefCap }
     defpact      { token TokenDefPact }
+    defproperty  { token TokenDefProperty }
     interface    { token TokenInterface }
     module       { token TokenModule }
     bless        { token TokenBless }
@@ -61,19 +62,26 @@ tokens :-
     false        { token TokenFalse }
     keyGov       { token TokenKeyGov }
     capGov       { token TokenCapGov }
-    bool         { token TokenTyBool }
     lambda       { token TokenLambda }
-    integer      { token TokenTyInteger }
-    bool         { token TokenTyBool }
+    -- types
+    -- integer      { token TokenTyInteger }
+    -- bool         { token TokenTyBool }
+    -- guard        { token TokenTyGuard }
     table        { token TokenTyTable }
-    decimal      { token TokenTyDecimal }
-    string       { token TokenTyString }
-    unit         { token TokenTyUnit }
+    -- decimal      { token TokenTyDecimal }
+    -- string       { token TokenTyString }
+    -- unit         { token TokenTyUnit }
+    -- bool         { token TokenTyBool }
+    object       { token TokenTyObject }
+    -- list         { token TokenTyList }
+
     and          { token TokenAnd }
     or           { token TokenOr }
     load         { token TokenLoad }
     \@doc        { token TokenDocAnn }
     \@model      { token TokenModelAnn}
+    \@event      { token TokenEventAnn }
+    \@managed    { token TokenManagedAnn}
     @steprb      { token TokenStepWithRollback}
     step         { token TokenStep }
     @tc          { token TokenTypechecks }

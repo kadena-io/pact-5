@@ -19,6 +19,7 @@ import Pact.Core.Names
 import Pact.Core.Pretty
 import Pact.Core.Type(PrimType(..))
 import Pact.Core.Imports
+import Pact.Core.Guards
 
 
 data Operator
@@ -67,7 +68,8 @@ data Type
   | TyModRef ModuleName
   | TyGuard
   | TyKeyset
-  | TyObject QualifiedName
+  | TyObject ParsedName
+  | TyTime
   | TyPolyObject
   deriving (Show, Eq)
 
@@ -100,6 +102,7 @@ instance Pretty Type where
     TyKeyset -> "keyset"
     TyObject qn -> "object" <> brackets (pretty qn)
     TyPolyObject -> "object"
+    TyTime -> "time"
 
 
 ----------------------------------------------------
@@ -138,6 +141,11 @@ data DefConst i
   , _dcInfo :: i
   } deriving Show
 
+data DCapMeta
+  = DefEvent
+  | DefManaged (Maybe (Text, ParsedName))
+  deriving Show
+
 data DefCap i
   = DefCap
   { _dcapName :: Text
@@ -146,6 +154,7 @@ data DefCap i
   , _dcapTerm :: Expr i
   , _dcapDocs :: Maybe Text
   , _dcapModel :: Maybe [Expr i]
+  , _dcapMeta :: Maybe DCapMeta
   , _dcapInfo :: i
   } deriving Show
 
@@ -167,13 +176,15 @@ data DefTable i
   } deriving Show
 
 data PactStep i
-  = Step (Expr i)
+  = Step (Expr i) (Maybe [Expr i])
+  | StepWithRollback (Expr i) (Expr i) (Maybe [Expr i])
   deriving Show
 
 data DefPact i
   = DefPact
   { _dpName :: Text
   , _dpArgs :: [MArg]
+  , _dpRetType :: Maybe Type
   , _dpSteps :: [PactStep i]
   , _dpDocs :: Maybe Text
   , _dpModel :: Maybe [Expr i]
@@ -200,14 +211,21 @@ data ExtDecl
   | ExtImplements ModuleName
   deriving Show
 
+data DefProperty i
+  = DefProperty
+  { _dpropName :: Text
+  , _dpropArgs :: [MArg]
+  , _dpropExp :: Expr i
+  } deriving Show
+
 data Module i
   = Module
   { _mName :: ModuleName
-  -- , _mGovernance :: Governance Text
+  , _mGovernance :: Governance Text
   , _mExternal :: [ExtDecl]
   , _mDefs :: NonEmpty (Def i)
   , _mDoc :: Maybe Text
-  , _mModel :: Maybe [Expr i]
+  , _mModel :: [DefProperty i]
   } deriving Show
 
 data TopLevel i

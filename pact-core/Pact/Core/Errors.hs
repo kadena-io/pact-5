@@ -78,6 +78,7 @@ data ParseError
   -- Emitted in the case of "Expression was parsed successfully but there's more input remaining."
   | PrecisionOverflowError Int
   -- ^ Way too many decimal places for `Decimal` to deal with
+  | InvalidBaseType Text
   deriving Show
 
 instance Exception ParseError
@@ -92,6 +93,8 @@ instance RenderError ParseError where
       tConcatSpace ["Unexpected input after expr, remaining tokens:", e]
     PrecisionOverflowError i ->
       tConcatSpace ["Precision overflow >256: ", T.pack (show i), "decimals"]
+    InvalidBaseType txt ->
+      tConcatSpace ["No such type:", txt]
 
 data DesugarError
   = UnboundTermVariable Text

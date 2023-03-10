@@ -323,8 +323,9 @@ desugarDef = \case
   _ -> error "unimplemented"
 
 -- Todo: Module hashing, either on
+-- Todo: governance
 desugarModule :: (DesugarBuiltin b) => Lisp.Module i -> Module ParsedName b i
-desugarModule (Lisp.Module mname extdecls defs _ _) = let
+desugarModule (Lisp.Module mname _ extdecls defs _ _) = let
   (imports, blessed, implemented) = splitExts extdecls
   defs' = desugarDef <$> NE.toList defs
   mhash = ModuleHash (Hash "placeholder")

@@ -24,6 +24,7 @@ import qualified Data.Text as T
 
 import Pact.Core.Info
 import Pact.Core.Errors
+import Pact.Core.Names
 import Pact.Core.Pretty (Pretty(..))
 import Pact.Core.Syntax.Lisp.ParseTree
 
@@ -65,11 +66,14 @@ data Token
   | TokenDefPact
   | TokenDefSchema
   | TokenDefTable
+  | TokenDefProperty
   | TokenBless
   | TokenImplements
   -- Annotations
   | TokenDocAnn
   | TokenModelAnn
+  | TokenEventAnn
+  | TokenManagedAnn
   -- Delimiters
   | TokenOpenBrace -- {
   | TokenCloseBrace -- }
@@ -87,6 +91,10 @@ data Token
   | TokenTyString
   | TokenTyBool
   | TokenTyUnit
+  | TokenTyList
+  | TokenTyKeyset
+  | TokenTyObject
+  | TokenTyGuard
   | TokenTyArrow
   -- Operators
   | TokenEq
@@ -199,6 +207,25 @@ throwLexerError' le = getLineInfo >>= throwLexerError le
 throwParseError :: ParseError -> LineInfo -> ParserT a
 throwParseError pe = throwError . PEParseError pe
 
+toAppExprList :: [Either ParsedExpr [(Field, Text)]] -> [ParsedExpr]
+toAppExprList (h:hs) = case h of
+  Left e -> e : toAppExprList hs
+  Right binds -> [Binding binds (toAppExprList hs) def]
+toAppExprList [] = []
+
+primType :: LineInfo -> Text -> ParserT Type
+primType i = \case
+  "integer" -> pure TyInt
+  "bool" -> pure TyBool
+  "guard" -> pure TyGuard
+  "decimal" -> pure TyDecimal
+  "time" -> pure TyTime
+  "string" -> pure TyString
+  "list" -> pure TyPolyList
+  "keyset" -> pure TyKeyset
+  e -> throwParseError (InvalidBaseType e) i
+
+
 parseError :: ([PosToken], [String]) -> ParserT a
 parseError (remaining, exps) =
   case (remaining, exps) of
@@ -245,8 +272,11 @@ renderTokenText = \case
   TokenDefCap -> "defcap"
   TokenDefPact -> "defpact"
   TokenDefSchema -> "defschema"
+  TokenDefProperty -> "defproperty"
   TokenDefTable -> "deftable"
   TokenDocAnn -> "@doc"
+  TokenEventAnn -> "@event"
+  TokenManagedAnn ->  "@managed"
   TokenModelAnn -> "@model"
   TokenBless -> "bless"
   TokenImplements -> "implements"
@@ -265,6 +295,10 @@ renderTokenText = \case
   TokenTyString -> "string"
   TokenTyBool -> "bool"
   TokenTyUnit -> "unit"
+  TokenTyGuard -> "guard"
+  TokenTyList -> "list"
+  TokenTyKeyset -> "keyset"
+  TokenTyObject ->  "object"
   TokenTyArrow -> "->"
   TokenBindAssign -> ":="
   TokenDynAcc -> "::"

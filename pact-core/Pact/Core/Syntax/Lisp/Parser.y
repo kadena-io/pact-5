@@ -58,6 +58,7 @@ import Pact.Core.Syntax.Lisp.LexUtils
   defschema  { PosToken TokenDefSchema _ }
   deftable   { PosToken TokenDefTable _ }
   defpact    { PosToken TokenDefPact _ }
+  defprop    { PosToken TokenDefProperty _}
   bless      { PosToken TokenBless _}
   implements { PosToken TokenImplements _ }
   true       { PosToken TokenTrue _ }
@@ -69,6 +70,8 @@ import Pact.Core.Syntax.Lisp.LexUtils
   load       { PosToken TokenLoad _ }
   docAnn     { PosToken TokenDocAnn _ }
   modelAnn   { PosToken TokenModelAnn _ }
+  eventAnn   { PosToken TokenEventAnn _ }
+  managedAnn { PosToken TokenManagedAnn _ }
   step       { PosToken TokenStep _ }
   steprb     { PosToken TokenStepWithRollback _ }
   tc         { PosToken TokenTypechecks _ }
@@ -84,12 +87,18 @@ import Pact.Core.Syntax.Lisp.LexUtils
   ':'        { PosToken TokenColon _ }
   ':='       { PosToken TokenBindAssign _ }
   '.'        { PosToken TokenDot _ }
+  -- types
   TYTABLE    { PosToken TokenTyTable _ }
-  TYINTEGER  { PosToken TokenTyInteger _ }
-  TYDECIMAL  { PosToken TokenTyDecimal _ }
-  TYSTRING   { PosToken TokenTyString _ }
-  TYBOOL     { PosToken TokenTyBool _ }
-  TYUNIT     { PosToken TokenTyUnit _ }
+  -- TYINTEGER  { PosToken TokenTyInteger _ }
+  -- TYDECIMAL  { PosToken TokenTyDecimal _ }
+  -- TYSTRING   { PosToken TokenTyString _ }
+  -- TYBOOL     { PosToken TokenTyBool _ }
+  -- TYUNIT     { PosToken TokenTyUnit _ }
+  TYOBJECT   { PosToken TokenTyObject _}
+  -- TYLIST     { PosToken TokenTyList _ }
+  -- TYGUARD    { PosToken TokenTyGuard _ }
+  -- TYKEYSET   { PosToken TokenTyKeyset _}
+
   '->'       { PosToken TokenTyArrow _ }
   '=='       { PosToken TokenEq _ }
   '!='       { PosToken TokenNeq _ }
@@ -151,13 +160,41 @@ ReplSpecial :: { LineInfo -> ReplSpecialForm LineInfo }
   | tc STR Expr { ReplTypechecks (getStr $2) $3 }
   | tcfail STR Expr { ReplTypecheckFail (getStr $2) $3 }
 
+Governance :: { Governance Text }
+  : StringRaw { Governance (Left (KeySetName $1))}
+  | IDENT { Governance (Right (getIdent $1))}
+
+StringRaw :: { Text }
+ : STR  { getStr $1 }
+ | TICK { getTick $1 }
+
 Module :: { ParsedModule }
-  : '(' module IDENT MDocOrModel Exts Defs ')'
-    { Module (ModuleName (getIdent $3) Nothing) (reverse $5) (NE.fromList (reverse $6)) (fst $4) (snd $4)}
+  : '(' module IDENT Governance MDocOrModuleModel Exts Defs ')'
+    { Module (ModuleName (getIdent $3) Nothing) $4 (reverse $6) (NE.fromList (reverse $7)) (fst $5) (snd $5)}
 
 Interface :: { ParsedInterface }
   : '(' interface IDENT MDocOrModel IfDefs ')'
     { Interface (ModuleName (getIdent $3) Nothing) (reverse $5) (fst $4) (snd $4) }
+
+MDocOrModuleModel :: { (Maybe Text, [DefProperty LineInfo])}
+  : DocAnn ModuleModel { (Just $1, $2)}
+  | ModuleModel DocAnn { (Just $2, $1) }
+  | DocAnn { (Just $1, [])}
+  | ModuleModel { (Nothing, $1)}
+  | DocStr { (Just $1, []) }
+  | {- empty -} { (Nothing, []) }
+
+
+ModuleModel :: { [DefProperty LineInfo] }
+  : modelAnn '[' DefProperties ']' { reverse $3 }
+
+DefProperties :: { [DefProperty LineInfo] }
+  : DefProperties DefProperty { $2:$1 }
+  | {- empty -} { [] }
+
+DefProperty :: { DefProperty LineInfo }
+  : '(' defprop IDENT '(' MArgs ')' Block ')' { DefProperty (getIdent $3) (reverse $5) $7 }
+  | '(' defprop IDENT Block ')' { DefProperty (getIdent $3) [] $4 }
 
 
 -- Module :: { ParsedModule }
@@ -175,6 +212,7 @@ Exts :: { [ExtDecl] }
 Ext :: { ExtDecl }
   : '(' import ModQual ImportList ')' { ExtImport (Import (mkModName $3) Nothing $4)  }
   | '(' implements ModQual ')' { ExtImplements (mkModName $3) }
+  | '(' bless StringRaw ')' { ExtBless $3 }
 
 Defs :: { [ParsedDef] }
   : Defs Def { $2:$1 }
@@ -186,6 +224,7 @@ Def :: { ParsedDef }
   | '(' Defcap ')'  { DCap ($2 (combineSpan (_ptInfo $1) (_ptInfo $3)))  }
   | '(' Defschema ')' { DSchema ($2 (combineSpan (_ptInfo $1) (_ptInfo $3)))  }
   | '(' Deftable ')' { DTable ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
+  | '(' DefPact ')' { DPact ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
 
 IfDefs :: { [ParsedIfDef] }
@@ -230,12 +269,35 @@ Defschema :: { LineInfo -> DefSchema LineInfo }
     { DefSchema (getIdent $2) (reverse $4) (fst $3) (snd $3) }
 
 Deftable :: { LineInfo -> DefTable LineInfo }
-  : deftable IDENT '{' ParsedName '}' MDoc { DefTable (getIdent $2) $4 $6 }
+  : deftable IDENT ':' '{' ParsedName '}' MDoc { DefTable (getIdent $2) $5 $7 }
 
 Defcap :: { LineInfo -> DefCap LineInfo }
-  : defcap IDENT MTypeAnn '(' MArgs ')' MDocOrModel  Block
-    { DefCap (getIdent $2) (reverse $5) $3 $8 (fst $7) (snd $7) }
+  : defcap IDENT MTypeAnn '(' MArgs ')' MDocOrModel MDCapMeta Block
+    { DefCap (getIdent $2) (reverse $5) $3 $9 (fst $7) (snd $7) $8 }
 
+DefPact :: { LineInfo -> DefPact LineInfo }
+  : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel Steps
+    { DefPact (getIdent $2) $5 $3 $8 (fst $7) (snd $7) }
+
+Steps :: { [PactStep LineInfo] }
+  : Steps Step { $2:$1 }
+  | Step { [$1] }
+
+Step :: { PactStep LineInfo }
+  : '(' step Expr MModel ')' { Step $3 $4 }
+  | '(' steprb Expr Expr MModel ')' { StepWithRollback $3 $4 $5 }
+
+MDCapMeta :: { Maybe DCapMeta }
+  : Managed { Just $1 }
+  | Event { Just $1 }
+  | {- empty -} { Nothing }
+
+Managed :: { DCapMeta }
+  : managedAnn { DefManaged Nothing }
+  | managedAnn IDENT ParsedName { DefManaged (Just (getIdent $2, $3)) }
+
+Event :: { DCapMeta }
+  : eventAnn { DefEvent }
 
 MArgs :: { [MArg] }
   : MArgs IDENT ':' Type { (MArg (getIdent $2) (Just $4)):$1 }
@@ -252,10 +314,16 @@ ArgList :: { [Arg] }
 Type :: { Type }
   : '[' Type ']' { TyList $2 }
   | module '{' ModQual '}' { TyModRef (mkModName $3) }
+  -- | TYGUARD { TyGuard }
+  | TYOBJECT '{' ParsedName '}' { TyObject $3 }
+  | TYOBJECT { TyPolyObject }
+  -- | TYKEYSET { TyKeyset }
+  -- | TYLIST { TyPolyList }
   | AtomicType { $1 }
 
 AtomicType :: { Type }
-  : PrimType { TyPrim $1 }
+  : IDENT {% primType (_ptInfo $1) (getIdent $1) }
+  -- : PrimType { TyPrim $1 }
 
 TyFieldPair :: { (Field, Type) }
   : IDENT ':' Type { (Field (getIdent $1), $3) }
@@ -265,12 +333,12 @@ RowType :: { [(Field, Type)] }
   | TyFieldPair { [$1] }
   | {- empty -} { [] }
 
-PrimType :: { PrimType }
-  : TYINTEGER { PrimInt }
-  | TYDECIMAL { PrimDecimal }
-  | TYSTRING  { PrimString }
-  | TYUNIT    { PrimUnit }
-  | TYBOOL    { PrimBool }
+-- PrimType :: { PrimType }
+--   : TYINTEGER { PrimInt }
+--   | TYDECIMAL { PrimDecimal }
+--   | TYSTRING  { PrimString }
+--   | TYUNIT    { PrimUnit }
+--   | TYBOOL    { PrimBool }
 
 -- Annotations
 DocAnn :: { Text }
@@ -282,6 +350,10 @@ DocStr :: { Text }
 ModelExprs :: { [ParsedExpr] }
   : ModelExprs Expr { $2:$1 }
   | {- empty -} { [] }
+
+MModel :: { Maybe [Expr LineInfo] }
+  : ModelAnn { Just $1 }
+  | {- empty -}  { Nothing }
 
 ModelAnn :: { [Expr LineInfo] }
   : modelAnn '[' ModelExprs ']' { reverse $3 }
@@ -371,15 +443,22 @@ Binders :: { [Binder LineInfo] }
   | '(' IDENT MTypeAnn Expr ')' { [Binder (getIdent $2) $3 $4] }
 
 GenAppExpr :: { LineInfo -> ParsedExpr }
-  : Expr AppList { App $1 (reverse $2) }
+  : Expr AppBindList { App $1 (toAppExprList (reverse $2)) }
 
 ProgNExpr :: { LineInfo -> ParsedExpr }
   : progn BlockBody { Block (NE.fromList (reverse $2)) }
 
 AppList :: { [ParsedExpr] }
   : AppList Expr { $2:$1 }
-  | Binding { [$1] }
   | {- empty -} { [] }
+
+AppBindList :: { [Either ParsedExpr [(Field, Text)]] }
+  : AppBindList Expr { (Left $2):$1 }
+  | AppBindList BindingForm { (Right $2):$1}
+  | {- empty -} { [] }
+
+BindingForm :: { [(Field, Text)] }
+  : '{' BindPairs '}' { $2 }
 
 Binding :: { ParsedExpr }
   : '{' BindPairs '}' BlockBody { Binding $2 $4 (_ptInfo $1)}
@@ -437,6 +516,9 @@ Var :: { ParsedExpr }
 ParsedName :: { ParsedName }
   : IDENT '.' ModQual { mkQualName (getIdent $1) $3 }
   | IDENT { mkBarename (getIdent $1) }
+
+QualifiedName :: { QualifiedName }
+  : IDENT '.' ModQual { mkQualName' (getIdent $1) $3 }
 
 ModQual :: { (Text, Maybe Text) }
   : IDENT '.' IDENT { (getIdent $1, Just (getIdent $3)) }
@@ -498,6 +580,12 @@ mkQualName ns (mod, (Just ident)) =
 mkQualName mod (ident, Nothing) =
   let qn = QualifiedName ident (ModuleName mod Nothing)
   in QN qn
+
+mkQualName' ns (mod, (Just ident)) =
+  let ns' = NamespaceName ns
+  in QualifiedName ident (ModuleName mod (Just ns'))
+mkQualName' mod (ident, Nothing) = QualifiedName ident (ModuleName mod Nothing)
+
 
 mkModName (ident, Nothing) = ModuleName ident Nothing
 mkModName (ns, Just ident) = ModuleName ident (Just (NamespaceName ns))
