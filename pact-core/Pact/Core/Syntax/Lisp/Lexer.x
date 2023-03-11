@@ -28,10 +28,11 @@ import Pact.Core.Syntax.Lisp.LexUtils
 $lower = [ a-z ]
 $digit = [ 0-9 ]
 $alpha = [a-zA-Z]
+$psymbol = [\%\#\+\-\_\&\$\@\<\>\=\^\?\*\!\|\/\~]
 $special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
-@ident = [$alpha][$alpha $digit \- \_]*
+@ident = [$alpha $psymbol][$alpha $digit $psymbol]*
 @integer = [\-]?[$digit]+
-@singletick = [\'][$alpha][$alpha $digit \-]*
+@singletick = [\'][$alpha][$alpha $digit \- \_]*
 @comment = [\;][.]*[\n]
 @tc = expect\-typechecks
 @tcfail = expect\-typecheck\-failure
@@ -173,11 +174,12 @@ stringLiteral _ = do
   escape acc inp =
     case alexGetByte inp of
       Just (w2c -> c, rest)
-        | c == '\n' -> multiLine acc rest
+        | isSpace c -> multiLine acc rest
         | c == 'n' -> loop ('\n':acc) rest
         | c == 't' -> loop ('\t':acc) rest
         | c == '\\' -> loop ('\\':acc) rest
         | c == '\"' -> loop ('\"':acc) rest
+        | c == '\'' -> loop ('\'':acc) rest
         | c == 'r' -> throwLexerError' $ StringLiteralError "carriage return is not supported in strings literals"
         | otherwise -> throwLexerError' $ StringLiteralError "Invalid escape sequence"
       Nothing -> throwLexerError' $ StringLiteralError "did not close string literal"

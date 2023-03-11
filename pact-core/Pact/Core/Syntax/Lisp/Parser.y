@@ -12,6 +12,7 @@ import Data.Decimal(DecimalRaw(..))
 import Data.Char(digitToInt)
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
+import Data.Either(lefts, rights)
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
@@ -121,6 +122,8 @@ import Pact.Core.Syntax.Lisp.LexUtils
   STR        { PosToken (TokenString _) _ }
   TICK       { PosToken (TokenSingleTick _) _}
 
+%nonassoc ARG
+
 %%
 
 Program :: { [ParsedTopLevel] }
@@ -169,8 +172,8 @@ StringRaw :: { Text }
  | TICK { getTick $1 }
 
 Module :: { ParsedModule }
-  : '(' module IDENT Governance MDocOrModuleModel Exts Defs ')'
-    { Module (ModuleName (getIdent $3) Nothing) $4 (reverse $6) (NE.fromList (reverse $7)) (fst $5) (snd $5)}
+  : '(' module IDENT Governance MDocOrModuleModel ExtOrDefs ')'
+    { Module (ModuleName (getIdent $3) Nothing) $4 (reverse (rights $6)) (NE.fromList (reverse (lefts $6))) (fst $5) (snd $5)}
 
 Interface :: { ParsedInterface }
   : '(' interface IDENT MDocOrModel IfDefs ')'
@@ -193,17 +196,13 @@ DefProperties :: { [DefProperty LineInfo] }
   | {- empty -} { [] }
 
 DefProperty :: { DefProperty LineInfo }
-  : '(' defprop IDENT '(' MArgs ')' Block ')' { DefProperty (getIdent $3) (reverse $5) $7 }
-  | '(' defprop IDENT Block ')' { DefProperty (getIdent $3) [] $4 }
+  : '(' defprop IDENT DPropArgList ')' { DefProperty (getIdent $3) (fst $4) (snd $4) }
 
-
--- Module :: { ParsedModule }
---   : '(' module IDENT '(' Gov ')' Exts Defs ')'
---     { Module (ModuleName (getIdent $3) Nothing) $5 (reverse $7) (NE.fromList (reverse $8)) }
-
-Gov :: { Governance Text }
-  : keygov STR { Governance (Left (KeySetName (getStr $2))) }
-  | capgov IDENT { Governance (Right (getIdent $2)) }
+-- This rule seems gnarly, but essentially
+-- happy needs to resolve whether the arglist is present or not
+DPropArgList
+  : '(' IDENT ':' Type ArgList ')' Expr { (Arg (getIdent $2) $4 : reverse $5, $7) }
+  | '(' SExpr ')' { ([], $2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
 Exts :: { [ExtDecl] }
   : Exts Ext { $2:$1 }
@@ -217,6 +216,12 @@ Ext :: { ExtDecl }
 Defs :: { [ParsedDef] }
   : Defs Def { $2:$1 }
   | Def { [$1] }
+
+ExtOrDefs :: { [Either (Def LineInfo) ExtDecl] }
+  : ExtOrDefs Def { (Left $2):$1 }
+  | ExtOrDefs Ext { (Right $2) : $1 }
+  | Def { [Left $1] }
+  | Ext { [Right $1] }
 
 Def :: { ParsedDef }
   : '(' Defun ')' { Dfun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
@@ -234,19 +239,22 @@ IfDefs :: { [ParsedIfDef] }
 IfDef :: { ParsedIfDef }
   : '(' IfDefun ')' { IfDfun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefConst ')' { IfDConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
+  | '(' IfDefCap ')'{ IfDCap ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
+  | '(' Defschema ')' { IfDSchema ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
+  | '(' IfDefPact ')' { IfDPact ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
 -- ident = $2,
 IfDefun :: { LineInfo -> IfDefun LineInfo }
-  : defun IDENT ':' Type '(' ArgList ')' MDocOrModel
-    { IfDefun (getIdent $2) (reverse $6) $4 (fst $8) (snd $8) }
+  : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel
+    { IfDefun (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) }
 
 IfDefCap :: { LineInfo -> IfDefCap LineInfo }
-  : defcap IDENT ':' Type '(' ArgList ')' MDocOrModel
-    { IfDefCap (getIdent $2) (reverse $6) $4 (fst $8) (snd $8) }
+  : defcap IDENT MTypeAnn'(' MArgs ')' MDocOrModel MDCapMeta
+    { IfDefCap (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) $8 }
 
 IfDefPact :: { LineInfo -> IfDefPact LineInfo }
-  : defpact IDENT ':' Type '(' ArgList ')' MDocOrModel
-    { IfDefPact (getIdent $2) (reverse $6) $4 (fst $8) (snd $8) }
+  : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel
+    { IfDefPact (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) }
 
 ImportList :: { Maybe [Text] }
   : '[' ImportNames ']' { Just (reverse $2) }
@@ -300,9 +308,12 @@ Event :: { DCapMeta }
   : eventAnn { DefEvent }
 
 MArgs :: { [MArg] }
-  : MArgs IDENT ':' Type { (MArg (getIdent $2) (Just $4)):$1 }
-  | MArgs IDENT {  (MArg (getIdent $2) Nothing):$1 }
+  : MArgs MArg { $2:$1 }
   | {- empty -} { [] }
+
+MArg :: { MArg }
+  : IDENT ':' Type { MArg (getIdent $1) (Just $3) }
+  | IDENT { MArg (getIdent $1) Nothing }
 
 NEArgList :: { [Arg] }
   : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
@@ -314,31 +325,12 @@ ArgList :: { [Arg] }
 Type :: { Type }
   : '[' Type ']' { TyList $2 }
   | module '{' ModQual '}' { TyModRef (mkModName $3) }
-  -- | TYGUARD { TyGuard }
   | TYOBJECT '{' ParsedName '}' { TyObject $3 }
   | TYOBJECT { TyPolyObject }
-  -- | TYKEYSET { TyKeyset }
-  -- | TYLIST { TyPolyList }
   | AtomicType { $1 }
 
 AtomicType :: { Type }
   : IDENT {% primType (_ptInfo $1) (getIdent $1) }
-  -- : PrimType { TyPrim $1 }
-
-TyFieldPair :: { (Field, Type) }
-  : IDENT ':' Type { (Field (getIdent $1), $3) }
-
-RowType :: { [(Field, Type)] }
-  : RowType ',' TyFieldPair { $3:$1 }
-  | TyFieldPair { [$1] }
-  | {- empty -} { [] }
-
--- PrimType :: { PrimType }
---   : TYINTEGER { PrimInt }
---   | TYDECIMAL { PrimDecimal }
---   | TYSTRING  { PrimString }
---   | TYUNIT    { PrimUnit }
---   | TYBOOL    { PrimBool }
 
 -- Annotations
 DocAnn :: { Text }
@@ -414,7 +406,7 @@ ExprCommaSep :: { [ParsedExpr] }
   -- | {- empty -} { [] }
 
 LamExpr :: { LineInfo -> ParsedExpr }
-  : lam '(' LamArgs ')' Expr { Lam (reverse $3) $5 }
+  : lam '(' LamArgs ')' Block { Lam (reverse $3) $5 }
 
 IfExpr :: { LineInfo -> ParsedExpr }
   : if Expr Expr Expr { If $2 $3 $4 }
@@ -452,22 +444,22 @@ AppList :: { [ParsedExpr] }
   : AppList Expr { $2:$1 }
   | {- empty -} { [] }
 
-AppBindList :: { [Either ParsedExpr [(Field, Text)]] }
+AppBindList :: { [Either ParsedExpr [(Field, MArg)]] }
   : AppBindList Expr { (Left $2):$1 }
   | AppBindList BindingForm { (Right $2):$1}
   | {- empty -} { [] }
 
-BindingForm :: { [(Field, Text)] }
+BindingForm :: { [(Field, MArg)] }
   : '{' BindPairs '}' { $2 }
 
 Binding :: { ParsedExpr }
   : '{' BindPairs '}' BlockBody { Binding $2 $4 (_ptInfo $1)}
 
-BindPair :: { (Field, Text) }
-  : STR ':=' IDENT { (Field (getStr $1), getIdent $3) }
-  | TICK ':=' IDENT { (Field (getTick $1), getIdent $3) }
+BindPair :: { (Field, MArg) }
+  : STR ':=' MArg { (Field (getStr $1), $3) }
+  | TICK ':=' MArg { (Field (getTick $1), $3) }
 
-BindPairs :: { [(Field, Text)] }
+BindPairs :: { [(Field, MArg)] }
   : BindPairs ',' BindPair { $3 : $1 }
   | BindPair { [$1] }
   -- | {- empty -} { [] }

@@ -306,7 +306,7 @@ desugarDefConst (Lisp.DefConst n mty e _ i) = let
 
 desugarIfDef :: (DesugarBuiltin b) => Lisp.IfDef i -> IfDef ParsedName b i
 desugarIfDef = \case
-  Lisp.IfDfun (Lisp.IfDefun n args rty _ _ i) -> IfDfun $ case args of
+  Lisp.IfDfun (Lisp.IfDefun n (fmap enforceArg -> args) (Just rty) _ _ i) -> IfDfun $ case args of
     [] -> let
       dty = TyUnit :~> desugarType rty
       in IfDefun n dty i

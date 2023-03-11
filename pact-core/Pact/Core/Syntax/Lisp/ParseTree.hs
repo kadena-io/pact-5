@@ -119,7 +119,7 @@ data MArg
   = MArg
   { _margName :: Text
   , _margType :: Maybe Type }
-  deriving Show
+  deriving (Eq, Show)
 
 data Defun i
   = Defun
@@ -214,10 +214,11 @@ data ExtDecl
 data DefProperty i
   = DefProperty
   { _dpropName :: Text
-  , _dpropArgs :: [MArg]
+  , _dpropArgs :: [Arg]
   , _dpropExp :: Expr i
   } deriving Show
 
+-- Todo: fix nonempty cond on module
 data Module i
   = Module
   { _mName :: ModuleName
@@ -245,8 +246,8 @@ data Interface i
 data IfDefun i
   = IfDefun
   { _ifdName :: Text
-  , _ifdArgs :: [Arg]
-  , _ifdRetType :: Type
+  , _ifdArgs :: [MArg]
+  , _ifdRetType :: Maybe Type
   , _ifdDocs :: Maybe Text
   , _ifdModel :: Maybe [Expr i]
   , _ifdInfo :: i
@@ -255,18 +256,19 @@ data IfDefun i
 data IfDefCap i
   = IfDefCap
   { _ifdcName :: Text
-  , _ifdcArgs :: [Arg]
-  , _ifdcRetType :: Type
+  , _ifdcArgs :: [MArg]
+  , _ifdcRetType :: Maybe Type
   , _ifdcDocs :: Maybe Text
   , _ifdcModel :: Maybe [Expr i]
+  , _ifdcMeta :: Maybe DCapMeta
   , _ifdcInfo :: i
   } deriving Show
 
 data IfDefPact i
   = IfDefPact
   { _ifdpName :: Text
-  , _ifdpArgs :: [Arg]
-  , _ifdpRetType :: Type
+  , _ifdpArgs :: [MArg]
+  , _ifdpRetType :: Maybe Type
   , _ifdpDocs :: Maybe Text
   , _ifdpModel :: Maybe [Expr i]
   , _ifdpInfo :: i
@@ -328,7 +330,7 @@ data Expr i
   | Suspend (Expr i) i
   | DynAccess (Expr i) Text i
   | Object [(Field, Expr i)] i
-  | Binding [(Field, Text)] [Expr i] i
+  | Binding [(Field, MArg)] [Expr i] i
   | Error Text i
   deriving (Show, Eq, Functor)
 

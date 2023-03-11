@@ -207,7 +207,7 @@ throwLexerError' le = getLineInfo >>= throwLexerError le
 throwParseError :: ParseError -> LineInfo -> ParserT a
 throwParseError pe = throwError . PEParseError pe
 
-toAppExprList :: [Either ParsedExpr [(Field, Text)]] -> [ParsedExpr]
+toAppExprList :: [Either ParsedExpr [(Field, MArg)]] -> [ParsedExpr]
 toAppExprList (h:hs) = case h of
   Left e -> e : toAppExprList hs
   Right binds -> [Binding binds (toAppExprList hs) def]

@@ -10,6 +10,7 @@ module Pact.Core.Compile where
 
 -- import Control.Lens
 import Control.Monad.Except
+-- import Data.Foldable(traverse_)
 -- import Data.Text as Text
 import Data.Proxy
 import Data.ByteString(ByteString)
@@ -44,7 +45,9 @@ import qualified Pact.Core.Syntax.Lisp.LexUtils as Lisp
 import qualified Pact.Core.Syntax.Lisp.Lexer as Lisp
 import qualified Pact.Core.Syntax.Lisp.Parser as Lisp
 
-import Debug.Trace
+-- import Debug.Trace
+-- import System.Directory
+-- import System.FilePath
 
 type HasCompileEnv raw reso m
   = ( MonadError PactErrorI m, DesugarBuiltin raw, TypeOfBuiltin raw
@@ -54,11 +57,12 @@ _parseOnly
   :: ByteString -> Either PactErrorI [Lisp.ParsedTopLevel]
 _parseOnly source = do
   lexed <- liftEither (Lisp.lexer source)
-  traceM (show (Lisp._ptToken <$> lexed))
+  -- traceM (show (Lisp._ptToken <$> lexed))
   liftEither (Lisp.parseProgram lexed)
 
 _parseOnlyFile :: FilePath -> IO (Either PactErrorI [Lisp.ParsedTopLevel])
 _parseOnlyFile fp = _parseOnly <$> B.readFile fp
+
 
 compileTypedExprGen :: forall raw reso m
   . (HasCompileEnv raw reso m)
