@@ -92,9 +92,9 @@
 "Module references"
 (interface ix (defun f:bool ()))
 (interface iy (defun f:bool ()))
-(module mx (implements ix) (defun f:bool () true))
-(module my (implements ix) (defun f:bool () true))
-(module ny (implements iy) (defun f:bool () true))
+(module mx G (defcap G () true) (implements ix) (defun f:bool () true))
+(module my G (defcap G () true) (implements ix) (defun f:bool () true))
+(module ny G (defcap G () true) (implements iy) (defun f:bool () true))
 
 (expect "= module{ix} module{ix}" true (= mx mx))
 (expect "!= module{ix} module{ix}" true (!= my mx))

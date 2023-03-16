@@ -95,7 +95,7 @@ tokens :-
     suspend      { token TokenSuspend }
 
     @integer     { emit TokenNumber }
-    @ident       { emit TokenIdent }
+    
     @singletick  { emit TokenSingleTick }
     \(           { token TokenOpenParens }
     \)           { token TokenCloseParens }
@@ -124,7 +124,7 @@ tokens :-
     \"           { stringLiteral }
     \-\>         { token TokenTyArrow }
     \^           { token TokenPow }
-
+    @ident       { emit TokenIdent }
 {
 -- TODO: non-horrible errors
 scan :: LexerM PosToken

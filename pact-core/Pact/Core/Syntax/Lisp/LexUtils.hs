@@ -217,6 +217,7 @@ primType :: LineInfo -> Text -> ParserT Type
 primType i = \case
   "integer" -> pure TyInt
   "bool" -> pure TyBool
+  "unit" -> pure TyUnit
   "guard" -> pure TyGuard
   "decimal" -> pure TyDecimal
   "time" -> pure TyTime

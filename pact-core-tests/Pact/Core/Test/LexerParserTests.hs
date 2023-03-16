@@ -12,7 +12,6 @@ import Data.Text.Encoding (encodeUtf8)
 import qualified Data.ByteString.Char8 as BS
 import Data.Decimal(DecimalRaw(..))
 import Pact.Core.Names
-import Pact.Core.Syntax.Common
 import qualified Pact.Core.Syntax.Lisp.Lexer as Lisp
 import qualified Pact.Core.Syntax.Lisp.LexUtils as Lisp
 import qualified Pact.Core.Syntax.Lisp.ParseTree as Lisp
@@ -75,12 +74,12 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
           , TokenDot
           -- Types
           , TokenTyTable
-          , TokenTyInteger
-          , TokenTyDecimal
-          , TokenTyString
-          , TokenTyBool
-          , TokenTyUnit
-          , TokenTyArrow
+          -- , TokenTyInteger
+          -- , TokenTyDecimal
+          -- , TokenTyString
+          -- , TokenTyBool
+          -- , TokenTyUnit
+          -- , TokenTyArrow
           -- Operators
           , TokenEq
           , TokenNeq
@@ -184,10 +183,10 @@ exprGen = Gen.recursive Gen.choice
       binders <- Gen.nonEmpty (Range.constant 1 8) binderGen
       pure $ Lisp.LetIn binders inner ()
 
-    typeGen :: Gen Type
+    typeGen :: Gen Lisp.Type
     typeGen = Gen.recursive Gen.choice
-      (Gen.constant . TyPrim <$> [minBound ..])
-      [TyList <$> typeGen]
+      (Gen.constant . Lisp.TyPrim <$> [minBound ..])
+      [Lisp.TyList <$> typeGen]
 
     binderGen = do
       name <- identGen
