@@ -64,17 +64,6 @@ tokens :-
     keyGov       { token TokenKeyGov }
     capGov       { token TokenCapGov }
     lambda       { token TokenLambda }
-    -- types
-    -- integer      { token TokenTyInteger }
-    -- bool         { token TokenTyBool }
-    -- guard        { token TokenTyGuard }
-    table        { token TokenTyTable }
-    -- decimal      { token TokenTyDecimal }
-    -- string       { token TokenTyString }
-    -- unit         { token TokenTyUnit }
-    -- bool         { token TokenTyBool }
-    object       { token TokenTyObject }
-    -- list         { token TokenTyList }
 
     and          { token TokenAnd }
     or           { token TokenOr }
@@ -122,7 +111,6 @@ tokens :-
     \|           { token TokenBitOr }
     \~           { token TokenBitComplement }
     \"           { stringLiteral }
-    \-\>         { token TokenTyArrow }
     \^           { token TokenPow }
     @ident       { emit TokenIdent }
 {

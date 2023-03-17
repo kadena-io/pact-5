@@ -84,18 +84,6 @@ data Token
   | TokenComma
   | TokenColon
   | TokenDot
-  -- Types
-  | TokenTyTable
-  | TokenTyInteger
-  | TokenTyDecimal
-  | TokenTyString
-  | TokenTyBool
-  | TokenTyUnit
-  | TokenTyList
-  | TokenTyKeyset
-  | TokenTyObject
-  | TokenTyGuard
-  | TokenTyArrow
   -- Operators
   | TokenEq
   | TokenNeq
@@ -223,9 +211,14 @@ primType i = \case
   "time" -> pure TyTime
   "string" -> pure TyString
   "list" -> pure TyPolyList
+  "object" -> pure TyPolyObject
   "keyset" -> pure TyKeyset
   e -> throwParseError (InvalidBaseType e) i
 
+objType :: LineInfo -> Text -> ParsedName -> ParserT Type
+objType i t p = case t of
+  "object" -> pure (TyObject p)
+  e -> throwParseError (InvalidBaseType e) i
 
 parseError :: ([PosToken], [String]) -> ParserT a
 parseError (remaining, exps) =
@@ -290,17 +283,6 @@ renderTokenText = \case
   TokenComma -> ","
   TokenColon -> ":"
   TokenDot -> "."
-  TokenTyTable -> "table"
-  TokenTyInteger -> "integer"
-  TokenTyDecimal -> "decimal"
-  TokenTyString -> "string"
-  TokenTyBool -> "bool"
-  TokenTyUnit -> "unit"
-  TokenTyGuard -> "guard"
-  TokenTyList -> "list"
-  TokenTyKeyset -> "keyset"
-  TokenTyObject ->  "object"
-  TokenTyArrow -> "->"
   TokenBindAssign -> ":="
   TokenDynAcc -> "::"
   TokenEq -> "="

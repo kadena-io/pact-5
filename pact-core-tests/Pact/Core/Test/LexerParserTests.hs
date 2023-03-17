@@ -72,14 +72,6 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
           , TokenComma
           , TokenColon
           , TokenDot
-          -- Types
-          , TokenTyTable
-          -- , TokenTyInteger
-          -- , TokenTyDecimal
-          -- , TokenTyString
-          -- , TokenTyBool
-          -- , TokenTyUnit
-          -- , TokenTyArrow
           -- Operators
           , TokenEq
           , TokenNeq

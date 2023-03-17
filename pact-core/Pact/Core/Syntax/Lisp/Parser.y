@@ -88,19 +88,6 @@ import Pact.Core.Syntax.Lisp.LexUtils
   ':'        { PosToken TokenColon _ }
   ':='       { PosToken TokenBindAssign _ }
   '.'        { PosToken TokenDot _ }
-  -- types
-  TYTABLE    { PosToken TokenTyTable _ }
-  -- TYINTEGER  { PosToken TokenTyInteger _ }
-  -- TYDECIMAL  { PosToken TokenTyDecimal _ }
-  -- TYSTRING   { PosToken TokenTyString _ }
-  -- TYBOOL     { PosToken TokenTyBool _ }
-  -- TYUNIT     { PosToken TokenTyUnit _ }
-  TYOBJECT   { PosToken TokenTyObject _}
-  -- TYLIST     { PosToken TokenTyList _ }
-  -- TYGUARD    { PosToken TokenTyGuard _ }
-  -- TYKEYSET   { PosToken TokenTyKeyset _}
-
-  '->'       { PosToken TokenTyArrow _ }
   '=='       { PosToken TokenEq _ }
   '!='       { PosToken TokenNeq _ }
   '>'        { PosToken TokenGT _ }
@@ -325,8 +312,7 @@ ArgList :: { [Arg] }
 Type :: { Type }
   : '[' Type ']' { TyList $2 }
   | module '{' ModQual '}' { TyModRef (mkModName $3) }
-  | TYOBJECT '{' ParsedName '}' { TyObject $3 }
-  | TYOBJECT { TyPolyObject }
+  | IDENT '{' ParsedName '}' {% objType (_ptInfo $1) (getIdent $1) $3}
   | AtomicType { $1 }
 
 AtomicType :: { Type }
