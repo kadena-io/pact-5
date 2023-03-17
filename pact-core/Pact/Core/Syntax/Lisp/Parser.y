@@ -423,8 +423,6 @@ ErrExpr :: { LineInfo -> ParsedExpr }
 LamArgs :: { [(Text, Maybe Type)] }
   : LamArgs IDENT ':' Type { (getIdent $2, Just $4):$1 }
   | LamArgs IDENT { (getIdent $2, Nothing):$1 }
-  -- | IDENT ':' Type { [(getIdent $1, Just $3)] }
-  -- | IDENT { [(getIdent $1, Nothing)] }
   | {- empty -} { [] }
 
 LetExpr :: { LineInfo -> ParsedExpr }
@@ -462,7 +460,6 @@ BindPair :: { (Field, MArg) }
 BindPairs :: { [(Field, MArg)] }
   : BindPairs ',' BindPair { $3 : $1 }
   | BindPair { [$1] }
-  -- | {- empty -} { [] }
 
 
 Atom :: { ParsedExpr }

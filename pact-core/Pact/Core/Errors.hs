@@ -98,7 +98,9 @@ instance RenderError ParseError where
 
 data DesugarError
   = UnboundTermVariable Text
+  | UnsupportedType Text
   | UnboundTypeVariable Text
+  | UnannotatedType Text
   | NoSuchModuleMember ModuleName Text
   | NoSuchModule ModuleName
   | NoSuchInterface ModuleName
@@ -111,6 +113,10 @@ instance Exception DesugarError
 
 instance RenderError DesugarError where
   renderError = \case
+    UnsupportedType t ->
+      tConcatSpace ["Unsupported type in pact-core:", t]
+    UnannotatedType t ->
+      tConcatSpace ["Unannotated type in variable:", t]
     UnboundTermVariable t ->
       tConcatSpace ["Unbound variable", t]
     UnboundTypeVariable t ->

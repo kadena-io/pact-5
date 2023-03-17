@@ -262,8 +262,8 @@ rawBuiltinToText = \case
   RawLT -> "(<)"
   RawLEQ -> "(<=)"
   -- Int ops
-  RawBitwiseAnd -> "(&)"
-  RawBitwiseOr -> "(|)"
+  RawBitwiseAnd -> "&"
+  RawBitwiseOr -> "|"
   RawBitwiseXor -> "xor"
   RawBitwiseFlip -> "(~)"
   RawBitShift -> "shift"

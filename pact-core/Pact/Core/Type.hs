@@ -15,6 +15,7 @@ module Pact.Core.Type
  , pattern TyBool
  , pattern TyString
  , pattern TyUnit
+ , pattern TyGuard
  , pattern (:~>)
  , tyFunToArgList
  , typeOfLit
@@ -42,6 +43,7 @@ data PrimType =
   -- PrimTime |
   PrimBool |
   PrimString |
+  PrimGuard |
   PrimUnit
   deriving (Eq,Ord,Show, Enum, Bounded)
 
@@ -52,6 +54,7 @@ instance Pretty PrimType where
     -- PrimTime -> "time"
     PrimBool -> "bool"
     PrimString -> "string"
+    PrimGuard -> "guard"
     PrimUnit -> "unit"
 
 -- Todo: caps are a bit strange here
@@ -76,11 +79,12 @@ data Type n
   -- ^ Row objects
   | TyList (Type n)
   -- ^ List aka [a]
-  | TyGuard
   -- ^ Type of Guards.
   | TyModRef ModuleName
   -- ^ Module references
   | TyForall (NonEmpty n) (Type n)
+  -- ^ Universal quantification
+  -- TODO: remove?
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 instance Plated (Type n) where
@@ -89,7 +93,6 @@ instance Plated (Type n) where
     TyPrim pt -> pure (TyPrim pt)
     TyFun ty ty' -> TyFun <$> f ty <*> f ty'
     TyList ty -> TyList <$> f ty
-    TyGuard -> pure TyGuard
     TyModRef mn -> pure (TyModRef mn)
     TyForall ne ty -> TyForall ne <$> f ty
 
@@ -110,6 +113,9 @@ pattern TyString = TyPrim PrimString
 
 pattern TyUnit :: Type n
 pattern TyUnit = TyPrim PrimUnit
+
+pattern TyGuard :: Type n
+pattern TyGuard = TyPrim PrimGuard
 
 pattern (:~>) :: Type n -> Type n -> Type n
 pattern l :~> r  = TyFun l r
