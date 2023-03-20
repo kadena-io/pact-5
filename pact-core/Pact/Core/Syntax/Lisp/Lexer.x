@@ -114,14 +114,16 @@ tokens :-
     \^           { token TokenPow }
     @ident       { emit TokenIdent }
 {
+
 -- TODO: non-horrible errors
 scan :: LexerM PosToken
 scan = do
-  input@(AlexInput _ _ _ bs) <- get
+  input@(AlexInput sLine sCol _ bs) <- get
   case alexScan input 0 of
-    AlexEOF -> withLineInfo TokenEOF
-    AlexError (AlexInput line col _last inp) ->
-      let li = LineInfo line col 1
+    AlexEOF -> pure (PosToken TokenEOF (SpanInfo sLine sCol (sLine+1) 0))
+
+    AlexError (AlexInput eLine eCol  _last inp) ->
+      let li = SpanInfo sLine sCol eLine eCol
       in case B.uncons inp of
         Just (h, _) ->
           throwLexerError (LexicalError (w2c h) _last) li
@@ -129,15 +131,16 @@ scan = do
     AlexSkip input' _ -> do
       put input'
       scan
-    AlexToken input' tokl action -> do
+    AlexToken input'@(AlexInput eLine eCol _ _) tokl action -> do
       put input'
-      let t = T.decodeLatin1 (B.take (fromIntegral tokl) bs)
-      action t
+      let
+        span' = SpanInfo sLine sCol eLine eCol
+        t = T.decodeLatin1 (B.take (fromIntegral tokl) bs)
+      action t span'
 
-stringLiteral :: Text -> LexerM PosToken
-stringLiteral _ = do
+stringLiteral :: Text -> SpanInfo -> LexerM PosToken
+stringLiteral _ info = do
   inp <- get
-  info <- getLineInfo
   body <- loop [] inp
   pure (PosToken (TokenString (T.pack body)) info)
   where

@@ -68,9 +68,9 @@ compileTypedExprGen :: forall raw reso m
   . (HasCompileEnv raw reso m)
   => ByteString
   -> Proxy raw
-  -> PactDb m reso LineInfo
-  -> Loaded reso LineInfo
-  -> m (Typed.Term Name NamedDeBruijn reso LineInfo, Loaded reso LineInfo)
+  -> PactDb m reso SpanInfo
+  -> Loaded reso SpanInfo
+  -> m (Typed.Term Name NamedDeBruijn reso SpanInfo, Loaded reso SpanInfo)
 compileTypedExprGen source proxy pactDb loaded = do
   lexed <- liftEither (Lisp.lexer source)
   debugPrint DebugLexer lexed
@@ -89,9 +89,9 @@ compileUntypedExprGen :: forall raw reso m
   . (HasCompileEnv raw reso m)
   => ByteString
   -> Proxy raw
-  -> PactDb m reso LineInfo
-  -> Loaded reso LineInfo
-  -> m (Untyped.Term Name reso LineInfo, Loaded reso LineInfo)
+  -> PactDb m reso SpanInfo
+  -> Loaded reso SpanInfo
+  -> m (Untyped.Term Name reso SpanInfo, Loaded reso SpanInfo)
 compileUntypedExprGen source proxy pactDb loaded = do
   (typedTerm, l) <- compileTypedExprGen source proxy pactDb loaded
   let untyped = fromTypedTerm typedTerm
@@ -103,9 +103,9 @@ compileTypedExpr :: forall raw reso m
   . (HasCompileEnv raw reso m)
   => ByteString
   -> Proxy raw
-  -> PactDb m reso LineInfo
-  -> Loaded reso LineInfo
-  -> m (Typed.Term Name NamedDeBruijn reso LineInfo, Loaded reso LineInfo)
+  -> PactDb m reso SpanInfo
+  -> Loaded reso SpanInfo
+  -> m (Typed.Term Name NamedDeBruijn reso SpanInfo, Loaded reso SpanInfo)
 compileTypedExpr source proxy pactDb loaded = do
   lexed <- liftEither (Lisp.lexer source)
   debugPrint DebugLexer lexed
@@ -124,9 +124,9 @@ compileUntypedExpr :: forall raw reso m
   . (HasCompileEnv raw reso m)
   => ByteString
   -> Proxy raw
-  -> PactDb m reso LineInfo
-  -> Loaded reso LineInfo
-  -> m (Untyped.Term Name reso LineInfo, Loaded reso LineInfo)
+  -> PactDb m reso SpanInfo
+  -> Loaded reso SpanInfo
+  -> m (Untyped.Term Name reso SpanInfo, Loaded reso SpanInfo)
 compileUntypedExpr source proxy pactDb loaded = do
   (typedTerm, l) <- compileTypedExprGen source proxy pactDb loaded
   let untyped = fromTypedTerm typedTerm

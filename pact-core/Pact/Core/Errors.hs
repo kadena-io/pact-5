@@ -29,7 +29,7 @@ import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Info
 
-type PactErrorI = PactError LineInfo
+type PactErrorI = PactError SpanInfo
 
 class RenderError e where
   renderError :: e -> Text
