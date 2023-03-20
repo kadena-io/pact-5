@@ -376,7 +376,7 @@ SExpr :: { SpanInfo -> ParsedExpr }
   | SuspendExpr { $1 }
 
 List :: { ParsedExpr }
-  : '[' ListExprs ']' { List $2 (_ptInfo $1) }
+  : '[' ListExprs ']' { List $2 (combineSpan (_ptInfo $1) (_ptInfo $3)) }
 
 ListExprs :: { [ParsedExpr] }
   : Expr MCommaExpr { $1:(reverse $2) }
