@@ -19,7 +19,6 @@ import qualified Pact.Core.Syntax.Lisp.Parser as Lisp
 import Pact.Core.Syntax.Lisp.LexUtils (Token(..))
 import Pact.Core.Literal
 
-
 showPretty :: Pretty a => a -> BS.ByteString
 showPretty = BS.pack . show . pretty
 
@@ -115,15 +114,23 @@ parsedExprToSrc :: Lisp.Expr () -> BS.ByteString
 parsedExprToSrc = BS.pack . show . pretty
 
 varGen :: ParserGen
-varGen = Gen.choice [bn, qn]
+varGen = (`Lisp.Var` ()) <$> parsedNameGen
+
+parsedNameGen :: Gen ParsedName
+parsedNameGen = Gen.choice [qn, bn]
   where
-    bn = (\n -> Lisp.Var (BN $ BareName n) ()) <$> identGen
+    bn = BN . BareName <$> identGen
     qn = do
-      modName <- identGen
       name <- identGen
-      modNs <- Gen.maybe (NamespaceName <$> identGen)
-      let qname = QualifiedName name (ModuleName modName modNs)
-      pure $ Lisp.Var (QN qname) ()
+      mn   <- moduleNameGen
+      let qname = QualifiedName name mn
+      pure (QN qname)
+
+moduleNameGen :: Gen ModuleName
+moduleNameGen = do
+  modName <- identGen
+  modNS   <- Gen.maybe (NamespaceName <$> identGen)
+  pure (ModuleName modName modNS)
 
 constantGen :: ParserGen
 constantGen = (`Lisp.Constant` ()) <$> Gen.choice
@@ -178,7 +185,14 @@ exprGen = Gen.recursive Gen.choice
     typeGen :: Gen Lisp.Type
     typeGen = Gen.recursive Gen.choice
       (Gen.constant . Lisp.TyPrim <$> [minBound ..])
-      [Lisp.TyList <$> typeGen]
+      [Lisp.TyList <$> typeGen
+      ,pure Lisp.TyPolyList
+      ,Lisp.TyModRef <$> moduleNameGen
+      ,pure Lisp.TyGuard
+      ,pure Lisp.TyKeyset
+      ,Lisp.TyObject <$> parsedNameGen
+      ,pure Lisp.TyTime
+      ,pure Lisp.TyPolyObject]
 
     binderGen = do
       name <- identGen
