@@ -29,21 +29,22 @@ import Pact.Core.Pretty (Pretty(..))
 import Pact.Core.Syntax.Lisp.ParseTree
 
 type ParserT = Either PactErrorI
-type ParsedExpr = Expr LineInfo
-type ParsedDefun = Defun LineInfo
-type ParsedDef = Def LineInfo
-type ParsedDefConst = DefConst LineInfo
-type ParsedModule = Module LineInfo
-type ParsedTopLevel = TopLevel LineInfo
-type ParsedIfDef = IfDef LineInfo
-type ParsedInterface = Interface LineInfo
-type ParsedReplTopLevel = ReplTopLevel LineInfo
+type ParsedExpr = Expr SpanInfo
+type ParsedDefun = Defun SpanInfo
+type ParsedDef = Def SpanInfo
+type ParsedDefConst = DefConst SpanInfo
+type ParsedModule = Module SpanInfo
+type ParsedTopLevel = TopLevel SpanInfo
+type ParsedIfDef = IfDef SpanInfo
+type ParsedInterface = Interface SpanInfo
+type ParsedReplTopLevel = ReplTopLevel SpanInfo
 
 data PosToken =
   PosToken
   { _ptToken :: Token
-  , _ptInfo :: LineInfo }
-  deriving Show
+  , _ptInfo :: SpanInfo
+  }
+  deriving (Show, Eq)
 
 data Token
   -- Keywords
@@ -84,18 +85,6 @@ data Token
   | TokenComma
   | TokenColon
   | TokenDot
-  -- Types
-  | TokenTyTable
-  | TokenTyInteger
-  | TokenTyDecimal
-  | TokenTyString
-  | TokenTyBool
-  | TokenTyUnit
-  | TokenTyList
-  | TokenTyKeyset
-  | TokenTyObject
-  | TokenTyGuard
-  | TokenTyArrow
   -- Operators
   | TokenEq
   | TokenNeq
@@ -133,7 +122,7 @@ data Token
 
 data AlexInput
  = AlexInput
- { _inpLine :: {-# UNPACK #-} !Int
+ { _inpLine   :: {-# UNPACK #-} !Int
  , _inpColumn :: {-# UNPACK #-} !Int
  , _inpLast :: {-# UNPACK #-} !Char
  , _inpStream :: ByteString
@@ -152,7 +141,7 @@ alexGetByte (AlexInput line col _ stream) =
   advance (c, rest) | w2c c  == '\n' =
     (c
     , AlexInput
-    { _inpLine  = line + 1
+    { _inpLine  = line +1
     , _inpColumn = 0
     , _inpLast = '\n'
     , _inpStream = rest})
@@ -160,7 +149,7 @@ alexGetByte (AlexInput line col _ stream) =
     (c
     , AlexInput
     { _inpLine  = line
-    , _inpColumn = col + 1
+    , _inpColumn = col +1
     , _inpLast = w2c c
     , _inpStream = rest})
 
@@ -178,33 +167,27 @@ newtype LexerM a =
   via (StateT AlexInput (Either PactErrorI))
 
 
-column :: LexerM Int
-column = gets _inpColumn
-
 initState :: ByteString -> AlexInput
 initState = AlexInput 0 0 '\n'
 
-getLineInfo :: LexerM LineInfo
-getLineInfo = do
+getSpanInfo :: LexerM SpanInfo
+getSpanInfo = do
   input <- get
-  pure (LineInfo (_inpLine input) (_inpColumn input) 1)
+  pure (SpanInfo (_inpLine input) (_inpColumn input) (_inpLine input) (_inpColumn input))
 
-withLineInfo :: Token -> LexerM PosToken
-withLineInfo tok = PosToken tok <$> getLineInfo
+emit :: (Text -> Token) -> Text -> SpanInfo -> LexerM PosToken
+emit f e s = pure (PosToken (f e) s)
 
-emit :: (Text -> Token) -> Text -> LexerM PosToken
-emit f e = withLineInfo (f e)
+token :: Token -> Text -> SpanInfo -> LexerM PosToken
+token tok _ s = pure (PosToken tok s)
 
-token :: Token -> Text -> LexerM PosToken
-token tok = const (withLineInfo tok)
-
-throwLexerError :: LexerError -> LineInfo -> LexerM a
+throwLexerError :: LexerError -> SpanInfo -> LexerM a
 throwLexerError le = throwError . PELexerError le
 
 throwLexerError' :: LexerError -> LexerM a
-throwLexerError' le = getLineInfo >>= throwLexerError le
+throwLexerError' le = getSpanInfo >>= throwLexerError le
 
-throwParseError :: ParseError -> LineInfo -> ParserT a
+throwParseError :: ParseError -> SpanInfo -> ParserT a
 throwParseError pe = throwError . PEParseError pe
 
 toAppExprList :: [Either ParsedExpr [(Field, MArg)]] -> [ParsedExpr]
@@ -213,18 +196,24 @@ toAppExprList (h:hs) = case h of
   Right binds -> [Binding binds (toAppExprList hs) def]
 toAppExprList [] = []
 
-primType :: LineInfo -> Text -> ParserT Type
+primType :: SpanInfo -> Text -> ParserT Type
 primType i = \case
   "integer" -> pure TyInt
   "bool" -> pure TyBool
+  "unit" -> pure TyUnit
   "guard" -> pure TyGuard
   "decimal" -> pure TyDecimal
   "time" -> pure TyTime
   "string" -> pure TyString
   "list" -> pure TyPolyList
+  "object" -> pure TyPolyObject
   "keyset" -> pure TyKeyset
   e -> throwParseError (InvalidBaseType e) i
 
+objType :: SpanInfo -> Text -> ParsedName -> ParserT Type
+objType i t p = case t of
+  "object" -> pure (TyObject p)
+  e -> throwParseError (InvalidBaseType e) i
 
 parseError :: ([PosToken], [String]) -> ParserT a
 parseError (remaining, exps) =
@@ -289,17 +278,6 @@ renderTokenText = \case
   TokenComma -> ","
   TokenColon -> ":"
   TokenDot -> "."
-  TokenTyTable -> "table"
-  TokenTyInteger -> "integer"
-  TokenTyDecimal -> "decimal"
-  TokenTyString -> "string"
-  TokenTyBool -> "bool"
-  TokenTyUnit -> "unit"
-  TokenTyGuard -> "guard"
-  TokenTyList -> "list"
-  TokenTyKeyset -> "keyset"
-  TokenTyObject ->  "object"
-  TokenTyArrow -> "->"
   TokenBindAssign -> ":="
   TokenDynAcc -> "::"
   TokenEq -> "="

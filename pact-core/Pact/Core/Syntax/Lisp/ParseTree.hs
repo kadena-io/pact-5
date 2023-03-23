@@ -100,7 +100,7 @@ instance Pretty Type where
     TyPolyList -> "list"
     TyGuard -> "guard"
     TyKeyset -> "keyset"
-    TyObject qn -> "object" <> brackets (pretty qn)
+    TyObject qn -> "object" <> braces (pretty qn)
     TyPolyObject -> "object"
     TyTime -> "time"
 

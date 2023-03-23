@@ -88,19 +88,6 @@ import Pact.Core.Syntax.Lisp.LexUtils
   ':'        { PosToken TokenColon _ }
   ':='       { PosToken TokenBindAssign _ }
   '.'        { PosToken TokenDot _ }
-  -- types
-  TYTABLE    { PosToken TokenTyTable _ }
-  -- TYINTEGER  { PosToken TokenTyInteger _ }
-  -- TYDECIMAL  { PosToken TokenTyDecimal _ }
-  -- TYSTRING   { PosToken TokenTyString _ }
-  -- TYBOOL     { PosToken TokenTyBool _ }
-  -- TYUNIT     { PosToken TokenTyUnit _ }
-  TYOBJECT   { PosToken TokenTyObject _}
-  -- TYLIST     { PosToken TokenTyList _ }
-  -- TYGUARD    { PosToken TokenTyGuard _ }
-  -- TYKEYSET   { PosToken TokenTyKeyset _}
-
-  '->'       { PosToken TokenTyArrow _ }
   '=='       { PosToken TokenEq _ }
   '!='       { PosToken TokenNeq _ }
   '>'        { PosToken TokenGT _ }
@@ -133,10 +120,10 @@ ProgramList :: { [ParsedTopLevel] }
   : ProgramList TopLevel { $2:$1 }
   | {- empty -} { [] }
 
-ReplProgram :: { [ReplSpecialTL LineInfo] }
+ReplProgram :: { [ReplSpecialTL SpanInfo] }
   : ReplProgramList { reverse $1 }
 
-ReplProgramList :: { [ReplSpecialTL LineInfo] }
+ReplProgramList :: { [ReplSpecialTL SpanInfo] }
   : ReplProgramList RTL { $2:$1 }
   | {- empty -} { [] }
 
@@ -145,7 +132,7 @@ TopLevel :: { ParsedTopLevel }
   | Interface { TLInterface $1 }
   | Expr { TLTerm $1 }
 
-RTL :: { ReplSpecialTL LineInfo }
+RTL :: { ReplSpecialTL SpanInfo }
   : ReplTopLevel { RTL $1 }
   | '(' ReplSpecial ')' { RTLReplSpecial  ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
@@ -157,7 +144,7 @@ ReplTopLevel :: { ParsedReplTopLevel }
   | Expr { RTLTerm $1 }
 
 
-ReplSpecial :: { LineInfo -> ReplSpecialForm LineInfo }
+ReplSpecial :: { SpanInfo -> ReplSpecialForm SpanInfo }
   : load STR BOOLEAN { ReplLoad (getStr $2) $3 }
   | load STR { ReplLoad (getStr $2) False }
   | tc STR Expr { ReplTypechecks (getStr $2) $3 }
@@ -179,7 +166,7 @@ Interface :: { ParsedInterface }
   : '(' interface IDENT MDocOrModel IfDefs ')'
     { Interface (ModuleName (getIdent $3) Nothing) (reverse $5) (fst $4) (snd $4) }
 
-MDocOrModuleModel :: { (Maybe Text, [DefProperty LineInfo])}
+MDocOrModuleModel :: { (Maybe Text, [DefProperty SpanInfo])}
   : DocAnn ModuleModel { (Just $1, $2)}
   | ModuleModel DocAnn { (Just $2, $1) }
   | DocAnn { (Just $1, [])}
@@ -188,14 +175,14 @@ MDocOrModuleModel :: { (Maybe Text, [DefProperty LineInfo])}
   | {- empty -} { (Nothing, []) }
 
 
-ModuleModel :: { [DefProperty LineInfo] }
+ModuleModel :: { [DefProperty SpanInfo] }
   : modelAnn '[' DefProperties ']' { reverse $3 }
 
-DefProperties :: { [DefProperty LineInfo] }
+DefProperties :: { [DefProperty SpanInfo] }
   : DefProperties DefProperty { $2:$1 }
   | {- empty -} { [] }
 
-DefProperty :: { DefProperty LineInfo }
+DefProperty :: { DefProperty SpanInfo }
   : '(' defprop IDENT DPropArgList ')' { DefProperty (getIdent $3) (fst $4) (snd $4) }
 
 -- This rule seems gnarly, but essentially
@@ -217,7 +204,7 @@ Defs :: { [ParsedDef] }
   : Defs Def { $2:$1 }
   | Def { [$1] }
 
-ExtOrDefs :: { [Either (Def LineInfo) ExtDecl] }
+ExtOrDefs :: { [Either (Def SpanInfo) ExtDecl] }
   : ExtOrDefs Def { (Left $2):$1 }
   | ExtOrDefs Ext { (Right $2) : $1 }
   | Def { [Left $1] }
@@ -244,15 +231,15 @@ IfDef :: { ParsedIfDef }
   | '(' IfDefPact ')' { IfDPact ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
 -- ident = $2,
-IfDefun :: { LineInfo -> IfDefun LineInfo }
+IfDefun :: { SpanInfo -> IfDefun SpanInfo }
   : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel
     { IfDefun (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) }
 
-IfDefCap :: { LineInfo -> IfDefCap LineInfo }
+IfDefCap :: { SpanInfo -> IfDefCap SpanInfo }
   : defcap IDENT MTypeAnn'(' MArgs ')' MDocOrModel MDCapMeta
     { IfDefCap (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) $8 }
 
-IfDefPact :: { LineInfo -> IfDefPact LineInfo }
+IfDefPact :: { SpanInfo -> IfDefPact SpanInfo }
   : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel
     { IfDefPact (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) }
 
@@ -264,34 +251,34 @@ ImportNames :: { [Text] }
   : ImportNames IDENT { (getIdent $2):$1 }
   | {- empty -} { [] }
 
-DefConst :: { LineInfo -> ParsedDefConst }
+DefConst :: { SpanInfo -> ParsedDefConst }
   : defconst IDENT MTypeAnn Expr MDoc { DefConst (getIdent $2) $3 $4 $5 }
 
 -- All defs
-Defun :: { LineInfo -> ParsedDefun }
+Defun :: { SpanInfo -> ParsedDefun }
   : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel Block
     { Defun (getIdent $2) (reverse $5) $3 $8 (fst $7) (snd $7) }
 
-Defschema :: { LineInfo -> DefSchema LineInfo }
+Defschema :: { SpanInfo -> DefSchema SpanInfo }
   : defschema IDENT MDocOrModel NEArgList
     { DefSchema (getIdent $2) (reverse $4) (fst $3) (snd $3) }
 
-Deftable :: { LineInfo -> DefTable LineInfo }
+Deftable :: { SpanInfo -> DefTable SpanInfo }
   : deftable IDENT ':' '{' ParsedName '}' MDoc { DefTable (getIdent $2) $5 $7 }
 
-Defcap :: { LineInfo -> DefCap LineInfo }
+Defcap :: { SpanInfo -> DefCap SpanInfo }
   : defcap IDENT MTypeAnn '(' MArgs ')' MDocOrModel MDCapMeta Block
     { DefCap (getIdent $2) (reverse $5) $3 $9 (fst $7) (snd $7) $8 }
 
-DefPact :: { LineInfo -> DefPact LineInfo }
+DefPact :: { SpanInfo -> DefPact SpanInfo }
   : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel Steps
     { DefPact (getIdent $2) $5 $3 $8 (fst $7) (snd $7) }
 
-Steps :: { [PactStep LineInfo] }
+Steps :: { [PactStep SpanInfo] }
   : Steps Step { $2:$1 }
   | Step { [$1] }
 
-Step :: { PactStep LineInfo }
+Step :: { PactStep SpanInfo }
   : '(' step Expr MModel ')' { Step $3 $4 }
   | '(' steprb Expr Expr MModel ')' { StepWithRollback $3 $4 $5 }
 
@@ -325,8 +312,7 @@ ArgList :: { [Arg] }
 Type :: { Type }
   : '[' Type ']' { TyList $2 }
   | module '{' ModQual '}' { TyModRef (mkModName $3) }
-  | TYOBJECT '{' ParsedName '}' { TyObject $3 }
-  | TYOBJECT { TyPolyObject }
+  | IDENT '{' ParsedName '}' {% objType (_ptInfo $1) (getIdent $1) $3}
   | AtomicType { $1 }
 
 AtomicType :: { Type }
@@ -343,14 +329,14 @@ ModelExprs :: { [ParsedExpr] }
   : ModelExprs Expr { $2:$1 }
   | {- empty -} { [] }
 
-MModel :: { Maybe [Expr LineInfo] }
+MModel :: { Maybe [Expr SpanInfo] }
   : ModelAnn { Just $1 }
   | {- empty -}  { Nothing }
 
-ModelAnn :: { [Expr LineInfo] }
+ModelAnn :: { [Expr SpanInfo] }
   : modelAnn '[' ModelExprs ']' { reverse $3 }
 
-MDocOrModel :: { (Maybe Text, Maybe [Expr LineInfo])}
+MDocOrModel :: { (Maybe Text, Maybe [Expr SpanInfo])}
   : DocAnn ModelAnn { (Just $1, Just $2)}
   | ModelAnn DocAnn { (Just $2, Just $1) }
   | DocAnn { (Just $1, Nothing)}
@@ -379,7 +365,7 @@ Expr :: { ParsedExpr }
   | Atom { $1 }
   | Expr '::' IDENT { DynAccess $1 (getIdent $3) (combineSpan (view termInfo $1) (_ptInfo $3)) }
 
-SExpr :: { LineInfo -> ParsedExpr }
+SExpr :: { SpanInfo -> ParsedExpr }
   : LamExpr { $1 }
   | LetExpr { $1 }
   | IfExpr { $1 }
@@ -390,7 +376,7 @@ SExpr :: { LineInfo -> ParsedExpr }
   | SuspendExpr { $1 }
 
 List :: { ParsedExpr }
-  : '[' ListExprs ']' { List $2 (_ptInfo $1) }
+  : '[' ListExprs ']' { List $2 (combineSpan (_ptInfo $1) (_ptInfo $3)) }
 
 ListExprs :: { [ParsedExpr] }
   : Expr MCommaExpr { $1:(reverse $2) }
@@ -405,19 +391,19 @@ ExprCommaSep :: { [ParsedExpr] }
   | Expr { [$1] }
   -- | {- empty -} { [] }
 
-LamExpr :: { LineInfo -> ParsedExpr }
+LamExpr :: { SpanInfo -> ParsedExpr }
   : lam '(' LamArgs ')' Block { Lam (reverse $3) $5 }
 
-IfExpr :: { LineInfo -> ParsedExpr }
+IfExpr :: { SpanInfo -> ParsedExpr }
   : if Expr Expr Expr { If $2 $3 $4 }
 
-TryExpr :: { LineInfo -> ParsedExpr }
+TryExpr :: { SpanInfo -> ParsedExpr }
   : try Expr Expr { Try $2 $3 }
 
-SuspendExpr :: { LineInfo -> ParsedExpr }
+SuspendExpr :: { SpanInfo -> ParsedExpr }
   : suspend Expr { Suspend $2 }
 
-ErrExpr :: { LineInfo -> ParsedExpr }
+ErrExpr :: { SpanInfo -> ParsedExpr }
   : err STR { Error (getStr $2) }
 
 LamArgs :: { [(Text, Maybe Type)] }
@@ -425,17 +411,17 @@ LamArgs :: { [(Text, Maybe Type)] }
   | LamArgs IDENT { (getIdent $2, Nothing):$1 }
   | {- empty -} { [] }
 
-LetExpr :: { LineInfo -> ParsedExpr }
+LetExpr :: { SpanInfo -> ParsedExpr }
   : let '(' Binders ')' Block { LetIn (NE.fromList (reverse $3)) $5 }
 
-Binders :: { [Binder LineInfo] }
+Binders :: { [Binder SpanInfo] }
   : Binders '(' IDENT MTypeAnn Expr ')' { (Binder (getIdent $3) $4 $5):$1 }
   | '(' IDENT MTypeAnn Expr ')' { [Binder (getIdent $2) $3 $4] }
 
-GenAppExpr :: { LineInfo -> ParsedExpr }
+GenAppExpr :: { SpanInfo -> ParsedExpr }
   : Expr AppBindList { App $1 (toAppExprList (reverse $2)) }
 
-ProgNExpr :: { LineInfo -> ParsedExpr }
+ProgNExpr :: { SpanInfo -> ParsedExpr }
   : progn BlockBody { Block (NE.fromList (reverse $2)) }
 
 AppList :: { [ParsedExpr] }
