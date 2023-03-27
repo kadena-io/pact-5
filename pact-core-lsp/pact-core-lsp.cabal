@@ -1,0 +1,72 @@
+cabal-version:      3.0
+name:               pact-core-lsp
+version:            0.1.0.0
+-- synopsis:
+-- description:
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             Robert Soeldner
+maintainer:         robert@kadena.io
+-- copyright:
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+-- extra-source-files:
+
+common warnings
+    ghc-options: -Wall
+
+library
+    import:           warnings
+    exposed-modules:
+      Pact.Core.LSP.Server
+      Pact.Core.LSP.Handlers
+      Pact.Core.LSP.Types
+    -- other-modules:
+    -- other-extensions:
+    build-depends:
+        base ^>=4.14.3.0
+      , bytestring
+      , co-log-core
+      , data-default
+      , lens
+      , lsp
+      , lsp-types
+      , mtl
+      , aeson
+      , prettyprinter
+      , stm
+      , text
+      , pact-core
+      , text-rope
+      , containers
+    hs-source-dirs:   src
+    default-language: Haskell2010
+
+executable pact-core-lsp
+    import:           warnings
+    main-is:          Main.hs
+    -- other-modules:
+    -- other-extensions:
+    build-depends:
+        base ^>=4.14.3.0
+      , pact-core-lsp
+
+    hs-source-dirs:   app
+    default-language: Haskell2010
+
+test-suite pact-core-lsp-test
+    import:           warnings
+    default-language: Haskell2010
+    -- other-modules:
+    -- other-extensions:
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Main.hs
+    build-depends:
+        base ^>=4.14.3.0
+      , lsp-test
+      , lsp-types
+      , pact-core-lsp
+      , hspec
+      , process
+      , co-log-core
