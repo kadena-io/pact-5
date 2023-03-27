@@ -17,18 +17,17 @@ import qualified Language.LSP.VFS as VFS
 import Data.Text.Utf16.Rope (toText)
 import Data.Text.Encoding (encodeUtf8)
 
-import Data.Proxy
-import Pact.Core.Info
 
 import qualified Pact.Core.Errors as P
 import Control.Lens.Getter (view)
 import qualified Pact.Core.Info as P
-
 import Pact.Core.Builtin (RawBuiltin, CoreBuiltin)
 import qualified Data.Map.Strict as M
 import Control.Monad.Except (MonadError(..), runExceptT)
 import qualified Data.Text as T
 import Pact.Core.Typed.Term (TopLevel(..))
+import qualified Pact.Core.Syntax.Lisp.Lexer as Lisp
+import Pact.Core.LSP.AnalyzeSource (analyzeSource, AnalyzeError (..))
 
 liftLsp :: LspT ServerConfig IO a -> HandlerM a
 liftLsp = HandlerM . lift . lift
@@ -79,45 +78,35 @@ documentDiagnostics _uri = do
   let nuri = toNormalizedUri _uri
 
   mFile <- liftLsp $ getVirtualFile nuri
-  -- diag <- case mFile of
-  --   Nothing -> throwError (NoVirtualFile _uri)
-  --   Just (VFS.VirtualFile _ _ rope) -> do
-  --     let src = encodeUtf8 (toText rope)
+  res <- case mFile of
+    Nothing -> throwError (NoVirtualFile _uri)
+    Just (VFS.VirtualFile _ _ rope) -> do
+      let src = encodeUtf8 (toText rope)
+      liftIO $ runExceptT (analyzeSource src)
+  _diagnostics <- case res of
+    Left (PactError pe) -> pure (List [pactErrorToDiagnostic pe])
+    Left _ -> throwError (UnknownError "")
+    Right _ -> pure (List [])
+  let
+    _version = Nothing
+  liftLsp (sendNotification STextDocumentPublishDiagnostics PublishDiagnosticsParams{..})
 
-  undefined
-  --     pactDb <- use ssPactDb
-  --     loaded <- use ssLoaded
-
-  --     let mloaded = M.findWithDefault mempty _uri loaded
-  --     res <- liftIO $ runExceptT (compileProgram src pactDb mloaded)
-  --     case res of
-  --       Left e -> pure [pactErrorToDiagnostic e]
-  --       Right (tl, newLoaded) -> do
-  --         modifying ssCache (M.insert _uri tl)
-  --         modifying ssLoaded (M.insert _uri newLoaded)
-  --         pure []
-
-  -- let
-  --    _version = Nothing
-  --    _diagnostics = List diag
-  -- liftLsp (sendNotification STextDocumentPublishDiagnostics PublishDiagnosticsParams{..})
-
-
-
--- pactErrorToDiagnostic :: P.PactErrorI -> Diagnostic
--- pactErrorToDiagnostic pe = Diagnostic{..}
---   where
---     pos = view P.peInfo pe
---     _range = lineInfoToRange pos
---     _severity = Just DsError
---     _code = Nothing
---     _source = case pe of
---       P.PELexerError _ _ -> Just "Lexer"
---       P.PEParseError _ _ -> Just "Parser"
---       P.PEDesugarError _ _ -> Just "Desugar"
---       P.PETypecheckError _ _ -> Just "Typechecker"
---       P.PEOverloadError _ _ -> Just "Overloader"
---       _ -> Nothing
---     _message = P.renderPactError pe
---     _tags = Nothing
---     _relatedInformation = Nothing
+pactErrorToDiagnostic :: P.PactErrorI -> Diagnostic
+pactErrorToDiagnostic pe = Diagnostic{..}
+  where
+    (P.SpanInfo sl sc el ec) = view P.peInfo pe
+    _range = Range
+      (Position (fromIntegral sl) (fromIntegral sc))
+      (Position (fromIntegral el) (fromIntegral ec))
+    _severity = Just DsError
+    _code = Nothing
+    _source = case pe of
+      P.PELexerError _ _ -> Just "Lexer"
+      P.PEParseError _ _ -> Just "Parser"
+      P.PEDesugarError _ _ -> Just "Desugar"
+      P.PETypecheckError _ _ -> Just "Typechecker"
+      P.PEOverloadError _ _ -> Just "Overloader"
+      _ -> Nothing
+    _message = P.renderPactError pe
+    _tags = Nothing
+    _relatedInformation = Nothing

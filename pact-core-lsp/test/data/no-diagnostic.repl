@@ -1,0 +1,1 @@
+(defun test: integer (hello: string world: bool) (+ 1 1))

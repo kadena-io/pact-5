@@ -25,6 +25,8 @@ data ServerConfig
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
+
+
 data ServerState
   = ServerState
   {
@@ -32,7 +34,7 @@ data ServerState
 makeLenses ''ServerState
 
 data HandlerError
-  = UnkownError Text
+  = UnknownError Text
   | NoVirtualFile Uri
   | NotCached Uri
   | PositionError

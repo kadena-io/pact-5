@@ -21,6 +21,7 @@ library
       Pact.Core.LSP.Server
       Pact.Core.LSP.Handlers
       Pact.Core.LSP.Types
+      Pact.Core.LSP.AnalyzeSource
     -- other-modules:
     -- other-extensions:
     build-depends:
@@ -70,3 +71,4 @@ test-suite pact-core-lsp-test
       , hspec
       , process
       , co-log-core
+      , temporary
