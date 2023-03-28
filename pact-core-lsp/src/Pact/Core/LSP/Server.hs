@@ -47,7 +47,7 @@ runWith i o l = do
   let
     _ssLoaded = empty
     _ssCache = empty
-  state <- newMVar ServerState
+  state <- newMVar (ServerState mempty)
 
   let
     defaultConfig = ServerConfig "pact"

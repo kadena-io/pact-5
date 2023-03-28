@@ -27,7 +27,8 @@ import Control.Monad.Except (MonadError(..), runExceptT)
 import qualified Data.Text as T
 import Pact.Core.Typed.Term (TopLevel(..))
 import qualified Pact.Core.Syntax.Lisp.Lexer as Lisp
-import Pact.Core.LSP.AnalyzeSource (analyzeSource, AnalyzeError (..))
+import Pact.Core.LSP.AnalyzeSource (analyzeSource, AnalyzeError (..), runAnalyze, AnalyzeState (..), AnalyzeResult (..))
+import Control.Lens.Operators
 
 liftLsp :: LspT ServerConfig IO a -> HandlerM a
 liftLsp = HandlerM . lift . lift
@@ -78,15 +79,20 @@ documentDiagnostics _uri = do
   let nuri = toNormalizedUri _uri
 
   mFile <- liftLsp $ getVirtualFile nuri
-  res <- case mFile of
-    Nothing -> throwError (NoVirtualFile _uri)
+  aRes <- case mFile of
+    Nothing ->
+      throwError (NoVirtualFile _uri)
+
     Just (VFS.VirtualFile _ _ rope) -> do
       let src = encodeUtf8 (toText rope)
-      liftIO $ runExceptT (analyzeSource src)
-  _diagnostics <- case res of
-    Left (PactError pe) -> pure (List [pactErrorToDiagnostic pe])
-    Left _ -> throwError (UnknownError "")
-    Right _ -> pure (List [])
+      liftIO $ runAnalyze (analyzeSource src)
+
+  _diagnostics <- case aRes of
+    (Left (AnalyzeError pe), _) -> pure (List [pactErrorToDiagnostic pe])
+    (Right (AnalyzeResult aCom), AnalyzeState aState) -> do
+      ssCache %= M.insert _uri (aCom, aState)
+
+      pure (List []) -- no diagnostics
   let
     _version = Nothing
   liftLsp (sendNotification STextDocumentPublishDiagnostics PublishDiagnosticsParams{..})

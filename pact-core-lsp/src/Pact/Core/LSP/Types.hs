@@ -17,6 +17,12 @@ import Control.Lens
 import GHC.Generics
 import Language.LSP.Types (Uri)
 import Data.Aeson (FromJSON, ToJSON)
+import Pact.Core.Typed.Term (OverloadedReplTopLevel)
+import Pact.Core.Names (NamedDeBruijn)
+import Pact.Core.Builtin (ReplRawBuiltin, ReplCoreBuiltin)
+import Pact.Core.Info (SpanInfo)
+import Data.Map (Map)
+import Pact.Core.Persistence (Loaded)
 
 data ServerConfig
   = ServerConfig
@@ -26,10 +32,11 @@ data ServerConfig
   deriving anyclass (ToJSON, FromJSON)
 
 
+type Compiled = OverloadedReplTopLevel NamedDeBruijn ReplRawBuiltin SpanInfo
 
 data ServerState
   = ServerState
-  {
+  { _ssCache :: Map Uri ([Compiled], Loaded ReplCoreBuiltin SpanInfo)
   }
 makeLenses ''ServerState
 
