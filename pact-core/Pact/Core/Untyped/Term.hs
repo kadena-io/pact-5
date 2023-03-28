@@ -38,6 +38,7 @@ module Pact.Core.Untyped.Term
  , mImports
  , mImplemented
  , mHash
+ , mGovernance
  -- Interface lenses
  , ifName
  , ifDefns
@@ -59,6 +60,8 @@ import Pact.Core.Names
 import Pact.Core.Type
 import Pact.Core.Imports
 import Pact.Core.Hash
+import Pact.Core.Guards
+import Pact.Core.Capabilities
 import Pact.Core.Pretty(Pretty(..), pretty, (<+>))
 
 import qualified Pact.Core.Pretty as Pretty
@@ -80,24 +83,40 @@ data DefConst name builtin info
   , _dcInfo :: info
   } deriving Show
 
+data DefCap name builtin info
+  = DefCap
+  { _dcapName :: Text
+  , _dcapType :: Type Void
+  , _dcapTerm :: Term name builtin info
+  , _dcapMeta :: Maybe (DefCapMeta name)
+  , _dcapInfo :: info
+  } deriving Show
+
 data Def name builtin info
   = Dfun (Defun name builtin info)
   | DConst (DefConst name builtin info)
+  | DCap (DefCap name builtin info)
   deriving Show
 
 -- DCap (DefCap name builtin info)
 -- DPact (DefPact name builtin info)
 -- DSchema (DefSchema name info)
 -- DTable (DefTable name info)
+
+-- Todo: Remove this, not all top level defs have a proper
+-- associated type, and DCap types are w holly irrelevant, we cannot simply
+-- call them, they can only be evaluated within `with-capability`.
 defType :: Def name builtin info -> Type Void
 defType = \case
   Dfun d -> _dfunType d
   DConst d -> _dcType d
+  DCap d -> _dcapType d
 
 defName :: Def name builtin i -> Text
 defName = \case
   Dfun d -> _dfunName d
   DConst d -> _dcName d
+  DCap d -> _dcapName d
 
 ifDefName :: IfDef name builtin i -> Text
 ifDefName = \case
@@ -108,10 +127,12 @@ defTerm :: Def name builtin info -> Term name builtin info
 defTerm = \case
   Dfun d -> _dfunTerm d
   DConst d -> _dcTerm d
+  DCap d -> _dcapTerm d
 
 data Module name builtin info
   = Module
   { _mName :: ModuleName
+  , _mGovernance :: Governance name
   , _mDefs :: [Def name builtin info]
   , _mBlessed :: !(Set.Set ModuleHash)
   , _mImports :: [Import]
@@ -228,13 +249,17 @@ fromIRDConst
 fromIRDConst (IR.DefConst n ty term i) =
   DefConst n (maybe TyUnit (fmap absurd) ty) (fromIRTerm term) i
 
+fromIRDCap :: IR.DefCap name builtin info -> DefCap name builtin info
+fromIRDCap (IR.DefCap dcn dcty term meta i) =
+  DefCap dcn dcty (fromIRTerm term) meta i
+
 fromIRDef
   :: IR.Def name builtin info
   -> Def name builtin info
 fromIRDef = \case
   IR.Dfun d -> Dfun (fromIRDefun d)
   IR.DConst d -> DConst (fromIRDConst d)
-  -- IR.DCap d -> DCap (fromIRDCap d)
+  IR.DCap d -> DCap (fromIRDCap d)
 
 fromIRIfDef
   :: IR.IfDef name builtin info
@@ -246,8 +271,8 @@ fromIRIfDef = \case
 fromIRModule
   :: IR.Module name builtin info
   -> Module name builtin info
-fromIRModule (IR.Module mn defs blessed imports implements hs) =
-  Module mn (fromIRDef <$> defs) blessed imports implements hs
+fromIRModule (IR.Module mn gov defs blessed imports implements hs) =
+  Module mn gov (fromIRDef <$> defs) blessed imports implements hs
 
 fromIRInterface
   :: IR.Interface name builtin info

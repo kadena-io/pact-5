@@ -24,8 +24,9 @@ newtype PublicKey = PublicKey { _pubKey :: ByteString }
 newtype KeySetName = KeySetName Text
     deriving (Eq,Ord,Show)
 
-newtype Governance a =
-  Governance { _governance :: Either KeySetName a }
+data Governance name
+  = KeyGov KeySetName
+  | CapGov name
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data KSPredicate name

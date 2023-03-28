@@ -164,8 +164,8 @@ ReplSpecial :: { LineInfo -> ReplSpecialForm LineInfo }
   | tcfail STR Expr { ReplTypecheckFail (getStr $2) $3 }
 
 Governance :: { Governance Text }
-  : StringRaw { Governance (Left (KeySetName $1))}
-  | IDENT { Governance (Right (getIdent $1))}
+  : StringRaw { KeyGov (KeySetName $1)}
+  | IDENT { CapGov (getIdent $1) }
 
 StringRaw :: { Text }
  : STR  { getStr $1 }

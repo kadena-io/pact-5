@@ -121,6 +121,8 @@ type TypedGenTerm b i = Typed.OverloadedTerm NamedDeBruijn b i
 
 type TypedDefun b i = Typed.OverloadedDefun NamedDeBruijn b i
 
+type TypedDefCap b i = Typed.OverloadedDefCap NamedDeBruijn b i
+
 type TypedDefConst b i = Typed.OverloadedDefConst NamedDeBruijn b i
 
 type TypedDef b i = Typed.OverloadedDef NamedDeBruijn b i
@@ -1254,6 +1256,17 @@ inferDefConst (IR.DefConst name dcTy term info) = do
   rty' <- ensureNoTyVars info (maybe termTy id dcTy')
   pure (Typed.DefConst name rty' fterm info)
 
+inferDefCap
+  :: TypeOfBuiltin b
+  => IR.DefCap Name b i
+  -> InferM s b' i (TypedDefCap b i)
+inferDefCap (IR.DefCap name ty term meta i) = do
+  (termTy, term', preds) <- inferTerm term
+  checkReducible preds i
+  unify (liftType ty) (termTy) i
+  fterm <- noTyVarsinTerm i term'
+  pure (Typed.DefCap name (liftType ty) fterm meta i)
+
 inferDef
   :: TypeOfBuiltin b
   => IR.Def Name b i
@@ -1261,7 +1274,7 @@ inferDef
 inferDef = \case
   IR.Dfun d -> Typed.Dfun <$> inferDefun d
   IR.DConst d -> Typed.DConst <$> inferDefConst d
-  -- IR.DCap d -> Typed.DCap <$> inferDefCap d
+  IR.DCap dc -> Typed.DCap <$> inferDefCap dc
 
 inferIfDef
   :: TypeOfBuiltin b
@@ -1279,11 +1292,11 @@ inferModule
   :: TypeOfBuiltin b
   => IR.Module Name b i
   -> InferM s b' i (TypedModule b i)
-inferModule (IR.Module mname defs blessed imports impl mh) = do
+inferModule (IR.Module mname mgov defs blessed imports impl mh) = do
   -- gov' <- traverse (dbjName [] 0 . toOName ) gov
   fv <- view tcFree
   (defs', _) <- foldlM infer' ([], fv) defs
-  pure (Typed.Module mname (reverse defs') blessed imports impl mh)
+  pure (Typed.Module mname mgov (reverse defs') blessed imports impl mh)
   where
   infer' (xs, m) d = do
     def' <- local (set tcFree m) (inferDef d)

@@ -45,6 +45,7 @@ import Pact.Core.Type
 import Pact.Core.Literal
 import Pact.Core.Hash
 import Pact.Core.Persistence
+import Pact.Core.Capabilities
 import Pact.Core.Errors
 import Pact.Core.IR.Term
 
@@ -328,6 +329,20 @@ desugarDefConst (Lisp.DefConst n mty e _ i) = do
   e' <- desugarLispTerm e
   pure $ DefConst n mty' e' i
 
+desugarDefMeta = \case
+  Lisp.DefEvent -> DefEvent
+  Lisp.DefManaged marg ->
+    DefManaged marg
+
+desugarDefCap (Lisp.DefCap dcn margs mrtype term _docs _model meta i) = do
+  args <- traverse (enforceArg i) margs
+  rtype <- maybe (error "boom") pure mrtype
+  term' <- desugarLispTerm term
+  let meta' = fmap desugarDefMeta meta
+      dct = foldr TyFun rtype (Lisp._argType <$> args)
+  pure (DefCap dcm dct term' meta' i)
+
+
 desugarIfDef
   :: (MonadError (PactError info) m, DesugarBuiltin builtin)
   => Lisp.IfDef info
@@ -359,11 +374,12 @@ desugarModule
   :: (DesugarBuiltin builtin, MonadError (PactError info) m)
   => Lisp.Module info
   -> RenamerT m b info (Module ParsedName builtin info)
-desugarModule (Lisp.Module mname _ extdecls defs _ _) = do
+desugarModule (Lisp.Module mname mgov extdecls defs _ _) = do
   let (imports, blessed, implemented) = splitExts extdecls
   defs' <- traverse desugarDef (NE.toList defs)
   let mhash = ModuleHash (Hash "placeholder")
-  pure $ Module mname defs' blessed imports implemented mhash
+      mgov' = BN . BareName <$> mgov
+  pure $ Module mname mgov' defs' blessed imports implemented mhash
   where
   splitExts = split ([], Set.empty, [])
   split (accI, accB, accImp) (h:hs) = case h of
@@ -774,11 +790,6 @@ resolveBare (BareName bn) i = views reBinds (Map.lookup bn) >>= \case
         -- todo: error type here
         InterfaceData{} -> error "CANNOT USE INTERFACE AS MODULE REF"
 
--- resolveBareName' :: Text -> RenamerM b i Name
--- resolveBareName' bn = views reBinds (Map.lookup bn) >>= \case
---   Just irnk -> pure (Name bn irnk)
---   Nothing -> fail $ "Expected identifier " <> T.unpack bn <> " in scope"
-
 resolveQualified
   :: (MonadError (PactError i) m)
   => QualifiedName
@@ -798,12 +809,13 @@ renameModule
   :: (MonadError (PactError i) m)
   => Module ParsedName b' i
   -> RenamerT m b i (Module Name b' i)
-renameModule (Module mname defs blessed imp implements mhash) = do
+renameModule (Module mname mgov defs blessed imp implements mhash) = do
   let rawDefNames = defName <$> defs
       defMap = Map.fromList $ (, NTopLevel mname mhash) <$> rawDefNames
       fqns = Map.fromList $ (\n -> (n, FullyQualifiedName mname n mhash)) <$> rawDefNames
   -- `maybe all of this next section should be in a block laid out by the
   -- `locally reBinds`
+  mgov' <- resolveGov mgov
   rsModuleBinds %= Map.insert mname defMap
   rsLoaded . loToplevel %= Map.union fqns
   defs' <- locally reBinds (Map.union defMap) $ traverse renameDef defs
@@ -815,8 +827,12 @@ renameModule (Module mname defs blessed imp implements mhash) = do
       -- but all uses of `head` are still scary
       throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (head d))
   traverse_ (checkImplements mname defs) implements
-  pure (Module mname defs'' blessed imp implements mhash)
+  pure (Module mname mgov' defs'' blessed imp implements mhash)
   where
+  resolveGov = traverse $ \govName -> case find (\d -> BN (BareName (defName d)) == govName) defs of
+    Just (DCap d) -> pure (Name (_dcapName d) (NTopLevel mname mhash))
+    _ -> error "no such ovuvue"
+
   mkScc def = (def, defName def, Set.toList (defSCC mname def))
 
 checkImplements
@@ -942,30 +958,6 @@ runDesugarInterface
 runDesugarInterface _ pdb loaded m  = runDesugar' pdb loaded $ do
   desugared <- desugarInterface m
   renameInterface desugared
-
-
--- runDesugarDefun
---   :: (MonadError (PactError i) m, DesugarTerm term raw i)
---   => Proxy raw
---   -> PactDb m reso i
---   -> Loaded reso i
---   -> Lisp.Defun term i
---   -> m (DesugarOutput reso i (Defun Name raw i))
--- runDesugarDefun _ pdb loaded df = let
---   d = desugarDefun df
---   in runDesugar' pdb loaded (renameDefun d)
-
--- runDesugarDefConst
---   :: (MonadError (PactError i) m, DesugarTerm term raw i)
---   => Proxy raw
---   -> PactDb m reso i
---   -> Loaded reso i
---   -> Lisp.DefConst term i
---   -> m (DesugarOutput reso i (DefConst Name raw i))
--- runDesugarDefConst _ pdb loaded df = let
---   d = desugarDefConst df
---   in runDesugar' pdb loaded (renameDefConst d)
-
 
 runDesugarReplDefun
   :: (MonadError (PactError i) m, DesugarBuiltin raw)

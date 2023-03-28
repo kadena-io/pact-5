@@ -316,6 +316,14 @@ instance Pretty (Binder i) where
   pretty (Binder ident ty e) =
     parens $ pretty ident <> maybe mempty ((":" <>) . pretty) ty <+> pretty e
 
+data CapForm i
+  = WithCapability ParsedName [Expr i] (Expr i)
+  | RequireCapability ParsedName [Expr i]
+  | ComposeCapability ParsedName [Expr i]
+  | InstallCapability ParsedName [Expr i]
+  | EmitEvent ParsedName [Expr i]
+  deriving (Show, Eq, Functor)
+
 data Expr i
   = Var ParsedName i
   | LetIn (NonEmpty (Binder i)) (Expr i) i
@@ -331,6 +339,7 @@ data Expr i
   | DynAccess (Expr i) Text i
   | Object [(Field, Expr i)] i
   | Binding [(Field, MArg)] [Expr i] i
+  | CapabilityForm (CapForm i) i
   | Error Text i
   deriving (Show, Eq, Functor)
 
@@ -380,6 +389,8 @@ termInfo f = \case
     Constant l <$> f i
   Try e1 e2 i ->
     Try e1 e2 <$> f i
+  CapabilityForm e i ->
+    CapabilityForm e <$> f i
   Error t i ->
     Error t <$> f i
   Binding t e i ->
@@ -413,6 +424,20 @@ instance Pretty (Expr i) where
       pretty e <> "::" <> pretty f
     Suspend e _ ->
       parens ("suspend" <+> pretty e)
+    CapabilityForm c _ -> case c of
+      WithCapability pn exs ex ->
+        parens ("with-capability" <+> capApp pn exs <+> pretty ex)
+      RequireCapability pn exs ->
+        parens ("require-capability" <+> capApp pn exs)
+      ComposeCapability pn exs ->
+        parens ("compose-capability" <+> capApp pn exs)
+      InstallCapability pn exs ->
+        parens ("install-capability" <+> capApp pn exs)
+      EmitEvent pn exs ->
+        parens ("require-capability" <+> capApp pn exs)
+      where
+      capApp pn exns =
+        parens (pretty pn <+> hsep (pretty <$> exns))
     Object m _ ->
       "{" <> pretty m <> "}"
     Binding{} -> error "boom"

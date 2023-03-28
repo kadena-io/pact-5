@@ -93,6 +93,7 @@ library
     Pact.Core.Persistence
     Pact.Core.PactValue
     Pact.Core.Debug
+    Pact.Core.Capabilities
 
      -- Syntax modules
     Pact.Core.Syntax.Lisp.ParseTree

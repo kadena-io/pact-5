@@ -8,6 +8,7 @@ module Pact.Core.Typed.Term
  ( Defun(..)
  , DefConst(..)
  , Def(..)
+ , DefCap(..)
  , Term(..)
  , Module(..)
  , Interface(..)
@@ -22,6 +23,7 @@ module Pact.Core.Typed.Term
  , OverloadedTerm
  , OverloadedDefun
  , OverloadedDefConst
+ , OverloadedDefCap
  , OverloadedIfDef
  , OverloadedDef
  , OverloadedModule
@@ -57,6 +59,8 @@ import Pact.Core.Names
 import Pact.Core.Type
 import Pact.Core.Imports
 import Pact.Core.Hash
+import Pact.Core.Guards
+import Pact.Core.Capabilities
 import Pact.Core.Pretty(Pretty(..), pretty, (<+>))
 
 import qualified Pact.Core.Pretty as Pretty
@@ -77,9 +81,20 @@ data DefConst name tyname builtin info
   , _dcInfo :: info
   } deriving Show
 
+data DefCap name tyname builtin info
+  = DefCap
+  { _dcapName :: Text
+  , _dcapType :: Type Void
+  , _dcapTerm :: Term name tyname builtin info
+  , _dcapMeta :: Maybe (DefCapMeta name)
+  , _dcapInfo :: info
+  } deriving Show
+
+
 data Def name tyname builtin info
   = Dfun (Defun name tyname builtin info)
   | DConst (DefConst name tyname builtin info)
+  | DCap (DefCap name tyname builtin info)
   deriving Show
 
 -- Todo: deftypes to support
@@ -91,23 +106,24 @@ defType :: Def name tyname builtin info -> Type Void
 defType = \case
   Dfun d -> _dfunType d
   DConst d -> _dcType d
-  -- DCap d -> _dcapType d
+  DCap d -> _dcapType d
 
 defName :: Def name tyname builtin i -> Text
 defName = \case
   Dfun d -> _dfunName d
   DConst d -> _dcName d
-  -- DCap d -> _dcapName d
+  DCap d -> _dcapName d
 
 defTerm :: Def name tyname builtin info -> Term name tyname builtin info
 defTerm = \case
   Dfun d -> _dfunTerm d
   DConst d -> _dcTerm d
+  DCap d -> _dcapTerm d
 
 data Module name tyname builtin info
   = Module
   { _mName :: ModuleName
-  -- , _mGovernance :: Governance name
+  , _mGovernance :: Governance name
   , _mDefs :: [Def name tyname builtin info]
   , _mBlessed :: !(Set.Set ModuleHash)
   , _mImports :: [Import]
@@ -190,6 +206,9 @@ type OverloadedDefun tyname b i =
 
 type OverloadedDefConst tyname b i =
   DefConst Name tyname (b, [Type tyname], [Pred tyname]) i
+
+type OverloadedDefCap tyname b i =
+  DefCap Name tyname (b, [Type tyname], [Pred tyname]) i
 
 type OverloadedDef tyname b i =
   Def Name tyname (b, [Type tyname], [Pred tyname]) i

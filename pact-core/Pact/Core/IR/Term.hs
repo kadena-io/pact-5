@@ -21,12 +21,14 @@ import Data.List.NonEmpty (NonEmpty)
 import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NE
 
+import Pact.Core.Guards
 import Pact.Core.Builtin
 import Pact.Core.Hash
 import Pact.Core.Literal
 import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Imports
+import Pact.Core.Capabilities
 import Pact.Core.Pretty
 
 data Defun name builtin info
@@ -45,14 +47,25 @@ data DefConst name builtin info
   , _dcInfo :: info
   } deriving Show
 
+data DefCap name builtin info
+  = DefCap
+  { _dcapName :: Text
+  , _dcapType :: Type Void
+  , _dcapTerm :: Term name builtin info
+  , _dcapMeta :: Maybe (DefCapMeta name)
+  , _dcapInfo :: info
+  } deriving Show
+
 data Def name builtin info
   = Dfun (Defun name builtin info)
   | DConst (DefConst name builtin info)
+  | DCap (DefCap name builtin info)
   deriving Show
 
 defName :: Def name b i -> Text
 defName (Dfun d) = _dfunName d
 defName (DConst d) = _dcName d
+defName (DCap d) = _dcapName d
 
 ifDefName :: IfDef name builtin i -> Text
 ifDefName = \case
@@ -63,6 +76,7 @@ defInfo :: Def name b i -> i
 defInfo = \case
   Dfun de -> _dfunInfo de
   DConst dc -> _dcInfo dc
+  DCap dc -> _dcapInfo dc
 
 ifDefInfo :: IfDef name b i -> i
 ifDefInfo = \case
@@ -75,7 +89,7 @@ ifDefInfo = \case
 data Module name builtin info
   = Module
   { _mName :: ModuleName
-  -- , _mGovernance :: Governance name
+  , _mGovernance :: Governance name
   , _mDefs :: [Def name builtin info]
   , _mBlessed :: !(Set.Set ModuleHash)
   , _mImports :: [Import]

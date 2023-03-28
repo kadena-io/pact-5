@@ -395,6 +395,7 @@ resolveDef
 resolveDef = \case
   Dfun d -> Dfun <$> resolveDefun d
   DConst d -> DConst <$> resolveDefConst d
+  DCap _ -> error "implement dcap"
 
 resolveIfDef
   :: SolveOverload raw reso
