@@ -60,7 +60,8 @@ instance Pretty Operator where
     PowOp -> "^"
     BitComplementOp -> "~"
 
--- Todo: type constructors aren't 1-1 atm.
+-- | Type representing all pact syntactic types.
+-- Note: A few types (mainly TyPoly*) do not exist in pact-core.
 data Type
   = TyPrim PrimType
   | TyList Type
@@ -79,9 +80,6 @@ pattern TyInt = TyPrim PrimInt
 pattern TyDecimal :: Type
 pattern TyDecimal = TyPrim PrimDecimal
 
--- pattern TyTime :: Type
--- pattern TyTime = TyPrim PrimTime
-
 pattern TyBool :: Type
 pattern TyBool = TyPrim PrimBool
 
@@ -91,7 +89,6 @@ pattern TyString = TyPrim PrimString
 pattern TyUnit :: Type
 pattern TyUnit = TyPrim PrimUnit
 
--- | Do we render parenthesis for the type if it shows nested in another
 instance Pretty Type where
   pretty = \case
     TyPrim prim -> pretty prim
@@ -112,21 +109,21 @@ instance Pretty Type where
 data Arg
   = Arg
   { _argName :: Text
-  , _argType :: Type }
-  deriving Show
+  , _argType :: Type
+  } deriving Show
 
 data MArg
   = MArg
   { _margName :: Text
-  , _margType :: Maybe Type }
-  deriving (Eq, Show)
+  , _margType :: Maybe Type
+  } deriving (Eq, Show)
 
 data Defun i
   = Defun
-  { _dfunName :: !Text
-  , _dfunArgs :: ![MArg]
+  { _dfunName :: Text
+  , _dfunArgs :: [MArg]
   , _dfunRetType :: Maybe Type
-  , _dfunTerm :: !(Expr i)
+  , _dfunTerm :: Expr i
   , _dfunDocs :: Maybe Text
   , _dfunModel :: Maybe [Expr i]
   , _dfunInfo :: i
@@ -218,7 +215,6 @@ data DefProperty i
   , _dpropExp :: Expr i
   } deriving Show
 
--- Todo: fix nonempty cond on module
 data Module i
   = Module
   { _mName :: ModuleName
@@ -367,14 +363,12 @@ termInfo f = \case
   Block nel i ->
     Block nel <$> f i
   Object m i -> Object m <$> f i
-  -- UnaryOp _op e i -> UnaryOp _op e <$> f i
   Operator op i ->
     Operator op <$> f i
   List nel i ->
     List nel <$> f i
   Suspend e i ->
     Suspend e <$> f i
-  -- ObjectOp o i -> ObjectOp o <$> f i
   DynAccess e fn i -> DynAccess e fn <$> f i
   Constant l i ->
     Constant l <$> f i
@@ -414,9 +408,10 @@ instance Pretty (Expr i) where
     Suspend e _ ->
       parens ("suspend" <+> pretty e)
     Object m _ ->
-      "{" <> pretty m <> "}"
+      braces (hsep (punctuate "," (prettyObj m)))
     Binding{} -> error "boom"
     where
+    prettyObj = fmap (\(n, k) -> dquotes (pretty n) <> ":" <> pretty k)
     renderLamPair (n, mt) = case mt of
       Nothing -> pretty n
       Just t -> pretty n <> ":" <> pretty t

@@ -84,7 +84,7 @@ tokens :-
     suspend      { token TokenSuspend }
 
     @integer     { emit TokenNumber }
-    
+
     @singletick  { emit TokenSingleTick }
     \(           { token TokenOpenParens }
     \)           { token TokenCloseParens }
@@ -111,7 +111,7 @@ tokens :-
     -- \|           { token TokenBitOr }
     -- \~           { token TokenBitComplement }
     \"           { stringLiteral }
-    \^           { token TokenPow }
+    -- \^           { token TokenPow }
     @ident       { emit TokenIdent }
 {
 

@@ -88,20 +88,20 @@ import Pact.Core.Syntax.Lisp.LexUtils
   ':'        { PosToken TokenColon _ }
   ':='       { PosToken TokenBindAssign _ }
   '.'        { PosToken TokenDot _ }
-  '=='       { PosToken TokenEq _ }
-  '!='       { PosToken TokenNeq _ }
-  '>'        { PosToken TokenGT _ }
-  '>='       { PosToken TokenGEQ _ }
-  '<'        { PosToken TokenLT _ }
-  '<='       { PosToken TokenLEQ _ }
-  '+'        { PosToken TokenPlus _ }
-  '-'        { PosToken TokenMinus _}
-  '*'        { PosToken TokenMult _ }
-  '/'        { PosToken TokenDiv _ }
-  '&'        { PosToken TokenBitAnd _ }
-  '|'        { PosToken TokenBitOr _ }
-  '~'        { PosToken TokenBitComplement _}
-  pow        { PosToken TokenPow _}
+  -- '=='       { PosToken TokenEq _ }
+  -- '!='       { PosToken TokenNeq _ }
+  -- '>'        { PosToken TokenGT _ }
+  -- '>='       { PosToken TokenGEQ _ }
+  -- '<'        { PosToken TokenLT _ }
+  -- '<='       { PosToken TokenLEQ _ }
+  -- '+'        { PosToken TokenPlus _ }
+  -- '-'        { PosToken TokenMinus _}
+  -- '*'        { PosToken TokenMult _ }
+  -- '/'        { PosToken TokenDiv _ }
+  -- '&'        { PosToken TokenBitAnd _ }
+  -- '|'        { PosToken TokenBitOr _ }
+  -- '~'        { PosToken TokenBitComplement _}
+  -- pow        { PosToken TokenPow _}
   and        { PosToken TokenAnd _ }
   or         { PosToken TokenOr _ }
   IDENT      { PosToken (TokenIdent _) _ }
@@ -461,20 +461,6 @@ Atom :: { ParsedExpr }
 Operator :: { ParsedExpr }
   : and { Operator AndOp (_ptInfo $1) }
   | or { Operator OrOp (_ptInfo $1) }
-  | '==' { Operator EQOp (_ptInfo $1) }
-  | '!=' { Operator NEQOp (_ptInfo $1) }
-  | '>'  { Operator GTOp (_ptInfo $1) }
-  | '>=' { Operator GEQOp (_ptInfo $1) }
-  | '<'  { Operator LTOp (_ptInfo $1) }
-  | '<=' { Operator LEQOp (_ptInfo $1) }
-  | '+'  { Operator AddOp (_ptInfo $1) }
-  | '-'  { Operator SubOp (_ptInfo $1) }
-  | '*'  { Operator MultOp (_ptInfo $1) }
-  | '/'  { Operator DivOp (_ptInfo $1) }
-  | '&'  { Operator BitAndOp (_ptInfo $1) }
-  | '|'  { Operator BitOrOp (_ptInfo $1) }
-  | '~'  { Operator BitComplementOp (_ptInfo $1) }
-  | pow  { Operator PowOp (_ptInfo $1) }
 
 Bool :: { ParsedExpr }
   : true { Constant (LBool True) (_ptInfo $1) }
