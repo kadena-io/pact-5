@@ -29,7 +29,7 @@ import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Info
 
-type PactErrorI = PactError LineInfo
+type PactErrorI = PactError SpanInfo
 
 class RenderError e where
   renderError :: e -> Text
@@ -77,7 +77,9 @@ data ParseError
   -- ^ Too much input in general. Did not expect more tokens.
   -- Emitted in the case of "Expression was parsed successfully but there's more input remaining."
   | PrecisionOverflowError Int
-  -- ^ Way too many decimal places for `Decimal` to deal with
+  -- ^ Way too many decimal places for `Decimal` to deal with, max 255 precision.
+  | InvalidBaseType Text
+  -- ^ Invalid primitive type
   deriving Show
 
 instance Exception ParseError
@@ -91,11 +93,15 @@ instance RenderError ParseError where
     UnexpectedInput e ->
       tConcatSpace ["Unexpected input after expr, remaining tokens:", e]
     PrecisionOverflowError i ->
-      tConcatSpace ["Precision overflow >256: ", T.pack (show i), "decimals"]
+      tConcatSpace ["Precision overflow (>=255 decimal places): ", T.pack (show i), "decimals"]
+    InvalidBaseType txt ->
+      tConcatSpace ["No such type:", txt]
 
 data DesugarError
   = UnboundTermVariable Text
+  | UnsupportedType Text
   | UnboundTypeVariable Text
+  | UnannotatedType Text
   | NoSuchModuleMember ModuleName Text
   | NoSuchModule ModuleName
   | NoSuchInterface ModuleName
@@ -108,6 +114,10 @@ instance Exception DesugarError
 
 instance RenderError DesugarError where
   renderError = \case
+    UnsupportedType t ->
+      tConcatSpace ["Unsupported type in pact-core:", t]
+    UnannotatedType t ->
+      tConcatSpace ["Unannotated type in variable:", t]
     UnboundTermVariable t ->
       tConcatSpace ["Unbound variable", t]
     UnboundTypeVariable t ->

@@ -17,8 +17,292 @@ import qualified Data.List.NonEmpty as NE
 import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.Pretty
+import Pact.Core.Type(PrimType(..))
+import Pact.Core.Imports
+import Pact.Core.Guards
 
-import Pact.Core.Syntax.Common
+
+data Operator
+  = AddOp
+  | SubOp
+  | MultOp
+  | DivOp
+  | GTOp
+  | GEQOp
+  | LTOp
+  | LEQOp
+  | EQOp
+  | NEQOp
+  | BitAndOp
+  | BitOrOp
+  | BitComplementOp
+  | AndOp
+  | OrOp
+  | PowOp
+  deriving (Show, Eq, Enum, Bounded)
+
+instance Pretty Operator where
+  pretty = \case
+    AddOp -> "+"
+    SubOp -> "-"
+    MultOp -> "*"
+    DivOp -> "/"
+    GTOp -> ">"
+    GEQOp -> ">="
+    LTOp -> "<"
+    LEQOp -> "<="
+    EQOp -> "="
+    NEQOp -> "!="
+    BitAndOp -> "&"
+    BitOrOp -> "|"
+    AndOp -> "and"
+    OrOp -> "or"
+    PowOp -> "^"
+    BitComplementOp -> "~"
+
+-- | Type representing all pact syntactic types.
+-- Note: A few types (mainly TyPoly*) do not exist in pact-core.
+data Type
+  = TyPrim PrimType
+  | TyList Type
+  | TyPolyList
+  | TyModRef ModuleName
+  | TyGuard
+  | TyKeyset
+  | TyObject ParsedName
+  | TyTime
+  | TyPolyObject
+  deriving (Show, Eq)
+
+pattern TyInt :: Type
+pattern TyInt = TyPrim PrimInt
+
+pattern TyDecimal :: Type
+pattern TyDecimal = TyPrim PrimDecimal
+
+pattern TyBool :: Type
+pattern TyBool = TyPrim PrimBool
+
+pattern TyString :: Type
+pattern TyString = TyPrim PrimString
+
+pattern TyUnit :: Type
+pattern TyUnit = TyPrim PrimUnit
+
+instance Pretty Type where
+  pretty = \case
+    TyPrim prim -> pretty prim
+    TyList t -> brackets (pretty t)
+    TyModRef mn -> "module" <> braces (pretty mn)
+    TyPolyList -> "list"
+    TyGuard -> "guard"
+    TyKeyset -> "keyset"
+    TyObject qn -> "object" <> braces (pretty qn)
+    TyPolyObject -> "object"
+    TyTime -> "time"
+
+
+----------------------------------------------------
+-- Common structures
+----------------------------------------------------
+
+data Arg
+  = Arg
+  { _argName :: Text
+  , _argType :: Type
+  } deriving Show
+
+data MArg
+  = MArg
+  { _margName :: Text
+  , _margType :: Maybe Type
+  } deriving (Eq, Show)
+
+data Defun i
+  = Defun
+  { _dfunName :: Text
+  , _dfunArgs :: [MArg]
+  , _dfunRetType :: Maybe Type
+  , _dfunTerm :: Expr i
+  , _dfunDocs :: Maybe Text
+  , _dfunModel :: Maybe [Expr i]
+  , _dfunInfo :: i
+  } deriving Show
+
+data DefConst i
+  = DefConst
+  { _dcName :: Text
+  , _dcType :: Maybe Type
+  , _dcTerm :: Expr i
+  , _dcDocs :: Maybe Text
+  , _dcInfo :: i
+  } deriving Show
+
+data DCapMeta
+  = DefEvent
+  | DefManaged (Maybe (Text, ParsedName))
+  deriving Show
+
+data DefCap i
+  = DefCap
+  { _dcapName :: Text
+  , _dcapArgs :: ![MArg]
+  , _dcapRetType :: Maybe Type
+  , _dcapTerm :: Expr i
+  , _dcapDocs :: Maybe Text
+  , _dcapModel :: Maybe [Expr i]
+  , _dcapMeta :: Maybe DCapMeta
+  , _dcapInfo :: i
+  } deriving Show
+
+data DefSchema i
+  = DefSchema
+  { _dscName :: Text
+  , _dscArgs :: [Arg]
+  , _dscDocs :: Maybe Text
+  , _dscModel :: Maybe [Expr i]
+  , _dscInfo :: i
+  } deriving Show
+
+data DefTable i
+  = DefTable
+  { _dtName :: Text
+  , _dtSchema :: ParsedName
+  , _dtDocs :: Maybe Text
+  , _dtInfo :: i
+  } deriving Show
+
+data PactStep i
+  = Step (Expr i) (Maybe [Expr i])
+  | StepWithRollback (Expr i) (Expr i) (Maybe [Expr i])
+  deriving Show
+
+data DefPact i
+  = DefPact
+  { _dpName :: Text
+  , _dpArgs :: [MArg]
+  , _dpRetType :: Maybe Type
+  , _dpSteps :: [PactStep i]
+  , _dpDocs :: Maybe Text
+  , _dpModel :: Maybe [Expr i]
+  , _dpInfo :: i
+  } deriving Show
+
+data Managed
+  = AutoManaged
+  | Managed Text ParsedName
+  deriving (Show)
+
+data Def i
+  = Dfun (Defun i)
+  | DConst (DefConst i)
+  | DCap (DefCap i)
+  | DSchema (DefSchema i)
+  | DTable (DefTable i)
+  | DPact (DefPact i)
+  deriving Show
+
+data ExtDecl
+  = ExtBless Text
+  | ExtImport Import
+  | ExtImplements ModuleName
+  deriving Show
+
+data DefProperty i
+  = DefProperty
+  { _dpropName :: Text
+  , _dpropArgs :: [Arg]
+  , _dpropExp :: Expr i
+  } deriving Show
+
+data Module i
+  = Module
+  { _mName :: ModuleName
+  , _mGovernance :: Governance Text
+  , _mExternal :: [ExtDecl]
+  , _mDefs :: NonEmpty (Def i)
+  , _mDoc :: Maybe Text
+  , _mModel :: [DefProperty i]
+  } deriving Show
+
+data TopLevel i
+  = TLModule (Module i)
+  | TLInterface (Interface i)
+  | TLTerm (Expr i)
+  deriving Show
+
+data Interface i
+  = Interface
+  { _ifName :: ModuleName
+  , _ifDefns :: [IfDef i]
+  , _ifDocs :: Maybe Text
+  , _ifModel :: Maybe [Expr i]
+  } deriving Show
+
+data IfDefun i
+  = IfDefun
+  { _ifdName :: Text
+  , _ifdArgs :: [MArg]
+  , _ifdRetType :: Maybe Type
+  , _ifdDocs :: Maybe Text
+  , _ifdModel :: Maybe [Expr i]
+  , _ifdInfo :: i
+  } deriving Show
+
+data IfDefCap i
+  = IfDefCap
+  { _ifdcName :: Text
+  , _ifdcArgs :: [MArg]
+  , _ifdcRetType :: Maybe Type
+  , _ifdcDocs :: Maybe Text
+  , _ifdcModel :: Maybe [Expr i]
+  , _ifdcMeta :: Maybe DCapMeta
+  , _ifdcInfo :: i
+  } deriving Show
+
+data IfDefPact i
+  = IfDefPact
+  { _ifdpName :: Text
+  , _ifdpArgs :: [MArg]
+  , _ifdpRetType :: Maybe Type
+  , _ifdpDocs :: Maybe Text
+  , _ifdpModel :: Maybe [Expr i]
+  , _ifdpInfo :: i
+  } deriving Show
+
+
+-- Interface definitions may be one of:
+--   Defun sig
+--   Defconst
+--   Defschema
+--   Defpact sig
+--   Defcap Sig
+data IfDef i
+  = IfDfun (IfDefun i)
+  | IfDConst (DefConst i)
+  | IfDCap (IfDefCap i)
+  | IfDSchema (DefSchema i)
+  | IfDPact (IfDefPact i)
+  deriving Show
+
+instance Pretty (DefConst i) where
+  pretty (DefConst dcn dcty term _ _) =
+    parens ("defconst" <+> pretty dcn <> mprettyTy dcty <+> pretty term)
+    where
+    mprettyTy = maybe mempty ((":" <>) . pretty)
+
+instance Pretty Arg where
+  pretty (Arg n ty) =
+    pretty n <> ":" <+> pretty ty
+
+instance Pretty MArg where
+  pretty (MArg n mty) =
+    pretty n <> maybe mempty (\ty -> ":" <+> pretty ty) mty
+
+instance Pretty (Defun i) where
+  pretty (Defun n args rettype term _ _ _) =
+    parens ("defun" <+> pretty n <+> parens (prettyCommaSep args)
+      <> ":" <+> pretty rettype <+> "=" <+> pretty term)
 
 data Binder i =
   Binder Text (Maybe Type) (Expr i)
@@ -41,6 +325,8 @@ data Expr i
   | Try (Expr i) (Expr i) i
   | Suspend (Expr i) i
   | DynAccess (Expr i) Text i
+  | Object [(Field, Expr i)] i
+  | Binding [(Field, MArg)] [Expr i] i
   | Error Text i
   deriving (Show, Eq, Functor)
 
@@ -56,10 +342,10 @@ data ReplSpecialTL i
   deriving Show
 
 data ReplTopLevel i
-  = RTLModule (Module (Expr i) i)
-  | RTLInterface (Interface (Expr i) i)
-  | RTLDefun (Defun (Expr i) i)
-  | RTLDefConst (DefConst (Expr i) i)
+  = RTLModule (Module i)
+  | RTLInterface (Interface i)
+  | RTLDefun (Defun i)
+  | RTLDefConst (DefConst i)
   | RTLTerm (Expr i)
   deriving Show
 
@@ -76,15 +362,13 @@ termInfo f = \case
     App e1 args <$> f i
   Block nel i ->
     Block nel <$> f i
-  -- Object m i -> Object m <$> f i
-  -- UnaryOp _op e i -> UnaryOp _op e <$> f i
+  Object m i -> Object m <$> f i
   Operator op i ->
     Operator op <$> f i
   List nel i ->
     List nel <$> f i
   Suspend e i ->
     Suspend e <$> f i
-  -- ObjectOp o i -> ObjectOp o <$> f i
   DynAccess e fn i -> DynAccess e fn <$> f i
   Constant l i ->
     Constant l <$> f i
@@ -92,6 +376,8 @@ termInfo f = \case
     Try e1 e2 <$> f i
   Error t i ->
     Error t <$> f i
+  Binding t e i ->
+    Binding t e <$> f i
 
 instance Pretty (Expr i) where
   pretty = \case
@@ -121,18 +407,11 @@ instance Pretty (Expr i) where
       pretty e <> "::" <> pretty f
     Suspend e _ ->
       parens ("suspend" <+> pretty e)
-    -- UnaryOp uop e1 _ ->
-    --   pretty uop <> pretty e1
-    -- Object m _ ->
-    --   "{" <> prettyObj m <> "}"
-    -- ObjectOp op _ -> case op of
-    --   ObjectAccess f o ->
-    --     pretty o <> "->" <> pretty f
-    --   ObjectRemove f o ->
-    --     pretty o <> "#" <> pretty f
-    --   ObjectExtend f u o ->
-    --     pretty o <> braces (pretty f <> ":=" <> pretty u)
+    Object m _ ->
+      braces (hsep (punctuate "," (prettyObj m)))
+    Binding{} -> error "boom"
     where
+    prettyObj = fmap (\(n, k) -> dquotes (pretty n) <> ":" <> pretty k)
     renderLamPair (n, mt) = case mt of
       Nothing -> pretty n
       Just t -> pretty n <> ":" <> pretty t

@@ -471,7 +471,6 @@ _dbgType = \case
   TyFun l r -> TyFun <$> _dbgType l <*> _dbgType r
   TyList t -> TyList <$> _dbgType t
   TyPrim p -> pure (TyPrim p)
-  TyGuard -> pure TyGuard
   TyModRef mr -> pure (TyModRef mr)
   TyForall {} -> error "impredicative"
 
@@ -554,7 +553,6 @@ eqInst = \case
     _ -> pure Nothing
   -- All prims have an EQ instance
   TyPrim _ -> pure (Just [])
-  TyGuard -> pure (Just [])
   TyModRef _ -> pure (Just [])
   TyList t -> pure (Just [Pred Eq t])
   _ -> pure Nothing
@@ -812,7 +810,6 @@ instantiateImported (TypeScheme tvs preds ty) i = do
     TyPrim p -> pure (TyPrim p)
     TyFun l r -> TyFun <$> inst rl l <*> inst rl r
     TyList t -> TyList <$> inst rl t
-    TyGuard -> pure TyGuard
     TyModRef mr -> pure (TyModRef mr)
     -- Impredicative type might work
     -- If we change unification.
@@ -951,7 +948,6 @@ generalizeWithTerm' ty pp term = do
     pure (ftvl ++ ftvr,TyFun l' r')
   gen' t@TyPrim{} = pure ([], t)
   gen' (TyList t) = over _2 TyList <$> gen' t
-  gen' TyGuard = pure ([], TyGuard)
   gen' (TyModRef mr) = pure ([], TyModRef mr)
   gen' t@TyForall{} = pure ([], t)
 
@@ -1483,7 +1479,6 @@ ensureNoTyVars i = \case
   TyPrim p -> pure (TyPrim p)
   TyFun l r -> TyFun <$> ensureNoTyVars i l <*> ensureNoTyVars i r
   TyList l -> TyList <$> ensureNoTyVars i l
-  TyGuard -> pure TyGuard
   TyModRef mr -> pure (TyModRef mr)
   TyForall _ _ ->
     throwTypecheckError (TCInvariantFailure "Encountered universal quantification emitted by the typechecker. Impossible") i
@@ -1589,7 +1584,6 @@ dbjTyp i env depth = \case
   TyPrim p -> pure (TyPrim p)
   TyFun l r -> TyFun <$> dbjTyp i env depth l <*> dbjTyp i env depth r
   TyList l -> TyList <$> dbjTyp i env depth l
-  TyGuard -> pure TyGuard
   TyModRef m -> pure (TyModRef m)
   TyForall{} ->
     throwTypecheckError (TCInvariantFailure "Found impredicative Type") i

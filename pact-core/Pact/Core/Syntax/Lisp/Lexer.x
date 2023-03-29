@@ -9,6 +9,7 @@ module Pact.Core.Syntax.Lisp.Lexer(lexer, runLexerIO) where
 
 import Control.Monad.State.Strict
 import Control.Exception(throwIO)
+import Data.Char(isSpace)
 import Data.Text(Text)
 import Data.ByteString(ByteString)
 import Data.ByteString.Internal(w2c)
@@ -27,20 +28,23 @@ import Pact.Core.Syntax.Lisp.LexUtils
 $lower = [ a-z ]
 $digit = [ 0-9 ]
 $alpha = [a-zA-Z]
+$psymbol = [\%\#\+\-\_\&\$\@\<\>\=\^\?\*\!\|\/\~]
 $special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
-@ident = [$alpha][$alpha $digit \-]*
+@ident = [$alpha $psymbol][$alpha $digit $psymbol]*
 @integer = [\-]?[$digit]+
+@singletick = [\'][$alpha][$alpha $digit \- \_]*
 @comment = [\;][.]*[\n]
 @tc = expect\-typechecks
 @tcfail = expect\-typecheck\-failure
+@steprb = step\-with\-rollback
 
 
 tokens :-
     @comment;
     $white+;
     -- Keywords
-    let          { token TokenLet }
     let\*        { token TokenLet }
+    let          { token TokenLet }
     if           { token TokenIf }
     defun        { token TokenDefun }
     defcap       { token TokenDefCap }
@@ -49,6 +53,7 @@ tokens :-
     deftable     { token TokenDefTable }
     defcap       { token TokenDefCap }
     defpact      { token TokenDefPact }
+    defproperty  { token TokenDefProperty }
     interface    { token TokenInterface }
     module       { token TokenModule }
     bless        { token TokenBless }
@@ -58,17 +63,17 @@ tokens :-
     false        { token TokenFalse }
     keyGov       { token TokenKeyGov }
     capGov       { token TokenCapGov }
-    bool         { token TokenTyBool }
     lambda       { token TokenLambda }
-    integer      { token TokenTyInteger }
-    bool         { token TokenTyBool }
-    table        { token TokenTyTable }
-    decimal      { token TokenTyDecimal }
-    string       { token TokenTyString }
-    unit         { token TokenTyUnit }
+
     and          { token TokenAnd }
     or           { token TokenOr }
     load         { token TokenLoad }
+    \@doc        { token TokenDocAnn }
+    \@model      { token TokenModelAnn}
+    \@event      { token TokenEventAnn }
+    \@managed    { token TokenManagedAnn}
+    @steprb      { token TokenStepWithRollback}
+    step         { token TokenStep }
     @tc          { token TokenTypechecks }
     @tcfail      { token TokenTypecheckFailure }
     -- at           { token TokenObjAccess }
@@ -79,7 +84,8 @@ tokens :-
     suspend      { token TokenSuspend }
 
     @integer     { emit TokenNumber }
-    @ident       { emit TokenIdent }
+
+    @singletick  { emit TokenSingleTick }
     \(           { token TokenOpenParens }
     \)           { token TokenCloseParens }
     \{           { token TokenOpenBrace }
@@ -88,34 +94,36 @@ tokens :-
     \]           { token TokenCloseBracket }
     \,           { token TokenComma }
     \.           { token TokenDot }
+    \:\=         { token TokenBindAssign }
     \:\:         { token TokenDynAcc }
     \:           { token TokenColon }
-    \=           { token TokenEq }
-    \!\=         { token TokenNeq }
-    \>\=         { token TokenGEQ }
-    \>           { token TokenGT }
-    \<\=         { token TokenLEQ }
-    \<           { token TokenLT }
-    \+           { token TokenPlus }
-    \-           { token TokenMinus }
-    \*           { token TokenMult }
-    \/           { token TokenDiv }
-    \&           { token TokenBitAnd }
-    \|           { token TokenBitOr }
-    \~           { token TokenBitComplement }
+    -- \=           { token TokenEq }
+    -- \!\=         { token TokenNeq }
+    -- \>\=         { token TokenGEQ }
+    -- \>           { token TokenGT }
+    -- \<\=         { token TokenLEQ }
+    -- \<           { token TokenLT }
+    -- \+           { token TokenPlus }
+    -- \-           { token TokenMinus }
+    -- \*           { token TokenMult }
+    -- \/           { token TokenDiv }
+    -- \&           { token TokenBitAnd }
+    -- \|           { token TokenBitOr }
+    -- \~           { token TokenBitComplement }
     \"           { stringLiteral }
-    \-\>         { token TokenTyArrow }
-    \^           { token TokenPow }
-
+    -- \^           { token TokenPow }
+    @ident       { emit TokenIdent }
 {
+
 -- TODO: non-horrible errors
 scan :: LexerM PosToken
 scan = do
-  input@(AlexInput _ _ _ bs) <- get
+  input@(AlexInput sLine sCol _ bs) <- get
   case alexScan input 0 of
-    AlexEOF -> withLineInfo TokenEOF
-    AlexError (AlexInput line col _last inp) ->
-      let li = LineInfo line col 1
+    AlexEOF -> pure (PosToken TokenEOF (SpanInfo sLine sCol (sLine+1) 0))
+
+    AlexError (AlexInput eLine eCol  _last inp) ->
+      let li = SpanInfo sLine sCol eLine eCol
       in case B.uncons inp of
         Just (h, _) ->
           throwLexerError (LexicalError (w2c h) _last) li
@@ -123,15 +131,16 @@ scan = do
     AlexSkip input' _ -> do
       put input'
       scan
-    AlexToken input' tokl action -> do
+    AlexToken input'@(AlexInput eLine eCol _ _) tokl action -> do
       put input'
-      let t = T.decodeLatin1 (B.take (fromIntegral tokl) bs)
-      action t
+      let
+        span' = SpanInfo sLine sCol eLine eCol
+        t = T.decodeLatin1 (B.take (fromIntegral tokl) bs)
+      action t span'
 
-stringLiteral :: Text -> LexerM PosToken
-stringLiteral _ = do
+stringLiteral :: Text -> SpanInfo -> LexerM PosToken
+stringLiteral _ info = do
   inp <- get
-  info <- getLineInfo
   body <- loop [] inp
   pure (PosToken (TokenString (T.pack body)) info)
   where
@@ -146,13 +155,22 @@ stringLiteral _ = do
     | c == '\r' = throwLexerError' $ StringLiteralError "carriage return in string literal"
     | c == '\"' = reverse acc <$ put rest
     | otherwise = loop (c:acc) rest
+  multiLine acc inp =
+    case alexGetByte inp of
+      Just (w2c -> c, rest)
+        | isSpace c -> multiLine acc rest
+        | c == '\\' -> loop acc rest
+        | otherwise -> throwLexerError' $ StringLiteralError "Invalid multiline string"
+      Nothing -> throwLexerError' $ StringLiteralError "did not close string literal"
   escape acc inp =
     case alexGetByte inp of
       Just (w2c -> c, rest)
+        | isSpace c -> multiLine acc rest
         | c == 'n' -> loop ('\n':acc) rest
         | c == 't' -> loop ('\t':acc) rest
         | c == '\\' -> loop ('\\':acc) rest
         | c == '\"' -> loop ('\"':acc) rest
+        | c == '\'' -> loop ('\'':acc) rest
         | c == 'r' -> throwLexerError' $ StringLiteralError "carriage return is not supported in strings literals"
         | otherwise -> throwLexerError' $ StringLiteralError "Invalid escape sequence"
       Nothing -> throwLexerError' $ StringLiteralError "did not close string literal"
