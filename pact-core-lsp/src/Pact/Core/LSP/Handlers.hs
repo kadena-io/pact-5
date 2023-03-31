@@ -8,14 +8,13 @@
 module Pact.Core.LSP.Handlers where
 
 import Language.LSP.Server (Handlers, notificationHandler, getVirtualFile,
-                            LspT, sendNotification, requestHandler)
+                            sendNotification, requestHandler)
 import Language.LSP.Types
 import Pact.Core.LSP.Types
-import Control.Lens ((^.), use, modifying)
+import Control.Lens (use, modifying)
 import Language.LSP.Types.Lens
-import Control.Monad.Trans (MonadTrans (..), liftIO)
+import Control.Monad.Trans (liftIO)
 import qualified Language.LSP.VFS as VFS
-import Data.Text.Utf16.Rope (toText)
 import Data.Text.Encoding (encodeUtf8)
 
 import qualified Pact.Core.Errors as P
@@ -33,9 +32,7 @@ import Pact.Core.Names (NamedDeBruijn)
 import Control.Applicative ((<|>))
 import Data.Monoid (Alt (..))
 import qualified Data.Text as T
-
-liftLsp :: LspT ServerConfig IO a -> HandlerM a
-liftLsp = HandlerM . lift . lift
+import qualified Data.Text.Utf16.Rope as Rope
 
 initializeHandler :: Handlers HandlerM
 initializeHandler = notificationHandler SInitialized $ const (pure ())
@@ -44,7 +41,8 @@ documentChangeNotificationHandler :: Handlers HandlerM
 documentChangeNotificationHandler = notificationHandler STextDocumentDidChange $ const (pure ())
 
 workspaceChangeNotificationHandler :: Handlers HandlerM
-workspaceChangeNotificationHandler = notificationHandler SWorkspaceDidChangeConfiguration $ const (pure ())
+workspaceChangeNotificationHandler = notificationHandler SWorkspaceDidChangeConfiguration
+  $ const (pure ())
 
 documentOpenNotificationHandler :: Handlers HandlerM
 documentOpenNotificationHandler = notificationHandler STextDocumentDidOpen $ \msg -> do
@@ -54,9 +52,8 @@ documentOpenNotificationHandler = notificationHandler STextDocumentDidOpen $ \ms
 documentCloseNotificationHandler :: Handlers HandlerM
 documentCloseNotificationHandler = notificationHandler STextDocumentDidClose $ \msg -> do
   let _uri = msg^.params.textDocument.uri
-  pure ()
-  -- modifying ssCache (M.delete _uri)
-  -- modifying ssLoaded (M.delete _uri)
+  modifying ssCache (M.delete _uri)
+
 
 documentSaveNotificationHandler :: Handlers HandlerM
 documentSaveNotificationHandler = notificationHandler STextDocumentDidSave $ \msg -> do
@@ -65,6 +62,10 @@ documentSaveNotificationHandler = notificationHandler STextDocumentDidSave $ \ms
 
 handleError :: (HandlerError -> HandlerM a) -> HandlerM a -> HandlerM a
 handleError = flip catchError
+
+completionRequestHandler :: Handlers HandlerM
+completionRequestHandler = requestHandler STextDocumentCompletion $ \_req _resp -> do
+  error "not implemented"
 
 hoverRequestHandler :: Handlers HandlerM
 hoverRequestHandler = requestHandler STextDocumentHover $ \req resp ->
@@ -77,24 +78,18 @@ hoverRequestHandler = requestHandler STextDocumentHover $ \req resp ->
   term <- case M.lookup _uri cache of
     Nothing -> throwError (NotCached _uri)
     Just (m, _) -> pure $ getAlt (foldMap (Alt . termAt pos) m)
+
+  -- TODO: write better hover information
   let _contents = HoverContents (MarkupContent MkPlainText (T.pack (show (term,pos))))
       _range = Nothing
   resp (Right (Just Hover{..}))
 
 documentDiagnostics ::  Uri -> HandlerM ()
 documentDiagnostics _uri = do
-  let nuri = toNormalizedUri _uri
+  src <- getSource _uri
+  res <- liftIO $ runAnalyze (analyzeSource (encodeUtf8 (Rope.toText src)))
 
-  mFile <- liftLsp $ getVirtualFile nuri
-  aRes <- case mFile of
-    Nothing ->
-      throwError (NoVirtualFile _uri)
-
-    Just (VFS.VirtualFile _ _ rope) -> do
-      let src = encodeUtf8 (toText rope)
-      liftIO $ runAnalyze (analyzeSource src)
-
-  _diagnostics <- case aRes of
+  _diagnostics <- case res of
     (Left (AnalyzeError pe), _) -> pure (List [pactErrorToDiagnostic pe])
     (Right (AnalyzeResult aCom), AnalyzeState aState) -> do
       ssCache %= M.insert _uri (aCom, aState)
@@ -175,3 +170,10 @@ inside pos (P.SpanInfo sl sc el ec) = sPos <= pos && pos < ePos
   where
     sPos = Position (fromIntegral sl) (fromIntegral sc)
     ePos = Position (fromIntegral el) (fromIntegral ec)
+
+getSource :: Uri -> HandlerM Rope.Rope
+getSource _uri = do
+  vfM <- liftLsp $ getVirtualFile (toNormalizedUri _uri)
+  case vfM of
+    Nothing -> throwError (NoVirtualFile _uri)
+    Just (VFS.VirtualFile _ _ rope) -> pure rope

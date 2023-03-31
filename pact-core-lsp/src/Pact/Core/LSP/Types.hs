@@ -54,3 +54,6 @@ newtype HandlerM a
 
 runHandlerM :: HandlerM a -> ServerState -> LspT ServerConfig IO (Either HandlerError a, ServerState)
 runHandlerM (HandlerM handler) = runStateT (runExceptT handler)
+
+liftLsp :: LspT ServerConfig IO a -> HandlerM a
+liftLsp = HandlerM . lift . lift

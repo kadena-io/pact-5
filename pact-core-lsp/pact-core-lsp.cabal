@@ -22,6 +22,7 @@ library
       Pact.Core.LSP.Handlers
       Pact.Core.LSP.Types
       Pact.Core.LSP.AnalyzeSource
+      Pact.Core.LSP.Completion
     -- other-modules:
     -- other-extensions:
     build-depends:

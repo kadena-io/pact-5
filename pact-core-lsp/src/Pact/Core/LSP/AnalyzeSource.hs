@@ -22,8 +22,8 @@ import Pact.Core.Persistence (Loaded, PactDb, mockPactDb)
 import Pact.Core.IR.Typecheck
 import Control.Monad.State
 import Control.Lens
-import Pact.Core.Typed.Term (OverloadedReplTopLevel, ReplTopLevel (..))
-import Pact.Core.Names (NamedDeBruijn, Name)
+import Pact.Core.Typed.Term (OverloadedReplTopLevel)
+import Pact.Core.Names (NamedDeBruijn)
 import Debug.Trace (trace)
 
 data AnalyzeError

@@ -13,6 +13,7 @@ import Test.Hspec
 import Language.LSP.Types (Position(..), Diagnostic (..), Range (..),
                            DiagnosticSeverity (DsError))
 import qualified Colog.Core as L
+import Pact.Core.LSP.Completion
 
 withLSPServer :: ((Handle, Handle) -> IO ()) -> IO ()
 withLSPServer f = do
@@ -27,8 +28,8 @@ withLSPServer f = do
 defConfig :: SessionConfig
 defConfig = defaultConfig{logMessages=False, logStdErr=False}
 
-main :: IO ()
-main = hspec $ around withLSPServer $ do
+lspSpec :: Spec
+lspSpec = around withLSPServer $ do
   describe "diagnostic" $ do
     it "should send no diagnostic" $ \(hin, hout) ->
       runSessionWithHandles hin hout defConfig fullCaps "pact-core-lsp/test/data/" $ do
@@ -47,3 +48,21 @@ main = hspec $ around withLSPServer $ do
            Nothing (Just "Parser")
            "No such type: hallo"
            Nothing Nothing]
+
+
+querySourceAtSpec :: Spec
+querySourceAtSpec = do
+  it "should generate expected CompletionContext (single-line)" $ do
+    completionCtxAt "abc\ndef" (Position 0 3) `shouldBe` CompletionContext "" "abc" "def"
+    completionCtxAt "ddf abc\ndef" (Position 0 6) `shouldBe` CompletionContext "ddf" "ab" "c"
+    completionCtxAt "d df abc\ndef" (Position 0 7) `shouldBe` CompletionContext "df" "ab" "c"
+
+  it "should generate expected CompletionContext (multi-line" $ do
+    completionCtxAt "d df abc\ndef" (Position 1 1) `shouldBe` CompletionContext "abc" "d" "ef"
+    completionCtxAt "d df abc\ndef" (Position 1 2) `shouldBe` CompletionContext "abc" "de" "f"
+    completionCtxAt "d df abc\ndef" (Position 1 0) `shouldBe` CompletionContext "abc" "" "def"
+
+main :: IO ()
+main = hspec $ do
+  querySourceAtSpec
+  lspSpec
