@@ -196,6 +196,8 @@ data Term name builtin info
   -- ^ try (catch expr) (try-expr)
   | DynInvoke (Term name builtin info) Text info
   -- ^ dynamic module reference invocation m::f
+  | CapabilityForm (CapForm name (Term name builtin info)) info
+  -- ^ Capability
   | Error Text info
   -- ^ Error catching
   deriving (Show, Functor, Foldable, Traversable)
@@ -323,6 +325,7 @@ instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
       Pretty.parens ("try" <+> pretty e1 <+> pretty e2)
     DynInvoke n t _ ->
       pretty n <> "::" <> pretty t
+    CapabilityForm _ _ -> error "pretty capform"
     Error e _ ->
       Pretty.parens ("error \"" <> pretty e <> "\"")
     -- ObjectLit (Map.toList -> obj) _ ->
@@ -351,6 +354,8 @@ termInfo f = \case
   Try e1 e2 i ->
     Try e1 e2 <$> f i
   DynInvoke n t i -> DynInvoke n t <$> f i
+  CapabilityForm cf i ->
+    CapabilityForm cf <$> f i
   Error e i ->
     Error e <$> f i
 

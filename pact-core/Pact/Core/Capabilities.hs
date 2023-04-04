@@ -17,4 +17,4 @@ data CapForm name e
   | ComposeCapability name [e]
   | InstallCapability name [e]
   | EmitEvent name [e]
-  deriving (Functor, Foldable, Traversable)
+  deriving (Show, Functor, Foldable, Traversable)

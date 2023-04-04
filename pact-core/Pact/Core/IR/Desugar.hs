@@ -329,18 +329,24 @@ desugarDefConst (Lisp.DefConst n mty e _ i) = do
   e' <- desugarLispTerm e
   pure $ DefConst n mty' e' i
 
+desugarDefMeta :: Lisp.DCapMeta -> DefCapMeta ParsedName
 desugarDefMeta = \case
   Lisp.DefEvent -> DefEvent
   Lisp.DefManaged marg ->
     DefManaged marg
 
+desugarDefCap
+  :: (MonadError (PactError info) m, DesugarBuiltin builtin)
+  => Lisp.DefCap info
+  -> RenamerT m b info (DefCap ParsedName builtin info)
 desugarDefCap (Lisp.DefCap dcn margs mrtype term _docs _model meta i) = do
   args <- traverse (enforceArg i) margs
-  rtype <- maybe (error "boom") pure mrtype
+  rtype <- maybe (error "boom") (desugarType i) mrtype
+  argTys <- traverse (desugarType i . Lisp._argType) args
   term' <- desugarLispTerm term
   let meta' = fmap desugarDefMeta meta
-      dct = foldr TyFun rtype (Lisp._argType <$> args)
-  pure (DefCap dcm dct term' meta' i)
+      dct = foldr TyFun rtype argTys
+  pure (DefCap dcn dct term' meta' i)
 
 
 desugarIfDef
@@ -366,6 +372,7 @@ desugarDef :: (DesugarBuiltin builtin, MonadError (PactError info) m) => Lisp.De
 desugarDef = \case
   Lisp.Dfun d -> Dfun <$> desugarDefun d
   Lisp.DConst d -> DConst <$> desugarDefConst d
+  Lisp.DCap dc -> DCap <$> desugarDefCap dc
   _ -> error "unimplemented"
 
 -- Todo: Module hashing, either on
@@ -466,6 +473,7 @@ defSCC :: ModuleName -> Def Name b i1 -> Set Text
 defSCC mn = \case
   Dfun d -> defunSCC mn d
   DConst d -> defConstSCC mn d
+  DCap dc -> termSCC mn (_dcapTerm dc)
 
 ifDefSCC :: ModuleName -> IfDef Name b i1 -> Set Text
 ifDefSCC mn = \case
@@ -746,6 +754,7 @@ renameDef
 renameDef = \case
   Dfun d -> Dfun <$> renameDefun d
   DConst d -> DConst <$> renameDefConst d
+  _ -> error "renaming cap"
 
 
 renameIfDef

@@ -122,13 +122,19 @@ pattern VBool b = VLiteral (LBool b)
 pattern VDecimal :: Decimal -> CEKValue b i m
 pattern VDecimal d = VLiteral (LDecimal d)
 
-
+-- | Result of an evaluation step, either a CEK value or an error.
 data EvalResult b i m
   = EvalValue (CEKValue b i m)
   | VError Text
   deriving Show
 
-type MonadEval b i m = (MonadEvalEnv b i m, MonadError (PactError i) m, Default i)
+data EvalState
+  = EvalState
+  { _esCapStack :: [PureCap]
+  , _esEvents ::
+  }
+
+type MonadEval b i m = (MonadEvalEnv b i m, MonadState () MonadError (PactError i) m, Default i)
 
 class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
   cekReadEnv :: m (CEKRuntimeEnv b i m)
@@ -184,6 +190,26 @@ data CondFrame b i
   | IfFrame (EvalTerm b i) (EvalTerm b i)
   deriving Show
 
+data CapToken b i
+  = CapToken
+  { _ctName :: Name
+  , _ctArgs :: [PactValue]
+  } deriving (Show, Eq)
+
+data Capability b i
+  = PureCap (CapToken b i)
+  | ManagedCap (CapToken b i) PactValue Name
+  | OneShotCap (CapToken b i) Bool
+  deriving (Show, Eq)
+
+data CapFrame b i
+  = WithCapFrame Name (EvalTerm b i)
+  | RequireCapFrame Name
+  | ComposeCapFrame Name (EvalTerm b i)
+  | InstallCapability Name (EvalTerm b i)
+  | EmitEvent Name
+  deriving Show
+
 data Cont b i m
   = Fn (CEKValue b i m) (Cont b i m)
   | Arg (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
@@ -191,6 +217,8 @@ data Cont b i m
   | ListC (CEKEnv b i m) [EvalTerm b i] [CEKValue b i m] (Cont b i m)
   | CondC (CEKEnv b i m) (CondFrame b i) (Cont b i m)
   | DynInvokeC (CEKEnv b i m) Text (Cont b i m)
+  | CapInvokeC (CEKEnv b i m) [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
+  | CapPopC (CEKEnv b i m) (Cont b i m)
   | Mt
   deriving Show
 
