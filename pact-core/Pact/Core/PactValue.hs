@@ -24,7 +24,8 @@ data PactValue
   = PLiteral Literal
   | PList (Vector PactValue)
   | PGuard (Guard FullyQualifiedName PactValue)
-  deriving (Eq, Show)
+  | PModRef ModuleName [ModuleName]
+  deriving (Eq, Show, Ord)
 
 makePrisms ''PactValue
 
@@ -37,6 +38,10 @@ checkPvType ty = \case
   PList l -> case ty of
     TyList t' | all (isJust . checkPvType t') l -> Just (TyList t')
     _ -> Nothing
+  PModRef _ ifs -> case ty of
+    TyModRef mn | elem mn ifs -> Just (TyModRef mn)
+    _ -> Nothing
+
 
 
 newtype EnvData term

@@ -147,9 +147,11 @@ replRawBuiltinRuntime = \case
   RPrint -> corePrint RPrint
 
 defaultReplState :: Default i => ReplEvalState (ReplBuiltin CoreBuiltin) i
-defaultReplState = ReplEvalState $
-  CEKRuntimeEnv
-  { _cekBuiltins = replCoreBuiltinRuntime
-  , _cekLoaded = mempty
-  , _cekGasModel = freeGasEnv
-  , _cekMHashes = mempty }
+defaultReplState = ReplEvalState env (EvalState (CapState [] mempty) [])
+  where
+  env =
+    CEKRuntimeEnv
+    { _cekBuiltins = replCoreBuiltinRuntime
+    , _cekLoaded = mempty
+    , _cekGasModel = freeGasEnv
+    , _cekMHashes = mempty }

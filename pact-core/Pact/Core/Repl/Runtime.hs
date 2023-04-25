@@ -35,9 +35,10 @@ data ReplEvalEnv b i
   , _emGasLog :: IORef (Maybe [(Text, Gas)])
   }
 
-newtype ReplEvalState b i
+data ReplEvalState b i
   = ReplEvalState
   { _reEnv :: CEKRuntimeEnv b i (ReplEvalM b i)
+  , _reState :: EvalState b i
   }
 
 -- Todo: are we going to inject state as the reader monad here?
@@ -66,6 +67,18 @@ instance MonadEvalEnv b i (ReplEvalM b i) where
   cekChargeGas g = do
     r <- view emGas
     liftIO (modifyIORef' r (<> g))
+
+instance MonadEvalState b i (ReplEvalM b i) where
+  setCekState f s =
+    reState %= set f s
+  modifyCEKState f g = 
+    reState %= over f g
+  useCekState f =
+    uses reState (view f)
+  usesCekState f g =
+    uses reState (views f g)
+
+
 
 runReplEvalM
   :: ReplEvalEnv b i

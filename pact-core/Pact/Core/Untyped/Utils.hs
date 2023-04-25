@@ -59,11 +59,11 @@ fromTypedDConst
 fromTypedDConst (Typed.DefConst n ty term i) =
   DefConst n ty (fromTypedTerm term) i
 
--- fromTypedDCap
---   :: Typed.DefCap name NamedDeBruijn builtin info
---   -> DefCap name builtin info
--- fromTypedDCap (Typed.DefCap name args term captype ty info) =
---   DefCap name args (fromTypedTerm term) captype ty info
+fromTypedDCap
+  :: Typed.DefCap name tyname builtin info
+  -> DefCap name builtin info
+fromTypedDCap (Typed.DefCap name ty term meta i) =
+  DefCap name ty (fromTypedTerm term) meta i
 
 fromTypedDef
   :: Typed.Def name tyname builtin info
@@ -71,7 +71,7 @@ fromTypedDef
 fromTypedDef = \case
   Typed.Dfun d -> Dfun (fromTypedDefun d)
   Typed.DConst d -> DConst (fromTypedDConst d)
-  -- Typed.DCap d -> DCap (fromTypedDCap d)
+  Typed.DCap d -> DCap (fromTypedDCap d)
 
 fromTypedIfDef
   :: Typed.IfDef name tyname builtin info
@@ -84,8 +84,8 @@ fromTypedIfDef = \case
 fromTypedModule
   :: Typed.Module name tyname builtin info
   -> Module name builtin info
-fromTypedModule (Typed.Module mn defs blessed imports implements hs) =
-  Module mn (fromTypedDef <$> defs) blessed imports implements hs
+fromTypedModule (Typed.Module mn mgov defs blessed imports implements hs) =
+  Module mn mgov (fromTypedDef <$> defs) blessed imports implements hs
 
 fromTypedInterface
   :: Typed.Interface name tyname builtin info

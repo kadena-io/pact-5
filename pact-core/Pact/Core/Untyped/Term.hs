@@ -8,6 +8,7 @@
 module Pact.Core.Untyped.Term
  ( Defun(..)
  , DefConst(..)
+ , DefCap(..)
  , Def(..)
  , defType
  , defName
