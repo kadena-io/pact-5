@@ -98,6 +98,7 @@ data RenamerEnv m b i
   , _reVarDepth :: DeBruijn
   , _rePactDb :: PactDb m b i
   , _reCurrModule :: Maybe ModuleName
+  , _reCurrDef :: Maybe DefKind
   }
 makeLenses ''RenamerEnv
 
@@ -730,19 +731,31 @@ renameTerm (CapabilityForm cf i) =
           (n', dk) <- resolveQualified qn i
           when (dk /= DKDefCap) $ error "not a defcap"
           let cf' = set capFormName n' cf
+          checkCapForm cf'
           CapabilityForm <$> traverse renameTerm cf' <*> pure i
         | otherwise -> error "invariant borken"
       BN bn -> do
         (n', dk) <- resolveQualified (QualifiedName (_bnName bn) mn) i
         when (dk /= DKDefCap) $ error "not a defcap"
         let cf' = set capFormName n' cf
+        checkCapForm cf'
         CapabilityForm <$> traverse renameTerm cf' <*> pure i
     Nothing -> error "capability used outside module"
+    where
+    checkCapForm = \case
+      WithCapability{} -> enforceNotWithinDefcap
+      InstallCapability{} -> enforceNotWithinDefcap
+      _ -> pure ()
 renameTerm (Error e i) = pure (Error e i)
 -- renameTerm (ObjectLit o i) =
 --   ObjectLit <$> traverse renameTerm o <*> pure i
 -- renameTerm (ObjectOp o i) =
 --   ObjectOp <$> traverse renameTerm o <*> pure i
+
+enforceNotWithinDefcap :: (MonadError (PactError i) m) => RenamerT m b i ()
+enforceNotWithinDefcap = do
+  withinDefCap <- (/= Just DKDefCap) <$> view reCurrDef
+  when withinDefCap $ error "boom"
 
 renameDefun
   :: (MonadError (PactError i) m)
@@ -750,7 +763,7 @@ renameDefun
   -> RenamerT m b i (Defun Name b' i)
 renameDefun (Defun n dty term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
-  term' <- renameTerm term
+  term' <- local (set reCurrDef (Just DKDefun)) $ renameTerm term
   pure (Defun n dty term' i)
 
 renameReplDefun
@@ -762,7 +775,7 @@ renameReplDefun (Defun n dty term i) = do
   let fqn = FullyQualifiedName replModuleName n replModuleHash
   rsModuleBinds %= Map.insertWith (<>) replModuleName (Map.singleton n (NTopLevel replModuleName replModuleHash, DKDefun))
   rsLoaded . loToplevel %= Map.insert n (fqn, DKDefun)
-  term' <- renameTerm term
+  term' <- local (set reCurrDef (Just DKDefun)) $ renameTerm term
   pure (Defun n dty term' i)
 
 renameReplDefConst
@@ -783,7 +796,7 @@ renameDefConst
   -> RenamerT m b i (DefConst Name b' i)
 renameDefConst (DefConst n mty term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
-  term' <- renameTerm term
+  term' <- local (set reCurrDef (Just DKDefConst)) $ renameTerm term
   pure (DefConst n mty term' i)
 
 renameDefCap
@@ -792,7 +805,7 @@ renameDefCap
   -> RenamerT m reso info (DefCap Name raw info)
 renameDefCap (DefCap name ty term meta i) = do
   meta' <- (traverse . traverse) resolveName' meta
-  term' <- renameTerm term
+  term' <- local (set reCurrDef (Just DKDefCap)) $ renameTerm term
   pure (DefCap name ty term' meta' i)
   where
   resolveName' dn = resolveName i dn >>= \case
@@ -981,7 +994,7 @@ runDesugar'
 runDesugar' pdb loaded act = do
   let reState = reStateFromLoaded loaded
       rTLBinds = loadedBinds loaded
-      rEnv = RenamerEnv (over _2 Just <$> rTLBinds) 0 pdb Nothing
+      rEnv = RenamerEnv (over _2 Just <$> rTLBinds) 0 pdb Nothing Nothing
   (renamed, RenamerState _ loaded' deps) <- runRenamerM reState rEnv act
   pure (DesugarOutput renamed loaded' deps)
 
