@@ -233,6 +233,8 @@ fromIRTerm = \case
     Try (fromIRTerm e1) (fromIRTerm e2) i
   IR.DynInvoke n t i ->
     DynInvoke (fromIRTerm n) t i
+  IR.CapabilityForm cf i ->
+    CapabilityForm (fmap fromIRTerm cf) i
   IR.Error e i ->
     Error e i
 

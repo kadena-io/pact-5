@@ -10,11 +10,13 @@ module Pact.Core.Capabilities
 import Control.Lens
 import Data.Text(Text)
 
+import Pact.Core.Pretty
+
 
 data DefCapMeta name
   = DefEvent
   | DefManaged (Maybe (Text, name))
-  deriving Show
+  deriving (Show, Functor, Foldable, Traversable)
 
 data CapForm name e
   = WithCapability name [e] e
@@ -31,3 +33,16 @@ capFormName f = \case
   ComposeCapability name es -> (`ComposeCapability` es) <$> f name
   InstallCapability name es -> (`InstallCapability` es) <$> f name
   EmitEvent name es -> (`EmitEvent` es) <$> f name
+
+instance (Pretty name, Pretty e) => Pretty (CapForm name e) where
+  pretty = \case
+    WithCapability name es e ->
+      parens ("with-capability" <+> parens (pretty name <+> hsep (pretty <$> es)) <+> pretty e)
+    RequireCapability name es ->
+      parens ("require-capability" <+> parens (pretty name <+> hsep (pretty <$> es)))
+    ComposeCapability name es ->
+      parens ("compose-capability" <+> parens (pretty name <+> hsep (pretty <$> es)))
+    InstallCapability name es ->
+      parens ("install-capability" <+> parens (pretty name <+> hsep (pretty <$> es)))
+    EmitEvent name es ->
+      parens ("require-capability" <+> parens (pretty name <+> hsep (pretty <$> es)))

@@ -79,6 +79,8 @@ resolveTerm = \case
     solveOverload i bs tys preds
   Try e1 e2 i ->
     Try <$> resolveTerm e1 <*> resolveTerm e2 <*> pure i
+  CapabilityForm cf i ->
+    CapabilityForm <$> traverse resolveTerm cf <*> pure i
   DynInvoke te t i ->
     DynInvoke <$> resolveTerm te <*> pure t <*> pure i
   TyAbs ns term i ->

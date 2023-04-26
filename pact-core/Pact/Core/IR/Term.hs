@@ -154,6 +154,8 @@ data Term name builtin info
   -- ^ List Literals
   | Try (Term name builtin info) (Term name builtin info) info
   -- ^ try (catch expr) (try-expr)
+  | CapabilityForm (CapForm name (Term name builtin info)) info
+  -- ^ Capability Natives
   | DynInvoke (Term name builtin info) Text info
   -- ^ dynamic module reference invocation m::f
   | Error Text info
@@ -178,6 +180,8 @@ instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
       pretty lit
     ListLit tes _ ->
       pretty tes
+    CapabilityForm cf _ ->
+      pretty cf
     Try te te' _ ->
       parens ("try" <+> pretty te <+> pretty te')
     DynInvoke n t _ ->
@@ -214,6 +218,8 @@ termBuiltin f = \case
     ListLit <$> traverse (termBuiltin f) tes <*> pure i
   Try te te' i ->
     Try <$> termBuiltin f te <*> termBuiltin f te' <*> pure i
+  CapabilityForm cf i ->
+    CapabilityForm <$> traverse (termBuiltin f) cf <*> pure i
   DynInvoke n t i ->
     DynInvoke <$> termBuiltin f n <*> pure t <*> pure i
   Error txt i -> pure (Error txt i)
@@ -233,6 +239,7 @@ termInfo f = \case
   ListLit l i  -> ListLit l <$> f i
   Try e1 e2 i -> Try e1 e2 <$> f i
   DynInvoke n t i -> DynInvoke n t <$> f i
+  CapabilityForm cf i -> CapabilityForm cf <$> f i
   Error t i -> Error t <$> f i
   -- ObjectLit m i -> ObjectLit m <$> f i
   -- ObjectOp o i -> ObjectOp o <$> f i
@@ -249,6 +256,8 @@ instance Plated (Term name builtin info) where
     Conditional o i ->
       Conditional <$> traverse (plate f) o <*> pure i
     ListLit m i -> ListLit <$> traverse f m <*> pure i
+    CapabilityForm cf i ->
+      CapabilityForm <$> traverse f cf <*> pure i
     Try e1 e2 i ->
       Try <$> f e1 <*> f e2 <*> pure i
     DynInvoke n t i ->

@@ -180,7 +180,7 @@ instance RenderError TypecheckError where
 
 instance Exception TypecheckError
 
-data OverloadError
+newtype OverloadError
   = OverloadError Text
   deriving Show
 

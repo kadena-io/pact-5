@@ -193,6 +193,8 @@ data Term name tyname builtin info
   -- ^ Dynamic invoke.
   | Try (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ Error handling
+  | CapabilityForm (CapForm name (Term name tyname builtin info)) info
+  -- ^ Capabilities
   | Error (Type tyname) Text info
   -- ^ Error term
   deriving (Show, Functor, Foldable, Traversable)
@@ -266,6 +268,7 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
     Constant l _ -> pretty l
     Try e1 e2 _ ->
       Pretty.parens ("try" <+> pretty e1 <+> pretty e2)
+    CapabilityForm cf _ -> pretty cf
     DynInvoke{} -> error "implement dyn invoke"
     Error _ e _ ->
       Pretty.parens ("error \"" <> pretty e <> "\"")
@@ -301,6 +304,8 @@ termBuiltin f = \case
     ListLit ty <$> traverse (termBuiltin f) tes <*> pure info
   Try te te' info ->
     Try <$> termBuiltin f te <*> termBuiltin f te' <*> pure info
+  CapabilityForm cf i ->
+    CapabilityForm <$> traverse (termBuiltin f) cf <*> pure i
   DynInvoke te t i ->
     DynInvoke <$> termBuiltin f te <*> pure t <*> pure i
   Error ty txt info ->
@@ -332,6 +337,8 @@ termInfo f = \case
     Constant l <$> f i
   Try e1 e2 i ->
     Try e1 e2 <$> f i
+  CapabilityForm cf i ->
+    CapabilityForm cf <$> f i
   DynInvoke t e i -> DynInvoke t e <$> f i
   Error t e i ->
     Error t e <$> f i
@@ -358,6 +365,8 @@ instance Plated (Term name tyname builtin info) where
     Constant l i -> pure (Constant l i)
     Try e1 e2 i ->
       Try <$> f e1 <*> f e2 <*> pure i
+    CapabilityForm cf i ->
+      CapabilityForm <$> traverse f cf <*> pure i
     DynInvoke e1 t i ->
       DynInvoke <$> f e1 <*> pure t <*> pure i
     Error t e i -> pure (Error t e i)

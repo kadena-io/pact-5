@@ -91,6 +91,7 @@ data RenamerEnv m b i
   { _reBinds :: Map Text NameKind
   , _reVarDepth :: DeBruijn
   , _rePactDb :: PactDb m b i
+  , _reCurrModule :: Maybe ModuleName
   }
 makeLenses ''RenamerEnv
 
@@ -432,6 +433,7 @@ desugarType i = \case
 -- Renaming
 -----------------------------------------------------------
 
+-- Strongly connected components in term
 termSCC
   :: ModuleName
   -> Term Name b1 i1
@@ -454,10 +456,12 @@ termSCC currM = conn
     Constant{} -> Set.empty
     ListLit v _ -> foldMap conn v
     Try e1 e2 _ -> Set.union (conn e1) (conn e2)
+    CapabilityForm cf _ ->  foldMap conn cf <> case _nKind (view capFormName cf) of
+      NTopLevel mn _ | mn == currM ->
+        Set.singleton (_nName (view capFormName cf))
+      _ -> mempty
     DynInvoke m _ _ -> conn m
     Error {} -> Set.empty
-    -- ObjectLit o _ -> foldMap conn o
-    -- ObjectOp o _ -> foldMap conn o
 
 
 defunSCC :: ModuleName -> Defun Name b i -> Set Text
@@ -647,7 +651,7 @@ renameTerm
   :: (MonadError (PactError i) m)
   => Term ParsedName b' i
   -> RenamerT m b i (Term Name b' i)
-renameTerm (Var n i) = (`Var` i) <$> resolveName n i
+renameTerm (Var n i) = (`Var` i) <$> resolveName i n
 -- Todo: what happens when an argument is shadowed?
 renameTerm (Lam nsts body i) = do
   depth <- view reVarDepth
@@ -691,6 +695,20 @@ renameTerm (DynInvoke te t i) =
   DynInvoke <$> renameTerm te <*> pure t <*> pure i
 renameTerm (Try e1 e2 i) = do
   Try <$> renameTerm e1 <*> renameTerm e2 <*> pure i
+renameTerm (CapabilityForm cf i) =
+  view reCurrModule >>= \case
+    Just mn -> case view capFormName cf of
+      QN qn
+        | _qnModName qn == mn -> do
+          n' <- resolveQualified qn i
+          let cf' = set capFormName n' cf
+          CapabilityForm <$> traverse renameTerm cf' <*> pure i
+        | otherwise -> error "invariant borken"
+      BN bn -> do
+        n' <- resolveQualified (QualifiedName (_bnName bn) mn) i
+        let cf' = set capFormName n' cf
+        CapabilityForm <$> traverse renameTerm cf' <*> pure i
+    Nothing -> error "capability used outside module"
 renameTerm (Error e i) = pure (Error e i)
 -- renameTerm (ObjectLit o i) =
 --   ObjectLit <$> traverse renameTerm o <*> pure i
@@ -739,13 +757,14 @@ renameDefConst (DefConst n mty term i) = do
   term' <- renameTerm term
   pure (DefConst n mty term' i)
 
--- renameDefCap
---   :: DefCap ParsedName builtin info
---   -> RenamerM cb ci (DefCap Name builtin info)
--- renameDefCap (DefCap name args term capType ty i) = do
---   term' <- renameTerm term
---   capType' <- traverse resolveName capType
---   pure (DefCap name args term' capType' ty i)
+renameDefCap
+  :: (MonadError (PactError info) m)
+  => DefCap ParsedName raw info
+  -> RenamerT m reso info (DefCap Name raw info)
+renameDefCap (DefCap name ty term meta i) = do
+  meta' <- (traverse . traverse) (resolveName i) meta
+  term' <- renameTerm term
+  pure (DefCap name ty term' meta' i)
 
 renameDef
   :: (MonadError (PactError i) m)
@@ -754,8 +773,7 @@ renameDef
 renameDef = \case
   Dfun d -> Dfun <$> renameDefun d
   DConst d -> DConst <$> renameDefConst d
-  _ -> error "renaming cap"
-
+  DCap d -> DCap <$> renameDefCap d
 
 renameIfDef
   :: (MonadError (PactError i) m)
@@ -767,12 +785,12 @@ renameIfDef = \case
 
 resolveName
   :: (MonadError (PactError i) m)
-  => ParsedName
-  -> i
+  => i
+  -> ParsedName
   -> RenamerT m b i Name
-resolveName = \case
-  BN b -> resolveBare b
-  QN q -> resolveQualified q
+resolveName i = \case
+  BN b -> resolveBare b i
+  QN q -> resolveQualified q i
 
 -- not in immediate binds, so it must be in the module
 -- Todo: resolve module ref within this model
@@ -827,7 +845,7 @@ renameModule (Module mname mgov defs blessed imp implements mhash) = do
   mgov' <- resolveGov mgov
   rsModuleBinds %= Map.insert mname defMap
   rsLoaded . loToplevel %= Map.union fqns
-  defs' <- locally reBinds (Map.union defMap) $ traverse renameDef defs
+  defs' <- locally reBinds (Map.union defMap) . local (set reCurrModule (Just mname)) $ traverse renameDef defs
   let scc = mkScc <$> defs'
   defs'' <- forM (stronglyConnComp scc) \case
     AcyclicSCC d -> pure d
@@ -931,7 +949,7 @@ runDesugar'
 runDesugar' pdb loaded act = do
   let reState = reStateFromLoaded loaded
       rTLBinds = loadedBinds loaded
-      rEnv = RenamerEnv rTLBinds 0 pdb
+      rEnv = RenamerEnv rTLBinds 0 pdb Nothing
   (renamed, RenamerState _ loaded' deps) <- runRenamerM reState rEnv act
   pure (DesugarOutput renamed loaded' deps)
 
@@ -942,9 +960,7 @@ runDesugarTerm
   -> Loaded reso i
   -> Lisp.Expr i
   -> m (DesugarOutput reso i (Term Name raw i))
-runDesugarTerm _ pdb loaded e = runDesugar' pdb loaded $ do
-  desugared <- desugarLispTerm e
-  renameTerm desugared
+runDesugarTerm _ pdb loaded = runDesugar' pdb loaded  . (desugarLispTerm >=> renameTerm)
 
 runDesugarModule'
   :: (MonadError (PactError i) m, DesugarBuiltin raw)
@@ -953,9 +969,7 @@ runDesugarModule'
   -> Loaded reso i
   -> Lisp.Module i
   -> m (DesugarOutput reso i (Module Name raw i))
-runDesugarModule' _ pdb loaded m  = runDesugar' pdb loaded $ do
-  desugared <- desugarModule m
-  renameModule desugared
+runDesugarModule' _ pdb loaded = runDesugar' pdb loaded . (desugarModule >=> renameModule)
 
 runDesugarInterface
   :: (MonadError (PactError i) m, DesugarBuiltin raw)
@@ -964,9 +978,7 @@ runDesugarInterface
   -> Loaded reso i
   -> Lisp.Interface i
   -> m (DesugarOutput reso i (Interface Name raw i))
-runDesugarInterface _ pdb loaded m  = runDesugar' pdb loaded $ do
-  desugared <- desugarInterface m
-  renameInterface desugared
+runDesugarInterface _ pdb loaded  = runDesugar' pdb loaded . (desugarInterface >=> renameInterface)
 
 runDesugarReplDefun
   :: (MonadError (PactError i) m, DesugarBuiltin raw)
@@ -975,9 +987,7 @@ runDesugarReplDefun
   -> Loaded reso i
   -> Lisp.Defun i
   -> m (DesugarOutput reso i (Defun Name raw i))
-runDesugarReplDefun _ pdb loaded df = runDesugar' pdb loaded  $ do
-  d <- desugarDefun df
-  renameReplDefun d
+runDesugarReplDefun _ pdb loaded = runDesugar' pdb loaded . (desugarDefun >=> renameReplDefun)
 
 runDesugarReplDefConst
   :: (MonadError (PactError i) m, DesugarBuiltin raw)
@@ -986,10 +996,7 @@ runDesugarReplDefConst
   -> Loaded reso i
   -> Lisp.DefConst i
   -> m (DesugarOutput reso i (DefConst Name raw i))
-runDesugarReplDefConst _ pdb loaded df = runDesugar' pdb loaded $ do
-  d <- desugarDefConst df
-  renameReplDefConst d
-
+runDesugarReplDefConst _ pdb loaded = runDesugar' pdb loaded . (desugarDefConst >=> renameReplDefConst)
 
 -- runDesugarModule
 --   :: (DesugarTerm term b' i)

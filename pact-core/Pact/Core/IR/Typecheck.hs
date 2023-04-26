@@ -60,6 +60,7 @@ import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Errors
 import Pact.Core.Persistence
+import Pact.Core.Capabilities
 import qualified Pact.Core.IR.Term as IR
 import qualified Pact.Core.Typed.Term as Typed
 import qualified Pact.Core.Untyped.Term as U
@@ -434,6 +435,9 @@ _dbgTypedTerm = \case
     Typed.Error <$> _dbgType t <*> pure e <*> pure i
   Typed.DynInvoke n t i ->
     Typed.DynInvoke <$> _dbgTypedTerm n <*> pure t <*> pure i
+  Typed.CapabilityForm cf i ->
+    let cf' = over capFormName _nName cf
+    in Typed.CapabilityForm <$> traverse _dbgTypedTerm cf' <*> pure i
   Typed.ListLit ty li i ->
     Typed.ListLit <$> _dbgType ty <*> traverse _dbgTypedTerm li <*> pure i
   -- Typed.ObjectLit obj i ->
@@ -1062,6 +1066,40 @@ checkTermType checkty = \case
     unify checkty ty i
     let term' = Typed.Builtin (b, TyVar <$> tvs, preds) i
     pure (ty, term', preds)
+  IR.CapabilityForm cf i -> over _2 (`Typed.CapabilityForm` i) <$> case cf of
+    WithCapability na tes te -> do
+      (tes', p1) <- checkCapArgs na tes
+      (ty', te', p2) <- checkTermType checkty te
+      pure (ty', WithCapability na tes' te', p1 ++ p2)
+    RequireCapability na tes -> do
+      unify checkty TyUnit i
+      tes' <- checkCapArgs na tes
+      pure (TyUnit, RequireCapability na tes', [])
+    ComposeCapability na tes -> do
+      unify checkty TyUnit i
+      tes' <- checkCapArgs na tes
+      pure (TyUnit, ComposeCapability na tes', [])
+    InstallCapability na tes -> do
+      unify checkty TyUnit i
+      tes' <- checkCapArgs na tes
+      pure (TyUnit, InstallCapability na tes', [])
+    EmitEvent na tes -> do
+      unify checkty TyUnit i
+      tes' <- checkCapArgs na tes
+      pure (TyUnit, EmitEvent na tes', [])
+    where
+    checkCapArgs na tes = case _nKind na of
+      NTopLevel mn mh ->
+        view (tcFree . at (FullyQualifiedName mn (_nName na) mh)) >>= \case
+         Nothing -> error "invariant broken with defcap"
+         Just dcapTy -> case tyFunToArgList dcapTy of
+          Just (dcargs, _) -> do
+            when (length dcargs /= length tes) $ error "invariant broken dcap args"
+            vs <- zipWithM (\ty term -> checkTermType (liftType ty) term) dcargs tes
+            pure (view _2 vs, view _3 vs)
+          Nothing -> error "invariant broken"
+      _ -> error "invariant broken"
+
   IR.Constant lit i -> do
     let ty = typeOfLit lit
     unify checkty ty i
@@ -1169,6 +1207,8 @@ inferTerm = \case
     (te2, e2', pe2) <- inferTerm e2
     pure (te2, Typed.Sequence e1' e2' i, pe1 ++ pe2)
   -- Todo: Here, convert to dictionary
+  IR.CapabilityForm cf _ -> error "implement"
+
   IR.Conditional cond i -> over _2 (`Typed.Conditional` i) <$>
     case cond of
       CAnd e1 e2 -> do

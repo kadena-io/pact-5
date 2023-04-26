@@ -171,6 +171,7 @@ typecheck' = \case
   -- Γ ⊢ k : Prim p
   Constant l _ ->
     pure (typeOfLit l)
+  CapabilityForm{} -> error "implement caps"
   DynInvoke{} -> error "implement dyn ref"
 
   Try e1 e2 _ -> do
