@@ -34,6 +34,8 @@ fromTypedTerm = \case
     Try (fromTypedTerm e1) (fromTypedTerm e2) i
   Typed.DynInvoke term t i ->
     DynInvoke (fromTypedTerm term) t i
+  Typed.CapabilityForm cf i ->
+    CapabilityForm (fromTypedTerm <$> cf) i
   Typed.Error _ e i -> Error e i
   -- Typed.ObjectLit m i ->
   --   ObjectLit (fromTypedTerm <$> m) i

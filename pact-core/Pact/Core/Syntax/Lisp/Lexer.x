@@ -37,6 +37,12 @@ $special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
 @tc = expect\-typechecks
 @tcfail = expect\-typecheck\-failure
 @steprb = step\-with\-rollback
+@withcap = with\-capability
+@reqcap = require\-capability
+@installcap = install\-capability
+@composecap = compose\-capability
+@emitevent = emit\-event
+
 
 
 tokens :-
@@ -87,6 +93,11 @@ tokens :-
     step         { token TokenStep }
     @tc          { token TokenTypechecks }
     @tcfail      { token TokenTypecheckFailure }
+    @withcap     { token TokenWithCapability }
+    @composecap  { token TokenComposeCapability }
+    @reqcap      { token TokenRequireCapability }
+    @installcap  { token TokenInstallCapability }
+    @emitevent   { token TokenEmitEvent }
     -- at           { token TokenObjAccess }
     -- remove       { token TokenObjRemove }
     try          { token TokenTry }

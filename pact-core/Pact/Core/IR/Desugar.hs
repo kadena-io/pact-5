@@ -86,9 +86,15 @@ import qualified Pact.Core.Untyped.Term as Term
     worth writing our own.
 -}
 
+-- data RNameKind
+--   = RNBound DeBruijn
+--   | RNTopLevel ModuleName ModuleHash DefKind
+--   | RNModRef ModuleName [ModuleName]
+--   deriving Show
+
 data RenamerEnv m b i
   = RenamerEnv
-  { _reBinds :: Map Text NameKind
+  { _reBinds :: Map Text (NameKind, Maybe DefKind)
   , _reVarDepth :: DeBruijn
   , _rePactDb :: PactDb m b i
   , _reCurrModule :: Maybe ModuleName
@@ -97,7 +103,7 @@ makeLenses ''RenamerEnv
 
 data RenamerState b i
   = RenamerState
-  { _rsModuleBinds :: Map ModuleName (Map Text NameKind)
+  { _rsModuleBinds :: Map ModuleName (Map Text (NameKind, DefKind))
   , _rsLoaded :: Loaded b i
   , _rsDependencies :: Set ModuleName }
 
@@ -272,6 +278,17 @@ desugarLispTerm = \case
     Try <$> desugarLispTerm e1 <*> desugarLispTerm e2 <*> pure i
   Lisp.Error e i ->
     pure (Error e i)
+  Lisp.CapabilityForm cf i -> (`CapabilityForm` i) <$> case cf of
+    Lisp.WithCapability pn exs ex ->
+      WithCapability pn <$> traverse desugarLispTerm exs <*> desugarLispTerm ex
+    Lisp.RequireCapability pn exs ->
+      RequireCapability pn <$> traverse desugarLispTerm exs
+    Lisp.ComposeCapability pn exs ->
+      ComposeCapability pn <$> traverse desugarLispTerm exs
+    Lisp.InstallCapability pn exs ->
+      InstallCapability pn <$> traverse desugarLispTerm exs
+    Lisp.EmitEvent pn exs ->
+      EmitEvent pn <$> traverse desugarLispTerm exs
   _ -> error "implement rest (parser covering whole syntax"
   where
   binderToLet i (Lisp.Binder n mty expr) term = do
@@ -340,6 +357,11 @@ desugarDefCap
   :: (MonadError (PactError info) m, DesugarBuiltin builtin)
   => Lisp.DefCap info
   -> RenamerT m b info (DefCap ParsedName builtin info)
+desugarDefCap (Lisp.DefCap dcn [] mrtype term _docs _model meta i) = do
+  rtype <- maybe (error "boom") (desugarType i) mrtype
+  term' <- desugarLispTerm term
+  let meta' = fmap desugarDefMeta meta
+  pure (DefCap dcn rtype term' meta' i)
 desugarDefCap (Lisp.DefCap dcn margs mrtype term _docs _model meta i) = do
   args <- traverse (enforceArg i) margs
   rtype <- maybe (error "boom") (desugarType i) mrtype
@@ -534,7 +556,7 @@ loadModule'
 loadModule' module_ deps = do
   let modName = Term._mName module_
       mhash = Term._mHash module_
-      toDepMap def = (Term.defName def, NTopLevel modName mhash)
+      toDepMap def = (Term.defName def, (NTopLevel modName mhash, Term.defKind def))
       depMap = Map.fromList $ toDepMap <$> Term._mDefs module_
   loadModule module_ deps depMap
 
@@ -546,11 +568,10 @@ loadInterface'
 loadInterface' iface deps = do
   let modName = Term._ifName iface
       mhash = Term._ifHash iface
-      toDepMap def = (Term.defName def, NTopLevel modName mhash)
-      dcDeps = mapMaybe (fmap Term.DConst . preview Term._IfDConst) (Term._ifDefns iface)
+      toDepMap def = (Term.defName def, (NTopLevel modName mhash, Term.defKind def))
+      dcDeps = mapMaybe (fmap (Term.DConst) . preview Term._IfDConst) (Term._ifDefns iface)
       dconstDeps = Map.fromList $ toDepMap <$> dcDeps
   loadInterface iface deps dconstDeps dcDeps
-
 
 -- | Load a module and it's constituents into the `Loaded` environment.
 -- including the types of the members
@@ -558,7 +579,7 @@ loadModule
   :: Monad m
   => Term.EvalModule builtin info
   -> Map FullyQualifiedName (Term.EvalDef builtin info)
-  -> Map Text NameKind
+  -> Map Text (NameKind, DefKind)
   -> RenamerT m builtin info ()
 loadModule module_ deps depMap = do
   let modName = Term._mName module_
@@ -578,7 +599,7 @@ loadInterface
   :: Monad m
   => Term.EvalInterface builtin info
   -> Map FullyQualifiedName (Term.EvalDef builtin info)
-  -> Map Text NameKind
+  -> Map Text (NameKind, DefKind)
   -> [Term.Def Name builtin info]
   -> RenamerT m builtin info ()
 loadInterface iface deps depMap dcDeps = do
@@ -603,7 +624,7 @@ lookupModuleMember
   => ModuleName
   -> Text
   -> i
-  -> RenamerT m b i Name
+  -> RenamerT m b i (Name, DefKind)
 lookupModuleMember modName name i = do
   view rePactDb >>= liftRenamerT . (`_readModule` modName) >>= \case
     Just m -> case m of
@@ -614,9 +635,9 @@ lookupModuleMember modName name i = do
           -- Great! The name exists
           -- This, we must include the module in `Loaded`, as well as propagate its deps and
           -- all loaded members in `loAllLoaded`
-          Just irtl -> do
+          Just (nk, dk) -> do
             loadModule module_ deps depMap
-            pure (Name name irtl)
+            pure (Name name nk, dk)
           -- Module exists, but it has no such member
           -- Todo: check whether the module name includes a namespace
           -- if it does not, we retry the lookup under the current namespace
@@ -627,13 +648,13 @@ lookupModuleMember modName name i = do
             dcDeps = mapMaybe (fmap Term.DConst . preview Term._IfDConst) (Term._ifDefns iface)
             dconstDeps = Map.fromList $ toDepMap mhash <$> dcDeps
         case Map.lookup name dconstDeps of
-          Just nk -> do
+          Just (nk, dk) -> do
             loadInterface iface deps dconstDeps dcDeps
-            pure (Name name nk)
+            pure (Name name nk, dk)
           Nothing -> throwDesugarError (NoSuchModuleMember modName name) i
     Nothing -> throwDesugarError (NoSuchModule modName) i
   where
-  toDepMap mhash def = (Term.defName def, NTopLevel modName mhash)
+  toDepMap mhash def = (Term.defName def, (NTopLevel modName mhash, Term.defKind def))
 
 resolveTyModRef
   :: MonadError (PactError i) m
@@ -651,7 +672,13 @@ renameTerm
   :: (MonadError (PactError i) m)
   => Term ParsedName b' i
   -> RenamerT m b i (Term Name b' i)
-renameTerm (Var n i) = (`Var` i) <$> resolveName i n
+renameTerm (Var n i) = resolveName i n >>= \case
+  (n', Just dk)
+    | dk `elem` legalVarDefs  -> pure (Var n' i)
+    | otherwise -> error "Illegal def kind in term variable position"
+    where
+    legalVarDefs = [DKDefun, DKDefConst]
+  (n', _) -> pure (Var n' i)
 -- Todo: what happens when an argument is shadowed?
 renameTerm (Lam nsts body i) = do
   depth <- view reVarDepth
@@ -660,7 +687,7 @@ renameTerm (Lam nsts body i) = do
       newDepth = depth + len
       ixs = NE.fromList [depth .. newDepth - 1]
       -- ns = rawParsedName <$> pns
-  let m = Map.fromList $ NE.toList $ NE.zip pns (NBound <$> ixs)
+  let m = Map.fromList $ NE.toList $ NE.zip pns ((,Nothing). NBound <$> ixs)
       -- ns' = NE.zipWith (\ix n -> Name n (NBound ix)) ixs ns
   term' <- local (inEnv m newDepth) (renameTerm body)
   _ <- (traversed . _Just) (resolveTyModRef i) ts
@@ -672,7 +699,7 @@ renameTerm (Lam nsts body i) = do
 renameTerm (Let name mt e1 e2 i) = do
   depth <- view reVarDepth
   let inEnv = over reVarDepth succ .
-              over reBinds (Map.insert name (NBound depth))
+              over reBinds (Map.insert name (NBound depth, Nothing))
   e1' <- renameTerm e1
   _ <- _Just (resolveTyModRef i) mt
   e2' <- local inEnv (renameTerm e2)
@@ -700,12 +727,14 @@ renameTerm (CapabilityForm cf i) =
     Just mn -> case view capFormName cf of
       QN qn
         | _qnModName qn == mn -> do
-          n' <- resolveQualified qn i
+          (n', dk) <- resolveQualified qn i
+          when (dk /= DKDefCap) $ error "not a defcap"
           let cf' = set capFormName n' cf
           CapabilityForm <$> traverse renameTerm cf' <*> pure i
         | otherwise -> error "invariant borken"
       BN bn -> do
-        n' <- resolveQualified (QualifiedName (_bnName bn) mn) i
+        (n', dk) <- resolveQualified (QualifiedName (_bnName bn) mn) i
+        when (dk /= DKDefCap) $ error "not a defcap"
         let cf' = set capFormName n' cf
         CapabilityForm <$> traverse renameTerm cf' <*> pure i
     Nothing -> error "capability used outside module"
@@ -731,8 +760,8 @@ renameReplDefun
 renameReplDefun (Defun n dty term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
   let fqn = FullyQualifiedName replModuleName n replModuleHash
-  rsModuleBinds %= Map.insertWith (<>) replModuleName (Map.singleton n (NTopLevel replModuleName replModuleHash))
-  rsLoaded . loToplevel %= Map.insert n fqn
+  rsModuleBinds %= Map.insertWith (<>) replModuleName (Map.singleton n (NTopLevel replModuleName replModuleHash, DKDefun))
+  rsLoaded . loToplevel %= Map.insert n (fqn, DKDefun)
   term' <- renameTerm term
   pure (Defun n dty term' i)
 
@@ -743,8 +772,8 @@ renameReplDefConst
 renameReplDefConst (DefConst n mty term i) = do
   -- Todo: put type variables in scoperhere, if we want to support polymorphism
   let fqn = FullyQualifiedName replModuleName n replModuleHash
-  rsModuleBinds %= Map.insertWith (<>) replModuleName (Map.singleton n (NTopLevel replModuleName replModuleHash))
-  rsLoaded . loToplevel %= Map.insert n fqn
+  rsModuleBinds %= Map.insertWith (<>) replModuleName (Map.singleton n (NTopLevel replModuleName replModuleHash, DKDefConst))
+  rsLoaded . loToplevel %= Map.insert n (fqn, DKDefConst)
   term' <- renameTerm term
   pure (DefConst n mty term' i)
 
@@ -762,9 +791,13 @@ renameDefCap
   => DefCap ParsedName raw info
   -> RenamerT m reso info (DefCap Name raw info)
 renameDefCap (DefCap name ty term meta i) = do
-  meta' <- (traverse . traverse) (resolveName i) meta
+  meta' <- (traverse . traverse) resolveName' meta
   term' <- renameTerm term
   pure (DefCap name ty term' meta' i)
+  where
+  resolveName' dn = resolveName i dn >>= \case
+    (n, Just DKDefun) -> pure n
+    _ -> error "defcap manager function does not refer to a defun"
 
 renameDef
   :: (MonadError (PactError i) m)
@@ -787,10 +820,10 @@ resolveName
   :: (MonadError (PactError i) m)
   => i
   -> ParsedName
-  -> RenamerT m b i Name
+  -> RenamerT m b i (Name, Maybe DefKind)
 resolveName i = \case
   BN b -> resolveBare b i
-  QN q -> resolveQualified q i
+  QN q -> over _2 Just <$> resolveQualified q i
 
 -- not in immediate binds, so it must be in the module
 -- Todo: resolve module ref within this model
@@ -799,21 +832,21 @@ resolveBare
   :: (MonadError (PactError i) m)
   => BareName
   -> i
-  -> RenamerT m b i Name
+  -> RenamerT m b i (Name, Maybe DefKind)
 resolveBare (BareName bn) i = views reBinds (Map.lookup bn) >>= \case
-  Just nk -> case nk of
-    NBound d -> do
+  Just tnk -> case tnk of
+    (NBound d, _) -> do
       depth <- view reVarDepth
-      pure (Name bn (NBound (depth - d - 1)))
-    _ -> pure (Name bn nk)
+      pure (Name bn (NBound (depth - d - 1)), Nothing)
+    (nk, dk) -> pure (Name bn nk, dk)
   Nothing -> uses (rsLoaded . loToplevel) (Map.lookup bn) >>= \case
-    Just fqn -> pure (Name bn (NTopLevel (_fqModule fqn) (_fqHash fqn)))
+    Just (fqn, dk) -> pure (Name bn (NTopLevel (_fqModule fqn) (_fqHash fqn)), Just dk)
     Nothing -> do
       let mn = ModuleName bn Nothing
       resolveModuleName mn i >>= \case
         ModuleData md _ -> do
           let implementeds = view Term.mImplemented md
-          pure (Name bn (NModRef mn implementeds))
+          pure (Name bn (NModRef mn implementeds), Nothing)
         -- todo: error type here
         InterfaceData{} -> error "CANNOT USE INTERFACE AS MODULE REF"
 
@@ -821,11 +854,11 @@ resolveQualified
   :: (MonadError (PactError i) m)
   => QualifiedName
   -> i
-  -> RenamerT m b i Name
+  -> RenamerT m b i (Name, DefKind)
 resolveQualified (QualifiedName qn qmn) i = do
   uses rsModuleBinds (Map.lookup qmn) >>= \case
     Just binds -> case Map.lookup qn binds of
-      Just irnk -> pure (Name qn irnk)
+      Just (nk, dk) -> pure (Name qn nk, dk)
       Nothing ->
         throwDesugarError (NoSuchModuleMember qmn qn) i
     Nothing -> lookupModuleMember qmn qn i
@@ -837,15 +870,14 @@ renameModule
   => Module ParsedName b' i
   -> RenamerT m b i (Module Name b' i)
 renameModule (Module mname mgov defs blessed imp implements mhash) = do
-  let rawDefNames = defName <$> defs
-      defMap = Map.fromList $ (, NTopLevel mname mhash) <$> rawDefNames
-      fqns = Map.fromList $ (\n -> (n, FullyQualifiedName mname n mhash)) <$> rawDefNames
+  let defMap = Map.fromList $ (\d -> (defName d, (NTopLevel mname mhash, defKind d))) <$> defs
+      fqns = Map.fromList $ (\d -> (defName d, (FullyQualifiedName mname (defName d) mhash, defKind d))) <$> defs
   -- `maybe all of this next section should be in a block laid out by the
   -- `locally reBinds`
   mgov' <- resolveGov mgov
   rsModuleBinds %= Map.insert mname defMap
   rsLoaded . loToplevel %= Map.union fqns
-  defs' <- locally reBinds (Map.union defMap) . local (set reCurrModule (Just mname)) $ traverse renameDef defs
+  defs' <- locally reBinds (Map.union (over _2 Just <$> defMap)) . local (set reCurrModule (Just mname)) $ traverse renameDef defs
   let scc = mkScc <$> defs'
   defs'' <- forM (stronglyConnComp scc) \case
     AcyclicSCC d -> pure d
@@ -897,13 +929,13 @@ renameInterface
 renameInterface (Interface ifn defs ih) = do
   let dcs = mapMaybe (preview _IfDConst) defs
       rawDefNames = _dcName <$> dcs
-      defMap = Map.fromList $ (, NTopLevel ifn ih) <$> rawDefNames
-      fqns = Map.fromList $ (\n -> (n, FullyQualifiedName ifn n ih)) <$> rawDefNames
+      defMap = Map.fromList $ (, (NTopLevel ifn ih, DKDefConst)) <$> rawDefNames
+      fqns = Map.fromList $ (\n -> (n, (FullyQualifiedName ifn n ih, DKDefConst))) <$> rawDefNames
   -- `maybe all of this next section should be in a block laid out by the
   -- `locally reBinds`
   rsModuleBinds %= Map.insert ifn defMap
   rsLoaded . loToplevel %= Map.union fqns
-  defs' <- locally reBinds (Map.union defMap) $ traverse renameIfDef defs
+  defs' <- locally reBinds (Map.union (over _2 Just <$> defMap)) $ traverse renameIfDef defs
   let scc = mkScc <$> defs'
   defs'' <- forM (stronglyConnComp scc) \case
     AcyclicSCC d -> pure d
@@ -928,17 +960,17 @@ reStateFromLoaded loaded = RenamerState mbinds loaded Set.empty
   where
   mbind = \case
     ModuleData m _ ->
-      let depNames = Term.defName <$> Term._mDefs m
-      in Map.fromList $ (,NTopLevel (Term._mName m) (Term._mHash m)) <$> depNames
+      let depNames = (\def -> (Term.defName def, (NTopLevel (Term._mName m) (Term._mHash m), Term.defKind def))) <$> Term._mDefs m
+      in Map.fromList depNames
     InterfaceData iface _ ->
       let depNames = Term._dcName <$> mapMaybe (preview Term._IfDConst)  (Term._ifDefns iface)
-      in Map.fromList $ (,NTopLevel (Term._ifName iface) (Term._ifHash iface)) <$> depNames
+      in Map.fromList $ (,(NTopLevel (Term._ifName iface) (Term._ifHash iface), DKDefConst)) <$> depNames
   mbinds = fmap mbind (_loModules loaded)
 
-loadedBinds :: Loaded b i -> Map Text NameKind
+loadedBinds :: Loaded b i -> Map Text (NameKind, DefKind)
 loadedBinds loaded =
   let f fqn = NTopLevel (_fqModule fqn) (_fqHash fqn)
-  in f <$> _loToplevel loaded
+  in over _1 f <$> _loToplevel loaded
 
 runDesugar'
   :: MonadError (PactError i) m
@@ -949,7 +981,7 @@ runDesugar'
 runDesugar' pdb loaded act = do
   let reState = reStateFromLoaded loaded
       rTLBinds = loadedBinds loaded
-      rEnv = RenamerEnv rTLBinds 0 pdb Nothing
+      rEnv = RenamerEnv (over _2 Just <$> rTLBinds) 0 pdb Nothing
   (renamed, RenamerState _ loaded' deps) <- runRenamerM reState rEnv act
   pure (DesugarOutput renamed loaded' deps)
 

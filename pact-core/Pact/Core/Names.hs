@@ -40,6 +40,7 @@ module Pact.Core.Names
  , replRawModuleName
  , replModuleName
  , replModuleHash
+ , DefKind(..)
  ) where
 
 import Control.Lens
@@ -156,6 +157,12 @@ data OverloadedName b
   , _olNameKind :: ONameKind b }
   deriving (Show, Eq)
 
+data DefKind
+  = DKDefun
+  | DKDefConst
+  | DKDefCap
+  deriving (Show, Eq, Ord)
+
 -- Name representing locally nameless representations
 data Name
   = Name
@@ -236,4 +243,3 @@ replModuleName = ModuleName replRawModuleName Nothing
 
 replModuleHash :: ModuleHash
 replModuleHash = ModuleHash (Hash "#repl")
-

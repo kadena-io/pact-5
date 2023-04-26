@@ -382,6 +382,13 @@ resolveDefConst (DefConst dname ty term info) = do
   term' <- resolveTerm term
   pure (DefConst dname ty term' info)
 
+resolveDefCap
+  :: SolveOverload raw reso
+  => OverloadedDefCap tyname raw info
+  -> OverloadM info (DefCap Name tyname reso info)
+resolveDefCap (DefCap name dty body m_dcm info) =
+  DefCap name dty <$> resolveTerm body <*> pure m_dcm <*> pure info
+
 -- resolveDefCap
 --   :: OverloadedDefCap RawBuiltin info
 --   -> OverloadM (DefCap Name Void CoreBuiltin info)
@@ -397,7 +404,7 @@ resolveDef
 resolveDef = \case
   Dfun d -> Dfun <$> resolveDefun d
   DConst d -> DConst <$> resolveDefConst d
-  DCap _ -> error "implement dcap"
+  DCap d -> DCap <$> resolveDefCap d
 
 resolveIfDef
   :: SolveOverload raw reso

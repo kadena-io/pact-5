@@ -96,6 +96,12 @@ data Token
   | TokenTyObject
   | TokenTyGuard
   | TokenTyArrow
+  -- Capabilities
+  | TokenWithCapability
+  | TokenRequireCapability
+  | TokenComposeCapability
+  | TokenInstallCapability
+  | TokenEmitEvent
   -- Operators
   | TokenEq
   | TokenNeq
@@ -330,6 +336,11 @@ renderTokenText = \case
   TokenLoad -> "load"
   TokenTypechecks -> "expect-typechecks"
   TokenTypecheckFailure -> "expect-typecheck-failure"
+  TokenWithCapability -> "with-capability"
+  TokenRequireCapability -> "require-capability"
+  TokenComposeCapability -> "compose-capability"
+  TokenInstallCapability -> "install-capability"
+  TokenEmitEvent -> "emit-event"
 
 
 

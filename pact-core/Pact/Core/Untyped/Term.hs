@@ -13,6 +13,7 @@ module Pact.Core.Untyped.Term
  , defType
  , defName
  , defTerm
+ , defKind
  , ifDefName
  , Module(..)
  , Interface(..)
@@ -118,6 +119,12 @@ defName = \case
   Dfun d -> _dfunName d
   DConst d -> _dcName d
   DCap d -> _dcapName d
+
+defKind :: Def name builtin i -> DefKind
+defKind = \case
+  Dfun _ -> DKDefun
+  DConst _ -> DKDefConst
+  DCap _ -> DKDefCap
 
 ifDefName :: IfDef name builtin i -> Text
 ifDefName = \case

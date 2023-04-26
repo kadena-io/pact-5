@@ -999,7 +999,7 @@ checkTermType checkty = \case
       _ -> error "checking modref against incorrect type"
   IR.Lam ne te i ->
     case tyFunToArgList checkty of
-      Just (tl, ret) -> do
+      (tl, ret) -> do
         when (length tl /= NE.length ne) $ error "Arguments mismatch"
         let zipped = NE.zip ne (NE.fromList tl)
         traverse_ (uncurry unifyArg) zipped
@@ -1007,7 +1007,6 @@ checkTermType checkty = \case
         (_, te', preds) <- locally tcVarEnv (args RAList.++) $ checkTermType ret te
         let ne' = over _1 fst <$> zipped
         pure (checkty, Typed.Lam ne' te' i, preds)
-      Nothing -> error "invalid arg length"
     where
     unifyArg (_, Just tl) tr = unify (liftType tl) tr i
     unifyArg _ _ = pure ()
@@ -1073,33 +1072,20 @@ checkTermType checkty = \case
       pure (ty', WithCapability na tes' te', p1 ++ p2)
     RequireCapability na tes -> do
       unify checkty TyUnit i
-      tes' <- checkCapArgs na tes
-      pure (TyUnit, RequireCapability na tes', [])
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyUnit, RequireCapability na tes', p1)
     ComposeCapability na tes -> do
       unify checkty TyUnit i
-      tes' <- checkCapArgs na tes
-      pure (TyUnit, ComposeCapability na tes', [])
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyUnit, ComposeCapability na tes', p1)
     InstallCapability na tes -> do
       unify checkty TyUnit i
-      tes' <- checkCapArgs na tes
-      pure (TyUnit, InstallCapability na tes', [])
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyUnit, InstallCapability na tes', p1)
     EmitEvent na tes -> do
       unify checkty TyUnit i
-      tes' <- checkCapArgs na tes
-      pure (TyUnit, EmitEvent na tes', [])
-    where
-    checkCapArgs na tes = case _nKind na of
-      NTopLevel mn mh ->
-        view (tcFree . at (FullyQualifiedName mn (_nName na) mh)) >>= \case
-         Nothing -> error "invariant broken with defcap"
-         Just dcapTy -> case tyFunToArgList dcapTy of
-          Just (dcargs, _) -> do
-            when (length dcargs /= length tes) $ error "invariant broken dcap args"
-            vs <- zipWithM (\ty term -> checkTermType (liftType ty) term) dcargs tes
-            pure (view _2 vs, view _3 vs)
-          Nothing -> error "invariant broken"
-      _ -> error "invariant broken"
-
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyUnit, EmitEvent na tes', p1)
   IR.Constant lit i -> do
     let ty = typeOfLit lit
     unify checkty ty i
@@ -1131,6 +1117,22 @@ checkTermType checkty = \case
       _ -> error "boom"
   IR.Error txt i -> pure (checkty, Typed.Error checkty txt i, [])
 
+
+checkCapArgs
+  :: TypeOfBuiltin raw
+  => Name
+  -> [IRTerm raw i]
+  -> InferM s reso i ([TCTerm s raw i], [TCPred s])
+checkCapArgs na tes = case _nKind na of
+  NTopLevel mn mh ->
+    view (tcFree . at (FullyQualifiedName mn (_nName na) mh)) >>= \case
+      Nothing -> error "invariant broken with defcap"
+      Just dcapTy -> case tyFunToArgList dcapTy of
+        (dcargs, _) -> do
+          when (length dcargs /= length tes) $ error "invariant broken dcap args"
+          vs <- zipWithM (checkTermType . liftType) dcargs tes
+          pure (view _2 <$> vs, concat (view _3 <$> vs))
+  _ -> error "invariant broken"
 
 -- Todo: bidirectionality
 inferTerm
@@ -1207,7 +1209,23 @@ inferTerm = \case
     (te2, e2', pe2) <- inferTerm e2
     pure (te2, Typed.Sequence e1' e2' i, pe1 ++ pe2)
   -- Todo: Here, convert to dictionary
-  IR.CapabilityForm cf _ -> error "implement"
+  IR.CapabilityForm cf i -> over _2 (`Typed.CapabilityForm` i) <$> case cf of
+    WithCapability na tes te -> do
+      (tes', p1) <- checkCapArgs na tes
+      (ty', te', p2) <- inferTerm te
+      pure (ty', WithCapability na tes' te', p1 ++ p2)
+    RequireCapability na tes -> do
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyUnit, RequireCapability na tes', p1)
+    ComposeCapability na tes -> do
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyUnit, ComposeCapability na tes', p1)
+    InstallCapability na tes -> do
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyUnit, InstallCapability na tes', p1)
+    EmitEvent na tes -> do
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyUnit, EmitEvent na tes', p1)
 
   IR.Conditional cond i -> over _2 (`Typed.Conditional` i) <$>
     case cond of
@@ -1506,6 +1524,8 @@ debruijnizeTermTypes info = dbj [] 0
       tys' <- traverse (dbjTyp info env depth) tys
       preds' <- traverse (dbjPred info env depth) preds
       pure (Typed.Builtin (b, tys', preds') i)
+    Typed.CapabilityForm cf i ->
+      Typed.CapabilityForm <$> traverse (dbj env depth) cf <*> pure i
     Typed.Constant l i -> pure (Typed.Constant l i)
 
 
@@ -1578,6 +1598,8 @@ noTyVarsinTerm info = \case
     Typed.Try <$> noTyVarsinTerm info e1 <*> noTyVarsinTerm info e2 <*> pure i
   Typed.DynInvoke e1 t i ->
     Typed.DynInvoke <$> noTyVarsinTerm info e1 <*> pure t <*> pure i
+  Typed.CapabilityForm cf i ->
+    Typed.CapabilityForm <$> traverse (noTyVarsinTerm info) cf <*> pure i
   Typed.Error t e i ->
     Typed.Error <$> ensureNoTyVars info t <*> pure e <*> pure i
 

@@ -67,6 +67,13 @@ defName (Dfun d) = _dfunName d
 defName (DConst d) = _dcName d
 defName (DCap d) = _dcapName d
 
+defKind :: Def name b i -> DefKind
+defKind = \case
+  Dfun{} -> DKDefun
+  DConst{} -> DKDefConst
+  DCap{} -> DKDefCap
+
+
 ifDefName :: IfDef name builtin i -> Text
 ifDefName = \case
   IfDfun ifd -> _ifdName ifd

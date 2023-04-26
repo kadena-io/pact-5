@@ -101,7 +101,8 @@ evalCEK cont handler env (Var n info)  = do
     NTopLevel mname mh -> do
       let fqn = FullyQualifiedName mname (_nName n) mh
       cekReadEnv >>= \renv -> case Map.lookup fqn (view cekLoaded renv) of
-        Just d -> evalCEK cont handler RAList.Nil (defTerm d)
+        Just (Dfun d) -> evalCEK cont handler RAList.Nil (_dfunTerm d)
+        Just _ -> failInvariant' "invalid call" info
         Nothing -> failInvariant' ("top level name " <> T.pack (show fqn) <> " not in scope") info
     NModRef m ifs ->
       returnCEKValue cont handler (VModRef m ifs)

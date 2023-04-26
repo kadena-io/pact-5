@@ -152,13 +152,13 @@ data TypeScheme tv =
   TypeScheme [tv] [Pred tv]  (Type tv)
   deriving Show
 
-tyFunToArgList :: Type n -> Maybe ([Type n], Type n)
+tyFunToArgList :: Type n -> ([Type n], Type n)
 tyFunToArgList (TyFun l r) =
   unFun [l] r
   where
   unFun args (TyFun l' r') = unFun (l':args) r'
-  unFun args ret = Just (reverse args, ret)
-tyFunToArgList _ = Nothing
+  unFun args ret = (reverse args, ret)
+tyFunToArgList r = ([], r)
 
 typeOfLit :: Literal -> Type n
 typeOfLit = TyPrim . \case

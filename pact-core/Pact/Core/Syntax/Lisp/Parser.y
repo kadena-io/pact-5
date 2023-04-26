@@ -73,6 +73,11 @@ import Pact.Core.Syntax.Lisp.LexUtils
   modelAnn   { PosToken TokenModelAnn _ }
   eventAnn   { PosToken TokenEventAnn _ }
   managedAnn { PosToken TokenManagedAnn _ }
+  withcap    { PosToken TokenWithCapability _ }
+  reqcap     { PosToken TokenRequireCapability _}
+  installcap { PosToken TokenInstallCapability _ }
+  composecap { PosToken TokenComposeCapability _ }
+  emitevent  { PosToken TokenEmitEvent _ }
   step       { PosToken TokenStep _ }
   steprb     { PosToken TokenStepWithRollback _ }
   tc         { PosToken TokenTypechecks _ }
@@ -388,6 +393,7 @@ SExpr :: { LineInfo -> ParsedExpr }
   | ProgNExpr { $1 }
   | GenAppExpr { $1 }
   | SuspendExpr { $1 }
+  | CapExpr { $1 }
 
 List :: { ParsedExpr }
   : '[' ListExprs ']' { List $2 (_ptInfo $1) }
@@ -419,6 +425,16 @@ SuspendExpr :: { LineInfo -> ParsedExpr }
 
 ErrExpr :: { LineInfo -> ParsedExpr }
   : err STR { Error (getStr $2) }
+
+CapExpr :: { LineInfo -> ParsedExpr }
+  : CapForm { CapabilityForm $1 }
+
+CapForm :: { CapForm LineInfo }
+  : withcap '(' ParsedName AppList ')' Block { WithCapability $3 $4 $6 }
+  | installcap '(' ParsedName AppList ')' { InstallCapability $3 $4 }
+  | reqcap '(' ParsedName AppList ')' { RequireCapability $3 $4 }
+  | composecap '(' ParsedName AppList ')' { ComposeCapability $3 $4 }
+  | emitevent '(' ParsedName AppList ')' { EmitEvent $3 $4 }
 
 LamArgs :: { [(Text, Maybe Type)] }
   : LamArgs IDENT ':' Type { (getIdent $2, Just $4):$1 }
