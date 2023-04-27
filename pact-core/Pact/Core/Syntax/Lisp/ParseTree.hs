@@ -23,42 +23,14 @@ import Pact.Core.Guards
 
 
 data Operator
-  = AddOp
-  | SubOp
-  | MultOp
-  | DivOp
-  | GTOp
-  | GEQOp
-  | LTOp
-  | LEQOp
-  | EQOp
-  | NEQOp
-  | BitAndOp
-  | BitOrOp
-  | BitComplementOp
-  | AndOp
+  = AndOp
   | OrOp
-  | PowOp
   deriving (Show, Eq, Enum, Bounded)
 
 instance Pretty Operator where
   pretty = \case
-    AddOp -> "+"
-    SubOp -> "-"
-    MultOp -> "*"
-    DivOp -> "/"
-    GTOp -> ">"
-    GEQOp -> ">="
-    LTOp -> "<"
-    LEQOp -> "<="
-    EQOp -> "="
-    NEQOp -> "!="
-    BitAndOp -> "&"
-    BitOrOp -> "|"
     AndOp -> "and"
     OrOp -> "or"
-    PowOp -> "^"
-    BitComplementOp -> "~"
 
 -- | Type representing all pact syntactic types.
 -- Note: A few types (mainly TyPoly*) do not exist in pact-core.
@@ -67,7 +39,6 @@ data Type
   | TyList Type
   | TyPolyList
   | TyModRef ModuleName
-  | TyGuard
   | TyKeyset
   | TyObject ParsedName
   | TyTime
@@ -88,6 +59,9 @@ pattern TyString = TyPrim PrimString
 
 pattern TyUnit :: Type
 pattern TyUnit = TyPrim PrimUnit
+
+pattern TyGuard :: Type
+pattern TyGuard = TyPrim PrimGuard
 
 instance Pretty Type where
   pretty = \case
