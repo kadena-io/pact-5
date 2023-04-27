@@ -130,32 +130,6 @@ class DesugarBuiltin b where
 instance DesugarBuiltin RawBuiltin where
   reservedNatives = rawBuiltinMap
   desugarOperator info = \case
-    Lisp.AddOp ->
-      Builtin RawAdd info
-    Lisp.SubOp ->
-      Builtin RawSub info
-    Lisp.MultOp ->
-      Builtin RawMultiply info
-    Lisp.DivOp ->
-      Builtin RawDivide info
-    Lisp.GTOp ->
-      Builtin RawGT info
-    Lisp.GEQOp ->
-      Builtin RawGEQ info
-    Lisp.LTOp ->
-      Builtin RawLT info
-    Lisp.LEQOp ->
-      Builtin RawLEQ info
-    Lisp.EQOp ->
-      Builtin RawEq info
-    Lisp.NEQOp ->
-      Builtin RawNeq info
-    Lisp.BitAndOp ->
-      Builtin RawBitwiseAnd info
-    Lisp.BitOrOp ->
-      Builtin RawBitwiseOr info
-    Lisp.BitComplementOp ->
-      Builtin RawBitwiseFlip info
     -- Manual eta expansion for and as well as Or
     Lisp.AndOp -> let
       arg1 = "#andArg1"
@@ -165,7 +139,6 @@ instance DesugarBuiltin RawBuiltin where
       arg1 = "#orArg1"
       arg2 = "#orArg2"
       in Lam ((arg1, Just TyBool) :| [(arg2, Just TyBool)]) (Conditional (COr (Var (BN (BareName arg1)) info) (Var (BN (BareName arg2)) info)) info) info
-    Lisp.PowOp -> Builtin RawPow info
   -- Todo:
   -- Builtins of known arity differences we are yet to support:
   --  str-to-int
@@ -237,16 +210,11 @@ desugarLispTerm = \case
       let arg = Constant LUnit i :| []
       in App v arg i
     e' -> e'
-  Lisp.App (Lisp.Operator o oi) [e1, e2] i -> case o of
+  Lisp.App (Lisp.Operator o _) [e1, e2] i -> case o of
     Lisp.AndOp ->
       Conditional <$> (CAnd <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure i
     Lisp.OrOp ->
       Conditional <$> (COr <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure i
-    _ -> do
-      let o' = desugarOperator oi o
-      e1' <- desugarLispTerm e1
-      e2' <- desugarLispTerm e2
-      pure (App o' (e1' :| [e2']) i)
   Lisp.App e (h:hs) i -> do
     e' <- desugarLispTerm e
     h' <- desugarLispTerm h

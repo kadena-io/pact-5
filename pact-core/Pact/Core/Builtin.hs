@@ -241,11 +241,11 @@ data RawBuiltin
 rawBuiltinToText :: RawBuiltin -> Text
 rawBuiltinToText = \case
   -- Addition
-  RawAdd -> "add"
+  RawAdd -> "+"
   -- Num
-  RawSub -> "subtract"
-  RawMultiply -> "mult"
-  RawDivide -> "div"
+  RawSub -> "-"
+  RawMultiply -> "*"
+  RawDivide -> "/"
   RawNegate -> "negate"
   RawAbs -> "abs"
   RawPow -> "^"
