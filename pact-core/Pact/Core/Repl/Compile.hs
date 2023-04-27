@@ -55,7 +55,7 @@ import qualified Pact.Core.Syntax.Lisp.Lexer as Lisp
 import qualified Pact.Core.Syntax.Lisp.Parser as Lisp
 
 data InterpretOutput b i
-  = InterpretValue (CEKValue b i (ReplEvalM ReplCoreBuiltin LineInfo)) LineInfo
+  = InterpretValue (CEKValue b i (ReplEvalM ReplCoreBuiltin SpanInfo)) SpanInfo
   | InterpretLog Text
   deriving Show
 
@@ -63,9 +63,9 @@ data InterpretOutput b i
 -- to assist in swapping from the lisp frontend
 data InterpretBundle
   = InterpretBundle
-  { expr :: ByteString -> ReplM ReplCoreBuiltin (ReplEvalResult CoreBuiltin LineInfo)
+  { expr :: ByteString -> ReplM ReplCoreBuiltin (ReplEvalResult CoreBuiltin SpanInfo)
   , exprType :: ByteString -> ReplM ReplCoreBuiltin (TypeScheme NamedDeBruijn)
-  , program :: ByteString -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin LineInfo]
+  , program :: ByteString -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin SpanInfo]
   }
 
 lispInterpretBundle :: InterpretBundle
@@ -77,7 +77,7 @@ lispInterpretBundle =
 
 interpretExprLisp
   :: ByteString
-  -> ReplM ReplCoreBuiltin (ReplEvalResult CoreBuiltin LineInfo)
+  -> ReplM ReplCoreBuiltin (ReplEvalResult CoreBuiltin SpanInfo)
 interpretExprLisp source = do
   pactdb <- use replPactDb
   loaded <- use replLoaded
@@ -89,8 +89,8 @@ interpretExprLisp source = do
   interpretExpr desugared
 
 interpretExpr
-  :: DesugarOutput ReplCoreBuiltin LineInfo (IR.Term Name ReplRawBuiltin LineInfo)
-  -> ReplM ReplCoreBuiltin (ReplEvalResult CoreBuiltin LineInfo)
+  :: DesugarOutput ReplCoreBuiltin SpanInfo (IR.Term Name ReplRawBuiltin SpanInfo)
+  -> ReplM ReplCoreBuiltin (ReplEvalResult CoreBuiltin SpanInfo)
 interpretExpr (DesugarOutput desugared loaded' _) = do
   debugIfFlagSet ReplDebugDesugar desugared
   (ty, typed) <- liftEither (runInferTerm loaded' desugared)
@@ -127,7 +127,7 @@ interpretExprTypeLisp source = do
   interpretExprType desugared
 
 interpretExprType
-  :: DesugarOutput ReplCoreBuiltin LineInfo (IR.Term Name ReplRawBuiltin LineInfo)
+  :: DesugarOutput ReplCoreBuiltin SpanInfo (IR.Term Name ReplRawBuiltin SpanInfo)
   -> ReplM ReplCoreBuiltin (TypeScheme NamedDeBruijn)
 interpretExprType (DesugarOutput desugared loaded' _) = do
   debugIfFlagSet ReplDebugDesugar desugared
@@ -138,12 +138,12 @@ interpretExprType (DesugarOutput desugared loaded' _) = do
 
 -- Small internal debugging function for playing with file loading within
 -- this module
-loadFile :: FilePath -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin LineInfo]
+loadFile :: FilePath -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin SpanInfo]
 loadFile source = liftIO (B.readFile source) >>= interpretReplProgram
 
 compileProgram
   :: ByteString
-  -> ReplM ReplCoreBuiltin [DesugarOutput ReplCoreBuiltin LineInfo (TopLevel Name ReplCoreBuiltin LineInfo)]
+  -> ReplM ReplCoreBuiltin [DesugarOutput ReplCoreBuiltin SpanInfo (TopLevel Name ReplCoreBuiltin SpanInfo)]
 compileProgram source = do
   loaded <- use replLoaded
   pactdb <- use replPactDb
@@ -169,7 +169,7 @@ compileProgram source = do
 
 interpretReplProgram
   :: ByteString
-  -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin LineInfo]
+  -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin SpanInfo]
 interpretReplProgram source = do
   pactdb <- use replPactDb
   lexx <- liftEither (Lisp.lexer source)
@@ -295,7 +295,7 @@ interpretReplProgram source = do
 
 interpretProgram
   :: ByteString
-  -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin LineInfo]
+  -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin SpanInfo]
 interpretProgram source = do
   compileProgram source >>= traverse interpret
   where

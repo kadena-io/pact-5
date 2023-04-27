@@ -3,12 +3,10 @@ module Pact.Core.Test.ReplTests where
 import Test.Tasty
 import Test.Tasty.HUnit
 
-import Control.Lens
 import Control.Monad(when)
 import Data.IORef
 import Data.ByteString(ByteString)
 import Data.Foldable(traverse_)
-import Data.Text(Text)
 import Data.Text.Encoding(decodeUtf8)
 import System.Directory
 import System.FilePath
@@ -17,35 +15,14 @@ import qualified Data.Text as T
 import qualified Data.ByteString as B
 
 import Pact.Core.Gas
-import Pact.Core.Errors
 import Pact.Core.Literal
 import Pact.Core.Persistence
-import Pact.Core.Info
 
 import Pact.Core.Untyped.Eval.Runtime
 
 import Pact.Core.Repl.Utils
 import Pact.Core.Repl.Compile
-
-replError
-  :: ReplSource
-  -- ^ The actual source of text to slice from
-  -> Text
-  -- ^ The rendered error
-  -> LineInfo
-  -- ^ The source loc of the error
-  -> Text
-replError (ReplSource file src) errRender pei =
-  let srcLines = T.lines src
-      slice = withLine (_liLine pei) $ take (max 1 (_liSpan pei)) $ drop (_liLine pei) srcLines
-      colMarker = padBlankr 5 <> "| " <> T.replicate (_liColumn pei - 1) " " <> "^"
-      fileErr = file <> ":" <> T.pack (show (_liLine pei)) <> ":" <> T.pack (show (_liColumn pei)) <> ": "
-  in T.unlines ([fileErr <> errRender] ++ slice ++ [colMarker])
-  where
-  padr n r = n <> T.replicate (r - T.length n) " "
-  padBlankr r = padr "" r
-  withLine st lns = zipWith (\i e -> padr (T.pack (show i)) 5 <> "| " <> e) [st ..] lns
-
+import Pact.Core.Errors (PactError(..), ExecutionError (..))
 
 tests :: IO TestTree
 tests = do
@@ -77,8 +54,7 @@ runReplTest file src = do
   stateRef <- newIORef rstate
   runReplT stateRef (interpretReplProgram src) >>= \case
     Left e -> let
-      errRender = renderPactError e
-      rendered = replError (ReplSource (T.pack file) (decodeUtf8 src)) errRender (view peInfo e)
+      rendered = replError (ReplSource (T.pack file) (decodeUtf8 src)) e
       in assertFailure (T.unpack rendered)
     Right output -> traverse_ ensurePassing output
   where
@@ -86,7 +62,7 @@ runReplTest file src = do
     InterpretLog _ ->  pure ()
     InterpretValue v i -> case v of
       VLiteral (LString msg) -> do
-        let render = replError (ReplSource (T.pack file) (decodeUtf8 src)) msg i
+        let render = replError (ReplSource (T.pack file) (decodeUtf8 src)) (PEExecutionError (ExecutionError msg) i)
         when (T.isPrefixOf "FAILURE:" msg) $ assertFailure (T.unpack render)
       _ -> pure ()
 

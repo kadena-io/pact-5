@@ -241,31 +241,31 @@ data RawBuiltin
 rawBuiltinToText :: RawBuiltin -> Text
 rawBuiltinToText = \case
   -- Addition
-  RawAdd -> "add"
+  RawAdd -> "+"
   -- Num
-  RawSub -> "subtract"
-  RawMultiply -> "mult"
-  RawDivide -> "div"
+  RawSub -> "-"
+  RawMultiply -> "*"
+  RawDivide -> "/"
   RawNegate -> "negate"
   RawAbs -> "abs"
-  RawPow -> "pow"
+  RawPow -> "^"
   -- Bolean ops
   -- RawAnd -> "and"
   -- RawOr -> "or"
   RawNot -> "not"
   -- Eq
-  RawEq -> "(=)"
-  RawNeq -> "(!=)"
+  RawEq -> "="
+  RawNeq -> "!="
   -- Ord
-  RawGT -> "(>)"
-  RawGEQ -> "(>=)"
-  RawLT -> "(<)"
-  RawLEQ -> "(<=)"
+  RawGT -> ">"
+  RawGEQ -> ">="
+  RawLT -> "<"
+  RawLEQ -> "<="
   -- Int ops
   RawBitwiseAnd -> "&"
   RawBitwiseOr -> "|"
   RawBitwiseXor -> "xor"
-  RawBitwiseFlip -> "(~)"
+  RawBitwiseFlip -> "~"
   RawBitShift -> "shift"
   RawMod -> "mod"
   -- roundings

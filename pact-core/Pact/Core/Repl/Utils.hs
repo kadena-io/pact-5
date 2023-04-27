@@ -27,6 +27,7 @@ module Pact.Core.Repl.Utils
  , parseReplAction
  , prettyReplFlag
  , ReplSource(..)
+ , replError
  ) where
 
 import Control.Lens
@@ -79,17 +80,17 @@ prettyReplFlag = \case
   ReplDebugUntyped -> "untyped-core"
 
 newtype ReplM b a
-  = ReplT { unReplT :: ExceptT (PactError LineInfo) (ReaderT (IORef (ReplState b)) IO) a }
+  = ReplT { unReplT :: ExceptT (PactError SpanInfo) (ReaderT (IORef (ReplState b)) IO) a }
   deriving
     ( Functor
     , Applicative
     , Monad
     , MonadIO
     , MonadThrow
-    , MonadError (PactError LineInfo)
+    , MonadError (PactError SpanInfo)
     , MonadCatch
     , MonadMask)
-  via (ExceptT (PactError LineInfo) (ReaderT (IORef (ReplState b)) IO))
+  via (ExceptT (PactError SpanInfo) (ReaderT (IORef (ReplState b)) IO))
 
 
 instance MonadState (ReplState b) (ReplM b)  where
@@ -102,8 +103,8 @@ instance MonadState (ReplState b) (ReplM b)  where
 data ReplState b
   = ReplState
   { _replFlags :: Set ReplDebugFlag
-  , _replLoaded :: Loaded b LineInfo
-  , _replPactDb :: PactDb (ReplM b) b LineInfo
+  , _replLoaded :: Loaded b SpanInfo
+  , _replPactDb :: PactDb (ReplM b) b SpanInfo
   , _replGas :: IORef Gas
   , _replEvalLog :: IORef (Maybe [(Text, Gas)])
   }
@@ -236,6 +237,20 @@ replCompletion natives =
     dns = defNames ems
     in fmap ((renderModuleName mn <> ".") <>) dns
 
-runReplT :: IORef (ReplState b) -> ReplM b a -> IO (Either (PactError LineInfo) a)
+runReplT :: IORef (ReplState b) -> ReplM b a -> IO (Either (PactError SpanInfo) a)
 runReplT env (ReplT act) = runReaderT (runExceptT act) env
 
+replError
+  :: ReplSource
+  -> PactErrorI
+  -> Text
+replError (ReplSource file src) pe =
+  let srcLines = T.lines src
+      pei = view peInfo pe
+      slice = withLine (_liStartLine pei) $ take (max 1 (_liEndLine pei)) $ drop (_liStartLine pei) srcLines
+      colMarker = "  | " <> T.replicate (_liStartColumn pei) " " <> T.replicate (max 1 (_liEndColumn pei - _liStartColumn pei)) "^"
+      errRender = renderPactError pe
+      fileErr = file <> ":" <> T.pack (show (_liStartLine pei)) <> ":" <> T.pack (show (_liStartColumn pei)) <> ": "
+  in T.unlines ([fileErr <> errRender] ++ slice ++ [colMarker])
+  where
+  withLine st lns = zipWith (\i e -> T.pack (show i) <> " | " <> e) [st ..] lns

@@ -23,7 +23,6 @@ import Control.Monad.Except
 import System.Console.Haskeline
 import Data.IORef
 import Data.Foldable(traverse_)
-import Data.Text(Text)
 
 import qualified Data.ByteString as B
 import qualified Data.Text as T
@@ -33,8 +32,6 @@ import qualified Data.Set as Set
 import Pact.Core.Persistence
 import Pact.Core.Pretty
 import Pact.Core.Builtin
-import Pact.Core.Errors
-import Pact.Core.Info
 
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
@@ -108,18 +105,3 @@ main = do
 tryError :: MonadError a m => m b -> m (Either a b)
 tryError ma =
   catchError (Right <$> ma) (pure . Left)
-
-replError
-  :: ReplSource
-  -> PactErrorI
-  -> Text
-replError (ReplSource file src) pe =
-  let srcLines = T.lines src
-      pei = view peInfo pe
-      slice = withLine (_liLine pei) $ take (max 1 (_liSpan pei)) $ drop (_liLine pei) srcLines
-      colMarker = "  | " <> T.replicate (_liColumn pei - 1) " " <> "^"
-      errRender = renderPactError pe
-      fileErr = file <> ":" <> T.pack (show (_liLine pei)) <> ":" <> T.pack (show (_liColumn pei)) <> ": "
-  in T.unlines ([fileErr <> errRender] ++ slice ++ [colMarker])
-  where
-  withLine st lns = zipWith (\i e -> T.pack (show i) <> " | " <> e) [st ..] lns

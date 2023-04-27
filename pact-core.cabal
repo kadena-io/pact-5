@@ -235,3 +235,4 @@ test-suite core-tests
   other-modules:
     , Pact.Core.Test.ReplTests
     , Pact.Core.Test.LexerParserTests
+    , Pact.Core.Test.LexerTests

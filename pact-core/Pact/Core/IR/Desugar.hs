@@ -211,7 +211,6 @@ instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
 throwDesugarError :: MonadError (PactError i) m => DesugarError -> i -> RenamerT m b i a
 throwDesugarError de = liftRenamerT . throwError . PEDesugarError de
 
--- type DesugarTerm term b i = (?desugarTerm :: term -> Term ParsedName Text b i)
 desugarLispTerm
   :: forall raw reso i m
   . (DesugarBuiltin raw, MonadError (PactError i) m)
@@ -237,11 +236,7 @@ desugarLispTerm = \case
     ts' <- (traverse.traverse) (desugarType i) ts
     body' <- desugarLispTerm body
     pure (Lam (NE.zip ns ts') body' i)
-  Lisp.Suspend body i -> do
-    let n = "#unitLamArg"
-        nty = Just TyUnit
-    body' <- desugarLispTerm body
-    pure (Lam (pure (n, nty)) body' i)
+  Lisp.Suspend body i -> desugarLispTerm (Lisp.Lam [] body i)
   Lisp.If e1 e2 e3 i -> Conditional <$>
      (CIf <$> desugarLispTerm e1 <*> desugarLispTerm e2 <*> desugarLispTerm e3) <*> pure i
   -- Note: this is our "unit arg application" desugaring
@@ -294,7 +289,6 @@ desugarLispTerm = \case
   where
   binderToLet i (Lisp.Binder n mty expr) term = do
     expr' <- desugarLispTerm expr
-    -- term' <- desugarLispTerm expr
     mty' <- traverse (desugarType i) mty
     pure $ Let n mty' expr' term i
   isReservedNative n =
@@ -304,9 +298,8 @@ suspendTerm
   :: Term ParsedName builtin info
   -> Term ParsedName builtin info
 suspendTerm e' =
-  Lam (("#suspendarg", Just TyUnit) :| []) e' (view termInfo e')
+  Lam (("#suspendArg", Just TyUnit) :| []) e' (view termInfo e')
 
--- Todo: remove this monkey patch
 enforceArg
   :: MonadError (PactError i) m
   => i
@@ -318,7 +311,6 @@ enforceArg i (Lisp.MArg n mty) = case mty of
   Nothing -> throwDesugarError (UnannotatedType n) i
 
 
--- desugarDefun :: (DesugarBuiltin b) => Lisp.Defun i -> Defun ParsedName b i
 desugarDefun
   :: (DesugarBuiltin builtin, MonadError (PactError info) m)
   => Lisp.Defun info
@@ -390,7 +382,7 @@ desugarIfDef = \case
       let dty = foldr TyFun rty' argsTys
       pure $ IfDefun n dty i
   Lisp.IfDConst dc -> IfDConst <$> desugarDefConst dc
-  _ -> error "unimplemented"
+  _ -> error "unimplemented: special interface decl forms in desugar"
 
 desugarDef :: (DesugarBuiltin builtin, MonadError (PactError info) m) => Lisp.Def info -> RenamerT m b info (Def ParsedName builtin info)
 desugarDef = \case
@@ -399,7 +391,8 @@ desugarDef = \case
   Lisp.DCap dc -> DCap <$> desugarDefCap dc
   _ -> error "unimplemented"
 
--- Todo: Module hashing, either on
+-- Todo: Module hashing, either on source or
+-- the contents
 -- Todo: governance
 desugarModule
   :: (DesugarBuiltin builtin, MonadError (PactError info) m)
@@ -420,6 +413,8 @@ desugarModule (Lisp.Module mname mgov extdecls defs _ _) = do
     Lisp.ExtImplements mn -> split (accI, accB, mn:accImp) hs
   split (a, b, c) [] = (reverse a, b, reverse c)
 
+-- Todo: Interface hashing, either on source or
+-- the contents
 desugarInterface
   :: (MonadError (PactError info) m, DesugarBuiltin builtin)
   => Lisp.Interface info
