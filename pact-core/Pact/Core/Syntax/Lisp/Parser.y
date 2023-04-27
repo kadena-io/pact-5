@@ -287,6 +287,10 @@ MDCapMeta :: { Maybe DCapMeta }
   | Event { Just $1 }
   | {- empty -} { Nothing }
 
+-- This production causes parser ambiguity.
+-- Take the code:
+-- (defcap f (a) @managed a a a)
+-- is this an automanaged capability, or are the managed args capturing parameters.
 Managed :: { DCapMeta }
   : managedAnn { DefManaged Nothing }
   | managedAnn IDENT ParsedName { DefManaged (Just (getIdent $2, $3)) }
@@ -313,10 +317,7 @@ Type :: { Type }
   : '[' Type ']' { TyList $2 }
   | module '{' ModQual '}' { TyModRef (mkModName $3) }
   | IDENT '{' ParsedName '}' {% objType (_ptInfo $1) (getIdent $1) $3}
-  | AtomicType { $1 }
-
-AtomicType :: { Type }
-  : IDENT {% primType (_ptInfo $1) (getIdent $1) }
+  | IDENT {% primType (_ptInfo $1) (getIdent $1) }
 
 -- Annotations
 DocAnn :: { Text }
@@ -344,6 +345,10 @@ MDocOrModel :: { (Maybe Text, Maybe [Expr SpanInfo])}
   | DocStr { (Just $1, Nothing) }
   | {- empty -} { (Nothing, Nothing) }
 
+-- This production causes parser ambugity in two productions: defun and defcap
+-- (defun f () "a")
+-- (defcap f () "a")
+-- it isn't clear whether "a" is a docstring or a string literal.
 MDoc :: { Maybe Text }
   : DocAnn { Just $1 }
   | DocStr { Just $1 }
