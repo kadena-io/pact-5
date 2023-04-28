@@ -18,7 +18,6 @@
         inherit (haskellNix) config;
       };
       flake = pkgs.pact-core.flake {
-        # crossPlatforms = p: [ p.ghcjs ];
       };
       overlays = [ haskellNix.overlay
         (final: prev: {
@@ -28,18 +27,28 @@
               compiler-nix-name = "ghc8107";
               shell.tools = {
                 cabal = {};
-                # hlint = {};
+                haskell-language-server = {};
               };
               shell.buildInputs = with pkgs; [
                 zlib
                 z3
                 pkgconfig
               ];
-              # shell.crossPlatforms = p: [ p.ghcjs ];
             };
         })
       ];
     in flake // {
       packages.default = flake.packages."pact-core:exe:repl";
+
+      devShell = pkgs.haskellPackages.shellFor {
+        packages = p: [
+        ];
+
+        buildInputs = with pkgs.haskellPackages; [
+          cabal-install
+        ];
+
+        withHoogle = true;
+      };
     });
 }
