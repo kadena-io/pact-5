@@ -27,7 +27,7 @@
               compiler-nix-name = "ghc8107";
               shell.tools = {
                 cabal = {};
-                haskell-language-server = {};
+                # haskell-language-server = {};
               };
               shell.buildInputs = with pkgs; [
                 zlib
