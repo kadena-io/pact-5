@@ -212,7 +212,6 @@ test-suite core-tests
     , intervals
     , mmorph
     , neat-interpolation
-    , sbv < 10.0
     , servant-client
     , temporary
     , yaml
