@@ -39,6 +39,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.RAList as RAList
 import qualified Data.Text as T
 import qualified Data.Vector as V
+import qualified Data.Set as S
 
 import Pact.Core.Builtin
 import Pact.Core.Names
@@ -139,13 +140,13 @@ evalCEK cont handler env (CapabilityForm cf _) = do
         in evalCEK cont' handler env x
       [] -> evalCap cont handler env (CapToken fqn []) body
     RequireCapability _ args -> case args of
-      [] -> requireCap cont handler env (CapToken fqn [])
+      [] -> requireCap cont handler (CapToken fqn [])
       x:xs -> let
         capFrame = RequireCapFrame fqn
         cont' = CapInvokeC env xs [] capFrame cont
         in evalCEK cont' handler env x
     ComposeCapability _ args -> case args of
-      [] -> composeCap cont handler env (CapToken fqn [])
+      [] -> composeCap cont handler (CapToken fqn [])
       x:xs -> let
         capFrame = ComposeCapFrame fqn
         cont' = CapInvokeC env xs [] capFrame cont
@@ -216,12 +217,36 @@ evalCap cont handler env ct@(CapToken fqn args) contbody = do
   applyCapBody e  _ b = (e, b)
 
 
-requireCap :: a
-requireCap = undefined
-composeCap :: a
-composeCap = undefined
+requireCap
+  :: MonadEval b i m
+  => Cont b i m
+  -> CEKErrorHandler b i m
+  -> CapToken
+  -> m (EvalResult b i m)
+requireCap cont handler ct = do
+  caps <- useCekState (esCaps.csSlots)
+  let csToSet cs = S.insert (_csCap cs) (S.fromList (_csComposed cs))
+      capSet = foldMap csToSet caps
+  if S.member ct capSet then returnCEKValue cont handler VUnit
+  else throwExecutionError' (CapNotInScope "ovuvue")
+
+composeCap cont handler (CapToken fqn args) = do
+  cekReadEnv >>= \renv -> case Map.lookup fqn (view cekLoaded renv) of
+    Just (DCap d) -> do
+      modifyCEKState (esCaps . csSlots) (CapSlot ct []:)
+      let (env', capBody) = applyCapBody mempty args (_dcapTerm d)
+          cont' = CapBodyC env contbody cont
+      evalCEK cont' handler env' capBody
+    Just {} -> error "was not defcap, invariant violated"
+    Nothing -> error "No such def"
+  where
+  applyCapBody e (x:xs) (Lam b _) =
+    applyCapBody (RAList.cons (pactToCEKValue x) e) xs b
+  applyCapBody e  _ b = (e, b)
+
 installCap :: a
 installCap = undefined
+
 emitEvent :: a
 emitEvent = undefined
 
@@ -284,7 +309,8 @@ returnCEKValue (CapInvokeC env terms pvs cf cont) handler v = case terms of
   [] -> case cf of
     WithCapFrame fqn wcbody ->
       evalCap cont handler env (CapToken fqn (reverse pvs)) wcbody
-    RequireCapFrame{} -> error "todo"
+    RequireCapFrame fqn  ->
+      requireCap cont handler (CapToken fqn (reverse pvs))
     ComposeCapFrame{} -> error "todo"
     InstallCapFrame{} -> error "todo"
     EmitEventFrame{} -> error "todo"

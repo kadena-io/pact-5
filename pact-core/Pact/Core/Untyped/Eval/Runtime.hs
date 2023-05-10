@@ -156,6 +156,7 @@ data EvalState b i
   = EvalState
   { _esCaps :: CapState
   , _esEvents :: [PactEvent b i]
+  , _esInCap :: Bool
   } deriving Show
 
 type MonadEval b i m = (MonadEvalEnv b i m, MonadEvalState b i m, MonadError (PactError i) m, Default i)

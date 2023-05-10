@@ -207,6 +207,8 @@ data ExecutionError
   -- ^ Gas went past the gas limit
   | FloatingPointError Text
   -- ^ Floating point operation exception
+  | CapNotInScope Text
+  -- ^ Capability not in scope
   | InvariantFailure Text
   -- ^ Invariant violation in execution. This is a fatal Error.
   | ExecutionError Text
@@ -230,6 +232,8 @@ instance RenderError ExecutionError where
     FloatingPointError txt ->
       tConcatSpace ["Floating point error:", txt]
     -- Todo: probably enhance this data type
+    CapNotInScope txt ->
+      tConcatSpace ["Capability not in scope:", txt]
     GasExceeded txt -> txt
     InvariantFailure txt ->
       tConcatSpace ["Fatal execution error, invariant violated:", txt]
