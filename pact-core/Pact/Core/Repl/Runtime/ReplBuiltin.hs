@@ -147,7 +147,7 @@ replRawBuiltinRuntime = \case
   RPrint -> corePrint RPrint
 
 defaultReplState :: Default i => ReplEvalState (ReplBuiltin CoreBuiltin) i
-defaultReplState = ReplEvalState env (EvalState (CapState [] mempty) [])
+defaultReplState = ReplEvalState env (EvalState (CapState [] mempty) [] False)
   where
   env =
     CEKRuntimeEnv

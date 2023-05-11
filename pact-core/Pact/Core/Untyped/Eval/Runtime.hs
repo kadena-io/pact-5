@@ -41,7 +41,7 @@ module Pact.Core.Untyped.Eval.Runtime
  , EvalResult(..)
  , EvalMEnv(..)
  , EvalState(..)
- , esCaps, esEvents
+ , esCaps, esEvents, esInCap
  , pattern VString
  , pattern VInteger
  , pattern VDecimal
@@ -59,6 +59,7 @@ module Pact.Core.Untyped.Eval.Runtime
  , mcCap, mcManaged
  , ManagedCapType(..)
  , PactEvent(..)
+ , CapPopState(..)
  ) where
 
 
@@ -282,6 +283,11 @@ cfFQN f = \case
   InstallCapFrame fqn -> InstallCapFrame <$> f fqn
   EmitEventFrame fqn -> EmitEventFrame <$> f fqn
 
+data CapPopState
+  = PopCapComposed
+  | PopCapInvoke
+  deriving (Eq, Show)
+
 data Cont b i m
   = Fn (CEKValue b i m) (Cont b i m)
   | Arg (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
@@ -291,7 +297,7 @@ data Cont b i m
   | DynInvokeC (CEKEnv b i m) Text (Cont b i m)
   | CapInvokeC (CEKEnv b i m) [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
   | CapBodyC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
-  | CapPopC (Cont b i m)
+  | CapPopC CapPopState (Cont b i m)
   | Mt
   deriving Show
 

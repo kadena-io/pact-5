@@ -308,31 +308,30 @@ enforceArg
 enforceArg i (Lisp.MArg n mty) = case mty of
   Just ty ->
     pure (Lisp.Arg n ty)
-  Nothing -> throwDesugarError (UnannotatedType n) i
+  Nothing -> throwDesugarError (UnannotatedArgumentType n) i
 
 
 desugarDefun
   :: (DesugarBuiltin builtin, MonadError (PactError info) m)
   => Lisp.Defun info
   -> RenamerT m b info (Defun ParsedName builtin info)
-desugarDefun (Lisp.Defun defname [] (Just rt) body _ _ i) = do
-  rt' <- desugarType i rt
+desugarDefun (Lisp.Defun defname [] mrt body _ _ i) = do
+  rt' <- maybe (throwDesugarError (UnannotatedReturnType defname) i) (desugarType i) mrt
   let dfnType = TyFun TyUnit rt'
   body' <- desugarLispTerm body
   let bodyLam = Lam ((defname, Just TyUnit) :| []) body' i
   pure $ Defun defname dfnType bodyLam i
-desugarDefun (Lisp.Defun defname (marg:margs) (Just rt) body _ _ i) = do
+desugarDefun (Lisp.Defun defname (marg:margs) mrt body _ _ i) = do
+  rt' <- maybe (throwDesugarError (UnannotatedReturnType defname) i) (desugarType i) mrt
   arg <- enforceArg i marg
   args <- traverse (enforceArg i) margs
   let neArgs = arg :| args
-  rt' <- desugarType i rt
   neArgs' <- traverse (desugarType i . Lisp._argType) neArgs
   let dfnType = foldr TyFun rt' neArgs'
   let lamArgs = NE.zipWith (\(Lisp.Arg n _) ty -> (n, Just ty)) neArgs neArgs'
   body' <- desugarLispTerm body
   let bodyLam = Lam lamArgs body' i
   pure $ Defun defname dfnType bodyLam i
-desugarDefun _ = error "functions require annotations"
 
 desugarDefConst :: (DesugarBuiltin builtin, MonadError (PactError info) m) => Lisp.DefConst info -> RenamerT m b info (DefConst ParsedName builtin info)
 desugarDefConst (Lisp.DefConst n mty e _ i) = do
@@ -351,13 +350,13 @@ desugarDefCap
   => Lisp.DefCap info
   -> RenamerT m b info (DefCap ParsedName builtin info)
 desugarDefCap (Lisp.DefCap dcn [] mrtype term _docs _model meta i) = do
-  rtype <- maybe (error "boom") (desugarType i) mrtype
+  rtype <- maybe (throwDesugarError (UnannotatedReturnType dcn) i) (desugarType i) mrtype
   term' <- desugarLispTerm term
   let meta' = fmap desugarDefMeta meta
   pure (DefCap dcn rtype term' meta' i)
 desugarDefCap (Lisp.DefCap dcn margs mrtype term _docs _model meta i) = do
   args <- traverse (enforceArg i) margs
-  rtype <- maybe (error "boom") (desugarType i) mrtype
+  rtype <- maybe (throwDesugarError (UnannotatedReturnType dcn) i) (desugarType i) mrtype
   argTys <- traverse (desugarType i . Lisp._argType) args
   term' <- desugarLispTerm term
   let meta' = fmap desugarDefMeta meta
@@ -724,14 +723,14 @@ renameTerm (CapabilityForm cf i) =
       QN qn
         | _qnModName qn == mn -> do
           (n', dk) <- resolveQualified qn i
-          when (dk /= DKDefCap) $ error "not a defcap"
+          when (dk /= DKDefCap) $ throwDesugarError (InvalidCapabilityReference (_qnName qn)) i
           let cf' = set capFormName n' cf
           checkCapForm cf'
           CapabilityForm <$> traverse renameTerm cf' <*> pure i
-        | otherwise -> error "invariant borken"
+        | otherwise -> throwDesugarError (CapabilityOutOfScope (_qnName qn) (_qnModName qn)) i
       BN bn -> do
         (n', dk) <- resolveQualified (QualifiedName (_bnName bn) mn) i
-        when (dk /= DKDefCap) $ error "not a defcap"
+        when (dk /= DKDefCap) $ throwDesugarError (InvalidCapabilityReference (_bnName bn)) i
         let cf' = set capFormName n' cf
         checkCapForm cf'
         CapabilityForm <$> traverse renameTerm cf' <*> pure i
@@ -749,7 +748,7 @@ renameTerm (Error e i) = pure (Error e i)
 
 enforceNotWithinDefcap :: (MonadError (PactError i) m) => RenamerT m b i ()
 enforceNotWithinDefcap = do
-  withinDefCap <- (/= Just DKDefCap) <$> view reCurrDef
+  withinDefCap <- (== Just DKDefCap) <$> view reCurrDef
   when withinDefCap $ error "boom"
 
 renameDefun

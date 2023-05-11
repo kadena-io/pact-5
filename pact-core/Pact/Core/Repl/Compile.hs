@@ -109,7 +109,7 @@ interpretExpr (DesugarOutput desugared loaded' _) = do
              , _cekLoaded = _loAllLoaded loaded'
              , _cekGasModel = freeGasEnv
              , _cekMHashes = mhashes }
-      rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [])
+      rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] False)
   value <- liftEither =<< liftIO (runReplCEK rEnv rState untyped)
   replLoaded .= loaded'
   pure value
@@ -259,7 +259,7 @@ interpretReplProgram source = do
                   , _cekLoaded = _loAllLoaded loaded
                   , _cekGasModel = freeGasEnv
                   , _cekMHashes = mhashes }
-            rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [])
+            rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] False)
         -- Todo: Fix this with `returnCEKValue`
         liftIO (runReplCEK rEnv rState te) >>= liftEither >>= \case
           VError txt ->
@@ -331,7 +331,7 @@ interpretProgram source = do
                   , _cekLoaded = _loAllLoaded loaded
                   , _cekGasModel = freeGasEnv
                   , _cekMHashes = mhashes }
-            rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [])
+            rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] False)
         -- Todo: Fix this with `returnCEKValue`
         liftIO (runReplCEK rEnv rState te) >>= liftEither >>= \case
           VError txt ->

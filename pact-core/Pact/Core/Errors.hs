@@ -101,7 +101,10 @@ data DesugarError
   = UnboundTermVariable Text
   | UnsupportedType Text
   | UnboundTypeVariable Text
-  | UnannotatedType Text
+  | UnannotatedArgumentType Text
+  | UnannotatedReturnType Text
+  | InvalidCapabilityReference Text
+  | CapabilityOutOfScope Text ModuleName
   | NoSuchModuleMember ModuleName Text
   | NoSuchModule ModuleName
   | NoSuchInterface ModuleName
@@ -116,12 +119,18 @@ instance RenderError DesugarError where
   renderError = \case
     UnsupportedType t ->
       tConcatSpace ["Unsupported type in pact-core:", t]
-    UnannotatedType t ->
-      tConcatSpace ["Unannotated type in variable:", t]
+    UnannotatedArgumentType t ->
+      tConcatSpace ["Unannotated type in argument:", t]
+    UnannotatedReturnType t ->
+      tConcatSpace ["Declaration", t, "is missing a return type"]
     UnboundTermVariable t ->
       tConcatSpace ["Unbound variable", t]
     UnboundTypeVariable t ->
       tConcatSpace ["Unbound type variable", t]
+    InvalidCapabilityReference t ->
+      tConcatSpace ["Variable or function used in special form is not a capability", t]
+    CapabilityOutOfScope fn mn ->
+      tConcatSpace [renderModuleName mn <> "." <> fn, "was used in a capability special form outside of the"]
     NoSuchModuleMember mn txt ->
       tConcatSpace ["Module", renderModuleName mn, "has no such member:", txt]
     NoSuchModule mn ->

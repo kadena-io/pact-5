@@ -230,12 +230,18 @@ requireCap cont handler ct = do
   if S.member ct capSet then returnCEKValue cont handler VUnit
   else throwExecutionError' (CapNotInScope "ovuvue")
 
-composeCap cont handler (CapToken fqn args) = do
+composeCap
+  :: (MonadEval b i m)
+  => Cont b i m
+  -> CEKErrorHandler b i m
+  -> CapToken
+  -> m (EvalResult b i m)
+composeCap cont handler ct@(CapToken fqn args) = do
   cekReadEnv >>= \renv -> case Map.lookup fqn (view cekLoaded renv) of
     Just (DCap d) -> do
       modifyCEKState (esCaps . csSlots) (CapSlot ct []:)
       let (env', capBody) = applyCapBody mempty args (_dcapTerm d)
-          cont' = CapBodyC env contbody cont
+          cont' = CapPopC PopCapComposed cont
       evalCEK cont' handler env' capBody
     Just {} -> error "was not defcap, invariant violated"
     Nothing -> error "No such def"
@@ -315,13 +321,21 @@ returnCEKValue (CapInvokeC env terms pvs cf cont) handler v = case terms of
     InstallCapFrame{} -> error "todo"
     EmitEventFrame{} -> error "todo"
 returnCEKValue (CapBodyC env term cont) handler _ = do
-  let cont' = CapPopC cont
+  let cont' = CapPopC PopCapInvoke cont
   evalCEK cont' handler env term
-returnCEKValue (CapPopC cont) handler v = do
-  -- todo: need safe tail here, but this should be fine given the invariant that `CapPopC`
-  -- will never show up otherwise
-  modifyCEKState (esCaps . csSlots) tail
-  returnCEKValue cont handler v
+returnCEKValue (CapPopC st cont) handler v = case st of
+  PopCapInvoke -> do
+    -- todo: need safe tail here, but this should be fine given the invariant that `CapPopC`
+    -- will never show up otherwise
+    modifyCEKState (esCaps . csSlots) tail
+    returnCEKValue cont handler v
+  PopCapComposed -> do
+    caps <- useCekState (esCaps . csSlots)
+    let cs = head caps
+        csList = _csCap cs : _csComposed cs
+        caps' = over (_head . csComposed) (++ csList) (tail caps)
+    setCekState (esCaps . csSlots) caps'
+    returnCEKValue cont handler VUnit
 returnCEKValue (ListC env args vals cont) handler v = do
   case args of
     [] ->
