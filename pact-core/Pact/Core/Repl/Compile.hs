@@ -18,7 +18,9 @@ module Pact.Core.Repl.Compile
  ) where
 
 import Control.Lens
+import Control.Monad
 import Control.Monad.Except
+import Control.Monad.IO.Class(liftIO)
 import Data.Text(Text)
 import Data.ByteString(ByteString)
 import Data.Proxy

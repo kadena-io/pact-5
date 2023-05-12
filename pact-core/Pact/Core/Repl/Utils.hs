@@ -31,6 +31,7 @@ module Pact.Core.Repl.Utils
  ) where
 
 import Control.Lens
+import Control.Monad ( when, unless )
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Control.Monad.Catch
@@ -218,11 +219,11 @@ replCompletion natives =
   completeWord (Just '\\') filenameWordBreakChars $ \str -> do
     tlns <- uses (replLoaded . loToplevel) Map.keys
     moduleNames <- uses (replLoaded . loModules) (fmap renderModuleName . Map.keys)
-    prefixed <- uses (replLoaded . loModules) toPrefixed
+    prefixedNames <- uses (replLoaded . loModules) toPrefixed
     let
       cmds = [":load", ":type", ":syntax", ":debug"]
       allNames = Set.fromList $ T.unpack <$> concat
-        [tlns, moduleNames, prefixed, natives, cmds]
+        [tlns, moduleNames, prefixedNames, natives, cmds]
     pure $ simpleCompletion <$> Set.toList (Set.filter (str `isPrefixOf`) allNames)
   where
   defNames = \case

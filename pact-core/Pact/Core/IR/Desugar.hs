@@ -23,6 +23,7 @@ module Pact.Core.IR.Desugar
  , DesugarBuiltin(..)
  ) where
 
+import Control.Monad ( when, forM, (>=>))
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Control.Monad.Except

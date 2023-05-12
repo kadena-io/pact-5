@@ -3,6 +3,7 @@
 module Pact.Core.Repl.Runtime.ReplBuiltin where
 
 import Control.Monad.Except
+import Control.Monad.IO.Class(liftIO)
 import Data.Default
 import Data.Text(Text)
 import qualified Data.Text as T
@@ -47,8 +48,8 @@ enforceValue = \case
   EvalValue v -> pure v
   _ -> failInvariant "Error"
 
-tryError :: MonadError a m => m b -> m (Either a b)
-tryError ma = catchError (Right <$> ma) (pure . Left)
+-- tryError :: MonadError a m => m b -> m (Either a b)
+-- tryError ma = catchError (Right <$> ma) (pure . Left)
 
 mkReplBuiltinFn
   :: (BuiltinArity b)

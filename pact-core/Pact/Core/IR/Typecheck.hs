@@ -32,6 +32,7 @@ module Pact.Core.IR.Typecheck
  ) where
 
 import Control.Lens hiding (Level)
+import Control.Monad ( when, unless, zipWithM )
 import Control.Monad.Reader
 import Control.Monad.ST
 -- import Control.Monad.ST.Unsafe(unsafeIOToST, unsafeSTToIO)

@@ -6,6 +6,7 @@
 module Pact.Core.Syntax.Lisp.Parser where
 
 import Control.Lens(preview, view, _head)
+import Control.Monad(when)
 import Control.Monad.Except
 
 import Data.Decimal(DecimalRaw(..))

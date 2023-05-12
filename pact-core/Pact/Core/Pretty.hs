@@ -11,10 +11,10 @@ module Pact.Core.Pretty
 ) where
 
 import Data.Text(Text)
-import Data.Text.Prettyprint.Doc
-import Data.Text.Prettyprint.Doc as Pretty
-import Data.Text.Prettyprint.Doc.Render.String
-import Data.Text.Prettyprint.Doc.Render.Text
+import Prettyprinter
+import Prettyprinter as Pretty
+import Prettyprinter.Render.String
+import Prettyprinter.Render.Text
 import Data.List(intersperse)
 import Data.List.NonEmpty(NonEmpty)
 import Data.Foldable(fold)

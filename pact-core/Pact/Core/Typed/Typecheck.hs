@@ -7,6 +7,7 @@
 
 module Pact.Core.Typed.Typecheck where
 
+import Control.Monad
 import Control.Lens
 import Control.Monad.Reader
 import Control.Monad.Except
