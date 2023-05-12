@@ -99,18 +99,37 @@ instance RenderError ParseError where
 
 data DesugarError
   = UnboundTermVariable Text
+  -- ^ Encountered a variable with no binding <varname>
   | UnsupportedType Text
+  -- ^ Type left over from old pact type system (e.g poly list)
   | UnboundTypeVariable Text
+  -- ^ Found an unbound type variable in a type definition
+  -- (note: in this current version of core this should never occur,
+  --  there are no userland type variables that can be annotated)
   | UnannotatedArgumentType Text
+  -- ^ A declaration has a type parameter without an annotation <argument name>
   | UnannotatedReturnType Text
+  -- ^ Function <function name> has an unannotated return type
   | InvalidCapabilityReference Text
+  -- ^ Function <function name> is used in a scope that expected a capability
   | CapabilityOutOfScope Text ModuleName
+  -- ^ Capability <modulename . defname > is used in a scope outside of its static allowable scope
   | NoSuchModuleMember ModuleName Text
+  -- ^ Module <modulename> does not have member <membername>
   | NoSuchModule ModuleName
+  -- ^ Module <modulename> does not exist
   | NoSuchInterface ModuleName
+  -- ^ Interface <ifname> doesnt exist
   | ImplementationError ModuleName ModuleName Text
+  -- ^ Interface implemented in module for member <member> does not match the signature
   | RecursionDetected ModuleName [Text]
+  -- ^ Detected use of recursion in module <module>. [functions] for a cycle
+  | NotAllowedWithinDefcap Text
+  -- ^ Form <text> not allowed within defcap
+  | NotAllowedOutsideModule Text
+  -- ^ Form not allowed outside of module call <description
   | UnresolvedQualName QualifiedName
+  -- ^ no such qualified name
   deriving Show
 
 instance Exception DesugarError
@@ -137,6 +156,10 @@ instance RenderError DesugarError where
       tConcatSpace ["Cannot find module: ", renderModuleName mn]
     NoSuchInterface mn ->
       tConcatSpace ["Cannot find interface: ", renderModuleName mn]
+    NotAllowedWithinDefcap dc ->
+      tConcatSpace [dc, "form not allowed within defcap"]
+    NotAllowedOutsideModule txt ->
+      tConcatSpace [txt, "not allowed outside of a module"]
     ImplementationError mn1 mn2 defn ->
       tConcatSpace [ "Module"
                    , renderModuleName mn1

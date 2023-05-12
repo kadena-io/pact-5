@@ -735,11 +735,25 @@ renameTerm (CapabilityForm cf i) =
         let cf' = set capFormName n' cf
         checkCapForm cf'
         CapabilityForm <$> traverse renameTerm cf' <*> pure i
-    Nothing -> error "capability used outside module"
+    Nothing -> do
+      checkCapFormNonModule cf
+      let n = view capFormName cf
+      (n', declty) <- resolveName i n
+      case declty of
+        Just DKDefCap -> do
+          let cf' = set capFormName n' cf
+          CapabilityForm <$> traverse renameTerm cf' <*> pure i
+        _ -> throwDesugarError (InvalidCapabilityReference (_nName n')) i
     where
+    checkCapFormNonModule = \case
+      InstallCapability{} -> pure ()
+      WithCapability{} -> throwDesugarError (NotAllowedOutsideModule "with-capability") i
+      RequireCapability{} -> throwDesugarError (NotAllowedOutsideModule "require-capability") i
+      ComposeCapability{} -> throwDesugarError (NotAllowedOutsideModule "compose-capability") i
+      EmitEvent{} -> throwDesugarError (NotAllowedOutsideModule "emit-event") i
     checkCapForm = \case
-      WithCapability{} -> enforceNotWithinDefcap
-      InstallCapability{} -> enforceNotWithinDefcap
+      WithCapability{} -> enforceNotWithinDefcap i "with-capability"
+      InstallCapability{} -> enforceNotWithinDefcap i "install-capability"
       _ -> pure ()
 renameTerm (Error e i) = pure (Error e i)
 -- renameTerm (ObjectLit o i) =
@@ -747,10 +761,14 @@ renameTerm (Error e i) = pure (Error e i)
 -- renameTerm (ObjectOp o i) =
 --   ObjectOp <$> traverse renameTerm o <*> pure i
 
-enforceNotWithinDefcap :: (MonadError (PactError i) m) => RenamerT m b i ()
-enforceNotWithinDefcap = do
+enforceNotWithinDefcap
+  :: MonadError (PactError i) m
+  => i
+  -> Text
+  -> RenamerT m b i ()
+enforceNotWithinDefcap i form = do
   withinDefCap <- (== Just DKDefCap) <$> view reCurrDef
-  when withinDefCap $ error "boom"
+  when withinDefCap $ throwDesugarError (NotAllowedWithinDefcap form) i
 
 renameDefun
   :: (MonadError (PactError i) m)
