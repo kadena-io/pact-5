@@ -1351,11 +1351,11 @@ inferModule
   :: TypeOfBuiltin b
   => IR.Module Name b i
   -> InferM s b' i (TypedModule b i)
-inferModule (IR.Module mname mgov defs blessed imports impl mh) = do
+inferModule (IR.Module mname mgov defs blessed imports impl mh info) = do
   -- gov' <- traverse (dbjName [] 0 . toOName ) gov
   fv <- view tcFree
   (defs', _) <- foldlM infer' ([], fv) defs
-  pure (Typed.Module mname mgov (reverse defs') blessed imports impl mh)
+  pure (Typed.Module mname mgov (reverse defs') blessed imports impl mh info)
   where
   infer' (xs, m) d = do
     def' <- local (set tcFree m) (inferDef d)
@@ -1368,9 +1368,9 @@ inferInterface
   :: TypeOfBuiltin b
   => IRInterface b info
   -> InferM s b' info (TypedInterface b info)
-inferInterface (IR.Interface n defns h) = do
+inferInterface (IR.Interface n defns h info) = do
   defns' <- traverse inferIfDef defns
-  pure (Typed.Interface n defns' h)
+  pure (Typed.Interface n defns' h info)
 
 -- | Note: debruijnizeType will
 -- ensure that terms that are generic will fail

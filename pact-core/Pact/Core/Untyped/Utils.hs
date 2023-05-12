@@ -86,14 +86,14 @@ fromTypedIfDef = \case
 fromTypedModule
   :: Typed.Module name tyname builtin info
   -> Module name builtin info
-fromTypedModule (Typed.Module mn mgov defs blessed imports implements hs) =
-  Module mn mgov (fromTypedDef <$> defs) blessed imports implements hs
+fromTypedModule (Typed.Module mn mgov defs blessed imports implements hs i) =
+  Module mn mgov (fromTypedDef <$> defs) blessed imports implements hs i
 
 fromTypedInterface
   :: Typed.Interface name tyname builtin info
   -> Interface name builtin info
-fromTypedInterface (Typed.Interface ifname ifdefs ifh) =
-  Interface ifname (fromTypedIfDef <$> ifdefs) ifh
+fromTypedInterface (Typed.Interface ifname ifdefs ifh i) =
+  Interface ifname (fromTypedIfDef <$> ifdefs) ifh i
 
 fromTypedTopLevel
   :: Typed.TopLevel name tyname builtin info

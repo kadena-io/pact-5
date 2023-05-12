@@ -41,10 +41,12 @@ module Pact.Core.Untyped.Term
  , mImplemented
  , mHash
  , mGovernance
+ , mInfo
  -- Interface lenses
  , ifName
  , ifDefns
  , ifHash
+ , ifInfo
  , findIfDef
  , _IfDfun
  , _IfDConst
@@ -146,6 +148,7 @@ data Module name builtin info
   , _mImports :: [Import]
   , _mImplemented :: [ModuleName]
   , _mHash :: ModuleHash
+  , _mInfo :: info
   } deriving Show
 
 data Interface name builtin info
@@ -153,6 +156,7 @@ data Interface name builtin info
   { _ifName :: ModuleName
   , _ifDefns :: [IfDef name builtin info]
   , _ifHash :: ModuleHash
+  , _ifInfo :: info
   } deriving Show
 
 data IfDefun info
@@ -283,14 +287,14 @@ fromIRIfDef = \case
 fromIRModule
   :: IR.Module name builtin info
   -> Module name builtin info
-fromIRModule (IR.Module mn gov defs blessed imports implements hs) =
-  Module mn gov (fromIRDef <$> defs) blessed imports implements hs
+fromIRModule (IR.Module mn gov defs blessed imports implements hs i) =
+  Module mn gov (fromIRDef <$> defs) blessed imports implements hs i
 
 fromIRInterface
   :: IR.Interface name builtin info
   -> Interface name builtin info
-fromIRInterface (IR.Interface ifn ifdefs ifhash) =
-  Interface ifn (fromIRIfDef <$> ifdefs) ifhash
+fromIRInterface (IR.Interface ifn ifdefs ifhash i) =
+  Interface ifn (fromIRIfDef <$> ifdefs) ifhash i
 
 fromIRTopLevel
   :: IR.TopLevel name builtin info

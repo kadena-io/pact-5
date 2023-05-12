@@ -130,6 +130,8 @@ data DesugarError
   -- ^ Form not allowed outside of module call <description
   | UnresolvedQualName QualifiedName
   -- ^ no such qualified name
+  | InvalidGovernanceRef QualifiedName
+  -- ^ No such governance
   deriving Show
 
 instance Exception DesugarError
@@ -175,6 +177,8 @@ instance RenderError DesugarError where
       , T.pack (show txts)]
     UnresolvedQualName qual ->
       tConcatSpace ["No such name", renderQualName qual]
+    InvalidGovernanceRef gov ->
+      tConcatSpace ["Invalid governance:", renderQualName gov]
 
 data TypecheckError
   = UnificationError (Type Text) (Type Text)

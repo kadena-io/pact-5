@@ -166,11 +166,13 @@ StringRaw :: { Text }
 
 Module :: { ParsedModule }
   : '(' module IDENT Governance MDocOrModuleModel ExtOrDefs ')'
-    { Module (ModuleName (getIdent $3) Nothing) $4 (reverse (rights $6)) (NE.fromList (reverse (lefts $6))) (fst $5) (snd $5)}
+    { Module (ModuleName (getIdent $3) Nothing) $4 (reverse (rights $6)) (NE.fromList (reverse (lefts $6))) (fst $5) (snd $5)
+      (combineSpan (_ptInfo $1) (_ptInfo $7)) }
 
 Interface :: { ParsedInterface }
   : '(' interface IDENT MDocOrModel IfDefs ')'
-    { Interface (ModuleName (getIdent $3) Nothing) (reverse $5) (fst $4) (snd $4) }
+    { Interface (ModuleName (getIdent $3) Nothing) (reverse $5) (fst $4) (snd $4)
+      (combineSpan (_ptInfo $1) (_ptInfo $2))}
 
 MDocOrModuleModel :: { (Maybe Text, [DefProperty SpanInfo])}
   : DocAnn ModuleModel { (Just $1, $2)}

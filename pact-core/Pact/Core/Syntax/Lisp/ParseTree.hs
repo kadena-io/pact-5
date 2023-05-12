@@ -223,6 +223,7 @@ data Module i
   , _mDefs :: NonEmpty (Def i)
   , _mDoc :: Maybe Text
   , _mModel :: [DefProperty i]
+  , _mInfo :: i
   } deriving Show
 
 data TopLevel i
@@ -237,6 +238,7 @@ data Interface i
   , _ifDefns :: [IfDef i]
   , _ifDocs :: Maybe Text
   , _ifModel :: Maybe [Expr i]
+  , _ifInfo :: i
   } deriving Show
 
 data IfDefun i

@@ -398,18 +398,18 @@ desugarModule
   :: (DesugarBuiltin builtin, MonadError (PactError info) m)
   => Lisp.Module info
   -> RenamerT m b info (Module ParsedName builtin info)
-desugarModule (Lisp.Module mname mgov extdecls defs _ _) = do
+desugarModule (Lisp.Module mname mgov extdecls defs _ _ i) = do
   let (imports, blessed, implemented) = splitExts extdecls
   defs' <- traverse desugarDef (NE.toList defs)
   let mhash = ModuleHash (Hash "placeholder")
       mgov' = BN . BareName <$> mgov
-  pure $ Module mname mgov' defs' blessed imports implemented mhash
+  pure $ Module mname mgov' defs' blessed imports implemented mhash i
   where
   splitExts = split ([], Set.empty, [])
   split (accI, accB, accImp) (h:hs) = case h of
     -- todo: implement bless hashes
     Lisp.ExtBless _ -> split (accI, accB, accImp) hs
-    Lisp.ExtImport i -> split (i:accI, accB, accImp) hs
+    Lisp.ExtImport imp -> split (imp:accI, accB, accImp) hs
     Lisp.ExtImplements mn -> split (accI, accB, mn:accImp) hs
   split (a, b, c) [] = (reverse a, b, reverse c)
 
@@ -419,10 +419,10 @@ desugarInterface
   :: (MonadError (PactError info) m, DesugarBuiltin builtin)
   => Lisp.Interface info
   -> RenamerT m b info (Interface ParsedName builtin info)
-desugarInterface (Lisp.Interface ifn ifdefns _ _) = do
+desugarInterface (Lisp.Interface ifn ifdefns _ _ info) = do
   defs' <- traverse desugarIfDef ifdefns
   let mhash = ModuleHash (Hash "placeholder")
-  pure $ Interface ifn defs' mhash
+  pure $ Interface ifn defs' mhash info
 
 desugarType
   :: MonadError (PactError i) m
@@ -895,7 +895,7 @@ renameModule
   :: (MonadError (PactError i) m)
   => Module ParsedName b' i
   -> RenamerT m b i (Module Name b' i)
-renameModule (Module mname mgov defs blessed imp implements mhash) = do
+renameModule (Module mname mgov defs blessed imp implements mhash i) = do
   let defMap = Map.fromList $ (\d -> (defName d, (NTopLevel mname mhash, defKind d))) <$> defs
       fqns = Map.fromList $ (\d -> (defName d, (FullyQualifiedName mname (defName d) mhash, defKind d))) <$> defs
   -- `maybe all of this next section should be in a block laid out by the
@@ -912,10 +912,11 @@ renameModule (Module mname mgov defs blessed imp implements mhash) = do
       -- but all uses of `head` are still scary
       throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (head d))
   traverse_ (checkImplements mname defs) implements
-  pure (Module mname mgov' defs'' blessed imp implements mhash)
+  pure (Module mname mgov' defs'' blessed imp implements mhash i)
   where
   resolveGov = traverse $ \govName -> case find (\d -> BN (BareName (defName d)) == govName) defs of
     Just (DCap d) -> pure (Name (_dcapName d) (NTopLevel mname mhash))
+    Just d -> throwDesugarError (InvalidGovernanceRef (QualifiedName (defName d) mname)) i
     _ -> error "no such ovuvue"
 
   mkScc def = (def, defName def, Set.toList (defSCC mname def))
@@ -952,7 +953,7 @@ renameInterface
   :: (MonadError (PactError i) m)
   => Interface ParsedName b' i
   -> RenamerT m b i (Interface Name b' i)
-renameInterface (Interface ifn defs ih) = do
+renameInterface (Interface ifn defs ih info) = do
   let dcs = mapMaybe (preview _IfDConst) defs
       rawDefNames = _dcName <$> dcs
       defMap = Map.fromList $ (, (NTopLevel ifn ih, DKDefConst)) <$> rawDefNames
@@ -970,7 +971,7 @@ renameInterface (Interface ifn defs ih) = do
       -- but all uses of `head` are still scary
       throwDesugarError (RecursionDetected ifn (ifDefName <$> d)) (ifDefInfo (head d))
   -- mgov' <- locally reBinds (Map.union defMap) $ traverse (resolveBareName' . rawParsedName) mgov
-  pure (Interface ifn defs'' ih)
+  pure (Interface ifn defs'' ih info)
   where
   mkScc def = (def, ifDefName def, Set.toList (ifDefSCC ifn def))
 

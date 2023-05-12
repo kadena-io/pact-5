@@ -129,6 +129,7 @@ data Module name tyname builtin info
   , _mImports :: [Import]
   , _mImplemented :: [ModuleName]
   , _mHash :: ModuleHash
+  , _mInfo :: info
   } deriving Show
 
 data Interface name tyname builtin info
@@ -136,6 +137,7 @@ data Interface name tyname builtin info
   { _ifName :: ModuleName
   , _ifDefns :: [IfDef name tyname builtin info]
   , _ifHash :: ModuleHash
+  , _ifInfo :: info
   } deriving Show
 
 data IfDefun name info

@@ -37,7 +37,7 @@ data Defun name builtin info
   , _dfunType :: Type Void
   , _dfunTerm :: Term name builtin info
   , _dfunInfo :: info
-  } deriving Show
+  } deriving (Show, Functor)
 
 data DefConst name builtin info
   = DefConst
@@ -45,7 +45,7 @@ data DefConst name builtin info
   , _dcType :: Maybe (Type Void)
   , _dcTerm :: Term name builtin info
   , _dcInfo :: info
-  } deriving Show
+  } deriving (Show, Functor)
 
 data DefCap name builtin info
   = DefCap
@@ -54,13 +54,13 @@ data DefCap name builtin info
   , _dcapTerm :: Term name builtin info
   , _dcapMeta :: Maybe (DefCapMeta name)
   , _dcapInfo :: info
-  } deriving Show
+  } deriving (Show, Functor)
 
 data Def name builtin info
   = Dfun (Defun name builtin info)
   | DConst (DefConst name builtin info)
   | DCap (DefCap name builtin info)
-  deriving Show
+  deriving (Show, Functor)
 
 defName :: Def name b i -> Text
 defName (Dfun d) = _dfunName d
@@ -102,32 +102,34 @@ data Module name builtin info
   , _mImports :: [Import]
   , _mImplements :: [ModuleName]
   , _mHash :: ModuleHash
-  } deriving Show
+  , _mInfo :: info
+  } deriving (Show, Functor)
 
 data Interface name builtin info
   = Interface
   { _ifName :: ModuleName
   , _ifDefns :: [IfDef name builtin info]
   , _ifHash :: ModuleHash
-  } deriving Show
+  , _ifInfo :: info
+  } deriving (Show, Functor)
 
 data IfDefun info
   = IfDefun
   { _ifdName :: Text
   , _ifdType :: Type Void
   , _ifdInfo :: info
-  } deriving Show
+  } deriving (Show, Functor)
 
 data IfDef name builtin info
   = IfDfun (IfDefun info)
   | IfDConst (DefConst name builtin info)
-  deriving Show
+  deriving (Show, Functor)
 
 data TopLevel name builtin info
   = TLModule (Module name builtin info)
   | TLInterface (Interface name builtin info)
   | TLTerm (Term name builtin info)
-  deriving Show
+  deriving (Show, Functor)
 
 data ReplTopLevel name builtin info
   = RTLModule (Module name builtin info)
@@ -135,7 +137,7 @@ data ReplTopLevel name builtin info
   | RTLDefConst (DefConst name builtin info)
   | RTLDefun (Defun name builtin info)
   | RTLTerm (Term name builtin info)
-  deriving Show
+  deriving (Show, Functor)
 
 
 -- | Core IR
