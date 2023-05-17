@@ -1344,8 +1344,8 @@ inferIfDef = \case
     pure (Typed.IfDfun (Typed.IfDefun (IR._ifdName ifd) (IR._ifdType ifd) (IR._ifdInfo ifd)))
   IR.IfDConst dc ->
     Typed.IfDConst <$> inferDefConst dc
-  -- IR.Dfun d -> Typed.Dfun <$> inferDefun d
-  -- IR.DConst d -> Typed.DConst <$> inferDefConst d
+  IR.IfDCap (IR.IfDefCap n ty i) ->
+    pure $ Typed.IfDCap (Typed.IfDefCap n ty i)
 
 inferModule
   :: TypeOfBuiltin b

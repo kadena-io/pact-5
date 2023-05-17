@@ -370,17 +370,23 @@ desugarIfDef
   => Lisp.IfDef info
   -> RenamerT m b info (IfDef ParsedName builtin info)
 desugarIfDef = \case
-  Lisp.IfDfun (Lisp.IfDefun n margs (Just rty) _ _ i) -> IfDfun <$> case margs of
+  Lisp.IfDfun (Lisp.IfDefun n margs rty _ _ i) -> IfDfun <$> case margs of
     [] -> do
-      rty' <- desugarType i rty
+      rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) (desugarType i) rty
       let dty = TyUnit :~> rty'
       pure $ IfDefun n dty i
     _ -> do
       args <- traverse (enforceArg i) margs
       argsTys <- traverse (desugarType i . Lisp._argType) args
-      rty' <- desugarType i rty
+      rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) (desugarType i) rty
       let dty = foldr TyFun rty' argsTys
       pure $ IfDefun n dty i
+  Lisp.IfDCap (Lisp.IfDefCap n margs rty _ _ _meta i) -> IfDCap <$> do
+    rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) (desugarType i) rty
+    args <- traverse (enforceArg i) margs
+    argTys <- traverse (desugarType i . Lisp._argType) args
+    let dty = foldr (:~>) rty' argTys
+    pure $ IfDefCap n dty i
   Lisp.IfDConst dc -> IfDConst <$> desugarDefConst dc
   _ -> error "unimplemented: special interface decl forms in desugar"
 
@@ -500,6 +506,7 @@ defSCC mn = \case
 ifDefSCC :: ModuleName -> IfDef Name b i1 -> Set Text
 ifDefSCC mn = \case
   IfDfun _ -> mempty
+  IfDCap _ -> mempty
   IfDConst d -> defConstSCC mn d
 
 liftRenamerT :: Monad m => m a -> RenamerT m cb ci a
@@ -671,7 +678,8 @@ renameTerm
 renameTerm (Var n i) = resolveName i n >>= \case
   (n', Just dk)
     | dk `elem` legalVarDefs  -> pure (Var n' i)
-    | otherwise -> error "Illegal def kind in term variable position"
+    | otherwise ->
+      throwDesugarError (InvalidDefInTermVariable (rawParsedName n)) i
     where
     legalVarDefs = [DKDefun, DKDefConst]
   (n', _) -> pure (Var n' i)
@@ -841,6 +849,7 @@ renameIfDef
 renameIfDef = \case
   IfDfun d -> pure (IfDfun d)
   IfDConst d -> IfDConst <$> renameDefConst d
+  IfDCap d -> pure (IfDCap d)
 
 resolveName
   :: (MonadError (PactError i) m)
@@ -874,7 +883,8 @@ resolveBare (BareName bn) i = views reBinds (Map.lookup bn) >>= \case
           let implementeds = view Term.mImplemented md
           pure (Name bn (NModRef mn implementeds), Nothing)
         -- todo: error type here
-        InterfaceData{} -> error "CANNOT USE INTERFACE AS MODULE REF"
+        InterfaceData iface _ ->
+          throwDesugarError (InvalidModuleReference (Term._ifName iface)) i
 
 resolveQualified
   :: (MonadError (PactError i) m)
@@ -911,32 +921,37 @@ renameModule (Module mname mgov defs blessed imp implements mhash i) = do
       -- todo: just in case, match on `d` because it makes no sense for there to be an empty cycle
       -- but all uses of `head` are still scary
       throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (head d))
-  traverse_ (checkImplements mname defs) implements
+  traverse_ (checkImplements i mname defs) implements
   pure (Module mname mgov' defs'' blessed imp implements mhash i)
   where
   resolveGov = traverse $ \govName -> case find (\d -> BN (BareName (defName d)) == govName) defs of
     Just (DCap d) -> pure (Name (_dcapName d) (NTopLevel mname mhash))
     Just d -> throwDesugarError (InvalidGovernanceRef (QualifiedName (defName d) mname)) i
-    _ -> error "no such ovuvue"
-
+    Nothing ->
+      -- Todo: could be better error? In this case the governance ref does not exist.
+      throwDesugarError (InvalidGovernanceRef (QualifiedName (rawParsedName govName) mname)) i
   mkScc def = (def, defName def, Set.toList (defSCC mname def))
 
 checkImplements
-  :: (Monad m, Foldable t)
-  => ModuleName
-  -> t (Def name builtin info) -> ModuleName -> RenamerT m b i ()
-checkImplements mn defs ifName =
+  :: (MonadError (PactError i) m)
+  => i
+  -> ModuleName
+  -> [Def name builtin info]
+  -> ModuleName
+  -> RenamerT m b i ()
+checkImplements i mn defs ifName =
   use (rsLoaded . loModules . at ifName) >>= \case
     Just (InterfaceData in' _depmap) ->
       traverse_ checkImplementedMember (Term._ifDefns in')
     -- Todo: lift into DesugarError (technically name resolution error but this is fine)
-    Just _ -> error "found module, expected to implement interface"
+    Just _ -> throwDesugarError (NoSuchInterface mn) i
     Nothing -> view rePactDb >>= liftRenamerT . (`_readModule` mn) >>= \case
       Just (InterfaceData in' depmap) -> do
         loadInterface' in' depmap
         traverse_ checkImplementedMember (Term._ifDefns in')
-      Just _ -> error "found module, expected to implement interface"
-      Nothing -> error "no such interface"
+      -- Todo: improve this error, could be "found module, expected interface"
+      Just _ -> throwDesugarError (NoSuchInterface mn) i
+      Nothing -> throwDesugarError (NoSuchInterface mn) i
   where
   checkImplementedMember = \case
     Term.IfDConst{} -> pure ()
@@ -944,6 +959,12 @@ checkImplements mn defs ifName =
       case find (\df -> Term._ifdName ifd == defName df) defs of
         Just (Dfun v) ->
           when (_dfunType v /= Term._ifdType ifd) $ error "BOOM"
+        Just _ -> error "not implemented"
+        Nothing -> error "not implemented"
+    Term.IfDCap ifd ->
+      case find (\df -> Term._ifdcName ifd == defName df) defs of
+        Just (DCap v) ->
+          when (_dcapType v /= Term._ifdcType ifd) $ error "BOOM"
         Just _ -> error "not implemented"
         Nothing -> error "not implemented"
 

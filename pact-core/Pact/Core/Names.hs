@@ -3,6 +3,7 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module Pact.Core.Names
  ( ModuleName(..)
@@ -32,7 +33,7 @@ module Pact.Core.Names
  , ndName
  , DeBruijn
  , TypeName(..)
---  , rawParsedName
+ , rawParsedName
  , ONameKind(..)
  , OverloadedName(..)
  , FullyQualifiedName(..)
@@ -81,6 +82,7 @@ data QualifiedName =
   } deriving (Show, Eq)
 
 instance Ord QualifiedName where
+  compare :: QualifiedName -> QualifiedName -> Ordering
   compare (QualifiedName qn1 m1) (QualifiedName qn2 m2) =
     case compare m1 m2 of
       EQ -> compare qn1 qn2
@@ -103,9 +105,9 @@ data ParsedName
   | BN BareName
   deriving (Show, Eq)
 
--- rawParsedName :: ParsedName -> Text
--- rawParsedName (BN (BareName n)) = n
--- rawParsedName (QN qn) = _qnName qn
+rawParsedName :: ParsedName -> Text
+rawParsedName (BN (BareName n)) = n
+rawParsedName (QN qn) = _qnName qn
 
 instance Pretty ParsedName where
   pretty = \case

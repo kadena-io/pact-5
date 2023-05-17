@@ -50,10 +50,16 @@ fromTypedDefun (Typed.Defun n ty term i) =
   Defun n ty (fromTypedTerm term) i
 
 fromTypedIfDefun
-  :: Typed.IfDefun name info
+  :: Typed.IfDefun info
   -> IfDefun info
 fromTypedIfDefun (Typed.IfDefun n ty i) =
   IfDefun n ty i
+
+fromTypedIfDefCap
+  :: Typed.IfDefCap info
+  -> IfDefCap info
+fromTypedIfDefCap (Typed.IfDefCap n ty i) =
+  IfDefCap n ty i
 
 fromTypedDConst
   :: Typed.DefConst name tyname builtin info
@@ -82,6 +88,8 @@ fromTypedIfDef = \case
   Typed.IfDfun d -> IfDfun (fromTypedIfDefun d)
   Typed.IfDConst d ->
     IfDConst (fromTypedDConst d)
+  Typed.IfDCap d ->
+    IfDCap (fromTypedIfDefCap d)
 
 fromTypedModule
   :: Typed.Module name tyname builtin info

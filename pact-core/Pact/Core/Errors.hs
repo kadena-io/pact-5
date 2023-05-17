@@ -132,6 +132,10 @@ data DesugarError
   -- ^ no such qualified name
   | InvalidGovernanceRef QualifiedName
   -- ^ No such governance
+  | InvalidDefInTermVariable Text
+  -- ^ Invalid top level defn references a non-semantic value (e.g defcap, defschema)
+  | InvalidModuleReference ModuleName
+  -- ^ Invalid: Interface used as module reference
   deriving Show
 
 instance Exception DesugarError
@@ -179,6 +183,10 @@ instance RenderError DesugarError where
       tConcatSpace ["No such name", renderQualName qual]
     InvalidGovernanceRef gov ->
       tConcatSpace ["Invalid governance:", renderQualName gov]
+    InvalidDefInTermVariable n ->
+      tConcatSpace ["Invalid definition in term variable position:", n]
+    InvalidModuleReference mn ->
+      tConcatSpace ["Invalid Interface attempted to be used as module reference:", renderModuleName mn]
 
 data TypecheckError
   = UnificationError (Type Text) (Type Text)

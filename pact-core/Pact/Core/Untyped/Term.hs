@@ -18,6 +18,7 @@ module Pact.Core.Untyped.Term
  , Module(..)
  , Interface(..)
  , IfDefun(..)
+ , IfDefCap(..)
  , IfDef(..)
  , TopLevel(..)
  , ReplTopLevel(..)
@@ -132,6 +133,7 @@ ifDefName :: IfDef name builtin i -> Text
 ifDefName = \case
   IfDfun ifd -> _ifdName ifd
   IfDConst dc -> _dcName dc
+  IfDCap d -> _ifdcName d
 
 defTerm :: Def name builtin info -> Term name builtin info
 defTerm = \case
@@ -166,9 +168,17 @@ data IfDefun info
   , _ifdInfo :: info
   } deriving Show
 
+data IfDefCap info
+  = IfDefCap
+  { _ifdcName :: Text
+  , _ifdcType :: Type Void
+  , _ifdcInfo :: info
+  } deriving (Show, Functor)
+
 data IfDef name builtin info
   = IfDfun (IfDefun info)
   | IfDConst (DefConst name builtin info)
+  | IfDCap (IfDefCap info)
   deriving Show
 
 data TopLevel name builtin info
@@ -259,6 +269,10 @@ fromIRIfDefun :: IR.IfDefun info -> IfDefun info
 fromIRIfDefun (IR.IfDefun dfn ty i) =
   IfDefun dfn ty i
 
+fromIRIfDefCap :: IR.IfDefCap info -> IfDefCap info
+fromIRIfDefCap (IR.IfDefCap dfn ty i) =
+  IfDefCap dfn ty i
+
 fromIRDConst
   :: IR.DefConst name builtin info
   -> DefConst name builtin info
@@ -283,6 +297,7 @@ fromIRIfDef
 fromIRIfDef = \case
   IR.IfDfun d -> IfDfun (fromIRIfDefun d)
   IR.IfDConst d -> IfDConst (fromIRDConst d)
+  IR.IfDCap d -> IfDCap (fromIRIfDefCap d)
 
 fromIRModule
   :: IR.Module name builtin info

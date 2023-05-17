@@ -13,6 +13,7 @@ module Pact.Core.Typed.Term
  , Module(..)
  , Interface(..)
  , IfDefun(..)
+ , IfDefCap(..)
  , IfDef(..)
  , TopLevel(..)
  , ReplTopLevel(..)
@@ -140,16 +141,24 @@ data Interface name tyname builtin info
   , _ifInfo :: info
   } deriving Show
 
-data IfDefun name info
+data IfDefun info
   = IfDefun
   { _ifdName :: Text
   , _ifdType :: Type Void
   , _ifdInfo :: info
   } deriving Show
 
+data IfDefCap info
+  = IfDefCap
+  { _ifdcName :: Text
+  , _ifdcType :: Type Void
+  , _ifdcInfo :: info
+  } deriving (Show, Functor)
+
 data IfDef name tyname builtin info
-  = IfDfun (IfDefun name info)
+  = IfDfun (IfDefun info)
   | IfDConst (DefConst name tyname builtin info)
+  | IfDCap (IfDefCap info)
   deriving Show
 
 data TopLevel name tyname builtin info

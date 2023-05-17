@@ -78,6 +78,7 @@ ifDefName :: IfDef name builtin i -> Text
 ifDefName = \case
   IfDfun ifd -> _ifdName ifd
   IfDConst dc -> _dcName dc
+  IfDCap ifd -> _ifdcName ifd
 
 defInfo :: Def name b i -> i
 defInfo = \case
@@ -89,6 +90,7 @@ ifDefInfo :: IfDef name b i -> i
 ifDefInfo = \case
   IfDfun de -> _ifdInfo de
   IfDConst dc -> _dcInfo dc
+  IfDCap d -> _ifdcInfo d
 
 -- TODO:
 -- Support module guards
@@ -120,9 +122,17 @@ data IfDefun info
   , _ifdInfo :: info
   } deriving (Show, Functor)
 
+data IfDefCap info
+  = IfDefCap
+  { _ifdcName :: Text
+  , _ifdcType :: Type Void
+  , _ifdcInfo :: info
+  } deriving (Show, Functor)
+
 data IfDef name builtin info
   = IfDfun (IfDefun info)
   | IfDConst (DefConst name builtin info)
+  | IfDCap (IfDefCap info)
   deriving (Show, Functor)
 
 data TopLevel name builtin info

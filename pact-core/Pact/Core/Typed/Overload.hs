@@ -414,6 +414,7 @@ resolveIfDef = \case
   IfDfun df -> pure (IfDfun df)
   IfDConst dc ->
     IfDConst <$> resolveDefConst dc
+  IfDCap d -> pure (IfDCap d)
 
 
 resolveModule
