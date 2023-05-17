@@ -759,6 +759,7 @@ renameTerm (CapabilityForm cf i) =
       RequireCapability{} -> throwDesugarError (NotAllowedOutsideModule "require-capability") i
       ComposeCapability{} -> throwDesugarError (NotAllowedOutsideModule "compose-capability") i
       EmitEvent{} -> throwDesugarError (NotAllowedOutsideModule "emit-event") i
+      CreateUserGuard{} -> pure ()
     checkCapForm = \case
       WithCapability{} -> enforceNotWithinDefcap i "with-capability"
       InstallCapability{} -> enforceNotWithinDefcap i "install-capability"

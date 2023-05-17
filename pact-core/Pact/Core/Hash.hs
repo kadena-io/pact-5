@@ -29,6 +29,7 @@ module Pact.Core.Hash
 -- , typedHashToText
 , toB64UrlUnpaddedText
 , fromB64UrlUnpaddedText
+, PublicKeyText(..)
 ) where
 
 import Control.DeepSeq
@@ -51,6 +52,11 @@ import Pact.Core.Pretty
 -- so other hash values are kosher (such as an ETH sha256, etc).
 newtype Hash = Hash { unHash :: ByteString }
   deriving (Eq, Ord, NFData)
+
+
+newtype PublicKeyText
+  = PublicKeyText { _pkText :: ByteString }
+  deriving (Eq, Ord, Show)
 
 instance Show Hash where
   show (Hash h) = show $ encodeBase64UrlUnpadded h

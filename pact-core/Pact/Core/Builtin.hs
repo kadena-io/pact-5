@@ -227,9 +227,9 @@ data RawBuiltin
   | RawReadInteger
   | RawReadDecimal
   | RawReadString
-  -- | RawReadKeyset
-  -- | RawEnforceGuard
-  -- | RawKeysetRefGuard
+  | RawReadKeyset
+  | RawEnforceGuard
+  | RawKeysetRefGuard
   -- | RawCreateUserGuard
   | RawListAccess
   | RawMakeList
@@ -300,9 +300,9 @@ rawBuiltinToText = \case
   RawReadInteger -> "read-integer"
   RawReadDecimal -> "read-decimal"
   RawReadString -> "read-string"
-  -- RawReadKeyset -> "read-keyset"
-  -- RawEnforceGuard -> "enforce-guard"
-  -- RawKeysetRefGuard -> "keyset-ref-guard"
+  RawReadKeyset -> "read-keyset"
+  RawEnforceGuard -> "enforce-guard"
+  RawKeysetRefGuard -> "keyset-ref-guard"
   -- RawCreateUserGuard -> "create-user-guard"
   RawListAccess -> "at"
   RawMakeList -> "make-list"
@@ -372,9 +372,9 @@ instance BuiltinArity RawBuiltin where
     RawReadInteger -> 1
     RawReadDecimal -> 1
     RawReadString -> 1
-    -- RawReadKeyset -> 1
-    -- RawEnforceGuard -> 1
-    -- RawKeysetRefGuard -> 1
+    RawReadKeyset -> 1
+    RawEnforceGuard -> 1
+    RawKeysetRefGuard -> 1
     -- RawCreateUserGuard -> 1
     RawListAccess -> 2
     RawMakeList -> 2
@@ -639,9 +639,9 @@ data CoreBuiltin
   | ReadInteger
   | ReadDecimal
   | ReadString
-  -- | ReadKeyset
-  -- | EnforceGuard
-  -- | KeysetRefGuard
+  | ReadKeyset
+  | EnforceGuard
+  | KeysetRefGuard
   -- | CreateUserGuard
   -- List ops
   | ListAccess
@@ -755,9 +755,9 @@ instance BuiltinArity CoreBuiltin where
     ReadInteger -> 1
     ReadDecimal -> 1
     ReadString -> 1
-    -- ReadKeyset -> 1
-    -- EnforceGuard -> 1
-    -- KeysetRefGuard -> 1
+    ReadKeyset -> 1
+    EnforceGuard -> 1
+    KeysetRefGuard -> 1
     -- CreateUserGuard -> 1
     ListAccess -> 2
     MakeList -> 2
@@ -896,9 +896,9 @@ coreBuiltinToText = \case
   ReadInteger -> "read-integer"
   ReadDecimal -> "read-decimal"
   ReadString -> "read-string"
-  -- ReadKeyset -> "read-keyset"
-  -- EnforceGuard -> "enforce-guard"
-  -- KeysetRefGuard -> "keyset-ref-guard"
+  ReadKeyset -> "read-keyset"
+  EnforceGuard -> "enforce-guard"
+  KeysetRefGuard -> "keyset-ref-guard"
   -- CreateUserGuard -> "create-user-guard"
   ListAccess -> "at"
   MakeList -> "make-list"

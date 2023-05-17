@@ -27,7 +27,7 @@ module Pact.Core.Untyped.Eval.Runtime
  , cekBuiltins
  , cekLoaded
  , cekGasModel
- , cekMHashes
+ , cekMHashes, cekMsgSigs
  , fromPactValue
  , checkPactValueType
  , pactToCEKValue
@@ -113,7 +113,7 @@ data CEKValue b i m
   | VClosure !(EvalTerm b i) !(CEKEnv b i m)
   | VNative !(BuiltinFn b i m)
   | VModRef ModuleName [ModuleName]
-  | VGuard !(Guard FullyQualifiedName (CEKValue b i m))
+  | VGuard !(Guard FullyQualifiedName PactValue)
   -- deriving Show
 
 instance Show (CEKValue b i m) where
@@ -129,7 +129,7 @@ pactToCEKValue :: PactValue -> CEKValue b i m
 pactToCEKValue = \case
   PLiteral lit -> VLiteral lit
   PList vec -> VList (pactToCEKValue <$> vec)
-  PGuard gu -> VGuard (pactToCEKValue <$> gu)
+  PGuard gu -> VGuard gu
   PModRef mn ifs -> VModRef mn ifs
 
 pattern VString :: Text -> CEKValue b i m
@@ -313,6 +313,7 @@ data CEKRuntimeEnv b i m
   , _cekGasModel :: GasEnv b
   , _cekLoaded :: CEKTLEnv b i
   , _cekMHashes :: Map ModuleName ModuleHash
+  , _cekMsgSigs :: Map PublicKeyText (Set CapToken)
   --   _cekGas :: IORef Gas
   -- , _cekEvalLog :: IORef (Maybe [(Text, Gas)])
   -- , _ckeData :: EnvData PactValue
@@ -358,7 +359,7 @@ fromPactValue = \case
   PLiteral lit -> VLiteral lit
   PList vec -> VList (fromPactValue <$> vec)
   PGuard gu ->
-    VGuard (fromPactValue <$> gu)
+    VGuard gu
   PModRef mn ifs -> VModRef mn ifs
 
 checkPactValueType :: Type Void -> PactValue -> Bool

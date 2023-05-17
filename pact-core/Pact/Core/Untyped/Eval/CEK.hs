@@ -158,11 +158,12 @@ evalCEK cont handler env (CapabilityForm cf _) = do
         cont' = CapInvokeC env xs [] capFrame cont
         in evalCEK cont' handler env x
     EmitEvent _ args -> case args of
-      [] -> emitEvent cont handler env (CapToken fqn [])
+      [] -> emitEvent cont handler (CapToken fqn [])
       x : xs -> let
         capFrame = EmitEventFrame fqn
         cont' = CapInvokeC env xs [] capFrame cont
         in evalCEK cont' handler env x
+    CreateUserGuard{} -> error "implement"
 evalCEK cont handler env (ListLit ts _) = do
   chargeNodeGas ListNode
   case ts of
@@ -178,12 +179,14 @@ evalCEK cont handler env (DynInvoke n fn _) =
 evalCEK _ handler _ (Error e _) =
   returnCEK Mt handler (VError e)
 
+-- Todo: fail invariant
 nameToFQN :: Applicative f => Name -> f FullyQualifiedName
 nameToFQN (Name n nk) = case nk of
   NTopLevel mn mh -> pure (FullyQualifiedName mn n mh)
   NBound{} -> error "expected fully resolve FQ name"
   NModRef{} -> error "expected non-modref"
 
+-- Todo: fail invariants
 cekToPactValue :: Applicative f => CEKValue b i m -> f PactValue
 cekToPactValue = \case
   VLiteral lit -> pure (PLiteral lit)
@@ -191,7 +194,7 @@ cekToPactValue = \case
   VClosure{} -> error "closure is not a pact value"
   VNative{} -> error "Native is not a pact value"
   VModRef mn mns -> pure (PModRef mn mns)
-  VGuard gu -> PGuard <$> traverse cekToPactValue gu
+  VGuard gu -> pure (PGuard gu)
 
 -- Todo: managed
 evalCap
@@ -253,8 +256,17 @@ composeCap cont handler ct@(CapToken fqn args) = do
 installCap :: a
 installCap = undefined
 
-emitEvent :: a
-emitEvent = undefined
+emitEvent
+  :: MonadEval b i m
+  => Cont b i m
+  -> CEKErrorHandler b i m
+  -> CapToken
+  -> m (EvalResult b i m)
+emitEvent cont handler ct@(CapToken fqn _) = do
+  let pactEvent = PactEvent ct (_fqModule fqn) (_fqHash fqn)
+  modifyCEKState esEvents (pactEvent:)
+  returnCEKValue cont handler VUnit
+
 
 returnCEK :: (MonadEval b i m)
   => Cont b i m
@@ -317,9 +329,11 @@ returnCEKValue (CapInvokeC env terms pvs cf cont) handler v = case terms of
       evalCap cont handler env (CapToken fqn (reverse pvs)) wcbody
     RequireCapFrame fqn  ->
       requireCap cont handler (CapToken fqn (reverse pvs))
-    ComposeCapFrame{} -> error "todo"
+    ComposeCapFrame fqn ->
+      composeCap cont handler (CapToken fqn (reverse pvs))
     InstallCapFrame{} -> error "todo"
-    EmitEventFrame{} -> error "todo"
+    EmitEventFrame fqn ->
+      emitEvent cont handler (CapToken fqn (reverse pvs))
 returnCEKValue (CapBodyC env term cont) handler _ = do
   let cont' = CapPopC PopCapInvoke cont
   evalCEK cont' handler env term

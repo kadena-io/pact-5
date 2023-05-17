@@ -360,6 +360,9 @@ solveCoreOverload i b tys preds = case b of
     pure (Builtin B64Decode i)
   RawStrToList ->
     pure (Builtin StrToList i)
+  RawReadKeyset -> pure (Builtin ReadKeyset i)
+  RawEnforceGuard -> pure (Builtin EnforceGuard i)
+  RawKeysetRefGuard -> pure (Builtin KeysetRefGuard i)
 
 singlePred :: [t] -> i -> (t -> OverloadM i a) -> String -> OverloadM i a
 singlePred preds i f msg = case preds of

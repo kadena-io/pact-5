@@ -1025,6 +1025,9 @@ coreBuiltinRuntime = \case
   -- ReadKeyset -> coreReadKeyset ReadKeyset
   -- EnforceGuard -> coreEnforceGuard EnforceGuard
   -- KeysetRefGuard -> coreKeysetRefGuard KeysetRefGuard
+  ReadKeyset -> unimplemented
+  EnforceGuard -> unimplemented
+  KeysetRefGuard -> unimplemented
   -- CreateUserGuard -> createUserGuard CreateUserGuard
   ListAccess -> listAccess ListAccess
   MakeList -> makeList MakeList
@@ -1167,7 +1170,9 @@ coreBuiltinLiftedRuntime f = \case
   -- ReadKeyset -> coreReadKeyset ReadKeyset
   -- EnforceGuard -> coreEnforceGuard EnforceGuard
   -- KeysetRefGuard -> coreKeysetRefGuard KeysetRefGuard
-  -- CreateUserGuard -> createUserGuard CreateUserGuard
+  ReadKeyset -> unimplemented
+  EnforceGuard -> unimplemented
+  KeysetRefGuard -> unimplemented
   ListAccess -> listAccess (f ListAccess)
   MakeList -> makeList (f MakeList)
   B64Encode -> coreB64Encode (f B64Encode)

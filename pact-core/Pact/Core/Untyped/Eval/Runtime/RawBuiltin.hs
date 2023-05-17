@@ -993,6 +993,9 @@ rawBuiltinLiftedRuntime f = \case
   RawReadInteger -> unimplemented
   RawReadDecimal -> unimplemented
   RawReadString -> unimplemented
+  RawReadKeyset -> unimplemented
+  RawEnforceGuard -> unimplemented
+  RawKeysetRefGuard -> unimplemented
   RawListAccess -> listAccess (f RawListAccess)
   RawMakeList -> makeList (f RawMakeList)
   RawB64Encode -> coreB64Encode (f RawB64Encode)

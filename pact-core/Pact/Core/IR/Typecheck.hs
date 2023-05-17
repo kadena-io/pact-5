@@ -314,12 +314,12 @@ instance TypeOfBuiltin RawBuiltin where
       TypeScheme [] [] (TyString :~> TyDecimal)
     RawReadString ->
       TypeScheme [] [] (TyString :~> TyString)
-    -- RawReadKeyset ->
-    --   TypeScheme [] [] (TyString :~> TyGuard)
-    -- RawEnforceGuard ->
-    --   TypeScheme [] [] (TyGuard :~> TyUnit)
-    -- RawKeysetRefGuard ->
-    --   TypeScheme [] [] (TyString :~> TyGuard)
+    RawReadKeyset ->
+      TypeScheme [] [] (TyString :~> TyGuard)
+    RawEnforceGuard ->
+      TypeScheme [] [] (TyGuard :~> TyUnit)
+    RawKeysetRefGuard ->
+      TypeScheme [] [] (TyString :~> TyGuard)
     -- RawCreateUserGuard -> let
     --   a = nd "a" 0
     --   in TypeScheme [a] [] ((TyUnit :~> TyVar a) :~> TyGuard)
@@ -1087,6 +1087,25 @@ checkTermType checkty = \case
       unify checkty TyUnit i
       (tes', p1) <- checkCapArgs na tes
       pure (TyUnit, EmitEvent na tes', p1)
+    -- TODO: Enforce `na` is a name of a dfun and not a dcap
+    -- as a matter of fact, the whole above block needs the same enforcement just
+    -- for dfuns
+    CreateUserGuard na tes -> case _nKind na of
+      NTopLevel mn mh ->
+        view (tcFree . at (FullyQualifiedName mn (_nName na) mh)) >>= \case
+          Nothing -> error "boom"
+          Just fty -> do
+            let (args, r) = tyFunToArgList fty
+            unify (liftType r) TyUnit i
+            when (length args /= length tes) $ error "invariant broken "
+            vs <- zipWithM (checkTermType . liftType) args tes
+            let tes' = view _2 <$> vs
+            pure (TyGuard, CreateUserGuard na tes', concat (view _3 <$> vs))
+      _ -> error "invariant broken, must refer to a top level name"
+
+      -- unify checkty TyGuard i
+      -- (tes', p1) <- checkCapArgs na tes
+      -- pure (TyGuard, CreateUserGuard na tes', p1)
   IR.Constant lit i -> do
     let ty = typeOfLit lit
     unify checkty ty i
@@ -1227,6 +1246,9 @@ inferTerm = \case
     EmitEvent na tes -> do
       (tes', p1) <- checkCapArgs na tes
       pure (TyUnit, EmitEvent na tes', p1)
+    CreateUserGuard na tes -> do
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyGuard, CreateUserGuard na tes', p1)
 
   IR.Conditional cond i -> over _2 (`Typed.Conditional` i) <$>
     case cond of
@@ -1352,7 +1374,6 @@ inferModule
   => IR.Module Name b i
   -> InferM s b' i (TypedModule b i)
 inferModule (IR.Module mname mgov defs blessed imports impl mh info) = do
-  -- gov' <- traverse (dbjName [] 0 . toOName ) gov
   fv <- view tcFree
   (defs', _) <- foldlM infer' ([], fv) defs
   pure (Typed.Module mname mgov (reverse defs') blessed imports impl mh info)

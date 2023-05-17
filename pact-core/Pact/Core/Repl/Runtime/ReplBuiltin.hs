@@ -155,4 +155,5 @@ defaultReplState = ReplEvalState env (EvalState (CapState [] mempty) [] False)
     { _cekBuiltins = replCoreBuiltinRuntime
     , _cekLoaded = mempty
     , _cekGasModel = freeGasEnv
-    , _cekMHashes = mempty }
+    , _cekMHashes = mempty
+    , _cekMsgSigs = mempty }

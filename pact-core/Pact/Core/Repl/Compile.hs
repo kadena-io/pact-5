@@ -110,7 +110,8 @@ interpretExpr (DesugarOutput desugared loaded' _) = do
              { _cekBuiltins = replCoreBuiltinRuntime
              , _cekLoaded = _loAllLoaded loaded'
              , _cekGasModel = freeGasEnv
-             , _cekMHashes = mhashes }
+             , _cekMHashes = mhashes
+             , _cekMsgSigs = mempty }
       rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] False)
   value <- liftEither =<< liftIO (runReplCEK rEnv rState untyped)
   replLoaded .= loaded'
@@ -260,7 +261,8 @@ interpretReplProgram source = do
                   { _cekBuiltins = replCoreBuiltinRuntime
                   , _cekLoaded = _loAllLoaded loaded
                   , _cekGasModel = freeGasEnv
-                  , _cekMHashes = mhashes }
+                  , _cekMHashes = mhashes
+                  , _cekMsgSigs = mempty }
             rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] False)
         -- Todo: Fix this with `returnCEKValue`
         liftIO (runReplCEK rEnv rState te) >>= liftEither >>= \case
@@ -332,7 +334,8 @@ interpretProgram source = do
                   { _cekBuiltins = replCoreBuiltinRuntime
                   , _cekLoaded = _loAllLoaded loaded
                   , _cekGasModel = freeGasEnv
-                  , _cekMHashes = mhashes }
+                  , _cekMHashes = mhashes
+                  , _cekMsgSigs = mempty }
             rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] False)
         -- Todo: Fix this with `returnCEKValue`
         liftIO (runReplCEK rEnv rState te) >>= liftEither >>= \case

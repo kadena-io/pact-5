@@ -51,7 +51,7 @@ data UserGuard name term
 data Guard name term
   = GKeyset (KeySet name)
   | GKeySetRef KeySetName
-  -- | GUserGuard term
+  | GUserGuard name term
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 data Namespace name term

@@ -24,6 +24,7 @@ data CapForm name e
   | ComposeCapability name [e]
   | InstallCapability name [e]
   | EmitEvent name [e]
+  | CreateUserGuard name [e]
   deriving (Show, Functor, Foldable, Traversable)
 
 capFormName :: Lens (CapForm name e) (CapForm name' e) name name'
@@ -33,6 +34,7 @@ capFormName f = \case
   ComposeCapability name es -> (`ComposeCapability` es) <$> f name
   InstallCapability name es -> (`InstallCapability` es) <$> f name
   EmitEvent name es -> (`EmitEvent` es) <$> f name
+  CreateUserGuard name es -> (`CreateUserGuard` es) <$> f name
 
 instance (Pretty name, Pretty e) => Pretty (CapForm name e) where
   pretty = \case
@@ -45,4 +47,7 @@ instance (Pretty name, Pretty e) => Pretty (CapForm name e) where
     InstallCapability name es ->
       parens ("install-capability" <+> parens (pretty name <+> hsep (pretty <$> es)))
     EmitEvent name es ->
-      parens ("require-capability" <+> parens (pretty name <+> hsep (pretty <$> es)))
+      parens ("emit-event" <+> parens (pretty name <+> hsep (pretty <$> es)))
+    CreateUserGuard name es ->
+      parens ("create-user-guard" <+> parens (pretty name <+> hsep (pretty <$> es)))
+
