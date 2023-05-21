@@ -20,6 +20,8 @@ module Main where
 import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Except
+import Control.Monad.Trans(lift)
+import Control.Monad.IO.Class(liftIO)
 import System.Console.Haskeline
 import Data.IORef
 import Data.Foldable(traverse_)
@@ -63,7 +65,7 @@ main = do
           outputStrLn "Error: Expected command [:load, :type, :syntax, :debug] or expression"
           loop
         Just ra -> case ra of
-          RALoad txt -> let 
+          RALoad txt -> let
             file = T.unpack txt
             in catch' $ do
               source <- liftIO (B.readFile file)
@@ -102,6 +104,6 @@ main = do
                 in outputStrLn (T.unpack (replError rs err))
             loop
 
-tryError :: MonadError a m => m b -> m (Either a b)
-tryError ma =
-  catchError (Right <$> ma) (pure . Left)
+-- tryError :: MonadError a m => m b -> m (Either a b)
+-- tryError ma =
+--   catchError (Right <$> ma) (pure . Left)

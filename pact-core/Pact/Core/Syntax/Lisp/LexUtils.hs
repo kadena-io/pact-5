@@ -92,20 +92,20 @@ data Token
   | TokenInstallCapability
   | TokenEmitEvent
   -- Operators
-  | TokenEq
-  | TokenNeq
-  | TokenGT
-  | TokenGEQ
-  | TokenLT
-  | TokenLEQ
-  | TokenPlus
-  | TokenMinus
-  | TokenMult
-  | TokenDiv
-  | TokenPow
-  | TokenBitAnd
-  | TokenBitOr
-  | TokenBitComplement
+  -- | TokenEq
+  -- | TokenNeq
+  -- | TokenGT
+  -- | TokenGEQ
+  -- | TokenLT
+  -- | TokenLEQ
+  -- | TokenPlus
+  -- | TokenMinus
+  -- | TokenMult
+  -- | TokenDiv
+  -- | TokenPow
+  -- | TokenBitAnd
+  -- | TokenBitOr
+  -- | TokenBitComplement
   | TokenAnd
   | TokenOr
   | TokenSingleTick !Text
@@ -286,20 +286,20 @@ renderTokenText = \case
   TokenDot -> "."
   TokenBindAssign -> ":="
   TokenDynAcc -> "::"
-  TokenEq -> "="
-  TokenNeq -> "!="
-  TokenGT -> ">"
-  TokenGEQ -> ">="
-  TokenLT -> "<"
-  TokenLEQ -> "<="
-  TokenPlus -> "+"
-  TokenMinus -> "-"
-  TokenMult -> "*"
-  TokenDiv -> "/"
-  TokenPow -> "^"
-  TokenBitAnd -> "&"
-  TokenBitOr -> "|"
-  TokenBitComplement -> "~"
+  -- TokenEq -> "="
+  -- TokenNeq -> "!="
+  -- TokenGT -> ">"
+  -- TokenGEQ -> ">="
+  -- TokenLT -> "<"
+  -- TokenLEQ -> "<="
+  -- TokenPlus -> "+"
+  -- TokenMinus -> "-"
+  -- TokenMult -> "*"
+  -- TokenDiv -> "/"
+  -- TokenPow -> "^"
+  -- TokenBitAnd -> "&"
+  -- TokenBitOr -> "|"
+  -- TokenBitComplement -> "~"
   TokenBlockIntro -> "progn"
   TokenAnd -> "and"
   TokenOr -> "or"

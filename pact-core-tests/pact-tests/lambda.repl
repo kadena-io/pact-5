@@ -1,6 +1,6 @@
 
 (module lam-test G
-  (defcap G () true)
+  (defcap G:bool () true)
   (defun add2:integer (x:integer) (+ x 2))
   (defun gt2:bool (x:integer) (> x 2))
   )
