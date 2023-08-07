@@ -31,6 +31,7 @@ import Control.Lens hiding (List,ix)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Data.Maybe(mapMaybe)
+import Data.List(findIndex)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Set(Set)
 import Data.Graph(stronglyConnComp, SCC(..))
@@ -313,11 +314,23 @@ desugarDefConst (Lisp.DefConst n mty e _ i) = do
   e' <- desugarLispTerm e
   pure $ DefConst n mty' e' i
 
-desugarDefMeta :: Lisp.DCapMeta -> DefCapMeta ParsedName
-desugarDefMeta = \case
-  Lisp.DefEvent -> DefEvent
-  Lisp.DefManaged marg ->
-    DefManaged marg
+desugarDefMeta
+  :: Applicative f
+  => Term name builtin info
+  -> Lisp.DCapMeta
+  -> f (DefCapMeta ParsedName)
+desugarDefMeta body = \case
+  Lisp.DefEvent -> pure DefEvent
+  Lisp.DefManaged marg -> case marg of
+    Just (arg, name) -> case body of
+      Lam args _ _ ->
+        case findIndex ((==) arg . view _1) (NE.toList args) of
+          Just ix ->
+            let dmanaged = DefManagedMeta ix name
+            in pure (DefManaged (Just dmanaged))
+          Nothing -> error "no such managed arg"
+      _ -> error "invalid body: not a lambda form, cannot find app arg"
+    Nothing -> pure (DefManaged Nothing)
 
 desugarDefCap
   :: (MonadError (PactError info) m, DesugarBuiltin builtin)
@@ -326,16 +339,16 @@ desugarDefCap
 desugarDefCap (Lisp.DefCap dcn [] mrtype term _docs _model meta i) = do
   rtype <- maybe (throwDesugarError (UnannotatedReturnType dcn) i) (desugarType i) mrtype
   term' <- desugarLispTerm term
-  let meta' = fmap desugarDefMeta meta
-  pure (DefCap dcn rtype term' meta' i)
+  meta' <- traverse (desugarDefMeta term') meta
+  pure (DefCap dcn 0 [] rtype term' meta' i)
 desugarDefCap (Lisp.DefCap dcn margs mrtype term _docs _model meta i) = do
   args <- traverse (enforceArg i) margs
   rtype <- maybe (throwDesugarError (UnannotatedReturnType dcn) i) (desugarType i) mrtype
+  let appArity = length args
   argTys <- traverse (desugarType i . Lisp._argType) args
   term' <- desugarLispTerm term
-  let meta' = fmap desugarDefMeta meta
-      dct = foldr TyFun rtype argTys
-  pure (DefCap dcn dct term' meta' i)
+  meta' <- traverse (desugarDefMeta term') meta
+  pure (DefCap dcn appArity argTys rtype term' meta' i)
 
 
 desugarIfDef
@@ -354,12 +367,12 @@ desugarIfDef = \case
       rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) (desugarType i) rty
       let dty = foldr TyFun rty' argsTys
       pure $ IfDefun n dty i
+  -- Todo: check managed impl
   Lisp.IfDCap (Lisp.IfDefCap n margs rty _ _ _meta i) -> IfDCap <$> do
     rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) (desugarType i) rty
     args <- traverse (enforceArg i) margs
     argTys <- traverse (desugarType i . Lisp._argType) args
-    let dty = foldr (:~>) rty' argTys
-    pure $ IfDefCap n dty i
+    pure $ IfDefCap n argTys rty' i
   Lisp.IfDConst dc -> IfDConst <$> desugarDefConst dc
   _ -> error "unimplemented: special interface decl forms in desugar"
 
@@ -562,7 +575,7 @@ loadModule module_ deps depMap = do
   let mhash = Term._mHash module_
   let memberTerms = Map.fromList (toFqDep modName mhash <$> Term._mDefs module_)
       allDeps = Map.union memberTerms deps
-      allTyped = Term.defType <$> memberTerms
+      allTyped = fmap Term.defType memberTerms
   rsLoaded %= over loModules (Map.insert modName (ModuleData module_ deps)) . over loAllLoaded (Map.union allDeps)
   rsLoaded . loAllTyped <>= allTyped
   rsModuleBinds %= Map.insert modName depMap
@@ -583,7 +596,7 @@ loadInterface iface deps depMap dcDeps = do
       ifhash = Term._ifHash iface
   let memberTerms = Map.fromList (toFqDep ifName ifhash <$> dcDeps)
       allDeps = Map.union memberTerms deps
-      allTyped = Term.defType <$> memberTerms
+      allTyped = fmap Term.defType memberTerms
   rsLoaded %= over loModules (Map.insert ifName (InterfaceData iface deps)) . over loAllLoaded (Map.union allDeps)
   rsLoaded . loAllTyped <>= allTyped
   rsModuleBinds %= Map.insert ifName depMap
@@ -798,12 +811,12 @@ renameDefCap
   :: (MonadError (PactError info) m)
   => DefCap ParsedName raw info
   -> RenamerT m reso info (DefCap Name raw info)
-renameDefCap (DefCap name ty term meta i) = do
+renameDefCap (DefCap name arity argtys rtype term meta info) = do
   meta' <- (traverse . traverse) resolveName' meta
   term' <- local (set reCurrDef (Just DKDefCap)) $ renameTerm term
-  pure (DefCap name ty term' meta' i)
+  pure (DefCap name arity argtys rtype term' meta' info)
   where
-  resolveName' dn = resolveName i dn >>= \case
+  resolveName' dn = resolveName info dn >>= \case
     (n, Just DKDefun) -> pure n
     _ -> error "defcap manager function does not refer to a defun"
 
@@ -938,7 +951,7 @@ checkImplements i mn defs ifName =
     Term.IfDCap ifd ->
       case find (\df -> Term._ifdcName ifd == defName df) defs of
         Just (DCap v) ->
-          when (_dcapType v /= Term._ifdcType ifd) $ error "BOOM"
+          when (_dcapArgTypes v /= Term._ifdcArgTys ifd || _dcapRType v /= Term._ifdcRType ifd) $ error "BOOM"
         Just _ -> error "not implemented"
         Nothing -> error "not implemented"
 

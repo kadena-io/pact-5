@@ -58,8 +58,8 @@ fromTypedIfDefun (Typed.IfDefun n ty i) =
 fromTypedIfDefCap
   :: Typed.IfDefCap info
   -> IfDefCap info
-fromTypedIfDefCap (Typed.IfDefCap n ty i) =
-  IfDefCap n ty i
+fromTypedIfDefCap (Typed.IfDefCap n argtys ty i) =
+  IfDefCap n argtys ty i
 
 fromTypedDConst
   :: Typed.DefConst name tyname builtin info
@@ -70,8 +70,8 @@ fromTypedDConst (Typed.DefConst n ty term i) =
 fromTypedDCap
   :: Typed.DefCap name tyname builtin info
   -> DefCap name builtin info
-fromTypedDCap (Typed.DefCap name ty term meta i) =
-  DefCap name ty (fromTypedTerm term) meta i
+fromTypedDCap (Typed.DefCap name appArity argTys rty term meta i) =
+  DefCap name appArity argTys rty (fromTypedTerm term) meta i
 
 fromTypedDef
   :: Typed.Def name tyname builtin info

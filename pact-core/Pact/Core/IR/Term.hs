@@ -50,7 +50,9 @@ data DefConst name builtin info
 data DefCap name builtin info
   = DefCap
   { _dcapName :: Text
-  , _dcapType :: Type Void
+  , _dcapAppArity :: Int
+  , _dcapArgTypes :: [Type Void]
+  , _dcapRType :: Type Void
   , _dcapTerm :: Term name builtin info
   , _dcapMeta :: Maybe (DefCapMeta name)
   , _dcapInfo :: info
@@ -125,7 +127,8 @@ data IfDefun info
 data IfDefCap info
   = IfDefCap
   { _ifdcName :: Text
-  , _ifdcType :: Type Void
+  , _ifdcArgTys :: [Type Void]
+  , _ifdcRType :: Type Void
   , _ifdcInfo :: info
   } deriving (Show, Functor)
 

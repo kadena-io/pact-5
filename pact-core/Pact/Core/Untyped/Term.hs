@@ -91,7 +91,9 @@ data DefConst name builtin info
 data DefCap name builtin info
   = DefCap
   { _dcapName :: Text
-  , _dcapType :: Type Void
+  , _dcapAppArity :: Int
+  , _dcapArgTypes :: [Type Void]
+  , _dcapRType :: Type Void
   , _dcapTerm :: Term name builtin info
   , _dcapMeta :: Maybe (DefCapMeta name)
   , _dcapInfo :: info
@@ -111,11 +113,11 @@ data Def name builtin info
 -- Todo: Remove this, not all top level defs have a proper
 -- associated type, and DCap types are w holly irrelevant, we cannot simply
 -- call them, they can only be evaluated within `with-capability`.
-defType :: Def name builtin info -> Type Void
+defType :: Def name builtin info -> TypeOfDef Void
 defType = \case
-  Dfun d -> _dfunType d
-  DConst d -> _dcType d
-  DCap d -> _dcapType d
+  Dfun d -> DefunType (_dfunType d)
+  DConst d -> DefunType $ _dcType d
+  DCap d -> DefcapType (_dcapArgTypes d) (_dcapRType d)
 
 defName :: Def name builtin i -> Text
 defName = \case
@@ -171,7 +173,8 @@ data IfDefun info
 data IfDefCap info
   = IfDefCap
   { _ifdcName :: Text
-  , _ifdcType :: Type Void
+  , _ifdcArgTys :: [Type Void]
+  , _ifdcRType :: Type Void
   , _ifdcInfo :: info
   } deriving (Show, Functor)
 
@@ -270,8 +273,8 @@ fromIRIfDefun (IR.IfDefun dfn ty i) =
   IfDefun dfn ty i
 
 fromIRIfDefCap :: IR.IfDefCap info -> IfDefCap info
-fromIRIfDefCap (IR.IfDefCap dfn ty i) =
-  IfDefCap dfn ty i
+fromIRIfDefCap (IR.IfDefCap dfn argtys rty i) =
+  IfDefCap dfn argtys rty i
 
 fromIRDConst
   :: IR.DefConst name builtin info
@@ -280,8 +283,8 @@ fromIRDConst (IR.DefConst n ty term i) =
   DefConst n (maybe TyUnit (fmap absurd) ty) (fromIRTerm term) i
 
 fromIRDCap :: IR.DefCap name builtin info -> DefCap name builtin info
-fromIRDCap (IR.DefCap dcn dcty term meta i) =
-  DefCap dcn dcty (fromIRTerm term) meta i
+fromIRDCap (IR.DefCap name arity argtys rtype body meta i) =
+  DefCap  name arity argtys rtype (fromIRTerm body) meta i
 
 fromIRDef
   :: IR.Def name builtin info

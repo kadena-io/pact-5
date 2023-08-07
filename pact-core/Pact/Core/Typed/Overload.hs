@@ -389,8 +389,8 @@ resolveDefCap
   :: SolveOverload raw reso
   => OverloadedDefCap tyname raw info
   -> OverloadM info (DefCap Name tyname reso info)
-resolveDefCap (DefCap name dty body m_dcm info) =
-  DefCap name dty <$> resolveTerm body <*> pure m_dcm <*> pure info
+resolveDefCap (DefCap name arity args rty body m_dcm info) =
+  DefCap name arity args rty <$> resolveTerm body <*> pure m_dcm <*> pure info
 
 -- resolveDefCap
 --   :: OverloadedDefCap RawBuiltin info

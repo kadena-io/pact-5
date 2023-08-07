@@ -92,7 +92,7 @@ data Loaded b i
   = Loaded
   { _loModules :: Map ModuleName (ModuleData b i)
   , _loToplevel :: Map Text (FullyQualifiedName, DefKind)
-  , _loAllTyped :: Map FullyQualifiedName (Type Void)
+  , _loAllTyped :: Map FullyQualifiedName (TypeOfDef Void)
   , _loAllLoaded :: Map FullyQualifiedName (EvalDef b i)
   } deriving Show
 

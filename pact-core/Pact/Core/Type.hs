@@ -23,6 +23,7 @@ module Pact.Core.Type
  , Pred(..)
  , renderType
  , renderPred
+ , TypeOfDef(..)
  ) where
 
 import Control.Lens
@@ -151,6 +152,11 @@ data Pred tv
 data TypeScheme tv =
   TypeScheme [tv] [Pred tv]  (Type tv)
   deriving Show
+
+data TypeOfDef tv
+  = DefunType (Type tv)
+  | DefcapType [Type tv] (Type tv)
+  deriving (Show, Functor, Foldable, Traversable)
 
 tyFunToArgList :: Type n -> ([Type n], Type n)
 tyFunToArgList (TyFun l r) =

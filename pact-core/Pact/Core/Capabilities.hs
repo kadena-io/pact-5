@@ -3,19 +3,24 @@
 
 module Pact.Core.Capabilities
  ( DefCapMeta(..)
+ , DefManagedMeta(..)
  , CapForm(..)
  , capFormName
  ) where
 
 import Control.Lens
-import Data.Text(Text)
 
 import Pact.Core.Pretty
 
+data DefManagedMeta name
+  = DefManagedMeta
+  { _dmManagedArgIx :: Int
+  , _dmManagerFn :: name
+  } deriving (Show, Functor, Foldable, Traversable)
 
 data DefCapMeta name
   = DefEvent
-  | DefManaged (Maybe (Text, name))
+  | DefManaged (Maybe (DefManagedMeta name))
   deriving (Show, Functor, Foldable, Traversable)
 
 data CapForm name e

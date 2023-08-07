@@ -95,7 +95,7 @@ data TCEnv s b i
   , _tcVarEnv :: RAList (Type (TvRef s))
   -- ^ Builtins map, that uses the enum instance
   -- , _tcFree :: Map ModuleName (Map Text (Type Void))
-  , _tcFree :: Map FullyQualifiedName (Type Void)
+  , _tcFree :: Map FullyQualifiedName (TypeOfDef Void)
   -- ^ Free variables
   , _tcLevel :: STRef s Level
   -- ^ Type Variable "Region"
@@ -978,12 +978,12 @@ checkTermType checkty = \case
           throwTypecheckError (TCUnboundTermVariable n) i
     NTopLevel mn _mh ->
       view (tcFree . at (FullyQualifiedName mn n _mh)) >>= \case
-        Just nty -> do
+        Just (DefunType nty) -> do
           let newVar = Typed.Var irn i
               rty = liftType nty
           unify rty checkty i
           pure (rty, newVar, [])
-        Nothing ->
+        _ ->
           throwTypecheckError (TCUnboundFreeVariable mn n) i
     NModRef _ ifs -> case checkty of
       TyModRef mn -> do
@@ -1093,14 +1093,14 @@ checkTermType checkty = \case
     CreateUserGuard na tes -> case _nKind na of
       NTopLevel mn mh ->
         view (tcFree . at (FullyQualifiedName mn (_nName na) mh)) >>= \case
-          Nothing -> error "boom"
-          Just fty -> do
+          Just (DefunType fty) -> do
             let (args, r) = tyFunToArgList fty
             unify (liftType r) TyUnit i
-            when (length args /= length tes) $ error "invariant broken "
+            when (length args /= length tes) $ error "invariant broken"
             vs <- zipWithM (checkTermType . liftType) args tes
             let tes' = view _2 <$> vs
             pure (TyGuard, CreateUserGuard na tes', concat (view _3 <$> vs))
+          _ -> error "boom"
       _ -> error "invariant broken, must refer to a top level name"
 
       -- unify checkty TyGuard i
@@ -1146,12 +1146,11 @@ checkCapArgs
 checkCapArgs na tes = case _nKind na of
   NTopLevel mn mh ->
     view (tcFree . at (FullyQualifiedName mn (_nName na) mh)) >>= \case
-      Nothing -> error "invariant broken with defcap"
-      Just dcapTy -> case tyFunToArgList dcapTy of
-        (dcargs, _) -> do
-          when (length dcargs /= length tes) $ error "invariant broken dcap args"
-          vs <- zipWithM (checkTermType . liftType) dcargs tes
-          pure (view _2 <$> vs, concat (view _3 <$> vs))
+      Just (DefcapType dcargs _) -> do
+        when (length dcargs /= length tes) $ error "invariant broken dcap args"
+        vs <- zipWithM (checkTermType . liftType) dcargs tes
+        pure (view _2 <$> vs, concat (view _3 <$> vs))
+      _ -> error "invariant broken"
   _ -> error "invariant broken"
 
 -- Todo: bidirectionality
@@ -1170,10 +1169,10 @@ inferTerm = \case
           throwTypecheckError (TCUnboundTermVariable n) i
     NTopLevel mn _mh ->
       view (tcFree . at (FullyQualifiedName mn n _mh)) >>= \case
-        Just ty -> do
+        Just (DefunType ty) -> do
           let newVar = Typed.Var irn i
           pure (liftType ty, newVar, [])
-        Nothing ->
+        _ ->
           throwTypecheckError (TCUnboundFreeVariable mn n) i
     NModRef _ ifs -> case ifs of
       [iface] -> do
@@ -1341,12 +1340,13 @@ inferDefCap
   :: TypeOfBuiltin b
   => IR.DefCap Name b i
   -> InferM s b' i (TypedDefCap b i)
-inferDefCap (IR.DefCap name ty term meta i) = do
-  (termTy, term', preds) <- inferTerm term
+inferDefCap (IR.DefCap name arity argtys rty term meta i) = do
+  let ty = foldr TyFun rty argtys
+  (termTy, term', preds) <- checkTermType (liftType ty) term
   checkReducible preds i
   unify (liftType ty) (termTy) i
   fterm <- noTyVarsinTerm i term'
-  pure (Typed.DefCap name (liftType ty) fterm meta i)
+  pure (Typed.DefCap name arity argtys rty fterm meta i)
 
 inferDef
   :: TypeOfBuiltin b
@@ -1366,8 +1366,8 @@ inferIfDef = \case
     pure (Typed.IfDfun (Typed.IfDefun (IR._ifdName ifd) (IR._ifdType ifd) (IR._ifdInfo ifd)))
   IR.IfDConst dc ->
     Typed.IfDConst <$> inferDefConst dc
-  IR.IfDCap (IR.IfDefCap n ty i) ->
-    pure $ Typed.IfDCap (Typed.IfDefCap n ty i)
+  IR.IfDCap (IR.IfDefCap n argtys rty i) ->
+    pure $ Typed.IfDCap (Typed.IfDefCap n argtys rty i)
 
 inferModule
   :: TypeOfBuiltin b
@@ -1381,8 +1381,8 @@ inferModule (IR.Module mname mgov defs blessed imports impl mh info) = do
   infer' (xs, m) d = do
     def' <- local (set tcFree m) (inferDef d)
     let name' = FullyQualifiedName mname (Typed.defName def') mh
-        ty = liftType (Typed.defType def')
-        m' = Map.insert name' ty  m
+        dty = fmap absurd (Typed.defType def')
+        m' = Map.insert name' dty  m
     pure (def':xs, m')
 
 inferInterface
@@ -1439,7 +1439,7 @@ inferTopLevel loaded = \case
   IR.TLInterface i -> do
     tci <- inferInterface i
     let toFqn dc = FullyQualifiedName (Typed._ifName tci) (Typed._dcName dc) (Typed._ifHash tci)
-        newTLs = Map.fromList $ fmap (\df -> (toFqn df, Typed._dcType df)) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
+        newTLs = Map.fromList $ fmap (\df -> (toFqn df, DefunType (Typed._dcType df))) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
         loaded' = over loAllTyped (Map.union newTLs) loaded
     pure (Typed.TLInterface tci, loaded')
 
@@ -1461,17 +1461,17 @@ inferReplTopLevel loaded = \case
   IR.RTLDefun dfn -> do
     dfn' <- inferDefun dfn
     let newFqn = FullyQualifiedName replModuleName (Typed._dfunName dfn') replModuleHash
-    let loaded' = over loAllTyped (Map.insert newFqn (Typed._dfunType dfn')) loaded
+    let loaded' = over loAllTyped (Map.insert newFqn (DefunType (Typed._dfunType dfn'))) loaded
     pure (Typed.RTLDefun dfn', loaded')
   IR.RTLDefConst dconst -> do
     dc <- inferDefConst dconst
     let newFqn = FullyQualifiedName replModuleName (Typed._dcName dc) replModuleHash
-    let loaded' = over loAllTyped (Map.insert newFqn (Typed._dcType dc)) loaded
+    let loaded' = over loAllTyped (Map.insert newFqn (DefunType (Typed._dcType dc))) loaded
     pure (Typed.RTLDefConst dc, loaded')
   IR.RTLInterface i -> do
     tci <- inferInterface i
     let toFqn dc = FullyQualifiedName (Typed._ifName tci) (Typed._dcName dc) (Typed._ifHash tci)
-        newTLs = Map.fromList $ fmap (\df -> (toFqn df, Typed._dcType df)) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
+        newTLs = Map.fromList $ fmap (\df -> (toFqn df, DefunType (Typed._dcType df))) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
         loaded' = over loAllTyped (Map.union newTLs) loaded
     pure (Typed.RTLInterface tci, loaded')
 

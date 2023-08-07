@@ -1,4 +1,4 @@
-cabal-version:       3.6
+cabal-version:       3.8
 name:                pact-core
 version:             0.1
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
@@ -17,8 +17,7 @@ copyright:           Copyright (C) 2022 Kadena
 category:            Language
 build-type:          Simple
 
-library
-  hs-source-dirs: pact-core
+common pact-core-common
   build-depends:
     , Decimal
     , base
@@ -51,9 +50,6 @@ library
     , exceptions
     , array
 
-  build-tool-depends:
-    , alex:alex
-    , happy:happy
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
@@ -66,6 +62,27 @@ library
     ScopedTypeVariables
     FlexibleContexts
     FlexibleInstances
+    NumericUnderscores
+    TypeOperators
+
+library
+  import: pact-core-common
+  hs-source-dirs: pact-core
+  build-tool-depends:
+    , alex:alex
+    , happy:happy
+  -- ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  -- ghc-prof-options: -fprof-auto -fprof-auto-calls
+  -- default-language:    Haskell2010
+  -- default-extensions:
+  --   OverloadedStrings
+  --   ViewPatterns
+  --   LambdaCase
+  --   TupleSections
+  --   BangPatterns
+  --   ScopedTypeVariables
+  --   FlexibleContexts
+  --   FlexibleInstances
 
   exposed-modules:
     Pact.Core.Compile
@@ -116,7 +133,6 @@ library
     Pact.Core.Repl.Runtime
     Pact.Core.Repl.Runtime.ReplBuiltin
     Pact.Core.Repl.Compile
-
 
 executable repl
   main-is: pact-core/Pact/Core/Repl.hs

@@ -85,7 +85,9 @@ data DefConst name tyname builtin info
 data DefCap name tyname builtin info
   = DefCap
   { _dcapName :: Text
-  , _dcapType :: Type Void
+  , _dcapAppArity :: Int
+  , _dcapArgTypes :: [Type Void]
+  , _dcapRType :: Type Void
   , _dcapTerm :: Term name tyname builtin info
   , _dcapMeta :: Maybe (DefCapMeta name)
   , _dcapInfo :: info
@@ -103,11 +105,11 @@ data Def name tyname builtin info
 -- DPact (DefPact name builtin info)
 -- DSchema (DefSchema name info)
 -- DTable (DefTable name info)
-defType :: Def name tyname builtin info -> Type Void
+defType :: Def name tyname builtin info -> TypeOfDef Void
 defType = \case
-  Dfun d -> _dfunType d
-  DConst d -> _dcType d
-  DCap d -> _dcapType d
+  Dfun d -> DefunType (_dfunType d)
+  DConst d -> DefunType (_dcType d)
+  DCap d -> DefcapType (_dcapArgTypes d) (_dcapRType d)
 
 defName :: Def name tyname builtin i -> Text
 defName = \case
@@ -151,7 +153,8 @@ data IfDefun info
 data IfDefCap info
   = IfDefCap
   { _ifdcName :: Text
-  , _ifdcType :: Type Void
+  , _ifdcArgTys :: [Type Void]
+  , _ifdcRType :: Type Void
   , _ifdcInfo :: info
   } deriving (Show, Functor)
 

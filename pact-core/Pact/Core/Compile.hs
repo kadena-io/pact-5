@@ -8,6 +8,7 @@
 
 module Pact.Core.Compile where
 
+import Control.Monad.IO.Class(MonadIO)
 import Control.Monad.Except
 import Data.Proxy
 import Data.ByteString(ByteString)
@@ -33,7 +34,8 @@ import qualified Pact.Core.Syntax.Lisp.Parser as Lisp
 
 type HasCompileEnv raw reso m
   = ( MonadError PactErrorI m, DesugarBuiltin raw, TypeOfBuiltin raw
-    , SolveOverload raw reso, Pretty raw, Pretty reso, PhaseDebug m)
+    , SolveOverload raw reso, Pretty raw, Pretty reso, PhaseDebug m
+    , MonadIO m)
 
 _parseOnly
   :: ByteString -> Either PactErrorI [Lisp.ParsedTopLevel]
@@ -45,8 +47,8 @@ _parseOnlyFile :: FilePath -> IO (Either PactErrorI [Lisp.ParsedTopLevel])
 _parseOnlyFile fp = _parseOnly <$> B.readFile fp
 
 
-compileTypedExprGen :: forall raw reso m
-  . (HasCompileEnv raw reso m)
+compileTypedExprGen
+  :: (HasCompileEnv raw reso m)
   => ByteString
   -> Proxy raw
   -> PactDb m reso SpanInfo
@@ -66,8 +68,8 @@ compileTypedExprGen source proxy pactDb loaded = do
   debugPrint DebugSpecializer o
   pure (o, loaded')
 
-compileUntypedExprGen :: forall raw reso m
-  . (HasCompileEnv raw reso m)
+compileUntypedExprGen
+  :: (HasCompileEnv raw reso m)
   => ByteString
   -> Proxy raw
   -> PactDb m reso SpanInfo
@@ -78,7 +80,6 @@ compileUntypedExprGen source proxy pactDb loaded = do
   let untyped = fromTypedTerm typedTerm
   debugPrint DebugUntyped untyped
   pure (untyped, l)
-
 
 compileTypedExpr :: forall raw reso m
   . (HasCompileEnv raw reso m)

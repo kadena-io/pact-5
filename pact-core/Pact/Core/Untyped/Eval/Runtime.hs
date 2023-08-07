@@ -19,7 +19,7 @@ module Pact.Core.Untyped.Eval.Runtime
  , CEKEnv
  , CEKRuntimeEnv(..)
  , BuiltinFn(..)
- , EvalM(..)
+ , EvalT(..)
  , runEvalT
  , CEKValue(..)
  , Cont(..)
@@ -39,7 +39,7 @@ module Pact.Core.Untyped.Eval.Runtime
  , MonadEval
  , Closure(..)
  , EvalResult(..)
- , EvalMEnv(..)
+ , EvalEnv(..)
  , EvalState(..)
  , esCaps, esEvents, esInCap
  , pattern VString
@@ -67,6 +67,7 @@ import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Reader
 import Control.Monad.Except
+import Control.Monad.State.Strict
 import Data.Void
 import Data.Text(Text)
 import Data.Map.Strict(Map)
@@ -173,26 +174,29 @@ class Monad m => (MonadEvalState b i m) | m -> b, m -> i where
   useCekState :: Lens' (EvalState b i) s -> m s
   usesCekState :: Lens' (EvalState b i) s -> (s -> s') -> m s'
 
-data EvalMEnv b i
-  = EvalMEnv
-  { _emRuntimeEnv :: CEKRuntimeEnv b i (EvalM b i)
+data EvalEnv b i m
+  = EvalEnv
+  { _emRuntimeEnv :: CEKRuntimeEnv b i (EvalT b i m)
   , _emGas :: IORef Gas
   , _emGasLog :: IORef (Maybe [(Text, Gas)])
   }
 
 -- Todo: are we going to inject state as the reader monad here?
-newtype EvalM b i a =
-  EvalM (ExceptT (PactError i) (ReaderT (EvalMEnv b i) IO) a)
+newtype EvalT b i m a =
+  EvalT (ReaderT (EvalEnv b i m) (StateT (EvalState b i) m) a)
   deriving
     ( Functor, Applicative, Monad
-    , MonadReader (EvalMEnv b i)
     , MonadIO
     , MonadThrow
     , MonadCatch)
-  via (ExceptT (PactError i) (ReaderT (EvalMEnv b i) IO))
+  via (ReaderT (EvalEnv b i m) (StateT (EvalState b i) m))
 
-runEvalT :: EvalMEnv b i -> EvalM b i a -> IO (Either (PactError i) a)
-runEvalT s (EvalM action) = runReaderT (runExceptT action) s
+runEvalT
+  :: EvalEnv b i m
+  -> EvalState b i
+  -> EvalT b i m a
+  -> m (a, EvalState b i)
+runEvalT env st (EvalT action) = runStateT (runReaderT action env) st
 
 data BuiltinFn b i m
   = BuiltinFn
@@ -373,18 +377,24 @@ checkPactValueType ty = \case
     TyModRef m -> m `elem` ifs
     _ -> False
 
-makeLenses ''EvalMEnv
+makeLenses ''EvalEnv
 makeLenses ''EvalState
 makeLenses ''CapState
 makeLenses ''CapToken
 makeLenses ''CapSlot
 makeLenses ''ManagedCap
 
-instance MonadEvalEnv b i (EvalM b i) where
-  cekReadEnv = view emRuntimeEnv
+instance (MonadIO m) => MonadEvalEnv b i (EvalT b i m) where
+  cekReadEnv = EvalT $ view emRuntimeEnv
   cekLogGas msg g = do
-    r <- view emGasLog
+    r <- EvalT $ view emGasLog
     liftIO $ modifyIORef' r (fmap ((msg, g):))
   cekChargeGas g = do
-    r <- view emGas
+    r <- EvalT $ view emGas
     liftIO (modifyIORef' r (<> g))
+
+instance Monad m => MonadEvalState b i (EvalT b i m) where
+  setCekState l s = EvalT $ l .= s
+  modifyCEKState l f = EvalT (l %= f)
+  useCekState l = EvalT (use l)
+  usesCekState l f = EvalT (uses l f)
