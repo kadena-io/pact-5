@@ -36,6 +36,7 @@ import Data.List.NonEmpty(NonEmpty(..))
 import Data.Set(Set)
 import Data.Graph(stronglyConnComp, SCC(..))
 import Data.Proxy
+import Data.Void
 import Data.Foldable(find, traverse_, foldrM)
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
@@ -52,7 +53,6 @@ import Pact.Core.Errors
 import Pact.Core.IR.Term
 
 import qualified Pact.Core.Syntax.Lisp.ParseTree as Lisp
-import qualified Pact.Core.Untyped.Term as Term
 
 {- Note on Desugaring + Renaming:
 
@@ -143,13 +143,17 @@ instance DesugarBuiltin RawBuiltin where
   desugarOperator info = \case
     -- Manual eta expansion for and as well as Or
     Lisp.AndOp -> let
-      arg1 = "#andArg1"
-      arg2 = "#andArg2"
-      in Lam ((arg1, Just TyBool) :| [(arg2, Just TyBool)]) (Conditional (CAnd (Var (BN (BareName arg1)) info) (Var (BN (BareName arg2)) info)) info) info
+      arg1Name = "#andArg1"
+      arg1 = Arg arg1Name (Just TyBool)
+      arg2Name = "#andArg2"
+      arg2 = Arg arg2Name (Just TyBool)
+      in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (CAnd (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
     Lisp.OrOp -> let
-      arg1 = "#orArg1"
-      arg2 = "#orArg2"
-      in Lam ((arg1, Just TyBool) :| [(arg2, Just TyBool)]) (Conditional (COr (Var (BN (BareName arg1)) info) (Var (BN (BareName arg2)) info)) info) info
+      arg1Name = "#orArg1"
+      arg1 = Arg arg1Name (Just TyBool)
+      arg2Name = "#orArg2"
+      arg2 = Arg arg2Name (Just TyBool)
+      in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (COr (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
   -- Todo:
   -- Builtins of known arity differences we are yet to support:
   --  str-to-int
@@ -204,13 +208,14 @@ desugarLispTerm = \case
   Lisp.Lam [] body i -> let
     n = "#unitLamArg"
     nty = Just TyUnit
-    in Lam (pure (n, nty)) <$> desugarLispTerm body <*> pure i
+    in Lam AnonLamInfo (pure (Arg n nty)) <$> desugarLispTerm body <*> pure i
   Lisp.Lam (x:xs) body i -> do
     let nsts = x :| xs
         (ns, ts) = NE.unzip nsts
     ts' <- (traverse.traverse) (desugarType i) ts
+    let args = NE.zipWith Arg ns ts'
     body' <- desugarLispTerm body
-    pure (Lam (NE.zip ns ts') body' i)
+    pure (Lam AnonLamInfo args body' i)
   Lisp.Suspend body i -> desugarLispTerm (Lisp.Lam [] body i)
   Lisp.If e1 e2 e3 i -> Conditional <$>
      (CIf <$> desugarLispTerm e1 <*> desugarLispTerm e2 <*> desugarLispTerm e3) <*> pure i
@@ -273,40 +278,44 @@ suspendTerm
   :: Term ParsedName builtin info
   -> Term ParsedName builtin info
 suspendTerm e' =
-  Lam (("#suspendArg", Just TyUnit) :| []) e' (view termInfo e')
+  Lam AnonLamInfo (pure (Arg "#suspendArg" (Just TyUnit))) e' (view termInfo e')
 
-enforceArg
+toArg
   :: MonadError (PactError i) m
   => i
   -> Lisp.MArg
-  -> RenamerT m b i Lisp.Arg
-enforceArg i (Lisp.MArg n mty) = case mty of
-  Just ty ->
-    pure (Lisp.Arg n ty)
-  Nothing -> throwDesugarError (UnannotatedArgumentType n) i
+  -> RenamerT m reso i (Arg Void)
+toArg i (Lisp.MArg n mty) =
+  Arg n <$> traverse (desugarType i) mty
 
+-- Arg for turning nullary into unary functions
+-- Todo: Remove this, support nullary apps.
+unitFnArg :: Arg a
+unitFnArg = Arg "#unitFnArg" (Just TyUnit)
 
 desugarDefun
   :: (DesugarBuiltin builtin, MonadError (PactError info) m)
   => Lisp.Defun info
   -> RenamerT m b info (Defun ParsedName builtin info)
 desugarDefun (Lisp.Defun defname [] mrt body _ _ i) = do
-  rt' <- maybe (throwDesugarError (UnannotatedReturnType defname) i) (desugarType i) mrt
-  let dfnType = TyFun TyUnit rt'
+  mrt' <- traverse (desugarType i) mrt
   body' <- desugarLispTerm body
-  let bodyLam = Lam ((defname, Just TyUnit) :| []) body' i
-  pure $ Defun defname dfnType bodyLam i
-desugarDefun (Lisp.Defun defname (marg:margs) mrt body _ _ i) = do
-  rt' <- maybe (throwDesugarError (UnannotatedReturnType defname) i) (desugarType i) mrt
-  arg <- enforceArg i marg
-  args <- traverse (enforceArg i) margs
-  let neArgs = arg :| args
-  neArgs' <- traverse (desugarType i . Lisp._argType) neArgs
-  let dfnType = foldr TyFun rt' neArgs'
-  let lamArgs = NE.zipWith (\(Lisp.Arg n _) ty -> (n, Just ty)) neArgs neArgs'
+  view reCurrModule >>= \case
+    Just mn -> do
+      let bodyLam = Lam (TLLamInfo mn defname) (pure unitFnArg) body' i
+      pure $ Defun defname [unitFnArg] mrt' bodyLam i
+    Nothing -> error "Defun is module-less"
+desugarDefun (Lisp.Defun defname (arg:args) mrt body _ _ i) = do
+  args' <- traverse (toArg i) (arg :| args)
+  mrt' <- traverse (desugarType i) mrt
   body' <- desugarLispTerm body
-  let bodyLam = Lam lamArgs body' i
-  pure $ Defun defname dfnType bodyLam i
+  view reCurrModule >>= \case
+    Just mn -> do
+      let bodyLam = Lam (TLLamInfo mn defname) args' body' i
+      pure $ Defun defname (NE.toList args') mrt' bodyLam i
+    Nothing -> error "Defun is module-less"
+
+
 
 desugarDefConst :: (DesugarBuiltin builtin, MonadError (PactError info) m) => Lisp.DefConst info -> RenamerT m b info (DefConst ParsedName builtin info)
 desugarDefConst (Lisp.DefConst n mty e _ i) = do
@@ -323,8 +332,8 @@ desugarDefMeta body = \case
   Lisp.DefEvent -> pure DefEvent
   Lisp.DefManaged marg -> case marg of
     Just (arg, name) -> case body of
-      Lam args _ _ ->
-        case findIndex ((==) arg . view _1) (NE.toList args) of
+      Lam _ args _ _ ->
+        case findIndex ((==) arg . view argName) (NE.toList args) of
           Just ix ->
             let dmanaged = DefManagedMeta ix name
             in pure (DefManaged (Just dmanaged))
@@ -337,18 +346,18 @@ desugarDefCap
   => Lisp.DefCap info
   -> RenamerT m b info (DefCap ParsedName builtin info)
 desugarDefCap (Lisp.DefCap dcn [] mrtype term _docs _model meta i) = do
-  rtype <- maybe (throwDesugarError (UnannotatedReturnType dcn) i) (desugarType i) mrtype
+  rtype <- traverse (desugarType i) mrtype
   term' <- desugarLispTerm term
   meta' <- traverse (desugarDefMeta term') meta
   pure (DefCap dcn 0 [] rtype term' meta' i)
-desugarDefCap (Lisp.DefCap dcn margs mrtype term _docs _model meta i) = do
-  args <- traverse (enforceArg i) margs
-  rtype <- maybe (throwDesugarError (UnannotatedReturnType dcn) i) (desugarType i) mrtype
-  let appArity = length args
-  argTys <- traverse (desugarType i . Lisp._argType) args
+desugarDefCap (Lisp.DefCap dcn (x:xs) mrtype term _docs _model meta i) = do
+  rtype <- traverse (desugarType i) mrtype
+  args <- traverse (toArg i) (x :| xs)
+  let appArity = NE.length args
   term' <- desugarLispTerm term
+  let bodyLam = Lam AnonLamInfo args term' i
   meta' <- traverse (desugarDefMeta term') meta
-  pure (DefCap dcn appArity argTys rtype term' meta' i)
+  pure (DefCap dcn appArity (NE.toList args) rtype bodyLam meta' i)
 
 
 desugarIfDef
@@ -358,21 +367,18 @@ desugarIfDef
 desugarIfDef = \case
   Lisp.IfDfun (Lisp.IfDefun n margs rty _ _ i) -> IfDfun <$> case margs of
     [] -> do
-      rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) (desugarType i) rty
-      let dty = TyUnit :~> rty'
-      pure $ IfDefun n dty i
+      -- rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) (desugarType i) rty
+      rty' <- traverse (desugarType i) rty
+      pure $ IfDefun n [unitFnArg] rty' i
     _ -> do
-      args <- traverse (enforceArg i) margs
-      argsTys <- traverse (desugarType i . Lisp._argType) args
+      args <- traverse (toArg i) margs
       rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) (desugarType i) rty
-      let dty = foldr TyFun rty' argsTys
-      pure $ IfDefun n dty i
+      pure $ IfDefun n args (Just rty') i
   -- Todo: check managed impl
   Lisp.IfDCap (Lisp.IfDefCap n margs rty _ _ _meta i) -> IfDCap <$> do
-    rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) (desugarType i) rty
-    args <- traverse (enforceArg i) margs
-    argTys <- traverse (desugarType i . Lisp._argType) args
-    pure $ IfDefCap n argTys rty' i
+    rty' <- traverse (desugarType i) rty
+    args <- traverse (toArg i) margs
+    pure $ IfDefCap n args rty' i
   Lisp.IfDConst dc -> IfDConst <$> desugarDefConst dc
   _ -> error "unimplemented: special interface decl forms in desugar"
 
@@ -455,7 +461,7 @@ termSCC currM = conn
       NTopLevel m _ | m == currM ->
         Set.singleton (_nName n)
       _ -> Set.empty
-    Lam _ e _ -> conn e
+    Lam _ _ e _ -> conn e
     Let _ _ e1 e2 _ -> Set.union (conn e1) (conn e2)
     App fn apps _ ->
       Set.union (conn fn) (foldMap conn apps)
@@ -531,34 +537,34 @@ resolveModuleName mn i =
 toFqDep
   :: ModuleName
   -> ModuleHash
-  -> Term.Def name builtin i
-  -> (FullyQualifiedName, Term.Def name builtin i)
+  -> Def name builtin i
+  -> (FullyQualifiedName, Def name builtin i)
 toFqDep modName mhash def = let
-  fqn = FullyQualifiedName modName (Term.defName def) mhash
+  fqn = FullyQualifiedName modName (defName def) mhash
   in (fqn, def)
 
 loadModule'
   :: Monad m
-  => Term.EvalModule builtin info
-  -> Map FullyQualifiedName (Term.EvalDef builtin info)
+  => Module Name builtin info
+  -> Map FullyQualifiedName (Def Name builtin info)
   -> RenamerT m builtin info ()
 loadModule' module_ deps = do
-  let modName = Term._mName module_
-      mhash = Term._mHash module_
-      toDepMap def = (Term.defName def, (NTopLevel modName mhash, Term.defKind def))
-      depMap = Map.fromList $ toDepMap <$> Term._mDefs module_
+  let modName = _mName module_
+      mhash = _mHash module_
+      toDepMap def = (defName def, (NTopLevel modName mhash, defKind def))
+      depMap = Map.fromList $ toDepMap <$> _mDefs module_
   loadModule module_ deps depMap
 
 loadInterface'
   :: Monad m
-  => Term.EvalInterface builtin info
-  -> Map FullyQualifiedName (Term.EvalDef builtin info)
+  => Interface Name builtin info
+  -> Map FullyQualifiedName (Def Name builtin info)
   -> RenamerT m builtin info ()
 loadInterface' iface deps = do
-  let modName = Term._ifName iface
-      mhash = Term._ifHash iface
-      toDepMap def = (Term.defName def, (NTopLevel modName mhash, Term.defKind def))
-      dcDeps = mapMaybe (fmap (Term.DConst) . preview Term._IfDConst) (Term._ifDefns iface)
+  let modName = _ifName iface
+      mhash = _ifHash iface
+      toDepMap def = (defName def, (NTopLevel modName mhash, defKind def))
+      dcDeps = mapMaybe (fmap (DConst) . preview _IfDConst) (_ifDefns iface)
       dconstDeps = Map.fromList $ toDepMap <$> dcDeps
   loadInterface iface deps dconstDeps dcDeps
 
@@ -566,18 +572,16 @@ loadInterface' iface deps = do
 -- including the types of the members
 loadModule
   :: Monad m
-  => Term.EvalModule builtin info
-  -> Map FullyQualifiedName (Term.EvalDef builtin info)
+  => Module Name builtin info
+  -> Map FullyQualifiedName (Def Name builtin info)
   -> Map Text (NameKind, DefKind)
   -> RenamerT m builtin info ()
 loadModule module_ deps depMap = do
-  let modName = Term._mName module_
-  let mhash = Term._mHash module_
-  let memberTerms = Map.fromList (toFqDep modName mhash <$> Term._mDefs module_)
+  let modName = _mName module_
+  let mhash = _mHash module_
+  let memberTerms = Map.fromList (toFqDep modName mhash <$> _mDefs module_)
       allDeps = Map.union memberTerms deps
-      allTyped = fmap Term.defType memberTerms
   rsLoaded %= over loModules (Map.insert modName (ModuleData module_ deps)) . over loAllLoaded (Map.union allDeps)
-  rsLoaded . loAllTyped <>= allTyped
   rsModuleBinds %= Map.insert modName depMap
   rsDependencies %= Set.insert modName
 
@@ -586,21 +590,19 @@ loadModule module_ deps depMap = do
 -- are (For now, while we implement more features) the declared constants.
 loadInterface
   :: Monad m
-  => Term.EvalInterface builtin info
-  -> Map FullyQualifiedName (Term.EvalDef builtin info)
+  => Interface Name builtin info
+  -> Map FullyQualifiedName (Def Name builtin info)
   -> Map Text (NameKind, DefKind)
-  -> [Term.Def Name builtin info]
+  -> [Def Name builtin info]
   -> RenamerT m builtin info ()
 loadInterface iface deps depMap dcDeps = do
-  let ifName = Term._ifName iface
-      ifhash = Term._ifHash iface
-  let memberTerms = Map.fromList (toFqDep ifName ifhash <$> dcDeps)
+  let ifaceName = _ifName iface
+      ifhash = _ifHash iface
+  let memberTerms = Map.fromList (toFqDep ifaceName ifhash <$> dcDeps)
       allDeps = Map.union memberTerms deps
-      allTyped = fmap Term.defType memberTerms
-  rsLoaded %= over loModules (Map.insert ifName (InterfaceData iface deps)) . over loAllLoaded (Map.union allDeps)
-  rsLoaded . loAllTyped <>= allTyped
-  rsModuleBinds %= Map.insert ifName depMap
-  rsDependencies %= Set.insert ifName
+  rsLoaded %= over loModules (Map.insert ifaceName (InterfaceData iface deps)) . over loAllLoaded (Map.union allDeps)
+  rsModuleBinds %= Map.insert ifaceName depMap
+  rsDependencies %= Set.insert ifaceName
 
 -- | Look up a qualified name in the pact db
 -- if it's there, great! We will load the module into the scope of
@@ -618,8 +620,8 @@ lookupModuleMember modName name i = do
   view rePactDb >>= liftRenamerT . (`_readModule` modName) >>= \case
     Just m -> case m of
       ModuleData module_ deps ->
-        let mhash = Term._mHash module_
-            depMap = Map.fromList $ toDepMap mhash <$> Term._mDefs module_
+        let mhash = _mHash module_
+            depMap = Map.fromList $ toDepMap mhash <$> _mDefs module_
         in case Map.lookup name depMap of
           -- Great! The name exists
           -- This, we must include the module in `Loaded`, as well as propagate its deps and
@@ -633,8 +635,8 @@ lookupModuleMember modName name i = do
           Nothing ->
             throwDesugarError (NoSuchModuleMember modName name) i
       InterfaceData iface deps -> do
-        let mhash = Term._ifHash iface
-            dcDeps = mapMaybe (fmap Term.DConst . preview Term._IfDConst) (Term._ifDefns iface)
+        let mhash = _ifHash iface
+            dcDeps = mapMaybe (fmap DConst . preview _IfDConst) (_ifDefns iface)
             dconstDeps = Map.fromList $ toDepMap mhash <$> dcDeps
         case Map.lookup name dconstDeps of
           Just (nk, dk) -> do
@@ -643,7 +645,7 @@ lookupModuleMember modName name i = do
           Nothing -> throwDesugarError (NoSuchModuleMember modName name) i
     Nothing -> throwDesugarError (NoSuchModule modName) i
   where
-  toDepMap mhash def = (Term.defName def, (NTopLevel modName mhash, Term.defKind def))
+  toDepMap mhash def = (defName def, (NTopLevel modName mhash, defKind def))
 
 resolveTyModRef
   :: MonadError (PactError i) m
@@ -670,18 +672,15 @@ renameTerm (Var n i) = resolveName i n >>= \case
     legalVarDefs = [DKDefun, DKDefConst]
   (n', _) -> pure (Var n' i)
 -- Todo: what happens when an argument is shadowed?
-renameTerm (Lam nsts body i) = do
+renameTerm (Lam li nsts body i) = do
   depth <- view reVarDepth
-  let (pns, ts) = NE.unzip nsts
-      len = fromIntegral (NE.length nsts)
+  let len = fromIntegral (NE.length nsts)
       newDepth = depth + len
       ixs = NE.fromList [depth .. newDepth - 1]
-      -- ns = rawParsedName <$> pns
-  let m = Map.fromList $ NE.toList $ NE.zip pns ((,Nothing). NBound <$> ixs)
-      -- ns' = NE.zipWith (\ix n -> Name n (NBound ix)) ixs ns
+  let m = Map.fromList $ NE.toList $ NE.zip (_argName <$> nsts) ((,Nothing). NBound <$> ixs)
   term' <- local (inEnv m newDepth) (renameTerm body)
-  _ <- (traversed . _Just) (resolveTyModRef i) ts
-  pure (Lam (NE.zip pns ts) term' i)
+  _ <- (traversed . argType . _Just) (resolveTyModRef i) nsts
+  pure (Lam li nsts term' i)
   where
   inEnv m depth =
     over reBinds (Map.union m) .
@@ -769,22 +768,22 @@ renameDefun
   :: (MonadError (PactError i) m)
   => Defun ParsedName b' i
   -> RenamerT m b i (Defun Name b' i)
-renameDefun (Defun n dty term i) = do
+renameDefun (Defun n args ret term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
   term' <- local (set reCurrDef (Just DKDefun)) $ renameTerm term
-  pure (Defun n dty term' i)
+  pure (Defun n args ret term' i)
 
 renameReplDefun
   :: (MonadError (PactError i) m)
   => Defun ParsedName b' i
   -> RenamerT m b i (Defun Name b' i)
-renameReplDefun (Defun n dty term i) = do
+renameReplDefun (Defun n args ret term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
   let fqn = FullyQualifiedName replModuleName n replModuleHash
   rsModuleBinds %= Map.insertWith (<>) replModuleName (Map.singleton n (NTopLevel replModuleName replModuleHash, DKDefun))
   rsLoaded . loToplevel %= Map.insert n (fqn, DKDefun)
   term' <- local (set reCurrDef (Just DKDefun)) $ renameTerm term
-  pure (Defun n dty term' i)
+  pure (Defun n args ret term' i)
 
 renameReplDefConst
   :: (MonadError (PactError i) m)
@@ -867,11 +866,11 @@ resolveBare (BareName bn) i = views reBinds (Map.lookup bn) >>= \case
       let mn = ModuleName bn Nothing
       resolveModuleName mn i >>= \case
         ModuleData md _ -> do
-          let implementeds = view Term.mImplemented md
+          let implementeds = view mImplements md
           pure (Name bn (NModRef mn implementeds), Nothing)
         -- todo: error type here
         InterfaceData iface _ ->
-          throwDesugarError (InvalidModuleReference (Term._ifName iface)) i
+          throwDesugarError (InvalidModuleReference (_ifName iface)) i
 
 resolveQualified
   :: (MonadError (PactError i) m)
@@ -926,32 +925,32 @@ checkImplements
   -> [Def name builtin info]
   -> ModuleName
   -> RenamerT m b i ()
-checkImplements i mn defs ifName =
-  use (rsLoaded . loModules . at ifName) >>= \case
+checkImplements i mn defs ifaceName =
+  use (rsLoaded . loModules . at ifaceName) >>= \case
     Just (InterfaceData in' _depmap) ->
-      traverse_ checkImplementedMember (Term._ifDefns in')
+      traverse_ checkImplementedMember (_ifDefns in')
     -- Todo: lift into DesugarError (technically name resolution error but this is fine)
     Just _ -> throwDesugarError (NoSuchInterface mn) i
     Nothing -> view rePactDb >>= liftRenamerT . (`_readModule` mn) >>= \case
       Just (InterfaceData in' depmap) -> do
         loadInterface' in' depmap
-        traverse_ checkImplementedMember (Term._ifDefns in')
+        traverse_ checkImplementedMember (_ifDefns in')
       -- Todo: improve this error, could be "found module, expected interface"
       Just _ -> throwDesugarError (NoSuchInterface mn) i
       Nothing -> throwDesugarError (NoSuchInterface mn) i
   where
   checkImplementedMember = \case
-    Term.IfDConst{} -> pure ()
-    Term.IfDfun ifd ->
-      case find (\df -> Term._ifdName ifd == defName df) defs of
+    IfDConst{} -> pure ()
+    IfDfun ifd ->
+      case find (\df -> _ifdName ifd == defName df) defs of
         Just (Dfun v) ->
-          when (_dfunType v /= Term._ifdType ifd) $ error "BOOM"
+          when (_dfunArgs v /= _ifdArgs ifd || _dfunRType v /= _ifdRType ifd) $ error "function args dont match"
         Just _ -> error "not implemented"
         Nothing -> error "not implemented"
-    Term.IfDCap ifd ->
-      case find (\df -> Term._ifdcName ifd == defName df) defs of
+    IfDCap ifd ->
+      case find (\df -> _ifdcName ifd == defName df) defs of
         Just (DCap v) ->
-          when (_dcapArgTypes v /= Term._ifdcArgTys ifd || _dcapRType v /= Term._ifdcRType ifd) $ error "BOOM"
+          when (_dcapArgs v /= _ifdcArgs ifd || _dcapRType v /= _ifdcRType ifd) $ error "function args dont match"
         Just _ -> error "not implemented"
         Nothing -> error "not implemented"
 
@@ -995,11 +994,11 @@ reStateFromLoaded loaded = RenamerState mbinds loaded Set.empty
   where
   mbind = \case
     ModuleData m _ ->
-      let depNames = (\def -> (Term.defName def, (NTopLevel (Term._mName m) (Term._mHash m), Term.defKind def))) <$> Term._mDefs m
+      let depNames = (\def -> (defName def, (NTopLevel (_mName m) (_mHash m), defKind def))) <$> _mDefs m
       in Map.fromList depNames
     InterfaceData iface _ ->
-      let depNames = Term._dcName <$> mapMaybe (preview Term._IfDConst)  (Term._ifDefns iface)
-      in Map.fromList $ (,(NTopLevel (Term._ifName iface) (Term._ifHash iface), DKDefConst)) <$> depNames
+      let depNames = _dcName <$> mapMaybe (preview _IfDConst)  (_ifDefns iface)
+      in Map.fromList $ (,(NTopLevel (_ifName iface) (_ifHash iface), DKDefConst)) <$> depNames
   mbinds = fmap mbind (_loModules loaded)
 
 loadedBinds :: Loaded b i -> Map Text (NameKind, DefKind)

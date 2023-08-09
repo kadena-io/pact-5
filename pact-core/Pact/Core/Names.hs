@@ -51,7 +51,6 @@ import Data.Word(Word64)
 import Pact.Core.Hash
 import Pact.Core.Pretty(Pretty(..))
 
-
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
   deriving (Eq, Ord, Show)
 

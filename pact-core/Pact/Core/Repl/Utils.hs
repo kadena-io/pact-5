@@ -56,7 +56,7 @@ import Pact.Core.Persistence
 import Pact.Core.Pretty
 import Pact.Core.Gas
 import Pact.Core.Errors
-import qualified Pact.Core.Untyped.Term as Term
+import qualified Pact.Core.IR.Term as Term
 
 import System.Console.Haskeline.Completion
 

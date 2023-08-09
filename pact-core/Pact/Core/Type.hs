@@ -4,6 +4,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE TemplateHaskell #-}
+
 
 module Pact.Core.Type
  ( PrimType(..)
@@ -24,12 +26,13 @@ module Pact.Core.Type
  , renderType
  , renderPred
  , TypeOfDef(..)
+ , Arg(..)
+ , argName
+ , argType
  ) where
 
 import Control.Lens
 import Data.Text(Text)
-import Data.List.NonEmpty(NonEmpty(..))
-import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 
 import Pact.Core.Literal
@@ -83,8 +86,6 @@ data Type n
   -- ^ Type of Guards.
   | TyModRef ModuleName
   -- ^ Module references
-  | TyForall (NonEmpty n) (Type n)
-  -- ^ Universal quantification
   -- TODO: remove?
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
@@ -95,7 +96,6 @@ instance Plated (Type n) where
     TyFun ty ty' -> TyFun <$> f ty <*> f ty'
     TyList ty -> TyList <$> f ty
     TyModRef mn -> pure (TyModRef mn)
-    TyForall ne ty -> TyForall ne <$> f ty
 
 pattern TyInt :: Type n
 pattern TyInt = TyPrim PrimInt
@@ -180,6 +180,12 @@ renderType = T.pack . show . pretty
 renderPred :: (Pretty n) => Pred n -> Text
 renderPred = T.pack . show . pretty
 
+data Arg tv
+  = Arg
+  { _argName :: !Text
+  , _argType :: Maybe (Type tv)
+  } deriving (Show, Eq)
+
 instance Pretty n => Pretty (Pred n) where
   pretty (Pred tc ty) = pretty tc <>  Pretty.angles (pretty ty)
 
@@ -199,11 +205,6 @@ instance Pretty n => Pretty (Type n) where
       liParens t = Pretty.parens (pretty t)
     TyModRef mr ->
       "module" <> Pretty.braces (pretty mr)
-    TyForall as ty ->
-      "∀" <> render (NE.toList as) "*" <> "." <> pretty ty
-      where
-      render xs suffix =
-        Pretty.hsep $ fmap (\n -> Pretty.parens (pretty n <> ":" <+> suffix)) xs
 
 instance Pretty tv => Pretty (TypeScheme tv) where
   pretty (TypeScheme tvs preds ty) =
@@ -217,3 +218,5 @@ instance Pretty tv => Pretty (TypeScheme tv) where
     qual [] = mempty
     qual as =
       Pretty.parens (Pretty.hsep $ Pretty.punctuate "," (pretty <$> as)) <+> "=> "
+
+makeLenses ''Arg

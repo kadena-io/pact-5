@@ -109,10 +109,34 @@ library
     Pact.Core.Syntax.Lisp.LexUtils
     Pact.Core.Syntax.Lisp.Parser
     -- Pact.Core.Repl
+
     -- Core IR modules
     Pact.Core.IR.Term
-    Pact.Core.IR.Typecheck
     Pact.Core.IR.Desugar
+
+    -- Core IR Evaluator modules
+    Pact.Core.IR.Eval.Runtime
+    Pact.Core.IR.Eval.CEK
+    Pact.Core.IR.Eval.RawBuiltin
+
+    -- Pact.Core.Untyped.Eval.Builtin
+
+    -- Repl
+    Pact.Core.Repl.Utils
+    Pact.Core.Repl.Runtime
+    Pact.Core.Repl.Runtime.ReplBuiltin
+    Pact.Core.Repl.Compile
+
+library typed-core
+  import: pact-core-common
+  hs-source-dirs: typed-core
+
+  build-depends:
+    , pact-core
+
+  exposed-modules:
+    -- Typed core typecheck
+    Pact.Core.IR.Typecheck
 
     -- Typed core modules
     Pact.Core.Typed.Typecheck
@@ -126,13 +150,7 @@ library
     Pact.Core.Untyped.Eval.Runtime.CoreBuiltin
     Pact.Core.Untyped.Eval.Runtime.RawBuiltin
     Pact.Core.Untyped.Utils
-    -- Pact.Core.Untyped.Eval.Builtin
 
-    -- Repl
-    Pact.Core.Repl.Utils
-    Pact.Core.Repl.Runtime
-    Pact.Core.Repl.Runtime.ReplBuiltin
-    Pact.Core.Repl.Compile
 
 executable repl
   main-is: pact-core/Pact/Core/Repl.hs

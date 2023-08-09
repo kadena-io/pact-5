@@ -6,11 +6,13 @@
 -- Module      :  Pact.Core.IR.Term
 -- Copyright   :  (C) 2016 Stuart Popejoy
 -- License     :  BSD-style (see the file LICENSE)
--- Maintainer  :  Stuart Popejoy <stuart@kadena.io>, Jose Cardona <jose@kadena.io>
+-- Maintainer  :  Jose Cardona <jose@kadena.io>
 --
--- Our Core IR, which supports let-bound terms for type inference
+-- Our Core IR, which is inspected for static guarantees before interpretation
+-- The core IR manages to
 --
 
+-- Todo: Enumerate imports
 module Pact.Core.IR.Term where
 
 import Control.Lens
@@ -34,7 +36,8 @@ import Pact.Core.Pretty
 data Defun name builtin info
   = Defun
   { _dfunName :: Text
-  , _dfunType :: Type Void
+  , _dfunArgs :: [Arg Void]
+  , _dfunRType :: Maybe (Type Void)
   , _dfunTerm :: Term name builtin info
   , _dfunInfo :: info
   } deriving (Show, Functor)
@@ -51,8 +54,8 @@ data DefCap name builtin info
   = DefCap
   { _dcapName :: Text
   , _dcapAppArity :: Int
-  , _dcapArgTypes :: [Type Void]
-  , _dcapRType :: Type Void
+  , _dcapArgs :: [Arg Void]
+  , _dcapRType :: Maybe (Type Void)
   , _dcapTerm :: Term name builtin info
   , _dcapMeta :: Maybe (DefCapMeta name)
   , _dcapInfo :: info
@@ -74,7 +77,6 @@ defKind = \case
   Dfun{} -> DKDefun
   DConst{} -> DKDefConst
   DCap{} -> DKDefCap
-
 
 ifDefName :: IfDef name builtin i -> Text
 ifDefName = \case
@@ -120,15 +122,16 @@ data Interface name builtin info
 data IfDefun info
   = IfDefun
   { _ifdName :: Text
-  , _ifdType :: Type Void
+  , _ifdArgs :: [Arg Void]
+  , _ifdRType :: Maybe (Type Void)
   , _ifdInfo :: info
   } deriving (Show, Functor)
 
 data IfDefCap info
   = IfDefCap
   { _ifdcName :: Text
-  , _ifdcArgTys :: [Type Void]
-  , _ifdcRType :: Type Void
+  , _ifdcArgs :: [Arg Void]
+  , _ifdcRType :: Maybe (Type Void)
   , _ifdcInfo :: info
   } deriving (Show, Functor)
 
@@ -153,11 +156,19 @@ data ReplTopLevel name builtin info
   deriving (Show, Functor)
 
 
+type EvalTerm b i = Term Name b i
+type EvalDef b i = Def Name b i
+
+data LamInfo
+  = TLLamInfo ModuleName Text
+  | AnonLamInfo
+  deriving Show
+
 -- | Core IR
 data Term name builtin info
   = Var name info
   -- ^ single variables e.g x
-  | Lam (NonEmpty (Text, Maybe (Type Void))) (Term name builtin info) info
+  | Lam LamInfo (NonEmpty (Arg Void)) (Term name builtin info) info
   -- ^ $f = \x.e
   -- Lambdas are named for the sake of the callstack.
   | Let Text (Maybe (Type Void)) (Term name builtin info) (Term name builtin info) info
@@ -187,7 +198,7 @@ data Term name builtin info
 instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
   pretty = \case
     Var name _ -> pretty name
-    Lam ne te _ ->
+    Lam _ ne te _ ->
       parens ("lambda" <+> parens (fold (NE.intersperse ":" (prettyLamArg <$> ne))) <+> pretty te)
     Let name m_ty te te' _ ->
       parens $ "let" <+> parens (pretty name <> prettyTyAnn m_ty <+> pretty te) <+> pretty te'
@@ -212,8 +223,8 @@ instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
       parens ("error" <> pretty txt)
     where
     prettyTyAnn = maybe mempty ((":" <>) . pretty)
-    prettyLamArg (n, arg) =
-      pretty n <> prettyTyAnn arg
+    prettyLamArg (Arg n ty) =
+      pretty n <> prettyTyAnn ty
 
 
 ----------------------------
@@ -222,8 +233,8 @@ instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
 termBuiltin :: Traversal (Term n b i) (Term n b' i) b b'
 termBuiltin f = \case
   Var n i -> pure (Var n i)
-  Lam ne te i ->
-    Lam ne <$> termBuiltin f te <*> pure i
+  Lam li ne te i ->
+    Lam li ne <$> termBuiltin f te <*> pure i
   Let n m_ty te te' i ->
     Let n m_ty <$> termBuiltin f te <*> termBuiltin f te' <*> pure i
   App te ne i ->
@@ -251,7 +262,7 @@ termInfo f = \case
   Var n i -> Var n <$> f i
   Let n mty t1 t2 i ->
     Let n mty t1 t2 <$> f i
-  Lam ns term i -> Lam ns term <$> f i
+  Lam li ns term i -> Lam li ns term <$> f i
   App t1 t2 i -> App t1 t2 <$> f i
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i
@@ -269,7 +280,7 @@ termInfo f = \case
 instance Plated (Term name builtin info) where
   plate f = \case
     Var n i -> pure (Var n i)
-    Lam ns term i -> Lam ns <$> f term <*> pure i
+    Lam li ns term i -> Lam li ns <$> f term <*> pure i
     Let n mty t1 t2 i -> Let n mty <$> f t1 <*> f t2 <*> pure i
     App t1 t2 i -> App <$> f t1 <*> traverse f t2 <*> pure i
     Builtin b i -> pure (Builtin b i)
@@ -286,5 +297,12 @@ instance Plated (Term name builtin info) where
       pure (DynInvoke n t i)
     Error e i -> pure (Error e i)
 
+-- Todo: qualify all of these
+makeLenses ''Module
+makeLenses ''Interface
+makeLenses ''Defun
+makeLenses ''DefConst
+makeLenses ''DefCap
+makePrisms ''Def
 makePrisms ''Term
 makePrisms ''IfDef
