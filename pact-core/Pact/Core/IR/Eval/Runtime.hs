@@ -220,7 +220,7 @@ data BuiltinFn b i m
   { _native :: b
   , _nativeFn :: Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m)
   , _nativeArity :: {-# UNPACK #-} !Int
-  -- , _nativeAppliedArgs :: [CEKValue b i m]
+  , _nativeAppliedArgs :: [CEKValue b i m]
   }
 
 mkBuiltinFn
@@ -229,7 +229,7 @@ mkBuiltinFn
   -> b
   -> BuiltinFn b i m
 mkBuiltinFn fn b =
-  BuiltinFn b fn (builtinArity b)
+  BuiltinFn b fn (builtinArity b) []
 {-# INLINE mkBuiltinFn #-}
 
 data ExecutionMode
@@ -346,7 +346,7 @@ data CEKRuntimeEnv b i m
   }
 
 instance (Show i, Show b) => Show (BuiltinFn b i m) where
-  show (BuiltinFn b _ arity) = unwords
+  show (BuiltinFn b _ arity _) = unwords
     ["(BuiltinFn"
     , show b
     , "#fn"

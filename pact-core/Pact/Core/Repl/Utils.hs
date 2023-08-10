@@ -46,7 +46,7 @@ import Data.Maybe(mapMaybe)
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
-import Text.Megaparsec((<|>))
+import Text.Megaparsec((<|>), (<?>))
 import qualified Text.Megaparsec as MP
 import qualified Text.Megaparsec.Char as MP
 
@@ -117,7 +117,7 @@ data ReplAction
   = RALoad Text
   | RASetLispSyntax
   | RASetNewSyntax
-  | RATypecheck Text
+  -- | RATypecheck Text
   | RASetFlag ReplDebugFlag
   | RADebugAll
   | RADebugNone
@@ -145,15 +145,15 @@ replAction =
   cmdKw kw = MP.chunk kw *> MP.space1
   cmd = do
     _ <- MP.chunk ":"
-    load <|> setLang <|> setFlag <|> tc
+    load <|> setLang <|> setFlag <?> "asdf"
   setFlag =
     cmdKw "debug" *> ((RASetFlag <$> replFlag) <|> (RADebugAll <$ MP.chunk "all") <|> (RADebugNone <$ MP.chunk "none"))
   setLang = do
     cmdKw "syntax"
     (RASetLispSyntax <$ MP.chunk "lisp") <|> (RASetNewSyntax <$ MP.chunk "new")
-  tc = do
-    cmdKw "type"
-    RATypecheck <$> MP.takeRest
+  -- tc = do
+  --   cmdKw "type"
+  --   RATypecheck <$> MP.takeRest
   load = do
     cmdKw "load"
     let c = MP.char '\"'

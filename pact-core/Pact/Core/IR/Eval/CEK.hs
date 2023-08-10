@@ -1,12 +1,10 @@
 module Pact.Core.IR.Eval.CEK where
 
 import Control.Lens
-import Control.Monad(when)
 import Control.Monad.Except
 import Data.Default
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
-import Data.Foldable(foldl')
 import qualified Data.Map.Strict as Map
 import qualified Data.RAList as RAList
 import qualified Data.Text as T
@@ -50,19 +48,6 @@ eval
   -> m (EvalResult b i m)
 eval = evalCEK Mt CEKNoHandler
 
-evalAppFun
-  :: MonadEval b i m
-  => Cont b i m
-  -> CEKErrorHandler b i m
-  -> CEKEnv b i m
-  -> Term Name b i
-  -> m (EvalResult b i m)
-evalAppFun cont handler env = \case
-  v@Var{} -> evalCEK cont handler env v
-  v@Builtin{} -> evalCEK cont handler env v
-  v@Lam{} -> evalCEK cont handler env v
-  _ -> error "not an app form"
-
 evalCEK
   :: (MonadEval b i m)
   => Cont b i m
@@ -91,7 +76,7 @@ evalCEK cont handler _env (Constant l _) = do
   returnCEKValue cont handler (VLiteral l)
 evalCEK cont handler env (App fn args _) = do
   chargeNodeGas AppNode
-  evalAppFun (Args env args cont) handler env fn
+  evalCEK (Args env args cont) handler env fn
 evalCEK cont handler env (Let n ty e1 e2 i) =
   let lam = Lam AnonLamInfo (pure (Arg n ty)) e2 i
   in evalCEK cont handler env (App lam (pure e1) i)
@@ -375,18 +360,26 @@ applyLam
   -> Cont b i m
   -> CEKErrorHandler b i m
   -> m (EvalResult b i m)
-applyLam (C (Closure _li _tys term env)) args cont handler = do
-  -- Todo: stackframe
-  when (length args /= NE.length _tys) $ error "boom invariant broken incorrect app arity"
-  evalCEK cont handler (foldl' (flip RAList.cons) env args) term
-  -- Todo: runtime tc!
-applyLam (N (BuiltinFn _b fn arity)) args cont handler = do
-  when (length args /= arity) $ error "boom invariant broken: native applied with less than needed number of args"
-  fn cont handler args
-  -- | arity - 1 == 0 = do
-  --   chargeNative b
-  --   fn cont handler (reverse (arg:args))
-  -- | otherwise = returnCEKValue cont handler (VNative (BuiltinFn b fn (arity - 1) (arg:args)))
+applyLam (C (Closure li cloargs term env)) args cont handler = apply' env (NE.toList cloargs) args
+  where
+  -- Todo: runtime TC here
+  apply' e (_ty:tys) (x:xs) =
+    apply' (RAList.cons x e) tys xs
+  apply' e [] [] =
+    -- Todo: stack frame here
+    evalCEK cont handler e term
+  apply' e (ty:tys) [] =
+    returnCEKValue cont handler (VClosure (Closure li (ty :| tys) term e))
+  apply' _ [] _ = error "Applying too many arguments to function"
+
+applyLam (N (BuiltinFn b fn arity vs)) args cont handler = apply' arity vs args
+  where
+  apply' !a pa (x:xs)
+    | a <= 0 = error "Applying too many args to native"
+    | otherwise = apply' (a - 1) (x:pa) xs
+  apply' !a pa []
+    | a == 0 = fn cont handler (reverse pa)
+    | otherwise = returnCEKValue cont handler (VNative (BuiltinFn b fn a pa))
 
 failInvariant :: MonadEval b i m => Text -> m a
 failInvariant b =
@@ -401,30 +394,29 @@ failInvariant' b i =
 throwExecutionError' :: (MonadEval b i m) => ExecutionError -> m a
 throwExecutionError' e = throwError (PEExecutionError e def)
 
--- unsafeApplyOne
---   :: MonadEval b i m
---   => CEKValue b i m
---   -> CEKValue b i m
---   -> m (EvalResult b i m)
-unsafeApplyOne :: a
-unsafeApplyOne = error "stub"
--- unsafeApplyOne (VClosure body env) arg = eval (RAList.cons arg env) body
--- unsafeApplyOne (VNative (BuiltinFn b fn arity args)) arg =
---   if arity - 1 <= 0 then fn Mt CEKNoHandler (reverse (arg:args))
---   else pure (EvalValue (VNative (BuiltinFn b fn (arity - 1) (arg:args))))
--- unsafeApplyOne _ _ = failInvariant "Applied argument to non-closure in native"
+unsafeApplyOne
+  :: MonadEval b i m
+  => CEKValue b i m
+  -> CEKValue b i m
+  -> m (EvalResult b i m)
+unsafeApplyOne (VClosure c) arg = do
+  let cont = Fn (C c) mempty [] [] Mt
+  returnCEKValue cont CEKNoHandler arg
+unsafeApplyOne (VNative (BuiltinFn b fn arity args)) arg =
+  if arity - 1 <= 0 then fn Mt CEKNoHandler (reverse (arg:args))
+  else pure (EvalValue (VNative (BuiltinFn b fn (arity - 1) (arg:args))))
+unsafeApplyOne _ _ = failInvariant "Applied argument to non-closure in native"
 
--- unsafeApplyTwo
---   :: MonadEval b i m
---   => CEKValue b i m
---   -> CEKValue b i m
---   -> CEKValue b i m
---   -> m (EvalResult b i m)
-unsafeApplyTwo :: a
-unsafeApplyTwo = error "stub2"
--- unsafeApplyTwo (VClosure (Lam body _) env) arg1 arg2 =
---   eval (RAList.cons arg2 (RAList.cons arg1 env)) body
--- unsafeApplyTwo (VNative (BuiltinFn b fn arity args)) arg1 arg2 =
---   if arity - 2 <= 0 then fn Mt CEKNoHandler (reverse (arg1:arg2:args))
---   else pure $ EvalValue $ VNative $ BuiltinFn b fn (arity - 2) (arg1:arg2:args)
--- unsafeApplyTwo _ _ _ = failInvariant "Applied argument to non-closure in native"
+unsafeApplyTwo
+  :: MonadEval b i m
+  => CEKValue b i m
+  -> CEKValue b i m
+  -> CEKValue b i m
+  -> m (EvalResult b i m)
+unsafeApplyTwo (VClosure c) arg1 arg2 = do
+  let cont = Fn (C c) mempty [] [arg1] Mt
+  returnCEKValue cont CEKNoHandler arg2
+unsafeApplyTwo (VNative (BuiltinFn b fn arity args)) arg1 arg2 =
+  if arity - 2 <= 0 then fn Mt CEKNoHandler (reverse (arg1:arg2:args))
+  else pure $ EvalValue $ VNative $ BuiltinFn b fn (arity - 2) (arg1:arg2:args)
+unsafeApplyTwo _ _ _ = failInvariant "Applied argument to non-closure in native"

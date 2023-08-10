@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Pact.Core.Syntax.Lisp.Parser where
+module Pact.Core.Syntax.Parser where
 
 import Control.Lens(preview, view, _head)
 import Control.Monad(when)
@@ -28,8 +28,8 @@ import Pact.Core.Type(PrimType(..))
 import Pact.Core.Guards
 import Pact.Core.Imports
 import Pact.Core.Errors
-import Pact.Core.Syntax.Lisp.ParseTree
-import Pact.Core.Syntax.Lisp.LexUtils
+import Pact.Core.Syntax.ParseTree
+import Pact.Core.Syntax.LexUtils
 
 
 }
@@ -81,8 +81,6 @@ import Pact.Core.Syntax.Lisp.LexUtils
   emitevent  { PosToken TokenEmitEvent _ }
   step       { PosToken TokenStep _ }
   steprb     { PosToken TokenStepWithRollback _ }
-  tc         { PosToken TokenTypechecks _ }
-  tcfail     { PosToken TokenTypecheckFailure _ }
   '{'        { PosToken TokenOpenBrace _ }
   '}'        { PosToken TokenCloseBrace _ }
   '('        { PosToken TokenOpenParens _ }
@@ -153,8 +151,6 @@ ReplTopLevel :: { ParsedReplTopLevel }
 ReplSpecial :: { SpanInfo -> ReplSpecialForm SpanInfo }
   : load STR BOOLEAN { ReplLoad (getStr $2) $3 }
   | load STR { ReplLoad (getStr $2) False }
-  | tc STR Expr { ReplTypechecks (getStr $2) $3 }
-  | tcfail STR Expr { ReplTypecheckFail (getStr $2) $3 }
 
 Governance :: { Governance Text }
   : StringRaw { KeyGov (KeySetName $1)}

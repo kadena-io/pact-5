@@ -4,7 +4,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE PatternSynonyms #-}
 
-module Pact.Core.Syntax.Lisp.ParseTree where
+module Pact.Core.Syntax.ParseTree where
 
 import Control.Lens hiding (List, op)
 import Data.Foldable(fold)
@@ -316,8 +316,6 @@ data Expr i
 
 data ReplSpecialForm i
   = ReplLoad Text Bool i
-  | ReplTypechecks Text (Expr i) i
-  | ReplTypecheckFail Text (Expr i) i
   deriving Show
 
 data ReplSpecialTL i

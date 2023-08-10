@@ -78,11 +78,6 @@ main = do
               loop
           RASetLispSyntax -> loop
           RASetNewSyntax -> loop
-          RATypecheck inp -> catch' $ do
-            let inp' = T.strip inp
-            out <- lift (interpretExprTypeLisp (T.encodeUtf8 inp'))
-            outputStrLn (show (pretty out))
-            loop
           RASetFlag flag -> do
             lift (replFlags %= Set.insert flag)
             outputStrLn $ unwords ["set debug flag for", prettyReplFlag flag]

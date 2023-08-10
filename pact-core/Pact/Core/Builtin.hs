@@ -433,7 +433,7 @@ data ReplBuiltin b
 instance BuiltinArity b => BuiltinArity (ReplBuiltin b) where
   builtinArity = \case
     RBuiltinWrap b -> builtinArity b
-    RExpect -> 5
+    RExpect -> 3
     RExpectFailure -> 2
     RExpectThat -> 3
     RPrint -> 2

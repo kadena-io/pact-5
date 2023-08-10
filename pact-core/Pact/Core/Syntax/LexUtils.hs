@@ -7,7 +7,7 @@
 {-# LANGUAGE DerivingVia #-}
 
 
-module Pact.Core.Syntax.Lisp.LexUtils where
+module Pact.Core.Syntax.LexUtils where
 
 import Control.Lens hiding (uncons)
 import Control.Monad.Except
@@ -26,7 +26,7 @@ import Pact.Core.Info
 import Pact.Core.Errors
 import Pact.Core.Names
 import Pact.Core.Pretty (Pretty(..))
-import Pact.Core.Syntax.Lisp.ParseTree
+import Pact.Core.Syntax.ParseTree
 
 type ParserT = Either PactErrorI
 type ParsedExpr = Expr SpanInfo
@@ -120,8 +120,6 @@ data Token
   | TokenBindAssign
   -- Repl-specific tokens
   | TokenLoad
-  | TokenTypechecks
-  | TokenTypecheckFailure
   -- Layout
   | TokenEOF
   deriving (Eq, Show)
@@ -312,8 +310,6 @@ renderTokenText = \case
   TokenEOF -> "EOF"
   TokenSuspend -> "suspend"
   TokenLoad -> "load"
-  TokenTypechecks -> "expect-typechecks"
-  TokenTypecheckFailure -> "expect-typecheck-failure"
   TokenWithCapability -> "with-capability"
   TokenRequireCapability -> "require-capability"
   TokenComposeCapability -> "compose-capability"

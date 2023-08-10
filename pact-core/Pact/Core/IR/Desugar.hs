@@ -52,7 +52,7 @@ import Pact.Core.Capabilities
 import Pact.Core.Errors
 import Pact.Core.IR.Term
 
-import qualified Pact.Core.Syntax.Lisp.ParseTree as Lisp
+import qualified Pact.Core.Syntax.ParseTree as Lisp
 
 {- Note on Desugaring + Renaming:
 
@@ -1053,7 +1053,10 @@ runDesugarReplDefun
   -> Loaded reso i
   -> Lisp.Defun i
   -> m (DesugarOutput reso i (Defun Name raw i))
-runDesugarReplDefun _ pdb loaded = runDesugar' pdb loaded . (desugarDefun >=> renameReplDefun)
+runDesugarReplDefun _ pdb loaded =
+  runDesugar' pdb loaded
+  . local (set reCurrModule (Just replModuleName))
+  . (desugarDefun >=> renameReplDefun)
 
 runDesugarReplDefConst
   :: (MonadError (PactError i) m, DesugarBuiltin raw)
@@ -1062,7 +1065,10 @@ runDesugarReplDefConst
   -> Loaded reso i
   -> Lisp.DefConst i
   -> m (DesugarOutput reso i (DefConst Name raw i))
-runDesugarReplDefConst _ pdb loaded = runDesugar' pdb loaded . (desugarDefConst >=> renameReplDefConst)
+runDesugarReplDefConst _ pdb loaded =
+  runDesugar' pdb loaded
+  . local (set reCurrModule (Just replModuleName))
+  . (desugarDefConst >=> renameReplDefConst)
 
 -- runDesugarModule
 --   :: (DesugarTerm term b' i)

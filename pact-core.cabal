@@ -104,10 +104,10 @@ library
     Pact.Core.Capabilities
 
      -- Syntax modules
-    Pact.Core.Syntax.Lisp.ParseTree
-    Pact.Core.Syntax.Lisp.Lexer
-    Pact.Core.Syntax.Lisp.LexUtils
-    Pact.Core.Syntax.Lisp.Parser
+    Pact.Core.Syntax.ParseTree
+    Pact.Core.Syntax.Lexer
+    Pact.Core.Syntax.LexUtils
+    Pact.Core.Syntax.Parser
     -- Pact.Core.Repl
 
     -- Core IR modules
