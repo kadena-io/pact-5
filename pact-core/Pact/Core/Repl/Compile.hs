@@ -141,7 +141,7 @@ interpretReplProgram source = do
       RTLModule m -> do
         let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded loaded)
             mdata = ModuleData m deps'
-        liftIO (_writeModule pdb mdata)
+        liftIO (writeModule pdb (view mName m) mdata)
         let out = "Loaded module " <> renderModuleName (_mName m)
             newLoaded = Map.fromList $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
             loadNewModule =
@@ -187,7 +187,7 @@ interpretReplProgram source = do
       RTLInterface iface -> do
         let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded loaded)
             mdata = InterfaceData iface deps'
-        liftIO (_writeModule pdb mdata)
+        liftIO (writeModule pdb (view ifName iface) mdata)
         let out = "Loaded iface " <> renderModuleName (_ifName iface)
             newLoaded = Map.fromList $ toFqDep (_ifName iface) (_ifHash iface)
                         <$> mapMaybe (fmap DConst . preview _IfDConst) (_ifDefns iface)
@@ -216,7 +216,7 @@ interpretProgram source = do
       TLModule m -> do
         let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded loaded)
             mdata = ModuleData m deps'
-        liftIO (_writeModule pdb mdata)
+        liftIO (writeModule pdb (view mName m) mdata)
         let out = "Loaded module " <> renderModuleName (_mName m)
             newLoaded = Map.fromList $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
             loadNewModule =

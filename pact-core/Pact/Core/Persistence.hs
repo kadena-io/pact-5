@@ -4,6 +4,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 
 
@@ -17,13 +18,14 @@ module Pact.Core.Persistence
  , mockPactDb
  , mdModuleName
  , mdModuleHash
+ , readModule, writeModule
+ , readKeyset, writeKeySet
  ) where
 
 import Control.Lens
 import Data.Text(Text)
 import Data.IORef
 import Data.Map.Strict(Map)
-import Control.Monad.IO.Class
 
 import Pact.Core.Names
 import Pact.Core.IR.Term
@@ -62,6 +64,20 @@ mdModuleHash f = \case
 
 type FQKS = KeySet FullyQualifiedName
 
+-- | Specify key and value types for database domains.
+data Domain k v b i where
+  -- | User tables accept a TableName and map to an 'ObjectMap PactValue'
+  -- UserTables :: !TableName -> Domain RowKey RowData
+  -- | Keysets
+  DKeySets :: Domain KeySetName (KeySet FullyQualifiedName) b i
+  -- | Modules
+  DModules :: Domain ModuleName (ModuleData b i) b i
+  -- | Namespaces
+  -- Namespaces :: Domain NamespaceName (Namespace PactValue)
+  -- | Pacts map to 'Maybe PactExec' where Nothing indicates
+  -- a terminated pact.
+  -- Pacts :: Domain PactId (Maybe PactExec)
+
 data Purity
   -- | Read-only access to systables.
   = PSysOnly
@@ -72,18 +88,43 @@ data Purity
   deriving (Eq,Show,Ord,Bounded,Enum)
 
 -- | Fun-record type for Pact back-ends.
+-- Todo: `Domain` requires sometimes some really annoying type anns,
+-- Do we want to keep this abstraction or go to the monomorphized one?
 data PactDb b i
   = PactDb
-  { _purity :: !Purity
-  , _readModule :: ModuleName -> IO (Maybe (ModuleData b i))
-  -- ^ Look up module by module name
-  , _writeModule :: ModuleData b i -> IO ()
-  -- ^ Save a module
-  , _readKeyset :: KeySetName -> IO (Maybe FQKS)
-  -- ^ Read in a fully resolve keyset
-  , _writeKeyset :: KeySetName -> FQKS -> IO ()
-  -- ^ write in a keyset
+  { _pdbPurity :: !Purity
+  , _pdbRead :: forall k v. Domain k v b i -> k -> IO (Maybe v)
+  , _pdbWrite :: forall k v. Domain k v b i -> k -> v -> IO ()
   }
+
+-- Potentially new Pactdb abstraction
+-- That said: changes in `Purity` that restrict read/write
+-- have to be done for all read functions.
+-- data PactDb b i
+--   = PactDb
+--   { _pdbPrity :: !Purity
+--   , _pdbReadModule :: ModuleName -> IO (Maybe (ModuleData b i))
+--   -- ^ Look up module by module name
+--   , _pdbWriteModule :: ModuleData b i -> IO ()
+--   -- ^ Save a module
+--   , _pdbReadKeyset :: KeySetName -> IO (Maybe FQKS)
+--   -- ^ Read in a fully resolve keyset
+--   , _pdbWriteKeyset :: KeySetName -> FQKS -> IO ()
+--   -- ^ write in a keyset
+--   }
+
+readModule :: PactDb b i -> ModuleName -> IO (Maybe (ModuleData b i))
+readModule pdb mn = _pdbRead pdb DModules mn
+
+writeModule :: PactDb b i -> ModuleName -> ModuleData b i -> IO ()
+writeModule pdb mn md = _pdbWrite pdb DModules mn md
+
+readKeyset :: PactDb b i -> KeySetName -> IO (Maybe FQKS)
+readKeyset pdb ksn = _pdbRead pdb DKeySets ksn
+
+writeKeySet :: PactDb b i -> KeySetName -> FQKS -> IO ()
+writeKeySet pdb ksn ks = _pdbWrite pdb DKeySets ksn ks
+
 
 data Loaded b i
   = Loaded
@@ -101,24 +142,50 @@ instance Semigroup (Loaded b i) where
 instance Monoid (Loaded b i) where
   mempty = Loaded mempty mempty mempty
 
-mockPactDb :: (MonadIO m) => m (PactDb b i)
+mockPactDb :: forall b i. IO (PactDb b i)
 mockPactDb = do
-  refMod <- liftIO $ newIORef Map.empty
-  refKs <- liftIO $ newIORef Map.empty
+  refMod <- newIORef Map.empty
+  refKs <- newIORef Map.empty
   pure $ PactDb
-    { _purity = PImpure
-    , _readModule = liftIO . readMod refMod
-    , _writeModule = liftIO . writeMod refMod
-    , _readKeyset = liftIO . readKS refKs
-    , _writeKeyset = \ksn  -> liftIO . writeKS refKs ksn
+    { _pdbPurity = PImpure
+    , _pdbRead = read' refKs refMod
+    , _pdbWrite = write refKs refMod
+    -- , _readModule = liftIO . readMod refMod
+    -- , _writeModule = liftIO . writeMod refMod
+    -- , _readKeyset = liftIO . readKS refKs
+    -- , _writeKeyset = \ksn  -> liftIO . writeKS refKs ksn
     }
   where
+  read'
+    :: forall k v
+    .  IORef (Map KeySetName FQKS)
+    -> IORef (Map ModuleName (ModuleData b i))
+    -> Domain k v b i
+    -> k
+    -> IO (Maybe v)
+  read' refKs refMod domain k = case domain of
+    DKeySets -> readKS refKs k
+    DModules -> readMod refMod k
+
+  write
+    :: forall k v
+    .  IORef (Map KeySetName FQKS)
+    -> IORef (Map ModuleName (ModuleData b i))
+    -> Domain k v b i
+    -> k
+    -> v
+    -> IO ()
+  write refKs refMod domain k v = case domain of
+    DKeySets -> writeKS refKs k v
+    DModules -> writeMod refMod v
+
   readKS ref ksn = do
     m <- readIORef ref
     pure (Map.lookup ksn m)
 
   writeKS ref ksn ks = modifyIORef' ref (Map.insert ksn ks)
 
+  readMod :: IORef (Map ModuleName (ModuleData b i)) -> ModuleName -> IO (Maybe (ModuleData b i))
   readMod ref mn = do
     m <- readIORef ref
     pure (Map.lookup mn m)

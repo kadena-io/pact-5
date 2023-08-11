@@ -824,7 +824,7 @@ enforceKeysetName
   -> m Bool
 enforceKeysetName ksn = do
   pactDb <- view cekPactDb <$> cekReadEnv
-  liftIO (_readKeyset pactDb ksn) >>= \case
+  liftIO (readKeyset pactDb ksn) >>= \case
     Just ks -> enforceKeyset ks
     Nothing -> failInvariant "No such keyset"
 

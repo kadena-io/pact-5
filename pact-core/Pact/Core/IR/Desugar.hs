@@ -399,7 +399,7 @@ desugarModule
   -> RenamerT m b info (Module ParsedName builtin info)
 desugarModule (Lisp.Module mname mgov extdecls defs _ _ i) = do
   let (imports, blessed, implemented) = splitExts extdecls
-  defs' <- traverse desugarDef (NE.toList defs)
+  defs' <- locally reCurrModule (const (Just mname)) $ traverse desugarDef (NE.toList defs)
   let mhash = ModuleHash (Hash "placeholder")
       mgov' = BN . BareName <$> mgov
   pure $ Module mname mgov' defs' blessed imports implemented mhash i
@@ -514,7 +514,7 @@ resolveModuleName mn i =
   use (rsLoaded . loModules . at mn) >>= \case
     Just md -> pure md
     Nothing ->
-      view rePactDb >>= liftIO . (`_readModule` mn) >>= \case
+      view rePactDb >>= liftIO . (`readModule` mn) >>= \case
       Nothing -> throwDesugarError (NoSuchModule mn) i
       Just md -> case md of
         ModuleData module_ depmap ->
@@ -618,7 +618,7 @@ lookupModuleMember
   -> i
   -> RenamerT m b i (Name, DefKind)
 lookupModuleMember modName name i = do
-  view rePactDb >>= liftIO . (`_readModule` modName) >>= \case
+  view rePactDb >>= liftIO . (`readModule` modName) >>= \case
     Just m -> case m of
       ModuleData module_ deps ->
         let mhash = _mHash module_
@@ -932,7 +932,7 @@ checkImplements i mn defs ifaceName =
       traverse_ checkImplementedMember (_ifDefns in')
     -- Todo: lift into DesugarError (technically name resolution error but this is fine)
     Just _ -> throwDesugarError (NoSuchInterface mn) i
-    Nothing -> view rePactDb >>= liftIO . (`_readModule` mn) >>= \case
+    Nothing -> view rePactDb >>= liftIO . (`readModule` mn) >>= \case
       Just (InterfaceData in' depmap) -> do
         loadInterface' in' depmap
         traverse_ checkImplementedMember (_ifDefns in')

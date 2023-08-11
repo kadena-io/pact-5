@@ -33,15 +33,12 @@ chargeNodeGas :: MonadEval b i m => NodeType -> m ()
 chargeNodeGas nt = do
   gm <- view (cekGasModel . geGasModel . gmNodes) <$> cekReadEnv
   cekChargeGas (gm nt)
-  -- gm <- view (cekGasModel . geGasModel . gmNodes)
-  -- chargeGas (gm nt)
+
 
 chargeNative :: MonadEval b i m => b -> m ()
 chargeNative native = do
   gm <- view (cekGasModel . geGasModel . gmNatives) <$> cekReadEnv
   cekChargeGas (gm native)
-  -- gm <- view (cekGasModel . geGasModel . gmNatives)
-  -- chargeGas (gm native)
 
 -- Todo: exception handling? do we want labels
 -- Todo: `traverse` usage should be perf tested.
@@ -252,9 +249,10 @@ evalCap cont handler env ct@(CapToken fqn args) contbody = do
         Just (DefManaged mdm) -> do
           caps <- useCekState (esCaps . csManaged)
           case mdm of
-            -- | Not automanaged
+            -- | Not automanaged, so it must have a defmeta
             Just (DefManagedMeta cix _) -> do
               let cap = CapToken fqn (filterIndex cix args)
+              -- Find the capability post-filtering
               case find ((==) cap . _mcCap) caps of
                 Nothing -> error "cap not installed"
                 Just managedCap -> case _mcManaged managedCap of
@@ -268,7 +266,9 @@ evalCap cont handler env ct@(CapToken fqn args) contbody = do
                         undefined
                       _ -> error "not a defun"
                   _ -> error "incorrect cap type"
-            Nothing -> error "implement automanaged"
+            Nothing -> error "Todo: implement automanaged"
+              -- case find ((==) ct . _mcCap) caps of
+              -- Just managedCap
         Just DefEvent -> error "defEvent"
         Nothing -> evalCEK cont' handler env' capBody
     Just {} -> error "was not defcap, invariant violated"

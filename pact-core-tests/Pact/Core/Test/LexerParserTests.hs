@@ -4,20 +4,21 @@ import Test.Tasty
 import Test.Tasty.Hedgehog
 import Hedgehog
 import Control.Applicative ((<|>))
-import Data.Text.Prettyprint.Doc
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.ByteString.Char8 as BS
 import Data.Decimal(DecimalRaw(..))
+
 import Pact.Core.Names
-import qualified Pact.Core.Syntax.Lisp.Lexer as Lisp
-import qualified Pact.Core.Syntax.Lisp.LexUtils as Lisp
-import qualified Pact.Core.Syntax.Lisp.ParseTree as Lisp
-import qualified Pact.Core.Syntax.Lisp.Parser as Lisp
-import Pact.Core.Syntax.Lisp.LexUtils (Token(..))
+import qualified Pact.Core.Syntax.Lexer as Lisp
+import qualified Pact.Core.Syntax.LexUtils as Lisp
+import qualified Pact.Core.Syntax.ParseTree as Lisp
+import qualified Pact.Core.Syntax.Parser as Lisp
+import Pact.Core.Syntax.LexUtils (Token(..))
 import Pact.Core.Literal
+import Pact.Core.Pretty
 
 showPretty :: Pretty a => a -> BS.ByteString
 showPretty = BS.pack . show . pretty
@@ -94,8 +95,6 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
           , TokenSuspend
           -- Repl-specific tokens
           , TokenLoad
-          , TokenTypechecks
-          , TokenTypecheckFailure
           ]
 
 lexerRoundtrip :: Property
