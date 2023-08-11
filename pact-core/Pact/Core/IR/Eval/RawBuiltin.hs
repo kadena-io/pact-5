@@ -23,13 +23,14 @@ module Pact.Core.IR.Eval.RawBuiltin
 -- CEK runtime for our IR term
 --
 
+import Control.Lens hiding (from, to, op)
 import Control.Monad(when)
-
 import Data.Bits
 import Data.Decimal(roundTo', Decimal)
 import Data.Text(Text)
 import Data.Vector(Vector)
 import Data.List(intersperse)
+import Control.Monad.IO.Class
 import qualified Data.Vector as V
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -47,6 +48,7 @@ import Pact.Core.Pretty(pretty)
 import Pact.Core.Guards
 import Pact.Core.Type(Arg(..))
 import Pact.Core.PactValue
+import Pact.Core.Persistence
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
@@ -784,17 +786,47 @@ coreB64Decode = mkBuiltinFn \cont handler -> \case
 coreEnforceGuard :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
 coreEnforceGuard = mkBuiltinFn \cont handler -> \case
   [VGuard g] -> case g of
-      GKeyset _ks -> undefined
-      GKeySetRef _ksn -> undefined
+      GKeyset ks -> do
+        cond <- enforceKeyset ks
+        if cond then returnCEKValue cont handler VUnit
+        else returnCEK cont handler (VError "enforce keyset failure")
+      GKeySetRef ksn -> do
+        cond <- enforceKeysetName ksn
+        if cond then returnCEKValue cont handler VUnit
+        else returnCEK cont handler (VError "enforce keyset failure")
       GUserGuard ug -> runUserGuard cont handler ug
   _ -> failInvariant "enforce-guard"
 
 
-
+enforceKeyset :: MonadEval b i m => KeySet FullyQualifiedName -> m Bool
 enforceKeyset (KeySet kskeys ksPred) = do
-  sigs <- Map.filterWithKey matchKey <$> viewCEKEnv cekMsgSigs
-  undefined sigs
+  sigs <- Map.filterWithKey matchKey . view cekMsgSigs <$> cekReadEnv
+  runPred (Map.size sigs)
+  where
+  matchKey k _ = k `elem` kskeys
+  atLeast t m = m >= t
+  -- elide pk
+  --   | T.length pk < 8 = pk
+  --   | otherwise = T.take 8 pk <> "..."
+  count = Set.size kskeys
+  -- failed = "Keyset failure"
+  runPred matched =
+    case ksPred of
+      KeysAll -> run atLeast
+      KeysAny -> run (\_ m -> atLeast 1 m)
+      Keys2 -> run (\_ m -> atLeast 2 m)
+    where
+    run p = pure (p count matched)
 
+enforceKeysetName
+  :: MonadEval b i m
+  => KeySetName
+  -> m Bool
+enforceKeysetName ksn = do
+  pactDb <- view cekPactDb <$> cekReadEnv
+  liftIO (_readKeyset pactDb ksn) >>= \case
+    Just ks -> enforceKeyset ks
+    Nothing -> failInvariant "No such keyset"
 
 runUserGuard
   :: MonadEval b i m

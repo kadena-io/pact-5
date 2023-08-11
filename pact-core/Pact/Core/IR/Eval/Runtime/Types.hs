@@ -26,9 +26,8 @@ module Pact.Core.IR.Eval.Runtime.Types
  , cekLoaded
  , cekGasModel
  , cekMHashes, cekMsgSigs
-
+ , cekPactDb
  , pactToCEKValue
-
  , CEKErrorHandler(..)
  , MonadEvalEnv(..)
  , MonadEvalState(..)
@@ -93,6 +92,7 @@ import Pact.Core.Hash
 import Pact.Core.IR.Term
 import Pact.Core.Literal
 import Pact.Core.Type
+import Pact.Core.Persistence
 import qualified Pact.Core.Pretty as P
 
 
@@ -179,7 +179,7 @@ data EvalState b i
   , _esInCap :: Bool
   } deriving Show
 
-type MonadEval b i m = (MonadEvalEnv b i m, MonadEvalState b i m, MonadError (PactError i) m, Default i)
+type MonadEval b i m = (MonadEvalEnv b i m, MonadEvalState b i m, MonadError (PactError i) m, MonadIO m, Default i)
 
 class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
   cekReadEnv :: m (CEKRuntimeEnv b i m)
@@ -326,6 +326,7 @@ data CEKRuntimeEnv b i m
   , _cekLoaded :: CEKTLEnv b i
   , _cekMHashes :: Map ModuleName ModuleHash
   , _cekMsgSigs :: Map PublicKeyText (Set CapToken)
+  , _cekPactDb :: PactDb b i
   --   _cekGas :: IORef Gas
   -- , _cekEvalLog :: IORef (Maybe [(Text, Gas)])
   -- , _ckeData :: EnvData PactValue

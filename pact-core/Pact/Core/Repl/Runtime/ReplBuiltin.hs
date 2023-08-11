@@ -10,7 +10,7 @@ import qualified Data.Text as T
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
-import Pact.Core.Gas
+-- import Pact.Core.Gas
 -- import Pact.Core.Errors
 
 import Pact.Core.IR.Eval.Runtime
@@ -132,13 +132,13 @@ replRawBuiltinRuntime = \case
   RExpectThat -> coreExpectThat RExpectThat
   RPrint -> corePrint RPrint
 
-defaultReplState :: Default i => ReplEvalState (ReplBuiltin RawBuiltin) i
-defaultReplState = ReplEvalState env (EvalState (CapState [] mempty) [] [] False)
-  where
-  env =
-    CEKRuntimeEnv
-    { _cekBuiltins = replRawBuiltinRuntime
-    , _cekLoaded = mempty
-    , _cekGasModel = freeGasEnv
-    , _cekMHashes = mempty
-    , _cekMsgSigs = mempty }
+-- defaultReplState :: Default i => ReplEvalState (ReplBuiltin RawBuiltin) i
+-- defaultReplState = ReplEvalState env (EvalState (CapState [] mempty) [] [] False)
+--   where
+--   env =
+--     CEKRuntimeEnv
+--     { _cekBuiltins = replRawBuiltinRuntime
+--     , _cekLoaded = mempty
+--     , _cekGasModel = freeGasEnv
+--     , _cekMHashes = mempty
+--     , _cekMsgSigs = mempty }

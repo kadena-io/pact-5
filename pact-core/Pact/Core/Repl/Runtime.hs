@@ -26,13 +26,13 @@ import Pact.Core.Gas
 import Pact.Core.Errors
 
 import Pact.Core.IR.Term
-import Pact.Core.IR.Eval.Runtime
+import Pact.Core.IR.Eval.Runtime hiding (EvalEnv(..))
 import Pact.Core.IR.Eval.CEK
 
 data ReplEvalEnv b i
   = ReplEvalEnv
-  { _emGas :: IORef Gas
-  , _emGasLog :: IORef (Maybe [(Text, Gas)])
+  { _reGas :: IORef Gas
+  , _reGasLog :: IORef (Maybe [(Text, Gas)])
   }
 
 data ReplEvalState b i
@@ -62,21 +62,19 @@ makeLenses ''ReplEvalState
 instance MonadEvalEnv b i (ReplEvalM b i) where
   cekReadEnv = use reEnv
   cekLogGas msg g = do
-    r <- view emGasLog
+    r <- view reGasLog
     liftIO $ modifyIORef' r (fmap ((msg, g):))
   cekChargeGas g = do
-    r <- view emGas
+    r <- view reGas
     liftIO (modifyIORef' r (<> g))
 
 instance MonadEvalState b i (ReplEvalM b i) where
-  setCekState f s =
-    reState %= set f s
-  modifyCEKState f g =
-    reState %= over f g
-  useCekState f =
-    uses reState (view f)
-  usesCekState f g =
-    uses reState (views f g)
+  getCEKState = use reState
+  modifyCEKState f =
+    reState %= f
+  putCEKState s =
+    reState .= s
+
 
 
 

@@ -1,4 +1,5 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Pact.Core.IR.Eval.CEK where
 
@@ -7,6 +8,7 @@ import Control.Monad.Except
 import Data.Default
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
+import Data.Foldable(find)
 import qualified Data.Map.Strict as Map
 import qualified Data.RAList as RAList
 import qualified Data.Text as T
@@ -205,6 +207,26 @@ pactValueToCEK = \case
 
 -- usesCekState :: (MonadEvalState b i m) => Lens' (EvalState b i) s -> (s -> s') -> m s'
 -- usesCekState l f = views l f <$> getCEKState
+
+
+-- getAllStackCaps
+--   :: MonadEval b i m
+--   => m (S.Set CapToken)
+-- getAllStackCaps = do
+--   S.fromList . concatMap capToList <$> useCekState (esCaps . csSlots)
+--   where
+--   capToList (CapSlot c cs) = c:cs
+
+-- checkSigCaps
+--   :: MonadEval b i m
+--   => Map.Map PublicKeyText (S.Set CapToken)
+--   -> m (Map.Map PublicKeyText (S.Set CapToken))
+-- checkSigCaps sigs = do
+--   granted <- getAllStackCaps
+--   pure $ Map.filter (match granted) sigs
+--   where
+--   match granted sigCaps =
+--     S.null sigCaps || not (S.null (S.intersection granted sigCaps))
 -- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -224,10 +246,42 @@ evalCap cont handler env ct@(CapToken fqn args) contbody = do
       (esCaps . csSlots) %%= (CapSlot ct []:)
       let (env', capBody) = applyCapBody args (_dcapTerm d)
           cont' = CapBodyC env contbody cont
-      evalCEK cont' handler env' capBody
+      -- Todo: horrible holy crap
+      case _dcapMeta d of
+        -- Managed capability, so we should look for it in the set of csmanaged
+        Just (DefManaged mdm) -> do
+          caps <- useCekState (esCaps . csManaged)
+          case mdm of
+            -- | Not automanaged
+            Just (DefManagedMeta cix _) -> do
+              let cap = CapToken fqn (filterIndex cix args)
+              case find ((==) cap . _mcCap) caps of
+                Nothing -> error "cap not installed"
+                Just managedCap -> case _mcManaged managedCap of
+                  ManagedParam mpfqn pv managedIx -> do
+                    lookupFqName mpfqn >>= \case
+                      Just (Dfun dfun) -> do
+                        mparam <- maybe (error "fatal: no param") pure (args ^? ix managedIx)
+                        result <- evaluate (_dfunTerm dfun) pv mparam
+                        let mcM = ManagedParam mpfqn result managedIx
+                        esCaps . csManaged %%= S.union (S.singleton (set mcManaged mcM managedCap))
+                        undefined
+                      _ -> error "not a defun"
+                  _ -> error "incorrect cap type"
+            Nothing -> error "implement automanaged"
+        Just DefEvent -> error "defEvent"
+        Nothing -> evalCEK cont' handler env' capBody
     Just {} -> error "was not defcap, invariant violated"
     Nothing -> error "No such def"
   where
+  evaluate term managed value = case term of
+    Lam li lamargs body _ -> do
+      let clo = Closure li (_argType <$> lamargs) body mempty
+      res <- applyLam (C clo) [pactToCEKValue managed, pactToCEKValue value] Mt CEKNoHandler
+      case res of
+        EvalValue out -> cekToPactValue out
+        _ -> error "did not resurn a value"
+    _t -> failInvariant "mgr function was not a lambda"
   -- Todo: typecheck arg here
   -- Todo: definitely a bug if a cap has a lambda as a body
   applyCapBody bArgs (Lam _ _lamArgs body _) = (RAList.fromList (fmap pactToCEKValue (reverse bArgs)), body)

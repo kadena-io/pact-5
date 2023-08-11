@@ -105,7 +105,7 @@ data ReplState b
   = ReplState
   { _replFlags :: Set ReplDebugFlag
   , _replLoaded :: Loaded b SpanInfo
-  , _replPactDb :: PactDb (ReplM b) b SpanInfo
+  , _replPactDb :: PactDb b SpanInfo
   , _replGas :: IORef Gas
   , _replEvalLog :: IORef (Maybe [(Text, Gas)])
   }

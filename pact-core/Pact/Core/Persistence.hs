@@ -72,16 +72,16 @@ data Purity
   deriving (Eq,Show,Ord,Bounded,Enum)
 
 -- | Fun-record type for Pact back-ends.
-data PactDb m b i
+data PactDb b i
   = PactDb
   { _purity :: !Purity
-  , _readModule :: ModuleName -> m (Maybe (ModuleData b i))
+  , _readModule :: ModuleName -> IO (Maybe (ModuleData b i))
   -- ^ Look up module by module name
-  , _writeModule :: ModuleData b i -> m ()
+  , _writeModule :: ModuleData b i -> IO ()
   -- ^ Save a module
-  , _readKeyset :: KeySetName -> m (Maybe FQKS)
+  , _readKeyset :: KeySetName -> IO (Maybe FQKS)
   -- ^ Read in a fully resolve keyset
-  , _writeKeyset :: KeySetName -> FQKS -> m ()
+  , _writeKeyset :: KeySetName -> FQKS -> IO ()
   -- ^ write in a keyset
   }
 
@@ -101,7 +101,7 @@ instance Semigroup (Loaded b i) where
 instance Monoid (Loaded b i) where
   mempty = Loaded mempty mempty mempty
 
-mockPactDb :: (MonadIO m1, MonadIO m2) => m1 (PactDb m2 b i)
+mockPactDb :: (MonadIO m) => m (PactDb b i)
 mockPactDb = do
   refMod <- liftIO $ newIORef Map.empty
   refKs <- liftIO $ newIORef Map.empty
