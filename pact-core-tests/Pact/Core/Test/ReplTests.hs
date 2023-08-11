@@ -18,7 +18,7 @@ import Pact.Core.Gas
 import Pact.Core.Literal
 import Pact.Core.Persistence
 
-import Pact.Core.Untyped.Eval.Runtime
+import Pact.Core.IR.Eval.Runtime
 
 import Pact.Core.Repl.Utils
 import Pact.Core.Repl.Compile

@@ -79,6 +79,8 @@ resolveTerm = \case
     solveOverload i bs tys preds
   Try e1 e2 i ->
     Try <$> resolveTerm e1 <*> resolveTerm e2 <*> pure i
+  CapabilityForm cf i ->
+    CapabilityForm <$> traverse resolveTerm cf <*> pure i
   DynInvoke te t i ->
     DynInvoke <$> resolveTerm te <*> pure t <*> pure i
   TyAbs ns term i ->
@@ -358,6 +360,9 @@ solveCoreOverload i b tys preds = case b of
     pure (Builtin B64Decode i)
   RawStrToList ->
     pure (Builtin StrToList i)
+  RawReadKeyset -> pure (Builtin ReadKeyset i)
+  RawEnforceGuard -> pure (Builtin EnforceGuard i)
+  RawKeysetRefGuard -> pure (Builtin KeysetRefGuard i)
 
 singlePred :: [t] -> i -> (t -> OverloadM i a) -> String -> OverloadM i a
 singlePred preds i f msg = case preds of
@@ -380,6 +385,13 @@ resolveDefConst (DefConst dname ty term info) = do
   term' <- resolveTerm term
   pure (DefConst dname ty term' info)
 
+resolveDefCap
+  :: SolveOverload raw reso
+  => OverloadedDefCap tyname raw info
+  -> OverloadM info (DefCap Name tyname reso info)
+resolveDefCap (DefCap name arity args rty body m_dcm info) =
+  DefCap name arity args rty <$> resolveTerm body <*> pure m_dcm <*> pure info
+
 -- resolveDefCap
 --   :: OverloadedDefCap RawBuiltin info
 --   -> OverloadM (DefCap Name Void CoreBuiltin info)
@@ -395,6 +407,7 @@ resolveDef
 resolveDef = \case
   Dfun d -> Dfun <$> resolveDefun d
   DConst d -> DConst <$> resolveDefConst d
+  DCap d -> DCap <$> resolveDefCap d
 
 resolveIfDef
   :: SolveOverload raw reso
@@ -404,6 +417,7 @@ resolveIfDef = \case
   IfDfun df -> pure (IfDfun df)
   IfDConst dc ->
     IfDConst <$> resolveDefConst dc
+  IfDCap d -> pure (IfDCap d)
 
 
 resolveModule

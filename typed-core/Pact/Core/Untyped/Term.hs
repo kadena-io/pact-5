@@ -8,14 +8,17 @@
 module Pact.Core.Untyped.Term
  ( Defun(..)
  , DefConst(..)
+ , DefCap(..)
  , Def(..)
  , defType
  , defName
  , defTerm
+ , defKind
  , ifDefName
  , Module(..)
  , Interface(..)
  , IfDefun(..)
+ , IfDefCap(..)
  , IfDef(..)
  , TopLevel(..)
  , ReplTopLevel(..)
@@ -36,12 +39,15 @@ module Pact.Core.Untyped.Term
  , mDefs
  , mBlessed
  , mImports
- , mImplemented
+ , mImplements
  , mHash
+ , mGovernance
+ , mInfo
  -- Interface lenses
  , ifName
  , ifDefns
  , ifHash
+ , ifInfo
  , findIfDef
  , _IfDfun
  , _IfDConst
@@ -59,6 +65,8 @@ import Pact.Core.Names
 import Pact.Core.Type
 import Pact.Core.Imports
 import Pact.Core.Hash
+import Pact.Core.Guards
+import Pact.Core.Capabilities
 import Pact.Core.Pretty(Pretty(..), pretty, (<+>))
 
 import qualified Pact.Core.Pretty as Pretty
@@ -80,43 +88,71 @@ data DefConst name builtin info
   , _dcInfo :: info
   } deriving Show
 
+data DefCap name builtin info
+  = DefCap
+  { _dcapName :: Text
+  , _dcapAppArity :: Int
+  , _dcapArgTypes :: [Type Void]
+  , _dcapRType :: Type Void
+  , _dcapTerm :: Term name builtin info
+  , _dcapMeta :: Maybe (DefCapMeta name)
+  , _dcapInfo :: info
+  } deriving Show
+
 data Def name builtin info
   = Dfun (Defun name builtin info)
   | DConst (DefConst name builtin info)
+  | DCap (DefCap name builtin info)
   deriving Show
 
 -- DCap (DefCap name builtin info)
 -- DPact (DefPact name builtin info)
 -- DSchema (DefSchema name info)
 -- DTable (DefTable name info)
-defType :: Def name builtin info -> Type Void
+
+-- Todo: Remove this, not all top level defs have a proper
+-- associated type, and DCap types are w holly irrelevant, we cannot simply
+-- call them, they can only be evaluated within `with-capability`.
+defType :: Def name builtin info -> TypeOfDef Void
 defType = \case
-  Dfun d -> _dfunType d
-  DConst d -> _dcType d
+  Dfun d -> DefunType (_dfunType d)
+  DConst d -> DefunType $ _dcType d
+  DCap d -> DefcapType (_dcapArgTypes d) (_dcapRType d)
 
 defName :: Def name builtin i -> Text
 defName = \case
   Dfun d -> _dfunName d
   DConst d -> _dcName d
+  DCap d -> _dcapName d
+
+defKind :: Def name builtin i -> DefKind
+defKind = \case
+  Dfun _ -> DKDefun
+  DConst _ -> DKDefConst
+  DCap _ -> DKDefCap
 
 ifDefName :: IfDef name builtin i -> Text
 ifDefName = \case
   IfDfun ifd -> _ifdName ifd
   IfDConst dc -> _dcName dc
+  IfDCap d -> _ifdcName d
 
 defTerm :: Def name builtin info -> Term name builtin info
 defTerm = \case
   Dfun d -> _dfunTerm d
   DConst d -> _dcTerm d
+  DCap d -> _dcapTerm d
 
 data Module name builtin info
   = Module
   { _mName :: ModuleName
+  , _mGovernance :: Governance name
   , _mDefs :: [Def name builtin info]
   , _mBlessed :: !(Set.Set ModuleHash)
   , _mImports :: [Import]
-  , _mImplemented :: [ModuleName]
+  , _mImplements :: [ModuleName]
   , _mHash :: ModuleHash
+  , _mInfo :: info
   } deriving Show
 
 data Interface name builtin info
@@ -124,6 +160,7 @@ data Interface name builtin info
   { _ifName :: ModuleName
   , _ifDefns :: [IfDef name builtin info]
   , _ifHash :: ModuleHash
+  , _ifInfo :: info
   } deriving Show
 
 data IfDefun info
@@ -133,9 +170,18 @@ data IfDefun info
   , _ifdInfo :: info
   } deriving Show
 
+data IfDefCap info
+  = IfDefCap
+  { _ifdcName :: Text
+  , _ifdcArgTys :: [Type Void]
+  , _ifdcRType :: Type Void
+  , _ifdcInfo :: info
+  } deriving (Show, Functor)
+
 data IfDef name builtin info
   = IfDfun (IfDefun info)
   | IfDConst (DefConst name builtin info)
+  | IfDCap (IfDefCap info)
   deriving Show
 
 data TopLevel name builtin info
@@ -175,6 +221,8 @@ data Term name builtin info
   -- ^ try (catch expr) (try-expr)
   | DynInvoke (Term name builtin info) Text info
   -- ^ dynamic module reference invocation m::f
+  | CapabilityForm (CapForm name (Term name builtin info)) info
+  -- ^ Capability
   | Error Text info
   -- ^ Error catching
   deriving (Show, Functor, Foldable, Traversable)
@@ -209,6 +257,8 @@ fromIRTerm = \case
     Try (fromIRTerm e1) (fromIRTerm e2) i
   IR.DynInvoke n t i ->
     DynInvoke (fromIRTerm n) t i
+  IR.CapabilityForm cf i ->
+    CapabilityForm (fmap fromIRTerm cf) i
   IR.Error e i ->
     Error e i
 
@@ -222,11 +272,19 @@ fromIRIfDefun :: IR.IfDefun info -> IfDefun info
 fromIRIfDefun (IR.IfDefun dfn ty i) =
   IfDefun dfn ty i
 
+fromIRIfDefCap :: IR.IfDefCap info -> IfDefCap info
+fromIRIfDefCap (IR.IfDefCap dfn argtys rty i) =
+  IfDefCap dfn argtys rty i
+
 fromIRDConst
   :: IR.DefConst name builtin info
   -> DefConst name builtin info
 fromIRDConst (IR.DefConst n ty term i) =
   DefConst n (maybe TyUnit (fmap absurd) ty) (fromIRTerm term) i
+
+fromIRDCap :: IR.DefCap name builtin info -> DefCap name builtin info
+fromIRDCap (IR.DefCap name arity argtys rtype body meta i) =
+  DefCap  name arity argtys rtype (fromIRTerm body) meta i
 
 fromIRDef
   :: IR.Def name builtin info
@@ -234,7 +292,7 @@ fromIRDef
 fromIRDef = \case
   IR.Dfun d -> Dfun (fromIRDefun d)
   IR.DConst d -> DConst (fromIRDConst d)
-  -- IR.DCap d -> DCap (fromIRDCap d)
+  IR.DCap d -> DCap (fromIRDCap d)
 
 fromIRIfDef
   :: IR.IfDef name builtin info
@@ -242,18 +300,19 @@ fromIRIfDef
 fromIRIfDef = \case
   IR.IfDfun d -> IfDfun (fromIRIfDefun d)
   IR.IfDConst d -> IfDConst (fromIRDConst d)
+  IR.IfDCap d -> IfDCap (fromIRIfDefCap d)
 
 fromIRModule
   :: IR.Module name builtin info
   -> Module name builtin info
-fromIRModule (IR.Module mn defs blessed imports implements hs) =
-  Module mn (fromIRDef <$> defs) blessed imports implements hs
+fromIRModule (IR.Module mn gov defs blessed imports implements hs i) =
+  Module mn gov (fromIRDef <$> defs) blessed imports implements hs i
 
 fromIRInterface
   :: IR.Interface name builtin info
   -> Interface name builtin info
-fromIRInterface (IR.Interface ifn ifdefs ifhash) =
-  Interface ifn (fromIRIfDef <$> ifdefs) ifhash
+fromIRInterface (IR.Interface ifn ifdefs ifhash i) =
+  Interface ifn (fromIRIfDef <$> ifdefs) ifhash i
 
 fromIRTopLevel
   :: IR.TopLevel name builtin info
@@ -298,6 +357,7 @@ instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
       Pretty.parens ("try" <+> pretty e1 <+> pretty e2)
     DynInvoke n t _ ->
       pretty n <> "::" <> pretty t
+    CapabilityForm _ _ -> error "pretty capform"
     Error e _ ->
       Pretty.parens ("error \"" <> pretty e <> "\"")
     -- ObjectLit (Map.toList -> obj) _ ->
@@ -326,6 +386,8 @@ termInfo f = \case
   Try e1 e2 i ->
     Try e1 e2 <$> f i
   DynInvoke n t i -> DynInvoke n t <$> f i
+  CapabilityForm cf i ->
+    CapabilityForm cf <$> f i
   Error e i ->
     Error e <$> f i
 

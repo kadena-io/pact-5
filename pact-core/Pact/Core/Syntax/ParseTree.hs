@@ -4,7 +4,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE PatternSynonyms #-}
 
-module Pact.Core.Syntax.Lisp.ParseTree where
+module Pact.Core.Syntax.ParseTree where
 
 import Control.Lens hiding (List, op)
 import Data.Foldable(fold)
@@ -69,7 +69,6 @@ instance Pretty Type where
     TyList t -> brackets (pretty t)
     TyModRef mn -> "module" <> braces (pretty mn)
     TyPolyList -> "list"
-    TyGuard -> "guard"
     TyKeyset -> "keyset"
     TyObject qn -> "object" <> braces (pretty qn)
     TyPolyObject -> "object"
@@ -197,6 +196,7 @@ data Module i
   , _mDefs :: NonEmpty (Def i)
   , _mDoc :: Maybe Text
   , _mModel :: [DefProperty i]
+  , _mInfo :: i
   } deriving Show
 
 data TopLevel i
@@ -211,6 +211,7 @@ data Interface i
   , _ifDefns :: [IfDef i]
   , _ifDocs :: Maybe Text
   , _ifModel :: Maybe [Expr i]
+  , _ifInfo :: i
   } deriving Show
 
 data IfDefun i
@@ -286,10 +287,18 @@ instance Pretty (Binder i) where
   pretty (Binder ident ty e) =
     parens $ pretty ident <> maybe mempty ((":" <>) . pretty) ty <+> pretty e
 
+data CapForm i
+  = WithCapability ParsedName [Expr i] (Expr i)
+  | RequireCapability ParsedName [Expr i]
+  | ComposeCapability ParsedName [Expr i]
+  | InstallCapability ParsedName [Expr i]
+  | EmitEvent ParsedName [Expr i]
+  deriving (Show, Eq, Functor)
+
 data Expr i
   = Var ParsedName i
   | LetIn (NonEmpty (Binder i)) (Expr i) i
-  | Lam [(Text, Maybe Type)] (Expr i) i
+  | Lam [MArg] (Expr i) i
   | If (Expr i) (Expr i) (Expr i) i
   | App (Expr i) [Expr i] i
   | Block (NonEmpty (Expr i)) i
@@ -301,13 +310,12 @@ data Expr i
   | DynAccess (Expr i) Text i
   | Object [(Field, Expr i)] i
   | Binding [(Field, MArg)] [Expr i] i
+  | CapabilityForm (CapForm i) i
   | Error Text i
   deriving (Show, Eq, Functor)
 
 data ReplSpecialForm i
   = ReplLoad Text Bool i
-  | ReplTypechecks Text (Expr i) i
-  | ReplTypecheckFail Text (Expr i) i
   deriving Show
 
 data ReplSpecialTL i
@@ -348,6 +356,8 @@ termInfo f = \case
     Constant l <$> f i
   Try e1 e2 i ->
     Try e1 e2 <$> f i
+  CapabilityForm e i ->
+    CapabilityForm e <$> f i
   Error t i ->
     Error t <$> f i
   Binding t e i ->
@@ -381,12 +391,26 @@ instance Pretty (Expr i) where
       pretty e <> "::" <> pretty f
     Suspend e _ ->
       parens ("suspend" <+> pretty e)
+    CapabilityForm c _ -> case c of
+      WithCapability pn exs ex ->
+        parens ("with-capability" <+> capApp pn exs <+> pretty ex)
+      RequireCapability pn exs ->
+        parens ("require-capability" <+> capApp pn exs)
+      ComposeCapability pn exs ->
+        parens ("compose-capability" <+> capApp pn exs)
+      InstallCapability pn exs ->
+        parens ("install-capability" <+> capApp pn exs)
+      EmitEvent pn exs ->
+        parens ("require-capability" <+> capApp pn exs)
+      where
+      capApp pn exns =
+        parens (pretty pn <+> hsep (pretty <$> exns))
     Object m _ ->
       braces (hsep (punctuate "," (prettyObj m)))
     Binding{} -> error "boom"
     where
     prettyObj = fmap (\(n, k) -> dquotes (pretty n) <> ":" <> pretty k)
-    renderLamPair (n, mt) = case mt of
+    renderLamPair (MArg n mt) = case mt of
       Nothing -> pretty n
       Just t -> pretty n <> ":" <> pretty t
     renderLamTypes = fold . intersperse " " . fmap renderLamPair

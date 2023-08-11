@@ -18,15 +18,15 @@ module Pact.Core.Hash
 , hashToText
 , verifyHash
 , initialHash
-, hashLength
-, TypedHash(..)
-, toUntypedHash, fromUntypedHash
-, HashAlgo(..)
-, PactHash
+-- , hashLength
+-- , TypedHash(..)
+-- , toUntypedHash, fromUntypedHash
+-- , HashAlgo(..)
+-- , PactHash
 , pactHash
 , pactInitialHash
 , pactHashLength
-, typedHashToText
+-- , typedHashToText
 , toB64UrlUnpaddedText
 , fromB64UrlUnpaddedText
 ) where
@@ -35,10 +35,7 @@ import Control.DeepSeq
 import Data.ByteString (ByteString)
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
-import Data.Reflection
-import Data.Proxy
 import Data.Word
-import GHC.Generics
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base64.URL as B64URL
@@ -47,7 +44,7 @@ import qualified Data.Text.Encoding as T
 import qualified Data.ByteArray as ByteArray
 import qualified Crypto.Hash as Crypto
 
-import Pact.Core.Pretty
+import Pact.Core.Pretty ( renderCompactString, Pretty(pretty) )
 
 -- | Untyped hash value, encoded with unpadded base64url.
 -- Within Pact these are blake2b_256 but unvalidated as such,
@@ -66,74 +63,76 @@ hashToText :: Hash -> Text
 hashToText (Hash h) = toB64UrlUnpaddedText h
 
 -- | All supported hashes in Pact (although not necessarily GHCJS pact).
-data HashAlgo =
-  Blake2b_256 |
-  SHA3_256
-  deriving (Eq,Show,Ord,Bounded,Enum)
+-- data HashAlgo =
+--   Blake2b_256 |
+--   SHA3_256
+--   deriving (Eq,Show,Ord,Bounded,Enum)
 
-instance Reifies 'Blake2b_256 HashAlgo where
-  reflect _ = Blake2b_256
-instance Reifies 'SHA3_256 HashAlgo where
-  reflect _ = SHA3_256
+-- instance Reifies 'Blake2b_256 HashAlgo where
+--   reflect _ = Blake2b_256
+-- instance Reifies 'SHA3_256 HashAlgo where
+--   reflect _ = SHA3_256
 
-hashLength :: HashAlgo -> Int
-hashLength Blake2b_256 = 32
-hashLength SHA3_256 = 32
+-- hashLength :: HashAlgo -> Int
+-- hashLength Blake2b_256 = 32
+-- hashLength SHA3_256 = 32
 
 -- | Typed hash, to indicate algorithm
-data TypedHash (h :: HashAlgo) where
-  TypedHash :: ByteString -> TypedHash h
-  deriving (Eq, Ord, Generic)
+-- data TypedHash (h :: HashAlgo) where
+--   TypedHash :: ByteString -> TypedHash h
+--   deriving (Eq, Ord, Generic)
 
-instance Show (TypedHash h) where
-  show (TypedHash h) = show $ encodeBase64UrlUnpadded h
+-- instance Show (TypedHash h) where
+--   show (TypedHash h) = show $ encodeBase64UrlUnpadded h
 
-instance Pretty (TypedHash h) where
-  pretty (TypedHash h) =
-    pretty $ decodeUtf8 (encodeBase64UrlUnpadded h)
+-- instance Pretty (TypedHash h) where
+--   pretty (TypedHash h) =
+--     pretty $ decodeUtf8 (encodeBase64UrlUnpadded h)
 
-instance NFData (TypedHash h)
+-- instance NFData (TypedHash h)
 
 
-typedHashToText :: TypedHash h -> Text
-typedHashToText (TypedHash h) = toB64UrlUnpaddedText h
+-- typedHashToText :: TypedHash h -> Text
+-- typedHashToText (TypedHash h) = toB64UrlUnpaddedText h
 
-toUntypedHash :: TypedHash h -> Hash
-toUntypedHash (TypedHash h) = Hash h
+-- toUntypedHash :: TypedHash h -> Hash
+-- toUntypedHash (TypedHash h) = Hash h
 
-fromUntypedHash :: Hash -> TypedHash h
-fromUntypedHash (Hash h) = TypedHash h
+-- fromUntypedHash :: Hash -> TypedHash h
+-- fromUntypedHash (Hash h) = TypedHash h
 
-type PactHash = TypedHash 'Blake2b_256
+-- type PactHash = TypedHash 'Blake2b_256
 
 pactHash :: ByteString -> Hash
-pactHash = toUntypedHash . (hash :: ByteString -> PactHash)
+pactHash = hash
 
 pactInitialHash :: Hash
-pactInitialHash = toUntypedHash $ (initialHash :: PactHash)
+pactInitialHash = initialHash
 
 pactHashLength :: Int
-pactHashLength = hashLength Blake2b_256
+pactHashLength = 32
+
+hash :: ByteString -> Hash
+hash = Hash . ByteArray.convert . Crypto.hashWith Crypto.Blake2b_256
 
 
-hash :: forall h . Reifies h HashAlgo => ByteString -> TypedHash h
-hash = TypedHash . go
-  where
-    algo = reflect (Proxy :: Proxy h)
-    go = case algo of
-      Blake2b_256 -> ByteArray.convert . Crypto.hashWith Crypto.Blake2b_256
-      SHA3_256 -> ByteArray.convert . Crypto.hashWith Crypto.SHA3_256
-{-# INLINE hash #-}
+-- hash :: forall h . Reifies h HashAlgo => ByteString -> TypedHash h
+-- hash = TypedHash . go
+--   where
+--     algo = reflect (Proxy :: Proxy h)
+--     go = case algo of
+--       Blake2b_256 -> ByteArray.convert . Crypto.hashWith Crypto.Blake2b_256
+--       SHA3_256 -> ByteArray.convert . Crypto.hashWith Crypto.SHA3_256
+-- {-# INLINE hash #-}
 
-verifyHash :: Reifies h HashAlgo => TypedHash h -> ByteString -> Either String Hash
+verifyHash :: Hash -> ByteString -> Either String Hash
 verifyHash h b = if hashed == h
-  then Right (toUntypedHash h)
+  then Right h
   else Left $ "Hash Mismatch, received " ++ renderCompactString h ++
               " but our hashing resulted in " ++ renderCompactString hashed
   where hashed = hash b
-{-# INLINE verifyHash #-}
 
-initialHash :: Reifies h HashAlgo => TypedHash h
+initialHash :: Hash
 initialHash = hash mempty
 
 equalWord8 :: Word8

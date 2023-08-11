@@ -3,21 +3,20 @@
 module Pact.Core.Repl.Runtime.ReplBuiltin where
 
 import Control.Monad.Except
+import Control.Monad.IO.Class(liftIO)
 import Data.Default
 import Data.Text(Text)
 import qualified Data.Text as T
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
-import Pact.Core.Gas
+-- import Pact.Core.Gas
 -- import Pact.Core.Errors
 
-import Pact.Core.Untyped.Eval.Runtime
-import Pact.Core.Untyped.Eval.CEK
-import Pact.Core.Untyped.Eval.Runtime.CoreBuiltin
-import Pact.Core.Untyped.Eval.Runtime.RawBuiltin(rawBuiltinLiftedRuntime)
-
-import qualified Pact.Core.Untyped.Eval.Runtime.RawBuiltin as RawBuiltin
+import Pact.Core.IR.Eval.Runtime
+import Pact.Core.IR.Eval.CEK
+import Pact.Core.IR.Eval.RawBuiltin(rawBuiltinLiftedRuntime, prettyShowValue)
+import qualified Pact.Core.IR.Eval.RawBuiltin as RawBuiltin
 
 
 import Pact.Core.Repl.Runtime
@@ -47,8 +46,8 @@ enforceValue = \case
   EvalValue v -> pure v
   _ -> failInvariant "Error"
 
-tryError :: MonadError a m => m b -> m (Either a b)
-tryError ma = catchError (Right <$> ma) (pure . Left)
+-- tryError :: MonadError a m => m b -> m (Either a b)
+-- tryError ma = catchError (Right <$> ma) (pure . Left)
 
 mkReplBuiltinFn
   :: (BuiltinArity b)
@@ -61,27 +60,24 @@ mkReplBuiltinFn fn b =
 
 corePrint :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i
 corePrint = mkReplBuiltinFn \cont handler -> \case
-  [showInst, v] -> do
-    unsafeApplyOne showInst v >>= enforceValue >>= \case
-     VLiteral (LString showed) -> do
-        liftIO $ putStrLn $ T.unpack showed
-        returnCEKValue cont handler (VLiteral LUnit)
-     _ -> failInvariant "Print"
+  [v] -> do
+    liftIO $ putStrLn $ T.unpack (prettyShowValue v)
+    returnCEKValue cont handler (VLiteral LUnit)
   _ -> failInvariant "Print"
 
-coreExpect :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i
-coreExpect = mkReplBuiltinFn \cont handler -> \case
-  [eqFn, showFn, VLiteral (LString msg), v1, clo@VClosure{}] -> do
-    unsafeApplyOne clo (VLiteral LUnit) >>= \case
-       EvalValue v2 -> do
-        unsafeApplyTwo eqFn v1 v2 >>= enforceValue >>= asBool >>= \case
-          False -> do
-            v1s <- asString =<< enforceValue =<< unsafeApplyOne showFn v1
-            v2s <- asString =<< enforceValue =<< unsafeApplyOne showFn v2
-            returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
-          True -> returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
-       v -> returnCEK cont handler v
-  e -> failInvariant $ "Expect" <> T.pack (show e)
+-- coreExpect :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i
+-- coreExpect = mkReplBuiltinFn \cont handler -> \case
+--   [VLiteral (LString msg), v1, clo@VClosure{}] -> do
+--     unsafeApplyOne clo (VLiteral LUnit) >>= \case
+--        EvalValue v2 -> do
+--         unsafeApplyTwo eqFn v1 v2 >>= enforceValue >>= asBool >>= \case
+--           False -> do
+--             v1s <- asString =<< enforceValue =<< unsafeApplyOne showFn v1
+--             v2s <- asString =<< enforceValue =<< unsafeApplyOne showFn v2
+--             returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
+--           True -> returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
+--        v -> returnCEK cont handler v
+--   e -> failInvariant $ "Expect" <> T.pack (show e)
 
 rawExpect :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i
 rawExpect = mkReplBuiltinFn \cont handler -> \case
@@ -121,19 +117,6 @@ coreExpectFailure = mkReplBuiltinFn \cont handler -> \case
   _ -> failInvariant "Expect-failure"
 
 
-
-replCoreBuiltinRuntime
-  :: (Default i)
-  => ReplBuiltin CoreBuiltin
-  -> ReplBuiltinFn CoreBuiltin i
-replCoreBuiltinRuntime = \case
-  RBuiltinWrap cb ->
-    coreBuiltinLiftedRuntime RBuiltinWrap cb
-  RExpect -> coreExpect RExpect
-  RExpectFailure -> coreExpectFailure RExpectFailure
-  RExpectThat -> coreExpectThat RExpectThat
-  RPrint -> corePrint RPrint
-
 replRawBuiltinRuntime
   :: (Default i)
   => ReplBuiltin RawBuiltin
@@ -146,10 +129,13 @@ replRawBuiltinRuntime = \case
   RExpectThat -> coreExpectThat RExpectThat
   RPrint -> corePrint RPrint
 
-defaultReplState :: Default i => ReplEvalState (ReplBuiltin CoreBuiltin) i
-defaultReplState = ReplEvalState $
-  CEKRuntimeEnv
-  { _cekBuiltins = replCoreBuiltinRuntime
-  , _cekLoaded = mempty
-  , _cekGasModel = freeGasEnv
-  , _cekMHashes = mempty }
+-- defaultReplState :: Default i => ReplEvalState (ReplBuiltin RawBuiltin) i
+-- defaultReplState = ReplEvalState env (EvalState (CapState [] mempty) [] [] False)
+--   where
+--   env =
+--     CEKRuntimeEnv
+--     { _cekBuiltins = replRawBuiltinRuntime
+--     , _cekLoaded = mempty
+--     , _cekGasModel = freeGasEnv
+--     , _cekMHashes = mempty
+--     , _cekMsgSigs = mempty }

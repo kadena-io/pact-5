@@ -99,15 +99,43 @@ instance RenderError ParseError where
 
 data DesugarError
   = UnboundTermVariable Text
+  -- ^ Encountered a variable with no binding <varname>
   | UnsupportedType Text
+  -- ^ Type left over from old pact type system (e.g poly list)
   | UnboundTypeVariable Text
-  | UnannotatedType Text
+  -- ^ Found an unbound type variable in a type definition
+  -- (note: in this current version of core this should never occur,
+  --  there are no userland type variables that can be annotated)
+  | UnannotatedArgumentType Text
+  -- ^ A declaration has a type parameter without an annotation <argument name>
+  | UnannotatedReturnType Text
+  -- ^ Function <function name> has an unannotated return type
+  | InvalidCapabilityReference Text
+  -- ^ Function <function name> is used in a scope that expected a capability
+  | CapabilityOutOfScope Text ModuleName
+  -- ^ Capability <modulename . defname > is used in a scope outside of its static allowable scope
   | NoSuchModuleMember ModuleName Text
+  -- ^ Module <modulename> does not have member <membername>
   | NoSuchModule ModuleName
+  -- ^ Module <modulename> does not exist
   | NoSuchInterface ModuleName
+  -- ^ Interface <ifname> doesnt exist
   | ImplementationError ModuleName ModuleName Text
+  -- ^ Interface implemented in module for member <member> does not match the signature
   | RecursionDetected ModuleName [Text]
+  -- ^ Detected use of recursion in module <module>. [functions] for a cycle
+  | NotAllowedWithinDefcap Text
+  -- ^ Form <text> not allowed within defcap
+  | NotAllowedOutsideModule Text
+  -- ^ Form not allowed outside of module call <description
   | UnresolvedQualName QualifiedName
+  -- ^ no such qualified name
+  | InvalidGovernanceRef QualifiedName
+  -- ^ No such governance
+  | InvalidDefInTermVariable Text
+  -- ^ Invalid top level defn references a non-semantic value (e.g defcap, defschema)
+  | InvalidModuleReference ModuleName
+  -- ^ Invalid: Interface used as module reference
   deriving Show
 
 instance Exception DesugarError
@@ -116,18 +144,28 @@ instance RenderError DesugarError where
   renderError = \case
     UnsupportedType t ->
       tConcatSpace ["Unsupported type in pact-core:", t]
-    UnannotatedType t ->
-      tConcatSpace ["Unannotated type in variable:", t]
+    UnannotatedArgumentType t ->
+      tConcatSpace ["Unannotated type in argument:", t]
+    UnannotatedReturnType t ->
+      tConcatSpace ["Declaration", t, "is missing a return type"]
     UnboundTermVariable t ->
       tConcatSpace ["Unbound variable", t]
     UnboundTypeVariable t ->
       tConcatSpace ["Unbound type variable", t]
+    InvalidCapabilityReference t ->
+      tConcatSpace ["Variable or function used in special form is not a capability", t]
+    CapabilityOutOfScope fn mn ->
+      tConcatSpace [renderModuleName mn <> "." <> fn, "was used in a capability special form outside of the"]
     NoSuchModuleMember mn txt ->
       tConcatSpace ["Module", renderModuleName mn, "has no such member:", txt]
     NoSuchModule mn ->
       tConcatSpace ["Cannot find module: ", renderModuleName mn]
     NoSuchInterface mn ->
       tConcatSpace ["Cannot find interface: ", renderModuleName mn]
+    NotAllowedWithinDefcap dc ->
+      tConcatSpace [dc, "form not allowed within defcap"]
+    NotAllowedOutsideModule txt ->
+      tConcatSpace [txt, "not allowed outside of a module"]
     ImplementationError mn1 mn2 defn ->
       tConcatSpace [ "Module"
                    , renderModuleName mn1
@@ -143,6 +181,12 @@ instance RenderError DesugarError where
       , T.pack (show txts)]
     UnresolvedQualName qual ->
       tConcatSpace ["No such name", renderQualName qual]
+    InvalidGovernanceRef gov ->
+      tConcatSpace ["Invalid governance:", renderQualName gov]
+    InvalidDefInTermVariable n ->
+      tConcatSpace ["Invalid definition in term variable position:", n]
+    InvalidModuleReference mn ->
+      tConcatSpace ["Invalid Interface attempted to be used as module reference:", renderModuleName mn]
 
 data TypecheckError
   = UnificationError (Type Text) (Type Text)
@@ -181,7 +225,7 @@ instance RenderError TypecheckError where
 
 instance Exception TypecheckError
 
-data OverloadError
+newtype OverloadError
   = OverloadError Text
   deriving Show
 
@@ -207,6 +251,8 @@ data ExecutionError
   -- ^ Gas went past the gas limit
   | FloatingPointError Text
   -- ^ Floating point operation exception
+  | CapNotInScope Text
+  -- ^ Capability not in scope
   | InvariantFailure Text
   -- ^ Invariant violation in execution. This is a fatal Error.
   | ExecutionError Text
@@ -230,6 +276,8 @@ instance RenderError ExecutionError where
     FloatingPointError txt ->
       tConcatSpace ["Floating point error:", txt]
     -- Todo: probably enhance this data type
+    CapNotInScope txt ->
+      tConcatSpace ["Capability not in scope:", txt]
     GasExceeded txt -> txt
     InvariantFailure txt ->
       tConcatSpace ["Fatal execution error, invariant violated:", txt]

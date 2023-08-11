@@ -39,12 +39,15 @@ import qualified Data.Map.Strict as Map
 import qualified Data.RAList as RAList
 import qualified Data.Text as T
 import qualified Data.Vector as V
+import qualified Data.Set as S
 
 import Pact.Core.Builtin
 import Pact.Core.Names
 import Pact.Core.Errors
 import Pact.Core.Gas
 import Pact.Core.Literal
+import Pact.Core.PactValue
+import Pact.Core.Capabilities
 
 import Pact.Core.Untyped.Term
 import Pact.Core.Untyped.Eval.Runtime
@@ -99,7 +102,8 @@ evalCEK cont handler env (Var n info)  = do
     NTopLevel mname mh -> do
       let fqn = FullyQualifiedName mname (_nName n) mh
       cekReadEnv >>= \renv -> case Map.lookup fqn (view cekLoaded renv) of
-        Just d -> evalCEK cont handler RAList.Nil (defTerm d)
+        Just (Dfun d) -> evalCEK cont handler RAList.Nil (_dfunTerm d)
+        Just _ -> failInvariant' "invalid call" info
         Nothing -> failInvariant' ("top level name " <> T.pack (show fqn) <> " not in scope") info
     NModRef m ifs ->
       returnCEKValue cont handler (VModRef m ifs)
@@ -126,19 +130,143 @@ evalCEK cont handler env (Conditional c _) = case c of
     evalCEK (CondC env (OrFrame te') cont) handler env te
   CIf cond e1 e2 ->
     evalCEK (CondC env (IfFrame e1 e2) cont) handler env cond
+evalCEK cont handler env (CapabilityForm cf _) = do
+  fqn <- nameToFQN (view capFormName cf)
+  case cf of
+    WithCapability _ args body -> case args of
+      x:xs -> let
+        capFrame = WithCapFrame fqn body
+        cont' = CapInvokeC env xs [] capFrame cont
+        in evalCEK cont' handler env x
+      [] -> evalCap cont handler env (CapToken fqn []) body
+    RequireCapability _ args -> case args of
+      [] -> requireCap cont handler (CapToken fqn [])
+      x:xs -> let
+        capFrame = RequireCapFrame fqn
+        cont' = CapInvokeC env xs [] capFrame cont
+        in evalCEK cont' handler env x
+    ComposeCapability _ args -> case args of
+      [] -> composeCap cont handler (CapToken fqn [])
+      x:xs -> let
+        capFrame = ComposeCapFrame fqn
+        cont' = CapInvokeC env xs [] capFrame cont
+        in evalCEK cont' handler env x
+    InstallCapability _ args -> case args of
+      [] -> installCap cont handler env (CapToken fqn [])
+      x : xs -> let
+        capFrame = InstallCapFrame fqn
+        cont' = CapInvokeC env xs [] capFrame cont
+        in evalCEK cont' handler env x
+    EmitEvent _ args -> case args of
+      [] -> emitEvent cont handler (CapToken fqn [])
+      x : xs -> let
+        capFrame = EmitEventFrame fqn
+        cont' = CapInvokeC env xs [] capFrame cont
+        in evalCEK cont' handler env x
+    CreateUserGuard{} -> error "implement"
 evalCEK cont handler env (ListLit ts _) = do
   chargeNodeGas ListNode
   case ts of
     [] -> returnCEKValue cont handler (VList mempty)
     x:xs -> evalCEK (ListC env xs [] cont) handler env x
 evalCEK cont handler env (Try e1 rest _) = do
-  let handler' = CEKHandler env e1 cont handler
+  caps <- useCekState (esCaps . csSlots)
+  let handler' = CEKHandler env e1 cont caps handler
   evalCEK Mt handler' env rest
 evalCEK cont handler env (DynInvoke n fn _) =
   evalCEK (DynInvokeC env fn cont) handler env n
 -- Error terms ignore the current cont
 evalCEK _ handler _ (Error e _) =
   returnCEK Mt handler (VError e)
+
+-- Todo: fail invariant
+nameToFQN :: Applicative f => Name -> f FullyQualifiedName
+nameToFQN (Name n nk) = case nk of
+  NTopLevel mn mh -> pure (FullyQualifiedName mn n mh)
+  NBound{} -> error "expected fully resolve FQ name"
+  NModRef{} -> error "expected non-modref"
+
+-- Todo: fail invariants
+cekToPactValue :: Applicative f => CEKValue b i m -> f PactValue
+cekToPactValue = \case
+  VLiteral lit -> pure (PLiteral lit)
+  VList vec -> PList <$> traverse cekToPactValue vec
+  VClosure{} -> error "closure is not a pact value"
+  VNative{} -> error "Native is not a pact value"
+  VModRef mn mns -> pure (PModRef mn mns)
+  VGuard gu -> pure (PGuard gu)
+
+-- Todo: managed
+evalCap
+  :: MonadEval b i m
+  => Cont b i m
+  -> CEKErrorHandler b i m
+  -> CEKEnv b i m
+  -> CapToken
+  -> EvalTerm b i
+  -> m (EvalResult b i m)
+evalCap cont handler env ct@(CapToken fqn args) contbody = do
+  cekReadEnv >>= \renv -> case Map.lookup fqn (view cekLoaded renv) of
+    Just (DCap d) -> do
+      modifyCEKState (esCaps . csSlots) (CapSlot ct []:)
+      let (env', capBody) = applyCapBody mempty args (_dcapTerm d)
+          cont' = CapBodyC env contbody cont
+      evalCEK cont' handler env' capBody
+    Just {} -> error "was not defcap, invariant violated"
+    Nothing -> error "No such def"
+  where
+  applyCapBody e (x:xs) (Lam b _) =
+    applyCapBody (RAList.cons (pactToCEKValue x) e) xs b
+  applyCapBody e  _ b = (e, b)
+
+
+requireCap
+  :: MonadEval b i m
+  => Cont b i m
+  -> CEKErrorHandler b i m
+  -> CapToken
+  -> m (EvalResult b i m)
+requireCap cont handler ct = do
+  caps <- useCekState (esCaps.csSlots)
+  let csToSet cs = S.insert (_csCap cs) (S.fromList (_csComposed cs))
+      capSet = foldMap csToSet caps
+  if S.member ct capSet then returnCEKValue cont handler VUnit
+  else throwExecutionError' (CapNotInScope "ovuvue")
+
+composeCap
+  :: (MonadEval b i m)
+  => Cont b i m
+  -> CEKErrorHandler b i m
+  -> CapToken
+  -> m (EvalResult b i m)
+composeCap cont handler ct@(CapToken fqn args) = do
+  cekReadEnv >>= \renv -> case Map.lookup fqn (view cekLoaded renv) of
+    Just (DCap d) -> do
+      modifyCEKState (esCaps . csSlots) (CapSlot ct []:)
+      let (env', capBody) = applyCapBody mempty args (_dcapTerm d)
+          cont' = CapPopC PopCapComposed cont
+      evalCEK cont' handler env' capBody
+    Just {} -> error "was not defcap, invariant violated"
+    Nothing -> error "No such def"
+  where
+  applyCapBody e (x:xs) (Lam b _) =
+    applyCapBody (RAList.cons (pactToCEKValue x) e) xs b
+  applyCapBody e  _ b = (e, b)
+
+installCap :: a
+installCap = undefined
+
+emitEvent
+  :: MonadEval b i m
+  => Cont b i m
+  -> CEKErrorHandler b i m
+  -> CapToken
+  -> m (EvalResult b i m)
+emitEvent cont handler ct@(CapToken fqn _) = do
+  let pactEvent = PactEvent ct (_fqModule fqn) (_fqHash fqn)
+  modifyCEKState esEvents (pactEvent:)
+  returnCEKValue cont handler VUnit
+
 
 returnCEK :: (MonadEval b i m)
   => Cont b i m
@@ -148,9 +276,12 @@ returnCEK :: (MonadEval b i m)
 returnCEK Mt handler v =
   case handler of
     CEKNoHandler -> return v
-    CEKHandler env term cont' handler' -> case v of
-      VError{} -> evalCEK cont' handler' env term
-      EvalValue v' -> returnCEKValue cont' handler' v'
+    CEKHandler env term cont' caps handler' -> case v of
+      VError{} -> do
+        setCekState (esCaps . csSlots) caps
+        evalCEK cont' handler' env term
+      EvalValue v' ->
+        returnCEKValue cont' handler' v'
 returnCEK cont handler v = case v of
   VError{} -> returnCEK Mt handler v
   EvalValue v' -> returnCEKValue cont handler v'
@@ -164,7 +295,8 @@ returnCEKValue
 returnCEKValue Mt handler v =
   case handler of
     CEKNoHandler -> return (EvalValue v)
-    CEKHandler _env _term cont' handler' -> returnCEKValue cont' handler' v
+    -- Assuming no error, the caps will have been popped naturally
+    CEKHandler _env _term cont' _ handler' -> returnCEKValue cont' handler' v
 -- Error terms that don't simply returnt the empty continuation
 -- "Zero out" the continuation up to the latest handler
 -- returnCEKValue _cont handler v@VError{} =
@@ -187,6 +319,37 @@ returnCEKValue (CondC env frame cont) handler v = case v of
       if b then evalCEK cont handler env ifExpr
       else evalCEK cont handler env elseExpr
   _ -> failInvariant "Evaluation of conditional expression yielded non-boolean value"
+returnCEKValue (CapInvokeC env terms pvs cf cont) handler v = case terms of
+  x:xs -> do
+    pv <- cekToPactValue v
+    let cont' = CapInvokeC env xs (pv:pvs) cf cont
+    evalCEK cont' handler env x
+  [] -> case cf of
+    WithCapFrame fqn wcbody ->
+      evalCap cont handler env (CapToken fqn (reverse pvs)) wcbody
+    RequireCapFrame fqn  ->
+      requireCap cont handler (CapToken fqn (reverse pvs))
+    ComposeCapFrame fqn ->
+      composeCap cont handler (CapToken fqn (reverse pvs))
+    InstallCapFrame{} -> error "todo"
+    EmitEventFrame fqn ->
+      emitEvent cont handler (CapToken fqn (reverse pvs))
+returnCEKValue (CapBodyC env term cont) handler _ = do
+  let cont' = CapPopC PopCapInvoke cont
+  evalCEK cont' handler env term
+returnCEKValue (CapPopC st cont) handler v = case st of
+  PopCapInvoke -> do
+    -- todo: need safe tail here, but this should be fine given the invariant that `CapPopC`
+    -- will never show up otherwise
+    modifyCEKState (esCaps . csSlots) tail
+    returnCEKValue cont handler v
+  PopCapComposed -> do
+    caps <- useCekState (esCaps . csSlots)
+    let cs = head caps
+        csList = _csCap cs : _csComposed cs
+        caps' = over (_head . csComposed) (++ csList) (tail caps)
+    setCekState (esCaps . csSlots) caps'
+    returnCEKValue cont handler VUnit
 returnCEKValue (ListC env args vals cont) handler v = do
   case args of
     [] ->

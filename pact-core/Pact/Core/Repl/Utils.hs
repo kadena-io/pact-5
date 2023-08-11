@@ -31,6 +31,7 @@ module Pact.Core.Repl.Utils
  ) where
 
 import Control.Lens
+import Control.Monad ( when, unless )
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Control.Monad.Catch
@@ -45,7 +46,7 @@ import Data.Maybe(mapMaybe)
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
-import Text.Megaparsec((<|>))
+import Text.Megaparsec((<|>), (<?>))
 import qualified Text.Megaparsec as MP
 import qualified Text.Megaparsec.Char as MP
 
@@ -55,7 +56,7 @@ import Pact.Core.Persistence
 import Pact.Core.Pretty
 import Pact.Core.Gas
 import Pact.Core.Errors
-import qualified Pact.Core.Untyped.Term as Term
+import qualified Pact.Core.IR.Term as Term
 
 import System.Console.Haskeline.Completion
 
@@ -104,7 +105,7 @@ data ReplState b
   = ReplState
   { _replFlags :: Set ReplDebugFlag
   , _replLoaded :: Loaded b SpanInfo
-  , _replPactDb :: PactDb (ReplM b) b SpanInfo
+  , _replPactDb :: PactDb b SpanInfo
   , _replGas :: IORef Gas
   , _replEvalLog :: IORef (Maybe [(Text, Gas)])
   }
@@ -116,7 +117,7 @@ data ReplAction
   = RALoad Text
   | RASetLispSyntax
   | RASetNewSyntax
-  | RATypecheck Text
+  -- | RATypecheck Text
   | RASetFlag ReplDebugFlag
   | RADebugAll
   | RADebugNone
@@ -144,15 +145,15 @@ replAction =
   cmdKw kw = MP.chunk kw *> MP.space1
   cmd = do
     _ <- MP.chunk ":"
-    load <|> setLang <|> setFlag <|> tc
+    load <|> setLang <|> setFlag <?> "asdf"
   setFlag =
     cmdKw "debug" *> ((RASetFlag <$> replFlag) <|> (RADebugAll <$ MP.chunk "all") <|> (RADebugNone <$ MP.chunk "none"))
   setLang = do
     cmdKw "syntax"
     (RASetLispSyntax <$ MP.chunk "lisp") <|> (RASetNewSyntax <$ MP.chunk "new")
-  tc = do
-    cmdKw "type"
-    RATypecheck <$> MP.takeRest
+  -- tc = do
+  --   cmdKw "type"
+  --   RATypecheck <$> MP.takeRest
   load = do
     cmdKw "load"
     let c = MP.char '\"'
@@ -218,11 +219,11 @@ replCompletion natives =
   completeWord (Just '\\') filenameWordBreakChars $ \str -> do
     tlns <- uses (replLoaded . loToplevel) Map.keys
     moduleNames <- uses (replLoaded . loModules) (fmap renderModuleName . Map.keys)
-    prefixed <- uses (replLoaded . loModules) toPrefixed
+    prefixedNames <- uses (replLoaded . loModules) toPrefixed
     let
       cmds = [":load", ":type", ":syntax", ":debug"]
       allNames = Set.fromList $ T.unpack <$> concat
-        [tlns, moduleNames, prefixed, natives, cmds]
+        [tlns, moduleNames, prefixedNames, natives, cmds]
     pure $ simpleCompletion <$> Set.toList (Set.filter (str `isPrefixOf`) allNames)
   where
   defNames = \case

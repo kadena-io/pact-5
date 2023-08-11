@@ -22,7 +22,7 @@ data Literal
   | LDecimal !Decimal
   | LUnit
   | LBool !Bool
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 makePrisms ''Literal
 

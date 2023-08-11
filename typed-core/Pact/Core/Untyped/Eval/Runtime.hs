@@ -19,7 +19,7 @@ module Pact.Core.Untyped.Eval.Runtime
  , CEKEnv
  , CEKRuntimeEnv(..)
  , BuiltinFn(..)
- , EvalM(..)
+ , EvalT(..)
  , runEvalT
  , CEKValue(..)
  , Cont(..)
@@ -27,20 +27,39 @@ module Pact.Core.Untyped.Eval.Runtime
  , cekBuiltins
  , cekLoaded
  , cekGasModel
- , cekMHashes
+ , cekMHashes, cekMsgSigs
  , fromPactValue
  , checkPactValueType
+ , pactToCEKValue
+ , cfFQN
  , CEKErrorHandler(..)
  , MonadEvalEnv(..)
+ , MonadEvalState(..)
  , CondFrame(..)
  , MonadEval
  , Closure(..)
  , EvalResult(..)
+ , EvalEnv(..)
+ , EvalState(..)
+ , esCaps, esEvents, esInCap
  , pattern VString
  , pattern VInteger
  , pattern VDecimal
  , pattern VUnit
  , pattern VBool
+ -- Capabilities
+ , CapToken(..)
+ , ctName, ctArgs
+ , CapSlot(..)
+ , csCap, csComposed
+ , CapFrame(..)
+ , CapState(..)
+ , csSlots, csManaged
+ , ManagedCap(..)
+ , mcCap, mcManaged
+ , ManagedCapType(..)
+ , PactEvent(..)
+ , CapPopState(..)
  ) where
 
 
@@ -48,6 +67,7 @@ import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Reader
 import Control.Monad.Except
+import Control.Monad.State.Strict
 import Data.Void
 import Data.Text(Text)
 import Data.Map.Strict(Map)
@@ -56,6 +76,7 @@ import Data.Decimal(Decimal)
 -- import Data.Set(Set)
 import Data.Vector(Vector)
 import Data.RAList(RAList)
+import Data.Set(Set)
 import Data.IORef
 import qualified Data.Vector as V
 
@@ -93,7 +114,7 @@ data CEKValue b i m
   | VClosure !(EvalTerm b i) !(CEKEnv b i m)
   | VNative !(BuiltinFn b i m)
   | VModRef ModuleName [ModuleName]
-  | VGuard !(Guard FullyQualifiedName (CEKValue b i m))
+  | VGuard !(Guard FullyQualifiedName PactValue)
   -- deriving Show
 
 instance Show (CEKValue b i m) where
@@ -103,9 +124,14 @@ instance Show (CEKValue b i m) where
     VClosure _ _ -> "closure<>"
     VNative _ -> "native<>"
     VModRef mn mns -> "modRef" <> show mn <> show mns
-    VGuard _ -> "guard_"
+    VGuard _ -> "guard<>"
 
-
+pactToCEKValue :: PactValue -> CEKValue b i m
+pactToCEKValue = \case
+  PLiteral lit -> VLiteral lit
+  PList vec -> VList (pactToCEKValue <$> vec)
+  PGuard gu -> VGuard gu
+  PModRef mn ifs -> VModRef mn ifs
 
 pattern VString :: Text -> CEKValue b i m
 pattern VString txt = VLiteral (LString txt)
@@ -122,39 +148,55 @@ pattern VBool b = VLiteral (LBool b)
 pattern VDecimal :: Decimal -> CEKValue b i m
 pattern VDecimal d = VLiteral (LDecimal d)
 
-
+-- | Result of an evaluation step, either a CEK value or an error.
 data EvalResult b i m
   = EvalValue (CEKValue b i m)
   | VError Text
   deriving Show
 
-type MonadEval b i m = (MonadEvalEnv b i m, MonadError (PactError i) m, Default i)
+data EvalState b i
+  = EvalState
+  { _esCaps :: CapState
+  , _esEvents :: [PactEvent b i]
+  , _esInCap :: Bool
+  } deriving Show
+
+type MonadEval b i m = (MonadEvalEnv b i m, MonadEvalState b i m, MonadError (PactError i) m, Default i)
 
 class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
   cekReadEnv :: m (CEKRuntimeEnv b i m)
   cekLogGas :: Text -> Gas -> m ()
   cekChargeGas :: Gas -> m ()
 
-data EvalMEnv b i
-  = EvalMEnv
-  { _emRuntimeEnv :: CEKRuntimeEnv b i (EvalM b i)
+class Monad m => (MonadEvalState b i m) | m -> b, m -> i where
+  setCekState :: Lens' (EvalState b i) s -> s -> m ()
+  modifyCEKState :: Lens' (EvalState b i) s -> (s -> s) -> m ()
+  useCekState :: Lens' (EvalState b i) s -> m s
+  usesCekState :: Lens' (EvalState b i) s -> (s -> s') -> m s'
+
+data EvalEnv b i m
+  = EvalEnv
+  { _emRuntimeEnv :: CEKRuntimeEnv b i (EvalT b i m)
   , _emGas :: IORef Gas
   , _emGasLog :: IORef (Maybe [(Text, Gas)])
   }
 
 -- Todo: are we going to inject state as the reader monad here?
-newtype EvalM b i a =
-  EvalM (ExceptT (PactError i) (ReaderT (EvalMEnv b i) IO) a)
+newtype EvalT b i m a =
+  EvalT (ReaderT (EvalEnv b i m) (StateT (EvalState b i) m) a)
   deriving
     ( Functor, Applicative, Monad
-    , MonadReader (EvalMEnv b i)
     , MonadIO
     , MonadThrow
     , MonadCatch)
-  via (ExceptT (PactError i) (ReaderT (EvalMEnv b i) IO))
+  via (ReaderT (EvalEnv b i m) (StateT (EvalState b i) m))
 
-runEvalT :: EvalMEnv b i -> EvalM b i a -> IO (Either (PactError i) a)
-runEvalT s (EvalM action) = runReaderT (runExceptT action) s
+runEvalT
+  :: EvalEnv b i m
+  -> EvalState b i
+  -> EvalT b i m a
+  -> m (a, EvalState b i)
+runEvalT env st (EvalT action) = runStateT (runReaderT action env) st
 
 data BuiltinFn b i m
   = BuiltinFn
@@ -184,6 +226,72 @@ data CondFrame b i
   | IfFrame (EvalTerm b i) (EvalTerm b i)
   deriving Show
 
+data CapToken
+  = CapToken
+  { _ctName :: FullyQualifiedName
+  , _ctArgs :: [PactValue]
+  } deriving (Show, Eq, Ord)
+
+data CapSlot
+ = CapSlot
+ { _csCap :: CapToken
+ , _csComposed :: [CapToken]
+ } deriving (Show, Eq)
+
+data PactEvent b i
+  = PactEvent
+  { _peToken :: CapToken
+  , _peModule :: ModuleName
+  , _peModuleHash :: ModuleHash
+  } deriving (Show, Eq)
+
+data ManagedCapType
+  = AutoManaged Bool
+  | ManagedParam FullyQualifiedName PactValue Int
+  -- ^ managed cap, with manager function, managed value
+  deriving Show
+
+data ManagedCap
+  = ManagedCap
+  { _mcCap :: CapToken
+  , _mcManaged :: ManagedCapType
+  } deriving (Show)
+
+instance Eq ManagedCap where
+  l == r = _mcCap l == _mcCap r
+
+instance Ord ManagedCap where
+  l `compare` r = _mcCap l `compare` _mcCap r
+
+-- | The overall capability state
+data CapState
+  = CapState
+  { _csSlots :: [CapSlot]
+  , _csManaged :: Set ManagedCap
+  }
+  deriving Show
+
+data CapFrame b i
+  = WithCapFrame FullyQualifiedName (EvalTerm b i)
+  | RequireCapFrame FullyQualifiedName
+  | ComposeCapFrame FullyQualifiedName
+  | InstallCapFrame FullyQualifiedName
+  | EmitEventFrame FullyQualifiedName
+  deriving Show
+
+cfFQN :: Lens' (CapFrame b i) FullyQualifiedName
+cfFQN f = \case
+  WithCapFrame fqn b -> (`WithCapFrame` b) <$> f fqn
+  RequireCapFrame fqn -> RequireCapFrame <$> f fqn
+  ComposeCapFrame fqn -> ComposeCapFrame <$> f fqn
+  InstallCapFrame fqn -> InstallCapFrame <$> f fqn
+  EmitEventFrame fqn -> EmitEventFrame <$> f fqn
+
+data CapPopState
+  = PopCapComposed
+  | PopCapInvoke
+  deriving (Eq, Show)
+
 data Cont b i m
   = Fn (CEKValue b i m) (Cont b i m)
   | Arg (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
@@ -191,13 +299,16 @@ data Cont b i m
   | ListC (CEKEnv b i m) [EvalTerm b i] [CEKValue b i m] (Cont b i m)
   | CondC (CEKEnv b i m) (CondFrame b i) (Cont b i m)
   | DynInvokeC (CEKEnv b i m) Text (Cont b i m)
+  | CapInvokeC (CEKEnv b i m) [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
+  | CapBodyC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
+  | CapPopC CapPopState (Cont b i m)
   | Mt
   deriving Show
 
 
 data CEKErrorHandler b i m
   = CEKNoHandler
-  | CEKHandler (CEKEnv b i m) (EvalTerm b i) (Cont b i m) (CEKErrorHandler b i m)
+  | CEKHandler (CEKEnv b i m) (EvalTerm b i) (Cont b i m) [CapSlot] (CEKErrorHandler b i m)
   deriving Show
 
 data CEKRuntimeEnv b i m
@@ -206,6 +317,7 @@ data CEKRuntimeEnv b i m
   , _cekGasModel :: GasEnv b
   , _cekLoaded :: CEKTLEnv b i
   , _cekMHashes :: Map ModuleName ModuleHash
+  , _cekMsgSigs :: Map PublicKeyText (Set CapToken)
   --   _cekGas :: IORef Gas
   -- , _cekEvalLog :: IORef (Maybe [(Text, Gas)])
   -- , _ckeData :: EnvData PactValue
@@ -251,7 +363,8 @@ fromPactValue = \case
   PLiteral lit -> VLiteral lit
   PList vec -> VList (fromPactValue <$> vec)
   PGuard gu ->
-    VGuard (fromPactValue <$> gu)
+    VGuard gu
+  PModRef mn ifs -> VModRef mn ifs
 
 checkPactValueType :: Type Void -> PactValue -> Bool
 checkPactValueType ty = \case
@@ -260,14 +373,28 @@ checkPactValueType ty = \case
     TyList t -> V.null vec || all (checkPactValueType t) vec
     _ -> False
   PGuard _ -> ty == TyGuard
+  PModRef _ ifs -> case ty of
+    TyModRef m -> m `elem` ifs
+    _ -> False
 
-makeLenses ''EvalMEnv
+makeLenses ''EvalEnv
+makeLenses ''EvalState
+makeLenses ''CapState
+makeLenses ''CapToken
+makeLenses ''CapSlot
+makeLenses ''ManagedCap
 
-instance MonadEvalEnv b i (EvalM b i) where
-  cekReadEnv = view emRuntimeEnv
+instance (MonadIO m) => MonadEvalEnv b i (EvalT b i m) where
+  cekReadEnv = EvalT $ view emRuntimeEnv
   cekLogGas msg g = do
-    r <- view emGasLog
+    r <- EvalT $ view emGasLog
     liftIO $ modifyIORef' r (fmap ((msg, g):))
   cekChargeGas g = do
-    r <- view emGas
+    r <- EvalT $ view emGas
     liftIO (modifyIORef' r (<> g))
+
+instance Monad m => MonadEvalState b i (EvalT b i m) where
+  setCekState l s = EvalT $ l .= s
+  modifyCEKState l f = EvalT (l %= f)
+  useCekState l = EvalT (use l)
+  usesCekState l f = EvalT (uses l f)

@@ -3,9 +3,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Pact.Core.Syntax.Lisp.Parser where
+module Pact.Core.Syntax.Parser where
 
 import Control.Lens(preview, view, _head)
+import Control.Monad(when)
 import Control.Monad.Except
 
 import Data.Decimal(DecimalRaw(..))
@@ -27,8 +28,8 @@ import Pact.Core.Type(PrimType(..))
 import Pact.Core.Guards
 import Pact.Core.Imports
 import Pact.Core.Errors
-import Pact.Core.Syntax.Lisp.ParseTree
-import Pact.Core.Syntax.Lisp.LexUtils
+import Pact.Core.Syntax.ParseTree
+import Pact.Core.Syntax.LexUtils
 
 
 }
@@ -73,10 +74,13 @@ import Pact.Core.Syntax.Lisp.LexUtils
   modelAnn   { PosToken TokenModelAnn _ }
   eventAnn   { PosToken TokenEventAnn _ }
   managedAnn { PosToken TokenManagedAnn _ }
+  withcap    { PosToken TokenWithCapability _ }
+  reqcap     { PosToken TokenRequireCapability _}
+  installcap { PosToken TokenInstallCapability _ }
+  composecap { PosToken TokenComposeCapability _ }
+  emitevent  { PosToken TokenEmitEvent _ }
   step       { PosToken TokenStep _ }
   steprb     { PosToken TokenStepWithRollback _ }
-  tc         { PosToken TokenTypechecks _ }
-  tcfail     { PosToken TokenTypecheckFailure _ }
   '{'        { PosToken TokenOpenBrace _ }
   '}'        { PosToken TokenCloseBrace _ }
   '('        { PosToken TokenOpenParens _ }
@@ -147,12 +151,10 @@ ReplTopLevel :: { ParsedReplTopLevel }
 ReplSpecial :: { SpanInfo -> ReplSpecialForm SpanInfo }
   : load STR BOOLEAN { ReplLoad (getStr $2) $3 }
   | load STR { ReplLoad (getStr $2) False }
-  | tc STR Expr { ReplTypechecks (getStr $2) $3 }
-  | tcfail STR Expr { ReplTypecheckFail (getStr $2) $3 }
 
 Governance :: { Governance Text }
-  : StringRaw { Governance (Left (KeySetName $1))}
-  | IDENT { Governance (Right (getIdent $1))}
+  : StringRaw { KeyGov (KeySetName $1)}
+  | IDENT { CapGov (getIdent $1) }
 
 StringRaw :: { Text }
  : STR  { getStr $1 }
@@ -160,11 +162,13 @@ StringRaw :: { Text }
 
 Module :: { ParsedModule }
   : '(' module IDENT Governance MDocOrModuleModel ExtOrDefs ')'
-    { Module (ModuleName (getIdent $3) Nothing) $4 (reverse (rights $6)) (NE.fromList (reverse (lefts $6))) (fst $5) (snd $5)}
+    { Module (ModuleName (getIdent $3) Nothing) $4 (reverse (rights $6)) (NE.fromList (reverse (lefts $6))) (fst $5) (snd $5)
+      (combineSpan (_ptInfo $1) (_ptInfo $7)) }
 
 Interface :: { ParsedInterface }
   : '(' interface IDENT MDocOrModel IfDefs ')'
-    { Interface (ModuleName (getIdent $3) Nothing) (reverse $5) (fst $4) (snd $4) }
+    { Interface (ModuleName (getIdent $3) Nothing) (reverse $5) (fst $4) (snd $4)
+      (combineSpan (_ptInfo $1) (_ptInfo $2))}
 
 MDocOrModuleModel :: { (Maybe Text, [DefProperty SpanInfo])}
   : DocAnn ModuleModel { (Just $1, $2)}
@@ -379,6 +383,7 @@ SExpr :: { SpanInfo -> ParsedExpr }
   | ProgNExpr { $1 }
   | GenAppExpr { $1 }
   | SuspendExpr { $1 }
+  | CapExpr { $1 }
 
 List :: { ParsedExpr }
   : '[' ListExprs ']' { List $2 (combineSpan (_ptInfo $1) (_ptInfo $3)) }
@@ -411,9 +416,19 @@ SuspendExpr :: { SpanInfo -> ParsedExpr }
 ErrExpr :: { SpanInfo -> ParsedExpr }
   : err STR { Error (getStr $2) }
 
-LamArgs :: { [(Text, Maybe Type)] }
-  : LamArgs IDENT ':' Type { (getIdent $2, Just $4):$1 }
-  | LamArgs IDENT { (getIdent $2, Nothing):$1 }
+CapExpr :: { SpanInfo -> ParsedExpr }
+  : CapForm { CapabilityForm $1 }
+
+CapForm :: { CapForm SpanInfo }
+  : withcap '(' ParsedName AppList ')' Block { WithCapability $3 $4 $6 }
+  | installcap '(' ParsedName AppList ')' { InstallCapability $3 $4 }
+  | reqcap '(' ParsedName AppList ')' { RequireCapability $3 $4 }
+  | composecap '(' ParsedName AppList ')' { ComposeCapability $3 $4 }
+  | emitevent '(' ParsedName AppList ')' { EmitEvent $3 $4 }
+
+LamArgs :: { [MArg] }
+  : LamArgs IDENT ':' Type { (MArg (getIdent $2) (Just $4)):$1 }
+  | LamArgs IDENT { (MArg (getIdent $2) Nothing):$1 }
   | {- empty -} { [] }
 
 LetExpr :: { SpanInfo -> ParsedExpr }

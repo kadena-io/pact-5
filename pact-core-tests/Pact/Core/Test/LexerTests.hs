@@ -1,10 +1,10 @@
--- | 
+-- |
 
 module Pact.Core.Test.LexerTests where
 import Test.Tasty
 import Test.Tasty.HUnit
-import Pact.Core.Syntax.Lisp.Lexer (lexer)
-import Pact.Core.Syntax.Lisp.LexUtils
+import Pact.Core.Syntax.Lexer (lexer)
+import Pact.Core.Syntax.LexUtils
 import Pact.Core.Info (SpanInfo(..))
 
 

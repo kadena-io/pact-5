@@ -25,19 +25,20 @@ import Data.Text(Text)
 import Pact.Core.Gas
 import Pact.Core.Errors
 
-import Pact.Core.Untyped.Term
-import Pact.Core.Untyped.Eval.Runtime
-import Pact.Core.Untyped.Eval.CEK
+import Pact.Core.IR.Term
+import Pact.Core.IR.Eval.Runtime hiding (EvalEnv(..))
+import Pact.Core.IR.Eval.CEK
 
 data ReplEvalEnv b i
   = ReplEvalEnv
-  { _emGas :: IORef Gas
-  , _emGasLog :: IORef (Maybe [(Text, Gas)])
+  { _reGas :: IORef Gas
+  , _reGasLog :: IORef (Maybe [(Text, Gas)])
   }
 
-newtype ReplEvalState b i
+data ReplEvalState b i
   = ReplEvalState
   { _reEnv :: CEKRuntimeEnv b i (ReplEvalM b i)
+  , _reState :: EvalState b i
   }
 
 -- Todo: are we going to inject state as the reader monad here?
@@ -61,11 +62,21 @@ makeLenses ''ReplEvalState
 instance MonadEvalEnv b i (ReplEvalM b i) where
   cekReadEnv = use reEnv
   cekLogGas msg g = do
-    r <- view emGasLog
+    r <- view reGasLog
     liftIO $ modifyIORef' r (fmap ((msg, g):))
   cekChargeGas g = do
-    r <- view emGas
+    r <- view reGas
     liftIO (modifyIORef' r (<> g))
+
+instance MonadEvalState b i (ReplEvalM b i) where
+  getCEKState = use reState
+  modifyCEKState f =
+    reState %= f
+  putCEKState s =
+    reState .= s
+
+
+
 
 runReplEvalM
   :: ReplEvalEnv b i

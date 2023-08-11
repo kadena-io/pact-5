@@ -32,6 +32,7 @@ module Pact.Core.IR.Typecheck
  ) where
 
 import Control.Lens hiding (Level)
+import Control.Monad ( when, unless, zipWithM )
 import Control.Monad.Reader
 import Control.Monad.ST
 -- import Control.Monad.ST.Unsafe(unsafeIOToST, unsafeSTToIO)
@@ -60,6 +61,7 @@ import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Errors
 import Pact.Core.Persistence
+import Pact.Core.Capabilities
 import qualified Pact.Core.IR.Term as IR
 import qualified Pact.Core.Typed.Term as Typed
 import qualified Pact.Core.Untyped.Term as U
@@ -93,7 +95,7 @@ data TCEnv s b i
   , _tcVarEnv :: RAList (Type (TvRef s))
   -- ^ Builtins map, that uses the enum instance
   -- , _tcFree :: Map ModuleName (Map Text (Type Void))
-  , _tcFree :: Map FullyQualifiedName (Type Void)
+  , _tcFree :: Map FullyQualifiedName (TypeOfDef Void)
   -- ^ Free variables
   , _tcLevel :: STRef s Level
   -- ^ Type Variable "Region"
@@ -120,6 +122,8 @@ type TypedTerm b i = Typed.OverloadedTerm NamedDeBruijn b i
 type TypedGenTerm b i = Typed.OverloadedTerm NamedDeBruijn b i
 
 type TypedDefun b i = Typed.OverloadedDefun NamedDeBruijn b i
+
+type TypedDefCap b i = Typed.OverloadedDefCap NamedDeBruijn b i
 
 type TypedDefConst b i = Typed.OverloadedDefConst NamedDeBruijn b i
 
@@ -310,12 +314,12 @@ instance TypeOfBuiltin RawBuiltin where
       TypeScheme [] [] (TyString :~> TyDecimal)
     RawReadString ->
       TypeScheme [] [] (TyString :~> TyString)
-    -- RawReadKeyset ->
-    --   TypeScheme [] [] (TyString :~> TyGuard)
-    -- RawEnforceGuard ->
-    --   TypeScheme [] [] (TyGuard :~> TyUnit)
-    -- RawKeysetRefGuard ->
-    --   TypeScheme [] [] (TyString :~> TyGuard)
+    RawReadKeyset ->
+      TypeScheme [] [] (TyString :~> TyGuard)
+    RawEnforceGuard ->
+      TypeScheme [] [] (TyGuard :~> TyUnit)
+    RawKeysetRefGuard ->
+      TypeScheme [] [] (TyString :~> TyGuard)
     -- RawCreateUserGuard -> let
     --   a = nd "a" 0
     --   in TypeScheme [a] [] ((TyUnit :~> TyVar a) :~> TyGuard)
@@ -432,6 +436,9 @@ _dbgTypedTerm = \case
     Typed.Error <$> _dbgType t <*> pure e <*> pure i
   Typed.DynInvoke n t i ->
     Typed.DynInvoke <$> _dbgTypedTerm n <*> pure t <*> pure i
+  Typed.CapabilityForm cf i ->
+    let cf' = over capFormName _nName cf
+    in Typed.CapabilityForm <$> traverse _dbgTypedTerm cf' <*> pure i
   Typed.ListLit ty li i ->
     Typed.ListLit <$> _dbgType ty <*> traverse _dbgTypedTerm li <*> pure i
   -- Typed.ObjectLit obj i ->
@@ -971,12 +978,12 @@ checkTermType checkty = \case
           throwTypecheckError (TCUnboundTermVariable n) i
     NTopLevel mn _mh ->
       view (tcFree . at (FullyQualifiedName mn n _mh)) >>= \case
-        Just nty -> do
+        Just (DefunType nty) -> do
           let newVar = Typed.Var irn i
               rty = liftType nty
           unify rty checkty i
           pure (rty, newVar, [])
-        Nothing ->
+        _ ->
           throwTypecheckError (TCUnboundFreeVariable mn n) i
     NModRef _ ifs -> case checkty of
       TyModRef mn -> do
@@ -993,7 +1000,7 @@ checkTermType checkty = \case
       _ -> error "checking modref against incorrect type"
   IR.Lam ne te i ->
     case tyFunToArgList checkty of
-      Just (tl, ret) -> do
+      (tl, ret) -> do
         when (length tl /= NE.length ne) $ error "Arguments mismatch"
         let zipped = NE.zip ne (NE.fromList tl)
         traverse_ (uncurry unifyArg) zipped
@@ -1001,7 +1008,6 @@ checkTermType checkty = \case
         (_, te', preds) <- locally tcVarEnv (args RAList.++) $ checkTermType ret te
         let ne' = over _1 fst <$> zipped
         pure (checkty, Typed.Lam ne' te' i, preds)
-      Nothing -> error "invalid arg length"
     where
     unifyArg (_, Just tl) tr = unify (liftType tl) tr i
     unifyArg _ _ = pure ()
@@ -1060,6 +1066,46 @@ checkTermType checkty = \case
     unify checkty ty i
     let term' = Typed.Builtin (b, TyVar <$> tvs, preds) i
     pure (ty, term', preds)
+  IR.CapabilityForm cf i -> over _2 (`Typed.CapabilityForm` i) <$> case cf of
+    WithCapability na tes te -> do
+      (tes', p1) <- checkCapArgs na tes
+      (ty', te', p2) <- checkTermType checkty te
+      pure (ty', WithCapability na tes' te', p1 ++ p2)
+    RequireCapability na tes -> do
+      unify checkty TyUnit i
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyUnit, RequireCapability na tes', p1)
+    ComposeCapability na tes -> do
+      unify checkty TyUnit i
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyUnit, ComposeCapability na tes', p1)
+    InstallCapability na tes -> do
+      unify checkty TyUnit i
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyUnit, InstallCapability na tes', p1)
+    EmitEvent na tes -> do
+      unify checkty TyUnit i
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyUnit, EmitEvent na tes', p1)
+    -- TODO: Enforce `na` is a name of a dfun and not a dcap
+    -- as a matter of fact, the whole above block needs the same enforcement just
+    -- for dfuns
+    CreateUserGuard na tes -> case _nKind na of
+      NTopLevel mn mh ->
+        view (tcFree . at (FullyQualifiedName mn (_nName na) mh)) >>= \case
+          Just (DefunType fty) -> do
+            let (args, r) = tyFunToArgList fty
+            unify (liftType r) TyUnit i
+            when (length args /= length tes) $ error "invariant broken"
+            vs <- zipWithM (checkTermType . liftType) args tes
+            let tes' = view _2 <$> vs
+            pure (TyGuard, CreateUserGuard na tes', concat (view _3 <$> vs))
+          _ -> error "boom"
+      _ -> error "invariant broken, must refer to a top level name"
+
+      -- unify checkty TyGuard i
+      -- (tes', p1) <- checkCapArgs na tes
+      -- pure (TyGuard, CreateUserGuard na tes', p1)
   IR.Constant lit i -> do
     let ty = typeOfLit lit
     unify checkty ty i
@@ -1092,6 +1138,21 @@ checkTermType checkty = \case
   IR.Error txt i -> pure (checkty, Typed.Error checkty txt i, [])
 
 
+checkCapArgs
+  :: TypeOfBuiltin raw
+  => Name
+  -> [IRTerm raw i]
+  -> InferM s reso i ([TCTerm s raw i], [TCPred s])
+checkCapArgs na tes = case _nKind na of
+  NTopLevel mn mh ->
+    view (tcFree . at (FullyQualifiedName mn (_nName na) mh)) >>= \case
+      Just (DefcapType dcargs _) -> do
+        when (length dcargs /= length tes) $ error "invariant broken dcap args"
+        vs <- zipWithM (checkTermType . liftType) dcargs tes
+        pure (view _2 <$> vs, concat (view _3 <$> vs))
+      _ -> error "invariant broken"
+  _ -> error "invariant broken"
+
 -- Todo: bidirectionality
 inferTerm
   :: (TypeOfBuiltin b)
@@ -1108,10 +1169,10 @@ inferTerm = \case
           throwTypecheckError (TCUnboundTermVariable n) i
     NTopLevel mn _mh ->
       view (tcFree . at (FullyQualifiedName mn n _mh)) >>= \case
-        Just ty -> do
+        Just (DefunType ty) -> do
           let newVar = Typed.Var irn i
           pure (liftType ty, newVar, [])
-        Nothing ->
+        _ ->
           throwTypecheckError (TCUnboundFreeVariable mn n) i
     NModRef _ ifs -> case ifs of
       [iface] -> do
@@ -1167,6 +1228,27 @@ inferTerm = \case
     (te2, e2', pe2) <- inferTerm e2
     pure (te2, Typed.Sequence e1' e2' i, pe1 ++ pe2)
   -- Todo: Here, convert to dictionary
+  IR.CapabilityForm cf i -> over _2 (`Typed.CapabilityForm` i) <$> case cf of
+    WithCapability na tes te -> do
+      (tes', p1) <- checkCapArgs na tes
+      (ty', te', p2) <- inferTerm te
+      pure (ty', WithCapability na tes' te', p1 ++ p2)
+    RequireCapability na tes -> do
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyUnit, RequireCapability na tes', p1)
+    ComposeCapability na tes -> do
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyUnit, ComposeCapability na tes', p1)
+    InstallCapability na tes -> do
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyUnit, InstallCapability na tes', p1)
+    EmitEvent na tes -> do
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyUnit, EmitEvent na tes', p1)
+    CreateUserGuard na tes -> do
+      (tes', p1) <- checkCapArgs na tes
+      pure (TyGuard, CreateUserGuard na tes', p1)
+
   IR.Conditional cond i -> over _2 (`Typed.Conditional` i) <$>
     case cond of
       CAnd e1 e2 -> do
@@ -1254,6 +1336,18 @@ inferDefConst (IR.DefConst name dcTy term info) = do
   rty' <- ensureNoTyVars info (maybe termTy id dcTy')
   pure (Typed.DefConst name rty' fterm info)
 
+inferDefCap
+  :: TypeOfBuiltin b
+  => IR.DefCap Name b i
+  -> InferM s b' i (TypedDefCap b i)
+inferDefCap (IR.DefCap name arity argtys rty term meta i) = do
+  let ty = foldr TyFun rty argtys
+  (termTy, term', preds) <- checkTermType (liftType ty) term
+  checkReducible preds i
+  unify (liftType ty) (termTy) i
+  fterm <- noTyVarsinTerm i term'
+  pure (Typed.DefCap name arity argtys rty fterm meta i)
+
 inferDef
   :: TypeOfBuiltin b
   => IR.Def Name b i
@@ -1261,7 +1355,7 @@ inferDef
 inferDef = \case
   IR.Dfun d -> Typed.Dfun <$> inferDefun d
   IR.DConst d -> Typed.DConst <$> inferDefConst d
-  -- IR.DCap d -> Typed.DCap <$> inferDefCap d
+  IR.DCap dc -> Typed.DCap <$> inferDefCap dc
 
 inferIfDef
   :: TypeOfBuiltin b
@@ -1272,33 +1366,32 @@ inferIfDef = \case
     pure (Typed.IfDfun (Typed.IfDefun (IR._ifdName ifd) (IR._ifdType ifd) (IR._ifdInfo ifd)))
   IR.IfDConst dc ->
     Typed.IfDConst <$> inferDefConst dc
-  -- IR.Dfun d -> Typed.Dfun <$> inferDefun d
-  -- IR.DConst d -> Typed.DConst <$> inferDefConst d
+  IR.IfDCap (IR.IfDefCap n argtys rty i) ->
+    pure $ Typed.IfDCap (Typed.IfDefCap n argtys rty i)
 
 inferModule
   :: TypeOfBuiltin b
   => IR.Module Name b i
   -> InferM s b' i (TypedModule b i)
-inferModule (IR.Module mname defs blessed imports impl mh) = do
-  -- gov' <- traverse (dbjName [] 0 . toOName ) gov
+inferModule (IR.Module mname mgov defs blessed imports impl mh info) = do
   fv <- view tcFree
   (defs', _) <- foldlM infer' ([], fv) defs
-  pure (Typed.Module mname (reverse defs') blessed imports impl mh)
+  pure (Typed.Module mname mgov (reverse defs') blessed imports impl mh info)
   where
   infer' (xs, m) d = do
     def' <- local (set tcFree m) (inferDef d)
     let name' = FullyQualifiedName mname (Typed.defName def') mh
-        ty = liftType (Typed.defType def')
-        m' = Map.insert name' ty  m
+        dty = fmap absurd (Typed.defType def')
+        m' = Map.insert name' dty  m
     pure (def':xs, m')
 
 inferInterface
   :: TypeOfBuiltin b
   => IRInterface b info
   -> InferM s b' info (TypedInterface b info)
-inferInterface (IR.Interface n defns h) = do
+inferInterface (IR.Interface n defns h info) = do
   defns' <- traverse inferIfDef defns
-  pure (Typed.Interface n defns' h)
+  pure (Typed.Interface n defns' h info)
 
 -- | Note: debruijnizeType will
 -- ensure that terms that are generic will fail
@@ -1346,7 +1439,7 @@ inferTopLevel loaded = \case
   IR.TLInterface i -> do
     tci <- inferInterface i
     let toFqn dc = FullyQualifiedName (Typed._ifName tci) (Typed._dcName dc) (Typed._ifHash tci)
-        newTLs = Map.fromList $ fmap (\df -> (toFqn df, Typed._dcType df)) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
+        newTLs = Map.fromList $ fmap (\df -> (toFqn df, DefunType (Typed._dcType df))) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
         loaded' = over loAllTyped (Map.union newTLs) loaded
     pure (Typed.TLInterface tci, loaded')
 
@@ -1368,17 +1461,17 @@ inferReplTopLevel loaded = \case
   IR.RTLDefun dfn -> do
     dfn' <- inferDefun dfn
     let newFqn = FullyQualifiedName replModuleName (Typed._dfunName dfn') replModuleHash
-    let loaded' = over loAllTyped (Map.insert newFqn (Typed._dfunType dfn')) loaded
+    let loaded' = over loAllTyped (Map.insert newFqn (DefunType (Typed._dfunType dfn'))) loaded
     pure (Typed.RTLDefun dfn', loaded')
   IR.RTLDefConst dconst -> do
     dc <- inferDefConst dconst
     let newFqn = FullyQualifiedName replModuleName (Typed._dcName dc) replModuleHash
-    let loaded' = over loAllTyped (Map.insert newFqn (Typed._dcType dc)) loaded
+    let loaded' = over loAllTyped (Map.insert newFqn (DefunType (Typed._dcType dc))) loaded
     pure (Typed.RTLDefConst dc, loaded')
   IR.RTLInterface i -> do
     tci <- inferInterface i
     let toFqn dc = FullyQualifiedName (Typed._ifName tci) (Typed._dcName dc) (Typed._ifHash tci)
-        newTLs = Map.fromList $ fmap (\df -> (toFqn df, Typed._dcType df)) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
+        newTLs = Map.fromList $ fmap (\df -> (toFqn df, DefunType (Typed._dcType df))) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
         loaded' = over loAllTyped (Map.union newTLs) loaded
     pure (Typed.RTLInterface tci, loaded')
 
@@ -1453,6 +1546,8 @@ debruijnizeTermTypes info = dbj [] 0
       tys' <- traverse (dbjTyp info env depth) tys
       preds' <- traverse (dbjPred info env depth) preds
       pure (Typed.Builtin (b, tys', preds') i)
+    Typed.CapabilityForm cf i ->
+      Typed.CapabilityForm <$> traverse (dbj env depth) cf <*> pure i
     Typed.Constant l i -> pure (Typed.Constant l i)
 
 
@@ -1525,6 +1620,8 @@ noTyVarsinTerm info = \case
     Typed.Try <$> noTyVarsinTerm info e1 <*> noTyVarsinTerm info e2 <*> pure i
   Typed.DynInvoke e1 t i ->
     Typed.DynInvoke <$> noTyVarsinTerm info e1 <*> pure t <*> pure i
+  Typed.CapabilityForm cf i ->
+    Typed.CapabilityForm <$> traverse (noTyVarsinTerm info) cf <*> pure i
   Typed.Error t e i ->
     Typed.Error <$> ensureNoTyVars info t <*> pure e <*> pure i
 

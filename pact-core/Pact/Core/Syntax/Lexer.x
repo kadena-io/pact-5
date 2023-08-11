@@ -5,7 +5,7 @@
 {-# LANGUAGE ViewPatterns #-}
 
 
-module Pact.Core.Syntax.Lisp.Lexer(lexer, runLexerIO) where
+module Pact.Core.Syntax.Lexer(lexer, runLexerIO) where
 
 import Control.Monad.State.Strict
 import Control.Exception(throwIO)
@@ -20,7 +20,7 @@ import qualified Data.Text.Encoding as T
 
 import Pact.Core.Info
 import Pact.Core.Errors
-import Pact.Core.Syntax.Lisp.LexUtils
+import Pact.Core.Syntax.LexUtils
 
 }
 %encoding "latin1"
@@ -37,6 +37,12 @@ $special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
 @tc = expect\-typechecks
 @tcfail = expect\-typecheck\-failure
 @steprb = step\-with\-rollback
+@withcap = with\-capability
+@reqcap = require\-capability
+@installcap = install\-capability
+@composecap = compose\-capability
+@emitevent = emit\-event
+
 
 
 tokens :-
@@ -74,8 +80,11 @@ tokens :-
     \@managed    { token TokenManagedAnn}
     @steprb      { token TokenStepWithRollback}
     step         { token TokenStep }
-    @tc          { token TokenTypechecks }
-    @tcfail      { token TokenTypecheckFailure }
+    @withcap     { token TokenWithCapability }
+    @composecap  { token TokenComposeCapability }
+    @reqcap      { token TokenRequireCapability }
+    @installcap  { token TokenInstallCapability }
+    @emitevent   { token TokenEmitEvent }
     -- at           { token TokenObjAccess }
     -- remove       { token TokenObjRemove }
     try          { token TokenTry }

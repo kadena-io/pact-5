@@ -8,10 +8,12 @@ module Pact.Core.Typed.Term
  ( Defun(..)
  , DefConst(..)
  , Def(..)
+ , DefCap(..)
  , Term(..)
  , Module(..)
  , Interface(..)
  , IfDefun(..)
+ , IfDefCap(..)
  , IfDef(..)
  , TopLevel(..)
  , ReplTopLevel(..)
@@ -22,6 +24,7 @@ module Pact.Core.Typed.Term
  , OverloadedTerm
  , OverloadedDefun
  , OverloadedDefConst
+ , OverloadedDefCap
  , OverloadedIfDef
  , OverloadedDef
  , OverloadedModule
@@ -57,6 +60,8 @@ import Pact.Core.Names
 import Pact.Core.Type
 import Pact.Core.Imports
 import Pact.Core.Hash
+import Pact.Core.Guards
+import Pact.Core.Capabilities
 import Pact.Core.Pretty(Pretty(..), pretty, (<+>))
 
 import qualified Pact.Core.Pretty as Pretty
@@ -77,9 +82,22 @@ data DefConst name tyname builtin info
   , _dcInfo :: info
   } deriving Show
 
+data DefCap name tyname builtin info
+  = DefCap
+  { _dcapName :: Text
+  , _dcapAppArity :: Int
+  , _dcapArgTypes :: [Type Void]
+  , _dcapRType :: Type Void
+  , _dcapTerm :: Term name tyname builtin info
+  , _dcapMeta :: Maybe (DefCapMeta name)
+  , _dcapInfo :: info
+  } deriving Show
+
+
 data Def name tyname builtin info
   = Dfun (Defun name tyname builtin info)
   | DConst (DefConst name tyname builtin info)
+  | DCap (DefCap name tyname builtin info)
   deriving Show
 
 -- Todo: deftypes to support
@@ -87,32 +105,34 @@ data Def name tyname builtin info
 -- DPact (DefPact name builtin info)
 -- DSchema (DefSchema name info)
 -- DTable (DefTable name info)
-defType :: Def name tyname builtin info -> Type Void
+defType :: Def name tyname builtin info -> TypeOfDef Void
 defType = \case
-  Dfun d -> _dfunType d
-  DConst d -> _dcType d
-  -- DCap d -> _dcapType d
+  Dfun d -> DefunType (_dfunType d)
+  DConst d -> DefunType (_dcType d)
+  DCap d -> DefcapType (_dcapArgTypes d) (_dcapRType d)
 
 defName :: Def name tyname builtin i -> Text
 defName = \case
   Dfun d -> _dfunName d
   DConst d -> _dcName d
-  -- DCap d -> _dcapName d
+  DCap d -> _dcapName d
 
 defTerm :: Def name tyname builtin info -> Term name tyname builtin info
 defTerm = \case
   Dfun d -> _dfunTerm d
   DConst d -> _dcTerm d
+  DCap d -> _dcapTerm d
 
 data Module name tyname builtin info
   = Module
   { _mName :: ModuleName
-  -- , _mGovernance :: Governance name
+  , _mGovernance :: Governance name
   , _mDefs :: [Def name tyname builtin info]
   , _mBlessed :: !(Set.Set ModuleHash)
   , _mImports :: [Import]
   , _mImplemented :: [ModuleName]
   , _mHash :: ModuleHash
+  , _mInfo :: info
   } deriving Show
 
 data Interface name tyname builtin info
@@ -120,18 +140,28 @@ data Interface name tyname builtin info
   { _ifName :: ModuleName
   , _ifDefns :: [IfDef name tyname builtin info]
   , _ifHash :: ModuleHash
+  , _ifInfo :: info
   } deriving Show
 
-data IfDefun name info
+data IfDefun info
   = IfDefun
   { _ifdName :: Text
   , _ifdType :: Type Void
   , _ifdInfo :: info
   } deriving Show
 
+data IfDefCap info
+  = IfDefCap
+  { _ifdcName :: Text
+  , _ifdcArgTys :: [Type Void]
+  , _ifdcRType :: Type Void
+  , _ifdcInfo :: info
+  } deriving (Show, Functor)
+
 data IfDef name tyname builtin info
-  = IfDfun (IfDefun name info)
+  = IfDfun (IfDefun info)
   | IfDConst (DefConst name tyname builtin info)
+  | IfDCap (IfDefCap info)
   deriving Show
 
 data TopLevel name tyname builtin info
@@ -177,6 +207,8 @@ data Term name tyname builtin info
   -- ^ Dynamic invoke.
   | Try (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ Error handling
+  | CapabilityForm (CapForm name (Term name tyname builtin info)) info
+  -- ^ Capabilities
   | Error (Type tyname) Text info
   -- ^ Error term
   deriving (Show, Functor, Foldable, Traversable)
@@ -190,6 +222,9 @@ type OverloadedDefun tyname b i =
 
 type OverloadedDefConst tyname b i =
   DefConst Name tyname (b, [Type tyname], [Pred tyname]) i
+
+type OverloadedDefCap tyname b i =
+  DefCap Name tyname (b, [Type tyname], [Pred tyname]) i
 
 type OverloadedDef tyname b i =
   Def Name tyname (b, [Type tyname], [Pred tyname]) i
@@ -247,6 +282,7 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
     Constant l _ -> pretty l
     Try e1 e2 _ ->
       Pretty.parens ("try" <+> pretty e1 <+> pretty e2)
+    CapabilityForm cf _ -> pretty cf
     DynInvoke{} -> error "implement dyn invoke"
     Error _ e _ ->
       Pretty.parens ("error \"" <> pretty e <> "\"")
@@ -282,6 +318,8 @@ termBuiltin f = \case
     ListLit ty <$> traverse (termBuiltin f) tes <*> pure info
   Try te te' info ->
     Try <$> termBuiltin f te <*> termBuiltin f te' <*> pure info
+  CapabilityForm cf i ->
+    CapabilityForm <$> traverse (termBuiltin f) cf <*> pure i
   DynInvoke te t i ->
     DynInvoke <$> termBuiltin f te <*> pure t <*> pure i
   Error ty txt info ->
@@ -313,6 +351,8 @@ termInfo f = \case
     Constant l <$> f i
   Try e1 e2 i ->
     Try e1 e2 <$> f i
+  CapabilityForm cf i ->
+    CapabilityForm cf <$> f i
   DynInvoke t e i -> DynInvoke t e <$> f i
   Error t e i ->
     Error t e <$> f i
@@ -339,6 +379,8 @@ instance Plated (Term name tyname builtin info) where
     Constant l i -> pure (Constant l i)
     Try e1 e2 i ->
       Try <$> f e1 <*> f e2 <*> pure i
+    CapabilityForm cf i ->
+      CapabilityForm <$> traverse f cf <*> pure i
     DynInvoke e1 t i ->
       DynInvoke <$> f e1 <*> pure t <*> pure i
     Error t e i -> pure (Error t e i)

@@ -34,6 +34,8 @@ fromTypedTerm = \case
     Try (fromTypedTerm e1) (fromTypedTerm e2) i
   Typed.DynInvoke term t i ->
     DynInvoke (fromTypedTerm term) t i
+  Typed.CapabilityForm cf i ->
+    CapabilityForm (fromTypedTerm <$> cf) i
   Typed.Error _ e i -> Error e i
   -- Typed.ObjectLit m i ->
   --   ObjectLit (fromTypedTerm <$> m) i
@@ -48,10 +50,16 @@ fromTypedDefun (Typed.Defun n ty term i) =
   Defun n ty (fromTypedTerm term) i
 
 fromTypedIfDefun
-  :: Typed.IfDefun name info
+  :: Typed.IfDefun info
   -> IfDefun info
 fromTypedIfDefun (Typed.IfDefun n ty i) =
   IfDefun n ty i
+
+fromTypedIfDefCap
+  :: Typed.IfDefCap info
+  -> IfDefCap info
+fromTypedIfDefCap (Typed.IfDefCap n argtys ty i) =
+  IfDefCap n argtys ty i
 
 fromTypedDConst
   :: Typed.DefConst name tyname builtin info
@@ -59,11 +67,11 @@ fromTypedDConst
 fromTypedDConst (Typed.DefConst n ty term i) =
   DefConst n ty (fromTypedTerm term) i
 
--- fromTypedDCap
---   :: Typed.DefCap name NamedDeBruijn builtin info
---   -> DefCap name builtin info
--- fromTypedDCap (Typed.DefCap name args term captype ty info) =
---   DefCap name args (fromTypedTerm term) captype ty info
+fromTypedDCap
+  :: Typed.DefCap name tyname builtin info
+  -> DefCap name builtin info
+fromTypedDCap (Typed.DefCap name appArity argTys rty term meta i) =
+  DefCap name appArity argTys rty (fromTypedTerm term) meta i
 
 fromTypedDef
   :: Typed.Def name tyname builtin info
@@ -71,7 +79,7 @@ fromTypedDef
 fromTypedDef = \case
   Typed.Dfun d -> Dfun (fromTypedDefun d)
   Typed.DConst d -> DConst (fromTypedDConst d)
-  -- Typed.DCap d -> DCap (fromTypedDCap d)
+  Typed.DCap d -> DCap (fromTypedDCap d)
 
 fromTypedIfDef
   :: Typed.IfDef name tyname builtin info
@@ -80,18 +88,20 @@ fromTypedIfDef = \case
   Typed.IfDfun d -> IfDfun (fromTypedIfDefun d)
   Typed.IfDConst d ->
     IfDConst (fromTypedDConst d)
+  Typed.IfDCap d ->
+    IfDCap (fromTypedIfDefCap d)
 
 fromTypedModule
   :: Typed.Module name tyname builtin info
   -> Module name builtin info
-fromTypedModule (Typed.Module mn defs blessed imports implements hs) =
-  Module mn (fromTypedDef <$> defs) blessed imports implements hs
+fromTypedModule (Typed.Module mn mgov defs blessed imports implements hs i) =
+  Module mn mgov (fromTypedDef <$> defs) blessed imports implements hs i
 
 fromTypedInterface
   :: Typed.Interface name tyname builtin info
   -> Interface name builtin info
-fromTypedInterface (Typed.Interface ifname ifdefs ifh) =
-  Interface ifname (fromTypedIfDef <$> ifdefs) ifh
+fromTypedInterface (Typed.Interface ifname ifdefs ifh i) =
+  Interface ifname (fromTypedIfDef <$> ifdefs) ifh i
 
 fromTypedTopLevel
   :: Typed.TopLevel name tyname builtin info

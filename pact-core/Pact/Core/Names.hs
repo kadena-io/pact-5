@@ -3,6 +3,7 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module Pact.Core.Names
  ( ModuleName(..)
@@ -32,7 +33,7 @@ module Pact.Core.Names
  , ndName
  , DeBruijn
  , TypeName(..)
---  , rawParsedName
+ , rawParsedName
  , ONameKind(..)
  , OverloadedName(..)
  , FullyQualifiedName(..)
@@ -40,6 +41,8 @@ module Pact.Core.Names
  , replRawModuleName
  , replModuleName
  , replModuleHash
+ , DefKind(..)
+ , fqnToName
  ) where
 
 import Control.Lens
@@ -48,7 +51,6 @@ import Data.Word(Word64)
 
 import Pact.Core.Hash
 import Pact.Core.Pretty(Pretty(..))
-
 
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
   deriving (Eq, Ord, Show)
@@ -80,6 +82,7 @@ data QualifiedName =
   } deriving (Show, Eq)
 
 instance Ord QualifiedName where
+  compare :: QualifiedName -> QualifiedName -> Ordering
   compare (QualifiedName qn1 m1) (QualifiedName qn2 m2) =
     case compare m1 m2 of
       EQ -> compare qn1 qn2
@@ -102,9 +105,9 @@ data ParsedName
   | BN BareName
   deriving (Show, Eq)
 
--- rawParsedName :: ParsedName -> Text
--- rawParsedName (BN (BareName n)) = n
--- rawParsedName (QN qn) = _qnName qn
+rawParsedName :: ParsedName -> Text
+rawParsedName (BN (BareName n)) = n
+rawParsedName (QN qn) = _qnName qn
 
 instance Pretty ParsedName where
   pretty = \case
@@ -155,6 +158,12 @@ data OverloadedName b
   { _olName :: !Text
   , _olNameKind :: ONameKind b }
   deriving (Show, Eq)
+
+data DefKind
+  = DKDefun
+  | DKDefConst
+  | DKDefCap
+  deriving (Show, Eq, Ord)
 
 -- Name representing locally nameless representations
 data Name
@@ -237,3 +246,6 @@ replModuleName = ModuleName replRawModuleName Nothing
 replModuleHash :: ModuleHash
 replModuleHash = ModuleHash (Hash "#repl")
 
+fqnToName :: FullyQualifiedName -> Name
+fqnToName (FullyQualifiedName mn name mh) =
+  Name name (NTopLevel mn mh)

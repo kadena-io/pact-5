@@ -2,7 +2,7 @@
 
 
 module Pact.Core.Guards
-( PublicKey(..)
+( PublicKeyText(..)
 , KeySetName(..)
 , Governance(..)
 , KeySet(..)
@@ -18,14 +18,15 @@ import qualified Data.Set as S
 
 import Pact.Core.Names
 
-newtype PublicKey = PublicKey { _pubKey :: ByteString }
+newtype PublicKeyText = PublicKeyText { _pubKey :: ByteString }
   deriving (Eq,Ord,Show)
 
 newtype KeySetName = KeySetName Text
     deriving (Eq,Ord,Show)
 
-newtype Governance a =
-  Governance { _governance :: Either KeySetName a }
+data Governance name
+  = KeyGov KeySetName
+  | CapGov name
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data KSPredicate name
@@ -37,7 +38,7 @@ data KSPredicate name
 
 data KeySet name
   = KeySet
-  { _ksKeys :: !(S.Set PublicKey)
+  { _ksKeys :: !(S.Set PublicKeyText)
   , _ksPredFun :: KSPredicate name
   } deriving (Eq, Show, Ord)
 
@@ -45,14 +46,13 @@ data UserGuard name term
   = UserGuard
   { _ugFunction :: name
   , _ugArgs :: [term] }
-  deriving (Eq, Show, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 data Guard name term
   = GKeyset (KeySet name)
   | GKeySetRef KeySetName
-  | GUserGuard term
-  -- | GUserGuard (UserGuard name term)
-  deriving (Eq, Show, Functor, Foldable, Traversable)
+  | GUserGuard (UserGuard name term)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 data Namespace name term
   = Namespace

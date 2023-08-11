@@ -4,6 +4,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE TemplateHaskell #-}
+
 
 module Pact.Core.Type
  ( PrimType(..)
@@ -23,12 +25,14 @@ module Pact.Core.Type
  , Pred(..)
  , renderType
  , renderPred
+ , TypeOfDef(..)
+ , Arg(..)
+ , argName
+ , argType
  ) where
 
 import Control.Lens
 import Data.Text(Text)
-import Data.List.NonEmpty(NonEmpty(..))
-import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 
 import Pact.Core.Literal
@@ -82,8 +86,6 @@ data Type n
   -- ^ Type of Guards.
   | TyModRef ModuleName
   -- ^ Module references
-  | TyForall (NonEmpty n) (Type n)
-  -- ^ Universal quantification
   -- TODO: remove?
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
@@ -94,7 +96,6 @@ instance Plated (Type n) where
     TyFun ty ty' -> TyFun <$> f ty <*> f ty'
     TyList ty -> TyList <$> f ty
     TyModRef mn -> pure (TyModRef mn)
-    TyForall ne ty -> TyForall ne <$> f ty
 
 pattern TyInt :: Type n
 pattern TyInt = TyPrim PrimInt
@@ -152,13 +153,18 @@ data TypeScheme tv =
   TypeScheme [tv] [Pred tv]  (Type tv)
   deriving Show
 
-tyFunToArgList :: Type n -> Maybe ([Type n], Type n)
+data TypeOfDef tv
+  = DefunType (Type tv)
+  | DefcapType [Type tv] (Type tv)
+  deriving (Show, Functor, Foldable, Traversable)
+
+tyFunToArgList :: Type n -> ([Type n], Type n)
 tyFunToArgList (TyFun l r) =
   unFun [l] r
   where
   unFun args (TyFun l' r') = unFun (l':args) r'
-  unFun args ret = Just (reverse args, ret)
-tyFunToArgList _ = Nothing
+  unFun args ret = (reverse args, ret)
+tyFunToArgList r = ([], r)
 
 typeOfLit :: Literal -> Type n
 typeOfLit = TyPrim . \case
@@ -173,6 +179,12 @@ renderType = T.pack . show . pretty
 
 renderPred :: (Pretty n) => Pred n -> Text
 renderPred = T.pack . show . pretty
+
+data Arg tv
+  = Arg
+  { _argName :: !Text
+  , _argType :: Maybe (Type tv)
+  } deriving (Show, Eq)
 
 instance Pretty n => Pretty (Pred n) where
   pretty (Pred tc ty) = pretty tc <>  Pretty.angles (pretty ty)
@@ -193,11 +205,6 @@ instance Pretty n => Pretty (Type n) where
       liParens t = Pretty.parens (pretty t)
     TyModRef mr ->
       "module" <> Pretty.braces (pretty mr)
-    TyForall as ty ->
-      "∀" <> render (NE.toList as) "*" <> "." <> pretty ty
-      where
-      render xs suffix =
-        Pretty.hsep $ fmap (\n -> Pretty.parens (pretty n <> ":" <+> suffix)) xs
 
 instance Pretty tv => Pretty (TypeScheme tv) where
   pretty (TypeScheme tvs preds ty) =
@@ -211,3 +218,5 @@ instance Pretty tv => Pretty (TypeScheme tv) where
     qual [] = mempty
     qual as =
       Pretty.parens (Pretty.hsep $ Pretty.punctuate "," (pretty <$> as)) <+> "=> "
+
+makeLenses ''Arg

@@ -8,17 +8,16 @@
 
 module Pact.Core.Repl.Compile
  ( InterpretOutput(..)
- , interpretExprLisp
- , lispInterpretBundle
- , interpretExprTypeLisp
- , InterpretBundle(..)
+ , interpretExpr
  , compileProgram
  , interpretProgram
  , interpretReplProgram
  ) where
 
 import Control.Lens
+import Control.Monad
 import Control.Monad.Except
+import Control.Monad.IO.Class(liftIO)
 import Data.Text(Text)
 import Data.ByteString(ByteString)
 import Data.Proxy
@@ -34,116 +33,60 @@ import Pact.Core.Builtin
 import Pact.Core.Gas
 import Pact.Core.Names
 import Pact.Core.Repl.Utils
-import Pact.Core.Untyped.Term
-import Pact.Core.Untyped.Utils
 import Pact.Core.IR.Desugar
-import Pact.Core.IR.Typecheck
-import Pact.Core.Type
-import Pact.Core.Typed.Overload
 import Pact.Core.Errors
+import Pact.Core.IR.Term
 
 
-import Pact.Core.Untyped.Eval.Runtime
+import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Repl.Runtime
 import Pact.Core.Repl.Runtime.ReplBuiltin
 
-import qualified Pact.Core.Pretty as Pretty
 import qualified Pact.Core.IR.Term as IR
-import qualified Pact.Core.Typed.Term as Typed
-import qualified Pact.Core.Syntax.Lisp.ParseTree as Lisp
-import qualified Pact.Core.Syntax.Lisp.Lexer as Lisp
-import qualified Pact.Core.Syntax.Lisp.Parser as Lisp
+import qualified Pact.Core.Syntax.ParseTree as Lisp
+import qualified Pact.Core.Syntax.Lexer as Lisp
+import qualified Pact.Core.Syntax.Parser as Lisp
 
 data InterpretOutput b i
-  = InterpretValue (CEKValue b i (ReplEvalM ReplCoreBuiltin SpanInfo)) SpanInfo
+  = InterpretValue (CEKValue b i (ReplEvalM ReplRawBuiltin SpanInfo)) SpanInfo
   | InterpretLog Text
   deriving Show
 
--- | Auxiliary type
--- to assist in swapping from the lisp frontend
-data InterpretBundle
-  = InterpretBundle
-  { expr :: ByteString -> ReplM ReplCoreBuiltin (ReplEvalResult CoreBuiltin SpanInfo)
-  , exprType :: ByteString -> ReplM ReplCoreBuiltin (TypeScheme NamedDeBruijn)
-  , program :: ByteString -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin SpanInfo]
-  }
-
-lispInterpretBundle :: InterpretBundle
-lispInterpretBundle =
-    InterpretBundle
-  { expr = interpretExprLisp
-  , exprType = interpretExprTypeLisp
-  , program = interpretProgram }
-
-interpretExprLisp
+interpretExpr
   :: ByteString
-  -> ReplM ReplCoreBuiltin (ReplEvalResult CoreBuiltin SpanInfo)
-interpretExprLisp source = do
+  -> ReplM ReplRawBuiltin (ReplEvalResult RawBuiltin SpanInfo)
+interpretExpr source = do
   pactdb <- use replPactDb
   loaded <- use replLoaded
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ Lisp.parseExpr lexx
   debugIfFlagSet ReplDebugParser parsed
-  desugared <- runDesugarTermLisp Proxy pactdb loaded parsed
-  interpretExpr desugared
-
-interpretExpr
-  :: DesugarOutput ReplCoreBuiltin SpanInfo (IR.Term Name ReplRawBuiltin SpanInfo)
-  -> ReplM ReplCoreBuiltin (ReplEvalResult CoreBuiltin SpanInfo)
-interpretExpr (DesugarOutput desugared loaded' _) = do
-  debugIfFlagSet ReplDebugDesugar desugared
-  (ty, typed) <- liftEither (runInferTerm loaded' desugared)
-  debugIfFlagSet ReplDebugTypecheckerType ty
-  debugIfFlagSet ReplDebugTypechecker typed
-  resolved <- liftEither (runOverloadTerm typed)
-  debugIfFlagSet ReplDebugSpecializer resolved
-  let untyped = fromTypedTerm resolved
-  debugIfFlagSet ReplDebugUntyped untyped
+  (DesugarOutput desugared loaded' _) <- runDesugarTermLisp Proxy pactdb loaded parsed
   evalGas <- use replGas
   evalLog <- use replEvalLog
   mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
   let rEnv = ReplEvalEnv evalGas evalLog
       cekEnv = CEKRuntimeEnv
-             { _cekBuiltins = replCoreBuiltinRuntime
+             { _cekBuiltins = replRawBuiltinRuntime
              , _cekLoaded = _loAllLoaded loaded'
              , _cekGasModel = freeGasEnv
-             , _cekMHashes = mhashes }
-      rState = ReplEvalState cekEnv
-  value <- liftEither =<< liftIO (runReplCEK rEnv rState untyped)
+             , _cekMHashes = mhashes
+             , _cekMsgSigs = mempty
+             , _cekPactDb = pactdb }
+      rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] [] False)
+  value <- liftEither =<< liftIO (runReplCEK rEnv rState desugared)
   replLoaded .= loaded'
   pure value
 
-
-interpretExprTypeLisp :: ByteString -> ReplM ReplCoreBuiltin (TypeScheme NamedDeBruijn)
-interpretExprTypeLisp source = do
-  pactdb <- use replPactDb
-  loaded <- use replLoaded
-  lexx <- liftEither (Lisp.lexer source)
-  debugIfFlagSet ReplDebugLexer lexx
-  parsed <- liftEither $ Lisp.parseExpr lexx
-  debugIfFlagSet ReplDebugParser parsed
-  desugared <- runDesugarTermLisp Proxy pactdb loaded parsed
-  interpretExprType desugared
-
-interpretExprType
-  :: DesugarOutput ReplCoreBuiltin SpanInfo (IR.Term Name ReplRawBuiltin SpanInfo)
-  -> ReplM ReplCoreBuiltin (TypeScheme NamedDeBruijn)
-interpretExprType (DesugarOutput desugared loaded' _) = do
-  debugIfFlagSet ReplDebugDesugar desugared
-  (ty, typed) <- liftEither (runInferTerm loaded' desugared)
-  debugIfFlagSet ReplDebugTypecheckerType ty
-  debugIfFlagSet ReplDebugTypechecker typed
-  pure ty
-
 -- Small internal debugging function for playing with file loading within
 -- this module
-loadFile :: FilePath -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin SpanInfo]
+loadFile :: FilePath -> ReplM ReplRawBuiltin [InterpretOutput ReplRawBuiltin SpanInfo]
 loadFile source = liftIO (B.readFile source) >>= interpretReplProgram
 
 compileProgram
   :: ByteString
-  -> ReplM ReplCoreBuiltin [DesugarOutput ReplCoreBuiltin SpanInfo (TopLevel Name ReplCoreBuiltin SpanInfo)]
+  -> ReplM ReplRawBuiltin [DesugarOutput ReplRawBuiltin SpanInfo (TopLevel Name ReplRawBuiltin SpanInfo)]
 compileProgram source = do
   loaded <- use replLoaded
   pactdb <- use replPactDb
@@ -156,20 +99,15 @@ compileProgram source = do
   where
   pipe pactdb tl = do
     lastLoaded <- use replLoaded
-    (DesugarOutput desugared loaded' deps) <- runDesugarTopLevelLisp (Proxy @ReplRawBuiltin) pactdb lastLoaded tl
-    (typechecked, loadedWithTc) <- liftEither (runInferTopLevel loaded' desugared)
-    replLoaded .= loadedWithTc
-    overloaded <- liftEither (runOverloadTopLevel typechecked)
-    pure (DesugarOutput (fromTypedTopLevel overloaded) loadedWithTc deps)
-
-    -- replLoaded .= loaded'
-    -- pure (DesugarOutput (fromIRTopLevel desugared) loaded' deps)
+    dsOut <- runDesugarTopLevelLisp (Proxy @ReplRawBuiltin) pactdb lastLoaded tl
+    replLoaded .= (_dsLoaded dsOut)
+    pure dsOut
 
 
 
 interpretReplProgram
   :: ByteString
-  -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin SpanInfo]
+  -> ReplM ReplRawBuiltin [InterpretOutput ReplRawBuiltin SpanInfo]
 interpretReplProgram source = do
   pactdb <- use replPactDb
   lexx <- liftEither (Lisp.lexer source)
@@ -183,50 +121,19 @@ interpretReplProgram source = do
   debugIfIRExpr flag = \case
     IR.RTLTerm t -> debugIfFlagSet flag t
     _ -> pure ()
-  debugIfTypedExpr flag = \case
-    Typed.RTLTerm t -> debugIfFlagSet flag t
-    _ -> pure ()
-  -- debugIfUntyped flag = \case
-  --   RTLTerm t -> debugIfFlagSet flag t
-  --   _ -> pure ()
-  tcExpr loaded pdb e = do
-    (DesugarOutput desugared loaded' _) <- runDesugarTermLisp (Proxy @ReplRawBuiltin) pdb loaded e
-    pure (runInferTerm loaded' desugared)
   pipe pactdb = \case
     Lisp.RTL rtl -> pure <$> pipe' pactdb rtl
     Lisp.RTLReplSpecial rsf -> case rsf of
       Lisp.ReplLoad txt b _ -> do
         when b $ replLoaded .= mempty
         loadFile (T.unpack txt)
-      Lisp.ReplTypechecks msg ex i -> do
-        loaded <- use replLoaded
-        tcExpr loaded pactdb ex >>= \case
-           Left err -> let
-            errRender = renderPactError err
-            errMsg = "FAILURE: expect-typecheck: " <> msg <> ". Expression failed to to typecheck with error: " <> errRender
-            in pure [InterpretValue (VString errMsg) i]
-           Right _ -> pure [InterpretValue (VString ("Success: expect-typecheck: " <> msg <> ": " <> Pretty.renderText ex)) i]
-      Lisp.ReplTypecheckFail msg ex i -> do
-        loaded <- use replLoaded
-        let exprRender = Pretty.renderText ex
-        tcExpr loaded pactdb ex >>= \case
-           Left _ ->
-            let succMsg = "Success: expect-typecheck-failure: " <> msg <> ". Expression failed to typecheck: " <> exprRender
-            in pure [InterpretValue (VString succMsg) i]
-           Right _ ->
-            let errMsg = "FAILURE: expect-typecheck-failure: " <> msg <> ". Expression successfully typechecked when expected to fail: " <> exprRender
-            in pure [InterpretValue (VString errMsg) i]
   pipe' pactdb tl = do
     debugIfLispExpr tl
     lastLoaded <- use replLoaded
-    (DesugarOutput desugared loaded' deps) <- runDesugarReplTopLevel (Proxy @ReplRawBuiltin) pactdb lastLoaded tl
-    debugIfIRExpr ReplDebugDesugar desugared
-    (typechecked, loadedWithTc) <- liftEither (runInferReplTopLevel loaded' desugared)
-    debugIfTypedExpr ReplDebugTypechecker typechecked
-    replLoaded .= loadedWithTc
-    overloaded <- liftEither (runOverloadReplTopLevel typechecked)
-    debugIfTypedExpr ReplDebugSpecializer overloaded
-    interpret (DesugarOutput (fromTypedReplTopLevel overloaded) loaded' deps)
+    ds <- runDesugarReplTopLevel (Proxy @ReplRawBuiltin) pactdb lastLoaded tl
+    debugIfIRExpr ReplDebugDesugar (_dsOut ds)
+    replLoaded .= (_dsLoaded ds)
+    interpret ds
   interpret (DesugarOutput tl _ deps) = do
     pdb <- use replPactDb
     loaded <- use replLoaded
@@ -234,7 +141,7 @@ interpretReplProgram source = do
       RTLModule m -> do
         let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded loaded)
             mdata = ModuleData m deps'
-        _writeModule pdb mdata
+        liftIO (writeModule pdb (view mName m) mdata)
         let out = "Loaded module " <> renderModuleName (_mName m)
             newLoaded = Map.fromList $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
             loadNewModule =
@@ -255,11 +162,13 @@ interpretReplProgram source = do
         mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
         let rEnv = ReplEvalEnv evalGas evalLog
             cekEnv = CEKRuntimeEnv
-                  { _cekBuiltins = replCoreBuiltinRuntime
+                  { _cekBuiltins = replRawBuiltinRuntime
                   , _cekLoaded = _loAllLoaded loaded
                   , _cekGasModel = freeGasEnv
-                  , _cekMHashes = mhashes }
-            rState = ReplEvalState cekEnv
+                  , _cekMHashes = mhashes
+                  , _cekMsgSigs = mempty
+                  , _cekPactDb = pdb }
+            rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] [] False)
         -- Todo: Fix this with `returnCEKValue`
         liftIO (runReplCEK rEnv rState te) >>= liftEither >>= \case
           VError txt ->
@@ -278,7 +187,7 @@ interpretReplProgram source = do
       RTLInterface iface -> do
         let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded loaded)
             mdata = InterfaceData iface deps'
-        _writeModule pdb mdata
+        liftIO (writeModule pdb (view ifName iface) mdata)
         let out = "Loaded iface " <> renderModuleName (_ifName iface)
             newLoaded = Map.fromList $ toFqDep (_ifName iface) (_ifHash iface)
                         <$> mapMaybe (fmap DConst . preview _IfDConst) (_ifDefns iface)
@@ -295,7 +204,7 @@ interpretReplProgram source = do
 
 interpretProgram
   :: ByteString
-  -> ReplM ReplCoreBuiltin [InterpretOutput ReplCoreBuiltin SpanInfo]
+  -> ReplM ReplRawBuiltin [InterpretOutput ReplRawBuiltin SpanInfo]
 interpretProgram source = do
   compileProgram source >>= traverse interpret
   where
@@ -307,7 +216,7 @@ interpretProgram source = do
       TLModule m -> do
         let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded loaded)
             mdata = ModuleData m deps'
-        _writeModule pdb mdata
+        liftIO (writeModule pdb (view mName m) mdata)
         let out = "Loaded module " <> renderModuleName (_mName m)
             newLoaded = Map.fromList $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
             loadNewModule =
@@ -327,11 +236,13 @@ interpretProgram source = do
         mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
         let rEnv = ReplEvalEnv evalGas evalLog
             cekEnv = CEKRuntimeEnv
-                  { _cekBuiltins = replCoreBuiltinRuntime
+                  { _cekBuiltins = replRawBuiltinRuntime
                   , _cekLoaded = _loAllLoaded loaded
                   , _cekGasModel = freeGasEnv
-                  , _cekMHashes = mhashes }
-            rState = ReplEvalState cekEnv
+                  , _cekMHashes = mhashes
+                  , _cekMsgSigs = mempty
+                  , _cekPactDb = pdb}
+            rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] [] False)
         -- Todo: Fix this with `returnCEKValue`
         liftIO (runReplCEK rEnv rState te) >>= liftEither >>= \case
           VError txt ->
