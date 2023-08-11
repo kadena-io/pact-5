@@ -29,6 +29,8 @@ import Pact.Core.Guards
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
 
+
+
 chargeNodeGas :: MonadEval b i m => NodeType -> m ()
 chargeNodeGas nt = do
   gm <- view (cekGasModel . geGasModel . gmNodes) <$> cekReadEnv
@@ -111,7 +113,8 @@ evalCEK cont handler env (CapabilityForm cf _) = do
         in evalCEK cont' handler env x
       [] -> evalCap cont handler env (CapToken fqn []) body
     RequireCapability _ args -> case args of
-      [] -> requireCap cont handler (CapToken fqn [])
+      [] ->
+        requireCap cont handler (CapToken fqn [])
       x:xs -> let
         capFrame = RequireCapFrame fqn
         cont' = CapInvokeC env xs [] capFrame cont
@@ -263,7 +266,7 @@ evalCap cont handler env ct@(CapToken fqn args) contbody = do
                         result <- evaluate (_dfunTerm dfun) pv mparam
                         let mcM = ManagedParam mpfqn result managedIx
                         esCaps . csManaged %%= S.union (S.singleton (set mcManaged mcM managedCap))
-                        undefined
+                        evalCEK cont' handler env' capBody
                       _ -> error "not a defun"
                   _ -> error "incorrect cap type"
             Nothing -> error "Todo: implement automanaged"
@@ -301,7 +304,7 @@ requireCap cont handler ct = do
   let csToSet cs = S.insert (_csCap cs) (S.fromList (_csComposed cs))
       capSet = foldMap csToSet caps
   if S.member ct capSet then returnCEKValue cont handler VUnit
-  else throwExecutionError' (CapNotInScope "ovuvue")
+  else throwExecutionError' (CapNotInScope "cap not in scope")
 
 composeCap
   :: (MonadEval b i m)
@@ -451,24 +454,25 @@ returnCEKValue (CondC env frame cont) handler v = case v of
       if b then evalCEK cont handler env ifExpr
       else evalCEK cont handler env elseExpr
   _ -> failInvariant "Evaluation of conditional expression yielded non-boolean value"
-returnCEKValue (CapInvokeC env terms pvs cf cont) handler v = case terms of
-  x:xs -> do
-    pv <- cekToPactValue v
-    let cont' = CapInvokeC env xs (pv:pvs) cf cont
-    evalCEK cont' handler env x
-  [] -> case cf of
-    WithCapFrame fqn wcbody ->
-      evalCap cont handler env (CapToken fqn (reverse pvs)) wcbody
-    RequireCapFrame fqn  ->
-      requireCap cont handler (CapToken fqn (reverse pvs))
-    ComposeCapFrame fqn ->
-      composeCap cont handler (CapToken fqn (reverse pvs))
-    InstallCapFrame fqn ->
-      installCap cont handler (CapToken fqn (reverse pvs))
-    EmitEventFrame fqn ->
-      emitEvent cont handler (CapToken fqn (reverse pvs))
-    CreateUserGuardFrame fqn ->
-      createUserGuard cont handler fqn (reverse pvs)
+returnCEKValue (CapInvokeC env terms pvs cf cont) handler v = do
+  pv <- cekToPactValue v
+  case terms of
+    x:xs -> do
+      let cont' = CapInvokeC env xs (pv:pvs) cf cont
+      evalCEK cont' handler env x
+    [] -> case cf of
+      WithCapFrame fqn wcbody ->
+        evalCap cont handler env (CapToken fqn (reverse (pv:pvs))) wcbody
+      RequireCapFrame fqn  ->
+        requireCap cont handler (CapToken fqn (reverse (pv:pvs)))
+      ComposeCapFrame fqn ->
+        composeCap cont handler (CapToken fqn (reverse (pv:pvs)))
+      InstallCapFrame fqn ->
+        installCap cont handler (CapToken fqn (reverse (pv:pvs)))
+      EmitEventFrame fqn ->
+        emitEvent cont handler (CapToken fqn (reverse (pv:pvs)))
+      CreateUserGuardFrame fqn ->
+        createUserGuard cont handler fqn (reverse (pv:pvs))
 returnCEKValue (CapBodyC env term cont) handler _ = do
   let cont' = CapPopC PopCapInvoke cont
   evalCEK cont' handler env term

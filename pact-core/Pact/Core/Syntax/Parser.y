@@ -421,9 +421,9 @@ CapForm :: { CapForm SpanInfo }
   | composecap '(' ParsedName AppList ')' { ComposeCapability $3 $4 }
   | emitevent '(' ParsedName AppList ')' { EmitEvent $3 $4 }
 
-LamArgs :: { [(Text, Maybe Type)] }
-  : LamArgs IDENT ':' Type { (getIdent $2, Just $4):$1 }
-  | LamArgs IDENT { (getIdent $2, Nothing):$1 }
+LamArgs :: { [MArg] }
+  : LamArgs IDENT ':' Type { (MArg (getIdent $2) (Just $4)):$1 }
+  | LamArgs IDENT { (MArg (getIdent $2) Nothing):$1 }
   | {- empty -} { [] }
 
 LetExpr :: { SpanInfo -> ParsedExpr }

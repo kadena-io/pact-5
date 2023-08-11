@@ -298,7 +298,7 @@ data CapForm i
 data Expr i
   = Var ParsedName i
   | LetIn (NonEmpty (Binder i)) (Expr i) i
-  | Lam [(Text, Maybe Type)] (Expr i) i
+  | Lam [MArg] (Expr i) i
   | If (Expr i) (Expr i) (Expr i) i
   | App (Expr i) [Expr i] i
   | Block (NonEmpty (Expr i)) i
@@ -410,7 +410,7 @@ instance Pretty (Expr i) where
     Binding{} -> error "boom"
     where
     prettyObj = fmap (\(n, k) -> dquotes (pretty n) <> ":" <> pretty k)
-    renderLamPair (n, mt) = case mt of
+    renderLamPair (MArg n mt) = case mt of
       Nothing -> pretty n
       Just t -> pretty n <> ":" <> pretty t
     renderLamTypes = fold . intersperse " " . fmap renderLamPair

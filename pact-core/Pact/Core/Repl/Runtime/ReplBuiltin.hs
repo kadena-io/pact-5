@@ -15,7 +15,7 @@ import Pact.Core.Literal
 
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.IR.Eval.CEK
-import Pact.Core.IR.Eval.RawBuiltin(rawBuiltinLiftedRuntime)
+import Pact.Core.IR.Eval.RawBuiltin(rawBuiltinLiftedRuntime, prettyShowValue)
 import qualified Pact.Core.IR.Eval.RawBuiltin as RawBuiltin
 
 
@@ -60,12 +60,9 @@ mkReplBuiltinFn fn b =
 
 corePrint :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i
 corePrint = mkReplBuiltinFn \cont handler -> \case
-  [showInst, v] -> do
-    unsafeApplyOne showInst v >>= enforceValue >>= \case
-     VLiteral (LString showed) -> do
-        liftIO $ putStrLn $ T.unpack showed
-        returnCEKValue cont handler (VLiteral LUnit)
-     _ -> failInvariant "Print"
+  [v] -> do
+    liftIO $ putStrLn $ T.unpack (prettyShowValue v)
+    returnCEKValue cont handler (VLiteral LUnit)
   _ -> failInvariant "Print"
 
 -- coreExpect :: (BuiltinArity b, Default i) => ReplBuiltin b -> ReplBuiltinFn b i

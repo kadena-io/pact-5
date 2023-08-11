@@ -212,7 +212,7 @@ desugarLispTerm = \case
     in Lam AnonLamInfo (pure (Arg n nty)) <$> desugarLispTerm body <*> pure i
   Lisp.Lam (x:xs) body i -> do
     let nsts = x :| xs
-        (ns, ts) = NE.unzip nsts
+        (ns, ts) = NE.unzip $ (\(Lisp.MArg n t) -> (n, t)) <$> nsts
     ts' <- (traverse.traverse) (desugarType i) ts
     let args = NE.zipWith Arg ns ts'
     body' <- desugarLispTerm body
@@ -355,7 +355,8 @@ desugarDefCap (Lisp.DefCap dcn (x:xs) mrtype term _docs _model meta i) = do
   rtype <- traverse (desugarType i) mrtype
   args <- traverse (toArg i) (x :| xs)
   let appArity = NE.length args
-  term' <- desugarLispTerm term
+  let termBody = Lisp.Lam (x:xs) term i
+  term' <- desugarLispTerm termBody
   let bodyLam = Lam AnonLamInfo args term' i
   meta' <- traverse (desugarDefMeta term') meta
   pure (DefCap dcn appArity (NE.toList args) rtype bodyLam meta' i)

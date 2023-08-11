@@ -436,7 +436,7 @@ instance BuiltinArity b => BuiltinArity (ReplBuiltin b) where
     RExpect -> 3
     RExpectFailure -> 2
     RExpectThat -> 3
-    RPrint -> 2
+    RPrint -> 1
     -- RLoad -> 1
 
 instance Bounded b => Bounded (ReplBuiltin b) where
