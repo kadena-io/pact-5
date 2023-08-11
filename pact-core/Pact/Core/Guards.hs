@@ -46,12 +46,12 @@ data UserGuard name term
   = UserGuard
   { _ugFunction :: name
   , _ugArgs :: [term] }
-  deriving (Eq, Show, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 data Guard name term
   = GKeyset (KeySet name)
   | GKeySetRef KeySetName
-  | GUserGuard name term
+  | GUserGuard (UserGuard name term)
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 data Namespace name term

@@ -116,6 +116,8 @@ library
 
     -- Core IR Evaluator modules
     Pact.Core.IR.Eval.Runtime
+    Pact.Core.IR.Eval.Runtime.Types
+    Pact.Core.IR.Eval.Runtime.Utils
     Pact.Core.IR.Eval.CEK
     Pact.Core.IR.Eval.RawBuiltin
 

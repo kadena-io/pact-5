@@ -42,6 +42,7 @@ module Pact.Core.Names
  , replModuleName
  , replModuleHash
  , DefKind(..)
+ , fqnToName
  ) where
 
 import Control.Lens
@@ -244,3 +245,7 @@ replModuleName = ModuleName replRawModuleName Nothing
 
 replModuleHash :: ModuleHash
 replModuleHash = ModuleHash (Hash "#repl")
+
+fqnToName :: FullyQualifiedName -> Name
+fqnToName (FullyQualifiedName mn name mh) =
+  Name name (NTopLevel mn mh)
