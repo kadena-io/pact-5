@@ -237,7 +237,7 @@ type EvalInterface b i = Interface Name b i
 fromIRTerm :: IR.Term n b i -> Term n b i
 fromIRTerm = \case
   IR.Var n i -> Var n i
-  IR.Lam nsts body i ->
+  IR.Lam _lamInfo nsts body i ->
     foldr (\_ t -> Lam t i) (fromIRTerm body) nsts
   IR.Let _ _ e1 e2 i ->
     App (Lam (fromIRTerm e2) i) (fromIRTerm e1) i
@@ -262,14 +262,15 @@ fromIRTerm = \case
   IR.Error e i ->
     Error e i
 
+  {- FIXME
 fromIRDefun
   :: IR.Defun name builtin info
   -> Defun name builtin info
-fromIRDefun (IR.Defun n ty term i) =
+fromIRDefun (IR.Defun n _args ty term i) =
   Defun n (fmap absurd ty) (fromIRTerm term) i
 
 fromIRIfDefun :: IR.IfDefun info -> IfDefun info
-fromIRIfDefun (IR.IfDefun dfn ty i) =
+fromIRIfDefun (IR.IfDefun _args dfn ty i) =
   IfDefun dfn ty i
 
 fromIRIfDefCap :: IR.IfDefCap info -> IfDefCap info

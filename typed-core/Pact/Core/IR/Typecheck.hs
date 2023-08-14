@@ -998,7 +998,7 @@ checkTermType checkty = \case
           pure (TyModRef iface, Typed.Var irn i, [])
         _ -> error "incorrect type"
       _ -> error "checking modref against incorrect type"
-  IR.Lam ne te i ->
+  IR.Lam _lamInfo ne te i ->
     case tyFunToArgList checkty of
       (tl, ret) -> do
         when (length tl /= NE.length ne) $ error "Arguments mismatch"
@@ -1180,7 +1180,7 @@ inferTerm = \case
         pure (TyModRef iface, v', [])
       [] -> error "Module reference does not implement any interfaces"
       _ -> error "Cannot infer module reference "
-  IR.Lam nts e i -> do
+  IR.Lam _lamInfo nts e i -> do
     let names = fst <$> nts
     ntys <- traverse withTypeInfo nts
     -- Todo: bidirectionality
@@ -1311,7 +1311,7 @@ inferDefun
   :: TypeOfBuiltin b
   => IR.Defun Name b i
   -> InferM s b' i (TypedDefun b i)
-inferDefun (IR.Defun name dfTy term info) = do
+inferDefun (IR.Defun name _args dfTy term info) = do
   enterLevel
   (termTy, term', preds) <- inferTerm term
   leaveLevel
