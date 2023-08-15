@@ -1180,9 +1180,9 @@ inferTerm = \case
         pure (TyModRef iface, v', [])
       [] -> error "Module reference does not implement any interfaces"
       _ -> error "Cannot infer module reference "
-  IR.Lam _lamInfo nts e i -> do
-    let names = fst <$> nts
-    ntys <- traverse withTypeInfo nts
+  IR.Lam _lamInfo irArgs e i -> do
+    let names = _argName <$> irArgs
+    ntys <- traverse withTypeInfo irArgs
     -- Todo: bidirectionality
     -- let m = IntMap.fromList $ NE.toList $ NE.zipWith (\n t ->  (_irUnique n, t)) names ntys
     let m = RAList.fromList (reverse (NE.toList ntys))
@@ -1191,7 +1191,7 @@ inferTerm = \case
         rty = foldr TyFun ty ntys
     pure (rty, Typed.Lam nts' e' i, preds)
     where
-    withTypeInfo p = case snd p of
+    withTypeInfo p = case _argType p of
       Just ty -> pure (liftType ty)
       Nothing -> TyVar <$> newTvRef
   IR.App te (h :| hs) i -> do
