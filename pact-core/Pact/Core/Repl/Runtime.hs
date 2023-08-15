@@ -26,7 +26,7 @@ import Pact.Core.Gas
 import Pact.Core.Errors
 
 import Pact.Core.IR.Term
-import Pact.Core.IR.Eval.Runtime hiding (EvalEnv(..))
+import Pact.Core.IR.Eval.Runtime
 import Pact.Core.IR.Eval.CEK
 
 data ReplEvalEnv b i
@@ -37,7 +37,7 @@ data ReplEvalEnv b i
 
 data ReplEvalState b i
   = ReplEvalState
-  { _reEnv :: CEKRuntimeEnv b i (ReplEvalM b i)
+  { _reEnv :: EvalEnv b i (ReplEvalM b i)
   , _reState :: EvalState b i
   }
 
@@ -59,20 +59,22 @@ newtype ReplEvalM b i a =
 makeLenses ''ReplEvalEnv
 makeLenses ''ReplEvalState
 
-instance MonadEvalEnv b i (ReplEvalM b i) where
-  cekReadEnv = use reEnv
-  cekLogGas msg g = do
+instance MonadGas (ReplEvalM b i) where
+  logGas msg g = do
     r <- view reGasLog
     liftIO $ modifyIORef' r (fmap ((msg, g):))
-  cekChargeGas g = do
+  chargeGas g = do
     r <- view reGas
     liftIO (modifyIORef' r (<> g))
 
+instance MonadEvalEnv b i (ReplEvalM b i) where
+  readEnv = use reEnv
+
 instance MonadEvalState b i (ReplEvalM b i) where
-  getCEKState = use reState
-  modifyCEKState f =
+  getEvalState = use reState
+  modifyEvalState f =
     reState %= f
-  putCEKState s =
+  putEvalState s =
     reState .= s
 
 

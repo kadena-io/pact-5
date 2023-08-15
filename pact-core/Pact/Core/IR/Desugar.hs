@@ -518,19 +518,6 @@ resolveModuleName mn i =
         InterfaceData in' depmap ->
           md <$ loadInterface' in' depmap
 
--- lookupModule
---   :: MonadError (PactError i) m
---   => ModuleName
---   -> i
---   -> RenamerT m b i (ModuleData b i)
--- lookupModule mn i = view rePactDb >>= liftRenamerT . (`_readModule` mn) >>= \case
---    Nothing -> throwDesugarError (NoSuchModule mn) i
---    Just md -> case md of
---      ModuleData module_ depmap ->
---       md <$ loadModule' module_ depmap
---      InterfaceData in' depmap ->
---       md <$ loadInterface' in' depmap
-
 toFqDep
   :: ModuleName
   -> ModuleHash

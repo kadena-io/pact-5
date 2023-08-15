@@ -16,27 +16,27 @@
 module Pact.Core.IR.Eval.Runtime.Types
  ( CEKTLEnv
  , CEKEnv
- , CEKRuntimeEnv(..)
- , BuiltinFn(..)
+ , EvalEnv(..)
+ , NativeFn(..)
  , EvalT(..)
  , runEvalT
  , CEKValue(..)
  , Cont(..)
- , cekBuiltins
- , cekLoaded
- , cekGasModel
- , cekMHashes, cekMsgSigs
- , cekPactDb
+ , eeBuiltins
+ , eeLoaded
+ , eeGasModel
+ , eeMHashes, eeMsgSigs
+ , eePactDb
  , pactToCEKValue
  , CEKErrorHandler(..)
  , MonadEvalEnv(..)
  , MonadEvalState(..)
-
+ , MonadGas(..)
  , CondFrame(..)
  , MonadEval
  , Closure(..)
  , EvalResult(..)
- , EvalEnv(..)
+ , EvalTEnv(..)
  , emGas, emGasLog, emRuntimeEnv
  , EvalState(..)
  , esCaps, esEvents, esInCap
@@ -103,7 +103,7 @@ type CEKTLEnv b i = Map FullyQualifiedName (EvalDef b i)
 type CEKEnv b i m = RAList (CEKValue b i m)
 
 -- | List of builtins
-type BuiltinEnv b i m = b -> BuiltinFn b i m
+type BuiltinEnv b i m = i -> b -> NativeFn b i m
 
 data StackFrame
   = StackFrame
@@ -122,7 +122,7 @@ data Closure b i m
 
 data CanApply b i m
   = C {-# UNPACK #-} !(Closure b i m)
-  | N {-# UNPACK #-} !(BuiltinFn b i m)
+  | N {-# UNPACK #-} !(NativeFn b i m)
   deriving Show
 
 -- | The type of our semantic runtime values
@@ -130,7 +130,7 @@ data CEKValue b i m
   = VLiteral !Literal
   | VList !(Vector (CEKValue b i m))
   | VClosure {-# UNPACK #-} !(Closure b i m)
-  | VNative {-# UNPACK #-} !(BuiltinFn b i m)
+  | VNative {-# UNPACK #-} !(NativeFn b i m)
   | VModRef ModuleName [ModuleName]
   | VGuard !(Guard FullyQualifiedName PactValue)
 
@@ -179,50 +179,54 @@ data EvalState b i
   , _esInCap :: Bool
   } deriving Show
 
-type MonadEval b i m = (MonadEvalEnv b i m, MonadEvalState b i m, MonadError (PactError i) m, MonadIO m, Default i)
+type MonadEval b i m = (MonadEvalEnv b i m, MonadEvalState b i m, MonadGas m, MonadError (PactError i) m, MonadIO m, Default i)
+
+class Monad m => MonadGas m where
+  logGas :: Text -> Gas -> m ()
+  chargeGas :: Gas -> m ()
+
 
 class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
-  cekReadEnv :: m (CEKRuntimeEnv b i m)
-  cekLogGas :: Text -> Gas -> m ()
-  cekChargeGas :: Gas -> m ()
+  readEnv :: m (EvalEnv b i m)
 
 -- | Our monad mirroring `EvalState` for our evaluation state
 class Monad m => MonadEvalState b i m | m -> b, m -> i where
-  getCEKState :: m (EvalState b i)
-  putCEKState :: EvalState b i -> m ()
-  modifyCEKState :: (EvalState b i -> EvalState b i) -> m ()
+  getEvalState :: m (EvalState b i)
+  putEvalState :: EvalState b i -> m ()
+  modifyEvalState :: (EvalState b i -> EvalState b i) -> m ()
 
 
-data EvalEnv b i m
-  = EvalEnv
-  { _emRuntimeEnv :: CEKRuntimeEnv b i (EvalT b i m)
+data EvalTEnv b i m
+  = EvalTEnv
+  { _emRuntimeEnv :: EvalEnv b i (EvalT b i m)
   , _emGas :: IORef Gas
   , _emGasLog :: IORef (Maybe [(Text, Gas)])
   }
 
 -- Todo: are we going to inject state as the reader monad here?
 newtype EvalT b i m a =
-  EvalT (ReaderT (EvalEnv b i m) (StateT (EvalState b i) m) a)
+  EvalT (ReaderT (EvalTEnv b i m) (StateT (EvalState b i) m) a)
   deriving
     ( Functor, Applicative, Monad
     , MonadIO
     , MonadThrow
     , MonadCatch)
-  via (ReaderT (EvalEnv b i m) (StateT (EvalState b i) m))
+  via (ReaderT (EvalTEnv b i m) (StateT (EvalState b i) m))
 
 runEvalT
-  :: EvalEnv b i m
+  :: EvalTEnv b i m
   -> EvalState b i
   -> EvalT b i m a
   -> m (a, EvalState b i)
 runEvalT env st (EvalT action) = runStateT (runReaderT action env) st
 
-data BuiltinFn b i m
-  = BuiltinFn
+data NativeFn b i m
+  = NativeFn
   { _native :: b
   , _nativeFn :: Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m)
   , _nativeArity :: {-# UNPACK #-} !Int
   , _nativeAppliedArgs :: [CEKValue b i m]
+  , _nativeLoc :: i
   }
 
 data ExecutionMode
@@ -319,14 +323,14 @@ data CEKErrorHandler b i m
   | CEKHandler (CEKEnv b i m) (EvalTerm b i) (Cont b i m) [CapSlot] (CEKErrorHandler b i m)
   deriving Show
 
-data CEKRuntimeEnv b i m
-  = CEKRuntimeEnv
-  { _cekBuiltins :: BuiltinEnv b i m
-  , _cekGasModel :: GasEnv b
-  , _cekLoaded :: CEKTLEnv b i
-  , _cekMHashes :: Map ModuleName ModuleHash
-  , _cekMsgSigs :: Map PublicKeyText (Set CapToken)
-  , _cekPactDb :: PactDb b i
+data EvalEnv b i m
+  = EvalEnv
+  { _eeBuiltins :: BuiltinEnv b i m
+  , _eeGasModel :: GasEnv b
+  , _eeLoaded :: CEKTLEnv b i
+  , _eeMHashes :: Map ModuleName ModuleHash
+  , _eeMsgSigs :: Map PublicKeyText (Set CapToken)
+  , _eePactDb :: PactDb b i
   --   _cekGas :: IORef Gas
   -- , _cekEvalLog :: IORef (Maybe [(Text, Gas)])
   -- , _ckeData :: EnvData PactValue
@@ -336,16 +340,16 @@ data CEKRuntimeEnv b i m
   -- , _ckePactDb :: PactDb b i
   }
 
-instance (Show i, Show b) => Show (BuiltinFn b i m) where
-  show (BuiltinFn b _ arity _) = unwords
-    ["(BuiltinFn"
+instance (Show i, Show b) => Show (NativeFn b i m) where
+  show (NativeFn b _ arity _ _) = unwords
+    ["(NativeFn"
     , show b
     , "#fn"
     , show arity
     , ")"
     ]
 
-instance (Pretty b, Show i, Show b) => Pretty (BuiltinFn b i m) where
+instance (Pretty b, Show i, Show b) => Pretty (NativeFn b i m) where
   pretty = pretty . show
 
 instance (Show i, Show b, Pretty b) => Pretty (CEKValue b i m) where
@@ -362,25 +366,28 @@ instance (Show i, Show b, Pretty b) => Pretty (CEKValue b i m) where
     VModRef mn _ ->
       "modref" <> P.braces (pretty mn)
 
-makeLenses ''CEKRuntimeEnv
 makeLenses ''EvalEnv
+makeLenses ''EvalTEnv
 makeLenses ''EvalState
 makeLenses ''CapState
 makeLenses ''CapToken
 makeLenses ''CapSlot
 makeLenses ''ManagedCap
 
-instance (MonadIO m) => MonadEvalEnv b i (EvalT b i m) where
-  cekReadEnv = EvalT $ view emRuntimeEnv
-  cekLogGas msg g = do
+instance (MonadIO m) => MonadGas (EvalT b i m) where
+  logGas msg g = do
     r <- EvalT $ view emGasLog
     liftIO $ modifyIORef' r (fmap ((msg, g):))
-  cekChargeGas g = do
+
+  chargeGas g = do
     r <- EvalT $ view emGas
     liftIO (modifyIORef' r (<> g))
 
+instance (MonadIO m) => MonadEvalEnv b i (EvalT b i m) where
+  readEnv = EvalT $ view emRuntimeEnv
+
 instance Monad m => MonadEvalState b i (EvalT b i m) where
-  getCEKState = EvalT get
-  putCEKState p = EvalT (put p)
-  modifyCEKState f = EvalT (modify' f)
+  getEvalState = EvalT get
+  putEvalState p = EvalT (put p)
+  modifyEvalState f = EvalT (modify' f)
 

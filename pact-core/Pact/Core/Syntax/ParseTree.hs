@@ -276,7 +276,7 @@ instance Pretty MArg where
 
 instance Pretty (Defun i) where
   pretty (Defun n args rettype term _ _ _) =
-    parens ("defun" <+> pretty n <+> parens (prettyCommaSep args)
+    parens ("defun" <+> pretty n <+> parens (commaSep args)
       <> ":" <+> pretty rettype <+> "=" <+> pretty term)
 
 data Binder i =
@@ -382,7 +382,7 @@ instance Pretty (Expr i) where
     Constant l _ ->
       pretty l
     List nel _ ->
-      "[" <> prettyCommaSep nel <> "]"
+      "[" <> commaSep nel <> "]"
     Try e1 e2 _ ->
       parens ("try" <+> pretty e1 <+> pretty e2)
     Error e _ ->

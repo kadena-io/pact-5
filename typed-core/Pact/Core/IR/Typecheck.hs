@@ -95,7 +95,7 @@ data TCEnv s b i
   , _tcVarEnv :: RAList (Type (TvRef s))
   -- ^ Builtins map, that uses the enum instance
   -- , _tcFree :: Map ModuleName (Map Text (Type Void))
-  , _tcFree :: Map FullyQualifiedName (TypeOfDef Void)
+  , _tcFree :: Map FullyQualifiedName (Def Name)
   -- ^ Free variables
   , _tcLevel :: STRef s Level
   -- ^ Type Variable "Region"
@@ -1311,8 +1311,9 @@ inferDefun
   :: TypeOfBuiltin b
   => IR.Defun Name b i
   -> InferM s b' i (TypedDefun b i)
-inferDefun (IR.Defun name dfTy term info) = do
+inferDefun (IR.Defun name dfargs dfRetType term info) = do
   enterLevel
+  let dfTy = foldr TyFun retType dfArgs'
   (termTy, term', preds) <- inferTerm term
   leaveLevel
   checkReducible preds (view IR.termInfo term)

@@ -9,7 +9,6 @@ import Data.Default
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Foldable(find)
-import qualified Data.Map.Strict as Map
 import qualified Data.RAList as RAList
 import qualified Data.Text as T
 import qualified Data.Vector as V
@@ -33,14 +32,14 @@ import Pact.Core.IR.Eval.Runtime
 
 chargeNodeGas :: MonadEval b i m => NodeType -> m ()
 chargeNodeGas nt = do
-  gm <- view (cekGasModel . geGasModel . gmNodes) <$> cekReadEnv
-  cekChargeGas (gm nt)
+  gm <- view (eeGasModel . geGasModel . gmNodes) <$> readEnv
+  chargeGas (gm nt)
 
 
 chargeNative :: MonadEval b i m => b -> m ()
 chargeNative native = do
-  gm <- view (cekGasModel . geGasModel . gmNatives) <$> cekReadEnv
-  cekChargeGas (gm native)
+  gm <- view (eeGasModel . geGasModel . gmNatives) <$> readEnv
+  chargeGas (gm native)
 
 -- Todo: exception handling? do we want labels
 -- Todo: `traverse` usage should be perf tested.
@@ -69,7 +68,7 @@ evalCEK cont handler env (Var n info)  = do
     -- Top level names are not closures, so we wipe the env
     NTopLevel mname mh -> do
       let fqn = FullyQualifiedName mname (_nName n) mh
-      cekReadEnv >>= \renv -> case Map.lookup fqn (view cekLoaded renv) of
+      lookupFqName fqn >>= \case
         Just (Dfun d) -> evalCEK cont handler RAList.Nil (_dfunTerm d)
         Just _ -> failInvariant' "invalid call" info
         Nothing -> failInvariant' ("top level name " <> T.pack (show fqn) <> " not in scope") info
@@ -88,10 +87,10 @@ evalCEK cont handler env (Lam li args body _) = do
   chargeNodeGas LamNode
   let clo = VClosure (Closure li (_argType <$> args) body env)
   returnCEKValue cont handler clo
-evalCEK cont handler _env (Builtin b _) = do
+evalCEK cont handler _env (Builtin b i) = do
   chargeNodeGas BuiltinNode
-  builtins <- view cekBuiltins <$> cekReadEnv
-  returnCEKValue cont handler (VNative (builtins b))
+  builtins <- view eeBuiltins <$> readEnv
+  returnCEKValue cont handler (VNative (builtins i b))
 evalCEK cont handler env (Sequence e1 e2 _) = do
   chargeNodeGas SeqNode
   evalCEK (SeqC env e2 cont) handler env e1
@@ -149,7 +148,7 @@ evalCEK cont handler env (ListLit ts _) = do
     [] -> returnCEKValue cont handler (VList mempty)
     x:xs -> evalCEK (ListC env xs [] cont) handler env x
 evalCEK cont handler env (Try e1 rest _) = do
-  caps <- useCekState (esCaps . csSlots)
+  caps <- useEvalState (esCaps . csSlots)
   let handler' = CEKHandler env e1 cont caps handler
   evalCEK Mt handler' env rest
 evalCEK cont handler env (DynInvoke n fn _) =
@@ -188,10 +187,10 @@ pactValueToCEK = \case
 -- it's located in Pact.Core.Eval.Runtime
 -- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--- viewCEKEnv :: MonadEvalEnv b i m => Lens' (CEKRuntimeEnv b i m) s -> m s
+-- viewCEKEnv :: MonadEvalEnv b i m => Lens' (EvalEnv b i m) s -> m s
 -- viewCEKEnv l = view l <$> cekReadEnv
 
--- viewsCEKEnv :: MonadEvalEnv b i m => Lens' (CEKRuntimeEnv b i m) s -> (s -> a) -> m a
+-- viewsCEKEnv :: MonadEvalEnv b i m => Lens' (EvalEnv b i m) s -> (s -> a) -> m a
 -- viewsCEKEnv l f = views f l <$> cekReadEnv f
 
 -- setCekState :: (MonadEvalState b i m) => Lens' (EvalState b i) s -> s -> m ()
@@ -241,7 +240,7 @@ evalCap
   -> EvalTerm b i
   -> m (EvalResult b i m)
 evalCap cont handler env ct@(CapToken fqn args) contbody = do
-  cekReadEnv >>= \renv -> case Map.lookup fqn (view cekLoaded renv) of
+  lookupFqName fqn >>= \case
     Just (DCap d) -> do
       (esCaps . csSlots) %%= (CapSlot ct []:)
       let (env', capBody) = applyCapBody args (_dcapTerm d)
@@ -250,7 +249,7 @@ evalCap cont handler env ct@(CapToken fqn args) contbody = do
       case _dcapMeta d of
         -- Managed capability, so we should look for it in the set of csmanaged
         Just (DefManaged mdm) -> do
-          caps <- useCekState (esCaps . csManaged)
+          caps <- useEvalState (esCaps . csManaged)
           case mdm of
             -- | Not automanaged, so it must have a defmeta
             Just (DefManagedMeta cix _) -> do
@@ -300,7 +299,7 @@ requireCap
   -> CapToken
   -> m (EvalResult b i m)
 requireCap cont handler ct = do
-  caps <- useCekState (esCaps.csSlots)
+  caps <- useEvalState (esCaps.csSlots)
   let csToSet cs = S.insert (_csCap cs) (S.fromList (_csComposed cs))
       capSet = foldMap csToSet caps
   if S.member ct capSet then returnCEKValue cont handler VUnit
@@ -313,7 +312,7 @@ composeCap
   -> CapToken
   -> m (EvalResult b i m)
 composeCap cont handler ct@(CapToken fqn args) = do
-  cekReadEnv >>= \renv -> case Map.lookup fqn (view cekLoaded renv) of
+  lookupFqName fqn >>= \case
     Just (DCap d) -> do
       (esCaps . csSlots) %%= (CapSlot ct []:)
       let (env', capBody) = applyCapBody args (_dcapTerm d)
@@ -330,13 +329,6 @@ composeCap cont handler ct@(CapToken fqn args) = do
 
 filterIndex :: Int -> [a] -> [a]
 filterIndex i xs = [x | (x, i') <- zip xs [0..], i /= i']
-
-lookupFqName
-  :: (MonadEval b i m)
-  => FullyQualifiedName
-  -> m (Maybe (EvalDef b i))
-lookupFqName fqn =
-  Map.lookup fqn . view cekLoaded <$> cekReadEnv
 
 installCap :: (MonadEval b i m)
   => Cont b i m
@@ -403,7 +395,7 @@ returnCEK Mt handler v =
     CEKNoHandler -> return v
     CEKHandler env term cont' caps handler' -> case v of
       VError{} -> do
-        setCekState (esCaps . csSlots) caps
+        setEvalState (esCaps . csSlots) caps
         evalCEK cont' handler' env term
       EvalValue v' ->
         returnCEKValue cont' handler' v'
@@ -483,11 +475,11 @@ returnCEKValue (CapPopC st cont) handler v = case st of
     esCaps . csSlots %%= tail
     returnCEKValue cont handler v
   PopCapComposed -> do
-    caps <- useCekState (esCaps . csSlots)
+    caps <- useEvalState (esCaps . csSlots)
     let cs = head caps
         csList = _csCap cs : _csComposed cs
         caps' = over (_head . csComposed) (++ csList) (tail caps)
-    setCekState (esCaps . csSlots) caps'
+    setEvalState (esCaps . csSlots) caps'
     returnCEKValue cont handler VUnit
 returnCEKValue (ListC env args vals cont) handler v = do
   case args of
@@ -502,7 +494,7 @@ returnCEKValue (DynInvokeC env fn cont) handler v = case v of
   VModRef mn _ -> do
     -- Todo: for when persistence is implemented
     -- here is where we would incur module loading
-    cekReadEnv >>= \e -> case view (cekMHashes . at mn) e of
+    readEnv >>= \e -> case view (eeMHashes . at mn) e of
       Just mh ->
         evalCEK cont handler env (Var (Name fn (NTopLevel mn mh)) def)
       Nothing -> failInvariant "No such module"
@@ -529,14 +521,14 @@ applyLam (C (Closure li cloargs term env)) args cont handler = apply' env (NE.to
     returnCEKValue cont handler (VClosure (Closure li (ty :| tys) term e))
   apply' _ [] _ = error "Applying too many arguments to function"
 
-applyLam (N (BuiltinFn b fn arity vs)) args cont handler = apply' arity vs args
+applyLam (N (NativeFn b fn arity vs i)) args cont handler = apply' arity vs args
   where
   apply' !a pa (x:xs)
     | a <= 0 = error "Applying too many args to native"
     | otherwise = apply' (a - 1) (x:pa) xs
   apply' !a pa []
     | a == 0 = fn cont handler (reverse pa)
-    | otherwise = returnCEKValue cont handler (VNative (BuiltinFn b fn a pa))
+    | otherwise = returnCEKValue cont handler (VNative (NativeFn b fn a pa i))
 
 failInvariant :: MonadEval b i m => Text -> m a
 failInvariant b =
@@ -548,7 +540,7 @@ failInvariant' b i =
   let e = PEExecutionError (InvariantFailure b) i
   in throwError e
 
-throwExecutionError' :: (MonadEval b i m) => ExecutionError -> m a
+throwExecutionError' :: (MonadEval b i m) => EvalError -> m a
 throwExecutionError' e = throwError (PEExecutionError e def)
 
 -- | Apply one argument to a value
@@ -560,9 +552,9 @@ unsafeApplyOne
 unsafeApplyOne (VClosure c) arg = do
   let cont = Fn (C c) mempty [] [] Mt
   returnCEKValue cont CEKNoHandler arg
-unsafeApplyOne (VNative (BuiltinFn b fn arity args)) arg =
+unsafeApplyOne (VNative (NativeFn b fn arity args i)) arg =
   if arity - 1 <= 0 then fn Mt CEKNoHandler (reverse (arg:args))
-  else pure (EvalValue (VNative (BuiltinFn b fn (arity - 1) (arg:args))))
+  else pure (EvalValue (VNative (NativeFn b fn (arity - 1) (arg:args) i)))
 unsafeApplyOne _ _ = failInvariant "Applied argument to non-closure in native"
 
 unsafeApplyTwo
@@ -574,7 +566,7 @@ unsafeApplyTwo
 unsafeApplyTwo (VClosure c) arg1 arg2 = do
   let cont = Fn (C c) mempty [] [arg1] Mt
   returnCEKValue cont CEKNoHandler arg2
-unsafeApplyTwo (VNative (BuiltinFn b fn arity args)) arg1 arg2 =
+unsafeApplyTwo (VNative (NativeFn b fn arity args i)) arg1 arg2 =
   if arity - 2 <= 0 then fn Mt CEKNoHandler (reverse (arg1:arg2:args))
-  else pure $ EvalValue $ VNative $ BuiltinFn b fn (arity - 2) (arg1:arg2:args)
+  else pure $ EvalValue $ VNative $ NativeFn b fn (arity - 2) (arg1:arg2:args) i
 unsafeApplyTwo _ _ _ = failInvariant "Applied argument to non-closure in native"

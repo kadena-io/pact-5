@@ -175,7 +175,7 @@ data Term name builtin info
   -- ^ let x = e1 in e2
   | App (Term name builtin info) (NonEmpty (Term name builtin info)) info
   -- ^ (e1 e2)
-  | Sequence (Term name builtin info)  (Term name builtin info) info
+  | Sequence (Term name builtin info) (Term name builtin info) info
   -- ^ error term , error "blah"
   | Conditional (BuiltinForm (Term name builtin info)) info
   -- ^ Conditional terms

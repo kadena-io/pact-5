@@ -22,7 +22,7 @@ import Pact.Core.IR.Eval.Runtime
 
 import Pact.Core.Repl.Utils
 import Pact.Core.Repl.Compile
-import Pact.Core.Errors (PactError(..), ExecutionError (..))
+import Pact.Core.Errors (PactError(..), EvalError (..))
 
 tests :: IO TestTree
 tests = do
@@ -62,7 +62,7 @@ runReplTest file src = do
     InterpretLog _ ->  pure ()
     InterpretValue v i -> case v of
       VLiteral (LString msg) -> do
-        let render = replError (ReplSource (T.pack file) (decodeUtf8 src)) (PEExecutionError (ExecutionError msg) i)
+        let render = replError (ReplSource (T.pack file) (decodeUtf8 src)) (PEExecutionError (EvalError msg) i)
         when (T.isPrefixOf "FAILURE:" msg) $ assertFailure (T.unpack render)
       _ -> pure ()
 

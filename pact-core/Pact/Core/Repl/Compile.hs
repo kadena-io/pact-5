@@ -67,13 +67,13 @@ interpretExpr source = do
   evalLog <- use replEvalLog
   mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
   let rEnv = ReplEvalEnv evalGas evalLog
-      cekEnv = CEKRuntimeEnv
-             { _cekBuiltins = replRawBuiltinRuntime
-             , _cekLoaded = _loAllLoaded loaded'
-             , _cekGasModel = freeGasEnv
-             , _cekMHashes = mhashes
-             , _cekMsgSigs = mempty
-             , _cekPactDb = pactdb }
+      cekEnv = EvalEnv
+             { _eeBuiltins = replRawBuiltinRuntime
+             , _eeLoaded = _loAllLoaded loaded'
+             , _eeGasModel = freeGasEnv
+             , _eeMHashes = mhashes
+             , _eeMsgSigs = mempty
+             , _eePactDb = pactdb }
       rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] [] False)
   value <- liftEither =<< liftIO (runReplCEK rEnv rState desugared)
   replLoaded .= loaded'
@@ -161,18 +161,18 @@ interpretReplProgram source = do
         -- todo: cache?
         mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
         let rEnv = ReplEvalEnv evalGas evalLog
-            cekEnv = CEKRuntimeEnv
-                  { _cekBuiltins = replRawBuiltinRuntime
-                  , _cekLoaded = _loAllLoaded loaded
-                  , _cekGasModel = freeGasEnv
-                  , _cekMHashes = mhashes
-                  , _cekMsgSigs = mempty
-                  , _cekPactDb = pdb }
+            cekEnv = EvalEnv
+                  { _eeBuiltins = replRawBuiltinRuntime
+                  , _eeLoaded = _loAllLoaded loaded
+                  , _eeGasModel = freeGasEnv
+                  , _eeMHashes = mhashes
+                  , _eeMsgSigs = mempty
+                  , _eePactDb = pdb }
             rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] [] False)
         -- Todo: Fix this with `returnCEKValue`
         liftIO (runReplCEK rEnv rState te) >>= liftEither >>= \case
           VError txt ->
-            throwError (PEExecutionError (ExecutionError txt) i)
+            throwError (PEExecutionError (EvalError txt) i)
           EvalValue v -> do
             replLoaded .= loaded
             pure (InterpretValue v i)
@@ -235,18 +235,18 @@ interpretProgram source = do
         evalLog <- use replEvalLog
         mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
         let rEnv = ReplEvalEnv evalGas evalLog
-            cekEnv = CEKRuntimeEnv
-                  { _cekBuiltins = replRawBuiltinRuntime
-                  , _cekLoaded = _loAllLoaded loaded
-                  , _cekGasModel = freeGasEnv
-                  , _cekMHashes = mhashes
-                  , _cekMsgSigs = mempty
-                  , _cekPactDb = pdb}
+            cekEnv = EvalEnv
+                  { _eeBuiltins = replRawBuiltinRuntime
+                  , _eeLoaded = _loAllLoaded loaded
+                  , _eeGasModel = freeGasEnv
+                  , _eeMHashes = mhashes
+                  , _eeMsgSigs = mempty
+                  , _eePactDb = pdb}
             rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] [] False)
         -- Todo: Fix this with `returnCEKValue`
         liftIO (runReplCEK rEnv rState te) >>= liftEither >>= \case
           VError txt ->
-            throwError (PEExecutionError (ExecutionError txt) i)
+            throwError (PEExecutionError (EvalError txt) i)
           EvalValue v -> do
             replLoaded .= loaded
             pure (InterpretValue v i)
