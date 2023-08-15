@@ -998,18 +998,18 @@ checkTermType checkty = \case
           pure (TyModRef iface, Typed.Var irn i, [])
         _ -> error "incorrect type"
       _ -> error "checking modref against incorrect type"
-  IR.Lam _lamInfo ne te i ->
+  IR.Lam _lamInfo irArgs te i ->
     case tyFunToArgList checkty of
       (tl, ret) -> do
-        when (length tl /= NE.length ne) $ error "Arguments mismatch"
-        let zipped = NE.zip ne (NE.fromList tl)
+        when (length tl /= NE.length irArgs) $ error "Arguments mismatch"
+        let zipped = NE.zip irArgs (NE.fromList tl)
         traverse_ (uncurry unifyArg) zipped
         let args = RAList.fromList $ reverse tl
         (_, te', preds) <- locally tcVarEnv (args RAList.++) $ checkTermType ret te
-        let ne' = over _1 fst <$> zipped
+        let ne' = over _1 _argName <$> zipped
         pure (checkty, Typed.Lam ne' te' i, preds)
     where
-    unifyArg (_, Just tl) tr = unify (liftType tl) tr i
+    unifyArg (Arg _ (Just tl)) tr = unify (liftType tl) tr i
     unifyArg _ _ = pure ()
   IR.Let txt m_ty e1 e2 i ->
     case m_ty of
