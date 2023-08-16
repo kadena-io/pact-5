@@ -1306,6 +1306,16 @@ inferTerm = \case
     ty <- TyVar <$> newTvRef
     pure (ty, Typed.Error ty e i, [])
 
+ensureHasType :: Monad m => Maybe (Type a) -> m (Type a)
+ensureHasType (Just x) = pure x
+ensureHasType Nothing = error "should have the type by now"
+
+argToType :: Monad m => Arg Void -> m (Type Void)
+argToType = ensureHasType . _argType
+
+argsToTypes :: Monad m => [Arg Void] -> m [Type Void]
+argsToTypes = traverse argToType
+
 -- Todo: generic types?
 -- We can't generalize yet since
 -- we're not allowing type schemes just yet.
@@ -1313,12 +1323,13 @@ inferDefun
   :: TypeOfBuiltin b
   => IR.Defun Name b i
   -> InferM s b' i (TypedDefun b i)
-inferDefun (IR.Defun name _args dfTy term info) = do
+inferDefun (IR.Defun name _args mdfTy term info) = do
   enterLevel
   (termTy, term', preds) <- inferTerm term
   leaveLevel
   checkReducible preds (view IR.termInfo term)
   -- fail "typeclass constraints not supported in defun"
+  dfTy <- ensureHasType mdfTy
   unify (liftType dfTy) termTy info
   fterm <- noTyVarsinTerm info term'
   pure (Typed.Defun name (liftType dfTy) fterm info)
@@ -1342,7 +1353,9 @@ inferDefCap
   :: TypeOfBuiltin b
   => IR.DefCap Name b i
   -> InferM s b' i (TypedDefCap b i)
-inferDefCap (IR.DefCap name arity argtys rty term meta i) = do
+inferDefCap (IR.DefCap name arity margtys mrty term meta i) = do
+  rty <- ensureHasType mrty
+  argtys <- argsToTypes margtys
   let ty = foldr TyFun rty argtys
   (termTy, term', preds) <- checkTermType (liftType ty) term
   checkReducible preds i
@@ -1364,11 +1377,14 @@ inferIfDef
   => IR.IfDef Name b i
   -> InferM s b' i (TypedIfDef b i)
 inferIfDef = \case
-  IR.IfDfun ifd ->
-    pure (Typed.IfDfun (Typed.IfDefun (IR._ifdName ifd) (IR._ifdType ifd) (IR._ifdInfo ifd)))
+  IR.IfDfun ifd -> do
+    rty <- ensureHasType $ IR._ifdRType ifd
+    pure (Typed.IfDfun (Typed.IfDefun (IR._ifdName ifd) rty (IR._ifdInfo ifd)))
   IR.IfDConst dc ->
     Typed.IfDConst <$> inferDefConst dc
-  IR.IfDCap (IR.IfDefCap n argtys rty i) ->
+  IR.IfDCap (IR.IfDefCap n margtys mrty i) -> do
+    argtys <- argsToTypes margtys
+    rty <- ensureHasType mrty
     pure $ Typed.IfDCap (Typed.IfDefCap n argtys rty i)
 
 inferModule
