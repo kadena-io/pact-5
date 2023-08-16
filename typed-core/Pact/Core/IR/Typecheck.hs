@@ -961,6 +961,21 @@ generalizeWithTerm' ty pp term = do
 liftType :: Type Void -> Type a
 liftType = fmap absurd
 
+onModRefType
+  :: MonadReader (TCEnv s builtin info) m
+  => Text
+  -> Type n
+  -> (Type Void -> m b)
+  -> m b
+onModRefType fn (TyModRef m) f = view (tcModules . at m) >>= \case
+  Just (InterfaceData iface _) -> case IR.findIfDef fn iface of
+    Just (IR.IfDfun df) -> case IR._ifdRType df of
+      Just ty -> f ty
+      _ -> error "should have the type by now"
+    _ -> error "boom"
+  _ -> error "boom"
+onModRefType _ _ _ = error "boom"
+
 checkTermType
   :: (TypeOfBuiltin b)
   => TCType s
@@ -1126,17 +1141,9 @@ checkTermType checkty = \case
     pure (checkty, Typed.Try err' body' i, p1 ++ p2)
   IR.DynInvoke mref fn i -> do
     (tmref, mref', preds) <- inferTerm mref
-    case tmref of
-      TyModRef m -> view (tcModules . at m) >>= \case
-        Just (InterfaceData iface _) -> case IR.findIfDef fn iface of
-          Just (IR.IfDfun df) -> case IR._ifdRType df of
-            Just ty -> do
-              unify (liftType ty) checkty i
-              pure (checkty, Typed.DynInvoke mref' fn i, preds)
-            _ -> error "should have the type by now"
-          _ -> error "boom"
-        _ -> error "boom"
-      _ -> error "boom"
+    onModRefType fn tmref $ \ty -> do
+      unify (liftType ty) checkty i
+      pure (checkty, Typed.DynInvoke mref' fn i, preds)
   IR.Error txt i -> pure (checkty, Typed.Error checkty txt i, [])
 
 
@@ -1294,15 +1301,7 @@ inferTerm = \case
     pure (te1, Typed.Try e1' e2' i, p1 ++ p2)
   IR.DynInvoke mref fn i -> do
     (tmref, mref', preds) <- inferTerm mref
-    case tmref of
-      TyModRef m -> view (tcModules . at m) >>= \case
-        Just (InterfaceData iface _) -> case IR.findIfDef fn iface of
-          Just (IR.IfDfun df) -> case IR._ifdRType df of
-            Just ty -> pure (liftType ty, Typed.DynInvoke mref' fn i, preds)
-            _ -> error "should have the type by now"
-          _ -> error "boom"
-        _ -> error "boom"
-      _ -> error "boom"
+    onModRefType fn tmref $ \ty -> pure (liftType ty, Typed.DynInvoke mref' fn i, preds)
   IR.Error e i -> do
     ty <- TyVar <$> newTvRef
     pure (ty, Typed.Error ty e i, [])
