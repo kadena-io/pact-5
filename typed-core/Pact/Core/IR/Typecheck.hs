@@ -1128,10 +1128,12 @@ checkTermType checkty = \case
     (tmref, mref', preds) <- inferTerm mref
     case tmref of
       TyModRef m -> view (tcModules . at m) >>= \case
-        Just (InterfaceData iface _) -> case U.findIfDef fn iface of
-          Just (U.IfDfun df) -> do
-            unify (liftType (U._ifdType df)) checkty i
-            pure (checkty, Typed.DynInvoke mref' fn i, preds)
+        Just (InterfaceData iface _) -> case IR.findIfDef fn iface of
+          Just (IR.IfDfun df) -> case IR._ifdRType df of
+            Just ty -> do
+              unify (liftType ty) checkty i
+              pure (checkty, Typed.DynInvoke mref' fn i, preds)
+            _ -> error "should have the type by now"
           _ -> error "boom"
         _ -> error "boom"
       _ -> error "boom"
@@ -1294,9 +1296,10 @@ inferTerm = \case
     (tmref, mref', preds) <- inferTerm mref
     case tmref of
       TyModRef m -> view (tcModules . at m) >>= \case
-        Just (InterfaceData iface _) -> case U.findIfDef fn iface of
-          Just (U.IfDfun df) -> do
-            pure (liftType (U._ifdType df), Typed.DynInvoke mref' fn i, preds)
+        Just (InterfaceData iface _) -> case IR.findIfDef fn iface of
+          Just (IR.IfDfun df) -> case IR._ifdRType df of
+            Just ty -> pure (liftType ty, Typed.DynInvoke mref' fn i, preds)
+            _ -> error "should have the type by now"
           _ -> error "boom"
         _ -> error "boom"
       _ -> error "boom"
