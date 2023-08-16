@@ -16,7 +16,7 @@
 module Pact.Core.IR.Term where
 
 import Control.Lens
-import Data.Foldable(fold)
+import Data.Foldable(fold, find)
 import Data.Void(Void)
 import Data.Text(Text)
 import Data.List.NonEmpty (NonEmpty)
@@ -296,6 +296,10 @@ instance Plated (Term name builtin info) where
     DynInvoke n t i ->
       pure (DynInvoke n t i)
     Error e i -> pure (Error e i)
+
+findIfDef :: Text -> Interface name builtin info -> Maybe (IfDef name builtin info)
+findIfDef f iface =
+  find ((== f) . ifDefName) (_ifDefns iface)
 
 -- Todo: qualify all of these
 makeLenses ''Module
