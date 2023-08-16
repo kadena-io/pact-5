@@ -81,15 +81,14 @@ corePrint info = mkReplBuiltinFn info \cont handler -> \case
 
 rawExpect :: (BuiltinArity b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
 rawExpect info = mkReplBuiltinFn info \cont handler -> \case
-  [VLiteral (LString msg), v1, clo@VClosure{}] -> do
+  [VLiteral (LString msg), VPactValue v1, clo@VClosure{}] ->
     unsafeApplyOne clo (VLiteral LUnit) >>= \case
-       EvalValue v2 -> do
-        case RawBuiltin.valueEq v1 v2 of
-          False -> do
-            let v1s = RawBuiltin.prettyShowValue v1
-                v2s = RawBuiltin.prettyShowValue v2
+       EvalValue (VPactValue v2) ->
+        if v1 /= v2 then do
+            let v1s = RawBuiltin.prettyShowValue (VPactValue v1)
+                v2s = RawBuiltin.prettyShowValue (VPactValue v2)
             returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
-          True -> returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
+        else returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
        v -> returnCEK cont handler v
   _ -> failInvariant "Expect"
 

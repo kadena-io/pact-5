@@ -114,16 +114,16 @@ data PactDb b i
 --   }
 
 readModule :: PactDb b i -> ModuleName -> IO (Maybe (ModuleData b i))
-readModule pdb mn = _pdbRead pdb DModules mn
+readModule pdb = _pdbRead pdb DModules
 
 writeModule :: PactDb b i -> ModuleName -> ModuleData b i -> IO ()
-writeModule pdb mn md = _pdbWrite pdb DModules mn md
+writeModule pdb = _pdbWrite pdb DModules
 
 readKeyset :: PactDb b i -> KeySetName -> IO (Maybe FQKS)
-readKeyset pdb ksn = _pdbRead pdb DKeySets ksn
+readKeyset pdb = _pdbRead pdb DKeySets
 
 writeKeySet :: PactDb b i -> KeySetName -> FQKS -> IO ()
-writeKeySet pdb ksn ks = _pdbWrite pdb DKeySets ksn ks
+writeKeySet pdb = _pdbWrite pdb DKeySets
 
 
 data Loaded b i

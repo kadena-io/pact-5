@@ -15,9 +15,8 @@
 
 module Pact.Core.IR.Eval.Runtime.Utils
  ( mkBuiltinFn
- , fromPactValue
- , checkPactValueType
  , cfFQN
+ , enforcePactValue
 --  , viewCEKEnv, viewsCEKEnv
  , setEvalState, (%%=), useEvalState, usesEvalState
  , getAllStackCaps
@@ -26,10 +25,8 @@ module Pact.Core.IR.Eval.Runtime.Utils
  ) where
 
 import Control.Lens hiding ((%%=))
-import Data.Void
 import Data.Map.Strict(Map)
 import Data.Set(Set)
-import qualified Data.Vector as V
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
@@ -37,10 +34,8 @@ import Pact.Core.Names
 import Pact.Core.PactValue
 import Pact.Core.Builtin
 import Pact.Core.Guards
-import Pact.Core.Type
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime.Types
-
 
 mkBuiltinFn
   :: (BuiltinArity b)
@@ -49,7 +44,7 @@ mkBuiltinFn
   -> b
   -> NativeFn b i m
 mkBuiltinFn i fn b =
-  NativeFn b fn (builtinArity b) [] i
+  NativeFn b fn (builtinArity b) i
 {-# INLINE mkBuiltinFn #-}
 
 cfFQN :: Lens' (CapFrame b i) FullyQualifiedName
@@ -80,25 +75,10 @@ checkSigCaps sigs = do
   match granted sigCaps =
     Set.null sigCaps || not (Set.null (Set.intersection granted sigCaps))
 
-
-fromPactValue :: PactValue -> CEKValue b i m
-fromPactValue = \case
-  PLiteral lit -> VLiteral lit
-  PList vec -> VList (fromPactValue <$> vec)
-  PGuard gu ->
-    VGuard gu
-  PModRef mn ifs -> VModRef mn ifs
-
-checkPactValueType :: Type Void -> PactValue -> Bool
-checkPactValueType ty = \case
-  PLiteral lit -> typeOfLit lit == ty
-  PList vec -> case ty of
-    TyList t -> V.null vec || all (checkPactValueType t) vec
-    _ -> False
-  PGuard _ -> ty == TyGuard
-  PModRef _ ifs -> case ty of
-    TyModRef m -> m `elem` ifs
-    _ -> False
+enforcePactValue :: Applicative f => CEKValue b i m -> f PactValue
+enforcePactValue = \case
+  VPactValue pv -> pure pv
+  VClosure{} -> error "closure is not a pact value"
 
 -- Note: The following functions
 -- when placed in this file are causing GHC 9.6.2 to bork with the following error:
