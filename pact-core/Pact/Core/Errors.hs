@@ -215,16 +215,19 @@ instance Pretty DesugarError where
 
 -- instance Exception TypecheckError
 
--- newtype OverloadError
---   = OverloadError Text
---   deriving Show
+newtype OverloadError
+  = OverloadError Text
+  deriving Show
 
 -- instance RenderError OverloadError where
 --   renderError = \case
 --     OverloadError e ->
 --       Pretty.hsep ["Error during overloading stage:", e]
 
--- instance Exception OverloadError
+instance Pretty OverloadError where
+  pretty (OverloadError msg) = Pretty.hsep ["Error during overloading stage:", pretty msg]
+
+instance Exception OverloadError
 
 data ArgTypeError
   = ATEType (Type Void)
@@ -314,7 +317,7 @@ data PactError info
   | PEParseError ParseError info
   | PEDesugarError DesugarError info
   -- | PETypecheckError TypecheckError info
-  -- | PEOverloadError OverloadError info
+  | PEOverloadError OverloadError info
   | PEExecutionError EvalError info
   deriving Show
 
@@ -323,6 +326,7 @@ instance Pretty (PactError info) where
     PELexerError e _ -> pretty e
     PEParseError e _ -> pretty e
     PEDesugarError e _ -> pretty e
+    PEOverloadError e _ -> pretty e
     PEExecutionError e _ -> pretty e
 
 peInfo :: Lens (PactError info) (PactError info') info info'
@@ -335,8 +339,8 @@ peInfo f = \case
     PEDesugarError de <$> f info
   -- PETypecheckError pe info ->
   --   PETypecheckError pe <$> f info
-  -- PEOverloadError oe info ->
-  --   PEOverloadError oe <$> f info
+  PEOverloadError oe info ->
+    PEOverloadError oe <$> f info
   PEExecutionError ee info ->
     PEExecutionError ee <$> f info
   -- PEFatalError fpe info ->
