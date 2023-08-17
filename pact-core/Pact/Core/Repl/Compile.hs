@@ -18,7 +18,6 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Class(liftIO)
 import Data.Text(Text)
-import Data.ByteString(ByteString)
 import Data.Proxy
 -- import Data.Maybe(mapMaybe)
 import qualified Data.Map.Strict as Map
@@ -46,38 +45,6 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 
--- data InterpretOutput b i
---   = InterpretValue (CEKValue b i (ReplEvalM ReplRawBuiltin SpanInfo)) SpanInfo
---   | InterpretLog Text
---   deriving Show
-
--- interpretExpr
---   :: ByteString
---   -> ReplM ReplRawBuiltin (ReplEvalResult RawBuiltin SpanInfo)
--- interpretExpr source = do
---   pactdb <- use replPactDb
---   loaded <- use replLoaded
---   lexx <- liftEither (Lisp.lexer source)
---   debugIfFlagSet ReplDebugLexer lexx
---   parsed <- liftEither $ Lisp.parseExpr lexx
---   debugIfFlagSet ReplDebugParser parsed
---   (DesugarOutput desugared loaded' _) <- runDesugarTermLisp Proxy pactdb loaded parsed
---   evalGas <- use replGas
---   evalLog <- use replEvalLog
---   mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
---   let rEnv = ReplEvalEnv evalGas evalLog
---       cekEnv = EvalEnv
---              { _eeBuiltins = replRawBuiltinRuntime
---              , _eeLoaded = _loAllLoaded loaded'
---              , _eeGasModel = freeGasEnv
---              , _eeMHashes = mhashes
---              , _eeMsgSigs = mempty
---              , _eePactDb = pactdb }
---       rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] [] False)
---   value <- liftEither =<< liftIO (runReplCEK rEnv rState desugared)
---   replLoaded .= loaded'
---   pure value
-
 -- Small internal debugging function for playing with file loading within
 -- this module
 data ReplCompileValue
@@ -87,13 +54,15 @@ data ReplCompileValue
   deriving Show
 
 loadFile :: FilePath -> ReplM ReplRawBuiltin [ReplCompileValue]
-loadFile source = liftIO (B.readFile source) >>= interpretReplProgram
-
+loadFile loc = do
+  source <- SourceCode <$> liftIO (B.readFile loc)
+  replCurrSource .= source
+  interpretReplProgram source
 
 interpretReplProgram
-  :: ByteString
+  :: SourceCode
   -> ReplM ReplRawBuiltin [ReplCompileValue]
-interpretReplProgram source = do
+interpretReplProgram (SourceCode source) = do
   pactdb <- use replPactDb
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
@@ -111,8 +80,11 @@ interpretReplProgram source = do
       pure <$> pipe' pactdb rtl
     Lisp.RTLReplSpecial rsf -> case rsf of
       Lisp.ReplLoad txt b _ -> do
+        oldLoaded <- use replCurrSource
         when b $ replLoaded .= mempty
-        loadFile (T.unpack txt)
+        out <- loadFile (T.unpack txt)
+        replCurrSource .= oldLoaded
+        pure out
   pipe' pactdb tl = do
     debugIfLispExpr tl
     lastLoaded <- use replLoaded

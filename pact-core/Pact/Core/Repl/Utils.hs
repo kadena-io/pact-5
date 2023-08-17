@@ -23,11 +23,13 @@ module Pact.Core.Repl.Utils
  , unlessReplFlagSet
  , debugIfFlagSet
  , replCompletion
+ , replCurrSource
  , ReplAction(..)
  , parseReplAction
  , prettyReplFlag
  , ReplSource(..)
  , replError
+ , SourceCode(..)
  ) where
 
 import Control.Lens
@@ -43,6 +45,7 @@ import Data.Set(Set)
 import Data.Text(Text)
 import Data.List(isPrefixOf)
 import Data.Maybe(mapMaybe)
+import Data.ByteString(ByteString)
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
@@ -60,6 +63,10 @@ import Pact.Core.Debug
 import qualified Pact.Core.IR.Term as Term
 
 import System.Console.Haskeline.Completion
+
+newtype SourceCode
+  = SourceCode ByteString
+  deriving Show
 
 data ReplDebugFlag
   = ReplDebugLexer
@@ -109,6 +116,7 @@ data ReplState b
   , _replPactDb :: PactDb b SpanInfo
   , _replGas :: IORef Gas
   , _replEvalLog :: IORef (Maybe [(Text, Gas)])
+  , _replCurrSource :: SourceCode
   }
 
 
