@@ -13,6 +13,7 @@ module Pact.Core.Errors
  , PactError(..)
  , ArgTypeError(..)
  , OverloadError(..)
+ , TypecheckError(..)
  , peInfo
  ) where
 
@@ -179,51 +180,46 @@ instance Pretty DesugarError where
     InvalidModuleReference mn ->
       Pretty.hsep ["Invalid Interface attempted to be used as module reference:", pretty mn]
 
--- data TypecheckError
---   = UnificationError (Type Text) (Type Text)
---   | ContextReductionError (Pred Text)
---   | UnsupportedTypeclassGeneralization [Pred Text]
---   | UnsupportedImpredicativity
---   | OccursCheckFailure (Type Text)
---   | TCInvariantFailure Text
---   | TCUnboundTermVariable Text
---   | TCUnboundFreeVariable ModuleName Text
---   | DisabledGeneralization Text
---   deriving Show
+data TypecheckError
+  = UnificationError (Type Text) (Type Text)
+  | ContextReductionError (Pred Text)
+  | UnsupportedTypeclassGeneralization [Pred Text]
+  | UnsupportedImpredicativity
+  | OccursCheckFailure (Type Text)
+  | TCInvariantFailure Text
+  | TCUnboundTermVariable Text
+  | TCUnboundFreeVariable ModuleName Text
+  | DisabledGeneralization Text
+  deriving Show
 
--- instance RenderError TypecheckError where
---   renderError = \case
---     UnificationError ty ty' ->
---       Pretty.hsep ["Type mismatch, expected:", renderType ty, "got:", renderType ty']
---     ContextReductionError pr ->
---       Pretty.hsep ["Context reduction failure, no such instance:", renderPred pr]
---     UnsupportedTypeclassGeneralization prs ->
---       Pretty.hsep ["Encountered term with generic signature, attempted to generalize on:", T.pack (show (renderPred <$> prs))]
---     UnsupportedImpredicativity ->
---       Pretty.hsep ["Invariant failure: Inferred term with impredicative polymorphism"]
---     OccursCheckFailure ty ->
---       Pretty.hsep
---       [ "Cannot construct the infinite type:"
---       , "Var(" <> renderType ty <> ") ~ " <> renderType ty]
---     TCInvariantFailure txt ->
---       Pretty.hsep ["Typechecker invariant failure violated:", txt]
---     TCUnboundTermVariable txt ->
---       Pretty.hsep ["Found unbound term variable:", txt]
---     TCUnboundFreeVariable mn txt ->
---       Pretty.hsep ["Found unbound free variable:", renderModuleName mn <> "." <> txt]
---     DisabledGeneralization txt ->
---       Pretty.hsep ["Generic types have been disabled:", txt]
+instance Pretty TypecheckError where
+  pretty = \case
+    UnificationError ty ty' ->
+      Pretty.hsep ["Type mismatch, expected:", pretty ty, "got:", pretty ty']
+    ContextReductionError pr ->
+      Pretty.hsep ["Context reduction failure, no such instance:", pretty pr]
+    UnsupportedTypeclassGeneralization prs ->
+      Pretty.hsep ["Encountered term with generic signature, attempted to generalize on:", pretty prs]
+    UnsupportedImpredicativity ->
+      Pretty.hsep ["Invariant failure: Inferred term with impredicative polymorphism"]
+    OccursCheckFailure ty ->
+      Pretty.hsep
+      [ "Cannot construct the infinite type:"
+      , "Var(" <> pretty ty <> ") ~ " <> pretty ty]
+    TCInvariantFailure txt ->
+      Pretty.hsep ["Typechecker invariant failure violated:", pretty txt]
+    TCUnboundTermVariable txt ->
+      Pretty.hsep ["Found unbound term variable:", pretty txt]
+    TCUnboundFreeVariable mn txt ->
+      Pretty.hsep ["Found unbound free variable:", pretty mn <> "." <> pretty txt]
+    DisabledGeneralization txt ->
+      Pretty.hsep ["Generic types have been disabled:", pretty txt]
 
--- instance Exception TypecheckError
+instance Exception TypecheckError
 
 newtype OverloadError
   = OverloadError Text
   deriving Show
-
--- instance RenderError OverloadError where
---   renderError = \case
---     OverloadError e ->
---       Pretty.hsep ["Error during overloading stage:", e]
 
 instance Pretty OverloadError where
   pretty (OverloadError msg) = Pretty.hsep ["Error during overloading stage:", pretty msg]
@@ -317,7 +313,7 @@ data PactError info
   = PELexerError LexerError info
   | PEParseError ParseError info
   | PEDesugarError DesugarError info
-  -- | PETypecheckError TypecheckError info
+  | PETypecheckError TypecheckError info
   | PEOverloadError OverloadError info
   | PEExecutionError EvalError info
   deriving Show
@@ -327,6 +323,7 @@ instance Pretty (PactError info) where
     PELexerError e _ -> pretty e
     PEParseError e _ -> pretty e
     PEDesugarError e _ -> pretty e
+    PETypecheckError e _ -> pretty e
     PEOverloadError e _ -> pretty e
     PEExecutionError e _ -> pretty e
 
@@ -338,8 +335,8 @@ peInfo f = \case
     PEParseError pe <$> f info
   PEDesugarError de info ->
     PEDesugarError de <$> f info
-  -- PETypecheckError pe info ->
-  --   PETypecheckError pe <$> f info
+  PETypecheckError pe info ->
+    PETypecheckError pe <$> f info
   PEOverloadError oe info ->
     PEOverloadError oe <$> f info
   PEExecutionError ee info ->
