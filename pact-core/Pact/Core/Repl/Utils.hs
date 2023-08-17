@@ -56,6 +56,7 @@ import Pact.Core.Persistence
 import Pact.Core.Pretty
 import Pact.Core.Gas
 import Pact.Core.Errors
+import Pact.Core.Debug
 import qualified Pact.Core.IR.Term as Term
 
 import System.Console.Haskeline.Completion
@@ -112,6 +113,12 @@ data ReplState b
 
 
 makeLenses ''ReplState
+
+instance PhaseDebug (ReplM b) where
+  debugPrint _ _ = pure ()
+
+instance HasLoaded (ReplState b) b SpanInfo where
+  loaded = replLoaded
 
 data ReplAction
   = RALoad Text

@@ -16,8 +16,8 @@
 
 
 module Pact.Core.IR.Desugar
- ( runDesugarTermLisp
- , runDesugarTopLevelLisp
+ ( runDesugarTerm
+ , runDesugarTopLevel
  , runDesugarReplTopLevel
  , DesugarOutput(..)
  , DesugarBuiltin(..)
@@ -47,7 +47,7 @@ import Pact.Core.Names
 import Pact.Core.Type
 import Pact.Core.Literal
 import Pact.Core.Hash
-import Pact.Core.Persistence
+import Pact.Core.Persistence hiding (loaded)
 import Pact.Core.Capabilities
 import Pact.Core.Errors
 import Pact.Core.IR.Term
@@ -1115,33 +1115,13 @@ runDesugarReplTopLevel
   -> Lisp.ReplTopLevel i
   -> m (DesugarOutput reso i (ReplTopLevel Name raw i))
 runDesugarReplTopLevel proxy pdb loaded = \case
-  Lisp.RTLModule m ->
-    over dsOut RTLModule <$> runDesugarModule' proxy pdb loaded m
+  Lisp.RTLTopLevel m ->
+    over dsOut RTLTopLevel <$> runDesugarTopLevel proxy pdb loaded m
   Lisp.RTLDefun de ->
     over dsOut RTLDefun <$> runDesugarReplDefun proxy pdb loaded de
   Lisp.RTLDefConst dc ->
     over dsOut RTLDefConst <$> runDesugarReplDefConst proxy pdb loaded dc
-  Lisp.RTLTerm ex ->
-    over dsOut RTLTerm <$> runDesugarTerm proxy pdb loaded ex
-  Lisp.RTLInterface iface ->
-    over dsOut RTLInterface <$> runDesugarInterface proxy pdb loaded iface
-
-runDesugarTermLisp
-  :: forall raw reso i m
-  .  (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw)
-  => Proxy raw
-  -> PactDb reso i
-  -> Loaded reso i
-  -> Lisp.Expr i
-  -> m (DesugarOutput reso i (Term Name raw i))
-runDesugarTermLisp = runDesugarTerm
-
-runDesugarTopLevelLisp
-  :: forall raw reso i m
-  . (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw)
-  => Proxy raw
-  -> PactDb reso i
-  -> Loaded reso i
-  -> Lisp.TopLevel i
-  -> m (DesugarOutput reso i (TopLevel Name raw i))
-runDesugarTopLevelLisp = runDesugarTopLevel
+  -- Lisp.RTLTerm ex ->
+  --   over dsOut RTLTerm <$> runDesugarTerm proxy pdb loaded ex
+  -- Lisp.RTLInterface iface ->
+  --   over dsOut RTLInterface <$> runDesugarInterface proxy pdb loaded iface

@@ -5,6 +5,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies #-}
 
 
@@ -12,9 +13,10 @@ module Pact.Core.Persistence
  ( ModuleData(..)
  , PactDb(..)
  , Loaded(..)
- , loModules
- , loToplevel
- , loAllLoaded
+ , HasLoaded(..)
+--  , loModules
+--  , loToplevel
+--  , loAllLoaded
  , mockPactDb
  , mdModuleName
  , mdModuleHash
@@ -133,7 +135,8 @@ data Loaded b i
   , _loAllLoaded :: Map FullyQualifiedName (Def Name b i)
   } deriving Show
 
-makeLenses ''Loaded
+-- makeLenses ''Loaded
+makeClassy ''Loaded
 
 instance Semigroup (Loaded b i) where
   (Loaded ms tl al) <> (Loaded ms' tl' al') =

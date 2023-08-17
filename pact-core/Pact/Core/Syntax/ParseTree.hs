@@ -324,12 +324,20 @@ data ReplSpecialTL i
   deriving Show
 
 data ReplTopLevel i
-  = RTLModule (Module i)
-  | RTLInterface (Interface i)
+  = RTLTopLevel (TopLevel i)
   | RTLDefun (Defun i)
   | RTLDefConst (DefConst i)
-  | RTLTerm (Expr i)
   deriving Show
+
+pattern RTLModule :: Module i -> ReplTopLevel i
+pattern RTLModule m = RTLTopLevel (TLModule m)
+
+pattern RTLInterface :: Interface i -> ReplTopLevel i
+pattern RTLInterface m = RTLTopLevel (TLInterface m)
+
+pattern RTLTerm :: Expr i -> ReplTopLevel i
+pattern RTLTerm te = RTLTopLevel (TLTerm te)
+
 
 termInfo :: Lens' (Expr i) i
 termInfo f = \case

@@ -21,7 +21,9 @@ import Pact.Core.Persistence
 import Pact.Core.IR.Eval.Runtime
 
 import Pact.Core.Repl.Utils
+import Pact.Core.Compile
 import Pact.Core.Repl.Compile
+import Pact.Core.PactValue
 import Pact.Core.Errors (PactError(..), EvalError (..))
 
 tests :: IO TestTree
@@ -59,10 +61,10 @@ runReplTest file src = do
     Right output -> traverse_ ensurePassing output
   where
   ensurePassing = \case
-    InterpretLog _ ->  pure ()
-    InterpretValue v i -> case v of
-      VLiteral (LString msg) -> do
+    RCompileValue (InterpretValue (IPV v i)) -> case v of
+      PLiteral (LString msg) -> do
         let render = replError (ReplSource (T.pack file) (decodeUtf8 src)) (PEExecutionError (EvalError msg) i)
         when (T.isPrefixOf "FAILURE:" msg) $ assertFailure (T.unpack render)
       _ -> pure ()
+    _ -> pure ()
 
