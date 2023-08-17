@@ -102,6 +102,7 @@ library
     Pact.Core.PactValue
     Pact.Core.Debug
     Pact.Core.Capabilities
+    Pact.Core.ModRefs
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree

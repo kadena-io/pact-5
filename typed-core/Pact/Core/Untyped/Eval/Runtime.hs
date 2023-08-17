@@ -17,8 +17,8 @@
 module Pact.Core.Untyped.Eval.Runtime
  ( CEKTLEnv
  , CEKEnv
- , CEKRuntimeEnv(..)
- , BuiltinFn(..)
+ , EvalEnv(..)
+ , NativeFn(..)
  , EvalT(..)
  , runEvalT
  , CEKValue(..)
@@ -101,7 +101,7 @@ type CEKTLEnv b i = Map FullyQualifiedName (EvalDef b i)
 type CEKEnv b i m = RAList (CEKValue b i m)
 
 -- | List of builtins
-type BuiltinEnv b i m = b -> BuiltinFn b i m
+type BuiltinEnv b i m = b -> NativeFn b i m
 
 data Closure b i m =
   Closure !(EvalTerm b i) !(CEKEnv b i m)
@@ -112,7 +112,7 @@ data CEKValue b i m
   = VLiteral !Literal
   | VList !(Vector (CEKValue b i m))
   | VClosure !(EvalTerm b i) !(CEKEnv b i m)
-  | VNative !(BuiltinFn b i m)
+  | VNative !(NativeFn b i m)
   | VModRef ModuleName [ModuleName]
   | VGuard !(Guard FullyQualifiedName PactValue)
   -- deriving Show
@@ -164,7 +164,7 @@ data EvalState b i
 type MonadEval b i m = (MonadEvalEnv b i m, MonadEvalState b i m, MonadError (PactError i) m, Default i)
 
 class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
-  cekReadEnv :: m (CEKRuntimeEnv b i m)
+  cekReadEnv :: m (EvalEnv b i m)
   cekLogGas :: Text -> Gas -> m ()
   cekChargeGas :: Gas -> m ()
 
@@ -176,7 +176,7 @@ class Monad m => (MonadEvalState b i m) | m -> b, m -> i where
 
 data EvalEnv b i m
   = EvalEnv
-  { _emRuntimeEnv :: CEKRuntimeEnv b i (EvalT b i m)
+  { _emRuntimeEnv :: EvalEnv b i (EvalT b i m)
   , _emGas :: IORef Gas
   , _emGasLog :: IORef (Maybe [(Text, Gas)])
   }
@@ -198,8 +198,8 @@ runEvalT
   -> m (a, EvalState b i)
 runEvalT env st (EvalT action) = runStateT (runReaderT action env) st
 
-data BuiltinFn b i m
-  = BuiltinFn
+data NativeFn b i m
+  = NativeFn
   { _native :: b
   , _nativeFn :: Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m)
   , _nativeArity :: {-# UNPACK #-} !Int
@@ -210,9 +210,9 @@ mkBuiltinFn
   :: (BuiltinArity b)
   => (Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m))
   -> b
-  -> BuiltinFn b i m
+  -> NativeFn b i m
 mkBuiltinFn fn b =
-  BuiltinFn b fn (builtinArity b) []
+  NativeFn b fn (builtinArity b) []
 {-# INLINE mkBuiltinFn #-}
 
 data ExecutionMode
@@ -311,8 +311,8 @@ data CEKErrorHandler b i m
   | CEKHandler (CEKEnv b i m) (EvalTerm b i) (Cont b i m) [CapSlot] (CEKErrorHandler b i m)
   deriving Show
 
-data CEKRuntimeEnv b i m
-  = CEKRuntimeEnv
+data EvalEnv b i m
+  = EvalEnv
   { _cekBuiltins :: BuiltinEnv b i m
   , _cekGasModel :: GasEnv b
   , _cekLoaded :: CEKTLEnv b i
@@ -327,9 +327,9 @@ data CEKRuntimeEnv b i m
   -- , _ckePactDb :: PactDb b i
   }
 
-instance (Show i, Show b) => Show (BuiltinFn b i m) where
-  show (BuiltinFn b _ arity args) = unwords
-    ["(BuiltinFn"
+instance (Show i, Show b) => Show (NativeFn b i m) where
+  show (NativeFn b _ arity args) = unwords
+    ["(NativeFn"
     , show b
     , "#fn"
     , show arity
@@ -337,7 +337,7 @@ instance (Show i, Show b) => Show (BuiltinFn b i m) where
     , ")"
     ]
 
-instance (Pretty b, Show i, Show b) => Pretty (BuiltinFn b i m) where
+instance (Pretty b, Show i, Show b) => Pretty (NativeFn b i m) where
   pretty = pretty . show
 
 instance (Show i, Show b, Pretty b) => Pretty (CEKValue b i m) where
@@ -356,7 +356,7 @@ instance (Show i, Show b, Pretty b) => Pretty (CEKValue b i m) where
     -- VError e ->
     --   ("error " <> pretty e)
 
-makeLenses ''CEKRuntimeEnv
+makeLenses ''EvalEnv
 
 fromPactValue :: PactValue -> CEKValue b i m
 fromPactValue = \case

@@ -43,6 +43,7 @@ module Pact.Core.Names
  , replModuleHash
  , DefKind(..)
  , fqnToName
+ , NativeName(..)
  ) where
 
 import Control.Lens
@@ -209,9 +210,15 @@ data TypeName
   , _tynameUnique :: !Unique }
   deriving (Show, Eq)
 
+newtype NativeName
+  = NativeName
+  { _natName :: Text }
+  deriving (Show, Eq)
+
 makeLenses ''TypeVar
 makeLenses ''TypeName
 makeLenses ''NamedDeBruijn
+makeClassy ''NativeName
 
 instance (Pretty b) => Pretty (OverloadedName b) where
   pretty (OverloadedName n nk) = case nk of

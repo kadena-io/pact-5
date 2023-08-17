@@ -14,20 +14,32 @@ import Control.Lens
 import Data.Vector(Vector)
 import Data.Maybe(isJust)
 import Data.Map.Strict(Map)
+import qualified Data.Vector as V
 
 import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Literal
+import Pact.Core.Pretty
+import Pact.Core.ModRefs
+
+import qualified Pact.Core.Pretty as Pretty
 
 data PactValue
   = PLiteral Literal
   | PList (Vector PactValue)
   | PGuard (Guard FullyQualifiedName PactValue)
-  | PModRef ModuleName [ModuleName]
+  | PModRef ModRef
   deriving (Eq, Show, Ord)
 
 makePrisms ''PactValue
+
+instance Pretty PactValue where
+  pretty = \case
+    PLiteral lit -> pretty lit
+    PList p -> Pretty.list (V.toList (pretty <$> p))
+    PGuard _g -> "<guard>"
+    PModRef md -> pretty md
 
 checkPvType :: Eq n => Type n -> PactValue -> Maybe (Type n)
 checkPvType ty = \case
@@ -38,8 +50,12 @@ checkPvType ty = \case
   PList l -> case ty of
     TyList t' | all (isJust . checkPvType t') l -> Just (TyList t')
     _ -> Nothing
-  PModRef _ ifs -> case ty of
-    TyModRef mn | elem mn ifs -> Just (TyModRef mn)
+  PModRef (ModRef _orig ifs refined) -> case ty of
+    TyModRef mn
+      | refined == Just mn -> Just (TyModRef mn)
+      | isJust refined -> Nothing
+      | mn `elem` ifs -> Just (TyModRef mn)
+      | otherwise -> Nothing
     _ -> Nothing
 
 

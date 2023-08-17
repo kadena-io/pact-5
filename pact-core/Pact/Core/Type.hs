@@ -217,6 +217,6 @@ instance Pretty tv => Pretty (TypeScheme tv) where
       "∀" <> renderTvs as "*" <> ". "
     qual [] = mempty
     qual as =
-      Pretty.parens (Pretty.hsep $ Pretty.punctuate "," (pretty <$> as)) <+> "=> "
+      Pretty.parens (Pretty.commaSep as) <+> "=> "
 
 makeLenses ''Arg

@@ -56,6 +56,7 @@ import Pact.Core.Persistence
 import Pact.Core.Pretty
 import Pact.Core.Gas
 import Pact.Core.Errors
+import Pact.Core.Debug
 import qualified Pact.Core.IR.Term as Term
 
 import System.Console.Haskeline.Completion
@@ -112,6 +113,12 @@ data ReplState b
 
 
 makeLenses ''ReplState
+
+instance PhaseDebug (ReplM b) where
+  debugPrint _ _ = pure ()
+
+instance HasLoaded (ReplState b) b SpanInfo where
+  loaded = replLoaded
 
 data ReplAction
   = RALoad Text
@@ -250,7 +257,7 @@ replError (ReplSource file src) pe =
       pei = view peInfo pe
       slice = withLine (_liStartLine pei) $ take (max 1 (_liEndLine pei)) $ drop (_liStartLine pei) srcLines
       colMarker = "  | " <> T.replicate (_liStartColumn pei) " " <> T.replicate (max 1 (_liEndColumn pei - _liStartColumn pei)) "^"
-      errRender = renderPactError pe
+      errRender = renderText pe
       fileErr = file <> ":" <> T.pack (show (_liStartLine pei)) <> ":" <> T.pack (show (_liStartColumn pei)) <> ": "
   in T.unlines ([fileErr <> errRender] ++ slice ++ [colMarker])
   where

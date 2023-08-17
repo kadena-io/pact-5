@@ -73,19 +73,6 @@ data DefType
   | DTDefConst
   deriving Show
 
--- data CapabilityOp name o
---   = WithCapability name [o] o
---   | RequireCapability name [o]
---   | InstallCapability name [o]
---   | ComposeCapability name [o]
---   deriving (Show, Eq, Functor, Foldable, Traversable)
-
--- data CapType name
---   = ManagedCap Int (Type Void) name
---   | AutomanagedCap
---   | Unmanaged
---   deriving  (Show, Eq, Functor, Foldable, Traversable)
-
 {-
   [Typeclasses and Instances]
   Builtin operator overloads, grouped by the current type class hierarchy:

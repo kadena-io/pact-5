@@ -276,7 +276,7 @@ instance Pretty MArg where
 
 instance Pretty (Defun i) where
   pretty (Defun n args rettype term _ _ _) =
-    parens ("defun" <+> pretty n <+> parens (prettyCommaSep args)
+    parens ("defun" <+> pretty n <+> parens (commaSep args)
       <> ":" <+> pretty rettype <+> "=" <+> pretty term)
 
 data Binder i =
@@ -324,12 +324,20 @@ data ReplSpecialTL i
   deriving Show
 
 data ReplTopLevel i
-  = RTLModule (Module i)
-  | RTLInterface (Interface i)
+  = RTLTopLevel (TopLevel i)
   | RTLDefun (Defun i)
   | RTLDefConst (DefConst i)
-  | RTLTerm (Expr i)
   deriving Show
+
+pattern RTLModule :: Module i -> ReplTopLevel i
+pattern RTLModule m = RTLTopLevel (TLModule m)
+
+pattern RTLInterface :: Interface i -> ReplTopLevel i
+pattern RTLInterface m = RTLTopLevel (TLInterface m)
+
+pattern RTLTerm :: Expr i -> ReplTopLevel i
+pattern RTLTerm te = RTLTopLevel (TLTerm te)
+
 
 termInfo :: Lens' (Expr i) i
 termInfo f = \case
@@ -382,7 +390,7 @@ instance Pretty (Expr i) where
     Constant l _ ->
       pretty l
     List nel _ ->
-      "[" <> prettyCommaSep nel <> "]"
+      "[" <> commaSep nel <> "]"
     Try e1 e2 _ ->
       parens ("try" <+> pretty e1 <+> pretty e2)
     Error e _ ->

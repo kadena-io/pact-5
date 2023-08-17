@@ -124,6 +124,7 @@ data Token
   | TokenEOF
   deriving (Eq, Show)
 
+
 data AlexInput
  = AlexInput
  { _inpLine   :: {-# UNPACK #-} !Int

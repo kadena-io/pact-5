@@ -16,36 +16,44 @@
 module Pact.Core.IR.Eval.Runtime.Types
  ( CEKTLEnv
  , CEKEnv
- , CEKRuntimeEnv(..)
- , BuiltinFn(..)
+ , EvalEnv(..)
+ , NativeFn(..)
  , EvalT(..)
  , runEvalT
  , CEKValue(..)
  , Cont(..)
- , cekBuiltins
- , cekLoaded
- , cekGasModel
- , cekMHashes, cekMsgSigs
- , cekPactDb
- , pactToCEKValue
+ , eeBuiltins
+ , eeLoaded
+ , eeGasModel
+ , eeMHashes, eeMsgSigs
+ , eePactDb
  , CEKErrorHandler(..)
  , MonadEvalEnv(..)
  , MonadEvalState(..)
-
+ , MonadGas(..)
  , CondFrame(..)
  , MonadEval
  , Closure(..)
  , EvalResult(..)
- , EvalEnv(..)
+ , EvalTEnv(..)
  , emGas, emGasLog, emRuntimeEnv
  , EvalState(..)
  , esCaps, esEvents, esInCap
  , esStack
+ , pattern VLiteral
+ , pattern VGuard
+ , pattern VList
+ , pattern VModRef
  , pattern VString
  , pattern VInteger
  , pattern VDecimal
  , pattern VUnit
  , pattern VBool
+ , pattern VDefClosure
+ , pattern VLamClosure
+ , pattern VPartialClosure
+ , pattern VNative
+ , pattern VPartialNative
  -- Capabilities
  , CapToken(..)
  , ctName, ctArgs
@@ -59,6 +67,9 @@ module Pact.Core.IR.Eval.Runtime.Types
  , ManagedCapType(..)
  , PactEvent(..)
  , CapPopState(..)
+ , LamClosure(..)
+ , PartialNativeFn(..)
+ , PartialClosure(..)
  , CanApply(..)
  ) where
 
@@ -73,18 +84,14 @@ import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Data.Default
 import Data.Decimal(Decimal)
--- import Data.Set(Set)
 import Data.Vector(Vector)
 import Data.RAList(RAList)
 import Data.Set(Set)
 import Data.IORef
-import qualified Data.Vector as V
--- import qualified Data.Map.Strict as Map
--- import qualified Data.Set as Set
 
 import Pact.Core.Names
 import Pact.Core.Guards
-import Pact.Core.Pretty(Pretty(..), (<+>))
+import Pact.Core.Pretty(Pretty(..))
 import Pact.Core.Gas
 import Pact.Core.PactValue
 import Pact.Core.Errors
@@ -93,6 +100,7 @@ import Pact.Core.IR.Term
 import Pact.Core.Literal
 import Pact.Core.Type
 import Pact.Core.Persistence
+import Pact.Core.ModRefs
 import qualified Pact.Core.Pretty as P
 
 
@@ -103,7 +111,7 @@ type CEKTLEnv b i = Map FullyQualifiedName (EvalDef b i)
 type CEKEnv b i m = RAList (CEKValue b i m)
 
 -- | List of builtins
-type BuiltinEnv b i m = b -> BuiltinFn b i m
+type BuiltinEnv b i m = i -> b -> NativeFn b i m
 
 data StackFrame
   = StackFrame
@@ -112,43 +120,65 @@ data StackFrame
   , _sfApp :: [PactValue]
   } deriving Show
 
-data Closure b i m
+data Closure b i
   = Closure
   { _cloLamInfo :: !LamInfo
   , _cloTypes :: !(NonEmpty (Maybe (Type Void)))
+  , _cloArity :: Int
   , _cloTerm :: !(EvalTerm b i)
-  , _cloEnv :: !(CEKEnv b i m)
+  -- , _cloEnv :: !(CEKEnv b i m)
+  , _cloInfo :: i
+  } deriving Show
+
+-- | A closure coming from a lambda application with its accompanying environment capturing args,
+-- but is not partially applied
+data LamClosure b i m
+  = LamClosure
+  { _lcloLamInfo :: !LamInfo
+  , _lcloTypes :: !(NonEmpty (Maybe (Type Void)))
+  , _lcloArity :: Int
+  , _lcloTerm :: !(EvalTerm b i)
+  , _lcloEnv :: !(CEKEnv b i m)
+  , _lcloInfo :: i
+  } deriving Show
+
+-- | A partially applied function because we don't allow
+-- them to be applied at the lhs of an app since pact historically hasn't had partial closures.
+-- This is a bit annoying to deal with but helps preserve semantics
+data PartialClosure b i m
+  = PartialClosure
+  { _pcloLamInfo :: !LamInfo
+  , _pcloTypes :: !(NonEmpty (Maybe (Type Void)))
+  , _pcloArity :: Int
+  , _pcloTerm :: !(EvalTerm b i)
+  , _pcloEnv :: !(CEKEnv b i m)
+  , _pcloInfo :: i
   } deriving Show
 
 data CanApply b i m
-  = C {-# UNPACK #-} !(Closure b i m)
-  | N {-# UNPACK #-} !(BuiltinFn b i m)
+  = C {-# UNPACK #-} !(Closure b i)
+  | LC {-# UNPACK #-} !(LamClosure b i m)
+  | PC {-# UNPACK #-} !(PartialClosure b i m)
+  | N {-# UNPACK #-} !(NativeFn b i m)
+  | PN {-# UNPACK #-} !(PartialNativeFn b i m)
   deriving Show
 
 -- | The type of our semantic runtime values
 data CEKValue b i m
-  = VLiteral !Literal
-  | VList !(Vector (CEKValue b i m))
-  | VClosure {-# UNPACK #-} !(Closure b i m)
-  | VNative {-# UNPACK #-} !(BuiltinFn b i m)
-  | VModRef ModuleName [ModuleName]
-  | VGuard !(Guard FullyQualifiedName PactValue)
+  = VPactValue PactValue
+  -- = VLiteral !Literal
+  -- | VList !(Vector (CEKValue b i m))
+  | VClosure {-# UNPACK #-} !(CanApply b i m)
+  -- | VModRef ModuleName [ModuleName]
+  -- | VGuard !(Guard FullyQualifiedName PactValue)
 
 instance Show (CEKValue b i m) where
   show = \case
-    VLiteral lit -> show lit
-    VList vec -> show vec
+    VPactValue pv -> show pv
     VClosure _ -> "closure<>"
-    VNative _ -> "native<>"
-    VModRef mn mns -> "modRef" <> show mn <> show mns
-    VGuard _ -> "guard<>"
 
-pactToCEKValue :: PactValue -> CEKValue b i m
-pactToCEKValue = \case
-  PLiteral lit -> VLiteral lit
-  PList vec -> VList (pactToCEKValue <$> vec)
-  PGuard gu -> VGuard gu
-  PModRef mn ifs -> VModRef mn ifs
+pattern VLiteral :: Literal -> CEKValue b i m
+pattern VLiteral lit = VPactValue (PLiteral lit)
 
 pattern VString :: Text -> CEKValue b i m
 pattern VString txt = VLiteral (LString txt)
@@ -165,6 +195,30 @@ pattern VBool b = VLiteral (LBool b)
 pattern VDecimal :: Decimal -> CEKValue b i m
 pattern VDecimal d = VLiteral (LDecimal d)
 
+pattern VGuard :: Guard FullyQualifiedName PactValue -> CEKValue b i m
+pattern VGuard g = VPactValue (PGuard g)
+
+pattern VList :: Vector PactValue -> CEKValue b i m
+pattern VList p = VPactValue (PList p)
+
+pattern VModRef :: ModRef -> CEKValue b i m
+pattern VModRef mn = VPactValue (PModRef mn)
+
+pattern VNative :: NativeFn b i m -> CEKValue b i m
+pattern VNative clo = VClosure (N clo)
+
+pattern VPartialNative :: PartialNativeFn b i m -> CEKValue b i m
+pattern VPartialNative clo = VClosure (PN clo)
+
+pattern VDefClosure :: Closure b i -> CEKValue b i m
+pattern VDefClosure clo = VClosure (C clo)
+
+pattern VLamClosure :: LamClosure b i m -> CEKValue b i m
+pattern VLamClosure clo = VClosure (LC clo)
+
+pattern VPartialClosure :: PartialClosure b i m -> CEKValue b i m
+pattern VPartialClosure clo = VClosure (PC clo)
+
 -- | Result of an evaluation step, either a CEK value or an error.
 data EvalResult b i m
   = EvalValue (CEKValue b i m)
@@ -179,51 +233,67 @@ data EvalState b i
   , _esInCap :: Bool
   } deriving Show
 
-type MonadEval b i m = (MonadEvalEnv b i m, MonadEvalState b i m, MonadError (PactError i) m, MonadIO m, Default i)
+type MonadEval b i m = (MonadEvalEnv b i m, MonadEvalState b i m, MonadGas m, MonadError (PactError i) m, MonadIO m, Default i)
+
+class Monad m => MonadGas m where
+  logGas :: Text -> Gas -> m ()
+  chargeGas :: Gas -> m ()
+
 
 class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
-  cekReadEnv :: m (CEKRuntimeEnv b i m)
-  cekLogGas :: Text -> Gas -> m ()
-  cekChargeGas :: Gas -> m ()
+  readEnv :: m (EvalEnv b i m)
 
 -- | Our monad mirroring `EvalState` for our evaluation state
 class Monad m => MonadEvalState b i m | m -> b, m -> i where
-  getCEKState :: m (EvalState b i)
-  putCEKState :: EvalState b i -> m ()
-  modifyCEKState :: (EvalState b i -> EvalState b i) -> m ()
+  getEvalState :: m (EvalState b i)
+  putEvalState :: EvalState b i -> m ()
+  modifyEvalState :: (EvalState b i -> EvalState b i) -> m ()
 
 
-data EvalEnv b i m
-  = EvalEnv
-  { _emRuntimeEnv :: CEKRuntimeEnv b i (EvalT b i m)
+data EvalTEnv b i m
+  = EvalTEnv
+  { _emRuntimeEnv :: EvalEnv b i (EvalT b i m)
   , _emGas :: IORef Gas
   , _emGasLog :: IORef (Maybe [(Text, Gas)])
   }
 
 -- Todo: are we going to inject state as the reader monad here?
 newtype EvalT b i m a =
-  EvalT (ReaderT (EvalEnv b i m) (StateT (EvalState b i) m) a)
+  EvalT (ReaderT (EvalTEnv b i m) (StateT (EvalState b i) m) a)
   deriving
     ( Functor, Applicative, Monad
     , MonadIO
     , MonadThrow
     , MonadCatch)
-  via (ReaderT (EvalEnv b i m) (StateT (EvalState b i) m))
+  via (ReaderT (EvalTEnv b i m) (StateT (EvalState b i) m))
 
 runEvalT
-  :: EvalEnv b i m
+  :: EvalTEnv b i m
   -> EvalState b i
   -> EvalT b i m a
   -> m (a, EvalState b i)
 runEvalT env st (EvalT action) = runStateT (runReaderT action env) st
 
-data BuiltinFn b i m
-  = BuiltinFn
+data NativeFn b i m
+  = NativeFn
   { _native :: b
   , _nativeFn :: Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m)
   , _nativeArity :: {-# UNPACK #-} !Int
-  , _nativeAppliedArgs :: [CEKValue b i m]
+  , _nativeLoc :: i
   }
+
+-- | A partially applied native because we don't allow
+-- them to be applied at the lhs of an app since pact historically hasn't had partial closures.
+-- This is a bit annoying to deal with but helps preserve semantics
+data PartialNativeFn b i m
+  = PartialNativeFn
+  { _pNative :: b
+  , _pNativeFn :: Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m)
+  , _pNativeArity :: {-# UNPACK #-} !Int
+  , _pNativeAppliedArgs :: [CEKValue b i m]
+  , _pNativeLoc :: i
+  }
+
 
 data ExecutionMode
   = Transactional
@@ -303,7 +373,7 @@ data Cont b i m
   = Fn (CanApply b i m) (CEKEnv b i m) [EvalTerm b i] [CEKValue b i m] (Cont b i m)
   | Args (CEKEnv b i m) (NonEmpty (EvalTerm b i)) (Cont b i m)
   | SeqC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
-  | ListC (CEKEnv b i m) [EvalTerm b i] [CEKValue b i m] (Cont b i m)
+  | ListC (CEKEnv b i m) [EvalTerm b i] [PactValue] (Cont b i m)
   | CondC (CEKEnv b i m) (CondFrame b i) (Cont b i m)
   | DynInvokeC (CEKEnv b i m) Text (Cont b i m)
   | CapInvokeC (CEKEnv b i m) [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
@@ -319,14 +389,14 @@ data CEKErrorHandler b i m
   | CEKHandler (CEKEnv b i m) (EvalTerm b i) (Cont b i m) [CapSlot] (CEKErrorHandler b i m)
   deriving Show
 
-data CEKRuntimeEnv b i m
-  = CEKRuntimeEnv
-  { _cekBuiltins :: BuiltinEnv b i m
-  , _cekGasModel :: GasEnv b
-  , _cekLoaded :: CEKTLEnv b i
-  , _cekMHashes :: Map ModuleName ModuleHash
-  , _cekMsgSigs :: Map PublicKeyText (Set CapToken)
-  , _cekPactDb :: PactDb b i
+data EvalEnv b i m
+  = EvalEnv
+  { _eeBuiltins :: BuiltinEnv b i m
+  , _eeGasModel :: GasEnv b
+  , _eeLoaded :: CEKTLEnv b i
+  , _eeMHashes :: Map ModuleName ModuleHash
+  , _eeMsgSigs :: Map PublicKeyText (Set CapToken)
+  , _eePactDb :: PactDb b i
   --   _cekGas :: IORef Gas
   -- , _cekEvalLog :: IORef (Maybe [(Text, Gas)])
   -- , _ckeData :: EnvData PactValue
@@ -336,51 +406,64 @@ data CEKRuntimeEnv b i m
   -- , _ckePactDb :: PactDb b i
   }
 
-instance (Show i, Show b) => Show (BuiltinFn b i m) where
-  show (BuiltinFn b _ arity _) = unwords
-    ["(BuiltinFn"
+instance (Show i, Show b) => Show (NativeFn b i m) where
+  show (NativeFn b _ arity _) = unwords
+    ["(NativeFn"
     , show b
     , "#fn"
     , show arity
     , ")"
     ]
 
-instance (Pretty b, Show i, Show b) => Pretty (BuiltinFn b i m) where
+instance (Show i, Show b) => Show (PartialNativeFn b i m) where
+  show (PartialNativeFn b _ arity _ _) = unwords
+    ["(NativeFn"
+    , show b
+    , "#fn"
+    , show arity
+    , ")"
+    ]
+
+instance (Pretty b, Show i, Show b) => Pretty (NativeFn b i m) where
   pretty = pretty . show
 
 instance (Show i, Show b, Pretty b) => Pretty (CEKValue b i m) where
   pretty = \case
-    VLiteral i ->
-      pretty i
-    VList v ->
-      P.brackets $ P.hsep (P.punctuate P.comma (V.toList (pretty <$> v)))
+    VPactValue pv -> pretty pv
+    -- VLiteral i ->
+    --   pretty i
+    -- VList v ->
+    --   P.brackets $ P.hsep (P.punctuate P.comma (V.toList (pretty <$> v)))
     VClosure{} ->
       P.angles "closure#"
-    VNative b ->
-      P.angles $ "native" <+> pretty b
-    VGuard _ -> P.angles "guard#"
-    VModRef mn _ ->
-      "modref" <> P.braces (pretty mn)
+    -- VNative b ->
+    --   P.angles $ "native" <+> pretty b
+    -- VGuard _ -> P.angles "guard#"
+    -- VModRef mn _ ->
+    --   "modref" <> P.braces (pretty mn)
 
-makeLenses ''CEKRuntimeEnv
 makeLenses ''EvalEnv
+makeLenses ''EvalTEnv
 makeLenses ''EvalState
 makeLenses ''CapState
 makeLenses ''CapToken
 makeLenses ''CapSlot
 makeLenses ''ManagedCap
 
-instance (MonadIO m) => MonadEvalEnv b i (EvalT b i m) where
-  cekReadEnv = EvalT $ view emRuntimeEnv
-  cekLogGas msg g = do
+instance (MonadIO m) => MonadGas (EvalT b i m) where
+  logGas msg g = do
     r <- EvalT $ view emGasLog
     liftIO $ modifyIORef' r (fmap ((msg, g):))
-  cekChargeGas g = do
+
+  chargeGas g = do
     r <- EvalT $ view emGas
     liftIO (modifyIORef' r (<> g))
 
+instance (MonadIO m) => MonadEvalEnv b i (EvalT b i m) where
+  readEnv = EvalT $ view emRuntimeEnv
+
 instance Monad m => MonadEvalState b i (EvalT b i m) where
-  getCEKState = EvalT get
-  putCEKState p = EvalT (put p)
-  modifyCEKState f = EvalT (modify' f)
+  getEvalState = EvalT get
+  putEvalState p = EvalT (put p)
+  modifyEvalState f = EvalT (modify' f)
 

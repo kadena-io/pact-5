@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 -- |
 -- Module      :  Pact.Core.IR.Term
@@ -148,12 +149,25 @@ data TopLevel name builtin info
   deriving (Show, Functor)
 
 data ReplTopLevel name builtin info
-  = RTLModule (Module name builtin info)
-  | RTLInterface (Interface name builtin info)
+  = RTLTopLevel (TopLevel name builtin info)
   | RTLDefConst (DefConst name builtin info)
   | RTLDefun (Defun name builtin info)
-  | RTLTerm (Term name builtin info)
   deriving (Show, Functor)
+
+pattern RTLTerm :: Term name builtin info -> ReplTopLevel name builtin info
+pattern RTLTerm e = RTLTopLevel (TLTerm e)
+
+pattern RTLModule :: Module name builtin info -> ReplTopLevel name builtin info
+pattern RTLModule m = RTLTopLevel (TLModule m)
+
+pattern RTLInterface :: Interface name builtin info -> ReplTopLevel name builtin info
+pattern RTLInterface iface = RTLTopLevel (TLInterface iface)
+  -- = RTLModule (Module name builtin info)
+  -- | RTLInterface (Interface name builtin info)
+  -- | RTLDefConst (DefConst name builtin info)
+  -- | RTLDefun (Defun name builtin info)
+  -- | RTLTerm (Term name builtin info)
+  -- deriving (Show, Functor)
 
 
 type EvalTerm b i = Term Name b i
@@ -175,7 +189,7 @@ data Term name builtin info
   -- ^ let x = e1 in e2
   | App (Term name builtin info) (NonEmpty (Term name builtin info)) info
   -- ^ (e1 e2)
-  | Sequence (Term name builtin info)  (Term name builtin info) info
+  | Sequence (Term name builtin info) (Term name builtin info) info
   -- ^ error term , error "blah"
   | Conditional (BuiltinForm (Term name builtin info)) info
   -- ^ Conditional terms

@@ -6,33 +6,29 @@
 
 module Pact.Core.Errors
  ( PactErrorI
- , RenderError(..)
  , LexerError(..)
  , ParseError(..)
  , DesugarError(..)
- , TypecheckError(..)
- , OverloadError(..)
- , ExecutionError(..)
+ , EvalError(..)
  , PactError(..)
+ , ArgTypeError(..)
  , peInfo
- , renderPactError
  ) where
 
 import Control.Lens hiding (ix)
 import Control.Exception
 import Data.Text(Text)
-import Data.List(intersperse)
+import Data.Void
 import Data.Dynamic (Typeable)
-import qualified Data.Text as T
 
 import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Info
+import Pact.Core.Pretty(Pretty(..))
+
+import qualified Pact.Core.Pretty as Pretty
 
 type PactErrorI = PactError SpanInfo
-
-class RenderError e where
-  renderError :: e -> Text
 
 data LexerError
   = LexicalError Char Char
@@ -48,24 +44,18 @@ data LexerError
 
 instance Exception LexerError
 
-tParens :: Text -> Text
-tParens e = "(" <> e <> ")"
-
-tConcatSpace :: [Text] -> Text
-tConcatSpace = T.concat . intersperse " "
-
-instance RenderError LexerError where
-  renderError = ("Lexical Error: " <>) . \case
+instance Pretty LexerError where
+  pretty = ("Lexical Error: " <>) . \case
     LexicalError c1 c2 ->
-      tConcatSpace ["Encountered character",  tParens (T.singleton c1) <> ",", "Last seen", tParens (T.singleton c2)]
+      Pretty.hsep ["Encountered character",  Pretty.parens (pretty c1) <> ",", "Last seen", Pretty.parens (pretty c2)]
     InvalidIndentation curr expected ->
-      tConcatSpace ["Invalid indentation. Encountered", tParens (T.pack (show curr)) <> ",", "Expected", tParens (T.pack (show expected))]
+      Pretty.hsep ["Invalid indentation. Encountered", Pretty.parens (pretty curr) <> ",", "Expected", Pretty.parens (pretty expected)]
     StringLiteralError te ->
-      tConcatSpace ["String literal parsing error: ", te]
+      Pretty.hsep ["String literal parsing error: ", pretty te]
     InvalidInitialIndent i ->
-      tConcatSpace ["Invalid initial ident. Valid indentation are 2 or 4 spaces. Found: ", tParens (T.pack (show i))]
+      Pretty.hsep ["Invalid initial ident. Valid indentation are 2 or 4 spaces. Found: ", Pretty.parens (pretty i)]
     OutOfInputError c ->
-      tConcatSpace ["Ran out of input before finding a lexeme. Last Character seen: ", tParens (T.singleton c)]
+      Pretty.hsep ["Ran out of input before finding a lexeme. Last Character seen: ", Pretty.parens (pretty c)]
 
 data ParseError
   = ParsingError Text
@@ -84,18 +74,18 @@ data ParseError
 
 instance Exception ParseError
 
-instance RenderError ParseError where
-  renderError = \case
+instance Pretty ParseError where
+  pretty = \case
     ParsingError e ->
-      tConcatSpace ["Expected:", e]
+      Pretty.hsep ["Expected:", pretty e]
     TooManyCloseParens e ->
-      tConcatSpace ["Too many closing parens, remaining tokens:", e]
+      Pretty.hsep ["Too many closing parens, remaining tokens:", pretty e]
     UnexpectedInput e ->
-      tConcatSpace ["Unexpected input after expr, remaining tokens:", e]
+      Pretty.hsep ["Unexpected input after expr, remaining tokens:", pretty e]
     PrecisionOverflowError i ->
-      tConcatSpace ["Precision overflow (>=255 decimal places): ", T.pack (show i), "decimals"]
+      Pretty.hsep ["Precision overflow (>=255 decimal places): ", pretty i, "decimals"]
     InvalidBaseType txt ->
-      tConcatSpace ["No such type:", txt]
+      Pretty.hsep ["No such type:", pretty txt]
 
 data DesugarError
   = UnboundTermVariable Text
@@ -140,105 +130,115 @@ data DesugarError
 
 instance Exception DesugarError
 
-instance RenderError DesugarError where
-  renderError = \case
+instance Pretty DesugarError where
+  pretty = \case
     UnsupportedType t ->
-      tConcatSpace ["Unsupported type in pact-core:", t]
+      Pretty.hsep ["Unsupported type in pact-core:", pretty t]
     UnannotatedArgumentType t ->
-      tConcatSpace ["Unannotated type in argument:", t]
+      Pretty.hsep ["Unannotated type in argument:", pretty t]
     UnannotatedReturnType t ->
-      tConcatSpace ["Declaration", t, "is missing a return type"]
+      Pretty.hsep ["Declaration", pretty t, "is missing a return type"]
     UnboundTermVariable t ->
-      tConcatSpace ["Unbound variable", t]
+      Pretty.hsep ["Unbound variable", pretty t]
     UnboundTypeVariable t ->
-      tConcatSpace ["Unbound type variable", t]
+      Pretty.hsep ["Unbound type variable", pretty t]
     InvalidCapabilityReference t ->
-      tConcatSpace ["Variable or function used in special form is not a capability", t]
+      Pretty.hsep ["Variable or function used in special form is not a capability", pretty t]
     CapabilityOutOfScope fn mn ->
-      tConcatSpace [renderModuleName mn <> "." <> fn, "was used in a capability special form outside of the"]
+      Pretty.hsep [pretty mn <> "." <> pretty fn, "was used in a capability special form outside of the"]
     NoSuchModuleMember mn txt ->
-      tConcatSpace ["Module", renderModuleName mn, "has no such member:", txt]
+      Pretty.hsep ["Module", pretty mn, "has no such member:", pretty txt]
     NoSuchModule mn ->
-      tConcatSpace ["Cannot find module: ", renderModuleName mn]
+      Pretty.hsep ["Cannot find module: ", pretty mn]
     NoSuchInterface mn ->
-      tConcatSpace ["Cannot find interface: ", renderModuleName mn]
+      Pretty.hsep ["Cannot find interface: ", pretty mn]
     NotAllowedWithinDefcap dc ->
-      tConcatSpace [dc, "form not allowed within defcap"]
+      Pretty.hsep [pretty dc, "form not allowed within defcap"]
     NotAllowedOutsideModule txt ->
-      tConcatSpace [txt, "not allowed outside of a module"]
+      Pretty.hsep [pretty txt, "not allowed outside of a module"]
     ImplementationError mn1 mn2 defn ->
-      tConcatSpace [ "Module"
-                   , renderModuleName mn1
+      Pretty.hsep [ "Module"
+                   , pretty mn1
                    , "does not correctly implement the function"
-                   , defn
+                   , pretty defn
                    , "from Interface"
-                   , renderModuleName mn2]
+                   , pretty mn2]
     RecursionDetected mn txts ->
-      tConcatSpace
+      Pretty.hsep
       ["Recursive cycle detected in Module"
-      , renderModuleName mn
+      , pretty mn
       , "in the following functions:"
-      , T.pack (show txts)]
+      , pretty txts]
     UnresolvedQualName qual ->
-      tConcatSpace ["No such name", renderQualName qual]
+      Pretty.hsep ["No such name", pretty qual]
     InvalidGovernanceRef gov ->
-      tConcatSpace ["Invalid governance:", renderQualName gov]
+      Pretty.hsep ["Invalid governance:", pretty gov]
     InvalidDefInTermVariable n ->
-      tConcatSpace ["Invalid definition in term variable position:", n]
+      Pretty.hsep ["Invalid definition in term variable position:", pretty n]
     InvalidModuleReference mn ->
-      tConcatSpace ["Invalid Interface attempted to be used as module reference:", renderModuleName mn]
+      Pretty.hsep ["Invalid Interface attempted to be used as module reference:", pretty mn]
 
-data TypecheckError
-  = UnificationError (Type Text) (Type Text)
-  | ContextReductionError (Pred Text)
-  | UnsupportedTypeclassGeneralization [Pred Text]
-  | UnsupportedImpredicativity
-  | OccursCheckFailure (Type Text)
-  | TCInvariantFailure Text
-  | TCUnboundTermVariable Text
-  | TCUnboundFreeVariable ModuleName Text
-  | DisabledGeneralization Text
-  deriving Show
+-- data TypecheckError
+--   = UnificationError (Type Text) (Type Text)
+--   | ContextReductionError (Pred Text)
+--   | UnsupportedTypeclassGeneralization [Pred Text]
+--   | UnsupportedImpredicativity
+--   | OccursCheckFailure (Type Text)
+--   | TCInvariantFailure Text
+--   | TCUnboundTermVariable Text
+--   | TCUnboundFreeVariable ModuleName Text
+--   | DisabledGeneralization Text
+--   deriving Show
 
-instance RenderError TypecheckError where
-  renderError = \case
-    UnificationError ty ty' ->
-      tConcatSpace ["Type mismatch, expected:", renderType ty, "got:", renderType ty']
-    ContextReductionError pr ->
-      tConcatSpace ["Context reduction failure, no such instance:", renderPred pr]
-    UnsupportedTypeclassGeneralization prs ->
-      tConcatSpace ["Encountered term with generic signature, attempted to generalize on:", T.pack (show (renderPred <$> prs))]
-    UnsupportedImpredicativity ->
-      tConcatSpace ["Invariant failure: Inferred term with impredicative polymorphism"]
-    OccursCheckFailure ty ->
-      tConcatSpace
-      [ "Cannot construct the infinite type:"
-      , "Var(" <> renderType ty <> ") ~ " <> renderType ty]
-    TCInvariantFailure txt ->
-      tConcatSpace ["Typechecker invariant failure violated:", txt]
-    TCUnboundTermVariable txt ->
-      tConcatSpace ["Found unbound term variable:", txt]
-    TCUnboundFreeVariable mn txt ->
-      tConcatSpace ["Found unbound free variable:", renderModuleName mn <> "." <> txt]
-    DisabledGeneralization txt ->
-      tConcatSpace ["Generic types have been disabled:", txt]
+-- instance RenderError TypecheckError where
+--   renderError = \case
+--     UnificationError ty ty' ->
+--       Pretty.hsep ["Type mismatch, expected:", renderType ty, "got:", renderType ty']
+--     ContextReductionError pr ->
+--       Pretty.hsep ["Context reduction failure, no such instance:", renderPred pr]
+--     UnsupportedTypeclassGeneralization prs ->
+--       Pretty.hsep ["Encountered term with generic signature, attempted to generalize on:", T.pack (show (renderPred <$> prs))]
+--     UnsupportedImpredicativity ->
+--       Pretty.hsep ["Invariant failure: Inferred term with impredicative polymorphism"]
+--     OccursCheckFailure ty ->
+--       Pretty.hsep
+--       [ "Cannot construct the infinite type:"
+--       , "Var(" <> renderType ty <> ") ~ " <> renderType ty]
+--     TCInvariantFailure txt ->
+--       Pretty.hsep ["Typechecker invariant failure violated:", txt]
+--     TCUnboundTermVariable txt ->
+--       Pretty.hsep ["Found unbound term variable:", txt]
+--     TCUnboundFreeVariable mn txt ->
+--       Pretty.hsep ["Found unbound free variable:", renderModuleName mn <> "." <> txt]
+--     DisabledGeneralization txt ->
+--       Pretty.hsep ["Generic types have been disabled:", txt]
 
-instance Exception TypecheckError
+-- instance Exception TypecheckError
 
-newtype OverloadError
-  = OverloadError Text
-  deriving Show
+-- newtype OverloadError
+--   = OverloadError Text
+--   deriving Show
 
-instance RenderError OverloadError where
-  renderError = \case
-    OverloadError e ->
-      tConcatSpace ["Error during overloading stage:", e]
+-- instance RenderError OverloadError where
+--   renderError = \case
+--     OverloadError e ->
+--       Pretty.hsep ["Error during overloading stage:", e]
 
-instance Exception OverloadError
+-- instance Exception OverloadError
+
+data ArgTypeError
+  = ATEType (Type Void)
+  | ATEClosure
+  deriving (Show)
+
+instance Pretty ArgTypeError where
+  pretty = \case
+    ATEType ty -> pretty ty
+    ATEClosure -> "<closure>"
 
 -- | All fatal execution errors which should pause
 --
-data ExecutionError
+data EvalError
   = ArrayOutOfBoundsException Int Int
   -- ^ Array index out of bounds <length> <index>
   | ArithmeticException Text
@@ -255,37 +255,42 @@ data ExecutionError
   -- ^ Capability not in scope
   | InvariantFailure Text
   -- ^ Invariant violation in execution. This is a fatal Error.
-  | ExecutionError Text
+  | EvalError Text
   -- ^ Error raised by the program that went unhandled
+  | NativeArgumentsError NativeName [ArgTypeError]
   deriving Show
 
-instance RenderError ExecutionError where
-  renderError = \case
+instance Pretty EvalError where
+  pretty = \case
     ArrayOutOfBoundsException len ix ->
-      tConcatSpace
+      Pretty.hsep
       [ "Array index out of bounds. Length"
-      , tParens (T.pack (show len)) <> ","
+      , Pretty.parens (pretty len) <> ","
       , "Index"
-      , tParens (T.pack (show ix))]
+      , Pretty.parens (pretty ix)]
     ArithmeticException txt ->
-      tConcatSpace ["Arithmetic exception:", txt]
+      Pretty.hsep ["Arithmetic exception:", pretty txt]
     EnumerationError txt ->
-      tConcatSpace ["Enumeration error:", txt]
+      Pretty.hsep ["Enumeration error:", pretty txt]
     DecodeError txt ->
-      tConcatSpace ["Decoding error:", txt]
+      Pretty.hsep ["Decoding error:", pretty txt]
     FloatingPointError txt ->
-      tConcatSpace ["Floating point error:", txt]
+      Pretty.hsep ["Floating point error:", pretty txt]
     -- Todo: probably enhance this data type
     CapNotInScope txt ->
-      tConcatSpace ["Capability not in scope:", txt]
-    GasExceeded txt -> txt
+      Pretty.hsep ["Capability not in scope:", pretty txt]
+    GasExceeded txt ->
+      Pretty.hsep ["Gas Exceeded:", pretty txt]
     InvariantFailure txt ->
-      tConcatSpace ["Fatal execution error, invariant violated:", txt]
-    ExecutionError txt ->
-      tConcatSpace ["Program encountered an unhandled raised error: " <> txt]
+      Pretty.hsep ["Fatal execution error, invariant violated:", pretty txt]
+    NativeArgumentsError (NativeName n) tys ->
+      Pretty.hsep ["Native evaluation error for native", pretty n <> ",", "received incorrect argument(s) of type(s)", Pretty.commaSep tys]
+    EvalError txt ->
+      Pretty.hsep ["Program encountered an unhandled raised error:", pretty txt]
 
 
-instance Exception ExecutionError
+
+instance Exception EvalError
 
 -- data FatalPactError
 --   = InvariantFailure Text
@@ -298,30 +303,27 @@ instance Exception ExecutionError
 -- instance RenderError FatalPactError where
 --   renderError = \case
 --     InvariantFailure txt ->
---       tConcatSpace ["Fatal Execution Error", txt]
+--       Pretty.hsep ["Fatal Execution Error", txt]
 --     FatalOverloadError txt ->
---       tConcatSpace ["Fatal Overload Error", txt]
+--       Pretty.hsep ["Fatal Overload Error", txt]
 --     FatalParserError txt ->
---       tConcatSpace ["Fatal Parser Error", txt]
+--       Pretty.hsep ["Fatal Parser Error", txt]
 
 data PactError info
   = PELexerError LexerError info
   | PEParseError ParseError info
   | PEDesugarError DesugarError info
-  | PETypecheckError TypecheckError info
-  | PEOverloadError OverloadError info
-  | PEExecutionError ExecutionError info
+  -- | PETypecheckError TypecheckError info
+  -- | PEOverloadError OverloadError info
+  | PEExecutionError EvalError info
   deriving Show
 
-renderPactError :: PactError i -> Text
-renderPactError = \case
-  PELexerError le _ -> renderError le
-  PEParseError pe _ -> renderError pe
-  PEDesugarError de _ -> renderError de
-  PETypecheckError te _ -> renderError te
-  PEOverloadError oe _ -> renderError oe
-  PEExecutionError ee _ -> renderError ee
-  -- PEFatalError fpe _ -> renderError fpe
+instance Pretty (PactError info) where
+  pretty = \case
+    PELexerError e _ -> pretty e
+    PEParseError e _ -> pretty e
+    PEDesugarError e _ -> pretty e
+    PEExecutionError e _ -> pretty e
 
 peInfo :: Lens (PactError info) (PactError info') info info'
 peInfo f = \case
@@ -331,10 +333,10 @@ peInfo f = \case
     PEParseError pe <$> f info
   PEDesugarError de info ->
     PEDesugarError de <$> f info
-  PETypecheckError pe info ->
-    PETypecheckError pe <$> f info
-  PEOverloadError oe info ->
-    PEOverloadError oe <$> f info
+  -- PETypecheckError pe info ->
+  --   PETypecheckError pe <$> f info
+  -- PEOverloadError oe info ->
+  --   PEOverloadError oe <$> f info
   PEExecutionError ee info ->
     PEExecutionError ee <$> f info
   -- PEFatalError fpe info ->

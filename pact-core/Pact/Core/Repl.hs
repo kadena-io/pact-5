@@ -35,6 +35,7 @@ import Pact.Core.Persistence
 import Pact.Core.Pretty
 import Pact.Core.Builtin
 
+import Pact.Core.Compile
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
 
@@ -52,8 +53,22 @@ main = do
   where
   replSettings = Settings (replCompletion rawBuiltinNames) (Just ".pc-history") True
   displayOutput = \case
-    InterpretValue v _ -> outputStrLn (show (pretty v))
-    InterpretLog t -> outputStrLn (T.unpack t)
+    RCompileValue cv -> case cv of
+      LoadedModule mn -> outputStrLn $ show $
+        "loaded module" <+> pretty mn
+      LoadedInterface mn -> outputStrLn $ show $
+        "Loaded interface" <+> pretty mn
+      InterpretValue iv -> case iv of
+        IPV v _ -> outputStrLn (show (pretty v))
+        IPClosure -> outputStrLn "<<closure>>"
+    RLoadedDefun mn ->
+      outputStrLn $ show $
+        "loaded defun" <+> pretty mn
+    RLoadedDefConst mn ->
+      outputStrLn $ show $
+        "loaded defconst" <+> pretty mn
+    -- InterpretValue v _ -> outputStrLn (show (pretty v))
+    -- InterpretLog t -> outputStrLn (T.unpack t)
   catch' ma = catchAll ma (\e -> outputStrLn (show e) *> loop)
   loop = do
     minput <- fmap T.pack <$> getInputLine "pact>"

@@ -11,11 +11,10 @@
 module Pact.Core.IR.Eval.RawBuiltin
  ( rawBuiltinLiftedRuntime
  , rawBuiltinRuntime
- , prettyShowValue
- , valueEq ) where
+ , prettyShowValue ) where
 
 -- |
--- Module      :  Pact.Core.IR.Typecheck
+-- Module      :  Pact.Core.Eval.RawBuiltin
 -- Copyright   :  (C) 2022 Kadena
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Jose Cardona <jose@kadena.io>
@@ -29,7 +28,6 @@ import Data.Bits
 import Data.Decimal(roundTo', Decimal)
 import Data.Text(Text)
 import Data.Vector(Vector)
-import Data.List(intersperse)
 import Control.Monad.IO.Class
 import qualified Data.Vector as V
 import qualified Data.Text as T
@@ -44,7 +42,7 @@ import Pact.Core.Literal
 import Pact.Core.Errors
 import Pact.Core.Hash
 import Pact.Core.Names
-import Pact.Core.Pretty(pretty)
+import Pact.Core.Pretty(renderText)
 import Pact.Core.Guards
 import Pact.Core.Type(Arg(..))
 import Pact.Core.PactValue
@@ -60,8 +58,8 @@ import Pact.Core.IR.Eval.CEK
 ----------------------------------------------------------------------
 
 -- -- Todo: runtime error
-unaryIntFn :: (BuiltinArity b, MonadEval b i m) => (Integer -> Integer) -> b -> BuiltinFn b i m
-unaryIntFn op = mkBuiltinFn \cont handler -> \case
+unaryIntFn :: (BuiltinArity b, MonadEval b i m) => (Integer -> Integer) -> i -> b -> NativeFn b i m
+unaryIntFn op info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i)] -> returnCEKValue cont handler (VLiteral (LInteger (op i)))
   _ -> failInvariant "unary int function"
 {-# INLINE unaryIntFn #-}
@@ -69,15 +67,16 @@ unaryIntFn op = mkBuiltinFn \cont handler -> \case
 binaryIntFn
   :: (BuiltinArity b, MonadEval b i m)
   => (Integer -> Integer -> Integer)
+  -> i
   -> b
-  -> BuiltinFn b i m
-binaryIntFn op = mkBuiltinFn \cont handler -> \case
+  -> NativeFn b i m
+binaryIntFn op info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LInteger (op i i')))
   _ -> failInvariant "binary int function"
 {-# INLINE binaryIntFn #-}
 
-roundingFn :: (BuiltinArity b, MonadEval b i m) => (Rational -> Integer) -> b -> BuiltinFn b i m
-roundingFn op = mkBuiltinFn \cont handler -> \case
+roundingFn :: (BuiltinArity b, MonadEval b i m) => (Rational -> Integer) -> i -> b -> NativeFn b i m
+roundingFn op info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LDecimal i)] -> returnCEKValue cont handler (VLiteral (LInteger (truncate (roundTo' op 0 i))))
   _ -> failInvariant "rounding function"
 {-# INLINE roundingFn #-}
@@ -85,8 +84,8 @@ roundingFn op = mkBuiltinFn \cont handler -> \case
 ---------------------------------
 -- Arithmetic Ops
 ------------------------------
-rawAdd :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawAdd = mkBuiltinFn \cont handler -> \case
+rawAdd :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawAdd info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LInteger (i + i')))
   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LDecimal (i + i')))
   [VLiteral (LString i), VLiteral (LString i')] ->
@@ -94,20 +93,20 @@ rawAdd = mkBuiltinFn \cont handler -> \case
   [VList l, VList r] -> returnCEKValue cont handler (VList (l <> r))
   _ -> failInvariant "add"
 
-rawSub :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawSub = mkBuiltinFn \cont handler -> \case
+rawSub :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawSub info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LInteger (i - i')))
   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LDecimal (i - i')))
   _ -> failInvariant "subtract"
 
-rawMul :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawMul =  mkBuiltinFn \cont handler -> \case
+rawMul :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawMul info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LInteger (i * i')))
   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LDecimal (i * i')))
   _ -> failInvariant "multiply"
 
-rawPow :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawPow = mkBuiltinFn \cont handler -> \case
+rawPow :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawPow info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
     when (i' < 0) $ throwExecutionError' (ArithmeticException "negative exponent in integer power")
     returnCEKValue cont handler (VLiteral (LInteger (i ^ i')))
@@ -117,8 +116,8 @@ rawPow = mkBuiltinFn \cont handler -> \case
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   _ -> failInvariant "pow"
 
-rawLogBase :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawLogBase = mkBuiltinFn \cont handler -> \case
+rawLogBase :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawLogBase info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger base), VLiteral (LInteger n)] -> do
     when (base < 0 || n <= 0) $ throwExecutionError' (ArithmeticException "Illegal log base")
     let base' = fromIntegral base :: Double
@@ -134,8 +133,8 @@ rawLogBase = mkBuiltinFn \cont handler -> \case
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   _ -> failInvariant "logBase"
 
-rawDiv :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawDiv = mkBuiltinFn \cont handler -> \case
+rawDiv :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawDiv info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] ->
     if i' == 0 then throwExecutionError' (ArithmeticException "div by zero")
     else returnCEKValue cont handler (VLiteral (LInteger (div i i')))
@@ -144,117 +143,106 @@ rawDiv = mkBuiltinFn \cont handler -> \case
     else returnCEKValue cont handler (VLiteral (LDecimal (i / i')))
   _ -> failInvariant "div"
 
-rawNegate :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawNegate = mkBuiltinFn \cont handler -> \case
+rawNegate :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawNegate info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i)] ->
     returnCEKValue cont handler (VLiteral (LInteger (negate i)))
   [VLiteral (LDecimal i)] ->
     returnCEKValue cont handler (VLiteral (LDecimal (negate i)))
   _ -> failInvariant "negate"
 
-rawEq :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawEq = mkBuiltinFn \cont handler -> \case
-  [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LBool (i == i')))
-  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LBool (i == i')))
-  [VLiteral (LString i), VLiteral (LString i')] -> returnCEKValue cont handler (VLiteral (LBool (i == i')))
-  [VLiteral (LBool i), VLiteral (LBool i')] -> returnCEKValue cont handler (VLiteral (LBool (i == i')))
-  [VLiteral LUnit, VLiteral LUnit] -> returnCEKValue cont handler (VLiteral (LBool True))
-  [VList l, VList r] ->
-    if V.length l /= V.length r then
-      returnCEKValue cont handler (VLiteral (LBool False))
-    else returnCEKValue cont handler (VBool (valueEq (VList l) (VList r)))
+rawEq :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawEq info = mkBuiltinFn info \cont handler -> \case
+  [VPactValue pv, VPactValue pv'] -> returnCEKValue cont handler (VBool (pv == pv'))
+  -- [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LBool (i == i')))
+  -- [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LBool (i == i')))
+  -- [VLiteral (LString i), VLiteral (LString i')] -> returnCEKValue cont handler (VLiteral (LBool (i == i')))
+  -- [VLiteral (LBool i), VLiteral (LBool i')] -> returnCEKValue cont handler (VLiteral (LBool (i == i')))
+  -- [VLiteral LUnit, VLiteral LUnit] -> returnCEKValue cont handler (VLiteral (LBool True))
+  -- [VList l, VList r] ->
+  --   if V.length l /= V.length r then
+  --     returnCEKValue cont handler (VLiteral (LBool False))
+  --   else returnCEKValue cont handler (VBool (valueEq (VList l) (VList r)))
   _ -> failInvariant "eq"
 
-modInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
+modInt :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
 modInt = binaryIntFn mod
 
-valueEq :: CEKValue b i m -> CEKValue b i m -> Bool
-valueEq (VInteger i) (VInteger r) = i == r
-valueEq (VDecimal l) (VDecimal r) = l == r
-valueEq (VString l) (VString r) = l == r
-valueEq VUnit VUnit = True
-valueEq (VBool l) (VBool r) = l == r
-valueEq (VList l) (VList r) =
-  V.length l == V.length r &&  all (uncurry valueEq) (V.zip l r)
-valueEq _ _ = False
+-- valueEq :: CEKValue b i m -> CEKValue b i m -> Bool
+-- valueEq (VInteger i) (VInteger r) = i == r
+-- valueEq (VDecimal l) (VDecimal r) = l == r
+-- valueEq (VString l) (VString r) = l == r
+-- valueEq VUnit VUnit = True
+-- valueEq (VBool l) (VBool r) = l == r
+-- valueEq (VList l) (VList r) =
+--   V.length l == V.length r &&  all (uncurry valueEq) (V.zip l r)
+-- valueEq _ _ = False
 
 prettyShowValue :: CEKValue b i m -> Text
 prettyShowValue = \case
   -- Todo: REMOVE THIS. THIS CANNOT MAKE IT INTO OUTPUTS.
-  VLiteral lit -> T.pack (show (pretty lit))
-  VList vec ->
-    "[" <> T.concat (intersperse ", " (prettyShowValue <$> V.toList vec)) <> "]"
+  VPactValue p -> renderText p
   VClosure _ -> "<#closure>"
-  VNative _ -> "<#nativefn>"
-  VGuard _ -> "<#guard>"
-  VModRef mn _ -> "modRef{" <> (_mnName mn) <> "}"
 
-rawNeq :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawNeq = mkBuiltinFn \cont handler -> \case
-  [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LBool (i /= i')))
-  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LBool (i /= i')))
-  [VLiteral (LString i), VLiteral (LString i')] -> returnCEKValue cont handler (VLiteral (LBool (i /= i')))
-  [VLiteral (LBool i), VLiteral (LBool i')] -> returnCEKValue cont handler (VLiteral (LBool (i /= i')))
-  [VLiteral LUnit, VLiteral LUnit] -> returnCEKValue cont handler (VLiteral (LBool False))
-  [VList l, VList r] ->
-    if V.length l /= V.length r then
-      returnCEKValue cont handler (VLiteral (LBool True))
-    else returnCEKValue cont handler (VBool (not (valueEq (VList l) (VList r))))
+rawNeq :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawNeq info = mkBuiltinFn info \cont handler -> \case
+  [VPactValue pv, VPactValue pv'] ->
+    returnCEKValue cont handler (VBool (pv /= pv'))
   _ -> failInvariant "neq"
 
-rawGt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawGt = mkBuiltinFn \cont handler -> \case
+rawGt :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawGt info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LBool (i > i')))
   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LBool (i > i')))
   [VLiteral (LString i), VLiteral (LString i')] -> returnCEKValue cont handler (VLiteral (LBool (i > i')))
   _ -> failInvariant "int cmp function"
 
-rawLt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawLt = mkBuiltinFn \cont handler -> \case
+rawLt :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawLt info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LBool (i < i')))
   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LBool (i < i')))
   [VLiteral (LString i), VLiteral (LString i')] -> returnCEKValue cont handler (VLiteral (LBool (i < i')))
   _ -> failInvariant "int cmp function"
 
-rawGeq :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawGeq = mkBuiltinFn \cont handler -> \case
+rawGeq :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawGeq info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LBool (i >= i')))
   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LBool (i >= i')))
   [VLiteral (LString i), VLiteral (LString i')] -> returnCEKValue cont handler (VLiteral (LBool (i >= i')))
   _ -> failInvariant "int cmp function"
 
-rawLeq :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawLeq = mkBuiltinFn \cont handler -> \case
+rawLeq :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawLeq info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LBool (i <= i')))
   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LBool (i <= i')))
   [VLiteral (LString i), VLiteral (LString i')] -> returnCEKValue cont handler (VLiteral (LBool (i <= i')))
   _ -> failInvariant "int cmp function"
 
-bitAndInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
+bitAndInt :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
 bitAndInt = binaryIntFn (.&.)
 
-bitOrInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
+bitOrInt :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
 bitOrInt = binaryIntFn (.|.)
 
-bitComplementInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
+bitComplementInt :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
 bitComplementInt = unaryIntFn complement
 
-bitXorInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
+bitXorInt :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
 bitXorInt = binaryIntFn xor
 
-bitShiftInt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
+bitShiftInt :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
 bitShiftInt =  binaryIntFn (\i s -> shift i (fromIntegral s))
 
-rawAbs :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawAbs = mkBuiltinFn \cont handler -> \case
+rawAbs :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawAbs info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i)] ->
     returnCEKValue cont handler (VLiteral (LInteger (abs i)))
   [VLiteral (LDecimal e)] -> do
     returnCEKValue cont handler (VLiteral (LDecimal (abs e)))
   _ -> failInvariant "abs"
 
-rawExp :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawExp = mkBuiltinFn \cont handler -> \case
+rawExp :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawExp info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i)] -> do
     let result = exp (fromIntegral i)
     guardNanOrInf result
@@ -265,8 +253,8 @@ rawExp = mkBuiltinFn \cont handler -> \case
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   _ -> failInvariant "exe"
 
-rawLn :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawLn = mkBuiltinFn \cont handler -> \case
+rawLn :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawLn info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i)] -> do
     let result = log (fromIntegral i)
     guardNanOrInf result
@@ -277,8 +265,8 @@ rawLn = mkBuiltinFn \cont handler -> \case
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   _ -> failInvariant "lnInt"
 
-rawSqrt :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawSqrt = mkBuiltinFn \cont handler -> \case
+rawSqrt :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawSqrt info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i)] -> do
     when (i < 0) $ throwExecutionError' (ArithmeticException "Square root must be non-negative")
     let result = sqrt (fromIntegral i)
@@ -292,8 +280,8 @@ rawSqrt = mkBuiltinFn \cont handler -> \case
   _ -> failInvariant "sqrtInt"
 
 -- Todo: fix all show instances
-rawShow :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawShow = mkBuiltinFn \cont handler -> \case
+rawShow :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawShow info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i)] ->
     returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
   [VLiteral (LDecimal i)] ->
@@ -320,20 +308,20 @@ dec2F = fromRational . toRational
 f2Dec :: Double -> Decimal
 f2Dec = fromRational . toRational
 
-roundDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
+roundDec :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
 roundDec = roundingFn round
 
-floorDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
+floorDec :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
 floorDec = roundingFn floor
 
-ceilingDec :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
+ceilingDec :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
 ceilingDec = roundingFn ceiling
 
 ---------------------------
 -- bool ops
 ---------------------------
-notBool :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-notBool = mkBuiltinFn \cont handler -> \case
+notBool :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+notBool info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LBool i)] -> returnCEKValue cont handler  (VLiteral (LBool (not i)))
   _ -> failInvariant "notBool"
 
@@ -341,8 +329,8 @@ notBool = mkBuiltinFn \cont handler -> \case
 -- string ops
 ---------------------------
 
-rawTake :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawTake = mkBuiltinFn \cont handler -> \case
+rawTake :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawTake info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i), VLiteral (LString t)]
     | i >= 0 -> do
       let clamp = min (fromIntegral i) (T.length t)
@@ -359,8 +347,8 @@ rawTake = mkBuiltinFn \cont handler -> \case
       returnCEKValue cont handler (VList (V.drop clamp li))
   _ -> failInvariant "takeStr"
 
-rawDrop :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawDrop = mkBuiltinFn \cont handler -> \case
+rawDrop :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawDrop info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i), VLiteral (LString t)]
     | i >= 0 -> do
       let clamp = min (fromIntegral i) (T.length t)
@@ -377,39 +365,39 @@ rawDrop = mkBuiltinFn \cont handler -> \case
       returnCEKValue cont handler (VList (V.take clamp li))
   _ -> failInvariant "dropStr"
 
-rawLength :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawLength = mkBuiltinFn \cont handler -> \case
+rawLength :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawLength info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LString t)] -> do
     returnCEKValue cont handler  (VLiteral (LInteger (fromIntegral (T.length t))))
   [VList li] -> returnCEKValue cont handler (VLiteral (LInteger (fromIntegral (V.length li))))
   _ -> failInvariant "lengthStr"
 
-rawReverse :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-rawReverse = mkBuiltinFn \cont handler -> \case
+rawReverse :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawReverse info = mkBuiltinFn info \cont handler -> \case
   [VList li] ->
     returnCEKValue cont handler (VList (V.reverse li))
   [VLiteral (LString t)] -> do
     returnCEKValue cont handler  (VLiteral (LString (T.reverse t)))
   _ -> failInvariant "reverseStr"
 
--- showStr :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- showStr = mkBuiltinFn \cont handler -> \case
+-- showStr :: (BuiltinArity b, MonadEval b i m) => b -> NativeFn b i m
+-- showStr info = mkBuiltinFn info \cont handler -> \case
 --   [VLiteral (LString t)] -> do
 --     let out = "\"" <> t <> "\""
 --     returnCEKValue cont handler  (VLiteral (LString out))
 --   _ -> failInvariant "showStr"
 
-coreConcat :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-coreConcat = mkBuiltinFn \cont handler -> \case
+coreConcat :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+coreConcat info = mkBuiltinFn info \cont handler -> \case
   [VList li] -> do
     li' <- traverse asString li
-    returnCEKValue cont handler (VLiteral (LString (T.concat (V.toList li'))))
+    returnCEKValue cont handler (VString (T.concat (V.toList li')))
   _ -> failInvariant "concatStr"
 
-strToList :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-strToList = mkBuiltinFn \cont handler -> \case
+strToList :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+strToList info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LString s)] -> do
-    let v = VList (V.fromList (VLiteral . LString . T.singleton <$> T.unpack s))
+    let v = VList (V.fromList (PLiteral . LString . T.singleton <$> T.unpack s))
     returnCEKValue cont handler v
   _ -> failInvariant "concatStr"
 
@@ -417,18 +405,18 @@ strToList = mkBuiltinFn \cont handler -> \case
 -- Unit ops
 ---------------------------
 
--- eqUnit :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- eqUnit = mkBuiltinFn \cont handler -> \case
+-- eqUnit :: (BuiltinArity b, MonadEval b i m) => b -> NativeFn b i m
+-- eqUnit info = mkBuiltinFn info \cont handler -> \case
 --   [VLiteral LUnit, VLiteral LUnit] -> returnCEKValue cont handler (VLiteral (LBool True))
 --   _ -> failInvariant "eqUnit"
 
--- neqUnit :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- neqUnit = mkBuiltinFn \cont handler -> \case
+-- neqUnit :: (BuiltinArity b, MonadEval b i m) => b -> NativeFn b i m
+-- neqUnit info = mkBuiltinFn info \cont handler -> \case
 --   [VLiteral LUnit, VLiteral LUnit] -> returnCEKValue cont handler (VLiteral (LBool False))
 --   _ -> failInvariant "neqUnit"
 
--- showUnit :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- showUnit = mkBuiltinFn \cont handler -> \case
+-- showUnit :: (BuiltinArity b, MonadEval b i m) => b -> NativeFn b i m
+-- showUnit info = mkBuiltinFn info \cont handler -> \case
 --   [VLiteral LUnit] -> returnCEKValue cont handler (VLiteral (LString "()"))
 --   _ -> failInvariant "showUnit"
 
@@ -436,13 +424,13 @@ strToList = mkBuiltinFn \cont handler -> \case
 -- Object ops
 ---------------------------
 
--- eqObj :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- eqObj = mkBuiltinFn \case
+-- eqObj :: (BuiltinArity b, MonadEval b i m) => b -> NativeFn b i m
+-- eqObj info = mkBuiltinFn info \case
 --   [l@VObject{}, r@VObject{}] -> pure (VLiteral (LBool (unsafeEqCEKValue l r)))
 --   _ -> failInvariant "eqObj"
 
--- neqObj :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- neqObj = mkBuiltinFn \case
+-- neqObj :: (BuiltinArity b, MonadEval b i m) => b -> NativeFn b i m
+-- neqObj info = mkBuiltinFn info \case
 --   [l@VObject{}, r@VObject{}] -> pure (VLiteral (LBool (unsafeNeqCEKValue l r)))
 --   _ -> failInvariant "neqObj"
 
@@ -454,8 +442,8 @@ strToList = mkBuiltinFn \cont handler -> \case
 -- asBool (VLiteral (LBool b)) = pure b
 -- asBool _ = failInvariant "asBool"
 
-asString :: MonadEval b i m => CEKValue b i m -> m Text
-asString (VLiteral (LString b)) = pure b
+asString :: MonadEval b i m => PactValue -> m Text
+asString (PLiteral (LString b)) = pure b
 asString _ = failInvariant "asString"
 
 -- unsafeEqLiteral :: Literal -> Literal -> Bool
@@ -485,8 +473,8 @@ asString _ = failInvariant "asString"
 ---------------------------
 
 
--- neqList :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- neqList = mkBuiltinFn \cont handler -> \case
+-- neqList :: (BuiltinArity b, MonadEval b i m) => b -> NativeFn b i m
+-- neqList info = mkBuiltinFn info \cont handler -> \case
 --   [neqClo, VList l, VList r] ->
 --     if V.length l /= V.length r then
 --       returnCEKValue cont handler (VLiteral (LBool True))
@@ -499,23 +487,23 @@ asString _ = failInvariant "asString"
 --     zip' _ _ acc = returnCEKValue cont handler (VLiteral (LBool (or acc)))
 --   _ -> failInvariant "neqList"
 
-zipList :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-zipList = mkBuiltinFn \cont handler -> \case
+zipList :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+zipList info = mkBuiltinFn info \cont handler -> \case
   [clo, VList l, VList r] -> zip' (V.toList l) (V.toList r) []
     where
-    zip' (x:xs) (y:ys) acc = unsafeApplyTwo clo x y >>= \case
-       EvalValue v -> zip' xs ys (v:acc)
+    zip' (x:xs) (y:ys) acc = unsafeApplyTwo clo (VPactValue x) (VPactValue y) >>= \case
+       EvalValue v -> enforcePactValue v >>= zip' xs ys . (:acc)
        v@VError{} -> returnCEK cont handler v
     zip' _ _ acc = returnCEKValue cont handler (VList (V.fromList (reverse acc)))
   _ -> failInvariant "zipList"
 
--- addList :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- addList = mkBuiltinFn \cont handler -> \case
+-- addList :: (BuiltinArity b, MonadEval b i m) => b -> NativeFn b i m
+-- addList info = mkBuiltinFn info \cont handler -> \case
 --   [VList l, VList r] -> returnCEKValue cont handler (VList (l <> r))
 --   _ -> failInvariant "addList"
 
--- pcShowList :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- pcShowList = mkBuiltinFn \cont handler -> \case
+-- pcShowList :: (BuiltinArity b, MonadEval b i m) => b -> NativeFn b i m
+-- pcShowList info = mkBuiltinFn info \cont handler -> \case
 --   [showFn, VList l1] -> show' (V.toList l1) []
 --     where
 --     show' (x:xs) acc = unsafeApplyOne showFn x >>= \case
@@ -527,21 +515,21 @@ zipList = mkBuiltinFn \cont handler -> \case
 --       returnCEKValue cont handler (VLiteral (LString out))
 --   _ -> failInvariant "showList"
 
-coreMap :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-coreMap = mkBuiltinFn \cont handler -> \case
+coreMap :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+coreMap info = mkBuiltinFn info \cont handler -> \case
   [fn, VList li] -> map' (V.toList li) []
     where
-    map' (x:xs) acc = unsafeApplyOne fn x >>= \case
-       EvalValue cv -> map' xs (cv:acc)
+    map' (x:xs) acc = unsafeApplyOne fn (VPactValue x) >>= \case
+       EvalValue cv -> enforcePactValue cv >>= map' xs . (:acc)
        v -> returnCEK cont handler v
     map' _ acc = returnCEKValue cont handler (VList (V.fromList (reverse acc)))
   _ -> failInvariant "map"
 
-coreFilter :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-coreFilter = mkBuiltinFn \cont handler -> \case
+coreFilter :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+coreFilter info = mkBuiltinFn info \cont handler -> \case
   [fn, VList li] -> filter' (V.toList li) []
     where
-    filter' (x:xs) acc = unsafeApplyOne fn x >>= \case
+    filter' (x:xs) acc = unsafeApplyOne fn (VPactValue x) >>= \case
       EvalValue (VLiteral (LBool b)) ->
         if b then filter' xs (x:acc) else filter' xs acc
       v@VError{} ->
@@ -550,22 +538,22 @@ coreFilter = mkBuiltinFn \cont handler -> \case
     filter' [] acc = returnCEKValue cont handler (VList (V.fromList (reverse acc)))
   _ -> failInvariant "filter"
 
-coreFold :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-coreFold = mkBuiltinFn \cont handler -> \case
+coreFold :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+coreFold info = mkBuiltinFn info \cont handler -> \case
   [fn, initElem, VList li] ->
     fold' initElem (V.toList li)
     where
-    fold' e (x:xs) = unsafeApplyTwo fn e x >>= \case
+    fold' e (x:xs) = unsafeApplyTwo fn e (VPactValue x) >>= \case
       EvalValue v -> fold' v xs
       v -> returnCEK cont handler v
     fold' e [] = returnCEKValue cont handler e
   _ -> failInvariant "fold"
 
-coreEnumerate :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-coreEnumerate = mkBuiltinFn \cont handler -> \case
+coreEnumerate :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+coreEnumerate info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger from), VLiteral (LInteger to)] -> do
     v <- createEnumerateList from to (if from > to then -1 else 1)
-    returnCEKValue cont handler (VList (VLiteral . LInteger <$> v))
+    returnCEKValue cont handler (VList (PLiteral . LInteger <$> v))
   _ -> failInvariant "enumerate"
 
 createEnumerateList
@@ -588,31 +576,31 @@ createEnumerateList from to inc
     step = succ (abs (from - to) `div` abs inc)
     in pure $ V.enumFromStepN from inc (fromIntegral step)
 
-coreEnumerateStepN :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-coreEnumerateStepN = mkBuiltinFn \cont handler -> \case
+coreEnumerateStepN :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+coreEnumerateStepN info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger from), VLiteral (LInteger to), VLiteral (LInteger inc)] -> do
     v <- createEnumerateList from to inc
-    returnCEKValue cont handler (VList (VLiteral . LInteger <$> v))
+    returnCEKValue cont handler (VList (PLiteral . LInteger <$> v))
   _ -> failInvariant "enumerate-step"
 
--- concatList :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- concatList = mkBuiltinFn \cont handler -> \case
+-- concatList :: (BuiltinArity b, MonadEval b i m) => b -> NativeFn b i m
+-- concatList info = mkBuiltinFn info \cont handler -> \case
 --   [VList li] -> do
 --     li' <- traverse asList li
 --     returnCEKValue cont handler (VList (V.concat (V.toList li')))
 --   _ -> failInvariant "takeList"
 
-makeList :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-makeList = mkBuiltinFn \cont handler -> \case
-  [VLiteral (LInteger i), v] -> do
+makeList :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+makeList info = mkBuiltinFn info \cont handler -> \case
+  [VLiteral (LInteger i), VPactValue v] -> do
     returnCEKValue cont handler (VList (V.fromList (replicate (fromIntegral i) v)))
   _ -> failInvariant "makeList"
 
-listAccess :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-listAccess = mkBuiltinFn \cont handler -> \case
+listAccess :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+listAccess info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i), VList vec] ->
     case vec V.!? fromIntegral i of
-      Just v -> returnCEKValue cont handler v
+      Just v -> returnCEKValue cont handler (VPactValue v)
       _ -> throwExecutionError' (ArrayOutOfBoundsException (V.length vec) (fromIntegral i))
   _ -> failInvariant "list-access"
 
@@ -620,15 +608,15 @@ listAccess = mkBuiltinFn \cont handler -> \case
 -- try-related ops
 -----------------------------------
 
-coreEnforce :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-coreEnforce = mkBuiltinFn \cont handler -> \case
+coreEnforce :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+coreEnforce info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LBool b), VLiteral (LString s)] ->
     if b then returnCEKValue cont handler (VLiteral LUnit)
     else returnCEK cont handler (VError s)
   _ -> failInvariant "enforce"
 
--- coreEnforceOne :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- coreEnforceOne = mkBuiltinFn \case
+-- coreEnforceOne :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+-- coreEnforceOne info = mkBuiltinFn info \case
 --   [VList v, VLiteral (LString msg)] ->
 --     enforceFail msg (V.toList v)
 --   _ -> failInvariant "coreEnforceOne"
@@ -648,8 +636,8 @@ coreEnforce = mkBuiltinFn \cont handler -> \case
 -- readError field expected =
 --   "invalid value at field " <> field <> " expected: " <> expected
 
--- coreReadInteger :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- coreReadInteger = mkBuiltinFn \case
+-- coreReadInteger :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+-- coreReadInteger info = mkBuiltinFn info \case
 --   [VLiteral (LString s)] ->
 --     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
 --       Just pv -> case pv of
@@ -658,8 +646,8 @@ coreEnforce = mkBuiltinFn \cont handler -> \case
 --       _ -> throwM (ReadException ("no field at key " <> s))
 --   _ -> failInvariant "read-integer"
 
--- coreReadString :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- coreReadString = mkBuiltinFn \case
+-- coreReadString :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+-- coreReadString info = mkBuiltinFn info \case
 --   [VLiteral (LString s)] ->
 --     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
 --       Just pv-> case pv of
@@ -668,8 +656,8 @@ coreEnforce = mkBuiltinFn \cont handler -> \case
 --       _ -> throwM (ReadException ("no field at key " <> s))
 --   _ -> failInvariant "read-string"
 
--- coreReadDecimal :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- coreReadDecimal = mkBuiltinFn \case
+-- coreReadDecimal :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+-- coreReadDecimal info = mkBuiltinFn info \case
 --   [VLiteral (LString s)] ->
 --     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
 --       Just pv -> case pv of
@@ -688,8 +676,8 @@ coreEnforce = mkBuiltinFn \cont handler -> \case
 --       _ -> throwM (ReadException ("no field at key " <> s))
 --   _ -> failInvariant "readObject"
 
--- coreReadKeyset :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- coreReadKeyset = mkBuiltinFn \case
+-- coreReadKeyset :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+-- coreReadKeyset info = mkBuiltinFn info \case
 --   [VLiteral (LString s)] ->
 --     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
 --       Just pv -> case pv of
@@ -716,13 +704,13 @@ coreEnforce = mkBuiltinFn \cont handler -> \case
 --     pure (KeySet ks kspred)
 
 
--- coreKeysetRefGuard :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- coreKeysetRefGuard = mkBuiltinFn \case
+-- coreKeysetRefGuard :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+-- coreKeysetRefGuard info = mkBuiltinFn info \case
 --   [VLiteral (LString s)] -> pure (VGuard (GKeySetRef (KeySetName s)))
 --   _ -> failInvariant "keyset-ref-guard"
 
--- coreEnforceGuard :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- coreEnforceGuard = mkBuiltinFn \case
+-- coreEnforceGuard :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+-- coreEnforceGuard info = mkBuiltinFn info \case
 --   [VGuard v] -> case v of
 --     GKeyset ks -> enforceKeySet ks
 --     GKeySetRef ksr -> enforceKeySetRef ksr
@@ -754,8 +742,8 @@ coreEnforce = mkBuiltinFn \cont handler -> \case
 --     _ -> failInvariant "expected a function returning unit"
 --   _ -> failInvariant "invalid type for user closure"
 
--- createUserGuard :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- createUserGuard = mkBuiltinFn \case
+-- createUserGuard :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+-- createUserGuard info = mkBuiltinFn info \case
 --   [v@VClosure{}] -> pure (VGuard (GUserGuard v))
 --   _ -> failInvariant "create-user-guard"
 
@@ -763,28 +751,28 @@ coreEnforce = mkBuiltinFn \cont handler -> \case
 -- Other Core forms
 -----------------------------------
 
--- coreIf :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
--- coreIf = mkBuiltinFn \case
+-- coreIf :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+-- coreIf info = mkBuiltinFn info \case
 --   [VLiteral (LBool b), VClosure tbody tenv, VClosure fbody fenv] ->
 --     if b then eval tenv tbody else  eval fenv fbody
 --   _ -> failInvariant "if"
 
-coreB64Encode :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-coreB64Encode = mkBuiltinFn \cont handler -> \case
+coreB64Encode :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+coreB64Encode info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LString l)] ->
     returnCEKValue cont handler $ VLiteral $ LString $ toB64UrlUnpaddedText $ T.encodeUtf8 l
   _ -> failInvariant "base64-encode"
 
 
-coreB64Decode :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-coreB64Decode = mkBuiltinFn \cont handler -> \case
+coreB64Decode :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+coreB64Decode info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LString s)] -> case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
     Left{} -> throwExecutionError' (DecodeError "invalid b64 encoding")
     Right txt -> returnCEKValue cont handler (VLiteral (LString txt))
   _ -> failInvariant "base64-encode"
 
-coreEnforceGuard :: (BuiltinArity b, MonadEval b i m) => b -> BuiltinFn b i m
-coreEnforceGuard = mkBuiltinFn \cont handler -> \case
+coreEnforceGuard :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+coreEnforceGuard info = mkBuiltinFn info \cont handler -> \case
   [VGuard g] -> case g of
       GKeyset ks -> do
         cond <- enforceKeyset ks
@@ -800,7 +788,7 @@ coreEnforceGuard = mkBuiltinFn \cont handler -> \case
 
 enforceKeyset :: MonadEval b i m => KeySet FullyQualifiedName -> m Bool
 enforceKeyset (KeySet kskeys ksPred) = do
-  sigs <- Map.filterWithKey matchKey . view cekMsgSigs <$> cekReadEnv
+  sigs <- Map.filterWithKey matchKey . view eeMsgSigs <$> readEnv
   runPred (Map.size sigs)
   where
   matchKey k _ = k `elem` kskeys
@@ -823,7 +811,7 @@ enforceKeysetName
   => KeySetName
   -> m Bool
 enforceKeysetName ksn = do
-  pactDb <- view cekPactDb <$> cekReadEnv
+  pactDb <- view eePactDb <$> readEnv
   liftIO (readKeyset pactDb ksn) >>= \case
     Just ks -> enforceKeyset ks
     Nothing -> failInvariant "No such keyset"
@@ -839,82 +827,84 @@ runUserGuard cont handler (UserGuard fqn args) =
     Just (Dfun d) -> do
       when (length (_dfunArgs d) /= length args) $ error "user guard not saturated"
       let li = TLLamInfo (_fqModule fqn) (_fqName fqn)
-          cloargs = NE.fromList (_argType <$> (_dfunArgs d))
-          clo = Closure li cloargs (_dfunTerm d) mempty
-      applyLam (C clo) (pactToCEKValue <$> args) cont handler
+          cloargs = NE.fromList (_argType <$> _dfunArgs d)
+          clo = Closure li cloargs (NE.length cloargs) (_dfunTerm d) (_dfunInfo d)
+      applyLam (C clo) (VPactValue <$> args) cont handler
     _ -> failInvariant "enforce-user-guard"
 
 -----------------------------------
 -- Core definitions
 -----------------------------------
 
-unimplemented :: BuiltinFn b i m
+unimplemented :: NativeFn b i m
 unimplemented = error "unimplemented"
 
 rawBuiltinRuntime
   :: (MonadEval RawBuiltin i m)
-  => RawBuiltin
-  -> BuiltinFn RawBuiltin i m
+  => i
+  -> RawBuiltin
+  -> NativeFn RawBuiltin i m
 rawBuiltinRuntime = rawBuiltinLiftedRuntime id
 
 rawBuiltinLiftedRuntime
   :: (MonadEval b i m, BuiltinArity b)
   => (RawBuiltin -> b)
+  -> i
   -> RawBuiltin
-  -> BuiltinFn b i m
-rawBuiltinLiftedRuntime f = \case
-  RawAdd -> rawAdd (f RawAdd)
-  RawSub -> rawSub (f RawSub)
-  RawMultiply -> rawMul (f RawMultiply)
-  RawDivide -> rawDiv (f RawDivide)
-  RawNegate -> rawNegate (f RawNegate)
-  RawAbs -> rawAbs (f RawAbs)
-  RawPow -> rawPow (f RawPow)
-  RawNot -> notBool (f RawNot)
-  RawEq -> rawEq (f RawEq)
-  RawNeq -> rawNeq (f RawNeq)
-  RawGT -> rawGt (f RawGT)
-  RawGEQ -> rawGeq (f RawGEQ)
-  RawLT -> rawLt (f RawLT)
-  RawLEQ -> rawLeq (f RawLEQ)
-  RawBitwiseAnd -> bitAndInt (f RawBitwiseAnd)
-  RawBitwiseOr -> bitOrInt (f RawBitwiseOr)
-  RawBitwiseXor -> bitXorInt (f RawBitwiseXor)
-  RawBitwiseFlip -> bitComplementInt (f RawBitwiseFlip)
-  RawBitShift -> bitShiftInt (f RawBitShift)
-  RawRound -> roundDec (f RawRound)
-  RawCeiling -> ceilingDec (f RawCeiling)
-  RawFloor -> floorDec (f RawFloor)
-  RawExp -> rawExp (f RawExp)
-  RawLn -> rawLn (f RawLn)
-  RawSqrt -> rawSqrt (f RawSqrt)
-  RawLogBase -> rawLogBase (f RawLogBase)
-  RawLength -> rawLength (f RawLength)
-  RawTake -> rawTake (f RawTake)
-  RawDrop -> rawDrop (f RawDrop)
-  RawConcat -> coreConcat (f RawConcat)
-  RawReverse -> rawReverse (f RawReverse)
-  RawMod -> modInt (f RawMod)
-  RawMap -> coreMap (f RawMap)
-  RawFilter -> coreFilter (f RawFilter)
-  RawZip -> zipList (f RawZip)
+  -> NativeFn b i m
+rawBuiltinLiftedRuntime f i = \case
+  RawAdd -> rawAdd i (f RawAdd)
+  RawSub -> rawSub i (f RawSub)
+  RawMultiply -> rawMul i (f RawMultiply)
+  RawDivide -> rawDiv i (f RawDivide)
+  RawNegate -> rawNegate i (f RawNegate)
+  RawAbs -> rawAbs i (f RawAbs)
+  RawPow -> rawPow i (f RawPow)
+  RawNot -> notBool i (f RawNot)
+  RawEq -> rawEq i (f RawEq)
+  RawNeq -> rawNeq i (f RawNeq)
+  RawGT -> rawGt i (f RawGT)
+  RawGEQ -> rawGeq i (f RawGEQ)
+  RawLT -> rawLt i (f RawLT)
+  RawLEQ -> rawLeq i (f RawLEQ)
+  RawBitwiseAnd -> bitAndInt i (f RawBitwiseAnd)
+  RawBitwiseOr -> bitOrInt i (f RawBitwiseOr)
+  RawBitwiseXor -> bitXorInt i (f RawBitwiseXor)
+  RawBitwiseFlip -> bitComplementInt i (f RawBitwiseFlip)
+  RawBitShift -> bitShiftInt i (f RawBitShift)
+  RawRound -> roundDec i (f RawRound)
+  RawCeiling -> ceilingDec i (f RawCeiling)
+  RawFloor -> floorDec i (f RawFloor)
+  RawExp -> rawExp i (f RawExp)
+  RawLn -> rawLn i (f RawLn)
+  RawSqrt -> rawSqrt i (f RawSqrt)
+  RawLogBase -> rawLogBase i (f RawLogBase)
+  RawLength -> rawLength i (f RawLength)
+  RawTake -> rawTake i (f RawTake)
+  RawDrop -> rawDrop i (f RawDrop)
+  RawConcat -> coreConcat i (f RawConcat)
+  RawReverse -> rawReverse i (f RawReverse)
+  RawMod -> modInt i (f RawMod)
+  RawMap -> coreMap i (f RawMap)
+  RawFilter -> coreFilter i (f RawFilter)
+  RawZip -> zipList i (f RawZip)
   RawIntToStr -> unimplemented
   RawStrToInt -> unimplemented
-  RawFold -> coreFold (f RawFold)
+  RawFold -> coreFold i (f RawFold)
   RawDistinct -> unimplemented
-  RawEnforce -> coreEnforce (f RawEnforce)
+  RawEnforce -> coreEnforce i (f RawEnforce)
   RawEnforceOne -> unimplemented
-  RawEnumerate -> coreEnumerate (f RawEnumerate)
-  RawEnumerateStepN -> coreEnumerateStepN (f RawEnumerateStepN)
-  RawShow -> rawShow (f RawShow)
+  RawEnumerate -> coreEnumerate i (f RawEnumerate)
+  RawEnumerateStepN -> coreEnumerateStepN i (f RawEnumerateStepN)
+  RawShow -> rawShow i (f RawShow)
   RawReadInteger -> unimplemented
   RawReadDecimal -> unimplemented
   RawReadString -> unimplemented
   RawReadKeyset -> unimplemented
-  RawEnforceGuard -> coreEnforceGuard (f RawEnforceGuard)
+  RawEnforceGuard -> coreEnforceGuard i (f RawEnforceGuard)
   RawKeysetRefGuard -> unimplemented
-  RawListAccess -> listAccess (f RawListAccess)
-  RawMakeList -> makeList (f RawMakeList)
-  RawB64Encode -> coreB64Encode (f RawB64Encode)
-  RawB64Decode -> coreB64Decode (f RawB64Decode)
-  RawStrToList -> strToList (f RawStrToList)
+  RawListAccess -> listAccess i (f RawListAccess)
+  RawMakeList -> makeList i (f RawMakeList)
+  RawB64Encode -> coreB64Encode i (f RawB64Encode)
+  RawB64Decode -> coreB64Decode i (f RawB64Decode)
+  RawStrToList -> strToList i (f RawStrToList)

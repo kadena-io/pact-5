@@ -378,11 +378,11 @@ applyLam
   -> m (EvalResult b i m)
 applyLam (VClosure body env) arg cont handler =
   evalCEK cont handler (RAList.cons arg env) body
-applyLam (VNative (BuiltinFn b fn arity args)) arg cont handler
+applyLam (VNative (NativeFn b fn arity args)) arg cont handler
   | arity - 1 == 0 = do
     chargeNative b
     fn cont handler (reverse (arg:args))
-  | otherwise = returnCEKValue cont handler (VNative (BuiltinFn b fn (arity - 1) (arg:args)))
+  | otherwise = returnCEKValue cont handler (VNative (NativeFn b fn (arity - 1) (arg:args)))
 applyLam _ _ _ _ = failInvariant' "Applying value to non-function" def
 
 failInvariant :: MonadEval b i m => Text -> m a
@@ -395,7 +395,7 @@ failInvariant' b i =
   let e = PEExecutionError (InvariantFailure b) i
   in throwError e
 
-throwExecutionError' :: (MonadEval b i m) => ExecutionError -> m a
+throwExecutionError' :: (MonadEval b i m) => EvalError -> m a
 throwExecutionError' e = throwError (PEExecutionError e def)
 
 unsafeApplyOne
@@ -404,9 +404,9 @@ unsafeApplyOne
   -> CEKValue b i m
   -> m (EvalResult b i m)
 unsafeApplyOne (VClosure body env) arg = eval (RAList.cons arg env) body
-unsafeApplyOne (VNative (BuiltinFn b fn arity args)) arg =
+unsafeApplyOne (VNative (NativeFn b fn arity args)) arg =
   if arity - 1 <= 0 then fn Mt CEKNoHandler (reverse (arg:args))
-  else pure (EvalValue (VNative (BuiltinFn b fn (arity - 1) (arg:args))))
+  else pure (EvalValue (VNative (NativeFn b fn (arity - 1) (arg:args))))
 unsafeApplyOne _ _ = failInvariant "Applied argument to non-closure in native"
 
 unsafeApplyTwo
@@ -417,7 +417,7 @@ unsafeApplyTwo
   -> m (EvalResult b i m)
 unsafeApplyTwo (VClosure (Lam body _) env) arg1 arg2 =
   eval (RAList.cons arg2 (RAList.cons arg1 env)) body
-unsafeApplyTwo (VNative (BuiltinFn b fn arity args)) arg1 arg2 =
+unsafeApplyTwo (VNative (NativeFn b fn arity args)) arg1 arg2 =
   if arity - 2 <= 0 then fn Mt CEKNoHandler (reverse (arg1:arg2:args))
-  else pure $ EvalValue $ VNative $ BuiltinFn b fn (arity - 2) (arg1:arg2:args)
+  else pure $ EvalValue $ VNative $ NativeFn b fn (arity - 2) (arg1:arg2:args)
 unsafeApplyTwo _ _ _ = failInvariant "Applied argument to non-closure in native"

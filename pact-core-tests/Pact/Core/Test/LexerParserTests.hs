@@ -159,7 +159,7 @@ exprGen = Gen.recursive Gen.choice
       par <- Gen.list (Range.linear 0 8) $ do
         i <- identGen
         ty <- Gen.maybe typeGen
-        pure (i, ty)
+        pure (Lisp.MArg i ty)
       expr <- Gen.subterm exprGen id
       pure $ Lisp.Lam par expr ()
 

@@ -6,8 +6,8 @@ module Pact.Core.Pretty
 , renderCompactString'
 , renderText
 , renderText'
-, prettyCommaSep
-, prettyCommaSepNE
+, commaSep
+, commaSepNE
 ) where
 
 import Data.Text(Text)
@@ -17,7 +17,6 @@ import Prettyprinter.Render.String
 import Prettyprinter.Render.Text
 import Data.List(intersperse)
 import Data.List.NonEmpty(NonEmpty)
-import Data.Foldable(fold)
 
 import qualified Data.List.NonEmpty as NE
 
@@ -33,8 +32,9 @@ renderText = renderStrict . layoutPretty defaultLayoutOptions . pretty
 renderText' :: Doc ann -> Text
 renderText' = renderStrict . layoutPretty defaultLayoutOptions
 
-prettyCommaSepNE :: Pretty a => NonEmpty a -> Doc ann
-prettyCommaSepNE = fold . NE.intersperse ", " . fmap pretty
+commaSepNE :: Pretty a => NonEmpty a -> Doc ann
+commaSepNE = commaSep . NE.toList
 
-prettyCommaSep :: Pretty a => [a] -> Doc ann
-prettyCommaSep = fold . intersperse ", " . fmap pretty
+commaSep :: Pretty a => [a] -> Doc ann
+commaSep = Pretty.hsep . intersperse "," . fmap pretty
+
