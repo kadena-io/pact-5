@@ -12,6 +12,7 @@ module Pact.Core.Errors
  , EvalError(..)
  , PactError(..)
  , ArgTypeError(..)
+ , OverloadError(..)
  , peInfo
  ) where
 
