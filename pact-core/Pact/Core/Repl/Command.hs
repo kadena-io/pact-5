@@ -87,6 +87,7 @@ helpCommand = outputStrLn $ List.intercalate "\n"
   , "     tc-type         show inferred type information"
   , "     specializer     show specializer phase information"
   , "     untyped-core    show untyped core phase information"
+  , ""
   ]
 
 

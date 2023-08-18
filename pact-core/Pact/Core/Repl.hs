@@ -76,7 +76,6 @@ main = do
       Just input -> case parseReplActionText (T.strip input) of
         Nothing -> do
           outputStrLn "Error: Expected supported command or expression. See :help for more information."
-          outputStrLn $ show $ parseReplActionText input
           loop
         Just ra -> case ra of
           RALoad txt -> let

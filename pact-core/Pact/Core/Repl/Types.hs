@@ -201,19 +201,20 @@ parseReplAction =
   where
   execute =
     RAExecuteExpr <$> MP.takeRest
-  cmdKw kw = MP.chunk kw *> MP.space1
   cmd = do
     _ <- MP.char ':'
-    load <|> setFlag <|> showHelp
-  showHelp = pure RAShowHelp
-  setFlag =
-    cmdKw "debug" *> (RASetDebugFlag <$> parseReplDebugUpdate)
+    load <|> setDebugFlag <|> showHelp
 
-  -- tc = do
-  --   cmdKw "type"
-  --   RATypecheck <$> MP.takeRest
+  cmdKwWithArg kw = MP.chunk kw *> MP.space1
+
+  showHelp =
+    RAShowHelp <$ MP.chunk "help"
+
+  setDebugFlag =
+    cmdKwWithArg "debug" *> (RASetDebugFlag <$> parseReplDebugUpdate)
+
   load = do
-    cmdKw "load"
+    cmdKwWithArg "load"
     let c = MP.char '\"'
     RALoad <$> MP.between c c (MP.takeWhile1P Nothing (/= '\"'))
 
