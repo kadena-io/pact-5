@@ -17,6 +17,8 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Class(liftIO)
+
+import qualified Data.Set as Set
 import Data.Text(Text)
 import Data.ByteString(ByteString)
 import Data.Proxy
@@ -31,7 +33,8 @@ import Pact.Core.Persistence
 import Pact.Core.Builtin
 import Pact.Core.Gas
 import Pact.Core.Names
-import Pact.Core.Repl.Utils
+import Pact.Core.Pretty hiding (pipe)
+import Pact.Core.Repl.Types
 import Pact.Core.IR.Desugar
 import Pact.Core.Errors
 import Pact.Core.IR.Term
@@ -96,15 +99,15 @@ interpretReplProgram
 interpretReplProgram source = do
   pactdb <- use replPactDb
   lexx <- liftEither (Lisp.lexer source)
-  debugIfFlagSet ReplDebugLexer lexx
+  printIfReplFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ Lisp.parseReplProgram lexx
   concat <$> traverse (pipe pactdb) parsed
   where
   debugIfLispExpr = \case
-    Lisp.RTLTerm t -> debugIfFlagSet ReplDebugParser t
+    Lisp.RTLTerm t -> printIfReplFlagSet ReplDebugParser t
     _ -> pure ()
   debugIfIRExpr flag = \case
-    RTLTerm t -> debugIfFlagSet flag t
+    RTLTerm t -> printIfReplFlagSet flag t
     _ -> pure ()
   pipe pactdb = \case
     Lisp.RTL rtl ->
@@ -129,7 +132,7 @@ interpretReplProgram source = do
         RCompileValue <$> interpretTopLevel pdb interp (DesugarOutput tt lo deps)
         where
         interpreter te = do
-          debugIfFlagSet ReplDebugUntyped te
+          printIfReplFlagSet ReplDebugUntyped te
           let i = view termInfo te
           evalGas <- use replGas
           evalLog <- use replEvalLog
@@ -218,3 +221,59 @@ interpretReplProgram source = do
       --   toFqDep modName mhash defn =
       --     let fqn = FullyQualifiedName modName (defName defn) mhash
       --     in (fqn, defn)
+
+-- | Print debugging information for a particular Repl debug flag
+-- if set in the Repl environment.
+--
+printIfReplFlagSet :: Pretty a => ReplDebugFlag -> a -> ReplM b ()
+printIfReplFlagSet flag a =
+  whenReplFlagSet flag $ liftIO (printDebug a flag)
+
+-- | Set Repl debug flag in the repl monad.
+--
+replFlagSet
+  :: ReplDebugFlag
+  -> ReplM b Bool
+replFlagSet flag =
+  uses replFlags (Set.member flag)
+
+-- | Execute an action if a particular debug flag is set in
+-- in the Repl environment.
+--
+whenReplFlagSet :: ReplDebugFlag -> ReplM b () -> ReplM b ()
+whenReplFlagSet flag ma =
+  replFlagSet flag >>= \b -> when b ma
+
+-- | Execute an action if a particular debug flag is not set in
+-- in the Repl environment.
+--
+_unlessReplFlagSet :: ReplDebugFlag -> ReplM b () -> ReplM b ()
+_unlessReplFlagSet flag ma =
+  replFlagSet flag >>= \b -> unless b ma
+
+-- | Print configuration for repl debug flags
+--
+-- TODO: this seems useful, but stale.
+printDebug :: Pretty a => a -> ReplDebugFlag -> IO ()
+printDebug a = \case
+  ReplDebugLexer -> do
+    putStrLn "----------- Lexer output -----------------"
+    print (pretty a)
+  ReplDebugParser -> do
+    putStrLn "----------- Parser output ----------------"
+    print (pretty a)
+  ReplDebugDesugar -> do
+    putStrLn "----------- Desugar output ---------------"
+    print (pretty a)
+  ReplDebugTypechecker -> do
+    putStrLn "----------- Typechecker output -----------"
+    print (pretty a)
+  ReplDebugTypecheckerType -> do
+    putStrLn "----------- Inferred type output ---------"
+    print (pretty a)
+  ReplDebugSpecializer -> do
+    putStrLn "----------- Specializer output -----------"
+    print (pretty a)
+  ReplDebugUntyped -> do
+    putStrLn "----------- Untyped core output ----------"
+    print (pretty a)

@@ -3,21 +3,18 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-
-
 -- |
--- Module      :  Pact.Core.IR.Typecheck
--- Copyright   :  (C) 2022 Kadena
+-- Module      :  Pact.Core.Repl
+-- Copyright   :  (C) 2023 Kadena
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Jose Cardona <jose@kadena.io>
 --
 -- Pact core minimal repl
 --
+module Main
+( main
+) where
 
-
-module Main where
-
-import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Monad.Trans(lift)
@@ -29,7 +26,6 @@ import Data.Foldable(traverse_)
 import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import qualified Data.Set as Set
 
 import Pact.Core.Persistence
 import Pact.Core.Pretty
@@ -37,7 +33,9 @@ import Pact.Core.Builtin
 
 import Pact.Core.Compile
 import Pact.Core.Repl.Compile
-import Pact.Core.Repl.Utils
+import Pact.Core.Repl.Command
+import Pact.Core.Repl.Types
+
 
 main :: IO ()
 main = do
@@ -45,7 +43,7 @@ main = do
   g <- newIORef mempty
   evalLog <- newIORef Nothing
   ref <- newIORef (ReplState mempty mempty pactDb g evalLog)
-  runReplT ref (runInputT replSettings loop) >>= \case
+  runReplM ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
       putStrLn $ T.unpack $ replError (ReplSource "(interactive)" "") err
@@ -75,9 +73,10 @@ main = do
     case minput of
       Nothing -> outputStrLn "goodbye"
       Just input | T.null input -> loop
-      Just input -> case parseReplAction (T.strip input) of
+      Just input -> case parseReplActionText (T.strip input) of
         Nothing -> do
-          outputStrLn "Error: Expected command [:load, :type, :syntax, :debug] or expression"
+          outputStrLn "Error: Expected supported command or expression. See :help for more information."
+          outputStrLn $ show $ parseReplActionText input
           loop
         Just ra -> case ra of
           RALoad txt -> let
@@ -91,19 +90,11 @@ main = do
                   rs = ReplSource (T.pack file) (T.decodeUtf8 source)
                   in outputStrLn (T.unpack (replError rs err))
               loop
-          RASetLispSyntax -> loop
-          RASetNewSyntax -> loop
-          RASetFlag flag -> do
-            lift (replFlags %= Set.insert flag)
-            outputStrLn $ unwords ["set debug flag for", prettyReplFlag flag]
+          RAShowHelp -> do
+            helpCommand
             loop
-          RADebugAll -> do
-            lift (replFlags .= Set.fromList [minBound .. maxBound])
-            outputStrLn $ unwords ["set all debug flags"]
-            loop
-          RADebugNone -> do
-            lift (replFlags .= Set.empty)
-            outputStrLn $ unwords ["Remove all debug flags"]
+          RASetDebugFlag flag -> do
+            debugCommand flag
             loop
           RAExecuteExpr src -> catch' $ do
             eout <- lift (tryError (interpretReplProgram (T.encodeUtf8 src)))
@@ -113,7 +104,3 @@ main = do
                 rs = ReplSource "(interactive)" input
                 in outputStrLn (T.unpack (replError rs err))
             loop
-
--- tryError :: MonadError a m => m b -> m (Either a b)
--- tryError ma =
---   catchError (Right <$> ma) (pure . Left)

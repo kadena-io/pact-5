@@ -125,10 +125,11 @@ library
     -- Pact.Core.Untyped.Eval.Builtin
 
     -- Repl
-    Pact.Core.Repl.Utils
+    Pact.Core.Repl.Command
+    Pact.Core.Repl.Compile
     Pact.Core.Repl.Runtime
     Pact.Core.Repl.Runtime.ReplBuiltin
-    Pact.Core.Repl.Compile
+    Pact.Core.Repl.Types
 
 library typed-core
   import: pact-core-common
