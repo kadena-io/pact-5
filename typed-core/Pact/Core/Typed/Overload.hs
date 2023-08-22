@@ -23,9 +23,9 @@ import Control.Monad.Except
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 
-import qualified Data.Text as T
+-- import qualified Data.Text as T
 
-import Pact.Core.Type
+import Pact.Core.Typed.Type
 import Pact.Core.Names
 import Pact.Core.Builtin
 import Pact.Core.Typed.Term
@@ -40,8 +40,9 @@ newtype OverloadM info a =
     , MonadError (PactError info))
   via (Either (PactError info))
 
+-- Todo: proper overload error
 throwOverloadError :: String -> i -> OverloadM i a
-throwOverloadError e = throwError . PEOverloadError (OverloadError (T.pack e))
+throwOverloadError e _ = error e
 
 class SolveOverload raw resolved | raw -> resolved where
   solveOverload
@@ -350,7 +351,7 @@ solveCoreOverload i b tys preds = case b of
     pure (Builtin ReadDecimal i)
   RawReadString ->
     pure (Builtin ReadString i)
-  RawListAccess ->
+  RawAt ->
     pure (Builtin ListAccess i)
   RawMakeList ->
     pure (Builtin MakeList i)
@@ -363,6 +364,10 @@ solveCoreOverload i b tys preds = case b of
   RawReadKeyset -> pure (Builtin ReadKeyset i)
   RawEnforceGuard -> pure (Builtin EnforceGuard i)
   RawKeysetRefGuard -> pure (Builtin KeysetRefGuard i)
+  RawContains -> error "contains"
+  RawSort -> error "sort"
+  RawSortObject -> error "sortObject"
+  RawRemove -> error "remove"
 
 singlePred :: [t] -> i -> (t -> OverloadM i a) -> String -> OverloadM i a
 singlePred preds i f msg = case preds of
@@ -373,9 +378,9 @@ resolveDefun
   :: SolveOverload raw reso
   => OverloadedDefun tyname raw info
   -> OverloadM info (Defun Name tyname reso info)
-resolveDefun (Defun dname ty term info) = do
+resolveDefun (Defun dname args rty term info) = do
   term' <- resolveTerm term
-  pure (Defun dname ty term' info)
+  pure (Defun dname args rty term' info)
 
 resolveDefConst
   :: SolveOverload raw reso

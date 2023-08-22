@@ -57,14 +57,14 @@ import qualified Data.RAList as RAList
 import qualified Data.Set as Set
 
 import Pact.Core.Builtin
-import Pact.Core.Type
+import Pact.Core.Type(PrimType(..), Arg(..), TypedArg(..))
+import Pact.Core.Typed.Type
 import Pact.Core.Names
 import Pact.Core.Errors
 import Pact.Core.Persistence
 import Pact.Core.Capabilities
 import qualified Pact.Core.IR.Term as IR
 import qualified Pact.Core.Typed.Term as Typed
-import qualified Pact.Core.Untyped.Term as U
 
 -- inference based on https://okmij.org/ftp/ML/generalization.html
 -- Note: Type inference levels in the types
@@ -75,6 +75,18 @@ import qualified Pact.Core.Untyped.Term as U
 -- Display purposes
 type UniqueSupply s = STRef s Unique
 type Level = Int
+
+data TypecheckError
+  = UnificationError (Type Text) (Type Text)
+  | ContextReductionError (Pred Text)
+  | UnsupportedTypeclassGeneralization [Pred Text]
+  | UnsupportedImpredicativity
+  | OccursCheckFailure (Type Text)
+  | TCInvariantFailure Text
+  | TCUnboundTermVariable Text
+  | TCUnboundFreeVariable ModuleName Text
+  | DisabledGeneralization Text
+  deriving Show
 
 data Tv s
   = Unbound !Text !Unique !Level
@@ -95,7 +107,7 @@ data TCEnv s b i
   , _tcVarEnv :: RAList (Type (TvRef s))
   -- ^ Builtins map, that uses the enum instance
   -- , _tcFree :: Map ModuleName (Map Text (Type Void))
-  , _tcFree :: Map FullyQualifiedName (Def Name)
+  , _tcLoaded :: Loaded b i
   -- ^ Free variables
   , _tcLevel :: STRef s Level
   -- ^ Type Variable "Region"
@@ -142,7 +154,7 @@ type TypedInterface b i = Typed.OverloadedInterface NamedDeBruijn b i
 -- | Our inference monad, where we can plumb through generalization "regions",
 -- our variable environment and our "supply" of unique names
 newtype InferM s b i a =
-  InferT (ExceptT (PactError i) (ReaderT (TCEnv s b i) (ST s)) a)
+  InferT (ExceptT TypecheckError (ReaderT (TCEnv s b i) (ST s)) a)
   deriving
     ( Functor, Applicative, Monad
     , MonadReader (TCEnv s b i)
@@ -323,7 +335,7 @@ instance TypeOfBuiltin RawBuiltin where
     -- RawCreateUserGuard -> let
     --   a = nd "a" 0
     --   in TypeScheme [a] [] ((TyUnit :~> TyVar a) :~> TyGuard)
-    RawListAccess -> let
+    RawAt -> let
       a = nd "a" 0
       in TypeScheme [a] [] (TyInt :~> TyList (TyVar a) :~> TyVar a)
     RawMakeList -> let
@@ -400,7 +412,7 @@ liftST :: ST s a -> InferM s b i a
 liftST action = InferT (ExceptT (Right <$> ReaderT (const action)))
 
 throwTypecheckError :: TypecheckError -> i -> InferM s b i a
-throwTypecheckError te = throwError . PETypecheckError te
+throwTypecheckError te i = throwError te
 
 _dbgTypedTerm
   :: TCTerm s b i
@@ -961,6 +973,8 @@ generalizeWithTerm' ty pp term = do
 liftType :: Type Void -> Type a
 liftType = fmap absurd
 
+toTypedArg (Arg n (Just ty)) = TypedArg n ty
+
 checkTermType
   :: (TypeOfBuiltin b)
   => TCType s
@@ -977,10 +991,12 @@ checkTermType checkty = \case
         Nothing ->
           throwTypecheckError (TCUnboundTermVariable n) i
     NTopLevel mn _mh ->
-      view (tcFree . at (FullyQualifiedName mn n _mh)) >>= \case
-        Just (DefunType nty) -> do
+      view (tcLoaded . loAllLoaded . at (FullyQualifiedName mn n _mh)) >>= \case
+        Just (IR.DCapDfun d) -> do
+          let funArgs = fmap liftCoreType . toTypedArg <$> IR._dfunArgs d
+              funRet = maybe (error "boom") id (_dfunRType d)
+              rty = foldr (\arg ty -> TyFun (_targType arg) ty) funRet funArgs
           let newVar = Typed.Var irn i
-              rty = liftType nty
           unify rty checkty i
           pure (rty, newVar, [])
         _ ->
@@ -1128,9 +1144,9 @@ checkTermType checkty = \case
     (tmref, mref', preds) <- inferTerm mref
     case tmref of
       TyModRef m -> view (tcModules . at m) >>= \case
-        Just (InterfaceData iface _) -> case U.findIfDef fn iface of
-          Just (U.IfDfun df) -> do
-            unify (liftType (U._ifdType df)) checkty i
+        Just (InterfaceData iface _) -> case IR.findIfDef fn iface of
+          Just (IR.IfDfun df) -> do
+            unify (liftType (IR._ifdType df)) checkty i
             pure (checkty, Typed.DynInvoke mref' fn i, preds)
           _ -> error "boom"
         _ -> error "boom"
@@ -1294,9 +1310,9 @@ inferTerm = \case
     (tmref, mref', preds) <- inferTerm mref
     case tmref of
       TyModRef m -> view (tcModules . at m) >>= \case
-        Just (InterfaceData iface _) -> case U.findIfDef fn iface of
-          Just (U.IfDfun df) -> do
-            pure (liftType (U._ifdType df), Typed.DynInvoke mref' fn i, preds)
+        Just (InterfaceData iface _) -> case IR.findIfDef fn iface of
+          Just (IR.IfDfun df) -> do
+            pure (liftType (IR._ifdType df), Typed.DynInvoke mref' fn i, preds)
           _ -> error "boom"
         _ -> error "boom"
       _ -> error "boom"
@@ -1448,33 +1464,30 @@ inferReplTopLevel
   :: TypeOfBuiltin b
   => Loaded reso i
   -> IR.ReplTopLevel Name b i
-  -> InferM s reso i (TypedReplTopLevel b i, Loaded reso i)
+  -> InferM s reso i (TypedReplTopLevel b i)
 inferReplTopLevel loaded = \case
   IR.RTLModule m ->  do
     tcm <- inferModule m
     let toFqn df = FullyQualifiedName (Typed._mName tcm) (Typed.defName df) (Typed._mHash tcm)
         newTLs = Map.fromList $ (\df -> (toFqn df, Typed.defType df)) <$> Typed._mDefs tcm
         loaded' = over loAllTyped (Map.union newTLs) loaded
-    pure (Typed.RTLModule tcm, loaded')
-  IR.RTLTerm m -> (, loaded) . Typed.RTLTerm . snd <$> inferTermNonGen m
+    pure (Typed.RTLModule tcm)
+  IR.RTLTerm m -> Typed.RTLTerm . snd <$> inferTermNonGen m
   -- Todo: if we don't update the module hash to update linking,
   -- repl defuns and defconsts will break invariants about
   IR.RTLDefun dfn -> do
     dfn' <- inferDefun dfn
     let newFqn = FullyQualifiedName replModuleName (Typed._dfunName dfn') replModuleHash
-    let loaded' = over loAllTyped (Map.insert newFqn (DefunType (Typed._dfunType dfn'))) loaded
-    pure (Typed.RTLDefun dfn', loaded')
+    pure (Typed.RTLDefun dfn')
   IR.RTLDefConst dconst -> do
     dc <- inferDefConst dconst
     let newFqn = FullyQualifiedName replModuleName (Typed._dcName dc) replModuleHash
-    let loaded' = over loAllTyped (Map.insert newFqn (DefunType (Typed._dcType dc))) loaded
-    pure (Typed.RTLDefConst dc, loaded')
+    pure (Typed.RTLDefConst dc)
   IR.RTLInterface i -> do
     tci <- inferInterface i
     let toFqn dc = FullyQualifiedName (Typed._ifName tci) (Typed._dcName dc) (Typed._ifHash tci)
         newTLs = Map.fromList $ fmap (\df -> (toFqn df, DefunType (Typed._dcType df))) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
-        loaded' = over loAllTyped (Map.union newTLs) loaded
-    pure (Typed.RTLInterface tci, loaded')
+    pure (Typed.RTLInterface tci)
 
 
 -- | Transform types into their debruijn-indexed version
@@ -1704,7 +1717,7 @@ runInfer
 runInfer loaded (InferT act) = do
   uref <- newSTRef 0
   lref <- newSTRef 1
-  let tcs = TCState uref mempty (_loAllTyped loaded) lref (_loModules loaded)
+  let tcs = TCState uref mempty loaded lref (_loModules loaded)
   runReaderT (runExceptT act) tcs
 
 runInferTerm

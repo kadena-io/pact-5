@@ -177,17 +177,7 @@ instance Pretty DesugarError where
     InvalidModuleReference mn ->
       Pretty.hsep ["Invalid Interface attempted to be used as module reference:", pretty mn]
 
--- data TypecheckError
---   = UnificationError (Type Text) (Type Text)
---   | ContextReductionError (Pred Text)
---   | UnsupportedTypeclassGeneralization [Pred Text]
---   | UnsupportedImpredicativity
---   | OccursCheckFailure (Type Text)
---   | TCInvariantFailure Text
---   | TCUnboundTermVariable Text
---   | TCUnboundFreeVariable ModuleName Text
---   | DisabledGeneralization Text
---   deriving Show
+
 
 -- instance RenderError TypecheckError where
 --   renderError = \case

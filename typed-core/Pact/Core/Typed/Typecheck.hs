@@ -10,7 +10,7 @@ module Pact.Core.Typed.Typecheck where
 import Control.Monad
 import Control.Lens
 import Control.Monad.Reader
-import Control.Monad.Except
+import Control.Monad.Except ( MonadError(throwError) )
 import Data.Foldable(foldlM)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Map.Strict(Map)
@@ -22,7 +22,7 @@ import qualified Data.RAList as RAList
 import Pact.Core.Builtin
 import Pact.Core.Typed.Term
 import Pact.Core.Names
-import Pact.Core.Type
+import Pact.Core.Typed.Type
 
 
 data TCEnv tyname builtin = TCEnv

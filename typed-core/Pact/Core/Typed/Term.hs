@@ -40,7 +40,6 @@ module Pact.Core.Typed.Term
  , CoreEvalTopLevel
  , CoreEvalReplTopLevel
  , defName
- , defType
  , defTerm
  -- Prisms and lenses
  , _IfDfun
@@ -57,7 +56,8 @@ import qualified Data.List.NonEmpty as NE
 import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Names
-import Pact.Core.Type
+import Pact.Core.Type hiding (Type)
+import Pact.Core.Typed.Type
 import Pact.Core.Imports
 import Pact.Core.Hash
 import Pact.Core.Guards
@@ -66,13 +66,21 @@ import Pact.Core.Pretty(Pretty(..), pretty, (<+>))
 
 import qualified Pact.Core.Pretty as Pretty
 
+-- data Defun name tyname builtin info
+--   = Defun
+--   { _dfunName :: Text
+--   , _dfunType :: Type Void
+--   , _dfunTerm :: Term name tyname builtin info
+--   , _dfunInfo :: info
+--   } deriving Show
 data Defun name tyname builtin info
   = Defun
   { _dfunName :: Text
-  , _dfunType :: Type Void
+  , _dfunArgs :: [TypedArg (Type tyname)]
+  , _dfunRType :: Type tyname
   , _dfunTerm :: Term name tyname builtin info
   , _dfunInfo :: info
-  } deriving Show
+  } deriving (Show, Functor)
 
 data DefConst name tyname builtin info
   = DefConst
@@ -86,12 +94,12 @@ data DefCap name tyname builtin info
   = DefCap
   { _dcapName :: Text
   , _dcapAppArity :: Int
-  , _dcapArgTypes :: [Type Void]
-  , _dcapRType :: Type Void
+  , _dcapArgs :: [TypedArg (Type tyname)]
+  , _dcapRType :: Type tyname
   , _dcapTerm :: Term name tyname builtin info
   , _dcapMeta :: Maybe (DefCapMeta name)
   , _dcapInfo :: info
-  } deriving Show
+  } deriving (Show, Functor)
 
 
 data Def name tyname builtin info
@@ -105,11 +113,11 @@ data Def name tyname builtin info
 -- DPact (DefPact name builtin info)
 -- DSchema (DefSchema name info)
 -- DTable (DefTable name info)
-defType :: Def name tyname builtin info -> TypeOfDef Void
-defType = \case
-  Dfun d -> DefunType (_dfunType d)
-  DConst d -> DefunType (_dcType d)
-  DCap d -> DefcapType (_dcapArgTypes d) (_dcapRType d)
+-- defType :: Def name tyname builtin info -> TypeOfDef Void
+-- defType = \case
+--   Dfun d -> DefunType (_dfunType d)
+--   DConst d -> DefunType (_dcType d)
+--   DCap d -> DefcapType (_dcapArgTypes d) (_dcapRType d)
 
 defName :: Def name tyname builtin i -> Text
 defName = \case
