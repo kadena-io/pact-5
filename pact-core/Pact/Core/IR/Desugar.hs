@@ -13,6 +13,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 
 
 module Pact.Core.IR.Desugar
@@ -27,7 +28,7 @@ import Control.Monad ( when, forM, (>=>))
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Control.Monad.Except
-import Control.Lens hiding (List,ix)
+import Control.Lens hiding (List)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Data.Maybe(mapMaybe)
@@ -35,8 +36,8 @@ import Data.List(findIndex)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Set(Set)
 import Data.Graph(stronglyConnComp, SCC(..))
+import Data.Foldable(foldl', foldlM)
 import Data.Proxy
-import Data.Void
 import Data.Foldable(find, traverse_, foldrM)
 import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
@@ -94,7 +95,7 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 --   | RNModRef ModuleName [ModuleName]
 --   deriving Show
 
-
+type DesugarType = Lisp.Type
 
 data RenamerEnv b i
   = RenamerEnv
@@ -151,8 +152,8 @@ dsOut f (DesugarOutput a l d) =
 
 class DesugarBuiltin b where
   reservedNatives :: Map Text b
-  desugarOperator :: i -> Lisp.Operator -> Term ParsedName b i
-  desugarAppArity :: i -> b -> NonEmpty (Term ParsedName b i) -> Term ParsedName b i
+  desugarOperator :: i -> Lisp.Operator -> Term ParsedName DesugarType b i
+  desugarAppArity :: i -> b -> NonEmpty (Term ParsedName DesugarType b i) -> Term ParsedName DesugarType b i
 
 instance DesugarBuiltin RawBuiltin where
   reservedNatives = rawBuiltinMap
@@ -160,15 +161,15 @@ instance DesugarBuiltin RawBuiltin where
     -- Manual eta expansion for and as well as Or
     Lisp.AndOp -> let
       arg1Name = "#andArg1"
-      arg1 = Arg arg1Name (Just TyBool)
+      arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool))
       arg2Name = "#andArg2"
-      arg2 = Arg arg2Name (Just TyBool)
+      arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool))
       in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (CAnd (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
     Lisp.OrOp -> let
       arg1Name = "#orArg1"
-      arg1 = Arg arg1Name (Just TyBool)
+      arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool))
       arg2Name = "#orArg2"
-      arg2 = Arg arg2Name (Just TyBool)
+      arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool))
       in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (COr (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
   -- Todo:
   -- Builtins of known arity differences we are yet to support:
@@ -177,16 +178,18 @@ instance DesugarBuiltin RawBuiltin where
   --  select (db, later milestone)
   --  floor
   --  log
-  desugarAppArity i raw ne = desugarAppArityRaw id i raw ne
+  desugarAppArity = desugarAppArityRaw id
 
 desugarAppArityRaw
   :: (RawBuiltin -> builtin)
   -> info
   -> RawBuiltin
-  -> NonEmpty (Term name builtin info)
-  -> Term name builtin info
+  -> NonEmpty (Term name DesugarType builtin info)
+  -> Term name DesugarType builtin info
 desugarAppArityRaw f i RawEnumerate (e1 :| [e2, e3]) =
     App (Builtin (f RawEnumerateStepN) i) (e1 :| [e2, e3]) i
+desugarAppArityRaw f i RawSort (e1 :| [e2]) =
+  App (Builtin (f RawSortObject) i) (e1 :| [e2]) i
 desugarAppArityRaw f i b args =
     App (Builtin (f b) i) args i
 
@@ -210,7 +213,7 @@ desugarLispTerm
   :: forall raw reso i m
   . (MonadDesugar raw reso i m)
   => Lisp.Expr i
-  -> m (Term ParsedName raw i)
+  -> m (Term ParsedName DesugarType raw i)
 desugarLispTerm = \case
   Lisp.Var (BN n) i  ->
     case Map.lookup (_bnName n) reservedNatives' of
@@ -226,13 +229,11 @@ desugarLispTerm = \case
     foldrM (binderToLet i) expr' binders
   Lisp.Lam [] body i -> let
     n = "#unitLamArg"
-    nty = Just TyUnit
+    nty = Just (Lisp.TyPrim PrimUnit)
     in Lam AnonLamInfo (pure (Arg n nty)) <$> desugarLispTerm body <*> pure i
   Lisp.Lam (x:xs) body i -> do
     let nsts = x :| xs
-        (ns, ts) = NE.unzip $ (\(Lisp.MArg n t) -> (n, t)) <$> nsts
-    ts' <- (traverse.traverse) (desugarType i) ts
-    let args = NE.zipWith Arg ns ts'
+        args = (\(Lisp.MArg n t) -> Arg n t) <$> nsts
     body' <- desugarLispTerm body
     pure (Lam AnonLamInfo args body' i)
   Lisp.Suspend body i -> desugarLispTerm (Lisp.Lam [] body i)
@@ -268,6 +269,8 @@ desugarLispTerm = \case
     Try <$> desugarLispTerm e1 <*> desugarLispTerm e2 <*> pure i
   Lisp.Error e i ->
     pure (Error e i)
+  Lisp.Object fields i ->
+    ObjectLit <$> (traverse._2) desugarLispTerm fields <*> pure i
   Lisp.CapabilityForm cf i -> (`CapabilityForm` i) <$> case cf of
     Lisp.WithCapability pn exs ex ->
       WithCapability pn <$> traverse desugarLispTerm exs <*> desugarLispTerm ex
@@ -283,50 +286,44 @@ desugarLispTerm = \case
   where
   binderToLet i (Lisp.Binder n mty expr) term = do
     expr' <- desugarLispTerm expr
-    mty' <- traverse (desugarType i) mty
-    pure $ Let n mty' expr' term i
+    pure $ Let (Arg n mty) expr' term i
   reservedNatives' :: Map Text raw
   reservedNatives' = reservedNatives
 
 suspendTerm
-  :: Term ParsedName builtin info
-  -> Term ParsedName builtin info
+  :: Term ParsedName DesugarType builtin info
+  -> Term ParsedName DesugarType builtin info
 suspendTerm e' =
-  Lam AnonLamInfo (pure (Arg "#suspendArg" (Just TyUnit))) e' (view termInfo e')
+  Lam AnonLamInfo (pure (Arg "#suspendArg" (Just (Lisp.TyPrim PrimUnit)))) e' (view termInfo e')
 
 toArg
-  :: (MonadRenamer reso i m)
-  => i
-  -> Lisp.MArg
-  -> m (Arg Void)
-toArg i (Lisp.MArg n mty) =
-  Arg n <$> traverse (desugarType i) mty
+  :: Lisp.MArg
+  -> Arg DesugarType
+toArg (Lisp.MArg n mty) = Arg n mty
 
 -- Arg for turning nullary into unary functions
 -- Todo: Remove this, support nullary apps.
-unitFnArg :: Arg a
-unitFnArg = Arg "#unitFnArg" (Just TyUnit)
+unitFnArg :: Arg DesugarType
+unitFnArg = Arg "#unitFnArg" (Just (Lisp.TyPrim PrimUnit))
 
 desugarDefun
   :: (MonadDesugar raw reso i m)
   => Lisp.Defun i
-  -> m (Defun ParsedName raw i)
+  -> m (Defun ParsedName DesugarType raw i)
 desugarDefun (Lisp.Defun defname [] mrt body _ _ i) = do
-  mrt' <- traverse (desugarType i) mrt
   body' <- desugarLispTerm body
   view reCurrModule >>= \case
     Just mn -> do
       let bodyLam = Lam (TLLamInfo mn defname) (pure unitFnArg) body' i
-      pure $ Defun defname [unitFnArg] mrt' bodyLam i
+      pure $ Defun defname [unitFnArg] mrt bodyLam i
     Nothing -> error "Defun is module-less"
 desugarDefun (Lisp.Defun defname (arg:args) mrt body _ _ i) = do
-  args' <- traverse (toArg i) (arg :| args)
-  mrt' <- traverse (desugarType i) mrt
+  let args' = toArg <$> (arg :| args)
   body' <- desugarLispTerm body
   view reCurrModule >>= \case
     Just mn -> do
       let bodyLam = Lam (TLLamInfo mn defname) args' body' i
-      pure $ Defun defname (NE.toList args') mrt' bodyLam i
+      pure $ Defun defname (NE.toList args') mrt bodyLam i
     Nothing -> error "Defun is module-less"
 
 
@@ -334,15 +331,14 @@ desugarDefun (Lisp.Defun defname (arg:args) mrt body _ _ i) = do
 desugarDefConst
   :: (MonadDesugar raw reso i m)
   => Lisp.DefConst i
-  -> m (DefConst ParsedName raw i)
+  -> m (DefConst ParsedName DesugarType raw i)
 desugarDefConst (Lisp.DefConst n mty e _ i) = do
-  mty' <- traverse (desugarType i) mty
   e' <- desugarLispTerm e
-  pure $ DefConst n mty' e' i
+  pure $ DefConst n mty e' i
 
 desugarDefMeta
   :: Applicative f
-  => Term n b i
+  => Term n DesugarType b i
   -> Lisp.DCapMeta
   -> f (DefCapMeta ParsedName)
 desugarDefMeta body = \case
@@ -351,8 +347,8 @@ desugarDefMeta body = \case
     Just (arg, name) -> case body of
       Lam _ args _ _ ->
         case findIndex ((==) arg . view argName) (NE.toList args) of
-          Just ix ->
-            let dmanaged = DefManagedMeta ix name
+          Just index' ->
+            let dmanaged = DefManagedMeta index' name
             in pure (DefManaged (Just dmanaged))
           Nothing -> error "no such managed arg"
       _ -> error "invalid body: not a lambda form, cannot find app arg"
@@ -361,15 +357,13 @@ desugarDefMeta body = \case
 desugarDefCap
   :: (MonadDesugar raw reso info m)
   => Lisp.DefCap info
-  -> m (DefCap ParsedName raw info)
-desugarDefCap (Lisp.DefCap dcn [] mrtype term _docs _model meta i) = do
-  rtype <- traverse (desugarType i) mrtype
+  -> m (DefCap ParsedName DesugarType raw info)
+desugarDefCap (Lisp.DefCap dcn [] rtype term _docs _model meta i) = do
   term' <- desugarLispTerm term
   meta' <- traverse (desugarDefMeta term') meta
   pure (DefCap dcn 0 [] rtype term' meta' i)
-desugarDefCap (Lisp.DefCap dcn (x:xs) mrtype term _docs _model meta i) = do
-  rtype <- traverse (desugarType i) mrtype
-  args <- traverse (toArg i) (x :| xs)
+desugarDefCap (Lisp.DefCap dcn (x:xs) rtype term _docs _model meta i) = do
+  let args = toArg <$> (x :| xs)
   let appArity = NE.length args
   let termBody = Lisp.Lam (x:xs) term i
   term' <- desugarLispTerm termBody
@@ -381,29 +375,26 @@ desugarDefCap (Lisp.DefCap dcn (x:xs) mrtype term _docs _model meta i) = do
 desugarIfDef
   :: (MonadDesugar raw reso info m)
   => Lisp.IfDef info
-  -> m (IfDef ParsedName raw info)
+  -> m (IfDef ParsedName DesugarType raw info)
 desugarIfDef = \case
   Lisp.IfDfun (Lisp.IfDefun n margs rty _ _ i) -> IfDfun <$> case margs of
     [] -> do
-      -- rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) (desugarType i) rty
-      rty' <- traverse (desugarType i) rty
-      pure $ IfDefun n [unitFnArg] rty' i
+      pure $ IfDefun n [unitFnArg] rty i
     _ -> do
-      args <- traverse (toArg i) margs
-      rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) (desugarType i) rty
+      let args = toArg <$> margs
+      rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) pure rty
       pure $ IfDefun n args (Just rty') i
   -- Todo: check managed impl
   Lisp.IfDCap (Lisp.IfDefCap n margs rty _ _ _meta i) -> IfDCap <$> do
-    rty' <- traverse (desugarType i) rty
-    args <- traverse (toArg i) margs
-    pure $ IfDefCap n args rty' i
+    let args = toArg <$> margs
+    pure $ IfDefCap n args rty i
   Lisp.IfDConst dc -> IfDConst <$> desugarDefConst dc
   _ -> error "unimplemented: special interface decl forms in desugar"
 
 desugarDef
   :: (MonadDesugar raw reso i m)
   => Lisp.Def i
-  -> m (Def ParsedName raw i)
+  -> m (Def ParsedName DesugarType raw i)
 desugarDef = \case
   Lisp.Dfun d -> Dfun <$> desugarDefun d
   Lisp.DConst d -> DConst <$> desugarDefConst d
@@ -416,7 +407,7 @@ desugarDef = \case
 desugarModule
   :: (MonadDesugar raw reso i m)
   => Lisp.Module i
-  -> m (Module ParsedName raw i)
+  -> m (Module ParsedName DesugarType raw i)
 desugarModule (Lisp.Module mname mgov extdecls defs _ _ i) = do
   let (imports, blessed, implemented) = splitExts extdecls
   defs' <- locally reCurrModule (const (Just mname)) $ traverse desugarDef (NE.toList defs)
@@ -437,33 +428,33 @@ desugarModule (Lisp.Module mname mgov extdecls defs _ _ i) = do
 desugarInterface
   :: (MonadDesugar raw reso i m)
   => Lisp.Interface i
-  -> m (Interface ParsedName raw i)
+  -> m (Interface ParsedName DesugarType raw i)
 desugarInterface (Lisp.Interface ifn ifdefns _ _ info) = do
   defs' <- traverse desugarIfDef ifdefns
   let mhash = ModuleHash (Hash "placeholder")
   pure $ Interface ifn defs' mhash info
 
-desugarType
-  :: (MonadRenamer reso i m)
-  => i
-  -> Lisp.Type
-  -> m (Type n)
-desugarType i = \case
-  Lisp.TyPrim p -> pure (TyPrim p)
-  Lisp.TyGuard -> pure TyGuard
-  Lisp.TyList t ->
-    TyList <$> desugarType i t
-  Lisp.TyModRef mr ->
-    pure (TyModRef mr)
-  Lisp.TyKeyset -> pure TyGuard
-  Lisp.TyPolyList ->
-    throwDesugarError (UnsupportedType "[any]") i
-  Lisp.TyObject _ ->
-    throwDesugarError (UnsupportedType "object{schema}") i
-  Lisp.TyPolyObject ->
-    throwDesugarError (UnsupportedType "object{any}") i
-  Lisp.TyTime ->
-    throwDesugarError (UnsupportedType "time") i
+-- renameType
+--   :: (MonadRenamer reso i m)
+--   => i
+--   -> Lisp.Type
+--   -> m (Type a)
+-- renameType i = \case
+--   Lisp.TyPrim p -> pure (TyPrim p)
+--   Lisp.TyGuard -> pure (TyPrim PrimGuard)
+--   Lisp.TyList t ->
+--     TyList <$> renameType i t
+--   Lisp.TyModRef mr ->
+--     pure (TyModRef mr)
+--   Lisp.TyKeyset -> pure (TyPrim PrimGuard)
+--   Lisp.TyObject n ->
+--     TyObject n
+--   Lisp.TyPolyList ->
+--     throwDesugarError (UnsupportedType "[any]") i
+--   Lisp.TyPolyObject ->
+--     throwDesugarError (UnsupportedType "object{any}") i
+--   Lisp.TyTime ->
+--     throwDesugarError (UnsupportedType "time") i
 
 
 -----------------------------------------------------------
@@ -473,54 +464,106 @@ desugarType i = \case
 -- Strongly connected components in term
 termSCC
   :: ModuleName
-  -> Term Name b1 i1
+  -- ^ The current module
   -> Set Text
-termSCC currM = conn
-  where
-  conn = \case
-    Var n _ -> case _nKind n of
-      NTopLevel m _ | m == currM ->
-        Set.singleton (_nName n)
-      _ -> Set.empty
-    Lam _ _ e _ -> conn e
-    Let _ _ e1 e2 _ -> Set.union (conn e1) (conn e2)
-    App fn apps _ ->
-      Set.union (conn fn) (foldMap conn apps)
-    Sequence e1 e2 _ -> Set.union (conn e1) (conn e2)
-    Conditional c _ ->
-      foldMap conn c
-    Builtin{} -> Set.empty
-    Constant{} -> Set.empty
-    ListLit v _ -> foldMap conn v
-    Try e1 e2 _ -> Set.union (conn e1) (conn e2)
-    CapabilityForm cf _ ->  foldMap conn cf <> case _nKind (view capFormName cf) of
-      NTopLevel mn _ | mn == currM ->
-        Set.singleton (_nName (view capFormName cf))
-      _ -> mempty
-    DynInvoke m _ _ -> conn m
-    Error {} -> Set.empty
+  -- ^ The current set of definitions, we thread this through
+  -- because lambdas may shadow.
+  -- Note: this is a decent place to emit shadowing warnings.
+  -> Term ParsedName DesugarType b1 i1
+  -> Set Text
+termSCC currM currDefns = \case
+  -- todo: factor out this patmat on `ParsedName`,
+  -- we use it multiple times
+  Var n _ -> case n of
+    BN bn | Set.member (_bnName bn) currDefns -> Set.singleton (_bnName bn)
+          | otherwise -> mempty
+    QN (QualifiedName n' mn')
+      | Set.member n' currDefns && mn' == currM -> Set.singleton n'
+      | otherwise -> mempty
+  Lam _ args e _ ->
+    let currDefns' = foldl' (\s t -> Set.delete (_argName t) s) currDefns args
+    in termSCC currM currDefns' e
+  Let arg e1 e2 _ ->
+    let currDefns' = Set.delete (_argName arg) currDefns
+    in Set.union (termSCC currM currDefns e1) (termSCC currM currDefns' e2)
+  App fn apps _ ->
+    Set.union (termSCC currM currDefns fn) (foldMap (termSCC currM currDefns) apps)
+  Sequence e1 e2 _ -> Set.union (termSCC currM currDefns e1) (termSCC currM currDefns e2)
+  Conditional c _ ->
+    foldMap (termSCC currM currDefns) c
+  Builtin{} -> Set.empty
+  Constant{} -> Set.empty
+  ListLit v _ -> foldMap (termSCC currM currDefns) v
+  Try e1 e2 _ -> Set.union (termSCC currM currDefns e1) (termSCC currM currDefns e2)
+  CapabilityForm cf _ -> foldMap (termSCC currM currDefns) cf <> case view capFormName cf of
+    BN n | Set.member (_bnName n) currDefns -> Set.singleton (_bnName n)
+          | otherwise -> mempty
+    QN (QualifiedName n' mn')
+      | Set.member n' currDefns && mn' == currM -> Set.singleton n'
+      | otherwise -> Set.singleton n'
+  DynInvoke m _ _ -> termSCC currM currDefns m
+  ObjectLit m _ -> foldMap (termSCC currM currDefns . view _2) m
+  Error {} -> Set.empty
 
+typeSCC
+  :: ModuleName
+  -> Set Text
+  -> DesugarType
+  -> Set Text
+typeSCC currM currDefs = \case
+  Lisp.TyPrim _ -> mempty
+  Lisp.TyList l -> typeSCC currM currDefs l
+  Lisp.TyModRef _ -> mempty
+  Lisp.TyObject pn -> case pn of
+    -- Todo: factor out, repeated in termSCC
+    BN bn | Set.member (_bnName bn) currDefs -> Set.singleton (_bnName bn)
+          | otherwise -> mempty
+    QN (QualifiedName n' mn')
+      | Set.member n' currDefs && mn' == currM -> Set.singleton n'
+      | otherwise -> mempty
+  Lisp.TyKeyset -> mempty
+  Lisp.TyTime -> mempty
+  Lisp.TyPolyList -> mempty
+  Lisp.TyPolyObject -> mempty
 
-defunSCC :: ModuleName -> Defun Name b i -> Set Text
-defunSCC mn = termSCC mn . _dfunTerm
+defunSCC
+  :: ModuleName
+  -> Set Text
+  -> Defun ParsedName DesugarType  b i
+  -> Set Text
+defunSCC mn cd = termSCC mn cd . _dfunTerm
 
-defConstSCC :: ModuleName -> DefConst Name b i -> Set Text
-defConstSCC mn = termSCC mn . _dcTerm
+defConstSCC
+  :: ModuleName
+  -> Set Text
+  -> DefConst ParsedName DesugarType  b i
+  -> Set Text
+defConstSCC mn cd = termSCC mn cd . _dcTerm
 
 -- defCapSCC :: ModuleName -> DefCap Name b i -> Set Text
 -- defCapSCC mn = termSCC mn . _dcapTerm
 
-defSCC :: ModuleName -> Def Name b i1 -> Set Text
-defSCC mn = \case
-  Dfun d -> defunSCC mn d
-  DConst d -> defConstSCC mn d
-  DCap dc -> termSCC mn (_dcapTerm dc)
+defSCC
+  :: ModuleName
+  -> Set Text
+  -> Def ParsedName DesugarType b i1
+  -> Set Text
+defSCC mn cd = \case
+  Dfun d -> defunSCC mn cd d
+  DConst d -> defConstSCC mn cd d
+  DCap dc -> termSCC mn cd (_dcapTerm dc)
+  DSchema ds -> foldMap (typeSCC mn cd) ( _dsSchema ds)
+  DTable _ -> mempty
 
-ifDefSCC :: ModuleName -> IfDef Name b i1 -> Set Text
-ifDefSCC mn = \case
+ifDefSCC
+  :: ModuleName
+  -> Set Text
+  -> IfDef ParsedName DesugarType b i1
+  -> Set Text
+ifDefSCC mn currDefs = \case
   IfDfun _ -> mempty
   IfDCap _ -> mempty
-  IfDConst d -> defConstSCC mn d
+  IfDConst d -> defConstSCC mn currDefs d
 
 resolveModuleName
   :: (MonadRenamer b i m)
@@ -542,17 +585,18 @@ resolveModuleName mn i =
 toFqDep
   :: ModuleName
   -> ModuleHash
-  -> Def name builtin i
-  -> (FullyQualifiedName, Def name builtin i)
+  -> Def name ty builtin i
+  -> (FullyQualifiedName, Def name ty builtin i)
 toFqDep modName mhash def = let
   fqn = FullyQualifiedName modName (defName def) mhash
   in (fqn, def)
 
 
+-- | Load a module into the environment
 loadModule'
   :: MonadState (RenamerState b i) m
-  => Module Name b i
-  -> Map FullyQualifiedName (Def Name b i)
+  => Module Name Type b i
+  -> Map FullyQualifiedName (Def Name Type b i)
   -> m ()
 loadModule' module_ deps = do
   let modName = _mName module_
@@ -562,31 +606,26 @@ loadModule' module_ deps = do
   loadModule module_ deps depMap
 
 
+-- load and interface into the environment
 loadInterface'
   :: MonadState (RenamerState b i) m
-  => Interface Name b i
-  -> Map FullyQualifiedName (Def Name b i)
+  => Interface Name Type b i
+  -> Map FullyQualifiedName (Def Name Type b i)
   -> m ()
 loadInterface' iface deps = do
   let modName = _ifName iface
       mhash = _ifHash iface
       toDepMap def = (defName def, (NTopLevel modName mhash, defKind def))
-      dcDeps = mapMaybe (fmap (DConst) . preview _IfDConst) (_ifDefns iface)
+      dcDeps = mapMaybe (fmap DConst . preview _IfDConst) (_ifDefns iface)
       dconstDeps = Map.fromList $ toDepMap <$> dcDeps
   loadInterface iface deps dconstDeps dcDeps
 
 -- | Load a module and it's constituents into the `Loaded` environment.
 -- including the types of the members
--- loadModule
---   :: (MonadState)
---   => Module Name builtin info
---   -> Map FullyQualifiedName (Def Name builtin info)
---   -> Map Text (NameKind, DefKind)
---   -> m ()
 loadModule
   :: MonadState (RenamerState b i) m
-  => Module Name b i
-  -> Map FullyQualifiedName (Def Name b i)
+  => Module Name Type b i
+  -> Map FullyQualifiedName (Def Name Type b i)
   -> Map Text (NameKind, DefKind)
   -> m ()
 loadModule module_ deps depMap = do
@@ -604,10 +643,10 @@ loadModule module_ deps depMap = do
 
 loadInterface
   :: MonadState (RenamerState b i) m
-  => Interface Name b i
-  -> Map FullyQualifiedName (Def Name b i)
+  => Interface Name Type b i
+  -> Map FullyQualifiedName (Def Name Type b i)
   -> Map Text (NameKind, DefKind)
-  -> [Def Name b i]
+  -> [Def Name Type b i]
   -> m ()
 loadInterface iface deps depMap dcDeps = do
   let ifaceName = _ifName iface
@@ -662,29 +701,57 @@ lookupModuleMember modName name i = do
   where
   toDepMap mhash def = (defName def, (NTopLevel modName mhash, defKind def))
 
-resolveTyModRef
-  :: (MonadRenamer b i m)
+
+renameType
+  :: (MonadRenamer reso i m)
   => i
-  -> Type n
-  -> m (Type n)
-resolveTyModRef i = transformM \case
-  TyModRef tmr ->
-     TyModRef tmr <$ resolveModuleName tmr i
-  a -> pure a
+  -> DesugarType
+  -> m Type
+renameType i = \case
+  Lisp.TyPrim p -> pure (TyPrim p)
+  Lisp.TyList ty ->
+    TyList <$> renameType i ty
+  Lisp.TyModRef tmr ->
+    TyModRef tmr <$ resolveModuleName tmr i
+  Lisp.TyKeyset -> pure TyGuard
+  Lisp.TyObject pn -> case pn of
+    BN bn ->
+      view reCurrModule >>= \case
+        Just currM -> do
+          rs <- use rsModuleBinds
+          case rs ^? ix currM . ix (_bnName bn) of
+            Just (_, DKDefSchema sc) ->
+              pure (TyObject sc)
+            _ -> error "no schema with required name"
+        _ -> error "schema lives outside a module"
+    QN qn -> do
+      let currM = _qnModName qn
+      rs <- use rsModuleBinds
+      case rs ^? ix currM . ix (_qnName qn)  of
+        Just (_, DKDefSchema sc) ->
+          pure (TyObject sc)
+        _ -> error "no schema with required name"
+  Lisp.TyPolyList ->
+    throwDesugarError (UnsupportedType "[any]") i
+  Lisp.TyPolyObject ->
+    throwDesugarError (UnsupportedType "object{any}") i
+  Lisp.TyTime ->
+    throwDesugarError (UnsupportedType "time") i
+
 
 -- Rename a term (that is part of a module)
 -- emitting the list of dependent calls
 renameTerm
   :: (MonadDesugar raw reso i m)
-  => Term ParsedName raw i
-  -> m (Term Name raw i)
+  => Term ParsedName DesugarType raw i
+  -> m (Term Name Type raw i)
 renameTerm (Var n i) = resolveName i n >>= \case
   (n', Just dk)
     | dk `elem` legalVarDefs  -> pure (Var n' i)
     | otherwise ->
       throwDesugarError (InvalidDefInTermVariable (rawParsedName n)) i
     where
-    legalVarDefs = [DKDefun, DKDefConst]
+    legalVarDefs = [DKDefun, DKDefConst, DKDefTable]
   (n', _) -> pure (Var n' i)
 -- Todo: what happens when an argument is shadowed?
 renameTerm (Lam li nsts body i) = do
@@ -694,20 +761,20 @@ renameTerm (Lam li nsts body i) = do
       ixs = NE.fromList [depth .. newDepth - 1]
   let m = Map.fromList $ NE.toList $ NE.zip (_argName <$> nsts) ((,Nothing). NBound <$> ixs)
   term' <- local (inEnv m newDepth) (renameTerm body)
-  _ <- (traversed . argType . _Just) (resolveTyModRef i) nsts
-  pure (Lam li nsts term' i)
+  nsts' <- (traversed . argType . _Just) (renameType i) nsts
+  pure (Lam li nsts' term' i)
   where
   inEnv m depth =
     over reBinds (Map.union m) .
     set reVarDepth depth
-renameTerm (Let name mt e1 e2 i) = do
+renameTerm (Let arg e1 e2 i) = do
   depth <- view reVarDepth
+  arg' <- traverse (renameType i) arg
   let inEnv = over reVarDepth succ .
-              over reBinds (Map.insert name (NBound depth, Nothing))
+              over reBinds (Map.insert (_argName arg) (NBound depth, Nothing))
   e1' <- renameTerm e1
-  _ <- _Just (resolveTyModRef i) mt
   e2' <- local inEnv (renameTerm e2)
-  pure (Let name mt e1' e2' i)
+  pure (Let arg' e1' e2' i)
 renameTerm (App fn apps i) = do
   fn' <- renameTerm fn
   apps' <- traverse renameTerm apps
@@ -765,8 +832,8 @@ renameTerm (CapabilityForm cf i) =
       InstallCapability{} -> enforceNotWithinDefcap i "install-capability"
       _ -> pure ()
 renameTerm (Error e i) = pure (Error e i)
--- renameTerm (ObjectLit o i) =
---   ObjectLit <$> traverse renameTerm o <*> pure i
+renameTerm (ObjectLit o i) =
+  ObjectLit <$> (traverse._2) renameTerm o <*> pure i
 -- renameTerm (ObjectOp o i) =
 --   ObjectOp <$> traverse renameTerm o <*> pure i
 
@@ -781,54 +848,62 @@ enforceNotWithinDefcap i form = do
 
 renameDefun
   :: (MonadDesugar raw reso i m)
-  => Defun ParsedName raw i
-  -> m (Defun Name raw i)
+  => Defun ParsedName DesugarType raw i
+  -> m (Defun Name Type raw i)
 renameDefun (Defun n args ret term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
+  args' <- (traverse.traverse) (renameType i) args
+  ret' <- traverse (renameType i) ret
   term' <- local (set reCurrDef (Just DKDefun)) $ renameTerm term
-  pure (Defun n args ret term' i)
+  pure (Defun n args' ret' term' i)
 
 renameReplDefun
   :: (MonadDesugar raw reso i m)
-  => Defun ParsedName raw i
-  -> m (Defun Name raw i)
+  => Defun ParsedName DesugarType raw i
+  -> m (Defun Name Type raw i)
 renameReplDefun (Defun n args ret term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
   let fqn = FullyQualifiedName replModuleName n replModuleHash
+  args' <- (traverse.traverse) (renameType i) args
+  ret' <- traverse (renameType i) ret
   rsModuleBinds %= Map.insertWith (<>) replModuleName (Map.singleton n (NTopLevel replModuleName replModuleHash, DKDefun))
   rsLoaded . loToplevel %= Map.insert n (fqn, DKDefun)
   term' <- local (set reCurrDef (Just DKDefun)) $ renameTerm term
-  pure (Defun n args ret term' i)
+  pure (Defun n args' ret' term' i)
 
 renameReplDefConst
   :: (MonadDesugar raw reso i m)
-  => DefConst ParsedName raw i
-  -> m (DefConst Name raw i)
+  => DefConst ParsedName DesugarType raw i
+  -> m (DefConst Name Type raw i)
 renameReplDefConst (DefConst n mty term i) = do
   -- Todo: put type variables in scoperhere, if we want to support polymorphism
   let fqn = FullyQualifiedName replModuleName n replModuleHash
   rsModuleBinds %= Map.insertWith (<>) replModuleName (Map.singleton n (NTopLevel replModuleName replModuleHash, DKDefConst))
   rsLoaded . loToplevel %= Map.insert n (fqn, DKDefConst)
+  mty' <- traverse (renameType i) mty
   term' <- renameTerm term
-  pure (DefConst n mty term' i)
+  pure (DefConst n mty' term' i)
 
 renameDefConst
   :: (MonadDesugar raw reso i m)
-  => DefConst ParsedName raw i
-  -> m (DefConst Name raw i)
+  => DefConst ParsedName DesugarType raw i
+  -> m (DefConst Name Type raw i)
 renameDefConst (DefConst n mty term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
+  mty' <- traverse (renameType i) mty
   term' <- local (set reCurrDef (Just DKDefConst)) $ renameTerm term
-  pure (DefConst n mty term' i)
+  pure (DefConst n mty' term' i)
 
 renameDefCap
   :: (MonadDesugar raw reso i m)
-  => DefCap ParsedName raw i
-  -> m (DefCap Name raw i)
+  => DefCap ParsedName DesugarType raw i
+  -> m (DefCap Name Type raw i)
 renameDefCap (DefCap name arity argtys rtype term meta info) = do
   meta' <- (traverse . traverse) resolveName' meta
+  argtys' <- (traverse.traverse) (renameType info) argtys
+  rtype' <- traverse (renameType info) rtype
   term' <- local (set reCurrDef (Just DKDefCap)) $ renameTerm term
-  pure (DefCap name arity argtys rtype term' meta' info)
+  pure (DefCap name arity argtys' rtype' term' meta' info)
   where
   resolveName' dn = resolveName info dn >>= \case
     (n, Just DKDefun) -> pure n
@@ -836,21 +911,32 @@ renameDefCap (DefCap name arity argtys rtype term meta info) = do
 
 renameDef
   :: MonadDesugar raw reso i m
-  => Def ParsedName raw i
-  -> m (Def Name raw i)
+  => Def ParsedName DesugarType raw i
+  -> m (Def Name Type raw i)
 renameDef = \case
   Dfun d -> Dfun <$> renameDefun d
   DConst d -> DConst <$> renameDefConst d
   DCap d -> DCap <$> renameDefCap d
+  DSchema{} -> error "todo: rename schema"
+  DTable{} -> error "todo: rename table"
 
 renameIfDef
   :: (MonadDesugar raw reso i m)
-  => IfDef ParsedName raw i
-  -> m (IfDef Name raw i)
+  => IfDef ParsedName DesugarType raw i
+  -> m (IfDef Name Type raw i)
 renameIfDef = \case
-  IfDfun d -> pure (IfDfun d)
+  -- Todo: export and use lenses lol
+  IfDfun d -> do
+    let i = _ifdInfo d
+    args' <- (traverse.traverse) (renameType i) (_ifdArgs d)
+    rtype' <- traverse (renameType i) (_ifdRType d)
+    pure (IfDfun (d{_ifdArgs = args', _ifdRType = rtype'}))
   IfDConst d -> IfDConst <$> renameDefConst d
-  IfDCap d -> pure (IfDCap d)
+  IfDCap d -> do
+    let i = _ifdcInfo d
+    args' <- (traverse.traverse) (renameType i) (_ifdcArgs d)
+    rtype' <- traverse (renameType i) (_ifdcRType d)
+    pure (IfDCap (d{_ifdcArgs = args', _ifdcRType = rtype'}))
 
 resolveName
   :: (MonadRenamer b i m)
@@ -904,40 +990,52 @@ resolveQualified (QualifiedName qn qmn) i = do
 -- Todo:
 renameModule
   :: (MonadDesugar raw reso i m)
-  => Module ParsedName raw i
-  -> m (Module Name raw i)
-renameModule (Module mname mgov defs blessed imp implements mhash i) = do
-  let defMap = Map.fromList $ (\d -> (defName d, (NTopLevel mname mhash, defKind d))) <$> defs
-      fqns = Map.fromList $ (\d -> (defName d, (FullyQualifiedName mname (defName d) mhash, defKind d))) <$> defs
+  => Module ParsedName DesugarType raw i
+  -> m (Module Name Type raw i)
+renameModule (Module mname mgov defs blessed imp implements mhash i) = local (set reCurrModule (Just mname)) $ do
+  -- let defMap = Map.fromList $ (\d -> (defName d, (NTopLevel mname mhash, defKind d))) <$> defs
+  -- let fqns = Map.fromList $ (\d -> (defName d, (FullyQualifiedName mname (defName d) mhash, defKind d))) <$> defs
   -- `maybe all of this next section should be in a block laid out by the
   -- `locally reBinds`
   mgov' <- resolveGov mgov
-  rsModuleBinds %= Map.insert mname defMap
-  rsLoaded . loToplevel %= Map.union fqns
-  defs' <- locally reBinds (Map.union (over _2 Just <$> defMap)) . local (set reCurrModule (Just mname)) $ traverse renameDef defs
-  let scc = mkScc <$> defs'
-  defs'' <- forM (stronglyConnComp scc) \case
+  let defNames = Set.fromList $ fmap defName defs
+  let scc = mkScc defNames <$> defs
+  defs' <- forM (stronglyConnComp scc) \case
     AcyclicSCC d -> pure d
     CyclicSCC d ->
       -- todo: just in case, match on `d` because it makes no sense for there to be an empty cycle
       -- but all uses of `head` are still scary
       throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (head d))
-  traverse_ (checkImplements i mname defs) implements
+  binds <- view reBinds
+  (defs'', _, _) <- over _1 reverse <$> foldlM go ([], Set.empty, binds) defs'
+  let fqns = Map.fromList $ (\d -> (defName d, (FullyQualifiedName mname (defName d) mhash, defKind d))) <$> defs''
+  rsLoaded . loToplevel %= Map.union fqns
+  traverse_ (checkImplements i mname defs'') implements
   pure (Module mname mgov' defs'' blessed imp implements mhash i)
   where
+  -- Our deps are acyclic, so we resolve all names
+  go (defns, s, m) defn = do
+    when (Set.member (defName defn) s) $ error "duplicate defn name"
+    let dn = defName defn
+    defn' <- local (set reBinds m) $ renameDef defn
+    let depPair = (NTopLevel mname mhash, defKind defn')
+    let m' = Map.insert dn (over _2 Just depPair) m
+    rsModuleBinds . ix mname %= Map.insert dn depPair
+    pure (defn':defns, Set.insert (defName defn) s, m')
+
   resolveGov = traverse $ \govName -> case find (\d -> BN (BareName (defName d)) == govName) defs of
     Just (DCap d) -> pure (Name (_dcapName d) (NTopLevel mname mhash))
     Just d -> throwDesugarError (InvalidGovernanceRef (QualifiedName (defName d) mname)) i
     Nothing ->
       -- Todo: could be better error? In this case the governance ref does not exist.
       throwDesugarError (InvalidGovernanceRef (QualifiedName (rawParsedName govName) mname)) i
-  mkScc def = (def, defName def, Set.toList (defSCC mname def))
+  mkScc dns def = (def, defName def, Set.toList (defSCC mname dns def))
 
 checkImplements
   :: (MonadRenamer reso i m)
   => i
   -> ModuleName
-  -> [Def raw b i]
+  -> [Def raw Type b i]
   -> ModuleName
   -> m ()
 checkImplements i mn defs ifaceName =
@@ -970,32 +1068,40 @@ checkImplements i mn defs ifaceName =
         Nothing -> error "not implemented"
 
 -- | Todo: support imports
--- Todo:
+--   Todo: support
 renameInterface
   :: (MonadDesugar raw reso i m)
-  => Interface ParsedName raw i
-  -> m (Interface Name raw i)
-renameInterface (Interface ifn defs ih info) = do
-  let dcs = mapMaybe (preview _IfDConst) defs
-      rawDefNames = _dcName <$> dcs
-      defMap = Map.fromList $ (, (NTopLevel ifn ih, DKDefConst)) <$> rawDefNames
-      fqns = Map.fromList $ (\n -> (n, (FullyQualifiedName ifn n ih, DKDefConst))) <$> rawDefNames
+  => Interface ParsedName DesugarType raw i
+  -> m (Interface Name Type raw i)
+renameInterface (Interface ifn defs ih info) = local (set reCurrModule (Just ifn)) $ do
+      -- defMap = Map.fromList $ (, (NTopLevel ifn ih, DKDefConst)) <$> rawDefNames
+      -- fqns = Map.fromList $ (\n -> (n, (FullyQualifiedName ifn n ih, DKDefConst))) <$> rawDefNames
   -- `maybe all of this next section should be in a block laid out by the
   -- `locally reBinds`
-  rsModuleBinds %= Map.insert ifn defMap
-  rsLoaded . loToplevel %= Map.union fqns
-  defs' <- locally reBinds (Map.union (over _2 Just <$> defMap)) $ traverse renameIfDef defs
-  let scc = mkScc <$> defs'
-  defs'' <- forM (stronglyConnComp scc) \case
+  -- rsModuleBinds %= Map.insert ifn defMap
+  -- rsLoaded . loToplevel %= Map.union fqns
+  let defNames = ifDefName <$> defs
+  let scc = mkScc (Set.fromList defNames) <$> defs
+  defs' <- forM (stronglyConnComp scc) \case
     AcyclicSCC d -> pure d
     CyclicSCC d ->
       -- todo: just in case, match on `d` because it makes no sense for there to be an empty cycle
       -- but all uses of `head` are still scary
       throwDesugarError (RecursionDetected ifn (ifDefName <$> d)) (ifDefInfo (head d))
-  -- mgov' <- locally reBinds (Map.union defMap) $ traverse (resolveBareName' . rawParsedName) mgov
+  -- defs' <- locally reBinds (Map.union (over _2 Just <$> defMap)) $ traverse renameIfDef defs
+  binds <- view reBinds
+  (defs'', _, _) <- over _1 reverse <$> foldlM go ([], Set.empty, binds) defs'
+
   pure (Interface ifn defs'' ih info)
   where
-  mkScc def = (def, ifDefName def, Set.toList (ifDefSCC ifn def))
+  mkScc dns def = (def, ifDefName def, Set.toList (ifDefSCC ifn dns def))
+  go (ds, s, m) d = do
+    when (Set.member (ifDefName d) s) $ error "duplicate defn name in interface"
+    let dn = ifDefName d
+    d' <- local (set reBinds m) $ renameIfDef d
+    let m' = maybe m (\dk -> Map.insert dn (NTopLevel ifn ih, Just dk) m) (ifDefKind d')
+    rsModuleBinds . ix ifn %= maybe id (Map.insert dn . (NTopLevel ifn ih,)) (ifDefKind d')
+    pure (d':ds, Set.insert dn s, m')
 
 runRenamerM
   :: RenamerState b i
@@ -1040,7 +1146,7 @@ runDesugarTerm
   -> PactDb reso i
   -> Loaded reso i
   -> Lisp.Expr i
-  -> m (DesugarOutput reso i (Term Name raw i))
+  -> m (DesugarOutput reso i (Term Name Type raw i))
 runDesugarTerm _ pdb loaded = runDesugar' pdb loaded  . RenamerT . (desugarLispTerm >=> renameTerm)
 
 runDesugarModule'
@@ -1049,7 +1155,7 @@ runDesugarModule'
   -> PactDb reso i
   -> Loaded reso i
   -> Lisp.Module i
-  -> m (DesugarOutput reso i (Module Name raw i))
+  -> m (DesugarOutput reso i (Module Name Type raw i))
 runDesugarModule' _ pdb loaded = runDesugar' pdb loaded . RenamerT . (desugarModule >=> renameModule)
 
 runDesugarInterface
@@ -1058,7 +1164,7 @@ runDesugarInterface
   -> PactDb reso i
   -> Loaded reso i
   -> Lisp.Interface i
-  -> m (DesugarOutput reso i (Interface Name raw i))
+  -> m (DesugarOutput reso i (Interface Name Type raw i))
 runDesugarInterface _ pdb loaded  = runDesugar' pdb loaded . RenamerT . (desugarInterface >=> renameInterface)
 
 runDesugarReplDefun
@@ -1067,7 +1173,7 @@ runDesugarReplDefun
   -> PactDb reso i
   -> Loaded reso i
   -> Lisp.Defun i
-  -> m (DesugarOutput reso i (Defun Name raw i))
+  -> m (DesugarOutput reso i (Defun Name Type raw i))
 runDesugarReplDefun _ pdb loaded =
   runDesugar' pdb loaded
   . local (set reCurrModule (Just replModuleName))
@@ -1080,7 +1186,7 @@ runDesugarReplDefConst
   -> PactDb reso i
   -> Loaded reso i
   -> Lisp.DefConst i
-  -> m (DesugarOutput reso i (DefConst Name raw i))
+  -> m (DesugarOutput reso i (DefConst Name Type raw i))
 runDesugarReplDefConst _ pdb loaded =
   runDesugar' pdb loaded
   . local (set reCurrModule (Just replModuleName))
@@ -1100,7 +1206,7 @@ runDesugarTopLevel
   -> PactDb reso i
   -> Loaded reso i
   -> Lisp.TopLevel i
-  -> m (DesugarOutput reso i (TopLevel Name raw i))
+  -> m (DesugarOutput reso i (TopLevel Name Type raw i))
 runDesugarTopLevel proxy pdb loaded = \case
   Lisp.TLModule m -> over dsOut TLModule <$> runDesugarModule' proxy pdb loaded m
   Lisp.TLTerm e -> over dsOut TLTerm <$> runDesugarTerm proxy pdb loaded e
@@ -1113,7 +1219,7 @@ runDesugarReplTopLevel
   -> PactDb reso i
   -> Loaded reso i
   -> Lisp.ReplTopLevel i
-  -> m (DesugarOutput reso i (ReplTopLevel Name raw i))
+  -> m (DesugarOutput reso i (ReplTopLevel Name Type raw i))
 runDesugarReplTopLevel proxy pdb loaded = \case
   Lisp.RTLTopLevel m ->
     over dsOut RTLTopLevel <$> runDesugarTopLevel proxy pdb loaded m
@@ -1121,7 +1227,3 @@ runDesugarReplTopLevel proxy pdb loaded = \case
     over dsOut RTLDefun <$> runDesugarReplDefun proxy pdb loaded de
   Lisp.RTLDefConst dc ->
     over dsOut RTLDefConst <$> runDesugarReplDefConst proxy pdb loaded dc
-  -- Lisp.RTLTerm ex ->
-  --   over dsOut RTLTerm <$> runDesugarTerm proxy pdb loaded ex
-  -- Lisp.RTLInterface iface ->
-  --   over dsOut RTLInterface <$> runDesugarInterface proxy pdb loaded iface

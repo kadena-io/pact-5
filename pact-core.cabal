@@ -38,6 +38,7 @@ common pact-core-common
     , transformers
     , text
     , vector
+    , vector-algorithms
     , megaparsec
     , cryptonite
     , memory

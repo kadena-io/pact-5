@@ -18,7 +18,6 @@ module Pact.Core.Errors
 import Control.Lens hiding (ix)
 import Control.Exception
 import Data.Text(Text)
-import Data.Void
 import Data.Dynamic (Typeable)
 
 import Pact.Core.Type
@@ -227,7 +226,7 @@ instance Pretty DesugarError where
 -- instance Exception OverloadError
 
 data ArgTypeError
-  = ATEType (Type Void)
+  = ATEType Type
   | ATEClosure
   deriving (Show)
 

@@ -41,7 +41,7 @@ module Pact.Core.Names
  , replRawModuleName
  , replModuleName
  , replModuleHash
- , DefKind(..)
+--  , DefKind(..)
  , fqnToName
  , NativeName(..)
  ) where
@@ -160,12 +160,6 @@ data OverloadedName b
   , _olNameKind :: ONameKind b }
   deriving (Show, Eq)
 
-data DefKind
-  = DKDefun
-  | DKDefConst
-  | DKDefCap
-  deriving (Show, Eq, Ord)
-
 -- Name representing locally nameless representations
 data Name
   = Name
@@ -175,8 +169,13 @@ data Name
 
 data NameKind
   = NBound DeBruijn
+  -- ^ Locally bound names, via defuns or lambdas
   | NTopLevel ModuleName ModuleHash
+  -- ^ top level names, referring to only
+  -- defuns, defconsts, deftables and defcaps
   | NModRef ModuleName [ModuleName]
+  -- ^ module reference, pointing to the module name +
+  -- the implemented interfaces
   deriving (Show, Eq, Ord)
 
 data FullyQualifiedName

@@ -2,6 +2,9 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 
 -- |
 -- Module      :  Pact.Core.IR.Term
@@ -18,9 +21,9 @@ module Pact.Core.IR.Term where
 
 import Control.Lens
 import Data.Foldable(fold)
-import Data.Void(Void)
 import Data.Text(Text)
 import Data.List.NonEmpty (NonEmpty)
+import Data.Map.Strict(Map)
 import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NE
 
@@ -34,77 +37,65 @@ import Pact.Core.Imports
 import Pact.Core.Capabilities
 import Pact.Core.Pretty
 
-data Defun name builtin info
+data Defun name ty builtin info
   = Defun
   { _dfunName :: Text
-  , _dfunArgs :: [Arg Void]
-  , _dfunRType :: Maybe (Type Void)
-  , _dfunTerm :: Term name builtin info
+  , _dfunArgs :: [Arg ty]
+  , _dfunRType :: Maybe ty
+  , _dfunTerm :: Term name ty builtin info
   , _dfunInfo :: info
   } deriving (Show, Functor)
 
-data DefConst name builtin info
+data DefConst name ty builtin info
   = DefConst
   { _dcName :: Text
-  , _dcType :: Maybe (Type Void)
-  , _dcTerm :: Term name builtin info
+  , _dcType :: Maybe ty
+  , _dcTerm :: Term name ty builtin info
   , _dcInfo :: info
   } deriving (Show, Functor)
 
-data DefCap name builtin info
+data DefCap name ty builtin info
   = DefCap
   { _dcapName :: Text
   , _dcapAppArity :: Int
-  , _dcapArgs :: [Arg Void]
-  , _dcapRType :: Maybe (Type Void)
-  , _dcapTerm :: Term name builtin info
+  , _dcapArgs :: [Arg ty]
+  , _dcapRType :: Maybe ty
+  , _dcapTerm :: Term name ty builtin info
   , _dcapMeta :: Maybe (DefCapMeta name)
   , _dcapInfo :: info
   } deriving (Show, Functor)
 
-data Def name builtin info
-  = Dfun (Defun name builtin info)
-  | DConst (DefConst name builtin info)
-  | DCap (DefCap name builtin info)
+data DefSchema ty info
+  = DefSchema
+  { _dsName :: Text
+  , _dsSchema :: Map Field ty
+  , _dsInfo :: info
+  } deriving (Show, Functor)
+
+data DefTable info
+  = DefTable
+  { _dtName :: Text
+  , _dtSchema :: Schema
+  , _dtInfo :: info
+  } deriving (Show, Functor)
+
+data Def name ty builtin info
+  = Dfun (Defun name ty builtin info)
+  | DConst (DefConst name ty builtin info)
+  | DCap (DefCap name ty builtin info)
+  | DSchema (DefSchema ty info)
+  | DTable (DefTable info)
   deriving (Show, Functor)
 
-defName :: Def name b i -> Text
-defName (Dfun d) = _dfunName d
-defName (DConst d) = _dcName d
-defName (DCap d) = _dcapName d
-
-defKind :: Def name b i -> DefKind
-defKind = \case
-  Dfun{} -> DKDefun
-  DConst{} -> DKDefConst
-  DCap{} -> DKDefCap
-
-ifDefName :: IfDef name builtin i -> Text
-ifDefName = \case
-  IfDfun ifd -> _ifdName ifd
-  IfDConst dc -> _dcName dc
-  IfDCap ifd -> _ifdcName ifd
-
-defInfo :: Def name b i -> i
-defInfo = \case
-  Dfun de -> _dfunInfo de
-  DConst dc -> _dcInfo dc
-  DCap dc -> _dcapInfo dc
-
-ifDefInfo :: IfDef name b i -> i
-ifDefInfo = \case
-  IfDfun de -> _ifdInfo de
-  IfDConst dc -> _dcInfo dc
-  IfDCap d -> _ifdcInfo d
 
 -- TODO:
 -- Support module guards
 -- Support governance
-data Module name builtin info
+data Module name ty builtin info
   = Module
   { _mName :: ModuleName
   , _mGovernance :: Governance name
-  , _mDefs :: [Def name builtin info]
+  , _mDefs :: [Def name ty builtin info]
   , _mBlessed :: !(Set.Set ModuleHash)
   , _mImports :: [Import]
   , _mImplements :: [ModuleName]
@@ -112,66 +103,104 @@ data Module name builtin info
   , _mInfo :: info
   } deriving (Show, Functor)
 
-data Interface name builtin info
+data Interface name ty builtin info
   = Interface
   { _ifName :: ModuleName
-  , _ifDefns :: [IfDef name builtin info]
+  , _ifDefns :: [IfDef name ty builtin info]
   , _ifHash :: ModuleHash
   , _ifInfo :: info
   } deriving (Show, Functor)
 
-data IfDefun info
+data IfDefun ty info
   = IfDefun
   { _ifdName :: Text
-  , _ifdArgs :: [Arg Void]
-  , _ifdRType :: Maybe (Type Void)
+  , _ifdArgs :: [Arg ty]
+  , _ifdRType :: Maybe ty
   , _ifdInfo :: info
   } deriving (Show, Functor)
 
-data IfDefCap info
+data IfDefCap ty info
   = IfDefCap
   { _ifdcName :: Text
-  , _ifdcArgs :: [Arg Void]
-  , _ifdcRType :: Maybe (Type Void)
+  , _ifdcArgs :: [Arg ty]
+  , _ifdcRType :: Maybe ty
   , _ifdcInfo :: info
   } deriving (Show, Functor)
 
-data IfDef name builtin info
-  = IfDfun (IfDefun info)
-  | IfDConst (DefConst name builtin info)
-  | IfDCap (IfDefCap info)
+data IfDef name ty builtin info
+  = IfDfun (IfDefun ty info)
+  | IfDConst (DefConst name ty builtin info)
+  | IfDCap (IfDefCap ty info)
   deriving (Show, Functor)
 
-data TopLevel name builtin info
-  = TLModule (Module name builtin info)
-  | TLInterface (Interface name builtin info)
-  | TLTerm (Term name builtin info)
+data TopLevel name ty builtin info
+  = TLModule (Module name ty builtin info)
+  | TLInterface (Interface name ty builtin info)
+  | TLTerm (Term name ty builtin info)
   deriving (Show, Functor)
 
-data ReplTopLevel name builtin info
-  = RTLTopLevel (TopLevel name builtin info)
-  | RTLDefConst (DefConst name builtin info)
-  | RTLDefun (Defun name builtin info)
+data ReplTopLevel name ty builtin info
+  = RTLTopLevel (TopLevel name ty builtin info)
+  | RTLDefConst (DefConst name ty builtin info)
+  | RTLDefun (Defun name ty builtin info)
   deriving (Show, Functor)
 
-pattern RTLTerm :: Term name builtin info -> ReplTopLevel name builtin info
+pattern RTLTerm :: Term name ty builtin info -> ReplTopLevel name ty builtin info
 pattern RTLTerm e = RTLTopLevel (TLTerm e)
 
-pattern RTLModule :: Module name builtin info -> ReplTopLevel name builtin info
+pattern RTLModule :: Module name ty builtin info -> ReplTopLevel name ty builtin info
 pattern RTLModule m = RTLTopLevel (TLModule m)
 
-pattern RTLInterface :: Interface name builtin info -> ReplTopLevel name builtin info
+pattern RTLInterface :: Interface name ty builtin info -> ReplTopLevel name ty builtin info
 pattern RTLInterface iface = RTLTopLevel (TLInterface iface)
-  -- = RTLModule (Module name builtin info)
-  -- | RTLInterface (Interface name builtin info)
-  -- | RTLDefConst (DefConst name builtin info)
-  -- | RTLDefun (Defun name builtin info)
-  -- | RTLTerm (Term name builtin info)
-  -- deriving (Show, Functor)
+
+defName :: Def name t b i -> Text
+defName (Dfun d) = _dfunName d
+defName (DConst d) = _dcName d
+defName (DCap d) = _dcapName d
+defName (DSchema d) = _dsName d
+defName (DTable d) = _dtName d
+
+defKind :: Def name Type b i -> DefKind
+defKind = \case
+  Dfun{} -> DKDefun
+  DConst{} -> DKDefConst
+  DCap{} -> DKDefCap
+  DSchema ds -> DKDefSchema (Schema (_dsSchema ds))
+  DTable{} -> DKDefTable
+
+ifDefKind :: IfDef name Type b i -> Maybe DefKind
+ifDefKind = \case
+  IfDfun{} -> Nothing
+  IfDCap{} -> Nothing
+  IfDConst{} -> Just DKDefConst
 
 
-type EvalTerm b i = Term Name b i
-type EvalDef b i = Def Name b i
+ifDefName :: IfDef name ty builtin i -> Text
+ifDefName = \case
+  IfDfun ifd -> _ifdName ifd
+  IfDConst dc -> _dcName dc
+  IfDCap ifd -> _ifdcName ifd
+
+defInfo :: Def name ty b i -> i
+defInfo = \case
+  Dfun de -> _dfunInfo de
+  DConst dc -> _dcInfo dc
+  DCap dc -> _dcapInfo dc
+  DSchema dc -> _dsInfo dc
+  DTable dt -> _dtInfo dt
+
+
+ifDefInfo :: IfDef name ty b i -> i
+ifDefInfo = \case
+  IfDfun de -> _ifdInfo de
+  IfDConst dc -> _dcInfo dc
+  IfDCap d -> _ifdcInfo d
+
+type EvalTerm b i = Term Name Type b i
+type EvalDef b i = Def Name Type b i
+type EvalModule b i = Module Name Type b i
+type EvalInterface b i = Interface Name Type b i
 
 data LamInfo
   = TLLamInfo ModuleName Text
@@ -179,43 +208,45 @@ data LamInfo
   deriving Show
 
 -- | Core IR
-data Term name builtin info
+data Term name ty builtin info
   = Var name info
   -- ^ single variables e.g x
-  | Lam LamInfo (NonEmpty (Arg Void)) (Term name builtin info) info
+  | Lam LamInfo (NonEmpty (Arg ty)) (Term name ty builtin info) info
   -- ^ $f = \x.e
   -- Lambdas are named for the sake of the callstack.
-  | Let Text (Maybe (Type Void)) (Term name builtin info) (Term name builtin info) info
+  | Let (Arg ty) (Term name ty builtin info) (Term name ty builtin info) info
   -- ^ let x = e1 in e2
-  | App (Term name builtin info) (NonEmpty (Term name builtin info)) info
+  | App (Term name ty builtin info) (NonEmpty (Term name ty builtin info)) info
   -- ^ (e1 e2)
-  | Sequence (Term name builtin info) (Term name builtin info) info
+  | Sequence (Term name ty builtin info) (Term name ty builtin info) info
   -- ^ error term , error "blah"
-  | Conditional (BuiltinForm (Term name builtin info)) info
+  | Conditional (BuiltinForm (Term name ty builtin info)) info
   -- ^ Conditional terms
   | Builtin builtin info
   -- ^ Built-in ops, e.g (+)
   | Constant Literal info
   -- ^ Literals
-  | ListLit [Term name builtin info] info
+  | ListLit [Term name ty builtin info] info
   -- ^ List Literals
-  | Try (Term name builtin info) (Term name builtin info) info
+  | Try (Term name ty builtin info) (Term name ty builtin info) info
   -- ^ try (catch expr) (try-expr)
-  | CapabilityForm (CapForm name (Term name builtin info)) info
+  | CapabilityForm (CapForm name (Term name ty builtin info)) info
   -- ^ Capability Natives
-  | DynInvoke (Term name builtin info) Text info
+  | ObjectLit [(Field, Term name ty builtin info)] info
+  -- ^ an object literal
+  | DynInvoke (Term name ty builtin info) Text info
   -- ^ dynamic module reference invocation m::f
   | Error Text info
   -- ^ Error term
   deriving (Show, Functor)
 
-instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
+instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builtin info) where
   pretty = \case
     Var name _ -> pretty name
     Lam _ ne te _ ->
       parens ("lambda" <+> parens (fold (NE.intersperse ":" (prettyLamArg <$> ne))) <+> pretty te)
-    Let name m_ty te te' _ ->
-      parens $ "let" <+> parens (pretty name <> prettyTyAnn m_ty <+> pretty te) <+> pretty te'
+    Let n te te' _ ->
+      parens $ "let" <+> parens (pretty n <+> pretty te) <+> pretty te'
     App te ne _ ->
       parens (pretty te <+> hsep (NE.toList (pretty <$> ne)))
     Sequence te te' _ ->
@@ -233,6 +264,7 @@ instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
       parens ("try" <+> pretty te <+> pretty te')
     DynInvoke n t _ ->
       pretty n <> "::" <> pretty t
+    ObjectLit _n _ -> "object<todo>"
     Error txt _ ->
       parens ("error" <> pretty txt)
     where
@@ -244,13 +276,13 @@ instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
 ----------------------------
 -- Aliases for convenience
 ----------------------------
-termBuiltin :: Traversal (Term n b i) (Term n b' i) b b'
+termBuiltin :: Traversal (Term n t b i) (Term n t b' i) b b'
 termBuiltin f = \case
   Var n i -> pure (Var n i)
   Lam li ne te i ->
     Lam li ne <$> termBuiltin f te <*> pure i
-  Let n m_ty te te' i ->
-    Let n m_ty <$> termBuiltin f te <*> termBuiltin f te' <*> pure i
+  Let n te te' i ->
+    Let n <$> termBuiltin f te <*> termBuiltin f te' <*> pure i
   App te ne i ->
     App <$> termBuiltin f te <*> traverse (termBuiltin f) ne <*> pure i
   Sequence te te' i ->
@@ -267,15 +299,17 @@ termBuiltin f = \case
     Try <$> termBuiltin f te <*> termBuiltin f te' <*> pure i
   CapabilityForm cf i ->
     CapabilityForm <$> traverse (termBuiltin f) cf <*> pure i
+  ObjectLit m i ->
+    ObjectLit <$> (traverse._2) (termBuiltin f) m <*> pure i
   DynInvoke n t i ->
     DynInvoke <$> termBuiltin f n <*> pure t <*> pure i
   Error txt i -> pure (Error txt i)
 
-termInfo :: Lens' (Term name builtin info) info
+termInfo :: Lens' (Term name ty builtin info) info
 termInfo f = \case
   Var n i -> Var n <$> f i
-  Let n mty t1 t2 i ->
-    Let n mty t1 t2 <$> f i
+  Let n t1 t2 i ->
+    Let n t1 t2 <$> f i
   Lam li ns term i -> Lam li ns term <$> f i
   App t1 t2 i -> App t1 t2 <$> f i
   Builtin b i -> Builtin b <$> f i
@@ -288,14 +322,14 @@ termInfo f = \case
   DynInvoke n t i -> DynInvoke n t <$> f i
   CapabilityForm cf i -> CapabilityForm cf <$> f i
   Error t i -> Error t <$> f i
-  -- ObjectLit m i -> ObjectLit m <$> f i
+  ObjectLit m i -> ObjectLit m <$> f i
   -- ObjectOp o i -> ObjectOp o <$> f i
 
-instance Plated (Term name builtin info) where
+instance Plated (Term name ty builtin info) where
   plate f = \case
     Var n i -> pure (Var n i)
     Lam li ns term i -> Lam li ns <$> f term <*> pure i
-    Let n mty t1 t2 i -> Let n mty <$> f t1 <*> f t2 <*> pure i
+    Let n t1 t2 i -> Let n <$> f t1 <*> f t2 <*> pure i
     App t1 t2 i -> App <$> f t1 <*> traverse f t2 <*> pure i
     Builtin b i -> pure (Builtin b i)
     Constant l i -> pure (Constant l i)
@@ -307,6 +341,8 @@ instance Plated (Term name builtin info) where
       CapabilityForm <$> traverse f cf <*> pure i
     Try e1 e2 i ->
       Try <$> f e1 <*> f e2 <*> pure i
+    ObjectLit o i ->
+      ObjectLit <$> (traverse._2) f o <*> pure i
     DynInvoke n t i ->
       pure (DynInvoke n t i)
     Error e i -> pure (Error e i)

@@ -10,7 +10,7 @@
 module Pact.Core.Type
  ( PrimType(..)
  , Type(..)
- , TypeScheme(..)
+--  , TypeScheme(..)
  , pattern TyInt
  , pattern TyDecimal
 --  , pattern TyTime
@@ -18,22 +18,25 @@ module Pact.Core.Type
  , pattern TyString
  , pattern TyUnit
  , pattern TyGuard
- , pattern (:~>)
- , tyFunToArgList
  , typeOfLit
- , BuiltinTC(..)
- , Pred(..)
- , renderType
- , renderPred
- , TypeOfDef(..)
+--  , BuiltinTC(..)
+--  , Pred(..)
+--  , renderType
+--  , renderPred
+--  , TypeOfDef(..)
  , Arg(..)
  , argName
  , argType
+ , TypedArg(..)
+ , targName
+ , targType
+ , Schema(..)
+ , DefKind(..)
  ) where
 
 import Control.Lens
 import Data.Text(Text)
-import qualified Data.Text as T
+import Data.Map.Strict(Map)
 
 import Pact.Core.Literal
 import Pact.Core.Names
@@ -74,99 +77,81 @@ instance Pretty PrimType where
 --
 --    row  ::= {name:t, row*}
 --    row* ::= name:t | ϵ
-data Type n
-  = TyVar n
-  -- ^ Type variables.
-  | TyPrim PrimType
+data Type
+  = TyPrim PrimType
   -- ^ Built-in types
-  | TyFun (Type n) (Type n)
-  -- ^ Row objects
-  | TyList (Type n)
+  | TyList Type
   -- ^ List aka [a]
-  -- ^ Type of Guards.
   | TyModRef ModuleName
   -- ^ Module references
-  -- TODO: remove?
-  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+  | TyObject Schema
+  -- ^ Objects
+  | TyTable Schema
+  -- ^ Tables
+  deriving (Eq, Show)
 
-instance Plated (Type n) where
-  plate f = \case
-    TyVar n -> pure (TyVar n)
-    TyPrim pt -> pure (TyPrim pt)
-    TyFun ty ty' -> TyFun <$> f ty <*> f ty'
-    TyList ty -> TyList <$> f ty
-    TyModRef mn -> pure (TyModRef mn)
+newtype Schema
+  = Schema { _schema :: Map Field Type }
+  deriving (Eq, Show)
 
-pattern TyInt :: Type n
+pattern TyInt :: Type
 pattern TyInt = TyPrim PrimInt
 
-pattern TyDecimal :: Type n
+pattern TyDecimal :: Type
 pattern TyDecimal = TyPrim PrimDecimal
 
 -- pattern TyTime :: Type n
 -- pattern TyTime = TyPrim PrimTime
 
-pattern TyBool :: Type n
+pattern TyBool :: Type
 pattern TyBool = TyPrim PrimBool
 
-pattern TyString :: Type n
+pattern TyString :: Type
 pattern TyString = TyPrim PrimString
 
-pattern TyUnit :: Type n
+pattern TyUnit :: Type
 pattern TyUnit = TyPrim PrimUnit
 
-pattern TyGuard :: Type n
+pattern TyGuard :: Type
 pattern TyGuard = TyPrim PrimGuard
 
-pattern (:~>) :: Type n -> Type n -> Type n
-pattern l :~> r  = TyFun l r
-
-infixr 5 :~>
 
 -- Built in typeclasses
-data BuiltinTC
-  = Eq
-  | Ord
-  | Show
-  | Add
-  | Num
-  | ListLike
-  | Fractional
-  deriving (Show, Eq, Ord)
+-- data BuiltinTC
+--   = Eq
+--   | Ord
+--   | Show
+--   | Add
+--   | Num
+--   | ListLike
+--   | Fractional
+--   deriving (Show, Eq, Ord)
 
-instance Pretty BuiltinTC where
-  pretty = \case
-    Eq -> "Eq"
-    Ord -> "Ord"
-    Show -> "Show"
-    Add -> "Add"
-    Num -> "Num"
-    ListLike -> "ListLike"
-    Fractional -> "Fractional"
+-- instance Pretty BuiltinTC where
+--   pretty = \case
+--     Eq -> "Eq"
+--     Ord -> "Ord"
+--     Show -> "Show"
+--     Add -> "Add"
+--     Num -> "Num"
+--     ListLike -> "ListLike"
+--     Fractional -> "Fractional"
 
--- Note, no superclasses, for now
-data Pred tv
-  = Pred BuiltinTC (Type tv)
-  deriving (Show, Eq, Functor, Foldable, Traversable)
+-- -- Note, no superclasses, for now
+-- data Pred tv
+--   = Pred BuiltinTC (Type tv)
+--   deriving (Show, Eq, Functor, Foldable, Traversable)
 
-data TypeScheme tv =
-  TypeScheme [tv] [Pred tv]  (Type tv)
-  deriving Show
+-- data TypeScheme tv =
+--   TypeScheme [tv] [Pred tv]  (Type tv)
+--   deriving Show
 
-data TypeOfDef tv
-  = DefunType (Type tv)
-  | DefcapType [Type tv] (Type tv)
-  deriving (Show, Functor, Foldable, Traversable)
+-- data TypeOfDef tv
+--   = DefunType (Type tv)
+--   | DefcapType [Type tv] (Type tv)
+--   deriving (Show, Functor, Foldable, Traversable)
 
-tyFunToArgList :: Type n -> ([Type n], Type n)
-tyFunToArgList (TyFun l r) =
-  unFun [l] r
-  where
-  unFun args (TyFun l' r') = unFun (l':args) r'
-  unFun args ret = (reverse args, ret)
-tyFunToArgList r = ([], r)
-
-typeOfLit :: Literal -> Type n
+typeOfLit :: Literal -> Type
 typeOfLit = TyPrim . \case
   LString{} -> PrimString
   LInteger{} -> PrimInt
@@ -174,49 +159,64 @@ typeOfLit = TyPrim . \case
   LBool{} -> PrimBool
   LUnit -> PrimUnit
 
-renderType :: (Pretty n) => Type n -> Text
-renderType = T.pack . show . pretty
+-- renderType :: Type -> Text
+-- renderType = T.pack . show . pretty
 
-renderPred :: (Pretty n) => Pred n -> Text
-renderPred = T.pack . show . pretty
+-- renderPred :: (Pretty n) => Pred n -> Text
+-- renderPred = T.pack . show . pretty
 
-data Arg tv
+data Arg ty
   = Arg
   { _argName :: !Text
-  , _argType :: Maybe (Type tv)
-  } deriving (Show, Eq)
+  , _argType :: Maybe ty
+  } deriving (Show, Eq, Functor, Foldable, Traversable)
 
-instance Pretty n => Pretty (Pred n) where
-  pretty (Pred tc ty) = pretty tc <>  Pretty.angles (pretty ty)
+instance Pretty ty => Pretty (Arg ty) where
+  pretty (Arg n ty) =
+    pretty n <> maybe mempty ((":" <>) . pretty) ty
 
-instance Pretty n => Pretty (Type n) where
+data TypedArg ty
+  = TypedArg
+  { _targName :: !Text
+  , _targType :: ty
+  } deriving (Show, Eq, Functor, Foldable, Traversable)
+
+data DefKind
+  = DKDefun
+  | DKDefConst
+  | DKDefCap
+  | DKDefSchema Schema
+  | DKDefTable
+  deriving (Show, Eq)
+
+-- instance Pretty n => Pretty (Pred n) where
+--   pretty (Pred tc ty) = pretty tc <>  Pretty.angles (pretty ty)
+
+instance Pretty Type where
   pretty = \case
-    TyVar n -> pretty n
     TyPrim p -> pretty p
     TyGuard -> "guard"
-    TyFun l r -> fnParens l <+> "->" <+> pretty r
-      where
-        fnParens t@TyFun{} = Pretty.parens (pretty t)
-        fnParens t = pretty t
     TyList l -> "list" <+> liParens l
       where
-      liParens t@TyVar{} = pretty t
       liParens t@TyPrim{} = pretty t
       liParens t = Pretty.parens (pretty t)
     TyModRef mr ->
       "module" <> Pretty.braces (pretty mr)
+    TyObject _o -> "todo: <object>"
+    TyTable _o -> "todo: table"
 
-instance Pretty tv => Pretty (TypeScheme tv) where
-  pretty (TypeScheme tvs preds ty) =
-    quant tvs <> qual preds <> pretty ty
-    where
-    renderTvs xs suffix =
-      Pretty.hsep $ fmap (\n -> Pretty.parens (pretty n <> ":" <+> suffix)) xs
-    quant [] = mempty
-    quant as =
-      "∀" <> renderTvs as "*" <> ". "
-    qual [] = mempty
-    qual as =
-      Pretty.parens (Pretty.commaSep as) <+> "=> "
+-- instance Pretty tv => Pretty (TypeScheme tv) where
+--   pretty (TypeScheme tvs preds ty) =
+--     quant tvs <> qual preds <> pretty ty
+--     where
+--     renderTvs xs suffix =
+--       Pretty.hsep $ fmap (\n -> Pretty.parens (pretty n <> ":" <+> suffix)) xs
+--     quant [] = mempty
+--     quant as =
+--       "∀" <> renderTvs as "*" <> ". "
+--     qual [] = mempty
+--     qual as =
+--       Pretty.parens (Pretty.commaSep as) <+> "=> "
 
 makeLenses ''Arg
+makeLenses ''TypedArg

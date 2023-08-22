@@ -92,20 +92,6 @@ import Pact.Core.Syntax.LexUtils
   ':'        { PosToken TokenColon _ }
   ':='       { PosToken TokenBindAssign _ }
   '.'        { PosToken TokenDot _ }
-  -- '=='       { PosToken TokenEq _ }
-  -- '!='       { PosToken TokenNeq _ }
-  -- '>'        { PosToken TokenGT _ }
-  -- '>='       { PosToken TokenGEQ _ }
-  -- '<'        { PosToken TokenLT _ }
-  -- '<='       { PosToken TokenLEQ _ }
-  -- '+'        { PosToken TokenPlus _ }
-  -- '-'        { PosToken TokenMinus _}
-  -- '*'        { PosToken TokenMult _ }
-  -- '/'        { PosToken TokenDiv _ }
-  -- '&'        { PosToken TokenBitAnd _ }
-  -- '|'        { PosToken TokenBitOr _ }
-  -- '~'        { PosToken TokenBitComplement _}
-  -- pow        { PosToken TokenPow _}
   and        { PosToken TokenAnd _ }
   or         { PosToken TokenOr _ }
   IDENT      { PosToken (TokenIdent _) _ }

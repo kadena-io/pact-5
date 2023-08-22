@@ -30,6 +30,7 @@ import Data.Text(Text)
 import Data.Vector(Vector)
 import Control.Monad.IO.Class
 import qualified Data.Vector as V
+import qualified Data.Vector.Algorithms.Intro as V
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.List.NonEmpty as NE
@@ -90,6 +91,9 @@ rawAdd info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LDecimal (i + i')))
   [VLiteral (LString i), VLiteral (LString i')] ->
     returnCEKValue cont handler  (VLiteral (LString (i <> i')))
+  [VObject l, VObject r] ->
+    let o' = VObject (l `Map.union` r)
+    in returnCEKValue cont handler o'
   [VList l, VList r] -> returnCEKValue cont handler (VList (l <> r))
   _ -> failInvariant "add"
 
@@ -154,29 +158,10 @@ rawNegate info = mkBuiltinFn info \cont handler -> \case
 rawEq :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
 rawEq info = mkBuiltinFn info \cont handler -> \case
   [VPactValue pv, VPactValue pv'] -> returnCEKValue cont handler (VBool (pv == pv'))
-  -- [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LBool (i == i')))
-  -- [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LBool (i == i')))
-  -- [VLiteral (LString i), VLiteral (LString i')] -> returnCEKValue cont handler (VLiteral (LBool (i == i')))
-  -- [VLiteral (LBool i), VLiteral (LBool i')] -> returnCEKValue cont handler (VLiteral (LBool (i == i')))
-  -- [VLiteral LUnit, VLiteral LUnit] -> returnCEKValue cont handler (VLiteral (LBool True))
-  -- [VList l, VList r] ->
-  --   if V.length l /= V.length r then
-  --     returnCEKValue cont handler (VLiteral (LBool False))
-  --   else returnCEKValue cont handler (VBool (valueEq (VList l) (VList r)))
   _ -> failInvariant "eq"
 
 modInt :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
 modInt = binaryIntFn mod
-
--- valueEq :: CEKValue b i m -> CEKValue b i m -> Bool
--- valueEq (VInteger i) (VInteger r) = i == r
--- valueEq (VDecimal l) (VDecimal r) = l == r
--- valueEq (VString l) (VString r) = l == r
--- valueEq VUnit VUnit = True
--- valueEq (VBool l) (VBool r) = l == r
--- valueEq (VList l) (VList r) =
---   V.length l == V.length r &&  all (uncurry valueEq) (V.zip l r)
--- valueEq _ _ = False
 
 prettyShowValue :: CEKValue b i m -> Text
 prettyShowValue = \case
@@ -293,6 +278,62 @@ rawShow info = mkBuiltinFn info \cont handler -> \case
   [VLiteral LUnit] ->
     returnCEKValue cont handler (VLiteral (LString "()"))
   _ -> failInvariant "showInt"
+
+rawContains :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawContains info = mkBuiltinFn info \cont handler -> \case
+  [VString f, VObject o] ->
+    returnCEKValue cont handler (VBool (Map.member (Field f) o))
+  [VString s, VString s'] ->
+    returnCEKValue cont handler (VBool (s `T.isInfixOf` s'))
+  [VPactValue v, VList vli] ->
+    returnCEKValue cont handler (VBool (v `V.elem` vli))
+  _ -> failInvariant "contains"
+
+rawSort :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawSort info = mkBuiltinFn info \cont handler -> \case
+  [VList vli]
+    | V.null vli -> returnCEKValue cont handler (VList mempty)
+    | otherwise -> do
+    vli' <- liftIO $ do
+      v' <- V.thaw vli
+      V.sort v'
+      V.freeze v'
+    returnCEKValue cont handler (VList vli')
+  _ -> failInvariant "contains"
+
+rawRemove :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawRemove info = mkBuiltinFn info \cont handler -> \case
+  [VString s, VObject o] -> returnCEKValue cont handler (VObject (Map.delete (Field s) o))
+  _ -> failInvariant "contains"
+
+asObject :: PactValue -> Map.Map Field PactValue
+asObject = \case
+  PObject o -> o
+  _ -> error "todo: as-object-failure"
+
+rawSortObject :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+rawSortObject info = mkBuiltinFn info \cont handler -> \case
+  [VList fields, VList objs]
+    | V.null fields -> returnCEKValue cont handler (VList objs)
+    | V.null objs -> returnCEKValue cont handler (VList objs)
+    | otherwise -> do
+        let objs' = asObject <$> objs
+        fields' <- traverse (fmap Field . asString) fields
+        v' <- liftIO $ do
+          mobjs <- V.thaw objs'
+          V.sortBy (sort fields') mobjs
+          V.freeze mobjs
+        returnCEKValue cont handler (VList (PObject <$> v'))
+    where
+    sort fs o o' =
+      foldr go EQ fs
+      where
+      go field EQ = case (,) <$> Map.lookup field o <*> Map.lookup field o' of
+        Just (PLiteral l1, PLiteral l2) -> l1 `compare` l2
+        _ -> EQ
+      go _ ne = ne
+  _ -> failInvariant "contains"
+
 
 -- -------------------------
 -- double ops
@@ -596,12 +637,16 @@ makeList info = mkBuiltinFn info \cont handler -> \case
     returnCEKValue cont handler (VList (V.fromList (replicate (fromIntegral i) v)))
   _ -> failInvariant "makeList"
 
-listAccess :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
-listAccess info = mkBuiltinFn info \cont handler -> \case
+coreAccess :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+coreAccess info = mkBuiltinFn info \cont handler -> \case
   [VLiteral (LInteger i), VList vec] ->
     case vec V.!? fromIntegral i of
       Just v -> returnCEKValue cont handler (VPactValue v)
       _ -> throwExecutionError' (ArrayOutOfBoundsException (V.length vec) (fromIntegral i))
+  [VString field, VObject o] ->
+    case Map.lookup (Field field) o of
+      Just v -> returnCEKValue cont handler (VPactValue v)
+      Nothing -> error "todo: better error here"
   _ -> failInvariant "list-access"
 
 -----------------------------------
@@ -892,6 +937,10 @@ rawBuiltinLiftedRuntime f i = \case
   RawStrToInt -> unimplemented
   RawFold -> coreFold i (f RawFold)
   RawDistinct -> unimplemented
+  RawContains -> rawContains i (f RawContains)
+  RawSort -> rawSort i (f RawSort)
+  RawSortObject -> rawSortObject i (f RawSortObject)
+  RawRemove -> rawRemove i (f RawRemove)
   RawEnforce -> coreEnforce i (f RawEnforce)
   RawEnforceOne -> unimplemented
   RawEnumerate -> coreEnumerate i (f RawEnumerate)
@@ -903,7 +952,7 @@ rawBuiltinLiftedRuntime f i = \case
   RawReadKeyset -> unimplemented
   RawEnforceGuard -> coreEnforceGuard i (f RawEnforceGuard)
   RawKeysetRefGuard -> unimplemented
-  RawListAccess -> listAccess i (f RawListAccess)
+  RawAt -> coreAccess i (f RawAt)
   RawMakeList -> makeList i (f RawMakeList)
   RawB64Encode -> coreB64Encode i (f RawB64Encode)
   RawB64Decode -> coreB64Decode i (f RawB64Decode)

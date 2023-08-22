@@ -27,6 +27,7 @@ import Pact.Core.Names
 import Pact.Core.IR.Desugar
 import Pact.Core.Errors
 import Pact.Core.Pretty
+import Pact.Core.Type
 import Pact.Core.IR.Term
 import Pact.Core.PactValue
 
@@ -62,7 +63,7 @@ data CompileValue b
 
 newtype Interpreter b s m
   = Interpreter {
-    _interpret :: HasCompileEnv b s m => Term Name b SpanInfo -> m InterpretValue
+    _interpret :: HasCompileEnv b s m => Term Name Type b SpanInfo -> m InterpretValue
   }
 
 
@@ -88,7 +89,7 @@ interpretTopLevel
   :: (HasCompileEnv b s m)
   => PactDb b SpanInfo
   -> Interpreter b s m
-  -> DesugarOutput b SpanInfo (TopLevel Name b SpanInfo)
+  -> DesugarOutput b SpanInfo (TopLevel Name Type b SpanInfo)
   -> m (CompileValue b)
 interpretTopLevel pdb interp (DesugarOutput ds lo0 deps) = do
   loaded .= lo0

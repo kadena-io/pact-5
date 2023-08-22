@@ -7,10 +7,10 @@
 (expect "+ decimal decimal" 7.0 (+ 1.2 5.8))
 (expect "+ string string" "foobar" (+ "foo" "bar"))
 (expect "+ list list" [1 2 3 4 5] (+ [1 2 3] [4 5]))
-;  (expect "+ object object" { "a": 2, "b": 4, "c": false}
-;    (+ { "a": 2 } { "b": 4, "c": false}))
-;  (expect "+ object object, left-biased merge" { "a": 4}
-;    (+ { "a": 4} {"a": true}))
+(expect "+ object object" { "a": 2, "b": 4, "c": false}
+  (+ { "a": 2 } { "b": 4, "c": false}))
+(expect "+ object object, left-biased merge" { "a": 4}
+  (+ { "a": 4} {"a": true}))
 ;  (expect-failure "+ integer string" (+ 2 "hello"))
 ;  (expect-failure "+ list string" (+ [2] "hello"))
 ;  (expect-failure "+ object decimal" (+ {'a: 4} 1.0))
@@ -435,11 +435,11 @@
 (expect "not != list list" false (!= [1 2 3] [1 2 3]))
 (expect "!= list list" true (!= [1 3 2] [1 2 3]))
 
-;  "===== object equality"
-;  (expect "= object object" true (= { "a": 1 } { "a": 1 }))
-;  (expect "not = object object" false (= { "a": 1 } { "a": 1, "b": 2 }))
-;  (expect "not != object object" false (!= { "a": 1 } { "a": 1 }))
-;  (expect "!= object object" true (!= { "a": 1 } { "a": 1, "b": 2 }))
+"===== object equality"
+(expect "= object object" true (= { "a": 1 } { "a": 1 }))
+(expect "not = object object" false (= { "a": 1 } { "a": 1, "b": 2 }))
+(expect "not != object object" false (!= { "a": 1 } { "a": 1 }))
+(expect "!= object object" true (!= { "a": 1 } { "a": 1, "b": 2 }))
 
 ;  "===== keyset equality"
 ;  (env-data { "k1": ["k1"], "k2": ["k2"] })

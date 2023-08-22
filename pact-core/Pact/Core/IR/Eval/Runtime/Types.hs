@@ -49,6 +49,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , pattern VDecimal
  , pattern VUnit
  , pattern VBool
+ , pattern VObject
  , pattern VDefClosure
  , pattern VLamClosure
  , pattern VPartialClosure
@@ -78,7 +79,6 @@ import Control.Monad.Catch
 import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Monad.State.Strict
-import Data.Void
 import Data.List.NonEmpty(NonEmpty)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
@@ -123,10 +123,9 @@ data StackFrame
 data Closure b i
   = Closure
   { _cloLamInfo :: !LamInfo
-  , _cloTypes :: !(NonEmpty (Maybe (Type Void)))
+  , _cloTypes :: !(NonEmpty (Maybe Type))
   , _cloArity :: Int
   , _cloTerm :: !(EvalTerm b i)
-  -- , _cloEnv :: !(CEKEnv b i m)
   , _cloInfo :: i
   } deriving Show
 
@@ -135,7 +134,7 @@ data Closure b i
 data LamClosure b i m
   = LamClosure
   { _lcloLamInfo :: !LamInfo
-  , _lcloTypes :: !(NonEmpty (Maybe (Type Void)))
+  , _lcloTypes :: !(NonEmpty (Maybe Type))
   , _lcloArity :: Int
   , _lcloTerm :: !(EvalTerm b i)
   , _lcloEnv :: !(CEKEnv b i m)
@@ -148,7 +147,7 @@ data LamClosure b i m
 data PartialClosure b i m
   = PartialClosure
   { _pcloLamInfo :: !LamInfo
-  , _pcloTypes :: !(NonEmpty (Maybe (Type Void)))
+  , _pcloTypes :: !(NonEmpty (Maybe Type))
   , _pcloArity :: Int
   , _pcloTerm :: !(EvalTerm b i)
   , _pcloEnv :: !(CEKEnv b i m)
@@ -200,6 +199,9 @@ pattern VGuard g = VPactValue (PGuard g)
 
 pattern VList :: Vector PactValue -> CEKValue b i m
 pattern VList p = VPactValue (PList p)
+
+pattern VObject :: Map Field PactValue -> CEKValue b i m
+pattern VObject o = VPactValue (PObject o)
 
 pattern VModRef :: ModRef -> CEKValue b i m
 pattern VModRef mn = VPactValue (PModRef mn)
@@ -375,6 +377,8 @@ data Cont b i m
   | SeqC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   | ListC (CEKEnv b i m) [EvalTerm b i] [PactValue] (Cont b i m)
   | CondC (CEKEnv b i m) (CondFrame b i) (Cont b i m)
+  | ObjC (CEKEnv b i m) Field [(Field, EvalTerm b i)] [(Field, PactValue)] (Cont b i m)
+  -- env, current field, evaluated pairs, rest of the continuation
   | DynInvokeC (CEKEnv b i m) Text (Cont b i m)
   | CapInvokeC (CEKEnv b i m) [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
   | CapBodyC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)

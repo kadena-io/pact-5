@@ -44,7 +44,7 @@ main = do
   pactDb <- mockPactDb
   g <- newIORef mempty
   evalLog <- newIORef Nothing
-  ref <- newIORef (ReplState mempty mempty pactDb g evalLog)
+  ref <- newIORef (ReplState mempty mempty pactDb g evalLog (SourceCode mempty))
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
@@ -84,7 +84,7 @@ main = do
             file = T.unpack txt
             in catch' $ do
               source <- liftIO (B.readFile file)
-              eout <- lift $ tryError $ interpretReplProgram source
+              eout <- lift $ tryError $ interpretReplProgram (SourceCode source)
               case eout of
                 Right vs -> traverse_ displayOutput vs
                 Left err -> let
@@ -106,7 +106,7 @@ main = do
             outputStrLn $ unwords ["Remove all debug flags"]
             loop
           RAExecuteExpr src -> catch' $ do
-            eout <- lift (tryError (interpretReplProgram (T.encodeUtf8 src)))
+            eout <- lift (tryError (interpretReplProgram (SourceCode (T.encodeUtf8 src))))
             case eout of
               Right out -> traverse_ displayOutput out
               Left err -> let

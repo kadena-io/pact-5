@@ -12,9 +12,10 @@ module Pact.Core.PactValue
 
 import Control.Lens
 import Data.Vector(Vector)
-import Data.Maybe(isJust)
 import Data.Map.Strict(Map)
+import Data.Maybe(isJust)
 import qualified Data.Vector as V
+import qualified Data.Map.Strict as M
 
 import Pact.Core.Type
 import Pact.Core.Names
@@ -29,6 +30,7 @@ data PactValue
   = PLiteral Literal
   | PList (Vector PactValue)
   | PGuard (Guard FullyQualifiedName PactValue)
+  | PObject (Map Field PactValue)
   | PModRef ModRef
   deriving (Eq, Show, Ord)
 
@@ -39,14 +41,22 @@ instance Pretty PactValue where
     PLiteral lit -> pretty lit
     PList p -> Pretty.list (V.toList (pretty <$> p))
     PGuard _g -> "<guard>"
+    PObject o ->
+      braces $ hsep $ punctuate comma (objPair <$> M.toList o)
+      where
+      objPair (f, t) = pretty f <> ":" <> pretty t
     PModRef md -> pretty md
 
-checkPvType :: Eq n => Type n -> PactValue -> Maybe (Type n)
+checkPvType :: Type -> PactValue -> Maybe Type
 checkPvType ty = \case
   PLiteral l -> let
     t = typeOfLit l
     in if t == ty then Just t else Nothing
-  PGuard{} -> Just TyGuard
+  PGuard{}
+    | ty == TyGuard -> Just TyGuard
+    | otherwise -> Nothing
+  -- todo: types of objects
+  PObject{} -> Nothing
   PList l -> case ty of
     TyList t' | all (isJust . checkPvType t') l -> Just (TyList t')
     _ -> Nothing

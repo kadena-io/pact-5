@@ -195,6 +195,10 @@ data RawBuiltin
   | RawDrop
   | RawConcat
   | RawReverse
+  | RawContains
+  | RawSort
+  | RawSortObject
+  | RawRemove
   -- General
   | RawMod
   | RawMap
@@ -218,7 +222,7 @@ data RawBuiltin
   | RawEnforceGuard
   | RawKeysetRefGuard
   -- | RawCreateUserGuard
-  | RawListAccess
+  | RawAt
   | RawMakeList
   | RawB64Encode
   | RawB64Decode
@@ -273,6 +277,10 @@ rawBuiltinToText = \case
   -- general
   RawMap -> "map"
   RawFilter -> "filter"
+  RawContains -> "contains"
+  RawSort -> "sort"
+  RawSortObject -> "sort-object"
+  RawRemove -> "remove"
   -- RawIf -> "if"
   RawIntToStr -> "int-to-str"
   RawStrToInt -> "str-to-int"
@@ -291,7 +299,7 @@ rawBuiltinToText = \case
   RawEnforceGuard -> "enforce-guard"
   RawKeysetRefGuard -> "keyset-ref-guard"
   -- RawCreateUserGuard -> "create-user-guard"
-  RawListAccess -> "at"
+  RawAt -> "at"
   RawMakeList -> "make-list"
   RawB64Encode -> "base64-encode"
   RawB64Decode -> "base64-decode"
@@ -340,6 +348,10 @@ instance BuiltinArity RawBuiltin where
     RawDrop -> 2
     RawConcat -> 1
     RawReverse -> 1
+    RawContains -> 2
+    RawSort -> 1
+    RawSortObject -> 2
+    RawRemove -> 2
     -- General ->
     RawMod -> 2
     RawMap -> 2
@@ -363,7 +375,7 @@ instance BuiltinArity RawBuiltin where
     RawEnforceGuard -> 1
     RawKeysetRefGuard -> 1
     -- RawCreateUserGuard -> 1
-    RawListAccess -> 2
+    RawAt -> 2
     RawMakeList -> 2
     RawB64Encode -> 1
     RawB64Decode -> 1

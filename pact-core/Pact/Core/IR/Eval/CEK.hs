@@ -13,6 +13,7 @@ import qualified Data.RAList as RAList
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Data.Set as S
+import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
 
 import Pact.Core.Builtin
@@ -87,8 +88,8 @@ evalCEK cont handler _env (Constant l _) = do
 evalCEK cont handler env (App fn args _) = do
   chargeNodeGas AppNode
   evalCEK (Args env args cont) handler env fn
-evalCEK cont handler env (Let n ty e1 e2 i) =
-  let lam = Lam AnonLamInfo (pure (Arg n ty)) e2 i
+evalCEK cont handler env (Let arg e1 e2 i) =
+  let lam = Lam AnonLamInfo (pure arg) e2 i
   in evalCEK cont handler env (App lam (pure e1) i)
 evalCEK cont handler env (Lam li args body info) = do
   chargeNodeGas LamNode
@@ -160,11 +161,18 @@ evalCEK cont handler env (Try e1 rest _) = do
   evalCEK Mt handler' env rest
 evalCEK cont handler env (DynInvoke n fn _) =
   evalCEK (DynInvokeC env fn cont) handler env n
+evalCEK cont handler env (ObjectLit o _) =
+  case o of
+    (f, term):rest -> do
+      let cont' = ObjC env f rest [] cont
+      evalCEK cont' handler env term
+    [] -> returnCEKValue cont handler (VObject mempty)
+
 -- Error terms ignore the current cont
 evalCEK _ handler _ (Error e _) =
   returnCEK Mt handler (VError e)
 
-mkDefunClosure :: Applicative f => Term Name b i -> f (CEKValue b i m)
+mkDefunClosure :: Applicative f => Term Name Type b i -> f (CEKValue b i m)
 mkDefunClosure (Lam li args body i) = do
   pure (VDefClosure (Closure li (_argType <$> args) (NE.length args) body i))
 mkDefunClosure _ = error "defun is not a function, fatal"
@@ -341,12 +349,12 @@ installCap cont handler ct@(CapToken fqn args) = do
           let mcapType = ManagedParam fqnMgr managedParam paramIx
               ctFiltered = CapToken fqn (filterIndex paramIx args)
               mcap = ManagedCap ctFiltered ct mcapType
-          (esCaps . csManaged) %%= (S.insert mcap)
+          (esCaps . csManaged) %%= S.insert mcap
           returnCEKValue cont handler VUnit
         Nothing -> do
           let mcapType = AutoManaged False
               mcap = ManagedCap ct ct mcapType
-          (esCaps . csManaged) %%= (S.insert mcap)
+          (esCaps . csManaged) %%= S.insert mcap
           returnCEKValue cont handler VUnit
       Just DefEvent -> error "cannot install an event cap"
       Nothing -> error "cap is not managed"
@@ -487,6 +495,15 @@ returnCEKValue (ListC env args vals cont) handler v = do
       returnCEKValue cont handler (VList (V.fromList (reverse (pv:vals))))
     e:es ->
       evalCEK (ListC env es (pv:vals) cont) handler env e
+returnCEKValue (ObjC env currfield fs vs cont) handler v = do
+  v' <- enforcePactValue v
+  let fields = (currfield,v'):vs
+  case fs of
+    (f', term):fs' ->
+      let cont' = ObjC env f' fs' fields cont
+      in evalCEK cont' handler env term
+    [] ->
+      returnCEKValue cont handler (VObject (M.fromList (reverse fields)))
 -- Todo: note over here we might want to typecheck
 -- Todo: inline the variable lookup instead of calling EvalCEK directly,
 -- as we can provide a better error message this way.

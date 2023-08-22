@@ -4,7 +4,6 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -14,9 +13,6 @@ module Pact.Core.Persistence
  , PactDb(..)
  , Loaded(..)
  , HasLoaded(..)
---  , loModules
---  , loToplevel
---  , loAllLoaded
  , mockPactDb
  , mdModuleName
  , mdModuleHash
@@ -29,6 +25,7 @@ import Data.Text(Text)
 import Data.IORef
 import Data.Map.Strict(Map)
 
+import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.IR.Term
 import Pact.Core.Guards
@@ -38,13 +35,14 @@ import qualified Data.Map.Strict as Map
 
 -- | Modules as they are stored
 -- in our backend.
--- That is: All module definitions, as well as
+-- That is: All module definitions, as well as their dependencies
+-- Todo: bikeshed this name? This contains interface data
 data ModuleData b i
-  = ModuleData (Module Name b i) (Map FullyQualifiedName (Def Name b i))
+  = ModuleData (EvalModule b i) (Map FullyQualifiedName (EvalDef b i))
   -- { _mdModule :: EvalModule b i
   -- , _mdDependencies :: Map FullyQualifiedName (EvalDef b i)
   -- }
-  | InterfaceData (Interface Name b i) (Map FullyQualifiedName (Def Name b i))
+  | InterfaceData (EvalInterface b i) (Map FullyQualifiedName (EvalDef b i))
   deriving Show
   -- { _ifInterface :: EvalInterface b i
   -- , _ifDependencies :: Map FullyQualifiedName (EvalDefConst b i)
@@ -102,19 +100,6 @@ data PactDb b i
 -- Potentially new Pactdb abstraction
 -- That said: changes in `Purity` that restrict read/write
 -- have to be done for all read functions.
--- data PactDb b i
---   = PactDb
---   { _pdbPrity :: !Purity
---   , _pdbReadModule :: ModuleName -> IO (Maybe (ModuleData b i))
---   -- ^ Look up module by module name
---   , _pdbWriteModule :: ModuleData b i -> IO ()
---   -- ^ Save a module
---   , _pdbReadKeyset :: KeySetName -> IO (Maybe FQKS)
---   -- ^ Read in a fully resolve keyset
---   , _pdbWriteKeyset :: KeySetName -> FQKS -> IO ()
---   -- ^ write in a keyset
---   }
-
 readModule :: PactDb b i -> ModuleName -> IO (Maybe (ModuleData b i))
 readModule pdb = _pdbRead pdb DModules
 
@@ -132,10 +117,9 @@ data Loaded b i
   = Loaded
   { _loModules :: Map ModuleName (ModuleData b i)
   , _loToplevel :: Map Text (FullyQualifiedName, DefKind)
-  , _loAllLoaded :: Map FullyQualifiedName (Def Name b i)
+  , _loAllLoaded :: Map FullyQualifiedName (Def Name Type b i)
   } deriving Show
 
--- makeLenses ''Loaded
 makeClassy ''Loaded
 
 instance Semigroup (Loaded b i) where
@@ -153,10 +137,6 @@ mockPactDb = do
     { _pdbPurity = PImpure
     , _pdbRead = read' refKs refMod
     , _pdbWrite = write refKs refMod
-    -- , _readModule = liftIO . readMod refMod
-    -- , _writeModule = liftIO . writeMod refMod
-    -- , _readKeyset = liftIO . readKS refKs
-    -- , _writeKeyset = \ksn  -> liftIO . writeKS refKs ksn
     }
   where
   read'
@@ -188,7 +168,6 @@ mockPactDb = do
 
   writeKS ref ksn ks = modifyIORef' ref (Map.insert ksn ks)
 
-  readMod :: IORef (Map ModuleName (ModuleData b i)) -> ModuleName -> IO (Maybe (ModuleData b i))
   readMod ref mn = do
     m <- readIORef ref
     pure (Map.lookup mn m)
