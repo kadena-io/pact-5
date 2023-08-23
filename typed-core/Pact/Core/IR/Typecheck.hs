@@ -158,7 +158,7 @@ newtype InferM s b i a =
   deriving
     ( Functor, Applicative, Monad
     , MonadReader (TCEnv s b i)
-    , MonadError (PactError i))
+    , MonadError TypecheckError)
   via (ExceptT TypecheckError (ReaderT (TCEnv s b i) (ST s)))
 
 class TypeOfBuiltin b where
@@ -1713,7 +1713,7 @@ dbjTyp i env depth = \case
 runInfer
   :: Loaded b i
   -> InferM s b i a
-  -> ST s (Either (PactError i) a)
+  -> ST s (Either TypecheckError a)
 runInfer loaded (InferT act) = do
   uref <- newSTRef 0
   lref <- newSTRef 1
@@ -1724,7 +1724,7 @@ runInferTerm
   :: TypeOfBuiltin b
   => Loaded b' i
   -> IRTerm b i
-  -> Either (PactError i) (TypeScheme NamedDeBruijn, TypedGenTerm b i)
+  -> Either TypecheckError (TypeScheme NamedDeBruijn, TypedGenTerm b i)
 runInferTerm loaded term0 = runST $
   runInfer loaded $ inferTermGen term0
 
@@ -1732,7 +1732,7 @@ runInferTermNonGen
   :: TypeOfBuiltin b
   => Loaded b' i
   -> IRTerm b i
-  -> Either (PactError i) (TypeScheme NamedDeBruijn, TypedTerm b i)
+  -> Either TypecheckError (TypeScheme NamedDeBruijn, TypedTerm b i)
 runInferTermNonGen loaded term0 = runST $
   runInfer loaded $ inferTermNonGen term0
 
@@ -1740,15 +1740,15 @@ runInferModule
   :: TypeOfBuiltin b
   => Loaded b' i
   -> IRModule b i
-  -> Either (PactError i) (TypedModule b i)
+  -> Either TypecheckError (TypedModule b i)
 runInferModule loaded term0 =
   runST $ runInfer loaded (inferModule term0)
 
 runInferTopLevel
   :: TypeOfBuiltin b
   => Loaded reso i
-  -> IR.TopLevel Name b i
-  -> Either (PactError i) (TypedTopLevel b i, Loaded reso i)
+  -> IR.TopLevel Name IRType b i
+  -> Either TypecheckError (TypedTopLevel b i, Loaded reso i)
 runInferTopLevel l tl =
   runST $ runInfer l (inferTopLevel l tl)
 
@@ -1756,7 +1756,7 @@ runInferTopLevel l tl =
 runInferReplTopLevel
   :: TypeOfBuiltin b
   => Loaded reso i
-  -> IR.ReplTopLevel Name b i
-  -> Either (PactError i) (TypedReplTopLevel b i, Loaded reso i)
+  -> IR.ReplTopLevel Name IRType b i
+  -> Either TypecheckError (TypedReplTopLevel b i, Loaded reso i)
 runInferReplTopLevel l tl =
   runST $ runInfer l (inferReplTopLevel l tl)
