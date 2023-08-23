@@ -159,7 +159,7 @@ newtype InferM s b i a =
     ( Functor, Applicative, Monad
     , MonadReader (TCEnv s b i)
     , MonadError (PactError i))
-  via (ExceptT (PactError i) (ReaderT (TCEnv s b i) (ST s)))
+  via (ExceptT TypecheckError (ReaderT (TCEnv s b i) (ST s)))
 
 class TypeOfBuiltin b where
   typeOfBuiltin :: b -> TypeScheme NamedDeBruijn
