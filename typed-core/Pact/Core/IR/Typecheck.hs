@@ -45,7 +45,7 @@ import Data.RAList(RAList)
 import Data.Foldable(traverse_, foldlM)
 import Data.Functor(($>))
 import Data.STRef
-import Data.Maybe(mapMaybe)
+import Data.Maybe(mapMaybe, fromMaybe)
 import Data.Map(Map)
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
@@ -939,7 +939,7 @@ generalizeWithTerm' ty pp term = do
     TyVar rv -> readTvRef rv >>= \case
       Link tl -> nubPreds' (Pred tc tl :xs) elems
       _ ->
-        if elem p elems
+        if p `elem` elems
         then nubPreds' xs elems
         else nubPreds' xs (Pred tc x:elems)
     _ -> nubPreds' xs elems
@@ -1129,7 +1129,7 @@ checkTermType checkty = \case
   IR.ListLit tes i -> case checkty of
     TyList ty -> do
       liTup <- traverse (checkTermType ty) tes
-      let preds = concat (view _3 <$> liTup)
+      let preds = concatMap (view _3) liTup
           term' = Typed.ListLit ty (view _2 <$> liTup) i
       pure (TyList ty, term', preds)
     _ -> do
@@ -1298,7 +1298,7 @@ inferTerm = \case
   IR.ListLit li i -> do
     tv <- TyVar <$> newTvRef
     liTup <- traverse inferTerm li
-    let preds = concat (view _3 <$> liTup)
+    let preds = concatMap (view _3) liTup
     traverse_ (\(t,_, _) -> unify tv t i) liTup
     pure (TyList tv, Typed.ListLit tv (view _2 <$> liTup) i, preds)
   IR.Try e1 e2 i -> do
@@ -1350,7 +1350,7 @@ inferDefConst (IR.DefConst name dcTy term info) = do
   fterm <- noTyVarsinTerm info term'
   let dcTy' = liftType <$> dcTy
   _ <- maybe (pure ()) (\dct -> unify dct termTy info) dcTy'
-  rty' <- ensureNoTyVars info (maybe termTy id dcTy')
+  rty' <- ensureNoTyVars info (fromMaybe termTy dcTy')
   pure (Typed.DefConst name rty' fterm info)
 
 inferDefCap
@@ -1361,7 +1361,7 @@ inferDefCap (IR.DefCap name arity argtys rty term meta i) = do
   let ty = foldr TyFun rty argtys
   (termTy, term', preds) <- checkTermType (liftType ty) term
   checkReducible preds i
-  unify (liftType ty) (termTy) i
+  unify (liftType ty) termTy i
   fterm <- noTyVarsinTerm i term'
   pure (Typed.DefCap name arity argtys rty fterm meta i)
 
