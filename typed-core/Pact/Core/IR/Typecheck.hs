@@ -997,7 +997,9 @@ generalizeWithTerm' ty pp term = do
 liftType :: Type Void -> Type a
 liftType = fmap absurd
 
+toTypedArg :: Arg ty -> TypedArg ty
 toTypedArg (Arg n (Just ty)) = TypedArg n ty
+toTypedArg (Arg _ Nothing) = error "toTypedArg TODO must have type"
 
 checkTermType
   :: (TypeOfBuiltin b)
