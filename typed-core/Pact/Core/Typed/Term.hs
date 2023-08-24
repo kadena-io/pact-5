@@ -56,7 +56,7 @@ import qualified Data.List.NonEmpty as NE
 import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Names
-import Pact.Core.Type hiding (Type)
+import Pact.Core.Type hiding (Pred, Type)
 import Pact.Core.Typed.Type
 import Pact.Core.Imports
 import Pact.Core.Hash
