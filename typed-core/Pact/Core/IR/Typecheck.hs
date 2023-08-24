@@ -437,8 +437,8 @@ _dbgTypedTerm = \case
   Typed.Let n e1 e2 i ->
     Typed.Let n <$> _dbgTypedTerm e1 <*> _dbgTypedTerm e2 <*> pure i
   Typed.Builtin (b, tys, preds) i -> do
-    tys' <- traverse _dbgType tys
-    preds' <- traverse _dbgPred preds
+    tys' <- traverse _dbgTCType tys
+    preds' <- traverse _dbgTCPred preds
     pure (Typed.Builtin (b, tys', preds') i)
   Typed.Constant l i -> pure (Typed.Constant l i)
   Typed.TyApp t nelty i ->
@@ -487,10 +487,25 @@ _dbgTvRef tv = readTvRef tv >>= \case
       ty' <- _dbgType ty
       pure $ "linked type<" <> T.pack (show ty') <> ">"
 
-_dbgPred :: TCPred s -> InferM s b i (Pred Text)
-_dbgPred (Pred i t) = Pred i <$> _dbgType t
+_dbgTCPred :: TCPred s -> InferM s b i (Pred Text)
+_dbgTCPred = error "dbgPred" -- TODO predicates
 
-_dbgType :: TCType s -> InferM s b i (Type Text)
+_dbgTCType :: TCType s -> InferM s b i (Type Text)
+_dbgTCType = \case
+  TyVar tv -> readTvRef tv >>= \case
+    Unbound u l _ -> pure (TyVar ("unbound" <> T.pack (show (u, l))))
+    Bound u l -> pure (TyVar ("bound" <> T.pack (show (u, l))))
+    Link ty -> _dbgType ty
+  TyFun l r -> TyFun <$> _dbgType l <*> _dbgType r
+  TyList t -> TyList <$> _dbgType t
+  TyPrim p -> pure (TyPrim p)
+  TyModRef mr -> pure (TyModRef mr)
+  TyForall {} -> error "impredicative"
+
+_dbgPred :: Pred (TvRef s) -> InferM s b i (Pred Text)
+_dbgPred (Pred b t) = Pred b <$> _dbgType t
+
+_dbgType :: Type (TvRef s) -> InferM s b i (Type Text)
 _dbgType = \case
   TyVar tv -> readTvRef tv >>= \case
     Unbound u l _ -> pure (TyVar ("unbound" <> T.pack (show (u, l))))
