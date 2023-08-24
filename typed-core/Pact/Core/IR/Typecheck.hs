@@ -32,7 +32,7 @@ module Pact.Core.IR.Typecheck
  ) where
 
 import Control.Lens hiding (Level)
-import Control.Monad ( when, unless, zipWithM )
+import Control.Monad ( when, unless )
 import Control.Monad.Reader
 import Control.Monad.ST
 -- import Control.Monad.ST.Unsafe(unsafeIOToST, unsafeSTToIO)
@@ -57,14 +57,15 @@ import qualified Data.RAList as RAList
 import qualified Data.Set as Set
 
 import Pact.Core.Builtin
-import Pact.Core.Type(PrimType(..), Arg(..), TypedArg(..))
+import Pact.Core.Type(PrimType(..), Arg(..), TypedArg(..), BuiltinTC(..))
 import Pact.Core.Typed.Type
 import Pact.Core.Names
-import Pact.Core.Errors
 import Pact.Core.Persistence
 import Pact.Core.Capabilities
+import qualified Pact.Core.Type as IR
 import qualified Pact.Core.IR.Term as IR
 import qualified Pact.Core.Typed.Term as Typed
+import qualified Pact.Core.Typed.Type as Typed
 
 -- inference based on https://okmij.org/ftp/ML/generalization.html
 -- Note: Type inference levels in the types
@@ -116,8 +117,8 @@ data TCEnv s b i
 
 makeLenses ''TCEnv
 
-type TCType s = Type (TvRef s)
-type TCPred s = Pred (TvRef s)
+type TCType s = Typed.Type (TvRef s)
+type TCPred s = Typed.Pred (TvRef s)
 
 -- | Term emitted by desugar
 type IRType = IR.Type
