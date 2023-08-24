@@ -120,9 +120,10 @@ type TCType s = Type (TvRef s)
 type TCPred s = Pred (TvRef s)
 
 -- | Term emitted by desugar
-type IRTerm b i = IR.Term Name b i
-type IRModule b i = IR.Module Name b i
-type IRInterface b i = IR.Interface Name b i
+type IRType = IR.Type
+type IRTerm b i = IR.Term Name IRType b i
+type IRModule b i = IR.Module Name IRType b i
+type IRInterface b i = IR.Interface Name IRType b i
 
 -- | Term emitted by the typechecker prior to final generalization/unification.
 type TCTerm s b i = Typed.Term Name (TvRef s) (b, [TCType s], [TCPred s]) i
@@ -1325,7 +1326,7 @@ inferTerm = \case
 -- we're not allowing type schemes just yet.
 inferDefun
   :: TypeOfBuiltin b
-  => IR.Defun Name b i
+  => IR.Defun Name IRType b i
   -> InferM s b' i (TypedDefun b i)
 inferDefun (IR.Defun name dfargs dfRetType term info) = do
   enterLevel
@@ -1340,7 +1341,7 @@ inferDefun (IR.Defun name dfargs dfRetType term info) = do
 
 inferDefConst
   :: TypeOfBuiltin b
-  => IR.DefConst Name b i
+  => IR.DefConst Name IRType b i
   -> InferM s b' i (TypedDefConst b i)
 inferDefConst (IR.DefConst name dcTy term info) = do
   enterLevel
@@ -1355,7 +1356,7 @@ inferDefConst (IR.DefConst name dcTy term info) = do
 
 inferDefCap
   :: TypeOfBuiltin b
-  => IR.DefCap Name b i
+  => IR.DefCap Name IRType b i
   -> InferM s b' i (TypedDefCap b i)
 inferDefCap (IR.DefCap name arity argtys rty term meta i) = do
   let ty = foldr TyFun rty argtys
@@ -1367,7 +1368,7 @@ inferDefCap (IR.DefCap name arity argtys rty term meta i) = do
 
 inferDef
   :: TypeOfBuiltin b
-  => IR.Def Name b i
+  => IR.Def Name IRType b i
   -> InferM s b' i (TypedDef b i)
 inferDef = \case
   IR.Dfun d -> Typed.Dfun <$> inferDefun d
@@ -1376,7 +1377,7 @@ inferDef = \case
 
 inferIfDef
   :: TypeOfBuiltin b
-  => IR.IfDef Name b i
+  => IR.IfDef Name IRType b i
   -> InferM s b' i (TypedIfDef b i)
 inferIfDef = \case
   IR.IfDfun ifd ->
@@ -1388,7 +1389,7 @@ inferIfDef = \case
 
 inferModule
   :: TypeOfBuiltin b
-  => IR.Module Name b i
+  => IR.Module Name IRType b i
   -> InferM s b' i (TypedModule b i)
 inferModule (IR.Module mname mgov defs blessed imports impl mh info) = do
   fv <- view tcFree
@@ -1443,7 +1444,7 @@ inferTermGen term = do
 inferTopLevel
   :: TypeOfBuiltin b
   => Loaded reso i
-  -> IR.TopLevel Name b i
+  -> IR.TopLevel Name IRType b i
   -> InferM s reso i (TypedTopLevel b i, Loaded reso i)
 inferTopLevel loaded = \case
   IR.TLModule m -> do
@@ -1463,7 +1464,7 @@ inferTopLevel loaded = \case
 inferReplTopLevel
   :: TypeOfBuiltin b
   => Loaded reso i
-  -> IR.ReplTopLevel Name b i
+  -> IR.ReplTopLevel Name IRType b i
   -> InferM s reso i (TypedReplTopLevel b i)
 inferReplTopLevel loaded = \case
   IR.RTLModule m ->  do
