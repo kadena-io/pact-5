@@ -13,6 +13,8 @@ module Pact.Core.Persistence
  , PactDb(..)
  , Loaded(..)
  , HasLoaded(..)
+ , Domain(..)
+ , WriteType(..)
  , mockPactDb
  , mdModuleName
  , mdModuleHash
@@ -30,6 +32,7 @@ import Pact.Core.Names
 import Pact.Core.IR.Term
 import Pact.Core.Guards
 import Pact.Core.Hash
+import Pact.Core.PactValue
 
 import qualified Data.Map.Strict as Map
 
@@ -64,10 +67,30 @@ mdModuleHash f = \case
 
 type FQKS = KeySet FullyQualifiedName
 
+newtype RowData
+  = RowData (Map Field PactValue)
+  deriving (Eq, Show)
+
+-- -------------------------------------------------------------------------- --
+-- WriteType
+
+-- | Instruction for '_writeRow'.
+data WriteType =
+  -- | Insert a new row, fail if key already found.
+  --   Requires complete row value, enforced by pact runtime.
+  Insert |
+  -- | Update an existing row, fail if key not found.
+  --   Allows incomplete row values.
+  Update |
+  -- | Update an existing row, or insert a new row if not found.
+  --   Requires complete row value, enforced by pact runtime.
+  Write
+  deriving (Eq,Ord,Show,Enum,Bounded)
+
 -- | Specify key and value types for database domains.
 data Domain k v b i where
   -- | User tables accept a TableName and map to an 'ObjectMap PactValue'
-  -- UserTables :: !TableName -> Domain RowKey RowData
+  DUserTables :: !TableName -> Domain RowKey RowData b i
   -- | Keysets
   DKeySets :: Domain KeySetName (KeySet FullyQualifiedName) b i
   -- | Modules
@@ -133,34 +156,47 @@ mockPactDb :: forall b i. IO (PactDb b i)
 mockPactDb = do
   refMod <- newIORef Map.empty
   refKs <- newIORef Map.empty
+  refUsrTbl <- newIORef Map.empty
   pure $ PactDb
     { _pdbPurity = PImpure
-    , _pdbRead = read' refKs refMod
-    , _pdbWrite = write refKs refMod
+    , _pdbRead = read' refKs refMod refUsrTbl
+    , _pdbWrite = write refKs refMod refUsrTbl
     }
   where
   read'
     :: forall k v
     .  IORef (Map KeySetName FQKS)
     -> IORef (Map ModuleName (ModuleData b i))
+    -> IORef (Map TableName (Map RowKey RowData))
     -> Domain k v b i
     -> k
     -> IO (Maybe v)
-  read' refKs refMod domain k = case domain of
+  read' refKs refMod refUsrTbl domain k = case domain of
     DKeySets -> readKS refKs k
     DModules -> readMod refMod k
+    DUserTables tbl ->
+      readRowData refUsrTbl tbl k
 
   write
     :: forall k v
     .  IORef (Map KeySetName FQKS)
     -> IORef (Map ModuleName (ModuleData b i))
+    -> IORef (Map TableName (Map RowKey RowData))
     -> Domain k v b i
     -> k
     -> v
     -> IO ()
-  write refKs refMod domain k v = case domain of
+  write refKs refMod refUsrTbl domain k v = case domain of
     DKeySets -> writeKS refKs k v
     DModules -> writeMod refMod v
+    DUserTables tbl -> writeRowData refUsrTbl tbl k v
+
+  readRowData ref tbl k = do
+    r <- readIORef ref
+    pure (r ^? ix tbl . ix k)
+
+  writeRowData ref tbl k v =
+    modifyIORef' ref (Map.insertWith Map.union tbl (Map.singleton k v))
 
   readKS ref ksn = do
     m <- readIORef ref

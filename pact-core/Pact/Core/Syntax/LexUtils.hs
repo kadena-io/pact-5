@@ -218,6 +218,7 @@ primType i = \case
 objType :: SpanInfo -> Text -> ParsedName -> ParserT Type
 objType i t p = case t of
   "object" -> pure (TyObject p)
+  "table" -> pure (TyTable p)
   e -> throwParseError (InvalidBaseType e) i
 
 parseError :: ([PosToken], [String]) -> ParserT a

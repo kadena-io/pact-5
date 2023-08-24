@@ -72,6 +72,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , PartialNativeFn(..)
  , PartialClosure(..)
  , CanApply(..)
+ , StackFrame(..)
  ) where
 
 import Control.Lens hiding ((%%=))
@@ -113,19 +114,18 @@ type CEKEnv b i m = RAList (CEKValue b i m)
 -- | List of builtins
 type BuiltinEnv b i m = i -> b -> NativeFn b i m
 
-data StackFrame
+newtype StackFrame
   = StackFrame
-  { _sfModule :: ModuleName
-  , _sfLamInfo :: LamInfo
-  , _sfApp :: [PactValue]
-  } deriving Show
+  { _sfLamInfo :: LamInfo }
+  deriving Show
 
 data Closure b i
   = Closure
   { _cloLamInfo :: !LamInfo
   , _cloTypes :: !(NonEmpty (Maybe Type))
-  , _cloArity :: Int
+  , _cloArity :: !Int
   , _cloTerm :: !(EvalTerm b i)
+  , _cloRType :: !(Maybe Type)
   , _cloInfo :: i
   } deriving Show
 
@@ -137,6 +137,7 @@ data LamClosure b i m
   , _lcloTypes :: !(NonEmpty (Maybe Type))
   , _lcloArity :: Int
   , _lcloTerm :: !(EvalTerm b i)
+  , _lcloRType :: !(Maybe Type)
   , _lcloEnv :: !(CEKEnv b i m)
   , _lcloInfo :: i
   } deriving Show
@@ -150,6 +151,7 @@ data PartialClosure b i m
   , _pcloTypes :: !(NonEmpty (Maybe Type))
   , _pcloArity :: Int
   , _pcloTerm :: !(EvalTerm b i)
+  , _pcloRType :: !(Maybe Type)
   , _pcloEnv :: !(CEKEnv b i m)
   , _pcloInfo :: i
   } deriving Show
@@ -383,7 +385,7 @@ data Cont b i m
   | CapInvokeC (CEKEnv b i m) [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
   | CapBodyC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   | CapPopC CapPopState (Cont b i m)
-  | StackPopC (Cont b i m)
+  | StackPopC (Maybe Type) (Cont b i m)
   | Mt
   deriving Show
 

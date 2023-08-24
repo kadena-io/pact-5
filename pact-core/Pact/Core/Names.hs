@@ -44,6 +44,7 @@ module Pact.Core.Names
 --  , DefKind(..)
  , fqnToName
  , NativeName(..)
+ , RowKey(..)
  ) where
 
 import Control.Lens
@@ -239,7 +240,7 @@ instance Pretty NamedDeBruijn where
     pretty _n
 
 newtype TableName = TableName Text
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 -- | Constants for resolving repl things
 replRawModuleName :: Text
@@ -255,3 +256,7 @@ replModuleHash = ModuleHash (Hash "#repl")
 fqnToName :: FullyQualifiedName -> Name
 fqnToName (FullyQualifiedName mn name mh) =
   Name name (NTopLevel mn mh)
+
+newtype RowKey
+  = RowKey Text
+  deriving (Eq, Ord, Show)

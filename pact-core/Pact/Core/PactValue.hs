@@ -11,6 +11,7 @@ module Pact.Core.PactValue
  , envMap ) where
 
 import Control.Lens
+import Control.Monad(zipWithM)
 import Data.Vector(Vector)
 import Data.Map.Strict(Map)
 import Data.Maybe(isJust)
@@ -49,14 +50,26 @@ instance Pretty PactValue where
 
 checkPvType :: Type -> PactValue -> Maybe Type
 checkPvType ty = \case
-  PLiteral l -> let
-    t = typeOfLit l
-    in if t == ty then Just t else Nothing
+  PLiteral l
+    | typeOfLit l == ty -> Just ty
+    | otherwise -> Nothing
   PGuard{}
     | ty == TyGuard -> Just TyGuard
     | otherwise -> Nothing
   -- todo: types of objects
-  PObject{} -> Nothing
+  PObject o -> case ty of
+    TyObject (Schema sc) ->
+      let tyList = M.toList sc
+          oList = M.toList o
+      in tcObj oList tyList
+      where
+      tcObj l1 l2
+        | length l1 == length l2 = TyObject . Schema . M.fromList <$> zipWithM mcheck l1 l2
+        | otherwise = Nothing
+      mcheck (f1, pv) (f2, t)
+        | f1 == f2 = (f1,) <$> checkPvType t pv
+        | otherwise = Nothing
+    _ -> Nothing
   PList l -> case ty of
     TyList t' | all (isJust . checkPvType t') l -> Just (TyList t')
     _ -> Nothing
@@ -64,7 +77,7 @@ checkPvType ty = \case
     TyModRef mn
       | refined == Just mn -> Just (TyModRef mn)
       | isJust refined -> Nothing
-      | mn `elem` ifs -> Just (TyModRef mn)
+      | mn `elem` ifs && refined == Nothing -> Just (TyModRef mn)
       | otherwise -> Nothing
     _ -> Nothing
 

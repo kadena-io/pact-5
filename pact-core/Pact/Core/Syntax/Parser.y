@@ -524,7 +524,7 @@ combineSpans lexpr rexpr =
 getIdent (PosToken (TokenIdent x) _) = x
 getNumber (PosToken (TokenNumber x) _) = x
 getStr (PosToken (TokenString x) _ ) = x
-getTick (PosToken (TokenSingleTick x) _) = x
+getTick (PosToken (TokenSingleTick x) _) = T.drop 1 x
 getIdentField = Field . getIdent
 
 mkIntegerConstant n i =

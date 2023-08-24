@@ -1,7 +1,14 @@
+{-# LANGUAGE TemplateHaskell #-}
+
+
 module Pact.Core.ModRefs
  ( ModRef(..)
+ , mrModule
+ , mrImplemented
+ , mrRefined
  ) where
 
+import Control.Lens
 import Pact.Core.Names
 import Pact.Core.Pretty
 
@@ -28,3 +35,5 @@ instance Eq ModRef where
 
 instance Ord ModRef where
   m1 `compare` m2 = _mrModule m1 `compare` _mrModule m2
+
+makeLenses ''ModRef

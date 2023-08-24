@@ -22,6 +22,9 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , getAllStackCaps
  , checkSigCaps
  , lookupFqName
+ , typecheckArgument
+ , maybeTCType
+ , safeTail
  ) where
 
 import Control.Lens hiding ((%%=))
@@ -35,6 +38,8 @@ import Pact.Core.PactValue
 import Pact.Core.Builtin
 import Pact.Core.Guards
 import Pact.Core.IR.Term
+import Pact.Core.ModRefs
+import Pact.Core.Type
 import Pact.Core.IR.Eval.Runtime.Types
 
 mkBuiltinFn
@@ -123,3 +128,17 @@ lookupFqName :: (MonadEval b i m) => FullyQualifiedName -> m (Maybe (EvalDef b i
 lookupFqName fqn =
   Map.lookup fqn . view eeLoaded <$> readEnv
 
+typecheckArgument :: (MonadEval b i m) => PactValue -> Type -> m PactValue
+typecheckArgument pv ty = case (pv, checkPvType ty pv) of
+  (PModRef mr, Just (TyModRef m))
+    | _mrRefined mr == Nothing -> pure (PModRef (mr & mrRefined ?~ m))
+    | otherwise -> pure (PModRef mr)
+  (_, Just _) -> pure pv
+  (_, Nothing) -> error $ "runtime tc error" <> show (pv, ty)
+
+maybeTCType :: (MonadEval b i m) => PactValue -> Maybe Type -> m PactValue
+maybeTCType pv = maybe (pure pv) (typecheckArgument pv)
+
+safeTail :: [a] -> [a]
+safeTail (_:xs) = xs
+safeTail [] = []

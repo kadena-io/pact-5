@@ -41,6 +41,7 @@ data Type
   | TyModRef ModuleName
   | TyKeyset
   | TyObject ParsedName
+  | TyTable ParsedName
   | TyTime
   | TyPolyObject
   deriving (Show, Eq)
@@ -73,6 +74,7 @@ instance Pretty Type where
     TyObject qn -> "object" <> braces (pretty qn)
     TyPolyObject -> "object"
     TyTime -> "time"
+    TyTable o -> "table" <> braces (pretty o)
 
 
 ----------------------------------------------------

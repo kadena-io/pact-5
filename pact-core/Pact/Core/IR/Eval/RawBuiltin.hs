@@ -871,9 +871,10 @@ runUserGuard cont handler (UserGuard fqn args) =
   lookupFqName fqn >>= \case
     Just (Dfun d) -> do
       when (length (_dfunArgs d) /= length args) $ error "user guard not saturated"
-      let li = TLLamInfo (_fqModule fqn) (_fqName fqn)
+      -- Todo: this is probably needs to be factored out
+      let li = TLDefun (_fqModule fqn) (_fqName fqn)
           cloargs = NE.fromList (_argType <$> _dfunArgs d)
-          clo = Closure li cloargs (NE.length cloargs) (_dfunTerm d) (_dfunInfo d)
+          clo = Closure li cloargs (NE.length cloargs) (_dfunTerm d) (_dfunRType d) (_dfunInfo d)
       applyLam (C clo) (VPactValue <$> args) cont handler
     _ -> failInvariant "enforce-user-guard"
 

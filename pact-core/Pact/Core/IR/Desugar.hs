@@ -14,6 +14,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE GADTs #-}
 
 
 module Pact.Core.IR.Desugar
@@ -314,7 +315,7 @@ desugarDefun (Lisp.Defun defname [] mrt body _ _ i) = do
   body' <- desugarLispTerm body
   view reCurrModule >>= \case
     Just mn -> do
-      let bodyLam = Lam (TLLamInfo mn defname) (pure unitFnArg) body' i
+      let bodyLam = Lam (TLDefun mn defname) (pure unitFnArg) body' i
       pure $ Defun defname [unitFnArg] mrt bodyLam i
     Nothing -> error "Defun is module-less"
 desugarDefun (Lisp.Defun defname (arg:args) mrt body _ _ i) = do
@@ -322,7 +323,7 @@ desugarDefun (Lisp.Defun defname (arg:args) mrt body _ _ i) = do
   body' <- desugarLispTerm body
   view reCurrModule >>= \case
     Just mn -> do
-      let bodyLam = Lam (TLLamInfo mn defname) args' body' i
+      let bodyLam = Lam (TLDefun mn defname) args' body' i
       pure $ Defun defname (NE.toList args') mrt bodyLam i
     Nothing -> error "Defun is module-less"
 
@@ -367,10 +368,30 @@ desugarDefCap (Lisp.DefCap dcn (x:xs) rtype term _docs _model meta i) = do
   let appArity = NE.length args
   let termBody = Lisp.Lam (x:xs) term i
   term' <- desugarLispTerm termBody
-  let bodyLam = Lam AnonLamInfo args term' i
-  meta' <- traverse (desugarDefMeta term') meta
-  pure (DefCap dcn appArity (NE.toList args) rtype bodyLam meta' i)
+  -- todo: pass module name into this.
+  -- same with renameDef
+  view reCurrModule >>= \case
+    Just mname -> do
+      let bodyLam = Lam (TLDefCap mname dcn) args term' i
+      meta' <- traverse (desugarDefMeta term') meta
+      pure (DefCap dcn appArity (NE.toList args) rtype bodyLam meta' i)
+    Nothing -> error "defcap outside of module"
 
+desugarDefSchema
+  :: (MonadRenamer reso info m)
+  => Lisp.DefSchema info
+  -> m (DefSchema DesugarType info)
+desugarDefSchema (Lisp.DefSchema dsn args _docs _model i) = do
+  let args' = (\(Lisp.Arg n ty) -> (Field n, ty)) <$> args
+      scd = Map.fromList args'
+  pure $ DefSchema dsn scd i
+
+desugarDefTable
+  :: (MonadRenamer reso info m)
+  => Lisp.DefTable info
+  -> m (DefTable ParsedName info)
+desugarDefTable (Lisp.DefTable dtn dts _ i) =
+  pure (DefTable dtn (DesugaredTable dts) i)
 
 desugarIfDef
   :: (MonadDesugar raw reso info m)
@@ -399,6 +420,8 @@ desugarDef = \case
   Lisp.Dfun d -> Dfun <$> desugarDefun d
   Lisp.DConst d -> DConst <$> desugarDefConst d
   Lisp.DCap dc -> DCap <$> desugarDefCap dc
+  Lisp.DSchema d -> DSchema <$> desugarDefSchema d
+  Lisp.DTable d -> DTable <$> desugarDefTable d
   _ -> error "unimplemented"
 
 -- Todo: Module hashing, either on source or
@@ -525,6 +548,13 @@ typeSCC currM currDefs = \case
   Lisp.TyTime -> mempty
   Lisp.TyPolyList -> mempty
   Lisp.TyPolyObject -> mempty
+  Lisp.TyTable pn ->  case pn of
+    -- Todo: factor out, repeated in termSCC
+    BN bn | Set.member (_bnName bn) currDefs -> Set.singleton (_bnName bn)
+          | otherwise -> mempty
+    QN (QualifiedName n' mn')
+      | Set.member n' currDefs && mn' == currM -> Set.singleton n'
+      | otherwise -> mempty
 
 defunSCC
   :: ModuleName
@@ -714,29 +744,33 @@ renameType i = \case
   Lisp.TyModRef tmr ->
     TyModRef tmr <$ resolveModuleName tmr i
   Lisp.TyKeyset -> pure TyGuard
-  Lisp.TyObject pn -> case pn of
-    BN bn ->
-      view reCurrModule >>= \case
-        Just currM -> do
-          rs <- use rsModuleBinds
-          case rs ^? ix currM . ix (_bnName bn) of
-            Just (_, DKDefSchema sc) ->
-              pure (TyObject sc)
-            _ -> error "no schema with required name"
-        _ -> error "schema lives outside a module"
-    QN qn -> do
-      let currM = _qnModName qn
-      rs <- use rsModuleBinds
-      case rs ^? ix currM . ix (_qnName qn)  of
-        Just (_, DKDefSchema sc) ->
-          pure (TyObject sc)
-        _ -> error "no schema with required name"
+  Lisp.TyObject pn ->
+    TyObject <$> resolveSchema pn
+  Lisp.TyTable pn ->
+    TyTable <$> resolveSchema pn
   Lisp.TyPolyList ->
     throwDesugarError (UnsupportedType "[any]") i
   Lisp.TyPolyObject ->
     throwDesugarError (UnsupportedType "object{any}") i
   Lisp.TyTime ->
     throwDesugarError (UnsupportedType "time") i
+  where
+  resolveSchema = \case
+    BN bn ->
+      view reCurrModule >>= \case
+        Just currM -> do
+          rs <- use rsModuleBinds
+          case rs ^? ix currM . ix (_bnName bn) of
+            Just (_, DKDefSchema sc) -> pure sc
+            _ -> error "no schema with required name - bare"
+        _ -> error "schema lives outside a module"
+    QN qn -> do
+      let currM = _qnModName qn
+      rs <- use rsModuleBinds
+      case rs ^? ix currM . ix (_qnName qn)  of
+        Just (_, DKDefSchema sc) ->
+          pure sc
+        _ -> error "no schema with required name - qualified"
 
 
 -- Rename a term (that is part of a module)
@@ -857,6 +891,24 @@ renameDefun (Defun n args ret term i) = do
   term' <- local (set reCurrDef (Just DKDefun)) $ renameTerm term
   pure (Defun n args' ret' term' i)
 
+renameDefSchema
+  :: (MonadRenamer reso i m)
+  => DefSchema DesugarType i
+  -> m (DefSchema Type i)
+renameDefSchema (DefSchema dsn dsc i) = do
+  dsc' <- traverse (renameType i) dsc
+  pure (DefSchema dsn dsc' i)
+
+renameDefTable
+  :: (MonadRenamer reso i m)
+  => DefTable ParsedName i
+  -> m (DefTable Name i)
+renameDefTable (DefTable dtn sc i) =
+  case sc of
+    DesugaredTable dn -> resolveName i dn >>= \case
+      (_, Just (DKDefSchema rsc)) -> pure (DefTable dtn (ResolvedTable rsc) i)
+      _ -> error "invalid schema"
+
 renameReplDefun
   :: (MonadDesugar raw reso i m)
   => Defun ParsedName DesugarType raw i
@@ -917,8 +969,8 @@ renameDef = \case
   Dfun d -> Dfun <$> renameDefun d
   DConst d -> DConst <$> renameDefConst d
   DCap d -> DCap <$> renameDefCap d
-  DSchema{} -> error "todo: rename schema"
-  DTable{} -> error "todo: rename table"
+  DSchema d -> DSchema <$> renameDefSchema d
+  DTable d -> DTable <$> renameDefTable d
 
 renameIfDef
   :: (MonadDesugar raw reso i m)
@@ -1007,6 +1059,7 @@ renameModule (Module mname mgov defs blessed imp implements mhash i) = local (se
       -- but all uses of `head` are still scary
       throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (head d))
   binds <- view reBinds
+  rsModuleBinds %= Map.insert mname mempty
   (defs'', _, _) <- over _1 reverse <$> foldlM go ([], Set.empty, binds) defs'
   let fqns = Map.fromList $ (\d -> (defName d, (FullyQualifiedName mname (defName d) mhash, defKind d))) <$> defs''
   rsLoaded . loToplevel %= Map.union fqns
@@ -1017,10 +1070,12 @@ renameModule (Module mname mgov defs blessed imp implements mhash i) = local (se
   go (defns, s, m) defn = do
     when (Set.member (defName defn) s) $ error "duplicate defn name"
     let dn = defName defn
+    liftIO $ print $ "at defname: " <> show dn
     defn' <- local (set reBinds m) $ renameDef defn
     let depPair = (NTopLevel mname mhash, defKind defn')
     let m' = Map.insert dn (over _2 Just depPair) m
     rsModuleBinds . ix mname %= Map.insert dn depPair
+    use rsModuleBinds >>= liftIO . print
     pure (defn':defns, Set.insert (defName defn) s, m')
 
   resolveGov = traverse $ \govName -> case find (\d -> BN (BareName (defName d)) == govName) defs of

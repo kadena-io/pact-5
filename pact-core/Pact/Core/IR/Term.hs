@@ -3,6 +3,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 
@@ -72,10 +73,23 @@ data DefSchema ty info
   , _dsInfo :: info
   } deriving (Show, Functor)
 
-data DefTable info
+-- | The type of our desugared table schemas
+-- TODO: This GADT is unnecessarily complicated and only really necessary
+-- because currently, renaming and desugaring are not in sequence. That is:
+-- renaming and desugaring a module happens as a full desugar into a full rename.
+-- if they ran one after another, this type would not be necessary
+data TableSchema name where
+  DesugaredTable :: ParsedName -> TableSchema ParsedName
+  ResolvedTable :: Schema -> TableSchema Name
+
+instance Show (TableSchema name) where
+  show (DesugaredTable t) = "DesugardTable(" <> show t <> ")"
+  show (ResolvedTable t) = "ResolvedTable(" <> show t <> ")"
+
+data DefTable name info
   = DefTable
   { _dtName :: Text
-  , _dtSchema :: Schema
+  , _dtSchema :: TableSchema name
   , _dtInfo :: info
   } deriving (Show, Functor)
 
@@ -84,13 +98,9 @@ data Def name ty builtin info
   | DConst (DefConst name ty builtin info)
   | DCap (DefCap name ty builtin info)
   | DSchema (DefSchema ty info)
-  | DTable (DefTable info)
+  | DTable (DefTable name info)
   deriving (Show, Functor)
 
-
--- TODO:
--- Support module guards
--- Support governance
 data Module name ty builtin info
   = Module
   { _mName :: ModuleName
@@ -203,7 +213,8 @@ type EvalModule b i = Module Name Type b i
 type EvalInterface b i = Interface Name Type b i
 
 data LamInfo
-  = TLLamInfo ModuleName Text
+  = TLDefun ModuleName Text
+  | TLDefCap ModuleName Text
   | AnonLamInfo
   deriving Show
 
