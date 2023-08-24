@@ -91,3 +91,11 @@ data TypeScheme tv =
 newtype Schema tv
   = Schema { _schema :: Map Field (Type tv) }
   deriving (Eq, Show)
+
+tyFunToArgList :: Type n -> ([Type n], Type n)
+tyFunToArgList (TyFun l r) =
+  unFun [l] r
+  where
+  unFun args (TyFun l' r') = unFun (l':args) r'
+  unFun args ret = (reverse args, ret)
+tyFunToArgList r = ([], r)
