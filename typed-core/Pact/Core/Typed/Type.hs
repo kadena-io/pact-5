@@ -11,7 +11,7 @@ import Data.List.NonEmpty(NonEmpty)
 import Data.Map.Strict(Map)
 
 import Pact.Core.Literal
-import Pact.Core.Type(PrimType(..))
+import Pact.Core.Type(PrimType(..), BuiltinTC)
 import Pact.Core.Names
 import Pact.Core.Pretty
 
@@ -77,26 +77,6 @@ typeOfLit = \case
 
 instance Pretty (Type n) where
   pretty _ty = error "todo"
-
-data BuiltinTC
-  = Eq
-  | Ord
-  | Show
-  | Add
-  | Num
-  | ListLike
-  | Fractional
-  deriving (Show, Eq, Ord)
-
-instance Pretty BuiltinTC where
-  pretty = \case
-    Eq -> "Eq"
-    Ord -> "Ord"
-    Show -> "Show"
-    Add -> "Add"
-    Num -> "Num"
-    ListLike -> "ListLike"
-    Fractional -> "Fractional"
 
 -- Note, no superclasses, for now
 data Pred tv

@@ -19,7 +19,7 @@ module Pact.Core.Type
  , pattern TyUnit
  , pattern TyGuard
  , typeOfLit
---  , BuiltinTC(..)
+ , BuiltinTC(..)
 --  , Pred(..)
 --  , renderType
 --  , renderPred
@@ -117,25 +117,25 @@ pattern TyGuard = TyPrim PrimGuard
 
 
 -- Built in typeclasses
--- data BuiltinTC
---   = Eq
---   | Ord
---   | Show
---   | Add
---   | Num
---   | ListLike
---   | Fractional
---   deriving (Show, Eq, Ord)
+data BuiltinTC
+  = Eq
+  | Ord
+  | Show
+  | Add
+  | Num
+  | ListLike
+  | Fractional
+  deriving (Show, Eq, Ord)
 
--- instance Pretty BuiltinTC where
---   pretty = \case
---     Eq -> "Eq"
---     Ord -> "Ord"
---     Show -> "Show"
---     Add -> "Add"
---     Num -> "Num"
---     ListLike -> "ListLike"
---     Fractional -> "Fractional"
+instance Pretty BuiltinTC where
+  pretty = \case
+    Eq -> "Eq"
+    Ord -> "Ord"
+    Show -> "Show"
+    Add -> "Add"
+    Num -> "Num"
+    ListLike -> "ListLike"
+    Fractional -> "Fractional"
 
 -- -- Note, no superclasses, for now
 -- data Pred tv
