@@ -364,10 +364,10 @@ solveCoreOverload i b tys preds = case b of
   RawReadKeyset -> pure (Builtin ReadKeyset i)
   RawEnforceGuard -> pure (Builtin EnforceGuard i)
   RawKeysetRefGuard -> pure (Builtin KeysetRefGuard i)
-  RawContains -> error "contains"
-  RawSort -> error "sort"
-  RawSortObject -> error "sortObject"
-  RawRemove -> error "remove"
+  RawContains -> error "contains" -- TODO
+  RawSort -> error "sort" -- TODO
+  RawSortObject -> error "sortObject" -- TODO
+  RawRemove -> error "remove" -- TODO
 
 singlePred :: [t] -> i -> (t -> OverloadM i a) -> String -> OverloadM i a
 singlePred preds i f msg = case preds of
