@@ -349,6 +349,13 @@ instance TypeOfBuiltin RawBuiltin where
       TypeScheme [] [] (TyString :~> TyString)
     RawStrToList ->
       TypeScheme [] [] (TyString :~> TyList TyString)
+    RawSort -> let
+      aVar = nd "a" 0
+      a = TyVar aVar
+      in TypeScheme [aVar] [Pred Ord a] (TyList a :~> TyList a)
+    RawSortObject -> error "sort object TODO" -- TODO
+    RawContains -> error "contains TODO" -- TODO
+    RawRemove -> error "remove TODO" -- TODO
     where
     nd b a = NamedDeBruijn a b
     unaryNumType =
