@@ -20,7 +20,7 @@ module Pact.Core.Type
  , pattern TyGuard
  , typeOfLit
  , BuiltinTC(..)
---  , Pred(..)
+ , Pred(..)
 --  , renderType
 --  , renderPred
 --  , TypeOfDef(..)
@@ -138,9 +138,9 @@ instance Pretty BuiltinTC where
     Fractional -> "Fractional"
 
 -- -- Note, no superclasses, for now
--- data Pred tv
---   = Pred BuiltinTC (Type tv)
---   deriving (Show, Eq, Functor, Foldable, Traversable)
+data Pred
+  = Pred BuiltinTC Type
+  deriving (Show, Eq)
 
 -- data TypeScheme tv =
 --   TypeScheme [tv] [Pred tv]  (Type tv)
