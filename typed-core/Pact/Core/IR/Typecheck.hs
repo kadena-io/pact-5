@@ -1245,11 +1245,9 @@ inferTerm = \case
   --       preds' = concat (pte : NE.toList (view _3 <$> as))
   --   unify te (foldr TyFun tv1 tys) i
   --   pure (tv1, Typed.App e' args' i, preds')
-  IR.Let n mty e1 e2 i -> do
+  IR.Let ty e1 e2 i -> do
     enterLevel
-    (te1, e1', pe1) <- case mty of
-      Nothing -> inferTerm e1
-      Just ty -> checkTermType (liftType ty) e1
+    (te1, e1', pe1) <- checkTermType (liftType ty) e1
     leaveLevel
     -- Note: generalization is turned off.
     -- (ts, e1Qual, deferred) <- generalizeWithTerm te1 pe1 e1Unqual
