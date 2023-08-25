@@ -1167,6 +1167,7 @@ checkTermType checkty = \case
         _ -> error "boom"
       _ -> error "boom"
   IR.Error txt i -> pure (checkty, Typed.Error checkty txt i, [])
+  IR.ObjectLit{} -> error "TODO" -- TODO new ctor
 
 
 checkCapArgs
@@ -1334,6 +1335,7 @@ inferTerm = \case
   IR.Error e i -> do
     ty <- TyVar <$> newTvRef
     pure (ty, Typed.Error ty e i, [])
+  IR.ObjectLit{} -> error "inferTerm TODO" -- TODO new ctor
 
 -- Todo: generic types?
 -- We can't generalize yet since
