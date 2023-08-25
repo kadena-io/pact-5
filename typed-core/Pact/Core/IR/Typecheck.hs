@@ -1053,22 +1053,11 @@ checkTermType checkty = \case
     where
     unifyArg (_, Just tl) tr = unify (liftType tl) tr i
     unifyArg _ _ = pure ()
-  IR.Let txt m_ty e1 e2 i ->
-    case m_ty of
-      Just lty -> do
-        (_, e1', pe1) <- checkTermType (liftType lty) e1
-        (_, e2', pe2) <-
-          locally tcVarEnv (RAList.cons (liftType lty)) $ checkTermType checkty e2
-        let term' = Typed.Let txt e1' e2' i
-        pure (checkty, term', pe1 ++ pe2)
-      Nothing -> do
-        enterLevel
-        (te1, e1', pe1) <- inferTerm e1
-        leaveLevel
-        (_, e2', pe2) <-
-          locally tcVarEnv (RAList.cons te1) $ checkTermType checkty e2
-        let term' = Typed.Let txt e1' e2' i
-        pure (checkty, term', pe1 ++ pe2)
+  IR.Let lty e1 e2 i -> do
+    (_, e1', pe1) <- checkTermType (liftType lty) e1
+    (_, e2', pe2) <- locally tcVarEnv (RAList.cons (liftType lty)) $ checkTermType checkty e2
+    let term' = Typed.Let (_argName lty) e1' e2' i
+    pure (checkty, term', pe1 ++ pe2)
   IR.App te (h :| hs) i -> do
     (tapp, te', pe1) <- inferTerm te
     (rty, xs, ps) <- foldlM inferFunctionArgs (tapp, [], []) (h:hs)
