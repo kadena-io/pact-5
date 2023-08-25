@@ -1040,7 +1040,7 @@ checkTermType checkty = \case
           pure (TyModRef iface, Typed.Var irn i, [])
         _ -> error "incorrect type"
       _ -> error "checking modref against incorrect type"
-  IR.Lam ne te i ->
+  IR.Lam _info ne te i ->
     case tyFunToArgList checkty of
       (tl, ret) -> do
         when (length tl /= NE.length ne) $ error "Arguments mismatch"
@@ -1212,7 +1212,7 @@ inferTerm = \case
         pure (TyModRef iface, v', [])
       [] -> error "Module reference does not implement any interfaces"
       _ -> error "Cannot infer module reference "
-  IR.Lam nts e i -> do
+  IR.Lam _info nts e i -> do
     let names = fst <$> nts
     ntys <- traverse withTypeInfo nts
     -- Todo: bidirectionality
