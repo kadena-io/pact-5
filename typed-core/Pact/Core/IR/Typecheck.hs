@@ -1045,24 +1045,26 @@ checkTermType checkty = \case
           pure (TyModRef iface, Typed.Var irn i, [])
         _ -> error "incorrect type"
       _ -> error "checking modref against incorrect type"
-  IR.Lam _info ne te i ->
+  IR.Lam _info irArgs te i ->
     case tyFunToArgList checkty of
       (tl, ret) -> do
-        when (length tl /= NE.length ne) $ error "Arguments mismatch"
-        let zipped = NE.zip ne (NE.fromList tl)
+        when (length tl /= NE.length irArgs) $ error "Arguments mismatch"
+        let zipped = NE.zip irArgs (NE.fromList tl)
         traverse_ (uncurry unifyArg) zipped
         let args = RAList.fromList $ reverse tl
         (_, te', preds) <- locally tcVarEnv (args RAList.++) $ checkTermType ret te
-        let ne' = over _1 fst <$> zipped
+        let ne' = over _1 _argName <$> zipped
         pure (checkty, Typed.Lam ne' te' i, preds)
     where
-    unifyArg (_, Just tl) tr = unify (liftType tl) tr i
+    unifyArg (Arg _ (Just tl)) tr = unify (liftType tl) tr i
     unifyArg _ _ = pure ()
-  IR.Let lty e1 e2 i -> do
-    (_, e1', pe1) <- checkTermType (liftType lty) e1
-    (_, e2', pe2) <- locally tcVarEnv (RAList.cons (liftType lty)) $ checkTermType checkty e2
-    let term' = Typed.Let (_argName lty) e1' e2' i
-    pure (checkty, term', pe1 ++ pe2)
+  IR.Let (Arg name mlty) e1 e2 i
+    | Just lty <- mlty -> do
+      (_, e1', pe1) <- checkTermType (liftType lty) e1
+      (_, e2', pe2) <- locally tcVarEnv (RAList.cons (liftType lty)) $ checkTermType checkty e2
+      let term' = Typed.Let name e1' e2' i
+      pure (checkty, term', pe1 ++ pe2)
+    | otherwise -> error "must have the type"
   IR.App te (h :| hs) i -> do
     (tapp, te', pe1) <- inferTerm te
     (rty, xs, ps) <- foldlM inferFunctionArgs (tapp, [], []) (h:hs)
@@ -1218,7 +1220,7 @@ inferTerm = \case
       [] -> error "Module reference does not implement any interfaces"
       _ -> error "Cannot infer module reference "
   IR.Lam _info nts e i -> do
-    let names = fst <$> nts
+    let names = _argName <$> nts
     ntys <- traverse withTypeInfo nts
     -- Todo: bidirectionality
     -- let m = IntMap.fromList $ NE.toList $ NE.zipWith (\n t ->  (_irUnique n, t)) names ntys
@@ -1228,7 +1230,7 @@ inferTerm = \case
         rty = foldr TyFun ty ntys
     pure (rty, Typed.Lam nts' e' i, preds)
     where
-    withTypeInfo p = case snd p of
+    withTypeInfo p = case _argType p of
       Just ty -> pure (liftType ty)
       Nothing -> TyVar <$> newTvRef
   IR.App te (h :| hs) i -> do
@@ -1250,14 +1252,16 @@ inferTerm = \case
   --       preds' = concat (pte : NE.toList (view _3 <$> as))
   --   unify te (foldr TyFun tv1 tys) i
   --   pure (tv1, Typed.App e' args' i, preds')
-  IR.Let ty e1 e2 i -> do
-    enterLevel
-    (te1, e1', pe1) <- checkTermType (liftType ty) e1
-    leaveLevel
-    -- Note: generalization is turned off.
-    -- (ts, e1Qual, deferred) <- generalizeWithTerm te1 pe1 e1Unqual
-    (te2, e2', pe2) <- locally tcVarEnv (RAList.cons te1) $ inferTerm e2
-    pure (te2, Typed.Let n e1' e2' i, pe1 ++ pe2)
+  IR.Let (Arg name mlty) e1 e2 i
+    | Just lty <- mlty -> do
+      enterLevel
+      (te1, e1', pe1) <- checkTermType (liftType lty) e1
+      leaveLevel
+      -- Note: generalization is turned off.
+      -- (ts, e1Qual, deferred) <- generalizeWithTerm te1 pe1 e1Unqual
+      (te2, e2', pe2) <- locally tcVarEnv (RAList.cons te1) $ inferTerm e2
+      pure (te2, Typed.Let name e1' e2' i, pe1 ++ pe2)
+    | otherwise -> error "must have the type annotated here"
   IR.Sequence e1 e2 i -> do
     (_, e1', pe1) <- inferTerm e1
     (te2, e2', pe2) <- inferTerm e2
