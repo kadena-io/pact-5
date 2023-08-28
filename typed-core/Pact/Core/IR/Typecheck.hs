@@ -32,7 +32,7 @@ module Pact.Core.IR.Typecheck
  ) where
 
 import Control.Lens hiding (Level)
-import Control.Monad ( when, unless )
+import Control.Monad ( when, unless, zipWithM )
 import Control.Monad.Reader
 import Control.Monad.ST
 -- import Control.Monad.ST.Unsafe(unsafeIOToST, unsafeSTToIO)
@@ -1129,15 +1129,18 @@ checkTermType checkty = \case
     -- as a matter of fact, the whole above block needs the same enforcement just
     -- for dfuns
     CreateUserGuard na tes -> case _nKind na of
-      NTopLevel mn mh ->
-        view (tcFree . at (FullyQualifiedName mn (_nName na) mh)) >>= \case
-          Just (DefunType fty) -> do
-            let (args, r) = tyFunToArgList fty
-            unify (liftType r) TyUnit i
-            when (length args /= length tes) $ error "invariant broken"
-            vs <- zipWithM (checkTermType . liftType) args tes
-            let tes' = view _2 <$> vs
-            pure (TyGuard, CreateUserGuard na tes', concat (view _3 <$> vs))
+      NTopLevel modname modhash ->
+        view (tcLoaded . loAllLoaded . at (FullyQualifiedName modname (_nName na) modhash)) >>= \case
+          Just (IR.Dfun (IR.Defun _name mirArgs mrty _term _info))
+            | Just rty <- mrty
+            , Just irArgs <- traverse _argType mirArgs -> do
+              let args = liftType <$> irArgs
+              unify (liftType rty) TyUnit i
+              when (length args /= length tes) $ error "invariant broken"
+              vs <- zipWithM checkTermType args tes
+              let tes' = view _2 <$> vs
+              pure (TyGuard, CreateUserGuard na tes', concatMap (view _3) vs)
+            | otherwise -> error "unannotated types"
           _ -> error "boom"
       _ -> error "invariant broken, must refer to a top level name"
 
