@@ -994,8 +994,13 @@ generalizeWithTerm' ty pp term = do
   gen' (TyModRef mr) = pure ([], TyModRef mr)
   gen' t@TyForall{} = pure ([], t)
 
-liftType :: Type Void -> Type a
-liftType = fmap absurd
+liftType :: IR.Type -> Type a
+liftType = \case
+  IR.TyPrim prim -> TyPrim prim
+  IR.TyList ty -> TyList $ liftType ty
+  IR.TyModRef modName -> TyModRef modName
+  IR.TyObject _schema -> error "TODO" -- TyObject schema
+  IR.TyTable _schema -> error "TODO" -- TyTable schema
 
 toTypedArg :: Arg ty -> TypedArg ty
 toTypedArg (Arg n (Just ty)) = TypedArg n ty
