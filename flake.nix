@@ -24,10 +24,10 @@
           pact-core =
             final.haskell-nix.project' {
               src = ./.;
-              compiler-nix-name = "ghc8107";
+              compiler-nix-name = "ghc962";
               shell.tools = {
                 cabal = {};
-                # haskell-language-server = {};
+                haskell-language-server = {};
               };
               shell.buildInputs = with pkgs; [
                 zlib
@@ -37,7 +37,14 @@
             };
         })
       ];
-    in flake // {
+      # This package depends on other packages at buildtime, but its output does not
+      # depend on them. This way, we don't have to download the entire closure to verify
+      # that those packages build.
+      mkCheck = name: package: pkgs.runCommand ("check-"+name) {} ''
+        echo ${name}: ${package}
+        echo works > $out
+      '';
+    in flake // rec {
       packages.default = flake.packages."pact-core:exe:repl";
 
       devShell = pkgs.haskellPackages.shellFor {
@@ -46,9 +53,15 @@
 
         buildInputs = with pkgs.haskellPackages; [
           cabal-install
+          haskell-language-server
         ];
 
         withHoogle = true;
       };
+      packages.check = pkgs.runCommand "check" {} ''
+        echo ${mkCheck "pact-core" packages.default}
+        echo ${mkCheck "devShell" flake.devShell}
+        echo works > $out
+      '';
     });
 }
