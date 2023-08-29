@@ -57,6 +57,7 @@ import qualified Data.RAList as RAList
 import qualified Data.Set as Set
 
 import Pact.Core.Builtin
+import Pact.Core.Hash (ModuleHash)
 import Pact.Core.Type(PrimType(..), Arg(..), TypedArg(..), BuiltinTC(..))
 import Pact.Core.Typed.Type
 import Pact.Core.Names
@@ -1019,6 +1020,15 @@ unifyFunArgs tys irArgs info
     traverse_ (\(irTy, ty) -> unify (liftType irTy) ty info) zipped
   | otherwise = error "unspecified arg types"
 
+getTopLevelDef
+  :: MonadReader (TCEnv s b i) m
+  => Text
+  -> ModuleName
+  -> ModuleHash
+  -> m (Maybe (IR.Def Name IR.Type b i))
+getTopLevelDef name modname modhash =
+  view (tcLoaded . loAllLoaded . at (FullyQualifiedName modname name modhash))
+
 checkTermType
   :: (TypeOfBuiltin b)
   => TCType s
@@ -1137,7 +1147,7 @@ checkTermType checkty = \case
     -- for dfuns
     CreateUserGuard na tes -> case _nKind na of
       NTopLevel modname modhash ->
-        view (tcLoaded . loAllLoaded . at (FullyQualifiedName modname (_nName na) modhash)) >>= \case
+        getTopLevelDef (_nName na) modname modhash >>= \case
           Just (IR.Dfun (IR.Defun _name mirArgs mrty _term _info))
             | Just rty <- mrty
             , Just irArgs <- traverse _argType mirArgs -> do
