@@ -1177,9 +1177,13 @@ checkTermType checkty = \case
     case tmref of
       TyModRef m -> view (tcModules . at m) >>= \case
         Just (InterfaceData iface _) -> case IR.findIfDef fn iface of
-          Just (IR.IfDfun df) -> do
-            unify (liftType (IR._ifdType df)) checkty i
-            pure (checkty, Typed.DynInvoke mref' fn i, preds)
+          Just (IR.IfDfun (IR.IfDefun _name irArgs irMRet _info))
+            | Just irRet <- irMRet -> do
+              let (tl, ret) = tyFunToArgList checkty
+              unifyFunArgs tl irArgs i
+              unify (liftType irRet) ret i
+              pure (checkty, Typed.DynInvoke mref' fn i, preds)
+            | otherwise -> error "unannotated return type"
           _ -> error "boom"
         _ -> error "boom"
       _ -> error "boom"
