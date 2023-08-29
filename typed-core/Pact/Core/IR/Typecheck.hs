@@ -42,7 +42,7 @@ import Control.Monad.Except
 import Data.Void
 -- import Data.Dynamic (Typeable)
 import Data.RAList(RAList)
-import Data.Foldable(traverse_, foldlM)
+import Data.Foldable(traverse_, foldlM, toList)
 import Data.Functor(($>))
 import Data.STRef
 import Data.Maybe(mapMaybe, fromMaybe)
@@ -1006,6 +1006,19 @@ toTypedArg :: Arg ty -> TypedArg ty
 toTypedArg (Arg n (Just ty)) = TypedArg n ty
 toTypedArg (Arg _ Nothing) = error "toTypedArg TODO must have type"
 
+unifyFunArgs
+  :: Traversable f
+  => [TCType s]
+  -> f (Arg IR.Type)
+  -> i
+  -> InferM s b' i ()
+unifyFunArgs tys irArgs info
+  | Just irTys <- traverse _argType irArgs = do
+    when (length tys /= length irTys) $ error "Arguments mismatch"
+    let zipped = zip (toList irTys) tys
+    traverse_ (\(irTy, ty) -> unify (liftType irTy) ty info) zipped
+  | otherwise = error "unspecified arg types"
+
 checkTermType
   :: (TypeOfBuiltin b)
   => TCType s
@@ -1045,19 +1058,13 @@ checkTermType checkty = \case
           pure (TyModRef iface, Typed.Var irn i, [])
         _ -> error "incorrect type"
       _ -> error "checking modref against incorrect type"
-  IR.Lam _info irArgs te i ->
-    case tyFunToArgList checkty of
-      (tl, ret) -> do
-        when (length tl /= NE.length irArgs) $ error "Arguments mismatch"
-        let zipped = NE.zip irArgs (NE.fromList tl)
-        traverse_ (uncurry unifyArg) zipped
-        let args = RAList.fromList $ reverse tl
-        (_, te', preds) <- locally tcVarEnv (args RAList.++) $ checkTermType ret te
-        let ne' = over _1 _argName <$> zipped
-        pure (checkty, Typed.Lam ne' te' i, preds)
-    where
-    unifyArg (Arg _ (Just tl)) tr = unify (liftType tl) tr i
-    unifyArg _ _ = pure ()
+  IR.Lam _info irArgs te i -> do
+    let (tl, ret) = tyFunToArgList checkty
+    unifyFunArgs tl irArgs i
+    let args = RAList.fromList $ reverse tl
+    (_, te', preds) <- locally tcVarEnv (args RAList.++) $ checkTermType ret te
+    let ne' = over _1 _argName <$> NE.zip irArgs (NE.fromList tl)
+    pure (checkty, Typed.Lam ne' te' i, preds)
   IR.Let (Arg name mlty) e1 e2 i
     | Just lty <- mlty -> do
       (_, e1', pe1) <- checkTermType (liftType lty) e1
