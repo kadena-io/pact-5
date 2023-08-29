@@ -15,8 +15,6 @@ import Pact.Core.Type(PrimType(..), BuiltinTC)
 import Pact.Core.Names
 import Pact.Core.Pretty
 
-import qualified Pact.Core.Type as CoreType
-
 data Type n
   = TyVar n
   -- ^ type variables
@@ -34,14 +32,6 @@ data Type n
   -- | TyTable Schema
   -- ^ Tables
   deriving (Eq, Show, Functor, Foldable, Traversable)
-
-liftCoreType :: CoreType.Type -> Type n
-liftCoreType = \case
-  CoreType.TyPrim p -> TyPrim p
-  CoreType.TyList t -> TyList (liftCoreType t)
-  CoreType.TyModRef m -> TyModRef m
-  CoreType.TyTable{} -> error "tytable"
-  CoreType.TyObject{} -> error "tyobject"
 
 pattern TyInt :: Type n
 pattern TyInt = TyPrim PrimInt

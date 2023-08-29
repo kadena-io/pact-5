@@ -1047,7 +1047,7 @@ checkTermType checkty = \case
     NTopLevel mn _mh ->
       view (tcLoaded . loAllLoaded . at (FullyQualifiedName mn n _mh)) >>= \case
         Just (IR.DCapDfun d) -> do
-          let funArgs = fmap liftCoreType . toTypedArg <$> IR._dfunArgs d
+          let funArgs = fmap liftType . toTypedArg <$> IR._dfunArgs d
               funRet = maybe (error "boom") id (_dfunRType d)
               rty = foldr (\arg ty -> TyFun (_targType arg) ty) funRet funArgs
           let newVar = Typed.Var irn i
