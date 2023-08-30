@@ -1242,13 +1242,17 @@ inferTerm = \case
           pure (ty, v', [])
         Nothing ->
           throwTypecheckError (TCUnboundTermVariable n) i
-    NTopLevel mn _mh ->
-      view (tcFree . at (FullyQualifiedName mn n _mh)) >>= \case
-        Just (DefunType ty) -> do
-          let newVar = Typed.Var irn i
-          pure (liftType ty, newVar, [])
-        _ ->
-          throwTypecheckError (TCUnboundFreeVariable mn n) i
+    NTopLevel mn mh ->
+      getTopLevelDef n mn mh >>= \case
+        Just (IR.Dfun df)
+          | Just irArgs <- traverse IR._argType $ IR._dfunArgs df
+          , Just irRet <- IR._dfunRType df -> do
+            let newVar = Typed.Var irn i
+                args = liftType <$> irArgs
+                ret = liftType irRet
+            pure (argListToTyFun args ret, newVar, [])
+          | otherwise -> error "unannotated types"
+        _ -> throwTypecheckError (TCUnboundFreeVariable mn n) i
     NModRef _ ifs -> case ifs of
       [iface] -> do
         let v' = Typed.Var irn i
