@@ -1218,11 +1218,13 @@ checkCapArgs
   -> InferM s reso i ([TCTerm s raw i], [TCPred s])
 checkCapArgs na tes = case _nKind na of
   NTopLevel mn mh ->
-    view (tcFree . at (FullyQualifiedName mn (_nName na) mh)) >>= \case
-      Just (DefcapType dcargs _) -> do
-        when (length dcargs /= length tes) $ error "invariant broken dcap args"
-        vs <- zipWithM (checkTermType . liftType) dcargs tes
-        pure (view _2 <$> vs, concat (view _3 <$> vs))
+    getTopLevelDef (_nName na) mn mh >>= \case
+      Just (IR.DCap dc)
+        | Just dcargs <- traverse IR._argType $ IR._dcapArgs dc -> do
+          when (length dcargs /= length tes) $ error "invariant broken dcap args"
+          vs <- zipWithM (checkTermType . liftType) dcargs tes
+          pure (view _2 <$> vs, concat (view _3 <$> vs))
+        | otherwise -> error "unannotated types"
       _ -> error "invariant broken"
   _ -> error "invariant broken"
 
