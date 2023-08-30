@@ -1012,13 +1012,27 @@ unifyFunArgs
   => [TCType s]
   -> f (Arg IR.Type)
   -> i
-  -> InferM s b' i ()
+  -> InferM s b i ()
 unifyFunArgs tys irArgs info
   | Just irTys <- traverse _argType irArgs = do
     when (length tys /= length irTys) $ error "Arguments mismatch"
     let zipped = zip (toList irTys) tys
     traverse_ (\(irTy, ty) -> unify (liftType irTy) ty info) zipped
   | otherwise = error "unspecified arg types"
+
+unifyFun
+  :: Traversable f
+  => TCType s
+  -> f (Arg IR.Type)
+  -> Maybe IR.Type
+  -> i
+  -> InferM s b i ()
+unifyFun funty irArgs (Just irRet) info = do
+  unifyFunArgs tys irArgs info
+  unify ret (liftType irRet) info
+  where
+    (tys, ret) = tyFunToArgList funty
+unifyFun _ _ Nothing _ = error "unannotated return type"
 
 getTopLevelDef
   :: MonadReader (TCEnv s b i) m
@@ -1187,13 +1201,9 @@ checkTermType checkty = \case
     case tmref of
       TyModRef m -> view (tcModules . at m) >>= \case
         Just (InterfaceData iface _) -> case IR.findIfDef fn iface of
-          Just (IR.IfDfun (IR.IfDefun _name irArgs irMRet _info))
-            | Just irRet <- irMRet -> do
-              let (tl, ret) = tyFunToArgList checkty
-              unifyFunArgs tl irArgs i
-              unify (liftType irRet) ret i
-              pure (checkty, Typed.DynInvoke mref' fn i, preds)
-            | otherwise -> error "unannotated return type"
+          Just (IR.IfDfun (IR.IfDefun _name irArgs irMRet _info)) -> do
+            unifyFun checkty irArgs irMRet i
+            pure (checkty, Typed.DynInvoke mref' fn i, preds)
           _ -> error "boom"
         _ -> error "boom"
       _ -> error "boom"
