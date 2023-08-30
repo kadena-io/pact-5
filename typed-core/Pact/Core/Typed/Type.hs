@@ -89,3 +89,6 @@ tyFunToArgList (TyFun l r) =
   unFun args (TyFun l' r') = unFun (l':args) r'
   unFun args ret = (reverse args, ret)
 tyFunToArgList r = ([], r)
+
+argListToTyFun :: [Type n] -> Type n -> Type n
+argListToTyFun args ret = foldr TyFun ret args
