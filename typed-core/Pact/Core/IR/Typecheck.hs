@@ -1058,17 +1058,17 @@ checkTermType checkty = \case
           pure (ty, v', [])
         Nothing ->
           throwTypecheckError (TCUnboundTermVariable n) i
-    NTopLevel mn _mh ->
-      view (tcLoaded . loAllLoaded . at (FullyQualifiedName mn n _mh)) >>= \case
-        Just (IR.DCapDfun d) -> do
-          let funArgs = fmap liftType . toTypedArg <$> IR._dfunArgs d
-              funRet = maybe (error "boom") id (_dfunRType d)
-              rty = foldr (\arg ty -> TyFun (_targType arg) ty) funRet funArgs
-          let newVar = Typed.Var irn i
-          unify rty checkty i
-          pure (rty, newVar, [])
-        _ ->
-          throwTypecheckError (TCUnboundFreeVariable mn n) i
+    NTopLevel mn mh ->
+      getTopLevelDef n mn mh >>= \case
+        Just (IR.Dfun df) -> do
+          unifyFun checkty (IR._dfunArgs df) (IR._dfunRType df) i
+          let rty = snd $ tyFunToArgList checkty
+          pure (rty, Typed.Var irn i, [])
+        Just (IR.DCap df) -> do
+          unifyFun checkty (IR._dcapArgs df) (IR._dcapRType df) i
+          let rty = snd $ tyFunToArgList checkty
+          pure (rty, Typed.Var irn i, [])
+        _ -> throwTypecheckError (TCUnboundFreeVariable mn n) i
     NModRef _ ifs -> case checkty of
       TyModRef mn -> do
         let newVar = Typed.Var irn i
