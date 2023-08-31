@@ -1405,14 +1405,15 @@ inferDefun
   -> InferM s b' i (TypedDefun b i)
 inferDefun (IR.Defun name dfargs dfRetType term info) = do
   enterLevel
-  let dfTy = foldr TyFun retType dfArgs'
+  (argTys, ret) <- irFunToTc dfargs dfRetType
+  let args = zipWith (\irArg ty -> TypedArg (IR._argName irArg) (liftNoFreeVars ty)) dfargs argTys
   (termTy, term', preds) <- inferTerm term
   leaveLevel
   checkReducible preds (view IR.termInfo term)
   -- fail "typeclass constraints not supported in defun"
-  unify (liftType dfTy) termTy info
+  unify (liftNoFreeVars $ argListToTyFun argTys ret) termTy info
   fterm <- noTyVarsinTerm info term'
-  pure (Typed.Defun name (liftType dfTy) fterm info)
+  pure (Typed.Defun name args (liftNoFreeVars ret) fterm info)
 
 inferDefConst
   :: TypeOfBuiltin b
