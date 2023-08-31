@@ -13,7 +13,7 @@ module Pact.Core.Builtin
  , ReplBuiltin(..)
  , replRawBuiltinNames
  , replRawBuiltinMap
- , BuiltinArity(..)
+ , IsBuiltin(..)
 --  , CapabilityOp(..)
 --  , CapType(..)
 --  , DefType(..)
@@ -26,8 +26,9 @@ module Pact.Core.Builtin
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 
+import Pact.Core.Names(NativeName(..))
 import Pact.Core.Pretty
 
 type ReplRawBuiltin = ReplBuiltin RawBuiltin
@@ -305,7 +306,8 @@ rawBuiltinToText = \case
   RawB64Decode -> "base64-decode"
   RawStrToList -> "str-to-list"
 
-instance BuiltinArity RawBuiltin where
+instance IsBuiltin RawBuiltin where
+  builtinName = NativeName . rawBuiltinToText
   builtinArity = \case
     RawAdd -> 2
     -- Num ->
@@ -385,7 +387,7 @@ rawBuiltinNames :: [Text]
 rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]
 
 rawBuiltinMap :: Map Text RawBuiltin
-rawBuiltinMap = Map.fromList $ (\b -> (rawBuiltinToText b, b)) <$> [minBound .. maxBound]
+rawBuiltinMap = M.fromList $ (\b -> (rawBuiltinToText b, b)) <$> [minBound .. maxBound]
 
 
 -- Note: commented out natives are
@@ -429,7 +431,8 @@ data ReplBuiltin b
 
 -- NOTE: Maybe `ReplBuiltin` is not a great abstraction, given
 -- expect arity changes based on whether it's corebuiltin or rawbuiltin
-instance BuiltinArity b => BuiltinArity (ReplBuiltin b) where
+instance IsBuiltin b => IsBuiltin (ReplBuiltin b) where
+  builtinName = NativeName . replBuiltinToText (_natName . builtinName)
   builtinArity = \case
     RBuiltinWrap b -> builtinArity b
     RExpect -> 3
@@ -489,12 +492,13 @@ replRawBuiltinNames = fmap (replBuiltinToText rawBuiltinToText) [minBound .. max
 
 replRawBuiltinMap :: Map Text (ReplBuiltin RawBuiltin)
 replRawBuiltinMap =
-  Map.fromList $ (\b -> (replBuiltinToText rawBuiltinToText b, b)) <$> [minBound .. maxBound]
+  M.fromList $ (\b -> (replBuiltinToText rawBuiltinToText b, b)) <$> [minBound .. maxBound]
 
 -- Todo: is not a great abstraction.
 -- In particular: the arity could be gathered from the type.
-class BuiltinArity b where
+class IsBuiltin b where
   builtinArity :: b -> Int
+  builtinName :: b -> NativeName
 
 
 instance Pretty RawBuiltin where
@@ -654,7 +658,8 @@ data CoreBuiltin
 instance Pretty CoreBuiltin where
   pretty = pretty . coreBuiltinToText
 
-instance BuiltinArity CoreBuiltin where
+instance IsBuiltin CoreBuiltin where
+  builtinName = NativeName . coreBuiltinToText
   builtinArity = \case
     AddInt -> 2
     SubInt -> 2

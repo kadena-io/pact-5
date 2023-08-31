@@ -242,6 +242,9 @@ instance Pretty NamedDeBruijn where
 newtype TableName = TableName Text
   deriving (Eq, Ord, Show)
 
+instance Pretty TableName where
+  pretty (TableName tn) = pretty tn
+
 -- | Constants for resolving repl things
 replRawModuleName :: Text
 replRawModuleName = "#repl"

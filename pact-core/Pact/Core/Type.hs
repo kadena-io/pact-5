@@ -19,6 +19,7 @@ module Pact.Core.Type
  , pattern TyUnit
  , pattern TyGuard
  , typeOfLit
+ , literalPrim
 --  , BuiltinTC(..)
 --  , Pred(..)
 --  , renderType
@@ -88,11 +89,11 @@ data Type
   -- ^ Objects
   | TyTable Schema
   -- ^ Tables
-  deriving (Eq, Show)
+  deriving (Eq, Show, Ord)
 
 newtype Schema
   = Schema { _schema :: Map Field Type }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Ord)
 
 pattern TyInt :: Type
 pattern TyInt = TyPrim PrimInt
@@ -152,7 +153,10 @@ pattern TyGuard = TyPrim PrimGuard
 --   deriving (Show, Functor, Foldable, Traversable)
 
 typeOfLit :: Literal -> Type
-typeOfLit = TyPrim . \case
+typeOfLit = TyPrim . literalPrim
+
+literalPrim :: Literal -> PrimType
+literalPrim = \case
   LString{} -> PrimString
   LInteger{} -> PrimInt
   LDecimal{} -> PrimDecimal

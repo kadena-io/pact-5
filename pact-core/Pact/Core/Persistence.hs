@@ -34,7 +34,7 @@ import Pact.Core.Guards
 import Pact.Core.Hash
 import Pact.Core.PactValue
 
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 
 -- | Modules as they are stored
 -- in our backend.
@@ -154,9 +154,9 @@ instance Monoid (Loaded b i) where
 
 mockPactDb :: forall b i. IO (PactDb b i)
 mockPactDb = do
-  refMod <- newIORef Map.empty
-  refKs <- newIORef Map.empty
-  refUsrTbl <- newIORef Map.empty
+  refMod <- newIORef M.empty
+  refKs <- newIORef M.empty
+  refUsrTbl <- newIORef M.empty
   pure $ PactDb
     { _pdbPurity = PImpure
     , _pdbRead = read' refKs refMod refUsrTbl
@@ -196,19 +196,19 @@ mockPactDb = do
     pure (r ^? ix tbl . ix k)
 
   writeRowData ref tbl k v =
-    modifyIORef' ref (Map.insertWith Map.union tbl (Map.singleton k v))
+    modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
 
   readKS ref ksn = do
     m <- readIORef ref
-    pure (Map.lookup ksn m)
+    pure (M.lookup ksn m)
 
-  writeKS ref ksn ks = modifyIORef' ref (Map.insert ksn ks)
+  writeKS ref ksn ks = modifyIORef' ref (M.insert ksn ks)
 
   readMod ref mn = do
     m <- readIORef ref
-    pure (Map.lookup mn m)
+    pure (M.lookup mn m)
 
   writeMod ref md = let
     mname = view mdModuleName md
-    in modifyIORef' ref (Map.insert mname md)
+    in modifyIORef' ref (M.insert mname md)
 

@@ -167,6 +167,7 @@ data CanApply b i m
 -- | The type of our semantic runtime values
 data CEKValue b i m
   = VPactValue PactValue
+  | VTable TableName ModuleName ModuleHash Schema
   -- = VLiteral !Literal
   -- | VList !(Vector (CEKValue b i m))
   | VClosure {-# UNPACK #-} !(CanApply b i m)
@@ -176,6 +177,7 @@ data CEKValue b i m
 instance Show (CEKValue b i m) where
   show = \case
     VPactValue pv -> show pv
+    VTable tn _ _ _sc -> "table" <> show tn
     VClosure _ -> "closure<>"
 
 pattern VLiteral :: Literal -> CEKValue b i m
@@ -375,14 +377,21 @@ data CapPopState
 
 data Cont b i m
   = Fn (CanApply b i m) (CEKEnv b i m) [EvalTerm b i] [CEKValue b i m] (Cont b i m)
+  -- ^ Continuation which evaluates arguments for a function to apply
   | Args (CEKEnv b i m) (NonEmpty (EvalTerm b i)) (Cont b i m)
+  -- ^ Continuation holding the arguments to evaluate in a function application
   | SeqC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
+  -- ^ Sequencing expression, holding the next term to evaluate
   | ListC (CEKEnv b i m) [EvalTerm b i] [PactValue] (Cont b i m)
+  -- ^ Continuation for list elements
   | CondC (CEKEnv b i m) (CondFrame b i) (Cont b i m)
+  -- ^ Continuation for conditionals with lazy semantics
   | ObjC (CEKEnv b i m) Field [(Field, EvalTerm b i)] [(Field, PactValue)] (Cont b i m)
-  -- env, current field, evaluated pairs, rest of the continuation
+  -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
   | DynInvokeC (CEKEnv b i m) Text (Cont b i m)
+  -- ^ Continuation for dynamic invocation of `m::f`
   | CapInvokeC (CEKEnv b i m) [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
+  -- ^ Capability special form frams that eva
   | CapBodyC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   | CapPopC CapPopState (Cont b i m)
   | StackPopC (Maybe Type) (Cont b i m)
@@ -436,17 +445,9 @@ instance (Pretty b, Show i, Show b) => Pretty (NativeFn b i m) where
 instance (Show i, Show b, Pretty b) => Pretty (CEKValue b i m) where
   pretty = \case
     VPactValue pv -> pretty pv
-    -- VLiteral i ->
-    --   pretty i
-    -- VList v ->
-    --   P.brackets $ P.hsep (P.punctuate P.comma (V.toList (pretty <$> v)))
+    VTable tn _ _ _sc -> "table" <> P.braces (pretty tn)
     VClosure{} ->
       P.angles "closure#"
-    -- VNative b ->
-    --   P.angles $ "native" <+> pretty b
-    -- VGuard _ -> P.angles "guard#"
-    -- VModRef mn _ ->
-    --   "modref" <> P.braces (pretty mn)
 
 makeLenses ''EvalEnv
 makeLenses ''EvalTEnv

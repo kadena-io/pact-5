@@ -22,6 +22,7 @@ import Data.Dynamic (Typeable)
 
 import Pact.Core.Type
 import Pact.Core.Names
+import Pact.Core.Guards
 import Pact.Core.Info
 import Pact.Core.Pretty(Pretty(..))
 
@@ -226,14 +227,22 @@ instance Pretty DesugarError where
 -- instance Exception OverloadError
 
 data ArgTypeError
-  = ATEType Type
+  = ATEPrim PrimType
+  | ATEList
+  | ATEObject
+  | ATETable
   | ATEClosure
+  | ATEModRef
   deriving (Show)
 
 instance Pretty ArgTypeError where
   pretty = \case
-    ATEType ty -> pretty ty
-    ATEClosure -> "<closure>"
+    ATEPrim p -> Pretty.brackets $ pretty p
+    ATEList -> "[list]"
+    ATEObject -> "[object]"
+    ATETable -> "[table]"
+    ATEClosure -> "[closure]"
+    ATEModRef -> "[modref]"
 
 -- | All fatal execution errors which should pause
 --
@@ -257,6 +266,22 @@ data EvalError
   | EvalError Text
   -- ^ Error raised by the program that went unhandled
   | NativeArgumentsError NativeName [ArgTypeError]
+  -- ^ Error raised: native called with the wrong arguments
+  | ModRefNotRefined Text
+  -- ^ Module reference not refined to a value
+  | InvalidDefKind DefKind Text
+  -- ^ Def used in method has wrong type + reason
+  | NoSuchDef FullyQualifiedName
+  -- ^ Could not find a definition with the above name
+  | InvalidManagedCap FullyQualifiedName
+  -- ^ Name does not point to a managed capability
+  | CapNotInstalled FullyQualifiedName
+  -- ^ Capability not installed
+  | NameNotInScope FullyQualifiedName
+  -- ^ Name not found in the top level environment
+  | DefIsNotClosure Text
+  -- ^ Def is not a closure
+  | NoSuchKeySet KeySetName
   deriving Show
 
 instance Pretty EvalError where
@@ -286,6 +311,7 @@ instance Pretty EvalError where
       Pretty.hsep ["Native evaluation error for native", pretty n <> ",", "received incorrect argument(s) of type(s)", Pretty.commaSep tys]
     EvalError txt ->
       Pretty.hsep ["Program encountered an unhandled raised error:", pretty txt]
+    _ -> error "todo: render"
 
 
 

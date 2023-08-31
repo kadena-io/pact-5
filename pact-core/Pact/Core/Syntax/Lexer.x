@@ -106,21 +106,7 @@ tokens :-
     \:\=         { token TokenBindAssign }
     \:\:         { token TokenDynAcc }
     \:           { token TokenColon }
-    -- \=           { token TokenEq }
-    -- \!\=         { token TokenNeq }
-    -- \>\=         { token TokenGEQ }
-    -- \>           { token TokenGT }
-    -- \<\=         { token TokenLEQ }
-    -- \<           { token TokenLT }
-    -- \+           { token TokenPlus }
-    -- \-           { token TokenMinus }
-    -- \*           { token TokenMult }
-    -- \/           { token TokenDiv }
-    -- \&           { token TokenBitAnd }
-    -- \|           { token TokenBitOr }
-    -- \~           { token TokenBitComplement }
     \"           { stringLiteral }
-    -- \^           { token TokenPow }
     @ident       { emit TokenIdent }
 {
 

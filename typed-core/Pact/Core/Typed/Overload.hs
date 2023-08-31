@@ -834,7 +834,7 @@ lengthResolve =
 -- eqDict eq neq i =
 --   ObjectLit o i
 --   where
---   o = Map.fromList
+--   o = M.fromList
 --     [(Field "==", Builtin eq i)
 --     ,(Field "/=", Builtin neq i)]
 
@@ -842,13 +842,13 @@ lengthResolve =
 -- showDict s i =
 --   ObjectLit o i
 --   where
---   o = Map.singleton (Field "show") (Builtin s i)
+--   o = M.singleton (Field "show") (Builtin s i)
 
 -- ordDict :: b -> b -> b -> b -> i -> Term n tn b i
 -- ordDict gt geq lt leq i =
 --   ObjectLit o i
 --   where
---   o = Map.fromList
+--   o = M.fromList
 --     [ (Field ">", Builtin gt i)
 --     , (Field ">=", Builtin geq i)
 --     , (Field "<", Builtin lt i)
@@ -858,7 +858,7 @@ lengthResolve =
 -- addDict add i =
 --   ObjectLit o i
 --   where
---   o = Map.singleton (Field "+") (Builtin add i)
+--   o = M.singleton (Field "+") (Builtin add i)
 
 -- numDict :: builtin
 --   -> builtin
@@ -870,7 +870,7 @@ lengthResolve =
 -- numDict sub mul divv neg abs' i =
 --   ObjectLit o i
 --   where
---   o = Map.fromList
+--   o = M.fromList
 --     [ (Field "-", Builtin sub i)
 --     , (Field "*", Builtin mul i)
 --     , (Field "/", Builtin divv i)
@@ -886,7 +886,7 @@ lengthResolve =
 -- fracDict ln_ exp_ sqrt_ logBase_ i =
 --   ObjectLit o i
 --   where
---   o = Map.fromList
+--   o = M.fromList
 --     [ (Field "ln", Builtin ln_ i)
 --     , (Field "exp", Builtin exp_ i)
 --     , (Field "sqrt", Builtin sqrt_ i)
@@ -902,7 +902,7 @@ lengthResolve =
 -- listLikeDict take_ drop_ concat_ rev len i =
 --   ObjectLit o i
 --   where
---   o = Map.fromList
+--   o = M.fromList
 --     [ (Field "take", Builtin take_ i)
 --     , (Field "drop", Builtin drop_ i)
 --     , (Field "concat", Builtin concat_ i)

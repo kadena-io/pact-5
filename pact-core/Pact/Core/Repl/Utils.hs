@@ -47,7 +47,7 @@ import Data.List(isPrefixOf)
 import Data.Maybe(mapMaybe)
 import Data.ByteString(ByteString)
 import qualified Data.Set as Set
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import Text.Megaparsec((<|>), (<?>))
 import qualified Text.Megaparsec as MP
@@ -232,8 +232,8 @@ replCompletion
 replCompletion natives =
   completeQuotedWord (Just '\\') "\"" listFiles $
   completeWord (Just '\\') filenameWordBreakChars $ \str -> do
-    tlns <- uses (replLoaded . loToplevel) Map.keys
-    moduleNames <- uses (replLoaded . loModules) (fmap renderModuleName . Map.keys)
+    tlns <- uses (replLoaded . loToplevel) M.keys
+    moduleNames <- uses (replLoaded . loModules) (fmap renderModuleName . M.keys)
     prefixedNames <- uses (replLoaded . loModules) toPrefixed
     let
       cmds = [":load", ":type", ":syntax", ":debug"]
@@ -248,7 +248,7 @@ replCompletion natives =
       fmap Term._dcName $ mapMaybe (preview Term._IfDConst) $ Term._ifDefns iface
     -- fmap Term.defName . Term._mDefs . _mdModule
   toPrefixed m =
-    concat $ prefixF <$> Map.toList m
+    concat $ prefixF <$> M.toList m
   prefixF (mn, ems) = let
     dns = defNames ems
     in fmap ((renderModuleName mn <> ".") <>) dns

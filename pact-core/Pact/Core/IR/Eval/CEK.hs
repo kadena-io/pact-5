@@ -1,7 +1,15 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Pact.Core.IR.Eval.CEK where
+module Pact.Core.IR.Eval.CEK
+  ( eval
+  , returnCEKValue
+  , returnCEK
+  , applyLam
+  , throwExecutionError
+  , unsafeApplyOne
+  , unsafeApplyTwo) where
 
 import Control.Lens hiding ((%%=))
 import Control.Monad(zipWithM)
@@ -39,10 +47,10 @@ chargeNodeGas nt = do
   chargeGas (gm nt)
 
 
-chargeNative :: MonadEval b i m => b -> m ()
-chargeNative native = do
-  gm <- view (eeGasModel . geGasModel . gmNatives) <$> readEnv
-  chargeGas (gm native)
+-- chargeNative :: MonadEval b i m => b -> m ()
+-- chargeNative native = do
+--   gm <- view (eeGasModel . geGasModel . gmNatives) <$> readEnv
+--   chargeGas (gm native)
 
 -- Todo: exception handling? do we want labels
 -- Todo: `traverse` usage should be perf tested.
@@ -77,11 +85,17 @@ evalCEK cont handler env (Var n info)  = do
           returnCEKValue cont handler dfunClo
         Just (DConst d) ->
           evalCEK cont handler mempty (_dcTerm d)
-        Just _ -> failInvariant' "invalid call" info
-        Nothing -> failInvariant' ("top level name " <> T.pack (show fqn) <> " not in scope") info
+        Just (DTable d) ->
+          let (ResolvedTable sc) = _dtSchema d
+              tbl = VTable (TableName (_dtName d)) mname mh sc
+          in returnCEKValue cont handler tbl
+        Just d ->
+          throwExecutionError info (InvalidDefKind (defKind d) "in var position")
+        Nothing ->
+          throwExecutionError info (NameNotInScope (FullyQualifiedName mname (_nName n) mh))
     NModRef m ifs -> case ifs of
       [x] -> returnCEKValue cont handler (VModRef (ModRef m ifs (Just x)))
-      [] -> error "module does not implement any interfaces to use as a module reference"
+      [] -> throwExecutionError info (ModRefNotRefined (_nName n))
       _ -> returnCEKValue cont handler (VModRef (ModRef m ifs Nothing))
 evalCEK cont handler _env (Constant l _) = do
   chargeNodeGas ConstantNode
@@ -156,9 +170,9 @@ evalCEK cont handler env (ListLit ts _) = do
   case ts of
     [] -> returnCEKValue cont handler (VList mempty)
     x:xs -> evalCEK (ListC env xs [] cont) handler env x
-evalCEK cont handler env (Try e1 rest _) = do
+evalCEK cont handler env (Try catchExpr rest _) = do
   caps <- useEvalState (esCaps . csSlots)
-  let handler' = CEKHandler env e1 cont caps handler
+  let handler' = CEKHandler env catchExpr cont caps handler
   evalCEK Mt handler' env rest
 evalCEK cont handler env (DynInvoke n fn _) =
   evalCEK (DynInvokeC env fn cont) handler env n
@@ -173,11 +187,15 @@ evalCEK cont handler env (ObjectLit o _) =
 evalCEK _ handler _ (Error e _) =
   returnCEK Mt handler (VError e)
 
-mkDefunClosure :: Applicative f => Defun Name Type b i -> f (CEKValue b i m)
+mkDefunClosure
+  :: (MonadEval b i m)
+  => Defun Name Type b i
+  -> m (CEKValue b i m)
 mkDefunClosure d = case _dfunTerm d of
   Lam li args body i ->
     pure (VDefClosure (Closure li (_argType <$> args) (NE.length args) body (_dfunRType d) i))
-  _ -> error "defun is not a function, fatal"
+  _ ->
+    throwExecutionError (_dfunInfo d) (DefIsNotClosure (_dfunName d))
 
 -- Todo: fail invariant
 nameToFQN :: Applicative f => Name -> f FullyQualifiedName
@@ -213,7 +231,8 @@ evalCap cont handler env ct@(CapToken fqn args) contbody = do
               let cap = CapToken fqn (filterIndex cix args)
               -- Find the capability post-filtering
               case find ((==) cap . _mcCap) caps of
-                Nothing -> error "cap not installed"
+                Nothing ->
+                  throwExecutionError (_dcapInfo d) (CapNotInstalled fqn)
                 Just managedCap -> case _mcManaged managedCap of
                   ManagedParam mpfqn pv managedIx -> do
                     lookupFqName mpfqn >>= \case
@@ -230,15 +249,12 @@ evalCap cont handler env ct@(CapToken fqn args) contbody = do
               case find ((==) ct . _mcCap) caps of
                 Nothing -> error "cap not installed"
                 Just managedCap -> case _mcManaged managedCap of
-                  ManagedParam mpfqn pv managedIx -> do
-                    lookupFqName mpfqn >>= \case
-                      Just (Dfun dfun) -> do
-                        mparam <- maybe (error "fatal: no param") pure (args ^? ix managedIx)
-                        result <- evaluate (_dfunTerm dfun) pv mparam
-                        let mcM = ManagedParam mpfqn result managedIx
-                        esCaps . csManaged %%= S.union (S.singleton (set mcManaged mcM managedCap))
-                        evalCEK cont' handler env' capBody
-                      _ -> error "not a defun"
+                  AutoManaged b -> do
+                    if b then error "automanaged cap already used once"
+                    else do
+                      let newManaged = AutoManaged True
+                      esCaps . csManaged %%= S.union (S.singleton (set mcManaged newManaged managedCap))
+                      evalCEK cont' handler env' capBody
                   _ -> error "incorrect cap type"
         Just DefEvent -> error "defEvent"
         Nothing -> evalCEK cont' handler env' capBody
@@ -287,17 +303,22 @@ composeCap cont handler ct@(CapToken fqn args) = do
   lookupFqName fqn >>= \case
     Just (DCap d) -> do
       (esCaps . csSlots) %%= (CapSlot ct []:)
-      let (env', capBody) = applyCapBody args (_dcapTerm d)
-          cont' = CapPopC PopCapComposed cont
+      (env', capBody) <- applyCapBody (_dcapTerm d)
+      let cont' = CapPopC PopCapComposed cont
       evalCEK cont' handler env' capBody
-    Just {} -> error "was not defcap, invariant violated"
-    Nothing -> error "No such def"
+    -- todo: this error loc is _not_ good. Need to propagate `i` here, maybe in the stack
+    Just d ->
+      throwExecutionError (defInfo d) $ InvalidDefKind (defKind d) "in compose-capability"
+    Nothing ->
+      -- Todo: error loc here
+      throwExecutionError' (NoSuchDef fqn)
   where
   -- Todo: typecheck arg here
   -- Todo: definitely a bug if a cap has a lambda as a body
-  applyCapBody bArgs (Lam _ _lamArgs body _) = (RAList.fromList (fmap VPactValue (reverse bArgs)), body)
-  applyCapBody [] b = (mempty, b)
-  applyCapBody _ _ = error "invariant broken: cap does not take arguments but is a lambda"
+  applyCapBody (Lam _ lamArgs body _) = do
+    args' <- zipWithM (\pv arg -> maybeTCType pv (_argType arg)) args (NE.toList lamArgs)
+    pure (RAList.fromList (fmap VPactValue (reverse args')), body)
+  applyCapBody b = pure (mempty, b)
 
 filterIndex :: Int -> [a] -> [a]
 filterIndex i xs = [x | (x, i') <- zip xs [0..], i /= i']
@@ -313,7 +334,7 @@ installCap cont handler ct@(CapToken fqn args) = do
       Just (DefManaged m) -> case m of
         Just (DefManagedMeta paramIx mgrfn) -> do
           fqnMgr <- nameToFQN mgrfn
-          managedParam <- maybe (error "no param") pure (args ^? ix paramIx)
+          managedParam <- maybe (throwExecutionError (_dcapInfo d) (InvalidManagedCap fqn)) pure (args ^? ix paramIx)
           let mcapType = ManagedParam fqnMgr managedParam paramIx
               ctFiltered = CapToken fqn (filterIndex paramIx args)
               mcap = ManagedCap ctFiltered ct mcapType
@@ -324,10 +345,13 @@ installCap cont handler ct@(CapToken fqn args) = do
               mcap = ManagedCap ct ct mcapType
           (esCaps . csManaged) %%= S.insert mcap
           returnCEKValue cont handler VUnit
-      Just DefEvent -> error "cannot install an event cap"
-      Nothing -> error "cap is not managed"
-    Just _ -> error "not a dcap"
-    Nothing -> error "no such reference dcap"
+      Just DefEvent ->
+        throwExecutionError (_dcapInfo d) (InvalidManagedCap fqn)
+      Nothing -> throwExecutionError (_dcapInfo d) (InvalidManagedCap fqn)
+    Just d ->
+      -- todo: error loc here is not in install-cap
+      throwExecutionError (defInfo d) (InvalidDefKind (defKind d) "install-capability")
+    Nothing -> throwExecutionError' (NoSuchDef fqn)
 
 -- Todo: should we typecheck / arity check here?
 createUserGuard
@@ -420,7 +444,9 @@ returnCEKValue (CondC env frame cont) handler v = case v of
     IfFrame ifExpr elseExpr ->
       if b then evalCEK cont handler env ifExpr
       else evalCEK cont handler env elseExpr
-  _ -> failInvariant "Evaluation of conditional expression yielded non-boolean value"
+  _ ->
+    -- Todo: thread error loc here
+    failInvariant "Evaluation of conditional expression yielded non-boolean value"
 returnCEKValue (CapInvokeC env terms pvs cf cont) handler v = do
   pv <- enforcePactValue v
   case terms of
@@ -584,35 +610,19 @@ failInvariant' b i =
   let e = PEExecutionError (InvariantFailure b) i
   in throwError e
 
-throwExecutionError' :: (MonadEval b i m) => EvalError -> m a
-throwExecutionError' e = throwError (PEExecutionError e def)
-
 -- | Apply one argument to a value
 unsafeApplyOne
   :: MonadEval b i m
-  => CEKValue b i m
+  => CanApply b i m
   -> CEKValue b i m
   -> m (EvalResult b i m)
-unsafeApplyOne (VClosure c) arg =
+unsafeApplyOne c arg =
   applyLam c [arg] Mt CEKNoHandler
---   let cont = Fn (C c) mempty [] [] Mt
---   returnCEKValue cont CEKNoHandler arg
--- unsafeApplyOne (VNative (NativeFn b fn arity args i)) arg =
---   if arity - 1 <= 0 then fn Mt CEKNoHandler (reverse (arg:args))
---   else pure (EvalValue (VNative (NativeFn b fn (arity - 1) (arg:args) i)))
-unsafeApplyOne _ _ = failInvariant "Applied argument to non-closure in native"
 
 unsafeApplyTwo
   :: MonadEval b i m
-  => CEKValue b i m
+  => CanApply b i m
   -> CEKValue b i m
   -> CEKValue b i m
   -> m (EvalResult b i m)
-unsafeApplyTwo (VClosure c) arg1 arg2 = applyLam c [arg1, arg2] Mt CEKNoHandler
--- unsafeApplyTwo (VClosure c) arg1 arg2 = do
---   let cont = Fn (C c) mempty [] [arg1] Mt
---   returnCEKValue cont CEKNoHandler arg2
--- unsafeApplyTwo (VNative (NativeFn b fn arity args i)) arg1 arg2 =
---   if arity - 2 <= 0 then fn Mt CEKNoHandler (reverse (arg1:arg2:args))
---   else pure $ EvalValue $ VNative $ NativeFn b fn (arity - 2) (arg1:arg2:args) i
-unsafeApplyTwo _ _ _ = failInvariant "Applied argument to non-closure in native"
+unsafeApplyTwo c arg1 arg2 = applyLam c [arg1, arg2] Mt CEKNoHandler

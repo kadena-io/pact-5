@@ -40,7 +40,7 @@ import Data.Graph(stronglyConnComp, SCC(..))
 import Data.Foldable(foldl', foldlM)
 import Data.Proxy
 import Data.Foldable(find, traverse_, foldrM)
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 
@@ -217,7 +217,7 @@ desugarLispTerm
   -> m (Term ParsedName DesugarType raw i)
 desugarLispTerm = \case
   Lisp.Var (BN n) i  ->
-    case Map.lookup (_bnName n) reservedNatives' of
+    case M.lookup (_bnName n) reservedNatives' of
       Just b -> pure (Builtin b i)
       Nothing ->
         pure (Var (BN n) i)
@@ -383,7 +383,7 @@ desugarDefSchema
   -> m (DefSchema DesugarType info)
 desugarDefSchema (Lisp.DefSchema dsn args _docs _model i) = do
   let args' = (\(Lisp.Arg n ty) -> (Field n, ty)) <$> args
-      scd = Map.fromList args'
+      scd = M.fromList args'
   pure $ DefSchema dsn scd i
 
 desugarDefTable
@@ -632,7 +632,7 @@ loadModule' module_ deps = do
   let modName = _mName module_
       mhash = _mHash module_
       toDepMap def = (defName def, (NTopLevel modName mhash, defKind def))
-      depMap = Map.fromList $ toDepMap <$> _mDefs module_
+      depMap = M.fromList $ toDepMap <$> _mDefs module_
   loadModule module_ deps depMap
 
 
@@ -647,7 +647,7 @@ loadInterface' iface deps = do
       mhash = _ifHash iface
       toDepMap def = (defName def, (NTopLevel modName mhash, defKind def))
       dcDeps = mapMaybe (fmap DConst . preview _IfDConst) (_ifDefns iface)
-      dconstDeps = Map.fromList $ toDepMap <$> dcDeps
+      dconstDeps = M.fromList $ toDepMap <$> dcDeps
   loadInterface iface deps dconstDeps dcDeps
 
 -- | Load a module and it's constituents into the `Loaded` environment.
@@ -661,10 +661,10 @@ loadModule
 loadModule module_ deps depMap = do
   let modName = _mName module_
   let mhash = _mHash module_
-  let memberTerms = Map.fromList (toFqDep modName mhash <$> _mDefs module_)
-      allDeps = Map.union memberTerms deps
-  rsLoaded %= over loModules (Map.insert modName (ModuleData module_ deps)) . over loAllLoaded (Map.union allDeps)
-  rsModuleBinds %= Map.insert modName depMap
+  let memberTerms = M.fromList (toFqDep modName mhash <$> _mDefs module_)
+      allDeps = M.union memberTerms deps
+  rsLoaded %= over loModules (M.insert modName (ModuleData module_ deps)) . over loAllLoaded (M.union allDeps)
+  rsModuleBinds %= M.insert modName depMap
   rsDependencies %= Set.insert modName
 
 -- Load an interface into the `Loaded` environment
@@ -681,10 +681,10 @@ loadInterface
 loadInterface iface deps depMap dcDeps = do
   let ifaceName = _ifName iface
       ifhash = _ifHash iface
-  let memberTerms = Map.fromList (toFqDep ifaceName ifhash <$> dcDeps)
-      allDeps = Map.union memberTerms deps
-  rsLoaded %= over loModules (Map.insert ifaceName (InterfaceData iface deps)) . over loAllLoaded (Map.union allDeps)
-  rsModuleBinds %= Map.insert ifaceName depMap
+  let memberTerms = M.fromList (toFqDep ifaceName ifhash <$> dcDeps)
+      allDeps = M.union memberTerms deps
+  rsLoaded %= over loModules (M.insert ifaceName (InterfaceData iface deps)) . over loAllLoaded (M.union allDeps)
+  rsModuleBinds %= M.insert ifaceName depMap
   rsDependencies %= Set.insert ifaceName
 
 -- | Look up a qualified name in the pact db
@@ -705,8 +705,8 @@ lookupModuleMember modName name i = do
     Just m -> case m of
       ModuleData module_ deps ->
         let mhash = _mHash module_
-            depMap = Map.fromList $ toDepMap mhash <$> _mDefs module_
-        in case Map.lookup name depMap of
+            depMap = M.fromList $ toDepMap mhash <$> _mDefs module_
+        in case M.lookup name depMap of
           -- Great! The name exists
           -- This, we must include the module in `Loaded`, as well as propagate its deps and
           -- all loaded members in `loAllLoaded`
@@ -721,8 +721,8 @@ lookupModuleMember modName name i = do
       InterfaceData iface deps -> do
         let mhash = _ifHash iface
             dcDeps = mapMaybe (fmap DConst . preview _IfDConst) (_ifDefns iface)
-            dconstDeps = Map.fromList $ toDepMap mhash <$> dcDeps
-        case Map.lookup name dconstDeps of
+            dconstDeps = M.fromList $ toDepMap mhash <$> dcDeps
+        case M.lookup name dconstDeps of
           Just (nk, dk) -> do
             loadInterface iface deps dconstDeps dcDeps
             pure (Name name nk, dk)
@@ -793,19 +793,19 @@ renameTerm (Lam li nsts body i) = do
   let len = fromIntegral (NE.length nsts)
       newDepth = depth + len
       ixs = NE.fromList [depth .. newDepth - 1]
-  let m = Map.fromList $ NE.toList $ NE.zip (_argName <$> nsts) ((,Nothing). NBound <$> ixs)
+  let m = M.fromList $ NE.toList $ NE.zip (_argName <$> nsts) ((,Nothing). NBound <$> ixs)
   term' <- local (inEnv m newDepth) (renameTerm body)
   nsts' <- (traversed . argType . _Just) (renameType i) nsts
   pure (Lam li nsts' term' i)
   where
   inEnv m depth =
-    over reBinds (Map.union m) .
+    over reBinds (M.union m) .
     set reVarDepth depth
 renameTerm (Let arg e1 e2 i) = do
   depth <- view reVarDepth
   arg' <- traverse (renameType i) arg
   let inEnv = over reVarDepth succ .
-              over reBinds (Map.insert (_argName arg) (NBound depth, Nothing))
+              over reBinds (M.insert (_argName arg) (NBound depth, Nothing))
   e1' <- renameTerm e1
   e2' <- local inEnv (renameTerm e2)
   pure (Let arg' e1' e2' i)
@@ -918,8 +918,8 @@ renameReplDefun (Defun n args ret term i) = do
   let fqn = FullyQualifiedName replModuleName n replModuleHash
   args' <- (traverse.traverse) (renameType i) args
   ret' <- traverse (renameType i) ret
-  rsModuleBinds %= Map.insertWith (<>) replModuleName (Map.singleton n (NTopLevel replModuleName replModuleHash, DKDefun))
-  rsLoaded . loToplevel %= Map.insert n (fqn, DKDefun)
+  rsModuleBinds %= M.insertWith (<>) replModuleName (M.singleton n (NTopLevel replModuleName replModuleHash, DKDefun))
+  rsLoaded . loToplevel %= M.insert n (fqn, DKDefun)
   term' <- local (set reCurrDef (Just DKDefun)) $ renameTerm term
   pure (Defun n args' ret' term' i)
 
@@ -930,8 +930,8 @@ renameReplDefConst
 renameReplDefConst (DefConst n mty term i) = do
   -- Todo: put type variables in scoperhere, if we want to support polymorphism
   let fqn = FullyQualifiedName replModuleName n replModuleHash
-  rsModuleBinds %= Map.insertWith (<>) replModuleName (Map.singleton n (NTopLevel replModuleName replModuleHash, DKDefConst))
-  rsLoaded . loToplevel %= Map.insert n (fqn, DKDefConst)
+  rsModuleBinds %= M.insertWith (<>) replModuleName (M.singleton n (NTopLevel replModuleName replModuleHash, DKDefConst))
+  rsLoaded . loToplevel %= M.insert n (fqn, DKDefConst)
   mty' <- traverse (renameType i) mty
   term' <- renameTerm term
   pure (DefConst n mty' term' i)
@@ -1007,13 +1007,13 @@ resolveBare
   => BareName
   -> i
   -> m (Name, Maybe DefKind)
-resolveBare (BareName bn) i = views reBinds (Map.lookup bn) >>= \case
+resolveBare (BareName bn) i = views reBinds (M.lookup bn) >>= \case
   Just tnk -> case tnk of
     (NBound d, _) -> do
       depth <- view reVarDepth
       pure (Name bn (NBound (depth - d - 1)), Nothing)
     (nk, dk) -> pure (Name bn nk, dk)
-  Nothing -> uses (rsLoaded . loToplevel) (Map.lookup bn) >>= \case
+  Nothing -> uses (rsLoaded . loToplevel) (M.lookup bn) >>= \case
     Just (fqn, dk) -> pure (Name bn (NTopLevel (_fqModule fqn) (_fqHash fqn)), Just dk)
     Nothing -> do
       let mn = ModuleName bn Nothing
@@ -1031,8 +1031,8 @@ resolveQualified
   -> i
   -> m (Name, DefKind)
 resolveQualified (QualifiedName qn qmn) i = do
-  uses rsModuleBinds (Map.lookup qmn) >>= \case
-    Just binds -> case Map.lookup qn binds of
+  uses rsModuleBinds (M.lookup qmn) >>= \case
+    Just binds -> case M.lookup qn binds of
       Just (nk, dk) -> pure (Name qn nk, dk)
       Nothing ->
         throwDesugarError (NoSuchModuleMember qmn qn) i
@@ -1045,8 +1045,8 @@ renameModule
   => Module ParsedName DesugarType raw i
   -> m (Module Name Type raw i)
 renameModule (Module mname mgov defs blessed imp implements mhash i) = local (set reCurrModule (Just mname)) $ do
-  -- let defMap = Map.fromList $ (\d -> (defName d, (NTopLevel mname mhash, defKind d))) <$> defs
-  -- let fqns = Map.fromList $ (\d -> (defName d, (FullyQualifiedName mname (defName d) mhash, defKind d))) <$> defs
+  -- let defMap = M.fromList $ (\d -> (defName d, (NTopLevel mname mhash, defKind d))) <$> defs
+  -- let fqns = M.fromList $ (\d -> (defName d, (FullyQualifiedName mname (defName d) mhash, defKind d))) <$> defs
   -- `maybe all of this next section should be in a block laid out by the
   -- `locally reBinds`
   mgov' <- resolveGov mgov
@@ -1059,10 +1059,10 @@ renameModule (Module mname mgov defs blessed imp implements mhash i) = local (se
       -- but all uses of `head` are still scary
       throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (head d))
   binds <- view reBinds
-  rsModuleBinds %= Map.insert mname mempty
+  rsModuleBinds %= M.insert mname mempty
   (defs'', _, _) <- over _1 reverse <$> foldlM go ([], Set.empty, binds) defs'
-  let fqns = Map.fromList $ (\d -> (defName d, (FullyQualifiedName mname (defName d) mhash, defKind d))) <$> defs''
-  rsLoaded . loToplevel %= Map.union fqns
+  let fqns = M.fromList $ (\d -> (defName d, (FullyQualifiedName mname (defName d) mhash, defKind d))) <$> defs''
+  rsLoaded . loToplevel %= M.union fqns
   traverse_ (checkImplements i mname defs'') implements
   pure (Module mname mgov' defs'' blessed imp implements mhash i)
   where
@@ -1073,8 +1073,8 @@ renameModule (Module mname mgov defs blessed imp implements mhash i) = local (se
     liftIO $ print $ "at defname: " <> show dn
     defn' <- local (set reBinds m) $ renameDef defn
     let depPair = (NTopLevel mname mhash, defKind defn')
-    let m' = Map.insert dn (over _2 Just depPair) m
-    rsModuleBinds . ix mname %= Map.insert dn depPair
+    let m' = M.insert dn (over _2 Just depPair) m
+    rsModuleBinds . ix mname %= M.insert dn depPair
     use rsModuleBinds >>= liftIO . print
     pure (defn':defns, Set.insert (defName defn) s, m')
 
@@ -1129,12 +1129,12 @@ renameInterface
   => Interface ParsedName DesugarType raw i
   -> m (Interface Name Type raw i)
 renameInterface (Interface ifn defs ih info) = local (set reCurrModule (Just ifn)) $ do
-      -- defMap = Map.fromList $ (, (NTopLevel ifn ih, DKDefConst)) <$> rawDefNames
-      -- fqns = Map.fromList $ (\n -> (n, (FullyQualifiedName ifn n ih, DKDefConst))) <$> rawDefNames
+      -- defMap = M.fromList $ (, (NTopLevel ifn ih, DKDefConst)) <$> rawDefNames
+      -- fqns = M.fromList $ (\n -> (n, (FullyQualifiedName ifn n ih, DKDefConst))) <$> rawDefNames
   -- `maybe all of this next section should be in a block laid out by the
   -- `locally reBinds`
-  -- rsModuleBinds %= Map.insert ifn defMap
-  -- rsLoaded . loToplevel %= Map.union fqns
+  -- rsModuleBinds %= M.insert ifn defMap
+  -- rsLoaded . loToplevel %= M.union fqns
   let defNames = ifDefName <$> defs
   let scc = mkScc (Set.fromList defNames) <$> defs
   defs' <- forM (stronglyConnComp scc) \case
@@ -1143,7 +1143,7 @@ renameInterface (Interface ifn defs ih info) = local (set reCurrModule (Just ifn
       -- todo: just in case, match on `d` because it makes no sense for there to be an empty cycle
       -- but all uses of `head` are still scary
       throwDesugarError (RecursionDetected ifn (ifDefName <$> d)) (ifDefInfo (head d))
-  -- defs' <- locally reBinds (Map.union (over _2 Just <$> defMap)) $ traverse renameIfDef defs
+  -- defs' <- locally reBinds (M.union (over _2 Just <$> defMap)) $ traverse renameIfDef defs
   binds <- view reBinds
   (defs'', _, _) <- over _1 reverse <$> foldlM go ([], Set.empty, binds) defs'
 
@@ -1154,8 +1154,8 @@ renameInterface (Interface ifn defs ih info) = local (set reCurrModule (Just ifn
     when (Set.member (ifDefName d) s) $ error "duplicate defn name in interface"
     let dn = ifDefName d
     d' <- local (set reBinds m) $ renameIfDef d
-    let m' = maybe m (\dk -> Map.insert dn (NTopLevel ifn ih, Just dk) m) (ifDefKind d')
-    rsModuleBinds . ix ifn %= maybe id (Map.insert dn . (NTopLevel ifn ih,)) (ifDefKind d')
+    let m' = maybe m (\dk -> M.insert dn (NTopLevel ifn ih, Just dk) m) (ifDefKind d')
+    rsModuleBinds . ix ifn %= maybe id (M.insert dn . (NTopLevel ifn ih,)) (ifDefKind d')
     pure (d':ds, Set.insert dn s, m')
 
 runRenamerM
@@ -1171,10 +1171,10 @@ reStateFromLoaded loaded = RenamerState mbinds loaded Set.empty
   mbind = \case
     ModuleData m _ ->
       let depNames = (\def -> (defName def, (NTopLevel (_mName m) (_mHash m), defKind def))) <$> _mDefs m
-      in Map.fromList depNames
+      in M.fromList depNames
     InterfaceData iface _ ->
       let depNames = _dcName <$> mapMaybe (preview _IfDConst)  (_ifDefns iface)
-      in Map.fromList $ (,(NTopLevel (_ifName iface) (_ifHash iface), DKDefConst)) <$> depNames
+      in M.fromList $ (,(NTopLevel (_ifName iface) (_ifHash iface), DKDefConst)) <$> depNames
   mbinds = fmap mbind (_loModules loaded)
 
 loadedBinds :: Loaded b i -> Map Text (NameKind, DefKind)

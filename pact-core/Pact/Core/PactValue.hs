@@ -32,6 +32,7 @@ data PactValue
   | PList (Vector PactValue)
   | PGuard (Guard FullyQualifiedName PactValue)
   | PObject (Map Field PactValue)
+  -- | PTable TableName Schema
   | PModRef ModRef
   deriving (Eq, Show, Ord)
 
@@ -42,6 +43,7 @@ instance Pretty PactValue where
     PLiteral lit -> pretty lit
     PList p -> Pretty.list (V.toList (pretty <$> p))
     PGuard _g -> "<guard>"
+    -- PTable tn _sc -> "table" <> braces (pretty tn)
     PObject o ->
       braces $ hsep $ punctuate comma (objPair <$> M.toList o)
       where
@@ -56,6 +58,9 @@ checkPvType ty = \case
   PGuard{}
     | ty == TyGuard -> Just TyGuard
     | otherwise -> Nothing
+  -- PTable _ sc1
+  --   | ty == TyTable sc1 -> Just (TyTable sc1)
+  --   | otherwise -> Nothing
   -- todo: types of objects
   PObject o -> case ty of
     TyObject (Schema sc) ->

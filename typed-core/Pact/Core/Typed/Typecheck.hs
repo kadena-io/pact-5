@@ -15,7 +15,7 @@ import Data.Foldable(foldlM)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Map.Strict(Map)
 import Data.RAList(RAList)
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
 import qualified Data.RAList as RAList
 
@@ -39,7 +39,7 @@ typeUnifies (TyFun l r) (TyFun l' r') =
   typeUnifies l l' && typeUnifies r r'
 typeUnifies (TyForall as ty) (TyForall as' ty') =
   let tys = NE.zip as (TyVar <$>  as')
-      env = Map.fromList (NE.toList tys)
+      env = M.fromList (NE.toList tys)
   in typeUnifies (substInTy env ty) ty'
 typeUnifies _ _ = False
 
@@ -52,14 +52,14 @@ applyFunctionType _ _ =
 
 applyType :: (MonadError String m, Ord n, Show n) => Type n -> Type n -> m (Type n)
 applyType (TyForall (t:|ts) tfty) ty = case ts of
-  [] -> pure $ substInTy (Map.singleton t ty) tfty
-  t':ts' -> pure $ TyForall (t':|ts') $ substInTy (Map.singleton t ty) tfty
+  [] -> pure $ substInTy (M.singleton t ty) tfty
+  t':ts' -> pure $ TyForall (t':|ts') $ substInTy (M.singleton t ty) tfty
 applyType t1 tyr =
   throwError $ "Cannot apply: " <> show t1 <> " to: " <> show tyr
 
-substInTy :: Ord n => Map.Map n (Type n) -> Type n -> Type n
+substInTy :: Ord n => M.Map n (Type n) -> Type n -> Type n
 substInTy s (TyVar n) =
-  case Map.lookup n s of
+  case M.lookup n s of
     Just ty -> ty
     Nothing -> TyVar n
 substInTy s (TyFun l r) =
@@ -94,10 +94,10 @@ typecheck' = \case
   -- ------------------- (T-Abs)
   -- Γ ⊢ (λx:t1.e):t1→t2
   Lam args term _ -> do
-    -- let inEnv e = foldl' (\m (n', t') -> Map.insert n' t' m) e args
+    -- let inEnv e = foldl' (\m (n', t') -> M.insert n' t' m) e args
     let env' = RAList.fromList $ view _2 <$> NE.toList args
     ret <- locally tcLocalVarEnv (env' <>) (typecheck' term)
-    -- ret <- locally tcVarEnv (Map.union (Map.fromList (NE.toList args))) (typecheck' term)
+    -- ret <- locally tcVarEnv (M.union (M.fromList (NE.toList args))) (typecheck' term)
     pure $ foldr TyFun ret (snd <$> args)
   -- Γ ⊢ x:t1→t2     Γ ⊢ y:t1
   -- ------------------------ (T-App  )

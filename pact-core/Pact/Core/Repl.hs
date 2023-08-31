@@ -34,8 +34,11 @@ import qualified Data.Set as Set
 import Pact.Core.Persistence
 import Pact.Core.Pretty
 import Pact.Core.Builtin
+import Pact.Core.Names
 
 import Pact.Core.Compile
+    ( CompileValue(InterpretValue, LoadedModule, LoadedInterface),
+      InterpretValue(IPClosure, IPV, IPTable) )
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
 
@@ -60,6 +63,7 @@ main = do
         "Loaded interface" <+> pretty mn
       InterpretValue iv -> case iv of
         IPV v _ -> outputStrLn (show (pretty v))
+        IPTable (TableName tn) -> outputStrLn $ "table{" <> T.unpack tn <> "}"
         IPClosure -> outputStrLn "<<closure>>"
     RLoadedDefun mn ->
       outputStrLn $ show $

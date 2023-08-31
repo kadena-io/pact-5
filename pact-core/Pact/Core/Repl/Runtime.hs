@@ -28,6 +28,7 @@ import Pact.Core.Errors
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.IR.Eval.CEK
+import Pact.Core.Repl.Utils
 
 data ReplEvalEnv b i
   = ReplEvalEnv
@@ -39,6 +40,7 @@ data ReplEvalState b i
   = ReplEvalState
   { _reEnv :: EvalEnv b i (ReplEvalM b i)
   , _reState :: EvalState b i
+  , _reSource :: SourceCode
   }
 
 -- Todo: are we going to inject state as the reader monad here?

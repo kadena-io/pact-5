@@ -15,7 +15,7 @@ import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Either(lefts, rights)
 
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.Text.Read as T
 import qualified Data.List.NonEmpty as NE
