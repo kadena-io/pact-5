@@ -1377,7 +1377,8 @@ inferTerm = \case
       TyModRef m -> view (tcModules . at m) >>= \case
         Just (InterfaceData iface _) -> case IR.findIfDef fn iface of
           Just (IR.IfDfun df) -> do
-            pure (liftType (IR._ifdType df), Typed.DynInvoke mref' fn i, preds)
+            (args, ret) <- irFunToTc (IR._ifdArgs df) (IR._ifdRType df)
+            pure (argListToTyFun args ret, Typed.DynInvoke mref' fn i, preds)
           _ -> error "boom"
         _ -> error "boom"
       _ -> error "boom"
