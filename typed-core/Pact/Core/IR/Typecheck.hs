@@ -1224,6 +1224,16 @@ checkCapArgs na tes = case _nKind na of
       _ -> error "invariant broken"
   _ -> error "invariant broken"
 
+irFunToTc
+  :: [Arg IR.Type]
+  -> Maybe IR.Type
+  -> InferM s b i ([Type a], Type a)
+irFunToTc irMArgs (Just irRet)
+  | Just irArgs <- traverse IR._argType irMArgs = do
+    pure (liftType <$> irArgs, liftType irRet)
+  | otherwise = error "unannotated arguments"
+irFunToTc _ Nothing = error "unannotated return type"
+
 -- Todo: bidirectionality
 inferTerm
   :: (TypeOfBuiltin b)
@@ -1240,14 +1250,10 @@ inferTerm = \case
           throwTypecheckError (TCUnboundTermVariable n) i
     NTopLevel mn mh ->
       getTopLevelDef n mn mh >>= \case
-        Just (IR.Dfun df)
-          | Just irArgs <- traverse IR._argType $ IR._dfunArgs df
-          , Just irRet <- IR._dfunRType df -> do
-            let newVar = Typed.Var irn i
-                args = liftType <$> irArgs
-                ret = liftType irRet
-            pure (argListToTyFun args ret, newVar, [])
-          | otherwise -> error "unannotated types"
+        Just (IR.Dfun df) -> do
+          (args, ret) <- irFunToTc (IR._dfunArgs df) (IR._dfunRType df)
+          let newVar = Typed.Var irn i
+          pure (argListToTyFun args ret, newVar, [])
         _ -> throwTypecheckError (TCUnboundFreeVariable mn n) i
     NModRef _ ifs -> case ifs of
       [iface] -> do
