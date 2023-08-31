@@ -1675,6 +1675,8 @@ ensureNoTyVarsPred
   -> InferM s b i (Pred NamedDeBruijn)
 ensureNoTyVarsPred i (Pred tc ty) = Pred tc <$> ensureNoTyVars i ty
 
+-- TODO here and in ensure* functions,
+-- is it really needed, or can we do the same trick as with `Type Void`?
 noTyVarsinTerm
   :: i
   -> TCTerm s b' i
