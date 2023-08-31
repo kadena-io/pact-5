@@ -1064,10 +1064,6 @@ checkTermType checkty = \case
           unifyFun checkty (IR._dfunArgs df) (IR._dfunRType df) i
           let rty = snd $ tyFunToArgList checkty
           pure (rty, Typed.Var irn i, [])
-        Just (IR.DCap df) -> do
-          unifyFun checkty (IR._dcapArgs df) (IR._dcapRType df) i
-          let rty = snd $ tyFunToArgList checkty
-          pure (rty, Typed.Var irn i, [])
         _ -> throwTypecheckError (TCUnboundFreeVariable mn n) i
     NModRef _ ifs -> case checkty of
       TyModRef mn -> do
