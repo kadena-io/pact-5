@@ -1396,6 +1396,9 @@ inferTerm = \case
     pure (ty, Typed.Error ty e i, [])
   IR.ObjectLit{} -> error "inferTerm TODO" -- TODO new ctor
 
+toTypedArgs :: [Arg ty] -> [Type Void] -> [TypedArg (Type a)]
+toTypedArgs = zipWith (\irArg ty -> TypedArg (IR._argName irArg) (liftNoFreeVars ty))
+
 -- Todo: generic types?
 -- We can't generalize yet since
 -- we're not allowing type schemes just yet.
@@ -1406,7 +1409,7 @@ inferDefun
 inferDefun (IR.Defun name dfargs dfRetType term info) = do
   enterLevel
   (argTys, ret) <- irFunToTc dfargs dfRetType
-  let args = zipWith (\irArg ty -> TypedArg (IR._argName irArg) (liftNoFreeVars ty)) dfargs argTys
+  let args = toTypedArgs dfargs argTys
   (termTy, term', preds) <- inferTerm term
   leaveLevel
   checkReducible preds (view IR.termInfo term)
