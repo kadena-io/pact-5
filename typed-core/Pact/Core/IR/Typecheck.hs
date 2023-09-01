@@ -1437,13 +1437,15 @@ inferDefCap
   :: TypeOfBuiltin b
   => IR.DefCap Name IRType b i
   -> InferM s b' i (TypedDefCap b i)
-inferDefCap (IR.DefCap name arity argtys rty term meta i) = do
-  let ty = foldr TyFun rty argtys
-  (termTy, term', preds) <- checkTermType (liftType ty) term
+inferDefCap (IR.DefCap name arity dcargs dcRetType term meta i) = do
+  (argtys, rty) <- irFunToTc dcargs dcRetType
+  let ty = liftNoFreeVars $ argListToTyFun argtys rty
+      args = toTypedArgs dcargs argtys
+  (termTy, term', preds) <- checkTermType ty term
   checkReducible preds i
-  unify (liftType ty) termTy i
+  unify ty termTy i
   fterm <- noTyVarsinTerm i term'
-  pure (Typed.DefCap name arity argtys rty fterm meta i)
+  pure (Typed.DefCap name arity args (liftNoFreeVars rty) fterm meta i)
 
 inferDef
   :: TypeOfBuiltin b
