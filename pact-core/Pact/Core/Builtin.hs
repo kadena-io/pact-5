@@ -21,6 +21,7 @@ module Pact.Core.Builtin
  , ReplRawBuiltin
  , ReplCoreBuiltin
  , BuiltinForm(..)
+ , ReplBuiltins(..)
  )where
 
 import Data.Text(Text)
@@ -389,11 +390,27 @@ rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]
 rawBuiltinMap :: Map Text RawBuiltin
 rawBuiltinMap = M.fromList $ (\b -> (rawBuiltinToText b, b)) <$> [minBound .. maxBound]
 
+data ReplBuiltins
+  = RExpect
+  | RExpectFailure
+  | RExpectThat
+  | RPrint
+  | REnvStackFrame
+  deriving (Show, Enum, Bounded, Eq)
 
+instance IsBuiltin ReplBuiltins where
+  builtinName = NativeName . replBuiltinsToText
+  builtinArity = \case
+    RExpect -> 3
+    RExpectFailure -> 2
+    RExpectThat -> 3
+    RPrint -> 1
+    REnvStackFrame -> 1
 -- Note: commented out natives are
 -- to be implemented later
 data ReplBuiltin b
   = RBuiltinWrap b
+  | RBuiltinRepl ReplBuiltins
   -- | RBeginTx
   -- | RBench
   -- | RCommitTx
@@ -415,18 +432,19 @@ data ReplBuiltin b
   -- | REnvKeys
   -- | REnvNamespacePolicy
   -- | REnvSigs
-  | RExpect
-  | RExpectFailure
-  | RExpectThat
+  -- | RExpect
+  -- | RExpectFailure
+  -- | RExpectThat
   -- | RFormatAddress
   -- | RPactState
-  | RPrint
+  -- | RPrint
   -- | RRollbackTx
   -- | RSigKeyset
   -- | RTestCapability
   -- | RVerify
   -- | RWithAppliedEnv
   -- | RLoad
+  -- | REnvStackFrame
   deriving (Eq, Show)
 
 -- NOTE: Maybe `ReplBuiltin` is not a great abstraction, given
@@ -435,15 +453,13 @@ instance IsBuiltin b => IsBuiltin (ReplBuiltin b) where
   builtinName = NativeName . replBuiltinToText (_natName . builtinName)
   builtinArity = \case
     RBuiltinWrap b -> builtinArity b
-    RExpect -> 3
-    RExpectFailure -> 2
-    RExpectThat -> 3
-    RPrint -> 1
+    RBuiltinRepl b -> builtinArity b
+
     -- RLoad -> 1
 
 instance Bounded b => Bounded (ReplBuiltin b) where
   minBound = RBuiltinWrap minBound
-  maxBound = RPrint
+  maxBound = RBuiltinRepl maxBound
 
 instance (Enum b, Bounded b) => Enum (ReplBuiltin b) where
   toEnum  = replBToEnum
@@ -455,37 +471,32 @@ instance (Enum b, Bounded b) => Enum (ReplBuiltin b) where
 replBToEnum :: forall b. (Bounded b, Enum b) => Int -> ReplBuiltin b
 replBToEnum i =
   if i <= mbound then RBuiltinWrap (toEnum i)
-  else case i - mbound of
-    1 -> RExpect
-    2 -> RExpectFailure
-    3 -> RExpectThat
-    4 -> RPrint
-    -- 5 -> RLoad
-    _ -> error "invalid"
+  else RBuiltinRepl (toEnum (i - mbound - 1))
   where
   mbound = fromEnum (maxBound :: b)
 {-# INLINE replBToEnum #-}
 
 replBFromEnum :: forall b. (Bounded b, Enum b) => ReplBuiltin b -> Int
 replBFromEnum e =
-  let maxContained = fromEnum (maxBound :: b)
+  let maxContained = fromEnum (maxBound :: b) + 1
   in case e of
     RBuiltinWrap b -> fromEnum b
-    RExpect -> maxContained + 1
-    RExpectFailure -> maxContained + 2
-    RExpectThat -> maxContained + 3
-    RPrint -> maxContained + 4
-    -- RLoad -> maxContained + 5
+    RBuiltinRepl rb -> maxContained + fromEnum rb
 {-# INLINE replBFromEnum #-}
 
-replBuiltinToText :: (b -> Text) -> ReplBuiltin b -> Text
-replBuiltinToText f = \case
-  RBuiltinWrap b -> f b
+replBuiltinsToText :: ReplBuiltins -> Text
+replBuiltinsToText = \case
   RExpect -> "expect"
   RExpectFailure -> "expect-failure"
   RExpectThat -> "expect-that"
   RPrint -> "print"
+  REnvStackFrame -> "env-stackframe"
   -- RLoad -> "load"
+
+replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
+replBuiltinToText f = \case
+  RBuiltinWrap b -> f b
+  RBuiltinRepl rb -> replBuiltinsToText rb
 
 replRawBuiltinNames :: [Text]
 replRawBuiltinNames = fmap (replBuiltinToText rawBuiltinToText) [minBound .. maxBound]

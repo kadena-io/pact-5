@@ -35,10 +35,9 @@ import Pact.Core.Persistence
 import Pact.Core.Pretty
 import Pact.Core.Builtin
 import Pact.Core.Names
+import Pact.Core.Interpreter
 
 import Pact.Core.Compile
-    ( CompileValue(InterpretValue, LoadedModule, LoadedInterface),
-      InterpretValue(IPClosure, IPV, IPTable) )
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
 

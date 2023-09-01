@@ -573,8 +573,9 @@ applyLam (PC (PartialClosure li argtys _ term mty env i)) args cont handler =
     x' <- (`maybeTCType` ty) =<< enforcePactValue x
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e [] [] = do
+    let cont' = StackPopC mty cont
     esStack %%= (StackFrame li :)
-    evalCEK cont handler e term
+    evalCEK cont' handler e term
   apply' e (ty:tys) [] =
     returnCEKValue cont handler (VPartialClosure (PartialClosure li (ty :| tys) (length tys + 1) term mty e i))
   apply' _ [] _ = error "Applying too many arguments to partial function"

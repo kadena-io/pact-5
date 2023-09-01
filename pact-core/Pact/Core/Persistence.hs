@@ -13,6 +13,7 @@ module Pact.Core.Persistence
  , PactDb(..)
  , Loaded(..)
  , HasLoaded(..)
+ , HasPactDb
  , Domain(..)
  , WriteType(..)
  , mockPactDb
@@ -23,6 +24,9 @@ module Pact.Core.Persistence
  ) where
 
 import Control.Lens
+-- import Control.Monad.State.Class
+-- import Control.Monad.IO.Class
+-- import Control.Monad.Except
 import Data.Text(Text)
 import Data.IORef
 import Data.Map.Strict(Map)
@@ -33,6 +37,7 @@ import Pact.Core.IR.Term
 import Pact.Core.Guards
 import Pact.Core.Hash
 import Pact.Core.PactValue
+-- import Pact.Core.Errors
 
 import qualified Data.Map.Strict as M
 
@@ -120,6 +125,8 @@ data PactDb b i
   , _pdbWrite :: forall k v. Domain k v b i -> k -> v -> IO ()
   }
 
+makeClassy ''PactDb
+
 -- Potentially new Pactdb abstraction
 -- That said: changes in `Purity` that restrict read/write
 -- have to be done for all read functions.
@@ -151,6 +158,49 @@ instance Semigroup (Loaded b i) where
 
 instance Monoid (Loaded b i) where
   mempty = Loaded mempty mempty mempty
+
+
+-- resolveBare
+--   :: MonadState s m
+--   => MonadError (PactError i) m
+--   => HasLoaded s b i
+--   => HasPactDb s b i
+--   => i
+--   -> BareName
+--   -> m (Name, Maybe DefKind)
+-- resolveBare i (BareName bn) =
+--   uses (loaded . loToplevel) (M.lookup bn) >>= \case
+--     Just (fqn, dk) -> pure (Name bn (NTopLevel (_fqModule fqn) (_fqHash fqn)), dk)
+--     Nothing -> do
+--       let mn = ModuleName bn Nothing
+--       resolveModuleName i mn >>= \case
+--         ModuleData md _ -> do
+--           let implementeds = view mImplements md
+--           pure (Name bn (NModRef mn implementeds), Nothing)
+--         InterfaceData iface _ ->
+--           throwError (PEDesugarError (InvalidModuleReference (_ifName iface)) i)
+
+
+
+-- resolveModuleName
+--   :: MonadState s m
+--   => MonadError (PactError i) m
+--   => HasLoaded s b i
+--   => HasPactDb s b i
+--   => i
+--   -> ModuleName
+--   -> m (ModuleData b i)
+-- resolveModuleName i mn =
+--   use (loaded . loModules . at mn) >>= \case
+--     Just md -> pure md
+--     Nothing ->
+--       use pactDb >>= liftIO . (`readModule` mn) >>= \case
+--       Nothing -> throwError (PEDesugarError (NoSuchModule mn) i)
+--       Just md -> case md of
+--         ModuleData module_ depmap ->
+--           md <$ loadModule' module_ depmap
+--         InterfaceData in' depmap ->
+--           md <$ loadInterface' in' depmap
 
 mockPactDb :: forall b i. IO (PactDb b i)
 mockPactDb = do

@@ -81,7 +81,6 @@ instance MonadEvalState b i (ReplEvalM b i) where
 
 
 
-
 runReplEvalM
   :: ReplEvalEnv b i
   -> ReplEvalState b i

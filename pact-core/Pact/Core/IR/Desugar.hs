@@ -200,10 +200,10 @@ instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
     over termBuiltin RBuiltinWrap $ desugarOperator i dsg
   desugarAppArity i (RBuiltinWrap b) ne =
     desugarAppArityRaw RBuiltinWrap i b ne
-  desugarAppArity i RExpect (e1 :| [e2, e3]) | isn't _Lam e3 =
-    App (Builtin RExpect i) (e1 :| [e2, suspendTerm e3]) i
-  desugarAppArity i RExpectFailure (e1 :| [e2]) | isn't _Lam e2 =
-    App (Builtin RExpectFailure i) (e1 :| [suspendTerm e2]) i
+  desugarAppArity i (RBuiltinRepl RExpect) (e1 :| [e2, e3]) | isn't _Lam e3 =
+    App (Builtin (RBuiltinRepl RExpect) i) (e1 :| [e2, suspendTerm e3]) i
+  desugarAppArity i (RBuiltinRepl RExpectFailure) (e1 :| [e2]) | isn't _Lam e2 =
+    App (Builtin (RBuiltinRepl RExpectFailure) i) (e1 :| [suspendTerm e2]) i
   desugarAppArity i b ne =
     App (Builtin b i) ne i
 
@@ -456,29 +456,6 @@ desugarInterface (Lisp.Interface ifn ifdefns _ _ info) = do
   defs' <- traverse desugarIfDef ifdefns
   let mhash = ModuleHash (Hash "placeholder")
   pure $ Interface ifn defs' mhash info
-
--- renameType
---   :: (MonadRenamer reso i m)
---   => i
---   -> Lisp.Type
---   -> m (Type a)
--- renameType i = \case
---   Lisp.TyPrim p -> pure (TyPrim p)
---   Lisp.TyGuard -> pure (TyPrim PrimGuard)
---   Lisp.TyList t ->
---     TyList <$> renameType i t
---   Lisp.TyModRef mr ->
---     pure (TyModRef mr)
---   Lisp.TyKeyset -> pure (TyPrim PrimGuard)
---   Lisp.TyObject n ->
---     TyObject n
---   Lisp.TyPolyList ->
---     throwDesugarError (UnsupportedType "[any]") i
---   Lisp.TyPolyObject ->
---     throwDesugarError (UnsupportedType "object{any}") i
---   Lisp.TyTime ->
---     throwDesugarError (UnsupportedType "time") i
-
 
 -----------------------------------------------------------
 -- Renaming

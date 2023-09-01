@@ -89,6 +89,13 @@ coreExpectFailure info b = mkReplBuiltinFn info b \cont handler -> \case
         returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result"
   args -> argsError info b args
 
+coreEnvStackFrame :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
+coreEnvStackFrame info b = mkReplBuiltinFn info b \cont handler -> \case
+  [_] -> do
+    frames <- useEvalState esStack
+    liftIO $ print frames
+    returnCEKValue cont handler VUnit
+  args -> argsError info b args
 
 replRawBuiltinRuntime
   :: (Default i)
@@ -98,10 +105,12 @@ replRawBuiltinRuntime
 replRawBuiltinRuntime i = \case
   RBuiltinWrap cb ->
     rawBuiltinLiftedRuntime RBuiltinWrap i cb
-  RExpect -> rawExpect i RExpect
-  RExpectFailure -> coreExpectFailure i RExpectFailure
-  RExpectThat -> coreExpectThat i RExpectThat
-  RPrint -> corePrint i RPrint
+  RBuiltinRepl br -> case br of
+    RExpect -> rawExpect i $ RBuiltinRepl RExpect
+    RExpectFailure -> coreExpectFailure i $ RBuiltinRepl RExpectFailure
+    RExpectThat -> coreExpectThat i $ RBuiltinRepl RExpectThat
+    RPrint -> corePrint i $ RBuiltinRepl RPrint
+    REnvStackFrame -> coreEnvStackFrame i $ RBuiltinRepl REnvStackFrame
 
 -- defaultReplState :: Default i => ReplEvalState (ReplBuiltin RawBuiltin) i
 -- defaultReplState = ReplEvalState env (EvalState (CapState [] mempty) [] [] False)
