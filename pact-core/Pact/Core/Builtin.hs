@@ -390,27 +390,14 @@ rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]
 rawBuiltinMap :: Map Text RawBuiltin
 rawBuiltinMap = M.fromList $ (\b -> (rawBuiltinToText b, b)) <$> [minBound .. maxBound]
 
+-- Todo: rename
+-- | Our repl builtins.
 data ReplBuiltins
   = RExpect
   | RExpectFailure
   | RExpectThat
   | RPrint
   | REnvStackFrame
-  deriving (Show, Enum, Bounded, Eq)
-
-instance IsBuiltin ReplBuiltins where
-  builtinName = NativeName . replBuiltinsToText
-  builtinArity = \case
-    RExpect -> 3
-    RExpectFailure -> 2
-    RExpectThat -> 3
-    RPrint -> 1
-    REnvStackFrame -> 1
--- Note: commented out natives are
--- to be implemented later
-data ReplBuiltin b
-  = RBuiltinWrap b
-  | RBuiltinRepl ReplBuiltins
   -- | RBeginTx
   -- | RBench
   -- | RCommitTx
@@ -445,6 +432,23 @@ data ReplBuiltin b
   -- | RWithAppliedEnv
   -- | RLoad
   -- | REnvStackFrame
+  deriving (Show, Enum, Bounded, Eq)
+
+
+
+instance IsBuiltin ReplBuiltins where
+  builtinName = NativeName . replBuiltinsToText
+  builtinArity = \case
+    RExpect -> 3
+    RExpectFailure -> 2
+    RExpectThat -> 3
+    RPrint -> 1
+    REnvStackFrame -> 1
+-- Note: commented out natives are
+-- to be implemented later
+data ReplBuiltin b
+  = RBuiltinWrap b
+  | RBuiltinRepl ReplBuiltins
   deriving (Eq, Show)
 
 -- NOTE: Maybe `ReplBuiltin` is not a great abstraction, given
@@ -462,27 +466,19 @@ instance Bounded b => Bounded (ReplBuiltin b) where
   maxBound = RBuiltinRepl maxBound
 
 instance (Enum b, Bounded b) => Enum (ReplBuiltin b) where
-  toEnum  = replBToEnum
+  toEnum  i =
+    if i <= mbound then RBuiltinWrap (toEnum i)
+    else RBuiltinRepl (toEnum (i - mbound - 1))
+    where
+    mbound = fromEnum (maxBound :: b)
   {-# SPECIALISE toEnum :: Int -> ReplBuiltin RawBuiltin #-}
 
-  fromEnum = replBFromEnum
+  fromEnum e =
+    let maxContained = fromEnum (maxBound :: b) + 1
+    in case e of
+      RBuiltinWrap b -> fromEnum b
+      RBuiltinRepl rb -> maxContained + fromEnum rb
   {-# SPECIALISE fromEnum :: ReplBuiltin RawBuiltin -> Int #-}
-
-replBToEnum :: forall b. (Bounded b, Enum b) => Int -> ReplBuiltin b
-replBToEnum i =
-  if i <= mbound then RBuiltinWrap (toEnum i)
-  else RBuiltinRepl (toEnum (i - mbound - 1))
-  where
-  mbound = fromEnum (maxBound :: b)
-{-# INLINE replBToEnum #-}
-
-replBFromEnum :: forall b. (Bounded b, Enum b) => ReplBuiltin b -> Int
-replBFromEnum e =
-  let maxContained = fromEnum (maxBound :: b) + 1
-  in case e of
-    RBuiltinWrap b -> fromEnum b
-    RBuiltinRepl rb -> maxContained + fromEnum rb
-{-# INLINE replBFromEnum #-}
 
 replBuiltinsToText :: ReplBuiltins -> Text
 replBuiltinsToText = \case
