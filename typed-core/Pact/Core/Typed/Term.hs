@@ -41,6 +41,7 @@ module Pact.Core.Typed.Term
  , CoreEvalReplTopLevel
  , defName
  , defTerm
+ , defType
  -- Prisms and lenses
  , _IfDfun
  , _IfDConst
@@ -130,6 +131,12 @@ defTerm = \case
   Dfun d -> _dfunTerm d
   DConst d -> _dcTerm d
   DCap d -> _dcapTerm d
+
+defType :: Def name tyname builtin info -> Type tyname
+defType = \case
+  Dfun d -> argListToTyFun (_targType <$> _dfunArgs d) (_dfunRType d)
+  DConst d -> absurd <$> _dcType d
+  DCap d -> argListToTyFun (_targType <$> _dcapArgs d) (_dcapRType d)
 
 data Module name tyname builtin info
   = Module
