@@ -126,6 +126,7 @@ data DesugarError
   -- ^ Invalid top level defn references a non-semantic value (e.g defcap, defschema)
   | InvalidModuleReference ModuleName
   -- ^ Invalid: Interface used as module reference
+  | EmptyBindingBody
   deriving Show
 
 instance Exception DesugarError
@@ -177,6 +178,7 @@ instance Pretty DesugarError where
       Pretty.hsep ["Invalid definition in term variable position:", pretty n]
     InvalidModuleReference mn ->
       Pretty.hsep ["Invalid Interface attempted to be used as module reference:", pretty mn]
+    EmptyBindingBody -> "Bind expression lacks an accompanying body"
 
 -- data TypecheckError
 --   = UnificationError (Type Text) (Type Text)

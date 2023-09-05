@@ -195,11 +195,11 @@ throwLexerError' le = getSpanInfo >>= throwLexerError le
 throwParseError :: ParseError -> SpanInfo -> ParserT a
 throwParseError pe = throwError . PEParseError pe
 
-toAppExprList :: [Either ParsedExpr [(Field, MArg)]] -> [ParsedExpr]
-toAppExprList (h:hs) = case h of
-  Left e -> e : toAppExprList hs
-  Right binds -> [Binding binds (toAppExprList hs) def]
-toAppExprList [] = []
+toAppExprList :: SpanInfo -> [Either ParsedExpr [(Field, MArg)]] -> [ParsedExpr]
+toAppExprList i  (h:hs) = case h of
+  Left e -> e : toAppExprList i hs
+  Right binds -> [Binding binds (toAppExprList i hs) i]
+toAppExprList _ [] = []
 
 primType :: SpanInfo -> Text -> ParserT Type
 primType i = \case

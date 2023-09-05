@@ -14,6 +14,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE GADTs #-}
 
 
@@ -151,12 +152,17 @@ dsOut :: Lens (DesugarOutput b i a) (DesugarOutput b i a') a a'
 dsOut f (DesugarOutput a l d) =
   f a <&> \a' -> DesugarOutput a' l d
 
+-- Todo: DesugarBuiltin
+-- probably should just be a `data` definition we pass in.
+-- This class is causing us to use `Proxy`
 class DesugarBuiltin b where
   reservedNatives :: Map Text b
+  liftRaw :: RawBuiltin -> b
   desugarOperator :: i -> Lisp.Operator -> Term ParsedName DesugarType b i
   desugarAppArity :: i -> b -> NonEmpty (Term ParsedName DesugarType b i) -> Term ParsedName DesugarType b i
 
 instance DesugarBuiltin RawBuiltin where
+  liftRaw = id
   reservedNatives = rawBuiltinMap
   desugarOperator info = \case
     -- Manual eta expansion for and as well as Or
@@ -195,6 +201,7 @@ desugarAppArityRaw f i b args =
     App (Builtin (f b) i) args i
 
 instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
+  liftRaw = RBuiltinWrap
   reservedNatives = replRawBuiltinMap
   desugarOperator i dsg =
     over termBuiltin RBuiltinWrap $ desugarOperator i dsg
@@ -209,6 +216,13 @@ instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
 
 throwDesugarError :: MonadError (PactError i) m => DesugarError -> i -> m a
 throwDesugarError de = throwError . PEDesugarError de
+
+-- pattern Bind i = Lisp.Var (BN (BareName "bind")) i
+
+-- pattern WithRead i = Lisp.Var (BN (BareName "with-read")) i
+
+-- pattern WithDefaultRead i = Lisp.Var (BN (BareName "with-read")) i
+
 
 desugarLispTerm
   :: forall raw reso i m
@@ -238,6 +252,22 @@ desugarLispTerm = \case
     body' <- desugarLispTerm body
     pure (Lam AnonLamInfo args body' i)
   Lisp.Suspend body i -> desugarLispTerm (Lisp.Lam [] body i)
+  Lisp.Binding fs hs i -> do
+    hs' <- traverse desugarLispTerm hs
+    body <- bindingBody hs'
+    let bodyLam b = Lam AnonLamInfo (pure (Arg objFreshText Nothing)) b i
+    pure $ bodyLam $ foldr bindToLet body fs
+      where
+      bindingBody hs' = case reverse hs' of
+        [] -> throwDesugarError EmptyBindingBody i
+        x:xs -> pure $ foldl' (\acc e -> Sequence e acc i) x xs
+      objFreshText = "#bindObject"
+      objFreshVar = Var (BN (BareName objFreshText)) i
+      bindToLet (Field field, marg) body =
+        let arg = toArg marg
+            fieldLit = Constant (LString field) i
+            access = App (Builtin (liftRaw RawAt) i) (fieldLit :| [objFreshVar]) i
+        in Let arg access body i
   Lisp.If e1 e2 e3 i -> Conditional <$>
      (CIf <$> desugarLispTerm e1 <*> desugarLispTerm e2 <*> desugarLispTerm e3) <*> pure i
   -- Note: this is our "unit arg application" desugaring
@@ -283,7 +313,6 @@ desugarLispTerm = \case
       InstallCapability pn <$> traverse desugarLispTerm exs
     Lisp.EmitEvent pn exs ->
       EmitEvent pn <$> traverse desugarLispTerm exs
-  _ -> error "implement rest (parser covering whole syntax"
   where
   binderToLet i (Lisp.Binder n mty expr) term = do
     expr' <- desugarLispTerm expr
@@ -1047,12 +1076,10 @@ renameModule (Module mname mgov defs blessed imp implements mhash i) = local (se
   go (defns, s, m) defn = do
     when (Set.member (defName defn) s) $ error "duplicate defn name"
     let dn = defName defn
-    liftIO $ print $ "at defname: " <> show dn
     defn' <- local (set reBinds m) $ renameDef defn
     let depPair = (NTopLevel mname mhash, defKind defn')
     let m' = M.insert dn (over _2 Just depPair) m
     rsModuleBinds . ix mname %= M.insert dn depPair
-    use rsModuleBinds >>= liftIO . print
     pure (defn':defns, Set.insert (defName defn) s, m')
 
   resolveGov = traverse $ \govName -> case find (\d -> BN (BareName (defName d)) == govName) defs of

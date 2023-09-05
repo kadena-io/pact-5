@@ -102,7 +102,6 @@ interpretReplProgram sc@(SourceCode source) = do
         RCompileValue <$> interpretTopLevel pdb interp (DesugarOutput tt lo deps)
         where
         interpreter te = do
-          debugIfFlagSet ReplDebugUntyped te
           let i = view termInfo te
           evalGas <- use replGas
           evalLog <- use replEvalLog

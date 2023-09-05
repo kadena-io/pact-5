@@ -425,7 +425,7 @@ Binders :: { [Binder SpanInfo] }
   | '(' IDENT MTypeAnn Expr ')' { [Binder (getIdent $2) $3 $4] }
 
 GenAppExpr :: { SpanInfo -> ParsedExpr }
-  : Expr AppBindList { App $1 (toAppExprList (reverse $2)) }
+  : Expr AppBindList { \i -> App $1 (toAppExprList i (reverse $2)) i }
 
 ProgNExpr :: { SpanInfo -> ParsedExpr }
   : progn BlockBody { Block (NE.fromList (reverse $2)) }

@@ -13,12 +13,10 @@
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Jose Cardona <jose@kadena.io>
 --
--- Our Core IR, which is inspected for static guarantees before interpretation
--- The core IR manages to
+-- Our Analysis IR
 --
 
--- Todo: Enumerate imports
-module Pact.Core.IR.Term where
+module Pact.Core.IR.Analysis.Term where
 
 import Control.Lens
 import Data.Foldable(fold)
@@ -78,18 +76,18 @@ data DefSchema ty info
 -- because currently, renaming and desugaring are not in sequence. That is:
 -- renaming and desugaring a module happens as a full desugar into a full rename.
 -- if they ran one after another, this type would not be necessary
-data TableSchema name where
-  DesugaredTable :: ParsedName -> TableSchema ParsedName
-  ResolvedTable :: Schema -> TableSchema Name
+-- data TableSchema name where
+--   DesugaredTable :: ParsedName -> TableSchema ParsedName
+--   ResolvedTable :: Schema -> TableSchema Name
 
-instance Show (TableSchema name) where
-  show (DesugaredTable t) = "DesugardTable(" <> show t <> ")"
-  show (ResolvedTable t) = "ResolvedTable(" <> show t <> ")"
+-- instance Show (TableSchema name) where
+--   show (DesugaredTable t) = "DesugardTable(" <> show t <> ")"
+--   show (ResolvedTable t) = "ResolvedTable(" <> show t <> ")"
 
 data DefTable name info
   = DefTable
   { _dtName :: Text
-  , _dtSchema :: TableSchema name
+  , _dtSchema :: name
   , _dtInfo :: info
   } deriving (Show, Functor)
 
@@ -275,19 +273,13 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
       parens ("try" <+> pretty te <+> pretty te')
     DynInvoke n t _ ->
       pretty n <> "::" <> pretty t
-    ObjectLit n _ ->
-      braces (hsep $ punctuate "," $ fmap (\(f, t) -> pretty f <> ":" <> pretty t) n)
+    ObjectLit _n _ -> "object<todo>"
     Error txt _ ->
       parens ("error" <> pretty txt)
     where
     prettyTyAnn = maybe mempty ((":" <>) . pretty)
     prettyLamArg (Arg n ty) =
       pretty n <> prettyTyAnn ty
-
-instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (TopLevel name ty builtin info) where
-  pretty = \case
-    TLTerm tm -> pretty tm
-    _ -> "todo: pretty defs/modules"
 
 
 ----------------------------

@@ -22,6 +22,7 @@ module Pact.Core.Builtin
  , ReplCoreBuiltin
  , BuiltinForm(..)
  , ReplBuiltins(..)
+ , HasObjectOps(..)
  )where
 
 import Data.Text(Text)
@@ -56,18 +57,8 @@ instance Pretty o => Pretty (BuiltinForm o) where
     -- CZip e1 e2 e3 ->
     --   parens ("zip" <+> pretty e1 <+> pretty e2 <+> pretty e3)
 
--- Todo: Objects to be added later @ a later milestone
--- data ObjectOp o
---   = ObjectAccess Field o
---   -- access[f](o)
---   -- For some {f:a|r}, access f
---   | ObjectRemove Field o
---   -- remove[f](o)
---   -- For some {f:a|r}, remove f
---   | ObjectExtend Field o o
---   -- extend[k:=v](o)
---   -- For some {r}, extend with
---   deriving (Show, Eq, Functor, Foldable, Traversable)
+class HasObjectOps b where
+  objectAt :: b
 
 data DefType
   = DTDefun
@@ -229,7 +220,11 @@ data RawBuiltin
   | RawB64Encode
   | RawB64Decode
   | RawStrToList
+  | RawBind
   deriving (Eq, Show, Ord, Bounded, Enum)
+
+instance HasObjectOps RawBuiltin where
+  objectAt = RawAt
 
 rawBuiltinToText :: RawBuiltin -> Text
 rawBuiltinToText = \case
@@ -306,6 +301,7 @@ rawBuiltinToText = \case
   RawB64Encode -> "base64-encode"
   RawB64Decode -> "base64-decode"
   RawStrToList -> "str-to-list"
+  RawBind -> "bind"
 
 instance IsBuiltin RawBuiltin where
   builtinName = NativeName . rawBuiltinToText
@@ -383,6 +379,7 @@ instance IsBuiltin RawBuiltin where
     RawB64Encode -> 1
     RawB64Decode -> 1
     RawStrToList -> 1
+    RawBind -> 2
 
 rawBuiltinNames :: [Text]
 rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]
@@ -435,7 +432,6 @@ data ReplBuiltins
   deriving (Show, Enum, Bounded, Eq)
 
 
-
 instance IsBuiltin ReplBuiltins where
   builtinName = NativeName . replBuiltinsToText
   builtinArity = \case
@@ -450,6 +446,9 @@ data ReplBuiltin b
   = RBuiltinWrap b
   | RBuiltinRepl ReplBuiltins
   deriving (Eq, Show)
+
+instance HasObjectOps b => HasObjectOps (ReplBuiltin b) where
+  objectAt = RBuiltinWrap objectAt
 
 -- NOTE: Maybe `ReplBuiltin` is not a great abstraction, given
 -- expect arity changes based on whether it's corebuiltin or rawbuiltin

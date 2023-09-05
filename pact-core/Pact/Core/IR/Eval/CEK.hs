@@ -17,7 +17,7 @@ import Control.Monad.Except
 import Data.Default
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
-import Data.Foldable(find, traverse_)
+import Data.Foldable(find, foldl')
 import qualified Data.RAList as RAList
 import qualified Data.Text as T
 import qualified Data.Vector as V
@@ -422,6 +422,7 @@ returnCEKValue (Args env (x :| xs) cont) handler fn = do
   canApply = \case
     -- Todo: restrict the type of closures applied to user functions
     VClosure (C clo) -> pure (C clo)
+    VClosure (LC clo) -> pure (LC clo)
     VClosure (N clo) -> pure (N clo)
     _ -> error "Cannot apply partial closure"
   -- evalCEK (Fn fn cont) handler env arg
@@ -547,10 +548,10 @@ applyLam (C (Closure li cloargs arity term mty cloi)) args cont handler
 
 applyLam (LC (LamClosure li cloargs arity term mty env cloi)) args cont handler
   | arity == argLen = do
-    traverse_ enforcePactValue args
     esStack %%= (StackFrame li :)
     let cont' = StackPopC mty cont
-    evalCEK cont' handler (RAList.fromList (reverse args)) term
+        env' = foldl' (flip RAList.cons) env args
+    evalCEK cont' handler env' term
   | argLen > arity = error "Closure applied to too many arguments"
   | otherwise = apply' env (NE.toList cloargs) args
   where

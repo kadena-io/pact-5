@@ -83,6 +83,7 @@ interpretTopLevel
   -> DesugarOutput b SpanInfo (TopLevel Name Type b SpanInfo)
   -> m (CompileValue b)
 interpretTopLevel pdb interp (DesugarOutput ds lo0 deps) = do
+  debugPrint DebugDesugar ds
   loaded .= lo0
   case ds of
     TLModule m -> do

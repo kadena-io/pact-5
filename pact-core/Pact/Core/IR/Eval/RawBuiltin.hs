@@ -580,7 +580,9 @@ coreAccess info b = mkBuiltinFn info b \cont handler -> \case
   [VString field, VObject o] ->
     case M.lookup (Field field) o of
       Just v -> returnCEKValue cont handler (VPactValue v)
-      Nothing -> error "todo: better error here"
+      Nothing ->
+        let msg = "Object does not have field: " <> field
+        in returnCEK cont handler (VError msg)
   args -> argsError info b args
 
 -----------------------------------
@@ -809,6 +811,12 @@ runUserGuard info cont handler (UserGuard fqn args) =
     Just d -> throwExecutionError info (InvalidDefKind (defKind d) "run-user-guard")
     Nothing -> throwExecutionError info (NameNotInScope fqn)
 
+coreBind :: (IsBuiltin b, MonadEval b i m) => i -> b -> NativeFn b i m
+coreBind info b = mkBuiltinFn info b \cont handler -> \case
+  [v@VObject{}, VClosure clo] ->
+    applyLam clo [v] cont handler
+  args -> argsError info b args
+
 -----------------------------------
 -- Core definitions
 -----------------------------------
@@ -889,3 +897,4 @@ rawBuiltinLiftedRuntime f i = \case
   RawB64Encode -> coreB64Encode i (f RawB64Encode)
   RawB64Decode -> coreB64Decode i (f RawB64Decode)
   RawStrToList -> strToList i (f RawStrToList)
+  RawBind -> coreBind i (f RawBind)
