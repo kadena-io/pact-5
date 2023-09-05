@@ -61,7 +61,7 @@ import Pact.Core.Hash (ModuleHash)
 import Pact.Core.Type(PrimType(..), Arg(..), TypedArg(..), BuiltinTC(..))
 import Pact.Core.Typed.Type
 import Pact.Core.Names
-import Pact.Core.Persistence
+import Pact.Core.Persistence hiding (loaded)
 import Pact.Core.Capabilities
 import qualified Pact.Core.Type as IR
 import qualified Pact.Core.IR.Term as IR
