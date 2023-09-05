@@ -154,7 +154,8 @@ data Interface name tyname builtin info
 data IfDefun info
   = IfDefun
   { _ifdName :: Text
-  , _ifdType :: Type Void
+  , _ifdArgs :: [TypedArg (Type Void)]
+  , _ifdRType :: Type Void
   , _ifdInfo :: info
   } deriving Show
 
