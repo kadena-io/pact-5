@@ -422,7 +422,7 @@ liftST :: ST s a -> InferM s b i a
 liftST action = InferT (ExceptT (Right <$> ReaderT (const action)))
 
 throwTypecheckError :: TypecheckError -> i -> InferM s b i a
-throwTypecheckError te i = throwError te
+throwTypecheckError te _i = throwError te
 
 _dbgTypedTerm
   :: TCTerm s b i
@@ -1542,7 +1542,7 @@ inferTopLevel loaded = \case
   IR.TLInterface i -> do
     tci <- inferInterface i
     let toFqn dc = FullyQualifiedName (Typed._ifName tci) (Typed._dcName dc) (Typed._ifHash tci)
-        newTLs = Map.fromList $ fmap (\df -> (toFqn df, DefunType (Typed._dcType df))) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
+        newTLs = Map.fromList $ (\df -> (toFqn df, DefunType (Typed._dcType df))) <$> mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
         loaded' = over loAllTyped (Map.union newTLs) loaded
     pure (Typed.TLInterface tci, loaded')
 
