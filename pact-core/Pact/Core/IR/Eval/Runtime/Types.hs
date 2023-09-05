@@ -38,7 +38,9 @@ module Pact.Core.IR.Eval.Runtime.Types
  , EvalTEnv(..)
  , emGas, emGasLog, emRuntimeEnv
  , EvalState(..)
- , esCaps, esEvents, esInCap
+ , esCaps, esEvents, esInCap, esPactExec
+ , peStepCount, peYield, peStep, peStepHasRollback, pePactId, peContinuation
+ , pcDef, pcArgs
  , esStack
  , pattern VLiteral
  , pattern VGuard
@@ -53,6 +55,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , pattern VDefClosure
  , pattern VLamClosure
  , pattern VPartialClosure
+ , pattern VPactClosure
  , pattern VNative
  , pattern VPartialNative
  -- Capabilities
@@ -73,6 +76,11 @@ module Pact.Core.IR.Eval.Runtime.Types
  , PartialClosure(..)
  , CanApply(..)
  , StackFrame(..)
+ -- defpact
+ , PactExec(..)
+ , PactId(..)
+ , Yield(..)
+ , PactClosure(..)
  ) where
 
 import Control.Lens hiding ((%%=))
@@ -156,12 +164,24 @@ data PartialClosure b i m
   , _pcloInfo :: i
   } deriving Show
 
+data PactClosure b i m
+  = PactClosure
+  { _pactcloLamInfo :: !LamInfo
+  , _pactcloTypes :: !(NonEmpty (Maybe Type))
+  , _pactcloArity :: Int
+  , _pactcloTerm :: !(EvalTerm b i)
+  , _pactcloRType :: !(Maybe Type)
+  , _pactcloEnv :: !(CEKEnv b i m)
+  , _pactcloInfo :: i
+  } deriving Show
+
 data CanApply b i m
   = C {-# UNPACK #-} !(Closure b i)
   | LC {-# UNPACK #-} !(LamClosure b i m)
   | PC {-# UNPACK #-} !(PartialClosure b i m)
   | N {-# UNPACK #-} !(NativeFn b i m)
   | PN {-# UNPACK #-} !(PartialNativeFn b i m)
+  | PactC {-# UNPACK #-} !(PactClosure b i m)
   deriving Show
 
 -- | The type of our semantic runtime values
@@ -223,11 +243,41 @@ pattern VLamClosure clo = VClosure (LC clo)
 pattern VPartialClosure :: PartialClosure b i m -> CEKValue b i m
 pattern VPartialClosure clo = VClosure (PC clo)
 
+pattern VPactClosure :: PactClosure b i m -> CEKValue b i m
+pattern VPactClosure clo = VClosure (PactC clo)
+
 -- | Result of an evaluation step, either a CEK value or an error.
 data EvalResult b i m
   = EvalValue (CEKValue b i m)
   | VError Text
   deriving Show
+
+-- | `PactId` representing pact identifiers
+newtype PactId
+  = PactId {unPactId :: Text}
+  deriving (Eq, Show)
+
+-- | `Yield` representing an object
+newtype Yield
+  = Yield {unYield :: PactObject}
+  deriving (Show)
+
+data PactContinuation
+  = PactContinuation
+  { _pcDef :: FullyQualifiedName
+  , _pcArgs :: [PactValue]
+  } deriving (Eq, Show)
+
+-- | Internal representation of pacts
+data PactExec
+  = PactExec
+  { _peStepCount :: Int
+  , _peYield :: Maybe Yield
+  , _peStep :: Int
+  , _pePactId :: PactId
+  , _peContinuation :: PactContinuation
+  , _peStepHasRollback :: Bool
+  } deriving Show
 
 data EvalState b i
   = EvalState
@@ -235,6 +285,7 @@ data EvalState b i
   , _esStack :: [StackFrame]
   , _esEvents :: [PactEvent b i]
   , _esInCap :: Bool
+  , _esPactExec :: Maybe PactExec
   } deriving Show
 
 type MonadEval b i m = (MonadEvalEnv b i m, MonadEvalState b i m, MonadGas m, MonadError (PactError i) m, MonadIO m, Default i)
@@ -386,6 +437,8 @@ data Cont b i m
   | CapBodyC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   | CapPopC CapPopState (Cont b i m)
   | StackPopC (Maybe Type) (Cont b i m)
+  -- defpact
+  | DefPactC (Maybe Type) (CEKEnv b i m) (Cont b i m) -- PactExec [PactStep Name Type b i]
   | Mt
   deriving Show
 
@@ -403,6 +456,7 @@ data EvalEnv b i m
   , _eeMHashes :: Map ModuleName ModuleHash
   , _eeMsgSigs :: Map PublicKeyText (Set CapToken)
   , _eePactDb :: PactDb b i
+  -- , _eePactStep :: Maybe (PactStep Name Type b i) -- TODO: Is this actually needed?
   --   _cekGas :: IORef Gas
   -- , _cekEvalLog :: IORef (Maybe [(Text, Gas)])
   -- , _ckeData :: EnvData PactValue
@@ -448,6 +502,8 @@ instance (Show i, Show b, Pretty b) => Pretty (CEKValue b i m) where
     -- VModRef mn _ ->
     --   "modref" <> P.braces (pretty mn)
 
+makeLenses ''PactExec
+makeLenses ''PactContinuation
 makeLenses ''EvalEnv
 makeLenses ''EvalTEnv
 makeLenses ''EvalState

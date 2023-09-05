@@ -115,7 +115,7 @@ interpretReplProgram (SourceCode source) = do
                     , _eeMHashes = mhashes
                     , _eeMsgSigs = mempty
                     , _eePactDb = pdb }
-              rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] [] False)
+              rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] [] False Nothing)
           -- Todo: Fix this with `returnCEKValue`
           liftIO (runReplCEK rEnv rState te) >>= liftEither >>= \case
             VError txt ->

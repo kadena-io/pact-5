@@ -7,6 +7,7 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -328,6 +329,35 @@ desugarDefun (Lisp.Defun defname (arg:args) mrt body _ _ i) = do
     Nothing -> error "Defun is module-less"
 
 
+desugarPactStep
+  :: MonadDesugar raw reso i m
+  => Lisp.PactStep i
+  -> m (PactStep ParsedName DesugarType raw i)
+desugarPactStep = \case
+  Lisp.Step step mSteps ->
+    Step <$> desugarLispTerm step <*> desugarMaybeSteps mSteps
+  Lisp.StepWithRollback step rollback mSteps ->
+    StepWithRollback
+    <$> desugarLispTerm step
+    <*> desugarLispTerm rollback
+    <*> desugarMaybeSteps mSteps
+  where
+    desugarMaybeSteps
+      :: MonadDesugar raw reso i m
+      => Maybe [Lisp.Expr i]
+      -> m (Maybe [Term ParsedName DesugarType raw i])
+    desugarMaybeSteps Nothing = pure Nothing
+    desugarMaybeSteps (Just steps) = Just <$> traverse desugarLispTerm steps
+
+desugarDefPact
+  :: MonadDesugar raw reso i m
+  => Lisp.DefPact i
+  -> m (DefPact ParsedName DesugarType raw i)
+desugarDefPact (Lisp.DefPact name margs rt steps _ _ i) = do
+  let args = toArg <$> margs
+  steps' <- traverse desugarPactStep steps
+  pure $ DefPact name args rt steps' i
+
 
 desugarDefConst
   :: (MonadDesugar raw reso i m)
@@ -422,7 +452,7 @@ desugarDef = \case
   Lisp.DCap dc -> DCap <$> desugarDefCap dc
   Lisp.DSchema d -> DSchema <$> desugarDefSchema d
   Lisp.DTable d -> DTable <$> desugarDefTable d
-  _ -> error "unimplemented"
+  Lisp.DPact d -> DPact <$> desugarDefPact d
 
 -- Todo: Module hashing, either on source or
 -- the contents
@@ -573,6 +603,19 @@ defConstSCC mn cd = termSCC mn cd . _dcTerm
 -- defCapSCC :: ModuleName -> DefCap Name b i -> Set Text
 -- defCapSCC mn = termSCC mn . _dcapTerm
 
+defPactSCC
+  :: ModuleName
+  -> Set Text
+  -> PactStep ParsedName DesugarType b i
+  -> Set Text
+defPactSCC mn cd = \case
+  Step step mSteps -> Set.union (termSCC mn cd step) (stepsSCC mSteps)
+  StepWithRollback step rollback mSteps ->
+    Set.unions $ stepsSCC mSteps : [termSCC mn cd step, termSCC mn cd rollback]
+  where
+    stepsSCC :: Maybe [Term ParsedName DesugarType b i] -> Set Text
+    stepsSCC = maybe Set.empty (foldMap $ termSCC mn cd)
+
 defSCC
   :: ModuleName
   -> Set Text
@@ -584,6 +627,7 @@ defSCC mn cd = \case
   DCap dc -> termSCC mn cd (_dcapTerm dc)
   DSchema ds -> foldMap (typeSCC mn cd) ( _dsSchema ds)
   DTable _ -> mempty
+  DPact dp -> foldMap (defPactSCC mn cd) (_dpSteps dp)
 
 ifDefSCC
   :: ModuleName
@@ -891,6 +935,30 @@ renameDefun (Defun n args ret term i) = do
   term' <- local (set reCurrDef (Just DKDefun)) $ renameTerm term
   pure (Defun n args' ret' term' i)
 
+renamePactStep
+  :: forall raw reso i m. MonadDesugar raw reso i m
+  => PactStep ParsedName DesugarType raw i
+  -> m (PactStep Name Type raw i)
+renamePactStep = \case
+  Step step mSteps ->
+    Step <$> renameTerm step <*> mListRename mSteps
+  StepWithRollback step rollback mSteps ->
+    StepWithRollback <$> renameTerm step <*> renameTerm rollback <*> mListRename mSteps
+  where
+    mListRename :: Maybe [Term ParsedName DesugarType raw i] -> m (Maybe [Term Name Type raw i])
+    mListRename = maybe (pure Nothing) (fmap Just . traverse renameTerm)
+
+renameDefPact
+  :: MonadDesugar raw reso i m
+  => DefPact ParsedName DesugarType raw i
+  -> m (DefPact Name Type raw i)
+renameDefPact (DefPact n args mret steps i) = do
+  args' <- (traverse.traverse) (renameType i) args
+  mret' <- traverse (renameType i) mret
+  steps' <- local (set reCurrDef (Just DKDefPact)) $
+    traverse renamePactStep steps
+  pure (DefPact n args' mret' steps' i)
+
 renameDefSchema
   :: (MonadRenamer reso i m)
   => DefSchema DesugarType i
@@ -971,6 +1039,7 @@ renameDef = \case
   DCap d -> DCap <$> renameDefCap d
   DSchema d -> DSchema <$> renameDefSchema d
   DTable d -> DTable <$> renameDefTable d
+  DPact d -> DPact <$> renameDefPact d
 
 renameIfDef
   :: (MonadDesugar raw reso i m)

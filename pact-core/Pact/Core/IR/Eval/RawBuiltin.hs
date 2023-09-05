@@ -22,7 +22,7 @@ module Pact.Core.IR.Eval.RawBuiltin
 -- CEK runtime for our IR term
 --
 
-import Control.Lens hiding (from, to, op)
+import Control.Lens hiding (from, to, op, (%%=))
 import Control.Monad(when)
 import Data.Bits
 import Data.Decimal(roundTo', Decimal)
@@ -649,6 +649,15 @@ coreAccess info = mkBuiltinFn info \cont handler -> \case
       Nothing -> error "todo: better error here"
   _ -> failInvariant "list-access"
 
+
+coreYield :: (BuiltinArity b, MonadEval b i m) => i -> b -> NativeFn b i m
+coreYield info = mkBuiltinFn info \cont handler -> \case
+  [VObject o] -> do
+    esPactExec . _Just . peYield %%= const (Just $ Yield o)
+    returnCEKValue cont handler VUnit
+  _ -> failInvariant "yield expects object"
+
+
 -----------------------------------
 -- try-related ops
 -----------------------------------
@@ -958,3 +967,4 @@ rawBuiltinLiftedRuntime f i = \case
   RawB64Encode -> coreB64Encode i (f RawB64Encode)
   RawB64Decode -> coreB64Decode i (f RawB64Decode)
   RawStrToList -> strToList i (f RawStrToList)
+  RawYield -> coreYield i (f RawYield)

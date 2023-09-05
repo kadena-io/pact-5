@@ -77,6 +77,9 @@ evalCEK cont handler env (Var n info)  = do
           returnCEKValue cont handler dfunClo
         Just (DConst d) ->
           evalCEK cont handler mempty (_dcTerm d)
+        Just (DPact d) -> do
+          dpactClo <- mkDefpactClosure d
+          returnCEKValue cont handler dpactClo
         Just _ -> failInvariant' "invalid call" info
         Nothing -> failInvariant' ("top level name " <> T.pack (show fqn) <> " not in scope") info
     NModRef m ifs -> case ifs of
@@ -178,6 +181,23 @@ mkDefunClosure d = case _dfunTerm d of
   Lam li args body i ->
     pure (VDefClosure (Closure li (_argType <$> args) (NE.length args) body (_dfunRType d) i))
   _ -> error "defun is not a function, fatal"
+
+mkDefpactClosure
+  :: Applicative f
+  => DefPact Name Type b i
+  -> f (CEKValue b i m)
+mkDefpactClosure (DefPact n args mrty steps i) = case steps of
+  [] -> error "steps empty"
+  step:_steps -> do
+    let
+      step' = mkStep step
+      pc = PactClosure undefined undefined undefined undefined undefined undefined undefined
+    pure (VPactClosure pc)
+  where
+    mkStep :: PactStep Name Type b i -> EvalTerm b i
+    mkStep = \case
+      Step s ms -> undefined
+      StepWithRollback s rb ms -> undefined
 
 -- Todo: fail invariant
 nameToFQN :: Applicative f => Name -> f FullyQualifiedName
@@ -489,6 +509,8 @@ returnCEKValue (StackPopC mty cont) handler v = do
   -- Todo: unsafe use of tail here. need `tailMay`
   (esStack %%= tail) *> returnCEKValue cont handler (VPactValue v')
 
+returnCEKValue DefPactC{} _ _ = undefined
+
 
 applyLam
   :: (MonadEval b i m)
@@ -573,6 +595,17 @@ applyLam (PN (PartialNativeFn b fn arity pArgs i)) args cont handler
   apply' !a pa [] =
     returnCEKValue cont handler (VPartialNative (PartialNativeFn b fn a pa i))
 
+applyLam (PactC (PactClosure li cloargs arity term rty env _)) args cont handler
+  | arity == argLen = do
+    args' <- traverse enforcePactValue args
+    tcArgs <- zipWithM (\arg ty -> VPactValue <$> maybeTCType arg ty) args' (NE.toList cloargs)
+    esStack %%= (StackFrame li :)
+    let cont' = DefPactC rty env cont
+    evalCEK cont' handler (RAList.fromList (reverse tcArgs)) term
+  | argLen > arity = error "Closure applied to too many arguments"
+  | otherwise = error "Closure applied to few arguments"
+  where
+  argLen = length args
 
 failInvariant :: MonadEval b i m => Text -> m a
 failInvariant b =

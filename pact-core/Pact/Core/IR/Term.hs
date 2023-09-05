@@ -38,6 +38,45 @@ import Pact.Core.Imports
 import Pact.Core.Capabilities
 import Pact.Core.Pretty
 
+data LamInfo
+  = TLDefun ModuleName Text
+  | TLDefCap ModuleName Text
+  | AnonLamInfo
+  deriving Show
+
+-- | Core IR
+data Term name ty builtin info
+  = Var name info
+  -- ^ single variables e.g x
+  | Lam LamInfo (NonEmpty (Arg ty)) (Term name ty builtin info) info
+  -- ^ $f = \x.e
+  -- Lambdas are named for the sake of the callstack.
+  | Let (Arg ty) (Term name ty builtin info) (Term name ty builtin info) info
+  -- ^ let x = e1 in e2
+  | App (Term name ty builtin info) (NonEmpty (Term name ty builtin info)) info
+  -- ^ (e1 e2)
+  | Sequence (Term name ty builtin info) (Term name ty builtin info) info
+  -- ^ error term , error "blah"
+  | Conditional (BuiltinForm (Term name ty builtin info)) info
+  -- ^ Conditional terms
+  | Builtin builtin info
+  -- ^ Built-in ops, e.g (+)
+  | Constant Literal info
+  -- ^ Literals
+  | ListLit [Term name ty builtin info] info
+  -- ^ List Literals
+  | Try (Term name ty builtin info) (Term name ty builtin info) info
+  -- ^ try (catch expr) (try-expr)
+  | CapabilityForm (CapForm name (Term name ty builtin info)) info
+  -- ^ Capability Natives
+  | ObjectLit [(Field, Term name ty builtin info)] info
+  -- ^ an object literal
+  | DynInvoke (Term name ty builtin info) Text info
+  -- ^ dynamic module reference invocation m::f
+  | Error Text info
+  -- ^ Error term
+  deriving (Show, Functor)
+
 data Defun name ty builtin info
   = Defun
   { _dfunName :: Text
@@ -45,6 +84,28 @@ data Defun name ty builtin info
   , _dfunRType :: Maybe ty
   , _dfunTerm :: Term name ty builtin info
   , _dfunInfo :: info
+  } deriving (Show, Functor)
+
+data PactStep name ty builtin info
+  = Step (Term name ty builtin info) (Maybe [Term name ty builtin info])
+  | StepWithRollback
+    (Term name ty builtin info)
+    (Term name ty builtin info)
+    (Maybe [Term name ty builtin info])
+  deriving (Show, Functor)
+
+hasRollback :: PactStep n t b i -> Bool
+hasRollback Step{} = False
+hasRollback StepWithRollback{} = True
+
+
+data DefPact name ty builtin info
+  = DefPact
+  { _dpName :: Text
+  , _dpArgs :: [Arg ty]
+  , _dpRetType :: Maybe ty
+  , _dpSteps :: [PactStep name ty builtin info]
+  , _dpInfo :: info
   } deriving (Show, Functor)
 
 data DefConst name ty builtin info
@@ -99,6 +160,7 @@ data Def name ty builtin info
   | DCap (DefCap name ty builtin info)
   | DSchema (DefSchema ty info)
   | DTable (DefTable name info)
+  | DPact (DefPact name ty builtin info)
   deriving (Show, Functor)
 
 data Module name ty builtin info
@@ -170,6 +232,7 @@ defName (DConst d) = _dcName d
 defName (DCap d) = _dcapName d
 defName (DSchema d) = _dsName d
 defName (DTable d) = _dtName d
+defName (DPact d) = _dpName d
 
 defKind :: Def name Type b i -> DefKind
 defKind = \case
@@ -178,6 +241,7 @@ defKind = \case
   DCap{} -> DKDefCap
   DSchema ds -> DKDefSchema (Schema (_dsSchema ds))
   DTable{} -> DKDefTable
+  DPact{} -> DKDefPact
 
 ifDefKind :: IfDef name Type b i -> Maybe DefKind
 ifDefKind = \case
@@ -199,6 +263,7 @@ defInfo = \case
   DCap dc -> _dcapInfo dc
   DSchema dc -> _dsInfo dc
   DTable dt -> _dtInfo dt
+  DPact dp -> _dpInfo dp
 
 
 ifDefInfo :: IfDef name ty b i -> i
@@ -212,44 +277,44 @@ type EvalDef b i = Def Name Type b i
 type EvalModule b i = Module Name Type b i
 type EvalInterface b i = Interface Name Type b i
 
-data LamInfo
-  = TLDefun ModuleName Text
-  | TLDefCap ModuleName Text
-  | AnonLamInfo
-  deriving Show
+-- data LamInfo
+--   = TLDefun ModuleName Text
+--   | TLDefCap ModuleName Text
+--   | AnonLamInfo
+--   deriving Show
 
--- | Core IR
-data Term name ty builtin info
-  = Var name info
-  -- ^ single variables e.g x
-  | Lam LamInfo (NonEmpty (Arg ty)) (Term name ty builtin info) info
-  -- ^ $f = \x.e
-  -- Lambdas are named for the sake of the callstack.
-  | Let (Arg ty) (Term name ty builtin info) (Term name ty builtin info) info
-  -- ^ let x = e1 in e2
-  | App (Term name ty builtin info) (NonEmpty (Term name ty builtin info)) info
-  -- ^ (e1 e2)
-  | Sequence (Term name ty builtin info) (Term name ty builtin info) info
-  -- ^ error term , error "blah"
-  | Conditional (BuiltinForm (Term name ty builtin info)) info
-  -- ^ Conditional terms
-  | Builtin builtin info
-  -- ^ Built-in ops, e.g (+)
-  | Constant Literal info
-  -- ^ Literals
-  | ListLit [Term name ty builtin info] info
-  -- ^ List Literals
-  | Try (Term name ty builtin info) (Term name ty builtin info) info
-  -- ^ try (catch expr) (try-expr)
-  | CapabilityForm (CapForm name (Term name ty builtin info)) info
-  -- ^ Capability Natives
-  | ObjectLit [(Field, Term name ty builtin info)] info
-  -- ^ an object literal
-  | DynInvoke (Term name ty builtin info) Text info
-  -- ^ dynamic module reference invocation m::f
-  | Error Text info
-  -- ^ Error term
-  deriving (Show, Functor)
+-- -- | Core IR
+-- data Term name ty builtin info
+--   = Var name info
+--   -- ^ single variables e.g x
+--   | Lam LamInfo (NonEmpty (Arg ty)) (Term name ty builtin info) info
+--   -- ^ $f = \x.e
+--   -- Lambdas are named for the sake of the callstack.
+--   | Let (Arg ty) (Term name ty builtin info) (Term name ty builtin info) info
+--   -- ^ let x = e1 in e2
+--   | App (Term name ty builtin info) (NonEmpty (Term name ty builtin info)) info
+--   -- ^ (e1 e2)
+--   | Sequence (Term name ty builtin info) (Term name ty builtin info) info
+--   -- ^ error term , error "blah"
+--   | Conditional (BuiltinForm (Term name ty builtin info)) info
+--   -- ^ Conditional terms
+--   | Builtin builtin info
+--   -- ^ Built-in ops, e.g (+)
+--   | Constant Literal info
+--   -- ^ Literals
+--   | ListLit [Term name ty builtin info] info
+--   -- ^ List Literals
+--   | Try (Term name ty builtin info) (Term name ty builtin info) info
+--   -- ^ try (catch expr) (try-expr)
+--   | CapabilityForm (CapForm name (Term name ty builtin info)) info
+--   -- ^ Capability Natives
+--   | ObjectLit [(Field, Term name ty builtin info)] info
+--   -- ^ an object literal
+--   | DynInvoke (Term name ty builtin info) Text info
+--   -- ^ dynamic module reference invocation m::f
+--   | Error Text info
+--   -- ^ Error term
+--   deriving (Show, Functor)
 
 instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builtin info) where
   pretty = \case

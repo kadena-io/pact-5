@@ -227,6 +227,8 @@ data RawBuiltin
   | RawB64Encode
   | RawB64Decode
   | RawStrToList
+  -- | DefPacts
+  | RawYield
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 rawBuiltinToText :: RawBuiltin -> Text
@@ -304,6 +306,7 @@ rawBuiltinToText = \case
   RawB64Encode -> "base64-encode"
   RawB64Decode -> "base64-decode"
   RawStrToList -> "str-to-list"
+  RawYield -> "yield"
 
 instance BuiltinArity RawBuiltin where
   builtinArity = \case
@@ -380,6 +383,7 @@ instance BuiltinArity RawBuiltin where
     RawB64Encode -> 1
     RawB64Decode -> 1
     RawStrToList -> 1
+    RawYield -> 1
 
 rawBuiltinNames :: [Text]
 rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]
@@ -425,6 +429,8 @@ data ReplBuiltin b
   -- | RVerify
   -- | RWithAppliedEnv
   -- | RLoad
+  -- Defpact
+  | RContinuePact
   deriving (Eq, Show)
 
 -- NOTE: Maybe `ReplBuiltin` is not a great abstraction, given
@@ -436,11 +442,12 @@ instance BuiltinArity b => BuiltinArity (ReplBuiltin b) where
     RExpectFailure -> 2
     RExpectThat -> 3
     RPrint -> 1
+    RContinuePact -> 1 -- TODO: Continue has three different forms
     -- RLoad -> 1
 
 instance Bounded b => Bounded (ReplBuiltin b) where
   minBound = RBuiltinWrap minBound
-  maxBound = RPrint
+  maxBound = RContinuePact
 
 instance (Enum b, Bounded b) => Enum (ReplBuiltin b) where
   toEnum  = replBToEnum
@@ -457,6 +464,7 @@ replBToEnum i =
     2 -> RExpectFailure
     3 -> RExpectThat
     4 -> RPrint
+    5 -> RContinuePact
     -- 5 -> RLoad
     _ -> error "invalid"
   where
@@ -472,6 +480,7 @@ replBFromEnum e =
     RExpectFailure -> maxContained + 2
     RExpectThat -> maxContained + 3
     RPrint -> maxContained + 4
+    RContinuePact -> maxContained + 5
     -- RLoad -> maxContained + 5
 {-# INLINE replBFromEnum #-}
 
@@ -482,6 +491,7 @@ replBuiltinToText f = \case
   RExpectFailure -> "expect-failure"
   RExpectThat -> "expect-that"
   RPrint -> "print"
+  RContinuePact -> "continue"
   -- RLoad -> "load"
 
 replRawBuiltinNames :: [Text]

@@ -3,6 +3,7 @@
 
 module Pact.Core.PactValue
  ( PactValue(..)
+ , PactObject
  , _PLiteral
  , _PList
  , _PGuard
@@ -27,11 +28,13 @@ import Pact.Core.ModRefs
 
 import qualified Pact.Core.Pretty as Pretty
 
+type PactObject = Map Field PactValue
+
 data PactValue
   = PLiteral Literal
   | PList (Vector PactValue)
   | PGuard (Guard FullyQualifiedName PactValue)
-  | PObject (Map Field PactValue)
+  | PObject PactObject
   | PModRef ModRef
   deriving (Eq, Show, Ord)
 

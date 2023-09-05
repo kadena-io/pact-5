@@ -113,7 +113,7 @@ setEvalState l s = modifyEvalState (set l s)
 -- overEvalState :: (MonadEval b i m) => Lens' (EvalState b i) s -> (s -> s) -> m ()
 -- overEvalState l f = modifyCEKState (over l f)
 
-(%%=) :: (MonadEval b i m) => Lens' (EvalState b i) s -> (s -> s) -> m ()
+(%%=) :: (MonadEval b i m) => Traversal' (EvalState b i) s -> (s -> s) -> m ()
 l %%= f = modifyEvalState (over l f)
 
 infix 4 %%=

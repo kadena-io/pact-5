@@ -7,6 +7,7 @@ import Control.Monad.IO.Class(liftIO)
 import Data.Default
 import Data.Text(Text)
 import qualified Data.Text as T
+import Control.Lens
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
@@ -14,6 +15,7 @@ import Pact.Core.Literal
 -- import Pact.Core.Errors
 
 import Pact.Core.IR.Eval.Runtime
+import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.CEK
 import Pact.Core.IR.Eval.RawBuiltin(rawBuiltinLiftedRuntime, prettyShowValue)
 import qualified Pact.Core.IR.Eval.RawBuiltin as RawBuiltin
@@ -115,6 +117,17 @@ coreExpectFailure info = mkReplBuiltinFn info \cont handler -> \case
         returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result"
   _ -> failInvariant "Expect-failure"
 
+continuePact :: (BuiltinArity b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
+continuePact info = mkReplBuiltinFn info \cont handler -> \case
+  [VLiteral (LInteger s)] -> do
+    useEvalState esPactExec >>= \case
+      Nothing -> pure (VError "No pact exec environment found!")
+      Just pe -> lookupFqName (pe ^. peContinuation . pcDef) >>= \case
+        Just (DPact d) ->
+          let cont' = undefined
+          in evalCEK cont' handler undefined undefined
+        _ -> pure (VError "continuation is not a defpact")
+  _ -> failInvariant "continue-pact"
 
 replRawBuiltinRuntime
   :: (Default i)
@@ -128,6 +141,7 @@ replRawBuiltinRuntime i = \case
   RExpectFailure -> coreExpectFailure i RExpectFailure
   RExpectThat -> coreExpectThat i RExpectThat
   RPrint -> corePrint i RPrint
+  RContinuePact -> continuePact i RContinuePact
 
 -- defaultReplState :: Default i => ReplEvalState (ReplBuiltin RawBuiltin) i
 -- defaultReplState = ReplEvalState env (EvalState (CapState [] mempty) [] [] False)
