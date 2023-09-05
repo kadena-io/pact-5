@@ -1461,11 +1461,15 @@ inferIfDef
   => IR.IfDef Name IRType b i
   -> InferM s b' i (TypedIfDef b i)
 inferIfDef = \case
-  IR.IfDfun ifd ->
-    pure (Typed.IfDfun (Typed.IfDefun (IR._ifdName ifd) (IR._ifdType ifd) (IR._ifdInfo ifd)))
+  IR.IfDfun ifd -> do
+    let irArgs = IR._ifdArgs ifd
+    (argtys, rty) <- irFunToTc irArgs (IR._ifdRType ifd)
+    let args = toTypedArgs irArgs argtys
+    pure (Typed.IfDfun (Typed.IfDefun (IR._ifdName ifd) args rty (IR._ifdInfo ifd)))
   IR.IfDConst dc ->
     Typed.IfDConst <$> inferDefConst dc
-  IR.IfDCap (IR.IfDefCap n argtys rty i) ->
+  IR.IfDCap (IR.IfDefCap n irArgs irRty i) -> do
+    (argtys, rty) <- irFunToTc irArgs irRty
     pure $ Typed.IfDCap (Typed.IfDefCap n argtys rty i)
 
 inferModule
