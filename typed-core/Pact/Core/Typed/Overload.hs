@@ -25,6 +25,7 @@ import Data.List.NonEmpty(NonEmpty(..))
 
 -- import qualified Data.Text as T
 
+import Pact.Core.Type (BuiltinTC(..))
 import Pact.Core.Typed.Type
 import Pact.Core.Names
 import Pact.Core.Builtin
