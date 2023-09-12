@@ -594,9 +594,19 @@ coreYield info b = mkBuiltinFn info b \cont handler -> \case
       Nothing -> throwExecutionError info YieldOutsiteDefPact
       Just pe -> do
         setEvalState esPactExec (Just pe{_peYield = Just (Yield o)})
-        returnCEKValue cont handler VUnit
+        returnCEKValue cont handler (VObject o)
   args -> argsError info b args
 
+coreResume :: (IsBuiltin b, MonadEval b i m) => i -> b -> NativeFn b i m
+coreResume info b = mkBuiltinFn info b \cont handler -> \case
+  [VClosure clo] -> do
+    mpe <- useEvalState esPactExec
+    case mpe of
+      Nothing -> throwExecutionError info NoActivePactExec
+      Just pe -> case _peYield pe of
+        Nothing -> throwExecutionError info NoYieldInPactExec
+        Just (Yield resumeObj) -> applyLam clo [VObject resumeObj] cont handler
+  args -> argsError info b args
 
 -----------------------------------
 -- try-related ops
@@ -911,4 +921,5 @@ rawBuiltinLiftedRuntime f i = \case
   RawB64Decode -> coreB64Decode i (f RawB64Decode)
   RawStrToList -> strToList i (f RawStrToList)
   RawYield -> coreYield i (f RawYield)
+  RawResume -> coreResume i (f RawResume)
   RawBind -> coreBind i (f RawBind)

@@ -262,7 +262,7 @@ Defcap :: { SpanInfo -> DefCap SpanInfo }
 
 DefPact :: { SpanInfo -> DefPact SpanInfo }
   : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel Steps
-    { DefPact (getIdent $2) $5 $3 $8 (fst $7) (snd $7) }
+  { DefPact (getIdent $2) $5 $3 (reverse $8) (fst $7) (snd $7) }
 
 Steps :: { [PactStep SpanInfo] }
   : Steps Step { $2:$1 }

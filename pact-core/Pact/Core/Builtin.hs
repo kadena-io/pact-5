@@ -221,6 +221,7 @@ data RawBuiltin
   | RawB64Decode
   | RawStrToList
   | RawYield
+  | RawResume
   | RawBind
   deriving (Eq, Show, Ord, Bounded, Enum)
 
@@ -303,6 +304,7 @@ rawBuiltinToText = \case
   RawB64Decode -> "base64-decode"
   RawStrToList -> "str-to-list"
   RawYield -> "yield"
+  RawResume -> "resume"
   RawBind -> "bind"
 
 instance IsBuiltin RawBuiltin where
@@ -382,6 +384,7 @@ instance IsBuiltin RawBuiltin where
     RawB64Decode -> 1
     RawStrToList -> 1
     RawYield -> 1
+    RawResume -> 1
     RawBind -> 2
 
 rawBuiltinNames :: [Text]
@@ -433,6 +436,8 @@ data ReplBuiltins
   -- | RLoad
   -- Defpact
   | RContinuePact
+  | RPactState
+  | RResetPactState
   deriving (Show, Enum, Bounded, Eq)
 
 
@@ -444,7 +449,10 @@ instance IsBuiltin ReplBuiltins where
     RExpectThat -> 3
     RPrint -> 1
     RContinuePact -> 1 -- TODO: Continue has three different forms
+    RPactState -> 1
+    RResetPactState -> 1
     REnvStackFrame -> 1
+
 -- Note: commented out natives are
 -- to be implemented later
 data ReplBuiltin b
@@ -491,6 +499,8 @@ replBuiltinsToText = \case
   RExpectThat -> "expect-that"
   RPrint -> "print"
   RContinuePact -> "continue-pact"
+  RPactState -> "pact-state"
+  RResetPactState -> "reset-pact-state"
   REnvStackFrame -> "env-stackframe"
   -- RLoad -> "load"
 

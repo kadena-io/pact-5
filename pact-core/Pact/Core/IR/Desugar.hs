@@ -27,7 +27,6 @@ module Pact.Core.IR.Desugar
  , DesugarBuiltin(..)
  ) where
 
-import Debug.Trace
 import Control.Monad ( when, forM, (>=>))
 import Control.Monad.Reader
 import Control.Monad.State.Strict
@@ -364,7 +363,8 @@ desugarDefPact
   :: forall i m raw reso. MonadDesugar raw reso i m
   => Lisp.DefPact i
   -> m (DefPact ParsedName DesugarType raw i)
-desugarDefPact (Lisp.DefPact dpname _ _ [] _ _ i) = throwDesugarError (EmptyDefPact dpname) i
+desugarDefPact (Lisp.DefPact dpname _ _ [] _ _ i) =
+  throwDesugarError (EmptyDefPact dpname) i
 desugarDefPact (Lisp.DefPact dpname margs rt (step:steps) _ _ i) =
   view reCurrModule >>= \case
     Just mn -> do
@@ -384,7 +384,12 @@ desugarDefPact (Lisp.DefPact dpname margs rt (step:steps) _ _ i) =
           <$> desugarStep s
           <*> desugarStep rb
           <*> desugarMSteps ms
-      pure $ DefPact dpname args' rt (NE.reverse steps') i
+
+      -- In Pact, last steps are not allowed to roll back.
+      when (hasRollback $ NE.last steps') $
+        throwDesugarError (LastStepWithRollback (QualifiedName dpname mn)) i
+
+      pure $ DefPact dpname args' rt steps' i
     Nothing -> error "Defpact is module-less"
 
 desugarDefConst
@@ -652,7 +657,7 @@ resolveModuleName
 resolveModuleName mn i =
   use (rsLoaded . loModules . at mn) >>= \case
     Just md -> pure md
-    Nothing -> trace "@@@@@@" $
+    Nothing ->
       view rePactDb >>= liftIO . (`readModule` mn) >>= \case
       Nothing -> throwDesugarError (NoSuchModule mn) i
       Just md -> case md of
@@ -776,7 +781,7 @@ lookupModuleMember modName name i = do
             loadInterface iface deps dconstDeps dcDeps
             pure (Name name nk, dk)
           Nothing -> throwDesugarError (NoSuchModuleMember modName name) i
-    Nothing -> trace "!!!!!!!" $ throwDesugarError (NoSuchModule modName) i
+    Nothing -> throwDesugarError (NoSuchModule modName) i
   where
   toDepMap mhash def = (defName def, (NTopLevel modName mhash, defKind def))
 
@@ -1089,7 +1094,7 @@ resolveBare (BareName bn) i = views reBinds (M.lookup bn) >>= \case
     (nk, dk) -> pure (Name bn nk, dk)
   Nothing -> uses (rsLoaded . loToplevel) (M.lookup bn) >>= \case
     Just (fqn, dk) -> pure (Name bn (NTopLevel (_fqModule fqn) (_fqHash fqn)), Just dk)
-    Nothing -> trace (show bn)  $ do
+    Nothing -> do
       let mn = ModuleName bn Nothing
       resolveModuleName mn i >>= \case
         ModuleData md _ -> do

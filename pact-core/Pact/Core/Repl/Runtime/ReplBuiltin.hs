@@ -12,7 +12,7 @@ import Control.Lens
 import Pact.Core.Builtin
 import Pact.Core.Literal
 -- import Pact.Core.Gas
--- import Pact.Core.Errors
+import Pact.Core.Errors
 
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.IR.Term
@@ -24,6 +24,8 @@ import Pact.Core.IR.Eval.RawBuiltin
 import Pact.Core.Pretty
 
 import qualified Data.List.NonEmpty as NE
+import Data.Map.Strict (fromList)
+import Pact.Core.PactValue
 
 
 import Pact.Core.Repl.Runtime
@@ -104,9 +106,8 @@ continuePact info b = mkReplBuiltinFn info b \cont handler -> \case
       Nothing -> pure (VError "No pact exec environment found!")
       Just pe -> lookupFqName (pe ^. peContinuation . pcName) >>= \case
         Just (DPact dp)
-          | s >= toInteger (_peStepCount pe) -> undefined
-          | s <= toInteger (_peStep pe) -> undefined
-          | otherwise -> do
+          | s == toInteger (_peStep pe) + 1 &&
+            s < toInteger (_peStepCount pe) -> do
               let
                 step = _dpSteps dp NE.!! fromInteger s
                 args' = VPactValue <$> pe ^. peContinuation . pcArgs
@@ -118,9 +119,35 @@ continuePact info b = mkReplBuiltinFn info b \cont handler -> \case
                 Step s' _ -> toClosure s'
                 StepWithRollback s' _rb _ -> toClosure s'
               setEvalState esPactExec (Just $ over peStep (+1) pe)
-              returnCEK cont handler v
+              returnCEK (PactStepC cont) handler v
+          | otherwise ->
+            throwExecutionError info (ContinuePactInvalidContext s (toInteger (_peStep pe)) (toInteger (_peStepCount pe)))
         _ -> pure (VError "continuation is not a defpact")
   args -> argsError info b args
+
+pactState :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
+pactState info b = mkReplBuiltinFn info b \_cont _handler -> \case
+  [_] -> do
+    mpe <- useEvalState esPactExec
+    mRet <- case mpe of
+      Just pe -> case _peYield pe of
+        Nothing -> pure (Just $ PLiteral (LBool False))
+        Just (Yield y) -> pure (Just $ PObject y)
+      Nothing -> pure Nothing
+    case mRet of
+      Nothing -> pure (EvalValue $ VString "No Pact State available")
+      Just yield ->
+        let ps = [(Field "pactId", PLiteral (LString ""))
+                 ,(Field "yield", yield)]
+        in pure (EvalValue $ VObject (fromList ps))
+  args -> argsError info b args
+
+resetPactState :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
+resetPactState info b = mkReplBuiltinFn info b \_cont _handler -> \case
+  [_] -> setEvalState esPactExec Nothing >> pure (EvalValue $ VString "Resetted Pact State")
+  args -> argsError info b args
+
+
 
 coreEnvStackFrame :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
 coreEnvStackFrame info b = mkReplBuiltinFn info b \cont handler -> \case
@@ -145,6 +172,8 @@ replRawBuiltinRuntime i = \case
     RPrint -> corePrint i $ RBuiltinRepl RPrint
     REnvStackFrame -> coreEnvStackFrame i $ RBuiltinRepl REnvStackFrame
     RContinuePact -> continuePact i $ RBuiltinRepl RContinuePact
+    RPactState -> pactState i $ RBuiltinRepl RPactState
+    RResetPactState -> resetPactState i $ RBuiltinRepl RResetPactState
 
 -- defaultReplState :: Default i => ReplEvalState (ReplBuiltin RawBuiltin) i
 -- defaultReplState = ReplEvalState env (EvalState (CapState [] mempty) [] [] False)

@@ -256,9 +256,9 @@ data EvalResult b i m
   deriving Show
 
 -- | `PactId` representing pact identifiers
-newtype PactId
-  = PactId {unPactId :: Text}
-  deriving (Eq, Show)
+-- newtype PactId
+--   = PactId {unPactId :: Text}
+--   deriving (Eq, Show)
 
 -- | `Yield` representing an object
 newtype Yield
@@ -274,7 +274,12 @@ data PactExec
   -- , _pePactId :: PactId
   , _peContinuation :: PactContinuation FullyQualifiedName PactValue
   , _peStepHasRollback :: Bool
+--  , _peNestedPactExec :: Map PactId NestedPactExec
   } deriving Show
+
+newtype NestedPactExec
+  = NestedPactExec PactExec
+  deriving Show
 
 data EvalState b i
   = EvalState
@@ -442,6 +447,7 @@ data Cont b i m
   | CapBodyC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   | CapPopC CapPopState (Cont b i m)
   | StackPopC (Maybe Type) (Cont b i m)
+  | PactStepC (Cont b i m)
   | Mt
   deriving Show
 

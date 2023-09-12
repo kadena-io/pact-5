@@ -118,7 +118,7 @@ enforcePactValue = \case
 -- viewsCEKEnv :: (MonadEval b i m) => Lens' (EvalEnv b i m) s -> (s -> a) -> m a
 -- viewsCEKEnv l f = views f l <$> cekReadEnv f
 
-setEvalState :: (MonadEval b i m) => Lens' (EvalState b i) s -> s -> m ()
+setEvalState :: (MonadEval b i m) => Traversal' (EvalState b i) s -> s -> m ()
 setEvalState l s = modifyEvalState (set l s)
 
 -- overEvalState :: (MonadEval b i m) => Lens' (EvalState b i) s -> (s -> s) -> m ()

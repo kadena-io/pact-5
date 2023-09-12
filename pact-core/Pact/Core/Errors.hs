@@ -130,6 +130,8 @@ data DesugarError
   --
   | EmptyDefPact Text
   -- ^ Defpact without steps
+  | LastStepWithRollback QualifiedName
+  -- ^ Last Step has Rollback error
   deriving Show
 
 instance Exception DesugarError
@@ -183,6 +185,8 @@ instance Pretty DesugarError where
       Pretty.hsep ["Invalid Interface attempted to be used as module reference:", pretty mn]
     EmptyBindingBody -> "Bind expression lacks an accompanying body"
     EmptyDefPact dp -> Pretty.hsep ["Defpact has no steps:", pretty dp]
+    LastStepWithRollback mn ->
+      Pretty.hsep ["rollbacks aren't allowed on the last step in:", pretty mn]
 
 -- data TypecheckError
 --   = UnificationError (Type Text) (Type Text)
@@ -289,6 +293,10 @@ data EvalError
   -- ^ Def is not a closure
   | NoSuchKeySet KeySetName
   | YieldOutsiteDefPact
+  | NoActivePactExec
+  | NoYieldInPactExec
+  | ContinuePactInvalidContext Integer Integer Integer
+  | MultipleOrNestedPactExecFound
   deriving Show
 
 instance Pretty EvalError where
@@ -319,8 +327,13 @@ instance Pretty EvalError where
     EvalError txt ->
       Pretty.hsep ["Program encountered an unhandled raised error:", pretty txt]
     YieldOutsiteDefPact ->
-      Pretty.hsep ["Scope error: executed yield outsite a defpact"]
-
+      "Scope error: executed yield outsite a defpact"
+    NoActivePactExec ->
+      "No active pactExec"
+    NoYieldInPactExec -> "No yield in pact exec"
+    ContinuePactInvalidContext userStep currStep maxStep ->
+      Pretty.hsep ["Continue pact step with invalid context: user: ", pretty userStep, ", current: ", pretty currStep, ", max: ", pretty maxStep]
+    MultipleOrNestedPactExecFound -> "Multiple or nested pact exec found"
     _ -> error "todo: render"
 
 

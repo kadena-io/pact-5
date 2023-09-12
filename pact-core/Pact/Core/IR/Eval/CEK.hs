@@ -14,7 +14,7 @@ module Pact.Core.IR.Eval.CEK
 
 --import Debug.Trace
 import Control.Lens hiding ((%%=))
-import Control.Monad(zipWithM)
+import Control.Monad(zipWithM, when)
 import Control.Monad.Except
 import Data.Default
 import Data.Text(Text)
@@ -26,6 +26,7 @@ import qualified Data.Vector as V
 import qualified Data.Set as S
 import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
+import Data.Maybe (isJust)
 
 import Pact.Core.Builtin
 import Pact.Core.Names
@@ -208,7 +209,7 @@ mkDefPactClosure
   => FullyQualifiedName
   -> DefPact Name Type b i
   -> m (CEKValue b i m)
-mkDefPactClosure fqn (DefPact _ _ mrty (step :| steps) _) = case step of
+mkDefPactClosure fqn (DefPact _ _ mrty (step :| steps) info) = case step of
   Step step' _ -> toClosure False step'
   StepWithRollback step' _ _ -> toClosure True step'
   where
@@ -217,7 +218,7 @@ mkDefPactClosure fqn (DefPact _ _ mrty (step :| steps) _) = case step of
       Lam li args body i ->
         let dpc = DefPactClosure fqn li (_argType <$> args) (NE.length args) body rb nSteps mrty i
         in pure (VDefPactClosure dpc)
-      _ -> undefined
+      _ -> throwExecutionError info (InvariantFailure "Step is not lambda")
 
 -- Todo: fail invariant
 nameToFQN :: Applicative f => Name -> f FullyQualifiedName
@@ -538,6 +539,13 @@ returnCEKValue (StackPopC mty cont) handler v = do
   v' <- (`maybeTCType` mty) =<< enforcePactValue v
   -- Todo: unsafe use of tail here. need `tailMay`
   (esStack %%= tail) *> returnCEKValue cont handler (VPactValue v')
+returnCEKValue (PactStepC cont) handler v = do
+  -- We need to reset the `yield` value of the current pact exection
+  -- environment to match pact semantics. This `PactStepC` frame is
+  -- only used as a continuation which resets the `yield`.
+  setEvalState (esPactExec . _Just . peYield) Nothing
+  returnCEKValue cont handler v
+
 
 
 applyLam
@@ -630,6 +638,10 @@ applyLam (DPC (DefPactClosure fqn li cloargs arity term rb sc mty i)) args cont 
     args' <- traverse enforcePactValue args
     tcArgs <- zipWithM (\arg ty -> VPactValue <$> maybeTCType arg ty) args' (NE.toList cloargs)
 
+    mCurrExec <- useEvalState esPactExec
+    when (isJust mCurrExec) $
+      throwExecutionError i MultipleOrNestedPactExecFound
+
     let
       pe = PactExec
            { _peStepCount = sc
@@ -637,8 +649,9 @@ applyLam (DPC (DefPactClosure fqn li cloargs arity term rb sc mty i)) args cont 
            , _peStep = 0
            , _peContinuation = PactContinuation fqn args'
            , _peStepHasRollback = rb
+--           , _peNestedPactExec = mempty
            }
-    setEvalState esPactExec (Just pe) -- TODO: What if there is already an PactExec?
+    setEvalState esPactExec (Just pe)
 
     esStack %%= (StackFrame li :)
     let cont' = StackPopC mty cont
