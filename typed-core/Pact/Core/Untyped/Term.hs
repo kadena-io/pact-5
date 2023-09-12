@@ -360,7 +360,7 @@ instance (Pretty name, Pretty builtin) => Pretty (Term name builtin info) where
     CapabilityForm _ _ -> error "pretty capform"
     Error e _ ->
       Pretty.parens ("error \"" <> pretty e <> "\"")
-    -- ObjectLit (Map.toList -> obj) _ ->
+    -- ObjectLit (M.toList -> obj) _ ->
     --   Pretty.braces $
     --   Pretty.hsep $
     --   Pretty.punctuate Pretty.comma $

@@ -1,14 +1,17 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Pact.Core.Pacts.Types
  ( PactId(..)
  , PactContinuation(..)
  , ChainId(..)
+ , pcName, pcArgs
  ) where
 
 -- Todo: yield
 import Data.Text(Text)
 import Pact.Core.Pretty
+import Control.Lens
 
 newtype ChainId
   = ChainId { _chainId :: Text }
@@ -23,3 +26,5 @@ data PactContinuation name v
   { _pcName :: name
   , _pcArgs :: [v]
   } deriving (Eq, Show)
+
+makeLenses ''PactContinuation

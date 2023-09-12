@@ -35,7 +35,7 @@ import Control.Lens
 import Control.Monad.Except
 import Data.Default
 import Data.Text(Text)
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 import qualified Data.RAList as RAList
 import qualified Data.Text as T
 import qualified Data.Vector as V
@@ -101,7 +101,7 @@ evalCEK cont handler env (Var n info)  = do
     -- Top level names are not closures, so we wipe the env
     NTopLevel mname mh -> do
       let fqn = FullyQualifiedName mname (_nName n) mh
-      cekReadEnv >>= \renv -> case Map.lookup fqn (view cekLoaded renv) of
+      cekReadEnv >>= \renv -> case M.lookup fqn (view cekLoaded renv) of
         Just (Dfun d) -> evalCEK cont handler RAList.Nil (_dfunTerm d)
         Just _ -> failInvariant' "invalid call" info
         Nothing -> failInvariant' ("top level name " <> T.pack (show fqn) <> " not in scope") info
@@ -206,7 +206,7 @@ evalCap
   -> EvalTerm b i
   -> m (EvalResult b i m)
 evalCap cont handler env ct@(CapToken fqn args) contbody = do
-  cekReadEnv >>= \renv -> case Map.lookup fqn (view cekLoaded renv) of
+  cekReadEnv >>= \renv -> case M.lookup fqn (view cekLoaded renv) of
     Just (DCap d) -> do
       modifyCEKState (esCaps . csSlots) (CapSlot ct []:)
       let (env', capBody) = applyCapBody mempty args (_dcapTerm d)
@@ -240,7 +240,7 @@ composeCap
   -> CapToken
   -> m (EvalResult b i m)
 composeCap cont handler ct@(CapToken fqn args) = do
-  cekReadEnv >>= \renv -> case Map.lookup fqn (view cekLoaded renv) of
+  cekReadEnv >>= \renv -> case M.lookup fqn (view cekLoaded renv) of
     Just (DCap d) -> do
       modifyCEKState (esCaps . csSlots) (CapSlot ct []:)
       let (env', capBody) = applyCapBody mempty args (_dcapTerm d)

@@ -513,7 +513,7 @@ asList _ = failInvariant "asList"
 
 -- unsafeEqCEKValue :: CEKValue b i m -> CEKValue b i m -> Bool
 -- unsafeEqCEKValue (VLiteral l) (VLiteral l') = unsafeEqLiteral l l'
--- unsafeEqCEKValue (VObject o) (VObject o') = and (Map.intersectionWith unsafeEqCEKValue o o')
+-- unsafeEqCEKValue (VObject o) (VObject o') = and (M.intersectionWith unsafeEqCEKValue o o')
 -- unsafeEqCEKValue (VList l) (VList l') =  V.length l == V.length l' &&  and (V.zipWith unsafeEqCEKValue l l')
 -- unsafeEqCEKValue _ _ = throw (InvariantFailure "invariant failed in value Eq")
 
@@ -789,13 +789,13 @@ coreEnforce = mkBuiltinFn \cont handler -> \case
 --   -- Todo: public key parsing.
 --   -- This is most certainly wrong, it needs more checks.
 --   lookupKs m = do
---     ks <- Map.lookup (Field "keys") m >>= \case
+--     ks <- M.lookup (Field "keys") m >>= \case
 --       PList v -> do
 --         o <- traverse (preview (_PLiteral . _LString)) v
 --         guard (all (T.all isHexDigit) o)
 --         pure $ Set.fromList $ V.toList (PublicKey . T.encodeUtf8 <$> o)
 --       _ -> Nothing
---     kspred <- case Map.lookup (Field "pred") m of
+--     kspred <- case M.lookup (Field "pred") m of
 --       (Just (PLiteral LString{})) -> pure KeysAll
 --       Just _ -> Nothing
 --       Nothing -> pure KeysAll

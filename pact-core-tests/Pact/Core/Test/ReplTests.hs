@@ -17,6 +17,7 @@ import qualified Data.ByteString as B
 import Pact.Core.Gas
 import Pact.Core.Literal
 import Pact.Core.Persistence
+import Pact.Core.Interpreter
 
 import Pact.Core.Repl.Utils
 import Pact.Core.Compile
@@ -50,9 +51,10 @@ runReplTest file src = do
             , _replLoaded = mempty
             , _replPactDb = pdb
             , _replGas = gasRef
-            , _replEvalLog = gasLog }
+            , _replEvalLog = gasLog
+            , _replCurrSource = SourceCode mempty}
   stateRef <- newIORef rstate
-  runReplT stateRef (interpretReplProgram src) >>= \case
+  runReplT stateRef (interpretReplProgram (SourceCode src)) >>= \case
     Left e -> let
       rendered = replError (ReplSource (T.pack file) (decodeUtf8 src)) e
       in assertFailure (T.unpack rendered)

@@ -3,7 +3,6 @@
 
 module Pact.Core.PactValue
  ( PactValue(..)
- , PactObject
  , _PLiteral
  , _PList
  , _PGuard
@@ -28,13 +27,12 @@ import Pact.Core.ModRefs
 
 import qualified Pact.Core.Pretty as Pretty
 
-type PactObject = Map Field PactValue
-
 data PactValue
   = PLiteral Literal
   | PList (Vector PactValue)
   | PGuard (Guard FullyQualifiedName PactValue)
-  | PObject PactObject
+  | PObject (Map Field PactValue)
+  -- | PTable TableName Schema
   | PModRef ModRef
   deriving (Eq, Show, Ord)
 
@@ -45,6 +43,7 @@ instance Pretty PactValue where
     PLiteral lit -> pretty lit
     PList p -> Pretty.list (V.toList (pretty <$> p))
     PGuard _g -> "<guard>"
+    -- PTable tn _sc -> "table" <> braces (pretty tn)
     PObject o ->
       braces $ hsep $ punctuate comma (objPair <$> M.toList o)
       where
@@ -59,6 +58,9 @@ checkPvType ty = \case
   PGuard{}
     | ty == TyGuard -> Just TyGuard
     | otherwise -> Nothing
+  -- PTable _ sc1
+  --   | ty == TyTable sc1 -> Just (TyTable sc1)
+  --   | otherwise -> Nothing
   -- todo: types of objects
   PObject o -> case ty of
     TyObject (Schema sc) ->

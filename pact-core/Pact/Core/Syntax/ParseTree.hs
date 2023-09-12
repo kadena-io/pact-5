@@ -417,8 +417,11 @@ instance Pretty (Expr i) where
         parens (pretty pn <+> hsep (pretty <$> exns))
     Object m _ ->
       braces (hsep (punctuate "," (prettyObj m)))
-    Binding{} -> error "boom"
+    Binding binds body _ ->
+      braces (hsep $ punctuate "," $ fmap prettyBind binds) <+>
+        hsep (pretty <$> body)
     where
+    prettyBind (f, e) = pretty f <+> ":=" <+> pretty e
     prettyObj = fmap (\(n, k) -> dquotes (pretty n) <> ":" <> pretty k)
     renderLamPair (MArg n mt) = case mt of
       Nothing -> pretty n

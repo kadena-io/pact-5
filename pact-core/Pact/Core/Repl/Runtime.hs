@@ -28,6 +28,7 @@ import Pact.Core.Errors
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.IR.Eval.CEK
+import Pact.Core.Repl.Utils
 
 data ReplEvalEnv b i
   = ReplEvalEnv
@@ -39,6 +40,7 @@ data ReplEvalState b i
   = ReplEvalState
   { _reEnv :: EvalEnv b i (ReplEvalM b i)
   , _reState :: EvalState b i
+  , _reSource :: SourceCode
   }
 
 -- Todo: are we going to inject state as the reader monad here?
@@ -79,19 +81,18 @@ instance MonadEvalState b i (ReplEvalM b i) where
 
 
 
-
 runReplEvalM
   :: ReplEvalEnv b i
   -> ReplEvalState b i
   -> ReplEvalM b i a
-  -> IO (Either (PactError i) a)
-runReplEvalM env st (ReplEvalM action) = runReaderT (evalStateT (runExceptT action) st) env
+  -> IO (Either (PactError i) a, ReplEvalState b i)
+runReplEvalM env st (ReplEvalM action) = runReaderT (runStateT (runExceptT action) st) env
 
 runReplCEK
   :: (Default i)
   => ReplEvalEnv b i
   -> ReplEvalState b i
   -> EvalTerm b i
-  -> IO (Either (PactError i) (EvalResult b i (ReplEvalM b i)))
+  -> IO (Either (PactError i) (EvalResult b i (ReplEvalM b i)), ReplEvalState b i)
 runReplCEK env st term =
   runReplEvalM env st (eval mempty term)

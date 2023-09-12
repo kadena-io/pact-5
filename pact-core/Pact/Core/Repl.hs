@@ -34,17 +34,21 @@ import qualified Data.Set as Set
 import Pact.Core.Persistence
 import Pact.Core.Pretty
 import Pact.Core.Builtin
+import Pact.Core.Names
+import Pact.Core.Interpreter
 
 import Pact.Core.Compile
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
+import Pact.Core.IR.Eval.Runtime.Types
 
 main :: IO ()
 main = do
   pactDb <- mockPactDb
   g <- newIORef mempty
   evalLog <- newIORef Nothing
-  ref <- newIORef (ReplState mempty mempty pactDb g evalLog (SourceCode mempty))
+  let es = EvalState (CapState [] Set.empty) [] [] False Nothing
+  ref <- newIORef (ReplState mempty mempty pactDb g evalLog (SourceCode mempty) es)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
@@ -60,6 +64,7 @@ main = do
         "Loaded interface" <+> pretty mn
       InterpretValue iv -> case iv of
         IPV v _ -> outputStrLn (show (pretty v))
+        IPTable (TableName tn) -> outputStrLn $ "table{" <> T.unpack tn <> "}"
         IPClosure -> outputStrLn "<<closure>>"
     RLoadedDefun mn ->
       outputStrLn $ show $

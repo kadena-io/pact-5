@@ -17,7 +17,6 @@ module Pact.Core.IR.Eval.Runtime.Utils
  ( mkBuiltinFn
  , cfFQN
  , enforcePactValue
---  , viewCEKEnv, viewsCEKEnv
  , setEvalState, (%%=), useEvalState, usesEvalState
  , getAllStackCaps
  , checkSigCaps
@@ -25,12 +24,21 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , typecheckArgument
  , maybeTCType
  , safeTail
+ , toArgTypeError
+ , asString
+ , asBool
+ , throwExecutionError
+ , throwExecutionError'
+ , argsError
  ) where
 
 import Control.Lens hiding ((%%=))
+import Control.Monad.Except(MonadError(..))
 import Data.Map.Strict(Map)
+import Data.Text(Text)
 import Data.Set(Set)
-import qualified Data.Map.Strict as Map
+import Data.Default(def)
+import qualified Data.Map.Strict as M
 import qualified Data.Set as Set
 
 import Pact.Core.Names
@@ -40,15 +48,17 @@ import Pact.Core.Guards
 import Pact.Core.IR.Term
 import Pact.Core.ModRefs
 import Pact.Core.Type
+import Pact.Core.Errors
 import Pact.Core.IR.Eval.Runtime.Types
+import Pact.Core.Literal
 
 mkBuiltinFn
-  :: (BuiltinArity b)
+  :: (IsBuiltin b)
   => i
-  -> (Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m))
   -> b
+  -> (Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m))
   -> NativeFn b i m
-mkBuiltinFn i fn b =
+mkBuiltinFn i b fn =
   NativeFn b fn (builtinArity b) i
 {-# INLINE mkBuiltinFn #-}
 
@@ -75,7 +85,7 @@ checkSigCaps
   -> m (Map PublicKeyText (Set CapToken))
 checkSigCaps sigs = do
   granted <- getAllStackCaps
-  pure $ Map.filter (match granted) sigs
+  pure $ M.filter (match granted) sigs
   where
   match granted sigCaps =
     Set.null sigCaps || not (Set.null (Set.intersection granted sigCaps))
@@ -83,6 +93,7 @@ checkSigCaps sigs = do
 enforcePactValue :: Applicative f => CEKValue b i m -> f PactValue
 enforcePactValue = \case
   VPactValue pv -> pure pv
+  VTable{} -> error "a table is not a pact value"
   VClosure{} -> error "closure is not a pact value"
 
 -- Note: The following functions
@@ -126,7 +137,7 @@ usesEvalState l f = views l f <$> getEvalState
 
 lookupFqName :: (MonadEval b i m) => FullyQualifiedName -> m (Maybe (EvalDef b i))
 lookupFqName fqn =
-  Map.lookup fqn . view eeLoaded <$> readEnv
+  M.lookup fqn . view eeLoaded <$> readEnv
 
 typecheckArgument :: (MonadEval b i m) => PactValue -> Type -> m PactValue
 typecheckArgument pv ty = case (pv, checkPvType ty pv) of
@@ -142,3 +153,50 @@ maybeTCType pv = maybe (pure pv) (typecheckArgument pv)
 safeTail :: [a] -> [a]
 safeTail (_:xs) = xs
 safeTail [] = []
+
+toArgTypeError :: CEKValue b i m -> ArgTypeError
+toArgTypeError = \case
+  VPactValue pv -> case pv of
+    PLiteral l -> ATEPrim (literalPrim l)
+    PList _ -> ATEList
+    PObject _ -> ATEObject
+    PGuard _ -> ATEPrim PrimGuard
+    PModRef _ -> ATEModRef
+  VTable{} -> ATETable
+  VClosure{} -> ATEClosure
+
+argsError
+  :: (MonadEval b i m, IsBuiltin b)
+  => i
+  -> b
+  -> [CEKValue b3 i2 m2]
+  -> m a
+argsError info b args =
+  throwExecutionError info (NativeArgumentsError (builtinName b) (toArgTypeError <$> args))
+
+
+asString
+  :: (MonadEval b i m, IsBuiltin b)
+  => i
+  -> b
+  -> PactValue
+  -> m Text
+asString _ _ (PLiteral (LString b)) = pure b
+asString i b pv = argsError i b [VPactValue pv]
+
+asBool
+  :: (MonadEval b i m, IsBuiltin b)
+  => i
+  -> b
+  -> PactValue
+  -> m Text
+asBool _ _ (PLiteral (LString b)) = pure b
+asBool i b pv = argsError i b [VPactValue pv]
+
+
+throwExecutionError :: (MonadEval b i m) => i -> EvalError -> m a
+throwExecutionError i e = throwError (PEExecutionError e i)
+
+
+throwExecutionError' :: (MonadEval b i m) => EvalError -> m a
+throwExecutionError' = throwExecutionError def

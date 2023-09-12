@@ -16,9 +16,14 @@ import Pact.Core.Literal
 
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.IR.Term
+import Pact.Core.Type
+import Pact.Core.Pacts.Types
 import Pact.Core.IR.Eval.CEK
-import Pact.Core.IR.Eval.RawBuiltin(rawBuiltinLiftedRuntime, prettyShowValue)
-import qualified Pact.Core.IR.Eval.RawBuiltin as RawBuiltin
+import Pact.Core.Names
+import Pact.Core.IR.Eval.RawBuiltin
+import Pact.Core.Pretty
+
+import qualified Data.List.NonEmpty as NE
 
 
 import Pact.Core.Repl.Runtime
@@ -30,84 +35,57 @@ type ReplCEKValue b i = CEKValue (ReplBuiltin b) i (ReplBM b i)
 type ReplEvalResult b i = EvalResult (ReplBuiltin b) i (ReplBM b i)
 type ReplBuiltinFn b i = NativeFn (ReplBuiltin b) i (ReplBM b i)
 
-asBool :: MonadEval b i m => CEKValue b i m -> m Bool
-asBool (VLiteral (LBool b)) = pure b
-asBool _ = failInvariant "asBool"
+prettyShowValue :: CEKValue b i m -> Text
+prettyShowValue = \case
+  -- Todo: REMOVE THIS. THIS CANNOT MAKE IT INTO OUTPUTS.
+  VPactValue p -> renderText p
+  VTable (TableName tn) _ _ _ -> "table{" <> tn <> "}"
+  VClosure _ -> "<#closure>"
 
-asString :: MonadEval b i m => CEKValue b i m -> m Text
-asString (VLiteral (LString b)) = pure b
-asString _ = failInvariant "asString"
-
--- Show functions injected by the compiler are
--- not a recoverable thing from an invariant standpoint
-enforceValue
-  :: MonadEval b i m
-  => EvalResult b i m
-  -> m (CEKValue b i m)
-enforceValue = \case
-  EvalValue v -> pure v
-  _ -> failInvariant "Error"
-
--- tryError :: MonadError a m => m b -> m (Either a b)
--- tryError ma = catchError (Right <$> ma) (pure . Left)
 
 mkReplBuiltinFn
-  :: (BuiltinArity b)
+  :: (IsBuiltin b)
   => i
-  -> (ReplCont b i -> ReplHandler b i -> [ReplCEKValue b i] -> ReplBM b i (ReplEvalResult b i))
   -> ReplBuiltin b
+  -> (ReplCont b i -> ReplHandler b i -> [ReplCEKValue b i] -> ReplBM b i (ReplEvalResult b i))
   -> ReplBuiltinFn b i
 mkReplBuiltinFn = mkBuiltinFn
 {-# INLINE mkReplBuiltinFn #-}
 
-corePrint :: (BuiltinArity b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
-corePrint info = mkReplBuiltinFn info \cont handler -> \case
+corePrint :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
+corePrint info b = mkReplBuiltinFn info b \cont handler -> \case
   [v] -> do
     liftIO $ putStrLn $ T.unpack (prettyShowValue v)
     returnCEKValue cont handler (VLiteral LUnit)
-  _ -> failInvariant "Print"
+  args -> argsError info b args
 
--- coreExpect :: (BuiltinArity b, Default i) => ReplBuiltin b -> i -> ReplBuiltinFn b i
--- coreExpect = mkReplBuiltinFn \cont handler -> \case
---   [VLiteral (LString msg), v1, clo@VClosure{}] -> do
---     unsafeApplyOne clo (VLiteral LUnit) >>= \case
---        EvalValue v2 -> do
---         unsafeApplyTwo eqFn v1 v2 >>= enforceValue >>= asBool >>= \case
---           False -> do
---             v1s <- asString =<< enforceValue =<< unsafeApplyOne showFn v1
---             v2s <- asString =<< enforceValue =<< unsafeApplyOne showFn v2
---             returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
---           True -> returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
---        v -> returnCEK cont handler v
---   e -> failInvariant $ "Expect" <> T.pack (show e)
-
-rawExpect :: (BuiltinArity b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
-rawExpect info = mkReplBuiltinFn info \cont handler -> \case
-  [VLiteral (LString msg), VPactValue v1, clo@VClosure{}] ->
+rawExpect :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
+rawExpect info b = mkReplBuiltinFn info b \cont handler -> \case
+  [VLiteral (LString msg), VPactValue v1, VClosure clo] ->
     unsafeApplyOne clo (VLiteral LUnit) >>= \case
        EvalValue (VPactValue v2) ->
         if v1 /= v2 then do
-            let v1s = RawBuiltin.prettyShowValue (VPactValue v1)
-                v2s = RawBuiltin.prettyShowValue (VPactValue v2)
+            let v1s = prettyShowValue (VPactValue v1)
+                v2s = prettyShowValue (VPactValue v2)
             returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
         else returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
        v -> returnCEK cont handler v
-  _ -> failInvariant "Expect"
+  args -> argsError info b args
 
-coreExpectThat :: (BuiltinArity b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
-coreExpectThat info = mkReplBuiltinFn info \cont handler -> \case
-  [VLiteral (LString msg), vclo, v] -> do
+coreExpectThat :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
+coreExpectThat info b = mkReplBuiltinFn info b \cont handler -> \case
+  [VLiteral (LString msg), VClosure vclo, v] -> do
     unsafeApplyOne vclo v >>= \case
-      EvalValue (VLiteral (LBool b)) ->
-        if b then returnCEKValue cont handler (VLiteral (LString ("Expect-that: success " <> msg)))
+      EvalValue (VLiteral (LBool c)) ->
+        if c then returnCEKValue cont handler (VLiteral (LString ("Expect-that: success " <> msg)))
         else returnCEKValue cont handler  (VLiteral (LString ("FAILURE: Expect-that: Did not satisfy condition: " <> msg)))
-      EvalValue _ -> failInvariant "Expect"
-      ve@VError{} -> returnCEK cont handler ve
-  _ -> failInvariant "Expect"
+      EvalValue _ -> return (VError "Expect-that: condition did not return a boolean")
+      VError ve -> return (VError ve)
+  args -> argsError info b args
 
-coreExpectFailure :: (BuiltinArity b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
-coreExpectFailure info = mkReplBuiltinFn info \cont handler -> \case
-  [VLiteral (LString toMatch), vclo] -> do
+coreExpectFailure :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
+coreExpectFailure info b = mkReplBuiltinFn info b \cont handler -> \case
+  [VLiteral (LString toMatch), VClosure vclo] -> do
     tryError (unsafeApplyOne vclo (VLiteral LUnit)) >>= \case
       Right (VError _e) ->
         returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
@@ -115,19 +93,42 @@ coreExpectFailure info = mkReplBuiltinFn info \cont handler -> \case
         returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
       Right _ ->
         returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result"
-  _ -> failInvariant "Expect-failure"
+  args -> argsError info b args
 
-continuePact :: (BuiltinArity b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
-continuePact info = mkReplBuiltinFn info \cont handler -> \case
+
+
+continuePact :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
+continuePact info b = mkReplBuiltinFn info b \cont handler -> \case
   [VLiteral (LInteger s)] -> do
     useEvalState esPactExec >>= \case
       Nothing -> pure (VError "No pact exec environment found!")
-      Just pe -> lookupFqName (pe ^. peContinuation . pcDef) >>= \case
-        Just (DPact d) ->
-          let cont' = undefined
-          in evalCEK cont' handler undefined undefined
+      Just pe -> lookupFqName (pe ^. peContinuation . pcName) >>= \case
+        Just (DPact dp)
+          | s >= toInteger (_peStepCount pe) -> undefined
+          | s <= toInteger (_peStep pe) -> undefined
+          | otherwise -> do
+              let
+                step = _dpSteps dp NE.!! fromInteger s
+                args' = VPactValue <$> pe ^. peContinuation . pcArgs
+                toClosure = \case
+                  Lam li args body i ->
+                    applyLam (C (Closure li (_argType <$> args) (NE.length args) body Nothing i)) args' Mt CEKNoHandler
+                  _ -> error "invariant violation"
+              v <- case step of
+                Step s' _ -> toClosure s'
+                StepWithRollback s' _rb _ -> toClosure s'
+              setEvalState esPactExec (Just $ over peStep (+1) pe)
+              returnCEK cont handler v
         _ -> pure (VError "continuation is not a defpact")
-  _ -> failInvariant "continue-pact"
+  args -> argsError info b args
+
+coreEnvStackFrame :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
+coreEnvStackFrame info b = mkReplBuiltinFn info b \cont handler -> \case
+  [_] -> do
+    frames <- useEvalState esStack
+    liftIO $ print frames
+    returnCEKValue cont handler VUnit
+  args -> argsError info b args
 
 replRawBuiltinRuntime
   :: (Default i)
@@ -137,11 +138,13 @@ replRawBuiltinRuntime
 replRawBuiltinRuntime i = \case
   RBuiltinWrap cb ->
     rawBuiltinLiftedRuntime RBuiltinWrap i cb
-  RExpect -> rawExpect i RExpect
-  RExpectFailure -> coreExpectFailure i RExpectFailure
-  RExpectThat -> coreExpectThat i RExpectThat
-  RPrint -> corePrint i RPrint
-  RContinuePact -> continuePact i RContinuePact
+  RBuiltinRepl br -> case br of
+    RExpect -> rawExpect i $ RBuiltinRepl RExpect
+    RExpectFailure -> coreExpectFailure i $ RBuiltinRepl RExpectFailure
+    RExpectThat -> coreExpectThat i $ RBuiltinRepl RExpectThat
+    RPrint -> corePrint i $ RBuiltinRepl RPrint
+    REnvStackFrame -> coreEnvStackFrame i $ RBuiltinRepl REnvStackFrame
+    RContinuePact -> continuePact i $ RBuiltinRepl RContinuePact
 
 -- defaultReplState :: Default i => ReplEvalState (ReplBuiltin RawBuiltin) i
 -- defaultReplState = ReplEvalState env (EvalState (CapState [] mempty) [] [] False)

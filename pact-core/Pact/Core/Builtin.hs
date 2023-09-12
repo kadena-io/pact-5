@@ -13,7 +13,7 @@ module Pact.Core.Builtin
  , ReplBuiltin(..)
  , replRawBuiltinNames
  , replRawBuiltinMap
- , BuiltinArity(..)
+ , IsBuiltin(..)
 --  , CapabilityOp(..)
 --  , CapType(..)
 --  , DefType(..)
@@ -21,13 +21,16 @@ module Pact.Core.Builtin
  , ReplRawBuiltin
  , ReplCoreBuiltin
  , BuiltinForm(..)
+ , ReplBuiltins(..)
+ , HasObjectOps(..)
  )where
 
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 
+import Pact.Core.Names(NativeName(..))
 import Pact.Core.Pretty
 
 type ReplRawBuiltin = ReplBuiltin RawBuiltin
@@ -54,18 +57,8 @@ instance Pretty o => Pretty (BuiltinForm o) where
     -- CZip e1 e2 e3 ->
     --   parens ("zip" <+> pretty e1 <+> pretty e2 <+> pretty e3)
 
--- Todo: Objects to be added later @ a later milestone
--- data ObjectOp o
---   = ObjectAccess Field o
---   -- access[f](o)
---   -- For some {f:a|r}, access f
---   | ObjectRemove Field o
---   -- remove[f](o)
---   -- For some {f:a|r}, remove f
---   | ObjectExtend Field o o
---   -- extend[k:=v](o)
---   -- For some {r}, extend with
---   deriving (Show, Eq, Functor, Foldable, Traversable)
+class HasObjectOps b where
+  objectAt :: b
 
 data DefType
   = DTDefun
@@ -227,9 +220,12 @@ data RawBuiltin
   | RawB64Encode
   | RawB64Decode
   | RawStrToList
-  -- | DefPacts
   | RawYield
+  | RawBind
   deriving (Eq, Show, Ord, Bounded, Enum)
+
+instance HasObjectOps RawBuiltin where
+  objectAt = RawAt
 
 rawBuiltinToText :: RawBuiltin -> Text
 rawBuiltinToText = \case
@@ -307,8 +303,10 @@ rawBuiltinToText = \case
   RawB64Decode -> "base64-decode"
   RawStrToList -> "str-to-list"
   RawYield -> "yield"
+  RawBind -> "bind"
 
-instance BuiltinArity RawBuiltin where
+instance IsBuiltin RawBuiltin where
+  builtinName = NativeName . rawBuiltinToText
   builtinArity = \case
     RawAdd -> 2
     -- Num ->
@@ -384,18 +382,22 @@ instance BuiltinArity RawBuiltin where
     RawB64Decode -> 1
     RawStrToList -> 1
     RawYield -> 1
+    RawBind -> 2
 
 rawBuiltinNames :: [Text]
 rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]
 
 rawBuiltinMap :: Map Text RawBuiltin
-rawBuiltinMap = Map.fromList $ (\b -> (rawBuiltinToText b, b)) <$> [minBound .. maxBound]
+rawBuiltinMap = M.fromList $ (\b -> (rawBuiltinToText b, b)) <$> [minBound .. maxBound]
 
-
--- Note: commented out natives are
--- to be implemented later
-data ReplBuiltin b
-  = RBuiltinWrap b
+-- Todo: rename
+-- | Our repl builtins.
+data ReplBuiltins
+  = RExpect
+  | RExpectFailure
+  | RExpectThat
+  | RPrint
+  | REnvStackFrame
   -- | RBeginTx
   -- | RBench
   -- | RCommitTx
@@ -417,12 +419,12 @@ data ReplBuiltin b
   -- | REnvKeys
   -- | REnvNamespacePolicy
   -- | REnvSigs
-  | RExpect
-  | RExpectFailure
-  | RExpectThat
+  -- | RExpect
+  -- | RExpectFailure
+  -- | RExpectThat
   -- | RFormatAddress
   -- | RPactState
-  | RPrint
+  -- | RPrint
   -- | RRollbackTx
   -- | RSigKeyset
   -- | RTestCapability
@@ -431,80 +433,84 @@ data ReplBuiltin b
   -- | RLoad
   -- Defpact
   | RContinuePact
-  deriving (Eq, Show)
+  deriving (Show, Enum, Bounded, Eq)
 
--- NOTE: Maybe `ReplBuiltin` is not a great abstraction, given
--- expect arity changes based on whether it's corebuiltin or rawbuiltin
-instance BuiltinArity b => BuiltinArity (ReplBuiltin b) where
+
+instance IsBuiltin ReplBuiltins where
+  builtinName = NativeName . replBuiltinsToText
   builtinArity = \case
-    RBuiltinWrap b -> builtinArity b
     RExpect -> 3
     RExpectFailure -> 2
     RExpectThat -> 3
     RPrint -> 1
     RContinuePact -> 1 -- TODO: Continue has three different forms
+    REnvStackFrame -> 1
+-- Note: commented out natives are
+-- to be implemented later
+data ReplBuiltin b
+  = RBuiltinWrap b
+  | RBuiltinRepl ReplBuiltins
+  deriving (Eq, Show)
+
+instance HasObjectOps b => HasObjectOps (ReplBuiltin b) where
+  objectAt = RBuiltinWrap objectAt
+
+-- NOTE: Maybe `ReplBuiltin` is not a great abstraction, given
+-- expect arity changes based on whether it's corebuiltin or rawbuiltin
+instance IsBuiltin b => IsBuiltin (ReplBuiltin b) where
+  builtinName = NativeName . replBuiltinToText (_natName . builtinName)
+  builtinArity = \case
+    RBuiltinWrap b -> builtinArity b
+    RBuiltinRepl b -> builtinArity b
+
     -- RLoad -> 1
 
 instance Bounded b => Bounded (ReplBuiltin b) where
   minBound = RBuiltinWrap minBound
-  maxBound = RContinuePact
+  maxBound = RBuiltinRepl maxBound
 
 instance (Enum b, Bounded b) => Enum (ReplBuiltin b) where
-  toEnum  = replBToEnum
+  toEnum  i =
+    if i <= mbound then RBuiltinWrap (toEnum i)
+    else RBuiltinRepl (toEnum (i - mbound - 1))
+    where
+    mbound = fromEnum (maxBound :: b)
   {-# SPECIALISE toEnum :: Int -> ReplBuiltin RawBuiltin #-}
 
-  fromEnum = replBFromEnum
+  fromEnum e =
+    let maxContained = fromEnum (maxBound :: b) + 1
+    in case e of
+      RBuiltinWrap b -> fromEnum b
+      RBuiltinRepl rb -> maxContained + fromEnum rb
   {-# SPECIALISE fromEnum :: ReplBuiltin RawBuiltin -> Int #-}
 
-replBToEnum :: forall b. (Bounded b, Enum b) => Int -> ReplBuiltin b
-replBToEnum i =
-  if i <= mbound then RBuiltinWrap (toEnum i)
-  else case i - mbound of
-    1 -> RExpect
-    2 -> RExpectFailure
-    3 -> RExpectThat
-    4 -> RPrint
-    5 -> RContinuePact
-    -- 5 -> RLoad
-    _ -> error "invalid"
-  where
-  mbound = fromEnum (maxBound :: b)
-{-# INLINE replBToEnum #-}
-
-replBFromEnum :: forall b. (Bounded b, Enum b) => ReplBuiltin b -> Int
-replBFromEnum e =
-  let maxContained = fromEnum (maxBound :: b)
-  in case e of
-    RBuiltinWrap b -> fromEnum b
-    RExpect -> maxContained + 1
-    RExpectFailure -> maxContained + 2
-    RExpectThat -> maxContained + 3
-    RPrint -> maxContained + 4
-    RContinuePact -> maxContained + 5
-    -- RLoad -> maxContained + 5
-{-# INLINE replBFromEnum #-}
-
-replBuiltinToText :: (b -> Text) -> ReplBuiltin b -> Text
-replBuiltinToText f = \case
-  RBuiltinWrap b -> f b
+replBuiltinsToText :: ReplBuiltins -> Text
+replBuiltinsToText = \case
   RExpect -> "expect"
   RExpectFailure -> "expect-failure"
   RExpectThat -> "expect-that"
   RPrint -> "print"
-  RContinuePact -> "continue"
+  RContinuePact -> "continue-pact"
+  REnvStackFrame -> "env-stackframe"
   -- RLoad -> "load"
+
+replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
+replBuiltinToText f = \case
+  RBuiltinWrap b -> f b
+  RBuiltinRepl rb -> replBuiltinsToText rb
 
 replRawBuiltinNames :: [Text]
 replRawBuiltinNames = fmap (replBuiltinToText rawBuiltinToText) [minBound .. maxBound]
 
 replRawBuiltinMap :: Map Text (ReplBuiltin RawBuiltin)
 replRawBuiltinMap =
-  Map.fromList $ (\b -> (replBuiltinToText rawBuiltinToText b, b)) <$> [minBound .. maxBound]
+  M.fromList $ (\b -> (replBuiltinToText rawBuiltinToText b, b)) <$> [minBound .. maxBound]
 
 -- Todo: is not a great abstraction.
 -- In particular: the arity could be gathered from the type.
-class BuiltinArity b where
+class IsBuiltin b where
   builtinArity :: b -> Int
+  builtinName :: b -> NativeName
 
 
 instance Pretty RawBuiltin where
@@ -664,7 +670,8 @@ data CoreBuiltin
 instance Pretty CoreBuiltin where
   pretty = pretty . coreBuiltinToText
 
-instance BuiltinArity CoreBuiltin where
+instance IsBuiltin CoreBuiltin where
+  builtinName = NativeName . coreBuiltinToText
   builtinArity = \case
     AddInt -> 2
     SubInt -> 2

@@ -15,7 +15,7 @@ import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Either(lefts, rights)
 
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.Text.Read as T
 import qualified Data.List.NonEmpty as NE
@@ -425,7 +425,7 @@ Binders :: { [Binder SpanInfo] }
   | '(' IDENT MTypeAnn Expr ')' { [Binder (getIdent $2) $3 $4] }
 
 GenAppExpr :: { SpanInfo -> ParsedExpr }
-  : Expr AppBindList { App $1 (toAppExprList (reverse $2)) }
+  : Expr AppBindList { \i -> App $1 (toAppExprList i (reverse $2)) i }
 
 ProgNExpr :: { SpanInfo -> ParsedExpr }
   : progn BlockBody { Block (NE.fromList (reverse $2)) }

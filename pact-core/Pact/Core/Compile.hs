@@ -16,7 +16,7 @@ import Control.Monad
 import Data.Maybe(mapMaybe)
 import Data.Proxy
 import Data.ByteString(ByteString)
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 import qualified Data.ByteString as B
 import qualified Data.Set as Set
 
@@ -29,7 +29,7 @@ import Pact.Core.Errors
 import Pact.Core.Pretty
 import Pact.Core.Type
 import Pact.Core.IR.Term
-import Pact.Core.PactValue
+import Pact.Core.Interpreter
 
 
 -- import qualified Pact.Core.Syntax.LexUtils as Lisp
@@ -61,16 +61,7 @@ data CompileValue b
   | InterpretValue InterpretValue
   deriving Show
 
-newtype Interpreter b s m
-  = Interpreter {
-    _interpret :: HasCompileEnv b s m => Term Name Type b SpanInfo -> m InterpretValue
-  }
 
-
-data InterpretValue
-  = IPV PactValue SpanInfo
-  | IPClosure
-  deriving Show
 
 compileProgram
   :: (HasCompileEnv b s m)
@@ -92,27 +83,28 @@ interpretTopLevel
   -> DesugarOutput b SpanInfo (TopLevel Name Type b SpanInfo)
   -> m (CompileValue b)
 interpretTopLevel pdb interp (DesugarOutput ds lo0 deps) = do
+  debugPrint DebugDesugar ds
   loaded .= lo0
   case ds of
     TLModule m -> do
-      let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo0)
+      let deps' = M.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = ModuleData m deps'
       liftIO (writeModule pdb (view mName m) mdata)
-      let newLoaded = Map.fromList $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
+      let newLoaded = M.fromList $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
           loadNewModule =
-            over loModules (Map.insert (_mName m) mdata) .
-            over loAllLoaded (Map.union newLoaded)
+            over loModules (M.insert (_mName m) mdata) .
+            over loAllLoaded (M.union newLoaded)
       loaded %= loadNewModule
       pure (LoadedModule (_mName m))
     TLInterface iface -> do
-      let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo0)
+      let deps' = M.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = InterfaceData iface deps'
       liftIO (writeModule pdb (view ifName iface) mdata)
-      let newLoaded = Map.fromList $ toFqDep (_ifName iface) (_ifHash iface)
+      let newLoaded = M.fromList $ toFqDep (_ifName iface) (_ifHash iface)
                       <$> mapMaybe (fmap DConst . preview _IfDConst) (_ifDefns iface)
           loadNewModule =
-            over loModules (Map.insert (_ifName iface) mdata) .
-            over loAllLoaded (Map.union newLoaded)
+            over loModules (M.insert (_ifName iface) mdata) .
+            over loAllLoaded (M.union newLoaded)
       loaded %= loadNewModule
       pure (LoadedInterface (view ifName iface))
     TLTerm term -> InterpretValue <$> _interpret interp term
