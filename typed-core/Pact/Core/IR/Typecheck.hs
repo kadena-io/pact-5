@@ -1477,16 +1477,8 @@ inferModule
   => IR.Module Name IRType b i
   -> InferM s b' i (TypedModule b i)
 inferModule (IR.Module mname mgov defs blessed imports impl mh info) = do
-  fv <- view (tcLoaded . loAllLoaded)
-  (defs', _) <- foldlM infer' ([], fv) defs
-  pure (Typed.Module mname mgov (reverse defs') blessed imports impl mh info)
-  where
-  infer' (xs, m) d = do
-    def' <- local (set (tcLoaded . loAllLoaded) m) (inferDef d)
-    let name' = FullyQualifiedName mname (Typed.defName def') mh
-        dty = fmap absurd (Typed.defType def')
-        m' = Map.insert name' dty  m
-    pure (def':xs, m')
+  defs' <- traverse inferDef defs
+  pure (Typed.Module mname mgov defs' blessed imports impl mh info)
 
 inferInterface
   :: TypeOfBuiltin b
