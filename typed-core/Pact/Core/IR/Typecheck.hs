@@ -1454,6 +1454,8 @@ inferDef = \case
   IR.Dfun d -> Typed.Dfun <$> inferDefun d
   IR.DConst d -> Typed.DConst <$> inferDefConst d
   IR.DCap dc -> Typed.DCap <$> inferDefCap dc
+  IR.DSchema {} -> error "TODO infer defs" -- TODO
+  IR.DTable {} -> error "TODO infer tables" -- TODO
 
 inferIfDef
   :: TypeOfBuiltin b
