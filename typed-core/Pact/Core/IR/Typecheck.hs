@@ -45,12 +45,11 @@ import Data.RAList(RAList)
 import Data.Foldable(traverse_, foldlM, toList)
 import Data.Functor(($>))
 import Data.STRef
-import Data.Maybe(mapMaybe, fromMaybe)
+import Data.Maybe(fromMaybe)
 import Data.Map(Map)
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 
-import qualified Data.Map.Strict as Map
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 import qualified Data.RAList as RAList
@@ -1228,7 +1227,7 @@ checkCapArgs na tes = case _nKind na of
         | Just dcargs <- traverse IR._argType $ IR._dcapArgs dc -> do
           when (length dcargs /= length tes) $ error "invariant broken dcap args"
           vs <- zipWithM (checkTermType . liftType) dcargs tes
-          pure (view _2 <$> vs, concat (view _3 <$> vs))
+          pure (view _2 <$> vs, concatMap (view _3) vs)
         | otherwise -> error "unannotated types"
       _ -> error "invariant broken"
   _ -> error "invariant broken"
