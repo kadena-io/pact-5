@@ -1531,20 +1531,15 @@ inferReplTopLevel
   => IR.ReplTopLevel Name IRType b i
   -> InferM s reso i (TypedReplTopLevel b i)
 inferReplTopLevel = \case
-  IR.RTLModule m -> Typed.RTLModule <$> inferModule m
-  IR.RTLTerm m -> Typed.RTLTerm . snd <$> inferTermNonGen m
   -- Todo: if we don't update the module hash to update linking,
   -- repl defuns and defconsts will break invariants about
-  IR.RTLDefun dfn -> do
-    dfn' <- inferDefun dfn
-    pure (Typed.RTLDefun dfn')
-  IR.RTLDefConst dconst -> do
-    dc <- inferDefConst dconst
-    pure (Typed.RTLDefConst dc)
-  IR.RTLInterface i -> do
-    tci <- inferInterface i
-    pure (Typed.RTLInterface tci)
-
+  IR.RTLDefun dfn -> Typed.RTLDefun <$> inferDefun dfn
+  IR.RTLDefConst dconst -> Typed.RTLDefConst <$> inferDefConst dconst
+  IR.RTLTopLevel tl ->
+    case tl of
+      IR.TLModule m -> Typed.RTLModule <$> inferModule m
+      IR.TLTerm t -> Typed.RTLTerm . snd <$> inferTermNonGen t
+      IR.TLInterface i -> Typed.RTLInterface <$> inferInterface i
 
 -- | Transform types into their debruijn-indexed version
 -- Essentially: Start at depth 0:
