@@ -1520,51 +1520,30 @@ inferTermGen term = do
 
 inferTopLevel
   :: TypeOfBuiltin b
-  => Loaded reso i
-  -> IR.TopLevel Name IRType b i
-  -> InferM s reso i (TypedTopLevel b i, Loaded reso i)
-inferTopLevel loaded = \case
-  IR.TLModule m -> do
-    tcm <- inferModule m
-    let toFqn df = FullyQualifiedName (Typed._mName tcm) (Typed.defName df) (Typed._mHash tcm)
-        newTLs = Map.fromList $ (\df -> (toFqn df, Typed.defType df)) <$> Typed._mDefs tcm
-        loaded' = over loAllTyped (Map.union newTLs) loaded
-    pure (Typed.TLModule tcm, loaded')
-  IR.TLTerm m -> (, loaded) . Typed.TLTerm . snd <$> inferTermNonGen m
-  IR.TLInterface i -> do
-    tci <- inferInterface i
-    let toFqn dc = FullyQualifiedName (Typed._ifName tci) (Typed._dcName dc) (Typed._ifHash tci)
-        newTLs = Map.fromList $ (\df -> (toFqn df, DefunType (Typed._dcType df))) <$> mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
-        loaded' = over loAllTyped (Map.union newTLs) loaded
-    pure (Typed.TLInterface tci, loaded')
+  => IR.TopLevel Name IRType b i
+  -> InferM s reso i (TypedTopLevel b i)
+inferTopLevel = \case
+  IR.TLModule m -> Typed.TLModule <$> inferModule m
+  IR.TLTerm m -> Typed.TLTerm . snd <$> inferTermNonGen m
+  IR.TLInterface i -> Typed.TLInterface <$> inferInterface i
 
 inferReplTopLevel
   :: TypeOfBuiltin b
-  => Loaded reso i
-  -> IR.ReplTopLevel Name IRType b i
+  => IR.ReplTopLevel Name IRType b i
   -> InferM s reso i (TypedReplTopLevel b i)
-inferReplTopLevel loaded = \case
-  IR.RTLModule m ->  do
-    tcm <- inferModule m
-    let toFqn df = FullyQualifiedName (Typed._mName tcm) (Typed.defName df) (Typed._mHash tcm)
-        newTLs = Map.fromList $ (\df -> (toFqn df, Typed.defType df)) <$> Typed._mDefs tcm
-        loaded' = over loAllTyped (Map.union newTLs) loaded
-    pure (Typed.RTLModule tcm)
+inferReplTopLevel = \case
+  IR.RTLModule m -> Typed.RTLModule <$> inferModule m
   IR.RTLTerm m -> Typed.RTLTerm . snd <$> inferTermNonGen m
   -- Todo: if we don't update the module hash to update linking,
   -- repl defuns and defconsts will break invariants about
   IR.RTLDefun dfn -> do
     dfn' <- inferDefun dfn
-    let newFqn = FullyQualifiedName replModuleName (Typed._dfunName dfn') replModuleHash
     pure (Typed.RTLDefun dfn')
   IR.RTLDefConst dconst -> do
     dc <- inferDefConst dconst
-    let newFqn = FullyQualifiedName replModuleName (Typed._dcName dc) replModuleHash
     pure (Typed.RTLDefConst dc)
   IR.RTLInterface i -> do
     tci <- inferInterface i
-    let toFqn dc = FullyQualifiedName (Typed._ifName tci) (Typed._dcName dc) (Typed._ifHash tci)
-        newTLs = Map.fromList $ fmap (\df -> (toFqn df, DefunType (Typed._dcType df))) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
     pure (Typed.RTLInterface tci)
 
 
@@ -1828,15 +1807,15 @@ runInferTopLevel
   :: TypeOfBuiltin b
   => Loaded reso i
   -> IR.TopLevel Name IRType b i
-  -> Either TypecheckError (TypedTopLevel b i, Loaded reso i)
+  -> Either TypecheckError (TypedTopLevel b i)
 runInferTopLevel l tl =
-  runST $ runInfer l (inferTopLevel l tl)
+  runST $ runInfer l (inferTopLevel tl)
 
 
 runInferReplTopLevel
   :: TypeOfBuiltin b
   => Loaded reso i
   -> IR.ReplTopLevel Name IRType b i
-  -> Either TypecheckError (TypedReplTopLevel b i, Loaded reso i)
+  -> Either TypecheckError (TypedReplTopLevel b i)
 runInferReplTopLevel l tl =
-  runST $ runInfer l (inferReplTopLevel l tl)
+  runST $ runInfer l (inferReplTopLevel tl)
