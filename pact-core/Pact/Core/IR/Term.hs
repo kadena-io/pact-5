@@ -101,6 +101,7 @@ data Def name ty builtin info
   | DTable (DefTable name info)
   deriving (Show, Functor)
 
+
 data Module name ty builtin info
   = Module
   { _mName :: ModuleName

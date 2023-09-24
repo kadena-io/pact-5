@@ -284,6 +284,8 @@ data EvalError
   | DefIsNotClosure Text
   -- ^ Def is not a closure
   | NoSuchKeySet KeySetName
+  -- ^ No such keyset
+  | CannotUpgradeInterface ModuleName
   deriving Show
 
 instance Pretty EvalError where

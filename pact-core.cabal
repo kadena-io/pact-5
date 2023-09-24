@@ -105,6 +105,7 @@ library
     Pact.Core.Capabilities
     Pact.Core.ModRefs
     Pact.Core.Interpreter
+    Pact.Core.Environment
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree

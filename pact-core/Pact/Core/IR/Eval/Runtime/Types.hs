@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -102,6 +100,7 @@ import Pact.Core.Literal
 import Pact.Core.Type
 import Pact.Core.Persistence
 import Pact.Core.ModRefs
+import Pact.Core.Capabilities
 import qualified Pact.Core.Pretty as P
 
 
@@ -245,7 +244,6 @@ class Monad m => MonadGas m where
   logGas :: Text -> Gas -> m ()
   chargeGas :: Gas -> m ()
 
-
 class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
   readEnv :: m (EvalEnv b i m)
 
@@ -312,21 +310,10 @@ data CondFrame b i
   | IfFrame (EvalTerm b i) (EvalTerm b i)
   deriving Show
 
-data CapToken
-  = CapToken
-  { _ctName :: FullyQualifiedName
-  , _ctArgs :: [PactValue]
-  } deriving (Show, Eq, Ord)
-
-data CapSlot
- = CapSlot
- { _csCap :: CapToken
- , _csComposed :: [CapToken]
- } deriving (Show, Eq)
 
 data PactEvent b i
   = PactEvent
-  { _peToken :: CapToken
+  { _peToken :: CapToken FullyQualifiedName
   , _peModule :: ModuleName
   , _peModuleHash :: ModuleHash
   } deriving (Show, Eq)
@@ -339,9 +326,9 @@ data ManagedCapType
 
 data ManagedCap
   = ManagedCap
-  { _mcCap :: CapToken
+  { _mcCap :: CapToken FullyQualifiedName
   -- ^ The token without the managed param
-  , _mcOriginalCap :: CapToken
+  , _mcOriginalCap :: CapToken FullyQualifiedName
   -- ^ The original, installed token
   , _mcManaged :: ManagedCapType
   -- ^ Managed capability type
@@ -356,7 +343,7 @@ instance Ord ManagedCap where
 -- | The overall capability state
 data CapState
   = CapState
-  { _csSlots :: [CapSlot]
+  { _csSlots :: [CapSlot FullyQualifiedName]
   , _csManaged :: Set ManagedCap
   }
   deriving Show
@@ -401,7 +388,7 @@ data Cont b i m
 
 data CEKErrorHandler b i m
   = CEKNoHandler
-  | CEKHandler (CEKEnv b i m) (EvalTerm b i) (Cont b i m) [CapSlot] (CEKErrorHandler b i m)
+  | CEKHandler (CEKEnv b i m) (EvalTerm b i) (Cont b i m) [CapSlot FullyQualifiedName] (CEKErrorHandler b i m)
   deriving Show
 
 data EvalEnv b i m
@@ -410,7 +397,7 @@ data EvalEnv b i m
   , _eeGasModel :: GasEnv b
   , _eeLoaded :: CEKTLEnv b i
   , _eeMHashes :: Map ModuleName ModuleHash
-  , _eeMsgSigs :: Map PublicKeyText (Set CapToken)
+  , _eeMsgSigs :: Map PublicKeyText (Set (CapToken FullyQualifiedName))
   , _eePactDb :: PactDb b i
   --   _cekGas :: IORef Gas
   -- , _cekEvalLog :: IORef (Maybe [(Text, Gas)])

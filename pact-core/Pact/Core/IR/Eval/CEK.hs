@@ -211,7 +211,7 @@ evalCap
   => Cont b i m
   -> CEKErrorHandler b i m
   -> CEKEnv b i m
-  -> CapToken
+  -> FQCapToken
   -> EvalTerm b i
   -> m (EvalResult b i m)
 evalCap cont handler env ct@(CapToken fqn args) contbody = do
@@ -284,7 +284,7 @@ requireCap
   :: MonadEval b i m
   => Cont b i m
   -> CEKErrorHandler b i m
-  -> CapToken
+  -> FQCapToken
   -> m (EvalResult b i m)
 requireCap cont handler ct = do
   caps <- useEvalState (esCaps.csSlots)
@@ -297,7 +297,7 @@ composeCap
   :: (MonadEval b i m)
   => Cont b i m
   -> CEKErrorHandler b i m
-  -> CapToken
+  -> FQCapToken
   -> m (EvalResult b i m)
 composeCap cont handler ct@(CapToken fqn args) = do
   lookupFqName fqn >>= \case
@@ -326,7 +326,7 @@ filterIndex i xs = [x | (x, i') <- zip xs [0..], i /= i']
 installCap :: (MonadEval b i m)
   => Cont b i m
   -> CEKErrorHandler b i m
-  -> CapToken
+  -> FQCapToken
   -> m (EvalResult b i m)
 installCap cont handler ct@(CapToken fqn args) = do
   lookupFqName fqn >>= \case
@@ -373,7 +373,7 @@ emitEvent
   :: MonadEval b i m
   => Cont b i m
   -> CEKErrorHandler b i m
-  -> CapToken
+  -> FQCapToken
   -> m (EvalResult b i m)
 emitEvent cont handler ct@(CapToken fqn _) = do
   let pactEvent = PactEvent ct (_fqModule fqn) (_fqHash fqn)

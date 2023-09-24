@@ -51,6 +51,7 @@ import Pact.Core.Type
 import Pact.Core.Errors
 import Pact.Core.IR.Eval.Runtime.Types
 import Pact.Core.Literal
+import Pact.Core.Capabilities
 
 mkBuiltinFn
   :: (IsBuiltin b)
@@ -73,7 +74,7 @@ cfFQN f = \case
 
 getAllStackCaps
   :: MonadEval b i m
-  => m (Set CapToken)
+  => m (Set FQCapToken)
 getAllStackCaps = do
   Set.fromList . concatMap capToList <$> useEvalState (esCaps . csSlots)
   where
@@ -81,8 +82,8 @@ getAllStackCaps = do
 
 checkSigCaps
   :: MonadEval b i m
-  => Map PublicKeyText (Set CapToken)
-  -> m (Map PublicKeyText (Set CapToken))
+  => Map PublicKeyText (Set FQCapToken)
+  -> m (Map PublicKeyText (Set FQCapToken))
 checkSigCaps sigs = do
   granted <- getAllStackCaps
   pure $ M.filter (match granted) sigs

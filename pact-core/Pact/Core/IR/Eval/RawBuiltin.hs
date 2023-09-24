@@ -898,3 +898,17 @@ rawBuiltinLiftedRuntime f i = \case
   RawB64Decode -> coreB64Decode i (f RawB64Decode)
   RawStrToList -> strToList i (f RawStrToList)
   RawBind -> coreBind i (f RawBind)
+  RawCreateTable -> unimplemented
+  RawDescribeKeyset -> unimplemented
+  RawDescribeModule -> unimplemented
+  RawDescribeTable -> unimplemented
+  RawFoldDb -> unimplemented
+  RawInsert -> unimplemented
+  RawKeyLog -> unimplemented
+  RawKeys -> unimplemented
+  RawRead -> unimplemented
+  RawSelect -> unimplemented
+  RawUpdate -> unimplemented
+  RawWithDefaultRead -> unimplemented
+  RawWithRead -> unimplemented
+  RawWrite -> unimplemented
