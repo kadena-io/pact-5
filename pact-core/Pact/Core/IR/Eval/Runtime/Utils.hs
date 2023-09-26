@@ -52,15 +52,17 @@ import Pact.Core.Errors
 import Pact.Core.IR.Eval.Runtime.Types
 import Pact.Core.Literal
 import Pact.Core.Capabilities
+import Pact.Core.Persistence
 
 mkBuiltinFn
   :: (IsBuiltin b)
   => i
   -> b
-  -> (Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m))
+  -> CEKEnv b i m
+  -> NativeFunction b i m
   -> NativeFn b i m
-mkBuiltinFn i b fn =
-  NativeFn b fn (builtinArity b) i
+mkBuiltinFn i b env fn =
+  NativeFn b env fn (builtinArity b) i
 {-# INLINE mkBuiltinFn #-}
 
 cfFQN :: Lens' (CapFrame b i) FullyQualifiedName
@@ -138,7 +140,7 @@ usesEvalState l f = views l f <$> getEvalState
 
 lookupFqName :: (MonadEval b i m) => FullyQualifiedName -> m (Maybe (EvalDef b i))
 lookupFqName fqn =
-  M.lookup fqn . view eeLoaded <$> readEnv
+  views (esLoaded.loAllLoaded) (M.lookup fqn) <$> getEvalState
 
 typecheckArgument :: (MonadEval b i m) => PactValue -> Type -> m PactValue
 typecheckArgument pv ty = case (pv, checkPvType ty pv) of

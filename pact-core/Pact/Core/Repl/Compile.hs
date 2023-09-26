@@ -28,7 +28,6 @@ import qualified Data.Text as T
 -- import Pact.Core.Info
 import Pact.Core.Persistence
 import Pact.Core.Builtin
-import Pact.Core.Gas
 import Pact.Core.Names
 import Pact.Core.Repl.Utils
 import Pact.Core.IR.Desugar
@@ -36,11 +35,14 @@ import Pact.Core.Errors
 import Pact.Core.IR.Term
 import Pact.Core.Compile
 import Pact.Core.Interpreter
+import Pact.Core.PactValue
+import Pact.Core.Environment
 
 
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Repl.Runtime
 import Pact.Core.Repl.Runtime.ReplBuiltin
+import Pact.Core.Hash
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
@@ -106,16 +108,21 @@ interpretReplProgram sc@(SourceCode source) = do
           evalGas <- use replGas
           evalLog <- use replEvalLog
           -- todo: cache?
-          mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
-          let rEnv = ReplEvalEnv evalGas evalLog
-              cekEnv = EvalEnv
-                    { _eeBuiltins = replRawBuiltinRuntime
-                    , _eeLoaded = _loAllLoaded lo
-                    , _eeGasModel = freeGasEnv
-                    , _eeMHashes = mhashes
-                    , _eeMsgSigs = mempty
-                    , _eePactDb = pdb }
-              rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] [] False) sc
+          -- mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
+          let rEnv = ReplEvalEnv evalGas evalLog replBuiltinEnv
+              evalEnv = EvalEnv
+                    { _eeMsgSigs = mempty
+                    , _eeMsgBody = EnvData mempty
+                    , _eePactDb = pdb
+                    , _eeHash = Hash mempty}
+              evalState = EvalState
+                       { _esCaps = CapState [] mempty
+                       , _esStack = []
+                       , _esEvents = []
+                       , _esInCap = False
+                       , _esLoaded = lo
+                       }
+              rState = ReplEvalState evalEnv evalState sc
           liftIO (runReplCEK rEnv rState te) >>= liftEither >>= \case
             VError txt ->
               throwError (PEExecutionError (EvalError txt) i)

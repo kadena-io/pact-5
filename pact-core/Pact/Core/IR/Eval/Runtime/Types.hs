@@ -13,20 +13,20 @@
 
 module Pact.Core.IR.Eval.Runtime.Types
  ( CEKTLEnv
- , CEKEnv
+ , CEKEnv(..)
+ , ceLocal
+ , ceEnv
+ , ceBuiltins
  , EvalEnv(..)
+ , NativeFunction
+ , BuiltinEnv
  , NativeFn(..)
  , EvalT(..)
  , runEvalT
  , CEKValue(..)
  , Cont(..)
- , eeBuiltins
- , eeLoaded
- , eeGasModel
- , eeMHashes, eeMsgSigs
- , eePactDb
  , CEKErrorHandler(..)
- , MonadEvalEnv(..)
+--  , MonadEvalEnv(..)
  , MonadEvalState(..)
  , MonadGas(..)
  , CondFrame(..)
@@ -37,7 +37,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , emGas, emGasLog, emRuntimeEnv
  , EvalState(..)
  , esCaps, esEvents, esInCap
- , esStack
+ , esStack, esLoaded
  , pattern VLiteral
  , pattern VGuard
  , pattern VList
@@ -101,6 +101,7 @@ import Pact.Core.Type
 import Pact.Core.Persistence
 import Pact.Core.ModRefs
 import Pact.Core.Capabilities
+import Pact.Core.Environment
 import qualified Pact.Core.Pretty as P
 
 
@@ -108,23 +109,33 @@ import qualified Pact.Core.Pretty as P
 type CEKTLEnv b i = Map FullyQualifiedName (EvalDef b i)
 
 -- | Locally bound variables
-type CEKEnv b i m = RAList (CEKValue b i m)
+-- type CEKEnv b i m = RAList (CEKValue b i m)
+
+data CEKEnv b i m
+  = CEKEnv
+  { _ceLocal :: RAList (CEKValue b i m)
+  , _ceEnv :: EvalEnv b i
+  , _ceBuiltins :: BuiltinEnv b i m }
+
+instance (Show i, Show b) => Show (CEKEnv b i m) where
+  show (CEKEnv e _ _) = show e
 
 -- | List of builtins
-type BuiltinEnv b i m = i -> b -> NativeFn b i m
+type BuiltinEnv b i m = i -> b -> CEKEnv b i m -> NativeFn b i m
 
 newtype StackFrame
   = StackFrame
   { _sfLamInfo :: LamInfo }
   deriving Show
 
-data Closure b i
+data Closure b i m
   = Closure
   { _cloLamInfo :: !LamInfo
   , _cloTypes :: !(NonEmpty (Maybe Type))
   , _cloArity :: !Int
   , _cloTerm :: !(EvalTerm b i)
   , _cloRType :: !(Maybe Type)
+  , _cloEnv :: !(CEKEnv b i m)
   , _cloInfo :: i
   } deriving Show
 
@@ -156,7 +167,7 @@ data PartialClosure b i m
   } deriving Show
 
 data CanApply b i m
-  = C {-# UNPACK #-} !(Closure b i)
+  = C {-# UNPACK #-} !(Closure b i m)
   | LC {-# UNPACK #-} !(LamClosure b i m)
   | PC {-# UNPACK #-} !(PartialClosure b i m)
   | N {-# UNPACK #-} !(NativeFn b i m)
@@ -215,7 +226,7 @@ pattern VNative clo = VClosure (N clo)
 pattern VPartialNative :: PartialNativeFn b i m -> CEKValue b i m
 pattern VPartialNative clo = VClosure (PN clo)
 
-pattern VDefClosure :: Closure b i -> CEKValue b i m
+pattern VDefClosure :: Closure b i m -> CEKValue b i m
 pattern VDefClosure clo = VClosure (C clo)
 
 pattern VLamClosure :: LamClosure b i m -> CEKValue b i m
@@ -236,16 +247,17 @@ data EvalState b i
   , _esStack :: [StackFrame]
   , _esEvents :: [PactEvent b i]
   , _esInCap :: Bool
+  , _esLoaded :: Loaded b i
   } deriving Show
 
-type MonadEval b i m = (MonadEvalEnv b i m, MonadEvalState b i m, MonadGas m, MonadError (PactError i) m, MonadIO m, Default i)
+type MonadEval b i m = (MonadEvalState b i m, MonadGas m, MonadError (PactError i) m, MonadIO m, Default i)
 
 class Monad m => MonadGas m where
   logGas :: Text -> Gas -> m ()
   chargeGas :: Gas -> m ()
 
-class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
-  readEnv :: m (EvalEnv b i m)
+-- class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
+--   readEnv :: m (EvalEnv b i m)
 
 -- | Our monad mirroring `EvalState` for our evaluation state
 class Monad m => MonadEvalState b i m | m -> b, m -> i where
@@ -256,7 +268,7 @@ class Monad m => MonadEvalState b i m | m -> b, m -> i where
 
 data EvalTEnv b i m
   = EvalTEnv
-  { _emRuntimeEnv :: EvalEnv b i (EvalT b i m)
+  { _emRuntimeEnv :: CEKEnv b i (EvalT b i m)
   , _emGas :: IORef Gas
   , _emGasLog :: IORef (Maybe [(Text, Gas)])
   }
@@ -278,10 +290,14 @@ runEvalT
   -> m (a, EvalState b i)
 runEvalT env st (EvalT action) = runStateT (runReaderT action env) st
 
+type NativeFunction b i m
+  = i -> b -> Cont b i m -> CEKErrorHandler b i m -> CEKEnv b i m -> [CEKValue b i m] -> m (EvalResult b i m)
+
 data NativeFn b i m
   = NativeFn
   { _native :: b
-  , _nativeFn :: Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m)
+  , _nativeEnv :: CEKEnv b i m
+  , _nativeFn :: NativeFunction b i m
   , _nativeArity :: {-# UNPACK #-} !Int
   , _nativeLoc :: i
   }
@@ -292,7 +308,8 @@ data NativeFn b i m
 data PartialNativeFn b i m
   = PartialNativeFn
   { _pNative :: b
-  , _pNativeFn :: Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m)
+  , _pNativeEnv :: CEKEnv b i m
+  , _pNativeFn :: NativeFunction b i m
   , _pNativeArity :: {-# UNPACK #-} !Int
   , _pNativeAppliedArgs :: [CEKValue b i m]
   , _pNativeLoc :: i
@@ -391,14 +408,16 @@ data CEKErrorHandler b i m
   | CEKHandler (CEKEnv b i m) (EvalTerm b i) (Cont b i m) [CapSlot FullyQualifiedName] (CEKErrorHandler b i m)
   deriving Show
 
-data EvalEnv b i m
-  = EvalEnv
-  { _eeBuiltins :: BuiltinEnv b i m
-  , _eeGasModel :: GasEnv b
-  , _eeLoaded :: CEKTLEnv b i
-  , _eeMHashes :: Map ModuleName ModuleHash
-  , _eeMsgSigs :: Map PublicKeyText (Set (CapToken FullyQualifiedName))
-  , _eePactDb :: PactDb b i
+-- data EvalEnv b i m
+--   = EvalEnv
+--   { _eeBuiltins :: BuiltinEnv b i m
+--   , _eeGasModel :: GasEnv b
+--   , _eeLoaded :: CEKTLEnv b i
+--   , _eeMHashes :: Map ModuleName ModuleHash
+--   , _eeMsgSigs :: Map PublicKeyText (Set (CapToken FullyQualifiedName))
+--   , _eePactDb :: PactDb b i
+
+
   --   _cekGas :: IORef Gas
   -- , _cekEvalLog :: IORef (Maybe [(Text, Gas)])
   -- , _ckeData :: EnvData PactValue
@@ -406,10 +425,10 @@ data EvalEnv b i m
   -- , _ckeResolveName :: QualifiedName -> Maybe FullyQualifiedName
   -- , _ckeSigs :: Set PublicKey
   -- , _ckePactDb :: PactDb b i
-  }
+  -- }
 
 instance (Show i, Show b) => Show (NativeFn b i m) where
-  show (NativeFn b _ arity _) = unwords
+  show (NativeFn b _ _ arity _) = unwords
     ["(NativeFn"
     , show b
     , "#fn"
@@ -418,7 +437,7 @@ instance (Show i, Show b) => Show (NativeFn b i m) where
     ]
 
 instance (Show i, Show b) => Show (PartialNativeFn b i m) where
-  show (PartialNativeFn b _ arity _ _) = unwords
+  show (PartialNativeFn b _ _ arity _ _) = unwords
     ["(NativeFn"
     , show b
     , "#fn"
@@ -436,7 +455,8 @@ instance (Show i, Show b, Pretty b) => Pretty (CEKValue b i m) where
     VClosure{} ->
       P.angles "closure#"
 
-makeLenses ''EvalEnv
+makeLenses ''CEKEnv
+-- makeLenses ''EvalEnv
 makeLenses ''EvalTEnv
 makeLenses ''EvalState
 makeLenses ''CapState
@@ -453,8 +473,8 @@ instance (MonadIO m) => MonadGas (EvalT b i m) where
     r <- EvalT $ view emGas
     liftIO (modifyIORef' r (<> g))
 
-instance (MonadIO m) => MonadEvalEnv b i (EvalT b i m) where
-  readEnv = EvalT $ view emRuntimeEnv
+-- instance (MonadIO m) => MonadEvalEnv b i (EvalT b i m) where
+--   readEnv = EvalT $ view emRuntimeEnv
 
 instance Monad m => MonadEvalState b i (EvalT b i m) where
   getEvalState = EvalT get
