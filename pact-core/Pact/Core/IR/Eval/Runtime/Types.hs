@@ -362,6 +362,7 @@ data CapState
   = CapState
   { _csSlots :: [CapSlot FullyQualifiedName]
   , _csManaged :: Set ManagedCap
+  , _csModuleAdmin :: Set ModuleName
   }
   deriving Show
 

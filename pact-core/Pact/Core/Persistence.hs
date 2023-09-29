@@ -124,7 +124,7 @@ data PactDb b i
   , _pdbRead :: forall k v. Domain k v b i -> k -> IO (Maybe v)
   , _pdbWrite :: forall k v. Domain k v b i -> k -> v -> IO ()
   , _pdbKeys :: forall k v. Domain k v b i -> IO [k]
-  , _pdbCreateUserTable :: forall k v. Domain k v b i -> TableName -> ModuleName -> IO ()
+  , _pdbCreateUserTable :: TableName -> ModuleName -> IO ()
   }
 
 makeClassy ''PactDb

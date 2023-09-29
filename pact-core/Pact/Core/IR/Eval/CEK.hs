@@ -316,6 +316,8 @@ composeCap cont handler env ct@(CapToken fqn args) = do
 filterIndex :: Int -> [a] -> [a]
 filterIndex i xs = [x | (x, i') <- zip xs [0..], i /= i']
 
+-- Todo:
+-- `capAutonomous` are what we should use to match semantics accurately.
 installCap :: (MonadEval b i m)
   => Cont b i m
   -> CEKErrorHandler b i m

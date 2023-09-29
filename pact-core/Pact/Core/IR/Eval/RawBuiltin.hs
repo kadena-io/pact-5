@@ -144,7 +144,7 @@ rawDiv = \info b cont handler _env -> \case
   args -> argsError info b args
 
 rawNegate :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-rawNegate = \info b cont handler env -> \case
+rawNegate = \info b cont handler _env -> \case
   [VLiteral (LInteger i)] ->
     returnCEKValue cont handler (VLiteral (LInteger (negate i)))
   [VLiteral (LDecimal i)] ->
@@ -823,6 +823,17 @@ coreBind = \info b cont handler _env -> \case
     applyLam clo [v] cont handler
   args -> argsError info b args
 
+
+createTable :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+createTable = \info b cont handler env -> \case
+  [VTable tn mn _ _] -> do
+    let pdb = view (ceEnv . eePactDb) env
+    -- Todo: error handling here
+    -- Todo: guard table
+    liftIO (_pdbCreateUserTable pdb tn mn)
+    returnCEKValue cont handler VUnit
+  args -> argsError info b args
+
 -----------------------------------
 -- Core definitions
 -----------------------------------
@@ -900,7 +911,7 @@ rawBuiltinRuntime = \case
   RawB64Decode -> coreB64Decode
   RawStrToList -> strToList
   RawBind -> coreBind
-  RawCreateTable -> unimplemented
+  RawCreateTable -> createTable
   RawDescribeKeyset -> unimplemented
   RawDescribeModule -> unimplemented
   RawDescribeTable -> unimplemented
