@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE InstanceSigs #-}
 
 
 module Pact.Core.Capabilities
@@ -6,10 +7,14 @@ module Pact.Core.Capabilities
  , DefManagedMeta(..)
  , CapForm(..)
  , capFormName
+ , CapToken(..)
+ , CapSlot(..)
+ , FQCapToken
  ) where
 
 import Control.Lens
-
+import Pact.Core.Names
+import Pact.Core.PactValue
 import Pact.Core.Pretty
 
 data DefManagedMeta name
@@ -56,3 +61,19 @@ instance (Pretty name, Pretty e) => Pretty (CapForm name e) where
     CreateUserGuard name es ->
       parens ("create-user-guard" <+> parens (pretty name <+> hsep (pretty <$> es)))
 
+-- | An acquired capability token
+-- with the reference
+data CapToken name
+  = CapToken
+  { _ctName :: name
+  , _ctArgs :: [PactValue]
+  } deriving (Show, Eq, Ord)
+
+--
+data CapSlot name
+ = CapSlot
+ { _csCap :: CapToken name
+ , _csComposed :: [CapToken name]
+ } deriving (Show, Eq)
+
+type FQCapToken = CapToken FullyQualifiedName

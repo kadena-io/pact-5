@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TypeApplications #-}
@@ -28,7 +27,6 @@ import qualified Data.Text as T
 -- import Pact.Core.Info
 import Pact.Core.Persistence
 import Pact.Core.Builtin
-import Pact.Core.Gas
 import Pact.Core.Names
 import Pact.Core.Repl.Utils
 import Pact.Core.IR.Desugar
@@ -36,11 +34,14 @@ import Pact.Core.Errors
 import Pact.Core.IR.Term
 import Pact.Core.Compile
 import Pact.Core.Interpreter
+import Pact.Core.PactValue
+import Pact.Core.Environment
 
 
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Repl.Runtime
 import Pact.Core.Repl.Runtime.ReplBuiltin
+import Pact.Core.Hash
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
@@ -96,6 +97,7 @@ interpretReplProgram sc@(SourceCode source) = do
   interpret (DesugarOutput tl _ deps) = do
     pdb <- use replPactDb
     lo <- use replLoaded
+    res <- use replEvalState
     case tl of
       RTLTopLevel tt -> do
         let interp = Interpreter interpreter
@@ -106,20 +108,15 @@ interpretReplProgram sc@(SourceCode source) = do
           evalGas <- use replGas
           evalLog <- use replEvalLog
           -- todo: cache?
-          mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
-          es <- use replEvalState
-          let rEnv = ReplEvalEnv evalGas evalLog
-              cekEnv = EvalEnv
-                    { _eeBuiltins = replRawBuiltinRuntime
-                    , _eeLoaded = _loAllLoaded lo
-                    , _eeGasModel = freeGasEnv
-                    , _eeMHashes = mhashes
-                    , _eeMsgSigs = mempty
-                    , _eePactDb = pdb }
-              rState = ReplEvalState cekEnv es sc
-          (res, st') <- liftIO (runReplCEK rEnv rState te)
-          replEvalState  .= _reState st'
-          liftEither res >>= \case
+          -- mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
+          let rEnv = ReplEvalEnv evalGas evalLog replBuiltinEnv
+              evalEnv = EvalEnv
+                    { _eeMsgSigs = mempty
+                    , _eeMsgBody = EnvData mempty
+                    , _eePactDb = pdb
+                    , _eeHash = Hash mempty}
+              rState = ReplEvalState evalEnv res sc
+          liftIO (runReplCEK rEnv rState te) >>= liftEither . fst >>= \case
             VError txt ->
               throwError (PEExecutionError (EvalError txt) i)
             EvalValue v -> case v of

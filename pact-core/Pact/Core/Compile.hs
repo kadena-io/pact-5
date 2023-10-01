@@ -30,6 +30,7 @@ import Pact.Core.Pretty
 import Pact.Core.Type
 import Pact.Core.IR.Term
 import Pact.Core.Interpreter
+import Pact.Core.Guards
 
 
 -- import qualified Pact.Core.Syntax.LexUtils as Lisp
@@ -62,24 +63,54 @@ data CompileValue b
   deriving Show
 
 
-
 compileProgram
   :: (HasCompileEnv b s m)
   => ByteString
   -> PactDb b SpanInfo
-  -> Interpreter b s m
+  -> Interpreter b m
   -> m [CompileValue b]
 compileProgram source pdb interp = do
   lexed <- liftEither (Lisp.lexer source)
   debugPrint DebugLexer lexed
   parsed <- liftEither (Lisp.parseProgram lexed)
   lo <- use loaded
-  traverse (runDesugarTopLevel Proxy pdb lo >=> interpretTopLevel pdb interp) parsed
+  traverse (go lo) parsed
+  where
+  go lo =
+    evalModuleGovernance pdb interp
+    >=> runDesugarTopLevel Proxy pdb lo
+    >=> interpretTopLevel pdb interp
+
+evalModuleGovernance
+  :: (HasCompileEnv b s m)
+  => PactDb b SpanInfo
+  -> Interpreter b m
+  -> Lisp.TopLevel SpanInfo
+  -> m (Lisp.TopLevel SpanInfo)
+evalModuleGovernance pdb interp = \case
+  tl@(Lisp.TLModule m) -> liftIO (readModule pdb (Lisp._mName m)) >>= \case
+    Just (ModuleData md _) ->
+      case _mGovernance md of
+        KeyGov _ksn -> error "TODO: implement enforcing keyset names"
+        CapGov (Name n nk) -> case nk of
+          NTopLevel mn mh ->
+            use (loaded . loAllLoaded . at (FullyQualifiedName mn n mh)) >>= \case
+              Just (DCap d) ->
+                _interpret interp (_dcapTerm d) >>= \case
+                  IPV{} -> pure tl
+                  _ -> error "governance failure"
+              -- Todo: Definitely fixable with a GADT
+              _ -> error "invalid governance: not a defcap"
+          _ -> error "invariant failure: governance is not a fully qualified name"
+    Just (InterfaceData iface _) ->
+      throwError (PEExecutionError (CannotUpgradeInterface (_ifName iface)) (_ifInfo iface))
+    Nothing -> pure tl
+  a -> pure a
 
 interpretTopLevel
   :: (HasCompileEnv b s m)
   => PactDb b SpanInfo
-  -> Interpreter b s m
+  -> Interpreter b m
   -> DesugarOutput b SpanInfo (TopLevel Name Type b SpanInfo)
   -> m (CompileValue b)
 interpretTopLevel pdb interp (DesugarOutput ds lo0 deps) = do

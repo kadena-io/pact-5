@@ -47,7 +47,7 @@ main = do
   pactDb <- mockPactDb
   g <- newIORef mempty
   evalLog <- newIORef Nothing
-  let es = EvalState (CapState [] Set.empty) [] [] False Nothing
+  let es = EvalState (CapState [] mempty mempty) [] [] False Nothing mempty
   ref <- newIORef (ReplState mempty mempty pactDb g evalLog (SourceCode mempty) es)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do

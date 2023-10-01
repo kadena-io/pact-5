@@ -223,6 +223,23 @@ data RawBuiltin
   | RawYield
   | RawResume
   | RawBind
+  -- Database functions
+  | RawCreateTable
+  | RawDescribeKeyset
+  | RawDescribeModule
+  | RawDescribeTable
+  | RawFoldDb
+  | RawInsert
+  | RawKeyLog
+  | RawKeys
+  | RawRead
+  | RawSelect
+  | RawUpdate
+  | RawWithDefaultRead
+  | RawWithRead
+  | RawWrite
+  -- | RawTxIds
+  -- | RawTxLog
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 instance HasObjectOps RawBuiltin where
@@ -306,6 +323,20 @@ rawBuiltinToText = \case
   RawYield -> "yield"
   RawResume -> "resume"
   RawBind -> "bind"
+  RawCreateTable -> "create-table"
+  RawDescribeKeyset -> "describe-keyset"
+  RawDescribeModule -> "describe-module"
+  RawDescribeTable -> "describe-table"
+  RawFoldDb -> "fold-db"
+  RawInsert -> "insert"
+  RawKeyLog -> "keylog"
+  RawKeys -> "keys"
+  RawRead -> "read"
+  RawSelect -> "select"
+  RawUpdate -> "update"
+  RawWithDefaultRead -> "with-default-read"
+  RawWithRead -> "with-read"
+  RawWrite -> "write"
 
 instance IsBuiltin RawBuiltin where
   builtinName = NativeName . rawBuiltinToText
@@ -386,6 +417,20 @@ instance IsBuiltin RawBuiltin where
     RawYield -> 1
     RawResume -> 1
     RawBind -> 2
+    RawCreateTable -> 1
+    RawDescribeKeyset -> 1
+    RawDescribeModule -> 1
+    RawDescribeTable -> 1
+    RawFoldDb -> 3
+    RawInsert -> 3
+    RawKeyLog -> 3
+    RawKeys -> 1
+    RawRead -> 2
+    RawSelect -> 2
+    RawUpdate -> 3
+    RawWithDefaultRead -> 4
+    RawWithRead -> 3
+    RawWrite -> 3
 
 rawBuiltinNames :: [Text]
 rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]

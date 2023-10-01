@@ -34,11 +34,12 @@ data ReplEvalEnv b i
   = ReplEvalEnv
   { _reGas :: IORef Gas
   , _reGasLog :: IORef (Maybe [(Text, Gas)])
+  , _reBuiltins :: BuiltinEnv b i (ReplEvalM b i)
   }
 
 data ReplEvalState b i
   = ReplEvalState
-  { _reEnv :: EvalEnv b i (ReplEvalM b i)
+  { _reEnv :: EvalEnv b i
   , _reState :: EvalState b i
   , _reSource :: SourceCode
   }
@@ -69,9 +70,6 @@ instance MonadGas (ReplEvalM b i) where
     r <- view reGas
     liftIO (modifyIORef' r (<> g))
 
-instance MonadEvalEnv b i (ReplEvalM b i) where
-  readEnv = use reEnv
-
 instance MonadEvalState b i (ReplEvalM b i) where
   getEvalState = use reState
   modifyEvalState f =
@@ -95,4 +93,4 @@ runReplCEK
   -> EvalTerm b i
   -> IO (Either (PactError i) (EvalResult b i (ReplEvalM b i)), ReplEvalState b i)
 runReplCEK env st term =
-  runReplEvalM env st (eval mempty term)
+  runReplEvalM env st (eval (CEKEnv mempty (_reEnv st) (_reBuiltins env)) term)

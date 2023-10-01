@@ -124,6 +124,7 @@ data Def name ty builtin info
   | DPact (DefPact name ty builtin info)
   deriving (Show, Functor)
 
+
 data Module name ty builtin info
   = Module
   { _mName :: ModuleName

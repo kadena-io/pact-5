@@ -297,6 +297,8 @@ data EvalError
   | NoYieldInPactExec
   | ContinuePactInvalidContext Integer Integer Integer
   | MultipleOrNestedPactExecFound
+  -- ^ No such keyset
+  | CannotUpgradeInterface ModuleName
   deriving Show
 
 instance Pretty EvalError where
@@ -334,7 +336,7 @@ instance Pretty EvalError where
     ContinuePactInvalidContext userStep currStep maxStep ->
       Pretty.hsep ["Continue pact step with invalid context: user: ", pretty userStep, ", current: ", pretty currStep, ", max: ", pretty maxStep]
     MultipleOrNestedPactExecFound -> "Multiple or nested pact exec found"
-    _ -> error "todo: render"
+    err -> error ("todo: render" ++ show err)
 
 
 

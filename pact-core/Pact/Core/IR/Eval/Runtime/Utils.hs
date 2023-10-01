@@ -6,12 +6,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE InstanceSigs #-}
 
 module Pact.Core.IR.Eval.Runtime.Utils
  ( mkBuiltinFn
@@ -30,14 +25,19 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , throwExecutionError
  , throwExecutionError'
  , argsError
+ , findCallingModule
+ , getCallingModule
+ , getModule
  ) where
 
 import Control.Lens hiding ((%%=))
 import Control.Monad.Except(MonadError(..))
+import Control.Monad.IO.Class(liftIO)
 import Data.Map.Strict(Map)
 import Data.Text(Text)
 import Data.Set(Set)
 import Data.Default(def)
+import Data.Maybe(mapMaybe, listToMaybe)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as Set
 
@@ -51,15 +51,19 @@ import Pact.Core.Type
 import Pact.Core.Errors
 import Pact.Core.IR.Eval.Runtime.Types
 import Pact.Core.Literal
+import Pact.Core.Capabilities
+import Pact.Core.Persistence
+import Pact.Core.Environment
 
 mkBuiltinFn
   :: (IsBuiltin b)
   => i
   -> b
-  -> (Cont b i m -> CEKErrorHandler b i m -> [CEKValue b i m] -> m (EvalResult b i m))
+  -> CEKEnv b i m
+  -> NativeFunction b i m
   -> NativeFn b i m
-mkBuiltinFn i b fn =
-  NativeFn b fn (builtinArity b) i
+mkBuiltinFn i b env fn =
+  NativeFn b env fn (builtinArity b) i
 {-# INLINE mkBuiltinFn #-}
 
 cfFQN :: Lens' (CapFrame b i) FullyQualifiedName
@@ -73,7 +77,7 @@ cfFQN f = \case
 
 getAllStackCaps
   :: MonadEval b i m
-  => m (Set CapToken)
+  => m (Set FQCapToken)
 getAllStackCaps = do
   Set.fromList . concatMap capToList <$> useEvalState (esCaps . csSlots)
   where
@@ -81,8 +85,8 @@ getAllStackCaps = do
 
 checkSigCaps
   :: MonadEval b i m
-  => Map PublicKeyText (Set CapToken)
-  -> m (Map PublicKeyText (Set CapToken))
+  => Map PublicKeyText (Set FQCapToken)
+  -> m (Map PublicKeyText (Set FQCapToken))
 checkSigCaps sigs = do
   granted <- getAllStackCaps
   pure $ M.filter (match granted) sigs
@@ -137,7 +141,7 @@ usesEvalState l f = views l f <$> getEvalState
 
 lookupFqName :: (MonadEval b i m) => FullyQualifiedName -> m (Maybe (EvalDef b i))
 lookupFqName fqn =
-  M.lookup fqn . view eeLoaded <$> readEnv
+  views (esLoaded.loAllLoaded) (M.lookup fqn) <$> getEvalState
 
 typecheckArgument :: (MonadEval b i m) => PactValue -> Type -> m PactValue
 typecheckArgument pv ty = case (pv, checkPvType ty pv) of
@@ -149,6 +153,50 @@ typecheckArgument pv ty = case (pv, checkPvType ty pv) of
 
 maybeTCType :: (MonadEval b i m) => PactValue -> Maybe Type -> m PactValue
 maybeTCType pv = maybe (pure pv) (typecheckArgument pv)
+
+findCallingModule :: (MonadEval b i m) => m (Maybe ModuleName)
+findCallingModule = do
+  stack <- useEvalState esStack
+  pure $ listToMaybe $ mapMaybe getLamInfo stack
+  where
+  getLamInfo sf = case _sfLamInfo sf of
+    AnonLamInfo -> Nothing
+    TLDefun mn _ -> Just mn
+    TLDefCap mn _ -> Just mn
+    TLDefPact mn _ -> Just mn
+
+-- Todo: MaybeT cleans this up
+getCallingModule :: (MonadEval b i m) => m (EvalModule b i)
+getCallingModule = findCallingModule >>= \case
+  Just mn -> useEvalState (esLoaded . loModules . at mn) >>= \case
+    Just (ModuleData m _) -> pure m
+    Just (InterfaceData _m _) -> error "called from interface: impossible"
+    Nothing -> error "no such calling module"
+  Nothing -> error "no calling module in stack"
+
+
+-- enforceBlessedHashes md mh
+--   | _mHash md == mh = return ()
+--   | mh `Set.member` (_mBlessed md) = return ()
+--   | otherwise = error "Execution aborted: hash not blessed"
+
+-- guardForModuleCall env currMod onFound =
+--   findCallingModule >>= \case
+--     Just mn | mn == currMod -> onFound
+--     Nothing -> getModule currMod env >>= acquireModuleAdmin
+
+-- acquireModuleAdmin md
+
+getModule :: (MonadEval b i m) => ModuleName -> CEKEnv b i m -> m (EvalModule b i)
+getModule mn env =
+ useEvalState (esLoaded . loModules . at mn) >>= \case
+   Just (ModuleData md _) -> pure md
+   Just (InterfaceData _ _) -> error "not a module"
+   Nothing -> do
+    let pdb = view (ceEnv . eePactDb) env
+    liftIO (_pdbRead pdb DModules mn) >>= \case
+      Just (ModuleData md _) -> pure md
+      _ -> error "could not find module"
 
 safeTail :: [a] -> [a]
 safeTail (_:xs) = xs

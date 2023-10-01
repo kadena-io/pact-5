@@ -45,24 +45,24 @@ prettyShowValue = \case
   VClosure _ -> "<#closure>"
 
 
-mkReplBuiltinFn
-  :: (IsBuiltin b)
-  => i
-  -> ReplBuiltin b
-  -> (ReplCont b i -> ReplHandler b i -> [ReplCEKValue b i] -> ReplBM b i (ReplEvalResult b i))
-  -> ReplBuiltinFn b i
-mkReplBuiltinFn = mkBuiltinFn
-{-# INLINE mkReplBuiltinFn #-}
+-- mkReplBuiltinFn
+--   :: (IsBuiltin b)
+--   => i
+--   -> ReplBuiltin b
+--   -> (ReplCont b i -> ReplHandler b i -> [ReplCEKValue b i] -> ReplBM b i (ReplEvalResult b i))
+--   -> ReplBuiltinFn b i
+-- mkReplBuiltinFn = mkBuiltinFn
+-- {-# INLINE mkReplBuiltinFn #-}
 
-corePrint :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
-corePrint info b = mkReplBuiltinFn info b \cont handler -> \case
+corePrint :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+corePrint = \info b cont handler _env -> \case
   [v] -> do
     liftIO $ putStrLn $ T.unpack (prettyShowValue v)
     returnCEKValue cont handler (VLiteral LUnit)
   args -> argsError info b args
 
-rawExpect :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
-rawExpect info b = mkReplBuiltinFn info b \cont handler -> \case
+rawExpect :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+rawExpect = \info b cont handler _env -> \case
   [VLiteral (LString msg), VPactValue v1, VClosure clo] ->
     unsafeApplyOne clo (VLiteral LUnit) >>= \case
        EvalValue (VPactValue v2) ->
@@ -74,8 +74,8 @@ rawExpect info b = mkReplBuiltinFn info b \cont handler -> \case
        v -> returnCEK cont handler v
   args -> argsError info b args
 
-coreExpectThat :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
-coreExpectThat info b = mkReplBuiltinFn info b \cont handler -> \case
+coreExpectThat :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+coreExpectThat = \info b cont handler _env -> \case
   [VLiteral (LString msg), VClosure vclo, v] -> do
     unsafeApplyOne vclo v >>= \case
       EvalValue (VLiteral (LBool c)) ->
@@ -85,8 +85,8 @@ coreExpectThat info b = mkReplBuiltinFn info b \cont handler -> \case
       VError ve -> return (VError ve)
   args -> argsError info b args
 
-coreExpectFailure :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
-coreExpectFailure info b = mkReplBuiltinFn info b \cont handler -> \case
+coreExpectFailure :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+coreExpectFailure = \info b cont handler _env -> \case
   [VLiteral (LString toMatch), VClosure vclo] -> do
     tryError (unsafeApplyOne vclo (VLiteral LUnit)) >>= \case
       Right (VError _e) ->
@@ -99,8 +99,8 @@ coreExpectFailure info b = mkReplBuiltinFn info b \cont handler -> \case
 
 
 
-continuePact :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
-continuePact info b = mkReplBuiltinFn info b \cont handler -> \case
+continuePact :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+continuePact = \info b cont handler env -> \case
   [VLiteral (LInteger s)] -> do
     useEvalState esPactExec >>= \case
       Nothing -> pure (VError "No pact exec environment found!")
@@ -113,7 +113,7 @@ continuePact info b = mkReplBuiltinFn info b \cont handler -> \case
                 args' = VPactValue <$> pe ^. peContinuation . pcArgs
                 toClosure = \case
                   Lam li args body i ->
-                    applyLam (C (Closure li (_argType <$> args) (NE.length args) body Nothing i)) args' Mt CEKNoHandler
+                    applyLam (C (Closure li (_argType <$> args) (NE.length args) body Nothing env i)) args' Mt CEKNoHandler
                   _ -> error "invariant violation"
               v <- case step of
                 Step s' _ -> toClosure s'
@@ -125,8 +125,8 @@ continuePact info b = mkReplBuiltinFn info b \cont handler -> \case
         _ -> pure (VError "continuation is not a defpact")
   args -> argsError info b args
 
-pactState :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
-pactState info b = mkReplBuiltinFn info b \_cont _handler -> \case
+pactState :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+pactState = \ info b _cont _handler _env -> \case
   [_] -> do
     mpe <- useEvalState esPactExec
     mRet <- case mpe of
@@ -142,38 +142,43 @@ pactState info b = mkReplBuiltinFn info b \_cont _handler -> \case
         in pure (EvalValue $ VObject (fromList ps))
   args -> argsError info b args
 
-resetPactState :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
-resetPactState info b = mkReplBuiltinFn info b \_cont _handler -> \case
+resetPactState :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+resetPactState = \info b _cont _handler _env -> \case
   [_] -> setEvalState esPactExec Nothing >> pure (EvalValue $ VString "Resetted Pact State")
   args -> argsError info b args
 
 
 
-coreEnvStackFrame :: (IsBuiltin b, Default i) => i -> ReplBuiltin b -> ReplBuiltinFn b i
-coreEnvStackFrame info b = mkReplBuiltinFn info b \cont handler -> \case
+coreEnvStackFrame :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+coreEnvStackFrame = \info b cont handler _env -> \case
   [_] -> do
     frames <- useEvalState esStack
     liftIO $ print frames
     returnCEKValue cont handler VUnit
   args -> argsError info b args
 
+replBuiltinEnv
+  :: Default i
+  => BuiltinEnv (ReplBuiltin RawBuiltin) i (ReplEvalM (ReplBuiltin RawBuiltin) i)
+replBuiltinEnv i b env =
+  mkBuiltinFn i b env (replRawBuiltinRuntime b)
+
 replRawBuiltinRuntime
   :: (Default i)
-  => i
-  -> ReplBuiltin RawBuiltin
-  -> ReplBuiltinFn RawBuiltin i
-replRawBuiltinRuntime i = \case
+  => ReplBuiltin RawBuiltin
+  -> NativeFunction (ReplBuiltin RawBuiltin) i (ReplEvalM (ReplBuiltin RawBuiltin) i)
+replRawBuiltinRuntime = \case
   RBuiltinWrap cb ->
-    rawBuiltinLiftedRuntime RBuiltinWrap i cb
+    rawBuiltinRuntime cb
   RBuiltinRepl br -> case br of
-    RExpect -> rawExpect i $ RBuiltinRepl RExpect
-    RExpectFailure -> coreExpectFailure i $ RBuiltinRepl RExpectFailure
-    RExpectThat -> coreExpectThat i $ RBuiltinRepl RExpectThat
-    RPrint -> corePrint i $ RBuiltinRepl RPrint
-    REnvStackFrame -> coreEnvStackFrame i $ RBuiltinRepl REnvStackFrame
-    RContinuePact -> continuePact i $ RBuiltinRepl RContinuePact
-    RPactState -> pactState i $ RBuiltinRepl RPactState
-    RResetPactState -> resetPactState i $ RBuiltinRepl RResetPactState
+    RExpect -> rawExpect
+    RExpectFailure -> coreExpectFailure
+    RExpectThat -> coreExpectThat
+    RPrint -> corePrint
+    REnvStackFrame -> coreEnvStackFrame
+    RContinuePact -> continuePact
+    RPactState -> pactState
+    RResetPactState -> resetPactState
 
 -- defaultReplState :: Default i => ReplEvalState (ReplBuiltin RawBuiltin) i
 -- defaultReplState = ReplEvalState env (EvalState (CapState [] mempty) [] [] False)
