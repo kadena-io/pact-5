@@ -29,6 +29,7 @@ import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.IR.Eval.CEK
 import Pact.Core.Repl.Utils
+import Pact.Core.Environment
 
 data ReplEvalEnv b i
   = ReplEvalEnv
@@ -62,6 +63,9 @@ newtype ReplEvalM b i a =
 makeLenses ''ReplEvalEnv
 makeLenses ''ReplEvalState
 
+instance MonadEvalEnv b i (ReplEvalM b i) where
+  readEnv = use reEnv
+
 instance MonadGas (ReplEvalM b i) where
   logGas msg g = do
     r <- view reGasLog
@@ -83,14 +87,14 @@ runReplEvalM
   :: ReplEvalEnv b i
   -> ReplEvalState b i
   -> ReplEvalM b i a
-  -> IO (Either (PactError i) a)
-runReplEvalM env st (ReplEvalM action) = runReaderT (evalStateT (runExceptT action) st) env
+  -> IO (Either (PactError i) a, ReplEvalState b i)
+runReplEvalM env st (ReplEvalM action) = runReaderT (runStateT (runExceptT action) st) env
 
 runReplCEK
   :: (Default i)
   => ReplEvalEnv b i
   -> ReplEvalState b i
   -> EvalTerm b i
-  -> IO (Either (PactError i) (EvalResult b i (ReplEvalM b i)))
+  -> IO (Either (PactError i) (EvalResult b i (ReplEvalM b i)), ReplEvalState b i)
 runReplCEK env st term =
-  runReplEvalM env st (eval (CEKEnv mempty (_reEnv st) (_reBuiltins env)) term)
+  runReplEvalM env st (eval (CEKEnv mempty (view (reEnv . eePactDb) st) (_reBuiltins env)) term)

@@ -31,20 +31,9 @@ type ReplBuiltinFn b i = NativeFn (ReplBuiltin b) i (ReplBM b i)
 
 prettyShowValue :: CEKValue b i m -> Text
 prettyShowValue = \case
-  -- Todo: REMOVE THIS. THIS CANNOT MAKE IT INTO OUTPUTS.
   VPactValue p -> renderText p
-  VTable (TableName tn) _ _ _ -> "table{" <> tn <> "}"
+  VTable (TableValue (TableName tn) _ _ _) -> "table{" <> tn <> "}"
   VClosure _ -> "<#closure>"
-
-
--- mkReplBuiltinFn
---   :: (IsBuiltin b)
---   => i
---   -> ReplBuiltin b
---   -> (ReplCont b i -> ReplHandler b i -> [ReplCEKValue b i] -> ReplBM b i (ReplEvalResult b i))
---   -> ReplBuiltinFn b i
--- mkReplBuiltinFn = mkBuiltinFn
--- {-# INLINE mkReplBuiltinFn #-}
 
 corePrint :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 corePrint = \info b cont handler _env -> \case
@@ -116,14 +105,3 @@ replRawBuiltinRuntime = \case
     RExpectThat -> coreExpectThat
     RPrint -> corePrint
     REnvStackFrame -> coreEnvStackFrame
-
--- defaultReplState :: Default i => ReplEvalState (ReplBuiltin RawBuiltin) i
--- defaultReplState = ReplEvalState env (EvalState (CapState [] mempty) [] [] False)
---   where
---   env =
---     EvalEnv
---     { _cekBuiltins = replRawBuiltinRuntime
---     , _cekLoaded = mempty
---     , _cekGasModel = freeGasEnv
---     , _cekMHashes = mempty
---     , _cekMsgSigs = mempty }

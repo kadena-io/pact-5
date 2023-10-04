@@ -15,7 +15,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  ( CEKTLEnv
  , CEKEnv(..)
  , ceLocal
- , ceEnv
+ , cePactDb
  , ceBuiltins
  , EvalEnv(..)
  , NativeFunction
@@ -26,7 +26,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , CEKValue(..)
  , Cont(..)
  , CEKErrorHandler(..)
---  , MonadEvalEnv(..)
+ , MonadEvalEnv(..)
  , MonadEvalState(..)
  , MonadGas(..)
  , CondFrame(..)
@@ -60,7 +60,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , csCap, csComposed
  , CapFrame(..)
  , CapState(..)
- , csSlots, csManaged
+ , csSlots, csManaged, csModuleAdmin
  , ManagedCap(..)
  , mcCap, mcManaged, mcOriginalCap
  , ManagedCapType(..)
@@ -71,6 +71,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , PartialClosure(..)
  , CanApply(..)
  , StackFrame(..)
+ , TableValue(..)
  ) where
 
 import Control.Lens hiding ((%%=))
@@ -114,7 +115,7 @@ type CEKTLEnv b i = Map FullyQualifiedName (EvalDef b i)
 data CEKEnv b i m
   = CEKEnv
   { _ceLocal :: RAList (CEKValue b i m)
-  , _ceEnv :: EvalEnv b i
+  , _cePactDb :: PactDb b i
   , _ceBuiltins :: BuiltinEnv b i m }
 
 instance (Show i, Show b) => Show (CEKEnv b i m) where
@@ -174,10 +175,18 @@ data CanApply b i m
   | PN {-# UNPACK #-} !(PartialNativeFn b i m)
   deriving Show
 
+data TableValue
+  = TableValue
+  { _tvName :: !TableName
+  , _tvModule :: !ModuleName
+  , _tvHash :: !ModuleHash
+  , _tvSchema :: !Schema
+  } deriving Show
+
 -- | The type of our semantic runtime values
 data CEKValue b i m
   = VPactValue PactValue
-  | VTable TableName ModuleName ModuleHash Schema
+  | VTable !TableValue
   -- = VLiteral !Literal
   -- | VList !(Vector (CEKValue b i m))
   | VClosure {-# UNPACK #-} !(CanApply b i m)
@@ -187,7 +196,7 @@ data CEKValue b i m
 instance Show (CEKValue b i m) where
   show = \case
     VPactValue pv -> show pv
-    VTable tn _ _ _sc -> "table" <> show tn
+    VTable vt -> "table" <> show (_tvName vt)
     VClosure _ -> "closure<>"
 
 pattern VLiteral :: Literal -> CEKValue b i m
@@ -250,14 +259,14 @@ data EvalState b i
   , _esLoaded :: Loaded b i
   } deriving Show
 
-type MonadEval b i m = (MonadEvalState b i m, MonadGas m, MonadError (PactError i) m, MonadIO m, Default i)
+type MonadEval b i m = (MonadEvalEnv b i m, MonadEvalState b i m, MonadGas m, MonadError (PactError i) m, MonadIO m, Default i)
 
 class Monad m => MonadGas m where
   logGas :: Text -> Gas -> m ()
   chargeGas :: Gas -> m ()
 
--- class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
---   readEnv :: m (EvalEnv b i m)
+class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
+  readEnv :: m (EvalEnv b i)
 
 -- | Our monad mirroring `EvalState` for our evaluation state
 class Monad m => MonadEvalState b i m | m -> b, m -> i where
@@ -452,7 +461,7 @@ instance (Pretty b, Show i, Show b) => Pretty (NativeFn b i m) where
 instance (Show i, Show b, Pretty b) => Pretty (CEKValue b i m) where
   pretty = \case
     VPactValue pv -> pretty pv
-    VTable tn _ _ _sc -> "table" <> P.braces (pretty tn)
+    VTable tv -> "table" <> P.braces (pretty (_tvName tv))
     VClosure{} ->
       P.angles "closure#"
 

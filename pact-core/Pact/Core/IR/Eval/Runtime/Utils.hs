@@ -24,13 +24,19 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , typecheckArgument
  , maybeTCType
  , safeTail
- , toArgTypeError
+, toArgTypeError
  , asString
  , asBool
  , throwExecutionError
  , throwExecutionError'
  , argsError
  , findCallingModule
+ , getModule
+ , getCallingModule
+ , readOnlyEnv
+ , sysOnlyEnv
+ , viewCEKEnv
+ , viewsCEKEnv
  ) where
 
 import Control.Lens hiding ((%%=))
@@ -86,6 +92,7 @@ getAllStackCaps = do
   where
   capToList (CapSlot c cs) = c:cs
 
+-- Todo: capautonomous
 checkSigCaps
   :: MonadEval b i m
   => Map PublicKeyText (Set FQCapToken)
@@ -119,11 +126,11 @@ enforcePactValue = \case
 --         pprPanic, called at compiler/GHC/Core/Subst.hs:197:17 in ghc:GHC.Core.Subst
 --   CallStack (from HasCallStack):
 --     panic, called at compiler/GHC/Utils/Error.hs:454:29 in ghc:GHC.Utils.Error
--- viewCEKEnv :: (MonadEval b i m) => Lens' (EvalEnv b i m) s -> m s
--- viewCEKEnv l = view l <$> cekReadEnv
+viewCEKEnv :: (MonadEval b i m) => Lens' (EvalEnv b i) s -> m s
+viewCEKEnv l = view l <$> readEnv
 
--- viewsCEKEnv :: (MonadEval b i m) => Lens' (EvalEnv b i m) s -> (s -> a) -> m a
--- viewsCEKEnv l f = views f l <$> cekReadEnv f
+viewsCEKEnv :: (MonadEval b i m) => Lens' (EvalEnv b i) s -> (s -> a) -> m a
+viewsCEKEnv f l = views f l <$> readEnv
 
 setEvalState :: (MonadEval b i m) => Lens' (EvalState b i) s -> s -> m ()
 setEvalState l s = modifyEvalState (set l s)
@@ -177,25 +184,13 @@ getCallingModule = findCallingModule >>= \case
   Nothing -> error "no calling module in stack"
 
 
--- enforceBlessedHashes md mh
---   | _mHash md == mh = return ()
---   | mh `Set.member` (_mBlessed md) = return ()
---   | otherwise = error "Execution aborted: hash not blessed"
-
--- guardForModuleCall env currMod onFound =
---   findCallingModule >>= \case
---     Just mn | mn == currMod -> onFound
---     Nothing -> getModule currMod env >>= acquireModuleAdmin
-
--- acquireModuleAdmin md
-
 getModule :: (MonadEval b i m) => ModuleName -> CEKEnv b i m -> m (EvalModule b i)
 getModule mn env =
  useEvalState (esLoaded . loModules . at mn) >>= \case
    Just (ModuleData md _) -> pure md
    Just (InterfaceData _ _) -> error "not a module"
    Nothing -> do
-    let pdb = view (ceEnv . eePactDb) env
+    let pdb = view cePactDb env
     liftIO (_pdbRead pdb DModules mn) >>= \case
       Just (ModuleData md _) -> pure md
       _ -> error "could not find module"
@@ -243,10 +238,14 @@ asBool
 asBool _ _ (PLiteral (LString b)) = pure b
 asBool i b pv = argsError i b [VPactValue pv]
 
-
 throwExecutionError :: (MonadEval b i m) => i -> EvalError -> m a
 throwExecutionError i e = throwError (PEExecutionError e i)
 
-
 throwExecutionError' :: (MonadEval b i m) => EvalError -> m a
 throwExecutionError' = throwExecutionError def
+
+readOnlyEnv :: CEKEnv b i m -> CEKEnv b i m
+readOnlyEnv = set (cePactDb . pdbPurity) PReadOnly
+
+sysOnlyEnv :: CEKEnv b i m -> CEKEnv b i m
+sysOnlyEnv = set (cePactDb . pdbPurity) PSysOnly

@@ -33,7 +33,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
-import qualified Data.Set as Set
+-- import qualified Data.Set as Set
 -- import qualified Data.RAList as RAList
 
 import Pact.Core.Builtin
@@ -166,7 +166,7 @@ rawNeq = \info b cont handler _env -> \case
   args -> argsError info b args
 
 rawGt :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-rawGt = \info b cont handler _dcNameenv -> \case
+rawGt = \info b cont handler _env -> \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LBool (i > i')))
   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LBool (i > i')))
   [VLiteral (LString i), VLiteral (LString i')] -> returnCEKValue cont handler (VLiteral (LBool (i > i')))
@@ -209,7 +209,7 @@ bitShiftInt :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 bitShiftInt =  binaryIntFn (\i s -> shift i (fromIntegral s))
 
 rawAbs :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-rawAbs = \info b cont handler env -> \case
+rawAbs = \info b cont handler _env -> \case
   [VLiteral (LInteger i)] ->
     returnCEKValue cont handler (VLiteral (LInteger (abs i)))
   [VLiteral (LDecimal e)] -> do
@@ -595,130 +595,11 @@ coreEnforce = \info b cont handler _env -> \case
     else returnCEK cont handler (VError s)
   args -> argsError info b args
 
--- coreEnforceOne :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
--- coreEnforceOne info b = mkBuiltinFn info b \case
---   [VList v, VLiteral (LString msg)] ->
---     enforceFail msg (V.toList v)
---   _ -> failInvariant "coreEnforceOne"
---   where
---   handler msg rest = \case
---     EnforceException _ -> enforceFail msg rest
---     e -> throwM e
---   enforceClo _ [] = pure (VLiteral LUnit)
---   enforceClo msg (x:xs) = catch (unsafeApplyOne x (VLiteral LUnit)) (handler msg xs)
---   enforceFail msg [] = throwM (EnforceException msg)
---   enforceFail msg as = enforceClo msg as
+
 -----------------------------------
 -- Guards and reads
 -----------------------------------
 
--- readError :: Text -> Text -> Text
--- readError field expected =
---   "invalid value at field " <> field <> " expected: " <> expected
-
--- coreReadInteger :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
--- coreReadInteger info b = mkBuiltinFn info b \case
---   [VLiteral (LString s)] ->
---     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
---       Just pv -> case pv of
---         PLiteral l@LInteger{} -> pure (VLiteral l)
---         _ -> throwM (ReadException (readError s "integer"))
---       _ -> throwM (ReadException ("no field at key " <> s))
---   _ -> failInvariant "read-integer"
-
--- coreReadString :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
--- coreReadString info b = mkBuiltinFn info b \case
---   [VLiteral (LString s)] ->
---     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
---       Just pv-> case pv of
---         PLiteral l@LString{} -> pure (VLiteral l)
---         _ -> throwM (ReadException (readError s "string"))
---       _ -> throwM (ReadException ("no field at key " <> s))
---   _ -> failInvariant "read-string"
-
--- coreReadDecimal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
--- coreReadDecimal info b = mkBuiltinFn info b \case
---   [VLiteral (LString s)] ->
---     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
---       Just pv -> case pv of
---         PLiteral l@LDecimal{} -> pure (VLiteral l)
---         _ -> throwM (ReadException (readError s "decimal"))
---       _ -> throwM (ReadException ("no field at key " <> s))
---   _ -> failInvariant "read-decimal"
-
--- coreReadObject :: CEKRuntime b i => Row Void -> CEKValue b i m  -> EvalT b i (CEKValue b i m)
--- coreReadObject ty = \case
---   VLiteral (LString s) ->
---     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
---       Just pv -> case pv of
---         t@PObject{} | checkPactValueType (TyRow ty) t -> pure (fromPactValue t)
---         _ -> throwM (ReadException (readError s "object"))
---       _ -> throwM (ReadException ("no field at key " <> s))
---   _ -> failInvariant "readObject"
-
--- coreReadKeyset :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
--- coreReadKeyset info b = mkBuiltinFn info b \case
---   [VLiteral (LString s)] ->
---     case view (ckeData . envMap . at (Field s)) ?cekRuntimeEnv of
---       Just pv -> case pv of
---         PObject m -> case lookupKs m of
---           Just ks -> pure (VGuard (GKeyset ks))
---           _ -> throwM (ReadException "Invalid keyset format")
---         _ -> throwM (ReadException (readError s "decimal"))
---       _ -> throwM (ReadException ("no field at key " <> s))
---   _ -> failInvariant "read-keyset"
---   where
---   -- Todo: public key parsing.
---   -- This is most certainly wrong, it needs more checks.
---   lookupKs m = do
---     ks <- M.lookup (Field "keys") m >>= \case
---       PList v -> do
---         o <- traverse (preview (_PLiteral . _LString)) v
---         guard (all (T.all isHexDigit) o)
---         pure $ Set.fromList $ V.toList (PublicKey . T.encodeUtf8 <$> o)
---       _ -> Nothing
---     kspred <- case M.lookup (Field "pred") m of
---       (Just (PLiteral LString{})) -> pure KeysAll
---       Just _ -> Nothing
---       Nothing -> pure KeysAll
---     pure (KeySet ks kspred)
-
-
--- coreKeysetRefGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
--- coreKeysetRefGuard info b = mkBuiltinFn info b \case
---   [VLiteral (LString s)] -> pure (VGuard (GKeySetRef (KeySetName s)))
---   _ -> failInvariant "keyset-ref-guard"
-
--- coreEnforceGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
--- coreEnforceGuard info b = mkBuiltinFn info b \case
---   [VGuard v] -> case v of
---     GKeyset ks -> enforceKeySet ks
---     GKeySetRef ksr -> enforceKeySetRef ksr
---     GUserGuard ug -> enforceUserGuard ug
---   _ -> failInvariant "enforceGuard"
-
--- enforceKeySet :: CEKRuntime b i => KeySet name -> EvalT b i (CEKValue b i m)
--- enforceKeySet (KeySet keys p) = do
---   let sigs = _ckeSigs ?cekRuntimeEnv
---       matched = Set.size $ Set.filter (`Set.member` keys) sigs
---       count = Set.size keys
---   case p of
---     KeysAll | matched == count -> pure (VLiteral LUnit)
---     Keys2 | matched >= 2 -> pure (VLiteral LUnit)
---     KeysAny | matched > 0 -> pure (VLiteral LUnit)
---     _ -> throwM (EnforceException "cannot match keyset predicate")
-
--- enforceKeySetRef :: CEKRuntime b i => KeySetName -> EvalT b i (CEKValue b i m)
--- enforceKeySetRef ksr = do
---   let pactDb = _ckePactDb ?cekRuntimeEnv
---   liftIO (_readKeyset pactDb ksr) >>= \case
---     Just ks -> enforceKeySet ks
---     Nothing -> throwM (EnforceException "no such keyset")
-
--- createUserGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
--- createUserGuard info b = mkBuiltinFn info b \case
---   [v@VClosure{}] -> pure (VGuard (GUserGuard v))
---   _ -> failInvariant "create-user-guard"
 
 -----------------------------------
 -- Other Core forms
@@ -748,53 +629,15 @@ coreEnforceGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreEnforceGuard = \info b cont handler env -> \case
   [VGuard g] -> case g of
       GKeyset ks -> do
-        cond <- enforceKeyset ks env
+        cond <- enforceKeyset ks
         if cond then returnCEKValue cont handler VUnit
         else returnCEK cont handler (VError "enforce keyset failure")
       GKeySetRef ksn -> do
-        cond <- enforceKeysetName info ksn env
+        cond <- enforceKeysetName info env ksn
         if cond then returnCEKValue cont handler VUnit
         else returnCEK cont handler (VError "enforce keyset failure")
       GUserGuard ug -> runUserGuard info cont handler env ug
   args -> argsError info b args
-
-
-enforceKeyset
-  :: MonadEval b i m
-  => KeySet FullyQualifiedName
-  -> CEKEnv b i m
-  -> m Bool
-enforceKeyset (KeySet kskeys ksPred) env = do
-  let sigs = views (ceEnv.eeMsgSigs) (M.filterWithKey matchKey) env
-  runPred (M.size sigs)
-  where
-  matchKey k _ = k `elem` kskeys
-  atLeast t m = m >= t
-  -- elide pk
-  --   | T.length pk < 8 = pk
-  --   | otherwise = T.take 8 pk <> "..."
-  count = Set.size kskeys
-  -- failed = "Keyset failure"
-  runPred matched =
-    case ksPred of
-      KeysAll -> run atLeast
-      KeysAny -> run (\_ m -> atLeast 1 m)
-      Keys2 -> run (\_ m -> atLeast 2 m)
-    where
-    run p = pure (p count matched)
-
-enforceKeysetName
-  :: MonadEval b i m
-  => i
-  -> KeySetName
-  -> CEKEnv b i m
-  -> m Bool
-enforceKeysetName info ksn env = do
-  let pactDb = view (ceEnv.eePactDb) env
-  liftIO (readKeyset pactDb ksn) >>= \case
-    Just ks -> enforceKeyset ks env
-    Nothing ->
-      throwExecutionError info (NoSuchKeySet ksn)
 
 runUserGuard
   :: MonadEval b i m
@@ -811,7 +654,8 @@ runUserGuard info cont handler env (UserGuard fqn args) =
       -- Todo: this is probably needs to be factored out
       let li = TLDefun (_fqModule fqn) (_fqName fqn)
           cloargs = NE.fromList (_argType <$> _dfunArgs d)
-          clo = Closure li cloargs (NE.length cloargs) (_dfunTerm d) (_dfunRType d) env (_dfunInfo d)
+          env' = sysOnlyEnv env
+          clo = Closure li cloargs (NE.length cloargs) (_dfunTerm d) (_dfunRType d) env' (_dfunInfo d)
       -- Todo: sys only here
       applyLam (C clo) (VPactValue <$> args) cont handler
     Just d -> throwExecutionError info (InvalidDefKind (defKind d) "run-user-guard")
@@ -823,15 +667,70 @@ coreBind = \info b cont handler _env -> \case
     applyLam clo [v] cont handler
   args -> argsError info b args
 
-
 createTable :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 createTable = \info b cont handler env -> \case
-  [VTable tn mn _ _] -> do
-    let pdb = view (ceEnv . eePactDb) env
+  [VTable tv@(TableValue tn mn _ _)] -> do
+    guardTable info env tv
+    let pdb = view cePactDb env
     -- Todo: error handling here
     -- Todo: guard table
     liftIO (_pdbCreateUserTable pdb tn mn)
     returnCEKValue cont handler VUnit
+  args -> argsError info b args
+
+-- Todo: error handling
+foldDb :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+foldDb = \info b cont handler env -> \case
+  [VTable tv, VClosure queryClo, VClosure consumer] -> do
+    let pdb = view cePactDb env
+    guardTable info env tv
+    let tblDomain = DUserTables (_tvName tv)
+    keys <- liftIO (_pdbKeys pdb tblDomain)
+    go pdb [] keys
+    where
+      -- todo: weird key invariant
+      go pdb acc (rk@(RowKey k):ks) = do
+        liftIO (_pdbRead pdb (DUserTables (_tvName tv)) rk) >>= \case
+          Just (RowData row) -> do
+            applyLam queryClo [VString k, VObject row] Mt CEKNoHandler >>= \case
+              EvalValue (VBool qry) -> if qry then do
+                applyLam consumer [VString k, VObject row] Mt CEKNoHandler >>= \case
+                  EvalValue (VPactValue v) -> go pdb (v:acc) ks
+                  EvalValue _ -> error "Fold db did not return a pact value"
+                  v -> returnCEK cont handler v
+                else go pdb acc ks
+              EvalValue _ -> error "Folddb query was not a boolean"
+              v@VError{} -> returnCEK cont handler v
+          Nothing -> error "no key despite keys"
+      go _ acc [] =
+        returnCEKValue cont handler (VList (V.fromList (reverse acc)))
+  args -> argsError info b args
+
+dbRead :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+dbRead = \info b cont handler env -> \case
+  [VTable tv, VString k] -> do
+    let pdb = view cePactDb env
+    liftIO (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
+      Just (RowData v) -> returnCEKValue cont handler (VObject v)
+      Nothing -> returnCEK cont handler (VError "no such read object")
+  args -> argsError info b args
+
+dbWithRead :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+dbWithRead = \info b cont handler env -> \case
+  [VTable tv, VString k, VClosure clo] -> do
+    let pdb = view cePactDb env
+    liftIO (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
+      Just (RowData v) -> applyLam clo [VObject v] cont handler
+      Nothing -> returnCEK cont handler (VError "no such read object")
+  args -> argsError info b args
+
+dbWithDefaultRead :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+dbWithDefaultRead = \info b cont handler env -> \case
+  [VTable tv, VString k, VObject defaultObj, VClosure clo] -> do
+    let pdb = view cePactDb env
+    liftIO (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
+      Just (RowData v) -> applyLam clo [VObject v] cont handler
+      Nothing -> applyLam clo [VObject defaultObj] cont handler
   args -> argsError info b args
 
 -----------------------------------
@@ -915,13 +814,18 @@ rawBuiltinRuntime = \case
   RawDescribeKeyset -> unimplemented
   RawDescribeModule -> unimplemented
   RawDescribeTable -> unimplemented
-  RawFoldDb -> unimplemented
+  RawFoldDb -> foldDb
   RawInsert -> unimplemented
+  RawWrite -> unimplemented
   RawKeyLog -> unimplemented
   RawKeys -> unimplemented
-  RawRead -> unimplemented
+  RawRead -> dbRead
   RawSelect -> unimplemented
   RawUpdate -> unimplemented
-  RawWithDefaultRead -> unimplemented
-  RawWithRead -> unimplemented
-  RawWrite -> unimplemented
+  RawWithDefaultRead -> dbWithDefaultRead
+  RawWithRead -> dbWithRead
+  RawAndQ -> unimplemented
+  RawOrQ -> unimplemented
+  RawWhere -> unimplemented
+  RawNotQ -> unimplemented
+

@@ -123,17 +123,19 @@ interpretReplProgram sc@(SourceCode source) = do
                        , _esLoaded = lo
                        }
               rState = ReplEvalState evalEnv evalState sc
-          liftIO (runReplCEK rEnv rState te) >>= liftEither >>= \case
+          (out, st) <- liftIO (runReplCEK rEnv rState te)
+          liftEither out >>= \case
             VError txt ->
               throwError (PEExecutionError (EvalError txt) i)
-            EvalValue v -> case v of
-              VClosure{} -> do
-                replLoaded .= lo
-                pure IPClosure
-              VTable tn _ _ _ -> pure (IPTable tn)
-              VPactValue pv -> do
-                replLoaded .= lo
-                pure (IPV pv (view termInfo te))
+            EvalValue v -> do
+              loaded .= view (reState . esLoaded) st
+              case v of
+                VClosure{} -> do
+                  pure IPClosure
+                VTable tv -> pure (IPTable (_tvName tv))
+                VPactValue pv -> do
+                  replLoaded .= lo
+                  pure (IPV pv (view termInfo te))
       RTLDefun df -> do
         let fqn = FullyQualifiedName replModuleName (_dfunName df) replModuleHash
         replLoaded . loAllLoaded %= M.insert fqn (Dfun df)
