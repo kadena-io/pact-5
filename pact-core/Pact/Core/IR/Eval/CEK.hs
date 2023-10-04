@@ -10,11 +10,17 @@ module Pact.Core.IR.Eval.CEK
   , throwExecutionError
   , unsafeApplyOne
   , unsafeApplyTwo
-  , mkDefPactClosure) where
+  , mkDefPactClosure
+  , evalCap
+  , nameToFQN
+  , guardTable
+  , enforceKeyset
+  , enforceKeysetName) where
 
 --import Debug.Trace
 import Control.Lens hiding ((%%=))
-import Control.Monad(zipWithM, when)
+import Control.Monad(zipWithM, unless, when)
+import Control.Monad.IO.Class
 import Control.Monad.Except
 import Data.Default
 import Data.Text(Text)
@@ -38,11 +44,13 @@ import Pact.Core.Capabilities
 import Pact.Core.Type
 import Pact.Core.Guards
 import Pact.Core.ModRefs
+import Pact.Core.Environment
+import Pact.Core.Persistence
+import Pact.Core.Hash
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Pacts.Types
-
 
 
 chargeNodeGas :: MonadEval b i m => NodeType -> m ()
@@ -85,7 +93,7 @@ evalCEK cont handler env (Var n info)  = do
           returnCEKValue cont handler dpactClo
         Just (DTable d) ->
           let (ResolvedTable sc) = _dtSchema d
-              tbl = VTable (TableName (_dtName d)) mname mh sc
+              tbl = VTable (TableValue (TableName (_dtName d)) mname mh sc)
           in returnCEKValue cont handler tbl
         Just d ->
           throwExecutionError info (InvalidDefKind (defKind d) "in var position")
@@ -171,7 +179,8 @@ evalCEK cont handler env (ListLit ts _) = do
 evalCEK cont handler env (Try catchExpr rest _) = do
   caps <- useEvalState (esCaps . csSlots)
   let handler' = CEKHandler env catchExpr cont caps handler
-  evalCEK Mt handler' env rest
+  let env' = readOnlyEnv env
+  evalCEK Mt handler' env' rest
 evalCEK cont handler env (DynInvoke n fn _) =
   evalCEK (DynInvokeC env fn cont) handler env n
 evalCEK cont handler env (ObjectLit o _) =
@@ -212,6 +221,43 @@ mkDefPactClosure fqn (DefPact _ _ mrty (step :| steps) info) env = case step of
         let dpc = DefPactClosure fqn li (_argType <$> args) (NE.length args) body rb nSteps mrty env i
         in pure (VDefPactClosure dpc)
       _ -> throwExecutionError info (InvariantFailure "Step is not lambda")
+enforceKeyset
+  :: MonadEval b i m
+  => KeySet FullyQualifiedName
+  -> m Bool
+enforceKeyset (KeySet kskeys ksPred) = do
+  allSigs <- viewCEKEnv eeMsgSigs
+  let matchedSigs = M.filterWithKey matchKey allSigs
+  sigs <- checkSigCaps matchedSigs
+  runPred (M.size sigs)
+  where
+  matchKey k _ = k `elem` kskeys
+  atLeast t m = m >= t
+  -- elide pk
+  --   | T.length pk < 8 = pk
+  --   | otherwise = T.take 8 pk <> "..."
+  count = S.size kskeys
+  -- failed = "Keyset failure"
+  runPred matched =
+    case ksPred of
+      KeysAll -> run atLeast
+      KeysAny -> run (\_ m -> atLeast 1 m)
+      Keys2 -> run (\_ m -> atLeast 2 m)
+    where
+    run p = pure (p count matched)
+
+enforceKeysetName
+  :: MonadEval b i m
+  => i
+  -> CEKEnv b i m
+  -> KeySetName
+  -> m Bool
+enforceKeysetName info env ksn = do
+  let pdb = view cePactDb env
+  liftIO (readKeyset pdb ksn) >>= \case
+    Just ks -> enforceKeyset ks
+    Nothing ->
+      throwExecutionError info (NoSuchKeySet ksn)
 
 -- Todo: fail invariant
 nameToFQN :: Applicative f => Name -> f FullyQualifiedName
@@ -219,6 +265,38 @@ nameToFQN (Name n nk) = case nk of
   NTopLevel mn mh -> pure (FullyQualifiedName mn n mh)
   NBound{} -> error "expected fully resolve FQ name"
   NModRef{} -> error "expected non-modref"
+
+guardTable :: (MonadEval b i m) => i -> CEKEnv b i m -> TableValue -> m ()
+guardTable i env (TableValue _ mn mh _) = do
+  guardForModuleCall i env mn $ do
+    mdl <- getModule mn env
+    enforceBlessedHashes mdl mh
+
+enforceBlessedHashes :: (MonadEval b i m) => EvalModule b i -> ModuleHash -> m ()
+enforceBlessedHashes md mh
+  | _mHash md == mh = return ()
+  | mh `S.member` (_mBlessed md) = return ()
+  | otherwise = error "Execution aborted: hash not blessed"
+
+guardForModuleCall :: (MonadEval b i m) => i -> CEKEnv b i m -> ModuleName -> m () -> m ()
+guardForModuleCall i env currMod onFound =
+  findCallingModule >>= \case
+    Just mn | mn == currMod -> onFound
+    _ -> getModule currMod env >>= acquireModuleAdmin i env
+
+acquireModuleAdmin :: (MonadEval b i m) => i -> CEKEnv b i m -> EvalModule b i -> m ()
+acquireModuleAdmin i env mdl = case _mGovernance mdl of
+  KeyGov ksn -> do
+    signed <- enforceKeysetName i env ksn
+    unless signed $ error "module admin key enforce failure"
+  CapGov n -> do
+    -- Todo: GADT fixes this.
+    fqn <- nameToFQN n
+    let wcapBody = Constant LUnit i
+    -- *special* use of `evalCap` here to evaluate module governance.
+    evalCap Mt CEKNoHandler env (CapToken fqn [])  wcapBody >>= \case
+      VError e -> error (T.unpack e)
+      _ -> pure ()
 
 -- | Evaluate a capability in `(with-capability)`
 -- the resulting
@@ -293,7 +371,6 @@ evalCap cont handler env ct@(CapToken fqn args) contbody = do
   applyCapBody bArgs (Lam _ _lamArgs body _) = (RAList.fromList (fmap VPactValue (reverse bArgs)), body)
   applyCapBody [] b = (mempty, b)
   applyCapBody _ _ = error "invariant broken: cap does not take arguments but is a lambda"
-
 
 
 requireCap

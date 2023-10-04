@@ -240,6 +240,11 @@ data RawBuiltin
   | RawWrite
   -- | RawTxIds
   -- | RawTxLog
+  -- Db QueryFunctions
+  | RawAndQ
+  | RawOrQ
+  | RawWhere
+  | RawNotQ
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 instance HasObjectOps RawBuiltin where
@@ -337,6 +342,10 @@ rawBuiltinToText = \case
   RawWithDefaultRead -> "with-default-read"
   RawWithRead -> "with-read"
   RawWrite -> "write"
+  RawAndQ -> "and?"
+  RawOrQ -> "or?"
+  RawWhere -> "where?"
+  RawNotQ -> "not?"
 
 instance IsBuiltin RawBuiltin where
   builtinName = NativeName . rawBuiltinToText
@@ -431,6 +440,11 @@ instance IsBuiltin RawBuiltin where
     RawWithDefaultRead -> 4
     RawWithRead -> 3
     RawWrite -> 3
+    RawAndQ -> 3
+    RawOrQ -> 3
+    RawWhere -> 3
+    RawNotQ -> 2
+
 
 rawBuiltinNames :: [Text]
 rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]
@@ -446,16 +460,29 @@ data ReplBuiltins
   | RExpectThat
   | RPrint
   | REnvStackFrame
+  -- | REnvChainData
+  -- | REnvData
+  -- | REnvDynRef
+  -- | REnvEntity
+  -- | REnvEvents
+  -- | REnvHash
+  -- | REnvKeys
+  -- | REnvSigs
+  -- | RLoad
+  -- | RExpect
+  -- | RExpectFailure
+  -- | RExpectThat
+  -- | RPactState
+  -- | RRollbackTx
+  -- | RSigKeyset
+  -- | RTestCapability
+  -- | RVerify
+  -- | RWithAppliedEnv
+  -- | REnvEnableReplNatives
   -- | RBeginTx
   -- | RBench
   -- | RCommitTx
   -- | RContinuePact
-  -- | REnvChainData
-  -- | REnvData
-  -- | REnvDynRef
-  -- | REnvEnableReplNatives
-  -- | REnvEntity
-  -- | REnvEvents
   -- | REnvExecConfig
   -- | REnvGas
   -- | REnvGasLimit
@@ -463,22 +490,7 @@ data ReplBuiltins
   -- | REnvGasModel
   -- | REnvGasPrice
   -- | REnvGasRate
-  -- | REnvHash
-  -- | REnvKeys
   -- | REnvNamespacePolicy
-  -- | REnvSigs
-  -- | RExpect
-  -- | RExpectFailure
-  -- | RExpectThat
-  -- | RFormatAddress
-  -- | RPactState
-  -- | RPrint
-  -- | RRollbackTx
-  -- | RSigKeyset
-  -- | RTestCapability
-  -- | RVerify
-  -- | RWithAppliedEnv
-  -- | RLoad
   -- Defpact
   | RContinuePact
   | RPactState

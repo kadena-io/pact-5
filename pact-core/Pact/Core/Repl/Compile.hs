@@ -97,7 +97,7 @@ interpretReplProgram sc@(SourceCode source) = do
   interpret (DesugarOutput tl _ deps) = do
     pdb <- use replPactDb
     lo <- use replLoaded
-    res <- use replEvalState
+    ps <- use (replEvalState . esPactExec)
     case tl of
       RTLTopLevel tt -> do
         let interp = Interpreter interpreter
@@ -115,18 +115,29 @@ interpretReplProgram sc@(SourceCode source) = do
                     , _eeMsgBody = EnvData mempty
                     , _eePactDb = pdb
                     , _eeHash = Hash mempty}
-              rState = ReplEvalState evalEnv res sc
-          liftIO (runReplCEK rEnv rState te) >>= liftEither . fst >>= \case
+              evalState = EvalState
+                       { _esCaps = CapState [] mempty mempty
+                       , _esStack = []
+                       , _esEvents = []
+                       , _esInCap = False
+                       , _esLoaded = lo
+                       , _esPactExec = ps
+                       }
+              rState = ReplEvalState evalEnv evalState sc
+          (out, st) <- liftIO (runReplCEK rEnv rState te)
+          liftEither out >>= \case
             VError txt ->
               throwError (PEExecutionError (EvalError txt) i)
-            EvalValue v -> case v of
-              VClosure{} -> do
-                replLoaded .= lo
-                pure IPClosure
-              VTable tn _ _ _ -> pure (IPTable tn)
-              VPactValue pv -> do
-                replLoaded .= lo
-                pure (IPV pv (view termInfo te))
+            EvalValue v -> do
+              loaded .= view (reState . esLoaded) st
+              (replEvalState . esPactExec) .= view (reState . esPactExec) st
+              case v of
+                VClosure{} -> do
+                  pure IPClosure
+                VTable tv -> pure (IPTable (_tvName tv))
+                VPactValue pv -> do
+                  replLoaded .= lo
+                  pure (IPV pv (view termInfo te))
       RTLDefun df -> do
         let fqn = FullyQualifiedName replModuleName (_dfunName df) replModuleHash
         replLoaded . loAllLoaded %= M.insert fqn (Dfun df)
