@@ -995,13 +995,7 @@ generalizeWithTerm' ty pp term = do
   gen' t@TyForall{} = pure ([], t)
 
 liftNoFreeVars :: Type Void -> Type a
-liftNoFreeVars = \case
-  TyVar n -> absurd n
-  TyPrim prim -> TyPrim prim
-  TyFun t1 t2 -> TyFun (liftNoFreeVars t1) (liftNoFreeVars t2)
-  TyList t -> TyList (liftNoFreeVars t)
-  TyModRef mn -> TyModRef mn
-  TyForall vars t -> TyForall (absurd <$> vars) (liftNoFreeVars t)
+liftNoFreeVars = fmap absurd
 
 liftType :: IR.Type -> Type a
 liftType = \case
