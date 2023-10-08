@@ -197,16 +197,16 @@ data RawBuiltin
   | RawMap
   | RawFilter
   | RawZip
-  -- | RawIf
   | RawIntToStr
   | RawStrToInt
+  | RawStrToIntBase
   | RawFold
   | RawDistinct
   | RawEnforce
   | RawEnforceOne
   | RawEnumerate
   | RawEnumerateStepN
-  -- Show
+  -- Guards + read functions
   | RawShow
   | RawReadInteger
   | RawReadDecimal
@@ -214,13 +214,17 @@ data RawBuiltin
   | RawReadKeyset
   | RawEnforceGuard
   | RawKeysetRefGuard
-  -- | RawCreateUserGuard
   | RawAt
   | RawMakeList
   | RawB64Encode
   | RawB64Decode
   | RawStrToList
   | RawBind
+  | RawRequireCapability
+  | RawComposeCapability
+  | RawInstallCapability
+  | RawEmitEvent
+  | RawCreateCapabilityGuard
   -- Database functions
   | RawCreateTable
   | RawDescribeKeyset
@@ -303,6 +307,7 @@ rawBuiltinToText = \case
   -- RawIf -> "if"
   RawIntToStr -> "int-to-str"
   RawStrToInt -> "str-to-int"
+  RawStrToIntBase -> "str-to-int-base"
   RawFold -> "fold"
   RawZip -> "zip"
   RawDistinct -> "distinct"
@@ -317,6 +322,7 @@ rawBuiltinToText = \case
   RawReadKeyset -> "read-keyset"
   RawEnforceGuard -> "enforce-guard"
   RawKeysetRefGuard -> "keyset-ref-guard"
+  RawCreateCapabilityGuard -> "create-capability-guard"
   -- RawCreateUserGuard -> "create-user-guard"
   RawAt -> "at"
   RawMakeList -> "make-list"
@@ -324,6 +330,10 @@ rawBuiltinToText = \case
   RawB64Decode -> "base64-decode"
   RawStrToList -> "str-to-list"
   RawBind -> "bind"
+  RawRequireCapability -> "require-capability"
+  RawComposeCapability -> "compose-capability"
+  RawInstallCapability -> "install-capability"
+  RawEmitEvent -> "emit-event"
   RawCreateTable -> "create-table"
   RawDescribeKeyset -> "describe-keyset"
   RawDescribeModule -> "describe-module"
@@ -398,7 +408,8 @@ instance IsBuiltin RawBuiltin where
     RawZip -> 3
     -- RawIf -> 3
     RawIntToStr -> 2
-    RawStrToInt -> 2
+    RawStrToInt -> 1
+    RawStrToIntBase -> 2
     RawFold -> 3
     RawDistinct -> 1
     RawEnforce -> 2
@@ -413,6 +424,7 @@ instance IsBuiltin RawBuiltin where
     RawReadKeyset -> 1
     RawEnforceGuard -> 1
     RawKeysetRefGuard -> 1
+    RawCreateCapabilityGuard -> 1
     -- RawCreateUserGuard -> 1
     RawAt -> 2
     RawMakeList -> 2
@@ -420,6 +432,10 @@ instance IsBuiltin RawBuiltin where
     RawB64Decode -> 1
     RawStrToList -> 1
     RawBind -> 2
+    RawRequireCapability -> 1
+    RawComposeCapability -> 1
+    RawInstallCapability -> 1
+    RawEmitEvent -> 1
     RawCreateTable -> 1
     RawDescribeKeyset -> 1
     RawDescribeModule -> 1
@@ -454,15 +470,12 @@ data ReplBuiltins
   | RExpectThat
   | RPrint
   | REnvStackFrame
-  -- | REnvChainData
-  -- | REnvData
-  -- | REnvDynRef
-  -- | REnvEntity
-  -- | REnvEvents
-  -- | REnvHash
-  -- | REnvKeys
-  -- | REnvSigs
-  -- | RLoad
+  | REnvChainData
+  | REnvData
+  | REnvEvents
+  | REnvHash
+  | REnvKeys
+  | REnvSigs
   -- | RExpect
   -- | RExpectFailure
   -- | RExpectThat
@@ -496,6 +509,12 @@ instance IsBuiltin ReplBuiltins where
     RExpectThat -> 3
     RPrint -> 1
     REnvStackFrame -> 1
+    REnvChainData -> 1
+    REnvData -> 1
+    REnvEvents -> 1
+    REnvHash -> 1
+    REnvKeys -> 1
+    REnvSigs -> 1
 -- Note: commented out natives are
 -- to be implemented later
 data ReplBuiltin b
@@ -542,7 +561,12 @@ replBuiltinsToText = \case
   RExpectThat -> "expect-that"
   RPrint -> "print"
   REnvStackFrame -> "env-stackframe"
-  -- RLoad -> "load"
+  REnvChainData -> "env-chain-data"
+  REnvData -> "env-data"
+  REnvEvents -> "env-events"
+  REnvHash -> "env-hash"
+  REnvKeys -> "env-keys"
+  REnvSigs -> "env-sigs"
 
 replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
 replBuiltinToText f = \case

@@ -8,17 +8,17 @@ module Pact.Core.Guards
 , KeySet(..)
 , Guard(..)
 , UserGuard(..)
+, CapabilityGuard(..)
 , KSPredicate(..)
 )
 where
 
 import Data.Text(Text)
-import Data.ByteString(ByteString)
 import qualified Data.Set as S
 
 import Pact.Core.Names
 
-newtype PublicKeyText = PublicKeyText { _pubKey :: ByteString }
+newtype PublicKeyText = PublicKeyText { _pubKey :: Text }
   deriving (Eq,Ord,Show)
 
 newtype KeySetName = KeySetName Text
@@ -48,10 +48,18 @@ data UserGuard name term
   , _ugArgs :: [term] }
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
+data CapabilityGuard name term
+  = CapabilityGuard
+  { _cgName :: !name
+  , _cgArgs :: ![term] }
+    -- , _cgPactId :: !(Maybe PactId)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+
 data Guard name term
   = GKeyset (KeySet name)
   | GKeySetRef KeySetName
   | GUserGuard (UserGuard name term)
+  | GCapabilityGuard (CapabilityGuard name term)
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 data Namespace name term

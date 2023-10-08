@@ -10,12 +10,11 @@ module Pact.Core.Compile where
 
 import Control.Lens
 -- import Control.Monad.IO.Class(MonadIO)
-import Control.Monad.State.Strict
+import Control.Monad.State.Strict ( MonadIO(..), MonadState )
 import Control.Monad.Except
 import Control.Monad
 import Data.Maybe(mapMaybe)
 import Data.Proxy
-import Data.Foldable(traverse_)
 import Data.ByteString(ByteString)
 import qualified Data.Map.Strict as M
 import qualified Data.ByteString as B
@@ -32,6 +31,7 @@ import Pact.Core.Type
 import Pact.Core.IR.Term
 import Pact.Core.Interpreter
 import Pact.Core.Guards
+import Pact.Core.Environment
 
 
 -- import qualified Pact.Core.Syntax.LexUtils as Lisp
@@ -42,7 +42,7 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 type HasCompileEnv b s m
   = ( MonadError PactErrorI m
     , MonadState s m
-    , HasLoaded s b SpanInfo
+    , HasEvalState s b SpanInfo
     , DesugarBuiltin b
     , Pretty b
     , MonadIO m
@@ -74,7 +74,7 @@ compileProgram source pdb interp = do
   lexed <- liftEither (Lisp.lexer source)
   debugPrint DebugLexer lexed
   parsed <- liftEither (Lisp.parseProgram lexed)
-  lo <- use loaded
+  lo <- use (evalState . loaded)
   traverse (go lo) parsed
   where
   go lo =
@@ -95,7 +95,7 @@ evalModuleGovernance pdb interp = \case
         KeyGov _ksn -> error "TODO: implement enforcing keyset names"
         CapGov (Name n nk) -> case nk of
           NTopLevel mn mh ->
-            use (loaded . loAllLoaded . at (FullyQualifiedName mn n mh)) >>= \case
+            use (evalState . loaded . loAllLoaded . at (FullyQualifiedName mn n mh)) >>= \case
               Just (DCap d) ->
                 _interpret interp (_dcapTerm d) >>= \case
                   IPV{} -> pure tl
@@ -116,7 +116,7 @@ interpretTopLevel
   -> m (CompileValue b)
 interpretTopLevel pdb interp (DesugarOutput ds lo0 deps) = do
   debugPrint DebugDesugar ds
-  loaded .= lo0
+  evalState . loaded .= lo0
   case ds of
     TLModule m -> do
       let deps' = M.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo0)
@@ -126,7 +126,7 @@ interpretTopLevel pdb interp (DesugarOutput ds lo0 deps) = do
           loadNewModule =
             over loModules (M.insert (_mName m) mdata) .
             over loAllLoaded (M.union newLoaded)
-      loaded %= loadNewModule
+      evalState . loaded %= loadNewModule
       pure (LoadedModule (_mName m))
     TLInterface iface -> do
       let deps' = M.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo0)
@@ -137,7 +137,7 @@ interpretTopLevel pdb interp (DesugarOutput ds lo0 deps) = do
           loadNewModule =
             over loModules (M.insert (_ifName iface) mdata) .
             over loAllLoaded (M.union newLoaded)
-      loaded %= loadNewModule
+      evalState . loaded %= loadNewModule
       pure (LoadedInterface (view ifName iface))
     TLTerm term -> InterpretValue <$> _interpret interp term
   where

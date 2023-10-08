@@ -22,18 +22,22 @@ module Pact.Core.IR.Eval.RawBuiltin
 --
 
 import Control.Lens hiding (from, to, op)
-import Control.Monad(when)
+import Control.Monad(when, unless, foldM)
+import Control.Monad.IO.Class
 import Data.Bits
+import Data.Foldable(foldl')
 import Data.Decimal(roundTo', Decimal)
 import Data.Vector(Vector)
-import Control.Monad.IO.Class
+import Numeric(showIntAtBase)
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
--- import qualified Data.Set as Set
+import qualified Data.Set as S
+import qualified Data.Char as Char
+import qualified Data.ByteString as BS
 -- import qualified Data.RAList as RAList
 
 import Pact.Core.Builtin
@@ -46,6 +50,7 @@ import Pact.Core.Type(Arg(..))
 import Pact.Core.PactValue
 import Pact.Core.Persistence
 import Pact.Core.Environment
+import Pact.Core.Capabilities
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
@@ -605,12 +610,6 @@ coreEnforce = \info b cont handler _env -> \case
 -- Other Core forms
 -----------------------------------
 
--- coreIf :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
--- coreIf info b = mkBuiltinFn info b \case
---   [VLiteral (LBool b), VClosure tbody tenv, VClosure fbody fenv] ->
---     if b then eval tenv tbody else  eval fenv fbody
---   _ -> failInvariant "if"
-
 coreB64Encode :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreB64Encode = \info b cont handler _env -> \case
   [VLiteral (LString l)] ->
@@ -637,7 +636,81 @@ coreEnforceGuard = \info b cont handler env -> \case
         if cond then returnCEKValue cont handler VUnit
         else returnCEK cont handler (VError "enforce keyset failure")
       GUserGuard ug -> runUserGuard info cont handler env ug
+      GCapabilityGuard cg -> enforceCapGuard cont handler cg
   args -> argsError info b args
+
+keysetRefGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+keysetRefGuard = \info b cont handler _env -> \case
+  [VString g] ->
+    returnCEKValue cont handler (VGuard (GKeySetRef (KeySetName g)))
+  args -> argsError info b args
+
+coreReadInteger :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreReadInteger = \info b cont handler _env -> \case
+  [VString s] -> do
+    EnvData envData <- viewCEKEnv eeMsgBody
+    case M.lookup (Field s) envData of
+      Just (PInteger p) -> returnCEKValue cont handler (VInteger p)
+      _ -> returnCEK cont handler (VError "read-integer failure")
+  args -> argsError info b args
+
+coreReadDecimal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreReadDecimal = \info b cont handler _env -> \case
+  [VString s] -> do
+    EnvData envData <- viewCEKEnv eeMsgBody
+    case M.lookup (Field s) envData of
+      Just (PDecimal p) -> returnCEKValue cont handler (VDecimal p)
+      _ -> returnCEK cont handler (VError "read-integer failure")
+  args -> argsError info b args
+
+coreReadString :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreReadString = \info b cont handler _env -> \case
+  [VString s] -> do
+    EnvData envData <- viewCEKEnv eeMsgBody
+    case M.lookup (Field s) envData of
+      Just (PString p) -> returnCEKValue cont handler (VString p)
+      _ -> returnCEK cont handler (VError "read-integer failure")
+  args -> argsError info b args
+
+coreReadKeyset :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreReadKeyset = \info b cont handler _env -> \case
+  [VString s] -> do
+    EnvData envData <- viewCEKEnv eeMsgBody
+    case M.lookup (Field s) envData of
+      Just (PObject dat) ->
+        case parseObj dat of
+          Just (ks, p) -> returnCEKValue cont handler (VGuard (GKeyset (KeySet ks p)))
+          Nothing -> returnCEK cont handler (VError "read-keyset failure")
+        where
+        parseObj d = do
+          keys <- M.lookup (Field "keys") d
+          keyText <- preview _PList keys >>= traverse (fmap PublicKeyText . preview (_PLiteral . _LString))
+          predRaw <- M.lookup (Field "pred") d
+          p <- preview (_PLiteral . _LString) predRaw
+          (S.fromList (V.toList keyText),) <$> readPredicate p
+        readPredicate = \case
+          "keys-any" -> pure KeysAny
+          "keys-2" -> pure Keys2
+          "keys-all" -> pure KeysAll
+          _ -> Nothing
+      _ -> returnCEK cont handler (VError "read-integer failure")
+  args -> argsError info b args
+
+enforceCapGuard
+  :: MonadEval b i m
+  => Cont b i m
+  -> CEKErrorHandler b i m
+  -> CapabilityGuard FullyQualifiedName PactValue
+  -> m (EvalResult b i m)
+enforceCapGuard cont handler (CapabilityGuard fqn args) = do
+  let ct = CapToken (fqnToQualName fqn) args
+  caps <- useEvalState (esCaps.csSlots)
+  let csToSet cs = S.insert (_csCap cs) (S.fromList (_csComposed cs))
+      capSet = foldMap csToSet caps
+  if S.member ct capSet then returnCEKValue cont handler VUnit
+  else do
+    let errMsg = "Capability guard enforce failure cap not in scope: " <> renderFullyQualName fqn
+    returnCEK cont handler (VError errMsg)
 
 runUserGuard
   :: MonadEval b i m
@@ -733,6 +806,129 @@ dbWithDefaultRead = \info b cont handler env -> \case
       Nothing -> applyLam clo [VObject defaultObj] cont handler
   args -> argsError info b args
 
+requireCapability :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+requireCapability = \info b cont handler _env -> \case
+  [VCapToken ct] -> requireCap cont handler ct
+  args -> argsError info b args
+
+composeCapability :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+composeCapability = \info b cont handler env -> \case
+  [VCapToken ct] -> composeCap cont handler env ct
+  args -> argsError info b args
+
+installCapability :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+installCapability = \info b cont handler _env -> \case
+  [VCapToken ct] -> installCap cont handler ct
+  args -> argsError info b args
+
+coreEmitEvent :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreEmitEvent = \info b cont handler _env -> \case
+  [VCapToken ct] -> emitEvent cont handler ct
+  args -> argsError info b args
+
+createCapGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+createCapGuard = \info b cont handler _env -> \case
+  [VCapToken ct] ->
+    let cg = CapabilityGuard (_ctName ct) (_ctArgs ct)
+    in returnCEKValue cont handler (VGuard (GCapabilityGuard cg))
+  args -> argsError info b args
+
+coreIntToStr :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreIntToStr = \info b cont handler _env -> \case
+  [VInteger base, VInteger v]
+    | base >= 2 && base <= 16 -> do
+      let v' = T.pack $ showIntAtBase base Char.intToDigit v ""
+      returnCEKValue cont handler (VString v')
+    | base == 64 && v >= 0 -> do
+      let v' = toB64UrlUnpaddedText $ integerToBS v
+      returnCEKValue cont handler (VString v')
+    | base == 64 -> returnCEK cont handler (VError "only positive values allowed for base64URL conversion")
+    | otherwise -> returnCEK cont handler (VError "invalid base for base64URL conversion")
+  args -> argsError info b args
+
+coreStrToInt :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreStrToInt = \info b cont handler _env -> \case
+  [VString s] ->
+    checkLen info s *> doBase info cont handler 10 s
+  args -> argsError info b args
+
+coreStrToIntBase :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreStrToIntBase = \info b _ _ _env -> \case
+  [VInteger _base, VString _s] -> error "todo: base64"
+  args -> argsError info b args
+
+checkLen
+  :: (MonadEval b i m)
+  => i
+  -> T.Text
+  -> m ()
+checkLen info txt =
+  unless (T.length txt <= 512) $
+      throwExecutionError info $ DecodeError $ "Invalid input, only up to 512 length supported"
+
+doBase
+  :: (MonadEval b i m)
+  => i
+  -> Cont b i m
+  -> CEKErrorHandler b i m
+  -> Integer
+  -> T.Text
+  -> m (EvalResult b i m)
+doBase info cont handler base txt = case baseStrToInt base txt of
+  Left e -> throwExecutionError info (DecodeError e)
+  Right n -> returnCEKValue cont handler (VInteger n)
+
+baseStrToInt :: Integer -> T.Text -> Either T.Text Integer
+baseStrToInt base t =
+  if base <= 1 || base > 16
+  then Left $ "unsupported base: " `T.append` T.pack (show base)
+  else
+    if T.null t
+    then Left $ "empty text: " `T.append` t
+    else foldM go 0 $ T.unpack t
+  where
+    go :: Integer -> Char -> Either T.Text Integer
+    go acc c' =
+      let val = fromIntegral . Char.digitToInt $ c'
+      in if val < base
+         then pure $ base * acc + val
+         else Left $ "character '" <> T.singleton c' <>
+                "' is out of range for base " <> T.pack (show base) <> ": " <> t
+
+  -- case as of
+  --   [s'@(TLitString s)] -> checkLen s' s >> doBase s' 10 s
+  --   [b'@(TLitInteger base), s'@(TLitString s)] -> checkLen s' s >> go b' s' base s
+  --   _ -> argsError i as
+  -- where
+  --   checkLen si txt = unless (T.length txt <= 512) $
+  --     evalError' si $ "Invalid input, only up to 512 length supported"
+  --   go bi si base txt
+  --     | base == 64 = doBase64 si txt
+  --     | base >= 2 && base <= 16 = doBase si base txt
+  --     | otherwise = evalError' bi $ "Base value must be >= 2 and <= 16, or 64"
+  --   doBase si base txt = case baseStrToInt base txt of
+  --     Left e -> evalError' si (pretty e)
+  --     Right n -> return (toTerm n)
+  --   doBase64 si txt = do
+  --     parseResult <- base64DecodeWithShimmedErrors (getInfo si) txt
+  --     case parseResult of
+  --       Left e -> evalError' si (pretty (T.pack e))
+  --       Right bs -> return $ toTerm $ bsToInteger bs
+
+_bsToInteger :: BS.ByteString -> Integer
+_bsToInteger bs = fst $ foldl' go (0,(BS.length bs - 1) * 8) $ BS.unpack bs
+  where
+    go (i,p) w = (i .|. (shift (fromIntegral w) p),p - 8)
+
+integerToBS :: Integer -> BS.ByteString
+integerToBS v = BS.pack $ reverse $ go v
+  where
+    go i | i <= 0xff = [fromIntegral i]
+         | otherwise = (fromIntegral (i .&. 0xff)):go (shift i (-8))
+
+
+
+
 -----------------------------------
 -- Core definitions
 -----------------------------------
@@ -785,8 +981,9 @@ rawBuiltinRuntime = \case
   RawMap -> coreMap
   RawFilter -> coreFilter
   RawZip -> zipList
-  RawIntToStr -> unimplemented
-  RawStrToInt -> unimplemented
+  RawIntToStr -> coreIntToStr
+  RawStrToInt -> coreStrToInt
+  RawStrToIntBase -> coreStrToIntBase
   RawFold -> coreFold
   RawDistinct -> unimplemented
   RawContains -> rawContains
@@ -798,18 +995,23 @@ rawBuiltinRuntime = \case
   RawEnumerate -> coreEnumerate
   RawEnumerateStepN -> coreEnumerateStepN
   RawShow -> rawShow
-  RawReadInteger -> unimplemented
-  RawReadDecimal -> unimplemented
-  RawReadString -> unimplemented
-  RawReadKeyset -> unimplemented
+  RawReadInteger -> coreReadInteger
+  RawReadDecimal -> coreReadDecimal
+  RawReadString -> coreReadString
+  RawReadKeyset -> coreReadKeyset
   RawEnforceGuard -> coreEnforceGuard
-  RawKeysetRefGuard -> unimplemented
+  RawKeysetRefGuard -> keysetRefGuard
   RawAt -> coreAccess
   RawMakeList -> makeList
   RawB64Encode -> coreB64Encode
   RawB64Decode -> coreB64Decode
   RawStrToList -> strToList
   RawBind -> coreBind
+  RawRequireCapability -> requireCapability
+  RawComposeCapability -> composeCapability
+  RawInstallCapability -> installCapability
+  RawCreateCapabilityGuard -> createCapGuard
+  RawEmitEvent -> coreEmitEvent
   RawCreateTable -> createTable
   RawDescribeKeyset -> unimplemented
   RawDescribeModule -> unimplemented

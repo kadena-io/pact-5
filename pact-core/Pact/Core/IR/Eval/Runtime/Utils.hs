@@ -78,15 +78,15 @@ mkBuiltinFn i b env fn =
 cfFQN :: Lens' (CapFrame b i) FullyQualifiedName
 cfFQN f = \case
   WithCapFrame fqn b -> (`WithCapFrame` b) <$> f fqn
-  RequireCapFrame fqn -> RequireCapFrame <$> f fqn
-  ComposeCapFrame fqn -> ComposeCapFrame <$> f fqn
-  InstallCapFrame fqn -> InstallCapFrame <$> f fqn
-  EmitEventFrame fqn -> EmitEventFrame <$> f fqn
+  -- RequireCapFrame fqn -> RequireCapFrame <$> f fqn
+  -- ComposeCapFrame fqn -> ComposeCapFrame <$> f fqn
+  -- InstallCapFrame fqn -> InstallCapFrame <$> f fqn
+  -- EmitEventFrame fqn -> EmitEventFrame <$> f fqn
   CreateUserGuardFrame fqn -> CreateUserGuardFrame <$> f fqn
 
 getAllStackCaps
   :: MonadEval b i m
-  => m (Set FQCapToken)
+  => m (Set (CapToken QualifiedName PactValue))
 getAllStackCaps = do
   Set.fromList . concatMap capToList <$> useEvalState (esCaps . csSlots)
   where
@@ -95,8 +95,8 @@ getAllStackCaps = do
 -- Todo: capautonomous
 checkSigCaps
   :: MonadEval b i m
-  => Map PublicKeyText (Set FQCapToken)
-  -> m (Map PublicKeyText (Set FQCapToken))
+  => Map PublicKeyText (Set (CapToken QualifiedName PactValue))
+  -> m (Map PublicKeyText (Set (CapToken QualifiedName PactValue)))
 checkSigCaps sigs = do
   granted <- getAllStackCaps
   pure $ M.filter (match granted) sigs
@@ -207,6 +207,7 @@ toArgTypeError = \case
     PObject _ -> ATEObject
     PGuard _ -> ATEPrim PrimGuard
     PModRef _ -> ATEModRef
+    PCapToken _ -> ATEClosure
   VTable{} -> ATETable
   VClosure{} -> ATEClosure
 

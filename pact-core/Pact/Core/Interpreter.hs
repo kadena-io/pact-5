@@ -7,8 +7,6 @@ module Pact.Core.Interpreter
 
 import Control.Lens
 import Control.Monad.Except
-import Data.Map.Strict(Map)
-import Data.Set(Set)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
@@ -18,7 +16,6 @@ import Pact.Core.Info
 import Pact.Core.Names
 import Pact.Core.PactValue
 import Pact.Core.Guards
-import Pact.Core.Capabilities
 import Pact.Core.Environment
 import Pact.Core.Errors
 

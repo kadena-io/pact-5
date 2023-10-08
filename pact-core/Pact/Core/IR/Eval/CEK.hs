@@ -14,7 +14,11 @@ module Pact.Core.IR.Eval.CEK
   , nameToFQN
   , guardTable
   , enforceKeyset
-  , enforceKeysetName) where
+  , enforceKeysetName
+  , requireCap
+  , installCap
+  , composeCap
+  , emitEvent) where
 
 import Control.Lens hiding ((%%=))
 import Control.Monad(zipWithM, unless)
@@ -88,6 +92,10 @@ evalCEK cont handler env (Var n info)  = do
           let (ResolvedTable sc) = _dtSchema d
               tbl = VTable (TableValue (TableName (_dtName d)) mname mh sc)
           in returnCEKValue cont handler tbl
+        Just (DCap d) -> do
+          let args = _argType <$> _dcapArgs d
+              clo = CapTokenClosure fqn args (length args) info
+          returnCEKValue cont handler (VClosure (CT clo))
         Just d ->
           throwExecutionError info (InvalidDefKind (defKind d) "in var position")
         Nothing ->
@@ -96,6 +104,7 @@ evalCEK cont handler env (Var n info)  = do
       [x] -> returnCEKValue cont handler (VModRef (ModRef m ifs (Just x)))
       [] -> throwExecutionError info (ModRefNotRefined (_nName n))
       _ -> returnCEKValue cont handler (VModRef (ModRef m ifs Nothing))
+    NDynRef _ -> error "stub dynrefs"
 evalCEK cont handler _env (Constant l _) = do
   chargeNodeGas ConstantNode
   returnCEKValue cont handler (VLiteral l)
@@ -133,31 +142,31 @@ evalCEK cont handler env (CapabilityForm cf _) = do
         cont' = CapInvokeC env xs [] capFrame cont
         in evalCEK cont' handler env x
       [] -> evalCap cont handler env (CapToken fqn []) body
-    RequireCapability _ args -> case args of
-      [] ->
-        requireCap cont handler (CapToken fqn [])
-      x:xs -> let
-        capFrame = RequireCapFrame fqn
-        cont' = CapInvokeC env xs [] capFrame cont
-        in evalCEK cont' handler env x
-    ComposeCapability _ args -> case args of
-      [] -> composeCap cont handler env (CapToken fqn [])
-      x:xs -> let
-        capFrame = ComposeCapFrame fqn
-        cont' = CapInvokeC env xs [] capFrame cont
-        in evalCEK cont' handler env x
-    InstallCapability _ args -> case args of
-      [] -> installCap cont handler (CapToken fqn [])
-      x : xs -> let
-        capFrame = InstallCapFrame fqn
-        cont' = CapInvokeC env xs [] capFrame cont
-        in evalCEK cont' handler env x
-    EmitEvent _ args -> case args of
-      [] -> emitEvent cont handler (CapToken fqn [])
-      x : xs -> let
-        capFrame = EmitEventFrame fqn
-        cont' = CapInvokeC env xs [] capFrame cont
-        in evalCEK cont' handler env x
+--     RequireCapability _ args -> case args of
+--       [] ->
+--         requireCap cont handler (CapToken fqn [])
+--       x:xs -> let
+--         capFrame = RequireCapFrame fqn
+--         cont' = CapInvokeC env xs [] capFrame cont
+--         in evalCEK cont' handler env x
+--     ComposeCapability _ args -> case args of
+--       [] -> composeCap cont handler env (CapToken fqn [])
+--       x:xs -> let
+--         capFrame = ComposeCapFrame fqn
+--         cont' = CapInvokeC env xs [] capFrame cont
+--         in evalCEK cont' handler env x
+--     InstallCapability _ args -> case args of
+--       [] -> installCap cont handler (CapToken fqn [])
+--       x : xs -> let
+--         capFrame = InstallCapFrame fqn
+--         cont' = CapInvokeC env xs [] capFrame cont
+--         in evalCEK cont' handler env x
+--     EmitEvent _ args -> case args of
+--       [] -> emitEvent cont handler (CapToken fqn [])
+--       x : xs -> let
+--         capFrame = EmitEventFrame fqn
+--         cont' = CapInvokeC env xs [] capFrame cont
+--         in evalCEK cont' handler env x
     CreateUserGuard _ args -> case args of
       [] -> createUserGuard cont handler fqn []
       x : xs -> let
@@ -174,8 +183,8 @@ evalCEK cont handler env (Try catchExpr rest _) = do
   let handler' = CEKHandler env catchExpr cont caps handler
   let env' = readOnlyEnv env
   evalCEK Mt handler' env' rest
-evalCEK cont handler env (DynInvoke n fn _) =
-  evalCEK (DynInvokeC env fn cont) handler env n
+-- evalCEK cont handler env (DynInvoke n fn _) =
+--   evalCEK (DynInvokeC env fn cont) handler env n
 evalCEK cont handler env (ObjectLit o _) =
   case o of
     (f, term):rest -> do
@@ -242,6 +251,7 @@ nameToFQN (Name n nk) = case nk of
   NTopLevel mn mh -> pure (FullyQualifiedName mn n mh)
   NBound{} -> error "expected fully resolve FQ name"
   NModRef{} -> error "expected non-modref"
+  NDynRef{} -> error "expected non dynref"
 
 guardTable :: (MonadEval b i m) => i -> CEKEnv b i m -> TableValue -> m ()
 guardTable i env (TableValue _ mn mh _) = do
@@ -285,13 +295,15 @@ evalCap
   -> FQCapToken
   -> EvalTerm b i
   -> m (EvalResult b i m)
-evalCap cont handler env ct@(CapToken fqn args) contbody = do
+evalCap cont handler env (CapToken fqn args) contbody = do
+  let qn = fqnToQualName fqn
+  let ct = CapToken qn args
   lookupFqName fqn >>= \case
     Just (DCap d) -> do
       (esCaps . csSlots) %%= (CapSlot ct []:)
       let (env', capBody) = applyCapBody args (_dcapTerm d)
           cont' = CapBodyC env contbody cont
-      -- Todo: horrible holy crap
+      -- Todo: clean up the staircase of doom.
       case _dcapMeta d of
         -- Managed capability, so we should look for it in the set of csmanaged
         Just (DefManaged mdm) -> do
@@ -299,7 +311,7 @@ evalCap cont handler env ct@(CapToken fqn args) contbody = do
           case mdm of
             -- | Not automanaged, so it must have a defmeta
             Just (DefManagedMeta cix _) -> do
-              let cap = CapToken fqn (filterIndex cix args)
+              let cap = CapToken qn (filterIndex cix args)
               -- Find the capability post-filtering
               case find ((==) cap . _mcCap) caps of
                 Nothing ->
@@ -356,7 +368,8 @@ requireCap
   -> CEKErrorHandler b i m
   -> FQCapToken
   -> m (EvalResult b i m)
-requireCap cont handler ct = do
+requireCap cont handler (CapToken fqn args) = do
+  let ct = CapToken (fqnToQualName fqn) args
   caps <- useEvalState (esCaps.csSlots)
   let csToSet cs = S.insert (_csCap cs) (S.fromList (_csComposed cs))
       capSet = foldMap csToSet caps
@@ -370,7 +383,8 @@ composeCap
   -> CEKEnv b i m
   -> FQCapToken
   -> m (EvalResult b i m)
-composeCap cont handler env ct@(CapToken fqn args) = do
+composeCap cont handler env (CapToken fqn args) = do
+  let ct = CapToken (fqnToQualName fqn) args
   lookupFqName fqn >>= \case
     Just (DCap d) -> do
       (esCaps . csSlots) %%= (CapSlot ct []:)
@@ -401,7 +415,8 @@ installCap :: (MonadEval b i m)
   -> CEKErrorHandler b i m
   -> FQCapToken
   -> m (EvalResult b i m)
-installCap cont handler ct@(CapToken fqn args) = do
+installCap cont handler (CapToken fqn args) = do
+  let ct = CapToken (fqnToQualName fqn) args
   lookupFqName fqn >>= \case
     Just (DCap d) -> case _dcapMeta d of
       Just (DefManaged m) -> case m of
@@ -409,7 +424,7 @@ installCap cont handler ct@(CapToken fqn args) = do
           fqnMgr <- nameToFQN mgrfn
           managedParam <- maybe (throwExecutionError (_dcapInfo d) (InvalidManagedCap fqn)) pure (args ^? ix paramIx)
           let mcapType = ManagedParam fqnMgr managedParam paramIx
-              ctFiltered = CapToken fqn (filterIndex paramIx args)
+              ctFiltered = CapToken (fqnToQualName fqn) (filterIndex paramIx args)
               mcap = ManagedCap ctFiltered ct mcapType
           (esCaps . csManaged) %%= S.insert mcap
           returnCEKValue cont handler VUnit
@@ -530,14 +545,14 @@ returnCEKValue (CapInvokeC env terms pvs cf cont) handler v = do
     [] -> case cf of
       WithCapFrame fqn wcbody ->
         evalCap cont handler env (CapToken fqn (reverse (pv:pvs))) wcbody
-      RequireCapFrame fqn  ->
-        requireCap cont handler (CapToken fqn (reverse (pv:pvs)))
-      ComposeCapFrame fqn ->
-        composeCap cont handler env (CapToken fqn (reverse (pv:pvs)))
-      InstallCapFrame fqn ->
-        installCap cont handler (CapToken fqn (reverse (pv:pvs)))
-      EmitEventFrame fqn ->
-        emitEvent cont handler (CapToken fqn (reverse (pv:pvs)))
+      -- RequireCapFrame fqn  ->
+      --   requireCap cont handler (CapToken fqn (reverse (pv:pvs)))
+      -- ComposeCapFrame fqn ->
+      --   composeCap cont handler env (CapToken fqn (reverse (pv:pvs)))
+      -- InstallCapFrame fqn ->
+      --   installCap cont handler (CapToken fqn (reverse (pv:pvs)))
+      -- EmitEventFrame fqn ->
+      --   emitEvent cont handler (CapToken fqn (reverse (pv:pvs)))
       CreateUserGuardFrame fqn ->
         createUserGuard cont handler fqn (reverse (pv:pvs))
 returnCEKValue (CapBodyC env term cont) handler _ = do
@@ -679,6 +694,15 @@ applyLam (PN (PartialNativeFn b env fn arity pArgs i)) args cont handler
   apply' !a pa (x:xs) = apply' (a - 1) (x:pa) xs
   apply' !a pa [] =
     returnCEKValue cont handler (VPartialNative (PartialNativeFn b env fn a pa i))
+
+applyLam (CT (CapTokenClosure fqn argtys arity _i)) args cont handler
+  | arity == argLen = do
+    args' <- traverse enforcePactValue args
+    tcArgs <- zipWithM (\arg ty -> maybeTCType arg ty) args' argtys
+    returnCEKValue cont handler (VPactValue (PCapToken (CapToken fqn tcArgs)))
+  | otherwise = error "applying too many arguments to cap"
+  where
+  argLen = length args
 
 
 failInvariant :: MonadEval b i m => Text -> m a

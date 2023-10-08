@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 
 module Pact.Core.Capabilities
@@ -8,14 +9,25 @@ module Pact.Core.Capabilities
  , CapForm(..)
  , capFormName
  , CapToken(..)
+ , ctName, ctArgs
  , CapSlot(..)
- , FQCapToken
+ , csCap, csComposed
+ , CapState(..)
+ , csSlots, csManaged
+ , csModuleAdmin, csAutonomous
+ , ManagedCap(..)
+ , mcCap, mcManaged, mcOriginalCap
+ , ManagedCapType(..)
+ , PactEvent(..)
  ) where
 
 import Control.Lens
-import Pact.Core.Names
-import Pact.Core.PactValue
+import Data.Set(Set)
+
+
 import Pact.Core.Pretty
+import Pact.Core.Names ( ModuleName, FullyQualifiedName )
+import Pact.Core.Hash
 
 data DefManagedMeta name
   = DefManagedMeta
@@ -30,50 +42,95 @@ data DefCapMeta name
 
 data CapForm name e
   = WithCapability name [e] e
-  | RequireCapability name [e]
-  | ComposeCapability name [e]
-  | InstallCapability name [e]
-  | EmitEvent name [e]
+  -- | RequireCapability name [e]
+  -- | ComposeCapability name [e]
+  -- | InstallCapability name [e]
+  -- | EmitEvent name [e]
   | CreateUserGuard name [e]
   deriving (Show, Functor, Foldable, Traversable)
 
 capFormName :: Lens (CapForm name e) (CapForm name' e) name name'
 capFormName f = \case
   WithCapability name es e -> (\fq -> WithCapability fq es e) <$> f name
-  RequireCapability name es -> (`RequireCapability` es) <$> f name
-  ComposeCapability name es -> (`ComposeCapability` es) <$> f name
-  InstallCapability name es -> (`InstallCapability` es) <$> f name
-  EmitEvent name es -> (`EmitEvent` es) <$> f name
+  -- RequireCapability name es -> (`RequireCapability` es) <$> f name
+  -- ComposeCapability name es -> (`ComposeCapability` es) <$> f name
+  -- InstallCapability name es -> (`InstallCapability` es) <$> f name
+  -- EmitEvent name es -> (`EmitEvent` es) <$> f name
   CreateUserGuard name es -> (`CreateUserGuard` es) <$> f name
 
 instance (Pretty name, Pretty e) => Pretty (CapForm name e) where
   pretty = \case
     WithCapability name es e ->
       parens ("with-capability" <+> parens (pretty name <+> hsep (pretty <$> es)) <+> pretty e)
-    RequireCapability name es ->
-      parens ("require-capability" <+> parens (pretty name <+> hsep (pretty <$> es)))
-    ComposeCapability name es ->
-      parens ("compose-capability" <+> parens (pretty name <+> hsep (pretty <$> es)))
-    InstallCapability name es ->
-      parens ("install-capability" <+> parens (pretty name <+> hsep (pretty <$> es)))
-    EmitEvent name es ->
-      parens ("emit-event" <+> parens (pretty name <+> hsep (pretty <$> es)))
+    -- RequireCapability name es ->
+    --   parens ("require-capability" <+> parens (pretty name <+> hsep (pretty <$> es)))
+    -- ComposeCapability name es ->
+    --   parens ("compose-capability" <+> parens (pretty name <+> hsep (pretty <$> es)))
+    -- InstallCapability name es ->
+    --   parens ("install-capability" <+> parens (pretty name <+> hsep (pretty <$> es)))
+    -- EmitEvent name es ->
+    --   parens ("emit-event" <+> parens (pretty name <+> hsep (pretty <$> es)))
     CreateUserGuard name es ->
       parens ("create-user-guard" <+> parens (pretty name <+> hsep (pretty <$> es)))
 
 -- | An acquired capability token
 -- with the reference
-data CapToken name
+data CapToken name v
   = CapToken
   { _ctName :: name
-  , _ctArgs :: [PactValue]
+  , _ctArgs :: [v]
   } deriving (Show, Eq, Ord)
 
 --
-data CapSlot name
+data CapSlot name v
  = CapSlot
- { _csCap :: CapToken name
- , _csComposed :: [CapToken name]
+ { _csCap :: CapToken name v
+ , _csComposed :: [CapToken name v]
  } deriving (Show, Eq)
 
-type FQCapToken = CapToken FullyQualifiedName
+-- | The overall capability state
+data CapState name v
+  = CapState
+  { _csSlots :: [CapSlot name v]
+  , _csManaged :: Set (ManagedCap name v)
+  , _csModuleAdmin :: Set ModuleName
+  , _csAutonomous :: Set (CapToken name v)
+  }
+  deriving Show
+
+data PactEvent name v
+  = PactEvent
+  { _peToken :: CapToken name v
+  , _peModule :: ModuleName
+  , _peModuleHash :: ModuleHash
+  } deriving (Show, Eq)
+
+data ManagedCapType v
+  = AutoManaged Bool
+  | ManagedParam FullyQualifiedName v Int
+  -- ^ managed cap, with manager function, managed value
+  deriving Show
+
+data ManagedCap name v
+  = ManagedCap
+  { _mcCap :: CapToken name v
+  -- ^ The token without the managed param
+  , _mcOriginalCap :: CapToken name v
+  -- ^ The original, installed token
+  , _mcManaged :: ManagedCapType v
+  -- ^ Managed capability type
+  } deriving (Show)
+
+instance (Eq name, Eq v) => Eq (ManagedCap name v) where
+  l == r = _mcCap l == _mcCap r
+
+instance (Ord name, Ord v) => Ord (ManagedCap name v) where
+  l `compare` r = _mcCap l `compare` _mcCap r
+
+makeLenses ''CapState
+makeLenses ''CapToken
+makeLenses ''CapSlot
+makeLenses ''ManagedCap
+
+
+

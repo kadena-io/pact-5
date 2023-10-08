@@ -242,12 +242,12 @@ data Term name ty builtin info
   -- ^ List Literals
   | Try (Term name ty builtin info) (Term name ty builtin info) info
   -- ^ try (catch expr) (try-expr)
-  | CapabilityForm (CapForm name (Term name ty builtin info)) info
-  -- ^ Capability Natives
   | ObjectLit [(Field, Term name ty builtin info)] info
   -- ^ an object literal
-  | DynInvoke (Term name ty builtin info) Text info
+  -- | DynInvoke (Term name ty builtin info) Text info
   -- ^ dynamic module reference invocation m::f
+  | CapabilityForm (CapForm name (Term name ty builtin info)) info
+  -- ^ Capability Natives
   | Error Text info
   -- ^ Error term
   deriving (Show, Functor)
@@ -274,8 +274,8 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
       pretty cf
     Try te te' _ ->
       parens ("try" <+> pretty te <+> pretty te')
-    DynInvoke n t _ ->
-      pretty n <> "::" <> pretty t
+    -- DynInvoke n t _ ->
+    --   pretty n <> "::" <> pretty t
     ObjectLit n _ ->
       braces (hsep $ punctuate "," $ fmap (\(f, t) -> pretty f <> ":" <> pretty t) n)
     Error txt _ ->
@@ -319,8 +319,8 @@ termBuiltin f = \case
     CapabilityForm <$> traverse (termBuiltin f) cf <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (termBuiltin f) m <*> pure i
-  DynInvoke n t i ->
-    DynInvoke <$> termBuiltin f n <*> pure t <*> pure i
+  -- DynInvoke n t i ->
+  --   DynInvoke <$> termBuiltin f n <*> pure t <*> pure i
   Error txt i -> pure (Error txt i)
 
 termInfo :: Lens' (Term name ty builtin info) info
@@ -337,7 +337,7 @@ termInfo f = \case
     Conditional o <$> f i
   ListLit l i  -> ListLit l <$> f i
   Try e1 e2 i -> Try e1 e2 <$> f i
-  DynInvoke n t i -> DynInvoke n t <$> f i
+  -- DynInvoke n t i -> DynInvoke n t <$> f i
   CapabilityForm cf i -> CapabilityForm cf <$> f i
   Error t i -> Error t <$> f i
   ObjectLit m i -> ObjectLit m <$> f i
@@ -361,8 +361,8 @@ instance Plated (Term name ty builtin info) where
       Try <$> f e1 <*> f e2 <*> pure i
     ObjectLit o i ->
       ObjectLit <$> (traverse._2) f o <*> pure i
-    DynInvoke n t i ->
-      pure (DynInvoke n t i)
+    -- DynInvoke n t i ->
+    --   pure (DynInvoke n t i)
     Error e i -> pure (Error e i)
 
 -- Todo: qualify all of these

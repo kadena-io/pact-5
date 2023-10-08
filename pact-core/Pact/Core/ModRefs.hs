@@ -21,7 +21,7 @@ data ModRef
   , _mrImplemented :: [ModuleName]
   -- ^ All implemented interfaces
   , _mrRefined :: Maybe ModuleName
-  -- ^ The "Selected" interface from a type refinement
+-- ^ The "Selected" interface from a type refinement
   }
   deriving (Show)
 

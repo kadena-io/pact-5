@@ -1,20 +1,28 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Pact.Core.PactValue
  ( PactValue(..)
  , _PLiteral
  , _PList
  , _PGuard
+ , _PCapToken
  , checkPvType
  , EnvData(..)
- , envMap ) where
+ , envMap
+ , FQCapToken
+ , pattern PInteger
+ , pattern PDecimal
+ , pattern PString) where
 
 import Control.Lens
 import Control.Monad(zipWithM)
 import Data.Vector(Vector)
 import Data.Map.Strict(Map)
+import Data.Text(Text)
 import Data.Maybe(isJust)
+import Data.Decimal(Decimal)
 import qualified Data.Vector as V
 import qualified Data.Map.Strict as M
 
@@ -24,6 +32,7 @@ import Pact.Core.Guards
 import Pact.Core.Literal
 import Pact.Core.Pretty
 import Pact.Core.ModRefs
+import Pact.Core.Capabilities
 
 import qualified Pact.Core.Pretty as Pretty
 
@@ -32,11 +41,22 @@ data PactValue
   | PList (Vector PactValue)
   | PGuard (Guard FullyQualifiedName PactValue)
   | PObject (Map Field PactValue)
-  -- | PTable TableName Schema
   | PModRef ModRef
+  | PCapToken (CapToken FullyQualifiedName PactValue)
   deriving (Eq, Show, Ord)
 
 makePrisms ''PactValue
+
+pattern PInteger :: Integer -> PactValue
+pattern PInteger i = PLiteral (LInteger i)
+
+pattern PDecimal :: Decimal -> PactValue
+pattern PDecimal d = PLiteral (LDecimal d)
+
+pattern PString :: Text -> PactValue
+pattern PString s = PLiteral (LString s)
+
+type FQCapToken = CapToken FullyQualifiedName PactValue
 
 instance Pretty PactValue where
   pretty = \case
@@ -49,6 +69,8 @@ instance Pretty PactValue where
       where
       objPair (f, t) = pretty f <> ":" <> pretty t
     PModRef md -> pretty md
+    PCapToken _ -> "<captoken>"
+
 
 checkPvType :: Type -> PactValue -> Maybe Type
 checkPvType ty = \case
@@ -85,6 +107,7 @@ checkPvType ty = \case
       | mn `elem` ifs && refined == Nothing -> Just (TyModRef mn)
       | otherwise -> Nothing
     _ -> Nothing
+  PCapToken _ -> Nothing
 
 
 
