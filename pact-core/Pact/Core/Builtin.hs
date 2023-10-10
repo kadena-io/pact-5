@@ -225,11 +225,14 @@ data RawBuiltin
   | RawInstallCapability
   | RawEmitEvent
   | RawCreateCapabilityGuard
+  | RawCreateModuleGuard
   -- Database functions
   | RawCreateTable
   | RawDescribeKeyset
   | RawDescribeModule
   | RawDescribeTable
+  | RawDefineKeySet
+  | RawDefineKeysetData
   | RawFoldDb
   | RawInsert
   | RawKeyLog
@@ -247,6 +250,7 @@ data RawBuiltin
   | RawOrQ
   | RawWhere
   | RawNotQ
+  | RawHash
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 instance HasObjectOps RawBuiltin where
@@ -323,7 +327,7 @@ rawBuiltinToText = \case
   RawEnforceGuard -> "enforce-guard"
   RawKeysetRefGuard -> "keyset-ref-guard"
   RawCreateCapabilityGuard -> "create-capability-guard"
-  -- RawCreateUserGuard -> "create-user-guard"
+  RawCreateModuleGuard -> "create-module-guard"
   RawAt -> "at"
   RawMakeList -> "make-list"
   RawB64Encode -> "base64-encode"
@@ -338,6 +342,8 @@ rawBuiltinToText = \case
   RawDescribeKeyset -> "describe-keyset"
   RawDescribeModule -> "describe-module"
   RawDescribeTable -> "describe-table"
+  RawDefineKeySet -> "define-keyset"
+  RawDefineKeysetData -> "define-read-keyset"
   RawFoldDb -> "fold-db"
   RawInsert -> "insert"
   RawKeyLog -> "keylog"
@@ -352,6 +358,7 @@ rawBuiltinToText = \case
   RawOrQ -> "or?"
   RawWhere -> "where?"
   RawNotQ -> "not?"
+  RawHash -> "hash"
 
 instance IsBuiltin RawBuiltin where
   builtinName = NativeName . rawBuiltinToText
@@ -425,7 +432,7 @@ instance IsBuiltin RawBuiltin where
     RawEnforceGuard -> 1
     RawKeysetRefGuard -> 1
     RawCreateCapabilityGuard -> 1
-    -- RawCreateUserGuard -> 1
+    RawCreateModuleGuard -> 1
     RawAt -> 2
     RawMakeList -> 2
     RawB64Encode -> 1
@@ -440,6 +447,8 @@ instance IsBuiltin RawBuiltin where
     RawDescribeKeyset -> 1
     RawDescribeModule -> 1
     RawDescribeTable -> 1
+    RawDefineKeySet -> 2
+    RawDefineKeysetData -> 1
     RawFoldDb -> 3
     RawInsert -> 3
     RawKeyLog -> 3
@@ -454,6 +463,7 @@ instance IsBuiltin RawBuiltin where
     RawOrQ -> 3
     RawWhere -> 3
     RawNotQ -> 2
+    RawHash -> 1
 
 
 rawBuiltinNames :: [Text]
@@ -476,6 +486,11 @@ data ReplBuiltins
   | REnvHash
   | REnvKeys
   | REnvSigs
+  | RBeginTx
+  | RCommitTx
+  | RRollbackTx
+  -- | RLoad
+  -- | RLoadWithEnv
   -- | RExpect
   -- | RExpectFailure
   -- | RExpectThat
@@ -515,6 +530,11 @@ instance IsBuiltin ReplBuiltins where
     REnvHash -> 1
     REnvKeys -> 1
     REnvSigs -> 1
+    RBeginTx -> 1
+    RCommitTx -> 1
+    RRollbackTx -> 1
+    -- RLoad -> 1
+    -- RLoadWithEnv -> 2
 -- Note: commented out natives are
 -- to be implemented later
 data ReplBuiltin b
@@ -567,6 +587,11 @@ replBuiltinsToText = \case
   REnvHash -> "env-hash"
   REnvKeys -> "env-keys"
   REnvSigs -> "env-sigs"
+  RBeginTx -> "begin-tx"
+  RCommitTx -> "commit-tx"
+  RRollbackTx -> "rollback-tx"
+  -- RLoad -> "load"
+  -- RLoadWithEnv -> "load-with-env"
 
 replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
 replBuiltinToText f = \case

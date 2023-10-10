@@ -112,7 +112,8 @@ type BuiltinEnv b i m = i -> b -> CEKEnv b i m -> NativeFn b i m
 
 data Closure b i m
   = Closure
-  { _cloLamInfo :: !LamInfo
+  { _cloFnName :: !Text
+  , _cloModName :: !ModuleName
   , _cloTypes :: !(NonEmpty (Maybe Type))
   , _cloArity :: !Int
   , _cloTerm :: !(EvalTerm b i)
@@ -125,8 +126,7 @@ data Closure b i m
 -- but is not partially applied
 data LamClosure b i m
   = LamClosure
-  { _lcloLamInfo :: !LamInfo
-  , _lcloTypes :: !(NonEmpty (Maybe Type))
+  { _lcloTypes :: !(NonEmpty (Maybe Type))
   , _lcloArity :: Int
   , _lcloTerm :: !(EvalTerm b i)
   , _lcloRType :: !(Maybe Type)
@@ -139,7 +139,7 @@ data LamClosure b i m
 -- This is a bit annoying to deal with but helps preserve semantics
 data PartialClosure b i m
   = PartialClosure
-  { _pcloLamInfo :: !LamInfo
+  { _pcloFrame :: Maybe StackFrame
   , _pcloTypes :: !(NonEmpty (Maybe Type))
   , _pcloArity :: Int
   , _pcloTerm :: !(EvalTerm b i)
@@ -341,6 +341,9 @@ data Cont b i m
   -- ^ Continuation which evaluates arguments for a function to apply
   | Args (CEKEnv b i m) (NonEmpty (EvalTerm b i)) (Cont b i m)
   -- ^ Continuation holding the arguments to evaluate in a function application
+  | LetC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
+  -- ^ Let single-variable pushing
+  -- Known as a single argument it will not construct a needless closure
   | SeqC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   -- ^ Sequencing expression, holding the next term to evaluate
   | ListC (CEKEnv b i m) [EvalTerm b i] [PactValue] (Cont b i m)

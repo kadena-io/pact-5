@@ -5,6 +5,7 @@ import Test.Tasty.HUnit
 
 import Control.Monad(when)
 import Data.IORef
+import Data.Default
 import Data.ByteString(ByteString)
 import Data.Foldable(traverse_)
 import Data.Text.Encoding(decodeUtf8)
@@ -23,6 +24,8 @@ import Pact.Core.Repl.Utils
 import Pact.Core.Compile
 import Pact.Core.Repl.Compile
 import Pact.Core.PactValue
+import Pact.Core.Environment
+import Pact.Core.Hash
 import Pact.Core.Errors (PactError(..), EvalError (..))
 
 tests :: IO TestTree
@@ -46,13 +49,16 @@ runReplTest file src = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
   pdb <- mockPactDb
+  let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def
   let rstate = ReplState
             { _replFlags =  mempty
-            , _replLoaded = mempty
+            , _replEvalState = def
             , _replPactDb = pdb
             , _replGas = gasRef
             , _replEvalLog = gasLog
-            , _replCurrSource = SourceCode mempty}
+            , _replCurrSource = SourceCode mempty
+            , _replEvalEnv = ee
+            }
   stateRef <- newIORef rstate
   runReplT stateRef (interpretReplProgram (SourceCode src)) >>= \case
     Left e -> let

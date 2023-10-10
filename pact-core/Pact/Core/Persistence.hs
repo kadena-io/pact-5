@@ -18,18 +18,23 @@ module Pact.Core.Persistence
  , WriteType(..)
  , Purity(..)
  , RowData(..)
+ , ExecutionMode(..)
  , mockPactDb
  , mdModuleName
  , mdModuleHash
  , readModule, writeModule
  , readKeyset, writeKeySet
  , GuardTableOp(..)
+ , DbOpException(..)
  ) where
 
 import Control.Lens
 -- import Control.Monad.State.Class
 -- import Control.Monad.IO.Class
 -- import Control.Monad.Except
+import Control.Monad(unless)
+import Control.Exception(throwIO, Exception)
+import Data.Maybe(isJust)
 import Data.Text(Text)
 import Data.IORef
 import Data.Map.Strict(Map)
@@ -43,6 +48,7 @@ import Pact.Core.PactValue
 -- import Pact.Core.Errors
 
 import qualified Data.Map.Strict as M
+import Data.Dynamic (Typeable)
 
 -- | Modules as they are stored
 -- in our backend.
@@ -78,6 +84,14 @@ type FQKS = KeySet FullyQualifiedName
 newtype RowData
   = RowData (Map Field PactValue)
   deriving (Eq, Show)
+
+-- -------------------------------------------------------------------------- --
+-- ExecutionMode
+
+data ExecutionMode =
+    Transactional |
+    Local
+    deriving (Eq,Show)
 
 -- -------------------------------------------------------------------------- --
 -- WriteType
@@ -125,9 +139,10 @@ data PactDb b i
   = PactDb
   { _pdbPurity :: !Purity
   , _pdbRead :: forall k v. Domain k v b i -> k -> IO (Maybe v)
-  , _pdbWrite :: forall k v. Domain k v b i -> k -> v -> IO ()
+  , _pdbWrite :: forall k v. WriteType -> Domain k v b i -> k -> v -> IO ()
   , _pdbKeys :: forall k v. Domain k v b i -> IO [k]
   , _pdbCreateUserTable :: TableName -> ModuleName -> IO ()
+  , _pdbBeginTx ::
   }
 
 makeClassy ''PactDb
@@ -138,14 +153,22 @@ makeClassy ''PactDb
 readModule :: PactDb b i -> ModuleName -> IO (Maybe (ModuleData b i))
 readModule pdb = _pdbRead pdb DModules
 
-writeModule :: PactDb b i -> ModuleName -> ModuleData b i -> IO ()
-writeModule pdb = _pdbWrite pdb DModules
+writeModule :: PactDb b i -> WriteType -> ModuleName -> ModuleData b i -> IO ()
+writeModule pdb wt = _pdbWrite pdb wt DModules
 
 readKeyset :: PactDb b i -> KeySetName -> IO (Maybe FQKS)
 readKeyset pdb = _pdbRead pdb DKeySets
 
-writeKeySet :: PactDb b i -> KeySetName -> FQKS -> IO ()
-writeKeySet pdb = _pdbWrite pdb DKeySets
+writeKeySet :: PactDb b i -> WriteType -> KeySetName -> FQKS -> IO ()
+writeKeySet pdb wt = _pdbWrite pdb wt DKeySets
+
+data DbOpException
+  = WriteException
+  | NoSuchTable TableName
+  | TableAlreadyExists TableName
+  deriving (Show, Eq, Typeable)
+
+instance Exception DbOpException
 
 data GuardTableOp
   = GtRead
@@ -158,6 +181,7 @@ data GuardTableOp
   | GtKeyLog
   | GtWrite
   | GtCreateTable
+  deriving Show
 
 data Loaded b i
   = Loaded
@@ -180,14 +204,48 @@ mockPactDb = do
   refMod <- newIORef M.empty
   refKs <- newIORef M.empty
   refUsrTbl <- newIORef M.empty
+  ref <- newIORef
   pure $ PactDb
     { _pdbPurity = PImpure
     , _pdbRead = read' refKs refMod refUsrTbl
     , _pdbWrite = write refKs refMod refUsrTbl
-    , _pdbKeys = undefined
-    , _pdbCreateUserTable = undefined
+    , _pdbKeys = keys refKs refMod refUsrTbl
+    , _pdbCreateUserTable = createUsrTable refUsrTbl
     }
   where
+  keys
+    :: forall k v
+    .  IORef (Map KeySetName FQKS)
+    -> IORef (Map ModuleName (ModuleData b i))
+    -> IORef (Map TableName (Map RowKey RowData))
+    -> Domain k v b i
+    -> IO [k]
+  keys refKs refMod refUsrTbl d = case d of
+    DKeySets -> do
+      r <- readIORef refKs
+      return (M.keys r)
+    DModules -> do
+      r <- readIORef refMod
+      return (M.keys r)
+    DUserTables tbl -> do
+      r <- readIORef refUsrTbl
+      case M.lookup tbl r of
+        Just t -> return (M.keys t)
+        Nothing -> throwIO (NoSuchTable tbl)
+
+  createUsrTable
+    :: IORef (Map TableName (Map RowKey RowData))
+    -> TableName
+    -> ModuleName
+    -> IO ()
+  createUsrTable refUsrTbl tbl _ = do
+    ref <- readIORef refUsrTbl
+    case M.lookup tbl ref of
+      Nothing -> do
+        modifyIORef refUsrTbl (M.insert tbl mempty)
+        pure ()
+      Just _ -> throwIO (TableAlreadyExists tbl)
+
   read'
     :: forall k v
     .  IORef (Map KeySetName FQKS)
@@ -202,26 +260,48 @@ mockPactDb = do
     DUserTables tbl ->
       readRowData refUsrTbl tbl k
 
+  checkTable tbl ref = do
+    r <- readIORef ref
+    unless (isJust (M.lookup tbl r)) $ throwIO (NoSuchTable tbl)
+
   write
     :: forall k v
     .  IORef (Map KeySetName FQKS)
     -> IORef (Map ModuleName (ModuleData b i))
     -> IORef (Map TableName (Map RowKey RowData))
+    -> WriteType
     -> Domain k v b i
     -> k
     -> v
     -> IO ()
-  write refKs refMod refUsrTbl domain k v = case domain of
+  write refKs refMod refUsrTbl wt domain k v = case domain of
     DKeySets -> writeKS refKs k v
     DModules -> writeMod refMod v
-    DUserTables tbl -> writeRowData refUsrTbl tbl k v
+    DUserTables tbl -> writeRowData refUsrTbl tbl wt k v
 
   readRowData ref tbl k = do
+    checkTable tbl ref
     r <- readIORef ref
     pure (r ^? ix tbl . ix k)
 
-  writeRowData ref tbl k v =
-    modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
+  writeRowData ref tbl wt k v = checkTable tbl ref *> case wt of
+    Write ->
+      modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
+    Insert -> do
+      r <- readIORef ref
+      case M.lookup tbl r >>= M.lookup k of
+        Just _ -> throwIO WriteException
+        Nothing ->
+          modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
+    Update -> do
+      r <- readIORef ref
+      case M.lookup tbl r >>= M.lookup k of
+        Just (RowData m) -> do
+          let (RowData v') = v
+              nrd = RowData (M.union v' m)
+          modifyIORef' ref (M.insertWith M.union tbl (M.singleton k nrd))
+        Nothing -> throwIO WriteException
+
 
   readKS ref ksn = do
     m <- readIORef ref
@@ -236,4 +316,3 @@ mockPactDb = do
   writeMod ref md = let
     mname = view mdModuleName md
     in modifyIORef' ref (M.insert mname md)
-

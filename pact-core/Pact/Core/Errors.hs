@@ -13,9 +13,12 @@ module Pact.Core.Errors
  , PactError(..)
  , ArgTypeError(..)
  , peInfo
+ , liftDbFunction
  ) where
 
 import Control.Lens hiding (ix)
+import Control.Monad.Except(MonadError(..))
+import Control.Monad.IO.Class(MonadIO(..))
 import Control.Exception
 import Data.Text(Text)
 import Data.Dynamic (Typeable)
@@ -25,6 +28,7 @@ import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Info
 import Pact.Core.Pretty(Pretty(..))
+import Pact.Core.Persistence
 
 import qualified Pact.Core.Pretty as Pretty
 
@@ -286,6 +290,8 @@ data EvalError
   | NoSuchKeySet KeySetName
   -- ^ No such keyset
   | CannotUpgradeInterface ModuleName
+  -- ^ Interface cannot be upgrade
+  | DbOpFailure DbOpException
   deriving Show
 
 instance Pretty EvalError where
@@ -372,3 +378,12 @@ peInfo f = \case
   --   PEFatalError fpe <$> f info
 
 instance (Show info, Typeable info) => Exception (PactError info)
+
+liftDbFunction
+  :: (MonadError (PactError i) m, MonadIO m)
+  => i
+  -> IO a
+  -> m a
+liftDbFunction info action = do
+  e <- liftIO $ catch (Right <$> action) (pure . Left . DbOpFailure)
+  either (throwError . (`PEExecutionError` info)) pure e

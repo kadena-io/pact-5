@@ -23,6 +23,7 @@ module Pact.Core.Capabilities
 
 import Control.Lens
 import Data.Set(Set)
+import Data.Default
 
 
 import Pact.Core.Pretty
@@ -72,6 +73,8 @@ instance (Pretty name, Pretty e) => Pretty (CapForm name e) where
     --   parens ("emit-event" <+> parens (pretty name <+> hsep (pretty <$> es)))
     CreateUserGuard name es ->
       parens ("create-user-guard" <+> parens (pretty name <+> hsep (pretty <$> es)))
+    -- CreateModuleGuard mn ->
+    --   parens ("create-module-guard" <+> pretty mn)
 
 -- | An acquired capability token
 -- with the reference
@@ -97,6 +100,9 @@ data CapState name v
   , _csAutonomous :: Set (CapToken name v)
   }
   deriving Show
+
+instance (Ord name, Ord v) => Default (CapState name v) where
+  def = CapState mempty mempty mempty mempty
 
 data PactEvent name v
   = PactEvent

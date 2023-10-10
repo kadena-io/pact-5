@@ -306,5 +306,5 @@ renderFullyQualName (FullyQualifiedName mn n _) =
   renderQualName (QualifiedName n mn)
 
 newtype RowKey
-  = RowKey Text
+  = RowKey { _rowKey :: Text }
   deriving (Eq, Ord, Show)

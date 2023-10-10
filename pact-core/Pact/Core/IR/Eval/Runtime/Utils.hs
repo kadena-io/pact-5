@@ -24,7 +24,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , typecheckArgument
  , maybeTCType
  , safeTail
-, toArgTypeError
+  , toArgTypeError
  , asString
  , asBool
  , throwExecutionError
@@ -37,6 +37,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , sysOnlyEnv
  , viewCEKEnv
  , viewsCEKEnv
+ , calledByModule
  ) where
 
 import Control.Lens hiding ((%%=))
@@ -46,7 +47,8 @@ import Data.Map.Strict(Map)
 import Data.Text(Text)
 import Data.Set(Set)
 import Data.Default(def)
-import Data.Maybe(mapMaybe, listToMaybe)
+import Data.Maybe(listToMaybe)
+import Data.Foldable(find)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as Set
 
@@ -167,12 +169,17 @@ maybeTCType pv = maybe (pure pv) (typecheckArgument pv)
 findCallingModule :: (MonadEval b i m) => m (Maybe ModuleName)
 findCallingModule = do
   stack <- useEvalState esStack
-  pure $ listToMaybe $ mapMaybe getLamInfo stack
-  where
-  getLamInfo sf = case _sfLamInfo sf of
-    AnonLamInfo -> Nothing
-    TLDefun mn _ -> Just mn
-    TLDefCap mn _ -> Just mn
+  pure $ listToMaybe $ fmap _sfModule stack
+
+calledByModule
+  :: (MonadEval b i m)
+  => ModuleName
+  -> m Bool
+calledByModule mn = do
+  stack <- useEvalState esStack
+  case find (\sf -> _sfModule sf == mn) stack of
+    Just _ -> pure True
+    Nothing -> pure False
 
 -- Todo: MaybeT cleans this up
 getCallingModule :: (MonadEval b i m) => m (EvalModule b i)
@@ -183,6 +190,9 @@ getCallingModule = findCallingModule >>= \case
     Nothing -> error "no such calling module"
   Nothing -> error "no calling module in stack"
 
+toFqDep modName mhash defn =
+  let fqn = FullyQualifiedName modName (defName defn) mhash
+  in (fqn, defn)
 
 getModule :: (MonadEval b i m) => ModuleName -> CEKEnv b i m -> m (EvalModule b i)
 getModule mn env =
@@ -192,7 +202,11 @@ getModule mn env =
    Nothing -> do
     let pdb = view cePactDb env
     liftIO (_pdbRead pdb DModules mn) >>= \case
-      Just (ModuleData md _) -> pure md
+      Just mdata@(ModuleData md deps) -> do
+        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> (_mDefs md)
+        (esLoaded . loAllLoaded) %%= M.union newLoaded . M.union deps
+        (esLoaded . loModules) %%= M.insert mn mdata
+        pure md
       _ -> error "could not find module"
 
 safeTail :: [a] -> [a]

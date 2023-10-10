@@ -18,7 +18,8 @@ module Pact.Core.IR.Eval.CEK
   , requireCap
   , installCap
   , composeCap
-  , emitEvent) where
+  , emitEvent
+  , acquireModuleAdmin) where
 
 import Control.Lens hiding ((%%=))
 import Control.Monad(zipWithM, unless)
@@ -84,13 +85,14 @@ evalCEK cont handler env (Var n info)  = do
       let fqn = FullyQualifiedName mname (_nName n) mh
       lookupFqName fqn >>= \case
         Just (Dfun d) -> do
-          dfunClo <- mkDefunClosure d env
+          dfunClo <- mkDefunClosure d mname env
           returnCEKValue cont handler dfunClo
         Just (DConst d) ->
           evalCEK cont handler (set ceLocal mempty env) (_dcTerm d)
         Just (DTable d) ->
           let (ResolvedTable sc) = _dtSchema d
-              tbl = VTable (TableValue (TableName (_dtName d)) mname mh sc)
+              tn = TableName $ renderModuleName mname <> "_" <> _dtName d
+              tbl = VTable (TableValue tn mname mh sc)
           in returnCEKValue cont handler tbl
         Just (DCap d) -> do
           let args = _argType <$> _dcapArgs d
@@ -112,11 +114,11 @@ evalCEK cont handler env (App fn args _) = do
   chargeNodeGas AppNode
   evalCEK (Args env args cont) handler env fn
 evalCEK cont handler env (Let arg e1 e2 i) =
-  let lam = Lam AnonLamInfo (pure arg) e2 i
-  in evalCEK cont handler env (App lam (pure e1) i)
+  let cont' = LetC env e2 cont
+  in evalCEK cont' handler env e1
 evalCEK cont handler env (Lam li args body info) = do
   chargeNodeGas LamNode
-  let clo = VLamClosure (LamClosure li (_argType <$> args) (NE.length args) body Nothing env info)
+  let clo = VLamClosure (LamClosure (_argType <$> args) (NE.length args) body Nothing env info)
   returnCEKValue cont handler clo
 evalCEK cont handler env (Builtin b i) = do
   chargeNodeGas BuiltinNode
@@ -199,11 +201,12 @@ evalCEK _ handler _ (Error e _) =
 mkDefunClosure
   :: (MonadEval b i m)
   => Defun Name Type b i
+  -> ModuleName
   -> CEKEnv b i m
   -> m (CEKValue b i m)
-mkDefunClosure d e = case _dfunTerm d of
-  Lam li args body i ->
-    pure (VDefClosure (Closure li (_argType <$> args) (NE.length args) body (_dfunRType d) e i))
+mkDefunClosure d mn e = case _dfunTerm d of
+  Lam _ args body i ->
+    pure (VDefClosure (Closure (_dfunName d) mn (_argType <$> args) (NE.length args) body (_dfunRType d) e i))
   _ ->
     throwExecutionError (_dfunInfo d) (DefIsNotClosure (_dfunName d))
 
@@ -281,7 +284,7 @@ acquireModuleAdmin i env mdl = case _mGovernance mdl of
     fqn <- nameToFQN n
     let wcapBody = Constant LUnit i
     -- *special* use of `evalCap` here to evaluate module governance.
-    evalCap Mt CEKNoHandler env (CapToken fqn [])  wcapBody >>= \case
+    evalCap Mt CEKNoHandler (set ceLocal mempty env) (CapToken fqn [])  wcapBody >>= \case
       VError e -> error (T.unpack e)
       _ -> pure ()
 
@@ -321,7 +324,7 @@ evalCap cont handler env (CapToken fqn args) contbody = do
                     lookupFqName mpfqn >>= \case
                       Just (Dfun dfun) -> do
                         mparam <- maybe (error "fatal: no param") pure (args ^? ix managedIx)
-                        result <- evaluate (_dfunTerm dfun) pv mparam
+                        result <- evaluate mpfqn (_dfunTerm dfun) pv mparam
                         let mcM = ManagedParam mpfqn result managedIx
                         esCaps . csManaged %%= S.union (S.singleton (set mcManaged mcM managedCap))
                         evalCEK cont' handler (set ceLocal env' env) capBody
@@ -344,12 +347,12 @@ evalCap cont handler env (CapToken fqn args) contbody = do
     Just {} -> error "was not defcap, invariant violated"
     Nothing -> error "No such def"
   where
-  evaluate term managed value = case term of
-    Lam li lamargs body i -> do
+  evaluate fqn' term managed value = case term of
+    Lam _ lamargs body i -> do
       -- Todo: `applyLam` here gives suboptimal errors
       -- Todo: this completely violates our "step" semantics.
       -- This should be its own frame
-      let clo = Closure li (_argType <$> lamargs) (NE.length lamargs) body Nothing env i
+      let clo = Closure (_fqName fqn') (_fqModule fqn') (_argType <$> lamargs) (NE.length lamargs) body Nothing env i
       res <- applyLam (C clo) [VPactValue managed, VPactValue value] Mt CEKNoHandler
       case res of
         EvalValue out -> enforcePactValue out
@@ -520,6 +523,8 @@ returnCEKValue (Fn fn env args vs cont) handler v = do
       applyLam fn (reverse (v:vs)) cont handler
     x:xs ->
       evalCEK (Fn fn env xs (v:vs) cont) handler env x
+returnCEKValue (LetC env term cont) handler v = do
+  evalCEK cont handler (over ceLocal (RAList.cons v) env) term
 returnCEKValue (SeqC env e cont) handler _ =
   evalCEK cont handler env e
 returnCEKValue (CondC env frame cont) handler v = case v of
@@ -605,6 +610,7 @@ returnCEKValue (StackPopC mty cont) handler v = do
   (esStack %%= tail) *> returnCEKValue cont handler (VPactValue v')
 
 
+
 applyLam
   :: (MonadEval b i m)
   => CanApply b i m
@@ -612,11 +618,11 @@ applyLam
   -> Cont b i m
   -> CEKErrorHandler b i m
   -> m (EvalResult b i m)
-applyLam (C (Closure li cloargs arity term mty env cloi)) args cont handler
+applyLam (C (Closure fn mn cloargs arity term mty env cloi)) args cont handler
   | arity == argLen = do
     args' <- traverse enforcePactValue args
     tcArgs <- zipWithM (\arg ty -> VPactValue <$> maybeTCType arg ty) args' (NE.toList cloargs)
-    esStack %%= (StackFrame li :)
+    esStack %%= (StackFrame fn mn :)
     let cont' = StackPopC mty cont
         varEnv = RAList.fromList (reverse tcArgs)
     evalCEK cont' handler (set ceLocal varEnv env) term
@@ -628,22 +634,17 @@ applyLam (C (Closure li cloargs arity term mty env cloi)) args cont handler
   apply' e (ty:tys) (x:xs) = do
     x' <- (`maybeTCType` ty) =<< enforcePactValue x
     apply' (RAList.cons (VPactValue x') e) tys xs
-  apply' e [] [] = do
-    esStack %%= (StackFrame li :)
-    evalCEK cont handler (set ceLocal e env) term
   apply' e (ty:tys) [] = do
     let env' = set ceLocal e env
-        pclo = PartialClosure li (ty :| tys) (length tys + 1) term mty env' cloi
+        pclo = PartialClosure (Just (StackFrame fn mn)) (ty :| tys) (length tys + 1) term mty env' cloi
     returnCEKValue cont handler (VPartialClosure pclo)
   apply' _ [] _ = error "Applying too many arguments to function"
 
-applyLam (LC (LamClosure li cloargs arity term mty env cloi)) args cont handler
+applyLam (LC (LamClosure cloargs arity term mty env cloi)) args cont handler
   | arity == argLen = do
-    esStack %%= (StackFrame li :)
     let locals = view ceLocal env
-    let cont' = StackPopC mty cont
         locals' = foldl' (flip RAList.cons) locals args
-    evalCEK cont' handler (set ceLocal locals' env) term
+    evalCEK cont handler (set ceLocal locals' env) term
   | argLen > arity = error "Closure applied to too many arguments"
   | otherwise = apply' (view ceLocal env) (NE.toList cloargs) args
   where
@@ -653,11 +654,10 @@ applyLam (LC (LamClosure li cloargs arity term mty env cloi)) args cont handler
     x' <- (`maybeTCType` ty) =<< enforcePactValue x
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e [] [] = do
-    esStack %%= (StackFrame li :)
     evalCEK cont handler (set ceLocal e env) term
   apply' e (ty:tys) [] =
     returnCEKValue cont handler
-    (VPartialClosure (PartialClosure li (ty :| tys) (length tys + 1) term mty (set ceLocal e env) cloi))
+    (VPartialClosure (PartialClosure Nothing (ty :| tys) (length tys + 1) term mty (set ceLocal e env) cloi))
   apply' _ [] _ = error "Applying too many arguments to function"
 
 applyLam (PC (PartialClosure li argtys _ term mty env i)) args cont handler =
@@ -667,9 +667,12 @@ applyLam (PC (PartialClosure li argtys _ term mty env i)) args cont handler =
     x' <- (`maybeTCType` ty) =<< enforcePactValue x
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e [] [] = do
-    let cont' = StackPopC mty cont
-    esStack %%= (StackFrame li :)
-    evalCEK cont' handler (set ceLocal e env) term
+    case li of
+      Just sf -> do
+        let cont' = StackPopC mty cont
+        esStack %%= (sf :)
+        evalCEK cont' handler (set ceLocal e env) term
+      Nothing -> evalCEK cont handler (set ceLocal e env) term
   apply' e (ty:tys) [] = do
     let pclo = PartialClosure li (ty :| tys) (length tys + 1) term mty (set ceLocal e env) i
     returnCEKValue cont handler (VPartialClosure pclo)

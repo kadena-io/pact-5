@@ -3,6 +3,7 @@
 module Pact.Core.Repl.Runtime.ReplBuiltin where
 
 import Control.Lens
+import Control.Monad(when)
 import Control.Monad.Except
 import Control.Monad.IO.Class(liftIO)
 import Data.Default
@@ -28,7 +29,6 @@ import Pact.Core.PactValue
 import Pact.Core.Gas
 import Pact.Core.Guards
 import Pact.Core.Capabilities
-
 
 import Pact.Core.Repl.Runtime
 
@@ -179,6 +179,16 @@ envSigs = \info b cont handler _env -> \case
       _ -> Nothing
   args -> argsError info b args
 
+-- loadExec :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+-- loadExec = \info b cont handler _env -> \case
+--   [VString s, VBool reset] -> do
+--     es <- use evalState
+--     when reset $ evalState .= def
+
+--   args -> argsError info b args
+
+
+
 
 replBuiltinEnv
   :: Default i
@@ -205,3 +215,5 @@ replRawBuiltinRuntime = \case
     REnvHash -> envHash
     REnvKeys -> envKeys
     REnvSigs -> envSigs
+    -- RLoad -> loadExec
+    -- RLoadWithEnv -> loadExec

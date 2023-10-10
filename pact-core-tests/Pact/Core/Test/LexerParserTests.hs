@@ -110,6 +110,15 @@ parsedNameGen = Gen.choice [qn, bn]
       mn   <- moduleNameGen
       let qname = QualifiedName name mn
       pure (QN qname)
+parsedTyNameGen :: Gen ParsedTyName
+parsedTyNameGen = Gen.choice [qn, bn]
+  where
+    bn = TBN . BareName <$> identGen
+    qn = do
+      name <- identGen
+      mn   <- moduleNameGen
+      let qname = QualifiedName name mn
+      pure (TQN qname)
 
 moduleNameGen :: Gen ModuleName
 moduleNameGen = do
@@ -175,7 +184,7 @@ exprGen = Gen.recursive Gen.choice
       ,Lisp.TyModRef <$> moduleNameGen
       ,pure Lisp.TyGuard
       ,pure Lisp.TyKeyset
-      ,Lisp.TyObject <$> parsedNameGen
+      ,Lisp.TyObject <$> parsedTyNameGen
       ,pure Lisp.TyTime
       ,pure Lisp.TyPolyObject]
 

@@ -843,14 +843,14 @@ renameTerm (CapabilityForm cf i) =
       QN qn
         | _qnModName qn == mn -> do
           (n', dk) <- resolveQualified qn i
-          when (dk /= DKDefCap) $ throwDesugarError (InvalidCapabilityReference (_qnName qn)) i
+          -- when (dk /= DKDefCap) $ throwDesugarError (InvalidCapabilityReference (_qnName qn)) i
           let cf' = set capFormName n' cf
           checkCapForm cf'
           CapabilityForm <$> traverse renameTerm cf' <*> pure i
         | otherwise -> throwDesugarError (CapabilityOutOfScope (_qnName qn) (_qnModName qn)) i
       BN bn -> do
         (n', dk) <- resolveQualified (QualifiedName (_bnName bn) mn) i
-        when (dk /= DKDefCap) $ throwDesugarError (InvalidCapabilityReference (_bnName bn)) i
+        -- when (dk /= DKDefCap) $ throwDesugarError (InvalidCapabilityReference (_bnName bn)) i
         let cf' = set capFormName n' cf
         checkCapForm cf'
         CapabilityForm <$> traverse renameTerm cf' <*> pure i
@@ -862,11 +862,11 @@ renameTerm (CapabilityForm cf i) =
       checkCapFormNonModule cf
       let n = view capFormName cf
       (n', declty) <- resolveName i n
-      case declty of
-        Just DKDefCap -> do
-          let cf' = set capFormName n' cf
-          CapabilityForm <$> traverse renameTerm cf' <*> pure i
-        _ -> throwDesugarError (InvalidCapabilityReference (_nName n')) i
+      -- case declty of
+      --   Just DKDefCap -> do
+      let cf' = set capFormName n' cf
+      CapabilityForm <$> traverse renameTerm cf' <*> pure i
+        -- _ -> throwDesugarError (InvalidCapabilityReference (_nName n')) i
     where
     checkCapFormNonModule = \case
       -- InstallCapability{} -> pure ()

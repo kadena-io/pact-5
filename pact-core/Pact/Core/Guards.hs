@@ -10,6 +10,7 @@ module Pact.Core.Guards
 , UserGuard(..)
 , CapabilityGuard(..)
 , KSPredicate(..)
+, ModuleGuard(..)
 )
 where
 
@@ -48,6 +49,18 @@ data UserGuard name term
   , _ugArgs :: [term] }
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
+data ModuleGuard
+  = ModuleGuard
+  { _mgModule :: ModuleName
+  , _mgName :: Text
+  } deriving Show
+
+instance Eq ModuleGuard where
+  mg == mg' = _mgModule mg == _mgModule mg'
+
+instance Ord ModuleGuard where
+  mg `compare` mg' = _mgModule mg `compare` _mgModule mg'
+
 data CapabilityGuard name term
   = CapabilityGuard
   { _cgName :: !name
@@ -60,6 +73,7 @@ data Guard name term
   | GKeySetRef KeySetName
   | GUserGuard (UserGuard name term)
   | GCapabilityGuard (CapabilityGuard name term)
+  | GModuleGuard ModuleGuard
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 data Namespace name term

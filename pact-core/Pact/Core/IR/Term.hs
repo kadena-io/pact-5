@@ -33,6 +33,7 @@ import Pact.Core.Builtin
 import Pact.Core.Hash
 import Pact.Core.Literal
 import Pact.Core.Type
+    ( Type, Arg(Arg), DefKind(..), Schema(Schema) )
 import Pact.Core.Names
 import Pact.Core.Imports
 import Pact.Core.Capabilities
@@ -148,6 +149,7 @@ data TopLevel name ty builtin info
   = TLModule (Module name ty builtin info)
   | TLInterface (Interface name ty builtin info)
   | TLTerm (Term name ty builtin info)
+  | TLUse ModuleName
   deriving (Show, Functor)
 
 data ReplTopLevel name ty builtin info

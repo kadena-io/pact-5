@@ -121,7 +121,7 @@ interpretTopLevel pdb interp (DesugarOutput ds lo0 deps) = do
     TLModule m -> do
       let deps' = M.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = ModuleData m deps'
-      liftIO (writeModule pdb (view mName m) mdata)
+      liftDbFunction (_mInfo m) (writeModule pdb Write (view mName m) mdata)
       let newLoaded = M.fromList $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
           loadNewModule =
             over loModules (M.insert (_mName m) mdata) .
@@ -131,7 +131,7 @@ interpretTopLevel pdb interp (DesugarOutput ds lo0 deps) = do
     TLInterface iface -> do
       let deps' = M.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = InterfaceData iface deps'
-      liftIO (writeModule pdb (view ifName iface) mdata)
+      liftDbFunction (_ifInfo iface) (writeModule pdb Write (view ifName iface) mdata)
       let newLoaded = M.fromList $ toFqDep (_ifName iface) (_ifHash iface)
                       <$> mapMaybe (fmap DConst . preview _IfDConst) (_ifDefns iface)
           loadNewModule =

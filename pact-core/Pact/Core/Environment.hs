@@ -150,11 +150,11 @@ newtype PactState b i
 
 makeLenses ''PactState
 
-newtype StackFrame
+data StackFrame
   = StackFrame
-  { _sfLamInfo :: LamInfo }
+  { _sfFunction :: Text
+  , _sfModule :: ModuleName }
   deriving Show
-
 
 data EvalState b i
   = EvalState
@@ -164,6 +164,9 @@ data EvalState b i
   , _esInCap :: Bool
   , _esLoaded :: Loaded b i
   } deriving Show
+
+instance Default (EvalState b i) where
+  def = EvalState def [] [] False mempty
 
 makeClassy ''EvalState
 

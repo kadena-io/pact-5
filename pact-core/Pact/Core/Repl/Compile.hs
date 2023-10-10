@@ -44,6 +44,7 @@ import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Repl.Runtime
 import Pact.Core.Repl.Runtime.ReplBuiltin
 import Pact.Core.Hash
+import Pact.Core.Info
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
@@ -84,10 +85,12 @@ interpretReplProgram sc@(SourceCode source) = do
       pure <$> pipe' pactdb rtl
     Lisp.RTLReplSpecial rsf -> case rsf of
       Lisp.ReplLoad txt b _ -> do
-        oldLoaded <- use replCurrSource
-        when b $ loaded .= mempty
+        oldSrc <- use replCurrSource
+        oldEs <- use evalState
+        when b $ evalState .= def
         out <- loadFile (T.unpack txt)
-        replCurrSource .= oldLoaded
+        evalState .= oldEs
+        replCurrSource .= oldSrc
         pure out
   pipe' pactdb tl = do
     debugIfLispExpr tl
@@ -105,6 +108,7 @@ interpretReplProgram sc@(SourceCode source) = do
         let interp = Interpreter interpreter
         RCompileValue <$> interpretTopLevel pdb interp (DesugarOutput tt lo deps)
         where
+        -- interpreter :: EvalTerm (ReplBuiltin RawBuiltin) SpanInfo -> ReplM ReplRawBuiltin InterpretValue
         interpreter te = do
           let i = view termInfo te
           evalGas <- use replGas
@@ -113,12 +117,6 @@ interpretReplProgram sc@(SourceCode source) = do
           -- todo: cache?
           -- mhashes <- uses (loaded . loModules) (fmap (view mdModuleHash))
           let rEnv = ReplEvalEnv evalGas evalLog replBuiltinEnv
-              -- evalEnv = EvalEnv
-              --       { _eeMsgSigs = mempty
-              --       , _eeMsgBody = EnvData mempty
-              --       , _eePactDb = pdb
-              --       , _eeHash = Hash mempty
-              --       , _eePublicData = def}
               rState = ReplEvalState ee es sc
           (out, st) <- liftIO (runReplCEK rEnv rState te)
           evalState .= view reState st

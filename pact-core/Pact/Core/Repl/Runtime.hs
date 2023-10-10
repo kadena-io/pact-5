@@ -63,6 +63,9 @@ newtype ReplEvalM b i a =
 makeLenses ''ReplEvalEnv
 makeLenses ''ReplEvalState
 
+instance HasEvalState (ReplEvalState b i) b i where
+  evalState = reState
+
 instance MonadEvalEnv b i (ReplEvalM b i) where
   readEnv = use reEnv
 
