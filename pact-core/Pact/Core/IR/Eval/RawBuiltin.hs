@@ -45,6 +45,7 @@ import Pact.Core.Guards
 import Pact.Core.Type(Arg(..))
 import Pact.Core.PactValue
 import Pact.Core.Persistence
+import Pact.Core.Pacts.Types
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime

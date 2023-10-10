@@ -49,6 +49,7 @@ data EvalEnv b i
   -- Todo: `PactWarning`
   -- , _eeWarning :: IORef (Set Text)
   , _eeHash :: Hash
+--  , _eePactStep :: !(Maybe PactStep)
   --   _cekGas :: IORef Gas
   -- , _cekEvalLog :: IORef (Maybe [(Text, Gas)])
   -- , _ckeData :: EnvData PactValue

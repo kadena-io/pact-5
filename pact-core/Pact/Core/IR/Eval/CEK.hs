@@ -18,6 +18,7 @@ module Pact.Core.IR.Eval.CEK
   , enforceKeysetName) where
 
 --import Debug.Trace
+
 import Control.Lens hiding ((%%=))
 import Control.Monad(zipWithM, unless, when)
 import Control.Monad.IO.Class
@@ -48,9 +49,10 @@ import Pact.Core.Environment
 import Pact.Core.Persistence
 import Pact.Core.Hash
 
-import Pact.Core.IR.Term
+import Pact.Core.IR.Term hiding (PactStep)
 import Pact.Core.IR.Eval.Runtime
-import Pact.Core.Pacts.Types
+import Pact.Core.Pacts.Types (PactStep(..), PactExec(..), PactId(..), PactContinuation(..), peYield
+                             , peStepCount, psStep, psRollback)
 
 
 chargeNodeGas :: MonadEval b i m => NodeType -> m ()
@@ -221,6 +223,57 @@ mkDefPactClosure fqn (DefPact _ _ mrty (step :| steps) info) env = case step of
         let dpc = DefPactClosure fqn li (_argType <$> args) (NE.length args) body rb nSteps mrty env i
         in pure (VDefPactClosure dpc)
       _ -> throwExecutionError info (InvariantFailure "Step is not lambda")
+
+
+initPact
+  :: MonadEval b i m
+  => i
+  -> PactExec
+  -> Cont b i m
+  -> CEKErrorHandler b i m
+  -> CEKEnv b i m
+  -> EvalTerm b i
+  -> m (EvalResult b i m)
+initPact i pe cont handler cenv term = do
+  case view cePactStep cenv of
+    Nothing ->
+      let
+        pId = PactId ""-- (view eeHash env)
+        pStep = PactStep 0 False pId Nothing
+        cenv' = set cePactStep (Just pStep) cenv
+      in applyPact i pe pStep cont handler cenv' term
+    Just _ -> pure (VError "not implemented")
+
+applyPact
+  :: MonadEval b i m
+  => i
+  -> PactExec
+  -> PactStep
+  -> Cont b i m
+  -> CEKErrorHandler b i m
+  -> CEKEnv b i m
+  -> EvalTerm b i
+  -> m (EvalResult b i m)
+applyPact i pe ps cont handler cenv term = do
+  mCurrExec <- useEvalState esPactExec
+  when (isJust mCurrExec) $
+    throwExecutionError i MultipleOrNestedPactExecFound
+
+  -- TODO: Does this makes sense, `applyPact` should always start executing step 0
+
+  -- If the PactStep we want to execute is outside of
+  -- 0 <= peStepCount < ps ^. peStepCount
+  -- we fail with `PactStepNotFound`
+  when (ps ^. psStep < pe ^. peStepCount) $
+    throwExecutionError i (PactStepNotFound (ps ^. psStep))
+
+  -- TODO: another invariant should be that steps progress monoton linearly
+
+  -- store the initial PactExec
+  setEvalState esPactExec (Just pe)
+
+  evalCEK cont handler cenv term
+
 enforceKeyset
   :: MonadEval b i m
   => KeySet FullyQualifiedName
@@ -612,12 +665,22 @@ returnCEKValue (StackPopC mty cont) handler v = do
   v' <- (`maybeTCType` mty) =<< enforcePactValue v
   -- Todo: unsafe use of tail here. need `tailMay`
   (esStack %%= tail) *> returnCEKValue cont handler (VPactValue v')
-returnCEKValue (PactStepC cont) handler v = do
-  -- We need to reset the `yield` value of the current pact exection
-  -- environment to match pact semantics. This `PactStepC` frame is
-  -- only used as a continuation which resets the `yield`.
-  setEvalState (esPactExec . _Just . peYield) Nothing
-  returnCEKValue cont handler v
+returnCEKValue (PactStepC cont env) handler v =
+  useEvalState esPactExec >>= \case
+    Nothing -> error "invariant violation, pact exec missing"
+    Just pe -> case env ^. cePactStep of
+      Nothing -> error "invariant violation"
+      Just ps -> do
+        let isLastStep = ps ^. psStep == pred (pe ^. peStepCount)
+            done = isLastStep || ps ^. psRollback
+
+        -- If we want to rollback
+        
+        -- We need to reset the `yield` value of the current pact exection
+        -- environment to match pact semantics. This `PactStepC` frame is
+        -- only used as a continuation which resets the `yield`.
+        setEvalState (esPactExec . _Just . peYield) Nothing
+        returnCEKValue cont handler v
 
 
 
@@ -717,10 +780,6 @@ applyLam (DPC (DefPactClosure fqn li cloargs arity term rb sc mty env i)) args c
     args' <- traverse enforcePactValue args
     tcArgs <- zipWithM (\arg ty -> VPactValue <$> maybeTCType arg ty) args' (NE.toList cloargs)
 
-    mCurrExec <- useEvalState esPactExec
-    when (isJust mCurrExec) $
-      throwExecutionError i MultipleOrNestedPactExecFound
-
     let
       pe = PactExec
            { _peStepCount = sc
@@ -730,12 +789,12 @@ applyLam (DPC (DefPactClosure fqn li cloargs arity term rb sc mty env i)) args c
            , _peStepHasRollback = rb
 --           , _peNestedPactExec = mempty
            }
-    setEvalState esPactExec (Just pe)
-
     esStack %%= (StackFrame li :)
-    let cont' = StackPopC mty cont
-        varEnv = RAList.fromList (reverse tcArgs)
-    evalCEK cont' handler (set ceLocal varEnv env) term
+
+    let env' = set ceLocal (RAList.fromList (reverse tcArgs)) env
+        cont' = PactStepC (StackPopC mty cont) env'
+    initPact i pe cont' handler env' term
+
   | argLen > arity = error "Closure applied to too many arguments"
   | otherwise = apply' mempty (NE.toList cloargs) args
   where

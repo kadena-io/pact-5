@@ -114,7 +114,9 @@ interpretReplProgram sc@(SourceCode source) = do
                     { _eeMsgSigs = mempty
                     , _eeMsgBody = EnvData mempty
                     , _eePactDb = pdb
-                    , _eeHash = Hash mempty}
+                    , _eeHash = Hash mempty
+                    -- , _eePactStep = Nothing
+                    }
               evalState = EvalState
                        { _esCaps = CapState [] mempty mempty
                        , _esStack = []

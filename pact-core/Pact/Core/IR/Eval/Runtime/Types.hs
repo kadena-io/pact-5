@@ -17,6 +17,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , ceLocal
  , cePactDb
  , ceBuiltins
+ , cePactStep
  , EvalEnv(..)
  , NativeFunction
  , BuiltinEnv
@@ -76,10 +77,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , CanApply(..)
  , StackFrame(..)
  -- defpact
- , PactExec(..)
- , Yield(..)
  , DefPactClosure(..)
- , peStepCount, peYield, peStep, peContinuation, peStepHasRollback
  , TableValue(..)
  ) where
 
@@ -108,6 +106,7 @@ import Pact.Core.Hash
 import Pact.Core.IR.Term
 import Pact.Core.Literal
 import Pact.Core.Type
+import qualified Pact.Core.Pacts.Types as P
 import Pact.Core.Persistence
 import Pact.Core.ModRefs
 import Pact.Core.Pacts.Types
@@ -126,10 +125,12 @@ data CEKEnv b i m
   = CEKEnv
   { _ceLocal :: RAList (CEKValue b i m)
   , _cePactDb :: PactDb b i
-  , _ceBuiltins :: BuiltinEnv b i m }
+  , _ceBuiltins :: BuiltinEnv b i m
+  , _cePactStep :: Maybe P.PactStep
+  }
 
 instance (Show i, Show b) => Show (CEKEnv b i m) where
-  show (CEKEnv e _ _) = show e
+  show (CEKEnv e _ _ _) = show e
 
 -- | List of builtins
 type BuiltinEnv b i m = i -> b -> CEKEnv b i m -> NativeFn b i m
@@ -278,27 +279,6 @@ data EvalResult b i m
   | VError Text
   deriving Show
 
--- | `PactId` representing pact identifiers
--- newtype PactId
---   = PactId {unPactId :: Text}
---   deriving (Eq, Show)
-
--- | `Yield` representing an object
-newtype Yield
-  = Yield {unYield :: Map Field PactValue}
-  deriving (Show)
-
--- | Internal representation of pacts
-data PactExec
-  = PactExec
-  { _peStepCount :: Int
-  , _peYield :: Maybe Yield
-  , _peStep :: Int
-  -- , _pePactId :: PactId
-  , _peContinuation :: PactContinuation FullyQualifiedName PactValue
-  , _peStepHasRollback :: Bool
---  , _peNestedPactExec :: Map PactId NestedPactExec
-  } deriving Show
 
 newtype NestedPactExec
   = NestedPactExec PactExec
@@ -464,7 +444,7 @@ data Cont b i m
   | CapBodyC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   | CapPopC CapPopState (Cont b i m)
   | StackPopC (Maybe Type) (Cont b i m)
-  | PactStepC (Cont b i m)
+  | PactStepC (Cont b i m) (CEKEnv b i m)
   | Mt
   deriving Show
 
@@ -510,7 +490,6 @@ makeLenses ''CapState
 makeLenses ''CapToken
 makeLenses ''CapSlot
 makeLenses ''ManagedCap
-makeLenses ''PactExec
 
 instance (MonadIO m) => MonadGas (EvalT b i m) where
   logGas msg g = do
