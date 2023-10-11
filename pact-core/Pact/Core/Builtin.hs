@@ -40,6 +40,8 @@ data BuiltinForm o
   = CAnd o o
   | COr o o
   | CIf o o o
+  | CEnforceOne o [o]
+  | CEnforce o o
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 instance Pretty o => Pretty (BuiltinForm o) where
@@ -50,6 +52,10 @@ instance Pretty o => Pretty (BuiltinForm o) where
       parens ("or" <+> pretty o <+> pretty o')
     CIf o o' o3 ->
       parens ("if" <+> pretty o <+> pretty o' <+> pretty o3)
+    CEnforceOne o li ->
+      parens ("enforce-one" <+> pretty o <+> brackets (hsep (punctuate comma (pretty <$> li))))
+    CEnforce o o' ->
+      parens ("enforce" <+> pretty o <+> pretty o')
     -- CFold e1 e2 e3 ->
     --   parens ("fold" <+> pretty e1 <+> pretty e2 <+> pretty e3)
     -- CMap e1 e2 ->
@@ -202,12 +208,13 @@ data RawBuiltin
   | RawStrToIntBase
   | RawFold
   | RawDistinct
-  | RawEnforce
-  | RawEnforceOne
+  -- | RawEnforce
+  -- | RawEnforceOne
   | RawEnumerate
   | RawEnumerateStepN
   -- Guards + read functions
   | RawShow
+  | RawReadMsg
   | RawReadInteger
   | RawReadDecimal
   | RawReadString
@@ -315,11 +322,12 @@ rawBuiltinToText = \case
   RawFold -> "fold"
   RawZip -> "zip"
   RawDistinct -> "distinct"
-  RawEnforce -> "enforce"
-  RawEnforceOne -> "enforce-one"
+  -- RawEnforce -> "enforce"
+  -- RawEnforceOne -> "enforce-one"
   RawEnumerate -> "enumerate"
   RawEnumerateStepN -> "enumerate-step"
   RawShow -> "show"
+  RawReadMsg -> "read-msg"
   RawReadInteger -> "read-integer"
   RawReadDecimal -> "read-decimal"
   RawReadString -> "read-string"
@@ -421,12 +429,13 @@ instance IsBuiltin RawBuiltin where
     RawStrToIntBase -> 2
     RawFold -> 3
     RawDistinct -> 1
-    RawEnforce -> 2
-    RawEnforceOne -> 2
+    -- RawEnforce -> 2
+    -- RawEnforceOne -> 2
     RawEnumerate -> 2
     RawEnumerateStepN -> 3
     -- Show ->
     RawShow -> 1
+    RawReadMsg -> 1
     RawReadInteger -> 1
     RawReadDecimal -> 1
     RawReadString -> 1

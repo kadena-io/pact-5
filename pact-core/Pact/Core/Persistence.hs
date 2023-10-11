@@ -30,6 +30,7 @@ module Pact.Core.Persistence
  , DbOpException(..)
  , TxId(..)
  , TxLog(..)
+ , dbOpDisallowed
  ) where
 
 import Control.Lens
@@ -186,7 +187,11 @@ data DbOpException
   | TxAlreadyBegun TxId
   | NoTxToCommit
   | NoTxLog TableName TxId
+  | OpDisallowed
   deriving (Show, Eq, Typeable)
+
+dbOpDisallowed :: IO a
+dbOpDisallowed = throwIO OpDisallowed
 
 instance Exception DbOpException
 

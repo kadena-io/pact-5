@@ -321,6 +321,8 @@ data CondFrame b i
   = AndFrame (EvalTerm b i)
   | OrFrame (EvalTerm b i)
   | IfFrame (EvalTerm b i) (EvalTerm b i)
+  | EnforceFrame (EvalTerm b i)
+  | EnforceOneFrame (EvalTerm b i) [EvalTerm b i]
   deriving Show
 
 data CapFrame b i
@@ -358,7 +360,8 @@ data Cont b i m
   -- ^ Capability special form frams that eva
   | CapBodyC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   | CapPopC CapPopState (Cont b i m)
-  | StackPopC (Maybe Type) (Cont b i m)
+  | StackPopC i (Maybe Type) (Cont b i m)
+  | EnforceErrorC (Cont b i m)
   | Mt
   -- ^ Empty Continuation
   deriving Show
@@ -367,6 +370,7 @@ data Cont b i m
 data CEKErrorHandler b i m
   = CEKNoHandler
   | CEKHandler (CEKEnv b i m) (EvalTerm b i) (Cont b i m) [CapSlot QualifiedName PactValue] (CEKErrorHandler b i m)
+  | CEKEnforceOne (CEKEnv b i m) (EvalTerm b i) (Cont b i m) [CapSlot QualifiedName PactValue] (CEKErrorHandler b i m)
   deriving Show
 
 instance (Show i, Show b) => Show (NativeFn b i m) where

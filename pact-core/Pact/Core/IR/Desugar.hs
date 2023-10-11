@@ -188,6 +188,18 @@ instance DesugarBuiltin RawBuiltin where
       arg2Name = "#orArg2"
       arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool))
       in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (COr (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
+    Lisp.EnforceOp -> let
+      arg1Name = "#enforceArg1"
+      arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool))
+      arg2Name = "#enforceArg2"
+      arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimString))
+      in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (CEnforce (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
+    Lisp.EnforceOneOp -> let
+      arg1Name = "#enforceOneArg1"
+      arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimString))
+      arg2Name = "#enforceOneArg2"
+      arg2 = Arg arg2Name (Just (Lisp.TyList (Lisp.TyPrim PrimBool)))
+      in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (CEnforceOne (Var (BN (BareName arg1Name)) info) [Var (BN (BareName arg2Name)) info]) info) info
   -- Todo:
   -- Builtins of known arity differences we are yet to support:
   --  str-to-int
@@ -307,6 +319,12 @@ desugarLispTerm = \case
       Conditional <$> (CAnd <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure i
     Lisp.OrOp ->
       Conditional <$> (COr <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure i
+    Lisp.EnforceOp ->
+      Conditional <$> (CEnforce <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure i
+    Lisp.EnforceOneOp -> case e2 of
+      Lisp.List e _ ->
+        Conditional <$> (CEnforceOne <$> desugarLispTerm e1 <*> traverse desugarLispTerm e) <*> pure i
+      _ -> error "enforce-one incorrect form"
   Lisp.App e (h:hs) i -> do
     e' <- desugarLispTerm e
     h' <- desugarLispTerm h

@@ -551,7 +551,7 @@ coreAccess = \info b cont handler _env -> \case
 coreEnforce :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreEnforce = \info b cont handler _env -> \case
   [VLiteral (LBool b'), VLiteral (LString s)] ->
-    if b' then returnCEKValue cont handler (VLiteral LUnit)
+    if b' then returnCEKValue cont handler (VBool True)
     else returnCEK cont handler (VError s)
   args -> argsError info b args
 
@@ -584,20 +584,20 @@ coreEnforceGuard = \info b cont handler env -> \case
   [VGuard g] -> case g of
       GKeyset ks -> do
         cond <- enforceKeyset ks
-        if cond then returnCEKValue cont handler VUnit
+        if cond then returnCEKValue cont handler (VBool True)
         else returnCEK cont handler (VError "enforce keyset failure")
       GKeySetRef ksn -> do
         cond <- enforceKeysetName info env ksn
-        if cond then returnCEKValue cont handler VUnit
+        if cond then returnCEKValue cont handler (VBool True)
         else returnCEK cont handler (VError "enforce keyset failure")
       GUserGuard ug -> runUserGuard info cont handler env ug
       GCapabilityGuard cg -> enforceCapGuard cont handler cg
       GModuleGuard (ModuleGuard mn _) -> calledByModule mn >>= \case
-        True -> returnCEKValue cont handler VUnit
+        True -> returnCEKValue cont handler (VBool True)
         False -> do
           md <- getModule info env mn
           acquireModuleAdmin info env md
-          returnCEKValue cont handler VUnit
+          returnCEKValue cont handler (VBool True)
   args -> argsError info b args
 
 keysetRefGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -613,6 +613,18 @@ coreReadInteger = \info b cont handler _env -> \case
     case M.lookup (Field s) envData of
       Just (PInteger p) -> returnCEKValue cont handler (VInteger p)
       _ -> returnCEK cont handler (VError "read-integer failure")
+  args -> argsError info b args
+
+readMsg :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+readMsg = \info b cont handler _env -> \case
+  [VString s] -> do
+    EnvData envData <- viewCEKEnv eeMsgBody
+    case M.lookup (Field s) envData of
+      Just pv -> returnCEKValue cont handler (VPactValue pv)
+      _ -> returnCEK cont handler (VError "read-integer failure")
+  [VUnit] -> do
+    EnvData envData <- viewCEKEnv eeMsgBody
+    returnCEKValue cont handler (VObject envData)
   args -> argsError info b args
 
 coreReadDecimal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -1204,11 +1216,12 @@ rawBuiltinRuntime = \case
   RawSort -> rawSort
   RawSortObject -> rawSortObject
   RawRemove -> rawRemove
-  RawEnforce -> coreEnforce
-  RawEnforceOne -> unimplemented
+  -- RawEnforce -> coreEnforce
+  -- RawEnforceOne -> unimplemented
   RawEnumerate -> coreEnumerate
   RawEnumerateStepN -> coreEnumerateStepN
   RawShow -> rawShow
+  RawReadMsg -> readMsg
   RawReadInteger -> coreReadInteger
   RawReadDecimal -> coreReadDecimal
   RawReadString -> coreReadString

@@ -95,6 +95,8 @@ import Pact.Core.Syntax.LexUtils
   '.'        { PosToken TokenDot _ }
   and        { PosToken TokenAnd _ }
   or         { PosToken TokenOr _ }
+  enforce    { PosToken TokenEnforce _}
+  enforceOne { PosToken TokenEnforceOne _ }
   IDENT      { PosToken (TokenIdent _) _ }
   NUM        { PosToken (TokenNumber _) _ }
   STR        { PosToken (TokenString _) _ }
@@ -473,6 +475,8 @@ Atom :: { ParsedExpr }
 Operator :: { ParsedExpr }
   : and { Operator AndOp (_ptInfo $1) }
   | or { Operator OrOp (_ptInfo $1) }
+  | enforce { Operator EnforceOp (_ptInfo $1)}
+  | enforceOne { Operator EnforceOneOp (_ptInfo $1)}
 
 Bool :: { ParsedExpr }
   : true { Constant (LBool True) (_ptInfo $1) }
