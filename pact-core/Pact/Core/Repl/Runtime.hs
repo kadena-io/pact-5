@@ -63,6 +63,9 @@ newtype ReplEvalM b i a =
 makeLenses ''ReplEvalEnv
 makeLenses ''ReplEvalState
 
+instance HasEvalState (ReplEvalState b i) b i where
+  evalState = reState
+
 instance MonadEvalEnv b i (ReplEvalM b i) where
   readEnv = use reEnv
 
@@ -97,5 +100,4 @@ runReplCEK
   -> EvalTerm b i
   -> IO (Either (PactError i) (EvalResult b i (ReplEvalM b i)), ReplEvalState b i)
 runReplCEK env st term =
-  runReplEvalM env st (eval (CEKEnv mempty (view (reEnv . eePactDb) st) (_reBuiltins env) Nothing) term)
-  -- RS: TODO is Nothing right here?
+  runReplEvalM env st (eval (CEKEnv mempty (view (reEnv . eePactDb) st) (_reBuiltins env) (view (reEnv . eePactStep) st)) term)

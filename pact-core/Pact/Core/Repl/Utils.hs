@@ -15,10 +15,10 @@ module Pact.Core.Repl.Utils
  , runReplT
  , ReplState(..)
  , replFlags
- , replLoaded
  , replPactDb
  , replGas
  , replEvalLog
+ , replEvalEnv
  , replEvalState
  , whenReplFlagSet
  , unlessReplFlagSet
@@ -36,7 +36,7 @@ module Pact.Core.Repl.Utils
 import Control.Lens
 import Control.Monad ( when, unless )
 import Control.Monad.Reader
-import Control.Monad.State.Strict
+import Control.Monad.State.Strict(MonadState(..))
 import Control.Monad.Catch
 import Control.Monad.Except
 
@@ -61,8 +61,8 @@ import Pact.Core.Pretty
 import Pact.Core.Gas
 import Pact.Core.Errors
 import Pact.Core.Debug
+import Pact.Core.Environment
 import qualified Pact.Core.IR.Term as Term
-import Pact.Core.IR.Eval.Runtime.Types
 
 import System.Console.Haskeline.Completion
 
@@ -114,22 +114,26 @@ instance MonadState (ReplState b) (ReplM b)  where
 data ReplState b
   = ReplState
   { _replFlags :: Set ReplDebugFlag
-  , _replLoaded :: Loaded b SpanInfo
+  -- , _replLoaded :: Loaded b SpanInfo
   , _replPactDb :: PactDb b SpanInfo
+  , _replEvalState :: EvalState b SpanInfo
+  , _replEvalEnv :: EvalEnv b SpanInfo
   , _replGas :: IORef Gas
   , _replEvalLog :: IORef (Maybe [(Text, Gas)])
   , _replCurrSource :: SourceCode
-  , _replEvalState :: EvalState b SpanInfo
   }
 
 
 makeLenses ''ReplState
 
+instance HasEvalState (ReplState b) b SpanInfo where
+  evalState = replEvalState
+
 instance PhaseDebug (ReplM b) where
   debugPrint _ _ = pure ()
 
 instance HasLoaded (ReplState b) b SpanInfo where
-  loaded = replLoaded
+  loaded = evalState . esLoaded
 
 data ReplAction
   = RALoad Text
@@ -235,9 +239,9 @@ replCompletion
 replCompletion natives =
   completeQuotedWord (Just '\\') "\"" listFiles $
   completeWord (Just '\\') filenameWordBreakChars $ \str -> do
-    tlns <- uses (replLoaded . loToplevel) M.keys
-    moduleNames <- uses (replLoaded . loModules) (fmap renderModuleName . M.keys)
-    prefixedNames <- uses (replLoaded . loModules) toPrefixed
+    tlns <- uses (loaded . loToplevel) M.keys
+    moduleNames <- uses (loaded . loModules) (fmap renderModuleName . M.keys)
+    prefixedNames <- uses (loaded . loModules) toPrefixed
     let
       cmds = [":load", ":type", ":syntax", ":debug"]
       allNames = Set.fromList $ T.unpack <$> concat

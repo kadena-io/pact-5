@@ -18,20 +18,16 @@ module Pact.Core.Hash
 , hashToText
 , verifyHash
 , initialHash
--- , hashLength
--- , TypedHash(..)
--- , toUntypedHash, fromUntypedHash
--- , HashAlgo(..)
--- , PactHash
 , pactHash
 , pactInitialHash
 , pactHashLength
--- , typedHashToText
+, decodeBase64UrlUnpadded
 , toB64UrlUnpaddedText
 , fromB64UrlUnpaddedText
 ) where
 
 import Control.DeepSeq
+import Data.ByteString.Short (ShortByteString, fromShort, toShort)
 import Data.ByteString (ByteString)
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
@@ -49,59 +45,18 @@ import Pact.Core.Pretty ( renderCompactString, Pretty(pretty) )
 -- | Untyped hash value, encoded with unpadded base64url.
 -- Within Pact these are blake2b_256 but unvalidated as such,
 -- so other hash values are kosher (such as an ETH sha256, etc).
-newtype Hash = Hash { unHash :: ByteString }
+newtype Hash = Hash { unHash :: ShortByteString }
   deriving (Eq, Ord, NFData)
 
 instance Show Hash where
-  show (Hash h) = show $ encodeBase64UrlUnpadded h
+  show (Hash h) = show $ encodeBase64UrlUnpadded $ fromShort h
 
 instance Pretty Hash where
   pretty (Hash h) =
-    pretty $ decodeUtf8 (encodeBase64UrlUnpadded h)
+    pretty $ decodeUtf8 (encodeBase64UrlUnpadded (fromShort h))
 
 hashToText :: Hash -> Text
-hashToText (Hash h) = toB64UrlUnpaddedText h
-
--- | All supported hashes in Pact (although not necessarily GHCJS pact).
--- data HashAlgo =
---   Blake2b_256 |
---   SHA3_256
---   deriving (Eq,Show,Ord,Bounded,Enum)
-
--- instance Reifies 'Blake2b_256 HashAlgo where
---   reflect _ = Blake2b_256
--- instance Reifies 'SHA3_256 HashAlgo where
---   reflect _ = SHA3_256
-
--- hashLength :: HashAlgo -> Int
--- hashLength Blake2b_256 = 32
--- hashLength SHA3_256 = 32
-
--- | Typed hash, to indicate algorithm
--- data TypedHash (h :: HashAlgo) where
---   TypedHash :: ByteString -> TypedHash h
---   deriving (Eq, Ord, Generic)
-
--- instance Show (TypedHash h) where
---   show (TypedHash h) = show $ encodeBase64UrlUnpadded h
-
--- instance Pretty (TypedHash h) where
---   pretty (TypedHash h) =
---     pretty $ decodeUtf8 (encodeBase64UrlUnpadded h)
-
--- instance NFData (TypedHash h)
-
-
--- typedHashToText :: TypedHash h -> Text
--- typedHashToText (TypedHash h) = toB64UrlUnpaddedText h
-
--- toUntypedHash :: TypedHash h -> Hash
--- toUntypedHash (TypedHash h) = Hash h
-
--- fromUntypedHash :: Hash -> TypedHash h
--- fromUntypedHash (Hash h) = TypedHash h
-
--- type PactHash = TypedHash 'Blake2b_256
+hashToText (Hash h) = toB64UrlUnpaddedText (fromShort h)
 
 pactHash :: ByteString -> Hash
 pactHash = hash
@@ -113,7 +68,7 @@ pactHashLength :: Int
 pactHashLength = 32
 
 hash :: ByteString -> Hash
-hash = Hash . ByteArray.convert . Crypto.hashWith Crypto.Blake2b_256
+hash = Hash . toShort . ByteArray.convert . Crypto.hashWith Crypto.Blake2b_256
 
 
 -- hash :: forall h . Reifies h HashAlgo => ByteString -> TypedHash h

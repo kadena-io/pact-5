@@ -4,7 +4,6 @@
 module Pact.Core.Pacts.Types
  ( PactId(..)
  , PactContinuation(..)
- , ChainId(..)
  , pcName, pcArgs
  , PactStep(..)
  , psStep, psRollback, psPactId, psResume
@@ -20,10 +19,6 @@ import Control.Lens
 import Data.Map.Strict (Map)
 import Pact.Core.PactValue
 import Pact.Core.Names
-
-newtype ChainId
-  = ChainId { _chainId :: Text }
-  deriving (Eq,Ord,Show,Pretty)
 
 newtype PactId
   = PactId Text

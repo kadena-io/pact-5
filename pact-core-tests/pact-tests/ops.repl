@@ -441,31 +441,31 @@
 (expect "not != object object" false (!= { "a": 1 } { "a": 1 }))
 (expect "!= object object" true (!= { "a": 1 } { "a": 1, "b": 2 }))
 
-;  "===== keyset equality"
-;  (env-data { "k1": ["k1"], "k2": ["k2"] })
-;  (expect "= keyset keyset" true (= (read-keyset "k1") (read-keyset "k1")))
-;  (expect "not = keyset keyset" false (= (read-keyset "k1") (read-keyset "k2")))
-;  (expect "not != keyset keyset" false (!= (read-keyset "k1") (read-keyset "k1")))
-;  (expect "!= keyset keyset" true (!= (read-keyset "k1") (read-keyset "k2")))
+"===== keyset equality"
+(env-data { "k1": ["k1"], "k2": ["k2"] })
+(expect "= keyset keyset" true (= (read-keyset "k1") (read-keyset "k1")))
+(expect "not = keyset keyset" false (= (read-keyset "k1") (read-keyset "k2")))
+(expect "not != keyset keyset" false (!= (read-keyset "k1") (read-keyset "k1")))
+(expect "!= keyset keyset" true (!= (read-keyset "k1") (read-keyset "k2")))
 
-;  "===== keyset ref equality"
+"===== keyset ref equality"
 ;  (env-exec-config ["DisablePact44"])
-;  (env-data { "k1": ["k1"], "k2": ["k2"] })
-;  (env-keys ["k1" "k2"])
-;  (define-keyset 'k1 (read-keyset "k1"))
-;  (define-keyset 'k2 (read-keyset "k2"))
-;  (expect "= keysetRef keysetRef" true (= (keyset-ref-guard "k1") (keyset-ref-guard "k1")))
-;  (expect "not = keysetRef keysetRef" false (= (keyset-ref-guard "k1") (keyset-ref-guard "k2")))
-;  (expect "not != keysetRef keysetRef" false (!= (keyset-ref-guard "k1") (keyset-ref-guard "k1")))
-;  (expect "!= keysetRef keysetRef" true (!= (keyset-ref-guard "k1") (keyset-ref-guard "k2")))
+(env-data { "k1": ["k1"], "k2": ["k2"] })
+(env-keys ["k1" "k2"])
+(define-keyset 'k1 (read-keyset "k1"))
+(define-keyset 'k2 (read-keyset "k2"))
+(expect "= keysetRef keysetRef" true (= (keyset-ref-guard "k1") (keyset-ref-guard "k1")))
+(expect "not = keysetRef keysetRef" false (= (keyset-ref-guard "k1") (keyset-ref-guard "k2")))
+(expect "not != keysetRef keysetRef" false (!= (keyset-ref-guard "k1") (keyset-ref-guard "k1")))
+(expect "!= keysetRef keysetRef" true (!= (keyset-ref-guard "k1") (keyset-ref-guard "k2")))
 
-;  (module tm G
-;    (defcap G () true)
-;    (defun mk (id) (create-module-guard id))
-;    (defpact p (id1 id2)
-;      (step [(create-pact-guard id1) (create-pact-guard id2)]))
-;    (defun ug (id) true)
-;    )
+(module tm G
+  (defcap G () true)
+  ;  (defun mk (id) (create-module-guard id))
+  ;  (defpact p (id1 id2)
+  ;    (step [(create-pact-guard id1) (create-pact-guard id2)]))
+  (defun ug (id) true)
+  )
 
 ;  "===== module guard equality"
 ;  (expect "= moduleGuard moduleGuard" true (= (tm.mk "1") (tm.mk "1")))
@@ -483,11 +483,11 @@
 ;    )
 
 
-;  "===== userGuard equality"
-;  (expect "= userGuard userGuard" true (= (create-user-guard (tm.ug "1")) (create-user-guard (tm.ug "1"))))
-;  (expect "not = userGuard userGuard" false (= (create-user-guard (tm.ug "2")) (create-user-guard (tm.ug "1"))))
-;  (expect "not != userGuard userGuard" false (!= (create-user-guard (tm.ug "1")) (create-user-guard (tm.ug "1"))))
-;  (expect "!= userGuard userGuard" true (!= (create-user-guard (tm.ug "2")) (create-user-guard (tm.ug "1"))))
+"===== userGuard equality"
+(expect "= userGuard userGuard" true (= (create-user-guard (tm.ug "1")) (create-user-guard (tm.ug "1"))))
+(expect "not = userGuard userGuard" false (= (create-user-guard (tm.ug "2")) (create-user-guard (tm.ug "1"))))
+(expect "not != userGuard userGuard" false (!= (create-user-guard (tm.ug "1")) (create-user-guard (tm.ug "1"))))
+(expect "!= userGuard userGuard" true (!= (create-user-guard (tm.ug "2")) (create-user-guard (tm.ug "1"))))
 
 
 "===== bitwise"

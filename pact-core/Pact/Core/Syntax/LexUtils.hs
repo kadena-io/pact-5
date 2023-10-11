@@ -87,10 +87,11 @@ data Token
   | TokenDot
     -- Capabilities
   | TokenWithCapability
-  | TokenRequireCapability
-  | TokenComposeCapability
-  | TokenInstallCapability
-  | TokenEmitEvent
+  | TokenCreateUserGuard
+  -- | TokenRequireCapability
+  -- | TokenComposeCapability
+  -- | TokenInstallCapability
+  -- | TokenEmitEvent
   -- Operators
   -- | TokenEq
   -- | TokenNeq
@@ -215,7 +216,7 @@ primType i = \case
   "keyset" -> pure TyKeyset
   e -> throwParseError (InvalidBaseType e) i
 
-objType :: SpanInfo -> Text -> ParsedName -> ParserT Type
+objType :: SpanInfo -> Text -> ParsedTyName -> ParserT Type
 objType i t p = case t of
   "object" -> pure (TyObject p)
   "table" -> pure (TyTable p)
@@ -313,10 +314,11 @@ renderTokenText = \case
   TokenSuspend -> "suspend"
   TokenLoad -> "load"
   TokenWithCapability -> "with-capability"
-  TokenRequireCapability -> "require-capability"
-  TokenComposeCapability -> "compose-capability"
-  TokenInstallCapability -> "install-capability"
-  TokenEmitEvent -> "emit-event"
+  TokenCreateUserGuard -> "create-user-guard"
+  -- TokenRequireCapability -> "require-capability"
+  -- TokenComposeCapability -> "compose-capability"
+  -- TokenInstallCapability -> "install-capability"
+  -- TokenEmitEvent -> "emit-event"
 
 
 

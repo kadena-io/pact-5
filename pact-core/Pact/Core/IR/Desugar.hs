@@ -293,8 +293,8 @@ desugarLispTerm = \case
       Builtin b _ -> pure (desugarAppArity i b (h' :| hs'))
       _ -> pure (App e' (h' :| hs') i)
   Lisp.Operator bop i -> pure (desugarOperator i bop)
-  Lisp.DynAccess e fn i ->
-    DynInvoke <$> desugarLispTerm e <*> pure fn  <*> pure i
+  -- Lisp.DynAccess e fn i ->
+  --   DynInvoke <$> desugarLispTerm e <*> pure fn  <*> pure i
   Lisp.List e1 i ->
     ListLit <$> traverse desugarLispTerm e1 <*> pure i
   Lisp.Constant l i ->
@@ -308,14 +308,16 @@ desugarLispTerm = \case
   Lisp.CapabilityForm cf i -> (`CapabilityForm` i) <$> case cf of
     Lisp.WithCapability pn exs ex ->
       WithCapability pn <$> traverse desugarLispTerm exs <*> desugarLispTerm ex
-    Lisp.RequireCapability pn exs ->
-      RequireCapability pn <$> traverse desugarLispTerm exs
-    Lisp.ComposeCapability pn exs ->
-      ComposeCapability pn <$> traverse desugarLispTerm exs
-    Lisp.InstallCapability pn exs ->
-      InstallCapability pn <$> traverse desugarLispTerm exs
-    Lisp.EmitEvent pn exs ->
-      EmitEvent pn <$> traverse desugarLispTerm exs
+    Lisp.CreateUserGuard pn exs ->
+      CreateUserGuard pn <$> traverse desugarLispTerm exs
+    -- Lisp.RequireCapability pn exs ->
+    --   RequireCapability pn <$> traverse desugarLispTerm exs
+    -- Lisp.ComposeCapability pn exs ->
+    --   ComposeCapability pn <$> traverse desugarLispTerm exs
+    -- Lisp.InstallCapability pn exs ->
+    --   InstallCapability pn <$> traverse desugarLispTerm exs
+    -- Lisp.EmitEvent pn exs ->
+    --   EmitEvent pn <$> traverse desugarLispTerm exs
   where
   binderToLet i (Lisp.Binder n mty expr) term = do
     expr' <- desugarLispTerm expr
@@ -543,6 +545,7 @@ termSCC currM currDefns = \case
     QN (QualifiedName n' mn')
       | Set.member n' currDefns && mn' == currM -> Set.singleton n'
       | otherwise -> mempty
+    DN _ -> mempty
   Lam _ args e _ ->
     let currDefns' = foldl' (\s t -> Set.delete (_argName t) s) currDefns args
     in termSCC currM currDefns' e
@@ -564,7 +567,8 @@ termSCC currM currDefns = \case
     QN (QualifiedName n' mn')
       | Set.member n' currDefns && mn' == currM -> Set.singleton n'
       | otherwise -> Set.singleton n'
-  DynInvoke m _ _ -> termSCC currM currDefns m
+    DN _ -> mempty
+  -- DynInvoke m _ _ -> termSCC currM currDefns m
   ObjectLit m _ -> foldMap (termSCC currM currDefns . view _2) m
   Error {} -> Set.empty
 
@@ -579,9 +583,9 @@ typeSCC currM currDefs = \case
   Lisp.TyModRef _ -> mempty
   Lisp.TyObject pn -> case pn of
     -- Todo: factor out, repeated in termSCC
-    BN bn | Set.member (_bnName bn) currDefs -> Set.singleton (_bnName bn)
+    TBN bn | Set.member (_bnName bn) currDefs -> Set.singleton (_bnName bn)
           | otherwise -> mempty
-    QN (QualifiedName n' mn')
+    TQN (QualifiedName n' mn')
       | Set.member n' currDefs && mn' == currM -> Set.singleton n'
       | otherwise -> mempty
   Lisp.TyKeyset -> mempty
@@ -590,9 +594,9 @@ typeSCC currM currDefs = \case
   Lisp.TyPolyObject -> mempty
   Lisp.TyTable pn ->  case pn of
     -- Todo: factor out, repeated in termSCC
-    BN bn | Set.member (_bnName bn) currDefs -> Set.singleton (_bnName bn)
+    TBN bn | Set.member (_bnName bn) currDefs -> Set.singleton (_bnName bn)
           | otherwise -> mempty
-    QN (QualifiedName n' mn')
+    TQN (QualifiedName n' mn')
       | Set.member n' currDefs && mn' == currM -> Set.singleton n'
       | otherwise -> mempty
 
@@ -810,7 +814,7 @@ renameType i = \case
     throwDesugarError (UnsupportedType "time") i
   where
   resolveSchema = \case
-    BN bn ->
+    TBN bn ->
       view reCurrModule >>= \case
         Just currM -> do
           rs <- use rsModuleBinds
@@ -818,7 +822,7 @@ renameType i = \case
             Just (_, DKDefSchema sc) -> pure sc
             _ -> error "no schema with required name - bare"
         _ -> error "schema lives outside a module"
-    QN qn -> do
+    TQN qn -> do
       let currM = _qnModName qn
       rs <- use rsModuleBinds
       case rs ^? ix currM . ix (_qnName qn)  of
@@ -877,8 +881,8 @@ renameTerm (Constant l i) =
   pure (Constant l i)
 renameTerm (ListLit v i) = do
   ListLit <$> traverse renameTerm v <*> pure i
-renameTerm (DynInvoke te t i) =
-  DynInvoke <$> renameTerm te <*> pure t <*> pure i
+-- renameTerm (DynInvoke te t i) =
+--   DynInvoke <$> renameTerm te <*> pure t <*> pure i
 renameTerm (Try e1 e2 i) = do
   Try <$> renameTerm e1 <*> renameTerm e2 <*> pure i
 renameTerm (CapabilityForm cf i) =
@@ -886,44 +890,46 @@ renameTerm (CapabilityForm cf i) =
     Just mn -> case view capFormName cf of
       QN qn
         | _qnModName qn == mn -> do
-          (n', dk) <- resolveQualified qn i
-          when (dk /= DKDefCap) $ throwDesugarError (InvalidCapabilityReference (_qnName qn)) i
+          (n', _dk) <- resolveQualified qn i
+          -- when (dk /= DKDefCap) $ throwDesugarError (InvalidCapabilityReference (_qnName qn)) i
           let cf' = set capFormName n' cf
           checkCapForm cf'
           CapabilityForm <$> traverse renameTerm cf' <*> pure i
         | otherwise -> throwDesugarError (CapabilityOutOfScope (_qnName qn) (_qnModName qn)) i
       BN bn -> do
-        (n', dk) <- resolveQualified (QualifiedName (_bnName bn) mn) i
-        when (dk /= DKDefCap) $ throwDesugarError (InvalidCapabilityReference (_bnName bn)) i
+        (n', _dk) <- resolveQualified (QualifiedName (_bnName bn) mn) i
+        -- when (dk /= DKDefCap) $ throwDesugarError (InvalidCapabilityReference (_bnName bn)) i
         let cf' = set capFormName n' cf
         checkCapForm cf'
+        CapabilityForm <$> traverse renameTerm cf' <*> pure i
+      DN dn -> do
+        n' <- resolveDynamic i dn
+        let cf' = set capFormName n' cf
         CapabilityForm <$> traverse renameTerm cf' <*> pure i
     Nothing -> do
       checkCapFormNonModule cf
       let n = view capFormName cf
-      (n', declty) <- resolveName i n
-      case declty of
-        Just DKDefCap -> do
-          let cf' = set capFormName n' cf
-          CapabilityForm <$> traverse renameTerm cf' <*> pure i
-        _ -> throwDesugarError (InvalidCapabilityReference (_nName n')) i
+      (n', _declty) <- resolveName i n
+      -- case declty of
+      --   Just DKDefCap -> do
+      let cf' = set capFormName n' cf
+      CapabilityForm <$> traverse renameTerm cf' <*> pure i
+        -- _ -> throwDesugarError (InvalidCapabilityReference (_nName n')) i
     where
     checkCapFormNonModule = \case
-      InstallCapability{} -> pure ()
+      -- InstallCapability{} -> pure ()
       WithCapability{} -> throwDesugarError (NotAllowedOutsideModule "with-capability") i
-      RequireCapability{} -> throwDesugarError (NotAllowedOutsideModule "require-capability") i
-      ComposeCapability{} -> throwDesugarError (NotAllowedOutsideModule "compose-capability") i
-      EmitEvent{} -> throwDesugarError (NotAllowedOutsideModule "emit-event") i
+      -- RequireCapability{} -> throwDesugarError (NotAllowedOutsideModule "require-capability") i
+      -- ComposeCapability{} -> throwDesugarError (NotAllowedOutsideModule "compose-capability") i
+      -- EmitEvent{} -> throwDesugarError (NotAllowedOutsideModule "emit-event") i
       CreateUserGuard{} -> pure ()
     checkCapForm = \case
       WithCapability{} -> enforceNotWithinDefcap i "with-capability"
-      InstallCapability{} -> enforceNotWithinDefcap i "install-capability"
+      -- InstallCapability{} -> enforceNotWithinDefcap i "install-capability"
       _ -> pure ()
 renameTerm (Error e i) = pure (Error e i)
 renameTerm (ObjectLit o i) =
   ObjectLit <$> (traverse._2) renameTerm o <*> pure i
--- renameTerm (ObjectOp o i) =
---   ObjectOp <$> traverse renameTerm o <*> pure i
 
 enforceNotWithinDefcap
   :: (MonadRenamer b i m)
@@ -1077,6 +1083,23 @@ resolveName
 resolveName i = \case
   BN b -> resolveBare b i
   QN q -> over _2 Just <$> resolveQualified q i
+  DN dn -> (, Nothing) <$> resolveDynamic i dn
+
+resolveDynamic
+  :: (MonadRenamer b i m)
+  => i
+  -> DynamicName
+  -> m (Name)
+resolveDynamic i (DynamicName dn dArg) = views reBinds (M.lookup dn) >>= \case
+  Just tnk -> case tnk of
+    (NBound d, _) -> do
+      depth <- view reVarDepth
+      let dbjIx = depth - d - 1
+          dr = NDynRef (DynamicRef dArg dbjIx)
+      pure (Name dn dr)
+    _ -> error "dynamic names cannot be unbound"
+  Nothing ->
+    throwDesugarError (UnboundTermVariable dn) i
 
 -- not in immediate binds, so it must be in the module
 -- Todo: resolve module ref within this model

@@ -18,7 +18,7 @@ import Control.Monad.Except
 import Control.Monad.IO.Class(liftIO)
 import Data.Text(Text)
 import Data.Proxy
--- import Data.Maybe(mapMaybe)
+import Data.Default
 import qualified Data.Map.Strict as M
 -- import qualified Data.Set as Set
 import qualified Data.ByteString as B
@@ -34,14 +34,12 @@ import Pact.Core.Errors
 import Pact.Core.IR.Term
 import Pact.Core.Compile
 import Pact.Core.Interpreter
-import Pact.Core.PactValue
 import Pact.Core.Environment
 
 
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Repl.Runtime
 import Pact.Core.Repl.Runtime.ReplBuiltin
-import Pact.Core.Hash
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
@@ -82,51 +80,42 @@ interpretReplProgram sc@(SourceCode source) = do
       pure <$> pipe' pactdb rtl
     Lisp.RTLReplSpecial rsf -> case rsf of
       Lisp.ReplLoad txt b _ -> do
-        oldLoaded <- use replCurrSource
-        when b $ replLoaded .= mempty
+        oldSrc <- use replCurrSource
+        oldEs <- use evalState
+        when b $ evalState .= def
         out <- loadFile (T.unpack txt)
-        replCurrSource .= oldLoaded
+        evalState .= oldEs
+        replCurrSource .= oldSrc
         pure out
   pipe' pactdb tl = do
     debugIfLispExpr tl
-    lastLoaded <- use replLoaded
+    lastLoaded <- use loaded
     ds <- runDesugarReplTopLevel (Proxy @ReplRawBuiltin) pactdb lastLoaded tl
     debugIfIRExpr ReplDebugDesugar (_dsOut ds)
-    replLoaded .= _dsLoaded ds
+    loaded .= _dsLoaded ds
     interpret ds
   interpret (DesugarOutput tl _ deps) = do
     pdb <- use replPactDb
-    lo <- use replLoaded
-    ps <- use (replEvalState . esPactExec)
+    lo <- use loaded
+    ee <- use replEvalEnv
     case tl of
       RTLTopLevel tt -> do
         let interp = Interpreter interpreter
         RCompileValue <$> interpretTopLevel pdb interp (DesugarOutput tt lo deps)
         where
+        -- interpreter :: EvalTerm (ReplBuiltin RawBuiltin) SpanInfo -> ReplM ReplRawBuiltin InterpretValue
         interpreter te = do
           let i = view termInfo te
           evalGas <- use replGas
           evalLog <- use replEvalLog
+          es <- use replEvalState
           -- todo: cache?
-          -- mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
+          -- mhashes <- uses (loaded . loModules) (fmap (view mdModuleHash))
           let rEnv = ReplEvalEnv evalGas evalLog replBuiltinEnv
-              evalEnv = EvalEnv
-                    { _eeMsgSigs = mempty
-                    , _eeMsgBody = EnvData mempty
-                    , _eePactDb = pdb
-                    , _eeHash = Hash mempty
-                    -- , _eePactStep = Nothing
-                    }
-              evalState = EvalState
-                       { _esCaps = CapState [] mempty mempty
-                       , _esStack = []
-                       , _esEvents = []
-                       , _esInCap = False
-                       , _esLoaded = lo
-                       , _esPactExec = ps
-                       }
-              rState = ReplEvalState evalEnv evalState sc
+              rState = ReplEvalState ee es sc
           (out, st) <- liftIO (runReplCEK rEnv rState te)
+          evalState .= view reState st
+          replEvalEnv .= view reEnv st
           liftEither out >>= \case
             VError txt ->
               throwError (PEExecutionError (EvalError txt) i)
@@ -138,13 +127,12 @@ interpretReplProgram sc@(SourceCode source) = do
                   pure IPClosure
                 VTable tv -> pure (IPTable (_tvName tv))
                 VPactValue pv -> do
-                  replLoaded .= lo
                   pure (IPV pv (view termInfo te))
       RTLDefun df -> do
         let fqn = FullyQualifiedName replModuleName (_dfunName df) replModuleHash
-        replLoaded . loAllLoaded %= M.insert fqn (Dfun df)
+        loaded . loAllLoaded %= M.insert fqn (Dfun df)
         pure $ RLoadedDefun $ _dfunName df
       RTLDefConst dc -> do
         let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
-        replLoaded . loAllLoaded %= M.insert fqn (DConst dc)
+        loaded . loAllLoaded %= M.insert fqn (DConst dc)
         pure $ RLoadedDefConst $ _dcName dc
