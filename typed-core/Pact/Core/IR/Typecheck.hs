@@ -1195,17 +1195,6 @@ checkTermType checkty = \case
     (_, err', p1) <- checkTermType checkty errcase
     (_, body', p2) <- checkTermType checkty bodycase
     pure (checkty, Typed.Try err' body' i, p1 ++ p2)
-  IR.DynInvoke mref fn i -> do
-    (tmref, mref', preds) <- inferTerm mref
-    case tmref of
-      TyModRef m -> view (tcModules . at m) >>= \case
-        Just (InterfaceData iface _) -> case IR.findIfDef fn iface of
-          Just (IR.IfDfun (IR.IfDefun _name irArgs irMRet _info)) -> do
-            unifyFun checkty irArgs irMRet i
-            pure (checkty, Typed.DynInvoke mref' fn i, preds)
-          _ -> error "boom"
-        _ -> error "boom"
-      _ -> error "boom"
   IR.Error txt i -> pure (checkty, Typed.Error checkty txt i, [])
   IR.ObjectLit{} -> error "TODO" -- TODO new ctor
 
@@ -1374,17 +1363,6 @@ inferTerm = \case
     (te2, e2', p2)<- inferTerm e2
     unify te1 te2 i
     pure (te1, Typed.Try e1' e2' i, p1 ++ p2)
-  IR.DynInvoke mref fn i -> do
-    (tmref, mref', preds) <- inferTerm mref
-    case tmref of
-      TyModRef m -> view (tcModules . at m) >>= \case
-        Just (InterfaceData iface _) -> case IR.findIfDef fn iface of
-          Just (IR.IfDfun df) -> do
-            (args, ret) <- irFunToTc (IR._ifdArgs df) (IR._ifdRType df)
-            pure (argListToTyFun args ret, Typed.DynInvoke mref' fn i, preds)
-          _ -> error "boom"
-        _ -> error "boom"
-      _ -> error "boom"
   IR.Error e i -> do
     ty <- TyVar <$> newTvRef
     pure (ty, Typed.Error ty e i, [])
