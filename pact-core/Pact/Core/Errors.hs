@@ -266,6 +266,7 @@ data EvalError
   | CannotApplyPartialClosure
   | ClosureAppliedToTooManyArgs
   | FormIllegalWithinDefcap Text
+  | RunTimeTypecheckFailure 
   deriving Show
 
 instance Pretty EvalError where

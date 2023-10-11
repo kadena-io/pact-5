@@ -520,10 +520,10 @@ returnCEK
 returnCEK Mt handler v =
   case handler of
     CEKNoHandler -> return v
-    CEKHandler env term cont' caps handler' -> case v of
+    CEKHandler env catchTerm cont' caps handler' -> case v of
       VError{} -> do
         setEvalState (esCaps . csSlots) caps
-        evalCEK cont' handler' env term
+        evalCEK cont' handler' env catchTerm
       EvalValue v' ->
         returnCEKValue cont' handler' v'
 returnCEK cont handler v = case v of
@@ -549,6 +549,7 @@ returnCEKValue Mt handler v =
 --   returnCEK Mt handler v
 returnCEKValue (Args env i (x :| xs) cont) handler fn = do
   c <- canApply fn
+  -- Argument evaluation
   let cont' = Fn c env xs [] cont
   evalCEK cont' handler env x
   where
@@ -558,8 +559,9 @@ returnCEKValue (Args env i (x :| xs) cont) handler fn = do
     VClosure (LC clo) -> pure (LC clo)
     VClosure (N clo) -> pure (N clo)
     VClosure (CT clo) -> pure (CT clo)
-    _ ->
+    VClosure _ ->
       throwExecutionError i CannotApplyPartialClosure
+    _ -> failInvariant i "Cannot apply non-function to arguments"
   -- evalCEK (Fn fn cont) handler env arg
 returnCEKValue (Fn fn env args vs cont) handler v = do
   case args of
@@ -567,8 +569,8 @@ returnCEKValue (Fn fn env args vs cont) handler v = do
       applyLam fn (reverse (v:vs)) cont handler
     x:xs ->
       evalCEK (Fn fn env xs (v:vs) cont) handler env x
-returnCEKValue (LetC env term cont) handler v = do
-  evalCEK cont handler (over ceLocal (RAList.cons v) env) term
+returnCEKValue (LetC env letbody cont) handler v = do
+  evalCEK cont handler (over ceLocal (RAList.cons v) env) letbody
 returnCEKValue (SeqC env e cont) handler _ =
   evalCEK cont handler env e
 returnCEKValue (CondC env info frame cont) handler v = case v of
@@ -597,9 +599,9 @@ returnCEKValue (CapInvokeC env info terms pvs cf cont) handler v = do
         evalCap info cont handler env (CapToken fqn (reverse (pv:pvs))) wcbody
       CreateUserGuardFrame fqn ->
         createUserGuard cont handler fqn (reverse (pv:pvs))
-returnCEKValue (CapBodyC env term cont) handler _ = do
+returnCEKValue (CapBodyC env capbody cont) handler _ = do
   let cont' = CapPopC PopCapInvoke cont
-  evalCEK cont' handler env term
+  evalCEK cont' handler env capbody
 returnCEKValue (CapPopC st cont) handler v = case st of
   PopCapInvoke -> do
     -- todo: need safe tail here, but this should be fine given the invariant that `CapPopC`

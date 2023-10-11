@@ -222,18 +222,21 @@ instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
     App (Builtin (RBuiltinRepl RExpect) i) (e1 :| [e2, suspendTerm e3]) i
   desugarAppArity i (RBuiltinRepl RExpectFailure) (e1 :| [e2]) | isn't _Lam e2 =
     App (Builtin (RBuiltinRepl RExpectFailure) i) (e1 :| [suspendTerm e2]) i
+  desugarAppArity i (RBuiltinRepl RExpectFailure) (e1 :| [e2, e3]) | isn't _Lam e2 =
+    App (Builtin (RBuiltinRepl RExpectFailureMatch) i) (e1 :| [e2, suspendTerm e3]) i
   desugarAppArity i b ne =
     App (Builtin b i) ne i
 
 throwDesugarError :: MonadError (PactError i) m => DesugarError -> i -> m a
 throwDesugarError de = throwError . PEDesugarError de
 
--- pattern Bind i = Lisp.Var (BN (BareName "bind")) i
-
--- pattern WithRead i = Lisp.Var (BN (BareName "with-read")) i
-
--- pattern WithDefaultRead i = Lisp.Var (BN (BareName "with-read")) i
-
+-- Really ugly hack because
+-- of inconsistent old prod pact syntax :)))))))
+pattern HigherOrderApp :: Text -> i -> Text -> i -> [Lisp.Expr i] -> i -> i -> Lisp.Expr i
+pattern HigherOrderApp fnCaller ci fnCallee fi xs ai unused =
+  Lisp.App (Lisp.Var (BN (BareName fnCaller)) ci)
+    (Lisp.App (Lisp.Var (BN (BareName fnCallee)) unused) [] fi :   xs)
+    ai
 
 desugarLispTerm
   :: forall raw reso i m
@@ -241,6 +244,14 @@ desugarLispTerm
   => Lisp.Expr i
   -> m (Term ParsedName DesugarType raw i)
 desugarLispTerm = \case
+  HigherOrderApp fnCaller ci fnCallee fi xs ai _
+    | fnCaller `elem` specialCallsiteFns -> do
+      caller <- desugarLispTerm (Lisp.Var (BN (BareName fnCaller)) ci)
+      callee <- desugarLispTerm $ Lisp.Var (BN (BareName fnCallee)) fi
+      xs' <- traverse desugarLispTerm xs
+      pure (App caller (callee :| xs') ai)
+    where
+    specialCallsiteFns = ["map", "fold", "zip"]
   Lisp.Var (BN n) i  ->
     case M.lookup (_bnName n) reservedNatives' of
       Just b -> pure (Builtin b i)

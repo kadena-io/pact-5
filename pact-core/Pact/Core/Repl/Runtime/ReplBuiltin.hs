@@ -87,6 +87,14 @@ coreExpectFailure = \info b cont handler _env -> \case
         returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
       Right _ ->
         returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result"
+  [VString desc, VString toMatch, VClosure vclo] -> do
+    tryError (unsafeApplyOne vclo (VLiteral LUnit)) >>= \case
+      Right (VError _e) ->
+        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
+      Left _err -> do
+        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
+      Right _ ->
+        returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result"
   args -> argsError info b args
 
 coreEnvStackFrame :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
@@ -250,6 +258,7 @@ replRawBuiltinRuntime = \case
   RBuiltinRepl br -> case br of
     RExpect -> rawExpect
     RExpectFailure -> coreExpectFailure
+    RExpectFailureMatch -> coreExpectFailure
     RExpectThat -> coreExpectThat
     RPrint -> corePrint
     REnvStackFrame -> coreEnvStackFrame

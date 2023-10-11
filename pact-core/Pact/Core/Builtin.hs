@@ -481,6 +481,7 @@ rawBuiltinMap = M.fromList $ (\b -> (rawBuiltinToText b, b)) <$> [minBound .. ma
 data ReplBuiltins
   = RExpect
   | RExpectFailure
+  | RExpectFailureMatch
   | RExpectThat
   | RPrint
   | REnvStackFrame
@@ -526,6 +527,7 @@ instance IsBuiltin ReplBuiltins where
   builtinArity = \case
     RExpect -> 3
     RExpectFailure -> 2
+    RExpectFailureMatch -> 3
     RExpectThat -> 3
     RPrint -> 1
     REnvStackFrame -> 1
@@ -584,6 +586,7 @@ replBuiltinsToText :: ReplBuiltins -> Text
 replBuiltinsToText = \case
   RExpect -> "expect"
   RExpectFailure -> "expect-failure"
+  RExpectFailureMatch -> "expect-failure-match"
   RExpectThat -> "expect-that"
   RPrint -> "print"
   REnvStackFrame -> "env-stackframe"

@@ -49,7 +49,7 @@ runReplTest file src = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
   pdb <- mockPactDb
-  let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def
+  let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Transactional
   let rstate = ReplState
             { _replFlags =  mempty
             , _replEvalState = def
@@ -58,6 +58,7 @@ runReplTest file src = do
             , _replEvalLog = gasLog
             , _replCurrSource = SourceCode mempty
             , _replEvalEnv = ee
+            , _replTx = Nothing
             }
   stateRef <- newIORef rstate
   runReplT stateRef (interpretReplProgram (SourceCode src)) >>= \case

@@ -164,7 +164,7 @@ typecheckArgument pv ty = case (pv, checkPvType ty pv) of
     | _mrRefined mr == Nothing -> pure (PModRef (mr & mrRefined ?~ m))
     | otherwise -> pure (PModRef mr)
   (_, Just _) -> pure pv
-  (_, Nothing) -> error $ "runtime tc error" <> show (pv, ty)
+  (_, Nothing) -> failInvariant def "runtime TC error"
 
 maybeTCType :: (MonadEval b i m) => PactValue -> Maybe Type -> m PactValue
 maybeTCType pv = maybe (pure pv) (typecheckArgument pv)
