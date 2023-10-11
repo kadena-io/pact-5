@@ -1139,6 +1139,7 @@ checkTermType checkty = \case
       (tes', p1) <- checkCapArgs na tes
       (ty', te', p2) <- checkTermType checkty te
       pure (ty', WithCapability na tes' te', p1 ++ p2)
+        {- TODO commented out in IR
     RequireCapability na tes -> do
       unify checkty TyUnit i
       (tes', p1) <- checkCapArgs na tes
@@ -1155,6 +1156,7 @@ checkTermType checkty = \case
       unify checkty TyUnit i
       (tes', p1) <- checkCapArgs na tes
       pure (TyUnit, EmitEvent na tes', p1)
+      -}
     -- TODO: Enforce `na` is a name of a dfun and not a dcap
     -- as a matter of fact, the whole above block needs the same enforcement just
     -- for dfuns
@@ -1306,6 +1308,7 @@ inferTerm = \case
       (tes', p1) <- checkCapArgs na tes
       (ty', te', p2) <- inferTerm te
       pure (ty', WithCapability na tes' te', p1 ++ p2)
+        {- TODO commented out in IR
     RequireCapability na tes -> do
       (tes', p1) <- checkCapArgs na tes
       pure (TyUnit, RequireCapability na tes', p1)
@@ -1318,6 +1321,7 @@ inferTerm = \case
     EmitEvent na tes -> do
       (tes', p1) <- checkCapArgs na tes
       pure (TyUnit, EmitEvent na tes', p1)
+      -}
     CreateUserGuard na tes -> do
       (tes', p1) <- checkCapArgs na tes
       pure (TyGuard, CreateUserGuard na tes', p1)
