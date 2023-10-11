@@ -129,9 +129,7 @@ RTL :: { ReplSpecialTL SpanInfo }
   | '(' ReplSpecial ')' { RTLReplSpecial  ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
 ReplTopLevel :: { ParsedReplTopLevel }
-  : Module { RTLModule $1 }
-  | Interface { RTLInterface $1 }
-  | Use { RTLTopLevel (uncurry TLUse $1) }
+  : TopLevel { RTLTopLevel $1 }
   | '(' Defun ')' { RTLDefun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefConst ')' { RTLDefConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | Expr { RTLTerm $1 }
