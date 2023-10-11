@@ -357,6 +357,37 @@ instance TypeOfBuiltin RawBuiltin where
     RawSortObject -> error "sort object TODO" -- TODO
     RawContains -> error "contains TODO" -- TODO
     RawRemove -> error "remove TODO" -- TODO
+    RawStrToIntBase -> error "strtoint base"
+    RawBind -> error "bind"
+    RawRequireCapability -> error "require cap"
+    RawComposeCapability -> error "compose cap"
+    RawInstallCapability -> error "install cap"
+    RawEmitEvent -> error "emit event"
+    RawCreateCapabilityGuard -> error "create cap guard"
+    RawCreateModuleGuard -> error "create mod guard"
+    RawCreateTable -> error "create table"
+    RawDescribeKeyset -> error "descr keyset"
+    RawDescribeModule -> error "descr module"
+    RawDescribeTable -> error "descr table"
+    RawDefineKeySet -> error "define keyset"
+    RawDefineKeysetData -> error "define keyset data"
+    RawFoldDb -> error "fold db"
+    RawInsert -> error "insert"
+    RawKeyLog -> error "keylog"
+    RawKeys -> error "keys"
+    RawRead -> error "read"
+    RawSelect -> error "select"
+    RawUpdate -> error "update"
+    RawWithDefaultRead -> error "with default read"
+    RawWithRead -> error "with read"
+    RawWrite -> error "write"
+    RawTxIds -> error "txids"
+    RawTxLog -> error "txlog"
+    RawAndQ -> error "andq"
+    RawOrQ -> error "orq"
+    RawWhere -> error "where"
+    RawNotQ -> error "notq"
+    RawHash -> error "hash"
     where
     nd b a = NamedDeBruijn a b
     unaryNumType =
@@ -397,8 +428,8 @@ instance TypeOfBuiltin RawBuiltin where
       in TypeScheme [aVar] [Pred ListLike a] (TyInt :~> a :~> a)
 
 instance TypeOfBuiltin b => TypeOfBuiltin (ReplBuiltin b) where
-  typeOfBuiltin = \case
-    RBuiltinWrap b -> typeOfBuiltin b
+  typeOfBuiltin (RBuiltinWrap b) = typeOfBuiltin b
+  typeOfBuiltin (RBuiltinRepl rb) = case rb of
     RExpect -> let
       aVar = nd "a" 0
       aTv = TyVar aVar
@@ -415,6 +446,7 @@ instance TypeOfBuiltin b => TypeOfBuiltin (ReplBuiltin b) where
       aVar = nd "a" 0
       aTv = TyVar aVar
       in TypeScheme [aVar] [Pred Show aTv] (aTv :~> TyUnit)
+    r -> error $ "TODO repl builtin " <> show r
     where
     nd b a = NamedDeBruijn a b
 
