@@ -51,9 +51,9 @@ main = do
   pdb <- mockPactDb
   g <- newIORef mempty
   evalLog <- newIORef Nothing
-  let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def
+  let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Transactional
       es = EvalState (CapState [] mempty mempty mempty)  [] [] False mempty
-  ref <- newIORef (ReplState mempty pdb es ee g evalLog (SourceCode mempty))
+  ref <- newIORef (ReplState mempty pdb es ee g evalLog (SourceCode mempty) Nothing)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
@@ -119,9 +119,11 @@ main = do
             eout <- lift (tryError (interpretReplProgram (SourceCode (T.encodeUtf8 src))))
             case eout of
               Right out -> traverse_ displayOutput out
-              Left err -> let
-                rs = ReplSource "(interactive)" input
-                in outputStrLn (T.unpack (replError rs err))
+              Left err -> do
+                SourceCode currSrc <- lift (use replCurrSource)
+                let srcText = T.decodeUtf8 currSrc
+                let rs = ReplSource "(interactive)" srcText
+                outputStrLn (T.unpack (replError rs err))
             loop
 
 -- tryError :: MonadError a m => m b -> m (Either a b)

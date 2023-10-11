@@ -27,19 +27,19 @@ import Data.Default
 
 
 import Pact.Core.Pretty
-import Pact.Core.Names ( ModuleName, FullyQualifiedName )
+import Pact.Core.Names
 import Pact.Core.Hash
 
 data DefManagedMeta name
   = DefManagedMeta
   { _dmManagedArgIx :: Int
-  , _dmManagerFn :: name
-  } deriving (Show, Functor, Foldable, Traversable)
+  , _dmManagerFn :: FQNameRef name
+  } deriving (Show)
 
 data DefCapMeta name
   = DefEvent
   | DefManaged (Maybe (DefManagedMeta name))
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Show)
 
 data CapForm name e
   = WithCapability name [e] e

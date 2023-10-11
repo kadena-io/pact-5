@@ -21,11 +21,9 @@ import Data.Text(Text)
 import Data.Proxy
 import Data.Default
 import qualified Data.Map.Strict as M
--- import qualified Data.Set as Set
 import qualified Data.ByteString as B
 import qualified Data.Text as T
 
--- import Pact.Core.Info
 import Pact.Core.Persistence
 import Pact.Core.Builtin
 import Pact.Core.Names
@@ -37,14 +35,12 @@ import Pact.Core.Compile
 import Pact.Core.Interpreter
 import Pact.Core.PactValue
 import Pact.Core.Environment
-import Pact.Core.Capabilities
 
 
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Repl.Runtime
 import Pact.Core.Repl.Runtime.ReplBuiltin
 import Pact.Core.Hash
-import Pact.Core.Info
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
@@ -64,15 +60,18 @@ loadFile loc = do
   replCurrSource .= source
   interpretReplProgram source
 
+defaultEvalEnv :: PactDb b i -> EvalEnv b i
+defaultEvalEnv pdb =
+  EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Transactional
+
 interpretReplProgram
   :: SourceCode
   -> ReplM ReplRawBuiltin [ReplCompileValue]
 interpretReplProgram sc@(SourceCode source) = do
-  pactdb <- use replPactDb
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ Lisp.parseReplProgram lexx
-  concat <$> traverse (pipe pactdb) parsed
+  concat <$> traverse pipe parsed
   where
   debugIfLispExpr = \case
     Lisp.RTLTerm t -> debugIfFlagSet ReplDebugParser t
@@ -80,19 +79,32 @@ interpretReplProgram sc@(SourceCode source) = do
   debugIfIRExpr flag = \case
     RTLTerm t -> debugIfFlagSet flag t
     _ -> pure ()
-  pipe pactdb = \case
+  pipe = \case
     Lisp.RTL rtl ->
-      pure <$> pipe' pactdb rtl
+      pure <$> pipe' rtl
     Lisp.RTLReplSpecial rsf -> case rsf of
-      Lisp.ReplLoad txt b _ -> do
-        oldSrc <- use replCurrSource
-        oldEs <- use evalState
-        when b $ evalState .= def
-        out <- loadFile (T.unpack txt)
-        evalState .= oldEs
-        replCurrSource .= oldSrc
-        pure out
-  pipe' pactdb tl = do
+      Lisp.ReplLoad txt b _
+        | b -> do
+          oldSrc <- use replCurrSource
+          evalState .= def
+          pactdb <- liftIO mockPactDb
+          replPactDb .= pactdb
+          replEvalEnv .= defaultEvalEnv pactdb
+          out <- loadFile (T.unpack txt)
+          replCurrSource .= oldSrc
+          pure out
+        | otherwise -> do
+          oldSrc <- use replCurrSource
+          oldEs <- use evalState
+          oldEE <- use replEvalEnv
+          when b $ evalState .= def
+          out <- loadFile (T.unpack txt)
+          replEvalEnv .= oldEE
+          evalState .= oldEs
+          replCurrSource .= oldSrc
+          pure out
+  pipe' tl = do
+    pactdb <- use replPactDb
     debugIfLispExpr tl
     lastLoaded <- use loaded
     ds <- runDesugarReplTopLevel (Proxy @ReplRawBuiltin) pactdb lastLoaded tl
@@ -114,11 +126,13 @@ interpretReplProgram sc@(SourceCode source) = do
           evalGas <- use replGas
           evalLog <- use replEvalLog
           es <- use replEvalState
+          tx <- use replTx
           -- todo: cache?
           -- mhashes <- uses (loaded . loModules) (fmap (view mdModuleHash))
           let rEnv = ReplEvalEnv evalGas evalLog replBuiltinEnv
-              rState = ReplEvalState ee es sc
+              rState = ReplEvalState ee es sc tx
           (out, st) <- liftIO (runReplCEK rEnv rState te)
+          replTx .= view reTx st
           evalState .= view reState st
           replEvalEnv .= view reEnv st
           liftEither out >>= \case

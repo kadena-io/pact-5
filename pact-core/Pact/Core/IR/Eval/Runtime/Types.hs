@@ -339,7 +339,7 @@ data CapPopState
 data Cont b i m
   = Fn (CanApply b i m) (CEKEnv b i m) [EvalTerm b i] [CEKValue b i m] (Cont b i m)
   -- ^ Continuation which evaluates arguments for a function to apply
-  | Args (CEKEnv b i m) (NonEmpty (EvalTerm b i)) (Cont b i m)
+  | Args (CEKEnv b i m) i (NonEmpty (EvalTerm b i)) (Cont b i m)
   -- ^ Continuation holding the arguments to evaluate in a function application
   | LetC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   -- ^ Let single-variable pushing
@@ -348,18 +348,17 @@ data Cont b i m
   -- ^ Sequencing expression, holding the next term to evaluate
   | ListC (CEKEnv b i m) [EvalTerm b i] [PactValue] (Cont b i m)
   -- ^ Continuation for list elements
-  | CondC (CEKEnv b i m) (CondFrame b i) (Cont b i m)
+  | CondC (CEKEnv b i m) i (CondFrame b i) (Cont b i m)
   -- ^ Continuation for conditionals with lazy semantics
   | ObjC (CEKEnv b i m) Field [(Field, EvalTerm b i)] [(Field, PactValue)] (Cont b i m)
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
-  | DynInvokeC (CEKEnv b i m) Text (Cont b i m)
-  -- ^ Continuation for dynamic invocation of `m::f`
   | CapInvokeC (CEKEnv b i m) [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
   -- ^ Capability special form frams that eva
   | CapBodyC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   | CapPopC CapPopState (Cont b i m)
   | StackPopC (Maybe Type) (Cont b i m)
   | Mt
+  -- ^ Empty Continuation
   deriving Show
 
 

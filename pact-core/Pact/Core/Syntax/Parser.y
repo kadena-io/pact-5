@@ -139,9 +139,9 @@ ReplSpecial :: { SpanInfo -> ReplSpecialForm SpanInfo }
   : load STR BOOLEAN { ReplLoad (getStr $2) $3 }
   | load STR { ReplLoad (getStr $2) False }
 
-Governance :: { Governance Text }
+Governance :: { Governance ParsedName }
   : StringRaw { KeyGov (KeySetName $1)}
-  | IDENT { CapGov (getIdent $1) }
+  | IDENT { CapGov (UnresolvedGov (BN (BareName (getIdent $1)))) }
 
 StringRaw :: { Text }
  : STR  { getStr $1 }
@@ -407,8 +407,8 @@ CapExpr :: { SpanInfo -> ParsedExpr }
   : CapForm { CapabilityForm $1 }
 
 CapForm :: { CapForm SpanInfo }
-  : withcap '(' ParsedName AppList ')' Block { WithCapability $3 $4 $6 }
-  | c_usr_grd '(' ParsedName AppList ')' { CreateUserGuard $3 $4}
+  : withcap '(' ParsedName AppList ')' Block { WithCapability $3 (reverse $4) $6 }
+  | c_usr_grd '(' ParsedName AppList ')' { CreateUserGuard $3 (reverse $4)}
   -- | installcap '(' ParsedName AppList ')' { InstallCapability $3 $4 }
   -- | reqcap '(' ParsedName AppList ')' { RequireCapability $3 $4 }
   -- | composecap '(' ParsedName AppList ')' { ComposeCapability $3 $4 }
@@ -481,6 +481,7 @@ BOOLEAN :: { Bool }
 Var :: { ParsedExpr }
   : IDENT '.' ModQual  { Var (QN (mkQualName (getIdent $1) $3)) (_ptInfo $1) }
   | IDENT { Var (BN (mkBarename (getIdent $1))) (_ptInfo $1) }
+  | IDENT '::' IDENT { Var (DN (DynamicName (getIdent $1) (getIdent $3))) (_ptInfo $1) }
 
 ParsedName :: { ParsedName }
   : IDENT '.' ModQual { QN (mkQualName (getIdent $1) $3) }

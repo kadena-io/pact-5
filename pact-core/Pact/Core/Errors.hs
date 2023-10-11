@@ -28,6 +28,7 @@ import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Info
 import Pact.Core.Pretty(Pretty(..))
+import Pact.Core.Hash
 import Pact.Core.Persistence
 
 import qualified Pact.Core.Pretty as Pretty
@@ -131,6 +132,8 @@ data DesugarError
   | InvalidModuleReference ModuleName
   -- ^ Invalid: Interface used as module reference
   | EmptyBindingBody
+  | ExpectedFreeVariable Text
+  -- ^ Expected free variable
   deriving Show
 
 instance Exception DesugarError
@@ -183,6 +186,8 @@ instance Pretty DesugarError where
     InvalidModuleReference mn ->
       Pretty.hsep ["Invalid Interface attempted to be used as module reference:", pretty mn]
     EmptyBindingBody -> "Bind expression lacks an accompanying body"
+    ExpectedFreeVariable t ->
+      Pretty.hsep ["Expected free variable in expression, found locally bound: ", pretty t]
 
 -- data TypecheckError
 --   = UnificationError (Type Text) (Type Text)
@@ -291,7 +296,17 @@ data EvalError
   -- ^ No such keyset
   | CannotUpgradeInterface ModuleName
   -- ^ Interface cannot be upgrade
+  | ModuleGovernanceFailure ModuleName
+  -- ^ Failed to acquire module governance
   | DbOpFailure DbOpException
+  -- ^ DynName is not a module ref
+  | DynNameIsNotModRef Text
+  | ModuleDoesNotExist ModuleName
+  | ExpectedModule ModuleName
+  -- ^ Module does not exist
+  | HashNotBlessed ModuleName ModuleHash
+  | CannotApplyPartialClosure
+  | ClosureAppliedToTooManyArgs
   deriving Show
 
 instance Pretty EvalError where
@@ -321,7 +336,7 @@ instance Pretty EvalError where
       Pretty.hsep ["Native evaluation error for native", pretty n <> ",", "received incorrect argument(s) of type(s)", Pretty.commaSep tys]
     EvalError txt ->
       Pretty.hsep ["Program encountered an unhandled raised error:", pretty txt]
-    _ -> error "todo: render"
+    e -> pretty (show e)
 
 
 

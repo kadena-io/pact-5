@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE GADTs #-}
 
 
 module Pact.Core.Guards
@@ -11,6 +12,7 @@ module Pact.Core.Guards
 , CapabilityGuard(..)
 , KSPredicate(..)
 , ModuleGuard(..)
+, CapGovRef(..)
 )
 where
 
@@ -22,13 +24,25 @@ import Pact.Core.Names
 newtype PublicKeyText = PublicKeyText { _pubKey :: Text }
   deriving (Eq,Ord,Show)
 
-newtype KeySetName = KeySetName Text
+newtype KeySetName = KeySetName { _keysetName :: Text }
     deriving (Eq,Ord,Show)
 
 data Governance name
   = KeyGov KeySetName
-  | CapGov name
-  deriving (Eq, Show, Functor, Foldable, Traversable)
+  | CapGov (CapGovRef name)
+  deriving (Eq, Show)
+
+data CapGovRef name where
+  UnresolvedGov :: ParsedName -> CapGovRef ParsedName
+  ResolvedGov :: FullyQualifiedName -> CapGovRef Name
+
+instance Eq (CapGovRef name) where
+  (UnresolvedGov g1) == (UnresolvedGov g2) = g1 == g2
+  (ResolvedGov g1) == (ResolvedGov g2) = g1 == g2
+
+instance Show (CapGovRef name) where
+  show (UnresolvedGov ksn) = "(UnresolvedGov " <> show ksn <> ")"
+  show (ResolvedGov g) = "(ResolvedGov" <> show g <> ")"
 
 data KSPredicate name
   = KeysAll

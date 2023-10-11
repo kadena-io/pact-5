@@ -243,8 +243,8 @@ data RawBuiltin
   | RawWithDefaultRead
   | RawWithRead
   | RawWrite
-  -- | RawTxIds
-  -- | RawTxLog
+  | RawTxIds
+  | RawTxLog
   -- Db QueryFunctions
   | RawAndQ
   | RawOrQ
@@ -354,6 +354,8 @@ rawBuiltinToText = \case
   RawWithDefaultRead -> "with-default-read"
   RawWithRead -> "with-read"
   RawWrite -> "write"
+  RawTxIds -> "txids"
+  RawTxLog -> "txlog"
   RawAndQ -> "and?"
   RawOrQ -> "or?"
   RawWhere -> "where?"
@@ -459,6 +461,8 @@ instance IsBuiltin RawBuiltin where
     RawWithDefaultRead -> 4
     RawWithRead -> 3
     RawWrite -> 3
+    RawTxIds -> 2
+    RawTxLog -> 2
     RawAndQ -> 3
     RawOrQ -> 3
     RawWhere -> 3
@@ -489,6 +493,7 @@ data ReplBuiltins
   | RBeginTx
   | RCommitTx
   | RRollbackTx
+  | RSigKeyset
   -- | RLoad
   -- | RLoadWithEnv
   -- | RExpect
@@ -533,6 +538,7 @@ instance IsBuiltin ReplBuiltins where
     RBeginTx -> 1
     RCommitTx -> 1
     RRollbackTx -> 1
+    RSigKeyset -> 1
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
 -- Note: commented out natives are
@@ -590,6 +596,7 @@ replBuiltinsToText = \case
   RBeginTx -> "begin-tx"
   RCommitTx -> "commit-tx"
   RRollbackTx -> "rollback-tx"
+  RSigKeyset -> "sig-keyset"
   -- RLoad -> "load"
   -- RLoadWithEnv -> "load-with-env"
 

@@ -193,7 +193,7 @@ data DefProperty i
 data Module i
   = Module
   { _mName :: ModuleName
-  , _mGovernance :: Governance Text
+  , _mGovernance :: Governance ParsedName
   , _mExternal :: [ExtDecl]
   , _mDefs :: NonEmpty (Def i)
   , _mDoc :: Maybe Text
@@ -205,7 +205,7 @@ data TopLevel i
   = TLModule (Module i)
   | TLInterface (Interface i)
   | TLTerm (Expr i)
-  | TLUse ModuleName
+  | TLUse Import
   deriving Show
 
 data Interface i

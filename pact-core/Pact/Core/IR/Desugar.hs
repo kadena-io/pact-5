@@ -33,7 +33,7 @@ import Control.Monad.Except
 import Control.Lens hiding (List)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
-import Data.Maybe(mapMaybe)
+import Data.Maybe(mapMaybe, isJust)
 import Data.List(findIndex)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Set(Set)
@@ -54,6 +54,7 @@ import Pact.Core.Persistence hiding (loaded)
 import Pact.Core.Capabilities
 import Pact.Core.Errors
 import Pact.Core.IR.Term
+import Pact.Core.Guards
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 
@@ -201,6 +202,7 @@ desugarAppArityRaw f i b args =
     App (Builtin (f b) i) args i
 
 instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
+  liftRaw :: RawBuiltin -> ReplBuiltin RawBuiltin
   liftRaw = RBuiltinWrap
   reservedNatives = replRawBuiltinMap
   desugarOperator i dsg =
@@ -274,6 +276,9 @@ desugarLispTerm = \case
   -- This _may not_ stay long term
   Lisp.App e [] i -> desugarLispTerm e <&> \case
     v@Var{} ->
+      let arg = Constant LUnit i :| []
+      in App v arg i
+    v@Builtin{} ->
       let arg = Constant LUnit i :| []
       in App v arg i
     e' -> e'
@@ -380,7 +385,7 @@ desugarDefMeta body = \case
       Lam _ args _ _ ->
         case findIndex ((==) arg . view argName) (NE.toList args) of
           Just index' ->
-            let dmanaged = DefManagedMeta index' name
+            let dmanaged = DefManagedMeta index' (FQParsed name)
             in pure (DefManaged (Just dmanaged))
           Nothing -> error "no such managed arg"
       _ -> error "invalid body: not a lambda form, cannot find app arg"
@@ -466,8 +471,7 @@ desugarModule (Lisp.Module mname mgov extdecls defs _ _ i) = do
   let (imports, blessed, implemented) = splitExts extdecls
   defs' <- locally reCurrModule (const (Just mname)) $ traverse desugarDef (NE.toList defs)
   let mhash = ModuleHash (Hash "placeholder")
-      mgov' = BN . BareName <$> mgov
-  pure $ Module mname mgov' defs' blessed imports implemented mhash i
+  pure $ Module mname mgov defs' blessed imports implemented mhash i
   where
   splitExts = split ([], Set.empty, [])
   split (accI, accB, accImp) (h:hs) = case h of
@@ -538,6 +542,15 @@ termSCC currM currDefns = \case
   ObjectLit m _ -> foldMap (termSCC currM currDefns . view _2) m
   Error {} -> Set.empty
 
+parsedNameSCC :: ModuleName -> Set Text -> ParsedName -> Set Text
+parsedNameSCC currM currDefns n = case n of
+  BN bn | Set.member (_bnName bn) currDefns -> Set.singleton (_bnName bn)
+        | otherwise -> mempty
+  QN (QualifiedName n' mn')
+    | Set.member n' currDefns && mn' == currM -> Set.singleton n'
+    | otherwise -> mempty
+  DN _ -> mempty
+
 typeSCC
   :: ModuleName
   -> Set Text
@@ -580,6 +593,15 @@ defConstSCC
   -> Set Text
 defConstSCC mn cd = termSCC mn cd . _dcTerm
 
+defTableSCC
+  :: ModuleName
+  -> Set Text
+  -> DefTable ParsedName info
+  -> Set Text
+defTableSCC mn cd dt =
+  let (DesugaredTable t) = (_dtSchema dt)
+  in parsedNameSCC mn cd t
+
 -- defCapSCC :: ModuleName -> DefCap Name b i -> Set Text
 -- defCapSCC mn = termSCC mn . _dcapTerm
 
@@ -593,7 +615,7 @@ defSCC mn cd = \case
   DConst d -> defConstSCC mn cd d
   DCap dc -> termSCC mn cd (_dcapTerm dc)
   DSchema ds -> foldMap (typeSCC mn cd) ( _dsSchema ds)
-  DTable _ -> mempty
+  DTable dt -> defTableSCC mn cd dt
 
 ifDefSCC
   :: ModuleName
@@ -795,7 +817,7 @@ renameTerm (Var n i) = resolveName i n >>= \case
     | otherwise ->
       throwDesugarError (InvalidDefInTermVariable (rawParsedName n)) i
     where
-    legalVarDefs = [DKDefun, DKDefConst, DKDefTable]
+    legalVarDefs = [DKDefun, DKDefConst, DKDefTable, DKDefCap]
   (n', _) -> pure (Var n' i)
 -- Todo: what happens when an argument is shadowed?
 renameTerm (Lam li nsts body i) = do
@@ -839,18 +861,19 @@ renameTerm (Try e1 e2 i) = do
   Try <$> renameTerm e1 <*> renameTerm e2 <*> pure i
 renameTerm (CapabilityForm cf i) =
   view reCurrModule >>= \case
-    Just mn -> case view capFormName cf of
-      QN qn
-        | _qnModName qn == mn -> do
+    Just _ -> case view capFormName cf of
+      QN qn -> do
           (n', dk) <- resolveQualified qn i
-          -- when (dk /= DKDefCap) $ throwDesugarError (InvalidCapabilityReference (_qnName qn)) i
+          when ((isCapForm cf && dk /= DKDefCap) || (not (isCapForm cf) && dk == DKDefun))
+            $ throwDesugarError (InvalidCapabilityReference (_qnName qn)) i
           let cf' = set capFormName n' cf
           checkCapForm cf'
           CapabilityForm <$> traverse renameTerm cf' <*> pure i
-        | otherwise -> throwDesugarError (CapabilityOutOfScope (_qnName qn) (_qnModName qn)) i
+          -- throwDesugarError (CapabilityOutOfScope (_qnName qn) (_qnModName qn)) i
       BN bn -> do
-        (n', dk) <- resolveQualified (QualifiedName (_bnName bn) mn) i
-        -- when (dk /= DKDefCap) $ throwDesugarError (InvalidCapabilityReference (_bnName bn)) i
+        (n', dk) <- resolveBare bn i
+        when (isJust dk && not (dk == Just DKDefCap) && isCapForm cf)
+          $ throwDesugarError (InvalidCapabilityReference (_bnName bn)) i
         let cf' = set capFormName n' cf
         checkCapForm cf'
         CapabilityForm <$> traverse renameTerm cf' <*> pure i
@@ -861,23 +884,21 @@ renameTerm (CapabilityForm cf i) =
     Nothing -> do
       checkCapFormNonModule cf
       let n = view capFormName cf
-      (n', declty) <- resolveName i n
-      -- case declty of
-      --   Just DKDefCap -> do
+      (n', _) <- resolveName i n
       let cf' = set capFormName n' cf
       CapabilityForm <$> traverse renameTerm cf' <*> pure i
-        -- _ -> throwDesugarError (InvalidCapabilityReference (_nName n')) i
     where
+    isCapForm = \case
+      CreateUserGuard{} -> False
+      _ -> True
+
     checkCapFormNonModule = \case
-      -- InstallCapability{} -> pure ()
-      WithCapability{} -> throwDesugarError (NotAllowedOutsideModule "with-capability") i
-      -- RequireCapability{} -> throwDesugarError (NotAllowedOutsideModule "require-capability") i
-      -- ComposeCapability{} -> throwDesugarError (NotAllowedOutsideModule "compose-capability") i
-      -- EmitEvent{} -> throwDesugarError (NotAllowedOutsideModule "emit-event") i
+      WithCapability{} ->
+        throwDesugarError (NotAllowedOutsideModule "with-capability") i
       CreateUserGuard{} -> pure ()
+
     checkCapForm = \case
       WithCapability{} -> enforceNotWithinDefcap i "with-capability"
-      -- InstallCapability{} -> enforceNotWithinDefcap i "install-capability"
       _ -> pure ()
 renameTerm (Error e i) = pure (Error e i)
 renameTerm (ObjectLit o i) =
@@ -915,7 +936,7 @@ renameDefTable
   :: (MonadRenamer reso i m)
   => DefTable ParsedName i
   -> m (DefTable Name i)
-renameDefTable (DefTable dtn sc i) =
+renameDefTable (DefTable dtn sc i) = do
   case sc of
     DesugaredTable dn -> resolveName i dn >>= \case
       (_, Just (DKDefSchema rsc)) -> pure (DefTable dtn (ResolvedTable rsc) i)
@@ -963,15 +984,29 @@ renameDefCap
   => DefCap ParsedName DesugarType raw i
   -> m (DefCap Name Type raw i)
 renameDefCap (DefCap name arity argtys rtype term meta info) = do
-  meta' <- (traverse . traverse) resolveName' meta
+  meta' <- traverse resolveMeta meta
   argtys' <- (traverse.traverse) (renameType info) argtys
   rtype' <- traverse (renameType info) rtype
   term' <- local (set reCurrDef (Just DKDefCap)) $ renameTerm term
   pure (DefCap name arity argtys' rtype' term' meta' info)
   where
-  resolveName' dn = resolveName info dn >>= \case
-    (n, Just DKDefun) -> pure n
-    _ -> error "defcap manager function does not refer to a defun"
+  resolveMeta DefEvent = pure DefEvent
+  resolveMeta (DefManaged Nothing) = pure (DefManaged Nothing)
+  resolveMeta (DefManaged (Just (DefManagedMeta i (FQParsed pn)))) = do
+    (name', _) <- resolveName info pn
+    fqn <- expectedFree info name'
+    pure (DefManaged (Just (DefManagedMeta i (FQName fqn))))
+
+expectedFree
+  :: MonadRenamer reso i m
+  => i
+  -> Name
+  -> m FullyQualifiedName
+expectedFree i (Name n nk) = case nk of
+  NTopLevel mname mh ->
+    pure (FullyQualifiedName mname n mh)
+  _ -> throwDesugarError (ExpectedFreeVariable n) i
+
 
 renameDef
   :: MonadDesugar raw reso i m
@@ -1100,17 +1135,31 @@ renameModule (Module mname mgov defs blessed imp implements mhash i) = local (se
     when (Set.member (defName defn) s) $ error "duplicate defn name"
     let dn = defName defn
     defn' <- local (set reBinds m) $ renameDef defn
-    let depPair = (NTopLevel mname mhash, defKind defn')
+    let dk = defKind defn'
+    let depPair = (NTopLevel mname mhash, dk)
     let m' = M.insert dn (over _2 Just depPair) m
+        fqn = FullyQualifiedName mname dn mhash
     rsModuleBinds . ix mname %= M.insert dn depPair
+    rsLoaded . loToplevel . ix dn .= (fqn, dk)
     pure (defn':defns, Set.insert (defName defn) s, m')
 
-  resolveGov = traverse $ \govName -> case find (\d -> BN (BareName (defName d)) == govName) defs of
-    Just (DCap d) -> pure (Name (_dcapName d) (NTopLevel mname mhash))
-    Just d -> throwDesugarError (InvalidGovernanceRef (QualifiedName (defName d) mname)) i
-    Nothing ->
-      -- Todo: could be better error? In this case the governance ref does not exist.
-      throwDesugarError (InvalidGovernanceRef (QualifiedName (rawParsedName govName) mname)) i
+  resolveGov = \case
+    KeyGov ksn -> pure (KeyGov ksn)
+    CapGov (UnresolvedGov govName) ->
+      case find (\d -> BN (BareName (defName d)) == govName) defs of
+        Just (DCap d) -> do
+          let fqn = FullyQualifiedName mname (_dcapName d) mhash
+          pure (CapGov (ResolvedGov fqn))
+        Just d -> throwDesugarError (InvalidGovernanceRef (QualifiedName (defName d) mname)) i
+        Nothing -> throwDesugarError (InvalidGovernanceRef (QualifiedName (rawParsedName govName) mname)) i
+    --   -- Todo: could be better error? In this case the governance ref does not exist.
+    --   throwDesugarError (InvalidGovernanceRef (QualifiedName (rawParsedName govName) mname)) i
+    --  traverse $ \govName -> case find (\d -> BN (BareName (defName d)) == govName) defs of
+    -- Just (DCap d) -> pure (Name (_dcapName d) (NTopLevel mname mhash))
+    -- Just d -> throwDesugarError (InvalidGovernanceRef (QualifiedName (defName d) mname)) i
+    -- Nothing ->
+    --   -- Todo: could be better error? In this case the governance ref does not exist.
+    --   throwDesugarError (InvalidGovernanceRef (QualifiedName (rawParsedName govName) mname)) i
   mkScc dns def = (def, defName def, Set.toList (defSCC mname dns def))
 
 checkImplements
