@@ -121,6 +121,7 @@ instance (SolveOverload raw resolved) => SolveOverload (ReplBuiltin raw) (ReplBu
         let bApp = withTyApps (Builtin RPrint i) tys
         pure (App bApp (pure eqT) i)
       _ -> throwOverloadError "Print" i
+    _ -> error "TODO builtin repls"
   liftRaw r = RBuiltinWrap (liftRaw r)
 
 
