@@ -184,14 +184,13 @@ data TopLevel name tyname builtin info
   = TLModule (Module name tyname builtin info)
   | TLInterface (Interface name tyname builtin info)
   | TLTerm (Term name tyname builtin info)
+  | TLUse Import
   deriving Show
 
 data ReplTopLevel name tyname builtin info
-  = RTLModule (Module name tyname builtin info)
-  | RTLInterface (Interface name tyname builtin info)
+  = RTLTopLevel (TopLevel name tyname builtin info)
   | RTLDefun (Defun name tyname builtin info)
   | RTLDefConst (DefConst name tyname builtin info)
-  | RTLTerm (Term name tyname builtin info)
   deriving Show
 
 -- | Typed pact core terms

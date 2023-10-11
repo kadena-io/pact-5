@@ -1546,11 +1546,7 @@ inferReplTopLevel = \case
   -- repl defuns and defconsts will break invariants about
   IR.RTLDefun dfn -> Typed.RTLDefun <$> inferDefun dfn
   IR.RTLDefConst dconst -> Typed.RTLDefConst <$> inferDefConst dconst
-  IR.RTLTopLevel tl ->
-    case tl of
-      IR.TLModule m -> Typed.RTLModule <$> inferModule m
-      IR.TLTerm t -> Typed.RTLTerm . snd <$> inferTermNonGen t
-      IR.TLInterface i -> Typed.RTLInterface <$> inferInterface i
+  IR.RTLTopLevel tl -> Typed.RTLTopLevel <$> inferTopLevel tl
 
 -- | Transform types into their debruijn-indexed version
 -- Essentially: Start at depth 0:
