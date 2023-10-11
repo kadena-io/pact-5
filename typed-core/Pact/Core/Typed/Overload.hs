@@ -372,6 +372,37 @@ solveCoreOverload i b tys preds = case b of
   RawSort -> error "sort" -- TODO
   RawSortObject -> error "sortObject" -- TODO
   RawRemove -> error "remove" -- TODO
+  RawStrToIntBase -> error "strtointbase" -- TODO
+  RawBind -> error "bind" -- TODO
+  RawRequireCapability -> error "require cap"
+  RawComposeCapability -> error "compose cap"
+  RawInstallCapability -> error "install cap"
+  RawEmitEvent -> error "emit event"
+  RawCreateCapabilityGuard -> error "create cap guard"
+  RawCreateModuleGuard -> error "create mod guard"
+  RawCreateTable -> error "create table"
+  RawDescribeKeyset -> error "descr keyset"
+  RawDescribeModule -> error "descr module"
+  RawDescribeTable -> error "descr table"
+  RawDefineKeySet -> error "define keyset"
+  RawDefineKeysetData -> error "define keyset data"
+  RawFoldDb -> error "fold db"
+  RawInsert -> error "insert"
+  RawKeyLog -> error "keylog"
+  RawKeys -> error "keys"
+  RawRead -> error "read"
+  RawSelect -> error "select"
+  RawUpdate -> error "update"
+  RawWithDefaultRead -> error "with default read"
+  RawWithRead -> error "with read"
+  RawWrite -> error "write"
+  RawTxIds -> error "txids"
+  RawTxLog -> error "txlog"
+  RawAndQ -> error "andq"
+  RawOrQ -> error "orq"
+  RawWhere -> error "where"
+  RawNotQ -> error "notq"
+  RawHash -> error "hash"
 
 singlePred :: [t] -> i -> (t -> OverloadM i a) -> String -> OverloadM i a
 singlePred preds i f msg = case preds of
