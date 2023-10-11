@@ -5,6 +5,8 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
 
 
@@ -26,16 +28,16 @@ module Pact.Core.Persistence
  , readKeyset, writeKeySet
  , GuardTableOp(..)
  , DbOpException(..)
+ , TxId(..)
+ , TxLog(..)
  ) where
 
 import Control.Lens
--- import Control.Monad.State.Class
--- import Control.Monad.IO.Class
--- import Control.Monad.Except
 import Control.Monad(unless)
 import Control.Exception(throwIO, Exception)
 import Data.Maybe(isJust)
 import Data.Text(Text)
+import Data.Word(Word64)
 import Data.IORef
 import Data.Map.Strict(Map)
 
@@ -88,10 +90,23 @@ newtype RowData
 -- -------------------------------------------------------------------------- --
 -- ExecutionMode
 
-data ExecutionMode =
-    Transactional |
-    Local
-    deriving (Eq,Show)
+data ExecutionMode
+  = Transactional
+  | Local
+  deriving (Eq,Show)
+
+newtype TxId = TxId { _txId :: Word64 }
+    deriving (Eq,Ord, Show)
+
+-- | Transaction record.
+data TxLog v
+  = TxLog
+  { _txDomain :: !Text
+  , _txKey :: !Text
+  , _txValue :: !v
+  }
+  deriving (Eq,Show,Functor, Foldable, Traversable)
+-- makeLenses ''TxLog
 
 -- -------------------------------------------------------------------------- --
 -- WriteType
@@ -133,8 +148,6 @@ data Purity
   deriving (Eq,Show,Ord,Bounded,Enum)
 
 -- | Fun-record type for Pact back-ends.
--- Todo: `Domain` requires sometimes some really annoying type anns,
--- Do we want to keep this abstraction or go to the monomorphized one?
 data PactDb b i
   = PactDb
   { _pdbPurity :: !Purity
@@ -142,7 +155,11 @@ data PactDb b i
   , _pdbWrite :: forall k v. WriteType -> Domain k v b i -> k -> v -> IO ()
   , _pdbKeys :: forall k v. Domain k v b i -> IO [k]
   , _pdbCreateUserTable :: TableName -> ModuleName -> IO ()
---  , _pdbBeginTx ::
+  , _pdbBeginTx :: ExecutionMode -> IO (Maybe TxId)
+  , _pdbCommitTx :: IO ()
+  , _pdbRollbackTx :: IO ()
+  , _pdbTxIds :: TableName -> TxId -> IO [TxId]
+  , _pdbGetTxLog :: TableName -> TxId -> IO [TxLog RowData]
   }
 
 makeClassy ''PactDb
@@ -166,6 +183,9 @@ data DbOpException
   = WriteException
   | NoSuchTable TableName
   | TableAlreadyExists TableName
+  | TxAlreadyBegun TxId
+  | NoTxToCommit
+  | NoTxLog TableName TxId
   deriving (Show, Eq, Typeable)
 
 instance Exception DbOpException
@@ -204,15 +224,71 @@ mockPactDb = do
   refMod <- newIORef M.empty
   refKs <- newIORef M.empty
   refUsrTbl <- newIORef M.empty
---  ref <- newIORef
+  refRb <- newIORef Nothing
+  refTxLog <- newIORef mempty
+  refTxId <- newIORef 0
   pure $ PactDb
     { _pdbPurity = PImpure
     , _pdbRead = read' refKs refMod refUsrTbl
-    , _pdbWrite = write refKs refMod refUsrTbl
+    , _pdbWrite = write refKs refMod refUsrTbl refTxId refTxLog
     , _pdbKeys = keys refKs refMod refUsrTbl
-    , _pdbCreateUserTable = createUsrTable refUsrTbl
+    , _pdbCreateUserTable = createUsrTable refUsrTbl refTxLog
+    , _pdbBeginTx = beginTx refRb refTxId refTxLog refMod refKs refUsrTbl
+    , _pdbCommitTx = commitTx refRb refTxId refTxLog refMod refKs refUsrTbl
+    , _pdbRollbackTx = rollbackTx refRb refTxLog refMod refKs refUsrTbl
+    , _pdbTxIds = txIds refTxLog
+    , _pdbGetTxLog = txLog refTxLog
     }
   where
+  beginTx refRb refTxId refTxLog refMod refKs refUsrTbl em = do
+    readIORef refRb >>= \case
+      Just (_, _, _, _, _) -> pure Nothing
+      Nothing -> do
+        mods <- readIORef refMod
+        ks <- readIORef refKs
+        usrTbl <- readIORef refUsrTbl
+        txl <- readIORef refTxLog
+        writeIORef refRb (Just (em, txl, mods, ks, usrTbl))
+        tid <- readIORef refTxId
+        pure (Just (TxId tid))
+
+  commitTx refRb refTxId refTxLog refMod refKs refUsrTbl = readIORef refRb >>= \case
+    Just (em, txl, mods, ks, usr) -> case em of
+      Transactional -> do
+        writeIORef refRb Nothing
+        modifyIORef' refTxId (+ 1)
+      Local -> do
+        writeIORef refRb Nothing
+        writeIORef refMod mods
+        writeIORef refKs ks
+        writeIORef refUsrTbl usr
+        writeIORef refTxLog txl
+    Nothing ->
+      throwIO NoTxToCommit
+
+  rollbackTx refRb refTxLog refMod refKs refUsrTbl = readIORef refRb >>= \case
+    Just (_, txl, mods, ks, usr) -> do
+      writeIORef refRb Nothing
+      writeIORef refTxLog txl
+      writeIORef refMod mods
+      writeIORef refKs ks
+      writeIORef refUsrTbl usr
+    Nothing -> throwIO NoTxToCommit
+
+  txLog refTxLog tn tid = do
+    m <- readIORef refTxLog
+    case M.lookup tn m of
+      Just txids -> case M.lookup tid txids of
+        Just n -> pure n
+        Nothing -> throwIO (NoTxLog tn tid)
+      Nothing -> throwIO (NoTxLog tn tid)
+
+  txIds refTxLog tn txId = do
+    txl <- readIORef refTxLog
+    case M.lookup tn txl of
+      Just mtxl -> pure [ x | x <- M.keys mtxl, x > txId ]
+      Nothing -> throwIO (NoSuchTable tn)
+
   keys
     :: forall k v
     .  IORef (Map KeySetName FQKS)
@@ -235,13 +311,15 @@ mockPactDb = do
 
   createUsrTable
     :: IORef (Map TableName (Map RowKey RowData))
+    -> IORef (Map TableName (Map TxId [TxLog RowData]))
     -> TableName
     -> ModuleName
     -> IO ()
-  createUsrTable refUsrTbl tbl _ = do
+  createUsrTable refUsrTbl refTxLog tbl _ = do
     ref <- readIORef refUsrTbl
     case M.lookup tbl ref of
       Nothing -> do
+        modifyIORef refTxLog (M.insert tbl mempty)
         modifyIORef refUsrTbl (M.insert tbl mempty)
         pure ()
       Just _ -> throwIO (TableAlreadyExists tbl)
@@ -269,29 +347,54 @@ mockPactDb = do
     .  IORef (Map KeySetName FQKS)
     -> IORef (Map ModuleName (ModuleData b i))
     -> IORef (Map TableName (Map RowKey RowData))
+    -> IORef Word64
+    -> IORef (Map TableName (Map TxId [TxLog RowData]))
     -> WriteType
     -> Domain k v b i
     -> k
     -> v
     -> IO ()
-  write refKs refMod refUsrTbl wt domain k v = case domain of
+  write refKs refMod refUsrTbl refTxId refTxLog wt domain k v = case domain of
     DKeySets -> writeKS refKs k v
     DModules -> writeMod refMod v
-    DUserTables tbl -> writeRowData refUsrTbl tbl wt k v
+    DUserTables tbl -> writeRowData refUsrTbl refTxId refTxLog tbl wt k v
 
   readRowData ref tbl k = do
     checkTable tbl ref
     r <- readIORef ref
     pure (r ^? ix tbl . ix k)
 
-  writeRowData ref tbl wt k v = checkTable tbl ref *> case wt of
-    Write ->
+  writeToTxLog
+    :: IORef Word64
+    -> IORef (Map TableName (Map TxId [TxLog RowData]))
+    -> TableName
+    -> RowKey
+    -> RowData
+    -> IO ()
+  writeToTxLog refTxId refTxLog tbl k rdata = do
+    tid <- readIORef refTxId
+    let entry = M.singleton (TxId tid) [TxLog (_tableName tbl) (_rowKey k) rdata]
+    modifyIORef' refTxLog (M.insertWith (M.unionWith (<>)) tbl entry)
+
+  writeRowData
+    :: IORef (Map TableName (Map RowKey RowData))
+    -> IORef Word64
+    -> IORef (Map TableName (Map TxId [TxLog RowData]))
+    -> TableName
+    -> WriteType
+    -> RowKey
+    -> RowData
+    -> IO ()
+  writeRowData ref refTxId refTxLog tbl wt k v = checkTable tbl ref *> case wt of
+    Write -> do
+      writeToTxLog refTxId refTxLog tbl k v
       modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
     Insert -> do
       r <- readIORef ref
       case M.lookup tbl r >>= M.lookup k of
         Just _ -> throwIO WriteException
-        Nothing ->
+        Nothing -> do
+          writeToTxLog refTxId refTxLog tbl k v
           modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
     Update -> do
       r <- readIORef ref
@@ -299,6 +402,7 @@ mockPactDb = do
         Just (RowData m) -> do
           let (RowData v') = v
               nrd = RowData (M.union v' m)
+          writeToTxLog refTxId refTxLog tbl k nrd
           modifyIORef' ref (M.insertWith M.union tbl (M.singleton k nrd))
         Nothing -> throwIO WriteException
 

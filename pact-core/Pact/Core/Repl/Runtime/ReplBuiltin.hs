@@ -30,6 +30,9 @@ import Pact.Core.PactValue
 import Pact.Core.Gas
 import Pact.Core.Guards
 import Pact.Core.Capabilities
+import Pact.Core.Errors
+import Pact.Core.Persistence
+
 import Pact.Core.Repl.Runtime
 
 type ReplBM b i = ReplEvalM (ReplBuiltin b) i
@@ -256,15 +259,58 @@ envSigs = \info b cont handler _env -> \case
       _ -> Nothing
   args -> argsError info b args
 
--- loadExec :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
--- loadExec = \info b cont handler _env -> \case
---   [VString s, VBool reset] -> do
---     es <- use evalState
---     when reset $ evalState .= def
+beginTx :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+beginTx = \info b cont handler _env -> \case
+  [VString s] -> begin' info (Just s) >>= returnCEK cont handler . renderTx "Begin Tx"
+  [VUnit] -> begin' info Nothing >>= returnCEK cont handler . renderTx "Begin Tx"
+  args -> argsError info b args
 
---   args -> argsError info b args
+renderTx :: Text -> Maybe (TxId, Maybe Text) -> EvalResult b i m
+renderTx start (Just (TxId tid, mt)) =
+  EvalValue $ VString $ start <> " " <> T.pack (show tid) <> maybe mempty ((<>) " ") mt
+renderTx start Nothing = VError $ "tx-function failure " <> start
+
+begin' :: (Default i) => i -> Maybe Text -> ReplEvalM b i (Maybe (TxId, Maybe Text))
+begin' info mt = do
+  pdb <- use (reEnv . eePactDb)
+  mode <- viewCEKEnv eeMode
+  mTxId <- liftDbFunction info (_pdbBeginTx pdb mode)
+  reTx .= ((,mt) <$> mTxId)
+  return ((,mt) <$> mTxId)
+
+commitTx :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+commitTx = \info b cont handler _env -> \case
+  [_] -> do
+    pdb <- use (reEnv . eePactDb)
+    liftDbFunction info (_pdbCommitTx pdb)
+    reState .= def
+    use reTx >>= \case
+      Just tx -> do
+        reTx .= Nothing
+        returnCEK cont handler (renderTx "Commit Tx" (Just tx))
+      Nothing -> returnCEK cont handler (renderTx "Commit Tx" Nothing)
+  args -> argsError info b args
 
 
+rollbackTx :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+rollbackTx = \info b cont handler _env -> \case
+  [_] -> do
+    pdb <- use (reEnv . eePactDb)
+    liftDbFunction info (_pdbRollbackTx pdb)
+    reState .= def
+    use reTx >>= \case
+      Just tx -> do
+        reTx .= Nothing
+        returnCEK cont handler (renderTx "Rollback Tx" (Just tx))
+      Nothing -> returnCEK cont handler (renderTx "Rollback Tx" Nothing)
+  args -> argsError info b args
+
+sigKeyset :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+sigKeyset = \info b cont handler _env -> \case
+  [VUnit] -> do
+    sigs <- S.fromList . M.keys <$> viewCEKEnv eeMsgSigs
+    returnCEKValue cont handler (VGuard (GKeyset (KeySet sigs KeysAll)))
+  args -> argsError info b args
 
 
 replBuiltinEnv
@@ -295,8 +341,7 @@ replRawBuiltinRuntime = \case
     REnvHash -> envHash
     REnvKeys -> envKeys
     REnvSigs -> envSigs
-    RBeginTx -> undefined
-    RCommitTx -> undefined
-    RRollbackTx -> undefined
-    -- RLoad -> loadExec
-    -- RLoadWithEnv -> loadExec
+    RBeginTx -> beginTx
+    RCommitTx -> commitTx
+    RRollbackTx -> rollbackTx
+    RSigKeyset -> sigKeyset

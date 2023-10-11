@@ -25,6 +25,7 @@ module Pact.Core.Repl.Utils
  , debugIfFlagSet
  , replCompletion
  , replCurrSource
+ , replTx
  , ReplAction(..)
  , parseReplAction
  , prettyReplFlag
@@ -121,6 +122,7 @@ data ReplState b
   , _replGas :: IORef Gas
   , _replEvalLog :: IORef (Maybe [(Text, Gas)])
   , _replCurrSource :: SourceCode
+  , _replTx :: Maybe (TxId, Maybe Text)
   }
 
 
@@ -273,7 +275,7 @@ replError (ReplSource file src) pe =
       slice = withLine (_liStartLine pei) $ take (max 1 (_liEndLine pei)) $ drop (_liStartLine pei) srcLines
       colMarker = "  | " <> T.replicate (_liStartColumn pei) " " <> T.replicate (max 1 (_liEndColumn pei - _liStartColumn pei)) "^"
       errRender = renderText pe
-      fileErr = file <> ":" <> T.pack (show (_liStartLine pei)) <> ":" <> T.pack (show (_liStartColumn pei)) <> ": "
+      fileErr = file <> ":" <> T.pack (show (_liStartLine pei + 1)) <> ":" <> T.pack (show (_liStartColumn pei)) <> ": "
   in T.unlines ([fileErr <> errRender] ++ slice ++ [colMarker])
   where
   withLine st lns = zipWith (\i e -> T.pack (show i) <> " | " <> e) [st ..] lns

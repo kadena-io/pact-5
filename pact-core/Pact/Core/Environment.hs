@@ -17,7 +17,8 @@ module Pact.Core.Environment
  ( EvalEnv(..)
  , eeMsgSigs, eePactDb
  , eeHash, eeMsgBody
- , eePublicData, eePactStep
+ , eePactStep
+ , eePublicData, eeMode
  , PactState(..)
  , psLoaded
  , TxCreationTime(..)
@@ -52,7 +53,7 @@ import Pact.Core.Guards
 import Pact.Core.PactValue ( PactValue, EnvData )
 import Pact.Core.Hash
 import Pact.Core.Names
-import Pact.Core.Pacts.Types (PactExec, PactStep)
+import Pact.Core.Pacts.Types
 
 -- | Wrapper for 'PublicMeta' ttl field in seconds since offset
 --
@@ -133,12 +134,8 @@ data EvalEnv b i
   , _eeHash :: Hash
   , _eePublicData :: PublicData
   , _eePactStep :: Maybe PactStep
-  -- Todo: `PactWarning`
-  -- , _eeWarning :: IORef (Set Text)
-  -- , _eePactStep :: !(Maybe PactStep)
-  --   _cekGas :: IORef Gas
-  -- , _cekEvalLog :: IORef (Maybe [(Text, Gas)])
-  -- , _ckeData :: EnvData PactValue
+  , _eeMode :: ExecutionMode
+  -- ^ The pact execution mode: local or transactional
   }
 
 makeLenses ''EvalEnv

@@ -36,7 +36,6 @@ import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Char as Char
@@ -446,17 +445,18 @@ zipList = \info b cont handler _env -> \case
     where
     zip' (x:xs) (y:ys) acc = unsafeApplyTwo clo (VPactValue x) (VPactValue y) >>= \case
        EvalValue v -> enforcePactValue v >>= zip' xs ys . (:acc)
-       v@VError{} -> returnCEK cont   handler v
+       v@VError{} -> returnCEK cont handler v
     zip' _ _ acc = returnCEKValue cont handler (VList (V.fromList (reverse acc)))
   args -> argsError info b args
 
+-- (try [1] (map (+ 1) [1 2 (enforce false "greg")])
 coreMap :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreMap = \info b cont handler _env -> \case
   [VClosure fn, VList li] -> map' (V.toList li) []
     where
-    map' (x:xs) acc = unsafeApplyOne fn (VPactValue x) >>= \case
+    map' (x:xs) acc = applyLam fn [VPactValue x] Mt CEKNoHandler >>= \case
        EvalValue cv -> enforcePactValue cv >>= map' xs . (:acc)
-       v -> returnCEK cont handler v
+       v@VError{} -> returnCEK cont handler v
     map' _ acc = returnCEKValue cont handler (VList (V.fromList (reverse acc)))
   args -> argsError info b args
 
@@ -620,7 +620,7 @@ coreEnforceGuard = \info b cont handler env -> \case
       GModuleGuard (ModuleGuard mn _) -> calledByModule mn >>= \case
         True -> returnCEKValue cont handler VUnit
         False -> do
-          md <- getModule mn env
+          md <- getModule info env mn
           acquireModuleAdmin info env md
           returnCEKValue cont handler VUnit
   args -> argsError info b args
@@ -748,11 +748,11 @@ runUserGuard
 runUserGuard info cont handler env (UserGuard fqn args) =
   lookupFqName fqn >>= \case
     Just (Dfun d) -> do
-      when (length (_dfunArgs d) /= length args) $ error "user guard not saturated"
-      -- Todo: this is probably needs to be factored out
-      let cloargs = NE.fromList (_argType <$> _dfunArgs d)
-          env' = sysOnlyEnv env
-          clo = Closure (_dfunName d) (_fqModule fqn) cloargs (NE.length cloargs) (_dfunTerm d) (_dfunRType d) env' (_dfunInfo d)
+      when (length (_dfunArgs d) /= length args) $ throwExecutionError info CannotApplyPartialClosure
+      let env' = sysOnlyEnv env
+      clo <- mkDefunClosure d (_fqModule fqn) env'
+      -- clo <- ugTerm env' (_dfunTerm d)
+          -- clo = Closure (_dfunName d) (_fqModule fqn) cloargs (NE.length cloargs) (_dfunTerm d) (_dfunRType d) env' (_dfunInfo d)
       -- Todo: sys only here
       applyLam (C clo) (VPactValue <$> args) cont handler
     Just d -> throwExecutionError info (InvalidDefKind (defKind d) "run-user-guard")
@@ -900,6 +900,34 @@ dbKeys = \info b cont handler env -> \case
     returnCEKValue cont handler (VList li)
   args -> argsError info b args
 
+dbTxIds :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+dbTxIds = \info b cont handler env -> \case
+  [VTable tv, VInteger tid] -> do
+    guardTable info env tv
+    let pdb = view cePactDb env
+    ks <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) (TxId (fromIntegral tid)))
+    let li = V.fromList (PInteger . fromIntegral . _txId <$> ks)
+    returnCEKValue cont handler (VList li)
+  args -> argsError info b args
+
+
+dbTxLog :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+dbTxLog = \info b cont handler env -> \case
+  [VTable tv, VInteger tid] -> do
+    guardTable info env tv
+    let pdb = view cePactDb env
+        txId = TxId (fromInteger tid)
+    ks <- liftDbFunction info (_pdbGetTxLog pdb (_tvName tv) txId)
+    let li = V.fromList (txLogToObj <$> ks)
+    returnCEKValue cont handler (VList li)
+    where
+    txLogToObj (TxLog domain key (RowData v)) = do
+      PObject $ M.fromList
+        [ (Field "table", PString domain)
+        , (Field "key", PString key)
+        , (Field "value", PObject v)]
+  args -> argsError info b args
+
 tvToDomain :: TableValue -> Domain RowKey RowData b i
 tvToDomain tv =
   DUserTables(_tvName tv)
@@ -966,7 +994,9 @@ composeCapability = \info b cont handler env -> \case
 
 installCapability :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 installCapability = \info b cont handler _env -> \case
-  [VCapToken ct] -> installCap cont handler ct
+  [VCapToken ct] -> do
+    _ <- installCap ct
+    returnCEKValue cont handler VUnit
   args -> argsError info b args
 
 coreEmitEvent :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -1239,6 +1269,8 @@ rawBuiltinRuntime = \case
   RawUpdate -> dbUpdate
   RawWithDefaultRead -> dbWithDefaultRead
   RawWithRead -> dbWithRead
+  RawTxLog -> dbTxLog
+  RawTxIds -> dbTxIds
   RawAndQ -> coreAndQ
   RawOrQ -> coreOrQ
   RawWhere -> coreWhere

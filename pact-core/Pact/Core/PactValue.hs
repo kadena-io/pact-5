@@ -69,7 +69,8 @@ instance Pretty PactValue where
       where
       objPair (f, t) = pretty f <> ":" <> pretty t
     PModRef md -> pretty md
-    PCapToken _ -> "<captoken>"
+    PCapToken (CapToken fqn args) ->
+      parens (pretty (fqnToQualName fqn) <+> hsep (pretty <$> args))
 
 
 checkPvType :: Type -> PactValue -> Maybe Type

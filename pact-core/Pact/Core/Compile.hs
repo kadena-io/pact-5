@@ -3,15 +3,15 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 
 module Pact.Core.Compile where
 
 import Control.Lens
--- import Control.Monad.IO.Class(MonadIO)
 import Control.Monad.State.Strict ( MonadIO(..), MonadState )
-import Control.Monad.Except
+import Control.Monad.Except ( MonadError(throwError), liftEither )
 import Control.Monad
 import Data.Maybe(mapMaybe)
 import Data.Proxy
@@ -21,6 +21,7 @@ import qualified Data.ByteString as B
 import qualified Data.Set as Set
 
 import Pact.Core.Debug
+import Pact.Core.Builtin
 import Pact.Core.Info
 import Pact.Core.Persistence
 import Pact.Core.Names
@@ -32,9 +33,10 @@ import Pact.Core.IR.Term
 import Pact.Core.Interpreter
 import Pact.Core.Guards
 import Pact.Core.Environment
+import Pact.Core.Capabilities
+import Pact.Core.Literal
 
 
--- import qualified Pact.Core.Syntax.LexUtils as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
@@ -82,6 +84,7 @@ compileProgram source pdb interp = do
     >=> runDesugarTopLevel Proxy pdb lo
     >=> interpretTopLevel pdb interp
 
+-- | Evaluate module governance
 evalModuleGovernance
   :: (HasCompileEnv b s m)
   => PactDb b SpanInfo
@@ -92,17 +95,18 @@ evalModuleGovernance pdb interp = \case
   tl@(Lisp.TLModule m) -> liftIO (readModule pdb (Lisp._mName m)) >>= \case
     Just (ModuleData md _) ->
       case _mGovernance md of
-        KeyGov _ksn -> error "TODO: implement enforcing keyset names"
-        CapGov (Name n nk) -> case nk of
-          NTopLevel mn mh ->
-            use (evalState . loaded . loAllLoaded . at (FullyQualifiedName mn n mh)) >>= \case
-              Just (DCap d) ->
-                _interpret interp (_dcapTerm d) >>= \case
-                  IPV{} -> pure tl
-                  _ -> error "governance failure"
-              -- Todo: Definitely fixable with a GADT
-              _ -> error "invalid governance: not a defcap"
-          _ -> error "invariant failure: governance is not a fully qualified name"
+        KeyGov (KeySetName ksn) -> do
+          let info = Lisp._mInfo m
+              ksnTerm = Constant (LString ksn) info
+              ksrg = App (Builtin (liftRaw RawKeysetRefGuard) info) (pure ksnTerm) info
+              term = App (Builtin (liftRaw RawEnforceGuard) info) (pure ksrg) info
+          _interpret interp term *> pure tl
+        CapGov (ResolvedGov fqn) ->
+          use (evalState . loaded . loAllLoaded . at fqn) >>= \case
+            Just (DCap d) ->
+              _interpret interp (_dcapTerm d) *> pure tl
+            -- Todo: Definitely fixable with a GADT
+            _ -> throwError (PEExecutionError (ModuleGovernanceFailure (Lisp._mName m)) (Lisp._mInfo m))
     Just (InterfaceData iface _) ->
       throwError (PEExecutionError (CannotUpgradeInterface (_ifName iface)) (_ifInfo iface))
     Nothing -> pure tl
@@ -127,6 +131,7 @@ interpretTopLevel pdb interp (DesugarOutput ds lo0 deps) = do
             over loModules (M.insert (_mName m) mdata) .
             over loAllLoaded (M.union newLoaded)
       evalState . loaded %= loadNewModule
+      evalState . esCaps . csModuleAdmin %= Set.union (Set.singleton (_mName m))
       pure (LoadedModule (_mName m))
     TLInterface iface -> do
       let deps' = M.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo0)
@@ -140,6 +145,7 @@ interpretTopLevel pdb interp (DesugarOutput ds lo0 deps) = do
       evalState . loaded %= loadNewModule
       pure (LoadedInterface (view ifName iface))
     TLTerm term -> InterpretValue <$> _interpret interp term
+    TLUse _ -> error "todo: use statements"
   where
   toFqDep modName mhash defn =
     let fqn = FullyQualifiedName modName (defName defn) mhash

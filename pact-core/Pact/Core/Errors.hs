@@ -28,6 +28,7 @@ import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Info
 import Pact.Core.Pretty(Pretty(..))
+import Pact.Core.Hash
 import Pact.Core.Persistence
 
 import qualified Pact.Core.Pretty as Pretty
@@ -136,6 +137,8 @@ data DesugarError
   -- ^ Defpact without steps
   | LastStepWithRollback QualifiedName
   -- ^ Last Step has Rollback error
+  | ExpectedFreeVariable Text
+  -- ^ Expected free variable
   deriving Show
 
 instance Exception DesugarError
@@ -191,6 +194,8 @@ instance Pretty DesugarError where
     EmptyDefPact dp -> Pretty.hsep ["Defpact has no steps:", pretty dp]
     LastStepWithRollback mn ->
       Pretty.hsep ["rollbacks aren't allowed on the last step in:", pretty mn]
+    ExpectedFreeVariable t ->
+      Pretty.hsep ["Expected free variable in expression, found locally bound: ", pretty t]
 
 -- data TypecheckError
 --   = UnificationError (Type Text) (Type Text)
@@ -305,7 +310,17 @@ data EvalError
   -- ^ No such keyset
   | CannotUpgradeInterface ModuleName
   -- ^ Interface cannot be upgrade
+  | ModuleGovernanceFailure ModuleName
+  -- ^ Failed to acquire module governance
   | DbOpFailure DbOpException
+  -- ^ DynName is not a module ref
+  | DynNameIsNotModRef Text
+  | ModuleDoesNotExist ModuleName
+  | ExpectedModule ModuleName
+  -- ^ Module does not exist
+  | HashNotBlessed ModuleName ModuleHash
+  | CannotApplyPartialClosure
+  | ClosureAppliedToTooManyArgs
   deriving Show
 
 instance Pretty EvalError where
@@ -344,7 +359,7 @@ instance Pretty EvalError where
       Pretty.hsep ["Continue pact step with invalid context: user: ", pretty userStep, ", current: ", pretty currStep, ", max: ", pretty maxStep]
     MultipleOrNestedPactExecFound -> "Multiple or nested pact exec found"
     PactStepNotFound s -> Pretty.hsep ["PactStep not found:", pretty s]
-    err -> error ("todo: render" ++ show err)
+    e -> pretty (show e)
 
 
 

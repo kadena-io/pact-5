@@ -33,11 +33,11 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , viewCEKEnv
  , viewsCEKEnv
  , calledByModule
+ , failInvariant
  ) where
 
 import Control.Lens hiding ((%%=))
 import Control.Monad.Except(MonadError(..))
-import Control.Monad.IO.Class(liftIO)
 import Data.Map.Strict(Map)
 import Data.Text(Text)
 import Data.Set(Set)
@@ -96,10 +96,12 @@ checkSigCaps
   -> m (Map PublicKeyText (Set (CapToken QualifiedName PactValue)))
 checkSigCaps sigs = do
   granted <- getAllStackCaps
-  pure $ M.filter (match granted) sigs
+  autos <- useEvalState (esCaps . csAutonomous)
+  pure $ M.filter (match (Set.null autos) granted) sigs
   where
-  match granted sigCaps =
-    Set.null sigCaps || not (Set.null (Set.intersection granted sigCaps))
+  match allowEmpty granted sigCaps =
+    (Set.null sigCaps && allowEmpty) ||
+    not (Set.null (Set.intersection granted sigCaps))
 
 enforcePactValue :: Applicative f => CEKValue b i m -> f PactValue
 enforcePactValue = \case
@@ -176,38 +178,45 @@ calledByModule mn = do
     Just _ -> pure True
     Nothing -> pure False
 
+failInvariant :: MonadEval b i m => i -> Text -> m a
+failInvariant i b =
+  let e = PEExecutionError (InvariantFailure b) i
+  in throwError e
+
 -- Todo: MaybeT cleans this up
-getCallingModule :: (MonadEval b i m) => m (EvalModule b i)
-getCallingModule = findCallingModule >>= \case
+getCallingModule :: (MonadEval b i m) => i -> m (EvalModule b i)
+getCallingModule info = findCallingModule >>= \case
   Just mn -> useEvalState (esLoaded . loModules . at mn) >>= \case
     Just (ModuleData m _) -> pure m
-    Just (InterfaceData _m _) -> error "called from interface: impossible"
-    Nothing -> error "no such calling module"
+    Just (InterfaceData _m _) ->
+      failInvariant info "getCallingModule points to interface"
+    Nothing ->
+      failInvariant info "getCallingModule points to no loaded module"
   Nothing -> error "no calling module in stack"
 
-toFqDep
-  :: ModuleName
-  -> ModuleHash
-  -> Def name t b i
-  -> (FullyQualifiedName, Def name t b i)
+toFqDep :: ModuleName -> ModuleHash -> Def name t b i -> (FullyQualifiedName, Def name t b i)
 toFqDep modName mhash defn =
   let fqn = FullyQualifiedName modName (defName defn) mhash
   in (fqn, defn)
 
-getModule :: (MonadEval b i m) => ModuleName -> CEKEnv b i m -> m (EvalModule b i)
-getModule mn env =
+getModule :: (MonadEval b i m) => i -> CEKEnv b i m -> ModuleName -> m (EvalModule b i)
+getModule info env mn =
  useEvalState (esLoaded . loModules . at mn) >>= \case
    Just (ModuleData md _) -> pure md
-   Just (InterfaceData _ _) -> error "not a module"
+   Just (InterfaceData _ _) ->
+    throwExecutionError info (ExpectedModule mn)
    Nothing -> do
     let pdb = view cePactDb env
-    liftIO (_pdbRead pdb DModules mn) >>= \case
+    liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
       Just mdata@(ModuleData md deps) -> do
         let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> (_mDefs md)
         (esLoaded . loAllLoaded) %%= M.union newLoaded . M.union deps
         (esLoaded . loModules) %%= M.insert mn mdata
         pure md
-      _ -> error "could not find module"
+      Just (InterfaceData _ _) ->
+        throwExecutionError info (ExpectedModule mn)
+      Nothing ->
+        throwExecutionError info (ModuleDoesNotExist mn)
 
 safeTail :: [a] -> [a]
 safeTail (_:xs) = xs

@@ -4,6 +4,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE GADTs #-}
 
 module Pact.Core.Names
  ( ModuleName(..)
@@ -50,6 +51,7 @@ module Pact.Core.Names
  , NativeName(..)
  , RowKey(..)
  , renderFullyQualName
+ , FQNameRef(..)
  ) where
 
 import Control.Lens
@@ -276,7 +278,7 @@ instance Pretty NamedDeBruijn where
   pretty (NamedDeBruijn _i _n) =
     pretty _n
 
-newtype TableName = TableName Text
+newtype TableName = TableName { _tableName :: Text }
   deriving (Eq, Ord, Show)
 
 instance Pretty TableName where
@@ -308,3 +310,16 @@ renderFullyQualName (FullyQualifiedName mn n _) =
 newtype RowKey
   = RowKey { _rowKey :: Text }
   deriving (Eq, Ord, Show)
+
+data FQNameRef name where
+  FQParsed :: ParsedName -> FQNameRef ParsedName
+  FQName :: FullyQualifiedName -> FQNameRef Name
+
+instance Show (FQNameRef name) where
+  show = \case
+    FQParsed pn -> show pn
+    FQName fqn -> show fqn
+
+instance Eq (FQNameRef name) where
+  (FQParsed pn) == (FQParsed pn') = pn == pn'
+  (FQName fqn) == (FQName fqn') = fqn == fqn'
