@@ -311,7 +311,7 @@ mockPactDb = do
 
   createUsrTable
     :: IORef (Map TableName (Map RowKey RowData))
-    -> _
+    -> IORef (Map TableName (Map TxId [TxLog RowData]))
     -> TableName
     -> ModuleName
     -> IO ()

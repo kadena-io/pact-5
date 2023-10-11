@@ -133,7 +133,7 @@ data EvalEnv b i
   , _eeMsgBody :: EnvData PactValue
   , _eeHash :: Hash
   , _eePublicData :: PublicData
-  -- ^ 
+  -- ^
   , _eeMode :: ExecutionMode
   -- ^ The pact execution mode: local or transactional
   }
@@ -158,12 +158,11 @@ data EvalState b i
   { _esCaps :: CapState QualifiedName PactValue
   , _esStack :: [StackFrame]
   , _esEvents :: [PactEvent FullyQualifiedName PactValue]
-  , _esInCap :: Bool
   , _esLoaded :: Loaded b i
   } deriving Show
 
 instance Default (EvalState b i) where
-  def = EvalState def [] [] False mempty
+  def = EvalState def [] [] mempty
 
 makeClassy ''EvalState
 

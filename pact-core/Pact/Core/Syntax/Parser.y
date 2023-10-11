@@ -122,6 +122,7 @@ TopLevel :: { ParsedTopLevel }
   : Module { TLModule $1 }
   | Interface { TLInterface $1 }
   | Expr { TLTerm $1 }
+  | Use { uncurry TLUse $1 }
 
 RTL :: { ReplSpecialTL SpanInfo }
   : ReplTopLevel { RTL $1 }
@@ -130,6 +131,7 @@ RTL :: { ReplSpecialTL SpanInfo }
 ReplTopLevel :: { ParsedReplTopLevel }
   : Module { RTLModule $1 }
   | Interface { RTLInterface $1 }
+  | Use { RTLTopLevel (uncurry TLUse $1) }
   | '(' Defun ')' { RTLDefun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefConst ')' { RTLDefConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | Expr { RTLTerm $1 }
@@ -187,9 +189,13 @@ Exts :: { [ExtDecl] }
   | {- empty -} { [] }
 
 Ext :: { ExtDecl }
-  : '(' import ModQual ImportList ')' { ExtImport (Import (mkModName $3) Nothing $4)  }
+  : Use { ExtImport (fst $1)  }
   | '(' implements ModQual ')' { ExtImplements (mkModName $3) }
   | '(' bless StringRaw ')' { ExtBless $3 }
+
+Use :: { (Import, SpanInfo) }
+  : '(' import ModQual ImportList ')' {  (Import (mkModName $3) Nothing $4, combineSpan (_ptInfo $1) (_ptInfo $5))  }
+
 
 Defs :: { [ParsedDef] }
   : Defs Def { $2:$1 }

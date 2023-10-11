@@ -35,6 +35,7 @@ import Pact.Core.Guards
 import Pact.Core.Environment
 import Pact.Core.Capabilities
 import Pact.Core.Literal
+import Pact.Core.Imports
 
 
 import qualified Pact.Core.Syntax.Lexer as Lisp
@@ -62,6 +63,7 @@ _parseOnlyFile fp = _parseOnly <$> B.readFile fp
 data CompileValue b
   = LoadedModule ModuleName
   | LoadedInterface ModuleName
+  | LoadedImports Import
   | InterpretValue InterpretValue
   deriving Show
 
@@ -145,7 +147,7 @@ interpretTopLevel pdb interp (DesugarOutput ds lo0 deps) = do
       evalState . loaded %= loadNewModule
       pure (LoadedInterface (view ifName iface))
     TLTerm term -> InterpretValue <$> _interpret interp term
-    TLUse _ -> error "todo: use statements"
+    TLUse imp _ -> pure (LoadedImports imp)
   where
   toFqDep modName mhash defn =
     let fqn = FullyQualifiedName modName (defName defn) mhash

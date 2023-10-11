@@ -968,9 +968,10 @@ composeCapability = \info b cont handler env -> \case
   args -> argsError info b args
 
 installCapability :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-installCapability = \info b cont handler _env -> \case
+installCapability = \info b cont handler env -> \case
   [VCapToken ct] -> do
-    _ <- installCap ct
+    enforceNotWithinDefcap info env "install-capability"
+    _ <- installCap info env ct
     returnCEKValue cont handler VUnit
   args -> argsError info b args
 

@@ -14,6 +14,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE GADTs #-}
 
@@ -26,9 +27,9 @@ module Pact.Core.IR.Desugar
  , DesugarBuiltin(..)
  ) where
 
-import Control.Monad ( when, forM, (>=>))
+import Control.Monad ( when, forM, (>=>), unless)
 import Control.Monad.Reader
-import Control.Monad.State.Strict
+import Control.Monad.State.Strict ( StateT(..), MonadState )
 import Control.Monad.Except
 import Control.Lens hiding (List)
 import Data.Text(Text)
@@ -43,7 +44,7 @@ import Data.Proxy
 import Data.Foldable(find, traverse_, foldrM)
 import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
-import qualified Data.Set as Set
+import qualified Data.Set as S
 
 import Pact.Core.Builtin
 import Pact.Core.Names
@@ -55,6 +56,7 @@ import Pact.Core.Capabilities
 import Pact.Core.Errors
 import Pact.Core.IR.Term
 import Pact.Core.Guards
+import Pact.Core.Imports
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 
@@ -128,6 +130,13 @@ newtype RenamerT m b i a =
     , MonadState (RenamerState b i)
     , MonadIO)
   via (StateT (RenamerState b i) (ReaderT (RenamerEnv b i) m))
+
+instance (MonadError e m) => MonadError e (RenamerT m b i) where
+  throwError e = RenamerT (lift (throwError e))
+  catchError ma f = RenamerT $ StateT $ \rs ->
+      ReaderT $ \env ->
+        catchError (runRenamerM rs env ma) (\e -> runRenamerM rs env (f e))
+
 
 data DesugarOutput b i a
   = DesugarOutput
@@ -473,7 +482,7 @@ desugarModule (Lisp.Module mname mgov extdecls defs _ _ i) = do
   let mhash = ModuleHash (Hash "placeholder")
   pure $ Module mname mgov defs' blessed imports implemented mhash i
   where
-  splitExts = split ([], Set.empty, [])
+  splitExts = split ([], S.empty, [])
   split (accI, accB, accImp) (h:hs) = case h of
     -- todo: implement bless hashes
     Lisp.ExtBless _ -> split (accI, accB, accImp) hs
@@ -491,6 +500,13 @@ desugarInterface (Lisp.Interface ifn ifdefns _ _ info) = do
   defs' <- traverse desugarIfDef ifdefns
   let mhash = ModuleHash (Hash "placeholder")
   pure $ Interface ifn defs' mhash info
+
+desugarUse
+  :: (MonadRenamer b i m)
+  => i
+  -> Import
+  -> m Import
+desugarUse i imp = imp <$ handleImport i mempty imp
 
 -----------------------------------------------------------
 -- Renaming
@@ -510,44 +526,44 @@ termSCC currM currDefns = \case
   -- todo: factor out this patmat on `ParsedName`,
   -- we use it multiple times
   Var n _ -> case n of
-    BN bn | Set.member (_bnName bn) currDefns -> Set.singleton (_bnName bn)
+    BN bn | S.member (_bnName bn) currDefns -> S.singleton (_bnName bn)
           | otherwise -> mempty
     QN (QualifiedName n' mn')
-      | Set.member n' currDefns && mn' == currM -> Set.singleton n'
+      | S.member n' currDefns && mn' == currM -> S.singleton n'
       | otherwise -> mempty
     DN _ -> mempty
   Lam _ args e _ ->
-    let currDefns' = foldl' (\s t -> Set.delete (_argName t) s) currDefns args
+    let currDefns' = foldl' (\s t -> S.delete (_argName t) s) currDefns args
     in termSCC currM currDefns' e
   Let arg e1 e2 _ ->
-    let currDefns' = Set.delete (_argName arg) currDefns
-    in Set.union (termSCC currM currDefns e1) (termSCC currM currDefns' e2)
+    let currDefns' = S.delete (_argName arg) currDefns
+    in S.union (termSCC currM currDefns e1) (termSCC currM currDefns' e2)
   App fn apps _ ->
-    Set.union (termSCC currM currDefns fn) (foldMap (termSCC currM currDefns) apps)
-  Sequence e1 e2 _ -> Set.union (termSCC currM currDefns e1) (termSCC currM currDefns e2)
+    S.union (termSCC currM currDefns fn) (foldMap (termSCC currM currDefns) apps)
+  Sequence e1 e2 _ -> S.union (termSCC currM currDefns e1) (termSCC currM currDefns e2)
   Conditional c _ ->
     foldMap (termSCC currM currDefns) c
-  Builtin{} -> Set.empty
-  Constant{} -> Set.empty
+  Builtin{} -> S.empty
+  Constant{} -> S.empty
   ListLit v _ -> foldMap (termSCC currM currDefns) v
-  Try e1 e2 _ -> Set.union (termSCC currM currDefns e1) (termSCC currM currDefns e2)
+  Try e1 e2 _ -> S.union (termSCC currM currDefns e1) (termSCC currM currDefns e2)
   CapabilityForm cf _ -> foldMap (termSCC currM currDefns) cf <> case view capFormName cf of
-    BN n | Set.member (_bnName n) currDefns -> Set.singleton (_bnName n)
+    BN n | S.member (_bnName n) currDefns -> S.singleton (_bnName n)
           | otherwise -> mempty
     QN (QualifiedName n' mn')
-      | Set.member n' currDefns && mn' == currM -> Set.singleton n'
-      | otherwise -> Set.singleton n'
+      | S.member n' currDefns && mn' == currM -> S.singleton n'
+      | otherwise -> S.singleton n'
     DN _ -> mempty
   -- DynInvoke m _ _ -> termSCC currM currDefns m
   ObjectLit m _ -> foldMap (termSCC currM currDefns . view _2) m
-  Error {} -> Set.empty
+  Error {} -> S.empty
 
 parsedNameSCC :: ModuleName -> Set Text -> ParsedName -> Set Text
 parsedNameSCC currM currDefns n = case n of
-  BN bn | Set.member (_bnName bn) currDefns -> Set.singleton (_bnName bn)
+  BN bn | S.member (_bnName bn) currDefns -> S.singleton (_bnName bn)
         | otherwise -> mempty
   QN (QualifiedName n' mn')
-    | Set.member n' currDefns && mn' == currM -> Set.singleton n'
+    | S.member n' currDefns && mn' == currM -> S.singleton n'
     | otherwise -> mempty
   DN _ -> mempty
 
@@ -562,10 +578,10 @@ typeSCC currM currDefs = \case
   Lisp.TyModRef _ -> mempty
   Lisp.TyObject pn -> case pn of
     -- Todo: factor out, repeated in termSCC
-    TBN bn | Set.member (_bnName bn) currDefs -> Set.singleton (_bnName bn)
+    TBN bn | S.member (_bnName bn) currDefs -> S.singleton (_bnName bn)
           | otherwise -> mempty
     TQN (QualifiedName n' mn')
-      | Set.member n' currDefs && mn' == currM -> Set.singleton n'
+      | S.member n' currDefs && mn' == currM -> S.singleton n'
       | otherwise -> mempty
   Lisp.TyKeyset -> mempty
   Lisp.TyTime -> mempty
@@ -573,10 +589,10 @@ typeSCC currM currDefs = \case
   Lisp.TyPolyObject -> mempty
   Lisp.TyTable pn ->  case pn of
     -- Todo: factor out, repeated in termSCC
-    TBN bn | Set.member (_bnName bn) currDefs -> Set.singleton (_bnName bn)
+    TBN bn | S.member (_bnName bn) currDefs -> S.singleton (_bnName bn)
           | otherwise -> mempty
     TQN (QualifiedName n' mn')
-      | Set.member n' currDefs && mn' == currM -> Set.singleton n'
+      | S.member n' currDefs && mn' == currM -> S.singleton n'
       | otherwise -> mempty
 
 defunSCC
@@ -626,6 +642,42 @@ ifDefSCC mn currDefs = \case
   IfDfun _ -> mempty
   IfDCap _ -> mempty
   IfDConst d -> defConstSCC mn currDefs d
+
+-- Todo: this handles imports, rename?
+loadTopLevelMembers
+  :: (MonadRenamer b i m)
+  => i
+  -> Maybe (Set Text)
+  -> ModuleData b i
+  -> Map Text (NameKind, Maybe DefKind)
+  -> m (Map Text (NameKind, Maybe DefKind))
+loadTopLevelMembers i mimports mdata binds = case mdata of
+  ModuleData md _ -> do
+    let modName = _mName md
+        mhash = _mHash md
+    let depMap = M.fromList $ toLocalDepMap modName mhash <$> _mDefs md
+        loadedDeps = M.fromList $ toLoadedDepMap modName mhash <$> _mDefs md
+    loadWithImports depMap loadedDeps
+  InterfaceData iface _ -> do
+    let ifname = _ifName iface
+    let ifhash = _ifHash iface
+        dcDeps = mapMaybe (fmap DConst . preview _IfDConst) (_ifDefns iface)
+        depMap = M.fromList $ toLocalDepMap ifname ifhash <$> dcDeps
+        loadedDeps = M.fromList $ toLoadedDepMap ifname ifhash <$> dcDeps
+    loadWithImports depMap loadedDeps
+  where
+  toLocalDepMap modName mhash defn = (defName defn, (NTopLevel modName mhash, Just (defKind defn)))
+  toLoadedDepMap modName mhash defn = (defName defn, (FullyQualifiedName modName (defName defn) mhash, defKind defn))
+  loadWithImports depMap loadedDeps = case mimports of
+      Just st -> do
+        let depsKeys = M.keysSet depMap
+        unless (S.isSubsetOf st depsKeys) $ throwDesugarError (InvalidImports (S.toList (S.difference st depsKeys))) i
+        (rsLoaded . loToplevel) %= (`M.union` (M.restrictKeys loadedDeps st))
+        pure (M.union (M.restrictKeys depMap st) binds)
+      Nothing -> do
+        (rsLoaded . loToplevel) %= (`M.union` loadedDeps)
+        pure (M.union depMap binds)
+
 
 resolveModuleName
   :: (MonadRenamer b i m)
@@ -697,7 +749,7 @@ loadModule module_ deps depMap = do
       allDeps = M.union memberTerms deps
   rsLoaded %= over loModules (M.insert modName (ModuleData module_ deps)) . over loAllLoaded (M.union allDeps)
   rsModuleBinds %= M.insert modName depMap
-  rsDependencies %= Set.insert modName
+  rsDependencies %= S.insert modName
 
 -- Load an interface into the `Loaded` environment
 -- noting that the only interface names that are "legal" in terms
@@ -717,7 +769,7 @@ loadInterface iface deps depMap dcDeps = do
       allDeps = M.union memberTerms deps
   rsLoaded %= over loModules (M.insert ifaceName (InterfaceData iface deps)) . over loAllLoaded (M.union allDeps)
   rsModuleBinds %= M.insert ifaceName depMap
-  rsDependencies %= Set.insert ifaceName
+  rsDependencies %= S.insert ifaceName
 
 -- | Look up a qualified name in the pact db
 -- if it's there, great! We will load the module into the scope of
@@ -1114,7 +1166,7 @@ renameModule (Module mname mgov defs blessed imp implements mhash i) = local (se
   -- `maybe all of this next section should be in a block laid out by the
   -- `locally reBinds`
   mgov' <- resolveGov mgov
-  let defNames = Set.fromList $ fmap defName defs
+  let defNames = S.fromList $ fmap defName defs
   let scc = mkScc defNames <$> defs
   defs' <- forM (stronglyConnComp scc) \case
     AcyclicSCC d -> pure d
@@ -1123,16 +1175,22 @@ renameModule (Module mname mgov defs blessed imp implements mhash i) = local (se
       -- but all uses of `head` are still scary
       throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (head d))
   binds <- view reBinds
+  bindsWithImports <- handleImports binds imp
   rsModuleBinds %= M.insert mname mempty
-  (defs'', _, _) <- over _1 reverse <$> foldlM go ([], Set.empty, binds) defs'
+  (defs'', _, _) <- over _1 reverse <$> foldlM go ([], S.empty, bindsWithImports) defs'
   let fqns = M.fromList $ (\d -> (defName d, (FullyQualifiedName mname (defName d) mhash, defKind d))) <$> defs''
   rsLoaded . loToplevel %= M.union fqns
   traverse_ (checkImplements i mname defs'') implements
   pure (Module mname mgov' defs'' blessed imp implements mhash i)
   where
+  handleImports binds [] = pure binds
+  handleImports binds (imp':xs) = do
+    binds' <- handleImport i binds imp'
+    handleImports binds' xs
+
   -- Our deps are acyclic, so we resolve all names
   go (defns, s, m) defn = do
-    when (Set.member (defName defn) s) $ error "duplicate defn name"
+    when (S.member (defName defn) s) $ error "duplicate defn name"
     let dn = defName defn
     defn' <- local (set reBinds m) $ renameDef defn
     let dk = defKind defn'
@@ -1141,7 +1199,7 @@ renameModule (Module mname mgov defs blessed imp implements mhash i) = local (se
         fqn = FullyQualifiedName mname dn mhash
     rsModuleBinds . ix mname %= M.insert dn depPair
     rsLoaded . loToplevel . ix dn .= (fqn, dk)
-    pure (defn':defns, Set.insert (defName defn) s, m')
+    pure (defn':defns, S.insert (defName defn) s, m')
 
   resolveGov = \case
     KeyGov ksn -> pure (KeyGov ksn)
@@ -1152,15 +1210,23 @@ renameModule (Module mname mgov defs blessed imp implements mhash i) = local (se
           pure (CapGov (ResolvedGov fqn))
         Just d -> throwDesugarError (InvalidGovernanceRef (QualifiedName (defName d) mname)) i
         Nothing -> throwDesugarError (InvalidGovernanceRef (QualifiedName (rawParsedName govName) mname)) i
-    --   -- Todo: could be better error? In this case the governance ref does not exist.
-    --   throwDesugarError (InvalidGovernanceRef (QualifiedName (rawParsedName govName) mname)) i
-    --  traverse $ \govName -> case find (\d -> BN (BareName (defName d)) == govName) defs of
-    -- Just (DCap d) -> pure (Name (_dcapName d) (NTopLevel mname mhash))
-    -- Just d -> throwDesugarError (InvalidGovernanceRef (QualifiedName (defName d) mname)) i
-    -- Nothing ->
-    --   -- Todo: could be better error? In this case the governance ref does not exist.
-    --   throwDesugarError (InvalidGovernanceRef (QualifiedName (rawParsedName govName) mname)) i
-  mkScc dns def = (def, defName def, Set.toList (defSCC mname dns def))
+  mkScc dns def = (def, defName def, S.toList (defSCC mname dns def))
+
+
+handleImport
+  :: (MonadRenamer b i m)
+  => i
+  -> Map Text (NameKind, Maybe DefKind)
+  -> Import
+  -> m (Map Text (NameKind, Maybe DefKind))
+handleImport info binds (Import mn mh imported) = do
+  mdata <- resolveModuleName mn info
+  let imported' = S.fromList <$> imported
+      mdhash = view mdModuleHash mdata
+  case mh of
+    Just modHash -> when (modHash /= mdhash) $ throwDesugarError (InvalidImportModuleHash mn modHash) info
+    Nothing -> pure ()
+  loadTopLevelMembers info imported' mdata binds
 
 checkImplements
   :: (MonadRenamer reso i m)
@@ -1212,7 +1278,7 @@ renameInterface (Interface ifn defs ih info) = local (set reCurrModule (Just ifn
   -- rsModuleBinds %= M.insert ifn defMap
   -- rsLoaded . loToplevel %= M.union fqns
   let defNames = ifDefName <$> defs
-  let scc = mkScc (Set.fromList defNames) <$> defs
+  let scc = mkScc (S.fromList defNames) <$> defs
   defs' <- forM (stronglyConnComp scc) \case
     AcyclicSCC d -> pure d
     CyclicSCC d ->
@@ -1221,18 +1287,18 @@ renameInterface (Interface ifn defs ih info) = local (set reCurrModule (Just ifn
       throwDesugarError (RecursionDetected ifn (ifDefName <$> d)) (ifDefInfo (head d))
   -- defs' <- locally reBinds (M.union (over _2 Just <$> defMap)) $ traverse renameIfDef defs
   binds <- view reBinds
-  (defs'', _, _) <- over _1 reverse <$> foldlM go ([], Set.empty, binds) defs'
+  (defs'', _, _) <- over _1 reverse <$> foldlM go ([], S.empty, binds) defs'
 
   pure (Interface ifn defs'' ih info)
   where
-  mkScc dns def = (def, ifDefName def, Set.toList (ifDefSCC ifn dns def))
+  mkScc dns def = (def, ifDefName def, S.toList (ifDefSCC ifn dns def))
   go (ds, s, m) d = do
-    when (Set.member (ifDefName d) s) $ error "duplicate defn name in interface"
+    when (S.member (ifDefName d) s) $ error "duplicate defn name in interface"
     let dn = ifDefName d
     d' <- local (set reBinds m) $ renameIfDef d
     let m' = maybe m (\dk -> M.insert dn (NTopLevel ifn ih, Just dk) m) (ifDefKind d')
     rsModuleBinds . ix ifn %= maybe id (M.insert dn . (NTopLevel ifn ih,)) (ifDefKind d')
-    pure (d':ds, Set.insert dn s, m')
+    pure (d':ds, S.insert dn s, m')
 
 runRenamerM
   :: RenamerState b i
@@ -1242,7 +1308,7 @@ runRenamerM
 runRenamerM st env (RenamerT act) = runReaderT (runStateT act st) env
 
 reStateFromLoaded :: Loaded b i -> RenamerState b i
-reStateFromLoaded loaded = RenamerState mbinds loaded Set.empty
+reStateFromLoaded loaded = RenamerState mbinds loaded S.empty
   where
   mbind = \case
     ModuleData m _ ->
@@ -1342,6 +1408,8 @@ runDesugarTopLevel proxy pdb loaded = \case
   Lisp.TLModule m -> over dsOut TLModule <$> runDesugarModule' proxy pdb loaded m
   Lisp.TLTerm e -> over dsOut TLTerm <$> runDesugarTerm proxy pdb loaded e
   Lisp.TLInterface i -> over dsOut TLInterface <$> runDesugarInterface proxy pdb loaded i
+  Lisp.TLUse imp info -> runDesugar' pdb loaded $ (`TLUse` info) <$> desugarUse info imp
+
 
 
 runDesugarReplTopLevel

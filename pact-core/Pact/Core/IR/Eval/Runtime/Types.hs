@@ -17,6 +17,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , ceLocal
  , cePactDb
  , ceBuiltins
+ , ceInCap
  , EvalEnv(..)
  , NativeFunction
  , BuiltinEnv
@@ -102,10 +103,11 @@ data CEKEnv b i m
   = CEKEnv
   { _ceLocal :: RAList (CEKValue b i m)
   , _cePactDb :: PactDb b i
-  , _ceBuiltins :: BuiltinEnv b i m }
+  , _ceBuiltins :: BuiltinEnv b i m
+  , _ceInCap :: Bool }
 
 instance (Show i, Show b) => Show (CEKEnv b i m) where
-  show (CEKEnv e _ _) = show e
+  show (CEKEnv e _ _ _) = show e
 
 -- | List of builtins
 type BuiltinEnv b i m = i -> b -> CEKEnv b i m -> NativeFn b i m
@@ -352,7 +354,7 @@ data Cont b i m
   -- ^ Continuation for conditionals with lazy semantics
   | ObjC (CEKEnv b i m) Field [(Field, EvalTerm b i)] [(Field, PactValue)] (Cont b i m)
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
-  | CapInvokeC (CEKEnv b i m) [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
+  | CapInvokeC (CEKEnv b i m) i [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
   -- ^ Capability special form frams that eva
   | CapBodyC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   | CapPopC CapPopState (Cont b i m)

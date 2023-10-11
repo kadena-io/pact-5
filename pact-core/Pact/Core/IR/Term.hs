@@ -149,7 +149,7 @@ data TopLevel name ty builtin info
   = TLModule (Module name ty builtin info)
   | TLInterface (Interface name ty builtin info)
   | TLTerm (Term name ty builtin info)
-  | TLUse Import
+  | TLUse Import info
   deriving (Show, Functor)
 
 data ReplTopLevel name ty builtin info

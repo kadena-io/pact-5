@@ -2,7 +2,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE InstanceSigs #-}
+-- {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Pact.Core.Errors
  ( PactErrorI
@@ -48,6 +49,8 @@ data LexerError
   deriving Show
 
 instance Exception LexerError
+
+
 
 instance Pretty LexerError where
   pretty = ("Lexical Error: " <>) . \case
@@ -133,6 +136,8 @@ data DesugarError
   -- ^ Invalid: Interface used as module reference
   | EmptyBindingBody
   | ExpectedFreeVariable Text
+  | InvalidImports [Text]
+  | InvalidImportModuleHash ModuleName ModuleHash
   -- ^ Expected free variable
   deriving Show
 
@@ -188,54 +193,7 @@ instance Pretty DesugarError where
     EmptyBindingBody -> "Bind expression lacks an accompanying body"
     ExpectedFreeVariable t ->
       Pretty.hsep ["Expected free variable in expression, found locally bound: ", pretty t]
-
--- data TypecheckError
---   = UnificationError (Type Text) (Type Text)
---   | ContextReductionError (Pred Text)
---   | UnsupportedTypeclassGeneralization [Pred Text]
---   | UnsupportedImpredicativity
---   | OccursCheckFailure (Type Text)
---   | TCInvariantFailure Text
---   | TCUnboundTermVariable Text
---   | TCUnboundFreeVariable ModuleName Text
---   | DisabledGeneralization Text
---   deriving Show
-
--- instance RenderError TypecheckError where
---   renderError = \case
---     UnificationError ty ty' ->
---       Pretty.hsep ["Type mismatch, expected:", renderType ty, "got:", renderType ty']
---     ContextReductionError pr ->
---       Pretty.hsep ["Context reduction failure, no such instance:", renderPred pr]
---     UnsupportedTypeclassGeneralization prs ->
---       Pretty.hsep ["Encountered term with generic signature, attempted to generalize on:", T.pack (show (renderPred <$> prs))]
---     UnsupportedImpredicativity ->
---       Pretty.hsep ["Invariant failure: Inferred term with impredicative polymorphism"]
---     OccursCheckFailure ty ->
---       Pretty.hsep
---       [ "Cannot construct the infinite type:"
---       , "Var(" <> renderType ty <> ") ~ " <> renderType ty]
---     TCInvariantFailure txt ->
---       Pretty.hsep ["Typechecker invariant failure violated:", txt]
---     TCUnboundTermVariable txt ->
---       Pretty.hsep ["Found unbound term variable:", txt]
---     TCUnboundFreeVariable mn txt ->
---       Pretty.hsep ["Found unbound free variable:", renderModuleName mn <> "." <> txt]
---     DisabledGeneralization txt ->
---       Pretty.hsep ["Generic types have been disabled:", txt]
-
--- instance Exception TypecheckError
-
--- newtype OverloadError
---   = OverloadError Text
---   deriving Show
-
--- instance RenderError OverloadError where
---   renderError = \case
---     OverloadError e ->
---       Pretty.hsep ["Error during overloading stage:", e]
-
--- instance Exception OverloadError
+    e -> pretty (show e)
 
 data ArgTypeError
   = ATEPrim PrimType
@@ -307,6 +265,7 @@ data EvalError
   | HashNotBlessed ModuleName ModuleHash
   | CannotApplyPartialClosure
   | ClosureAppliedToTooManyArgs
+  | FormIllegalWithinDefcap Text
   deriving Show
 
 instance Pretty EvalError where

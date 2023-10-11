@@ -205,7 +205,7 @@ data TopLevel i
   = TLModule (Module i)
   | TLInterface (Interface i)
   | TLTerm (Expr i)
-  | TLUse Import
+  | TLUse Import i
   deriving Show
 
 data Interface i
