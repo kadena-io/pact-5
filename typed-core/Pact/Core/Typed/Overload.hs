@@ -103,25 +103,27 @@ instance SolveOverload RawBuiltin CoreBuiltin where
   liftRaw = id
 
 instance (SolveOverload raw resolved) => SolveOverload (ReplBuiltin raw) (ReplBuiltin resolved) where
-  solveOverload i b tys preds = case b of
-    RBuiltinWrap raw -> over termBuiltin RBuiltinWrap <$> solveOverload i raw tys preds
+  solveOverload i (RBuiltinWrap raw) tys preds = over termBuiltin RBuiltinWrap <$> solveOverload i raw tys preds
+  solveOverload i (RBuiltinRepl b) tys preds = case b of
     RExpect ->
       case preds of
         [Pred Eq t1, Pred Show t2] -> do
           pEq <- solveOverload i (liftRaw RawEq :: ReplBuiltin raw) tys [Pred Eq t1]
           pShow <- solveOverload i (liftRaw RawShow :: ReplBuiltin raw) tys [Pred Show t2]
-          let bApp = withTyApps (Builtin RExpect i) tys
+          let bApp = withTyApps (builtin RExpect i) tys
           pure (App bApp (pEq :| [pShow]) i)
         _ -> throwOverloadError "Expect" i
-    RExpectFailure -> pure $ withTyApps (Builtin RExpectFailure i) tys
-    RExpectThat -> pure $ withTyApps (Builtin RExpectThat i) tys
+    RExpectFailure -> pure $ withTyApps (builtin RExpectFailure i) tys
+    RExpectThat -> pure $ withTyApps (builtin RExpectThat i) tys
     RPrint -> case preds of
       [Pred Show t1] -> do
         eqT <- solveOverload i (liftRaw RawShow :: ReplBuiltin raw) tys [Pred Show t1]
-        let bApp = withTyApps (Builtin RPrint i) tys
+        let bApp = withTyApps (builtin RPrint i) tys
         pure (App bApp (pure eqT) i)
       _ -> throwOverloadError "Print" i
     _ -> error "TODO builtin repls"
+    where
+      builtin = Builtin . RBuiltinRepl
   liftRaw r = RBuiltinWrap (liftRaw r)
 
 
