@@ -13,15 +13,13 @@
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Jose Cardona <jose@kadena.io>
 --
--- Our Core IR, which is inspected for static guarantees before interpretation
--- The core IR manages to
+-- Our Analysis IR
 --
 
--- Todo: Enumerate imports
-module Pact.Core.IR.Term where
+module Pact.Core.IR.Analysis.Term where
 
 import Control.Lens
-import Data.Foldable(fold, find)
+import Data.Foldable(fold)
 import Data.Text(Text)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict(Map)
@@ -33,7 +31,6 @@ import Pact.Core.Builtin
 import Pact.Core.Hash
 import Pact.Core.Literal
 import Pact.Core.Type
-    ( Type, Arg(Arg), DefKind(..), Schema(Schema) )
 import Pact.Core.Names
 import Pact.Core.Imports
 import Pact.Core.Capabilities
@@ -79,18 +76,18 @@ data DefSchema ty info
 -- because currently, renaming and desugaring are not in sequence. That is:
 -- renaming and desugaring a module happens as a full desugar into a full rename.
 -- if they ran one after another, this type would not be necessary
-data TableSchema name where
-  DesugaredTable :: ParsedName -> TableSchema ParsedName
-  ResolvedTable :: Schema -> TableSchema Name
+-- data TableSchema name where
+--   DesugaredTable :: ParsedName -> TableSchema ParsedName
+--   ResolvedTable :: Schema -> TableSchema Name
 
-instance Show (TableSchema name) where
-  show (DesugaredTable t) = "DesugardTable(" <> show t <> ")"
-  show (ResolvedTable t) = "ResolvedTable(" <> show t <> ")"
+-- instance Show (TableSchema name) where
+--   show (DesugaredTable t) = "DesugardTable(" <> show t <> ")"
+--   show (ResolvedTable t) = "ResolvedTable(" <> show t <> ")"
 
 data DefTable name info
   = DefTable
   { _dtName :: Text
-  , _dtSchema :: TableSchema name
+  , _dtSchema :: name
   , _dtInfo :: info
   } deriving (Show, Functor)
 
@@ -101,7 +98,6 @@ data Def name ty builtin info
   | DSchema (DefSchema ty info)
   | DTable (DefTable name info)
   deriving (Show, Functor)
-
 
 data Module name ty builtin info
   = Module
@@ -149,7 +145,6 @@ data TopLevel name ty builtin info
   = TLModule (Module name ty builtin info)
   | TLInterface (Interface name ty builtin info)
   | TLTerm (Term name ty builtin info)
-  | TLUse Import
   deriving (Show, Functor)
 
 data ReplTopLevel name ty builtin info
@@ -244,12 +239,12 @@ data Term name ty builtin info
   -- ^ List Literals
   | Try (Term name ty builtin info) (Term name ty builtin info) info
   -- ^ try (catch expr) (try-expr)
-  | ObjectLit [(Field, Term name ty builtin info)] info
-  -- ^ an object literal
-  -- | DynInvoke (Term name ty builtin info) Text info
-  -- ^ dynamic module reference invocation m::f
   | CapabilityForm (CapForm name (Term name ty builtin info)) info
   -- ^ Capability Natives
+  | ObjectLit [(Field, Term name ty builtin info)] info
+  -- ^ an object literal
+  | DynInvoke (Term name ty builtin info) Text info
+  -- ^ dynamic module reference invocation m::f
   | Error Text info
   -- ^ Error term
   deriving (Show, Functor)
@@ -276,21 +271,15 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
       pretty cf
     Try te te' _ ->
       parens ("try" <+> pretty te <+> pretty te')
-    -- DynInvoke n t _ ->
-    --   pretty n <> "::" <> pretty t
-    ObjectLit n _ ->
-      braces (hsep $ punctuate "," $ fmap (\(f, t) -> pretty f <> ":" <> pretty t) n)
+    DynInvoke n t _ ->
+      pretty n <> "::" <> pretty t
+    ObjectLit _n _ -> "object<todo>"
     Error txt _ ->
       parens ("error" <> pretty txt)
     where
     prettyTyAnn = maybe mempty ((":" <>) . pretty)
     prettyLamArg (Arg n ty) =
       pretty n <> prettyTyAnn ty
-
-instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (TopLevel name ty builtin info) where
-  pretty = \case
-    TLTerm tm -> pretty tm
-    _ -> "todo: pretty defs/modules"
 
 
 ----------------------------
@@ -321,8 +310,8 @@ termBuiltin f = \case
     CapabilityForm <$> traverse (termBuiltin f) cf <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (termBuiltin f) m <*> pure i
-  -- DynInvoke n t i ->
-  --   DynInvoke <$> termBuiltin f n <*> pure t <*> pure i
+  DynInvoke n t i ->
+    DynInvoke <$> termBuiltin f n <*> pure t <*> pure i
   Error txt i -> pure (Error txt i)
 
 termInfo :: Lens' (Term name ty builtin info) info
@@ -339,7 +328,7 @@ termInfo f = \case
     Conditional o <$> f i
   ListLit l i  -> ListLit l <$> f i
   Try e1 e2 i -> Try e1 e2 <$> f i
-  -- DynInvoke n t i -> DynInvoke n t <$> f i
+  DynInvoke n t i -> DynInvoke n t <$> f i
   CapabilityForm cf i -> CapabilityForm cf <$> f i
   Error t i -> Error t <$> f i
   ObjectLit m i -> ObjectLit m <$> f i
@@ -363,13 +352,9 @@ instance Plated (Term name ty builtin info) where
       Try <$> f e1 <*> f e2 <*> pure i
     ObjectLit o i ->
       ObjectLit <$> (traverse._2) f o <*> pure i
-    -- DynInvoke n t i ->
-    --   pure (DynInvoke n t i)
+    DynInvoke n t i ->
+      pure (DynInvoke n t i)
     Error e i -> pure (Error e i)
-
-findIfDef :: Text -> Interface name ty builtin info -> Maybe (IfDef name ty builtin info)
-findIfDef f iface =
-  find ((== f) . ifDefName) (_ifDefns iface)
 
 -- Todo: qualify all of these
 makeLenses ''Module

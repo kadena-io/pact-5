@@ -28,17 +28,23 @@ import Pact.Core.Errors
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.IR.Eval.CEK
+import Pact.Core.Repl.Utils
+import Pact.Core.Environment
+import Pact.Core.Persistence
 
 data ReplEvalEnv b i
   = ReplEvalEnv
   { _reGas :: IORef Gas
   , _reGasLog :: IORef (Maybe [(Text, Gas)])
+  , _reBuiltins :: BuiltinEnv b i (ReplEvalM b i)
   }
 
 data ReplEvalState b i
   = ReplEvalState
-  { _reEnv :: EvalEnv b i (ReplEvalM b i)
+  { _reEnv :: EvalEnv b i
   , _reState :: EvalState b i
+  , _reSource :: SourceCode
+  , _reTx :: Maybe (TxId, Maybe Text)
   }
 
 -- Todo: are we going to inject state as the reader monad here?
@@ -59,6 +65,12 @@ newtype ReplEvalM b i a =
 makeLenses ''ReplEvalEnv
 makeLenses ''ReplEvalState
 
+instance HasEvalState (ReplEvalState b i) b i where
+  evalState = reState
+
+instance MonadEvalEnv b i (ReplEvalM b i) where
+  readEnv = use reEnv
+
 instance MonadGas (ReplEvalM b i) where
   logGas msg g = do
     r <- view reGasLog
@@ -66,9 +78,6 @@ instance MonadGas (ReplEvalM b i) where
   chargeGas g = do
     r <- view reGas
     liftIO (modifyIORef' r (<> g))
-
-instance MonadEvalEnv b i (ReplEvalM b i) where
-  readEnv = use reEnv
 
 instance MonadEvalState b i (ReplEvalM b i) where
   getEvalState = use reState
@@ -79,19 +88,18 @@ instance MonadEvalState b i (ReplEvalM b i) where
 
 
 
-
 runReplEvalM
   :: ReplEvalEnv b i
   -> ReplEvalState b i
   -> ReplEvalM b i a
-  -> IO (Either (PactError i) a)
-runReplEvalM env st (ReplEvalM action) = runReaderT (evalStateT (runExceptT action) st) env
+  -> IO (Either (PactError i) a, ReplEvalState b i)
+runReplEvalM env st (ReplEvalM action) = runReaderT (runStateT (runExceptT action) st) env
 
 runReplCEK
   :: (Default i)
   => ReplEvalEnv b i
   -> ReplEvalState b i
   -> EvalTerm b i
-  -> IO (Either (PactError i) (EvalResult b i (ReplEvalM b i)))
+  -> IO (Either (PactError i) (EvalResult b i (ReplEvalM b i)), ReplEvalState b i)
 runReplCEK env st term =
-  runReplEvalM env st (eval mempty term)
+  runReplEvalM env st (eval (CEKEnv mempty (view (reEnv . eePactDb) st) (_reBuiltins env)) term)

@@ -15,7 +15,7 @@ import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Either(lefts, rights)
 
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.Text.Read as T
 import qualified Data.List.NonEmpty as NE
@@ -75,10 +75,11 @@ import Pact.Core.Syntax.LexUtils
   eventAnn   { PosToken TokenEventAnn _ }
   managedAnn { PosToken TokenManagedAnn _ }
   withcap    { PosToken TokenWithCapability _ }
-  reqcap     { PosToken TokenRequireCapability _}
-  installcap { PosToken TokenInstallCapability _ }
-  composecap { PosToken TokenComposeCapability _ }
-  emitevent  { PosToken TokenEmitEvent _ }
+  c_usr_grd  { PosToken TokenCreateUserGuard _}
+  -- reqcap     { PosToken TokenRequireCapability _}
+  -- installcap { PosToken TokenInstallCapability _ }
+  -- composecap { PosToken TokenComposeCapability _ }
+  -- emitevent  { PosToken TokenEmitEvent _ }
   step       { PosToken TokenStep _ }
   steprb     { PosToken TokenStepWithRollback _ }
   '{'        { PosToken TokenOpenBrace _ }
@@ -138,9 +139,9 @@ ReplSpecial :: { SpanInfo -> ReplSpecialForm SpanInfo }
   : load STR BOOLEAN { ReplLoad (getStr $2) $3 }
   | load STR { ReplLoad (getStr $2) False }
 
-Governance :: { Governance Text }
+Governance :: { Governance ParsedName }
   : StringRaw { KeyGov (KeySetName $1)}
-  | IDENT { CapGov (getIdent $1) }
+  | IDENT { CapGov (UnresolvedGov (BN (BareName (getIdent $1)))) }
 
 StringRaw :: { Text }
  : STR  { getStr $1 }
@@ -306,7 +307,7 @@ ArgList :: { [Arg] }
 Type :: { Type }
   : '[' Type ']' { TyList $2 }
   | module '{' ModQual '}' { TyModRef (mkModName $3) }
-  | IDENT '{' ParsedName '}' {% objType (_ptInfo $1) (getIdent $1) $3}
+  | IDENT '{' ParsedTyName '}' {% objType (_ptInfo $1) (getIdent $1) $3}
   | IDENT {% primType (_ptInfo $1) (getIdent $1) }
 
 -- Annotations
@@ -358,7 +359,7 @@ BlockBody :: { [ParsedExpr] }
 Expr :: { ParsedExpr }
   : '(' SExpr ')' { $2 (combineSpan (_ptInfo $1) (_ptInfo $3)) }
   | Atom { $1 }
-  | Expr '::' IDENT { DynAccess $1 (getIdent $3) (combineSpan (view termInfo $1) (_ptInfo $3)) }
+  -- | Expr '::' IDENT { DynAccess $1 (getIdent $3) (combineSpan (view termInfo $1) (_ptInfo $3)) }
 
 SExpr :: { SpanInfo -> ParsedExpr }
   : LamExpr { $1 }
@@ -406,11 +407,12 @@ CapExpr :: { SpanInfo -> ParsedExpr }
   : CapForm { CapabilityForm $1 }
 
 CapForm :: { CapForm SpanInfo }
-  : withcap '(' ParsedName AppList ')' Block { WithCapability $3 $4 $6 }
-  | installcap '(' ParsedName AppList ')' { InstallCapability $3 $4 }
-  | reqcap '(' ParsedName AppList ')' { RequireCapability $3 $4 }
-  | composecap '(' ParsedName AppList ')' { ComposeCapability $3 $4 }
-  | emitevent '(' ParsedName AppList ')' { EmitEvent $3 $4 }
+  : withcap '(' ParsedName AppList ')' Block { WithCapability $3 (reverse $4) $6 }
+  | c_usr_grd '(' ParsedName AppList ')' { CreateUserGuard $3 (reverse $4)}
+  -- | installcap '(' ParsedName AppList ')' { InstallCapability $3 $4 }
+  -- | reqcap '(' ParsedName AppList ')' { RequireCapability $3 $4 }
+  -- | composecap '(' ParsedName AppList ')' { ComposeCapability $3 $4 }
+  -- | emitevent '(' ParsedName AppList ')' { EmitEvent $3 $4 }
 
 LamArgs :: { [MArg] }
   : LamArgs IDENT ':' Type { (MArg (getIdent $2) (Just $4)):$1 }
@@ -425,7 +427,7 @@ Binders :: { [Binder SpanInfo] }
   | '(' IDENT MTypeAnn Expr ')' { [Binder (getIdent $2) $3 $4] }
 
 GenAppExpr :: { SpanInfo -> ParsedExpr }
-  : Expr AppBindList { App $1 (toAppExprList (reverse $2)) }
+  : Expr AppBindList { \i -> App $1 (toAppExprList i (reverse $2)) i }
 
 ProgNExpr :: { SpanInfo -> ParsedExpr }
   : progn BlockBody { Block (NE.fromList (reverse $2)) }
@@ -477,12 +479,18 @@ BOOLEAN :: { Bool }
   | false { False }
 
 Var :: { ParsedExpr }
-  : IDENT '.' ModQual  { Var (mkQualName (getIdent $1) $3) (_ptInfo $1) }
-  | IDENT { Var (mkBarename (getIdent $1)) (_ptInfo $1) }
+  : IDENT '.' ModQual  { Var (QN (mkQualName (getIdent $1) $3)) (_ptInfo $1) }
+  | IDENT { Var (BN (mkBarename (getIdent $1))) (_ptInfo $1) }
+  | IDENT '::' IDENT { Var (DN (DynamicName (getIdent $1) (getIdent $3))) (_ptInfo $1) }
 
 ParsedName :: { ParsedName }
-  : IDENT '.' ModQual { mkQualName (getIdent $1) $3 }
-  | IDENT { mkBarename (getIdent $1) }
+  : IDENT '.' ModQual { QN (mkQualName (getIdent $1) $3) }
+  | IDENT { BN (mkBarename (getIdent $1)) }
+  | IDENT '::' IDENT { DN (DynamicName (getIdent $1) (getIdent $3)) }
+
+ParsedTyName :: { ParsedTyName }
+  : IDENT '.' ModQual { TQN (mkQualName (getIdent $1) $3) }
+  | IDENT { TBN (mkBarename (getIdent $1)) }
 
 QualifiedName :: { QualifiedName }
   : IDENT '.' ModQual { mkQualName' (getIdent $1) $3 }
@@ -524,7 +532,7 @@ combineSpans lexpr rexpr =
 getIdent (PosToken (TokenIdent x) _) = x
 getNumber (PosToken (TokenNumber x) _) = x
 getStr (PosToken (TokenString x) _ ) = x
-getTick (PosToken (TokenSingleTick x) _) = x
+getTick (PosToken (TokenSingleTick x) _) = T.drop 1 x
 getIdentField = Field . getIdent
 
 mkIntegerConstant n i =
@@ -542,11 +550,9 @@ mkDecimal num dec i = do
 
 mkQualName ns (mod, (Just ident)) =
   let ns' = NamespaceName ns
-      qn = QualifiedName ident (ModuleName mod (Just ns'))
-  in QN qn
+  in QualifiedName ident (ModuleName mod (Just ns'))
 mkQualName mod (ident, Nothing) =
-  let qn = QualifiedName ident (ModuleName mod Nothing)
-  in QN qn
+  QualifiedName ident (ModuleName mod Nothing)
 
 mkQualName' ns (mod, (Just ident)) =
   let ns' = NamespaceName ns
@@ -566,7 +572,7 @@ mkBlock = \case
 
 -- ln0 = BN (BareName "")
 
-mkBarename tx = BN (BareName tx)
+mkBarename tx = BareName tx
 
 
 }

@@ -8,6 +8,8 @@ module Pact.Core.Gas
  , GasModel(..)
  , GasEnv(..)
  , NodeType(..)
+ , GasLimit
+ , GasPrice
  , gmName
  , gmDesc
  , gmNatives

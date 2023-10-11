@@ -4,6 +4,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE GADTs #-}
 
 module Pact.Core.Names
  ( ModuleName(..)
@@ -11,6 +12,9 @@ module Pact.Core.Names
  , Field(..)
  , IRNameKind(..)
  , ParsedName(..)
+ , ParsedTyName(..)
+ , DynamicName(..)
+ , DynamicRef(..)
  , Name(..)
  , NameKind(..)
  , BareName(..)
@@ -43,7 +47,11 @@ module Pact.Core.Names
  , replModuleHash
 --  , DefKind(..)
  , fqnToName
+ , fqnToQualName
  , NativeName(..)
+ , RowKey(..)
+ , renderFullyQualName
+ , FQNameRef(..)
  ) where
 
 import Control.Lens
@@ -101,21 +109,40 @@ instance Pretty QualifiedName where
   pretty (QualifiedName n m) =
     pretty m <> "." <> pretty n
 
+data DynamicName
+  = DynamicName
+  { _dnName :: Text
+  , _dnCall :: Text
+  } deriving (Show, Eq)
+
+data ParsedTyName
+  = TQN QualifiedName
+  | TBN BareName
+  deriving (Show, Eq)
+
+instance Pretty ParsedTyName where
+  pretty = \case
+    TQN qn -> pretty qn
+    TBN n -> pretty n
+
 data ParsedName
   = QN QualifiedName
   | BN BareName
+  | DN DynamicName
   deriving (Show, Eq)
 
 rawParsedName :: ParsedName -> Text
 rawParsedName (BN (BareName n)) = n
 rawParsedName (QN qn) = _qnName qn
+rawParsedName (DN dn) = _dnName dn
 
 instance Pretty ParsedName where
   pretty = \case
     QN qn -> pretty qn
     BN n -> pretty n
+    DN dn -> pretty (_dnName dn) <> "::" <> pretty (_dnCall dn)
 
-newtype Field = Field Text
+newtype Field = Field { _field :: Text }
   deriving (Eq, Ord, Show)
 
 instance Pretty Field where
@@ -160,13 +187,24 @@ data OverloadedName b
   , _olNameKind :: ONameKind b }
   deriving (Show, Eq)
 
--- Name representing locally nameless representations
+-- | Name type representing all local and free
+-- variable binders
 data Name
   = Name
   { _nName :: !Text
   , _nKind :: NameKind }
   deriving (Show, Eq, Ord)
 
+data DynamicRef
+  = DynamicRef
+  { _drNameArg :: !Text
+  , _drBindType :: DeBruijn
+  } deriving (Show, Eq, Ord)
+
+-- | NameKind distinguishes the identifier
+-- from the binding type, whether it is a free or bound variable,
+-- and whether the free variable is simply a module reference,
+-- a top-level function, or a dynamic reference
 data NameKind
   = NBound DeBruijn
   -- ^ Locally bound names, via defuns or lambdas
@@ -176,6 +214,7 @@ data NameKind
   | NModRef ModuleName [ModuleName]
   -- ^ module reference, pointing to the module name +
   -- the implemented interfaces
+  | NDynRef DynamicRef
   deriving (Show, Eq, Ord)
 
 data FullyQualifiedName
@@ -233,13 +272,17 @@ instance Pretty Name where
     NBound dix -> pretty n <> "<" <> pretty dix <> ">"
     NTopLevel mn _mh -> pretty mn <> "." <> pretty n
     NModRef m _ -> pretty m
+    NDynRef dr -> pretty n <> "::" <> pretty (_drNameArg dr)
 
 instance Pretty NamedDeBruijn where
   pretty (NamedDeBruijn _i _n) =
     pretty _n
 
-newtype TableName = TableName Text
-  deriving (Eq, Show)
+newtype TableName = TableName { _tableName :: Text }
+  deriving (Eq, Ord, Show)
+
+instance Pretty TableName where
+  pretty (TableName tn) = pretty tn
 
 -- | Constants for resolving repl things
 replRawModuleName :: Text
@@ -255,3 +298,28 @@ replModuleHash = ModuleHash (Hash "#repl")
 fqnToName :: FullyQualifiedName -> Name
 fqnToName (FullyQualifiedName mn name mh) =
   Name name (NTopLevel mn mh)
+
+fqnToQualName :: FullyQualifiedName -> QualifiedName
+fqnToQualName (FullyQualifiedName mn name _) =
+  QualifiedName name mn
+
+renderFullyQualName :: FullyQualifiedName -> Text
+renderFullyQualName (FullyQualifiedName mn n _) =
+  renderQualName (QualifiedName n mn)
+
+newtype RowKey
+  = RowKey { _rowKey :: Text }
+  deriving (Eq, Ord, Show)
+
+data FQNameRef name where
+  FQParsed :: ParsedName -> FQNameRef ParsedName
+  FQName :: FullyQualifiedName -> FQNameRef Name
+
+instance Show (FQNameRef name) where
+  show = \case
+    FQParsed pn -> show pn
+    FQName fqn -> show fqn
+
+instance Eq (FQNameRef name) where
+  (FQParsed pn) == (FQParsed pn') = pn == pn'
+  (FQName fqn) == (FQName fqn') = fqn == fqn'

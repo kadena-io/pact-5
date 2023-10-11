@@ -50,6 +50,7 @@ import Data.Map(Map)
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 
+import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 import qualified Data.RAList as RAList
@@ -1757,7 +1758,7 @@ dbjTyp i env depth = \case
 --   tl = _loModules loaded
 --   toTy d = (Untyped.defName d, Untyped.defType d)
 --   mdefs =  Untyped._mDefs . _mdModule <$> tl
---   in Map.fromList . fmap toTy <$> mdefs
+--   in M.fromList . fmap toTy <$> mdefs
 
 runInfer
   :: Loaded b i
