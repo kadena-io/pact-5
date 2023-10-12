@@ -67,7 +67,7 @@ ordinaryPactStepExec (StepWithRollback expr _ _) = expr
 data DefPact name ty builtin info
   = DefPact
   { _dpName :: Text
-  , _dpArgs :: NonEmpty (Arg ty)
+  , _dpArgs :: [Arg ty]
   , _dpRetType :: Maybe ty
   , _dpSteps :: NonEmpty (PactStep name ty builtin info)
   , _dpInfo :: info

@@ -210,11 +210,9 @@ mkDefPactClosure fqn (DefPact _ _ mrty (step :| steps) info) env = case step of
   StepWithRollback step' _ _ -> toClosure True step'
   where
     nSteps = length steps + 1
-    toClosure rb = \case
-      Lam _ args body i ->
-        let dpc = DefPactClosure fqn (_argType <$> args) (NE.length args) body rb nSteps mrty env i
-        in pure (VDefPactClosure dpc)
-      _ -> throwExecutionError info (InvariantFailure "Step is not lambda")
+    toClosure rb =
+      let dpc = DefPactClosure fqn (_argType <$> args) (NE.length args) body rb nSteps mrty env i
+      in pure (VDefPactClosure dpc)
 
 
 initPact

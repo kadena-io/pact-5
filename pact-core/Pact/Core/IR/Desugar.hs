@@ -375,22 +375,23 @@ desugarDefPact (Lisp.DefPact dpname _ _ [] _ _ i) =
 desugarDefPact (Lisp.DefPact dpname margs rt (step:steps) _ _ i) =
   view reCurrModule >>= \case
     Just mn -> do
-      let
-        args' = case margs of
-                  [] -> pure unitFnArg
-                  arg:args -> toArg <$> (arg :| args)
-        desugarStep b = do
-          tm <- desugarLispTerm b
-          pure (Lam (TLDefPact mn dpname) args' tm i) -- TODO: add TLPactStep
-        desugarMSteps = maybe (pure Nothing) (fmap Just . traverse desugarStep)
+      -- let
+      --   args' = case margs of
+      --             [] -> pure unitFnArg
+      --             arg:args -> toArg <$> (arg :| args)
+      -- let desugarStep b = do
+      --       tm <- desugarLispTerm b
+      --       pure (Lam (TLDefPact mn dpname) args' tm i) -- TODO: add TLPactStep
+      --   desugarMSteps = maybe (pure Nothing) (fmap Just . traverse desugarStep)
+      let args' = toArg <$> margs
       steps' <- forM (step :| steps) \case
         Lisp.Step s ms ->
-          Step <$> desugarStep s <*> desugarMSteps ms
+          Step <$> desugarLispTerm s <*> traverse (traverse desugarLispTerm) ms
         Lisp.StepWithRollback s rb ms ->
           StepWithRollback
-          <$> desugarStep s
-          <*> desugarStep rb
-          <*> desugarMSteps ms
+          <$> desugarLispTerm s
+          <*> desugarLispTerm rb
+          <*> traverse (traverse desugarLispTerm) ms
 
       -- In Pact, last steps are not allowed to roll back.
       when (hasRollback $ NE.last steps') $
@@ -398,6 +399,17 @@ desugarDefPact (Lisp.DefPact dpname margs rt (step:steps) _ _ i) =
 
       pure $ DefPact dpname args' rt steps' i
     Nothing -> error "Defpact is module-less"
+    where
+      -- Todo: debruijn code should be isolated
+    -- bindArgs rEnv
+    --   | null argtys = rEnv
+    --   | otherwise = let
+    --     depth = view reVarDepth rEnv
+    --     len = fromIntegral (length argtys)
+    --     newDepth = depth + len
+    --     ixs = [depth .. newDepth - 1]
+    --     m = M.fromList $ zip (_argName <$> argtys) ((, Nothing) . NBound <$> ixs)
+    --     in over reBinds (M.union m) $ set reVarDepth newDepth rEnv
 
 desugarDefConst
   :: (MonadDesugar raw reso i m)
@@ -989,12 +1001,24 @@ renameDefPact
   :: MonadDesugar raw reso i m
   => DefPact ParsedName DesugarType raw i
   -> m (DefPact Name Type raw i)
-renameDefPact (DefPact n args mret steps i) = do
-  args' <- (traverse.traverse) (renameType i) args
+renameDefPact (DefPact n argtys mret steps i) = do
+  args' <- (traverse.traverse) (renameType i) argtys
   mret' <- traverse (renameType i) mret
-  steps' <- local (set reCurrDef (Just DKDefPact)) $
+  steps' <- local (set reCurrDef (Just DKDefPact) . bindArgs) $
     traverse renamePactStep steps
   pure (DefPact n args' mret' steps' i)
+  where
+  -- Todo: duplication, factor out
+  bindArgs rEnv
+      | null argtys = rEnv
+      | otherwise = let
+        depth = view reVarDepth rEnv
+        len = fromIntegral (length argtys)
+        newDepth = depth + len
+        ixs = [depth .. newDepth - 1]
+        m = M.fromList $ zip (_argName <$> argtys) ((, Nothing) . NBound <$> ixs)
+        in over reBinds (M.union m) $ set reVarDepth newDepth rEnv
+
 
 renameDefSchema
   :: (MonadRenamer reso i m)
