@@ -252,6 +252,7 @@ data RawBuiltin
   | RawWrite
   | RawTxIds
   | RawTxLog
+  | RawTxHash
   -- Db QueryFunctions
   | RawAndQ
   | RawOrQ
@@ -364,6 +365,7 @@ rawBuiltinToText = \case
   RawWrite -> "write"
   RawTxIds -> "txids"
   RawTxLog -> "txlog"
+  RawTxHash -> "tx-hash"
   RawAndQ -> "and?"
   RawOrQ -> "or?"
   RawWhere -> "where?"
@@ -472,6 +474,7 @@ instance IsBuiltin RawBuiltin where
     RawWrite -> 3
     RawTxIds -> 2
     RawTxLog -> 2
+    RawTxHash -> 1
     RawAndQ -> 3
     RawOrQ -> 3
     RawWhere -> 3

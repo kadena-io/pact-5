@@ -418,7 +418,7 @@ requireCap cont handler (CapToken fqn args) = do
   let csToSet cs = S.insert (_csCap cs) (S.fromList (_csComposed cs))
       capSet = foldMap csToSet caps
   if S.member ct capSet then returnCEKValue cont handler (VBool True)
-  else throwExecutionError' (CapNotInScope "cap not in scope")
+  else returnCEK cont handler $ VError $ "cap not in scope " <> renderQualName (fqnToQualName fqn)
 
 composeCap
   :: (MonadEval b i m)

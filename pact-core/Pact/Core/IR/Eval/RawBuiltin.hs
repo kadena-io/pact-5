@@ -548,13 +548,17 @@ coreAccess = \info b cont handler _env -> \case
 -- try-related ops
 -----------------------------------
 
-coreEnforce :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-coreEnforce = \info b cont handler _env -> \case
-  [VLiteral (LBool b'), VLiteral (LString s)] ->
-    if b' then returnCEKValue cont handler (VBool True)
-    else returnCEK cont handler (VError s)
-  args -> argsError info b args
+-- coreEnforce :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+-- coreEnforce = \info b cont handler _env -> \case
+--   [VLiteral (LBool b'), VLiteral (LString s)] ->
+--     if b' then returnCEKValue cont handler (VBool True)
+--     else returnCEK cont handler (VError s)
+--   args -> argsError info b args
 
+enforceTopLevelOnly :: (IsBuiltin b, MonadEval b i m) => i -> b -> m ()
+enforceTopLevelOnly info b = do
+  s <- useEvalState esStack
+  when (not (null s)) $ throwExecutionError info (NativeIsTopLevelOnly (builtinName b))
 
 -----------------------------------
 -- Guards and reads
@@ -680,32 +684,6 @@ coreReadKeyset = \info b cont handler _env -> \case
     readKeyset' ksn >>= \case
       Just ks -> returnCEKValue cont handler (VGuard (GKeyset ks))
       Nothing -> returnCEK cont handler (VError "read-keyset failure")
-    -- EnvData envData <- viewCEKEnv eeMsgBody
-    -- case M.lookup (Field s) envData of
-    --   Just (PObject dat) ->
-    --     case parseObj dat of
-    --       Just (ks, p) -> returnCEKValue cont handler (VGuard (GKeyset (KeySet ks p)))
-    --       Nothing -> returnCEK cont handler (VError "read-keyset failure")
-    --     where
-    --     parseObj d = do
-    --       keys <- M.lookup (Field "keys") d
-    --       keyText <- preview _PList keys >>= traverse (fmap PublicKeyText . preview (_PLiteral . _LString))
-    --       predRaw <- M.lookup (Field "pred") d
-    --       p <- preview (_PLiteral . _LString) predRaw
-    --       (S.fromList (V.toList keyText),) <$> readPredicate p
-    --     readPredicate = \case
-    --       "keys-any" -> pure KeysAny
-    --       "keys-2" -> pure Keys2
-    --       "keys-all" -> pure KeysAll
-    --       _ -> Nothing
-    --   Just (PList li) ->
-    --     case parseKeyList li of
-    --       Just ks -> returnCEKValue cont handler (VGuard (GKeyset (KeySet ks KeysAll)))
-    --       Nothing -> returnCEK cont handler (VError "read-keyset failure")
-    --     where
-    --     parseKeyList d =
-    --       S.fromList . V.toList . fmap PublicKeyText <$> traverse (preview (_PLiteral . _LString)) d
-    --   _ -> returnCEK cont handler (VError "read-keyset failure")
   args -> argsError info b args
 
 enforceCapGuard
@@ -759,6 +737,7 @@ coreBind = \info b cont handler _env -> \case
 createTable :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 createTable = \info b cont handler env -> \case
   [VTable tv@(TableValue tn mn _ _)] -> do
+    enforceTopLevelOnly info b
     guardTable info env tv
     let pdb = view cePactDb env
     -- Todo: error handling here
@@ -1155,8 +1134,15 @@ coreHash = \info b cont handler _env -> \case
     returnCEKValue cont handler $ VString $ hashToText $ pactHash $ T.encodeUtf8 s
   args -> argsError info b args
 
+txHash :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+txHash = \info b cont handler _env -> \case
+  [VUnit] -> do
+    h <- viewCEKEnv eeHash
+    returnCEKValue cont handler (VString (hashToText h))
+  args -> argsError info b args
+
 -----------------------------------
--- Core definitions
+-- Core definiti ons
 -----------------------------------
 
 unimplemented :: NativeFunction b i m
@@ -1263,4 +1249,5 @@ rawBuiltinRuntime = \case
   RawWhere -> coreWhere
   RawNotQ -> coreNotQ
   RawHash -> coreHash
+  RawTxHash -> txHash
 

@@ -267,6 +267,7 @@ data EvalError
   | ClosureAppliedToTooManyArgs
   | FormIllegalWithinDefcap Text
   | RunTimeTypecheckFailure ArgTypeError Type
+  | NativeIsTopLevelOnly NativeName
   deriving Show
 
 instance Pretty EvalError where
