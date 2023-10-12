@@ -1536,6 +1536,7 @@ inferTopLevel = \case
   IR.TLModule m -> Typed.TLModule <$> inferModule m
   IR.TLTerm m -> Typed.TLTerm . snd <$> inferTermNonGen m
   IR.TLInterface i -> Typed.TLInterface <$> inferInterface i
+  IR.TLUse u -> pure $ Typed.TLUse u
 
 inferReplTopLevel
   :: TypeOfBuiltin b
