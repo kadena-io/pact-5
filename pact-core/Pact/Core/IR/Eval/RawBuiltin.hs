@@ -7,6 +7,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE MultiWayIf #-}
 
 module Pact.Core.IR.Eval.RawBuiltin
  ( rawBuiltinRuntime
@@ -21,7 +22,7 @@ module Pact.Core.IR.Eval.RawBuiltin
 -- CEK runtime for our IR term
 --
 
-import Control.Lens hiding (from, to, op)
+import Control.Lens hiding (from, to, op, parts)
 import Control.Monad(when, unless, foldM)
 import Control.Monad.IO.Class
 import Data.Containers.ListUtils(nubOrd)
@@ -39,7 +40,6 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Char as Char
 import qualified Data.ByteString as BS
--- import qualified Data.RAList as RAList
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
@@ -56,6 +56,8 @@ import Pact.Core.Capabilities
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.IR.Eval.CEK
+
+import qualified Pact.Core.Pretty as Pretty
 
 
 ----------------------------------------------------------------------
@@ -602,6 +604,11 @@ coreEnforceGuard = \info b cont handler env -> \case
           md <- getModule info env mn
           acquireModuleAdmin info env md
           returnCEKValue cont handler (VBool True)
+  [VString s] -> do
+    let ksn = KeySetName s
+    cond <- enforceKeysetName info env ksn
+    if cond then returnCEKValue cont handler (VBool True)
+    else returnCEK cont handler (VError "enforce keyset failure")
   args -> argsError info b args
 
 keysetRefGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -955,7 +962,12 @@ requireCapability = \info b cont handler _env -> \case
 
 composeCapability :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 composeCapability = \info b cont handler env -> \case
-  [VCapToken ct] -> composeCap cont handler env ct
+  [VCapToken ct] ->
+    useEvalState esStack >>= \case
+      sf:_ -> do
+        when (_sfFnType sf /= SFDefcap) $ failInvariant info "compose-cap "
+        composeCap info cont handler env ct
+      _ -> failInvariant info "compose-cap at the top level"
   args -> argsError info b args
 
 installCapability :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -1023,6 +1035,39 @@ coreDistinct = \info b cont handler _env -> \case
       $ nubOrd
       $ V.toList s
   args -> argsError info b args
+
+coreFormat  :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreFormat = \info b cont handler _env -> \case
+  [VString s, VList es] -> do
+    let parts = T.splitOn "{}" s
+        plen = length parts
+    if | plen == 1 -> returnCEKValue cont handler (VString s)
+       | plen - length es > 1 -> returnCEK cont handler $ VError $ "format: not enough arguments for template"
+       | otherwise -> do
+          let args = formatArg <$> V.toList es
+          returnCEKValue cont handler $ VString $  T.concat $ alternate parts (take (plen - 1) args)
+    where
+    formatArg (PString ps) = ps
+    formatArg a = renderPactValue a
+    alternate (x:xs) ys = x : alternate ys xs
+    alternate _ _ = []
+  args -> argsError info b args
+
+-- Todo: This _Really_ needs gas
+-- moreover this is kinda hacky
+-- BIG TODO: REMOVE PRETTY FROM SEMANTICS.
+-- THIS CANNOT MAKE IT TO PROD
+renderPactValue :: PactValue -> T.Text
+renderPactValue = T.pack . show . Pretty.pretty
+  -- PLiteral l -> case l of
+  --   LString s -> "\"" <> s <> "\""
+  --   LInteger i -> T.pack (show i)
+  --   LDecimal d -> T.pack (show d)
+  --   LUnit -> "()"
+
+
+
+
 
 checkLen
   :: (MonadEval b i m)
@@ -1198,6 +1243,7 @@ rawBuiltinRuntime = \case
   RawStrToIntBase -> coreStrToIntBase
   RawFold -> coreFold
   RawDistinct -> coreDistinct
+  RawFormat -> coreFormat
   RawContains -> rawContains
   RawSort -> rawSort
   RawSortObject -> rawSortObject
@@ -1214,6 +1260,7 @@ rawBuiltinRuntime = \case
   RawReadString -> coreReadString
   RawReadKeyset -> coreReadKeyset
   RawEnforceGuard -> coreEnforceGuard
+  RawEnforceKeyset -> coreEnforceGuard
   RawKeysetRefGuard -> keysetRefGuard
   RawAt -> coreAccess
   RawMakeList -> makeList

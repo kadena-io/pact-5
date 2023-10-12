@@ -37,6 +37,7 @@ module Pact.Core.Environment
 --  , esCaps, esEvents, esInCap
 --  , esStack, esLoaded
  , StackFrame(..)
+ , StackFunctionType(..)
  ) where
 
 import Data.Int(Int64)
@@ -147,10 +148,16 @@ newtype PactState b i
 
 makeLenses ''PactState
 
+data StackFunctionType
+  = SFDefun
+  | SFDefcap
+  deriving (Eq, Show, Enum, Bounded)
+
 data StackFrame
   = StackFrame
   { _sfFunction :: Text
-  , _sfModule :: ModuleName }
+  , _sfModule :: ModuleName
+  , _sfFnType :: StackFunctionType }
   deriving Show
 
 data EvalState b i

@@ -208,6 +208,7 @@ data RawBuiltin
   | RawStrToIntBase
   | RawFold
   | RawDistinct
+  | RawFormat
   -- | RawEnforce
   -- | RawEnforceOne
   | RawEnumerate
@@ -221,6 +222,7 @@ data RawBuiltin
   | RawReadString
   | RawReadKeyset
   | RawEnforceGuard
+  | RawEnforceKeyset
   | RawKeysetRefGuard
   | RawAt
   | RawMakeList
@@ -324,6 +326,7 @@ rawBuiltinToText = \case
   RawFold -> "fold"
   RawZip -> "zip"
   RawDistinct -> "distinct"
+  RawFormat -> "format"
   -- RawEnforce -> "enforce"
   -- RawEnforceOne -> "enforce-one"
   RawEnumerate -> "enumerate"
@@ -336,6 +339,7 @@ rawBuiltinToText = \case
   RawReadString -> "read-string"
   RawReadKeyset -> "read-keyset"
   RawEnforceGuard -> "enforce-guard"
+  RawEnforceKeyset -> "enforce-keyset"
   RawKeysetRefGuard -> "keyset-ref-guard"
   RawCreateCapabilityGuard -> "create-capability-guard"
   RawCreateModuleGuard -> "create-module-guard"
@@ -433,6 +437,7 @@ instance IsBuiltin RawBuiltin where
     RawStrToIntBase -> 2
     RawFold -> 3
     RawDistinct -> 1
+    RawFormat -> 2
     -- RawEnforce -> 2
     -- RawEnforceOne -> 2
     RawEnumerate -> 2
@@ -445,6 +450,7 @@ instance IsBuiltin RawBuiltin where
     RawReadDecimal -> 1
     RawReadString -> 1
     RawReadKeyset -> 1
+    RawEnforceKeyset -> 1
     RawEnforceGuard -> 1
     RawKeysetRefGuard -> 1
     RawCreateCapabilityGuard -> 1
@@ -511,6 +517,7 @@ data ReplBuiltins
   | RCommitTx
   | RRollbackTx
   | RSigKeyset
+  | RTestCapability
   -- | RLoad
   -- | RLoadWithEnv
   -- | RExpect
@@ -558,6 +565,7 @@ instance IsBuiltin ReplBuiltins where
     RCommitTx -> 0
     RRollbackTx -> 0
     RSigKeyset -> 1
+    RTestCapability -> 1
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
 -- Note: commented out natives are
@@ -618,6 +626,7 @@ replBuiltinsToText = \case
   RCommitTx -> "commit-tx"
   RRollbackTx -> "rollback-tx"
   RSigKeyset -> "sig-keyset"
+  RTestCapability -> "test-capability"
   -- RLoad -> "load"
   -- RLoadWithEnv -> "load-with-env"
 

@@ -150,12 +150,16 @@ type MonadDesugar raw reso i m =
   , MonadError (PactError i) m
   , MonadState (RenamerState reso i) m
   , MonadReader (RenamerEnv reso i) m
+  , Show reso
+  , Show i
   , MonadIO m)
 
 type MonadRenamer reso i m =
   ( MonadError (PactError i) m
   , MonadState (RenamerState reso i) m
   , MonadReader (RenamerEnv reso i) m
+  , Show reso
+  , Show i
   , MonadIO m)
 
 dsOut :: Lens (DesugarOutput b i a) (DesugarOutput b i a') a a'
@@ -221,6 +225,8 @@ desugarAppArityRaw f i RawSort [e1, e2] =
   App (Builtin (f RawSortObject) i) [e1, e2] i
 desugarAppArityRaw f i RawReadMsg [] =
   App (Builtin (f RawReadMsgDefault) i) [] i
+desugarAppArityRaw f i RawDefineKeySet [e1] =
+  App (Builtin (f RawDefineKeysetData) i) [e1] i
 desugarAppArityRaw f i b args =
     App (Builtin (f b) i) args i
 
@@ -636,8 +642,18 @@ defTableSCC mn cd dt =
   let (DesugaredTable t) = (_dtSchema dt)
   in parsedNameSCC mn cd t
 
--- defCapSCC :: ModuleName -> DefCap Name b i -> Set Text
--- defCapSCC mn = termSCC mn . _dcapTerm
+defCapSCC
+  :: ModuleName
+  -> Set Text
+  -> DefCap ParsedName DesugarType b i1
+  -> Set Text
+defCapSCC mn cd dc =
+  case _dcapMeta dc of
+    Just (DefManaged (Just dmeta)) ->
+      let (FQParsed pn) = _dmManagerFn dmeta
+      in termSCC mn cd (_dcapTerm dc) <> parsedNameSCC mn cd pn
+    _ -> termSCC mn cd (_dcapTerm dc)
+
 
 defSCC
   :: ModuleName
@@ -647,7 +663,7 @@ defSCC
 defSCC mn cd = \case
   Dfun d -> defunSCC mn cd d
   DConst d -> defConstSCC mn cd d
-  DCap dc -> termSCC mn cd (_dcapTerm dc)
+  DCap dc -> defCapSCC mn cd dc
   DSchema ds -> foldMap (typeSCC mn cd) ( _dsSchema ds)
   DTable dt -> defTableSCC mn cd dt
 
@@ -709,7 +725,7 @@ resolveModuleName mn i =
       view rePactDb >>= liftIO . (`readModule` mn) >>= \case
       Nothing -> throwDesugarError (NoSuchModule mn) i
       Just md -> case md of
-        ModuleData module_ depmap ->
+        ModuleData module_ depmap -> do
           md <$ loadModule' module_ depmap
         InterfaceData in' depmap ->
           md <$ loadInterface' in' depmap
@@ -964,10 +980,10 @@ renameTerm (CapabilityForm cf i) =
       CreateUserGuard{} -> False
       _ -> True
 
-    checkCapFormNonModule = \case
-      WithCapability{} ->
-        throwDesugarError (NotAllowedOutsideModule "with-capability") i
-      CreateUserGuard{} -> pure ()
+    checkCapFormNonModule = const (pure ())
+      -- WithCapability{} ->
+      --   throwDesugarError (NotAllowedOutsideModule "with-capability") i
+      -- CreateUserGuard{} -> pure ()
 
     checkCapForm = \case
       WithCapability{} -> enforceNotWithinDefcap i "with-capability"
@@ -1191,10 +1207,7 @@ renameModule
   => Module ParsedName DesugarType raw i
   -> m (Module Name Type raw i)
 renameModule (Module mname mgov defs blessed imp implements mhash i) = local (set reCurrModule (Just mname)) $ do
-  -- let defMap = M.fromList $ (\d -> (defName d, (NTopLevel mname mhash, defKind d))) <$> defs
-  -- let fqns = M.fromList $ (\d -> (defName d, (FullyQualifiedName mname (defName d) mhash, defKind d))) <$> defs
-  -- `maybe all of this next section should be in a block laid out by the
-  -- `locally reBinds`
+  rsDependencies .= mempty
   mgov' <- resolveGov mgov
   let defNames = S.fromList $ fmap defName defs
   let scc = mkScc defNames <$> defs
@@ -1368,7 +1381,7 @@ runDesugar' pdb loaded act = do
   pure (DesugarOutput renamed loaded' deps)
 
 runDesugarTerm
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1377,7 +1390,7 @@ runDesugarTerm
 runDesugarTerm _ pdb loaded = runDesugar' pdb loaded  . RenamerT . (desugarLispTerm >=> renameTerm)
 
 runDesugarModule'
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1386,7 +1399,7 @@ runDesugarModule'
 runDesugarModule' _ pdb loaded = runDesugar' pdb loaded . RenamerT . (desugarModule >=> renameModule)
 
 runDesugarInterface
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1395,7 +1408,7 @@ runDesugarInterface
 runDesugarInterface _ pdb loaded  = runDesugar' pdb loaded . RenamerT . (desugarInterface >=> renameInterface)
 
 runDesugarReplDefun
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1408,7 +1421,7 @@ runDesugarReplDefun _ pdb loaded =
   . (desugarDefun >=> renameReplDefun)
 
 runDesugarReplDefConst
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1428,7 +1441,7 @@ runDesugarReplDefConst _ pdb loaded =
 -- runDesugarModule loaded = runDesugarModule' loaded 0
 
 runDesugarTopLevel
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1443,7 +1456,7 @@ runDesugarTopLevel proxy pdb loaded = \case
 
 
 runDesugarReplTopLevel
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i

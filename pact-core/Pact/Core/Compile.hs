@@ -49,6 +49,7 @@ type HasCompileEnv b s m
     , DesugarBuiltin b
     , Pretty b
     , MonadIO m
+    , Show b
     , PhaseDebug m)
 
 _parseOnly
@@ -120,12 +121,14 @@ interpretTopLevel
   -> Interpreter b m
   -> DesugarOutput b SpanInfo (TopLevel Name Type b SpanInfo)
   -> m (CompileValue b)
-interpretTopLevel pdb interp (DesugarOutput ds lo0 deps) = do
+interpretTopLevel pdb interp (DesugarOutput ds lo0 _deps) = do
   debugPrint DebugDesugar ds
   evalState . loaded .= lo0
   case ds of
     TLModule m -> do
-      let deps' = M.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo0)
+      -- let deps' = M.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo0)
+      -- Todo: deps are not being calculated properly by the renamer
+      let deps' = _loAllLoaded lo0
           mdata = ModuleData m deps'
       liftDbFunction (_mInfo m) (writeModule pdb Write (view mName m) mdata)
       let newLoaded = M.fromList $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
@@ -136,7 +139,9 @@ interpretTopLevel pdb interp (DesugarOutput ds lo0 deps) = do
       evalState . esCaps . csModuleAdmin %= Set.union (Set.singleton (_mName m))
       pure (LoadedModule (_mName m))
     TLInterface iface -> do
-      let deps' = M.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo0)
+      -- Todo: deps are not being calculated properly by the renamer
+      -- let deps' = M.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo0)
+      let deps' = _loAllLoaded lo0
           mdata = InterfaceData iface deps'
       liftDbFunction (_ifInfo iface) (writeModule pdb Write (view ifName iface) mdata)
       let newLoaded = M.fromList $ toFqDep (_ifName iface) (_ifHash iface)
