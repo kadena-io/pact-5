@@ -8,7 +8,7 @@ module Pact.Core.Pacts.Types
  , PactStep(..)
  , psStep, psRollback, psPactId, psResume
  , PactExec(..)
- , peStepCount, peYield, peStep, peContinuation, peStepHasRollback
+ , peStepCount, peYield, peStep, peContinuation, peStepHasRollback, pePactId
  , Yield(..)
  ) where
 
@@ -43,7 +43,7 @@ data PactExec
   { _peStepCount :: Int
   , _peYield :: Maybe Yield
   , _peStep :: Int
-  -- , _pePactId :: PactId
+  , _pePactId :: PactId
   , _peContinuation :: PactContinuation FullyQualifiedName PactValue
   , _peStepHasRollback :: Bool
 --  , _peNestedPactExec :: Map PactId NestedPactExec

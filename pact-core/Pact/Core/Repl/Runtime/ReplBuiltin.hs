@@ -140,7 +140,8 @@ continuePact info b _cont _handler _env = \case
 
             setEvalState esPactExec Nothing
             (reEnv . eePactStep) .= Just pactStep
-            pure (EvalValue (VObject (M.fromList [])))
+            returnCEKValue cont handler (resumePact i Nothing)
+
       Just _ -> pure (EvalValue (VObject (M.fromList [])))
 
 

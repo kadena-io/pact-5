@@ -393,7 +393,7 @@ data Cont b i m
   | CapBodyC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   | CapPopC CapPopState (Cont b i m)
   | StackPopC (Maybe Type) (Cont b i m)
-  | PactStepC (Cont b i m) (CEKEnv b i m)
+  | PactStepC (CEKEnv b i m) (Cont b i m)
   | Mt
   -- ^ Empty Continuation
   deriving Show

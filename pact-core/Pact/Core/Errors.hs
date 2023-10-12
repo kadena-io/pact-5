@@ -307,6 +307,8 @@ data EvalError
   | ContinuePactInvalidContext Integer Integer Integer
   | MultipleOrNestedPactExecFound
   | PactStepNotFound Int
+  | PactStepHasNoRollback
+  | StepNotInEnvironment
   -- ^ No such keyset
   | CannotUpgradeInterface ModuleName
   -- ^ Interface cannot be upgrade

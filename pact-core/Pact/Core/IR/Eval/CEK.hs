@@ -11,6 +11,7 @@ module Pact.Core.IR.Eval.CEK
   , unsafeApplyOne
   , unsafeApplyTwo
   , mkDefPactClosure
+  , resumePact
   , evalCap
   , nameToFQN
   , guardTable
@@ -23,7 +24,6 @@ module Pact.Core.IR.Eval.CEK
   , mkDefunClosure
   , acquireModuleAdmin) where
 
---import Debug.Trace
 
 import Control.Lens hiding ((%%=))
 import Control.Monad(zipWithM, unless, when)
@@ -37,7 +37,6 @@ import qualified Data.Vector as V
 import qualified Data.Set as S
 import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (isJust)
 
 import Pact.Core.Builtin
 import Pact.Core.Names
@@ -56,7 +55,8 @@ import Pact.Core.Hash
 import Pact.Core.IR.Term hiding (PactStep)
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Pacts.Types (PactStep(..), PactExec(..), PactId(..), PactContinuation(..), peYield
-                             , peStepCount, psStep)
+                             , peStepCount, psStep, peContinuation, pcName, peStep, peStepHasRollback
+                             , psRollback)
 
 
 chargeNodeGas :: MonadEval b i m => NodeType -> m ()
@@ -246,26 +246,60 @@ applyPact
   -> CEKEnv b i m
   -> EvalTerm b i
   -> m (EvalResult b i m)
-applyPact i pe ps cont handler cenv term = do
-  mCurrExec <- useEvalState esPactExec
-  when (isJust mCurrExec) $
-    throwExecutionError i MultipleOrNestedPactExecFound
+applyPact i pe ps cont handler cenv term = useEvalState esPactExec >>= \case
+  Just _ ->  throwExecutionError i MultipleOrNestedPactExecFound
+  Nothing -> lookupFqName (pe ^. peContinuation . pcName) >>= \case
+    Just (DPact defPact) -> do
 
-  -- TODO: Does this makes sense, `applyPact` should always start executing step 0
+      -- Check we try to apply the correct pact Step
+      unless (ps ^. psStep < pe ^. peStepCount) $
+        throwExecutionError i (PactStepNotFound (ps ^. psStep))
 
-  -- If the PactStep we want to execute is outside of
-  -- 0 <= peStepCount < ps ^. peStepCount
-  -- we fail with `PactStepNotFound`
-  unless (ps ^. psStep < pe ^. peStepCount) $
-    throwExecutionError i (PactStepNotFound (ps ^. psStep))
+      step <- maybe (failInvariant i "Step not found") pure
+        $ _dpSteps defPact ^? ix (ps ^. psStep)
 
-  -- TODO: another invariant should be that steps progress monoton linearly
+      when (ps ^. psStep /= 0) $
+        failInvariant i "applyPact with stepId /= 0"
 
-  -- store the initial PactExec
-  setEvalState esPactExec (Just pe)
+      let pe' = set peStep (ps ^. psStep) $ set peStepHasRollback (hasRollback step) pe
+      setEvalState esPactExec (Just pe')
 
-  let cont' = PactStepC cont cenv
-  evalCEK cont' handler cenv term
+      let cont' = PactStepC cenv cont
+
+      case (ps ^. psRollback, step) of
+        (False, _) -> evalCEK cont' handler cenv term --(ordinaryPactStepExec step)
+        (True, StepWithRollback _ rollbackExpr _) -> evalCEK cont' handler cenv rollbackExpr
+        (True, Step{}) -> throwExecutionError i PactStepHasNoRollback
+
+    _otherwise -> failInvariant i "DefPact not found"
+
+resumePact
+  :: MonadEval b i m
+  => i
+  -> Maybe PactExec
+  -> m (EvalResult b i m)
+resumePact i crossChainContinuation = viewCEKEnv eePactStep >>= \case
+  Nothing -> throwExecutionError i StepNotInEnvironment
+  Just ps -> do
+    pdb <- viewCEKEnv eePactDb
+    dbState <- liftIO (readPacts pdb (_psPactId ps))
+    case (dbState, crossChainContinuation) of
+      (Just Nothing, _) -> error "resumePact: completed"
+      (Nothing, Nothing) -> error "no prev exec found"
+      (Nothing, Just ccExec) -> resumePactExec ccExec
+      (Just (Just dbExec), Nothing) -> resumePactExec dbExec
+      (Just (Just _dbExec), Just _ccExec) -> error "not implemented"
+      where
+        --resumePactExec :: MonadEval b i m => PactExec -> m (EvalResult b i m)
+        resumePactExec pe = do
+          when (_psPactId ps /= _pePactId pe) $
+            error "resumePactExec: request and context pact IDs do not match"
+
+          -- additional checks: https://github.com/kadena-io/pact/blob/e72d86749f5d65ac8d6e07a7652dd2ffb468607b/src/Pact/Eval.hs#L1590
+          let
+            env = undefined
+          applyPact i pe ps Mt CEKNoHandler env undefined
+
 
 enforceKeyset
   :: MonadEval b i m
@@ -693,21 +727,26 @@ returnCEKValue (StackPopC mty cont) handler v = do
   v' <- (`maybeTCType` mty) =<< enforcePactValue v
   -- Todo: unsafe use of tail here. need `tailMay`
   (esStack %%= tail) *> returnCEKValue cont handler (VPactValue v')
-returnCEKValue (PactStepC cont env) handler v =
+returnCEKValue (PactStepC env cont) handler v =
   useEvalState esPactExec >>= \case
-    Nothing -> error "invariant violation, pact exec missing"
-    Just _pe -> case env ^. cePactStep of
+    Nothing -> failInvariant def "No PactExec found"
+    Just pe -> case env ^. cePactStep of
       Nothing -> error "invariant violation"
-      Just _ps -> do
-        -- let isLastStep = ps ^. psStep == pred (pe ^. peStepCount)
-        --     done = isLastStep || ps ^. psRollback
+      Just ps -> do
+        let
+          pdb = view cePactDb env
+          isLastStep = _psStep ps == pred (_peStepCount pe)
+          done = (not (_psRollback ps) && isLastStep) || _psRollback ps
 
-        -- -- If we want to rollback
+        liftIO (writePacts pdb Write (_psPactId ps)
+                 (if done then Nothing else Just pe))
 
         -- We need to reset the `yield` value of the current pact exection
         -- environment to match pact semantics. This `PactStepC` frame is
         -- only used as a continuation which resets the `yield`.
         setEvalState (esPactExec . _Just . peYield) Nothing
+--        evalCEK cont handler env v
+        liftIO $ print v
         returnCEKValue cont handler v
 
 
