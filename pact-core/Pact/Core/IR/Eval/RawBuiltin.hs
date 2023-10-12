@@ -40,6 +40,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Char as Char
 import qualified Data.ByteString as BS
+import qualified Pact.Time as PactTime
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
@@ -1186,6 +1187,15 @@ txHash = \info b cont handler _env -> \case
     returnCEKValue cont handler (VString (hashToText h))
   args -> argsError info b args
 
+parseTime :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+parseTime = \info b cont handler _env -> \case
+  [VString fmt, VString s] -> do
+    case PactTime.parseTime (T.unpack fmt) (T.unpack s) of
+      Just t -> returnCEKValue cont handler $ VPactValue (PTime t)
+      Nothing -> undefined -- returnCEK
+  args -> argsError info b args
+
+
 -----------------------------------
 -- Core definiti ons
 -----------------------------------
@@ -1298,4 +1308,4 @@ rawBuiltinRuntime = \case
   RawNotQ -> coreNotQ
   RawHash -> coreHash
   RawTxHash -> txHash
-
+  RawParseTime -> parseTime

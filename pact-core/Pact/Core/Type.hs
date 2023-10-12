@@ -52,6 +52,7 @@ data PrimType =
   PrimBool |
   PrimString |
   PrimGuard |
+  PrimTime |
   PrimUnit
   deriving (Eq,Ord,Show, Enum, Bounded)
 
@@ -63,6 +64,7 @@ instance Pretty PrimType where
     PrimBool -> "bool"
     PrimString -> "string"
     PrimGuard -> "guard"
+    PrimTime -> "time"
     PrimUnit -> "unit"
 
 -- Todo: caps are a bit strange here

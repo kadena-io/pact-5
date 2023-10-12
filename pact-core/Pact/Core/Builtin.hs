@@ -262,6 +262,8 @@ data RawBuiltin
   | RawWhere
   | RawNotQ
   | RawHash
+  -- Time functions
+  | RawParseTime
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 instance HasObjectOps RawBuiltin where
@@ -377,6 +379,7 @@ rawBuiltinToText = \case
   RawWhere -> "where?"
   RawNotQ -> "not?"
   RawHash -> "hash"
+  RawParseTime -> "parse-time"
 
 instance IsBuiltin RawBuiltin where
   builtinName = NativeName . rawBuiltinToText
@@ -489,6 +492,7 @@ instance IsBuiltin RawBuiltin where
     RawWhere -> 3
     RawNotQ -> 2
     RawHash -> 1
+    RawParseTime -> 2
 
 
 rawBuiltinNames :: [Text]
@@ -658,7 +662,6 @@ instance (Pretty b) => Pretty (ReplBuiltin b) where
     t -> pretty (replBuiltinToText (const "") t)
 
 -- monomorphised builtin operations
--- TODO: TIME
 data CoreBuiltin
   -- IntOps
   -- Integer Add
