@@ -60,6 +60,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , CapTokenClosure(..)
  , CanApply(..)
  , TableValue(..)
+ , ClosureType(..)
  ) where
 
 import Control.Lens hiding ((%%=))
@@ -112,11 +113,17 @@ instance (Show i, Show b) => Show (CEKEnv b i m) where
 -- | List of builtins
 type BuiltinEnv b i m = i -> b -> CEKEnv b i m -> NativeFn b i m
 
+data ClosureType
+  = NullaryClosure
+  | ArgClosure !(NonEmpty (Maybe Type))
+  deriving Show
+
 data Closure b i m
   = Closure
   { _cloFnName :: !Text
   , _cloModName :: !ModuleName
-  , _cloTypes :: !(NonEmpty (Maybe Type))
+  , _cloTypes :: ClosureType
+  -- , _cloTypes :: !(NonEmpty (Maybe Type))
   , _cloArity :: !Int
   , _cloTerm :: !(EvalTerm b i)
   , _cloRType :: !(Maybe Type)
@@ -128,7 +135,8 @@ data Closure b i m
 -- but is not partially applied
 data LamClosure b i m
   = LamClosure
-  { _lcloTypes :: !(NonEmpty (Maybe Type))
+  -- { _lcloTypes :: !(NonEmpty (Maybe Type))
+  { _lcloTypes :: ClosureType
   , _lcloArity :: Int
   , _lcloTerm :: !(EvalTerm b i)
   , _lcloRType :: !(Maybe Type)
@@ -343,7 +351,7 @@ data CapPopState
 data Cont b i m
   = Fn (CanApply b i m) (CEKEnv b i m) [EvalTerm b i] [CEKValue b i m] (Cont b i m)
   -- ^ Continuation which evaluates arguments for a function to apply
-  | Args (CEKEnv b i m) i (NonEmpty (EvalTerm b i)) (Cont b i m)
+  | Args (CEKEnv b i m) i [EvalTerm b i] (Cont b i m)
   -- ^ Continuation holding the arguments to evaluate in a function application
   | LetC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   -- ^ Let single-variable pushing
@@ -370,7 +378,7 @@ data Cont b i m
 data CEKErrorHandler b i m
   = CEKNoHandler
   | CEKHandler (CEKEnv b i m) (EvalTerm b i) (Cont b i m) [CapSlot QualifiedName PactValue] (CEKErrorHandler b i m)
-  | CEKEnforceOne (CEKEnv b i m) (EvalTerm b i) (Cont b i m) [CapSlot QualifiedName PactValue] (CEKErrorHandler b i m)
+  | CEKEnforceOne (CEKEnv b i m) i (EvalTerm b i) [EvalTerm b i] (Cont b i m) [CapSlot QualifiedName PactValue] (CEKErrorHandler b i m)
   deriving Show
 
 instance (Show i, Show b) => Show (NativeFn b i m) where

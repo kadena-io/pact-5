@@ -215,6 +215,7 @@ data RawBuiltin
   -- Guards + read functions
   | RawShow
   | RawReadMsg
+  | RawReadMsgDefault
   | RawReadInteger
   | RawReadDecimal
   | RawReadString
@@ -329,6 +330,7 @@ rawBuiltinToText = \case
   RawEnumerateStepN -> "enumerate-step"
   RawShow -> "show"
   RawReadMsg -> "read-msg"
+  RawReadMsgDefault -> "read-msg-default"
   RawReadInteger -> "read-integer"
   RawReadDecimal -> "read-decimal"
   RawReadString -> "read-string"
@@ -438,6 +440,7 @@ instance IsBuiltin RawBuiltin where
     -- Show ->
     RawShow -> 1
     RawReadMsg -> 1
+    RawReadMsgDefault -> 0
     RawReadInteger -> 1
     RawReadDecimal -> 1
     RawReadString -> 1
@@ -474,7 +477,7 @@ instance IsBuiltin RawBuiltin where
     RawWrite -> 3
     RawTxIds -> 2
     RawTxLog -> 2
-    RawTxHash -> 1
+    RawTxHash -> 0
     RawAndQ -> 3
     RawOrQ -> 3
     RawWhere -> 3
@@ -504,6 +507,7 @@ data ReplBuiltins
   | REnvKeys
   | REnvSigs
   | RBeginTx
+  | RBeginNamedTx
   | RCommitTx
   | RRollbackTx
   | RSigKeyset
@@ -542,16 +546,17 @@ instance IsBuiltin ReplBuiltins where
     RExpectFailureMatch -> 3
     RExpectThat -> 3
     RPrint -> 1
-    REnvStackFrame -> 1
+    REnvStackFrame -> 0
     REnvChainData -> 1
     REnvData -> 1
-    REnvEvents -> 1
+    REnvEvents -> 0
     REnvHash -> 1
     REnvKeys -> 1
     REnvSigs -> 1
-    RBeginTx -> 1
-    RCommitTx -> 1
-    RRollbackTx -> 1
+    RBeginTx -> 0
+    RBeginNamedTx -> 1
+    RCommitTx -> 0
+    RRollbackTx -> 0
     RSigKeyset -> 1
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
@@ -609,6 +614,7 @@ replBuiltinsToText = \case
   REnvKeys -> "env-keys"
   REnvSigs -> "env-sigs"
   RBeginTx -> "begin-tx"
+  RBeginNamedTx -> "begin-named-tx"
   RCommitTx -> "commit-tx"
   RRollbackTx -> "rollback-tx"
   RSigKeyset -> "sig-keyset"

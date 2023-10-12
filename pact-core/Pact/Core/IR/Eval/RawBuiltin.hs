@@ -626,7 +626,7 @@ readMsg = \info b cont handler _env -> \case
     case M.lookup (Field s) envData of
       Just pv -> returnCEKValue cont handler (VPactValue pv)
       _ -> returnCEK cont handler (VError "read-integer failure")
-  [VUnit] -> do
+  [] -> do
     EnvData envData <- viewCEKEnv eeMsgBody
     returnCEKValue cont handler (VObject envData)
   args -> argsError info b args
@@ -1136,7 +1136,7 @@ coreHash = \info b cont handler _env -> \case
 
 txHash :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 txHash = \info b cont handler _env -> \case
-  [VUnit] -> do
+  [] -> do
     h <- viewCEKEnv eeHash
     returnCEKValue cont handler (VString (hashToText h))
   args -> argsError info b args
@@ -1208,6 +1208,7 @@ rawBuiltinRuntime = \case
   RawEnumerateStepN -> coreEnumerateStepN
   RawShow -> rawShow
   RawReadMsg -> readMsg
+  RawReadMsgDefault -> readMsg
   RawReadInteger -> coreReadInteger
   RawReadDecimal -> coreReadDecimal
   RawReadString -> coreReadString

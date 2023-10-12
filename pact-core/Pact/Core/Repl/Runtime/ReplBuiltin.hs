@@ -56,7 +56,7 @@ corePrint = \info b cont handler _env -> \case
 rawExpect :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 rawExpect = \info b cont handler _env -> \case
   [VLiteral (LString msg), VPactValue v1, VClosure clo] ->
-    unsafeApplyOne clo (VLiteral LUnit) >>= \case
+    applyLam clo [] Mt CEKNoHandler >>= \case
        EvalValue (VPactValue v2) ->
         if v1 /= v2 then do
             let v1s = prettyShowValue (VPactValue v1)
@@ -80,7 +80,7 @@ coreExpectThat = \info b cont handler _env -> \case
 coreExpectFailure :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 coreExpectFailure = \info b cont handler _env -> \case
   [VLiteral (LString toMatch), VClosure vclo] -> do
-    tryError (unsafeApplyOne vclo (VLiteral LUnit)) >>= \case
+    tryError (applyLam vclo [] Mt CEKNoHandler) >>= \case
       Right (VError _e) ->
         returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
       Left _err -> do
@@ -88,7 +88,7 @@ coreExpectFailure = \info b cont handler _env -> \case
       Right _ ->
         returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result"
   [VString desc, VString toMatch, VClosure vclo] -> do
-    tryError (unsafeApplyOne vclo (VLiteral LUnit)) >>= \case
+    tryError (applyLam vclo [] Mt CEKNoHandler) >>= \case
       Right (VError _e) ->
         returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
       Left _err -> do
@@ -99,7 +99,7 @@ coreExpectFailure = \info b cont handler _env -> \case
 
 coreEnvStackFrame :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 coreEnvStackFrame = \info b cont handler _env -> \case
-  [_] -> do
+  [] -> do
     frames <- useEvalState esStack
     liftIO $ print frames
     returnCEKValue cont handler VUnit
@@ -107,7 +107,7 @@ coreEnvStackFrame = \info b cont handler _env -> \case
 
 envEvents :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 envEvents =  \info b cont handler _env -> \case
-  [_] -> do
+  [] -> do
     events <- useEvalState esEvents
     liftIO $ print events
     returnCEKValue cont handler VUnit
@@ -191,7 +191,7 @@ envSigs = \info b cont handler _env -> \case
 beginTx :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 beginTx = \info b cont handler _env -> \case
   [VString s] -> begin' info (Just s) >>= returnCEK cont handler . renderTx "Begin Tx"
-  [VUnit] -> begin' info Nothing >>= returnCEK cont handler . renderTx "Begin Tx"
+  [] -> begin' info Nothing >>= returnCEK cont handler . renderTx "Begin Tx"
   args -> argsError info b args
 
 renderTx :: Text -> Maybe (TxId, Maybe Text) -> EvalResult b i m
@@ -209,7 +209,7 @@ begin' info mt = do
 
 commitTx :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 commitTx = \info b cont handler _env -> \case
-  [_] -> do
+  [] -> do
     pdb <- use (reEnv . eePactDb)
     liftDbFunction info (_pdbCommitTx pdb)
     reState .= def
@@ -223,7 +223,7 @@ commitTx = \info b cont handler _env -> \case
 
 rollbackTx :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 rollbackTx = \info b cont handler _env -> \case
-  [_] -> do
+  [] -> do
     pdb <- use (reEnv . eePactDb)
     liftDbFunction info (_pdbRollbackTx pdb)
     reState .= def
@@ -236,7 +236,7 @@ rollbackTx = \info b cont handler _env -> \case
 
 sigKeyset :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 sigKeyset = \info b cont handler _env -> \case
-  [VUnit] -> do
+  [] -> do
     sigs <- S.fromList . M.keys <$> viewCEKEnv eeMsgSigs
     returnCEKValue cont handler (VGuard (GKeyset (KeySet sigs KeysAll)))
   args -> argsError info b args
@@ -269,6 +269,7 @@ replRawBuiltinRuntime = \case
     REnvKeys -> envKeys
     REnvSigs -> envSigs
     RBeginTx -> beginTx
+    RBeginNamedTx -> beginTx
     RCommitTx -> commitTx
     RRollbackTx -> rollbackTx
     RSigKeyset -> sigKeyset

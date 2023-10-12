@@ -230,10 +230,13 @@ data Term name ty builtin info
   -- Lambdas are named for the sake of the callstack.
   | Let (Arg ty) (Term name ty builtin info) (Term name ty builtin info) info
   -- ^ let x = e1 in e2
-  | App (Term name ty builtin info) (NonEmpty (Term name ty builtin info)) info
+  | App (Term name ty builtin info) [Term name ty builtin info] info
   -- ^ (e1 e2)
   | Sequence (Term name ty builtin info) (Term name ty builtin info) info
-  -- ^ error term , error "blah"
+  -- ^ sequencing, that is e1 `Sequence` e2 evaluates e1
+  -- discards the result and then evaluates and returns the result of e2
+  | Nullary (Term name ty builtin info) info
+  -- ^ "Lazy terms of arity zero"
   | Conditional (BuiltinForm (Term name ty builtin info)) info
   -- ^ Conditional terms
   | Builtin builtin info
@@ -262,7 +265,7 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
     Let n te te' _ ->
       parens $ "let" <+> parens (pretty n <+> pretty te) <+> pretty te'
     App te ne _ ->
-      parens (pretty te <+> hsep (NE.toList (pretty <$> ne)))
+      parens (pretty te <+> hsep (pretty <$> ne))
     Sequence te te' _ ->
       parens ("seq" <+> pretty te <+> pretty te')
     Conditional o _ ->
@@ -270,6 +273,8 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
     Builtin builtin _ -> pretty builtin
     Constant lit _ ->
       pretty lit
+    Nullary term _ ->
+      parens ("suspend" <+> pretty term)
     ListLit tes _ ->
       pretty tes
     CapabilityForm cf _ ->
@@ -311,6 +316,8 @@ termBuiltin f = \case
     Conditional <$> traverse (termBuiltin f) bf <*> pure i
   Builtin b i ->
     Builtin <$> f b <*> pure i
+  Nullary term i ->
+    Nullary <$> termBuiltin f term <*> pure i
   Constant lit i ->
     pure (Constant lit i)
   ListLit tes i ->
@@ -339,11 +346,11 @@ termInfo f = \case
     Conditional o <$> f i
   ListLit l i  -> ListLit l <$> f i
   Try e1 e2 i -> Try e1 e2 <$> f i
-  -- DynInvoke n t i -> DynInvoke n t <$> f i
+  Nullary term i ->
+    Nullary term <$> f i
   CapabilityForm cf i -> CapabilityForm cf <$> f i
   Error t i -> Error t <$> f i
   ObjectLit m i -> ObjectLit m <$> f i
-  -- ObjectOp o i -> ObjectOp o <$> f i
 
 instance Plated (Term name ty builtin info) where
   plate f = \case
@@ -357,14 +364,14 @@ instance Plated (Term name ty builtin info) where
     Conditional o i ->
       Conditional <$> traverse (plate f) o <*> pure i
     ListLit m i -> ListLit <$> traverse f m <*> pure i
+    Nullary term i ->
+      Nullary <$> f term <*> pure i
     CapabilityForm cf i ->
       CapabilityForm <$> traverse f cf <*> pure i
     Try e1 e2 i ->
       Try <$> f e1 <*> f e2 <*> pure i
     ObjectLit o i ->
       ObjectLit <$> (traverse._2) f o <*> pure i
-    -- DynInvoke n t i ->
-    --   pure (DynInvoke n t i)
     Error e i -> pure (Error e i)
 
 -- Todo: qualify all of these

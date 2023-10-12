@@ -122,12 +122,16 @@ evalCEK cont handler _env (Constant l _) = do
 evalCEK cont handler env (App fn args info) = do
   chargeNodeGas AppNode
   evalCEK (Args env info args cont) handler env fn
+evalCEK cont handler env (Nullary body info) = do
+  chargeNodeGas LamNode
+  let clo = VLamClosure (LamClosure NullaryClosure 0 body Nothing env info)
+  returnCEKValue cont handler clo
 evalCEK cont handler env (Let _ e1 e2 _) =
   let cont' = LetC env e2 cont
   in evalCEK cont' handler env e1
 evalCEK cont handler env (Lam _ args body info) = do
   chargeNodeGas LamNode
-  let clo = VLamClosure (LamClosure (_argType <$> args) (NE.length args) body Nothing env info)
+  let clo = VLamClosure (LamClosure (ArgClosure (_argType <$> args)) (NE.length args) body Nothing env info)
   returnCEKValue cont handler clo
 evalCEK cont handler env (Builtin b i) = do
   chargeNodeGas BuiltinNode
@@ -149,7 +153,7 @@ evalCEK cont handler env (Conditional c info) = case c of
     [] -> returnCEK cont handler (VError "enforce-one failure")
     x:xs -> do
       cs <- useEvalState (esCaps . csSlots)
-      let handler' = CEKEnforceOne env str cont cs handler
+      let handler' = CEKEnforceOne env info str xs cont cs handler
       let cont' = CondC env info (EnforceOneFrame str xs) Mt
           env' = readOnlyEnv env
       evalCEK cont' handler' env' x
@@ -197,7 +201,9 @@ mkDefunClosure
   -> m (Closure b i m)
 mkDefunClosure d mn e = case _dfunTerm d of
   Lam _ args body i ->
-    pure (Closure (_dfunName d) mn (_argType <$> args) (NE.length args) body (_dfunRType d) e i)
+    pure (Closure (_dfunName d) mn (ArgClosure (_argType <$> args)) (NE.length args) body (_dfunRType d) e i)
+  Nullary body i ->
+    pure (Closure (_dfunName d) mn NullaryClosure 0 body (_dfunRType d) e i)
   _ ->
     throwExecutionError (_dfunInfo d) (DefIsNotClosure (_dfunName d))
 
@@ -305,8 +311,11 @@ evalCap info cont handler env (CapToken fqn args) contbody = do
   enforceNotWithinDefcap info env "with-capability"
   lookupFqName fqn >>= \case
     Just (DCap d) -> do
+      when (length args /= _dcapAppArity d) $ failInvariant info "Dcap argument length mismatch"
       (esCaps . csSlots) %%= (CapSlot ct []:)
-      let (env', capBody) = applyCapBody args (_dcapTerm d)
+      -- let (env', capBody) = applyCapBody args (_dcapTerm d)
+      let env' = RAList.fromList $ fmap VPactValue (reverse args)
+          capBody = _dcapTerm d
           cont' = CapBodyC env contbody cont
       -- Todo: clean up the staircase of doom.
       case _dcapMeta d of
@@ -388,14 +397,15 @@ evalCap info cont handler env (CapToken fqn args) contbody = do
       -- Todo: this completely violates our "step" semantics.
       -- This should be its own frame
       let inCapEnv = set ceInCap True env
-      let clo = Closure (_fqName fqn') (_fqModule fqn') (_argType <$> lamargs) (NE.length lamargs) body Nothing inCapEnv i
+          cloArgs = ArgClosure(_argType <$> lamargs)
+          clo = Closure (_fqName fqn') (_fqModule fqn') cloArgs (NE.length lamargs) body Nothing inCapEnv i
       applyLam (C clo) [VPactValue managed, VPactValue value] Mt CEKNoHandler
-    _t -> failInvariant (view termInfo _t) "mgr function was not a lambda"
+    _t -> failInvariant (view termInfo _t) "Manager function was not a two-argument function"
   -- Todo: typecheck arg here
   -- Todo: definitely a bug if a cap has a lambda as a body
-  applyCapBody bArgs (Lam _ _lamArgs body _) = (RAList.fromList (fmap VPactValue (reverse bArgs)), body)
-  applyCapBody [] b = (mempty, b)
-  applyCapBody _ b = (mempty, b)
+  -- applyCapBody bArgs (Lam _ _lamArgs body _) = (), body)
+  -- applyCapBody [] b = (mempty, b)
+  -- applyCapBody _ b = (mempty, b)
 
 enforceNotWithinDefcap
   :: (MonadEval b i m)
@@ -536,11 +546,35 @@ returnCEK Mt handler v =
         evalCEK cont' handler' env catchTerm
       EvalValue v' ->
         returnCEKValue cont' handler' v'
-    CEKEnforceOne env str cont cs h -> case v of
-      VError{} -> do
-        setEvalState (esCaps . csSlots) cs
-        let cont' = EnforceErrorC cont
-        evalCEK cont' h env str
+    -- Enforce one is tricky. Not only do false results
+    -- mean "continue to evaluate the list of expressions",
+    -- but it also HANDLES ERRORS and continues to chug away!!!!
+    -- Therefore, it has a custom handler which holds:
+    --  - The last eval env
+    --  - The "lazy" string expression
+    --  - The remaining conditions, in case a falsy error needs to be handled
+    --  - The remainder of the continuation and the old handler
+    --
+    -- This handler upon encountering an error has a choice to make:
+    --  - Do we have unhandled expressions left? If so, resume evaluation with the head of
+    --    the expression list
+    --  - Are we done evaluating expressions? Then we have an enforce error: compute the
+    --    error string and boom boom de boom return an unhandled error with it
+    --
+    --  How is the list of expressions kept up to date you may ask?
+    --  EnforceOne is the only native that actualy has to _modify the handler_
+    --  on successful expression evaluation in the case that it errors
+    CEKEnforceOne env i str li cont cs h -> case v of
+      VError{} -> case li of
+        [] -> do
+          setEvalState (esCaps . csSlots) cs
+          let cont' = EnforceErrorC cont
+          evalCEK cont' h env str
+        x:xs -> do
+          setEvalState (esCaps . csSlots) cs
+          let handler' = CEKEnforceOne env i str xs cont cs h
+              oldFrame = CondC env i (EnforceOneFrame str xs) Mt
+          evalCEK oldFrame handler' env x
       EvalValue v' ->
         returnCEKValue cont h v'
 returnCEK cont handler v = case v of
@@ -560,17 +594,20 @@ returnCEKValue Mt handler v =
     -- Assuming no error, the caps will have been popped naturally
     CEKHandler _env _term cont' _ handler' ->
       returnCEKValue cont' handler' v
-    CEKEnforceOne _ _ cont' _ handler' ->
+    CEKEnforceOne _ _ _ _ cont' _ handler' ->
       returnCEKValue cont' handler' v
 -- Error terms that don't simply returnt the empty continuation
 -- "Zero out" the continuation up to the latest handler
 -- returnCEKValue _cont handler v@VError{} =
 --   returnCEK Mt handler v
-returnCEKValue (Args env i (x :| xs) cont) handler fn = do
+returnCEKValue (Args env i args cont) handler fn = do
   c <- canApply fn
   -- Argument evaluation
-  let cont' = Fn c env xs [] cont
-  evalCEK cont' handler env x
+  case args of
+    [] -> applyLam c [] cont handler
+    (x:xs) -> do
+      let cont' = Fn c env xs [] cont
+      evalCEK cont' handler env x
   where
   canApply = \case
     -- Todo: restrict the type of closures applied to user functions
@@ -613,13 +650,18 @@ returnCEKValue (CondC env info frame cont) handler v = case v of
       else case li of
         x:xs -> do
           let cont' = CondC env info (EnforceOneFrame str xs) cont
-          evalCEK cont' handler env x
+              handler' = updateEnforceOneList xs handler
+          evalCEK cont' handler' env x
         [] -> do
           let cont' = EnforceErrorC cont
           evalCEK cont' handler env str
   _ ->
     -- Todo: thread error loc here
     failInvariant info "Evaluation of conditional expression yielded non-boolean value"
+  where
+  updateEnforceOneList xs (CEKEnforceOne e i str _ c cs h) =
+    CEKEnforceOne e i str xs c cs h
+  updateEnforceOneList _ e = e
 returnCEKValue (CapInvokeC env info terms pvs cf cont) handler v = do
   pv <- enforcePactValue v
   case terms of
@@ -672,8 +714,6 @@ returnCEKValue (StackPopC i mty cont) handler v = do
   -- Todo: unsafe use of tail here. need `tailMay`
   (esStack %%= tail) *> returnCEKValue cont handler (VPactValue v')
 
-
-
 applyLam
   :: (MonadEval b i m)
   => CanApply b i m
@@ -681,16 +721,25 @@ applyLam
   -> Cont b i m
   -> CEKErrorHandler b i m
   -> m (EvalResult b i m)
-applyLam (C (Closure fn mn cloargs arity term mty env cloi)) args cont handler
-  | arity == argLen = do
-    args' <- traverse enforcePactValue args
-    tcArgs <- zipWithM (\arg ty -> VPactValue <$> maybeTCType cloi arg ty) args' (NE.toList cloargs)
-    esStack %%= (StackFrame fn mn :)
-    let cont' = StackPopC cloi mty cont
-        varEnv = RAList.fromList (reverse tcArgs)
-    evalCEK cont' handler (set ceLocal varEnv env) term
+applyLam (C (Closure fn mn ca arity term mty env cloi)) args cont handler
+  | arity == argLen = case ca of
+    ArgClosure cloargs -> do
+      args' <- traverse enforcePactValue args
+      tcArgs <- zipWithM (\arg ty -> VPactValue <$> maybeTCType cloi arg ty) args' (NE.toList cloargs)
+      esStack %%= (StackFrame fn mn :)
+      let cont' = StackPopC cloi mty cont
+          varEnv = RAList.fromList (reverse tcArgs)
+      evalCEK cont' handler (set ceLocal varEnv env) term
+    NullaryClosure -> do
+      esStack %%= (StackFrame fn mn :)
+      let cont' = StackPopC cloi mty cont
+          varEnv = mempty
+      evalCEK cont' handler (set ceLocal varEnv env) term
   | argLen > arity = throwExecutionError cloi ClosureAppliedToTooManyArgs
-  | otherwise = apply' mempty (NE.toList cloargs) args
+  | otherwise = case ca of
+    NullaryClosure -> throwExecutionError cloi ClosureAppliedToTooManyArgs
+    ArgClosure cloargs ->
+      apply' mempty (NE.toList cloargs) args
   where
   argLen = length args
   -- Here we enforce an argument to a user fn is a
@@ -703,13 +752,19 @@ applyLam (C (Closure fn mn cloargs arity term mty env cloi)) args cont handler
     returnCEKValue cont handler (VPartialClosure pclo)
   apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
 
-applyLam (LC (LamClosure cloargs arity term mty env cloi)) args cont handler
-  | arity == argLen = do
-    let locals = view ceLocal env
-        locals' = foldl' (flip RAList.cons) locals args
-    evalCEK cont handler (set ceLocal locals' env) term
+applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
+  | arity == argLen = case ca of
+    ArgClosure _ -> do
+      let locals = view ceLocal env
+          locals' = foldl' (flip RAList.cons) locals args
+      evalCEK cont handler (set ceLocal locals' env) term
+    NullaryClosure -> do
+      evalCEK cont handler env term
   | argLen > arity = throwExecutionError cloi ClosureAppliedToTooManyArgs
-  | otherwise = apply' (view ceLocal env) (NE.toList cloargs) args
+  | otherwise = case ca of
+      NullaryClosure -> throwExecutionError cloi ClosureAppliedToTooManyArgs
+      ArgClosure cloargs ->
+        apply' (view ceLocal env) (NE.toList cloargs) args
   where
   argLen = length args
   -- Todo: runtime TC here

@@ -136,6 +136,7 @@ data DesugarError
   -- ^ Invalid: Interface used as module reference
   | EmptyBindingBody
   | ExpectedFreeVariable Text
+  | InvalidManagedArg Text
   | InvalidImports [Text]
   | InvalidImportModuleHash ModuleName ModuleHash
   -- ^ Expected free variable

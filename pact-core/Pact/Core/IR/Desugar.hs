@@ -169,7 +169,7 @@ class DesugarBuiltin b where
   reservedNatives :: Map Text b
   liftRaw :: RawBuiltin -> b
   desugarOperator :: i -> Lisp.Operator -> Term ParsedName DesugarType b i
-  desugarAppArity :: i -> b -> NonEmpty (Term ParsedName DesugarType b i) -> Term ParsedName DesugarType b i
+  desugarAppArity :: i -> b -> [Term ParsedName DesugarType b i] -> Term ParsedName DesugarType b i
 
 instance DesugarBuiltin RawBuiltin where
   liftRaw = id
@@ -213,12 +213,14 @@ desugarAppArityRaw
   :: (RawBuiltin -> builtin)
   -> info
   -> RawBuiltin
-  -> NonEmpty (Term name DesugarType builtin info)
+  -> [Term name DesugarType builtin info]
   -> Term name DesugarType builtin info
-desugarAppArityRaw f i RawEnumerate (e1 :| [e2, e3]) =
-    App (Builtin (f RawEnumerateStepN) i) (e1 :| [e2, e3]) i
-desugarAppArityRaw f i RawSort (e1 :| [e2]) =
-  App (Builtin (f RawSortObject) i) (e1 :| [e2]) i
+desugarAppArityRaw f i RawEnumerate [e1, e2, e3] =
+    App (Builtin (f RawEnumerateStepN) i) ([e1, e2, e3]) i
+desugarAppArityRaw f i RawSort [e1, e2] =
+  App (Builtin (f RawSortObject) i) [e1, e2] i
+desugarAppArityRaw f i RawReadMsg [] =
+  App (Builtin (f RawReadMsgDefault) i) [] i
 desugarAppArityRaw f i b args =
     App (Builtin (f b) i) args i
 
@@ -230,12 +232,12 @@ instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
     over termBuiltin RBuiltinWrap $ desugarOperator i dsg
   desugarAppArity i (RBuiltinWrap b) ne =
     desugarAppArityRaw RBuiltinWrap i b ne
-  desugarAppArity i (RBuiltinRepl RExpect) (e1 :| [e2, e3]) | isn't _Lam e3 =
-    App (Builtin (RBuiltinRepl RExpect) i) (e1 :| [e2, suspendTerm e3]) i
-  desugarAppArity i (RBuiltinRepl RExpectFailure) (e1 :| [e2]) | isn't _Lam e2 =
-    App (Builtin (RBuiltinRepl RExpectFailure) i) (e1 :| [suspendTerm e2]) i
-  desugarAppArity i (RBuiltinRepl RExpectFailure) (e1 :| [e2, e3]) | isn't _Lam e2 =
-    App (Builtin (RBuiltinRepl RExpectFailureMatch) i) (e1 :| [e2, suspendTerm e3]) i
+  desugarAppArity i (RBuiltinRepl RExpect) ([e1, e2, e3]) | isn't _Lam e3 =
+    App (Builtin (RBuiltinRepl RExpect) i) ([e1, e2, suspendTerm e3]) i
+  desugarAppArity i (RBuiltinRepl RExpectFailure) [e1, e2] | isn't _Lam e2 =
+    App (Builtin (RBuiltinRepl RExpectFailure) i) [e1, suspendTerm e2] i
+  desugarAppArity i (RBuiltinRepl RExpectFailure) [e1, e2, e3] | isn't _Lam e2 =
+    App (Builtin (RBuiltinRepl RExpectFailureMatch) i) [e1, e2, suspendTerm e3] i
   desugarAppArity i b ne =
     App (Builtin b i) ne i
 
@@ -244,11 +246,11 @@ throwDesugarError de = throwError . PEDesugarError de
 
 -- Really ugly hack because
 -- of inconsistent old prod pact syntax :)))))))
-pattern HigherOrderApp :: Text -> i -> Text -> i -> [Lisp.Expr i] -> i -> i -> Lisp.Expr i
-pattern HigherOrderApp fnCaller ci fnCallee fi xs ai unused =
-  Lisp.App (Lisp.Var (BN (BareName fnCaller)) ci)
-    (Lisp.App (Lisp.Var (BN (BareName fnCallee)) unused) [] fi :   xs)
-    ai
+-- pattern HigherOrderApp :: Text -> i -> Text -> i -> [Lisp.Expr i] -> i -> i -> Lisp.Expr i
+-- pattern HigherOrderApp fnCaller ci fnCallee fi xs ai unused =
+--   Lisp.App (Lisp.Var (BN (BareName fnCaller)) ci)
+--     (Lisp.App (Lisp.Var (BN (BareName fnCallee)) unused) [] fi :   xs)
+--     ai
 
 desugarLispTerm
   :: forall raw reso i m
@@ -256,14 +258,14 @@ desugarLispTerm
   => Lisp.Expr i
   -> m (Term ParsedName DesugarType raw i)
 desugarLispTerm = \case
-  HigherOrderApp fnCaller ci fnCallee fi xs ai _
-    | fnCaller `elem` specialCallsiteFns -> do
-      caller <- desugarLispTerm (Lisp.Var (BN (BareName fnCaller)) ci)
-      callee <- desugarLispTerm $ Lisp.Var (BN (BareName fnCallee)) fi
-      xs' <- traverse desugarLispTerm xs
-      pure (App caller (callee :| xs') ai)
-    where
-    specialCallsiteFns = ["map", "fold", "zip"]
+  -- HigherOrderApp fnCaller ci fnCallee fi xs ai _
+  --   | fnCaller `elem` specialCallsiteFns -> do
+  --     caller <- desugarLispTerm (Lisp.Var (BN (BareName fnCaller)) ci)
+  --     callee <- desugarLispTerm $ Lisp.Var (BN (BareName fnCallee)) fi
+  --     xs' <- traverse desugarLispTerm xs
+  --     pure (App caller (callee:xs') ai)
+  --   where
+  --   specialCallsiteFns = ["map", "fold", "zip"]
   Lisp.Var (BN n) i  ->
     case M.lookup (_bnName n) reservedNatives' of
       Just b -> pure (Builtin b i)
@@ -276,10 +278,8 @@ desugarLispTerm = \case
   Lisp.LetIn binders expr i -> do
     expr' <- desugarLispTerm expr
     foldrM (binderToLet i) expr' binders
-  Lisp.Lam [] body i -> let
-    n = "#unitLamArg"
-    nty = Just (Lisp.TyPrim PrimUnit)
-    in Lam AnonLamInfo (pure (Arg n nty)) <$> desugarLispTerm body <*> pure i
+  Lisp.Lam [] body i ->
+    Nullary <$> desugarLispTerm body <*> pure i
   Lisp.Lam (x:xs) body i -> do
     let nsts = x :| xs
         args = (\(Lisp.MArg n t) -> Arg n t) <$> nsts
@@ -300,20 +300,21 @@ desugarLispTerm = \case
       bindToLet (Field field, marg) body =
         let arg = toArg marg
             fieldLit = Constant (LString field) i
-            access = App (Builtin (liftRaw RawAt) i) (fieldLit :| [objFreshVar]) i
+            access = App (Builtin (liftRaw RawAt) i) [fieldLit, objFreshVar] i
         in Let arg access body i
   Lisp.If e1 e2 e3 i -> Conditional <$>
      (CIf <$> desugarLispTerm e1 <*> desugarLispTerm e2 <*> desugarLispTerm e3) <*> pure i
   -- Note: this is our "unit arg application" desugaring
   -- This _may not_ stay long term
-  Lisp.App e [] i -> desugarLispTerm e <&> \case
-    v@Var{} ->
-      let arg = Constant LUnit i :| []
-      in App v arg i
-    v@Builtin{} ->
-      let arg = Constant LUnit i :| []
-      in App v arg i
-    e' -> e'
+  -- Lisp.App e [] i ->
+  --   App <$> desugarLispTerm e <&> [] <*> pure i
+    -- v@Var{} ->
+    --   let arg = Constant LUnit i :| []
+    --   in App v arg i
+    -- v@Builtin{} ->
+    --   let arg = Constant LUnit i :| []
+    --   in App v arg i
+    -- e' -> e'
   Lisp.App (Lisp.Operator o _oi) [e1, e2] i -> case o of
     Lisp.AndOp ->
       Conditional <$> (CAnd <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure i
@@ -325,13 +326,12 @@ desugarLispTerm = \case
       Lisp.List e _ ->
         Conditional <$> (CEnforceOne <$> desugarLispTerm e1 <*> traverse desugarLispTerm e) <*> pure i
       _ -> error "enforce-one incorrect form"
-  Lisp.App e (h:hs) i -> do
+  Lisp.App e hs i -> do
     e' <- desugarLispTerm e
-    h' <- desugarLispTerm h
     hs' <- traverse desugarLispTerm hs
     case e' of
-      Builtin b _ -> pure (desugarAppArity i b (h' :| hs'))
-      _ -> pure (App e' (h' :| hs') i)
+      Builtin b _ -> pure (desugarAppArity i b hs')
+      _ -> pure (App e' hs' i)
   Lisp.Operator bop i -> pure (desugarOperator i bop)
   -- Lisp.DynAccess e fn i ->
   --   DynInvoke <$> desugarLispTerm e <*> pure fn  <*> pure i
@@ -369,17 +369,12 @@ suspendTerm
   :: Term ParsedName DesugarType builtin info
   -> Term ParsedName DesugarType builtin info
 suspendTerm e' =
-  Lam AnonLamInfo (pure (Arg "#suspendArg" (Just (Lisp.TyPrim PrimUnit)))) e' (view termInfo e')
+  Nullary e' (view termInfo e')
 
 toArg
   :: Lisp.MArg
   -> Arg DesugarType
 toArg (Lisp.MArg n mty) = Arg n mty
-
--- Arg for turning nullary into unary functions
--- Todo: Remove this, support nullary apps.
-unitFnArg :: Arg DesugarType
-unitFnArg = Arg "#unitFnArg" (Just (Lisp.TyPrim PrimUnit))
 
 desugarDefun
   :: (MonadDesugar raw reso i m)
@@ -388,10 +383,11 @@ desugarDefun
 desugarDefun (Lisp.Defun defname [] mrt body _ _ i) = do
   body' <- desugarLispTerm body
   view reCurrModule >>= \case
-    Just mn -> do
-      let bodyLam = Lam (TLDefun mn defname) (pure unitFnArg) body' i
-      pure $ Defun defname [unitFnArg] mrt bodyLam i
-    Nothing -> error "Defun is module-less"
+    Just _ -> do
+      let bodyLam = Nullary body' i
+      pure $ Defun defname [] mrt bodyLam i
+    Nothing ->
+      throwDesugarError (NotAllowedOutsideModule "defun") i
 desugarDefun (Lisp.Defun defname (arg:args) mrt body _ _ i) = do
   let args' = toArg <$> (arg :| args)
   body' <- desugarLispTerm body
@@ -399,7 +395,7 @@ desugarDefun (Lisp.Defun defname (arg:args) mrt body _ _ i) = do
     Just mn -> do
       let bodyLam = Lam (TLDefun mn defname) args' body' i
       pure $ Defun defname (NE.toList args') mrt bodyLam i
-    Nothing -> error "Defun is module-less"
+    Nothing -> throwDesugarError (NotAllowedOutsideModule "defun") i
 
 
 
@@ -412,44 +408,36 @@ desugarDefConst (Lisp.DefConst n mty e _ i) = do
   pure $ DefConst n mty e' i
 
 desugarDefMeta
-  :: Applicative f
-  => Term n DesugarType b i
+  :: (MonadRenamer b i m)
+  => i
+  -> [Arg t]
   -> Lisp.DCapMeta
-  -> f (DefCapMeta ParsedName)
-desugarDefMeta body = \case
+  -> m (DefCapMeta ParsedName)
+desugarDefMeta info args = \case
   Lisp.DefEvent -> pure DefEvent
   Lisp.DefManaged marg -> case marg of
-    Just (arg, name) -> case body of
-      Lam _ args _ _ ->
-        case findIndex ((==) arg . view argName) (NE.toList args) of
+    Just (arg, name) ->
+        case findIndex ((==) arg . view argName) args of
           Just index' ->
             let dmanaged = DefManagedMeta index' (FQParsed name)
             in pure (DefManaged (Just dmanaged))
-          Nothing -> error "no such managed arg"
-      _ -> error "invalid body: not a lambda form, cannot find app arg"
+          Nothing ->
+            throwDesugarError (InvalidManagedArg arg) info
     Nothing -> pure (DefManaged Nothing)
 
 desugarDefCap
   :: (MonadDesugar raw reso info m)
   => Lisp.DefCap info
   -> m (DefCap ParsedName DesugarType raw info)
-desugarDefCap (Lisp.DefCap dcn [] rtype term _docs _model meta i) = do
-  term' <- desugarLispTerm term
-  meta' <- traverse (desugarDefMeta term') meta
-  pure (DefCap dcn 0 [] rtype term' meta' i)
-desugarDefCap (Lisp.DefCap dcn (x:xs) rtype term _docs _model meta i) = do
-  let args = toArg <$> (x :| xs)
-  let appArity = NE.length args
-  let termBody = Lisp.Lam (x:xs) term i
-  term' <- desugarLispTerm termBody
-  -- todo: pass module name into this.
-  -- same with renameDef
+desugarDefCap (Lisp.DefCap dcn arglist rtype term _docs _model meta i) =
   view reCurrModule >>= \case
-    Just mname -> do
-      let bodyLam = Lam (TLDefCap mname dcn) args term' i
-      meta' <- traverse (desugarDefMeta term') meta
-      pure (DefCap dcn appArity (NE.toList args) rtype bodyLam meta' i)
-    Nothing -> error "defcap outside of module"
+    Just _ -> do
+      let arglist' = toArg <$> arglist
+      term' <- desugarLispTerm term
+      meta' <- traverse (desugarDefMeta i arglist') meta
+      pure (DefCap dcn (length arglist) arglist' rtype term' meta' i)
+    Nothing ->
+      throwDesugarError (NotAllowedOutsideModule "defcap") i
 
 desugarDefSchema
   :: (MonadRenamer reso info m)
@@ -474,7 +462,7 @@ desugarIfDef
 desugarIfDef = \case
   Lisp.IfDfun (Lisp.IfDefun n margs rty _ _ i) -> IfDfun <$> case margs of
     [] -> do
-      pure $ IfDefun n [unitFnArg] rty i
+      pure $ IfDefun n [] rty i
     _ -> do
       let args = toArg <$> margs
       rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) pure rty
@@ -576,6 +564,7 @@ termSCC currM currDefns = \case
   Constant{} -> S.empty
   ListLit v _ -> foldMap (termSCC currM currDefns) v
   Try e1 e2 _ -> S.union (termSCC currM currDefns e1) (termSCC currM currDefns e2)
+  Nullary e _ -> termSCC currM currDefns e
   CapabilityForm cf _ -> foldMap (termSCC currM currDefns) cf <> case view capFormName cf of
     BN n | S.member (_bnName n) currDefns -> S.singleton (_bnName n)
           | otherwise -> mempty
@@ -911,9 +900,9 @@ renameTerm (Lam li nsts body i) = do
   nsts' <- (traversed . argType . _Just) (renameType i) nsts
   pure (Lam li nsts' term' i)
   where
-  inEnv m depth =
+  inEnv m newDepth =
     over reBinds (M.union m) .
-    set reVarDepth depth
+    set reVarDepth newDepth
 renameTerm (Let arg e1 e2 i) = do
   depth <- view reVarDepth
   arg' <- traverse (renameType i) arg
@@ -926,6 +915,8 @@ renameTerm (App fn apps i) = do
   fn' <- renameTerm fn
   apps' <- traverse renameTerm apps
   pure (App fn' apps' i)
+renameTerm (Nullary term i) =
+  Nullary <$> renameTerm term <*> pure i
 renameTerm (Sequence e1 e2 i) = do
   Sequence <$> renameTerm e1 <*> renameTerm e2 <*> pure i
 renameTerm (Conditional c i) =
@@ -1068,9 +1059,19 @@ renameDefCap (DefCap name arity argtys rtype term meta info) = do
   meta' <- traverse resolveMeta meta
   argtys' <- (traverse.traverse) (renameType info) argtys
   rtype' <- traverse (renameType info) rtype
-  term' <- local (set reCurrDef (Just DKDefCap)) $ renameTerm term
+  term' <- local (set reCurrDef (Just DKDefCap) .  bindArgs) $ renameTerm term
   pure (DefCap name arity argtys' rtype' term' meta' info)
   where
+  -- Todo: debruijn code should be isolated
+  bindArgs rEnv
+    | null argtys = rEnv
+    | otherwise = let
+      depth = view reVarDepth rEnv
+      len = fromIntegral (length argtys)
+      newDepth = depth + len
+      ixs = [depth .. newDepth - 1]
+      m = M.fromList $ zip (_argName <$> argtys) ((, Nothing) . NBound <$> ixs)
+      in over reBinds (M.union m) $ set reVarDepth newDepth rEnv
   resolveMeta DefEvent = pure DefEvent
   resolveMeta (DefManaged Nothing) = pure (DefManaged Nothing)
   resolveMeta (DefManaged (Just (DefManagedMeta i (FQParsed pn)))) = do
