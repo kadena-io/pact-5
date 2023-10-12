@@ -7,6 +7,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE MultiWayIf #-}
 
 module Pact.Core.IR.Eval.RawBuiltin
  ( rawBuiltinRuntime
@@ -21,9 +22,8 @@ module Pact.Core.IR.Eval.RawBuiltin
 -- CEK runtime for our IR term
 --
 
-import Control.Lens hiding (from, to, op, (%%=))
-import Control.Monad(when)
-import Control.Monad(unless, foldM)
+import Control.Lens hiding (from, to, op, parts, (%%=))
+import Control.Monad(when, unless, foldM)
 import Control.Monad.IO.Class
 import Data.Containers.ListUtils(nubOrd)
 import Data.Bits
@@ -40,7 +40,6 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Char as Char
 import qualified Data.ByteString as BS
--- import qualified Data.RAList as RAList
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
@@ -58,6 +57,8 @@ import Pact.Core.Capabilities
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.IR.Eval.CEK
+
+import qualified Pact.Core.Pretty as Pretty
 
 
 ----------------------------------------------------------------------
@@ -573,13 +574,17 @@ coreResume = \info b cont handler _env -> \case
 -- try-related ops
 -----------------------------------
 
-coreEnforce :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-coreEnforce = \info b cont handler _env -> \case
-  [VLiteral (LBool b'), VLiteral (LString s)] ->
-    if b' then returnCEKValue cont handler (VLiteral LUnit)
-    else returnCEK cont handler (VError s)
-  args -> argsError info b args
+-- coreEnforce :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+-- coreEnforce = \info b cont handler _env -> \case
+--   [VLiteral (LBool b'), VLiteral (LString s)] ->
+--     if b' then returnCEKValue cont handler (VBool True)
+--     else returnCEK cont handler (VError s)
+--   args -> argsError info b args
 
+enforceTopLevelOnly :: (IsBuiltin b, MonadEval b i m) => i -> b -> m ()
+enforceTopLevelOnly info b = do
+  s <- useEvalState esStack
+  when (not (null s)) $ throwExecutionError info (NativeIsTopLevelOnly (builtinName b))
 
 -----------------------------------
 -- Guards and reads
@@ -609,20 +614,25 @@ coreEnforceGuard = \info b cont handler env -> \case
   [VGuard g] -> case g of
       GKeyset ks -> do
         cond <- enforceKeyset ks
-        if cond then returnCEKValue cont handler VUnit
+        if cond then returnCEKValue cont handler (VBool True)
         else returnCEK cont handler (VError "enforce keyset failure")
       GKeySetRef ksn -> do
         cond <- enforceKeysetName info env ksn
-        if cond then returnCEKValue cont handler VUnit
+        if cond then returnCEKValue cont handler (VBool True)
         else returnCEK cont handler (VError "enforce keyset failure")
       GUserGuard ug -> runUserGuard info cont handler env ug
       GCapabilityGuard cg -> enforceCapGuard cont handler cg
       GModuleGuard (ModuleGuard mn _) -> calledByModule mn >>= \case
-        True -> returnCEKValue cont handler VUnit
+        True -> returnCEKValue cont handler (VBool True)
         False -> do
           md <- getModule info env mn
           acquireModuleAdmin info env md
-          returnCEKValue cont handler VUnit
+          returnCEKValue cont handler (VBool True)
+  [VString s] -> do
+    let ksn = KeySetName s
+    cond <- enforceKeysetName info env ksn
+    if cond then returnCEKValue cont handler (VBool True)
+    else returnCEK cont handler (VError "enforce keyset failure")
   args -> argsError info b args
 
 keysetRefGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -638,6 +648,18 @@ coreReadInteger = \info b cont handler _env -> \case
     case M.lookup (Field s) envData of
       Just (PInteger p) -> returnCEKValue cont handler (VInteger p)
       _ -> returnCEK cont handler (VError "read-integer failure")
+  args -> argsError info b args
+
+readMsg :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+readMsg = \info b cont handler _env -> \case
+  [VString s] -> do
+    EnvData envData <- viewCEKEnv eeMsgBody
+    case M.lookup (Field s) envData of
+      Just pv -> returnCEKValue cont handler (VPactValue pv)
+      _ -> returnCEK cont handler (VError "read-integer failure")
+  [] -> do
+    EnvData envData <- viewCEKEnv eeMsgBody
+    returnCEKValue cont handler (VObject envData)
   args -> argsError info b args
 
 coreReadDecimal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -693,32 +715,6 @@ coreReadKeyset = \info b cont handler _env -> \case
     readKeyset' ksn >>= \case
       Just ks -> returnCEKValue cont handler (VGuard (GKeyset ks))
       Nothing -> returnCEK cont handler (VError "read-keyset failure")
-    -- EnvData envData <- viewCEKEnv eeMsgBody
-    -- case M.lookup (Field s) envData of
-    --   Just (PObject dat) ->
-    --     case parseObj dat of
-    --       Just (ks, p) -> returnCEKValue cont handler (VGuard (GKeyset (KeySet ks p)))
-    --       Nothing -> returnCEK cont handler (VError "read-keyset failure")
-    --     where
-    --     parseObj d = do
-    --       keys <- M.lookup (Field "keys") d
-    --       keyText <- preview _PList keys >>= traverse (fmap PublicKeyText . preview (_PLiteral . _LString))
-    --       predRaw <- M.lookup (Field "pred") d
-    --       p <- preview (_PLiteral . _LString) predRaw
-    --       (S.fromList (V.toList keyText),) <$> readPredicate p
-    --     readPredicate = \case
-    --       "keys-any" -> pure KeysAny
-    --       "keys-2" -> pure Keys2
-    --       "keys-all" -> pure KeysAll
-    --       _ -> Nothing
-    --   Just (PList li) ->
-    --     case parseKeyList li of
-    --       Just ks -> returnCEKValue cont handler (VGuard (GKeyset (KeySet ks KeysAll)))
-    --       Nothing -> returnCEK cont handler (VError "read-keyset failure")
-    --     where
-    --     parseKeyList d =
-    --       S.fromList . V.toList . fmap PublicKeyText <$> traverse (preview (_PLiteral . _LString)) d
-    --   _ -> returnCEK cont handler (VError "read-keyset failure")
   args -> argsError info b args
 
 enforceCapGuard
@@ -772,6 +768,7 @@ coreBind = \info b cont handler _env -> \case
 createTable :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 createTable = \info b cont handler env -> \case
   [VTable tv@(TableValue tn mn _ _)] -> do
+    enforceTopLevelOnly info b
     guardTable info env tv
     let pdb = view cePactDb env
     -- Todo: error handling here
@@ -989,13 +986,19 @@ requireCapability = \info b cont handler _env -> \case
 
 composeCapability :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 composeCapability = \info b cont handler env -> \case
-  [VCapToken ct] -> composeCap cont handler env ct
+  [VCapToken ct] ->
+    useEvalState esStack >>= \case
+      sf:_ -> do
+        when (_sfFnType sf /= SFDefcap) $ failInvariant info "compose-cap "
+        composeCap info cont handler env ct
+      _ -> failInvariant info "compose-cap at the top level"
   args -> argsError info b args
 
 installCapability :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-installCapability = \info b cont handler _env -> \case
+installCapability = \info b cont handler env -> \case
   [VCapToken ct] -> do
-    _ <- installCap ct
+    enforceNotWithinDefcap info env "install-capability"
+    _ <- installCap info env ct
     returnCEKValue cont handler VUnit
   args -> argsError info b args
 
@@ -1056,6 +1059,39 @@ coreDistinct = \info b cont handler _env -> \case
       $ nubOrd
       $ V.toList s
   args -> argsError info b args
+
+coreFormat  :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreFormat = \info b cont handler _env -> \case
+  [VString s, VList es] -> do
+    let parts = T.splitOn "{}" s
+        plen = length parts
+    if | plen == 1 -> returnCEKValue cont handler (VString s)
+       | plen - length es > 1 -> returnCEK cont handler $ VError $ "format: not enough arguments for template"
+       | otherwise -> do
+          let args = formatArg <$> V.toList es
+          returnCEKValue cont handler $ VString $  T.concat $ alternate parts (take (plen - 1) args)
+    where
+    formatArg (PString ps) = ps
+    formatArg a = renderPactValue a
+    alternate (x:xs) ys = x : alternate ys xs
+    alternate _ _ = []
+  args -> argsError info b args
+
+-- Todo: This _Really_ needs gas
+-- moreover this is kinda hacky
+-- BIG TODO: REMOVE PRETTY FROM SEMANTICS.
+-- THIS CANNOT MAKE IT TO PROD
+renderPactValue :: PactValue -> T.Text
+renderPactValue = T.pack . show . Pretty.pretty
+  -- PLiteral l -> case l of
+  --   LString s -> "\"" <> s <> "\""
+  --   LInteger i -> T.pack (show i)
+  --   LDecimal d -> T.pack (show d)
+  --   LUnit -> "()"
+
+
+
+
 
 checkLen
   :: (MonadEval b i m)
@@ -1167,8 +1203,15 @@ coreHash = \info b cont handler _env -> \case
     returnCEKValue cont handler $ VString $ hashToText $ pactHash $ T.encodeUtf8 s
   args -> argsError info b args
 
+txHash :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+txHash = \info b cont handler _env -> \case
+  [] -> do
+    h <- viewCEKEnv eeHash
+    returnCEKValue cont handler (VString (hashToText h))
+  args -> argsError info b args
+
 -----------------------------------
--- Core definitions
+-- Core definiti ons
 -----------------------------------
 
 unimplemented :: NativeFunction b i m
@@ -1224,15 +1267,18 @@ rawBuiltinRuntime = \case
   RawStrToIntBase -> coreStrToIntBase
   RawFold -> coreFold
   RawDistinct -> coreDistinct
+  RawFormat -> coreFormat
   RawContains -> rawContains
   RawSort -> rawSort
   RawSortObject -> rawSortObject
   RawRemove -> rawRemove
-  RawEnforce -> coreEnforce
-  RawEnforceOne -> unimplemented
+  -- RawEnforce -> coreEnforce
+  -- RawEnforceOne -> unimplemented
   RawEnumerate -> coreEnumerate
   RawEnumerateStepN -> coreEnumerateStepN
   RawShow -> rawShow
+  RawReadMsg -> readMsg
+  RawReadMsgDefault -> readMsg
   RawReadInteger -> coreReadInteger
   RawReadDecimal -> coreReadDecimal
   RawReadString -> coreReadString
@@ -1240,6 +1286,7 @@ rawBuiltinRuntime = \case
   RawEnforceGuard -> coreEnforceGuard
   RawYield -> coreYield
   RawResume -> coreResume
+  RawEnforceKeyset -> coreEnforceGuard
   RawKeysetRefGuard -> keysetRefGuard
   RawAt -> coreAccess
   RawMakeList -> makeList
@@ -1276,4 +1323,5 @@ rawBuiltinRuntime = \case
   RawWhere -> coreWhere
   RawNotQ -> coreNotQ
   RawHash -> coreHash
+  RawTxHash -> txHash
 

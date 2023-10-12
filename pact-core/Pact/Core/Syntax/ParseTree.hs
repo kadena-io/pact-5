@@ -25,12 +25,16 @@ import Pact.Core.Guards
 data Operator
   = AndOp
   | OrOp
+  | EnforceOp
+  | EnforceOneOp
   deriving (Show, Eq, Enum, Bounded)
 
 instance Pretty Operator where
   pretty = \case
     AndOp -> "and"
     OrOp -> "or"
+    EnforceOp -> "enforce"
+    EnforceOneOp -> "enforce-one"
 
 -- | Type representing all pact syntactic types.
 -- Note: A few types (mainly TyPoly*) do not exist in pact-core.
@@ -205,7 +209,7 @@ data TopLevel i
   = TLModule (Module i)
   | TLInterface (Interface i)
   | TLTerm (Expr i)
-  | TLUse Import
+  | TLUse Import i
   deriving Show
 
 data Interface i

@@ -18,6 +18,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , cePactDb
  , ceBuiltins
  , cePactStep
+ , ceInCap
  , EvalEnv(..)
  , NativeFunction
  , BuiltinEnv
@@ -38,7 +39,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , emGas, emGasLog, emRuntimeEnv
  , EvalState(..)
  , esStack
- , esCaps, esEvents, esInCap
+ , esCaps, esEvents
  , csModuleAdmin
  , esLoaded
  , pattern VLiteral
@@ -75,6 +76,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  -- defpact
  , DefPactClosure(..)
  , TableValue(..)
+ , ClosureType(..)
  ) where
 
 import Control.Lens hiding ((%%=))
@@ -121,19 +123,24 @@ data CEKEnv b i m
   , _cePactDb :: PactDb b i
   , _ceBuiltins :: BuiltinEnv b i m
   , _cePactStep :: Maybe P.PactStep
-  }
+  , _ceInCap :: Bool }
 
 instance (Show i, Show b) => Show (CEKEnv b i m) where
-  show (CEKEnv e _ _ _) = show e
+  show (CEKEnv e _ _ _ _) = show e
 
 -- | List of builtins
 type BuiltinEnv b i m = i -> b -> CEKEnv b i m -> NativeFn b i m
+
+data ClosureType
+  = NullaryClosure
+  | ArgClosure !(NonEmpty (Maybe Type))
+  deriving Show
 
 data Closure b i m
   = Closure
   { _cloFnName :: !Text
   , _cloModName :: !ModuleName
-  , _cloTypes :: !(NonEmpty (Maybe Type))
+  , _cloTypes :: ClosureType
   , _cloArity :: !Int
   , _cloTerm :: !(EvalTerm b i)
   , _cloRType :: !(Maybe Type)
@@ -145,7 +152,7 @@ data Closure b i m
 -- but is not partially applied
 data LamClosure b i m
   = LamClosure
-  { _lcloTypes :: !(NonEmpty (Maybe Type))
+  { _lcloTypes :: ClosureType
   , _lcloArity :: Int
   , _lcloTerm :: !(EvalTerm b i)
   , _lcloRType :: !(Maybe Type)
@@ -170,12 +177,8 @@ data PartialClosure b i m
 data DefPactClosure b i m
   = DefPactClosure
   { _pactcloFQN :: FullyQualifiedName
-  , _pactcloTypes :: !(NonEmpty (Maybe Type))
+  , _pactcloTypes :: !ClosureType
   , _pactcloArity :: Int
-  , _pactcloTerm :: !(EvalTerm b i)
-  , _pactcloHasRollback :: Bool
-  , _pactcloStepCount :: Int
-  , _pactcloRType :: !(Maybe Type)
   , _pactEnv :: !(CEKEnv b i m)
   , _pactcloInfo :: i
   } deriving Show
@@ -355,6 +358,8 @@ data CondFrame b i
   = AndFrame (EvalTerm b i)
   | OrFrame (EvalTerm b i)
   | IfFrame (EvalTerm b i) (EvalTerm b i)
+  | EnforceFrame (EvalTerm b i)
+  | EnforceOneFrame (EvalTerm b i) [EvalTerm b i]
   deriving Show
 
 data CapFrame b i
@@ -375,7 +380,7 @@ data CapPopState
 data Cont b i m
   = Fn (CanApply b i m) (CEKEnv b i m) [EvalTerm b i] [CEKValue b i m] (Cont b i m)
   -- ^ Continuation which evaluates arguments for a function to apply
-  | Args (CEKEnv b i m) i (NonEmpty (EvalTerm b i)) (Cont b i m)
+  | Args (CEKEnv b i m) i [EvalTerm b i] (Cont b i m)
   -- ^ Continuation holding the arguments to evaluate in a function application
   | LetC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   -- ^ Let single-variable pushing
@@ -388,12 +393,13 @@ data Cont b i m
   -- ^ Continuation for conditionals with lazy semantics
   | ObjC (CEKEnv b i m) Field [(Field, EvalTerm b i)] [(Field, PactValue)] (Cont b i m)
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
-  | CapInvokeC (CEKEnv b i m) [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
+  | CapInvokeC (CEKEnv b i m) i [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
   -- ^ Capability special form frams that eva
   | CapBodyC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   | CapPopC CapPopState (Cont b i m)
-  | StackPopC (Maybe Type) (Cont b i m)
   | PactStepC (CEKEnv b i m) (Cont b i m)
+  | StackPopC i (Maybe Type) (Cont b i m)
+  | EnforceErrorC (Cont b i m)
   | Mt
   -- ^ Empty Continuation
   deriving Show
@@ -402,6 +408,7 @@ data Cont b i m
 data CEKErrorHandler b i m
   = CEKNoHandler
   | CEKHandler (CEKEnv b i m) (EvalTerm b i) (Cont b i m) [CapSlot QualifiedName PactValue] (CEKErrorHandler b i m)
+  | CEKEnforceOne (CEKEnv b i m) i (EvalTerm b i) [EvalTerm b i] (Cont b i m) [CapSlot QualifiedName PactValue] (CEKErrorHandler b i m)
   deriving Show
 
 instance (Show i, Show b) => Show (NativeFn b i m) where

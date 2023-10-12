@@ -45,6 +45,7 @@ import Pact.Core.Environment
 import Pact.Core.PactValue
 import Pact.Core.Hash
 import Pact.Core.Capabilities
+import Pact.Core.Imports
 
 main :: IO ()
 main = do
@@ -52,8 +53,7 @@ main = do
   g <- newIORef mempty
   evalLog <- newIORef Nothing
   let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Nothing Transactional
-      es = EvalState (CapState [] mempty mempty mempty)  [] [] False mempty Nothing
-  ref <- newIORef (ReplState mempty pdb es ee g evalLog (SourceCode mempty) Nothing)
+  ref <- newIORef (ReplState mempty pdb def ee g evalLog (SourceCode mempty) Nothing)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
@@ -71,6 +71,8 @@ main = do
         IPV v _ -> outputStrLn (show (pretty v))
         IPTable (TableName tn) -> outputStrLn $ "table{" <> T.unpack tn <> "}"
         IPClosure -> outputStrLn "<<closure>>"
+      LoadedImports i ->
+        outputStrLn $ "loaded imports from" <> show (pretty (_impModuleName i))
     RLoadedDefun mn ->
       outputStrLn $ show $
         "loaded defun" <+> pretty mn

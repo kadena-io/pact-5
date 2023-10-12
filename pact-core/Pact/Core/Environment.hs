@@ -36,6 +36,7 @@ module Pact.Core.Environment
  , EvalState(..)
  , HasEvalState(..)
  , StackFrame(..)
+ , StackFunctionType(..)
  ) where
 
 import Data.Int(Int64)
@@ -147,11 +148,17 @@ newtype PactState b i
 
 makeLenses ''PactState
 
+data StackFunctionType
+  = SFDefun
+  | SFDefcap
+  | SFDefPact
+  deriving (Eq, Show, Enum, Bounded)
+
 data StackFrame
   = StackFrame
   { _sfFunction :: Text
   , _sfModule :: ModuleName
-  }
+  , _sfFnType :: StackFunctionType }
   deriving Show
 
 data EvalState b i
@@ -159,13 +166,12 @@ data EvalState b i
   { _esCaps :: CapState QualifiedName PactValue
   , _esStack :: [StackFrame]
   , _esEvents :: [PactEvent FullyQualifiedName PactValue]
-  , _esInCap :: Bool
   , _esLoaded :: Loaded b i
   , _esPactExec :: Maybe PactExec
   } deriving Show
 
 instance Default (EvalState b i) where
-  def = EvalState def [] [] False mempty Nothing
+  def = EvalState def [] [] mempty Nothing
 
 makeClassy ''EvalState
 

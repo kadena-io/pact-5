@@ -152,16 +152,17 @@ lookupFqName :: (MonadEval b i m) => FullyQualifiedName -> m (Maybe (EvalDef b i
 lookupFqName fqn =
   views (esLoaded.loAllLoaded) (M.lookup fqn) <$> getEvalState
 
-typecheckArgument :: (MonadEval b i m) => PactValue -> Type -> m PactValue
-typecheckArgument pv ty = case (pv, checkPvType ty pv) of
+typecheckArgument :: (MonadEval b i m) => i -> PactValue -> Type -> m PactValue
+typecheckArgument info pv ty = case (pv, checkPvType ty pv) of
   (PModRef mr, Just (TyModRef m))
     | _mrRefined mr == Nothing -> pure (PModRef (mr & mrRefined ?~ m))
     | otherwise -> pure (PModRef mr)
   (_, Just _) -> pure pv
-  (_, Nothing) -> error $ "runtime tc error" <> show (pv, ty)
+  (_, Nothing) ->
+    throwExecutionError info (RunTimeTypecheckFailure (toArgTypeError (VPactValue pv)) ty)
 
-maybeTCType :: (MonadEval b i m) => PactValue -> Maybe Type -> m PactValue
-maybeTCType pv = maybe (pure pv) (typecheckArgument pv)
+maybeTCType :: (MonadEval b i m) => i -> PactValue -> Maybe Type -> m PactValue
+maybeTCType i pv = maybe (pure pv) (typecheckArgument i pv)
 
 findCallingModule :: (MonadEval b i m) => m (Maybe ModuleName)
 findCallingModule = do
@@ -269,7 +270,22 @@ throwExecutionError' :: (MonadEval b i m) => EvalError -> m a
 throwExecutionError' = throwExecutionError def
 
 readOnlyEnv :: CEKEnv b i m -> CEKEnv b i m
-readOnlyEnv = set (cePactDb . pdbPurity) PReadOnly
+readOnlyEnv e =
+  let pdb = view cePactDb  e
+      newPactdb =
+          PactDb
+         { _pdbPurity = PReadOnly
+         , _pdbRead = _pdbRead pdb
+         , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
+         , _pdbKeys = \_ -> dbOpDisallowed
+         , _pdbCreateUserTable = \_ _ -> dbOpDisallowed
+         , _pdbBeginTx = \_ -> dbOpDisallowed
+         , _pdbCommitTx = dbOpDisallowed
+         , _pdbRollbackTx = dbOpDisallowed
+         , _pdbTxIds = \_ _ -> dbOpDisallowed
+         , _pdbGetTxLog = \_ _ -> dbOpDisallowed
+         }
+  in set cePactDb newPactdb e
 
 sysOnlyEnv :: CEKEnv b i m -> CEKEnv b i m
 sysOnlyEnv = set (cePactDb . pdbPurity) PSysOnly

@@ -39,6 +39,8 @@ $special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
 @steprb = step\-with\-rollback
 @withcap = with\-capability
 @cruserguard = create\-user\-guard
+@enforce = enforce
+@enforceOne = enforce\-one
 -- @reqcap = require\-capability
 -- @installcap = install\-capability
 -- @composecap = compose\-capability
@@ -80,6 +82,8 @@ tokens :-
     \@event      { token TokenEventAnn }
     \@managed    { token TokenManagedAnn}
     @steprb      { token TokenStepWithRollback}
+    @enforce     { token TokenEnforce }
+    @enforceOne  { token TokenEnforceOne }
     step         { token TokenStep }
     @withcap     { token TokenWithCapability }
     @cruserguard { token TokenCreateUserGuard }

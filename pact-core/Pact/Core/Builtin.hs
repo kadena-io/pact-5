@@ -40,6 +40,8 @@ data BuiltinForm o
   = CAnd o o
   | COr o o
   | CIf o o o
+  | CEnforceOne o [o]
+  | CEnforce o o
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 instance Pretty o => Pretty (BuiltinForm o) where
@@ -50,6 +52,10 @@ instance Pretty o => Pretty (BuiltinForm o) where
       parens ("or" <+> pretty o <+> pretty o')
     CIf o o' o3 ->
       parens ("if" <+> pretty o <+> pretty o' <+> pretty o3)
+    CEnforceOne o li ->
+      parens ("enforce-one" <+> pretty o <+> brackets (hsep (punctuate comma (pretty <$> li))))
+    CEnforce o o' ->
+      parens ("enforce" <+> pretty o <+> pretty o')
     -- CFold e1 e2 e3 ->
     --   parens ("fold" <+> pretty e1 <+> pretty e2 <+> pretty e3)
     -- CMap e1 e2 ->
@@ -202,17 +208,21 @@ data RawBuiltin
   | RawStrToIntBase
   | RawFold
   | RawDistinct
-  | RawEnforce
-  | RawEnforceOne
+  | RawFormat
+  -- | RawEnforce
+  -- | RawEnforceOne
   | RawEnumerate
   | RawEnumerateStepN
   -- Guards + read functions
   | RawShow
+  | RawReadMsg
+  | RawReadMsgDefault
   | RawReadInteger
   | RawReadDecimal
   | RawReadString
   | RawReadKeyset
   | RawEnforceGuard
+  | RawEnforceKeyset
   | RawKeysetRefGuard
   | RawAt
   | RawMakeList
@@ -247,6 +257,7 @@ data RawBuiltin
   | RawWrite
   | RawTxIds
   | RawTxLog
+  | RawTxHash
   -- Db QueryFunctions
   | RawAndQ
   | RawOrQ
@@ -317,16 +328,20 @@ rawBuiltinToText = \case
   RawFold -> "fold"
   RawZip -> "zip"
   RawDistinct -> "distinct"
-  RawEnforce -> "enforce"
-  RawEnforceOne -> "enforce-one"
+  RawFormat -> "format"
+  -- RawEnforce -> "enforce"
+  -- RawEnforceOne -> "enforce-one"
   RawEnumerate -> "enumerate"
   RawEnumerateStepN -> "enumerate-step"
   RawShow -> "show"
+  RawReadMsg -> "read-msg"
+  RawReadMsgDefault -> "read-msg-default"
   RawReadInteger -> "read-integer"
   RawReadDecimal -> "read-decimal"
   RawReadString -> "read-string"
   RawReadKeyset -> "read-keyset"
   RawEnforceGuard -> "enforce-guard"
+  RawEnforceKeyset -> "enforce-keyset"
   RawKeysetRefGuard -> "keyset-ref-guard"
   RawCreateCapabilityGuard -> "create-capability-guard"
   RawCreateModuleGuard -> "create-module-guard"
@@ -360,6 +375,7 @@ rawBuiltinToText = \case
   RawWrite -> "write"
   RawTxIds -> "txids"
   RawTxLog -> "txlog"
+  RawTxHash -> "tx-hash"
   RawAndQ -> "and?"
   RawOrQ -> "or?"
   RawWhere -> "where?"
@@ -425,16 +441,20 @@ instance IsBuiltin RawBuiltin where
     RawStrToIntBase -> 2
     RawFold -> 3
     RawDistinct -> 1
-    RawEnforce -> 2
-    RawEnforceOne -> 2
+    RawFormat -> 2
+    -- RawEnforce -> 2
+    -- RawEnforceOne -> 2
     RawEnumerate -> 2
     RawEnumerateStepN -> 3
     -- Show ->
     RawShow -> 1
+    RawReadMsg -> 1
+    RawReadMsgDefault -> 0
     RawReadInteger -> 1
     RawReadDecimal -> 1
     RawReadString -> 1
     RawReadKeyset -> 1
+    RawEnforceKeyset -> 1
     RawEnforceGuard -> 1
     RawKeysetRefGuard -> 1
     RawCreateCapabilityGuard -> 1
@@ -469,6 +489,7 @@ instance IsBuiltin RawBuiltin where
     RawWrite -> 3
     RawTxIds -> 2
     RawTxLog -> 2
+    RawTxHash -> 0
     RawAndQ -> 3
     RawOrQ -> 3
     RawWhere -> 3
@@ -487,6 +508,7 @@ rawBuiltinMap = M.fromList $ (\b -> (rawBuiltinToText b, b)) <$> [minBound .. ma
 data ReplBuiltins
   = RExpect
   | RExpectFailure
+  | RExpectFailureMatch
   | RExpectThat
   | RPrint
   | REnvStackFrame
@@ -497,9 +519,11 @@ data ReplBuiltins
   | REnvKeys
   | REnvSigs
   | RBeginTx
+  | RBeginNamedTx
   | RCommitTx
   | RRollbackTx
   | RSigKeyset
+  | RTestCapability
   -- | RLoad
   -- | RLoadWithEnv
   -- | RExpect
@@ -536,22 +560,25 @@ instance IsBuiltin ReplBuiltins where
   builtinArity = \case
     RExpect -> 3
     RExpectFailure -> 2
+    RExpectFailureMatch -> 3
     RExpectThat -> 3
     RPrint -> 1
     RContinuePact -> 1 -- TODO: Continue has three different forms
     RPactState -> 1
     RResetPactState -> 1
-    REnvStackFrame -> 1
+    REnvStackFrame -> 0
     REnvChainData -> 1
     REnvData -> 1
-    REnvEvents -> 1
+    REnvEvents -> 0
     REnvHash -> 1
     REnvKeys -> 1
     REnvSigs -> 1
-    RBeginTx -> 1
-    RCommitTx -> 1
-    RRollbackTx -> 1
+    RBeginTx -> 0
+    RBeginNamedTx -> 1
+    RCommitTx -> 0
+    RRollbackTx -> 0
     RSigKeyset -> 1
+    RTestCapability -> 1
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
 -- Note: commented out natives are
@@ -597,6 +624,7 @@ replBuiltinsToText :: ReplBuiltins -> Text
 replBuiltinsToText = \case
   RExpect -> "expect"
   RExpectFailure -> "expect-failure"
+  RExpectFailureMatch -> "expect-failure-match"
   RExpectThat -> "expect-that"
   RPrint -> "print"
   RContinuePact -> "continue-pact"
@@ -610,9 +638,11 @@ replBuiltinsToText = \case
   REnvKeys -> "env-keys"
   REnvSigs -> "env-sigs"
   RBeginTx -> "begin-tx"
+  RBeginNamedTx -> "begin-named-tx"
   RCommitTx -> "commit-tx"
   RRollbackTx -> "rollback-tx"
   RSigKeyset -> "sig-keyset"
+  RTestCapability -> "test-capability"
   -- RLoad -> "load"
   -- RLoadWithEnv -> "load-with-env"
 

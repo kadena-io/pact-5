@@ -95,6 +95,8 @@ import Pact.Core.Syntax.LexUtils
   '.'        { PosToken TokenDot _ }
   and        { PosToken TokenAnd _ }
   or         { PosToken TokenOr _ }
+  enforce    { PosToken TokenEnforce _}
+  enforceOne { PosToken TokenEnforceOne _ }
   IDENT      { PosToken (TokenIdent _) _ }
   NUM        { PosToken (TokenNumber _) _ }
   STR        { PosToken (TokenString _) _ }
@@ -122,14 +124,14 @@ TopLevel :: { ParsedTopLevel }
   : Module { TLModule $1 }
   | Interface { TLInterface $1 }
   | Expr { TLTerm $1 }
+  | Use { uncurry TLUse $1 }
 
 RTL :: { ReplSpecialTL SpanInfo }
   : ReplTopLevel { RTL $1 }
   | '(' ReplSpecial ')' { RTLReplSpecial  ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
 ReplTopLevel :: { ParsedReplTopLevel }
-  : Module { RTLModule $1 }
-  | Interface { RTLInterface $1 }
+  : TopLevel { RTLTopLevel $1 }
   | '(' Defun ')' { RTLDefun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefConst ')' { RTLDefConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | Expr { RTLTerm $1 }
@@ -187,9 +189,13 @@ Exts :: { [ExtDecl] }
   | {- empty -} { [] }
 
 Ext :: { ExtDecl }
-  : '(' import ModQual ImportList ')' { ExtImport (Import (mkModName $3) Nothing $4)  }
+  : Use { ExtImport (fst $1)  }
   | '(' implements ModQual ')' { ExtImplements (mkModName $3) }
   | '(' bless StringRaw ')' { ExtBless $3 }
+
+Use :: { (Import, SpanInfo) }
+  : '(' import ModQual ImportList ')' {  (Import (mkModName $3) Nothing $4, combineSpan (_ptInfo $1) (_ptInfo $5))  }
+
 
 Defs :: { [ParsedDef] }
   : Defs Def { $2:$1 }
@@ -469,6 +475,8 @@ Atom :: { ParsedExpr }
 Operator :: { ParsedExpr }
   : and { Operator AndOp (_ptInfo $1) }
   | or { Operator OrOp (_ptInfo $1) }
+  | enforce { Operator EnforceOp (_ptInfo $1)}
+  | enforceOne { Operator EnforceOneOp (_ptInfo $1)}
 
 Bool :: { ParsedExpr }
   : true { Constant (LBool True) (_ptInfo $1) }

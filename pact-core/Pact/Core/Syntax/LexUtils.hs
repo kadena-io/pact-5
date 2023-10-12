@@ -109,6 +109,8 @@ data Token
   -- | TokenBitComplement
   | TokenAnd
   | TokenOr
+  | TokenEnforce
+  | TokenEnforceOne
   | TokenSingleTick !Text
   | TokenIdent !Text
   | TokenNumber !Text
@@ -304,6 +306,8 @@ renderTokenText = \case
   TokenBlockIntro -> "progn"
   TokenAnd -> "and"
   TokenOr -> "or"
+  TokenEnforce -> "enforce"
+  TokenEnforceOne -> "enforce-one"
   TokenIdent t -> "ident<" <> t <> ">"
   TokenNumber n -> "number<" <> n <> ">"
   TokenSingleTick s -> "\'" <> s

@@ -52,6 +52,9 @@ module Pact.Core.Names
  , RowKey(..)
  , renderFullyQualName
  , FQNameRef(..)
+ , fqName
+ , fqModule
+ , fqHash
  ) where
 
 import Control.Lens
@@ -323,3 +326,5 @@ instance Show (FQNameRef name) where
 instance Eq (FQNameRef name) where
   (FQParsed pn) == (FQParsed pn') = pn == pn'
   (FQName fqn) == (FQName fqn') = fqn == fqn'
+
+makeLenses ''FullyQualifiedName
