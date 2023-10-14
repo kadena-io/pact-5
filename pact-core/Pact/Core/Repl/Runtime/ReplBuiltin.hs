@@ -108,57 +108,29 @@ coreExpectFailure = \info b cont handler _env -> \case
 
 
 continuePact :: forall b i. (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
-continuePact info b _cont _handler _env = \case
+continuePact info b cont handler env = \case
   [VLiteral (LInteger s)] -> go s False Nothing Nothing
-    -- do
-    -- useEvalState esPactExec >>= \case
-    --   Nothing -> pure (VError "No pact exec environment found!")
-    --   Just pe -> lookupFqName (pe ^. peContinuation . pcName) >>= \case
-    --     Just (DPact dp)
-    --       | s == toInteger (_peStep pe) + 1 &&
-    --         s < toInteger (_peStepCount pe) -> do
-    --           let
-    --             step = _dpSteps dp NE.!! fromInteger s
-    --             args' = VPactValue <$> pe ^. peContinuation . pcArgs
-    --             toClosure = \case
-    --               Lam _li args body i ->
-    --                 applyLam (C (Closure undefined undefined (_argType <$> args) (NE.length args) body Nothing env i)) args' Mt CEKNoHandler
-    --               _ -> error "invariant violation"
-    --           v <- case step of
-    --             Step s' _ -> toClosure s'
-    --             StepWithRollback s' _rb _ -> toClosure s'
-    --           setEvalState esPactExec (Just $ over peStep (+1) pe)
-    --           returnCEK (PactStepC cont undefined) handler v
-    --       | otherwise ->
-    --         -- throwExecutionError info (ContinuePactInvalidContext s (toInteger (_peStep pe)) (toInteger (_peStepCount pe)))
-    --         pure (VError "")
-    --     _ -> pure (VError "continuation is not a defpact")
   args -> argsError info b args
   where
     go :: Integer -> Bool -> Maybe Text -> Maybe (M.Map Field PactValue) -> ReplEvalM b i (EvalResult b i (ReplEvalM b i))
-    go step rollback mpid userResume = useEvalState esPactExec >>= \case
-      -- If we try to execute `continue-pact`, we first check if we have a running
-      -- `PactExec` in the `EvalState` environment.
-      Nothing -> do
-        case mpid of
-          -- In case, there is no `PactExec` AND we have no user-specified `PactId`, we abort
-          -- abort the execution.
-          Nothing -> error "continue-pact: No pact id supplied and no pact exec in context"
-          Just pid -> do
-            -- If we do have a user-specified `PactId`, we can resume the
-            -- execution of the `DefPact`.
-            let
-              pactId = PactId pid
-              pactYield = Yield <$> userResume
-              pactStep = PactStep (fromInteger step) rollback pactId pactYield
+    go step rollback mpid userResume = do
+      mpe <- useEvalState esPactExec
+      (pid, myield) <- case mpe of
+        Nothing -> do
+          pid <- maybe (error "") (pure . PactId) mpid
+          pure (pid, Yield <$> userResume)
+        Just pactExec ->
+          let
+            pid = maybe (_pePactId pactExec) PactId mpid
+            yield = case userResume of
+              Nothing -> _peYield pactExec
+              Just o -> pure (Yield o)
+          in pure (pid, yield)
+      let pactStep = PactStep (fromInteger step) rollback pid myield
+      setEvalState esPactExec Nothing
 
-            setEvalState esPactExec Nothing
-            (reEnv . eePactStep) .= Just pactStep
-            undefined -- Todo: robert
-            -- returnCEKValue cont handler (resumePact info Nothing)
-
-      Just _ -> pure (EvalValue (VObject (M.fromList [])))
-
+      (reEnv . eePactStep) .= Just pactStep
+      resumePact info cont handler env Nothing
 
 pactState :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 pactState = \ info b _cont _handler _env -> \case

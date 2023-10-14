@@ -555,6 +555,7 @@ coreYield = \info b cont handler _env -> \case
     case mpe of
       Nothing -> throwExecutionError info YieldOutsiteDefPact
       Just pe -> do
+        liftIO $ putStrLn "coreYield : set Yield to exec"
         setEvalState esPactExec (Just pe{_peYield = Just (Yield o)})
         returnCEKValue cont handler (VObject o)
   args -> argsError info b args
@@ -562,12 +563,12 @@ coreYield = \info b cont handler _env -> \case
 coreResume :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreResume = \info b cont handler _env -> \case
   [VClosure clo] -> do
-    mpe <- useEvalState esPactExec
-    case mpe of
+    mps <- viewCEKEnv eePactStep
+    case mps of
       Nothing -> throwExecutionError info NoActivePactExec
-      Just pe -> case _peYield pe of
+      Just pactStep -> case _psResume pactStep of
         Nothing -> throwExecutionError info NoYieldInPactExec
-        Just (Yield resumeObj) -> applyLam clo [VObject resumeObj] cont handler
+        Just (Yield resumeObj) ->applyLam clo [VObject resumeObj] cont handler
   args -> argsError info b args
 
 -----------------------------------

@@ -59,7 +59,7 @@ import Pact.Core.Hash
 
 import Pact.Core.IR.Term hiding (PactStep)
 import Pact.Core.IR.Eval.Runtime
-import Pact.Core.Pacts.Types 
+import Pact.Core.Pacts.Types
 chargeNodeGas :: MonadEval b i m => NodeType -> m ()
 chargeNodeGas _nt = pure ()
   -- gm <- view (eeGasModel . geGasModel . gmNodes) <$> readEnv
@@ -242,12 +242,12 @@ initPact
   -> m (EvalResult b i m)
 initPact i pc cont handler cenv = do
   case view cePactStep cenv of
-    Nothing ->
+    Nothing -> do
+      pHash <- viewCEKEnv eeHash
       let
-        pId = PactId ""-- (view eeHash env)
-        pStep = PactStep 0 False pId Nothing
+        pStep = PactStep 0 False (hashToPactId pHash) Nothing
         cenv' = set cePactStep (Just pStep) cenv
-      in applyPact i pc pStep cont handler cenv'
+      applyPact i pc pStep cont handler cenv'
     Just _ -> pure (VError "not implemented")
 
 applyPact
@@ -264,6 +264,7 @@ applyPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
   Nothing -> lookupFqName (pc ^. pcName) >>= \case
     Just (DPact defPact) -> do
       let nSteps = NE.length (_dpSteps defPact)
+
       -- Check we try to apply the correct pact Step
       unless (ps ^. psStep < nSteps) $
         throwExecutionError i (PactStepNotFound (ps ^. psStep))
@@ -271,8 +272,9 @@ applyPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
       step <- maybe (failInvariant i "Step not found") pure
         $ _dpSteps defPact ^? ix (ps ^. psStep)
 
-      when (ps ^. psStep /= 0) $
-        failInvariant i "applyPact with stepId /= 0"
+      -- when (ps ^. psStep /= 0) $
+      --  failInvariant i "applyPact with stepId /= 0"
+
       let pe = PactExec
                { _peYield = Nothing
                , _peStepHasRollback = hasRollback step
@@ -281,14 +283,13 @@ applyPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
                , _pePactId = _psPactId ps
                , _peContinuation = pc
                }
-      setEvalState esPactExec (Just pe)
 
+      setEvalState esPactExec (Just pe)
       let cont' = PactStepC cenv cont
 
       case (ps ^. psRollback, step) of
         (False, _) ->
           evalWithStackFrame i cont' handler cenv sf Nothing  (ordinaryPactStepExec step)
-          -- evalCEK cont' handler cenv
         (True, StepWithRollback _ rollbackExpr _) ->
           evalWithStackFrame i cont' handler cenv sf Nothing rollbackExpr
         (True, Step{}) -> throwExecutionError i PactStepHasNoRollback
@@ -299,29 +300,52 @@ applyPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
 resumePact
   :: MonadEval b i m
   => i
+  -> Cont b i m
+  -> CEKErrorHandler b i m
+  -> CEKEnv b i m
   -> Maybe PactExec
   -> m (EvalResult b i m)
-resumePact i crossChainContinuation = viewCEKEnv eePactStep >>= \case
+resumePact i cont handler env crossChainContinuation = viewCEKEnv eePactStep >>= \case
   Nothing -> throwExecutionError i StepNotInEnvironment
   Just ps -> do
     pdb <- viewCEKEnv eePactDb
-    dbState <- liftIO (readPacts pdb (_psPactId ps))
+    dbState <- liftDbFunction i (readPacts pdb (_psPactId ps))
     case (dbState, crossChainContinuation) of
       (Just Nothing, _) -> error "resumePact: completed"
       (Nothing, Nothing) -> error "no prev exec found"
       (Nothing, Just ccExec) -> resumePactExec ccExec
       (Just (Just dbExec), Nothing) -> resumePactExec dbExec
-      (Just (Just _dbExec), Just _ccExec) -> error "not implemented"
+      (Just (Just dbExec), Just ccExec) -> do
+        unless (_peStep ccExec > succ (_peStep dbExec)) $
+          error "resumePAct must be at least 2 steps before cc"
+
+        -- Validate Contuation and Step count against db state
+        when (_peContinuation dbExec /= _peContinuation ccExec) $
+          throwExecutionError i (StepResumeDbMismatch "continuation")
+
+        when (_peStepCount dbExec /= _peStepCount ccExec) $
+          throwExecutionError i (StepResumeDbMismatch "peStepCount")
+
+        resumePactExec ccExec
       where
         --resumePactExec :: MonadEval b i m => PactExec -> m (EvalResult b i m)
         resumePactExec pe = do
           when (_psPactId ps /= _pePactId pe) $
             error "resumePactExec: request and context pact IDs do not match"
 
-          -- additional checks: https://github.com/kadena-io/pact/blob/e72d86749f5d65ac8d6e07a7652dd2ffb468607b/src/Pact/Eval.hs#L1590
-          let
-            env = undefined
-          applyPact i undefined ps Mt CEKNoHandler env
+          when (_psStep ps < 0 || _psStep ps >= _peStepCount pe) $
+            error "invalid step in pactstep request"
+
+          if _psRollback ps
+            then when (_psStep ps /= _peStep pe) $ error ""
+            else when (_psStep ps /= succ (_peStep pe)) $ error ""
+
+          let pc = view peContinuation pe
+              resume = case _psResume ps of
+                         r@Just{} -> r
+                         Nothing -> _peYield pe
+              env' = set cePactStep (Just $ set psResume resume ps) env
+          applyPact i pc ps cont handler env'
 
 
 enforceKeyset
@@ -853,22 +877,17 @@ returnCEKValue (PactStepC env cont) handler v =
   useEvalState esPactExec >>= \case
     Nothing -> failInvariant def "No PactExec found"
     Just pe -> case env ^. cePactStep of
-      Nothing -> error "invariant violation"
+      Nothing -> failInvariant def "Expected a PactStep in the environment"
       Just ps -> do
         let
           pdb = view cePactDb env
           isLastStep = _psStep ps == pred (_peStepCount pe)
           done = (not (_psRollback ps) && isLastStep) || _psRollback ps
 
-        liftIO (writePacts pdb Write (_psPactId ps)
-                 (if done then Nothing else Just pe))
+        liftDbFunction def
+          (writePacts pdb Write (_psPactId ps)
+            (if done then Nothing else Just pe))
 
-        -- We need to reset the `yield` value of the current pact exection
-        -- environment to match pact semantics. This `PactStepC` frame is
-        -- only used as a continuation which resets the `yield`.
-        setEvalState (esPactExec . _Just . peYield) Nothing
---        evalCEK cont handler env v
-        liftIO $ print v
         returnCEKValue cont handler v
 
 
@@ -981,11 +1000,11 @@ applyLam (DPC (DefPactClosure fqn argtys arity env i)) args cont handler
       args' <- traverse enforcePactValue args
       tcArgs <- zipWithM (\arg ty -> maybeTCType i arg ty) args' (NE.toList cloargs)
       let pc = PactContinuation fqn tcArgs
-      let env' = set ceLocal (RAList.fromList (reverse (VPactValue <$> tcArgs))) env
+          env' = set ceLocal (RAList.fromList (reverse (VPactValue <$> tcArgs))) env
       initPact i pc cont handler env'
     NullaryClosure -> do
       let pc = PactContinuation fqn []
-      let env' = set ceLocal mempty env
+          env' = set ceLocal mempty env
       initPact i pc cont handler env'
   | otherwise = throwExecutionError i ClosureAppliedToTooManyArgs
   where

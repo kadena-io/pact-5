@@ -268,6 +268,7 @@ data EvalError
   | PactStepNotFound Int
   | PactStepHasNoRollback
   | StepNotInEnvironment
+  | StepResumeDbMismatch Text
   -- ^ No such keyset
   | CannotUpgradeInterface ModuleName
   -- ^ Interface cannot be upgrade

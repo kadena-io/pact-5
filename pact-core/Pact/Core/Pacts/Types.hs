@@ -10,6 +10,7 @@ module Pact.Core.Pacts.Types
  , PactExec(..)
  , peStepCount, peYield, peStep, peContinuation, peStepHasRollback, pePactId
  , Yield(..)
+ , hashToPactId
  ) where
 
 -- Todo: yield
@@ -19,10 +20,14 @@ import Control.Lens
 import Data.Map.Strict (Map)
 import Pact.Core.PactValue
 import Pact.Core.Names
+import Pact.Core.Hash (Hash, hashToText)
 
 newtype PactId
   = PactId Text
   deriving (Eq,Ord,Show,Pretty)
+
+hashToPactId :: Hash -> PactId
+hashToPactId = PactId . hashToText
 
 data PactContinuation name v
   = PactContinuation
