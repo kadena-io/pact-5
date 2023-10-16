@@ -1413,6 +1413,12 @@ coreCompose = \info b cont handler _env -> \case
       err -> returnCEK cont handler err
   args -> argsError info b args
 
+coreCreatePrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreCreatePrincipal = \info b cont handler _env -> \case
+  [VGuard g] -> do
+    undefined
+  args -> argsError info b args
+
 -----------------------------------
 -- Core definitions
 -----------------------------------
@@ -1536,3 +1542,4 @@ rawBuiltinRuntime = \case
   RawDays -> days
   RawCompose -> coreCompose
   RawSelectWithFields -> dbSelect
+  RawCreatePrincipal -> coreCreatePrincipal
