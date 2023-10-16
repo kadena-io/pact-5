@@ -8,11 +8,17 @@ module Pact.Core.Pretty
 , renderText'
 , commaSep
 , commaSepNE
+, commaBraces
+, commaBrackets
+, bracketsSep
+, parensSep
+, bracesSep
+-- , prettyList
 ) where
 
 import Data.Text(Text)
 import Prettyprinter
-import Prettyprinter as Pretty
+import qualified Prettyprinter as Pretty
 import Prettyprinter.Render.String
 import Prettyprinter.Render.Text
 import Data.List(intersperse)
@@ -37,4 +43,14 @@ commaSepNE = commaSep . NE.toList
 
 commaSep :: Pretty a => [a] -> Doc ann
 commaSep = Pretty.hsep . intersperse "," . fmap pretty
+
+commaBraces, commaBrackets, bracketsSep, parensSep, bracesSep :: [Doc ann] -> Doc ann
+commaBraces   = encloseSep "{" "}" ","
+commaBrackets = encloseSep "[" "]" ","
+bracketsSep   = brackets . sep
+parensSep     = parens   . sep
+bracesSep     = braces   . sep
+
+-- prettyList :: Pretty a => [a] -> Doc ann
+-- prettyList = list . map pretty
 

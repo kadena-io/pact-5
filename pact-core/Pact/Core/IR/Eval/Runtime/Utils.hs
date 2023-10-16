@@ -19,7 +19,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , typecheckArgument
  , maybeTCType
  , safeTail
-  , toArgTypeError
+ , toArgTypeError
  , asString
  , asBool
  , throwExecutionError
@@ -34,6 +34,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , viewsCEKEnv
  , calledByModule
  , failInvariant
+ , getModuleData
  ) where
 
 import Control.Lens hiding ((%%=))
@@ -42,7 +43,7 @@ import Data.Map.Strict(Map)
 import Data.Text(Text)
 import Data.Set(Set)
 import Data.Default(def)
-import Data.Maybe(listToMaybe)
+import Data.Maybe(listToMaybe, mapMaybe)
 import Data.Foldable(find)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as Set
@@ -97,6 +98,8 @@ checkSigCaps
 checkSigCaps sigs = do
   granted <- getAllStackCaps
   autos <- useEvalState (esCaps . csAutonomous)
+  -- liftIO $ print granted
+  -- liftIO $ print sigs
   pure $ M.filter (match (Set.null autos) granted) sigs
   where
   match allowEmpty granted sigCaps =
@@ -193,7 +196,7 @@ getCallingModule info = findCallingModule >>= \case
       failInvariant info "getCallingModule points to interface"
     Nothing ->
       failInvariant info "getCallingModule points to no loaded module"
-  Nothing -> error "no calling module in stack"
+  Nothing -> failInvariant info "Error: No Module in stack"
 
 toFqDep :: ModuleName -> ModuleHash -> Def name t b i -> (FullyQualifiedName, Def name t b i)
 toFqDep modName mhash defn =
@@ -216,6 +219,27 @@ getModule info env mn =
         pure md
       Just (InterfaceData _ _) ->
         throwExecutionError info (ExpectedModule mn)
+      Nothing ->
+        throwExecutionError info (ModuleDoesNotExist mn)
+
+getModuleData :: (MonadEval b i m) => i -> CEKEnv b i m -> ModuleName -> m (ModuleData b i)
+getModuleData info env mn =
+ useEvalState (esLoaded . loModules . at mn) >>= \case
+   Just md -> pure md
+   Nothing -> do
+    let pdb = view cePactDb env
+    liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
+      Just mdata@(ModuleData md deps) -> do
+        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> (_mDefs md)
+        (esLoaded . loAllLoaded) %%= M.union newLoaded . M.union deps
+        (esLoaded . loModules) %%= M.insert mn mdata
+        pure mdata
+      Just ifdata@(InterfaceData iface deps) -> do
+        let mdefs = mapMaybe ifDefToDef (_ifDefns iface)
+        let newLoaded = M.fromList $ toFqDep mn (_ifHash iface) <$> mdefs
+        (esLoaded . loAllLoaded) %%= M.union newLoaded . M.union deps
+        (esLoaded . loModules) %%= M.insert mn ifdata
+        pure ifdata
       Nothing ->
         throwExecutionError info (ModuleDoesNotExist mn)
 
@@ -270,7 +294,9 @@ throwExecutionError' :: (MonadEval b i m) => EvalError -> m a
 throwExecutionError' = throwExecutionError def
 
 readOnlyEnv :: CEKEnv b i m -> CEKEnv b i m
-readOnlyEnv e =
+readOnlyEnv e
+  | view (cePactDb . pdbPurity) e == PSysOnly = e
+  | otherwise =
   let pdb = view cePactDb  e
       newPactdb =
           PactDb
@@ -287,5 +313,30 @@ readOnlyEnv e =
          }
   in set cePactDb newPactdb e
 
-sysOnlyEnv :: CEKEnv b i m -> CEKEnv b i m
-sysOnlyEnv = set (cePactDb . pdbPurity) PSysOnly
+sysOnlyEnv :: forall b i m. CEKEnv b i m -> CEKEnv b i m
+sysOnlyEnv e
+  | view (cePactDb . pdbPurity) e == PSysOnly = e
+  | otherwise =
+  let newPactdb =
+          PactDb
+         { _pdbPurity = PSysOnly
+         , _pdbRead = read'
+         , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
+         , _pdbKeys = \_ -> dbOpDisallowed
+         , _pdbCreateUserTable = \_ _ -> dbOpDisallowed
+         , _pdbBeginTx = \_ -> dbOpDisallowed
+         , _pdbCommitTx = dbOpDisallowed
+         , _pdbRollbackTx = dbOpDisallowed
+         , _pdbTxIds = \_ _ -> dbOpDisallowed
+         , _pdbGetTxLog = \_ _ -> dbOpDisallowed
+         }
+  in set cePactDb newPactdb e
+  where
+  pdb = view cePactDb e
+  read' :: Domain k v b i -> k -> IO (Maybe v)
+  read' dom k = case dom of
+    DUserTables _ -> dbOpDisallowed
+    DKeySets -> _pdbRead pdb DKeySets k
+    DModules -> _pdbRead pdb dom k
+    DPacts -> _pdbRead pdb dom k
+

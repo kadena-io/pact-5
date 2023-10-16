@@ -286,6 +286,8 @@ data EvalError
   | FormIllegalWithinDefcap Text
   | RunTimeTypecheckFailure ArgTypeError Type
   | NativeIsTopLevelOnly NativeName
+  | EventDoesNotMatchModule ModuleName
+  | InvalidEventCap FullyQualifiedName
   deriving Show
 
 instance Pretty EvalError where

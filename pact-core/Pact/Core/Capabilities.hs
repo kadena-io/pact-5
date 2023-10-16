@@ -22,6 +22,7 @@ module Pact.Core.Capabilities
  ) where
 
 import Control.Lens
+import Data.Text(Text)
 import Data.Set(Set)
 import Data.Default
 
@@ -31,14 +32,16 @@ import Pact.Core.Names
 import Pact.Core.Hash
 
 data DefManagedMeta name
-  = DefManagedMeta
-  { _dmManagedArgIx :: Int
-  , _dmManagerFn :: FQNameRef name
-  } deriving (Show)
+  = DefManagedMeta Int (FQNameRef name)
+  | AutoManagedMeta
+  -- { _dmManagedArgIx :: Int
+  -- , _dmManagerFn :: FQNameRef name
+  deriving (Show)
 
 data DefCapMeta name
   = DefEvent
-  | DefManaged (Maybe (DefManagedMeta name))
+  | DefManaged (DefManagedMeta name)
+  | Unmanaged
   deriving (Show)
 
 data CapForm name e
@@ -104,9 +107,12 @@ data CapState name v
 instance (Ord name, Ord v) => Default (CapState name v) where
   def = CapState mempty mempty mempty mempty
 
-data PactEvent name v
+-- Todo: Is there a reason why module + name is
+-- an unqualified
+data PactEvent v
   = PactEvent
-  { _peToken :: CapToken name v
+  { _peName :: Text
+  , _peArgs :: [v]
   , _peModule :: ModuleName
   , _peModuleHash :: ModuleHash
   } deriving (Show, Eq)

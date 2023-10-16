@@ -134,7 +134,6 @@ ReplTopLevel :: { ParsedReplTopLevel }
   : TopLevel { RTLTopLevel $1 }
   | '(' Defun ')' { RTLDefun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefConst ')' { RTLDefConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
-  | Expr { RTLTerm $1 }
 
 
 ReplSpecial :: { SpanInfo -> ReplSpecialForm SpanInfo }

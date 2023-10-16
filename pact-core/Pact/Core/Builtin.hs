@@ -265,6 +265,7 @@ data RawBuiltin
   | RawNotQ
   | RawHash
   | RawContinue
+  | RawCompose
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 instance HasObjectOps RawBuiltin where
@@ -383,6 +384,7 @@ rawBuiltinToText = \case
   RawNotQ -> "not?"
   RawHash -> "hash"
   RawContinue -> "continue"
+  RawCompose -> "compose"
 
 instance IsBuiltin RawBuiltin where
   builtinName = NativeName . rawBuiltinToText
@@ -498,6 +500,7 @@ instance IsBuiltin RawBuiltin where
     RawNotQ -> 2
     RawHash -> 1
     RawContinue -> 1
+    RawCompose -> 3
 
 
 rawBuiltinNames :: [Text]
@@ -572,7 +575,7 @@ instance IsBuiltin ReplBuiltins where
     REnvStackFrame -> 0
     REnvChainData -> 1
     REnvData -> 1
-    REnvEvents -> 0
+    REnvEvents -> 1
     REnvHash -> 1
     REnvKeys -> 1
     REnvSigs -> 1
