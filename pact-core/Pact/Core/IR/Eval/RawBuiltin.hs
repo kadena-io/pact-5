@@ -1189,12 +1189,61 @@ txHash = \info b cont handler _env -> \case
 
 parseTime :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 parseTime = \info b cont handler _env -> \case
-  [VString fmt, VString s] -> do
+  [VString fmt, VString s] ->
     case PactTime.parseTime (T.unpack fmt) (T.unpack s) of
       Just t -> returnCEKValue cont handler $ VPactValue (PTime t)
       Nothing -> undefined -- returnCEK
   args -> argsError info b args
 
+formatTime :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+formatTime = \info b cont handler _env -> \case
+  [VString fmt, VPactValue (PTime t)] -> do
+    let timeString = PactTime.formatTime (T.unpack fmt) t
+    returnCEKValue cont handler $ VString (T.pack timeString)
+  args -> argsError info b args
+
+time :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+time = \info b cont handler _env -> \case
+  [VString s] -> do
+    case PactTime.parseTime "%Y-%m-%dT%H:%M:%SZ" (T.unpack s) of
+      Just t -> returnCEKValue cont handler $ VPactValue (PTime t)
+      Nothing -> undefined -- returnCEK
+  args -> argsError info b args
+
+addTime :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+addTime = \info b cont handler _env -> \case
+  [VPactValue (PTime t), VPactValue (PDecimal seconds)] -> do
+      let newTime = t PactTime..+^ PactTime.fromSeconds seconds
+      returnCEKValue cont handler $ VPactValue (PTime newTime)
+  args -> argsError info b args
+
+diffTime :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+diffTime = \info b cont handler _env -> \case
+  [VPactValue (PTime x), VPactValue (PTime y)] -> do
+    let secondsDifference = PactTime.toSeconds $ x PactTime..-. y
+    returnCEKValue cont handler $ VPactValue $ PDecimal secondsDifference
+  args -> argsError info b args
+
+minutes :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+minutes = \info b cont handler _env -> \case
+  [VPactValue (PDecimal x)] -> do
+    let seconds = x * 60
+    returnCEKValue cont handler $ VPactValue $ PDecimal seconds
+  args -> argsError info b args
+
+hours :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+hours = \info b cont handler _env -> \case
+  [VPactValue (PDecimal x)] -> do
+    let seconds = x * 60 * 60
+    returnCEKValue cont handler $ VPactValue $ PDecimal seconds
+  args -> argsError info b args
+
+days :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+days = \info b cont handler _env -> \case
+  [VPactValue (PDecimal x)] -> do
+    let seconds = x * 60 * 60 * 24
+    returnCEKValue cont handler $ VPactValue $ PDecimal seconds
+  args -> argsError info b args
 
 -----------------------------------
 -- Core definiti ons
@@ -1309,3 +1358,10 @@ rawBuiltinRuntime = \case
   RawHash -> coreHash
   RawTxHash -> txHash
   RawParseTime -> parseTime
+  RawFormatTime -> formatTime
+  RawTime -> time
+  RawAddTime -> addTime
+  RawDiffTime -> diffTime
+  RawHours -> hours
+  RawMinutes -> minutes
+  RawDays -> days

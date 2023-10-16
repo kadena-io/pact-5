@@ -264,6 +264,13 @@ data RawBuiltin
   | RawHash
   -- Time functions
   | RawParseTime
+  | RawFormatTime
+  | RawTime
+  | RawAddTime
+  | RawDiffTime
+  | RawHours
+  | RawMinutes
+  | RawDays
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 instance HasObjectOps RawBuiltin where
@@ -380,6 +387,13 @@ rawBuiltinToText = \case
   RawNotQ -> "not?"
   RawHash -> "hash"
   RawParseTime -> "parse-time"
+  RawFormatTime -> "format-time"
+  RawTime -> "time"
+  RawAddTime -> "add-time"
+  RawDiffTime -> "diff-time"
+  RawHours -> "hours"
+  RawMinutes -> "minutes"
+  RawDays -> "days"
 
 instance IsBuiltin RawBuiltin where
   builtinName = NativeName . rawBuiltinToText
@@ -493,6 +507,13 @@ instance IsBuiltin RawBuiltin where
     RawNotQ -> 2
     RawHash -> 1
     RawParseTime -> 2
+    RawFormatTime -> 2
+    RawTime -> 1
+    RawAddTime -> 2
+    RawDiffTime -> 2
+    RawHours -> 1
+    RawMinutes -> 1
+    RawDays -> 1
 
 
 rawBuiltinNames :: [Text]

@@ -233,6 +233,7 @@ toArgTypeError :: CEKValue b i m -> ArgTypeError
 toArgTypeError = \case
   VPactValue pv -> case pv of
     PLiteral l -> ATEPrim (literalPrim l)
+    PTime _ -> ATEPrim PrimTime
     PList _ -> ATEList
     PObject _ -> ATEObject
     PGuard _ -> ATEPrim PrimGuard
