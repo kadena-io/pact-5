@@ -109,7 +109,10 @@ coreExpectFailure = \info b cont handler _env -> \case
 
 continuePact :: forall b i. (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 continuePact info b cont handler env = \case
-  [VLiteral (LInteger s)] -> go s False Nothing Nothing
+  [VInteger s] -> go s False Nothing Nothing
+  [VInteger s, VBool r] -> go s r Nothing Nothing
+  [VInteger s, VBool r, VString pid] -> go s r (Just pid) Nothing
+  [VInteger s, VBool r, VString pid, VObject y] -> go s r (Just pid) (Just y)
   args -> argsError info b args
   where
     go :: Integer -> Bool -> Maybe Text -> Maybe (M.Map Field PactValue) -> ReplEvalM b i (EvalResult b i (ReplEvalM b i))

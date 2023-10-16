@@ -264,6 +264,7 @@ data RawBuiltin
   | RawWhere
   | RawNotQ
   | RawHash
+  | RawContinue
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 instance HasObjectOps RawBuiltin where
@@ -381,6 +382,7 @@ rawBuiltinToText = \case
   RawWhere -> "where?"
   RawNotQ -> "not?"
   RawHash -> "hash"
+  RawContinue -> "continue"
 
 instance IsBuiltin RawBuiltin where
   builtinName = NativeName . rawBuiltinToText
@@ -495,6 +497,7 @@ instance IsBuiltin RawBuiltin where
     RawWhere -> 3
     RawNotQ -> 2
     RawHash -> 1
+    RawContinue -> 1
 
 
 rawBuiltinNames :: [Text]

@@ -108,6 +108,7 @@ import Pact.Core.Persistence
 import Pact.Core.ModRefs
 import Pact.Core.Capabilities
 import Pact.Core.Environment
+import Pact.Core.Pacts.Types (PactExec)
 import qualified Pact.Core.Pretty as P
 
 
@@ -398,6 +399,7 @@ data Cont b i m
   | CapBodyC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   | CapPopC CapPopState (Cont b i m)
   | PactStepC (CEKEnv b i m) (Cont b i m)
+  | NestedPactStepC (CEKEnv b i m) (Cont b i m) PactExec
   | StackPopC i (Maybe Type) (Cont b i m)
   | EnforceErrorC (Cont b i m)
   | Mt

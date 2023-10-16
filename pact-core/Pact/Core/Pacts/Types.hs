@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Pact.Core.Pacts.Types
  ( PactId(..)
@@ -9,8 +10,10 @@ module Pact.Core.Pacts.Types
  , psStep, psRollback, psPactId, psResume
  , PactExec(..)
  , peStepCount, peYield, peStep, peContinuation, peStepHasRollback, pePactId
+ , peNestedPactExec
  , Yield(..)
  , hashToPactId
+ , mkNestedPactId
  ) where
 
 -- Todo: yield
@@ -20,7 +23,8 @@ import Control.Lens
 import Data.Map.Strict (Map)
 import Pact.Core.PactValue
 import Pact.Core.Names
-import Pact.Core.Hash (Hash, hashToText)
+import Pact.Core.Hash (Hash, hashToText, pactHash)
+import qualified Data.Text.Encoding as T
 
 newtype PactId
   = PactId Text
@@ -37,6 +41,10 @@ data PactContinuation name v
 
 makeLenses ''PactContinuation
 
+mkNestedPactId :: PactContinuation FullyQualifiedName v -> PactId -> PactId
+mkNestedPactId _pc (PactId parent) =
+  hashToPactId (pactHash (T.encodeUtf8 parent <> ":" )) -- TODOL add pc
+
 -- | `Yield` representing an object
 newtype Yield
   = Yield {unYield :: Map Field PactValue}
@@ -51,7 +59,7 @@ data PactExec
   , _pePactId :: PactId
   , _peContinuation :: PactContinuation FullyQualifiedName PactValue
   , _peStepHasRollback :: Bool
---  , _peNestedPactExec :: Map PactId NestedPactExec
+  , _peNestedPactExec :: Map PactId PactExec
   } deriving Show
 
 makeLenses ''PactExec

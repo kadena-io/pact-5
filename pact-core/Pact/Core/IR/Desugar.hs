@@ -524,6 +524,13 @@ desugarIfDef = \case
     let args = toArg <$> margs
     pure $ IfDefCap n args rty i
   Lisp.IfDConst dc -> IfDConst <$> desugarDefConst dc
+  Lisp.IfDPact (Lisp.IfDefPact n margs rty _ _ i) -> IfDPact <$> case margs of
+    [] -> do
+      pure $ IfDefPact n [] rty i
+    _ -> do
+      let args = toArg <$> margs
+      rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) pure rty
+      pure $ IfDefPact n args (Just rty') i
   _ -> error "unimplemented: special interface decl forms in desugar"
 
 desugarDef
@@ -685,7 +692,7 @@ defTableSCC
   -> DefTable ParsedName info
   -> Set Text
 defTableSCC mn cd dt =
-  let (DesugaredTable t) = (_dtSchema dt)
+  let (DesugaredTable t) =  (_dtSchema dt)
   in parsedNameSCC mn cd t
 
 defCapSCC
@@ -736,6 +743,7 @@ ifDefSCC mn currDefs = \case
   IfDfun _ -> mempty
   IfDCap _ -> mempty
   IfDConst d -> defConstSCC mn currDefs d
+  IfDPact _ -> mempty
 
 -- Todo: this handles imports, rename?
 loadTopLevelMembers
@@ -1231,7 +1239,11 @@ renameIfDef = \case
     args' <- (traverse.traverse) (renameType i) (_ifdcArgs d)
     rtype' <- traverse (renameType i) (_ifdcRType d)
     pure (IfDCap (d{_ifdcArgs = args', _ifdcRType = rtype'}))
-
+  IfDPact d -> do
+    let i = _ifdpInfo d
+    args' <- (traverse.traverse) (renameType i) (_ifdpArgs d)
+    rtype' <- traverse (renameType i) (_ifdpRType d)
+    pure (IfDPact (d{_ifdpArgs = args', _ifdpRType = rtype'}))
 resolveName
   :: (MonadRenamer b i m)
   => i
@@ -1396,13 +1408,20 @@ checkImplements i mn defs ifaceName =
         Just (Dfun v) ->
           when (_dfunArgs v /= _ifdArgs ifd || _dfunRType v /= _ifdRType ifd) $ error "function args dont match"
         Just _ -> error "not implemented"
-        Nothing -> error "not implemented"
+        Nothing -> error "not implemented" 
     IfDCap ifd ->
       case find (\df -> _ifdcName ifd == defName df) defs of
         Just (DCap v) ->
           when (_dcapArgs v /= _ifdcArgs ifd || _dcapRType v /= _ifdcRType ifd) $ error "function args dont match"
         Just _ -> error "not implemented"
         Nothing -> error "not implemented"
+    IfDPact ifd ->
+      case find (\df -> _ifdpName ifd == defName df) defs of
+        Just (DPact v) ->
+          when (_dpArgs v /= _ifdpArgs ifd || _dpRetType v /= _ifdpRType ifd) $ error "function args dont match"
+        Just _ -> error "not implemented"
+        Nothing -> error "not implemented"
+
 
 -- | Todo: support imports
 --   Todo: support

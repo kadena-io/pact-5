@@ -149,6 +149,14 @@ data Interface name ty builtin info
   , _ifInfo :: info
   } deriving (Show, Functor)
 
+data IfDefPact ty info
+  = IfDefPact
+  { _ifdpName :: Text
+  , _ifdpArgs :: [Arg ty]
+  , _ifdpRType :: Maybe ty
+  , _ifdpInfo :: info
+  } deriving (Show, Functor)
+
 data IfDefun ty info
   = IfDefun
   { _ifdName :: Text
@@ -169,6 +177,7 @@ data IfDef name ty builtin info
   = IfDfun (IfDefun ty info)
   | IfDConst (DefConst name ty builtin info)
   | IfDCap (IfDefCap ty info)
+  | IfDPact (IfDefPact ty info)
   deriving (Show, Functor)
 
 data TopLevel name ty builtin info
@@ -215,6 +224,7 @@ ifDefKind = \case
   IfDfun{} -> Nothing
   IfDCap{} -> Nothing
   IfDConst{} -> Just DKDefConst
+  IfDPact{} -> Nothing
 
 
 ifDefName :: IfDef name ty builtin i -> Text
@@ -222,6 +232,7 @@ ifDefName = \case
   IfDfun ifd -> _ifdName ifd
   IfDConst dc -> _dcName dc
   IfDCap ifd -> _ifdcName ifd
+  IfDPact ifd -> _ifdpName ifd
 
 defInfo :: Def name ty b i -> i
 defInfo = \case
@@ -238,6 +249,7 @@ ifDefInfo = \case
   IfDfun de -> _ifdInfo de
   IfDConst dc -> _dcInfo dc
   IfDCap d -> _ifdcInfo d
+  IfDPact d -> _ifdpInfo d
 
 type EvalTerm b i = Term Name Type b i
 type EvalDef b i = Def Name Type b i

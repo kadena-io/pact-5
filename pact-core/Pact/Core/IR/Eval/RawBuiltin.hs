@@ -1211,6 +1211,14 @@ txHash = \info b cont handler _env -> \case
     returnCEKValue cont handler (VString (hashToText h))
   args -> argsError info b args
 
+
+
+coreContinue :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreContinue = \info b cont handler _env -> \case
+  [v] -> do
+    returnCEKValue cont handler v
+  args -> argsError info b args
+
 -----------------------------------
 -- Core definiti ons
 -----------------------------------
@@ -1325,4 +1333,5 @@ rawBuiltinRuntime = \case
   RawNotQ -> coreNotQ
   RawHash -> coreHash
   RawTxHash -> txHash
+  RawContinue -> coreContinue
 
