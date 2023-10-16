@@ -14,6 +14,7 @@ import Control.Monad.State.Strict ( MonadIO(..), MonadState )
 import Control.Monad.Except ( MonadError(throwError), liftEither )
 import Control.Monad
 import Data.Maybe(mapMaybe)
+import Data.Foldable(find)
 import Data.Proxy
 import Data.ByteString(ByteString)
 import qualified Data.Map.Strict as M
@@ -105,11 +106,12 @@ evalModuleGovernance pdb interp = \case
               term = App (Builtin (liftRaw RawEnforceGuard) info) (pure ksrg) info
           _interpret interp term *> pure tl
         CapGov (ResolvedGov fqn) ->
-          use (evalState . loaded . loAllLoaded . at fqn) >>= \case
+          -- Todo: this does not allow us to delegate governance, which is an issue.
+          case find (\d -> defName d == _fqName fqn) (_mDefs md) of
             Just (DCap d) ->
               _interpret interp (_dcapTerm d) *> pure tl
-            -- Todo: Definitely fixable with a GADT
-            _ -> throwError (PEExecutionError (ModuleGovernanceFailure (Lisp._mName m)) (Lisp._mInfo m))
+            _ ->
+              throwError (PEExecutionError (ModuleGovernanceFailure (Lisp._mName m)) (Lisp._mInfo m))
     Just (InterfaceData iface _) ->
       throwError (PEExecutionError (CannotUpgradeInterface (_ifName iface)) (_ifInfo iface))
     Nothing -> pure tl
@@ -145,7 +147,7 @@ interpretTopLevel pdb interp (DesugarOutput ds lo0 _deps) = do
           mdata = InterfaceData iface deps'
       liftDbFunction (_ifInfo iface) (writeModule pdb Write (view ifName iface) mdata)
       let newLoaded = M.fromList $ toFqDep (_ifName iface) (_ifHash iface)
-                      <$> mapMaybe (fmap DConst . preview _IfDConst) (_ifDefns iface)
+                      <$> mapMaybe ifDefToDef (_ifDefns iface)
           loadNewModule =
             over loModules (M.insert (_ifName iface) mdata) .
             over loAllLoaded (M.union newLoaded)

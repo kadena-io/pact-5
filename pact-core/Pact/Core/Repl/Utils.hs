@@ -138,11 +138,11 @@ instance HasLoaded (ReplState b) b SpanInfo where
   loaded = evalState . esLoaded
 
 data ReplAction
-  = RALoad Text
-  | RASetLispSyntax
-  | RASetNewSyntax
+  -- = RALoad Text
+  -- | RASetLispSyntax
+  -- | RASetNewSyntax
   -- | RATypecheck Text
-  | RASetFlag ReplDebugFlag
+  = RASetFlag ReplDebugFlag
   | RADebugAll
   | RADebugNone
   | RAExecuteExpr Text
@@ -169,19 +169,19 @@ replAction =
   cmdKw kw = MP.chunk kw *> MP.space1
   cmd = do
     _ <- MP.chunk ":"
-    load <|> setLang <|> setFlag <?> "asdf"
+    setFlag <?> "asdf"
   setFlag =
     cmdKw "debug" *> ((RASetFlag <$> replFlag) <|> (RADebugAll <$ MP.chunk "all") <|> (RADebugNone <$ MP.chunk "none"))
-  setLang = do
-    cmdKw "syntax"
-    (RASetLispSyntax <$ MP.chunk "lisp") <|> (RASetNewSyntax <$ MP.chunk "new")
+  -- setLang = do
+  --   cmdKw "syntax"
+  --   (RASetLispSyntax <$ MP.chunk "lisp") <|> (RASetNewSyntax <$ MP.chunk "new")
   -- tc = do
   --   cmdKw "type"
   --   RATypecheck <$> MP.takeRest
-  load = do
-    cmdKw "load"
-    let c = MP.char '\"'
-    RALoad <$> MP.between c c (MP.takeWhile1P Nothing (/= '\"'))
+  -- load = do
+  --   cmdKw "load"
+  --   let c = MP.char '\"'
+  --   RALoad <$> MP.between c c (MP.takeWhile1P Nothing (/= '\"'))
 
 parseReplAction :: Text -> Maybe ReplAction
 parseReplAction = MP.parseMaybe replAction
@@ -272,7 +272,8 @@ replError
 replError (ReplSource file src) pe =
   let srcLines = T.lines src
       pei = view peInfo pe
-      slice = withLine (_liStartLine pei) $ take (max 1 (_liEndLine pei)) $ drop (_liStartLine pei) srcLines
+      end = _liEndLine pei - _liStartLine pei
+      slice = withLine (_liStartLine pei) $ take (max 1 end) $ drop (_liStartLine pei) srcLines
       colMarker = "  | " <> T.replicate (_liStartColumn pei) " " <> T.replicate (max 1 (_liEndColumn pei - _liStartColumn pei)) "^"
       errRender = renderText pe
       fileErr = file <> ":" <> T.pack (show (_liStartLine pei + 1)) <> ":" <> T.pack (show (_liStartColumn pei)) <> ": "

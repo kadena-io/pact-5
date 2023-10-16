@@ -79,25 +79,31 @@ coreExpectThat = \info b cont handler _env -> \case
       EvalValue (VLiteral (LBool c)) ->
         if c then returnCEKValue cont handler (VLiteral (LString ("Expect-that: success " <> msg)))
         else returnCEKValue cont handler  (VLiteral (LString ("FAILURE: Expect-that: Did not satisfy condition: " <> msg)))
-      EvalValue _ -> return (VError "Expect-that: condition did not return a boolean")
-      VError ve -> return (VError ve)
+      EvalValue _ -> return (VError "Expect-that: condition did not return a boolean" info)
+      VError ve i -> return (VError ve i)
   args -> argsError info b args
 
 coreExpectFailure :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 coreExpectFailure = \info b cont handler _env -> \case
   [VLiteral (LString toMatch), VClosure vclo] -> do
+    es <- getEvalState
     tryError (applyLam vclo [] Mt CEKNoHandler) >>= \case
-      Right (VError _e) ->
+      Right (VError _ _) -> do
+        putEvalState es
         returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
       Left _err -> do
+        putEvalState es
         returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
       Right _ ->
         returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result"
   [VString desc, VString toMatch, VClosure vclo] -> do
+    es <- getEvalState
     tryError (applyLam vclo [] Mt CEKNoHandler) >>= \case
-      Right (VError _e) ->
+      Right (VError _ _) -> do
+        putEvalState es
         returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
       Left _err -> do
+        putEvalState es
         returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
       Right _ ->
         returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result"
@@ -106,24 +112,31 @@ coreExpectFailure = \info b cont handler _env -> \case
 coreEnvStackFrame :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 coreEnvStackFrame = \info b cont handler _env -> \case
   [] -> do
-    frames <- useEvalState esStack
-    liftIO $ print frames
-    returnCEKValue cont handler VUnit
+    capSet <- getAllStackCaps
+    returnCEKValue cont handler $ VString $ T.pack (show capSet)
   args -> argsError info b args
 
 envEvents :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 envEvents =  \info b cont handler _env -> \case
-  [] -> do
-    events <- useEvalState esEvents
-    liftIO $ print events
-    returnCEKValue cont handler VUnit
+  [VBool clear] -> do
+    events <- fmap envToObj <$> useEvalState esEvents
+    when clear $ setEvalState esEvents []
+    returnCEKValue cont handler (VList (V.fromList events))
+    where
+    envToObj (PactEvent name args mn mh) =
+      PObject
+      $ M.fromList
+      $ fmap (over _1 Field)
+      $ [ ("name", PString (renderQualName (QualifiedName name mn)))
+        , ("params", PList (V.fromList args))
+        , ("module-hash", PString (hashToText (_mhHash mh)))]
   args -> argsError info b args
 
 envHash :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 envHash =  \info b cont handler _env -> \case
   [VString s] -> do
     case decodeBase64UrlUnpadded (T.encodeUtf8 s) of
-      Left e -> returnCEK cont handler (VError (T.pack e))
+      Left e -> returnCEK cont handler (VError (T.pack e) info)
       Right hs -> do
         (reEnv . eeHash) .= Hash (toShort hs)
         returnCEKValue cont handler VUnit
@@ -162,7 +175,7 @@ envChainData = \info b cont handler _env -> \case
           go (set (pdPublicMeta . pmSender) s pd) rest
         | k == cdPrevBlockHash ->
           go (set pdPrevBlockHash s pd) rest
-      _ -> returnCEK cont handler (VError $ "envChainData: bad public metadata value for key: " <> _field k)
+      _ -> returnCEK cont handler (VError ("envChainData: bad public metadata value for key: " <> _field k) info)
   args -> argsError info b args
 
 envKeys :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
@@ -180,7 +193,7 @@ envSigs = \info b cont handler _env -> \case
       Just sigs -> do
         (reEnv . eeMsgSigs) .= M.fromList (V.toList sigs)
         returnCEKValue cont handler VUnit
-      Nothing -> returnCEK cont handler (VError "env-sigs format is wrong")
+      Nothing -> returnCEK cont handler (VError ("env-sigs format is wrong") info)
     where
     keyCapObj = \case
       PObject o -> do
@@ -196,14 +209,14 @@ envSigs = \info b cont handler _env -> \case
 
 beginTx :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 beginTx = \info b cont handler _env -> \case
-  [VString s] -> begin' info (Just s) >>= returnCEK cont handler . renderTx "Begin Tx"
-  [] -> begin' info Nothing >>= returnCEK cont handler . renderTx "Begin Tx"
+  [VString s] -> begin' info (Just s) >>= returnCEK cont handler . renderTx info "Begin Tx"
+  [] -> begin' info Nothing >>= returnCEK cont handler . renderTx info "Begin Tx"
   args -> argsError info b args
 
-renderTx :: Text -> Maybe (TxId, Maybe Text) -> EvalResult b i m
-renderTx start (Just (TxId tid, mt)) =
+renderTx :: i -> Text -> Maybe (TxId, Maybe Text) -> EvalResult b i m
+renderTx _info start (Just (TxId tid, mt)) =
   EvalValue $ VString $ start <> " " <> T.pack (show tid) <> maybe mempty ((<>) " ") mt
-renderTx start Nothing = VError $ "tx-function failure " <> start
+renderTx info start Nothing = VError ("tx-function failure " <> start) info
 
 begin' :: (Default i) => i -> Maybe Text -> ReplEvalM b i (Maybe (TxId, Maybe Text))
 begin' info mt = do
@@ -222,8 +235,8 @@ commitTx = \info b cont handler _env -> \case
     use reTx >>= \case
       Just tx -> do
         reTx .= Nothing
-        returnCEK cont handler (renderTx "Commit Tx" (Just tx))
-      Nothing -> returnCEK cont handler (renderTx "Commit Tx" Nothing)
+        returnCEK cont handler (renderTx info "Commit Tx" (Just tx))
+      Nothing -> returnCEK cont handler (renderTx info "Commit Tx" Nothing)
   args -> argsError info b args
 
 
@@ -236,8 +249,8 @@ rollbackTx = \info b cont handler _env -> \case
     use reTx >>= \case
       Just tx -> do
         reTx .= Nothing
-        returnCEK cont handler (renderTx "Rollback Tx" (Just tx))
-      Nothing -> returnCEK cont handler (renderTx "Rollback Tx" Nothing)
+        returnCEK cont handler (renderTx info "Rollback Tx" (Just tx))
+      Nothing -> returnCEK cont handler (renderTx info "Rollback Tx" Nothing)
   args -> argsError info b args
 
 sigKeyset :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
@@ -249,105 +262,23 @@ sigKeyset = \info b cont handler _env -> \case
 
 
 testCapability :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
-testCapability = \info b currCont handler env -> \case
-  [VCapToken origToken@(CapToken fqn args)] -> isCapInStack origToken >>= \case
-    False -> do
-      let qn = fqnToQualName fqn
-      let ct = CapToken qn args
-      lookupFqName fqn >>= \case
-        Just (DCap d) -> do
-          when (length args /= _dcapAppArity d) $ failInvariant info "Dcap argument length mismatch"
-          (esCaps . csSlots) %%= (CapSlot ct []:)
-          let env' = RAList.fromList $ fmap VPactValue (reverse args)
-              capBody = _dcapTerm d
-          -- Todo: clean up the staircase of doom.
-          case _dcapMeta d of
-            -- Managed capability, so we should look for it in the set of csmanaged
-            Just (DefManaged mdm) -> do
-              case mdm of
-                -- | Not automanaged, so it must have a defmeta
-                -- We are handling user-managed caps
-                Just (DefManagedMeta cix _) -> do
-                  let filteredCap = CapToken qn (filterIndex cix args)
-                  -- Find the capability post-filtering
-                  mgdCaps <- useEvalState (esCaps . csManaged)
-                  case find ((==) filteredCap . _mcCap) mgdCaps of
-                    Nothing -> do
-                      msgCaps <- S.unions <$> viewCEKEnv eeMsgSigs
-                      case find (findMsgSigCap cix filteredCap) msgCaps of
-                        Just c -> do
-                          let c' = set ctName fqn c
-                          installCap info env c' >>= evalUserManagedCap currCont env' capBody
-                        Nothing ->
-                          throwExecutionError info (CapNotInstalled fqn)
-                    Just managedCap -> evalUserManagedCap currCont env' capBody managedCap
-                -- handle autonomous caps
-                Nothing -> do
-                  -- Find the capability post-filtering
-                  mgdCaps <- useEvalState (esCaps . csManaged)
-                  case find ((==) ct . _mcCap) mgdCaps of
-                    Nothing -> do
-                      msgCaps <- S.unions <$> viewCEKEnv eeMsgSigs
-                      case find ((==) ct) msgCaps of
-                        Just c -> do
-                          let c' = set ctName fqn c
-                          installCap info env c' >>= evalAutomanagedCap currCont env' capBody
-                        Nothing ->
-                          throwExecutionError info (CapNotInstalled fqn)
-                    Just managedCap -> case _mcManaged managedCap of
-                      AutoManaged bcond -> do
-                        if bcond then
-                          returnCEK currCont handler (VError "automanaged capability used more than once")
-                        else do
-                          let newManaged = AutoManaged True
-                          esCaps . csManaged %%= S.union (S.singleton (set mcManaged newManaged managedCap))
-                          evalWithStackFrame info currCont handler (set ceLocal env' env) capStackFrame Nothing capBody
-                      _ -> failInvariant info "manager function mismatch"
-            Just DefEvent ->
-              failInvariant info "cannot evaluate the body of an event cap"
-            Nothing -> do
-              evalWithStackFrame info currCont handler (set ceLocal env' env) capStackFrame Nothing capBody
-        Just {} ->
-          failInvariant info "Captoken references invalid def"
-        Nothing -> failInvariant info "No such def for evalCap"
-    True ->
-      returnCEKValue currCont handler (VString "Capability already acquired")
-    where
-    capStackFrame = StackFrame (_fqName fqn) (_fqModule fqn) SFDefcap
-    evalUserManagedCap cont' env' capBody managedCap =  case _mcManaged managedCap of
-      ManagedParam mpfqn pv managedIx -> do
-        lookupFqName mpfqn >>= \case
-          Just (Dfun dfun) -> do
-            mparam <- maybe (failInvariant def "Managed param does not exist at index") pure (args ^? ix managedIx)
-            evaluate mpfqn (_dfunTerm dfun) pv mparam >>= \case
-              EvalValue res -> do
-                result <- enforcePactValue res
-                let mcM = ManagedParam mpfqn result managedIx
-                esCaps . csManaged %%= S.union (S.singleton (set mcManaged mcM managedCap))
-                let inCapEnv = set ceInCap True $ set ceLocal env' $ env
-                evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
-              VError v -> returnCEK currCont handler (VError v)
-          _ -> failInvariant def "user managed cap is an invalid defn"
-      _ -> failInvariant def "Invalid managed cap type"
-    evalAutomanagedCap cont' env' capBody managedCap = case _mcManaged managedCap of
-      AutoManaged bcond -> do
-        if bcond then returnCEK currCont handler (VError "automanaged cap used once")
-        else do
-          let newManaged = AutoManaged True
-          esCaps . csManaged %%= S.union (S.singleton (set mcManaged newManaged managedCap))
-          let inCapEnv = set ceLocal env' $ set ceInCap True $ env
-          evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
-      _ -> failInvariant def "Invalid managed cap type"
-    evaluate fqn' term managed value = case term of
-      Lam _ lamargs body i -> do
-        -- Todo: `applyLam` here gives suboptimal errors
-        -- Todo: this completely violates our "step" semantics.
-        -- This should be its own frame
-        let inCapEnv = set ceInCap True env
-            cloArgs = ArgClosure(_argType <$> lamargs)
-            clo = Closure (_fqName fqn') (_fqModule fqn') cloArgs (NE.length lamargs) body Nothing inCapEnv i
-        applyLam (C clo) [VPactValue managed, VPactValue value] Mt CEKNoHandler
-      _t -> failInvariant (view termInfo _t) "Manager function was not a two-argument function"
+testCapability = \info b cont handler env -> \case
+  [VCapToken origToken] -> do
+    lookupFqName (_ctName origToken) >>= \case
+      Just (DCap d) -> do
+        let cBody = Constant LUnit info
+            ignoreContBody _env _mct _mev _cb c = c
+            cont' = SeqC env cBody cont
+        case _dcapMeta d of
+          Unmanaged ->
+            evalCap info cont' handler env origToken ignoreContBody cBody
+          _ -> do
+            -- Installed caps emit and event
+            -- so we create a fake stack frame
+            let sf = StackFrame "test-capability" (views ctName _fqModule origToken) SFDefun
+            esStack %%= (sf :)
+            installCap info env origToken False *> evalCap info cont' handler env origToken ignoreContBody cBody
+      _ -> returnCEK cont handler (VError "no such capability" info)
   args -> argsError info b args
 
 

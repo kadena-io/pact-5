@@ -164,7 +164,7 @@ data EvalState b i
   = EvalState
   { _esCaps :: CapState QualifiedName PactValue
   , _esStack :: [StackFrame]
-  , _esEvents :: [PactEvent FullyQualifiedName PactValue]
+  , _esEvents :: [PactEvent PactValue]
   , _esLoaded :: Loaded b i
   } deriving Show
 

@@ -224,6 +224,17 @@ data FullyQualifiedName
   , _fqHash :: ModuleHash
   } deriving (Eq, Show, Ord)
 
+fqnToName :: FullyQualifiedName -> Name
+fqnToName (FullyQualifiedName mn name mh) =
+  Name name (NTopLevel mn mh)
+
+fqnToQualName :: FullyQualifiedName -> QualifiedName
+fqnToQualName (FullyQualifiedName mn name _) =
+  QualifiedName name mn
+
+instance Pretty FullyQualifiedName where
+  pretty fq = pretty $ fqnToQualName fq
+
 data TypeVar
   = TypeVar
   { _tyVarName :: !Text
@@ -294,14 +305,6 @@ replModuleName = ModuleName replRawModuleName Nothing
 
 replModuleHash :: ModuleHash
 replModuleHash = ModuleHash (Hash "#repl")
-
-fqnToName :: FullyQualifiedName -> Name
-fqnToName (FullyQualifiedName mn name mh) =
-  Name name (NTopLevel mn mh)
-
-fqnToQualName :: FullyQualifiedName -> QualifiedName
-fqnToQualName (FullyQualifiedName mn name _) =
-  QualifiedName name mn
 
 renderFullyQualName :: FullyQualifiedName -> Text
 renderFullyQualName (FullyQualifiedName mn n _) =

@@ -62,8 +62,7 @@ instance Pretty PactValue where
   pretty = \case
     PLiteral lit -> pretty lit
     PList p -> Pretty.list (V.toList (pretty <$> p))
-    PGuard _g -> "<guard>"
-    -- PTable tn _sc -> "table" <> braces (pretty tn)
+    PGuard g -> pretty g
     PObject o ->
       braces $ hsep $ punctuate comma (objPair <$> M.toList o)
       where

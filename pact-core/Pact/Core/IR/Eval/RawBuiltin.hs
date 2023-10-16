@@ -22,7 +22,7 @@ module Pact.Core.IR.Eval.RawBuiltin
 -- CEK runtime for our IR term
 --
 
-import Control.Lens hiding (from, to, op, parts)
+import Control.Lens hiding (from, to, op, parts, (%%=))
 import Control.Monad(when, unless, foldM)
 import Control.Monad.IO.Class
 import Data.Containers.ListUtils(nubOrd)
@@ -543,7 +543,7 @@ coreAccess = \info b cont handler _env -> \case
       Just v -> returnCEKValue cont handler (VPactValue v)
       Nothing ->
         let msg = "Object does not have field: " <> field
-        in returnCEK cont handler (VError msg)
+        in returnCEK cont handler (VError msg info)
   args -> argsError info b args
 
 -----------------------------------
@@ -591,13 +591,13 @@ coreEnforceGuard = \info b cont handler env -> \case
       GKeyset ks -> do
         cond <- enforceKeyset ks
         if cond then returnCEKValue cont handler (VBool True)
-        else returnCEK cont handler (VError "enforce keyset failure")
+        else returnCEK cont handler (VError "enforce keyset failure" info)
       GKeySetRef ksn -> do
         cond <- enforceKeysetName info env ksn
         if cond then returnCEKValue cont handler (VBool True)
-        else returnCEK cont handler (VError "enforce keyset failure")
+        else returnCEK cont handler (VError "enforce keyset ref failure" info)
       GUserGuard ug -> runUserGuard info cont handler env ug
-      GCapabilityGuard cg -> enforceCapGuard cont handler cg
+      GCapabilityGuard cg -> enforceCapGuard info cont handler cg
       GModuleGuard (ModuleGuard mn _) -> calledByModule mn >>= \case
         True -> returnCEKValue cont handler (VBool True)
         False -> do
@@ -608,13 +608,16 @@ coreEnforceGuard = \info b cont handler env -> \case
     let ksn = KeySetName s
     cond <- enforceKeysetName info env ksn
     if cond then returnCEKValue cont handler (VBool True)
-    else returnCEK cont handler (VError "enforce keyset failure")
+    else returnCEK cont handler (VError "enforce keyset ref failure" info)
   args -> argsError info b args
 
 keysetRefGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-keysetRefGuard = \info b cont handler _env -> \case
-  [VString g] ->
-    returnCEKValue cont handler (VGuard (GKeySetRef (KeySetName g)))
+keysetRefGuard = \info b cont handler env -> \case
+  [VString g] -> do
+    let pdb = view cePactDb env
+    liftDbFunction info (_pdbRead pdb DKeySets (KeySetName g)) >>= \case
+      Nothing -> returnCEK cont handler (VError ("no such keyset defined: " <> g) info)
+      Just _ -> returnCEKValue cont handler (VGuard (GKeySetRef (KeySetName g)))
   args -> argsError info b args
 
 coreReadInteger :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -623,7 +626,7 @@ coreReadInteger = \info b cont handler _env -> \case
     EnvData envData <- viewCEKEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just (PInteger p) -> returnCEKValue cont handler (VInteger p)
-      _ -> returnCEK cont handler (VError "read-integer failure")
+      _ -> returnCEK cont handler (VError "read-integer failure" info)
   args -> argsError info b args
 
 readMsg :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -632,7 +635,7 @@ readMsg = \info b cont handler _env -> \case
     EnvData envData <- viewCEKEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just pv -> returnCEKValue cont handler (VPactValue pv)
-      _ -> returnCEK cont handler (VError "read-integer failure")
+      _ -> returnCEK cont handler (VError "read-integer failure" info)
   [] -> do
     EnvData envData <- viewCEKEnv eeMsgBody
     returnCEKValue cont handler (VObject envData)
@@ -644,7 +647,7 @@ coreReadDecimal = \info b cont handler _env -> \case
     EnvData envData <- viewCEKEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just (PDecimal p) -> returnCEKValue cont handler (VDecimal p)
-      _ -> returnCEK cont handler (VError "read-integer failure")
+      _ -> returnCEK cont handler (VError "read-integer failure" info)
   args -> argsError info b args
 
 coreReadString :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -653,7 +656,7 @@ coreReadString = \info b cont handler _env -> \case
     EnvData envData <- viewCEKEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just (PString p) -> returnCEKValue cont handler (VString p)
-      _ -> returnCEK cont handler (VError "read-integer failure")
+      _ -> returnCEK cont handler (VError "read-integer failure" info)
   args -> argsError info b args
 
 readKeyset' :: (MonadEval b i m) => T.Text -> m (Maybe (KeySet FullyQualifiedName))
@@ -690,24 +693,26 @@ coreReadKeyset = \info b cont handler _env -> \case
   [VString ksn] ->
     readKeyset' ksn >>= \case
       Just ks -> returnCEKValue cont handler (VGuard (GKeyset ks))
-      Nothing -> returnCEK cont handler (VError "read-keyset failure")
+      Nothing -> returnCEK cont handler (VError "read-keyset failure" info)
   args -> argsError info b args
 
 enforceCapGuard
   :: MonadEval b i m
-  => Cont b i m
+  => i
+  -> Cont b i m
   -> CEKErrorHandler b i m
   -> CapabilityGuard FullyQualifiedName PactValue
   -> m (EvalResult b i m)
-enforceCapGuard cont handler (CapabilityGuard fqn args) = do
-  let ct = CapToken (fqnToQualName fqn) args
-  caps <- useEvalState (esCaps.csSlots)
-  let csToSet cs = S.insert (_csCap cs) (S.fromList (_csComposed cs))
-      capSet = foldMap csToSet caps
-  if S.member ct capSet then returnCEKValue cont handler VUnit
+enforceCapGuard info cont handler (CapabilityGuard fqn args) = do
+  -- let ct = CapToken (fqnToQualName fqn) args
+  cond <- isCapInStack (CapToken fqn args)
+  -- caps <- useEvalState (esCaps.csSlots)
+  -- let csToSet cs = S.insert (_csCap cs) (S.fromList (_csComposed cs))
+  --     capSet = foldMap csToSet caps
+  if cond then returnCEKValue cont handler (VBool True)
   else do
     let errMsg = "Capability guard enforce failure cap not in scope: " <> renderFullyQualName fqn
-    returnCEK cont handler (VError errMsg)
+    returnCEK cont handler (VError errMsg info)
 
 runUserGuard
   :: MonadEval b i m
@@ -723,10 +728,8 @@ runUserGuard info cont handler env (UserGuard fqn args) =
       when (length (_dfunArgs d) /= length args) $ throwExecutionError info CannotApplyPartialClosure
       let env' = sysOnlyEnv env
       clo <- mkDefunClosure d (_fqModule fqn) env'
-      -- clo <- ugTerm env' (_dfunTerm d)
-          -- clo = Closure (_dfunName d) (_fqModule fqn) cloargs (NE.length cloargs) (_dfunTerm d) (_dfunRType d) env' (_dfunInfo d)
       -- Todo: sys only here
-      applyLam (C clo) (VPactValue <$> args) cont handler
+      applyLam (C clo) (VPactValue <$> args) (UserGuardC cont) handler
     Just d -> throwExecutionError info (InvalidDefKind (defKind d) "run-user-guard")
     Nothing -> throwExecutionError info (NameNotInScope fqn)
 
@@ -767,9 +770,9 @@ dbSelect = \info b cont handler env -> \case
         Just (RowData rdata) -> applyLam clo [VObject rdata] cont handler >>= \case
           EvalValue (VBool cond) ->
             if cond then go pdb ks (PObject rdata:acc) else go pdb ks acc
-          EvalValue _ -> returnCEK cont handler (VError "select query error")
-          VError e -> returnCEK cont handler (VError e)
-        Nothing -> returnCEK cont handler (VError "select is not enabled")
+          EvalValue _ -> returnCEK cont handler (VError "select query error" info)
+          VError e i -> returnCEK cont handler (VError e i)
+        Nothing -> returnCEK cont handler (VError "select is not enabled" info)
 
   args -> argsError info b args
 
@@ -808,7 +811,7 @@ dbRead = \info b cont handler env -> \case
     guardTable info env tv
     liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
       Just (RowData v) -> returnCEKValue cont handler (VObject v)
-      Nothing -> returnCEK cont handler (VError "no such read object")
+      Nothing -> returnCEK cont handler (VError "no such read object" info)
   args -> argsError info b args
 
 dbWithRead :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -818,7 +821,7 @@ dbWithRead = \info b cont handler env -> \case
     guardTable info env tv
     liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
       Just (RowData v) -> applyLam clo [VObject v] cont handler
-      Nothing -> returnCEK cont handler (VError "no such read object")
+      Nothing -> returnCEK cont handler (VError "no such read object" info)
   args -> argsError info b args
 
 dbWithDefaultRead :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -848,7 +851,7 @@ write' wt = \info b cont handler env -> \case
         liftDbFunction info (_pdbWrite pdb wt (tvToDomain tv) (RowKey key) rowData)
         returnCEKValue cont handler (VString "Write succeeded")
     else
-        returnCEK cont handler (VError "object does not match schema")
+        returnCEK cont handler (VError "object does not match schema" info)
   args -> argsError info b args
 
 dbUpdate :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -860,7 +863,7 @@ dbUpdate = \info b cont handler env -> \case
         let rowData = RowData o
         liftDbFunction info (_pdbWrite pdb Update (tvToDomain tv) (RowKey key) rowData)
         returnCEKValue cont handler (VString "Write succeeded")
-    else returnCEK cont handler (VError "object does not match schema")
+    else returnCEK cont handler (VError "object does not match schema" info)
   args -> argsError info b args
 
 dbKeys :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -935,7 +938,7 @@ defineKeySet' info cont handler env ksname newKs  = do
       if cond then do
           liftDbFunction info (_pdbWrite pdb Write DKeySets (KeySetName ksname) newKs)
           returnCEKValue cont handler (VString "Keyset write success")
-      else returnCEK cont handler (VError "enforce keyset failure")
+      else returnCEK cont handler (VError "enforce keyset failure" info)
     Nothing -> do
       liftDbFunction info (_pdbWrite pdb Write DKeySets (KeySetName ksname) newKs)
       returnCEKValue cont handler (VString "Keyset write success")
@@ -948,7 +951,7 @@ defineKeySet = \info b cont handler env -> \case
     readKeyset' ksname >>= \case
       Just newKs ->
         defineKeySet' info cont handler env ksname newKs
-      Nothing -> returnCEK cont handler (VError "read-keyset failure")
+      Nothing -> returnCEK cont handler (VError "read-keyset failure" info)
   args -> argsError info b args
 
 --------------------------------------------------
@@ -957,7 +960,7 @@ defineKeySet = \info b cont handler env -> \case
 
 requireCapability :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 requireCapability = \info b cont handler _env -> \case
-  [VCapToken ct] -> requireCap cont handler ct
+  [VCapToken ct] -> requireCap info cont handler ct
   args -> argsError info b args
 
 composeCapability :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -974,13 +977,45 @@ installCapability :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 installCapability = \info b cont handler env -> \case
   [VCapToken ct] -> do
     enforceNotWithinDefcap info env "install-capability"
-    _ <- installCap info env ct
-    returnCEKValue cont handler VUnit
+    _ <- installCap info env ct True
+    returnCEKValue cont handler (VString "Installed capability")
   args -> argsError info b args
 
+-- emitEvent
+--   :: MonadEval b i m
+--   => Cont b i m
+--   -> CEKErrorHandler b i m
+--   -> FQCapToken
+--   -> m (EvalResult b i m)
+-- emitEvent cont handler ct@(CapToken fqn _) = do
+--   let pactEvent = PactEvent ct (_fqModule fqn) (_fqHash fqn)
+--   esEvents %%= (pactEvent:)
+--   returnCEKValue cont handler VUnit
+
 coreEmitEvent :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-coreEmitEvent = \info b cont handler _env -> \case
-  [VCapToken ct] -> emitEvent cont handler ct
+coreEmitEvent = \info b cont handler env -> \case
+  [VCapToken ct@(CapToken fqn _)] -> do
+    guardForModuleCall info env (_fqModule fqn) $ return ()
+    lookupFqName (_ctName ct) >>= \case
+      Just (DCap d) -> do
+        enforceMeta (_dcapMeta d)
+        emitCapability info ct
+        returnCEKValue cont handler (VBool True)
+      Just _ ->
+        failInvariant info "CapToken does not point to defcap"
+      _ -> failInvariant info "No Capability found in emit-event"
+      where
+      enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)
+      enforceMeta _ = pure ()
+    -- Just mn -> do
+    --   let fqn = _ctName ct
+    --   let ctModule = _fqModule fqn
+    --   if ctModule == mn then do
+    --     let pactEvent = PactEvent ct (_fqModule fqn) (_fqHash fqn)
+    --     esEvents %%= (++ [pactEvent])
+    --     returnCEKValue cont handler (VBool True)
+    --   else returnCEK cont handler (VError "Event does not match emitting module" info)
+    -- Nothing -> returnCEK cont handler (VError "emit-event called outside of module code" info)
   args -> argsError info b args
 
 createCapGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -998,7 +1033,7 @@ createModuleGuard = \info b cont handler _env -> \case
         let cg = GModuleGuard (ModuleGuard mn n)
         returnCEKValue cont handler (VGuard cg)
       Nothing ->
-        returnCEK cont handler (VError "not-in-module")
+        returnCEK cont handler (VError "not-in-module" info)
   args -> argsError info b args
 
 
@@ -1011,8 +1046,8 @@ coreIntToStr = \info b cont handler _env -> \case
     | base == 64 && v >= 0 -> do
       let v' = toB64UrlUnpaddedText $ integerToBS v
       returnCEKValue cont handler (VString v')
-    | base == 64 -> returnCEK cont handler (VError "only positive values allowed for base64URL conversion")
-    | otherwise -> returnCEK cont handler (VError "invalid base for base64URL conversion")
+    | base == 64 -> returnCEK cont handler (VError "only positive values allowed for base64URL conversion" info)
+    | otherwise -> returnCEK cont handler (VError "invalid base for base64URL conversion" info)
   args -> argsError info b args
 
 coreStrToInt :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -1042,7 +1077,7 @@ coreFormat = \info b cont handler _env -> \case
     let parts = T.splitOn "{}" s
         plen = length parts
     if | plen == 1 -> returnCEKValue cont handler (VString s)
-       | plen - length es > 1 -> returnCEK cont handler $ VError $ "format: not enough arguments for template"
+       | plen - length es > 1 -> returnCEK cont handler $ VError "format: not enough arguments for template" info
        | otherwise -> do
           let args = formatArg <$> V.toList es
           returnCEKValue cont handler $ VString $  T.concat $ alternate parts (take (plen - 1) args)
@@ -1059,15 +1094,6 @@ coreFormat = \info b cont handler _env -> \case
 -- THIS CANNOT MAKE IT TO PROD
 renderPactValue :: PactValue -> T.Text
 renderPactValue = T.pack . show . Pretty.pretty
-  -- PLiteral l -> case l of
-  --   LString s -> "\"" <> s <> "\""
-  --   LInteger i -> T.pack (show i)
-  --   LDecimal d -> T.pack (show d)
-  --   LUnit -> "()"
-
-
-
-
 
 checkLen
   :: (MonadEval b i m)
@@ -1126,13 +1152,13 @@ coreAndQ = \info b cont handler _env -> \case
       EvalValue (VBool out)
         | out -> applyLam r [e] Mt CEKNoHandler >>= \case
             EvalValue (VBool out') -> returnCEKValue cont handler (VBool out')
-            VError err -> returnCEK cont handler (VError err)
+            VError err i -> returnCEK cont handler (VError err i)
             _ -> returnCEK cont handler invalidCloValue
         | otherwise -> returnCEKValue cont handler (VBool out)
       EvalValue _ -> returnCEK cont handler invalidCloValue
-      VError err -> returnCEK cont handler (VError err)
+      VError err i -> returnCEK cont handler (VError err i)
     where
-    invalidCloValue = VError "invalid return application for and? closure"
+    invalidCloValue = VError "invalid return application for and? closure" info
   args -> argsError info b args
 
 coreOrQ :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -1143,12 +1169,12 @@ coreOrQ = \info b cont handler _env -> \case
         | out -> returnCEKValue cont handler (VBool out)
         | otherwise -> applyLam r [e] Mt CEKNoHandler >>= \case
             EvalValue (VBool out') -> returnCEKValue cont handler (VBool out')
-            VError err -> returnCEK cont handler (VError err)
+            VError err i -> returnCEK cont handler (VError err i)
             _ -> returnCEK cont handler invalidCloValue
       EvalValue _ -> returnCEK cont handler invalidCloValue
-      VError err -> returnCEK cont handler (VError err)
+      VError err i -> returnCEK cont handler (VError err i)
     where
-    invalidCloValue = VError "invalid return application for and? closure"
+    invalidCloValue = VError "invalid return application for and? closure" info
   args -> argsError info b args
 
 coreNotQ :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -1157,9 +1183,9 @@ coreNotQ = \info b cont handler _env -> \case
     applyLam l [e] Mt CEKNoHandler >>= \case
       EvalValue (VBool out) -> returnCEKValue cont handler (VBool (not out))
       EvalValue _ -> returnCEK cont handler invalidCloValue
-      VError err -> returnCEK cont handler (VError err)
+      VError err i -> returnCEK cont handler (VError err i)
     where
-    invalidCloValue = VError "invalid return application for and? closure"
+    invalidCloValue = VError "invalid return application for and? closure" info
   args -> argsError info b args
 
 coreWhere :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -1168,9 +1194,9 @@ coreWhere = \info b cont handler _env -> \case
     case M.lookup (Field field) o of
       Just v -> applyLam app [VPactValue v] Mt CEKNoHandler >>= \case
         EvalValue (VBool cond) -> returnCEKValue cont handler (VBool cond)
-        EvalValue _ -> returnCEK cont handler (VError "where application did not result in a boolean")
-        VError err -> returnCEK cont handler (VError err)
-      Nothing -> returnCEK cont handler (VError "no such field in object in where application")
+        EvalValue _ -> returnCEK cont handler (VError "where application did not result in a boolean" info)
+        VError err i -> returnCEK cont handler (VError err i)
+      Nothing -> returnCEK cont handler (VError "no such field in object in where application" info)
   args -> argsError info b args
 
 coreHash :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -1186,8 +1212,32 @@ txHash = \info b cont handler _env -> \case
     returnCEKValue cont handler (VString (hashToText h))
   args -> argsError info b args
 
+describeModule :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+describeModule = \info b cont handler env -> \case
+  [VString s] ->
+    getModuleData info env (ModuleName s Nothing) >>= \case
+      ModuleData m _ -> returnCEKValue cont handler $
+        VObject $ M.fromList $ fmap (over _1 Field)
+          [ ("name", PString (renderModuleName (_mName m)))
+          , ("hash", PString (hashToText (_mhHash (_mHash m))))
+          , ("interfaces", PList (PString . renderModuleName <$> V.fromList (_mImplements m)))]
+      InterfaceData iface _ -> returnCEKValue cont handler $
+        VObject $ M.fromList $ fmap (over _1 Field)
+          [ ("name", PString (renderModuleName (_ifName iface)))
+          ]
+  args -> argsError info b args
+
+coreCompose :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreCompose = \info b cont handler _env -> \case
+  [VClosure clo1, VClosure clo2, v] ->
+    applyLam clo1 [v] Mt CEKNoHandler >>= \case
+      EvalValue v' ->
+        applyLam clo2 [v'] cont handler
+      err -> returnCEK cont handler err
+  args -> argsError info b args
+
 -----------------------------------
--- Core definiti ons
+-- Core definitions
 -----------------------------------
 
 unimplemented :: NativeFunction b i m
@@ -1276,7 +1326,7 @@ rawBuiltinRuntime = \case
   RawEmitEvent -> coreEmitEvent
   RawCreateTable -> createTable
   RawDescribeKeyset -> unimplemented
-  RawDescribeModule -> unimplemented
+  RawDescribeModule -> describeModule
   RawDescribeTable -> unimplemented
   RawDefineKeySet -> defineKeySet
   RawDefineKeysetData -> defineKeySet
@@ -1298,4 +1348,5 @@ rawBuiltinRuntime = \case
   RawNotQ -> coreNotQ
   RawHash -> coreHash
   RawTxHash -> txHash
+  RawCompose -> coreCompose
 

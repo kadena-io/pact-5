@@ -63,7 +63,7 @@ data DefCap name ty builtin info
   , _dcapArgs :: [Arg ty]
   , _dcapRType :: Maybe ty
   , _dcapTerm :: Term name ty builtin info
-  , _dcapMeta :: Maybe (DefCapMeta name)
+  , _dcapMeta :: DefCapMeta name
   , _dcapInfo :: info
   } deriving (Show, Functor)
 
@@ -143,6 +143,7 @@ data IfDef name ty builtin info
   = IfDfun (IfDefun ty info)
   | IfDConst (DefConst name ty builtin info)
   | IfDCap (IfDefCap ty info)
+  | IfDSchema (DefSchema ty info)
   deriving (Show, Functor)
 
 data TopLevel name ty builtin info
@@ -187,13 +188,14 @@ ifDefKind = \case
   IfDfun{} -> Nothing
   IfDCap{} -> Nothing
   IfDConst{} -> Just DKDefConst
-
+  IfDSchema ds -> Just (DKDefSchema (Schema (_dsSchema ds)))
 
 ifDefName :: IfDef name ty builtin i -> Text
 ifDefName = \case
   IfDfun ifd -> _ifdName ifd
   IfDConst dc -> _dcName dc
   IfDCap ifd -> _ifdcName ifd
+  IfDSchema dc -> _dsName dc
 
 defInfo :: Def name ty b i -> i
 defInfo = \case
@@ -203,12 +205,19 @@ defInfo = \case
   DSchema dc -> _dsInfo dc
   DTable dt -> _dtInfo dt
 
+ifDefToDef :: IfDef name ty b i -> Maybe (Def name ty b i)
+ifDefToDef = \case
+  IfDfun _ -> Nothing
+  IfDConst dc -> Just (DConst dc)
+  IfDCap _ -> Nothing
+  IfDSchema dc -> Just (DSchema dc)
 
 ifDefInfo :: IfDef name ty b i -> i
 ifDefInfo = \case
   IfDfun de -> _ifdInfo de
   IfDConst dc -> _dcInfo dc
   IfDCap d -> _ifdcInfo d
+  IfDSchema d -> _dsInfo d
 
 type EvalTerm b i = Term Name Type b i
 type EvalDef b i = Def Name Type b i
