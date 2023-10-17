@@ -249,6 +249,7 @@ data RawBuiltin
   | RawKeys
   | RawRead
   | RawSelect
+  | RawSelectWithFields
   | RawUpdate
   | RawWithDefaultRead
   | RawWithRead
@@ -262,6 +263,15 @@ data RawBuiltin
   | RawWhere
   | RawNotQ
   | RawHash
+  -- Time functions
+  | RawParseTime
+  | RawFormatTime
+  | RawTime
+  | RawAddTime
+  | RawDiffTime
+  | RawHours
+  | RawMinutes
+  | RawDays
   | RawCompose
   deriving (Eq, Show, Ord, Bounded, Enum)
 
@@ -366,6 +376,7 @@ rawBuiltinToText = \case
   RawKeys -> "keys"
   RawRead -> "read"
   RawSelect -> "select"
+  RawSelectWithFields -> ""
   RawUpdate -> "update"
   RawWithDefaultRead -> "with-default-read"
   RawWithRead -> "with-read"
@@ -378,6 +389,14 @@ rawBuiltinToText = \case
   RawWhere -> "where"
   RawNotQ -> "not?"
   RawHash -> "hash"
+  RawParseTime -> "parse-time"
+  RawFormatTime -> "format-time"
+  RawTime -> "time"
+  RawAddTime -> "add-time"
+  RawDiffTime -> "diff-time"
+  RawHours -> "hours"
+  RawMinutes -> "minutes"
+  RawDays -> "days"
   RawCompose -> "compose"
 
 instance IsBuiltin RawBuiltin where
@@ -479,6 +498,7 @@ instance IsBuiltin RawBuiltin where
     RawKeys -> 1
     RawRead -> 2
     RawSelect -> 2
+    RawSelectWithFields -> 3
     RawUpdate -> 3
     RawWithDefaultRead -> 4
     RawWithRead -> 3
@@ -491,6 +511,14 @@ instance IsBuiltin RawBuiltin where
     RawWhere -> 3
     RawNotQ -> 2
     RawHash -> 1
+    RawParseTime -> 2
+    RawFormatTime -> 2
+    RawTime -> 1
+    RawAddTime -> 2
+    RawDiffTime -> 2
+    RawHours -> 1
+    RawMinutes -> 1
+    RawDays -> 1
     RawCompose -> 3
 
 
@@ -664,7 +692,6 @@ instance (Pretty b) => Pretty (ReplBuiltin b) where
     t -> pretty (replBuiltinToText (const "") t)
 
 -- monomorphised builtin operations
--- TODO: TIME
 data CoreBuiltin
   -- IntOps
   -- Integer Add

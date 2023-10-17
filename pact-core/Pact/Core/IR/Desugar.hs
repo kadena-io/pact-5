@@ -215,6 +215,8 @@ desugarAppArityRaw
   -> Term name DesugarType builtin info
 desugarAppArityRaw f i RawEnumerate [e1, e2, e3] =
     App (Builtin (f RawEnumerateStepN) i) ([e1, e2, e3]) i
+desugarAppArityRaw f i RawSelect [e1, e2, e3] =
+    App (Builtin (f RawSelectWithFields) i) ([e1, e2, e3]) i
 desugarAppArityRaw f i RawSort [e1, e2] =
   App (Builtin (f RawSortObject) i) [e1, e2] i
 desugarAppArityRaw f i RawReadMsg [] =
@@ -612,7 +614,6 @@ typeSCC currM currDefs = \case
       | S.member n' currDefs && mn' == currM -> S.singleton n'
       | otherwise -> mempty
   Lisp.TyKeyset -> mempty
-  Lisp.TyTime -> mempty
   Lisp.TyPolyList -> mempty
   Lisp.TyPolyObject -> mempty
   Lisp.TyTable pn ->  case pn of
@@ -874,8 +875,6 @@ renameType i = \case
     throwDesugarError (UnsupportedType "[any]") i
   Lisp.TyPolyObject ->
     throwDesugarError (UnsupportedType "object{any}") i
-  Lisp.TyTime ->
-    throwDesugarError (UnsupportedType "time") i
   where
   resolveSchema = \case
     TBN bn -> do

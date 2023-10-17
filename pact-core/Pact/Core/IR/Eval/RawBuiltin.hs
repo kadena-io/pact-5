@@ -40,6 +40,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Char as Char
 import qualified Data.ByteString as BS
+import qualified Pact.Time as PactTime
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
@@ -760,24 +761,34 @@ createTable = \info b cont handler env -> \case
   args -> argsError info b args
 
 dbSelect :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-dbSelect = \info b cont handler env -> \case
+dbSelect info b cont handler env = \case
   [VTable tv, VClosure clo] -> do
     let pdb = view cePactDb env
     guardTable info env tv GtSelect
     ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
-    go pdb ks []
-    where
-    go _ [] acc = returnCEKValue cont handler (VList (V.fromList (reverse acc)))
-    go pdb (k:ks) acc = do
+    go Nothing clo tv pdb ks []
+  [VTable tv, VList li, VClosure clo] -> do
+    let pdb = view cePactDb env
+    guardTable info env tv GtSelect
+    li' <- traverse (fmap Field . asString info b) (V.toList li)
+    ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
+    go (Just li') clo tv pdb ks []
+  args -> argsError info b args
+  where
+    go mf _clo _tv _ [] acc = case mf of
+      Just fields -> do
+        let acc' = PObject . (`M.restrictKeys` (S.fromList fields)) <$> reverse acc
+        returnCEKValue cont handler (VList (V.fromList acc'))
+      Nothing ->
+        returnCEKValue cont handler (VList (V.fromList (fmap PObject (reverse acc))))
+    go mf clo tv pdb (k:ks) acc = do
       liftDbFunction info (_pdbRead pdb (tvToDomain tv) k) >>= \case
         Just (RowData rdata) -> applyLam clo [VObject rdata] Mt CEKNoHandler >>= \case
           EvalValue (VBool cond) ->
-            if cond then go pdb ks (PObject rdata:acc) else go pdb ks acc
+            if cond then go mf clo tv pdb ks (rdata:acc) else go mf clo tv pdb ks acc
           EvalValue _ -> returnCEK cont handler (VError "select query error" info)
           VError e i -> returnCEK cont handler (VError e i)
         Nothing -> returnCEK cont handler (VError "select is not enabled" info)
-
-  args -> argsError info b args
 
 -- Todo: error handling
 foldDb :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -1238,6 +1249,75 @@ txHash = \info b cont handler _env -> \case
     returnCEKValue cont handler (VString (hashToText h))
   args -> argsError info b args
 
+parseTime :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+parseTime = \info b cont handler _env -> \case
+  [VString fmt, VString s] ->
+    case PactTime.parseTime (T.unpack fmt) (T.unpack s) of
+      Just t -> returnCEKValue cont handler $ VPactValue (PTime t)
+      Nothing ->
+        returnCEK cont handler (VError "parse-time parse failure" info)
+  args -> argsError info b args
+
+formatTime :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+formatTime = \info b cont handler _env -> \case
+  [VString fmt, VPactValue (PTime t)] -> do
+    let timeString = PactTime.formatTime (T.unpack fmt) t
+    returnCEKValue cont handler $ VString (T.pack timeString)
+  args -> argsError info b args
+
+time :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+time = \info b cont handler _env -> \case
+  [VString s] -> do
+    case PactTime.parseTime "%Y-%m-%dT%H:%M:%SZ" (T.unpack s) of
+      Just t -> returnCEKValue cont handler $ VPactValue (PTime t)
+      Nothing ->
+        returnCEK cont handler (VError "time default format parse failure" info)
+  args -> argsError info b args
+
+addTime :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+addTime = \info b cont handler _env -> \case
+  [VPactValue (PTime t), VPactValue (PDecimal seconds)] -> do
+      let newTime = t PactTime..+^ PactTime.fromSeconds seconds
+      returnCEKValue cont handler $ VPactValue (PTime newTime)
+  args -> argsError info b args
+
+diffTime :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+diffTime = \info b cont handler _env -> \case
+  [VPactValue (PTime x), VPactValue (PTime y)] -> do
+    let secondsDifference = PactTime.toSeconds $ x PactTime..-. y
+    returnCEKValue cont handler $ VPactValue $ PDecimal secondsDifference
+  args -> argsError info b args
+
+minutes :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+minutes = \info b cont handler _env -> \case
+  [VDecimal x] -> do
+    let seconds = x * 60
+    returnCEKValue cont handler $ VDecimal seconds
+  [VInteger x] -> do
+    let seconds = fromIntegral x * 60
+    returnCEKValue cont handler $ VDecimal seconds
+  args -> argsError info b args
+
+hours :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+hours = \info b cont handler _env -> \case
+  [VDecimal x] -> do
+    let seconds = x * 60 * 60
+    returnCEKValue cont handler $ VDecimal seconds
+  [VInteger x] -> do
+    let seconds = fromIntegral x * 60 * 60
+    returnCEKValue cont handler $ VDecimal seconds
+  args -> argsError info b args
+
+days :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+days = \info b cont handler _env -> \case
+  [VDecimal x] -> do
+    let seconds = x * 60 * 60 * 24
+    returnCEKValue cont handler $ VDecimal seconds
+  [VInteger x] -> do
+    let seconds = fromIntegral x * 60 * 60 * 24
+    returnCEKValue cont handler $ VDecimal seconds
+  args -> argsError info b args
+
 describeModule :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 describeModule = \info b cont handler env -> \case
   [VString s] -> do
@@ -1400,4 +1480,13 @@ rawBuiltinRuntime = \case
   RawNotQ -> coreNotQ
   RawHash -> coreHash
   RawTxHash -> txHash
+  RawParseTime -> parseTime
+  RawFormatTime -> formatTime
+  RawTime -> time
+  RawAddTime -> addTime
+  RawDiffTime -> diffTime
+  RawHours -> hours
+  RawMinutes -> minutes
+  RawDays -> days
   RawCompose -> coreCompose
+  RawSelectWithFields -> dbSelect

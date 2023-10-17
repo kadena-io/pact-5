@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE PatternSynonyms #-}
@@ -25,6 +26,7 @@ import Data.Maybe(isJust)
 import Data.Decimal(Decimal)
 import qualified Data.Vector as V
 import qualified Data.Map.Strict as M
+import qualified Pact.Time as PactTime
 
 import Pact.Core.Type
 import Pact.Core.Names
@@ -43,6 +45,7 @@ data PactValue
   | PObject (Map Field PactValue)
   | PModRef ModRef
   | PCapToken (CapToken FullyQualifiedName PactValue)
+  | PTime !PactTime.UTCTime
   deriving (Eq, Show, Ord)
 
 makePrisms ''PactValue
@@ -70,8 +73,11 @@ instance Pretty PactValue where
     PModRef md -> pretty md
     PCapToken (CapToken fqn args) ->
       parens (pretty (fqnToQualName fqn) <> if null args then mempty else hsep (pretty <$> args))
+    PTime t -> pretty (PactTime.formatTime "%Y-%m-%d %H:%M:%S%Q %Z" t)
 
 
+-- | Check that a `PactValue` has the provided `Type`, returning
+-- `Just ty` if so and `Nothing` otherwise.
 checkPvType :: Type -> PactValue -> Maybe Type
 checkPvType ty = \case
   PLiteral l
@@ -108,6 +114,9 @@ checkPvType ty = \case
       | otherwise -> Nothing
     _ -> Nothing
   PCapToken _ -> Nothing
+  PTime _ -> case ty of
+    TyTime -> Just $ TyTime
+    _ -> Nothing
 
 
 
