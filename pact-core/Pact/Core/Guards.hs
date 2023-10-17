@@ -92,13 +92,13 @@ data ModuleGuard
   = ModuleGuard
   { _mgModule :: ModuleName
   , _mgName :: Text
-  } deriving Show
+  } deriving (Show, Eq, Ord)
 
-instance Eq ModuleGuard where
-  mg == mg' = _mgModule mg == _mgModule mg'
+-- instance Eq ModuleGuard where
+--   mg == mg' = _mgModule mg == _mgModule mg'
 
-instance Ord ModuleGuard where
-  mg `compare` mg' = _mgModule mg `compare` _mgModule mg'
+-- instance Ord ModuleGuard where
+--   mg `compare` mg' = _mgModule mg `compare` _mgModule mg'
 
 instance Pretty ModuleGuard where
   pretty (ModuleGuard mg name) = "ModuleGuard" <+> commaBraces

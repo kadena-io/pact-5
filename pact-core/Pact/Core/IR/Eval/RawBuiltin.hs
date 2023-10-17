@@ -452,7 +452,9 @@ zipList = \info b cont handler _env -> \case
 -- (try [1] (map (+ 1) [1 2 (enforce false "greg")])
 coreMap :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreMap = \info b cont handler _env -> \case
-  [VClosure fn, VList li] -> map' (V.toList li) []
+  [VClosure fn, VList li] -> do
+    -- liftIO $ print (show (view ceLocal _env))
+    map' (V.toList li) []
     where
     map' (x:xs) acc = applyLam fn [VPactValue x] Mt CEKNoHandler >>= \case
        EvalValue cv -> enforcePactValue cv >>= map' xs . (:acc)
@@ -767,7 +769,7 @@ dbSelect = \info b cont handler env -> \case
     go _ [] acc = returnCEKValue cont handler (VList (V.fromList (reverse acc)))
     go pdb (k:ks) acc = do
       liftDbFunction info (_pdbRead pdb (tvToDomain tv) k) >>= \case
-        Just (RowData rdata) -> applyLam clo [VObject rdata] cont handler >>= \case
+        Just (RowData rdata) -> applyLam clo [VObject rdata] Mt CEKNoHandler >>= \case
           EvalValue (VBool cond) ->
             if cond then go pdb ks (PObject rdata:acc) else go pdb ks acc
           EvalValue _ -> returnCEK cont handler (VError "select query error" info)

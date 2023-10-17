@@ -132,9 +132,9 @@ evalCEK cont handler env (Nullary body info) = do
   chargeNodeGas LamNode
   let clo = VLamClosure (LamClosure NullaryClosure 0 body Nothing env info)
   returnCEKValue cont handler clo
-evalCEK cont handler env (Let _ e1 e2 _) =
+evalCEK cont handler env (Let _ e1 e2 _) = do
   let cont' = LetC env e2 cont
-  in evalCEK cont' handler env e1
+  evalCEK cont' handler env e1
 evalCEK cont handler env (Lam _ args body info) = do
   chargeNodeGas LamNode
   let clo = VLamClosure (LamClosure (ArgClosure (_argType <$> args)) (NE.length args) body Nothing env info)
@@ -222,9 +222,7 @@ enforceKeyset
   -> m Bool
 enforceKeyset (KeySet kskeys ksPred) = do
   matchedSigs <- M.filterWithKey matchKey <$> viewCEKEnv eeMsgSigs
-  -- liftIO $ print matchedSigs
   sigs <- checkSigCaps matchedSigs
-  -- liftIO $ print sigs
   runPred (M.size sigs)
   where
   matchKey k _ = k `elem` kskeys

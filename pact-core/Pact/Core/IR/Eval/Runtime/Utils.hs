@@ -107,8 +107,6 @@ checkSigCaps
 checkSigCaps sigs = do
   granted <- getAllStackCaps
   autos <- useEvalState (esCaps . csAutonomous)
-  -- liftIO $ print granted
-  -- liftIO $ print sigs
   pure $ M.filter (match (S.null autos) granted) sigs
   where
   match allowEmpty granted sigCaps =
