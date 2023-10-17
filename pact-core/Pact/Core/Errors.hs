@@ -2,7 +2,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE InstanceSigs #-}
+-- {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Pact.Core.Errors
  ( PactErrorI
@@ -13,18 +14,23 @@ module Pact.Core.Errors
  , PactError(..)
  , ArgTypeError(..)
  , peInfo
+ , liftDbFunction
  ) where
 
 import Control.Lens hiding (ix)
+import Control.Monad.Except(MonadError(..))
+import Control.Monad.IO.Class(MonadIO(..))
 import Control.Exception
 import Data.Text(Text)
-import Data.Void
 import Data.Dynamic (Typeable)
 
 import Pact.Core.Type
 import Pact.Core.Names
+import Pact.Core.Guards
 import Pact.Core.Info
 import Pact.Core.Pretty(Pretty(..))
+import Pact.Core.Hash
+import Pact.Core.Persistence
 
 import qualified Pact.Core.Pretty as Pretty
 
@@ -43,6 +49,8 @@ data LexerError
   deriving Show
 
 instance Exception LexerError
+
+
 
 instance Pretty LexerError where
   pretty = ("Lexical Error: " <>) . \case
@@ -112,6 +120,8 @@ data DesugarError
   -- ^ Interface <ifname> doesnt exist
   | ImplementationError ModuleName ModuleName Text
   -- ^ Interface implemented in module for member <member> does not match the signature
+  | NotImplemented ModuleName ModuleName Text
+  -- ^ Interface member not implemented
   | RecursionDetected ModuleName [Text]
   -- ^ Detected use of recursion in module <module>. [functions] for a cycle
   | NotAllowedWithinDefcap Text
@@ -126,6 +136,16 @@ data DesugarError
   -- ^ Invalid top level defn references a non-semantic value (e.g defcap, defschema)
   | InvalidModuleReference ModuleName
   -- ^ Invalid: Interface used as module reference
+  | EmptyBindingBody
+  | ExpectedFreeVariable Text
+  | InvalidManagedArg Text
+  | InvalidImports [Text]
+  | InvalidImportModuleHash ModuleName ModuleHash
+  -- ^ Expected free variable
+  | InvalidSyntax Text
+  | InvalidDefInSchemaPosition Text
+  | InvalidDynamicInvoke Text
+  | DuplicateDefinition Text
   deriving Show
 
 instance Exception DesugarError
@@ -177,64 +197,28 @@ instance Pretty DesugarError where
       Pretty.hsep ["Invalid definition in term variable position:", pretty n]
     InvalidModuleReference mn ->
       Pretty.hsep ["Invalid Interface attempted to be used as module reference:", pretty mn]
-
--- data TypecheckError
---   = UnificationError (Type Text) (Type Text)
---   | ContextReductionError (Pred Text)
---   | UnsupportedTypeclassGeneralization [Pred Text]
---   | UnsupportedImpredicativity
---   | OccursCheckFailure (Type Text)
---   | TCInvariantFailure Text
---   | TCUnboundTermVariable Text
---   | TCUnboundFreeVariable ModuleName Text
---   | DisabledGeneralization Text
---   deriving Show
-
--- instance RenderError TypecheckError where
---   renderError = \case
---     UnificationError ty ty' ->
---       Pretty.hsep ["Type mismatch, expected:", renderType ty, "got:", renderType ty']
---     ContextReductionError pr ->
---       Pretty.hsep ["Context reduction failure, no such instance:", renderPred pr]
---     UnsupportedTypeclassGeneralization prs ->
---       Pretty.hsep ["Encountered term with generic signature, attempted to generalize on:", T.pack (show (renderPred <$> prs))]
---     UnsupportedImpredicativity ->
---       Pretty.hsep ["Invariant failure: Inferred term with impredicative polymorphism"]
---     OccursCheckFailure ty ->
---       Pretty.hsep
---       [ "Cannot construct the infinite type:"
---       , "Var(" <> renderType ty <> ") ~ " <> renderType ty]
---     TCInvariantFailure txt ->
---       Pretty.hsep ["Typechecker invariant failure violated:", txt]
---     TCUnboundTermVariable txt ->
---       Pretty.hsep ["Found unbound term variable:", txt]
---     TCUnboundFreeVariable mn txt ->
---       Pretty.hsep ["Found unbound free variable:", renderModuleName mn <> "." <> txt]
---     DisabledGeneralization txt ->
---       Pretty.hsep ["Generic types have been disabled:", txt]
-
--- instance Exception TypecheckError
-
--- newtype OverloadError
---   = OverloadError Text
---   deriving Show
-
--- instance RenderError OverloadError where
---   renderError = \case
---     OverloadError e ->
---       Pretty.hsep ["Error during overloading stage:", e]
-
--- instance Exception OverloadError
+    EmptyBindingBody -> "Bind expression lacks an accompanying body"
+    ExpectedFreeVariable t ->
+      Pretty.hsep ["Expected free variable in expression, found locally bound: ", pretty t]
+    e -> pretty (show e)
 
 data ArgTypeError
-  = ATEType (Type Void)
+  = ATEPrim PrimType
+  | ATEList
+  | ATEObject
+  | ATETable
   | ATEClosure
+  | ATEModRef
   deriving (Show)
 
 instance Pretty ArgTypeError where
   pretty = \case
-    ATEType ty -> pretty ty
-    ATEClosure -> "<closure>"
+    ATEPrim p -> Pretty.brackets $ pretty p
+    ATEList -> "[list]"
+    ATEObject -> "[object]"
+    ATETable -> "[table]"
+    ATEClosure -> "[closure]"
+    ATEModRef -> "[modref]"
 
 -- | All fatal execution errors which should pause
 --
@@ -258,6 +242,42 @@ data EvalError
   | EvalError Text
   -- ^ Error raised by the program that went unhandled
   | NativeArgumentsError NativeName [ArgTypeError]
+  -- ^ Error raised: native called with the wrong arguments
+  | ModRefNotRefined Text
+  -- ^ Module reference not refined to a value
+  | InvalidDefKind DefKind Text
+  -- ^ Def used in method has wrong type + reason
+  | NoSuchDef FullyQualifiedName
+  -- ^ Could not find a definition with the above name
+  | InvalidManagedCap FullyQualifiedName
+  -- ^ Name does not point to a managed capability
+  | CapNotInstalled FullyQualifiedName
+  -- ^ Capability not installed
+  | NameNotInScope FullyQualifiedName
+  -- ^ Name not found in the top level environment
+  | DefIsNotClosure Text
+  -- ^ Def is not a closure
+  | NoSuchKeySet KeySetName
+  -- ^ No such keyset
+  | CannotUpgradeInterface ModuleName
+  -- ^ Interface cannot be upgrade
+  | ModuleGovernanceFailure ModuleName
+  -- ^ Failed to acquire module governance
+  | DbOpFailure DbOpException
+  -- ^ DynName is not a module ref
+  | DynNameIsNotModRef Text
+  | ModuleDoesNotExist ModuleName
+  | ExpectedModule ModuleName
+  -- ^ Module does not exist
+  | HashNotBlessed ModuleName ModuleHash
+  | CannotApplyPartialClosure
+  | ClosureAppliedToTooManyArgs
+  | FormIllegalWithinDefcap Text
+  | RunTimeTypecheckFailure ArgTypeError Type
+  | NativeIsTopLevelOnly NativeName
+  | EventDoesNotMatchModule ModuleName
+  | InvalidEventCap FullyQualifiedName
+  | ExpectedPactValue
   deriving Show
 
 instance Pretty EvalError where
@@ -287,27 +307,11 @@ instance Pretty EvalError where
       Pretty.hsep ["Native evaluation error for native", pretty n <> ",", "received incorrect argument(s) of type(s)", Pretty.commaSep tys]
     EvalError txt ->
       Pretty.hsep ["Program encountered an unhandled raised error:", pretty txt]
+    e -> pretty (show e)
 
 
 
 instance Exception EvalError
-
--- data FatalPactError
---   = InvariantFailure Text
---   | FatalOverloadError Text
---   | FatalParserError Text
---   deriving Show
-
--- instance Exception FatalPactError
-
--- instance RenderError FatalPactError where
---   renderError = \case
---     InvariantFailure txt ->
---       Pretty.hsep ["Fatal Execution Error", txt]
---     FatalOverloadError txt ->
---       Pretty.hsep ["Fatal Overload Error", txt]
---     FatalParserError txt ->
---       Pretty.hsep ["Fatal Parser Error", txt]
 
 data PactError info
   = PELexerError LexerError info
@@ -343,3 +347,12 @@ peInfo f = \case
   --   PEFatalError fpe <$> f info
 
 instance (Show info, Typeable info) => Exception (PactError info)
+
+liftDbFunction
+  :: (MonadError (PactError i) m, MonadIO m)
+  => i
+  -> IO a
+  -> m a
+liftDbFunction info action = do
+  e <- liftIO $ catch (Right <$> action) (pure . Left . DbOpFailure)
+  either (throwError . (`PEExecutionError` info)) pure e

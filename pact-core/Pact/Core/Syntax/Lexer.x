@@ -38,10 +38,13 @@ $special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
 @tcfail = expect\-typecheck\-failure
 @steprb = step\-with\-rollback
 @withcap = with\-capability
-@reqcap = require\-capability
-@installcap = install\-capability
-@composecap = compose\-capability
-@emitevent = emit\-event
+@cruserguard = create\-user\-guard
+@enforce = enforce
+@enforceOne = enforce\-one
+-- @reqcap = require\-capability
+-- @installcap = install\-capability
+-- @composecap = compose\-capability
+-- @emitevent = emit\-event
 
 
 
@@ -79,14 +82,15 @@ tokens :-
     \@event      { token TokenEventAnn }
     \@managed    { token TokenManagedAnn}
     @steprb      { token TokenStepWithRollback}
+    @enforce     { token TokenEnforce }
+    @enforceOne  { token TokenEnforceOne }
     step         { token TokenStep }
     @withcap     { token TokenWithCapability }
-    @composecap  { token TokenComposeCapability }
-    @reqcap      { token TokenRequireCapability }
-    @installcap  { token TokenInstallCapability }
-    @emitevent   { token TokenEmitEvent }
-    -- at           { token TokenObjAccess }
-    -- remove       { token TokenObjRemove }
+    @cruserguard { token TokenCreateUserGuard }
+    -- @composecap  { token TokenComposeCapability }
+    -- @reqcap      { token TokenRequireCapability }
+    -- @installcap  { token TokenInstallCapability }
+    -- @emitevent   { token TokenEmitEvent }
     try          { token TokenTry }
     error        { token TokenError }
     progn        { token TokenBlockIntro }
@@ -106,21 +110,7 @@ tokens :-
     \:\=         { token TokenBindAssign }
     \:\:         { token TokenDynAcc }
     \:           { token TokenColon }
-    -- \=           { token TokenEq }
-    -- \!\=         { token TokenNeq }
-    -- \>\=         { token TokenGEQ }
-    -- \>           { token TokenGT }
-    -- \<\=         { token TokenLEQ }
-    -- \<           { token TokenLT }
-    -- \+           { token TokenPlus }
-    -- \-           { token TokenMinus }
-    -- \*           { token TokenMult }
-    -- \/           { token TokenDiv }
-    -- \&           { token TokenBitAnd }
-    -- \|           { token TokenBitOr }
-    -- \~           { token TokenBitComplement }
     \"           { stringLiteral }
-    -- \^           { token TokenPow }
     @ident       { emit TokenIdent }
 {
 

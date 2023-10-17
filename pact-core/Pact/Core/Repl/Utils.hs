@@ -15,25 +15,29 @@ module Pact.Core.Repl.Utils
  , runReplT
  , ReplState(..)
  , replFlags
- , replLoaded
  , replPactDb
  , replGas
  , replEvalLog
+ , replEvalEnv
+ , replEvalState
  , whenReplFlagSet
  , unlessReplFlagSet
  , debugIfFlagSet
  , replCompletion
+ , replCurrSource
+ , replTx
  , ReplAction(..)
  , parseReplAction
  , prettyReplFlag
  , ReplSource(..)
  , replError
+ , SourceCode(..)
  ) where
 
 import Control.Lens
 import Control.Monad ( when, unless )
 import Control.Monad.Reader
-import Control.Monad.State.Strict
+import Control.Monad.State.Strict(MonadState(..))
 import Control.Monad.Catch
 import Control.Monad.Except
 
@@ -43,8 +47,9 @@ import Data.Set(Set)
 import Data.Text(Text)
 import Data.List(isPrefixOf)
 import Data.Maybe(mapMaybe)
+import Data.ByteString(ByteString)
 import qualified Data.Set as Set
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import Text.Megaparsec((<|>), (<?>))
 import qualified Text.Megaparsec as MP
@@ -57,9 +62,14 @@ import Pact.Core.Pretty
 import Pact.Core.Gas
 import Pact.Core.Errors
 import Pact.Core.Debug
+import Pact.Core.Environment
 import qualified Pact.Core.IR.Term as Term
 
 import System.Console.Haskeline.Completion
+
+newtype SourceCode
+  = SourceCode ByteString
+  deriving Show
 
 data ReplDebugFlag
   = ReplDebugLexer
@@ -105,27 +115,34 @@ instance MonadState (ReplState b) (ReplM b)  where
 data ReplState b
   = ReplState
   { _replFlags :: Set ReplDebugFlag
-  , _replLoaded :: Loaded b SpanInfo
+  -- , _replLoaded :: Loaded b SpanInfo
   , _replPactDb :: PactDb b SpanInfo
+  , _replEvalState :: EvalState b SpanInfo
+  , _replEvalEnv :: EvalEnv b SpanInfo
   , _replGas :: IORef Gas
   , _replEvalLog :: IORef (Maybe [(Text, Gas)])
+  , _replCurrSource :: SourceCode
+  , _replTx :: Maybe (TxId, Maybe Text)
   }
 
 
 makeLenses ''ReplState
 
+instance HasEvalState (ReplState b) b SpanInfo where
+  evalState = replEvalState
+
 instance PhaseDebug (ReplM b) where
   debugPrint _ _ = pure ()
 
 instance HasLoaded (ReplState b) b SpanInfo where
-  loaded = replLoaded
+  loaded = evalState . esLoaded
 
 data ReplAction
-  = RALoad Text
-  | RASetLispSyntax
-  | RASetNewSyntax
+  -- = RALoad Text
+  -- | RASetLispSyntax
+  -- | RASetNewSyntax
   -- | RATypecheck Text
-  | RASetFlag ReplDebugFlag
+  = RASetFlag ReplDebugFlag
   | RADebugAll
   | RADebugNone
   | RAExecuteExpr Text
@@ -152,19 +169,19 @@ replAction =
   cmdKw kw = MP.chunk kw *> MP.space1
   cmd = do
     _ <- MP.chunk ":"
-    load <|> setLang <|> setFlag <?> "asdf"
+    setFlag <?> "asdf"
   setFlag =
     cmdKw "debug" *> ((RASetFlag <$> replFlag) <|> (RADebugAll <$ MP.chunk "all") <|> (RADebugNone <$ MP.chunk "none"))
-  setLang = do
-    cmdKw "syntax"
-    (RASetLispSyntax <$ MP.chunk "lisp") <|> (RASetNewSyntax <$ MP.chunk "new")
+  -- setLang = do
+  --   cmdKw "syntax"
+  --   (RASetLispSyntax <$ MP.chunk "lisp") <|> (RASetNewSyntax <$ MP.chunk "new")
   -- tc = do
   --   cmdKw "type"
   --   RATypecheck <$> MP.takeRest
-  load = do
-    cmdKw "load"
-    let c = MP.char '\"'
-    RALoad <$> MP.between c c (MP.takeWhile1P Nothing (/= '\"'))
+  -- load = do
+  --   cmdKw "load"
+  --   let c = MP.char '\"'
+  --   RALoad <$> MP.between c c (MP.takeWhile1P Nothing (/= '\"'))
 
 parseReplAction :: Text -> Maybe ReplAction
 parseReplAction = MP.parseMaybe replAction
@@ -224,9 +241,9 @@ replCompletion
 replCompletion natives =
   completeQuotedWord (Just '\\') "\"" listFiles $
   completeWord (Just '\\') filenameWordBreakChars $ \str -> do
-    tlns <- uses (replLoaded . loToplevel) Map.keys
-    moduleNames <- uses (replLoaded . loModules) (fmap renderModuleName . Map.keys)
-    prefixedNames <- uses (replLoaded . loModules) toPrefixed
+    tlns <- uses (loaded . loToplevel) M.keys
+    moduleNames <- uses (loaded . loModules) (fmap renderModuleName . M.keys)
+    prefixedNames <- uses (loaded . loModules) toPrefixed
     let
       cmds = [":load", ":type", ":syntax", ":debug"]
       allNames = Set.fromList $ T.unpack <$> concat
@@ -240,7 +257,7 @@ replCompletion natives =
       fmap Term._dcName $ mapMaybe (preview Term._IfDConst) $ Term._ifDefns iface
     -- fmap Term.defName . Term._mDefs . _mdModule
   toPrefixed m =
-    concat $ prefixF <$> Map.toList m
+    concat $ prefixF <$> M.toList m
   prefixF (mn, ems) = let
     dns = defNames ems
     in fmap ((renderModuleName mn <> ".") <>) dns
@@ -255,10 +272,11 @@ replError
 replError (ReplSource file src) pe =
   let srcLines = T.lines src
       pei = view peInfo pe
-      slice = withLine (_liStartLine pei) $ take (max 1 (_liEndLine pei)) $ drop (_liStartLine pei) srcLines
+      end = _liEndLine pei - _liStartLine pei
+      slice = withLine (_liStartLine pei) $ take (max 1 end) $ drop (_liStartLine pei) srcLines
       colMarker = "  | " <> T.replicate (_liStartColumn pei) " " <> T.replicate (max 1 (_liEndColumn pei - _liStartColumn pei)) "^"
       errRender = renderText pe
-      fileErr = file <> ":" <> T.pack (show (_liStartLine pei)) <> ":" <> T.pack (show (_liStartColumn pei)) <> ": "
+      fileErr = file <> ":" <> T.pack (show (_liStartLine pei + 1)) <> ":" <> T.pack (show (_liStartColumn pei)) <> ": "
   in T.unlines ([fileErr <> errRender] ++ slice ++ [colMarker])
   where
   withLine st lns = zipWith (\i e -> T.pack (show i) <> " | " <> e) [st ..] lns

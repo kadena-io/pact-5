@@ -13,12 +13,10 @@
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Jose Cardona <jose@kadena.io>
 --
--- Our Core IR, which is inspected for static guarantees before interpretation
--- The core IR manages to
+-- Our Analysis IR
 --
 
--- Todo: Enumerate imports
-module Pact.Core.IR.Term where
+module Pact.Core.IR.Analysis.Term where
 
 import Control.Lens
 import Data.Foldable(fold)
@@ -33,7 +31,6 @@ import Pact.Core.Builtin
 import Pact.Core.Hash
 import Pact.Core.Literal
 import Pact.Core.Type
-    ( Type, Arg(Arg), DefKind(..), Schema(Schema) )
 import Pact.Core.Names
 import Pact.Core.Imports
 import Pact.Core.Capabilities
@@ -63,7 +60,7 @@ data DefCap name ty builtin info
   , _dcapArgs :: [Arg ty]
   , _dcapRType :: Maybe ty
   , _dcapTerm :: Term name ty builtin info
-  , _dcapMeta :: DefCapMeta name
+  , _dcapMeta :: Maybe (DefCapMeta name)
   , _dcapInfo :: info
   } deriving (Show, Functor)
 
@@ -79,18 +76,18 @@ data DefSchema ty info
 -- because currently, renaming and desugaring are not in sequence. That is:
 -- renaming and desugaring a module happens as a full desugar into a full rename.
 -- if they ran one after another, this type would not be necessary
-data TableSchema name where
-  DesugaredTable :: ParsedName -> TableSchema ParsedName
-  ResolvedTable :: Schema -> TableSchema Name
+-- data TableSchema name where
+--   DesugaredTable :: ParsedName -> TableSchema ParsedName
+--   ResolvedTable :: Schema -> TableSchema Name
 
-instance Show (TableSchema name) where
-  show (DesugaredTable t) = "DesugardTable(" <> show t <> ")"
-  show (ResolvedTable t) = "ResolvedTable(" <> show t <> ")"
+-- instance Show (TableSchema name) where
+--   show (DesugaredTable t) = "DesugardTable(" <> show t <> ")"
+--   show (ResolvedTable t) = "ResolvedTable(" <> show t <> ")"
 
 data DefTable name info
   = DefTable
   { _dtName :: Text
-  , _dtSchema :: TableSchema name
+  , _dtSchema :: name
   , _dtInfo :: info
   } deriving (Show, Functor)
 
@@ -101,7 +98,6 @@ data Def name ty builtin info
   | DSchema (DefSchema ty info)
   | DTable (DefTable name info)
   deriving (Show, Functor)
-
 
 data Module name ty builtin info
   = Module
@@ -143,14 +139,12 @@ data IfDef name ty builtin info
   = IfDfun (IfDefun ty info)
   | IfDConst (DefConst name ty builtin info)
   | IfDCap (IfDefCap ty info)
-  | IfDSchema (DefSchema ty info)
   deriving (Show, Functor)
 
 data TopLevel name ty builtin info
   = TLModule (Module name ty builtin info)
   | TLInterface (Interface name ty builtin info)
   | TLTerm (Term name ty builtin info)
-  | TLUse Import info
   deriving (Show, Functor)
 
 data ReplTopLevel name ty builtin info
@@ -188,14 +182,13 @@ ifDefKind = \case
   IfDfun{} -> Nothing
   IfDCap{} -> Nothing
   IfDConst{} -> Just DKDefConst
-  IfDSchema ds -> Just (DKDefSchema (Schema (_dsSchema ds)))
+
 
 ifDefName :: IfDef name ty builtin i -> Text
 ifDefName = \case
   IfDfun ifd -> _ifdName ifd
   IfDConst dc -> _dcName dc
   IfDCap ifd -> _ifdcName ifd
-  IfDSchema dc -> _dsName dc
 
 defInfo :: Def name ty b i -> i
 defInfo = \case
@@ -205,19 +198,12 @@ defInfo = \case
   DSchema dc -> _dsInfo dc
   DTable dt -> _dtInfo dt
 
-ifDefToDef :: IfDef name ty b i -> Maybe (Def name ty b i)
-ifDefToDef = \case
-  IfDfun _ -> Nothing
-  IfDConst dc -> Just (DConst dc)
-  IfDCap _ -> Nothing
-  IfDSchema dc -> Just (DSchema dc)
 
 ifDefInfo :: IfDef name ty b i -> i
 ifDefInfo = \case
   IfDfun de -> _ifdInfo de
   IfDConst dc -> _dcInfo dc
   IfDCap d -> _ifdcInfo d
-  IfDSchema d -> _dsInfo d
 
 type EvalTerm b i = Term Name Type b i
 type EvalDef b i = Def Name Type b i
@@ -239,13 +225,10 @@ data Term name ty builtin info
   -- Lambdas are named for the sake of the callstack.
   | Let (Arg ty) (Term name ty builtin info) (Term name ty builtin info) info
   -- ^ let x = e1 in e2
-  | App (Term name ty builtin info) [Term name ty builtin info] info
+  | App (Term name ty builtin info) (NonEmpty (Term name ty builtin info)) info
   -- ^ (e1 e2)
   | Sequence (Term name ty builtin info) (Term name ty builtin info) info
-  -- ^ sequencing, that is e1 `Sequence` e2 evaluates e1
-  -- discards the result and then evaluates and returns the result of e2
-  | Nullary (Term name ty builtin info) info
-  -- ^ "Lazy terms of arity zero"
+  -- ^ error term , error "blah"
   | Conditional (BuiltinForm (Term name ty builtin info)) info
   -- ^ Conditional terms
   | Builtin builtin info
@@ -256,12 +239,12 @@ data Term name ty builtin info
   -- ^ List Literals
   | Try (Term name ty builtin info) (Term name ty builtin info) info
   -- ^ try (catch expr) (try-expr)
-  | ObjectLit [(Field, Term name ty builtin info)] info
-  -- ^ an object literal
-  -- | DynInvoke (Term name ty builtin info) Text info
-  -- ^ dynamic module reference invocation m::f
   | CapabilityForm (CapForm name (Term name ty builtin info)) info
   -- ^ Capability Natives
+  | ObjectLit [(Field, Term name ty builtin info)] info
+  -- ^ an object literal
+  | DynInvoke (Term name ty builtin info) Text info
+  -- ^ dynamic module reference invocation m::f
   | Error Text info
   -- ^ Error term
   deriving (Show, Functor)
@@ -274,7 +257,7 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
     Let n te te' _ ->
       parens $ "let" <+> parens (pretty n <+> pretty te) <+> pretty te'
     App te ne _ ->
-      parens (pretty te <+> hsep (pretty <$> ne))
+      parens (pretty te <+> hsep (NE.toList (pretty <$> ne)))
     Sequence te te' _ ->
       parens ("seq" <+> pretty te <+> pretty te')
     Conditional o _ ->
@@ -282,29 +265,21 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
     Builtin builtin _ -> pretty builtin
     Constant lit _ ->
       pretty lit
-    Nullary term _ ->
-      parens ("suspend" <+> pretty term)
     ListLit tes _ ->
       pretty tes
     CapabilityForm cf _ ->
       pretty cf
     Try te te' _ ->
       parens ("try" <+> pretty te <+> pretty te')
-    -- DynInvoke n t _ ->
-    --   pretty n <> "::" <> pretty t
-    ObjectLit n _ ->
-      braces (hsep $ punctuate "," $ fmap (\(f, t) -> pretty f <> ":" <> pretty t) n)
+    DynInvoke n t _ ->
+      pretty n <> "::" <> pretty t
+    ObjectLit _n _ -> "object<todo>"
     Error txt _ ->
       parens ("error" <> pretty txt)
     where
     prettyTyAnn = maybe mempty ((":" <>) . pretty)
     prettyLamArg (Arg n ty) =
       pretty n <> prettyTyAnn ty
-
-instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (TopLevel name ty builtin info) where
-  pretty = \case
-    TLTerm tm -> pretty tm
-    _ -> "todo: pretty defs/modules"
 
 
 ----------------------------
@@ -325,8 +300,6 @@ termBuiltin f = \case
     Conditional <$> traverse (termBuiltin f) bf <*> pure i
   Builtin b i ->
     Builtin <$> f b <*> pure i
-  Nullary term i ->
-    Nullary <$> termBuiltin f term <*> pure i
   Constant lit i ->
     pure (Constant lit i)
   ListLit tes i ->
@@ -337,8 +310,8 @@ termBuiltin f = \case
     CapabilityForm <$> traverse (termBuiltin f) cf <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (termBuiltin f) m <*> pure i
-  -- DynInvoke n t i ->
-  --   DynInvoke <$> termBuiltin f n <*> pure t <*> pure i
+  DynInvoke n t i ->
+    DynInvoke <$> termBuiltin f n <*> pure t <*> pure i
   Error txt i -> pure (Error txt i)
 
 termInfo :: Lens' (Term name ty builtin info) info
@@ -355,11 +328,11 @@ termInfo f = \case
     Conditional o <$> f i
   ListLit l i  -> ListLit l <$> f i
   Try e1 e2 i -> Try e1 e2 <$> f i
-  Nullary term i ->
-    Nullary term <$> f i
+  DynInvoke n t i -> DynInvoke n t <$> f i
   CapabilityForm cf i -> CapabilityForm cf <$> f i
   Error t i -> Error t <$> f i
   ObjectLit m i -> ObjectLit m <$> f i
+  -- ObjectOp o i -> ObjectOp o <$> f i
 
 instance Plated (Term name ty builtin info) where
   plate f = \case
@@ -373,14 +346,14 @@ instance Plated (Term name ty builtin info) where
     Conditional o i ->
       Conditional <$> traverse (plate f) o <*> pure i
     ListLit m i -> ListLit <$> traverse f m <*> pure i
-    Nullary term i ->
-      Nullary <$> f term <*> pure i
     CapabilityForm cf i ->
       CapabilityForm <$> traverse f cf <*> pure i
     Try e1 e2 i ->
       Try <$> f e1 <*> f e2 <*> pure i
     ObjectLit o i ->
       ObjectLit <$> (traverse._2) f o <*> pure i
+    DynInvoke n t i ->
+      pure (DynInvoke n t i)
     Error e i -> pure (Error e i)
 
 -- Todo: qualify all of these

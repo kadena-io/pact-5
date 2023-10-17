@@ -15,7 +15,7 @@ import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Either(lefts, rights)
 
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.Text.Read as T
 import qualified Data.List.NonEmpty as NE
@@ -75,10 +75,11 @@ import Pact.Core.Syntax.LexUtils
   eventAnn   { PosToken TokenEventAnn _ }
   managedAnn { PosToken TokenManagedAnn _ }
   withcap    { PosToken TokenWithCapability _ }
-  reqcap     { PosToken TokenRequireCapability _}
-  installcap { PosToken TokenInstallCapability _ }
-  composecap { PosToken TokenComposeCapability _ }
-  emitevent  { PosToken TokenEmitEvent _ }
+  c_usr_grd  { PosToken TokenCreateUserGuard _}
+  -- reqcap     { PosToken TokenRequireCapability _}
+  -- installcap { PosToken TokenInstallCapability _ }
+  -- composecap { PosToken TokenComposeCapability _ }
+  -- emitevent  { PosToken TokenEmitEvent _ }
   step       { PosToken TokenStep _ }
   steprb     { PosToken TokenStepWithRollback _ }
   '{'        { PosToken TokenOpenBrace _ }
@@ -92,22 +93,10 @@ import Pact.Core.Syntax.LexUtils
   ':'        { PosToken TokenColon _ }
   ':='       { PosToken TokenBindAssign _ }
   '.'        { PosToken TokenDot _ }
-  -- '=='       { PosToken TokenEq _ }
-  -- '!='       { PosToken TokenNeq _ }
-  -- '>'        { PosToken TokenGT _ }
-  -- '>='       { PosToken TokenGEQ _ }
-  -- '<'        { PosToken TokenLT _ }
-  -- '<='       { PosToken TokenLEQ _ }
-  -- '+'        { PosToken TokenPlus _ }
-  -- '-'        { PosToken TokenMinus _}
-  -- '*'        { PosToken TokenMult _ }
-  -- '/'        { PosToken TokenDiv _ }
-  -- '&'        { PosToken TokenBitAnd _ }
-  -- '|'        { PosToken TokenBitOr _ }
-  -- '~'        { PosToken TokenBitComplement _}
-  -- pow        { PosToken TokenPow _}
   and        { PosToken TokenAnd _ }
   or         { PosToken TokenOr _ }
+  enforce    { PosToken TokenEnforce _}
+  enforceOne { PosToken TokenEnforceOne _ }
   IDENT      { PosToken (TokenIdent _) _ }
   NUM        { PosToken (TokenNumber _) _ }
   STR        { PosToken (TokenString _) _ }
@@ -135,26 +124,25 @@ TopLevel :: { ParsedTopLevel }
   : Module { TLModule $1 }
   | Interface { TLInterface $1 }
   | Expr { TLTerm $1 }
+  | Use { uncurry TLUse $1 }
 
 RTL :: { ReplSpecialTL SpanInfo }
   : ReplTopLevel { RTL $1 }
   | '(' ReplSpecial ')' { RTLReplSpecial  ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
 ReplTopLevel :: { ParsedReplTopLevel }
-  : Module { RTLModule $1 }
-  | Interface { RTLInterface $1 }
+  : TopLevel { RTLTopLevel $1 }
   | '(' Defun ')' { RTLDefun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefConst ')' { RTLDefConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
-  | Expr { RTLTerm $1 }
 
 
 ReplSpecial :: { SpanInfo -> ReplSpecialForm SpanInfo }
   : load STR BOOLEAN { ReplLoad (getStr $2) $3 }
   | load STR { ReplLoad (getStr $2) False }
 
-Governance :: { Governance Text }
+Governance :: { Governance ParsedName }
   : StringRaw { KeyGov (KeySetName $1)}
-  | IDENT { CapGov (getIdent $1) }
+  | IDENT { CapGov (UnresolvedGov (BN (BareName (getIdent $1)))) }
 
 StringRaw :: { Text }
  : STR  { getStr $1 }
@@ -200,9 +188,13 @@ Exts :: { [ExtDecl] }
   | {- empty -} { [] }
 
 Ext :: { ExtDecl }
-  : '(' import ModQual ImportList ')' { ExtImport (Import (mkModName $3) Nothing $4)  }
+  : Use { ExtImport (fst $1)  }
   | '(' implements ModQual ')' { ExtImplements (mkModName $3) }
   | '(' bless StringRaw ')' { ExtBless $3 }
+
+Use :: { (Import, SpanInfo) }
+  : '(' import ModQual ImportList ')' {  (Import (mkModName $3) Nothing $4, combineSpan (_ptInfo $1) (_ptInfo $5))  }
+
 
 Defs :: { [ParsedDef] }
   : Defs Def { $2:$1 }
@@ -320,7 +312,7 @@ ArgList :: { [Arg] }
 Type :: { Type }
   : '[' Type ']' { TyList $2 }
   | module '{' ModQual '}' { TyModRef (mkModName $3) }
-  | IDENT '{' ParsedName '}' {% objType (_ptInfo $1) (getIdent $1) $3}
+  | IDENT '{' ParsedTyName '}' {% objType (_ptInfo $1) (getIdent $1) $3}
   | IDENT {% primType (_ptInfo $1) (getIdent $1) }
 
 -- Annotations
@@ -372,7 +364,7 @@ BlockBody :: { [ParsedExpr] }
 Expr :: { ParsedExpr }
   : '(' SExpr ')' { $2 (combineSpan (_ptInfo $1) (_ptInfo $3)) }
   | Atom { $1 }
-  | Expr '::' IDENT { DynAccess $1 (getIdent $3) (combineSpan (view termInfo $1) (_ptInfo $3)) }
+  -- | Expr '::' IDENT { DynAccess $1 (getIdent $3) (combineSpan (view termInfo $1) (_ptInfo $3)) }
 
 SExpr :: { SpanInfo -> ParsedExpr }
   : LamExpr { $1 }
@@ -420,11 +412,12 @@ CapExpr :: { SpanInfo -> ParsedExpr }
   : CapForm { CapabilityForm $1 }
 
 CapForm :: { CapForm SpanInfo }
-  : withcap '(' ParsedName AppList ')' Block { WithCapability $3 $4 $6 }
-  | installcap '(' ParsedName AppList ')' { InstallCapability $3 $4 }
-  | reqcap '(' ParsedName AppList ')' { RequireCapability $3 $4 }
-  | composecap '(' ParsedName AppList ')' { ComposeCapability $3 $4 }
-  | emitevent '(' ParsedName AppList ')' { EmitEvent $3 $4 }
+  : withcap '(' ParsedName AppList ')' Block { WithCapability $3 (reverse $4) $6 }
+  | c_usr_grd '(' ParsedName AppList ')' { CreateUserGuard $3 (reverse $4)}
+  -- | installcap '(' ParsedName AppList ')' { InstallCapability $3 $4 }
+  -- | reqcap '(' ParsedName AppList ')' { RequireCapability $3 $4 }
+  -- | composecap '(' ParsedName AppList ')' { ComposeCapability $3 $4 }
+  -- | emitevent '(' ParsedName AppList ')' { EmitEvent $3 $4 }
 
 LamArgs :: { [MArg] }
   : LamArgs IDENT ':' Type { (MArg (getIdent $2) (Just $4)):$1 }
@@ -439,7 +432,7 @@ Binders :: { [Binder SpanInfo] }
   | '(' IDENT MTypeAnn Expr ')' { [Binder (getIdent $2) $3 $4] }
 
 GenAppExpr :: { SpanInfo -> ParsedExpr }
-  : Expr AppBindList { App $1 (toAppExprList (reverse $2)) }
+  : Expr AppBindList { \i -> App $1 (toAppExprList i (reverse $2)) i }
 
 ProgNExpr :: { SpanInfo -> ParsedExpr }
   : progn BlockBody { Block (NE.fromList (reverse $2)) }
@@ -481,6 +474,8 @@ Atom :: { ParsedExpr }
 Operator :: { ParsedExpr }
   : and { Operator AndOp (_ptInfo $1) }
   | or { Operator OrOp (_ptInfo $1) }
+  | enforce { Operator EnforceOp (_ptInfo $1)}
+  | enforceOne { Operator EnforceOneOp (_ptInfo $1)}
 
 Bool :: { ParsedExpr }
   : true { Constant (LBool True) (_ptInfo $1) }
@@ -491,12 +486,18 @@ BOOLEAN :: { Bool }
   | false { False }
 
 Var :: { ParsedExpr }
-  : IDENT '.' ModQual  { Var (mkQualName (getIdent $1) $3) (_ptInfo $1) }
-  | IDENT { Var (mkBarename (getIdent $1)) (_ptInfo $1) }
+  : IDENT '.' ModQual  { Var (QN (mkQualName (getIdent $1) $3)) (_ptInfo $1) }
+  | IDENT { Var (BN (mkBarename (getIdent $1))) (_ptInfo $1) }
+  | IDENT '::' IDENT { Var (DN (DynamicName (getIdent $1) (getIdent $3))) (_ptInfo $1) }
 
 ParsedName :: { ParsedName }
-  : IDENT '.' ModQual { mkQualName (getIdent $1) $3 }
-  | IDENT { mkBarename (getIdent $1) }
+  : IDENT '.' ModQual { QN (mkQualName (getIdent $1) $3) }
+  | IDENT { BN (mkBarename (getIdent $1)) }
+  | IDENT '::' IDENT { DN (DynamicName (getIdent $1) (getIdent $3)) }
+
+ParsedTyName :: { ParsedTyName }
+  : IDENT '.' ModQual { TQN (mkQualName (getIdent $1) $3) }
+  | IDENT { TBN (mkBarename (getIdent $1)) }
 
 QualifiedName :: { QualifiedName }
   : IDENT '.' ModQual { mkQualName' (getIdent $1) $3 }
@@ -538,7 +539,7 @@ combineSpans lexpr rexpr =
 getIdent (PosToken (TokenIdent x) _) = x
 getNumber (PosToken (TokenNumber x) _) = x
 getStr (PosToken (TokenString x) _ ) = x
-getTick (PosToken (TokenSingleTick x) _) = x
+getTick (PosToken (TokenSingleTick x) _) = T.drop 1 x
 getIdentField = Field . getIdent
 
 mkIntegerConstant n i =
@@ -556,11 +557,9 @@ mkDecimal num dec i = do
 
 mkQualName ns (mod, (Just ident)) =
   let ns' = NamespaceName ns
-      qn = QualifiedName ident (ModuleName mod (Just ns'))
-  in QN qn
+  in QualifiedName ident (ModuleName mod (Just ns'))
 mkQualName mod (ident, Nothing) =
-  let qn = QualifiedName ident (ModuleName mod Nothing)
-  in QN qn
+  QualifiedName ident (ModuleName mod Nothing)
 
 mkQualName' ns (mod, (Just ident)) =
   let ns' = NamespaceName ns
@@ -580,7 +579,7 @@ mkBlock = \case
 
 -- ln0 = BN (BareName "")
 
-mkBarename tx = BN (BareName tx)
+mkBarename tx = BareName tx
 
 
 }

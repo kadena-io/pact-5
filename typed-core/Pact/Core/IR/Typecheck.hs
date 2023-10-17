@@ -50,7 +50,7 @@ import Data.Map(Map)
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 import qualified Data.RAList as RAList
@@ -1383,7 +1383,7 @@ inferModule (IR.Module mname mgov defs blessed imports impl mh info) = do
     def' <- local (set tcFree m) (inferDef d)
     let name' = FullyQualifiedName mname (Typed.defName def') mh
         dty = fmap absurd (Typed.defType def')
-        m' = Map.insert name' dty  m
+        m' = M.insert name' dty  m
     pure (def':xs, m')
 
 inferInterface
@@ -1433,15 +1433,15 @@ inferTopLevel loaded = \case
   IR.TLModule m -> do
     tcm <- inferModule m
     let toFqn df = FullyQualifiedName (Typed._mName tcm) (Typed.defName df) (Typed._mHash tcm)
-        newTLs = Map.fromList $ (\df -> (toFqn df, Typed.defType df)) <$> Typed._mDefs tcm
-        loaded' = over loAllTyped (Map.union newTLs) loaded
+        newTLs = M.fromList $ (\df -> (toFqn df, Typed.defType df)) <$> Typed._mDefs tcm
+        loaded' = over loAllTyped (M.union newTLs) loaded
     pure (Typed.TLModule tcm, loaded')
   IR.TLTerm m -> (, loaded) . Typed.TLTerm . snd <$> inferTermNonGen m
   IR.TLInterface i -> do
     tci <- inferInterface i
     let toFqn dc = FullyQualifiedName (Typed._ifName tci) (Typed._dcName dc) (Typed._ifHash tci)
-        newTLs = Map.fromList $ fmap (\df -> (toFqn df, DefunType (Typed._dcType df))) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
-        loaded' = over loAllTyped (Map.union newTLs) loaded
+        newTLs = M.fromList $ fmap (\df -> (toFqn df, DefunType (Typed._dcType df))) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
+        loaded' = over loAllTyped (M.union newTLs) loaded
     pure (Typed.TLInterface tci, loaded')
 
 inferReplTopLevel
@@ -1453,8 +1453,8 @@ inferReplTopLevel loaded = \case
   IR.RTLModule m ->  do
     tcm <- inferModule m
     let toFqn df = FullyQualifiedName (Typed._mName tcm) (Typed.defName df) (Typed._mHash tcm)
-        newTLs = Map.fromList $ (\df -> (toFqn df, Typed.defType df)) <$> Typed._mDefs tcm
-        loaded' = over loAllTyped (Map.union newTLs) loaded
+        newTLs = M.fromList $ (\df -> (toFqn df, Typed.defType df)) <$> Typed._mDefs tcm
+        loaded' = over loAllTyped (M.union newTLs) loaded
     pure (Typed.RTLModule tcm, loaded')
   IR.RTLTerm m -> (, loaded) . Typed.RTLTerm . snd <$> inferTermNonGen m
   -- Todo: if we don't update the module hash to update linking,
@@ -1462,18 +1462,18 @@ inferReplTopLevel loaded = \case
   IR.RTLDefun dfn -> do
     dfn' <- inferDefun dfn
     let newFqn = FullyQualifiedName replModuleName (Typed._dfunName dfn') replModuleHash
-    let loaded' = over loAllTyped (Map.insert newFqn (DefunType (Typed._dfunType dfn'))) loaded
+    let loaded' = over loAllTyped (M.insert newFqn (DefunType (Typed._dfunType dfn'))) loaded
     pure (Typed.RTLDefun dfn', loaded')
   IR.RTLDefConst dconst -> do
     dc <- inferDefConst dconst
     let newFqn = FullyQualifiedName replModuleName (Typed._dcName dc) replModuleHash
-    let loaded' = over loAllTyped (Map.insert newFqn (DefunType (Typed._dcType dc))) loaded
+    let loaded' = over loAllTyped (M.insert newFqn (DefunType (Typed._dcType dc))) loaded
     pure (Typed.RTLDefConst dc, loaded')
   IR.RTLInterface i -> do
     tci <- inferInterface i
     let toFqn dc = FullyQualifiedName (Typed._ifName tci) (Typed._dcName dc) (Typed._ifHash tci)
-        newTLs = Map.fromList $ fmap (\df -> (toFqn df, DefunType (Typed._dcType df))) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
-        loaded' = over loAllTyped (Map.union newTLs) loaded
+        newTLs = M.fromList $ fmap (\df -> (toFqn df, DefunType (Typed._dcType df))) $ mapMaybe (preview Typed._IfDConst) (Typed._ifDefns tci)
+        loaded' = over loAllTyped (M.union newTLs) loaded
     pure (Typed.RTLInterface tci, loaded')
 
 
@@ -1695,7 +1695,7 @@ dbjTyp i env depth = \case
 --   tl = _loModules loaded
 --   toTy d = (Untyped.defName d, Untyped.defType d)
 --   mdefs =  Untyped._mDefs . _mdModule <$> tl
---   in Map.fromList . fmap toTy <$> mdefs
+--   in M.fromList . fmap toTy <$> mdefs
 
 runInfer
   :: Loaded b i

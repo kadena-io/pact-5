@@ -38,6 +38,7 @@ common pact-core-common
     , transformers
     , text
     , vector
+    , vector-algorithms
     , megaparsec
     , cryptonite
     , memory
@@ -103,6 +104,8 @@ library
     Pact.Core.Debug
     Pact.Core.Capabilities
     Pact.Core.ModRefs
+    Pact.Core.Interpreter
+    Pact.Core.Environment
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree

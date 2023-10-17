@@ -18,65 +18,33 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Class(liftIO)
 import Data.Text(Text)
-import Data.ByteString(ByteString)
 import Data.Proxy
--- import Data.Maybe(mapMaybe)
-import qualified Data.Map.Strict as Map
--- import qualified Data.Set as Set
+import Data.Default
+import qualified Data.Map.Strict as M
 import qualified Data.ByteString as B
 import qualified Data.Text as T
 
--- import Pact.Core.Info
 import Pact.Core.Persistence
 import Pact.Core.Builtin
-import Pact.Core.Gas
 import Pact.Core.Names
 import Pact.Core.Repl.Utils
 import Pact.Core.IR.Desugar
 import Pact.Core.Errors
 import Pact.Core.IR.Term
 import Pact.Core.Compile
+import Pact.Core.Interpreter
+import Pact.Core.PactValue
+import Pact.Core.Environment
 
 
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Repl.Runtime
 import Pact.Core.Repl.Runtime.ReplBuiltin
+import Pact.Core.Hash
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
-
--- data InterpretOutput b i
---   = InterpretValue (CEKValue b i (ReplEvalM ReplRawBuiltin SpanInfo)) SpanInfo
---   | InterpretLog Text
---   deriving Show
-
--- interpretExpr
---   :: ByteString
---   -> ReplM ReplRawBuiltin (ReplEvalResult RawBuiltin SpanInfo)
--- interpretExpr source = do
---   pactdb <- use replPactDb
---   loaded <- use replLoaded
---   lexx <- liftEither (Lisp.lexer source)
---   debugIfFlagSet ReplDebugLexer lexx
---   parsed <- liftEither $ Lisp.parseExpr lexx
---   debugIfFlagSet ReplDebugParser parsed
---   (DesugarOutput desugared loaded' _) <- runDesugarTermLisp Proxy pactdb loaded parsed
---   evalGas <- use replGas
---   evalLog <- use replEvalLog
---   mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
---   let rEnv = ReplEvalEnv evalGas evalLog
---       cekEnv = EvalEnv
---              { _eeBuiltins = replRawBuiltinRuntime
---              , _eeLoaded = _loAllLoaded loaded'
---              , _eeGasModel = freeGasEnv
---              , _eeMHashes = mhashes
---              , _eeMsgSigs = mempty
---              , _eePactDb = pactdb }
---       rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] [] False)
---   value <- liftEither =<< liftIO (runReplCEK rEnv rState desugared)
---   replLoaded .= loaded'
---   pure value
 
 -- Small internal debugging function for playing with file loading within
 -- this module
@@ -87,18 +55,23 @@ data ReplCompileValue
   deriving Show
 
 loadFile :: FilePath -> ReplM ReplRawBuiltin [ReplCompileValue]
-loadFile source = liftIO (B.readFile source) >>= interpretReplProgram
+loadFile loc = do
+  source <- SourceCode <$> liftIO (B.readFile loc)
+  replCurrSource .= source
+  interpretReplProgram source
 
+defaultEvalEnv :: PactDb b i -> EvalEnv b i
+defaultEvalEnv pdb =
+  EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Transactional mempty
 
 interpretReplProgram
-  :: ByteString
+  :: SourceCode
   -> ReplM ReplRawBuiltin [ReplCompileValue]
-interpretReplProgram source = do
-  pactdb <- use replPactDb
+interpretReplProgram sc@(SourceCode source) = do
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ Lisp.parseReplProgram lexx
-  concat <$> traverse (pipe pactdb) parsed
+  concat <$> traverse pipe parsed
   where
   debugIfLispExpr = \case
     Lisp.RTLTerm t -> debugIfFlagSet ReplDebugParser t
@@ -106,115 +79,81 @@ interpretReplProgram source = do
   debugIfIRExpr flag = \case
     RTLTerm t -> debugIfFlagSet flag t
     _ -> pure ()
-  pipe pactdb = \case
+  pipe = \case
     Lisp.RTL rtl ->
-      pure <$> pipe' pactdb rtl
+      pure <$> pipe' rtl
     Lisp.RTLReplSpecial rsf -> case rsf of
-      Lisp.ReplLoad txt b _ -> do
-        when b $ replLoaded .= mempty
-        loadFile (T.unpack txt)
-  pipe' pactdb tl = do
+      Lisp.ReplLoad txt b _
+        | b -> do
+          oldSrc <- use replCurrSource
+          evalState .= def
+          pactdb <- liftIO mockPactDb
+          replPactDb .= pactdb
+          replEvalEnv .= defaultEvalEnv pactdb
+          out <- loadFile (T.unpack txt)
+          replCurrSource .= oldSrc
+          pure out
+        | otherwise -> do
+          oldSrc <- use replCurrSource
+          oldEs <- use evalState
+          oldEE <- use replEvalEnv
+          when b $ evalState .= def
+          out <- loadFile (T.unpack txt)
+          replEvalEnv .= oldEE
+          evalState .= oldEs
+          replCurrSource .= oldSrc
+          pure out
+  pipe' tl = do
+    pactdb <- use replPactDb
     debugIfLispExpr tl
-    lastLoaded <- use replLoaded
+    _ <- moduleGov pactdb tl
+    lastLoaded <- use loaded
     ds <- runDesugarReplTopLevel (Proxy @ReplRawBuiltin) pactdb lastLoaded tl
     debugIfIRExpr ReplDebugDesugar (_dsOut ds)
-    replLoaded .= _dsLoaded ds
+    loaded .= _dsLoaded ds
     interpret ds
+
+  moduleGov pactdb (Lisp.RTLTopLevel tl) =
+    () <$ evalModuleGovernance pactdb interpreter tl
+  moduleGov _ _ = pure ()
+
+  interpreter = Interpreter $ \te -> do
+    evalGas <- use replGas
+    evalLog <- use replEvalLog
+    es <- use replEvalState
+    tx <- use replTx
+    ee <- use replEvalEnv
+    -- todo: cache?
+    -- mhashes <- uses (loaded . loModules) (fmap (view mdModuleHash))
+    let rEnv = ReplEvalEnv evalGas evalLog replBuiltinEnv
+        rState = ReplEvalState ee es sc tx
+    (out, st) <- liftIO (runReplCEK rEnv rState te)
+    replTx .= view reTx st
+    evalState .= view reState st
+    replEvalEnv .= view reEnv st
+    liftEither out >>= \case
+      VError txt _ ->
+        throwError (PEExecutionError (EvalError txt) (view termInfo te))
+      EvalValue v -> do
+        loaded .= view (reState . esLoaded) st
+        case v of
+          VClosure{} -> do
+            pure IPClosure
+          VTable tv -> pure (IPTable (_tvName tv))
+          VPactValue pv -> do
+            pure (IPV pv (view termInfo te))
   interpret (DesugarOutput tl _ deps) = do
     pdb <- use replPactDb
-    lo <- use replLoaded
+    lo <- use loaded
     case tl of
       RTLTopLevel tt -> do
-        let interp = Interpreter interpreter
-        RCompileValue <$> interpretTopLevel pdb interp (DesugarOutput tt lo deps)
+        RCompileValue <$> interpretTopLevel pdb interpreter (DesugarOutput tt lo deps)
         where
-        interpreter te = do
-          debugIfFlagSet ReplDebugUntyped te
-          let i = view termInfo te
-          evalGas <- use replGas
-          evalLog <- use replEvalLog
-          -- todo: cache?
-          mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
-          let rEnv = ReplEvalEnv evalGas evalLog
-              cekEnv = EvalEnv
-                    { _eeBuiltins = replRawBuiltinRuntime
-                    , _eeLoaded = _loAllLoaded lo
-                    , _eeGasModel = freeGasEnv
-                    , _eeMHashes = mhashes
-                    , _eeMsgSigs = mempty
-                    , _eePactDb = pdb }
-              rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] [] False)
-          -- Todo: Fix this with `returnCEKValue`
-          liftIO (runReplCEK rEnv rState te) >>= liftEither >>= \case
-            VError txt ->
-              throwError (PEExecutionError (EvalError txt) i)
-            EvalValue v -> case v of
-              VClosure{} -> do
-                replLoaded .= lo
-                pure IPClosure
-              VPactValue pv -> do
-                replLoaded .= lo
-                pure (IPV pv (view termInfo te))
-
-      -- RTLModule m -> do
-      --   let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo)
-      --       mdata = ModuleData m deps'
-      --   liftIO (writeModule pdb (view mName m) mdata)
-      --   let out = "Loaded module " <> renderModuleName (_mName m)
-      --       newLoaded = Map.fromList $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
-      --       loadNewModule =
-      --         over loModules (Map.insert (_mName m) mdata) .
-      --         over loAllLoaded (Map.union newLoaded)
-      --   replLoaded %= loadNewModule
-      --   pure (InterpretLog out)
-      --   where
-      --   toFqDep modName mhash defn =
-      --     let fqn = FullyQualifiedName modName (defName defn) mhash
-      --     in (fqn, defn)
-      -- RTLTerm te -> do
-      --   debugIfFlagSet ReplDebugUntyped te
-      --   let i = view termInfo te
-      --   evalGas <- use replGas
-      --   evalLog <- use replEvalLog
-      --   -- todo: cache?
-      --   mhashes <- uses (replLoaded . loModules) (fmap (view mdModuleHash))
-      --   let rEnv = ReplEvalEnv evalGas evalLog
-      --       cekEnv = EvalEnv
-      --             { _eeBuiltins = replRawBuiltinRuntime
-      --             , _eeLoaded = _loAllLoaded lo
-      --             , _eeGasModel = freeGasEnv
-      --             , _eeMHashes = mhashes
-      --             , _eeMsgSigs = mempty
-      --             , _eePactDb = pdb }
-      --       rState = ReplEvalState cekEnv (EvalState (CapState [] mempty) [] [] False)
-      --   -- Todo: Fix this with `returnCEKValue`
-      --   liftIO (runReplCEK rEnv rState te) >>= liftEither >>= \case
-      --     VError txt ->
-      --       throwError (PEExecutionError (EvalError txt) i)
-      --     EvalValue v -> do
-      --       replLoaded .= lo
-      --       pure (InterpretValue v i)
       RTLDefun df -> do
         let fqn = FullyQualifiedName replModuleName (_dfunName df) replModuleHash
-        replLoaded . loAllLoaded %= Map.insert fqn (Dfun df)
+        loaded . loAllLoaded %= M.insert fqn (Dfun df)
         pure $ RLoadedDefun $ _dfunName df
       RTLDefConst dc -> do
         let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
-        replLoaded . loAllLoaded %= Map.insert fqn (DConst dc)
+        loaded . loAllLoaded %= M.insert fqn (DConst dc)
         pure $ RLoadedDefConst $ _dcName dc
-      -- RTLInterface iface -> do
-      --   let deps' = Map.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo)
-      --       mdata = InterfaceData iface deps'
-      --   liftIO (writeModule pdb (view ifName iface) mdata)
-      --   let out = "Loaded iface " <> renderModuleName (_ifName iface)
-      --       newLoaded = Map.fromList $ toFqDep (_ifName iface) (_ifHash iface)
-      --                   <$> mapMaybe (fmap DConst . preview _IfDConst) (_ifDefns iface)
-      --       loadNewModule =
-      --         over loModules (Map.insert (_ifName iface) mdata) .
-      --         over loAllLoaded (Map.union newLoaded)
-      --   replLoaded %= loadNewModule
-      --   pure (InterpretLog out)
-      --   where
-      --   toFqDep modName mhash defn =
-      --     let fqn = FullyQualifiedName modName (defName defn) mhash
-      --     in (fqn, defn)

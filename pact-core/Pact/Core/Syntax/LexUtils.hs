@@ -87,10 +87,11 @@ data Token
   | TokenDot
     -- Capabilities
   | TokenWithCapability
-  | TokenRequireCapability
-  | TokenComposeCapability
-  | TokenInstallCapability
-  | TokenEmitEvent
+  | TokenCreateUserGuard
+  -- | TokenRequireCapability
+  -- | TokenComposeCapability
+  -- | TokenInstallCapability
+  -- | TokenEmitEvent
   -- Operators
   -- | TokenEq
   -- | TokenNeq
@@ -108,6 +109,8 @@ data Token
   -- | TokenBitComplement
   | TokenAnd
   | TokenOr
+  | TokenEnforce
+  | TokenEnforceOne
   | TokenSingleTick !Text
   | TokenIdent !Text
   | TokenNumber !Text
@@ -195,11 +198,11 @@ throwLexerError' le = getSpanInfo >>= throwLexerError le
 throwParseError :: ParseError -> SpanInfo -> ParserT a
 throwParseError pe = throwError . PEParseError pe
 
-toAppExprList :: [Either ParsedExpr [(Field, MArg)]] -> [ParsedExpr]
-toAppExprList (h:hs) = case h of
-  Left e -> e : toAppExprList hs
-  Right binds -> [Binding binds (toAppExprList hs) def]
-toAppExprList [] = []
+toAppExprList :: SpanInfo -> [Either ParsedExpr [(Field, MArg)]] -> [ParsedExpr]
+toAppExprList i  (h:hs) = case h of
+  Left e -> e : toAppExprList i hs
+  Right binds -> [Binding binds (toAppExprList i hs) i]
+toAppExprList _ [] = []
 
 primType :: SpanInfo -> Text -> ParserT Type
 primType i = \case
@@ -215,9 +218,10 @@ primType i = \case
   "keyset" -> pure TyKeyset
   e -> throwParseError (InvalidBaseType e) i
 
-objType :: SpanInfo -> Text -> ParsedName -> ParserT Type
+objType :: SpanInfo -> Text -> ParsedTyName -> ParserT Type
 objType i t p = case t of
   "object" -> pure (TyObject p)
+  "table" -> pure (TyTable p)
   e -> throwParseError (InvalidBaseType e) i
 
 parseError :: ([PosToken], [String]) -> ParserT a
@@ -302,6 +306,8 @@ renderTokenText = \case
   TokenBlockIntro -> "progn"
   TokenAnd -> "and"
   TokenOr -> "or"
+  TokenEnforce -> "enforce"
+  TokenEnforceOne -> "enforce-one"
   TokenIdent t -> "ident<" <> t <> ">"
   TokenNumber n -> "number<" <> n <> ">"
   TokenSingleTick s -> "\'" <> s
@@ -312,10 +318,11 @@ renderTokenText = \case
   TokenSuspend -> "suspend"
   TokenLoad -> "load"
   TokenWithCapability -> "with-capability"
-  TokenRequireCapability -> "require-capability"
-  TokenComposeCapability -> "compose-capability"
-  TokenInstallCapability -> "install-capability"
-  TokenEmitEvent -> "emit-event"
+  TokenCreateUserGuard -> "create-user-guard"
+  -- TokenRequireCapability -> "require-capability"
+  -- TokenComposeCapability -> "compose-capability"
+  -- TokenInstallCapability -> "install-capability"
+  -- TokenEmitEvent -> "emit-event"
 
 
 

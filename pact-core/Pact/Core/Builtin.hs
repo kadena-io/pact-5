@@ -13,7 +13,7 @@ module Pact.Core.Builtin
  , ReplBuiltin(..)
  , replRawBuiltinNames
  , replRawBuiltinMap
- , BuiltinArity(..)
+ , IsBuiltin(..)
 --  , CapabilityOp(..)
 --  , CapType(..)
 --  , DefType(..)
@@ -21,13 +21,16 @@ module Pact.Core.Builtin
  , ReplRawBuiltin
  , ReplCoreBuiltin
  , BuiltinForm(..)
+ , ReplBuiltins(..)
+ , HasObjectOps(..)
  )where
 
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 
+import Pact.Core.Names(NativeName(..))
 import Pact.Core.Pretty
 
 type ReplRawBuiltin = ReplBuiltin RawBuiltin
@@ -37,6 +40,8 @@ data BuiltinForm o
   = CAnd o o
   | COr o o
   | CIf o o o
+  | CEnforceOne o [o]
+  | CEnforce o o
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 instance Pretty o => Pretty (BuiltinForm o) where
@@ -47,6 +52,10 @@ instance Pretty o => Pretty (BuiltinForm o) where
       parens ("or" <+> pretty o <+> pretty o')
     CIf o o' o3 ->
       parens ("if" <+> pretty o <+> pretty o' <+> pretty o3)
+    CEnforceOne o li ->
+      parens ("enforce-one" <+> pretty o <+> brackets (hsep (punctuate comma (pretty <$> li))))
+    CEnforce o o' ->
+      parens ("enforce" <+> pretty o <+> pretty o')
     -- CFold e1 e2 e3 ->
     --   parens ("fold" <+> pretty e1 <+> pretty e2 <+> pretty e3)
     -- CMap e1 e2 ->
@@ -54,18 +63,8 @@ instance Pretty o => Pretty (BuiltinForm o) where
     -- CZip e1 e2 e3 ->
     --   parens ("zip" <+> pretty e1 <+> pretty e2 <+> pretty e3)
 
--- Todo: Objects to be added later @ a later milestone
--- data ObjectOp o
---   = ObjectAccess Field o
---   -- access[f](o)
---   -- For some {f:a|r}, access f
---   | ObjectRemove Field o
---   -- remove[f](o)
---   -- For some {f:a|r}, remove f
---   | ObjectExtend Field o o
---   -- extend[k:=v](o)
---   -- For some {r}, extend with
---   deriving (Show, Eq, Functor, Foldable, Traversable)
+class HasObjectOps b where
+  objectAt :: b
 
 data DefType
   = DTDefun
@@ -195,35 +194,79 @@ data RawBuiltin
   | RawDrop
   | RawConcat
   | RawReverse
+  | RawContains
+  | RawSort
+  | RawSortObject
+  | RawRemove
   -- General
   | RawMod
   | RawMap
   | RawFilter
   | RawZip
-  -- | RawIf
   | RawIntToStr
   | RawStrToInt
+  | RawStrToIntBase
   | RawFold
   | RawDistinct
-  | RawEnforce
-  | RawEnforceOne
+  | RawFormat
+  -- | RawEnforce
+  -- | RawEnforceOne
   | RawEnumerate
   | RawEnumerateStepN
-  -- Show
+  -- Guards + read functions
   | RawShow
+  | RawReadMsg
+  | RawReadMsgDefault
   | RawReadInteger
   | RawReadDecimal
   | RawReadString
   | RawReadKeyset
   | RawEnforceGuard
+  | RawEnforceKeyset
   | RawKeysetRefGuard
-  -- | RawCreateUserGuard
-  | RawListAccess
+  | RawAt
   | RawMakeList
   | RawB64Encode
   | RawB64Decode
   | RawStrToList
+  | RawBind
+  | RawRequireCapability
+  | RawComposeCapability
+  | RawInstallCapability
+  | RawEmitEvent
+  | RawCreateCapabilityGuard
+  | RawCreateModuleGuard
+  -- Database functions
+  | RawCreateTable
+  | RawDescribeKeyset
+  | RawDescribeModule
+  | RawDescribeTable
+  | RawDefineKeySet
+  | RawDefineKeysetData
+  | RawFoldDb
+  | RawInsert
+  | RawKeyLog
+  | RawKeys
+  | RawRead
+  | RawSelect
+  | RawUpdate
+  | RawWithDefaultRead
+  | RawWithRead
+  | RawWrite
+  | RawTxIds
+  | RawTxLog
+  | RawTxHash
+  -- Db QueryFunctions
+  | RawAndQ
+  | RawOrQ
+  | RawWhere
+  | RawNotQ
+  | RawHash
+  | RawCompose
   deriving (Eq, Show, Ord, Bounded, Enum)
+
+instance HasObjectOps RawBuiltin where
+  objectAt = RawAt
 
 rawBuiltinToText :: RawBuiltin -> Text
 rawBuiltinToText = \case
@@ -273,31 +316,72 @@ rawBuiltinToText = \case
   -- general
   RawMap -> "map"
   RawFilter -> "filter"
+  RawContains -> "contains"
+  RawSort -> "sort"
+  RawSortObject -> "sort-object"
+  RawRemove -> "remove"
   -- RawIf -> "if"
   RawIntToStr -> "int-to-str"
   RawStrToInt -> "str-to-int"
+  RawStrToIntBase -> "str-to-int-base"
   RawFold -> "fold"
   RawZip -> "zip"
   RawDistinct -> "distinct"
-  RawEnforce -> "enforce"
-  RawEnforceOne -> "enforce-one"
+  RawFormat -> "format"
+  -- RawEnforce -> "enforce"
+  -- RawEnforceOne -> "enforce-one"
   RawEnumerate -> "enumerate"
   RawEnumerateStepN -> "enumerate-step"
   RawShow -> "show"
+  RawReadMsg -> "read-msg"
+  RawReadMsgDefault -> "read-msg-default"
   RawReadInteger -> "read-integer"
   RawReadDecimal -> "read-decimal"
   RawReadString -> "read-string"
   RawReadKeyset -> "read-keyset"
   RawEnforceGuard -> "enforce-guard"
+  RawEnforceKeyset -> "enforce-keyset"
   RawKeysetRefGuard -> "keyset-ref-guard"
-  -- RawCreateUserGuard -> "create-user-guard"
-  RawListAccess -> "at"
+  RawCreateCapabilityGuard -> "create-capability-guard"
+  RawCreateModuleGuard -> "create-module-guard"
+  RawAt -> "at"
   RawMakeList -> "make-list"
   RawB64Encode -> "base64-encode"
   RawB64Decode -> "base64-decode"
   RawStrToList -> "str-to-list"
+  RawBind -> "bind"
+  RawRequireCapability -> "require-capability"
+  RawComposeCapability -> "compose-capability"
+  RawInstallCapability -> "install-capability"
+  RawEmitEvent -> "emit-event"
+  RawCreateTable -> "create-table"
+  RawDescribeKeyset -> "describe-keyset"
+  RawDescribeModule -> "describe-module"
+  RawDescribeTable -> "describe-table"
+  RawDefineKeySet -> "define-keyset"
+  RawDefineKeysetData -> "define-read-keyset"
+  RawFoldDb -> "fold-db"
+  RawInsert -> "insert"
+  RawKeyLog -> "keylog"
+  RawKeys -> "keys"
+  RawRead -> "read"
+  RawSelect -> "select"
+  RawUpdate -> "update"
+  RawWithDefaultRead -> "with-default-read"
+  RawWithRead -> "with-read"
+  RawWrite -> "write"
+  RawTxIds -> "txids"
+  RawTxLog -> "txlog"
+  RawTxHash -> "tx-hash"
+  RawAndQ -> "and?"
+  RawOrQ -> "or?"
+  RawWhere -> "where"
+  RawNotQ -> "not?"
+  RawHash -> "hash"
+  RawCompose -> "compose"
 
-instance BuiltinArity RawBuiltin where
+instance IsBuiltin RawBuiltin where
+  builtinName = NativeName . rawBuiltinToText
   builtinArity = \case
     RawAdd -> 2
     -- Num ->
@@ -340,6 +424,10 @@ instance BuiltinArity RawBuiltin where
     RawDrop -> 2
     RawConcat -> 1
     RawReverse -> 1
+    RawContains -> 2
+    RawSort -> 1
+    RawSortObject -> 2
+    RawRemove -> 2
     -- General ->
     RawMod -> 2
     RawMap -> 2
@@ -347,49 +435,109 @@ instance BuiltinArity RawBuiltin where
     RawZip -> 3
     -- RawIf -> 3
     RawIntToStr -> 2
-    RawStrToInt -> 2
+    RawStrToInt -> 1
+    RawStrToIntBase -> 2
     RawFold -> 3
     RawDistinct -> 1
-    RawEnforce -> 2
-    RawEnforceOne -> 2
+    RawFormat -> 2
+    -- RawEnforce -> 2
+    -- RawEnforceOne -> 2
     RawEnumerate -> 2
     RawEnumerateStepN -> 3
     -- Show ->
     RawShow -> 1
+    RawReadMsg -> 1
+    RawReadMsgDefault -> 0
     RawReadInteger -> 1
     RawReadDecimal -> 1
     RawReadString -> 1
     RawReadKeyset -> 1
+    RawEnforceKeyset -> 1
     RawEnforceGuard -> 1
     RawKeysetRefGuard -> 1
-    -- RawCreateUserGuard -> 1
-    RawListAccess -> 2
+    RawCreateCapabilityGuard -> 1
+    RawCreateModuleGuard -> 1
+    RawAt -> 2
     RawMakeList -> 2
     RawB64Encode -> 1
     RawB64Decode -> 1
     RawStrToList -> 1
+    RawBind -> 2
+    RawRequireCapability -> 1
+    RawComposeCapability -> 1
+    RawInstallCapability -> 1
+    RawEmitEvent -> 1
+    RawCreateTable -> 1
+    RawDescribeKeyset -> 1
+    RawDescribeModule -> 1
+    RawDescribeTable -> 1
+    RawDefineKeySet -> 2
+    RawDefineKeysetData -> 1
+    RawFoldDb -> 3
+    RawInsert -> 3
+    RawKeyLog -> 3
+    RawKeys -> 1
+    RawRead -> 2
+    RawSelect -> 2
+    RawUpdate -> 3
+    RawWithDefaultRead -> 4
+    RawWithRead -> 3
+    RawWrite -> 3
+    RawTxIds -> 2
+    RawTxLog -> 2
+    RawTxHash -> 0
+    RawAndQ -> 3
+    RawOrQ -> 3
+    RawWhere -> 3
+    RawNotQ -> 2
+    RawHash -> 1
+    RawCompose -> 3
+
 
 rawBuiltinNames :: [Text]
 rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]
 
 rawBuiltinMap :: Map Text RawBuiltin
-rawBuiltinMap = Map.fromList $ (\b -> (rawBuiltinToText b, b)) <$> [minBound .. maxBound]
+rawBuiltinMap = M.fromList $ (\b -> (rawBuiltinToText b, b)) <$> [minBound .. maxBound]
 
-
--- Note: commented out natives are
--- to be implemented later
-data ReplBuiltin b
-  = RBuiltinWrap b
+-- Todo: rename
+-- | Our repl builtins.
+data ReplBuiltins
+  = RExpect
+  | RExpectFailure
+  | RExpectFailureMatch
+  | RExpectThat
+  | RPrint
+  | REnvStackFrame
+  | REnvChainData
+  | REnvData
+  | REnvEvents
+  | REnvHash
+  | REnvKeys
+  | REnvSigs
+  | RBeginTx
+  | RBeginNamedTx
+  | RCommitTx
+  | RRollbackTx
+  | RSigKeyset
+  | RTestCapability
+  | REnvExecConfig
+  -- | RLoad
+  -- | RLoadWithEnv
+  -- | RExpect
+  -- | RExpectFailure
+  -- | RExpectThat
+  -- | RPactState
+  -- | RRollbackTx
+  -- | RSigKeyset
+  -- | RTestCapability
+  -- | RVerify
+  -- | RWithAppliedEnv
+  -- | REnvEnableReplNatives
   -- | RBeginTx
   -- | RBench
   -- | RCommitTx
   -- | RContinuePact
-  -- | REnvChainData
-  -- | REnvData
-  -- | REnvDynRef
-  -- | REnvEnableReplNatives
-  -- | REnvEntity
-  -- | REnvEvents
   -- | REnvExecConfig
   -- | REnvGas
   -- | REnvGasLimit
@@ -397,92 +545,114 @@ data ReplBuiltin b
   -- | REnvGasModel
   -- | REnvGasPrice
   -- | REnvGasRate
-  -- | REnvHash
-  -- | REnvKeys
   -- | REnvNamespacePolicy
-  -- | REnvSigs
-  | RExpect
-  | RExpectFailure
-  | RExpectThat
-  -- | RFormatAddress
-  -- | RPactState
-  | RPrint
-  -- | RRollbackTx
-  -- | RSigKeyset
-  -- | RTestCapability
-  -- | RVerify
-  -- | RWithAppliedEnv
-  -- | RLoad
+  deriving (Show, Enum, Bounded, Eq)
+
+
+instance IsBuiltin ReplBuiltins where
+  builtinName = NativeName . replBuiltinsToText
+  builtinArity = \case
+    RExpect -> 3
+    RExpectFailure -> 2
+    RExpectFailureMatch -> 3
+    RExpectThat -> 3
+    RPrint -> 1
+    REnvStackFrame -> 0
+    REnvChainData -> 1
+    REnvData -> 1
+    REnvEvents -> 1
+    REnvHash -> 1
+    REnvKeys -> 1
+    REnvSigs -> 1
+    RBeginTx -> 0
+    RBeginNamedTx -> 1
+    RCommitTx -> 0
+    RRollbackTx -> 0
+    RSigKeyset -> 1
+    RTestCapability -> 1
+    REnvExecConfig -> 1
+    -- RLoad -> 1
+    -- RLoadWithEnv -> 2
+-- Note: commented out natives are
+-- to be implemented later
+data ReplBuiltin b
+  = RBuiltinWrap b
+  | RBuiltinRepl ReplBuiltins
   deriving (Eq, Show)
+
+instance HasObjectOps b => HasObjectOps (ReplBuiltin b) where
+  objectAt = RBuiltinWrap objectAt
 
 -- NOTE: Maybe `ReplBuiltin` is not a great abstraction, given
 -- expect arity changes based on whether it's corebuiltin or rawbuiltin
-instance BuiltinArity b => BuiltinArity (ReplBuiltin b) where
+instance IsBuiltin b => IsBuiltin (ReplBuiltin b) where
+  builtinName = NativeName . replBuiltinToText (_natName . builtinName)
   builtinArity = \case
     RBuiltinWrap b -> builtinArity b
-    RExpect -> 3
-    RExpectFailure -> 2
-    RExpectThat -> 3
-    RPrint -> 1
+    RBuiltinRepl b -> builtinArity b
+
     -- RLoad -> 1
 
 instance Bounded b => Bounded (ReplBuiltin b) where
   minBound = RBuiltinWrap minBound
-  maxBound = RPrint
+  maxBound = RBuiltinRepl maxBound
 
 instance (Enum b, Bounded b) => Enum (ReplBuiltin b) where
-  toEnum  = replBToEnum
+  toEnum  i =
+    if i <= mbound then RBuiltinWrap (toEnum i)
+    else RBuiltinRepl (toEnum (i - mbound - 1))
+    where
+    mbound = fromEnum (maxBound :: b)
   {-# SPECIALISE toEnum :: Int -> ReplBuiltin RawBuiltin #-}
 
-  fromEnum = replBFromEnum
+  fromEnum e =
+    let maxContained = fromEnum (maxBound :: b) + 1
+    in case e of
+      RBuiltinWrap b -> fromEnum b
+      RBuiltinRepl rb -> maxContained + fromEnum rb
   {-# SPECIALISE fromEnum :: ReplBuiltin RawBuiltin -> Int #-}
 
-replBToEnum :: forall b. (Bounded b, Enum b) => Int -> ReplBuiltin b
-replBToEnum i =
-  if i <= mbound then RBuiltinWrap (toEnum i)
-  else case i - mbound of
-    1 -> RExpect
-    2 -> RExpectFailure
-    3 -> RExpectThat
-    4 -> RPrint
-    -- 5 -> RLoad
-    _ -> error "invalid"
-  where
-  mbound = fromEnum (maxBound :: b)
-{-# INLINE replBToEnum #-}
-
-replBFromEnum :: forall b. (Bounded b, Enum b) => ReplBuiltin b -> Int
-replBFromEnum e =
-  let maxContained = fromEnum (maxBound :: b)
-  in case e of
-    RBuiltinWrap b -> fromEnum b
-    RExpect -> maxContained + 1
-    RExpectFailure -> maxContained + 2
-    RExpectThat -> maxContained + 3
-    RPrint -> maxContained + 4
-    -- RLoad -> maxContained + 5
-{-# INLINE replBFromEnum #-}
-
-replBuiltinToText :: (b -> Text) -> ReplBuiltin b -> Text
-replBuiltinToText f = \case
-  RBuiltinWrap b -> f b
+replBuiltinsToText :: ReplBuiltins -> Text
+replBuiltinsToText = \case
   RExpect -> "expect"
   RExpectFailure -> "expect-failure"
+  RExpectFailureMatch -> "expect-failure-match"
   RExpectThat -> "expect-that"
   RPrint -> "print"
+  REnvStackFrame -> "env-stackframe"
+  REnvChainData -> "env-chain-data"
+  REnvData -> "env-data"
+  REnvEvents -> "env-events"
+  REnvHash -> "env-hash"
+  REnvKeys -> "env-keys"
+  REnvSigs -> "env-sigs"
+  RBeginTx -> "begin-tx"
+  RBeginNamedTx -> "begin-named-tx"
+  RCommitTx -> "commit-tx"
+  RRollbackTx -> "rollback-tx"
+  RSigKeyset -> "sig-keyset"
+  RTestCapability -> "test-capability"
+  REnvExecConfig -> "env-exec-config"
   -- RLoad -> "load"
+  -- RLoadWithEnv -> "load-with-env"
+
+replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
+replBuiltinToText f = \case
+  RBuiltinWrap b -> f b
+  RBuiltinRepl rb -> replBuiltinsToText rb
 
 replRawBuiltinNames :: [Text]
 replRawBuiltinNames = fmap (replBuiltinToText rawBuiltinToText) [minBound .. maxBound]
 
 replRawBuiltinMap :: Map Text (ReplBuiltin RawBuiltin)
 replRawBuiltinMap =
-  Map.fromList $ (\b -> (replBuiltinToText rawBuiltinToText b, b)) <$> [minBound .. maxBound]
+  M.fromList $ (\b -> (replBuiltinToText rawBuiltinToText b, b)) <$> [minBound .. maxBound]
 
 -- Todo: is not a great abstraction.
 -- In particular: the arity could be gathered from the type.
-class BuiltinArity b where
+class Show b => IsBuiltin b where
   builtinArity :: b -> Int
+  builtinName :: b -> NativeName
 
 
 instance Pretty RawBuiltin where
@@ -629,7 +799,6 @@ data CoreBuiltin
   | ReadKeyset
   | EnforceGuard
   | KeysetRefGuard
-  -- | CreateUserGuard
   -- List ops
   | ListAccess
   | MakeList
@@ -642,7 +811,8 @@ data CoreBuiltin
 instance Pretty CoreBuiltin where
   pretty = pretty . coreBuiltinToText
 
-instance BuiltinArity CoreBuiltin where
+instance IsBuiltin CoreBuiltin where
+  builtinName = NativeName . coreBuiltinToText
   builtinArity = \case
     AddInt -> 2
     SubInt -> 2
