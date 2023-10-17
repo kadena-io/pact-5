@@ -268,11 +268,21 @@ nameToFQN info env (Name n nk) = case nk of
     Nothing -> failInvariant info ("unbound identifier" <> T.pack (show n))
   _ -> failInvariant info ("invalid name in fq position" <> T.pack (show n))
 
-guardTable :: (MonadEval b i m) => i -> CEKEnv b i m -> TableValue -> m ()
-guardTable i env (TableValue _ mn mh _) = do
-  guardForModuleCall i env mn $ do
-    mdl <- getModule i env mn
-    enforceBlessedHashes i mdl mh
+guardTable :: (MonadEval b i m) => i -> CEKEnv b i m -> TableValue -> GuardTableOp -> m ()
+guardTable i env (TableValue _ mn mh _) dbop = do
+  checkLocalBypass $
+    guardForModuleCall i env mn $ do
+      mdl <- getModule i env mn
+      enforceBlessedHashes i mdl mh
+  where
+  checkLocalBypass notBypassed = do
+    enabled <- isExecutionFlagSet FlagAllowReadInLocal
+    case dbop of
+      GtWrite -> notBypassed
+      GtCreateTable -> notBypassed
+      _ | enabled -> pure ()
+        | otherwise -> notBypassed
+
 
 enforceBlessedHashes :: (MonadEval b i m) => i -> EvalModule b i -> ModuleHash -> m ()
 enforceBlessedHashes info md mh

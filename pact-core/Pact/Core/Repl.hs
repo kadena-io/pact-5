@@ -53,7 +53,7 @@ main = do
   pdb <- mockPactDb
   g <- newIORef mempty
   evalLog <- newIORef Nothing
-  let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Transactional
+  let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Transactional mempty
       es = EvalState (CapState [] mempty mempty mempty)  [] [] mempty
   ref <- newIORef (ReplState mempty pdb es ee g evalLog (SourceCode mempty) Nothing)
   runReplT ref (runInputT replSettings loop) >>= \case

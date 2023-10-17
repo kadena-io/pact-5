@@ -269,8 +269,16 @@ desugarLispTerm = \case
   Lisp.Var (BN n) i  ->
     case M.lookup (_bnName n) reservedNatives' of
       Just b -> pure (Builtin b i)
-      Nothing ->
-        pure (Var (BN n) i)
+      Nothing
+        | n == BareName "constantly" -> do
+          let c1 = Arg cvar1 Nothing
+              c2 = Arg cvar2 Nothing
+          pure $ Lam AnonLamInfo (c1 :| [c2]) (Var (BN (BareName cvar1)) i) i
+        | otherwise ->
+          pure (Var (BN n) i)
+    where
+    cvar1 = "#constantlyA1"
+    cvar2 = "#constantlyA2"
   Lisp.Var n i -> pure (Var n i)
   Lisp.Block nel i -> do
     nel' <- traverse desugarLispTerm nel

@@ -375,7 +375,7 @@ rawBuiltinToText = \case
   RawTxHash -> "tx-hash"
   RawAndQ -> "and?"
   RawOrQ -> "or?"
-  RawWhere -> "where?"
+  RawWhere -> "where"
   RawNotQ -> "not?"
   RawHash -> "hash"
   RawCompose -> "compose"
@@ -521,6 +521,7 @@ data ReplBuiltins
   | RRollbackTx
   | RSigKeyset
   | RTestCapability
+  | REnvExecConfig
   -- | RLoad
   -- | RLoadWithEnv
   -- | RExpect
@@ -569,6 +570,7 @@ instance IsBuiltin ReplBuiltins where
     RRollbackTx -> 0
     RSigKeyset -> 1
     RTestCapability -> 1
+    REnvExecConfig -> 1
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
 -- Note: commented out natives are
@@ -630,6 +632,7 @@ replBuiltinsToText = \case
   RRollbackTx -> "rollback-tx"
   RSigKeyset -> "sig-keyset"
   RTestCapability -> "test-capability"
+  REnvExecConfig -> "env-exec-config"
   -- RLoad -> "load"
   -- RLoadWithEnv -> "load-with-env"
 
@@ -796,7 +799,6 @@ data CoreBuiltin
   | ReadKeyset
   | EnforceGuard
   | KeysetRefGuard
-  -- | CreateUserGuard
   -- List ops
   | ListAccess
   | MakeList

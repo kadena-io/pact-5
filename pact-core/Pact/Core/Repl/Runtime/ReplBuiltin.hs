@@ -281,6 +281,20 @@ testCapability = \info b cont handler env -> \case
       _ -> returnCEK cont handler (VError "no such capability" info)
   args -> argsError info b args
 
+envExecConfig :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+envExecConfig = \info b cont handler _env -> \case
+  [VList s] -> do
+    s' <- traverse go (V.toList s)
+    reEnv . eeFlags .= S.fromList s'
+    let reps = PString . flagRep <$> s'
+    returnCEKValue cont handler (VList (V.fromList reps))
+    where
+    go str = do
+      str' <- asString info b str
+      case M.lookup str' flagReps of
+        Just f -> pure f
+        Nothing -> failInvariant info $ "Invalid flag, allowed: " <> T.pack (show (M.keys flagReps))
+  args -> argsError info b args
 
 replBuiltinEnv
   :: Default i
@@ -314,3 +328,4 @@ replRawBuiltinRuntime = \case
     RRollbackTx -> rollbackTx
     RSigKeyset -> sigKeyset
     RTestCapability -> testCapability
+    REnvExecConfig -> envExecConfig

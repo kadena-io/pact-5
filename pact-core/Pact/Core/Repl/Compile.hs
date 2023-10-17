@@ -62,7 +62,7 @@ loadFile loc = do
 
 defaultEvalEnv :: PactDb b i -> EvalEnv b i
 defaultEvalEnv pdb =
-  EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Transactional
+  EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Transactional mempty
 
 interpretReplProgram
   :: SourceCode
