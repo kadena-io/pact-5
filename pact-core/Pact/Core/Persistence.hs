@@ -291,7 +291,7 @@ mockPactDb = do
   txIds refTxLog tn txId = do
     txl <- readIORef refTxLog
     case M.lookup tn txl of
-      Just mtxl -> pure [ x | x <- M.keys mtxl, x > txId ]
+      Just mtxl -> pure [ x | x <- M.keys mtxl, x >= txId ]
       Nothing -> throwIO (NoSuchTable tn)
 
   keys

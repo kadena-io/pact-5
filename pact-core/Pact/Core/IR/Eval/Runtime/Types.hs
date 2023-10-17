@@ -61,6 +61,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , CanApply(..)
  , TableValue(..)
  , ClosureType(..)
+ , ErrorState(..)
  ) where
 
 import Control.Lens hiding ((%%=))
@@ -250,11 +251,18 @@ pattern VPartialClosure clo = VClosure (PC clo)
 -- | Result of an evaluation step, either a CEK value or an error.
 data EvalResult b i m
   = EvalValue (CEKValue b i m)
-  | VError Text
+  | VError Text i
   deriving Show
 
 
-type MonadEval b i m = (MonadEvalEnv b i m, MonadEvalState b i m, MonadGas m, MonadError (PactError i) m, MonadIO m, Default i)
+type MonadEval b i m =
+  ( MonadEvalEnv b i m
+  , MonadEvalState b i m
+  , MonadGas m
+  , MonadError (PactError i) m
+  , MonadIO m
+  , Default i
+  , Show i)
 
 class Monad m => MonadGas m where
   logGas :: Text -> Gas -> m ()
@@ -366,19 +374,30 @@ data Cont b i m
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
   | CapInvokeC (CEKEnv b i m) i [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
   -- ^ Capability special form frams that eva
-  | CapBodyC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
+  | CapBodyC CapPopState (CEKEnv b i m) (Maybe (CapToken QualifiedName PactValue)) (Maybe (PactEvent PactValue)) (EvalTerm b i) (Cont b i m)
+  -- ^ CapBodyC includes
+  --  - what to do after the cap body (pop it, or compose it)
+  --  - Is it a user managed cap? If so, include the body token
+  --  - the capability "user body" to evaluate, generally carrying a series of expressions
+  --    or a simple return value in the case of `compose-capability`
+  --  - The rest of the continuation
   | CapPopC CapPopState (Cont b i m)
+  | UserGuardC (Cont b i m)
   | StackPopC i (Maybe Type) (Cont b i m)
-  | EnforceErrorC (Cont b i m)
+  | EnforceErrorC i (Cont b i m)
   | Mt
   -- ^ Empty Continuation
   deriving Show
 
+-- | State to preserve in the error handler
+data ErrorState
+  = ErrorState (CapState QualifiedName PactValue) [StackFrame]
+  deriving Show
 
 data CEKErrorHandler b i m
   = CEKNoHandler
-  | CEKHandler (CEKEnv b i m) (EvalTerm b i) (Cont b i m) [CapSlot QualifiedName PactValue] (CEKErrorHandler b i m)
-  | CEKEnforceOne (CEKEnv b i m) i (EvalTerm b i) [EvalTerm b i] (Cont b i m) [CapSlot QualifiedName PactValue] (CEKErrorHandler b i m)
+  | CEKHandler (CEKEnv b i m) (EvalTerm b i) (Cont b i m) ErrorState (CEKErrorHandler b i m)
+  | CEKEnforceOne (CEKEnv b i m) i (EvalTerm b i) [EvalTerm b i] (Cont b i m) ErrorState (CEKErrorHandler b i m)
   deriving Show
 
 instance (Show i, Show b) => Show (NativeFn b i m) where

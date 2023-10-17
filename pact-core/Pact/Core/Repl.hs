@@ -46,13 +46,14 @@ import Pact.Core.PactValue
 import Pact.Core.Hash
 import Pact.Core.Capabilities
 import Pact.Core.Imports
+import Pact.Core.Errors
 
 main :: IO ()
 main = do
   pdb <- mockPactDb
   g <- newIORef mempty
   evalLog <- newIORef Nothing
-  let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Transactional
+  let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Transactional mempty
       es = EvalState (CapState [] mempty mempty mempty)  [] [] mempty
   ref <- newIORef (ReplState mempty pdb es ee g evalLog (SourceCode mempty) Nothing)
   runReplT ref (runInputT replSettings loop) >>= \case
@@ -93,19 +94,6 @@ main = do
           outputStrLn "Error: Expected command [:load, :type, :syntax, :debug] or expression"
           loop
         Just ra -> case ra of
-          RALoad txt -> let
-            file = T.unpack txt
-            in catch' $ do
-              source <- liftIO (B.readFile file)
-              eout <- lift $ tryError $ interpretReplProgram (SourceCode source)
-              case eout of
-                Right vs -> traverse_ displayOutput vs
-                Left err -> let
-                  rs = ReplSource (T.pack file) (T.decodeUtf8 source)
-                  in outputStrLn (T.unpack (replError rs err))
-              loop
-          RASetLispSyntax -> loop
-          RASetNewSyntax -> loop
           RASetFlag flag -> do
             lift (replFlags %= Set.insert flag)
             outputStrLn $ unwords ["set debug flag for", prettyReplFlag flag]

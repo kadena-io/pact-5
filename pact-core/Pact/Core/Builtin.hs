@@ -249,6 +249,7 @@ data RawBuiltin
   | RawKeys
   | RawRead
   | RawSelect
+  | RawSelectWithFields
   | RawUpdate
   | RawWithDefaultRead
   | RawWithRead
@@ -271,6 +272,7 @@ data RawBuiltin
   | RawHours
   | RawMinutes
   | RawDays
+  | RawCompose
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 instance HasObjectOps RawBuiltin where
@@ -374,6 +376,7 @@ rawBuiltinToText = \case
   RawKeys -> "keys"
   RawRead -> "read"
   RawSelect -> "select"
+  RawSelectWithFields -> ""
   RawUpdate -> "update"
   RawWithDefaultRead -> "with-default-read"
   RawWithRead -> "with-read"
@@ -383,7 +386,7 @@ rawBuiltinToText = \case
   RawTxHash -> "tx-hash"
   RawAndQ -> "and?"
   RawOrQ -> "or?"
-  RawWhere -> "where?"
+  RawWhere -> "where"
   RawNotQ -> "not?"
   RawHash -> "hash"
   RawParseTime -> "parse-time"
@@ -394,6 +397,7 @@ rawBuiltinToText = \case
   RawHours -> "hours"
   RawMinutes -> "minutes"
   RawDays -> "days"
+  RawCompose -> "compose"
 
 instance IsBuiltin RawBuiltin where
   builtinName = NativeName . rawBuiltinToText
@@ -494,6 +498,7 @@ instance IsBuiltin RawBuiltin where
     RawKeys -> 1
     RawRead -> 2
     RawSelect -> 2
+    RawSelectWithFields -> 3
     RawUpdate -> 3
     RawWithDefaultRead -> 4
     RawWithRead -> 3
@@ -514,6 +519,7 @@ instance IsBuiltin RawBuiltin where
     RawHours -> 1
     RawMinutes -> 1
     RawDays -> 1
+    RawCompose -> 3
 
 
 rawBuiltinNames :: [Text]
@@ -543,6 +549,7 @@ data ReplBuiltins
   | RRollbackTx
   | RSigKeyset
   | RTestCapability
+  | REnvExecConfig
   -- | RLoad
   -- | RLoadWithEnv
   -- | RExpect
@@ -581,7 +588,7 @@ instance IsBuiltin ReplBuiltins where
     REnvStackFrame -> 0
     REnvChainData -> 1
     REnvData -> 1
-    REnvEvents -> 0
+    REnvEvents -> 1
     REnvHash -> 1
     REnvKeys -> 1
     REnvSigs -> 1
@@ -591,6 +598,7 @@ instance IsBuiltin ReplBuiltins where
     RRollbackTx -> 0
     RSigKeyset -> 1
     RTestCapability -> 1
+    REnvExecConfig -> 1
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
 -- Note: commented out natives are
@@ -652,6 +660,7 @@ replBuiltinsToText = \case
   RRollbackTx -> "rollback-tx"
   RSigKeyset -> "sig-keyset"
   RTestCapability -> "test-capability"
+  REnvExecConfig -> "env-exec-config"
   -- RLoad -> "load"
   -- RLoadWithEnv -> "load-with-env"
 
@@ -669,7 +678,7 @@ replRawBuiltinMap =
 
 -- Todo: is not a great abstraction.
 -- In particular: the arity could be gathered from the type.
-class IsBuiltin b where
+class Show b => IsBuiltin b where
   builtinArity :: b -> Int
   builtinName :: b -> NativeName
 
@@ -817,7 +826,6 @@ data CoreBuiltin
   | ReadKeyset
   | EnforceGuard
   | KeysetRefGuard
-  -- | CreateUserGuard
   -- List ops
   | ListAccess
   | MakeList

@@ -62,7 +62,7 @@ loadFile loc = do
 
 defaultEvalEnv :: PactDb b i -> EvalEnv b i
 defaultEvalEnv pdb =
-  EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Transactional
+  EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Transactional mempty
 
 interpretReplProgram
   :: SourceCode
@@ -106,46 +106,49 @@ interpretReplProgram sc@(SourceCode source) = do
   pipe' tl = do
     pactdb <- use replPactDb
     debugIfLispExpr tl
+    _ <- moduleGov pactdb tl
     lastLoaded <- use loaded
     ds <- runDesugarReplTopLevel (Proxy @ReplRawBuiltin) pactdb lastLoaded tl
     debugIfIRExpr ReplDebugDesugar (_dsOut ds)
     loaded .= _dsLoaded ds
     interpret ds
+
+  moduleGov pactdb (Lisp.RTLTopLevel tl) =
+    () <$ evalModuleGovernance pactdb interpreter tl
+  moduleGov _ _ = pure ()
+
+  interpreter = Interpreter $ \te -> do
+    evalGas <- use replGas
+    evalLog <- use replEvalLog
+    es <- use replEvalState
+    tx <- use replTx
+    ee <- use replEvalEnv
+    -- todo: cache?
+    -- mhashes <- uses (loaded . loModules) (fmap (view mdModuleHash))
+    let rEnv = ReplEvalEnv evalGas evalLog replBuiltinEnv
+        rState = ReplEvalState ee es sc tx
+    (out, st) <- liftIO (runReplCEK rEnv rState te)
+    replTx .= view reTx st
+    evalState .= view reState st
+    replEvalEnv .= view reEnv st
+    liftEither out >>= \case
+      VError txt _ ->
+        throwError (PEExecutionError (EvalError txt) (view termInfo te))
+      EvalValue v -> do
+        loaded .= view (reState . esLoaded) st
+        case v of
+          VClosure{} -> do
+            pure IPClosure
+          VTable tv -> pure (IPTable (_tvName tv))
+          VPactValue pv -> do
+            pure (IPV pv (view termInfo te))
   interpret (DesugarOutput tl _ deps) = do
     pdb <- use replPactDb
     lo <- use loaded
-    ee <- use replEvalEnv
     case tl of
       RTLTopLevel tt -> do
-        let interp = Interpreter interpreter
-        RCompileValue <$> interpretTopLevel pdb interp (DesugarOutput tt lo deps)
+        RCompileValue <$> interpretTopLevel pdb interpreter (DesugarOutput tt lo deps)
         where
-        -- interpreter :: EvalTerm (ReplBuiltin RawBuiltin) SpanInfo -> ReplM ReplRawBuiltin InterpretValue
-        interpreter te = do
-          let i = view termInfo te
-          evalGas <- use replGas
-          evalLog <- use replEvalLog
-          es <- use replEvalState
-          tx <- use replTx
-          -- todo: cache?
-          -- mhashes <- uses (loaded . loModules) (fmap (view mdModuleHash))
-          let rEnv = ReplEvalEnv evalGas evalLog replBuiltinEnv
-              rState = ReplEvalState ee es sc tx
-          (out, st) <- liftIO (runReplCEK rEnv rState te)
-          replTx .= view reTx st
-          evalState .= view reState st
-          replEvalEnv .= view reEnv st
-          liftEither out >>= \case
-            VError txt ->
-              throwError (PEExecutionError (EvalError txt) i)
-            EvalValue v -> do
-              loaded .= view (reState . esLoaded) st
-              case v of
-                VClosure{} -> do
-                  pure IPClosure
-                VTable tv -> pure (IPTable (_tvName tv))
-                VPactValue pv -> do
-                  pure (IPV pv (view termInfo te))
       RTLDefun df -> do
         let fqn = FullyQualifiedName replModuleName (_dfunName df) replModuleHash
         loaded . loAllLoaded %= M.insert fqn (Dfun df)

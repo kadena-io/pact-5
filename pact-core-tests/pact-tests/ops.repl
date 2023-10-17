@@ -11,9 +11,9 @@
   (+ { "a": 2 } { "b": 4, "c": false}))
 (expect "+ object object, left-biased merge" { "a": 4}
   (+ { "a": 4} {"a": true}))
-;  (expect-failure "+ integer string" (+ 2 "hello"))
-;  (expect-failure "+ list string" (+ [2] "hello"))
-;  (expect-failure "+ object decimal" (+ {'a: 4} 1.0))
+(expect-failure "+ integer string" (+ 2 "hello"))
+(expect-failure "+ list string" (+ [2] "hello"))
+(expect-failure "+ object decimal" (+ {'a: 4} 1.0))
 
 "===== -"
 (expect "- integer, - integer integer" (negate 2) (- 0 2))
@@ -397,9 +397,9 @@
 ;  (expect "^ 4.0 15.0" 1073741824.0 (^ 4.0 15.0))
 
 ;  (expect "^ -4.0 0" 1.0 (^ -4.0 0))
-;  (expect "^ -4.0 0.0" 1.0 (^ -4.0 0.0))
+(expect "^ -4.0 0.0" 1.0 (^ -4.0 0.0))
 ;  (expect "^ -4.0 -0" 1.0 (^ -4.0 -0))
-;  (expect "^ -4.0 -0.0" 1.0 (^ -4.0 -0.0))
+(expect "^ -4.0 -0.0" 1.0 (^ -4.0 -0.0))
 ;  (expect "^ -4.0 1" -4.0 (^ -4.0 1))
 ;  (expect "^ -4.0 1.0" -4.0 (^ -4.0 1.0))
 ;  (expect "^ -4.0 -1" -0.25 (^ -4.0 -1))
@@ -461,17 +461,17 @@
 
 (module tm G
   (defcap G () true)
-  ;  (defun mk (id) (create-module-guard id))
+  (defun mk (id) (create-module-guard id))
   ;  (defpact p (id1 id2)
   ;    (step [(create-pact-guard id1) (create-pact-guard id2)]))
   (defun ug (id) true)
   )
 
-;  "===== module guard equality"
-;  (expect "= moduleGuard moduleGuard" true (= (tm.mk "1") (tm.mk "1")))
-;  (expect "not = moduleGuard moduleGuard" false (= (tm.mk "2") (tm.mk "1")))
-;  (expect "not != moduleGuard moduleGuard" false (!= (tm.mk "1") (tm.mk "1")))
-;  (expect "!= moduleGuard moduleGuard" true (!= (tm.mk "2") (tm.mk "1")))
+"===== module guard equality"
+(expect "= moduleGuard moduleGuard" true (= (tm.mk "1") (tm.mk "1")))
+(expect "not = moduleGuard moduleGuard" false (= (tm.mk "2") (tm.mk "1")))
+(expect "not != moduleGuard moduleGuard" false (!= (tm.mk "1") (tm.mk "1")))
+(expect "!= moduleGuard moduleGuard" true (!= (tm.mk "2") (tm.mk "1")))
 
 ;  "===== pact guard equality"
 ;  (env-hash "YQo")

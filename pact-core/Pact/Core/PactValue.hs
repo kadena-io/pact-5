@@ -65,15 +65,14 @@ instance Pretty PactValue where
   pretty = \case
     PLiteral lit -> pretty lit
     PList p -> Pretty.list (V.toList (pretty <$> p))
-    PGuard _g -> "<guard>"
-    -- PTable tn _sc -> "table" <> braces (pretty tn)
+    PGuard g -> pretty g
     PObject o ->
       braces $ hsep $ punctuate comma (objPair <$> M.toList o)
       where
       objPair (f, t) = pretty f <> ":" <> pretty t
     PModRef md -> pretty md
     PCapToken (CapToken fqn args) ->
-      parens (pretty (fqnToQualName fqn) <+> hsep (pretty <$> args))
+      parens (pretty (fqnToQualName fqn) <> if null args then mempty else hsep (pretty <$> args))
     PTime t -> pretty (PactTime.formatTime "%Y-%m-%d %H:%M:%S%Q %Z" t)
 
 
