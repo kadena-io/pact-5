@@ -1226,23 +1226,32 @@ diffTime = \info b cont handler _env -> \case
 
 minutes :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 minutes = \info b cont handler _env -> \case
-  [VPactValue (PDecimal x)] -> do
+  [VDecimal x] -> do
     let seconds = x * 60
-    returnCEKValue cont handler $ VPactValue $ PDecimal seconds
+    returnCEKValue cont handler $ VDecimal seconds
+  [VInteger x] -> do
+    let seconds = fromIntegral x * 60
+    returnCEKValue cont handler $ VDecimal seconds
   args -> argsError info b args
 
 hours :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 hours = \info b cont handler _env -> \case
-  [VPactValue (PDecimal x)] -> do
+  [VDecimal x] -> do
     let seconds = x * 60 * 60
-    returnCEKValue cont handler $ VPactValue $ PDecimal seconds
+    returnCEKValue cont handler $ VDecimal seconds
+  [VInteger x] -> do
+    let seconds = fromIntegral x * 60 * 60
+    returnCEKValue cont handler $ VDecimal seconds
   args -> argsError info b args
 
 days :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 days = \info b cont handler _env -> \case
-  [VPactValue (PDecimal x)] -> do
+  [VDecimal x] -> do
     let seconds = x * 60 * 60 * 24
-    returnCEKValue cont handler $ VPactValue $ PDecimal seconds
+    returnCEKValue cont handler $ VDecimal seconds
+  [VInteger x] -> do
+    let seconds = fromIntegral x * 60 * 60 * 24
+    returnCEKValue cont handler $ VDecimal seconds
   args -> argsError info b args
 
 -----------------------------------
