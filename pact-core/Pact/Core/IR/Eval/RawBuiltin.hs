@@ -1254,7 +1254,8 @@ parseTime = \info b cont handler _env -> \case
   [VString fmt, VString s] ->
     case PactTime.parseTime (T.unpack fmt) (T.unpack s) of
       Just t -> returnCEKValue cont handler $ VPactValue (PTime t)
-      Nothing -> undefined -- returnCEK
+      Nothing ->
+        returnCEK cont handler (VError "parse-time parse failure" info)
   args -> argsError info b args
 
 formatTime :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -1269,7 +1270,8 @@ time = \info b cont handler _env -> \case
   [VString s] -> do
     case PactTime.parseTime "%Y-%m-%dT%H:%M:%SZ" (T.unpack s) of
       Just t -> returnCEKValue cont handler $ VPactValue (PTime t)
-      Nothing -> undefined -- returnCEK
+      Nothing ->
+        returnCEK cont handler (VError "time default format parse failure" info)
   args -> argsError info b args
 
 addTime :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
