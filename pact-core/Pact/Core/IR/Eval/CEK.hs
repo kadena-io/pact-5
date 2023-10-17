@@ -99,7 +99,7 @@ evalCEK cont handler env (Var n info)  = do
           evalCEK cont handler (set ceLocal mempty env) (_dcTerm d)
         Just (DTable d) ->
           let (ResolvedTable sc) = _dtSchema d
-              tn = TableName $ renderModuleName mname <> "_" <> _dtName d
+              tn = userTable $ TableName $ renderModuleName mname <> "_" <> _dtName d
               tbl = VTable (TableValue tn mname mh sc)
           in returnCEKValue cont handler tbl
         Just (DCap d) -> do
@@ -159,9 +159,9 @@ evalCEK cont handler env (Conditional c info) = case c of
   CEnforceOne str conds -> case conds of
     [] -> returnCEK cont handler (VError "enforce-one failure" info)
     x:xs -> do
-      cs <- useEvalState (esCaps . csSlots)
+      errState <- evalStateToErrorState <$> getEvalState
       let env' = readOnlyEnv env
-      let handler' = CEKEnforceOne env' info str xs cont cs handler
+      let handler' = CEKEnforceOne env' info str xs cont errState handler
       let cont' = CondC env' info (EnforceOneFrame str xs) Mt
       evalCEK cont' handler' env' x
 evalCEK cont handler env (CapabilityForm cf info) = do
@@ -188,8 +188,8 @@ evalCEK cont handler env (ListLit ts _) = do
     [] -> returnCEKValue cont handler (VList mempty)
     x:xs -> evalCEK (ListC env xs [] cont) handler env x
 evalCEK cont handler env (Try catchExpr rest _) = do
-  caps <- useEvalState (esCaps . csSlots)
-  let handler' = CEKHandler env catchExpr cont caps handler
+  errState <- evalStateToErrorState <$> getEvalState
+  let handler' = CEKHandler env catchExpr cont errState handler
   let env' = readOnlyEnv env
   evalCEK Mt handler' env' rest
 evalCEK cont handler env (ObjectLit o _) =
@@ -443,7 +443,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
           mparam <- maybe (failInvariant def "Managed param does not exist at index") pure (args ^? ix managedIx)
           evaluate mpfqn (_dfunTerm dfun) pv mparam >>= \case
             EvalValue res -> do
-              result <- enforcePactValue res
+              result <- enforcePactValue info res
               let mcM = ManagedParam mpfqn result managedIx
               let inCapEnv = set ceInCap True $ set ceLocal env' $ env
               let inCapBodyToken = _mcOriginalCap managedCap
@@ -643,9 +643,9 @@ returnCEK
 returnCEK Mt handler v =
   case handler of
     CEKNoHandler -> return v
-    CEKHandler env catchTerm cont' caps handler' -> case v of
+    CEKHandler env catchTerm cont' errState handler' -> case v of
       VError{} -> do
-        setEvalState (esCaps . csSlots) caps
+        modifyEvalState (restoreFromErrorState errState)
         evalCEK cont' handler' env catchTerm
       EvalValue v' ->
         returnCEKValue cont' handler' v'
@@ -667,15 +667,15 @@ returnCEK Mt handler v =
     --  How is the list of expressions kept up to date you may ask?
     --  EnforceOne is the only native that actualy has to _modify the handler_
     --  on successful expression evaluation in the case that it errors
-    CEKEnforceOne env i str li cont cs h -> case v of
+    CEKEnforceOne env i str li cont errState h -> case v of
       VError{} -> case li of
         [] -> do
-          setEvalState (esCaps . csSlots) cs
+          modifyEvalState (restoreFromErrorState errState)
           let cont' = EnforceErrorC i cont
           evalCEK cont' h env str
         x:xs -> do
-          setEvalState (esCaps . csSlots) cs
-          let handler' = CEKEnforceOne env i str xs cont cs h
+          modifyEvalState (restoreFromErrorState errState)
+          let handler' = CEKEnforceOne env i str xs cont errState h
               oldFrame = CondC env i (EnforceOneFrame str xs) Mt
           evalCEK oldFrame handler' env x
       EvalValue v' ->
@@ -759,14 +759,13 @@ returnCEKValue (CondC env info frame cont) handler v = case v of
           let cont' = EnforceErrorC info cont
           evalCEK cont' handler env str
   _ ->
-    -- Todo: thread error loc here
     failInvariant info "Evaluation of conditional expression yielded non-boolean value"
   where
   updateEnforceOneList xs (CEKEnforceOne e i str _ c cs h) =
     CEKEnforceOne e i str xs c cs h
   updateEnforceOneList _ e = e
 returnCEKValue (CapInvokeC env info terms pvs cf cont) handler v = do
-  pv <- enforcePactValue v
+  pv <- enforcePactValue info v
   case terms of
     x:xs -> do
       let cont' = CapInvokeC env info xs (pv:pvs) cf cont
@@ -804,14 +803,14 @@ returnCEKValue (CapPopC st cont) handler v = case st of
     setEvalState (esCaps . csSlots) caps'
     returnCEKValue cont handler VUnit
 returnCEKValue (ListC env args vals cont) handler v = do
-  pv <- enforcePactValue v
+  pv <- enforcePactValue def v
   case args of
     [] ->
       returnCEKValue cont handler (VList (V.fromList (reverse (pv:vals))))
     e:es ->
       evalCEK (ListC env es (pv:vals) cont) handler env e
 returnCEKValue (ObjC env currfield fs vs cont) handler v = do
-  v' <- enforcePactValue v
+  v' <- enforcePactValue def v
   let fields = (currfield,v'):vs
   case fs of
     (f', term):fs' ->
@@ -827,7 +826,7 @@ returnCEKValue (EnforceErrorC info _) handler v = case v of
 returnCEKValue (UserGuardC cont) handler _v =
   returnCEKValue cont handler (VBool True)
 returnCEKValue (StackPopC i mty cont) handler v = do
-  v' <- (\pv -> maybeTCType i pv mty) =<< enforcePactValue v
+  v' <- (\pv -> maybeTCType i pv mty) =<< enforcePactValue i v
   -- Todo: unsafe use of tail here. need `tailMay`
   (esStack %%= tail) *> returnCEKValue cont handler (VPactValue v')
 
@@ -841,7 +840,7 @@ applyLam
 applyLam (C (Closure fn mn ca arity term mty env cloi)) args cont handler
   | arity == argLen = case ca of
     ArgClosure cloargs -> do
-      args' <- traverse enforcePactValue args
+      args' <- traverse (enforcePactValue cloi) args
       tcArgs <- zipWithM (\arg ty -> VPactValue <$> maybeTCType cloi arg ty) args' (NE.toList cloargs)
       esStack %%= (StackFrame fn mn SFDefun :)
       let cont' = StackPopC cloi mty cont
@@ -861,7 +860,7 @@ applyLam (C (Closure fn mn ca arity term mty env cloi)) args cont handler
   argLen = length args
   -- Here we enforce an argument to a user fn is a
   apply' e (ty:tys) (x:xs) = do
-    x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue x
+    x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue cloi x
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e (ty:tys) [] = do
     let env' = set ceLocal e env
@@ -886,7 +885,7 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
   argLen = length args
   -- Todo: runtime TC here
   apply' e (ty:tys) (x:xs) = do
-    x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue x
+    x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue cloi x
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e [] [] = do
     evalCEK cont handler (set ceLocal e env) term
@@ -895,23 +894,23 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
     (VPartialClosure (PartialClosure Nothing (ty :| tys) (length tys + 1) term mty (set ceLocal e env) cloi))
   apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
 
-applyLam (PC (PartialClosure li argtys _ term mty env i)) args cont handler =
+applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args cont handler =
   apply' (view ceLocal env) (NE.toList argtys) args
   where
   apply' e (ty:tys) (x:xs) = do
-    x' <- (\pv -> maybeTCType i pv ty) =<< enforcePactValue x
+    x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue cloi x
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e [] [] = do
     case li of
       Just sf -> do
-        let cont' = StackPopC i mty cont
+        let cont' = StackPopC cloi mty cont
         esStack %%= (sf :)
         evalCEK cont' handler (set ceLocal e env) term
       Nothing -> evalCEK cont handler (set ceLocal e env) term
   apply' e (ty:tys) [] = do
-    let pclo = PartialClosure li (ty :| tys) (length tys + 1) term mty (set ceLocal e env) i
+    let pclo = PartialClosure li (ty :| tys) (length tys + 1) term mty (set ceLocal e env) cloi
     returnCEKValue cont handler (VPartialClosure pclo)
-  apply' _ [] _ = throwExecutionError i ClosureAppliedToTooManyArgs
+  apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
 
 applyLam nclo@(N (NativeFn b env fn arity i)) args cont handler
   | arity == argLen = fn i b cont handler env args
@@ -936,7 +935,7 @@ applyLam (PN (PartialNativeFn b env fn arity pArgs i)) args cont handler
 
 applyLam (CT (CapTokenClosure fqn argtys arity i)) args cont handler
   | arity == argLen = do
-    args' <- traverse enforcePactValue args
+    args' <- traverse (enforcePactValue i) args
     tcArgs <- zipWithM (\arg ty -> maybeTCType i arg ty) args' argtys
     returnCEKValue cont handler (VPactValue (PCapToken (CapToken fqn tcArgs)))
   | otherwise = throwExecutionError i ClosureAppliedToTooManyArgs

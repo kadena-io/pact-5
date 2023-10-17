@@ -52,6 +52,7 @@ module Pact.Core.Names
  , RowKey(..)
  , renderFullyQualName
  , FQNameRef(..)
+ , userTable
  ) where
 
 import Control.Lens
@@ -326,3 +327,6 @@ instance Show (FQNameRef name) where
 instance Eq (FQNameRef name) where
   (FQParsed pn) == (FQParsed pn') = pn == pn'
   (FQName fqn) == (FQName fqn') = fqn == fqn'
+
+userTable :: TableName -> TableName
+userTable (TableName tn) = TableName ("USER_" <> tn)

@@ -333,7 +333,8 @@ desugarLispTerm = \case
     Lisp.EnforceOneOp -> case e2 of
       Lisp.List e _ ->
         Conditional <$> (CEnforceOne <$> desugarLispTerm e1 <*> traverse desugarLispTerm e) <*> pure i
-      _ -> error "enforce-one incorrect form"
+      _ ->
+        throwDesugarError (InvalidSyntax "enforce-one: expected argument list") i
   Lisp.App e hs i -> do
     e' <- desugarLispTerm e
     hs' <- traverse desugarLispTerm hs
@@ -877,21 +878,18 @@ renameType i = \case
     throwDesugarError (UnsupportedType "time") i
   where
   resolveSchema = \case
-    TBN bn ->
-      view reCurrModule >>= \case
-        Just (currM,_) -> do
-          rs <- use rsModuleBinds
-          case rs ^? ix currM . ix (_bnName bn) of
-            Just (_, DKDefSchema sc) -> pure sc
-            _ -> error "no schema with required name - bare"
-        _ -> error "schema lives outside a module"
+    TBN bn -> do
+      (_, dkty) <- resolveBare bn i
+      case dkty of
+        Just (DKDefSchema sc) -> pure sc
+        Just _ -> throwDesugarError (InvalidDefInSchemaPosition (_bnName bn)) i
+        Nothing ->
+          throwDesugarError (UnboundTypeVariable (_bnName bn)) i
     TQN qn -> do
-      let currM = _qnModName qn
-      rs <- use rsModuleBinds
-      case rs ^? ix currM . ix (_qnName qn)  of
-        Just (_, DKDefSchema sc) ->
-          pure sc
-        _ -> error "no schema with required name - qualified"
+      (_, dt) <- resolveQualified qn i
+      case dt of
+        DKDefSchema sc -> pure sc
+        _ -> throwDesugarError (InvalidDefInSchemaPosition (_qnName qn)) i
 
 
 -- Rename a term (that is part of a module)
@@ -1031,7 +1029,9 @@ renameDefTable (DefTable dtn sc i) = do
   case sc of
     DesugaredTable dn -> resolveName i dn >>= \case
       (_, Just (DKDefSchema rsc)) -> pure (DefTable dtn (ResolvedTable rsc) i)
-      _ -> error "invalid schema"
+      (n, Just _) ->
+        throwDesugarError (InvalidDefInSchemaPosition (_nName n)) i
+      (_n, Nothing) -> throwDesugarError (UnboundTypeVariable (rawParsedName dn)) i
 
 renameReplDefun
   :: (MonadDesugar raw reso i m)
@@ -1162,7 +1162,8 @@ resolveDynamic i (DynamicName dn dArg) = views reBinds (M.lookup dn) >>= \case
       let dbjIx = depth - d - 1
           dr = NDynRef (DynamicRef dArg dbjIx)
       pure (Name dn dr)
-    _ -> error "dynamic names cannot be unbound"
+    _ ->
+      throwDesugarError (InvalidDynamicInvoke dn) i
   Nothing ->
     throwDesugarError (UnboundTermVariable dn) i
 
@@ -1232,7 +1233,7 @@ renameModule (Module mname mgov defs blessed imp implements mhash i) = local (se
   (defs'', _, _) <- over _1 reverse <$> foldlM go ([], S.empty, bindsWithImports) defs'
   let fqns = M.fromList $ (\d -> (defName d, (FullyQualifiedName mname (defName d) mhash, defKind d))) <$> defs''
   rsLoaded . loToplevel %= M.union fqns
-  traverse_ (checkImplements i defs'') implements
+  traverse_ (checkImplements i defs'' mname) implements
   pure (Module mname mgov' defs'' blessed imp implements mhash i)
   where
   handleImports binds [] = pure binds
@@ -1242,7 +1243,7 @@ renameModule (Module mname mgov defs blessed imp implements mhash i) = local (se
 
   -- Our deps are acyclic, so we resolve all names
   go (defns, s, m) defn = do
-    when (S.member (defName defn) s) $ error "duplicate defn name"
+    when (S.member (defName defn) s) $ throwDesugarError (DuplicateDefinition (defName defn)) i
     let dn = defName defn
     defn' <- local (set reBinds m) $ renameDef defn
     let dk = defKind defn'
@@ -1285,8 +1286,9 @@ checkImplements
   => i
   -> [Def raw Type b i]
   -> ModuleName
+  -> ModuleName
   -> m ()
-checkImplements i defs ifaceName =
+checkImplements i defs moduleName ifaceName =
   use (rsLoaded . loModules . at ifaceName) >>= \case
     Just (InterfaceData in' _depmap) ->
       traverse_ checkImplementedMember (_ifDefns in')
@@ -1306,15 +1308,20 @@ checkImplements i defs ifaceName =
     IfDfun ifd ->
       case find (\df -> _ifdName ifd == defName df) defs of
         Just (Dfun v) ->
-          when (_dfunArgs v /= _ifdArgs ifd || _dfunRType v /= _ifdRType ifd) $ error "function args dont match"
-        Just _ -> error "not implemented"
-        Nothing -> error "not implemented"
+          when (_dfunArgs v /= _ifdArgs ifd || _dfunRType v /= _ifdRType ifd) $
+            throwDesugarError (ImplementationError moduleName ifaceName (_dfunName v)) i
+        Just d ->
+          throwDesugarError (ImplementationError moduleName ifaceName  (defName d)) i
+        Nothing ->
+          throwDesugarError (NotImplemented moduleName ifaceName (_ifdName ifd)) i
     IfDCap ifd ->
       case find (\df -> _ifdcName ifd == defName df) defs of
         Just (DCap v) ->
-          when (_dcapArgs v /= _ifdcArgs ifd || _dcapRType v /= _ifdcRType ifd) $ error "function args dont match"
-        Just _ -> error "not implemented"
-        Nothing -> error "not implemented"
+          when (_dcapArgs v /= _ifdcArgs ifd || _dcapRType v /= _ifdcRType ifd) $
+            throwDesugarError (ImplementationError moduleName ifaceName (_dcapName v)) i
+        Just d -> throwDesugarError (ImplementationError moduleName ifaceName  (defName d)) i
+        Nothing ->
+          throwDesugarError (NotImplemented moduleName ifaceName (_ifdcName ifd)) i
 
 -- | Todo: support imports
 --   Todo: support

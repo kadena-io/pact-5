@@ -9,14 +9,11 @@ import Control.Monad.IO.Class(liftIO)
 import Data.Default
 import Data.Text(Text)
 import Data.ByteString.Short(toShort)
-import Data.Foldable(find)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Vector as V
-import qualified Data.RAList as RAList
-import qualified Data.List.NonEmpty as NE
 
 
 import Pact.Core.Builtin
@@ -35,7 +32,6 @@ import Pact.Core.Capabilities
 import Pact.Core.Errors
 import Pact.Core.Persistence
 import Pact.Core.IR.Term
-import Pact.Core.Type
 
 import Pact.Core.Repl.Runtime
 
@@ -52,14 +48,14 @@ prettyShowValue = \case
   VTable (TableValue (TableName tn) _ _ _) -> "table{" <> tn <> "}"
   VClosure _ -> "<#closure>"
 
-corePrint :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+corePrint :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 corePrint = \info b cont handler _env -> \case
   [v] -> do
     liftIO $ putStrLn $ T.unpack (prettyShowValue v)
     returnCEKValue cont handler (VLiteral LUnit)
   args -> argsError info b args
 
-rawExpect :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+rawExpect :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 rawExpect = \info b cont handler _env -> \case
   [VLiteral (LString msg), VPactValue v1, VClosure clo] ->
     applyLam clo [] Mt CEKNoHandler >>= \case
@@ -72,7 +68,7 @@ rawExpect = \info b cont handler _env -> \case
        v -> returnCEK cont handler v
   args -> argsError info b args
 
-coreExpectThat :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+coreExpectThat :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 coreExpectThat = \info b cont handler _env -> \case
   [VLiteral (LString msg), VClosure vclo, v] -> do
     unsafeApplyOne vclo v >>= \case
@@ -83,7 +79,7 @@ coreExpectThat = \info b cont handler _env -> \case
       VError ve i -> return (VError ve i)
   args -> argsError info b args
 
-coreExpectFailure :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+coreExpectFailure :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 coreExpectFailure = \info b cont handler _env -> \case
   [VLiteral (LString toMatch), VClosure vclo] -> do
     es <- getEvalState
@@ -109,14 +105,14 @@ coreExpectFailure = \info b cont handler _env -> \case
         returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result"
   args -> argsError info b args
 
-coreEnvStackFrame :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+coreEnvStackFrame :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 coreEnvStackFrame = \info b cont handler _env -> \case
   [] -> do
     capSet <- getAllStackCaps
     returnCEKValue cont handler $ VString $ T.pack (show capSet)
   args -> argsError info b args
 
-envEvents :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+envEvents :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 envEvents =  \info b cont handler _env -> \case
   [VBool clear] -> do
     events <- fmap envToObj <$> useEvalState esEvents
@@ -132,7 +128,7 @@ envEvents =  \info b cont handler _env -> \case
         , ("module-hash", PString (hashToText (_mhHash mh)))]
   args -> argsError info b args
 
-envHash :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+envHash :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 envHash =  \info b cont handler _env -> \case
   [VString s] -> do
     case decodeBase64UrlUnpadded (T.encodeUtf8 s) of
@@ -142,7 +138,7 @@ envHash =  \info b cont handler _env -> \case
         returnCEKValue cont handler VUnit
   args -> argsError info b args
 
-envData :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+envData :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 envData = \info b cont handler _env -> \case
   [VObject o] -> do
     let ed = EnvData o
@@ -150,7 +146,7 @@ envData = \info b cont handler _env -> \case
     returnCEKValue cont handler VUnit
   args -> argsError info b args
 
-envChainData :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+envChainData :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 envChainData = \info b cont handler _env -> \case
   [VObject cdataObj] -> do
     pd <- viewCEKEnv eePublicData
@@ -178,7 +174,7 @@ envChainData = \info b cont handler _env -> \case
       _ -> returnCEK cont handler (VError ("envChainData: bad public metadata value for key: " <> _field k) info)
   args -> argsError info b args
 
-envKeys :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+envKeys :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 envKeys = \info b cont handler _env -> \case
   [VList ks] -> do
     keys <- traverse (asString info b) ks
@@ -186,7 +182,7 @@ envKeys = \info b cont handler _env -> \case
     returnCEKValue cont handler VUnit
   args -> argsError info b args
 
-envSigs :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+envSigs :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 envSigs = \info b cont handler _env -> \case
   [VList ks] ->
     case traverse keyCapObj ks of
@@ -207,7 +203,7 @@ envSigs = \info b cont handler _env -> \case
       _ -> Nothing
   args -> argsError info b args
 
-beginTx :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+beginTx :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 beginTx = \info b cont handler _env -> \case
   [VString s] -> begin' info (Just s) >>= returnCEK cont handler . renderTx info "Begin Tx"
   [] -> begin' info Nothing >>= returnCEK cont handler . renderTx info "Begin Tx"
@@ -218,7 +214,7 @@ renderTx _info start (Just (TxId tid, mt)) =
   EvalValue $ VString $ start <> " " <> T.pack (show tid) <> maybe mempty ((<>) " ") mt
 renderTx info start Nothing = VError ("tx-function failure " <> start) info
 
-begin' :: (Default i) => i -> Maybe Text -> ReplEvalM b i (Maybe (TxId, Maybe Text))
+begin' :: (Default i, Show i) => i -> Maybe Text -> ReplEvalM b i (Maybe (TxId, Maybe Text))
 begin' info mt = do
   pdb <- use (reEnv . eePactDb)
   mode <- viewCEKEnv eeMode
@@ -226,12 +222,14 @@ begin' info mt = do
   reTx .= ((,mt) <$> mTxId)
   return ((,mt) <$> mTxId)
 
-commitTx :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+commitTx :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 commitTx = \info b cont handler _env -> \case
   [] -> do
     pdb <- use (reEnv . eePactDb)
     liftDbFunction info (_pdbCommitTx pdb)
-    reState .= def
+    fqdefs <- useEvalState (esLoaded . loAllLoaded)
+    cs <- useEvalState esStack
+    reState .= (set esStack cs $ set (esLoaded . loAllLoaded) fqdefs def)
     use reTx >>= \case
       Just tx -> do
         reTx .= Nothing
@@ -240,12 +238,14 @@ commitTx = \info b cont handler _env -> \case
   args -> argsError info b args
 
 
-rollbackTx :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+rollbackTx :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 rollbackTx = \info b cont handler _env -> \case
   [] -> do
     pdb <- use (reEnv . eePactDb)
     liftDbFunction info (_pdbRollbackTx pdb)
-    reState .= def
+    fqdefs <- useEvalState (esLoaded . loAllLoaded)
+    cs <- useEvalState esStack
+    reState .= (set esStack cs $ set (esLoaded . loAllLoaded) fqdefs def)
     use reTx >>= \case
       Just tx -> do
         reTx .= Nothing
@@ -253,7 +253,7 @@ rollbackTx = \info b cont handler _env -> \case
       Nothing -> returnCEK cont handler (renderTx info "Rollback Tx" Nothing)
   args -> argsError info b args
 
-sigKeyset :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+sigKeyset :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 sigKeyset = \info b cont handler _env -> \case
   [] -> do
     sigs <- S.fromList . M.keys <$> viewCEKEnv eeMsgSigs
@@ -261,7 +261,7 @@ sigKeyset = \info b cont handler _env -> \case
   args -> argsError info b args
 
 
-testCapability :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+testCapability :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 testCapability = \info b cont handler env -> \case
   [VCapToken origToken] -> do
     lookupFqName (_ctName origToken) >>= \case
@@ -275,13 +275,11 @@ testCapability = \info b cont handler env -> \case
           _ -> do
             -- Installed caps emit and event
             -- so we create a fake stack frame
-            let sf = StackFrame "test-capability" (views ctName _fqModule origToken) SFDefun
-            esStack %%= (sf :)
             installCap info env origToken False *> evalCap info cont' handler env origToken ignoreContBody cBody
       _ -> returnCEK cont handler (VError "no such capability" info)
   args -> argsError info b args
 
-envExecConfig :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
+envExecConfig :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 envExecConfig = \info b cont handler _env -> \case
   [VList s] -> do
     s' <- traverse go (V.toList s)
@@ -297,13 +295,13 @@ envExecConfig = \info b cont handler _env -> \case
   args -> argsError info b args
 
 replBuiltinEnv
-  :: Default i
+  :: (Default i, Show i)
   => BuiltinEnv (ReplBuiltin RawBuiltin) i (ReplEvalM (ReplBuiltin RawBuiltin) i)
 replBuiltinEnv i b env =
   mkBuiltinFn i b env (replRawBuiltinRuntime b)
 
 replRawBuiltinRuntime
-  :: (Default i)
+  :: (Default i, Show i)
   => ReplBuiltin RawBuiltin
   -> NativeFunction (ReplBuiltin RawBuiltin) i (ReplEvalM (ReplBuiltin RawBuiltin) i)
 replRawBuiltinRuntime = \case

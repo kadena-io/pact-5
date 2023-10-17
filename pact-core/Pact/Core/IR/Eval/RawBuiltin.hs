@@ -444,7 +444,7 @@ zipList = \info b cont handler _env -> \case
   [VClosure clo, VList l, VList r] -> zip' (V.toList l) (V.toList r) []
     where
     zip' (x:xs) (y:ys) acc = unsafeApplyTwo clo (VPactValue x) (VPactValue y) >>= \case
-       EvalValue v -> enforcePactValue v >>= zip' xs ys . (:acc)
+       EvalValue v -> enforcePactValue info v >>= zip' xs ys . (:acc)
        v@VError{} -> returnCEK cont handler v
     zip' _ _ acc = returnCEKValue cont handler (VList (V.fromList (reverse acc)))
   args -> argsError info b args
@@ -453,11 +453,10 @@ zipList = \info b cont handler _env -> \case
 coreMap :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreMap = \info b cont handler _env -> \case
   [VClosure fn, VList li] -> do
-    -- liftIO $ print (show (view ceLocal _env))
     map' (V.toList li) []
     where
     map' (x:xs) acc = applyLam fn [VPactValue x] Mt CEKNoHandler >>= \case
-       EvalValue cv -> enforcePactValue cv >>= map' xs . (:acc)
+       EvalValue cv -> enforcePactValue info cv >>= map' xs . (:acc)
        v@VError{} -> returnCEK cont handler v
     map' _ acc = returnCEKValue cont handler (VList (V.fromList (reverse acc)))
   args -> argsError info b args
@@ -562,7 +561,9 @@ coreAccess = \info b cont handler _env -> \case
 enforceTopLevelOnly :: (IsBuiltin b, MonadEval b i m) => i -> b -> m ()
 enforceTopLevelOnly info b = do
   s <- useEvalState esStack
-  when (not (null s)) $ throwExecutionError info (NativeIsTopLevelOnly (builtinName b))
+  when (not (null s)) $ do
+    liftIO $ print s
+    throwExecutionError info (NativeIsTopLevelOnly (builtinName b))
 
 -----------------------------------
 -- Guards and reads
@@ -796,10 +797,12 @@ foldDb = \info b cont handler env -> \case
               EvalValue (VBool qry) -> if qry then do
                 applyLam consumer [VString k, VObject row] Mt CEKNoHandler >>= \case
                   EvalValue (VPactValue v) -> go pdb (v:acc) ks
-                  EvalValue _ -> error "Fold db did not return a pact value"
+                  EvalValue _ ->
+                    returnCEK cont handler (VError "Fold db did not return a pact value" info)
                   v -> returnCEK cont handler v
                 else go pdb acc ks
-              EvalValue _ -> error "Folddb query was not a boolean"
+              EvalValue _ ->
+                returnCEK cont handler (VError "Fold db did not return a pact value" info)
               v@VError{} -> returnCEK cont handler v
           Nothing -> error "no key despite keys"
       go _ acc [] =
@@ -1252,7 +1255,7 @@ describeModule = \info b cont handler env -> \case
   args -> argsError info b args
 
 dbDescribeTable :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-dbDescribeTable = \info b cont handler env -> \case
+dbDescribeTable = \info b cont handler _env -> \case
   [VTable (TableValue name mname _ _)] ->
     returnCEKValue cont handler $ VObject $ M.fromList $ fmap (over _1 Field)
       [("name", PString (_tableName name))
@@ -1289,8 +1292,8 @@ coreCompose = \info b cont handler _env -> \case
 -- Core definitions
 -----------------------------------
 
-unimplemented :: NativeFunction b i m
-unimplemented = error "unimplemented"
+-- unimplemented :: NativeFunction b i m
+-- unimplemented = error "unimplemented"
 
 rawBuiltinEnv
   :: (MonadEval RawBuiltin i m)

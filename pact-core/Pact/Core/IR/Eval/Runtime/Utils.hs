@@ -42,6 +42,8 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , getModuleData
  , isExecutionFlagSet
  , checkNonLocalAllowed
+ , evalStateToErrorState
+ , restoreFromErrorState
  ) where
 
 import Control.Lens hiding ((%%=))
@@ -113,11 +115,10 @@ checkSigCaps sigs = do
     (S.null sigCaps && allowEmpty) ||
     not (S.null (S.intersection granted sigCaps))
 
-enforcePactValue :: Applicative f => CEKValue b i m -> f PactValue
-enforcePactValue = \case
+enforcePactValue :: (MonadEval b i m) => i -> CEKValue b i m -> m PactValue
+enforcePactValue info = \case
   VPactValue pv -> pure pv
-  VTable{} -> error "a table is not a pact value"
-  VClosure{} -> error "closure is not a pact value"
+  _ -> throwExecutionError info ExpectedPactValue
 
 -- Note: The following functions
 -- when placed in this file are causing GHC 9.6.2 to bork with the following error:
@@ -256,6 +257,14 @@ safeTail [] = []
 
 isExecutionFlagSet :: (MonadEval b i m) => ExecutionFlag -> m Bool
 isExecutionFlagSet flag = viewsCEKEnv eeFlags (S.member flag)
+
+evalStateToErrorState :: EvalState b i -> ErrorState
+evalStateToErrorState es =
+  ErrorState (_esCaps es) (_esStack es)
+
+restoreFromErrorState :: ErrorState -> EvalState b i -> EvalState b i
+restoreFromErrorState (ErrorState caps stack) =
+  set esCaps caps . set esStack stack
 
 checkNonLocalAllowed :: (MonadEval b i m) => i -> m ()
 checkNonLocalAllowed info = do

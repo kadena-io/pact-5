@@ -96,7 +96,7 @@ runReplEvalM
 runReplEvalM env st (ReplEvalM action) = runReaderT (runStateT (runExceptT action) st) env
 
 runReplCEK
-  :: (Default i)
+  :: (Default i, Show i)
   => ReplEvalEnv b i
   -> ReplEvalState b i
   -> EvalTerm b i

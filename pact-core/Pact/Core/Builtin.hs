@@ -650,7 +650,7 @@ replRawBuiltinMap =
 
 -- Todo: is not a great abstraction.
 -- In particular: the arity could be gathered from the type.
-class IsBuiltin b where
+class Show b => IsBuiltin b where
   builtinArity :: b -> Int
   builtinName :: b -> NativeName
 
