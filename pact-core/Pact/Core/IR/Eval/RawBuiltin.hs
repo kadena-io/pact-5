@@ -1240,7 +1240,7 @@ txHash = \info b cont handler _env -> \case
 
 
 coreContinue :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-coreContinue = \info b cont handler _env -> \case
+coreContinue info b cont handler _env = \case
   [v] -> do
     returnCEKValue cont handler v
   args -> argsError info b args

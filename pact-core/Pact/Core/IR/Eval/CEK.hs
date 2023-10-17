@@ -32,6 +32,7 @@ module Pact.Core.IR.Eval.CEK
   , guardForModuleCall) where
 
 
+import Debug.Trace
 import Control.Lens hiding ((%%=))
 import Control.Monad(zipWithM, unless, when)
 import Control.Monad.IO.Class
@@ -316,8 +317,8 @@ applyNestedPact
   -> CEKErrorHandler b i m
   -> CEKEnv b i m
   -> m (EvalResult b i m)
-applyNestedPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
-  Nothing -> failInvariant i "applyNestedPact: nested defpacts do not allow private execution"
+applyNestedPact i pc ps cont handler cenv = trace (show pc) $ useEvalState esPactExec >>= \case
+  Nothing -> failInvariant i "applyNestedPact: Nested Pact attempted but no pactExec found"
   Just pe -> lookupFqName (pc ^. pcName) >>= \case
     Just (DPact defPact) -> do
       step <- maybe (failInvariant i "Step not found") pure
@@ -327,7 +328,7 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
         stepCount = NE.length (_dpSteps defPact)
         isRollback = hasRollback step
       when (stepCount /= _peStepCount pe) $
-        error "applyNestedPact: invalid nested defpact length, must be equal to length of parent"
+        failInvariant i "applyNestedPact: invalid nested defpact length, must be equal to length of parent"
       when (isRollback /= _peStepHasRollback pe) $
         error "applyNestedPact: invalid nested defpact step, must match parent rollback"
 
@@ -342,10 +343,11 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
                                , _peStepHasRollback = isRollback
                                , _peNestedPactExec = mempty
                                }
-          | otherwise -> error "Nested pact executing same nested pact twice"
+          | otherwise -> failInvariant i "Nested pact executing same nested pact twice"
         Just npe
-          | _psStep ps >= 0 && isRollback && _peStep npe == _psStep ps -> pure npe
-          | _psStep ps >  0 && _peStep npe + 1 == _psStep ps -> pure npe
+          | _psStep ps >= 0 && isRollback && _peStep npe == _psStep ps ->
+            pure (set peStepHasRollback isRollback npe)
+          | _psStep ps >  0 && _peStep npe + 1 == _psStep ps -> pure (over peStep (+1) npe)
           | otherwise -> failInvariant i "nested pact never started at prior step"
 
       setEvalState esPactExec (Just exec)
@@ -377,7 +379,7 @@ resumePact i cont handler env crossChainContinuation = viewCEKEnv eePactStep >>=
     pdb <- viewCEKEnv eePactDb
     dbState <- liftDbFunction i (readPacts pdb (_psPactId ps))
     case (dbState, crossChainContinuation) of
-      (Just Nothing, _) -> error "resumePact: completed"
+      (Just Nothing, _) -> failInvariant i "resumePact: completed"
       (Nothing, Nothing) -> error "no prev exec found"
       (Nothing, Just ccExec) -> resumePactExec ccExec
       (Just (Just dbExec), Nothing) -> resumePactExec dbExec

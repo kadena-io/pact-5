@@ -25,6 +25,8 @@ import Pact.Core.PactValue
 import Pact.Core.Names
 import Pact.Core.Hash (Hash, hashToText, pactHash)
 import qualified Data.Text.Encoding as T
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as BS8
 
 newtype PactId
   = PactId Text
@@ -41,9 +43,12 @@ data PactContinuation name v
 
 makeLenses ''PactContinuation
 
-mkNestedPactId :: PactContinuation FullyQualifiedName v -> PactId -> PactId
-mkNestedPactId _pc (PactId parent) =
-  hashToPactId (pactHash (T.encodeUtf8 parent <> ":" )) -- TODOL add pc
+encodePactContinuation :: PactContinuation FullyQualifiedName PactValue -> ByteString
+encodePactContinuation = BS8.pack . show
+
+mkNestedPactId :: PactContinuation FullyQualifiedName PactValue -> PactId -> PactId
+mkNestedPactId pc (PactId parent) =
+  hashToPactId (pactHash (T.encodeUtf8 parent <> ":" <> encodePactContinuation pc)) -- TODOL add pc
 
 -- | `Yield` representing an object
 newtype Yield
