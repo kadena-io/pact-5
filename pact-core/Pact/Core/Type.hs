@@ -16,6 +16,7 @@ module Pact.Core.Type
  , pattern TyTime
  , pattern TyBool
  , pattern TyString
+ , pattern TyPrincipal
  , pattern TyUnit
  , pattern TyGuard
  , typeOfLit
@@ -53,6 +54,7 @@ data PrimType =
   PrimString |
   PrimGuard |
   PrimTime |
+  PrimPrincipal |
   PrimUnit
   deriving (Eq,Ord,Show, Enum, Bounded)
 
@@ -64,6 +66,7 @@ instance Pretty PrimType where
     PrimString -> "string"
     PrimGuard -> "guard"
     PrimTime -> "time"
+    PrimPrincipal -> "principal"
     PrimUnit -> "unit"
 
 -- Todo: caps are a bit strange here
@@ -110,6 +113,9 @@ pattern TyBool = TyPrim PrimBool
 
 pattern TyString :: Type
 pattern TyString = TyPrim PrimString
+
+pattern TyPrincipal :: Type
+pattern TyPrincipal = TyPrim PrimPrincipal
 
 pattern TyUnit :: Type
 pattern TyUnit = TyPrim PrimUnit

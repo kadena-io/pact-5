@@ -35,6 +35,7 @@ import Pact.Core.Literal
 import Pact.Core.Pretty
 import Pact.Core.ModRefs
 import Pact.Core.Capabilities
+import Pact.Core.Principal
 
 import qualified Pact.Core.Pretty as Pretty
 
@@ -46,6 +47,7 @@ data PactValue
   | PModRef ModRef
   | PCapToken (CapToken FullyQualifiedName PactValue)
   | PTime !PactTime.UTCTime
+  | PPrincipal !Principal
   deriving (Eq, Show, Ord)
 
 makePrisms ''PactValue
@@ -74,6 +76,7 @@ instance Pretty PactValue where
     PCapToken (CapToken fqn args) ->
       parens (pretty (fqnToQualName fqn) <> if null args then mempty else hsep (pretty <$> args))
     PTime t -> pretty (PactTime.formatTime "%Y-%m-%d %H:%M:%S%Q %Z" t)
+    PPrincipal p -> pretty $ mkPrincipalIdent p
 
 
 -- | Check that a `PactValue` has the provided `Type`, returning
@@ -115,7 +118,10 @@ checkPvType ty = \case
     _ -> Nothing
   PCapToken _ -> Nothing
   PTime _ -> case ty of
-    TyTime -> Just $ TyTime
+    TyTime -> Just TyTime
+    _ -> Nothing
+  PPrincipal _ -> case ty of
+    TyPrincipal -> Just TyPrincipal
     _ -> Nothing
 
 
