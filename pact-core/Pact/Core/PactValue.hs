@@ -115,7 +115,7 @@ checkPvType ty = \case
     _ -> Nothing
   PCapToken _ -> Nothing
   PTime _ -> case ty of
-    TyPrim PrimTime -> Just $ TyPrim PrimTime
+    TyTime -> Just $ TyTime
     _ -> Nothing
 
 
