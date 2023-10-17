@@ -239,6 +239,8 @@ instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
     App (Builtin (RBuiltinRepl RExpectFailure) i) [e1, suspendTerm e2] i
   desugarAppArity i (RBuiltinRepl RExpectFailure) [e1, e2, e3] | isn't _Lam e2 =
     App (Builtin (RBuiltinRepl RExpectFailureMatch) i) [e1, e2, suspendTerm e3] i
+  desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2] | isn't _Lam e2 =
+    App (Builtin (RBuiltinRepl RContinuePactRollback) i) [e1, e2] i
   -- desugarAppArity i (RBuiltinRepl RContinuePact) (e1 :| e2)  =
   --   App (Builtin (RBuiltinRepl RContinuePact) i) (e1 :| e2) i
   desugarAppArity i b ne =
@@ -1408,7 +1410,7 @@ checkImplements i defs ifaceName =
         Just (Dfun v) ->
           when (_dfunArgs v /= _ifdArgs ifd || _dfunRType v /= _ifdRType ifd) $ error "function args dont match"
         Just _ -> error "not implemented"
-        Nothing -> error "not implemented" 
+        Nothing -> error "not implemented"
     IfDCap ifd ->
       case find (\df -> _ifdcName ifd == defName df) defs of
         Just (DCap v) ->

@@ -545,7 +545,6 @@ data ReplBuiltins
   -- | RBeginTx
   -- | RBench
   -- | RCommitTx
-  -- | RContinuePact
   -- | REnvExecConfig
   -- | REnvGas
   -- | REnvGasLimit
@@ -556,6 +555,7 @@ data ReplBuiltins
   -- | REnvNamespacePolicy
   -- Defpact
   | RContinuePact
+  | RContinuePactRollback
   | RPactState
   | RResetPactState
   deriving (Show, Enum, Bounded, Eq)
@@ -585,6 +585,7 @@ instance IsBuiltin ReplBuiltins where
     RRollbackTx -> 0
     RSigKeyset -> 1
     RTestCapability -> 1
+    RContinuePactRollback -> 2
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
 -- Note: commented out natives are
@@ -649,6 +650,7 @@ replBuiltinsToText = \case
   RRollbackTx -> "rollback-tx"
   RSigKeyset -> "sig-keyset"
   RTestCapability -> "test-capability"
+  RContinuePactRollback -> "continue-pact-with-rollback"
   -- RLoad -> "load"
   -- RLoadWithEnv -> "load-with-env"
 

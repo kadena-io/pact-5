@@ -253,7 +253,7 @@ initPact i pc cont handler cenv = do
       let
         pStep = PactStep 0 False (hashToPactId pHash) Nothing
         cenv' = set cePactStep (Just pStep) cenv
-      applyPact i pc pStep cont handler cenv'
+      applyPact i pc pStep cont handler cenv' mempty
     Just ps ->
       let
         npId = mkNestedPactId pc (_psPactId ps)
@@ -268,8 +268,9 @@ applyPact
   -> Cont b i m
   -> CEKErrorHandler b i m
   -> CEKEnv b i m
+  -> M.Map PactId PactExec
   -> m (EvalResult b i m)
-applyPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
+applyPact i pc ps cont handler cenv nested = useEvalState esPactExec >>= \case
   Just _ ->  throwExecutionError i MultipleOrNestedPactExecFound
   Nothing -> lookupFqName (pc ^. pcName) >>= \case
     Just (DPact defPact) -> do
@@ -292,7 +293,7 @@ applyPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
                , _peStep = _psStep ps
                , _pePactId = _psPactId ps
                , _peContinuation = pc
-               , _peNestedPactExec = mempty
+               , _peNestedPactExec = nested
                }
 
       setEvalState esPactExec (Just pe)
@@ -317,8 +318,8 @@ applyNestedPact
   -> CEKErrorHandler b i m
   -> CEKEnv b i m
   -> m (EvalResult b i m)
-applyNestedPact i pc ps cont handler cenv = trace (show pc) $ useEvalState esPactExec >>= \case
-  Nothing -> failInvariant i "applyNestedPact: Nested Pact attempted but no pactExec found"
+applyNestedPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
+  Nothing -> failInvariant i $ "applyNestedPact: Nested Pact attempted but no pactExec found" <> T.pack (show pc)
   Just pe -> lookupFqName (pc ^. pcName) >>= \case
     Just (DPact defPact) -> do
       step <- maybe (failInvariant i "Step not found") pure
@@ -331,7 +332,6 @@ applyNestedPact i pc ps cont handler cenv = trace (show pc) $ useEvalState esPac
         failInvariant i "applyNestedPact: invalid nested defpact length, must be equal to length of parent"
       when (isRollback /= _peStepHasRollback pe) $
         error "applyNestedPact: invalid nested defpact step, must match parent rollback"
-
       exec <- case pe ^. peNestedPactExec . at (_psPactId ps) of
         Nothing
           | _psStep ps == 0 -> pure $ PactExec
@@ -347,7 +347,8 @@ applyNestedPact i pc ps cont handler cenv = trace (show pc) $ useEvalState esPac
         Just npe
           | _psStep ps >= 0 && isRollback && _peStep npe == _psStep ps ->
             pure (set peStepHasRollback isRollback npe)
-          | _psStep ps >  0 && _peStep npe + 1 == _psStep ps -> pure (over peStep (+1) npe)
+          | _psStep ps >  0 && _peStep npe + 1 == _psStep ps ->
+            pure (over peStep (+1) $ set peStepHasRollback isRollback $ npe)
           | otherwise -> failInvariant i "nested pact never started at prior step"
 
       setEvalState esPactExec (Just exec)
@@ -413,7 +414,7 @@ resumePact i cont handler env crossChainContinuation = viewCEKEnv eePactStep >>=
                          r@Just{} -> r
                          Nothing -> _peYield pe
               env' = set cePactStep (Just $ set psResume resume ps) env
-          applyPact i pc ps cont handler env'
+          applyPact i pc ps cont handler env' (_peNestedPactExec pe)
 
 
 enforceKeyset
@@ -1033,7 +1034,8 @@ returnCEKValue (PactStepC env cont) handler v =
           pdb = view cePactDb env
           isLastStep = _psStep ps == pred (_peStepCount pe)
           done = (not (_psRollback ps) && isLastStep) || _psRollback ps
-
+        when (nestedPactsNotAdvanced pe ps) $
+          throwExecutionError def (NestedDefpactsNotAdvanced (_pePactId pe))
         liftDbFunction def
           (writePacts pdb Write (_psPactId ps)
             (if done then Nothing else Just pe))
@@ -1046,12 +1048,19 @@ returnCEKValue (NestedPactStepC env cont parentPactExec) handler v =
     Just pe ->  case env ^. cePactStep of
       Nothing -> failInvariant def "Expected a PactStep in the environment"
       Just ps -> do
+        when (nestedPactsNotAdvanced pe ps) $
+          throwExecutionError def (NestedDefpactsNotAdvanced (_pePactId pe))
         let npe = parentPactExec & peNestedPactExec %~ M.insert (_psPactId ps) pe
         setEvalState esPactExec (Just npe)
-
         -- TODO: check nestedPactsNotAdvanced
         returnCEKValue cont handler v
 
+-- | Important check for nested pacts:
+--     - Nested step must be equal to the parent step after execution.
+nestedPactsNotAdvanced :: PactExec -> PactStep -> Bool
+nestedPactsNotAdvanced resultState ps =
+  any (\npe -> _peStep npe /= _psStep ps) (_peNestedPactExec resultState)
+{-# INLINE nestedPactsNotAdvanced #-}
 
 applyLam
   :: (MonadEval b i m)

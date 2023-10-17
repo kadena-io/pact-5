@@ -333,50 +333,50 @@
 
 
 ;; ; Case 1 test: module references
-;; (begin-tx)
-;; (expect "All is good for successful case 1: step 0" ["hello1-nested" "hello1-nested" "hello1"] (parent.good2))
-;; (expect "All is good for successful case 1: step 1" ["hello2-nested" "hello2-nested" "hello2"] (continue-pact 1))
-;; (expect "All is good for successful case 1: step 2" ["hello3-nested" "hello3-nested" "hello3"] (continue-pact 2))
-;; (commit-tx)
+(begin-tx)
+(expect "All is good for successful case 1: step 0" ["hello1-nested" "hello1-nested" "hello1"] (parent.good2))
+(expect "All is good for successful case 1: step 1" ["hello2-nested" "hello2-nested" "hello2"] (continue-pact 1))
+(expect "All is good for successful case 1: step 2" ["hello3-nested" "hello3-nested" "hello3"] (continue-pact 2))
+(commit-tx)
 
-;; ;  Case 1 test: different args
-;; (begin-tx)
-;; (expect "All is good for successful case 2: step 0" ["hello1-nesteda" "hello1-nestedb" "hello1-nested" "hello1"] (parent.good3))
-;; (expect "All is good for successful case 2: step 1" ["hello2-nesteda" "hello2-nestedb" "hello2-nested" "hello2"] (continue-pact 1))
-;; (expect "All is good for successful case 2: step 2" ["hello3-nesteda" "hello3-nestedb" "hello3-nested" "hello3"] (continue-pact 2))
-;; (commit-tx)
+;  Case 1 test: different args
+(begin-tx)
+(expect "All is good for successful case 2: step 0" ["hello1-nesteda" "hello1-nestedb" "hello1-nested" "hello1"] (parent.good3))
+(expect "All is good for successful case 2: step 1" ["hello2-nesteda" "hello2-nestedb" "hello2-nested" "hello2"] (continue-pact 1))
+(expect "All is good for successful case 2: step 2" ["hello3-nesteda" "hello3-nestedb" "hello3-nested" "hello3"] (continue-pact 2))
+(commit-tx)
 
-;; ; Case 1 test: good rollback
-;; (begin-tx)
-;; (expect "All is good for rollback success case" ["hello1-nested" "hello1-nested" "hello1"] (parent.good-rollback))
-;; (expect "All is good for rollback success case" ["hello2-nested" "hello2-nested" "hello2"] (continue-pact 1))
-;; (expect "All is good for rollback success case" ["hello3-nested" "hello3-nested" "hello3"] (continue-pact 2))
-;; (commit-tx)
+; Case 1 test: good rollback
+(begin-tx)
+(expect "All is good for rollback success case" ["hello1-nested" "hello1-nested" "hello1"] (parent.good-rollback))
+(expect "All is good for rollback success case" ["hello2-nested" "hello2-nested" "hello2"] (continue-pact 1))
+(expect "All is good for rollback success case" ["hello3-nested" "hello3-nested" "hello3"] (continue-pact 2))
+(commit-tx)
 
-;; ; Case 1 test: good rollback
-;; (begin-tx)
-;; (expect "All is good for rollback: step 0 executes before rollback" ["hello1-nested" "hello1-nested" "hello1"] (parent.good-rollback))
-;; (expect "All is good for rollback: step 0 rolls back" ["hello1rollback-nested" "hello1rollback-nested" "hello1"] (continue-pact 0 true))
-;; (commit-tx)
+; Case 1 test: good rollback
+(begin-tx)
+(expect "All is good for rollback: step 0 executes before rollback" ["hello1-nested" "hello1-nested" "hello1"] (parent.good-rollback))
+(expect "All is good for rollback: step 0 rolls back" ["hello1rollback-nested" "hello1rollback-nested" "hello1"] (continue-pact 0 true))
+(commit-tx)
 
-;; ; Case 1 test: good rollback
-;; (begin-tx)
-;; (expect "All is good for rollback step 1 case: step 0 executes" ["hello1-nested" "hello1-nested" "hello1"] (parent.good-rollback))
-;; (expect "All is good for rollback step 1 case: step 1 executes" ["hello2-nested" "hello2-nested" "hello2"] (continue-pact 1))
-;; (expect "All is good for rollback step 1 case: step 1 rollbacks"  ["hello2rollback-nested" "hello2rollback-nested" "hello2"] (continue-pact 1 true))
-;; (commit-tx)
+; Case 1 test: good rollback
+(begin-tx)
+(expect "All is good for rollback step 1 case: step 0 executes" ["hello1-nested" "hello1-nested" "hello1"] (parent.good-rollback))
+(expect "All is good for rollback step 1 case: step 1 executes" ["hello2-nested" "hello2-nested" "hello2"] (continue-pact 1))
+(expect "All is good for rollback step 1 case: step 1 rollbacks"  ["hello2rollback-nested" "hello2rollback-nested" "hello2"] (continue-pact 1 true))
+(commit-tx)
 
-;; ; Case 2 test
-;; (begin-tx)
-;; (expect "Case 2: step 0" ["hello1-nested" "hello1-nested" "hello1"] (parent.bad-parent))
-;; (expect-failure "Case 2: step 1" "Nested defpacts were not all advanced in prior step for pact" (continue-pact 1))
-;; (commit-tx)
+; Case 2 test
+(begin-tx)
+(expect "Case 2: step 0" ["hello1-nested" "hello1-nested" "hello1"] (parent.bad-parent))
+(expect-failure "Case 2: step 1" "Nested defpacts were not all advanced in prior step for pact" (continue-pact 1))
+(commit-tx)
 
-;; ; Case 3 test
-;; (begin-tx)
-;; (expect "Case 3: step 0" ["hello1-nested" "hello1-nested" "hello1"] (parent.bad1))
-;; (expect-failure "Case 3: step 1" "Nested defpacts were not all advanced in prior step for pact" (continue-pact 1))
-;; (commit-tx)
+; Case 3 test
+;  (begin-tx)
+;  (expect "Case 3: step 0" ["hello1-nested" "hello1-nested" "hello1"] (parent.bad1))
+;  (expect-failure "Case 3: step 1" "Nested defpacts were not all advanced in prior step for pact" (continue-pact 1))
+;  (commit-tx)
 
 ;; ; Case 4 test
 ;; (begin-tx)

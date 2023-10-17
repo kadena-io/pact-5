@@ -133,9 +133,10 @@ continuePact info b cont handler env = \case
           in pure (pid, yield)
       let pactStep = PactStep (fromInteger step) rollback pid myield
       setEvalState esPactExec Nothing
-
       (reEnv . eePactStep) .= Just pactStep
-      resumePact info cont handler env Nothing
+      s <- resumePact info cont handler env Nothing
+      (reEnv . eePactStep) .= Nothing
+      pure s
 
 pactState :: (IsBuiltin b, Default i) => NativeFunction b i (ReplEvalM b i)
 pactState = \ info b _cont _handler _env -> \case
@@ -369,3 +370,4 @@ replRawBuiltinRuntime = \case
     RRollbackTx -> rollbackTx
     RSigKeyset -> sigKeyset
     RTestCapability -> testCapability
+    RContinuePactRollback -> continuePact

@@ -4,6 +4,7 @@
 {-# LANGUAGE GADTs #-}
 -- {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module Pact.Core.Errors
  ( PactErrorI
@@ -31,6 +32,7 @@ import Pact.Core.Info
 import Pact.Core.Pretty(Pretty(..))
 import Pact.Core.Hash
 import Pact.Core.Persistence
+import Pact.Core.Pacts.Types
 
 import qualified Pact.Core.Pretty as Pretty
 
@@ -288,9 +290,11 @@ data EvalError
   | NativeIsTopLevelOnly NativeName
   | EventDoesNotMatchModule ModuleName
   | InvalidEventCap FullyQualifiedName
+  | NestedDefpactsNotAdvanced PactId
   deriving Show
 
 instance Pretty EvalError where
+  pretty :: EvalError -> Pretty.Doc ann
   pretty = \case
     ArrayOutOfBoundsException len ix ->
       Pretty.hsep
