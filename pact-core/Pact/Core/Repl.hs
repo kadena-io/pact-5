@@ -21,13 +21,11 @@ import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Monad.Trans(lift)
-import Control.Monad.IO.Class(liftIO)
 import System.Console.Haskeline
 import Data.IORef
 import Data.Foldable(traverse_)
 
 import Data.Default
-import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Set as Set
@@ -46,7 +44,6 @@ import Pact.Core.PactValue
 import Pact.Core.Hash
 import Pact.Core.Capabilities
 import Pact.Core.Imports
-import Pact.Core.Errors
 
 main :: IO ()
 main = do
@@ -116,7 +113,3 @@ main = do
                 let rs = ReplSource "(interactive)" srcText
                 outputStrLn (T.unpack (replError rs err))
             loop
-
--- tryError :: MonadError a m => m b -> m (Either a b)
--- tryError ma =
---   catchError (Right <$> ma) (pure . Left)
