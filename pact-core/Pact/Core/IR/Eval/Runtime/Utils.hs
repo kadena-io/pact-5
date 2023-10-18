@@ -35,9 +35,14 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , calledByModule
  , failInvariant
  , getModuleData
+ , isExecutionFlagSet
+ , checkNonLocalAllowed
+ , evalStateToErrorState
+ , restoreFromErrorState
  ) where
 
 import Control.Lens hiding ((%%=))
+import Control.Monad(when)
 import Control.Monad.Except(MonadError(..))
 import Data.Map.Strict(Map)
 import Data.Text(Text)
@@ -46,7 +51,7 @@ import Data.Default(def)
 import Data.Maybe(listToMaybe, mapMaybe)
 import Data.Foldable(find)
 import qualified Data.Map.Strict as M
-import qualified Data.Set as Set
+import qualified Data.Set as S
 
 import Pact.Core.Names
 import Pact.Core.PactValue
@@ -61,6 +66,7 @@ import Pact.Core.Literal
 import Pact.Core.Capabilities
 import Pact.Core.Persistence
 import Pact.Core.Hash
+import Pact.Core.Environment
 
 mkBuiltinFn
   :: (IsBuiltin b)
@@ -86,7 +92,7 @@ getAllStackCaps
   :: MonadEval b i m
   => m (Set (CapToken QualifiedName PactValue))
 getAllStackCaps = do
-  Set.fromList . concatMap capToList <$> useEvalState (esCaps . csSlots)
+  S.fromList . concatMap capToList <$> useEvalState (esCaps . csSlots)
   where
   capToList (CapSlot c cs) = c:cs
 
@@ -98,19 +104,16 @@ checkSigCaps
 checkSigCaps sigs = do
   granted <- getAllStackCaps
   autos <- useEvalState (esCaps . csAutonomous)
-  -- liftIO $ print granted
-  -- liftIO $ print sigs
-  pure $ M.filter (match (Set.null autos) granted) sigs
+  pure $ M.filter (match (S.null autos) granted) sigs
   where
   match allowEmpty granted sigCaps =
-    (Set.null sigCaps && allowEmpty) ||
-    not (Set.null (Set.intersection granted sigCaps))
+    (S.null sigCaps && allowEmpty) ||
+    not (S.null (S.intersection granted sigCaps))
 
-enforcePactValue :: Applicative f => CEKValue b i m -> f PactValue
-enforcePactValue = \case
+enforcePactValue :: (MonadEval b i m) => i -> CEKValue b i m -> m PactValue
+enforcePactValue info = \case
   VPactValue pv -> pure pv
-  VTable{} -> error "a table is not a pact value"
-  VClosure{} -> error "closure is not a pact value"
+  _ -> throwExecutionError info ExpectedPactValue
 
 -- Note: The following functions
 -- when placed in this file are causing GHC 9.6.2 to bork with the following error:
@@ -247,10 +250,29 @@ safeTail :: [a] -> [a]
 safeTail (_:xs) = xs
 safeTail [] = []
 
+isExecutionFlagSet :: (MonadEval b i m) => ExecutionFlag -> m Bool
+isExecutionFlagSet flag = viewsCEKEnv eeFlags (S.member flag)
+
+evalStateToErrorState :: EvalState b i -> ErrorState
+evalStateToErrorState es =
+  ErrorState (_esCaps es) (_esStack es)
+
+restoreFromErrorState :: ErrorState -> EvalState b i -> EvalState b i
+restoreFromErrorState (ErrorState caps stack) =
+  set esCaps caps . set esStack stack
+
+checkNonLocalAllowed :: (MonadEval b i m) => i -> m ()
+checkNonLocalAllowed info = do
+  disabledInTx <- isExecutionFlagSet FlagDisableHistoryInTransactionalMode
+  mode <- viewCEKEnv eeMode
+  when (mode == Transactional && disabledInTx) $ failInvariant info $
+    "Operation only permitted in local execution mode"
+
 toArgTypeError :: CEKValue b i m -> ArgTypeError
 toArgTypeError = \case
   VPactValue pv -> case pv of
     PLiteral l -> ATEPrim (literalPrim l)
+    PTime _ -> ATEPrim PrimTime
     PList _ -> ATEList
     PObject _ -> ATEObject
     PGuard _ -> ATEPrim PrimGuard

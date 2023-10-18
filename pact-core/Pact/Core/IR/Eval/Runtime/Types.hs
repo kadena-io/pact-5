@@ -77,6 +77,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , DefPactClosure(..)
  , TableValue(..)
  , ClosureType(..)
+ , ErrorState(..)
  ) where
 
 import Control.Lens hiding ((%%=))
@@ -284,7 +285,14 @@ data EvalResult b i m
   deriving Show
 
 
-type MonadEval b i m = (MonadEvalEnv b i m, MonadEvalState b i m, MonadGas m, MonadError (PactError i) m, MonadIO m, Default i)
+type MonadEval b i m =
+  ( MonadEvalEnv b i m
+  , MonadEvalState b i m
+  , MonadGas m
+  , MonadError (PactError i) m
+  , MonadIO m
+  , Default i
+  , Show i)
 
 class Monad m => MonadGas m where
   logGas :: Text -> Gas -> m ()
@@ -413,11 +421,15 @@ data Cont b i m
   -- ^ Empty Continuation
   deriving Show
 
+-- | State to preserve in the error handler
+data ErrorState
+  = ErrorState (CapState QualifiedName PactValue) [StackFrame]
+  deriving Show
 
 data CEKErrorHandler b i m
   = CEKNoHandler
-  | CEKHandler (CEKEnv b i m) (EvalTerm b i) (Cont b i m) [CapSlot QualifiedName PactValue] (CEKErrorHandler b i m)
-  | CEKEnforceOne (CEKEnv b i m) i (EvalTerm b i) [EvalTerm b i] (Cont b i m) [CapSlot QualifiedName PactValue] (CEKErrorHandler b i m)
+  | CEKHandler (CEKEnv b i m) (EvalTerm b i) (Cont b i m) ErrorState (CEKErrorHandler b i m)
+  | CEKEnforceOne (CEKEnv b i m) i (EvalTerm b i) [EvalTerm b i] (Cont b i m) ErrorState (CEKErrorHandler b i m)
   deriving Show
 
 instance (Show i, Show b) => Show (NativeFn b i m) where

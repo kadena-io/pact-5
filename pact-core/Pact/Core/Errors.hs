@@ -122,6 +122,8 @@ data DesugarError
   -- ^ Interface <ifname> doesnt exist
   | ImplementationError ModuleName ModuleName Text
   -- ^ Interface implemented in module for member <member> does not match the signature
+  | NotImplemented ModuleName ModuleName Text
+  -- ^ Interface member not implemented
   | RecursionDetected ModuleName [Text]
   -- ^ Detected use of recursion in module <module>. [functions] for a cycle
   | NotAllowedWithinDefcap Text
@@ -147,6 +149,10 @@ data DesugarError
   | InvalidImports [Text]
   | InvalidImportModuleHash ModuleName ModuleHash
   -- ^ Expected free variable
+  | InvalidSyntax Text
+  | InvalidDefInSchemaPosition Text
+  | InvalidDynamicInvoke Text
+  | DuplicateDefinition Text
   deriving Show
 
 instance Exception DesugarError
@@ -292,6 +298,7 @@ data EvalError
   | EventDoesNotMatchModule ModuleName
   | InvalidEventCap FullyQualifiedName
   | NestedDefpactsNotAdvanced PactId
+  | ExpectedPactValue
   deriving Show
 
 instance Pretty EvalError where
@@ -336,23 +343,6 @@ instance Pretty EvalError where
 
 
 instance Exception EvalError
-
--- data FatalPactError
---   = InvariantFailure Text
---   | FatalOverloadError Text
---   | FatalParserError Text
---   deriving Show
-
--- instance Exception FatalPactError
-
--- instance RenderError FatalPactError where
---   renderError = \case
---     InvariantFailure txt ->
---       Pretty.hsep ["Fatal Execution Error", txt]
---     FatalOverloadError txt ->
---       Pretty.hsep ["Fatal Overload Error", txt]
---     FatalParserError txt ->
---       Pretty.hsep ["Fatal Parser Error", txt]
 
 data PactError info
   = PELexerError LexerError info

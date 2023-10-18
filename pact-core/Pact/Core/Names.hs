@@ -55,6 +55,7 @@ module Pact.Core.Names
  , fqName
  , fqModule
  , fqHash
+ , userTable
  ) where
 
 import Control.Lens
@@ -331,3 +332,6 @@ instance Eq (FQNameRef name) where
   (FQName fqn) == (FQName fqn') = fqn == fqn'
 
 makeLenses ''FullyQualifiedName
+
+userTable :: TableName -> TableName
+userTable (TableName tn) = TableName ("USER_" <> tn)

@@ -40,6 +40,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Char as Char
 import qualified Data.ByteString as BS
+import qualified Pact.Time as PactTime
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
@@ -445,7 +446,7 @@ zipList = \info b cont handler _env -> \case
   [VClosure clo, VList l, VList r] -> zip' (V.toList l) (V.toList r) []
     where
     zip' (x:xs) (y:ys) acc = unsafeApplyTwo clo (VPactValue x) (VPactValue y) >>= \case
-       EvalValue v -> enforcePactValue v >>= zip' xs ys . (:acc)
+       EvalValue v -> enforcePactValue info v >>= zip' xs ys . (:acc)
        v@VError{} -> returnCEK cont handler v
     zip' _ _ acc = returnCEKValue cont handler (VList (V.fromList (reverse acc)))
   args -> argsError info b args
@@ -453,10 +454,11 @@ zipList = \info b cont handler _env -> \case
 -- (try [1] (map (+ 1) [1 2 (enforce false "greg")])
 coreMap :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreMap = \info b cont handler _env -> \case
-  [VClosure fn, VList li] -> map' (V.toList li) []
+  [VClosure fn, VList li] -> do
+    map' (V.toList li) []
     where
     map' (x:xs) acc = applyLam fn [VPactValue x] Mt CEKNoHandler >>= \case
-       EvalValue cv -> enforcePactValue cv >>= map' xs . (:acc)
+       EvalValue cv -> enforcePactValue info cv >>= map' xs . (:acc)
        v@VError{} -> returnCEK cont handler v
     map' _ acc = returnCEKValue cont handler (VList (V.fromList (reverse acc)))
   args -> argsError info b args
@@ -585,7 +587,9 @@ coreResume = \info b cont handler _env -> \case
 enforceTopLevelOnly :: (IsBuiltin b, MonadEval b i m) => i -> b -> m ()
 enforceTopLevelOnly info b = do
   s <- useEvalState esStack
-  when (not (null s)) $ throwExecutionError info (NativeIsTopLevelOnly (builtinName b))
+  when (not (null s)) $ do
+    liftIO $ print s
+    throwExecutionError info (NativeIsTopLevelOnly (builtinName b))
 
 -----------------------------------
 -- Guards and reads
@@ -773,7 +777,7 @@ createTable :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 createTable = \info b cont handler env -> \case
   [VTable tv@(TableValue tn mn _ _)] -> do
     enforceTopLevelOnly info b
-    guardTable info env tv
+    guardTable info env tv GtCreateTable
     let pdb = view cePactDb env
     -- Todo: error handling here
     -- Todo: guard table
@@ -782,31 +786,41 @@ createTable = \info b cont handler env -> \case
   args -> argsError info b args
 
 dbSelect :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-dbSelect = \info b cont handler env -> \case
+dbSelect info b cont handler env = \case
   [VTable tv, VClosure clo] -> do
     let pdb = view cePactDb env
-    guardTable info env tv
+    guardTable info env tv GtSelect
     ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
-    go pdb ks []
-    where
-    go _ [] acc = returnCEKValue cont handler (VList (V.fromList (reverse acc)))
-    go pdb (k:ks) acc = do
+    go Nothing clo tv pdb ks []
+  [VTable tv, VList li, VClosure clo] -> do
+    let pdb = view cePactDb env
+    guardTable info env tv GtSelect
+    li' <- traverse (fmap Field . asString info b) (V.toList li)
+    ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
+    go (Just li') clo tv pdb ks []
+  args -> argsError info b args
+  where
+    go mf _clo _tv _ [] acc = case mf of
+      Just fields -> do
+        let acc' = PObject . (`M.restrictKeys` (S.fromList fields)) <$> reverse acc
+        returnCEKValue cont handler (VList (V.fromList acc'))
+      Nothing ->
+        returnCEKValue cont handler (VList (V.fromList (fmap PObject (reverse acc))))
+    go mf clo tv pdb (k:ks) acc = do
       liftDbFunction info (_pdbRead pdb (tvToDomain tv) k) >>= \case
-        Just (RowData rdata) -> applyLam clo [VObject rdata] cont handler >>= \case
+        Just (RowData rdata) -> applyLam clo [VObject rdata] Mt CEKNoHandler >>= \case
           EvalValue (VBool cond) ->
-            if cond then go pdb ks (PObject rdata:acc) else go pdb ks acc
+            if cond then go mf clo tv pdb ks (rdata:acc) else go mf clo tv pdb ks acc
           EvalValue _ -> returnCEK cont handler (VError "select query error" info)
           VError e i -> returnCEK cont handler (VError e i)
         Nothing -> returnCEK cont handler (VError "select is not enabled" info)
-
-  args -> argsError info b args
 
 -- Todo: error handling
 foldDb :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 foldDb = \info b cont handler env -> \case
   [VTable tv, VClosure queryClo, VClosure consumer] -> do
     let pdb = view cePactDb env
-    guardTable info env tv
+    guardTable info env tv GtSelect
     let tblDomain = DUserTables (_tvName tv)
     keys <- liftDbFunction info (_pdbKeys pdb tblDomain)
     go pdb [] keys
@@ -819,10 +833,12 @@ foldDb = \info b cont handler env -> \case
               EvalValue (VBool qry) -> if qry then do
                 applyLam consumer [VString k, VObject row] Mt CEKNoHandler >>= \case
                   EvalValue (VPactValue v) -> go pdb (v:acc) ks
-                  EvalValue _ -> error "Fold db did not return a pact value"
+                  EvalValue _ ->
+                    returnCEK cont handler (VError "Fold db did not return a pact value" info)
                   v -> returnCEK cont handler v
                 else go pdb acc ks
-              EvalValue _ -> error "Folddb query was not a boolean"
+              EvalValue _ ->
+                returnCEK cont handler (VError "Fold db did not return a pact value" info)
               v@VError{} -> returnCEK cont handler v
           Nothing -> error "no key despite keys"
       go _ acc [] =
@@ -833,7 +849,7 @@ dbRead :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbRead = \info b cont handler env -> \case
   [VTable tv, VString k] -> do
     let pdb = view cePactDb env
-    guardTable info env tv
+    guardTable info env tv GtRead
     liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
       Just (RowData v) -> returnCEKValue cont handler (VObject v)
       Nothing -> returnCEK cont handler (VError "no such read object" info)
@@ -843,7 +859,7 @@ dbWithRead :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbWithRead = \info b cont handler env -> \case
   [VTable tv, VString k, VClosure clo] -> do
     let pdb = view cePactDb env
-    guardTable info env tv
+    guardTable info env tv GtWithRead
     liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
       Just (RowData v) -> applyLam clo [VObject v] cont handler
       Nothing -> returnCEK cont handler (VError "no such read object" info)
@@ -853,7 +869,7 @@ dbWithDefaultRead :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbWithDefaultRead = \info b cont handler env -> \case
   [VTable tv, VString k, VObject defaultObj, VClosure clo] -> do
     let pdb = view cePactDb env
-    guardTable info env tv
+    guardTable info env tv GtWithDefaultRead
     liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
       Just (RowData v) -> applyLam clo [VObject v] cont handler
       Nothing -> applyLam clo [VObject defaultObj] cont handler
@@ -869,7 +885,7 @@ dbInsert = write' Insert
 write' :: (IsBuiltin b, MonadEval b i m) => WriteType -> NativeFunction b i m
 write' wt = \info b cont handler env -> \case
   [VTable tv, VString key, VObject o] -> do
-    guardTable info env tv
+    guardTable info env tv GtWrite
     if checkSchema o (_tvSchema tv) then do
         let pdb = view cePactDb env
         let rowData = RowData o
@@ -882,7 +898,7 @@ write' wt = \info b cont handler env -> \case
 dbUpdate :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbUpdate = \info b cont handler env -> \case
   [VTable tv, VString key, VObject o] -> do
-    guardTable info env tv
+    guardTable info env tv GtWrite
     if checkPartialSchema o (_tvSchema tv) then do
         let pdb = view cePactDb env
         let rowData = RowData o
@@ -894,7 +910,7 @@ dbUpdate = \info b cont handler env -> \case
 dbKeys :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbKeys = \info b cont handler env -> \case
   [VTable tv] -> do
-    guardTable info env tv
+    guardTable info env tv GtKeys
     let pdb = view cePactDb env
     ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
     let li = V.fromList (PString . _rowKey <$> ks)
@@ -904,7 +920,8 @@ dbKeys = \info b cont handler env -> \case
 dbTxIds :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbTxIds = \info b cont handler env -> \case
   [VTable tv, VInteger tid] -> do
-    guardTable info env tv
+    checkNonLocalAllowed info
+    guardTable info env tv GtTxIds
     let pdb = view cePactDb env
     ks <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) (TxId (fromIntegral tid)))
     let li = V.fromList (PInteger . fromIntegral . _txId <$> ks)
@@ -915,7 +932,8 @@ dbTxIds = \info b cont handler env -> \case
 dbTxLog :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbTxLog = \info b cont handler env -> \case
   [VTable tv, VInteger tid] -> do
-    guardTable info env tv
+    checkNonLocalAllowed info
+    guardTable info env tv GtTxLog
     let pdb = view cePactDb env
         txId = TxId (fromInteger tid)
     ks <- liftDbFunction info (_pdbGetTxLog pdb (_tvName tv) txId)
@@ -926,6 +944,25 @@ dbTxLog = \info b cont handler env -> \case
       PObject $ M.fromList
         [ (Field "table", PString domain)
         , (Field "key", PString key)
+        , (Field "value", PObject v)]
+  args -> argsError info b args
+
+dbKeyLog :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+dbKeyLog = \info b cont handler env -> \case
+  [VTable tv, VString key, VInteger tid] -> do
+    checkNonLocalAllowed info
+    guardTable info env tv GtKeyLog
+    let pdb = view cePactDb env
+        txId = TxId (fromInteger tid)
+    ids <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) txId)
+    ks <- concat <$> traverse (\t -> fmap (t,) <$> liftDbFunction info (_pdbGetTxLog pdb (_tvName tv) t)) ids
+    let ks' = filter (\(_, txl) -> _txKey txl == key) ks
+    let li = V.fromList (txLogToObj <$> ks')
+    returnCEKValue cont handler (VList li)
+    where
+    txLogToObj (TxId txid, TxLog _domain _key (RowData v)) = do
+      PObject $ M.fromList
+        [ (Field "txid", PInteger (fromIntegral txid))
         , (Field "value", PObject v)]
   args -> argsError info b args
 
@@ -1237,17 +1274,110 @@ txHash = \info b cont handler _env -> \case
     returnCEKValue cont handler (VString (hashToText h))
   args -> argsError info b args
 
-
-
 coreContinue :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreContinue info b cont handler _env = \case
   [v] -> do
     returnCEKValue cont handler v
   args -> argsError info b args
 
+parseTime :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+parseTime = \info b cont handler _env -> \case
+  [VString fmt, VString s] ->
+    case PactTime.parseTime (T.unpack fmt) (T.unpack s) of
+      Just t -> returnCEKValue cont handler $ VPactValue (PTime t)
+      Nothing ->
+        returnCEK cont handler (VError "parse-time parse failure" info)
+  args -> argsError info b args
+
+formatTime :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+formatTime = \info b cont handler _env -> \case
+  [VString fmt, VPactValue (PTime t)] -> do
+    let timeString = PactTime.formatTime (T.unpack fmt) t
+    returnCEKValue cont handler $ VString (T.pack timeString)
+  args -> argsError info b args
+
+time :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+time = \info b cont handler _env -> \case
+  [VString s] -> do
+    case PactTime.parseTime "%Y-%m-%dT%H:%M:%SZ" (T.unpack s) of
+      Just t -> returnCEKValue cont handler $ VPactValue (PTime t)
+      Nothing ->
+        returnCEK cont handler (VError "time default format parse failure" info)
+  args -> argsError info b args
+
+addTime :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+addTime = \info b cont handler _env -> \case
+  [VPactValue (PTime t), VPactValue (PDecimal seconds)] -> do
+      let newTime = t PactTime..+^ PactTime.fromSeconds seconds
+      returnCEKValue cont handler $ VPactValue (PTime newTime)
+  args -> argsError info b args
+
+diffTime :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+diffTime = \info b cont handler _env -> \case
+  [VPactValue (PTime x), VPactValue (PTime y)] -> do
+    let secondsDifference = PactTime.toSeconds $ x PactTime..-. y
+    returnCEKValue cont handler $ VPactValue $ PDecimal secondsDifference
+  args -> argsError info b args
+
+minutes :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+minutes = \info b cont handler _env -> \case
+  [VDecimal x] -> do
+    let seconds = x * 60
+    returnCEKValue cont handler $ VDecimal seconds
+  [VInteger x] -> do
+    let seconds = fromIntegral x * 60
+    returnCEKValue cont handler $ VDecimal seconds
+  args -> argsError info b args
+
+hours :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+hours = \info b cont handler _env -> \case
+  [VDecimal x] -> do
+    let seconds = x * 60 * 60
+    returnCEKValue cont handler $ VDecimal seconds
+  [VInteger x] -> do
+    let seconds = fromIntegral x * 60 * 60
+    returnCEKValue cont handler $ VDecimal seconds
+  args -> argsError info b args
+
+days :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+days = \info b cont handler _env -> \case
+  [VDecimal x] -> do
+    let seconds = x * 60 * 60 * 24
+    returnCEKValue cont handler $ VDecimal seconds
+  [VInteger x] -> do
+    let seconds = fromIntegral x * 60 * 60 * 24
+    returnCEKValue cont handler $ VDecimal seconds
+  args -> argsError info b args
+
 describeModule :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 describeModule = \info b cont handler env -> \case
-  [VString s] ->
+  [VString s] -> do
+    checkNonLocalAllowed info
+    getModuleData info env (ModuleName s Nothing) >>= \case
+      ModuleData m _ -> returnCEKValue cont handler $
+        VObject $ M.fromList $ fmap (over _1 Field)
+          [ ("name", PString (renderModuleName (_mName m)))
+          , ("hash", PString (hashToText (_mhHash (_mHash m))))
+          , ("interfaces", PList (PString . renderModuleName <$> V.fromList (_mImplements m)))]
+      InterfaceData iface _ -> returnCEKValue cont handler $
+        VObject $ M.fromList $ fmap (over _1 Field)
+          [ ("name", PString (renderModuleName (_ifName iface)))
+          ]
+  args -> argsError info b args
+
+dbDescribeTable :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+dbDescribeTable = \info b cont handler _env -> \case
+  [VTable (TableValue name mname _ _)] ->
+    returnCEKValue cont handler $ VObject $ M.fromList $ fmap (over _1 Field)
+      [("name", PString (_tableName name))
+      ,("module", PString (renderModuleName mname))
+      ,("type", PString "asdf")]
+  args -> argsError info b args
+
+dbDescribeKeySet :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+dbDescribeKeySet = \info b cont handler env -> \case
+  [VString s] -> do
+    checkNonLocalAllowed info
     getModuleData info env (ModuleName s Nothing) >>= \case
       ModuleData m _ -> returnCEKValue cont handler $
         VObject $ M.fromList $ fmap (over _1 Field)
@@ -1273,8 +1403,8 @@ coreCompose = \info b cont handler _env -> \case
 -- Core definitions
 -----------------------------------
 
-unimplemented :: NativeFunction b i m
-unimplemented = error "unimplemented"
+-- unimplemented :: NativeFunction b i m
+-- unimplemented = error "unimplemented"
 
 rawBuiltinEnv
   :: (MonadEval RawBuiltin i m)
@@ -1360,15 +1490,15 @@ rawBuiltinRuntime = \case
   RawCreateModuleGuard -> createModuleGuard
   RawEmitEvent -> coreEmitEvent
   RawCreateTable -> createTable
-  RawDescribeKeyset -> unimplemented
+  RawDescribeKeyset -> dbDescribeKeySet
   RawDescribeModule -> describeModule
-  RawDescribeTable -> unimplemented
+  RawDescribeTable -> dbDescribeTable
   RawDefineKeySet -> defineKeySet
   RawDefineKeysetData -> defineKeySet
   RawFoldDb -> foldDb
   RawInsert -> dbInsert
   RawWrite -> dbWrite
-  RawKeyLog -> unimplemented
+  RawKeyLog -> dbKeyLog
   RawKeys -> dbKeys
   RawRead -> dbRead
   RawSelect -> dbSelect
@@ -1384,5 +1514,13 @@ rawBuiltinRuntime = \case
   RawHash -> coreHash
   RawTxHash -> txHash
   RawContinue -> coreContinue
+  RawParseTime -> parseTime
+  RawFormatTime -> formatTime
+  RawTime -> time
+  RawAddTime -> addTime
+  RawDiffTime -> diffTime
+  RawHours -> hours
+  RawMinutes -> minutes
+  RawDays -> days
   RawCompose -> coreCompose
-
+  RawSelectWithFields -> dbSelect

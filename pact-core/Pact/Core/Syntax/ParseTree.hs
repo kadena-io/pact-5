@@ -46,7 +46,6 @@ data Type
   | TyKeyset
   | TyObject ParsedTyName
   | TyTable ParsedTyName
-  | TyTime
   | TyPolyObject
   deriving (Show, Eq)
 
@@ -61,6 +60,9 @@ pattern TyBool = TyPrim PrimBool
 
 pattern TyString :: Type
 pattern TyString = TyPrim PrimString
+
+pattern TyTime :: Type
+pattern TyTime = TyPrim PrimTime
 
 pattern TyUnit :: Type
 pattern TyUnit = TyPrim PrimUnit
@@ -77,7 +79,6 @@ instance Pretty Type where
     TyKeyset -> "keyset"
     TyObject qn -> "object" <> braces (pretty qn)
     TyPolyObject -> "object"
-    TyTime -> "time"
     TyTable o -> "table" <> braces (pretty o)
 
 

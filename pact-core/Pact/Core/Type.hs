@@ -13,7 +13,7 @@ module Pact.Core.Type
 --  , TypeScheme(..)
  , pattern TyInt
  , pattern TyDecimal
---  , pattern TyTime
+ , pattern TyTime
  , pattern TyBool
  , pattern TyString
  , pattern TyUnit
@@ -52,6 +52,7 @@ data PrimType =
   PrimBool |
   PrimString |
   PrimGuard |
+  PrimTime |
   PrimUnit
   deriving (Eq,Ord,Show, Enum, Bounded)
 
@@ -59,10 +60,10 @@ instance Pretty PrimType where
   pretty = \case
     PrimInt -> "integer"
     PrimDecimal -> "decimal"
-    -- PrimTime -> "time"
     PrimBool -> "bool"
     PrimString -> "string"
     PrimGuard -> "guard"
+    PrimTime -> "time"
     PrimUnit -> "unit"
 
 -- Todo: caps are a bit strange here
@@ -101,8 +102,8 @@ pattern TyInt = TyPrim PrimInt
 pattern TyDecimal :: Type
 pattern TyDecimal = TyPrim PrimDecimal
 
--- pattern TyTime :: Type n
--- pattern TyTime = TyPrim PrimTime
+pattern TyTime :: Type
+pattern TyTime = TyPrim PrimTime
 
 pattern TyBool :: Type
 pattern TyBool = TyPrim PrimBool

@@ -21,13 +21,11 @@ import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Monad.Trans(lift)
-import Control.Monad.IO.Class(liftIO)
 import System.Console.Haskeline
 import Data.IORef
 import Data.Foldable(traverse_)
 
 import Data.Default
-import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Set as Set
@@ -46,15 +44,15 @@ import Pact.Core.PactValue
 import Pact.Core.Hash
 import Pact.Core.Capabilities
 import Pact.Core.Imports
-import Pact.Core.Errors
 
 main :: IO ()
 main = do
   pdb <- mockPactDb
   g <- newIORef mempty
   evalLog <- newIORef Nothing
-  let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Nothing Transactional
-  ref <- newIORef (ReplState mempty pdb def ee g evalLog (SourceCode mempty) Nothing)
+  let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Nothing Transactional mempty
+      es = EvalState (CapState [] mempty mempty mempty)  [] [] mempty
+  ref <- newIORef (ReplState mempty pdb es ee g evalLog (SourceCode mempty) Nothing)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
@@ -115,7 +113,3 @@ main = do
                 let rs = ReplSource "(interactive)" srcText
                 outputStrLn (T.unpack (replError rs err))
             loop
-
--- tryError :: MonadError a m => m b -> m (Either a b)
--- tryError ma =
---   catchError (Right <$> ma) (pure . Left)

@@ -18,7 +18,7 @@ module Pact.Core.Environment
  , eeMsgSigs, eePactDb
  , eeHash, eeMsgBody
  , eePactStep
- , eePublicData, eeMode
+ , eePublicData, eeMode, eeFlags
  , PactState(..)
  , psLoaded
  , TxCreationTime(..)
@@ -37,6 +37,9 @@ module Pact.Core.Environment
  , HasEvalState(..)
  , StackFrame(..)
  , StackFunctionType(..)
+ , flagRep
+ , flagReps
+ , ExecutionFlag(..)
  ) where
 
 import Data.Int(Int64)
@@ -46,6 +49,9 @@ import Data.Set(Set)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Data.Default
+
+import qualified Data.Text as T
+import qualified Data.Map.Strict as M
 
 import Pact.Core.Gas
 import Pact.Core.Persistence
@@ -125,6 +131,32 @@ instance Default PublicData where
     , _pdBlockTime = 0
     , _pdPrevBlockHash = ""}
 
+-- | Execution flags specify behavior of the runtime environment,
+-- with an orientation towards some alteration of a default behavior.
+-- Thus, a flag should _not_ describe "normal behavior" (the default),
+-- but instead should enable some "unusual" option.
+data ExecutionFlag
+  -- | Disable user module install
+  = FlagDisableModuleInstall
+  -- | Disable database history queries in transactional mode (local-only)
+  | FlagDisableHistoryInTransactionalMode
+  -- | Disable table module guard for read operations in local
+  | FlagAllowReadInLocal
+  -- | Disable emission of pact events
+  | FlagDisablePactEvents
+  -- -- | Enforce key formats. "Positive" polarity to not break legacy repl tests.
+  -- | FlagEnforceKeyFormats
+  deriving (Eq,Ord,Show,Enum,Bounded)
+
+-- | Flag string representation
+flagRep :: ExecutionFlag -> Text
+flagRep = T.pack . drop 4 . show
+
+-- | Flag string representations
+flagReps :: Map Text ExecutionFlag
+flagReps = M.fromList $ map go [minBound .. maxBound]
+  where go f = (flagRep f,f)
+
 -- From pact
 -- | All of the types included in our evaluation environment.
 data EvalEnv b i
@@ -137,6 +169,7 @@ data EvalEnv b i
   , _eePactStep :: Maybe PactStep
   , _eeMode :: ExecutionMode
   -- ^ The pact execution mode: local or transactional
+  , _eeFlags :: Set ExecutionFlag
   }
 
 makeLenses ''EvalEnv
