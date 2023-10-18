@@ -20,6 +20,7 @@ module Pact.Core.Gas
  , constantGasModel
  , freeGasModel
  , freeGasEnv
+ , coreGasPerLegacyGas
  ) where
 
 import Control.Lens
@@ -27,7 +28,7 @@ import Data.Word(Word64)
 import Data.Monoid(Sum(..))
 import Data.Text(Text)
 import qualified Data.Text as T
-import Data.Semiring(Semiring)
+import Data.Semiring(Semiring, fromNatural)
 
 -- | Gas in pact-core, represented as an unsigned
 -- integer, units will go in terms of 1e3 = 2ns
@@ -36,6 +37,9 @@ newtype Gas
   deriving (Eq, Ord, Show)
   deriving (Semigroup, Monoid) via (Sum Word64)
   deriving (Semiring, Enum) via Word64
+
+coreGasPerLegacyGas :: Semiring r => r
+coreGasPerLegacyGas = fromNatural 1000
 
 type GasLimit = Gas
 type GasPrice = Rational
