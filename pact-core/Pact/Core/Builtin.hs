@@ -229,6 +229,8 @@ data RawBuiltin
   | RawB64Encode
   | RawB64Decode
   | RawStrToList
+  | RawYield
+  | RawResume
   | RawBind
   | RawRequireCapability
   | RawComposeCapability
@@ -263,6 +265,7 @@ data RawBuiltin
   | RawWhere
   | RawNotQ
   | RawHash
+  | RawContinue
   -- Time functions
   | RawParseTime
   | RawFormatTime
@@ -359,6 +362,8 @@ rawBuiltinToText = \case
   RawB64Encode -> "base64-encode"
   RawB64Decode -> "base64-decode"
   RawStrToList -> "str-to-list"
+  RawYield -> "yield"
+  RawResume -> "resume"
   RawBind -> "bind"
   RawRequireCapability -> "require-capability"
   RawComposeCapability -> "compose-capability"
@@ -389,6 +394,7 @@ rawBuiltinToText = \case
   RawWhere -> "where"
   RawNotQ -> "not?"
   RawHash -> "hash"
+  RawContinue -> "continue"
   RawParseTime -> "parse-time"
   RawFormatTime -> "format-time"
   RawTime -> "time"
@@ -481,6 +487,8 @@ instance IsBuiltin RawBuiltin where
     RawB64Encode -> 1
     RawB64Decode -> 1
     RawStrToList -> 1
+    RawYield -> 1
+    RawResume -> 1
     RawBind -> 2
     RawRequireCapability -> 1
     RawComposeCapability -> 1
@@ -511,6 +519,7 @@ instance IsBuiltin RawBuiltin where
     RawWhere -> 3
     RawNotQ -> 2
     RawHash -> 1
+    RawContinue -> 1
     RawParseTime -> 2
     RawFormatTime -> 2
     RawTime -> 1
@@ -550,23 +559,6 @@ data ReplBuiltins
   | RSigKeyset
   | RTestCapability
   | REnvExecConfig
-  -- | RLoad
-  -- | RLoadWithEnv
-  -- | RExpect
-  -- | RExpectFailure
-  -- | RExpectThat
-  -- | RPactState
-  -- | RRollbackTx
-  -- | RSigKeyset
-  -- | RTestCapability
-  -- | RVerify
-  -- | RWithAppliedEnv
-  -- | REnvEnableReplNatives
-  -- | RBeginTx
-  -- | RBench
-  -- | RCommitTx
-  -- | RContinuePact
-  -- | REnvExecConfig
   -- | REnvGas
   -- | REnvGasLimit
   -- | REnvGasLog
@@ -574,6 +566,12 @@ data ReplBuiltins
   -- | REnvGasPrice
   -- | REnvGasRate
   -- | REnvNamespacePolicy
+  -- Defpact
+  | RContinuePact
+  | RContinuePactRollback
+  | RContinuePactRollbackYield
+  | RPactState
+  | RResetPactState
   deriving (Show, Enum, Bounded, Eq)
 
 
@@ -585,6 +583,8 @@ instance IsBuiltin ReplBuiltins where
     RExpectFailureMatch -> 3
     RExpectThat -> 3
     RPrint -> 1
+    RPactState -> 0
+    RResetPactState -> 1
     REnvStackFrame -> 0
     REnvChainData -> 1
     REnvData -> 1
@@ -598,6 +598,9 @@ instance IsBuiltin ReplBuiltins where
     RRollbackTx -> 0
     RSigKeyset -> 1
     RTestCapability -> 1
+    RContinuePact -> 1
+    RContinuePactRollback -> 2
+    RContinuePactRollbackYield -> 3
     REnvExecConfig -> 1
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
@@ -647,6 +650,8 @@ replBuiltinsToText = \case
   RExpectFailureMatch -> "expect-failure-match"
   RExpectThat -> "expect-that"
   RPrint -> "print"
+  RPactState -> "pact-state"
+  RResetPactState -> "reset-pact-state"
   REnvStackFrame -> "env-stackframe"
   REnvChainData -> "env-chain-data"
   REnvData -> "env-data"
@@ -660,9 +665,10 @@ replBuiltinsToText = \case
   RRollbackTx -> "rollback-tx"
   RSigKeyset -> "sig-keyset"
   RTestCapability -> "test-capability"
+  RContinuePact -> "continue-pact"
+  RContinuePactRollback -> "continue-pact-with-rollback"
+  RContinuePactRollbackYield -> "continue-pact-rollback-yield"
   REnvExecConfig -> "env-exec-config"
-  -- RLoad -> "load"
-  -- RLoadWithEnv -> "load-with-env"
 
 replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
 replBuiltinToText f = \case

@@ -51,6 +51,7 @@ import Pact.Core.Guards
 import Pact.Core.Type
 import Pact.Core.PactValue
 import Pact.Core.Persistence
+import Pact.Core.Pacts.Types
 import Pact.Core.Environment
 import Pact.Core.Capabilities
 
@@ -548,16 +549,45 @@ coreAccess = \info b cont handler _env -> \case
         in returnCEK cont handler (VError msg info)
   args -> argsError info b args
 
+
+coreYield :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreYield info b cont handler _env = \case
+  [VObject o] -> go o Nothing
+  [VObject o, VString cid] -> go o (Just (ChainId cid))
+  args -> argsError info b args
+  where
+  go o mcid = do
+    mpe <- useEvalState esPactExec
+    case mpe of
+      Nothing -> throwExecutionError info YieldOutsiteDefPact
+      Just pe -> case mcid of
+        Nothing -> do
+          esPactExec . _Just . peYield .== Just (Yield o Nothing Nothing)
+          returnCEKValue cont handler (VObject o)
+        Just cid -> do
+          sourceChain <- viewCEKEnv (eePublicData . pdPublicMeta . pmChainId)
+          p <- provenanceOf cid
+          when (_peStepHasRollback pe) $ failInvariant info "Cross-chain yield not allowed in step with rollback"
+          esPactExec . _Just . peYield .== Just (Yield o (Just p) (Just sourceChain))
+          returnCEKValue cont handler (VObject o)
+  provenanceOf tid =
+    Provenance tid . _mHash <$> getCallingModule info
+
+
+coreResume :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreResume = \info b cont handler _env -> \case
+  [VClosure clo] -> do
+    mps <- viewCEKEnv eePactStep
+    case mps of
+      Nothing -> throwExecutionError info NoActivePactExec
+      Just pactStep -> case _psResume pactStep of
+        Nothing -> throwExecutionError info (NoYieldInPactStep pactStep)
+        Just (Yield resumeObj _ _) -> applyLam clo [VObject resumeObj] cont handler
+  args -> argsError info b args
+
 -----------------------------------
 -- try-related ops
 -----------------------------------
-
--- coreEnforce :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
--- coreEnforce = \info b cont handler _env -> \case
---   [VLiteral (LBool b'), VLiteral (LString s)] ->
---     if b' then returnCEKValue cont handler (VBool True)
---     else returnCEK cont handler (VError s)
---   args -> argsError info b args
 
 enforceTopLevelOnly :: (IsBuiltin b, MonadEval b i m) => i -> b -> m ()
 enforceTopLevelOnly info b = do
@@ -1249,6 +1279,12 @@ txHash = \info b cont handler _env -> \case
     returnCEKValue cont handler (VString (hashToText h))
   args -> argsError info b args
 
+coreContinue :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreContinue info b cont handler _env = \case
+  [v] -> do
+    returnCEKValue cont handler v
+  args -> argsError info b args
+
 parseTime :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 parseTime = \info b cont handler _env -> \case
   [VString fmt, VString s] ->
@@ -1372,9 +1408,6 @@ coreCompose = \info b cont handler _env -> \case
 -- Core definitions
 -----------------------------------
 
--- unimplemented :: NativeFunction b i m
--- unimplemented = error "unimplemented"
-
 rawBuiltinEnv
   :: (MonadEval RawBuiltin i m)
   => BuiltinEnv RawBuiltin i m
@@ -1442,6 +1475,8 @@ rawBuiltinRuntime = \case
   RawReadString -> coreReadString
   RawReadKeyset -> coreReadKeyset
   RawEnforceGuard -> coreEnforceGuard
+  RawYield -> coreYield
+  RawResume -> coreResume
   RawEnforceKeyset -> coreEnforceGuard
   RawKeysetRefGuard -> keysetRefGuard
   RawAt -> coreAccess
@@ -1480,6 +1515,7 @@ rawBuiltinRuntime = \case
   RawNotQ -> coreNotQ
   RawHash -> coreHash
   RawTxHash -> txHash
+  RawContinue -> coreContinue
   RawParseTime -> parseTime
   RawFormatTime -> formatTime
   RawTime -> time

@@ -190,6 +190,7 @@ data DefKind
   = DKDefun
   | DKDefConst
   | DKDefCap
+  | DKDefPact
   | DKDefSchema Schema
   | DKDefTable
   deriving (Show, Eq)

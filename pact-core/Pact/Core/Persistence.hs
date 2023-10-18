@@ -26,6 +26,7 @@ module Pact.Core.Persistence
  , mdModuleHash
  , readModule, writeModule
  , readKeyset, writeKeySet
+ , readPacts, writePacts
  , GuardTableOp(..)
  , DbOpException(..)
  , TxId(..)
@@ -48,6 +49,7 @@ import Pact.Core.IR.Term
 import Pact.Core.Guards
 import Pact.Core.Hash
 import Pact.Core.PactValue
+import Pact.Core.Pacts.Types
 -- import Pact.Core.Errors
 
 import qualified Data.Map.Strict as M
@@ -137,7 +139,9 @@ data Domain k v b i where
   -- Namespaces :: Domain NamespaceName (Namespace PactValue)
   -- | Pacts map to 'Maybe PactExec' where Nothing indicates
   -- a terminated pact.
-  -- Pacts :: Domain PactId (Maybe PactExec)
+
+  -- | DefPact state, `Nothing` implies DefPact with `PactId` is completed.
+  DPacts :: Domain PactId (Maybe PactExec) b i
 
 data Purity
   -- | Read-only access to systables.
@@ -179,6 +183,12 @@ readKeyset pdb = _pdbRead pdb DKeySets
 
 writeKeySet :: PactDb b i -> WriteType -> KeySetName -> FQKS -> IO ()
 writeKeySet pdb wt = _pdbWrite pdb wt DKeySets
+
+readPacts :: PactDb b i -> PactId -> IO (Maybe (Maybe PactExec))
+readPacts pdb = _pdbRead pdb DPacts
+
+writePacts :: PactDb b i -> WriteType -> PactId -> Maybe PactExec -> IO ()
+writePacts pdb wt = _pdbWrite pdb wt DPacts
 
 data DbOpException
   = WriteException
@@ -229,14 +239,15 @@ mockPactDb = do
   refMod <- newIORef M.empty
   refKs <- newIORef M.empty
   refUsrTbl <- newIORef M.empty
+  refPacts <- newIORef M.empty
   refRb <- newIORef Nothing
   refTxLog <- newIORef mempty
   refTxId <- newIORef 0
   pure $ PactDb
     { _pdbPurity = PImpure
-    , _pdbRead = read' refKs refMod refUsrTbl
-    , _pdbWrite = write refKs refMod refUsrTbl refTxId refTxLog
-    , _pdbKeys = keys refKs refMod refUsrTbl
+    , _pdbRead = read' refKs refMod refUsrTbl refPacts
+    , _pdbWrite = write refKs refMod refUsrTbl refTxId refTxLog refPacts
+    , _pdbKeys = keys refKs refMod refUsrTbl refPacts
     , _pdbCreateUserTable = createUsrTable refUsrTbl refTxLog
     , _pdbBeginTx = beginTx refRb refTxId refTxLog refMod refKs refUsrTbl
     , _pdbCommitTx = commitTx refRb refTxId refTxLog refMod refKs refUsrTbl
@@ -299,9 +310,10 @@ mockPactDb = do
     .  IORef (Map KeySetName FQKS)
     -> IORef (Map ModuleName (ModuleData b i))
     -> IORef (Map TableName (Map RowKey RowData))
+    -> IORef (Map PactId (Maybe PactExec))
     -> Domain k v b i
     -> IO [k]
-  keys refKs refMod refUsrTbl d = case d of
+  keys refKs refMod refUsrTbl refPacts d = case d of
     DKeySets -> do
       r <- readIORef refKs
       return (M.keys r)
@@ -313,6 +325,9 @@ mockPactDb = do
       case M.lookup tbl r of
         Just t -> return (M.keys t)
         Nothing -> throwIO (NoSuchTable tbl)
+    DPacts -> do
+      r <- readIORef refPacts
+      return (M.keys r)
 
   createUsrTable
     :: IORef (Map TableName (Map RowKey RowData))
@@ -334,14 +349,16 @@ mockPactDb = do
     .  IORef (Map KeySetName FQKS)
     -> IORef (Map ModuleName (ModuleData b i))
     -> IORef (Map TableName (Map RowKey RowData))
+    -> IORef (Map PactId (Maybe PactExec))
     -> Domain k v b i
     -> k
     -> IO (Maybe v)
-  read' refKs refMod refUsrTbl domain k = case domain of
+  read' refKs refMod refUsrTbl refPacts domain k = case domain of
     DKeySets -> readKS refKs k
     DModules -> readMod refMod k
     DUserTables tbl ->
       readRowData refUsrTbl tbl k
+    DPacts -> readPacts' refPacts k
 
   checkTable tbl ref = do
     r <- readIORef ref
@@ -354,15 +371,17 @@ mockPactDb = do
     -> IORef (Map TableName (Map RowKey RowData))
     -> IORef Word64
     -> IORef (Map TableName (Map TxId [TxLog RowData]))
+    -> IORef (Map PactId (Maybe PactExec))
     -> WriteType
     -> Domain k v b i
     -> k
     -> v
     -> IO ()
-  write refKs refMod refUsrTbl refTxId refTxLog wt domain k v = case domain of
+  write refKs refMod refUsrTbl refTxId refTxLog refPacts wt domain k v = case domain of
     DKeySets -> writeKS refKs k v
     DModules -> writeMod refMod v
     DUserTables tbl -> writeRowData refUsrTbl refTxId refTxLog tbl wt k v
+    DPacts -> writePacts' refPacts k v
 
   readRowData ref tbl k = do
     checkTable tbl ref
@@ -425,3 +444,9 @@ mockPactDb = do
   writeMod ref md = let
     mname = view mdModuleName md
     in modifyIORef' ref (M.insert mname md)
+
+  readPacts' ref pid = do
+    m <- readIORef ref
+    pure (M.lookup pid m)
+
+  writePacts' ref pid pe = modifyIORef' ref (M.insert pid pe)

@@ -1,0 +1,40 @@
+(begin-tx)
+(module defcap-module GOVERNANCE
+  "Test defpacts"
+
+  (defcap GOVERNANCE ()
+    true)
+
+  (defpact defpact-single-step ()
+    (step "step-0"))
+
+  (defpact defpact-step ()
+    (step "step-0")
+    (step "step-1")
+    (step "step-2"))
+ )
+(commit-tx)
+
+(begin-tx)
+(use defcap-module)
+
+(expect "should return 'step-0'" "step-0" (defpact-single-step))
+(expect-failure "should not executing step again" "not-step-0" (defpact-single-step))
+(commit-tx)
+
+
+;; (begin-tx)
+;; (use defcap-module)
+
+;; (expect-failure "should return 'step-0'" "not-step-0" (defpact-single-step))
+;; (commit-tx)
+
+
+
+(begin-tx)
+(use defcap-module)
+
+(expect "should return 'step-0'" "step-0" (defpact-step))
+(expect "should return 'step-1'" "step-1" (continue-pact 1))
+(expect "should return 'step-2'" "step-2" (continue-pact 2))
+(commit-tx)

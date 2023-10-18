@@ -17,6 +17,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , ceLocal
  , cePactDb
  , ceBuiltins
+ , cePactStep
  , ceInCap
  , EvalEnv(..)
  , NativeFunction
@@ -36,6 +37,11 @@ module Pact.Core.IR.Eval.Runtime.Types
  , EvalResult(..)
  , EvalTEnv(..)
  , emGas, emGasLog, emRuntimeEnv
+ , EvalState(..)
+ , esStack
+ , esCaps, esEvents
+ , csModuleAdmin
+ , esLoaded
  , pattern VLiteral
  , pattern VGuard
  , pattern VList
@@ -49,16 +55,26 @@ module Pact.Core.IR.Eval.Runtime.Types
  , pattern VDefClosure
  , pattern VLamClosure
  , pattern VPartialClosure
+ , pattern VDefPactClosure
  , pattern VNative
  , pattern VPartialNative
  , pattern VCapToken
  , CapFrame(..)
+ , CapState(..)
+ , csSlots, csManaged
+ , ManagedCap(..)
+ , mcCap, mcManaged, mcOriginalCap
+ , ManagedCapType(..)
+ , PactEvent(..)
  , CapPopState(..)
  , LamClosure(..)
  , PartialNativeFn(..)
  , PartialClosure(..)
  , CapTokenClosure(..)
  , CanApply(..)
+ , StackFrame(..)
+ -- defpact
+ , DefPactClosure(..)
  , TableValue(..)
  , ClosureType(..)
  , ErrorState(..)
@@ -88,10 +104,12 @@ import Pact.Core.Hash
 import Pact.Core.IR.Term
 import Pact.Core.Literal
 import Pact.Core.Type
+import qualified Pact.Core.Pacts.Types as P
 import Pact.Core.Persistence
 import Pact.Core.ModRefs
 import Pact.Core.Capabilities
 import Pact.Core.Environment
+import Pact.Core.Pacts.Types (PactExec)
 import qualified Pact.Core.Pretty as P
 
 
@@ -106,10 +124,11 @@ data CEKEnv b i m
   { _ceLocal :: RAList (CEKValue b i m)
   , _cePactDb :: PactDb b i
   , _ceBuiltins :: BuiltinEnv b i m
+  , _cePactStep :: Maybe P.PactStep
   , _ceInCap :: Bool }
 
 instance (Show i, Show b) => Show (CEKEnv b i m) where
-  show (CEKEnv e _ _ _) = show e
+  show (CEKEnv e _ _ _ _) = show e
 
 -- | List of builtins
 type BuiltinEnv b i m = i -> b -> CEKEnv b i m -> NativeFn b i m
@@ -124,7 +143,6 @@ data Closure b i m
   { _cloFnName :: !Text
   , _cloModName :: !ModuleName
   , _cloTypes :: ClosureType
-  -- , _cloTypes :: !(NonEmpty (Maybe Type))
   , _cloArity :: !Int
   , _cloTerm :: !(EvalTerm b i)
   , _cloRType :: !(Maybe Type)
@@ -136,7 +154,6 @@ data Closure b i m
 -- but is not partially applied
 data LamClosure b i m
   = LamClosure
-  -- { _lcloTypes :: !(NonEmpty (Maybe Type))
   { _lcloTypes :: ClosureType
   , _lcloArity :: Int
   , _lcloTerm :: !(EvalTerm b i)
@@ -159,6 +176,15 @@ data PartialClosure b i m
   , _pcloInfo :: i
   } deriving Show
 
+data DefPactClosure b i m
+  = DefPactClosure
+  { _pactcloFQN :: FullyQualifiedName
+  , _pactcloTypes :: !ClosureType
+  , _pactcloArity :: Int
+  , _pactEnv :: !(CEKEnv b i m)
+  , _pactcloInfo :: i
+  } deriving Show
+
 data CapTokenClosure i
   = CapTokenClosure
   { _ctcCapName :: FullyQualifiedName
@@ -173,6 +199,7 @@ data CanApply b i m
   | PC {-# UNPACK #-} !(PartialClosure b i m)
   | N {-# UNPACK #-} !(NativeFn b i m)
   | PN {-# UNPACK #-} !(PartialNativeFn b i m)
+  | DPC {-# UNPACK #-} !(DefPactClosure b i m)
   | CT {-# UNPACK #-} !(CapTokenClosure i)
   deriving Show
 
@@ -247,6 +274,9 @@ pattern VLamClosure clo = VClosure (LC clo)
 
 pattern VPartialClosure :: PartialClosure b i m -> CEKValue b i m
 pattern VPartialClosure clo = VClosure (PC clo)
+
+pattern VDefPactClosure :: DefPactClosure b i m -> CEKValue b i m
+pattern VDefPactClosure clo = VClosure (DPC clo)
 
 -- | Result of an evaluation step, either a CEK value or an error.
 data EvalResult b i m
@@ -382,6 +412,8 @@ data Cont b i m
   --    or a simple return value in the case of `compose-capability`
   --  - The rest of the continuation
   | CapPopC CapPopState (Cont b i m)
+  | PactStepC (CEKEnv b i m) (Cont b i m)
+  | NestedPactStepC (CEKEnv b i m) (Cont b i m) PactExec
   | UserGuardC (Cont b i m)
   | StackPopC i (Maybe Type) (Cont b i m)
   | EnforceErrorC i (Cont b i m)

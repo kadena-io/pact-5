@@ -52,6 +52,9 @@ module Pact.Core.Names
  , RowKey(..)
  , renderFullyQualName
  , FQNameRef(..)
+ , fqName
+ , fqModule
+ , fqHash
  , userTable
  ) where
 
@@ -327,6 +330,8 @@ instance Show (FQNameRef name) where
 instance Eq (FQNameRef name) where
   (FQParsed pn) == (FQParsed pn') = pn == pn'
   (FQName fqn) == (FQName fqn') = fqn == fqn'
+
+makeLenses ''FullyQualifiedName
 
 userTable :: TableName -> TableName
 userTable (TableName tn) = TableName ("USER_" <> tn)
