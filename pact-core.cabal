@@ -106,6 +106,7 @@ library
     Pact.Core.ModRefs
     Pact.Core.Interpreter
     Pact.Core.Environment
+    Pact.Core.StableEncoding
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
