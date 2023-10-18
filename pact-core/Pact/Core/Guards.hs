@@ -11,11 +11,13 @@ module Pact.Core.Guards
 , UserGuard(..)
 , CapabilityGuard(..)
 , KSPredicate(..)
+, predicateToString
 , ModuleGuard(..)
 , CapGovRef(..)
 )
 where
 
+import Data.String
 import Data.Text(Text)
 import qualified Data.Set as S
 import Pact.Core.Pretty
@@ -58,11 +60,14 @@ data KSPredicate name
   -- | CustomPredicate name
   deriving (Eq, Show, Ord)
 
-instance Pretty (KSPredicate name) where
-  pretty = \case
+predicateToString :: IsString s => KSPredicate name -> s
+predicateToString = \case
     KeysAll -> "keys-all"
     Keys2 -> "keys2"
     KeysAny -> "keys-any"
+
+instance Pretty (KSPredicate name) where
+  pretty = predicateToString
 
 data KeySet name
   = KeySet
