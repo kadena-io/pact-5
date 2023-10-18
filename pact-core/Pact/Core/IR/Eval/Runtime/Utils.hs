@@ -6,12 +6,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE InstanceSigs #-}
 
 module Pact.Core.IR.Eval.Runtime.Utils
  ( mkBuiltinFn
@@ -44,6 +39,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , checkNonLocalAllowed
  , evalStateToErrorState
  , restoreFromErrorState
+ , (.==)
  ) where
 
 import Control.Lens hiding ((%%=))
@@ -70,8 +66,8 @@ import Pact.Core.IR.Eval.Runtime.Types
 import Pact.Core.Literal
 import Pact.Core.Capabilities
 import Pact.Core.Persistence
-import Pact.Core.Environment
 import Pact.Core.Hash
+import Pact.Core.Environment
 
 mkBuiltinFn
   :: (IsBuiltin b)
@@ -142,16 +138,19 @@ viewCEKEnv l = view l <$> readEnv
 viewsCEKEnv :: (MonadEval b i m) => Lens' (EvalEnv b i) s -> (s -> a) -> m a
 viewsCEKEnv f l = views f l <$> readEnv
 
-setEvalState :: (MonadEval b i m) => Lens' (EvalState b i) s -> s -> m ()
+setEvalState :: (MonadEval b i m) => Traversal' (EvalState b i) s -> s -> m ()
 setEvalState l s = modifyEvalState (set l s)
+
+(.==) :: (MonadEval b i m) => Traversal' (EvalState b i) s -> s -> m ()
+l .== s = modifyEvalState (set l s)
 
 -- overEvalState :: (MonadEval b i m) => Lens' (EvalState b i) s -> (s -> s) -> m ()
 -- overEvalState l f = modifyCEKState (over l f)
 
-(%%=) :: (MonadEval b i m) => Lens' (EvalState b i) s -> (s -> s) -> m ()
+(%%=) :: (MonadEval b i m) => Traversal' (EvalState b i) s -> (s -> s) -> m ()
 l %%= f = modifyEvalState (over l f)
 
-infix 4 %%=
+infix 4 %%=, .==
 
 useEvalState :: (MonadEval b i m) => Lens' (EvalState b i) s -> m s
 useEvalState l = view l <$> getEvalState
@@ -365,4 +364,5 @@ sysOnlyEnv e
     DUserTables _ -> dbOpDisallowed
     DKeySets -> _pdbRead pdb DKeySets k
     DModules -> _pdbRead pdb dom k
+    DPacts -> _pdbRead pdb dom k
 

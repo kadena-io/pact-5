@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TypeApplications #-}
@@ -33,7 +32,6 @@ import Pact.Core.Errors
 import Pact.Core.IR.Term
 import Pact.Core.Compile
 import Pact.Core.Interpreter
-import Pact.Core.PactValue
 import Pact.Core.Environment
 
 
@@ -41,6 +39,7 @@ import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Repl.Runtime
 import Pact.Core.Repl.Runtime.ReplBuiltin
 import Pact.Core.Hash
+import Pact.Core.PactValue (EnvData(..))
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
@@ -62,7 +61,7 @@ loadFile loc = do
 
 defaultEvalEnv :: PactDb b i -> EvalEnv b i
 defaultEvalEnv pdb =
-  EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Transactional mempty
+  EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Nothing Transactional mempty
 
 interpretReplProgram
   :: SourceCode
@@ -136,6 +135,7 @@ interpretReplProgram sc@(SourceCode source) = do
         throwError (PEExecutionError (EvalError txt) (view termInfo te))
       EvalValue v -> do
         loaded .= view (reState . esLoaded) st
+        (replEvalState . esPactExec) .= view (reState . esPactExec) st
         case v of
           VClosure{} -> do
             pure IPClosure

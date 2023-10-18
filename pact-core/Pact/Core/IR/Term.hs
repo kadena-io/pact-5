@@ -48,6 +48,31 @@ data Defun name ty builtin info
   , _dfunInfo :: info
   } deriving (Show, Functor)
 
+data PactStep name ty builtin info
+  = Step (Term name ty builtin info) (Maybe [Term name ty builtin info])
+  | StepWithRollback
+    (Term name ty builtin info)
+    (Term name ty builtin info)
+    (Maybe [Term name ty builtin info])
+  deriving (Show, Functor)
+
+hasRollback :: PactStep n t b i -> Bool
+hasRollback Step{} = False
+hasRollback StepWithRollback{} = True
+
+ordinaryPactStepExec :: PactStep name ty builtin info -> Term name ty builtin info
+ordinaryPactStepExec (Step expr _) = expr
+ordinaryPactStepExec (StepWithRollback expr _ _) = expr
+
+data DefPact name ty builtin info
+  = DefPact
+  { _dpName :: Text
+  , _dpArgs :: [Arg ty]
+  , _dpRetType :: Maybe ty
+  , _dpSteps :: NonEmpty (PactStep name ty builtin info)
+  , _dpInfo :: info
+  } deriving (Show, Functor)
+
 data DefConst name ty builtin info
   = DefConst
   { _dcName :: Text
@@ -100,6 +125,7 @@ data Def name ty builtin info
   | DCap (DefCap name ty builtin info)
   | DSchema (DefSchema ty info)
   | DTable (DefTable name info)
+  | DPact (DefPact name ty builtin info)
   deriving (Show, Functor)
 
 
@@ -123,6 +149,14 @@ data Interface name ty builtin info
   , _ifInfo :: info
   } deriving (Show, Functor)
 
+data IfDefPact ty info
+  = IfDefPact
+  { _ifdpName :: Text
+  , _ifdpArgs :: [Arg ty]
+  , _ifdpRType :: Maybe ty
+  , _ifdpInfo :: info
+  } deriving (Show, Functor)
+
 data IfDefun ty info
   = IfDefun
   { _ifdName :: Text
@@ -143,6 +177,7 @@ data IfDef name ty builtin info
   = IfDfun (IfDefun ty info)
   | IfDConst (DefConst name ty builtin info)
   | IfDCap (IfDefCap ty info)
+  | IfDPact (IfDefPact ty info)
   | IfDSchema (DefSchema ty info)
   deriving (Show, Functor)
 
@@ -174,6 +209,7 @@ defName (DConst d) = _dcName d
 defName (DCap d) = _dcapName d
 defName (DSchema d) = _dsName d
 defName (DTable d) = _dtName d
+defName (DPact d) = _dpName d
 
 defKind :: Def name Type b i -> DefKind
 defKind = \case
@@ -182,12 +218,15 @@ defKind = \case
   DCap{} -> DKDefCap
   DSchema ds -> DKDefSchema (Schema (_dsSchema ds))
   DTable{} -> DKDefTable
+  DPact{} -> DKDefPact
 
 ifDefKind :: IfDef name Type b i -> Maybe DefKind
 ifDefKind = \case
   IfDfun{} -> Nothing
   IfDCap{} -> Nothing
   IfDConst{} -> Just DKDefConst
+  IfDPact{} -> Nothing
+
   IfDSchema ds -> Just (DKDefSchema (Schema (_dsSchema ds)))
 
 ifDefName :: IfDef name ty builtin i -> Text
@@ -195,6 +234,7 @@ ifDefName = \case
   IfDfun ifd -> _ifdName ifd
   IfDConst dc -> _dcName dc
   IfDCap ifd -> _ifdcName ifd
+  IfDPact ifd -> _ifdpName ifd
   IfDSchema dc -> _dsName dc
 
 defInfo :: Def name ty b i -> i
@@ -204,12 +244,14 @@ defInfo = \case
   DCap dc -> _dcapInfo dc
   DSchema dc -> _dsInfo dc
   DTable dt -> _dtInfo dt
+  DPact dp -> _dpInfo dp
 
 ifDefToDef :: IfDef name ty b i -> Maybe (Def name ty b i)
 ifDefToDef = \case
   IfDfun _ -> Nothing
   IfDConst dc -> Just (DConst dc)
   IfDCap _ -> Nothing
+  IfDPact _ -> Nothing
   IfDSchema dc -> Just (DSchema dc)
 
 ifDefInfo :: IfDef name ty b i -> i
@@ -217,6 +259,7 @@ ifDefInfo = \case
   IfDfun de -> _ifdInfo de
   IfDConst dc -> _dcInfo dc
   IfDCap d -> _ifdcInfo d
+  IfDPact d -> _ifdpInfo d
   IfDSchema d -> _dsInfo d
 
 type EvalTerm b i = Term Name Type b i
@@ -227,6 +270,7 @@ type EvalInterface b i = Interface Name Type b i
 data LamInfo
   = TLDefun ModuleName Text
   | TLDefCap ModuleName Text
+  | TLDefPact ModuleName Text
   | AnonLamInfo
   deriving Show
 

@@ -7,6 +7,7 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -240,6 +241,11 @@ instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
     App (Builtin (RBuiltinRepl RExpectFailure) i) [e1, suspendTerm e2] i
   desugarAppArity i (RBuiltinRepl RExpectFailure) [e1, e2, e3] | isn't _Lam e2 =
     App (Builtin (RBuiltinRepl RExpectFailureMatch) i) [e1, e2, suspendTerm e3] i
+  desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2] | isn't _Lam e2 =
+    App (Builtin (RBuiltinRepl RContinuePactRollback) i) [e1, e2] i
+  desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2, e3]
+    | isn't _Lam e2 && isn't _Lam e3 =
+      App (Builtin (RBuiltinRepl RContinuePactRollbackYield) i) [e1, e2, e3] i
   desugarAppArity i b ne =
     App (Builtin b i) ne i
 
@@ -408,7 +414,31 @@ desugarDefun (Lisp.Defun defname (arg:args) mrt body _ _ i) = do
       pure $ Defun defname (NE.toList args') mrt bodyLam i
     Nothing -> throwDesugarError (NotAllowedOutsideModule "defun") i
 
+desugarDefPact
+  :: forall i m raw reso. MonadDesugar raw reso i m
+  => Lisp.DefPact i
+  -> m (DefPact ParsedName DesugarType raw i)
+desugarDefPact (Lisp.DefPact dpname _ _ [] _ _ i) =
+  throwDesugarError (EmptyDefPact dpname) i
+desugarDefPact (Lisp.DefPact dpname margs rt (step:steps) _ _ i) =
+  view reCurrModule >>= \case
+    Just (mn,_) -> do
+      let args' = toArg <$> margs
+      steps' <- forM (step :| steps) \case
+        Lisp.Step s ms ->
+          Step <$> desugarLispTerm s <*> traverse (traverse desugarLispTerm) ms
+        Lisp.StepWithRollback s rb ms ->
+          StepWithRollback
+          <$> desugarLispTerm s
+          <*> desugarLispTerm rb
+          <*> traverse (traverse desugarLispTerm) ms
 
+      -- In DefPacts, last step is not allowed to rollback.
+      when (hasRollback $ NE.last steps') $
+        throwDesugarError (LastStepWithRollback (QualifiedName dpname mn)) i
+
+      pure $ DefPact dpname args' rt steps' i
+    Nothing -> throwDesugarError (NotAllowedOutsideModule "defpact") i
 
 desugarDefConst
   :: (MonadDesugar raw reso i m)
@@ -483,8 +513,14 @@ desugarIfDef = \case
     let args = toArg <$> margs
     pure $ IfDefCap n args rty i
   Lisp.IfDConst dc -> IfDConst <$> desugarDefConst dc
+  Lisp.IfDPact (Lisp.IfDefPact n margs rty _ _ i) -> IfDPact <$> case margs of
+    [] -> do
+      pure $ IfDefPact n [] rty i
+    _ -> do
+      let args = toArg <$> margs
+      rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) pure rty
+      pure $ IfDefPact n args (Just rty') i
   Lisp.IfDSchema ds -> IfDSchema <$> desugarDefSchema ds
-  _ -> error "unimplemented: special interface decl forms in desugar"
 
 desugarDef
   :: (MonadDesugar raw reso i m)
@@ -496,7 +532,7 @@ desugarDef = \case
   Lisp.DCap dc -> DCap <$> desugarDefCap dc
   Lisp.DSchema d -> DSchema <$> desugarDefSchema d
   Lisp.DTable d -> DTable <$> desugarDefTable d
-  _ -> error "unimplemented"
+  Lisp.DPact d -> DPact <$> desugarDefPact d
 
 -- Todo: Module hashing, either on source or
 -- the contents
@@ -644,7 +680,7 @@ defTableSCC
   -> DefTable ParsedName info
   -> Set Text
 defTableSCC mn cd dt =
-  let (DesugaredTable t) = (_dtSchema dt)
+  let (DesugaredTable t) =  (_dtSchema dt)
   in parsedNameSCC mn cd t
 
 defCapSCC
@@ -659,6 +695,19 @@ defCapSCC mn cd dc =
     _ -> termSCC mn cd (_dcapTerm dc)
 
 
+defPactSCC
+  :: ModuleName
+  -> Set Text
+  -> PactStep ParsedName DesugarType b i
+  -> Set Text
+defPactSCC mn cd = \case
+  Step step mSteps -> S.union (termSCC mn cd step) (stepsSCC mSteps)
+  StepWithRollback step rollback mSteps ->
+    S.unions $ stepsSCC mSteps : [termSCC mn cd step, termSCC mn cd rollback]
+  where
+    stepsSCC :: Maybe [Term ParsedName DesugarType b i] -> Set Text
+    stepsSCC = maybe S.empty (foldMap $ termSCC mn cd)
+
 defSCC
   :: ModuleName
   -> Set Text
@@ -669,6 +718,7 @@ defSCC mn cd = \case
   DConst d -> defConstSCC mn cd d
   DCap dc -> defCapSCC mn cd dc
   DSchema ds -> foldMap (typeSCC mn cd) ( _dsSchema ds)
+  DPact dp -> foldMap (defPactSCC mn cd) (_dpSteps dp)
   DTable dt -> defTableSCC mn cd dt
 
 ifDefSCC
@@ -680,6 +730,7 @@ ifDefSCC mn currDefs = \case
   IfDfun _ -> mempty
   IfDCap _ -> mempty
   IfDConst d -> defConstSCC mn currDefs d
+  IfDPact _ -> mempty
   IfDSchema ds -> foldMap (typeSCC mn currDefs) ( _dsSchema ds)
 
 -- Todo: this handles imports, rename?
@@ -903,7 +954,7 @@ renameTerm (Var n i) = resolveName i n >>= \case
     | otherwise ->
       throwDesugarError (InvalidDefInTermVariable (rawParsedName n)) i
     where
-    legalVarDefs = [DKDefun, DKDefConst, DKDefTable, DKDefCap]
+    legalVarDefs = [DKDefun, DKDefConst, DKDefTable, DKDefCap, DKDefPact]
   (n', _) -> pure (Var n' i)
 -- Todo: what happens when an argument is shadowed?
 renameTerm (Lam li nsts body i) = do
@@ -1012,6 +1063,42 @@ renameDefun (Defun n args ret term i) = do
   term' <- local (set reCurrDef (Just DKDefun)) $ renameTerm term
   pure (Defun n args' ret' term' i)
 
+renamePactStep
+  :: forall raw reso i m. MonadDesugar raw reso i m
+  => PactStep ParsedName DesugarType raw i
+  -> m (PactStep Name Type raw i)
+renamePactStep = \case
+  Step step mSteps ->
+    Step <$> renameTerm step <*> mListRename mSteps
+  StepWithRollback step rollback mSteps ->
+    StepWithRollback <$> renameTerm step <*> renameTerm rollback <*> mListRename mSteps
+  where
+    mListRename :: Maybe [Term ParsedName DesugarType raw i] -> m (Maybe [Term Name Type raw i])
+    mListRename = maybe (pure Nothing) (fmap Just . traverse renameTerm)
+
+renameDefPact
+  :: MonadDesugar raw reso i m
+  => DefPact ParsedName DesugarType raw i
+  -> m (DefPact Name Type raw i)
+renameDefPact (DefPact n argtys mret steps i) = do
+  args' <- (traverse.traverse) (renameType i) argtys
+  mret' <- traverse (renameType i) mret
+  steps' <- local (set reCurrDef (Just DKDefPact) . bindArgs) $
+    traverse renamePactStep steps
+  pure (DefPact n args' mret' steps' i)
+  where
+  -- Todo: duplication, factor out
+  bindArgs rEnv
+      | null argtys = rEnv
+      | otherwise = let
+        depth = view reVarDepth rEnv
+        len = fromIntegral (length argtys)
+        newDepth = depth + len
+        ixs = [depth .. newDepth - 1]
+        m = M.fromList $ zip (_argName <$> argtys) ((, Nothing) . NBound <$> ixs)
+        in over reBinds (M.union m) $ set reVarDepth newDepth rEnv
+
+
 renameDefSchema
   :: (MonadRenamer reso i m)
   => DefSchema DesugarType i
@@ -1119,6 +1206,7 @@ renameDef = \case
   DCap d -> DCap <$> renameDefCap d
   DSchema d -> DSchema <$> renameDefSchema d
   DTable d -> DTable <$> renameDefTable d
+  DPact d -> DPact <$> renameDefPact d
 
 renameIfDef
   :: (MonadDesugar raw reso i m)
@@ -1138,7 +1226,11 @@ renameIfDef = \case
     args' <- (traverse.traverse) (renameType i) (_ifdcArgs d)
     rtype' <- traverse (renameType i) (_ifdcRType d)
     pure (IfDCap (d{_ifdcArgs = args', _ifdcRType = rtype'}))
-
+  IfDPact d -> do
+    let i = _ifdpInfo d
+    args' <- (traverse.traverse) (renameType i) (_ifdpArgs d)
+    rtype' <- traverse (renameType i) (_ifdpRType d)
+    pure (IfDPact (d{_ifdpArgs = args', _ifdpRType = rtype'}))
 resolveName
   :: (MonadRenamer b i m)
   => i
@@ -1321,6 +1413,14 @@ checkImplements i defs moduleName ifaceName =
         Just d -> throwDesugarError (ImplementationError moduleName ifaceName  (defName d)) i
         Nothing ->
           throwDesugarError (NotImplemented moduleName ifaceName (_ifdcName ifd)) i
+    IfDPact ifd ->
+      case find (\df -> _ifdpName ifd == defName df) defs of
+        Just (DPact v) ->
+          when (_dpArgs v /= _ifdpArgs ifd || _dpRetType v /= _ifdpRType ifd) $
+          throwDesugarError (ImplementationError moduleName ifaceName (_ifdpName ifd)) i
+        Just _ ->  throwDesugarError (ImplementationError moduleName ifaceName (_ifdpName ifd)) i
+        Nothing -> throwDesugarError (NotImplemented moduleName ifaceName (_ifdpName ifd)) i
+
 
 -- | Todo: support imports
 --   Todo: support

@@ -102,4 +102,4 @@ runReplCEK
   -> EvalTerm b i
   -> IO (Either (PactError i) (EvalResult b i (ReplEvalM b i)), ReplEvalState b i)
 runReplCEK env st term =
-  runReplEvalM env st (eval (CEKEnv mempty (view (reEnv . eePactDb) st) (_reBuiltins env) False) term)
+  runReplEvalM env st (eval (CEKEnv mempty (view (reEnv . eePactDb) st) (_reBuiltins env) (view (reEnv . eePactStep) st) False) term)

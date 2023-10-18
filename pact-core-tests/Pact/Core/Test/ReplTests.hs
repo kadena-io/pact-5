@@ -49,7 +49,7 @@ runReplTest file src = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
   pdb <- mockPactDb
-  let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Transactional mempty
+  let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Nothing Transactional mempty
   let rstate = ReplState
             { _replFlags =  mempty
             , _replEvalState = def
