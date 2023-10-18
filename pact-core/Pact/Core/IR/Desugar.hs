@@ -252,28 +252,12 @@ instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
 throwDesugarError :: MonadError (PactError i) m => DesugarError -> i -> m a
 throwDesugarError de = throwError . PEDesugarError de
 
--- Really ugly hack because
--- of inconsistent old prod pact syntax :)))))))
--- pattern HigherOrderApp :: Text -> i -> Text -> i -> [Lisp.Expr i] -> i -> i -> Lisp.Expr i
--- pattern HigherOrderApp fnCaller ci fnCallee fi xs ai unused =
---   Lisp.App (Lisp.Var (BN (BareName fnCaller)) ci)
---     (Lisp.App (Lisp.Var (BN (BareName fnCallee)) unused) [] fi :   xs)
---     ai
-
 desugarLispTerm
   :: forall raw reso i m
   . (MonadDesugar raw reso i m)
   => Lisp.Expr i
   -> m (Term ParsedName DesugarType raw i)
 desugarLispTerm = \case
-  -- HigherOrderApp fnCaller ci fnCallee fi xs ai _
-  --   | fnCaller `elem` specialCallsiteFns -> do
-  --     caller <- desugarLispTerm (Lisp.Var (BN (BareName fnCaller)) ci)
-  --     callee <- desugarLispTerm $ Lisp.Var (BN (BareName fnCallee)) fi
-  --     xs' <- traverse desugarLispTerm xs
-  --     pure (App caller (callee:xs') ai)
-  --   where
-  --   specialCallsiteFns = ["map", "fold", "zip"]
   Lisp.Var (BN n) i  ->
     case M.lookup (_bnName n) reservedNatives' of
       Just b -> pure (Builtin b i)
@@ -320,17 +304,6 @@ desugarLispTerm = \case
         in Let arg access body i
   Lisp.If e1 e2 e3 i -> Conditional <$>
      (CIf <$> desugarLispTerm e1 <*> desugarLispTerm e2 <*> desugarLispTerm e3) <*> pure i
-  -- Note: this is our "unit arg application" desugaring
-  -- This _may not_ stay long term
-  -- Lisp.App e [] i ->
-  --   App <$> desugarLispTerm e <&> [] <*> pure i
-    -- v@Var{} ->
-    --   let arg = Constant LUnit i :| []
-    --   in App v arg i
-    -- v@Builtin{} ->
-    --   let arg = Constant LUnit i :| []
-    --   in App v arg i
-    -- e' -> e'
   Lisp.App (Lisp.Operator o _oi) [e1, e2] i -> case o of
     Lisp.AndOp ->
       Conditional <$> (CAnd <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure i
@@ -367,14 +340,6 @@ desugarLispTerm = \case
       WithCapability pn <$> traverse desugarLispTerm exs <*> desugarLispTerm ex
     Lisp.CreateUserGuard pn exs ->
       CreateUserGuard pn <$> traverse desugarLispTerm exs
-    -- Lisp.RequireCapability pn exs ->
-    --   RequireCapability pn <$> traverse desugarLispTerm exs
-    -- Lisp.ComposeCapability pn exs ->
-    --   ComposeCapability pn <$> traverse desugarLispTerm exs
-    -- Lisp.InstallCapability pn exs ->
-    --   InstallCapability pn <$> traverse desugarLispTerm exs
-    -- Lisp.EmitEvent pn exs ->
-    --   EmitEvent pn <$> traverse desugarLispTerm exs
   where
   binderToLet i (Lisp.Binder n mty expr) term = do
     expr' <- desugarLispTerm expr
@@ -1549,13 +1514,6 @@ runDesugarReplDefConst _ pdb loaded =
   . RenamerT
   . (desugarDefConst >=> renameReplDefConst)
 
--- runDesugarModule
---   :: (DesugarTerm term raw i)
---   => Loaded b i
---   -> Lisp.Module term i
---   -> IO (DesugarOutput b i (Module Name TypeVar raw i))
--- runDesugarModule loaded = runDesugarModule' loaded 0
-
 runDesugarTopLevel
   :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
   => Proxy raw
@@ -1580,12 +1538,12 @@ runDesugarReplTopLevel
   -> m (DesugarOutput reso i (ReplTopLevel Name Type raw i))
 runDesugarReplTopLevel proxy pdb loaded = \case
   -- We do not run desugar here for the repl.
-  -- We pattern match before we ever hit this case, therefore this should _not_
-  -- be callable
+  -- We pattern match before we ever hit this case, therefore this should not be reachable
+  -- This is fine to stay in `error`. The repl special functions and forms do not show up on chain
+  -- and we want this to be a clear haskell error. The current repl implementation
+  -- makes sure to not ever hit this.
   Lisp.RTLTopLevel _ ->
-    -- Todo: error
-    error "unreachable"
-    -- over dsOut RTLTopLevel <$> runDesugarTopLevel proxy pdb loaded m
+    error "Fatal: do not use desugarReplTopLevel on toplevel forms from the parser. Use runDesugarTopLevel directly"
   Lisp.RTLDefun de ->
     over dsOut RTLDefun <$> runDesugarReplDefun proxy pdb loaded de
   Lisp.RTLDefConst dc ->
