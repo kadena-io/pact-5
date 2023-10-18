@@ -32,6 +32,7 @@ common pact-core-common
     , filepath
     , lens
     , mtl
+    , pact-json
     , pact-time
     , prettyprinter
     , prettyprinter-ansi-terminal
