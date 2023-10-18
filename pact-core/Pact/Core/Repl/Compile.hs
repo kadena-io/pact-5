@@ -53,11 +53,14 @@ data ReplCompileValue
   | RLoadedDefConst Text
   deriving Show
 
-loadFile :: FilePath -> ReplM ReplRawBuiltin [ReplCompileValue]
-loadFile loc = do
+loadFile
+  :: FilePath
+  -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
+  -> ReplM ReplRawBuiltin [ReplCompileValue]
+loadFile loc display = do
   source <- SourceCode <$> liftIO (B.readFile loc)
   replCurrSource .= source
-  interpretReplProgram source
+  interpretReplProgram source display
 
 defaultEvalEnv :: PactDb b i -> EvalEnv b i
 defaultEvalEnv pdb =
@@ -65,19 +68,15 @@ defaultEvalEnv pdb =
 
 interpretReplProgram
   :: SourceCode
+  -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
   -> ReplM ReplRawBuiltin [ReplCompileValue]
-interpretReplProgram sc@(SourceCode source) = do
+interpretReplProgram sc@(SourceCode source) display = do
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ Lisp.parseReplProgram lexx
   concat <$> traverse pipe parsed
   where
-  debugIfLispExpr = \case
-    Lisp.RTLTerm t -> debugIfFlagSet ReplDebugParser t
-    _ -> pure ()
-  debugIfIRExpr flag = \case
-    RTLTerm t -> debugIfFlagSet flag t
-    _ -> pure ()
+  displayValue p = p <$ display p
   pipe = \case
     Lisp.RTL rtl ->
       pure <$> pipe' rtl
@@ -89,7 +88,7 @@ interpretReplProgram sc@(SourceCode source) = do
           pactdb <- liftIO mockPactDb
           replPactDb .= pactdb
           replEvalEnv .= defaultEvalEnv pactdb
-          out <- loadFile (T.unpack txt)
+          out <- loadFile (T.unpack txt) display
           replCurrSource .= oldSrc
           pure out
         | otherwise -> do
@@ -97,24 +96,22 @@ interpretReplProgram sc@(SourceCode source) = do
           oldEs <- use evalState
           oldEE <- use replEvalEnv
           when b $ evalState .= def
-          out <- loadFile (T.unpack txt)
+          out <- loadFile (T.unpack txt) display
           replEvalEnv .= oldEE
           evalState .= oldEs
           replCurrSource .= oldSrc
           pure out
-  pipe' tl = do
-    pactdb <- use replPactDb
-    debugIfLispExpr tl
-    _ <- moduleGov pactdb tl
-    lastLoaded <- use loaded
-    ds <- runDesugarReplTopLevel (Proxy @ReplRawBuiltin) pactdb lastLoaded tl
-    debugIfIRExpr ReplDebugDesugar (_dsOut ds)
-    loaded .= _dsLoaded ds
-    interpret ds
-
-  moduleGov pactdb (Lisp.RTLTopLevel tl) =
-    () <$ evalModuleGovernance pactdb interpreter tl
-  moduleGov _ _ = pure ()
+  pipe' tl = case tl of
+    Lisp.RTLTopLevel toplevel -> do
+      pdb <- use replPactDb
+      v <- interpretTopLevel pdb interpreter toplevel
+      displayValue (RCompileValue v)
+    _ ->  do
+      pactdb <- use replPactDb
+      lastLoaded <- use loaded
+      ds <- runDesugarReplTopLevel (Proxy @ReplRawBuiltin) pactdb lastLoaded tl
+      loaded .= _dsLoaded ds
+      interpret ds
 
   interpreter = Interpreter $ \te -> do
     evalGas <- use replGas
@@ -122,8 +119,6 @@ interpretReplProgram sc@(SourceCode source) = do
     es <- use replEvalState
     tx <- use replTx
     ee <- use replEvalEnv
-    -- todo: cache?
-    -- mhashes <- uses (loaded . loModules) (fmap (view mdModuleHash))
     let rEnv = ReplEvalEnv evalGas evalLog replBuiltinEnv
         rState = ReplEvalState ee es sc tx
     (out, st) <- liftIO (runReplCEK rEnv rState te)
@@ -142,18 +137,13 @@ interpretReplProgram sc@(SourceCode source) = do
           VTable tv -> pure (IPTable (_tvName tv))
           VPactValue pv -> do
             pure (IPV pv (view termInfo te))
-  interpret (DesugarOutput tl _ deps) = do
-    pdb <- use replPactDb
-    lo <- use loaded
+  interpret (DesugarOutput tl _ _deps) = do
     case tl of
-      RTLTopLevel tt -> do
-        RCompileValue <$> interpretTopLevel pdb interpreter (DesugarOutput tt lo deps)
-        where
       RTLDefun df -> do
         let fqn = FullyQualifiedName replModuleName (_dfunName df) replModuleHash
         loaded . loAllLoaded %= M.insert fqn (Dfun df)
-        pure $ RLoadedDefun $ _dfunName df
+        displayValue $ RLoadedDefun $ _dfunName df
       RTLDefConst dc -> do
         let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
         loaded . loAllLoaded %= M.insert fqn (DConst dc)
-        pure $ RLoadedDefConst $ _dcName dc
+        displayValue $ RLoadedDefConst $ _dcName dc

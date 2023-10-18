@@ -64,6 +64,7 @@ import Pact.Core.Errors
 import Pact.Core.Debug
 import Pact.Core.Environment
 import qualified Pact.Core.IR.Term as Term
+import qualified Pact.Core.Syntax.ParseTree as Syntax
 
 import System.Console.Haskeline.Completion
 
@@ -131,8 +132,26 @@ makeLenses ''ReplState
 instance HasEvalState (ReplState b) b SpanInfo where
   evalState = replEvalState
 
-instance PhaseDebug (ReplM b) where
-  debugPrint _ _ = pure ()
+instance Pretty b => PhaseDebug b i (ReplM b) where
+  debugPrint dp term = do
+    -- flags <- use replFlags
+    case dp of
+      DPLexer -> whenReplFlagSet ReplDebugLexer $ liftIO $ do
+        putStrLn "----------- Lexer output -----------------"
+        print (pretty term)
+      DPParser -> whenReplFlagSet ReplDebugParser $ case term of
+        Syntax.TLTerm t ->
+          liftIO $ do
+            putStrLn "----------- Parser output ----------------"
+            print (pretty t)
+        _ -> pure ()
+      DPDesugar -> whenReplFlagSet ReplDebugDesugar $ case term of
+        Term.TLTerm t ->
+          liftIO $ do
+            putStrLn "----------- Desugar output ---------------"
+            print (pretty t)
+        _ -> pure ()
+
 
 instance HasLoaded (ReplState b) b SpanInfo where
   loaded = evalState . esLoaded

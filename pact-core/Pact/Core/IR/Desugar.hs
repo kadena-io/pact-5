@@ -1579,8 +1579,13 @@ runDesugarReplTopLevel
   -> Lisp.ReplTopLevel i
   -> m (DesugarOutput reso i (ReplTopLevel Name Type raw i))
 runDesugarReplTopLevel proxy pdb loaded = \case
-  Lisp.RTLTopLevel m ->
-    over dsOut RTLTopLevel <$> runDesugarTopLevel proxy pdb loaded m
+  -- We do not run desugar here for the repl.
+  -- We pattern match before we ever hit this case, therefore this should _not_
+  -- be callable
+  Lisp.RTLTopLevel _ ->
+    -- Todo: error
+    error "unreachable"
+    -- over dsOut RTLTopLevel <$> runDesugarTopLevel proxy pdb loaded m
   Lisp.RTLDefun de ->
     over dsOut RTLDefun <$> runDesugarReplDefun proxy pdb loaded de
   Lisp.RTLDefConst dc ->

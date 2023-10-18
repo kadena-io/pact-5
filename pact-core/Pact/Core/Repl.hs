@@ -78,8 +78,6 @@ main = do
     RLoadedDefConst mn ->
       outputStrLn $ show $
         "loaded defconst" <+> pretty mn
-    -- InterpretValue v _ -> outputStrLn (show (pretty v))
-    -- InterpretLog t -> outputStrLn (T.unpack t)
   catch' ma = catchAll ma (\e -> outputStrLn (show e) *> loop)
   loop = do
     minput <- fmap T.pack <$> getInputLine "pact>"
@@ -104,9 +102,10 @@ main = do
             outputStrLn $ unwords ["Remove all debug flags"]
             loop
           RAExecuteExpr src -> catch' $ do
-            eout <- lift (tryError (interpretReplProgram (SourceCode (T.encodeUtf8 src))))
+            let display rcv = runInputT replSettings (displayOutput rcv)
+            eout <- lift (tryError (interpretReplProgram (SourceCode (T.encodeUtf8 src)) display))
             case eout of
-              Right out -> traverse_ displayOutput out
+              Right out -> pure ()
               Left err -> do
                 SourceCode currSrc <- lift (use replCurrSource)
                 let srcText = T.decodeUtf8 currSrc
