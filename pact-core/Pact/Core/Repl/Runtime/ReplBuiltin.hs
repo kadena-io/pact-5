@@ -123,13 +123,13 @@ continuePact info b cont handler env = \case
       (pid, myield) <- case mpe of
         Nothing -> do
           pid <- maybe (throwExecutionError info NoDefPactIdAndExecEnvSupplied) (pure . PactId) mpid
-          pure (pid, Yield <$> userResume)
+          pure (pid, (\r -> Yield r Nothing Nothing) <$> userResume)
         Just pactExec ->
           let
             pid = maybe (_pePactId pactExec) PactId mpid
             yield = case userResume of
               Nothing -> _peYield pactExec
-              Just o -> pure (Yield o)
+              Just o -> pure (Yield o Nothing Nothing)
           in pure (pid, yield)
       let pactStep = PactStep (fromInteger step) rollback pid myield
       setEvalState esPactExec Nothing
@@ -139,28 +139,25 @@ continuePact info b cont handler env = \case
       liftEither s
 
 pactState :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
-pactState = \ info b _cont _handler _env -> \case
-  [_] -> do
+pactState info b cont handler _env = \case
+  [] -> go False
+  [VBool clear] -> go clear
+  args -> argsError info b args
+  where
+  go clear = do
     mpe <- useEvalState esPactExec
-    mRet <- case mpe of
-      Just pe -> case _peYield pe of
-        Nothing -> pure (Just $ PLiteral (LBool False))
-        Just (Yield y) -> pure (Just $ PObject y)
-      Nothing -> pure Nothing
-    case mRet of
-      Nothing -> pure (EvalValue $ VString "No Pact State available")
-      Just yield ->
-        let ps = [(Field "pactId", PLiteral (LString ""))
-                 ,(Field "yield", yield)]
-        in pure (EvalValue $ VObject (M.fromList ps))
-  args -> argsError info b args
-
-resetPactState :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
-resetPactState = \info b _cont _handler _env -> \case
-  [_] -> setEvalState esPactExec Nothing >> pure (EvalValue $ VString "Resetted Pact State")
-  args -> argsError info b args
-
-
+    case mpe of
+      Just pe -> do
+        when clear $ esPactExec .== Nothing
+        let yield' = case _peYield pe of
+              Nothing ->  PLiteral (LBool False)
+              Just (Yield y _ _) -> PObject y
+            PactId pid = _pePactId pe
+            ps = [(Field "pactId", PString pid)
+                 ,(Field "yield", yield')
+                 ,(Field "step", PInteger (fromIntegral (_peStep pe)))]
+        returnCEKValue cont handler (VObject (M.fromList ps))
+      Nothing -> returnCEK cont handler (VError "pact-state: no pact exec in context" info)
 
 coreEnvStackFrame :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 coreEnvStackFrame = \info b cont handler _env -> \case
@@ -372,7 +369,7 @@ replRawBuiltinRuntime = \case
     RPrint -> corePrint
     REnvStackFrame -> coreEnvStackFrame
     RPactState -> pactState
-    RResetPactState -> resetPactState
+    RResetPactState -> pactState
     REnvChainData -> envChainData
     REnvData -> envData
     REnvEvents -> envEvents

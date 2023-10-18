@@ -106,6 +106,7 @@ library
     Pact.Core.Capabilities
     Pact.Core.ModRefs
     Pact.Core.Interpreter
+    Pact.Core.ChainData
     Pact.Core.Environment
 
      -- Syntax modules

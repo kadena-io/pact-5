@@ -39,6 +39,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , checkNonLocalAllowed
  , evalStateToErrorState
  , restoreFromErrorState
+ , (.==)
  ) where
 
 import Control.Lens hiding ((%%=))
@@ -140,13 +141,16 @@ viewsCEKEnv f l = views f l <$> readEnv
 setEvalState :: (MonadEval b i m) => Traversal' (EvalState b i) s -> s -> m ()
 setEvalState l s = modifyEvalState (set l s)
 
+(.==) :: (MonadEval b i m) => Traversal' (EvalState b i) s -> s -> m ()
+l .== s = modifyEvalState (set l s)
+
 -- overEvalState :: (MonadEval b i m) => Lens' (EvalState b i) s -> (s -> s) -> m ()
 -- overEvalState l f = modifyCEKState (over l f)
 
 (%%=) :: (MonadEval b i m) => Traversal' (EvalState b i) s -> (s -> s) -> m ()
 l %%= f = modifyEvalState (over l f)
 
-infix 4 %%=
+infix 4 %%=, .==
 
 useEvalState :: (MonadEval b i m) => Lens' (EvalState b i) s -> m s
 useEvalState l = view l <$> getEvalState

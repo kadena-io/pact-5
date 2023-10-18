@@ -551,15 +551,28 @@ coreAccess = \info b cont handler _env -> \case
 
 
 coreYield :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-coreYield = \info b cont handler _env -> \case
-  [VObject o] -> do
+coreYield info b cont handler _env = \case
+  [VObject o] -> go o Nothing
+  [VObject o, VString cid] -> go o (Just (ChainId cid))
+  args -> argsError info b args
+  where
+  go o mcid = do
     mpe <- useEvalState esPactExec
     case mpe of
       Nothing -> throwExecutionError info YieldOutsiteDefPact
-      Just pe -> do
-        setEvalState esPactExec (Just pe{_peYield = Just (Yield o)})
-        returnCEKValue cont handler (VObject o)
-  args -> argsError info b args
+      Just pe -> case mcid of
+        Nothing -> do
+          esPactExec . _Just . peYield .== Just (Yield o Nothing Nothing)
+          returnCEKValue cont handler (VObject o)
+        Just cid -> do
+          sourceChain <- viewCEKEnv (eePublicData . pdPublicMeta . pmChainId)
+          p <- provenanceOf cid
+          when (_peStepHasRollback pe) $ failInvariant info "Cross-chain yield not allowed in step with rollback"
+          esPactExec . _Just . peYield .== Just (Yield o (Just p) (Just sourceChain))
+          returnCEKValue cont handler (VObject o)
+  provenanceOf tid =
+    Provenance tid . _mHash <$> getCallingModule info
+
 
 coreResume :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreResume = \info b cont handler _env -> \case
@@ -569,19 +582,12 @@ coreResume = \info b cont handler _env -> \case
       Nothing -> throwExecutionError info NoActivePactExec
       Just pactStep -> case _psResume pactStep of
         Nothing -> throwExecutionError info (NoYieldInPactStep pactStep)
-        Just (Yield resumeObj) -> applyLam clo [VObject resumeObj] cont handler
+        Just (Yield resumeObj _ _) -> applyLam clo [VObject resumeObj] cont handler
   args -> argsError info b args
 
 -----------------------------------
 -- try-related ops
 -----------------------------------
-
--- coreEnforce :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
--- coreEnforce = \info b cont handler _env -> \case
---   [VLiteral (LBool b'), VLiteral (LString s)] ->
---     if b' then returnCEKValue cont handler (VBool True)
---     else returnCEK cont handler (VError s)
---   args -> argsError info b args
 
 enforceTopLevelOnly :: (IsBuiltin b, MonadEval b i m) => i -> b -> m ()
 enforceTopLevelOnly info b = do

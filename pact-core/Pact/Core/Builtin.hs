@@ -559,22 +559,6 @@ data ReplBuiltins
   | RSigKeyset
   | RTestCapability
   | REnvExecConfig
-  -- | RLoad
-  -- | RLoadWithEnv
-  -- | RExpect
-  -- | RExpectFailure
-  -- | RExpectThat
-  -- | RPactState
-  -- | RRollbackTx
-  -- | RSigKeyset
-  -- | RTestCapability
-  -- | RVerify
-  -- | RWithAppliedEnv
-  -- | REnvEnableReplNatives
-  -- | RBeginTx
-  -- | RBench
-  -- | RCommitTx
-  -- | REnvExecConfig
   -- | REnvGas
   -- | REnvGasLimit
   -- | REnvGasLog
@@ -599,7 +583,7 @@ instance IsBuiltin ReplBuiltins where
     RExpectFailureMatch -> 3
     RExpectThat -> 3
     RPrint -> 1
-    RPactState -> 1
+    RPactState -> 0
     RResetPactState -> 1
     REnvStackFrame -> 0
     REnvChainData -> 1
@@ -685,8 +669,6 @@ replBuiltinsToText = \case
   RContinuePactRollback -> "continue-pact-with-rollback"
   RContinuePactRollbackYield -> "continue-pact-rollback-yield"
   REnvExecConfig -> "env-exec-config"
-  -- RLoad -> "load"
-  -- RLoadWithEnv -> "load-with-env"
 
 replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
 replBuiltinToText f = \case
