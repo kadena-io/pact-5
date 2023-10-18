@@ -51,7 +51,7 @@ main = do
   g <- newIORef mempty
   evalLog <- newIORef Nothing
   let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Nothing Transactional mempty
-      es = EvalState (CapState [] mempty mempty mempty)  [] [] mempty
+      es = EvalState (CapState [] mempty mempty mempty) [] [] mempty Nothing
   ref <- newIORef (ReplState mempty pdb es ee g evalLog (SourceCode mempty) Nothing)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
