@@ -224,6 +224,7 @@ instance Pretty ArgTypeError where
     ATEClosure -> "[closure]"
     ATEModRef -> "[modref]"
 
+
 -- | All fatal execution errors which should pause
 --
 data EvalError

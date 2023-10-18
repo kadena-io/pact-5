@@ -32,7 +32,6 @@ module Pact.Core.IR.Eval.CEK
   , guardForModuleCall) where
 
 
-import Debug.Trace
 import Control.Lens hiding ((%%=))
 import Control.Monad(zipWithM, unless, when)
 import Control.Monad.IO.Class
@@ -237,6 +236,9 @@ mkDefPactClosure info fqn dpact env = case _dpArgs dpact of
     let dpc = DefPactClosure fqn (ArgClosure (fmap _argType (x :| xs))) (length (x:xs)) env info
     in pure (VDefPactClosure dpc)
 
+
+-- throwDefPactError :: MonadEval b i m => i -> EvalDefPactError -> m a
+--   throwDefPactError i = throwExecutionError i . EvalDefPa
 
 initPact
   :: MonadEval b i m
