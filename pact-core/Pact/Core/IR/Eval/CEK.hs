@@ -237,9 +237,6 @@ mkDefPactClosure info fqn dpact env = case _dpArgs dpact of
     in pure (VDefPactClosure dpc)
 
 
--- throwDefPactError :: MonadEval b i m => i -> EvalDefPactError -> m a
---   throwDefPactError i = throwExecutionError i . EvalDefPa
-
 initPact
   :: MonadEval b i m
   => i
@@ -273,20 +270,17 @@ applyPact
   -> M.Map PactId PactExec
   -> m (EvalResult b i m)
 applyPact i pc ps cont handler cenv nested = useEvalState esPactExec >>= \case
-  Just _ ->  throwExecutionError i MultipleOrNestedPactExecFound
+  Just pe ->  throwExecutionError i (MultipleOrNestedDefPactExecFound pe)
   Nothing -> lookupFqName (pc ^. pcName) >>= \case
     Just (DPact defPact) -> do
       let nSteps = NE.length (_dpSteps defPact)
 
       -- Check we try to apply the correct pact Step
       unless (ps ^. psStep < nSteps) $
-        throwExecutionError i (PactStepNotFound (ps ^. psStep))
+        throwExecutionError i (DefPactStepNotFound ps nSteps)
 
       step <- maybe (failInvariant i "Step not found") pure
         $ _dpSteps defPact ^? ix (ps ^. psStep)
-
-      -- when (ps ^. psStep /= 0) $
-      --  failInvariant i "applyPact with stepId /= 0"
 
       let pe = PactExec
                { _peYield = Nothing
@@ -303,10 +297,10 @@ applyPact i pc ps cont handler cenv nested = useEvalState esPactExec >>= \case
 
       case (ps ^. psRollback, step) of
         (False, _) ->
-          evalWithStackFrame i cont' handler cenv sf Nothing  (ordinaryPactStepExec step)
+          evalWithStackFrame i cont' handler cenv sf Nothing (ordinaryPactStepExec step)
         (True, StepWithRollback _ rollbackExpr _) ->
           evalWithStackFrame i cont' handler cenv sf Nothing rollbackExpr
-        (True, Step{}) -> throwExecutionError i PactStepHasNoRollback
+        (True, Step{}) -> throwExecutionError i (PactStepHasNoRollback ps)
     _otherwise -> failInvariant i "DefPact not found"
   where
   sf = StackFrame (view (pcName . fqName) pc) (view (pcName . fqModule) pc) SFDefPact
@@ -321,7 +315,9 @@ applyNestedPact
   -> CEKEnv b i m
   -> m (EvalResult b i m)
 applyNestedPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
-  Nothing -> failInvariant i $ "applyNestedPact: Nested Pact attempted but no pactExec found" <> T.pack (show pc)
+  Nothing -> failInvariant i $
+    "applyNestedPact: Nested DefPact attempted but no pactExec found" <> T.pack (show pc)
+
   Just pe -> lookupFqName (pc ^. pcName) >>= \case
     Just (DPact defPact) -> do
       step <- maybe (failInvariant i "Step not found") pure
@@ -330,10 +326,13 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
       let
         stepCount = NE.length (_dpSteps defPact)
         isRollback = hasRollback step
+
       when (stepCount /= _peStepCount pe) $
-        failInvariant i "applyNestedPact: invalid nested defpact length, must be equal to length of parent"
+        throwExecutionError i (NestedDefPactParentStepCountMissmatch (_pePactId pe) stepCount (_peStepCount pe))
+
       when (isRollback /= _peStepHasRollback pe) $
-        error "applyNestedPact: invalid nested defpact step, must match parent rollback"
+        throwExecutionError i (NestedDefPactParentRollbackMissmatch (_pePactId pe) isRollback (_peStepHasRollback pe))
+
       exec <- case pe ^. peNestedPactExec . at (_psPactId ps) of
         Nothing
           | _psStep ps == 0 -> pure $ PactExec
@@ -345,13 +344,15 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
                                , _peStepHasRollback = isRollback
                                , _peNestedPactExec = mempty
                                }
-          | otherwise -> failInvariant i "Nested pact executing same nested pact twice"
+          | otherwise ->
+            throwExecutionError i (NestedDefPactDoubleExecution ps)
         Just npe
           | _psStep ps >= 0 && isRollback && _peStep npe == _psStep ps ->
             pure (set peStepHasRollback isRollback npe)
           | _psStep ps >  0 && _peStep npe + 1 == _psStep ps ->
-            pure (over peStep (+1) $ set peStepHasRollback isRollback $ npe)
-          | otherwise -> failInvariant i "nested pact never started at prior step"
+            pure (over peStep (+1) $ set peStepHasRollback isRollback npe)
+          | otherwise ->
+            throwExecutionError i (NestedDefPactNeverStarted ps)
 
       setEvalState esPactExec (Just exec)
       let
@@ -363,8 +364,8 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
           evalWithStackFrame i cont' handler cenv' sf Nothing  (ordinaryPactStepExec step)
         (True, StepWithRollback _ rollbackExpr _) ->
           evalWithStackFrame i cont' handler cenv' sf Nothing rollbackExpr
-        (True, Step{}) -> throwExecutionError i PactStepHasNoRollback
-    _otherwise -> failInvariant i ""
+        (True, Step{}) -> throwExecutionError i (PactStepHasNoRollback ps)
+    _otherwise -> failInvariant i "applyNestedPact: Expected a DefPact bot got something else"
   where
   sf = StackFrame (view (pcName . fqName) pc) (view (pcName . fqModule) pc) SFDefPact
 
@@ -377,39 +378,45 @@ resumePact
   -> Maybe PactExec
   -> m (EvalResult b i m)
 resumePact i cont handler env crossChainContinuation = viewCEKEnv eePactStep >>= \case
-  Nothing -> throwExecutionError i StepNotInEnvironment
+  Nothing -> throwExecutionError i PactStepNotInEnvironment
   Just ps -> do
     pdb <- viewCEKEnv eePactDb
     dbState <- liftDbFunction i (readPacts pdb (_psPactId ps))
     case (dbState, crossChainContinuation) of
-      (Just Nothing, _) -> failInvariant i "resumePact: completed"
-      (Nothing, Nothing) -> error "no prev exec found"
+      (Just Nothing, _) -> throwExecutionError i (DefPactAlreadyCompleted ps)
+      (Nothing, Nothing) -> throwExecutionError i (NoPreviousDefPactExecutionFound ps)
       (Nothing, Just ccExec) -> resumePactExec ccExec
       (Just (Just dbExec), Nothing) -> resumePactExec dbExec
       (Just (Just dbExec), Just ccExec) -> do
+
+        -- Validate CC execution environment progressed far enough
         unless (_peStep ccExec > succ (_peStep dbExec)) $
-          error "resumePAct must be at least 2 steps before cc"
+          throwExecutionError i
+            (CCDefPactContinuationError ps ccExec dbExec)
 
-        -- Validate Contuation and Step count against db state
+        -- Validate continuation db state
         when (_peContinuation dbExec /= _peContinuation ccExec) $
-          throwExecutionError i (StepResumeDbMismatch "continuation")
+          throwExecutionError i (CCDefPactContinuationError ps ccExec dbExec)
 
+        -- Validate step count against db state
         when (_peStepCount dbExec /= _peStepCount ccExec) $
-          throwExecutionError i (StepResumeDbMismatch "peStepCount")
+          throwExecutionError i (CCDefPactContinuationError ps ccExec dbExec)
 
         resumePactExec ccExec
       where
         --resumePactExec :: MonadEval b i m => PactExec -> m (EvalResult b i m)
         resumePactExec pe = do
           when (_psPactId ps /= _pePactId pe) $
-            error "resumePactExec: request and context pact IDs do not match"
+            throwExecutionError i (DefPactIdMissmatch (_psPactId ps) (_pePactId pe))
 
           when (_psStep ps < 0 || _psStep ps >= _peStepCount pe) $
-            error "invalid step in pactstep request"
+            throwExecutionError i (InvalidPactStepSupplied ps pe)
 
           if _psRollback ps
-            then when (_psStep ps /= _peStep pe) $ error ""
-            else when (_psStep ps /= succ (_peStep pe)) $ error ""
+            then when (_psStep ps /= _peStep pe) $
+                 throwExecutionError i (DefPactRollbackMissmatch ps pe)
+            else when (_psStep ps /= succ (_peStep pe)) $
+                 throwExecutionError i (DefPactStepMissmatch ps pe)
 
           let pc = view peContinuation pe
               resume = case _psResume ps of
@@ -1059,13 +1066,13 @@ returnCEKValue (NestedPactStepC env cont parentPactExec) handler v =
       Just ps -> do
         when (nestedPactsNotAdvanced pe ps) $
           throwExecutionError def (NestedDefpactsNotAdvanced (_pePactId pe))
+
         let npe = parentPactExec & peNestedPactExec %~ M.insert (_psPactId ps) pe
         setEvalState esPactExec (Just npe)
-        -- TODO: check nestedPactsNotAdvanced
         returnCEKValue cont handler v
 
 -- | Important check for nested pacts:
---     - Nested step must be equal to the parent step after execution.
+--   Nested step must be equal to the parent step after execution.
 nestedPactsNotAdvanced :: PactExec -> PactStep -> Bool
 nestedPactsNotAdvanced resultState ps =
   any (\npe -> _peStep npe /= _psStep ps) (_peNestedPactExec resultState)

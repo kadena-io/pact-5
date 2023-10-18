@@ -585,6 +585,7 @@ data ReplBuiltins
   -- Defpact
   | RContinuePact
   | RContinuePactRollback
+  | RContinuePactRollbackYield
   | RPactState
   | RResetPactState
   deriving (Show, Enum, Bounded, Eq)
@@ -598,7 +599,6 @@ instance IsBuiltin ReplBuiltins where
     RExpectFailureMatch -> 3
     RExpectThat -> 3
     RPrint -> 1
-    RContinuePact -> 1 -- TODO: Continue has three different forms
     RPactState -> 1
     RResetPactState -> 1
     REnvStackFrame -> 0
@@ -614,7 +614,9 @@ instance IsBuiltin ReplBuiltins where
     RRollbackTx -> 0
     RSigKeyset -> 1
     RTestCapability -> 1
+    RContinuePact -> 1
     RContinuePactRollback -> 2
+    RContinuePactRollbackYield -> 3
     REnvExecConfig -> 1
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
@@ -664,7 +666,6 @@ replBuiltinsToText = \case
   RExpectFailureMatch -> "expect-failure-match"
   RExpectThat -> "expect-that"
   RPrint -> "print"
-  RContinuePact -> "continue-pact"
   RPactState -> "pact-state"
   RResetPactState -> "reset-pact-state"
   REnvStackFrame -> "env-stackframe"
@@ -680,7 +681,9 @@ replBuiltinsToText = \case
   RRollbackTx -> "rollback-tx"
   RSigKeyset -> "sig-keyset"
   RTestCapability -> "test-capability"
+  RContinuePact -> "continue-pact"
   RContinuePactRollback -> "continue-pact-with-rollback"
+  RContinuePactRollbackYield -> "continue-pact-rollback-yield"
   REnvExecConfig -> "env-exec-config"
   -- RLoad -> "load"
   -- RLoadWithEnv -> "load-with-env"

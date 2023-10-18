@@ -243,8 +243,9 @@ instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
     App (Builtin (RBuiltinRepl RExpectFailureMatch) i) [e1, e2, suspendTerm e3] i
   desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2] | isn't _Lam e2 =
     App (Builtin (RBuiltinRepl RContinuePactRollback) i) [e1, e2] i
-  -- desugarAppArity i (RBuiltinRepl RContinuePact) (e1 :| e2)  =
-  --   App (Builtin (RBuiltinRepl RContinuePact) i) (e1 :| e2) i
+  desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2, e3]
+    | isn't _Lam e2 && isn't _Lam e3 =
+      App (Builtin (RBuiltinRepl RContinuePactRollbackYield) i) [e1, e2, e3] i
   desugarAppArity i b ne =
     App (Builtin b i) ne i
 
@@ -422,14 +423,6 @@ desugarDefPact (Lisp.DefPact dpname _ _ [] _ _ i) =
 desugarDefPact (Lisp.DefPact dpname margs rt (step:steps) _ _ i) =
   view reCurrModule >>= \case
     Just (mn,_) -> do
-      -- let
-      --   args' = case margs of
-      --             [] -> pure unitFnArg
-      --             arg:args -> toArg <$> (arg :| args)
-      -- let desugarStep b = do
-      --       tm <- desugarLispTerm b
-      --       pure (Lam (TLDefPact mn dpname) args' tm i) -- TODO: add TLPactStep
-      --   desugarMSteps = maybe (pure Nothing) (fmap Just . traverse desugarStep)
       let args' = toArg <$> margs
       steps' <- forM (step :| steps) \case
         Lisp.Step s ms ->
@@ -440,23 +433,12 @@ desugarDefPact (Lisp.DefPact dpname margs rt (step:steps) _ _ i) =
           <*> desugarLispTerm rb
           <*> traverse (traverse desugarLispTerm) ms
 
-      -- In Pact, last steps are not allowed to roll back.
+      -- In DefPacts, last step is not allowed to rollback.
       when (hasRollback $ NE.last steps') $
         throwDesugarError (LastStepWithRollback (QualifiedName dpname mn)) i
 
       pure $ DefPact dpname args' rt steps' i
-    Nothing -> error "Defpact is module-less"
-    where
-      -- Todo: debruijn code should be isolated
-    -- bindArgs rEnv
-    --   | null argtys = rEnv
-    --   | otherwise = let
-    --     depth = view reVarDepth rEnv
-    --     len = fromIntegral (length argtys)
-    --     newDepth = depth + len
-    --     ixs = [depth .. newDepth - 1]
-    --     m = M.fromList $ zip (_argName <$> argtys) ((, Nothing) . NBound <$> ixs)
-    --     in over reBinds (M.union m) $ set reVarDepth newDepth rEnv
+    Nothing -> throwDesugarError (NotAllowedOutsideModule "defpact") i
 
 desugarDefConst
   :: (MonadDesugar raw reso i m)

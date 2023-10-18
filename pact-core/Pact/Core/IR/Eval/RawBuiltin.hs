@@ -557,7 +557,6 @@ coreYield = \info b cont handler _env -> \case
     case mpe of
       Nothing -> throwExecutionError info YieldOutsiteDefPact
       Just pe -> do
-        liftIO $ putStrLn "coreYield : set Yield to exec"
         setEvalState esPactExec (Just pe{_peYield = Just (Yield o)})
         returnCEKValue cont handler (VObject o)
   args -> argsError info b args
@@ -569,8 +568,8 @@ coreResume = \info b cont handler _env -> \case
     case mps of
       Nothing -> throwExecutionError info NoActivePactExec
       Just pactStep -> case _psResume pactStep of
-        Nothing -> throwExecutionError info NoYieldInPactExec
-        Just (Yield resumeObj) ->applyLam clo [VObject resumeObj] cont handler
+        Nothing -> throwExecutionError info (NoYieldInPactStep pactStep)
+        Just (Yield resumeObj) -> applyLam clo [VObject resumeObj] cont handler
   args -> argsError info b args
 
 -----------------------------------
@@ -1402,9 +1401,6 @@ coreCompose = \info b cont handler _env -> \case
 -----------------------------------
 -- Core definitions
 -----------------------------------
-
--- unimplemented :: NativeFunction b i m
--- unimplemented = error "unimplemented"
 
 rawBuiltinEnv
   :: (MonadEval RawBuiltin i m)

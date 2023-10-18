@@ -139,7 +139,8 @@ data Domain k v b i where
   -- Namespaces :: Domain NamespaceName (Namespace PactValue)
   -- | Pacts map to 'Maybe PactExec' where Nothing indicates
   -- a terminated pact.
-  -- RS: TODO -> Maybe PactExec to `IsExecuting PactExec`
+
+  -- | DefPact state, `Nothing` implies DefPact with `PactId` is completed.
   DPacts :: Domain PactId (Maybe PactExec) b i
 
 data Purity

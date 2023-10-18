@@ -122,7 +122,7 @@ continuePact info b cont handler env = \case
       mpe <- useEvalState esPactExec
       (pid, myield) <- case mpe of
         Nothing -> do
-          pid <- maybe (error "") (pure . PactId) mpid
+          pid <- maybe (throwExecutionError info NoDefPactIdAndExecEnvSupplied) (pure . PactId) mpid
           pure (pid, Yield <$> userResume)
         Just pactExec ->
           let
@@ -371,7 +371,6 @@ replRawBuiltinRuntime = \case
     RExpectThat -> coreExpectThat
     RPrint -> corePrint
     REnvStackFrame -> coreEnvStackFrame
-    RContinuePact -> continuePact
     RPactState -> pactState
     RResetPactState -> resetPactState
     REnvChainData -> envChainData
@@ -386,5 +385,7 @@ replRawBuiltinRuntime = \case
     RRollbackTx -> rollbackTx
     RSigKeyset -> sigKeyset
     RTestCapability -> testCapability
+    RContinuePact -> continuePact
     RContinuePactRollback -> continuePact
+    RContinuePactRollbackYield -> continuePact
     REnvExecConfig -> envExecConfig
