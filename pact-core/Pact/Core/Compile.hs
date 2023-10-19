@@ -8,7 +8,10 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 
-module Pact.Core.Compile where
+module Pact.Core.Compile
+ ( interpretTopLevel
+ , CompileValue(..)
+ ) where
 
 import Control.Lens
 import Control.Monad.State.Strict ( MonadIO(..), MonadState )
@@ -69,25 +72,6 @@ data CompileValue b
   | LoadedImports Import
   | InterpretValue InterpretValue
   deriving Show
-
-
--- compileProgram
---   :: (HasCompileEnv b s m)
---   => ByteString
---   -> PactDb b SpanInfo
---   -> Interpreter b m
---   -> m [CompileValue b]
--- compileProgram source pdb interp = do
---   lexed <- liftEither (Lisp.lexer source)
---   debugPrint DebugLexer lexed
---   parsed <- liftEither (Lisp.parseProgram lexed)
---   lo <- use (evalState . loaded)
---   traverse (go lo) parsed
---   where
---   go lo =
---     evalModuleGovernance pdb interp
---     >=> runDesugarTopLevel Proxy pdb lo
---     >=> interpretTopLevel pdb interp
 
 -- | Evaluate module governance
 evalModuleGovernance

@@ -68,8 +68,10 @@ import qualified Pact.Core.Syntax.ParseTree as Syntax
 
 import System.Console.Haskeline.Completion
 
-newtype SourceCode
-  = SourceCode ByteString
+data SourceCode
+  = SourceCode
+  { _scFileName :: String
+  , _scPayload :: ByteString }
   deriving Show
 
 data ReplDebugFlag
@@ -276,11 +278,20 @@ replError
 replError (ReplSource file src) pe =
   let srcLines = T.lines src
       pei = view peInfo pe
-      end = _liEndLine pei - _liStartLine pei
-      slice = withLine (_liStartLine pei) $ take (max 1 end) $ drop (_liStartLine pei) srcLines
-      colMarker = "  | " <> T.replicate (_liStartColumn pei) " " <> T.replicate (max 1 (_liEndColumn pei - _liStartColumn pei)) "^"
+      -- Note: The startline is 0-indexed, but we want our
+      -- repl to output errors which are 1-indexed.
+      start = _liStartLine pei
+      spanLen = _liEndLine pei - _liStartLine pei
+      -- We want the padding to be the biggest line number we will show, which
+      -- is endLine + 1
+      maxPad = T.length (T.pack (show ((_liEndLine pei + 1)))) + 1
+      slice = withLine start maxPad $ take (max 1 spanLen) $ drop start srcLines
+      -- Render ^^^ only in the column slice
+      colMarker = T.replicate (maxPad+1) " " <> "| " <> T.replicate (_liStartColumn pei) " " <> T.replicate (max 1 (_liEndColumn pei - _liStartColumn pei)) "^"
       errRender = renderText pe
       fileErr = file <> ":" <> T.pack (show (_liStartLine pei + 1)) <> ":" <> T.pack (show (_liStartColumn pei)) <> ": "
   in T.unlines ([fileErr <> errRender] ++ slice ++ [colMarker])
   where
-  withLine st lns = zipWith (\i e -> T.pack (show i) <> " | " <> e) [st ..] lns
+  padLeft t pad = T.replicate (pad - (T.length t)) " " <> t <> " "
+  -- Zip the line number with the source text, and apply the number padding correctly
+  withLine st pad lns = zipWith (\i e -> padLeft (T.pack (show i)) pad <> "| " <> e) [st+1..] lns

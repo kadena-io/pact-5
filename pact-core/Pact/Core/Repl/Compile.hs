@@ -19,6 +19,9 @@ import Control.Monad.IO.Class(liftIO)
 import Data.Text(Text)
 import Data.Proxy
 import Data.Default
+import System.FilePath(takeFileName)
+
+
 import qualified Data.Map.Strict as M
 import qualified Data.ByteString as B
 import qualified Data.Text as T
@@ -58,7 +61,7 @@ loadFile
   -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
   -> ReplM ReplRawBuiltin [ReplCompileValue]
 loadFile loc display = do
-  source <- SourceCode <$> liftIO (B.readFile loc)
+  source <- SourceCode (takeFileName loc) <$> liftIO (B.readFile loc)
   replCurrSource .= source
   interpretReplProgram source display
 
@@ -70,7 +73,7 @@ interpretReplProgram
   :: SourceCode
   -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
   -> ReplM ReplRawBuiltin [ReplCompileValue]
-interpretReplProgram sc@(SourceCode source) display = do
+interpretReplProgram sc@(SourceCode _ source) display = do
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ Lisp.parseReplProgram lexx
