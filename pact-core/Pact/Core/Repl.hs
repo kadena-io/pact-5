@@ -23,8 +23,6 @@ import Control.Monad.Except
 import Control.Monad.Trans(lift)
 import System.Console.Haskeline
 import Data.IORef
-import Data.Foldable(traverse_)
-
 import Data.Default
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -52,7 +50,7 @@ main = do
   evalLog <- newIORef Nothing
   let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Nothing Transactional mempty
       es = EvalState (CapState [] mempty mempty mempty) [] [] mempty Nothing
-  ref <- newIORef (ReplState mempty pdb es ee g evalLog (SourceCode mempty) Nothing)
+  ref <- newIORef (ReplState mempty pdb es ee g evalLog defaultSrc Nothing)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
@@ -78,9 +76,8 @@ main = do
     RLoadedDefConst mn ->
       outputStrLn $ show $
         "loaded defconst" <+> pretty mn
-    -- InterpretValue v _ -> outputStrLn (show (pretty v))
-    -- InterpretLog t -> outputStrLn (T.unpack t)
   catch' ma = catchAll ma (\e -> outputStrLn (show e) *> loop)
+  defaultSrc = SourceCode "(interactive)" mempty
   loop = do
     minput <- fmap T.pack <$> getInputLine "pact>"
     case minput of
@@ -104,12 +101,16 @@ main = do
             outputStrLn $ unwords ["Remove all debug flags"]
             loop
           RAExecuteExpr src -> catch' $ do
-            eout <- lift (tryError (interpretReplProgram (SourceCode (T.encodeUtf8 src))))
+            let display' rcv = runInputT replSettings (displayOutput rcv)
+            let sourceBs = T.encodeUtf8 src
+            lift (replCurrSource .= defaultSrc{_scPayload=sourceBs})
+            eout <- lift (tryError (interpretReplProgram (SourceCode "(interactive)" sourceBs) display'))
             case eout of
-              Right out -> traverse_ displayOutput out
+              Right _ -> pure ()
               Left err -> do
-                SourceCode currSrc <- lift (use replCurrSource)
+                SourceCode srcFile currSrc <- lift (use replCurrSource)
                 let srcText = T.decodeUtf8 currSrc
-                let rs = ReplSource "(interactive)" srcText
+                let rs = ReplSource (T.pack srcFile) srcText
+                lift (replCurrSource .= defaultSrc)
                 outputStrLn (T.unpack (replError rs err))
             loop

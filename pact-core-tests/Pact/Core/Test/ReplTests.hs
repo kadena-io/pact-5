@@ -61,7 +61,7 @@ runReplTest file src = do
             , _replTx = Nothing
             }
   stateRef <- newIORef rstate
-  runReplT stateRef (interpretReplProgram (SourceCode src)) >>= \case
+  runReplT stateRef (interpretReplProgram (SourceCode src) (const (pure ()))) >>= \case
     Left e -> let
       rendered = replError (ReplSource (T.pack file) (decodeUtf8 src)) e
       in assertFailure (T.unpack rendered)

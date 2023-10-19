@@ -5,9 +5,13 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 
-module Pact.Core.Compile where
+module Pact.Core.Compile
+ ( interpretTopLevel
+ , CompileValue(..)
+ ) where
 
 import Control.Lens
 import Control.Monad.State.Strict ( MonadIO(..), MonadState )
@@ -29,7 +33,6 @@ import Pact.Core.Names
 import Pact.Core.IR.Desugar
 import Pact.Core.Errors
 import Pact.Core.Pretty
-import Pact.Core.Type
 import Pact.Core.IR.Term
 import Pact.Core.Interpreter
 import Pact.Core.Guards
@@ -43,15 +46,16 @@ import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 
-type HasCompileEnv b s m
-  = ( MonadError PactErrorI m
+type HasCompileEnv b i s m
+  = ( MonadError (PactError i) m
     , MonadState s m
-    , HasEvalState s b SpanInfo
+    , HasEvalState s b i
     , DesugarBuiltin b
     , Pretty b
     , MonadIO m
     , Show b
-    , PhaseDebug m)
+    , Show i
+    , PhaseDebug b i m)
 
 _parseOnly
   :: ByteString -> Either PactErrorI [Lisp.TopLevel SpanInfo]
@@ -69,34 +73,16 @@ data CompileValue b
   | InterpretValue InterpretValue
   deriving Show
 
-
-compileProgram
-  :: (HasCompileEnv b s m)
-  => ByteString
-  -> PactDb b SpanInfo
-  -> Interpreter b m
-  -> m [CompileValue b]
-compileProgram source pdb interp = do
-  lexed <- liftEither (Lisp.lexer source)
-  debugPrint DebugLexer lexed
-  parsed <- liftEither (Lisp.parseProgram lexed)
-  lo <- use (evalState . loaded)
-  traverse (go lo) parsed
-  where
-  go lo =
-    evalModuleGovernance pdb interp
-    >=> runDesugarTopLevel Proxy pdb lo
-    >=> interpretTopLevel pdb interp
-
 -- | Evaluate module governance
 evalModuleGovernance
-  :: (HasCompileEnv b s m)
-  => PactDb b SpanInfo
-  -> Interpreter b m
-  -> Lisp.TopLevel SpanInfo
-  -> m (Lisp.TopLevel SpanInfo)
+  :: (HasCompileEnv b i s m)
+  => PactDb b i
+  -> Interpreter b i m
+  -> Lisp.TopLevel i
+  -> m ()
 evalModuleGovernance pdb interp = \case
-  tl@(Lisp.TLModule m) -> liftIO (readModule pdb (Lisp._mName m)) >>= \case
+  Lisp.TLModule m -> liftIO (readModule pdb (Lisp._mName m)) >>= \case
+    -- Existing module found
     Just (ModuleData md _) ->
       case _mGovernance md of
         KeyGov (KeySetName ksn) -> do
@@ -104,27 +90,34 @@ evalModuleGovernance pdb interp = \case
               ksnTerm = Constant (LString ksn) info
               ksrg = App (Builtin (liftRaw RawKeysetRefGuard) info) (pure ksnTerm) info
               term = App (Builtin (liftRaw RawEnforceGuard) info) (pure ksrg) info
-          _interpret interp term *> pure tl
+          void (_interpret interp term)
         CapGov (ResolvedGov fqn) ->
           -- Todo: this does not allow us to delegate governance, which is an issue.
           case find (\d -> defName d == _fqName fqn) (_mDefs md) of
             Just (DCap d) ->
-              _interpret interp (_dcapTerm d) *> pure tl
+              void (_interpret interp (_dcapTerm d))
             _ ->
               throwError (PEExecutionError (ModuleGovernanceFailure (Lisp._mName m)) (Lisp._mInfo m))
+    -- Found an interface, oopsie it's not upgradeable.
     Just (InterfaceData iface _) ->
       throwError (PEExecutionError (CannotUpgradeInterface (_ifName iface)) (_ifInfo iface))
-    Nothing -> pure tl
-  a -> pure a
+    Nothing -> pure ()
+  _ -> pure ()
 
 interpretTopLevel
-  :: (HasCompileEnv b s m)
-  => PactDb b SpanInfo
-  -> Interpreter b m
-  -> DesugarOutput b SpanInfo (TopLevel Name Type b SpanInfo)
+  :: forall b i s m
+  .  (HasCompileEnv b i s m)
+  => PactDb b i
+  -> Interpreter b i m
+  -> Lisp.TopLevel i
   -> m (CompileValue b)
-interpretTopLevel pdb interp (DesugarOutput ds lo0 _deps) = do
-  debugPrint DebugDesugar ds
+interpretTopLevel pdb interp tl = do
+  evalModuleGovernance pdb interp tl
+  lo <- use (evalState . loaded)
+  -- Todo: pretty instance for modules and all of toplevel
+  debugPrint (DPParser @b) tl
+  (DesugarOutput ds lo0 _deps) <- runDesugarTopLevel Proxy pdb lo tl
+  debugPrint DPDesugar ds
   evalState . loaded .= lo0
   case ds of
     TLModule m -> do

@@ -64,11 +64,14 @@ import Pact.Core.Errors
 import Pact.Core.Debug
 import Pact.Core.Environment
 import qualified Pact.Core.IR.Term as Term
+import qualified Pact.Core.Syntax.ParseTree as Syntax
 
 import System.Console.Haskeline.Completion
 
-newtype SourceCode
-  = SourceCode ByteString
+data SourceCode
+  = SourceCode
+  { _scFileName :: String
+  , _scPayload :: ByteString }
   deriving Show
 
 data ReplDebugFlag
@@ -131,17 +134,30 @@ makeLenses ''ReplState
 instance HasEvalState (ReplState b) b SpanInfo where
   evalState = replEvalState
 
-instance PhaseDebug (ReplM b) where
-  debugPrint _ _ = pure ()
+instance Pretty b => PhaseDebug b i (ReplM b) where
+  debugPrint dp term = do
+    case dp of
+      DPLexer -> whenReplFlagSet ReplDebugLexer $ liftIO $ do
+        putStrLn "----------- Lexer output -----------------"
+        print (pretty term)
+      DPParser -> whenReplFlagSet ReplDebugParser $ case term of
+        Syntax.TLTerm t ->
+          liftIO $ do
+            putStrLn "----------- Parser output ----------------"
+            print (pretty t)
+        _ -> pure ()
+      DPDesugar -> whenReplFlagSet ReplDebugDesugar $ case term of
+        Term.TLTerm t ->
+          liftIO $ do
+            putStrLn "----------- Desugar output ---------------"
+            print (pretty t)
+        _ -> pure ()
+
 
 instance HasLoaded (ReplState b) b SpanInfo where
   loaded = evalState . esLoaded
 
 data ReplAction
-  -- = RALoad Text
-  -- | RASetLispSyntax
-  -- | RASetNewSyntax
-  -- | RATypecheck Text
   = RASetFlag ReplDebugFlag
   | RADebugAll
   | RADebugNone
@@ -172,16 +188,7 @@ replAction =
     setFlag <?> "asdf"
   setFlag =
     cmdKw "debug" *> ((RASetFlag <$> replFlag) <|> (RADebugAll <$ MP.chunk "all") <|> (RADebugNone <$ MP.chunk "none"))
-  -- setLang = do
-  --   cmdKw "syntax"
-  --   (RASetLispSyntax <$ MP.chunk "lisp") <|> (RASetNewSyntax <$ MP.chunk "new")
-  -- tc = do
-  --   cmdKw "type"
-  --   RATypecheck <$> MP.takeRest
-  -- load = do
-  --   cmdKw "load"
-  --   let c = MP.char '\"'
-  --   RALoad <$> MP.between c c (MP.takeWhile1P Nothing (/= '\"'))
+
 
 parseReplAction :: Text -> Maybe ReplAction
 parseReplAction = MP.parseMaybe replAction
@@ -255,7 +262,6 @@ replCompletion natives =
       Term.defName <$> Term._mDefs md
     InterfaceData iface _ ->
       fmap Term._dcName $ mapMaybe (preview Term._IfDConst) $ Term._ifDefns iface
-    -- fmap Term.defName . Term._mDefs . _mdModule
   toPrefixed m =
     concat $ prefixF <$> M.toList m
   prefixF (mn, ems) = let
@@ -272,11 +278,20 @@ replError
 replError (ReplSource file src) pe =
   let srcLines = T.lines src
       pei = view peInfo pe
-      end = _liEndLine pei - _liStartLine pei
-      slice = withLine (_liStartLine pei) $ take (max 1 end) $ drop (_liStartLine pei) srcLines
-      colMarker = "  | " <> T.replicate (_liStartColumn pei) " " <> T.replicate (max 1 (_liEndColumn pei - _liStartColumn pei)) "^"
+      -- Note: The startline is 0-indexed, but we want our
+      -- repl to output errors which are 1-indexed.
+      start = _liStartLine pei
+      spanLen = _liEndLine pei - _liStartLine pei
+      -- We want the padding to be the biggest line number we will show, which
+      -- is endLine + 1
+      maxPad = length (show (_liEndLine pei + 1)) + 1
+      slice = withLine start maxPad $ take (max 1 spanLen) $ drop start srcLines
+      -- Render ^^^ only in the column slice
+      colMarker = T.replicate (maxPad+1) " " <> "| " <> T.replicate (_liStartColumn pei) " " <> T.replicate (max 1 (_liEndColumn pei - _liStartColumn pei)) "^"
       errRender = renderText pe
       fileErr = file <> ":" <> T.pack (show (_liStartLine pei + 1)) <> ":" <> T.pack (show (_liStartColumn pei)) <> ": "
   in T.unlines ([fileErr <> errRender] ++ slice ++ [colMarker])
   where
-  withLine st lns = zipWith (\i e -> T.pack (show i) <> " | " <> e) [st ..] lns
+  padLeft t pad = T.replicate (pad - (T.length t)) " " <> t <> " "
+  -- Zip the line number with the source text, and apply the number padding correctly
+  withLine st pad lns = zipWith (\i e -> padLeft (T.pack (show i)) pad <> "| " <> e) [st+1..] lns

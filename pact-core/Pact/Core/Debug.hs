@@ -1,19 +1,30 @@
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+-- {-# LANGUAGE FunctionalDependencies #-}
+
 module Pact.Core.Debug
  ( DebugFlag(..)
  , PhaseDebug(..)
+ , DebugPrint(..)
  ) where
 
-import Pact.Core.Pretty
+import Pact.Core.Type
+import Pact.Core.Names
+import Pact.Core.Syntax.LexUtils(PosToken)
+import qualified Pact.Core.Syntax.ParseTree as Syntax
+import qualified Pact.Core.IR.Term as Term
+
+data DebugPrint b i term where
+  DPLexer :: DebugPrint b i [PosToken]
+  DPParser :: DebugPrint b i (Syntax.TopLevel i)
+  DPDesugar :: DebugPrint b i (Term.TopLevel Name Type b i)
+  -- deriving (Show, Eq, Ord, Enum, Bounded)
 
 data DebugFlag
-  = DebugLexer
-  | DebugParser
-  | DebugDesugar
-  | DebugTypechecker
-  | DebugTypecheckerType
-  | DebugSpecializer
-  | DebugUntyped
+  = DFLexer
+  | DFParser
+  | DFDesugar
   deriving (Show, Eq, Ord, Enum, Bounded)
 
-class Monad m => PhaseDebug m where
-  debugPrint :: Pretty a => DebugFlag -> a -> m ()
+class Monad m => PhaseDebug b i m where
+  debugPrint :: DebugPrint b i term -> term -> m ()
