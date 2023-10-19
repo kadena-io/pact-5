@@ -8,6 +8,7 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE ImportQualifiedPost #-}
 
 module Pact.Core.IR.Eval.RawBuiltin
  ( rawBuiltinRuntime
@@ -23,11 +24,11 @@ module Pact.Core.IR.Eval.RawBuiltin
 --
 
 import Control.Lens hiding (from, to, op, parts, (%%=))
-import Control.Monad(when, unless, foldM)
+import Control.Monad(when, unless, foldM, void)
 import Control.Monad.IO.Class
 import Data.Containers.ListUtils(nubOrd)
 import Data.Bits
-import Data.Foldable(foldl', traverse_)
+import Data.Foldable(foldl', traverse_, toList)
 import Data.Decimal(roundTo', Decimal)
 import Data.Vector(Vector)
 import Data.Maybe(isJust)
@@ -42,6 +43,7 @@ import qualified Data.Char as Char
 import qualified Data.ByteString as BS
 import qualified Pact.Time as PactTime
 
+import Pact.Core.Gas
 import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Errors
@@ -54,6 +56,7 @@ import Pact.Core.Persistence
 import Pact.Core.Pacts.Types
 import Pact.Core.Environment
 import Pact.Core.Capabilities
+import Pact.Core.Principal qualified as Pr
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
@@ -1414,10 +1417,37 @@ coreCompose = \info b cont handler _env -> \case
   args -> argsError info b args
 
 coreCreatePrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-coreCreatePrincipal = \info b cont handler _env -> \case
+coreCreatePrincipal info b cont handler _env = \case
   [VGuard g] -> do
-    undefined
+    chargeGas coreGasPerLegacyGas
+    case g of
+      GKeyset (KeySet ks pf) -> case (toList ks, predicateToString pf) of
+        ([k], "keys-all") -> ret $ Pr.K k
+        (l, fun) -> do
+          h <- mkHash $ map (T.encodeUtf8 . _pubKey) l
+          ret $ Pr.W (hashToText h) fun
+      GKeySetRef ksn -> ret $ Pr.R ksn
+      GModuleGuard (ModuleGuard mn n) -> ret $ Pr.M mn n
+      GUserGuard (UserGuard f args) -> do
+        h <- mkHash $ map encodeStable args
+        ret $ Pr.U (Pretty.renderText $ fqnToName f) (hashToText h)
+        -- TODO orig pact gets a Name   ^^^^^^^^ and renders a Name, so double-check equivalence
+      GCapabilityGuard (CapabilityGuard f args pid) -> do
+        let args' = map encodeStable args
+            f' = T.encodeUtf8 $ Pretty.renderText f
+            -- TODO orig pact renders it via `AsString QualifiedName`
+            pid' = T.encodeUtf8 . Pretty.renderText <$> pid
+        h <- mkHash $ f' : args' ++ maybe [] pure pid'
+        ret $ Pr.C $ hashToText h
   args -> argsError info b args
+  where
+    ret = returnCEKValue cont handler . VPactValue . PPrincipal
+    mkHash bss = do
+      let bs = mconcat bss
+      -- the original pact impl charged 1 gas per 64 bytes of hashing,
+      void $ chargeGas $ coreGasPerLegacyGas <> Gas (fromIntegral (BS.length bs) * coreGasPerLegacyGas `quot` 64)
+      pure $ pactHash bs
+
 
 -----------------------------------
 -- Core definitions
