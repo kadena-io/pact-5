@@ -587,7 +587,6 @@ enforceTopLevelOnly :: (IsBuiltin b, MonadEval b i m) => i -> b -> m ()
 enforceTopLevelOnly info b = do
   s <- useEvalState esStack
   when (not (null s)) $ do
-    liftIO $ print s
     throwExecutionError info (NativeIsTopLevelOnly (builtinName b))
 
 -----------------------------------
@@ -1276,7 +1275,7 @@ coreHash :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreHash = \info b cont handler _env -> \case
   [VString s] ->
     returnCEKValue cont handler (go (T.encodeUtf8 s))
-  [VPactValue pv] ->
+  [VPactValue pv] -> do
     returnCEKValue cont handler (go (encodeStable pv))
   args -> argsError info b args
   where

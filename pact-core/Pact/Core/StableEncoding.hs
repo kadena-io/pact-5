@@ -81,6 +81,10 @@ instance J.Encode (StableEncoding (CapabilityGuard FullyQualifiedName PactValue)
     ]
   {-# INLINABLE build #-}
 
+instance J.Encode (StableEncoding QualifiedName) where
+  build (StableEncoding qn) = J.build (renderQualName qn)
+  {-# INLINABLE build #-}
+
 -- | Stable encoding of `FullyQualifiedName`
 instance J.Encode (StableEncoding FullyQualifiedName) where
   build (StableEncoding (FullyQualifiedName (ModuleName mn mns) n (ModuleHash mh))) = J.build t
@@ -100,7 +104,7 @@ instance J.Encode (StableEncoding ModuleGuard) where
 instance J.Encode (StableEncoding (UserGuard FullyQualifiedName PactValue)) where
   build (StableEncoding (UserGuard fun args)) = J.object
     [ "args" J..= J.array (StableEncoding <$> args)
-    , "fun" J..= StableEncoding fun
+    , "fun" J..= StableEncoding (fqnToQualName fun)
     ]
   {-# INLINABLE build #-}
 
@@ -152,8 +156,7 @@ instance J.Encode (StableEncoding ModuleName) where
 -- | Stable encoding of `ModRef`
 instance J.Encode (StableEncoding ModRef) where
   build (StableEncoding (ModRef mn imp _ref)) = J.object
-    [ "refSpec" J..= J.Array (StableEncoding <$> imp)
-    , "refInfo" J..= J.null
+    [ "refSpec" J..= Just (J.Array (StableEncoding <$> imp))
     , "refName" J..= StableEncoding mn
     ]
   {-# INLINABLE build #-}
@@ -187,6 +190,6 @@ instance J.Encode (StableEncoding PactValue) where
 instance J.Encode (StableEncoding (PactContinuation FullyQualifiedName PactValue)) where
   build (StableEncoding (PactContinuation name args))= J.object
     [ "args" J..= J.Array (StableEncoding <$> args)
-    , "def" J..= J.build (StableEncoding name)
+    , "def" J..= J.build (StableEncoding (fqnToQualName name))
     ]
   {-# INLINABLE build #-}

@@ -736,13 +736,41 @@ loadTopLevelMembers i mimports mdata binds = case mdata of
         (rsLoaded . loToplevel) %= (`M.union` loadedDeps)
         pure (M.union depMap binds)
 
+-- | Resolve a module name, return the implemented members as well if any
+-- including all current
+resolveModuleName :: (MonadRenamer b i m) => i -> ModuleName -> m (ModuleName, [ModuleName])
+resolveModuleName i mn =
+  view reCurrModule >>= \case
+    Just (currMod, imps) | currMod == mn -> pure (currMod, imps)
+    _ -> resolveModuleData mn i >>= \case
+      ModuleData md _ -> do
+        let implementeds = view mImplements md
+        pure (mn, implementeds)
+      -- todo: error type here
+      InterfaceData iface _ ->
+        throwDesugarError (InvalidModuleReference (_ifName iface)) i
 
-resolveModuleName
+-- | Resolve a module name, return the implemented members as well if any
+-- including all current
+resolveInterfaceName :: (MonadRenamer b i m) => i -> ModuleName -> m (ModuleName)
+resolveInterfaceName i mn =
+  view reCurrModule >>= \case
+    Just (currMod, _imps) | currMod == mn -> pure currMod
+    _ -> resolveModuleData mn i >>= \case
+      ModuleData _ _ ->
+        throwDesugarError (InvalidModuleReference mn) i
+      -- todo: error type here
+      InterfaceData _ _ ->
+        pure mn
+
+
+-- mn implementeds
+resolveModuleData
   :: (MonadRenamer b i m)
   => ModuleName
   -> i
   -> m (ModuleData b i)
-resolveModuleName mn i =
+resolveModuleData mn i =
   use (rsLoaded . loModules . at mn) >>= \case
     Just md -> pure md
     Nothing ->
@@ -884,7 +912,7 @@ renameType i = \case
   Lisp.TyList ty ->
     TyList <$> renameType i ty
   Lisp.TyModRef tmr ->
-    TyModRef tmr <$ resolveModuleName tmr i
+    TyModRef tmr <$ resolveInterfaceName i tmr
   Lisp.TyKeyset -> pure TyGuard
   Lisp.TyObject pn ->
     TyObject <$> resolveSchema pn
@@ -1248,13 +1276,16 @@ resolveBare (BareName bn) i = views reBinds (M.lookup bn) >>= \case
         Just (currMod, imps) | currMod == mn ->
           pure (Name bn (NModRef mn imps), Nothing)
         _ -> do
-          resolveModuleName mn i >>= \case
-            ModuleData md _ -> do
-              let implementeds = view mImplements md
-              pure (Name bn (NModRef mn implementeds), Nothing)
-            -- todo: error type here
-            InterfaceData iface _ ->
-              throwDesugarError (InvalidModuleReference (_ifName iface)) i
+          (mn', imps) <- resolveModuleName i mn
+          pure (Name bn (NModRef mn' imps), Nothing)
+
+          -- resolveModuleData mn i >>= \case
+          --   ModuleData md _ -> do
+          --     let implementeds = view mImplements md
+          --     pure (Name bn (NModRef mn implementeds), Nothing)
+          --   -- todo: error type here
+          --   InterfaceData iface _ ->
+          --     throwDesugarError (InvalidModuleReference (_ifName iface)) i
 
 resolveQualified
   :: (MonadRenamer b i m)
@@ -1332,7 +1363,7 @@ handleImport
   -> Import
   -> m (Map Text (NameKind, Maybe DefKind))
 handleImport info binds (Import mn mh imported) = do
-  mdata <- resolveModuleName mn info
+  mdata <- resolveModuleData mn info
   let imported' = S.fromList <$> imported
       mdhash = view mdModuleHash mdata
   case mh of
