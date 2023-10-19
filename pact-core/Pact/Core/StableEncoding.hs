@@ -15,6 +15,7 @@ import Pact.Core.Guards
 import Pact.Core.Names
 import Pact.Core.ModRefs
 import Pact.Core.Hash
+import Pact.Core.Principal
 import Pact.Core.Pacts.Types
 import Pact.Time
 
@@ -174,6 +175,19 @@ instance J.Encode (StableEncoding UTCTime) where
       denom = denominator . (% 1000) . fromIntegral . toPosixTimestampMicros
   {-# INLINABLE build #-}
 
+-- | Stable encoding of `Principal`.
+instance J.Encode (StableEncoding Principal) where
+  build (StableEncoding principal) = case principal of
+    K pk -> J.object [ kind 'K', "pk" J..= StableEncoding pk ]
+    W ph n -> J.object [ kind 'W', "ph" J..= ph, "pred" J..= n ]
+    R ksn -> J.object [ kind 'R', "ksn" J..= StableEncoding ksn ]
+    U fqn args -> J.object [ kind 'U', "fqn" J..= fqn, "args" J..= args ]
+    M mn n -> J.object [ kind 'M', "modname" J..= StableEncoding mn, "guard" J..= n ]
+    P pid n -> J.object [ kind 'P', "pid" J..= StableEncoding pid, "fun" J..= n ]
+    C c -> J.object [ kind 'C', "cap" J..= c ]
+    where
+      kind c = "kind" J..= T.singleton c
+
 -- | Stable encoding of `PactValue`
 instance J.Encode (StableEncoding PactValue) where
   build (StableEncoding pv) = case pv of
@@ -184,6 +198,7 @@ instance J.Encode (StableEncoding PactValue) where
     PModRef mr -> J.build (StableEncoding mr)
     PCapToken _ct -> error "not implemented"
     PTime pt -> J.build (StableEncoding pt)
+    PPrincipal pr -> J.build (StableEncoding pr)
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `PactContinuation FullyQualifiedName PactValue`
