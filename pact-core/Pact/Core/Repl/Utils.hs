@@ -134,7 +134,6 @@ instance HasEvalState (ReplState b) b SpanInfo where
 
 instance Pretty b => PhaseDebug b i (ReplM b) where
   debugPrint dp term = do
-    -- flags <- use replFlags
     case dp of
       DPLexer -> whenReplFlagSet ReplDebugLexer $ liftIO $ do
         putStrLn "----------- Lexer output -----------------"
@@ -157,10 +156,6 @@ instance HasLoaded (ReplState b) b SpanInfo where
   loaded = evalState . esLoaded
 
 data ReplAction
-  -- = RALoad Text
-  -- | RASetLispSyntax
-  -- | RASetNewSyntax
-  -- | RATypecheck Text
   = RASetFlag ReplDebugFlag
   | RADebugAll
   | RADebugNone
@@ -191,16 +186,7 @@ replAction =
     setFlag <?> "asdf"
   setFlag =
     cmdKw "debug" *> ((RASetFlag <$> replFlag) <|> (RADebugAll <$ MP.chunk "all") <|> (RADebugNone <$ MP.chunk "none"))
-  -- setLang = do
-  --   cmdKw "syntax"
-  --   (RASetLispSyntax <$ MP.chunk "lisp") <|> (RASetNewSyntax <$ MP.chunk "new")
-  -- tc = do
-  --   cmdKw "type"
-  --   RATypecheck <$> MP.takeRest
-  -- load = do
-  --   cmdKw "load"
-  --   let c = MP.char '\"'
-  --   RALoad <$> MP.between c c (MP.takeWhile1P Nothing (/= '\"'))
+
 
 parseReplAction :: Text -> Maybe ReplAction
 parseReplAction = MP.parseMaybe replAction
@@ -274,7 +260,6 @@ replCompletion natives =
       Term.defName <$> Term._mDefs md
     InterfaceData iface _ ->
       fmap Term._dcName $ mapMaybe (preview Term._IfDConst) $ Term._ifDefns iface
-    -- fmap Term.defName . Term._mDefs . _mdModule
   toPrefixed m =
     concat $ prefixF <$> M.toList m
   prefixF (mn, ems) = let
