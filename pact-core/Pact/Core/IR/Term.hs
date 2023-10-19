@@ -189,19 +189,9 @@ data TopLevel name ty builtin info
   deriving (Show, Functor)
 
 data ReplTopLevel name ty builtin info
-  = RTLTopLevel (TopLevel name ty builtin info)
-  | RTLDefConst (DefConst name ty builtin info)
+  = RTLDefConst (DefConst name ty builtin info)
   | RTLDefun (Defun name ty builtin info)
   deriving (Show, Functor)
-
-pattern RTLTerm :: Term name ty builtin info -> ReplTopLevel name ty builtin info
-pattern RTLTerm e = RTLTopLevel (TLTerm e)
-
-pattern RTLModule :: Module name ty builtin info -> ReplTopLevel name ty builtin info
-pattern RTLModule m = RTLTopLevel (TLModule m)
-
-pattern RTLInterface :: Interface name ty builtin info -> ReplTopLevel name ty builtin info
-pattern RTLInterface iface = RTLTopLevel (TLInterface iface)
 
 defName :: Def name t b i -> Text
 defName (Dfun d) = _dfunName d

@@ -19,9 +19,9 @@ import Pact.Core.PactValue
 -- import Pact.Core.Environment
 -- import Pact.Core.Errors
 
-newtype Interpreter b m
+newtype Interpreter b i m
   = Interpreter
-  { _interpret :: Term Name Type b SpanInfo -> m InterpretValue
+  { _interpret :: Term Name Type b i -> m InterpretValue
   }
 
 data InterpretValue
