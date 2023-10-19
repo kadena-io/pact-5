@@ -35,6 +35,9 @@ encodeStable = J.encodeStrict . StableEncoding
 newtype StableEncoding a = StableEncoding a
   deriving (Ord, Eq)
 
+instance J.Encode (StableEncoding PactId) where
+  build (StableEncoding (PactId pid)) =
+    J.build pid
 
 -- | Stable encoding of `Literal`
 --
@@ -71,8 +74,8 @@ instance J.Encode (StableEncoding (Guard FullyQualifiedName PactValue)) where
 
 -- | Stable encoding of `CapabilityGuard FullyQualifiedName PactValue`
 instance J.Encode (StableEncoding (CapabilityGuard FullyQualifiedName PactValue)) where
-  build (StableEncoding (CapabilityGuard name args)) = J.object
-    [ "cgPactId" J..=  (error "a" :: T.Text) -- TODO: Check availability
+  build (StableEncoding (CapabilityGuard name args mpid)) = J.object
+    [ "cgPactId" J..= fmap StableEncoding mpid -- TODO: Check availability
     , "cgArgs" J..= J.Array (StableEncoding <$> args)
     , "cgName" J..= StableEncoding name
     ]
@@ -150,7 +153,7 @@ instance J.Encode (StableEncoding ModuleName) where
 instance J.Encode (StableEncoding ModRef) where
   build (StableEncoding (ModRef mn imp _ref)) = J.object
     [ "refSpec" J..= J.Array (StableEncoding <$> imp)
---    , "refInfo" J..= _modRefInfo o
+    , "refInfo" J..= J.null
     , "refName" J..= StableEncoding mn
     ]
   {-# INLINABLE build #-}

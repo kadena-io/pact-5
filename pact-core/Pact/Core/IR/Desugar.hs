@@ -145,6 +145,7 @@ type MonadDesugar raw reso i m =
   , MonadError (PactError i) m
   , MonadState (RenamerState reso i) m
   , MonadReader (RenamerEnv reso i) m
+  , Show raw
   , Show reso
   , Show i
   , MonadIO m)
@@ -243,6 +244,8 @@ instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
     App (Builtin (RBuiltinRepl RExpectFailureMatch) i) [e1, e2, suspendTerm e3] i
   desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2] | isn't _Lam e2 =
     App (Builtin (RBuiltinRepl RContinuePactRollback) i) [e1, e2] i
+  desugarAppArity i (RBuiltinRepl RPactState) [e1] =
+    App (Builtin (RBuiltinRepl RResetPactState) i) [e1] i
   desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2, e3]
     | isn't _Lam e2 && isn't _Lam e3 =
       App (Builtin (RBuiltinRepl RContinuePactRollbackYield) i) [e1, e2, e3] i
@@ -1462,7 +1465,7 @@ runDesugar' pdb loaded act = do
   pure (DesugarOutput renamed loaded' deps)
 
 runDesugarTerm
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i, Show raw)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1471,7 +1474,7 @@ runDesugarTerm
 runDesugarTerm _ pdb loaded = runDesugar' pdb loaded  . RenamerT . (desugarLispTerm >=> renameTerm)
 
 runDesugarModule'
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i, Show raw)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1480,7 +1483,7 @@ runDesugarModule'
 runDesugarModule' _ pdb loaded = runDesugar' pdb loaded . RenamerT . (desugarModule >=> renameModule)
 
 runDesugarInterface
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i, Show raw)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1489,7 +1492,7 @@ runDesugarInterface
 runDesugarInterface _ pdb loaded  = runDesugar' pdb loaded . RenamerT . (desugarInterface >=> renameInterface)
 
 runDesugarReplDefun
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i, Show raw)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1502,7 +1505,7 @@ runDesugarReplDefun _ pdb loaded =
   . (desugarDefun >=> renameReplDefun)
 
 runDesugarReplDefConst
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i, Show raw)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1515,7 +1518,7 @@ runDesugarReplDefConst _ pdb loaded =
   . (desugarDefConst >=> renameReplDefConst)
 
 runDesugarTopLevel
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i, Show raw)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1530,7 +1533,7 @@ runDesugarTopLevel proxy pdb loaded = \case
 
 
 runDesugarReplTopLevel
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i, Show raw)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i

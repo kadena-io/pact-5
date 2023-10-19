@@ -212,6 +212,8 @@ instance Pretty DesugarError where
       Pretty.hsep ["Expected free variable in expression, found locally bound: ", pretty t]
     e -> pretty (show e)
 
+-- | Argument type mismatch meant for errors
+--   that does not force you to show the whole PactValue
 data ArgTypeError
   = ATEPrim PrimType
   | ATEList
@@ -329,7 +331,9 @@ data EvalError
   | InvalidEventCap FullyQualifiedName
   | NestedDefpactsNotAdvanced PactId
   | ExpectedPactValue
+  | NotInPactExecution
   deriving Show
+
 
 instance Pretty EvalError where
   pretty :: EvalError -> Pretty.Doc ann
@@ -359,14 +363,14 @@ instance Pretty EvalError where
       Pretty.hsep ["Native evaluation error for native", pretty n <> ",", "received incorrect argument(s) of type(s)", Pretty.commaSep tys]
     EvalError txt ->
       Pretty.hsep ["Program encountered an unhandled raised error:", pretty txt]
-    ModRefNotRefined _ -> error ""
-    InvalidDefKind _ _ -> error ""
-    NoSuchDef _ -> error ""
-    InvalidManagedCap _ -> error ""
-    CapNotInstalled _ -> error ""
-    NameNotInScope _ -> error ""
-    DefIsNotClosure _ -> error ""
-    NoSuchKeySet _ -> error ""
+    -- ModRefNotRefined _ -> error ""
+    -- InvalidDefKind _ _ -> error ""
+    -- NoSuchDef _ -> error ""
+    -- InvalidManagedCap _ -> error ""
+    -- CapNotInstalled _ -> error ""
+    -- NameNotInScope _ -> error ""
+    -- DefIsNotClosure _ -> error ""
+    -- NoSuchKeySet _ -> error ""
     YieldOutsiteDefPact ->
       "Try to yield a value outside a running DefPact execution"
     NoActivePactExec ->
@@ -433,22 +437,24 @@ instance Pretty EvalError where
       , "step: " <> pretty (_psStep ps)
       , "PactExec step: " <> pretty (_peStep pe + 1)
       ]
-    CannotUpgradeInterface _ -> error ""
-    ModuleGovernanceFailure _ -> error ""
-    DbOpFailure _ -> error ""
-    DynNameIsNotModRef _ -> error ""
-    ModuleDoesNotExist _ -> error ""
-    ExpectedModule _ -> error ""
-    HashNotBlessed _ _ -> error ""
-    CannotApplyPartialClosure -> error ""
-    ClosureAppliedToTooManyArgs -> error ""
-    FormIllegalWithinDefcap _ -> error ""
-    RunTimeTypecheckFailure _ _ -> error ""
-    NativeIsTopLevelOnly _ -> error ""
-    EventDoesNotMatchModule _ -> error ""
-    InvalidEventCap _ -> error ""
-    NestedDefpactsNotAdvanced _ -> error ""
-    ExpectedPactValue -> error ""
+    e -> pretty (show e)
+    -- CannotUpgradeInterface _ -> error ""
+    -- ModuleGovernanceFailure _ -> error ""
+    -- DbOpFailure _ -> error ""
+    -- DynNameIsNotModRef _ -> error ""
+    -- ModuleDoesNotExist _ -> error ""
+    -- ExpectedModule _ -> error ""
+    -- HashNotBlessed _ _ -> error ""
+    -- CannotApplyPartialClosure -> error ""
+    -- ClosureAppliedToTooManyArgs -> error ""
+    -- FormIllegalWithinDefcap _ -> error ""
+    -- RunTimeTypecheckFailure _ _ -> error ""
+    -- NativeIsTopLevelOnly _ -> error ""
+    -- EventDoesNotMatchModule _ -> error ""
+    -- InvalidEventCap _ -> error ""
+    -- NestedDefpactsNotAdvanced _ -> error ""
+    -- ExpectedPactValue -> error ""
+    -- NotInPactExecution -> error ""
 
 instance Exception EvalError
 
@@ -476,14 +482,8 @@ peInfo f = \case
     PEParseError pe <$> f info
   PEDesugarError de info ->
     PEDesugarError de <$> f info
-  -- PETypecheckError pe info ->
-  --   PETypecheckError pe <$> f info
-  -- PEOverloadError oe info ->
-  --   PEOverloadError oe <$> f info
   PEExecutionError ee info ->
     PEExecutionError ee <$> f info
-  -- PEFatalError fpe info ->
-  --   PEFatalError fpe <$> f info
 
 instance (Show info, Typeable info) => Exception (PactError info)
 

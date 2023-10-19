@@ -45,7 +45,6 @@ module Pact.Core.Names
  , replRawModuleName
  , replModuleName
  , replModuleHash
---  , DefKind(..)
  , fqnToName
  , fqnToQualName
  , NativeName(..)

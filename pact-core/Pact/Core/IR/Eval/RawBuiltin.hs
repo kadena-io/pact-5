@@ -57,6 +57,7 @@ import Pact.Core.Capabilities
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
+import Pact.Core.StableEncoding
 import Pact.Core.IR.Eval.CEK
 
 import qualified Pact.Core.Pretty as Pretty
@@ -522,13 +523,6 @@ coreEnumerateStepN = \info b cont handler _env -> \case
     returnCEKValue cont handler (VList (PLiteral . LInteger <$> v))
   args -> argsError info b args
 
--- concatList :: (IsBuiltin b, MonadEval b i m) => b -> NativeFn b i m
--- concatList = \info b cont handler env -> \case
---   [VList li] -> do
---     li' <- traverse asList li
---     returnCEKValue cont handler (VList (V.concat (V.toList li')))
---   _ -> failInvariant "takeList"
-
 makeList :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 makeList = \info b cont handler _env -> \case
   [VLiteral (LInteger i), VPactValue v] -> do
@@ -737,16 +731,20 @@ enforceCapGuard
   -> CEKErrorHandler b i m
   -> CapabilityGuard FullyQualifiedName PactValue
   -> m (EvalResult b i m)
-enforceCapGuard info cont handler (CapabilityGuard fqn args) = do
-  -- let ct = CapToken (fqnToQualName fqn) args
-  cond <- isCapInStack (CapToken fqn args)
-  -- caps <- useEvalState (esCaps.csSlots)
-  -- let csToSet cs = S.insert (_csCap cs) (S.fromList (_csComposed cs))
-  --     capSet = foldMap csToSet caps
-  if cond then returnCEKValue cont handler (VBool True)
-  else do
-    let errMsg = "Capability guard enforce failure cap not in scope: " <> renderFullyQualName fqn
-    returnCEK cont handler (VError errMsg info)
+enforceCapGuard info cont handler (CapabilityGuard fqn args mpid) = do
+  case mpid of
+    Nothing -> enforceCap
+    Just pid -> do
+      currPid <- getPactId info
+      if currPid == pid then enforceCap
+      else returnCEK cont handler (VError "Capability pact guard failed: invalid pact id" info)
+  where
+  enforceCap = do
+    cond <- isCapInStack (CapToken fqn args)
+    if cond then returnCEKValue cont handler (VBool True)
+    else do
+      let errMsg = "Capability guard enforce failure cap not in scope: " <> renderFullyQualName fqn
+      returnCEK cont handler (VError errMsg info)
 
 runUserGuard
   :: MonadEval b i m
@@ -1088,8 +1086,16 @@ coreEmitEvent = \info b cont handler env -> \case
 createCapGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 createCapGuard = \info b cont handler _env -> \case
   [VCapToken ct] ->
-    let cg = CapabilityGuard (_ctName ct) (_ctArgs ct)
+    let cg = CapabilityGuard (_ctName ct) (_ctArgs ct) Nothing
     in returnCEKValue cont handler (VGuard (GCapabilityGuard cg))
+  args -> argsError info b args
+
+createCapabilityPactGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+createCapabilityPactGuard = \info b cont handler _env -> \case
+  [VCapToken ct] -> do
+    pid <- getPactId info
+    let cg = CapabilityGuard (_ctName ct) (_ctArgs ct) (Just pid)
+    returnCEKValue cont handler (VGuard (GCapabilityGuard cg))
   args -> argsError info b args
 
 createModuleGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -1268,9 +1274,13 @@ coreWhere = \info b cont handler _env -> \case
 
 coreHash :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreHash = \info b cont handler _env -> \case
-  [VString s] -> do
-    returnCEKValue cont handler $ VString $ hashToText $ pactHash $ T.encodeUtf8 s
+  [VString s] ->
+    returnCEKValue cont handler (go (T.encodeUtf8 s))
+  [VPactValue pv] ->
+    returnCEKValue cont handler (go (encodeStable pv))
   args -> argsError info b args
+  where
+  go =  VString . hashToText . pactHash
 
 txHash :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 txHash = \info b cont handler _env -> \case
@@ -1489,6 +1499,7 @@ rawBuiltinRuntime = \case
   RawComposeCapability -> composeCapability
   RawInstallCapability -> installCapability
   RawCreateCapabilityGuard -> createCapGuard
+  RawCreateCapabilityPactGuard -> createCapabilityPactGuard
   RawCreateModuleGuard -> createModuleGuard
   RawEmitEvent -> coreEmitEvent
   RawCreateTable -> createTable

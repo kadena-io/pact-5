@@ -14,14 +14,12 @@ module Pact.Core.Pacts.Types
  ) where
 
 -- Todo: yield
-import Data.Text(Text)
 import Control.Lens
 import Data.Map.Strict (Map)
 
 import Pact.Core.PactValue
 import Pact.Core.Names
 import Pact.Core.Hash
-import Pact.Core.Pretty
 import Pact.Core.ChainData
 
 data PactContinuation name v

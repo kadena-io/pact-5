@@ -424,10 +424,11 @@ resumePact i cont handler env crossChainContinuation = viewCEKEnv eePactStep >>=
                  throwExecutionError i (DefPactStepMissmatch ps pe)
 
           let pc = view peContinuation pe
+              args = VPactValue <$> _pcArgs pc
               resume = case _psResume ps of
                          r@Just{} -> r
                          Nothing -> _peYield pe
-              env' = set cePactStep (Just $ set psResume resume ps) env
+              env' = set ceLocal (RAList.fromList (reverse args)) $ set cePactStep (Just $ set psResume resume ps) env
           applyPact i pc ps cont handler env' (_peNestedPactExec pe)
 
 

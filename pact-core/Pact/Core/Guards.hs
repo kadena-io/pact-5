@@ -140,9 +140,8 @@ data Namespace name term
   } deriving (Eq, Show)
 
 instance (Pretty name, Pretty term) => Pretty (CapabilityGuard name term) where
-  pretty (CapabilityGuard cg args) = "CapabilityGuard" <+> commaBraces
+  pretty (CapabilityGuard cg args pid) = "CapabilityGuard" <+> commaBraces
     [ "name: " <> pretty cg
     , "args: " <> pretty args
-    -- todo: pactId when I merge defpcats
-    -- , "pactId: " <> pretty _cgPactId
+    , "pactId: " <> pretty pid
     ]

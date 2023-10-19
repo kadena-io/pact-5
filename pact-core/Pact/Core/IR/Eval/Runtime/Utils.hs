@@ -40,6 +40,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , evalStateToErrorState
  , restoreFromErrorState
  , (.==)
+ , getPactId
  ) where
 
 import Control.Lens hiding ((%%=))
@@ -68,6 +69,7 @@ import Pact.Core.Capabilities
 import Pact.Core.Persistence
 import Pact.Core.Hash
 import Pact.Core.Environment
+import Pact.Core.Pacts.Types
 
 mkBuiltinFn
   :: (IsBuiltin b)
@@ -366,3 +368,9 @@ sysOnlyEnv e
     DModules -> _pdbRead pdb dom k
     DPacts -> _pdbRead pdb dom k
 
+getPactId :: (MonadEval b i m) => i -> m PactId
+getPactId info =
+  useEvalState esPactExec >>= \case
+    Just pe -> pure (_pePactId pe)
+    Nothing ->
+      throwExecutionError info NotInPactExecution
