@@ -56,6 +56,7 @@ module Pact.Core.Names
  , fqModule
  , fqHash
  , userTable
+ , PactId(..)
  ) where
 
 import Control.Lens
@@ -335,3 +336,14 @@ makeLenses ''FullyQualifiedName
 
 userTable :: TableName -> TableName
 userTable (TableName tn) = TableName ("USER_" <> tn)
+
+-- | The identifier that indexes defpacts in the db,
+--   generally computed from the continuation, or
+--   in the case of nested defpacts, the hash of the
+--   parent + the nested continuation
+newtype PactId
+  = PactId Text
+  deriving (Eq,Ord,Show)
+
+instance Pretty PactId where
+  pretty (PactId p) = pretty p

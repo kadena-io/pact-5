@@ -1,10 +1,8 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Pact.Core.Pacts.Types
- ( PactId(..)
- , PactContinuation(..)
+ ( PactContinuation(..)
  , pcName, pcArgs
  , PactStep(..)
  , psStep, psRollback, psPactId, psResume
@@ -25,10 +23,6 @@ import Pact.Core.Names
 import Pact.Core.Hash
 import Pact.Core.Pretty
 import Pact.Core.ChainData
-
-newtype PactId
-  = PactId Text
-  deriving (Eq,Ord,Show,Pretty)
 
 data PactContinuation name v
   = PactContinuation
