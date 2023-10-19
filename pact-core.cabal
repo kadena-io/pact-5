@@ -51,6 +51,7 @@ common pact-core-common
     , exceptions
     , array
     , pact-json
+    , scientific
 
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls

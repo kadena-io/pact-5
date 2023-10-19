@@ -12,8 +12,6 @@ module Pact.Core.Pacts.Types
  , peStepCount, peYield, peStep, peContinuation, peStepHasRollback, pePactId
  , peNestedPactExec
  , Yield(..)
- , hashToPactId
- , mkNestedPactId
  , Provenance(..)
  ) where
 
@@ -21,9 +19,6 @@ module Pact.Core.Pacts.Types
 import Data.Text(Text)
 import Control.Lens
 import Data.Map.Strict (Map)
-import qualified Data.Text.Encoding as T
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as BS8
 
 import Pact.Core.PactValue
 import Pact.Core.Names
@@ -34,9 +29,6 @@ import Pact.Core.ChainData
 newtype PactId
   = PactId Text
   deriving (Eq,Ord,Show,Pretty)
-
-hashToPactId :: Hash -> PactId
-hashToPactId = PactId . hashToText
 
 data PactContinuation name v
   = PactContinuation
@@ -55,14 +47,6 @@ data Provenance = Provenance
   , _pModuleHash :: ModuleHash
     -- ^ a hash of current containing module
   } deriving (Eq, Show)
-
-encodePactContinuation :: PactContinuation FullyQualifiedName PactValue -> ByteString
-encodePactContinuation = BS8.pack . show
-
-mkNestedPactId :: PactContinuation FullyQualifiedName PactValue -> PactId -> PactId
-mkNestedPactId pc (PactId parent) =
-  hashToPactId (pactHash (T.encodeUtf8 parent <> ":" <> encodePactContinuation pc)) -- TODO add pc
-
 
 
 -- | `Yield` representing an object
@@ -95,4 +79,3 @@ data PactStep = PactStep
   } deriving Show
 
 makeLenses ''PactStep
-

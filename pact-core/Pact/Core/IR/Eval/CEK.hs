@@ -40,6 +40,7 @@ import Data.List.NonEmpty(NonEmpty(..))
 import Data.Foldable(find, foldl')
 import qualified Data.RAList as RAList
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified Data.Vector as V
 import qualified Data.Set as S
 import qualified Data.Map.Strict as M
@@ -58,6 +59,7 @@ import Pact.Core.ModRefs
 import Pact.Core.Environment
 import Pact.Core.Persistence
 import Pact.Core.Hash
+import Pact.Core.StableEncoding
 
 import Pact.Core.IR.Term hiding (PactStep)
 import Pact.Core.IR.Eval.Runtime
@@ -255,9 +257,12 @@ initPact i pc cont handler cenv = do
       applyPact i pc pStep cont handler cenv' mempty
     Just ps ->
       let
-        npId = mkNestedPactId pc (_psPactId ps)
+        PactId p = _psPactId ps
+        npId = hashToPactId (pactHash (T.encodeUtf8 p <> ":" <> encodeStable pc))
         pStep = PactStep (_psStep ps) (_psRollback ps) npId Nothing
       in applyNestedPact i pc pStep cont handler cenv
+  where
+    hashToPactId = PactId . hashToText
 
 applyPact
   :: MonadEval b i m
