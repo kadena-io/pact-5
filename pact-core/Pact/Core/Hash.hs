@@ -24,6 +24,7 @@ module Pact.Core.Hash
 , decodeBase64UrlUnpadded
 , toB64UrlUnpaddedText
 , fromB64UrlUnpaddedText
+, defaultPactHash
 ) where
 
 import Control.DeepSeq
@@ -114,3 +115,6 @@ fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }
   deriving (Eq, Ord, Show)
   deriving newtype (NFData)
+
+defaultPactHash :: Hash
+defaultPactHash = pactHash ""

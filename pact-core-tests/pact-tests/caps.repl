@@ -798,12 +798,12 @@
   (defun test-cap-guard (n:string m:string)
     (with-capability (CAP1 n)
       (enforce-guard (create-capability-guard (CAP1 m)))))
-  ;  (defpact cg-pact (kw:string kr:string n:string m:string)
-  ;    (step (write cg-tbl kw { 'g: (create-capability-pact-guard (CAP1 m)) }))
-  ;    (step
-  ;     (with-read cg-tbl kr { 'g := cg }
-  ;      (with-capability (CAP1 n) (enforce-guard cg))))
-  ;  )
+  (defpact cg-pact (kw:string kr:string n:string m:string)
+    (step (write cg-tbl kw { 'g: (create-capability-pact-guard (CAP1 m)) }))
+    (step
+     (with-read cg-tbl kr { 'g := cg }
+      (with-capability (CAP1 n) (enforce-guard cg))))
+  )
 )
 (create-table cg-tbl)
 
@@ -817,35 +817,34 @@
  "Capability not acquired"
  (test-cap-guard "A" "B"))
 
-;  (env-hash (hash 1))
+(env-hash (hash 1))
 
-;  (cg-pact 'k1 'k1 "C" "C")
-;  (expect
-;   "cap pact guard succeeds"
-;   true
-;   (continue-pact 1))
+(cg-pact 'k1 'k1 "C" "C")
+(expect
+ "cap pact guard succeeds"
+ true
+ (continue-pact 1))
 
-;  (pact-state true)
-;  (env-hash (hash 2))
+(pact-state true)
+(env-hash (hash 2))
 
-;  (cg-pact 'k2 'k2 "D" "E")
-;  (expect-failure
-;   "cap pact guard fails on wrong cap"
-;   "Capability not acquired"
-;   (continue-pact 1))
+(cg-pact 'k2 'k2 "D" "E")
+(expect-failure
+ "cap pact guard fails on wrong cap"
+ "Capability not acquired"
+ (continue-pact 1))
 
-;  (pact-state true)
-;  (env-hash (hash 3))
+(pact-state true)
+(env-hash (hash 3))
 
-;  (cg-pact 'k3 'k1 "C" "C")
-;  (expect-failure
-;   "cap pact guard fails on wrong pact id"
-;   "Invalid Pact ID"
-;   (continue-pact 1))
+(cg-pact 'k3 'k1 "C" "C")
+(expect-failure
+ "cap pact guard fails on wrong pact id"
+ "Invalid Pact ID"
+ (continue-pact 1))
 (commit-tx)
 
 (begin-tx)
-;  ;  (env-exec-config ["DisablePact49"])
 
  ; pact 48 caps
  (interface ops

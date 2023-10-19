@@ -237,6 +237,7 @@ data RawBuiltin
   | RawInstallCapability
   | RawEmitEvent
   | RawCreateCapabilityGuard
+  | RawCreateCapabilityPactGuard
   | RawCreateModuleGuard
   -- Database functions
   | RawCreateTable
@@ -356,6 +357,7 @@ rawBuiltinToText = \case
   RawEnforceKeyset -> "enforce-keyset"
   RawKeysetRefGuard -> "keyset-ref-guard"
   RawCreateCapabilityGuard -> "create-capability-guard"
+  RawCreateCapabilityPactGuard -> "create-capability-pact-guard"
   RawCreateModuleGuard -> "create-module-guard"
   RawAt -> "at"
   RawMakeList -> "make-list"
@@ -481,6 +483,7 @@ instance IsBuiltin RawBuiltin where
     RawEnforceGuard -> 1
     RawKeysetRefGuard -> 1
     RawCreateCapabilityGuard -> 1
+    RawCreateCapabilityPactGuard -> 1
     RawCreateModuleGuard -> 1
     RawAt -> 2
     RawMakeList -> 2

@@ -49,19 +49,20 @@ runReplTest file src = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
   pdb <- mockPactDb
-  let ee = EvalEnv mempty pdb (EnvData mempty) (Hash "default") def Nothing Transactional mempty
+  let ee = EvalEnv mempty pdb (EnvData mempty) defaultPactHash def Nothing Transactional mempty
+      source = SourceCode (takeFileName file) src
   let rstate = ReplState
             { _replFlags =  mempty
             , _replEvalState = def
             , _replPactDb = pdb
             , _replGas = gasRef
             , _replEvalLog = gasLog
-            , _replCurrSource = SourceCode mempty
+            , _replCurrSource = source
             , _replEvalEnv = ee
             , _replTx = Nothing
             }
   stateRef <- newIORef rstate
-  runReplT stateRef (interpretReplProgram (SourceCode src) (const (pure ()))) >>= \case
+  runReplT stateRef (interpretReplProgram source (const (pure ()))) >>= \case
     Left e -> let
       rendered = replError (ReplSource (T.pack file) (decodeUtf8 src)) e
       in assertFailure (T.unpack rendered)

@@ -145,6 +145,7 @@ type MonadDesugar raw reso i m =
   , MonadError (PactError i) m
   , MonadState (RenamerState reso i) m
   , MonadReader (RenamerEnv reso i) m
+  , Show raw
   , Show reso
   , Show i
   , MonadIO m)
@@ -243,6 +244,8 @@ instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
     App (Builtin (RBuiltinRepl RExpectFailureMatch) i) [e1, e2, suspendTerm e3] i
   desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2] | isn't _Lam e2 =
     App (Builtin (RBuiltinRepl RContinuePactRollback) i) [e1, e2] i
+  desugarAppArity i (RBuiltinRepl RPactState) [e1] =
+    App (Builtin (RBuiltinRepl RResetPactState) i) [e1] i
   desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2, e3]
     | isn't _Lam e2 && isn't _Lam e3 =
       App (Builtin (RBuiltinRepl RContinuePactRollbackYield) i) [e1, e2, e3] i
@@ -733,13 +736,41 @@ loadTopLevelMembers i mimports mdata binds = case mdata of
         (rsLoaded . loToplevel) %= (`M.union` loadedDeps)
         pure (M.union depMap binds)
 
+-- | Resolve a module name, return the implemented members as well if any
+-- including all current
+resolveModuleName :: (MonadRenamer b i m) => i -> ModuleName -> m (ModuleName, [ModuleName])
+resolveModuleName i mn =
+  view reCurrModule >>= \case
+    Just (currMod, imps) | currMod == mn -> pure (currMod, imps)
+    _ -> resolveModuleData mn i >>= \case
+      ModuleData md _ -> do
+        let implementeds = view mImplements md
+        pure (mn, implementeds)
+      -- todo: error type here
+      InterfaceData iface _ ->
+        throwDesugarError (InvalidModuleReference (_ifName iface)) i
 
-resolveModuleName
+-- | Resolve a module name, return the implemented members as well if any
+-- including all current
+resolveInterfaceName :: (MonadRenamer b i m) => i -> ModuleName -> m (ModuleName)
+resolveInterfaceName i mn =
+  view reCurrModule >>= \case
+    Just (currMod, _imps) | currMod == mn -> pure currMod
+    _ -> resolveModuleData mn i >>= \case
+      ModuleData _ _ ->
+        throwDesugarError (InvalidModuleReference mn) i
+      -- todo: error type here
+      InterfaceData _ _ ->
+        pure mn
+
+
+-- mn implementeds
+resolveModuleData
   :: (MonadRenamer b i m)
   => ModuleName
   -> i
   -> m (ModuleData b i)
-resolveModuleName mn i =
+resolveModuleData mn i =
   use (rsLoaded . loModules . at mn) >>= \case
     Just md -> pure md
     Nothing ->
@@ -881,7 +912,7 @@ renameType i = \case
   Lisp.TyList ty ->
     TyList <$> renameType i ty
   Lisp.TyModRef tmr ->
-    TyModRef tmr <$ resolveModuleName tmr i
+    TyModRef tmr <$ resolveInterfaceName i tmr
   Lisp.TyKeyset -> pure TyGuard
   Lisp.TyObject pn ->
     TyObject <$> resolveSchema pn
@@ -1245,13 +1276,16 @@ resolveBare (BareName bn) i = views reBinds (M.lookup bn) >>= \case
         Just (currMod, imps) | currMod == mn ->
           pure (Name bn (NModRef mn imps), Nothing)
         _ -> do
-          resolveModuleName mn i >>= \case
-            ModuleData md _ -> do
-              let implementeds = view mImplements md
-              pure (Name bn (NModRef mn implementeds), Nothing)
-            -- todo: error type here
-            InterfaceData iface _ ->
-              throwDesugarError (InvalidModuleReference (_ifName iface)) i
+          (mn', imps) <- resolveModuleName i mn
+          pure (Name bn (NModRef mn' imps), Nothing)
+
+          -- resolveModuleData mn i >>= \case
+          --   ModuleData md _ -> do
+          --     let implementeds = view mImplements md
+          --     pure (Name bn (NModRef mn implementeds), Nothing)
+          --   -- todo: error type here
+          --   InterfaceData iface _ ->
+          --     throwDesugarError (InvalidModuleReference (_ifName iface)) i
 
 resolveQualified
   :: (MonadRenamer b i m)
@@ -1329,7 +1363,7 @@ handleImport
   -> Import
   -> m (Map Text (NameKind, Maybe DefKind))
 handleImport info binds (Import mn mh imported) = do
-  mdata <- resolveModuleName mn info
+  mdata <- resolveModuleData mn info
   let imported' = S.fromList <$> imported
       mdhash = view mdModuleHash mdata
   case mh of
@@ -1462,7 +1496,7 @@ runDesugar' pdb loaded act = do
   pure (DesugarOutput renamed loaded' deps)
 
 runDesugarTerm
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i, Show raw)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1471,7 +1505,7 @@ runDesugarTerm
 runDesugarTerm _ pdb loaded = runDesugar' pdb loaded  . RenamerT . (desugarLispTerm >=> renameTerm)
 
 runDesugarModule'
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i, Show raw)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1480,7 +1514,7 @@ runDesugarModule'
 runDesugarModule' _ pdb loaded = runDesugar' pdb loaded . RenamerT . (desugarModule >=> renameModule)
 
 runDesugarInterface
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i, Show raw)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1489,7 +1523,7 @@ runDesugarInterface
 runDesugarInterface _ pdb loaded  = runDesugar' pdb loaded . RenamerT . (desugarInterface >=> renameInterface)
 
 runDesugarReplDefun
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i, Show raw)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1502,7 +1536,7 @@ runDesugarReplDefun _ pdb loaded =
   . (desugarDefun >=> renameReplDefun)
 
 runDesugarReplDefConst
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i, Show raw)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1515,7 +1549,7 @@ runDesugarReplDefConst _ pdb loaded =
   . (desugarDefConst >=> renameReplDefConst)
 
 runDesugarTopLevel
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i, Show raw)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
@@ -1530,7 +1564,7 @@ runDesugarTopLevel proxy pdb loaded = \case
 
 
 runDesugarReplTopLevel
-  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i)
+  :: (MonadError (PactError i) m, MonadIO m, DesugarBuiltin raw, Show reso, Show i, Show raw)
   => Proxy raw
   -> PactDb reso i
   -> Loaded reso i
