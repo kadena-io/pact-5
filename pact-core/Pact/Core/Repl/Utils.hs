@@ -284,7 +284,7 @@ replError (ReplSource file src) pe =
       spanLen = _liEndLine pei - _liStartLine pei
       -- We want the padding to be the biggest line number we will show, which
       -- is endLine + 1
-      maxPad = T.length (T.pack (show ((_liEndLine pei + 1)))) + 1
+      maxPad = length (show (_liEndLine pei + 1)) + 1
       slice = withLine start maxPad $ take (max 1 spanLen) $ drop start srcLines
       -- Render ^^^ only in the column slice
       colMarker = T.replicate (maxPad+1) " " <> "| " <> T.replicate (_liStartColumn pei) " " <> T.replicate (max 1 (_liEndColumn pei - _liStartColumn pei)) "^"
