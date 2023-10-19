@@ -94,6 +94,8 @@ data ModuleGuard
   , _mgName :: Text
   } deriving (Show, Eq, Ord)
 
+-- Todo: module guards are compared on equality based on name
+-- Why????
 -- instance Eq ModuleGuard where
 --   mg == mg' = _mgModule mg == _mgModule mg'
 
@@ -109,8 +111,8 @@ instance Pretty ModuleGuard where
 data CapabilityGuard name term
   = CapabilityGuard
   { _cgName :: !name
-  , _cgArgs :: ![term] }
-    -- , _cgPactId :: !(Maybe PactId)
+  , _cgArgs :: ![term]
+  , _cgPactId :: !(Maybe PactId) }
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 data Guard name term
@@ -138,9 +140,8 @@ data Namespace name term
   } deriving (Eq, Show)
 
 instance (Pretty name, Pretty term) => Pretty (CapabilityGuard name term) where
-  pretty (CapabilityGuard cg args) = "CapabilityGuard" <+> commaBraces
+  pretty (CapabilityGuard cg args pid) = "CapabilityGuard" <+> commaBraces
     [ "name: " <> pretty cg
     , "args: " <> pretty args
-    -- todo: pactId when I merge defpcats
-    -- , "pactId: " <> pretty _cgPactId
+    , "pactId: " <> pretty pid
     ]
