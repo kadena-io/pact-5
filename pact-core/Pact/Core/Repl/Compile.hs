@@ -7,8 +7,6 @@
 
 module Pact.Core.Repl.Compile
  ( ReplCompileValue(..)
---  , interpretExpr
---  , compileProgram
  , interpretReplProgram
  ) where
 
@@ -38,10 +36,11 @@ import Pact.Core.Environment
 
 
 import Pact.Core.IR.Eval.Runtime
-import Pact.Core.Repl.Runtime
+import Pact.Core.IR.Eval.CEK(eval)
+import Pact.Core.IR.Eval.RawBuiltin
 import Pact.Core.Repl.Runtime.ReplBuiltin
 import Pact.Core.Hash
-import Pact.Core.PactValue (EnvData(..))
+import Pact.Core.PactValue
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
@@ -72,7 +71,7 @@ interpretReplProgram
   :: SourceCode
   -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
   -> ReplM ReplRawBuiltin [ReplCompileValue]
-interpretReplProgram sc@(SourceCode _ source) display = do
+interpretReplProgram (SourceCode _ source) display = do
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ Lisp.parseReplProgram lexx
@@ -105,36 +104,42 @@ interpretReplProgram sc@(SourceCode _ source) display = do
           pure out
   pipe' tl = case tl of
     Lisp.RTLTopLevel toplevel -> do
-      v <- interpretTopLevel interpreter toplevel
+      v <- interpretTopLevel (Interpreter interpretExpr interpretGuard) toplevel
       displayValue (RCompileValue v)
     _ ->  do
       ds <- runDesugarReplTopLevel tl
       interpret ds
-
-  interpreter = Interpreter $ \te -> do
-    evalGas <- use replGas
-    evalLog <- use replEvalLog
-    es <- use replEvalState
-    tx <- use replTx
-    ee <- use replEvalEnv
-    let rEnv = ReplEvalEnv evalGas evalLog replBuiltinEnv
-        rState = ReplEvalState ee es sc tx
-    (out, st) <- liftIO (runReplCEK rEnv rState te)
-    replTx .= view reTx st
-    evalState .= view reState st
-    replEvalEnv .= view reEnv st
-    liftEither out >>= \case
+  interpretGuard i g = do
+    pdb <- viewEvalEnv eePactDb
+    ps <- viewEvalEnv eePactStep
+    let env = CEKEnv mempty pdb replBuiltinEnv ps False
+    ev <- coreEnforceGuard i (RBuiltinWrap RawEnforceGuard) Mt CEKNoHandler env [VGuard g]
+    case ev of
       VError txt _ ->
-        throwError (PEExecutionError (EvalError txt) (view termInfo te))
+        throwError (PEExecutionError (EvalError txt) i)
       EvalValue v -> do
-        loaded .= view (reState . esLoaded) st
-        (replEvalState . esPactExec) .= view (reState . esPactExec) st
         case v of
           VClosure{} -> do
             pure IPClosure
           VTable tv -> pure (IPTable (_tvName tv))
           VPactValue pv -> do
-            pure (IPV pv (view termInfo te))
+            pure (IPV pv i)
+
+  interpretExpr term = do
+    pdb <- use (replEvalEnv . eePactDb)
+    let builtins = replBuiltinEnv
+    ps <- viewEvalEnv eePactStep
+    let cekEnv = CEKEnv mempty pdb builtins ps False
+    eval cekEnv term >>= \case
+      VError txt _ ->
+        throwError (PEExecutionError (EvalError txt) (view termInfo term))
+      EvalValue v -> do
+        case v of
+          VClosure{} -> do
+            pure IPClosure
+          VTable tv -> pure (IPTable (_tvName tv))
+          VPactValue pv -> do
+            pure (IPV pv (view termInfo term))
   interpret (DesugarOutput tl _deps) = do
     case tl of
       RTLDefun df -> do

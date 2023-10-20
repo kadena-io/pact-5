@@ -123,7 +123,6 @@ library
 
     -- Repl
     Pact.Core.Repl.Utils
-    Pact.Core.Repl.Runtime
     Pact.Core.Repl.Runtime.ReplBuiltin
     Pact.Core.Repl.Compile
 

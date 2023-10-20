@@ -43,10 +43,6 @@ module Pact.Core.Environment.Types
  , MonadEvalEnv(..)
  , MonadEvalState(..)
  , MonadEval
---  , setEvalState, (%==), useEvalState, usesEvalState
---  , (.==)
---  , viewEvalEnv
---  , viewsEvalEnv
  ) where
 
 

@@ -11,7 +11,8 @@
 
 module Pact.Core.IR.Eval.RawBuiltin
  ( rawBuiltinRuntime
- , rawBuiltinEnv ) where
+ , rawBuiltinEnv
+ , coreEnforceGuard) where
 
 -- |
 -- Module      :  Pact.Core.Eval.RawBuiltin
@@ -620,7 +621,7 @@ coreEnforceGuard = \info b cont handler env -> \case
         if cond then returnCEKValue cont handler (VBool True)
         else returnCEK cont handler (VError "enforce keyset failure" info)
       GKeySetRef ksn -> do
-        cond <- enforceKeysetName info env ksn
+        cond <- enforceKeysetName info (view cePactDb env) ksn
         if cond then returnCEKValue cont handler (VBool True)
         else returnCEK cont handler (VError "enforce keyset ref failure" info)
       GUserGuard ug -> runUserGuard info cont handler env ug
@@ -633,7 +634,7 @@ coreEnforceGuard = \info b cont handler env -> \case
           returnCEKValue cont handler (VBool True)
   [VString s] -> do
     let ksn = KeySetName s
-    cond <- enforceKeysetName info env ksn
+    cond <- enforceKeysetName info (view cePactDb env) ksn
     if cond then returnCEKValue cont handler (VBool True)
     else returnCEK cont handler (VError "enforce keyset ref failure" info)
   args -> argsError info b args

@@ -332,6 +332,8 @@ data EvalError
   | NestedDefpactsNotAdvanced PactId
   | ExpectedPactValue
   | NotInPactExecution
+  | GuardEnforceError Text
+  -- ^ Non-recoverable guard enforces.
   deriving Show
 
 

@@ -19,6 +19,8 @@ module Pact.Core.Environment.Utils
  , viewsEvalEnv
  , getModuleData
  , getModule
+ , lookupModule
+ , lookupModuleData
  , throwExecutionError
  , throwExecutionError'
  , toFqDep
@@ -73,6 +75,45 @@ throwExecutionError i e = throwError (PEExecutionError e i)
 
 throwExecutionError' :: (MonadEval b i m) => EvalError -> m a
 throwExecutionError' = throwExecutionError def
+
+-- | lookupModuleData for only modules
+lookupModule :: (MonadEval b i m) => i -> PactDb b i -> ModuleName -> m (Maybe (EvalModule b i))
+lookupModule info pdb mn =
+ useEvalState (esLoaded . loModules . at mn) >>= \case
+   Just (ModuleData md _) -> pure (Just md)
+   Just (InterfaceData _ _) ->
+    throwExecutionError info (ExpectedModule mn)
+   Nothing -> do
+    liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
+      Just mdata@(ModuleData md deps) -> do
+        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> (_mDefs md)
+        (esLoaded . loAllLoaded) %== M.union newLoaded . M.union deps
+        (esLoaded . loModules) %== M.insert mn mdata
+        pure (Just md)
+      Just (InterfaceData _ _) ->
+        throwExecutionError info (ExpectedModule mn)
+      Nothing -> pure Nothing
+
+-- | lookupModuleData for only modules
+lookupModuleData :: (MonadEval b i m) => i -> PactDb b i -> ModuleName -> m (Maybe (ModuleData b i))
+lookupModuleData info pdb mn =
+ useEvalState (esLoaded . loModules . at mn) >>= \case
+   Just md -> pure (Just md)
+   Nothing -> do
+    liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
+      Just mdata@(ModuleData md deps) -> do
+        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> (_mDefs md)
+        (esLoaded . loAllLoaded) %== M.union newLoaded . M.union deps
+        (esLoaded . loModules) %== M.insert mn mdata
+        pure (Just mdata)
+      Just mdata@(InterfaceData iface deps) -> do
+        let ifDefs = mapMaybe ifDefToDef (_ifDefns iface)
+        let newLoaded = M.fromList $ toFqDep mn (_ifHash iface) <$> ifDefs
+        (esLoaded . loAllLoaded) %== M.union newLoaded . M.union deps
+        (esLoaded . loModules) %== M.insert mn mdata
+        pure (Just mdata)
+      Nothing -> pure Nothing
+
 
 -- | getModuleData, but only for modules, no interfaces
 getModule :: (MonadEval b i m) => i -> PactDb b i -> ModuleName -> m (EvalModule b i)

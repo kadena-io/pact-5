@@ -14,15 +14,13 @@ module Pact.Core.Compile
  ) where
 
 import Control.Lens
-import Control.Monad.IO.Class
-import Control.Monad.Except ( MonadError(throwError), liftEither )
+import Control.Monad.Except
 import Control.Monad
 import Data.Maybe(mapMaybe)
-import Data.Foldable(find)
 import Data.ByteString(ByteString)
 import qualified Data.Map.Strict as M
 import qualified Data.ByteString as B
-import qualified Data.Set as Set
+import qualified Data.Set as S
 
 import Pact.Core.Debug
 import Pact.Core.Builtin
@@ -39,7 +37,6 @@ import Pact.Core.Environment
 import Pact.Core.Capabilities
 import Pact.Core.Literal
 import Pact.Core.Imports
-
 
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
@@ -76,27 +73,27 @@ evalModuleGovernance
 evalModuleGovernance interp tl = do
   pdb <- viewEvalEnv eePactDb
   case tl of
-    Lisp.TLModule m -> liftIO (readModule pdb (Lisp._mName m)) >>= \case
-      -- Existing module found
-      Just (ModuleData md _) ->
-        case _mGovernance md of
+    Lisp.TLModule m -> lookupModule (Lisp._mInfo m) pdb (Lisp._mName m) >>= \case
+      Just targetModule -> do
+        term <- case _mGovernance targetModule of
           KeyGov (KeySetName ksn) -> do
             let info = Lisp._mInfo m
                 ksnTerm = Constant (LString ksn) info
                 ksrg = App (Builtin (liftRaw RawKeysetRefGuard) info) (pure ksnTerm) info
                 term = App (Builtin (liftRaw RawEnforceGuard) info) (pure ksrg) info
-            void (_interpret interp term)
-          CapGov (ResolvedGov fqn) ->
-            -- Todo: this does not allow us to delegate governance, which is an issue.
-            case find (\d -> defName d == _fqName fqn) (_mDefs md) of
-              Just (DCap d) ->
-                void (_interpret interp (_dcapTerm d))
-              _ ->
-                throwError (PEExecutionError (ModuleGovernanceFailure (Lisp._mName m)) (Lisp._mInfo m))
-      -- Found an interface, oopsie it's not upgradeable.
-      Just (InterfaceData iface _) ->
-        throwError (PEExecutionError (CannotUpgradeInterface (_ifName iface)) (_ifInfo iface))
+            pure term
+          CapGov (ResolvedGov fqn) -> do
+            let info = Lisp._mInfo m
+                cgBody = Constant LUnit info
+                term = CapabilityForm (WithCapability (fqnToName fqn) [] cgBody) info
+            pure term
+        void (_interpret interp term)
+        esCaps . csModuleAdmin %== S.insert (Lisp._mName m)
       Nothing -> pure ()
+    Lisp.TLInterface iface -> lookupModuleData (Lisp._ifInfo iface) pdb (Lisp._ifName iface) >>= \case
+      Nothing -> pure ()
+      Just _ ->
+        throwExecutionError (Lisp._ifInfo iface)  (CannotUpgradeInterface (Lisp._ifName iface))
     _ -> pure ()
 
 interpretTopLevel
@@ -125,7 +122,7 @@ interpretTopLevel interp tl = do
             over loModules (M.insert (_mName m) mdata) .
             over loAllLoaded (M.union newLoaded)
       esLoaded %== loadNewModule
-      esCaps . csModuleAdmin %== Set.union (Set.singleton (_mName m))
+      esCaps . csModuleAdmin %== S.union (S.singleton (_mName m))
       pure (LoadedModule (_mName m))
     TLInterface iface -> do
       -- Todo: deps are not being calculated properly by the renamer

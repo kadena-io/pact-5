@@ -60,7 +60,7 @@ import Pact.Core.Persistence
 import Pact.Core.Hash
 import Pact.Core.StableEncoding
 
-import Pact.Core.IR.Term 
+import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Pacts.Types
 chargeNodeGas :: MonadEval b i m => NodeType -> m ()
@@ -454,11 +454,10 @@ enforceKeyset (KeySet kskeys ksPred) = do
 enforceKeysetName
   :: MonadEval b i m
   => i
-  -> CEKEnv b i m
+  -> PactDb b i
   -> KeySetName
   -> m Bool
-enforceKeysetName info env ksn = do
-  let pdb = view cePactDb env
+enforceKeysetName info pdb ksn = do
   liftIO (readKeyset pdb ksn) >>= \case
     Just ks -> enforceKeyset ks
     Nothing ->
@@ -514,16 +513,16 @@ acquireModuleAdmin i env mdl = do
   mc <- useEvalState (esCaps . csModuleAdmin)
   unless (S.member (_mName mdl) mc) $ case _mGovernance mdl of
     KeyGov ksn -> do
-      signed <- enforceKeysetName i env ksn
+      signed <- enforceKeysetName i (view cePactDb env) ksn
       unless signed $ throwExecutionError i (ModuleGovernanceFailure (_mName mdl))
       esCaps . csModuleAdmin %== S.insert (_mName mdl)
     CapGov (ResolvedGov fqn) -> do
       let wcapBody = Constant LUnit i
       -- *special* use of `evalCap` here to evaluate module governance.
-      evalCap i Mt CEKNoHandler (set ceLocal mempty env) (CapToken fqn []) (CapBodyC PopCapInvoke) wcapBody >>= \case
+      evalCap i Mt CEKNoHandler env (CapToken fqn []) (CapBodyC PopCapInvoke) wcapBody >>= \case
         VError _ _ ->
           throwExecutionError i (ModuleGovernanceFailure (_mName mdl))
-        _ -> do
+        EvalValue _ -> do
           esCaps . csModuleAdmin %== S.insert (_mName mdl)
 
 evalWithStackFrame
