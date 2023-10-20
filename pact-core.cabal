@@ -119,8 +119,6 @@ library
     Pact.Core.IR.Eval.CEK
     Pact.Core.IR.Eval.RawBuiltin
 
-    -- Pact.Core.Untyped.Eval.Builtin
-
     -- Repl
     Pact.Core.Repl.Utils
     Pact.Core.Repl.Runtime.ReplBuiltin

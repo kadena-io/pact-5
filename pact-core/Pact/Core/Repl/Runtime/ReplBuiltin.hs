@@ -37,14 +37,6 @@ import Pact.Core.IR.Term
 import Pact.Core.Info
 
 import Pact.Core.Repl.Utils
--- import Pact.Core.Repl.Runtime
-
--- type ReplBM b i = ReplM (ReplBuiltin b) i
--- type ReplCont b i = Cont (ReplBuiltin b) i (ReplBM b i)
--- type ReplHandler b i = CEKErrorHandler (ReplBuiltin b) i (ReplBM b i)
--- type ReplCEKValue b i = CEKValue (ReplBuiltin b) i (ReplBM b i)
--- type ReplEvalResult b i = EvalResult (ReplBuiltin b) i (ReplBM b i)
--- type ReplBuiltinFn b i = NativeFn (ReplBuiltin b) i (ReplBM b i)
 
 prettyShowValue :: CEKValue b i m -> Text
 prettyShowValue = \case
