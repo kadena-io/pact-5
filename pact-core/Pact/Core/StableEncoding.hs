@@ -178,15 +178,15 @@ instance J.Encode (StableEncoding UTCTime) where
 -- | Stable encoding of `Principal`.
 instance J.Encode (StableEncoding Principal) where
   build (StableEncoding principal) = case principal of
-    K pk -> J.object [ kind 'K', "pk" J..= StableEncoding pk ]
-    W ph n -> J.object [ kind 'W', "ph" J..= ph, "pred" J..= n ]
-    R ksn -> J.object [ kind 'R', "ksn" J..= StableEncoding ksn ]
-    U fqn args -> J.object [ kind 'U', "fqn" J..= fqn, "args" J..= args ]
-    M mn n -> J.object [ kind 'M', "modname" J..= StableEncoding mn, "guard" J..= n ]
-    P pid n -> J.object [ kind 'P', "pid" J..= StableEncoding pid, "fun" J..= n ]
-    C c -> J.object [ kind 'C', "cap" J..= c ]
+    K pk -> kind 'K' [ "pk" J..= StableEncoding pk ]
+    W ph n -> kind 'W' [ "ph" J..= ph, "pred" J..= n ]
+    R ksn -> kind 'R' [ "ksn" J..= StableEncoding ksn ]
+    U fqn args -> kind 'U' [ "fqn" J..= fqn, "args" J..= args ]
+    M mn n -> kind 'M' [ "modname" J..= StableEncoding mn, "guard" J..= n ]
+    P pid n -> kind 'P' [ "pid" J..= StableEncoding pid, "fun" J..= n ]
+    C c -> kind 'C' [ "cap" J..= c ]
     where
-      kind c = "kind" J..= T.singleton c
+      kind c rest = J.object $ "kind" J..= T.singleton c : rest
 
 -- | Stable encoding of `PactValue`
 instance J.Encode (StableEncoding PactValue) where
