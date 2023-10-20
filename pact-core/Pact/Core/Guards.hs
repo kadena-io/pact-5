@@ -4,7 +4,9 @@
 
 module Pact.Core.Guards
 ( PublicKeyText(..)
+, renderPublicKeyText
 , KeySetName(..)
+, renderKeySetName
 , Governance(..)
 , KeySet(..)
 , Guard(..)
@@ -30,11 +32,17 @@ newtype PublicKeyText = PublicKeyText { _pubKey :: Text }
 instance Pretty PublicKeyText where
   pretty (PublicKeyText t) = pretty t
 
+renderPublicKeyText :: PublicKeyText -> Text
+renderPublicKeyText = _pubKey
+
 newtype KeySetName = KeySetName { _keysetName :: Text }
     deriving (Eq,Ord,Show)
 
 instance Pretty KeySetName where
   pretty (KeySetName ks) = "'" <> pretty ks
+
+renderKeySetName :: KeySetName -> Text
+renderKeySetName = _keysetName
 
 data Governance name
   = KeyGov KeySetName

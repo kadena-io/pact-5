@@ -34,11 +34,11 @@ data Principal
 -- Invariant: should roundtrip with parser.
 --
 mkPrincipalIdent :: Principal -> Text
-mkPrincipalIdent = undefined {- \case
-  P pid n -> "p:" <> asString pid <> ":" <> n
-  K pk -> "k:" <> asString pk
+mkPrincipalIdent = \case
+  P pid n -> "p:" <> renderPactId pid <> ":" <> n
+  K pk -> "k:" <> renderPublicKeyText pk
   W ph n -> "w:" <> ph <> ":" <> n
-  R n -> "r:" <> asString n
+  R n -> "r:" <> renderKeySetName n
   U n ph -> "u:" <> n <> ":" <> ph
-  M mn n -> "m:" <> asString mn <> ":" <> n
-  C c -> "c:" <> c -}
+  M mn n -> "m:" <> renderModuleName mn <> ":" <> n
+  C c -> "c:" <> c
