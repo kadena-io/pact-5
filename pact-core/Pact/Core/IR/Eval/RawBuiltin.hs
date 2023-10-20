@@ -1430,8 +1430,10 @@ coreCreatePrincipal info b cont handler _env = \case
       GModuleGuard (ModuleGuard mn n) -> ret $ Pr.M mn n
       GUserGuard (UserGuard f args) -> do
         h <- mkHash $ map encodeStable args
-        ret $ Pr.U (Pretty.renderText $ fqnToName f) (hashToText h)
-        -- TODO orig pact gets a Name   ^^^^^^^^ and renders a Name, so double-check equivalence
+        ret $ Pr.U (Pretty.renderText f) (hashToText h)
+        -- TODO orig pact gets here ^^^^ a Name
+        -- which can be any of QualifiedName/BareName/DynamicName/FQN,
+        -- and uses the rendered string here. Need to double-check equivalence.
       GCapabilityGuard (CapabilityGuard f args pid) -> do
         let args' = map encodeStable args
             f' = T.encodeUtf8 $ renderQualName $ fqnToQualName f
