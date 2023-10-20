@@ -1435,7 +1435,7 @@ coreCreatePrincipal info b cont handler _env = \case
       GCapabilityGuard (CapabilityGuard f args pid) -> do
         let args' = map encodeStable args
             f' = T.encodeUtf8 $ renderQualName $ fqnToQualName f
-            pid' = T.encodeUtf8 . Pretty.renderText <$> pid
+            pid' = T.encodeUtf8 . renderPactId <$> pid
         h <- mkHash $ f' : args' ++ maybe [] pure pid'
         ret $ Pr.C $ hashToText h
   args -> argsError info b args

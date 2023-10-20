@@ -56,6 +56,7 @@ module Pact.Core.Names
  , fqHash
  , userTable
  , PactId(..)
+ , renderPactId
  ) where
 
 import Control.Lens
@@ -346,3 +347,6 @@ newtype PactId
 
 instance Pretty PactId where
   pretty (PactId p) = pretty p
+
+renderPactId :: PactId -> Text
+renderPactId (PactId t) = t
