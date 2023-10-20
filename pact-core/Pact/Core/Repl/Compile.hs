@@ -17,7 +17,6 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Class(liftIO)
 import Data.Text(Text)
-import Data.Proxy
 import Data.Default
 import System.FilePath(takeFileName)
 
@@ -65,7 +64,7 @@ loadFile loc display = do
   replCurrSource .= source
   interpretReplProgram source display
 
-defaultEvalEnv :: PactDb b i -> EvalEnv b i
+defaultEvalEnv :: PactDb b i -> M.Map Text b -> EvalEnv b i
 defaultEvalEnv pdb =
   EvalEnv mempty pdb (EnvData mempty) defaultPactHash def Nothing Transactional mempty
 
@@ -90,7 +89,7 @@ interpretReplProgram sc@(SourceCode _ source) display = do
           evalState .= def
           pactdb <- liftIO mockPactDb
           replPactDb .= pactdb
-          replEvalEnv .= defaultEvalEnv pactdb
+          replEvalEnv .= defaultEvalEnv pactdb replRawBuiltinMap
           out <- loadFile (T.unpack txt) display
           replCurrSource .= oldSrc
           pure out
@@ -106,14 +105,10 @@ interpretReplProgram sc@(SourceCode _ source) display = do
           pure out
   pipe' tl = case tl of
     Lisp.RTLTopLevel toplevel -> do
-      pdb <- use replPactDb
-      v <- interpretTopLevel pdb interpreter toplevel
+      v <- interpretTopLevel interpreter toplevel
       displayValue (RCompileValue v)
     _ ->  do
-      pactdb <- use replPactDb
-      lastLoaded <- use loaded
-      ds <- runDesugarReplTopLevel (Proxy @ReplRawBuiltin) pactdb lastLoaded tl
-      loaded .= _dsLoaded ds
+      ds <- runDesugarReplTopLevel tl
       interpret ds
 
   interpreter = Interpreter $ \te -> do
@@ -140,7 +135,7 @@ interpretReplProgram sc@(SourceCode _ source) display = do
           VTable tv -> pure (IPTable (_tvName tv))
           VPactValue pv -> do
             pure (IPV pv (view termInfo te))
-  interpret (DesugarOutput tl _ _deps) = do
+  interpret (DesugarOutput tl _deps) = do
     case tl of
       RTLDefun df -> do
         let fqn = FullyQualifiedName replModuleName (_dfunName df) replModuleHash

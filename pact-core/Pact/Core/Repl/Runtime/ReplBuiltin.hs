@@ -3,7 +3,7 @@
 
 module Pact.Core.Repl.Runtime.ReplBuiltin where
 
-import Control.Lens hiding ((%%=))
+import Control.Lens
 import Control.Monad(when)
 import Control.Monad.Except
 import Control.Monad.IO.Class(liftIO)
@@ -203,7 +203,7 @@ envData = \info b cont handler _env -> \case
 envChainData :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 envChainData = \info b cont handler _env -> \case
   [VObject cdataObj] -> do
-    pd <- viewCEKEnv eePublicData
+    pd <- viewEvalEnv eePublicData
     go pd (M.toList cdataObj)
     where
     go pd [] = do
@@ -268,10 +268,10 @@ renderTx _info start (Just (TxId tid, mt)) =
   EvalValue $ VString $ start <> " " <> T.pack (show tid) <> maybe mempty ((<>) " ") mt
 renderTx info start Nothing = VError ("tx-function failure " <> start) info
 
-begin' :: (Default i, Show i) => i -> Maybe Text -> ReplEvalM b i (Maybe (TxId, Maybe Text))
+begin' :: i -> Maybe Text -> ReplEvalM b i (Maybe (TxId, Maybe Text))
 begin' info mt = do
   pdb <- use (reEnv . eePactDb)
-  mode <- viewCEKEnv eeMode
+  mode <- viewEvalEnv eeMode
   mTxId <- liftDbFunction info (_pdbBeginTx pdb mode)
   reTx .= ((,mt) <$> mTxId)
   return ((,mt) <$> mTxId)
@@ -310,7 +310,7 @@ rollbackTx = \info b cont handler _env -> \case
 sigKeyset :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
 sigKeyset = \info b cont handler _env -> \case
   [] -> do
-    sigs <- S.fromList . M.keys <$> viewCEKEnv eeMsgSigs
+    sigs <- S.fromList . M.keys <$> viewEvalEnv eeMsgSigs
     returnCEKValue cont handler (VGuard (GKeyset (KeySet sigs KeysAll)))
   args -> argsError info b args
 

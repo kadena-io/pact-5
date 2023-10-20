@@ -298,10 +298,6 @@ instance Pretty (Binder i) where
 data CapForm i
   = WithCapability ParsedName [Expr i] (Expr i)
   | CreateUserGuard ParsedName [Expr i]
-  -- | RequireCapability ParsedName [Expr i]
-  -- | ComposeCapability ParsedName [Expr i]
-  -- | InstallCapability ParsedName [Expr i]
-  -- | EmitEvent ParsedName [Expr i]
   deriving (Show, Eq, Functor)
 
 data Expr i
@@ -316,7 +312,6 @@ data Expr i
   | Constant Literal i
   | Try (Expr i) (Expr i) i
   | Suspend (Expr i) i
-  -- | DynAccess (Expr i) Text i
   | Object [(Field, Expr i)] i
   | Binding [(Field, MArg)] [Expr i] i
   | CapabilityForm (CapForm i) i
@@ -368,7 +363,6 @@ termInfo f = \case
     List nel <$> f i
   Suspend e i ->
     Suspend e <$> f i
-  -- DynAccess e fn i -> DynAccess e fn <$> f i
   Constant l i ->
     Constant l <$> f i
   Try e1 e2 i ->
@@ -404,8 +398,6 @@ instance Pretty (Expr i) where
       parens ("try" <+> pretty e1 <+> pretty e2)
     Error e _ ->
       parens ("error \"" <> pretty e <> "\"")
-    -- DynAccess e f _ ->
-    --   pretty e <> "::" <> pretty f
     Suspend e _ ->
       parens ("suspend" <+> pretty e)
     CapabilityForm c _ -> case c of
@@ -413,14 +405,6 @@ instance Pretty (Expr i) where
         parens ("with-capability" <+> capApp pn exs <+> pretty ex)
       CreateUserGuard pn exs ->
         parens ("create-user-guard" <> capApp pn exs)
-    --   RequireCapability pn exs ->
-    --     parens ("require-capability" <+> capApp pn exs)
-    --   ComposeCapability pn exs ->
-    --     parens ("compose-capability" <+> capApp pn exs)
-    --   InstallCapability pn exs ->
-    --     parens ("install-capability" <+> capApp pn exs)
-    --   EmitEvent pn exs ->
-    --     parens ("require-capability" <+> capApp pn exs)
       where
       capApp pn exns =
         parens (pretty pn <+> hsep (pretty <$> exns))

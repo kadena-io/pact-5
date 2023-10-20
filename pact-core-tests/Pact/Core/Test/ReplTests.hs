@@ -26,6 +26,7 @@ import Pact.Core.Repl.Compile
 import Pact.Core.PactValue
 import Pact.Core.Environment
 import Pact.Core.Hash
+import Pact.Core.Builtin
 import Pact.Core.Errors (PactError(..), EvalError (..))
 
 tests :: IO TestTree
@@ -49,7 +50,7 @@ runReplTest file src = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
   pdb <- mockPactDb
-  let ee = EvalEnv mempty pdb (EnvData mempty) defaultPactHash def Nothing Transactional mempty
+  let ee = EvalEnv mempty pdb (EnvData mempty) defaultPactHash def Nothing Transactional mempty replRawBuiltinMap
       source = SourceCode (takeFileName file) src
   let rstate = ReplState
             { _replFlags =  mempty

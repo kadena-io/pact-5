@@ -37,10 +37,12 @@ module Pact.Core.Persistence
 import Control.Lens
 import Control.Monad(unless)
 import Control.Exception(throwIO, Exception)
+import Control.Applicative((<|>))
 import Data.Maybe(isJust)
 import Data.Text(Text)
 import Data.Word(Word64)
 import Data.IORef
+import Data.Default
 import Data.Map.Strict(Map)
 
 import Pact.Core.Type
@@ -50,7 +52,7 @@ import Pact.Core.Guards
 import Pact.Core.Hash
 import Pact.Core.PactValue
 import Pact.Core.Pacts.Types
--- import Pact.Core.Errors
+import Pact.Core.Namespace
 
 import qualified Data.Map.Strict as M
 import Data.Dynamic (Typeable)
@@ -218,21 +220,31 @@ data GuardTableOp
   | GtCreateTable
   deriving Show
 
+-- | Our loaded modules, names in top-level scope and fully qualified dependencies.
 data Loaded b i
   = Loaded
   { _loModules :: Map ModuleName (ModuleData b i)
+  -- ^ All loaded modules and interfaces
   , _loToplevel :: Map Text (FullyQualifiedName, DefKind)
+  -- ^ All names bound @ the top level scope, that is, by `(use)` statements
+  -- or module loads
+  , _loNamespace :: Maybe Namespace
+  -- ^ The potentially loaded current namespace
   , _loAllLoaded :: Map FullyQualifiedName (Def Name Type b i)
+  -- ^ All of our fully qualified dependencies
   } deriving Show
 
 makeClassy ''Loaded
 
 instance Semigroup (Loaded b i) where
-  (Loaded ms tl al) <> (Loaded ms' tl' al') =
-    Loaded (ms <> ms') (tl <> tl') (al <> al')
+  (Loaded ms tl ns al) <> (Loaded ms' tl' ns' al') =
+    Loaded (ms <> ms') (tl <> tl') (ns <|> ns') (al <> al')
 
 instance Monoid (Loaded b i) where
-  mempty = Loaded mempty mempty mempty
+  mempty = Loaded mempty mempty Nothing mempty
+
+instance Default (Loaded b i) where
+  def = Loaded mempty mempty Nothing mempty
 
 mockPactDb :: forall b i. IO (PactDb b i)
 mockPactDb = do

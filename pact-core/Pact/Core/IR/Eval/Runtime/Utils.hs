@@ -10,9 +10,7 @@
 
 module Pact.Core.IR.Eval.Runtime.Utils
  ( mkBuiltinFn
- , cfFQN
  , enforcePactValue
- , setEvalState, (%%=), useEvalState, usesEvalState
  , getAllStackCaps
  , checkSigCaps
  , lookupFqName
@@ -26,31 +24,27 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , throwExecutionError'
  , argsError
  , findCallingModule
- , getModule
+--  , getModule
  , getCallingModule
  , readOnlyEnv
  , sysOnlyEnv
- , viewCEKEnv
- , viewsCEKEnv
  , calledByModule
  , failInvariant
- , getModuleData
+--  , getModuleData
  , isExecutionFlagSet
  , checkNonLocalAllowed
  , evalStateToErrorState
  , restoreFromErrorState
- , (.==)
  , getPactId
  ) where
 
-import Control.Lens hiding ((%%=))
+import Control.Lens
 import Control.Monad(when)
 import Control.Monad.Except(MonadError(..))
 import Data.Map.Strict(Map)
 import Data.Text(Text)
 import Data.Set(Set)
-import Data.Default(def)
-import Data.Maybe(listToMaybe, mapMaybe)
+import Data.Maybe(listToMaybe)
 import Data.Foldable(find)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -67,7 +61,6 @@ import Pact.Core.IR.Eval.Runtime.Types
 import Pact.Core.Literal
 import Pact.Core.Capabilities
 import Pact.Core.Persistence
-import Pact.Core.Hash
 import Pact.Core.Environment
 import Pact.Core.Pacts.Types
 
@@ -82,14 +75,14 @@ mkBuiltinFn i b env fn =
   NativeFn b env fn (builtinArity b) i
 {-# INLINE mkBuiltinFn #-}
 
-cfFQN :: Lens' (CapFrame b i) FullyQualifiedName
-cfFQN f = \case
-  WithCapFrame fqn b -> (`WithCapFrame` b) <$> f fqn
+-- cfFQN :: Lens' (CapFrame b i) FullyQualifiedName
+-- cfFQN f = \case
+--   WithCapFrame fqn b -> (`WithCapFrame` b) <$> f fqn
   -- RequireCapFrame fqn -> RequireCapFrame <$> f fqn
   -- ComposeCapFrame fqn -> ComposeCapFrame <$> f fqn
   -- InstallCapFrame fqn -> InstallCapFrame <$> f fqn
   -- EmitEventFrame fqn -> EmitEventFrame <$> f fqn
-  CreateUserGuardFrame fqn -> CreateUserGuardFrame <$> f fqn
+  -- CreateUserGuardFrame fqn -> CreateUserGuardFrame <$> f fqn
 
 getAllStackCaps
   :: MonadEval b i m
@@ -117,48 +110,6 @@ enforcePactValue :: (MonadEval b i m) => i -> CEKValue b i m -> m PactValue
 enforcePactValue info = \case
   VPactValue pv -> pure pv
   _ -> throwExecutionError info ExpectedPactValue
-
--- Note: The following functions
--- when placed in this file are causing GHC 9.6.2 to bork with the following error:
--- <no location info>: error:
---     panic! (the 'impossible' happened)
---   GHC version 9.6.2:
--- 	lookupIdSubst
---   $dMonadEvalEnv_aO5i
---   InScope {b_aNXG i_aNXH m_aNXI s_aNXJ a_aNXK $d(%,,,%)_aNXL
---            mkBuiltinFn cfFQN fromPactValue setEvalState overEvalState
---            useEvalState usesEvalState viewCEKEnv}
---   Call stack:
---       CallStack (from HasCallStack):
---         callStackDoc, called at compiler/GHC/Utils/Panic.hs:189:37 in ghc:GHC.Utils.Panic
---         pprPanic, called at compiler/GHC/Core/Subst.hs:197:17 in ghc:GHC.Core.Subst
---   CallStack (from HasCallStack):
---     panic, called at compiler/GHC/Utils/Error.hs:454:29 in ghc:GHC.Utils.Error
-viewCEKEnv :: (MonadEval b i m) => Lens' (EvalEnv b i) s -> m s
-viewCEKEnv l = view l <$> readEnv
-
-viewsCEKEnv :: (MonadEval b i m) => Lens' (EvalEnv b i) s -> (s -> a) -> m a
-viewsCEKEnv f l = views f l <$> readEnv
-
-setEvalState :: (MonadEval b i m) => Traversal' (EvalState b i) s -> s -> m ()
-setEvalState l s = modifyEvalState (set l s)
-
-(.==) :: (MonadEval b i m) => Traversal' (EvalState b i) s -> s -> m ()
-l .== s = modifyEvalState (set l s)
-
--- overEvalState :: (MonadEval b i m) => Lens' (EvalState b i) s -> (s -> s) -> m ()
--- overEvalState l f = modifyCEKState (over l f)
-
-(%%=) :: (MonadEval b i m) => Traversal' (EvalState b i) s -> (s -> s) -> m ()
-l %%= f = modifyEvalState (over l f)
-
-infix 4 %%=, .==
-
-useEvalState :: (MonadEval b i m) => Lens' (EvalState b i) s -> m s
-useEvalState l = view l <$> getEvalState
-
-usesEvalState :: (MonadEval b i m) => Lens' (EvalState b i) s -> (s -> s') -> m s'
-usesEvalState l f = views l f <$> getEvalState
 
 lookupFqName :: (MonadEval b i m) => FullyQualifiedName -> m (Maybe (EvalDef b i))
 lookupFqName fqn =
@@ -207,57 +158,12 @@ getCallingModule info = findCallingModule >>= \case
       failInvariant info "getCallingModule points to no loaded module"
   Nothing -> failInvariant info "Error: No Module in stack"
 
-toFqDep :: ModuleName -> ModuleHash -> Def name t b i -> (FullyQualifiedName, Def name t b i)
-toFqDep modName mhash defn =
-  let fqn = FullyQualifiedName modName (defName defn) mhash
-  in (fqn, defn)
-
-getModule :: (MonadEval b i m) => i -> CEKEnv b i m -> ModuleName -> m (EvalModule b i)
-getModule info env mn =
- useEvalState (esLoaded . loModules . at mn) >>= \case
-   Just (ModuleData md _) -> pure md
-   Just (InterfaceData _ _) ->
-    throwExecutionError info (ExpectedModule mn)
-   Nothing -> do
-    let pdb = view cePactDb env
-    liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
-      Just mdata@(ModuleData md deps) -> do
-        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> (_mDefs md)
-        (esLoaded . loAllLoaded) %%= M.union newLoaded . M.union deps
-        (esLoaded . loModules) %%= M.insert mn mdata
-        pure md
-      Just (InterfaceData _ _) ->
-        throwExecutionError info (ExpectedModule mn)
-      Nothing ->
-        throwExecutionError info (ModuleDoesNotExist mn)
-
-getModuleData :: (MonadEval b i m) => i -> CEKEnv b i m -> ModuleName -> m (ModuleData b i)
-getModuleData info env mn =
- useEvalState (esLoaded . loModules . at mn) >>= \case
-   Just md -> pure md
-   Nothing -> do
-    let pdb = view cePactDb env
-    liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
-      Just mdata@(ModuleData md deps) -> do
-        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> (_mDefs md)
-        (esLoaded . loAllLoaded) %%= M.union newLoaded . M.union deps
-        (esLoaded . loModules) %%= M.insert mn mdata
-        pure mdata
-      Just ifdata@(InterfaceData iface deps) -> do
-        let mdefs = mapMaybe ifDefToDef (_ifDefns iface)
-        let newLoaded = M.fromList $ toFqDep mn (_ifHash iface) <$> mdefs
-        (esLoaded . loAllLoaded) %%= M.union newLoaded . M.union deps
-        (esLoaded . loModules) %%= M.insert mn ifdata
-        pure ifdata
-      Nothing ->
-        throwExecutionError info (ModuleDoesNotExist mn)
-
 safeTail :: [a] -> [a]
 safeTail (_:xs) = xs
 safeTail [] = []
 
 isExecutionFlagSet :: (MonadEval b i m) => ExecutionFlag -> m Bool
-isExecutionFlagSet flag = viewsCEKEnv eeFlags (S.member flag)
+isExecutionFlagSet flag = viewsEvalEnv eeFlags (S.member flag)
 
 evalStateToErrorState :: EvalState b i -> ErrorState
 evalStateToErrorState es =
@@ -270,7 +176,7 @@ restoreFromErrorState (ErrorState caps stack) =
 checkNonLocalAllowed :: (MonadEval b i m) => i -> m ()
 checkNonLocalAllowed info = do
   disabledInTx <- isExecutionFlagSet FlagDisableHistoryInTransactionalMode
-  mode <- viewCEKEnv eeMode
+  mode <- viewEvalEnv eeMode
   when (mode == Transactional && disabledInTx) $ failInvariant info $
     "Operation only permitted in local execution mode"
 
@@ -314,12 +220,6 @@ asBool
   -> m Text
 asBool _ _ (PLiteral (LString b)) = pure b
 asBool i b pv = argsError i b [VPactValue pv]
-
-throwExecutionError :: (MonadEval b i m) => i -> EvalError -> m a
-throwExecutionError i e = throwError (PEExecutionError e i)
-
-throwExecutionError' :: (MonadEval b i m) => EvalError -> m a
-throwExecutionError' = throwExecutionError def
 
 readOnlyEnv :: CEKEnv b i m -> CEKEnv b i m
 readOnlyEnv e

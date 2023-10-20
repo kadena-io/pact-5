@@ -5,6 +5,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE InstanceSigs #-}
 
 
 module Pact.Core.Repl.Utils
@@ -107,7 +108,6 @@ newtype ReplM b a
     , MonadMask)
   via (ExceptT (PactError SpanInfo) (ReaderT (IORef (ReplState b)) IO))
 
-
 instance MonadState (ReplState b) (ReplM b)  where
   get = ReplT (ExceptT (Right <$> ReaderT readIORef))
   put rs = ReplT (ExceptT (Right <$> ReaderT (`writeIORef` rs)))
@@ -130,6 +130,21 @@ data ReplState b
 
 
 makeLenses ''ReplState
+
+instance MonadEvalEnv b SpanInfo (ReplM b) where
+  readEnv = use replEvalEnv
+
+instance MonadEvalState b SpanInfo (ReplM b) where
+  getEvalState = use replEvalState
+  putEvalState es =
+    replEvalState .= es
+  modifyEvalState f =
+    replEvalState %= f
+
+instance MonadGas (ReplM b) where
+  logGas _ _ = error "implement logGas"
+  chargeGas = error "implement chargeGas"
+
 
 instance HasEvalState (ReplState b) b SpanInfo where
   evalState = replEvalState

@@ -21,7 +21,7 @@
 module Pact.Core.IR.Term where
 
 import Control.Lens
-import Data.Foldable(fold)
+import Data.Foldable(fold, find)
 import Data.Text(Text)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict(Map)
@@ -33,7 +33,6 @@ import Pact.Core.Builtin
 import Pact.Core.Hash
 import Pact.Core.Literal
 import Pact.Core.Type
-    ( Type, Arg(Arg), DefKind(..), Schema(Schema) )
 import Pact.Core.Names
 import Pact.Core.Imports
 import Pact.Core.Capabilities
@@ -48,7 +47,7 @@ data Defun name ty builtin info
   , _dfunInfo :: info
   } deriving (Show, Functor)
 
-data PactStep name ty builtin info
+data Step name ty builtin info
   = Step (Term name ty builtin info) (Maybe [Term name ty builtin info])
   | StepWithRollback
     (Term name ty builtin info)
@@ -56,11 +55,11 @@ data PactStep name ty builtin info
     (Maybe [Term name ty builtin info])
   deriving (Show, Functor)
 
-hasRollback :: PactStep n t b i -> Bool
+hasRollback :: Step n t b i -> Bool
 hasRollback Step{} = False
 hasRollback StepWithRollback{} = True
 
-ordinaryPactStepExec :: PactStep name ty builtin info -> Term name ty builtin info
+ordinaryPactStepExec :: Step name ty builtin info -> Term name ty builtin info
 ordinaryPactStepExec (Step expr _) = expr
 ordinaryPactStepExec (StepWithRollback expr _ _) = expr
 
@@ -69,7 +68,7 @@ data DefPact name ty builtin info
   { _dpName :: Text
   , _dpArgs :: [Arg ty]
   , _dpRetType :: Maybe ty
-  , _dpSteps :: NonEmpty (PactStep name ty builtin info)
+  , _dpSteps :: NonEmpty (Step name ty builtin info)
   , _dpInfo :: info
   } deriving (Show, Functor)
 
@@ -201,6 +200,10 @@ defName (DSchema d) = _dsName d
 defName (DTable d) = _dtName d
 defName (DPact d) = _dpName d
 
+findDefInModule :: Text -> Module name ty b i -> Maybe (Def name ty b i)
+findDefInModule defnName targetModule =
+  find ((==) defnName . defName) (_mDefs targetModule)
+
 defKind :: Def name Type b i -> DefKind
 defKind = \case
   Dfun{} -> DKDefun
@@ -243,6 +246,10 @@ ifDefToDef = \case
   IfDCap _ -> Nothing
   IfDPact _ -> Nothing
   IfDSchema dc -> Just (DSchema dc)
+
+findDefInInterface :: Text -> Interface name ty b i -> Maybe (Def name ty b i)
+findDefInInterface defnName targetIface =
+  find ((==) defnName . ifDefName) (_ifDefns targetIface) >>= ifDefToDef
 
 ifDefInfo :: IfDef name ty b i -> i
 ifDefInfo = \case

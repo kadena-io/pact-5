@@ -28,11 +28,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , CEKValue(..)
  , Cont(..)
  , CEKErrorHandler(..)
- , MonadEvalEnv(..)
- , MonadEvalState(..)
- , MonadGas(..)
  , CondFrame(..)
- , MonadEval
  , Closure(..)
  , EvalResult(..)
  , EvalTEnv(..)
@@ -80,15 +76,13 @@ module Pact.Core.IR.Eval.Runtime.Types
  , ErrorState(..)
  ) where
 
-import Control.Lens hiding ((%%=))
+import Control.Lens 
 import Control.Monad.Catch
 import Control.Monad.Reader
-import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.List.NonEmpty(NonEmpty)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
-import Data.Default
 import Data.Decimal(Decimal)
 import Data.Vector(Vector)
 import Data.RAList(RAList)
@@ -99,7 +93,6 @@ import Pact.Core.Guards
 import Pact.Core.Pretty(Pretty(..))
 import Pact.Core.Gas
 import Pact.Core.PactValue
-import Pact.Core.Errors
 import Pact.Core.Hash
 import Pact.Core.IR.Term
 import Pact.Core.Literal
@@ -283,29 +276,6 @@ data EvalResult b i m
   = EvalValue (CEKValue b i m)
   | VError Text i
   deriving Show
-
-
-type MonadEval b i m =
-  ( MonadEvalEnv b i m
-  , MonadEvalState b i m
-  , MonadGas m
-  , MonadError (PactError i) m
-  , MonadIO m
-  , Default i
-  , Show i)
-
-class Monad m => MonadGas m where
-  logGas :: Text -> Gas -> m ()
-  chargeGas :: Gas -> m ()
-
-class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
-  readEnv :: m (EvalEnv b i)
-
--- | Our monad mirroring `EvalState` for our evaluation state
-class Monad m => MonadEvalState b i m | m -> b, m -> i where
-  getEvalState :: m (EvalState b i)
-  putEvalState :: EvalState b i -> m ()
-  modifyEvalState :: (EvalState b i -> EvalState b i) -> m ()
 
 
 data EvalTEnv b i m

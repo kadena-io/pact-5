@@ -22,7 +22,7 @@ module Pact.Core.IR.Eval.RawBuiltin
 -- CEK runtime for our IR term
 --
 
-import Control.Lens hiding (from, to, op, parts, (%%=))
+import Control.Lens hiding (from, to, op, parts)
 import Control.Monad(when, unless, foldM)
 import Control.Monad.IO.Class
 import Data.Containers.ListUtils(nubOrd)
@@ -559,7 +559,7 @@ coreYield info b cont handler _env = \case
           esPactExec . _Just . peYield .== Just (Yield o Nothing Nothing)
           returnCEKValue cont handler (VObject o)
         Just cid -> do
-          sourceChain <- viewCEKEnv (eePublicData . pdPublicMeta . pmChainId)
+          sourceChain <- viewEvalEnv (eePublicData . pdPublicMeta . pmChainId)
           p <- provenanceOf cid
           when (_peStepHasRollback pe) $ failInvariant info "Cross-chain yield not allowed in step with rollback"
           esPactExec . _Just . peYield .== Just (Yield o (Just p) (Just sourceChain))
@@ -571,7 +571,7 @@ coreYield info b cont handler _env = \case
 coreResume :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreResume = \info b cont handler _env -> \case
   [VClosure clo] -> do
-    mps <- viewCEKEnv eePactStep
+    mps <- viewEvalEnv eePactStep
     case mps of
       Nothing -> throwExecutionError info NoActivePactExec
       Just pactStep -> case _psResume pactStep of
@@ -628,7 +628,7 @@ coreEnforceGuard = \info b cont handler env -> \case
       GModuleGuard (ModuleGuard mn _) -> calledByModule mn >>= \case
         True -> returnCEKValue cont handler (VBool True)
         False -> do
-          md <- getModule info env mn
+          md <- getModule info (view cePactDb env) mn
           acquireModuleAdmin info env md
           returnCEKValue cont handler (VBool True)
   [VString s] -> do
@@ -650,7 +650,7 @@ keysetRefGuard = \info b cont handler env -> \case
 coreReadInteger :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreReadInteger = \info b cont handler _env -> \case
   [VString s] -> do
-    EnvData envData <- viewCEKEnv eeMsgBody
+    EnvData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just (PInteger p) -> returnCEKValue cont handler (VInteger p)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
@@ -659,19 +659,19 @@ coreReadInteger = \info b cont handler _env -> \case
 readMsg :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 readMsg = \info b cont handler _env -> \case
   [VString s] -> do
-    EnvData envData <- viewCEKEnv eeMsgBody
+    EnvData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just pv -> returnCEKValue cont handler (VPactValue pv)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
   [] -> do
-    EnvData envData <- viewCEKEnv eeMsgBody
+    EnvData envData <- viewEvalEnv eeMsgBody
     returnCEKValue cont handler (VObject envData)
   args -> argsError info b args
 
 coreReadDecimal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreReadDecimal = \info b cont handler _env -> \case
   [VString s] -> do
-    EnvData envData <- viewCEKEnv eeMsgBody
+    EnvData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just (PDecimal p) -> returnCEKValue cont handler (VDecimal p)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
@@ -680,7 +680,7 @@ coreReadDecimal = \info b cont handler _env -> \case
 coreReadString :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreReadString = \info b cont handler _env -> \case
   [VString s] -> do
-    EnvData envData <- viewCEKEnv eeMsgBody
+    EnvData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just (PString p) -> returnCEKValue cont handler (VString p)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
@@ -688,7 +688,7 @@ coreReadString = \info b cont handler _env -> \case
 
 readKeyset' :: (MonadEval b i m) => T.Text -> m (Maybe (KeySet FullyQualifiedName))
 readKeyset' ksn = do
-    EnvData envData <- viewCEKEnv eeMsgBody
+    EnvData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field ksn) envData of
       Just (PObject dat) -> parseObj dat
         where
@@ -1045,17 +1045,6 @@ installCapability = \info b cont handler env -> \case
     returnCEKValue cont handler (VString "Installed capability")
   args -> argsError info b args
 
--- emitEvent
---   :: MonadEval b i m
---   => Cont b i m
---   -> CEKErrorHandler b i m
---   -> FQCapToken
---   -> m (EvalResult b i m)
--- emitEvent cont handler ct@(CapToken fqn _) = do
---   let pactEvent = PactEvent ct (_fqModule fqn) (_fqHash fqn)
---   esEvents %%= (pactEvent:)
---   returnCEKValue cont handler VUnit
-
 coreEmitEvent :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreEmitEvent = \info b cont handler env -> \case
   [VCapToken ct@(CapToken fqn _)] -> do
@@ -1076,7 +1065,7 @@ coreEmitEvent = \info b cont handler env -> \case
     --   let ctModule = _fqModule fqn
     --   if ctModule == mn then do
     --     let pactEvent = PactEvent ct (_fqModule fqn) (_fqHash fqn)
-    --     esEvents %%= (++ [pactEvent])
+    --     esEvents %== (++ [pactEvent])
     --     returnCEKValue cont handler (VBool True)
     --   else returnCEK cont handler (VError "Event does not match emitting module" info)
     -- Nothing -> returnCEK cont handler (VError "emit-event called outside of module code" info)
@@ -1284,7 +1273,7 @@ coreHash = \info b cont handler _env -> \case
 txHash :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 txHash = \info b cont handler _env -> \case
   [] -> do
-    h <- viewCEKEnv eeHash
+    h <- viewEvalEnv eeHash
     returnCEKValue cont handler (VString (hashToText h))
   args -> argsError info b args
 
@@ -1367,7 +1356,7 @@ describeModule :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 describeModule = \info b cont handler env -> \case
   [VString s] -> do
     checkNonLocalAllowed info
-    getModuleData info env (ModuleName s Nothing) >>= \case
+    getModuleData info (view cePactDb env) (ModuleName s Nothing) >>= \case
       ModuleData m _ -> returnCEKValue cont handler $
         VObject $ M.fromList $ fmap (over _1 Field)
           [ ("name", PString (renderModuleName (_mName m)))
@@ -1392,7 +1381,7 @@ dbDescribeKeySet :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbDescribeKeySet = \info b cont handler env -> \case
   [VString s] -> do
     checkNonLocalAllowed info
-    getModuleData info env (ModuleName s Nothing) >>= \case
+    getModuleData info (view cePactDb env) (ModuleName s Nothing) >>= \case
       ModuleData m _ -> returnCEKValue cont handler $
         VObject $ M.fromList $ fmap (over _1 Field)
           [ ("name", PString (renderModuleName (_mName m)))
