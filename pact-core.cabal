@@ -111,6 +111,7 @@ library
     Pact.Core.ChainData
     Pact.Core.Environment
     Pact.Core.StableEncoding
+    Pact.Core.Principal
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
