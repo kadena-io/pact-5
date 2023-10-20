@@ -1434,8 +1434,7 @@ coreCreatePrincipal info b cont handler _env = \case
         -- TODO orig pact gets a Name   ^^^^^^^^ and renders a Name, so double-check equivalence
       GCapabilityGuard (CapabilityGuard f args pid) -> do
         let args' = map encodeStable args
-            f' = T.encodeUtf8 $ Pretty.renderText f
-            -- TODO orig pact renders it via `AsString QualifiedName`
+            f' = T.encodeUtf8 $ renderQualName $ fqnToQualName f
             pid' = T.encodeUtf8 . Pretty.renderText <$> pid
         h <- mkHash $ f' : args' ++ maybe [] pure pid'
         ret $ Pr.C $ hashToText h
