@@ -1419,6 +1419,7 @@ coreCompose = \info b cont handler _env -> \case
 coreCreatePrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreCreatePrincipal info b cont handler _env = \case
   [VGuard g] -> do
+    -- TODO make gas charging actually go through the model
     chargeGas coreGasPerLegacyGas
     case g of
       GKeyset (KeySet ks pf) -> case (toList ks, predicateToString pf) of
