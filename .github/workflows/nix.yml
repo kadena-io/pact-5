@@ -7,7 +7,7 @@ on:
     - '**'
     - '!.github/**'
     - '.github/workflows/nix.yml'
-    
+
 jobs:
   build-and-cache:
     runs-on: ${{ matrix.os }}
@@ -35,7 +35,7 @@ jobs:
 
     - name: Give root user AWS credentials
       uses: kadena-io/setup-nix-with-cache/copy-root-aws-credentials@v3
-      
+
     - name: Build and cache artifacts
       run: |
         echo Building the project and its devShell
