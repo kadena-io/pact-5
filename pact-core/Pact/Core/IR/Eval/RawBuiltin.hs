@@ -1416,39 +1416,43 @@ coreCompose = \info b cont handler _env -> \case
       err -> returnCEK cont handler err
   args -> argsError info b args
 
-coreCreatePrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-coreCreatePrincipal info b cont handler _env = \case
-  [VGuard g] -> do
-    -- TODO make gas charging actually go through the model
-    chargeGas coreGasPerLegacyGas
-    case g of
-      GKeyset (KeySet ks pf) -> case (toList ks, predicateToString pf) of
-        ([k], "keys-all") -> ret $ Pr.K k
-        (l, fun) -> do
-          h <- mkHash $ map (T.encodeUtf8 . _pubKey) l
-          ret $ Pr.W (hashToText h) fun
-      GKeySetRef ksn -> ret $ Pr.R ksn
-      GModuleGuard (ModuleGuard mn n) -> ret $ Pr.M mn n
-      GUserGuard (UserGuard f args) -> do
-        h <- mkHash $ map encodeStable args
-        ret $ Pr.U (Pretty.renderText f) (hashToText h)
-        -- TODO orig pact gets here ^^^^ a Name
-        -- which can be any of QualifiedName/BareName/DynamicName/FQN,
-        -- and uses the rendered string here. Need to double-check equivalence.
-      GCapabilityGuard (CapabilityGuard f args pid) -> do
-        let args' = map encodeStable args
-            f' = T.encodeUtf8 $ renderQualName $ fqnToQualName f
-            pid' = T.encodeUtf8 . renderPactId <$> pid
-        h <- mkHash $ f' : args' ++ maybe [] pure pid'
-        ret $ Pr.C $ hashToText h
-  args -> argsError info b args
+createPrincipalForGuard :: (MonadGas m) => Guard FullyQualifiedName PactValue -> m Pr.Principal
+createPrincipalForGuard g = do
+  -- TODO make gas charging actually go through the model
+  chargeGas coreGasPerLegacyGas
+  case g of
+    GKeyset (KeySet ks pf) -> case (toList ks, predicateToString pf) of
+      ([k], "keys-all") -> pure $ Pr.K k
+      (l, fun) -> do
+        h <- mkHash $ map (T.encodeUtf8 . _pubKey) l
+        pure $ Pr.W (hashToText h) fun
+    GKeySetRef ksn -> pure $ Pr.R ksn
+    GModuleGuard (ModuleGuard mn n) -> pure $ Pr.M mn n
+    GUserGuard (UserGuard f args) -> do
+      h <- mkHash $ map encodeStable args
+      pure $ Pr.U (Pretty.renderText f) (hashToText h)
+      -- TODO orig pact gets here ^^^^ a Name
+      -- which can be any of QualifiedName/BareName/DynamicName/FQN,
+      -- and uses the rendered string here. Need to double-check equivalence.
+    GCapabilityGuard (CapabilityGuard f args pid) -> do
+      let args' = map encodeStable args
+          f' = T.encodeUtf8 $ renderQualName $ fqnToQualName f
+          pid' = T.encodeUtf8 . renderPactId <$> pid
+      h <- mkHash $ f' : args' ++ maybe [] pure pid'
+      pure $ Pr.C $ hashToText h
   where
-    ret = returnCEKValue cont handler . VPactValue . PPrincipal
     mkHash bss = do
       let bs = mconcat bss
       -- the original pact impl charged 1 gas per 64 bytes of hashing,
       void $ chargeGas $ coreGasPerLegacyGas <> Gas (fromIntegral (BS.length bs) * coreGasPerLegacyGas `quot` 64)
       pure $ pactHash bs
+
+coreCreatePrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreCreatePrincipal info b cont handler _env = \case
+  [VGuard g] -> do
+    pr <- createPrincipalForGuard g
+    returnCEKValue cont handler $ VPactValue $ PPrincipal pr
+  args -> argsError info b args
 
 
 -----------------------------------
