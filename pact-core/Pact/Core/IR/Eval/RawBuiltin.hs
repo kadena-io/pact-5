@@ -51,7 +51,7 @@ import Pact.Core.Guards
 import Pact.Core.Type
 import Pact.Core.PactValue
 import Pact.Core.Persistence
-import Pact.Core.Pacts.Types
+import Pact.Core.DefPacts.Types
 import Pact.Core.Environment
 import Pact.Core.Capabilities
 
@@ -551,18 +551,18 @@ coreYield info b cont handler _env = \case
   args -> argsError info b args
   where
   go o mcid = do
-    mpe <- useEvalState esPactExec
+    mpe <- useEvalState esDefPactExec
     case mpe of
       Nothing -> throwExecutionError info YieldOutsiteDefPact
       Just pe -> case mcid of
         Nothing -> do
-          esPactExec . _Just . peYield .== Just (Yield o Nothing Nothing)
+          esDefPactExec . _Just . peYield .== Just (Yield o Nothing Nothing)
           returnCEKValue cont handler (VObject o)
         Just cid -> do
           sourceChain <- viewCEKEnv (eePublicData . pdPublicMeta . pmChainId)
           p <- provenanceOf cid
           when (_peStepHasRollback pe) $ failInvariant info "Cross-chain yield not allowed in step with rollback"
-          esPactExec . _Just . peYield .== Just (Yield o (Just p) (Just sourceChain))
+          esDefPactExec . _Just . peYield .== Just (Yield o (Just p) (Just sourceChain))
           returnCEKValue cont handler (VObject o)
   provenanceOf tid =
     Provenance tid . _mHash <$> getCallingModule info
@@ -571,11 +571,11 @@ coreYield info b cont handler _env = \case
 coreResume :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreResume = \info b cont handler _env -> \case
   [VClosure clo] -> do
-    mps <- viewCEKEnv eePactStep
+    mps <- viewCEKEnv eeDefPactStep
     case mps of
-      Nothing -> throwExecutionError info NoActivePactExec
+      Nothing -> throwExecutionError info NoActiveDefPactExec
       Just pactStep -> case _psResume pactStep of
-        Nothing -> throwExecutionError info (NoYieldInPactStep pactStep)
+        Nothing -> throwExecutionError info (NoYieldInDefPactStep pactStep)
         Just (Yield resumeObj _ _) -> applyLam clo [VObject resumeObj] cont handler
   args -> argsError info b args
 
@@ -734,7 +734,7 @@ enforceCapGuard info cont handler (CapabilityGuard fqn args mpid) = do
   case mpid of
     Nothing -> enforceCap
     Just pid -> do
-      currPid <- getPactId info
+      currPid <- getDefPactId info
       if currPid == pid then enforceCap
       else returnCEK cont handler (VError "Capability pact guard failed: invalid pact id" info)
   where
@@ -1092,7 +1092,7 @@ createCapGuard = \info b cont handler _env -> \case
 createCapabilityPactGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 createCapabilityPactGuard = \info b cont handler _env -> \case
   [VCapToken ct] -> do
-    pid <- getPactId info
+    pid <- getDefPactId info
     let cg = CapabilityGuard (_ctName ct) (_ctArgs ct) (Just pid)
     returnCEKValue cont handler (VGuard (GCapabilityGuard cg))
   args -> argsError info b args

@@ -21,7 +21,7 @@ import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Hash
 import Pact.Core.IR.Eval.Runtime
-import Pact.Core.Pacts.Types
+import Pact.Core.DefPacts.Types
 import Pact.Core.IR.Eval.CEK
 import Pact.Core.Names
 import Pact.Core.IR.Eval.RawBuiltin
@@ -119,23 +119,23 @@ continuePact info b cont handler env = \case
   where
     go :: Integer -> Bool -> Maybe Text -> Maybe (M.Map Field PactValue) -> ReplEvalM b i (EvalResult b i (ReplEvalM b i))
     go step rollback mpid userResume = do
-      mpe <- useEvalState esPactExec
+      mpe <- useEvalState esDefPactExec
       (pid, myield) <- case mpe of
         Nothing -> do
-          pid <- maybe (throwExecutionError info NoDefPactIdAndExecEnvSupplied) (pure . PactId) mpid
+          pid <- maybe (throwExecutionError info NoDefPactIdAndExecEnvSupplied) (pure . DefPactId) mpid
           pure (pid, (\r -> Yield r Nothing Nothing) <$> userResume)
         Just pactExec ->
           let
-            pid = maybe (_pePactId pactExec) PactId mpid
+            pid = maybe (_peDefPactId pactExec) DefPactId mpid
             yield = case userResume of
               Nothing -> _peYield pactExec
               Just o -> pure (Yield o Nothing Nothing)
           in pure (pid, yield)
-      let pactStep = PactStep (fromInteger step) rollback pid myield
-      setEvalState esPactExec Nothing
-      (reEnv . eePactStep) .= Just pactStep
+      let pactStep = DefPactStep (fromInteger step) rollback pid myield
+      setEvalState esDefPactExec Nothing
+      (reEnv . eeDefPactStep) .= Just pactStep
       s <- tryError $ resumePact info cont handler env Nothing
-      (reEnv . eePactStep) .= Nothing
+      (reEnv . eeDefPactStep) .= Nothing
       liftEither s
 
 pactState :: (IsBuiltin b, Default i, Show i) => NativeFunction b i (ReplEvalM b i)
@@ -145,14 +145,14 @@ pactState info b cont handler _env = \case
   args -> argsError info b args
   where
   go clear = do
-    mpe <- useEvalState esPactExec
+    mpe <- useEvalState esDefPactExec
     case mpe of
       Just pe -> do
-        when clear $ esPactExec .== Nothing
+        when clear $ esDefPactExec .== Nothing
         let yield' = case _peYield pe of
               Nothing ->  PLiteral (LBool False)
               Just (Yield y _ _) -> PObject y
-            PactId pid = _pePactId pe
+            DefPactId pid = _peDefPactId pe
             ps = [(Field "pactId", PString pid)
                  ,(Field "yield", yield')
                  ,(Field "step", PInteger (fromIntegral (_peStep pe)))]

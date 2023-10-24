@@ -60,9 +60,9 @@ hasRollback :: PactStep n t b i -> Bool
 hasRollback Step{} = False
 hasRollback StepWithRollback{} = True
 
-ordinaryPactStepExec :: PactStep name ty builtin info -> Term name ty builtin info
-ordinaryPactStepExec (Step expr _) = expr
-ordinaryPactStepExec (StepWithRollback expr _ _) = expr
+ordinaryDefPactStepExec :: PactStep name ty builtin info -> Term name ty builtin info
+ordinaryDefPactStepExec (Step expr _) = expr
+ordinaryDefPactStepExec (StepWithRollback expr _ _) = expr
 
 data DefPact name ty builtin info
   = DefPact
