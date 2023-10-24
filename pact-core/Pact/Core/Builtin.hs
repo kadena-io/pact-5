@@ -278,6 +278,7 @@ data RawBuiltin
   | RawDays
   | RawCompose
   | RawCreatePrincipal
+  | RawValidatePrincipal
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 instance HasObjectOps RawBuiltin where
@@ -408,6 +409,7 @@ rawBuiltinToText = \case
   RawDays -> "days"
   RawCompose -> "compose"
   RawCreatePrincipal -> "create-principal"
+  RawValidatePrincipal -> "validate-principal"
 
 instance IsBuiltin RawBuiltin where
   builtinName = NativeName . rawBuiltinToText
@@ -535,6 +537,7 @@ instance IsBuiltin RawBuiltin where
     RawDays -> 1
     RawCompose -> 3
     RawCreatePrincipal -> 1
+    RawValidatePrincipal -> 2
 
 
 rawBuiltinNames :: [Text]

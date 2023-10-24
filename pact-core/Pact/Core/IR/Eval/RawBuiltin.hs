@@ -1454,6 +1454,13 @@ coreCreatePrincipal info b cont handler _env = \case
     returnCEKValue cont handler $ VPactValue $ PPrincipal pr
   args -> argsError info b args
 
+coreValidatePrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreValidatePrincipal info b cont handler _env = \case
+  [VGuard g, VString s] -> do
+    pr' <- createPrincipalForGuard g
+    returnCEKValue cont handler $ VPactValue $ PBool $ Pr.mkPrincipalIdent pr' == s
+  args -> argsError info b args
+
 
 -----------------------------------
 -- Core definitions
@@ -1579,3 +1586,4 @@ rawBuiltinRuntime = \case
   RawCompose -> coreCompose
   RawSelectWithFields -> dbSelect
   RawCreatePrincipal -> coreCreatePrincipal
+  RawValidatePrincipal -> coreValidatePrincipal
