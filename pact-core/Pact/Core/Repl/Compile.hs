@@ -133,7 +133,7 @@ interpretReplProgram sc@(SourceCode _ source) display = do
         throwError (PEExecutionError (EvalError txt) (view termInfo te))
       EvalValue v -> do
         loaded .= view (reState . esLoaded) st
-        (replEvalState . esPactExec) .= view (reState . esPactExec) st
+        (replEvalState . esDefPactExec) .= view (reState . esDefPactExec) st
         case v of
           VClosure{} -> do
             pure IPClosure

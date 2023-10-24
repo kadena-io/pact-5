@@ -17,7 +17,7 @@ module Pact.Core.Environment
  ( EvalEnv(..)
  , eeMsgSigs, eePactDb
  , eeHash, eeMsgBody
- , eePactStep
+ , eeDefPactStep
  , eePublicData, eeMode, eeFlags
  , PactState(..)
  , psLoaded
@@ -57,7 +57,7 @@ import Pact.Core.Guards
 import Pact.Core.PactValue ( PactValue, EnvData )
 import Pact.Core.Hash
 import Pact.Core.Names
-import Pact.Core.Pacts.Types
+import Pact.Core.DefPacts.Types
 import Pact.Core.ChainData
 
 -- | Execution flags specify behavior of the runtime environment,
@@ -95,7 +95,7 @@ data EvalEnv b i
   , _eeMsgBody :: EnvData PactValue
   , _eeHash :: Hash
   , _eePublicData :: PublicData
-  , _eePactStep :: Maybe PactStep
+  , _eeDefPactStep :: Maybe DefPactStep
   , _eeMode :: ExecutionMode
   -- ^ The pact execution mode: local or transactional
   , _eeFlags :: Set ExecutionFlag
@@ -129,7 +129,7 @@ data EvalState b i
   , _esStack :: [StackFrame]
   , _esEvents :: [PactEvent PactValue]
   , _esLoaded :: Loaded b i
-  , _esPactExec :: Maybe PactExec
+  , _esDefPactExec :: Maybe DefPactExec
   } deriving Show
 
 instance Default (EvalState b i) where

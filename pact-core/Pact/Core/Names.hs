@@ -55,7 +55,7 @@ module Pact.Core.Names
  , fqModule
  , fqHash
  , userTable
- , PactId(..)
+ , DefPactId(..)
  ) where
 
 import Control.Lens
@@ -340,9 +340,9 @@ userTable (TableName tn) = TableName ("USER_" <> tn)
 --   generally computed from the continuation, or
 --   in the case of nested defpacts, the hash of the
 --   parent + the nested continuation
-newtype PactId
-  = PactId Text
+newtype DefPactId
+  = DefPactId Text
   deriving (Eq,Ord,Show)
 
-instance Pretty PactId where
-  pretty (PactId p) = pretty p
+instance Pretty DefPactId where
+  pretty (DefPactId p) = pretty p
