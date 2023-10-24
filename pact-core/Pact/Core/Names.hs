@@ -37,6 +37,7 @@ module Pact.Core.Names
  , OverloadedName(..)
  , FullyQualifiedName(..)
  , TableName(..)
+ , tableName
  , replRawModuleName
  , replModuleName
  , replModuleHash
@@ -44,6 +45,7 @@ module Pact.Core.Names
  , fqnToQualName
  , NativeName(..)
  , RowKey(..)
+ , rowKey
  , renderFullyQualName
  , FQNameRef(..)
  , fqName
@@ -287,6 +289,8 @@ instance Pretty NamedDeBruijn where
 newtype TableName = TableName { _tableName :: Text }
   deriving (Eq, Ord, Show)
 
+makeLenses ''TableName
+
 instance Pretty TableName where
   pretty (TableName tn) = pretty tn
 
@@ -309,6 +313,8 @@ renderFullyQualName (FullyQualifiedName mn n _) =
 newtype RowKey
   = RowKey { _rowKey :: Text }
   deriving (Eq, Ord, Show)
+
+makeLenses ''RowKey
 
 -- | A Name reference which
 -- is always fully qualified after name resolution

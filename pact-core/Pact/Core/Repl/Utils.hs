@@ -1,11 +1,12 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 
 
 module Pact.Core.Repl.Utils
@@ -37,6 +38,8 @@ module Pact.Core.Repl.Utils
 
 import Control.Lens
 import Control.Monad ( when, unless )
+import Control.Monad.Base
+import Control.Monad.Trans.Control
 import Control.Monad.Reader
 import Control.Monad.State.Strict(MonadState(..))
 import Control.Monad.Catch
@@ -64,6 +67,7 @@ import Pact.Core.Gas
 import Pact.Core.Errors
 import Pact.Core.Debug
 import Pact.Core.Environment
+import Pact.Core.IR.Eval.Runtime.Types (MonadGas(logGas, chargeGas))
 import qualified Pact.Core.IR.Term as Term
 import qualified Pact.Core.Syntax.ParseTree as Syntax
 
@@ -102,6 +106,7 @@ newtype ReplM b a
     , Applicative
     , Monad
     , MonadIO
+    , MonadReader (IORef (ReplState b))
     , MonadThrow
     , MonadError (PactError SpanInfo)
     , MonadCatch
@@ -111,6 +116,19 @@ newtype ReplM b a
 instance MonadState (ReplState b) (ReplM b)  where
   get = ReplT (ExceptT (Right <$> ReaderT readIORef))
   put rs = ReplT (ExceptT (Right <$> ReaderT (`writeIORef` rs)))
+
+instance MonadBase IO (ReplM b) where
+  liftBase = liftIO
+
+instance MonadBaseControl IO (ReplM b) where
+    type StM (ReplM b) a = Either (PactError SpanInfo) a
+    liftBaseWith f = ReplT $ liftWith $ \runInBaseReader ->
+      liftWith $ \runInBaseExcept ->
+      f $ \k -> runInBaseExcept (runInBaseReader (unReplT k))
+    restoreM = \case
+      Left err -> throwError err
+      Right a -> return a
+
 
 -- | Passed in repl environment
 -- Todo: not a `newtype` since there's
@@ -144,6 +162,14 @@ instance MonadEvalState b SpanInfo (ReplM b) where
 instance MonadGas (ReplM b) where
   logGas _ _ = error "implement logGas"
   chargeGas = error "implement chargeGas"
+
+instance MonadGas (ReplM b) where
+  logGas msg g = do
+    r <- use replEvalLog
+    liftIO $ modifyIORef' r (fmap ((msg, g):))
+  chargeGas g = do
+    r <- use replGas
+    liftIO (modifyIORef' r (<> g))
 
 
 instance HasEvalState (ReplState b) b SpanInfo where

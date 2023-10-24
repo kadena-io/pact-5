@@ -27,15 +27,19 @@ common pact-core-common
     , containers
     , data-default
     , deepseq
+    , direct-sqlite
     , directory
     , exceptions
     , filepath
     , lens
+    , lifted-base
+    , monad-control
     , mtl
     , pact-time
     , prettyprinter
     , prettyprinter-ansi-terminal
     , transformers
+    , transformers-base
     , text
     , vector
     , vector-algorithms
@@ -93,6 +97,8 @@ library
     Pact.Core.Info
     Pact.Core.Errors
     Pact.Core.Persistence
+    Pact.Core.Persistence.SQLite
+    Pact.Core.Persistence.MockPersistence
     Pact.Core.PactValue
     Pact.Core.Debug
     Pact.Core.Capabilities
