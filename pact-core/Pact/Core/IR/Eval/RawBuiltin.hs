@@ -1451,7 +1451,7 @@ coreCreatePrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreCreatePrincipal info b cont handler _env = \case
   [VGuard g] -> do
     pr <- createPrincipalForGuard g
-    returnCEKValue cont handler $ VPactValue $ PPrincipal pr
+    returnCEKValue cont handler $ VString $ Pr.mkPrincipalIdent pr
   args -> argsError info b args
 
 coreValidatePrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
