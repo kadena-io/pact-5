@@ -33,6 +33,7 @@ import Pact.Core.IR.Term
 import Pact.Core.Compile
 import Pact.Core.Interpreter
 import Pact.Core.Environment
+import Pact.Core.Namespace
 
 
 import Pact.Core.IR.Eval.Runtime
@@ -62,10 +63,6 @@ loadFile loc display = do
   source <- SourceCode (takeFileName loc) <$> liftIO (B.readFile loc)
   replCurrSource .= source
   interpretReplProgram source display
-
-defaultEvalEnv :: PactDb b i -> M.Map Text b -> EvalEnv b i
-defaultEvalEnv pdb =
-  EvalEnv mempty pdb (EnvData mempty) defaultPactHash def Nothing Transactional mempty
 
 interpretReplProgram
   :: SourceCode

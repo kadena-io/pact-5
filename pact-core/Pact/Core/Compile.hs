@@ -71,29 +71,38 @@ evalModuleGovernance
   -> Lisp.TopLevel i
   -> m ()
 evalModuleGovernance interp tl = do
+  lo <- useEvalState esLoaded
   pdb <- viewEvalEnv eePactDb
   case tl of
-    Lisp.TLModule m -> lookupModule (Lisp._mInfo m) pdb (Lisp._mName m) >>= \case
-      Just targetModule -> do
-        term <- case _mGovernance targetModule of
-          KeyGov (KeySetName ksn) -> do
-            let info = Lisp._mInfo m
-                ksnTerm = Constant (LString ksn) info
-                ksrg = App (Builtin (liftRaw RawKeysetRefGuard) info) (pure ksnTerm) info
-                term = App (Builtin (liftRaw RawEnforceGuard) info) (pure ksrg) info
-            pure term
-          CapGov (ResolvedGov fqn) -> do
-            let info = Lisp._mInfo m
-                cgBody = Constant LUnit info
-                term = CapabilityForm (WithCapability (fqnToName fqn) [] cgBody) info
-            pure term
-        void (_interpret interp term)
-        esCaps . csModuleAdmin %== S.insert (Lisp._mName m)
-      Nothing -> pure ()
-    Lisp.TLInterface iface -> lookupModuleData (Lisp._ifInfo iface) pdb (Lisp._ifName iface) >>= \case
-      Nothing -> pure ()
-      Just _ ->
-        throwExecutionError (Lisp._ifInfo iface)  (CannotUpgradeInterface (Lisp._ifName iface))
+    Lisp.TLModule m -> do
+      let unmangled = Lisp._mName m
+      mname <- mangleNamespace unmangled
+      lookupModule (Lisp._mInfo m) pdb mname >>= \case
+        Just targetModule -> do
+          term <- case _mGovernance targetModule of
+            KeyGov (KeySetName ksn) -> do
+              let info = Lisp._mInfo m
+                  ksnTerm = Constant (LString ksn) info
+                  ksrg = App (Builtin (liftRaw RawKeysetRefGuard) info) (pure ksnTerm) info
+                  term = App (Builtin (liftRaw RawEnforceGuard) info) (pure ksrg) info
+              pure term
+            CapGov (ResolvedGov fqn) -> do
+              let info = Lisp._mInfo m
+                  cgBody = Constant LUnit info
+                  term = CapabilityForm (WithCapability (fqnToName fqn) [] cgBody) info
+              pure term
+          void (_interpret interp term)
+          esCaps . csModuleAdmin %== S.insert (Lisp._mName m)
+          -- | Restore the state to pre-module admin acquisition
+          esLoaded .== lo
+        Nothing -> pure ()
+    Lisp.TLInterface iface -> do
+      let unmangled = Lisp._ifName iface
+      ifn <- mangleNamespace unmangled
+      lookupModuleData (Lisp._ifInfo iface) pdb ifn >>= \case
+        Nothing -> pure ()
+        Just _ ->
+          throwExecutionError (Lisp._ifInfo iface)  (CannotUpgradeInterface (Lisp._ifName iface))
     _ -> pure ()
 
 interpretTopLevel
@@ -107,14 +116,14 @@ interpretTopLevel interp tl = do
   pdb <- viewEvalEnv eePactDb
   -- Todo: pretty instance for modules and all of toplevel
   debugPrint (DPParser @b) tl
-  (DesugarOutput ds _deps) <- runDesugarTopLevel tl
+  (DesugarOutput ds deps) <- runDesugarTopLevel tl
   debugPrint DPDesugar ds
   lo0 <- useEvalState esLoaded
   case ds of
     TLModule m -> do
-      -- let deps' = M.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo0)
+      let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
       -- Todo: deps are not being calculated properly by the renamer
-      let deps' = _loAllLoaded lo0
+      -- let deps' = _loAllLoaded lo0
           mdata = ModuleData m deps'
       liftDbFunction (_mInfo m) (writeModule pdb Write (view mName m) mdata)
       let newLoaded = M.fromList $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
@@ -126,8 +135,8 @@ interpretTopLevel interp tl = do
       pure (LoadedModule (_mName m))
     TLInterface iface -> do
       -- Todo: deps are not being calculated properly by the renamer
-      -- let deps' = M.filterWithKey (\k _ -> Set.member (_fqModule k) deps) (_loAllLoaded lo0)
-      let deps' = _loAllLoaded lo0
+      let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
+      -- let deps' = _loAllLoaded lo0
           mdata = InterfaceData iface deps'
       liftDbFunction (_ifInfo iface) (writeModule pdb Write (view ifName iface) mdata)
       let newLoaded = M.fromList $ toFqDep (_ifName iface) (_ifHash iface)

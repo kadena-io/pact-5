@@ -19,6 +19,7 @@ module Pact.Core.Environment.Types
  , eePactStep
  , eePublicData, eeMode, eeFlags
  , eeNatives
+ , eeNamespacePolicy
  , PactState(..)
  , psLoaded
  , TxCreationTime(..)
@@ -43,6 +44,7 @@ module Pact.Core.Environment.Types
  , MonadEvalEnv(..)
  , MonadEvalState(..)
  , MonadEval
+ , defaultEvalEnv
  ) where
 
 
@@ -60,13 +62,14 @@ import qualified Data.Map.Strict as M
 import Pact.Core.Persistence
 import Pact.Core.Capabilities
 import Pact.Core.Guards
-import Pact.Core.PactValue ( PactValue, EnvData )
+import Pact.Core.PactValue
 import Pact.Core.Hash
 import Pact.Core.Names
 import Pact.Core.Pacts.Types
 import Pact.Core.ChainData
 import Pact.Core.Errors
 import Pact.Core.Gas
+import Pact.Core.Namespace
 
 -- | Execution flags specify behavior of the runtime environment,
 -- with an orientation towards some alteration of a default behavior.
@@ -114,6 +117,8 @@ data EvalEnv b i
   , _eeFlags :: Set ExecutionFlag
   -- ^ The present runtime flags in the eval environment
   , _eeNatives :: Map Text b
+  -- ^ The native resolution map
+  , _eeNamespacePolicy :: NamespacePolicy
   }
 
 makeLenses ''EvalEnv
@@ -174,3 +179,20 @@ type MonadEval b i m =
   , Default i
   , Show i
   , Show b)
+
+-- | A default evaluation environment meant for
+--   uses such as the repl
+defaultEvalEnv :: PactDb b i -> M.Map Text b -> EvalEnv b i
+defaultEvalEnv pdb m
+  = EvalEnv
+  { _eeMsgSigs = mempty
+  , _eePactDb = pdb
+  , _eeMsgBody = EnvData mempty
+  , _eeHash = defaultPactHash
+  , _eePublicData = def
+  , _eePactStep = Nothing
+  , _eeMode = Transactional
+  , _eeFlags = mempty
+  , _eeNatives = m
+  , _eeNamespacePolicy = SimpleNamespacePolicy
+  }

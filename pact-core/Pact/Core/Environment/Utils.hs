@@ -24,6 +24,7 @@ module Pact.Core.Environment.Utils
  , throwExecutionError
  , throwExecutionError'
  , toFqDep
+ , mangleNamespace
  ) where
 
 import Control.Lens
@@ -38,6 +39,7 @@ import Pact.Core.IR.Term
 import Pact.Core.Errors
 import Pact.Core.Environment.Types
 import Pact.Core.Hash
+import Pact.Core.Namespace
 
 viewEvalEnv :: (MonadEvalEnv b i m) => Lens' (EvalEnv b i) s -> m s
 viewEvalEnv l = view l <$> readEnv
@@ -50,9 +52,6 @@ setEvalState l s = modifyEvalState (set l s)
 
 (.==) :: (MonadEvalState b i m) => Traversal' (EvalState b i) s -> s -> m ()
 l .== s = modifyEvalState (set l s)
-
--- overEvalState :: (MonadEval b i m) => Lens' (EvalState b i) s -> (s -> s) -> m ()
--- overEvalState l f = modifyCEKState (over l f)
 
 (%==) :: (MonadEvalState b i m) => Traversal' (EvalState b i) s -> (s -> s) -> m ()
 l %== f = modifyEvalState (over l f)
@@ -94,7 +93,7 @@ lookupModule info pdb mn =
         throwExecutionError info (ExpectedModule mn)
       Nothing -> pure Nothing
 
--- | lookupModuleData for only modules
+-- | lookupModuleData modules and interfaces
 lookupModuleData :: (MonadEval b i m) => i -> PactDb b i -> ModuleName -> m (Maybe (ModuleData b i))
 lookupModuleData info pdb mn =
  useEvalState (esLoaded . loModules . at mn) >>= \case
@@ -154,3 +153,9 @@ getModuleData info pdb mn =
         pure ifdata
       Nothing ->
         throwExecutionError info (ModuleDoesNotExist mn)
+
+mangleNamespace :: (MonadEvalState b i m) => ModuleName -> m ModuleName
+mangleNamespace mn@(ModuleName mnraw ns) =
+  useEvalState (esLoaded . loNamespace) >>= \case
+    Nothing -> pure mn
+    Just (Namespace currNs _ _) -> pure (ModuleName mnraw (maybe (Just currNs) Just ns))

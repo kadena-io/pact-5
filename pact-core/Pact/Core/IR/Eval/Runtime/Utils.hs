@@ -264,9 +264,7 @@ sysOnlyEnv e
   read' :: Domain k v b i -> k -> IO (Maybe v)
   read' dom k = case dom of
     DUserTables _ -> dbOpDisallowed
-    DKeySets -> _pdbRead pdb DKeySets k
-    DModules -> _pdbRead pdb dom k
-    DPacts -> _pdbRead pdb dom k
+    _ -> _pdbRead pdb dom k
 
 getPactId :: (MonadEval b i m) => i -> m PactId
 getPactId info =

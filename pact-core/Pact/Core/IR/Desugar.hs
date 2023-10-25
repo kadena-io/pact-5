@@ -28,9 +28,11 @@ module Pact.Core.IR.Desugar
  , DesugarBuiltin(..)
  ) where
 
+import Control.Applicative((<|>))
 import Control.Monad ( when, forM, (>=>), unless)
 import Control.Monad.Reader
 import Control.Monad.State.Strict ( StateT(..), MonadState )
+import Control.Monad.Trans.Maybe(MaybeT(..), runMaybeT, hoistMaybe)
 import Control.Monad.Except
 import Control.Lens hiding (List)
 import Data.Text(Text)
@@ -59,6 +61,7 @@ import Pact.Core.Guards
 import Pact.Core.Imports
 import Pact.Core.Environment
 import Pact.Core.Gas
+import Pact.Core.Namespace
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 
@@ -108,15 +111,18 @@ newtype RenamerT b i m a =
     , MonadIO)
   via (StateT RenamerState (ReaderT (RenamerEnv b i) m))
 
--- instance (MonadError e m) => MonadError e (RenamerT m b i) where
---   throwError e = RenamerT (lift (throwError e))
+instance MonadTrans (RenamerT b i) where
+  lift = RenamerT . lift . lift
+
+-- instance (MonadError e m) => MonadError e (RenamerT b i m) where
+--   throwError e = lift (throwError e)
 --   catchError ma f = RenamerT $ StateT $ \rs ->
 --       ReaderT $ \env ->
 --         catchError (runRenamerM rs env ma) (\e -> runRenamerM rs env (f e))
 
 instance MonadGas m => MonadGas (RenamerT b i m) where
-  logGas logText g = RenamerT (lift (lift (logGas logText g)))
-  chargeGas g = RenamerT (lift (lift (chargeGas g)))
+  logGas logText g = lift (logGas logText g)
+  chargeGas g = lift (chargeGas g)
 
 
 instance (MonadEvalEnv b i m) => MonadEvalEnv b i (RenamerT b i m) where
@@ -163,13 +169,6 @@ instance DesugarBuiltin RawBuiltin where
       arg2Name = "#enforceOneArg2"
       arg2 = Arg arg2Name (Just (Lisp.TyList (Lisp.TyPrim PrimBool)))
       in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (CEnforceOne (Var (BN (BareName arg1Name)) info) [Var (BN (BareName arg2Name)) info]) info) info
-  -- Todo:
-  -- Builtins of known arity differences we are yet to support:
-  --  str-to-int
-  --  read (db, later milestone)
-  --  select (db, later milestone)
-  --  floor
-  --  log
   desugarAppArity = desugarAppArityRaw id
 
 desugarAppArityRaw
@@ -221,29 +220,9 @@ data DesugarOutput a
   , _dsDeps :: Set ModuleName
   } deriving (Show, Functor)
 
--- type MonadDesugar raw reso i m =
---   ( DesugarBuiltin raw
---   , MonadError (PactError i) m
---   , MonadState (RenamerState reso i) m
---   , MonadReader (RenamerEnv reso i) m
---   , Show raw
---   , Show reso
---   , Show i
---   , MonadIO m)
-
--- type MonadRenamer reso i m =
---   ( MonadError (PactError i) m
---   , MonadState (RenamerState reso i) m
---   , MonadReader (RenamerEnv reso i) m
---   , Show reso
---   , Show i
---   , MonadIO m)
-
 dsOut :: Lens (DesugarOutput a) (DesugarOutput a') a a'
 dsOut f (DesugarOutput a d) =
   f a <&> \a' -> DesugarOutput a' d
-
-
 
 throwDesugarError :: MonadError (PactError i) m => DesugarError -> i -> RenamerT b i m a
 throwDesugarError de = RenamerT . lift . throwError . PEDesugarError de
@@ -729,7 +708,11 @@ loadTopLevelMembers i mimports mdata binds = case mdata of
 
 -- | Resolve a module name, return the implemented members as well if any
 -- including all current
-resolveModuleName :: (MonadEval b i m) => i -> ModuleName -> RenamerT b i m (ModuleName, [ModuleName])
+resolveModuleName
+  :: (MonadEval b i m)
+  => i
+  -> ModuleName
+  -> RenamerT b i m (ModuleName, [ModuleName])
 resolveModuleName i mn =
   view reCurrModule >>= \case
     Just (currMod, imps) | currMod == mn -> pure (currMod, imps)
@@ -755,103 +738,93 @@ resolveInterfaceName i mn =
         pure mn
 
 
--- mn implementeds
+-- | Resolve module data, fail if not found
 resolveModuleData
   :: (MonadEval b i m)
   => ModuleName
   -> i
   -> RenamerT b i m (ModuleData b i)
-resolveModuleData mn i =
-  useEvalState (esLoaded . loModules . at mn) >>= \case
+resolveModuleData mn@(ModuleName name mNs) i = do
+  pdb <- viewEvalEnv eePactDb
+  lift (lookupModuleData i pdb mn) >>= \case
     Just md -> pure md
-    Nothing ->
-      viewEvalEnv eePactDb >>= liftIO . (`readModule` mn) >>= \case
-      Nothing -> throwDesugarError (NoSuchModule mn) i
-      Just md -> case md of
-        ModuleData module_ depmap -> do
-          md <$ loadModule module_ depmap
-        InterfaceData in' depmap ->
-          md <$ loadInterface in' depmap
+    Nothing -> case mNs of
+      Just _ -> throwDesugarError (NoSuchModule mn) i
+      Nothing -> useEvalState (esLoaded . loNamespace) >>= \case
+        Nothing -> throwDesugarError (NoSuchModule mn) i
+        Just (Namespace ns _ _) ->
+          lift (getModuleData i pdb (ModuleName name (Just ns)))
+  -- useEvalState (esLoaded . loModules . at mn) >>= \case
+    -- Just md -> pure md
+    -- Nothing ->
+    --   viewEvalEnv eePactDb >>= RenamerT . lift . lift . liftDbFunction i . (`readModule` mn) >>= \case
+    --   Just md -> case md of
+    --     ModuleData module_ depmap -> do
+    --       md <$ loadModule module_ depmap
+    --     InterfaceData in' depmap ->
+    --       md <$ loadInterface in' depmap
+    --   -- We didn't find the module data, therefore
+    --   -- we will check whether a namespace was supplied.
+    --   Nothing -> case mNs of
+    --     Just _ -> throwDesugarError (NoSuchModule mn) i
+    --     Nothing -> useEvalState (esLoaded . loNamespace) >>= \case
+    --       Nothing -> throwDesugarError (NoSuchModule mn) i
+    --       Just (Namespace ns _ _) -> resolveModuleData (ModuleName name (Just ns)) i
 
--- toFqDep
---   :: ModuleName
---   -> ModuleHash
---   -> Def name ty builtin i
---   -> (FullyQualifiedName, Def name ty builtin i)
--- toFqDep modName mhash def = let
---   fqn = FullyQualifiedName modName (defName def) mhash
---   in (fqn, def)
+-- lookupModuleData
+--   :: (MonadEval b i m)
+--   => ModuleName
+--   -> i
+--   -> RenamerT b i m (Maybe (ModuleData b i))
+-- lookupModuleData mn@(ModuleName name mNs) i =
+--   useEvalState (esLoaded . loModules . at mn) >>= \case
+--     Just md -> pure md
+--     Nothing ->
+--       viewEvalEnv eePactDb >>= liftIO . (`readModule` mn) >>= \case
+--       Just md -> case md of
+--         ModuleData module_ depmap -> do
+--           Just md <$ loadModule module_ depmap
+--         InterfaceData in' depmap ->
+--           Just md <$ loadInterface in' depmap
+--       -- We didn't find the module data, therefore
+--       -- we will check whether a namespace was supplied.
+--       Nothing -> case mNs of
+--         Just _ -> pure Nothing
+--         Nothing -> useEvalState (esLoaded . loNamespace) >>= \case
+--           Nothing -> pure Nothing
+--           Just (Namespace ns _ _) -> lookupModuleData (ModuleName name (Just ns)) i
 
 -- | Load a module and it's constituents into the `Loaded` environment.
 -- including the types of the members
-loadModule
-  :: (MonadEvalState b i m)
-  => Module Name Type b i
-  -> Map FullyQualifiedName (Def Name Type b i)
-  -> RenamerT b i m ()
-loadModule module_ deps  = do
-  let modName = _mName module_
-  let mhash = _mHash module_
-  let memberTerms = M.fromList (toFqDep modName mhash <$> _mDefs module_)
-      allDeps = M.union memberTerms deps
-  esLoaded %== over loModules (M.insert modName (ModuleData module_ deps)) . over loAllLoaded (M.union allDeps)
-  -- rsModuleBinds %= M.insert modName depMap
-  -- rsDependencies %= S.insert modName
+-- loadModule
+--   :: (MonadEvalState b i m)
+--   => Module Name Type b i
+--   -> Map FullyQualifiedName (Def Name Type b i)
+--   -> RenamerT b i m ()
+-- loadModule module_ deps  = do
+--   let modName = _mName module_
+--   let mhash = _mHash module_
+--   let memberTerms = M.fromList (toFqDep modName mhash <$> _mDefs module_)
+--       allDeps = M.union memberTerms deps
+--   esLoaded %== over loModules (M.insert modName (ModuleData module_ deps)) . over loAllLoaded (M.union allDeps)
 
 -- Load an interface into the `Loaded` environment
 -- noting that the only interface names that are "legal" in terms
 -- are (For now, while we implement more features) the declared constants.
 
-loadInterface
-  :: (MonadEvalState b i m)
-  => Interface Name Type b i
-  -> Map FullyQualifiedName (Def Name Type b i)
-  -> RenamerT b i m ()
-loadInterface iface deps = do
-  let ifaceName = _ifName iface
-      ifhash = _ifHash iface
-      ifaceDefs = mapMaybe ifDefToDef (_ifDefns iface)
-  let memberTerms = M.fromList (toFqDep ifaceName ifhash <$> ifaceDefs)
-      allDeps = M.union memberTerms deps
-  esLoaded %== over loModules (M.insert ifaceName (InterfaceData iface deps)) . over loAllLoaded (M.union allDeps)
+-- loadInterface
+--   :: (MonadEvalState b i m)
+--   => Interface Name Type b i
+--   -> Map FullyQualifiedName (Def Name Type b i)
+--   -> RenamerT b i m ()
+-- loadInterface iface deps = do
+--   let ifaceName = _ifName iface
+--       ifhash = _ifHash iface
+--       ifaceDefs = mapMaybe ifDefToDef (_ifDefns iface)
+--   let memberTerms = M.fromList (toFqDep ifaceName ifhash <$> ifaceDefs)
+--       allDeps = M.union memberTerms deps
+--   esLoaded %== over loModules (M.insert ifaceName (InterfaceData iface deps)) . over loAllLoaded (M.union allDeps)
   -- rsDependencies %= S.insert ifaceName
-
--- | Look up a qualified name in the pact db
--- if it's there, great! We will load the module into the scope of
--- `Loaded`, as well as include it in the renamer map
--- Todo: Bare namespace lookup first, then
--- current namespace.
--- Namespace definitions are yet to be supported in core
-
-lookupModuleMember
- :: (MonadEval b i m)
- => ModuleName
- -> Text
- -> i
- -> RenamerT b i m (Name, DefKind)
-lookupModuleMember modName defnName i = do
-  viewEvalEnv eePactDb >>= liftIO . (`readModule` modName) >>= \case
-    Just m -> case m of
-      ModuleData module_ deps ->
-        case findDefInModule defnName module_ of
-          -- Great! The name exists
-          -- This, we must include the module in `Loaded`, as well as propagate its deps and
-          -- all loaded members in `loAllLoaded`
-          Just defn -> do
-            loadModule module_ deps
-            pure (Name defnName (NTopLevel (_mName module_) (_mHash module_)), defKind defn)
-          -- Module exists, but it has no such member
-          -- Todo: check whether the module name includes a namespace
-          -- if it does not, we retry the lookup under the current namespace
-          Nothing ->
-            throwDesugarError (NoSuchModuleMember modName defnName) i
-      InterfaceData iface deps ->
-        case findDefInInterface defnName iface of
-          Just d -> do
-            loadInterface iface deps
-            pure (Name defnName (NTopLevel (_ifName iface) (_ifHash iface)), defKind d)
-          Nothing -> throwDesugarError (NoSuchModuleMember modName defnName) i
-    Nothing -> throwDesugarError (NoSuchModule modName) i
 
 
 renameType
@@ -886,7 +859,7 @@ renameType i = \case
     TQN qn -> do
       (_, dt) <- resolveQualified qn i
       case dt of
-        DKDefSchema sc -> pure sc
+        Just (DKDefSchema sc) -> pure sc
         _ -> throwDesugarError (InvalidDefInSchemaPosition (_qnName qn)) i
 
 
@@ -951,7 +924,7 @@ renameTerm (CapabilityForm cf i) =
     Just _ -> case view capFormName cf of
       QN qn -> do
           (n', dk) <- resolveQualified qn i
-          when ((isCapForm cf && dk /= DKDefCap) || (not (isCapForm cf) && dk == DKDefun))
+          when ((isCapForm cf && dk /= Just DKDefCap) || (not (isCapForm cf) && dk == Just DKDefun))
             $ throwDesugarError (InvalidCapabilityReference (_qnName qn)) i
           let cf' = set capFormName n' cf
           checkCapForm cf'
@@ -1184,7 +1157,7 @@ resolveName
   -> RenamerT b i m (Name, Maybe DefKind)
 resolveName i = \case
   BN b -> resolveBare b i
-  QN q -> over _2 Just <$> resolveQualified q i
+  QN q -> resolveQualified q i
   DN dn -> (, Nothing) <$> resolveDynamic i dn
 
 resolveDynamic
@@ -1204,9 +1177,11 @@ resolveDynamic i (DynamicName dn dArg) = views reBinds (M.lookup dn) >>= \case
   Nothing ->
     throwDesugarError (UnboundTermVariable dn) i
 
--- not in immediate binds, so it must be in the module
--- Todo: resolve module ref within this model
--- Todo: hierarchical namespace search
+-- | Resolve bare name atoms
+-- which either correspond to:
+--  - A top-level name in scope (e.g a definition)
+--  - A module reference (we query bare module names first)
+--  - A module reference with
 resolveBare
   :: (MonadEval b i m)
   => BareName
@@ -1229,34 +1204,61 @@ resolveBare (BareName bn) i = views reBinds (M.lookup bn) >>= \case
           (mn', imps) <- resolveModuleName i mn
           pure (Name bn (NModRef mn' imps), Nothing)
 
+-- | Resolve a qualified name `<qual>.<name>` with the following
+-- procedure:
+--  - <qual> has the form `<namespace>.<module>`:
+--    - if we find no identifier loaded or in the database, then it must not exist.
+--      it definitely refers to a fully qualified member
+--  - <qual> is of the form `<module>` (so, no namespace):
+--    - The identifier can mean one of three things: a root-namespaced identifier (e.g `coin.transfer`),
+--      a namespaced identifier when a namespace is in scope (so m.f when `(namespace 'free)` has been called),
+--      or a module reference where `<name>` is actually the module name, and `<module>` was actually the namespace.
+--
 resolveQualified
   :: (MonadEval b i m)
   => QualifiedName
   -> i
-  -> RenamerT b i m (Name, DefKind)
-resolveQualified (QualifiedName qn qmn) i = do
-  usesEvalState (esLoaded . loModules) (M.lookup qmn) >>= \case
-    Just (ModuleData module_ _) -> case findDefInModule qn module_ of
-      Just d -> pure (Name qn (NTopLevel qmn (_mHash module_)), defKind d)
-      Nothing ->
-        throwDesugarError (NoSuchModuleMember qmn qn) i
-    Just (InterfaceData iface _) -> case findDefInInterface qn iface of
-      Just d -> pure (Name qn (NTopLevel qmn (_ifHash iface)), defKind d)
-      Nothing ->
-        throwDesugarError (NoSuchModuleMember qmn qn) i
-    Nothing -> lookupModuleMember qmn qn i
+  -> RenamerT b i m (Name, Maybe DefKind)
+resolveQualified (QualifiedName qn qmn@(ModuleName modName mns)) i = do
+  pdb <- viewEvalEnv eePactDb
+  runMaybeT (baseLookup pdb qn qmn <|> modRefLookup pdb <|> namespacedLookup pdb) >>= \case
+    Just p -> pure p
+    Nothing -> throwDesugarError (NoSuchModuleMember qmn qn) i
+  where
+  baseLookup pdb defnName moduleName = do
+    MaybeT (lift (lookupModuleData i pdb moduleName)) >>= \case
+      ModuleData module' _ -> do
+        d <- hoistMaybe (findDefInModule defnName module' )
+        lift $ rsDependencies %= S.insert moduleName
+        pure (Name qn (NTopLevel qmn (_mHash module')), Just (defKind d))
+      InterfaceData iface _ -> do
+        d <- hoistMaybe (findDefInInterface defnName iface)
+        lift $ rsDependencies %= S.insert moduleName
+        pure (Name qn (NTopLevel qmn (_ifHash iface)), Just (defKind d))
+  modRefLookup pdb = case mns of
+    -- Fail eagerly: the previous lookup was fully qualified
+    Just _ -> MaybeT (throwDesugarError (NoSuchModuleMember qmn qn) i)
+    Nothing -> do
+      let mn' = ModuleName qn (Just (NamespaceName modName))
+      m <- MaybeT $ lift $ lookupModule i pdb mn'
+      let nk = NModRef mn' (_mImplements m)
+      pure (Name qn nk, Nothing)
+  namespacedLookup pdb = do
+    Namespace ns _ _ <- MaybeT (useEvalState (esLoaded . loNamespace))
+    let mn' = ModuleName modName (Just ns)
+    baseLookup pdb qn mn'
 
--- | Todo: support imports
--- Todo:
+-- | Handle all name resolution for modules
 renameModule
-  :: forall b i m. (MonadEval b i m, DesugarBuiltin b)
+  :: (MonadEval b i m, DesugarBuiltin b)
   => Module ParsedName DesugarType b i
   -> RenamerT b i m (Module Name Type b i)
-renameModule (Module mname mgov defs blessed imp implements mhash i) = local (set reCurrModule (Just (mname, implements))) $ do
+renameModule (Module unmangled mgov defs blessed imp implements mhash i) = do
   rsDependencies .= mempty
-  mgov' <- resolveGov mgov
+  mname <- mangleNamespace unmangled
+  mgov' <- resolveGov mname mgov
   let defNames = S.fromList $ fmap defName defs
-  let scc = mkScc defNames <$> defs
+  let scc = mkScc mname defNames <$> defs
   defs' <- forM (stronglyConnComp scc) \case
     AcyclicSCC d -> pure d
     CyclicSCC d ->
@@ -1264,24 +1266,21 @@ renameModule (Module mname mgov defs blessed imp implements mhash i) = local (se
       -- but all uses of `head` are still scary
       throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (head d))
   binds <- view reBinds
-  bindsWithImports <- handleImports binds imp
+  bindsWithImports <- foldlM (handleImport i) binds imp
+  -- bindsWithImports <- handleImports binds imp
   -- rsModuleBinds %= M.insert mname mempty
-  (defs'', _, _) <- over _1 reverse <$> foldlM go ([], S.empty, bindsWithImports) defs'
+  (defs'', _, _) <- over _1 reverse <$> foldlM (go mname) ([], S.empty, bindsWithImports) defs'
   let fqns = M.fromList $ (\d -> (defName d, (FullyQualifiedName mname (defName d) mhash, defKind d))) <$> defs''
   esLoaded . loToplevel %== M.union fqns
   traverse_ (checkImplements i defs'' mname) implements
   pure (Module mname mgov' defs'' blessed imp implements mhash i)
   where
-  handleImports binds [] = pure binds
-  handleImports binds (imp':xs) = do
-    binds' <- handleImport i binds imp'
-    handleImports binds' xs
-
   -- Our deps are acyclic, so we resolve all names
-  go (defns, s, m) defn = do
+  go mname (defns, s, m) defn = do
     when (S.member (defName defn) s) $ throwDesugarError (DuplicateDefinition (defName defn)) i
     let dn = defName defn
-    defn' <- local (set reBinds m) $ renameDef defn
+    defn' <- local (set reCurrModule (Just (mname, implements)))
+             $ local (set reBinds m) $ renameDef defn
     let dk = defKind defn'
     let depPair = (NTopLevel mname mhash, dk)
     let m' = M.insert dn (over _2 Just depPair) m
@@ -1290,7 +1289,7 @@ renameModule (Module mname mgov defs blessed imp implements mhash i) = local (se
     esLoaded . loToplevel . ix dn .== (fqn, dk)
     pure (defn':defns, S.insert (defName defn) s, m')
 
-  resolveGov = \case
+  resolveGov mname = \case
     KeyGov ksn -> pure (KeyGov ksn)
     CapGov (UnresolvedGov govName) ->
       case find (\d -> BN (BareName (defName d)) == govName) defs of
@@ -1299,7 +1298,7 @@ renameModule (Module mname mgov defs blessed imp implements mhash i) = local (se
           pure (CapGov (ResolvedGov fqn))
         Just d -> throwDesugarError (InvalidGovernanceRef (QualifiedName (defName d) mname)) i
         Nothing -> throwDesugarError (InvalidGovernanceRef (QualifiedName (rawParsedName govName) mname)) i
-  mkScc dns def = (def, defName def, S.toList (defSCC mname dns def))
+  mkScc mname dns def = (def, defName def, S.toList (defSCC mname dns def))
 
 
 handleImport
@@ -1324,19 +1323,12 @@ checkImplements
   -> ModuleName
   -> ModuleName
   -> RenamerT b i m ()
-checkImplements i defs moduleName ifaceName =
-  useEvalState (esLoaded . loModules . at ifaceName) >>= \case
-    Just (InterfaceData in' _depmap) ->
-      traverse_ checkImplementedMember (_ifDefns in')
-    -- Todo: lift into DesugarError (technically name resolution error but this is fine)
-    Just _ -> throwDesugarError (NoSuchInterface ifaceName) i
-    Nothing -> viewEvalEnv eePactDb >>= liftIO . (`readModule` ifaceName) >>= \case
-      Just (InterfaceData in' depmap) -> do
-        loadInterface in' depmap
-        traverse_ checkImplementedMember (_ifDefns in')
-      -- Todo: improve this error, could be "found module, expected interface"
-      Just _ -> throwDesugarError (NoSuchInterface ifaceName) i
-      Nothing -> throwDesugarError (NoSuchInterface ifaceName) i
+checkImplements i defs moduleName ifaceName = do
+  pdb <- viewEvalEnv eePactDb
+  lift (getModuleData i pdb ifaceName) >>= \case
+    InterfaceData iface _deps ->
+      traverse_ checkImplementedMember (_ifDefns iface)
+    _ -> throwDesugarError (NoSuchInterface ifaceName) i
   where
   checkImplementedMember = \case
     IfDConst{} -> pure ()

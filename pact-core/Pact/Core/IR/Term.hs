@@ -351,6 +351,34 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (TopLevel name ty bu
 ----------------------------
 -- Aliases for convenience
 ----------------------------
+termType :: Traversal (Term n t b i) (Term n t' b i) t t'
+termType f  = \case
+  Var n i -> pure (Var n i)
+  Lam li ne te i ->
+    Lam li <$> (traversed.argType._Just) f ne <*> termType f te <*> pure i
+  Let n te te' i ->
+    Let <$> (argType . _Just) f n <*> termType f te <*> termType f te' <*> pure i
+  App te ne i ->
+    App <$> termType f te <*> traverse (termType f) ne <*> pure i
+  Sequence te te' i ->
+    Sequence <$> termType f te <*> termType f te' <*> pure i
+  Conditional bf i ->
+    Conditional <$> traverse (termType f) bf <*> pure i
+  Builtin b i -> pure (Builtin b i)
+  Nullary term i ->
+    Nullary <$> termType f term <*> pure i
+  Constant lit i ->
+    pure (Constant lit i)
+  ListLit tes i ->
+    ListLit <$> traverse (termType f) tes <*> pure i
+  Try te te' i ->
+    Try <$> termType f te <*> termType f te' <*> pure i
+  CapabilityForm cf i ->
+    CapabilityForm <$> traverse (termType f) cf <*> pure i
+  ObjectLit m i ->
+    ObjectLit <$> (traverse._2) (termType f) m <*> pure i
+  Error txt i -> pure (Error txt i)
+
 termBuiltin :: Traversal (Term n t b i) (Term n t b' i) b b'
 termBuiltin f = \case
   Var n i -> pure (Var n i)
@@ -378,8 +406,6 @@ termBuiltin f = \case
     CapabilityForm <$> traverse (termBuiltin f) cf <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (termBuiltin f) m <*> pure i
-  -- DynInvoke n t i ->
-  --   DynInvoke <$> termBuiltin f n <*> pure t <*> pure i
   Error txt i -> pure (Error txt i)
 
 termInfo :: Lens' (Term name ty builtin info) info
@@ -423,6 +449,10 @@ instance Plated (Term name ty builtin info) where
     ObjectLit o i ->
       ObjectLit <$> (traverse._2) f o <*> pure i
     Error e i -> pure (Error e i)
+
+-- defType :: Lens (Def n t b i) (Def n t' b i) t t'
+-- defType f = \case
+--   Dfun (Defun df)
 
 -- Todo: qualify all of these
 makeLenses ''Module
