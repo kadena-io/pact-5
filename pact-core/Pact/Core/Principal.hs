@@ -78,10 +78,7 @@ principalParser = alts <* void eof
 
     wParser = do
       prefix 'w'
-      h <- base64UrlHashParser
-      char' ':'
-      n <- nameMatcher
-      pure $ W h n
+      binCtor W base64UrlHashParser nameMatcher
 
     rParser = do
       prefix 'r'
@@ -89,10 +86,10 @@ principalParser = alts <* void eof
 
     uParser = do
       prefix 'u'
-      n <- nameMatcher
-      char' ':'
-      h <- base64UrlHashParser
-      pure $ U n h
+      binCtor U nameMatcher base64UrlHashParser
+
+    binCtor :: (a -> b -> Principal) -> Parser a -> Parser b -> Parser Principal
+    binCtor ctor p1 p2 = ctor <$> p1 <*> (char ':' *> p2)
 
     hexKeyFormat = PublicKeyText . T.pack <$> count 64 (satisfy isHexDigit)
 
