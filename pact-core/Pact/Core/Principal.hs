@@ -66,9 +66,7 @@ principalParser = alts <* void eof
        <|> wParser
        <|> rParser
        <|> uParser
-      {-
        <|> mParser
-       -}
        <|> pParser
        <|> cParser
 
@@ -87,6 +85,10 @@ principalParser = alts <* void eof
     uParser = do
       prefix 'u'
       binCtor U nameMatcher base64UrlHashParser
+
+    mParser = do
+      prefix 'm'
+      binCtor M moduleNameParser nameMatcher
 
     pParser = do
       prefix 'p'
@@ -110,18 +112,20 @@ principalParser = alts <* void eof
     char' = void . char
     prefix ch = char ch >> char' ':'
 
-asMatcher :: Parser a -> Parser Text
-asMatcher = fmap fst . match
 
 nameMatcher :: Parser Text
 nameMatcher = asMatcher $ qualifiedNameMatcher
                       <|> bareNameMatcher
   where
+    bareNameMatcher :: Parser ()
     bareNameMatcher = void $ ident' style
+    qualifiedNameMatcher :: Parser ()
     qualifiedNameMatcher = do
       void $ ident' style
       void $ dot *> ident' style
       void $ optional (dot *> ident' style)
+    asMatcher :: Parser a -> Parser Text
+    asMatcher = fmap fst . match
 
 keysetNameParser :: Parser KeySetName
 keysetNameParser = qualified <|> withoutNs
@@ -134,6 +138,14 @@ keysetNameParser = qualified <|> withoutNs
       t <- takeText
       guard $ not $ T.null t
       pure $ KeySetName t {- TODO Nothing -}
+
+moduleNameParser :: Parser ModuleName
+moduleNameParser = do
+  a <- ident style
+  b <- optional (dot *> ident style)
+  case b of
+    Nothing -> pure $ ModuleName a Nothing
+    Just b' -> pure $ ModuleName b' (Just $ NamespaceName a)
 
 -- type-specialized version of `ident`
 -- to avoid defaulting warnings on the `IsString` constraint
