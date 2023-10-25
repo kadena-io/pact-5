@@ -96,15 +96,12 @@ asMatcher = fmap fst . match
 nameMatcher :: Parser Text
 nameMatcher = asMatcher $ qualifiedNameMatcher
                       <|> bareNameMatcher
-
-qualifiedNameMatcher :: Parser ()
-qualifiedNameMatcher = do
-  void $ ident' style
-  void $ dot *> ident' style
-  void $ optional (dot *> ident' style)
-
-bareNameMatcher :: Parser ()
-bareNameMatcher = void $ ident' style
+  where
+    bareNameMatcher = void $ ident' style
+    qualifiedNameMatcher = do
+      void $ ident' style
+      void $ dot *> ident' style
+      void $ optional (dot *> ident' style)
 
 -- type-specialized version of `ident`
 -- to avoid defaulting warnings on the `IsString` constraint
