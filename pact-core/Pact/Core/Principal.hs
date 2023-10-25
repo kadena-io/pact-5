@@ -65,8 +65,8 @@ principalParser = alts <* void eof
     alts = kParser
        <|> wParser
        <|> rParser
-      {-
        <|> uParser
+      {-
        <|> mParser
        <|> pParser
        <|> cParser
@@ -86,6 +86,13 @@ principalParser = alts <* void eof
     rParser = do
       prefix 'r'
       R <$> keysetNameParser
+
+    uParser = do
+      prefix 'u'
+      n <- nameMatcher
+      char' ':'
+      h <- base64UrlHashParser
+      pure $ U n h
 
     hexKeyFormat = PublicKeyText . T.pack <$> count 64 (satisfy isHexDigit)
 
