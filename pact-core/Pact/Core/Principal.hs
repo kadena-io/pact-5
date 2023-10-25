@@ -8,10 +8,10 @@ module Pact.Core.Principal
 ) where
 
 import Control.Applicative
+import Control.Monad
 import Data.Attoparsec.Text
 import Data.ByteString.Char8 qualified as BS
 import Data.Char(isHexDigit)
-import Data.Functor
 import Data.HashSet qualified as HS
 import Data.Text(Text)
 import Data.Text qualified as T
@@ -64,8 +64,8 @@ principalParser = alts <* void eof
   where
     alts = kParser
        <|> wParser
-      {-
        <|> rParser
+      {-
        <|> uParser
        <|> mParser
        <|> pParser
@@ -82,6 +82,10 @@ principalParser = alts <* void eof
       char' ':'
       n <- nameMatcher
       pure $ W h n
+
+    rParser = do
+      prefix 'r'
+      R <$> keysetNameParser
 
     hexKeyFormat = PublicKeyText . T.pack <$> count 64 (satisfy isHexDigit)
 
@@ -106,6 +110,18 @@ nameMatcher = asMatcher $ qualifiedNameMatcher
       void $ ident' style
       void $ dot *> ident' style
       void $ optional (dot *> ident' style)
+
+keysetNameParser :: Parser KeySetName
+keysetNameParser = qualified <|> withoutNs
+  where
+    qualified = do
+      -- TODO ns <- ident style
+      kn <- dot *> ident style
+      pure $ KeySetName kn {- TODO (Just ns) -}
+    withoutNs = do
+      t <- takeText
+      guard $ not $ T.null t
+      pure $ KeySetName t {- TODO Nothing -}
 
 -- type-specialized version of `ident`
 -- to avoid defaulting warnings on the `IsString` constraint
