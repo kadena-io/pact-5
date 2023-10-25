@@ -20,6 +20,7 @@ build-type:          Simple
 common pact-core-common
   build-depends:
     , Decimal
+    , attoparsec
     , base
     , base16-bytestring
     , base64-bytestring
@@ -34,6 +35,7 @@ common pact-core-common
     , mtl
     , pact-json
     , pact-time
+    , parsers
     , prettyprinter
     , prettyprinter-ansi-terminal
     , transformers
@@ -53,6 +55,7 @@ common pact-core-common
     , array
     , pact-json
     , scientific
+    , unordered-containers
 
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
@@ -226,7 +229,6 @@ test-suite core-tests
     , bytestring
     , containers
     , data-default
-    , unordered-containers
     , Decimal
     , QuickCheck
     , deepseq
