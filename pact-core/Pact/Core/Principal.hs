@@ -1,8 +1,20 @@
+{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Pact.Core.Principal where
 
+import Control.Applicative
+import Data.Attoparsec.Text
+import Data.ByteString.Char8 qualified as BS
+import Data.Char(isHexDigit)
+import Data.Functor
+import Data.HashSet qualified as HS
 import Data.Text(Text)
+import Data.Text qualified as T
+import Text.Parser.Char(oneOf)
+import Text.Parser.Combinators(eof)
+import Text.Parser.Token
+import Text.Parser.Token.Highlight
 
 import Pact.Core.Guards
 import Pact.Core.Names
@@ -42,3 +54,70 @@ mkPrincipalIdent = \case
   U n ph -> "u:" <> n <> ":" <> ph
   M mn n -> "m:" <> renderModuleName mn <> ":" <> n
   C c -> "c:" <> c
+
+principalParser :: Parser Principal
+principalParser = alts <* void eof
+  where
+    alts = kParser
+       <|> wParser
+      {-
+       <|> rParser
+       <|> uParser
+       <|> mParser
+       <|> pParser
+       <|> cParser
+       -}
+
+    kParser = do
+      prefix 'k'
+      K <$> hexKeyFormat
+
+    wParser = do
+      prefix 'w'
+      h <- base64UrlHashParser
+      char' ':'
+      n <- nameMatcher
+      pure $ W h n
+
+    hexKeyFormat = PublicKeyText . T.pack <$> count 64 (satisfy isHexDigit)
+
+    base64UrlUnpaddedAlphabet :: BS.ByteString
+    base64UrlUnpaddedAlphabet =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+    base64UrlHashParser = T.pack <$> count 43 (satisfy (`BS.elem` base64UrlUnpaddedAlphabet))
+
+    char' = void . char
+    prefix ch = char ch >> char' ':'
+
+asMatcher :: Parser a -> Parser Text
+asMatcher = fmap fst . match
+
+nameMatcher :: Parser Text
+nameMatcher = asMatcher $ qualifiedNameMatcher
+                      <|> bareNameMatcher
+
+qualifiedNameMatcher :: Parser ()
+qualifiedNameMatcher = do
+  void $ ident' style
+  void $ dot *> ident' style
+  void $ optional (dot *> ident' style)
+
+bareNameMatcher :: Parser ()
+bareNameMatcher = void $ ident' style
+
+-- type-specialized version of `ident`
+-- to avoid defaulting warnings on the `IsString` constraint
+ident' :: IdentifierStyle Parser -> Parser Text
+ident' = ident
+
+style :: IdentifierStyle Parser
+style = IdentifierStyle "atom"
+        (letter <|> symbols)
+        (letter <|> digit <|> symbols)
+        (HS.fromList ["true", "false"])
+        Symbol
+        ReservedIdentifier
+  where
+    symbols :: Parser Char
+    symbols = oneOf "%#+-_&$@<>=^?*!|/~"
