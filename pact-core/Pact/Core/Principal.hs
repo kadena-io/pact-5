@@ -1,7 +1,11 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Pact.Core.Principal where
+module Pact.Core.Principal
+( Principal(..)
+, mkPrincipalIdent
+, principalParser
+) where
 
 import Control.Applicative
 import Data.Attoparsec.Text
