@@ -68,9 +68,9 @@ principalParser = alts <* void eof
        <|> uParser
       {-
        <|> mParser
+       -}
        <|> pParser
        <|> cParser
-       -}
 
     kParser = do
       prefix 'k'
@@ -87,6 +87,14 @@ principalParser = alts <* void eof
     uParser = do
       prefix 'u'
       binCtor U nameMatcher base64UrlHashParser
+
+    pParser = do
+      prefix 'p'
+      binCtor P (PactId <$> base64UrlHashParser) nameMatcher
+
+    cParser = do
+      prefix 'c'
+      C <$> base64UrlHashParser
 
     binCtor :: (a -> b -> Principal) -> Parser a -> Parser b -> Parser Principal
     binCtor ctor p1 p2 = ctor <$> p1 <*> (char ':' *> p2)
