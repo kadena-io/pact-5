@@ -37,10 +37,12 @@ import Pact.Core.Environment
 import Pact.Core.Capabilities
 import Pact.Core.Literal
 import Pact.Core.Imports
+import Pact.Core.Namespace
 
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
+import qualified Pact.Core.IR.Eval.CEK as Eval
 
 type HasCompileEnv b i  m
   = ( MonadEval b i m
@@ -64,6 +66,26 @@ data CompileValue b
   | InterpretValue InterpretValue
   deriving Show
 
+
+enforceNamespaceInstall
+  :: (HasCompileEnv b i m)
+  => i
+  -> Interpreter b i m
+  -> m ()
+enforceNamespaceInstall info interp =
+  useEvalState (esLoaded . loNamespace) >>= \case
+    Just ns ->
+      void (_interpretGuard interp info (_nsUser ns))
+    Nothing ->
+      enforceRootNamespacePolicy
+    where
+    enforceRootNamespacePolicy = do
+      policy <- viewEvalEnv eeNamespacePolicy
+      unless (allowRoot policy) $
+        throwExecutionError info (NamespaceInstallError "cannot install in root namespace")
+    allowRoot SimpleNamespacePolicy = True
+    allowRoot (SmartNamespacePolicy ar _) = ar
+
 -- | Evaluate module governance
 evalModuleGovernance
   :: (HasCompileEnv b i m)
@@ -75,34 +97,34 @@ evalModuleGovernance interp tl = do
   pdb <- viewEvalEnv eePactDb
   case tl of
     Lisp.TLModule m -> do
+      let info = Lisp._mInfo m
       let unmangled = Lisp._mName m
       mname <- mangleNamespace unmangled
       lookupModule (Lisp._mInfo m) pdb mname >>= \case
         Just targetModule -> do
           term <- case _mGovernance targetModule of
             KeyGov (KeySetName ksn) -> do
-              let info = Lisp._mInfo m
-                  ksnTerm = Constant (LString ksn) info
+              let ksnTerm = Constant (LString ksn) info
                   ksrg = App (Builtin (liftRaw RawKeysetRefGuard) info) (pure ksnTerm) info
                   term = App (Builtin (liftRaw RawEnforceGuard) info) (pure ksrg) info
               pure term
             CapGov (ResolvedGov fqn) -> do
-              let info = Lisp._mInfo m
-                  cgBody = Constant LUnit info
+              let cgBody = Constant LUnit info
                   term = CapabilityForm (WithCapability (fqnToName fqn) [] cgBody) info
               pure term
           void (_interpret interp term)
           esCaps . csModuleAdmin %== S.insert (Lisp._mName m)
           -- | Restore the state to pre-module admin acquisition
           esLoaded .== lo
-        Nothing -> pure ()
+        Nothing -> enforceNamespaceInstall info interp
     Lisp.TLInterface iface -> do
+      let info = Lisp._ifInfo iface
       let unmangled = Lisp._ifName iface
       ifn <- mangleNamespace unmangled
-      lookupModuleData (Lisp._ifInfo iface) pdb ifn >>= \case
-        Nothing -> pure ()
+      lookupModuleData info pdb ifn >>= \case
+        Nothing -> enforceNamespaceInstall info interp
         Just _ ->
-          throwExecutionError (Lisp._ifInfo iface)  (CannotUpgradeInterface (Lisp._ifName iface))
+          throwExecutionError info  (CannotUpgradeInterface ifn)
     _ -> pure ()
 
 interpretTopLevel

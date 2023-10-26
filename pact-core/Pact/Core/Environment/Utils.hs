@@ -19,6 +19,7 @@ module Pact.Core.Environment.Utils
  , viewsEvalEnv
  , getModuleData
  , getModule
+ , getModuleMember
  , lookupModule
  , lookupModuleData
  , throwExecutionError
@@ -153,6 +154,15 @@ getModuleData info pdb mn =
         pure ifdata
       Nothing ->
         throwExecutionError info (ModuleDoesNotExist mn)
+
+-- | getModuleData, but only for modules, no interfaces
+getModuleMember :: (MonadEval b i m) => i -> PactDb b i -> QualifiedName -> m (EvalDef b i)
+getModuleMember info pdb (QualifiedName qn mn) = do
+  md <- getModule info pdb mn
+  case findDefInModule qn md of
+    Just d -> pure d
+    Nothing -> throwExecutionError info (InvariantFailure ("no such module member: " <> qn))
+
 
 mangleNamespace :: (MonadEvalState b i m) => ModuleName -> m ModuleName
 mangleNamespace mn@(ModuleName mnraw ns) =

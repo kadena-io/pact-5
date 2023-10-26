@@ -29,7 +29,6 @@ $lower = [ a-z ]
 $digit = [ 0-9 ]
 $alpha = [a-zA-Z]
 $psymbol = [\%\#\+\-\_\&\$\@\<\>\=\^\?\*\!\|\/\~]
-$special = [\.\;\,\$\|\*\+\?\#\~\-\{\}\(\)\[\]\^\/]
 @ident = [$alpha $psymbol][$alpha $digit $psymbol]*
 @integer = [\-]?[$digit]+
 @singletick = [\'][$alpha][$alpha $digit \- \_]*

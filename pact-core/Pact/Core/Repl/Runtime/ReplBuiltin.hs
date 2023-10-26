@@ -35,6 +35,7 @@ import Pact.Core.Errors
 import Pact.Core.Persistence
 import Pact.Core.IR.Term
 import Pact.Core.Info
+import Pact.Core.Namespace
 
 import Pact.Core.Repl.Utils
 
@@ -341,6 +342,20 @@ envExecConfig = \info b cont handler _env -> \case
         Nothing -> failInvariant info $ "Invalid flag, allowed: " <> T.pack (show (M.keys flagReps))
   args -> argsError info b args
 
+envNamespacePolicy :: (IsBuiltin b) => NativeFunction b SpanInfo (ReplM b)
+envNamespacePolicy info b cont handler _env = \case
+  [VBool allowRoot, VClosure (C clo)] -> do
+    pdb <- viewEvalEnv eePactDb
+    let qn = QualifiedName (_cloFnName clo) (_cloModName clo)
+    when (_cloArity clo /= 2) $ failInvariant info "Namespace manager function has invalid argument length"
+    getModuleMember info pdb qn >>= \case
+      Dfun _ -> do
+        let nsp = SmartNamespacePolicy allowRoot qn
+        replEvalEnv . eeNamespacePolicy .= nsp
+        returnCEKValue cont handler (VString "Installed namespace policy")
+      _ -> returnCEK cont handler (VError "invalid namespace manager function type" info)
+  args -> argsError info b args
+
 replBuiltinEnv
   :: BuiltinEnv (ReplBuiltin RawBuiltin) SpanInfo (ReplM (ReplBuiltin RawBuiltin))
 replBuiltinEnv i b env =
@@ -377,3 +392,4 @@ replRawBuiltinRuntime = \case
     RContinuePactRollback -> continuePact
     RContinuePactRollbackYield -> continuePact
     REnvExecConfig -> envExecConfig
+    REnvNamespacePolicy -> envNamespacePolicy

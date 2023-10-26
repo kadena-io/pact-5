@@ -1089,7 +1089,7 @@ applyLam
   -> Cont b i m
   -> CEKErrorHandler b i m
   -> m (EvalResult b i m)
-applyLam (C (Closure fn mn ca arity term mty env cloi)) args cont handler
+applyLam vc@(C (Closure fn mn ca arity term mty env cloi)) args cont handler
   | arity == argLen = case ca of
     ArgClosure cloargs -> do
       args' <- traverse (enforcePactValue cloi) args
@@ -1106,8 +1106,11 @@ applyLam (C (Closure fn mn ca arity term mty env cloi)) args cont handler
   | argLen > arity = throwExecutionError cloi ClosureAppliedToTooManyArgs
   | otherwise = case ca of
     NullaryClosure -> throwExecutionError cloi ClosureAppliedToTooManyArgs
-    ArgClosure cloargs ->
-      apply' mempty (NE.toList cloargs) args
+    ArgClosure cloargs
+      | null args ->
+        returnCEKValue cont handler (VClosure vc)
+      | otherwise ->
+        apply' mempty (NE.toList cloargs) args
   where
   argLen = length args
   -- Here we enforce an argument to a user fn is a

@@ -754,22 +754,6 @@ resolveModuleData mn@(ModuleName name mNs) i = do
         Nothing -> throwDesugarError (NoSuchModule mn) i
         Just (Namespace ns _ _) ->
           lift (getModuleData i pdb (ModuleName name (Just ns)))
-  -- useEvalState (esLoaded . loModules . at mn) >>= \case
-    -- Just md -> pure md
-    -- Nothing ->
-    --   viewEvalEnv eePactDb >>= RenamerT . lift . lift . liftDbFunction i . (`readModule` mn) >>= \case
-    --   Just md -> case md of
-    --     ModuleData module_ depmap -> do
-    --       md <$ loadModule module_ depmap
-    --     InterfaceData in' depmap ->
-    --       md <$ loadInterface in' depmap
-    --   -- We didn't find the module data, therefore
-    --   -- we will check whether a namespace was supplied.
-    --   Nothing -> case mNs of
-    --     Just _ -> throwDesugarError (NoSuchModule mn) i
-    --     Nothing -> useEvalState (esLoaded . loNamespace) >>= \case
-    --       Nothing -> throwDesugarError (NoSuchModule mn) i
-    --       Just (Namespace ns _ _) -> resolveModuleData (ModuleName name (Just ns)) i
 
 -- lookupModuleData
 --   :: (MonadEval b i m)
@@ -1230,11 +1214,11 @@ resolveQualified (QualifiedName qn qmn@(ModuleName modName mns)) i = do
       ModuleData module' _ -> do
         d <- hoistMaybe (findDefInModule defnName module' )
         lift $ rsDependencies %= S.insert moduleName
-        pure (Name qn (NTopLevel qmn (_mHash module')), Just (defKind d))
+        pure (Name qn (NTopLevel moduleName (_mHash module')), Just (defKind d))
       InterfaceData iface _ -> do
         d <- hoistMaybe (findDefInInterface defnName iface)
         lift $ rsDependencies %= S.insert moduleName
-        pure (Name qn (NTopLevel qmn (_ifHash iface)), Just (defKind d))
+        pure (Name qn (NTopLevel moduleName (_ifHash iface)), Just (defKind d))
   modRefLookup pdb = case mns of
     -- Fail eagerly: the previous lookup was fully qualified
     Just _ -> MaybeT (throwDesugarError (NoSuchModuleMember qmn qn) i)
@@ -1324,8 +1308,7 @@ checkImplements
   -> ModuleName
   -> RenamerT b i m ()
 checkImplements i defs moduleName ifaceName = do
-  pdb <- viewEvalEnv eePactDb
-  lift (getModuleData i pdb ifaceName) >>= \case
+  resolveModuleData ifaceName i >>= \case
     InterfaceData iface _deps ->
       traverse_ checkImplementedMember (_ifDefns iface)
     _ -> throwDesugarError (NoSuchInterface ifaceName) i
@@ -1365,15 +1348,10 @@ renameInterface
   :: (MonadEval b i m, DesugarBuiltin b)
   => Interface ParsedName DesugarType b i
   -> RenamerT b i m (Interface Name Type b i)
-renameInterface (Interface ifn defs ih info) = local (set reCurrModule (Just (ifn,[]))) $ do
-      -- defMap = M.fromList $ (, (NTopLevel ifn ih, DKDefConst)) <$> rawDefNames
-      -- fqns = M.fromList $ (\n -> (n, (FullyQualifiedName ifn n ih, DKDefConst))) <$> rawDefNames
-  -- `maybe all of this next section should be in a block laid out by the
-  -- `locally reBinds`
-  -- rsModuleBinds %= M.insert ifn defMap
-  -- rsLoaded . loToplevel %= M.union fqns
+renameInterface (Interface unmangled defs ih info) = do
+  ifn <- mangleNamespace unmangled
   let defNames = ifDefName <$> defs
-  let scc = mkScc (S.fromList defNames) <$> defs
+  let scc = mkScc ifn (S.fromList defNames) <$> defs
   defs' <- forM (stronglyConnComp scc) \case
     AcyclicSCC d -> pure d
     CyclicSCC d ->
@@ -1382,17 +1360,24 @@ renameInterface (Interface ifn defs ih info) = local (set reCurrModule (Just (if
       throwDesugarError (RecursionDetected ifn (ifDefName <$> d)) (ifDefInfo (head d))
   -- defs' <- locally reBinds (M.union (over _2 Just <$> defMap)) $ traverse renameIfDef defs
   binds <- view reBinds
-  (defs'', _, _) <- over _1 reverse <$> foldlM go ([], S.empty, binds) defs'
-
+  (defs'', _, _) <- over _1 reverse <$> foldlM (go ifn) ([], S.empty, binds) defs'
   pure (Interface ifn defs'' ih info)
   where
-  mkScc dns def = (def, ifDefName def, S.toList (ifDefSCC ifn dns def))
-  go (ds, s, m) d = do
-    when (S.member (ifDefName d) s) $ error "duplicate defn name in interface"
+  mkScc ifn dns def = (def, ifDefName def, S.toList (ifDefSCC ifn dns def))
+  go ifn (ds, s, m) d = do
     let dn = ifDefName d
-    d' <- local (set reBinds m) $ renameIfDef d
-    let m' = maybe m (\dk -> M.insert dn (NTopLevel ifn ih, Just dk) m) (ifDefKind d')
-    -- rsModuleBinds . ix ifn %= maybe id (M.insert dn . (NTopLevel ifn ih,)) (ifDefKind d')
+    when (S.member dn s) $
+      throwDesugarError (DuplicateDefinition dn) info
+    d' <- local (set reBinds m) $
+          local (set reCurrModule (Just (ifn, []))) $ renameIfDef d
+    -- let m' = maybe m (\dk -> M.insert dn (NTopLevel ifn ih, Just dk) m) (ifDefKind d')
+    m' <- case ifDefToDef d' of
+      Just defn -> do
+        let fqn = FullyQualifiedName ifn dn ih
+            dk = defKind defn
+        esLoaded . loToplevel . ix dn .== (fqn, dk)
+        pure (M.insert dn (NTopLevel ifn ih, Just dk) m)
+      Nothing -> pure m
     pure (d':ds, S.insert dn s, m')
 
 runRenamerT

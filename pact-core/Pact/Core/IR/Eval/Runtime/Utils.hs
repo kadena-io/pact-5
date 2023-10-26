@@ -24,13 +24,11 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , throwExecutionError'
  , argsError
  , findCallingModule
---  , getModule
  , getCallingModule
  , readOnlyEnv
  , sysOnlyEnv
  , calledByModule
  , failInvariant
---  , getModuleData
  , isExecutionFlagSet
  , checkNonLocalAllowed
  , evalStateToErrorState

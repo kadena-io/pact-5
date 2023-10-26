@@ -333,6 +333,8 @@ data EvalError
   | ExpectedPactValue
   | NotInPactExecution
   | GuardEnforceError Text
+  | NamespaceInstallError Text
+  | DefineNamespaceError Text
   -- ^ Non-recoverable guard enforces.
   deriving Show
 

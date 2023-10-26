@@ -55,6 +55,7 @@ import Pact.Core.Persistence
 import Pact.Core.Pacts.Types
 import Pact.Core.Environment
 import Pact.Core.Capabilities
+import Pact.Core.Namespace
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
@@ -1061,15 +1062,6 @@ coreEmitEvent = \info b cont handler env -> \case
       where
       enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)
       enforceMeta _ = pure ()
-    -- Just mn -> do
-    --   let fqn = _ctName ct
-    --   let ctModule = _fqModule fqn
-    --   if ctModule == mn then do
-    --     let pactEvent = PactEvent ct (_fqModule fqn) (_fqHash fqn)
-    --     esEvents %== (++ [pactEvent])
-    --     returnCEKValue cont handler (VBool True)
-    --   else returnCEK cont handler (VError "Event does not match emitting module" info)
-    -- Nothing -> returnCEK cont handler (VError "emit-event called outside of module code" info)
   args -> argsError info b args
 
 createCapGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -1403,6 +1395,100 @@ coreCompose = \info b cont handler _env -> \case
       err -> returnCEK cont handler err
   args -> argsError info b args
 
+--------------------------------------------------
+-- Namespace functions
+--------------------------------------------------
+coreNamespace :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreNamespace = \info b cont handler env -> \case
+  [VString n] -> do
+    enforceTopLevelOnly info b
+    let pdb = view cePactDb env
+    if T.null n then do
+      (esLoaded . loNamespace) .== Nothing
+      returnCEKValue cont handler (VString "Namespace reset to root")
+    else
+      liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
+        Just ns -> do
+          (esLoaded . loNamespace) .== Just ns
+          let msg = "Namespace set to " <> n
+          returnCEKValue cont handler (VString msg)
+        Nothing ->
+          returnCEK cont handler $ VError ("Namespace " <> n <> " not defined") info
+  args -> argsError info b args
+
+
+
+
+coreDefineNamespace :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreDefineNamespace info b cont handler env = \case
+  [VString n, VGuard usrG, VGuard adminG] -> do
+    enforceTopLevelOnly info b
+    unless (isValidNsFormat n) $ throwExecutionError info (DefineNamespaceError "invalid namespace format")
+    let pdb = view cePactDb env
+    liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
+      -- G!
+      -- https://static.wikia.nocookie.net/onepiece/images/5/52/Lao_G_Manga_Infobox.png/revision/latest?cb=20150405020446
+      -- Enforce the old guard
+      Just (Namespace _ _ laoG) -> do
+        coreEnforceGuard info b Mt CEKNoHandler env [VGuard laoG] >>= \case
+          -- Enforce guard returns an error and never a different kind of value, so
+          -- this pattern match is fine
+          EvalValue _ -> do
+            let nsn = NamespaceName n
+                ns = Namespace nsn usrG adminG
+            liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
+            returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
+          VError e i -> returnCEK cont handler (VError e i)
+      Nothing -> do
+        enforcePolicy pdb n adminG
+        let nsn = NamespaceName n
+            ns = Namespace nsn usrG adminG
+        liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
+        returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
+  args -> argsError info b args
+  where
+  enforcePolicy pdb nsn adminG = viewEvalEnv eeNamespacePolicy >>= \case
+    SimpleNamespacePolicy -> pure ()
+    SmartNamespacePolicy _ fun -> getModuleMember info pdb fun >>= \case
+      Dfun d -> do
+        clo <- mkDefunClosure d (_qnModName fun) env
+        -- Todo: nested exec?
+        applyLam (C clo) [VString nsn, VGuard adminG] Mt CEKNoHandler >>= \case
+          EvalValue (VBool allow) ->
+            unless allow $ throwExecutionError info $ DefineNamespaceError "Namespace definition not permitted"
+          EvalValue _ ->
+            throwExecutionError info $ DefineNamespaceError "Namespace manager function returned an invalid value"
+          VError e _ ->
+            throwExecutionError info $ DefineNamespaceError e
+      _ -> failInvariant info "Namespace manager function is not a defun"
+  isValidNsFormat nsn = case T.uncons nsn of
+    Just (h, tl) ->
+      isValidNsHead h && T.all isValidNsChar tl
+    Nothing -> False
+    -- not (T.null nsn) && isValidNsHead (T.head nsn) && T.all isValidNsChar (T.tail )
+  isValidNsHead c =
+    Char.isLatin1 c && Char.isAlpha c
+  isValidNsChar c =
+    Char.isLatin1 c && (Char.isAlphaNum c || T.elem c validSpecialChars)
+  validSpecialChars :: T.Text
+  validSpecialChars =
+    "%#+-_&$@<>=^?*!|/~"
+
+coreDescribeNamespace :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreDescribeNamespace = \info b cont handler _env -> \case
+  [VString n] -> do
+    pdb <- viewEvalEnv eePactDb
+    liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
+      Just (Namespace _ usrG laoG) -> do
+        let obj = M.fromList
+                  [ (Field "user-guard", PGuard usrG)
+                  , (Field "admin-guard", PGuard laoG)
+                  , (Field "namespace-name", PString n)]
+        returnCEKValue cont handler (VObject obj)
+      Nothing ->
+        returnCEK cont handler (VError ("Namespace not defined " <> n) info)
+  args -> argsError info b args
+
 -----------------------------------
 -- Core definitions
 -----------------------------------
@@ -1526,3 +1612,6 @@ rawBuiltinRuntime = \case
   RawDays -> days
   RawCompose -> coreCompose
   RawSelectWithFields -> dbSelect
+  RawNamespace -> coreNamespace
+  RawDefineNamespace -> coreDefineNamespace
+  RawDescribeNamespace -> coreDescribeNamespace
