@@ -33,15 +33,12 @@ import Pact.Core.IR.Term
 import Pact.Core.Compile
 import Pact.Core.Interpreter
 import Pact.Core.Environment
-import Pact.Core.Namespace
 
 
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.IR.Eval.CEK(eval)
 import Pact.Core.IR.Eval.RawBuiltin
 import Pact.Core.Repl.Runtime.ReplBuiltin
-import Pact.Core.Hash
-import Pact.Core.PactValue
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp

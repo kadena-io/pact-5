@@ -42,7 +42,6 @@ import Pact.Core.Namespace
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
-import qualified Pact.Core.IR.Eval.CEK as Eval
 
 type HasCompileEnv b i  m
   = ( MonadEval b i m
