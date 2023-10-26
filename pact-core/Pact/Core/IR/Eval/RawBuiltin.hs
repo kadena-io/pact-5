@@ -26,8 +26,10 @@ module Pact.Core.IR.Eval.RawBuiltin
 import Control.Lens hiding (from, to, op, parts, (%%=))
 import Control.Monad(when, unless, foldM, void)
 import Control.Monad.IO.Class
+import Data.Attoparsec.Text(parseOnly)
 import Data.Containers.ListUtils(nubOrd)
 import Data.Bits
+import Data.Either(isRight)
 import Data.Foldable(foldl', traverse_, toList)
 import Data.Decimal(roundTo', Decimal)
 import Data.Vector(Vector)
@@ -1454,6 +1456,11 @@ coreCreatePrincipal info b cont handler _env = \case
     returnCEKValue cont handler $ VString $ Pr.mkPrincipalIdent pr
   args -> argsError info b args
 
+coreIsPrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreIsPrincipal info b cont handler _env = \case
+  [VString p] -> returnCEKValue cont handler $ VBool $ isRight $ parseOnly Pr.principalParser p
+  args -> argsError info b args
+
 coreValidatePrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreValidatePrincipal info b cont handler _env = \case
   [VGuard g, VString s] -> do
@@ -1586,4 +1593,5 @@ rawBuiltinRuntime = \case
   RawCompose -> coreCompose
   RawSelectWithFields -> dbSelect
   RawCreatePrincipal -> coreCreatePrincipal
+  RawIsPrincipal -> coreIsPrincipal
   RawValidatePrincipal -> coreValidatePrincipal

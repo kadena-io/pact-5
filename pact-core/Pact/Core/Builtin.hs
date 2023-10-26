@@ -278,6 +278,7 @@ data RawBuiltin
   | RawDays
   | RawCompose
   | RawCreatePrincipal
+  | RawIsPrincipal
   | RawValidatePrincipal
   deriving (Eq, Show, Ord, Bounded, Enum)
 
@@ -409,6 +410,7 @@ rawBuiltinToText = \case
   RawDays -> "days"
   RawCompose -> "compose"
   RawCreatePrincipal -> "create-principal"
+  RawIsPrincipal -> "is-principal"
   RawValidatePrincipal -> "validate-principal"
 
 instance IsBuiltin RawBuiltin where
@@ -537,6 +539,7 @@ instance IsBuiltin RawBuiltin where
     RawDays -> 1
     RawCompose -> 3
     RawCreatePrincipal -> 1
+    RawIsPrincipal -> 1
     RawValidatePrincipal -> 2
 
 
