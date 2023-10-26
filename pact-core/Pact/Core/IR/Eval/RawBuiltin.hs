@@ -1461,6 +1461,15 @@ coreIsPrincipal info b cont handler _env = \case
   [VString p] -> returnCEKValue cont handler $ VBool $ isRight $ parseOnly Pr.principalParser p
   args -> argsError info b args
 
+coreTypeOfPrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreTypeOfPrincipal info b cont handler _env = \case
+  [VString p] -> do
+    let prty = case parseOnly Pr.principalParser p of
+          Left _ -> ""
+          Right pr -> Pr.showPrincipalType pr
+    returnCEKValue cont handler $ VString prty
+  args -> argsError info b args
+
 coreValidatePrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreValidatePrincipal info b cont handler _env = \case
   [VGuard g, VString s] -> do
@@ -1594,4 +1603,5 @@ rawBuiltinRuntime = \case
   RawSelectWithFields -> dbSelect
   RawCreatePrincipal -> coreCreatePrincipal
   RawIsPrincipal -> coreIsPrincipal
+  RawTypeOfPrincipal -> coreTypeOfPrincipal
   RawValidatePrincipal -> coreValidatePrincipal

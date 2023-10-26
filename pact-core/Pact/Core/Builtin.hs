@@ -279,6 +279,7 @@ data RawBuiltin
   | RawCompose
   | RawCreatePrincipal
   | RawIsPrincipal
+  | RawTypeOfPrincipal
   | RawValidatePrincipal
   deriving (Eq, Show, Ord, Bounded, Enum)
 
@@ -411,6 +412,7 @@ rawBuiltinToText = \case
   RawCompose -> "compose"
   RawCreatePrincipal -> "create-principal"
   RawIsPrincipal -> "is-principal"
+  RawTypeOfPrincipal -> "typeof-principal"
   RawValidatePrincipal -> "validate-principal"
 
 instance IsBuiltin RawBuiltin where
@@ -540,6 +542,7 @@ instance IsBuiltin RawBuiltin where
     RawCompose -> 3
     RawCreatePrincipal -> 1
     RawIsPrincipal -> 1
+    RawTypeOfPrincipal -> 1
     RawValidatePrincipal -> 2
 
 

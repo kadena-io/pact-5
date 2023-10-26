@@ -4,6 +4,7 @@
 module Pact.Core.Principal
 ( Principal(..)
 , mkPrincipalIdent
+, showPrincipalType
 , principalParser
 ) where
 
@@ -58,6 +59,16 @@ mkPrincipalIdent = \case
   U n ph -> "u:" <> n <> ":" <> ph
   M mn n -> "m:" <> renderModuleName mn <> ":" <> n
   C c -> "c:" <> c
+
+showPrincipalType :: Principal -> Text
+showPrincipalType = \case
+  K{} -> "k:"
+  W{} -> "w:"
+  R{} -> "r:"
+  U{} -> "u:"
+  M{} -> "m:"
+  P{} -> "p:"
+  C{} -> "c:"
 
 principalParser :: Parser Principal
 principalParser = alts <* void eof
