@@ -143,8 +143,6 @@ interpretTopLevel interp tl = do
   case ds of
     TLModule m -> do
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
-      -- Todo: deps are not being calculated properly by the renamer
-      -- let deps' = _loAllLoaded lo0
           mdata = ModuleData m deps'
       liftDbFunction (_mInfo m) (writeModule pdb Write (view mName m) mdata)
       let newLoaded = M.fromList $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
@@ -155,9 +153,7 @@ interpretTopLevel interp tl = do
       esCaps . csModuleAdmin %== S.union (S.singleton (_mName m))
       pure (LoadedModule (_mName m))
     TLInterface iface -> do
-      -- Todo: deps are not being calculated properly by the renamer
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
-      -- let deps' = _loAllLoaded lo0
           mdata = InterfaceData iface deps'
       liftDbFunction (_ifInfo iface) (writeModule pdb Write (view ifName iface) mdata)
       let newLoaded = M.fromList $ toFqDep (_ifName iface) (_ifHash iface)

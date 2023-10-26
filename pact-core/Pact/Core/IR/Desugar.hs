@@ -15,7 +15,6 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE PartialTypeSignatures #-}
--- {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE GADTs #-}
 
@@ -94,9 +93,6 @@ makeLenses ''RenamerEnv
 -- Our type to keep track of
 newtype RenamerState
   = RenamerState { _rsDependencies :: Set ModuleName }
-  -- { _rsModuleBinds :: Map ModuleName (Map Text (NameKind, DefKind))
-  -- , _rsLoaded :: Loaded b i
-  -- , _rsDependencies :: Set ModuleName }
 
 makeLenses ''RenamerState
 
@@ -113,12 +109,6 @@ newtype RenamerT b i m a =
 
 instance MonadTrans (RenamerT b i) where
   lift = RenamerT . lift . lift
-
--- instance (MonadError e m) => MonadError e (RenamerT b i m) where
---   throwError e = lift (throwError e)
---   catchError ma f = RenamerT $ StateT $ \rs ->
---       ReaderT $ \env ->
---         catchError (runRenamerM rs env ma) (\e -> runRenamerM rs env (f e))
 
 instance MonadGas m => MonadGas (RenamerT b i m) where
   logGas logText g = lift (logGas logText g)
@@ -754,62 +744,6 @@ resolveModuleData mn@(ModuleName name mNs) i = do
         Nothing -> throwDesugarError (NoSuchModule mn) i
         Just (Namespace ns _ _) ->
           lift (getModuleData i pdb (ModuleName name (Just ns)))
-
--- lookupModuleData
---   :: (MonadEval b i m)
---   => ModuleName
---   -> i
---   -> RenamerT b i m (Maybe (ModuleData b i))
--- lookupModuleData mn@(ModuleName name mNs) i =
---   useEvalState (esLoaded . loModules . at mn) >>= \case
---     Just md -> pure md
---     Nothing ->
---       viewEvalEnv eePactDb >>= liftIO . (`readModule` mn) >>= \case
---       Just md -> case md of
---         ModuleData module_ depmap -> do
---           Just md <$ loadModule module_ depmap
---         InterfaceData in' depmap ->
---           Just md <$ loadInterface in' depmap
---       -- We didn't find the module data, therefore
---       -- we will check whether a namespace was supplied.
---       Nothing -> case mNs of
---         Just _ -> pure Nothing
---         Nothing -> useEvalState (esLoaded . loNamespace) >>= \case
---           Nothing -> pure Nothing
---           Just (Namespace ns _ _) -> lookupModuleData (ModuleName name (Just ns)) i
-
--- | Load a module and it's constituents into the `Loaded` environment.
--- including the types of the members
--- loadModule
---   :: (MonadEvalState b i m)
---   => Module Name Type b i
---   -> Map FullyQualifiedName (Def Name Type b i)
---   -> RenamerT b i m ()
--- loadModule module_ deps  = do
---   let modName = _mName module_
---   let mhash = _mHash module_
---   let memberTerms = M.fromList (toFqDep modName mhash <$> _mDefs module_)
---       allDeps = M.union memberTerms deps
---   esLoaded %== over loModules (M.insert modName (ModuleData module_ deps)) . over loAllLoaded (M.union allDeps)
-
--- Load an interface into the `Loaded` environment
--- noting that the only interface names that are "legal" in terms
--- are (For now, while we implement more features) the declared constants.
-
--- loadInterface
---   :: (MonadEvalState b i m)
---   => Interface Name Type b i
---   -> Map FullyQualifiedName (Def Name Type b i)
---   -> RenamerT b i m ()
--- loadInterface iface deps = do
---   let ifaceName = _ifName iface
---       ifhash = _ifHash iface
---       ifaceDefs = mapMaybe ifDefToDef (_ifDefns iface)
---   let memberTerms = M.fromList (toFqDep ifaceName ifhash <$> ifaceDefs)
---       allDeps = M.union memberTerms deps
---   esLoaded %== over loModules (M.insert ifaceName (InterfaceData iface deps)) . over loAllLoaded (M.union allDeps)
-  -- rsDependencies %= S.insert ifaceName
-
 
 renameType
   :: (MonadEval b i m, DesugarBuiltin b)
