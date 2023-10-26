@@ -105,7 +105,7 @@ interpretReplProgram (SourceCode _ source) display = do
       interpret ds
   interpretGuard i g = do
     pdb <- viewEvalEnv eePactDb
-    ps <- viewEvalEnv eePactStep
+    ps <- viewEvalEnv eeDefPactStep
     let env = CEKEnv mempty pdb replBuiltinEnv ps False
     ev <- coreEnforceGuard i (RBuiltinWrap RawEnforceGuard) Mt CEKNoHandler env [VGuard g]
     case ev of
@@ -122,7 +122,7 @@ interpretReplProgram (SourceCode _ source) display = do
   interpretExpr term = do
     pdb <- use (replEvalEnv . eePactDb)
     let builtins = replBuiltinEnv
-    ps <- viewEvalEnv eePactStep
+    ps <- viewEvalEnv eeDefPactStep
     let cekEnv = CEKEnv mempty pdb builtins ps False
     eval cekEnv term >>= \case
       VError txt _ ->

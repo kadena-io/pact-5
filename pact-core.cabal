@@ -82,7 +82,7 @@ library
     Pact.Core.Literal
     Pact.Core.Guards
     Pact.Core.Imports
-    Pact.Core.Pacts.Types
+    Pact.Core.DefPacts.Types
     Pact.Core.Hash
     Pact.Core.Type
     Pact.Core.Pretty

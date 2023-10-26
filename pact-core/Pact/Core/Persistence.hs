@@ -51,7 +51,7 @@ import Pact.Core.IR.Term
 import Pact.Core.Guards
 import Pact.Core.Hash
 import Pact.Core.PactValue
-import Pact.Core.Pacts.Types
+import Pact.Core.DefPacts.Types
 import Pact.Core.Namespace
 
 import qualified Data.Map.Strict as M
@@ -142,8 +142,8 @@ data Domain k v b i where
   -- | Pacts map to 'Maybe PactExec' where Nothing indicates
   -- a terminated pact.
 
-  -- | DefPact state, `Nothing` implies DefPact with `PactId` is completed.
-  DPacts :: Domain PactId (Maybe PactExec) b i
+  -- | DefPact state, `Nothing` implies DefPact with `DefPactId` is completed.
+  DDefPacts :: Domain DefPactId (Maybe DefPactExec) b i
 
 data Purity
   -- | Read-only access to systables.
@@ -186,11 +186,11 @@ readKeyset pdb = _pdbRead pdb DKeySets
 writeKeySet :: PactDb b i -> WriteType -> KeySetName -> FQKS -> IO ()
 writeKeySet pdb wt = _pdbWrite pdb wt DKeySets
 
-readPacts :: PactDb b i -> PactId -> IO (Maybe (Maybe PactExec))
-readPacts pdb = _pdbRead pdb DPacts
+readPacts :: PactDb b i -> DefPactId -> IO (Maybe (Maybe DefPactExec))
+readPacts pdb = _pdbRead pdb DDefPacts
 
-writePacts :: PactDb b i -> WriteType -> PactId -> Maybe PactExec -> IO ()
-writePacts pdb wt = _pdbWrite pdb wt DPacts
+writePacts :: PactDb b i -> WriteType -> DefPactId -> Maybe DefPactExec -> IO ()
+writePacts pdb wt = _pdbWrite pdb wt DDefPacts
 
 data DbOpException
   = WriteException
@@ -326,7 +326,7 @@ mockPactDb = do
     .  IORef (Map KeySetName FQKS)
     -> IORef (Map ModuleName (ModuleData b i))
     -> IORef (Map TableName (Map RowKey RowData))
-    -> IORef (Map PactId (Maybe PactExec))
+    -> IORef (Map DefPactId (Maybe DefPactExec))
     -> IORef (Map NamespaceName Namespace)
     -> Domain k v b i
     -> IO [k]
@@ -342,7 +342,7 @@ mockPactDb = do
       case M.lookup tbl r of
         Just t -> return (M.keys t)
         Nothing -> throwIO (NoSuchTable tbl)
-    DPacts -> do
+    DDefPacts -> do
       r <- readIORef refPacts
       return (M.keys r)
     DNamespaces -> do
@@ -369,7 +369,7 @@ mockPactDb = do
     .  IORef (Map KeySetName FQKS)
     -> IORef (Map ModuleName (ModuleData b i))
     -> IORef (Map TableName (Map RowKey RowData))
-    -> IORef (Map PactId (Maybe PactExec))
+    -> IORef (Map DefPactId (Maybe DefPactExec))
     -> IORef (Map NamespaceName Namespace)
     -> Domain k v b i
     -> k
@@ -379,7 +379,7 @@ mockPactDb = do
     DModules -> readMod refMod k
     DUserTables tbl ->
       readRowData refUsrTbl tbl k
-    DPacts -> readPacts' refPacts k
+    DDefPacts -> readPacts' refPacts k
     DNamespaces ->
       M.lookup k <$> readIORef refNS
 
@@ -394,7 +394,7 @@ mockPactDb = do
     -> IORef (Map TableName (Map RowKey RowData))
     -> IORef Word64
     -> IORef (Map TableName (Map TxId [TxLog RowData]))
-    -> IORef (Map PactId (Maybe PactExec))
+    -> IORef (Map DefPactId (Maybe DefPactExec))
     -> IORef (Map NamespaceName Namespace)
     -> WriteType
     -> Domain k v b i
@@ -405,7 +405,7 @@ mockPactDb = do
     DKeySets -> writeKS refKs k v
     DModules -> writeMod refMod v
     DUserTables tbl -> writeRowData refUsrTbl refTxId refTxLog tbl wt k v
-    DPacts -> writePacts' refPacts k v
+    DDefPacts -> writePacts' refPacts k v
     DNamespaces ->
       modifyIORef' refNs (M.insert k v)
 

@@ -16,7 +16,7 @@ module Pact.Core.Environment.Types
  ( EvalEnv(..)
  , eeMsgSigs, eePactDb
  , eeHash, eeMsgBody
- , eePactStep
+ , eeDefPactStep
  , eePublicData, eeMode, eeFlags
  , eeNatives
  , eeNamespacePolicy
@@ -65,7 +65,7 @@ import Pact.Core.Guards
 import Pact.Core.PactValue
 import Pact.Core.Hash
 import Pact.Core.Names
-import Pact.Core.Pacts.Types
+import Pact.Core.DefPacts.Types
 import Pact.Core.ChainData
 import Pact.Core.Errors
 import Pact.Core.Gas
@@ -110,7 +110,7 @@ data EvalEnv b i
   -- ^ The transaction hash
   , _eePublicData :: PublicData
   -- ^ Chain data provided to pact
-  , _eePactStep :: Maybe PactStep
+  , _eeDefPactStep :: Maybe DefPactStep
   -- The (possible) defpact execution step
   , _eeMode :: ExecutionMode
   -- ^ The pact execution mode: local or transactional
@@ -149,7 +149,7 @@ data EvalState b i
   , _esStack :: [StackFrame]
   , _esEvents :: [PactEvent PactValue]
   , _esLoaded :: Loaded b i
-  , _esPactExec :: Maybe PactExec
+  , _esDefPactExec :: Maybe DefPactExec
   } deriving Show
 
 instance Default (EvalState b i) where
@@ -190,7 +190,7 @@ defaultEvalEnv pdb m
   , _eeMsgBody = EnvData mempty
   , _eeHash = defaultPactHash
   , _eePublicData = def
-  , _eePactStep = Nothing
+  , _eeDefPactStep = Nothing
   , _eeMode = Transactional
   , _eeFlags = mempty
   , _eeNatives = m

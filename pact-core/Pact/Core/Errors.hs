@@ -2,8 +2,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
--- {-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE InstanceSigs #-}
 
 module Pact.Core.Errors
@@ -32,7 +30,7 @@ import Pact.Core.Info
 import Pact.Core.Pretty(Pretty(..))
 import Pact.Core.Hash
 import Pact.Core.Persistence
-import Pact.Core.Pacts.Types
+import Pact.Core.DefPacts.Types
 
 import qualified Pact.Core.Pretty as Pretty
 
@@ -273,43 +271,43 @@ data EvalError
   | NoSuchKeySet KeySetName
     -- ^ No such keyset
   | YieldOutsiteDefPact
-  -- ^ Yield a value outside a running PactExec
-  | NoActivePactExec
-  -- ^ No Active PactExec in the environment
-  | NoYieldInPactStep PactStep
-  -- ^ No Yield available in PactStep
-  | InvalidPactStepSupplied PactStep PactExec
-  -- ^ Supplied PactStep requests an invalid step
-  | DefPactIdMissmatch PactId PactId
+  -- ^ Yield a value outside a running DefPactExec
+  | NoActiveDefPactExec
+  -- ^ No Active DefPactExec in the environment
+  | NoYieldInDefPactStep DefPactStep
+  -- ^ No Yield available in DefPactStep
+  | InvalidDefPactStepSupplied DefPactStep DefPactExec
+  -- ^ Supplied DefPactStep requests an invalid step
+  | DefPactIdMissmatch DefPactId DefPactId
   -- ^ Requested PactId does not match context PactId
-  | CCDefPactContinuationError PactStep PactExec PactExec
+  | CCDefPactContinuationError DefPactStep DefPactExec DefPactExec
   -- ^ Crosschain DefPact contunation must be at least 2 steps before CC continuation step
   --   with <ccExec> <dbExec>
-  | NoPreviousDefPactExecutionFound PactStep
+  | NoPreviousDefPactExecutionFound DefPactStep
   -- ^ No previouse DefPact execution could be found in the environment or database
-  | DefPactAlreadyCompleted PactStep
+  | DefPactAlreadyCompleted DefPactStep
   -- ^ DefPact already completed
-  | NestedDefPactParentStepCountMissmatch PactId Int Int
+  | NestedDefPactParentStepCountMissmatch DefPactId Int Int
   -- ^ Nested DefPact <stepcount> does not match <parent step count>
-  | NestedDefPactParentRollbackMissmatch PactId Bool Bool
+  | NestedDefPactParentRollbackMissmatch DefPactId Bool Bool
   -- ^ Nested DefPact <rollback> does not match <parent rollback>
-  | NestedDefPactNeverStarted PactStep
+  | NestedDefPactNeverStarted DefPactStep
   -- ^ Nested DefPact never started at prior step
-  | NestedDefPactDoubleExecution PactStep
+  | NestedDefPactDoubleExecution DefPactStep
   -- ^ Nested DefPact is executed twice
-  | MultipleOrNestedDefPactExecFound PactExec
-  -- ^ Unexpected PactExec found in the environment
-  | DefPactStepNotFound PactStep Int
+  | MultipleOrNestedDefPactExecFound DefPactExec
+  -- ^ Unexpected DefPactExec found in the environment
+  | DefPactStepNotFound DefPactStep Int
   -- ^ The expected step could not be found in the DefPact
-  | PactStepHasNoRollback PactStep
-  -- ^ The requested PactStep has no rollback
-  | PactStepNotInEnvironment
-  -- ^ PactStep is not in the environment
+  | DefPactStepHasNoRollback DefPactStep
+  -- ^ The requested DefPactStep has no rollback
+  | DefPactStepNotInEnvironment
+  -- ^ DefPactStep is not in the environment
   | NoDefPactIdAndExecEnvSupplied
-  -- ^ No PactId supplied and no PactExec found in the environment
-  | DefPactRollbackMissmatch PactStep PactExec
+  -- ^ No DefPactId supplied and no DefPactExec found in the environment
+  | DefPactRollbackMissmatch DefPactStep DefPactExec
   -- ^ DefPact rollback missmatch
-  | DefPactStepMissmatch PactStep PactExec
+  | DefPactStepMissmatch DefPactStep DefPactExec
   -- ^ DefPact missmatch
   | CannotUpgradeInterface ModuleName
   -- ^ Interface cannot be upgrade
@@ -329,9 +327,9 @@ data EvalError
   | NativeIsTopLevelOnly NativeName
   | EventDoesNotMatchModule ModuleName
   | InvalidEventCap FullyQualifiedName
-  | NestedDefpactsNotAdvanced PactId
+  | NestedDefpactsNotAdvanced DefPactId
   | ExpectedPactValue
-  | NotInPactExecution
+  | NotInDefPactExecution
   | GuardEnforceError Text
   | NamespaceInstallError Text
   | DefineNamespaceError Text
@@ -377,29 +375,29 @@ instance Pretty EvalError where
     -- NoSuchKeySet _ -> error ""
     YieldOutsiteDefPact ->
       "Try to yield a value outside a running DefPact execution"
-    NoActivePactExec ->
+    NoActiveDefPactExec ->
       "No active DefPact execution in the environment"
-    NoYieldInPactStep (PactStep step _ i _) ->
+    NoYieldInDefPactStep (DefPactStep step _ i _) ->
       Pretty.hsep ["No yield in DefPactStep:", "Step: " <> pretty step, "DefPactId: " <> pretty i]
-    InvalidPactStepSupplied (PactStep step _ _ _) pe ->
+    InvalidDefPactStepSupplied (DefPactStep step _ _ _) pe ->
       Pretty.hsep
-      [ "PactStep does not match DefPact properties:"
+      [ "DefPactStep does not match DefPact properties:"
       , "requested: "<> pretty step
       , "step count:" <> pretty (_peStepCount pe)]
     DefPactIdMissmatch reqId envId ->
       Pretty.hsep
-      [ "Requested PactId:", pretty reqId
-      , "does not match context PactId:", pretty envId
+      [ "Requested DefPactId:", pretty reqId
+      , "does not match context DefPactId:", pretty envId
       ]
     CCDefPactContinuationError pactStep _ccExec _dbExec ->
       Pretty.hsep
       [ "Crosschain DefPact continuation error:"
-      , "PactId:" <> pretty (_psStep pactStep)
+      , "DefPactId:" <> pretty (_psStep pactStep)
       ]
     NestedDefPactParentRollbackMissmatch pid rollback parentRollback ->
       Pretty.hsep
       [ "Nested DefPact execution failed, parameter missmatch:"
-      , "PactId: " <> pretty pid
+      , "DefPactId: " <> pretty pid
       , "Rollback: " <> pretty rollback
       , "Parent rollback:" <> pretty parentRollback
       ]
@@ -411,35 +409,35 @@ instance Pretty EvalError where
       , "Parent step count: " <> pretty parentStepCount
       ]
     NoPreviousDefPactExecutionFound ps ->
-      Pretty.hsep ["No previous DefPact exeuction found for PactId: ", pretty (_psPactId ps)]
+      Pretty.hsep ["No previous DefPact exeuction found for DefPactId: ", pretty (_psDefPactId ps)]
     DefPactAlreadyCompleted ps -> Pretty.hsep
-      [ "Requested DefPact already completed: ", "PactId:" <> pretty (_psPactId ps)]
+      [ "Requested DefPact already completed: ", "DefPactId:" <> pretty (_psDefPactId ps)]
     NestedDefPactNeverStarted ps -> Pretty.hsep
-      ["Requested nested DefPact never started:", "PactId: " <> pretty (_psPactId ps)]
+      ["Requested nested DefPact never started:", "DefPactId: " <> pretty (_psDefPactId ps)]
     NestedDefPactDoubleExecution ps -> Pretty.hsep
-      ["Requested nested DefPact double execution:", "PactId: " <> pretty (_psPactId ps)]
+      ["Requested nested DefPact double execution:", "DefPactId: " <> pretty (_psDefPactId ps)]
     MultipleOrNestedDefPactExecFound pe -> Pretty.hsep
-      ["DefPact execution context already in the environment: ", "PactId: " <> pretty (_pePactId pe)]
+      ["DefPact execution context already in the environment: ", "DefPactId: " <> pretty (_peDefPactId pe)]
     DefPactStepNotFound ps maxSteps -> Pretty.hsep
       [ "Requested DefPact step exceeds available steps:"
       , "requested: " <> pretty (_psStep ps)
       , "available: " <> pretty maxSteps
       ]
-    PactStepHasNoRollback ps -> Pretty.hsep
-      ["Step has no rollback:", "PactId: " <> pretty (_psPactId ps)]
-    PactStepNotInEnvironment -> "No PactStep in the environment"
-    NoDefPactIdAndExecEnvSupplied -> "No PactId or execution environment supplied"
+    DefPactStepHasNoRollback ps -> Pretty.hsep
+      ["Step has no rollback:", "DefPactId: " <> pretty (_psDefPactId ps)]
+    DefPactStepNotInEnvironment -> "No DefPactStep in the environment"
+    NoDefPactIdAndExecEnvSupplied -> "No DefPactId or execution environment supplied"
     DefPactRollbackMissmatch ps pe -> Pretty.hsep
-      [ "Rollback missmatch in PactStep and DefPact exeuction environment:"
-      , "PactId: " <> pretty (_psPactId ps)
+      [ "Rollback missmatch in DefPactStep and DefPact exeuction environment:"
+      , "DefPactId: " <> pretty (_psDefPactId ps)
       , "step rollback: " <> pretty (_psRollback ps)
-      , "PactExec rollback: " <> pretty (_peStepHasRollback pe)
+      , "DefPactExec rollback: " <> pretty (_peStepHasRollback pe)
       ]
     DefPactStepMissmatch ps pe -> Pretty.hsep
-      [ "Step missmatch in PactStep and DefPact exeuction environment:"
-      , "PactId: " <> pretty (_psPactId ps)
+      [ "Step missmatch in DefPactStep and DefPact exeuction environment:"
+      , "DefPactId: " <> pretty (_psDefPactId ps)
       , "step: " <> pretty (_psStep ps)
-      , "PactExec step: " <> pretty (_peStep pe + 1)
+      , "DefPactExec step: " <> pretty (_peStep pe + 1)
       ]
     e -> pretty (show e)
     -- CannotUpgradeInterface _ -> error ""
@@ -458,7 +456,7 @@ instance Pretty EvalError where
     -- InvalidEventCap _ -> error ""
     -- NestedDefpactsNotAdvanced _ -> error ""
     -- ExpectedPactValue -> error ""
-    -- NotInPactExecution -> error ""
+    -- NotInDefPactExecution -> error ""
 
 instance Exception EvalError
 

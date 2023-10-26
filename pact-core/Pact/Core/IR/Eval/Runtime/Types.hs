@@ -17,7 +17,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , ceLocal
  , cePactDb
  , ceBuiltins
- , cePactStep
+ , ceDefPactStep
  , ceInCap
  , EvalEnv(..)
  , NativeFunction
@@ -76,7 +76,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , ErrorState(..)
  ) where
 
-import Control.Lens 
+import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Reader
 import Control.Monad.State.Strict
@@ -97,12 +97,12 @@ import Pact.Core.Hash
 import Pact.Core.IR.Term
 import Pact.Core.Literal
 import Pact.Core.Type
-import qualified Pact.Core.Pacts.Types as P
+import qualified Pact.Core.DefPacts.Types as P
 import Pact.Core.Persistence
 import Pact.Core.ModRefs
 import Pact.Core.Capabilities
 import Pact.Core.Environment
-import Pact.Core.Pacts.Types (PactExec)
+import Pact.Core.DefPacts.Types (DefPactExec)
 import qualified Pact.Core.Pretty as P
 
 
@@ -117,7 +117,7 @@ data CEKEnv b i m
   { _ceLocal :: RAList (CEKValue b i m)
   , _cePactDb :: PactDb b i
   , _ceBuiltins :: BuiltinEnv b i m
-  , _cePactStep :: Maybe P.PactStep
+  , _ceDefPactStep :: Maybe P.DefPactStep
   , _ceInCap :: Bool }
 
 instance (Show i, Show b) => Show (CEKEnv b i m) where
@@ -382,8 +382,8 @@ data Cont b i m
   --    or a simple return value in the case of `compose-capability`
   --  - The rest of the continuation
   | CapPopC CapPopState (Cont b i m)
-  | PactStepC (CEKEnv b i m) (Cont b i m)
-  | NestedPactStepC (CEKEnv b i m) (Cont b i m) PactExec
+  | DefPactStepC (CEKEnv b i m) (Cont b i m)
+  | NestedDefPactStepC (CEKEnv b i m) (Cont b i m) DefPactExec
   | UserGuardC (Cont b i m)
   | StackPopC i (Maybe Type) (Cont b i m)
   | EnforceErrorC i (Cont b i m)

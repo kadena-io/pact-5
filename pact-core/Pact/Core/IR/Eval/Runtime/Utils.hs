@@ -33,7 +33,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , checkNonLocalAllowed
  , evalStateToErrorState
  , restoreFromErrorState
- , getPactId
+ , getDefPactId
  ) where
 
 import Control.Lens
@@ -60,7 +60,7 @@ import Pact.Core.Literal
 import Pact.Core.Capabilities
 import Pact.Core.Persistence
 import Pact.Core.Environment
-import Pact.Core.Pacts.Types
+import Pact.Core.DefPacts.Types
 
 mkBuiltinFn
   :: (IsBuiltin b)
@@ -264,9 +264,9 @@ sysOnlyEnv e
     DUserTables _ -> dbOpDisallowed
     _ -> _pdbRead pdb dom k
 
-getPactId :: (MonadEval b i m) => i -> m PactId
-getPactId info =
-  useEvalState esPactExec >>= \case
-    Just pe -> pure (_pePactId pe)
+getDefPactId :: (MonadEval b i m) => i -> m DefPactId
+getDefPactId info =
+  useEvalState esDefPactExec >>= \case
+    Just pe -> pure (_peDefPactId pe)
     Nothing ->
-      throwExecutionError info NotInPactExecution
+      throwExecutionError info NotInDefPactExecution
