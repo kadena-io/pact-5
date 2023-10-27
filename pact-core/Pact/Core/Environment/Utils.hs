@@ -161,7 +161,9 @@ getModuleMember info pdb (QualifiedName qn mn) = do
   md <- getModule info pdb mn
   case findDefInModule qn md of
     Just d -> pure d
-    Nothing -> throwExecutionError info (InvariantFailure ("no such module member: " <> qn))
+    Nothing -> do
+      let fqn = FullyQualifiedName mn qn (_mHash md)
+      throwExecutionError info (NameNotInScope fqn)
 
 
 mangleNamespace :: (MonadEvalState b i m) => ModuleName -> m ModuleName
