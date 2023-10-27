@@ -78,7 +78,6 @@
 
 (begin-tx)
 (namespace 'free)
-(env-exec-config []) ; reset
 
 (module test-mod-redeploy-ref g
   (defcap g () true)

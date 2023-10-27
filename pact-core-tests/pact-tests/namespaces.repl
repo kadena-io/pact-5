@@ -196,7 +196,6 @@
 ;;;;
 
 (begin-tx)
-;; TODO need `describe-namespace` #1009
 (env-data { 'user: ["user"], 'admin: ["admin"] })
 (env-keys [])
 (env-exec-config [])
