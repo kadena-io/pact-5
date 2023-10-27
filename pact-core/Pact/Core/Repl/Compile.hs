@@ -7,8 +7,6 @@
 
 module Pact.Core.Repl.Compile
  ( ReplCompileValue(..)
---  , interpretExpr
---  , compileProgram
  , interpretReplProgram
  ) where
 
@@ -17,7 +15,6 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Class(liftIO)
 import Data.Text(Text)
-import Data.Proxy
 import Data.Default
 import System.FilePath(takeFileName)
 
@@ -39,10 +36,9 @@ import Pact.Core.Environment
 
 
 import Pact.Core.IR.Eval.Runtime
-import Pact.Core.Repl.Runtime
+import Pact.Core.IR.Eval.CEK(eval)
+import Pact.Core.IR.Eval.RawBuiltin
 import Pact.Core.Repl.Runtime.ReplBuiltin
-import Pact.Core.Hash
-import Pact.Core.PactValue (EnvData(..))
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
@@ -65,15 +61,11 @@ loadFile loc display = do
   replCurrSource .= source
   interpretReplProgram source display
 
-defaultEvalEnv :: PactDb b i -> EvalEnv b i
-defaultEvalEnv pdb =
-  EvalEnv mempty pdb (EnvData mempty) defaultPactHash def Nothing Transactional mempty
-
 interpretReplProgram
   :: SourceCode
   -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
   -> ReplM ReplRawBuiltin [ReplCompileValue]
-interpretReplProgram sc@(SourceCode _ source) display = do
+interpretReplProgram (SourceCode _ source) display = do
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ Lisp.parseReplProgram lexx
@@ -90,7 +82,7 @@ interpretReplProgram sc@(SourceCode _ source) display = do
           evalState .= def
           pactdb <- liftIO mockPactDb
           replPactDb .= pactdb
-          replEvalEnv .= defaultEvalEnv pactdb
+          replEvalEnv .= defaultEvalEnv pactdb replRawBuiltinMap
           out <- loadFile (T.unpack txt) display
           replCurrSource .= oldSrc
           pure out
@@ -106,41 +98,43 @@ interpretReplProgram sc@(SourceCode _ source) display = do
           pure out
   pipe' tl = case tl of
     Lisp.RTLTopLevel toplevel -> do
-      pdb <- use replPactDb
-      v <- interpretTopLevel pdb interpreter toplevel
+      v <- interpretTopLevel (Interpreter interpretExpr interpretGuard) toplevel
       displayValue (RCompileValue v)
     _ ->  do
-      pactdb <- use replPactDb
-      lastLoaded <- use loaded
-      ds <- runDesugarReplTopLevel (Proxy @ReplRawBuiltin) pactdb lastLoaded tl
-      loaded .= _dsLoaded ds
+      ds <- runDesugarReplTopLevel tl
       interpret ds
-
-  interpreter = Interpreter $ \te -> do
-    evalGas <- use replGas
-    evalLog <- use replEvalLog
-    es <- use replEvalState
-    tx <- use replTx
-    ee <- use replEvalEnv
-    let rEnv = ReplEvalEnv evalGas evalLog replBuiltinEnv
-        rState = ReplEvalState ee es sc tx
-    (out, st) <- liftIO (runReplCEK rEnv rState te)
-    replTx .= view reTx st
-    evalState .= view reState st
-    replEvalEnv .= view reEnv st
-    liftEither out >>= \case
+  interpretGuard i g = do
+    pdb <- viewEvalEnv eePactDb
+    ps <- viewEvalEnv eeDefPactStep
+    let env = CEKEnv mempty pdb replBuiltinEnv ps False
+    ev <- coreEnforceGuard i (RBuiltinWrap RawEnforceGuard) Mt CEKNoHandler env [VGuard g]
+    case ev of
       VError txt _ ->
-        throwError (PEExecutionError (EvalError txt) (view termInfo te))
+        throwError (PEExecutionError (EvalError txt) i)
       EvalValue v -> do
-        loaded .= view (reState . esLoaded) st
-        (replEvalState . esDefPactExec) .= view (reState . esDefPactExec) st
         case v of
           VClosure{} -> do
             pure IPClosure
           VTable tv -> pure (IPTable (_tvName tv))
           VPactValue pv -> do
-            pure (IPV pv (view termInfo te))
-  interpret (DesugarOutput tl _ _deps) = do
+            pure (IPV pv i)
+
+  interpretExpr term = do
+    pdb <- use (replEvalEnv . eePactDb)
+    let builtins = replBuiltinEnv
+    ps <- viewEvalEnv eeDefPactStep
+    let cekEnv = CEKEnv mempty pdb builtins ps False
+    eval cekEnv term >>= \case
+      VError txt _ ->
+        throwError (PEExecutionError (EvalError txt) (view termInfo term))
+      EvalValue v -> do
+        case v of
+          VClosure{} -> do
+            pure IPClosure
+          VTable tv -> pure (IPTable (_tvName tv))
+          VPactValue pv -> do
+            pure (IPV pv (view termInfo term))
+  interpret (DesugarOutput tl _deps) = do
     case tl of
       RTLDefun df -> do
         let fqn = FullyQualifiedName replModuleName (_dfunName df) replModuleHash

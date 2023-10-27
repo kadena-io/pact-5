@@ -2,8 +2,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
--- {-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE InstanceSigs #-}
 
 module Pact.Core.Errors
@@ -332,6 +330,10 @@ data EvalError
   | NestedDefpactsNotAdvanced DefPactId
   | ExpectedPactValue
   | NotInDefPactExecution
+  | GuardEnforceError Text
+  | NamespaceInstallError Text
+  | DefineNamespaceError Text
+  -- ^ Non-recoverable guard enforces.
   deriving Show
 
 

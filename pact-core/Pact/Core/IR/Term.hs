@@ -21,7 +21,7 @@
 module Pact.Core.IR.Term where
 
 import Control.Lens
-import Data.Foldable(fold)
+import Data.Foldable(fold, find)
 import Data.Text(Text)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict(Map)
@@ -33,7 +33,6 @@ import Pact.Core.Builtin
 import Pact.Core.Hash
 import Pact.Core.Literal
 import Pact.Core.Type
-    ( Type, Arg(Arg), DefKind(..), Schema(Schema) )
 import Pact.Core.Names
 import Pact.Core.Imports
 import Pact.Core.Capabilities
@@ -48,7 +47,7 @@ data Defun name ty builtin info
   , _dfunInfo :: info
   } deriving (Show, Functor)
 
-data PactStep name ty builtin info
+data Step name ty builtin info
   = Step (Term name ty builtin info) (Maybe [Term name ty builtin info])
   | StepWithRollback
     (Term name ty builtin info)
@@ -56,11 +55,11 @@ data PactStep name ty builtin info
     (Maybe [Term name ty builtin info])
   deriving (Show, Functor)
 
-hasRollback :: PactStep n t b i -> Bool
+hasRollback :: Step n t b i -> Bool
 hasRollback Step{} = False
 hasRollback StepWithRollback{} = True
 
-ordinaryDefPactStepExec :: PactStep name ty builtin info -> Term name ty builtin info
+ordinaryDefPactStepExec :: Step name ty builtin info -> Term name ty builtin info
 ordinaryDefPactStepExec (Step expr _) = expr
 ordinaryDefPactStepExec (StepWithRollback expr _ _) = expr
 
@@ -69,7 +68,7 @@ data DefPact name ty builtin info
   { _dpName :: Text
   , _dpArgs :: [Arg ty]
   , _dpRetType :: Maybe ty
-  , _dpSteps :: NonEmpty (PactStep name ty builtin info)
+  , _dpSteps :: NonEmpty (Step name ty builtin info)
   , _dpInfo :: info
   } deriving (Show, Functor)
 
@@ -201,6 +200,10 @@ defName (DSchema d) = _dsName d
 defName (DTable d) = _dtName d
 defName (DPact d) = _dpName d
 
+findDefInModule :: Text -> Module name ty b i -> Maybe (Def name ty b i)
+findDefInModule defnName targetModule =
+  find ((==) defnName . defName) (_mDefs targetModule)
+
 defKind :: Def name Type b i -> DefKind
 defKind = \case
   Dfun{} -> DKDefun
@@ -243,6 +246,10 @@ ifDefToDef = \case
   IfDCap _ -> Nothing
   IfDPact _ -> Nothing
   IfDSchema dc -> Just (DSchema dc)
+
+findDefInInterface :: Text -> Interface name ty b i -> Maybe (Def name ty b i)
+findDefInInterface defnName targetIface =
+  find ((==) defnName . ifDefName) (_ifDefns targetIface) >>= ifDefToDef
 
 ifDefInfo :: IfDef name ty b i -> i
 ifDefInfo = \case
@@ -344,6 +351,34 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (TopLevel name ty bu
 ----------------------------
 -- Aliases for convenience
 ----------------------------
+termType :: Traversal (Term n t b i) (Term n t' b i) t t'
+termType f  = \case
+  Var n i -> pure (Var n i)
+  Lam li ne te i ->
+    Lam li <$> (traversed.argType._Just) f ne <*> termType f te <*> pure i
+  Let n te te' i ->
+    Let <$> (argType . _Just) f n <*> termType f te <*> termType f te' <*> pure i
+  App te ne i ->
+    App <$> termType f te <*> traverse (termType f) ne <*> pure i
+  Sequence te te' i ->
+    Sequence <$> termType f te <*> termType f te' <*> pure i
+  Conditional bf i ->
+    Conditional <$> traverse (termType f) bf <*> pure i
+  Builtin b i -> pure (Builtin b i)
+  Nullary term i ->
+    Nullary <$> termType f term <*> pure i
+  Constant lit i ->
+    pure (Constant lit i)
+  ListLit tes i ->
+    ListLit <$> traverse (termType f) tes <*> pure i
+  Try te te' i ->
+    Try <$> termType f te <*> termType f te' <*> pure i
+  CapabilityForm cf i ->
+    CapabilityForm <$> traverse (termType f) cf <*> pure i
+  ObjectLit m i ->
+    ObjectLit <$> (traverse._2) (termType f) m <*> pure i
+  Error txt i -> pure (Error txt i)
+
 termBuiltin :: Traversal (Term n t b i) (Term n t b' i) b b'
 termBuiltin f = \case
   Var n i -> pure (Var n i)
@@ -371,8 +406,6 @@ termBuiltin f = \case
     CapabilityForm <$> traverse (termBuiltin f) cf <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (termBuiltin f) m <*> pure i
-  -- DynInvoke n t i ->
-  --   DynInvoke <$> termBuiltin f n <*> pure t <*> pure i
   Error txt i -> pure (Error txt i)
 
 termInfo :: Lens' (Term name ty builtin info) info
@@ -416,6 +449,10 @@ instance Plated (Term name ty builtin info) where
     ObjectLit o i ->
       ObjectLit <$> (traverse._2) f o <*> pure i
     Error e i -> pure (Error e i)
+
+-- defType :: Lens (Def n t b i) (Def n t' b i) t t'
+-- defType f = \case
+--   Dfun (Defun df)
 
 -- Todo: qualify all of these
 makeLenses ''Module
