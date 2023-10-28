@@ -32,7 +32,7 @@ newtype PublicKeyText = PublicKeyText { _pubKey :: Text }
 instance Pretty PublicKeyText where
   pretty (PublicKeyText t) = pretty t
 
-newtype KeySetName = KeySetName { _keysetName :: Text }
+newtype KeySetName = KeySetName { _keySetName :: Text }
     deriving (Eq,Ord,Show)
 
 instance Pretty KeySetName where
