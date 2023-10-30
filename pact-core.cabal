@@ -52,6 +52,9 @@ common pact-core-common
     , array
     , pact-json
     , scientific
+  -- Serialization
+    , serialise
+    , cborg
 
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
@@ -123,6 +126,9 @@ library
     Pact.Core.Repl.Utils
     Pact.Core.Repl.Runtime.ReplBuiltin
     Pact.Core.Repl.Compile
+
+    -- Serialization
+    Pact.Core.Serialise.CBOR
 
 library typed-core
   import: pact-core-common
