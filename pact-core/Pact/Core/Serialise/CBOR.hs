@@ -19,6 +19,7 @@ import Pact.Core.Literal
 import Pact.Core.Capabilities
 import Pact.Core.Builtin
 import Pact.Core.Imports
+import Pact.Core.Info
 
 instance Serialise NamespaceName where
   encode (NamespaceName ns) = encode ns
@@ -26,8 +27,9 @@ instance Serialise NamespaceName where
 
 instance Serialise ModuleName where
   encode (ModuleName mn mns) = encodeListLen 2 <> encode mn <> encode mns
-  decode = ModuleName <$> decode <*> decode
-
+  decode = do
+    2 <- decodeListLen
+    ModuleName <$> decode <*> decode
 
 instance Serialise KeySetName where
   encode (KeySetName ksn) = encode ksn
@@ -122,6 +124,7 @@ instance Serialise LamInfo where
     2 -> do
       2 <- decodeListLen
       TLDefPact <$> decode <*> decode
+    3 -> pure AnonLamInfo
     _ -> fail "unexpected decoding"
 
 
@@ -573,3 +576,235 @@ instance (Serialise b, Serialise i) =>  Serialise (ModuleData b i) where
       2 <- decodeListLen
       InterfaceData <$> decode <*> decode
     _ -> fail "unexpected decoding"
+
+instance Serialise SpanInfo where
+  encode (SpanInfo sl sc el ec) = encodeListLen 4 <> encode sl <> encode sc <> encode el <> encode ec
+  decode = do
+    4 <- decodeListLen
+    SpanInfo <$> decode <*> decode <*> decode <*> decode
+
+instance Serialise RawBuiltin where
+  encode = \case
+    RawAdd -> encodeWord 0
+    RawSub-> encodeWord 1
+    RawMultiply -> encodeWord 2
+    RawDivide -> encodeWord 3
+    RawNegate -> encodeWord 4
+    RawAbs -> encodeWord 5
+    RawPow -> encodeWord 6
+    RawNot -> encodeWord 7
+    RawEq -> encodeWord 8
+    RawNeq -> encodeWord 9
+    RawGT -> encodeWord 10
+    RawGEQ -> encodeWord 11
+    RawLT -> encodeWord 12
+    RawLEQ -> encodeWord 13
+    RawBitwiseAnd -> encodeWord 14
+    RawBitwiseOr -> encodeWord 15
+    RawBitwiseXor -> encodeWord 16
+    RawBitwiseFlip -> encodeWord 17
+    RawBitShift -> encodeWord 18
+    RawRound -> encodeWord 19
+    RawCeiling -> encodeWord 20
+    RawFloor -> encodeWord 21
+    RawExp -> encodeWord 22
+    RawLn -> encodeWord 23
+    RawSqrt -> encodeWord 24
+    RawLogBase -> encodeWord 25
+    RawLength -> encodeWord 26
+    RawTake -> encodeWord 27
+    RawDrop -> encodeWord 28
+    RawConcat -> encodeWord 29
+    RawReverse -> encodeWord 30
+    RawContains -> encodeWord 31
+    RawSort -> encodeWord 32
+    RawSortObject -> encodeWord 33
+    RawRemove -> encodeWord 34
+    RawMod -> encodeWord 35
+    RawMap -> encodeWord 36
+    RawFilter -> encodeWord 37
+    RawZip -> encodeWord 38
+    RawIntToStr -> encodeWord 39
+    RawStrToInt -> encodeWord 40
+    RawStrToIntBase -> encodeWord 41
+    RawFold -> encodeWord 42
+    RawDistinct -> encodeWord 43
+    RawFormat -> encodeWord 44
+    RawEnumerate -> encodeWord 45
+    RawEnumerateStepN -> encodeWord 46
+    RawShow -> encodeWord 47
+    RawReadMsg -> encodeWord 48
+    RawReadMsgDefault -> encodeWord 49
+    RawReadInteger -> encodeWord 50
+    RawReadDecimal -> encodeWord 51
+    RawReadString -> encodeWord 52
+    RawReadKeyset -> encodeWord 53
+    RawEnforceGuard -> encodeWord 54
+    RawEnforceKeyset -> encodeWord 55
+    RawKeysetRefGuard -> encodeWord 56
+    RawAt -> encodeWord 57
+    RawMakeList -> encodeWord 58
+    RawB64Encode -> encodeWord 59
+    RawB64Decode -> encodeWord 60
+    RawStrToList -> encodeWord 61
+    RawYield -> encodeWord 62
+    RawResume -> encodeWord 63
+    RawBind -> encodeWord 64
+    RawRequireCapability -> encodeWord 65
+    RawComposeCapability -> encodeWord 66
+    RawInstallCapability -> encodeWord 67
+    RawEmitEvent -> encodeWord 68
+    RawCreateCapabilityGuard -> encodeWord 69
+    RawCreateCapabilityPactGuard -> encodeWord 70
+    RawCreateModuleGuard -> encodeWord 71
+    RawCreateTable -> encodeWord 72
+    RawDescribeKeyset -> encodeWord 73
+    RawDescribeModule -> encodeWord 74
+    RawDescribeTable -> encodeWord 75
+    RawDefineKeySet -> encodeWord 76
+    RawDefineKeysetData -> encodeWord 77
+    RawFoldDb -> encodeWord 78
+    RawInsert -> encodeWord 79
+    RawKeyLog -> encodeWord 80
+    RawKeys -> encodeWord 81
+    RawRead -> encodeWord 82
+    RawSelect -> encodeWord 83
+    RawSelectWithFields -> encodeWord 84
+    RawUpdate -> encodeWord 85
+    RawWithDefaultRead -> encodeWord 86
+    RawWithRead -> encodeWord 87
+    RawWrite -> encodeWord 88
+    RawTxIds -> encodeWord 89
+    RawTxLog -> encodeWord 90
+    RawTxHash -> encodeWord 91
+    RawAndQ -> encodeWord 92
+    RawOrQ -> encodeWord 93
+    RawWhere -> encodeWord 94
+    RawNotQ -> encodeWord 95
+    RawHash -> encodeWord 96
+    RawContinue -> encodeWord 97
+    RawParseTime -> encodeWord 98
+    RawFormatTime -> encodeWord 99
+    RawTime -> encodeWord 100
+    RawAddTime -> encodeWord 101
+    RawDiffTime -> encodeWord 102
+    RawHours -> encodeWord 103
+    RawMinutes -> encodeWord 104
+    RawDays -> encodeWord 105
+    RawCompose -> encodeWord 106
+    RawNamespace -> encodeWord 107
+    RawDefineNamespace -> encodeWord 108
+    RawDescribeNamespace -> encodeWord 109
+
+  decode = decodeWord >>= \case
+    0 -> pure RawAdd
+    1 -> pure RawSub
+    2 -> pure RawMultiply
+    3 -> pure RawDivide
+    4 -> pure RawNegate
+    5 -> pure RawAbs
+    6 -> pure RawPow
+    7 -> pure RawNot
+    8 -> pure RawEq
+    9 -> pure RawNeq
+    10 -> pure RawGT
+    11 -> pure RawGEQ
+    12 -> pure RawLT
+    13 -> pure RawLEQ
+    14 -> pure RawBitwiseAnd
+    15 -> pure RawBitwiseOr
+    16 -> pure RawBitwiseXor
+    17 -> pure RawBitwiseFlip
+    18 -> pure RawBitShift
+    19 -> pure RawRound
+    20 -> pure RawCeiling
+    21 -> pure RawFloor
+    22 -> pure RawExp
+    23 -> pure RawLn
+    24 -> pure RawSqrt
+    25 -> pure RawLogBase
+    26 -> pure RawLength
+    27 -> pure RawTake
+    28 -> pure RawDrop
+    29 -> pure RawConcat
+    30 -> pure RawReverse
+    31 -> pure RawContains
+    32 -> pure RawSort
+    33 -> pure RawSortObject
+    34 -> pure RawRemove
+    35 -> pure RawMod
+    36 -> pure RawMap
+    37 -> pure RawFilter
+    38 -> pure RawZip
+    39 -> pure RawIntToStr
+    40 -> pure RawStrToInt
+    41 -> pure RawStrToIntBase
+    42 -> pure RawFold
+    43 -> pure RawDistinct
+    44 -> pure RawFormat
+    45 -> pure RawEnumerate
+    46 -> pure RawEnumerateStepN
+    47 -> pure RawShow
+    48 -> pure RawReadMsg
+    49 -> pure RawReadMsgDefault
+    50 -> pure RawReadInteger
+    51 -> pure RawReadDecimal
+    52 -> pure RawReadString
+    53 -> pure RawReadKeyset
+    54 -> pure RawEnforceGuard
+    55 -> pure RawEnforceKeyset
+    56 -> pure RawKeysetRefGuard
+    57 -> pure RawAt
+    58 -> pure RawMakeList
+    59 -> pure RawB64Encode
+    60 -> pure RawB64Decode
+    61 -> pure RawStrToList
+    62 -> pure RawYield
+    63 -> pure RawResume
+    64 -> pure RawBind
+    65 -> pure RawRequireCapability
+    66 -> pure RawComposeCapability
+    67 -> pure RawInstallCapability
+    68 -> pure RawEmitEvent
+    69 -> pure RawCreateCapabilityGuard
+    70 -> pure RawCreateCapabilityPactGuard
+    71 -> pure RawCreateModuleGuard
+    72 -> pure RawCreateTable
+    73 -> pure RawDescribeKeyset
+    74 -> pure RawDescribeModule
+    75 -> pure RawDescribeTable
+    76 -> pure RawDefineKeySet
+    77 -> pure RawDefineKeysetData
+    78 -> pure RawFoldDb
+    79 -> pure RawInsert
+    80 -> pure RawKeyLog
+    81 -> pure RawKeys
+    82 -> pure RawRead
+    83 -> pure RawSelect
+    84 -> pure RawSelectWithFields
+    85 -> pure RawUpdate
+    86 -> pure RawWithDefaultRead
+    87 -> pure RawWithRead
+    88 -> pure RawWrite
+    89 -> pure RawTxIds
+    90 -> pure RawTxLog
+    91 -> pure RawTxHash
+    92 -> pure RawAndQ
+    93 -> pure RawOrQ
+    94 -> pure RawWhere
+    95 -> pure RawNotQ
+    96 -> pure RawHash
+    97 -> pure RawContinue
+    98 -> pure RawParseTime
+    99 -> pure RawFormatTime
+    100 -> pure RawTime
+    101 -> pure RawAddTime
+    102 -> pure RawDiffTime
+    103 -> pure RawHours
+    104 -> pure RawMinutes
+    105 -> pure RawDays
+    106 -> pure RawCompose
+    107 -> pure RawNamespace
+    108 -> pure RawDefineNamespace
+    109 -> pure RawDescribeNamespace
+    _ -> fail "unexpeced decoding"

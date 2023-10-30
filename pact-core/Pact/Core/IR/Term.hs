@@ -45,7 +45,7 @@ data Defun name ty builtin info
   , _dfunRType :: Maybe ty
   , _dfunTerm :: Term name ty builtin info
   , _dfunInfo :: info
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Eq)
 
 data Step name ty builtin info
   = Step (Term name ty builtin info) (Maybe [Term name ty builtin info])
@@ -269,7 +269,7 @@ data LamInfo
   | TLDefCap ModuleName Text
   | TLDefPact ModuleName Text
   | AnonLamInfo
-  deriving Show
+  deriving (Show, Eq)
 
 -- | Core IR
 data Term name ty builtin info
@@ -305,7 +305,7 @@ data Term name ty builtin info
   -- ^ Capability Natives
   | Error Text info
   -- ^ Error term
-  deriving (Show, Functor)
+  deriving (Show, Functor, Eq)
 
 instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builtin info) where
   pretty = \case
