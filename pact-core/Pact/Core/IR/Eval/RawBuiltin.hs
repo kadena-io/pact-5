@@ -24,7 +24,7 @@ module Pact.Core.IR.Eval.RawBuiltin
 --
 
 import Control.Lens hiding (from, to, op, parts, (%%=))
-import Control.Monad(when, unless, foldM, void)
+import Control.Monad(when, unless, foldM)
 import Control.Monad.IO.Class
 import Data.Attoparsec.Text(parseOnly)
 import Data.Containers.ListUtils(nubOrd)
@@ -45,7 +45,6 @@ import qualified Data.Char as Char
 import qualified Data.ByteString as BS
 import qualified Pact.Time as PactTime
 
-import Pact.Core.Gas
 import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Errors
@@ -1420,8 +1419,6 @@ coreCompose = \info b cont handler _env -> \case
 
 createPrincipalForGuard :: (MonadGas m) => Guard FullyQualifiedName PactValue -> m Pr.Principal
 createPrincipalForGuard g = do
-  -- TODO make gas charging actually go through the model
-  chargeGas coreGasPerLegacyGas
   case g of
     GKeyset (KeySet ks pf) -> case (toList ks, predicateToString pf) of
       ([k], "keys-all") -> pure $ Pr.K k
@@ -1443,11 +1440,7 @@ createPrincipalForGuard g = do
       h <- mkHash $ f' : args' ++ maybe [] pure pid'
       pure $ Pr.C $ hashToText h
   where
-    mkHash bss = do
-      let bs = mconcat bss
-      -- the original pact impl charged 1 gas per 64 bytes of hashing,
-      void $ chargeGas $ coreGasPerLegacyGas <> Gas (fromIntegral (BS.length bs) * coreGasPerLegacyGas `quot` 64)
-      pure $ pactHash bs
+    mkHash bss = pure $ pactHash $ mconcat bss
 
 coreCreatePrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreCreatePrincipal info b cont handler _env = \case
