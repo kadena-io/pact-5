@@ -45,7 +45,7 @@ data DefCapMeta name
 data CapForm name e
   = WithCapability name [e] e
   | CreateUserGuard name [e]
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Show, Functor, Foldable, Traversable, Eq)
 
 capFormName :: Lens (CapForm name e) (CapForm name' e) name name'
 capFormName f = \case

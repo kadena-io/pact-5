@@ -186,6 +186,7 @@ executable repl
     , primitive
     , haskeline
     , exceptions
+    , serialise
 
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
@@ -237,8 +238,11 @@ test-suite core-tests
     , tasty
     , tasty-hunit
     , tasty-hedgehog
+    , serialise
 
   other-modules:
     , Pact.Core.Test.ReplTests
     , Pact.Core.Test.LexerParserTests
     , Pact.Core.Test.LexerTests
+    , Pact.Core.Test.SerialiseTests
+    , Pact.Core.Gen.Serialise
