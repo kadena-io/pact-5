@@ -70,9 +70,6 @@ pattern TyUnit = TyPrim PrimUnit
 pattern TyGuard :: Type
 pattern TyGuard = TyPrim PrimGuard
 
-pattern TyPrincipal :: Type
-pattern TyPrincipal = TyPrim PrimPrincipal
-
 instance Pretty Type where
   pretty = \case
     TyPrim prim -> pretty prim

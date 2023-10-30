@@ -221,7 +221,6 @@ data ArgTypeError
   | ATETable
   | ATEClosure
   | ATEModRef
-  | ATEPrincipal
   deriving (Show)
 
 instance Pretty ArgTypeError where
@@ -232,7 +231,6 @@ instance Pretty ArgTypeError where
     ATETable -> "[table]"
     ATEClosure -> "[closure]"
     ATEModRef -> "[modref]"
-    ATEPrincipal -> "[principal]"
 
 
 -- | All fatal execution errors which should pause

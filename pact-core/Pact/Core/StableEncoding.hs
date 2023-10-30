@@ -198,7 +198,6 @@ instance J.Encode (StableEncoding PactValue) where
     PModRef mr -> J.build (StableEncoding mr)
     PCapToken _ct -> error "not implemented"
     PTime pt -> J.build (StableEncoding pt)
-    PPrincipal pr -> J.build (StableEncoding pr)
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `PactContinuation FullyQualifiedName PactValue`

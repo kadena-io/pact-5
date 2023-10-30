@@ -216,7 +216,6 @@ primType i = \case
   "list" -> pure TyPolyList
   "object" -> pure TyPolyObject
   "keyset" -> pure TyKeyset
-  "principal" -> pure TyPrincipal
   e -> throwParseError (InvalidBaseType e) i
 
 objType :: SpanInfo -> Text -> ParsedTyName -> ParserT Type

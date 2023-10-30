@@ -284,7 +284,6 @@ toArgTypeError = \case
     PGuard _ -> ATEPrim PrimGuard
     PModRef _ -> ATEModRef
     PCapToken _ -> ATEClosure
-    PPrincipal _ -> ATEPrincipal
   VTable{} -> ATETable
   VClosure{} -> ATEClosure
 
