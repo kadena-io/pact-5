@@ -33,7 +33,7 @@ import Data.Either(isRight)
 import Data.Foldable(foldl', traverse_, toList)
 import Data.Decimal(roundTo', Decimal)
 import Data.Vector(Vector)
-import Data.Maybe(isJust)
+import Data.Maybe(isJust, maybeToList)
 import Numeric(showIntAtBase)
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
@@ -1418,7 +1418,7 @@ createPrincipalForGuard g = do
       let args' = map encodeStable args
           f' = T.encodeUtf8 $ renderQualName $ fqnToQualName f
           pid' = T.encodeUtf8 . renderDefPactId <$> pid
-      h <- mkHash $ f' : args' ++ maybe [] pure pid'
+      h <- mkHash $ f' : args' ++ maybeToList pid'
       pure $ Pr.C $ hashToText h
   where
     mkHash bss = pure $ pactHash $ mconcat bss
