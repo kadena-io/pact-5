@@ -244,11 +244,42 @@ defCapGen = do
   meta <- defCapMetaGen
   DefCap name arity args ret term meta <$> infoGen
 
+defSchemaGen :: Gen (DefSchema Type SpanInfo)
+defSchemaGen = do
+  name <- identGen
+  schema <- _schema <$> schemaGen
+  DefSchema name schema <$> infoGen
+
+defTableGen :: Gen (DefTable Name SpanInfo)
+defTableGen = do
+  name <- identGen
+  schema <- ResolvedTable <$> schemaGen
+  DefTable name schema <$> infoGen
+
+stepGen :: Gen (Step Name Type RawBuiltin SpanInfo)
+stepGen = Gen.choice
+  [ Step <$> termGen <*> mt
+  , StepWithRollback <$> termGen <*> termGen <*> mt
+  ]
+  where
+    mt = Gen.maybe (Gen.list (Range.linear 0 16) termGen)
+
+defPactGen :: Gen (DefPact Name Type RawBuiltin SpanInfo)
+defPactGen = do
+  name <- identGen
+  args <- Gen.list (Range.linear 0 16) argGen
+  ret <- Gen.maybe typeGen
+  steps <- Gen.nonEmpty (Range.linear 0 16) stepGen
+  DefPact name args ret steps <$> infoGen
+
 defGen :: Gen (Def Name Type RawBuiltin SpanInfo)
 defGen = Gen.choice
   [ Dfun <$> defunGen
   , DConst <$> defConstGen
   , DCap <$> defCapGen
+  , DSchema <$> defSchemaGen
+  , DTable <$> defTableGen
+  , DPact <$> defPactGen
   ]
 
 
