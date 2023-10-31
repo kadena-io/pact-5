@@ -115,7 +115,7 @@ instance Show (TableSchema name) where
   show (DesugaredTable t) = "DesugardTable(" <> show t <> ")"
   show (ResolvedTable t) = "ResolvedTable(" <> show t <> ")"
 
-data DefTable name info
+data DefTablename info
   = DefTable
   { _dtName :: Text
   , _dtSchema :: TableSchema name

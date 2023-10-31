@@ -53,4 +53,8 @@ tests = testGroup "Serialise Roundtrip"
   , testProperty "DefCap" $ serialiseRoundtrip defCapGen
   , testProperty "Def" $ serialiseRoundtrip defGen
   , testProperty "Module" $ serialiseRoundtrip evalModuleGen
+  , testProperty "DefSchema" $ serialiseRoundtrip defSchemaGen
+  , testProperty "DefTable" $ serialiseRoundtrip defTableGen
+  , testProperty "Step" $ serialiseRoundtrip stepGen
+  , testProperty "DefPact" $ serialiseRoundtrip defPactGen
   ]
