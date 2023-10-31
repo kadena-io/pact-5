@@ -125,7 +125,7 @@ data CapabilityGuard name term
   = CapabilityGuard
   { _cgName :: !name
   , _cgArgs :: ![term]
-  , _cgPactId :: !(Maybe PactId) }
+  , _cgPactId :: !(Maybe DefPactId) }
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 data Guard name term

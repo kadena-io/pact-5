@@ -78,18 +78,6 @@ library
   build-tool-depends:
     , alex:alex
     , happy:happy
-  -- ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
-  -- ghc-prof-options: -fprof-auto -fprof-auto-calls
-  -- default-language:    Haskell2010
-  -- default-extensions:
-  --   OverloadedStrings
-  --   ViewPatterns
-  --   LambdaCase
-  --   TupleSections
-  --   BangPatterns
-  --   ScopedTypeVariables
-  --   FlexibleContexts
-  --   FlexibleInstances
 
   exposed-modules:
     Pact.Core.Compile
@@ -98,7 +86,7 @@ library
     Pact.Core.Literal
     Pact.Core.Guards
     Pact.Core.Imports
-    Pact.Core.Pacts.Types
+    Pact.Core.DefPacts.Types
     Pact.Core.Hash
     Pact.Core.Type
     Pact.Core.Pretty
@@ -113,15 +101,17 @@ library
     Pact.Core.Interpreter
     Pact.Core.ChainData
     Pact.Core.Environment
+    Pact.Core.Environment.Utils
+    Pact.Core.Environment.Types
     Pact.Core.StableEncoding
     Pact.Core.Principal
+    Pact.Core.Namespace
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
     Pact.Core.Syntax.Lexer
     Pact.Core.Syntax.LexUtils
     Pact.Core.Syntax.Parser
-    -- Pact.Core.Repl
 
     -- Core IR modules
     Pact.Core.IR.Term
@@ -134,11 +124,8 @@ library
     Pact.Core.IR.Eval.CEK
     Pact.Core.IR.Eval.RawBuiltin
 
-    -- Pact.Core.Untyped.Eval.Builtin
-
     -- Repl
     Pact.Core.Repl.Utils
-    Pact.Core.Repl.Runtime
     Pact.Core.Repl.Runtime.ReplBuiltin
     Pact.Core.Repl.Compile
 

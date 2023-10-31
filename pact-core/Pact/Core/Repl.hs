@@ -22,8 +22,8 @@ import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Monad.Trans(lift)
 import System.Console.Haskeline
-import Data.IORef
 import Data.Default
+import Data.IORef
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Set as Set
@@ -38,9 +38,6 @@ import Pact.Core.Compile
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
 import Pact.Core.Environment
-import Pact.Core.PactValue
-import Pact.Core.Hash
-import Pact.Core.Capabilities
 import Pact.Core.Imports
 
 main :: IO ()
@@ -48,9 +45,8 @@ main = do
   pdb <- mockPactDb
   g <- newIORef mempty
   evalLog <- newIORef Nothing
-  let ee = EvalEnv mempty pdb (EnvData mempty) defaultPactHash def Nothing Transactional mempty
-      es = EvalState (CapState [] mempty mempty mempty) [] [] mempty Nothing
-  ref <- newIORef (ReplState mempty pdb es ee g evalLog defaultSrc Nothing)
+  let ee = defaultEvalEnv pdb replRawBuiltinMap
+  ref <- newIORef (ReplState mempty pdb def ee g evalLog defaultSrc Nothing)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"

@@ -12,7 +12,8 @@
 
 module Pact.Core.IR.Eval.RawBuiltin
  ( rawBuiltinRuntime
- , rawBuiltinEnv ) where
+ , rawBuiltinEnv
+ , coreEnforceGuard) where
 
 -- |
 -- Module      :  Pact.Core.Eval.RawBuiltin
@@ -23,7 +24,7 @@ module Pact.Core.IR.Eval.RawBuiltin
 -- CEK runtime for our IR term
 --
 
-import Control.Lens hiding (from, to, op, parts, (%%=))
+import Control.Lens hiding (from, to, op, parts)
 import Control.Monad(when, unless, foldM)
 import Control.Monad.IO.Class
 import Data.Attoparsec.Text(parseOnly)
@@ -54,10 +55,11 @@ import Pact.Core.Guards
 import Pact.Core.Type
 import Pact.Core.PactValue
 import Pact.Core.Persistence
-import Pact.Core.Pacts.Types
+import Pact.Core.DefPacts.Types
 import Pact.Core.Environment
 import Pact.Core.Capabilities
 import Pact.Core.Principal qualified as Pr
+import Pact.Core.Namespace
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
@@ -555,18 +557,18 @@ coreYield info b cont handler _env = \case
   args -> argsError info b args
   where
   go o mcid = do
-    mpe <- useEvalState esPactExec
+    mpe <- useEvalState esDefPactExec
     case mpe of
       Nothing -> throwExecutionError info YieldOutsiteDefPact
       Just pe -> case mcid of
         Nothing -> do
-          esPactExec . _Just . peYield .== Just (Yield o Nothing Nothing)
+          esDefPactExec . _Just . peYield .== Just (Yield o Nothing Nothing)
           returnCEKValue cont handler (VObject o)
         Just cid -> do
-          sourceChain <- viewCEKEnv (eePublicData . pdPublicMeta . pmChainId)
+          sourceChain <- viewEvalEnv (eePublicData . pdPublicMeta . pmChainId)
           p <- provenanceOf cid
           when (_peStepHasRollback pe) $ failInvariant info "Cross-chain yield not allowed in step with rollback"
-          esPactExec . _Just . peYield .== Just (Yield o (Just p) (Just sourceChain))
+          esDefPactExec . _Just . peYield .== Just (Yield o (Just p) (Just sourceChain))
           returnCEKValue cont handler (VObject o)
   provenanceOf tid =
     Provenance tid . _mHash <$> getCallingModule info
@@ -575,11 +577,11 @@ coreYield info b cont handler _env = \case
 coreResume :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreResume = \info b cont handler _env -> \case
   [VClosure clo] -> do
-    mps <- viewCEKEnv eePactStep
+    mps <- viewEvalEnv eeDefPactStep
     case mps of
-      Nothing -> throwExecutionError info NoActivePactExec
+      Nothing -> throwExecutionError info NoActiveDefPactExec
       Just pactStep -> case _psResume pactStep of
-        Nothing -> throwExecutionError info (NoYieldInPactStep pactStep)
+        Nothing -> throwExecutionError info (NoYieldInDefPactStep pactStep)
         Just (Yield resumeObj _ _) -> applyLam clo [VObject resumeObj] cont handler
   args -> argsError info b args
 
@@ -624,7 +626,7 @@ coreEnforceGuard = \info b cont handler env -> \case
         if cond then returnCEKValue cont handler (VBool True)
         else returnCEK cont handler (VError "enforce keyset failure" info)
       GKeySetRef ksn -> do
-        cond <- enforceKeysetName info env ksn
+        cond <- enforceKeysetName info (view cePactDb env) ksn
         if cond then returnCEKValue cont handler (VBool True)
         else returnCEK cont handler (VError "enforce keyset ref failure" info)
       GUserGuard ug -> runUserGuard info cont handler env ug
@@ -632,12 +634,12 @@ coreEnforceGuard = \info b cont handler env -> \case
       GModuleGuard (ModuleGuard mn _) -> calledByModule mn >>= \case
         True -> returnCEKValue cont handler (VBool True)
         False -> do
-          md <- getModule info env mn
+          md <- getModule info (view cePactDb env) mn
           acquireModuleAdmin info env md
           returnCEKValue cont handler (VBool True)
   [VString s] -> do
     let ksn = KeySetName s
-    cond <- enforceKeysetName info env ksn
+    cond <- enforceKeysetName info (view cePactDb env) ksn
     if cond then returnCEKValue cont handler (VBool True)
     else returnCEK cont handler (VError "enforce keyset ref failure" info)
   args -> argsError info b args
@@ -654,7 +656,7 @@ keysetRefGuard = \info b cont handler env -> \case
 coreReadInteger :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreReadInteger = \info b cont handler _env -> \case
   [VString s] -> do
-    EnvData envData <- viewCEKEnv eeMsgBody
+    EnvData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just (PInteger p) -> returnCEKValue cont handler (VInteger p)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
@@ -663,19 +665,19 @@ coreReadInteger = \info b cont handler _env -> \case
 readMsg :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 readMsg = \info b cont handler _env -> \case
   [VString s] -> do
-    EnvData envData <- viewCEKEnv eeMsgBody
+    EnvData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just pv -> returnCEKValue cont handler (VPactValue pv)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
   [] -> do
-    EnvData envData <- viewCEKEnv eeMsgBody
+    EnvData envData <- viewEvalEnv eeMsgBody
     returnCEKValue cont handler (VObject envData)
   args -> argsError info b args
 
 coreReadDecimal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreReadDecimal = \info b cont handler _env -> \case
   [VString s] -> do
-    EnvData envData <- viewCEKEnv eeMsgBody
+    EnvData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just (PDecimal p) -> returnCEKValue cont handler (VDecimal p)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
@@ -684,7 +686,7 @@ coreReadDecimal = \info b cont handler _env -> \case
 coreReadString :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreReadString = \info b cont handler _env -> \case
   [VString s] -> do
-    EnvData envData <- viewCEKEnv eeMsgBody
+    EnvData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just (PString p) -> returnCEKValue cont handler (VString p)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
@@ -692,7 +694,7 @@ coreReadString = \info b cont handler _env -> \case
 
 readKeyset' :: (MonadEval b i m) => T.Text -> m (Maybe (KeySet FullyQualifiedName))
 readKeyset' ksn = do
-    EnvData envData <- viewCEKEnv eeMsgBody
+    EnvData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field ksn) envData of
       Just (PObject dat) -> parseObj dat
         where
@@ -738,7 +740,7 @@ enforceCapGuard info cont handler (CapabilityGuard fqn args mpid) = do
   case mpid of
     Nothing -> enforceCap
     Just pid -> do
-      currPid <- getPactId info
+      currPid <- getDefPactId info
       if currPid == pid then enforceCap
       else returnCEK cont handler (VError "Capability pact guard failed: invalid pact id" info)
   where
@@ -1049,17 +1051,6 @@ installCapability = \info b cont handler env -> \case
     returnCEKValue cont handler (VString "Installed capability")
   args -> argsError info b args
 
--- emitEvent
---   :: MonadEval b i m
---   => Cont b i m
---   -> CEKErrorHandler b i m
---   -> FQCapToken
---   -> m (EvalResult b i m)
--- emitEvent cont handler ct@(CapToken fqn _) = do
---   let pactEvent = PactEvent ct (_fqModule fqn) (_fqHash fqn)
---   esEvents %%= (pactEvent:)
---   returnCEKValue cont handler VUnit
-
 coreEmitEvent :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreEmitEvent = \info b cont handler env -> \case
   [VCapToken ct@(CapToken fqn _)] -> do
@@ -1075,15 +1066,6 @@ coreEmitEvent = \info b cont handler env -> \case
       where
       enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)
       enforceMeta _ = pure ()
-    -- Just mn -> do
-    --   let fqn = _ctName ct
-    --   let ctModule = _fqModule fqn
-    --   if ctModule == mn then do
-    --     let pactEvent = PactEvent ct (_fqModule fqn) (_fqHash fqn)
-    --     esEvents %%= (++ [pactEvent])
-    --     returnCEKValue cont handler (VBool True)
-    --   else returnCEK cont handler (VError "Event does not match emitting module" info)
-    -- Nothing -> returnCEK cont handler (VError "emit-event called outside of module code" info)
   args -> argsError info b args
 
 createCapGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -1096,7 +1078,7 @@ createCapGuard = \info b cont handler _env -> \case
 createCapabilityPactGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 createCapabilityPactGuard = \info b cont handler _env -> \case
   [VCapToken ct] -> do
-    pid <- getPactId info
+    pid <- getDefPactId info
     let cg = CapabilityGuard (_ctName ct) (_ctArgs ct) (Just pid)
     returnCEKValue cont handler (VGuard (GCapabilityGuard cg))
   args -> argsError info b args
@@ -1288,7 +1270,7 @@ coreHash = \info b cont handler _env -> \case
 txHash :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 txHash = \info b cont handler _env -> \case
   [] -> do
-    h <- viewCEKEnv eeHash
+    h <- viewEvalEnv eeHash
     returnCEKValue cont handler (VString (hashToText h))
   args -> argsError info b args
 
@@ -1371,7 +1353,7 @@ describeModule :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 describeModule = \info b cont handler env -> \case
   [VString s] -> do
     checkNonLocalAllowed info
-    getModuleData info env (ModuleName s Nothing) >>= \case
+    getModuleData info (view cePactDb env) (ModuleName s Nothing) >>= \case
       ModuleData m _ -> returnCEKValue cont handler $
         VObject $ M.fromList $ fmap (over _1 Field)
           [ ("name", PString (renderModuleName (_mName m)))
@@ -1396,7 +1378,7 @@ dbDescribeKeySet :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbDescribeKeySet = \info b cont handler env -> \case
   [VString s] -> do
     checkNonLocalAllowed info
-    getModuleData info env (ModuleName s Nothing) >>= \case
+    getModuleData info (view cePactDb env) (ModuleName s Nothing) >>= \case
       ModuleData m _ -> returnCEKValue cont handler $
         VObject $ M.fromList $ fmap (over _1 Field)
           [ ("name", PString (renderModuleName (_mName m)))
@@ -1417,7 +1399,7 @@ coreCompose = \info b cont handler _env -> \case
       err -> returnCEK cont handler err
   args -> argsError info b args
 
-createPrincipalForGuard :: (MonadGas m) => Guard FullyQualifiedName PactValue -> m Pr.Principal
+createPrincipalForGuard :: (Monad m) => Guard FullyQualifiedName PactValue -> m Pr.Principal
 createPrincipalForGuard g = do
   case g of
     GKeyset (KeySet ks pf) -> case (toList ks, pf) of
@@ -1470,6 +1452,100 @@ coreValidatePrincipal info b cont handler _env = \case
     returnCEKValue cont handler $ VBool $ Pr.mkPrincipalIdent pr' == s
   args -> argsError info b args
 
+
+--------------------------------------------------
+-- Namespace functions
+--------------------------------------------------
+coreNamespace :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreNamespace = \info b cont handler env -> \case
+  [VString n] -> do
+    enforceTopLevelOnly info b
+    let pdb = view cePactDb env
+    if T.null n then do
+      (esLoaded . loNamespace) .== Nothing
+      returnCEKValue cont handler (VString "Namespace reset to root")
+    else
+      liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
+        Just ns -> do
+          (esLoaded . loNamespace) .== Just ns
+          let msg = "Namespace set to " <> n
+          returnCEKValue cont handler (VString msg)
+        Nothing ->
+          returnCEK cont handler $ VError ("Namespace " <> n <> " not defined") info
+  args -> argsError info b args
+
+
+
+
+coreDefineNamespace :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreDefineNamespace info b cont handler env = \case
+  [VString n, VGuard usrG, VGuard adminG] -> do
+    enforceTopLevelOnly info b
+    unless (isValidNsFormat n) $ throwExecutionError info (DefineNamespaceError "invalid namespace format")
+    let pdb = view cePactDb env
+    liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
+      -- G!
+      -- https://static.wikia.nocookie.net/onepiece/images/5/52/Lao_G_Manga_Infobox.png/revision/latest?cb=20150405020446
+      -- Enforce the old guard
+      Just (Namespace _ _ laoG) -> do
+        coreEnforceGuard info b Mt CEKNoHandler env [VGuard laoG] >>= \case
+          -- Enforce guard returns an error and never a different kind of value, so
+          -- this pattern match is fine
+          EvalValue _ -> do
+            let nsn = NamespaceName n
+                ns = Namespace nsn usrG adminG
+            liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
+            returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
+          VError e i -> returnCEK cont handler (VError e i)
+      Nothing -> do
+        enforcePolicy pdb n adminG
+        let nsn = NamespaceName n
+            ns = Namespace nsn usrG adminG
+        liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
+        returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
+  args -> argsError info b args
+  where
+  enforcePolicy pdb nsn adminG = viewEvalEnv eeNamespacePolicy >>= \case
+    SimpleNamespacePolicy -> pure ()
+    SmartNamespacePolicy _ fun -> getModuleMember info pdb fun >>= \case
+      Dfun d -> do
+        clo <- mkDefunClosure d (_qnModName fun) env
+        -- Todo: nested exec?
+        applyLam (C clo) [VString nsn, VGuard adminG] Mt CEKNoHandler >>= \case
+          EvalValue (VBool allow) ->
+            unless allow $ throwExecutionError info $ DefineNamespaceError "Namespace definition not permitted"
+          EvalValue _ ->
+            throwExecutionError info $ DefineNamespaceError "Namespace manager function returned an invalid value"
+          VError e _ ->
+            throwExecutionError info $ DefineNamespaceError e
+      _ -> failInvariant info "Namespace manager function is not a defun"
+  isValidNsFormat nsn = case T.uncons nsn of
+    Just (h, tl) ->
+      isValidNsHead h && T.all isValidNsChar tl
+    Nothing -> False
+    -- not (T.null nsn) && isValidNsHead (T.head nsn) && T.all isValidNsChar (T.tail )
+  isValidNsHead c =
+    Char.isLatin1 c && Char.isAlpha c
+  isValidNsChar c =
+    Char.isLatin1 c && (Char.isAlphaNum c || T.elem c validSpecialChars)
+  validSpecialChars :: T.Text
+  validSpecialChars =
+    "%#+-_&$@<>=^?*!|/~"
+
+coreDescribeNamespace :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreDescribeNamespace = \info b cont handler _env -> \case
+  [VString n] -> do
+    pdb <- viewEvalEnv eePactDb
+    liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
+      Just (Namespace _ usrG laoG) -> do
+        let obj = M.fromList
+                  [ (Field "user-guard", PGuard usrG)
+                  , (Field "admin-guard", PGuard laoG)
+                  , (Field "namespace-name", PString n)]
+        returnCEKValue cont handler (VObject obj)
+      Nothing ->
+        returnCEK cont handler (VError ("Namespace not defined " <> n) info)
+  args -> argsError info b args
 
 -----------------------------------
 -- Core definitions
@@ -1598,3 +1674,6 @@ rawBuiltinRuntime = \case
   RawIsPrincipal -> coreIsPrincipal
   RawTypeOfPrincipal -> coreTypeOfPrincipal
   RawValidatePrincipal -> coreValidatePrincipal
+  RawNamespace -> coreNamespace
+  RawDefineNamespace -> coreDefineNamespace
+  RawDescribeNamespace -> coreDescribeNamespace

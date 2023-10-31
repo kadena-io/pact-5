@@ -10,7 +10,6 @@ module Pact.Core.Names
  ( ModuleName(..)
  , NamespaceName(..)
  , Field(..)
- , IRNameKind(..)
  , ParsedName(..)
  , ParsedTyName(..)
  , DynamicName(..)
@@ -18,10 +17,6 @@ module Pact.Core.Names
  , Name(..)
  , NameKind(..)
  , BareName(..)
- , IRName(..)
- , irName
- , irNameKind
- , irUnique
  , QualifiedName(..)
  , renderQualName
  , renderModuleName
@@ -55,7 +50,7 @@ module Pact.Core.Names
  , fqModule
  , fqHash
  , userTable
- , PactId(..)
+ , DefPactId(..)
  , renderPactId
  ) where
 
@@ -66,12 +61,15 @@ import Data.Word(Word64)
 import Pact.Core.Hash
 import Pact.Core.Pretty(Pretty(..))
 
+-- | Newtype wrapper over bare namespaces
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
   deriving (Eq, Ord, Show)
 
 instance Pretty NamespaceName where
   pretty (NamespaceName n) = pretty n
 
+-- Module names, which consist of a raw module name
+-- and maybe a namespace qualifier
 data ModuleName = ModuleName
   { _mnName      :: Text
   , _mnNamespace :: Maybe NamespaceName
@@ -89,6 +87,7 @@ newtype BareName
 instance Pretty BareName where
   pretty (BareName b) = pretty b
 
+-- | Qualified module members.
 data QualifiedName =
   QualifiedName
   { _qnName :: Text
@@ -96,7 +95,6 @@ data QualifiedName =
   } deriving (Show, Eq)
 
 instance Ord QualifiedName where
-  compare :: QualifiedName -> QualifiedName -> Ordering
   compare (QualifiedName qn1 m1) (QualifiedName qn2 m2) =
     case compare m1 m2 of
       EQ -> compare qn1 qn2
@@ -136,6 +134,9 @@ data ParsedName
   | DN DynamicName
   deriving (Show, Eq)
 
+-- | The member name of the ParsedName
+-- that is either an atom "f"
+-- or "f" in <qualifier>."f"
 rawParsedName :: ParsedName -> Text
 rawParsedName (BN (BareName n)) = n
 rawParsedName (QN qn) = _qnName qn
@@ -147,6 +148,8 @@ instance Pretty ParsedName where
     BN n -> pretty n
     DN dn -> pretty (_dnName dn) <> "::" <> pretty (_dnCall dn)
 
+-- | Object and Schema row labels.
+-- So in Field "a" in {"a":v},
 newtype Field = Field { _field :: Text }
   deriving (Eq, Ord, Show)
 
@@ -157,21 +160,7 @@ instance Pretty Field where
 type Unique = Int
 type Supply = Int
 
-data IRNameKind
-  = IRBound
-  | IRTopLevel ModuleName ModuleHash
-  | IRModuleRef ModuleName
-  deriving (Show, Eq, Ord)
-
-data IRName
-  = IRName
-  { _irName :: !Text
-  , _irNameKind :: IRNameKind
-  , _irUnique :: Unique
-  } deriving (Show, Eq, Ord)
-
-makeLenses ''IRName
-
+-- A name paired with a debruijn index
 data NamedDeBruijn
   = NamedDeBruijn
   { _ndIndex :: !DeBruijn
@@ -180,12 +169,16 @@ data NamedDeBruijn
 
 type DeBruijn = Word64
 
+-- | Names used in dictionary overloading that handle
+-- injected typeclass dictionaries. For use in pact-core-typed
 data ONameKind b
   = OBound Unique
   | OTopLevel ModuleName ModuleHash
   | OBuiltinDict b
   deriving (Show, Eq)
 
+-- | Name with overloaded dictionary definitions
+-- For use in pact-core-typed
 data OverloadedName b
   = OverloadedName
   { _olName :: !Text
@@ -193,13 +186,14 @@ data OverloadedName b
   deriving (Show, Eq)
 
 -- | Name type representing all local and free
--- variable binders
+-- variable binders and dynamic invokes
 data Name
   = Name
   { _nName :: !Text
   , _nKind :: NameKind }
   deriving (Show, Eq, Ord)
 
+-- Dynamic references.
 data DynamicRef
   = DynamicRef
   { _drNameArg :: !Text
@@ -280,9 +274,6 @@ instance (Pretty b) => Pretty (OverloadedName b) where
     OBuiltinDict b -> "DICT<" <> pretty b <> ">"
     OTopLevel mn _ -> pretty mn <> "." <> pretty n
 
-instance Pretty IRName where
-  pretty r = pretty (_irName r)
-
 instance Pretty Name where
   pretty (Name n nk) = case nk of
     NBound dix -> pretty n <> "<" <> pretty dix <> ">"
@@ -315,10 +306,13 @@ renderFullyQualName :: FullyQualifiedName -> Text
 renderFullyQualName (FullyQualifiedName mn n _) =
   renderQualName (QualifiedName n mn)
 
+-- | Newtype over text user keys
 newtype RowKey
   = RowKey { _rowKey :: Text }
   deriving (Eq, Ord, Show)
 
+-- | A Name reference which
+-- is always fully qualified after name resolution
 data FQNameRef name where
   FQParsed :: ParsedName -> FQNameRef ParsedName
   FQName :: FullyQualifiedName -> FQNameRef Name
@@ -341,12 +335,12 @@ userTable (TableName tn) = TableName ("USER_" <> tn)
 --   generally computed from the continuation, or
 --   in the case of nested defpacts, the hash of the
 --   parent + the nested continuation
-newtype PactId
-  = PactId Text
+newtype DefPactId
+  = DefPactId Text
   deriving (Eq,Ord,Show)
 
-instance Pretty PactId where
-  pretty (PactId p) = pretty p
+instance Pretty DefPactId where
+  pretty (DefPactId p) = pretty p
 
-renderPactId :: PactId -> Text
-renderPactId (PactId t) = t
+renderPactId :: DefPactId -> Text
+renderPactId (DefPactId t) = t

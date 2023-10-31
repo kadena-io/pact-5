@@ -72,8 +72,6 @@ chargeNative :: MonadEval b i m => b -> m ()
 chargeNative native = do
   gm <- view (cekGasModel . geGasModel . gmNatives) <$> cekReadEnv
   cekChargeGas (gm native)
-  -- gm <- view (cekGasModel . geGasModel . gmNatives)
-  -- chargeGas (gm native)
 
 -- Todo: exception handling? do we want labels
 -- Todo: `traverse` usage should be perf tested.

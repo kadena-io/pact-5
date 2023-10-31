@@ -16,7 +16,7 @@ import Pact.Core.Names
 import Pact.Core.ModRefs
 import Pact.Core.Hash
 import Pact.Core.Principal
-import Pact.Core.Pacts.Types
+import Pact.Core.DefPacts.Types
 import Pact.Time
 
 import Data.Decimal (DecimalRaw(..))
@@ -36,8 +36,8 @@ encodeStable = J.encodeStrict . StableEncoding
 newtype StableEncoding a = StableEncoding a
   deriving (Ord, Eq)
 
-instance J.Encode (StableEncoding PactId) where
-  build (StableEncoding (PactId pid)) =
+instance J.Encode (StableEncoding DefPactId) where
+  build (StableEncoding (DefPactId pid)) =
     J.build pid
 
 -- | Stable encoding of `Literal`
@@ -76,7 +76,7 @@ instance J.Encode (StableEncoding (Guard FullyQualifiedName PactValue)) where
 -- | Stable encoding of `CapabilityGuard FullyQualifiedName PactValue`
 instance J.Encode (StableEncoding (CapabilityGuard FullyQualifiedName PactValue)) where
   build (StableEncoding (CapabilityGuard name args mpid)) = J.object
-    [ "cgPactId" J..= fmap StableEncoding mpid -- TODO: Check availability
+    [ "cgPactId" J..= fmap StableEncoding mpid
     , "cgArgs" J..= J.Array (StableEncoding <$> args)
     , "cgName" J..= StableEncoding name
     ]
@@ -200,9 +200,9 @@ instance J.Encode (StableEncoding PactValue) where
     PTime pt -> J.build (StableEncoding pt)
   {-# INLINABLE build #-}
 
--- | Stable encoding of `PactContinuation FullyQualifiedName PactValue`
-instance J.Encode (StableEncoding (PactContinuation FullyQualifiedName PactValue)) where
-  build (StableEncoding (PactContinuation name args))= J.object
+-- | Stable encoding of `DefPactContinuation FullyQualifiedName PactValue`
+instance J.Encode (StableEncoding (DefPactContinuation FullyQualifiedName PactValue)) where
+  build (StableEncoding (DefPactContinuation name args))= J.object
     [ "args" J..= J.Array (StableEncoding <$> args)
     , "def" J..= J.build (StableEncoding (fqnToQualName name))
     ]

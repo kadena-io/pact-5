@@ -20,6 +20,7 @@ module Pact.Core.Gas
  , constantGasModel
  , freeGasModel
  , freeGasEnv
+ , MonadGas(..)
  ) where
 
 import Control.Lens
@@ -94,3 +95,7 @@ freeGasModel = constantGasModel (Gas 0)
 freeGasEnv :: GasEnv b
 freeGasEnv =
   GasEnv (Gas 1) 1 freeGasModel
+
+class Monad m => MonadGas m where
+  logGas :: Text -> Gas -> m ()
+  chargeGas :: Gas -> m ()

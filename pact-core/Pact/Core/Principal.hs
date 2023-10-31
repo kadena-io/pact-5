@@ -40,7 +40,7 @@ data Principal
     -- hash of args
   | M !ModuleName !Text
     -- ^ format: `m:fq module name:fqn of module guard function
-  | P !PactId !Text
+  | P !DefPactId !Text
     -- ^ format: `p:pactid:fqn of pact function
   | C !Text
     -- ^ format: `c:hash of cap name + cap params + pactId if any
@@ -103,7 +103,7 @@ principalParser = alts <* void eof
 
     pParser = do
       prefix 'p'
-      binCtor P (PactId <$> base64UrlHashParser) nameMatcher
+      binCtor P (DefPactId <$> base64UrlHashParser) nameMatcher
 
     cParser = do
       prefix 'c'

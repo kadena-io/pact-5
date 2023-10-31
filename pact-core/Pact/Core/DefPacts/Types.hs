@@ -1,14 +1,14 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Pact.Core.Pacts.Types
- ( PactContinuation(..)
+module Pact.Core.DefPacts.Types
+ ( DefPactContinuation(..)
  , pcName, pcArgs
- , PactStep(..)
- , psStep, psRollback, psPactId, psResume
- , PactExec(..)
- , peStepCount, peYield, peStep, peContinuation, peStepHasRollback, pePactId
- , peNestedPactExec
+ , DefPactStep(..)
+ , psStep, psRollback, psDefPactId, psResume
+ , DefPactExec(..)
+ , peStepCount, peYield, peStep, peContinuation, peStepHasRollback, peDefPactId
+ , peNestedDefPactExec
  , Yield(..)
  , Provenance(..)
  ) where
@@ -22,13 +22,13 @@ import Pact.Core.Names
 import Pact.Core.Hash
 import Pact.Core.ChainData
 
-data PactContinuation name v
-  = PactContinuation
+data DefPactContinuation name v
+  = DefPactContinuation
   { _pcName :: name
   , _pcArgs :: [v]
   } deriving (Eq, Show)
 
-makeLenses ''PactContinuation
+makeLenses ''DefPactContinuation
 
 -- | Provenance datatype contains all of the necessary
 -- data to 'endorse' a yield object.
@@ -46,28 +46,28 @@ data Yield
   = Yield
   { _yData :: Map Field PactValue
   , _yProvenance :: Maybe Provenance
-  , _ySourceChain :: Maybe ChainId }
-  deriving (Show)
+  , _ySourceChain :: Maybe ChainId
+  } deriving Show
 
 -- | Internal representation of pacts
-data PactExec
-  = PactExec
+data DefPactExec
+  = DefPactExec
   { _peStepCount :: Int
   , _peYield :: Maybe Yield
   , _peStep :: Int
-  , _pePactId :: PactId
-  , _peContinuation :: PactContinuation FullyQualifiedName PactValue
+  , _peDefPactId :: DefPactId
+  , _peContinuation :: DefPactContinuation FullyQualifiedName PactValue
   , _peStepHasRollback :: Bool
-  , _peNestedPactExec :: Map PactId PactExec
+  , _peNestedDefPactExec :: Map DefPactId DefPactExec
   } deriving Show
 
-makeLenses ''PactExec
+makeLenses ''DefPactExec
 
-data PactStep = PactStep
+data DefPactStep = DefPactStep
   { _psStep :: !Int
   , _psRollback :: !Bool
-  , _psPactId :: !PactId
+  , _psDefPactId :: !DefPactId
   , _psResume :: !(Maybe Yield)
   } deriving Show
 
-makeLenses ''PactStep
+makeLenses ''DefPactStep

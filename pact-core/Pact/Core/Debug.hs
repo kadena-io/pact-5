@@ -1,6 +1,5 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
--- {-# LANGUAGE FunctionalDependencies #-}
 
 module Pact.Core.Debug
  ( DebugFlag(..)
@@ -18,7 +17,6 @@ data DebugPrint b i term where
   DPLexer :: DebugPrint b i [PosToken]
   DPParser :: DebugPrint b i (Syntax.TopLevel i)
   DPDesugar :: DebugPrint b i (Term.TopLevel Name Type b i)
-  -- deriving (Show, Eq, Ord, Enum, Bounded)
 
 data DebugFlag
   = DFLexer

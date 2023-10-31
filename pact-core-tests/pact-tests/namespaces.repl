@@ -1,0 +1,291 @@
+;; This is an example of using namespaces for simple modules,
+;; showcasing how to declare them, as well as use qualified
+;; names to access declared constructs.
+(begin-tx)
+
+(env-data
+  { "alice-keys" : ["alice"]
+  , "bob-keys"   : ["bob"]
+  })
+
+(env-keys ["alice", "bob"])
+
+; Define namespace using a keyset guard
+(define-namespace 'alice (read-keyset 'alice-keys) (read-keyset 'alice-keys))
+(define-namespace 'bob (read-keyset 'bob-keys) (read-keyset 'bob-keys))
+
+(expect
+  "describe-namespace describes namespaces correctly - alice"
+  { "admin-guard": (read-keyset 'alice-keys)
+  , "namespace-name": "alice"
+  , "user-guard": (read-keyset 'alice-keys)
+  }
+  (describe-namespace 'alice))
+
+(expect
+  "describe-namespace describes namespaces correctly - bob"
+  { "admin-guard": (read-keyset 'bob-keys)
+  , "namespace-name": "bob"
+  , "user-guard": (read-keyset 'bob-keys)
+  }
+  (describe-namespace 'bob))
+
+; Set tx namespace to 'alice'
+(namespace 'alice)
+
+(env-data
+  { "alice.alice-keys" : ["alice"]
+  , "alice-keys" : ["alice"]
+  , "bob.bob-keys" : ["bob"]
+  , "bob-keys" : ["bob"]
+  })
+(env-keys ["alice", "bob"])
+
+(define-keyset "alice.alice-keys")
+
+;  (expect-failure
+;    "keyset namespace mismatch"
+;    (define-keyset "alice-keys" (read-keyset 'alice-keys)))
+
+(interface alice-contract
+
+  @doc "this contract is for alice, and occurs in the \
+       \namespace 'alice'"
+
+  (defun f:bool ())
+  (defun g:string (x:bool))
+
+  ; simple constants
+  (defconst C1 true)
+  (defconst C2 "bar")
+)
+
+; now bob gets his own namespace in the tx
+(namespace 'bob)
+(define-keyset "bob.bob-keys")
+
+(interface bob-contract
+  @doc "this contract is for bob, and occurs in the \
+       \namespace 'bob'"
+
+  (defun h:decimal (x:bool z:decimal))
+  (defun i:string ())
+)
+
+(commit-tx)
+(begin-tx)
+
+(env-data
+  { "carl-keys" : ["carl"]
+  , "carl.carl-keys": ["carl"]
+  })
+
+(env-keys ["carl"])
+
+(define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys))
+(namespace 'carl)
+(define-keyset "carl.carl-keys")
+
+(module carl-module "carl.carl-keys"
+  @doc "lets implement alice's and bob's contracts"
+
+  (implements alice.alice-contract)
+  (implements bob.bob-contract)
+
+  (defschema s foo:string)
+  (deftable t:{s})
+
+  (defun f:bool ()
+    @doc "Alice's flag"
+    alice.alice-contract.C1)
+
+  (defun g:string (x:bool)
+    @doc "do something simple or default to alice's constant"
+
+    (if x
+      "something simple"
+      i))
+
+  (defun h:decimal (x:bool z:decimal)
+    @doc "Bob's decision"
+    (if x z (- z)))
+
+  (defun i:string ()
+    alice.alice-contract.C2)
+)
+
+(commit-tx)
+(begin-tx)
+
+;; Used as part of NamespaceSpec test making sure
+;; namespaces propagate down the term tree
+(interface test-sig
+  @doc "test for biplate"
+
+  (defun f:bool ())
+  (defconst TBOOL true)
+)
+
+; Todo: namespaced keysets here
+;  (env-exec-config ['DisablePact44])
+(env-data { "test-keys" : ["test"] })
+(define-keyset 'test-keys)
+(env-keys ["test"])
+
+(module global-module 'test-keys
+  @doc "biplate test impl"
+
+  (defun global:bool ()
+    true)
+)
+
+(commit-tx)
+(begin-tx)
+
+(define-namespace 'test (read-keyset 'test-keys) (read-keyset 'test-keys))
+(namespace 'test)
+
+(module test-module 'test-keys
+  @doc "biplate test impl"
+
+  (implements test-sig)
+  (use global-module)
+
+  (defschema test s:string)
+  (deftable test-table:{test})
+
+  (defun f:bool ()
+    true)
+
+  (defun g:bool ()
+    test-sig.TBOOL)
+)
+
+(interface test-iface
+  (defun tif ()))
+
+
+(commit-tx)
+
+(use carl.carl-module)
+(expect "alice's triple reference" true alice.alice-contract.C1)
+(expect "qualified module name in table" "carl.carl-module" (at 'module (describe-table carl.carl-module.t)))
+
+(namespace 'test)
+(module m2 'test-keys
+  (use test-module)
+  (implements test-iface)
+  (defun tif () 1)
+  )
+
+(begin-tx)
+; Todo: namespaced keysets here
+(env-data { 'user: ["user"], 'admin: ["admin"] })
+(define-namespace 'ns-user-behavior (read-keyset 'user) (read-keyset 'admin))
+(namespace 'ns-user-behavior)
+(env-keys ["user"])
+
+(module user-module-1 G
+  (defcap G () true)
+  (defun f () 1))
+
+(commit-tx)
+
+;;;;;
+;; Don't check ns-user guard for upgrade: NEW BEHAVIOR
+;;;;
+
+(begin-tx)
+(env-data { 'user: ["user"], 'admin: ["admin"] })
+(env-keys [])
+(env-exec-config [])
+(expect-failure
+ "ensure user keyset does not pass"
+ (enforce-keyset (read-keyset 'user)))
+
+(expect-that
+ "entering ns does not enforce user guard"
+ (constantly true)
+ (namespace 'ns-user-behavior))
+
+;; Upgrading SUCCESS with new behavior
+(module user-module-1 G
+  (defcap G () false)
+  (defun f () 2))
+
+(expect "upgrade succeeds" 2 (f))
+
+;; FAILURE on module install: bad-module-enforce-ns-user.repl
+;; FAILURE on interface install: bad-iface-enforce-ns-user.repl
+
+(rollback-tx)
+
+
+
+
+;;;;;
+;; test managed namespaces
+;;;;;
+
+(begin-tx)
+(module test-mgd-ns GOV
+  (defcap GOV () true)
+  (defun the-guard () (create-module-guard "test"))
+  (defun manage (ns guard)
+    (if (= ns "approve") true
+      (if (= ns "check-guard")
+          (enforce (= guard (the-guard)) "Invalid guard")
+        false))))
+(commit-tx)
+
+(begin-tx)
+(use test-mgd-ns)
+(expect
+ "ns policy install succeeds"
+ "Installed namespace policy"
+ (env-namespace-policy true (manage)))
+
+(env-data { "k1": ["k1"], "k2": ["k2"] })
+(expect
+ "define 'approve succeeds"
+ "Namespace defined: approve"
+ (define-namespace 'approve (read-keyset "k1") (read-keyset "k2")))
+
+(expect-failure
+ "define 'check-guard with wrong admin guard fails"
+ (define-namespace "check-guard" (read-keyset "k1") (read-keyset "k2")))
+
+(expect
+ "define 'check-guard with right admin guard succeeds"
+ "Namespace defined: check-guard"
+ (define-namespace "check-guard" (read-keyset "k1") (the-guard)))
+
+;; the following should succeed per ns policy above
+(module my-root-module G
+  (defcap G () true)
+  (defun foo () 1))
+
+(env-namespace-policy false (manage))
+
+(module my-root-module G
+  (defcap G () true)
+  (defun foo () 2))
+
+
+
+(rollback-tx)
+
+(begin-tx)
+
+(env-exec-config [])
+
+(expect
+  "Setting namespace back to root namespace post-Pact 4.7 fork succeeds"
+  "Namespace reset to root"
+  (namespace ""))
+
+(expect
+  "Carl contract fqn required for member access - with ns"
+  true
+  (carl.carl-module.f))
+(commit-tx)

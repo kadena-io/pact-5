@@ -7,7 +7,6 @@ module Pact.Core.IR.Eval.CEK
   , returnCEKValue
   , returnCEK
   , applyLam
-  , throwExecutionError
   , unsafeApplyOne
   , unsafeApplyTwo
   , mkDefPactClosure
@@ -32,7 +31,7 @@ module Pact.Core.IR.Eval.CEK
   , guardForModuleCall) where
 
 
-import Control.Lens hiding ((%%=))
+import Control.Lens
 import Control.Monad(zipWithM, unless, when)
 import Control.Monad.IO.Class
 import Data.Default
@@ -61,9 +60,9 @@ import Pact.Core.Persistence
 import Pact.Core.Hash
 import Pact.Core.StableEncoding
 
-import Pact.Core.IR.Term hiding (PactStep)
+import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
-import Pact.Core.Pacts.Types
+import Pact.Core.DefPacts.Types
 chargeNodeGas :: MonadEval b i m => NodeType -> m ()
 chargeNodeGas _nt = pure ()
   -- gm <- view (eeGasModel . geGasModel . gmNodes) <$> readEnv
@@ -123,7 +122,7 @@ evalCEK cont handler env (Var n info)  = do
       _ -> returnCEKValue cont handler (VModRef (ModRef m ifs Nothing))
     NDynRef (DynamicRef dArg i) -> case RAList.lookup (view ceLocal env) i of
       Just (VModRef mr) -> do
-        modRefHash <- _mHash <$> getModule info env (_mrModule mr)
+        modRefHash <- _mHash <$> getModule info (view cePactDb env) (_mrModule mr)
         let nk = NTopLevel (_mrModule mr) modRefHash
         evalCEK cont handler env (Var (Name dArg nk) info)
       Just _ -> returnCEK cont handler (VError "dynamic name pointed to non-modref" info)
@@ -242,39 +241,39 @@ mkDefPactClosure info fqn dpact env = case _dpArgs dpact of
 initPact
   :: MonadEval b i m
   => i
-  -> PactContinuation FullyQualifiedName PactValue
+  -> DefPactContinuation FullyQualifiedName PactValue
   -> Cont b i m
   -> CEKErrorHandler b i m
   -> CEKEnv b i m
   -> m (EvalResult b i m)
 initPact i pc cont handler cenv = do
-  case view cePactStep cenv of
+  case view ceDefPactStep cenv of
     Nothing -> do
-      pHash <- viewCEKEnv eeHash
+      pHash <- viewEvalEnv eeHash
       let
-        pStep = PactStep 0 False (hashToPactId pHash) Nothing
-        cenv' = set cePactStep (Just pStep) cenv
+        pStep = DefPactStep 0 False (hashToDefPactId pHash) Nothing
+        cenv' = set ceDefPactStep (Just pStep) cenv
       applyPact i pc pStep cont handler cenv' mempty
     Just ps ->
       let
-        PactId p = _psPactId ps
-        npId = hashToPactId (pactHash (T.encodeUtf8 p <> ":" <> encodeStable pc))
-        pStep = PactStep (_psStep ps) (_psRollback ps) npId Nothing
+        DefPactId p = _psDefPactId ps
+        npId = hashToDefPactId (pactHash (T.encodeUtf8 p <> ":" <> encodeStable pc))
+        pStep = DefPactStep (_psStep ps) (_psRollback ps) npId Nothing
       in applyNestedPact i pc pStep cont handler cenv
   where
-    hashToPactId = PactId . hashToText
+    hashToDefPactId = DefPactId . hashToText
 
 applyPact
   :: MonadEval b i m
   => i
-  -> PactContinuation FullyQualifiedName PactValue
-  -> PactStep
+  -> DefPactContinuation FullyQualifiedName PactValue
+  -> DefPactStep
   -> Cont b i m
   -> CEKErrorHandler b i m
   -> CEKEnv b i m
-  -> M.Map PactId PactExec
+  -> M.Map DefPactId DefPactExec
   -> m (EvalResult b i m)
-applyPact i pc ps cont handler cenv nested = useEvalState esPactExec >>= \case
+applyPact i pc ps cont handler cenv nested = useEvalState esDefPactExec >>= \case
   Just pe ->  throwExecutionError i (MultipleOrNestedDefPactExecFound pe)
   Nothing -> lookupFqName (pc ^. pcName) >>= \case
     Just (DPact defPact) -> do
@@ -287,25 +286,25 @@ applyPact i pc ps cont handler cenv nested = useEvalState esPactExec >>= \case
       step <- maybe (failInvariant i "Step not found") pure
         $ _dpSteps defPact ^? ix (ps ^. psStep)
 
-      let pe = PactExec
+      let pe = DefPactExec
                { _peYield = Nothing
                , _peStepHasRollback = hasRollback step
                , _peStepCount = nSteps
                , _peStep = _psStep ps
-               , _pePactId = _psPactId ps
+               , _peDefPactId = _psDefPactId ps
                , _peContinuation = pc
-               , _peNestedPactExec = nested
+               , _peNestedDefPactExec = nested
                }
 
-      setEvalState esPactExec (Just pe)
-      let cont' = PactStepC cenv cont
+      setEvalState esDefPactExec (Just pe)
+      let cont' = DefPactStepC cenv cont
 
       case (ps ^. psRollback, step) of
         (False, _) ->
-          evalWithStackFrame i cont' handler cenv sf Nothing (ordinaryPactStepExec step)
+          evalWithStackFrame i cont' handler cenv sf Nothing (ordinaryDefPactStepExec step)
         (True, StepWithRollback _ rollbackExpr _) ->
           evalWithStackFrame i cont' handler cenv sf Nothing rollbackExpr
-        (True, Step{}) -> throwExecutionError i (PactStepHasNoRollback ps)
+        (True, Step{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
     _otherwise -> failInvariant i "DefPact not found"
   where
   sf = StackFrame (view (pcName . fqName) pc) (view (pcName . fqModule) pc) SFDefPact
@@ -313,13 +312,13 @@ applyPact i pc ps cont handler cenv nested = useEvalState esPactExec >>= \case
 applyNestedPact
   :: MonadEval b i m
   => i
-  -> PactContinuation FullyQualifiedName PactValue
-  -> PactStep
+  -> DefPactContinuation FullyQualifiedName PactValue
+  -> DefPactStep
   -> Cont b i m
   -> CEKErrorHandler b i m
   -> CEKEnv b i m
   -> m (EvalResult b i m)
-applyNestedPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
+applyNestedPact i pc ps cont handler cenv = useEvalState esDefPactExec >>= \case
   Nothing -> failInvariant i $
     "applyNestedPact: Nested DefPact attempted but no pactExec found" <> T.pack (show pc)
 
@@ -333,21 +332,21 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
         isRollback = hasRollback step
 
       when (stepCount /= _peStepCount pe) $
-        throwExecutionError i (NestedDefPactParentStepCountMissmatch (_pePactId pe) stepCount (_peStepCount pe))
+        throwExecutionError i (NestedDefPactParentStepCountMissmatch (_peDefPactId pe) stepCount (_peStepCount pe))
 
       when (isRollback /= _peStepHasRollback pe) $
-        throwExecutionError i (NestedDefPactParentRollbackMissmatch (_pePactId pe) isRollback (_peStepHasRollback pe))
+        throwExecutionError i (NestedDefPactParentRollbackMissmatch (_peDefPactId pe) isRollback (_peStepHasRollback pe))
 
-      exec <- case pe ^. peNestedPactExec . at (_psPactId ps) of
+      exec <- case pe ^. peNestedDefPactExec . at (_psDefPactId ps) of
         Nothing
-          | _psStep ps == 0 -> pure $ PactExec
+          | _psStep ps == 0 -> pure $ DefPactExec
                                { _peStepCount = stepCount
                                , _peYield = Nothing
                                , _peStep = _psStep ps
-                               , _pePactId = _psPactId ps
+                               , _peDefPactId = _psDefPactId ps
                                , _peContinuation = pc
                                , _peStepHasRollback = isRollback
-                               , _peNestedPactExec = mempty
+                               , _peNestedDefPactExec = mempty
                                }
           | otherwise ->
             throwExecutionError i (NestedDefPactDoubleExecution ps)
@@ -359,17 +358,17 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esPactExec >>= \case
           | otherwise ->
             throwExecutionError i (NestedDefPactNeverStarted ps)
 
-      setEvalState esPactExec (Just exec)
+      setEvalState esDefPactExec (Just exec)
       let
-        cenv' = set cePactStep (Just ps) cenv
-        cont' = NestedPactStepC cenv' cont pe
+        cenv' = set ceDefPactStep (Just ps) cenv
+        cont' = NestedDefPactStepC cenv' cont pe
 
       case (ps ^. psRollback, step) of
         (False, _) ->
-          evalWithStackFrame i cont' handler cenv' sf Nothing  (ordinaryPactStepExec step)
+          evalWithStackFrame i cont' handler cenv' sf Nothing  (ordinaryDefPactStepExec step)
         (True, StepWithRollback _ rollbackExpr _) ->
           evalWithStackFrame i cont' handler cenv' sf Nothing rollbackExpr
-        (True, Step{}) -> throwExecutionError i (PactStepHasNoRollback ps)
+        (True, Step{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
     _otherwise -> failInvariant i "applyNestedPact: Expected a DefPact bot got something else"
   where
   sf = StackFrame (view (pcName . fqName) pc) (view (pcName . fqModule) pc) SFDefPact
@@ -380,18 +379,18 @@ resumePact
   -> Cont b i m
   -> CEKErrorHandler b i m
   -> CEKEnv b i m
-  -> Maybe PactExec
+  -> Maybe DefPactExec
   -> m (EvalResult b i m)
-resumePact i cont handler env crossChainContinuation = viewCEKEnv eePactStep >>= \case
-  Nothing -> throwExecutionError i PactStepNotInEnvironment
+resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep >>= \case
+  Nothing -> throwExecutionError i DefPactStepNotInEnvironment
   Just ps -> do
-    pdb <- viewCEKEnv eePactDb
-    dbState <- liftDbFunction i (readPacts pdb (_psPactId ps))
+    pdb <- viewEvalEnv eePactDb
+    dbState <- liftDbFunction i (readPacts pdb (_psDefPactId ps))
     case (dbState, crossChainContinuation) of
       (Just Nothing, _) -> throwExecutionError i (DefPactAlreadyCompleted ps)
       (Nothing, Nothing) -> throwExecutionError i (NoPreviousDefPactExecutionFound ps)
-      (Nothing, Just ccExec) -> resumePactExec ccExec
-      (Just (Just dbExec), Nothing) -> resumePactExec dbExec
+      (Nothing, Just ccExec) -> resumeDefPactExec ccExec
+      (Just (Just dbExec), Nothing) -> resumeDefPactExec dbExec
       (Just (Just dbExec), Just ccExec) -> do
 
         -- Validate CC execution environment progressed far enough
@@ -407,15 +406,15 @@ resumePact i cont handler env crossChainContinuation = viewCEKEnv eePactStep >>=
         when (_peStepCount dbExec /= _peStepCount ccExec) $
           throwExecutionError i (CCDefPactContinuationError ps ccExec dbExec)
 
-        resumePactExec ccExec
+        resumeDefPactExec ccExec
       where
-        --resumePactExec :: MonadEval b i m => PactExec -> m (EvalResult b i m)
-        resumePactExec pe = do
-          when (_psPactId ps /= _pePactId pe) $
-            throwExecutionError i (DefPactIdMissmatch (_psPactId ps) (_pePactId pe))
+        --resumeDefPactExec :: MonadEval b i m => DefPactExec -> m (EvalResult b i m)
+        resumeDefPactExec pe = do
+          when (_psDefPactId ps /= _peDefPactId pe) $
+            throwExecutionError i (DefPactIdMissmatch (_psDefPactId ps) (_peDefPactId pe))
 
           when (_psStep ps < 0 || _psStep ps >= _peStepCount pe) $
-            throwExecutionError i (InvalidPactStepSupplied ps pe)
+            throwExecutionError i (InvalidDefPactStepSupplied ps pe)
 
           if _psRollback ps
             then when (_psStep ps /= _peStep pe) $
@@ -428,8 +427,8 @@ resumePact i cont handler env crossChainContinuation = viewCEKEnv eePactStep >>=
               resume = case _psResume ps of
                          r@Just{} -> r
                          Nothing -> _peYield pe
-              env' = set ceLocal (RAList.fromList (reverse args)) $ set cePactStep (Just $ set psResume resume ps) env
-          applyPact i pc ps cont handler env' (_peNestedPactExec pe)
+              env' = set ceLocal (RAList.fromList (reverse args)) $ set ceDefPactStep (Just $ set psResume resume ps) env
+          applyPact i pc ps cont handler env' (_peNestedDefPactExec pe)
 
 
 enforceKeyset
@@ -437,7 +436,7 @@ enforceKeyset
   => KeySet FullyQualifiedName
   -> m Bool
 enforceKeyset (KeySet kskeys ksPred) = do
-  matchedSigs <- M.filterWithKey matchKey <$> viewCEKEnv eeMsgSigs
+  matchedSigs <- M.filterWithKey matchKey <$> viewEvalEnv eeMsgSigs
   sigs <- checkSigCaps matchedSigs
   runPred (M.size sigs)
   where
@@ -455,11 +454,10 @@ enforceKeyset (KeySet kskeys ksPred) = do
 enforceKeysetName
   :: MonadEval b i m
   => i
-  -> CEKEnv b i m
+  -> PactDb b i
   -> KeySetName
   -> m Bool
-enforceKeysetName info env ksn = do
-  let pdb = view cePactDb env
+enforceKeysetName info pdb ksn = do
   liftIO (readKeyset pdb ksn) >>= \case
     Just ks -> enforceKeyset ks
     Nothing ->
@@ -476,7 +474,7 @@ nameToFQN info env (Name n nk) = case nk of
   NTopLevel mn mh -> pure (FullyQualifiedName mn n mh)
   NDynRef (DynamicRef dArg i) -> case RAList.lookup (view ceLocal env) i of
     Just (VModRef mr) -> do
-      md <- getModule info env (_mrModule mr)
+      md <- getModule info (view cePactDb env) (_mrModule mr)
       pure (FullyQualifiedName (_mrModule mr) dArg (_mHash md))
     Just _ -> throwExecutionError info (DynNameIsNotModRef dArg)
     Nothing -> failInvariant info ("unbound identifier" <> T.pack (show n))
@@ -486,7 +484,7 @@ guardTable :: (MonadEval b i m) => i -> CEKEnv b i m -> TableValue -> GuardTable
 guardTable i env (TableValue _ mn mh _) dbop = do
   checkLocalBypass $
     guardForModuleCall i env mn $ do
-      mdl <- getModule i env mn
+      mdl <- getModule i (view cePactDb env) mn
       enforceBlessedHashes i mdl mh
   where
   checkLocalBypass notBypassed = do
@@ -508,24 +506,24 @@ guardForModuleCall :: (MonadEval b i m) => i -> CEKEnv b i m -> ModuleName -> m 
 guardForModuleCall i env currMod onFound =
   findCallingModule >>= \case
     Just mn | mn == currMod -> onFound
-    _ -> getModule i env currMod >>= acquireModuleAdmin i env
+    _ -> getModule i (view cePactDb env) currMod >>= acquireModuleAdmin i env
 
 acquireModuleAdmin :: (MonadEval b i m) => i -> CEKEnv b i m -> EvalModule b i -> m ()
 acquireModuleAdmin i env mdl = do
   mc <- useEvalState (esCaps . csModuleAdmin)
   unless (S.member (_mName mdl) mc) $ case _mGovernance mdl of
     KeyGov ksn -> do
-      signed <- enforceKeysetName i env ksn
+      signed <- enforceKeysetName i (view cePactDb env) ksn
       unless signed $ throwExecutionError i (ModuleGovernanceFailure (_mName mdl))
-      esCaps . csModuleAdmin %%= S.insert (_mName mdl)
+      esCaps . csModuleAdmin %== S.insert (_mName mdl)
     CapGov (ResolvedGov fqn) -> do
       let wcapBody = Constant LUnit i
       -- *special* use of `evalCap` here to evaluate module governance.
-      evalCap i Mt CEKNoHandler (set ceLocal mempty env) (CapToken fqn []) (CapBodyC PopCapInvoke) wcapBody >>= \case
+      evalCap i Mt CEKNoHandler env (CapToken fqn []) (CapBodyC PopCapInvoke) wcapBody >>= \case
         VError _ _ ->
           throwExecutionError i (ModuleGovernanceFailure (_mName mdl))
-        _ -> do
-          esCaps . csModuleAdmin %%= S.insert (_mName mdl)
+        EvalValue _ -> do
+          esCaps . csModuleAdmin %== S.insert (_mName mdl)
 
 evalWithStackFrame
   :: (MonadEval b i m)
@@ -549,7 +547,7 @@ pushStackFrame
   -> StackFrame
   -> m (Cont b i m)
 pushStackFrame info cont mty sf = do
-  esStack %%= (sf :)
+  esStack %== (sf :)
   pure (StackPopC info mty cont)
 
 
@@ -587,7 +585,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
                 mgdCaps <- useEvalState (esCaps . csManaged)
                 case find ((==) filteredCap . _mcCap) mgdCaps of
                   Nothing -> do
-                    msgCaps <- S.unions <$> viewCEKEnv eeMsgSigs
+                    msgCaps <- S.unions <$> viewEvalEnv eeMsgSigs
                     case find (findMsgSigCap cix filteredCap) msgCaps of
                       Just c -> do
                         let c' = set ctName fqn c
@@ -605,7 +603,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
                 mgdCaps <- useEvalState (esCaps . csManaged)
                 case find ((==) qualCapToken . _mcCap) mgdCaps of
                   Nothing -> do
-                    msgCaps <- S.unions <$> viewCEKEnv eeMsgSigs
+                    msgCaps <- S.unions <$> viewEvalEnv eeMsgSigs
                     case find ((==) qualCapToken) msgCaps of
                       Just c -> do
                         let c' = set ctName fqn c
@@ -618,8 +616,8 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
                       --   returnCEK cont' handler (VError "Automanaged capability used more than once" info)
                       -- else do
                       --   let newManaged = AutoManaged True
-                      --   esCaps . csManaged %%= S.union (S.singleton (set mcManaged newManaged managedCap))
-                      --   (esCaps . csSlots) %%= (CapSlot qualCapToken []:)
+                      --   esCaps . csManaged %== S.union (S.singleton (set mcManaged newManaged managedCap))
+                      --   (esCaps . csSlots) %== (CapSlot qualCapToken []:)
                       --   sfCont <- pushStackFrame info cont' Nothing capStackFrame
                       --   emitCapability info origToken
                       --   evalCEK sfCont handler env capBody
@@ -628,7 +626,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
           DefEvent -> do
             let cont' = modCont env Nothing (Just (fqctToPactEvent origToken)) contbody currCont
             let inCapEnv = set ceInCap True $ set ceLocal newLocals env
-            (esCaps . csSlots) %%= (CapSlot qualCapToken []:)
+            (esCaps . csSlots) %== (CapSlot qualCapToken []:)
             sfCont <- pushStackFrame info cont' Nothing capStackFrame
             -- emitCapability info origToken
             evalCEK sfCont handler inCapEnv capBody
@@ -637,7 +635,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
           -- Todo: a type that's basically `Maybe` here would save us a lot of grief.
           Unmanaged -> do
             let cont' = modCont env Nothing Nothing contbody currCont
-            (esCaps . csSlots) %%= (CapSlot qualCapToken []:)
+            (esCaps . csSlots) %== (CapSlot qualCapToken []:)
             evalWithStackFrame info cont' handler (set ceLocal newLocals env) capStackFrame Nothing capBody
       Just {} ->
         failInvariant info "Captoken references invalid def"
@@ -669,8 +667,8 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
               -- within the cap body will fail (That is, keyset enforcement). Instead, once we are evaluating the body,
               -- we pop the current cap stack, then replace the head with the original intended token.
               -- this is done in `CapBodyC` and this is the only way to do this.
-              esCaps . csManaged %%= S.union (S.singleton (set mcManaged mcM managedCap))
-              (esCaps . csSlots) %%= (CapSlot inCapBodyToken []:)
+              esCaps . csManaged %== S.union (S.singleton (set mcManaged mcM managedCap))
+              (esCaps . csSlots) %== (CapSlot inCapBodyToken []:)
               sfCont <- pushStackFrame info cont' Nothing capStackFrame
               -- emitCapability info origToken
               evalCEK sfCont handler inCapEnv capBody
@@ -683,8 +681,8 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
       if b then returnCEK currCont handler (VError "Automanaged capability used more than once" info)
       else do
         let newManaged = AutoManaged True
-        esCaps . csManaged %%= S.union (S.singleton (set mcManaged newManaged managedCap))
-        esCaps . csSlots %%= (CapSlot qualCapToken []:)
+        esCaps . csManaged %== S.union (S.singleton (set mcManaged newManaged managedCap))
+        esCaps . csSlots %== (CapSlot qualCapToken []:)
         let inCapEnv = set ceLocal env' $ set ceInCap True $ env
         sfCont <- pushStackFrame info cont' Nothing capStackFrame
         -- emitCapability info origToken
@@ -711,7 +709,7 @@ emitEvent info pe = findCallingModule >>= \case
     Just mn -> do
       let ctModule = _peModule pe
       if ctModule == mn then do
-        esEvents %%= (++ [pe])
+        esEvents %== (++ [pe])
       else throwExecutionError info (EventDoesNotMatchModule mn)
       -- let fqn = _ctName ct
       -- let ctModule = _fqModule fqn
@@ -773,7 +771,7 @@ composeCap info cont handler env origToken =
       -- let ct = CapToken (fqnToQualName fqn) args
       -- lookupFqName fqn >>= \case
       --   Just (DCap d) -> do
-      --     (esCaps . csSlots) %%= (CapSlot ct []:)
+      --     (esCaps . csSlots) %== (CapSlot ct []:)
       --     args' <- zipWithM (\pv arg -> maybeTCType info pv (_argType arg)) args (_dcapArgs d)
       --     let env' = RAList.fromList $ fmap VPactValue (reverse args')
       --         capBody = _dcapTerm d
@@ -812,16 +810,16 @@ installCap info _env (CapToken fqn args) autonomous = do
           let mcapType = ManagedParam fqnMgr managedParam paramIx
               ctFiltered = CapToken (fqnToQualName fqn) (filterIndex paramIx args)
               mcap = ManagedCap ctFiltered ct mcapType
-          (esCaps . csManaged) %%= S.insert mcap
+          (esCaps . csManaged) %== S.insert mcap
           when autonomous $
-            (esCaps . csAutonomous) %%= S.insert ct
+            (esCaps . csAutonomous) %== S.insert ct
           pure mcap
         AutoManagedMeta -> do
           let mcapType = AutoManaged False
               mcap = ManagedCap ct ct mcapType
-          (esCaps . csManaged) %%= S.insert mcap
+          (esCaps . csManaged) %== S.insert mcap
           when autonomous $
-            (esCaps . csAutonomous) %%= S.insert ct
+            (esCaps . csAutonomous) %== S.insert ct
           pure mcap
       DefEvent ->
         throwExecutionError info (InvalidManagedCap fqn)
@@ -1010,7 +1008,7 @@ returnCEKValue (CapPopC st cont) handler v = case st of
   PopCapInvoke -> do
     -- todo: need safe tail here, but this should be fine given the invariant that `CapPopC`
     -- will never show up otherwise
-    esCaps . csSlots %%= tail
+    esCaps . csSlots %== tail
     returnCEKValue cont handler v
   PopCapComposed -> do
     caps <- useEvalState (esCaps . csSlots)
@@ -1045,11 +1043,11 @@ returnCEKValue (UserGuardC cont) handler _v =
 returnCEKValue (StackPopC i mty cont) handler v = do
   v' <- (\pv -> maybeTCType i pv mty) =<< enforcePactValue i v
   -- Todo: unsafe use of tail here. need `tailMay`
-  (esStack %%= tail) *> returnCEKValue cont handler (VPactValue v')
-returnCEKValue (PactStepC env cont) handler v =
-  useEvalState esPactExec >>= \case
+  (esStack %== tail) *> returnCEKValue cont handler (VPactValue v')
+returnCEKValue (DefPactStepC env cont) handler v =
+  useEvalState esDefPactExec >>= \case
     Nothing -> failInvariant def "No PactExec found"
-    Just pe -> case env ^. cePactStep of
+    Just pe -> case env ^. ceDefPactStep of
       Nothing -> failInvariant def "Expected a PactStep in the environment"
       Just ps -> do
         let
@@ -1057,31 +1055,31 @@ returnCEKValue (PactStepC env cont) handler v =
           isLastStep = _psStep ps == pred (_peStepCount pe)
           done = (not (_psRollback ps) && isLastStep) || _psRollback ps
         when (nestedPactsNotAdvanced pe ps) $
-          throwExecutionError def (NestedDefpactsNotAdvanced (_pePactId pe))
+          throwExecutionError def (NestedDefpactsNotAdvanced (_peDefPactId pe))
         liftDbFunction def
-          (writePacts pdb Write (_psPactId ps)
+          (writePacts pdb Write (_psDefPactId ps)
             (if done then Nothing else Just pe))
 
         returnCEKValue cont handler v
 
-returnCEKValue (NestedPactStepC env cont parentPactExec) handler v =
-  useEvalState esPactExec >>= \case
-    Nothing -> failInvariant def "No PactExec found"
-    Just pe ->  case env ^. cePactStep of
-      Nothing -> failInvariant def "Expected a PactStep in the environment"
+returnCEKValue (NestedDefPactStepC env cont parentDefPactExec) handler v =
+  useEvalState esDefPactExec >>= \case
+    Nothing -> failInvariant def "No DefPactExec found"
+    Just pe ->  case env ^. ceDefPactStep of
+      Nothing -> failInvariant def "Expected a DefPactStep in the environment"
       Just ps -> do
         when (nestedPactsNotAdvanced pe ps) $
-          throwExecutionError def (NestedDefpactsNotAdvanced (_pePactId pe))
+          throwExecutionError def (NestedDefpactsNotAdvanced (_peDefPactId pe))
 
-        let npe = parentPactExec & peNestedPactExec %~ M.insert (_psPactId ps) pe
-        setEvalState esPactExec (Just npe)
+        let npe = parentDefPactExec & peNestedDefPactExec %~ M.insert (_psDefPactId ps) pe
+        setEvalState esDefPactExec (Just npe)
         returnCEKValue cont handler v
 
 -- | Important check for nested pacts:
 --   Nested step must be equal to the parent step after execution.
-nestedPactsNotAdvanced :: PactExec -> PactStep -> Bool
+nestedPactsNotAdvanced :: DefPactExec -> DefPactStep -> Bool
 nestedPactsNotAdvanced resultState ps =
-  any (\npe -> _peStep npe /= _psStep ps) (_peNestedPactExec resultState)
+  any (\npe -> _peStep npe /= _psStep ps) (_peNestedDefPactExec resultState)
 {-# INLINE nestedPactsNotAdvanced #-}
 
 applyLam
@@ -1091,25 +1089,28 @@ applyLam
   -> Cont b i m
   -> CEKErrorHandler b i m
   -> m (EvalResult b i m)
-applyLam (C (Closure fn mn ca arity term mty env cloi)) args cont handler
+applyLam vc@(C (Closure fn mn ca arity term mty env cloi)) args cont handler
   | arity == argLen = case ca of
     ArgClosure cloargs -> do
       args' <- traverse (enforcePactValue cloi) args
       tcArgs <- zipWithM (\arg ty -> VPactValue <$> maybeTCType cloi arg ty) args' (NE.toList cloargs)
-      esStack %%= (StackFrame fn mn SFDefun :)
+      esStack %== (StackFrame fn mn SFDefun :)
       let cont' = StackPopC cloi mty cont
           varEnv = RAList.fromList (reverse tcArgs)
       evalCEK cont' handler (set ceLocal varEnv env) term
     NullaryClosure -> do
-      esStack %%= (StackFrame fn mn SFDefun :)
+      esStack %== (StackFrame fn mn SFDefun :)
       let cont' = StackPopC cloi mty cont
           varEnv = mempty
       evalCEK cont' handler (set ceLocal varEnv env) term
   | argLen > arity = throwExecutionError cloi ClosureAppliedToTooManyArgs
   | otherwise = case ca of
     NullaryClosure -> throwExecutionError cloi ClosureAppliedToTooManyArgs
-    ArgClosure cloargs ->
-      apply' mempty (NE.toList cloargs) args
+    ArgClosure cloargs
+      | null args ->
+        returnCEKValue cont handler (VClosure vc)
+      | otherwise ->
+        apply' mempty (NE.toList cloargs) args
   where
   argLen = length args
   -- Here we enforce an argument to a user fn is a
@@ -1158,7 +1159,7 @@ applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args cont handler =
     case li of
       Just sf -> do
         let cont' = StackPopC cloi mty cont
-        esStack %%= (sf :)
+        esStack %== (sf :)
         evalCEK cont' handler (set ceLocal e env) term
       Nothing -> evalCEK cont handler (set ceLocal e env) term
   apply' e (ty:tys) [] = do
@@ -1192,11 +1193,11 @@ applyLam (DPC (DefPactClosure fqn argtys arity env i)) args cont handler
     ArgClosure cloargs -> do
       args' <- traverse (enforcePactValue i) args
       tcArgs <- zipWithM (\arg ty -> maybeTCType i arg ty) args' (NE.toList cloargs)
-      let pc = PactContinuation fqn tcArgs
+      let pc = DefPactContinuation fqn tcArgs
           env' = set ceLocal (RAList.fromList (reverse (VPactValue <$> tcArgs))) env
       initPact i pc cont handler env'
     NullaryClosure -> do
-      let pc = PactContinuation fqn []
+      let pc = DefPactContinuation fqn []
           env' = set ceLocal mempty env
       initPact i pc cont handler env'
   | otherwise = throwExecutionError i ClosureAppliedToTooManyArgs

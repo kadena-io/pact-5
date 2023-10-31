@@ -17,7 +17,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , ceLocal
  , cePactDb
  , ceBuiltins
- , cePactStep
+ , ceDefPactStep
  , ceInCap
  , EvalEnv(..)
  , NativeFunction
@@ -28,11 +28,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , CEKValue(..)
  , Cont(..)
  , CEKErrorHandler(..)
- , MonadEvalEnv(..)
- , MonadEvalState(..)
- , MonadGas(..)
  , CondFrame(..)
- , MonadEval
  , Closure(..)
  , EvalResult(..)
  , EvalTEnv(..)
@@ -80,15 +76,13 @@ module Pact.Core.IR.Eval.Runtime.Types
  , ErrorState(..)
  ) where
 
-import Control.Lens hiding ((%%=))
+import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Reader
-import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.List.NonEmpty(NonEmpty)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
-import Data.Default
 import Data.Decimal(Decimal)
 import Data.Vector(Vector)
 import Data.RAList(RAList)
@@ -99,17 +93,16 @@ import Pact.Core.Guards
 import Pact.Core.Pretty(Pretty(..))
 import Pact.Core.Gas
 import Pact.Core.PactValue
-import Pact.Core.Errors
 import Pact.Core.Hash
 import Pact.Core.IR.Term
 import Pact.Core.Literal
 import Pact.Core.Type
-import qualified Pact.Core.Pacts.Types as P
+import qualified Pact.Core.DefPacts.Types as P
 import Pact.Core.Persistence
 import Pact.Core.ModRefs
 import Pact.Core.Capabilities
 import Pact.Core.Environment
-import Pact.Core.Pacts.Types (PactExec)
+import Pact.Core.DefPacts.Types (DefPactExec)
 import qualified Pact.Core.Pretty as P
 
 
@@ -124,7 +117,7 @@ data CEKEnv b i m
   { _ceLocal :: RAList (CEKValue b i m)
   , _cePactDb :: PactDb b i
   , _ceBuiltins :: BuiltinEnv b i m
-  , _cePactStep :: Maybe P.PactStep
+  , _ceDefPactStep :: Maybe P.DefPactStep
   , _ceInCap :: Bool }
 
 instance (Show i, Show b) => Show (CEKEnv b i m) where
@@ -285,29 +278,6 @@ data EvalResult b i m
   deriving Show
 
 
-type MonadEval b i m =
-  ( MonadEvalEnv b i m
-  , MonadEvalState b i m
-  , MonadGas m
-  , MonadError (PactError i) m
-  , MonadIO m
-  , Default i
-  , Show i)
-
-class Monad m => MonadGas m where
-  logGas :: Text -> Gas -> m ()
-  chargeGas :: Gas -> m ()
-
-class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
-  readEnv :: m (EvalEnv b i)
-
--- | Our monad mirroring `EvalState` for our evaluation state
-class Monad m => MonadEvalState b i m | m -> b, m -> i where
-  getEvalState :: m (EvalState b i)
-  putEvalState :: EvalState b i -> m ()
-  modifyEvalState :: (EvalState b i -> EvalState b i) -> m ()
-
-
 data EvalTEnv b i m
   = EvalTEnv
   { _emRuntimeEnv :: CEKEnv b i (EvalT b i m)
@@ -412,8 +382,8 @@ data Cont b i m
   --    or a simple return value in the case of `compose-capability`
   --  - The rest of the continuation
   | CapPopC CapPopState (Cont b i m)
-  | PactStepC (CEKEnv b i m) (Cont b i m)
-  | NestedPactStepC (CEKEnv b i m) (Cont b i m) PactExec
+  | DefPactStepC (CEKEnv b i m) (Cont b i m)
+  | NestedDefPactStepC (CEKEnv b i m) (Cont b i m) DefPactExec
   | UserGuardC (Cont b i m)
   | StackPopC i (Maybe Type) (Cont b i m)
   | EnforceErrorC i (Cont b i m)

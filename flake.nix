@@ -11,7 +11,8 @@
   outputs = { self, nixpkgs, flake-utils, haskellNix }:
     flake-utils.lib.eachSystem
       [ "x86_64-linux" "x86_64-darwin"
-        "aarch64-linux" "aarch64-darwin" ] (system:
+        "aarch64-linux" "aarch64-darwin"
+      ] (system:
     let
       pkgs = import nixpkgs {
         inherit system overlays;
@@ -44,8 +45,11 @@
         echo ${name}: ${package}
         echo works > $out
       '';
-    in flake // rec {
-      packages.default = flake.packages."pact-core:exe:repl";
+    in pkgs.lib.recursiveUpdate flake rec {
+      packages.pact-core-binary = flake.packages."pact-core:exe:repl";
+      packages.pact-core-tests  = flake.packages."pact-core:test:core-tests";
+
+      packages.default = packages.pact-core-binary;
 
       devShell = pkgs.haskellPackages.shellFor {
         packages = p: [
@@ -59,7 +63,13 @@
         withHoogle = true;
       };
       packages.check = pkgs.runCommand "check" {} ''
+        export LANG=C.UTF-8
+
         echo ${mkCheck "pact-core" packages.default}
+
+        echo ${packages.pact-core-tests}
+        (cd ${self}; ${packages.pact-core-tests}/bin/core-tests)
+
         echo ${mkCheck "devShell" flake.devShell}
         echo works > $out
       '';

@@ -37,10 +37,12 @@ module Pact.Core.Persistence
 import Control.Lens
 import Control.Monad(unless)
 import Control.Exception(throwIO, Exception)
+import Control.Applicative((<|>))
 import Data.Maybe(isJust)
 import Data.Text(Text)
 import Data.Word(Word64)
 import Data.IORef
+import Data.Default
 import Data.Map.Strict(Map)
 
 import Pact.Core.Type
@@ -49,8 +51,8 @@ import Pact.Core.IR.Term
 import Pact.Core.Guards
 import Pact.Core.Hash
 import Pact.Core.PactValue
-import Pact.Core.Pacts.Types
--- import Pact.Core.Errors
+import Pact.Core.DefPacts.Types
+import Pact.Core.Namespace
 
 import qualified Data.Map.Strict as M
 import Data.Dynamic (Typeable)
@@ -136,12 +138,12 @@ data Domain k v b i where
   -- | Modules
   DModules :: Domain ModuleName (ModuleData b i) b i
   -- | Namespaces
-  -- Namespaces :: Domain NamespaceName (Namespace PactValue)
+  DNamespaces :: Domain NamespaceName Namespace b i
   -- | Pacts map to 'Maybe PactExec' where Nothing indicates
   -- a terminated pact.
 
-  -- | DefPact state, `Nothing` implies DefPact with `PactId` is completed.
-  DPacts :: Domain PactId (Maybe PactExec) b i
+  -- | DefPact state, `Nothing` implies DefPact with `DefPactId` is completed.
+  DDefPacts :: Domain DefPactId (Maybe DefPactExec) b i
 
 data Purity
   -- | Read-only access to systables.
@@ -184,11 +186,11 @@ readKeyset pdb = _pdbRead pdb DKeySets
 writeKeySet :: PactDb b i -> WriteType -> KeySetName -> FQKS -> IO ()
 writeKeySet pdb wt = _pdbWrite pdb wt DKeySets
 
-readPacts :: PactDb b i -> PactId -> IO (Maybe (Maybe PactExec))
-readPacts pdb = _pdbRead pdb DPacts
+readPacts :: PactDb b i -> DefPactId -> IO (Maybe (Maybe DefPactExec))
+readPacts pdb = _pdbRead pdb DDefPacts
 
-writePacts :: PactDb b i -> WriteType -> PactId -> Maybe PactExec -> IO ()
-writePacts pdb wt = _pdbWrite pdb wt DPacts
+writePacts :: PactDb b i -> WriteType -> DefPactId -> Maybe DefPactExec -> IO ()
+writePacts pdb wt = _pdbWrite pdb wt DDefPacts
 
 data DbOpException
   = WriteException
@@ -218,21 +220,31 @@ data GuardTableOp
   | GtCreateTable
   deriving Show
 
+-- | Our loaded modules, names in top-level scope and fully qualified dependencies.
 data Loaded b i
   = Loaded
   { _loModules :: Map ModuleName (ModuleData b i)
+  -- ^ All loaded modules and interfaces
   , _loToplevel :: Map Text (FullyQualifiedName, DefKind)
+  -- ^ All names bound @ the top level scope, that is, by `(use)` statements
+  -- or module loads
+  , _loNamespace :: Maybe Namespace
+  -- ^ The potentially loaded current namespace
   , _loAllLoaded :: Map FullyQualifiedName (Def Name Type b i)
+  -- ^ All of our fully qualified dependencies
   } deriving Show
 
 makeClassy ''Loaded
 
 instance Semigroup (Loaded b i) where
-  (Loaded ms tl al) <> (Loaded ms' tl' al') =
-    Loaded (ms <> ms') (tl <> tl') (al <> al')
+  (Loaded ms tl ns al) <> (Loaded ms' tl' ns' al') =
+    Loaded (ms <> ms') (tl <> tl') (ns <|> ns') (al <> al')
 
 instance Monoid (Loaded b i) where
-  mempty = Loaded mempty mempty mempty
+  mempty = Loaded mempty mempty Nothing mempty
+
+instance Default (Loaded b i) where
+  def = Loaded mempty mempty Nothing mempty
 
 mockPactDb :: forall b i. IO (PactDb b i)
 mockPactDb = do
@@ -243,33 +255,35 @@ mockPactDb = do
   refRb <- newIORef Nothing
   refTxLog <- newIORef mempty
   refTxId <- newIORef 0
+  refNs <- newIORef mempty
   pure $ PactDb
     { _pdbPurity = PImpure
-    , _pdbRead = read' refKs refMod refUsrTbl refPacts
-    , _pdbWrite = write refKs refMod refUsrTbl refTxId refTxLog refPacts
-    , _pdbKeys = keys refKs refMod refUsrTbl refPacts
+    , _pdbRead = read' refKs refMod refUsrTbl refPacts refNs
+    , _pdbWrite = write refKs refMod refUsrTbl refTxId refTxLog refPacts refNs
+    , _pdbKeys = keys refKs refMod refUsrTbl refPacts refNs
     , _pdbCreateUserTable = createUsrTable refUsrTbl refTxLog
-    , _pdbBeginTx = beginTx refRb refTxId refTxLog refMod refKs refUsrTbl
-    , _pdbCommitTx = commitTx refRb refTxId refTxLog refMod refKs refUsrTbl
-    , _pdbRollbackTx = rollbackTx refRb refTxLog refMod refKs refUsrTbl
+    , _pdbBeginTx = beginTx refRb refTxId refTxLog refMod refKs refUsrTbl refNs
+    , _pdbCommitTx = commitTx refRb refTxId refTxLog refMod refKs refUsrTbl refNs
+    , _pdbRollbackTx = rollbackTx refRb refTxLog refMod refKs refUsrTbl refNs
     , _pdbTxIds = txIds refTxLog
     , _pdbGetTxLog = txLog refTxLog
     }
   where
-  beginTx refRb refTxId refTxLog refMod refKs refUsrTbl em = do
+  beginTx refRb refTxId refTxLog refMod refKs refUsrTbl refNs em = do
     readIORef refRb >>= \case
-      Just (_, _, _, _, _) -> pure Nothing
+      Just (_, _, _, _, _, _) -> pure Nothing
       Nothing -> do
         mods <- readIORef refMod
         ks <- readIORef refKs
         usrTbl <- readIORef refUsrTbl
         txl <- readIORef refTxLog
-        writeIORef refRb (Just (em, txl, mods, ks, usrTbl))
+        ns <- readIORef refNs
+        writeIORef refRb (Just (em, txl, mods, ks, usrTbl, ns))
         tid <- readIORef refTxId
         pure (Just (TxId tid))
 
-  commitTx refRb refTxId refTxLog refMod refKs refUsrTbl = readIORef refRb >>= \case
-    Just (em, txl, mods, ks, usr) -> case em of
+  commitTx refRb refTxId refTxLog refMod refKs refUsrTbl refNs = readIORef refRb >>= \case
+    Just (em, txl, mods, ks, usr, ns) -> case em of
       Transactional -> do
         writeIORef refRb Nothing
         modifyIORef' refTxId (+ 1)
@@ -279,16 +293,18 @@ mockPactDb = do
         writeIORef refKs ks
         writeIORef refUsrTbl usr
         writeIORef refTxLog txl
+        writeIORef refNs ns
     Nothing ->
       throwIO NoTxToCommit
 
-  rollbackTx refRb refTxLog refMod refKs refUsrTbl = readIORef refRb >>= \case
-    Just (_, txl, mods, ks, usr) -> do
+  rollbackTx refRb refTxLog refMod refKs refUsrTbl refNs = readIORef refRb >>= \case
+    Just (_, txl, mods, ks, usr, ns) -> do
       writeIORef refRb Nothing
       writeIORef refTxLog txl
       writeIORef refMod mods
       writeIORef refKs ks
       writeIORef refUsrTbl usr
+      writeIORef refNs ns
     Nothing -> throwIO NoTxToCommit
 
   txLog refTxLog tn tid = do
@@ -310,10 +326,11 @@ mockPactDb = do
     .  IORef (Map KeySetName FQKS)
     -> IORef (Map ModuleName (ModuleData b i))
     -> IORef (Map TableName (Map RowKey RowData))
-    -> IORef (Map PactId (Maybe PactExec))
+    -> IORef (Map DefPactId (Maybe DefPactExec))
+    -> IORef (Map NamespaceName Namespace)
     -> Domain k v b i
     -> IO [k]
-  keys refKs refMod refUsrTbl refPacts d = case d of
+  keys refKs refMod refUsrTbl refPacts refNs d = case d of
     DKeySets -> do
       r <- readIORef refKs
       return (M.keys r)
@@ -325,8 +342,11 @@ mockPactDb = do
       case M.lookup tbl r of
         Just t -> return (M.keys t)
         Nothing -> throwIO (NoSuchTable tbl)
-    DPacts -> do
+    DDefPacts -> do
       r <- readIORef refPacts
+      return (M.keys r)
+    DNamespaces -> do
+      r <- readIORef refNs
       return (M.keys r)
 
   createUsrTable
@@ -349,16 +369,19 @@ mockPactDb = do
     .  IORef (Map KeySetName FQKS)
     -> IORef (Map ModuleName (ModuleData b i))
     -> IORef (Map TableName (Map RowKey RowData))
-    -> IORef (Map PactId (Maybe PactExec))
+    -> IORef (Map DefPactId (Maybe DefPactExec))
+    -> IORef (Map NamespaceName Namespace)
     -> Domain k v b i
     -> k
     -> IO (Maybe v)
-  read' refKs refMod refUsrTbl refPacts domain k = case domain of
+  read' refKs refMod refUsrTbl refPacts refNS domain k = case domain of
     DKeySets -> readKS refKs k
     DModules -> readMod refMod k
     DUserTables tbl ->
       readRowData refUsrTbl tbl k
-    DPacts -> readPacts' refPacts k
+    DDefPacts -> readPacts' refPacts k
+    DNamespaces ->
+      M.lookup k <$> readIORef refNS
 
   checkTable tbl ref = do
     r <- readIORef ref
@@ -371,17 +394,20 @@ mockPactDb = do
     -> IORef (Map TableName (Map RowKey RowData))
     -> IORef Word64
     -> IORef (Map TableName (Map TxId [TxLog RowData]))
-    -> IORef (Map PactId (Maybe PactExec))
+    -> IORef (Map DefPactId (Maybe DefPactExec))
+    -> IORef (Map NamespaceName Namespace)
     -> WriteType
     -> Domain k v b i
     -> k
     -> v
     -> IO ()
-  write refKs refMod refUsrTbl refTxId refTxLog refPacts wt domain k v = case domain of
+  write refKs refMod refUsrTbl refTxId refTxLog refPacts refNs wt domain k v = case domain of
     DKeySets -> writeKS refKs k v
     DModules -> writeMod refMod v
     DUserTables tbl -> writeRowData refUsrTbl refTxId refTxLog tbl wt k v
-    DPacts -> writePacts' refPacts k v
+    DDefPacts -> writePacts' refPacts k v
+    DNamespaces ->
+      modifyIORef' refNs (M.insert k v)
 
   readRowData ref tbl k = do
     checkTable tbl ref
