@@ -6,6 +6,7 @@ module Pact.Core.Gen.Serialise where
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Map.Strict (fromList)
+import qualified Data.Set as Set
 import Data.Default
 
 import Pact.Core.Names
@@ -17,6 +18,7 @@ import Pact.Core.IR.Term
 import Pact.Core.Info
 import Pact.Core.Builtin
 import Pact.Core.Literal
+import Pact.Core.Capabilities
 
 import qualified Data.ByteString.Short as BSS
 import Pact.Core.Test.LexerParserTests (identGen)
@@ -93,15 +95,10 @@ unresolvedGovGen = UnresolvedGov <$> parsedNameGen
 resolvedGovGen :: Gen (CapGovRef Name)
 resolvedGovGen = ResolvedGov <$> fullyQualifiedNameGen
 
--- capGovRefGen :: Gen (CapGovRef a)
--- capGovRefGen = Gen.choice
---   [ UnresolvedGov <$> parsedNameGen
---   ]
-
-governanceGen :: Gen (Governance name)
+governanceGen :: Gen (Governance Name)
 governanceGen = Gen.choice
   [ KeyGov <$> keySetNameGen
---  , CapGov <$>
+  , CapGov <$> resolvedGovGen
   ]
 
 tyPrimGen :: Gen PrimType
@@ -214,14 +211,54 @@ defunGen = do
   term <- termGen
   Defun name args ret term <$> infoGen
 
+defConstGen :: Gen (DefConst Name Type RawBuiltin SpanInfo)
+defConstGen = do
+  name <- identGen
+  ty <- Gen.maybe typeGen
+  term <- termGen
+  DefConst name ty term <$> infoGen
+
+fqNameRefGen :: Gen (FQNameRef Name)
+fqNameRefGen = FQName <$> fullyQualifiedNameGen
+
+defManagedMetaGen :: Gen (DefManagedMeta Name)
+defManagedMetaGen = Gen.choice
+  [ DefManagedMeta <$> Gen.int (Range.linear 0 100) <*> fqNameRefGen
+  , pure AutoManagedMeta
+  ]
+
+defCapMetaGen :: Gen (DefCapMeta Name)
+defCapMetaGen = Gen.choice
+  [ pure DefEvent
+  , DefManaged <$> defManagedMetaGen
+  , pure Unmanaged
+  ]
+
+defCapGen :: Gen (DefCap Name Type RawBuiltin SpanInfo)
+defCapGen = do
+  name <- identGen
+  arity <- Gen.int (Range.linear 0 16)
+  args <- Gen.list (Range.singleton arity) argGen
+  ret <- Gen.maybe typeGen
+  term <- termGen
+  meta <- defCapMetaGen
+  DefCap name arity args ret term meta <$> infoGen
+
 defGen :: Gen (Def Name Type RawBuiltin SpanInfo)
 defGen = Gen.choice
   [ Dfun <$> defunGen
+  , DConst <$> defConstGen
+  , DCap <$> defCapGen
   ]
 
-evalModuleGen :: Gen (EvalModule b i)
+
+evalModuleGen :: Gen (EvalModule RawBuiltin SpanInfo)
 evalModuleGen = do
   name <- moduleNameGen
   gov <- governanceGen
   defs <- Gen.list (Range.linear 0 100) defGen
-  undefined
+  blessed <- Set.fromList <$> Gen.list (Range.linear 0 100) moduleHashGen
+  imps <- Gen.list (Range.linear 0 100) importGen
+  impl <- Gen.list (Range.linear 0 100) moduleNameGen
+  h <- moduleHashGen
+  Module name gov defs blessed imps impl h <$> infoGen

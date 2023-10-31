@@ -34,13 +34,13 @@ import Pact.Core.Hash
 data DefManagedMeta name
   = DefManagedMeta Int (FQNameRef name)
   | AutoManagedMeta
-  deriving (Show)
+  deriving (Show, Eq)
 
 data DefCapMeta name
   = DefEvent
   | DefManaged (DefManagedMeta name)
   | Unmanaged
-  deriving (Show)
+  deriving (Show, Eq)
 
 data CapForm name e
   = WithCapability name [e] e

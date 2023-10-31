@@ -78,19 +78,11 @@ instance Serialise FullyQualifiedName where
     3 <- decodeListLen
     FullyQualifiedName <$> decode <*> decode <*> decode
 
-instance Serialise (CapGovRef name) where
-  encode = \case
-    UnresolvedGov pn -> encodeListLen 2 <> encodeWord 0 <> encode pn
-    ResolvedGov fqn -> encodeListLen 2 <> encodeWord 1 <> encode fqn
+instance Serialise (CapGovRef Name) where
+  encode (ResolvedGov fqn) = encode fqn
+  decode = ResolvedGov <$> decode
 
-  decode = do
-    2 <- decodeListLen
-    pure undefined
-    -- decodeWord >>= \case
-    --   0 -> UnresolvedGov <$> decode
-    --   1 -> ResolvedGov <$> decode
-
-instance Serialise (Governance name) where
+instance Serialise (Governance Name) where
   encode = \case
     KeyGov ksn -> encodeListLen 2 <> encodeWord 0 <> encode ksn
     CapGov cgn -> encodeListLen 2 <> encodeWord 1 <> encode cgn
@@ -166,7 +158,7 @@ instance (Serialise name, Serialise e) => Serialise (CapForm name e) where
       CreateUserGuard <$> decode <*> decode
     _ -> fail "unexpected decoding"
 
-instance Serialise o => Serialise (BuiltinForm o) where
+instance Serialise (BuiltinForm (Term Name Type RawBuiltin SpanInfo)) where
   encode (CAnd t1 t2) = encodeWord 0 <> encodeListLen 2 <> encode t1 <> encode t2
   encode (COr t1 t2) = encodeWord 1 <> encodeListLen 2 <> encode t1 <> encode t2
   encode (CIf t1 t2 t3) = encodeWord 2 <> encodeListLen 3 <> encode t1 <> encode t2 <> encode t3
@@ -191,12 +183,7 @@ instance Serialise o => Serialise (BuiltinForm o) where
       CEnforce <$> decode <*> decode
     _ -> fail "unexpected decoding"
 
-instance
-  (Serialise name,
-   Serialise ty,
-   Serialise builtin,
-    Serialise info)
-  => Serialise (Term name ty builtin info) where
+instance Serialise (Term Name Type RawBuiltin SpanInfo) where
   encode (Var n i) = encodeWord 0 <> encodeListLen 2 <> encode n <> encode i
   encode (Lam li args term i) = encodeWord 1 <> encodeListLen 4 <> encode li <> encode args <> encode term <> encode i
   encode (Let arg t1 t2 i) = encodeWord 2 <> encodeListLen 4 <> encode arg <> encode t1 <> encode t2 <> encode i
@@ -257,12 +244,7 @@ instance
       Error <$> decode <*> decode
     _ -> fail "unexpected decoding"
 
-instance
-  ( Serialise ty
-  , Serialise name
-  , Serialise builtin
-  , Serialise info)
-  => Serialise (Defun name ty builtin info) where
+instance Serialise (Defun Name Type RawBuiltin SpanInfo) where
   encode (Defun n args ret term i) = encodeListLen 5
     <> encode n <> encode args <> encode ret
     <> encode term <> encode i
@@ -272,12 +254,7 @@ instance
     Defun <$> decode <*> decode <*> decode
       <*> decode <*> decode
 
-instance
-  ( Serialise ty
-  , Serialise name
-  , Serialise builtin
-  , Serialise info)
-  => Serialise (DefConst name ty builtin info) where
+instance Serialise (DefConst Name Type RawBuiltin SpanInfo) where
   encode (DefConst n ret term i) = encodeListLen 4
     <> encode n <> encode ret
     <> encode term <> encode i
@@ -286,12 +263,11 @@ instance
     4 <- decodeListLen
     DefConst <$> decode <*> decode <*> decode <*> decode
 
+instance Serialise (FQNameRef Name) where
+  encode (FQName fqn) = encode fqn
+  decode = FQName <$> decode
 
-instance Serialise name => Serialise (FQNameRef name) where
-  encode = undefined
-  decode = undefined
-
-instance Serialise name => Serialise (DefManagedMeta name) where
+instance Serialise (DefManagedMeta Name) where
   encode (DefManagedMeta i ref) = encodeWord 0 <> encodeListLen 2 <> encode i <> encode ref
   encode AutoManagedMeta = encodeWord 1
 
@@ -302,7 +278,7 @@ instance Serialise name => Serialise (DefManagedMeta name) where
     1 -> pure AutoManagedMeta
     _ -> fail "unexpected decoding"
 
-instance Serialise name => Serialise (DefCapMeta name) where
+instance Serialise (DefCapMeta Name) where
   encode DefEvent = encodeWord 0
   encode (DefManaged meta) = encodeWord 1 <> encode meta
   encode Unmanaged = encodeWord 2
@@ -313,12 +289,7 @@ instance Serialise name => Serialise (DefCapMeta name) where
     2 -> pure Unmanaged
     _ -> fail "unexpected dcecoding"
 
-instance
-  ( Serialise ty
-  , Serialise name
-  , Serialise builtin
-  , Serialise info)
-  => Serialise (DefCap name ty builtin info) where
+instance Serialise (DefCap Name Type RawBuiltin SpanInfo) where
   encode (DefCap n arity args ret term meta i) = encodeListLen 7
     <> encode n <> encode arity <> encode args
     <> encode ret <> encode term <> encode meta
@@ -331,36 +302,25 @@ instance
                       <*> decode <*> decode
 
 
-instance
-  ( Serialise ty
-  , Serialise info)
-  => Serialise (DefSchema ty info) where
+instance Serialise (DefSchema Type SpanInfo) where
   encode (DefSchema n schema i) = encodeListLen 3 <> encode n <> encode schema <> encode i
 
   decode = do
     3 <- decodeListLen
     DefSchema <$> decode <*> decode <*> decode
 
-instance (Serialise name) => Serialise (TableSchema name) where
-  encode = undefined
-  decode = undefined
+instance Serialise (TableSchema Name) where
+  encode (ResolvedTable n) = encode n
+  decode = ResolvedTable <$> decode
 
-instance
-  ( Serialise name
-  , Serialise info)
-  => Serialise (DefTable name info) where
+instance Serialise (DefTable Name SpanInfo) where
   encode (DefTable n schema i) = encodeListLen 3 <> encode n <> encode schema <> encode i
 
   decode = do
     3 <- decodeListLen
     DefTable <$> decode <*> decode <*> decode
 
-instance
-  ( Serialise name
-  , Serialise ty
-  , Serialise builtin
-  , Serialise info)
-  => Serialise (Step name ty builtin info) where
+instance Serialise (Step Name Type RawBuiltin SpanInfo) where
   encode (Step t mt) = encodeWord 0 <> encodeListLen 2 <> encode t <> encode mt
   encode (StepWithRollback t rb mt) = encodeWord 1 <> encodeListLen 3
     <> encode t <> encode rb <> encode mt
@@ -374,12 +334,7 @@ instance
       StepWithRollback <$> decode <*> decode <*> decode
     _ -> fail "unexpected decoding"
 
-instance
-  ( Serialise name
-  , Serialise ty
-  , Serialise builtin
-  , Serialise info)
-  => Serialise (DefPact name ty builtin info) where
+instance Serialise (DefPact Name Type RawBuiltin SpanInfo) where
   encode (DefPact n args ret steps i) = encodeListLen 5 <> encode n <> encode args
     <> encode ret <> encode steps <> encode i
 
@@ -388,11 +343,7 @@ instance
     DefPact <$> decode <*> decode <*> decode <*> decode <*> decode
 
 instance
-  ( Serialise name
-  , Serialise ty
-  , Serialise builtin
-  , Serialise info)
-  => Serialise (Def name ty builtin info) where
+  Serialise (Def Name Type RawBuiltin SpanInfo) where
   encode (Dfun df) = encodeListLen 2 <> encodeWord 0 <> encode df
   encode (DConst dc) = encodeListLen 2 <> encodeWord 1 <> encode dc
   encode (DCap cap) = encodeListLen 2 <> encodeWord 2 <> encode cap
@@ -485,7 +436,7 @@ instance Serialise Import where
     3 <- decodeListLen
     Import <$> decode <*> decode <*> decode
 
-instance (Serialise b, Serialise i) => Serialise (EvalModule b i) where
+instance Serialise (EvalModule RawBuiltin SpanInfo) where
   encode (Module mn mg mdef mbless mimports mimpl mhash minfo) =
     encodeListLen 8 <> encode mn <> encode mg <> encode mdef
     <> encode mbless <> encode mimports <> encode mimpl
@@ -498,10 +449,7 @@ instance (Serialise b, Serialise i) => Serialise (EvalModule b i) where
 
 
 
-instance
-  ( Serialise ty
-  , Serialise info)
-  => Serialise (IfDefun ty info) where
+instance Serialise (IfDefun Type SpanInfo) where
   encode (IfDefun n args ret i) = encodeListLen 4
     <> encode n <> encode args <> encode ret
     <> encode i
@@ -511,10 +459,7 @@ instance
     IfDefun <$> decode <*> decode
       <*> decode <*> decode
 
-instance
-  ( Serialise ty
-  , Serialise info)
-  => Serialise (IfDefCap ty info) where
+instance Serialise (IfDefCap Type SpanInfo) where
   encode (IfDefCap n args ret i) = encodeListLen 4
     <> encode n <> encode args
     <> encode ret <> encode i
@@ -523,10 +468,7 @@ instance
     4 <- decodeListLen
     IfDefCap <$> decode <*> decode <*> decode <*> decode
 
-instance
-  ( Serialise ty
-  , Serialise info)
-  => Serialise (IfDefPact ty info) where
+instance Serialise (IfDefPact Type SpanInfo) where
   encode (IfDefPact n args ret i) = encodeListLen 4
     <> encode n <> encode args
     <> encode ret <> encode i
@@ -536,11 +478,7 @@ instance
     IfDefPact <$> decode <*> decode <*> decode <*> decode
 
 instance
-  ( Serialise name
-  , Serialise ty
-  , Serialise builtin
-  , Serialise info)
-  => Serialise (IfDef name ty builtin info) where
+  Serialise (IfDef Name Type RawBuiltin SpanInfo) where
   encode (IfDfun df) = encodeListLen 2 <> encodeWord 0 <> encode df
   encode (IfDConst dc) = encodeListLen 2 <> encodeWord 1 <> encode dc
   encode (IfDCap cap) = encodeListLen 2 <> encodeWord 2 <> encode cap
@@ -557,13 +495,13 @@ instance
       4 -> IfDPact <$> decode
       _ -> fail "unexpected decoding"
 
-instance (Serialise b, Serialise i) =>  Serialise (EvalInterface b i) where
+instance Serialise (EvalInterface RawBuiltin SpanInfo) where
   encode (Interface n defs h i) = encodeListLen 4 <> encode n <> encode defs <> encode h <> encode i
   decode = do
     4 <- decodeListLen
     Interface <$> decode <*> decode <*> decode <*> decode
 
-instance (Serialise b, Serialise i) =>  Serialise (ModuleData b i) where
+instance Serialise (ModuleData RawBuiltin SpanInfo) where
   encode = \case
     ModuleData em m -> encodeWord 0 <> encodeListLen 2 <> encode em <> encode m
     InterfaceData ei m -> encodeWord 1 <> encodeListLen 2 <> encode ei <> encode m
