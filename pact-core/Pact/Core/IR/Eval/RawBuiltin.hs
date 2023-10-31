@@ -1420,11 +1420,11 @@ coreCompose = \info b cont handler _env -> \case
 createPrincipalForGuard :: (MonadGas m) => Guard FullyQualifiedName PactValue -> m Pr.Principal
 createPrincipalForGuard g = do
   case g of
-    GKeyset (KeySet ks pf) -> case (toList ks, predicateToString pf) of
-      ([k], "keys-all") -> pure $ Pr.K k
-      (l, fun) -> do
+    GKeyset (KeySet ks pf) -> case (toList ks, pf) of
+      ([k], KeysAll) -> pure $ Pr.K k
+      (l, _) -> do
         h <- mkHash $ map (T.encodeUtf8 . _pubKey) l
-        pure $ Pr.W (hashToText h) fun
+        pure $ Pr.W (hashToText h) (predicateToString pf)
     GKeySetRef ksn -> pure $ Pr.R ksn
     GModuleGuard (ModuleGuard mn n) -> pure $ Pr.M mn n
     GUserGuard (UserGuard f args) -> do
