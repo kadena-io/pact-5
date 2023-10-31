@@ -1,4 +1,3 @@
-{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Pact.Core.Principal
@@ -11,15 +10,15 @@ module Pact.Core.Principal
 import Control.Applicative
 import Control.Monad
 import Data.Attoparsec.Text
-import Data.ByteString.Char8 qualified as BS
 import Data.Char(isHexDigit)
-import Data.HashSet qualified as HS
 import Data.Text(Text)
-import Data.Text qualified as T
 import Text.Parser.Char(oneOf)
 import Text.Parser.Combinators(eof)
 import Text.Parser.Token
 import Text.Parser.Token.Highlight
+import qualified Data.ByteString.Char8 as BS
+import qualified Data.HashSet as HS
+import qualified Data.Text as T
 
 import Pact.Core.Guards
 import Pact.Core.Names

@@ -8,7 +8,6 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE MultiWayIf #-}
-{-# LANGUAGE ImportQualifiedPost #-}
 
 module Pact.Core.IR.Eval.RawBuiltin
  ( rawBuiltinRuntime
@@ -58,8 +57,8 @@ import Pact.Core.Persistence
 import Pact.Core.DefPacts.Types
 import Pact.Core.Environment
 import Pact.Core.Capabilities
-import Pact.Core.Principal qualified as Pr
 import Pact.Core.Namespace
+import qualified Pact.Core.Principal as Pr
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
