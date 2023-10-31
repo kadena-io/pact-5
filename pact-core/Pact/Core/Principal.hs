@@ -52,7 +52,7 @@ data Principal
 --
 mkPrincipalIdent :: Principal -> Text
 mkPrincipalIdent = \case
-  P pid n -> "p:" <> renderPactId pid <> ":" <> n
+  P pid n -> "p:" <> renderDefPactId pid <> ":" <> n
   K pk -> "k:" <> renderPublicKeyText pk
   W ph n -> "w:" <> ph <> ":" <> n
   R n -> "r:" <> renderKeySetName n

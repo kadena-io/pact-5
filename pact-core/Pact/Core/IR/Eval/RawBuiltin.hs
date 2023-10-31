@@ -1418,7 +1418,7 @@ createPrincipalForGuard g = do
     GCapabilityGuard (CapabilityGuard f args pid) -> do
       let args' = map encodeStable args
           f' = T.encodeUtf8 $ renderQualName $ fqnToQualName f
-          pid' = T.encodeUtf8 . renderPactId <$> pid
+          pid' = T.encodeUtf8 . renderDefPactId <$> pid
       h <- mkHash $ f' : args' ++ maybe [] pure pid'
       pure $ Pr.C $ hashToText h
   where
