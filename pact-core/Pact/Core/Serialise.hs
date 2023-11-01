@@ -1,4 +1,10 @@
--- | 
+-- | The canonical way of encoding and decoding Pact entities into bytestrings.
+--   There are two places where in Pact where serialization is needed:
+--     - Computing module hashes
+--     - Reading and writing the Pact Database
+--
+--  Normal usage of this module involes the `serializeModuleForHash` function,
+--  and `defaultSerializeForDatabase`.
 
 module Pact.Core.Serialise where
 
@@ -18,6 +24,20 @@ import Data.Bifunctor
 
 import Data.Int (Int64)
 
+-- | A Document in the sense of a Document-oriented database.
+--   Documents contain an abstract value (represented
+--   by the type parameter `a`), the version number and the
+--   encoding scheme for the value.
+--
+--   Documents are produced from bytestrings through one of the
+--   decoding methods in a `Serialise` record.
+data Document a
+  = Document
+  { _documentVersion :: DocumentVersion
+  , _documentFormat :: DocumentFormat
+  , _documentContent :: a
+  } deriving (Show, Eq)
+
 -- | Document version
 newtype DocumentVersion
   = DocumentVersion { unDocumentVersion :: Word32 }
@@ -27,6 +47,9 @@ newtype DocumentVersion
 -- | Supported Document Formats
 data DocumentFormat
   = DocumentCBOR
+  | DocumentCanonicalJSON
+  -- ^ A JSON encoding with all forms of nondeterminism removed:
+  --     Lexographic keys, stripped whitespace.
   deriving (Show, Eq, Enum, Bounded)
 
 
@@ -34,14 +57,13 @@ data DecodeError
   = DecodeFailure Int64 String
   deriving (Show, Eq)
 
+-- | A Serializer that encodes in CBOR at the latest version, and attempts
+--   to decode at each possible version, starting from the most recent.
+defaultSerializeForDatabase :: Serialise
+defaultSerializeForDatabase = undefined
 
-data Document a
-  = Document
-  { _documentVersion :: DocumentVersion
-  , _documentFormat :: DocumentFormat
-  , _documentContent :: a
-  } deriving (Show, Eq)
 
+-- | The main serialization API for Pact entities.
 data Serialise
   = Serialise
   { _encodeModule :: EvalModule RawBuiltin SpanInfo -> ByteString
