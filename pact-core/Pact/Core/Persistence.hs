@@ -39,9 +39,9 @@ import Control.Lens
 import Control.Exception(throwIO, Exception)
 import Control.Applicative((<|>))
 import Data.Default
-import Data.IORef
+--import Data.IORef
 import Data.Map.Strict(Map)
-import Data.Maybe(isJust)
+--import Data.Maybe(isJust)
 import Data.Text(Text)
 import Data.Word(Word64)
 

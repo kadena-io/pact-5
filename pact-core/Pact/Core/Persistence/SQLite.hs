@@ -15,20 +15,21 @@ import Data.Text (Text)
 import qualified Database.SQLite3 as SQL
 
 import Pact.Core.Guards (KeySetName(_keySetName))
-import Pact.Core.Persistence (PactDb(..), Domain(DKeySets, DModules, DUserTables, DPacts),
+import Pact.Core.Persistence (PactDb(..), Domain(..),
                               Purity(PImpure)
-                             , FQKS
+                             , FQKS, WriteType(..)
                              )
 -- import Pact.Core.Repl.Utils (ReplEvalM)
-
+import Pact.Core.Serialise
 
 withSqlitePactDb
   :: (MonadIO m, MonadBaseControl IO m)
-  => Text
+  => PactSerialise
+  -> Text
   -> (PactDb b i -> m a)
   -> m a
-withSqlitePactDb connectionString act =
-  bracket connect cleanup (\db -> liftIO (initializePactDb db) >>= act)
+withSqlitePactDb serial connectionString act =
+  bracket connect cleanup (\db -> liftIO (initializePactDb serial db) >>= act)
   where
     connect = liftIO $ SQL.open connectionString
     cleanup db = liftIO $ SQL.close db
@@ -37,13 +38,13 @@ withSqlitePactDb connectionString act =
 
 -- | Create all tables that should exist in a fresh pact db,
 --   or ensure that they are already created.
-initializePactDb :: SQL.Database  -> IO (PactDb b i)
-initializePactDb db = do
+initializePactDb :: PactSerialise -> SQL.Database  -> IO (PactDb b i)
+initializePactDb serial db = do
   -- liftIO (createTables db)
   pure $ PactDb
     { _pdbPurity = PImpure
-    , _pdbRead = read' db
-    , _pdbWrite = undefined
+    , _pdbRead = read' serial db
+    , _pdbWrite = write' serial db
     , _pdbKeys = undefined
     , _pdbCreateUserTable = undefined
     , _pdbBeginTx = undefined
@@ -53,8 +54,18 @@ initializePactDb db = do
     , _pdbGetTxLog = undefined
     }
 
-read' :: forall k v b i. SQL.Database -> Domain k v b i -> k -> IO (Maybe v)
-read' db domain k = case domain of
+write' :: forall k v b i. PactSerialise -> SQL.Database -> WriteType -> Domain k v b i -> k -> v -> IO ()
+write' serial db wt domain k v = case domain of
+  DKeySets -> withStmt db "INSERT INTO SYS_keysets (rowkey, rowdata) VALUES (?,?)" $ \stmt -> do
+      let encoded = _encodeKeySet serial v
+      SQL.bind stmt [SQL.SQLText (_keySetName k), SQL.SQLBlob encoded]
+      SQL.stepNoCB stmt >>= \case
+        SQL.Done -> pure ()
+        SQL.Row -> fail "invariant viaolation"
+  _ -> undefined
+
+read' :: forall k v b i. PactSerialise -> SQL.Database -> Domain k v b i -> k -> IO (Maybe v)
+read' serial db domain k = case domain of
   DKeySets -> withStmt db "SELECT rowdata FROM SYS_keysets ORDER BY txid DESCENDING WHERE rowkey = ? LIMIT 1" $ \stmt -> do
       SQL.bind stmt [SQL.SQLText (_keySetName k)]
       SQL.step stmt >>= \case
@@ -63,13 +74,16 @@ read' db domain k = case domain of
           1 <- SQL.columnCount stmt
           [SQL.SQLBlob value] <- SQL.columns stmt
           SQL.Done <- SQL.step stmt
-          pure @IO (Just (_ value))
+          case _decodeKeySet serial value of
+            Left _ -> pure Nothing
+            Right (Document _ _ c) -> pure (Just c)
   DModules -> readModules
   DUserTables tbl -> readRowData tbl
-  DPacts -> readDefPacts
+  DDefPacts -> readDefPacts
+  DNamespaces -> pure Nothing
   where
     readModules = pure @IO Nothing
-    readRowData tbl = pure Nothing
+    readRowData _tbl = pure Nothing
     readDefPacts = pure @IO Nothing
 
 -- Utility functions

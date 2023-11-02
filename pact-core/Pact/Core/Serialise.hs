@@ -14,6 +14,10 @@ import Data.Word (Word32)
 import Pact.Core.Info
 import Pact.Core.Builtin
 import Pact.Core.IR.Term
+--import Pact.Core.Persistence
+import Pact.Core.Guards
+import Pact.Core.Names
+
 import qualified Codec.Serialise as S
 import qualified Codec.CBOR.Encoding as S
 import qualified Codec.CBOR.Decoding as S
@@ -59,22 +63,26 @@ data DecodeError
 
 -- | A Serializer that encodes in CBOR at the latest version, and attempts
 --   to decode at each possible version, starting from the most recent.
-defaultSerializeForDatabase :: Serialise
+defaultSerializeForDatabase :: PactSerialise
 defaultSerializeForDatabase = undefined
 
 
 -- | The main serialization API for Pact entities.
-data Serialise
-  = Serialise
+data PactSerialise
+  = PactSerialise
   { _encodeModule :: EvalModule RawBuiltin SpanInfo -> ByteString
   , _decodeModule :: ByteString -> Either DecodeError (Document (EvalModule RawBuiltin SpanInfo))
+  , _encodeKeySet :: KeySet FullyQualifiedName -> ByteString
+  , _decodeKeySet :: ByteString -> Either DecodeError (Document (KeySet FullyQualifiedName))
   }
 
 
-serialiseCBOR :: Serialise
-serialiseCBOR = Serialise
+serialiseCBOR :: PactSerialise
+serialiseCBOR = PactSerialise
   { _encodeModule = toStrictByteString . S.encode . Document version format
   , _decodeModule = first toErr . S.deserialiseOrFail . fromStrict
+  , _encodeKeySet = toStrictByteString . S.encode . Document version format
+  , _decodeKeySet = first toErr . S.deserialiseOrFail . fromStrict
   }
   where
     version = DocumentVersion 0
@@ -92,6 +100,7 @@ instance S.Serialise DocumentVersion where
 instance S.Serialise DocumentFormat where
   encode = \case
     DocumentCBOR -> S.encodeWord 0
+    DocumentCanonicalJSON -> undefined
   decode = S.decodeWord >>= \case
     0 -> pure DocumentCBOR
     _ -> fail "unexpected decoding"

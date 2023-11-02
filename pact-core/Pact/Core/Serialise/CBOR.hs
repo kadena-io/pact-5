@@ -33,6 +33,25 @@ instance Serialise KeySetName where
   encode (KeySetName ksn) = encode ksn
   decode = KeySetName <$> decode
 
+instance Serialise PublicKeyText where
+  encode (PublicKeyText t) = encode t
+  decode = PublicKeyText <$> decode
+
+instance Serialise (KeySet FullyQualifiedName) where
+  encode (KeySet ks p) = encode ks <> encode p
+  decode = KeySet <$> decode <*> decode
+
+instance Serialise (KSPredicate n) where
+  encode = \case
+    KeysAll -> encodeWord 0
+    Keys2 -> encodeWord 1
+    KeysAny -> encodeWord 2
+  decode = decodeWord >>= \case
+    0 -> pure KeysAll
+    1 -> pure Keys2
+    2 -> pure KeysAny
+    _ -> fail "unexpected decoding"
+
 instance Serialise QualifiedName where
   encode (QualifiedName qn mn) = encode qn <> encode mn
   decode = QualifiedName <$> decode <*> decode

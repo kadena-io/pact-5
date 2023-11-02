@@ -67,7 +67,7 @@ import Pact.Core.Gas
 import Pact.Core.Errors
 import Pact.Core.Debug
 import Pact.Core.Environment
-import Pact.Core.IR.Eval.Runtime.Types (MonadGas(logGas, chargeGas))
+--import Pact.Core.IR.Eval.Runtime.Types (MonadGas(logGas, chargeGas))
 import qualified Pact.Core.IR.Term as Term
 import qualified Pact.Core.Syntax.ParseTree as Syntax
 
@@ -158,10 +158,6 @@ instance MonadEvalState b SpanInfo (ReplM b) where
     replEvalState .= es
   modifyEvalState f =
     replEvalState %= f
-
-instance MonadGas (ReplM b) where
-  logGas _ _ = error "implement logGas"
-  chargeGas = error "implement chargeGas"
 
 instance MonadGas (ReplM b) where
   logGas msg g = do

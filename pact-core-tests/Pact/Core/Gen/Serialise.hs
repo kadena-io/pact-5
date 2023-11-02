@@ -35,6 +35,12 @@ moduleNameGen =  do
   name <- identGen
   ModuleName name <$> Gen.maybe namespaceNameGen
 
+publicKeyTextGen :: Gen PublicKeyText
+publicKeyTextGen = PublicKeyText <$> identGen
+
+ksPredicateGen :: Gen (KSPredicate n)
+ksPredicateGen = Gen.elements [minBound .. maxBound]
+
 keySetNameGen :: Gen KeySetName
 keySetNameGen = KeySetName <$> identGen
 
