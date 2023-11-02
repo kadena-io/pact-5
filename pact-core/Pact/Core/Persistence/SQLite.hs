@@ -15,6 +15,7 @@ import Data.Text (Text)
 import qualified Database.SQLite3 as SQL
 
 import Pact.Core.Guards (KeySetName(_keySetName))
+import Pact.Core.Names (ModuleName, renderModuleName)
 import Pact.Core.Persistence (PactDb(..), Domain(..),
                               Purity(PImpure)
                              , FQKS, WriteType(..)
@@ -77,7 +78,17 @@ read' serial db domain k = case domain of
           case _decodeKeySet serial value of
             Left _ -> pure Nothing
             Right (Document _ _ c) -> pure (Just c)
-  DModules -> readModules
+  DModules ->  withStmt db "SELECT rowdata FROM SYS_keysets ORDER BY txid DESCENDING WHERE rowkey = ? LIMIT 1" $ \stmt -> do
+      SQL.bind stmt [SQL.SQLText (renderModuleName k)]
+      SQL.step stmt >>= \case
+        SQL.Done -> pure Nothing
+        SQL.Row -> do
+          1 <- SQL.columnCount stmt
+          [SQL.SQLBlob value] <- SQL.columns stmt
+          SQL.Done <- SQL.step stmt
+          case _decodeModule serial value of
+            Left _ -> pure Nothing
+            Right (Document _ _ c) -> pure (Just c)
   DUserTables tbl -> readRowData tbl
   DDefPacts -> readDefPacts
   DNamespaces -> pure Nothing

@@ -70,7 +70,7 @@ defaultSerializeForDatabase = undefined
 -- | The main serialization API for Pact entities.
 data PactSerialise
   = PactSerialise
-  { _encodeModule :: EvalModule RawBuiltin SpanInfo -> ByteString
+  { _encodeModule :: EvalModule RawBuiltin SpanInfo -> ByteString -- TODO: This should be ModuleData
   , _decodeModule :: ByteString -> Either DecodeError (Document (EvalModule RawBuiltin SpanInfo))
   , _encodeKeySet :: KeySet FullyQualifiedName -> ByteString
   , _decodeKeySet :: ByteString -> Either DecodeError (Document (KeySet FullyQualifiedName))
