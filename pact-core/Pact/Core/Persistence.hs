@@ -24,7 +24,7 @@ module Pact.Core.Persistence
  , mdModuleName
  , mdModuleHash
  , readModule, writeModule
- , readKeyset, writeKeySet
+ , readKeySet, writeKeySet
  , readPacts, writePacts
  , GuardTableOp(..)
  , DbOpException(..)
@@ -179,8 +179,8 @@ readModule pdb = _pdbRead pdb DModules
 writeModule :: PactDb b i -> WriteType -> ModuleName -> ModuleData b i -> IO ()
 writeModule pdb wt = _pdbWrite pdb wt DModules
 
-readKeyset :: PactDb b i -> KeySetName -> IO (Maybe FQKS)
-readKeyset pdb = _pdbRead pdb DKeySets
+readKeySet :: PactDb b i -> KeySetName -> IO (Maybe FQKS)
+readKeySet pdb = _pdbRead pdb DKeySets
 
 writeKeySet :: PactDb b i -> WriteType -> KeySetName -> FQKS -> IO ()
 writeKeySet pdb wt = _pdbWrite pdb wt DKeySets

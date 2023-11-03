@@ -59,7 +59,7 @@ data KSPredicate name
   = KeysAll
   | Keys2
   | KeysAny
-  -- | CustomPredicate name
+  -- | CustomPredicate name -- TODO: When this is brought back, fix up `keySetGen`!
   deriving (Eq, Show, Ord)
 
 instance Pretty (KSPredicate name) where

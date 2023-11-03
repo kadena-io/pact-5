@@ -1,5 +1,6 @@
 -- | 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Pact.Core.Gen.Serialise where
 
@@ -66,6 +67,19 @@ parsedNameGen = Gen.choice
 
 hashGen :: Gen Hash
 hashGen = Hash . BSS.toShort . encodeUtf8 <$> identGen
+
+keySetGen :: Gen a -> Gen (KeySet a)
+keySetGen _genA = do
+  ksKeysList <- Gen.list (Range.linear 1 10) publicKeyTextGen
+  let _ksKeys = Set.fromList ksKeysList
+  -- customPredicate <- CustomPredicate <$> genA
+  _ksPredFun <- Gen.choice
+    [ pure KeysAll
+    , pure Keys2
+    , pure KeysAny
+    -- , customPredicate -- TODO: Reinstantiate this when CustomPredicate is brought back into Guard.hs.
+    ]
+  pure $ KeySet { _ksKeys, _ksPredFun }
 
 moduleHashGen :: Gen ModuleHash
 moduleHashGen = ModuleHash <$> hashGen

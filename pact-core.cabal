@@ -251,5 +251,6 @@ test-suite core-tests
     , Pact.Core.Test.ReplTests
     , Pact.Core.Test.LexerParserTests
     , Pact.Core.Test.LexerTests
+    , Pact.Core.Test.PersistenceTests
     , Pact.Core.Test.SerialiseTests
     , Pact.Core.Gen.Serialise

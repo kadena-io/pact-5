@@ -458,7 +458,7 @@ enforceKeysetName
   -> KeySetName
   -> m Bool
 enforceKeysetName info pdb ksn = do
-  liftIO (readKeyset pdb ksn) >>= \case
+  liftIO (readKeySet pdb ksn) >>= \case
     Just ks -> enforceKeyset ks
     Nothing ->
       throwExecutionError info (NoSuchKeySet ksn)

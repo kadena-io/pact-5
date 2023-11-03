@@ -8,9 +8,9 @@ import Pact.Core.Gen.Serialise
 import Pact.Core.Serialise.CBOR ()
 import qualified Codec.Serialise as S
 
-import Test.Tasty
+import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.Hedgehog
-import Hedgehog
+import Hedgehog (Gen, Property, (===), forAll, property)
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 
