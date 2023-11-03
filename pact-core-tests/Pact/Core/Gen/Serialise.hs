@@ -38,8 +38,8 @@ moduleNameGen =  do
 publicKeyTextGen :: Gen PublicKeyText
 publicKeyTextGen = PublicKeyText <$> identGen
 
-ksPredicateGen :: Gen (KSPredicate n)
-ksPredicateGen = Gen.elements [minBound .. maxBound]
+-- ksPredicateGen :: Gen (KSPredicate n)
+-- ksPredicateGen = Gen.element [minBound .. maxBound]
 
 keySetNameGen :: Gen KeySetName
 keySetNameGen = KeySetName <$> identGen

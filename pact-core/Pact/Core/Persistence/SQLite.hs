@@ -15,17 +15,17 @@ import Data.Text (Text)
 import qualified Database.SQLite3 as SQL
 
 import Pact.Core.Guards (KeySetName(_keySetName))
-import Pact.Core.Names (ModuleName, renderModuleName)
+import Pact.Core.Names (renderModuleName)
 import Pact.Core.Persistence (PactDb(..), Domain(..),
                               Purity(PImpure)
-                             , FQKS, WriteType(..)
+                             ,WriteType(..)
                              )
 -- import Pact.Core.Repl.Utils (ReplEvalM)
 import Pact.Core.Serialise
 
 withSqlitePactDb
   :: (MonadIO m, MonadBaseControl IO m)
-  => PactSerialise
+  => PactSerialise b i
   -> Text
   -> (PactDb b i -> m a)
   -> m a
@@ -39,7 +39,7 @@ withSqlitePactDb serial connectionString act =
 
 -- | Create all tables that should exist in a fresh pact db,
 --   or ensure that they are already created.
-initializePactDb :: PactSerialise -> SQL.Database  -> IO (PactDb b i)
+initializePactDb :: PactSerialise b i -> SQL.Database  -> IO (PactDb b i)
 initializePactDb serial db = do
   -- liftIO (createTables db)
   pure $ PactDb
@@ -55,8 +55,8 @@ initializePactDb serial db = do
     , _pdbGetTxLog = undefined
     }
 
-write' :: forall k v b i. PactSerialise -> SQL.Database -> WriteType -> Domain k v b i -> k -> v -> IO ()
-write' serial db wt domain k v = case domain of
+write' :: forall k v b i. PactSerialise b i -> SQL.Database -> WriteType -> Domain k v b i -> k -> v -> IO ()
+write' serial db _wt domain k v = case domain of
   DKeySets -> withStmt db "INSERT INTO SYS_keysets (rowkey, rowdata) VALUES (?,?)" $ \stmt -> do
       let encoded = _encodeKeySet serial v
       SQL.bind stmt [SQL.SQLText (_keySetName k), SQL.SQLBlob encoded]
@@ -65,7 +65,7 @@ write' serial db wt domain k v = case domain of
         SQL.Row -> fail "invariant viaolation"
   _ -> undefined
 
-read' :: forall k v b i. PactSerialise -> SQL.Database -> Domain k v b i -> k -> IO (Maybe v)
+read' :: forall k v b i. PactSerialise b i -> SQL.Database -> Domain k v b i -> k -> IO (Maybe v)
 read' serial db domain k = case domain of
   DKeySets -> withStmt db "SELECT rowdata FROM SYS_keysets ORDER BY txid DESCENDING WHERE rowkey = ? LIMIT 1" $ \stmt -> do
       SQL.bind stmt [SQL.SQLText (_keySetName k)]
@@ -86,16 +86,12 @@ read' serial db domain k = case domain of
           1 <- SQL.columnCount stmt
           [SQL.SQLBlob value] <- SQL.columns stmt
           SQL.Done <- SQL.step stmt
-          case _decodeModule serial value of
+          case _decodeModuleData serial value of
             Left _ -> pure Nothing
             Right (Document _ _ c) -> pure (Just c)
-  DUserTables tbl -> readRowData tbl
-  DDefPacts -> readDefPacts
+  DUserTables _tbl -> pure Nothing
+  DDefPacts -> pure Nothing
   DNamespaces -> pure Nothing
-  where
-    readModules = pure @IO Nothing
-    readRowData _tbl = pure Nothing
-    readDefPacts = pure @IO Nothing
 
 -- Utility functions
 withStmt :: SQL.Database -> Text -> (SQL.Statement -> IO a) -> IO a

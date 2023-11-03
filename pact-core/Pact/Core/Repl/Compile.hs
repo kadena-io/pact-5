@@ -35,6 +35,7 @@ import Pact.Core.IR.Term
 import Pact.Core.Compile
 import Pact.Core.Interpreter
 import Pact.Core.Environment
+import Pact.Core.Serialise
 
 
 import Pact.Core.IR.Eval.Runtime
@@ -83,7 +84,7 @@ interpretReplProgram (SourceCode _ source) display = do
           oldSrc <- use replCurrSource
           evalState .= def
           pactdb <- liftIO mockPactDb
-          _ <- withSqlitePactDb "" pure
+          _ <- withSqlitePactDb (serialiseCBOR :: PactSerialise ReplRawBuiltin ()) "" pure
           replPactDb .= pactdb
           replEvalEnv .= defaultEvalEnv pactdb replRawBuiltinMap
           out <- loadFile (T.unpack txt) display

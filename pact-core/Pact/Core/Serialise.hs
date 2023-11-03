@@ -13,8 +13,8 @@ import Data.Word (Word32)
 
 import Pact.Core.Info
 import Pact.Core.Builtin
-import Pact.Core.IR.Term
---import Pact.Core.Persistence
+--import Pact.Core.IR.Term
+import Pact.Core.Persistence
 import Pact.Core.Guards
 import Pact.Core.Names
 
@@ -63,24 +63,24 @@ data DecodeError
 
 -- | A Serializer that encodes in CBOR at the latest version, and attempts
 --   to decode at each possible version, starting from the most recent.
-defaultSerializeForDatabase :: PactSerialise
+defaultSerializeForDatabase :: PactSerialise b i
 defaultSerializeForDatabase = undefined
 
 
 -- | The main serialization API for Pact entities.
-data PactSerialise
+data PactSerialise b i
   = PactSerialise
-  { _encodeModule :: EvalModule RawBuiltin SpanInfo -> ByteString -- TODO: This should be ModuleData
-  , _decodeModule :: ByteString -> Either DecodeError (Document (EvalModule RawBuiltin SpanInfo))
+  { _encodeModuleData :: ModuleData RawBuiltin SpanInfo -> ByteString
+  , _decodeModuleData :: ByteString -> Either DecodeError (Document (ModuleData b i))
   , _encodeKeySet :: KeySet FullyQualifiedName -> ByteString
   , _decodeKeySet :: ByteString -> Either DecodeError (Document (KeySet FullyQualifiedName))
   }
 
 
-serialiseCBOR :: PactSerialise
+serialiseCBOR :: (S.Serialise b, S.Serialise i) => PactSerialise b i
 serialiseCBOR = PactSerialise
-  { _encodeModule = toStrictByteString . S.encode . Document version format
-  , _decodeModule = first toErr . S.deserialiseOrFail . fromStrict
+  { _encodeModuleData = toStrictByteString . S.encode . Document version format
+  , _decodeModuleData = first toErr . S.deserialiseOrFail . fromStrict
   , _encodeKeySet = toStrictByteString . S.encode . Document version format
   , _decodeKeySet = first toErr . S.deserialiseOrFail . fromStrict
   }

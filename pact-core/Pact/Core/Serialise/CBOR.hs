@@ -674,3 +674,78 @@ instance Serialise RawBuiltin where
     108 -> pure RawDefineNamespace
     109 -> pure RawDescribeNamespace
     _ -> fail "unexpeced decoding"
+
+
+instance Serialise ReplBuiltins where
+  encode = encodeWord . fromIntegral . fromEnum
+  decode = toEnum . fromIntegral <$> decodeWord
+  -- encode = \case
+  --   RExpect -> encodeWord 0
+  --   RExpectFailure -> encodeWord 1
+  --   RExpectFailureMatch -> encodeWord 2
+  --   RExpectThat -> encodeWord 3
+  --   RPrint -> encodeWord 4
+  --   REnvStackFrame -> encodeWord 5
+  --   REnvChainData -> encodeWord 6
+  --   REnvData -> encodeWord 7
+  --   REnvEvents -> encodeWord 8
+  --   REnvHash -> encodeWord 9
+  --   REnvKeys -> encodeWord 10
+  --   REnvSigs -> encodeWord 11
+  --   RBeginTx -> encodeWord 12
+  --   RBeginNamedTx -> encodeWord 13
+  --   RCommitTx -> encodeWord 14
+  --   RRollbackTx -> encodeWord 15
+  --   RSigKeyset -> encodeWord 16
+  --   RTestCapability -> encodeWord 17
+  --   REnvExecConfig -> encodeWord 18
+  --   REnvNamespacePolicy -> encodeWord 19
+  --   RContinuePact -> encodeWord 20
+  --   RContinuePactRollback -> encodeWord 21
+  --   RContinuePactRollbackYield -> encodeWord 22
+  --   RPactState -> encodeWord 23
+  --   RResetPactState -> encodeWord 24
+  -- decode = decodeWord >>= \case
+  --   0 -> pure RExpect
+  --   1 -> pure RExpectFailure
+  --   2 -> pure RExpectFailureMatch
+  --   3 -> pure RExpectThat
+  -- | RPrint
+  -- | REnvStackFrame
+  -- | REnvChainData
+  -- | REnvData
+  -- | REnvEvents
+  -- | REnvHash
+  -- | REnvKeys
+  -- | REnvSigs
+  -- | RBeginTx
+  -- | RBeginNamedTx
+  -- | RCommitTx
+  -- | RRollbackTx
+  -- | RSigKeyset
+  -- | RTestCapability
+  -- | REnvExecConfig
+  -- | REnvNamespacePolicy
+  -- -- | REnvGas
+  -- -- | REnvGasLimit
+  -- -- | REnvGasLog
+  -- -- | REnvGasModel
+  -- -- | REnvGasPrice
+  -- -- | REnvGasRate
+  -- -- | REnvNamespacePolicy
+  -- -- Defpact
+  -- | RContinuePact
+  -- | RContinuePactRollback
+  -- | RContinuePactRollbackYield
+  -- | RPactState
+  -- | RResetPactState
+
+
+instance Serialise ReplRawBuiltin where
+  encode (RBuiltinWrap b) = encodeWord 0 <> encode b
+  encode (RBuiltinRepl r) = encodeWord 1 <> encode r
+
+  decode = decodeWord >>= \case
+    0 -> RBuiltinWrap <$> decode
+    1 -> RBuiltinRepl <$> decode
+    _ -> fail "unexpected decoding"

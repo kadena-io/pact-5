@@ -17,7 +17,9 @@ import qualified Data.ByteString as B
 
 import Pact.Core.Gas
 import Pact.Core.Literal
-import Pact.Core.Persistence
+-- import Pact.Core.Persistence
+import Pact.Core.Persistence.MockPersistence
+import Pact.Core.Serialise
 import Pact.Core.Interpreter
 
 import Pact.Core.Repl.Utils
