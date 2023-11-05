@@ -150,7 +150,7 @@ data Interface name ty builtin info
   , _ifDefns :: [IfDef name ty builtin info]
   , _ifHash :: ModuleHash
   , _ifInfo :: info
-  } deriving (Show, Functor)
+  } deriving (Show, Eq, Functor)
 
 data IfDefPact ty info
   = IfDefPact
@@ -158,7 +158,7 @@ data IfDefPact ty info
   , _ifdpArgs :: [Arg ty]
   , _ifdpRType :: Maybe ty
   , _ifdpInfo :: info
-  } deriving (Show, Functor)
+  } deriving (Show, Eq, Functor)
 
 data IfDefun ty info
   = IfDefun
@@ -166,7 +166,7 @@ data IfDefun ty info
   , _ifdArgs :: [Arg ty]
   , _ifdRType :: Maybe ty
   , _ifdInfo :: info
-  } deriving (Show, Functor)
+  } deriving (Show, Eq, Functor)
 
 data IfDefCap ty info
   = IfDefCap
@@ -174,7 +174,7 @@ data IfDefCap ty info
   , _ifdcArgs :: [Arg ty]
   , _ifdcRType :: Maybe ty
   , _ifdcInfo :: info
-  } deriving (Show, Functor)
+  } deriving (Show, Eq, Functor)
 
 data IfDef name ty builtin info
   = IfDfun (IfDefun ty info)
@@ -182,7 +182,7 @@ data IfDef name ty builtin info
   | IfDCap (IfDefCap ty info)
   | IfDPact (IfDefPact ty info)
   | IfDSchema (DefSchema ty info)
-  deriving (Show, Functor)
+  deriving (Show, Eq, Functor)
 
 data TopLevel name ty builtin info
   = TLModule (Module name ty builtin info)

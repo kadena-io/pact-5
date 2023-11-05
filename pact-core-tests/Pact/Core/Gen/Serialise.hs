@@ -20,6 +20,7 @@ import Pact.Core.Info
 import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Capabilities
+import Pact.Core.Persistence
 
 import qualified Data.ByteString.Short as BSS
 import Pact.Core.Test.LexerParserTests (identGen)
@@ -196,47 +197,54 @@ lamInfoGen = Gen.choice
   , pure AnonLamInfo
   ]
 
-builtinFormGen :: Gen (BuiltinForm (Term Name Type RawBuiltin SpanInfo))
-builtinFormGen = Gen.choice
-  [ CAnd <$> termGen <*> termGen
-  , COr <$> termGen <*> termGen
-  , CIf <$> termGen <*> termGen <*> termGen
-  , CEnforceOne <$> termGen <*> Gen.list (Range.linear 0 16) termGen
-  , CEnforce <$> termGen <*> termGen
+builtinFormGen :: Gen b -> Gen i -> Gen (BuiltinForm (Term Name Type b i))
+builtinFormGen b i = Gen.choice
+  [ CAnd <$> termGen b i <*> termGen b i
+  , COr <$> termGen b i <*> termGen b i
+  , CIf <$> termGen b i <*> termGen b i <*> termGen b i
+  , CEnforceOne <$> termGen b i <*> Gen.list (Range.linear 0 16) (termGen b i)
+  , CEnforce <$> termGen b i <*> termGen b i
   ]
 
-termGen :: Gen (Term Name Type RawBuiltin SpanInfo)
-termGen = Gen.recursive Gen.choice
-  [ Var <$> nameGen <*> infoGen
-  , Builtin <$> builtinGen <*> infoGen
-  , Constant <$> literalGen <*> infoGen
-  , Error <$> identGen <*> infoGen
+termGen :: Gen b -> Gen i -> Gen (Term Name Type b i)
+termGen b i = Gen.recursive Gen.choice
+  [ Var <$> nameGen <*> i
+  , Builtin <$> b <*> i
+  , Constant <$> literalGen <*> i
+  , Error <$> identGen <*> i
   ]
-  [ Lam <$> lamInfoGen <*> Gen.nonEmpty (Range.linear 1 16) argGen <*> termGen <*> infoGen
-  , Let <$> argGen <*> termGen <*> termGen <*> infoGen
-  , App <$> termGen <*> Gen.list (Range.linear 0 16) termGen <*> infoGen
-  , Sequence <$> termGen <*> termGen <*> infoGen
-  , Nullary <$> termGen <*> infoGen
-  , Conditional <$> builtinFormGen <*> infoGen
-  , ListLit <$> Gen.list (Range.linear 0 16) termGen <*> infoGen
-  , Try <$> termGen <*> termGen <*> infoGen
-  , ObjectLit <$> Gen.list (Range.linear 1 16) ((,) <$> fieldGen <*> termGen) <*> infoGen
+  [ Lam <$> lamInfoGen <*> Gen.nonEmpty (Range.linear 1 16) argGen <*> termGen b i <*> i
+  , Let <$> argGen <*> termGen b i <*> termGen b i <*> i
+  , App <$> termGen b i <*> Gen.list (Range.linear 0 16) (termGen b i) <*> i
+  , Sequence <$> termGen b i <*> termGen b i <*> i
+  , Nullary <$> termGen b i <*> i
+  , Conditional <$> builtinFormGen b i <*> i
+  , ListLit <$> Gen.list (Range.linear 0 16) (termGen b i)<*> i
+  , Try <$> termGen b i <*> termGen b i <*> i
+  , ObjectLit <$> Gen.list (Range.linear 1 16) ((,) <$> fieldGen <*> termGen b i) <*> i
   ]
 
-defunGen :: Gen (Defun Name Type RawBuiltin SpanInfo)
-defunGen = do
+defunGen :: Gen b -> Gen i -> Gen (Defun Name Type b i)
+defunGen b i = do
   name <- identGen
   args <- Gen.list (Range.linear 0 100) argGen
   ret <- Gen.maybe typeGen
-  term <- termGen
-  Defun name args ret term <$> infoGen
+  term <- termGen b i
+  Defun name args ret term <$> i
 
-defConstGen :: Gen (DefConst Name Type RawBuiltin SpanInfo)
-defConstGen = do
+ifDefunGen ::Gen i -> Gen (IfDefun Type i)
+ifDefunGen i = do
+  name <- identGen
+  args <- Gen.list (Range.linear 0 100) argGen
+  ret <- Gen.maybe typeGen
+  IfDefun name args ret <$> i
+
+defConstGen :: Gen b -> Gen i -> Gen (DefConst Name Type b i)
+defConstGen b i = do
   name <- identGen
   ty <- Gen.maybe typeGen
-  term <- termGen
-  DefConst name ty term <$> infoGen
+  term <- termGen b i
+  DefConst name ty term <$> i
 
 fqNameRefGen :: Gen (FQNameRef Name)
 fqNameRefGen = FQName <$> fullyQualifiedNameGen
@@ -254,62 +262,102 @@ defCapMetaGen = Gen.choice
   , pure Unmanaged
   ]
 
-defCapGen :: Gen (DefCap Name Type RawBuiltin SpanInfo)
-defCapGen = do
+defCapGen :: Gen b -> Gen i -> Gen (DefCap Name Type b i)
+defCapGen b i = do
   name <- identGen
   arity <- Gen.int (Range.linear 0 16)
   args <- Gen.list (Range.singleton arity) argGen
   ret <- Gen.maybe typeGen
-  term <- termGen
+  term <- termGen b i
   meta <- defCapMetaGen
-  DefCap name arity args ret term meta <$> infoGen
+  DefCap name arity args ret term meta <$> i
 
-defSchemaGen :: Gen (DefSchema Type SpanInfo)
-defSchemaGen = do
+ifDefCapGen :: Gen i -> Gen (IfDefCap Type i)
+ifDefCapGen i = do
+  name <- identGen
+  args <- Gen.list (Range.linear 1 8) argGen
+  ret <- Gen.maybe typeGen
+  IfDefCap name args ret <$> i
+
+defSchemaGen :: Gen i -> Gen (DefSchema Type i)
+defSchemaGen i = do
   name <- identGen
   schema <- _schema <$> schemaGen
-  DefSchema name schema <$> infoGen
+  DefSchema name schema <$> i
 
-defTableGen :: Gen (DefTable Name SpanInfo)
-defTableGen = do
+defTableGen :: Gen i -> Gen (DefTable Name i)
+defTableGen i = do
   name <- identGen
   schema <- ResolvedTable <$> schemaGen
-  DefTable name schema <$> infoGen
+  DefTable name schema <$> i
 
-stepGen :: Gen (Step Name Type RawBuiltin SpanInfo)
-stepGen = Gen.choice
-  [ Step <$> termGen <*> mt
-  , StepWithRollback <$> termGen <*> termGen <*> mt
+stepGen :: Gen b -> Gen i -> Gen (Step Name Type b i)
+stepGen b i = Gen.choice
+  [ Step <$> termGen b i <*> mt
+  , StepWithRollback <$> termGen b i <*> termGen b i <*> mt
   ]
   where
-    mt = Gen.maybe (Gen.list (Range.linear 0 16) termGen)
+    mt = Gen.maybe (Gen.list (Range.linear 0 16) (termGen b i))
 
-defPactGen :: Gen (DefPact Name Type RawBuiltin SpanInfo)
-defPactGen = do
+defPactGen :: Gen b -> Gen i -> Gen (DefPact Name Type b i)
+defPactGen b i = do
   name <- identGen
   args <- Gen.list (Range.linear 0 16) argGen
   ret <- Gen.maybe typeGen
-  steps <- Gen.nonEmpty (Range.linear 0 16) stepGen
-  DefPact name args ret steps <$> infoGen
+  steps <- Gen.nonEmpty (Range.linear 0 16) (stepGen b i)
+  DefPact name args ret steps <$> i
 
-defGen :: Gen (Def Name Type RawBuiltin SpanInfo)
-defGen = Gen.choice
-  [ Dfun <$> defunGen
-  , DConst <$> defConstGen
-  , DCap <$> defCapGen
-  , DSchema <$> defSchemaGen
-  , DTable <$> defTableGen
-  , DPact <$> defPactGen
+
+ifDefPactGen :: Gen i -> Gen (IfDefPact Type i)
+ifDefPactGen i = do
+  name <- identGen
+  args <- Gen.list (Range.linear 0 16) argGen
+  ret <- Gen.maybe typeGen
+  IfDefPact name args ret <$> i
+
+
+defGen :: Gen b -> Gen i -> Gen (Def Name Type b i)
+defGen b i = Gen.choice
+  [ Dfun <$> defunGen b i
+  , DConst <$> defConstGen b i
+  , DCap <$> defCapGen b i
+  , DSchema <$> defSchemaGen i
+  , DTable <$> defTableGen i
+  , DPact <$> defPactGen b i
   ]
 
 
-evalModuleGen :: Gen (EvalModule RawBuiltin SpanInfo)
-evalModuleGen = do
+evalModuleGen :: Gen b -> Gen i -> Gen (EvalModule b i)
+evalModuleGen b i= do
   name <- moduleNameGen
   gov <- governanceGen
-  defs <- Gen.list (Range.linear 0 100) defGen
+  defs <- Gen.list (Range.linear 0 100) (defGen b i)
   blessed <- Set.fromList <$> Gen.list (Range.linear 0 100) moduleHashGen
   imps <- Gen.list (Range.linear 0 100) importGen
   impl <- Gen.list (Range.linear 0 100) moduleNameGen
   h <- moduleHashGen
-  Module name gov defs blessed imps impl h <$> infoGen
+  Module name gov defs blessed imps impl h <$> i
+
+ifDefGen :: Gen b -> Gen i -> Gen (IfDef Name Type b i)
+ifDefGen b i = Gen.choice
+  [ IfDfun <$> ifDefunGen i
+  , IfDConst <$> defConstGen b i
+  , IfDCap <$> ifDefCapGen i
+  , IfDSchema <$> defSchemaGen i
+  , IfDPact <$> ifDefPactGen i
+  ]
+
+evalInterfaceGen :: Gen b -> Gen i -> Gen (EvalInterface b i)
+evalInterfaceGen b i = do
+  name <- moduleNameGen
+  defs <- Gen.list (Range.linear 0 100) (ifDefGen b i)
+  h <- moduleHashGen
+  Interface name defs h <$> i
+
+moduleDataGen :: Gen b -> Gen i -> Gen (ModuleData b i)
+moduleDataGen b i = Gen.choice
+  [ ModuleData <$> evalModuleGen b i<*> m
+  , InterfaceData <$> evalInterfaceGen b i<*> m
+  ]
+  where
+    m = Gen.map (Range.linear 0 8) $ (,) <$> fullyQualifiedNameGen <*> defGen b i

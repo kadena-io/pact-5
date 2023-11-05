@@ -73,20 +73,20 @@ tests = testGroup "Serialise Roundtrip"
     , testProperty "Builtin" $ serialiseRoundtrip builtinGen
     , testProperty "Literal" $ serialiseRoundtrip literalGen
     , testProperty "LamInfo" $ serialiseRoundtrip lamInfoGen
-    , testProperty "BuiltinForm" $ serialiseRoundtrip builtinFormGen
-    , testProperty "Term" $ serialiseRoundtrip termGen
-    , testProperty "Defun" $ serialiseRoundtrip defunGen
-    , testProperty "DefConst" $ serialiseRoundtrip defConstGen
+    , testProperty "BuiltinForm" $ serialiseRoundtrip (builtinFormGen builtinGen infoGen)
+    , testProperty "Term" $ serialiseRoundtrip (termGen builtinGen infoGen)
+    , testProperty "Defun" $ serialiseRoundtrip (defunGen builtinGen infoGen)
+    , testProperty "DefConst" $ serialiseRoundtrip (defConstGen builtinGen infoGen)
     , testProperty "FQNameRef" $ serialiseRoundtrip fqNameRefGen
     , testProperty "DefManagedMeta" $ serialiseRoundtrip defManagedMetaGen
     , testProperty "DefCapMeta" $ serialiseRoundtrip defCapMetaGen
-    , testProperty "DefCap" $ serialiseRoundtrip defCapGen
-    , testProperty "Def" $ serialiseRoundtrip defGen
-    , testProperty "Module" $ serialiseRoundtrip evalModuleGen
-    , testProperty "DefSchema" $ serialiseRoundtrip defSchemaGen
-    , testProperty "DefTable" $ serialiseRoundtrip defTableGen
-    , testProperty "Step" $ serialiseRoundtrip stepGen
-    , testProperty "DefPact" $ serialiseRoundtrip defPactGen
+    , testProperty "DefCap" $ serialiseRoundtrip (defCapGen builtinGen infoGen)
+    , testProperty "Def" $ serialiseRoundtrip (defGen builtinGen infoGen)
+    , testProperty "Module" $ serialiseRoundtrip (evalModuleGen builtinGen infoGen)
+    , testProperty "DefSchema" $ serialiseRoundtrip (defSchemaGen infoGen)
+    , testProperty "DefTable" $ serialiseRoundtrip (defTableGen infoGen)
+    , testProperty "Step" $ serialiseRoundtrip (stepGen builtinGen infoGen)
+    , testProperty "DefPact" $ serialiseRoundtrip (defPactGen builtinGen infoGen)
     -- , testProperty "ReplBuiltins" $ serialiseRoundtrip replBuiltinsGen
     -- , testProperty "ReplRawBuiltin" $ serialiseRoundtrip replRawBuiltinGen
     ] 

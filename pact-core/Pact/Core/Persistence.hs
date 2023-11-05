@@ -66,7 +66,7 @@ data ModuleData b i
   -- , _mdDependencies :: Map FullyQualifiedName (EvalDef b i)
   -- }
   | InterfaceData (EvalInterface b i) (Map FullyQualifiedName (EvalDef b i))
-  deriving Show
+  deriving (Show, Eq)
   -- { _ifInterface :: EvalInterface b i
   -- , _ifDependencies :: Map FullyQualifiedName (EvalDefConst b i)
   -- } deriving Show

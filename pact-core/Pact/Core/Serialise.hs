@@ -11,8 +11,8 @@ module Pact.Core.Serialise where
 import Data.ByteString (ByteString, fromStrict)
 import Data.Word (Word32)
 
-import Pact.Core.Info
-import Pact.Core.Builtin
+-- import Pact.Core.Info
+-- import Pact.Core.Builtin
 --import Pact.Core.IR.Term
 import Pact.Core.Persistence
 import Pact.Core.Guards
@@ -70,7 +70,7 @@ defaultSerializeForDatabase = undefined
 -- | The main serialization API for Pact entities.
 data PactSerialise b i
   = PactSerialise
-  { _encodeModuleData :: ModuleData RawBuiltin SpanInfo -> ByteString
+  { _encodeModuleData :: ModuleData b i -> ByteString
   , _decodeModuleData :: ByteString -> Either DecodeError (Document (ModuleData b i))
   , _encodeKeySet :: KeySet FullyQualifiedName -> ByteString
   , _decodeKeySet :: ByteString -> Either DecodeError (Document (KeySet FullyQualifiedName))
@@ -100,7 +100,8 @@ instance S.Serialise DocumentVersion where
 instance S.Serialise DocumentFormat where
   encode = \case
     DocumentCBOR -> S.encodeWord 0
-    DocumentCanonicalJSON -> undefined
+    DocumentCanonicalJSON -> S.encodeWord 1
   decode = S.decodeWord >>= \case
     0 -> pure DocumentCBOR
+    1 -> pure DocumentCanonicalJSON
     _ -> fail "unexpected decoding"
