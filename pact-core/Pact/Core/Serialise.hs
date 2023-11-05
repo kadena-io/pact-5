@@ -17,6 +17,7 @@ import Data.Word (Word32)
 import Pact.Core.Persistence
 import Pact.Core.Guards
 import Pact.Core.Names
+import Pact.Core.DefPacts.Types
 
 import qualified Codec.Serialise as S
 import qualified Codec.CBOR.Encoding as S
@@ -74,6 +75,8 @@ data PactSerialise b i
   , _decodeModuleData :: ByteString -> Either DecodeError (Document (ModuleData b i))
   , _encodeKeySet :: KeySet FullyQualifiedName -> ByteString
   , _decodeKeySet :: ByteString -> Either DecodeError (Document (KeySet FullyQualifiedName))
+  , _encodeDefPactExec :: Maybe DefPactExec -> ByteString
+  , _decodeDefPactExec :: ByteString -> Either DecodeError (Document (Maybe DefPactExec))
   }
 
 
@@ -83,6 +86,8 @@ serialiseCBOR = PactSerialise
   , _decodeModuleData = first toErr . S.deserialiseOrFail . fromStrict
   , _encodeKeySet = toStrictByteString . S.encode . Document version format
   , _decodeKeySet = first toErr . S.deserialiseOrFail . fromStrict
+  , _encodeDefPactExec = toStrictByteString . S.encode . Document version format
+  , _decodeDefPactExec = first toErr . S.deserialiseOrFail . fromStrict
   }
   where
     version = DocumentVersion 0

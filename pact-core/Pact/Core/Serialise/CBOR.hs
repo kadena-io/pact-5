@@ -20,6 +20,11 @@ import Pact.Core.Capabilities
 import Pact.Core.Builtin
 import Pact.Core.Imports
 import Pact.Core.Info
+import Pact.Core.DefPacts.Types
+import Pact.Core.PactValue
+import Pact.Core.ModRefs
+import Pact.Core.ChainData
+import Pact.Time.Internal (UTCTime(..), NominalDiffTime(..))
 
 instance Serialise NamespaceName where
   encode (NamespaceName ns) = encode ns
@@ -749,3 +754,86 @@ instance Serialise ReplRawBuiltin where
     0 -> RBuiltinWrap <$> decode
     1 -> RBuiltinRepl <$> decode
     _ -> fail "unexpected decoding"
+
+
+
+-- DefPacts
+
+instance Serialise (UserGuard FullyQualifiedName PactValue) where
+  encode (UserGuard f a) = encode f <> encode a
+  decode = UserGuard <$> decode <*> decode
+
+instance Serialise DefPactId where
+  encode (DefPactId pid) = encode pid
+  decode = DefPactId <$> decode
+
+instance Serialise (CapabilityGuard FullyQualifiedName PactValue) where
+  encode (CapabilityGuard n a pid) = encode n <> encode a <> encode pid
+  decode = CapabilityGuard <$> decode <*> decode <*> decode
+
+instance Serialise ModuleGuard where
+  encode (ModuleGuard mn n) = encode mn <> encode n
+  decode = ModuleGuard <$> decode <*> decode
+
+instance Serialise (Guard FullyQualifiedName PactValue) where
+  encode = \case
+    GKeyset ks -> encodeWord 0 <> encode ks
+    GKeySetRef ksn -> encodeWord 1 <> encode ksn
+    GUserGuard ug -> encodeWord 2 <> encode ug
+    GCapabilityGuard cg -> encodeWord 3 <> encode cg
+    GModuleGuard mg -> encodeWord 4 <> encode mg
+  decode = decodeWord >>= \case
+    0 -> GKeyset <$> decode
+    1 -> GKeySetRef <$> decode
+    2 -> GUserGuard <$> decode
+    3 -> GCapabilityGuard <$> decode
+    4 -> GModuleGuard <$> decode
+    _ -> fail "unexpected decoding"
+
+instance Serialise ModRef where
+  encode (ModRef mn imp ref) = encode mn <> encode imp <> encode ref
+  decode = ModRef <$> decode <*> decode <*> decode
+
+instance Serialise (CapToken FullyQualifiedName PactValue) where
+  encode (CapToken n a) = encode n <> encode a
+  decode = CapToken <$> decode <*> decode
+
+instance Serialise PactValue where
+  encode = \case
+    PLiteral l -> encodeWord 0 <> encode l
+    PList l -> encodeWord 1 <> encode l
+    PGuard g -> encodeWord 2 <> encode g
+    PObject o -> encodeWord 3 <> encode o
+    PModRef mr -> encodeWord 4 <> encode mr
+    PCapToken ct -> encodeWord 5 <> encode ct
+    PTime (UTCTime (NominalDiffTime pt)) -> encodeWord 6 <> encode pt
+  decode = decodeWord >>= \case
+    0 -> PLiteral <$> decode
+    1 -> PList <$> decode
+    2 -> PGuard <$> decode
+    3 -> PObject <$> decode
+    4 -> PModRef <$> decode
+    5 -> PCapToken <$> decode
+    6 -> PTime . UTCTime . NominalDiffTime <$> decode
+    _ -> fail "unexpected decoding"
+
+instance Serialise ChainId where
+  encode (ChainId cid) = encode cid
+  decode = ChainId <$> decode
+
+instance Serialise Provenance where
+  encode (Provenance tcid mh) = encode tcid <> encode mh
+  decode = Provenance <$> decode <*> decode
+
+instance Serialise Yield where
+  encode (Yield d p s) = encode d <> encode p <> encode s
+  decode = Yield <$> decode <*> decode <*> decode
+
+instance Serialise (DefPactContinuation FullyQualifiedName PactValue) where
+  encode (DefPactContinuation n a) = encode n <> encode a
+  decode = DefPactContinuation <$> decode <*> decode
+
+instance Serialise DefPactExec where
+  encode (DefPactExec sc y s dpid cont rb ndp)
+    = encode sc <> encode y <> encode s <> encode dpid <> encode cont <> encode rb <> encode ndp
+  decode = DefPactExec <$> decode <*> decode <*> decode <*> decode <*> decode <*> decode <*> decode

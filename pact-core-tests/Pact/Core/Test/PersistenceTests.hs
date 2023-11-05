@@ -7,20 +7,24 @@ import Control.Monad.IO.Class (liftIO)
 import Hedgehog (Gen, Property, (===), forAll, property)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.Hedgehog
+import qualified Hedgehog.Gen as Gen
 
 import Pact.Core.Names (FullyQualifiedName)
 import Pact.Core.Info (SpanInfo)
 import Pact.Core.Guards (KeySet)
-import Pact.Core.Gen.Serialise (keySetGen, keySetNameGen, moduleNameGen, moduleDataGen, builtinGen, infoGen)
+import Pact.Core.Gen.Serialise (keySetGen, keySetNameGen, moduleNameGen, moduleDataGen, builtinGen, infoGen
+                               ,defPactIdGen, defPactExecGen)
 import Pact.Core.Serialise (PactSerialise, serialiseCBOR)
 import Pact.Core.Builtin (RawBuiltin)
 import Pact.Core.Persistence.SQLite
-import Pact.Core.Persistence (WriteType(Insert), readKeySet, writeKeySet, writeModule, readModule)
+import Pact.Core.Persistence (WriteType(Insert), readKeySet, writeKeySet, writeModule, readModule
+                             ,writeDefPacts, readDefPacts)
 
 testsWithSerial :: (Show b, Show i, Eq b, Eq i) => PactSerialise b i -> Gen b -> Gen i -> [TestTree]
 testsWithSerial serial b i =
  [ testProperty "KeySet" $ keysetPersistRoundtrip serial (keySetGen undefined)
- , testProperty "ModuleData" $ moduleDataRoundtrip serial b i]
+ , testProperty "ModuleData" $ moduleDataRoundtrip serial b i
+ , testProperty "DefPactExec" $ defPactExecRoundtrip serial b i]
 
 tests :: TestTree
 tests = testGroup "Persistence Roundtrip"
@@ -47,3 +51,12 @@ moduleDataRoundtrip serial b i = property $ do
     () <- writeModule db Insert moduleName moduleData
     readModule db moduleName
   Just moduleData === writtenModuleData
+
+defPactExecRoundtrip :: (Show b,Show i, Eq b, Eq i) => PactSerialise b i -> Gen b -> Gen i -> Property
+defPactExecRoundtrip serial b i = property $ do
+  defPactId <- forAll defPactIdGen
+  defPactExec <- forAll (Gen.maybe defPactExecGen)
+  writtenDefPactExec <- liftIO $ withSqlitePactDb serial ":memory" $ \db -> do
+    () <- writeDefPacts db Insert defPactId defPactExec
+    readDefPacts db defPactId
+  Just defPactExec === writtenDefPactExec

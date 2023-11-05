@@ -21,6 +21,9 @@ import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Capabilities
 import Pact.Core.Persistence
+import Pact.Core.PactValue
+import Pact.Core.DefPacts.Types
+import Pact.Core.ChainData
 
 import qualified Data.ByteString.Short as BSS
 import Pact.Core.Test.LexerParserTests (identGen)
@@ -361,3 +364,35 @@ moduleDataGen b i = Gen.choice
   ]
   where
     m = Gen.map (Range.linear 0 8) $ (,) <$> fullyQualifiedNameGen <*> defGen b i
+
+
+defPactIdGen :: Gen DefPactId
+defPactIdGen = DefPactId <$> identGen
+
+pactValueGen :: Gen PactValue
+pactValueGen = undefined
+
+chainIdGen :: Gen ChainId
+chainIdGen = ChainId <$> identGen
+
+provenanceGen :: Gen Provenance
+provenanceGen = undefined
+
+yieldGen :: Gen Yield
+yieldGen = do
+  d <- Gen.map (Range.linear 0 16) ((,) <$> fieldGen <*> pactValueGen)
+  p <- Gen.maybe provenanceGen
+  Yield d p <$> Gen.maybe chainIdGen
+
+defPactContinuationGen :: Gen (DefPactContinuation FullyQualifiedName PactValue)
+defPactContinuationGen = undefined
+
+defPactExecGen :: Gen DefPactExec
+defPactExecGen = do
+  sc <- Gen.int (Range.linear 1 16)
+  yield <- Gen.maybe yieldGen
+  step <- Gen.int (Range.linear 1 sc)
+  dpid <- defPactIdGen
+  cont <- defPactContinuationGen
+  rb <- Gen.bool
+  DefPactExec sc yield step dpid cont rb <$> Gen.map (Range.linear 0 8) ((,) <$> defPactIdGen <*> undefined)

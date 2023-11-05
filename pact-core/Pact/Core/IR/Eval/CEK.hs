@@ -385,7 +385,7 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
   Nothing -> throwExecutionError i DefPactStepNotInEnvironment
   Just ps -> do
     pdb <- viewEvalEnv eePactDb
-    dbState <- liftDbFunction i (readPacts pdb (_psDefPactId ps))
+    dbState <- liftDbFunction i (readDefPacts pdb (_psDefPactId ps))
     case (dbState, crossChainContinuation) of
       (Just Nothing, _) -> throwExecutionError i (DefPactAlreadyCompleted ps)
       (Nothing, Nothing) -> throwExecutionError i (NoPreviousDefPactExecutionFound ps)
@@ -1057,7 +1057,7 @@ returnCEKValue (DefPactStepC env cont) handler v =
         when (nestedPactsNotAdvanced pe ps) $
           throwExecutionError def (NestedDefpactsNotAdvanced (_peDefPactId pe))
         liftDbFunction def
-          (writePacts pdb Write (_psDefPactId ps)
+          (writeDefPacts pdb Write (_psDefPactId ps)
             (if done then Nothing else Just pe))
 
         returnCEKValue cont handler v
