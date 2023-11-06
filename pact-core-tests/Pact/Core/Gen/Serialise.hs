@@ -8,6 +8,8 @@ import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Map.Strict (fromList)
 import qualified Data.Set as Set
+import qualified Data.Map as Map
+import qualified Data.Vector as Vec
 import Data.Default
 
 import Pact.Core.Names
@@ -369,8 +371,29 @@ moduleDataGen b i = Gen.choice
 defPactIdGen :: Gen DefPactId
 defPactIdGen = DefPactId <$> identGen
 
+userGuardGen :: Int -> Gen (UserGuard FullyQualifiedName PactValue)
+userGuardGen depth = undefined
+
+guardGen :: Int -> Gen n -> Gen (Guard n PactValue)
+guardGen depth n
+  | depth <= 0 = Gen.choice [gKeySetGen, gKeySetRefGen]
+  | otherwise  = Gen.choice [gKeySetGen, gKeySetRefGen]
+  where
+    gKeySetGen = GKeyset <$> keySetGen n
+    gKeySetRefGen = GKeySetRef <$> keySetNameGen
+--    gUserGuardGen = GUserGuard <$> userGuardGen (depth - 1)
+
 pactValueGen :: Gen PactValue
-pactValueGen = undefined
+pactValueGen = do
+  i <- Gen.int (Range.linear 0 8)
+  pactValueGen' i
+
+pactValueGen' :: Int ->Gen PactValue
+pactValueGen' depth = Gen.choice
+  [ PLiteral <$> literalGen
+  , PList . Vec.fromList <$> Gen.list (Range.linear 0 depth) (pactValueGen' (depth - 1))
+  , PGuard <$> guardGen (depth - 1) fullyQualifiedNameGen
+  ]
 
 chainIdGen :: Gen ChainId
 chainIdGen = ChainId <$> identGen
@@ -389,10 +412,23 @@ defPactContinuationGen = undefined
 
 defPactExecGen :: Gen DefPactExec
 defPactExecGen = do
+  i <- Gen.int (Range.linear 0 8)
+  defPactExecGen' i
+
+defPactExecGen' :: Int -> Gen DefPactExec
+defPactExecGen' depth = do
   sc <- Gen.int (Range.linear 1 16)
   yield <- Gen.maybe yieldGen
   step <- Gen.int (Range.linear 1 sc)
   dpid <- defPactIdGen
   cont <- defPactContinuationGen
+  nested <- if depth <= 0
+            then pure Map.empty
+            else Gen.map (Range.linear 0 8) genNested
   rb <- Gen.bool
-  DefPactExec sc yield step dpid cont rb <$> Gen.map (Range.linear 0 8) ((,) <$> defPactIdGen <*> undefined)
+  pure (DefPactExec sc yield step dpid cont rb nested)
+  where
+    genNested = do
+      dpid <- defPactIdGen
+      pexec <- defPactExecGen' (depth - 1)
+      pure (dpid, pexec)

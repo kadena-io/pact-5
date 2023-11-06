@@ -1,12 +1,15 @@
+{-# LANGUAGE TypeApplications #-}
 -- | 
 
 module Pact.Core.Test.SerialiseTests where
 
-import Data.ByteString
 import Pact.Core.Serialise
 import Pact.Core.Gen.Serialise
 import Pact.Core.Serialise.CBOR ()
 import qualified Codec.Serialise as S
+
+import Pact.Core.Builtin
+import Pact.Core.Info
 
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.Hedgehog
@@ -28,17 +31,42 @@ documentVersionGen = DocumentVersion <$> Gen.word32 (Range.linear 0 100)
 documentGen :: Gen a -> Gen (Document a)
 documentGen g = Document <$> documentVersionGen <*> documentFormatGen <*> g
 
--- serialiseModule :: Property
--- serialiseModule = property $ do
---   m <- forAll evalModuleGen
---   let
---     encoded = _encodeModuleData serialiseCBOR m
---   case _decodeModuleData serialiseCBOR encoded of
---     Left _ -> fail "asas"
---     Right (Document v f c) -> do
---       v === DocumentVersion 0
---       f === DocumentCBOR
---       m === c
+serialiseModule :: Property
+serialiseModule = property $ do
+  m <- forAll (moduleDataGen builtinGen infoGen)
+  let
+    encoded = _encodeModuleData serialiseCBOR m
+  case _decodeModuleData serialiseCBOR encoded of
+    Left _ -> fail "asas"
+    Right (Document v f c) -> do
+      v === DocumentVersion 0
+      f === DocumentCBOR
+      m === c
+
+
+serialiseKeySet :: Property
+serialiseKeySet = property $ do
+  ks <- forAll (keySetGen fullyQualifiedNameGen)
+  let
+    encoded = _encodeKeySet (serialiseCBOR @RawBuiltin @SpanInfo) ks
+  case _decodeKeySet (serialiseCBOR @RawBuiltin @SpanInfo) encoded of
+    Left _ -> fail "asas"
+    Right (Document v f c) -> do
+      v === DocumentVersion 0
+      f === DocumentCBOR
+      ks === c
+
+serialiseDefPactExec :: Property
+serialiseDefPactExec = property $ do
+  dpe <- forAll (Gen.maybe defPactExecGen)
+  let
+    encoded = _encodeDefPactExec (serialiseCBOR @RawBuiltin @SpanInfo) dpe
+  case _decodeDefPactExec (serialiseCBOR @RawBuiltin @SpanInfo) encoded of
+    Left _ -> fail "asas"
+    Right (Document v f c) -> do
+      v === DocumentVersion 0
+      f === DocumentCBOR
+      dpe === c
 
 tests :: TestTree
 tests = testGroup "Serialise Roundtrip"
@@ -89,8 +117,10 @@ tests = testGroup "Serialise Roundtrip"
     , testProperty "DefPact" $ serialiseRoundtrip (defPactGen builtinGen infoGen)
     -- , testProperty "ReplBuiltins" $ serialiseRoundtrip replBuiltinsGen
     -- , testProperty "ReplRawBuiltin" $ serialiseRoundtrip replRawBuiltinGen
-    ] 
-    -- testGroup "CBOR Serialise"
-    --   [ testProperty "Module roundtrip" serialiseModule
-    --   ]
+    ],
+    testGroup "CBOR Serialise"
+      [ testProperty "KeySet roundtrip" serialiseKeySet
+      , testProperty "Module roundtrip" serialiseModule
+      , testProperty "DefPactExec roundtrip" serialiseDefPactExec
+      ]
   ]
