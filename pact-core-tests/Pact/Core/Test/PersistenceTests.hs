@@ -47,7 +47,7 @@ moduleDataRoundtrip :: (Show b,Show i, Eq b, Eq i) => PactSerialise b i -> Gen b
 moduleDataRoundtrip serial b i = property $ do
   moduleData <- forAll (moduleDataGen b i)
   moduleName <- forAll moduleNameGen
-  writtenModuleData <- liftIO $ withSqlitePactDb serial ":memory" $ \db -> do
+  writtenModuleData <- liftIO $ withSqlitePactDb serial ":memory:" $ \db -> do
     () <- writeModule db Insert moduleName moduleData
     readModule db moduleName
   Just moduleData === writtenModuleData
@@ -56,7 +56,7 @@ defPactExecRoundtrip :: (Show b,Show i, Eq b, Eq i) => PactSerialise b i -> Gen 
 defPactExecRoundtrip serial b i = property $ do
   defPactId <- forAll defPactIdGen
   defPactExec <- forAll (Gen.maybe defPactExecGen)
-  writtenDefPactExec <- liftIO $ withSqlitePactDb serial ":memory" $ \db -> do
+  writtenDefPactExec <- liftIO $ withSqlitePactDb serial ":memory:" $ \db -> do
     () <- writeDefPacts db Insert defPactId defPactExec
     readDefPacts db defPactId
   Just defPactExec === writtenDefPactExec
