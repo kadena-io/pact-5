@@ -6,6 +6,10 @@
 --  Normal usage of this module involes the `serializeModuleForHash` function,
 --  and `defaultSerializeForDatabase`.
 
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Pact.Core.Serialise where
 
 import Data.ByteString (ByteString, fromStrict)
@@ -24,7 +28,7 @@ import qualified Codec.CBOR.Encoding as S
 import qualified Codec.CBOR.Decoding as S
 import Codec.CBOR.Write (toStrictByteString)
 
-import Pact.Core.Serialise.CBOR ()
+import Pact.Core.Serialise.CBOR_V1 ( V1Serial(V1Serial, unV1Serial))
 import Data.Bifunctor
 
 import Data.Int (Int64)
@@ -94,9 +98,16 @@ serialiseCBOR = PactSerialise
     format = DocumentCBOR
     toErr (S.DeserialiseFailure offset msg) = DecodeFailure offset msg
 
-instance S.Serialise a => S.Serialise (Document a) where
+instance S.Serialise (V1Serial a) => S.Serialise (Document a) where
   encode (Document v f c) = S.encode v <> S.encode f <> S.encode c
-  decode = Document <$> S.decode <*> S.decode <*> S.decode
+  decode = do
+    _documentVersion <- S.decode
+    _documentFormat <- S.decode
+    _documentContent <- case (_documentVersion, _documentFormat) of
+      (DocumentVersion 1, DocumentCBOR) -> unV1Serial <$> S.decode @(V1Serial a)
+    pure $ Document {_documentVersion, _documentFormat, _documentContent }
+
+
 
 instance S.Serialise DocumentVersion where
   encode (DocumentVersion v) = S.encode v

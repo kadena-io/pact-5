@@ -135,7 +135,7 @@ library
 
     -- Serialization
     Pact.Core.Serialise
-    Pact.Core.Serialise.CBOR
+    Pact.Core.Serialise.CBOR_V1
 
 library typed-core
   import: pact-core-common

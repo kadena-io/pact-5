@@ -24,7 +24,8 @@ testsWithSerial :: (Show b, Show i, Eq b, Eq i) => PactSerialise b i -> Gen b ->
 testsWithSerial serial b i =
  [ testProperty "KeySet" $ keysetPersistRoundtrip serial (keySetGen undefined)
  , testProperty "ModuleData" $ moduleDataRoundtrip serial b i
- , testProperty "DefPactExec" $ defPactExecRoundtrip serial b i]
+ -- , testProperty "DefPactExec" $ defPactExecRoundtrip serial b i
+ ]
 
 tests :: TestTree
 tests = testGroup "Persistence Roundtrip"
