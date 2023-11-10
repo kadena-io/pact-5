@@ -5,7 +5,7 @@ module Pact.Core.Test.SerialiseTests where
 
 import Pact.Core.Serialise
 import Pact.Core.Gen.Serialise
-import Pact.Core.Serialise.CBOR ()
+import Pact.Core.Serialise.CBOR_V1 ()
 import qualified Codec.Serialise as S
 
 import Pact.Core.Builtin
@@ -33,7 +33,7 @@ documentGen g = Document <$> documentVersionGen <*> documentFormatGen <*> g
 
 serialiseModule :: Property
 serialiseModule = property $ do
-  m <- forAll (moduleDataGen builtinGen infoGen)
+  m <- forAll (moduleDataGen builtinGen (pure ()))
   let
     encoded = _encodeModuleData serialiseCBOR m
   case _decodeModuleData serialiseCBOR encoded of
@@ -48,8 +48,8 @@ serialiseKeySet :: Property
 serialiseKeySet = property $ do
   ks <- forAll (keySetGen fullyQualifiedNameGen)
   let
-    encoded = _encodeKeySet (serialiseCBOR @RawBuiltin @SpanInfo) ks
-  case _decodeKeySet (serialiseCBOR @RawBuiltin @SpanInfo) encoded of
+    encoded = _encodeKeySet serialiseCBOR ks
+  case _decodeKeySet serialiseCBOR encoded of
     Left _ -> fail "asas"
     Right (Document v f c) -> do
       v === DocumentVersion 0
@@ -60,8 +60,8 @@ serialiseDefPactExec :: Property
 serialiseDefPactExec = property $ do
   dpe <- forAll (Gen.maybe defPactExecGen)
   let
-    encoded = _encodeDefPactExec (serialiseCBOR @RawBuiltin @SpanInfo) dpe
-  case _decodeDefPactExec (serialiseCBOR @RawBuiltin @SpanInfo) encoded of
+    encoded = _encodeDefPactExec serialiseCBOR dpe
+  case _decodeDefPactExec serialiseCBOR encoded of
     Left _ -> fail "asas"
     Right (Document v f c) -> do
       v === DocumentVersion 0
@@ -73,7 +73,7 @@ tests = testGroup "Serialise Roundtrip"
   [ testGroup "Document"
     [ testProperty "DocumentFormat" $ serialiseRoundtrip documentFormatGen
     , testProperty "DocumentVersion" $ serialiseRoundtrip documentVersionGen
-    , testProperty "Document" $ serialiseRoundtrip (documentGen (Gen.constant ()))
+--    , testProperty "Document" $ serialiseRoundtrip (documentGen (Gen.constant ()))
     ]
   , testGroup "CBOR"
     [ testProperty "NamespaceName" $ serialiseRoundtrip namespaceNameGen

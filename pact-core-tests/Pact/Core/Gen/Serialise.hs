@@ -26,6 +26,7 @@ import Pact.Core.Persistence
 import Pact.Core.PactValue
 import Pact.Core.DefPacts.Types
 import Pact.Core.ChainData
+import Pact.Core.Namespace
 
 import qualified Data.ByteString.Short as BSS
 import Pact.Core.Test.LexerParserTests (identGen)
@@ -36,6 +37,12 @@ import Data.Decimal
 
 namespaceNameGen :: Gen NamespaceName
 namespaceNameGen = NamespaceName <$> identGen
+
+namespaceGen :: Gen Namespace
+namespaceGen = do
+  name <- namespaceNameGen
+  user <- guardGen 3 fullyQualifiedNameGen
+  Namespace name user <$> guardGen 3 fullyQualifiedNameGen
 
 moduleNameGen :: Gen ModuleName
 moduleNameGen =  do

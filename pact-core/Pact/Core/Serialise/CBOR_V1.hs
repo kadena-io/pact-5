@@ -26,21 +26,21 @@ import Pact.Core.ModRefs
 import Pact.Core.ChainData
 import Pact.Time.Internal (UTCTime(..), NominalDiffTime(..))
 
-newtype V1Serial a = V1Serial { unV1Serial :: a }
+-- newtype V1Serial a = V1Serial { unV1Serial :: a }
 
-instance Serialise (V1Serial (KeySet FullyQualifiedName)) where
-  encode (V1Serial ks) = encode ks
-  decode = V1Serial <$> decode
+-- instance Serialise (V1Serial (KeySet FullyQualifiedName)) where
+--   encode (V1Serial ks) = encode ks
+--   decode = V1Serial <$> decode
 
-instance Serialise (V1Serial (Maybe DefPactExec)) where
-  encode (V1Serial ks) = encode ks
-  decode = V1Serial <$> decode
+-- instance Serialise (V1Serial (Maybe DefPactExec)) where
+--   encode (V1Serial ks) = encode ks
+--   decode = V1Serial <$> decode
 
-instance (Serialise (b), Serialise (i)) =>
-  Serialise (V1Serial (ModuleData b i)) where
-  encode (V1Serial md) = case md of
-    ModuleData em m -> encodeWord 0 <> encode (em) <> encode (m)
-  decode = V1Serial <$> decode
+-- instance (Serialise (b), Serialise (i)) =>
+--   Serialise (V1Serial (ModuleData b i)) where
+--   encode (V1Serial md) = case md of
+--     ModuleData em m -> encodeWord 0 <> encode (em) <> encode (m)
+--   decode = V1Serial <$> decode
 
 instance Serialise NamespaceName where
   encode (NamespaceName ns) = encode ns

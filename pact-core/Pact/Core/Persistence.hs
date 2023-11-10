@@ -26,6 +26,7 @@ module Pact.Core.Persistence
  , readModule, writeModule
  , readKeySet, writeKeySet
  , readDefPacts, writeDefPacts
+ , readNamespace, writeNamespace
  , GuardTableOp(..)
  , DbOpException(..)
  , TxId(..)
@@ -190,6 +191,12 @@ readDefPacts pdb = _pdbRead pdb DDefPacts
 
 writeDefPacts :: PactDb b i -> WriteType -> DefPactId -> Maybe DefPactExec -> IO ()
 writeDefPacts pdb wt = _pdbWrite pdb wt DDefPacts
+
+readNamespace :: PactDb b i -> NamespaceName -> IO (Maybe Namespace)
+readNamespace pdb = _pdbRead pdb DNamespaces
+
+writeNamespace :: PactDb b i -> WriteType -> NamespaceName -> Namespace -> IO ()
+writeNamespace pdb wt = _pdbWrite pdb wt DNamespaces
 
 data DbOpException
   = WriteException
