@@ -1412,7 +1412,7 @@ createPrincipalForGuard = \case
   GModuleGuard (ModuleGuard mn n) -> Pr.M mn n
   GUserGuard (UserGuard f args) ->
     let h = mkHash $ map encodeStable args
-    in Pr.U (Pretty.renderText f) (hashToText h)
+    in Pr.U (renderQualName $ fqnToQualName f) (hashToText h)
     -- TODO orig pact gets here ^^^^ a Name
     -- which can be any of QualifiedName/BareName/DynamicName/FQN,
     -- and uses the rendered string here. Need to double-check equivalence.
