@@ -29,7 +29,7 @@ import Control.Monad.IO.Class
 import Data.Attoparsec.Text(parseOnly)
 import Data.Containers.ListUtils(nubOrd)
 import Data.Bits
-import Data.Either(isRight)
+import Data.Either(isLeft, isRight)
 import Data.Foldable(foldl', traverse_, toList)
 import Data.Decimal(roundTo', Decimal)
 import Data.Vector(Vector)
@@ -724,7 +724,11 @@ coreReadKeyset :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreReadKeyset = \info b cont handler _env -> \case
   [VString ksn] ->
     readKeyset' ksn >>= \case
-      Just ks -> returnCEKValue cont handler (VGuard (GKeyset ks))
+      Just ks -> do
+        shouldEnforce <- isExecutionFlagSet FlagEnforceKeyFormats
+        if shouldEnforce && isLeft (enforceKeyFormats (const ()) ks)
+           then returnCEK cont handler (VError "Invalid keyset" info)
+           else returnCEKValue cont handler (VGuard (GKeyset ks))
       Nothing -> returnCEK cont handler (VError "read-keyset failure" info)
   args -> argsError info b args
 
