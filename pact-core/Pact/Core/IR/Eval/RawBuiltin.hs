@@ -1402,35 +1402,33 @@ coreCompose = \info b cont handler _env -> \case
       err -> returnCEK cont handler err
   args -> argsError info b args
 
-createPrincipalForGuard :: (Monad m) => Guard FullyQualifiedName PactValue -> m Pr.Principal
-createPrincipalForGuard g = do
-  case g of
-    GKeyset (KeySet ks pf) -> case (toList ks, pf) of
-      ([k], KeysAll) -> pure $ Pr.K k
-      (l, _) -> do
-        h <- mkHash $ map (T.encodeUtf8 . _pubKey) l
-        pure $ Pr.W (hashToText h) (predicateToString pf)
-    GKeySetRef ksn -> pure $ Pr.R ksn
-    GModuleGuard (ModuleGuard mn n) -> pure $ Pr.M mn n
-    GUserGuard (UserGuard f args) -> do
-      h <- mkHash $ map encodeStable args
-      pure $ Pr.U (Pretty.renderText f) (hashToText h)
-      -- TODO orig pact gets here ^^^^ a Name
-      -- which can be any of QualifiedName/BareName/DynamicName/FQN,
-      -- and uses the rendered string here. Need to double-check equivalence.
-    GCapabilityGuard (CapabilityGuard f args pid) -> do
-      let args' = map encodeStable args
-          f' = T.encodeUtf8 $ renderQualName $ fqnToQualName f
-          pid' = T.encodeUtf8 . renderDefPactId <$> pid
-      h <- mkHash $ f' : args' ++ maybeToList pid'
-      pure $ Pr.C $ hashToText h
+createPrincipalForGuard :: Guard FullyQualifiedName PactValue -> Pr.Principal
+createPrincipalForGuard = \case
+  GKeyset (KeySet ks pf) -> case (toList ks, pf) of
+    ([k], KeysAll) -> Pr.K k
+    (l, _) -> let h = mkHash $ map (T.encodeUtf8 . _pubKey) l
+              in Pr.W (hashToText h) (predicateToString pf)
+  GKeySetRef ksn -> Pr.R ksn
+  GModuleGuard (ModuleGuard mn n) -> Pr.M mn n
+  GUserGuard (UserGuard f args) ->
+    let h = mkHash $ map encodeStable args
+    in Pr.U (Pretty.renderText f) (hashToText h)
+    -- TODO orig pact gets here ^^^^ a Name
+    -- which can be any of QualifiedName/BareName/DynamicName/FQN,
+    -- and uses the rendered string here. Need to double-check equivalence.
+  GCapabilityGuard (CapabilityGuard f args pid) ->
+    let args' = map encodeStable args
+        f' = T.encodeUtf8 $ renderQualName $ fqnToQualName f
+        pid' = T.encodeUtf8 . renderDefPactId <$> pid
+        h = mkHash $ f' : args' ++ maybeToList pid'
+    in Pr.C $ hashToText h
   where
-    mkHash bss = pure $ pactHash $ mconcat bss
+    mkHash bss = pactHash $ mconcat bss
 
 coreCreatePrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreCreatePrincipal info b cont handler _env = \case
   [VGuard g] -> do
-    pr <- createPrincipalForGuard g
+    let pr = createPrincipalForGuard g
     returnCEKValue cont handler $ VString $ Pr.mkPrincipalIdent pr
   args -> argsError info b args
 
@@ -1451,7 +1449,7 @@ coreTypeOfPrincipal info b cont handler _env = \case
 coreValidatePrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreValidatePrincipal info b cont handler _env = \case
   [VGuard g, VString s] -> do
-    pr' <- createPrincipalForGuard g
+    let pr' = createPrincipalForGuard g
     returnCEKValue cont handler $ VBool $ Pr.mkPrincipalIdent pr' == s
   args -> argsError info b args
 
