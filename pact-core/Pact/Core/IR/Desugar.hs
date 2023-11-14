@@ -959,11 +959,9 @@ renameReplDefun
   => Defun ParsedName DesugarType b i
   -> RenamerT b i m (Defun Name Type b i)
 renameReplDefun (Defun n args ret term i) = do
-  -- Todo: put type variables in scope here, if we want to support polymorphism
   let fqn = FullyQualifiedName replModuleName n replModuleHash
   args' <- (traverse.traverse) (renameType i) args
   ret' <- traverse (renameType i) ret
-  -- rsModuleBinds %= M.insertWith (<>) replModuleName (M.singleton n (NTopLevel replModuleName replModuleHash, DKDefun))
   esLoaded . loToplevel %== M.insert n (fqn, DKDefun)
   term' <- local (set reCurrDef (Just DKDefun)) $ renameTerm term
   pure (Defun n args' ret' term' i)
@@ -973,9 +971,7 @@ renameReplDefConst
   => DefConst ParsedName DesugarType b i
   -> RenamerT b i m (DefConst Name Type b i)
 renameReplDefConst (DefConst n mty term i) = do
-  -- Todo: put type variables in scoperhere, if we want to support polymorphism
   let fqn = FullyQualifiedName replModuleName n replModuleHash
-  -- rsModuleBinds %= M.insertWith (<>) replModuleName (M.singleton n (NTopLevel replModuleName replModuleHash, DKDefConst))
   esLoaded . loToplevel %== M.insert n (fqn, DKDefConst)
   mty' <- traverse (renameType i) mty
   term' <- local (set reCurrDef (Just DKDefConst)) $ traverse renameTerm term
@@ -986,7 +982,6 @@ renameDefConst
   => DefConst ParsedName DesugarType b i
   -> RenamerT b i m (DefConst Name Type b i)
 renameDefConst (DefConst n mty term i) = do
-  -- Todo: put type variables in scope here, if we want to support polymorphism
   mty' <- traverse (renameType i) mty
   term' <- local (set reCurrDef (Just DKDefConst)) $ traverse renameTerm term
   pure (DefConst n mty' term' i)
@@ -1296,14 +1291,11 @@ renameInterface (Interface unmangled defs imports ih info) = do
       throwDesugarError (DuplicateDefinition dn) info
     d' <- local (set reBinds m) $
           local (set reCurrModule (Just (ifn, []))) $ renameIfDef d
-    -- let m' = maybe m (\dk -> M.insert dn (NTopLevel ifn ih, Just dk) m) (ifDefKind d')
-    m' <- case ifDefToDef d' of
-      Just defn -> do
-        -- let fqn = FullyQualifiedName ifn dn ih
-        let dk = defKind defn
-        -- esLoaded . loToplevel . ix dn .== (fqn, dk)
-        pure (M.insert dn (NTopLevel ifn ih, Just dk) m)
-      Nothing -> pure m
+    let m' = case ifDefToDef d' of
+              Just defn ->
+                let dk = defKind defn
+                in M.insert dn (NTopLevel ifn ih, Just dk) m
+              Nothing -> m
     pure (d':ds, S.insert dn s, m')
 
 runRenamerT

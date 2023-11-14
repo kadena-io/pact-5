@@ -60,8 +60,12 @@ hashInterfaceAndReplace iface@(Interface ifn defs imps _mh info) =
 updateDefHashes :: ModuleName -> ModuleHash -> Def Name Type b i -> Def Name Type b i
 updateDefHashes mname mhash = \case
   Dfun d -> Dfun $ over dfunTerm (updateTermHashes mname mhash) d
-  DConst d -> DConst $ over dcTerm (fmap (updateTermHashes mname mhash)) d
-  DCap d -> DCap $ over dcapTerm (updateTermHashes mname mhash) d
+  DConst d -> DConst $ case _dcTerm d of
+    TermConst t -> set dcTerm (TermConst (updateTermHashes mname mhash t)) d
+    EvaledConst v -> set dcTerm (EvaledConst (updatePactValueHash mname mhash v)) d
+  DCap d ->
+    DCap $ over dcapTerm (updateTermHashes mname mhash)
+         $ over (dcapMeta.dcMetaFqName) (updateFqNameHash mname mhash) d
   DPact d ->
     let updateStep (Step e1 m) = Step (updateTermHashes mname mhash e1) m
         updateStep (StepWithRollback e1 e2 m) = StepWithRollback (updateTermHashes mname mhash e1) (updateTermHashes mname mhash e2) m
@@ -80,6 +84,44 @@ updateNameHash :: ModuleName -> ModuleHash -> Name -> Name
 updateNameHash mname mhash (Name n nk) = case nk of
   NTopLevel tlmod _ | tlmod == mname -> Name n (NTopLevel tlmod mhash)
   _ -> Name n nk
+
+updateFqNameHash :: ModuleName -> ModuleHash -> FullyQualifiedName -> FullyQualifiedName
+updateFqNameHash mname mhash (FullyQualifiedName tlmod n mh)
+  | tlmod == mname = FullyQualifiedName tlmod n mhash
+  | otherwise = FullyQualifiedName tlmod n mh
+
+updateGuardHash
+  :: ModuleName
+  -> ModuleHash
+  -> Guard FullyQualifiedName PactValue
+  -> Guard FullyQualifiedName PactValue
+updateGuardHash mname mhash = \case
+  GKeyset ks -> GKeyset ks
+  GKeySetRef ksn -> GKeySetRef ksn
+  GUserGuard (UserGuard fqn pvs) ->
+    GUserGuard $
+      UserGuard
+        (updateFqNameHash mname mhash fqn)
+        (updatePactValueHash mname mhash <$> pvs)
+  GCapabilityGuard (CapabilityGuard fqn pvs pid) ->
+    GCapabilityGuard $
+      CapabilityGuard
+        (updateFqNameHash mname mhash fqn)
+        (updatePactValueHash mname mhash <$> pvs)
+        pid
+  GModuleGuard mg -> GModuleGuard mg
+
+updatePactValueHash :: ModuleName -> ModuleHash -> PactValue -> PactValue
+updatePactValueHash mname mhash = \case
+  PLiteral l -> PLiteral l
+  PList l ->
+    PList $ updatePactValueHash mname mhash <$> l
+  PGuard g -> PGuard $ updateGuardHash mname mhash g
+  PObject o -> PObject $ updatePactValueHash mname mhash <$> o
+  PModRef m -> PModRef m
+  PCapToken (CapToken ct pvs) ->
+    PCapToken $ CapToken (updateFqNameHash mname mhash ct) (updatePactValueHash mname mhash <$> pvs)
+  PTime t -> PTime t
 
 encodeModule :: (IsBuiltin b) => Module Name Type b i -> Builder
 encodeModule (Module mname mgov defs mblessed imports mimps _mh _mi) = parens $
