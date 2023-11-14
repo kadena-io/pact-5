@@ -26,12 +26,14 @@ module Pact.Core.IR.Eval.RawBuiltin
 import Control.Lens hiding (from, to, op, parts)
 import Control.Monad(when, unless, foldM)
 import Control.Monad.IO.Class
+import Data.Attoparsec.Text(parseOnly)
 import Data.Containers.ListUtils(nubOrd)
 import Data.Bits
-import Data.Foldable(foldl', traverse_)
+import Data.Either(isLeft, isRight)
+import Data.Foldable(foldl', traverse_, toList)
 import Data.Decimal(roundTo', Decimal)
 import Data.Vector(Vector)
-import Data.Maybe(isJust)
+import Data.Maybe(isJust, maybeToList)
 import Numeric(showIntAtBase)
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
@@ -56,6 +58,7 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.Environment
 import Pact.Core.Capabilities
 import Pact.Core.Namespace
+import qualified Pact.Core.Principal as Pr
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
@@ -720,7 +723,11 @@ coreReadKeyset :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreReadKeyset info b cont handler _env = \case
   [VString ksn] ->
     readKeyset' ksn >>= \case
-      Just ks -> returnCEKValue cont handler (VGuard (GKeyset ks))
+      Just ks -> do
+        shouldEnforce <- isExecutionFlagSet FlagEnforceKeyFormats
+        if shouldEnforce && isLeft (enforceKeyFormats (const ()) ks)
+           then returnCEK cont handler (VError "Invalid keyset" info)
+           else returnCEKValue cont handler (VGuard (GKeyset ks))
       Nothing -> returnCEK cont handler (VError "read-keyset failure" info)
   args -> argsError info b args
 
@@ -1397,6 +1404,58 @@ coreCompose info b cont handler _env = \case
       err -> returnCEK cont handler err
   args -> argsError info b args
 
+createPrincipalForGuard :: Guard FullyQualifiedName PactValue -> Pr.Principal
+createPrincipalForGuard = \case
+  GKeyset (KeySet ks pf) -> case (toList ks, pf) of
+    ([k], KeysAll) -> Pr.K k
+    (l, _) -> let h = mkHash $ map (T.encodeUtf8 . _pubKey) l
+              in Pr.W (hashToText h) (predicateToString pf)
+  GKeySetRef ksn -> Pr.R ksn
+  GModuleGuard (ModuleGuard mn n) -> Pr.M mn n
+  GUserGuard (UserGuard f args) ->
+    let h = mkHash $ map encodeStable args
+    in Pr.U (renderQualName $ fqnToQualName f) (hashToText h)
+    -- TODO orig pact gets here ^^^^ a Name
+    -- which can be any of QualifiedName/BareName/DynamicName/FQN,
+    -- and uses the rendered string here. Need to double-check equivalence.
+  GCapabilityGuard (CapabilityGuard f args pid) ->
+    let args' = map encodeStable args
+        f' = T.encodeUtf8 $ renderQualName $ fqnToQualName f
+        pid' = T.encodeUtf8 . renderDefPactId <$> pid
+        h = mkHash $ f' : args' ++ maybeToList pid'
+    in Pr.C $ hashToText h
+  where
+    mkHash bss = pactHash $ mconcat bss
+
+coreCreatePrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreCreatePrincipal info b cont handler _env = \case
+  [VGuard g] -> do
+    let pr = createPrincipalForGuard g
+    returnCEKValue cont handler $ VString $ Pr.mkPrincipalIdent pr
+  args -> argsError info b args
+
+coreIsPrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreIsPrincipal info b cont handler _env = \case
+  [VString p] -> returnCEKValue cont handler $ VBool $ isRight $ parseOnly Pr.principalParser p
+  args -> argsError info b args
+
+coreTypeOfPrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreTypeOfPrincipal info b cont handler _env = \case
+  [VString p] -> do
+    let prty = case parseOnly Pr.principalParser p of
+          Left _ -> ""
+          Right pr -> Pr.showPrincipalType pr
+    returnCEKValue cont handler $ VString prty
+  args -> argsError info b args
+
+coreValidatePrincipal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreValidatePrincipal info b cont handler _env = \case
+  [VGuard g, VString s] -> do
+    let pr' = createPrincipalForGuard g
+    returnCEKValue cont handler $ VBool $ Pr.mkPrincipalIdent pr' == s
+  args -> argsError info b args
+
+
 --------------------------------------------------
 -- Namespace functions
 --------------------------------------------------
@@ -1614,6 +1673,10 @@ rawBuiltinRuntime = \case
   RawDays -> days
   RawCompose -> coreCompose
   RawSelectWithFields -> dbSelect
+  RawCreatePrincipal -> coreCreatePrincipal
+  RawIsPrincipal -> coreIsPrincipal
+  RawTypeOfPrincipal -> coreTypeOfPrincipal
+  RawValidatePrincipal -> coreValidatePrincipal
   RawNamespace -> coreNamespace
   RawDefineNamespace -> coreDefineNamespace
   RawDescribeNamespace -> coreDescribeNamespace

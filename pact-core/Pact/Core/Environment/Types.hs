@@ -84,7 +84,8 @@ data ExecutionFlag
   | FlagAllowReadInLocal
   -- | Disable emission of pact events
   | FlagDisablePactEvents
-  -- | FlagEnforceKeyFormats
+  -- | Run the validity checks on keys
+  | FlagEnforceKeyFormats
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation

@@ -7,8 +7,6 @@
 {-# LANGUAGE ConstraintKinds #-}
 
 
-
-
 module Pact.Core.Environment.Utils
  ( setEvalState
  , (%==), useEvalState, usesEvalState

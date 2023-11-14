@@ -52,6 +52,7 @@ module Pact.Core.Names
  , userTable
  , DefPactId(..)
  , parseModuleName
+ , renderDefPactId
  ) where
 
 import Control.Lens
@@ -370,3 +371,6 @@ moduleNameParser = do
 
 parseModuleName :: Text -> Maybe ModuleName
 parseModuleName = MP.parseMaybe moduleNameParser
+
+renderDefPactId :: DefPactId -> Text
+renderDefPactId (DefPactId t) = t

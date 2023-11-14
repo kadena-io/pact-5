@@ -152,9 +152,13 @@ interpretTopLevel interp tl = do
           mdata = ModuleData m deps'
       liftDbFunction (_mInfo m) (writeModule pdb Write (view mName m) mdata)
       let newLoaded = M.fromList $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
+          newTopLevel = M.fromList
+                        $ fmap (\(fqn, d) -> (_fqName fqn, (fqn, defKind d)))
+                        $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
           loadNewModule =
             over loModules (M.insert (_mName m) mdata) .
-            over loAllLoaded (M.union newLoaded)
+            over loAllLoaded (M.union newLoaded) .
+            over loToplevel (M.union newTopLevel)
       esLoaded %== loadNewModule
       esCaps . csModuleAdmin %== S.union (S.singleton (_mName m))
       pure (LoadedModule (_mName m) (_mHash m))
@@ -164,9 +168,14 @@ interpretTopLevel interp tl = do
       liftDbFunction (_ifInfo iface) (writeModule pdb Write (view ifName iface) mdata)
       let newLoaded = M.fromList $ toFqDep (_ifName iface) (_ifHash iface)
                       <$> mapMaybe ifDefToDef (_ifDefns iface)
+          newTopLevel = M.fromList
+                        $ fmap (\(fqn, d) -> (_fqName fqn, (fqn, defKind d)))
+                        $ toFqDep (_ifName iface) (_ifHash iface)
+                        <$> mapMaybe ifDefToDef (_ifDefns iface)
           loadNewModule =
             over loModules (M.insert (_ifName iface) mdata) .
-            over loAllLoaded (M.union newLoaded)
+            over loAllLoaded (M.union newLoaded) .
+            over loToplevel (M.union newTopLevel)
       esLoaded %== loadNewModule
       pure (LoadedInterface (view ifName iface) (view ifHash iface))
     TLTerm term -> InterpretValue <$> _interpret interp PImpure term

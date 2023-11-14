@@ -679,8 +679,8 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
               evalCEK sfCont handler inCapEnv capBody
               -- evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
             VError v i -> returnCEK currCont handler (VError v i)
-        _ -> failInvariant def "user managed cap is an invalid defn"
-    _ -> failInvariant def "Invalid managed cap type"
+        _ -> failInvariant info "user managed cap is an invalid defn"
+    _ -> failInvariant info "Invalid managed cap type"
   evalAutomanagedCap cont' env' capBody managedCap = case _mcManaged managedCap of
     AutoManaged b -> do
       if b then returnCEK currCont handler (VError "Automanaged capability used more than once" info)

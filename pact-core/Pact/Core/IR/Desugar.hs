@@ -1184,11 +1184,7 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash i) = d
       throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (head d))
   binds <- view reBinds
   bindsWithImports <- foldlM (handleImport i) binds imports
-  -- bindsWithImports <- handleImports binds imp
-  -- rsModuleBinds %= M.insert mname mempty
   (defs'', _, _) <- over _1 reverse <$> foldlM (go mname) ([], S.empty, bindsWithImports) defs'
-  -- let fqns = M.fromList $ (\d -> (defName d, (FullyQualifiedName mname (defName d) mhash, defKind d))) <$> defs''
-  -- esLoaded . loToplevel %== M.union fqns
   traverse_ (checkImplements i defs'' mname) implements
   pure (Module mname mgov' defs'' blessed imports implements mhash i)
   where
@@ -1201,9 +1197,6 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash i) = d
     let dk = defKind defn'
     let depPair = (NTopLevel mname mhash, dk)
     let m' = M.insert dn (over _2 Just depPair) m
-        -- fqn = FullyQualifiedName mname dn mhash
-    -- rsModuleBinds . ix mname %= M.insert dn depPair
-    -- esLoaded . loToplevel . ix dn .== (fqn, dk)
     pure (defn':defns, S.insert (defName defn) s, m')
 
   resolveGov mname = \case

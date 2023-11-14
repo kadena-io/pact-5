@@ -14,7 +14,6 @@ import Pact.Core.Guards
 import Pact.Core.PactValue
 import Pact.Core.Persistence(Purity)
 
-
 -- | Our general interpreter abstraction. It allows us to
 -- decouple evaluation from
 data Interpreter b i m
