@@ -1097,6 +1097,13 @@ createModuleGuard = \info b cont handler _env -> \case
         returnCEK cont handler (VError "not-in-module" info)
   args -> argsError info b args
 
+createDefPactGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+createDefPactGuard info b cont handler _env = \case
+  [VString name] -> do
+    dpid <- getDefPactId info
+    returnCEKValue cont handler $ VGuard $ GDefPactGuard $ DefPactGuard dpid name
+  args -> argsError info b args
+
 
 coreIntToStr :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreIntToStr = \info b cont handler _env -> \case
@@ -1635,6 +1642,7 @@ rawBuiltinRuntime = \case
   RawCreateCapabilityGuard -> createCapGuard
   RawCreateCapabilityPactGuard -> createCapabilityPactGuard
   RawCreateModuleGuard -> createModuleGuard
+  RawCreateDefPactGuard -> createDefPactGuard
   RawEmitEvent -> coreEmitEvent
   RawCreateTable -> createTable
   RawDescribeKeyset -> dbDescribeKeySet
