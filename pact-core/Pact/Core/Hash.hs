@@ -25,6 +25,8 @@ module Pact.Core.Hash
 , toB64UrlUnpaddedText
 , fromB64UrlUnpaddedText
 , defaultPactHash
+, placeholderHash
+, moduleHashToText
 ) where
 
 import Control.DeepSeq
@@ -58,6 +60,9 @@ instance Pretty Hash where
 
 hashToText :: Hash -> Text
 hashToText (Hash h) = toB64UrlUnpaddedText (fromShort h)
+
+moduleHashToText :: ModuleHash -> Text
+moduleHashToText (ModuleHash h) = hashToText h
 
 pactHash :: ByteString -> Hash
 pactHash = hash
@@ -115,6 +120,9 @@ fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }
   deriving (Eq, Ord, Show)
   deriving newtype (NFData)
+
+placeholderHash :: ModuleHash
+placeholderHash = ModuleHash (Hash "#placeholder")
 
 defaultPactHash :: Hash
 defaultPactHash = pactHash ""

@@ -153,6 +153,7 @@ alexGetByte (AlexInput line col _ stream) =
     , _inpColumn = 0
     , _inpLast = '\n'
     , _inpStream = rest})
+
   advance (c, rest) =
     (c
     , AlexInput
@@ -236,8 +237,8 @@ parseError (remaining, exps) =
   renderRemaining r
     | length r <= 10 = renderList r
     | otherwise = renderList $ (<> ["..."]) $ take 10 r
-  handleWithLastToken i =
-    throwParseError (ParsingError (renderRemaining (T.pack <$> exps))) i
+  handleWithLastToken =
+    throwParseError (ParsingError (renderRemaining (T.pack <$> exps)))
   handleTooMuchInput = \case
     (PosToken TokenCloseParens i):rest ->
       let rem' = renderRemaining (renderTokenText . _ptToken <$> rest)

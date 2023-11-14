@@ -334,6 +334,7 @@ data EvalError
   | NamespaceInstallError Text
   | DefineNamespaceError Text
   -- ^ Non-recoverable guard enforces.
+  | ConstIsNotAPactValue QualifiedName
   deriving Show
 
 

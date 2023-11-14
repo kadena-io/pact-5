@@ -38,7 +38,10 @@ import Pact.Core.Capabilities
 import Pact.Core.Literal
 import Pact.Core.Imports
 import Pact.Core.Namespace
+import Pact.Core.Hash
 
+import qualified Pact.Core.IR.ModuleHashing as MHash
+import qualified Pact.Core.IR.ConstEval as ConstEval
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
@@ -47,6 +50,7 @@ type HasCompileEnv b i  m
   = ( MonadEval b i m
     , DesugarBuiltin b
     , Pretty b
+    , IsBuiltin b
     , PhaseDebug b i m)
 
 _parseOnly
@@ -59,8 +63,8 @@ _parseOnlyFile :: FilePath -> IO (Either PactErrorI [Lisp.TopLevel SpanInfo])
 _parseOnlyFile fp = _parseOnly <$> B.readFile fp
 
 data CompileValue b
-  = LoadedModule ModuleName
-  | LoadedInterface ModuleName
+  = LoadedModule ModuleName ModuleHash
+  | LoadedInterface ModuleName ModuleHash
   | LoadedImports Import
   | InterpretValue InterpretValue
   deriving Show
@@ -111,7 +115,7 @@ evalModuleGovernance interp tl = do
               let cgBody = Constant LUnit info
                   term = CapabilityForm (WithCapability (fqnToName fqn) [] cgBody) info
               pure term
-          void (_interpret interp term)
+          void (_interpret interp PReadOnly term)
           esCaps . csModuleAdmin %== S.insert (Lisp._mName m)
           -- | Restore the state to pre-module admin acquisition
           esLoaded .== lo
@@ -138,9 +142,11 @@ interpretTopLevel interp tl = do
   -- Todo: pretty instance for modules and all of toplevel
   debugPrint (DPParser @b) tl
   (DesugarOutput ds deps) <- runDesugarTopLevel tl
+  constEvaled <- ConstEval.evalTLConsts interp ds
+  let tlFinal = MHash.hashTopLevel constEvaled
   debugPrint DPDesugar ds
   lo0 <- useEvalState esLoaded
-  case ds of
+  case tlFinal of
     TLModule m -> do
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = ModuleData m deps'
@@ -151,7 +157,7 @@ interpretTopLevel interp tl = do
             over loAllLoaded (M.union newLoaded)
       esLoaded %== loadNewModule
       esCaps . csModuleAdmin %== S.union (S.singleton (_mName m))
-      pure (LoadedModule (_mName m))
+      pure (LoadedModule (_mName m) (_mHash m))
     TLInterface iface -> do
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = InterfaceData iface deps'
@@ -162,6 +168,6 @@ interpretTopLevel interp tl = do
             over loModules (M.insert (_ifName iface) mdata) .
             over loAllLoaded (M.union newLoaded)
       esLoaded %== loadNewModule
-      pure (LoadedInterface (view ifName iface))
-    TLTerm term -> InterpretValue <$> _interpret interp term
+      pure (LoadedInterface (view ifName iface) (view ifHash iface))
+    TLTerm term -> InterpretValue <$> _interpret interp PImpure term
     TLUse imp _ -> pure (LoadedImports imp)

@@ -1,15 +1,13 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE InstanceSigs #-}
+
+
+
 
 module Pact.Core.Environment.Utils
  ( setEvalState
@@ -29,6 +27,7 @@ module Pact.Core.Environment.Utils
  ) where
 
 import Control.Lens
+import Control.Applicative((<|>))
 import Control.Monad.Except
 import Data.Default
 import Data.Maybe(mapMaybe)
@@ -86,7 +85,7 @@ lookupModule info pdb mn =
    Nothing -> do
     liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
       Just mdata@(ModuleData md deps) -> do
-        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> (_mDefs md)
+        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> _mDefs md
         (esLoaded . loAllLoaded) %== M.union newLoaded . M.union deps
         (esLoaded . loModules) %== M.insert mn mdata
         pure (Just md)
@@ -102,7 +101,7 @@ lookupModuleData info pdb mn =
    Nothing -> do
     liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
       Just mdata@(ModuleData md deps) -> do
-        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> (_mDefs md)
+        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> _mDefs md
         (esLoaded . loAllLoaded) %== M.union newLoaded . M.union deps
         (esLoaded . loModules) %== M.insert mn mdata
         pure (Just mdata)
@@ -125,7 +124,7 @@ getModule info pdb mn =
    Nothing -> do
     liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
       Just mdata@(ModuleData md deps) -> do
-        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> (_mDefs md)
+        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> _mDefs md
         (esLoaded . loAllLoaded) %== M.union newLoaded . M.union deps
         (esLoaded . loModules) %== M.insert mn mdata
         pure md
@@ -142,7 +141,7 @@ getModuleData info pdb mn =
    Nothing -> do
     liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
       Just mdata@(ModuleData md deps) -> do
-        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> (_mDefs md)
+        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> _mDefs md
         (esLoaded . loAllLoaded) %== M.union newLoaded . M.union deps
         (esLoaded . loModules) %== M.insert mn mdata
         pure mdata
@@ -170,4 +169,4 @@ mangleNamespace :: (MonadEvalState b i m) => ModuleName -> m ModuleName
 mangleNamespace mn@(ModuleName mnraw ns) =
   useEvalState (esLoaded . loNamespace) >>= \case
     Nothing -> pure mn
-    Just (Namespace currNs _ _) -> pure (ModuleName mnraw (maybe (Just currNs) Just ns))
+    Just (Namespace currNs _ _) -> pure (ModuleName mnraw (ns <|> Just currNs))

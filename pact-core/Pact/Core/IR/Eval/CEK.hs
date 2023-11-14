@@ -98,8 +98,13 @@ evalCEK cont handler env (Var n info)  = do
           returnCEKValue cont handler dfunClo
         -- Todo: this should be GADT'd out
         -- and defconsts should already be evaluated
-        Just (DConst d) ->
-          evalCEK cont handler (set ceLocal mempty env) (_dcTerm d)
+        Just (DConst d) -> case _dcTerm d of
+          -- Todo: should this be an error?
+          -- probably.
+          TermConst term ->
+            evalCEK cont handler (set ceLocal mempty env) term
+          EvaledConst v ->
+            returnCEKValue cont handler (VPactValue v)
         Just (DPact d) -> do
           dpactClo <- mkDefPactClosure info fqn d env
           returnCEKValue cont handler dpactClo

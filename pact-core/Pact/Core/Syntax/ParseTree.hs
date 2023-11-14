@@ -217,6 +217,7 @@ data Interface i
   = Interface
   { _ifName :: ModuleName
   , _ifDefns :: [IfDef i]
+  , _ifImports :: [Import]
   , _ifDocs :: Maybe Text
   , _ifModel :: Maybe [Expr i]
   , _ifInfo :: i

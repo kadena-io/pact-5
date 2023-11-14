@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -39,6 +38,7 @@ import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
 import Pact.Core.Environment
 import Pact.Core.Imports
+import Pact.Core.Hash
 
 main :: IO ()
 main = do
@@ -56,10 +56,10 @@ main = do
   replSettings = Settings (replCompletion rawBuiltinNames) (Just ".pc-history") True
   displayOutput = \case
     RCompileValue cv -> case cv of
-      LoadedModule mn -> outputStrLn $ show $
-        "loaded module" <+> pretty mn
-      LoadedInterface mn -> outputStrLn $ show $
-        "Loaded interface" <+> pretty mn
+      LoadedModule mn mh -> outputStrLn $ show $
+        "loaded module" <+> pretty mn <> ", hash" <+> pretty (moduleHashToText mh)
+      LoadedInterface mn mh -> outputStrLn $ show $
+        "loaded interface" <+> pretty mn <> ", hash" <+> pretty (moduleHashToText mh)
       InterpretValue iv -> case iv of
         IPV v _ -> outputStrLn (show (pretty v))
         IPTable (TableName tn) -> outputStrLn $ "table{" <> T.unpack tn <> "}"
