@@ -220,10 +220,6 @@ ImportOrIfDef :: { [Either ParsedIfDef Import] }
   | IfDef { [Left $1] }
   | Use { [Right (fst $1)] }
 
--- IfDefs :: { [ParsedIfDef] }
---   : IfDefs IfDef { $2:$1 }
---   | IfDef { [$1] }
-
 IfDef :: { ParsedIfDef }
   : '(' IfDefun ')' { IfDfun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefConst ')' { IfDConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
