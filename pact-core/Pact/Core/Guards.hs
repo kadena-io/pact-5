@@ -4,7 +4,9 @@
 
 module Pact.Core.Guards
 ( PublicKeyText(..)
+, renderPublicKeyText
 , KeySetName(..)
+, renderKeySetName
 , Governance(..)
 , KeySet(..)
 , enforceKeyFormats
@@ -12,6 +14,7 @@ module Pact.Core.Guards
 , UserGuard(..)
 , CapabilityGuard(..)
 , KSPredicate(..)
+, predicateToString
 , ModuleGuard(..)
 , CapGovRef(..)
 )
@@ -21,6 +24,7 @@ import qualified Data.Char as Char
 import qualified Data.Set as S
 import qualified Data.Text as T
 import Data.Foldable
+import Data.String
 import Data.Text(Text)
 import Pact.Core.Pretty
 
@@ -32,11 +36,17 @@ newtype PublicKeyText = PublicKeyText { _pubKey :: Text }
 instance Pretty PublicKeyText where
   pretty (PublicKeyText t) = pretty t
 
+renderPublicKeyText :: PublicKeyText -> Text
+renderPublicKeyText = _pubKey
+
 newtype KeySetName = KeySetName { _keysetName :: Text }
     deriving (Eq,Ord,Show)
 
 instance Pretty KeySetName where
   pretty (KeySetName ks) = "'" <> pretty ks
+
+renderKeySetName :: KeySetName -> Text
+renderKeySetName = _keysetName
 
 data Governance name
   = KeyGov KeySetName
@@ -62,11 +72,14 @@ data KSPredicate name
   -- | CustomPredicate name
   deriving (Eq, Show, Ord)
 
-instance Pretty (KSPredicate name) where
-  pretty = \case
+predicateToString :: IsString s => KSPredicate name -> s
+predicateToString = \case
     KeysAll -> "keys-all"
     Keys2 -> "keys2"
     KeysAny -> "keys-any"
+
+instance Pretty (KSPredicate name) where
+  pretty = predicateToString
 
 data KeySet name
   = KeySet

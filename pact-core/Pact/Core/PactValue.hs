@@ -15,7 +15,9 @@ module Pact.Core.PactValue
  , FQCapToken
  , pattern PInteger
  , pattern PDecimal
- , pattern PString) where
+ , pattern PString
+ , pattern PBool
+ ) where
 
 import Control.Lens
 import Control.Monad(zipWithM)
@@ -58,6 +60,9 @@ pattern PDecimal d = PLiteral (LDecimal d)
 
 pattern PString :: Text -> PactValue
 pattern PString s = PLiteral (LString s)
+
+pattern PBool :: Bool -> PactValue
+pattern PBool b = PLiteral (LBool b)
 
 type FQCapToken = CapToken FullyQualifiedName PactValue
 
@@ -115,7 +120,7 @@ checkPvType ty = \case
     _ -> Nothing
   PCapToken _ -> Nothing
   PTime _ -> case ty of
-    TyTime -> Just $ TyTime
+    TyTime -> Just TyTime
     _ -> Nothing
 
 

@@ -15,6 +15,7 @@ import Pact.Core.Guards
 import Pact.Core.Names
 import Pact.Core.ModRefs
 import Pact.Core.Hash
+import Pact.Core.Principal
 import Pact.Core.DefPacts.Types
 import Pact.Time
 
@@ -173,6 +174,19 @@ instance J.Encode (StableEncoding UTCTime) where
       denom :: UTCTime -> Integer
       denom = denominator . (% 1000) . fromIntegral . toPosixTimestampMicros
   {-# INLINABLE build #-}
+
+-- | Stable encoding of `Principal`.
+instance J.Encode (StableEncoding Principal) where
+  build (StableEncoding principal) = case principal of
+    K pk -> kind 'K' [ "pk" J..= StableEncoding pk ]
+    W ph n -> kind 'W' [ "ph" J..= ph, "pred" J..= n ]
+    R ksn -> kind 'R' [ "ksn" J..= StableEncoding ksn ]
+    U fqn args -> kind 'U' [ "fqn" J..= fqn, "args" J..= args ]
+    M mn n -> kind 'M' [ "modname" J..= StableEncoding mn, "guard" J..= n ]
+    P pid n -> kind 'P' [ "pid" J..= StableEncoding pid, "fun" J..= n ]
+    C c -> kind 'C' [ "cap" J..= c ]
+    where
+      kind c rest = J.object $ "kind" J..= T.singleton c : rest
 
 -- | Stable encoding of `PactValue`
 instance J.Encode (StableEncoding PactValue) where
