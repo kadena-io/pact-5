@@ -1,5 +1,4 @@
 -- |
-{-# LANGUAGE TypeApplications #-}
 
 module Pact.Core.Test.PersistenceTests where
 
@@ -30,11 +29,9 @@ testsWithSerial serial b i =
 
 tests :: TestTree
 tests = testGroup "Persistence Roundtrip"
-  -- [ testGroup "CBOR encoding/decoding" $ testsWithSerial (serialiseCBOR @RawBuiltin @SpanInfo) builtinGen infoGen
-  -- ]
-  []
--- TODO: Choose a different type parameter for KeySet when Custom predicates
--- are reintroduced.
+  [ testGroup "CBOR encoding/decoding" $ testsWithSerial serialiseCBOR builtinGen (pure ())
+  ]
+
 keysetPersistRoundtrip :: PactSerialise b i -> Gen (KeySet FullyQualifiedName) -> Property
 keysetPersistRoundtrip serial keysetGen =
   property $ do

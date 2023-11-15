@@ -246,6 +246,7 @@ test-suite core-tests
     , tasty-hunit
     , tasty-hedgehog
     , serialise
+    , cborg
 
   other-modules:
     , Pact.Core.Test.ReplTests

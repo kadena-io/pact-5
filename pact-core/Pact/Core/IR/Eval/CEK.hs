@@ -105,7 +105,7 @@ evalCEK cont handler env (Var n info)  = do
           returnCEKValue cont handler dpactClo
         Just (DTable d) ->
           let (ResolvedTable sc) = _dtSchema d
-              tn = userTable $ TableName $ renderModuleName mname <> "_" <> _dtName d
+              tn = TableName (_dtName d) mname
               tbl = VTable (TableValue tn mname mh sc)
           in returnCEKValue cont handler tbl
         Just (DCap d) -> do

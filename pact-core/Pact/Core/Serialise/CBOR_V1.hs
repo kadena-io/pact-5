@@ -2,7 +2,13 @@
 {-# LANGUAGE GADTs #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Pact.Core.Serialise.CBOR_V1 where
+module Pact.Core.Serialise.CBOR_V1
+  ( encodeModuleData, decodeModuleData
+  , encodeKeySet, decodeKeySet
+  , encodeDefPactExec, decodeDefPactExec
+  , encodeNamespace, decodeNamespace
+  , encodeRowData, decodeRowData
+  ) where
 
 import Codec.Serialise.Class
 import Codec.CBOR.Encoding
@@ -24,23 +30,53 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.PactValue
 import Pact.Core.ModRefs
 import Pact.Core.ChainData
+import Pact.Core.Namespace
 import Pact.Time.Internal (UTCTime(..), NominalDiffTime(..))
+--import Data.Either (either)
+import Codec.CBOR.Read (deserialiseFromBytes)
+import Codec.CBOR.Write (toStrictByteString)
+import Data.ByteString (ByteString, fromStrict)
 
--- newtype V1Serial a = V1Serial { unV1Serial :: a }
 
--- instance Serialise (V1Serial (KeySet FullyQualifiedName)) where
---   encode (V1Serial ks) = encode ks
---   decode = V1Serial <$> decode
+encodeModuleData :: ModuleData RawBuiltin () -> ByteString
+encodeModuleData = toStrictByteString . encode
 
--- instance Serialise (V1Serial (Maybe DefPactExec)) where
---   encode (V1Serial ks) = encode ks
---   decode = V1Serial <$> decode
+decodeModuleData :: ByteString -> Maybe (ModuleData RawBuiltin ())
+decodeModuleData bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
--- instance (Serialise (b), Serialise (i)) =>
---   Serialise (V1Serial (ModuleData b i)) where
---   encode (V1Serial md) = case md of
---     ModuleData em m -> encodeWord 0 <> encode (em) <> encode (m)
---   decode = V1Serial <$> decode
+
+encodeKeySet :: KeySet FullyQualifiedName -> ByteString
+encodeKeySet = toStrictByteString . encode
+
+decodeKeySet :: ByteString -> Maybe (KeySet FullyQualifiedName)
+decodeKeySet bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
+
+
+encodeDefPactExec :: Maybe DefPactExec -> ByteString
+encodeDefPactExec =  toStrictByteString . encode
+
+decodeDefPactExec :: ByteString -> Maybe (Maybe DefPactExec)
+decodeDefPactExec bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
+
+encodeNamespace :: Namespace -> ByteString
+encodeNamespace = toStrictByteString . encode
+
+decodeNamespace :: ByteString -> Maybe Namespace
+decodeNamespace bs =either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
+
+encodeRowData :: RowData -> ByteString
+encodeRowData = toStrictByteString . encode
+
+decodeRowData :: ByteString -> Maybe RowData
+decodeRowData bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
+
+instance Serialise Namespace where
+  encode (Namespace n user admin) = encode n <> encode user <> encode admin
+  decode = Namespace <$> decode <*> decode <*> decode
+
+instance Serialise RowData where
+  encode (RowData m) = encode m
+  decode = RowData <$> decode
 
 instance Serialise NamespaceName where
   encode (NamespaceName ns) = encode ns

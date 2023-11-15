@@ -1,5 +1,4 @@
-{-# LANGUAGE TypeApplications #-}
--- | 
+-- |
 
 module Pact.Core.Test.SerialiseTests where
 
@@ -7,29 +6,27 @@ import Pact.Core.Serialise
 import Pact.Core.Gen.Serialise
 import Pact.Core.Serialise.CBOR_V1 ()
 import qualified Codec.Serialise as S
-
-import Pact.Core.Builtin
-import Pact.Core.Info
-
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.Hedgehog
 import Hedgehog (Gen, Property, (===), forAll, property)
 import qualified Hedgehog.Gen as Gen
-import qualified Hedgehog.Range as Range
+import Codec.CBOR.Read (deserialiseFromBytes)
+import Data.ByteString (fromStrict)
+import Codec.CBOR.Write (toStrictByteString)
 
 serialiseRoundtrip :: forall a. (S.Serialise a, Show a, Eq a) => Gen a -> Property
 serialiseRoundtrip g = property $ do
   expr <- forAll g
   S.deserialise (S.serialise expr) === expr
 
-documentFormatGen :: Gen DocumentFormat
-documentFormatGen = Gen.element [minBound .. maxBound]
-
 documentVersionGen :: Gen DocumentVersion
-documentVersionGen = DocumentVersion <$> Gen.word32 (Range.linear 0 100)
+documentVersionGen = Gen.element [minBound .. maxBound]
 
 documentGen :: Gen a -> Gen (Document a)
-documentGen g = Document <$> documentVersionGen <*> documentFormatGen <*> g
+documentGen g = Gen.choice
+  [ Document <$> documentVersionGen <*> g
+  , LegacyDocument <$> g
+  ]
 
 serialiseModule :: Property
 serialiseModule = property $ do
@@ -37,11 +34,10 @@ serialiseModule = property $ do
   let
     encoded = _encodeModuleData serialiseCBOR m
   case _decodeModuleData serialiseCBOR encoded of
-    Left _ -> fail "asas"
-    Right (Document v f c) -> do
-      v === DocumentVersion 0
-      f === DocumentCBOR
+    Just (Document v c) -> do
+      v === V0_CBOR
       m === c
+    _ -> fail "fail"
 
 
 serialiseKeySet :: Property
@@ -50,11 +46,10 @@ serialiseKeySet = property $ do
   let
     encoded = _encodeKeySet serialiseCBOR ks
   case _decodeKeySet serialiseCBOR encoded of
-    Left _ -> fail "asas"
-    Right (Document v f c) -> do
-      v === DocumentVersion 0
-      f === DocumentCBOR
+    Just (Document v c) -> do
+      v === V0_CBOR
       ks === c
+    _ -> fail "fail"
 
 serialiseDefPactExec :: Property
 serialiseDefPactExec = property $ do
@@ -62,18 +57,26 @@ serialiseDefPactExec = property $ do
   let
     encoded = _encodeDefPactExec serialiseCBOR dpe
   case _decodeDefPactExec serialiseCBOR encoded of
-    Left _ -> fail "asas"
-    Right (Document v f c) -> do
-      v === DocumentVersion 0
-      f === DocumentCBOR
+    Just (Document v c) -> do
+      v === V0_CBOR
       dpe === c
+    _ -> fail "fail"
+
+
+serialiseRoundtripVersion :: Property
+serialiseRoundtripVersion = property $ do
+  v <- forAll documentVersionGen
+  let
+    encoded = toStrictByteString (encodeVersion v)
+  case deserialiseFromBytes decodeVersion (fromStrict encoded) of
+    Left _ -> fail "fail"
+    Right (_, v') -> v === v'
+
 
 tests :: TestTree
 tests = testGroup "Serialise Roundtrip"
   [ testGroup "Document"
-    [ testProperty "DocumentFormat" $ serialiseRoundtrip documentFormatGen
-    , testProperty "DocumentVersion" $ serialiseRoundtrip documentVersionGen
---    , testProperty "Document" $ serialiseRoundtrip (documentGen (Gen.constant ()))
+    [ testProperty "DocumentVersion" serialiseRoundtripVersion
     ]
   , testGroup "CBOR"
     [ testProperty "NamespaceName" $ serialiseRoundtrip namespaceNameGen

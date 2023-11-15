@@ -16,13 +16,13 @@ import qualified Data.Map.Strict as M
 
 import Pact.Core.Guards (KeySetName)
 import Pact.Core.Namespace
-import Pact.Core.Names (ModuleName, RowKey, TableName, DefPactId, NamespaceName, rowKey, tableName)
+import Pact.Core.Names (ModuleName, RowKey, TableName, DefPactId, NamespaceName, rowKey)
 import Pact.Core.DefPacts.Types (DefPactExec)
 import qualified Pact.Core.Persistence as Persistence
 import Pact.Core.Persistence (Domain(..),
                               ExecutionMode(Local, Transactional), FQKS, TxId(..), TxLog(..), PactDb(..),
                               RowData, ModuleData, WriteType(Insert, Update, Write), RowData(..),
-                              Purity(PImpure)
+                              Purity(PImpure), toUserTable
                              )
 
 mockPactDb :: forall b i. IO (PactDb b i)
@@ -115,6 +115,7 @@ mockPactDb = do
       return (M.keys r)
     DUserTables tbl -> do
       r <- readIORef refUsrTbl
+--      let tblName = toUserTable tbl
       case M.lookup tbl r of
         Just t -> return (M.keys t)
         Nothing -> throwIO (Persistence.NoSuchTable tbl)
@@ -129,9 +130,8 @@ mockPactDb = do
     :: IORef (Map TableName (Map RowKey RowData))
     -> IORef (Map TableName (Map TxId [TxLog RowData]))
     -> TableName
-    -> ModuleName
     -> IO ()
-  createUsrTable refUsrTbl refTxLog tbl _ = do
+  createUsrTable refUsrTbl refTxLog tbl = do
     ref <- readIORef refUsrTbl
     case M.lookup tbl ref of
       Nothing -> do
@@ -184,6 +184,7 @@ mockPactDb = do
     DNamespaces -> writeNS refNS k v
 
   readRowData ref tbl k = do
+    -- let tblName = toUserTable tbl
     checkTable tbl ref
     r <- readIORef ref
     pure (r ^? ix tbl . ix k)
@@ -197,7 +198,7 @@ mockPactDb = do
     -> IO ()
   writeToTxLog refTxId refTxLog tbl k rdata = do
     tid <- readIORef refTxId
-    let entry = M.singleton (TxId tid) [TxLog (tbl ^. tableName) (k ^. rowKey) rdata]
+    let entry = M.singleton (TxId tid) [TxLog (toUserTable tbl) (k ^. rowKey) rdata]
     modifyIORef' refTxLog (M.insertWith (M.unionWith (<>)) tbl entry)
 
   writeRowData

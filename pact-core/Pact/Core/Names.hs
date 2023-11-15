@@ -38,6 +38,7 @@ module Pact.Core.Names
  , FullyQualifiedName(..)
  , TableName(..)
  , tableName
+ , tableModuleName
  , replRawModuleName
  , replModuleName
  , replModuleHash
@@ -51,7 +52,7 @@ module Pact.Core.Names
  , fqName
  , fqModule
  , fqHash
- , userTable
+-- , userTable
  , DefPactId(..)
  ) where
 
@@ -286,13 +287,16 @@ instance Pretty NamedDeBruijn where
   pretty (NamedDeBruijn _i _n) =
     pretty _n
 
-newtype TableName = TableName { _tableName :: Text }
-  deriving (Eq, Ord, Show)
+data TableName
+  = TableName
+  { _tableName :: Text
+  , _tableModuleName :: ModuleName
+  } deriving (Eq, Ord, Show)
 
 makeLenses ''TableName
 
 instance Pretty TableName where
-  pretty (TableName tn) = pretty tn
+  pretty (TableName tn ns) = pretty ns <> pretty ':' <> pretty tn
 
 -- | Constants for resolving repl things
 replRawModuleName :: Text
@@ -333,10 +337,10 @@ instance Eq (FQNameRef name) where
 
 makeLenses ''FullyQualifiedName
 
-userTable :: TableName -> TableName
-userTable (TableName tn) = TableName ("USER_" <> tn)
+-- userTable :: TableName -> TableName
+-- userTable (TableName tn) = TableName ("USER_" <> tn)
 
--- | The identifier that indexes defpacts in the db,
+-- | the identifier that indexes defpacts in the db,
 --   generally computed from the continuation, or
 --   in the case of nested defpacts, the hash of the
 --   parent + the nested continuation

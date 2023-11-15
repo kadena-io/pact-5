@@ -63,7 +63,7 @@ main = do
         "Loaded interface" <+> pretty mn
       InterpretValue iv -> case iv of
         IPV v _ -> outputStrLn (show (pretty v))
-        IPTable (TableName tn) -> outputStrLn $ "table{" <> T.unpack tn <> "}"
+        IPTable (TableName tn mn) -> outputStrLn $ "table{" <> T.unpack (renderModuleName mn) <> ":" <> T.unpack tn <> "}"
         IPClosure -> outputStrLn "<<closure>>"
       LoadedImports i ->
         outputStrLn $ "loaded imports from" <> show (pretty (_impModuleName i))

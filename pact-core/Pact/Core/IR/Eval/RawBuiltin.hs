@@ -784,13 +784,13 @@ coreBind = \info b cont handler _env -> \case
 
 createTable :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 createTable = \info b cont handler env -> \case
-  [VTable tv@(TableValue tn mn _ _)] -> do
+  [VTable tv@(TableValue tn _mn _ _)] -> do
     enforceTopLevelOnly info b
     guardTable info env tv GtCreateTable
     let pdb = view cePactDb env
     -- Todo: error handling here
     -- Todo: guard table
-    liftDbFunction info (_pdbCreateUserTable pdb tn mn)
+    liftDbFunction info (_pdbCreateUserTable pdb tn)
     returnCEKValue cont handler VUnit
   args -> argsError info b args
 

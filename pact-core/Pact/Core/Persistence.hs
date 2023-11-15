@@ -32,7 +32,7 @@ module Pact.Core.Persistence
  , TxId(..)
  , TxLog(..)
  , dbOpDisallowed
-
+ , toUserTable
  , FQKS
  ) where
 
@@ -161,7 +161,7 @@ data PactDb b i
   , _pdbRead :: forall k v. Domain k v b i -> k -> IO (Maybe v)
   , _pdbWrite :: forall k v. WriteType -> Domain k v b i -> k -> v -> IO ()
   , _pdbKeys :: forall k v. Domain k v b i -> IO [k]
-  , _pdbCreateUserTable :: TableName -> ModuleName -> IO ()
+  , _pdbCreateUserTable :: TableName -> IO ()
   , _pdbBeginTx :: ExecutionMode -> IO (Maybe TxId)
   , _pdbCommitTx :: IO ()
   , _pdbRollbackTx :: IO ()
@@ -251,3 +251,7 @@ instance Monoid (Loaded b i) where
 
 instance Default (Loaded b i) where
   def = Loaded mempty mempty Nothing mempty
+
+
+toUserTable :: TableName -> Text
+toUserTable (TableName tbl mn) = "USER_" <> renderModuleName mn <> "_" <> tbl
