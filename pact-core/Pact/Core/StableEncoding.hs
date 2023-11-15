@@ -108,7 +108,8 @@ instance J.Encode (StableEncoding DefPactGuard) where
     [ "pactId" J..= StableEncoding dpid
     , "name" J..= name
     ]
-{-# INLINABLE build #-}
+  {-# INLINABLE build #-}
+
 -- | Stable encoding of `UserGuard FullyQualifiedName PactValue`
 instance J.Encode (StableEncoding (UserGuard FullyQualifiedName PactValue)) where
   build (StableEncoding (UserGuard fun args)) = J.object
