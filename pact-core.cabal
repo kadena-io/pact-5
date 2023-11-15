@@ -135,6 +135,7 @@ library
 
     -- Serialization
     Pact.Core.Serialise
+    Pact.Core.Serialise.LegacyPact
     Pact.Core.Serialise.CBOR_V1
 
 library typed-core
