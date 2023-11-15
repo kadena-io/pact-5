@@ -1434,6 +1434,7 @@ createPrincipalForGuard = \case
         pid' = T.encodeUtf8 . renderDefPactId <$> pid
         h = mkHash $ f' : args' ++ maybeToList pid'
     in Pr.C $ hashToText h
+  GDefPactGuard (DefPactGuard dpid name) -> Pr.P dpid name
   where
     mkHash bss = pactHash $ mconcat bss
 
