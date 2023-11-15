@@ -244,25 +244,25 @@
         (read-keyset 'ks2))))
      ))
 
-;   (defpact pact-test ()
-;     (step
-;       (let*
-;         ((guard
-;            (create-principal
-;            (create-pact-guard "pact-guard"))))
-; 
-;         (update test-table "user"
-;           { "guard": guard
-;           })
-; 
-;         guard
-;         ))
-; 
-;     (step
-;        (validate-principal
-;          (create-pact-guard "pact-guard")
-;          (at 'guard (read test-table "user"))
-;        )))
+  (defpact pact-test ()
+    (step
+      (let*
+        ((guard
+           (create-principal
+           (create-pact-guard "pact-guard"))))
+
+        (update test-table "user"
+          { "guard": guard
+          })
+
+        guard
+        ))
+
+    (step
+       (validate-principal
+         (create-pact-guard "pact-guard")
+         (at 'guard (read test-table "user"))
+       )))
 )
 
 (module tester2 G
