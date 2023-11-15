@@ -636,6 +636,11 @@ coreEnforceGuard = \info b cont handler env -> \case
           md <- getModule info (view cePactDb env) mn
           acquireModuleAdmin info env md
           returnCEKValue cont handler (VBool True)
+      GDefPactGuard (DefPactGuard dpid _) -> do
+        curDpid <- getDefPactId info
+        if curDpid == dpid
+           then returnCEKValue cont handler (VBool True)
+           else returnCEK cont handler (VError "Capability pact guard failed: invalid pact id" info)
   [VString s] -> do
     let ksn = KeySetName s
     cond <- enforceKeysetName info (view cePactDb env) ksn
