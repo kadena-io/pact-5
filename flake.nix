@@ -2,18 +2,17 @@
   description = "Kadena's Pact smart contract language";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs?rev=4d2b37a84fad1091b9de401eb450aae66f1a741e";
-    # nixpkgs.follows = "haskellNix/nixpkgs-unstable";
-    haskellNix.url = "github:input-output-hk/haskell.nix";
+    hs-nix-infra.url = "github:kadena-io/hs-nix-infra";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils, haskellNix }:
+  outputs = { self, flake-utils, hs-nix-infra }:
     flake-utils.lib.eachSystem
       [ "x86_64-linux" "x86_64-darwin"
         "aarch64-linux" "aarch64-darwin"
       ] (system:
     let
+      inherit (hs-nix-infra) haskellNix nixpkgs;
       pkgs = import nixpkgs {
         inherit system overlays;
         inherit (haskellNix) config;
