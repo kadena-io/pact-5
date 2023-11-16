@@ -17,7 +17,8 @@
         inherit system overlays;
         inherit (haskellNix) config;
       };
-      flake = pkgs.pact-core.flake {
+      project = pkgs.pact-core;
+      flake = project.flake {
       };
       overlays = [ haskellNix.overlay
         (final: prev: {
@@ -44,11 +45,14 @@
         echo ${name}: ${package}
         echo works > $out
       '';
-    in pkgs.lib.recursiveUpdate flake rec {
+    in rec {
       packages.pact-core-binary = flake.packages."pact-core:exe:repl";
       packages.pact-core-tests  = flake.packages."pact-core:test:core-tests";
 
       packages.default = packages.pact-core-binary;
+
+      packages.recursive = with hs-nix-infra.lib.recursive system;
+        wrapRecursiveWithMeta "pact-core" "${wrapFlake self}.default";
 
       devShell = pkgs.haskellPackages.shellFor {
         packages = p: [
@@ -72,5 +76,9 @@
         echo ${mkCheck "devShell" flake.devShell}
         echo works > $out
       '';
+
+      # Other flake outputs provided by haskellNix can be accessed through
+      # this project output
+      inherit project;
     });
 }
