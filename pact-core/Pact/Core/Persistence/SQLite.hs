@@ -1,7 +1,6 @@
 -- |
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications #-}
 
 module Pact.Core.Persistence.SQLite (
   withSqlitePactDb
@@ -15,7 +14,7 @@ import Data.Text (Text)
 import Control.Lens (view)
 import qualified Database.SQLite3 as SQL
 
-import Pact.Core.Guards (KeySetName(_keySetName))
+import Pact.Core.Guards (renderKeySetName)
 import Pact.Core.Names (renderModuleName, DefPactId(..), NamespaceName(..), TableName(..), RowKey(..))
 import Pact.Core.Persistence (PactDb(..), Domain(..),
                               Purity(PImpure)
@@ -71,7 +70,7 @@ write' :: forall k v b i. PactSerialise b i -> SQL.Database -> WriteType -> Doma
 write' serial db _wt domain k v = case domain of
   DKeySets -> withStmt db "INSERT INTO SYS_kEYSETS (rowkey, rowdata) VALUES (?,?)" $ \stmt -> do
       let encoded = _encodeKeySet serial v
-      SQL.bind stmt [SQL.SQLText (_keySetName k), SQL.SQLBlob encoded]
+      SQL.bind stmt [SQL.SQLText (renderKeySetName k), SQL.SQLBlob encoded]
       SQL.stepNoCB stmt >>= \case
         SQL.Done -> pure ()
         SQL.Row -> fail "invariant viaolation"
@@ -109,7 +108,7 @@ write' serial db _wt domain k v = case domain of
 read' :: forall k v b i. PactSerialise b i -> SQL.Database -> Domain k v b i -> k -> IO (Maybe v)
 read' serial db domain k = case domain of
   DKeySets -> withStmt db "SELECT rowdata FROM SYS_KEYSETS WHERE rowkey = ? ORDER BY txid DESC LIMIT 1" $ \stmt -> do
-      SQL.bind stmt [SQL.SQLText (_keySetName k)]
+      SQL.bind stmt [SQL.SQLText (renderKeySetName k)]
       SQL.step stmt >>= \case
         SQL.Done -> pure Nothing
         SQL.Row -> do

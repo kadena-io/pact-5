@@ -618,6 +618,10 @@ instance Serialise RawBuiltin where
     RawNamespace -> encodeWord 107
     RawDefineNamespace -> encodeWord 108
     RawDescribeNamespace -> encodeWord 109
+    RawCreatePrincipal -> encodeWord 110
+    RawIsPrincipal -> encodeWord 111
+    RawTypeOfPrincipal -> encodeWord 112
+    RawValidatePrincipal -> encodeWord 113
 
   decode = decodeWord >>= \case
     0 -> pure RawAdd
@@ -730,6 +734,10 @@ instance Serialise RawBuiltin where
     107 -> pure RawNamespace
     108 -> pure RawDefineNamespace
     109 -> pure RawDescribeNamespace
+    110 -> pure RawCreatePrincipal
+    111 -> pure RawIsPrincipal
+    112 -> pure RawTypeOfPrincipal
+    113 -> pure RawValidatePrincipal
     _ -> fail "unexpeced decoding"
 
 

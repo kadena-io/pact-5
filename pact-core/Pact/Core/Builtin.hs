@@ -190,6 +190,10 @@ data RawBuiltin
   | RawMinutes
   | RawDays
   | RawCompose
+  | RawCreatePrincipal
+  | RawIsPrincipal
+  | RawTypeOfPrincipal
+  | RawValidatePrincipal
   -- Namespaces
   | RawNamespace
   | RawDefineNamespace
@@ -319,6 +323,10 @@ rawBuiltinToText = \case
   RawMinutes -> "minutes"
   RawDays -> "days"
   RawCompose -> "compose"
+  RawCreatePrincipal -> "create-principal"
+  RawIsPrincipal -> "is-principal"
+  RawTypeOfPrincipal -> "typeof-principal"
+  RawValidatePrincipal -> "validate-principal"
   RawNamespace -> "namespace"
   RawDefineNamespace -> "define-namespace"
   RawDescribeNamespace -> "describe-namespace"
@@ -448,6 +456,10 @@ instance IsBuiltin RawBuiltin where
     RawMinutes -> 1
     RawDays -> 1
     RawCompose -> 3
+    RawCreatePrincipal -> 1
+    RawIsPrincipal -> 1
+    RawTypeOfPrincipal -> 1
+    RawValidatePrincipal -> 2
     RawNamespace -> 1
     RawDefineNamespace -> 3
     RawDescribeNamespace -> 1

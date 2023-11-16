@@ -70,3 +70,12 @@ instance JD.FromJSON Namespace where
 
 instance JD.FromJSON (Guard FullyQualifiedName PactValue) where
   parseJSON = undefined
+
+instance JD.FromJSON (ModuleData RawBuiltin ()) where
+  parseJSON = undefined
+
+instance JD.FromJSON DefPactExec where
+  parseJSON = undefined
+
+instance JD.FromJSON RowData where
+  parseJSON = undefined
