@@ -155,12 +155,12 @@ instance (Pretty name, Pretty term) => Pretty (Guard name term) where
     GModuleGuard g -> pretty g
 
 
-data Namespace name term
-  = Namespace
-  { _nsName :: !NamespaceName
-  , _nsUser :: !(Guard name term)
-  , _nsAdmin :: !(Guard name term)
-  } deriving (Eq, Show)
+-- data Namespace name term
+--   = Namespace
+--   { _nsName :: !NamespaceName
+--   , _nsUser :: !(Guard name term)
+--   , _nsAdmin :: !(Guard name term)
+--   } deriving (Eq, Show)
 
 instance (Pretty name, Pretty term) => Pretty (CapabilityGuard name term) where
   pretty (CapabilityGuard cg args pid) = "CapabilityGuard" <+> commaBraces
