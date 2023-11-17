@@ -2,23 +2,23 @@
   description = "Kadena's Pact smart contract language";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs?rev=4d2b37a84fad1091b9de401eb450aae66f1a741e";
-    # nixpkgs.follows = "haskellNix/nixpkgs-unstable";
-    haskellNix.url = "github:input-output-hk/haskell.nix";
+    hs-nix-infra.url = "github:kadena-io/hs-nix-infra";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils, haskellNix }:
+  outputs = { self, flake-utils, hs-nix-infra }:
     flake-utils.lib.eachSystem
       [ "x86_64-linux" "x86_64-darwin"
         "aarch64-linux" "aarch64-darwin"
       ] (system:
     let
+      inherit (hs-nix-infra) haskellNix nixpkgs;
       pkgs = import nixpkgs {
         inherit system overlays;
         inherit (haskellNix) config;
       };
-      flake = pkgs.pact-core.flake {
+      project = pkgs.pact-core;
+      flake = project.flake {
       };
       overlays = [ haskellNix.overlay
         (final: prev: {
@@ -45,11 +45,14 @@
         echo ${name}: ${package}
         echo works > $out
       '';
-    in pkgs.lib.recursiveUpdate flake rec {
+    in rec {
       packages.pact-core-binary = flake.packages."pact-core:exe:repl";
       packages.pact-core-tests  = flake.packages."pact-core:test:core-tests";
 
       packages.default = packages.pact-core-binary;
+
+      packages.recursive = with hs-nix-infra.lib.recursive system;
+        wrapRecursiveWithMeta "pact-core" "${wrapFlake self}.default";
 
       devShell = pkgs.haskellPackages.shellFor {
         packages = p: [
@@ -73,5 +76,9 @@
         echo ${mkCheck "devShell" flake.devShell}
         echo works > $out
       '';
+
+      # Other flake outputs provided by haskellNix can be accessed through
+      # this project output
+      inherit project;
     });
 }
