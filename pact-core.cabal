@@ -106,6 +106,7 @@ library
     Pact.Core.StableEncoding
     Pact.Core.Principal
     Pact.Core.Namespace
+    Pact.Core.RuntimeParsers
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree

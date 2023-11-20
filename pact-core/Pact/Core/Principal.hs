@@ -23,6 +23,8 @@ import qualified Data.Text as T
 import Pact.Core.Guards
 import Pact.Core.Names
 
+import Pact.Core.RuntimeParsers
+
 data Principal
   = K !PublicKeyText
     -- ^ format: `k:public key`, where hex public key
@@ -156,19 +158,3 @@ moduleNameParser = do
   case b of
     Nothing -> pure $ ModuleName a Nothing
     Just b' -> pure $ ModuleName b' (Just $ NamespaceName a)
-
--- type-specialized version of `ident`
--- to avoid defaulting warnings on the `IsString` constraint
-ident' :: IdentifierStyle Parser -> Parser Text
-ident' = ident
-
-style :: IdentifierStyle Parser
-style = IdentifierStyle "atom"
-        (letter <|> symbols)
-        (letter <|> digit <|> symbols)
-        (HS.fromList ["true", "false"])
-        Symbol
-        ReservedIdentifier
-  where
-    symbols :: Parser Char
-    symbols = oneOf "%#+-_&$@<>=^?*!|/~"
