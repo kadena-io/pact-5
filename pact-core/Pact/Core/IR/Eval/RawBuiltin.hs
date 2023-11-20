@@ -636,6 +636,11 @@ coreEnforceGuard = \info b cont handler env -> \case
           md <- getModule info (view cePactDb env) mn
           acquireModuleAdmin info env md
           returnCEKValue cont handler (VBool True)
+      GDefPactGuard (DefPactGuard dpid _) -> do
+        curDpid <- getDefPactId info
+        if curDpid == dpid
+           then returnCEKValue cont handler (VBool True)
+           else returnCEK cont handler (VError "Capability pact guard failed: invalid pact id" info)
   [VString s] -> do
     let ksn = KeySetName s
     cond <- enforceKeysetName info (view cePactDb env) ksn
@@ -1097,6 +1102,13 @@ createModuleGuard = \info b cont handler _env -> \case
         returnCEK cont handler (VError "not-in-module" info)
   args -> argsError info b args
 
+createDefPactGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+createDefPactGuard info b cont handler _env = \case
+  [VString name] -> do
+    dpid <- getDefPactId info
+    returnCEKValue cont handler $ VGuard $ GDefPactGuard $ DefPactGuard dpid name
+  args -> argsError info b args
+
 
 coreIntToStr :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreIntToStr = \info b cont handler _env -> \case
@@ -1422,6 +1434,7 @@ createPrincipalForGuard = \case
         pid' = T.encodeUtf8 . renderDefPactId <$> pid
         h = mkHash $ f' : args' ++ maybeToList pid'
     in Pr.C $ hashToText h
+  GDefPactGuard (DefPactGuard dpid name) -> Pr.P dpid name
   where
     mkHash bss = pactHash $ mconcat bss
 
@@ -1635,6 +1648,7 @@ rawBuiltinRuntime = \case
   RawCreateCapabilityGuard -> createCapGuard
   RawCreateCapabilityPactGuard -> createCapabilityPactGuard
   RawCreateModuleGuard -> createModuleGuard
+  RawCreateDefPactGuard -> createDefPactGuard
   RawEmitEvent -> coreEmitEvent
   RawCreateTable -> createTable
   RawDescribeKeyset -> dbDescribeKeySet

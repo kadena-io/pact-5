@@ -13,6 +13,7 @@ module Pact.Core.Guards
 , Guard(..)
 , UserGuard(..)
 , CapabilityGuard(..)
+, DefPactGuard(..)
 , KSPredicate(..)
 , predicateToString
 , ModuleGuard(..)
@@ -151,12 +152,19 @@ data CapabilityGuard name term
   , _cgPactId :: !(Maybe DefPactId) }
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
+data DefPactGuard
+  = DefPactGuard
+  { _dpgDefPactId :: !DefPactId
+  , _dpgName :: !Text
+  } deriving (Eq, Ord, Show)
+
 data Guard name term
   = GKeyset (KeySet name)
   | GKeySetRef KeySetName
   | GUserGuard (UserGuard name term)
   | GCapabilityGuard (CapabilityGuard name term)
   | GModuleGuard ModuleGuard
+  | GDefPactGuard DefPactGuard
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 instance (Pretty name, Pretty term) => Pretty (Guard name term) where
@@ -166,6 +174,7 @@ instance (Pretty name, Pretty term) => Pretty (Guard name term) where
     GUserGuard ug -> pretty ug
     GCapabilityGuard cg -> pretty cg
     GModuleGuard g -> pretty g
+    GDefPactGuard dpg -> pretty dpg
 
 
 data Namespace name term
@@ -180,4 +189,10 @@ instance (Pretty name, Pretty term) => Pretty (CapabilityGuard name term) where
     [ "name: " <> pretty cg
     , "args: " <> pretty args
     , "pactId: " <> pretty pid
+    ]
+
+instance Pretty DefPactGuard where
+  pretty (DefPactGuard dpid name) = "PactGuard" <+> commaBraces
+    [ "pactId: " <> pretty dpid
+    , "name: "   <> pretty name
     ]

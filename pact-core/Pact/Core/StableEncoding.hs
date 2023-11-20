@@ -71,6 +71,7 @@ instance J.Encode (StableEncoding (Guard FullyQualifiedName PactValue)) where
     GUserGuard ug -> J.build (StableEncoding ug)
     GCapabilityGuard cg -> J.build (StableEncoding cg)
     GModuleGuard mg -> J.build (StableEncoding mg)
+    GDefPactGuard dpg -> J.build (StableEncoding dpg)
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `CapabilityGuard FullyQualifiedName PactValue`
@@ -97,6 +98,14 @@ instance J.Encode (StableEncoding FullyQualifiedName) where
 instance J.Encode (StableEncoding ModuleGuard) where
   build (StableEncoding (ModuleGuard m name)) = J.object
     [ "moduleName" J..= _mnName m
+    , "name" J..= name
+    ]
+  {-# INLINABLE build #-}
+
+-- | Stalbe encoding of `DefPactGuard`
+instance J.Encode (StableEncoding DefPactGuard) where
+  build (StableEncoding (DefPactGuard dpid name)) = J.object
+    [ "pactId" J..= StableEncoding dpid
     , "name" J..= name
     ]
   {-# INLINABLE build #-}

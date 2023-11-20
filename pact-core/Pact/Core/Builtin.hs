@@ -152,6 +152,7 @@ data RawBuiltin
   | RawCreateCapabilityGuard
   | RawCreateCapabilityPactGuard
   | RawCreateModuleGuard
+  | RawCreateDefPactGuard
   -- Database functions
   | RawCreateTable
   | RawDescribeKeyset
@@ -276,6 +277,7 @@ rawBuiltinToText = \case
   RawCreateCapabilityGuard -> "create-capability-guard"
   RawCreateCapabilityPactGuard -> "create-capability-pact-guard"
   RawCreateModuleGuard -> "create-module-guard"
+  RawCreateDefPactGuard -> "create-pact-guard"
   RawAt -> "at"
   RawMakeList -> "make-list"
   RawB64Encode -> "base64-encode"
@@ -409,6 +411,7 @@ instance IsBuiltin RawBuiltin where
     RawCreateCapabilityGuard -> 1
     RawCreateCapabilityPactGuard -> 1
     RawCreateModuleGuard -> 1
+    RawCreateDefPactGuard -> 1
     RawAt -> 2
     RawMakeList -> 2
     RawB64Encode -> 1
