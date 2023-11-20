@@ -40,11 +40,14 @@ instance Pretty PublicKeyText where
 renderPublicKeyText :: PublicKeyText -> Text
 renderPublicKeyText = _pubKey
 
-newtype KeySetName = KeySetName { _keysetName :: Text }
-    deriving (Eq,Ord,Show)
+data KeySetName = KeySetName
+  { _keysetName :: Text
+  , _keysetNs :: Maybe NamespaceName
+  } deriving (Eq, Ord, Show)
 
 instance Pretty KeySetName where
-  pretty (KeySetName ks) = "'" <> pretty ks
+  pretty (KeySetName ks Nothing) = "'" <> pretty ks
+  pretty (KeySetName ks (Just ns)) = "'" <> pretty ks <> "." <> pretty ns
 
 renderKeySetName :: KeySetName -> Text
 renderKeySetName = _keysetName
