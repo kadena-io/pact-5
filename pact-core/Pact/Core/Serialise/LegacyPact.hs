@@ -16,10 +16,23 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.Namespace
 import Pact.Core.PactValue
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Short as SB
+import qualified Data.Text.Encoding as T
 import Control.Applicative ((<|>))
 import Data.Maybe (fromMaybe)
-
+import Pact.Core.ChainData
+import Pact.Core.Hash
+import Pact.Core.Parser
+import Pact.Core.ModRefs
+import Pact.Core.Literal
+import Data.Decimal
+import Pact.Time
+import qualified Data.Attoparsec.Text as AP
 import qualified Pact.JSON.Decode as JD
+import qualified Data.Text as T
+import Data.Vector(Vector)
+import Data.Map.Strict(Map)
+import Text.Read (readMaybe)
 
 decodeModuleData :: ByteString -> Maybe (ModuleData RawBuiltin ())
 decodeModuleData = JD.decodeStrict'
@@ -68,14 +81,176 @@ instance JD.FromJSON Namespace where
     <*> v JD..: "user"
     <*> v JD..: "admin"
 
-instance JD.FromJSON (Guard FullyQualifiedName PactValue) where
-  parseJSON = undefined
-
 instance JD.FromJSON (ModuleData RawBuiltin ()) where
   parseJSON = undefined
 
 instance JD.FromJSON DefPactExec where
-  parseJSON = undefined
+  parseJSON = JD.withObject "PactExec" $ \o ->
+    DefPactExec
+      <$> o JD..: "stepCount"
+      <*> o JD..: "yield"
+      <*> o JD..: "step"
+      <*> o JD..: "pactId"
+      <*> o JD..: "continuation"
+      <*> o JD..: "stepHasRollback"
+      <*> (fromMaybe mempty <$> o JD..:? "nested")
+
+instance JD.FromJSONKey DefPactId where
+  fromJSONKey = JD.FromJSONKeyTextParser $ JD.parseJSON . JD.String
+
+instance JD.FromJSON Yield where
+  parseJSON = JD.withObject "Yield" $ \o ->
+    Yield
+      <$> o JD..: "data"
+      <*> o JD..: "provenance"
+      <*> o JD..:? "source"
+
+instance JD.FromJSON ChainId where
+  parseJSON = JD.withText "ChainId" (pure . ChainId)
+
+instance JD.FromJSON Provenance where
+  parseJSON = JD.withObject "Provenance" $ \o ->
+    Provenance
+      <$> o JD..: "targetChainId"
+      <*> o JD..: "moduleHash"
+
+instance JD.FromJSON ModuleHash where
+  parseJSON v = ModuleHash <$> JD.parseJSON v
+
+instance JD.FromJSON Hash where
+  parseJSON = JD.withText "Hash" $ \h ->
+    case decodeBase64UrlUnpadded (T.encodeUtf8 h) of
+      Left err -> fail ("Base64URL decode failed: " <> err)
+      Right r -> pure (Hash (SB.toShort r))
+
+instance JD.FromJSON DefPactId where
+  parseJSON = JD.withText "DefPactId" (pure . DefPactId)
 
 instance JD.FromJSON RowData where
   parseJSON = undefined
+
+instance JD.FromJSON (DefPactContinuation FullyQualifiedName PactValue) where
+  parseJSON = JD.withObject "DefPactContinuation" $ \o ->
+    DefPactContinuation
+      <$> o JD..: "def"
+      <*> o JD..: "args"
+
+instance JD.FromJSON FullyQualifiedName where
+  parseJSON = JD.withText "FullyQualifiedName" $ \f ->
+    case AP.parseOnly (fullyQualNameParser <* AP.endOfInput) f of
+      Left s  -> fail s
+      Right n -> return n
+
+instance JD.FromJSON PactValue where
+  parseJSON v = fromLegacyPactValue <$> JD.parseJSON v
+
+
+instance JD.FromJSONKey Field where
+  fromJSONKey = JD.FromJSONKeyTextParser $ JD.parseJSON . JD.String
+
+instance JD.FromJSON ModuleName where
+  parseJSON = JD.withObject "ModuleName" $ \o ->
+    ModuleName
+      <$> o JD..: "name"
+      <*> o JD..:? "namespace"
+
+instance JD.FromJSON ModRef where
+  parseJSON = JD.withObject "ModRef" $ \o ->
+    ModRef
+      <$> o JD..: "refName"
+      <*> o JD..: "refSpec"
+      <*> pure Nothing
+
+-- instance JD.FromJSON Literal where
+-- --  parseJSON n@Number{} = LDecimal <$> decoder decimalCodec n
+--   parseJSON (LString s) = pure $ LString s
+--   parseJSON (LBool b) = pure $ LBool b
+--   parseJSON (LInteger i) = undefined --decoder integerCodec i
+--     (LDecimal <$> decoder decimalCodec o)
+--   parseJSON _t = fail "Literal parse failed"
+
+instance JD.FromJSON Field where
+  parseJSON = JD.withText "Field" (pure . Field)
+
+
+-- | LegacyLiteral and `LegacyPactValue` are used to represent the old
+--   structure, used in legacy pact.
+
+data LegacyLiteral
+  = Legacy_LString T.Text
+  | Legacy_LInteger Integer
+  | Legacy_LDecimal Decimal
+  | Legacy_LBool Bool
+  | Legacy_LTime UTCTime
+
+data LegacyPactValue
+  = Legacy_PLiteral LegacyLiteral
+  | Legacy_PList (Vector LegacyPactValue)
+  | Legacy_PObject (Map Field LegacyPactValue)
+  | Legacy_PGuard (Guard FullyQualifiedName LegacyPactValue)
+  | Legacy_PModRef ModRef
+
+instance JD.FromJSON LegacyPactValue where
+  parseJSON v =
+    (Legacy_PLiteral <$> JD.parseJSON v) <|>
+    (Legacy_PList <$> JD.parseJSON v) <|>
+    (Legacy_PGuard <$> JD.parseJSON v) <|>
+    (Legacy_PModRef <$> (parseNoInfo v <|> JD.parseJSON v)) <|>
+    (Legacy_PObject <$> JD.parseJSON v)
+    where
+      parseNoInfo = JD.withObject "ModRef" $ \o -> ModRef
+        <$> o JD..: "refName"
+        <*> o JD..: "refSpec"
+        <*> pure Nothing
+
+instance JD.FromJSON LegacyLiteral where
+  parseJSON = \case
+    n@JD.Number{} -> Legacy_LDecimal <$> decodeDecimal n
+    JD.String s -> pure $ Legacy_LString s
+    JD.Bool b -> pure $ Legacy_LBool b
+    o@JD.Object {} ->
+      (Legacy_LInteger <$> decodeInteger o) <|>
+      (Legacy_LTime <$> decodeTime o) <|>
+      (Legacy_LDecimal <$> decodeDecimal o)
+    _t -> fail "Literal parse failed"
+    where
+      decodeInteger = JD.withObject "Integer" $ \o -> do
+        s <- o JD..: "int"
+        case s of
+          JD.Number n -> return (round n)
+          JD.String n -> case readMaybe (T.unpack n) of
+            Just i -> return i
+            Nothing -> fail $ "Invalid integer value: " ++ show s
+          _ -> fail $ "Invalid integer value: " ++ show s
+
+      decodeDecimal (JD.Number n) = return $ fromRational $ toRational n
+      decodeDecimal (JD.Object o) = o JD..: "decimal" >>= \s -> case readMaybe (T.unpack s) of
+        Just d -> return d
+        Nothing -> fail $ "Invalid decimal value: " ++ show s
+      decodeDecimal v = fail $ "Invalid decimal value: " ++ show v
+
+      decodeTime = JD.withObject "time" $ \o ->
+        (o JD..: "time" >>= mkTime pactISO8601Format) <|>
+        (o JD..: "timep" >>= mkTime highPrecFormat)
+
+      mkTime fmt v = case parseTime fmt v of
+              Just t -> return t
+              Nothing -> fail $ "Invalid time value, expected " ++ fmt
+
+      pactISO8601Format :: String
+      pactISO8601Format = "%Y-%m-%dT%H:%M:%SZ"
+
+      highPrecFormat :: String
+      highPrecFormat = "%Y-%m-%dT%H:%M:%S.%vZ"
+
+
+instance JD.FromJSON (Guard FullyQualifiedName PactValue) where
+  parseJSON v = undefined -- fromLegacyPactValue <$> JD.parseJSON v
+
+
+-- https://github.com/kadena-io/pact/blob/ba15517b56eba4fdaf6b2fbd3e5245eeedd0fc9f/src/Pact/Types/Term/Internal.hs#L802
+instance JD.FromJSON (Guard FullyQualifiedName LegacyPactValue) where
+  parseJSON v = undefined -- fromLegacyPactValue <$> JD.parseJSON v
+
+fromLegacyPactValue :: LegacyPactValue -> PactValue
+fromLegacyPactValue = undefined

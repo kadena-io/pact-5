@@ -12,16 +12,13 @@ import Control.Monad
 import Data.Attoparsec.Text
 import Data.Char(isHexDigit)
 import Data.Text(Text)
-import Text.Parser.Char(oneOf)
 import Text.Parser.Combinators(eof)
-import Text.Parser.Token
-import Text.Parser.Token.Highlight
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.HashSet as HS
 import qualified Data.Text as T
 
 import Pact.Core.Guards
 import Pact.Core.Names
+import Pact.Core.Parser
 
 data Principal
   = K !PublicKeyText
@@ -121,54 +118,3 @@ principalParser = alts <* void eof
 
     char' = void . char
     prefix ch = char ch >> char' ':'
-
-
-nameMatcher :: Parser Text
-nameMatcher = asMatcher $ qualifiedNameMatcher
-                      <|> bareNameMatcher
-  where
-    bareNameMatcher :: Parser ()
-    bareNameMatcher = void $ ident' style
-    qualifiedNameMatcher :: Parser ()
-    qualifiedNameMatcher = do
-      void $ ident' style
-      void $ dot *> ident' style
-      void $ optional (dot *> ident' style)
-    asMatcher :: Parser a -> Parser Text
-    asMatcher = fmap fst . match
-
-keysetNameParser :: Parser KeySetName
-keysetNameParser = qualified <|> withoutNs
-  where
-    qualified = do
-      -- TODO ns <- ident style
-      kn <- dot *> ident style
-      pure $ KeySetName kn {- TODO (Just ns) -}
-    withoutNs = do
-      t <- takeText
-      guard $ not $ T.null t
-      pure $ KeySetName t {- TODO Nothing -}
-
-moduleNameParser :: Parser ModuleName
-moduleNameParser = do
-  a <- ident style
-  b <- optional (dot *> ident style)
-  case b of
-    Nothing -> pure $ ModuleName a Nothing
-    Just b' -> pure $ ModuleName b' (Just $ NamespaceName a)
-
--- type-specialized version of `ident`
--- to avoid defaulting warnings on the `IsString` constraint
-ident' :: IdentifierStyle Parser -> Parser Text
-ident' = ident
-
-style :: IdentifierStyle Parser
-style = IdentifierStyle "atom"
-        (letter <|> symbols)
-        (letter <|> digit <|> symbols)
-        (HS.fromList ["true", "false"])
-        Symbol
-        ReservedIdentifier
-  where
-    symbols :: Parser Char
-    symbols = oneOf "%#+-_&$@<>=^?*!|/~"

@@ -103,6 +103,7 @@ library
     Pact.Core.Persistence.SQLite
     Pact.Core.Persistence.MockPersistence
     Pact.Core.PactValue
+    Pact.Core.Parser
     Pact.Core.Debug
     Pact.Core.Capabilities
     Pact.Core.ModRefs

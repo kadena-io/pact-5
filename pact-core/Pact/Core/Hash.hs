@@ -107,7 +107,7 @@ decodeBase64UrlUnpadded = B64URL.decode . pad
 fromB64UrlUnpaddedText :: ByteString -> Either String Text
 fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
   Right bs' -> case T.decodeUtf8' bs' of
-    Left _ -> Left $ "Base64URL decode failed: invalid unicode"
+    Left _ -> Left "Base64URL decode failed: invalid unicode"
     Right t -> Right t
   Left e -> Left $ "Base64URL decode failed: " ++ e
 
