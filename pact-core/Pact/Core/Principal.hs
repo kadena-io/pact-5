@@ -139,18 +139,6 @@ nameMatcher = asMatcher $ qualifiedNameMatcher
     asMatcher :: Parser a -> Parser Text
     asMatcher = fmap fst . match
 
-keysetNameParser :: Parser KeySetName
-keysetNameParser = qualified <|> withoutNs
-  where
-    qualified = do
-      -- TODO ns <- ident style
-      kn <- dot *> ident style
-      pure $ KeySetName kn {- TODO (Just ns) -}
-    withoutNs = do
-      t <- takeText
-      guard $ not $ T.null t
-      pure $ KeySetName t {- TODO Nothing -}
-
 moduleNameParser :: Parser ModuleName
 moduleNameParser = do
   a <- ident style

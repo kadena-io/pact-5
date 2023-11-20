@@ -7,6 +7,7 @@ module Pact.Core.Guards
 , renderPublicKeyText
 , KeySetName(..)
 , renderKeySetName
+, keysetNameParser
 , Governance(..)
 , KeySet(..)
 , enforceKeyFormats
@@ -24,12 +25,17 @@ where
 import qualified Data.Char as Char
 import qualified Data.Set as S
 import qualified Data.Text as T
+import Control.Applicative
+import Control.Monad
+import Data.Attoparsec.Text
 import Data.Foldable
 import Data.String
 import Data.Text(Text)
-import Pact.Core.Pretty
+import Text.Parser.Token as P
 
+import Pact.Core.Pretty
 import Pact.Core.Names
+import Pact.Core.RuntimeParsers
 
 newtype PublicKeyText = PublicKeyText { _pubKey :: Text }
   deriving (Eq,Ord,Show)
@@ -51,6 +57,18 @@ instance Pretty KeySetName where
 
 renderKeySetName :: KeySetName -> Text
 renderKeySetName = _keysetName
+
+keysetNameParser :: Parser KeySetName
+keysetNameParser = qualified <|> withoutNs
+  where
+    qualified = do
+      ns <- NamespaceName <$> ident style
+      kn <- P.dot *> ident style
+      pure $ KeySetName kn (Just ns)
+    withoutNs = do
+      t <- takeText
+      guard $ not $ T.null t
+      pure $ KeySetName t Nothing
 
 data Governance name
   = KeyGov KeySetName
