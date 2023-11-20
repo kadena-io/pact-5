@@ -8,6 +8,7 @@ module Pact.Core.Guards
 , KeySetName(..)
 , renderKeySetName
 , keysetNameParser
+, parseAnyKeysetName
 , Governance(..)
 , KeySet(..)
 , enforceKeyFormats
@@ -69,6 +70,9 @@ keysetNameParser = qualified <|> withoutNs
       t <- takeText
       guard $ not $ T.null t
       pure $ KeySetName t Nothing
+
+parseAnyKeysetName :: Text -> Either String KeySetName
+parseAnyKeysetName = parseOnly keysetNameParser
 
 data Governance name
   = KeyGov KeySetName
