@@ -12,17 +12,13 @@ import Control.Monad
 import Data.Attoparsec.Text
 import Data.Char(isHexDigit)
 import Data.Text(Text)
-import Text.Parser.Char(oneOf)
 import Text.Parser.Combinators(eof)
 import Text.Parser.Token
-import Text.Parser.Token.Highlight
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.HashSet as HS
 import qualified Data.Text as T
 
 import Pact.Core.Guards
 import Pact.Core.Names
-
 import Pact.Core.RuntimeParsers
 
 data Principal
