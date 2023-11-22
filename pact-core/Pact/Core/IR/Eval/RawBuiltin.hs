@@ -641,20 +641,24 @@ coreEnforceGuard = \info b cont handler env -> \case
         if curDpid == dpid
            then returnCEKValue cont handler (VBool True)
            else returnCEK cont handler (VError "Capability pact guard failed: invalid pact id" info)
-  [VString s] -> do
-    let ksn = KeySetName s
-    cond <- enforceKeysetName info (view cePactDb env) ksn
-    if cond then returnCEKValue cont handler (VBool True)
-    else returnCEK cont handler (VError "enforce keyset ref failure" info)
+  [VString s] -> case parseAnyKeysetName s of
+      Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
+      Right ksn -> do
+        cond <- enforceKeysetName info (view cePactDb env) ksn
+        if cond
+          then returnCEKValue cont handler (VBool True)
+          else returnCEK cont handler (VError "enforce keyset ref failure" info)
   args -> argsError info b args
 
 keysetRefGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 keysetRefGuard = \info b cont handler env -> \case
-  [VString g] -> do
-    let pdb = view cePactDb env
-    liftDbFunction info (_pdbRead pdb DKeySets (KeySetName g)) >>= \case
-      Nothing -> returnCEK cont handler (VError ("no such keyset defined: " <> g) info)
-      Just _ -> returnCEKValue cont handler (VGuard (GKeySetRef (KeySetName g)))
+  [VString g] -> case parseAnyKeysetName g of
+    Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
+    Right ksn -> do
+      let pdb = view cePactDb env
+      liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
+        Nothing -> returnCEK cont handler (VError ("no such keyset defined: " <> g) info)
+        Just _ -> returnCEKValue cont handler (VGuard (GKeySetRef ksn))
   args -> argsError info b args
 
 coreReadInteger :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
