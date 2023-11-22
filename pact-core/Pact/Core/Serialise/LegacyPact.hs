@@ -24,7 +24,8 @@ import Pact.Core.ChainData
 import Pact.Core.Hash
 import Pact.Core.Parser
 import Pact.Core.ModRefs
-import Pact.Core.Literal
+-- import Pact.Core.Guards
+import Pact.Core.Literal 
 import Data.Decimal
 import Pact.Time
 import qualified Data.Attoparsec.Text as AP
@@ -67,8 +68,8 @@ instance JD.FromJSON (KeySet FullyQualifiedName) where
 instance JD.FromJSON (KSPredicate FullyQualifiedName) where
   parseJSON = JD.withText "KSPredicate" $ \case
     "keys-all" -> pure KeysAll
-    "keys2" -> pure Keys2
-    "KeysAny" -> pure KeysAny
+    "keys-2" -> pure Keys2
+    "keys-any" -> pure KeysAny
     _ -> fail "unexpected parsing"
 
 instance JD.FromJSON PublicKeyText where
@@ -126,8 +127,11 @@ instance JD.FromJSON Hash where
 instance JD.FromJSON DefPactId where
   parseJSON = JD.withText "DefPactId" (pure . DefPactId)
 
+-- https://github.com/kadena-io/pact/blob/09f3b43fc10fbcdd798b01af45e4ddb6cecb91e7/src/Pact/Types/RowData.hs#L179C7-L181C24
+-- We currently ignore the version field
 instance JD.FromJSON RowData where
-  parseJSON = undefined
+  parseJSON = JD.withObject "RowData" $ \o ->
+    RowData <$> o JD..: "$d"
 
 instance JD.FromJSON (DefPactContinuation FullyQualifiedName PactValue) where
   parseJSON = JD.withObject "DefPactContinuation" $ \o ->
@@ -245,12 +249,50 @@ instance JD.FromJSON LegacyLiteral where
 
 
 instance JD.FromJSON (Guard FullyQualifiedName PactValue) where
-  parseJSON v = undefined -- fromLegacyPactValue <$> JD.parseJSON v
+  parseJSON = undefined -- fromLegacyPactValue <$> JD.parseJSON v
 
 
 -- https://github.com/kadena-io/pact/blob/ba15517b56eba4fdaf6b2fbd3e5245eeedd0fc9f/src/Pact/Types/Term/Internal.hs#L802
 instance JD.FromJSON (Guard FullyQualifiedName LegacyPactValue) where
-  parseJSON v = undefined -- fromLegacyPactValue <$> JD.parseJSON v
+  parseJSON v = GKeyset <$> JD.parseJSON v
+    <|> GKeySetRef <$> parseRef v
+    <|> GUserGuard <$> JD.parseJSON v
+    <|> GCapabilityGuard <$> JD.parseJSON v
+    <|> GModuleGuard <$> JD.parseJSON v
+    where
+    parseRef = JD.withObject "KeySetRef" $ \o -> do
+      ref <- o JD..: "keysetref"
+      pure (KeySetName ref)
+
+
+instance JD.FromJSON (UserGuard FullyQualifiedName LegacyPactValue) where
+  parseJSON = JD.withObject "UserGuard" $ \o ->
+    UserGuard
+      <$> o JD..: "fun"
+      <*> o JD..: "args"
+
+instance JD.FromJSON (CapabilityGuard FullyQualifiedName LegacyPactValue) where
+  parseJSON = JD.withObject "CapabilityGuard" $ \o ->
+    CapabilityGuard
+      <$> o JD..: "cgName"
+      <*> o JD..: "cgArgs"
+      <*> o JD..:? "cgPactId"
+
+instance JD.FromJSON ModuleGuard where
+  parseJSON = JD.withObject "ModuleGuard" $ \o ->
+    ModuleGuard
+      <$> o JD..: "moduleName"
+      <*> o JD..: "name"
 
 fromLegacyPactValue :: LegacyPactValue -> PactValue
-fromLegacyPactValue = undefined
+fromLegacyPactValue = \case
+  Legacy_PLiteral ll -> case ll of
+    Legacy_LString t -> PLiteral (LString t)
+    Legacy_LInteger i -> PLiteral (LInteger i)
+    Legacy_LDecimal d -> PLiteral (LDecimal d)
+    Legacy_LBool b -> PLiteral (LBool b)
+    Legacy_LTime utc -> PTime utc
+  Legacy_PList v -> PList (fromLegacyPactValue <$> v)
+  Legacy_PObject o -> PObject (fromLegacyPactValue <$> o)
+  Legacy_PGuard _g -> undefined
+  Legacy_PModRef mref -> PModRef mref
