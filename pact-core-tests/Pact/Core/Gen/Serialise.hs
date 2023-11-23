@@ -379,7 +379,9 @@ defPactIdGen :: Gen DefPactId
 defPactIdGen = DefPactId <$> identGen
 
 userGuardGen :: Int -> Gen (UserGuard FullyQualifiedName PactValue)
-userGuardGen depth = undefined
+userGuardGen depth = do
+  ident <- fullyQualifiedNameGen
+  UserGuard ident <$> Gen.list (Range.linear 0 depth) pactValueGen
 
 guardGen :: Int -> Gen n -> Gen (Guard n PactValue)
 guardGen depth n
@@ -406,7 +408,9 @@ chainIdGen :: Gen ChainId
 chainIdGen = ChainId <$> identGen
 
 provenanceGen :: Gen Provenance
-provenanceGen = undefined
+provenanceGen = do
+  chainId <- chainIdGen
+  Provenance chainId <$> moduleHashGen
 
 yieldGen :: Gen Yield
 yieldGen = do
@@ -415,11 +419,13 @@ yieldGen = do
   Yield d p <$> Gen.maybe chainIdGen
 
 defPactContinuationGen :: Gen (DefPactContinuation FullyQualifiedName PactValue)
-defPactContinuationGen = undefined
+defPactContinuationGen = do
+  ident <- fullyQualifiedNameGen
+  DefPactContinuation ident <$> Gen.list (Range.linear 0 8) pactValueGen
 
 defPactExecGen :: Gen DefPactExec
 defPactExecGen = do
-  i <- Gen.int (Range.linear 0 8)
+  i <- Gen.int (Range.linear 0 3)
   defPactExecGen' i
 
 defPactExecGen' :: Int -> Gen DefPactExec
@@ -431,7 +437,7 @@ defPactExecGen' depth = do
   cont <- defPactContinuationGen
   nested <- if depth <= 0
             then pure Map.empty
-            else Gen.map (Range.linear 0 8) genNested
+            else Gen.map (Range.linear 0 3) genNested
   rb <- Gen.bool
   pure (DefPactExec sc yield step dpid cont rb nested)
   where

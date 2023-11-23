@@ -8,7 +8,7 @@
 
 module Pact.Core.Serialise where
 
-import Data.ByteString (ByteString, fromStrict, toStrict)
+import Data.ByteString (ByteString, fromStrict)
 
 import Control.Applicative ((<|>))
 import Pact.Core.Builtin
@@ -25,8 +25,8 @@ import qualified Codec.CBOR.Decoding as S
 import Codec.CBOR.Write (toStrictByteString)
 import Codec.CBOR.Read (deserialiseFromBytes)
 
+import qualified Pact.Core.Serialise.LegacyPact as LegacyPact
 import qualified Pact.Core.Serialise.CBOR_V1 as V1
-
 
 data DocumentVersion
   = V0_CBOR
@@ -75,35 +75,35 @@ serialiseCBOR :: PactSerialise RawBuiltin ()
 serialiseCBOR = PactSerialise
   { _encodeModuleData = docEncode V1.encodeModuleData
   , _decodeModuleData = \bs ->
-      LegacyDocument <$> V1.decodeModuleData bs
+      LegacyDocument <$> LegacyPact.decodeModuleData bs
       <|> docDecode bs (\case
                            V0_CBOR -> V1.decodeModuleData
                        )
 
   , _encodeKeySet = docEncode V1.encodeKeySet
   , _decodeKeySet = \bs ->
-      LegacyDocument <$> V1.decodeKeySet bs
+      LegacyDocument <$> LegacyPact.decodeKeySet bs
       <|> docDecode bs (\case
                            V0_CBOR -> V1.decodeKeySet
                        )
 
   , _encodeDefPactExec = docEncode V1.encodeDefPactExec
   , _decodeDefPactExec = \bs ->
-      LegacyDocument <$> V1.decodeDefPactExec bs
+      LegacyDocument <$> LegacyPact.decodeDefPactExec bs
       <|> docDecode bs (\case
                            V0_CBOR -> V1.decodeDefPactExec
                        )
 
   , _encodeNamespace = docEncode V1.encodeNamespace
   , _decodeNamespace = \bs ->
-      LegacyDocument <$> V1.decodeNamespace bs
+      LegacyDocument <$> LegacyPact.decodeNamespace bs
       <|> docDecode bs (\case
                            V0_CBOR -> V1.decodeNamespace
                        )
 
   , _encodeRowData = docEncode V1.encodeRowData
   , _decodeRowData = \bs ->
-      LegacyDocument <$> V1.decodeRowData bs
+      LegacyDocument <$> LegacyPact.decodeRowData bs
       <|> docDecode bs (\case
                            V0_CBOR -> V1.decodeRowData
                        )
@@ -113,6 +113,6 @@ serialiseCBOR = PactSerialise
     docEncode enc o = toStrictByteString (encodeVersion V0_CBOR <> S.encodeBytes (enc o))
 
     docDecode :: ByteString -> (DocumentVersion -> ByteString -> Maybe a) -> Maybe (Document a)
-    docDecode bs dec = case deserialiseFromBytes decodeVersion (fromStrict bs) of
+    docDecode bs dec = case deserialiseFromBytes (liftA2 (,) decodeVersion S.decodeBytes) (fromStrict bs) of
       Left _ -> Nothing
-      Right (cnt, v) -> Document v <$> dec v (toStrict cnt)
+      Right (_, (v,c)) ->  Document v <$> dec v c

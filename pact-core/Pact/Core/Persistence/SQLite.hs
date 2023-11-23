@@ -23,7 +23,6 @@ import Pact.Core.Persistence (PactDb(..), Domain(..),
                              )
 -- import Pact.Core.Repl.Utils (ReplEvalM)
 import Pact.Core.Serialise
-
 withSqlitePactDb
   :: (MonadIO m, MonadBaseControl IO m)
   => PactSerialise b i
@@ -73,13 +72,13 @@ write' serial db _wt domain k v = case domain of
       SQL.bind stmt [SQL.SQLText (renderKeySetName k), SQL.SQLBlob encoded]
       SQL.stepNoCB stmt >>= \case
         SQL.Done -> pure ()
-        SQL.Row -> fail "invariant viaolation"
+        SQL.Row -> fail "invariant violation"
   DModules -> withStmt db "INSERT INTO SYS_MODULES (rowkey, rowdata) VALUES (?,?)" $ \stmt -> do
       let encoded = _encodeModuleData serial v
       SQL.bind stmt [SQL.SQLText (renderModuleName k), SQL.SQLBlob encoded]
       SQL.stepNoCB stmt >>= \case
         SQL.Done -> pure ()
-        SQL.Row -> fail "invariant viaolation"
+        SQL.Row -> fail "invariant violation"
   DDefPacts -> withStmt db "INSERT INTO SYS_DEFPACTS (rowkey, rowdata) VALUES (?,?)" $ \stmt -> do
       let
         encoded = _encodeDefPactExec serial v
@@ -87,7 +86,7 @@ write' serial db _wt domain k v = case domain of
       SQL.bind stmt [SQL.SQLText k', SQL.SQLBlob encoded]
       SQL.stepNoCB stmt >>= \case
         SQL.Done -> pure ()
-        SQL.Row -> fail "invariant viaolation"
+        SQL.Row -> fail "invariant violation"
   DNamespaces -> withStmt db "INSERT INTO SYS_NAMESPACES (rowkey, rowdata) VALUES (?,?)" $ \stmt -> do
       let
         encoded = _encodeNamespace serial v
