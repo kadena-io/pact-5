@@ -51,6 +51,7 @@ common pact-core-common
     , primitive
     , haskeline
     , semirings
+    , utf8-string
     , exceptions
     , array
     , pact-json
@@ -123,6 +124,8 @@ library
     Pact.Core.IR.Eval.Runtime.Utils
     Pact.Core.IR.Eval.CEK
     Pact.Core.IR.Eval.RawBuiltin
+    Pact.Core.IR.ModuleHashing
+    Pact.Core.IR.ConstEval
 
     -- Repl
     Pact.Core.Repl.Utils

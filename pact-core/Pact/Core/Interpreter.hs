@@ -12,13 +12,13 @@ import Pact.Core.Info
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.PactValue
-
+import Pact.Core.Persistence(Purity)
 
 -- | Our general interpreter abstraction. It allows us to
 -- decouple evaluation from
 data Interpreter b i m
   = Interpreter
-  { _interpret :: !(Term Name Type b i -> m InterpretValue)
+  { _interpret :: !(Purity -> Term Name Type b i -> m InterpretValue)
   , _interpretGuard :: !(i -> Guard FullyQualifiedName PactValue -> m InterpretValue)
   }
 

@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE GADTs #-}
 
 
 module Pact.Core.Capabilities
@@ -19,6 +20,7 @@ module Pact.Core.Capabilities
  , mcCap, mcManaged, mcOriginalCap
  , ManagedCapType(..)
  , PactEvent(..)
+ , dcMetaFqName
  ) where
 
 import Control.Lens
@@ -41,6 +43,12 @@ data DefCapMeta name
   | DefManaged (DefManagedMeta name)
   | Unmanaged
   deriving (Show)
+
+dcMetaFqName :: Traversal' (DefCapMeta Name) FullyQualifiedName
+dcMetaFqName f = \case
+  DefManaged (DefManagedMeta i (FQName fqn)) ->
+    DefManaged . DefManagedMeta i . FQName <$> f fqn
+  p -> pure p
 
 data CapForm name e
   = WithCapability name [e] e

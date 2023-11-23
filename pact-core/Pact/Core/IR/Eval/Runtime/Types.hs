@@ -382,11 +382,17 @@ data Cont b i m
   --    or a simple return value in the case of `compose-capability`
   --  - The rest of the continuation
   | CapPopC CapPopState (Cont b i m)
+  -- ^ What to do after returning from a defcap: do we compose the returned cap, or do we simply pop it from the stack
   | DefPactStepC (CEKEnv b i m) (Cont b i m)
+  -- ^ Cont frame after a defpact, ensuring we save the defpact to the database and whatnot
   | NestedDefPactStepC (CEKEnv b i m) (Cont b i m) DefPactExec
+  -- ^ Frame for control flow around nested defpact execution
   | UserGuardC (Cont b i m)
+  -- ^ Frame to ignore value after user guard execution
   | StackPopC i (Maybe Type) (Cont b i m)
+  -- ^ Pop the current stack frame and check the return value for the declared type
   | EnforceErrorC i (Cont b i m)
+  -- ^ Continuation for "enforced" errors.
   | Mt
   -- ^ Empty Continuation
   deriving Show
