@@ -131,7 +131,7 @@ evalModuleGovernance interp tl = do
     _ -> pure ()
 
 interpretTopLevel
-  :: forall b i  m
+  :: forall b i m
   .  (HasCompileEnv b i m)
   => Interpreter b i m
   -> Lisp.TopLevel i
@@ -151,10 +151,9 @@ interpretTopLevel interp tl = do
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = ModuleData m deps'
       liftDbFunction (_mInfo m) (writeModule pdb Write (view mName m) mdata)
-      let newLoaded = M.fromList $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
-          newTopLevel = M.fromList
-                        $ fmap (\(fqn, d) -> (_fqName fqn, (fqn, defKind d)))
-                        $ toFqDep (_mName m) (_mHash m) <$> _mDefs m
+      let fqDeps = toFqDep (_mName m) (_mHash m) <$> _mDefs m
+          newLoaded = M.fromList fqDeps
+          newTopLevel = M.fromList $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind d))) <$> fqDeps
           loadNewModule =
             over loModules (M.insert (_mName m) mdata) .
             over loAllLoaded (M.union newLoaded) .
@@ -166,12 +165,12 @@ interpretTopLevel interp tl = do
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = InterfaceData iface deps'
       liftDbFunction (_ifInfo iface) (writeModule pdb Write (view ifName iface) mdata)
-      let newLoaded = M.fromList $ toFqDep (_ifName iface) (_ifHash iface)
-                      <$> mapMaybe ifDefToDef (_ifDefns iface)
+      let fqDeps = toFqDep (_ifName iface) (_ifHash iface)
+                   <$> mapMaybe ifDefToDef (_ifDefns iface)
+          newLoaded = M.fromList fqDeps
           newTopLevel = M.fromList
-                        $ fmap (\(fqn, d) -> (_fqName fqn, (fqn, defKind d)))
-                        $ toFqDep (_ifName iface) (_ifHash iface)
-                        <$> mapMaybe ifDefToDef (_ifDefns iface)
+                        $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind d)))
+                        <$> fqDeps
           loadNewModule =
             over loModules (M.insert (_ifName iface) mdata) .
             over loAllLoaded (M.union newLoaded) .
