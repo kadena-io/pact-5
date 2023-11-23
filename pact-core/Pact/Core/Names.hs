@@ -341,7 +341,7 @@ makeLenses ''FullyQualifiedName
 -- userTable :: TableName -> TableName
 -- userTable (TableName tn) = TableName ("USER_" <> tn)
 
--- | the identifier that indexes defpacts in the db,
+-- | The identifier that indexes defpacts in the db,
 --   generally computed from the continuation, or
 --   in the case of nested defpacts, the hash of the
 --   parent + the nested continuation

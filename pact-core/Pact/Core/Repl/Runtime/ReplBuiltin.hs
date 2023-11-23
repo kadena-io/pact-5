@@ -42,7 +42,7 @@ import Pact.Core.Repl.Utils
 prettyShowValue :: CEKValue b i m -> Text
 prettyShowValue = \case
   VPactValue p -> renderText p
-  VTable (TableValue (TableName tn mn) _ _ _) -> "table{" <> renderModuleName mn <> "_" <> tn <> "}"
+  VTable (TableValue (TableName tn mn) _ _) -> "table{" <> renderModuleName mn <> "_" <> tn <> "}"
   VClosure _ -> "<#closure>"
 
 corePrint :: (IsBuiltin b) => NativeFunction b SpanInfo (ReplM b)

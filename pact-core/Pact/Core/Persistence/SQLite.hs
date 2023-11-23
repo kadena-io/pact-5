@@ -20,6 +20,7 @@ import Pact.Core.Persistence (PactDb(..), Domain(..),
                               Purity(PImpure)
                              ,WriteType(..) --, RowData(..)
                              ,toUserTable
+                             ,ExecutionMode(..), TxId
                              )
 -- import Pact.Core.Repl.Utils (ReplEvalM)
 import Pact.Core.Serialise
@@ -53,12 +54,23 @@ initializePactDb serial db = do
     , _pdbWrite = write' serial db
     , _pdbKeys = undefined
     , _pdbCreateUserTable = createUserTable db
-    , _pdbBeginTx = undefined
-    , _pdbCommitTx = undefined
-    , _pdbRollbackTx = undefined
+    , _pdbBeginTx = beginTx db
+    , _pdbCommitTx = commitTx db
+    , _pdbRollbackTx = rollbackTx db
     , _pdbTxIds = undefined
     , _pdbGetTxLog = undefined
     }
+
+commitTx :: SQL.Database -> IO ()
+commitTx db = SQL.exec db "COMMIT TRANSACTION"
+
+beginTx :: SQL.Database -> ExecutionMode -> IO (Maybe TxId)
+beginTx _db = \case
+  Transactional -> undefined -- SQL.exec db "BEGIN TRANSACTION"
+  Local -> undefined
+
+rollbackTx :: SQL.Database -> IO ()
+rollbackTx db = SQL.exec db "ROLLBACK TRANSACTION"
 
 createUserTable :: SQL.Database -> TableName -> IO ()
 createUserTable db tbl = SQL.exec db ("CREATE TABLE IF NOT EXISTS " <> tblName <> " (txid INTEGER PRIMARY KEY NOT NULL UNIQUE, rowkey TEXT NOT NULL, rowdata BLOB NOT NULL)")

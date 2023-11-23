@@ -199,7 +199,6 @@ data CanApply b i m
 data TableValue
   = TableValue
   { _tvName :: !TableName
-  , _tvModule :: !ModuleName
   , _tvHash :: !ModuleHash
   , _tvSchema :: !Schema
   } deriving Show

@@ -786,7 +786,7 @@ coreBind = \info b cont handler _env -> \case
 
 createTable :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 createTable = \info b cont handler env -> \case
-  [VTable tv@(TableValue tn _mn _ _)] -> do
+  [VTable tv@(TableValue tn __ _)] -> do
     enforceTopLevelOnly info b
     guardTable info env tv GtCreateTable
     let pdb = view cePactDb env
@@ -1370,11 +1370,11 @@ describeModule = \info b cont handler env -> \case
 
 dbDescribeTable :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbDescribeTable = \info b cont handler _env -> \case
-  [VTable (TableValue name mname _ _)] ->
+  [VTable (TableValue name _ _)] ->
     returnCEKValue cont handler $ VObject $ M.fromList $ fmap (over _1 Field)
       [("name", PString (_tableName name))
-      ,("module", PString (renderModuleName mname))
-      ,("type", PString "asdf")]
+      ,("module", PString (renderModuleName (_tableModuleName name)))
+      ,("type", PString "asdf")] -- TODO: 
   args -> argsError info b args
 
 dbDescribeKeySet :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m

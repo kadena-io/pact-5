@@ -106,7 +106,7 @@ evalCEK cont handler env (Var n info)  = do
         Just (DTable d) ->
           let (ResolvedTable sc) = _dtSchema d
               tn = TableName (_dtName d) mname
-              tbl = VTable (TableValue tn mname mh sc)
+              tbl = VTable (TableValue tn mh sc)
           in returnCEKValue cont handler tbl
         Just (DCap d) -> do
           let args = _argType <$> _dcapArgs d
@@ -481,10 +481,10 @@ nameToFQN info env (Name n nk) = case nk of
   _ -> failInvariant info ("invalid name in fq position" <> T.pack (show n))
 
 guardTable :: (MonadEval b i m) => i -> CEKEnv b i m -> TableValue -> GuardTableOp -> m ()
-guardTable i env (TableValue _ mn mh _) dbop = do
+guardTable i env (TableValue tn mh _) dbop = do
   checkLocalBypass $
-    guardForModuleCall i env mn $ do
-      mdl <- getModule i (view cePactDb env) mn
+    guardForModuleCall i env (_tableModuleName tn) $ do
+      mdl <- getModule i (view cePactDb env) (_tableModuleName tn)
       enforceBlessedHashes i mdl mh
   where
   checkLocalBypass notBypassed = do
