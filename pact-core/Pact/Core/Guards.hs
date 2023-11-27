@@ -57,7 +57,8 @@ instance Pretty KeySetName where
   pretty (KeySetName ks (Just ns)) = "'" <> pretty ks <> "." <> pretty ns
 
 renderKeySetName :: KeySetName -> Text
-renderKeySetName = _keysetName
+renderKeySetName (KeySetName n Nothing) = n
+renderKeySetName (KeySetName n (Just ns)) = _namespaceName ns <> "." <> n
 
 keysetNameParser :: Parser KeySetName
 keysetNameParser = qualified <|> withoutNs
