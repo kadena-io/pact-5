@@ -141,7 +141,8 @@ ReplSpecial :: { SpanInfo -> ReplSpecialForm SpanInfo }
   | load STR { ReplLoad (getStr $2) False }
 
 Governance :: { Governance ParsedName }
-  : StringRaw { KeyGov (KeySetName $1)}
+  : StringRaw { KeyGov (KeySetName $1 Nothing) }
+  | StringRaw '.' StringRaw { KeyGov (KeySetName $1 (Just (NamespaceName $ getStr $2))) }
   | IDENT { CapGov (UnresolvedGov (BN (BareName (getIdent $1)))) }
 
 StringRaw :: { Text }
