@@ -617,30 +617,54 @@ coreB64Decode = \info b cont handler _env -> \case
     Right txt -> returnCEKValue cont handler (VLiteral (LString txt))
   args -> argsError info b args
 
+enforceGuard
+  :: (MonadEval b i m)
+  => i
+  -> Cont b i m
+  -> CEKErrorHandler b i m
+  -> CEKEnv b i m
+  -> Guard FullyQualifiedName PactValue
+  -> m (EvalResult b i m)
+enforceGuard info cont handler env g = case g of
+  GKeyset ks -> do
+    cond <- enforceKeyset ks
+    if cond then returnCEKValue cont handler (VBool True)
+    else returnCEK cont handler (VError "enforce keyset failure" info)
+  GKeySetRef ksn -> do
+    cond <- enforceKeysetName info (view cePactDb env) ksn
+    if cond then returnCEKValue cont handler (VBool True)
+    else returnCEK cont handler (VError "enforce keyset ref failure" info)
+  GUserGuard ug -> runUserGuard info cont handler env ug
+  GCapabilityGuard cg -> enforceCapGuard info cont handler cg
+  GModuleGuard (ModuleGuard mn _) -> calledByModule mn >>= \case
+    True -> returnCEKValue cont handler (VBool True)
+    False -> do
+      md <- getModule info (view cePactDb env) mn
+      acquireModuleAdmin info env md
+      returnCEKValue cont handler (VBool True)
+  GDefPactGuard (DefPactGuard dpid _) -> do
+    curDpid <- getDefPactId info
+    if curDpid == dpid
+       then returnCEKValue cont handler (VBool True)
+       else returnCEK cont handler (VError "Capability pact guard failed: invalid pact id" info)
+
+enforceGuardCont
+  :: (MonadEval b i m)
+  => i
+  -> Cont b i m
+  -> CEKErrorHandler b i m
+  -> CEKEnv b i m
+  -> Guard FullyQualifiedName PactValue
+  -> m (EvalResult b i m)
+  -> m (EvalResult b i m)
+enforceGuardCont info cekCont cekHandler env g successCont =
+  enforceGuard info Mt CEKNoHandler env g >>= \case
+    EvalValue {} -> successCont
+    VError e i -> returnCEK cekCont cekHandler (VError e i)
+
 coreEnforceGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreEnforceGuard = \info b cont handler env -> \case
-  [VGuard g] -> case g of
-      GKeyset ks -> do
-        cond <- enforceKeyset ks
-        if cond then returnCEKValue cont handler (VBool True)
-        else returnCEK cont handler (VError "enforce keyset failure" info)
-      GKeySetRef ksn -> do
-        cond <- enforceKeysetName info (view cePactDb env) ksn
-        if cond then returnCEKValue cont handler (VBool True)
-        else returnCEK cont handler (VError "enforce keyset ref failure" info)
-      GUserGuard ug -> runUserGuard info cont handler env ug
-      GCapabilityGuard cg -> enforceCapGuard info cont handler cg
-      GModuleGuard (ModuleGuard mn _) -> calledByModule mn >>= \case
-        True -> returnCEKValue cont handler (VBool True)
-        False -> do
-          md <- getModule info (view cePactDb env) mn
-          acquireModuleAdmin info env md
-          returnCEKValue cont handler (VBool True)
-      GDefPactGuard (DefPactGuard dpid _) -> do
-        curDpid <- getDefPactId info
-        if curDpid == dpid
-           then returnCEKValue cont handler (VBool True)
-           else returnCEK cont handler (VError "Capability pact guard failed: invalid pact id" info)
+  [VGuard g] -> enforceGuard info cont handler env g
   [VString s] -> case parseAnyKeysetName s of
       Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
       Right ksn -> do
@@ -1493,8 +1517,6 @@ coreNamespace = \info b cont handler env -> \case
   args -> argsError info b args
 
 
-
-
 coreDefineNamespace :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreDefineNamespace info b cont handler env = \case
   [VString n, VGuard usrG, VGuard adminG] -> do
@@ -1505,16 +1527,12 @@ coreDefineNamespace info b cont handler env = \case
       -- G!
       -- https://static.wikia.nocookie.net/onepiece/images/5/52/Lao_G_Manga_Infobox.png/revision/latest?cb=20150405020446
       -- Enforce the old guard
-      Just (Namespace _ _ laoG) -> do
-        coreEnforceGuard info b Mt CEKNoHandler env [VGuard laoG] >>= \case
-          -- Enforce guard returns an error and never a different kind of value, so
-          -- this pattern match is fine
-          EvalValue _ -> do
-            let nsn = NamespaceName n
-                ns = Namespace nsn usrG adminG
-            liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
-            returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
-          VError e i -> returnCEK cont handler (VError e i)
+      Just (Namespace _ _ laoG) ->
+        enforceGuardCont info cont handler env laoG $ do
+          let nsn = NamespaceName n
+              ns = Namespace nsn usrG adminG
+          liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
+          returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
       Nothing -> do
         enforcePolicy pdb n adminG
         let nsn = NamespaceName n
