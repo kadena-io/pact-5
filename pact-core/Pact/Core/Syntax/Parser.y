@@ -142,7 +142,7 @@ ReplSpecial :: { SpanInfo -> ReplSpecialForm SpanInfo }
 
 Governance :: { Governance ParsedName }
   : StringRaw { KeyGov (KeySetName $1 Nothing) }
-  | StringRaw '.' StringRaw { KeyGov (KeySetName $1 (Just (NamespaceName $ getStr $2))) }
+  | StringRaw '.' StringRaw { KeyGov (KeySetName (getStr $2) (Just (NamespaceName $1))) }
   | IDENT { CapGov (UnresolvedGov (BN (BareName (getIdent $1)))) }
 
 StringRaw :: { Text }
