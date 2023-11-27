@@ -1038,16 +1038,24 @@ defineKeySet'
   -> m (EvalResult b i m)
 defineKeySet' info cont handler env ksname newKs  = do
   let pdb = view cePactDb env
-  liftDbFunction info (_pdbRead pdb DKeySets (KeySetName ksname)) >>= \case
-    Just oldKs -> do
-      cond <- enforceKeyset oldKs
-      if cond then do
-          liftDbFunction info (_pdbWrite pdb Write DKeySets (KeySetName ksname) newKs)
-          returnCEKValue cont handler (VString "Keyset write success")
-      else returnCEK cont handler (VError "enforce keyset failure" info)
-    Nothing -> do
-      liftDbFunction info (_pdbWrite pdb Write DKeySets (KeySetName ksname) newKs)
-      returnCEKValue cont handler (VString "Keyset write success")
+  case parseAnyKeysetName ksname of
+    Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
+    Right ksn -> liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
+      Just oldKs -> do
+        cond <- enforceKeyset oldKs
+        if cond then do
+            liftDbFunction info (_pdbWrite pdb Write DKeySets ksn newKs)
+            returnCEKValue cont handler (VString "Keyset write success")
+        else returnCEK cont handler (VError "enforce keyset failure" info)
+      Nothing -> useEvalState (esLoaded . loNamespace) >>= \case
+        Nothing -> returnCEK cont handler (VError "Cannot define a keyset outside of a namespace" info)
+        Just (Namespace ns uGuard _adminGuard) -> do
+          enforceGuardCont info cont handler env uGuard $
+            if Just ns == _keysetNs ksn
+              then do
+                liftDbFunction info (_pdbWrite pdb Write DKeySets ksn newKs)
+                returnCEKValue cont handler (VString "Keyset write success")
+              else returnCEK cont handler (VError "Mismatching keyset namespace" info)
 
 defineKeySet :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 defineKeySet = \info b cont handler env -> \case
