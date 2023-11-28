@@ -29,7 +29,7 @@ import qualified Pact.Core.Serialise.LegacyPact as LegacyPact
 import qualified Pact.Core.Serialise.CBOR_V1 as V1
 
 data DocumentVersion
-  = V0_CBOR
+  = V1_CBOR
   deriving (Show,Eq, Enum, Bounded)
 
 data Document a
@@ -48,12 +48,12 @@ document = lens getDoc setDoc
 
 decodeVersion :: S.Decoder s DocumentVersion
 decodeVersion = S.decodeWord >>= \case
-  0 -> pure V0_CBOR
+  0 -> pure V1_CBOR
   _ -> fail "unexpected version decoding"
 
 encodeVersion :: DocumentVersion -> S.Encoding
 encodeVersion = \case
-  V0_CBOR -> S.encodeWord 0
+  V1_CBOR -> S.encodeWord 0
 
 
 -- | The main serialization API for Pact entities.
@@ -71,46 +71,46 @@ data PactSerialise b i
   , _decodeRowData :: ByteString -> Maybe (Document RowData)
   }
 
-serialiseCBOR :: PactSerialise RawBuiltin ()
-serialiseCBOR = PactSerialise
+serialisePact :: PactSerialise RawBuiltin ()
+serialisePact = PactSerialise
   { _encodeModuleData = docEncode V1.encodeModuleData
   , _decodeModuleData = \bs ->
       LegacyDocument <$> LegacyPact.decodeModuleData bs
       <|> docDecode bs (\case
-                           V0_CBOR -> V1.decodeModuleData
+                           V1_CBOR -> V1.decodeModuleData
                        )
 
   , _encodeKeySet = docEncode V1.encodeKeySet
   , _decodeKeySet = \bs ->
       LegacyDocument <$> LegacyPact.decodeKeySet bs
       <|> docDecode bs (\case
-                           V0_CBOR -> V1.decodeKeySet
+                           V1_CBOR -> V1.decodeKeySet
                        )
 
   , _encodeDefPactExec = docEncode V1.encodeDefPactExec
   , _decodeDefPactExec = \bs ->
       LegacyDocument <$> LegacyPact.decodeDefPactExec bs
       <|> docDecode bs (\case
-                           V0_CBOR -> V1.decodeDefPactExec
+                           V1_CBOR -> V1.decodeDefPactExec
                        )
 
   , _encodeNamespace = docEncode V1.encodeNamespace
   , _decodeNamespace = \bs ->
       LegacyDocument <$> LegacyPact.decodeNamespace bs
       <|> docDecode bs (\case
-                           V0_CBOR -> V1.decodeNamespace
+                           V1_CBOR -> V1.decodeNamespace
                        )
 
   , _encodeRowData = docEncode V1.encodeRowData
   , _decodeRowData = \bs ->
       LegacyDocument <$> LegacyPact.decodeRowData bs
       <|> docDecode bs (\case
-                           V0_CBOR -> V1.decodeRowData
+                           V1_CBOR -> V1.decodeRowData
                        )
   }
   where
     docEncode :: (a -> ByteString) -> a -> ByteString
-    docEncode enc o = toStrictByteString (encodeVersion V0_CBOR <> S.encodeBytes (enc o))
+    docEncode enc o = toStrictByteString (encodeVersion V1_CBOR <> S.encodeBytes (enc o))
 
     docDecode :: ByteString -> (DocumentVersion -> ByteString -> Maybe a) -> Maybe (Document a)
     docDecode bs dec = case deserialiseFromBytes (liftA2 (,) decodeVersion S.decodeBytes) (fromStrict bs) of

@@ -1,5 +1,6 @@
 -- |
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Pact.Core.Persistence.SQLite (
@@ -10,6 +11,7 @@ import Control.Monad.Trans.Control (MonadBaseControl)
 import Control.Exception.Lifted (bracket)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 -- import qualified Data.Text as T
+import Data.IORef (newIORef)
 import Data.Text (Text)
 import Control.Lens (view)
 import qualified Database.SQLite3 as SQL
@@ -48,6 +50,7 @@ createSysTables db = do
 initializePactDb :: PactSerialise b i -> SQL.Database  -> IO (PactDb b i)
 initializePactDb serial db = do
   createSysTables db
+  _pdbTxId <- newIORef Nothing
   pure $ PactDb
     { _pdbPurity = PImpure
     , _pdbRead = read' serial db
@@ -59,6 +62,7 @@ initializePactDb serial db = do
     , _pdbRollbackTx = rollbackTx db
     , _pdbTxIds = undefined
     , _pdbGetTxLog = undefined
+    , _pdbTxId
     }
 
 commitTx :: SQL.Database -> IO ()

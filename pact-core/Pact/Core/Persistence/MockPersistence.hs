@@ -5,12 +5,11 @@ module Pact.Core.Persistence.MockPersistence (
   )where
 
 
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import Data.Maybe (isJust)
 import Control.Lens ((^?), (^.), ix, view)
 import Data.Map (Map)
 import Data.IORef (IORef, modifyIORef, modifyIORef', newIORef, readIORef, writeIORef)
-import GHC.Word (Word64)
 import Control.Exception(throwIO)
 import qualified Data.Map.Strict as M
 
@@ -34,7 +33,7 @@ mockPactDb = do
   refNS <- newIORef M.empty
   refRb <- newIORef Nothing
   refTxLog <- newIORef mempty
-  refTxId <- newIORef 0
+  refTxId <- newIORef $ Just (TxId 0)
   pure $ PactDb
     { _pdbPurity = PImpure
     , _pdbRead = read' refKs refMod refNS refUsrTbl refPacts
@@ -46,6 +45,7 @@ mockPactDb = do
     , _pdbRollbackTx = rollbackTx refRb refTxLog refMod refKs refUsrTbl
     , _pdbTxIds = txIds refTxLog
     , _pdbGetTxLog = txLog refTxLog
+    , _pdbTxId = refTxId
     }
   where
   beginTx refRb refTxId refTxLog refMod refKs refUsrTbl em = do
@@ -58,13 +58,15 @@ mockPactDb = do
         txl <- readIORef refTxLog
         writeIORef refRb (Just (em, txl, mods, ks, usrTbl))
         tid <- readIORef refTxId
-        pure (Just (TxId tid))
+        pure tid
 
   commitTx refRb refTxId refTxLog refMod refKs refUsrTbl = readIORef refRb >>= \case
     Just (em, txl, mods, ks, usr) -> case em of
       Transactional -> do
         writeIORef refRb Nothing
-        modifyIORef' refTxId (+ 1)
+        mtxid <- readIORef refTxId
+        when (mtxid == Nothing) $ error "Not in a transaction"
+        modifyIORef' refTxId (fmap (\(TxId n) -> TxId (n + 1)))
       Local -> do
         writeIORef refRb Nothing
         writeIORef refMod mods
@@ -168,7 +170,7 @@ mockPactDb = do
     -> IORef (Map ModuleName (ModuleData b i))
     -> IORef (Map NamespaceName Namespace)
     -> IORef (Map TableName (Map RowKey RowData))
-    -> IORef Word64
+    -> IORef (Maybe TxId)
     -> IORef (Map TableName (Map TxId [TxLog RowData]))
     -> IORef (Map DefPactId (Maybe DefPactExec))
     -> WriteType
@@ -190,20 +192,23 @@ mockPactDb = do
     pure (r ^? ix tbl . ix k)
 
   writeToTxLog
-    :: IORef Word64
+    :: IORef (Maybe TxId)
     -> IORef (Map TableName (Map TxId [TxLog RowData]))
     -> TableName
     -> RowKey
     -> RowData
     -> IO ()
   writeToTxLog refTxId refTxLog tbl k rdata = do
-    tid <- readIORef refTxId
-    let entry = M.singleton (TxId tid) [TxLog (toUserTable tbl) (k ^. rowKey) rdata]
-    modifyIORef' refTxLog (M.insertWith (M.unionWith (<>)) tbl entry)
+    mtid <- readIORef refTxId
+    case mtid of
+      Nothing -> pure ()
+      Just tid -> do
+        let entry = M.singleton tid [TxLog (toUserTable tbl) (k ^. rowKey) rdata]
+        modifyIORef' refTxLog (M.insertWith (M.unionWith (<>)) tbl entry)
 
   writeRowData
     :: IORef (Map TableName (Map RowKey RowData))
-    -> IORef Word64
+    -> IORef (Maybe TxId)
     -> IORef (Map TableName (Map TxId [TxLog RowData]))
     -> TableName
     -> WriteType

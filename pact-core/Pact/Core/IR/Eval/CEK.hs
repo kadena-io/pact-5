@@ -159,14 +159,14 @@ evalCEK cont handler env (Conditional c info) = case c of
     evalCEK (CondC env info (OrFrame te') cont) handler env te
   CIf cond e1 e2 ->
     evalCEK (CondC env info (IfFrame e1 e2) cont) handler env cond
-  CEnforce cond str ->
-    let env' = sysOnlyEnv env
-    in evalCEK (CondC env' info (EnforceFrame str) cont) handler env' cond
+  CEnforce cond str -> do
+    env' <- liftIO $ sysOnlyEnv env
+    evalCEK (CondC env' info (EnforceFrame str) cont) handler env' cond
   CEnforceOne str conds -> case conds of
     [] -> returnCEK cont handler (VError "enforce-one failure" info)
     x:xs -> do
       errState <- evalStateToErrorState <$> getEvalState
-      let env' = readOnlyEnv env
+      env' <- liftIO $ readOnlyEnv env
       let handler' = CEKEnforceOne env' info str xs cont errState handler
       let cont' = CondC env' info (EnforceOneFrame str xs) Mt
       evalCEK cont' handler' env' x
@@ -196,7 +196,7 @@ evalCEK cont handler env (ListLit ts _) = do
 evalCEK cont handler env (Try catchExpr rest _) = do
   errState <- evalStateToErrorState <$> getEvalState
   let handler' = CEKHandler env catchExpr cont errState handler
-  let env' = readOnlyEnv env
+  env' <- liftIO $ readOnlyEnv env
   evalCEK Mt handler' env' rest
 evalCEK cont handler env (ObjectLit o _) =
   case o of

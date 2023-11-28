@@ -766,7 +766,7 @@ runUserGuard info cont handler env (UserGuard fqn args) =
   lookupFqName fqn >>= \case
     Just (Dfun d) -> do
       when (length (_dfunArgs d) /= length args) $ throwExecutionError info CannotApplyPartialClosure
-      let env' = sysOnlyEnv env
+      env' <- liftIO $ sysOnlyEnv env
       clo <- mkDefunClosure d (_fqModule fqn) env'
       -- Todo: sys only here
       applyLam (C clo) (VPactValue <$> args) (UserGuardC cont) handler

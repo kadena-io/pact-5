@@ -40,7 +40,7 @@ import Control.Lens
 import Control.Exception(throwIO, Exception)
 import Control.Applicative((<|>))
 import Data.Default
---import Data.IORef
+import Data.IORef (IORef)
 import Data.Map.Strict(Map)
 --import Data.Maybe(isJust)
 import Data.Text(Text)
@@ -167,6 +167,9 @@ data PactDb b i
   , _pdbRollbackTx :: IO ()
   , _pdbTxIds :: TableName -> TxId -> IO [TxId]
   , _pdbGetTxLog :: TableName -> TxId -> IO [TxLog RowData]
+  , _pdbTxId :: IORef (Maybe TxId)
+    -- ^ A mutable reference to the currently running pact transaction.
+    -- TODO: This field is morally part of
   }
 
 makeClassy ''PactDb

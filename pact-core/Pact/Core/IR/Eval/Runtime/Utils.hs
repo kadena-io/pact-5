@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Pact.Core.IR.Eval.Runtime.Utils
  ( mkBuiltinFn
@@ -39,6 +40,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
 import Control.Lens
 import Control.Monad(when)
 import Control.Monad.Except(MonadError(..))
+import Data.IORef (newIORef)
 import Data.Map.Strict(Map)
 import Data.Text(Text)
 import Data.Set(Set)
@@ -219,44 +221,49 @@ asBool
 asBool _ _ (PLiteral (LString b)) = pure b
 asBool i b pv = argsError i b [VPactValue pv]
 
-readOnlyEnv :: CEKEnv b i m -> CEKEnv b i m
+readOnlyEnv :: CEKEnv b i m -> IO (CEKEnv b i m)
 readOnlyEnv e
-  | view (cePactDb . pdbPurity) e == PSysOnly = e
-  | otherwise =
-  let pdb = view cePactDb  e
-      newPactdb =
-          PactDb
-         { _pdbPurity = PReadOnly
-         , _pdbRead = _pdbRead pdb
-         , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
-         , _pdbKeys = \_ -> dbOpDisallowed
-         , _pdbCreateUserTable = const dbOpDisallowed
-         , _pdbBeginTx = \_ -> dbOpDisallowed
-         , _pdbCommitTx = dbOpDisallowed
-         , _pdbRollbackTx = dbOpDisallowed
-         , _pdbTxIds = \_ _ -> dbOpDisallowed
-         , _pdbGetTxLog = \_ _ -> dbOpDisallowed
-         }
-  in set cePactDb newPactdb e
+  | view (cePactDb . pdbPurity) e == PSysOnly = pure e
+  | otherwise = do
+      _pdbTxId <- newIORef Nothing
+      let pdb = view cePactDb  e
+          newPactdb =
+              PactDb
+             { _pdbPurity = PReadOnly
+             , _pdbRead = _pdbRead pdb
+             , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
+             , _pdbKeys = \_ -> dbOpDisallowed
+             , _pdbCreateUserTable = const dbOpDisallowed
+             , _pdbBeginTx = \_ -> dbOpDisallowed
+             , _pdbCommitTx = dbOpDisallowed
+             , _pdbRollbackTx = dbOpDisallowed
+             , _pdbTxIds = \_ _ -> dbOpDisallowed
+             , _pdbGetTxLog = \_ _ -> dbOpDisallowed
+             , _pdbTxId
+             }
+      pure $ set cePactDb newPactdb e
 
-sysOnlyEnv :: forall b i m. CEKEnv b i m -> CEKEnv b i m
+sysOnlyEnv :: forall b i m. CEKEnv b i m -> IO (CEKEnv b i m)
 sysOnlyEnv e
-  | view (cePactDb . pdbPurity) e == PSysOnly = e
+  | view (cePactDb . pdbPurity) e == PSysOnly = pure e
   | otherwise =
-  let newPactdb =
-          PactDb
-         { _pdbPurity = PSysOnly
-         , _pdbRead = read'
-         , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
-         , _pdbKeys = \_ -> dbOpDisallowed
-         , _pdbCreateUserTable = const dbOpDisallowed
-         , _pdbBeginTx = \_ -> dbOpDisallowed
-         , _pdbCommitTx = dbOpDisallowed
-         , _pdbRollbackTx = dbOpDisallowed
-         , _pdbTxIds = \_ _ -> dbOpDisallowed
-         , _pdbGetTxLog = \_ _ -> dbOpDisallowed
-         }
-  in set cePactDb newPactdb e
+    do
+      _pdbTxId <- newIORef Nothing
+      let newPactdb =
+              PactDb
+              { _pdbPurity = PSysOnly
+              , _pdbRead = read'
+              , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
+              , _pdbKeys = \_ -> dbOpDisallowed
+              , _pdbCreateUserTable = const dbOpDisallowed
+              , _pdbBeginTx = \_ -> dbOpDisallowed
+              , _pdbCommitTx = dbOpDisallowed
+              , _pdbRollbackTx = dbOpDisallowed
+              , _pdbTxIds = \_ _ -> dbOpDisallowed
+              , _pdbGetTxLog = \_ _ -> dbOpDisallowed
+              , _pdbTxId
+              }
+      pure $ set cePactDb newPactdb e
   where
   pdb = view cePactDb e
   read' :: Domain k v b i -> k -> IO (Maybe v)
