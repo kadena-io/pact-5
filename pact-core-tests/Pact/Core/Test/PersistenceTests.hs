@@ -13,7 +13,7 @@ import Pact.Core.Info (SpanInfo)
 import Pact.Core.Guards (KeySet)
 import Pact.Core.Gen.Serialise (keySetGen, keySetNameGen, moduleNameGen, moduleDataGen, builtinGen, infoGen
                                ,defPactIdGen, defPactExecGen, namespaceNameGen, namespaceGen)
-import Pact.Core.Serialise (PactSerialise, serialiseCBOR)
+import Pact.Core.Serialise (PactSerialise, serialisePact)
 import Pact.Core.Builtin (RawBuiltin)
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Persistence (WriteType(Insert), readKeySet, writeKeySet, writeModule, readModule
@@ -29,7 +29,7 @@ testsWithSerial serial b i =
 
 tests :: TestTree
 tests = testGroup "Persistence Roundtrip"
-  [ testGroup "CBOR encoding/decoding" $ testsWithSerial serialiseCBOR builtinGen (pure ())
+  [ testGroup "CBOR encoding/decoding" $ testsWithSerial serialisePact builtinGen (pure ())
   ]
 
 keysetPersistRoundtrip :: PactSerialise b i -> Gen (KeySet FullyQualifiedName) -> Property

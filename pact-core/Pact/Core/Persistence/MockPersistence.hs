@@ -5,7 +5,7 @@ module Pact.Core.Persistence.MockPersistence (
   )where
 
 
-import Control.Monad (unless, when)
+import Control.Monad (unless)
 import Data.Maybe (isJust)
 import Control.Lens ((^?), (^.), ix, view)
 import Data.Map (Map)
@@ -33,7 +33,7 @@ mockPactDb = do
   refNS <- newIORef M.empty
   refRb <- newIORef Nothing
   refTxLog <- newIORef mempty
-  refTxId <- newIORef $ Just (TxId 0)
+  refTxId <- newIORef $ TxId 0
   pure $ PactDb
     { _pdbPurity = PImpure
     , _pdbRead = read' refKs refMod refNS refUsrTbl refPacts
@@ -58,15 +58,13 @@ mockPactDb = do
         txl <- readIORef refTxLog
         writeIORef refRb (Just (em, txl, mods, ks, usrTbl))
         tid <- readIORef refTxId
-        pure tid
+        pure (Just tid)
 
   commitTx refRb refTxId refTxLog refMod refKs refUsrTbl = readIORef refRb >>= \case
     Just (em, txl, mods, ks, usr) -> case em of
       Transactional -> do
         writeIORef refRb Nothing
-        mtxid <- readIORef refTxId
-        when (mtxid == Nothing) $ error "Not in a transaction"
-        modifyIORef' refTxId (fmap (\(TxId n) -> TxId (n + 1)))
+        modifyIORef' refTxId (\(TxId n) -> TxId (n + 1))
       Local -> do
         writeIORef refRb Nothing
         writeIORef refMod mods
@@ -170,7 +168,7 @@ mockPactDb = do
     -> IORef (Map ModuleName (ModuleData b i))
     -> IORef (Map NamespaceName Namespace)
     -> IORef (Map TableName (Map RowKey RowData))
-    -> IORef (Maybe TxId)
+    -> IORef TxId
     -> IORef (Map TableName (Map TxId [TxLog RowData]))
     -> IORef (Map DefPactId (Maybe DefPactExec))
     -> WriteType
@@ -192,23 +190,20 @@ mockPactDb = do
     pure (r ^? ix tbl . ix k)
 
   writeToTxLog
-    :: IORef (Maybe TxId)
+    :: IORef TxId
     -> IORef (Map TableName (Map TxId [TxLog RowData]))
     -> TableName
     -> RowKey
     -> RowData
     -> IO ()
   writeToTxLog refTxId refTxLog tbl k rdata = do
-    mtid <- readIORef refTxId
-    case mtid of
-      Nothing -> pure ()
-      Just tid -> do
-        let entry = M.singleton tid [TxLog (toUserTable tbl) (k ^. rowKey) rdata]
-        modifyIORef' refTxLog (M.insertWith (M.unionWith (<>)) tbl entry)
+    tid <- readIORef refTxId
+    let entry = M.singleton tid [TxLog (toUserTable tbl) (k ^. rowKey) rdata]
+    modifyIORef' refTxLog (M.insertWith (M.unionWith (<>)) tbl entry)
 
   writeRowData
     :: IORef (Map TableName (Map RowKey RowData))
-    -> IORef (Maybe TxId)
+    -> IORef TxId
     -> IORef (Map TableName (Map TxId [TxLog RowData]))
     -> TableName
     -> WriteType

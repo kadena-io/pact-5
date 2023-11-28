@@ -25,7 +25,6 @@ import Pact.Core.Persistence (PactDb(..), Domain(..),
                              ,ExecutionMode(..), TxId(..)
                              )
 
-import Control.Monad (foldM)
 -- import Pact.Core.Repl.Utils (ReplEvalM)
 import Pact.Core.Serialise
 withSqlitePactDb

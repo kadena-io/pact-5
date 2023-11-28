@@ -32,10 +32,10 @@ serialiseModule :: Property
 serialiseModule = property $ do
   m <- forAll (moduleDataGen builtinGen (pure ()))
   let
-    encoded = _encodeModuleData serialiseCBOR m
-  case _decodeModuleData serialiseCBOR encoded of
+    encoded = _encodeModuleData serialisePact m
+  case _decodeModuleData serialisePact encoded of
     Just (Document v c) -> do
-      v === V0_CBOR
+      v === V1_CBOR
       m === c
     _ -> fail "fail"
 
@@ -44,10 +44,10 @@ serialiseKeySet :: Property
 serialiseKeySet = property $ do
   ks <- forAll (keySetGen fullyQualifiedNameGen)
   let
-    encoded = _encodeKeySet serialiseCBOR ks
-  case _decodeKeySet serialiseCBOR encoded of
+    encoded = _encodeKeySet serialisePact ks
+  case _decodeKeySet serialisePact encoded of
     Just (Document v c) -> do
-      v === V0_CBOR
+      v === V1_CBOR
       ks === c
     _ -> fail "fail"
 
@@ -55,10 +55,10 @@ serialiseDefPactExec :: Property
 serialiseDefPactExec = property $ do
   dpe <- forAll (Gen.maybe defPactExecGen)
   let
-    encoded = _encodeDefPactExec serialiseCBOR dpe
-  case _decodeDefPactExec serialiseCBOR encoded of
+    encoded = _encodeDefPactExec serialisePact dpe
+  case _decodeDefPactExec serialisePact encoded of
     Just (Document v c) -> do
-      v === V0_CBOR
+      v === V1_CBOR
       dpe === c
     _ -> fail "fail"
 

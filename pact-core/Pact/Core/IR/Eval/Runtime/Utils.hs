@@ -225,7 +225,7 @@ readOnlyEnv :: CEKEnv b i m -> IO (CEKEnv b i m)
 readOnlyEnv e
   | view (cePactDb . pdbPurity) e == PSysOnly = pure e
   | otherwise = do
-      _pdbTxId <- newIORef Nothing
+      txId <- newIORef (TxId 0)
       let pdb = view cePactDb  e
           newPactdb =
               PactDb
@@ -239,7 +239,7 @@ readOnlyEnv e
              , _pdbRollbackTx = dbOpDisallowed
              , _pdbTxIds = \_ _ -> dbOpDisallowed
              , _pdbGetTxLog = \_ _ -> dbOpDisallowed
-             , _pdbTxId
+             , _pdbTxId = txId
              }
       pure $ set cePactDb newPactdb e
 
@@ -248,7 +248,7 @@ sysOnlyEnv e
   | view (cePactDb . pdbPurity) e == PSysOnly = pure e
   | otherwise =
     do
-      _pdbTxId <- newIORef Nothing
+      txId <- newIORef (TxId 0)
       let newPactdb =
               PactDb
               { _pdbPurity = PSysOnly
@@ -261,7 +261,7 @@ sysOnlyEnv e
               , _pdbRollbackTx = dbOpDisallowed
               , _pdbTxIds = \_ _ -> dbOpDisallowed
               , _pdbGetTxLog = \_ _ -> dbOpDisallowed
-              , _pdbTxId
+              , _pdbTxId = txId
               }
       pure $ set cePactDb newPactdb e
   where

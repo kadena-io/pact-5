@@ -19,10 +19,15 @@ import Pact.Core.Gas
 import Pact.Core.Literal
 -- import Pact.Core.Persistence
 import Pact.Core.Persistence.MockPersistence
-import Pact.Core.Serialise
+-- import Pact.Core.Serialise
 import Pact.Core.Interpreter
 
 import Pact.Core.Repl.Utils
+import Pact.Core.Persistence (PactDb)
+import Pact.Core.Persistence.SQLite (withSqlitePactDb)
+import Pact.Core.Serialise (serialisePact)
+
+import Pact.Core.Info (SpanInfo)
 import Pact.Core.Compile
 import Pact.Core.Repl.Compile
 import Pact.Core.PactValue
@@ -33,7 +38,11 @@ import Pact.Core.Errors
 tests :: IO TestTree
 tests = do
   files <- replTestFiles
-  pure $ testGroup "Core repl tests" (runFileReplTest <$> files)
+  mockDb <- mockPactDb
+  pure $ testGroup "Core repl tests" (runFileReplTest mockDb <$> files)
+  -- withSqlitePactDb serialisePact ":memory:" $ \sqliteDb ->
+  --   pure $ testGroup "Core repl tests (SQLite)" (runFileReplTest sqliteDb <$> files)
+
 
 
 replTestDir :: [Char]
@@ -43,14 +52,13 @@ replTestFiles :: IO [FilePath]
 replTestFiles = do
   filter (\f -> isExtensionOf "repl" f || isExtensionOf "pact" f) <$> getDirectoryContents replTestDir
 
-runFileReplTest :: TestName -> TestTree
-runFileReplTest file = testCase file $ B.readFile (replTestDir </> file) >>= runReplTest file
+runFileReplTest :: PactDb (ReplBuiltin RawBuiltin) SpanInfo -> TestName -> TestTree
+runFileReplTest pdb file = testCase file $ B.readFile (replTestDir </> file) >>= runReplTest pdb file
 
-runReplTest :: FilePath -> ByteString -> Assertion
-runReplTest file src = do
+runReplTest :: PactDb (ReplBuiltin RawBuiltin) SpanInfo -> FilePath -> ByteString -> Assertion
+runReplTest pdb file src = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
-  pdb <- mockPactDb
   let ee = defaultEvalEnv pdb replRawBuiltinMap
       source = SourceCode (takeFileName file) src
   let rstate = ReplState
