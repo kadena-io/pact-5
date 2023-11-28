@@ -55,10 +55,12 @@ module Pact.Core.Names
 -- , userTable
  , DefPactId(..)
  , renderDefPactId
+ , parseRenderedModuleName
  ) where
 
 import Control.Lens
 import Data.Text(Text)
+import qualified Data.Text as T
 import Data.Word(Word64)
 
 import Pact.Core.Hash
@@ -110,6 +112,12 @@ renderQualName (QualifiedName n (ModuleName m ns)) =
 renderModuleName :: ModuleName -> Text
 renderModuleName (ModuleName m ns) =
   maybe "" ((<> ".") . _namespaceName) ns <> m
+
+parseRenderedModuleName :: Text -> Maybe ModuleName
+parseRenderedModuleName txt = case T.split (== '.') txt of
+  [ns, mn] -> Just (ModuleName mn (Just (NamespaceName ns)))
+  [mn] -> Just (ModuleName mn Nothing)
+  _ -> Nothing
 
 instance Pretty QualifiedName where
   pretty (QualifiedName n m) =

@@ -11,19 +11,21 @@ import Control.Monad.Trans.Control (MonadBaseControl)
 import Control.Exception.Lifted (bracket)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 -- import qualified Data.Text as T
-import Data.IORef (newIORef)
+import Data.IORef (newIORef, IORef, readIORef, atomicModifyIORef')
 import Data.Text (Text)
 import Control.Lens (view)
 import qualified Database.SQLite3 as SQL
 
-import Pact.Core.Guards (renderKeySetName)
-import Pact.Core.Names (renderModuleName, DefPactId(..), NamespaceName(..), TableName(..), RowKey(..))
+import Pact.Core.Guards (renderKeySetName, KeySetName(..))
+import Pact.Core.Names (renderModuleName, DefPactId(..), NamespaceName(..), TableName(..), RowKey(..), parseRenderedModuleName)
 import Pact.Core.Persistence (PactDb(..), Domain(..),
                               Purity(PImpure)
                              ,WriteType(..) --, RowData(..)
                              ,toUserTable
-                             ,ExecutionMode(..), TxId
+                             ,ExecutionMode(..), TxId(..)
                              )
+
+import Control.Monad (foldM)
 -- import Pact.Core.Repl.Utils (ReplEvalM)
 import Pact.Core.Serialise
 withSqlitePactDb
@@ -50,28 +52,49 @@ createSysTables db = do
 initializePactDb :: PactSerialise b i -> SQL.Database  -> IO (PactDb b i)
 initializePactDb serial db = do
   createSysTables db
-  _pdbTxId <- newIORef Nothing
+  txId <- newIORef (TxId 0)
   pure $ PactDb
     { _pdbPurity = PImpure
     , _pdbRead = read' serial db
     , _pdbWrite = write' serial db
-    , _pdbKeys = undefined
+    , _pdbKeys = readKeys db
     , _pdbCreateUserTable = createUserTable db
-    , _pdbBeginTx = beginTx db
-    , _pdbCommitTx = commitTx db
+    , _pdbBeginTx = beginTx txId db
+    , _pdbCommitTx = commitTx txId db
     , _pdbRollbackTx = rollbackTx db
     , _pdbTxIds = undefined
     , _pdbGetTxLog = undefined
-    , _pdbTxId
+    , _pdbTxId = txId
     }
 
-commitTx :: SQL.Database -> IO ()
-commitTx db = SQL.exec db "COMMIT TRANSACTION"
+readKeys :: forall k v b i. SQL.Database -> Domain k v b i -> IO [k]
+readKeys db = \case
+  DKeySets -> withStmt db "SELECT rowkey FROM SYS_KEYSETS ORDER BY DESC" $ \stmt -> fmap KeySetName <$> collect stmt []
+  DModules -> withStmt db "SELECT rowkey FROM SYS_MODULES ORDER BY DESC" $ \stmt -> fmap parseRenderedModuleName <$> collect stmt [] >>= \mns -> case sequence mns of
+    Nothing -> error ""
+    Just mns' -> pure mns'
+  DDefPacts -> withStmt db "SELECT rowkey FROM SYS_DEFPACTS ORDER BY DESC" $ \stmt -> fmap DefPactId <$> collect stmt []
+  DNamespaces -> withStmt db "SELECT rowkey FROM SYS_NAMESPACES ORDER BY DESC" $ \stmt -> fmap NamespaceName <$> collect stmt []
+  DUserTables tbl -> withStmt db ("SELECT rowkey FROM " <> toUserTable tbl <> " ORDER BY DESC") $ \stmt -> fmap RowKey <$> collect stmt []
+  where
+    collect stmt acc = SQL.step stmt >>= \case
+        SQL.Done -> pure acc
+        SQL.Row -> do
+          [SQL.SQLText value] <- SQL.columns stmt
+          collect stmt (value:acc)
+      
 
-beginTx :: SQL.Database -> ExecutionMode -> IO (Maybe TxId)
-beginTx _db = \case
-  Transactional -> undefined -- SQL.exec db "BEGIN TRANSACTION"
-  Local -> undefined
+commitTx :: IORef TxId -> SQL.Database -> IO ()
+commitTx txid db = do
+  _ <- atomicModifyIORef' txid (\old@(TxId n) -> (TxId (succ n), old))
+  SQL.exec db "COMMIT TRANSACTION"
+
+beginTx :: IORef TxId -> SQL.Database -> ExecutionMode -> IO (Maybe TxId)
+beginTx txid db em = do
+    SQL.exec db "BEGIN TRANSACTION"
+    case em of
+      Transactional -> Just <$> readIORef txid
+      Local -> pure Nothing
 
 rollbackTx :: SQL.Database -> IO ()
 rollbackTx db = SQL.exec db "ROLLBACK TRANSACTION"

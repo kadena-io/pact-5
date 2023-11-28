@@ -167,7 +167,7 @@ data PactDb b i
   , _pdbRollbackTx :: IO ()
   , _pdbTxIds :: TableName -> TxId -> IO [TxId]
   , _pdbGetTxLog :: TableName -> TxId -> IO [TxLog RowData]
-  , _pdbTxId :: IORef (Maybe TxId)
+  , _pdbTxId :: IORef TxId
     -- ^ A mutable reference to the currently running pact transaction.
     -- TODO: This field is morally part of
   }
