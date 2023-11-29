@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Pact.Core.Test.ReplTests where
 
@@ -33,6 +34,8 @@ import Pact.Core.Serialise (PactSerialise(..), serialisePact, Document(LegacyDoc
 
 import Pact.Core.Info (SpanInfo)
 import Pact.Core.Compile
+import Pact.Core.IR.Term (Module(..), EvalModule)
+import Pact.Core.Builtin (ReplBuiltin)
 import Pact.Core.Repl.Compile
 import Pact.Core.PactValue
 import Pact.Core.Environment
@@ -50,6 +53,37 @@ tests = do
     , testGroup "sqlite db" (runFileReplTestSqlite <$> files)
     ]
 
+
+enhanceModuleData :: ModuleData RawBuiltin () -> ModuleData ReplRawBuiltin SpanInfo
+enhanceModuleData = \case
+  ModuleData em defs -> undefined
+  InterfaceData ifd defs -> undefined
+
+stripModuleData :: ModuleData ReplRawBuiltin SpanInfo -> ModuleData RawBuiltin ()
+stripModuleData = \case
+  ModuleData em defs -> undefined
+  InterfaceData ifd defs -> undefined
+
+enhanceEvalModule :: EvalModule RawBuiltin () -> EvalModule ReplRawBuiltin SpanInfo
+enhanceEvalModule Module
+  { _mName
+  , _mGovernance
+  , _mDefs
+  , _mBlessed
+  , _mImports
+  , _mImplements
+  , _mHash
+  , _mInfo
+  } = Module
+      { _mName
+      , _mGovernance
+      , _mDefs = _ _mDefs
+      , _mBlessed
+      , _mImports
+      , _mImplements
+      , _mHash
+      , _mInfo = def
+      }
 
 
 replTestDir :: [Char]

@@ -14,7 +14,6 @@ import Pact.Core.Guards (KeySet)
 import Pact.Core.Gen.Serialise (keySetGen, keySetNameGen, moduleNameGen, moduleDataGen, builtinGen, infoGen
                                ,defPactIdGen, defPactExecGen, namespaceNameGen, namespaceGen)
 import Pact.Core.Serialise (PactSerialise, serialisePact)
-import Pact.Core.Builtin (RawBuiltin)
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Persistence (WriteType(Insert), readKeySet, writeKeySet, writeModule, readModule
                              ,writeDefPacts, readDefPacts, readNamespace, writeNamespace)
