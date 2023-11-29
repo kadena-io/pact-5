@@ -27,6 +27,7 @@ import Pact.Core.ModRefs
 -- import Pact.Core.Guards
 import Pact.Core.Literal 
 import Data.Decimal
+import Pact.Core.Info
 import Pact.Time
 import qualified Data.Attoparsec.Text as AP
 import qualified Pact.JSON.Decode as JD
@@ -37,6 +38,9 @@ import Text.Read (readMaybe)
 
 decodeModuleData :: ByteString -> Maybe (ModuleData RawBuiltin ())
 decodeModuleData = JD.decodeStrict'
+
+decodeModuleData_Repl_Info :: ByteString -> Maybe (ModuleData ReplRawBuiltin SpanInfo)
+decodeModuleData_Repl_Info = JD.decodeStrict'
 
 decodeKeySet :: ByteString -> Maybe (KeySet FullyQualifiedName)
 decodeKeySet = JD.decodeStrict'
