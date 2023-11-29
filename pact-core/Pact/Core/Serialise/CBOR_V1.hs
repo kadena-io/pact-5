@@ -8,6 +8,7 @@ module Pact.Core.Serialise.CBOR_V1
   , encodeDefPactExec, decodeDefPactExec
   , encodeNamespace, decodeNamespace
   , encodeRowData, decodeRowData
+  , stripSpanInfo, addDefaultSpanInfo
   ) where
 
 import Codec.Serialise.Class
@@ -37,6 +38,11 @@ import Codec.CBOR.Read (deserialiseFromBytes)
 import Codec.CBOR.Write (toStrictByteString)
 import Data.ByteString (ByteString, fromStrict)
 
+stripSpanInfo :: ModuleData RawBuiltin SpanInfo -> ModuleData RawBuiltin ()
+stripSpanInfo = undefined
+
+addDefaultSpanInfo :: ModuleData RawBuiltin () -> ModuleData RawBuiltin SpanInfo
+addDefaultSpanInfo = undefined
 
 encodeModuleData :: ModuleData RawBuiltin () -> ByteString
 encodeModuleData = toStrictByteString . encode
