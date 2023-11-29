@@ -34,6 +34,8 @@ module Pact.Core.Persistence
  , dbOpDisallowed
  , toUserTable
  , FQKS
+ , moduleDataInfo
+ , moduleDataBuiltin
  ) where
 
 import Control.Lens
@@ -63,14 +65,26 @@ import Data.Dynamic (Typeable)
 -- Todo: bikeshed this name? This contains interface data
 data ModuleData b i
   = ModuleData (EvalModule b i) (Map FullyQualifiedName (EvalDef b i))
-  -- { _mdModule :: EvalModule b i
-  -- , _mdDependencies :: Map FullyQualifiedName (EvalDef b i)
-  -- }
   | InterfaceData (EvalInterface b i) (Map FullyQualifiedName (EvalDef b i))
-  deriving (Show, Eq)
-  -- { _ifInterface :: EvalInterface b i
-  -- , _ifDependencies :: Map FullyQualifiedName (EvalDefConst b i)
-  -- } deriving Show
+  deriving (Show, Eq, Functor)
+
+
+moduleDataInfo :: Traversal (ModuleData b i) (ModuleData b i') i i'
+moduleDataInfo f = \case
+  ModuleData em m -> ModuleData <$> traverse (evalModuleInfo f) em  <*> traverse (evalDefInfo f) m
+  InterfaceData em m -> InterfaceData <$> traverse (evalInterfaceInfo f) em  <*> traverse (evalDefInfo f) m
+  
+evalModuleInfo :: Traversal (EvalModule b i) (EvalModule b i') i i'
+evalModuleInfo = undefined
+
+evalInterfaceInfo :: Traversal (EvalInterface b i) (EvalInterface b i') i i'
+evalInterfaceInfo = undefined
+
+evalDefInfo :: Traversal (Def Name Type b i) (Def Name Type b i') i i'
+evalDefInfo = undefined
+
+moduleDataBuiltin :: Traversal (ModuleData b i) (ModuleData b' i) b b'
+moduleDataBuiltin = undefined
 
 mdModuleName :: Lens' (ModuleData b i) ModuleName
 mdModuleName f = \case
