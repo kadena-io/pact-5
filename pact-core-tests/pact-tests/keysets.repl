@@ -51,3 +51,68 @@
  (read-keyset 'good2))
 
 (commit-tx)
+
+(begin-tx)
+;;
+;; namespaced keysets
+;;
+(env-exec-config ["RequireKeysetNs"])
+
+(env-data
+  { "alice-keys" : ["alice"]
+  , "bob-keys"   : ["bob"]
+  , "alice.alice-keys": ["alice"]
+  , "bob.bob-keys" : ["bob"]
+  })
+
+(env-keys ["alice", "bob"])
+
+; Define namespace using a keyset guard
+(define-namespace 'alice
+  (read-keyset 'alice-keys)
+  (read-keyset 'alice-keys))
+
+(define-namespace 'bob
+  (read-keyset 'bob-keys)
+  (read-keyset 'bob-keys))
+
+(expect-failure
+  "Defining un-namespaced keys fails - env keys, name failure"
+  "Cannot define a keyset outside of a namespace"
+  (define-keyset 'alice-keys))
+
+;; Show failure on lookup for keys
+(expect-failure
+  "Defining un-namespaced keys fails - actual keys, name failure"
+  "Cannot define a keyset outside of a namespace"
+  (define-keyset 'alice (read-keyset 'alice-keys)))
+
+(expect-failure
+  "Defining namespaced key fails - env keys, outside namespace"
+  "Cannot define a keyset outside of a namespace"
+  (define-keyset "alice.alice-keys"))
+
+(namespace 'alice)
+(expect
+  "Defining namespaced key succeeds - env keys, in namespace"
+  "Keyset write success"
+  (define-keyset "alice.alice-keys"))
+
+(expect-failure
+  "Defining namespaced key fails - env keys, in wrong namespace"
+  (define-keyset "bob.bob-keys"))
+
+(define-keyset "alice.alice-keys")
+(expect
+  "Rotating keyset within namespace succeeds"
+  "Keyset write success"
+  (define-keyset "alice.alice-keys" (read-keyset 'bob-keys)))
+
+(namespace 'bob)
+
+(expect
+  "Rotating keyset in wrong namespace succeeds if keys are present"
+  "Keyset write success"
+  (define-keyset "alice.alice-keys" (read-keyset 'bob-keys)))
+
+(commit-tx)
