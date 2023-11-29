@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Pact.Core.Test.ReplTests where
 
@@ -29,13 +30,14 @@ import Pact.Core.Interpreter
 
 import Pact.Core.Repl.Utils
 import Pact.Core.Persistence (PactDb(..), Domain(..), readKeySet, readModule, ModuleData(..), readNamespace, readDefPacts
-                             ,writeKeySet, writeNamespace, writeDefPacts, writeModule
-                             ,moduleDataInfo, moduleDataBuiltin)
+                             ,writeKeySet, writeNamespace, writeDefPacts, writeModule)
 import Pact.Core.Persistence.SQLite (withSqlitePactDb)
 import Pact.Core.Serialise (serialisePact)
 
 import Pact.Core.Info (SpanInfo)
 import Pact.Core.Compile
+import Pact.Core.IR.Term (Module(..), EvalModule)
+import Pact.Core.Builtin (ReplBuiltin)
 import Pact.Core.Repl.Compile
 import Pact.Core.PactValue
 import Pact.Core.Environment
@@ -51,6 +53,37 @@ tests = do
     , testGroup "sqlite db" (runFileReplTestSqlite <$> files)
     ]
 
+
+enhanceModuleData :: ModuleData RawBuiltin () -> ModuleData ReplRawBuiltin SpanInfo
+enhanceModuleData = \case
+  ModuleData em defs -> undefined
+  InterfaceData ifd defs -> undefined
+
+stripModuleData :: ModuleData ReplRawBuiltin SpanInfo -> ModuleData RawBuiltin ()
+stripModuleData = \case
+  ModuleData em defs -> undefined
+  InterfaceData ifd defs -> undefined
+
+enhanceEvalModule :: EvalModule RawBuiltin () -> EvalModule ReplRawBuiltin SpanInfo
+enhanceEvalModule Module
+  { _mName
+  , _mGovernance
+  , _mDefs
+  , _mBlessed
+  , _mImports
+  , _mImplements
+  , _mHash
+  , _mInfo
+  } = Module
+      { _mName
+      , _mGovernance
+      , _mDefs = _ _mDefs
+      , _mBlessed
+      , _mImports
+      , _mImplements
+      , _mHash
+      , _mInfo = def
+      }
 
 
 replTestDir :: [Char]
@@ -71,13 +104,13 @@ enhance pdb = PactDb
   , _pdbRead  = \case
       (DUserTables tbl) -> _pdbRead pdb (DUserTables tbl)
       DKeySets -> readKeySet pdb
-      DModules -> \k -> fmap enhanceModule <$> readModule pdb k
+      DModules -> \k -> fmap enhanceModuleData <$> readModule pdb k
       DNamespaces -> readNamespace pdb
       DDefPacts -> readDefPacts pdb
   , _pdbWrite = \wt -> \case
       (DUserTables tbl) -> _pdbWrite pdb wt (DUserTables tbl)
       DKeySets -> writeKeySet pdb wt
-      DModules -> \k v -> writeModule pdb wt k (stripModule v)
+      DModules -> \k v -> writeModule pdb wt k (stripModuleData v)
       DNamespaces -> writeNamespace pdb wt
       DDefPacts -> writeDefPacts pdb wt
   , _pdbKeys = undefined
@@ -89,17 +122,6 @@ enhance pdb = PactDb
   , _pdbGetTxLog = _pdbGetTxLog pdb
   , _pdbTxId = _pdbTxId pdb
   }
-  where
-    enhanceModule :: ModuleData RawBuiltin () -> ModuleData ReplRawBuiltin SpanInfo
-    enhanceModule m = m
-      & moduleDataBuiltin %~ RBuiltinWrap
-      & moduleDataInfo %~ const def
-      
-    stripModule :: ModuleData ReplRawBuiltin SpanInfo -> ModuleData RawBuiltin ()
-    stripModule m = m
-      & moduleDataInfo %~ const ()
-      & moduleDataBuiltin %~ \(RBuiltinWrap b) -> b
-
 
 
 runFileReplTestSqlite :: TestName -> TestTree
