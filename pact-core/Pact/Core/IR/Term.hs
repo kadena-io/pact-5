@@ -445,12 +445,12 @@ termInfo' f = \case
   Conditional o i ->
     Conditional <$> traverse (termInfo' f) o <*> f i
   ListLit l i  -> ListLit <$> traverse (termInfo' f) l <*> f i
-  Try e1 e2 i -> undefined -- Try e1 e2 <$> f i
-  Nullary term i ->
-    undefined -- Nullary term <$> f i
-  CapabilityForm cf i -> undefined -- CapabilityForm cf <$> f i
+  Try e1 e2 i -> Try <$> termInfo' f e1 <*> termInfo' f e2 <*> f i
+  Nullary term i -> Nullary <$> termInfo' f term <*> f i
+  CapabilityForm cf i -> CapabilityForm <$> traverse (termInfo' f) cf <*> f i
   Error t i -> Error t <$> f i
-  ObjectLit m i -> undefined -- ObjectLit m <$> f i
+  ObjectLit m i -> ObjectLit <$> (traverse ._2)  (termInfo' f) m <*> f i
+
 instance Plated (Term name ty builtin info) where
   plate f = \case
     Var n i -> pure (Var n i)

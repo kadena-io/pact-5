@@ -14,7 +14,6 @@ import Control.Applicative ((<|>))
 import Pact.Core.Builtin
 import Pact.Core.Persistence
 import Pact.Core.Guards
-import Pact.Core.Info (SpanInfo)
 import Pact.Core.Names
 import Pact.Core.Namespace
 import Pact.Core.DefPacts.Types
@@ -72,13 +71,13 @@ data PactSerialise b i
   , _decodeRowData :: ByteString -> Maybe (Document RowData)
   }
 
-serialisePact :: PactSerialise RawBuiltin SpanInfo
+serialisePact :: PactSerialise RawBuiltin ()
 serialisePact = PactSerialise
-  { _encodeModuleData = docEncode V1.encodeModuleData . V1.stripSpanInfo
+  { _encodeModuleData = docEncode V1.encodeModuleData
   , _decodeModuleData = \bs ->
-      LegacyDocument . V1.addDefaultSpanInfo <$> LegacyPact.decodeModuleData bs
+      LegacyDocument <$> LegacyPact.decodeModuleData bs
       <|> docDecode bs (\case
-                           V1_CBOR -> fmap V1.addDefaultSpanInfo . V1.decodeModuleData
+                           V1_CBOR -> V1.decodeModuleData
                        )
 
   , _encodeKeySet = docEncode V1.encodeKeySet
