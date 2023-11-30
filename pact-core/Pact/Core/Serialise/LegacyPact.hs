@@ -21,18 +21,14 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString.Short as SB
 import qualified Data.Text.Encoding as T
 import Control.Applicative ((<|>))
-import Data.Foldable (toList)
 import Data.Maybe (fromMaybe)
-import Data.Text (Text)
 
 import Pact.Core.ChainData
 import Pact.Core.Hash
 import Pact.Core.Parser
 import Pact.Core.ModRefs
--- import Pact.Core.Guards
 import Pact.Core.Literal 
 import Data.Decimal
-import Pact.Core.Info
 import Pact.Time
 import qualified Data.Attoparsec.Text as AP
 import qualified Pact.JSON.Decode as JD
@@ -43,23 +39,6 @@ import Text.Read (readMaybe)
 
 decodeModuleData :: ByteString -> Maybe (ModuleData RawBuiltin ())
 decodeModuleData = JD.decodeStrict'
-
-instance JD.FromJSON (ModuleData ReplRawBuiltin SpanInfo) where
-  parseJSON = JD.withObject "ModuleData" $ \o -> do
-    key :: Text <- o JD..: "key"
-    value <- o JD..: "value"
-    case key of
-      "ModuleData" -> parseModuleDataCtor value
-      "InterfaceData" -> parseInterfaceDataCtor value
-    where
-      parseModuleDataCtor = JD.withArray "ModuleData" $ \arr -> case toList arr of
-        [e1, e2] -> undefined
-        _ -> undefined
-      parseInterfaceDataCtor = undefined
-
-
-decodeModuleData_Repl_Info :: ByteString -> Maybe (ModuleData ReplRawBuiltin SpanInfo)
-decodeModuleData_Repl_Info = JD.decodeStrict'
 
 decodeKeySet :: ByteString -> Maybe (KeySet FullyQualifiedName)
 decodeKeySet = JD.decodeStrict'
@@ -106,7 +85,7 @@ instance JD.FromJSON Namespace where
     <*> v JD..: "admin"
 
 instance JD.FromJSON (ModuleData RawBuiltin ()) where
-  parseJSON = undefined
+  parseJSON = error "unimplemented"
 
 instance JD.FromJSON DefPactExec where
   parseJSON = JD.withObject "PactExec" $ \o ->
@@ -187,14 +166,6 @@ instance JD.FromJSON ModRef where
       <$> o JD..: "refName"
       <*> o JD..: "refSpec"
       <*> pure Nothing
-
--- instance JD.FromJSON Literal where
--- --  parseJSON n@Number{} = LDecimal <$> decoder decimalCodec n
---   parseJSON (LString s) = pure $ LString s
---   parseJSON (LBool b) = pure $ LBool b
---   parseJSON (LInteger i) = undefined --decoder integerCodec i
---     (LDecimal <$> decoder decimalCodec o)
---   parseJSON _t = fail "Literal parse failed"
 
 instance JD.FromJSON Field where
   parseJSON = JD.withText "Field" (pure . Field)

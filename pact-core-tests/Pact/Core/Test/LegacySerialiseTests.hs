@@ -8,8 +8,6 @@ import Test.Tasty.HUnit (assertBool, testCase)
 import Data.Maybe
 import Pact.Core.Serialise.LegacyPact
 import Pact.Core.Guards
-import Data.Text (Text)
-import qualified Data.Text.IO as T
 
 tests :: TestTree
 tests = testGroup "Legacy Serialisation"
