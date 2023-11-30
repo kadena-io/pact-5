@@ -116,3 +116,43 @@
   (define-keyset "alice.alice-keys" (read-keyset 'bob-keys)))
 
 (commit-tx)
+
+(begin-tx)
+
+(env-data
+  { "TEST <2>." : ["test"]
+  , "" : ["test"]
+  })
+(env-keys ["test"])
+
+;; clear env - post fork
+(env-exec-config ["RequireKeysetNs"])
+
+(expect-failure
+  "keyset definition parsing is not permissive post-pact-4.4 - define-keyset"
+  "namespace"
+  (define-keyset "TEST <2>."))
+
+(expect-failure
+  "keyset definition parsing is permissive post-pact-4.4 - enforce-guard - keyset ref"
+  (enforce-guard (keyset-ref-guard "TEST <2>.")))
+
+(namespace 'alice)
+(expect-failure
+  "keyset name format is not permissive post-pact-4.4 - empty-keyset - define-keyset"
+  "incorrect keyset name format"
+  (define-keyset ""))
+
+(expect-failure
+  "keyset name format is not permissive post-pact-4.4 - empty-keyset - enforce-keyset"
+  "incorrect keyset name format"
+  (enforce-keyset ""))
+
+(expect-failure
+  "keyset name format is not permissive post-pact-4.4 - empty keyset - enforce-guard - keyset ref"
+  "incorrect keyset name format"
+  (enforce-guard (keyset-ref-guard "")))
+
+;; admin/user guard differentiation in keyset
+
+(commit-tx)
