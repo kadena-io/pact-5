@@ -617,6 +617,11 @@ coreB64Decode = \info b cont handler _env -> \case
     Right txt -> returnCEKValue cont handler (VLiteral (LString txt))
   args -> argsError info b args
 
+-- | The main logic of enforcing a guard.
+--
+-- The main difference to `coreEnforceGuard` is this function's type doesn't need to be a `NativeFunction b i m`,
+-- thus there's no need to wrap/unwrap the guard into a `VPactValue`,
+-- and moreover it does not need to take a `b` which it does not use anyway.
 enforceGuard
   :: (MonadEval b i m)
   => i
@@ -648,6 +653,8 @@ enforceGuard info cont handler env g = case g of
        then returnCEKValue cont handler (VBool True)
        else returnCEK cont handler (VError "Capability pact guard failed: invalid pact id" info)
 
+-- | A version of `enforceGuard` that also accepts a continuation
+-- that gets called if the guard is enforced successfully.
 enforceGuardCont
   :: (MonadEval b i m)
   => i
@@ -662,6 +669,7 @@ enforceGuardCont info cekCont cekHandler env g successCont =
     EvalValue {} -> successCont
     VError e i -> returnCEK cekCont cekHandler (VError e i)
 
+-- | The implementation of `enforce-guard` native.
 coreEnforceGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreEnforceGuard = \info b cont handler env -> \case
   [VGuard g] -> enforceGuard info cont handler env g
