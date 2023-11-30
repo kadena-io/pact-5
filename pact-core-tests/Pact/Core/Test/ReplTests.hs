@@ -77,7 +77,7 @@ enhanceEvalModule Module
   } = Module
       { _mName
       , _mGovernance
-      , _mDefs = _ _mDefs
+      , _mDefs = undefined _mDefs
       , _mBlessed
       , _mImports
       , _mImplements
@@ -133,21 +133,21 @@ runFileReplTest mkPactDb file = testCase file $ do
 --       & moduleDataInfo %~ const ()
 --       & moduleDataBuiltin %~ \(RBuiltinWrap b) -> b
 
-deriving instance Read (ModuleData ReplRawBuiltin SpanInfo)
-deriving instance Read (EvalDef ReplRawBuiltin SpanInfo)
-deriving instance Read (EvalModule ReplRawBuiltin SpanInfo)
-deriving instance Read (Governance Name)
+-- deriving instance Read (ModuleData ReplRawBuiltin SpanInfo)
+-- deriving instance Read (EvalDef ReplRawBuiltin SpanInfo)
+-- deriving instance Read (EvalModule ReplRawBuiltin SpanInfo)
+-- deriving instance Read (Governance Name)
 
-sillySerialise :: PactSerialise ReplRawBuiltin SpanInfo
-sillySerialise = serialisePact
-  { _encodeModuleData = BSC.pack . show
-  , _decodeModuleData = Just . LegacyDocument . read . BSC.unpack
-  }
+-- sillySerialise :: PactSerialise ReplRawBuiltin SpanInfo
+-- sillySerialise = serialisePact
+--   { _encodeModuleData = BSC.pack . show
+--   , _decodeModuleData = Just . LegacyDocument . read . BSC.unpack
+--   }
 
 runFileReplTestSqlite :: TestName -> TestTree
 runFileReplTestSqlite file = testCase file $ do
   ctnt <- B.readFile (replTestDir </> file)
-  withSqlitePactDb sillySerialise ":memory:" $ \pdb -> do
+  withSqlitePactDb undefined ":memory:" $ \pdb -> do
     runReplTest pdb file ctnt
 
   

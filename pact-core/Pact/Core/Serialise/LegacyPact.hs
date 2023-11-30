@@ -1,4 +1,5 @@
--- | 
+-- |
+{-# LANGUAGE ScopedTypeVariables  #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Pact.Core.Serialise.LegacyPact
   ( decodeModuleData
@@ -15,11 +16,15 @@ import Pact.Core.Builtin
 import Pact.Core.DefPacts.Types
 import Pact.Core.Namespace
 import Pact.Core.PactValue
+
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Short as SB
 import qualified Data.Text.Encoding as T
 import Control.Applicative ((<|>))
+import Data.Foldable (toList)
 import Data.Maybe (fromMaybe)
+import Data.Text (Text)
+
 import Pact.Core.ChainData
 import Pact.Core.Hash
 import Pact.Core.Parser
@@ -38,6 +43,20 @@ import Text.Read (readMaybe)
 
 decodeModuleData :: ByteString -> Maybe (ModuleData RawBuiltin ())
 decodeModuleData = JD.decodeStrict'
+
+instance JD.FromJSON (ModuleData ReplRawBuiltin SpanInfo) where
+  parseJSON = JD.withObject "ModuleData" $ \o -> do
+    key :: Text <- o JD..: "key"
+    value <- o JD..: "value"
+    case key of
+      "ModuleData" -> parseModuleDataCtor value
+      "InterfaceData" -> parseInterfaceDataCtor value
+    where
+      parseModuleDataCtor = JD.withArray "ModuleData" $ \arr -> case toList arr of
+        [e1, e2] -> undefined
+        _ -> undefined
+      parseInterfaceDataCtor = undefined
+
 
 decodeModuleData_Repl_Info :: ByteString -> Maybe (ModuleData ReplRawBuiltin SpanInfo)
 decodeModuleData_Repl_Info = JD.decodeStrict'
