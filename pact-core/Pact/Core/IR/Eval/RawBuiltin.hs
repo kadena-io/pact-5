@@ -1058,6 +1058,8 @@ defineKeySet' info cont handler env ksname newKs  = do
           cond <- enforceKeyset oldKs
           if cond then writeKs
           else returnCEK cont handler (VError "enforce keyset failure" info)
+        -- `laxNs` implies the flag to require namespaces for keysets is not set,
+        -- so they are just not checked and get written no matter what.
         Nothing | laxNs -> writeKs
         Nothing | otherwise -> useEvalState (esLoaded . loNamespace) >>= \case
           Nothing -> returnCEK cont handler (VError "Cannot define a keyset outside of a namespace" info)
