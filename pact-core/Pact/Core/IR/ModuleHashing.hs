@@ -134,9 +134,13 @@ encodeModule (Module mname mgov defs mblessed imports mimps _mh _mi) = parens $
   <> hsep (encodeDef <$> defs)
   where
   encodeGov :: Governance Name -> Builder
-  encodeGov (KeyGov (KeySetName ksn)) = encodeText ksn
+  encodeGov (KeyGov (KeySetName name mNs)) = encodeMNamespace mNs <> encodeText name
   encodeGov (CapGov (ResolvedGov fqn)) = encodeFqnAsQual fqn
   encodeBless (ModuleHash (Hash s)) = parens ("bless" <+> B.shortByteString s)
+
+encodeMNamespace :: Maybe NamespaceName -> Builder
+encodeMNamespace Nothing = mempty
+encodeMNamespace (Just (NamespaceName ns)) = encodeText ns <> "."
 
 encodeInterface :: (IsBuiltin b) => Interface Name Type b i -> Builder
 encodeInterface (Interface ifn idefs imports _h _i) = parens $
@@ -214,7 +218,7 @@ encodeGuard = \case
       KeysAll -> "keys-all"
       Keys2 -> "keys-2"
       KeysAny -> "keys-any"
-  GKeySetRef (KeySetName ksn) -> "KeySetName" <> parens (encodeText ksn)
+  GKeySetRef (KeySetName name mNs) -> "KeySetName" <> parens (encodeMNamespace mNs <> encodeText name)
   GUserGuard (UserGuard fn args) ->
     "UG" <> encodeApp (encodeFqnAsQual fn) (encodePactValue <$> args)
   GCapabilityGuard (CapabilityGuard ct args _) ->
