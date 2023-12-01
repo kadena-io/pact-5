@@ -54,7 +54,7 @@ data KeySetName = KeySetName
 
 instance Pretty KeySetName where
   pretty (KeySetName ks Nothing) = "'" <> pretty ks
-  pretty (KeySetName ks (Just ns)) = "'" <> pretty ks <> "." <> pretty ns
+  pretty (KeySetName ks (Just ns)) = "'" <> pretty ns <> "." <> pretty ks
 
 renderKeySetName :: KeySetName -> Text
 renderKeySetName (KeySetName n Nothing) = n
