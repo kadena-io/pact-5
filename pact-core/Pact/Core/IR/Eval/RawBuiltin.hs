@@ -1045,7 +1045,7 @@ defineKeySet' info cont handler env ksname newKs  = do
       let writeKs = do
             liftDbFunction info (_pdbWrite pdb Write DKeySets ksn newKs)
             returnCEKValue cont handler (VString "Keyset write success")
-      liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
+      liftDbFunction info (readKeyset ksn) >>= \case
         Just oldKs -> do
           cond <- enforceKeyset oldKs
           if cond then writeKs
