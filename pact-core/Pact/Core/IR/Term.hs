@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -36,6 +37,7 @@ import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Imports
 import Pact.Core.Capabilities
+import Pact.Core.PactValue
 import Pact.Core.Pretty
 
 data Defun name ty builtin info
@@ -63,6 +65,11 @@ ordinaryDefPactStepExec :: Step name ty builtin info -> Term name ty builtin inf
 ordinaryDefPactStepExec (Step expr _) = expr
 ordinaryDefPactStepExec (StepWithRollback expr _ _) = expr
 
+data ConstVal term
+  = TermConst term
+  | EvaledConst PactValue
+  deriving (Show, Functor, Foldable, Traversable)
+
 data DefPact name ty builtin info
   = DefPact
   { _dpName :: Text
@@ -76,7 +83,7 @@ data DefConst name ty builtin info
   = DefConst
   { _dcName :: Text
   , _dcType :: Maybe ty
-  , _dcTerm :: Term name ty builtin info
+  , _dcTerm :: ConstVal (Term name ty builtin info)
   , _dcInfo :: info
   } deriving (Show, Functor)
 
@@ -127,7 +134,6 @@ data Def name ty builtin info
   | DPact (DefPact name ty builtin info)
   deriving (Show, Functor)
 
-
 data Module name ty builtin info
   = Module
   { _mName :: ModuleName
@@ -144,6 +150,7 @@ data Interface name ty builtin info
   = Interface
   { _ifName :: ModuleName
   , _ifDefns :: [IfDef name ty builtin info]
+  , _ifImports :: [Import]
   , _ifHash :: ModuleHash
   , _ifInfo :: info
   } deriving (Show, Functor)
@@ -460,6 +467,7 @@ makeLenses ''Interface
 makeLenses ''Defun
 makeLenses ''DefConst
 makeLenses ''DefCap
+makeLenses ''DefPact
 makePrisms ''Def
 makePrisms ''Term
 makePrisms ''IfDef

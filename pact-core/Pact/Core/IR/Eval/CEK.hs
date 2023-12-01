@@ -98,8 +98,13 @@ evalCEK cont handler env (Var n info)  = do
           returnCEKValue cont handler dfunClo
         -- Todo: this should be GADT'd out
         -- and defconsts should already be evaluated
-        Just (DConst d) ->
-          evalCEK cont handler (set ceLocal mempty env) (_dcTerm d)
+        Just (DConst d) -> case _dcTerm d of
+          -- Todo: should this be an error?
+          -- probably.
+          TermConst term ->
+            evalCEK cont handler (set ceLocal mempty env) term
+          EvaledConst v ->
+            returnCEKValue cont handler (VPactValue v)
         Just (DPact d) -> do
           dpactClo <- mkDefPactClosure info fqn d env
           returnCEKValue cont handler dpactClo
@@ -674,8 +679,8 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
               evalCEK sfCont handler inCapEnv capBody
               -- evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
             VError v i -> returnCEK currCont handler (VError v i)
-        _ -> failInvariant def "user managed cap is an invalid defn"
-    _ -> failInvariant def "Invalid managed cap type"
+        _ -> failInvariant info "user managed cap is an invalid defn"
+    _ -> failInvariant info "Invalid managed cap type"
   evalAutomanagedCap cont' env' capBody managedCap = case _mcManaged managedCap of
     AutoManaged b -> do
       if b then returnCEK currCont handler (VError "Automanaged capability used more than once" info)

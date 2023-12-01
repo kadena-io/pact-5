@@ -374,7 +374,7 @@ desugarDefConst
   -> RenamerT b i m (DefConst ParsedName DesugarType b i)
 desugarDefConst (Lisp.DefConst n mty e _ i) = do
   e' <- desugarLispTerm e
-  pure $ DefConst n mty e' i
+  pure $ DefConst n mty (TermConst e') i
 
 desugarDefMeta
   :: (MonadEval b i m)
@@ -472,8 +472,7 @@ desugarModule
 desugarModule (Lisp.Module mname mgov extdecls defs _ _ i) = do
   let (imports, blessed, implemented) = splitExts extdecls
   defs' <- locally reCurrModule (const (Just (mname,[]))) $ traverse desugarDef (NE.toList defs)
-  let mhash = ModuleHash (Hash "placeholder")
-  pure $ Module mname mgov defs' blessed imports implemented mhash i
+  pure $ Module mname mgov defs' blessed imports implemented placeholderHash i
   where
   splitExts = split ([], S.empty, [])
   split (accI, accB, accImp) (h:hs) = case h of
@@ -489,10 +488,10 @@ desugarInterface
   :: (MonadEval b i m, DesugarBuiltin b)
   => Lisp.Interface i
   -> RenamerT b i m (Interface ParsedName DesugarType b i)
-desugarInterface (Lisp.Interface ifn ifdefns _ _ info) = do
+desugarInterface (Lisp.Interface ifn ifdefns imps _ _ info) = do
   defs' <- traverse desugarIfDef ifdefns
   let mhash = ModuleHash (Hash "placeholder")
-  pure $ Interface ifn defs' mhash info
+  pure $ Interface ifn defs' imps mhash info
 
 desugarUse
   :: (MonadEval b i m )
@@ -600,7 +599,7 @@ defConstSCC
   -> Set Text
   -> DefConst ParsedName DesugarType  b i
   -> Set Text
-defConstSCC mn cd = termSCC mn cd . _dcTerm
+defConstSCC mn cd = foldMap (termSCC mn cd) . _dcTerm
 
 defTableSCC
   :: ModuleName
@@ -960,11 +959,9 @@ renameReplDefun
   => Defun ParsedName DesugarType b i
   -> RenamerT b i m (Defun Name Type b i)
 renameReplDefun (Defun n args ret term i) = do
-  -- Todo: put type variables in scope here, if we want to support polymorphism
   let fqn = FullyQualifiedName replModuleName n replModuleHash
   args' <- (traverse.traverse) (renameType i) args
   ret' <- traverse (renameType i) ret
-  -- rsModuleBinds %= M.insertWith (<>) replModuleName (M.singleton n (NTopLevel replModuleName replModuleHash, DKDefun))
   esLoaded . loToplevel %== M.insert n (fqn, DKDefun)
   term' <- local (set reCurrDef (Just DKDefun)) $ renameTerm term
   pure (Defun n args' ret' term' i)
@@ -974,12 +971,10 @@ renameReplDefConst
   => DefConst ParsedName DesugarType b i
   -> RenamerT b i m (DefConst Name Type b i)
 renameReplDefConst (DefConst n mty term i) = do
-  -- Todo: put type variables in scoperhere, if we want to support polymorphism
   let fqn = FullyQualifiedName replModuleName n replModuleHash
-  -- rsModuleBinds %= M.insertWith (<>) replModuleName (M.singleton n (NTopLevel replModuleName replModuleHash, DKDefConst))
   esLoaded . loToplevel %== M.insert n (fqn, DKDefConst)
   mty' <- traverse (renameType i) mty
-  term' <- renameTerm term
+  term' <- local (set reCurrDef (Just DKDefConst)) $ traverse renameTerm term
   pure (DefConst n mty' term' i)
 
 renameDefConst
@@ -987,9 +982,8 @@ renameDefConst
   => DefConst ParsedName DesugarType b i
   -> RenamerT b i m (DefConst Name Type b i)
 renameDefConst (DefConst n mty term i) = do
-  -- Todo: put type variables in scope here, if we want to support polymorphism
   mty' <- traverse (renameType i) mty
-  term' <- local (set reCurrDef (Just DKDefConst)) $ renameTerm term
+  term' <- local (set reCurrDef (Just DKDefConst)) $ traverse renameTerm term
   pure (DefConst n mty' term' i)
 
 renameDefCap
@@ -1171,7 +1165,7 @@ renameModule
   :: (MonadEval b i m, DesugarBuiltin b)
   => Module ParsedName DesugarType b i
   -> RenamerT b i m (Module Name Type b i)
-renameModule (Module unmangled mgov defs blessed imp implements mhash i) = do
+renameModule (Module unmangled mgov defs blessed imports implements mhash i) = do
   rsDependencies .= mempty
   mname <- mangleNamespace unmangled
   mgov' <- resolveGov mname mgov
@@ -1184,14 +1178,10 @@ renameModule (Module unmangled mgov defs blessed imp implements mhash i) = do
       -- but all uses of `head` are still scary
       throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (head d))
   binds <- view reBinds
-  bindsWithImports <- foldlM (handleImport i) binds imp
-  -- bindsWithImports <- handleImports binds imp
-  -- rsModuleBinds %= M.insert mname mempty
+  bindsWithImports <- foldlM (handleImport i) binds imports
   (defs'', _, _) <- over _1 reverse <$> foldlM (go mname) ([], S.empty, bindsWithImports) defs'
-  let fqns = M.fromList $ (\d -> (defName d, (FullyQualifiedName mname (defName d) mhash, defKind d))) <$> defs''
-  esLoaded . loToplevel %== M.union fqns
   traverse_ (checkImplements i defs'' mname) implements
-  pure (Module mname mgov' defs'' blessed imp implements mhash i)
+  pure (Module mname mgov' defs'' blessed imports implements mhash i)
   where
   -- Our deps are acyclic, so we resolve all names
   go mname (defns, s, m) defn = do
@@ -1202,9 +1192,6 @@ renameModule (Module unmangled mgov defs blessed imp implements mhash i) = do
     let dk = defKind defn'
     let depPair = (NTopLevel mname mhash, dk)
     let m' = M.insert dn (over _2 Just depPair) m
-        fqn = FullyQualifiedName mname dn mhash
-    -- rsModuleBinds . ix mname %= M.insert dn depPair
-    esLoaded . loToplevel . ix dn .== (fqn, dk)
     pure (defn':defns, S.insert (defName defn) s, m')
 
   resolveGov mname = \case
@@ -1282,7 +1269,7 @@ renameInterface
   :: (MonadEval b i m, DesugarBuiltin b)
   => Interface ParsedName DesugarType b i
   -> RenamerT b i m (Interface Name Type b i)
-renameInterface (Interface unmangled defs ih info) = do
+renameInterface (Interface unmangled defs imports ih info) = do
   ifn <- mangleNamespace unmangled
   let defNames = ifDefName <$> defs
   let scc = mkScc ifn (S.fromList defNames) <$> defs
@@ -1292,10 +1279,10 @@ renameInterface (Interface unmangled defs ih info) = do
       -- todo: just in case, match on `d` because it makes no sense for there to be an empty cycle
       -- but all uses of `head` are still scary
       throwDesugarError (RecursionDetected ifn (ifDefName <$> d)) (ifDefInfo (head d))
-  -- defs' <- locally reBinds (M.union (over _2 Just <$> defMap)) $ traverse renameIfDef defs
   binds <- view reBinds
-  (defs'', _, _) <- over _1 reverse <$> foldlM (go ifn) ([], S.empty, binds) defs'
-  pure (Interface ifn defs'' ih info)
+  bindsWithImports <- foldlM (handleImport info) binds imports
+  (defs'', _, _) <- over _1 reverse <$> foldlM (go ifn) ([], S.empty, bindsWithImports) defs'
+  pure (Interface ifn defs'' imports ih info)
   where
   mkScc ifn dns def = (def, ifDefName def, S.toList (ifDefSCC ifn dns def))
   go ifn (ds, s, m) d = do
@@ -1304,14 +1291,11 @@ renameInterface (Interface unmangled defs ih info) = do
       throwDesugarError (DuplicateDefinition dn) info
     d' <- local (set reBinds m) $
           local (set reCurrModule (Just (ifn, []))) $ renameIfDef d
-    -- let m' = maybe m (\dk -> M.insert dn (NTopLevel ifn ih, Just dk) m) (ifDefKind d')
-    m' <- case ifDefToDef d' of
-      Just defn -> do
-        let fqn = FullyQualifiedName ifn dn ih
-            dk = defKind defn
-        esLoaded . loToplevel . ix dn .== (fqn, dk)
-        pure (M.insert dn (NTopLevel ifn ih, Just dk) m)
-      Nothing -> pure m
+    let m' = case ifDefToDef d' of
+              Just defn ->
+                let dk = defKind defn
+                in M.insert dn (NTopLevel ifn ih, Just dk) m
+              Nothing -> m
     pure (d':ds, S.insert dn s, m')
 
 runRenamerT

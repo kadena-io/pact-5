@@ -155,9 +155,9 @@ Module :: { ParsedModule }
       (combineSpan (_ptInfo $1) (_ptInfo $7)) }
 
 Interface :: { ParsedInterface }
-  : '(' interface IDENT MDocOrModel IfDefs ')'
-    { Interface (ModuleName (getIdent $3) Nothing) (reverse $5) (fst $4) (snd $4)
-      (combineSpan (_ptInfo $1) (_ptInfo $2))}
+  : '(' interface IDENT MDocOrModel ImportOrIfDef ')'
+    { Interface (ModuleName (getIdent $3) Nothing) (reverse (lefts $5)) (reverse (rights $5)) (fst $4) (snd $4)
+      (combineSpan (_ptInfo $1) (_ptInfo $2)) }
 
 MDocOrModuleModel :: { (Maybe Text, [DefProperty SpanInfo])}
   : DocAnn ModuleModel { (Just $1, $2)}
@@ -215,10 +215,11 @@ Def :: { ParsedDef }
   | '(' Deftable ')' { DTable ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefPact ')' { DPact ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
-
-IfDefs :: { [ParsedIfDef] }
-  : IfDefs IfDef { $2:$1 }
-  | IfDef { [$1] }
+ImportOrIfDef :: { [Either ParsedIfDef Import] }
+  : ImportOrIfDef IfDef { (Left $2):$1 }
+  | ImportOrIfDef Use { (Right (fst $2)) : $1 }
+  | IfDef { [Left $1] }
+  | Use { [Right (fst $1)] }
 
 IfDef :: { ParsedIfDef }
   : '(' IfDefun ')' { IfDfun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }

@@ -51,12 +51,18 @@ module Pact.Core.Names
  , fqHash
  , userTable
  , DefPactId(..)
+ , parseModuleName
  , renderDefPactId
  ) where
 
 import Control.Lens
 import Data.Text(Text)
 import Data.Word(Word64)
+import Control.Applicative((<|>))
+import qualified Data.Text as T
+import qualified Data.Char as Char
+import qualified Text.Megaparsec as MP
+import qualified Text.Megaparsec.Char as MP
 
 import Pact.Core.Hash
 import Pact.Core.Pretty(Pretty(..))
@@ -303,8 +309,8 @@ replModuleHash :: ModuleHash
 replModuleHash = ModuleHash (Hash "#repl")
 
 renderFullyQualName :: FullyQualifiedName -> Text
-renderFullyQualName (FullyQualifiedName mn n _) =
-  renderQualName (QualifiedName n mn)
+renderFullyQualName (FullyQualifiedName mn n mh) =
+  renderQualName (QualifiedName n mn) <> ".{" <> hashToText (_mhHash mh) <> "}"
 
 -- | Newtype over text user keys
 newtype RowKey
@@ -341,6 +347,30 @@ newtype DefPactId
 
 instance Pretty DefPactId where
   pretty (DefPactId p) = pretty p
+
+type Parser = MP.Parsec () Text
+
+identParser :: Parser Text
+identParser = do
+  c1 <- MP.letterChar <|> MP.oneOf specials
+  rest <- MP.takeWhileP Nothing (\c -> Char.isLetter c || elem c specials)
+  pure (T.cons c1 rest)
+  where
+  specials :: String
+  specials = "%#+-_&$@<>=^?*!|/~"
+
+moduleNameParser :: Parser ModuleName
+moduleNameParser = do
+  p <- identParser
+  MP.try (go p <|> pure (ModuleName p Nothing))
+  where
+  go ns = do
+    _ <- MP.single '.'
+    p1 <- identParser
+    pure (ModuleName p1 (Just (NamespaceName ns)))
+
+parseModuleName :: Text -> Maybe ModuleName
+parseModuleName = MP.parseMaybe moduleNameParser
 
 renderDefPactId :: DefPactId -> Text
 renderDefPactId (DefPactId t) = t

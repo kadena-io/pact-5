@@ -119,11 +119,11 @@ interpretReplProgram (SourceCode _ source) display = do
           VPactValue pv -> do
             pure (IPV pv i)
 
-  interpretExpr term = do
+  interpretExpr purity term = do
     pdb <- use (replEvalEnv . eePactDb)
     let builtins = replBuiltinEnv
     ps <- viewEvalEnv eeDefPactStep
-    let cekEnv = CEKEnv mempty pdb builtins ps False
+    let cekEnv = fromPurity $ CEKEnv mempty pdb builtins ps False
     eval cekEnv term >>= \case
       VError txt _ ->
         throwError (PEExecutionError (EvalError txt) (view termInfo term))
@@ -134,6 +134,11 @@ interpretReplProgram (SourceCode _ source) display = do
           VTable tv -> pure (IPTable (_tvName tv))
           VPactValue pv -> do
             pure (IPV pv (view termInfo term))
+    where
+    fromPurity env = case purity of
+      PSysOnly -> sysOnlyEnv env
+      PReadOnly -> readOnlyEnv env
+      PImpure -> env
   interpret (DesugarOutput tl _deps) = do
     case tl of
       RTLDefun df -> do
