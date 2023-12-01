@@ -449,15 +449,16 @@
 (expect "!= keyset keyset" true (!= (read-keyset "k1") (read-keyset "k2")))
 
 "===== keyset ref equality"
-;  (env-exec-config ["DisablePact44"])
 (env-data { "k1": ["k1"], "k2": ["k2"] })
 (env-keys ["k1" "k2"])
-(define-keyset 'k1 (read-keyset "k1"))
-(define-keyset 'k2 (read-keyset "k2"))
-(expect "= keysetRef keysetRef" true (= (keyset-ref-guard "k1") (keyset-ref-guard "k1")))
-(expect "not = keysetRef keysetRef" false (= (keyset-ref-guard "k1") (keyset-ref-guard "k2")))
-(expect "not != keysetRef keysetRef" false (!= (keyset-ref-guard "k1") (keyset-ref-guard "k1")))
-(expect "!= keysetRef keysetRef" true (!= (keyset-ref-guard "k1") (keyset-ref-guard "k2")))
+(define-namespace 'alice (read-keyset 'k1) (read-keyset 'k1))
+(namespace 'alice)
+(define-keyset "alice.k1" (read-keyset "k1"))
+(define-keyset "alice.k2" (read-keyset "k2"))
+(expect "= keysetRef keysetRef" true (= (keyset-ref-guard "alice.k1") (keyset-ref-guard "alice.k1")))
+(expect "not = keysetRef keysetRef" false (= (keyset-ref-guard "alice.k1") (keyset-ref-guard "alice.k2")))
+(expect "not != keysetRef keysetRef" false (!= (keyset-ref-guard "alice.k1") (keyset-ref-guard "alice.k1")))
+(expect "!= keysetRef keysetRef" true (!= (keyset-ref-guard "alice.k1") (keyset-ref-guard "alice.k2")))
 
 (module tm G
   (defcap G () true)

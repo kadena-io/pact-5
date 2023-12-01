@@ -86,6 +86,8 @@ data ExecutionFlag
   | FlagDisablePactEvents
   -- | Run the validity checks on keys
   | FlagEnforceKeyFormats
+  -- | Require keysets to be defined in namespaces
+  | FlagRequireKeysetNs
   deriving (Eq,Ord,Show,Enum,Bounded)
 
 -- | Flag string representation

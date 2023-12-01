@@ -12,16 +12,14 @@ import Control.Monad
 import Data.Attoparsec.Text
 import Data.Char(isHexDigit)
 import Data.Text(Text)
-import Text.Parser.Char(oneOf)
 import Text.Parser.Combinators(eof)
 import Text.Parser.Token
-import Text.Parser.Token.Highlight
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.HashSet as HS
 import qualified Data.Text as T
 
 import Pact.Core.Guards
 import Pact.Core.Names
+import Pact.Core.RuntimeParsers
 
 data Principal
   = K !PublicKeyText
@@ -137,18 +135,6 @@ nameMatcher = asMatcher $ qualifiedNameMatcher
     asMatcher :: Parser a -> Parser Text
     asMatcher = fmap fst . match
 
-keysetNameParser :: Parser KeySetName
-keysetNameParser = qualified <|> withoutNs
-  where
-    qualified = do
-      -- TODO ns <- ident style
-      kn <- dot *> ident style
-      pure $ KeySetName kn {- TODO (Just ns) -}
-    withoutNs = do
-      t <- takeText
-      guard $ not $ T.null t
-      pure $ KeySetName t {- TODO Nothing -}
-
 moduleNameParser :: Parser ModuleName
 moduleNameParser = do
   a <- ident style
@@ -156,19 +142,3 @@ moduleNameParser = do
   case b of
     Nothing -> pure $ ModuleName a Nothing
     Just b' -> pure $ ModuleName b' (Just $ NamespaceName a)
-
--- type-specialized version of `ident`
--- to avoid defaulting warnings on the `IsString` constraint
-ident' :: IdentifierStyle Parser -> Parser Text
-ident' = ident
-
-style :: IdentifierStyle Parser
-style = IdentifierStyle "atom"
-        (letter <|> symbols)
-        (letter <|> digit <|> symbols)
-        (HS.fromList ["true", "false"])
-        Symbol
-        ReservedIdentifier
-  where
-    symbols :: Parser Char
-    symbols = oneOf "%#+-_&$@<>=^?*!|/~"
