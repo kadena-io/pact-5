@@ -631,11 +631,11 @@ enforceGuard
   -> m (EvalResult b i m)
 enforceGuard info cont handler env g = case g of
   GKeyset ks -> do
-    cond <- enforceKeyset ks
+    cond <- isKeysetInSigs ks
     if cond then returnCEKValue cont handler (VBool True)
     else returnCEK cont handler (VError "enforce keyset failure" info)
   GKeySetRef ksn -> do
-    cond <- enforceKeysetName info (view cePactDb env) ksn
+    cond <- isKeysetNameInSigs info (view cePactDb env) ksn
     if cond then returnCEKValue cont handler (VBool True)
     else returnCEK cont handler (VError "enforce keyset ref failure" info)
   GUserGuard ug -> runUserGuard info cont handler env ug
@@ -675,7 +675,7 @@ coreEnforceGuard info b cont handler env = \case
   [VString s] -> case parseAnyKeysetName s of
       Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
       Right ksn -> do
-        cond <- enforceKeysetName info (view cePactDb env) ksn
+        cond <- isKeysetNameInSigs info (view cePactDb env) ksn
         if cond
           then returnCEKValue cont handler (VBool True)
           else returnCEK cont handler (VError "enforce keyset ref failure" info)
@@ -1052,7 +1052,7 @@ defineKeySet' info cont handler env ksname newKs  = do
             returnCEKValue cont handler (VString "Keyset write success")
       liftDbFunction info (readKeyset pdb ksn) >>= \case
         Just oldKs -> do
-          cond <- enforceKeyset oldKs
+          cond <- isKeysetInSigs oldKs
           if cond then writeKs
           else returnCEK cont handler (VError "enforce keyset failure" info)
         Nothing | ignoreNamespaces -> writeKs

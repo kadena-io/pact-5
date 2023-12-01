@@ -14,8 +14,8 @@ module Pact.Core.IR.Eval.CEK
   , evalCap
   , nameToFQN
   , guardTable
-  , enforceKeyset
-  , enforceKeysetName
+  , isKeysetInSigs
+  , isKeysetNameInSigs
   , requireCap
   , installCap
   , composeCap
@@ -33,7 +33,6 @@ module Pact.Core.IR.Eval.CEK
 
 import Control.Lens
 import Control.Monad(zipWithM, unless, when)
-import Control.Monad.IO.Class
 import Data.Default
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Foldable(find, foldl')
@@ -436,38 +435,6 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
           applyPact i pc ps cont handler env' (_peNestedDefPactExec pe)
 
 
-enforceKeyset
-  :: MonadEval b i m
-  => KeySet FullyQualifiedName
-  -> m Bool
-enforceKeyset (KeySet kskeys ksPred) = do
-  matchedSigs <- M.filterWithKey matchKey <$> viewEvalEnv eeMsgSigs
-  sigs <- checkSigCaps matchedSigs
-  runPred (M.size sigs)
-  where
-  matchKey k _ = k `elem` kskeys
-  atLeast t m = m >= t
-  count = S.size kskeys
-  runPred matched =
-    case ksPred of
-      KeysAll -> run atLeast
-      KeysAny -> run (\_ m -> atLeast 1 m)
-      Keys2 -> run (\_ m -> atLeast 2 m)
-    where
-    run p = pure (p count matched)
-
-enforceKeysetName
-  :: MonadEval b i m
-  => i
-  -> PactDb b i
-  -> KeySetName
-  -> m Bool
-enforceKeysetName info pdb ksn = do
-  liftIO (readKeyset pdb ksn) >>= \case
-    Just ks -> enforceKeyset ks
-    Nothing ->
-      throwExecutionError info (NoSuchKeySet ksn)
-
 -- Todo: fail invariant
 nameToFQN
   :: MonadEval b i m
@@ -518,8 +485,7 @@ acquireModuleAdmin i env mdl = do
   mc <- useEvalState (esCaps . csModuleAdmin)
   unless (S.member (_mName mdl) mc) $ case _mGovernance mdl of
     KeyGov ksn -> do
-      signed <- enforceKeysetName i (view cePactDb env) ksn
-      unless signed $ throwExecutionError i (ModuleGovernanceFailure (_mName mdl))
+      enforceKeysetNameAdmin i (_mName mdl) ksn
       esCaps . csModuleAdmin %== S.insert (_mName mdl)
     CapGov (ResolvedGov fqn) -> do
       let wcapBody = Constant LUnit i
