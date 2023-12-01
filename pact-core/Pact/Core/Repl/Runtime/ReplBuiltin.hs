@@ -68,7 +68,7 @@ rawExpect info b cont handler _env = \case
 coreExpectThat :: (IsBuiltin b) => NativeFunction b SpanInfo (ReplM b)
 coreExpectThat info b cont handler _env = \case
   [VLiteral (LString msg), VClosure vclo, v] -> do
-    unsafeApplyOne vclo v >>= \case
+    applyLam vclo [v] Mt CEKNoHandler >>= \case
       EvalValue (VLiteral (LBool c)) ->
         if c then returnCEKValue cont handler (VLiteral (LString ("Expect-that: success " <> msg)))
         else returnCEKValue cont handler  (VLiteral (LString ("FAILURE: Expect-that: Did not satisfy condition: " <> msg)))
@@ -189,7 +189,7 @@ envHash info b cont handler _env = \case
 envData :: (IsBuiltin b) => NativeFunction b SpanInfo (ReplM b)
 envData info b cont handler _env = \case
   [VObject o] -> do
-    let ed = EnvData o
+    let ed = ObjectData o
     (replEvalEnv . eeMsgBody) .= ed
     returnCEKValue cont handler VUnit
   args -> argsError info b args

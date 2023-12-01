@@ -62,6 +62,7 @@ tokens :-
     defcap       { token TokenDefCap }
     defpact      { token TokenDefPact }
     defproperty  { token TokenDefProperty }
+    property     { token TokenProperty }
     interface    { token TokenInterface }
     module       { token TokenModule }
     bless        { token TokenBless }

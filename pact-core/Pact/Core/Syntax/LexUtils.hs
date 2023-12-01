@@ -68,6 +68,7 @@ data Token
   | TokenDefSchema
   | TokenDefTable
   | TokenDefProperty
+  | TokenProperty
   | TokenBless
   | TokenImplements
   -- Annotations
@@ -290,6 +291,7 @@ renderTokenText = \case
   TokenDot -> "."
   TokenBindAssign -> ":="
   TokenDynAcc -> "::"
+  TokenProperty -> "property"
   -- TokenEq -> "="
   -- TokenNeq -> "!="
   -- TokenGT -> ">"

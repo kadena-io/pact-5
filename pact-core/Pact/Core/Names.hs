@@ -353,7 +353,7 @@ type Parser = MP.Parsec () Text
 identParser :: Parser Text
 identParser = do
   c1 <- MP.letterChar <|> MP.oneOf specials
-  rest <- MP.takeWhileP Nothing (\c -> Char.isLetter c || elem c specials)
+  rest <- MP.takeWhileP Nothing (\c -> Char.isLetter c || Char.isDigit c || elem c specials)
   pure (T.cons c1 rest)
   where
   specials :: String

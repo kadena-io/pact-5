@@ -449,48 +449,40 @@ strToList info b cont handler _env = \case
 
 zipList :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 zipList info b cont handler _env = \case
-  [VClosure clo, VList l, VList r] -> zip' (V.toList l) (V.toList r) []
-    where
-    zip' (x:xs) (y:ys) acc = unsafeApplyTwo clo (VPactValue x) (VPactValue y) >>= \case
-       EvalValue v -> enforcePactValue info v >>= zip' xs ys . (:acc)
-       v@VError{} -> returnCEK cont handler v
-    zip' _ _ acc = returnCEKValue cont handler (VList (V.fromList (reverse acc)))
+  [VClosure clo, VList l, VList r] ->
+    case (V.toList l, V.toList r) of
+      (x:xs, y:ys) -> do
+        let cont' = BuiltinC _env info (ZipFrame clo (xs, ys) []) cont
+        applyLam clo [VPactValue x, VPactValue y] cont' handler
+      (_, _) -> returnCEKValue cont handler (VList mempty)
   args -> argsError info b args
 
--- (try [1] (map (+ 1) [1 2 (enforce false "greg")])
 coreMap :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-coreMap info b cont handler _env = \case
-  [VClosure fn, VList li] -> do
-    map' (V.toList li) []
-    where
-    map' (x:xs) acc = applyLam fn [VPactValue x] Mt CEKNoHandler >>= \case
-       EvalValue cv -> enforcePactValue info cv >>= map' xs . (:acc)
-       v@VError{} -> returnCEK cont handler v
-    map' _ acc = returnCEKValue cont handler (VList (V.fromList (reverse acc)))
+coreMap info b cont handler env = \case
+  [VClosure clo, VList li] -> case V.toList li of
+    x:xs -> do
+      let cont' = BuiltinC env info (MapFrame clo xs []) cont
+      applyLam clo [VPactValue x] cont' handler
+    [] -> returnCEKValue cont handler (VList mempty)
   args -> argsError info b args
 
 coreFilter :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreFilter info b cont handler _env = \case
-  [VClosure fn, VList li] -> filter' (V.toList li) []
-    where
-    filter' (x:xs) acc = unsafeApplyOne fn (VPactValue x) >>= \case
-      EvalValue (VLiteral (LBool b')) ->
-        if b' then filter' xs (x:acc) else filter' xs acc
-      EvalValue v -> argsError info b [v]
-      v@VError{} ->
-        returnCEK cont handler v
-    filter' [] acc = returnCEKValue cont handler (VList (V.fromList (reverse acc)))
+  [VClosure clo, VList li] -> case V.toList li of
+    x:xs -> do
+      let cont' = CondC _env info (FilterFrame clo x xs []) cont
+      applyLam clo [VPactValue x] cont' handler
+    [] -> returnCEKValue cont handler (VList mempty)
   args -> argsError info b args
 
 coreFold :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreFold info b cont handler _env = \case
-  [VClosure fn, initElem, VList li] ->
-    fold' initElem (V.toList li)
-    where
-    fold' e (x:xs) = unsafeApplyTwo fn e (VPactValue x) >>= \case
-      EvalValue v -> fold' v xs
-      v -> returnCEK cont handler v
-    fold' e [] = returnCEKValue cont handler e
+  [VClosure clo, VPactValue initElem, VList li] ->
+    case V.toList li of
+      x:xs -> do
+        let cont' = BuiltinC _env info (FoldFrame clo xs) cont
+        applyLam clo [VPactValue initElem, VPactValue x] cont' handler
+      [] -> returnCEKValue cont handler (VPactValue initElem)
   args -> argsError info b args
 
 coreEnumerate :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -659,7 +651,7 @@ keysetRefGuard info b cont handler env = \case
 coreReadInteger :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreReadInteger info b cont handler _env = \case
   [VString s] -> do
-    EnvData envData <- viewEvalEnv eeMsgBody
+    ObjectData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just (PInteger p) -> returnCEKValue cont handler (VInteger p)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
@@ -668,19 +660,19 @@ coreReadInteger info b cont handler _env = \case
 readMsg :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 readMsg info b cont handler _env = \case
   [VString s] -> do
-    EnvData envData <- viewEvalEnv eeMsgBody
+    ObjectData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just pv -> returnCEKValue cont handler (VPactValue pv)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
   [] -> do
-    EnvData envData <- viewEvalEnv eeMsgBody
+    ObjectData envData <- viewEvalEnv eeMsgBody
     returnCEKValue cont handler (VObject envData)
   args -> argsError info b args
 
 coreReadDecimal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreReadDecimal info b cont handler _env = \case
   [VString s] -> do
-    EnvData envData <- viewEvalEnv eeMsgBody
+    ObjectData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just (PDecimal p) -> returnCEKValue cont handler (VDecimal p)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
@@ -689,7 +681,7 @@ coreReadDecimal info b cont handler _env = \case
 coreReadString :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreReadString info b cont handler _env = \case
   [VString s] -> do
-    EnvData envData <- viewEvalEnv eeMsgBody
+    ObjectData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just (PString p) -> returnCEKValue cont handler (VString p)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
@@ -697,7 +689,7 @@ coreReadString info b cont handler _env = \case
 
 readKeyset' :: (MonadEval b i m) => T.Text -> m (Maybe (KeySet FullyQualifiedName))
 readKeyset' ksn = do
-    EnvData envData <- viewEvalEnv eeMsgBody
+    ObjectData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field ksn) envData of
       Just (PObject dat) -> parseObj dat
         where
@@ -772,7 +764,7 @@ runUserGuard info cont handler env (UserGuard fqn args) =
       let env' = sysOnlyEnv env
       clo <- mkDefunClosure d (_fqModule fqn) env'
       -- Todo: sys only here
-      applyLam (C clo) (VPactValue <$> args) (UserGuardC cont) handler
+      applyLam (C clo) (VPactValue <$> args) (IgnoreValueC (PBool True) cont) handler
     Just d -> throwExecutionError info (InvalidDefKind (defKind d) "run-user-guard")
     Nothing -> throwExecutionError info (NameNotInScope fqn)
 
@@ -804,29 +796,32 @@ dbSelect info b cont handler env = \case
   [VTable tv, VClosure clo] -> do
     let pdb = view cePactDb env
     guardTable info env tv GtSelect
-    ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
-    go Nothing clo tv pdb ks []
+    let cont' = BuiltinC env info (PreSelectFrame tv clo) cont
+    
+    -- ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
+    -- go Nothing clo tv pdb ks []
   [VTable tv, VList li, VClosure clo] -> do
     let pdb = view cePactDb env
     guardTable info env tv GtSelect
-    li' <- traverse (fmap Field . asString info b) (V.toList li)
-    ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
-    go (Just li') clo tv pdb ks []
+    undefined
+    -- li' <- traverse (fmap Field . asString info b) (V.toList li)
+    -- ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
+    -- go (Just li') clo tv pdb ks []
   args -> argsError info b args
-  where
-    go mf _clo _tv _ [] acc = case mf of
-      Just fields -> do
-        let acc' = PObject . (`M.restrictKeys` S.fromList fields) <$> reverse acc
-        returnCEKValue cont handler (VList (V.fromList acc'))
-      Nothing ->
-        returnCEKValue cont handler (VList (V.fromList (fmap PObject (reverse acc))))
-    go mf clo tv pdb (k:ks) acc = liftDbFunction info (_pdbRead pdb (tvToDomain tv) k) >>= \case
-      Just (RowData rdata) -> applyLam clo [VObject rdata] Mt CEKNoHandler >>= \case
-        EvalValue (VBool cond) ->
-          if cond then go mf clo tv pdb ks (rdata:acc) else go mf clo tv pdb ks acc
-        EvalValue _ -> returnCEK cont handler (VError "select query error" info)
-        VError e i -> returnCEK cont handler (VError e i)
-      Nothing -> returnCEK cont handler (VError "select is not enabled" info)
+  -- where
+  --   go mf _clo _tv _ [] acc = case mf of
+  --     Just fields -> do
+  --       let acc' = PObject . (`M.restrictKeys` S.fromList fields) <$> reverse acc
+  --       returnCEKValue cont handler (VList (V.fromList acc'))
+  --     Nothing ->
+  --       returnCEKValue cont handler (VList (V.fromList (fmap PObject (reverse acc))))
+  --   go mf clo tv pdb (k:ks) acc = liftDbFunction info (_pdbRead pdb (tvToDomain tv) k) >>= \case
+  --     Just (RowData rdata) -> applyLam clo [VObject rdata] Mt CEKNoHandler >>= \case
+  --       EvalValue (VBool cond) ->
+  --         if cond then go mf clo tv pdb ks (rdata:acc) else go mf clo tv pdb ks acc
+  --       EvalValue _ -> returnCEK cont handler (VError "select query error" info)
+  --       VError e i -> returnCEK cont handler (VError e i)
+  --     Nothing -> returnCEK cont handler (VError "select is not enabled" info)
 
 -- Todo: error handling
 foldDb :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
@@ -978,10 +973,6 @@ dbKeyLog info b cont handler env = \case
         [ (Field "txid", PInteger (fromIntegral txid))
         , (Field "value", PObject v)]
   args -> argsError info b args
-
-tvToDomain :: TableValue -> Domain RowKey RowData b i
-tvToDomain tv =
-  DUserTables (_tvName tv)
 
 -- | Todo: isProperSubmapOf
 checkSchema :: M.Map Field PactValue -> Schema -> Bool
@@ -1218,56 +1209,33 @@ integerToBS v = BS.pack $ reverse $ go v
 
 
 coreAndQ :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-coreAndQ info b cont handler _env = \case
-  [VClosure l, VClosure r, e] -> do
-    applyLam l [e] Mt CEKNoHandler >>= \case
-      EvalValue (VBool out)
-        | out -> applyLam r [e] Mt CEKNoHandler >>= \case
-            EvalValue (VBool out') -> returnCEKValue cont handler (VBool out')
-            VError err i -> returnCEK cont handler (VError err i)
-            _ -> returnCEK cont handler invalidCloValue
-        | otherwise -> returnCEKValue cont handler (VBool out)
-      EvalValue _ -> returnCEK cont handler invalidCloValue
-      VError err i -> returnCEK cont handler (VError err i)
-    where
-    invalidCloValue = VError "invalid return application for and? closure" info
+coreAndQ info b cont handler env = \case
+  [VClosure l, VClosure r, VPactValue v] -> do
+    let cont' =  CondC env info (AndQFrame r v) cont
+    applyLam l [VPactValue v] cont' handler
   args -> argsError info b args
 
 coreOrQ :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-coreOrQ info b cont handler _env = \case
-  [VClosure l, VClosure r, e] -> do
-    applyLam l [e] Mt CEKNoHandler >>= \case
-      EvalValue (VBool out)
-        | out -> returnCEKValue cont handler (VBool out)
-        | otherwise -> applyLam r [e] Mt CEKNoHandler >>= \case
-            EvalValue (VBool out') -> returnCEKValue cont handler (VBool out')
-            VError err i -> returnCEK cont handler (VError err i)
-            _ -> returnCEK cont handler invalidCloValue
-      EvalValue _ -> returnCEK cont handler invalidCloValue
-      VError err i -> returnCEK cont handler (VError err i)
-    where
-    invalidCloValue = VError "invalid return application for and? closure" info
+coreOrQ info b cont handler env = \case
+  [VClosure l, VClosure r, VPactValue v] -> do
+    let cont' =  CondC env info (OrQFrame r v) cont
+    applyLam l [VPactValue v] cont' handler
   args -> argsError info b args
 
 coreNotQ :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-coreNotQ info b cont handler _env = \case
-  [VClosure l, e] -> do
-    applyLam l [e] Mt CEKNoHandler >>= \case
-      EvalValue (VBool out) -> returnCEKValue cont handler (VBool (not out))
-      EvalValue _ -> returnCEK cont handler invalidCloValue
-      VError err i -> returnCEK cont handler (VError err i)
-    where
-    invalidCloValue = VError "invalid return application for and? closure" info
+coreNotQ info b cont handler env = \case
+  [VClosure clo, VPactValue v] -> do
+    let cont' = CondC env info NotQFrame cont
+    applyLam clo [VPactValue v] cont' handler
   args -> argsError info b args
 
 coreWhere :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreWhere info b cont handler _env = \case
   [VString field, VClosure app, VObject o] -> do
     case M.lookup (Field field) o of
-      Just v -> applyLam app [VPactValue v] Mt CEKNoHandler >>= \case
-        EvalValue (VBool cond) -> returnCEKValue cont handler (VBool cond)
-        EvalValue _ -> returnCEK cont handler (VError "where application did not result in a boolean" info)
-        VError err i -> returnCEK cont handler (VError err i)
+      Just v -> do
+        let cont' = EnforceBoolC info cont
+        applyLam app [VPactValue v] cont' handler
       Nothing -> returnCEK cont handler (VError "no such field in object in where application" info)
   args -> argsError info b args
 
@@ -1408,12 +1376,10 @@ dbDescribeKeySet info b cont handler env = \case
   args -> argsError info b args
 
 coreCompose :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-coreCompose info b cont handler _env = \case
-  [VClosure clo1, VClosure clo2, v] ->
-    applyLam clo1 [v] Mt CEKNoHandler >>= \case
-      EvalValue v' ->
-        applyLam clo2 [v'] cont handler
-      err -> returnCEK cont handler err
+coreCompose info b cont handler env = \case
+  [VClosure clo1, VClosure clo2, v] -> do
+    let cont' = Fn clo2 env [] [] cont
+    applyLam clo1 [v] cont' handler
   args -> argsError info b args
 
 createPrincipalForGuard :: Guard FullyQualifiedName PactValue -> Pr.Principal

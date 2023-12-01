@@ -74,6 +74,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , TableValue(..)
  , ClosureType(..)
  , ErrorState(..)
+ , BuiltinFrame(..)
  ) where
 
 import Control.Lens
@@ -207,12 +208,12 @@ data TableValue
 -- | The type of our semantic runtime values
 data CEKValue b i m
   = VPactValue PactValue
+  -- ^ PactValue(s), which contain no terms
   | VTable !TableValue
-  -- = VLiteral !Literal
-  -- | VList !(Vector (CEKValue b i m))
-  | VClosure {-# UNPACK #-} !(CanApply b i m)
-  -- | VModRef ModuleName [ModuleName]
-  -- | VGuard !(Guard FullyQualifiedName PactValue)
+  -- ^ Table references, which despite being a syntactic
+  -- value with
+  | VClosure  !(CanApply b i m)
+  -- ^ Closures, which may contain terms
 
 instance Show (CEKValue b i m) where
   show = \case
@@ -333,21 +334,39 @@ data ExecutionMode
   | Local
   deriving (Eq, Show, Bounded, Enum)
 
-data CondFrame b i
+data CondFrame b i m
   = AndFrame (EvalTerm b i)
   | OrFrame (EvalTerm b i)
   | IfFrame (EvalTerm b i) (EvalTerm b i)
   | EnforceFrame (EvalTerm b i)
   | EnforceOneFrame (EvalTerm b i) [EvalTerm b i]
+  | FilterFrame (CanApply b i m) PactValue [PactValue] [PactValue]
+  | AndQFrame (CanApply b i m) PactValue
+  | OrQFrame (CanApply b i m) PactValue
+  | NotQFrame
   deriving Show
+
+data BuiltinFrame b i m
+  = MapFrame (CanApply b i m) [PactValue] [PactValue]
+  -- ^ {closure} {remaining} {accum}
+  | FoldFrame (CanApply b i m) [PactValue]
+  -- ^ {closure} {accum} {rest}
+  | ZipFrame (CanApply b i m) ([PactValue],[PactValue]) [PactValue]
+  | PreSelectFrame TableValue (CanApply b i m) (Maybe [Field])
+  | SelectFrame TableValue (CanApply b i m) (ObjectData PactValue) [RowKey] [ObjectData PactValue] (Maybe [Field])
+  -- ^ <table> <filter closure> <current value> <remaining keys> <accumulator> <fields>
+  | ReadFrame TableValue RowKey
+  | WithReadFrame TableValue RowKey (CanApply b i m)
+  | WithDefaultReadFrame TableValue RowKey (ObjectData PactValue) (CanApply b i m)
+  | KeysFrame TableValue
+  -- | TxIdsFrame TableValue Integer
+  -- | TxLog TableValue Integer
+  deriving Show
+
 
 data CapFrame b i
   = WithCapFrame FullyQualifiedName (EvalTerm b i)
   | CreateUserGuardFrame FullyQualifiedName
-  -- | RequireCapFrame FullyQualifiedName
-  -- | ComposeCapFrame FullyQualifiedName
-  -- | InstallCapFrame FullyQualifiedName
-  -- | EmitEventFrame FullyQualifiedName
   deriving Show
 
 
@@ -363,13 +382,16 @@ data Cont b i m
   -- ^ Continuation holding the arguments to evaluate in a function application
   | LetC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   -- ^ Let single-variable pushing
+  -- Optimization frame: Bypasses closure creation and thus less alloc
   -- Known as a single argument it will not construct a needless closure
   | SeqC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   -- ^ Sequencing expression, holding the next term to evaluate
   | ListC (CEKEnv b i m) [EvalTerm b i] [PactValue] (Cont b i m)
   -- ^ Continuation for list elements
-  | CondC (CEKEnv b i m) i (CondFrame b i) (Cont b i m)
+  | CondC (CEKEnv b i m) i (CondFrame b i m) (Cont b i m)
   -- ^ Continuation for conditionals with lazy semantics
+  | BuiltinC (CEKEnv b i m) i (BuiltinFrame b i m) (Cont b i m)
+  -- ^ Continuation for higher-order function builtins
   | ObjC (CEKEnv b i m) Field [(Field, EvalTerm b i)] [(Field, PactValue)] (Cont b i m)
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
   | CapInvokeC (CEKEnv b i m) i [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
@@ -387,8 +409,13 @@ data Cont b i m
   -- ^ Cont frame after a defpact, ensuring we save the defpact to the database and whatnot
   | NestedDefPactStepC (CEKEnv b i m) (Cont b i m) DefPactExec
   -- ^ Frame for control flow around nested defpact execution
-  | UserGuardC (Cont b i m)
+  | IgnoreValueC PactValue (Cont b i m)
   -- ^ Frame to ignore value after user guard execution
+  | EnforceBoolC i (Cont b i m)
+  -- ^ Enforce boolean
+  | EnforcePactValueC i (Cont b i m)
+  -- ^ Enforce pact value
+  | ModuleAdminC ModuleName (Cont b i m)
   | StackPopC i (Maybe Type) (Cont b i m)
   -- ^ Pop the current stack frame and check the return value for the declared type
   | EnforceErrorC i (Cont b i m)

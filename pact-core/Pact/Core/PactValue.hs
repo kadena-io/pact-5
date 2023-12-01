@@ -10,7 +10,7 @@ module Pact.Core.PactValue
  , _PGuard
  , _PCapToken
  , checkPvType
- , EnvData(..)
+ , ObjectData(..)
  , envMap
  , FQCapToken
  , pattern PInteger
@@ -125,13 +125,13 @@ checkPvType ty = \case
 
 
 
-newtype EnvData term
-  = EnvData { _envMap :: Map Field term }
+newtype ObjectData term
+  = ObjectData { _objectData :: Map Field term }
   deriving (Eq, Show)
 
 envMap
-  :: Lens (EnvData term)
-          (EnvData term')
+  :: Lens (ObjectData term)
+          (ObjectData term')
           (Map Field term)
           (Map Field term')
-envMap f (EnvData m) = fmap EnvData (f m)
+envMap f (ObjectData m) = fmap ObjectData (f m)

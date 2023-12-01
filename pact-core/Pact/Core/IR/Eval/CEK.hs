@@ -7,8 +7,6 @@ module Pact.Core.IR.Eval.CEK
   , returnCEKValue
   , returnCEK
   , applyLam
-  , unsafeApplyOne
-  , unsafeApplyTwo
   , mkDefPactClosure
   , resumePact
   , evalCap
@@ -485,10 +483,18 @@ nameToFQN info env (Name n nk) = case nk of
     Nothing -> failInvariant info ("unbound identifier" <> T.pack (show n))
   _ -> failInvariant info ("invalid name in fq position" <> T.pack (show n))
 
-guardTable :: (MonadEval b i m) => i -> CEKEnv b i m -> TableValue -> GuardTableOp -> m ()
-guardTable i env (TableValue _ mn mh _) dbop = do
+guardTable
+  :: (MonadEval b i m)
+  => i
+  -> Cont b i m
+  -> CEKErrorHandler b i m
+  -> CEKEnv b i m
+  -> TableValue
+  -> GuardTableOp
+  -> m ()
+guardTable i cont handler env (TableValue _ mn mh _) dbop = do
   checkLocalBypass $
-    guardForModuleCall i env mn $ do
+    guardForModuleCall i cont handler env mn $ do
       mdl <- getModule i (view cePactDb env) mn
       enforceBlessedHashes i mdl mh
   where
@@ -504,19 +510,35 @@ guardTable i env (TableValue _ mn mh _) dbop = do
 enforceBlessedHashes :: (MonadEval b i m) => i -> EvalModule b i -> ModuleHash -> m ()
 enforceBlessedHashes info md mh
   | _mHash md == mh = return ()
-  | mh `S.member` (_mBlessed md) = return ()
+  | mh `S.member` _mBlessed md = return ()
   | otherwise = throwExecutionError info (HashNotBlessed (_mName md) mh)
 
-guardForModuleCall :: (MonadEval b i m) => i -> CEKEnv b i m -> ModuleName -> m () -> m ()
-guardForModuleCall i env currMod onFound =
+guardForModuleCall
+  :: (MonadEval b i m)
+  => i
+  -> Cont b i m
+  -> CEKErrorHandler b i m
+  -> CEKEnv b i m
+  -> ModuleName
+  -> m ()
+  -> m ()
+guardForModuleCall i cont handler env currMod onFound =
   findCallingModule >>= \case
     Just mn | mn == currMod -> onFound
-    _ -> getModule i (view cePactDb env) currMod >>= acquireModuleAdmin i env
+    _ ->
+      getModule i (view cePactDb env) currMod >>= acquireModuleAdmin i env
 
-acquireModuleAdmin :: (MonadEval b i m) => i -> CEKEnv b i m -> EvalModule b i -> m ()
-acquireModuleAdmin i env mdl = do
+acquireModuleAdmin
+  :: (MonadEval b i m)
+  => i
+  -> Cont b i m
+  -> CEKErrorHandler b i m
+  -> CEKEnv b i m
+  -> EvalModule b i
+  -> m PactValue
+acquireModuleAdmin i cont handler env mdl = do
   mc <- useEvalState (esCaps . csModuleAdmin)
-  unless (S.member (_mName mdl) mc) $ case _mGovernance mdl of
+  unless () $ case _mGovernance mdl of
     KeyGov ksn -> do
       signed <- enforceKeysetName i (view cePactDb env) ksn
       unless signed $ throwExecutionError i (ModuleGovernanceFailure (_mName mdl))
@@ -609,7 +631,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
                 case find ((==) qualCapToken . _mcCap) mgdCaps of
                   Nothing -> do
                     msgCaps <- S.unions <$> viewEvalEnv eeMsgSigs
-                    case find ((==) qualCapToken) msgCaps of
+                    case find (== qualCapToken) msgCaps of
                       Just c -> do
                         let c' = set ctName fqn c
                         installCap info env c' False >>= evalAutomanagedCap cont' newLocals capBody
@@ -617,17 +639,6 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
                         throwExecutionError info (CapNotInstalled fqn)
                   Just managedCap ->
                     evalAutomanagedCap cont' newLocals capBody managedCap
-                      -- if b then
-                      --   returnCEK cont' handler (VError "Automanaged capability used more than once" info)
-                      -- else do
-                      --   let newManaged = AutoManaged True
-                      --   esCaps . csManaged %== S.union (S.singleton (set mcManaged newManaged managedCap))
-                      --   (esCaps . csSlots) %== (CapSlot qualCapToken []:)
-                      --   sfCont <- pushStackFrame info cont' Nothing capStackFrame
-                      --   emitCapability info origToken
-                      --   evalCEK sfCont handler env capBody
-                        -- evalWithStackFrame info cont' handler (set ceLocal env' env) capStackFrame Nothing capBody
-                    -- _ -> failInvariant info "manager function mismatch"
           DefEvent -> do
             let cont' = modCont env Nothing (Just (fqctToPactEvent origToken)) contbody currCont
             let inCapEnv = set ceInCap True $ set ceLocal newLocals env
@@ -758,8 +769,7 @@ isCapInStack
   -> m Bool
 isCapInStack (CapToken fqn args) = do
   let ct = CapToken (fqnToQualName fqn) args
-  capSet <- getAllStackCaps
-  pure $ S.member ct capSet
+  S.member ct <$> getAllStackCaps
 
 composeCap
   :: (MonadEval b i m)
@@ -968,6 +978,13 @@ returnCEKValue (CondC env info frame cont) handler v = case v of
       else do
         let cont' = EnforceErrorC info cont
         evalCEK cont' handler env str
+    FilterFrame clo elem' rest acc -> do
+      let acc' = if b then elem':acc else acc
+      case rest of
+        x:xs -> do
+          let cont' = CondC env info (FilterFrame clo x xs acc') cont
+          applyLam clo [VPactValue x] cont' handler
+        [] -> returnCEKValue cont handler (VList (V.fromList (reverse acc')))
     EnforceOneFrame str li ->
       if b then returnCEKValue cont handler v
       else case li of
@@ -978,8 +995,15 @@ returnCEKValue (CondC env info frame cont) handler v = case v of
         [] -> do
           let cont' = EnforceErrorC info cont
           evalCEK cont' handler env str
+    AndQFrame clo pv ->
+      if b then applyLam clo [VPactValue pv] cont handler
+      else returnCEKValue cont handler v
+    OrQFrame clo pv ->
+      if not b then applyLam clo [VPactValue pv] cont handler
+      else returnCEKValue cont handler v
+    NotQFrame -> returnCEKValue cont handler (VBool (not b))
   _ ->
-    failInvariant info "Evaluation of conditional expression yielded non-boolean value"
+    returnCEK cont handler (VError "Evaluation of conditional expression yielded non-boolean value" info)
   where
   updateEnforceOneList xs (CEKEnforceOne e i str _ c cs h) =
     CEKEnforceOne e i str xs c cs h
@@ -996,6 +1020,75 @@ returnCEKValue (CapInvokeC env info terms pvs cf cont) handler v = do
         evalCap info cont handler env (CapToken fqn (reverse (pv:pvs))) (CapBodyC PopCapInvoke) wcbody
       CreateUserGuardFrame fqn ->
         createUserGuard info cont handler fqn (reverse (pv:pvs))
+returnCEKValue (BuiltinC env info frame cont) handler cv = do
+  let pdb = _cePactDb env
+  case cv of
+    VPactValue v -> case frame of
+      MapFrame closure rest acc -> case rest of
+        x:xs ->
+          let cont' = BuiltinC env info (MapFrame closure xs (v:acc)) cont
+          in applyLam closure [VPactValue x] cont' handler
+        [] ->
+          returnCEKValue cont handler (VList (V.fromList (reverse (v:acc))))
+      FoldFrame clo rest -> case rest of
+        x:xs ->
+          let cont' = BuiltinC env info (FoldFrame clo xs) cont
+          in applyLam clo [VPactValue v, VPactValue x] cont' handler
+        [] -> returnCEKValue cont handler cv
+      ZipFrame clo (l, r) acc -> case (l, r) of
+        (x:xs, y:ys) ->
+          let cont' = BuiltinC env info (ZipFrame clo (xs, ys) (v:acc)) cont
+          in applyLam clo [VPactValue x, VPactValue y] cont' handler
+        (_, _) ->
+          returnCEKValue cont handler (VList (V.fromList (reverse (v:acc))))
+      PreSelectFrame tv clo mf -> do
+        keys <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
+        selectRead tv clo keys [] mf
+      SelectFrame tv clo rdata remaining acc mf -> case v of
+        PBool b -> do
+          let acc' = if b then rdata:acc else acc
+          selectRead tv clo remaining acc' mf
+        _ -> returnCEK cont handler (VError "select query did not return a boolean " info)
+      ReadFrame tv rowkey -> do
+        liftDbFunction info (_pdbRead pdb (tvToDomain tv) rowkey) >>= \case
+          Just (RowData rdata) ->
+            returnCEKValue cont handler (VObject rdata)
+          Nothing -> returnCEK cont handler (VError "no such read object" info)
+      WithReadFrame tv rowkey clo -> do
+        liftDbFunction info (_pdbRead pdb (tvToDomain tv) rowkey) >>= \case
+          Just (RowData rdata) ->
+            applyLam clo [VObject rdata] cont handler
+          Nothing -> returnCEK cont handler (VError "no such read object" info)
+      WithDefaultReadFrame tv rowkey (ObjectData defaultObj) clo -> do
+        liftDbFunction info (_pdbRead pdb (tvToDomain tv) rowkey) >>= \case
+          Just (RowData rdata) ->
+            applyLam clo [VObject rdata] cont handler
+          Nothing -> applyLam clo [VObject defaultObj] cont handler
+      KeysFrame tv -> do
+        ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
+        let li = V.fromList (PString . _rowKey <$> ks)
+        returnCEKValue cont handler (VList li)
+      where
+      selectRead tv clo keys acc mf = case keys of
+        k:ks -> liftDbFunction info (_pdbRead pdb (tvToDomain tv) k) >>= \case
+          Just (RowData r) -> do
+            let bf = SelectFrame tv clo (ObjectData r) ks acc mf
+                cont' = BuiltinC env info bf cont
+            applyLam clo [VObject r] cont' handler
+          Nothing ->
+            failInvariant info "Select keys returned a key that did not exist"
+        [] -> case mf of
+          Just fields ->
+            let acc' = PObject . (`M.restrictKeys` S.fromList fields) . _objectData <$> reverse acc
+            in returnCEKValue cont handler (VList (V.fromList acc'))
+          Nothing ->
+            let acc' = PObject . _objectData <$> reverse acc
+            in returnCEKValue cont handler (VList (V.fromList acc'))
+  -- | ReadFrame TableValue RowKey
+  -- | WithReadFrame TableValue RowKey (CanApply b i m)
+  -- | WithDefaultReadFrame TableValue RowKey (ObjectData PactValue) (CanApply b i m)
+  -- | KeysFrame TableValue
+    _ -> returnCEK cont handler (VError "higher order apply did not return a pactvalue" info)
 returnCEKValue (CapBodyC cappop env mcap mevent capbody cont) handler _ = do
   maybe (pure ()) (emitEvent def) mevent
   case mcap of
@@ -1013,15 +1106,16 @@ returnCEKValue (CapPopC st cont) handler v = case st of
   PopCapInvoke -> do
     -- todo: need safe tail here, but this should be fine given the invariant that `CapPopC`
     -- will never show up otherwise
-    esCaps . csSlots %== tail
+    esCaps . csSlots %== safeTail
     returnCEKValue cont handler v
   PopCapComposed -> do
-    caps <- useEvalState (esCaps . csSlots)
-    let cs = head caps
-        csList = _csCap cs : _csComposed cs
-        caps' = over (_head . csComposed) (++ csList) (tail caps)
-    setEvalState (esCaps . csSlots) caps'
-    returnCEKValue cont handler VUnit
+    useEvalState (esCaps . csSlots) >>= \case
+      cap:cs -> do
+        let csList = _csCap cap : _csComposed cap
+            caps' = over (_head . csComposed) (++ csList) cs
+        setEvalState (esCaps . csSlots) caps'
+        returnCEKValue cont handler VUnit
+      [] -> failInvariant def "PopCapComposed present outside of cap eval"
 returnCEKValue (ListC env args vals cont) handler v = do
   pv <- enforcePactValue def v
   case args of
@@ -1042,13 +1136,13 @@ returnCEKValue (EnforceErrorC info _) handler v = case v of
   VString err -> returnCEK Mt handler (VError err info)
   _ -> failInvariant def "enforce function did not return a string"
 -- Discard the value of running a user guard, no error occured, so
--- return true
-returnCEKValue (UserGuardC cont) handler _v =
-  returnCEKValue cont handler (VBool True)
+returnCEKValue (IgnoreValueC v cont) handler _v =
+  returnCEKValue cont handler (VPactValue v)
 returnCEKValue (StackPopC i mty cont) handler v = do
   v' <- (\pv -> maybeTCType i pv mty) =<< enforcePactValue i v
-  -- Todo: unsafe use of tail here. need `tailMay`
-  (esStack %== tail) *> returnCEKValue cont handler (VPactValue v')
+  -- Todo: this seems like an invariant failure, so maybe safeTail is not what we want?
+  -- Testing will determine whether this is observable.
+  (esStack %== safeTail) *> returnCEKValue cont handler (VPactValue v')
 returnCEKValue (DefPactStepC env cont) handler v =
   useEvalState esDefPactExec >>= \case
     Nothing -> failInvariant def "No PactExec found"
@@ -1064,9 +1158,7 @@ returnCEKValue (DefPactStepC env cont) handler v =
         liftDbFunction def
           (writePacts pdb Write (_psDefPactId ps)
             (if done then Nothing else Just pe))
-
         returnCEKValue cont handler v
-
 returnCEKValue (NestedDefPactStepC env cont parentDefPactExec) handler v =
   useEvalState esDefPactExec >>= \case
     Nothing -> failInvariant def "No DefPactExec found"
@@ -1075,10 +1167,16 @@ returnCEKValue (NestedDefPactStepC env cont parentDefPactExec) handler v =
       Just ps -> do
         when (nestedPactsNotAdvanced pe ps) $
           throwExecutionError def (NestedDefpactsNotAdvanced (_peDefPactId pe))
-
         let npe = parentDefPactExec & peNestedDefPactExec %~ M.insert (_psDefPactId ps) pe
         setEvalState esDefPactExec (Just npe)
         returnCEKValue cont handler v
+returnCEKValue (EnforcePactValueC info cont) handler v = case v of
+  VPactValue{} -> returnCEKValue cont handler v
+  _ -> returnCEK cont handler (VError "function expected to return pact value" info)
+returnCEKValue (EnforceBoolC info cont) handler v = case v of
+  VBool{} -> returnCEKValue cont handler v
+  _ -> returnCEK cont handler (VError "function expected to return boolean" info)
+
 
 -- | Important check for nested pacts:
 --   Nested step must be equal to the parent step after execution.
@@ -1216,21 +1314,3 @@ applyLam (CT (CapTokenClosure fqn argtys arity i)) args cont handler
   | otherwise = throwExecutionError i ClosureAppliedToTooManyArgs
   where
   argLen = length args
-
-
--- | Apply one argument to a value
-unsafeApplyOne
-  :: MonadEval b i m
-  => CanApply b i m
-  -> CEKValue b i m
-  -> m (EvalResult b i m)
-unsafeApplyOne c arg =
-  applyLam c [arg] Mt CEKNoHandler
-
-unsafeApplyTwo
-  :: MonadEval b i m
-  => CanApply b i m
-  -> CEKValue b i m
-  -> CEKValue b i m
-  -> m (EvalResult b i m)
-unsafeApplyTwo c arg1 arg2 = applyLam c [arg1, arg2] Mt CEKNoHandler

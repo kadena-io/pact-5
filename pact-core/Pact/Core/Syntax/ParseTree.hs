@@ -195,6 +195,15 @@ data DefProperty i
   , _dpropExp :: Expr i
   } deriving Show
 
+newtype Property i
+  = Property (Expr i)
+  deriving Show
+
+data FVModel i
+  = FVDefProperty (DefProperty i)
+  | FVProperty (Property i)
+  deriving Show
+
 data Module i
   = Module
   { _mName :: ModuleName
@@ -202,7 +211,7 @@ data Module i
   , _mExternal :: [ExtDecl]
   , _mDefs :: NonEmpty (Def i)
   , _mDoc :: Maybe Text
-  , _mModel :: [DefProperty i]
+  , _mModel :: [FVModel i]
   , _mInfo :: i
   } deriving Show
 

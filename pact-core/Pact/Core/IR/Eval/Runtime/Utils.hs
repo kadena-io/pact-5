@@ -34,6 +34,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , evalStateToErrorState
  , restoreFromErrorState
  , getDefPactId
+ , tvToDomain
  ) where
 
 import Control.Lens
@@ -175,7 +176,7 @@ checkNonLocalAllowed :: (MonadEval b i m) => i -> m ()
 checkNonLocalAllowed info = do
   disabledInTx <- isExecutionFlagSet FlagDisableHistoryInTransactionalMode
   mode <- viewEvalEnv eeMode
-  when (mode == Transactional && disabledInTx) $ failInvariant info $
+  when (mode == Transactional && disabledInTx) $ failInvariant info
     "Operation only permitted in local execution mode"
 
 toArgTypeError :: CEKValue b i m -> ArgTypeError
@@ -248,9 +249,9 @@ sysOnlyEnv e
          { _pdbPurity = PSysOnly
          , _pdbRead = read'
          , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
-         , _pdbKeys = \_ -> dbOpDisallowed
+         , _pdbKeys = const dbOpDisallowed
          , _pdbCreateUserTable = \_ _ -> dbOpDisallowed
-         , _pdbBeginTx = \_ -> dbOpDisallowed
+         , _pdbBeginTx = const dbOpDisallowed
          , _pdbCommitTx = dbOpDisallowed
          , _pdbRollbackTx = dbOpDisallowed
          , _pdbTxIds = \_ _ -> dbOpDisallowed
@@ -270,3 +271,7 @@ getDefPactId info =
     Just pe -> pure (_peDefPactId pe)
     Nothing ->
       throwExecutionError info NotInDefPactExecution
+
+tvToDomain :: TableValue -> Domain RowKey RowData b i
+tvToDomain tv =
+  DUserTables (_tvName tv)
