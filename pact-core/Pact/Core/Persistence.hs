@@ -34,6 +34,7 @@ module Pact.Core.Persistence
  , dbOpDisallowed
  , toUserTable
  , FQKS
+ , builtinModuleData , infoModuleData
  ) where
 
 import Control.Lens
@@ -65,6 +66,60 @@ data ModuleData b i
   = ModuleData (EvalModule b i) (Map FullyQualifiedName (EvalDef b i))
   | InterfaceData (EvalInterface b i) (Map FullyQualifiedName (EvalDef b i))
   deriving (Show, Eq, Functor)
+
+builtinEvalModule :: Traversal (EvalModule b i) (EvalModule b' i) b b'
+builtinEvalModule = undefined
+
+infoEvalModule :: Traversal (EvalModule b i) (EvalModule b i') i i'
+infoEvalModule = undefined
+
+builtinEvalInterface :: Traversal (EvalInterface b i) (EvalInterface b' i) b b'
+builtinEvalInterface = undefined
+
+infoEvalInterface :: Traversal (EvalInterface b i) (EvalInterface b i') i i'
+infoEvalInterface = undefined
+
+builtinEvalDef :: Traversal (EvalDef b i) (EvalDef b' i) b b'
+builtinEvalDef = undefined
+
+infoDefun :: Traversal (Defun name ty builtin i) (Defun name ty builtin i') i i'
+infoDefun f (Defun n a r t i) = Defun n a r <$> termInfo' f t <*> f i
+
+infoConst :: Traversal (DefConst name ty builtin i) (DefConst name ty builtin i') i i'
+infoConst f (DefConst n r t i) = DefConst n r <$> termInfo' f t <*> f i
+
+infoDefCap :: Traversal (DefCap name ty builtin i) (DefCap name ty builtin i') i i'
+infoDefCap f (DefCap n ar arg rt t m i) = DefCap n ar arg rt <$> termInfo' f t <*> pure m <*> f i
+
+infoDefSchema :: Traversal (DefSchema ty i) (DefSchema ty i') i i'
+infoDefSchema f (DefSchema n schema i) = DefSchema n schema <$> f i
+
+infoDefTable :: Traversal (DefTable ty i) (DefTable ty i') i i'
+infoDefTable f (DefTable n schema i) = DefTable n schema <$> f i
+
+infoStep :: Traversal (Step name ty builtin i) (Step name ty builtin i') i i'
+infoStep f (Step t m) = Step <$> termInfo' f t <*> (traverse . traverse) (termInfo' f) m
+infoStep f (StepWithRollback t r m) = StepWithRollback <$> termInfo' f t <*> termInfo' f r <*> (traverse . traverse) (termInfo' f) m
+
+infoDefPact :: Traversal (DefPact name ty builtin i) (DefPact name ty builtin i') i i'
+infoDefPact f (DefPact n ad rt s i) = DefPact n ad rt <$> traverse (infoStep f) s <*> f i
+
+infoEvalDef :: Traversal (EvalDef b i) (EvalDef b i') i i'
+infoEvalDef f (Dfun defun) = Dfun <$> infoDefun f defun
+infoEvalDef f (DConst d) = DConst <$> infoConst f d
+infoEvalDef f (DCap cap) = DCap <$> infoDefCap f cap
+infoEvalDef f (DSchema schema) = DSchema <$> infoDefSchema f schema
+infoEvalDef f (DTable table) = DTable <$> infoDefTable f table
+infoEvalDef f (DPact pact) = DPact <$> infoDefPact f pact
+
+builtinModuleData :: Traversal (ModuleData b i) (ModuleData b' i) b b'
+builtinModuleData f (ModuleData m dep) = ModuleData <$> builtinEvalModule f m <*> traverse (builtinEvalDef f) dep
+builtinModuleData f (InterfaceData m dep) = InterfaceData <$> builtinEvalInterface f m <*> traverse (builtinEvalDef f) dep
+
+infoModuleData :: Traversal (ModuleData b i) (ModuleData b i') i i'
+infoModuleData f (ModuleData m dep) = ModuleData <$> infoEvalModule f m <*> traverse (infoEvalDef f) dep
+infoModuleData f (InterfaceData m dep) = InterfaceData <$> infoEvalInterface f m <*> traverse (infoEvalDef f) dep
+
 
 mdModuleName :: Lens' (ModuleData b i) ModuleName
 mdModuleName f = \case

@@ -24,7 +24,7 @@ import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Interpreter
 
 import Pact.Core.Repl.Utils
-import Pact.Core.Persistence (PactDb(..), ModuleData(..))
+import Pact.Core.Persistence (PactDb(..), ModuleData(..), builtinModuleData, infoModuleData)
 import Pact.Core.Persistence.SQLite (withSqlitePactDb)
 
 import Pact.Core.Info (SpanInfo)
@@ -35,46 +35,48 @@ import Pact.Core.PactValue
 import Pact.Core.Environment
 import Pact.Core.Builtin
 import Pact.Core.Errors
+import Pact.Core.Serialise
+import Control.Lens
 
 tests :: IO TestTree
 tests = do
   files <- replTestFiles
   pure $ testGroup "Repl Tests"
-    [ testGroup "in-memory db" (runFileReplTest mockPactDb <$> files)
+    [ testGroup "in-memory db" (runFileReplTest <$> files)
     , testGroup "sqlite db" (runFileReplTestSqlite <$> files)
     ]
 
 
-enhanceModuleData :: ModuleData RawBuiltin () -> ModuleData ReplRawBuiltin SpanInfo
-enhanceModuleData = \case
-  ModuleData _em _defs -> undefined
-  InterfaceData _ifd _defs -> undefined
+-- enhanceModuleData :: ModuleData RawBuiltin () -> ModuleData ReplRawBuiltin SpanInfo
+-- enhanceModuleData = \case
+--   ModuleData _em _defs -> undefined
+--   InterfaceData _ifd _defs -> undefined
 
-stripModuleData :: ModuleData ReplRawBuiltin SpanInfo -> ModuleData RawBuiltin ()
-stripModuleData = \case
-  ModuleData _em _defs -> undefined
-  InterfaceData _ifd _defs -> undefined
+-- stripModuleData :: ModuleData ReplRawBuiltin SpanInfo -> ModuleData RawBuiltin ()
+-- stripModuleData = \case
+--   ModuleData _em _defs -> undefined
+--   InterfaceData _ifd _defs -> undefined
 
-enhanceEvalModule :: EvalModule RawBuiltin () -> EvalModule ReplRawBuiltin SpanInfo
-enhanceEvalModule Module
-  { _mName
-  , _mGovernance
-  , _mDefs
-  , _mBlessed
-  , _mImports
-  , _mImplements
-  , _mHash
-  , _mInfo
-  } = Module
-      { _mName
-      , _mGovernance
-      , _mDefs = undefined _mDefs
-      , _mBlessed
-      , _mImports
-      , _mImplements
-      , _mHash
-      , _mInfo = def
-      }
+-- enhanceEvalModule :: EvalModule RawBuiltin () -> EvalModule ReplRawBuiltin SpanInfo
+-- enhanceEvalModule Module
+--   { _mName
+--   , _mGovernance
+--   , _mDefs
+--   , _mBlessed
+--   , _mImports
+--   , _mImplements
+--   , _mHash
+--   , _mInfo
+--   } = Module
+--       { _mName
+--       , _mGovernance
+--       , _mDefs = undefined _mDefs
+--       , _mBlessed
+--       , _mImports
+--       , _mImplements
+--       , _mHash
+--       , _mInfo = def
+--       }
 
 
 replTestDir :: [Char]
@@ -84,17 +86,29 @@ replTestFiles :: IO [FilePath]
 replTestFiles = do
   filter (\f -> isExtensionOf "repl" f || isExtensionOf "pact" f) <$> getDirectoryContents replTestDir
 
-runFileReplTest :: IO (PactDb (ReplBuiltin RawBuiltin) SpanInfo) -> TestName -> TestTree
-runFileReplTest mkPactDb file = testCase file $ do
-  pdb <- mkPactDb
+runFileReplTest :: TestName -> TestTree
+runFileReplTest file = testCase file $ do
+  pdb <- mockPactDb
   B.readFile (replTestDir </> file) >>= runReplTest pdb file
 
 runFileReplTestSqlite :: TestName -> TestTree
 runFileReplTestSqlite file = testCase file $ do
   ctnt <- B.readFile (replTestDir </> file)
-  withSqlitePactDb undefined ":memory:" $ \pdb -> do
+  withSqlitePactDb (enhance serialisePact) ":memory:" $ \pdb -> do
     runReplTest pdb file ctnt
-
+  where
+    enhance :: PactSerialise RawBuiltin () -> PactSerialise ReplRawBuiltin SpanInfo
+    enhance s = s{ _encodeModuleData = \md ->
+                     let encMod = md & builtinModuleData %~ (\(RBuiltinWrap r) -> r)
+                                     & infoModuleData %~ const ()
+                     in _encodeModuleData s encMod
+                 , _decodeModuleData = \bs -> case _decodeModuleData s bs of
+                     Just mdDoc -> Just $ LegacyDocument $ view document mdDoc
+                       & builtinModuleData %~ RBuiltinWrap
+                       & infoModuleData %~ const def
+                     Nothing -> error "unexpected decoding error"
+                 }
+    
   
 
 runReplTest :: PactDb ReplRawBuiltin SpanInfo -> FilePath -> ByteString -> Assertion
