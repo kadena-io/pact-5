@@ -1,5 +1,4 @@
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE NamedFieldPuns #-}
 
 module Pact.Core.Test.ReplTests where
 
@@ -24,19 +23,18 @@ import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Interpreter
 
 import Pact.Core.Repl.Utils
-import Pact.Core.Persistence (PactDb(..), ModuleData(..), builtinModuleData, infoModuleData)
+import Pact.Core.Persistence (PactDb)
 import Pact.Core.Persistence.SQLite (withSqlitePactDb)
 
 import Pact.Core.Info (SpanInfo)
 import Pact.Core.Compile
-import Pact.Core.IR.Term (Module(..), EvalModule)
 import Pact.Core.Repl.Compile
 import Pact.Core.PactValue
 import Pact.Core.Environment
 import Pact.Core.Builtin
 import Pact.Core.Errors
 import Pact.Core.Serialise
-import Control.Lens
+import Pact.Core.Serialise.CBOR_V1 (encodeModuleData_TESTING, decodeModuleData_TESTING)
 
 tests :: IO TestTree
 tests = do
@@ -45,39 +43,6 @@ tests = do
     [ testGroup "in-memory db" (runFileReplTest <$> files)
     , testGroup "sqlite db" (runFileReplTestSqlite <$> files)
     ]
-
-
--- enhanceModuleData :: ModuleData RawBuiltin () -> ModuleData ReplRawBuiltin SpanInfo
--- enhanceModuleData = \case
---   ModuleData _em _defs -> undefined
---   InterfaceData _ifd _defs -> undefined
-
--- stripModuleData :: ModuleData ReplRawBuiltin SpanInfo -> ModuleData RawBuiltin ()
--- stripModuleData = \case
---   ModuleData _em _defs -> undefined
---   InterfaceData _ifd _defs -> undefined
-
--- enhanceEvalModule :: EvalModule RawBuiltin () -> EvalModule ReplRawBuiltin SpanInfo
--- enhanceEvalModule Module
---   { _mName
---   , _mGovernance
---   , _mDefs
---   , _mBlessed
---   , _mImports
---   , _mImplements
---   , _mHash
---   , _mInfo
---   } = Module
---       { _mName
---       , _mGovernance
---       , _mDefs = undefined _mDefs
---       , _mBlessed
---       , _mImports
---       , _mImplements
---       , _mHash
---       , _mInfo = def
---       }
-
 
 replTestDir :: [Char]
 replTestDir = "pact-core-tests" </> "pact-tests"
@@ -94,22 +59,11 @@ runFileReplTest file = testCase file $ do
 runFileReplTestSqlite :: TestName -> TestTree
 runFileReplTestSqlite file = testCase file $ do
   ctnt <- B.readFile (replTestDir </> file)
-  withSqlitePactDb (enhance serialisePact) ":memory:" $ \pdb -> do
+  let enc = serialisePact{ _encodeModuleData = encodeModuleData_TESTING
+                         , _decodeModuleData = fmap LegacyDocument . decodeModuleData_TESTING
+                         }
+  withSqlitePactDb enc ":memory:" $ \pdb -> do
     runReplTest pdb file ctnt
-  where
-    enhance :: PactSerialise RawBuiltin () -> PactSerialise ReplRawBuiltin SpanInfo
-    enhance s = s{ _encodeModuleData = \md ->
-                     let encMod = md & builtinModuleData %~ (\(RBuiltinWrap r) -> r)
-                                     & infoModuleData %~ const ()
-                     in _encodeModuleData s encMod
-                 , _decodeModuleData = \bs -> case _decodeModuleData s bs of
-                     Just mdDoc -> Just $ LegacyDocument $ view document mdDoc
-                       & builtinModuleData %~ RBuiltinWrap
-                       & infoModuleData %~ const def
-                     Nothing -> error "unexpected decoding error"
-                 }
-    
-  
 
 runReplTest :: PactDb ReplRawBuiltin SpanInfo -> FilePath -> ByteString -> Assertion
 runReplTest pdb file src = do

@@ -1,3 +1,4 @@
+{-# LANGUAGE QuasiQuotes #-}
 -- |
 
 module Pact.Core.Test.PersistenceTests where
@@ -6,17 +7,22 @@ import Control.Monad.IO.Class (liftIO)
 import Hedgehog (Gen, Property, (===), forAll, property)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.Hedgehog
+import Test.Tasty.HUnit
 import qualified Hedgehog.Gen as Gen
 
 import Pact.Core.Names (FullyQualifiedName)
-import Pact.Core.Info (SpanInfo)
 import Pact.Core.Guards (KeySet)
-import Pact.Core.Gen.Serialise (keySetGen, keySetNameGen, moduleNameGen, moduleDataGen, builtinGen, infoGen
+import Pact.Core.Gen.Serialise (keySetGen, keySetNameGen, moduleNameGen, moduleDataGen, builtinGen
                                ,defPactIdGen, defPactExecGen, namespaceNameGen, namespaceGen)
 import Pact.Core.Serialise (PactSerialise, serialisePact)
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Persistence (WriteType(Insert), readKeySet, writeKeySet, writeModule, readModule
-                             ,writeDefPacts, readDefPacts, readNamespace, writeNamespace)
+                             ,writeDefPacts, readDefPacts, readNamespace, writeNamespace
+                             , Domain(..), PactDb(_pdbKeys))
+import Pact.Core.Serialise.LegacyPact
+import Data.Foldable (forM_)
+import qualified Data.Text as T
+import Data.String.QQ
 
 testsWithSerial :: (Show b, Show i, Eq b, Eq i) => PactSerialise b i -> Gen b -> Gen i -> [TestTree]
 testsWithSerial serial b i =
@@ -29,7 +35,43 @@ testsWithSerial serial b i =
 tests :: TestTree
 tests = testGroup "Persistence Roundtrip"
   [ testGroup "CBOR encoding/decoding" $ testsWithSerial serialisePact builtinGen (pure ())
+  , testGroup "Regression tests"  [ex1]
   ]
+
+
+ex1 :: TestTree
+ex1 = testCase "DefPact" $
+  assertEqual ""  (Right Nothing) (decodeDefPactExec1 bs)
+  where
+    bs = [s|{"executed":null,"pactId":"44AZc5R-mnuF_ehKF_qXHMzHDnqjVcsdXmRaVbo8g6s","stepHasRollback":false,"step":0,"yield":{"data":{"amount":1,"receiver":"3b60fc72f90fde59d32799c89f550b959b2e9c86f6f8a880af5120c7e62507eb","receiver-guard":{"pred":"keys-all","keys":["3b60fc72f90fde59d32799c89f550b959b2e9c86f6f8a880af5120c7e62507eb"]}},"provenance":{"targetChainId":"0","moduleHash":"ut_J_ZNkoyaPUEJhiwVeWnkSQn9JT9sQCWKdjjVVrWo"}},"continuation":{"args":["9645627f5dad4029f091128e17a030ed15ff6dc554d276824deabbb546488e35","3b60fc72f90fde59d32799c89f550b959b2e9c86f6f8a880af5120c7e62507eb",{"pred":"keys-all","keys":["3b60fc72f90fde59d32799c89f550b959b2e9c86f6f8a880af5120c7e62507eb"]},"0",1],"def":"coin.transfer-crosschain"},"stepCount":2}|]
+
+
+readExistingDb :: FilePath -> IO ()
+readExistingDb fp = withSqlitePactDb serialisePact (T.pack fp) $ \pdb -> do
+  keys <- _pdbKeys pdb DKeySets
+  forM_ keys $ \k -> do
+    print k
+    Just _ <- readKeySet pdb k
+    pure ()
+
+  -- TODO: Implement testing against pact sqlite files
+  
+ -- k <- SELECT name FROM sqlite_master WHERE type='table';
+
+
+  -- keys' <- _pdbKeys pdb DNamespaces
+  -- forM_ keys' $ \k -> do
+  --   Just n <- readNamespace pdb k
+  --   print n
+  --   pure ()
+  
+  keys'' <- _pdbKeys pdb DDefPacts
+  forM_ keys'' $ \k -> do
+    print k
+    Just _n <- readDefPacts pdb k
+    pure ()
+
+
 
 keysetPersistRoundtrip :: PactSerialise b i -> Gen (KeySet FullyQualifiedName) -> Property
 keysetPersistRoundtrip serial keysetGen =
@@ -50,8 +92,8 @@ moduleDataRoundtrip serial b i = property $ do
     readModule db moduleName
   Just moduleData === writtenModuleData
 
-defPactExecRoundtrip :: (Show b,Show i, Eq b, Eq i) => PactSerialise b i -> Gen b -> Gen i -> Property
-defPactExecRoundtrip serial b i = property $ do
+defPactExecRoundtrip :: PactSerialise b i -> Gen b -> Gen i -> Property
+defPactExecRoundtrip serial _b _i = property $ do
   defPactId <- forAll defPactIdGen
   defPactExec <- forAll (Gen.maybe defPactExecGen)
   writtenDefPactExec <- liftIO $ withSqlitePactDb serial ":memory:" $ \db -> do

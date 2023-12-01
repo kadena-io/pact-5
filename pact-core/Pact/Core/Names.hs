@@ -52,7 +52,6 @@ module Pact.Core.Names
  , fqName
  , fqModule
  , fqHash
--- , userTable
  , DefPactId(..)
  , renderDefPactId
  , parseRenderedModuleName
@@ -345,9 +344,6 @@ instance Eq (FQNameRef name) where
   (FQName fqn) == (FQName fqn') = fqn == fqn'
 
 makeLenses ''FullyQualifiedName
-
--- userTable :: TableName -> TableName
--- userTable (TableName tn) = TableName ("USER_" <> tn)
 
 -- | The identifier that indexes defpacts in the db,
 --   generally computed from the continuation, or

@@ -7,6 +7,7 @@ module Pact.Core.Serialise.LegacyPact
   , decodeDefPactExec
   , decodeNamespace
   , decodeRowData
+  , decodeDefPactExec1
   ) where
 
 import Pact.Core.Names
@@ -25,17 +26,18 @@ import Data.Maybe (fromMaybe)
 
 import Pact.Core.ChainData
 import Pact.Core.Hash
-import Pact.Core.Parser
+--import Pact.Core.Parser
 import Pact.Core.ModRefs
 import Pact.Core.Literal 
 import Data.Decimal
 import Pact.Time
-import qualified Data.Attoparsec.Text as AP
+--import qualified Data.Attoparsec.Text as AP
 import qualified Pact.JSON.Decode as JD
 import qualified Data.Text as T
 import Data.Vector(Vector)
 import Data.Map.Strict(Map)
 import Text.Read (readMaybe)
+
 
 decodeModuleData :: ByteString -> Maybe (ModuleData RawBuiltin ())
 decodeModuleData = JD.decodeStrict'
@@ -45,6 +47,9 @@ decodeKeySet = JD.decodeStrict'
 
 decodeDefPactExec :: ByteString -> Maybe (Maybe DefPactExec)
 decodeDefPactExec = JD.decodeStrict'
+
+decodeDefPactExec1 :: ByteString -> Either String (Maybe DefPactExec)
+decodeDefPactExec1 = JD.eitherDecodeStrict'
 
 decodeNamespace :: ByteString -> Maybe Namespace
 decodeNamespace = JD.decodeStrict'
@@ -141,11 +146,31 @@ instance JD.FromJSON (DefPactContinuation FullyQualifiedName PactValue) where
       <$> o JD..: "def"
       <*> o JD..: "args"
 
+-- TODO: This feels awkward, legacy pact uses qualified names in defpactexec continuations
+-- pact-core relies on fullyqualified names. @Jose, is this a valid approach to overcome the
+-- current issue?
+
 instance JD.FromJSON FullyQualifiedName where
-  parseJSON = JD.withText "FullyQualifiedName" $ \f ->
-    case AP.parseOnly (fullyQualNameParser <* AP.endOfInput) f of
-      Left s  -> fail s
-      Right n -> return n
+  parseJSON = JD.withText "QualifiedName" $ \n -> case T.split (== '.') n  of
+    [mod', name] -> pure (FullyQualifiedName (ModuleName mod' Nothing) name (ModuleHash defaultPactHash))
+    _ -> fail "unexpeced parsing"
+    
+-- instance JD.FromJSON QualifiedName where
+--   parseJSON = JD.withText "QualifiedName" $ \n -> case T.split (== '.') n  of
+--     [mod', name] -> pure (QualifiedName name (ModuleName mod' Nothing))
+--     _ -> fail "unexpeced parsing"
+    
+-- instance JD.FromJSON (DefPactContinuation FullyQualifiedName PactValue) where
+--   parseJSON = JD.withObject "DefPactContinuation" $ \o ->
+--     DefPactContinuation
+--       <$> o JD..: "def"
+--       <*> o JD..: "args"
+
+-- instance JD.FromJSON FullyQualifiedName where
+--   parseJSON = JD.withText "FullyQualifiedName" $ \f ->
+--     case AP.parseOnly (fullyQualNameParser <* AP.endOfInput) f of
+--       Left s  -> fail s
+--       Right n -> return n
 
 instance JD.FromJSON PactValue where
   parseJSON v = fromLegacyPactValue <$> JD.parseJSON v
@@ -243,7 +268,7 @@ instance JD.FromJSON LegacyLiteral where
 
 
 instance JD.FromJSON (Guard FullyQualifiedName PactValue) where
-  parseJSON = undefined -- fromLegacyPactValue <$> JD.parseJSON v
+  parseJSON = error "guards" -- fromLegacyPactValue <$> JD.parseJSON v
 
 
 -- https://github.com/kadena-io/pact/blob/ba15517b56eba4fdaf6b2fbd3e5245eeedd0fc9f/src/Pact/Types/Term/Internal.hs#L802
