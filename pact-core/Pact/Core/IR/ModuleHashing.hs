@@ -110,6 +110,7 @@ updateGuardHash mname mhash = \case
         (updatePactValueHash mname mhash <$> pvs)
         pid
   GModuleGuard mg -> GModuleGuard mg
+  g@GDefPactGuard{} -> g
 
 updatePactValueHash :: ModuleName -> ModuleHash -> PactValue -> PactValue
 updatePactValueHash mname mhash = \case
@@ -225,6 +226,7 @@ encodeGuard = \case
     "CapGuard" <> encodeApp (encodeFqnAsQual ct) (encodePactValue <$> args)
   GModuleGuard (ModuleGuard mg n) ->
     "ModuleGuard" <> parens (encodeModuleName mg <+> encodeText n)
+  GDefPactGuard (DefPactGuard (DefPactId dpid) name) -> "DefPactGuard" <> parens (encodeText dpid <+> encodeText name)
 
 encodeModuleName :: ModuleName -> Builder
 encodeModuleName = encodeText . renderModuleName
