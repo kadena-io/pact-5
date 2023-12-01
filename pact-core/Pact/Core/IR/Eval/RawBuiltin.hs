@@ -1046,7 +1046,7 @@ defineKeySet'
   -> m (EvalResult b i m)
 defineKeySet' info cont handler env ksname newKs  = do
   let pdb = view cePactDb env
-  laxNs <- not <$> isExecutionFlagSet FlagRequireKeysetNs
+  ignoreNamespaces <- not <$> isExecutionFlagSet FlagRequireKeysetNs
   case parseAnyKeysetName ksname of
     Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
     Right ksn -> do
@@ -1058,9 +1058,7 @@ defineKeySet' info cont handler env ksname newKs  = do
           cond <- enforceKeyset oldKs
           if cond then writeKs
           else returnCEK cont handler (VError "enforce keyset failure" info)
-        -- `laxNs` implies the flag to require namespaces for keysets is not set,
-        -- so they are just not checked and get written no matter what.
-        Nothing | laxNs -> writeKs
+        Nothing | ignoreNamespaces -> writeKs
         Nothing | otherwise -> useEvalState (esLoaded . loNamespace) >>= \case
           Nothing -> returnCEK cont handler (VError "Cannot define a keyset outside of a namespace" info)
           Just (Namespace ns uGuard _adminGuard) -> do
