@@ -106,7 +106,7 @@ evalModuleGovernance interp tl = do
       lookupModule (Lisp._mInfo m) pdb mname >>= \case
         Just targetModule -> do
           term <- case _mGovernance targetModule of
-            KeyGov (KeySetName ksn) -> do
+            KeyGov (KeySetName ksn _mNs) -> do
               let ksnTerm = Constant (LString ksn) info
                   ksrg = App (Builtin (liftRaw RawKeysetRefGuard) info) (pure ksnTerm) info
                   term = App (Builtin (liftRaw RawEnforceGuard) info) (pure ksrg) info

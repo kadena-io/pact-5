@@ -121,7 +121,10 @@ instance J.Encode (StableEncoding (UserGuard FullyQualifiedName PactValue)) wher
 -- TODO: KeySetName is namespaced (maybe)
 -- | Stable encoding of `KeySetName`
 instance J.Encode (StableEncoding KeySetName) where
-  build (StableEncoding (KeySetName ksn)) = J.build ksn
+  build (StableEncoding (KeySetName ksn mns)) =
+    case mns of
+         Nothing -> J.build ksn
+         Just ns -> J.object [ "ns" J..= StableEncoding ns, "ksn" J..= ksn ]
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `KeySet FullyQualifiedName`
