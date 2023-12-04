@@ -56,7 +56,7 @@ publicKeyTextGen = PublicKeyText <$> identGen
 -- ksPredicateGen = Gen.element [minBound .. maxBound]
 
 keySetNameGen :: Gen KeySetName
-keySetNameGen = KeySetName <$> identGen
+keySetNameGen = KeySetName <$> identGen <*> Gen.maybe namespaceNameGen
 
 qualifiedNameGen :: Gen QualifiedName
 qualifiedNameGen = do
@@ -255,8 +255,14 @@ defConstGen :: Gen b -> Gen i -> Gen (DefConst Name Type b i)
 defConstGen b i = do
   name <- identGen
   ty <- Gen.maybe typeGen
-  term <- termGen b i
-  DefConst name ty term <$> i
+  cval <- constValGen (termGen b i)
+  DefConst name ty cval <$> i
+
+constValGen :: Gen (Term name ty b i) -> Gen (ConstVal (Term name ty b i))
+constValGen t = Gen.choice
+  [ TermConst <$> t
+  , EvaledConst <$> pactValueGen
+  ]
 
 fqNameRefGen :: Gen (FQNameRef Name)
 fqNameRefGen = FQName <$> fullyQualifiedNameGen
@@ -363,8 +369,9 @@ evalInterfaceGen :: Gen b -> Gen i -> Gen (EvalInterface b i)
 evalInterfaceGen b i = do
   name <- moduleNameGen
   defs <- Gen.list (Range.linear 0 100) (ifDefGen b i)
+  imports <- Gen.list (Range.linear 0 100) (importGen )
   h <- moduleHashGen
-  Interface name defs h <$> i
+  Interface name defs imports h <$> i
 
 moduleDataGen :: Gen b -> Gen i -> Gen (ModuleData b i)
 moduleDataGen b i = Gen.choice

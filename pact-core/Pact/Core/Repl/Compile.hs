@@ -5,6 +5,7 @@
 {-# LANGUAGE TypeApplications #-}
 
 
+
 module Pact.Core.Repl.Compile
  ( ReplCompileValue(..)
  , interpretReplProgram
@@ -27,6 +28,7 @@ import Pact.Core.Persistence
 import Pact.Core.Persistence.MockPersistence (mockPactDb)
 -- import Pact.Core.Persistence.SQLite (withSqlitePactDb)
 import Pact.Core.Builtin
+import Pact.Core.Info (SpanInfo)
 import Pact.Core.Names
 import Pact.Core.Repl.Utils
 import Pact.Core.IR.Desugar
@@ -123,11 +125,12 @@ interpretReplProgram (SourceCode _ source) display = do
           VPactValue pv -> do
             pure (IPV pv i)
 
+  interpretExpr :: Purity -> EvalTerm ReplRawBuiltin SpanInfo  -> ReplM ReplRawBuiltin InterpretValue
   interpretExpr purity term = do
     pdb <- use (replEvalEnv . eePactDb)
     let builtins = replBuiltinEnv
     ps <- viewEvalEnv eeDefPactStep
-    let cekEnv = fromPurity $ CEKEnv mempty pdb builtins ps False
+    cekEnv <- liftIO $ fromPurity $ CEKEnv mempty pdb builtins ps False
     eval cekEnv term >>= \case
       VError txt _ ->
         throwError (PEExecutionError (EvalError txt) (view termInfo term))
@@ -142,7 +145,7 @@ interpretReplProgram (SourceCode _ source) display = do
     fromPurity env = case purity of
       PSysOnly -> sysOnlyEnv env
       PReadOnly -> readOnlyEnv env
-      PImpure -> env
+      PImpure -> pure env
   interpret (DesugarOutput tl _deps) = do
     case tl of
       RTLDefun df -> do
