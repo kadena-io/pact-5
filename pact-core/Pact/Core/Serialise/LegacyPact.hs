@@ -152,8 +152,11 @@ instance JD.FromJSON (DefPactContinuation FullyQualifiedName PactValue) where
 
 instance JD.FromJSON FullyQualifiedName where
   parseJSON = JD.withText "QualifiedName" $ \n -> case T.split (== '.') n  of
-    [mod', name] -> pure (FullyQualifiedName (ModuleName mod' Nothing) name (ModuleHash defaultPactHash))
+    [mod', name] -> pure (FullyQualifiedName (ModuleName mod' Nothing) name mh)
+    [ns, mod', name] -> pure (FullyQualifiedName (ModuleName mod' (Just (NamespaceName ns))) name mh)
     _ -> fail "unexpeced parsing"
+    where
+      mh = ModuleHash defaultPactHash
     
 -- instance JD.FromJSON QualifiedName where
 --   parseJSON = JD.withText "QualifiedName" $ \n -> case T.split (== '.') n  of
@@ -313,5 +316,14 @@ fromLegacyPactValue = \case
     Legacy_LTime utc -> PTime utc
   Legacy_PList v -> PList (fromLegacyPactValue <$> v)
   Legacy_PObject o -> PObject (fromLegacyPactValue <$> o)
-  Legacy_PGuard _g -> undefined
+  Legacy_PGuard g -> PGuard (guardToPactValue g)
   Legacy_PModRef mref -> PModRef mref
+
+
+guardToPactValue :: Guard FullyQualifiedName LegacyPactValue -> Guard FullyQualifiedName PactValue
+guardToPactValue = \case
+  (GKeyset ks) -> GKeyset ks
+  (GKeySetRef kref) -> GKeySetRef kref
+  (GUserGuard (UserGuard n tm)) -> GUserGuard (UserGuard n (fromLegacyPactValue <$> tm))
+  (GCapabilityGuard (CapabilityGuard n args i)) -> GCapabilityGuard (CapabilityGuard n (fromLegacyPactValue <$> args) i)
+  (GModuleGuard mg) -> GModuleGuard mg

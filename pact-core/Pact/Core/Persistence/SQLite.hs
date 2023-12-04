@@ -10,7 +10,6 @@ module Pact.Core.Persistence.SQLite (
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Control.Exception.Lifted (bracket)
 import Control.Monad.IO.Class (MonadIO, liftIO)
--- import qualified Data.Text as T
 import Data.IORef (newIORef, IORef, readIORef, atomicModifyIORef')
 import Data.Text (Text)
 import Control.Lens (view)
@@ -20,7 +19,7 @@ import Pact.Core.Guards (renderKeySetName, KeySetName(..))
 import Pact.Core.Names (renderModuleName, DefPactId(..), NamespaceName(..), TableName(..), RowKey(..), parseRenderedModuleName)
 import Pact.Core.Persistence (PactDb(..), Domain(..),
                               Purity(PImpure)
-                             ,WriteType(..) --, RowData(..)
+                             ,WriteType(..)
                              ,toUserTable
                              ,ExecutionMode(..), TxId(..)
                              )
