@@ -68,7 +68,7 @@ ordinaryDefPactStepExec (StepWithRollback expr _ _) = expr
 data ConstVal term
   = TermConst term
   | EvaledConst PactValue
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Show, Functor, Foldable, Traversable, Eq)
 
 data DefPact name ty builtin info
   = DefPact

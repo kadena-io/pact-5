@@ -229,7 +229,7 @@ isKeysetNameInSigs
   -> KeySetName
   -> m Bool
 isKeysetNameInSigs info pdb ksn = do
-  liftIO (readKeyset pdb ksn) >>= \case
+  liftIO (readKeySet pdb ksn) >>= \case
     Just ks -> isKeysetInSigs ks
     Nothing ->
       throwExecutionError info (NoSuchKeySet ksn)

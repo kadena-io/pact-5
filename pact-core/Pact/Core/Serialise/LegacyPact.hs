@@ -26,12 +26,10 @@ import Data.Maybe (fromMaybe)
 
 import Pact.Core.ChainData
 import Pact.Core.Hash
---import Pact.Core.Parser
 import Pact.Core.ModRefs
 import Pact.Core.Literal 
 import Data.Decimal
 import Pact.Time
---import qualified Data.Attoparsec.Text as AP
 import qualified Pact.JSON.Decode as JD
 import qualified Data.Text as T
 import Data.Vector(Vector)
@@ -283,8 +281,9 @@ instance JD.FromJSON (Guard FullyQualifiedName LegacyPactValue) where
     <|> GModuleGuard <$> JD.parseJSON v
     where
     parseRef = JD.withObject "KeySetRef" $ \o -> do
-      ref <- o JD..: "keysetref"
-      pure (KeySetName ref)
+      ref <- o JD..: "ksn"
+      ns <- o JD..:? "ns"
+      pure (KeySetName ref ns)
 
 
 instance JD.FromJSON (UserGuard FullyQualifiedName LegacyPactValue) where
@@ -327,3 +326,4 @@ guardToPactValue = \case
   (GUserGuard (UserGuard n tm)) -> GUserGuard (UserGuard n (fromLegacyPactValue <$> tm))
   (GCapabilityGuard (CapabilityGuard n args i)) -> GCapabilityGuard (CapabilityGuard n (fromLegacyPactValue <$> args) i)
   (GModuleGuard mg) -> GModuleGuard mg
+  (GDefPactGuard dpg) -> GDefPactGuard dpg

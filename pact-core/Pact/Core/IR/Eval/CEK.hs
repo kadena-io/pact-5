@@ -28,7 +28,9 @@ module Pact.Core.IR.Eval.CEK
   , evalWithStackFrame
   , emitEvent
   , emitCapability
-  , guardForModuleCall) where
+  , guardForModuleCall
+  , enforceKeyset
+  , enforceKeysetName ) where
 
 
 import Control.Lens
@@ -62,6 +64,8 @@ import Pact.Core.StableEncoding
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.DefPacts.Types
+import Control.Monad.IO.Class
+
 chargeNodeGas :: MonadEval b i m => NodeType -> m ()
 chargeNodeGas _nt = pure ()
   -- gm <- view (eeGasModel . geGasModel . gmNodes) <$> readEnv

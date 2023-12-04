@@ -63,7 +63,6 @@ import Data.Text(Text)
 import qualified Data.Text as T
 import Data.Word(Word64)
 import Control.Applicative((<|>))
-import qualified Data.Text as T
 import qualified Data.Char as Char
 import qualified Text.Megaparsec as MP
 import qualified Text.Megaparsec.Char as MP

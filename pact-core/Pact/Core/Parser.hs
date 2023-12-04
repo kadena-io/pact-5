@@ -44,13 +44,13 @@ keysetNameParser :: Parser KeySetName
 keysetNameParser = qualified <|> withoutNs
   where
     qualified = do
-      -- TODO ns <- ident style
+      ns <- NamespaceName <$> ident style
       kn <- dot *> ident style
-      pure $ KeySetName kn {- TODO (Just ns) -}
+      pure $ KeySetName kn (Just ns) -- TODO: @Georg, is this correct?
     withoutNs = do
       t <- takeText
       guard $ not $ T.null t
-      pure $ KeySetName t {- TODO Nothing -}
+      pure $ KeySetName t Nothing
 
 moduleNameParser :: Parser ModuleName
 moduleNameParser = do

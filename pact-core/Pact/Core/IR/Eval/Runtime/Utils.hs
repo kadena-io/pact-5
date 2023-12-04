@@ -7,7 +7,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE NamedFieldPuns #-}
 
 module Pact.Core.IR.Eval.Runtime.Utils
  ( mkBuiltinFn
@@ -40,7 +39,6 @@ import Control.Lens
 import Control.Monad(when)
 import Control.Monad.Except(MonadError(..))
 import Data.IORef (newIORef)
-import Data.Map.Strict(Map)
 import Data.Text(Text)
 import Data.Maybe(listToMaybe)
 import Data.Foldable(find)

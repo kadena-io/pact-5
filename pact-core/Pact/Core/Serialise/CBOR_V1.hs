@@ -92,8 +92,8 @@ instance Serialise ModuleName where
   decode = ModuleName <$> decode <*> decode
 
 instance Serialise KeySetName where
-  encode (KeySetName ksn) = encode ksn
-  decode = KeySetName <$> decode
+  encode (KeySetName ksn ns) = encode ksn <> encode ns
+  decode = KeySetName <$> decode <*> decode
 
 instance Serialise PublicKeyText where
   encode (PublicKeyText t) = encode t
@@ -282,6 +282,16 @@ instance
 
   decode = DefConst <$> decode <*> decode <*> decode <*> decode
 
+instance (Serialise b, Serialise i) => Serialise (ConstVal (Term Name Type b i)) where
+  encode = \case
+    TermConst t -> encodeWord 0 <> encode t
+    EvaledConst pv -> encodeWord 1 <> encode pv
+
+  decode = decodeWord >>= \case
+    0 -> TermConst <$> decode
+    1 -> EvaledConst <$> decode
+    _ -> fail "unexpected decoding"
+
 instance Serialise (FQNameRef Name) where
   encode (FQName fqn) = encode fqn
   decode = FQName <$> decode
@@ -304,7 +314,7 @@ instance Serialise (DefCapMeta Name) where
     0 -> pure DefEvent
     1 -> DefManaged <$> decode
     2 -> pure Unmanaged
-    _ -> fail "unexpected dcecoding"
+    _ -> fail "unexpected decoding"
 
 instance
   (Serialise b, Serialise i)
@@ -491,9 +501,9 @@ instance
 instance
   (Serialise b, Serialise i)
   => Serialise (EvalInterface b i) where
-  encode (Interface n defs h i) = encode n <> encode defs <> encode h <> encode i
+  encode (Interface n defs imp h i) = encode n <> encode defs <> encode imp <> encode h <> encode i
 
-  decode = Interface <$> decode <*> decode <*> decode <*> decode
+  decode = Interface <$> decode <*> decode <*> decode <*> decode <*> decode
 
 instance
   (Serialise b, Serialise i)
@@ -627,6 +637,7 @@ instance Serialise RawBuiltin where
     RawIsPrincipal -> encodeWord 111
     RawTypeOfPrincipal -> encodeWord 112
     RawValidatePrincipal -> encodeWord 113
+    RawCreateDefPactGuard -> encodeWord 114
 
   decode = decodeWord >>= \case
     0 -> pure RawAdd
@@ -743,6 +754,7 @@ instance Serialise RawBuiltin where
     111 -> pure RawIsPrincipal
     112 -> pure RawTypeOfPrincipal
     113 -> pure RawValidatePrincipal
+    114 -> pure RawCreateDefPactGuard
     _ -> fail "unexpeced decoding"
 
 
@@ -847,13 +859,19 @@ instance Serialise (Guard FullyQualifiedName PactValue) where
     GUserGuard ug -> encodeWord 2 <> encode ug
     GCapabilityGuard cg -> encodeWord 3 <> encode cg
     GModuleGuard mg -> encodeWord 4 <> encode mg
+    GDefPactGuard dpg -> encodeWord 5 <> encode dpg
   decode = decodeWord >>= \case
     0 -> GKeyset <$> decode
     1 -> GKeySetRef <$> decode
     2 -> GUserGuard <$> decode
     3 -> GCapabilityGuard <$> decode
     4 -> GModuleGuard <$> decode
+    5 -> GDefPactGuard <$> decode
     _ -> fail "unexpected decoding"
+
+instance Serialise DefPactGuard where
+  encode (DefPactGuard i name )= encode i <> encode name
+  decode = DefPactGuard <$> decode <*> decode
 
 instance Serialise ModRef where
   encode (ModRef mn imp ref) = encode mn <> encode imp <> encode ref

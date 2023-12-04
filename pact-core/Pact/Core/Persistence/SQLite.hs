@@ -15,7 +15,7 @@ import Data.Text (Text)
 import Control.Lens (view)
 import qualified Database.SQLite3 as SQL
 
-import Pact.Core.Guards (renderKeySetName, KeySetName(..))
+import Pact.Core.Guards (renderKeySetName, parseAnyKeysetName)
 import Pact.Core.Names (renderModuleName, DefPactId(..), NamespaceName(..), TableName(..), RowKey(..), parseRenderedModuleName)
 import Pact.Core.Persistence (PactDb(..), Domain(..),
                               Purity(PImpure)
@@ -67,7 +67,11 @@ initializePactDb serial db = do
 
 readKeys :: forall k v b i. SQL.Database -> Domain k v b i -> IO [k]
 readKeys db = \case
-  DKeySets -> withStmt db "SELECT rowkey FROM \"SYS:KEYSETS\" ORDER BY txid DESC" $ \stmt -> fmap KeySetName <$> collect stmt []
+  DKeySets -> withStmt db "SELECT rowkey FROM \"SYS:KEYSETS\" ORDER BY txid DESC" $ \stmt -> do
+    parsedKS <- fmap parseAnyKeysetName <$> collect stmt []
+    case sequence parsedKS of
+      Left _ -> fail "unexpected decoding"
+      Right v -> pure v
   DModules -> withStmt db "SELECT rowkey FROM \"SYS:MODULES\" ORDER BY txid DESC" $ \stmt -> fmap parseRenderedModuleName <$> collect stmt [] >>= \mns -> case sequence mns of
     Nothing -> error ""
     Just mns' -> pure mns'

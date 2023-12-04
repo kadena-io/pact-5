@@ -687,7 +687,7 @@ keysetRefGuard info b cont handler env = \case
     Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
     Right ksn -> do
       let pdb = view cePactDb env
-      liftDbFunction info (readKeyset pdb ksn) >>= \case
+      liftDbFunction info (readKeySet pdb ksn) >>= \case
         Nothing -> returnCEK cont handler (VError ("no such keyset defined: " <> g) info)
         Just _ -> returnCEKValue cont handler (VGuard (GKeySetRef ksn))
   args -> argsError info b args
@@ -1050,7 +1050,7 @@ defineKeySet' info cont handler env ksname newKs  = do
       let writeKs = do
             liftDbFunction info (writeKeySet pdb Write ksn newKs)
             returnCEKValue cont handler (VString "Keyset write success")
-      liftDbFunction info (readKeyset pdb ksn) >>= \case
+      liftDbFunction info (readKeySet pdb ksn) >>= \case
         Just oldKs -> do
           cond <- isKeysetInSigs oldKs
           if cond then writeKs
