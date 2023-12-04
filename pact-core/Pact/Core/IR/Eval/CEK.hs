@@ -14,8 +14,8 @@ module Pact.Core.IR.Eval.CEK
   , evalCap
   , nameToFQN
   , guardTable
-  , enforceKeyset
-  , enforceKeysetName
+  , isKeysetInSigs
+  , isKeysetNameInSigs
   , requireCap
   , installCap
   , composeCap
@@ -33,7 +33,6 @@ module Pact.Core.IR.Eval.CEK
 
 import Control.Lens
 import Control.Monad(zipWithM, unless, when)
-import Control.Monad.IO.Class
 import Data.Default
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Foldable(find, foldl')
@@ -98,8 +97,13 @@ evalCEK cont handler env (Var n info)  = do
           returnCEKValue cont handler dfunClo
         -- Todo: this should be GADT'd out
         -- and defconsts should already be evaluated
-        Just (DConst d) ->
-          evalCEK cont handler (set ceLocal mempty env) (_dcTerm d)
+        Just (DConst d) -> case _dcTerm d of
+          -- Todo: should this be an error?
+          -- probably.
+          TermConst term ->
+            evalCEK cont handler (set ceLocal mempty env) term
+          EvaledConst v ->
+            returnCEKValue cont handler (VPactValue v)
         Just (DPact d) -> do
           dpactClo <- mkDefPactClosure info fqn d env
           returnCEKValue cont handler dpactClo
@@ -513,8 +517,7 @@ acquireModuleAdmin i env mdl = do
   mc <- useEvalState (esCaps . csModuleAdmin)
   unless (S.member (_mName mdl) mc) $ case _mGovernance mdl of
     KeyGov ksn -> do
-      signed <- enforceKeysetName i (view cePactDb env) ksn
-      unless signed $ throwExecutionError i (ModuleGovernanceFailure (_mName mdl))
+      enforceKeysetNameAdmin i (_mName mdl) ksn
       esCaps . csModuleAdmin %== S.insert (_mName mdl)
     CapGov (ResolvedGov fqn) -> do
       let wcapBody = Constant LUnit i
@@ -674,8 +677,8 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
               evalCEK sfCont handler inCapEnv capBody
               -- evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
             VError v i -> returnCEK currCont handler (VError v i)
-        _ -> failInvariant def "user managed cap is an invalid defn"
-    _ -> failInvariant def "Invalid managed cap type"
+        _ -> failInvariant info "user managed cap is an invalid defn"
+    _ -> failInvariant info "Invalid managed cap type"
   evalAutomanagedCap cont' env' capBody managedCap = case _mcManaged managedCap of
     AutoManaged b -> do
       if b then returnCEK currCont handler (VError "Automanaged capability used more than once" info)

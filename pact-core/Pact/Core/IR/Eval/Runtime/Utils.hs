@@ -12,7 +12,6 @@
 module Pact.Core.IR.Eval.Runtime.Utils
  ( mkBuiltinFn
  , enforcePactValue
- , getAllStackCaps
  , checkSigCaps
  , lookupFqName
  , typecheckArgument
@@ -43,7 +42,6 @@ import Control.Monad.Except(MonadError(..))
 import Data.IORef (newIORef)
 import Data.Map.Strict(Map)
 import Data.Text(Text)
-import Data.Set(Set)
 import Data.Maybe(listToMaybe)
 import Data.Foldable(find)
 import qualified Data.Map.Strict as M
@@ -52,14 +50,12 @@ import qualified Data.Set as S
 import Pact.Core.Names
 import Pact.Core.PactValue
 import Pact.Core.Builtin
-import Pact.Core.Guards
 import Pact.Core.IR.Term
 import Pact.Core.ModRefs
 import Pact.Core.Type
 import Pact.Core.Errors
 import Pact.Core.IR.Eval.Runtime.Types
 import Pact.Core.Literal
-import Pact.Core.Capabilities
 import Pact.Core.Persistence
 import Pact.Core.Environment
 import Pact.Core.DefPacts.Types
@@ -83,28 +79,6 @@ mkBuiltinFn i b env fn =
   -- InstallCapFrame fqn -> InstallCapFrame <$> f fqn
   -- EmitEventFrame fqn -> EmitEventFrame <$> f fqn
   -- CreateUserGuardFrame fqn -> CreateUserGuardFrame <$> f fqn
-
-getAllStackCaps
-  :: MonadEval b i m
-  => m (Set (CapToken QualifiedName PactValue))
-getAllStackCaps = do
-  S.fromList . concatMap capToList <$> useEvalState (esCaps . csSlots)
-  where
-  capToList (CapSlot c cs) = c:cs
-
--- Todo: capautonomous
-checkSigCaps
-  :: MonadEval b i m
-  => Map PublicKeyText (Set (CapToken QualifiedName PactValue))
-  -> m (Map PublicKeyText (Set (CapToken QualifiedName PactValue)))
-checkSigCaps sigs = do
-  granted <- getAllStackCaps
-  autos <- useEvalState (esCaps . csAutonomous)
-  pure $ M.filter (match (S.null autos) granted) sigs
-  where
-  match allowEmpty granted sigCaps =
-    (S.null sigCaps && allowEmpty) ||
-    not (S.null (S.intersection granted sigCaps))
 
 enforcePactValue :: (MonadEval b i m) => i -> CEKValue b i m -> m PactValue
 enforcePactValue info = \case

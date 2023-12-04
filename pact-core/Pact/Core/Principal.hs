@@ -13,12 +13,13 @@ import Data.Attoparsec.Text
 import Data.Char(isHexDigit)
 import Data.Text(Text)
 import Text.Parser.Combinators(eof)
+import Text.Parser.Token
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Text as T
 
 import Pact.Core.Guards
 import Pact.Core.Names
-import Pact.Core.Parser
+import Pact.Core.RuntimeParsers
 
 data Principal
   = K !PublicKeyText
@@ -118,3 +119,26 @@ principalParser = alts <* void eof
 
     char' = void . char
     prefix ch = char ch >> char' ':'
+
+
+nameMatcher :: Parser Text
+nameMatcher = asMatcher $ qualifiedNameMatcher
+                      <|> bareNameMatcher
+  where
+    bareNameMatcher :: Parser ()
+    bareNameMatcher = void $ ident' style
+    qualifiedNameMatcher :: Parser ()
+    qualifiedNameMatcher = do
+      void $ ident' style
+      void $ dot *> ident' style
+      void $ optional (dot *> ident' style)
+    asMatcher :: Parser a -> Parser Text
+    asMatcher = fmap fst . match
+
+moduleNameParser :: Parser ModuleName
+moduleNameParser = do
+  a <- ident style
+  b <- optional (dot *> ident style)
+  case b of
+    Nothing -> pure $ ModuleName a Nothing
+    Just b' -> pure $ ModuleName b' (Just $ NamespaceName a)

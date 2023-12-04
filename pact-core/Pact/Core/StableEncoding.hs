@@ -71,6 +71,7 @@ instance J.Encode (StableEncoding (Guard FullyQualifiedName PactValue)) where
     GUserGuard ug -> J.build (StableEncoding ug)
     GCapabilityGuard cg -> J.build (StableEncoding cg)
     GModuleGuard mg -> J.build (StableEncoding mg)
+    GDefPactGuard dpg -> J.build (StableEncoding dpg)
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `CapabilityGuard FullyQualifiedName PactValue`
@@ -101,6 +102,14 @@ instance J.Encode (StableEncoding ModuleGuard) where
     ]
   {-# INLINABLE build #-}
 
+-- | Stalbe encoding of `DefPactGuard`
+instance J.Encode (StableEncoding DefPactGuard) where
+  build (StableEncoding (DefPactGuard dpid name)) = J.object
+    [ "pactId" J..= StableEncoding dpid
+    , "name" J..= name
+    ]
+  {-# INLINABLE build #-}
+
 -- | Stable encoding of `UserGuard FullyQualifiedName PactValue`
 instance J.Encode (StableEncoding (UserGuard FullyQualifiedName PactValue)) where
   build (StableEncoding (UserGuard fun args)) = J.object
@@ -112,7 +121,10 @@ instance J.Encode (StableEncoding (UserGuard FullyQualifiedName PactValue)) wher
 -- TODO: KeySetName is namespaced (maybe)
 -- | Stable encoding of `KeySetName`
 instance J.Encode (StableEncoding KeySetName) where
-  build (StableEncoding (KeySetName ksn)) = J.build ksn
+  build (StableEncoding (KeySetName ksn mns)) =
+    case mns of
+         Nothing -> J.build ksn
+         Just ns -> J.object [ "ns" J..= StableEncoding ns, "ksn" J..= ksn ]
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `KeySet FullyQualifiedName`
