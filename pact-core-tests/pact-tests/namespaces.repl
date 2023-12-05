@@ -197,7 +197,7 @@
 (begin-tx)
 (env-data { 'user: ["user"], 'admin: ["admin"] })
 (env-keys [])
-(env-exec-config [])
+(env-exec-config ['RequireKeysetNs])
 (expect-failure
  "ensure user keyset does not pass"
  (enforce-keyset (read-keyset 'user)))
