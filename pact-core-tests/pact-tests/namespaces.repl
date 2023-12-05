@@ -75,6 +75,8 @@
 (commit-tx)
 (begin-tx)
 
+(env-exec-config ['RequireKeysetNs])
+
 (env-data
   { "carl-keys" : ["carl"]
   , "carl.carl-keys": ["carl"]
