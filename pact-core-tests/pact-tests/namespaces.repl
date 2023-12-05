@@ -278,7 +278,7 @@
 
 (begin-tx)
 
-(env-exec-config [])
+(env-exec-config ['RequireKeysetNs])
 
 (expect
   "Setting namespace back to root namespace post-Pact 4.7 fork succeeds"
