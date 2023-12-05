@@ -28,15 +28,14 @@ module Pact.Core.Persistence
  , readDefPacts, writeDefPacts
  , readNamespace, writeNamespace
  , GuardTableOp(..)
- , DbOpException(..)
  , TxId(..)
  , TxLog(..)
- , dbOpDisallowed
  , toUserTable
  , FQKS
  ) where
 
 import Control.Lens
+import Control.Monad.IO.Class (MonadIO)
 import Control.Exception(throwIO, Exception)
 import Control.Applicative((<|>))
 import Data.Default
@@ -44,7 +43,9 @@ import Data.IORef (IORef)
 import Data.Map.Strict(Map)
 import Data.Text(Text)
 import Data.Word(Word64)
+import Pact.Core.Errors (dbOpDisallowed)
 
+import Pact.Core.Environment.State (TxId(..), Loaded(..), esLoaded, HasLoaded(..), ModuleData(..), MonadEvalState)
 import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.IR.Term
@@ -56,14 +57,6 @@ import Pact.Core.Namespace
 
 import Data.Dynamic (Typeable)
 
--- | Modules as they are stored
--- in our backend.
--- That is: All module definitions, as well as their dependencies
--- Todo: bikeshed this name? This contains interface data
-data ModuleData b i
-  = ModuleData (EvalModule b i) (Map FullyQualifiedName (EvalDef b i))
-  | InterfaceData (EvalInterface b i) (Map FullyQualifiedName (EvalDef b i))
-  deriving (Show, Eq, Functor)
 
 mdModuleName :: Lens' (ModuleData b i) ModuleName
 mdModuleName f = \case
@@ -92,9 +85,6 @@ data ExecutionMode
   = Transactional
   | Local
   deriving (Eq,Show)
-
-newtype TxId = TxId { _txId :: Word64 }
-    deriving (Eq,Ord, Show)
 
 -- | Transaction record.
 data TxLog v
@@ -148,66 +138,49 @@ data Purity
   deriving (Eq,Show,Ord,Bounded,Enum)
 
 -- | Fun-record type for Pact back-ends.
-data PactDb b i
+data PactDb m b i
   = PactDb
   { _pdbPurity :: !Purity
-  , _pdbRead :: forall k v. Domain k v b i -> k -> IO (Maybe v)
-  , _pdbWrite :: forall k v. WriteType -> Domain k v b i -> k -> v -> IO ()
-  , _pdbKeys :: forall k v. Domain k v b i -> IO [k]
-  , _pdbCreateUserTable :: TableName -> IO ()
-  , _pdbBeginTx :: ExecutionMode -> IO (Maybe TxId)
-  , _pdbCommitTx :: IO ()
-  , _pdbRollbackTx :: IO ()
-  , _pdbTxIds :: TableName -> TxId -> IO [TxId]
-  , _pdbGetTxLog :: TableName -> TxId -> IO [TxLog RowData]
-  , _pdbTxId :: IORef TxId
-    -- ^ A mutable reference to the currently running pact transaction.
-    -- TODO: This field is morally part of
+  , _pdbRead :: forall k v. Domain k v b i -> k -> m (Maybe v)
+  , _pdbWrite :: forall k v. WriteType -> Domain k v b i -> k -> v -> m ()
+  , _pdbKeys :: forall k v. Domain k v b i -> m [k]
+  , _pdbCreateUserTable :: TableName -> m ()
+  , _pdbBeginTx :: ExecutionMode -> m (Maybe TxId)
+  , _pdbCommitTx :: m ()
+  , _pdbRollbackTx :: m ()
+  , _pdbTxIds :: TableName -> TxId -> m [TxId]
+  , _pdbGetTxLog :: TableName -> TxId -> m [TxLog RowData]
   }
+
 
 makeClassy ''PactDb
 
 -- Potentially new Pactdb abstraction
 -- That said: changes in `Purity` that restrict read/write
 -- have to be done for all read functions.
-readModule :: PactDb b i -> ModuleName -> IO (Maybe (ModuleData b i))
+readModule :: PactDb m b i -> ModuleName -> m (Maybe (ModuleData b i))
 readModule pdb = _pdbRead pdb DModules
 
-writeModule :: PactDb b i -> WriteType -> ModuleName -> ModuleData b i -> IO ()
+writeModule :: PactDb m b i -> WriteType -> ModuleName -> ModuleData b i -> m ()
 writeModule pdb wt = _pdbWrite pdb wt DModules
 
-readKeySet :: PactDb b i -> KeySetName -> IO (Maybe FQKS)
+readKeySet :: PactDb m b i -> KeySetName -> m (Maybe FQKS)
 readKeySet pdb = _pdbRead pdb DKeySets
 
-writeKeySet :: PactDb b i -> WriteType -> KeySetName -> FQKS -> IO ()
+writeKeySet :: PactDb m b i -> WriteType -> KeySetName -> FQKS -> m ()
 writeKeySet pdb wt = _pdbWrite pdb wt DKeySets
 
-readDefPacts :: PactDb b i -> DefPactId -> IO (Maybe (Maybe DefPactExec))
+readDefPacts :: PactDb m b i -> DefPactId -> m (Maybe (Maybe DefPactExec))
 readDefPacts pdb = _pdbRead pdb DDefPacts
 
-writeDefPacts :: PactDb b i -> WriteType -> DefPactId -> Maybe DefPactExec -> IO ()
+writeDefPacts :: PactDb m b i -> WriteType -> DefPactId -> Maybe DefPactExec -> m ()
 writeDefPacts pdb wt = _pdbWrite pdb wt DDefPacts
 
-readNamespace :: PactDb b i -> NamespaceName -> IO (Maybe Namespace)
+readNamespace :: PactDb m b i -> NamespaceName -> m (Maybe Namespace)
 readNamespace pdb = _pdbRead pdb DNamespaces
 
-writeNamespace :: PactDb b i -> WriteType -> NamespaceName -> Namespace -> IO ()
+writeNamespace :: PactDb m b i -> WriteType -> NamespaceName -> Namespace -> m ()
 writeNamespace pdb wt = _pdbWrite pdb wt DNamespaces
-
-data DbOpException
-  = WriteException
-  | NoSuchTable TableName
-  | TableAlreadyExists TableName
-  | TxAlreadyBegun TxId
-  | NoTxToCommit
-  | NoTxLog TableName TxId
-  | OpDisallowed
-  deriving (Show, Eq, Typeable)
-
-dbOpDisallowed :: IO a
-dbOpDisallowed = throwIO OpDisallowed
-
-instance Exception DbOpException
 
 data GuardTableOp
   = GtRead
@@ -222,31 +195,6 @@ data GuardTableOp
   | GtCreateTable
   deriving Show
 
--- | Our loaded modules, names in top-level scope and fully qualified dependencies.
-data Loaded b i
-  = Loaded
-  { _loModules :: Map ModuleName (ModuleData b i)
-  -- ^ All loaded modules and interfaces
-  , _loToplevel :: Map Text (FullyQualifiedName, DefKind)
-  -- ^ All names bound @ the top level scope, that is, by `(use)` statements
-  -- or module loads
-  , _loNamespace :: Maybe Namespace
-  -- ^ The potentially loaded current namespace
-  , _loAllLoaded :: Map FullyQualifiedName (Def Name Type b i)
-  -- ^ All of our fully qualified dependencies
-  } deriving Show
-
-makeClassy ''Loaded
-
-instance Semigroup (Loaded b i) where
-  (Loaded ms tl ns al) <> (Loaded ms' tl' ns' al') =
-    Loaded (ms <> ms') (tl <> tl') (ns <|> ns') (al <> al')
-
-instance Monoid (Loaded b i) where
-  mempty = Loaded mempty mempty Nothing mempty
-
-instance Default (Loaded b i) where
-  def = Loaded mempty mempty Nothing mempty
 
 
 toUserTable :: TableName -> Text

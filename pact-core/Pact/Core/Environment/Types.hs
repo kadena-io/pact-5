@@ -20,8 +20,6 @@ module Pact.Core.Environment.Types
  , eePublicData, eeMode, eeFlags
  , eeNatives
  , eeNamespacePolicy
- , PactState(..)
- , psLoaded
  , TxCreationTime(..)
  , PublicData(..)
  , pdPublicMeta, pdBlockHeight
@@ -35,7 +33,6 @@ module Pact.Core.Environment.Types
  , cdBlockTime, cdPrevBlockHash
  , cdSender, cdGasLimit, cdGasPrice
  , EvalState(..)
- , HasEvalState(..)
  , StackFrame(..)
  , StackFunctionType(..)
  , flagRep
@@ -70,6 +67,7 @@ import Pact.Core.ChainData
 import Pact.Core.Errors
 import Pact.Core.Gas
 import Pact.Core.Namespace
+import Pact.Core.Environment.State (EvalState(..), esLoaded, MonadEvalState, HasEvalState, StackFrame(..), StackFunctionType(..))
 
 -- | Execution flags specify behavior of the runtime environment,
 -- with an orientation towards some alteration of a default behavior.
@@ -126,52 +124,12 @@ data EvalEnv b i
 
 makeLenses ''EvalEnv
 
-newtype PactState b i
-  = PactState
-  { _psLoaded :: Loaded b i
-  }
-
-makeLenses ''PactState
-
-data StackFunctionType
-  = SFDefun
-  | SFDefcap
-  | SFDefPact
-  deriving (Eq, Show, Enum, Bounded)
-
-data StackFrame
-  = StackFrame
-  { _sfFunction :: Text
-  , _sfModule :: ModuleName
-  , _sfFnType :: StackFunctionType }
-  deriving Show
-
-data EvalState b i
-  = EvalState
-  { _esCaps :: CapState QualifiedName PactValue
-  , _esStack :: [StackFrame]
-  , _esEvents :: [PactEvent PactValue]
-  , _esLoaded :: Loaded b i
-  , _esDefPactExec :: Maybe DefPactExec
-  , _esTxId :: Maybe TxId
-  } deriving Show
-
-instance Default (EvalState b i) where
-  def = EvalState def [] [] mempty Nothing Nothing
-
-makeClassy ''EvalState
 
 instance HasLoaded (EvalState b i) b i where
   loaded = esLoaded
 
 class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
   readEnv :: m (EvalEnv b i)
-
--- | Our monad mirroring `EvalState` for our evaluation state
-class Monad m => MonadEvalState b i m | m -> b, m -> i where
-  getEvalState :: m (EvalState b i)
-  putEvalState :: EvalState b i -> m ()
-  modifyEvalState :: (EvalState b i -> EvalState b i) -> m ()
 
 -- Our General constraint for evaluation and general analysis
 type MonadEval b i m =

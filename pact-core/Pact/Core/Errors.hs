@@ -14,6 +14,7 @@ module Pact.Core.Errors
  , ArgTypeError(..)
  , peInfo
  , liftDbFunction
+ , dbOpDisallowed
  ) where
 
 import Control.Lens hiding (ix)
@@ -22,6 +23,7 @@ import Control.Monad.IO.Class(MonadIO(..))
 import Control.Exception
 import Data.Text(Text)
 import Data.Dynamic (Typeable)
+import Data.Word(Word64)
 
 import Pact.Core.Type
 import Pact.Core.Names
@@ -29,7 +31,6 @@ import Pact.Core.Guards
 import Pact.Core.Info
 import Pact.Core.Pretty(Pretty(..))
 import Pact.Core.Hash
-import Pact.Core.Persistence
 import Pact.Core.DefPacts.Types
 
 import qualified Pact.Core.Pretty as Pretty
@@ -498,3 +499,19 @@ liftDbFunction
 liftDbFunction info action = do
   e <- liftIO $ catch (Right <$> action) (pure . Left . DbOpFailure)
   either (throwError . (`PEExecutionError` info)) pure e
+
+
+data DbOpException
+  = WriteException
+  | NoSuchTable TableName
+  | TableAlreadyExists TableName
+  | TxAlreadyBegun Word64
+  | NoTxToCommit
+  | NoTxLog TableName Word64
+  | OpDisallowed
+  deriving (Show, Eq, Typeable)
+
+dbOpDisallowed :: IO a
+dbOpDisallowed = throwIO OpDisallowed
+
+instance Exception DbOpException
