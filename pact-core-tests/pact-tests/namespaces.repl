@@ -126,8 +126,7 @@
   (defconst TBOOL true)
 )
 
-; Todo: namespaced keysets here
-;  (env-exec-config ['DisablePact44])
+(env-exec-config [])
 (env-data { "test-keys" : ["test"] })
 (define-keyset 'test-keys)
 (env-keys ["test"])
