@@ -178,7 +178,7 @@
   )
 
 (begin-tx)
-; Todo: namespaced keysets here
+(env-exec-config [])
 (env-data { 'user: ["user"], 'admin: ["admin"] })
 (define-namespace 'ns-user-behavior (read-keyset 'user) (read-keyset 'admin))
 (namespace 'ns-user-behavior)
