@@ -296,7 +296,8 @@ newtype EvalM b i a =
     ( Functor, Applicative, Monad
     , MonadIO
     , MonadThrow
-    , MonadCatch)
+    , MonadCatch
+    , MonadError (PactError i))
   via (ReaderT (EvalEnv b i) (ExceptT (PactError i) (StateT (EvalState b i) IO)))
 
 runEvalM
