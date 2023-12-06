@@ -10,6 +10,7 @@ import qualified Pact.Core.Test.SerialiseTests as SerialiseTests
 import qualified Pact.Core.Test.LegacySerialiseTests as LegacySerialiseTests
 import qualified Pact.Core.Test.ZkTests as ZkTests
 import qualified Pact.Core.Test.PoseidonTests as PoseidonTests
+import qualified Pact.Core.Test.StaticErrorTests as StaticErrorTests
 
 main :: IO ()
 main = do
@@ -23,4 +24,5 @@ main = do
     , ZkTests.tests
     , PoseidonTests.tests
     , PersistenceTests.tests
+    , StaticErrorTests.tests
     ]

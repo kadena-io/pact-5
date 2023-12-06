@@ -313,3 +313,4 @@ test-suite core-tests
     , Pact.Core.Test.ZkTests
     , Pact.Core.Test.PoseidonTests
     , Pact.Core.Test.StaticErrorTests
+    , Pact.Core.Test.TestPrisms
