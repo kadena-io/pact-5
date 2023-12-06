@@ -107,6 +107,7 @@ import Pact.Core.Capabilities
 import Pact.Core.Environment
 import Pact.Core.DefPacts.Types (DefPactExec)
 import Pact.Core.Errors
+import Pact.Core.Debug
 
 import qualified Pact.Core.Pretty as P
 import qualified Pact.Core.DefPacts.Types as P
@@ -304,6 +305,9 @@ newtype EvalM b i a =
     , MonadCatch
     , MonadError (PactError i))
   via (ReaderT (EvalEnv b i) (ExceptT (PactError i) (StateT (EvalState b i) IO)))
+
+instance PhaseDebug b i (EvalM b i) where
+  debugPrint _ _ = pure ()
 
 runEvalM
   :: EvalEnv b i
