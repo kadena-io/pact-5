@@ -111,7 +111,6 @@ library
     Pact.Core.ChainData
     Pact.Core.Environment
     Pact.Core.Environment.Utils
-    Pact.Core.Environment.State
     Pact.Core.Environment.Types
     Pact.Core.StableEncoding
     Pact.Core.Principal
