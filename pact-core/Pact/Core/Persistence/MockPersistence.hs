@@ -45,7 +45,6 @@ mockPactDb = do
     , _pdbRollbackTx = rollbackTx refRb refTxLog refMod refKs refUsrTbl
     , _pdbTxIds = txIds refTxLog
     , _pdbGetTxLog = txLog refTxLog
-    , _pdbTxId = refTxId
     }
   where
   beginTx refRb refTxId refTxLog refMod refKs refUsrTbl em = do

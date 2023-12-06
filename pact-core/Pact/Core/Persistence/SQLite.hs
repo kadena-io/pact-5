@@ -62,7 +62,6 @@ initializePactDb serial db = do
     , _pdbRollbackTx = rollbackTx db
     , _pdbTxIds = error "no txids"
     , _pdbGetTxLog = error "no txlog"
-    , _pdbTxId = txId
     }
 
 readKeys :: forall k v b i. SQL.Database -> Domain k v b i -> IO [k]

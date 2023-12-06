@@ -130,7 +130,7 @@ interpretReplProgram (SourceCode _ source) display = do
     pdb <- use (replEvalEnv . eePactDb)
     let builtins = replBuiltinEnv
     ps <- viewEvalEnv eeDefPactStep
-    cekEnv <- liftIO $ fromPurity $ CEKEnv mempty pdb builtins ps False
+    let cekEnv = fromPurity $ CEKEnv mempty pdb builtins ps False
     eval cekEnv term >>= \case
       VError txt _ ->
         throwError (PEExecutionError (EvalError txt) (view termInfo term))
@@ -145,7 +145,7 @@ interpretReplProgram (SourceCode _ source) display = do
     fromPurity env = case purity of
       PSysOnly -> sysOnlyEnv env
       PReadOnly -> readOnlyEnv env
-      PImpure -> pure env
+      PImpure -> env
   interpret (DesugarOutput tl _deps) = do
     case tl of
       RTLDefun df -> do

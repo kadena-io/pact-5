@@ -38,7 +38,6 @@ module Pact.Core.IR.Eval.Runtime.Utils
 import Control.Lens
 import Control.Monad(when)
 import Control.Monad.Except(MonadError(..))
-import Data.IORef (newIORef)
 import Data.Text(Text)
 import Data.Maybe(listToMaybe)
 import Data.Foldable(find)
@@ -193,11 +192,10 @@ asBool
 asBool _ _ (PLiteral (LString b)) = pure b
 asBool i b pv = argsError i b [VPactValue pv]
 
-readOnlyEnv :: CEKEnv b i m -> IO (CEKEnv b i m)
+readOnlyEnv :: CEKEnv b i m -> CEKEnv b i m
 readOnlyEnv e
-  | view (cePactDb . pdbPurity) e == PSysOnly = pure e
-  | otherwise = do
-      txId <- newIORef (TxId 0)
+  | view (cePactDb . pdbPurity) e == PSysOnly = e
+  | otherwise =
       let pdb = view cePactDb  e
           newPactdb =
               PactDb
@@ -211,16 +209,13 @@ readOnlyEnv e
              , _pdbRollbackTx = dbOpDisallowed
              , _pdbTxIds = \_ _ -> dbOpDisallowed
              , _pdbGetTxLog = \_ _ -> dbOpDisallowed
-             , _pdbTxId = txId
              }
-      pure $ set cePactDb newPactdb e
+      in set cePactDb newPactdb e
 
-sysOnlyEnv :: forall b i m. CEKEnv b i m -> IO (CEKEnv b i m)
+sysOnlyEnv :: forall b i m. CEKEnv b i m -> CEKEnv b i m
 sysOnlyEnv e
-  | view (cePactDb . pdbPurity) e == PSysOnly = pure e
+  | view (cePactDb . pdbPurity) e == PSysOnly = e
   | otherwise =
-    do
-      txId <- newIORef (TxId 0)
       let newPactdb =
               PactDb
               { _pdbPurity = PSysOnly
@@ -233,9 +228,8 @@ sysOnlyEnv e
               , _pdbRollbackTx = dbOpDisallowed
               , _pdbTxIds = \_ _ -> dbOpDisallowed
               , _pdbGetTxLog = \_ _ -> dbOpDisallowed
-              , _pdbTxId = txId
               }
-      pure $ set cePactDb newPactdb e
+      in set cePactDb newPactdb e
   where
   pdb = view cePactDb e
   read' :: Domain k v b i -> k -> IO (Maybe v)
