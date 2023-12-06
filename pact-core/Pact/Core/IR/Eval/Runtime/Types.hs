@@ -31,8 +31,8 @@ module Pact.Core.IR.Eval.Runtime.Types
  , CondFrame(..)
  , Closure(..)
  , EvalResult(..)
- , EvalTEnv(..)
- , emGas, emGasLog, emRuntimeEnv
+--  , EvalTEnv(..)
+--  , emGas, emGasLog, emRuntimeEnv
  , EvalState(..)
  , esStack
  , esCaps, esEvents
@@ -86,7 +86,7 @@ import Data.Map.Strict(Map)
 import Data.Decimal(Decimal)
 import Data.Vector(Vector)
 import Data.RAList(RAList)
-import Data.IORef
+-- import Data.IORef
 
 import Pact.Core.Names
 import Pact.Core.Guards
@@ -278,25 +278,25 @@ data EvalResult b i m
   deriving Show
 
 
-data EvalTEnv b i m
-  = EvalTEnv
-  { _emRuntimeEnv :: CEKEnv b i (EvalT b i m)
-  , _emGas :: IORef Gas
-  , _emGasLog :: IORef (Maybe [(Text, Gas)])
-  }
+-- data EvalTEnv b i
+--   = EvalTEnv
+--   { _emRuntimeEnv :: EvalEnv b i
+--   , _emGas :: IORef Gas
+--   , _emGasLog :: IORef (Maybe [(Text, Gas)])
+--   }
 
 -- Todo: are we going to inject state as the reader monad here?
 newtype EvalT b i m a =
-  EvalT (ReaderT (EvalTEnv b i m) (StateT (EvalState b i) m) a)
+  EvalT (ReaderT (EvalEnv b i) (StateT (EvalState b i) m) a)
   deriving
     ( Functor, Applicative, Monad
     , MonadIO
     , MonadThrow
     , MonadCatch)
-  via (ReaderT (EvalTEnv b i m) (StateT (EvalState b i) m))
+  via (ReaderT (EvalEnv b i) (StateT (EvalState b i) m))
 
 runEvalT
-  :: EvalTEnv b i m
+  :: EvalEnv b i
   -> EvalState b i
   -> EvalT b i m a
   -> m (a, EvalState b i)
@@ -437,19 +437,19 @@ instance (Show i, Show b, Pretty b) => Pretty (CEKValue b i m) where
       P.angles "closure#"
 
 makeLenses ''CEKEnv
-makeLenses ''EvalTEnv
+-- makeLenses ''EvalEnv
 
 instance (MonadIO m) => MonadGas (EvalT b i m) where
-  logGas msg g = do
-    r <- EvalT $ view emGasLog
-    liftIO $ modifyIORef' r (fmap ((msg, g):))
+  logGas _msg _g = pure ()
+    -- r <- EvalT $ view emGasLog
+    -- liftIO $ modifyIORef' r (fmap ((msg, g):))
 
-  chargeGas g = do
-    r <- EvalT $ view emGas
-    liftIO (modifyIORef' r (<> g))
+  chargeGas _g = pure ()
+    -- r <- EvalT $ view emGas
+    -- liftIO (modifyIORef' r (<> g))
 
--- instance (MonadIO m) => MonadEvalEnv b i (EvalT b i m) where
---   readEnv = EvalT $ view emRuntimeEnv
+instance (MonadIO m) => MonadEvalEnv b i (EvalT b i m) where
+  readEnv = EvalT ask
 
 instance Monad m => MonadEvalState b i (EvalT b i m) where
   getEvalState = EvalT get
