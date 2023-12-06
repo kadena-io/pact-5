@@ -70,6 +70,7 @@ import Pact.Core.ChainData
 import Pact.Core.Errors
 import Pact.Core.Gas
 import Pact.Core.Namespace
+import Pact.Core.Builtin
 
 -- | Execution flags specify behavior of the runtime environment,
 -- with an orientation towards some alteration of a default behavior.

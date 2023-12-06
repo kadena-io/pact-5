@@ -11,10 +11,9 @@ import Control.Monad.State.Strict
 import Control.Exception(throwIO)
 import Data.Char(isSpace)
 import Data.Text(Text)
-import Data.ByteString(ByteString)
-import Data.ByteString.Internal(w2c)
+-- import Data.ByteString(ByteString)
 
-import qualified Data.ByteString as B
+-- import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
@@ -117,15 +116,15 @@ tokens :-
 -- TODO: non-horrible errors
 scan :: LexerM PosToken
 scan = do
-  input@(AlexInput sLine sCol _ bs) <- get
+  input@(AlexInput sLine sCol _ txt) <- get
   case alexScan input 0 of
     AlexEOF -> pure (PosToken TokenEOF (SpanInfo sLine sCol (sLine+1) 0))
 
     AlexError (AlexInput eLine eCol  _last inp) ->
       let li = SpanInfo sLine sCol eLine eCol
-      in case B.uncons inp of
+      in case T.uncons inp of
         Just (h, _) ->
-          throwLexerError (LexicalError (w2c h) _last) li
+          throwLexerError (LexicalError h _last) li
         Nothing -> throwLexerError (OutOfInputError _last) li
     AlexSkip input' _ -> do
       put input'
@@ -134,7 +133,7 @@ scan = do
       put input'
       let
         span' = SpanInfo sLine sCol eLine eCol
-        t = T.decodeLatin1 (B.take (fromIntegral tokl) bs)
+        t = T.take (fromIntegral tokl) txt
       action t span'
 
 stringLiteral :: Text -> SpanInfo -> LexerM PosToken
@@ -144,9 +143,9 @@ stringLiteral _ info = do
   pure (PosToken (TokenString (T.pack body)) info)
   where
   loop acc inp =
-    case alexGetByte inp of
+    case lexerGetChar inp of
       Just (c, rest) ->
-        handleChar acc (w2c c) rest
+        handleChar acc c rest
       Nothing -> throwLexerError' $ StringLiteralError "did not close string literal"
   handleChar acc c rest
     | c == '\\' = escape acc rest
@@ -155,15 +154,15 @@ stringLiteral _ info = do
     | c == '\"' = reverse acc <$ put rest
     | otherwise = loop (c:acc) rest
   multiLine acc inp =
-    case alexGetByte inp of
-      Just (w2c -> c, rest)
+    case lexerGetChar inp of
+      Just (c, rest)
         | isSpace c -> multiLine acc rest
         | c == '\\' -> loop acc rest
         | otherwise -> throwLexerError' $ StringLiteralError "Invalid multiline string"
       Nothing -> throwLexerError' $ StringLiteralError "did not close string literal"
   escape acc inp =
-    case alexGetByte inp of
-      Just (w2c -> c, rest)
+    case lexerGetChar inp of
+      Just (c, rest)
         | isSpace c -> multiLine acc rest
         | c == 'n' -> loop ('\n':acc) rest
         | c == 't' -> loop ('\t':acc) rest
@@ -184,9 +183,9 @@ scanTokens = scan' []
       PosToken TokenEOF _ -> pure (reverse acc)
       tok -> scan' (tok:acc)
 
-lexer :: ByteString -> Either PactErrorI [PosToken]
+lexer :: Text -> Either PactErrorI [PosToken]
 lexer bs = runLexerT scanTokens bs
 
-runLexerIO :: ByteString -> IO [PosToken]
+runLexerIO :: Text -> IO [PosToken]
 runLexerIO bs = either throwIO pure (lexer bs)
 }

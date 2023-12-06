@@ -24,7 +24,6 @@ module Pact.Core.IR.Eval.CEK
   , filterIndex
   , findMsgSigCap
   , evalWithStackFrame
-  , emitEvent
   , emitCapability
   , guardForModuleCall) where
 
@@ -33,7 +32,8 @@ import Control.Lens
 import Control.Monad(zipWithM, unless, when)
 import Data.Default
 import Data.List.NonEmpty(NonEmpty(..))
-import Data.Foldable(find, foldl')
+import Data.Foldable(find, foldl', traverse_)
+import Data.Maybe(isJust)
 import qualified Data.RAList as RAList
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -98,8 +98,8 @@ evalCEK cont handler env (Var n info)  = do
         Just (DConst d) -> case _dcTerm d of
           -- Todo: should this be an error?
           -- probably.
-          TermConst term ->
-            evalCEK cont handler (set ceLocal mempty env) term
+          TermConst _term ->
+            failInvariant info "Defconst not fully evaluated"
           EvaledConst v ->
             returnCEKValue cont handler (VPactValue v)
         Just (DPact d) -> do
@@ -176,14 +176,18 @@ evalCEK cont handler env (CapabilityForm cf info) = do
   fqn <- nameToFQN info env (view capFormName cf)
   case cf of
     -- Todo: duplication here in the x:xs case
-    WithCapability _ args body -> do
+    WithCapability _ args withCapBody -> do
       enforceNotWithinDefcap info env "with-capability"
       case args of
         x:xs -> do
-          let capFrame = WithCapFrame fqn body
+          let capFrame = WithCapFrame fqn withCapBody
           let cont' = CapInvokeC env info xs [] capFrame cont
           evalCEK cont' handler env x
-        [] -> evalCap info cont handler env (CapToken fqn []) (CapBodyC PopCapInvoke) body
+        [] -> do
+          let ct = CapToken fqn []
+          let cont' = EvalCapC env info ct withCapBody cont
+          guardForModuleCall info cont' handler env (_fqModule fqn) $
+            evalCap info cont handler env ct (CapBodyC PopCapInvoke) withCapBody
     CreateUserGuard _ args -> case args of
       [] -> createUserGuard info cont handler fqn []
       x : xs -> let
@@ -458,19 +462,20 @@ guardTable
   -> CEKEnv b i m
   -> TableValue
   -> GuardTableOp
-  -> m ()
+  -> m (EvalResult b i m)
 guardTable i cont handler env (TableValue _ mn mh _) dbop = do
   checkLocalBypass $
     guardForModuleCall i cont handler env mn $ do
       mdl <- getModule i (view cePactDb env) mn
       enforceBlessedHashes i mdl mh
+      returnCEKValue cont handler VUnit
   where
   checkLocalBypass notBypassed = do
     enabled <- isExecutionFlagSet FlagAllowReadInLocal
     case dbop of
       GtWrite -> notBypassed
       GtCreateTable -> notBypassed
-      _ | enabled -> pure ()
+      _ | enabled -> returnCEKValue cont handler VUnit
         | otherwise -> notBypassed
 
 
@@ -487,13 +492,13 @@ guardForModuleCall
   -> CEKErrorHandler b i m
   -> CEKEnv b i m
   -> ModuleName
-  -> m ()
-  -> m ()
+  -> m (EvalResult b i m)
+  -> m (EvalResult b i m)
 guardForModuleCall i cont handler env currMod onFound =
   findCallingModule >>= \case
     Just mn | mn == currMod -> onFound
     _ ->
-      getModule i (view cePactDb env) currMod >>= acquireModuleAdmin i env
+      getModule i (view cePactDb env) currMod >>= acquireModuleAdmin i cont handler env
 
 acquireModuleAdmin
   :: (MonadEval b i m)
@@ -502,21 +507,19 @@ acquireModuleAdmin
   -> CEKErrorHandler b i m
   -> CEKEnv b i m
   -> EvalModule b i
-  -> m PactValue
+  -> m (EvalResult b i m)
 acquireModuleAdmin i cont handler env mdl = do
   mc <- useEvalState (esCaps . csModuleAdmin)
-  unless () $ case _mGovernance mdl of
+  if S.member (_mName mdl) mc then returnCEKValue cont handler VUnit
+  else case _mGovernance mdl of
     KeyGov ksn -> do
       enforceKeysetNameAdmin i (_mName mdl) ksn
       esCaps . csModuleAdmin %== S.insert (_mName mdl)
+      returnCEKValue cont handler VUnit
     CapGov (ResolvedGov fqn) -> do
       let wcapBody = Constant LUnit i
-      -- *special* use of `evalCap` here to evaluate module governance.
-      evalCap i Mt CEKNoHandler env (CapToken fqn []) (CapBodyC PopCapInvoke) wcapBody >>= \case
-        VError _ _ ->
-          throwExecutionError i (ModuleGovernanceFailure (_mName mdl))
-        EvalValue _ -> do
-          esCaps . csModuleAdmin %== S.insert (_mName mdl)
+      let cont' = ModuleAdminC (_mName mdl) cont
+      evalCap i cont' handler env (CapToken fqn []) (CapBodyC PopCapInvoke) wcapBody
 
 evalWithStackFrame
   :: (MonadEval b i m)
@@ -546,8 +549,6 @@ pushStackFrame info cont mty sf = do
 
 -- | Evaluate a capability in `(with-capability)`
 -- the resulting
--- Todo: case: cap already installed
--- (coin.TRANSFER "bob" "alice" someguard 10.0)
 evalCap
   :: MonadEval b i m
   => i
@@ -681,6 +682,19 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
           clo = Closure (_fqName fqn') (_fqModule fqn') cloArgs (NE.length lamargs) body Nothing inCapEnv i
       applyLam (C clo) [VPactValue managed, VPactValue value] Mt CEKNoHandler
     _t -> failInvariant (view termInfo _t) "Manager function was not a two-argument function"
+
+
+    -- lookupFqName (_ctName ct) >>= \case
+    --   Just (DCap d) -> do
+    --     enforceMeta (_dcapMeta d)
+    --     emitCapability info ct
+    --     returnCEKValue cont handler (VBool True)
+    --   Just _ ->
+    --     failInvariant info "CapToken does not point to defcap"
+    --   _ -> failInvariant info "No Capability found in emit-event"
+    --   where
+    --   enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)
+    --   enforceMeta _ = pure ()
 
 emitEvent
   :: (MonadEval b i m)
@@ -982,8 +996,10 @@ returnCEKValue (CapInvokeC env info terms pvs cf cont) handler v = do
       evalCEK cont' handler env x
     [] -> case cf of
       WithCapFrame fqn wcbody -> do
-        guardForModuleCall info env (_fqModule fqn) $ return ()
-        evalCap info cont handler env (CapToken fqn (reverse (pv:pvs))) (CapBodyC PopCapInvoke) wcbody
+        let ct = CapToken fqn (reverse (pv:pvs))
+        let cont' = EvalCapC env info ct wcbody cont
+        guardForModuleCall info cont' handler env (_fqModule fqn) $
+          evalCap info cont handler env ct (CapBodyC PopCapInvoke) wcbody
       CreateUserGuardFrame fqn ->
         createUserGuard info cont handler fqn (reverse (pv:pvs))
 returnCEKValue (BuiltinC env info frame cont) handler cv = do
@@ -1034,6 +1050,17 @@ returnCEKValue (BuiltinC env info frame cont) handler cv = do
         ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
         let li = V.fromList (PString . _rowKey <$> ks)
         returnCEKValue cont handler (VList li)
+      WriteFrame tv wt rk (ObjectData rv) -> do
+        let check' = if wt == Update then checkPartialSchema else checkSchema
+        if check' rv (_tvSchema tv) then do
+          let rdata = RowData rv
+          liftDbFunction info (_pdbWrite pdb wt (tvToDomain tv) rk rdata)
+          returnCEKValue cont handler (VString "Write succeeded")
+        else returnCEK cont handler (VError "object does not match schema" info)
+      PreFoldDbFrame{} -> undefined
+      TxIdsFrame{} -> undefined
+      KeyLogFrame{} -> undefined
+      -- _ -> undefined
       where
       selectRead tv clo keys acc mf = case keys of
         k:ks -> liftDbFunction info (_pdbRead pdb (tvToDomain tv) k) >>= \case
@@ -1056,6 +1083,7 @@ returnCEKValue (BuiltinC env info frame cont) handler cv = do
   -- | KeysFrame TableValue
     _ -> returnCEK cont handler (VError "higher order apply did not return a pactvalue" info)
 returnCEKValue (CapBodyC cappop env mcap mevent capbody cont) handler _ = do
+  -- Todo: I think this requires some administrative check?
   maybe (pure ()) (emitEvent def) mevent
   case mcap of
     Nothing -> do
@@ -1068,10 +1096,9 @@ returnCEKValue (CapBodyC cappop env mcap mevent capbody cont) handler _ = do
         let cont' = CapPopC PopCapInvoke cont
         evalCEK cont' handler env capbody
       [] -> failInvariant def "In CapBodyC but with no caps in stack"
+
 returnCEKValue (CapPopC st cont) handler v = case st of
   PopCapInvoke -> do
-    -- todo: need safe tail here, but this should be fine given the invariant that `CapPopC`
-    -- will never show up otherwise
     esCaps . csSlots %== safeTail
     returnCEKValue cont handler v
   PopCapComposed -> do
@@ -1082,6 +1109,7 @@ returnCEKValue (CapPopC st cont) handler v = case st of
         setEvalState (esCaps . csSlots) caps'
         returnCEKValue cont handler VUnit
       [] -> failInvariant def "PopCapComposed present outside of cap eval"
+
 returnCEKValue (ListC env args vals cont) handler v = do
   pv <- enforcePactValue def v
   case args of
@@ -1089,6 +1117,7 @@ returnCEKValue (ListC env args vals cont) handler v = do
       returnCEKValue cont handler (VList (V.fromList (reverse (pv:vals))))
     e:es ->
       evalCEK (ListC env es (pv:vals) cont) handler env e
+
 returnCEKValue (ObjC env currfield fs vs cont) handler v = do
   v' <- enforcePactValue def v
   let fields = (currfield,v'):vs
@@ -1098,12 +1127,14 @@ returnCEKValue (ObjC env currfield fs vs cont) handler v = do
       in evalCEK cont' handler env term
     [] ->
       returnCEKValue cont handler (VObject (M.fromList (reverse fields)))
+
 returnCEKValue (EnforceErrorC info _) handler v = case v of
   VString err -> returnCEK Mt handler (VError err info)
   _ -> failInvariant def "enforce function did not return a string"
 -- Discard the value of running a user guard, no error occured, so
 returnCEKValue (IgnoreValueC v cont) handler _v =
   returnCEKValue cont handler (VPactValue v)
+
 returnCEKValue (StackPopC i mty cont) handler v = do
   v' <- (\pv -> maybeTCType i pv mty) =<< enforcePactValue i v
   -- Todo: this seems like an invariant failure, so maybe safeTail is not what we want?
@@ -1125,6 +1156,7 @@ returnCEKValue (DefPactStepC env cont) handler v =
           (writePacts pdb Write (_psDefPactId ps)
             (if done then Nothing else Just pe))
         returnCEKValue cont handler v
+
 returnCEKValue (NestedDefPactStepC env cont parentDefPactExec) handler v =
   useEvalState esDefPactExec >>= \case
     Nothing -> failInvariant def "No DefPactExec found"
@@ -1136,12 +1168,21 @@ returnCEKValue (NestedDefPactStepC env cont parentDefPactExec) handler v =
         let npe = parentDefPactExec & peNestedDefPactExec %~ M.insert (_psDefPactId ps) pe
         setEvalState esDefPactExec (Just npe)
         returnCEKValue cont handler v
+
 returnCEKValue (EnforcePactValueC info cont) handler v = case v of
   VPactValue{} -> returnCEKValue cont handler v
   _ -> returnCEK cont handler (VError "function expected to return pact value" info)
+
 returnCEKValue (EnforceBoolC info cont) handler v = case v of
   VBool{} -> returnCEKValue cont handler v
   _ -> returnCEK cont handler (VError "function expected to return boolean" info)
+
+returnCEKValue (ModuleAdminC mn cont) handler v = do
+  (esCaps . csModuleAdmin) %== S.insert mn
+  returnCEKValue cont handler v
+
+returnCEKValue (EvalCapC env info captoken withCapBody cont) handler _ =
+  evalCap info cont handler env captoken (CapBodyC PopCapInvoke) withCapBody
 
 
 -- | Important check for nested pacts:
@@ -1280,3 +1321,15 @@ applyLam (CT (CapTokenClosure fqn argtys arity i)) args cont handler
   | otherwise = throwExecutionError i ClosureAppliedToTooManyArgs
   where
   argLen = length args
+
+checkSchema :: M.Map Field PactValue -> Schema -> Bool
+checkSchema o (Schema sc) = isJust $ do
+  let keys = M.keys o
+  when (keys /= M.keys sc) Nothing
+  traverse_ go (M.toList o)
+  where
+  go (k, v) = M.lookup k sc >>= (`checkPvType` v)
+
+checkPartialSchema :: M.Map Field PactValue -> Schema -> Bool
+checkPartialSchema o (Schema sc) =
+  M.isSubmapOfBy (\obj ty -> isJust (checkPvType ty obj)) o sc

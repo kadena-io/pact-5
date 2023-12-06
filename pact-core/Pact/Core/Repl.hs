@@ -24,7 +24,6 @@ import System.Console.Haskeline
 import Data.Default
 import Data.IORef
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import qualified Data.Set as Set
 
 import Pact.Core.Persistence
@@ -98,15 +97,13 @@ main = do
             loop
           RAExecuteExpr src -> catch' $ do
             let display' rcv = runInputT replSettings (displayOutput rcv)
-            let sourceBs = T.encodeUtf8 src
-            lift (replCurrSource .= defaultSrc{_scPayload=sourceBs})
-            eout <- lift (tryError (interpretReplProgram (SourceCode "(interactive)" sourceBs) display'))
+            lift (replCurrSource .= defaultSrc{_scPayload=src})
+            eout <- lift (tryError (interpretReplProgram (SourceCode "(interactive)" src) display'))
             case eout of
               Right _ -> pure ()
               Left err -> do
                 SourceCode srcFile currSrc <- lift (use replCurrSource)
-                let srcText = T.decodeUtf8 currSrc
-                let rs = ReplSource (T.pack srcFile) srcText
+                let rs = ReplSource (T.pack srcFile) currSrc
                 lift (replCurrSource .= defaultSrc)
                 outputStrLn (T.unpack (replError rs err))
             loop

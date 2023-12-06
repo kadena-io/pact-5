@@ -20,14 +20,14 @@ import Pact.Core.Syntax.LexUtils (Token(..))
 import Pact.Core.Literal
 import Pact.Core.Pretty
 
-showPretty :: Pretty a => a -> BS.ByteString
-showPretty = BS.pack . show . pretty
+showPretty :: Pretty a => a -> T.Text
+showPretty = T.pack . show . pretty
 
-tokenToSrc :: Token -> BS.ByteString
+tokenToSrc :: Token -> T.Text
 tokenToSrc = \case
   TokenString s -> "\"" <> showPretty s <> "\""
-  TokenIdent n  -> encodeUtf8 n
-  TokenNumber n -> encodeUtf8 n
+  TokenIdent n  -> n
+  TokenNumber n -> n
   tok           -> showPretty tok
 
 identGen :: Gen T.Text
@@ -86,7 +86,7 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
 lexerRoundtrip :: Property
 lexerRoundtrip = property $ do
   toks <- forAll $ Gen.list (Range.constant 0 10) tokenGen
-  ptoks <- evalEither $ Lisp.lexer (BS.unlines (tokenToSrc <$> toks))
+  ptoks <- evalEither $ Lisp.lexer (T.unlines (tokenToSrc <$> toks))
   toks === (Lisp._ptToken <$> ptoks)
 
 
@@ -95,8 +95,8 @@ type ParserGen = Gen (Lisp.Expr ())
 toUnitExpr :: Lisp.ParsedExpr -> Lisp.Expr ()
 toUnitExpr = fmap $ const ()
 
-parsedExprToSrc :: Lisp.Expr () -> BS.ByteString
-parsedExprToSrc = BS.pack . show . pretty
+parsedExprToSrc :: Lisp.Expr () -> T.Text
+parsedExprToSrc = T.pack . show . pretty
 
 varGen :: ParserGen
 varGen = (`Lisp.Var` ()) <$> parsedNameGen

@@ -125,7 +125,6 @@ instance (MonadEvalState b i m) => MonadEvalState b i (RenamerT b i m) where
 
 -- Todo: DesugarBuiltin
 -- probably should just be a `data` definition we pass in.
--- This class is causing us to use `Proxy`
 class DesugarBuiltin b where
   liftRaw :: RawBuiltin -> b
   desugarOperator :: i -> Lisp.Operator -> Term ParsedName DesugarType b i

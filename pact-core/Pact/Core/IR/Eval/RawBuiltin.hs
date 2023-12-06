@@ -636,8 +636,9 @@ enforceGuard info cont handler env g = case g of
     True -> returnCEKValue cont handler (VBool True)
     False -> do
       md <- getModule info (view cePactDb env) mn
-      acquireModuleAdmin info env md
-      returnCEKValue cont handler (VBool True)
+      let cont' = IgnoreValueC (PBool True) cont
+      acquireModuleAdmin info cont' handler env md
+      -- returnCEKValue cont handler (VBool True)
   GDefPactGuard (DefPactGuard dpid _) -> do
     curDpid <- getDefPactId info
     if curDpid == dpid
@@ -817,106 +818,95 @@ coreBind info b cont handler _env = \case
 
 createTable :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 createTable info b cont handler env = \case
-  [VTable tv@(TableValue tn mn _ _)] -> do
+  [VTable tv] -> do
     enforceTopLevelOnly info b
-    guardTable info env tv GtCreateTable
-    let pdb = view cePactDb env
+    let cont' = BuiltinC env info (CreateTableFrame tv) cont
+    guardTable info cont' handler env tv GtCreateTable
+    -- guardTable info env tv GtCreateTable
+    -- let pdb = view cePactDb env
     -- Todo: error handling here
     -- Todo: guard table
-    liftDbFunction info (_pdbCreateUserTable pdb tn mn)
-    returnCEKValue cont handler VUnit
+    -- liftDbFunction info (_pdbCreateUserTable pdb tn mn)
+    -- returnCEKValue cont handler VUnit
   args -> argsError info b args
 
 dbSelect :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbSelect info b cont handler env = \case
   [VTable tv, VClosure clo] -> do
-    let pdb = view cePactDb env
-    guardTable info env tv GtSelect
-    let cont' = BuiltinC env info (PreSelectFrame tv clo) cont
-    
-    -- ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
-    -- go Nothing clo tv pdb ks []
+    let cont' = BuiltinC env info (PreSelectFrame tv clo Nothing) cont
+    guardTable info cont' handler env tv GtSelect
   [VTable tv, VList li, VClosure clo] -> do
-    let pdb = view cePactDb env
-    guardTable info env tv GtSelect
-    undefined
-    -- li' <- traverse (fmap Field . asString info b) (V.toList li)
-    -- ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
-    -- go (Just li') clo tv pdb ks []
+    li' <- traverse (fmap Field . asString info b) (V.toList li)
+    let cont' = BuiltinC env info (PreSelectFrame tv clo (Just li')) cont
+    guardTable info cont' handler env tv GtSelect
   args -> argsError info b args
-  -- where
-  --   go mf _clo _tv _ [] acc = case mf of
-  --     Just fields -> do
-  --       let acc' = PObject . (`M.restrictKeys` S.fromList fields) <$> reverse acc
-  --       returnCEKValue cont handler (VList (V.fromList acc'))
-  --     Nothing ->
-  --       returnCEKValue cont handler (VList (V.fromList (fmap PObject (reverse acc))))
-  --   go mf clo tv pdb (k:ks) acc = liftDbFunction info (_pdbRead pdb (tvToDomain tv) k) >>= \case
-  --     Just (RowData rdata) -> applyLam clo [VObject rdata] Mt CEKNoHandler >>= \case
-  --       EvalValue (VBool cond) ->
-  --         if cond then go mf clo tv pdb ks (rdata:acc) else go mf clo tv pdb ks acc
-  --       EvalValue _ -> returnCEK cont handler (VError "select query error" info)
-  --       VError e i -> returnCEK cont handler (VError e i)
-  --     Nothing -> returnCEK cont handler (VError "select is not enabled" info)
 
 -- Todo: error handling
 foldDb :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 foldDb info b cont handler env = \case
   [VTable tv, VClosure queryClo, VClosure consumer] -> do
-    let pdb = view cePactDb env
-    guardTable info env tv GtSelect
-    let tblDomain = DUserTables (_tvName tv)
-    keys <- liftDbFunction info (_pdbKeys pdb tblDomain)
-    go pdb [] keys
-    where
+    let cont' = BuiltinC env info (PreFoldDbFrame tv queryClo consumer) cont
+    guardTable info cont' handler env tv GtSelect
+    -- let pdb = view cePactDb env
+    -- guardTable info env tv GtSelect
+    -- let tblDomain = DUserTables (_tvName tv)
+    -- keys <- liftDbFunction info (_pdbKeys pdb tblDomain)
+    -- go pdb [] keys
+    -- where
       -- todo: weird key invariant
-      go pdb acc (rk@(RowKey k):ks) = do
-        liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) rk) >>= \case
-          Just (RowData row) -> do
-            applyLam queryClo [VString k, VObject row] Mt CEKNoHandler >>= \case
-              EvalValue (VBool qry) -> if qry then do
-                applyLam consumer [VString k, VObject row] Mt CEKNoHandler >>= \case
-                  EvalValue (VPactValue v) -> go pdb (v:acc) ks
-                  EvalValue _ ->
-                    returnCEK cont handler (VError "Fold db did not return a pact value" info)
-                  v -> returnCEK cont handler v
-                else go pdb acc ks
-              EvalValue _ ->
-                returnCEK cont handler (VError "Fold db did not return a pact value" info)
-              v@VError{} -> returnCEK cont handler v
-          Nothing -> error "no key despite keys"
-      go _ acc [] =
-        returnCEKValue cont handler (VList (V.fromList (reverse acc)))
+      -- go pdb acc (rk@(RowKey k):ks) = do
+      --   liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) rk) >>= \case
+      --     Just (RowData row) -> do
+      --       applyLam queryClo [VString k, VObject row] Mt CEKNoHandler >>= \case
+      --         EvalValue (VBool qry) -> if qry then do
+      --           applyLam consumer [VString k, VObject row] Mt CEKNoHandler >>= \case
+      --             EvalValue (VPactValue v) -> go pdb (v:acc) ks
+      --             EvalValue _ ->
+      --               returnCEK cont handler (VError "Fold db did not return a pact value" info)
+      --             v -> returnCEK cont handler v
+      --           else go pdb acc ks
+      --         EvalValue _ ->
+      --           returnCEK cont handler (VError "Fold db did not return a pact value" info)
+      --         v@VError{} -> returnCEK cont handler v
+      --     Nothing -> error "no key despite keys"
+      -- go _ acc [] =
+      --   returnCEKValue cont handler (VList (V.fromList (reverse acc)))
   args -> argsError info b args
 
 dbRead :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbRead info b cont handler env = \case
   [VTable tv, VString k] -> do
-    let pdb = view cePactDb env
-    guardTable info env tv GtRead
-    liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
-      Just (RowData v) -> returnCEKValue cont handler (VObject v)
-      Nothing -> returnCEK cont handler (VError "no such read object" info)
+    let cont' = BuiltinC env info (ReadFrame tv (RowKey k)) cont
+    guardTable info cont' handler env tv GtRead
+    -- let pdb = view cePactDb env
+    -- guardTable info env tv GtRead
+    -- liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
+    --   Just (RowData v) -> returnCEKValue cont handler (VObject v)
+    --   Nothing -> returnCEK cont handler (VError "no such read object" info)
   args -> argsError info b args
 
 dbWithRead :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbWithRead info b cont handler env = \case
   [VTable tv, VString k, VClosure clo] -> do
-    let pdb = view cePactDb env
-    guardTable info env tv GtWithRead
-    liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
-      Just (RowData v) -> applyLam clo [VObject v] cont handler
-      Nothing -> returnCEK cont handler (VError "no such read object" info)
+    let cont' = BuiltinC env info (WithReadFrame tv (RowKey k) clo) cont
+    guardTable info cont' handler env tv GtWithRead
+    -- let pdb = view cePactDb env
+    -- guardTable info env tv GtWithRead
+    -- liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
+    --   Just (RowData v) -> applyLam clo [VObject v] cont handler
+    --   Nothing -> returnCEK cont handler (VError "no such read object" info)
   args -> argsError info b args
 
 dbWithDefaultRead :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbWithDefaultRead info b cont handler env = \case
   [VTable tv, VString k, VObject defaultObj, VClosure clo] -> do
-    let pdb = view cePactDb env
-    guardTable info env tv GtWithDefaultRead
-    liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
-      Just (RowData v) -> applyLam clo [VObject v] cont handler
-      Nothing -> applyLam clo [VObject defaultObj] cont handler
+    let cont' = BuiltinC env info (WithDefaultReadFrame tv (RowKey k) (ObjectData defaultObj) clo) cont
+    guardTable info cont' handler env tv GtWithDefaultRead
+    -- let pdb = view cePactDb env
+    -- guardTable info env tv GtWithDefaultRead
+    -- liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
+    --   Just (RowData v) -> applyLam clo [VObject v] cont handler
+    --   Nothing -> applyLam clo [VObject defaultObj] cont handler
   args -> argsError info b args
 
 -- | Todo: schema checking here? Or only on writes?
@@ -929,47 +919,52 @@ dbInsert = write' Insert
 write' :: (IsBuiltin b, MonadEval b i m) => WriteType -> NativeFunction b i m
 write' wt info b cont handler env = \case
   [VTable tv, VString key, VObject o] -> do
-    guardTable info env tv GtWrite
-    if checkSchema o (_tvSchema tv) then do
-        let pdb = view cePactDb env
-        let rowData = RowData o
-        liftDbFunction info (_pdbWrite pdb wt (tvToDomain tv) (RowKey key) rowData)
-        returnCEKValue cont handler (VString "Write succeeded")
-    else
-        returnCEK cont handler (VError "object does not match schema" info)
+    let cont' = BuiltinC env info (WriteFrame tv wt (RowKey key) (ObjectData o)) cont
+    guardTable info cont' handler env tv GtWithDefaultRead
+    -- guardTable info env tv GtWrite
+    -- if checkSchema o (_tvSchema tv) then do
+    --     let pdb = view cePactDb env
+    --     let rowData = RowData o
+    --     liftDbFunction info (_pdbWrite pdb wt (tvToDomain tv) (RowKey key) rowData)
+    --     returnCEKValue cont handler (VString "Write succeeded")
+    -- else
+    --     returnCEK cont handler (VError "object does not match schema" info)
   args -> argsError info b args
 
 dbUpdate :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-dbUpdate info b cont handler env = \case
-  [VTable tv, VString key, VObject o] -> do
-    guardTable info env tv GtWrite
-    if checkPartialSchema o (_tvSchema tv) then do
-        let pdb = view cePactDb env
-        let rowData = RowData o
-        liftDbFunction info (_pdbWrite pdb Update (tvToDomain tv) (RowKey key) rowData)
-        returnCEKValue cont handler (VString "Write succeeded")
-    else returnCEK cont handler (VError "object does not match schema" info)
-  args -> argsError info b args
+dbUpdate = write' Update
+  -- [VTable tv, VString key, VObject o] -> do
+    -- guardTable info env tv GtWrite
+    -- if checkPartialSchema o (_tvSchema tv) then do
+  --     let pdb = view cePactDb env
+    --     let rowData = RowData o
+    --     liftDbFunction info (_pdbWrite pdb Update (tvToDomain tv) (RowKey key) rowData)
+    --     returnCEKValue cont handler (VString "Write succeeded")
+    -- else returnCEK cont handler (VError "object does not match schema" info)
+  -- args -> argsError info b args
 
 dbKeys :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbKeys info b cont handler env = \case
   [VTable tv] -> do
-    guardTable info env tv GtKeys
-    let pdb = view cePactDb env
-    ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
-    let li = V.fromList (PString . _rowKey <$> ks)
-    returnCEKValue cont handler (VList li)
+    let cont' = BuiltinC env info (KeysFrame tv) cont
+    guardTable info cont' handler env tv GtKeys
+    -- guardTable info env tv GtKeys
+    -- let pdb = view cePactDb env
+    -- ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
+    -- let li = V.fromList (PString . _rowKey <$> ks)
+    -- returnCEKValue cont handler (VList li)
   args -> argsError info b args
 
 dbTxIds :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbTxIds info b cont handler env = \case
   [VTable tv, VInteger tid] -> do
     checkNonLocalAllowed info
-    guardTable info env tv GtTxIds
-    let pdb = view cePactDb env
-    ks <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) (TxId (fromIntegral tid)))
-    let li = V.fromList (PInteger . fromIntegral . _txId <$> ks)
-    returnCEKValue cont handler (VList li)
+    let cont' = BuiltinC env info (TxIdsFrame tv tid) cont
+    guardTable info cont' handler env tv GtTxIds
+    -- let pdb = view cePactDb env
+    -- ks <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) (TxId (fromIntegral tid)))
+    -- let li = V.fromList (PInteger . fromIntegral . _txId <$> ks)
+    -- returnCEKValue cont handler (VList li)
   args -> argsError info b args
 
 
@@ -977,51 +972,55 @@ dbTxLog :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbTxLog info b cont handler env = \case
   [VTable tv, VInteger tid] -> do
     checkNonLocalAllowed info
-    guardTable info env tv GtTxLog
-    let pdb = view cePactDb env
-        txId = TxId (fromInteger tid)
-    ks <- liftDbFunction info (_pdbGetTxLog pdb (_tvName tv) txId)
-    let li = V.fromList (txLogToObj <$> ks)
-    returnCEKValue cont handler (VList li)
-    where
-    txLogToObj (TxLog domain key (RowData v)) = do
-      PObject $ M.fromList
-        [ (Field "table", PString domain)
-        , (Field "key", PString key)
-        , (Field "value", PObject v)]
+    let cont' = BuiltinC env info (TxLogFrame tv tid) cont
+    guardTable info cont' handler env tv GtTxLog
+    -- guardTable info env tv GtTxLog
+    -- let pdb = view cePactDb env
+    --     txId = TxId (fromInteger tid)
+    -- ks <- liftDbFunction info (_pdbGetTxLog pdb (_tvName tv) txId)
+    -- let li = V.fromList (txLogToObj <$> ks)
+    -- returnCEKValue cont handler (VList li)
+    -- where
+    -- txLogToObj (TxLog domain key (RowData v)) = do
+    --   PObject $ M.fromList
+    --     [ (Field "table", PString domain)
+    --     , (Field "key", PString key)
+    --     , (Field "value", PObject v)]
   args -> argsError info b args
 
 dbKeyLog :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 dbKeyLog info b cont handler env = \case
   [VTable tv, VString key, VInteger tid] -> do
     checkNonLocalAllowed info
-    guardTable info env tv GtKeyLog
-    let pdb = view cePactDb env
-        txId = TxId (fromInteger tid)
-    ids <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) txId)
-    ks <- concat <$> traverse (\t -> fmap (t,) <$> liftDbFunction info (_pdbGetTxLog pdb (_tvName tv) t)) ids
-    let ks' = filter (\(_, txl) -> _txKey txl == key) ks
-    let li = V.fromList (txLogToObj <$> ks')
-    returnCEKValue cont handler (VList li)
-    where
-    txLogToObj (TxId txid, TxLog _domain _key (RowData v)) = do
-      PObject $ M.fromList
-        [ (Field "txid", PInteger (fromIntegral txid))
-        , (Field "value", PObject v)]
+    let cont' = BuiltinC env info (KeyLogFrame tv (RowKey key) tid) cont
+    guardTable info cont' handler env tv GtKeyLog
+    -- guardTable info env tv GtKeyLog
+    -- let pdb = view cePactDb env
+    --     txId = TxId (fromInteger tid)
+    -- ids <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) txId)
+    -- ks <- concat <$> traverse (\t -> fmap (t,) <$> liftDbFunction info (_pdbGetTxLog pdb (_tvName tv) t)) ids
+    -- let ks' = filter (\(_, txl) -> _txKey txl == key) ks
+    -- let li = V.fromList (txLogToObj <$> ks')
+    -- returnCEKValue cont handler (VList li)
+    -- where
+    -- txLogToObj (TxId txid, TxLog _domain _key (RowData v)) = do
+    --   PObject $ M.fromList
+    --     [ (Field "txid", PInteger (fromIntegral txid))
+    --     , (Field "value", PObject v)]
   args -> argsError info b args
 
 -- | Todo: isProperSubmapOf
-checkSchema :: M.Map Field PactValue -> Schema -> Bool
-checkSchema o (Schema sc) = isJust $ do
-  let keys = M.keys o
-  when (keys /= M.keys sc) Nothing
-  traverse_ go (M.toList o)
-  where
-  go (k, v) = M.lookup k sc >>= (`checkPvType` v)
+-- checkSchema :: M.Map Field PactValue -> Schema -> Bool
+-- checkSchema o (Schema sc) = isJust $ do
+--   let keys = M.keys o
+--   when (keys /= M.keys sc) Nothing
+--   traverse_ go (M.toList o)
+--   where
+--   go (k, v) = M.lookup k sc >>= (`checkPvType` v)
 
-checkPartialSchema :: M.Map Field PactValue -> Schema -> Bool
-checkPartialSchema o (Schema sc) =
-  M.isSubmapOfBy (\obj ty -> isJust (checkPvType ty obj)) o sc
+-- checkPartialSchema :: M.Map Field PactValue -> Schema -> Bool
+-- checkPartialSchema o (Schema sc) =
+--   M.isSubmapOfBy (\obj ty -> isJust (checkPvType ty obj)) o sc
 
 defineKeySet'
   :: (MonadEval b i m)
@@ -1096,18 +1095,19 @@ installCapability info b cont handler env = \case
 coreEmitEvent :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreEmitEvent info b cont handler env = \case
   [VCapToken ct@(CapToken fqn _)] -> do
-    guardForModuleCall info env (_fqModule fqn) $ return ()
-    lookupFqName (_ctName ct) >>= \case
-      Just (DCap d) -> do
-        enforceMeta (_dcapMeta d)
-        emitCapability info ct
-        returnCEKValue cont handler (VBool True)
-      Just _ ->
-        failInvariant info "CapToken does not point to defcap"
-      _ -> failInvariant info "No Capability found in emit-event"
-      where
-      enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)
-      enforceMeta _ = pure ()
+    let cont' = BuiltinC env info (EmitEventFrame ct) cont
+    guardForModuleCall info cont' handler env (_fqModule fqn) $
+      lookupFqName (_ctName ct) >>= \case
+        Just (DCap d) -> do
+          enforceMeta (_dcapMeta d)
+          emitCapability info ct
+          returnCEKValue cont handler (VBool True)
+        Just _ ->
+          failInvariant info "CapToken does not point to defcap"
+        _ -> failInvariant info "No Capability found in emit-event"
+        where
+        enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)
+        enforceMeta _ = pure ()
   args -> argsError info b args
 
 createCapGuard :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m

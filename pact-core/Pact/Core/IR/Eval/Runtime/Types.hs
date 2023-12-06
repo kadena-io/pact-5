@@ -103,7 +103,7 @@ import Pact.Core.Persistence
 import Pact.Core.ModRefs
 import Pact.Core.Capabilities
 import Pact.Core.Environment
-import Pact.Core.DefPacts.Types (DefPactExec)
+import Pact.Core.DefPacts.Types
 import qualified Pact.Core.Pretty as P
 
 
@@ -329,11 +329,6 @@ data PartialNativeFn b i m
   }
 
 
-data ExecutionMode
-  = Transactional
-  | Local
-  deriving (Eq, Show, Bounded, Enum)
-
 data CondFrame b i m
   = AndFrame (EvalTerm b i)
   | OrFrame (EvalTerm b i)
@@ -352,15 +347,30 @@ data BuiltinFrame b i m
   | FoldFrame (CanApply b i m) [PactValue]
   -- ^ {closure} {accum} {rest}
   | ZipFrame (CanApply b i m) ([PactValue],[PactValue]) [PactValue]
+  -- ^ <zip closure> <lists to zip> <accumulator>
   | PreSelectFrame TableValue (CanApply b i m) (Maybe [Field])
+  -- ^ <table> <select filter closure> <filter fields>*
+  | PreFoldDbFrame TableValue (CanApply b i m) (CanApply b i m)
+  -- ^ <table> <select filter closure> <accumulator closure>
   | SelectFrame TableValue (CanApply b i m) (ObjectData PactValue) [RowKey] [ObjectData PactValue] (Maybe [Field])
   -- ^ <table> <filter closure> <current value> <remaining keys> <accumulator> <fields>
+  | FoldDbFilterFrame TableValue (CanApply b i m) (CanApply b i m) (RowKey, ObjectData PactValue) [RowKey] [(RowKey, PactValue)]
+  -- ^ <table> <filter closure> <accum closure> <current k/v pair in focus> <remaining keys> <accumulator>
+  | FoldDbMapFrame TableValue (CanApply b i m) [(RowKey, PactValue)] [PactValue]
+  -- ^ <table> <accum closure> <remaining pairs> <accumulator>
   | ReadFrame TableValue RowKey
+  -- ^ <table> <key to read>
+  | WriteFrame TableValue WriteType RowKey (ObjectData PactValue)
+  -- ^ <table> <write type> <key to write> <value to write>
   | WithReadFrame TableValue RowKey (CanApply b i m)
+   -- ^ <table> <key to read> <closure to apply afterwards>
   | WithDefaultReadFrame TableValue RowKey (ObjectData PactValue) (CanApply b i m)
   | KeysFrame TableValue
-  -- | TxIdsFrame TableValue Integer
-  -- | TxLog TableValue Integer
+  | TxIdsFrame TableValue Integer
+  | TxLogFrame TableValue Integer
+  | KeyLogFrame TableValue RowKey Integer
+  | CreateTableFrame TableValue
+  | EmitEventFrame (CapToken FullyQualifiedName PactValue)
   deriving Show
 
 
@@ -393,8 +403,10 @@ data Cont b i m
   | BuiltinC (CEKEnv b i m) i (BuiltinFrame b i m) (Cont b i m)
   -- ^ Continuation for higher-order function builtins
   | ObjC (CEKEnv b i m) Field [(Field, EvalTerm b i)] [(Field, PactValue)] (Cont b i m)
+  -- Todo: merge all cap constructors
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
   | CapInvokeC (CEKEnv b i m) i [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
+  | EvalCapC (CEKEnv b i m) i FQCapToken (EvalTerm b i) (Cont b i m)
   -- ^ Capability special form frams that eva
   | CapBodyC CapPopState (CEKEnv b i m) (Maybe (CapToken QualifiedName PactValue)) (Maybe (PactEvent PactValue)) (EvalTerm b i) (Cont b i m)
   -- ^ CapBodyC includes
@@ -416,6 +428,7 @@ data Cont b i m
   | EnforcePactValueC i (Cont b i m)
   -- ^ Enforce pact value
   | ModuleAdminC ModuleName (Cont b i m)
+  -- ^ Add module admin on successful cap eval
   | StackPopC i (Maybe Type) (Cont b i m)
   -- ^ Pop the current stack frame and check the return value for the declared type
   | EnforceErrorC i (Cont b i m)
