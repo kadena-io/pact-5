@@ -60,7 +60,7 @@ initializePactDb serial db = do
     , _pdbBeginTx = beginTx txId db
     , _pdbCommitTx = commitTx txId db
     , _pdbRollbackTx = rollbackTx db
-    , _pdbTxIds = error "no txids"
+    , _pdbTxIds = listTxIds db
     , _pdbGetTxLog = error "no txlog"
     }
 
@@ -83,7 +83,22 @@ readKeys db = \case
         SQL.Row -> do
           [SQL.SQLText value] <- SQL.columns stmt
           collect stmt (value:acc)
-      
+
+
+listTxIds :: SQL.Database -> TableName -> TxId -> IO [TxId]
+listTxIds db tbl (TxId minTxId) = withStmt db ("SELECT txid FROM \"" <> toUserTable tbl <> "\" WHERE txid >= ? ORDER BY txid ASC") $ \stmt -> do
+  SQL.bind stmt [SQL.SQLInteger $ fromIntegral minTxId]
+  txIds <- collect stmt []
+  pure txIds
+  where
+    collect stmt acc = SQL.step stmt >>= \case
+        SQL.Done -> pure acc
+        SQL.Row -> do
+          [SQL.SQLInteger value] <- SQL.columns stmt
+          -- Here we convert the Int64 received from SQLite into Word64
+          -- using `fromIntegral`. It is assumed that recorded txids
+          -- in the database will never be negative integers.
+          collect stmt ((TxId (fromIntegral value)):acc)
 
 commitTx :: IORef TxId -> SQL.Database -> IO ()
 commitTx txid db = do
