@@ -41,8 +41,7 @@ import Data.List(findIndex)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Set(Set)
 import Data.Graph(stronglyConnComp, SCC(..))
-import Data.Foldable(foldl', foldlM)
-import Data.Foldable(find, traverse_, foldrM)
+import Data.Foldable(find, traverse_, foldrM, foldl', foldlM)
 import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as S
