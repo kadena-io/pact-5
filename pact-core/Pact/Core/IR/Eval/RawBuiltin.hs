@@ -44,6 +44,7 @@ import qualified Data.Set as S
 import qualified Data.Char as Char
 import qualified Data.ByteString as BS
 import qualified Pact.Time as PactTime
+import qualified Pact.Core.Trans.TOps as Musl
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
@@ -125,9 +126,10 @@ rawPow :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 rawPow info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
     when (i' < 0) $ throwExecutionError info (ArithmeticException "negative exponent in integer power")
+    -- Todo: move to iterated pow
     returnCEKValue cont handler (VLiteral (LInteger (i ^ i')))
   [VLiteral (LDecimal l), VLiteral (LDecimal r)] -> do
-    let result = dec2F l ** dec2F r
+    let result = Musl.trans_pow (dec2F l) (dec2F r)
     guardNanOrInf info result
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
@@ -138,13 +140,13 @@ rawLogBase info b cont handler _env = \case
     when (base < 0 || n <= 0) $ throwExecutionError info (ArithmeticException "Illegal log base")
     let base' = fromIntegral base :: Double
         n' = fromIntegral n
-        out = round (logBase base' n')
+        out = round (Musl.trans_logBase base' n')
     returnCEKValue cont handler (VLiteral (LInteger out))
     -- if i' == 0 then throwExecutionError' (ArithmeticException "div by zero")
     -- else returnCEKValue cont handler (VLiteral (LInteger (div i i')))
   [VLiteral (LDecimal base), VLiteral (LDecimal arg)] -> do
     when (base < 0 || arg <= 0) $ throwExecutionError info (ArithmeticException "Invalid base or argument in log")
-    let result = logBase (dec2F base) (dec2F arg)
+    let result = Musl.trans_logBase (dec2F base) (dec2F arg)
     guardNanOrInf info result
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
@@ -235,11 +237,11 @@ rawAbs info b cont handler _env = \case
 rawExp :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 rawExp info b cont handler _env = \case
   [VLiteral (LInteger i)] -> do
-    let result = exp (fromIntegral i)
+    let result = Musl.trans_exp (fromIntegral i)
     guardNanOrInf info result
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   [VLiteral (LDecimal e)] -> do
-    let result = exp (dec2F e)
+    let result = Musl.trans_exp (dec2F e)
     guardNanOrInf info result
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
@@ -247,11 +249,11 @@ rawExp info b cont handler _env = \case
 rawLn :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 rawLn info b cont handler _env = \case
   [VLiteral (LInteger i)] -> do
-    let result = log (fromIntegral i)
+    let result = Musl.trans_ln (fromIntegral i)
     guardNanOrInf info result
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   [VLiteral (LDecimal e)] -> do
-    let result = log (dec2F e)
+    let result = Musl.trans_ln (dec2F e)
     guardNanOrInf info result
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
@@ -260,12 +262,12 @@ rawSqrt :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 rawSqrt info b cont handler _env = \case
   [VLiteral (LInteger i)] -> do
     when (i < 0) $ throwExecutionError info (ArithmeticException "Square root must be non-negative")
-    let result = sqrt (fromIntegral i)
+    let result = Musl.trans_sqrt (fromIntegral i)
     guardNanOrInf info result
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   [VLiteral (LDecimal e)] -> do
     when (e < 0) $ throwExecutionError info (ArithmeticException "Square root must be non-negative")
-    let result = sqrt (dec2F e)
+    let result = Musl.trans_sqrt (dec2F e)
     guardNanOrInf info result
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
@@ -1603,8 +1605,13 @@ coreDescribeNamespace info b cont handler _env = \case
         returnCEK cont handler (VError ("Namespace not defined " <> n) info)
   args -> argsError info b args
 
+
+-- -------------------------
+-- ZK defns
+-- -------------------------
+
 -----------------------------------
--- Core definitions
+-- Builtin exports
 -----------------------------------
 
 rawBuiltinEnv

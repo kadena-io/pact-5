@@ -20,8 +20,8 @@ import System.FilePath(takeFileName)
 
 
 import qualified Data.Map.Strict as M
-import qualified Data.ByteString as B
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 
 import Pact.Core.Persistence
 import Pact.Core.Builtin
@@ -57,7 +57,7 @@ loadFile
   -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
   -> ReplM ReplRawBuiltin [ReplCompileValue]
 loadFile loc display = do
-  source <- SourceCode (takeFileName loc) <$> liftIO (B.readFile loc)
+  source <- SourceCode (takeFileName loc) <$> liftIO (T.readFile loc)
   replCurrSource .= source
   interpretReplProgram source display
 

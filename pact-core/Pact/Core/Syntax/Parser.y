@@ -61,6 +61,7 @@ import Pact.Core.Syntax.LexUtils
   deftable   { PosToken TokenDefTable _ }
   defpact    { PosToken TokenDefPact _ }
   defprop    { PosToken TokenDefProperty _}
+  property   { PosToken TokenProperty _ }
   bless      { PosToken TokenBless _}
   implements { PosToken TokenImplements _ }
   true       { PosToken TokenTrue _ }
@@ -76,10 +77,6 @@ import Pact.Core.Syntax.LexUtils
   managedAnn { PosToken TokenManagedAnn _ }
   withcap    { PosToken TokenWithCapability _ }
   c_usr_grd  { PosToken TokenCreateUserGuard _}
-  -- reqcap     { PosToken TokenRequireCapability _}
-  -- installcap { PosToken TokenInstallCapability _ }
-  -- composecap { PosToken TokenComposeCapability _ }
-  -- emitevent  { PosToken TokenEmitEvent _ }
   step       { PosToken TokenStep _ }
   steprb     { PosToken TokenStepWithRollback _ }
   '{'        { PosToken TokenOpenBrace _ }
@@ -158,7 +155,7 @@ Interface :: { ParsedInterface }
     { Interface (ModuleName (getIdent $3) Nothing) (reverse (lefts $5)) (reverse (rights $5)) (fst $4) (snd $4)
       (combineSpan (_ptInfo $1) (_ptInfo $2)) }
 
-MDocOrModuleModel :: { (Maybe Text, [DefProperty SpanInfo])}
+MDocOrModuleModel :: { (Maybe Text, [FVModel SpanInfo])}
   : DocAnn ModuleModel { (Just $1, $2)}
   | ModuleModel DocAnn { (Just $2, $1) }
   | DocAnn { (Just $1, [])}
@@ -167,15 +164,16 @@ MDocOrModuleModel :: { (Maybe Text, [DefProperty SpanInfo])}
   | {- empty -} { (Nothing, []) }
 
 
-ModuleModel :: { [DefProperty SpanInfo] }
+ModuleModel :: { [FVModel SpanInfo] }
   : modelAnn '[' DefProperties ']' { reverse $3 }
 
-DefProperties :: { [DefProperty SpanInfo] }
+DefProperties :: { [FVModel SpanInfo] }
   : DefProperties DefProperty { $2:$1 }
   | {- empty -} { [] }
 
-DefProperty :: { DefProperty SpanInfo }
-  : '(' defprop IDENT DPropArgList ')' { DefProperty (getIdent $3) (fst $4) (snd $4) }
+DefProperty :: { FVModel SpanInfo }
+  : '(' defprop IDENT DPropArgList ')' { FVDefProperty (DefProperty (getIdent $3) (fst $4) (snd $4)) }
+  | '(' property Expr ')' { FVProperty (Property $3) }
 
 -- This rule seems gnarly, but essentially
 -- happy needs to resolve whether the arglist is present or not
@@ -584,3 +582,4 @@ mkBarename tx = BareName tx
 
 
 }
+
