@@ -393,8 +393,9 @@ encodeIfDefun :: IfDefun Type info -> Builder
 encodeIfDefun (IfDefun dn args rty _i) = parens $
   "defun" <+> encodeText dn <> encodeTyAnn rty <+> encodeArgList args
 
-encodeIfDefCap :: IfDefCap Type info -> Builder
-encodeIfDefCap (IfDefCap dn args rty _i) = parens $
+-- todo: defcap meta
+encodeIfDefCap :: IfDefCap Name Type info -> Builder
+encodeIfDefCap (IfDefCap dn args rty _meta _i) = parens $
   "defcap" <+> encodeText dn <> encodeTyAnn rty <+> encodeArgList args
 
 encodeIfDefPact :: IfDefPact Type info -> Builder

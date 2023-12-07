@@ -436,9 +436,10 @@ desugarIfDef = \case
       rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) pure rty
       pure $ IfDefun n args (Just rty') i
   -- Todo: check managed impl
-  Lisp.IfDCap (Lisp.IfDefCap n margs rty _ _ _meta i) -> IfDCap <$> do
+  Lisp.IfDCap (Lisp.IfDefCap n margs rty _ _ meta i) -> IfDCap <$> do
     let args = toArg <$> margs
-    pure $ IfDefCap n args rty i
+    meta' <- maybe (pure Unmanaged) (desugarDefMeta i args) meta
+    pure $ IfDefCap n args rty meta' i
   Lisp.IfDConst dc -> IfDConst <$> desugarDefConst dc
   Lisp.IfDPact (Lisp.IfDefPact n margs rty _ _ i) -> IfDPact <$> case margs of
     [] -> do
@@ -1060,7 +1061,8 @@ renameIfDef = \case
     let i = _ifdcInfo d
     args' <- (traverse.traverse) (renameType i) (_ifdcArgs d)
     rtype' <- traverse (renameType i) (_ifdcRType d)
-    pure (IfDCap (d{_ifdcArgs = args', _ifdcRType = rtype'}))
+    meta' <- resolveMeta i (_ifdcMeta d)
+    pure (IfDCap (d{_ifdcArgs = args', _ifdcRType = rtype', _ifdcMeta = meta'}))
   IfDPact d -> do
     let i = _ifdpInfo d
     args' <- (traverse.traverse) (renameType i) (_ifdpArgs d)

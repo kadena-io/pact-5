@@ -171,18 +171,19 @@ data IfDefun ty info
   , _ifdInfo :: info
   } deriving (Show, Functor)
 
-data IfDefCap ty info
+data IfDefCap name ty info
   = IfDefCap
   { _ifdcName :: Text
   , _ifdcArgs :: [Arg ty]
   , _ifdcRType :: Maybe ty
+  , _ifdcMeta :: DefCapMeta name
   , _ifdcInfo :: info
   } deriving (Show, Functor)
 
 data IfDef name ty builtin info
   = IfDfun (IfDefun ty info)
   | IfDConst (DefConst name ty builtin info)
-  | IfDCap (IfDefCap ty info)
+  | IfDCap (IfDefCap name ty info)
   | IfDPact (IfDefPact ty info)
   | IfDSchema (DefSchema ty info)
   deriving (Show, Functor)
