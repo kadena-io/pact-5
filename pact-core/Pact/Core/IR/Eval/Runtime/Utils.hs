@@ -62,9 +62,9 @@ mkBuiltinFn
   :: (IsBuiltin b)
   => i
   -> b
-  -> CEKEnv b i m
-  -> NativeFunction b i m
-  -> NativeFn b i m
+  -> CEKEnv step b i m
+  -> NativeFunction step b i m
+  -> NativeFn step b i m
 mkBuiltinFn i b env fn =
   NativeFn b env fn (builtinArity b) i
 {-# INLINE mkBuiltinFn #-}
@@ -78,7 +78,7 @@ mkBuiltinFn i b env fn =
   -- EmitEventFrame fqn -> EmitEventFrame <$> f fqn
   -- CreateUserGuardFrame fqn -> CreateUserGuardFrame <$> f fqn
 
-enforcePactValue :: (MonadEval b i m) => i -> CEKValue b i m -> m PactValue
+enforcePactValue :: (MonadEval b i m) => i -> CEKValue step b i m -> m PactValue
 enforcePactValue info = \case
   VPactValue pv -> pure pv
   _ -> throwExecutionError info ExpectedPactValue
@@ -152,7 +152,7 @@ checkNonLocalAllowed info = do
   when (mode == Transactional && disabledInTx) $ failInvariant info
     "Operation only permitted in local execution mode"
 
-toArgTypeError :: CEKValue b i m -> ArgTypeError
+toArgTypeError :: CEKValue step b i m -> ArgTypeError
 toArgTypeError = \case
   VPactValue pv -> case pv of
     PLiteral l -> ATEPrim (literalPrim l)
@@ -169,7 +169,7 @@ argsError
   :: (MonadEval b i m, IsBuiltin b)
   => i
   -> b
-  -> [CEKValue b3 i2 m2]
+  -> [CEKValue step b3 i2 m2]
   -> m a
 argsError info b args =
   throwExecutionError info (NativeArgumentsError (builtinName b) (toArgTypeError <$> args))
@@ -193,7 +193,7 @@ asBool
 asBool _ _ (PLiteral (LString b)) = pure b
 asBool i b pv = argsError i b [VPactValue pv]
 
-readOnlyEnv :: CEKEnv b i m -> CEKEnv b i m
+readOnlyEnv :: CEKEnv step b i m -> CEKEnv step b i m
 readOnlyEnv e
   | view (cePactDb . pdbPurity) e == PSysOnly = e
   | otherwise =
@@ -213,7 +213,7 @@ readOnlyEnv e
          }
   in set cePactDb newPactdb e
 
-sysOnlyEnv :: forall b i m. CEKEnv b i m -> CEKEnv b i m
+sysOnlyEnv :: forall step b i m. CEKEnv step b i m -> CEKEnv step b i m
 sysOnlyEnv e
   | view (cePactDb . pdbPurity) e == PSysOnly = e
   | otherwise =

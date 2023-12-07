@@ -2,6 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
 
 
@@ -37,13 +38,14 @@ import Pact.Core.Environment
 
 
 import Pact.Core.IR.Eval.Runtime
-import Pact.Core.IR.Eval.CEK(eval)
 import Pact.Core.IR.Eval.RawBuiltin
 import Pact.Core.Repl.Runtime.ReplBuiltin
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
+import qualified Pact.Core.IR.Eval.CEK as Eval
+import qualified Pact.Core.IR.Eval.Runtime as Runtime
 
 -- Small internal debugging function for playing with file loading within
 -- this module
@@ -107,7 +109,7 @@ interpretReplProgram (SourceCode _ source) display = do
   interpretGuard i g = do
     pdb <- viewEvalEnv eePactDb
     ps <- viewEvalEnv eeDefPactStep
-    let env = CEKEnv mempty pdb replBuiltinEnv ps False
+    let env = CEKEnv mempty pdb (replBuiltinEnv @Runtime.CEKBigStep) ps False
     ev <- coreEnforceGuard i (RBuiltinWrap RawEnforceGuard) Mt CEKNoHandler env [VGuard g]
     case ev of
       VError txt _ ->
@@ -122,10 +124,10 @@ interpretReplProgram (SourceCode _ source) display = do
 
   interpretExpr purity term = do
     pdb <- use (replEvalEnv . eePactDb)
-    let builtins = replBuiltinEnv
+    let builtins = replBuiltinEnv @Runtime.CEKBigStep
     ps <- viewEvalEnv eeDefPactStep
     let cekEnv = fromPurity $ CEKEnv mempty pdb builtins ps False
-    eval cekEnv term >>= \case
+    Eval.eval cekEnv term >>= \case
       VError txt _ ->
         throwError (PEExecutionError (EvalError txt) (view termInfo term))
       EvalValue v -> do
