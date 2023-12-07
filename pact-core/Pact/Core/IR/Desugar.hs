@@ -990,7 +990,7 @@ renameDefCap
   => DefCap ParsedName DesugarType b i
   -> RenamerT b i m (DefCap Name Type b i)
 renameDefCap (DefCap name arity argtys rtype term meta info) = do
-  meta' <- resolveMeta meta
+  meta' <- resolveMeta info meta
   argtys' <- (traverse.traverse) (renameType info) argtys
   rtype' <- traverse (renameType info) rtype
   term' <- local (set reCurrDef (Just DKDefCap) .  bindArgs) $ renameTerm term
@@ -1006,13 +1006,19 @@ renameDefCap (DefCap name arity argtys rtype term meta info) = do
       ixs = [depth .. newDepth - 1]
       m = M.fromList $ zip (_argName <$> argtys) ((, Nothing) . NBound <$> ixs)
       in over reBinds (M.union m) $ set reVarDepth newDepth rEnv
-  resolveMeta DefEvent = pure DefEvent
-  resolveMeta Unmanaged = pure Unmanaged
-  resolveMeta (DefManaged AutoManagedMeta) = pure (DefManaged AutoManagedMeta)
-  resolveMeta (DefManaged (DefManagedMeta i (FQParsed pn))) = do
-    (name', _) <- resolveName info pn
-    fqn <- expectedFree info name'
-    pure (DefManaged (DefManagedMeta i (FQName fqn)))
+
+resolveMeta
+  :: MonadEval b i m
+  => i
+  -> DefCapMeta ParsedName
+  -> RenamerT b i m (DefCapMeta Name)
+resolveMeta _ DefEvent = pure DefEvent
+resolveMeta _ Unmanaged = pure Unmanaged
+resolveMeta _ (DefManaged AutoManagedMeta) = pure (DefManaged AutoManagedMeta)
+resolveMeta info (DefManaged (DefManagedMeta i (FQParsed pn))) = do
+  (name', _) <- resolveName info pn
+  fqn <- expectedFree info name'
+  pure (DefManaged (DefManagedMeta i (FQName fqn)))
 
 expectedFree
   :: (MonadEval b i m)
