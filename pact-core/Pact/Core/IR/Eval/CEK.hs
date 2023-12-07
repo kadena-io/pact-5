@@ -956,6 +956,7 @@ applyContToValue (Args env i args cont) handler fn = do
     VClosure (CT clo) -> pure (CT clo)
     VClosure _ ->
       throwExecutionError i CannotApplyPartialClosure
+    -- Todo: this is _not_ an invariant failure. Requires a better error
     _ -> failInvariant i "Cannot apply non-function to arguments"
   -- evalCEK (Fn fn cont) handler env arg
 applyContToValue (Fn fn env args vs cont) handler v = do
