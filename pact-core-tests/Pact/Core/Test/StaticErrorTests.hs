@@ -34,7 +34,7 @@ runStaticTest fp src predicate = do
   v <- fst <$> evaluate evalEnv src
   case v of
     Left err ->
-      assertBool "Expected Error constructor matches" (predicate err)
+      assertBool ("Expected Error to match predicate, but got " <> show err <> " instead") (predicate err)
     Right _v -> assertFailure ("Error: Static failure test succeeded for file: " <> fp)
 
 staticTests :: [(FilePath, PactErrorI -> Bool)]
