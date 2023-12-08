@@ -192,20 +192,20 @@ evalCEK cont handler env (CapabilityForm cf info) = do
         capFrame = CreateUserGuardFrame fqn
         cont' = CapInvokeC env info xs [] capFrame cont
         in evalCEK cont' handler env x
-evalCEK cont handler env (ListLit ts _) = do
+evalCEK cont handler env (ListLit ts info) = do
   chargeNodeGas ListNode
   case ts of
     [] -> returnCEKValue cont handler (VList mempty)
-    x:xs -> evalCEK (ListC env xs [] cont) handler env x
+    x:xs -> evalCEK (ListC env info xs [] cont) handler env x
 evalCEK cont handler env (Try catchExpr rest _) = do
   errState <- evalStateToErrorState <$> getEvalState
   let handler' = CEKHandler env catchExpr cont errState handler
   let env' = readOnlyEnv env
   evalCEK Mt handler' env' rest
-evalCEK cont handler env (ObjectLit o _) =
+evalCEK cont handler env (ObjectLit o info) =
   case o of
     (f, term):rest -> do
-      let cont' = ObjC env f rest [] cont
+      let cont' = ObjC env info f rest [] cont
       evalCEK cont' handler env term
     [] -> returnCEKValue cont handler (VObject mempty)
 -- Error terms ignore the current cont
@@ -625,7 +625,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
       lookupFqName mpfqn >>= \case
         -- We found the manager function, evaluate it and commit the argument.
         Just (Dfun dfun) -> do
-          mparam <- maybe (failInvariant def "Managed param does not exist at index") pure (args ^? ix managedIx)
+          mparam <- maybe (failInvariant info "Managed param does not exist at index") pure (args ^? ix managedIx)
           evaluate mpfqn (_dfunTerm dfun) pv mparam >>= \case
             EvalValue res -> do
               result <- enforcePactValue info res
@@ -659,7 +659,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
         -- emitCapability info origToken
         evalCEK sfCont handler inCapEnv capBody
         -- evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
-    _ -> failInvariant def "Invalid managed cap type"
+    _ -> failInvariant info "Invalid managed cap type"
   evaluate fqn' term managed value = case term of
     Lam _ lamargs body i -> do
       -- Todo: `applyLam` here gives suboptimal errors
@@ -816,7 +816,7 @@ createUserGuard info cont handler fqn args =
     Just _ ->
       returnCEK cont handler (VError "create-user-guard pointing to non-guard" info)
     Nothing ->
-      failInvariant def "User guard pointing to no defn"
+      failInvariant info "User guard pointing to no defn"
 
 
 returnCEK
@@ -988,25 +988,25 @@ returnCEKValue (CapPopC st cont) handler v = case st of
         caps' = over (_head . csComposed) (++ csList) (tail caps)
     setEvalState (esCaps . csSlots) caps'
     returnCEKValue cont handler VUnit
-returnCEKValue (ListC env args vals cont) handler v = do
-  pv <- enforcePactValue def v
+returnCEKValue (ListC env info args vals cont) handler v = do
+  pv <- enforcePactValue info v
   case args of
     [] ->
       returnCEKValue cont handler (VList (V.fromList (reverse (pv:vals))))
     e:es ->
-      evalCEK (ListC env es (pv:vals) cont) handler env e
-returnCEKValue (ObjC env currfield fs vs cont) handler v = do
-  v' <- enforcePactValue def v
+      evalCEK (ListC env info es (pv:vals) cont) handler env e
+returnCEKValue (ObjC env info currfield fs vs cont) handler v = do
+  v' <- enforcePactValue info v
   let fields = (currfield,v'):vs
   case fs of
     (f', term):fs' ->
-      let cont' = ObjC env f' fs' fields cont
+      let cont' = ObjC env info f' fs' fields cont
       in evalCEK cont' handler env term
     [] ->
       returnCEKValue cont handler (VObject (M.fromList (reverse fields)))
 returnCEKValue (EnforceErrorC info _) handler v = case v of
   VString err -> returnCEK Mt handler (VError err info)
-  _ -> failInvariant def "enforce function did not return a string"
+  _ -> failInvariant info "enforce function did not return a string"
 -- Discard the value of running a user guard, no error occured, so
 -- return true
 returnCEKValue (UserGuardC cont) handler _v =

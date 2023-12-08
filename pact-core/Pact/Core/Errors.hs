@@ -50,8 +50,6 @@ data LexerError
 
 instance Exception LexerError
 
-
-
 instance Pretty LexerError where
   pretty = ("Lexical Error: " <>) . \case
     LexicalError c1 c2 ->

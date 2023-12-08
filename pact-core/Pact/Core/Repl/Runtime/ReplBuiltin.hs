@@ -39,6 +39,8 @@ import Pact.Core.Namespace
 
 import Pact.Core.Repl.Utils
 
+import qualified Pact.Time as PactTime
+
 prettyShowValue :: CEKValue b i m -> Text
 prettyShowValue = \case
   VPactValue p -> renderText p
@@ -202,7 +204,7 @@ envChainData info b cont handler _env = \case
     where
     go pd [] = do
       replEvalEnv . eePublicData .= pd
-      returnCEKValue cont handler VUnit
+      returnCEKValue cont handler (VString "Updated public metadata")
     go pd ((k,v):rest) = case v of
       PInteger i
         | k == cdGasLimit ->
@@ -211,7 +213,7 @@ envChainData info b cont handler _env = \case
           go (set pdBlockHeight (fromInteger i) pd) rest
       PDecimal i
         | k == cdGasPrice ->
-          go (set (pdPublicMeta . pmGasPrice) (toRational i) pd) rest
+          go (set (pdPublicMeta . pmGasPrice) i pd) rest
       PString s
         | k == cdChainId ->
           go (set (pdPublicMeta . pmChainId) (ChainId s) pd) rest
@@ -219,6 +221,8 @@ envChainData info b cont handler _env = \case
           go (set (pdPublicMeta . pmSender) s pd) rest
         | k == cdPrevBlockHash ->
           go (set pdPrevBlockHash s pd) rest
+      PTime time
+        | k == cdBlockTime -> go (set pdBlockTime (PactTime.toPosixTimestampMicros time) pd) rest
       _ -> returnCEK cont handler (VError ("envChainData: bad public metadata value for key: " <> _field k) info)
   args -> argsError info b args
 

@@ -61,6 +61,7 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.Environment
 import Pact.Core.Capabilities
 import Pact.Core.Namespace
+import Pact.Core.Gas
 import Pact.Core.Crypto.Pairing
 import Pact.Core.Crypto.Hash.Poseidon
 
@@ -1610,6 +1611,48 @@ coreDescribeNamespace info b cont handler _env = \case
   args -> argsError info b args
 
 
+-- chainDataDef :: NativeDef
+-- chainDataDef = defRNative "chain-data" chainData
+--     (funType (tTyObject pcTy) [])
+--     ["(chain-data)"]
+--     "Get transaction public metadata. Returns an object with 'chain-id', 'block-height', \
+--     \'block-time', 'prev-block-hash', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields."
+--   where
+--     pcTy = TyUser (snd chainDataSchema)
+--     chainData :: RNativeFun e
+--     chainData _ [] = do
+--       PublicData{..} <- view eePublicData
+
+--       let PublicMeta{..} = _pdPublicMeta
+--           toTime = toTerm . fromPosixTimestampMicros
+
+--       pure $ toTObject TyAny def
+--         [ (cdChainId, toTerm _pmChainId)
+--         , (cdBlockHeight, toTerm _pdBlockHeight)
+--         , (cdBlockTime, toTime _pdBlockTime)
+--         , (cdPrevBlockHash, toTerm _pdPrevBlockHash)
+--         , (cdSender, toTerm _pmSender)
+--         , (cdGasLimit, toTerm _pmGasLimit)
+--         , (cdGasPrice, toTerm _pmGasPrice)
+--         ]
+--     chainData i as = argsError i as
+
+coreChainData :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+coreChainData info b cont handler _env = \case
+  [] -> do
+    PublicData publicMeta blockHeight blockTime prevBh <- viewEvalEnv eePublicData
+    let (PublicMeta cid sender (Gas gasLimit) gasPrice _ttl _creationTime) = publicMeta
+    let fields = M.fromList [ (cdChainId, PString (_chainId cid))
+                 , (cdBlockHeight, PInteger (fromIntegral blockHeight))
+                 , (cdBlockTime, PTime (PactTime.fromPosixTimestampMicros blockTime))
+                 , (cdPrevBlockHash, PString prevBh)
+                 , (cdSender, PString sender)
+                 , (cdGasLimit, PInteger (fromIntegral gasLimit))
+                 , (cdGasPrice, PDecimal gasPrice)]
+    returnCEKValue cont handler (VObject fields)
+  args -> argsError info b args
+
+
 -- -------------------------
 -- ZK defns
 -- -------------------------
@@ -1668,32 +1711,6 @@ fromG2 (Point x y) = ObjectData pts
     , (Field "y", y')]
 
 
--- pairingCheckDef :: NativeDef
--- pairingCheckDef =
---   defRNative "pairing-check" pairingCheck' (funType tTyBool [("points-g1", TyList a), ("points-g2", TyList b)])
---   []
---   "Perform pairing and final exponentiation points in G1 and G2 in BN254, check if the result is 1"
---   where
---   a = mkTyVar "a" []
---   b = mkTyVar "b" []
---   pairingCheck':: RNativeFun e
---   pairingCheck' i [TList p1s _ _, TList p2s _ _] = do
---     g1s <- traverse termToG1 $ G.toList p1s
---     g2s <- traverse termToG2 $ G.toList p2s
---     traverse_ (`ensureOnCurve` b1) g1s
---     traverse_ (`ensureOnCurve` b2) g2s
---     let pairs = zip g1s g2s
---     _ <- computeGas (Right i) (GZKArgs (Pairing (length pairs)))
---     pure $ toTerm $ pairingCheck pairs
---       where
---       ensureOnCurve :: (Num p, Eq p) => CurvePoint p -> p -> Eval e ()
---       ensureOnCurve p bp = unless (isOnCurve p bp) $ evalError' i "Point not on curve"
---       termToG1 (TObject o _) = toG1 i o
---       termToG1 _ = evalError' i "not a point"
---       termToG2 (TObject o _) = toG2 i o
---       termToG2 _ = evalError' i "not a point"
---   pairingCheck' i as = argsError i as
-
 zkPairingCheck :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 zkPairingCheck info b cont handler _env = \case
   args@[VList p1s, VList p2s] -> do
@@ -1704,26 +1721,6 @@ zkPairingCheck info b cont handler _env = \case
     let pairs = zip (V.toList g1s) (V.toList g2s)
     returnCEKValue cont handler $ VBool $ pairingCheck pairs
   args -> argsError info b args
-
---  curveOrder :: Integer
---   curveOrder = 21888242871839275222246405745257275088548364400416034343698204186575808495617
---   scalarMul :: RNativeFun e
---   scalarMul i as@[TLiteral (LString ptTy) _ , TObject p1 _, (TLiteral (LInteger scalar) _) :: Term Name] = do
---     let scalar' = scalar `mod` curveOrder
---     case T.toLower ptTy of
---       "g1" -> do
---         p1' <- toG1 i p1
---         unless (isOnCurve p1' b1) $ evalError' i "Point not on curve"
---         _ <- computeGas (Right i) (GZKArgs (ScalarMult ZKG1))
---         let p2' = multiply p1' scalar'
---         pure $ TObject (fromG1 p2') def
---       "g2" -> do
---         p1' <- toG2 i p1
---         unless (isOnCurve p1' b2) $ evalError' i "Point not on curve"
---         _ <- computeGas (Right i) (GZKArgs (ScalarMult ZKG2))
---         let p2' = multiply p1' scalar'
---         pure $ TObject (fromG2 p2') def
---       _ -> argsError i as
 
 zkScalaMult :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 zkScalaMult info b cont handler _env = \case
@@ -1769,36 +1766,9 @@ zkPointAddition info b cont handler _env = \case
       _ -> argsError info b args
   args -> argsError info b args
 
--- pointAdditionDef :: NativeDef
--- pointAdditionDef =
---   defRNative "point-add" pactPointAdd (funType a [("type", tTyString), ("point1", a), ("point2", a)])
---   [ "(point-add 'g1 {'x: 1, 'y: 2}  {'x: 1, 'y: 2})"
---   ] "Add two points together that lie on the curve BN254. Point addition either in Fq or in Fq2"
---   where
---   a = mkTyVar "a" []
---   pactPointAdd :: RNativeFun e
---   pactPointAdd i as@[TLiteral (LString ptTy) _ , TObject p1 _, (TObject p2 _) :: Term Name] =
---     case T.toLower ptTy of
---       "g1" -> do
---         p1' <- toG1 i p1
---         p2' <- toG1 i p2
---         unless (isOnCurve p1' b1 && isOnCurve p2' b1) $ evalError' i "Point not on curve"
---         _ <- computeGas (Right i) (GZKArgs (PointAdd ZKG1))
---         let p3' = add p1' p2'
---         pure $ TObject (fromG1 p3') def
---       "g2" -> do
---         p1' <- toG2 i p1
---         p2' <- toG2 i p2
---         unless (isOnCurve p1' b2 && isOnCurve p2' b2) $ evalError' i "Point not on curve"
---         _ <- computeGas (Right i) (GZKArgs (PointAdd ZKG2))
---         let p3' = add p1' p2'
---         pure $ TObject (fromG2 p3') def
---       _ -> argsError i as
---   pactPointAdd i as = argsError i as
-
-------
+-----------------------------------
 -- Poseidon
---
+-----------------------------------
 
 poseidonHash :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 poseidonHash info b cont handler _env = \case
@@ -1807,13 +1777,6 @@ poseidonHash info b cont handler _env = \case
     Just intArgs <- traverse (preview (_PLiteral . _LInteger)) as ->
       returnCEKValue cont handler $ VInteger (poseidon (V.toList intArgs))
   args -> argsError info b args
-  -- poseidon' :: RNativeFun e
-  -- poseidon' i as
-  --   | not (null as) && length as <= 8,
-  --     Just intArgs <- traverse (preview _TLitInteger) as
-  --     = computeGas' i (GPoseidonHashHackAChain $ length as) $
-  --       return $ toTerm $ poseidon intArgs
-  --    | otherwise = argsError i as
 
 -----------------------------------
 -- Builtin exports
@@ -1950,3 +1913,4 @@ rawBuiltinRuntime = \case
   RawZKScalarMult -> zkScalaMult
   RawZkPointAdd -> zkPointAddition
   RawPoseidonHashHackachain -> poseidonHash
+  RawChainData -> coreChainData

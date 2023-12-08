@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Pact.Core.Test.ZkTests (spec) where
+module Pact.Core.Test.ZkTests (tests) where
 
 import Data.Group (pow)
 import Data.Field(Field)
@@ -10,8 +10,10 @@ import Data.Foldable(foldl')
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
-import Pact.Native.Pairing
+import Pact.Core.Crypto.Pairing.Fields
+import Pact.Core.Crypto.Pairing
 import Test.Tasty
+import Test.Tasty.HUnit
 import Test.Tasty.Hedgehog
 
 p1 :: CurvePoint Fq
@@ -66,127 +68,130 @@ genG2 :: Gen G2
 genG2 = genCurvePoint g2
 
 pairingGenTest :: TestTree
-pairingGenTest = modifyMaxSuccess (const 20) $
-  describe "Curve generated tests" $ do
-    it "Generates a point on the curve, and obeys the pairing function" $ hedgehog $ do
-      p1' <- forAll genG1
-      assert (isOnCurve g1 b1)
-      addDoubling p1'
+pairingGenTest = testProperty "Generates a point on the curve, and obeys the pairing function" $ withTests 20 $ property $ do
+    p1' <- forAll genG1
+    Hedgehog.assert (isOnCurve g1 b1)
+    addDoubling p1'
 
-      p2' <- forAll genG2
-      assert (isOnCurve g2 b2)
-      addDoubling p2'
+    p2' <- forAll genG2
+    Hedgehog.assert (isOnCurve g2 b2)
+    addDoubling p2'
 
-      r1 <- forAll $ Gen.integral (Range.constant 0 1000)
-      r2 <- forAll $ Gen.integral (Range.constant 0 1000)
-      pairing (multiply p1' r1)  (multiply p2' r2) === pow (pairing p1' p2') (r1 * r2)
-      where
-      addDoubling pt =
-        add (add (double pt) pt) pt === double (double pt)
+    r1 <- forAll $ Gen.integral (Range.constant 0 1000)
+    r2 <- forAll $ Gen.integral (Range.constant 0 1000)
+    pairing (multiply p1' r1)  (multiply p2' r2) === pow (pairing p1' p2') (r1 * r2)
+    where
+    addDoubling pt =
+      add (add (double pt) pt) pt === double (double pt)
 
 pairingProofTest :: TestTree
-pairingProofTest =
-  describe "Proof system check" $
-    it "Should verify the test proof" $ do
+pairingProofTest = testGroup "Proof system check" $ pure $
+    testCase "Should verify the test proof" $ do
       let pp1 = Point 17899149025429256540670503450603840524526341770363252849540840688855727610005 6794888886586012478899094699714874747255503821264355877996121220781692052981
       let pp2 = Point
                 [4555160965165375385578562333880156835913586562443164694386914449127412126755, 16845220796436439159658389520454136502557317448502144055381480626643346396453]
                 [15740922883530394503972296892303076718862447518810507376564218784428077030254, 9794083499477745551885635852864140214811154513402172713835626845455029169909]
       let pp3 = Point 2188339130061078784977610313576641337709587353412678866175084864819379744795 7363399164077520072321162032202323356331016580445157674442815097597932017402
       let inp = [293440811465879871736579011234159205259, 82735329187654304797954025540247337640, 1125899906842623, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1]
-      pp1 `shouldSatisfy` (`isOnCurve` b1)
-      pp2 `shouldSatisfy` (`isOnCurve` b2)
-      pp3 `shouldSatisfy` (`isOnCurve` b1)
-      verifyProof pp1 pp2 pp3 inp `shouldBe` True
+      assertBool "pp1 on curve" (isOnCurve pp1 b1)
+      assertBool "pp2 on curve" (isOnCurve pp2 b2)
+      assertBool "pp3 on curve" (isOnCurve pp3 b1)
+      verifyProof pp1 pp2 pp3 inp @=? True
 
 
 -- Tests from:
 -- https://github.com/ethereum/py_pairing/blob/master/tests/test_bn128.py
 pairingLibTest :: TestTree
 pairingLibTest =
-  testGroup "pairing lib tests" $
-    it "passes basic field arithmetic for Fq" $ do
-      Fq 2 * Fq 2 `shouldBe` Fq 4
-      Fq 2 / Fq 7 + Fq 9 / Fq 7 `shouldBe` Fq 11 / Fq 7
-      Fq 2 * Fq 7 + Fq 9 * Fq 7 `shouldBe` Fq 11 * Fq 7
-      Fq 9 ^ fieldModulus `shouldBe` Fq 9
-    it "passes basic field arithmetic for Fq2" $ do
+  testGroup "pairing lib tests"
+    [ basicArith
+    , basicFieldArith
+    , basicFieldArithFq12
+    , curveOpG1
+    , curveOpG2
+    , basicPairing]
+  where
+  basicArith = testCase "passes basic field arithmetic for Fq" $ do
+      Fq 2 * Fq 2 @=? Fq 4
+      Fq 2 / Fq 7 + Fq 9 / Fq 7 @=? Fq 11 / Fq 7
+      Fq 2 * Fq 7 + Fq 9 * Fq 7 @=? Fq 11 * Fq 7
+      Fq 9 ^ fieldModulus @=? Fq 9
+  basicFieldArith = testCase "passes basic field arithmetic for Fq2" $ do
       let x :: Fq2 = [1, 0]
       let f :: Fq2 = [1, 2]
       let fpx :: Fq2 = [2, 2]
-      x + f `shouldBe` fpx
-      f / f `shouldBe` 1
-      1 / f + x / f `shouldBe` (1 + x) / f
-      1 * f + x * f `shouldBe` (1 + x) * f
-      x ^ (fieldModulus ^ (2 :: Int) - 1) `shouldBe` 1
-    it "passes basic field arithmetic for FQ12" $ do
+      x + f @=? fpx
+      f / f @=? 1
+      1 / f + x / f @=? (1 + x) / f
+      1 * f + x * f @=? (1 + x) * f
+      x ^ (fieldModulus ^ (2 :: Int) - 1) @=? 1
+  basicFieldArithFq12 = testCase "passes basic field arithmetic for FQ12" $ do
       let x :: Fq12 = [1]
           f :: Fq12 = [[[1, 2], [3, 4], [5, 6]], [[7, 8], [9, 10], [11, 12]]]
           fpx :: Fq12 = [[[2, 2], [3, 4], [5, 6]], [[7, 8], [9, 10], [11, 12]]]
-      x + f `shouldBe` fpx
-      f / f `shouldBe` 1
-      1 / f + x / f `shouldBe` (1 + x) / f
-      1 * f + x * f `shouldBe` (1 + x) * f
-      x ^ (fieldModulus ^ (2 :: Int) - 1) `shouldBe` 1
-    it "passes basic elliptic curve operations for G1" $ do
-      add (add (double g1) g1) g1 `shouldBe` double (double g1)
-      double g1 `shouldNotBe` g1
-      add (multiply g1 9) (multiply g1 5) `shouldBe` add (multiply g1 12) (multiply g1 2)
-      multiply g1 curveOrder `shouldBe` CurveInf
-    it "passes basic elliptic curve operations for G2" $ do
-      add (add (double g2) g2) g2 `shouldBe` double (double g2)
-      double g2 `shouldNotBe` g2
-      add (multiply g2 9) (multiply g2 5) `shouldBe` add (multiply g2 12) (multiply g2 2)
-      multiply g2 curveOrder `shouldBe` CurveInf
-      multiply g2 (2 * fieldModulus - curveOrder) `shouldNotBe` CurveInf
-      isOnCurve (multiply g2 9) b2 `shouldBe` True
-    it "passes basic pairing tests" $ do
+      x + f @=? fpx
+      f / f @=? 1
+      1 / f + x / f @=? (1 + x) / f
+      1 * f + x * f @=? (1 + x) * f
+      x ^ (fieldModulus ^ (2 :: Int) - 1) @=? 1
+  curveOpG1 = testCase "passes basic elliptic curve operations for G1" $ do
+      add (add (double g1) g1) g1 @=? double (double g1)
+      assertBool "double g1 /= g1" $ (double g1 /= g1)
+      add (multiply g1 9) (multiply g1 5) @=? add (multiply g1 12) (multiply g1 2)
+      multiply g1 curveOrder @=? CurveInf
+  curveOpG2 = testCase "passes basic elliptic curve operations for G2" $ do
+      add (add (double g2) g2) g2 @=? double (double g2)
+      assertBool "double g2 /= g2" $ (double g2 /= g2)
+      add (multiply g2 9) (multiply g2 5) @=? add (multiply g2 12) (multiply g2 2)
+      multiply g2 curveOrder @=? CurveInf
+      assertBool "g2 field mod test" $ multiply g2 (2 * fieldModulus - curveOrder) /= CurveInf
+      isOnCurve (multiply g2 9) b2 @=? True
+  basicPairing = testCase "passes basic pairing tests" $ do
       -- Pairing operation on negated g1
       let pp1 = pairing g1 g2
       let pn1 = pairing (negatePt g1) g2
-      pp1 * pn1 `shouldBe` 1
+      pp1 * pn1 @=? 1
 
       -- Pairing op negated in g2
       let np1 = pairing g1 (negatePt g2)
-      pp1 * np1 `shouldBe` 1
-      np1 `shouldBe` pn1
+      pp1 * np1 @=? 1
+      np1 @=? pn1
 
       -- Pairing output has correct order
-      pp1 ^ curveOrder `shouldBe` 1
+      pp1 ^ curveOrder @=? 1
 
       -- Pairing bilinearity in g1
       let pp2 = pairing (multiply g1 2) g2
-      pp1 * pp1 `shouldBe` pp2
+      pp1 * pp1 @=? pp2
 
       -- Pairing is non-degenerate
-      (pp1 /= pp2) && (pp1 /= np1) && (pp2 /= np1) `shouldBe` True
+      (pp1 /= pp2) && (pp1 /= np1) && (pp2 /= np1) @=? True
 
       -- Pairing bilinearity in G2
       let po2 = pairing g1 (multiply g2 2)
-      pp1 * pp1 `shouldBe` po2
+      pp1 * pp1 @=? po2
 
       -- Composite check
       let p3 = pairing (multiply g1 37) (multiply g2 27)
       let po3 = pairing (multiply g1 999) g2
-      p3 `shouldBe` po3
+      p3 @=? po3
 
 
-
-
-spec :: TestTree
-spec = do
-  pairingLibTest
-  pairingGenTest
-  pairingProofTest
-  describe "pairing tests" $ do
-    it "pairing smoke test" $ do
+pairingSmokeTest :: TestTree
+pairingSmokeTest = testCase "pairing smoke test" $ do
       let a :: Integer = 2
       let b :: Integer = 3
-
-      pairing p1 p2 `shouldBe` pt'
-
+      pairing p1 p2 @=? pt'
       pairing (multiply p1 a) (multiply p2 b)
-        `shouldBe` pow (pairing p1 p2) (a * b)
+        @=? pow (pairing p1 p2) (a * b)
+
+tests :: TestTree
+tests = testGroup "ZKPairingTests" $
+  [ pairingLibTest
+  , pairingGenTest
+  , pairingProofTest
+  , pairingSmokeTest]
+
 
 
 -- Verifying proof contract tests

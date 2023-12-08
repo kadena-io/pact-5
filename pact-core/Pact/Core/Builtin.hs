@@ -75,8 +75,6 @@ data RawBuiltin
   | RawAbs
   | RawPow
   -- Boolean Ops
-  -- | RawAnd
-  -- | RawOr
   | RawNot
   -- Equality and Comparisons
   | RawEq
@@ -199,6 +197,7 @@ data RawBuiltin
   | RawNamespace
   | RawDefineNamespace
   | RawDescribeNamespace
+  | RawChainData
   -- ZK
   | RawZkPairingCheck
   | RawZKScalarMult
@@ -342,6 +341,7 @@ rawBuiltinToText = \case
   RawZKScalarMult -> "scalar-mult"
   RawZkPointAdd -> "point-add"
   RawPoseidonHashHackachain -> "poseidon-hash-hack-a-chain"
+  RawChainData -> "chain-data"
 
 instance IsBuiltin RawBuiltin where
   builtinName = NativeName . rawBuiltinToText
@@ -480,6 +480,7 @@ instance IsBuiltin RawBuiltin where
     RawZKScalarMult -> 3
     RawZkPointAdd -> 3
     RawPoseidonHashHackachain -> 1
+    RawChainData -> 0
 
 
 rawBuiltinNames :: [Text]

@@ -366,11 +366,11 @@ data Cont b i m
   -- Known as a single argument it will not construct a needless closure
   | SeqC (CEKEnv b i m) (EvalTerm b i) (Cont b i m)
   -- ^ Sequencing expression, holding the next term to evaluate
-  | ListC (CEKEnv b i m) [EvalTerm b i] [PactValue] (Cont b i m)
+  | ListC (CEKEnv b i m) i [EvalTerm b i] [PactValue] (Cont b i m)
   -- ^ Continuation for list elements
   | CondC (CEKEnv b i m) i (CondFrame b i) (Cont b i m)
   -- ^ Continuation for conditionals with lazy semantics
-  | ObjC (CEKEnv b i m) Field [(Field, EvalTerm b i)] [(Field, PactValue)] (Cont b i m)
+  | ObjC (CEKEnv b i m) i Field [(Field, EvalTerm b i)] [(Field, PactValue)] (Cont b i m)
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
   | CapInvokeC (CEKEnv b i m) i [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
   -- ^ Capability special form frams that eva

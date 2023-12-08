@@ -70,3 +70,21 @@ Bullet points that are not filled are potential tasks
 - [ ] EvalResult and EvalInput-type API
 
 
+## Natives
+
+### at
+- [x] Object case implemented
+- [x] List case implemented
+- [ ] Gas
+
+### base64-decode
+- [x] implemented
+- [ ] Gas
+
+### base64-encode
+- [x] implemented
+- [ ] Gas
+
+### bind
+- [x] implemented
+- [ ] Gas

@@ -167,6 +167,25 @@ desugarAppArityRaw
   -> RawBuiltin
   -> [Term name Lisp.Type builtin info]
   -> Term name Lisp.Type builtin info
+-- Todo: this presents a really, _really_ annoying case for the map overload :(
+-- Jose: I am unsure how to fix this so far, but it does not break any tests.
+-- that is:
+-- prod:
+--   pact> (map (- 1) [1, 2, 3])
+--   [0 -1 -2]
+-- core:
+--   pact>(map (- 1) [1 2 3])
+--   (interactive):1:0: Native evaluation error for native map, received incorrect argument(s) of type(s) [integer] , [list]
+--   1 | (map (- 1) [1 2 3])
+--     | ^^^^^^^^^^^^^^^^^^^
+
+--   pact>(map (lambda (x) (- 1 x)) [1 2 3])
+--   [0, -1, -2]
+-- this is because prod simply suspends the static term without figuring out the arity which is being used
+-- to apply, vs core which does not attempt to do this, and picks an overload eagerly and statically.
+-- in 99% of cases this is fine, but we overloaded `-` to be completely different functions.
+desugarAppArityRaw f i RawSub [e1] =
+    App (Builtin (f RawNegate) i) ([e1]) i
 desugarAppArityRaw f i RawEnumerate [e1, e2, e3] =
     App (Builtin (f RawEnumerateStepN) i) ([e1, e2, e3]) i
 desugarAppArityRaw f i RawSelect [e1, e2, e3] =
@@ -528,10 +547,12 @@ termSCC currM currDefns = \case
     DN _ -> mempty
   Lam _ args e _ ->
     let currDefns' = foldl' (\s t -> S.delete (_argName t) s) currDefns args
-    in termSCC currM currDefns' e
+        tySCC = foldMap (argSCC currM currDefns) args
+    in tySCC <> termSCC currM currDefns' e
   Let arg e1 e2 _ ->
     let currDefns' = S.delete (_argName arg) currDefns
-    in S.union (termSCC currM currDefns e1) (termSCC currM currDefns' e2)
+        tySCC = argSCC currM currDefns arg
+    in tySCC <> termSCC currM currDefns e1 <> termSCC currM currDefns' e2
   App fn apps _ ->
     S.union (termSCC currM currDefns fn) (foldMap (termSCC currM currDefns) apps)
   Sequence e1 e2 _ -> S.union (termSCC currM currDefns e1) (termSCC currM currDefns e2)
@@ -589,19 +610,30 @@ typeSCC currM currDefs = \case
       | S.member n' currDefs && mn' == currM -> S.singleton n'
       | otherwise -> mempty
 
+argSCC :: ModuleName -> Set Text -> Arg DesugarType -> Set Text
+argSCC currM currDefs (Arg _ ty) = case ty of
+  Just t -> typeSCC currM currDefs t
+  Nothing -> mempty
+
 defunSCC
   :: ModuleName
   -> Set Text
   -> Defun ParsedName DesugarType  b i
   -> Set Text
-defunSCC mn cd = termSCC mn cd . _dfunTerm
+defunSCC mn cd df =
+  let tscc = termSCC mn cd (_dfunTerm df)
+      argScc = foldMap (argSCC mn cd) (_dfunArgs df)
+  in tscc <> argScc <> maybe mempty (typeSCC mn cd) (_dfunRType df)
 
 defConstSCC
   :: ModuleName
   -> Set Text
   -> DefConst ParsedName DesugarType  b i
   -> Set Text
-defConstSCC mn cd = foldMap (termSCC mn cd) . _dcTerm
+defConstSCC mn cd dc =
+  let tscc = foldMap (termSCC mn cd) (_dcTerm dc)
+      tyscc =  maybe mempty (typeSCC mn cd) (_dcType dc)
+  in tscc <> tyscc
 
 defTableSCC
   :: ModuleName
@@ -618,7 +650,9 @@ defCapSCC
   -> DefCap ParsedName DesugarType b i1
   -> Set Text
 defCapSCC mn cd dc =
-  case _dcapMeta dc of
+  let argsScc = foldMap (argSCC mn cd) (_dcapArgs dc)
+      rtypeScc = maybe mempty (typeSCC mn cd) (_dcapRType dc)
+  in argsScc <> rtypeScc <> case _dcapMeta dc of
     DefManaged (DefManagedMeta _ (FQParsed pn)) ->
       termSCC mn cd (_dcapTerm dc) <> parsedNameSCC mn cd pn
     _ -> termSCC mn cd (_dcapTerm dc)
@@ -627,9 +661,20 @@ defCapSCC mn cd dc =
 defPactSCC
   :: ModuleName
   -> Set Text
+  -> DefPact ParsedName DesugarType b i
+  -> Set Text
+defPactSCC mn cd dp =
+  let argsScc = foldMap (argSCC mn cd) (_dpArgs dp)
+      rtScc = maybe mempty (typeSCC mn cd) (_dpRetType dp)
+      stepsScc = foldMap (defPactStepSCC mn cd) (_dpSteps dp)
+  in argsScc <> rtScc <> stepsScc
+
+defPactStepSCC
+  :: ModuleName
+  -> Set Text
   -> Step ParsedName DesugarType b i
   -> Set Text
-defPactSCC mn cd = \case
+defPactStepSCC mn cd = \case
   Step step mSteps -> S.union (termSCC mn cd step) (stepsSCC mSteps)
   StepWithRollback step rollback mSteps ->
     S.unions $ stepsSCC mSteps : [termSCC mn cd step, termSCC mn cd rollback]
@@ -647,7 +692,7 @@ defSCC mn cd = \case
   DConst d -> defConstSCC mn cd d
   DCap dc -> defCapSCC mn cd dc
   DSchema ds -> foldMap (typeSCC mn cd) ( _dsSchema ds)
-  DPact dp -> foldMap (defPactSCC mn cd) (_dpSteps dp)
+  DPact dp -> defPactSCC mn cd dp
   DTable dt -> defTableSCC mn cd dt
 
 ifDefSCC
