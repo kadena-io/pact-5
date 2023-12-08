@@ -435,7 +435,7 @@ desugarDefMeta info args = \case
     Just (arg, name) ->
         case findIndex ((==) arg . view argName) args of
           Just index' ->
-            let dmanaged = DefManagedMeta index' (FQParsed name)
+            let dmanaged = DefManagedMeta (index', arg) name
             in pure (DefManaged dmanaged)
           Nothing ->
             throwDesugarError (InvalidManagedArg arg) info
@@ -450,7 +450,7 @@ desugarDefCap (Lisp.DefCap dcn arglist rtype term _docs _model meta i) =
     Just _ -> do
       let arglist' = toArg <$> arglist
       term' <- desugarLispTerm term
-      meta' <- maybe (pure Unmanaged) (desugarDefMeta i arglist') meta
+      meta' <- fmap FQParsed <$> maybe (pure Unmanaged) (desugarDefMeta i arglist') meta
       pure (DefCap dcn (length arglist) arglist' rtype term' meta' i)
     Nothing ->
       throwDesugarError (NotAllowedOutsideModule "defcap") i
@@ -486,7 +486,7 @@ desugarIfDef = \case
   -- Todo: check managed impl
   Lisp.IfDCap (Lisp.IfDefCap n margs rty _ _ meta i) -> IfDCap <$> do
     let args = toArg <$> margs
-    meta' <- maybe (pure Unmanaged) (desugarDefMeta i args) meta
+    meta' <- fmap (BareName . rawParsedName) <$> maybe (pure Unmanaged) (desugarDefMeta i args) meta
     pure $ IfDefCap n args rty meta' i
   Lisp.IfDConst dc -> IfDConst <$> desugarDefConst dc
   Lisp.IfDPact (Lisp.IfDefPact n margs rty _ _ i) -> IfDPact <$> case margs of
@@ -1089,8 +1089,8 @@ renameDefCap (DefCap name arity argtys rtype term meta info) = do
 resolveMeta
   :: MonadEval b i m
   => i
-  -> DefCapMeta ParsedName
-  -> RenamerT b i m (DefCapMeta Name)
+  -> DefCapMeta (FQNameRef ParsedName)
+  -> RenamerT b i m (DefCapMeta (FQNameRef Name))
 resolveMeta _ DefEvent = pure DefEvent
 resolveMeta _ Unmanaged = pure Unmanaged
 resolveMeta _ (DefManaged AutoManagedMeta) = pure (DefManaged AutoManagedMeta)
@@ -1124,9 +1124,11 @@ renameDef = \case
 
 renameIfDef
   :: (MonadEval b i m, DesugarBuiltin b)
-  => IfDef ParsedName DesugarType b i
+  => ModuleName
+  -> Set Text
+  -> IfDef ParsedName DesugarType b i
   -> RenamerT b i m (IfDef Name Type b i)
-renameIfDef = \case
+renameIfDef mn ifDefuns = \case
   -- Todo: export and use lenses lol
   IfDfun d -> do
     let i = _ifdInfo d
@@ -1139,8 +1141,13 @@ renameIfDef = \case
     let i = _ifdcInfo d
     args' <- (traverse.traverse) (renameType i) (_ifdcArgs d)
     rtype' <- traverse (renameType i) (_ifdcRType d)
-    meta' <- resolveMeta i (_ifdcMeta d)
-    pure (IfDCap (d{_ifdcArgs = args', _ifdcRType = rtype', _ifdcMeta = meta'}))
+    traverse_ (ensureInLocals i) (_ifdcMeta d)
+    pure (IfDCap (d{_ifdcArgs = args', _ifdcRType = rtype'}))
+    where
+    ensureInLocals info (BareName n) = do
+      unless (S.member n ifDefuns) $ throwDesugarError (NoSuchModuleMember mn n) info
+
+
   IfDPact d -> do
     let i = _ifdpInfo d
     args' <- (traverse.traverse) (renameType i) (_ifdpArgs d)
@@ -1376,22 +1383,25 @@ renameInterface (Interface unmangled defs imports ih info) = do
       throwDesugarError (RecursionDetected ifn (ifDefName <$> d)) (ifDefInfo (head d))
   binds <- view reBinds
   bindsWithImports <- foldlM (handleImport info) binds imports
-  (defs'', _, _) <- over _1 reverse <$> foldlM (go ifn) ([], S.empty, bindsWithImports) defs'
+  (defs'', _, _, _) <- over _1 reverse <$> foldlM (go ifn) ([], S.empty, bindsWithImports, S.empty) defs'
   pure (Interface ifn defs'' imports ih info)
   where
   mkScc ifn dns def = (def, ifDefName def, S.toList (ifDefSCC ifn dns def))
-  go ifn (ds, s, m) d = do
+  go ifn (ds, s, m, dfnSet) d = do
     let dn = ifDefName d
     when (S.member dn s) $
       throwDesugarError (DuplicateDefinition dn) info
     d' <- local (set reBinds m) $
-          local (set reCurrModule (Just (ifn, []))) $ renameIfDef d
+          local (set reCurrModule (Just (ifn, []))) $ renameIfDef ifn dfnSet d
     let m' = case ifDefToDef d' of
               Just defn ->
                 let dk = defKind defn
                 in M.insert dn (NTopLevel ifn ih, Just dk) m
               Nothing -> m
-    pure (d':ds, S.insert dn s, m')
+        dfnSet' = case d of
+          IfDfun{} -> S.insert dn dfnSet
+          _ -> dfnSet
+    pure (d':ds, S.insert dn s, m', dfnSet')
 
 runRenamerT
   :: (MonadEval b i m)
