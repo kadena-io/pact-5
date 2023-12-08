@@ -177,6 +177,8 @@ desugarAppArityRaw f i RawReadMsg [] =
   App (Builtin (f RawReadMsgDefault) i) [] i
 desugarAppArityRaw f i RawDefineKeySet [e1] =
   App (Builtin (f RawDefineKeysetData) i) [e1] i
+desugarAppArityRaw f i RawPoseidonHashHackachain li =
+  App (Builtin (f RawPoseidonHashHackachain) i )[(ListLit li i)] i
 desugarAppArityRaw f i b args =
     App (Builtin (f b) i) args i
 

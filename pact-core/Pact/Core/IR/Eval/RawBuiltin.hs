@@ -24,7 +24,7 @@ module Pact.Core.IR.Eval.RawBuiltin
 --
 
 import Control.Lens hiding (from, to, op, parts)
-import Control.Monad(when, unless, foldM)
+import Control.Monad
 import Control.Monad.IO.Class
 import Data.Attoparsec.Text(parseOnly)
 import Data.Containers.ListUtils(nubOrd)
@@ -35,6 +35,7 @@ import Data.Decimal(roundTo', Decimal)
 import Data.Vector(Vector)
 import Data.Maybe(isJust, maybeToList)
 import Numeric(showIntAtBase)
+import qualified Control.Lens as Lens
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
 import qualified Data.Text as T
@@ -43,8 +44,9 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Char as Char
 import qualified Data.ByteString as BS
+import qualified GHC.Exts as Exts
 import qualified Pact.Time as PactTime
-import qualified Pact.Core.Trans.TOps as Musl
+import qualified Data.Poly as Poly
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
@@ -59,7 +61,8 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.Environment
 import Pact.Core.Capabilities
 import Pact.Core.Namespace
-import qualified Pact.Core.Principal as Pr
+import Pact.Core.Crypto.Pairing
+import Pact.Core.Crypto.Hash.Poseidon
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
@@ -67,13 +70,14 @@ import Pact.Core.StableEncoding
 import Pact.Core.IR.Eval.CEK
 
 import qualified Pact.Core.Pretty as Pretty
+import qualified Pact.Core.Principal as Pr
+import qualified Pact.Core.Trans.TOps as Musl
 
 
 ----------------------------------------------------------------------
 -- Our builtin definitions start here
 ----------------------------------------------------------------------
 
--- -- Todo: runtime error
 unaryIntFn :: (IsBuiltin b, MonadEval b i m) => (Integer -> Integer) -> NativeFunction b i m
 unaryIntFn op info b cont handler _env = \case
   [VLiteral (LInteger i)] -> returnCEKValue cont handler (VLiteral (LInteger (op i)))
@@ -697,7 +701,7 @@ keysetRefGuard info b cont handler env = \case
 coreReadInteger :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreReadInteger info b cont handler _env = \case
   [VString s] -> do
-    EnvData envData <- viewEvalEnv eeMsgBody
+    ObjectData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just (PInteger p) -> returnCEKValue cont handler (VInteger p)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
@@ -706,19 +710,19 @@ coreReadInteger info b cont handler _env = \case
 readMsg :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 readMsg info b cont handler _env = \case
   [VString s] -> do
-    EnvData envData <- viewEvalEnv eeMsgBody
+    ObjectData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just pv -> returnCEKValue cont handler (VPactValue pv)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
   [] -> do
-    EnvData envData <- viewEvalEnv eeMsgBody
+    ObjectData envData <- viewEvalEnv eeMsgBody
     returnCEKValue cont handler (VObject envData)
   args -> argsError info b args
 
 coreReadDecimal :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreReadDecimal info b cont handler _env = \case
   [VString s] -> do
-    EnvData envData <- viewEvalEnv eeMsgBody
+    ObjectData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just (PDecimal p) -> returnCEKValue cont handler (VDecimal p)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
@@ -727,7 +731,7 @@ coreReadDecimal info b cont handler _env = \case
 coreReadString :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 coreReadString info b cont handler _env = \case
   [VString s] -> do
-    EnvData envData <- viewEvalEnv eeMsgBody
+    ObjectData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field s) envData of
       Just (PString p) -> returnCEKValue cont handler (VString p)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
@@ -735,7 +739,7 @@ coreReadString info b cont handler _env = \case
 
 readKeyset' :: (MonadEval b i m) => T.Text -> m (Maybe (KeySet FullyQualifiedName))
 readKeyset' ksn = do
-    EnvData envData <- viewEvalEnv eeMsgBody
+    ObjectData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field ksn) envData of
       Just (PObject dat) -> parseObj dat
         where
@@ -1610,6 +1614,207 @@ coreDescribeNamespace info b cont handler _env = \case
 -- ZK defns
 -- -------------------------
 
+ensureOnCurve :: (Num p, Eq p, MonadEval b i m) => i -> CurvePoint p -> p -> m ()
+ensureOnCurve info p bp = unless (isOnCurve p bp) $ failInvariant info "Point not on curve"
+
+toG1 :: ObjectData PactValue -> Maybe G1
+toG1 (ObjectData obj) = do
+  px <- fromIntegral <$> preview (ix (Field "x") . _PLiteral . _LInteger) obj
+  py <- fromIntegral <$> preview (ix (Field "y") . _PLiteral . _LInteger) obj
+  if px == 0 && py == 0 then pure CurveInf
+  else pure (Point px py)
+
+fromG1 :: G1 -> ObjectData PactValue
+fromG1 CurveInf = ObjectData pts
+  where
+  pts = M.fromList
+    [ (Field "x", PLiteral (LInteger 0))
+    , (Field "y", PLiteral (LInteger 0))]
+fromG1 (Point x y) = ObjectData pts
+  where
+  pts =
+    M.fromList
+    [ (Field "x", PLiteral (LInteger (fromIntegral x)))
+    , (Field "y", PLiteral (LInteger (fromIntegral y)))]
+
+toG2 :: ObjectData PactValue -> Maybe G2
+toG2 (ObjectData om) = do
+  pxl <- preview (ix (Field "x") . _PList) om
+  px <- traverse (preview (_PLiteral . _LInteger . Lens.to fromIntegral)) pxl
+  pyl <- preview (ix (Field "y") . _PList) om
+  py <- traverse (preview (_PLiteral . _LInteger . Lens.to fromIntegral)) pyl
+  let px' = Exts.fromList (V.toList px)
+      py' = Exts.fromList (V.toList py)
+  if px' == 0 && py' == 0 then pure CurveInf
+  else pure (Point px' py')
+
+fromG2 :: G2 -> ObjectData PactValue
+fromG2 CurveInf = ObjectData pts
+  where
+  pts =
+    M.fromList
+    [ (Field "x", PList (V.fromList [PLiteral (LInteger 0)]))
+    , (Field "y", PList (V.fromList [PLiteral (LInteger 0)]))]
+fromG2 (Point x y) = ObjectData pts
+  where
+  toPactPt (Extension e) = let
+    elems' = fmap (PInteger . fromIntegral) (Poly.unPoly e)
+    in PList elems'
+  x' = toPactPt x
+  y' = toPactPt y
+  pts =
+    M.fromList
+    [ (Field "x", x')
+    , (Field "y", y')]
+
+
+-- pairingCheckDef :: NativeDef
+-- pairingCheckDef =
+--   defRNative "pairing-check" pairingCheck' (funType tTyBool [("points-g1", TyList a), ("points-g2", TyList b)])
+--   []
+--   "Perform pairing and final exponentiation points in G1 and G2 in BN254, check if the result is 1"
+--   where
+--   a = mkTyVar "a" []
+--   b = mkTyVar "b" []
+--   pairingCheck':: RNativeFun e
+--   pairingCheck' i [TList p1s _ _, TList p2s _ _] = do
+--     g1s <- traverse termToG1 $ G.toList p1s
+--     g2s <- traverse termToG2 $ G.toList p2s
+--     traverse_ (`ensureOnCurve` b1) g1s
+--     traverse_ (`ensureOnCurve` b2) g2s
+--     let pairs = zip g1s g2s
+--     _ <- computeGas (Right i) (GZKArgs (Pairing (length pairs)))
+--     pure $ toTerm $ pairingCheck pairs
+--       where
+--       ensureOnCurve :: (Num p, Eq p) => CurvePoint p -> p -> Eval e ()
+--       ensureOnCurve p bp = unless (isOnCurve p bp) $ evalError' i "Point not on curve"
+--       termToG1 (TObject o _) = toG1 i o
+--       termToG1 _ = evalError' i "not a point"
+--       termToG2 (TObject o _) = toG2 i o
+--       termToG2 _ = evalError' i "not a point"
+--   pairingCheck' i as = argsError i as
+
+zkPairingCheck :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+zkPairingCheck info b cont handler _env = \case
+  args@[VList p1s, VList p2s] -> do
+    g1s <- maybe (argsError info b args) pure (traverse (preview _PObject >=> (toG1 . ObjectData)) p1s)
+    g2s <- maybe (argsError info b args) pure (traverse (preview _PObject >=> (toG2 . ObjectData)) p2s)
+    traverse_ (\p -> ensureOnCurve info p b1) g1s
+    traverse_ (\p -> ensureOnCurve info p b2) g2s
+    let pairs = zip (V.toList g1s) (V.toList g2s)
+    returnCEKValue cont handler $ VBool $ pairingCheck pairs
+  args -> argsError info b args
+
+--  curveOrder :: Integer
+--   curveOrder = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+--   scalarMul :: RNativeFun e
+--   scalarMul i as@[TLiteral (LString ptTy) _ , TObject p1 _, (TLiteral (LInteger scalar) _) :: Term Name] = do
+--     let scalar' = scalar `mod` curveOrder
+--     case T.toLower ptTy of
+--       "g1" -> do
+--         p1' <- toG1 i p1
+--         unless (isOnCurve p1' b1) $ evalError' i "Point not on curve"
+--         _ <- computeGas (Right i) (GZKArgs (ScalarMult ZKG1))
+--         let p2' = multiply p1' scalar'
+--         pure $ TObject (fromG1 p2') def
+--       "g2" -> do
+--         p1' <- toG2 i p1
+--         unless (isOnCurve p1' b2) $ evalError' i "Point not on curve"
+--         _ <- computeGas (Right i) (GZKArgs (ScalarMult ZKG2))
+--         let p2' = multiply p1' scalar'
+--         pure $ TObject (fromG2 p2') def
+--       _ -> argsError i as
+
+zkScalaMult :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+zkScalaMult info b cont handler _env = \case
+  args@[VString ptTy, VObject p1, VInteger scalar] -> do
+    let scalar' = scalar `mod` curveOrder
+    case T.toLower ptTy of
+      "g1" -> do
+        p1' <- maybe (argsError info b args) pure $ toG1 (ObjectData p1)
+        unless (isOnCurve p1' b1) $ failInvariant info "Point not on curve"
+        let p2' = multiply p1' scalar'
+            ObjectData o = fromG1 p2'
+        returnCEKValue cont handler (VObject o)
+      "g2" -> do
+        p1' <- maybe (argsError info b args) pure $ toG2 (ObjectData p1)
+        unless (isOnCurve p1' b2) $ failInvariant info "Point not on curve"
+        let p2' = multiply p1' scalar'
+            ObjectData o = fromG2 p2'
+        returnCEKValue cont handler (VObject o)
+      _ -> argsError info b args
+  args -> argsError info b args
+  where
+  curveOrder :: Integer
+  curveOrder = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+
+zkPointAddition :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+zkPointAddition info b cont handler _env = \case
+  args@[VString ptTy, VObject p1, VObject p2] -> do
+    case T.toLower ptTy of
+      "g1" -> do
+        p1' <- maybe (argsError info b args) pure $ toG1 (ObjectData p1)
+        p2' <- maybe (argsError info b args) pure $ toG1 (ObjectData p2)
+        unless (isOnCurve p1' b1 && isOnCurve p2' b1) $ failInvariant info "Point not on curve"
+        let p3' = add p1' p2'
+            ObjectData o = fromG1 p3'
+        returnCEKValue cont handler (VObject o)
+      "g2" -> do
+        p1' <- maybe (argsError info b args) pure $ toG2 (ObjectData p1)
+        p2' <- maybe (argsError info b args) pure $ toG2 (ObjectData p2)
+        unless (isOnCurve p1' b2 && isOnCurve p2' b2) $ failInvariant info "Point not on curve"
+        let p3' = add p1' p2'
+            ObjectData o = fromG2 p3'
+        returnCEKValue cont handler (VObject o)
+      _ -> argsError info b args
+  args -> argsError info b args
+
+-- pointAdditionDef :: NativeDef
+-- pointAdditionDef =
+--   defRNative "point-add" pactPointAdd (funType a [("type", tTyString), ("point1", a), ("point2", a)])
+--   [ "(point-add 'g1 {'x: 1, 'y: 2}  {'x: 1, 'y: 2})"
+--   ] "Add two points together that lie on the curve BN254. Point addition either in Fq or in Fq2"
+--   where
+--   a = mkTyVar "a" []
+--   pactPointAdd :: RNativeFun e
+--   pactPointAdd i as@[TLiteral (LString ptTy) _ , TObject p1 _, (TObject p2 _) :: Term Name] =
+--     case T.toLower ptTy of
+--       "g1" -> do
+--         p1' <- toG1 i p1
+--         p2' <- toG1 i p2
+--         unless (isOnCurve p1' b1 && isOnCurve p2' b1) $ evalError' i "Point not on curve"
+--         _ <- computeGas (Right i) (GZKArgs (PointAdd ZKG1))
+--         let p3' = add p1' p2'
+--         pure $ TObject (fromG1 p3') def
+--       "g2" -> do
+--         p1' <- toG2 i p1
+--         p2' <- toG2 i p2
+--         unless (isOnCurve p1' b2 && isOnCurve p2' b2) $ evalError' i "Point not on curve"
+--         _ <- computeGas (Right i) (GZKArgs (PointAdd ZKG2))
+--         let p3' = add p1' p2'
+--         pure $ TObject (fromG2 p3') def
+--       _ -> argsError i as
+--   pactPointAdd i as = argsError i as
+
+------
+-- Poseidon
+--
+
+poseidonHash :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
+poseidonHash info b cont handler _env = \case
+  [VList as]
+    | not (V.null as) && length as <= 8,
+    Just intArgs <- traverse (preview (_PLiteral . _LInteger)) as ->
+      returnCEKValue cont handler $ VInteger (poseidon (V.toList intArgs))
+  args -> argsError info b args
+  -- poseidon' :: RNativeFun e
+  -- poseidon' i as
+  --   | not (null as) && length as <= 8,
+  --     Just intArgs <- traverse (preview _TLitInteger) as
+  --     = computeGas' i (GPoseidonHashHackAChain $ length as) $
+  --       return $ toTerm $ poseidon intArgs
+  --    | otherwise = argsError i as
+
 -----------------------------------
 -- Builtin exports
 -----------------------------------
@@ -1741,3 +1946,7 @@ rawBuiltinRuntime = \case
   RawNamespace -> coreNamespace
   RawDefineNamespace -> coreDefineNamespace
   RawDescribeNamespace -> coreDescribeNamespace
+  RawZkPairingCheck -> zkPairingCheck
+  RawZKScalarMult -> zkScalaMult
+  RawZkPointAdd -> zkPointAddition
+  RawPoseidonHashHackachain -> poseidonHash

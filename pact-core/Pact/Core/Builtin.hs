@@ -199,6 +199,12 @@ data RawBuiltin
   | RawNamespace
   | RawDefineNamespace
   | RawDescribeNamespace
+  -- ZK
+  | RawZkPairingCheck
+  | RawZKScalarMult
+  | RawZkPointAdd
+  -- Poseidon Hackachain
+  | RawPoseidonHashHackachain
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 instance HasObjectOps RawBuiltin where
@@ -332,6 +338,10 @@ rawBuiltinToText = \case
   RawNamespace -> "namespace"
   RawDefineNamespace -> "define-namespace"
   RawDescribeNamespace -> "describe-namespace"
+  RawZkPairingCheck -> "pairing-check"
+  RawZKScalarMult -> "scalar-mult"
+  RawZkPointAdd -> "point-add"
+  RawPoseidonHashHackachain -> "poseidon-hash-hack-a-chain"
 
 instance IsBuiltin RawBuiltin where
   builtinName = NativeName . rawBuiltinToText
@@ -466,6 +476,10 @@ instance IsBuiltin RawBuiltin where
     RawNamespace -> 1
     RawDefineNamespace -> 3
     RawDescribeNamespace -> 1
+    RawZkPairingCheck -> 2
+    RawZKScalarMult -> 3
+    RawZkPointAdd -> 3
+    RawPoseidonHashHackachain -> 1
 
 
 rawBuiltinNames :: [Text]

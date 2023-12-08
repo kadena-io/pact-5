@@ -84,9 +84,23 @@ common pact-core-common
     NumericUnderscores
     TypeOperators
 
+-- internal crypto lirbary
+library pact-core-crypto
+  import: pact-core-common
+  hs-source-dirs: crypto
+
+  exposed-modules:
+    Pact.Core.Crypto.Hash.Poseidon
+    Pact.Core.Crypto.Pairing
+    Pact.Core.Crypto.Pairing.Fields
+
 library
   import: pact-core-common
   hs-source-dirs: pact-core
+
+  build-depends:
+    pact-core:pact-core-crypto
+
   build-tool-depends:
     , alex:alex
     , happy:happy
@@ -134,7 +148,6 @@ library
     Pact.Core.Principal
     Pact.Core.Namespace
     Pact.Core.RuntimeParsers
-    Pact.Core.Pairing
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
@@ -161,6 +174,10 @@ library
     Pact.Core.Repl.Utils
     Pact.Core.Repl.Runtime.ReplBuiltin
     Pact.Core.Repl.Compile
+
+    -- Crypto
+
+
 
 library typed-core
   import: pact-core-common
@@ -268,8 +285,12 @@ test-suite core-tests
     , tasty
     , tasty-hunit
     , tasty-hedgehog
+    , groups
+    , semirings
+    , pact-core:pact-core-crypto
 
   other-modules:
     , Pact.Core.Test.ReplTests
     , Pact.Core.Test.LexerParserTests
     , Pact.Core.Test.LexerTests
+    , Pact.Core.Test.ZkTests
