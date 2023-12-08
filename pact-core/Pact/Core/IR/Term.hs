@@ -94,7 +94,7 @@ data DefCap name ty builtin info
   , _dcapArgs :: [Arg ty]
   , _dcapRType :: Maybe ty
   , _dcapTerm :: Term name ty builtin info
-  , _dcapMeta :: DefCapMeta name
+  , _dcapMeta :: DefCapMeta (FQNameRef name)
   , _dcapInfo :: info
   } deriving (Show, Functor)
 
@@ -176,7 +176,7 @@ data IfDefCap name ty info
   { _ifdcName :: Text
   , _ifdcArgs :: [Arg ty]
   , _ifdcRType :: Maybe ty
-  , _ifdcMeta :: DefCapMeta name
+  , _ifdcMeta :: DefCapMeta BareName
   , _ifdcInfo :: info
   } deriving (Show, Functor)
 
