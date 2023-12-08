@@ -28,7 +28,7 @@ module Pact.Core.IR.Desugar
  ) where
 
 import Control.Applicative((<|>))
-import Control.Monad ( when, forM, (>=>), unless)
+import Control.Monad ( when, forM, (>=>), unless, guard)
 import Control.Monad.Reader
 import Control.Monad.State.Strict ( StateT(..), MonadState )
 import Control.Monad.Trans.Maybe(MaybeT(..), runMaybeT, hoistMaybe)
@@ -83,6 +83,7 @@ type DesugarType = Lisp.Type
 data RenamerEnv b i
   = RenamerEnv
   { _reBinds :: Map Text (NameKind, Maybe DefKind)
+  , _reCurrModuleTmpBinds ::  Map Text (NameKind, DefKind)
   , _reVarDepth :: DeBruijn
   , _reCurrModule :: Maybe (ModuleName, [ModuleName])
   , _reCurrDef :: Maybe DefKind
@@ -1144,7 +1145,12 @@ resolveQualified (QualifiedName qn qmn@(ModuleName modName mns)) i = do
     Just p -> pure p
     Nothing -> throwDesugarError (NoSuchModuleMember qmn qn) i
   where
-  baseLookup pdb defnName moduleName = do
+  lookupLocalQual defnName moduleName = do
+    (currMod, _) <- MaybeT (view reCurrModule)
+    guard (currMod == moduleName)
+    (nk, dk) <- MaybeT $ view (reCurrModuleTmpBinds . at defnName)
+    pure (Name defnName nk, Just dk)
+  baseLookup pdb defnName moduleName = lookupLocalQual defnName moduleName <|> do
     MaybeT (lift (lookupModuleData i pdb moduleName)) >>= \case
       ModuleData module' _ -> do
         d <- hoistMaybe (findDefInModule defnName module' )
@@ -1186,20 +1192,21 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash i) = d
       throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (head d))
   binds <- view reBinds
   bindsWithImports <- foldlM (handleImport i) binds imports
-  (defs'', _, _) <- over _1 reverse <$> foldlM (go mname) ([], S.empty, bindsWithImports) defs'
+  (defs'', _, _, _) <- over _1 reverse <$> foldlM (go mname) ([], S.empty, bindsWithImports, M.empty) defs'
   traverse_ (checkImplements i defs'' mname) implements
   pure (Module mname mgov' defs'' blessed imports implements mhash i)
   where
   -- Our deps are acyclic, so we resolve all names
-  go mname (defns, s, m) defn = do
+  go mname (!defns, !s, !m, !mlocals) defn = do
     when (S.member (defName defn) s) $ throwDesugarError (DuplicateDefinition (defName defn)) i
     let dn = defName defn
-    defn' <- local (set reCurrModule (Just (mname, implements)))
+    defn' <- local (set reCurrModule (Just (mname, implements)) . set reCurrModuleTmpBinds mlocals)
              $ local (set reBinds m) $ renameDef defn
     let dk = defKind defn'
     let depPair = (NTopLevel mname mhash, dk)
     let m' = M.insert dn (over _2 Just depPair) m
-    pure (defn':defns, S.insert (defName defn) s, m')
+        mlocals' = M.insert dn depPair mlocals
+    pure (defn':defns, S.insert (defName defn) s, m', mlocals')
 
   resolveGov mname = \case
     KeyGov rawKsn -> case parseAnyKeysetName (_keysetName rawKsn) of
@@ -1315,7 +1322,7 @@ runRenamerT
   -> m (a, RenamerState)
 runRenamerT (RenamerT act) = do
   tlBinds <- usesEvalState loToplevel (fmap (\(fqn, dk) -> (fqnToNameKind fqn, Just dk)))
-  let renamerEnv = RenamerEnv tlBinds 0 Nothing Nothing
+  let renamerEnv = RenamerEnv tlBinds mempty 0 Nothing Nothing
       renamerState = RenamerState mempty
   runReaderT (runStateT act renamerState) renamerEnv
   where
