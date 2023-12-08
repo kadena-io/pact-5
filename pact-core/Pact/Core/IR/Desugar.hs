@@ -1273,7 +1273,9 @@ checkImplements i defs moduleName ifaceName = do
           throwDesugarError (NotImplemented moduleName ifaceName (_ifdName ifd)) i
     IfDCap ifd ->
       case find (\df -> _ifdcName ifd == defName df) defs of
-        Just (DCap v) ->
+        Just (DCap v) -> do
+          unless (checkMetaMatches (_dcapMeta v) (_ifdcMeta ifd)) $
+             throwDesugarError (ImplementationError moduleName ifaceName $ ": defcap mismatch for " <> _dcapName v) i
           when (_dcapArgs v /= _ifdcArgs ifd || _dcapRType v /= _ifdcRType ifd) $
             throwDesugarError (ImplementationError moduleName ifaceName (_dcapName v)) i
         Just d -> throwDesugarError (ImplementationError moduleName ifaceName  (defName d)) i
@@ -1286,6 +1288,20 @@ checkImplements i defs moduleName ifaceName = do
           throwDesugarError (ImplementationError moduleName ifaceName (_ifdpName ifd)) i
         Just _ ->  throwDesugarError (ImplementationError moduleName ifaceName (_ifdpName ifd)) i
         Nothing -> throwDesugarError (NotImplemented moduleName ifaceName (_ifdpName ifd)) i
+
+  checkMetaMatches :: DefCapMeta (FQNameRef Name) -> DefCapMeta BareName -> Bool
+  checkMetaMatches Unmanaged Unmanaged = True
+  checkMetaMatches DefEvent DefEvent = True
+  checkMetaMatches (DefManaged l) (DefManaged r) = checkManagedMatches l r
+  checkMetaMatches _ _ = False
+
+  checkManagedMatches :: DefManagedMeta (FQNameRef Name) -> DefManagedMeta BareName -> Bool
+  checkManagedMatches _ AutoManagedMeta = True
+  checkManagedMatches (DefManagedMeta lhs (FQName lName)) (DefManagedMeta rhs (BareName rName)) =
+    lhs == rhs &&
+    _fqName lName == rName &&
+    _fqModule lName == moduleName
+  checkManagedMatches _ _ = False
 
 
 -- | Todo: support imports
