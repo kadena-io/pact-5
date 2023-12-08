@@ -34,13 +34,15 @@ runStaticTest fp src predicate = do
   v <- fst <$> evaluate evalEnv src
   case v of
     Left err ->
-      assertBool "Expected Error constructor matches" (predicate err)
+      assertBool ("Expected Error to match predicate, but got " <> show err <> " instead") (predicate err)
     Right _v -> assertFailure ("Error: Static failure test succeeded for file: " <> fp)
 
 staticTests :: [(FilePath, PactErrorI -> Bool)]
 staticTests =
   [ ("no_bind_body.pact", isDesugarError _EmptyBindingBody)
-  , ("defpact_last_step_rollback.pact", isDesugarError _LastStepWithRollback)]
+  , ("defpact_last_step_rollback.pact", isDesugarError _LastStepWithRollback)
+  , ("interface_defcap_meta_impl.pact", isDesugarError _ImplementationError)
+  ]
 
 tests :: TestTree
 tests =
