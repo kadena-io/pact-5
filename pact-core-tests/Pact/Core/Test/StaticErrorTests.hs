@@ -40,7 +40,9 @@ runStaticTest fp src predicate = do
 staticTests :: [(FilePath, PactErrorI -> Bool)]
 staticTests =
   [ ("no_bind_body.pact", isDesugarError _EmptyBindingBody)
-  , ("defpact_last_step_rollback.pact", isDesugarError _LastStepWithRollback)]
+  , ("defpact_last_step_rollback.pact", isDesugarError _LastStepWithRollback)
+  , ("interface_defcap_meta_impl.pact", isDesugarError _ImplementationError)
+  ]
 
 tests :: TestTree
 tests =
