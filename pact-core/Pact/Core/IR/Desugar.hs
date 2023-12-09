@@ -192,6 +192,15 @@ desugarAppArityRaw f i RawSelect [e1, e2, e3] =
     App (Builtin (f RawSelectWithFields) i) ([e1, e2, e3]) i
 desugarAppArityRaw f i RawSort [e1, e2] =
   App (Builtin (f RawSortObject) i) [e1, e2] i
+-- Rounding functions
+desugarAppArityRaw f i RawRound [e1, e2] =
+  App (Builtin (f RawRoundPrec) i) [e1, e2] i
+desugarAppArityRaw f i RawCeiling [e1, e2] =
+  App (Builtin (f RawCeilingPrec) i) [e1, e2] i
+desugarAppArityRaw f i RawFloor [e1, e2] =
+  App (Builtin (f RawFloorPrec) i) [e1, e2] i
+
+
 desugarAppArityRaw f i RawStrToInt [e1, e2] =
   App (Builtin (f RawStrToIntBase) i) [e1, e2] i
 desugarAppArityRaw f i RawReadMsg [] =

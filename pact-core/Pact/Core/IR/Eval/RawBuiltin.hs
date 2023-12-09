@@ -148,8 +148,9 @@ rawLogBase info b cont handler _env = \case
     when (base < 0 || n <= 0) $ throwExecutionError info (ArithmeticException "Illegal log base")
     let base' = fromIntegral base :: Double
         n' = fromIntegral n
-        out = round (Musl.trans_logBase base' n')
-    returnCEKValue cont handler (VLiteral (LInteger out))
+        result = Musl.trans_logBase base' n'
+    guardNanOrInf info result
+    returnCEKValue cont handler (VLiteral (LInteger (round result)))
     -- if i' == 0 then throwExecutionError' (ArithmeticException "div by zero")
     -- else returnCEKValue cont handler (VLiteral (LInteger (div i i')))
   [VLiteral (LDecimal base), VLiteral (LDecimal arg)] -> do
