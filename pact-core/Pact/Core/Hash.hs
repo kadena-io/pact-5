@@ -114,7 +114,7 @@ fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
   Right bs' -> case T.decodeUtf8' bs' of
     Left _ -> Left $ "Base64URL decode failed: invalid unicode"
     Right t -> Right t
-  Left e -> Left $ "Base64URL decode failed: " ++ e
+  Left _ -> Left $ "Base64URL decode failed"
 
 
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }

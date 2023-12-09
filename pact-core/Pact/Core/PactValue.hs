@@ -18,6 +18,7 @@ module Pact.Core.PactValue
  , pattern PDecimal
  , pattern PString
  , pattern PBool
+ , synthesizePvType
  ) where
 
 import Control.Lens
@@ -81,6 +82,17 @@ instance Pretty PactValue where
       parens (pretty (fqnToQualName fqn) <> if null args then mempty else hsep (pretty <$> args))
     PTime t -> pretty (PactTime.formatTime "%Y-%m-%d %H:%M:%S%Q %Z" t)
 
+synthesizePvType :: PactValue -> Type
+synthesizePvType = \case
+  PLiteral l -> typeOfLit l
+  PList _ -> TyList TyUnit
+  PGuard _ -> TyGuard
+  PModRef mr -> TyModRef (_mrModule mr)
+  PObject f ->
+    let tys = synthesizePvType <$> f
+    in TyObject (Schema tys)
+  PCapToken {} -> TyCapToken
+  PTime _ -> TyTime
 
 -- | Check that a `PactValue` has the provided `Type`, returning
 -- `Just ty` if so and `Nothing` otherwise.

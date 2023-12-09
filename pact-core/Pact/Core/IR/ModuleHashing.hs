@@ -267,6 +267,7 @@ encodeType = \case
   -- Maybe we preserve schema names instead
   TyObject sc -> "object" <> braces (encodeSchema sc)
   TyTable tbl -> "table" <> braces (encodeSchema tbl)
+  TyCapToken -> "captoken"
 
 encodeImport :: Import -> Builder
 encodeImport (Import mname mmh mimps) = parens $

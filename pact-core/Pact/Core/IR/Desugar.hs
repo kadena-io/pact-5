@@ -192,12 +192,16 @@ desugarAppArityRaw f i RawSelect [e1, e2, e3] =
     App (Builtin (f RawSelectWithFields) i) ([e1, e2, e3]) i
 desugarAppArityRaw f i RawSort [e1, e2] =
   App (Builtin (f RawSortObject) i) [e1, e2] i
+desugarAppArityRaw f i RawStrToInt [e1, e2] =
+  App (Builtin (f RawStrToIntBase) i) [e1, e2] i
 desugarAppArityRaw f i RawReadMsg [] =
   App (Builtin (f RawReadMsgDefault) i) [] i
 desugarAppArityRaw f i RawDefineKeySet [e1] =
   App (Builtin (f RawDefineKeysetData) i) [e1] i
 desugarAppArityRaw f i RawPoseidonHashHackachain li =
   App (Builtin (f RawPoseidonHashHackachain) i )[(ListLit li i)] i
+desugarAppArityRaw f i RawYield [e1, e2] =
+  App (Builtin (f RawYieldToChain) i) [e1, e2] i
 desugarAppArityRaw f i b args =
     App (Builtin (f b) i) args i
 
@@ -252,11 +256,17 @@ desugarLispTerm = \case
           let c1 = Arg cvar1 Nothing
               c2 = Arg cvar2 Nothing
           pure $ Lam AnonLamInfo (c1 :| [c2]) (Var (BN (BareName cvar1)) i) i
+        | n == BareName "identity" -> do
+          let c1 = Arg ivar1 Nothing
+          pure $ Lam AnonLamInfo (c1 :| []) (Var (BN (BareName ivar1)) i) i
+        | n == BareName "CHARSET_ASCII" -> pure (Constant (LInteger 0) i)
+        | n == BareName "CHARSET_LATIN1" -> pure (Constant (LInteger 1) i)
         | otherwise ->
           pure (Var (BN n) i)
     where
     cvar1 = "#constantlyA1"
     cvar2 = "#constantlyA2"
+    ivar1 = "#identityA1"
   Lisp.Var n i -> pure (Var n i)
   Lisp.Block nel i -> do
     nel' <- traverse desugarLispTerm nel

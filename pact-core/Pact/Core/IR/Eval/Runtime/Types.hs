@@ -55,6 +55,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , pattern VNative
  , pattern VPartialNative
  , pattern VCapToken
+ , pattern VTime
  , CapFrame(..)
  , CapState(..)
  , csSlots, csManaged
@@ -87,6 +88,7 @@ import Data.Decimal(Decimal)
 import Data.Vector(Vector)
 import Data.RAList(RAList)
 import Data.IORef
+import Pact.Time(UTCTime)
 
 import Pact.Core.Names
 import Pact.Core.Guards
@@ -243,6 +245,9 @@ pattern VGuard g = VPactValue (PGuard g)
 
 pattern VList :: Vector PactValue -> CEKValue b i m
 pattern VList p = VPactValue (PList p)
+
+pattern VTime :: UTCTime -> CEKValue b i m
+pattern VTime p = VPactValue (PTime p)
 
 pattern VObject :: Map Field PactValue -> CEKValue b i m
 pattern VObject o = VPactValue (PObject o)

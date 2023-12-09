@@ -33,11 +33,16 @@ module Pact.Core.Type
  , targType
  , Schema(..)
  , DefKind(..)
+ , renderType
  ) where
 
 import Control.Lens
+import Data.List
 import Data.Text(Text)
 import Data.Map.Strict(Map)
+
+import qualified Data.Text as T
+import qualified Data.Map.Strict as M
 
 import Pact.Core.Literal
 import Pact.Core.Names
@@ -55,6 +60,16 @@ data PrimType =
   PrimTime |
   PrimUnit
   deriving (Eq,Ord,Show, Enum, Bounded)
+
+renderPrimType :: PrimType -> Text
+renderPrimType = \case
+  PrimInt -> "integer"
+  PrimDecimal -> "decimal"
+  PrimBool -> "bool"
+  PrimString -> "string"
+  PrimGuard -> "guard"
+  PrimTime -> "time"
+  PrimUnit -> "unit"
 
 instance Pretty PrimType where
   pretty = \case
@@ -90,6 +105,7 @@ data Type
   -- ^ Objects
   | TyTable Schema
   -- ^ Tables
+  | TyCapToken
   deriving (Eq, Show, Ord)
 
 newtype Schema
@@ -208,21 +224,27 @@ instance Pretty Type where
       liParens t = Pretty.parens (pretty t)
     TyModRef mr ->
       "module" <> Pretty.braces (pretty mr)
-    TyObject _o -> "todo: <object>"
-    TyTable _o -> "todo: table"
+    TyObject (Schema sc) ->
+      let sc' =  (\(k, v) -> pretty k <> ":" <> pretty v) <$> M.toList sc
+      in "object" <> Pretty.braces (Pretty.hsep (Pretty.punctuate Pretty.comma sc'))
+    TyTable (Schema sc) ->
+      let sc' =  (\(k, v) -> pretty k <> ":" <> pretty v) <$> M.toList sc
+      in "table" <> Pretty.braces (Pretty.hsep (Pretty.punctuate Pretty.comma sc'))
+    TyCapToken -> "CAPTOKEN"
 
--- instance Pretty tv => Pretty (TypeScheme tv) where
---   pretty (TypeScheme tvs preds ty) =
---     quant tvs <> qual preds <> pretty ty
---     where
---     renderTvs xs suffix =
---       Pretty.hsep $ fmap (\n -> Pretty.parens (pretty n <> ":" <+> suffix)) xs
---     quant [] = mempty
---     quant as =
---       "∀" <> renderTvs as "*" <> ". "
---     qual [] = mempty
---     qual as =
---       Pretty.parens (Pretty.commaSep as) <+> "=> "
+renderType :: Type -> Text
+renderType = \case
+  TyPrim p -> renderPrimType p
+  TyList t -> "[" <> renderType t <> "]"
+  TyGuard -> "guard"
+  TyModRef mr -> "module" <> "{" <> renderModuleName mr <> "}"
+  TyObject (Schema sc) ->
+    let sc' =  (\(k, v) ->  _field k <> ":" <> renderType v) <$> M.toList sc
+    in "object{" <> T.concat (intersperse ", " sc') <> "}"
+  TyTable (Schema sc) ->
+    let sc' =  (\(k, v) ->  _field k <> ":" <> renderType v) <$> M.toList sc
+    in "table{" <> T.concat (intersperse ", " sc') <> "}"
+  TyCapToken -> "CAPTOKEN"
 
 makeLenses ''Arg
 makeLenses ''TypedArg

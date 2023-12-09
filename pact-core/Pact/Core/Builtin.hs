@@ -94,6 +94,9 @@ data RawBuiltin
   | RawRound
   | RawCeiling
   | RawFloor
+  | RawRoundPrec
+  | RawCeilingPrec
+  | RawFloorPrec
   -- Fractional
   | RawExp
   | RawLn
@@ -141,6 +144,7 @@ data RawBuiltin
   | RawB64Decode
   | RawStrToList
   | RawYield
+  | RawYieldToChain
   | RawResume
   | RawBind
   | RawRequireCapability
@@ -198,12 +202,17 @@ data RawBuiltin
   | RawDefineNamespace
   | RawDescribeNamespace
   | RawChainData
+  | RawIsCharset
+  | RawPactId
   -- ZK
   | RawZkPairingCheck
   | RawZKScalarMult
   | RawZkPointAdd
   -- Poseidon Hackachain
   | RawPoseidonHashHackachain
+  -- Misc
+  | RawTypeOf
+  | RawDec
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 instance HasObjectOps RawBuiltin where
@@ -241,6 +250,9 @@ rawBuiltinToText = \case
   RawRound -> "round"
   RawCeiling -> "ceiling"
   RawFloor -> "floor"
+  RawRoundPrec -> "round-prec"
+  RawCeilingPrec -> "ceiling-prec"
+  RawFloorPrec -> "floor-prec"
   -- Fractional
   RawExp -> "exp"
   RawLn -> "ln"
@@ -289,6 +301,7 @@ rawBuiltinToText = \case
   RawB64Decode -> "base64-decode"
   RawStrToList -> "str-to-list"
   RawYield -> "yield"
+  RawYieldToChain -> "yield-to-chain"
   RawResume -> "resume"
   RawBind -> "bind"
   RawRequireCapability -> "require-capability"
@@ -342,6 +355,10 @@ rawBuiltinToText = \case
   RawZkPointAdd -> "point-add"
   RawPoseidonHashHackachain -> "poseidon-hash-hack-a-chain"
   RawChainData -> "chain-data"
+  RawIsCharset -> "is-charset"
+  RawPactId -> "pact-id"
+  RawTypeOf -> "typeof"
+  RawDec -> "dec"
 
 instance IsBuiltin RawBuiltin where
   builtinName = NativeName . rawBuiltinToText
@@ -376,6 +393,9 @@ instance IsBuiltin RawBuiltin where
     RawRound -> 1
     RawCeiling -> 1
     RawFloor -> 1
+    RawRoundPrec -> 2
+    RawCeilingPrec -> 2
+    RawFloorPrec -> 2
     -- Fractional ->
     RawExp -> 1
     RawLn -> 1
@@ -428,6 +448,7 @@ instance IsBuiltin RawBuiltin where
     RawB64Decode -> 1
     RawStrToList -> 1
     RawYield -> 1
+    RawYieldToChain -> 2
     RawResume -> 1
     RawBind -> 2
     RawRequireCapability -> 1
@@ -481,6 +502,10 @@ instance IsBuiltin RawBuiltin where
     RawZkPointAdd -> 3
     RawPoseidonHashHackachain -> 1
     RawChainData -> 0
+    RawIsCharset -> 2
+    RawPactId -> 0
+    RawTypeOf -> 1
+    RawDec -> 1
 
 
 rawBuiltinNames :: [Text]

@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE InstanceSigs #-}
 
 
 -- |
@@ -115,6 +116,7 @@ data TableSchema name where
   ResolvedTable :: Schema -> TableSchema Name
 
 instance Show (TableSchema name) where
+  show :: TableSchema name -> String
   show (DesugaredTable t) = "DesugardTable(" <> show t <> ")"
   show (ResolvedTable t) = "ResolvedTable(" <> show t <> ")"
 
