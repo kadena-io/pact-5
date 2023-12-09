@@ -99,10 +99,14 @@ data Type
   -- ^ Built-in types
   | TyList Type
   -- ^ List aka [a]
+  | TyAnyList
+  -- ^ Any list
   | TyModRef ModuleName
   -- ^ Module references
   | TyObject Schema
   -- ^ Objects
+  | TyAnyObject
+  -- ^ Object with any schema
   | TyTable Schema
   -- ^ Tables
   | TyCapToken
@@ -231,6 +235,8 @@ instance Pretty Type where
       let sc' =  (\(k, v) -> pretty k <> ":" <> pretty v) <$> M.toList sc
       in "table" <> Pretty.braces (Pretty.hsep (Pretty.punctuate Pretty.comma sc'))
     TyCapToken -> "CAPTOKEN"
+    TyAnyList -> "list"
+    TyAnyObject -> "object"
 
 renderType :: Type -> Text
 renderType = \case
@@ -245,6 +251,8 @@ renderType = \case
     let sc' =  (\(k, v) ->  _field k <> ":" <> renderType v) <$> M.toList sc
     in "table{" <> T.concat (intersperse ", " sc') <> "}"
   TyCapToken -> "CAPTOKEN"
+  TyAnyObject -> "object"
+  TyAnyList -> "list"
 
 makeLenses ''Arg
 makeLenses ''TypedArg

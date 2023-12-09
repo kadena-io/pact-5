@@ -120,9 +120,11 @@ checkPvType ty = \case
       mcheck (f1, pv) (f2, t)
         | f1 == f2 = (f1,) <$> checkPvType t pv
         | otherwise = Nothing
+    TyAnyObject -> Just TyAnyObject
     _ -> Nothing
   PList l -> case ty of
     TyList t' | all (isJust . checkPvType t') l -> Just (TyList t')
+    TyAnyList -> Just TyAnyList
     _ -> Nothing
   PModRef (ModRef _orig ifs refined) -> case ty of
     TyModRef mn

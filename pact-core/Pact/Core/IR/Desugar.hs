@@ -817,10 +817,8 @@ renameType i = \case
     TyObject <$> resolveSchema pn
   Lisp.TyTable pn ->
     TyTable <$> resolveSchema pn
-  Lisp.TyPolyList ->
-    throwDesugarError (UnsupportedType "[any]") i
-  Lisp.TyPolyObject ->
-    throwDesugarError (UnsupportedType "object{any}") i
+  Lisp.TyPolyList -> pure TyAnyList
+  Lisp.TyPolyObject -> pure TyAnyObject
   where
   resolveSchema = \case
     TBN bn -> do

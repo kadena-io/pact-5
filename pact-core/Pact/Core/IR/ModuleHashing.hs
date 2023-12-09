@@ -268,6 +268,8 @@ encodeType = \case
   TyObject sc -> "object" <> braces (encodeSchema sc)
   TyTable tbl -> "table" <> braces (encodeSchema tbl)
   TyCapToken -> "captoken"
+  TyAnyList -> "list"
+  TyAnyObject -> "object"
 
 encodeImport :: Import -> Builder
 encodeImport (Import mname mmh mimps) = parens $
