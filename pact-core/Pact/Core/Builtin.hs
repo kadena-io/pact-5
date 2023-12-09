@@ -548,6 +548,7 @@ data ReplBuiltins
   | RContinuePact
   | RContinuePactRollback
   | RContinuePactRollbackYield
+  | RContinuePactRollbackYieldObj
   | RPactState
   | RResetPactState
   deriving (Show, Enum, Bounded, Eq)
@@ -579,6 +580,7 @@ instance IsBuiltin ReplBuiltins where
     RContinuePact -> 1
     RContinuePactRollback -> 2
     RContinuePactRollbackYield -> 3
+    RContinuePactRollbackYieldObj -> 4
     REnvExecConfig -> 1
     REnvNamespacePolicy -> 2
     -- RLoad -> 1
@@ -647,6 +649,7 @@ replBuiltinsToText = \case
   RContinuePact -> "continue-pact"
   RContinuePactRollback -> "continue-pact-with-rollback"
   RContinuePactRollbackYield -> "continue-pact-rollback-yield"
+  RContinuePactRollbackYieldObj -> "continue-pact-rollback-yield-object"
   REnvExecConfig -> "env-exec-config"
   REnvNamespacePolicy -> "env-namespace-policy"
 

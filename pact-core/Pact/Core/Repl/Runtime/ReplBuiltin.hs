@@ -397,3 +397,4 @@ replRawBuiltinRuntime = \case
     RContinuePactRollbackYield -> continuePact
     REnvExecConfig -> envExecConfig
     REnvNamespacePolicy -> envNamespacePolicy
+    RContinuePactRollbackYieldObj -> continuePact

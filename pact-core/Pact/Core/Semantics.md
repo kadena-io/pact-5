@@ -20,9 +20,8 @@ Bullet points that are not filled are potential tasks
 - [x] DefCaps
 - [x] DefSchemas
 - [x] DefTables
-- [ ] Defpacts
-- [ ] Internal defs produce the right dependency tree (Needs test)
-
+- [x] Defpacts
+- [x] Internal defs produce the right dependency tree (Needs test)
 
 ### Module evaluation semantics
 - [x] Module governance eval (Note: the way we do this via interpretation is still not concrete)
@@ -36,6 +35,8 @@ Bullet points that are not filled are potential tasks
 - [x] Defconst name resolution
 - [x] Defcap name resolution
 - [x] DefSchema name resolution
+- [x] DefTable name resolution
+- [x] DefPact name resolution
 
 ## Environment
 
@@ -44,11 +45,11 @@ Bullet points that are not filled are potential tasks
 - [x] Pactdb in env
 - [x] Tx hash
 - [x] Execution Mode
-- [ ] Pact Step
+- [x] Pact Step
 - [x] Chain data
 - [ ] Gas ref (In eval env? Unsure whether this will be abstracted out via `MonadGas`)
 - [ ] Gas Env? Also not sure, see above ^
-- [ ] Runtime Flags
+- [x] Runtime Flags
 - [ ] Warnings
 - [ ] SPV Support
 - [x] Purity (now in pactdb)
@@ -59,16 +60,15 @@ Bullet points that are not filled are potential tasks
 - [x] Capabilities environment
 - [ ] Gas log
 - [x] Pact Events
-- [ ] Defpact environment  `PactExec`
+- [x] Defpact environment  `PactExec`
 
 ### Environment semantic changes
 - RefStore no longer in `EvalEnv`. We do not resolve natives that way, but we potentially could for repl natives in modules. It is TBD
 - `InRepl` flag is not necessary currently. This may change, but it serves as a way to fork on-chain errors in prod-pact.
 
 ## Intepreter
-- [ ] Stable interpreter API
+- [X] Stable interpreter API
 - [ ] EvalResult and EvalInput-type API
-
 
 ## Base Builtins
 
@@ -182,7 +182,7 @@ TODO: Do we want this still???
 DELETED FROM EXISTENCE
 
 ### list-modules
-(potentially) DELETED FROM EXISTENCE
+TODO: (potentially) DELETED FROM EXISTENCE
 
 ### make-list
 - [x] implemented
@@ -197,7 +197,7 @@ DELETED FROM EXISTENCE
 - [ ] Gas
 
 ### pact-version
-(potentially) DELETED FROM EXISTENCE
+TODO: (potentially) DELETED FROM EXISTENCE
 
 ### public-chain-data
 - Todo: provide in base loaded
@@ -637,3 +637,212 @@ TODO: do we need this as a native?
 - [x] implemented guard case
 - [x] implemented keyset name case
 - [ ] Gas
+
+## Capability Builtins
+
+### compose-capability
+- [x] implemented
+- [ ] Gas
+
+### emit-event
+- [x] implemented
+- [ ] Gas
+
+### enforce-guard
+- [x] implemented (Same as enforce-keyset, basically they're an alias)
+- [ ] Gas
+
+### install-capability
+- [x] implemented
+- [ ] Gas
+
+### require-capability
+- [x] implemented
+- [ ] Gas
+
+### with-capability
+- [x] implemented
+- [ ] Gas
+
+## SPV Builtins
+
+### verify-spv
+- [ ] implemented
+- [ ] Gas
+
+## Commitment builtins
+
+### decrypt-cc20p1305
+TODO: do we want this in core? Can we delete?
+- [ ] implemented
+- [ ] gas
+
+### validate-keypair
+TODO: do we want this in core? Can we delete?
+- [ ] implemented
+- [ ] gas
+
+## Guard Builtins
+### create-capability-guard
+- [x] implemented
+- [ ] Gas
+
+### create-module-guard
+- [x] implemented
+- [ ] Gas
+
+### create-pact-guard
+- [x] implemented
+- [ ] Gas
+
+### create-principal
+- [x] implemented
+- [ ] Gas
+
+### create-user-guard
+- [x] implemented
+- [x] executed as sys only
+- [ ] Gas
+
+## is-principal
+- [x] implemented
+- [ ] Gas
+
+## keyset-ref-guard
+- [x] implemented
+- [ ] Gas
+
+## typeof-principal
+- [x] implemented
+- [ ] Gas
+
+## validate-principal
+- [x] implemented
+- [ ] Gas
+
+## Zk Builtins
+
+## pairing-check
+- [x] implemented
+- [x] ensure points that are tested are on the curve
+- [ ] Gas
+
+## point-add
+- [x] implemented
+- [x] ensure points that are tested are on the curve
+- [ ] Gas
+
+## scalar-mult
+- [x] implemented
+- [x] ensure points that are tested are on the curve
+- [ ] Gas
+
+## REPL-only Builtins
+
+### begin-tx
+- [x] implemented
+
+### bench
+- [ ] implemented
+
+### commit-tx
+- [x] implemented
+
+### continue=-pact
+- [x] implemented all 4 overloads
+
+### env-data
+- [x] implemented
+
+### env-dynref
+TODO: may not be necessary with new fv
+- [ ] implemented
+
+### env-enable-repl-natives
+- [ ] implemented
+
+### env-entity
+To be removed
+
+### env-events
+- [x] implemented
+
+### env-exec-config
+- [x] implemented
+
+### env-gas
+- [ ] implemented
+
+### env-gaslimit
+- [ ] implemented
+
+### env-gaslog
+- [ ] implemented
+
+### env-gasmodel
+- [ ] implemented
+
+### env-gasprice
+- [ ] implemented
+
+### env-gasrate
+- [ ] implemented
+
+### env-hash
+- [x] implemented
+
+### env-keys
+- [x] implemented
+
+### env-namespace-policy
+- [x] implemented
+
+### env-sigs
+- [x] implemented
+
+
+### env-simulate-onchain
+- [ ] This is a specific one related to error forking in pact. Likely we will implement it at a later date.
+
+### expect
+- [x] implemented
+
+### expect-failure
+- [x] implemented
+
+### expect-that
+- [x] implemented
+
+### format-address
+TODO: what are we doing about this?
+
+### load
+- [x] implemented
+
+### mock-spv
+- [ ] implemented
+
+### pact-state
+- [x] implemented 1-arg
+- [x] implemented 2-arg
+
+### print
+- [x] implemented
+
+### rollback-tx
+- [x] implemented
+
+### sig-keyset
+- [x] implemented
+
+### test-capability
+- [x] implemented
+
+### typecheck
+- [ ] TODO: implement using new typed core
+
+### verify
+- [ ] implemented
+
+### with-applied-env
+DELETED. Unnecessary with core's arch.

@@ -221,19 +221,27 @@ instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
     over termBuiltin RBuiltinWrap $ desugarOperator i dsg
   desugarAppArity i (RBuiltinWrap b) ne =
     desugarAppArityRaw RBuiltinWrap i b ne
-  desugarAppArity i (RBuiltinRepl RExpect) ([e1, e2, e3]) | isn't _Lam e3 =
+  -- (expect <description> <expected> <expression-to-eval>)
+  desugarAppArity i (RBuiltinRepl RExpect) ([e1, e2, e3]) | isn't _Nullary e3 =
     App (Builtin (RBuiltinRepl RExpect) i) ([e1, e2, suspendTerm e3]) i
-  desugarAppArity i (RBuiltinRepl RExpectFailure) [e1, e2] | isn't _Lam e2 =
+  -- (expect-failure <arg1> <term>)
+  desugarAppArity i (RBuiltinRepl RExpectFailure) [e1, e2] | isn't _Nullary e2 =
     App (Builtin (RBuiltinRepl RExpectFailure) i) [e1, suspendTerm e2] i
-  desugarAppArity i (RBuiltinRepl RExpectFailure) [e1, e2, e3] | isn't _Lam e2 =
+  -- (expect-failure <arg1> <expected-msg> <term>)
+  desugarAppArity i (RBuiltinRepl RExpectFailure) [e1, e2, e3] | isn't _Nullary e2 =
     App (Builtin (RBuiltinRepl RExpectFailureMatch) i) [e1, e2, suspendTerm e3] i
-  desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2] | isn't _Lam e2 =
-    App (Builtin (RBuiltinRepl RContinuePactRollback) i) [e1, e2] i
+  -- (pact-state <arg>)
   desugarAppArity i (RBuiltinRepl RPactState) [e1] =
     App (Builtin (RBuiltinRepl RResetPactState) i) [e1] i
-  desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2, e3]
-    | isn't _Lam e2 && isn't _Lam e3 =
+  -- (continue-pact <arg1> <arg2>)
+  desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2] =
+    App (Builtin (RBuiltinRepl RContinuePactRollback) i) [e1, e2] i
+  -- (continue-pact <arg1> <arg2> <arg3>)
+  desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2, e3] =
       App (Builtin (RBuiltinRepl RContinuePactRollbackYield) i) [e1, e2, e3] i
+  -- (continue-pact <arg1> <arg2> <arg3> <arg4>)
+  desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2, e3, e4] =
+      App (Builtin (RBuiltinRepl RContinuePactRollbackYieldObj) i) [e1, e2, e3, e4] i
   desugarAppArity i b ne =
     App (Builtin b i) ne i
 
