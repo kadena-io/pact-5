@@ -1706,7 +1706,7 @@ coreChainData info b cont handler _env = \case
 -- -------------------------
 
 ensureOnCurve :: (Num p, Eq p, MonadEval b i m) => i -> CurvePoint p -> p -> m ()
-ensureOnCurve info p bp = unless (isOnCurve p bp) $ failInvariant info "Point not on curve"
+ensureOnCurve info p bp = unless (isOnCurve p bp) $ throwExecutionError info PointNotOnCurve
 
 toG1 :: ObjectData PactValue -> Maybe G1
 toG1 (ObjectData obj) = do
@@ -1777,13 +1777,13 @@ zkScalaMult info b cont handler _env = \case
     case T.toLower ptTy of
       "g1" -> do
         p1' <- maybe (argsError info b args) pure $ toG1 (ObjectData p1)
-        unless (isOnCurve p1' b1) $ failInvariant info "Point not on curve"
+        ensureOnCurve info p1' b1
         let p2' = multiply p1' scalar'
             ObjectData o = fromG1 p2'
         returnCEKValue cont handler (VObject o)
       "g2" -> do
         p1' <- maybe (argsError info b args) pure $ toG2 (ObjectData p1)
-        unless (isOnCurve p1' b2) $ failInvariant info "Point not on curve"
+        ensureOnCurve info p1' b2
         let p2' = multiply p1' scalar'
             ObjectData o = fromG2 p2'
         returnCEKValue cont handler (VObject o)
@@ -1800,14 +1800,16 @@ zkPointAddition info b cont handler _env = \case
       "g1" -> do
         p1' <- maybe (argsError info b args) pure $ toG1 (ObjectData p1)
         p2' <- maybe (argsError info b args) pure $ toG1 (ObjectData p2)
-        unless (isOnCurve p1' b1 && isOnCurve p2' b1) $ failInvariant info "Point not on curve"
+        ensureOnCurve info p1' b1
+        ensureOnCurve info p2' b1
         let p3' = add p1' p2'
             ObjectData o = fromG1 p3'
         returnCEKValue cont handler (VObject o)
       "g2" -> do
         p1' <- maybe (argsError info b args) pure $ toG2 (ObjectData p1)
         p2' <- maybe (argsError info b args) pure $ toG2 (ObjectData p2)
-        unless (isOnCurve p1' b2 && isOnCurve p2' b2) $ failInvariant info "Point not on curve"
+        ensureOnCurve info p1' b2
+        ensureOnCurve info p2' b2
         let p3' = add p1' p2'
             ObjectData o = fromG2 p3'
         returnCEKValue cont handler (VObject o)
