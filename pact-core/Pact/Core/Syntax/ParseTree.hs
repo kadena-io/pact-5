@@ -18,7 +18,6 @@ import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.Pretty
 import Pact.Core.Type(PrimType(..))
-import Pact.Core.Imports
 import Pact.Core.Guards
 
 
@@ -180,6 +179,13 @@ data Def i
   | DSchema (DefSchema i)
   | DTable (DefTable i)
   | DPact (DefPact i)
+  deriving Show
+
+data Import
+  = Import
+  { _impModuleName  :: ModuleName
+  , _impModuleHash :: Maybe Text
+  , _impImported :: Maybe [Text] }
   deriving Show
 
 data ExtDecl

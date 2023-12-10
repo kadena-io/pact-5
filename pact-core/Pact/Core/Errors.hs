@@ -149,6 +149,7 @@ data DesugarError
   | InvalidDefInSchemaPosition Text
   | InvalidDynamicInvoke Text
   | DuplicateDefinition Text
+  | InvalidBlessedHash Text
   deriving Show
 
 instance Exception DesugarError

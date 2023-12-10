@@ -517,17 +517,27 @@ desugarModule
   => Lisp.Module i
   -> RenamerT b i m (Module ParsedName DesugarType b i)
 desugarModule (Lisp.Module mname mgov extdecls defs _ _ i) = do
-  let (imports, blessed, implemented) = splitExts extdecls
+  (imports, blessed, implemented) <- splitExts extdecls
   defs' <- locally reCurrModule (const (Just (mname,[]))) $ traverse desugarDef (NE.toList defs)
   pure $ Module mname mgov defs' blessed imports implemented placeholderHash i
   where
   splitExts = split ([], S.empty, [])
   split (accI, accB, accImp) (h:hs) = case h of
-    -- todo: implement bless hashes
-    Lisp.ExtBless _ -> split (accI, accB, accImp) hs
-    Lisp.ExtImport imp -> split (imp:accI, accB, accImp) hs
+    -- Todo: likely safer functions are a better idea here
+    Lisp.ExtBless b -> case parseModuleHash b of
+      Nothing -> throwDesugarError (InvalidBlessedHash b) i
+      Just mh -> split (accI, S.insert mh accB, accImp) hs
+    Lisp.ExtImport imp -> do
+      imp' <- desugarImport i imp
+      split (imp':accI, accB, accImp) hs
     Lisp.ExtImplements mn -> split (accI, accB, mn:accImp) hs
-  split (a, b, c) [] = (reverse a, b, reverse c)
+  split (a, b, c) [] = pure (reverse a, b, reverse c)
+
+desugarImport :: MonadEval b i m => i -> Lisp.Import -> RenamerT b i m Import
+desugarImport info (Lisp.Import mn (Just blessed) imported) = case parseModuleHash blessed of
+  Just mbh' -> pure (Import mn (Just mbh') imported)
+  Nothing -> throwDesugarError (InvalidBlessedHash blessed) info
+desugarImport _ (Lisp.Import mn Nothing imported) = pure (Import mn Nothing imported)
 
 -- Todo: Interface hashing, either on source or
 -- the contents
@@ -538,14 +548,17 @@ desugarInterface
 desugarInterface (Lisp.Interface ifn ifdefns imps _ _ info) = do
   defs' <- traverse desugarIfDef ifdefns
   let mhash = ModuleHash (Hash "placeholder")
-  pure $ Interface ifn defs' imps mhash info
+  imps' <- traverse (desugarImport info) imps
+  pure $ Interface ifn defs' imps' mhash info
 
 desugarUse
   :: (MonadEval b i m )
   => i
-  -> Import
+  -> Lisp.Import
   -> RenamerT b i m Import
-desugarUse i imp = imp <$ handleImport i mempty imp
+desugarUse i imp = do
+  imp' <- desugarImport i imp
+  imp' <$ handleImport i mempty imp'
 
 -----------------------------------------------------------
 -- Renaming

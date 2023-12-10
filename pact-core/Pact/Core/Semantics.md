@@ -752,7 +752,8 @@ TODO: do we want this in core? Can we delete?
 - [x] implemented all 4 overloads
 
 ### env-data
-- [x] implemented
+- [ ] TODO: string case? Do we want to parse json still??? what is the use case vs just an object?
+- [x] implemented object case
 
 ### env-dynref
 TODO: may not be necessary with new fv

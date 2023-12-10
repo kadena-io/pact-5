@@ -26,7 +26,6 @@ import Pact.Core.Literal
 import Pact.Core.Builtin
 import Pact.Core.Type(PrimType(..))
 import Pact.Core.Guards
-import Pact.Core.Imports
 import Pact.Core.Errors
 import Pact.Core.Syntax.ParseTree
 import Pact.Core.Syntax.LexUtils
@@ -194,6 +193,7 @@ Ext :: { ExtDecl }
 
 Use :: { (Import, SpanInfo) }
   : '(' import ModQual ImportList ')' {  (Import (mkModName $3) Nothing $4, combineSpan (_ptInfo $1) (_ptInfo $5))  }
+  | '(' import ModQual STR ImportList ')' {  (Import (mkModName $3) (Just (getStr $4)) $5, combineSpan (_ptInfo $1) (_ptInfo $6))  }
 
 
 Defs :: { [ParsedDef] }
