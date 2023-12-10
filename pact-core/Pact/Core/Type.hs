@@ -38,11 +38,13 @@ module Pact.Core.Type
 
 import Control.Lens
 import Data.List
+import Data.Set(Set)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
+import qualified Data.Set as S
 
 import Pact.Core.Literal
 import Pact.Core.Names
@@ -101,7 +103,7 @@ data Type
   -- ^ List aka [a]
   | TyAnyList
   -- ^ Any list
-  | TyModRef ModuleName
+  | TyModRef (Set ModuleName)
   -- ^ Module references
   | TyObject Schema
   -- ^ Objects
@@ -226,8 +228,8 @@ instance Pretty Type where
       where
       liParens t@TyPrim{} = pretty t
       liParens t = Pretty.parens (pretty t)
-    TyModRef mr ->
-      "module" <> Pretty.braces (pretty mr)
+    TyModRef mrs ->
+      "module" <> Pretty.braces (Pretty.hsep (Pretty.punctuate Pretty.comma (pretty <$> S.toList mrs))  )
     TyObject (Schema sc) ->
       let sc' =  (\(k, v) -> pretty k <> ":" <> pretty v) <$> M.toList sc
       in "object" <> Pretty.braces (Pretty.hsep (Pretty.punctuate Pretty.comma sc'))
@@ -243,7 +245,9 @@ renderType = \case
   TyPrim p -> renderPrimType p
   TyList t -> "[" <> renderType t <> "]"
   TyGuard -> "guard"
-  TyModRef mr -> "module" <> "{" <> renderModuleName mr <> "}"
+  TyModRef s ->
+    let s' = T.concat (intersperse ", " (renderModuleName <$> S.toList s))
+    in "module" <> "{" <> s' <> "}"
   TyObject (Schema sc) ->
     let sc' =  (\(k, v) ->  _field k <> ":" <> renderType v) <$> M.toList sc
     in "object{" <> T.concat (intersperse ", " sc') <> "}"

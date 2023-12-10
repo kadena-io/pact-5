@@ -1113,9 +1113,11 @@ defineKeySet' info cont handler env ksname newKs  = do
 
 defineKeySet :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
 defineKeySet info b cont handler env = \case
-  [VString ksname, VGuard (GKeyset ks)] ->
+  [VString ksname, VGuard (GKeyset ks)] -> do
+    enforceTopLevelOnly info b
     defineKeySet' info cont handler env ksname ks
-  [VString ksname] ->
+  [VString ksname] -> do
+    enforceTopLevelOnly info b
     readKeyset' ksname >>= \case
       Just newKs ->
         defineKeySet' info cont handler env ksname newKs

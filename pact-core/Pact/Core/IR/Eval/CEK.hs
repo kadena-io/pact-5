@@ -121,7 +121,7 @@ evalCEK cont handler env (Var n info)  = do
         Nothing ->
           throwExecutionError info (NameNotInScope (FullyQualifiedName mname (_nName n) mh))
     NModRef m ifs -> case ifs of
-      [x] -> returnCEKValue cont handler (VModRef (ModRef m ifs (Just x)))
+      [x] -> returnCEKValue cont handler (VModRef (ModRef m ifs (Just (S.singleton x))))
       [] -> throwExecutionError info (ModRefNotRefined (_nName n))
       _ -> returnCEKValue cont handler (VModRef (ModRef m ifs Nothing))
     NDynRef (DynamicRef dArg i) -> case RAList.lookup (view ceLocal env) i of
@@ -306,7 +306,7 @@ applyPact i pc ps cont handler cenv nested = useEvalState esDefPactExec >>= \cas
       case (ps ^. psRollback, step) of
         (False, _) ->
           evalWithStackFrame i cont' handler cenv sf Nothing (ordinaryDefPactStepExec step)
-        (True, StepWithRollback _ rollbackExpr _) ->
+        (True, StepWithRollback _ rollbackExpr) ->
           evalWithStackFrame i cont' handler cenv sf Nothing rollbackExpr
         (True, Step{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
     _otherwise -> failInvariant i "DefPact not found"
@@ -370,7 +370,7 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esDefPactExec >>= \case
       case (ps ^. psRollback, step) of
         (False, _) ->
           evalWithStackFrame i cont' handler cenv' sf Nothing  (ordinaryDefPactStepExec step)
-        (True, StepWithRollback _ rollbackExpr _) ->
+        (True, StepWithRollback _ rollbackExpr) ->
           evalWithStackFrame i cont' handler cenv' sf Nothing rollbackExpr
         (True, Step{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
     _otherwise -> failInvariant i "applyNestedPact: Expected a DefPact bot got something else"

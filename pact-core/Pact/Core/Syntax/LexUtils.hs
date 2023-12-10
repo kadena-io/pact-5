@@ -120,6 +120,7 @@ data Token
   | TokenSuspend
   | TokenDynAcc
   | TokenBindAssign
+  | TokenInvariant
   -- Repl-specific tokens
   | TokenLoad
   -- Layout
@@ -316,6 +317,7 @@ renderTokenText = \case
   TokenBindAssign -> ":="
   TokenDynAcc -> "::"
   TokenProperty -> "property"
+  TokenInvariant -> "invariant"
   -- TokenEq -> "="
   -- TokenNeq -> "!="
   -- TokenGT -> ">"

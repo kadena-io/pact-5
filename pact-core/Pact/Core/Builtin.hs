@@ -575,7 +575,7 @@ instance IsBuiltin ReplBuiltins where
     RBeginNamedTx -> 1
     RCommitTx -> 0
     RRollbackTx -> 0
-    RSigKeyset -> 1
+    RSigKeyset -> 0
     RTestCapability -> 1
     RContinuePact -> 1
     RContinuePactRollback -> 2

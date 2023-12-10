@@ -82,14 +82,13 @@
 
     (let*
       ((curve-inf {'x:0, 'y:0})
-       (vk_x (fold (point-add "g1") curve-inf (zip (scalar-mult 'g1) (drop 1 (at 'ic verifying-key)) input)))
-       (vk_x1 (point-add 'g1 vk_x (at 0 (at 'ic verifying-key))))
+       (vk_x (fold (point-add "g1") curve-inf (zip (scalar-mult "g1") (drop 1 (at "ic" verifying-key)) input)))
+       (vk_x1 (point-add "g1" vk_x (at 0 (at "ic" verifying-key))))
       )
-    (pairing-check
-      [(negate-point-g1 (at 'proofA proof)) (at 'alfa1 verifying-key) vk_x1 (at 'proofC proof)]
-      [(at 'proofB proof) (at 'beta2 verifying-key) (at 'gamma2 verifying-key) (at 'delta2 verifying-key)]
-      )
-    )
+      (pairing-check
+        [(negate-point-g1 (at "proofA" proof)) (at 'alfa1 verifying-key) vk_x1 (at 'proofC proof)]
+        [(at 'proofB proof) (at 'beta2 verifying-key) (at 'gamma2 verifying-key) (at 'delta2 verifying-key)]
+        ))
     )
 )
 

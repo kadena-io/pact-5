@@ -401,13 +401,12 @@ desugarDefPact (Lisp.DefPact dpname margs rt (step:steps) _ _ i) =
     Just (mn,_) -> do
       let args' = toArg <$> margs
       steps' <- forM (step :| steps) \case
-        Lisp.Step s ms ->
-          Step <$> desugarLispTerm s <*> traverse (traverse desugarLispTerm) ms
-        Lisp.StepWithRollback s rb ms ->
+        Lisp.Step s _ ->
+          Step <$> desugarLispTerm s
+        Lisp.StepWithRollback s rb _ ->
           StepWithRollback
           <$> desugarLispTerm s
           <*> desugarLispTerm rb
-          <*> traverse (traverse desugarLispTerm) ms
 
       -- In DefPacts, last step is not allowed to rollback.
       when (hasRollback $ NE.last steps') $
@@ -702,12 +701,9 @@ defPactStepSCC
   -> Step ParsedName DesugarType b i
   -> Set Text
 defPactStepSCC mn cd = \case
-  Step step mSteps -> S.union (termSCC mn cd step) (stepsSCC mSteps)
-  StepWithRollback step rollback mSteps ->
-    S.unions $ stepsSCC mSteps : [termSCC mn cd step, termSCC mn cd rollback]
-  where
-    stepsSCC :: Maybe [Term ParsedName DesugarType b i] -> Set Text
-    stepsSCC = maybe S.empty (foldMap $ termSCC mn cd)
+  Step step -> termSCC mn cd step
+  StepWithRollback step rollback ->
+    S.unions $ [termSCC mn cd step, termSCC mn cd rollback]
 
 defSCC
   :: ModuleName
@@ -828,7 +824,7 @@ renameType i = \case
   Lisp.TyList ty ->
     TyList <$> renameType i ty
   Lisp.TyModRef tmr ->
-    TyModRef tmr <$ resolveInterfaceName i tmr
+    TyModRef (S.fromList tmr) <$ traverse (resolveInterfaceName i) tmr
   Lisp.TyKeyset -> pure TyGuard
   Lisp.TyObject pn ->
     TyObject <$> resolveSchema pn
@@ -978,10 +974,10 @@ renamePactStep
   => Step ParsedName DesugarType b i
   -> RenamerT b i m (Step Name Type b i)
 renamePactStep = \case
-  Step step mSteps ->
-    Step <$> renameTerm step <*> (traverse.traverse) renameTerm mSteps
-  StepWithRollback step rollback mSteps ->
-    StepWithRollback <$> renameTerm step <*> renameTerm rollback <*> (traverse.traverse) renameTerm mSteps
+  Step step ->
+    Step <$> renameTerm step
+  StepWithRollback step rollback ->
+    StepWithRollback <$> renameTerm step <*> renameTerm rollback
 
 renameDefPact
   :: (MonadEval b i m, DesugarBuiltin b)

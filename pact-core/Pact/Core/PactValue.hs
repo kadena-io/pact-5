@@ -31,6 +31,7 @@ import Data.Decimal(Decimal)
 import qualified Data.Vector as V
 import qualified Data.Map.Strict as M
 import qualified Pact.Time as PactTime
+import qualified Data.Set as S
 
 import Pact.Core.Type
 import Pact.Core.Names
@@ -87,7 +88,7 @@ synthesizePvType = \case
   PLiteral l -> typeOfLit l
   PList _ -> TyList TyUnit
   PGuard _ -> TyGuard
-  PModRef mr -> TyModRef (_mrModule mr)
+  PModRef mr -> TyModRef (S.fromList (_mrImplemented mr))
   PObject f ->
     let tys = synthesizePvType <$> f
     in TyObject (Schema tys)
@@ -126,11 +127,11 @@ checkPvType ty = \case
     TyList t' | all (isJust . checkPvType t') l -> Just (TyList t')
     TyAnyList -> Just TyAnyList
     _ -> Nothing
-  PModRef (ModRef _orig ifs refined) -> case ty of
-    TyModRef mn
-      | refined == Just mn -> Just (TyModRef mn)
-      | isJust refined -> Nothing
-      | mn `elem` ifs && refined == Nothing -> Just (TyModRef mn)
+  PModRef (ModRef _orig ifs refinedSet) -> case ty of
+    TyModRef mns
+      | Just rf <- refinedSet, mns `S.isSubsetOf` rf -> Just (TyModRef mns)
+      | isJust refinedSet -> Nothing
+      | mns `S.isSubsetOf` (S.fromList ifs) && refinedSet == Nothing -> Just (TyModRef mns)
       | otherwise -> Nothing
     _ -> Nothing
   PCapToken _ -> Nothing

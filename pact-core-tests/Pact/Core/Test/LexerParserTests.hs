@@ -179,7 +179,7 @@ exprGen = Gen.recursive Gen.choice
       (Gen.constant . Lisp.TyPrim <$> [minBound ..])
       [Lisp.TyList <$> typeGen
       ,pure Lisp.TyPolyList
-      ,Lisp.TyModRef <$> moduleNameGen
+      ,Lisp.TyModRef <$> Gen.list (Range.constant 1 5) moduleNameGen
       ,pure Lisp.TyGuard
       ,pure Lisp.TyKeyset
       ,Lisp.TyObject <$> parsedTyNameGen
