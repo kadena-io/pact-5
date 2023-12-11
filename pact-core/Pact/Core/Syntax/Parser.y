@@ -149,11 +149,11 @@ Module :: { ParsedModule }
       (combineSpan (_ptInfo $1) (_ptInfo $7)) }
 
 Interface :: { ParsedInterface }
-  : '(' interface IDENT MDocOrModel ImportOrIfDef ')'
+  : '(' interface IDENT MDocOrModuleModel ImportOrIfDef ')'
     { Interface (ModuleName (getIdent $3) Nothing) (reverse (lefts $5)) (reverse (rights $5)) (fst $4) (snd $4)
       (combineSpan (_ptInfo $1) (_ptInfo $2)) }
 
-MDocOrModuleModel :: { (Maybe Text, [FVModel SpanInfo])}
+MDocOrModuleModel :: { (Maybe Text, [DefProperty SpanInfo])}
   : DocAnn ModuleModel { (Just $1, $2)}
   | ModuleModel DocAnn { (Just $2, $1) }
   | DocAnn { (Just $1, [])}
@@ -162,17 +162,17 @@ MDocOrModuleModel :: { (Maybe Text, [FVModel SpanInfo])}
   | {- empty -} { (Nothing, []) }
 
 
-ModuleModel :: { [FVModel SpanInfo] }
+ModuleModel :: { [DefProperty SpanInfo] }
   : modelAnn '[' DefProperties ']' { reverse $3 }
 
-DefProperties :: { [FVModel SpanInfo] }
+DefProperties :: { [DefProperty SpanInfo] }
   : DefProperties DefProperty { $2:$1 }
   | {- empty -} { [] }
 
-DefProperty :: { FVModel SpanInfo }
-  : '(' defprop IDENT DPropArgList ')' { FVDefProperty (DefProperty (getIdent $3) (fst $4) (snd $4)) }
-  | '(' property Expr ')' { FVProperty (Property $3) }
-  | '(' invariant Expr ')' { FVInvariant (Invariant $3) }
+DefProperty :: { DefProperty SpanInfo }
+  : '(' defprop IDENT DPropArgList ')' {  DefProperty (getIdent $3) (fst $4) (snd $4) }
+  -- | '(' property Expr ')' { FVProperty (Property $3) }
+  -- | '(' invariant Expr ')' { FVInvariant (Invariant $3) }
 
 -- This rule seems gnarly, but essentially
 -- happy needs to resolve whether the arglist is present or not
@@ -227,15 +227,15 @@ IfDef :: { ParsedIfDef }
 
 -- ident = $2,
 IfDefun :: { SpanInfo -> IfDefun SpanInfo }
-  : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel
+  : defun IDENT MTypeAnn '(' MArgs ')' MDocOrPropModel
     { IfDefun (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) }
 
 IfDefCap :: { SpanInfo -> IfDefCap SpanInfo }
-  : defcap IDENT MTypeAnn'(' MArgs ')' MDocOrModel MDCapMeta
+  : defcap IDENT MTypeAnn'(' MArgs ')' MDocOrPropModel MDCapMeta
     { IfDefCap (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) $8 }
 
 IfDefPact :: { SpanInfo -> IfDefPact SpanInfo }
-  : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel
+  : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrPropModel
     { IfDefPact (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) }
 
 ImportList :: { Maybe [Text] }
@@ -251,22 +251,22 @@ DefConst :: { SpanInfo -> ParsedDefConst }
 
 -- All defs
 Defun :: { SpanInfo -> ParsedDefun }
-  : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel Block
+  : defun IDENT MTypeAnn '(' MArgs ')' MDocOrPropModel Block
     { Defun (getIdent $2) (reverse $5) $3 $8 (fst $7) (snd $7) }
 
 Defschema :: { SpanInfo -> DefSchema SpanInfo }
-  : defschema IDENT MDocOrModel ArgList
+  : defschema IDENT MDocOrInvModel ArgList
     { DefSchema (getIdent $2) (reverse $4) (fst $3) (snd $3) }
 
 Deftable :: { SpanInfo -> DefTable SpanInfo }
   : deftable IDENT ':' '{' ParsedName '}' MDoc { DefTable (getIdent $2) $5 $7 }
 
 Defcap :: { SpanInfo -> DefCap SpanInfo }
-  : defcap IDENT MTypeAnn '(' MArgs ')' MDocOrModel MDCapMeta Block
+  : defcap IDENT MTypeAnn '(' MArgs ')' MDocOrPropModel MDCapMeta Block
     { DefCap (getIdent $2) (reverse $5) $3 $9 (fst $7) (snd $7) $8 }
 
 DefPact :: { SpanInfo -> DefPact SpanInfo }
-  : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel Steps
+  : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrPropModel Steps
   { DefPact (getIdent $2) (reverse $5) $3 (reverse $8) (fst $7) (snd $7) }
 
 Steps :: { [PactStep SpanInfo] }
@@ -325,23 +325,37 @@ DocAnn :: { Text }
 DocStr :: { Text }
   : STR { getStr $1 }
 
-ModelExprs :: { [FVFunModel SpanInfo] }
-  : ModelExprs '(' property Expr ')' { FVFunProperty (Property $4) :$1 }
-  | ModelExprs '(' invariant Expr ')' { FVFunInvariant (Invariant $4) :$1 }
+Properties :: { [Property SpanInfo] }
+  : Properties '(' property Expr ')' { (Property $4) : $1 }
   | {- empty -} { [] }
 
-MModel :: { Maybe [FVFunModel SpanInfo] }
-  : ModelAnn { Just $1 }
+Invariants :: { [Invariant SpanInfo] }
+  : Invariants '(' invariant Expr ')' { (Invariant $4) :$1 }
+  | {- empty -} { [] }
+
+MModel :: { Maybe [Property SpanInfo] }
+  : PropModelAnn { Just $1 }
   | {- empty -}  { Nothing }
 
-ModelAnn :: { [FVFunModel SpanInfo] }
-  : modelAnn '[' ModelExprs ']' { reverse $3 }
+PropModelAnn :: { [Property SpanInfo] }
+  : modelAnn '[' Properties ']' { reverse $3 }
 
-MDocOrModel :: { (Maybe Text, Maybe [FVFunModel SpanInfo])}
-  : DocAnn ModelAnn { (Just $1, Just $2)}
-  | ModelAnn DocAnn { (Just $2, Just $1) }
+InvModelAnn :: { [Invariant SpanInfo] }
+  : modelAnn '[' Invariants ']' { reverse $3 }
+
+MDocOrPropModel :: { (Maybe Text, Maybe [Property SpanInfo])}
+  : DocAnn PropModelAnn { (Just $1, Just $2)}
+  | PropModelAnn DocAnn { (Just $2, Just $1) }
   | DocAnn { (Just $1, Nothing)}
-  | ModelAnn { (Nothing, Just $1)}
+  | PropModelAnn { (Nothing, Just $1)}
+  | DocStr { (Just $1, Nothing) }
+  | {- empty -} { (Nothing, Nothing) }
+
+MDocOrInvModel :: { (Maybe Text, Maybe [Invariant SpanInfo])}
+  : DocAnn InvModelAnn { (Just $1, Just $2)}
+  | InvModelAnn DocAnn { (Just $2, Just $1) }
+  | DocAnn { (Just $1, Nothing)}
+  | InvModelAnn { (Nothing, Just $1)}
   | DocStr { (Just $1, Nothing) }
   | {- empty -} { (Nothing, Nothing) }
 
