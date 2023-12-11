@@ -348,7 +348,7 @@ data CondFrame b i
 
 data CapFrame b i
   = WithCapFrame (EvalTerm b i)
-  | CreateUserGuardFrame FullyQualifiedName
+  | CreateUserGuardFrame FullyQualifiedName [EvalTerm b i] [PactValue]
   -- | RequireCapFrame FullyQualifiedName
   -- | ComposeCapFrame FullyQualifiedName
   -- | InstallCapFrame FullyQualifiedName
@@ -377,7 +377,7 @@ data Cont b i m
   -- ^ Continuation for conditionals with lazy semantics
   | ObjC (CEKEnv b i m) i Field [(Field, EvalTerm b i)] [(Field, PactValue)] (Cont b i m)
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
-  | CapInvokeC (CEKEnv b i m) i [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
+  | CapInvokeC (CEKEnv b i m) i (CapFrame b i) (Cont b i m)
   -- ^ Capability special
   | CapBodyC CapPopState (CEKEnv b i m) (Maybe (CapToken QualifiedName PactValue)) (Maybe (PactEvent PactValue)) (EvalTerm b i) (Cont b i m)
   -- ^ CapBodyC includes

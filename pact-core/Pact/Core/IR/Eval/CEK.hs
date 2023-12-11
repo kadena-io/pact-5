@@ -179,15 +179,15 @@ evalCEK cont handler env (CapabilityForm cf info) = do
     WithCapability rawCap body -> do
       enforceNotWithinDefcap info env "with-capability"
       let capFrame = WithCapFrame body
-          cont' = CapInvokeC env info [] [] capFrame cont
+          cont' = CapInvokeC env info capFrame cont
       evalCEK cont' handler env rawCap
     CreateUserGuard name args -> do
       fqn <- nameToFQN info env name
       case args of
         [] -> createUserGuard info cont handler fqn []
         x : xs -> do
-          let capFrame = CreateUserGuardFrame fqn
-          let cont' = CapInvokeC env info xs [] capFrame cont
+          let usrGuardFrame = CreateUserGuardFrame fqn xs []
+          let cont' = CapInvokeC env info usrGuardFrame cont
           evalCEK cont' handler env x
 evalCEK cont handler env (ListLit ts info) = do
   chargeNodeGas ListNode
@@ -948,7 +948,7 @@ returnCEKValue (CondC env info frame cont) handler v = case v of
   updateEnforceOneList xs (CEKEnforceOne e i str _ c cs h) =
     CEKEnforceOne e i str xs c cs h
   updateEnforceOneList _ e = e
-returnCEKValue (CapInvokeC env info terms pvs cf cont) handler v = case cf of
+returnCEKValue (CapInvokeC env info cf cont) handler v = case cf of
   WithCapFrame body -> case v of
     VCapToken ct@(CapToken fqn _) -> do
       -- Todo: CEK-style this
@@ -956,11 +956,12 @@ returnCEKValue (CapInvokeC env info terms pvs cf cont) handler v = case cf of
       evalCap info cont handler env ct (CapBodyC PopCapInvoke) body
     -- Todo: this is actually more like "expected cap token"
     _ -> throwExecutionError info ExpectedPactValue
-  CreateUserGuardFrame fqn -> do
+  CreateUserGuardFrame fqn terms pvs -> do
     pv <- enforcePactValue info v
     case terms of
       x:xs -> do
-        let cont' = CapInvokeC env info xs (pv:pvs) cf cont
+        let cf' = CreateUserGuardFrame fqn xs (pv:pvs)
+            cont' = CapInvokeC env info cf' cont
         evalCEK cont' handler env x
       [] -> createUserGuard info cont handler fqn (reverse (pv:pvs))
 returnCEKValue (CapBodyC cappop env mcap mevent capbody cont) handler _ = do
