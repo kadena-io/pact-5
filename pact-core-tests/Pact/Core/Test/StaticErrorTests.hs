@@ -45,6 +45,8 @@ staticTests =
   , ("enforce-one_no_list.pact", isDesugarError _InvalidSyntax)
   -- TODO unable to trigger Desugar.hs:336/344 in `desugarDefun`, parser gets there first
   -- , ("defun_outside_module.pact", isDesugarError _NotAllowedOutsideModule)
+  -- TODO ditto
+  -- , ("defpact_empty.pact", isDesugarError _EmptyDefPact)
   ]
 
 tests :: TestTree
