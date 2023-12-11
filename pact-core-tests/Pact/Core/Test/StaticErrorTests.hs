@@ -47,6 +47,8 @@ staticTests =
   -- , ("defun_outside_module.pact", isDesugarError _NotAllowedOutsideModule)
   -- TODO ditto
   -- , ("defpact_empty.pact", isDesugarError _EmptyDefPact)
+  -- TODO ditto
+  -- , ("defpact_outside_module.pact", isDesugarError _NotAllowedOutsideModule)
   ]
 
 tests :: TestTree
