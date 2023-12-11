@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE InstanceSigs #-}
 
 
 -- |
@@ -50,11 +51,10 @@ data Defun name ty builtin info
   } deriving (Show, Functor)
 
 data Step name ty builtin info
-  = Step (Term name ty builtin info) (Maybe [Term name ty builtin info])
+  = Step (Term name ty builtin info)
   | StepWithRollback
     (Term name ty builtin info)
     (Term name ty builtin info)
-    (Maybe [Term name ty builtin info])
   deriving (Show, Functor)
 
 hasRollback :: Step n t b i -> Bool
@@ -62,8 +62,8 @@ hasRollback Step{} = False
 hasRollback StepWithRollback{} = True
 
 ordinaryDefPactStepExec :: Step name ty builtin info -> Term name ty builtin info
-ordinaryDefPactStepExec (Step expr _) = expr
-ordinaryDefPactStepExec (StepWithRollback expr _ _) = expr
+ordinaryDefPactStepExec (Step expr) = expr
+ordinaryDefPactStepExec (StepWithRollback expr _) = expr
 
 data ConstVal term
   = TermConst term
@@ -115,6 +115,7 @@ data TableSchema name where
   ResolvedTable :: Schema -> TableSchema Name
 
 instance Show (TableSchema name) where
+  show :: TableSchema name -> String
   show (DesugaredTable t) = "DesugardTable(" <> show t <> ")"
   show (ResolvedTable t) = "ResolvedTable(" <> show t <> ")"
 

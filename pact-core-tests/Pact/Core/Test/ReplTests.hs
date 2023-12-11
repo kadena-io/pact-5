@@ -6,14 +6,13 @@ import Test.Tasty.HUnit
 import Control.Monad(when)
 import Data.IORef
 import Data.Default
-import Data.ByteString(ByteString)
+import Data.Text(Text)
 import Data.Foldable(traverse_)
-import Data.Text.Encoding(decodeUtf8)
 import System.Directory
 import System.FilePath
 
 import qualified Data.Text as T
-import qualified Data.ByteString as B
+import qualified Data.Text.IO as T
 
 import Pact.Core.Gas
 import Pact.Core.Literal
@@ -31,7 +30,7 @@ import Pact.Core.Errors
 tests :: IO TestTree
 tests = do
   files <- replTestFiles
-  pure $ testGroup "Core repl tests" (runFileReplTest <$> files)
+  pure $ testGroup "CoreReplTests" (runFileReplTest <$> files)
 
 
 replTestDir :: [Char]
@@ -42,9 +41,9 @@ replTestFiles = do
   filter (\f -> isExtensionOf "repl" f || isExtensionOf "pact" f) <$> getDirectoryContents replTestDir
 
 runFileReplTest :: TestName -> TestTree
-runFileReplTest file = testCase file $ B.readFile (replTestDir </> file) >>= runReplTest file
+runFileReplTest file = testCase file $ T.readFile (replTestDir </> file) >>= runReplTest file
 
-runReplTest :: FilePath -> ByteString -> Assertion
+runReplTest :: FilePath -> Text -> Assertion
 runReplTest file src = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
@@ -64,15 +63,14 @@ runReplTest file src = do
   stateRef <- newIORef rstate
   runReplT stateRef (interpretReplProgram source (const (pure ()))) >>= \case
     Left e -> let
-      rendered = replError (ReplSource (T.pack file) (decodeUtf8 src)) e
+      rendered = replError (ReplSource (T.pack file) src) e
       in assertFailure (T.unpack rendered)
     Right output -> traverse_ ensurePassing output
   where
   ensurePassing = \case
     RCompileValue (InterpretValue (IPV v i)) -> case v of
       PLiteral (LString msg) -> do
-        let render = replError (ReplSource (T.pack file) (decodeUtf8 src)) (PEExecutionError (EvalError msg) i)
+        let render = replError (ReplSource (T.pack file) src) (PEExecutionError (EvalError msg) i)
         when (T.isPrefixOf "FAILURE:" msg) $ assertFailure (T.unpack render)
       _ -> pure ()
     _ -> pure ()
-

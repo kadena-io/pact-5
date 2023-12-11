@@ -216,6 +216,11 @@ checkSigCaps
 checkSigCaps sigs = do
   granted <- getAllStackCaps
   autos <- useEvalState (esCaps . csAutonomous)
+  -- Pretty much, what this means is:
+  -- if you installed a capability from code (using `install-capability`)
+  -- then we disable unscoped sigs. Why?
+  -- Because we do not want to allow the installation of managed caps with
+  -- resources when a user explicitly did not sign for it.
   pure $ M.filter (match (S.null autos) granted) sigs
   where
   match allowEmpty granted sigCaps =
