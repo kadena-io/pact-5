@@ -49,6 +49,8 @@ staticTests =
   -- , ("defpact_empty", isDesugarError _EmptyDefPact)
   -- TODO ditto
   -- , ("defpact_outside_module", isDesugarError _NotAllowedOutsideModule)
+  -- TODO ditto
+  -- , ("defcap_outside_module", isDesugarError _NotAllowedOutsideModule)
   , ("managed_invalid", isDesugarError _InvalidManagedArg)
   ]
 
