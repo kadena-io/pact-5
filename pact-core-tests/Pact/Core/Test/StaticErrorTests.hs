@@ -45,11 +45,11 @@ staticTests =
   , ("enforce-one_no_list", isDesugarError _InvalidSyntax)
   -- TODO unable to trigger Desugar.hs:336/344 in `desugarDefun`, parser gets there first
   -- , ("defun_outside_module", isDesugarError _NotAllowedOutsideModule)
-  -- TODO ditto
+  -- TODO ditto in desugarDefPact
   -- , ("defpact_empty", isDesugarError _EmptyDefPact)
-  -- TODO ditto
+  -- TODO ditto in desugarDefPact
   -- , ("defpact_outside_module", isDesugarError _NotAllowedOutsideModule)
-  -- TODO ditto
+  -- TODO ditto in desugarDefCap
   -- , ("defcap_outside_module", isDesugarError _NotAllowedOutsideModule)
   , ("managed_invalid", isDesugarError _InvalidManagedArg)
   ]
