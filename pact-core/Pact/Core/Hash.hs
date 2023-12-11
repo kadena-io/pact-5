@@ -89,15 +89,6 @@ parseModuleHash t = case decodeBase64UrlUnpadded (T.encodeUtf8 t) of
 hash :: ByteString -> Hash
 hash = unsafeBsToPactHash . ByteArray.convert . Crypto.hashWith Crypto.Blake2b_256
 
--- hash :: forall h . Reifies h HashAlgo => ByteString -> TypedHash h
--- hash = TypedHash . go
---   where
---     algo = reflect (Proxy :: Proxy h)
---     go = case algo of
---       Blake2b_256 -> ByteArray.convert . Crypto.hashWith Crypto.Blake2b_256
---       SHA3_256 -> ByteArray.convert . Crypto.hashWith Crypto.SHA3_256
--- {-# INLINE hash #-}
-
 verifyHash :: Hash -> ByteString -> Either String Hash
 verifyHash h b = if hashed == h
   then Right h

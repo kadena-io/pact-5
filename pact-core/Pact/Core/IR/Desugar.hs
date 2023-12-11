@@ -509,9 +509,6 @@ desugarDef = \case
   Lisp.DTable d -> DTable <$> desugarDefTable d
   Lisp.DPact d -> DPact <$> desugarDefPact d
 
--- Todo: Module hashing, either on source or
--- the contents
--- Todo: governance
 desugarModule
   :: (MonadEval b i m, DesugarBuiltin b)
   => Lisp.Module i
@@ -523,7 +520,6 @@ desugarModule (Lisp.Module mname mgov extdecls defs _ _ i) = do
   where
   splitExts = split ([], S.empty, [])
   split (accI, accB, accImp) (h:hs) = case h of
-    -- Todo: likely safer functions are a better idea here
     Lisp.ExtBless b -> case parseModuleHash b of
       Nothing -> throwDesugarError (InvalidBlessedHash b) i
       Just mh -> split (accI, S.insert mh accB, accImp) hs
