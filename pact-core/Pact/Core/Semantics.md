@@ -4,9 +4,79 @@ This document should serve as a record of known pact semantics, covering as much
 
 Bullet points that are not filled are potential tasks
 
+## Pact Syntax
+
+EBNF of Pact, Roughly speaking
+
+### Legend
+| Usage         | Notation   | Meaning |
+| ------------- | :--------: | ------- |
+| concatenation |            | One token immediately follows another
+| alternation   | \|         | One or the order
+| optional      | \[ ... \]  | none or once
+| repetition    | \{ ... \}  | none or many
+| grouping      | \( ... \)  | Groups tokens to match
+
+
+### Lexical Syntax
+
+
+```
+lower          ::= 'a' | ... | 'z' (Ascii only, no unicode lower case)
+upper          ::= 'A' | ... | 'Z' (Ascii only, no unicode lower case)
+special-symbol ::= '%' | '#' | '+' | '-' | '_' | '&' | '$' | '@'
+                     | '<' | '>' | '=' | '^' | '?' | '*' | '!'
+                     | '|' | '/' | '~'
+alpha          ::= lower | upper
+parens         ::=  '(' | ')'
+brackets       ::= '[' | ']'
+braces         ::= '{' | '}'
+digit          ::= '0' | ... | '9'
+comment        ::= ';' "any sequence of characters up until newline"
+colon          ::= ':'
+bind-assign    ::= ':' '='
+dot            ::= '.'
+comma          ::= ','
+nl             ::= "new line character"
+IDENT          ::= (alpha | special-symbol) {alpha | special-symbol | digit}
+STRING         ::= '"' {any character that is not a line break} '"'
+TICKSTRING     ::= '\'' alpha {alpha | digit | '-' | '_'}
+```
+
+### Keywords
+
+|     |   |  |
+| :--------: | :--------: | :--------: |
+| let         | let*     | if        |
+| defun       | defcap   | defconst  |
+| defschema   | deftable | defpact   |
+| defproperty | property | invariant |
+| interface   | module   | bless     |
+| implements  | use      | true      |
+| false       | lambda   | and       |
+| or | load | @doc |
+| @model | @event | @managed |
+| step | step-with-rollback | enforce |
+| enforce-one | with-capability | create-user-guard |
+| try | error | progn |
+
+#### Productions
+TODO: fill
+```
+<program> ::= <toplevel> { <toplevel> }
+
+<toplevel> ::= <module> | <interface> | <use> | <expr>
+
+<module> ::= '(' module IDENT <Governance> <MDocOrModuleModel> <ExtOrDefs> ')'
+
+<interface> ::= '(' interface IDENT <MDocOrModel> <ImportOrIfDef> ')'
+
+```
+
+
 ## Modules
 
-### Module Lexing and Parsing
+### Module Lexing and Parsing Implementation
 - [x] `module` keyword
 - [x] Governance forms: keyed governance (via Keyset name string) or cap governance bare name resolution
 - [x] use, bless and implements forms

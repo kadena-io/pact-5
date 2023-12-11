@@ -41,6 +41,8 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
     number = do
       n <- Gen.int $ Range.linear (-1000) 1000
       pure . TokenNumber $ T.pack $ show n
+    -- Todo: maybe we separate into keyword + ident
+    -- and num and turn this into an enum bounded call
     unary = Gen.constant
       <$> [ TokenLet
           , TokenIf
@@ -48,7 +50,6 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
           , TokenTry
           , TokenError
           , TokenModule
-          , TokenKeyGov
           , TokenCapGov
           , TokenInterface
           , TokenImport

@@ -51,8 +51,6 @@ import Pact.Core.Syntax.LexUtils
   module     { PosToken TokenModule _ }
   interface  { PosToken TokenInterface _ }
   import     { PosToken TokenImport _ }
-  keygov     { PosToken TokenKeyGov _ }
-  capgov     { PosToken TokenCapGov _ }
   defun      { PosToken TokenDefun _ }
   defcap     { PosToken TokenDefCap _ }
   defconst   { PosToken TokenDefConst _ }

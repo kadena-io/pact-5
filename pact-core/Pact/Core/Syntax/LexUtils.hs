@@ -52,8 +52,6 @@ data Token
   | TokenTry
   | TokenError
   | TokenModule
-  | TokenKeyGov
-  | TokenCapGov
   | TokenInterface
   | TokenImport
   | TokenStep
@@ -286,8 +284,6 @@ renderTokenText = \case
   TokenTry -> "try"
   TokenError -> "error"
   TokenModule -> "module"
-  TokenKeyGov -> "keyGov"
-  TokenCapGov -> "capGov"
   TokenInterface -> "interface"
   TokenImport -> "use"
   TokenStep -> "step"

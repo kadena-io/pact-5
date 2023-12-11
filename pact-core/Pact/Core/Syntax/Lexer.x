@@ -55,7 +55,6 @@ tokens :-
     defconst     { token TokenDefConst }
     defschema    { token TokenDefSchema }
     deftable     { token TokenDefTable }
-    defcap       { token TokenDefCap }
     defpact      { token TokenDefPact }
     defproperty  { token TokenDefProperty }
     property     { token TokenProperty }
@@ -67,8 +66,6 @@ tokens :-
     use          { token TokenImport }
     true         { token TokenTrue }
     false        { token TokenFalse }
-    keyGov       { token TokenKeyGov }
-    capGov       { token TokenCapGov }
     lambda       { token TokenLambda }
 
     and          { token TokenAnd }
