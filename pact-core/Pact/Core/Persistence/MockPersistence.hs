@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Pact.Core.Persistence.MockPersistence (
   mockPactDb
@@ -12,7 +13,7 @@ import Data.Map (Map)
 import Data.IORef (IORef, modifyIORef, modifyIORef', newIORef, readIORef, writeIORef)
 import Control.Exception(throwIO)
 import qualified Data.Map.Strict as M
-
+import Data.ByteString (ByteString)
 import Pact.Core.Guards (KeySetName)
 import Pact.Core.Namespace
 import Pact.Core.Names (ModuleName, RowKey, TableName, DefPactId, NamespaceName, rowKey)
@@ -23,16 +24,17 @@ import Pact.Core.Persistence (Domain(..),
                               RowData, ModuleData, WriteType(Insert, Update, Write), RowData(..),
                               Purity(PImpure), toUserTable
                              )
+import Pact.Core.Serialise
 
-mockPactDb :: forall b i. IO (PactDb b i)
-mockPactDb = do
+mockPactDb :: forall b i. PactSerialise b i -> IO (PactDb b i)
+mockPactDb serial = do
   refMod <- newIORef M.empty
   refKs <- newIORef M.empty
   refUsrTbl <- newIORef M.empty
   refPacts <- newIORef M.empty
   refNS <- newIORef M.empty
   refRb <- newIORef Nothing
-  refTxLog <- newIORef mempty
+  refTxLog :: IORef [TxLog ByteString] <- newIORef mempty
   refTxId <- newIORef $ TxId 0
   pure $ PactDb
     { _pdbPurity = PImpure
@@ -127,7 +129,7 @@ mockPactDb = do
 
   createUsrTable
     :: IORef (Map TableName (Map RowKey RowData))
-    -> IORef (Map TableName (Map TxId [TxLog RowData]))
+    -> IORef (Map TableName (Map TxId [TxLog ByteString]))
     -> TableName
     -> IO ()
   createUsrTable refUsrTbl refTxLog tbl = do
@@ -168,7 +170,7 @@ mockPactDb = do
     -> IORef (Map NamespaceName Namespace)
     -> IORef (Map TableName (Map RowKey RowData))
     -> IORef TxId
-    -> IORef (Map TableName (Map TxId [TxLog RowData]))
+    -> IORef (Map TableName (Map TxId [TxLog ByteString]))
     -> IORef (Map DefPactId (Maybe DefPactExec))
     -> WriteType
     -> Domain k v b i
@@ -176,11 +178,11 @@ mockPactDb = do
     -> v
     -> IO ()
   write refKs refMod refNS refUsrTbl refTxId refTxLog refPacts wt domain k v = case domain of
-    DKeySets -> writeKS refKs k v
-    DModules -> writeMod refMod v
+    DKeySets -> writeKS refKs refTxLog k v
+    DModules -> writeMod refMod refTxLog v
     DUserTables tbl -> writeRowData refUsrTbl refTxId refTxLog tbl wt k v
-    DDefPacts -> writePacts' refPacts k v
-    DNamespaces -> writeNS refNS k v
+    DDefPacts -> writePacts' refPacts refTxLog k v
+    DNamespaces -> writeNS refNS refTxLog k v
 
   readRowData ref tbl k = do
     -- let tblName = toUserTable tbl
@@ -239,7 +241,9 @@ mockPactDb = do
     m <- readIORef ref
     pure (M.lookup ns m)
 
-  writeKS ref ksn ks = modifyIORef' ref (M.insert ksn ks)
+  writeKS ref refTxLog ksn ks = do
+    modifyIORef' ref (M.insert ksn ks)
+    modifyIORef' refTxLog (TxLog "SYS:KEYSETS" ksn (_encodeKeySet serial ks) :) 
 
   writeNS ref nsn ns = modifyIORef' ref (M.insert nsn ns)
 

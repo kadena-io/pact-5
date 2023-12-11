@@ -1,6 +1,5 @@
 -- |
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Pact.Core.Persistence.SQLite (
@@ -10,10 +9,11 @@ module Pact.Core.Persistence.SQLite (
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Control.Exception.Lifted (bracket)
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Data.IORef (newIORef, IORef, readIORef, atomicModifyIORef')
+import Data.IORef (newIORef, IORef, readIORef, atomicModifyIORef', writeIORef, modifyIORef')
 import Data.Text (Text)
 import Control.Lens (view)
 import qualified Database.SQLite3 as SQL
+import Data.ByteString (ByteString)
 
 import Pact.Core.Guards (renderKeySetName, parseAnyKeysetName)
 import Pact.Core.Names (renderModuleName, DefPactId(..), NamespaceName(..), TableName(..), RowKey(..), parseRenderedModuleName)
@@ -22,6 +22,7 @@ import Pact.Core.Persistence (PactDb(..), Domain(..),
                              ,WriteType(..)
                              ,toUserTable
                              ,ExecutionMode(..), TxId(..)
+                             , RowData, TxLog(..)
                              )
 
 -- import Pact.Core.Repl.Utils (ReplEvalM)
@@ -40,10 +41,10 @@ withSqlitePactDb serial connectionString act =
 
 createSysTables :: SQL.Database -> IO ()
 createSysTables db = do
-  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:KEYSETS\"    (txid INTEGER PRIMARY KEY NOT NULL UNIQUE , rowkey TEXT NOT NULL, rowdata BLOB NOT NULL)"
-  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:MODULES\"    (txid INTEGER PRIMARY KEY NOT NULL UNIQUE , rowkey TEXT NOT NULL, rowdata BLOB NOT NULL)"
-  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:PACTS\"      (txid INTEGER PRIMARY KEY NOT NULL UNIQUE , rowkey TEXT NOT NULL, rowdata BLOB NOT NULL)"
-  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:NAMESPACES\" (txid INTEGER PRIMARY KEY NOT NULL UNIQUE , rowkey TEXT NOT NULL, rowdata BLOB NOT NULL)"
+  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:KEYSETS\"    (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey)"
+  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:MODULES\"    (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey)"
+  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:PACTS\"      (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey)"
+  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:NAMESPACES\" (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey)"
 
 -- | Create all tables that should exist in a fresh pact db,
 --   or ensure that they are already created.
@@ -51,19 +52,46 @@ initializePactDb :: PactSerialise b i -> SQL.Database  -> IO (PactDb b i)
 initializePactDb serial db = do
   createSysTables db
   txId <- newIORef (TxId 0)
+  txLog <- newIORef []
   pure $ PactDb
     { _pdbPurity = PImpure
     , _pdbRead = read' serial db
-    , _pdbWrite = write' serial db
+    , _pdbWrite = write' serial db txId txLog
     , _pdbKeys = readKeys db
-    , _pdbCreateUserTable = createUserTable db
-    , _pdbBeginTx = beginTx txId db
-    , _pdbCommitTx = commitTx txId db
-    , _pdbRollbackTx = rollbackTx db
+    , _pdbCreateUserTable = createUserTable db txLog
+    , _pdbBeginTx = beginTx txId db txLog
+    , _pdbCommitTx = commitTx txId db txLog
+    , _pdbRollbackTx = rollbackTx db txLog
     , _pdbTxIds = listTxIds db
-    , _pdbGetTxLog = error "no txlog"
+    , _pdbGetTxLog = getTxLog serial db txId txLog
     }
 
+getTxLog :: PactSerialise b i -> SQL.Database -> IORef TxId -> IORef [TxLog ByteString] -> TableName -> TxId -> IO [TxLog RowData]
+getTxLog serial db currTxId txLog tab txId = do
+  currTxId' <- readIORef currTxId
+  if currTxId' == txId
+    then do
+    txLog' <- readIORef txLog
+    let
+      userTabLogs = filter (\tl -> toUserTable tab == _txDomain tl) txLog'
+      env :: Maybe [TxLog RowData] = traverse (traverse (fmap (view document) . _decodeRowData serial)) userTabLogs
+    case env of
+      Nothing -> fail "undexpected decoding error"
+      Just xs -> pure $ reverse xs
+    else withStmt db ("SELECT rowkey,rowdata FROM \"" <> toUserTable tab <> "\" WHERE txid = ?") $ \stmt -> do
+                         let TxId i = txId
+                         SQL.bind stmt [SQL.SQLInteger $ fromIntegral i]
+                         txLogBS <- collect stmt []
+                         case traverse (traverse (fmap (view document) . _decodeRowData serial)) txLogBS of
+                           Nothing -> fail "unexpected decoding error"
+                           Just txl -> pure $ reverse txl
+  where
+    collect stmt acc = SQL.step stmt >>= \case
+        SQL.Done -> pure acc
+        SQL.Row -> do
+          [SQL.SQLText key, SQL.SQLBlob value] <- SQL.columns stmt
+          collect stmt (TxLog (toUserTable tab) key value:acc)
+        
 readKeys :: forall k v b i. SQL.Database -> Domain k v b i -> IO [k]
 readKeys db = \case
   DKeySets -> withStmt db "SELECT rowkey FROM \"SYS:KEYSETS\" ORDER BY txid DESC" $ \stmt -> do
@@ -72,7 +100,7 @@ readKeys db = \case
       Left _ -> fail "unexpected decoding"
       Right v -> pure v
   DModules -> withStmt db "SELECT rowkey FROM \"SYS:MODULES\" ORDER BY txid DESC" $ \stmt -> fmap parseRenderedModuleName <$> collect stmt [] >>= \mns -> case sequence mns of
-    Nothing -> error ""
+    Nothing -> fail "unexpected decoding"
     Just mns' -> pure mns'
   DDefPacts -> withStmt db "SELECT rowkey FROM \"SYS:PACTS\" ORDER BY txid DESC" $ \stmt -> fmap DefPactId <$> collect stmt []
   DNamespaces -> withStmt db "SELECT rowkey FROM \"SYS:NAMESPACES\" ORDER BY txid DESC" $ \stmt -> fmap NamespaceName <$> collect stmt []
@@ -88,8 +116,7 @@ readKeys db = \case
 listTxIds :: SQL.Database -> TableName -> TxId -> IO [TxId]
 listTxIds db tbl (TxId minTxId) = withStmt db ("SELECT txid FROM \"" <> toUserTable tbl <> "\" WHERE txid >= ? ORDER BY txid ASC") $ \stmt -> do
   SQL.bind stmt [SQL.SQLInteger $ fromIntegral minTxId]
-  txIds <- collect stmt []
-  pure txIds
+  collect stmt []
   where
     collect stmt acc = SQL.step stmt >>= \case
         SQL.Done -> pure acc
@@ -98,65 +125,74 @@ listTxIds db tbl (TxId minTxId) = withStmt db ("SELECT txid FROM \"" <> toUserTa
           -- Here we convert the Int64 received from SQLite into Word64
           -- using `fromIntegral`. It is assumed that recorded txids
           -- in the database will never be negative integers.
-          collect stmt ((TxId (fromIntegral value)):acc)
+          collect stmt (TxId (fromIntegral value):acc)
 
-commitTx :: IORef TxId -> SQL.Database -> IO ()
-commitTx txid db = do
+commitTx :: IORef TxId -> SQL.Database -> IORef [TxLog ByteString] -> IO [TxLog ByteString]
+commitTx txid db txLog = do
   _ <- atomicModifyIORef' txid (\old@(TxId n) -> (TxId (succ n), old))
   SQL.exec db "COMMIT TRANSACTION"
+  readIORef txLog
 
-beginTx :: IORef TxId -> SQL.Database -> ExecutionMode -> IO (Maybe TxId)
-beginTx txid db em = do
+beginTx :: IORef TxId -> SQL.Database -> IORef [TxLog ByteString] -> ExecutionMode -> IO (Maybe TxId)
+beginTx txid db txLog em = do
     SQL.exec db "BEGIN TRANSACTION"
+    writeIORef txLog []
     case em of
       Transactional -> Just <$> readIORef txid
       Local -> pure Nothing
 
-rollbackTx :: SQL.Database -> IO ()
-rollbackTx db = SQL.exec db "ROLLBACK TRANSACTION"
+rollbackTx :: SQL.Database -> IORef [TxLog ByteString] -> IO ()
+rollbackTx db txLog = do
+  SQL.exec db "ROLLBACK TRANSACTION"
+  writeIORef txLog []
 
-createUserTable :: SQL.Database -> TableName -> IO ()
-createUserTable db tbl = SQL.exec db ("CREATE TABLE IF NOT EXISTS " <> tblName <> " (txid INTEGER PRIMARY KEY NOT NULL UNIQUE, rowkey TEXT NOT NULL, rowdata BLOB NOT NULL)")
+createUserTable :: SQL.Database -> IORef [TxLog ByteString] -> TableName -> IO ()
+createUserTable db _txLog tbl = SQL.exec db ("CREATE TABLE IF NOT EXISTS " <> tblName <> " (txid INTEGER PRIMARY KEY NOT NULL UNIQUE, rowkey TEXT NOT NULL, rowdata BLOB NOT NULL)")
   where
     tblName = "\"" <> toUserTable tbl <> "\""
 
-write' :: forall k v b i. PactSerialise b i -> SQL.Database -> WriteType -> Domain k v b i -> k -> v -> IO ()
-write' serial db _wt domain k v = case domain of
-  DKeySets -> withStmt db "INSERT INTO \"SYS:kEYSETS\" (rowkey, rowdata) VALUES (?,?)" $ \stmt -> do
+write' :: forall k v b i. PactSerialise b i -> SQL.Database -> IORef TxId -> IORef [TxLog ByteString] -> WriteType -> Domain k v b i -> k -> v -> IO ()
+write' serial db txId txLog _wt domain k v = case domain of
+  DKeySets -> withStmt db "INSERT INTO \"SYS:kEYSETS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let encoded = _encodeKeySet serial v
-      SQL.bind stmt [SQL.SQLText (renderKeySetName k), SQL.SQLBlob encoded]
+      TxId i <- readIORef txId
+      SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderKeySetName k), SQL.SQLBlob encoded]
       SQL.stepNoCB stmt >>= \case
-        SQL.Done -> pure ()
+        SQL.Done -> modifyIORef' txLog (TxLog "SYS:KEYSETS" (renderKeySetName k) encoded:)
         SQL.Row -> fail "invariant violation"
-  DModules -> withStmt db "INSERT INTO \"SYS:MODULES\" (rowkey, rowdata) VALUES (?,?)" $ \stmt -> do
+  DModules -> withStmt db "INSERT INTO \"SYS:MODULES\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let encoded = _encodeModuleData serial v
-      SQL.bind stmt [SQL.SQLText (renderModuleName k), SQL.SQLBlob encoded]
+      TxId i <- readIORef txId
+      SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderModuleName k), SQL.SQLBlob encoded]
       SQL.stepNoCB stmt >>= \case
-        SQL.Done -> pure ()
+        SQL.Done -> modifyIORef' txLog (TxLog "SYS:Modules" (renderModuleName k) encoded:)
         SQL.Row -> fail "invariant violation"
-  DDefPacts -> withStmt db "INSERT INTO \"SYS:PACTS\" (rowkey, rowdata) VALUES (?,?)" $ \stmt -> do
+  DDefPacts -> withStmt db "INSERT INTO \"SYS:PACTS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let
         encoded = _encodeDefPactExec serial v
         DefPactId k' = k
-      SQL.bind stmt [SQL.SQLText k', SQL.SQLBlob encoded]
+      TxId i <- readIORef txId
+      SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
       SQL.stepNoCB stmt >>= \case
-        SQL.Done -> pure ()
+        SQL.Done -> modifyIORef' txLog (TxLog "SYS:DEFPACTS" k' encoded:)
         SQL.Row -> fail "invariant violation"
-  DNamespaces -> withStmt db "INSERT INTO \"SYS:NAMESPACES\" (rowkey, rowdata) VALUES (?,?)" $ \stmt -> do
+  DNamespaces -> withStmt db "INSERT INTO \"SYS:NAMESPACES\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let
         encoded = _encodeNamespace serial v
         NamespaceName k' = k
-      SQL.bind stmt [SQL.SQLText k', SQL.SQLBlob encoded]
+      TxId i <- readIORef txId
+      SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
       SQL.stepNoCB stmt >>= \case
-        SQL.Done -> pure ()
+        SQL.Done -> modifyIORef' txLog (TxLog "SYS:NAMESPACES" k' encoded:)
         SQL.Row -> fail "invariant viaolation"
-  DUserTables tbl -> withStmt db ("INSERT INTO \"" <> toUserTable tbl <> "\" (rowkey, rowdata) VALUES (?,?)") $ \stmt -> do
+  DUserTables tbl -> withStmt db ("INSERT INTO \"" <> toUserTable tbl <> "\" (txlog, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
     let
       encoded = _encodeRowData serial v
       RowKey k' = k
-    SQL.bind stmt [SQL.SQLText k', SQL.SQLBlob encoded]
+    TxId i <- readIORef txId
+    SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
     SQL.stepNoCB stmt >>= \case
-        SQL.Done -> pure ()
+        SQL.Done -> modifyIORef' txLog (TxLog (toUserTable tbl) k' encoded:)
         SQL.Row -> fail "invariant viaolation"
 
 read' :: forall k v b i. PactSerialise b i -> SQL.Database -> Domain k v b i -> k -> IO (Maybe v)

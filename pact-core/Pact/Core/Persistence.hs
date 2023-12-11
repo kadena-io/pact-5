@@ -52,6 +52,7 @@ import Pact.Core.Hash
 import Pact.Core.PactValue
 import Pact.Core.DefPacts.Types
 import Pact.Core.Namespace
+import Data.ByteString (ByteString)
 
 import Data.Dynamic (Typeable)
 
@@ -155,7 +156,7 @@ data PactDb b i
   , _pdbKeys :: forall k v. Domain k v b i -> IO [k]
   , _pdbCreateUserTable :: TableName -> IO ()
   , _pdbBeginTx :: ExecutionMode -> IO (Maybe TxId)
-  , _pdbCommitTx :: IO ()
+  , _pdbCommitTx :: IO [TxLog ByteString]
   , _pdbRollbackTx :: IO ()
   , _pdbTxIds :: TableName -> TxId -> IO [TxId]
   , _pdbGetTxLog :: TableName -> TxId -> IO [TxLog RowData]
