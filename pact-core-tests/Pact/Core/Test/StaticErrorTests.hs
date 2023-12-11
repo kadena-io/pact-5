@@ -39,17 +39,17 @@ runStaticTest fp src predicate = do
 
 staticTests :: [(FilePath, PactErrorI -> Bool)]
 staticTests =
-  [ ("no_bind_body.pact", isDesugarError _EmptyBindingBody)
-  , ("defpact_last_step_rollback.pact", isDesugarError _LastStepWithRollback)
-  , ("interface_defcap_meta_impl.pact", isDesugarError _ImplementationError)
-  , ("enforce-one_no_list.pact", isDesugarError _InvalidSyntax)
+  [ ("no_bind_body", isDesugarError _EmptyBindingBody)
+  , ("defpact_last_step_rollback", isDesugarError _LastStepWithRollback)
+  , ("interface_defcap_meta_impl", isDesugarError _ImplementationError)
+  , ("enforce-one_no_list", isDesugarError _InvalidSyntax)
   -- TODO unable to trigger Desugar.hs:336/344 in `desugarDefun`, parser gets there first
-  -- , ("defun_outside_module.pact", isDesugarError _NotAllowedOutsideModule)
+  -- , ("defun_outside_module", isDesugarError _NotAllowedOutsideModule)
   -- TODO ditto
-  -- , ("defpact_empty.pact", isDesugarError _EmptyDefPact)
+  -- , ("defpact_empty", isDesugarError _EmptyDefPact)
   -- TODO ditto
-  -- , ("defpact_outside_module.pact", isDesugarError _NotAllowedOutsideModule)
-  , ("managed_invalid.pact", isDesugarError _InvalidManagedArg)
+  -- , ("defpact_outside_module", isDesugarError _NotAllowedOutsideModule)
+  , ("managed_invalid", isDesugarError _InvalidManagedArg)
   ]
 
 tests :: TestTree
@@ -57,5 +57,5 @@ tests =
   testGroup "CoreStaticTests" (go <$> staticTests)
   where
   go (fp, p) = testCase fp $ do
-    srcText <- T.readFile (staticTestDir </> fp)
+    srcText <- T.readFile (staticTestDir </> (fp <> ".pact"))
     runStaticTest fp srcText p
