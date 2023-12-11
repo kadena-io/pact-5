@@ -917,3 +917,36 @@ TODO: what are we doing about this?
 
 ### with-applied-env
 DELETED. Unnecessary with core's arch.
+
+## Semantic Divergences
+
+### CapTokens
+In pact-core, you are allowed to bind capability tokens as values, that is for some module
+```
+(module m GOV
+
+  (defcap GOV () true)
+
+  (defcap SOMECAP () true)
+
+  (defun foo-old-pact ()
+    (with-capability (SOMECAP)
+      (require-capability (SOMECAP))
+      1000
+      )
+  )
+
+  (defun foo-pact-core ()
+    (let*
+      ((mycap (SOMECAP))
+      )
+     (with-capability mycap
+      (require-capability mycap)
+      1000
+      )
+    )
+  )
+)
+
+
+```

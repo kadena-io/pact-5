@@ -175,23 +175,20 @@ evalCEK cont handler env (Conditional c info) = case c of
       let cont' = CondC env' info (EnforceOneFrame str xs) Mt
       evalCEK cont' handler' env' x
 evalCEK cont handler env (CapabilityForm cf info) = do
-  fqn <- nameToFQN info env (view capFormName cf)
   case cf of
-    -- Todo: duplication here in the x:xs case
-    WithCapability _ args body -> do
+    WithCapability rawCap body -> do
       enforceNotWithinDefcap info env "with-capability"
+      let capFrame = WithCapFrame body
+          cont' = CapInvokeC env info [] [] capFrame cont
+      evalCEK cont' handler env rawCap
+    CreateUserGuard name args -> do
+      fqn <- nameToFQN info env name
       case args of
-        x:xs -> do
-          let capFrame = WithCapFrame fqn body
+        [] -> createUserGuard info cont handler fqn []
+        x : xs -> do
+          let capFrame = CreateUserGuardFrame fqn
           let cont' = CapInvokeC env info xs [] capFrame cont
           evalCEK cont' handler env x
-        [] -> evalCap info cont handler env (CapToken fqn []) (CapBodyC PopCapInvoke) body
-    CreateUserGuard _ args -> case args of
-      [] -> createUserGuard info cont handler fqn []
-      x : xs -> let
-        capFrame = CreateUserGuardFrame fqn
-        cont' = CapInvokeC env info xs [] capFrame cont
-        in evalCEK cont' handler env x
 evalCEK cont handler env (ListLit ts info) = do
   chargeNodeGas ListNode
   case ts of
@@ -436,6 +433,7 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
 
 
 -- Todo: fail invariant
+-- Todo: is this enough checks for ndynref?
 nameToFQN
   :: MonadEval b i m
   => i
@@ -950,18 +948,21 @@ returnCEKValue (CondC env info frame cont) handler v = case v of
   updateEnforceOneList xs (CEKEnforceOne e i str _ c cs h) =
     CEKEnforceOne e i str xs c cs h
   updateEnforceOneList _ e = e
-returnCEKValue (CapInvokeC env info terms pvs cf cont) handler v = do
-  pv <- enforcePactValue info v
-  case terms of
-    x:xs -> do
-      let cont' = CapInvokeC env info xs (pv:pvs) cf cont
-      evalCEK cont' handler env x
-    [] -> case cf of
-      WithCapFrame fqn wcbody -> do
-        guardForModuleCall info env (_fqModule fqn) $ return ()
-        evalCap info cont handler env (CapToken fqn (reverse (pv:pvs))) (CapBodyC PopCapInvoke) wcbody
-      CreateUserGuardFrame fqn ->
-        createUserGuard info cont handler fqn (reverse (pv:pvs))
+returnCEKValue (CapInvokeC env info terms pvs cf cont) handler v = case cf of
+  WithCapFrame body -> case v of
+    VCapToken ct@(CapToken fqn _) -> do
+      -- Todo: CEK-style this
+      guardForModuleCall info env (_fqModule fqn) $ return ()
+      evalCap info cont handler env ct (CapBodyC PopCapInvoke) body
+    -- Todo: this is actually more like "expected cap token"
+    _ -> throwExecutionError info ExpectedPactValue
+  CreateUserGuardFrame fqn -> do
+    pv <- enforcePactValue info v
+    case terms of
+      x:xs -> do
+        let cont' = CapInvokeC env info xs (pv:pvs) cf cont
+        evalCEK cont' handler env x
+      [] -> createUserGuard info cont handler fqn (reverse (pv:pvs))
 returnCEKValue (CapBodyC cappop env mcap mevent capbody cont) handler _ = do
   maybe (pure ()) (emitEvent def) mevent
   case mcap of

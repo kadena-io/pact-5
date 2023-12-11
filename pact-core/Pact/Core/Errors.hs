@@ -135,7 +135,7 @@ data DesugarError
   | InvalidModuleReference ModuleName
   -- ^ Invalid: Interface used as module reference
   | EmptyBindingBody
-  --
+  -- ^ binding without binding body encountered
   | EmptyDefPact Text
   -- ^ Defpact without steps
   | LastStepWithRollback QualifiedName
@@ -150,6 +150,7 @@ data DesugarError
   | InvalidDynamicInvoke Text
   | DuplicateDefinition Text
   | InvalidBlessedHash Text
+  | InvalidUserGuard Text
   deriving Show
 
 instance Exception DesugarError

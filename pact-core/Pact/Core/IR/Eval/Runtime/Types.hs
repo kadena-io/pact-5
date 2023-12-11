@@ -347,7 +347,7 @@ data CondFrame b i
   deriving Show
 
 data CapFrame b i
-  = WithCapFrame FullyQualifiedName (EvalTerm b i)
+  = WithCapFrame (EvalTerm b i)
   | CreateUserGuardFrame FullyQualifiedName
   -- | RequireCapFrame FullyQualifiedName
   -- | ComposeCapFrame FullyQualifiedName
@@ -378,7 +378,7 @@ data Cont b i m
   | ObjC (CEKEnv b i m) i Field [(Field, EvalTerm b i)] [(Field, PactValue)] (Cont b i m)
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
   | CapInvokeC (CEKEnv b i m) i [EvalTerm b i] [PactValue] (CapFrame b i) (Cont b i m)
-  -- ^ Capability special form frams that eva
+  -- ^ Capability special
   | CapBodyC CapPopState (CEKEnv b i m) (Maybe (CapToken QualifiedName PactValue)) (Maybe (PactEvent PactValue)) (EvalTerm b i) (Cont b i m)
   -- ^ CapBodyC includes
   --  - what to do after the cap body (pop it, or compose it)
