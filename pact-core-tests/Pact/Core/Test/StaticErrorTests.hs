@@ -42,6 +42,7 @@ staticTests =
   [ ("no_bind_body.pact", isDesugarError _EmptyBindingBody)
   , ("defpact_last_step_rollback.pact", isDesugarError _LastStepWithRollback)
   , ("interface_defcap_meta_impl.pact", isDesugarError _ImplementationError)
+  , ("enforce-one_no_list.pact", isDesugarError _InvalidSyntax)
   ]
 
 tests :: TestTree
