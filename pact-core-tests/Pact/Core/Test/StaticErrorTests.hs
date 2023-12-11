@@ -52,6 +52,8 @@ staticTests =
   -- TODO ditto in desugarDefCap
   -- , ("defcap_outside_module", isDesugarError _NotAllowedOutsideModule)
   , ("managed_invalid", isDesugarError _InvalidManagedArg)
+  , ("interface_unannotated_defun", isDesugarError _UnannotatedReturnType)
+  , ("interface_unannotated_defpact", isDesugarError _UnannotatedReturnType)
   ]
 
 tests :: TestTree
