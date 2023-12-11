@@ -293,19 +293,25 @@ Managed :: { DCapMeta }
 Event :: { DCapMeta }
   : eventAnn { DefEvent }
 
-MArgs :: { [MArg] }
-  : MArgs MArg { $2:$1 }
+MArgList :: { [MArg] }
+  : MArg MArg { $2:$1 }
+  | {- empty -} { [] }
+
+UncheckedMArgs :: { [MArg] }
+  : UncheckedArgList MArg { $2:$1 }
   | {- empty -} { [] }
 
 MArg :: { MArg }
   : IDENT ':' Type { MArg (getIdent $1) (Just $3) }
   | IDENT { MArg (getIdent $1) Nothing }
 
-NEArgList :: { [Arg] }
-  : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
+SchemaArgList :: { [Arg] }
+  : UncheckedArgList {% checkSchemaArgLength $1 }
+  -- : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
+  -- | {- empty -} { [] }
 
-ArgList :: { [Arg] }
-  : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
+UncheckedArgList :: { [Arg] }
+  : UncheckedArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
   | {- empty -} { [] }
 
 Type :: { Type }

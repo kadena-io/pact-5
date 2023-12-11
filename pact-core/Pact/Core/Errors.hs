@@ -31,6 +31,7 @@ import Pact.Core.Pretty(Pretty(..))
 import Pact.Core.Hash
 import Pact.Core.Persistence
 import Pact.Core.DefPacts.Types
+import qualified Pact.Core.Syntax.Limits as Limits
 
 import qualified Pact.Core.Pretty as Pretty
 
@@ -45,6 +46,7 @@ data LexerError
   -- ^ Invalid initial indentation: got ^, expected 2 or 4
   | StringLiteralError Text
   -- ^ Error lexing string literal
+  | IdentifierTooLong Text
   | OutOfInputError Char
   deriving Show
 
@@ -53,13 +55,23 @@ instance Exception LexerError
 instance Pretty LexerError where
   pretty = ("Lexical Error: " <>) . \case
     LexicalError c1 c2 ->
-      Pretty.hsep ["Encountered character",  Pretty.parens (pretty c1) <> ",", "Last seen", Pretty.parens (pretty c2)]
+      Pretty.hsep [ "Encountered character"
+                  ,  Pretty.parens (pretty c1) <> ","
+                  , "Last seen"
+                  , Pretty.parens (pretty c2)]
     InvalidIndentation curr expected ->
-      Pretty.hsep ["Invalid indentation. Encountered", Pretty.parens (pretty curr) <> ",", "Expected", Pretty.parens (pretty expected)]
+      Pretty.hsep [ "Invalid indentation. Encountered"
+                  , Pretty.parens (pretty curr) <> ",", "Expected"
+                  , Pretty.parens (pretty expected)]
     StringLiteralError te ->
       Pretty.hsep ["String literal parsing error: ", pretty te]
     InvalidInitialIndent i ->
-      Pretty.hsep ["Invalid initial ident. Valid indentation are 2 or 4 spaces. Found: ", Pretty.parens (pretty i)]
+      Pretty.hsep ["Invalid initial ident. Valid indentation are 2 or 4 spaces. Found: "
+                  , Pretty.parens (pretty i)]
+    IdentifierTooLong identifier ->
+      Pretty.hsep ["Identifier exceeds length limit"
+                  , Pretty.parens (pretty Limits.identifierLengthLimit) <> ":"
+                  , pretty identifier ]
     OutOfInputError c ->
       Pretty.hsep ["Ran out of input before finding a lexeme. Last Character seen: ", Pretty.parens (pretty c)]
 

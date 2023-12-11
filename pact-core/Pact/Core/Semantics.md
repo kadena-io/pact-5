@@ -737,6 +737,7 @@ TODO: do we need this as a native?
 ## SPV Builtins
 
 ### verify-spv
+TODO: DROP
 - [ ] implemented
 - [ ] Gas
 
@@ -947,6 +948,4 @@ In pact-core, you are allowed to bind capability tokens as values, that is for s
     )
   )
 )
-
-
 ```

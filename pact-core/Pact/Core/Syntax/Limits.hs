@@ -12,11 +12,11 @@ objectSizeLimit :: Int
 objectSizeLimit = 50
 
 -- | Maximum number of function arguments
-functionSizeLimit :: Int
-functionSizeLimit = 25
+functionArgLengthLimit :: Int
+functionArgLengthLimit = 25
 
 -- | Maximum number of function arguments
-rowKeyMaxSizeLimit :: Int
-rowKeyMaxSizeLimit = 1024
+rowKeyLengthLimit :: Int
+rowKeyLengthLimit = 1024
 
 
