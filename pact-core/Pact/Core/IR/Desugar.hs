@@ -476,25 +476,13 @@ desugarIfDef
   => Lisp.IfDef i
   -> RenamerT b i m  (IfDef ParsedName DesugarType b i)
 desugarIfDef = \case
-  Lisp.IfDfun (Lisp.IfDefun n margs rty _ _ i) -> IfDfun <$> case margs of
-    [] -> do
-      pure $ IfDefun n [] rty i
-    _ -> do
-      let args = toArg <$> margs
-      rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) pure rty
-      pure $ IfDefun n args (Just rty') i
+  Lisp.IfDfun (Lisp.IfDefun n margs rty _ _ i) -> pure $ IfDfun $ IfDefun n (toArg <$> margs) rty i
   -- Todo: check managed impl
   Lisp.IfDCap (Lisp.IfDefCap n margs rty _ _ _meta i) -> IfDCap <$> do
     let args = toArg <$> margs
     pure $ IfDefCap n args rty i
   Lisp.IfDConst dc -> IfDConst <$> desugarDefConst dc
-  Lisp.IfDPact (Lisp.IfDefPact n margs rty _ _ i) -> IfDPact <$> case margs of
-    [] -> do
-      pure $ IfDefPact n [] rty i
-    _ -> do
-      let args = toArg <$> margs
-      rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) pure rty
-      pure $ IfDefPact n args (Just rty') i
+  Lisp.IfDPact (Lisp.IfDefPact n margs rty _ _ i) -> pure $ IfDPact $ IfDefPact n (toArg <$> margs) rty i
   Lisp.IfDSchema ds -> IfDSchema <$> desugarDefSchema ds
 
 desugarDef
