@@ -10,6 +10,7 @@ import Control.Monad (unless)
 import Data.Maybe (isJust)
 import Control.Lens ((^?), (^.), ix, view)
 import Data.Map (Map)
+import Data.Map.Strict (insertWith)
 import Data.IORef (IORef, modifyIORef, modifyIORef', newIORef, readIORef, writeIORef)
 import Control.Exception(throwIO)
 import qualified Data.Map.Strict as M
@@ -43,7 +44,7 @@ mockPactDb serial = do
     , _pdbRead = read' refKs refMod refNS refUsrTbl refPacts
     , _pdbWrite = write refKs refMod refNS refUsrTbl refTxId refTxLog refPacts
     , _pdbKeys = keys refKs refMod refNS refUsrTbl refPacts
-    , _pdbCreateUserTable = createUsrTable refUsrTbl refTxLog
+    , _pdbCreateUserTable = createUsrTable refUsrTbl refTxId refTxLog
     , _pdbBeginTx = beginTx refRb refTxId refTxLog refMod refKs refUsrTbl
     , _pdbCommitTx = commitTx refRb refTxId refTxLog refMod refKs refUsrTbl
     , _pdbRollbackTx = rollbackTx refRb refTxLog refMod refKs refUsrTbl
@@ -86,13 +87,15 @@ mockPactDb serial = do
       writeIORef refUsrTbl usr
     Nothing -> throwIO Persistence.NoTxToCommit
 
+  txLog :: TxLogQueue -> TableName -> TxId -> IO [TxLog RowData]
   txLog refTxLog tn tid = do
-    m <- readIORef refTxLog
-    case M.lookup tn m of
-      Just txids -> case M.lookup tid txids of
-        Just n -> pure n
-        Nothing -> throwIO (Persistence.NoTxLog tn tid)
-      Nothing -> throwIO (Persistence.NoTxLog tn tid)
+    undefined
+    -- m <- readIORef refTxLog
+    -- case M.lookup tn m of
+    --   Just txids -> case M.lookup tid txids of
+    --     Just n -> pure n
+    --     Nothing -> throwIO (Persistence.NoTxLog tn tid)
+    --   Nothing -> throwIO (Persistence.NoTxLog tn tid)
 
   txIds refTxLog tn txId = do
     txl <- readIORef refTxLog
@@ -131,14 +134,15 @@ mockPactDb serial = do
 
   createUsrTable
     :: IORef (Map TableName (Map RowKey RowData))
+    -> IORef TxId
     -> TxLogQueue
     -> TableName
     -> IO ()
-  createUsrTable refUsrTbl refTxLog tbl = do
+  createUsrTable refUsrTbl refTxId refTxLog tbl = do
     ref <- readIORef refUsrTbl
     case M.lookup tbl ref of
       Nothing -> do
-        modifyIORef refTxLog (M.insert tbl mempty)
+        -- TODO: Do we need a TxLog when a usertable is created?
         modifyIORef refUsrTbl (M.insert tbl mempty)
         pure ()
       Just _ -> throwIO (Persistence.TableAlreadyExists tbl)
@@ -180,11 +184,11 @@ mockPactDb serial = do
     -> v
     -> IO ()
   write refKs refMod refNS refUsrTbl refTxId refTxLog refPacts wt domain k v = case domain of
-    DKeySets -> writeKS refKs refTxLog k v
-    DModules -> writeMod refMod refTxLog v
+    DKeySets -> writeKS refKs refTxId refTxLog k v
+    DModules -> writeMod refMod refTxId refTxLog v
     DUserTables tbl -> writeRowData refUsrTbl refTxId refTxLog tbl wt k v
-    DDefPacts -> writePacts' refPacts refTxLog k v
-    DNamespaces -> writeNS refNS refTxLog k v
+    DDefPacts -> writePacts' refPacts refTxId refTxLog k v
+    DNamespaces -> writeNS refNS refTxId refTxLog k v
 
   readRowData ref tbl k = do
     -- let tblName = toUserTable tbl
@@ -192,17 +196,18 @@ mockPactDb serial = do
     r <- readIORef ref
     pure (r ^? ix tbl . ix k)
 
-  writeToTxLog
-    :: IORef TxId
-    -> TxLogQueue
-    -> TableName
-    -> RowKey
-    -> RowData
-    -> IO ()
-  writeToTxLog refTxId refTxLog tbl k rdata = do
-    tid <- readIORef refTxId
-    let entry = M.singleton tid [TxLog (toUserTable tbl) (k ^. rowKey) (_encodeRowData serial rdata)]
-    modifyIORef' refTxLog (M.insertWith (M.unionWith (<>)) tbl entry)
+  -- writeToTxLog
+  --   :: IORef TxId
+  --   -> TxLogQueue
+  --   -> TableName
+  --   -> RowKey
+  --   -> RowData
+  --   -> IO ()
+  -- writeToTxLog refTxId refTxLog tbl k rdata = do
+  --   tid <- readIORef refTxId
+  --   let entry = M.singleton tid [TxLog (toUserTable tbl) (k ^. rowKey) (_encodeRowData serial rdata)]
+  --   record refTxId refTxLog
+  --   modifyIORef' refTxLog (M.insertWith (M.unionWith (<>)) tbl entry)
 
   writeRowData
     :: IORef (Map TableName (Map RowKey RowData))
@@ -215,14 +220,14 @@ mockPactDb serial = do
     -> IO ()
   writeRowData ref refTxId refTxLog tbl wt k v = checkTable tbl ref *> case wt of
     Write -> do
-      writeToTxLog refTxId refTxLog tbl k v
+      record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) (_encodeRowData serial v))
       modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
     Insert -> do
       r <- readIORef ref
       case M.lookup tbl r >>= M.lookup k of
         Just _ -> throwIO Persistence.WriteException
         Nothing -> do
-          writeToTxLog refTxId refTxLog tbl k v
+          record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) (_encodeRowData serial v))
           modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
     Update -> do
       r <- readIORef ref
@@ -230,7 +235,7 @@ mockPactDb serial = do
         Just (RowData m) -> do
           let (RowData v') = v
               nrd = RowData (M.union v' m)
-          writeToTxLog refTxId refTxLog tbl k nrd
+          record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) (_encodeRowData serial nrd))
           modifyIORef' ref (M.insertWith M.union tbl (M.singleton k nrd))
         Nothing -> throwIO Persistence.WriteException
 
@@ -243,32 +248,37 @@ mockPactDb serial = do
     m <- readIORef ref
     pure (M.lookup ns m)
 
-  writeKS ref refTxLog ksn ks = do
+  writeKS :: IORef (Map KeySetName Persistence.FQKS) -> IORef TxId -> TxLogQueue -> KeySetName -> Persistence.FQKS -> IO ()
+  writeKS ref refTxId refTxLog ksn ks = do
     modifyIORef' ref (M.insert ksn ks)
-    modifyIORef' refTxLog (TxLog "SYS:KEYSETS" ksn (_encodeKeySet serial ks) :) 
+    record refTxId refTxLog (TxLog "SYS:KEYSETS" (_ ksn) (_encodeKeySet serial ks))
 
-  writeNS :: IORef TxId -> IORef (Map _ _) -> TxLogQueue -> IO ()
-  writeNS ref txId refTxLog nsn ns = do
+  writeNS :: IORef (Map NamespaceName Namespace) -> IORef TxId -> TxLogQueue -> NamespaceName  -> Namespace -> IO ()
+  writeNS ref refTxId refTxLog nsn ns = do
     modifyIORef' ref (M.insert nsn ns)
-    modifyIORef' refTxLog (TxLog "SYS:NAMESPACES" (_namespaceName nsn) (_encodeNamespace serial ns) :)
+    record refTxId refTxLog (TxLog "SYS:NAMESPACES" (_namespaceName nsn) (_encodeNamespace serial ns))
 
   readMod ref mn = do
     m <- readIORef ref
     pure (M.lookup mn m)
 
-  writeMod ref refTxLog md = let
+  writeMod :: IORef (Map ModuleName (ModuleData b i)) -> IORef TxId -> TxLogQueue -> ModuleData b i -> IO ()
+  writeMod ref refTxId refTxLog md = let
     mname = view Persistence.mdModuleName md
     in do
          modifyIORef' ref (M.insert mname md)
-         modifyIORef' refTxLog (TxLog "SYS:MODULES" (renderModuleName mname) (_encodeModule serial md) :)
+         record refTxId refTxLog (TxLog "SYS:MODULES" (renderModuleName mname) (_encodeModule serial md))
 
   readPacts' ref pid = do
     m <- readIORef ref
     pure (M.lookup pid m)
 
-  writePacts' ref refTxLog pid pe = do
+  writePacts' :: IORef (Map DefPactId (Maybe DefPactExec)) -> IORef TxId -> TxLogQueue -> DefPactId -> Maybe DefPactExec -> IO ()
+  writePacts' ref refTxId refTxLog pid pe = do
     modifyIORef' ref (M.insert pid pe)
-    modifyIORef' refTxLog (TxLog "SYS:DEFAPCTS" pid (_encodeDefPact serial pe) :)
+    record refTxId refTxLog (TxLog "SYS:NAMESPACES" (_ pid) (_encodeDefPact serial pe))
 
 record :: IORef TxId -> TxLogQueue -> TxLog ByteString -> IO ()
-record txId queue entry = modifyIORef
+record txId queue entry = do
+  txIdNow <- readIORef txId
+  modifyIORef queue $ \txMap -> insertWith (<>) txIdNow [entry] txMap
