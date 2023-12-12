@@ -56,6 +56,7 @@ staticTests =
   , ("interface_unannotated_defpact", isDesugarError _UnannotatedReturnType)
   , ("import_invalid_set", isDesugarError _InvalidImports)
   , ("module_instead_of_interface", isDesugarError _InvalidModuleReference)
+  , ("interface_instead_of_module", isDesugarError _InvalidModuleReference)
   ]
 
 tests :: TestTree
