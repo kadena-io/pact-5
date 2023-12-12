@@ -56,6 +56,7 @@ module Pact.Core.Names
  , parseModuleName
  , renderDefPactId
  , parseRenderedModuleName
+ , renderNamespaceName
  ) where
 
 import Control.Lens
@@ -387,3 +388,7 @@ parseModuleName = MP.parseMaybe moduleNameParser
 
 renderDefPactId :: DefPactId -> Text
 renderDefPactId (DefPactId t) = t
+
+
+renderNamespaceName :: NamespaceName -> Text
+renderNamespaceName (NamespaceName nsn) = nsn

@@ -15,20 +15,23 @@ import Control.Lens (view)
 import qualified Database.SQLite3 as SQL
 import qualified Database.SQLite3.Direct as Direct
 import Data.ByteString (ByteString)
+import qualified Data.Map.Strict as Map
 
 import Pact.Core.Guards (renderKeySetName, parseAnyKeysetName)
-import Pact.Core.Names (renderModuleName, DefPactId(..), NamespaceName(..), TableName(..), RowKey(..), parseRenderedModuleName)
+import Pact.Core.Names (renderModuleName, DefPactId(..), NamespaceName(..), TableName(..), RowKey(..), parseRenderedModuleName
+                       , renderDefPactId, renderNamespaceName)
 import Pact.Core.Persistence (PactDb(..), Domain(..),
                               Purity(PImpure)
                              ,WriteType(..)
                              ,toUserTable
                              ,ExecutionMode(..), TxId(..)
-                             , RowData, TxLog(..)
+                             , RowData(..), TxLog(..)
                              )
 import qualified Pact.Core.Persistence as P
 import Control.Exception (throwIO)
 -- import Pact.Core.Repl.Utils (ReplEvalM)
 import Pact.Core.Serialise
+
 withSqlitePactDb
   :: (MonadIO m, MonadBaseControl IO m)
   => PactSerialise b i
@@ -43,10 +46,16 @@ withSqlitePactDb serial connectionString act =
 
 createSysTables :: SQL.Database -> IO ()
 createSysTables db = do
-  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:KEYSETS\"    (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey))"
-  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:MODULES\"    (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey))"
-  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:PACTS\"      (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey))"
-  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:NAMESPACES\" (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey))"
+  SQL.exec db (cStmt "SYS:KEYSETS")
+  SQL.exec db (cStmt "SYS:MODULES")
+  SQL.exec db (cStmt "SYS:PACTS")
+  SQL.exec db (cStmt "SYS:NAMESPACES")
+  where
+    cStmt tbl = "CREATE TABLE IF NOT EXISTS \"" <> tbl <> "\" \
+                \ (txid UNSIGNED BIG INT, \
+                \  rowkey TEXT, \
+                \  rowdata BLOB, \
+                \  UNIQUE (txid, rowkey))"
 
 -- | Create all tables that should exist in a fresh pact db,
 --   or ensure that they are already created.
@@ -153,16 +162,54 @@ createUserTable db _txLog tbl = SQL.exec db ("CREATE TABLE IF NOT EXISTS " <> tb
   where
     tblName = "\"" <> toUserTable tbl <> "\""
 
-write' :: forall k v b i. PactSerialise b i -> SQL.Database -> IORef TxId -> IORef [TxLog ByteString] -> WriteType -> Domain k v b i -> k -> v -> IO ()
-write' serial db txId txLog _wt domain k v = case domain of
-  DKeySets -> withStmt db "INSERT INTO \"SYS:kEYSETS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
+write'
+  :: forall k v b i.
+     PactSerialise b i
+  -> SQL.Database
+  -> IORef TxId
+  -> IORef [TxLog ByteString]
+  -> WriteType
+  -> Domain k v b i
+  -> k
+  -> v
+  -> IO ()
+write' serial db txId txLog wt domain k v =
+  case domain of
+    DUserTables tbl -> checkInsertOk tbl k >>= \case
+      Nothing -> withStmt db ("INSERT INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
+        let
+          encoded = _encodeRowData serial v
+          RowKey k' = k
+        TxId i <- readIORef txId
+        SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
+        SQL.stepNoCB stmt >>= \case
+          SQL.Done -> modifyIORef' txLog (TxLog (toUserTable tbl) k' encoded:)
+          SQL.Row -> fail "invariant viaolation"
+
+      Just old -> do
+        let
+          RowData old' = old
+          RowData v' = v
+          new = RowData (Map.union v' old')
+        withStmt db ("INSERT OR REPLACE INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
+          let
+            encoded = _encodeRowData serial new
+            RowKey k' = k
+          TxId i <- readIORef txId
+          SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
+          SQL.stepNoCB stmt >>= \case
+            SQL.Done -> modifyIORef' txLog (TxLog (toUserTable tbl) k' encoded:)
+            SQL.Row -> fail "invariant viaolation"
+      
+    DKeySets -> withStmt db "INSERT OR REPLACE INTO \"SYS:kEYSETS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let encoded = _encodeKeySet serial v
       TxId i <- readIORef txId
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderKeySetName k), SQL.SQLBlob encoded]
       SQL.stepNoCB stmt >>= \case
         SQL.Done -> modifyIORef' txLog (TxLog "SYS:KEYSETS" (renderKeySetName k) encoded:)
         SQL.Row -> fail "invariant violation"
-  DModules -> withStmt db "INSERT INTO \"SYS:MODULES\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
+        
+    DModules -> withStmt db "INSERT OR REPLACE INTO \"SYS:MODULES\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let encoded = _encodeModuleData serial v
       TxId i <- readIORef txId
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderModuleName k), SQL.SQLBlob encoded]
@@ -171,96 +218,81 @@ write' serial db txId txLog _wt domain k v = case domain of
         Right res
           | res == SQL.Done -> modifyIORef' txLog (TxLog "SYS:Modules" (renderModuleName k) encoded:)
           | otherwise -> fail "invariant violation"
-  DDefPacts -> withStmt db "INSERT INTO \"SYS:PACTS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
+    DDefPacts -> withStmt db "INSERT OR REPLACE INTO \"SYS:PACTS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let
         encoded = _encodeDefPactExec serial v
         DefPactId k' = k
       TxId i <- readIORef txId
+--      putStrLn (show wt <> " / " <> show k <> " / " <> show v)
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
       SQL.stepNoCB stmt >>= \case
         SQL.Done -> modifyIORef' txLog (TxLog "SYS:DEFPACTS" k' encoded:)
         SQL.Row -> fail "invariant violation"
-  DNamespaces -> withStmt db "INSERT INTO \"SYS:NAMESPACES\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
+    DNamespaces -> withStmt db "INSERT OR REPLACE INTO \"SYS:NAMESPACES\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let
         encoded = _encodeNamespace serial v
         NamespaceName k' = k
       TxId i <- readIORef txId
-      putStrLn ("DNamespaces: " <> show i <> " / " <> show k')
+--      putStrLn ("DNamespaces: " <> show i <> " / " <> show k')
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
       Direct.stepNoCB stmt >>= \case
         Left _err -> undefined
         Right res
           | res == SQL.Done -> modifyIORef' txLog (TxLog "SYS:NAMESPACES" k' encoded:)
           | otherwise -> fail "invariant viaolation"
-  DUserTables tbl -> withStmt db ("INSERT INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
-    let
-      encoded = _encodeRowData serial v
-      RowKey k' = k
-    TxId i <- readIORef txId
-    SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-    SQL.stepNoCB stmt >>= \case
-        SQL.Done -> modifyIORef' txLog (TxLog (toUserTable tbl) k' encoded:)
-        SQL.Row -> fail "invariant viaolation"
+  --     DUserTables tbl -> do
+        
+        -- withStmt db ("INSERT INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
+        -- let
+        --   encoded = _encodeRowData serial v
+        --   RowKey k' = k
+        -- TxId i <- readIORef txId
+        -- SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
+        -- SQL.stepNoCB stmt >>= \case
+        --   SQL.Done -> modifyIORef' txLog (TxLog (toUserTable tbl) k' encoded:)
+        --   SQL.Row -> fail "invariant viaolation"
   where
-    insertWt :: IO ()
-    insertWt = undefined
-    updateWt :: ()
-    updateWt = undefined
-    writeWt ::  ()
-    writeWt = undefined
+    checkInsertOk ::  TableName -> RowKey -> IO (Maybe RowData)
+    checkInsertOk tbl rk = do
+      curr <- read' serial db (DUserTables tbl) rk
+      case (curr, wt) of
+        (Nothing, Insert) -> return Nothing
+        (Just _, Insert) -> throwIO P.WriteException -- error ("Insert: row found for key "<> show tbl <> " " <> show rk)
+        (Nothing, Write) -> return Nothing
+        (Just old, Write) -> return $ Just old
+        (Just old, Update) -> return $ Just old
+        (Nothing, Update) -> error "Update: no row found for key "
+      
 
 read' :: forall k v b i. PactSerialise b i -> SQL.Database -> Domain k v b i -> k -> IO (Maybe v)
 read' serial db domain k = case domain of
-  DKeySets -> withStmt db "SELECT rowdata FROM \"SYS:KEYSETS\" WHERE rowkey = ? ORDER BY txid DESC LIMIT 1" $ \stmt -> do
-      SQL.bind stmt [SQL.SQLText (renderKeySetName k)]
+  DKeySets -> withStmt db (selStmt "SYS:KEYSETS")
+    (doRead (renderKeySetName k) (\v -> pure (view document <$> _decodeKeySet serial v)))
+
+  DModules -> withStmt db (selStmt "SYS:MODULES")
+    (doRead (renderModuleName k) (\v -> pure (view document <$> _decodeModuleData serial v)))
+
+  DUserTables tbl ->  withStmt db (selStmt $ toUserTable tbl)
+    (doRead (_rowKey k) (\v -> pure (view document <$> _decodeRowData serial v)))
+
+  DDefPacts -> withStmt db (selStmt "SYS:PACTS")
+    (doRead (renderDefPactId k) (\v -> pure (view document <$> _decodeDefPactExec serial v)))
+
+  DNamespaces -> withStmt db (selStmt "SYS:NAMESPACES")
+    (doRead (renderNamespaceName k) (\v -> pure (view document <$> _decodeNamespace serial v)))
+
+  where
+    selStmt tbl = "SELECT rowdata FROM \""<> tbl <> "\" WHERE rowkey = ? ORDER BY txid DESC LIMIT 1"
+    doRead k' f stmt = do
+      SQL.bind stmt [SQL.SQLText k']
       SQL.step stmt >>= \case
         SQL.Done -> pure Nothing
         SQL.Row -> do
           1 <- SQL.columnCount stmt
           [SQL.SQLBlob value] <- SQL.columns stmt
           SQL.Done <- SQL.step stmt
-          pure (view document <$> _decodeKeySet serial value)
-  DModules ->  withStmt db "SELECT rowdata FROM \"SYS:MODULES\" WHERE rowkey = ? ORDER BY txid DESC LIMIT 1" $ \stmt -> do
-      SQL.bind stmt [SQL.SQLText (renderModuleName k)]
-      SQL.step stmt >>= \case
-        SQL.Done -> pure Nothing
-        SQL.Row -> do
-          1 <- SQL.columnCount stmt
-          [SQL.SQLBlob value] <- SQL.columns stmt
-          SQL.Done <- SQL.step stmt
-          pure (view document <$> _decodeModuleData serial value)
-  DUserTables tbl -> do
-    let tblName = "\"" <> toUserTable tbl <> "\""
-    withStmt db ("SELECT rowdata FROM " <> tblName <> " WHERE rowkey = ? ORDER BY txid DESC LIMIT 1") $ \stmt -> do
-      let RowKey rk = k
-      SQL.bind stmt [SQL.SQLText rk]
-      SQL.step stmt >>= \case
-        SQL.Done -> pure Nothing
-        SQL.Row -> do
-          1 <- SQL.columnCount stmt
-          [SQL.SQLBlob value] <- SQL.columns stmt
-          SQL.Done <- SQL.step stmt
-          pure (view document <$>  _decodeRowData serial value)
-  DDefPacts -> withStmt db "SELECT rowdata FROM \"SYS:PACTS\" WHERE rowkey = ? ORDER BY txid DESC LIMIT 1" $ \stmt -> do
-      let DefPactId pid = k
-      SQL.bind stmt [SQL.SQLText pid]
-      SQL.step stmt >>= \case
-        SQL.Done -> pure Nothing
-        SQL.Row -> do
-          1 <- SQL.columnCount stmt
-          [SQL.SQLBlob value] <- SQL.columns stmt
-          SQL.Done <- SQL.step stmt
-          pure (view document <$> _decodeDefPactExec serial value)
-  DNamespaces -> withStmt db "SELECT rowdata FROM \"SYS:NAMESPACES\" WHERE rowkey = ? ORDER BY txid DESC LIMIT 1" $ \stmt -> do
-      let NamespaceName ns = k
-      SQL.bind stmt [SQL.SQLText ns]
-      SQL.step stmt >>= \case
-        SQL.Done -> pure Nothing
-        SQL.Row -> do
-          1 <- SQL.columnCount stmt
-          [SQL.SQLBlob value] <- SQL.columns stmt
-          SQL.Done <- SQL.step stmt
-          pure (view document <$> _decodeNamespace serial value)
+          f value
+
 
 -- Utility functions
 withStmt :: SQL.Database -> Text -> (SQL.Statement -> IO a) -> IO a
