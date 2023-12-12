@@ -53,7 +53,7 @@ replTestFiles = do
 
 runFileReplTest :: TestName -> TestTree
 runFileReplTest file = testCase file $ do
-  pdb <- mockPactDb
+  pdb <- mockPactDb serialiseRepl
   B.readFile (replTestDir </> file) >>= runReplTest pdb file
 
 runFileReplTestSqlite :: TestName -> TestTree

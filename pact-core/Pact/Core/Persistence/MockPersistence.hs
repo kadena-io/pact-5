@@ -2,22 +2,23 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Pact.Core.Persistence.MockPersistence (
-  mockPactDb
+  mockPactDb, serialiseRepl
   )where
 
 
 import Control.Monad (unless)
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, fromMaybe)
+import Data.List (find)
 import Control.Lens ((^?), (^.), ix, view)
 import Data.Map (Map)
-import Data.Map.Strict (insertWith)
-import Data.IORef (IORef, modifyIORef, modifyIORef', newIORef, readIORef, writeIORef)
+import qualified Data.Map.Strict as Map --(insertWith, findWithDefault, filterWithKey)
+import Data.IORef (IORef, modifyIORef, modifyIORef', newIORef, readIORef, writeIORef, atomicModifyIORef')
 import Control.Exception(throwIO)
 import qualified Data.Map.Strict as M
 import Data.ByteString (ByteString)
-import Pact.Core.Guards (KeySetName)
+import Pact.Core.Guards (KeySetName, renderKeySetName)
 import Pact.Core.Namespace
-import Pact.Core.Names (ModuleName, RowKey, TableName, DefPactId, NamespaceName, rowKey, renderModuleName)
+import Pact.Core.Names (ModuleName, RowKey, TableName, DefPactId, NamespaceName, rowKey, renderModuleName, NamespaceName(..), renderDefPactId)
 import Pact.Core.DefPacts.Types (DefPactExec)
 import qualified Pact.Core.Persistence as Persistence
 import Pact.Core.Persistence (Domain(..),
@@ -26,6 +27,10 @@ import Pact.Core.Persistence (Domain(..),
                               Purity(PImpure), toUserTable
                              )
 import Pact.Core.Serialise
+import Pact.Core.Builtin (ReplRawBuiltin)
+import Pact.Core.Info (SpanInfo)
+
+import Pact.Core.Serialise.CBOR_V1 (encodeModuleData_TESTING, decodeModuleData_TESTING)
 
 type TxLogQueue = IORef (Map TxId [TxLog ByteString])
 
@@ -68,13 +73,17 @@ mockPactDb serial = do
     Just (em, txl, mods, ks, usr) -> case em of
       Transactional -> do
         writeIORef refRb Nothing
-        modifyIORef' refTxId (\(TxId n) -> TxId (n + 1))
+        txId <- atomicModifyIORef' refTxId (\(TxId i) -> (TxId (succ i), TxId i))
+        txLogQueue <- readIORef refTxLog
+        pure (Map.findWithDefault [] txId txLogQueue)
       Local -> do
         writeIORef refRb Nothing
         writeIORef refMod mods
         writeIORef refKs ks
         writeIORef refUsrTbl usr
         writeIORef refTxLog txl
+        txId <- readIORef refTxId
+        pure (Map.findWithDefault [] txId txl)
     Nothing ->
       throwIO Persistence.NoTxToCommit
 
@@ -89,19 +98,27 @@ mockPactDb serial = do
 
   txLog :: TxLogQueue -> TableName -> TxId -> IO [TxLog RowData]
   txLog refTxLog tn tid = do
-    undefined
+    txl <- readIORef refTxLog
+    case Map.lookup tid txl of
+      Just txl' -> pure $ fromMaybe [] (traverse (traverse (fmap (view document) . _decodeRowData serial)) (filter (\(TxLog dom _ _) -> dom == toUserTable tn) txl'))
+      Nothing -> pure []
     -- m <- readIORef refTxLog
     -- case M.lookup tn m of
     --   Just txids -> case M.lookup tid txids of
     --     Just n -> pure n
     --     Nothing -> throwIO (Persistence.NoTxLog tn tid)
     --   Nothing -> throwIO (Persistence.NoTxLog tn tid)
-
-  txIds refTxLog tn txId = do
+  txIds :: TxLogQueue -> TableName -> TxId -> IO [TxId]
+  txIds refTxLog tn (TxId txId) = do
     txl <- readIORef refTxLog
-    case M.lookup tn txl of
-      Just mtxl -> pure [ x | x <- M.keys mtxl, x >= txId ]
-      Nothing -> throwIO (Persistence.NoSuchTable tn)
+    let
+      userTab = toUserTable tn
+      subTxs = Map.filterWithKey (\(TxId i) txs -> i >= txId && isJust (find (\(TxLog dom _ _) -> dom == userTab) txs)) txl
+    pure (Map.keys subTxs)
+    --txl <- readIORef refTxLog
+    -- case M.lookup tn txl of
+    --   Just mtxl -> pure [ x | x <- M.keys mtxl, x >= txId ]
+    --   Nothing -> throwIO (Persistence.NoSuchTable tn)
 
   keys
     :: forall k v
@@ -138,7 +155,7 @@ mockPactDb serial = do
     -> TxLogQueue
     -> TableName
     -> IO ()
-  createUsrTable refUsrTbl refTxId refTxLog tbl = do
+  createUsrTable refUsrTbl _refTxId _refTxLog tbl = do
     ref <- readIORef refUsrTbl
     case M.lookup tbl ref of
       Nothing -> do
@@ -251,7 +268,7 @@ mockPactDb serial = do
   writeKS :: IORef (Map KeySetName Persistence.FQKS) -> IORef TxId -> TxLogQueue -> KeySetName -> Persistence.FQKS -> IO ()
   writeKS ref refTxId refTxLog ksn ks = do
     modifyIORef' ref (M.insert ksn ks)
-    record refTxId refTxLog (TxLog "SYS:KEYSETS" (_ ksn) (_encodeKeySet serial ks))
+    record refTxId refTxLog (TxLog "SYS:KEYSETS" (renderKeySetName ksn) (_encodeKeySet serial ks))
 
   writeNS :: IORef (Map NamespaceName Namespace) -> IORef TxId -> TxLogQueue -> NamespaceName  -> Namespace -> IO ()
   writeNS ref refTxId refTxLog nsn ns = do
@@ -267,7 +284,7 @@ mockPactDb serial = do
     mname = view Persistence.mdModuleName md
     in do
          modifyIORef' ref (M.insert mname md)
-         record refTxId refTxLog (TxLog "SYS:MODULES" (renderModuleName mname) (_encodeModule serial md))
+         record refTxId refTxLog (TxLog "SYS:MODULES" (renderModuleName mname) (_encodeModuleData serial md))
 
   readPacts' ref pid = do
     m <- readIORef ref
@@ -276,9 +293,16 @@ mockPactDb serial = do
   writePacts' :: IORef (Map DefPactId (Maybe DefPactExec)) -> IORef TxId -> TxLogQueue -> DefPactId -> Maybe DefPactExec -> IO ()
   writePacts' ref refTxId refTxLog pid pe = do
     modifyIORef' ref (M.insert pid pe)
-    record refTxId refTxLog (TxLog "SYS:NAMESPACES" (_ pid) (_encodeDefPact serial pe))
+    record refTxId refTxLog (TxLog "SYS:NAMESPACES" (renderDefPactId pid) (_encodeDefPactExec serial pe))
 
 record :: IORef TxId -> TxLogQueue -> TxLog ByteString -> IO ()
 record txId queue entry = do
   txIdNow <- readIORef txId
-  modifyIORef queue $ \txMap -> insertWith (<>) txIdNow [entry] txMap
+  modifyIORef queue $ \txMap -> Map.insertWith (<>) txIdNow [entry] txMap
+
+
+serialiseRepl :: PactSerialise ReplRawBuiltin SpanInfo
+serialiseRepl = serialisePact{ _encodeModuleData = encodeModuleData_TESTING
+                             , _decodeModuleData = fmap LegacyDocument . decodeModuleData_TESTING
+                             }
+

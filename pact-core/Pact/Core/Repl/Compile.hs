@@ -25,7 +25,7 @@ import qualified Data.ByteString as B
 import qualified Data.Text as T
 
 import Pact.Core.Persistence
-import Pact.Core.Persistence.MockPersistence (mockPactDb)
+import Pact.Core.Persistence.MockPersistence (mockPactDb, serialiseRepl)
 -- import Pact.Core.Persistence.SQLite (withSqlitePactDb)
 import Pact.Core.Builtin
 import Pact.Core.Info (SpanInfo)
@@ -37,7 +37,7 @@ import Pact.Core.IR.Term
 import Pact.Core.Compile
 import Pact.Core.Interpreter
 import Pact.Core.Environment
--- import Pact.Core.Serialise
+--import Pact.Core.Serialise
 
 
 import Pact.Core.IR.Eval.Runtime
@@ -85,8 +85,7 @@ interpretReplProgram (SourceCode _ source) display = do
         | b -> do
           oldSrc <- use replCurrSource
           evalState .= def
-          pactdb <- liftIO mockPactDb
---          _ <- withSqlitePactDb undefined -- (serialiseCBOR :: PactSerialise ReplRawBuiltin ()) "" pure
+          pactdb <- liftIO (mockPactDb serialiseRepl)
           replPactDb .= pactdb
           replEvalEnv .= defaultEvalEnv pactdb replRawBuiltinMap
           out <- loadFile (T.unpack txt) display

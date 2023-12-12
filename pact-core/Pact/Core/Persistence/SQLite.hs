@@ -13,6 +13,7 @@ import Data.IORef (newIORef, IORef, readIORef, atomicModifyIORef', writeIORef, m
 import Data.Text (Text)
 import Control.Lens (view)
 import qualified Database.SQLite3 as SQL
+import qualified Database.SQLite3.Direct as Direct
 import Data.ByteString (ByteString)
 
 import Pact.Core.Guards (renderKeySetName, parseAnyKeysetName)
@@ -24,7 +25,8 @@ import Pact.Core.Persistence (PactDb(..), Domain(..),
                              ,ExecutionMode(..), TxId(..)
                              , RowData, TxLog(..)
                              )
-
+import qualified Pact.Core.Persistence as P
+import Control.Exception (throwIO)
 -- import Pact.Core.Repl.Utils (ReplEvalM)
 import Pact.Core.Serialise
 withSqlitePactDb
@@ -41,10 +43,10 @@ withSqlitePactDb serial connectionString act =
 
 createSysTables :: SQL.Database -> IO ()
 createSysTables db = do
-  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:KEYSETS\"    (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey)"
-  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:MODULES\"    (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey)"
-  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:PACTS\"      (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey)"
-  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:NAMESPACES\" (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey)"
+  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:KEYSETS\"    (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey))"
+  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:MODULES\"    (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey))"
+  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:PACTS\"      (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey))"
+  SQL.exec db "CREATE TABLE IF NOT EXISTS \"SYS:NAMESPACES\" (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey))"
 
 -- | Create all tables that should exist in a fresh pact db,
 --   or ensure that they are already created.
@@ -147,7 +149,7 @@ rollbackTx db txLog = do
   writeIORef txLog []
 
 createUserTable :: SQL.Database -> IORef [TxLog ByteString] -> TableName -> IO ()
-createUserTable db _txLog tbl = SQL.exec db ("CREATE TABLE IF NOT EXISTS " <> tblName <> " (txid INTEGER PRIMARY KEY NOT NULL UNIQUE, rowkey TEXT NOT NULL, rowdata BLOB NOT NULL)")
+createUserTable db _txLog tbl = SQL.exec db ("CREATE TABLE IF NOT EXISTS " <> tblName <> " (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey))")
   where
     tblName = "\"" <> toUserTable tbl <> "\""
 
@@ -164,9 +166,11 @@ write' serial db txId txLog _wt domain k v = case domain of
       let encoded = _encodeModuleData serial v
       TxId i <- readIORef txId
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderModuleName k), SQL.SQLBlob encoded]
-      SQL.stepNoCB stmt >>= \case
-        SQL.Done -> modifyIORef' txLog (TxLog "SYS:Modules" (renderModuleName k) encoded:)
-        SQL.Row -> fail "invariant violation"
+      Direct.stepNoCB stmt >>= \case
+        Left _err -> throwIO P.WriteException
+        Right res
+          | res == SQL.Done -> modifyIORef' txLog (TxLog "SYS:Modules" (renderModuleName k) encoded:)
+          | otherwise -> fail "invariant violation"
   DDefPacts -> withStmt db "INSERT INTO \"SYS:PACTS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let
         encoded = _encodeDefPactExec serial v
@@ -181,11 +185,14 @@ write' serial db txId txLog _wt domain k v = case domain of
         encoded = _encodeNamespace serial v
         NamespaceName k' = k
       TxId i <- readIORef txId
+      putStrLn ("DNamespaces: " <> show i <> " / " <> show k')
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-      SQL.stepNoCB stmt >>= \case
-        SQL.Done -> modifyIORef' txLog (TxLog "SYS:NAMESPACES" k' encoded:)
-        SQL.Row -> fail "invariant viaolation"
-  DUserTables tbl -> withStmt db ("INSERT INTO \"" <> toUserTable tbl <> "\" (txlog, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
+      Direct.stepNoCB stmt >>= \case
+        Left _err -> undefined
+        Right res
+          | res == SQL.Done -> modifyIORef' txLog (TxLog "SYS:NAMESPACES" k' encoded:)
+          | otherwise -> fail "invariant viaolation"
+  DUserTables tbl -> withStmt db ("INSERT INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
     let
       encoded = _encodeRowData serial v
       RowKey k' = k
@@ -194,6 +201,13 @@ write' serial db txId txLog _wt domain k v = case domain of
     SQL.stepNoCB stmt >>= \case
         SQL.Done -> modifyIORef' txLog (TxLog (toUserTable tbl) k' encoded:)
         SQL.Row -> fail "invariant viaolation"
+  where
+    insertWt :: IO ()
+    insertWt = undefined
+    updateWt :: ()
+    updateWt = undefined
+    writeWt ::  ()
+    writeWt = undefined
 
 read' :: forall k v b i. PactSerialise b i -> SQL.Database -> Domain k v b i -> k -> IO (Maybe v)
 read' serial db domain k = case domain of

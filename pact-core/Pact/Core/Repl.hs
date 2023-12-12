@@ -43,7 +43,7 @@ import Pact.Core.Hash
 
 main :: IO ()
 main = do
-  pdb <- mockPactDb
+  pdb <- mockPactDb serialiseRepl
   g <- newIORef mempty
   evalLog <- newIORef Nothing
   let ee = defaultEvalEnv pdb replRawBuiltinMap
