@@ -136,27 +136,27 @@ instance DesugarBuiltin RawBuiltin where
   desugarOperator info = \case
     -- Manual eta expansion for and as well as Or
     Lisp.AndOp -> let
-      arg1Name = "#andArg1"
+      arg1Name = "]andArg1"
       arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool))
-      arg2Name = "#andArg2"
+      arg2Name = "]andArg2"
       arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool))
       in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (CAnd (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
     Lisp.OrOp -> let
-      arg1Name = "#orArg1"
+      arg1Name = "]orArg1"
       arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool))
-      arg2Name = "#orArg2"
+      arg2Name = "]orArg2"
       arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool))
       in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (COr (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
     Lisp.EnforceOp -> let
-      arg1Name = "#enforceArg1"
+      arg1Name = "]enforceArg1"
       arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool))
-      arg2Name = "#enforceArg2"
+      arg2Name = "]enforceArg2"
       arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimString))
       in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (CEnforce (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
     Lisp.EnforceOneOp -> let
-      arg1Name = "#enforceOneArg1"
+      arg1Name = "]enforceOneArg1"
       arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimString))
-      arg2Name = "#enforceOneArg2"
+      arg2Name = "]enforceOneArg2"
       arg2 = Arg arg2Name (Just (Lisp.TyList (Lisp.TyPrim PrimBool)))
       in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (CEnforceOne (Var (BN (BareName arg1Name)) info) [Var (BN (BareName arg2Name)) info]) info) info
   desugarAppArity = desugarAppArityRaw id
@@ -165,8 +165,8 @@ desugarAppArityRaw
   :: (RawBuiltin -> builtin)
   -> info
   -> RawBuiltin
-  -> [Term name Lisp.Type builtin info]
-  -> Term name Lisp.Type builtin info
+  -> [Term ParsedName Lisp.Type builtin info]
+  -> Term ParsedName Lisp.Type builtin info
 -- Todo: this presents a really, _really_ annoying case for the map overload :(
 -- Jose: I am unsure how to fix this so far, but it does not break any tests.
 -- that is:
@@ -199,8 +199,7 @@ desugarAppArityRaw f i RawCeiling [e1, e2] =
   App (Builtin (f RawCeilingPrec) i) [e1, e2] i
 desugarAppArityRaw f i RawFloor [e1, e2] =
   App (Builtin (f RawFloorPrec) i) [e1, e2] i
-
-
+-- Higher order callsite desugars
 desugarAppArityRaw f i RawStrToInt [e1, e2] =
   App (Builtin (f RawStrToIntBase) i) [e1, e2] i
 desugarAppArityRaw f i RawReadMsg [] =
@@ -281,9 +280,9 @@ desugarLispTerm = \case
         | otherwise ->
           pure (Var (BN n) i)
     where
-    cvar1 = "#constantlyA1"
-    cvar2 = "#constantlyA2"
-    ivar1 = "#identityA1"
+    cvar1 = "]constantlyA1"
+    cvar2 = "]constantlyA2"
+    ivar1 = "]identityA1"
   Lisp.Var n i -> pure (Var n i)
   Lisp.Block nel i -> do
     nel' <- traverse desugarLispTerm nel
@@ -308,7 +307,7 @@ desugarLispTerm = \case
       bindingBody hs' = case reverse hs' of
         [] -> throwDesugarError EmptyBindingBody i
         x:xs -> pure $ foldl' (\acc e -> Sequence e acc i) x xs
-      objFreshText = "#bindObject"
+      objFreshText = "]bindObject"
       objFreshVar = Var (BN (BareName objFreshText)) i
       bindToLet (Field field, marg) body =
         let arg = toArg marg

@@ -73,7 +73,8 @@ instance Pretty LexerError where
                   , Pretty.parens (pretty Limits.identifierLengthLimit) <> ":"
                   , pretty identifier ]
     OutOfInputError c ->
-      Pretty.hsep ["Ran out of input before finding a lexeme. Last Character seen: ", Pretty.parens (pretty c)]
+      Pretty.hsep ["Ran out of input before finding a lexeme. Last Character seen: "
+                  , Pretty.parens (pretty c)]
 
 data ParseError
   = ParsingError Text
@@ -88,6 +89,8 @@ data ParseError
   -- ^ Way too many decimal places for `Decimal` to deal with, max 255 precision.
   | InvalidBaseType Text
   -- ^ Invalid primitive type
+  | TooManyFunctionArgs
+  | TooManySchemaArgs
   deriving Show
 
 instance Exception ParseError
@@ -104,6 +107,8 @@ instance Pretty ParseError where
       Pretty.hsep ["Precision overflow (>=255 decimal places): ", pretty i, "decimals"]
     InvalidBaseType txt ->
       Pretty.hsep ["No such type:", pretty txt]
+    TooManyFunctionArgs -> "Function has too many arguments"
+    TooManySchemaArgs -> "Schema has too many arguments"
 
 data DesugarError
   = UnboundTermVariable Text

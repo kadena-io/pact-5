@@ -282,6 +282,16 @@ parseError (remaining, exps) =
 runLexerT :: LexerM a -> Text -> Either PactErrorI a
 runLexerT (LexerM act) s = evalStateT act (initState s)
 
+checkArgListLength :: [a] -> ParserT [a]
+checkArgListLength k
+  | length k <= Limits.functionArgLengthLimit = pure k
+  | otherwise = throwParseError TooManyFunctionArgs def
+
+checkSchemaArgLength :: [a] -> ParserT [a]
+checkSchemaArgLength k
+  | length k <= Limits.schemaLengthLimit = pure k
+  | otherwise = throwParseError TooManyFunctionArgs def
+
 renderTokenText :: Token -> Text
 renderTokenText = \case
   TokenLet -> "let"
