@@ -1138,7 +1138,7 @@ composeCapability info b cont handler env = \case
   [VCapToken ct] ->
     useEvalState esStack >>= \case
       sf:_ -> do
-        when (_sfFnType sf /= SFDefcap) $ failInvariant info "compose-cap "
+        when (_sfFnType sf /= SFDefcap) $ failInvariant info "compose-cap"
         composeCap info cont handler env ct
       _ -> failInvariant info "compose-cap at the top level"
   args -> argsError info b args

@@ -34,17 +34,17 @@ import Pact.Core.Names
 import Pact.Core.Hash
 
 data DefManagedMeta name
-  = DefManagedMeta Int (FQNameRef name)
+  = DefManagedMeta (Int, Text) name
   | AutoManagedMeta
-  deriving (Show)
+  deriving (Show, Functor, Foldable, Traversable)
 
 data DefCapMeta name
   = DefEvent
   | DefManaged (DefManagedMeta name)
   | Unmanaged
-  deriving (Show)
+  deriving (Show, Functor, Foldable, Traversable)
 
-dcMetaFqName :: Traversal' (DefCapMeta Name) FullyQualifiedName
+dcMetaFqName :: Traversal' (DefCapMeta (FQNameRef Name)) FullyQualifiedName
 dcMetaFqName f = \case
   DefManaged (DefManagedMeta i (FQName fqn)) ->
     DefManaged . DefManagedMeta i . FQName <$> f fqn

@@ -5,6 +5,7 @@ import Test.Tasty
 import qualified Pact.Core.Test.ReplTests as ReplTests
 import qualified Pact.Core.Test.LexerParserTests as LexerParserTests
 import qualified Pact.Core.Test.LexerTests as LexerTests
+import qualified Pact.Core.Test.StaticErrorTests as StaticErrorTests
 import qualified Pact.Core.Test.ZkTests as ZkTests
 import qualified Pact.Core.Test.PoseidonTests as PoseidonTests
 
@@ -15,6 +16,7 @@ main = do
     [ replTests
     , LexerTests.tests
     , LexerParserTests.tests
+    , StaticErrorTests.tests
     , ZkTests.tests
     , PoseidonTests.tests
     ]

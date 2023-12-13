@@ -550,7 +550,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
             case mdm of
               -- | Not automanaged, so it must have a defmeta
               -- We are handling user-managed caps
-              DefManagedMeta cix _ -> do
+              DefManagedMeta (cix,_) _ -> do
                 let filteredCap = CapToken qualCapName (filterIndex cix args)
                 -- Find the capability post-filtering
                 mgdCaps <- useEvalState (esCaps . csManaged)
@@ -776,7 +776,7 @@ installCap info _env (CapToken fqn args) autonomous = do
   lookupFqName fqn >>= \case
     Just (DCap d) -> case _dcapMeta d of
       DefManaged m -> case m of
-        DefManagedMeta paramIx (FQName fqnMgr) -> do
+        DefManagedMeta (paramIx,_) (FQName fqnMgr) -> do
           managedParam <- maybe (throwExecutionError info (InvalidManagedCap fqn)) pure (args ^? ix paramIx)
           let mcapType = ManagedParam fqnMgr managedParam paramIx
               ctFiltered = CapToken (fqnToQualName fqn) (filterIndex paramIx args)
