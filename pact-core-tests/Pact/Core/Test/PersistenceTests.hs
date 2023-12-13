@@ -22,7 +22,7 @@ import Pact.Core.Persistence (WriteType(Insert), readKeySet, writeKeySet, writeM
                              ,writeDefPacts, readDefPacts, readNamespace, writeNamespace
                              , Domain(..), PactDb(..), TxId(..)
                              , ExecutionMode(Transactional)
-                             , TxLog(TxLog, _txDomain, _txKey, _txValue)
+                             , TxLog(..)
                              , RowData(..)
                              , WriteType(Insert, Update, Write)
                              )
