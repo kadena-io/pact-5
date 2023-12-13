@@ -54,17 +54,8 @@
       packages.recursive = with hs-nix-infra.lib.recursive system;
         wrapRecursiveWithMeta "pact-core" "${wrapFlake self}.default";
 
-      devShell = pkgs.haskellPackages.shellFor {
-        packages = p: [
-        ];
+      inherit (flake) devShell;
 
-        buildInputs = with pkgs.haskellPackages; [
-          cabal-install
-          haskell-language-server
-        ];
-
-        withHoogle = true;
-      };
       packages.check = pkgs.runCommand "check" {} ''
         export LANG=C.UTF-8
 
@@ -73,7 +64,7 @@
         echo ${packages.pact-core-tests}
         (cd ${self}; ${packages.pact-core-tests}/bin/core-tests)
 
-        echo ${mkCheck "devShell" flake.devShell}
+        echo ${mkCheck "devShell" devShell}
         echo works > $out
       '';
 

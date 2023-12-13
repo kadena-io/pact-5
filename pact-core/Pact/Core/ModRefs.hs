@@ -9,9 +9,12 @@ module Pact.Core.ModRefs
  ) where
 
 import Control.Lens
+
+import Data.Set(Set)
 import Pact.Core.Names
 import Pact.Core.Pretty
 
+import qualified Data.Set as S
 
 -- | Original module reference
 data ModRef
@@ -20,14 +23,14 @@ data ModRef
   -- ^ Original module
   , _mrImplemented :: [ModuleName]
   -- ^ All implemented interfaces
-  , _mrRefined :: Maybe ModuleName
+  , _mrRefined :: Maybe (Set ModuleName)
 -- ^ The "Selected" interface from a type refinement
   }
   deriving (Show)
 
 instance Pretty ModRef where
   pretty (ModRef _mn _imp mref) = case mref of
-    Just ref -> "module" <> braces (pretty ref)
+    Just ref -> "module" <> braces (pretty (S.toList ref))
     Nothing -> "module<not refined>"
 
 instance Eq ModRef where

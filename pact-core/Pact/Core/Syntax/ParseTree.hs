@@ -18,7 +18,6 @@ import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.Pretty
 import Pact.Core.Type(PrimType(..))
-import Pact.Core.Imports
 import Pact.Core.Guards
 
 
@@ -42,7 +41,7 @@ data Type
   = TyPrim PrimType
   | TyList Type
   | TyPolyList
-  | TyModRef ModuleName
+  | TyModRef [ModuleName]
   | TyKeyset
   | TyObject ParsedTyName
   | TyTable ParsedTyName
@@ -74,7 +73,7 @@ instance Pretty Type where
   pretty = \case
     TyPrim prim -> pretty prim
     TyList t -> brackets (pretty t)
-    TyModRef mn -> "module" <> braces (pretty mn)
+    TyModRef mn -> "module" <> braces (hsep (punctuate comma (pretty <$> mn)))
     TyPolyList -> "list"
     TyKeyset -> "keyset"
     TyObject qn -> "object" <> braces (pretty qn)
@@ -105,7 +104,7 @@ data Defun i
   , _dfunRetType :: Maybe Type
   , _dfunTerm :: Expr i
   , _dfunDocs :: Maybe Text
-  , _dfunModel :: Maybe [Expr i]
+  , _dfunModel :: Maybe [FVFunModel i]
   , _dfunInfo :: i
   } deriving Show
 
@@ -130,7 +129,7 @@ data DefCap i
   , _dcapRetType :: Maybe Type
   , _dcapTerm :: Expr i
   , _dcapDocs :: Maybe Text
-  , _dcapModel :: Maybe [Expr i]
+  , _dcapModel :: Maybe [FVFunModel i]
   , _dcapMeta :: Maybe DCapMeta
   , _dcapInfo :: i
   } deriving Show
@@ -140,7 +139,7 @@ data DefSchema i
   { _dscName :: Text
   , _dscArgs :: [Arg]
   , _dscDocs :: Maybe Text
-  , _dscModel :: Maybe [Expr i]
+  , _dscModel :: Maybe [FVFunModel i]
   , _dscInfo :: i
   } deriving Show
 
@@ -153,8 +152,8 @@ data DefTable i
   } deriving Show
 
 data PactStep i
-  = Step (Expr i) (Maybe [Expr i])
-  | StepWithRollback (Expr i) (Expr i) (Maybe [Expr i])
+  = Step (Expr i) (Maybe [FVFunModel i])
+  | StepWithRollback (Expr i) (Expr i) (Maybe [FVFunModel i])
   deriving Show
 
 data DefPact i
@@ -164,7 +163,7 @@ data DefPact i
   , _dpRetType :: Maybe Type
   , _dpSteps :: [PactStep i]
   , _dpDocs :: Maybe Text
-  , _dpModel :: Maybe [Expr i]
+  , _dpModel :: Maybe [FVFunModel i]
   , _dpInfo :: i
   } deriving Show
 
@@ -182,6 +181,13 @@ data Def i
   | DPact (DefPact i)
   deriving Show
 
+data Import
+  = Import
+  { _impModuleName  :: ModuleName
+  , _impModuleHash :: Maybe Text
+  , _impImported :: Maybe [Text] }
+  deriving Show
+
 data ExtDecl
   = ExtBless Text
   | ExtImport Import
@@ -195,6 +201,25 @@ data DefProperty i
   , _dpropExp :: Expr i
   } deriving Show
 
+newtype Property i
+  = Property (Expr i)
+  deriving Show
+
+newtype Invariant i
+  = Invariant (Expr i)
+  deriving Show
+
+data FVModel i
+  = FVDefProperty (DefProperty i)
+  | FVProperty (Property i)
+  | FVInvariant (Invariant i)
+  deriving Show
+
+data FVFunModel i
+  = FVFunProperty (Property i)
+  | FVFunInvariant (Invariant i)
+  deriving Show
+
 data Module i
   = Module
   { _mName :: ModuleName
@@ -202,7 +227,7 @@ data Module i
   , _mExternal :: [ExtDecl]
   , _mDefs :: NonEmpty (Def i)
   , _mDoc :: Maybe Text
-  , _mModel :: [DefProperty i]
+  , _mModel :: [FVModel i]
   , _mInfo :: i
   } deriving Show
 
@@ -219,7 +244,7 @@ data Interface i
   , _ifDefns :: [IfDef i]
   , _ifImports :: [Import]
   , _ifDocs :: Maybe Text
-  , _ifModel :: Maybe [Expr i]
+  , _ifModel :: Maybe [FVFunModel i]
   , _ifInfo :: i
   } deriving Show
 
@@ -229,7 +254,7 @@ data IfDefun i
   , _ifdArgs :: [MArg]
   , _ifdRetType :: Maybe Type
   , _ifdDocs :: Maybe Text
-  , _ifdModel :: Maybe [Expr i]
+  , _ifdModel :: Maybe [FVFunModel i]
   , _ifdInfo :: i
   } deriving Show
 
@@ -239,7 +264,7 @@ data IfDefCap i
   , _ifdcArgs :: [MArg]
   , _ifdcRetType :: Maybe Type
   , _ifdcDocs :: Maybe Text
-  , _ifdcModel :: Maybe [Expr i]
+  , _ifdcModel :: Maybe [FVFunModel i]
   , _ifdcMeta :: Maybe DCapMeta
   , _ifdcInfo :: i
   } deriving Show
@@ -250,7 +275,7 @@ data IfDefPact i
   , _ifdpArgs :: [MArg]
   , _ifdpRetType :: Maybe Type
   , _ifdpDocs :: Maybe Text
-  , _ifdpModel :: Maybe [Expr i]
+  , _ifdpModel :: Maybe [FVFunModel i]
   , _ifdpInfo :: i
   } deriving Show
 

@@ -67,8 +67,8 @@ updateDefHashes mname mhash = \case
     DCap $ over dcapTerm (updateTermHashes mname mhash)
          $ over (dcapMeta.dcMetaFqName) (updateFqNameHash mname mhash) d
   DPact d ->
-    let updateStep (Step e1 m) = Step (updateTermHashes mname mhash e1) m
-        updateStep (StepWithRollback e1 e2 m) = StepWithRollback (updateTermHashes mname mhash e1) (updateTermHashes mname mhash e2) m
+    let updateStep (Step e1) = Step (updateTermHashes mname mhash e1)
+        updateStep (StepWithRollback e1 e2) = StepWithRollback (updateTermHashes mname mhash e1) (updateTermHashes mname mhash e2)
     in DPact $ over dpSteps (fmap updateStep) d
   DTable d -> DTable d
   DSchema s -> DSchema s
@@ -262,11 +262,14 @@ encodeType :: Type -> Builder
 encodeType = \case
   TyPrim p -> encodePrim p
   TyList l -> brackets (encodeType l)
-  TyModRef m -> "module" <> braces (T.encodeUtf8Builder (renderModuleName m))
+  TyModRef m -> "module" <> braces (commaSep (T.encodeUtf8Builder . renderModuleName <$> S.toList m))
   -- Todo: this seems potentially inefficient?
   -- Maybe we preserve schema names instead
   TyObject sc -> "object" <> braces (encodeSchema sc)
   TyTable tbl -> "table" <> braces (encodeSchema tbl)
+  TyCapToken -> "captoken"
+  TyAnyList -> "list"
+  TyAnyObject -> "object"
 
 encodeImport :: Import -> Builder
 encodeImport (Import mname mmh mimps) = parens $
@@ -372,8 +375,8 @@ encodeDefPact (DefPact dpn args rty steps _i) = parens $
   "defpact" <+> encodeText dpn <> encodeTyAnn rty <+> encodeArgList args <+>
     hsep (encodeStep <$> NE.toList steps)
   where
-  encodeStep (Step t1 _) = parens ("step" <+> encodeTerm t1)
-  encodeStep (StepWithRollback t1 t2 _) =
+  encodeStep (Step t1) = parens ("step" <+> encodeTerm t1)
+  encodeStep (StepWithRollback t1 t2) =
     parens ("step-with-rollback" <+> encodeTerm t1 <+> encodeTerm t2)
 
 -- todo: defcap meta

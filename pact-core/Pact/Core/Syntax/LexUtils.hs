@@ -15,12 +15,10 @@ import Control.Monad.State.Strict
 import Data.Word (Word8)
 import Data.Text(Text)
 import Data.List(intersperse)
-import Data.ByteString.Internal(w2c)
-import Data.ByteString(ByteString)
 import Data.Default
 
-import qualified Data.ByteString as B
 import qualified Data.Text as T
+import qualified Data.Char as C
 
 import Pact.Core.Info
 import Pact.Core.Errors
@@ -54,8 +52,6 @@ data Token
   | TokenTry
   | TokenError
   | TokenModule
-  | TokenKeyGov
-  | TokenCapGov
   | TokenInterface
   | TokenImport
   | TokenStep
@@ -68,6 +64,7 @@ data Token
   | TokenDefSchema
   | TokenDefTable
   | TokenDefProperty
+  | TokenProperty
   | TokenBless
   | TokenImplements
   -- Annotations
@@ -121,6 +118,7 @@ data Token
   | TokenSuspend
   | TokenDynAcc
   | TokenBindAssign
+  | TokenInvariant
   -- Repl-specific tokens
   | TokenLoad
   -- Layout
@@ -133,7 +131,7 @@ data AlexInput
  { _inpLine   :: {-# UNPACK #-} !Int
  , _inpColumn :: {-# UNPACK #-} !Int
  , _inpLast :: {-# UNPACK #-} !Char
- , _inpStream :: ByteString
+ , _inpStream :: Text
  }
  deriving (Eq, Show)
 
@@ -142,11 +140,37 @@ makeLenses ''AlexInput
 alexPrevInputChar :: AlexInput -> Char
 alexPrevInputChar = _inpLast
 
+c2w :: Char -> Word8
+c2w = fromIntegral . C.ord
+
+w2c :: Word8 -> Char
+w2c = C.chr . fromIntegral
+
 alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
 alexGetByte (AlexInput line col _ stream) =
-  advance <$> B.uncons stream
+  advance <$> T.uncons stream
   where
-  advance (c, rest) | w2c c  == '\n' =
+  advance (c, rest) | c  == '\n' =
+    (c2w c
+    , AlexInput
+    { _inpLine  = line +1
+    , _inpColumn = 0
+    , _inpLast = '\n'
+    , _inpStream = rest})
+
+  advance (c, rest) =
+    (c2w c
+    , AlexInput
+    { _inpLine  = line
+    , _inpColumn = col +1
+    , _inpLast = c
+    , _inpStream = rest})
+
+lexerGetChar :: AlexInput -> Maybe (Char, AlexInput)
+lexerGetChar (AlexInput line col _ stream) =
+  advance <$> T.uncons stream
+  where
+  advance (c, rest) | c  == '\n' =
     (c
     , AlexInput
     { _inpLine  = line +1
@@ -159,7 +183,7 @@ alexGetByte (AlexInput line col _ stream) =
     , AlexInput
     { _inpLine  = line
     , _inpColumn = col +1
-    , _inpLast = w2c c
+    , _inpLast = c
     , _inpStream = rest})
 
 newtype Layout
@@ -176,7 +200,7 @@ newtype LexerM a =
   via (StateT AlexInput (Either PactErrorI))
 
 
-initState :: ByteString -> AlexInput
+initState :: Text -> AlexInput
 initState = AlexInput 0 0 '\n'
 
 getSpanInfo :: LexerM SpanInfo
@@ -249,7 +273,7 @@ parseError (remaining, exps) =
         [] -> def
         x:_ -> _ptInfo x
 
-runLexerT :: LexerM a -> ByteString -> Either PactErrorI a
+runLexerT :: LexerM a -> Text -> Either PactErrorI a
 runLexerT (LexerM act) s = evalStateT act (initState s)
 
 renderTokenText :: Token -> Text
@@ -260,8 +284,6 @@ renderTokenText = \case
   TokenTry -> "try"
   TokenError -> "error"
   TokenModule -> "module"
-  TokenKeyGov -> "keyGov"
-  TokenCapGov -> "capGov"
   TokenInterface -> "interface"
   TokenImport -> "use"
   TokenStep -> "step"
@@ -290,6 +312,8 @@ renderTokenText = \case
   TokenDot -> "."
   TokenBindAssign -> ":="
   TokenDynAcc -> "::"
+  TokenProperty -> "property"
+  TokenInvariant -> "invariant"
   -- TokenEq -> "="
   -- TokenNeq -> "!="
   -- TokenGT -> ">"

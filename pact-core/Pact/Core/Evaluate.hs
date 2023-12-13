@@ -6,7 +6,6 @@ import Control.Lens
 import Control.Monad.Except
 import Data.Default
 import Data.Text (Text)
-import qualified Data.Text.Encoding as T
 
 import Pact.Core.Builtin
 import Pact.Core.Compile
@@ -28,7 +27,7 @@ evaluate
   -> IO (Either (PactError SpanInfo) [CompileValue RawBuiltin],
          EvalState RawBuiltin SpanInfo)
 evaluate evalEnv source = runEvalM evalEnv def $ do
-  lexx <- liftEither (Lisp.lexer $ T.encodeUtf8 source)
+  lexx <- liftEither (Lisp.lexer source)
   parsed <- liftEither $ Lisp.parseProgram lexx
   traverse (interpretTopLevel $ Interpreter interpretExpr interpretGuard) parsed
 
