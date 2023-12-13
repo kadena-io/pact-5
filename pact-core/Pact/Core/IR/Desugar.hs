@@ -785,6 +785,7 @@ resolveModuleName
   -> RenamerT b i m (ModuleName, [ModuleName])
 resolveModuleName i mn =
   view reCurrModule >>= \case
+    -- TODO better error message if it's not MTMOdule
     Just (CurrModule currMod imps MTModule) | currMod == mn -> pure (currMod, imps)
     _ -> resolveModuleData mn i >>= \case
       ModuleData md _ -> do
@@ -799,11 +800,12 @@ resolveModuleName i mn =
 resolveInterfaceName :: (MonadEval b i m) => i -> ModuleName -> RenamerT b i m (ModuleName)
 resolveInterfaceName i mn =
   view reCurrModule >>= \case
+    -- TODO better error message if it's not MTInterface
     Just (CurrModule currMod _ MTInterface) | currMod == mn -> pure currMod
     _ -> resolveModuleData mn i >>= \case
       ModuleData _ _ ->
         throwDesugarError (InvalidModuleReference mn) i
-      -- todo: error type here
+      -- TODO: error type here
       InterfaceData _ _ ->
         pure mn
 
