@@ -252,4 +252,3 @@ instance Default (Loaded b i) where
 
 toUserTable :: TableName -> Text
 toUserTable (TableName tbl mn) = "USER_" <> renderModuleName mn <> "_" <> tbl
---toUserTable (TableName tbl mn) = "" <> renderModuleName mn <> "_" <> tbl

@@ -118,8 +118,6 @@ tests = testGroup "Serialise Roundtrip"
     , testProperty "DefTable" $ serialiseRoundtrip (defTableGen infoGen)
     , testProperty "Step" $ serialiseRoundtrip (stepGen builtinGen infoGen)
     , testProperty "DefPact" $ serialiseRoundtrip (defPactGen builtinGen infoGen)
-    -- , testProperty "ReplBuiltins" $ serialiseRoundtrip replBuiltinsGen
-    -- , testProperty "ReplRawBuiltin" $ serialiseRoundtrip replRawBuiltinGen
     ],
     testGroup "CBOR Serialise"
       [ testProperty "KeySet roundtrip" serialiseKeySet
