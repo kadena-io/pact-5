@@ -19,7 +19,8 @@ import qualified Data.Map.Strict as Map
 
 import Pact.Core.Guards (renderKeySetName, parseAnyKeysetName)
 import Pact.Core.Names (renderModuleName, DefPactId(..), NamespaceName(..), TableName(..), RowKey(..), parseRenderedModuleName
-                       , renderDefPactId, renderNamespaceName)
+                       , renderDefPactId, renderNamespaceName
+                       , Field(..), ModuleName(..))
 import Pact.Core.Persistence (PactDb(..), Domain(..),
                               Purity(PImpure)
                              ,WriteType(..)
@@ -27,9 +28,10 @@ import Pact.Core.Persistence (PactDb(..), Domain(..),
                              ,ExecutionMode(..), TxId(..)
                              , RowData(..), TxLog(..)
                              )
+import Pact.Core.PactValue
+import Pact.Core.Literal
 import qualified Pact.Core.Persistence as P
 import Control.Exception (throwIO)
--- import Pact.Core.Repl.Utils (ReplEvalM)
 import Pact.Core.Serialise
 
 -- | Acquire a SQLite-backed `PactDB`.
@@ -76,7 +78,7 @@ initializePactDb serial db = do
     , _pdbRead = read' serial db
     , _pdbWrite = write' serial db txId txLog
     , _pdbKeys = readKeys db
-    , _pdbCreateUserTable = createUserTable db txLog
+    , _pdbCreateUserTable = createUserTable serial db txLog
     , _pdbBeginTx = beginTx txId db txLog
     , _pdbCommitTx = commitTx txId db txLog
     , _pdbRollbackTx = rollbackTx db txLog
@@ -164,10 +166,17 @@ rollbackTx db txLog = do
   SQL.exec db "ROLLBACK TRANSACTION"
   writeIORef txLog []
 
-createUserTable :: SQL.Database -> IORef [TxLog ByteString] -> TableName -> IO ()
-createUserTable db txLog tbl = do
+createUserTable :: PactSerialise b i -> SQL.Database -> IORef [TxLog ByteString] -> TableName -> IO ()
+createUserTable serial db txLog tbl = do
   SQL.exec db stmt
-  modifyIORef' txLog (TxLog "SYS:usertables" (_tableName tbl) mempty :)
+  let
+    rd = RowData $ Map.singleton (Field "utModule")
+         (PObject $ Map.fromList
+          [ (Field "namespace", maybe (PLiteral LUnit) (PString . _namespaceName) (_mnNamespace (_tableModuleName tbl)))
+          , (Field "name", PString (_tableName tbl))
+          ])
+    rdEnc = _encodeRowData serial rd
+  modifyIORef' txLog (TxLog "SYS:usertables" (_tableName tbl) rdEnc :)
   
   where
     stmt = "CREATE TABLE IF NOT EXISTS " <> tblName <> " \
@@ -197,9 +206,11 @@ write' serial db txId txLog wt domain k v =
           RowKey k' = k
         TxId i <- readIORef txId
         SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-        SQL.stepNoCB stmt >>= \case
-          SQL.Done -> modifyIORef' txLog (TxLog (_tableName tbl) k' encoded:)
-          SQL.Row -> fail "invariant viaolation"
+        Direct.stepNoCB stmt >>= \case
+          Left _ -> throwIO P.WriteException
+          Right res
+            | res == SQL.Done -> modifyIORef' txLog (TxLog (_tableName tbl) k' encoded:)
+            | otherwise -> fail "invariant viaolation"
 
       Just old -> do
         let
@@ -212,17 +223,21 @@ write' serial db txId txLog wt domain k v =
             RowKey k' = k
           TxId i <- readIORef txId
           SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-          SQL.stepNoCB stmt >>= \case
-            SQL.Done -> modifyIORef' txLog (TxLog (_tableName tbl) k' encoded:)
-            SQL.Row -> fail "invariant viaolation"
+          Direct.stepNoCB stmt >>= \case
+            Left _ -> throwIO P.WriteException
+            Right res
+              | res == SQL.Done -> modifyIORef' txLog (TxLog (_tableName tbl) k' encoded:)
+              | otherwise -> fail "invariant viaolation"
       
-    DKeySets -> withStmt db "INSERT OR REPLACE INTO \"SYS:kEYSETS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
+    DKeySets -> withStmt db "INSERT OR REPLACE INTO \"SYS:KEYSETS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let encoded = _encodeKeySet serial v
       TxId i <- readIORef txId
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderKeySetName k), SQL.SQLBlob encoded]
-      SQL.stepNoCB stmt >>= \case
-        SQL.Done -> modifyIORef' txLog (TxLog "SYS:KeySets" (renderKeySetName k) encoded:)
-        SQL.Row -> fail "invariant violation"
+      Direct.stepNoCB stmt >>= \case
+        Left _ -> throwIO P.WriteException
+        Right res
+          | res == SQL.Done -> modifyIORef' txLog (TxLog "SYS:KEYSETS" (renderKeySetName k) encoded:)
+          | otherwise -> fail "invariant violation"
         
     DModules -> withStmt db "INSERT OR REPLACE INTO \"SYS:MODULES\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let encoded = _encodeModuleData serial v
@@ -231,27 +246,27 @@ write' serial db txId txLog wt domain k v =
       Direct.stepNoCB stmt >>= \case
         Left _err -> throwIO P.WriteException
         Right res
-          | res == SQL.Done -> modifyIORef' txLog (TxLog "SYS:Modules" (renderModuleName k) encoded:)
+          | res == SQL.Done -> modifyIORef' txLog (TxLog "SYS:MODULES" (renderModuleName k) encoded:)
           | otherwise -> fail "invariant violation"
     DDefPacts -> withStmt db "INSERT OR REPLACE INTO \"SYS:PACTS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let
         encoded = _encodeDefPactExec serial v
         DefPactId k' = k
       TxId i <- readIORef txId
---      putStrLn (show wt <> " / " <> show k <> " / " <> show v)
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-      SQL.stepNoCB stmt >>= \case
-        SQL.Done -> modifyIORef' txLog (TxLog "SYS:DEFPACTS" k' encoded:)
-        SQL.Row -> fail "invariant violation"
+      Direct.stepNoCB stmt >>= \case
+        Left _ -> throwIO P.WriteException
+        Right res
+          | res == SQL.Done -> modifyIORef' txLog (TxLog "SYS:PACTS" k' encoded:)
+          | otherwise -> fail "invariant violation"
     DNamespaces -> withStmt db "INSERT OR REPLACE INTO \"SYS:NAMESPACES\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let
         encoded = _encodeNamespace serial v
         NamespaceName k' = k
       TxId i <- readIORef txId
---      putStrLn ("DNamespaces: " <> show i <> " / " <> show k')
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
       Direct.stepNoCB stmt >>= \case
-        Left _err -> undefined
+        Left _err -> throwIO P.WriteException
         Right res
           | res == SQL.Done -> modifyIORef' txLog (TxLog "SYS:NAMESPACES" k' encoded:)
           | otherwise -> fail "invariant viaolation"
@@ -261,11 +276,11 @@ write' serial db txId txLog wt domain k v =
       curr <- read' serial db (DUserTables tbl) rk
       case (curr, wt) of
         (Nothing, Insert) -> return Nothing
-        (Just _, Insert) -> throwIO P.WriteException -- error ("Insert: row found for key "<> show tbl <> " " <> show rk)
+        (Just _, Insert) -> throwIO (P.RowFoundException tbl rk)
         (Nothing, Write) -> return Nothing
         (Just old, Write) -> return $ Just old
         (Just old, Update) -> return $ Just old
-        (Nothing, Update) -> error "Update: no row found for key "
+        (Nothing, Update) -> throwIO (P.NoRowFound tbl rk)
       
 
 read' :: forall k v b i. PactSerialise b i -> SQL.Database -> Domain k v b i -> k -> IO (Maybe v)

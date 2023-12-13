@@ -22,4 +22,5 @@ main = do
     , LegacySerialiseTests.tests
     , ZkTests.tests
     , PoseidonTests.tests
+    , PersistenceTests.tests
     ]

@@ -56,10 +56,7 @@ import Data.ByteString (ByteString)
 
 import Data.Dynamic (Typeable)
 
--- | Modules as they are stored
--- in our backend.
--- That is: All module definitions, as well as their dependencies
--- Todo: bikeshed this name? This contains interface data
+-- | Modules as they are stored in our backend.
 data ModuleData b i
   = ModuleData (EvalModule b i) (Map FullyQualifiedName (EvalDef b i))
   | InterfaceData (EvalInterface b i) (Map FullyQualifiedName (EvalDef b i))
@@ -81,6 +78,7 @@ mdModuleHash f = \case
 
 type FQKS = KeySet FullyQualifiedName
 
+-- | Data reflecting Key/Value storage in user-tables.
 newtype RowData
   = RowData { _unRowData :: Map Field PactValue }
   deriving (Eq, Show)
@@ -88,15 +86,20 @@ newtype RowData
 -- -------------------------------------------------------------------------- --
 -- ExecutionMode
 
+-- | Semantics for running transactions.
 data ExecutionMode
   = Transactional
+    -- ^ `beginTx` and `commitTx` atomically apply actions to the database.
   | Local
+    -- ^ `beginTx` and `commitTx` have no effect to the database.
   deriving (Eq,Show)
 
+-- | Identifier for transactions
 newtype TxId = TxId { _txId :: Word64 }
     deriving (Eq,Ord, Show)
 
 -- | Transaction record.
+--
 data TxLog v
   = TxLog
   { _txDomain :: !Text
@@ -104,7 +107,6 @@ data TxLog v
   , _txValue :: !v
   }
   deriving (Eq,Show,Functor, Foldable, Traversable)
--- makeLenses ''TxLog
 
 -- -------------------------------------------------------------------------- --
 -- WriteType
@@ -193,6 +195,8 @@ writeNamespace pdb wt = _pdbWrite pdb wt DNamespaces
 
 data DbOpException
   = WriteException
+  | RowFoundException TableName RowKey
+  | NoRowFound TableName RowKey
   | NoSuchTable TableName
   | TableAlreadyExists TableName
   | TxAlreadyBegun TxId

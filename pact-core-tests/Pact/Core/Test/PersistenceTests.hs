@@ -11,7 +11,7 @@ import Test.Tasty.Hedgehog
 import Test.Tasty.HUnit (assertEqual, testCase)
 import qualified Hedgehog.Gen as Gen
 
-import Pact.Core.Names (Field(..), FullyQualifiedName, RowKey(..), TableName(..), ModuleName(..), NamespaceName(..))
+import Pact.Core.Names (Field(..), FullyQualifiedName, RowKey(..), TableName(..), ModuleName(..))
 import Pact.Core.Guards (KeySet(KeySet), KeySetName(..), PublicKeyText(..), KSPredicate(KeysAll))
 import Pact.Core.Gen.Serialise (keySetGen, keySetNameGen, moduleNameGen, moduleDataGen, builtinGen
                                ,defPactIdGen, defPactExecGen, namespaceNameGen, namespaceGen)
@@ -26,7 +26,6 @@ import Pact.Core.Persistence (WriteType(Insert), readKeySet, writeKeySet, writeM
                              , RowData(..)
                              , WriteType(Insert, Update, Write)
                              )
-import qualified Data.Text as T
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
 import Pact.Core.Environment
@@ -34,6 +33,8 @@ import Pact.Core.Persistence.MockPersistence
 import Data.Default
 import Data.IORef
 import Pact.Core.Builtin
+import Pact.Core.PactValue
+import Pact.Core.Literal
 
 
 testsWithSerial :: (Show b, Show i, Eq b, Eq i) => PactSerialise b i -> Gen b -> Gen i -> [TestTree]
@@ -49,39 +50,6 @@ tests = testGroup "Persistence"
   [ testGroup "CBOR encoding/decoding roundtrip" $ testsWithSerial serialisePact builtinGen (pure ())
   , sqliteRegression
   ]
-
-readExistingDb :: FilePath -> IO ()
-readExistingDb fp = withSqlitePactDb serialisePact (T.pack fp) $ \pdb -> do
-
-  txIds <- _pdbTxIds pdb (TableName "token-table" (ModuleName "yeettoken" (Just (NamespaceName "free")))) (TxId 0)
-  print txIds
-
-  -- keys <- _pdbKeys pdb DKeySets
-  -- forM_ keys $ \k -> do
-  --   print k
-  --   Just _ <- readKeySet pdb k
-  --   pure ()
-  
-  -- TODO: fails
-  -- keys' <- _pdbKeys pdb DNamespaces
-  -- forM_ keys' $ \k -> do
-  --   Just n <- readNamespace pdb k
-  --   print n
-  --   pure ()
- 
-  -- keys' <- _pdbKeys pdb DDefPacts
-  -- forM_ keys' $ \k -> do
-  --   print k
-  --   Just _n <- readDefPacts pdb k
-  --   pure ()
-
-  -- TODO: fails
-  -- keys <- _pdbKeys pdb DModules
-  -- forM_ keys $ \mn -> do
-  --   print mn
-  --   Just _ <- readModule pdb mn
-  --   pure ()
-
 
 keysetPersistRoundtrip :: PactSerialise b i -> Gen (KeySet FullyQualifiedName) -> Property
 keysetPersistRoundtrip serial keysetGen =
@@ -131,8 +99,14 @@ sqliteRegression =
     _pdbCreateUserTable pdb usert
 
     txs1 <- _pdbCommitTx pdb
-    -- TODO: https://github.com/kadena-io/chainweb-node/blob/28764eb2dae323608ee2d4f17e984948455f04a1/test/Chainweb/Test/Pact/Checkpointer.hs#L492C13-L497C17
-    assertEqual "output of commit" txs1 [ TxLog "SYS:usertables" "user1" mempty ]
+    let
+      rd = RowData $ Map.singleton (Field "utModule")
+        (PObject $ Map.fromList
+          [ (Field "namespace", PLiteral LUnit)
+          , (Field "name", PString user1)
+          ])
+      rdEnc = _encodeRowData serialiseRepl rd
+    assertEqual "output of commit" txs1 [ TxLog "SYS:usertables" "user1" rdEnc ]
 
 
     --  Begin tx
@@ -174,20 +148,20 @@ sqliteRegression =
 
     txs2 <- _pdbCommitTx pdb
     assertEqual "output of commit" txs2
-      [ TxLog "SYS:Modules" "test" mdEnc
-      , TxLog "SYS:KeySets" "ks1" ksEnc
+      [ TxLog "SYS:MODULES" "test" mdEnc
+      , TxLog "SYS:KEYSETS" "ks1" ksEnc
       , TxLog "user1" "key1" row2Enc
       , TxLog "user1" "key1" rowEnc
       ]
-
-  -- begin tx
+ 
+    -- begin tx
     _ <- _pdbBeginTx pdb Transactional
     tids <- _pdbTxIds pdb usert t1
     assertEqual "user txids" [TxId 1] tids
 
     txlog <- _pdbGetTxLog pdb usert (head tids)
     assertEqual "user txlog" txlog
-      [ TxLog "user1" "key1" (RowData $ Map.union (_unRowData row2) (_unRowData row))
+      [ TxLog "USER_someModule_user1" "key1" (RowData $ Map.union (_unRowData row2) (_unRowData row))
       ]
 
     _pdbWrite pdb Insert (DUserTables usert) (RowKey "key2") row
