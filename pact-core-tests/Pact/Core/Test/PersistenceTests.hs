@@ -3,20 +3,29 @@
 module Pact.Core.Test.PersistenceTests where
 
 import Control.Monad.IO.Class (liftIO)
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Hedgehog (Gen, Property, (===), forAll, property)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.Hedgehog
+import Test.Tasty.HUnit (assertEqual, testCase)
 import qualified Hedgehog.Gen as Gen
 
-import Pact.Core.Names (FullyQualifiedName, TableName(..), ModuleName(..), NamespaceName(..))
-import Pact.Core.Guards (KeySet)
+import Pact.Core.Names (Field(..), FullyQualifiedName, RowKey(..), TableName(..), ModuleName(..), NamespaceName(..))
+import Pact.Core.Guards (KeySet(KeySet), KeySetName(..), PublicKeyText(..), KSPredicate(KeysAll))
 import Pact.Core.Gen.Serialise (keySetGen, keySetNameGen, moduleNameGen, moduleDataGen, builtinGen
                                ,defPactIdGen, defPactExecGen, namespaceNameGen, namespaceGen)
 import Pact.Core.Serialise (PactSerialise, serialisePact)
+import qualified Pact.Core.PactValue as PactValue
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Persistence (WriteType(Insert), readKeySet, writeKeySet, writeModule, readModule
                              ,writeDefPacts, readDefPacts, readNamespace, writeNamespace
-                             , Domain(..), PactDb(_pdbKeys, _pdbTxIds), TxId(..))
+                             , Domain(..), PactDb(_pdbKeys, _pdbTxIds, _pdbCreateUserTable, _pdbRead, _pdbWrite, _pdbBeginTx, _pdbCommitTx), TxId(..)
+                             , ExecutionMode(Transactional)
+                             , TxLog(TxLog, _txDomain, _txKey, _txValue)
+                             , RowData(..)
+                             , WriteType(Insert, Update, Write)
+                             )
 import Data.Foldable (forM_)
 import qualified Data.Text as T
 
@@ -102,3 +111,38 @@ namespaceRoundtrip serial = property $ do
     () <- writeNamespace db Insert ns namespace
     readNamespace db ns
   Just namespace === writtenNamespace
+
+sqliteRegression :: TestTree
+sqliteRegression =
+  testCase "sqlite persistence backend produces expected values/txlogs" $
+  withSqlitePactDb serialisePact "tmp.sqlite" $ \pdb -> do
+    let
+      user1 = "user1"
+      usert = TableName user1 (ModuleName "someModule" Nothing)
+    txId1 <- _pdbBeginTx pdb Transactional
+    _pdbCreateUserTable pdb usert
+
+    txs1 <- _pdbCommitTx pdb
+    assertEqual "output of commit" txs1 [ TxLog "SYS:usertables" "user1" "TODO" ]
+
+    _ <- _pdbBeginTx pdb Transactional
+    let row = RowData $ Map.fromList [(Field "gah", PactValue.PDecimal 123.454345)]
+    _pdbWrite pdb Insert (DUserTables usert) (RowKey "key1") row
+    Just row' <- _pdbRead pdb (DUserTables usert) (RowKey "key1")
+    assertEqual "row should be identical to its saved/recalled value" row row'
+
+    let row2 = RowData $ Map.fromList
+                 [(Field "gah", PactValue.PBool False)
+                 ,(Field "fh", PactValue.PInteger 1)
+                 ]
+    _pdbWrite pdb Update (DUserTables usert) (RowKey "key1") row2
+    Just row2' <- _pdbRead pdb (DUserTables usert) (RowKey "key1")
+    assertEqual "user update should overwrite with new value" row2 row2'
+
+    let ks = KeySet (Set.fromList [PublicKeyText "skdjhfskj"]) KeysAll
+    _ <- _pdbWrite pdb Write DKeySets (KeySetName "ks1" Nothing) ks
+    Just ks' <- _pdbRead pdb DKeySets (KeySetName "ks1" Nothing)
+    assertEqual "keyset should be equal after storage/retrieval" ks ks'
+
+
+    return ()
