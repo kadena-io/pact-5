@@ -101,7 +101,7 @@ getTxLog serial db currTxId txLog tab txId = do
         SQL.Done -> pure acc
         SQL.Row -> do
           [SQL.SQLText key, SQL.SQLBlob value] <- SQL.columns stmt
-          collect stmt (TxLog (_tableName tab) key value:acc)
+          collect stmt (TxLog (toUserTable tab) key value:acc)
         
 readKeys :: forall k v b i. SQL.Database -> Domain k v b i -> IO [k]
 readKeys db = \case
