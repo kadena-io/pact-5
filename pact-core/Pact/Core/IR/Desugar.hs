@@ -28,7 +28,7 @@ module Pact.Core.IR.Desugar
  ) where
 
 import Control.Applicative((<|>))
-import Control.Monad ( when, forM, (>=>), unless, guard)
+import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Strict ( StateT(..), MonadState )
 import Control.Monad.Trans.Maybe(MaybeT(..), runMaybeT, hoistMaybe)

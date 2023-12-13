@@ -287,17 +287,9 @@ data EvalResult b i m
   deriving Show
 
 
--- data EvalTEnv b i
---   = EvalTEnv
---   { _emRuntimeEnv :: EvalEnv b i
---   , _emGas :: IORef Gas
---   , _emGasLog :: IORef (Maybe [(Text, Gas)])
---   }
-
 -- Todo: are we going to inject state as the reader monad here?
 newtype EvalM b i a =
   EvalT (ReaderT (EvalEnv b i) (ExceptT (PactError i) (StateT (EvalState b i) IO)) a)
-  -- EvalT (ReaderT (EvalEnv b i) (StateT (EvalState b i) (ExceptT (PactError i) IO)) a)
   deriving
     ( Functor, Applicative, Monad
     , MonadIO
@@ -452,16 +444,11 @@ instance (Show i, Show b, Pretty b) => Pretty (CEKValue b i m) where
       P.angles "closure#"
 
 makeLenses ''CEKEnv
--- makeLenses ''EvalEnv
 
 instance MonadGas (EvalM b i) where
   logGas _msg _g = pure ()
-    -- r <- EvalT $ view emGasLog
-    -- liftIO $ modifyIORef' r (fmap ((msg, g):))
 
   chargeGas _g = pure ()
-    -- r <- EvalT $ view emGas
-    -- liftIO (modifyIORef' r (<> g))
 
 instance MonadEvalEnv b i (EvalM b i) where
   readEnv = EvalT ask
