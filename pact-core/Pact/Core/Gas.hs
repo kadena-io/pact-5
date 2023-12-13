@@ -24,6 +24,7 @@ module Pact.Core.Gas
  ) where
 
 import Control.Lens
+import Data.Decimal(Decimal)
 import Data.Word(Word64)
 import Data.Monoid(Sum(..))
 import Data.Text(Text)
@@ -39,7 +40,7 @@ newtype Gas
   deriving (Semiring, Enum) via Word64
 
 type GasLimit = Gas
-type GasPrice = Rational
+type GasPrice = Decimal
 
 data NodeType
   = VarNode

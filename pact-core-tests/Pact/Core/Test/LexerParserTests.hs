@@ -7,8 +7,6 @@ import Control.Applicative ((<|>))
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import qualified Data.Text as T
-import Data.Text.Encoding (encodeUtf8)
-import qualified Data.ByteString.Char8 as BS
 import Data.Decimal(DecimalRaw(..))
 
 import Pact.Core.Names
@@ -20,14 +18,14 @@ import Pact.Core.Syntax.LexUtils (Token(..))
 import Pact.Core.Literal
 import Pact.Core.Pretty
 
-showPretty :: Pretty a => a -> BS.ByteString
-showPretty = BS.pack . show . pretty
+showPretty :: Pretty a => a -> T.Text
+showPretty = T.pack . show . pretty
 
-tokenToSrc :: Token -> BS.ByteString
+tokenToSrc :: Token -> T.Text
 tokenToSrc = \case
   TokenString s -> "\"" <> showPretty s <> "\""
-  TokenIdent n  -> encodeUtf8 n
-  TokenNumber n -> encodeUtf8 n
+  TokenIdent n  -> n
+  TokenNumber n -> n
   tok           -> showPretty tok
 
 identGen :: Gen T.Text
@@ -43,6 +41,8 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
     number = do
       n <- Gen.int $ Range.linear (-1000) 1000
       pure . TokenNumber $ T.pack $ show n
+    -- Todo: maybe we separate into keyword + ident
+    -- and num and turn this into an enum bounded call
     unary = Gen.constant
       <$> [ TokenLet
           , TokenIf
@@ -50,8 +50,6 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
           , TokenTry
           , TokenError
           , TokenModule
-          , TokenKeyGov
-          , TokenCapGov
           , TokenInterface
           , TokenImport
           , TokenDefun
@@ -86,7 +84,7 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
 lexerRoundtrip :: Property
 lexerRoundtrip = property $ do
   toks <- forAll $ Gen.list (Range.constant 0 10) tokenGen
-  ptoks <- evalEither $ Lisp.lexer (BS.unlines (tokenToSrc <$> toks))
+  ptoks <- evalEither $ Lisp.lexer (T.unlines (tokenToSrc <$> toks))
   toks === (Lisp._ptToken <$> ptoks)
 
 
@@ -95,8 +93,8 @@ type ParserGen = Gen (Lisp.Expr ())
 toUnitExpr :: Lisp.ParsedExpr -> Lisp.Expr ()
 toUnitExpr = fmap $ const ()
 
-parsedExprToSrc :: Lisp.Expr () -> BS.ByteString
-parsedExprToSrc = BS.pack . show . pretty
+parsedExprToSrc :: Lisp.Expr () -> T.Text
+parsedExprToSrc = T.pack . show . pretty
 
 varGen :: ParserGen
 varGen = (`Lisp.Var` ()) <$> parsedNameGen
@@ -181,7 +179,7 @@ exprGen = Gen.recursive Gen.choice
       (Gen.constant . Lisp.TyPrim <$> [minBound ..])
       [Lisp.TyList <$> typeGen
       ,pure Lisp.TyPolyList
-      ,Lisp.TyModRef <$> moduleNameGen
+      ,Lisp.TyModRef <$> Gen.list (Range.constant 1 5) moduleNameGen
       ,pure Lisp.TyGuard
       ,pure Lisp.TyKeyset
       ,Lisp.TyObject <$> parsedTyNameGen

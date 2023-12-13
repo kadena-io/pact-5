@@ -356,7 +356,7 @@ makeLenses ''FullyQualifiedName
 --   in the case of nested defpacts, the hash of the
 --   parent + the nested continuation
 newtype DefPactId
-  = DefPactId Text
+  = DefPactId { _defpactId :: Text }
   deriving (Eq,Ord,Show)
 
 instance Pretty DefPactId where

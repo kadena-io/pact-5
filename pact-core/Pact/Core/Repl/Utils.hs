@@ -51,7 +51,6 @@ import Data.Set(Set)
 import Data.Text(Text)
 import Data.List(isPrefixOf)
 import Data.Maybe(mapMaybe)
-import Data.ByteString(ByteString)
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
@@ -76,7 +75,7 @@ import System.Console.Haskeline.Completion
 data SourceCode
   = SourceCode
   { _scFileName :: String
-  , _scPayload :: ByteString }
+  , _scPayload :: Text }
   deriving Show
 
 data ReplDebugFlag

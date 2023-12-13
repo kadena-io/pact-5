@@ -17,10 +17,10 @@ import Control.Lens
 import Control.Monad.Except
 import Control.Monad
 import Data.Maybe(mapMaybe)
-import Data.ByteString(ByteString)
+import Data.Text(Text)
 import qualified Data.Map.Strict as M
-import qualified Data.ByteString as B
 import qualified Data.Set as S
+import qualified Data.Text.IO as T
 
 import Pact.Core.Debug
 import Pact.Core.Builtin
@@ -54,13 +54,13 @@ type HasCompileEnv b i  m
     , PhaseDebug b i m)
 
 _parseOnly
-  :: ByteString -> Either PactErrorI [Lisp.TopLevel SpanInfo]
+  :: Text -> Either PactErrorI [Lisp.TopLevel SpanInfo]
 _parseOnly source = do
   lexed <- liftEither (Lisp.lexer source)
   liftEither (Lisp.parseProgram lexed)
 
 _parseOnlyFile :: FilePath -> IO (Either PactErrorI [Lisp.TopLevel SpanInfo])
-_parseOnlyFile fp = _parseOnly <$> B.readFile fp
+_parseOnlyFile fp = _parseOnly <$> T.readFile fp
 
 data CompileValue b
   = LoadedModule ModuleName ModuleHash

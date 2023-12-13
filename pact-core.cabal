@@ -17,6 +17,14 @@ copyright:           Copyright (C) 2022 Kadena
 category:            Language
 build-type:          Simple
 
+extra-source-files:
+    cbits/musl/libm.h
+    cbits/musl/endian.h
+    cbits/musl/exp_data.h
+    cbits/musl/log_data.h
+    cbits/musl/pow_data.h
+    cbits/musl/sqrt_data.h
+
 common pact-core-common
   build-depends:
     , Decimal
@@ -63,6 +71,9 @@ common pact-core-common
     , serialise
     , cborg
     , unordered-containers
+    , groups
+    , poly
+    , mod
 
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
@@ -79,12 +90,41 @@ common pact-core-common
     NumericUnderscores
     TypeOperators
 
+-- internal crypto lirbary
+library pact-core-crypto
+  import: pact-core-common
+  hs-source-dirs: crypto
+
+  exposed-modules:
+    Pact.Core.Crypto.Hash.Poseidon
+    Pact.Core.Crypto.Pairing
+    Pact.Core.Crypto.Pairing.Fields
+
 library
   import: pact-core-common
   hs-source-dirs: pact-core
+
+  build-depends:
+    pact-core:pact-core-crypto
+
   build-tool-depends:
     , alex:alex
     , happy:happy
+
+  c-sources:
+    cbits/musl/__math_invalid.c
+    cbits/musl/__math_divzero.c
+    cbits/musl/__math_oflow.c
+    cbits/musl/__math_uflow.c
+    cbits/musl/__math_xflow.c
+    cbits/musl/exp.c
+    cbits/musl/exp_data.c
+    cbits/musl/log.c
+    cbits/musl/log_data.c
+    cbits/musl/pow.c
+    cbits/musl/pow_data.c
+    cbits/musl/sqrt.c
+    cbits/musl/sqrt_data.c
 
   exposed-modules:
     Pact.Core.Compile
@@ -136,6 +176,8 @@ library
     Pact.Core.IR.ModuleHashing
     Pact.Core.IR.ConstEval
 
+    Pact.Core.Trans.TOps
+
     -- Repl
     Pact.Core.Repl.Utils
     Pact.Core.Repl.Runtime.ReplBuiltin
@@ -145,6 +187,10 @@ library
     Pact.Core.Serialise
     Pact.Core.Serialise.LegacyPact
     Pact.Core.Serialise.CBOR_V1
+
+    -- Crypto
+
+
 
 library typed-core
   import: pact-core-common
@@ -255,7 +301,10 @@ test-suite core-tests
     , tasty-hedgehog
     , serialise
     , cborg
-  
+    , groups
+    , semirings
+    , pact-core:pact-core-crypto
+
   other-modules:
     , Pact.Core.Test.ReplTests
     , Pact.Core.Test.LexerParserTests
@@ -264,3 +313,5 @@ test-suite core-tests
     , Pact.Core.Test.SerialiseTests
     , Pact.Core.Test.LegacySerialiseTests
     , Pact.Core.Gen.Serialise
+    , Pact.Core.Test.ZkTests
+    , Pact.Core.Test.PoseidonTests

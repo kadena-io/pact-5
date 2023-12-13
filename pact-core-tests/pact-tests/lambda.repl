@@ -75,24 +75,23 @@
   (fold (lambda (x y) (+ x y)) 0 [1, 2, 3])
   )
 
-;  (expect "inline lambdas function within natives: compose"
-;    2
-;    (let
-;      ((compose (lambda (f g a) (f (g a)))))
-;      (compose (lambda (x) (+ x 1)) (lambda (x) (+ x 1)) 0))
-;  )
+(expect "inline lambdas function within natives: compose"
+  2
+  (compose (lambda (x) (+ x 1)) (lambda (x) (+ x 1)) 0)
+)
 
-;  (expect "inline lambdas function within natives: and?"
-;    true
-;    (and? (lambda (x) (< x 20)) (lambda (x) (<= x 15)) 15)
-;  )
+(expect "inline lambdas function within natives: and?"
+  true
+  (and? (lambda (x) (< x 20)) (lambda (x) (<= x 15)) 15)
+)
 
-;  (expect "inline lambdas function within natives: or?"
-;    true
-;    (or? (lambda (x) (> x 20)) (lambda (x) (<= x 15)) 15)
-;  )
+(expect "inline lambdas function within natives: or?"
+  true
+  (or? (lambda (x) (> x 20)) (lambda (x) (<= x 15)) 15)
+)
 
-;  (expect "inline lambdas function within natives: not?"
-;    false
-;    (not? (lambda (x) (> x 20)) 22)
-;  )
+(expect "inline lambdas function within natives: not?"
+  false
+  (not? (lambda (x) (> x 20)) 22)
+)
+

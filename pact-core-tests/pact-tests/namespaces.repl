@@ -75,6 +75,8 @@
 (commit-tx)
 (begin-tx)
 
+(env-exec-config ['RequireKeysetNs])
+
 (env-data
   { "carl-keys" : ["carl"]
   , "carl.carl-keys": ["carl"]
@@ -126,8 +128,7 @@
   (defconst TBOOL true)
 )
 
-; Todo: namespaced keysets here
-;  (env-exec-config ['DisablePact44])
+(env-exec-config [])
 (env-data { "test-keys" : ["test"] })
 (define-keyset 'test-keys)
 (env-keys ["test"])
@@ -179,7 +180,7 @@
   )
 
 (begin-tx)
-; Todo: namespaced keysets here
+(env-exec-config [])
 (env-data { 'user: ["user"], 'admin: ["admin"] })
 (define-namespace 'ns-user-behavior (read-keyset 'user) (read-keyset 'admin))
 (namespace 'ns-user-behavior)
@@ -198,7 +199,7 @@
 (begin-tx)
 (env-data { 'user: ["user"], 'admin: ["admin"] })
 (env-keys [])
-(env-exec-config [])
+(env-exec-config ['RequireKeysetNs])
 (expect-failure
  "ensure user keyset does not pass"
  (enforce-keyset (read-keyset 'user)))
@@ -277,7 +278,7 @@
 
 (begin-tx)
 
-(env-exec-config [])
+(env-exec-config ['RequireKeysetNs])
 
 (expect
   "Setting namespace back to root namespace post-Pact 4.7 fork succeeds"

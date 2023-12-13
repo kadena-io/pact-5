@@ -8,6 +8,8 @@ import qualified Pact.Core.Test.LexerTests as LexerTests
 import qualified Pact.Core.Test.PersistenceTests as PersistenceTests
 import qualified Pact.Core.Test.SerialiseTests as SerialiseTests
 import qualified Pact.Core.Test.LegacySerialiseTests as LegacySerialiseTests
+import qualified Pact.Core.Test.ZkTests as ZkTests
+import qualified Pact.Core.Test.PoseidonTests as PoseidonTests
 
 main :: IO ()
 main = do
@@ -16,7 +18,8 @@ main = do
     [ replTests
     , LexerTests.tests
     , LexerParserTests.tests
-    , PersistenceTests.tests
     , SerialiseTests.tests
     , LegacySerialiseTests.tests
+    , ZkTests.tests
+    , PoseidonTests.tests
     ]

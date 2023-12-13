@@ -8,14 +8,13 @@ import Test.Tasty.HUnit
 import Control.Monad(when)
 import Data.IORef
 import Data.Default
-import Data.ByteString(ByteString)
+import Data.Text(Text)
 import Data.Foldable(traverse_)
-import Data.Text.Encoding(decodeUtf8)
 import System.Directory
 import System.FilePath
 
 import qualified Data.Text as T
-import qualified Data.ByteString as B
+import qualified Data.Text.IO as T
 
 import Pact.Core.Gas
 import Pact.Core.Literal
@@ -39,7 +38,6 @@ import Pact.Core.Serialise.CBOR_V1 (encodeModuleData_TESTING, decodeModuleData_T
 tests :: IO TestTree
 tests = do
   files <- replTestFiles
-  pure $ testGroup "Repl Tests"
     [ testGroup "in-memory db" (runFileReplTest <$> files)
     , testGroup "sqlite db" (runFileReplTestSqlite <$> files)
     ]
@@ -84,15 +82,14 @@ runReplTest pdb file src = do
   stateRef <- newIORef rstate
   runReplT stateRef (interpretReplProgram source (const (pure ()))) >>= \case
     Left e -> let
-      rendered = replError (ReplSource (T.pack file) (decodeUtf8 src)) e
+      rendered = replError (ReplSource (T.pack file) src) e
       in assertFailure (T.unpack rendered)
     Right output -> traverse_ ensurePassing output
   where
   ensurePassing = \case
     RCompileValue (InterpretValue (IPV v i)) -> case v of
       PLiteral (LString msg) -> do
-        let render = replError (ReplSource (T.pack file) (decodeUtf8 src)) (PEExecutionError (EvalError msg) i)
+        let render = replError (ReplSource (T.pack file) src) (PEExecutionError (EvalError msg) i)
         when (T.isPrefixOf "FAILURE:" msg) $ assertFailure (T.unpack render)
       _ -> pure ()
     _ -> pure ()
-
