@@ -44,17 +44,6 @@ data DefCapMeta name
   | Unmanaged
   deriving (Show, Functor, Foldable, Traversable)
 
--- data DefManagedMeta name
---   = DefManagedMeta Int (FQNameRef name)
---   | AutoManagedMeta
---   deriving (Show)
-
--- data DefCapMeta name
---   = DefEvent
---   | DefManaged (DefManagedMeta name)
---   | Unmanaged
---   deriving (Show)
-
 dcMetaFqName :: Traversal' (DefCapMeta (FQNameRef Name)) FullyQualifiedName
 dcMetaFqName f = \case
   DefManaged (DefManagedMeta i (FQName fqn)) ->
