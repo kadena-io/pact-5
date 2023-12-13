@@ -19,9 +19,8 @@ import Control.Monad
 import Data.Maybe(mapMaybe)
 import Data.Text(Text)
 import qualified Data.Map.Strict as M
-import qualified Data.Text.IO as T
-import qualified Data.ByteString as B
 import qualified Data.Set as S
+import qualified Data.Text.IO as T
 
 import Pact.Core.Debug
 import Pact.Core.Builtin

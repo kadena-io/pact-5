@@ -30,7 +30,7 @@ import Pact.Core.Errors
 tests :: IO TestTree
 tests = do
   files <- replTestFiles
-  pure $ testGroup "Core repl tests" (runFileReplTest <$> files)
+  pure $ testGroup "CoreReplTests" (runFileReplTest <$> files)
 
 
 replTestDir :: [Char]
@@ -74,4 +74,3 @@ runReplTest file src = do
         when (T.isPrefixOf "FAILURE:" msg) $ assertFailure (T.unpack render)
       _ -> pure ()
     _ -> pure ()
-

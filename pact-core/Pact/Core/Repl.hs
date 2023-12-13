@@ -102,8 +102,8 @@ main = do
             case eout of
               Right _ -> pure ()
               Left err -> do
-                SourceCode srcFile currSrc <- lift (use replCurrSource)
-                let rs = ReplSource (T.pack srcFile) currSrc
+                SourceCode srcFile currSrcText <- lift (use replCurrSource)
+                let rs = ReplSource (T.pack srcFile) currSrcText
                 lift (replCurrSource .= defaultSrc)
                 outputStrLn (T.unpack (replError rs err))
             loop

@@ -50,8 +50,6 @@ data LexerError
 
 instance Exception LexerError
 
-
-
 instance Pretty LexerError where
   pretty = ("Lexical Error: " <>) . \case
     LexicalError c1 c2 ->
@@ -151,6 +149,7 @@ data DesugarError
   | InvalidDefInSchemaPosition Text
   | InvalidDynamicInvoke Text
   | DuplicateDefinition Text
+  | InvalidBlessedHash Text
   deriving Show
 
 instance Exception DesugarError
@@ -335,6 +334,7 @@ data EvalError
   | DefineNamespaceError Text
   -- ^ Non-recoverable guard enforces.
   | ConstIsNotAPactValue QualifiedName
+  | PointNotOnCurve
   deriving Show
 
 
@@ -441,23 +441,6 @@ instance Pretty EvalError where
       , "DefPactExec step: " <> pretty (_peStep pe + 1)
       ]
     e -> pretty (show e)
-    -- CannotUpgradeInterface _ -> error ""
-    -- ModuleGovernanceFailure _ -> error ""
-    -- DbOpFailure _ -> error ""
-    -- DynNameIsNotModRef _ -> error ""
-    -- ModuleDoesNotExist _ -> error ""
-    -- ExpectedModule _ -> error ""
-    -- HashNotBlessed _ _ -> error ""
-    -- CannotApplyPartialClosure -> error ""
-    -- ClosureAppliedToTooManyArgs -> error ""
-    -- FormIllegalWithinDefcap _ -> error ""
-    -- RunTimeTypecheckFailure _ _ -> error ""
-    -- NativeIsTopLevelOnly _ -> error ""
-    -- EventDoesNotMatchModule _ -> error ""
-    -- InvalidEventCap _ -> error ""
-    -- NestedDefpactsNotAdvanced _ -> error ""
-    -- ExpectedPactValue -> error ""
-    -- NotInDefPactExecution -> error ""
 
 instance Exception EvalError
 

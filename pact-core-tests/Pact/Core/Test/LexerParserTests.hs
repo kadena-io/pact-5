@@ -7,8 +7,6 @@ import Control.Applicative ((<|>))
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import qualified Data.Text as T
-import Data.Text.Encoding (encodeUtf8)
-import qualified Data.ByteString.Char8 as BS
 import Data.Decimal(DecimalRaw(..))
 
 import Pact.Core.Names
@@ -43,6 +41,8 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
     number = do
       n <- Gen.int $ Range.linear (-1000) 1000
       pure . TokenNumber $ T.pack $ show n
+    -- Todo: maybe we separate into keyword + ident
+    -- and num and turn this into an enum bounded call
     unary = Gen.constant
       <$> [ TokenLet
           , TokenIf
@@ -50,8 +50,6 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
           , TokenTry
           , TokenError
           , TokenModule
-          , TokenKeyGov
-          , TokenCapGov
           , TokenInterface
           , TokenImport
           , TokenDefun
@@ -181,7 +179,7 @@ exprGen = Gen.recursive Gen.choice
       (Gen.constant . Lisp.TyPrim <$> [minBound ..])
       [Lisp.TyList <$> typeGen
       ,pure Lisp.TyPolyList
-      ,Lisp.TyModRef <$> moduleNameGen
+      ,Lisp.TyModRef <$> Gen.list (Range.constant 1 5) moduleNameGen
       ,pure Lisp.TyGuard
       ,pure Lisp.TyKeyset
       ,Lisp.TyObject <$> parsedTyNameGen

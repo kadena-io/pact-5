@@ -52,8 +52,6 @@ data Token
   | TokenTry
   | TokenError
   | TokenModule
-  | TokenKeyGov
-  | TokenCapGov
   | TokenInterface
   | TokenImport
   | TokenStep
@@ -120,6 +118,7 @@ data Token
   | TokenSuspend
   | TokenDynAcc
   | TokenBindAssign
+  | TokenInvariant
   -- Repl-specific tokens
   | TokenLoad
   -- Layout
@@ -285,8 +284,6 @@ renderTokenText = \case
   TokenTry -> "try"
   TokenError -> "error"
   TokenModule -> "module"
-  TokenKeyGov -> "keyGov"
-  TokenCapGov -> "capGov"
   TokenInterface -> "interface"
   TokenImport -> "use"
   TokenStep -> "step"
@@ -316,6 +313,7 @@ renderTokenText = \case
   TokenBindAssign -> ":="
   TokenDynAcc -> "::"
   TokenProperty -> "property"
+  TokenInvariant -> "invariant"
   -- TokenEq -> "="
   -- TokenNeq -> "!="
   -- TokenGT -> ">"

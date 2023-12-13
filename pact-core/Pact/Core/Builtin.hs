@@ -75,8 +75,6 @@ data RawBuiltin
   | RawAbs
   | RawPow
   -- Boolean Ops
-  -- | RawAnd
-  -- | RawOr
   | RawNot
   -- Equality and Comparisons
   | RawEq
@@ -96,6 +94,9 @@ data RawBuiltin
   | RawRound
   | RawCeiling
   | RawFloor
+  | RawRoundPrec
+  | RawCeilingPrec
+  | RawFloorPrec
   -- Fractional
   | RawExp
   | RawLn
@@ -143,6 +144,7 @@ data RawBuiltin
   | RawB64Decode
   | RawStrToList
   | RawYield
+  | RawYieldToChain
   | RawResume
   | RawBind
   | RawRequireCapability
@@ -199,6 +201,18 @@ data RawBuiltin
   | RawNamespace
   | RawDefineNamespace
   | RawDescribeNamespace
+  | RawChainData
+  | RawIsCharset
+  | RawPactId
+  -- ZK
+  | RawZkPairingCheck
+  | RawZKScalarMult
+  | RawZkPointAdd
+  -- Poseidon Hackachain
+  | RawPoseidonHashHackachain
+  -- Misc
+  | RawTypeOf
+  | RawDec
   deriving (Eq, Show, Ord, Bounded, Enum)
 
 instance HasObjectOps RawBuiltin where
@@ -236,6 +250,9 @@ rawBuiltinToText = \case
   RawRound -> "round"
   RawCeiling -> "ceiling"
   RawFloor -> "floor"
+  RawRoundPrec -> "round-prec"
+  RawCeilingPrec -> "ceiling-prec"
+  RawFloorPrec -> "floor-prec"
   -- Fractional
   RawExp -> "exp"
   RawLn -> "ln"
@@ -284,6 +301,7 @@ rawBuiltinToText = \case
   RawB64Decode -> "base64-decode"
   RawStrToList -> "str-to-list"
   RawYield -> "yield"
+  RawYieldToChain -> "yield-to-chain"
   RawResume -> "resume"
   RawBind -> "bind"
   RawRequireCapability -> "require-capability"
@@ -332,6 +350,15 @@ rawBuiltinToText = \case
   RawNamespace -> "namespace"
   RawDefineNamespace -> "define-namespace"
   RawDescribeNamespace -> "describe-namespace"
+  RawZkPairingCheck -> "pairing-check"
+  RawZKScalarMult -> "scalar-mult"
+  RawZkPointAdd -> "point-add"
+  RawPoseidonHashHackachain -> "poseidon-hash-hack-a-chain"
+  RawChainData -> "chain-data"
+  RawIsCharset -> "is-charset"
+  RawPactId -> "pact-id"
+  RawTypeOf -> "typeof"
+  RawDec -> "dec"
 
 instance IsBuiltin RawBuiltin where
   builtinName = NativeName . rawBuiltinToText
@@ -366,6 +393,9 @@ instance IsBuiltin RawBuiltin where
     RawRound -> 1
     RawCeiling -> 1
     RawFloor -> 1
+    RawRoundPrec -> 2
+    RawCeilingPrec -> 2
+    RawFloorPrec -> 2
     -- Fractional ->
     RawExp -> 1
     RawLn -> 1
@@ -418,6 +448,7 @@ instance IsBuiltin RawBuiltin where
     RawB64Decode -> 1
     RawStrToList -> 1
     RawYield -> 1
+    RawYieldToChain -> 2
     RawResume -> 1
     RawBind -> 2
     RawRequireCapability -> 1
@@ -466,6 +497,15 @@ instance IsBuiltin RawBuiltin where
     RawNamespace -> 1
     RawDefineNamespace -> 3
     RawDescribeNamespace -> 1
+    RawZkPairingCheck -> 2
+    RawZKScalarMult -> 3
+    RawZkPointAdd -> 3
+    RawPoseidonHashHackachain -> 1
+    RawChainData -> 0
+    RawIsCharset -> 2
+    RawPactId -> 0
+    RawTypeOf -> 1
+    RawDec -> 1
 
 
 
@@ -509,6 +549,7 @@ data ReplBuiltins
   | RContinuePact
   | RContinuePactRollback
   | RContinuePactRollbackYield
+  | RContinuePactRollbackYieldObj
   | RPactState
   | RResetPactState
   deriving (Show, Enum, Bounded, Eq)
@@ -535,11 +576,12 @@ instance IsBuiltin ReplBuiltins where
     RBeginNamedTx -> 1
     RCommitTx -> 0
     RRollbackTx -> 0
-    RSigKeyset -> 1
+    RSigKeyset -> 0
     RTestCapability -> 1
     RContinuePact -> 1
     RContinuePactRollback -> 2
     RContinuePactRollbackYield -> 3
+    RContinuePactRollbackYieldObj -> 4
     REnvExecConfig -> 1
     REnvNamespacePolicy -> 2
     -- RLoad -> 1
@@ -608,6 +650,7 @@ replBuiltinsToText = \case
   RContinuePact -> "continue-pact"
   RContinuePactRollback -> "continue-pact-with-rollback"
   RContinuePactRollbackYield -> "continue-pact-rollback-yield"
+  RContinuePactRollbackYieldObj -> "continue-pact-rollback-yield-object"
   REnvExecConfig -> "env-exec-config"
   REnvNamespacePolicy -> "env-namespace-policy"
 

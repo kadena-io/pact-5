@@ -26,7 +26,6 @@ import Pact.Core.Literal
 import Pact.Core.Builtin
 import Pact.Core.Type(PrimType(..))
 import Pact.Core.Guards
-import Pact.Core.Imports
 import Pact.Core.Errors
 import Pact.Core.Syntax.ParseTree
 import Pact.Core.Syntax.LexUtils
@@ -52,8 +51,6 @@ import Pact.Core.Syntax.LexUtils
   module     { PosToken TokenModule _ }
   interface  { PosToken TokenInterface _ }
   import     { PosToken TokenImport _ }
-  keygov     { PosToken TokenKeyGov _ }
-  capgov     { PosToken TokenCapGov _ }
   defun      { PosToken TokenDefun _ }
   defcap     { PosToken TokenDefCap _ }
   defconst   { PosToken TokenDefConst _ }
@@ -62,6 +59,7 @@ import Pact.Core.Syntax.LexUtils
   defpact    { PosToken TokenDefPact _ }
   defprop    { PosToken TokenDefProperty _}
   property   { PosToken TokenProperty _ }
+  invariant  { PosToken TokenInvariant _ }
   bless      { PosToken TokenBless _}
   implements { PosToken TokenImplements _ }
   true       { PosToken TokenTrue _ }
@@ -174,6 +172,7 @@ DefProperties :: { [FVModel SpanInfo] }
 DefProperty :: { FVModel SpanInfo }
   : '(' defprop IDENT DPropArgList ')' { FVDefProperty (DefProperty (getIdent $3) (fst $4) (snd $4)) }
   | '(' property Expr ')' { FVProperty (Property $3) }
+  | '(' invariant Expr ')' { FVInvariant (Invariant $3) }
 
 -- This rule seems gnarly, but essentially
 -- happy needs to resolve whether the arglist is present or not
@@ -192,6 +191,7 @@ Ext :: { ExtDecl }
 
 Use :: { (Import, SpanInfo) }
   : '(' import ModQual ImportList ')' {  (Import (mkModName $3) Nothing $4, combineSpan (_ptInfo $1) (_ptInfo $5))  }
+  | '(' import ModQual STR ImportList ')' {  (Import (mkModName $3) (Just (getStr $4)) $5, combineSpan (_ptInfo $1) (_ptInfo $6))  }
 
 
 Defs :: { [ParsedDef] }
@@ -255,7 +255,7 @@ Defun :: { SpanInfo -> ParsedDefun }
     { Defun (getIdent $2) (reverse $5) $3 $8 (fst $7) (snd $7) }
 
 Defschema :: { SpanInfo -> DefSchema SpanInfo }
-  : defschema IDENT MDocOrModel NEArgList
+  : defschema IDENT MDocOrModel ArgList
     { DefSchema (getIdent $2) (reverse $4) (fst $3) (snd $3) }
 
 Deftable :: { SpanInfo -> DefTable SpanInfo }
@@ -310,9 +310,13 @@ ArgList :: { [Arg] }
 
 Type :: { Type }
   : '[' Type ']' { TyList $2 }
-  | module '{' ModQual '}' { TyModRef (mkModName $3) }
+  | module '{' ModuleNames '}' { TyModRef (reverse $3) }
   | IDENT '{' ParsedTyName '}' {% objType (_ptInfo $1) (getIdent $1) $3}
   | IDENT {% primType (_ptInfo $1) (getIdent $1) }
+
+ModuleNames :: { [ModuleName] }
+  : ModuleNames ',' ModQual { (mkModName $3) : $1 }
+  | ModQual { [mkModName $1] }
 
 -- Annotations
 DocAnn :: { Text }
@@ -321,18 +325,19 @@ DocAnn :: { Text }
 DocStr :: { Text }
   : STR { getStr $1 }
 
-ModelExprs :: { [ParsedExpr] }
-  : ModelExprs Expr { $2:$1 }
+ModelExprs :: { [FVFunModel SpanInfo] }
+  : ModelExprs '(' property Expr ')' { FVFunProperty (Property $4) :$1 }
+  | ModelExprs '(' invariant Expr ')' { FVFunInvariant (Invariant $4) :$1 }
   | {- empty -} { [] }
 
-MModel :: { Maybe [Expr SpanInfo] }
+MModel :: { Maybe [FVFunModel SpanInfo] }
   : ModelAnn { Just $1 }
   | {- empty -}  { Nothing }
 
-ModelAnn :: { [Expr SpanInfo] }
+ModelAnn :: { [FVFunModel SpanInfo] }
   : modelAnn '[' ModelExprs ']' { reverse $3 }
 
-MDocOrModel :: { (Maybe Text, Maybe [Expr SpanInfo])}
+MDocOrModel :: { (Maybe Text, Maybe [FVFunModel SpanInfo])}
   : DocAnn ModelAnn { (Just $1, Just $2)}
   | ModelAnn DocAnn { (Just $2, Just $1) }
   | DocAnn { (Just $1, Nothing)}
@@ -413,10 +418,6 @@ CapExpr :: { SpanInfo -> ParsedExpr }
 CapForm :: { CapForm SpanInfo }
   : withcap '(' ParsedName AppList ')' Block { WithCapability $3 (reverse $4) $6 }
   | c_usr_grd '(' ParsedName AppList ')' { CreateUserGuard $3 (reverse $4)}
-  -- | installcap '(' ParsedName AppList ')' { InstallCapability $3 $4 }
-  -- | reqcap '(' ParsedName AppList ')' { RequireCapability $3 $4 }
-  -- | composecap '(' ParsedName AppList ')' { ComposeCapability $3 $4 }
-  -- | emitevent '(' ParsedName AppList ')' { EmitEvent $3 $4 }
 
 LamArgs :: { [MArg] }
   : LamArgs IDENT ':' Type { (MArg (getIdent $2) (Just $4)):$1 }
@@ -582,3 +583,4 @@ mkBarename tx = BareName tx
 
 
 }
+

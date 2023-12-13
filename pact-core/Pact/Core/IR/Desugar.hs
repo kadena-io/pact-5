@@ -166,16 +166,50 @@ desugarAppArityRaw
   -> RawBuiltin
   -> [Term name Lisp.Type builtin info]
   -> Term name Lisp.Type builtin info
+-- Todo: this presents a really, _really_ annoying case for the map overload :(
+-- Jose: I am unsure how to fix this so far, but it does not break any tests.
+-- that is:
+-- prod:
+--   pact> (map (- 1) [1, 2, 3])
+--   [0 -1 -2]
+-- core:
+--   pact>(map (- 1) [1 2 3])
+--   (interactive):1:0: Native evaluation error for native map, received incorrect argument(s) of type(s) [integer] , [list]
+--   1 | (map (- 1) [1 2 3])
+--     | ^^^^^^^^^^^^^^^^^^^
+
+--   pact>(map (lambda (x) (- 1 x)) [1 2 3])
+--   [0, -1, -2]
+-- this is because prod simply suspends the static term without figuring out the arity which is being used
+-- to apply, vs core which does not attempt to do this, and picks an overload eagerly and statically.
+-- in 99% of cases this is fine, but we overloaded `-` to be completely different functions.
+desugarAppArityRaw f i RawSub [e1] =
+    App (Builtin (f RawNegate) i) ([e1]) i
 desugarAppArityRaw f i RawEnumerate [e1, e2, e3] =
     App (Builtin (f RawEnumerateStepN) i) ([e1, e2, e3]) i
 desugarAppArityRaw f i RawSelect [e1, e2, e3] =
     App (Builtin (f RawSelectWithFields) i) ([e1, e2, e3]) i
 desugarAppArityRaw f i RawSort [e1, e2] =
   App (Builtin (f RawSortObject) i) [e1, e2] i
+-- Rounding functions
+desugarAppArityRaw f i RawRound [e1, e2] =
+  App (Builtin (f RawRoundPrec) i) [e1, e2] i
+desugarAppArityRaw f i RawCeiling [e1, e2] =
+  App (Builtin (f RawCeilingPrec) i) [e1, e2] i
+desugarAppArityRaw f i RawFloor [e1, e2] =
+  App (Builtin (f RawFloorPrec) i) [e1, e2] i
+
+
+desugarAppArityRaw f i RawStrToInt [e1, e2] =
+  App (Builtin (f RawStrToIntBase) i) [e1, e2] i
 desugarAppArityRaw f i RawReadMsg [] =
   App (Builtin (f RawReadMsgDefault) i) [] i
 desugarAppArityRaw f i RawDefineKeySet [e1] =
   App (Builtin (f RawDefineKeysetData) i) [e1] i
+desugarAppArityRaw f i RawPoseidonHashHackachain li =
+  App (Builtin (f RawPoseidonHashHackachain) i )[(ListLit li i)] i
+desugarAppArityRaw f i RawYield [e1, e2] =
+  App (Builtin (f RawYieldToChain) i) [e1, e2] i
 desugarAppArityRaw f i b args =
     App (Builtin (f b) i) args i
 
@@ -186,19 +220,27 @@ instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
     over termBuiltin RBuiltinWrap $ desugarOperator i dsg
   desugarAppArity i (RBuiltinWrap b) ne =
     desugarAppArityRaw RBuiltinWrap i b ne
-  desugarAppArity i (RBuiltinRepl RExpect) ([e1, e2, e3]) | isn't _Lam e3 =
+  -- (expect <description> <expected> <expression-to-eval>)
+  desugarAppArity i (RBuiltinRepl RExpect) ([e1, e2, e3]) | isn't _Nullary e3 =
     App (Builtin (RBuiltinRepl RExpect) i) ([e1, e2, suspendTerm e3]) i
-  desugarAppArity i (RBuiltinRepl RExpectFailure) [e1, e2] | isn't _Lam e2 =
+  -- (expect-failure <arg1> <term>)
+  desugarAppArity i (RBuiltinRepl RExpectFailure) [e1, e2] | isn't _Nullary e2 =
     App (Builtin (RBuiltinRepl RExpectFailure) i) [e1, suspendTerm e2] i
-  desugarAppArity i (RBuiltinRepl RExpectFailure) [e1, e2, e3] | isn't _Lam e2 =
+  -- (expect-failure <arg1> <expected-msg> <term>)
+  desugarAppArity i (RBuiltinRepl RExpectFailure) [e1, e2, e3] | isn't _Nullary e2 =
     App (Builtin (RBuiltinRepl RExpectFailureMatch) i) [e1, e2, suspendTerm e3] i
-  desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2] | isn't _Lam e2 =
-    App (Builtin (RBuiltinRepl RContinuePactRollback) i) [e1, e2] i
+  -- (pact-state <arg>)
   desugarAppArity i (RBuiltinRepl RPactState) [e1] =
     App (Builtin (RBuiltinRepl RResetPactState) i) [e1] i
-  desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2, e3]
-    | isn't _Lam e2 && isn't _Lam e3 =
+  -- (continue-pact <arg1> <arg2>)
+  desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2] =
+    App (Builtin (RBuiltinRepl RContinuePactRollback) i) [e1, e2] i
+  -- (continue-pact <arg1> <arg2> <arg3>)
+  desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2, e3] =
       App (Builtin (RBuiltinRepl RContinuePactRollbackYield) i) [e1, e2, e3] i
+  -- (continue-pact <arg1> <arg2> <arg3> <arg4>)
+  desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2, e3, e4] =
+      App (Builtin (RBuiltinRepl RContinuePactRollbackYieldObj) i) [e1, e2, e3, e4] i
   desugarAppArity i b ne =
     App (Builtin b i) ne i
 
@@ -230,11 +272,17 @@ desugarLispTerm = \case
           let c1 = Arg cvar1 Nothing
               c2 = Arg cvar2 Nothing
           pure $ Lam AnonLamInfo (c1 :| [c2]) (Var (BN (BareName cvar1)) i) i
+        | n == BareName "identity" -> do
+          let c1 = Arg ivar1 Nothing
+          pure $ Lam AnonLamInfo (c1 :| []) (Var (BN (BareName ivar1)) i) i
+        | n == BareName "CHARSET_ASCII" -> pure (Constant (LInteger 0) i)
+        | n == BareName "CHARSET_LATIN1" -> pure (Constant (LInteger 1) i)
         | otherwise ->
           pure (Var (BN n) i)
     where
     cvar1 = "#constantlyA1"
     cvar2 = "#constantlyA2"
+    ivar1 = "#identityA1"
   Lisp.Var n i -> pure (Var n i)
   Lisp.Block nel i -> do
     nel' <- traverse desugarLispTerm nel
@@ -352,13 +400,12 @@ desugarDefPact (Lisp.DefPact dpname margs rt (step:steps) _ _ i) =
     Just (mn,_) -> do
       let args' = toArg <$> margs
       steps' <- forM (step :| steps) \case
-        Lisp.Step s ms ->
-          Step <$> desugarLispTerm s <*> traverse (traverse desugarLispTerm) ms
-        Lisp.StepWithRollback s rb ms ->
+        Lisp.Step s _ ->
+          Step <$> desugarLispTerm s
+        Lisp.StepWithRollback s rb _ ->
           StepWithRollback
           <$> desugarLispTerm s
           <*> desugarLispTerm rb
-          <*> traverse (traverse desugarLispTerm) ms
 
       -- In DefPacts, last step is not allowed to rollback.
       when (hasRollback $ NE.last steps') $
@@ -428,25 +475,13 @@ desugarIfDef
   => Lisp.IfDef i
   -> RenamerT b i m  (IfDef ParsedName DesugarType b i)
 desugarIfDef = \case
-  Lisp.IfDfun (Lisp.IfDefun n margs rty _ _ i) -> IfDfun <$> case margs of
-    [] -> do
-      pure $ IfDefun n [] rty i
-    _ -> do
-      let args = toArg <$> margs
-      rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) pure rty
-      pure $ IfDefun n args (Just rty') i
+  Lisp.IfDfun (Lisp.IfDefun n margs rty _ _ i) -> pure $ IfDfun $ IfDefun n (toArg <$> margs) rty i
   -- Todo: check managed impl
   Lisp.IfDCap (Lisp.IfDefCap n margs rty _ _ _meta i) -> IfDCap <$> do
     let args = toArg <$> margs
     pure $ IfDefCap n args rty i
   Lisp.IfDConst dc -> IfDConst <$> desugarDefConst dc
-  Lisp.IfDPact (Lisp.IfDefPact n margs rty _ _ i) -> IfDPact <$> case margs of
-    [] -> do
-      pure $ IfDefPact n [] rty i
-    _ -> do
-      let args = toArg <$> margs
-      rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) pure rty
-      pure $ IfDefPact n args (Just rty') i
+  Lisp.IfDPact (Lisp.IfDefPact n margs rty _ _ i) -> pure $ IfDPact $ IfDefPact n (toArg <$> margs) rty i
   Lisp.IfDSchema ds -> IfDSchema <$> desugarDefSchema ds
 
 desugarDef
@@ -461,25 +496,31 @@ desugarDef = \case
   Lisp.DTable d -> DTable <$> desugarDefTable d
   Lisp.DPact d -> DPact <$> desugarDefPact d
 
--- Todo: Module hashing, either on source or
--- the contents
--- Todo: governance
 desugarModule
   :: (MonadEval b i m, DesugarBuiltin b)
   => Lisp.Module i
   -> RenamerT b i m (Module ParsedName DesugarType b i)
 desugarModule (Lisp.Module mname mgov extdecls defs _ _ i) = do
-  let (imports, blessed, implemented) = splitExts extdecls
+  (imports, blessed, implemented) <- splitExts extdecls
   defs' <- locally reCurrModule (const (Just (mname,[]))) $ traverse desugarDef (NE.toList defs)
   pure $ Module mname mgov defs' blessed imports implemented placeholderHash i
   where
   splitExts = split ([], S.empty, [])
   split (accI, accB, accImp) (h:hs) = case h of
-    -- todo: implement bless hashes
-    Lisp.ExtBless _ -> split (accI, accB, accImp) hs
-    Lisp.ExtImport imp -> split (imp:accI, accB, accImp) hs
+    Lisp.ExtBless b -> case parseModuleHash b of
+      Nothing -> throwDesugarError (InvalidBlessedHash b) i
+      Just mh -> split (accI, S.insert mh accB, accImp) hs
+    Lisp.ExtImport imp -> do
+      imp' <- desugarImport i imp
+      split (imp':accI, accB, accImp) hs
     Lisp.ExtImplements mn -> split (accI, accB, mn:accImp) hs
-  split (a, b, c) [] = (reverse a, b, reverse c)
+  split (a, b, c) [] = pure (reverse a, b, reverse c)
+
+desugarImport :: MonadEval b i m => i -> Lisp.Import -> RenamerT b i m Import
+desugarImport info (Lisp.Import mn (Just blessed) imported) = case parseModuleHash blessed of
+  Just mbh' -> pure (Import mn (Just mbh') imported)
+  Nothing -> throwDesugarError (InvalidBlessedHash blessed) info
+desugarImport _ (Lisp.Import mn Nothing imported) = pure (Import mn Nothing imported)
 
 -- Todo: Interface hashing, either on source or
 -- the contents
@@ -490,14 +531,17 @@ desugarInterface
 desugarInterface (Lisp.Interface ifn ifdefns imps _ _ info) = do
   defs' <- traverse desugarIfDef ifdefns
   let mhash = ModuleHash (Hash "placeholder")
-  pure $ Interface ifn defs' imps mhash info
+  imps' <- traverse (desugarImport info) imps
+  pure $ Interface ifn defs' imps' mhash info
 
 desugarUse
   :: (MonadEval b i m )
   => i
-  -> Import
+  -> Lisp.Import
   -> RenamerT b i m Import
-desugarUse i imp = imp <$ handleImport i mempty imp
+desugarUse i imp = do
+  imp' <- desugarImport i imp
+  imp' <$ handleImport i mempty imp'
 
 -----------------------------------------------------------
 -- Renaming
@@ -525,10 +569,12 @@ termSCC currM currDefns = \case
     DN _ -> mempty
   Lam _ args e _ ->
     let currDefns' = foldl' (\s t -> S.delete (_argName t) s) currDefns args
-    in termSCC currM currDefns' e
+        tySCC = foldMap (argSCC currM currDefns) args
+    in tySCC <> termSCC currM currDefns' e
   Let arg e1 e2 _ ->
     let currDefns' = S.delete (_argName arg) currDefns
-    in S.union (termSCC currM currDefns e1) (termSCC currM currDefns' e2)
+        tySCC = argSCC currM currDefns arg
+    in tySCC <> termSCC currM currDefns e1 <> termSCC currM currDefns' e2
   App fn apps _ ->
     S.union (termSCC currM currDefns fn) (foldMap (termSCC currM currDefns) apps)
   Sequence e1 e2 _ -> S.union (termSCC currM currDefns e1) (termSCC currM currDefns e2)
@@ -586,19 +632,30 @@ typeSCC currM currDefs = \case
       | S.member n' currDefs && mn' == currM -> S.singleton n'
       | otherwise -> mempty
 
+argSCC :: ModuleName -> Set Text -> Arg DesugarType -> Set Text
+argSCC currM currDefs (Arg _ ty) = case ty of
+  Just t -> typeSCC currM currDefs t
+  Nothing -> mempty
+
 defunSCC
   :: ModuleName
   -> Set Text
   -> Defun ParsedName DesugarType  b i
   -> Set Text
-defunSCC mn cd = termSCC mn cd . _dfunTerm
+defunSCC mn cd df =
+  let tscc = termSCC mn cd (_dfunTerm df)
+      argScc = foldMap (argSCC mn cd) (_dfunArgs df)
+  in tscc <> argScc <> maybe mempty (typeSCC mn cd) (_dfunRType df)
 
 defConstSCC
   :: ModuleName
   -> Set Text
   -> DefConst ParsedName DesugarType  b i
   -> Set Text
-defConstSCC mn cd = foldMap (termSCC mn cd) . _dcTerm
+defConstSCC mn cd dc =
+  let tscc = foldMap (termSCC mn cd) (_dcTerm dc)
+      tyscc =  maybe mempty (typeSCC mn cd) (_dcType dc)
+  in tscc <> tyscc
 
 defTableSCC
   :: ModuleName
@@ -615,7 +672,9 @@ defCapSCC
   -> DefCap ParsedName DesugarType b i1
   -> Set Text
 defCapSCC mn cd dc =
-  case _dcapMeta dc of
+  let argsScc = foldMap (argSCC mn cd) (_dcapArgs dc)
+      rtypeScc = maybe mempty (typeSCC mn cd) (_dcapRType dc)
+  in argsScc <> rtypeScc <> case _dcapMeta dc of
     DefManaged (DefManagedMeta _ (FQParsed pn)) ->
       termSCC mn cd (_dcapTerm dc) <> parsedNameSCC mn cd pn
     _ -> termSCC mn cd (_dcapTerm dc)
@@ -624,15 +683,23 @@ defCapSCC mn cd dc =
 defPactSCC
   :: ModuleName
   -> Set Text
+  -> DefPact ParsedName DesugarType b i
+  -> Set Text
+defPactSCC mn cd dp =
+  let argsScc = foldMap (argSCC mn cd) (_dpArgs dp)
+      rtScc = maybe mempty (typeSCC mn cd) (_dpRetType dp)
+      stepsScc = foldMap (defPactStepSCC mn cd) (_dpSteps dp)
+  in argsScc <> rtScc <> stepsScc
+
+defPactStepSCC
+  :: ModuleName
+  -> Set Text
   -> Step ParsedName DesugarType b i
   -> Set Text
-defPactSCC mn cd = \case
-  Step step mSteps -> S.union (termSCC mn cd step) (stepsSCC mSteps)
-  StepWithRollback step rollback mSteps ->
-    S.unions $ stepsSCC mSteps : [termSCC mn cd step, termSCC mn cd rollback]
-  where
-    stepsSCC :: Maybe [Term ParsedName DesugarType b i] -> Set Text
-    stepsSCC = maybe S.empty (foldMap $ termSCC mn cd)
+defPactStepSCC mn cd = \case
+  Step step -> termSCC mn cd step
+  StepWithRollback step rollback ->
+    S.unions $ [termSCC mn cd step, termSCC mn cd rollback]
 
 defSCC
   :: ModuleName
@@ -644,7 +711,7 @@ defSCC mn cd = \case
   DConst d -> defConstSCC mn cd d
   DCap dc -> defCapSCC mn cd dc
   DSchema ds -> foldMap (typeSCC mn cd) ( _dsSchema ds)
-  DPact dp -> foldMap (defPactSCC mn cd) (_dpSteps dp)
+  DPact dp -> defPactSCC mn cd dp
   DTable dt -> defTableSCC mn cd dt
 
 ifDefSCC
@@ -753,16 +820,14 @@ renameType i = \case
   Lisp.TyList ty ->
     TyList <$> renameType i ty
   Lisp.TyModRef tmr ->
-    TyModRef tmr <$ resolveInterfaceName i tmr
+    TyModRef (S.fromList tmr) <$ traverse (resolveInterfaceName i) tmr
   Lisp.TyKeyset -> pure TyGuard
   Lisp.TyObject pn ->
     TyObject <$> resolveSchema pn
   Lisp.TyTable pn ->
     TyTable <$> resolveSchema pn
-  Lisp.TyPolyList ->
-    throwDesugarError (UnsupportedType "[any]") i
-  Lisp.TyPolyObject ->
-    throwDesugarError (UnsupportedType "object{any}") i
+  Lisp.TyPolyList -> pure TyAnyList
+  Lisp.TyPolyObject -> pure TyAnyObject
   where
   resolveSchema = \case
     TBN bn -> do
@@ -905,10 +970,10 @@ renamePactStep
   => Step ParsedName DesugarType b i
   -> RenamerT b i m (Step Name Type b i)
 renamePactStep = \case
-  Step step mSteps ->
-    Step <$> renameTerm step <*> (traverse.traverse) renameTerm mSteps
-  StepWithRollback step rollback mSteps ->
-    StepWithRollback <$> renameTerm step <*> renameTerm rollback <*> (traverse.traverse) renameTerm mSteps
+  Step step ->
+    Step <$> renameTerm step
+  StepWithRollback step rollback ->
+    StepWithRollback <$> renameTerm step <*> renameTerm rollback
 
 renameDefPact
   :: (MonadEval b i m, DesugarBuiltin b)

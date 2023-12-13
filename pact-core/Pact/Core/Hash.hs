@@ -27,6 +27,7 @@ module Pact.Core.Hash
 , defaultPactHash
 , placeholderHash
 , moduleHashToText
+, parseModuleHash
 ) where
 
 import Control.DeepSeq
@@ -73,8 +74,20 @@ pactInitialHash = initialHash
 pactHashLength :: Int
 pactHashLength = 32
 
+unsafeBsToPactHash :: ByteString -> Hash
+unsafeBsToPactHash = Hash . toShort
+
+unsafeBsToModuleHash :: ByteString -> ModuleHash
+unsafeBsToModuleHash = ModuleHash . unsafeBsToPactHash
+
+parseModuleHash :: Text -> Maybe ModuleHash
+parseModuleHash t = case decodeBase64UrlUnpadded (T.encodeUtf8 t) of
+  Left{} -> Nothing
+  Right bs | B.length bs == pactHashLength -> Just (unsafeBsToModuleHash bs)
+           | otherwise -> Nothing
+
 hash :: ByteString -> Hash
-hash = Hash . toShort . ByteArray.convert . Crypto.hashWith Crypto.Blake2b_256
+hash = unsafeBsToPactHash . ByteArray.convert . Crypto.hashWith Crypto.Blake2b_256
 
 verifyHash :: Hash -> ByteString -> Either String Hash
 verifyHash h b = if hashed == h
@@ -104,7 +117,7 @@ fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
   Right bs' -> case T.decodeUtf8' bs' of
     Left _ -> Left $ "Base64URL decode failed: invalid unicode"
     Right t -> Right t
-  Left e -> Left $ "Base64URL decode failed: " ++ e
+  Left _ -> Left $ "Base64URL decode failed"
 
 
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }

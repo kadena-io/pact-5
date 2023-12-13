@@ -11,11 +11,7 @@ import Control.Monad.State.Strict
 import Control.Exception(throwIO)
 import Data.Char(isSpace)
 import Data.Text(Text)
--- import Data.ByteString(ByteString)
-
--- import qualified Data.ByteString as B
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 
 import Pact.Core.Info
 import Pact.Core.Errors
@@ -58,10 +54,10 @@ tokens :-
     defconst     { token TokenDefConst }
     defschema    { token TokenDefSchema }
     deftable     { token TokenDefTable }
-    defcap       { token TokenDefCap }
     defpact      { token TokenDefPact }
     defproperty  { token TokenDefProperty }
     property     { token TokenProperty }
+    invariant    { token TokenInvariant }
     interface    { token TokenInterface }
     module       { token TokenModule }
     bless        { token TokenBless }
@@ -69,8 +65,6 @@ tokens :-
     use          { token TokenImport }
     true         { token TokenTrue }
     false        { token TokenFalse }
-    keyGov       { token TokenKeyGov }
-    capGov       { token TokenCapGov }
     lambda       { token TokenLambda }
 
     and          { token TokenAnd }
