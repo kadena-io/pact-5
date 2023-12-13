@@ -82,7 +82,7 @@ mdModuleHash f = \case
 type FQKS = KeySet FullyQualifiedName
 
 newtype RowData
-  = RowData (Map Field PactValue)
+  = RowData { _unRowData :: Map Field PactValue }
   deriving (Eq, Show)
 
 -- -------------------------------------------------------------------------- --

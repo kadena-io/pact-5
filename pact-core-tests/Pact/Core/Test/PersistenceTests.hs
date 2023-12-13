@@ -20,7 +20,7 @@ import qualified Pact.Core.PactValue as PactValue
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Persistence (WriteType(Insert), readKeySet, writeKeySet, writeModule, readModule
                              ,writeDefPacts, readDefPacts, readNamespace, writeNamespace
-                             , Domain(..), PactDb(_pdbKeys, _pdbTxIds, _pdbCreateUserTable, _pdbRead, _pdbWrite, _pdbBeginTx, _pdbCommitTx), TxId(..)
+                             , Domain(..), PactDb(..), TxId(..)
                              , ExecutionMode(Transactional)
                              , TxLog(TxLog, _txDomain, _txKey, _txValue)
                              , RowData(..)
@@ -123,7 +123,7 @@ namespaceRoundtrip serial = property $ do
 sqliteRegression :: TestTree
 sqliteRegression =
   testCase "sqlite persistence backend produces expected values/txlogs" $
-  withSqlitePactDb serialisePact ":memory:" $ \pdb -> do
+  withSqlitePactDb serialiseRepl ":memory:" $ \pdb -> do
     let
       user1 = "user1"
       usert = TableName user1 (ModuleName "someModule" Nothing)
@@ -136,10 +136,10 @@ sqliteRegression =
 
 
     --  Begin tx
-    _ <- _pdbBeginTx pdb Transactional
+    Just t1 <- _pdbBeginTx pdb Transactional
     let
       row = RowData $ Map.fromList [(Field "gah", PactValue.PDecimal 123.454345)]
-      rowEnc = _encodeRowData serialisePact row
+      rowEnc = _encodeRowData serialiseRepl row
     _pdbWrite pdb Insert (DUserTables usert) (RowKey "key1") row
     Just row' <- _pdbRead pdb (DUserTables usert) (RowKey "key1")
     assertEqual "row should be identical to its saved/recalled value" row row'
@@ -149,7 +149,7 @@ sqliteRegression =
              [ (Field "gah", PactValue.PBool False)
              , (Field "fh", PactValue.PInteger 1)
              ]
-      row2Enc = _encodeRowData serialisePact row2
+      row2Enc = _encodeRowData serialiseRepl row2
                  
     _pdbWrite pdb Update (DUserTables usert) (RowKey "key1") row2
     Just row2' <- _pdbRead pdb (DUserTables usert) (RowKey "key1")
@@ -157,25 +157,53 @@ sqliteRegression =
 
     let
       ks = KeySet (Set.fromList [PublicKeyText "skdjhfskj"]) KeysAll
-      ksEnc = _encodeKeySet serialisePact ks
+      ksEnc = _encodeKeySet serialiseRepl ks
     _ <- _pdbWrite pdb Write DKeySets (KeySetName "ks1" Nothing) ks
     Just ks' <- _pdbRead pdb DKeySets (KeySetName "ks1" Nothing)
     assertEqual "keyset should be equal after storage/retrieval" ks ks'
 
 
     -- module
-    _md <- loadModule
+    let mn = ModuleName "test" Nothing
+    md <- loadModule
+    let mdEnc = _encodeModuleData serialiseRepl md
+    _pdbWrite pdb Write DModules mn md
 
+    Just md' <- _pdbRead pdb DModules mn
+    assertEqual "module should be identical to its saved/recalled value" md md'
 
     txs2 <- _pdbCommitTx pdb
     assertEqual "output of commit" txs2
-      [ TxLog "SYS:KeySets" "ks1" ksEnc
-      -- TxLog Module
+      [ TxLog "SYS:Modules" "test" mdEnc
+      , TxLog "SYS:KeySets" "ks1" ksEnc
       , TxLog "user1" "key1" row2Enc
       , TxLog "user1" "key1" rowEnc
-
       ]
-    return ()
+
+  -- begin tx
+    _ <- _pdbBeginTx pdb Transactional
+    tids <- _pdbTxIds pdb usert t1
+    assertEqual "user txids" [TxId 1] tids
+
+    txlog <- _pdbGetTxLog pdb usert (head tids)
+    assertEqual "user txlog" txlog
+      [ TxLog "user1" "key1" (RowData $ Map.union (_unRowData row2) (_unRowData row))
+      ]
+
+    _pdbWrite pdb Insert (DUserTables usert) (RowKey "key2") row
+    Just r1 <- _pdbRead pdb (DUserTables usert) (RowKey "key2")
+    assertEqual "user insert key2 pre-rollback" row r1
+
+    rkeys <- _pdbKeys pdb (DUserTables usert)
+    assertEqual "keys pre-rollback [key1, key2]" [RowKey "key1", RowKey "key2"] rkeys
+
+    _pdbRollbackTx pdb
+    r2 <- _pdbRead pdb (DUserTables usert) (RowKey "key2")
+    assertEqual "rollback erases key2" Nothing r2
+
+    rkeys2 <- _pdbKeys pdb (DUserTables usert)
+    assertEqual "keys post-rollback [key1]" [RowKey "key1"] rkeys2
+    
     where
       loadModule = do
         let src = "(module test G (defcap G () true) (defun f (a: integer) 1))"

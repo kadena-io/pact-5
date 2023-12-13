@@ -101,7 +101,7 @@ getTxLog serial db currTxId txLog tab txId = do
         SQL.Done -> pure acc
         SQL.Row -> do
           [SQL.SQLText key, SQL.SQLBlob value] <- SQL.columns stmt
-          collect stmt (TxLog (toUserTable tab) key value:acc)
+          collect stmt (TxLog (_tableName tab) key value:acc)
         
 readKeys :: forall k v b i. SQL.Database -> Domain k v b i -> IO [k]
 readKeys db = \case
@@ -248,17 +248,6 @@ write' serial db txId txLog wt domain k v =
         Right res
           | res == SQL.Done -> modifyIORef' txLog (TxLog "SYS:NAMESPACES" k' encoded:)
           | otherwise -> fail "invariant viaolation"
-  --     DUserTables tbl -> do
-        
-        -- withStmt db ("INSERT INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
-        -- let
-        --   encoded = _encodeRowData serial v
-        --   RowKey k' = k
-        -- TxId i <- readIORef txId
-        -- SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-        -- SQL.stepNoCB stmt >>= \case
-        --   SQL.Done -> modifyIORef' txLog (TxLog (toUserTable tbl) k' encoded:)
-        --   SQL.Row -> fail "invariant viaolation"
   where
     checkInsertOk ::  TableName -> RowKey -> IO (Maybe RowData)
     checkInsertOk tbl rk = do
