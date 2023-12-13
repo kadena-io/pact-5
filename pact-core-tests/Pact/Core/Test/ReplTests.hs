@@ -8,7 +8,6 @@ import Test.Tasty.HUnit
 import Control.Monad(when)
 import Data.IORef
 import Data.Default
-import Data.Text(Text)
 import Data.Foldable(traverse_)
 import System.Directory
 import System.FilePath
@@ -38,6 +37,7 @@ import Pact.Core.Serialise.CBOR_V1 (encodeModuleData_TESTING, decodeModuleData_T
 tests :: IO TestTree
 tests = do
   files <- replTestFiles
+  pure $ testGroup "ReplTests"
     [ testGroup "in-memory db" (runFileReplTest <$> files)
     , testGroup "sqlite db" (runFileReplTestSqlite <$> files)
     ]
@@ -52,18 +52,18 @@ replTestFiles = do
 runFileReplTest :: TestName -> TestTree
 runFileReplTest file = testCase file $ do
   pdb <- mockPactDb serialiseRepl
-  B.readFile (replTestDir </> file) >>= runReplTest pdb file
+  T.readFile (replTestDir </> file) >>= runReplTest pdb file
 
 runFileReplTestSqlite :: TestName -> TestTree
 runFileReplTestSqlite file = testCase file $ do
-  ctnt <- B.readFile (replTestDir </> file)
+  ctnt <- T.readFile (replTestDir </> file)
   let enc = serialisePact{ _encodeModuleData = encodeModuleData_TESTING
                          , _decodeModuleData = fmap LegacyDocument . decodeModuleData_TESTING
                          }
   withSqlitePactDb enc ":memory:" $ \pdb -> do
     runReplTest pdb file ctnt
 
-runReplTest :: PactDb ReplRawBuiltin SpanInfo -> FilePath -> ByteString -> Assertion
+runReplTest :: PactDb ReplRawBuiltin SpanInfo -> FilePath -> T.Text -> Assertion
 runReplTest pdb file src = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing

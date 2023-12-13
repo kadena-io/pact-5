@@ -550,9 +550,6 @@ instance Serialise RawBuiltin where
     RawRound -> encodeWord 19
     RawCeiling -> encodeWord 20
     RawFloor -> encodeWord 21
-    RawRoundPrec -> encodeWord 22
-    RawCeilingPrec -> encodeWord 23
-    RawFloorPrec -> encodeWord 24
     RawExp -> encodeWord 22
     RawLn -> encodeWord 23
     RawSqrt -> encodeWord 24
@@ -594,7 +591,6 @@ instance Serialise RawBuiltin where
     RawB64Decode -> encodeWord 60
     RawStrToList -> encodeWord 61
     RawYield -> encodeWord 62
-    RawYieldToChain -> encodeWord 63
     RawResume -> encodeWord 63
     RawBind -> encodeWord 64
     RawRequireCapability -> encodeWord 65
@@ -642,13 +638,25 @@ instance Serialise RawBuiltin where
     RawNamespace -> encodeWord 107
     RawDefineNamespace -> encodeWord 108
     RawDescribeNamespace -> encodeWord 109
-    RawChainData -> encodeWord 100
-    RawIsCharset -> encodeWord 100
     RawCreatePrincipal -> encodeWord 110
     RawIsPrincipal -> encodeWord 111
     RawTypeOfPrincipal -> encodeWord 112
     RawValidatePrincipal -> encodeWord 113
     RawCreateDefPactGuard -> encodeWord 114
+
+    RawRoundPrec -> encodeWord 125
+    RawCeilingPrec -> encodeWord 126
+    RawFloorPrec -> encodeWord 127
+    RawYieldToChain -> encodeWord 115
+    RawChainData -> encodeWord 116
+    RawIsCharset -> encodeWord 117
+    RawPactId -> encodeWord 118
+    RawZkPairingCheck -> encodeWord 119
+    RawZKScalarMult -> encodeWord 120
+    RawZkPointAdd -> encodeWord 121
+    RawPoseidonHashHackachain -> encodeWord 122
+    RawTypeOf -> encodeWord 123
+    RawDec -> encodeWord 124
 
   decode = decodeWord >>= \case
     0 -> pure RawAdd
@@ -673,47 +681,44 @@ instance Serialise RawBuiltin where
     19 -> pure RawRound
     20 -> pure RawCeiling
     21 -> pure RawFloor
-    22 -> pure RawRoundPrec
-    23 -> pure RawCeilingPrec
-    24 -> pure RawFloorPrec
-    25 -> pure RawExp
-    26 -> pure RawLn
-    27 -> pure RawSqrt
-    28 -> pure RawLogBase
-    29 -> pure RawLength
-    30 -> pure RawTake
-    31 -> pure RawDrop
-    32 -> pure RawConcat
-    33 -> pure RawReverse
-    34 -> pure RawContains
-    35 -> pure RawSort
-    36 -> pure RawSortObject
-    37 -> pure RawRemove
-    38 -> pure RawMod
-    39 -> pure RawMap
-    40 -> pure RawFilter
-    41 -> pure RawZip
-    42 -> pure RawIntToStr
-    43 -> pure RawStrToInt
-    44 -> pure RawStrToIntBase
-    45 -> pure RawFold
-    46 -> pure RawDistinct
-    47 -> pure RawFormat
-    48 -> pure RawEnumerate
-    49 -> pure RawEnumerateStepN
-    50 -> pure RawShow
-    51 -> pure RawReadMsg
-    52 -> pure RawReadMsgDefault
-    53 -> pure RawReadInteger
-    54 -> pure RawReadDecimal
-    55 -> pure RawReadString
-    56 -> pure RawReadKeyset
-    57 -> pure RawEnforceGuard
-    58 -> pure RawEnforceKeyset
-    59 -> pure RawKeysetRefGuard
-    60 -> pure RawAt
-    61 -> pure RawMakeList
-    62 -> pure RawB64Encode
+    22 -> pure RawExp
+    23 -> pure RawLn
+    24 -> pure RawSqrt
+    25 -> pure RawLogBase
+    26 -> pure RawLength
+    27 -> pure RawTake
+    28 -> pure RawDrop
+    29 -> pure RawConcat
+    30 -> pure RawReverse
+    31 -> pure RawContains
+    32 -> pure RawSort
+    33 -> pure RawSortObject
+    34 -> pure RawRemove
+    35 -> pure RawMod
+    36 -> pure RawMap
+    37 -> pure RawFilter
+    38 -> pure RawZip
+    39 -> pure RawIntToStr
+    40 -> pure RawStrToInt
+    41 -> pure RawStrToIntBase
+    42 -> pure RawFold
+    43 -> pure RawDistinct
+    44 -> pure RawFormat
+    45 -> pure RawEnumerate
+    46 -> pure RawEnumerateStepN
+    47 -> pure RawShow
+    48 -> pure RawReadMsg
+    49 -> pure RawReadMsgDefault
+    50 -> pure RawReadInteger
+    51 -> pure RawReadDecimal
+    52 -> pure RawReadString
+    53 -> pure RawReadKeyset
+    54 -> pure RawEnforceGuard
+    55 -> pure RawEnforceKeyset
+    56 -> pure RawKeysetRefGuard
+    57 -> pure RawAt
+    58 -> pure RawMakeList
+    59 -> pure RawB64Encode
     60 -> pure RawB64Decode
     61 -> pure RawStrToList
     62 -> pure RawYield
@@ -769,6 +774,21 @@ instance Serialise RawBuiltin where
     112 -> pure RawTypeOfPrincipal
     113 -> pure RawValidatePrincipal
     114 -> pure RawCreateDefPactGuard
+
+    115 -> pure RawYieldToChain
+    116 -> pure RawChainData
+    117 -> pure RawIsCharset
+    118 -> pure RawPactId
+    119 -> pure RawZkPairingCheck
+    120 -> pure RawZKScalarMult
+    121 -> pure RawZkPointAdd
+    122 -> pure RawPoseidonHashHackachain
+    123 -> pure RawTypeOf
+    124 -> pure RawDec
+
+    125 -> pure RawRoundPrec
+    126 -> pure RawCeilingPrec
+    127 -> pure RawFloorPrec
     _ -> fail "unexpeced decoding"
 
 

@@ -156,7 +156,7 @@ schemaGen = do
 typeGen :: Gen Type
 typeGen = Gen.recursive Gen.choice
  [ TyPrim <$> tyPrimGen
- , TyModRef <$> moduleNameGen
+ , TyModRef <$> Gen.set (Range.linear 0 10) moduleNameGen
  ]
  [ TyList <$> typeGen
  , TyObject <$> schemaGen
@@ -311,11 +311,9 @@ defTableGen i = do
 
 stepGen :: Gen b -> Gen i -> Gen (Step Name Type b i)
 stepGen b i = Gen.choice
-  [ Step <$> termGen b i <*> mt
-  , StepWithRollback <$> termGen b i <*> termGen b i <*> mt
+  [ Step <$> termGen b i
+  , StepWithRollback <$> termGen b i <*> termGen b i
   ]
-  where
-    mt = Gen.maybe (Gen.list (Range.linear 0 16) (termGen b i))
 
 defPactGen :: Gen b -> Gen i -> Gen (DefPact Name Type b i)
 defPactGen b i = do
