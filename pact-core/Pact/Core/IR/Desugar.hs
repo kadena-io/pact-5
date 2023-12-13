@@ -80,15 +80,28 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 
 type DesugarType = Lisp.Type
 
+data ModuleType = MTModule | MTInterface
+
+data CurrModule
+  = CurrModule
+  { _cmName :: ModuleName
+  , _cmImplements :: [ModuleName]
+  , _cmType :: ModuleType
+  }
+makeLenses ''CurrModule
+
 data RenamerEnv b i
   = RenamerEnv
   { _reBinds :: Map Text (NameKind, Maybe DefKind)
   , _reCurrModuleTmpBinds ::  Map Text (NameKind, DefKind)
   , _reVarDepth :: DeBruijn
-  , _reCurrModule :: Maybe (ModuleName, [ModuleName])
+  , _reCurrModule :: Maybe CurrModule
   , _reCurrDef :: Maybe DefKind
   }
 makeLenses ''RenamerEnv
+
+currModuleName :: MonadReader (RenamerEnv b i) m => m (Maybe ModuleName)
+currModuleName = preview $ reCurrModule . folded . cmName
 
 -- Our type to keep track of
 newtype RenamerState
@@ -384,8 +397,8 @@ desugarDefun (Lisp.Defun defname [] mrt body _ _ i) = do
 desugarDefun (Lisp.Defun defname (arg:args) mrt body _ _ i) = do
   let args' = toArg <$> (arg :| args)
   body' <- desugarLispTerm body
-  view reCurrModule >>= \case
-    Just (mn,_) -> do
+  currModuleName >>= \case
+    Just mn -> do
       let bodyLam = Lam (TLDefun mn defname) args' body' i
       pure $ Defun defname (NE.toList args') mrt bodyLam i
     Nothing -> throwDesugarError (NotAllowedOutsideModule "defun") i
@@ -397,8 +410,8 @@ desugarDefPact
 desugarDefPact (Lisp.DefPact dpname _ _ [] _ _ i) =
   throwDesugarError (EmptyDefPact dpname) i
 desugarDefPact (Lisp.DefPact dpname margs rt (step:steps) _ _ i) =
-  view reCurrModule >>= \case
-    Just (mn,_) -> do
+  currModuleName >>= \case
+    Just mn -> do
       let args' = toArg <$> margs
       steps' <- forM (step :| steps) \case
         Lisp.Step s _ ->
@@ -504,7 +517,7 @@ desugarModule
   -> RenamerT b i m (Module ParsedName DesugarType b i)
 desugarModule (Lisp.Module mname mgov extdecls defs _ _ i) = do
   (imports, blessed, implemented) <- splitExts extdecls
-  defs' <- locally reCurrModule (const (Just (mname,[]))) $ traverse desugarDef (NE.toList defs)
+  defs' <- locally reCurrModule (const (Just $ CurrModule mname [] MTModule)) $ traverse desugarDef (NE.toList defs)
   pure $ Module mname mgov defs' blessed imports implemented placeholderHash i
   where
   splitExts = split ([], S.empty, [])
@@ -772,7 +785,7 @@ resolveModuleName
   -> RenamerT b i m (ModuleName, [ModuleName])
 resolveModuleName i mn =
   view reCurrModule >>= \case
-    Just (currMod, imps) | currMod == mn -> pure (currMod, imps)
+    Just (CurrModule currMod imps MTModule) | currMod == mn -> pure (currMod, imps)
     _ -> resolveModuleData mn i >>= \case
       ModuleData md _ -> do
         let implementeds = view mImplements md
@@ -786,7 +799,7 @@ resolveModuleName i mn =
 resolveInterfaceName :: (MonadEval b i m) => i -> ModuleName -> RenamerT b i m (ModuleName)
 resolveInterfaceName i mn =
   view reCurrModule >>= \case
-    Just (currMod, _imps) | currMod == mn -> pure currMod
+    Just (CurrModule currMod _ MTInterface) | currMod == mn -> pure currMod
     _ -> resolveModuleData mn i >>= \case
       ModuleData _ _ ->
         throwDesugarError (InvalidModuleReference mn) i
@@ -1190,7 +1203,7 @@ resolveBare (BareName bn) i = views reBinds (M.lookup bn) >>= \case
     Nothing -> do
       let mn = ModuleName bn Nothing
       view reCurrModule >>= \case
-        Just (currMod, imps) | currMod == mn ->
+        Just (CurrModule currMod imps _type) | currMod == mn ->
           pure (Name bn (NModRef mn imps), Nothing)
         _ -> do
           (mn', imps) <- resolveModuleName i mn
@@ -1218,7 +1231,7 @@ resolveQualified (QualifiedName qn qmn@(ModuleName modName mns)) i = do
     Nothing -> throwDesugarError (NoSuchModuleMember qmn qn) i
   where
   lookupLocalQual defnName moduleName = do
-    (currMod, _) <- MaybeT (view reCurrModule)
+    currMod <- MaybeT currModuleName
     guard (currMod == moduleName)
     (nk, dk) <- MaybeT $ view (reCurrModuleTmpBinds . at defnName)
     pure (Name defnName nk, Just dk)
@@ -1272,7 +1285,7 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash i) = d
   go mname (!defns, !s, !m, !mlocals) defn = do
     when (S.member (defName defn) s) $ throwDesugarError (DuplicateDefinition (defName defn)) i
     let dn = defName defn
-    defn' <- local (set reCurrModule (Just (mname, implements)) . set reCurrModuleTmpBinds mlocals)
+    defn' <- local (set reCurrModule (Just $ CurrModule mname implements MTModule) . set reCurrModuleTmpBinds mlocals)
              $ local (set reBinds m) $ renameDef defn
     let dk = defKind defn'
     let depPair = (NTopLevel mname mhash, dk)
@@ -1396,7 +1409,7 @@ renameInterface (Interface unmangled defs imports ih info) = do
     when (S.member dn s) $
       throwDesugarError (DuplicateDefinition dn) info
     d' <- local (set reBinds m) $
-          local (set reCurrModule (Just (ifn, []))) $ renameIfDef ifn dfnSet d
+          local (set reCurrModule (Just $ CurrModule ifn [] MTInterface)) $ renameIfDef ifn dfnSet d
     let m' = case ifDefToDef d' of
               Just defn ->
                 let dk = defKind defn
@@ -1451,7 +1464,7 @@ runDesugarReplDefun
   -> m (DesugarOutput (Defun Name Type b i))
 runDesugarReplDefun =
   runDesugar
-  . local (set reCurrModule (Just (replModuleName, [])))
+  . local (set reCurrModule (Just $ CurrModule replModuleName [] MTModule))
   . (desugarDefun >=> renameReplDefun)
 
 runDesugarReplDefConst
@@ -1460,7 +1473,7 @@ runDesugarReplDefConst
   -> m (DesugarOutput (DefConst Name Type b i))
 runDesugarReplDefConst  =
   runDesugar
-  . local (set reCurrModule (Just (replModuleName,[])))
+  . local (set reCurrModule (Just $ CurrModule replModuleName [] MTModule))
   . (desugarDefConst >=> renameReplDefConst)
 
 runDesugarTopLevel
@@ -1491,3 +1504,11 @@ runDesugarReplTopLevel = \case
     over dsOut RTLDefun <$> runDesugarReplDefun de
   Lisp.RTLDefConst dc ->
     over dsOut RTLDefConst <$> runDesugarReplDefConst dc
+
+
+-- Some types don't get all their lenses used, hence GHC warns about unused bindings.
+-- This is one way to controllably silence these warnings.
+data Unused where Unused :: a -> Unused
+
+_unused :: [Unused]
+_unused = [Unused $ set cmImplements, Unused $ set cmType]
