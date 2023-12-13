@@ -4,7 +4,7 @@
 
 module Pact.Core.Persistence.SQLite (
   withSqlitePactDb
-                                    ) where
+) where
 
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Control.Exception.Lifted (bracket)
@@ -32,6 +32,13 @@ import Control.Exception (throwIO)
 -- import Pact.Core.Repl.Utils (ReplEvalM)
 import Pact.Core.Serialise
 
+-- | Acquire a SQLite-backed `PactDB`.
+--
+-- Pact entities (modules, keysets, namespaces, defpacts, and usertables) will be stored
+-- in the database given by the connection string.
+-- The `PactSerialise` paramater is used to determine which types of values are serializable,
+-- and how they should be serialized. [`serializePact`] is a good default.
+--
 withSqlitePactDb
   :: (MonadIO m, MonadBaseControl IO m)
   => PactSerialise b i
