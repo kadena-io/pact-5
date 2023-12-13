@@ -84,18 +84,18 @@ getTxLog serial db currTxId txLog tab txId = do
     then do
     txLog' <- readIORef txLog
     let
-      userTabLogs = filter (\tl -> toUserTable tab == _txDomain tl) txLog'
+      userTabLogs = filter (\tl -> _tableName tab == _txDomain tl) txLog'
       env :: Maybe [TxLog RowData] = traverse (traverse (fmap (view document) . _decodeRowData serial)) userTabLogs
     case env of
       Nothing -> fail "undexpected decoding error"
-      Just xs -> pure $ reverse xs
+      Just xs -> pure xs
     else withStmt db ("SELECT rowkey,rowdata FROM \"" <> toUserTable tab <> "\" WHERE txid = ?") $ \stmt -> do
                          let TxId i = txId
                          SQL.bind stmt [SQL.SQLInteger $ fromIntegral i]
                          txLogBS <- collect stmt []
                          case traverse (traverse (fmap (view document) . _decodeRowData serial)) txLogBS of
                            Nothing -> fail "unexpected decoding error"
-                           Just txl -> pure $ reverse txl
+                           Just txl -> pure txl
   where
     collect stmt acc = SQL.step stmt >>= \case
         SQL.Done -> pure acc
@@ -158,8 +158,16 @@ rollbackTx db txLog = do
   writeIORef txLog []
 
 createUserTable :: SQL.Database -> IORef [TxLog ByteString] -> TableName -> IO ()
-createUserTable db _txLog tbl = SQL.exec db ("CREATE TABLE IF NOT EXISTS " <> tblName <> " (txid UNSIGNED BIG INT, rowkey TEXT, rowdata BLOB, UNIQUE (txid, rowkey))")
+createUserTable db txLog tbl = do
+  SQL.exec db stmt
+  modifyIORef' txLog (TxLog "SYS:usertables" (_tableName tbl) mempty :)
+  
   where
+    stmt = "CREATE TABLE IF NOT EXISTS " <> tblName <> " \
+           \ (txid UNSIGNED BIG INT, \
+           \  rowkey TEXT, \
+           \  rowdata BLOB, \
+           \  UNIQUE (txid, rowkey))"
     tblName = "\"" <> toUserTable tbl <> "\""
 
 write'
@@ -183,7 +191,7 @@ write' serial db txId txLog wt domain k v =
         TxId i <- readIORef txId
         SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
         SQL.stepNoCB stmt >>= \case
-          SQL.Done -> modifyIORef' txLog (TxLog (toUserTable tbl) k' encoded:)
+          SQL.Done -> modifyIORef' txLog (TxLog (_tableName tbl) k' encoded:)
           SQL.Row -> fail "invariant viaolation"
 
       Just old -> do
@@ -198,7 +206,7 @@ write' serial db txId txLog wt domain k v =
           TxId i <- readIORef txId
           SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
           SQL.stepNoCB stmt >>= \case
-            SQL.Done -> modifyIORef' txLog (TxLog (toUserTable tbl) k' encoded:)
+            SQL.Done -> modifyIORef' txLog (TxLog (_tableName tbl) k' encoded:)
             SQL.Row -> fail "invariant viaolation"
       
     DKeySets -> withStmt db "INSERT OR REPLACE INTO \"SYS:kEYSETS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
@@ -206,7 +214,7 @@ write' serial db txId txLog wt domain k v =
       TxId i <- readIORef txId
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderKeySetName k), SQL.SQLBlob encoded]
       SQL.stepNoCB stmt >>= \case
-        SQL.Done -> modifyIORef' txLog (TxLog "SYS:KEYSETS" (renderKeySetName k) encoded:)
+        SQL.Done -> modifyIORef' txLog (TxLog "SYS:KeySets" (renderKeySetName k) encoded:)
         SQL.Row -> fail "invariant violation"
         
     DModules -> withStmt db "INSERT OR REPLACE INTO \"SYS:MODULES\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do

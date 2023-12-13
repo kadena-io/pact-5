@@ -15,7 +15,7 @@ import Pact.Core.Names (Field(..), FullyQualifiedName, RowKey(..), TableName(..)
 import Pact.Core.Guards (KeySet(KeySet), KeySetName(..), PublicKeyText(..), KSPredicate(KeysAll))
 import Pact.Core.Gen.Serialise (keySetGen, keySetNameGen, moduleNameGen, moduleDataGen, builtinGen
                                ,defPactIdGen, defPactExecGen, namespaceNameGen, namespaceGen)
-import Pact.Core.Serialise (PactSerialise, serialisePact)
+import Pact.Core.Serialise (PactSerialise(..), serialisePact)
 import qualified Pact.Core.PactValue as PactValue
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Persistence (WriteType(Insert), readKeySet, writeKeySet, writeModule, readModule
@@ -26,8 +26,15 @@ import Pact.Core.Persistence (WriteType(Insert), readKeySet, writeKeySet, writeM
                              , RowData(..)
                              , WriteType(Insert, Update, Write)
                              )
-import Data.Foldable (forM_)
 import qualified Data.Text as T
+import Pact.Core.Repl.Compile
+import Pact.Core.Repl.Utils
+import Pact.Core.Environment
+import Pact.Core.Persistence.MockPersistence
+import Data.Default
+import Data.IORef
+import Pact.Core.Builtin
+
 
 testsWithSerial :: (Show b, Show i, Eq b, Eq i) => PactSerialise b i -> Gen b -> Gen i -> [TestTree]
 testsWithSerial serial b i =
@@ -38,8 +45,9 @@ testsWithSerial serial b i =
  ]
 
 tests :: TestTree
-tests = testGroup "Persistence Roundtrip"
-  [ testGroup "CBOR encoding/decoding" $ testsWithSerial serialisePact builtinGen (pure ())
+tests = testGroup "Persistence"
+  [ testGroup "CBOR encoding/decoding roundtrip" $ testsWithSerial serialisePact builtinGen (pure ())
+  , sqliteRegression
   ]
 
 readExistingDb :: FilePath -> IO ()
@@ -115,34 +123,68 @@ namespaceRoundtrip serial = property $ do
 sqliteRegression :: TestTree
 sqliteRegression =
   testCase "sqlite persistence backend produces expected values/txlogs" $
-  withSqlitePactDb serialisePact "tmp.sqlite" $ \pdb -> do
+  withSqlitePactDb serialisePact ":memory:" $ \pdb -> do
     let
       user1 = "user1"
       usert = TableName user1 (ModuleName "someModule" Nothing)
-    txId1 <- _pdbBeginTx pdb Transactional
+    _txId1 <- _pdbBeginTx pdb Transactional
     _pdbCreateUserTable pdb usert
 
     txs1 <- _pdbCommitTx pdb
-    assertEqual "output of commit" txs1 [ TxLog "SYS:usertables" "user1" "TODO" ]
+    -- TODO: https://github.com/kadena-io/chainweb-node/blob/28764eb2dae323608ee2d4f17e984948455f04a1/test/Chainweb/Test/Pact/Checkpointer.hs#L492C13-L497C17
+    assertEqual "output of commit" txs1 [ TxLog "SYS:usertables" "user1" mempty ]
 
+
+    --  Begin tx
     _ <- _pdbBeginTx pdb Transactional
-    let row = RowData $ Map.fromList [(Field "gah", PactValue.PDecimal 123.454345)]
+    let
+      row = RowData $ Map.fromList [(Field "gah", PactValue.PDecimal 123.454345)]
+      rowEnc = _encodeRowData serialisePact row
     _pdbWrite pdb Insert (DUserTables usert) (RowKey "key1") row
     Just row' <- _pdbRead pdb (DUserTables usert) (RowKey "key1")
     assertEqual "row should be identical to its saved/recalled value" row row'
 
-    let row2 = RowData $ Map.fromList
-                 [(Field "gah", PactValue.PBool False)
-                 ,(Field "fh", PactValue.PInteger 1)
-                 ]
+    let
+      row2 = RowData $ Map.fromList
+             [ (Field "gah", PactValue.PBool False)
+             , (Field "fh", PactValue.PInteger 1)
+             ]
+      row2Enc = _encodeRowData serialisePact row2
+                 
     _pdbWrite pdb Update (DUserTables usert) (RowKey "key1") row2
     Just row2' <- _pdbRead pdb (DUserTables usert) (RowKey "key1")
     assertEqual "user update should overwrite with new value" row2 row2'
 
-    let ks = KeySet (Set.fromList [PublicKeyText "skdjhfskj"]) KeysAll
+    let
+      ks = KeySet (Set.fromList [PublicKeyText "skdjhfskj"]) KeysAll
+      ksEnc = _encodeKeySet serialisePact ks
     _ <- _pdbWrite pdb Write DKeySets (KeySetName "ks1" Nothing) ks
     Just ks' <- _pdbRead pdb DKeySets (KeySetName "ks1" Nothing)
     assertEqual "keyset should be equal after storage/retrieval" ks ks'
 
 
+    -- module
+    _md <- loadModule
+
+
+    txs2 <- _pdbCommitTx pdb
+    assertEqual "output of commit" txs2
+      [ TxLog "SYS:KeySets" "ks1" ksEnc
+      -- TxLog Module
+      , TxLog "user1" "key1" row2Enc
+      , TxLog "user1" "key1" rowEnc
+
+      ]
     return ()
+    where
+      loadModule = do
+        let src = "(module test G (defcap G () true) (defun f (a: integer) 1))"
+        pdb <- mockPactDb serialiseRepl
+        g <- newIORef mempty
+        evalLog <- newIORef Nothing
+        let ee = defaultEvalEnv pdb replRawBuiltinMap
+        ref <- newIORef (ReplState mempty pdb def ee g evalLog (SourceCode "" "") Nothing)
+        Right _ <- runReplT ref (interpretReplProgram (SourceCode "test" src) (const (pure ())))
+        Just md <- readModule pdb (ModuleName "test" Nothing)
+        pure md
+        
