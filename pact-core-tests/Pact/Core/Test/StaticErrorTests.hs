@@ -224,6 +224,12 @@ staticTests =
         (defconst c:object{m.i} { 'flag:true })
         )
       |])
+  , ("invalid_var_kind", isDesugarError _InvalidDefInTermVariable, [text|
+      (module m g (defcap g () true)
+        (defschema p flag:bool)
+        (defun i () p)
+      )
+      |])
   ]
 
 tests :: TestTree
