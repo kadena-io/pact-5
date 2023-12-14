@@ -267,16 +267,27 @@ constValGen t = Gen.choice
 fqNameRefGen :: Gen (FQNameRef Name)
 fqNameRefGen = FQName <$> fullyQualifiedNameGen
 
-defManagedMetaGen :: Gen (DefManagedMeta Name)
-defManagedMetaGen = Gen.choice
-  [ DefManagedMeta <$> Gen.int (Range.linear 0 100) <*> fqNameRefGen
+-- defManagedMetaGen :: Gen name -> Gen (DefManagedMeta name)
+-- defManagedMetaGen genName = Gen.choice
+--   [ DefManagedMeta <$> liftA2 (,) (Gen.int (Range.linear 0 100)) genText <*> genName
+--   , pure AutoManagedMeta
+--   ]
+
+defManagedMetaGen :: Gen name -> Gen (DefManagedMeta name)
+defManagedMetaGen genName = Gen.choice
+  [ DefManagedMeta
+    <$> liftA2
+          (,)
+          (Gen.int (Range.linear 0 100))
+          (Gen.text (Range.linear 0 100) Gen.latin1)
+    <*> genName
   , pure AutoManagedMeta
   ]
 
-defCapMetaGen :: Gen (DefCapMeta Name)
-defCapMetaGen = Gen.choice
+defCapMetaGen :: Gen name -> Gen (DefCapMeta name)
+defCapMetaGen genName = Gen.choice
   [ pure DefEvent
-  , DefManaged <$> defManagedMetaGen
+  , DefManaged <$> defManagedMetaGen genName
   , pure Unmanaged
   ]
 
@@ -287,15 +298,16 @@ defCapGen b i = do
   args <- Gen.list (Range.singleton arity) argGen
   ret <- Gen.maybe typeGen
   term <- termGen b i
-  meta <- defCapMetaGen
+  meta <- defCapMetaGen fqNameRefGen
   DefCap name arity args ret term meta <$> i
 
-ifDefCapGen :: Gen i -> Gen (IfDefCap Type i)
+ifDefCapGen :: Gen i -> Gen (IfDefCap name Type i)
 ifDefCapGen i = do
   name <- identGen
   args <- Gen.list (Range.linear 1 8) argGen
   ret <- Gen.maybe typeGen
-  IfDefCap name args ret <$> i
+  meta <- defCapMetaGen bareNameGen
+  IfDefCap name args ret meta <$> i
 
 defSchemaGen :: Gen i -> Gen (DefSchema Type i)
 defSchemaGen i = do

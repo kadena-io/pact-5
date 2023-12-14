@@ -5,6 +5,7 @@
 module Pact.Core.Serialise.CBOR_V1
   ( encodeModuleData, decodeModuleData
   , encodeModuleData_TESTING, decodeModuleData_TESTING
+  , encodeModuleData_TESTING2, decodeModuleData_TESTING2
   , encodeKeySet, decodeKeySet
   , encodeDefPactExec, decodeDefPactExec
   , encodeNamespace, decodeNamespace
@@ -43,12 +44,17 @@ encodeModuleData = toStrictByteString . encode
 encodeModuleData_TESTING :: ModuleData ReplRawBuiltin SpanInfo -> ByteString
 encodeModuleData_TESTING = toStrictByteString . encode
 
+encodeModuleData_TESTING2 :: ModuleData RawBuiltin SpanInfo -> ByteString
+encodeModuleData_TESTING2 = toStrictByteString . encode
+
 decodeModuleData :: ByteString -> Maybe (ModuleData RawBuiltin ())
 decodeModuleData bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
 decodeModuleData_TESTING :: ByteString -> Maybe (ModuleData ReplRawBuiltin SpanInfo)
 decodeModuleData_TESTING bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
+decodeModuleData_TESTING2 :: ByteString -> Maybe (ModuleData RawBuiltin SpanInfo)
+decodeModuleData_TESTING2 bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
 encodeKeySet :: KeySet FullyQualifiedName -> ByteString
 encodeKeySet = toStrictByteString . encode
@@ -305,7 +311,36 @@ instance Serialise (DefManagedMeta Name) where
     1 -> pure AutoManagedMeta
     _ -> fail "unexpected decoding"
 
-instance Serialise (DefCapMeta Name) where
+instance Serialise (DefManagedMeta BareName) where
+  encode (DefManagedMeta i ref) = encodeWord 0 <> encode i <> encode ref
+  encode AutoManagedMeta = encodeWord 1
+
+  decode = decodeWord >>= \case
+    0 -> DefManagedMeta <$> decode <*> decode
+    1 -> pure AutoManagedMeta
+    _ -> fail "unexpected decoding"
+
+instance Serialise (DefManagedMeta (FQNameRef Name)) where
+  encode (DefManagedMeta i ref) = encodeWord 0 <> encode i <> encode ref
+  encode AutoManagedMeta = encodeWord 1
+
+  decode = decodeWord >>= \case
+    0 -> DefManagedMeta <$> decode <*> decode
+    1 -> pure AutoManagedMeta
+    _ -> fail "unexpected decoding"
+
+instance Serialise (DefCapMeta BareName) where
+  encode DefEvent = encodeWord 0
+  encode (DefManaged meta) = encodeWord 1 <> encode meta
+  encode Unmanaged = encodeWord 2
+
+  decode = decodeWord >>= \case
+    0 -> pure DefEvent
+    1 -> DefManaged <$> decode
+    2 -> pure Unmanaged
+    _ -> fail "unexpected decoding"
+
+instance Serialise (DefCapMeta (FQNameRef Name)) where
   encode DefEvent = encodeWord 0
   encode (DefManaged meta) = encodeWord 1 <> encode meta
   encode Unmanaged = encodeWord 2
@@ -317,11 +352,18 @@ instance Serialise (DefCapMeta Name) where
     _ -> fail "unexpected decoding"
 
 instance
-  (Serialise b, Serialise i)
-  => Serialise (DefCap Name Type b i) where
+  (Serialise b,
+   Serialise i,
+   Serialise (Term name Type b i),
+   Serialise (DefCapMeta (FQNameRef name)))
+  => Serialise (DefCap name Type b i) where
   encode (DefCap n arity args ret term meta i) =
-    encode n <> encode arity <> encode args
-    <> encode ret <> encode term <> encode meta
+    encode n
+    <> encode arity
+    <> encode args
+    <> encode ret
+    <> encode term
+    <> encode meta
     <> encode i
 
   decode = DefCap <$> decode <*> decode <*> decode
@@ -472,11 +514,11 @@ instance
 
 instance
   Serialise i
-  => Serialise (IfDefCap Type i) where
-  encode (IfDefCap n args ret i) = encode n <> encode args
-                                   <> encode ret <> encode i
+  => Serialise (IfDefCap name Type i) where
+  encode (IfDefCap n args ret meta i) = encode n <> encode args
+                                   <> encode ret <> encode meta <> encode i
 
-  decode = IfDefCap <$> decode <*> decode <*> decode <*> decode
+  decode = IfDefCap <$> decode <*> decode <*> decode <*> decode <*> decode
 
 instance
   Serialise i

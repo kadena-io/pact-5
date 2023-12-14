@@ -109,8 +109,8 @@ tests = testGroup "Serialise Roundtrip"
     , testProperty "Defun" $ serialiseRoundtrip (defunGen builtinGen infoGen)
     , testProperty "DefConst" $ serialiseRoundtrip (defConstGen builtinGen infoGen)
     , testProperty "FQNameRef" $ serialiseRoundtrip fqNameRefGen
-    , testProperty "DefManagedMeta" $ serialiseRoundtrip defManagedMetaGen
-    , testProperty "DefCapMeta" $ serialiseRoundtrip defCapMetaGen
+    , testProperty "DefManagedMeta" $ serialiseRoundtrip (defManagedMetaGen bareNameGen)
+    , testProperty "DefCapMeta" $ serialiseRoundtrip (defCapMetaGen bareNameGen)
     , testProperty "DefCap" $ serialiseRoundtrip (defCapGen builtinGen infoGen)
     , testProperty "Def" $ serialiseRoundtrip (defGen builtinGen infoGen)
     , testProperty "Module" $ serialiseRoundtrip (evalModuleGen builtinGen infoGen)
