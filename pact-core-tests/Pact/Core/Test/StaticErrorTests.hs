@@ -182,6 +182,48 @@ staticTests =
         (use carl.n)
         )
       |])
+    -- TODO better error
+  , ("invalid_schema_iface_wrong_name", isDesugarError _NoSuchModule, [text|
+      (interface iface
+        (defconst c:object{nonexistent} { 'flag:true })
+        )
+      |])
+    -- TODO better error
+  , ("invalid_schema_iface_wrong_ref", isDesugarError _NoSuchModule, [text|
+      (interface iface
+        (defun i ())
+        (defconst c:object{i} { 'flag:true })
+        )
+      |])
+    -- TODO better error
+  , ("invalid_schema_iface_wrong_ref_qual", isDesugarError _NoSuchModuleMember, [text|
+      (interface iface
+        (defun i ())
+      )
+      (interface iface2
+        (defconst c:object{m.i} { 'flag:true })
+        )
+      |])
+    -- TODO better error
+  , ("invalid_schema_mod_wrong_name", isDesugarError _NoSuchModule, [text|
+      (module m g (defcap g () true)
+        (defconst c:object{nonexistent} { 'flag:true })
+        )
+      |])
+  , ("invalid_schema_mod_wrong_ref", isDesugarError _InvalidDefInSchemaPosition, [text|
+      (module m g (defcap g () true)
+        (defun i () true)
+        (defconst c:object{i} { 'flag:true })
+        )
+      |])
+  , ("invalid_schema_mod_wrong_ref_other", isDesugarError _InvalidDefInSchemaPosition, [text|
+      (module m g (defcap g () true)
+        (defun i () true)
+      )
+      (interface iface2
+        (defconst c:object{m.i} { 'flag:true })
+        )
+      |])
   ]
 
 tests :: TestTree
