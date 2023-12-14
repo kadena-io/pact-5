@@ -1,0 +1,1 @@
+(defcap G () true)

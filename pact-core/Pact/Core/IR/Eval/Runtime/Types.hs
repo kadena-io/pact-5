@@ -23,16 +23,16 @@ module Pact.Core.IR.Eval.Runtime.Types
  , NativeFunction
  , BuiltinEnv
  , NativeFn(..)
- , EvalT(..)
- , runEvalT
+ , EvalM(..)
+ , runEvalM
  , CEKValue(..)
  , Cont(..)
  , CEKErrorHandler(..)
  , CondFrame(..)
  , Closure(..)
  , EvalResult(..)
- , EvalTEnv(..)
- , emGas, emGasLog, emRuntimeEnv
+--  , EvalTEnv(..)
+--  , emGas, emGasLog, emRuntimeEnv
  , EvalState(..)
  , esStack
  , esCaps, esEvents
@@ -81,13 +81,13 @@ import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Reader
 import Control.Monad.State.Strict
+import Control.Monad.Except
 import Data.List.NonEmpty(NonEmpty)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Data.Decimal(Decimal)
 import Data.Vector(Vector)
 import Data.RAList(RAList)
-import Data.IORef
 import Pact.Time(UTCTime)
 
 import Pact.Core.Names
@@ -99,13 +99,16 @@ import Pact.Core.Hash
 import Pact.Core.IR.Term
 import Pact.Core.Literal
 import Pact.Core.Type
-import qualified Pact.Core.DefPacts.Types as P
-import Pact.Core.Persistence
+import Pact.Core.Persistence ( PactDb )
 import Pact.Core.ModRefs
 import Pact.Core.Capabilities
 import Pact.Core.Environment
 import Pact.Core.DefPacts.Types (DefPactExec)
+import Pact.Core.Errors
+import Pact.Core.Debug
+
 import qualified Pact.Core.Pretty as P
+import qualified Pact.Core.DefPacts.Types as P
 
 
 -- | The top level env map
@@ -282,29 +285,27 @@ data EvalResult b i m
   deriving Show
 
 
-data EvalTEnv b i m
-  = EvalTEnv
-  { _emRuntimeEnv :: CEKEnv b i (EvalT b i m)
-  , _emGas :: IORef Gas
-  , _emGasLog :: IORef (Maybe [(Text, Gas)])
-  }
-
 -- Todo: are we going to inject state as the reader monad here?
-newtype EvalT b i m a =
-  EvalT (ReaderT (EvalTEnv b i m) (StateT (EvalState b i) m) a)
+newtype EvalM b i a =
+  EvalT (ReaderT (EvalEnv b i) (ExceptT (PactError i) (StateT (EvalState b i) IO)) a)
   deriving
     ( Functor, Applicative, Monad
     , MonadIO
     , MonadThrow
-    , MonadCatch)
-  via (ReaderT (EvalTEnv b i m) (StateT (EvalState b i) m))
+    , MonadCatch
+    , MonadError (PactError i))
+  via (ReaderT (EvalEnv b i) (ExceptT (PactError i) (StateT (EvalState b i) IO)))
 
-runEvalT
-  :: EvalTEnv b i m
+instance PhaseDebug b i (EvalM b i) where
+  debugPrint _ _ = pure ()
+
+runEvalM
+  :: EvalEnv b i
   -> EvalState b i
-  -> EvalT b i m a
-  -> m (a, EvalState b i)
-runEvalT env st (EvalT action) = runStateT (runReaderT action env) st
+  -> EvalM b i a
+  -> IO (Either (PactError i) a, EvalState b i)
+runEvalM env st (EvalT action) =
+  runStateT (runExceptT (runReaderT action env)) st
 
 type NativeFunction b i m
   = i -> b -> Cont b i m -> CEKErrorHandler b i m -> CEKEnv b i m -> [CEKValue b i m] -> m (EvalResult b i m)
@@ -441,21 +442,16 @@ instance (Show i, Show b, Pretty b) => Pretty (CEKValue b i m) where
       P.angles "closure#"
 
 makeLenses ''CEKEnv
-makeLenses ''EvalTEnv
 
-instance (MonadIO m) => MonadGas (EvalT b i m) where
-  logGas msg g = do
-    r <- EvalT $ view emGasLog
-    liftIO $ modifyIORef' r (fmap ((msg, g):))
+instance MonadGas (EvalM b i) where
+  logGas _msg _g = pure ()
 
-  chargeGas g = do
-    r <- EvalT $ view emGas
-    liftIO (modifyIORef' r (<> g))
+  chargeGas _g = pure ()
 
--- instance (MonadIO m) => MonadEvalEnv b i (EvalT b i m) where
---   readEnv = EvalT $ view emRuntimeEnv
+instance MonadEvalEnv b i (EvalM b i) where
+  readEnv = EvalT ask
 
-instance Monad m => MonadEvalState b i (EvalT b i m) where
+instance MonadEvalState b i (EvalM b i) where
   getEvalState = EvalT get
   putEvalState p = EvalT (put p)
   modifyEvalState f = EvalT (modify' f)

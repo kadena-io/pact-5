@@ -28,7 +28,7 @@ module Pact.Core.IR.Desugar
  ) where
 
 import Control.Applicative((<|>))
-import Control.Monad ( when, forM, (>=>), unless)
+import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Strict ( StateT(..), MonadState )
 import Control.Monad.Trans.Maybe(MaybeT(..), runMaybeT, hoistMaybe)
@@ -41,8 +41,7 @@ import Data.List(findIndex)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Set(Set)
 import Data.Graph(stronglyConnComp, SCC(..))
-import Data.Foldable(foldl', foldlM)
-import Data.Foldable(find, traverse_, foldrM)
+import Data.Foldable(find, traverse_, foldrM, foldl', foldlM)
 import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as S
@@ -81,14 +80,28 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 
 type DesugarType = Lisp.Type
 
+data ModuleType = MTModule | MTInterface
+
+data CurrModule
+  = CurrModule
+  { _cmName :: ModuleName
+  , _cmImplements :: [ModuleName]
+  , _cmType :: ModuleType
+  }
+makeLenses ''CurrModule
+
 data RenamerEnv b i
   = RenamerEnv
   { _reBinds :: Map Text (NameKind, Maybe DefKind)
+  , _reCurrModuleTmpBinds ::  Map Text (NameKind, DefKind)
   , _reVarDepth :: DeBruijn
-  , _reCurrModule :: Maybe (ModuleName, [ModuleName])
+  , _reCurrModule :: Maybe CurrModule
   , _reCurrDef :: Maybe DefKind
   }
 makeLenses ''RenamerEnv
+
+currModuleName :: MonadReader (RenamerEnv b i) m => m (Maybe ModuleName)
+currModuleName = preview $ reCurrModule . folded . cmName
 
 -- Our type to keep track of
 newtype RenamerState
@@ -384,8 +397,8 @@ desugarDefun (Lisp.Defun defname [] mrt body _ _ i) = do
 desugarDefun (Lisp.Defun defname (arg:args) mrt body _ _ i) = do
   let args' = toArg <$> (arg :| args)
   body' <- desugarLispTerm body
-  view reCurrModule >>= \case
-    Just (mn,_) -> do
+  currModuleName >>= \case
+    Just mn -> do
       let bodyLam = Lam (TLDefun mn defname) args' body' i
       pure $ Defun defname (NE.toList args') mrt bodyLam i
     Nothing -> throwDesugarError (NotAllowedOutsideModule "defun") i
@@ -397,8 +410,8 @@ desugarDefPact
 desugarDefPact (Lisp.DefPact dpname _ _ [] _ _ i) =
   throwDesugarError (EmptyDefPact dpname) i
 desugarDefPact (Lisp.DefPact dpname margs rt (step:steps) _ _ i) =
-  view reCurrModule >>= \case
-    Just (mn,_) -> do
+  currModuleName >>= \case
+    Just mn -> do
       let args' = toArg <$> margs
       steps' <- forM (step :| steps) \case
         Lisp.Step s _ ->
@@ -435,7 +448,7 @@ desugarDefMeta info args = \case
     Just (arg, name) ->
         case findIndex ((==) arg . view argName) args of
           Just index' ->
-            let dmanaged = DefManagedMeta index' (FQParsed name)
+            let dmanaged = DefManagedMeta (index', arg) name
             in pure (DefManaged dmanaged)
           Nothing ->
             throwDesugarError (InvalidManagedArg arg) info
@@ -450,7 +463,7 @@ desugarDefCap (Lisp.DefCap dcn arglist rtype term _docs _model meta i) =
     Just _ -> do
       let arglist' = toArg <$> arglist
       term' <- desugarLispTerm term
-      meta' <- maybe (pure Unmanaged) (desugarDefMeta i arglist') meta
+      meta' <- fmap FQParsed <$> maybe (pure Unmanaged) (desugarDefMeta i arglist') meta
       pure (DefCap dcn (length arglist) arglist' rtype term' meta' i)
     Nothing ->
       throwDesugarError (NotAllowedOutsideModule "defcap") i
@@ -476,25 +489,14 @@ desugarIfDef
   => Lisp.IfDef i
   -> RenamerT b i m  (IfDef ParsedName DesugarType b i)
 desugarIfDef = \case
-  Lisp.IfDfun (Lisp.IfDefun n margs rty _ _ i) -> IfDfun <$> case margs of
-    [] -> do
-      pure $ IfDefun n [] rty i
-    _ -> do
-      let args = toArg <$> margs
-      rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) pure rty
-      pure $ IfDefun n args (Just rty') i
+  Lisp.IfDfun (Lisp.IfDefun n margs rty _ _ i) -> pure $ IfDfun $ IfDefun n (toArg <$> margs) rty i
   -- Todo: check managed impl
-  Lisp.IfDCap (Lisp.IfDefCap n margs rty _ _ _meta i) -> IfDCap <$> do
+  Lisp.IfDCap (Lisp.IfDefCap n margs rty _ _ meta i) -> IfDCap <$> do
     let args = toArg <$> margs
-    pure $ IfDefCap n args rty i
+    meta' <- fmap (BareName . rawParsedName) <$> maybe (pure Unmanaged) (desugarDefMeta i args) meta
+    pure $ IfDefCap n args rty meta' i
   Lisp.IfDConst dc -> IfDConst <$> desugarDefConst dc
-  Lisp.IfDPact (Lisp.IfDefPact n margs rty _ _ i) -> IfDPact <$> case margs of
-    [] -> do
-      pure $ IfDefPact n [] rty i
-    _ -> do
-      let args = toArg <$> margs
-      rty' <- maybe (throwDesugarError (UnannotatedReturnType n) i) pure rty
-      pure $ IfDefPact n args (Just rty') i
+  Lisp.IfDPact (Lisp.IfDefPact n margs rty _ _ i) -> pure $ IfDPact $ IfDefPact n (toArg <$> margs) rty i
   Lisp.IfDSchema ds -> IfDSchema <$> desugarDefSchema ds
 
 desugarDef
@@ -515,7 +517,7 @@ desugarModule
   -> RenamerT b i m (Module ParsedName DesugarType b i)
 desugarModule (Lisp.Module mname mgov extdecls defs _ _ i) = do
   (imports, blessed, implemented) <- splitExts extdecls
-  defs' <- locally reCurrModule (const (Just (mname,[]))) $ traverse desugarDef (NE.toList defs)
+  defs' <- locally reCurrModule (const (Just $ CurrModule mname [] MTModule)) $ traverse desugarDef (NE.toList defs)
   pure $ Module mname mgov defs' blessed imports implemented placeholderHash i
   where
   splitExts = split ([], S.empty, [])
@@ -783,7 +785,8 @@ resolveModuleName
   -> RenamerT b i m (ModuleName, [ModuleName])
 resolveModuleName i mn =
   view reCurrModule >>= \case
-    Just (currMod, imps) | currMod == mn -> pure (currMod, imps)
+    -- TODO better error message if it's not MTMOdule
+    Just (CurrModule currMod imps MTModule) | currMod == mn -> pure (currMod, imps)
     _ -> resolveModuleData mn i >>= \case
       ModuleData md _ -> do
         let implementeds = view mImplements md
@@ -797,11 +800,12 @@ resolveModuleName i mn =
 resolveInterfaceName :: (MonadEval b i m) => i -> ModuleName -> RenamerT b i m (ModuleName)
 resolveInterfaceName i mn =
   view reCurrModule >>= \case
-    Just (currMod, _imps) | currMod == mn -> pure currMod
+    -- TODO better error message if it's not MTInterface
+    Just (CurrModule currMod _ MTInterface) | currMod == mn -> pure currMod
     _ -> resolveModuleData mn i >>= \case
       ModuleData _ _ ->
         throwDesugarError (InvalidModuleReference mn) i
-      -- todo: error type here
+      -- TODO: error type here
       InterfaceData _ _ ->
         pure mn
 
@@ -1068,7 +1072,7 @@ renameDefCap
   => DefCap ParsedName DesugarType b i
   -> RenamerT b i m (DefCap Name Type b i)
 renameDefCap (DefCap name arity argtys rtype term meta info) = do
-  meta' <- resolveMeta meta
+  meta' <- resolveMeta info meta
   argtys' <- (traverse.traverse) (renameType info) argtys
   rtype' <- traverse (renameType info) rtype
   term' <- local (set reCurrDef (Just DKDefCap) .  bindArgs) $ renameTerm term
@@ -1084,13 +1088,19 @@ renameDefCap (DefCap name arity argtys rtype term meta info) = do
       ixs = [depth .. newDepth - 1]
       m = M.fromList $ zip (_argName <$> argtys) ((, Nothing) . NBound <$> ixs)
       in over reBinds (M.union m) $ set reVarDepth newDepth rEnv
-  resolveMeta DefEvent = pure DefEvent
-  resolveMeta Unmanaged = pure Unmanaged
-  resolveMeta (DefManaged AutoManagedMeta) = pure (DefManaged AutoManagedMeta)
-  resolveMeta (DefManaged (DefManagedMeta i (FQParsed pn))) = do
-    (name', _) <- resolveName info pn
-    fqn <- expectedFree info name'
-    pure (DefManaged (DefManagedMeta i (FQName fqn)))
+
+resolveMeta
+  :: MonadEval b i m
+  => i
+  -> DefCapMeta (FQNameRef ParsedName)
+  -> RenamerT b i m (DefCapMeta (FQNameRef Name))
+resolveMeta _ DefEvent = pure DefEvent
+resolveMeta _ Unmanaged = pure Unmanaged
+resolveMeta _ (DefManaged AutoManagedMeta) = pure (DefManaged AutoManagedMeta)
+resolveMeta info (DefManaged (DefManagedMeta i (FQParsed pn))) = do
+  (name', _) <- resolveName info pn
+  fqn <- expectedFree info name'
+  pure (DefManaged (DefManagedMeta i (FQName fqn)))
 
 expectedFree
   :: (MonadEval b i m)
@@ -1117,9 +1127,11 @@ renameDef = \case
 
 renameIfDef
   :: (MonadEval b i m, DesugarBuiltin b)
-  => IfDef ParsedName DesugarType b i
+  => ModuleName
+  -> Set Text
+  -> IfDef ParsedName DesugarType b i
   -> RenamerT b i m (IfDef Name Type b i)
-renameIfDef = \case
+renameIfDef mn ifDefuns = \case
   -- Todo: export and use lenses lol
   IfDfun d -> do
     let i = _ifdInfo d
@@ -1132,7 +1144,13 @@ renameIfDef = \case
     let i = _ifdcInfo d
     args' <- (traverse.traverse) (renameType i) (_ifdcArgs d)
     rtype' <- traverse (renameType i) (_ifdcRType d)
+    traverse_ (ensureInLocals i) (_ifdcMeta d)
     pure (IfDCap (d{_ifdcArgs = args', _ifdcRType = rtype'}))
+    where
+    ensureInLocals info (BareName n) = do
+      unless (S.member n ifDefuns) $ throwDesugarError (NoSuchModuleMember mn n) info
+
+
   IfDPact d -> do
     let i = _ifdpInfo d
     args' <- (traverse.traverse) (renameType i) (_ifdpArgs d)
@@ -1187,7 +1205,7 @@ resolveBare (BareName bn) i = views reBinds (M.lookup bn) >>= \case
     Nothing -> do
       let mn = ModuleName bn Nothing
       view reCurrModule >>= \case
-        Just (currMod, imps) | currMod == mn ->
+        Just (CurrModule currMod imps _type) | currMod == mn ->
           pure (Name bn (NModRef mn imps), Nothing)
         _ -> do
           (mn', imps) <- resolveModuleName i mn
@@ -1214,7 +1232,12 @@ resolveQualified (QualifiedName qn qmn@(ModuleName modName mns)) i = do
     Just p -> pure p
     Nothing -> throwDesugarError (NoSuchModuleMember qmn qn) i
   where
-  baseLookup pdb defnName moduleName = do
+  lookupLocalQual defnName moduleName = do
+    currMod <- MaybeT currModuleName
+    guard (currMod == moduleName)
+    (nk, dk) <- MaybeT $ view (reCurrModuleTmpBinds . at defnName)
+    pure (Name defnName nk, Just dk)
+  baseLookup pdb defnName moduleName = lookupLocalQual defnName moduleName <|> do
     MaybeT (lift (lookupModuleData i pdb moduleName)) >>= \case
       ModuleData module' _ -> do
         d <- hoistMaybe (findDefInModule defnName module' )
@@ -1256,20 +1279,21 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash i) = d
       throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (head d))
   binds <- view reBinds
   bindsWithImports <- foldlM (handleImport i) binds imports
-  (defs'', _, _) <- over _1 reverse <$> foldlM (go mname) ([], S.empty, bindsWithImports) defs'
+  (defs'', _, _, _) <- over _1 reverse <$> foldlM (go mname) ([], S.empty, bindsWithImports, M.empty) defs'
   traverse_ (checkImplements i defs'' mname) implements
   pure (Module mname mgov' defs'' blessed imports implements mhash i)
   where
   -- Our deps are acyclic, so we resolve all names
-  go mname (defns, s, m) defn = do
+  go mname (!defns, !s, !m, !mlocals) defn = do
     when (S.member (defName defn) s) $ throwDesugarError (DuplicateDefinition (defName defn)) i
     let dn = defName defn
-    defn' <- local (set reCurrModule (Just (mname, implements)))
+    defn' <- local (set reCurrModule (Just $ CurrModule mname implements MTModule) . set reCurrModuleTmpBinds mlocals)
              $ local (set reBinds m) $ renameDef defn
     let dk = defKind defn'
     let depPair = (NTopLevel mname mhash, dk)
     let m' = M.insert dn (over _2 Just depPair) m
-    pure (defn':defns, S.insert (defName defn) s, m')
+        mlocals' = M.insert dn depPair mlocals
+    pure (defn':defns, S.insert (defName defn) s, m', mlocals')
 
   resolveGov mname = \case
     KeyGov rawKsn -> case parseAnyKeysetName (_keysetName rawKsn) of
@@ -1329,7 +1353,9 @@ checkImplements i defs moduleName ifaceName = do
           throwDesugarError (NotImplemented moduleName ifaceName (_ifdName ifd)) i
     IfDCap ifd ->
       case find (\df -> _ifdcName ifd == defName df) defs of
-        Just (DCap v) ->
+        Just (DCap v) -> do
+          unless (checkMetaMatches (_dcapMeta v) (_ifdcMeta ifd)) $
+             throwDesugarError (ImplementationError moduleName ifaceName $ ": defcap mismatch for " <> _dcapName v) i
           when (_dcapArgs v /= _ifdcArgs ifd || _dcapRType v /= _ifdcRType ifd) $
             throwDesugarError (ImplementationError moduleName ifaceName (_dcapName v)) i
         Just d -> throwDesugarError (ImplementationError moduleName ifaceName  (defName d)) i
@@ -1342,6 +1368,20 @@ checkImplements i defs moduleName ifaceName = do
           throwDesugarError (ImplementationError moduleName ifaceName (_ifdpName ifd)) i
         Just _ ->  throwDesugarError (ImplementationError moduleName ifaceName (_ifdpName ifd)) i
         Nothing -> throwDesugarError (NotImplemented moduleName ifaceName (_ifdpName ifd)) i
+
+  checkMetaMatches :: DefCapMeta (FQNameRef Name) -> DefCapMeta BareName -> Bool
+  checkMetaMatches Unmanaged Unmanaged = True
+  checkMetaMatches DefEvent DefEvent = True
+  checkMetaMatches (DefManaged l) (DefManaged r) = checkManagedMatches l r
+  checkMetaMatches _ _ = False
+
+  checkManagedMatches :: DefManagedMeta (FQNameRef Name) -> DefManagedMeta BareName -> Bool
+  checkManagedMatches _ AutoManagedMeta = True
+  checkManagedMatches (DefManagedMeta lhs (FQName lName)) (DefManagedMeta rhs (BareName rName)) =
+    lhs == rhs &&
+    _fqName lName == rName &&
+    _fqModule lName == moduleName
+  checkManagedMatches _ _ = False
 
 
 -- | Todo: support imports
@@ -1362,22 +1402,25 @@ renameInterface (Interface unmangled defs imports ih info) = do
       throwDesugarError (RecursionDetected ifn (ifDefName <$> d)) (ifDefInfo (head d))
   binds <- view reBinds
   bindsWithImports <- foldlM (handleImport info) binds imports
-  (defs'', _, _) <- over _1 reverse <$> foldlM (go ifn) ([], S.empty, bindsWithImports) defs'
+  (defs'', _, _, _) <- over _1 reverse <$> foldlM (go ifn) ([], S.empty, bindsWithImports, S.empty) defs'
   pure (Interface ifn defs'' imports ih info)
   where
   mkScc ifn dns def = (def, ifDefName def, S.toList (ifDefSCC ifn dns def))
-  go ifn (ds, s, m) d = do
+  go ifn (ds, s, m, dfnSet) d = do
     let dn = ifDefName d
     when (S.member dn s) $
       throwDesugarError (DuplicateDefinition dn) info
     d' <- local (set reBinds m) $
-          local (set reCurrModule (Just (ifn, []))) $ renameIfDef d
+          local (set reCurrModule (Just $ CurrModule ifn [] MTInterface)) $ renameIfDef ifn dfnSet d
     let m' = case ifDefToDef d' of
               Just defn ->
                 let dk = defKind defn
                 in M.insert dn (NTopLevel ifn ih, Just dk) m
               Nothing -> m
-    pure (d':ds, S.insert dn s, m')
+        dfnSet' = case d of
+          IfDfun{} -> S.insert dn dfnSet
+          _ -> dfnSet
+    pure (d':ds, S.insert dn s, m', dfnSet')
 
 runRenamerT
   :: (MonadEval b i m)
@@ -1385,7 +1428,7 @@ runRenamerT
   -> m (a, RenamerState)
 runRenamerT (RenamerT act) = do
   tlBinds <- usesEvalState loToplevel (fmap (\(fqn, dk) -> (fqnToNameKind fqn, Just dk)))
-  let renamerEnv = RenamerEnv tlBinds 0 Nothing Nothing
+  let renamerEnv = RenamerEnv tlBinds mempty 0 Nothing Nothing
       renamerState = RenamerState mempty
   runReaderT (runStateT act renamerState) renamerEnv
   where
@@ -1423,7 +1466,7 @@ runDesugarReplDefun
   -> m (DesugarOutput (Defun Name Type b i))
 runDesugarReplDefun =
   runDesugar
-  . local (set reCurrModule (Just (replModuleName, [])))
+  . local (set reCurrModule (Just $ CurrModule replModuleName [] MTModule))
   . (desugarDefun >=> renameReplDefun)
 
 runDesugarReplDefConst
@@ -1432,7 +1475,7 @@ runDesugarReplDefConst
   -> m (DesugarOutput (DefConst Name Type b i))
 runDesugarReplDefConst  =
   runDesugar
-  . local (set reCurrModule (Just (replModuleName,[])))
+  . local (set reCurrModule (Just $ CurrModule replModuleName [] MTModule))
   . (desugarDefConst >=> renameReplDefConst)
 
 runDesugarTopLevel
@@ -1463,3 +1506,11 @@ runDesugarReplTopLevel = \case
     over dsOut RTLDefun <$> runDesugarReplDefun de
   Lisp.RTLDefConst dc ->
     over dsOut RTLDefConst <$> runDesugarReplDefConst dc
+
+
+-- Some types don't get all their lenses used, hence GHC warns about unused bindings.
+-- This is one way to controllably silence these warnings.
+data Unused where Unused :: a -> Unused
+
+_unused :: [Unused]
+_unused = [Unused $ set cmImplements, Unused $ set cmType]

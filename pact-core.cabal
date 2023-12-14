@@ -156,6 +156,7 @@ library
     Pact.Core.Principal
     Pact.Core.Namespace
     Pact.Core.RuntimeParsers
+    Pact.Core.Evaluate
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
@@ -309,5 +310,7 @@ test-suite core-tests
     , Pact.Core.Test.SerialiseTests
     , Pact.Core.Test.LegacySerialiseTests
     , Pact.Core.Gen.Serialise
+    , Pact.Core.Test.StaticErrorTests
+    , Pact.Core.Test.TestPrisms
     , Pact.Core.Test.ZkTests
     , Pact.Core.Test.PoseidonTests
