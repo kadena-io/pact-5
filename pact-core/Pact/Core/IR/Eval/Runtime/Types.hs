@@ -383,11 +383,17 @@ data BuiltinFrame (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type
   | WithReadFrame TableValue RowKey (CanApply step b i m)
    -- ^ <table> <key to read> <closure to apply afterwards>
   | WithDefaultReadFrame TableValue RowKey (ObjectData PactValue) (CanApply step b i m)
+  -- ^ <table> <key to read> <default value> <closure to apply afterwards>
   | KeysFrame TableValue
+  -- ^ Table to apply `keys` to
   | TxIdsFrame TableValue Integer
+  -- ^ <table> <key to read> <default value> <closure to apply afterwards>
   | TxLogFrame TableValue Integer
+  -- ^ <table> <txid>
   | KeyLogFrame TableValue RowKey Integer
+  -- <table> <key> <txid>
   | CreateTableFrame TableValue
+  -- <create-table>
   | EmitEventFrame (CapToken FullyQualifiedName PactValue)
   deriving Show
 
@@ -424,6 +430,7 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   -- Todo: merge all cap constructors
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
   | CapInvokeC (CEKEnv step b i m) i [EvalTerm b i] [PactValue] (CapFrame b i) (Cont step b i m)
+  -- ^ Frame for control flow around argument reduction to with-capability and create-user-guard
   | EvalCapC (CEKEnv step b i m) i FQCapToken (EvalTerm b i) (Cont step b i m)
   -- ^ Capability special form frams that eva
   | CapBodyC CapPopState (CEKEnv step b i m) (Maybe (CapToken QualifiedName PactValue)) (Maybe (PactEvent PactValue)) (EvalTerm b i) (Cont step b i m)

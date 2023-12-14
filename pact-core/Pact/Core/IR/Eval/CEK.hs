@@ -709,19 +709,6 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
       applyLamUnsafe (C clo) [VPactValue managed, VPactValue value] Mt CEKNoHandler
     _t -> failInvariant (view termInfo _t) "Manager function was not a two-argument function"
 
-
-    -- lookupFqName (_ctName ct) >>= \case
-    --   Just (DCap d) -> do
-    --     enforceMeta (_dcapMeta d)
-    --     emitCapability info ct
-    --     returnCEKValue cont handler (VBool True)
-    --   Just _ ->
-    --     failInvariant info "CapToken does not point to defcap"
-    --   _ -> failInvariant info "No Capability found in emit-event"
-    --   where
-    --   enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)
-    --   enforceMeta _ = pure ()
-
 emitEvent
   :: (MonadEval b i m)
   => i
@@ -733,8 +720,6 @@ emitEvent info pe = findCallingModule >>= \case
       if ctModule == mn then do
         esEvents %== (++ [pe])
       else throwExecutionError info (EventDoesNotMatchModule mn)
-      -- let fqn = _ctName ct
-      -- let ctModule = _fqModule fqn
     Nothing -> failInvariant info "emit-event called outside of module code"
 
 emitCapability
@@ -767,7 +752,8 @@ requireCap
 requireCap info cont handler ct@(CapToken fqn _) = do
   capInStack <- isCapInStack ct
   if capInStack then returnCEKValue cont handler (VBool True)
-  else returnCEK cont handler $ VError ("cap not in scope " <> renderQualName (fqnToQualName fqn)) info
+  else returnCEK cont handler $
+    VError ("cap not in scope " <> renderQualName (fqnToQualName fqn)) info
 
 isCapInStack
   :: (MonadEval b i m)
@@ -789,22 +775,8 @@ composeCap info cont handler env origToken =
   isCapInStack origToken >>= \case
     False ->
       evalCap info cont handler env origToken (CapBodyC PopCapComposed) (Constant (LBool True) info)
-      -- let ct = CapToken (fqnToQualName fqn) args
-      -- lookupFqName fqn >>= \case
-      --   Just (DCap d) -> do
-      --     (esCaps . csSlots) %== (CapSlot ct []:)
-      --     args' <- zipWithM (\pv arg -> maybeTCType info pv (_argType arg)) args (_dcapArgs d)
-      --     let env' = RAList.fromList $ fmap VPactValue (reverse args')
-      --         capBody = _dcapTerm d
-      --     let cont' = UserGuardC (CapPopC PopCapComposed cont)
-      --     evalCEK cont' handler (set ceLocal env' env) capBody
-      --   -- todo: this error loc is _not_ good. Need to propagate `i` here, maybe in the stack
-      --   Just d ->
-      --     throwExecutionError (defInfo d) $ InvalidDefKind (defKind d) "in compose-capability"
-      --   Nothing ->
-      --     -- Todo: error loc here
-      --     throwExecutionError' (NoSuchDef fqn)
-    True -> returnCEKValue cont handler (VBool True)
+    True ->
+      returnCEKValue cont handler (VBool True)
 
 filterIndex :: Int -> [a] -> [a]
 filterIndex i xs = [x | (x, i') <- zip xs [0..], i /= i']
@@ -1087,8 +1059,18 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
       PreFoldDbFrame{} -> undefined
       TxIdsFrame{} -> undefined
       KeyLogFrame{} -> undefined
-      _ -> undefined
+      FoldDbFilterFrame{} -> undefined
+      FoldDbMapFrame{} -> undefined
+      TxLogFrame{} -> undefined
+      CreateTableFrame{} -> undefined
+      EmitEventFrame{} -> undefined
       where
+      -- foldDBRead tv rk queryClo appClo remaining acc = liftDbFunction info (_pdbRead pdb (tvToDomain tv) rk) >>= \case
+      --   Just (RowData row) -> do
+      --     let rdf = FoldDbFilterFrame tv queryClo appClo (rk, ObjectData row) remaining acc
+      --         cont' = BuiltinC env info rdf cont
+      --     applyLam queryClo [VObject row] cont' handler
+      --   Nothing ->
       selectRead tv clo keys acc mf = case keys of
         k:ks -> liftDbFunction info (_pdbRead pdb (tvToDomain tv) k) >>= \case
           Just (RowData r) -> do
@@ -1104,10 +1086,6 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
           Nothing ->
             let acc' = PObject . _objectData <$> reverse acc
             in returnCEKValue cont handler (VList (V.fromList acc'))
-  -- | ReadFrame TableValue RowKey
-  -- | WithReadFrame TableValue RowKey (CanApply step b i m)
-  -- | WithDefaultReadFrame TableValue RowKey (ObjectData PactValue) (CanApply step b i m)
-  -- | KeysFrame TableValue
     _ -> returnCEK cont handler (VError "higher order apply did not return a pactvalue" info)
 applyContToValue (CapBodyC cappop env mcap mevent capbody cont) handler _ = do
   -- Todo: I think this requires some administrative check?
