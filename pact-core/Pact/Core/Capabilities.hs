@@ -36,13 +36,13 @@ import Pact.Core.Hash
 data DefManagedMeta name
   = DefManagedMeta (Int, Text) name
   | AutoManagedMeta
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data DefCapMeta name
   = DefEvent
   | DefManaged (DefManagedMeta name)
   | Unmanaged
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 dcMetaFqName :: Traversal' (DefCapMeta (FQNameRef Name)) FullyQualifiedName
 dcMetaFqName f = \case
