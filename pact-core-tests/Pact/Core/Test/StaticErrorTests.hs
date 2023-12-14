@@ -118,6 +118,16 @@ staticTests =
         (defun foo:string (a:string b:module{mod}) a)
         )
       |])
+  , ("import_unknown_module", isDesugarError _NoSuchModule, [text|
+      (module m g (defcap g () true)
+        (use nonexistent)
+        )
+      |])
+  , ("import_unknown_module_self", isDesugarError _NoSuchModule, [text|
+      (module m g (defcap g () true)
+        (use m)
+        )
+      |])
   ]
 
 tests :: TestTree
