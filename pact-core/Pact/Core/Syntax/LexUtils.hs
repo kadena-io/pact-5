@@ -25,6 +25,7 @@ import Pact.Core.Errors
 import Pact.Core.Names
 import Pact.Core.Pretty (Pretty(..))
 import Pact.Core.Syntax.ParseTree
+import qualified Pact.Core.Syntax.Limits as Limits
 
 type ParserT = Either PactErrorI
 type ParsedExpr = Expr SpanInfo
@@ -211,6 +212,11 @@ getSpanInfo = do
 emit :: (Text -> Token) -> Text -> SpanInfo -> LexerM PosToken
 emit f e s = pure (PosToken (f e) s)
 
+emitIdentifier :: Text -> SpanInfo -> LexerM PosToken
+emitIdentifier t si
+  | T.length t <= Limits.identifierLengthLimit = pure (PosToken (TokenIdent t) si)
+  | otherwise = throwLexerError (IdentifierTooLong t) si
+
 token :: Token -> Text -> SpanInfo -> LexerM PosToken
 token tok _ s = pure (PosToken tok s)
 
@@ -275,6 +281,16 @@ parseError (remaining, exps) =
 
 runLexerT :: LexerM a -> Text -> Either PactErrorI a
 runLexerT (LexerM act) s = evalStateT act (initState s)
+
+checkArgListLength :: [a] -> ParserT [a]
+checkArgListLength k
+  | length k <= Limits.functionArgLengthLimit = pure k
+  | otherwise = throwParseError TooManyFunctionArgs def
+
+checkSchemaArgLength :: [a] -> ParserT [a]
+checkSchemaArgLength k
+  | length k <= Limits.schemaLengthLimit = pure k
+  | otherwise = throwParseError TooManyFunctionArgs def
 
 renderTokenText :: Token -> Text
 renderTokenText = \case

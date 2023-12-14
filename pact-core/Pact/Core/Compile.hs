@@ -113,9 +113,10 @@ evalModuleGovernance interp tl = do
               pure term
             CapGov (ResolvedGov fqn) -> do
               let cgBody = Constant LUnit info
-                  term = CapabilityForm (WithCapability (fqnToName fqn) [] cgBody) info
+                  withCapApp = App (Var (fqnToName fqn) info) [] info
+                  term = CapabilityForm (WithCapability withCapApp cgBody) info
               pure term
-          void (_interpret interp PReadOnly term)
+          void (_interpret interp PImpure term)
           esCaps . csModuleAdmin %== S.insert (Lisp._mName m)
           -- | Restore the state to pre-module admin acquisition
           esLoaded .== lo

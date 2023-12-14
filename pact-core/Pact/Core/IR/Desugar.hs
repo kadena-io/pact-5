@@ -36,7 +36,7 @@ import Control.Monad.Except
 import Control.Lens hiding (List)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
-import Data.Maybe(mapMaybe, isJust)
+import Data.Maybe(mapMaybe)
 import Data.List(findIndex)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Set(Set)
@@ -149,27 +149,27 @@ instance DesugarBuiltin RawBuiltin where
   desugarOperator info = \case
     -- Manual eta expansion for and as well as Or
     Lisp.AndOp -> let
-      arg1Name = "#andArg1"
+      arg1Name = "]andArg1"
       arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool))
-      arg2Name = "#andArg2"
+      arg2Name = "]andArg2"
       arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool))
       in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (CAnd (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
     Lisp.OrOp -> let
-      arg1Name = "#orArg1"
+      arg1Name = "]orArg1"
       arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool))
-      arg2Name = "#orArg2"
+      arg2Name = "]orArg2"
       arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool))
       in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (COr (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
     Lisp.EnforceOp -> let
-      arg1Name = "#enforceArg1"
+      arg1Name = "]enforceArg1"
       arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool))
-      arg2Name = "#enforceArg2"
+      arg2Name = "]enforceArg2"
       arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimString))
       in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (CEnforce (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
     Lisp.EnforceOneOp -> let
-      arg1Name = "#enforceOneArg1"
+      arg1Name = "]enforceOneArg1"
       arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimString))
-      arg2Name = "#enforceOneArg2"
+      arg2Name = "]enforceOneArg2"
       arg2 = Arg arg2Name (Just (Lisp.TyList (Lisp.TyPrim PrimBool)))
       in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (CEnforceOne (Var (BN (BareName arg1Name)) info) [Var (BN (BareName arg2Name)) info]) info) info
   desugarAppArity = desugarAppArityRaw id
@@ -178,8 +178,8 @@ desugarAppArityRaw
   :: (RawBuiltin -> builtin)
   -> info
   -> RawBuiltin
-  -> [Term name Lisp.Type builtin info]
-  -> Term name Lisp.Type builtin info
+  -> [Term ParsedName Lisp.Type builtin info]
+  -> Term ParsedName Lisp.Type builtin info
 -- Todo: this presents a really, _really_ annoying case for the map overload :(
 -- Jose: I am unsure how to fix this so far, but it does not break any tests.
 -- that is:
@@ -212,8 +212,7 @@ desugarAppArityRaw f i RawCeiling [e1, e2] =
   App (Builtin (f RawCeilingPrec) i) [e1, e2] i
 desugarAppArityRaw f i RawFloor [e1, e2] =
   App (Builtin (f RawFloorPrec) i) [e1, e2] i
-
-
+-- Higher order callsite desugars
 desugarAppArityRaw f i RawStrToInt [e1, e2] =
   App (Builtin (f RawStrToIntBase) i) [e1, e2] i
 desugarAppArityRaw f i RawReadMsg [] =
@@ -294,9 +293,9 @@ desugarLispTerm = \case
         | otherwise ->
           pure (Var (BN n) i)
     where
-    cvar1 = "#constantlyA1"
-    cvar2 = "#constantlyA2"
-    ivar1 = "#identityA1"
+    cvar1 = "]constantlyA1"
+    cvar2 = "]constantlyA2"
+    ivar1 = "]identityA1"
   Lisp.Var n i -> pure (Var n i)
   Lisp.Block nel i -> do
     nel' <- traverse desugarLispTerm nel
@@ -321,7 +320,7 @@ desugarLispTerm = \case
       bindingBody hs' = case reverse hs' of
         [] -> throwDesugarError EmptyBindingBody i
         x:xs -> pure $ foldl' (\acc e -> Sequence e acc i) x xs
-      objFreshText = "#bindObject"
+      objFreshText = "]bindObject"
       objFreshVar = Var (BN (BareName objFreshText)) i
       bindToLet (Field field, marg) body =
         let arg = toArg marg
@@ -362,8 +361,8 @@ desugarLispTerm = \case
   Lisp.Object fields i ->
     ObjectLit <$> (traverse._2) desugarLispTerm fields <*> pure i
   Lisp.CapabilityForm cf i -> (`CapabilityForm` i) <$> case cf of
-    Lisp.WithCapability pn exs ex ->
-      WithCapability pn <$> traverse desugarLispTerm exs <*> desugarLispTerm ex
+    Lisp.WithCapability cap body ->
+      WithCapability <$> desugarLispTerm cap <*> desugarLispTerm body
     Lisp.CreateUserGuard pn exs ->
       CreateUserGuard pn <$> traverse desugarLispTerm exs
   where
@@ -573,26 +572,23 @@ termSCC
   -> Term ParsedName DesugarType b1 i1
   -> Set Text
 termSCC currM currDefns = \case
-  -- todo: factor out this patmat on `ParsedName`,
-  -- we use it multiple times
-  Var n _ -> case n of
-    BN bn | S.member (_bnName bn) currDefns -> S.singleton (_bnName bn)
-          | otherwise -> mempty
-    QN (QualifiedName n' mn')
-      | S.member n' currDefns && mn' == currM -> S.singleton n'
-      | otherwise -> mempty
-    DN _ -> mempty
+  Var n _ -> parsedNameSCC currM currDefns n
+  -- Note: Lambda Args contain types, which may contain names that
+  -- show up in the dependency graph
   Lam _ args e _ ->
     let currDefns' = foldl' (\s t -> S.delete (_argName t) s) currDefns args
         tySCC = foldMap (argSCC currM currDefns) args
     in tySCC <> termSCC currM currDefns' e
+  -- Note: Lambda Args contain types, which may contain names that
+  -- show up in the dependency graph
   Let arg e1 e2 _ ->
     let currDefns' = S.delete (_argName arg) currDefns
         tySCC = argSCC currM currDefns arg
     in tySCC <> termSCC currM currDefns e1 <> termSCC currM currDefns' e2
   App fn apps _ ->
     S.union (termSCC currM currDefns fn) (foldMap (termSCC currM currDefns) apps)
-  Sequence e1 e2 _ -> S.union (termSCC currM currDefns e1) (termSCC currM currDefns e2)
+  Sequence e1 e2 _ ->
+    S.union (termSCC currM currDefns e1) (termSCC currM currDefns e2)
   Conditional c _ ->
     foldMap (termSCC currM currDefns) c
   Builtin{} -> S.empty
@@ -600,15 +596,11 @@ termSCC currM currDefns = \case
   ListLit v _ -> foldMap (termSCC currM currDefns) v
   Try e1 e2 _ -> S.union (termSCC currM currDefns e1) (termSCC currM currDefns e2)
   Nullary e _ -> termSCC currM currDefns e
-  CapabilityForm cf _ -> foldMap (termSCC currM currDefns) cf <> case view capFormName cf of
-    BN n | S.member (_bnName n) currDefns -> S.singleton (_bnName n)
-          | otherwise -> mempty
-    QN (QualifiedName n' mn')
-      | S.member n' currDefns && mn' == currM -> S.singleton n'
-      | otherwise -> S.singleton n'
-    DN _ -> mempty
-  -- DynInvoke m _ _ -> termSCC currM currDefns m
-  ObjectLit m _ -> foldMap (termSCC currM currDefns . view _2) m
+  CapabilityForm cf _ -> foldMap (termSCC currM currDefns) cf <> case cf of
+    CreateUserGuard nameParam _ -> parsedNameSCC currM currDefns nameParam
+    WithCapability _ _ -> mempty
+  ObjectLit m _ ->
+    foldMap (termSCC currM currDefns . view _2) m
   Error {} -> S.empty
 
 parsedNameSCC :: ModuleName -> Set Text -> ParsedName -> Set Text
@@ -620,6 +612,14 @@ parsedNameSCC currM currDefns n = case n of
     | otherwise -> mempty
   DN _ -> mempty
 
+tyNameSCC :: ModuleName -> Set Text -> ParsedTyName -> Set Text
+tyNameSCC currM currDefs = \case
+  TBN bn | S.member (_bnName bn) currDefs -> S.singleton (_bnName bn)
+        | otherwise -> mempty
+  TQN (QualifiedName n' mn')
+    | S.member n' currDefs && mn' == currM -> S.singleton n'
+    | otherwise -> mempty
+
 typeSCC
   :: ModuleName
   -> Set Text
@@ -629,29 +629,26 @@ typeSCC currM currDefs = \case
   Lisp.TyPrim _ -> mempty
   Lisp.TyList l -> typeSCC currM currDefs l
   Lisp.TyModRef _ -> mempty
-  Lisp.TyObject pn -> case pn of
-    -- Todo: factor out, repeated in termSCC
-    TBN bn | S.member (_bnName bn) currDefs -> S.singleton (_bnName bn)
-          | otherwise -> mempty
-    TQN (QualifiedName n' mn')
-      | S.member n' currDefs && mn' == currM -> S.singleton n'
-      | otherwise -> mempty
+  Lisp.TyObject pn -> tyNameSCC currM currDefs pn
   Lisp.TyKeyset -> mempty
   Lisp.TyPolyList -> mempty
   Lisp.TyPolyObject -> mempty
-  Lisp.TyTable pn ->  case pn of
-    -- Todo: factor out, repeated in termSCC
-    TBN bn | S.member (_bnName bn) currDefs -> S.singleton (_bnName bn)
-          | otherwise -> mempty
-    TQN (QualifiedName n' mn')
-      | S.member n' currDefs && mn' == currM -> S.singleton n'
-      | otherwise -> mempty
+  Lisp.TyTable pn -> tyNameSCC currM currDefs pn
 
+-- | Get the dependent components from an `Arg`
+-- Args mean local bindings to something, therefore
+-- the actual arg name _cannot_ refer to a dependency,
+-- but the type annotation may contain a reference to a schema ann
 argSCC :: ModuleName -> Set Text -> Arg DesugarType -> Set Text
 argSCC currM currDefs (Arg _ ty) = case ty of
   Just t -> typeSCC currM currDefs t
   Nothing -> mempty
 
+-- | Get the set of dependencies from a defun
+-- Note: names will show up in:
+--   - Defun terms
+--   - Defun args
+--   - Defun return type
 defunSCC
   :: ModuleName
   -> Set Text
@@ -662,6 +659,10 @@ defunSCC mn cd df =
       argScc = foldMap (argSCC mn cd) (_dfunArgs df)
   in tscc <> argScc <> maybe mempty (typeSCC mn cd) (_dfunRType df)
 
+-- | Get the set of dependencies from a defconst
+-- Note: names will show up in:
+--   - Defconst terms
+--   - Defconst return type
 defConstSCC
   :: ModuleName
   -> Set Text
@@ -669,18 +670,26 @@ defConstSCC
   -> Set Text
 defConstSCC mn cd dc =
   let tscc = foldMap (termSCC mn cd) (_dcTerm dc)
-      tyscc =  maybe mempty (typeSCC mn cd) (_dcType dc)
+      tyscc = maybe mempty (typeSCC mn cd) (_dcType dc)
   in tscc <> tyscc
 
+-- | Get the set of dependencies from a deftable
+-- Note: names will show up in:
+--   - The schema reference of the table
 defTableSCC
   :: ModuleName
   -> Set Text
   -> DefTable ParsedName info
   -> Set Text
 defTableSCC mn cd dt =
-  let (DesugaredTable t) =  (_dtSchema dt)
+  let (DesugaredTable t) = (_dtSchema dt)
   in parsedNameSCC mn cd t
 
+-- | Get the set of dependencies from a defcap
+-- Note: names will show up in:
+--   - Defcap terms
+--   - Defcap args
+--   - Defcap return type
 defCapSCC
   :: ModuleName
   -> Set Text
@@ -695,6 +704,11 @@ defCapSCC mn cd dc =
     _ -> termSCC mn cd (_dcapTerm dc)
 
 
+-- | Get the set of dependencies from a defcap
+-- Note: names will show up in:
+--   - Defcap Steps
+--   - Defcap args
+--   - Defcap return type
 defPactSCC
   :: ModuleName
   -> Set Text
@@ -706,6 +720,7 @@ defPactSCC mn cd dp =
       stepsScc = foldMap (defPactStepSCC mn cd) (_dpSteps dp)
   in argsScc <> rtScc <> stepsScc
 
+-- | Calculate the functions the particular defpact step depends on
 defPactStepSCC
   :: ModuleName
   -> Set Text
@@ -716,6 +731,7 @@ defPactStepSCC mn cd = \case
   StepWithRollback step rollback ->
     S.unions $ [termSCC mn cd step, termSCC mn cd rollback]
 
+-- | Calculate the dependency set for any type of def
 defSCC
   :: ModuleName
   -> Set Text
@@ -729,6 +745,7 @@ defSCC mn cd = \case
   DPact dp -> defPactSCC mn cd dp
   DTable dt -> defTableSCC mn cd dt
 
+-- | Calculate the dependency set for any type of interface def
 ifDefSCC
   :: ModuleName
   -> Set Text
@@ -917,47 +934,17 @@ renameTerm (ListLit v i) = do
 --   DynInvoke <$> renameTerm te <*> pure t <*> pure i
 renameTerm (Try e1 e2 i) = do
   Try <$> renameTerm e1 <*> renameTerm e2 <*> pure i
-renameTerm (CapabilityForm cf i) =
-  view reCurrModule >>= \case
-    Just _ -> case view capFormName cf of
-      QN qn -> do
-          (n', dk) <- resolveQualified qn i
-          when ((isCapForm cf && dk /= Just DKDefCap) || (not (isCapForm cf) && dk == Just DKDefun))
-            $ throwDesugarError (InvalidCapabilityReference (_qnName qn)) i
-          let cf' = set capFormName n' cf
-          checkCapForm cf'
-          CapabilityForm <$> traverse renameTerm cf' <*> pure i
-          -- throwDesugarError (CapabilityOutOfScope (_qnName qn) (_qnModName qn)) i
-      BN bn -> do
-        (n', dk) <- resolveBare bn i
-        when (isJust dk && not (dk == Just DKDefCap) && isCapForm cf)
-          $ throwDesugarError (InvalidCapabilityReference (_bnName bn)) i
-        let cf' = set capFormName n' cf
-        checkCapForm cf'
-        CapabilityForm <$> traverse renameTerm cf' <*> pure i
-      DN dn -> do
-        n' <- resolveDynamic i dn
-        let cf' = set capFormName n' cf
-        CapabilityForm <$> traverse renameTerm cf' <*> pure i
-    Nothing -> do
-      checkCapFormNonModule cf
-      let n = view capFormName cf
-      (n', _) <- resolveName i n
-      let cf' = set capFormName n' cf
-      CapabilityForm <$> traverse renameTerm cf' <*> pure i
-    where
-    isCapForm = \case
-      CreateUserGuard{} -> False
-      _ -> True
-
-    checkCapFormNonModule = const (pure ())
-      -- WithCapability{} ->
-      --   throwDesugarError (NotAllowedOutsideModule "with-capability") i
-      -- CreateUserGuard{} -> pure ()
-
-    checkCapForm = \case
-      WithCapability{} -> enforceNotWithinDefcap i "with-capability"
-      _ -> pure ()
+renameTerm (CapabilityForm cf i) = case cf of
+  CreateUserGuard parsedName args -> do
+      (name', _dkind) <- resolveName i parsedName
+      -- Ensure user guards have a valid reference
+      -- Todo: we currently cover this in caps.repl, do we want
+      -- to make this a static error?
+      -- when (dkind /= Just DKDefun) $ throwDesugarError (InvalidUserGuard (rawParsedName parsedName)) i
+      CapabilityForm <$> (CreateUserGuard name' <$> traverse renameTerm args) <*> pure i
+  WithCapability cap body -> do
+    enforceNotWithinDefcap i "with-capability"
+    CapabilityForm <$> (WithCapability <$> renameTerm cap <*> renameTerm body) <*> pure i
 renameTerm (Error e i) = pure (Error e i)
 renameTerm (ObjectLit o i) =
   ObjectLit <$> (traverse._2) renameTerm o <*> pure i

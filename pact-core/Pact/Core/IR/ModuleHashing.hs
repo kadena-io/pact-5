@@ -340,8 +340,8 @@ encodeTerm = \case
     encodePair (Field f, term) =
       "'" <> T.encodeUtf8Builder f <> ":" <> encodeTerm term
   CapabilityForm cf _ -> parens $ case cf of
-    WithCapability n args body ->
-      "with-capability" <+> encodeName n <+> hsep (encodeTerm <$> args) <+> encodeTerm body
+    WithCapability cap body ->
+      "with-capability" <+> encodeTerm cap <+> encodeTerm body
     CreateUserGuard n args ->
       "with-capability" <+> encodeName n <+> hsep (encodeTerm <$> args)
   Error e _ ->

@@ -155,6 +155,7 @@ library
     Pact.Core.Syntax.Lexer
     Pact.Core.Syntax.LexUtils
     Pact.Core.Syntax.Parser
+    Pact.Core.Syntax.Limits
 
     -- Core IR modules
     Pact.Core.IR.Term

@@ -105,7 +105,7 @@ tokens :-
     \:\:         { token TokenDynAcc }
     \:           { token TokenColon }
     \"           { stringLiteral }
-    @ident       { emit TokenIdent }
+    @ident       { emitIdentifier }
 {
 
 -- TODO: non-horrible errors

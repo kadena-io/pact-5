@@ -177,7 +177,7 @@ DefProperty :: { FVModel SpanInfo }
 -- This rule seems gnarly, but essentially
 -- happy needs to resolve whether the arglist is present or not
 DPropArgList
-  : '(' IDENT ':' Type ArgList ')' Expr { (Arg (getIdent $2) $4 : reverse $5, $7) }
+  : '(' IDENT ':' Type UncheckedArgList ')' Expr { (Arg (getIdent $2) $4 : reverse $5, $7) }
   | '(' SExpr ')' { ([], $2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
 Exts :: { [ExtDecl] }
@@ -227,15 +227,15 @@ IfDef :: { ParsedIfDef }
 
 -- ident = $2,
 IfDefun :: { SpanInfo -> IfDefun SpanInfo }
-  : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel
+  : defun IDENT MTypeAnn '(' MArgList ')' MDocOrModel
     { IfDefun (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) }
 
 IfDefCap :: { SpanInfo -> IfDefCap SpanInfo }
-  : defcap IDENT MTypeAnn'(' MArgs ')' MDocOrModel MDCapMeta
+  : defcap IDENT MTypeAnn'(' MArgList ')' MDocOrModel MDCapMeta
     { IfDefCap (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) $8 }
 
 IfDefPact :: { SpanInfo -> IfDefPact SpanInfo }
-  : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel
+  : defpact IDENT MTypeAnn '(' MArgList ')' MDocOrModel
     { IfDefPact (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) }
 
 ImportList :: { Maybe [Text] }
@@ -251,22 +251,22 @@ DefConst :: { SpanInfo -> ParsedDefConst }
 
 -- All defs
 Defun :: { SpanInfo -> ParsedDefun }
-  : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel Block
+  : defun IDENT MTypeAnn '(' MArgList ')' MDocOrModel Block
     { Defun (getIdent $2) (reverse $5) $3 $8 (fst $7) (snd $7) }
 
 Defschema :: { SpanInfo -> DefSchema SpanInfo }
-  : defschema IDENT MDocOrModel ArgList
+  : defschema IDENT MDocOrModel SchemaArgList
     { DefSchema (getIdent $2) (reverse $4) (fst $3) (snd $3) }
 
 Deftable :: { SpanInfo -> DefTable SpanInfo }
   : deftable IDENT ':' '{' ParsedName '}' MDoc { DefTable (getIdent $2) $5 $7 }
 
 Defcap :: { SpanInfo -> DefCap SpanInfo }
-  : defcap IDENT MTypeAnn '(' MArgs ')' MDocOrModel MDCapMeta Block
+  : defcap IDENT MTypeAnn '(' MArgList ')' MDocOrModel MDCapMeta Block
     { DefCap (getIdent $2) (reverse $5) $3 $9 (fst $7) (snd $7) $8 }
 
 DefPact :: { SpanInfo -> DefPact SpanInfo }
-  : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel Steps
+  : defpact IDENT MTypeAnn '(' MArgList ')' MDocOrModel Steps
   { DefPact (getIdent $2) (reverse $5) $3 (reverse $8) (fst $7) (snd $7) }
 
 Steps :: { [PactStep SpanInfo] }
@@ -293,19 +293,26 @@ Managed :: { DCapMeta }
 Event :: { DCapMeta }
   : eventAnn { DefEvent }
 
-MArgs :: { [MArg] }
-  : MArgs MArg { $2:$1 }
+MArgList :: { [MArg] }
+  : UncheckedMArgs {% checkArgListLength $1 }
+  -- : MArg MArg { $2:$1 }
+  -- | {- empty -} { [] }
+
+UncheckedMArgs :: { [MArg] }
+  : UncheckedMArgs MArg { $2:$1 }
   | {- empty -} { [] }
 
 MArg :: { MArg }
   : IDENT ':' Type { MArg (getIdent $1) (Just $3) }
   | IDENT { MArg (getIdent $1) Nothing }
 
-NEArgList :: { [Arg] }
-  : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
+SchemaArgList :: { [Arg] }
+  : UncheckedArgList {% checkSchemaArgLength $1 }
+  -- : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
+  -- | {- empty -} { [] }
 
-ArgList :: { [Arg] }
-  : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
+UncheckedArgList :: { [Arg] }
+  : UncheckedArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
   | {- empty -} { [] }
 
 Type :: { Type }
@@ -416,7 +423,7 @@ CapExpr :: { SpanInfo -> ParsedExpr }
   : CapForm { CapabilityForm $1 }
 
 CapForm :: { CapForm SpanInfo }
-  : withcap '(' ParsedName AppList ')' Block { WithCapability $3 (reverse $4) $6 }
+  : withcap Expr Block { WithCapability $2 $3 }
   | c_usr_grd '(' ParsedName AppList ')' { CreateUserGuard $3 (reverse $4)}
 
 LamArgs :: { [MArg] }
