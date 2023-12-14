@@ -148,6 +148,40 @@ staticTests =
         (use m)
         )
       |])
+  , ("import_unknown_module_namespaced_self", isDesugarError _NoSuchModule, [text|
+      (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
+      (env-keys ["carl"])
+
+      (define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys))
+      (namespace 'carl)
+      (module m g (defcap g () true)
+        (use carl.m)
+        )
+      |])
+  , ("import_unknown_module_namespaced_self_nons", isExecutionError _ModuleDoesNotExist, [text|
+      (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
+      (env-keys ["carl"])
+
+      (define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys))
+      (namespace 'carl)
+      (module m g (defcap g () true)
+        (use m)
+        )
+      |])
+  , ("import_unknown_module_namespaced_outside", isDesugarError _NoSuchModule, [text|
+      (begin-tx)
+      (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
+      (env-keys ["carl"])
+
+      (define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys))
+      (namespace 'carl)
+      (module m g (defcap g () true))
+      (commit-tx)
+
+      (module n ng (defcap ng () true)
+        (use carl.n)
+        )
+      |])
   ]
 
 tests :: TestTree
