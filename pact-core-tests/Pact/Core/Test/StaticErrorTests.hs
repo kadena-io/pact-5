@@ -8,26 +8,46 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import Control.Lens
+import Data.Default
+import Data.IORef
 import Data.Text (Text)
 import Data.Maybe(isJust)
 import NeatInterpolation (text)
 
 import Pact.Core.Builtin
-import Pact.Core.Evaluate
-import Pact.Core.Persistence
 import Pact.Core.Environment
 import Pact.Core.Errors
-
+import Pact.Core.Gas
+import Pact.Core.Persistence
+import Pact.Core.Repl.Compile
+import Pact.Core.Repl.Utils
 import Pact.Core.Test.TestPrisms
 
 isDesugarError :: Prism' DesugarError a -> PactErrorI -> Bool
 isDesugarError p s = isJust $ preview (_PEDesugarError . _1 . p) s
 
+isExecutionError :: Prism' EvalError a -> PactErrorI -> Bool
+isExecutionError p s = isJust $ preview (_PEExecutionError . _1 . p) s
+
 runStaticTest :: String -> Text -> (PactErrorI -> Bool) -> Assertion
 runStaticTest label src predicate = do
+  gasRef <- newIORef (Gas 0)
+  gasLog <- newIORef Nothing
   pdb <- mockPactDb
-  let evalEnv = defaultEvalEnv pdb rawBuiltinMap
-  v <- fst <$> evaluate evalEnv src
+  let ee = defaultEvalEnv pdb replRawBuiltinMap
+      source = SourceCode label src
+      rstate = ReplState
+            { _replFlags = mempty
+            , _replEvalState = def
+            , _replPactDb = pdb
+            , _replGas = gasRef
+            , _replEvalLog = gasLog
+            , _replCurrSource = source
+            , _replEvalEnv = ee
+            , _replTx = Nothing
+            }
+  stateRef <- newIORef rstate
+  v <- runReplT stateRef (interpretReplProgram source (const (pure ())))
   case v of
     Left err ->
       assertBool ("Expected Error to match predicate, but got " <> show err <> " instead") (predicate err)
