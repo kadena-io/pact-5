@@ -1,5 +1,7 @@
 -- | 
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Pact.Core.Serialise.CBOR_V1
