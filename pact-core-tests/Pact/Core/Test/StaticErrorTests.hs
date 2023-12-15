@@ -230,7 +230,7 @@ staticTests =
         (defun i () p)
       )
       |])
-    -- TODO better error
+    -- TODO better error; intended to trigger `UnboundTypeVariable` instead in `renameDefTable`
   , ("invalid_def_table_nonexistent", isDesugarError _NoSuchModule, [text|
       (module fdb G
         (defcap G () true)
@@ -244,6 +244,14 @@ staticTests =
         (deftable fdb-tbl:{i})
         )
       |])
+    -- TODO better errror; intended to trigger `expectedFree` instead
+  , ("defmanaged_wrong_ref", isDesugarError _NoSuchModule, [text|
+      (module m g (defcap g () true)
+        (defcap CAP:bool (a:integer b:integer)
+          @managed a b
+          true
+        )
+        )
       |])
   ]
 
