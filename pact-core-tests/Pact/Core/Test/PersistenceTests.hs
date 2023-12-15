@@ -1,8 +1,10 @@
--- |
+-- | Tests of the SQLite persistence backend.
 
 module Pact.Core.Test.PersistenceTests where
 
 import Control.Monad.IO.Class (liftIO)
+import Data.Default (def)
+import Data.IORef (newIORef)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Hedgehog (Gen, Property, (===), forAll, property)
@@ -11,11 +13,14 @@ import Test.Tasty.Hedgehog
 import Test.Tasty.HUnit (assertEqual, testCase)
 import qualified Hedgehog.Gen as Gen
 
-import Pact.Core.Names (Field(..), FullyQualifiedName, RowKey(..), TableName(..), ModuleName(..))
+import Pact.Core.Builtin (replRawBuiltinMap)
+import Pact.Core.Environment (defaultEvalEnv)
 import Pact.Core.Guards (KeySet(KeySet), KeySetName(..), PublicKeyText(..), KSPredicate(KeysAll))
 import Pact.Core.Gen.Serialise (keySetGen, keySetNameGen, moduleNameGen, moduleDataGen, builtinGen
                                ,defPactIdGen, defPactExecGen, namespaceNameGen, namespaceGen)
-import Pact.Core.Serialise (PactSerialise(..), serialisePact)
+import Pact.Core.Literal (Literal(LUnit))
+import Pact.Core.Names (Field(..), FullyQualifiedName, RowKey(..), TableName(..), ModuleName(..))
+import Pact.Core.PactValue
 import qualified Pact.Core.PactValue as PactValue
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Persistence (WriteType(Insert), readKeySet, writeKeySet, writeModule, readModule
@@ -26,30 +31,34 @@ import Pact.Core.Persistence (WriteType(Insert), readKeySet, writeKeySet, writeM
                              , RowData(..)
                              , WriteType(Insert, Update, Write)
                              )
-import Pact.Core.Repl.Compile
-import Pact.Core.Repl.Utils
-import Pact.Core.Environment
-import Pact.Core.Persistence.MockPersistence
-import Data.Default
-import Data.IORef
-import Pact.Core.Builtin
-import Pact.Core.PactValue
-import Pact.Core.Literal
+import Pact.Core.Persistence.MockPersistence (mockPactDb, serialiseRepl)
+import Pact.Core.Repl.Compile (interpretReplProgram)
+import Pact.Core.Repl.Utils (ReplState(..), SourceCode(..), runReplT)
+import Pact.Core.Serialise (PactSerialise(..), serialisePact)
 
+-- | Top-level TestTree for Persistence Tests.
+tests :: TestTree
+tests = testGroup "Persistence"
+  [ testGroup "CBOR encoding/decoding roundtrip" $
+      testsWithSerial serialisePact builtinGen (pure ())
+  , sqliteRegression
+  ]
 
-testsWithSerial :: (Show b, Show i, Eq b, Eq i) => PactSerialise b i -> Gen b -> Gen i -> [TestTree]
+-- | Generate the test tree for any given `PactSerialise` serialization scheme,
+-- given also a means of creating builtins and infos for that scheme.
+testsWithSerial :: (Show b, Show i, Eq b, Eq i)
+  => PactSerialise b i
+  -> Gen b
+  -> Gen i
+  -> [TestTree]
 testsWithSerial serial b i =
  [ testProperty "KeySet" $ keysetPersistRoundtrip serial (keySetGen undefined)
+   -- ^ keySetGen does not use its first argument now. We will pass a real argument
+   --   once custom keyset predicate functions are supported.
  , testProperty "ModuleData" $ moduleDataRoundtrip serial b i
  , testProperty "DefPactExec" $ defPactExecRoundtrip serial b i
  , testProperty "Namespace" $ namespaceRoundtrip serial
  ]
-
-tests :: TestTree
-tests = testGroup "Persistence"
-  [ testGroup "CBOR encoding/decoding roundtrip" $ testsWithSerial serialisePact builtinGen (pure ())
-  , sqliteRegression
-  ]
 
 keysetPersistRoundtrip :: PactSerialise b i -> Gen (KeySet FullyQualifiedName) -> Property
 keysetPersistRoundtrip serial keysetGen =
@@ -88,6 +97,10 @@ namespaceRoundtrip serial = property $ do
     readNamespace db ns
   Just namespace === writtenNamespace
 
+-- | This regression test carries out a number of core operations on the
+--   PactDb, including reading and writing Namespaces, KeySets, Modules, and
+--   user data, within transactions. It ensures that TxLogs for transactions
+--   contain the expected metadata.
 sqliteRegression :: TestTree
 sqliteRegression =
   testCase "sqlite persistence backend produces expected values/txlogs" $

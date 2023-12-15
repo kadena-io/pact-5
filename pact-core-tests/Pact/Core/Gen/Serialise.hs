@@ -81,6 +81,9 @@ parsedNameGen = Gen.choice
 hashGen :: Gen Hash
 hashGen = Hash . BSS.toShort . encodeUtf8 <$> identGen
 
+-- | Generate a keyset, polymorphic over the custom
+-- predicate function `a`. This particular variant is
+-- not supported yet, so the argument is unused.
 keySetGen :: Gen a -> Gen (KeySet a)
 keySetGen _genA = do
   ksKeysList <- Gen.list (Range.linear 1 10) publicKeyTextGen
