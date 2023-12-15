@@ -273,6 +273,22 @@ staticTests =
         )
         )
       |])
+  , ("resolve_qualified_failure", isDesugarError _NoSuchModuleMember, [text|
+      (module m g (defcap g () true)
+        (defun f () true)
+        )
+      (module n ng (defcap ng () true)
+        (defun f () m.nonexistent)
+        )
+      |])
+  , ("resolve_qualified_shadowing", isDesugarError _NoSuchModuleMember, [text|
+      (module m g (defcap g () true)
+        (defun fff () true)
+        )
+      (module n ng (defcap ng () true)
+        (defun f () m.f)
+        )
+      |])
   ]
 
 tests :: TestTree
