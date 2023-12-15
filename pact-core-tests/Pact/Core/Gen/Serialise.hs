@@ -1,39 +1,55 @@
--- | 
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+-- | Hedgehog Generators for entities appearing in the PactDB
+--   and TxLogs.
+
 {-# LANGUAGE NamedFieldPuns #-}
 
 module Pact.Core.Gen.Serialise where
 
+import qualified Data.ByteString.Short as BSS
+import Data.Decimal
+import Data.Default (def)
+import Data.Map.Strict (fromList)
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
-import Data.Map.Strict (fromList)
-import qualified Data.Set as Set
-import qualified Data.Map as Map
 import qualified Data.Vector as Vec
-import Data.Default
-
-import Pact.Core.Names
-import Pact.Core.Guards
-import Pact.Core.Hash
-import Pact.Core.Type
-import Pact.Core.Imports
-import Pact.Core.IR.Term
-import Pact.Core.Info
-import Pact.Core.Builtin
-import Pact.Core.Literal
-import Pact.Core.Capabilities
-import Pact.Core.Persistence
-import Pact.Core.PactValue
-import Pact.Core.DefPacts.Types
-import Pact.Core.ChainData
-import Pact.Core.Namespace
-
-import qualified Data.ByteString.Short as BSS
-import Pact.Core.Test.LexerParserTests (identGen)
 import Hedgehog hiding (Var)
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
-import Data.Decimal
+
+import Pact.Core.Names (BareName(..), DefPactId(..), DynamicName(..),
+                        DynamicRef(..), Field(..), FQNameRef(FQName),
+                        FullyQualifiedName(..), ModuleName(..), Name(..),
+                        NameKind(NBound, NDynRef, NModRef, NTopLevel),
+                        NamespaceName(..), ParsedName(BN,DN,QN),
+                        QualifiedName(..))
+import Pact.Core.Guards (CapGovRef(UnresolvedGov, ResolvedGov),
+                         Governance(CapGov, KeyGov), Guard(GKeyset,GKeySetRef),
+                         KeySet(..), KeySetName(..),
+                         KSPredicate(KeysAll, Keys2, KeysAny), PublicKeyText(..),
+                         UserGuard(..))
+import Pact.Core.Hash (Hash(..), ModuleHash(..))
+import Pact.Core.Type (Arg(..), PrimType(PrimBool, PrimDecimal, PrimGuard,
+                                         PrimInt, PrimString, PrimTime,
+                                         PrimUnit),
+                       Schema(Schema, _schema), Type(TyList, TyModRef, TyObject,
+                                                     TyPrim, TyTable))
+import Pact.Core.Imports (Import(..))
+import Pact.Core.IR.Term
+import Pact.Core.Info (SpanInfo)
+import Pact.Core.Builtin (RawBuiltin, BuiltinForm(CAnd, COr, CIf, CEnforce,
+                                                   CEnforceOne))
+import Pact.Core.Literal (Literal(LBool, LDecimal, LInteger, LString, LUnit))
+import Pact.Core.Capabilities (DefManagedMeta(DefManagedMeta, AutoManagedMeta),
+                               DefCapMeta(DefEvent, DefManaged, Unmanaged) )
+import Pact.Core.Persistence (ModuleData(ModuleData, InterfaceData))
+import Pact.Core.PactValue (PactValue(PGuard, PList, PLiteral))
+import Pact.Core.DefPacts.Types (DefPactContinuation(..), DefPactExec(..),
+                                 Provenance(..), Yield(..))
+import Pact.Core.ChainData (ChainId(..))
+import Pact.Core.Namespace (Namespace(..))
+import Pact.Core.Test.LexerParserTests (identGen)
 
 namespaceNameGen :: Gen NamespaceName
 namespaceNameGen = NamespaceName <$> identGen
