@@ -1,4 +1,8 @@
--- | 
+-- | Tests that values encoded by legacy pact deployments
+--   decode into the expected pact-core values.
+--   TODO: We need to write many more such tests during the legacy
+--   pact compatibilty epic.
+
 {-# LANGUAGE OverloadedStrings #-}
 
 module Pact.Core.Test.LegacySerialiseTests where
