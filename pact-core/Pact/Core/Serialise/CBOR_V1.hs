@@ -206,7 +206,7 @@ instance Serialise Literal where
     2 -> LDecimal <$> decode
     3 -> pure LUnit
     4 -> LBool <$> decode
-    _ -> fail "unexpeced decoding"
+    _ -> fail "unexpected decoding"
 
 instance Serialise Field where
   encode (Field f) = encode f
