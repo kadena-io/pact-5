@@ -23,14 +23,7 @@ import Pact.Core.Names (Field(..), FullyQualifiedName, RowKey(..), TableName(..)
 import Pact.Core.PactValue
 import qualified Pact.Core.PactValue as PactValue
 import Pact.Core.Persistence.SQLite
-import Pact.Core.Persistence (WriteType(Insert), readKeySet, writeKeySet, writeModule, readModule
-                             ,writeDefPacts, readDefPacts, readNamespace, writeNamespace
-                             , Domain(..), PactDb(..), TxId(..)
-                             , ExecutionMode(Transactional)
-                             , TxLog(..)
-                             , RowData(..)
-                             , WriteType(Insert, Update, Write)
-                             )
+import Pact.Core.Persistence
 import Pact.Core.Persistence.MockPersistence (mockPactDb)
 import Pact.Core.Repl.Compile (interpretReplProgram)
 import Pact.Core.Repl.Utils (ReplState(..), SourceCode(..), runReplT)
