@@ -21,12 +21,20 @@ import qualified Pact.Core.IR.Eval.CEK as Eval
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 
-evaluate
+evaluateDefaultState
   :: EvalEnv RawBuiltin SpanInfo
   -> Text
   -> IO (Either (PactError SpanInfo) [CompileValue RawBuiltin],
          EvalState RawBuiltin SpanInfo)
-evaluate evalEnv source = runEvalM evalEnv def $ do
+evaluateDefaultState evalEnv source = evaluate evalEnv def source
+
+evaluate
+  :: EvalEnv RawBuiltin SpanInfo
+  -> EvalState RawBuiltin SpanInfo
+  -> Text
+  -> IO (Either (PactError SpanInfo) [CompileValue RawBuiltin],
+         EvalState RawBuiltin SpanInfo)
+evaluate evalEnv evalSt source = runEvalM evalEnv evalSt $ do
   lexx <- liftEither (Lisp.lexer source)
   parsed <- liftEither $ Lisp.parseProgram lexx
   traverse (interpretTopLevel $ Interpreter interpretExpr interpretGuard) parsed
