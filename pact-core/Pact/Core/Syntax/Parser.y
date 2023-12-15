@@ -180,9 +180,6 @@ DPropArgList
   : '(' IDENT ':' Type ArgList ')' Expr { (Arg (getIdent $2) $4 : reverse $5, $7) }
   | '(' SExpr ')' { ([], $2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
-Exts :: { [ExtDecl] }
-  : Exts Ext { $2:$1 }
-  | {- empty -} { [] }
 
 Ext :: { ExtDecl }
   : Use { ExtImport (fst $1)  }
@@ -193,10 +190,6 @@ Use :: { (Import, SpanInfo) }
   : '(' import ModQual ImportList ')' {  (Import (mkModName $3) Nothing $4, combineSpan (_ptInfo $1) (_ptInfo $5))  }
   | '(' import ModQual STR ImportList ')' {  (Import (mkModName $3) (Just (getStr $4)) $5, combineSpan (_ptInfo $1) (_ptInfo $6))  }
 
-
-Defs :: { [ParsedDef] }
-  : Defs Def { $2:$1 }
-  | Def { [$1] }
 
 ExtOrDefs :: { [Either (Def SpanInfo) ExtDecl] }
   : ExtOrDefs Def { (Left $2):$1 }
@@ -300,9 +293,6 @@ MArgs :: { [MArg] }
 MArg :: { MArg }
   : IDENT ':' Type { MArg (getIdent $1) (Just $3) }
   | IDENT { MArg (getIdent $1) Nothing }
-
-NEArgList :: { [Arg] }
-  : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
 
 ArgList :: { [Arg] }
   : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
@@ -449,9 +439,6 @@ AppBindList :: { [Either ParsedExpr [(Field, MArg)]] }
 BindingForm :: { [(Field, MArg)] }
   : '{' BindPairs '}' { $2 }
 
-Binding :: { ParsedExpr }
-  : '{' BindPairs '}' BlockBody { Binding $2 $4 (_ptInfo $1)}
-
 BindPair :: { (Field, MArg) }
   : STR ':=' MArg { (Field (getStr $1), $3) }
   | TICK ':=' MArg { (Field (getTick $1), $3) }
@@ -498,9 +485,6 @@ ParsedName :: { ParsedName }
 ParsedTyName :: { ParsedTyName }
   : IDENT '.' ModQual { TQN (mkQualName (getIdent $1) $3) }
   | IDENT { TBN (mkBarename (getIdent $1)) }
-
-QualifiedName :: { QualifiedName }
-  : IDENT '.' ModQual { mkQualName' (getIdent $1) $3 }
 
 ModQual :: { (Text, Maybe Text) }
   : IDENT '.' IDENT { (getIdent $1, Just (getIdent $3)) }
