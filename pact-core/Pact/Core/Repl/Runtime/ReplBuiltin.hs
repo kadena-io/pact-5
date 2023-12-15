@@ -278,7 +278,7 @@ commitTx :: (IsBuiltin b) => NativeFunction b SpanInfo (ReplM b)
 commitTx info b cont handler _env = \case
   [] -> do
     pdb <- use (replEvalEnv . eePactDb)
-    _txLog <- liftDbFunction info (_pdbCommitTx pdb) -- TODO: How to handle the txLog
+    _txLog <- liftDbFunction info (_pdbCommitTx pdb)
     fqdefs <- useEvalState (esLoaded . loAllLoaded)
     cs <- useEvalState esStack
     replEvalState .= set esStack cs (set (esLoaded . loAllLoaded) fqdefs def)
