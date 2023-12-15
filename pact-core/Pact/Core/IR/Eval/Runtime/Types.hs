@@ -62,7 +62,6 @@ module Pact.Core.IR.Eval.Runtime.Types
  , ManagedCap(..)
  , mcCap, mcManaged, mcOriginalCap
  , ManagedCapType(..)
- , PactEvent(..)
  , CapPopState(..)
  , LamClosure(..)
  , PartialNativeFn(..)
@@ -293,6 +292,7 @@ newtype EvalM b i a =
     , MonadIO
     , MonadThrow
     , MonadCatch
+    , MonadMask
     , MonadError (PactError i))
   via (ReaderT (EvalEnv b i) (ExceptT (PactError i) (StateT (EvalState b i) IO)))
 

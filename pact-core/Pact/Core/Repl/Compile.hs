@@ -37,6 +37,7 @@ import Pact.Core.Compile
 import Pact.Core.Interpreter
 import Pact.Core.Environment
 import Pact.Core.Serialise (serialisePact_repl_spaninfo)
+import Pact.Core.Info
 
 
 import Pact.Core.IR.Eval.Runtime
@@ -51,7 +52,7 @@ import qualified Pact.Core.Syntax.Parser as Lisp
 -- Small internal debugging function for playing with file loading within
 -- this module
 data ReplCompileValue
-  = RCompileValue (CompileValue ReplRawBuiltin)
+  = RCompileValue (CompileValue SpanInfo)
   | RLoadedDefun Text
   | RLoadedDefConst Text
   deriving Show

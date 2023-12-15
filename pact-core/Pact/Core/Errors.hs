@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
@@ -431,7 +432,7 @@ data PactError info
   -- | PETypecheckError TypecheckError info
   -- | PEOverloadError OverloadError info
   | PEExecutionError EvalError info
-  deriving Show
+  deriving (Show, Functor)
 
 instance Pretty (PactError info) where
   pretty = \case

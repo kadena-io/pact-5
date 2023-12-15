@@ -62,11 +62,11 @@ _parseOnly source = do
 _parseOnlyFile :: FilePath -> IO (Either PactErrorI [Lisp.TopLevel SpanInfo])
 _parseOnlyFile fp = _parseOnly <$> T.readFile fp
 
-data CompileValue b
+data CompileValue i
   = LoadedModule ModuleName ModuleHash
   | LoadedInterface ModuleName ModuleHash
   | LoadedImports Import
-  | InterpretValue InterpretValue
+  | InterpretValue (InterpretValue i)
   deriving Show
 
 
@@ -135,7 +135,7 @@ interpretTopLevel
   .  (HasCompileEnv b i m)
   => Interpreter b i m
   -> Lisp.TopLevel i
-  -> m (CompileValue b)
+  -> m (CompileValue i)
 interpretTopLevel interp tl = do
   evalModuleGovernance interp tl
   pdb <- viewEvalEnv eePactDb
