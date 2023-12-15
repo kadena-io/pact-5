@@ -41,8 +41,6 @@ common pact-core-common
     , exceptions
     , filepath
     , lens
-    , lifted-base
-    , monad-control
     , mtl
     , pact-json
     , pact-time

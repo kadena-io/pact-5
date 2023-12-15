@@ -6,10 +6,10 @@ module Pact.Core.Persistence.SQLite (
   withSqlitePactDb
 ) where
 
-import Control.Monad.Trans.Control (MonadBaseControl)
-import Control.Exception.Lifted (bracket)
+-- import Control.Monad.Trans.Control (MonadBaseControl)
+import Control.Monad.Catch
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Data.IORef (newIORef, IORef, readIORef, atomicModifyIORef', writeIORef, modifyIORef')
+import Data.IORef 
 import Data.Text (Text)
 import Control.Lens (view)
 import qualified Database.SQLite3 as SQL
@@ -18,16 +18,8 @@ import Data.ByteString (ByteString)
 import qualified Data.Map.Strict as Map
 
 import Pact.Core.Guards (renderKeySetName, parseAnyKeysetName)
-import Pact.Core.Names (renderModuleName, DefPactId(..), NamespaceName(..), TableName(..), RowKey(..), parseRenderedModuleName
-                       , renderDefPactId, renderNamespaceName
-                       , Field(..), ModuleName(..))
-import Pact.Core.Persistence (PactDb(..), Domain(..),
-                              Purity(PImpure)
-                             ,WriteType(..)
-                             ,toUserTable
-                             ,ExecutionMode(..), TxId(..)
-                             , RowData(..), TxLog(..)
-                             )
+import Pact.Core.Names
+import Pact.Core.Persistence
 import Pact.Core.PactValue
 import Pact.Core.Literal
 import qualified Pact.Core.Persistence as P
@@ -42,7 +34,7 @@ import Pact.Core.Serialise
 -- and how they should be serialized. [`serializePact`] is a good default.
 --
 withSqlitePactDb
-  :: (MonadIO m, MonadBaseControl IO m)
+  :: (MonadMask m, MonadIO m)
   => PactSerialise b i
   -> Text
   -> (PactDb b i -> m a)
@@ -111,7 +103,7 @@ getTxLog serial db currTxId txLog tab txId = do
         SQL.Row -> do
           [SQL.SQLText key, SQL.SQLBlob value] <- SQL.columns stmt
           collect stmt (TxLog (toUserTable tab) key value:acc)
-        
+
 readKeys :: forall k v b i. SQL.Database -> Domain k v b i -> IO [k]
 readKeys db = \case
   DKeySets -> withStmt db "SELECT rowkey FROM \"SYS:KEYSETS\" ORDER BY txid DESC" $ \stmt -> do
@@ -177,7 +169,7 @@ createUserTable serial db txLog tbl = do
           ])
     rdEnc = _encodeRowData serial rd
   modifyIORef' txLog (TxLog "SYS:usertables" (_tableName tbl) rdEnc :)
-  
+
   where
     stmt = "CREATE TABLE IF NOT EXISTS " <> tblName <> " \
            \ (txid UNSIGNED BIG INT, \
@@ -228,7 +220,7 @@ write' serial db txId txLog wt domain k v =
             Right res
               | res == SQL.Done -> modifyIORef' txLog (TxLog (_tableName tbl) k' encoded:)
               | otherwise -> fail "invariant viaolation"
-      
+
     DKeySets -> withStmt db "INSERT OR REPLACE INTO \"SYS:KEYSETS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let encoded = _encodeKeySet serial v
       TxId i <- readIORef txId
@@ -238,7 +230,7 @@ write' serial db txId txLog wt domain k v =
         Right res
           | res == SQL.Done -> modifyIORef' txLog (TxLog "SYS:KEYSETS" (renderKeySetName k) encoded:)
           | otherwise -> fail "invariant violation"
-        
+
     DModules -> withStmt db "INSERT OR REPLACE INTO \"SYS:MODULES\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let encoded = _encodeModuleData serial v
       TxId i <- readIORef txId
@@ -281,7 +273,7 @@ write' serial db txId txLog wt domain k v =
         (Just old, Write) -> return $ Just old
         (Just old, Update) -> return $ Just old
         (Nothing, Update) -> throwIO (P.NoRowFound tbl rk)
-      
+
 
 read' :: forall k v b i. PactSerialise b i -> SQL.Database -> Domain k v b i -> k -> IO (Maybe v)
 read' serial db domain k = case domain of

@@ -38,8 +38,6 @@ module Pact.Core.Repl.Utils
 
 import Control.Lens
 import Control.Monad ( when, unless )
-import Control.Monad.Base
-import Control.Monad.Trans.Control
 import Control.Monad.Reader
 import Control.Monad.State.Strict(MonadState(..))
 import Control.Monad.Catch
@@ -116,26 +114,11 @@ instance MonadState (ReplState b) (ReplM b)  where
   get = ReplT (ExceptT (Right <$> ReaderT readIORef))
   put rs = ReplT (ExceptT (Right <$> ReaderT (`writeIORef` rs)))
 
-instance MonadBase IO (ReplM b) where
-  liftBase = liftIO
-
-instance MonadBaseControl IO (ReplM b) where
-    type StM (ReplM b) a = Either (PactError SpanInfo) a
-    liftBaseWith f = ReplT $ liftWith $ \runInBaseReader ->
-      liftWith $ \runInBaseExcept ->
-      f $ \k -> runInBaseExcept (runInBaseReader (unReplT k))
-    restoreM = \case
-      Left err -> throwError err
-      Right a -> return a
-
 
 -- | Passed in repl environment
--- Todo: not a `newtype` since there's
--- more fields we can set.
 data ReplState b
   = ReplState
   { _replFlags :: Set ReplDebugFlag
-  -- , _replLoaded :: Loaded b SpanInfo
   , _replPactDb :: PactDb b SpanInfo
   , _replEvalState :: EvalState b SpanInfo
   , _replEvalEnv :: EvalEnv b SpanInfo
@@ -162,6 +145,7 @@ instance MonadGas (ReplM b) where
   logGas msg g = do
     r <- use replEvalLog
     liftIO $ modifyIORef' r (fmap ((msg, g):))
+  chargeGas :: Gas -> ReplM b ()
   chargeGas g = do
     r <- use replGas
     liftIO (modifyIORef' r (<> g))
