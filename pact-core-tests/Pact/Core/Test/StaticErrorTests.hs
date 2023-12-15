@@ -314,6 +314,18 @@ staticTests =
         (defun f3 () f1)
         )
       |])
+  , ("dup_defs", isDesugarError _DuplicateDefinition, [text|
+      (module m g (defcap g () true)
+        (defun f () true)
+        (defun f () false)
+        )
+      |])
+  , ("dup_defs_different_kind", isDesugarError _DuplicateDefinition, [text|
+      (module m g (defcap g () true)
+        (defun f () true)
+        (defconst f true)
+        )
+      |])
   ]
 
 tests :: TestTree
