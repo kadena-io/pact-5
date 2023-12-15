@@ -326,6 +326,12 @@ staticTests =
         (defconst f true)
         )
       |])
+  , ("governance_wrong", isDesugarError _InvalidGovernanceRef, [text|
+      (module m g (defconst g true))
+      |])
+  , ("governance_nonexistent", isDesugarError _InvalidGovernanceRef, [text|
+      (module m g (defconst k true))
+      |])
   ]
 
 tests :: TestTree
