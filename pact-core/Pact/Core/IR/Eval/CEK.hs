@@ -29,8 +29,7 @@ module Pact.Core.IR.Eval.CEK
   , emitEvent
   , emitCapability
   , guardForModuleCall
-  , enforceKeyset
-  , enforceKeysetName ) where
+  ) where
 
 
 import Control.Lens
@@ -64,7 +63,6 @@ import Pact.Core.StableEncoding
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.DefPacts.Types
-import Control.Monad.IO.Class
 
 chargeNodeGas :: MonadEval b i m => NodeType -> m ()
 chargeNodeGas _nt = pure ()
@@ -438,38 +436,6 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
               env' = set ceLocal (RAList.fromList (reverse args)) $ set ceDefPactStep (Just $ set psResume resume ps) env
           applyPact i pc ps cont handler env' (_peNestedDefPactExec pe)
 
-
-enforceKeyset
-  :: MonadEval b i m
-  => KeySet FullyQualifiedName
-  -> m Bool
-enforceKeyset (KeySet kskeys ksPred) = do
-  matchedSigs <- M.filterWithKey matchKey <$> viewEvalEnv eeMsgSigs
-  sigs <- checkSigCaps matchedSigs
-  runPred (M.size sigs)
-  where
-  matchKey k _ = k `elem` kskeys
-  atLeast t m = m >= t
-  count = S.size kskeys
-  runPred matched =
-    case ksPred of
-      KeysAll -> run atLeast
-      KeysAny -> run (\_ m -> atLeast 1 m)
-      Keys2 -> run (\_ m -> atLeast 2 m)
-    where
-    run p = pure (p count matched)
-
-enforceKeysetName
-  :: MonadEval b i m
-  => i
-  -> PactDb b i
-  -> KeySetName
-  -> m Bool
-enforceKeysetName info pdb ksn = do
-  liftIO (readKeySet pdb ksn) >>= \case
-    Just ks -> enforceKeyset ks
-    Nothing ->
-      throwExecutionError info (NoSuchKeySet ksn)
 
 -- Todo: fail invariant
 nameToFQN
