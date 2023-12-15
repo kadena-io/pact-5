@@ -64,7 +64,6 @@ import Pact.Core.Gas
 import Pact.Core.Errors
 import Pact.Core.Debug
 import Pact.Core.Environment
---import Pact.Core.IR.Eval.Runtime.Types (MonadGas(logGas, chargeGas))
 import qualified Pact.Core.IR.Term as Term
 import qualified Pact.Core.Syntax.ParseTree as Syntax
 

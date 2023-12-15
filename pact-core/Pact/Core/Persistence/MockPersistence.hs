@@ -99,12 +99,7 @@ mockPactDb serial = do
     case Map.lookup tid txl of
       Just txl' -> pure $ fromMaybe [] (traverse (traverse (fmap (view document) . _decodeRowData serial)) (filter (\(TxLog dom _ _) -> dom == toUserTable tn) txl'))
       Nothing -> pure []
-    -- m <- readIORef refTxLog
-    -- case M.lookup tn m of
-    --   Just txids -> case M.lookup tid txids of
-    --     Just n -> pure n
-    --     Nothing -> throwIO (Persistence.NoTxLog tn tid)
-    --   Nothing -> throwIO (Persistence.NoTxLog tn tid)
+
   txIds :: TxLogQueue -> TableName -> TxId -> IO [TxId]
   txIds refTxLog tn (TxId txId) = do
     txl <- readIORef refTxLog
@@ -112,10 +107,6 @@ mockPactDb serial = do
       userTab = toUserTable tn
       subTxs = Map.filterWithKey (\(TxId i) txs -> i >= txId && isJust (find (\(TxLog dom _ _) -> dom == userTab) txs)) txl
     pure (Map.keys subTxs)
-    --txl <- readIORef refTxLog
-    -- case M.lookup tn txl of
-    --   Just mtxl -> pure [ x | x <- M.keys mtxl, x >= txId ]
-    --   Nothing -> throwIO (Persistence.NoSuchTable tn)
 
   keys
     :: forall k v
@@ -209,19 +200,6 @@ mockPactDb serial = do
     checkTable tbl ref
     r <- readIORef ref
     pure (r ^? ix tbl . ix k)
-
-  -- writeToTxLog
-  --   :: IORef TxId
-  --   -> TxLogQueue
-  --   -> TableName
-  --   -> RowKey
-  --   -> RowData
-  --   -> IO ()
-  -- writeToTxLog refTxId refTxLog tbl k rdata = do
-  --   tid <- readIORef refTxId
-  --   let entry = M.singleton tid [TxLog (toUserTable tbl) (k ^. rowKey) (_encodeRowData serial rdata)]
-  --   record refTxId refTxLog
-  --   modifyIORef' refTxLog (M.insertWith (M.unionWith (<>)) tbl entry)
 
   writeRowData
     :: IORef (Map TableName (Map RowKey RowData))
