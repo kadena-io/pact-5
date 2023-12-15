@@ -269,7 +269,7 @@ write' serial db txId txLog wt domain k v =
         Left _err -> throwIO P.WriteException
         Right res
           | res == SQL.Done -> modifyIORef' txLog (TxLog "SYS:NAMESPACES" k' encoded:)
-          | otherwise -> fail "invariant viaolation"
+          | otherwise -> throwIO P.MultipleRowsReturnedFromSingleWrite
   where
     checkInsertOk ::  TableName -> RowKey -> IO (Maybe RowData)
     checkInsertOk tbl rk = do

@@ -203,6 +203,7 @@ data DbOpException
   | NoTxToCommit
   | NoTxLog TableName TxId
   | OpDisallowed
+  | MultipleRowsReturnedFromSingleWrite
   deriving (Show, Eq, Typeable)
 
 dbOpDisallowed :: IO a
