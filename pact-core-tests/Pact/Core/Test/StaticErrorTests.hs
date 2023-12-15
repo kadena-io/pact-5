@@ -199,7 +199,7 @@ staticTests =
   , ("invalid_schema_iface_wrong_ref_qual", isDesugarError _NoSuchModuleMember, [text|
       (interface iface
         (defun i ())
-      )
+        )
       (interface iface2
         (defconst c:object{m.i} { 'flag:true })
         )
@@ -229,6 +229,21 @@ staticTests =
         (defschema p flag:bool)
         (defun i () p)
       )
+      |])
+    -- TODO better error
+  , ("invalid_def_table_nonexistent", isDesugarError _NoSuchModule, [text|
+      (module fdb G
+        (defcap G () true)
+        (deftable fdb-tbl:{fdb-test})
+        )
+      |])
+  , ("invalid_def_table_wrong_type", isDesugarError _InvalidDefInSchemaPosition, [text|
+      (module fdb G
+        (defcap G () true)
+        (defun i () true)
+        (deftable fdb-tbl:{i})
+        )
+      |])
       |])
   ]
 
