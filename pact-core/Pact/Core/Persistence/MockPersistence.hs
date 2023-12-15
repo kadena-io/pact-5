@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Pact.Core.Persistence.MockPersistence (
-  mockPactDb, serialiseRepl
+  mockPactDb
   )where
 
 
@@ -27,10 +27,7 @@ import Pact.Core.Persistence (Domain(..),
                               Purity(PImpure), toUserTable
                              )
 import Pact.Core.Serialise
-import Pact.Core.Builtin (ReplRawBuiltin)
-import Pact.Core.Info (SpanInfo)
 
-import Pact.Core.Serialise.CBOR_V1 (encodeModuleData_TESTING, decodeModuleData_TESTING)
 
 type TxLogQueue = IORef (Map TxId [TxLog ByteString])
 
@@ -299,10 +296,3 @@ record :: IORef TxId -> TxLogQueue -> TxLog ByteString -> IO ()
 record txId queue entry = do
   txIdNow <- readIORef txId
   modifyIORef queue $ \txMap -> Map.insertWith (<>) txIdNow [entry] txMap
-
-
-serialiseRepl :: PactSerialise ReplRawBuiltin SpanInfo
-serialiseRepl = serialisePact{ _encodeModuleData = encodeModuleData_TESTING
-                             , _decodeModuleData = fmap LegacyDocument . decodeModuleData_TESTING
-                             }
-

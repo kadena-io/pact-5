@@ -31,10 +31,10 @@ import Pact.Core.Persistence (WriteType(Insert), readKeySet, writeKeySet, writeM
                              , RowData(..)
                              , WriteType(Insert, Update, Write)
                              )
-import Pact.Core.Persistence.MockPersistence (mockPactDb, serialiseRepl)
+import Pact.Core.Persistence.MockPersistence (mockPactDb)
 import Pact.Core.Repl.Compile (interpretReplProgram)
 import Pact.Core.Repl.Utils (ReplState(..), SourceCode(..), runReplT)
-import Pact.Core.Serialise (PactSerialise(..), serialisePact)
+import Pact.Core.Serialise (PactSerialise(..), serialisePact, serialisePact_repl_spaninfo)
 
 -- | Top-level TestTree for Persistence Tests.
 tests :: TestTree
@@ -104,7 +104,7 @@ namespaceRoundtrip serial = property $ do
 sqliteRegression :: TestTree
 sqliteRegression =
   testCase "sqlite persistence backend produces expected values/txlogs" $
-  withSqlitePactDb serialiseRepl ":memory:" $ \pdb -> do
+  withSqlitePactDb serialisePact_repl_spaninfo ":memory:" $ \pdb -> do
     let
       user1 = "user1"
       usert = TableName user1 (ModuleName "someModule" Nothing)
@@ -118,7 +118,7 @@ sqliteRegression =
           [ (Field "namespace", PLiteral LUnit)
           , (Field "name", PString user1)
           ])
-      rdEnc = _encodeRowData serialiseRepl rd
+      rdEnc = _encodeRowData serialisePact_repl_spaninfo rd
     assertEqual "output of commit" txs1 [ TxLog "SYS:usertables" "user1" rdEnc ]
 
 
@@ -126,7 +126,7 @@ sqliteRegression =
     Just t1 <- _pdbBeginTx pdb Transactional
     let
       row = RowData $ Map.fromList [(Field "gah", PactValue.PDecimal 123.454345)]
-      rowEnc = _encodeRowData serialiseRepl row
+      rowEnc = _encodeRowData serialisePact_repl_spaninfo row
     _pdbWrite pdb Insert (DUserTables usert) (RowKey "key1") row
     Just row' <- _pdbRead pdb (DUserTables usert) (RowKey "key1")
     assertEqual "row should be identical to its saved/recalled value" row row'
@@ -136,7 +136,7 @@ sqliteRegression =
              [ (Field "gah", PactValue.PBool False)
              , (Field "fh", PactValue.PInteger 1)
              ]
-      row2Enc = _encodeRowData serialiseRepl row2
+      row2Enc = _encodeRowData serialisePact_repl_spaninfo row2
                  
     _pdbWrite pdb Update (DUserTables usert) (RowKey "key1") row2
     Just row2' <- _pdbRead pdb (DUserTables usert) (RowKey "key1")
@@ -144,7 +144,7 @@ sqliteRegression =
 
     let
       ks = KeySet (Set.fromList [PublicKeyText "skdjhfskj"]) KeysAll
-      ksEnc = _encodeKeySet serialiseRepl ks
+      ksEnc = _encodeKeySet serialisePact_repl_spaninfo ks
     _ <- _pdbWrite pdb Write DKeySets (KeySetName "ks1" Nothing) ks
     Just ks' <- _pdbRead pdb DKeySets (KeySetName "ks1" Nothing)
     assertEqual "keyset should be equal after storage/retrieval" ks ks'
@@ -153,7 +153,7 @@ sqliteRegression =
     -- module
     let mn = ModuleName "test" Nothing
     md <- loadModule
-    let mdEnc = _encodeModuleData serialiseRepl md
+    let mdEnc = _encodeModuleData serialisePact_repl_spaninfo md
     _pdbWrite pdb Write DModules mn md
 
     Just md' <- _pdbRead pdb DModules mn
@@ -194,7 +194,7 @@ sqliteRegression =
     where
       loadModule = do
         let src = "(module test G (defcap G () true) (defun f (a: integer) 1))"
-        pdb <- mockPactDb serialiseRepl
+        pdb <- mockPactDb serialisePact_repl_spaninfo
         g <- newIORef mempty
         evalLog <- newIORef Nothing
         let ee = defaultEvalEnv pdb replRawBuiltinMap

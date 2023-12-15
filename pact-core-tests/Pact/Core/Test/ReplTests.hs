@@ -32,7 +32,6 @@ import Pact.Core.Environment
 import Pact.Core.Builtin
 import Pact.Core.Errors
 import Pact.Core.Serialise
-import Pact.Core.Serialise.CBOR_V1 (encodeModuleData_TESTING, decodeModuleData_TESTING)
 
 tests :: IO TestTree
 tests = do
@@ -51,16 +50,13 @@ replTestFiles = do
 
 runFileReplTest :: TestName -> TestTree
 runFileReplTest file = testCase file $ do
-  pdb <- mockPactDb serialiseRepl
+  pdb <- mockPactDb serialisePact_repl_spaninfo
   T.readFile (replTestDir </> file) >>= runReplTest pdb file
 
 runFileReplTestSqlite :: TestName -> TestTree
 runFileReplTestSqlite file = testCase file $ do
   ctnt <- T.readFile (replTestDir </> file)
-  let enc = serialisePact{ _encodeModuleData = encodeModuleData_TESTING
-                         , _decodeModuleData = fmap LegacyDocument . decodeModuleData_TESTING
-                         }
-  withSqlitePactDb enc ":memory:" $ \pdb -> do
+  withSqlitePactDb serialisePact_repl_spaninfo ":memory:" $ \pdb -> do
     runReplTest pdb file ctnt
 
 runReplTest :: PactDb ReplRawBuiltin SpanInfo -> FilePath -> T.Text -> Assertion

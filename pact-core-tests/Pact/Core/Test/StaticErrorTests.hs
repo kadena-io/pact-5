@@ -17,8 +17,7 @@ import Pact.Core.Builtin
 import Pact.Core.Evaluate
 import Pact.Core.Environment
 import Pact.Core.Errors
-import Pact.Core.Serialise (Document(LegacyDocument), PactSerialise(_encodeModuleData, _decodeModuleData), serialisePact)
-import Pact.Core.Serialise.CBOR_V1 (encodeModuleData_TESTING2, decodeModuleData_TESTING2)
+import Pact.Core.Serialise (serialisePact_raw_spaninfo)
 import Pact.Core.Persistence.MockPersistence (mockPactDb)
 
 import Pact.Core.Test.TestPrisms
@@ -31,13 +30,7 @@ isDesugarError p s = isJust $ preview (_PEDesugarError . _1 . p) s
 
 runStaticTest :: FilePath -> Text -> (PactErrorI -> Bool) -> Assertion
 runStaticTest fp src predicate = do
-  -- This special serialise record mixes RawBuiltin and SpanInfo, as is
-  -- needed by the `evaluate` function.
-  let frankenSerialise = serialisePact {
-        _encodeModuleData = encodeModuleData_TESTING2,
-        _decodeModuleData = fmap LegacyDocument . decodeModuleData_TESTING2
-      }
-  pdb <- mockPactDb frankenSerialise
+  pdb <- mockPactDb serialisePact_raw_spaninfo
   let evalEnv = defaultEvalEnv pdb rawBuiltinMap
   v <- fst <$> evaluate evalEnv src
   case v of

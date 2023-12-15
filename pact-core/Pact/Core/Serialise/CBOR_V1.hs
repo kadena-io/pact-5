@@ -6,8 +6,8 @@
 
 module Pact.Core.Serialise.CBOR_V1
   ( encodeModuleData, decodeModuleData
-  , encodeModuleData_TESTING, decodeModuleData_TESTING
-  , encodeModuleData_TESTING2, decodeModuleData_TESTING2
+  , encodeModuleData_repl_spaninfo, decodeModuleData_repl_spaninfo
+  , encodeModuleData_raw_spaninfo, decodeModuleData_raw_spaninfo
   , encodeKeySet, decodeKeySet
   , encodeDefPactExec, decodeDefPactExec
   , encodeNamespace, decodeNamespace
@@ -43,20 +43,20 @@ import Data.ByteString (ByteString, fromStrict)
 encodeModuleData :: ModuleData RawBuiltin () -> ByteString
 encodeModuleData = toStrictByteString . encode
 
-encodeModuleData_TESTING :: ModuleData ReplRawBuiltin SpanInfo -> ByteString
-encodeModuleData_TESTING = toStrictByteString . encode
+encodeModuleData_repl_spaninfo :: ModuleData ReplRawBuiltin SpanInfo -> ByteString
+encodeModuleData_repl_spaninfo = toStrictByteString . encode
 
-encodeModuleData_TESTING2 :: ModuleData RawBuiltin SpanInfo -> ByteString
-encodeModuleData_TESTING2 = toStrictByteString . encode
+encodeModuleData_raw_spaninfo :: ModuleData RawBuiltin SpanInfo -> ByteString
+encodeModuleData_raw_spaninfo = toStrictByteString . encode
 
 decodeModuleData :: ByteString -> Maybe (ModuleData RawBuiltin ())
 decodeModuleData bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
-decodeModuleData_TESTING :: ByteString -> Maybe (ModuleData ReplRawBuiltin SpanInfo)
-decodeModuleData_TESTING bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
+decodeModuleData_repl_spaninfo :: ByteString -> Maybe (ModuleData ReplRawBuiltin SpanInfo)
+decodeModuleData_repl_spaninfo bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
-decodeModuleData_TESTING2 :: ByteString -> Maybe (ModuleData RawBuiltin SpanInfo)
-decodeModuleData_TESTING2 bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
+decodeModuleData_raw_spaninfo :: ByteString -> Maybe (ModuleData RawBuiltin SpanInfo)
+decodeModuleData_raw_spaninfo bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
 encodeKeySet :: KeySet FullyQualifiedName -> ByteString
 encodeKeySet = toStrictByteString . encode
