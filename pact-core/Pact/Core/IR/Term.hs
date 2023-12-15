@@ -441,25 +441,6 @@ termInfo f = \case
   Error t i -> Error t <$> f i
   ObjectLit m i -> ObjectLit m <$> f i
 
-termInfo' :: Traversal (Term name ty builtin info) (Term name ty builtin info') info info'
-termInfo' f = \case
-  Var n i -> Var n <$> f i
-  Let n t1 t2 i ->
-    Let n <$> termInfo' f t1 <*> termInfo' f t2 <*> f i
-  Lam li ns term i -> Lam li ns <$> termInfo' f term <*> f i
-  App t1 t2 i -> App <$> termInfo' f t1 <*> traverse (termInfo' f) t2 <*> f i
-  Builtin b i -> Builtin b <$> f i
-  Constant l i -> Constant l <$> f i
-  Sequence e1 e2 i -> Sequence <$> termInfo' f e1 <*> termInfo' f e2 <*> f i
-  Conditional o i ->
-    Conditional <$> traverse (termInfo' f) o <*> f i
-  ListLit l i  -> ListLit <$> traverse (termInfo' f) l <*> f i
-  Try e1 e2 i -> Try <$> termInfo' f e1 <*> termInfo' f e2 <*> f i
-  Nullary term i -> Nullary <$> termInfo' f term <*> f i
-  CapabilityForm cf i -> CapabilityForm <$> traverse (termInfo' f) cf <*> f i
-  Error t i -> Error t <$> f i
-  ObjectLit m i -> ObjectLit <$> (traverse ._2)  (termInfo' f) m <*> f i
-
 instance Plated (Term name ty builtin info) where
   plate f = \case
     Var n i -> pure (Var n i)

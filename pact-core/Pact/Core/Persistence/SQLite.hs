@@ -111,7 +111,7 @@ readKeys db = \case
     case sequence parsedKS of
       Left _ -> fail "unexpected decoding"
       Right v -> pure v
-  DModules -> withStmt db "SELECT rowkey FROM \"SYS:MODULES\" ORDER BY txid DESC" $ \stmt -> fmap parseRenderedModuleName <$> collect stmt [] >>= \mns -> case sequence mns of
+  DModules -> withStmt db "SELECT rowkey FROM \"SYS:MODULES\" ORDER BY txid DESC" $ \stmt -> fmap parseModuleName <$> collect stmt [] >>= \mns -> case sequence mns of
     Nothing -> fail "unexpected decoding"
     Just mns' -> pure mns'
   DDefPacts -> withStmt db "SELECT rowkey FROM \"SYS:PACTS\" ORDER BY txid DESC" $ \stmt -> fmap DefPactId <$> collect stmt []
@@ -290,7 +290,7 @@ read' serial db domain k = case domain of
     (doRead (renderDefPactId k) (\v -> pure (view document <$> _decodeDefPactExec serial v)))
 
   DNamespaces -> withStmt db (selStmt "SYS:NAMESPACES")
-    (doRead (renderNamespaceName k) (\v -> pure (view document <$> _decodeNamespace serial v)))
+    (doRead (_namespaceName k) (\v -> pure (view document <$> _decodeNamespace serial v)))
 
   where
     selStmt tbl = "SELECT rowdata FROM \""<> tbl <> "\" WHERE rowkey = ? ORDER BY txid DESC LIMIT 1"

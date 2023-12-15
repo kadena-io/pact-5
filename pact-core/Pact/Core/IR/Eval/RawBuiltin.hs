@@ -870,13 +870,12 @@ coreBind info b cont handler _env = \case
 --------------------------------------------------
 
 createTable :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-createTable = \info b cont handler env -> \case
-  [VTable tv@(TableValue tn __ _)] -> do
+createTable info b cont handler env = \case
+  [VTable tv@(TableValue tn _ _)] -> do
     enforceTopLevelOnly info b
     guardTable info env tv GtCreateTable
     let pdb = view cePactDb env
     -- Todo: error handling here
-    -- Todo: guard table
     liftDbFunction info (_pdbCreateUserTable pdb tn)
     returnCEKValue cont handler VUnit
   args -> argsError info b args
@@ -1490,12 +1489,12 @@ describeModule info b cont handler env = \case
   args -> argsError info b args
 
 dbDescribeTable :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m
-dbDescribeTable = \info b cont handler _env -> \case
-  [VTable (TableValue name _ _)] ->
+dbDescribeTable info b cont handler _env = \case
+  [VTable (TableValue name _ schema)] ->
     returnCEKValue cont handler $ VObject $ M.fromList $ fmap (over _1 Field)
       [("name", PString (_tableName name))
       ,("module", PString (renderModuleName (_tableModuleName name)))
-      ,("type", PString "asdf")] -- TODO:
+      ,("type", PString (renderType (TyTable schema)))]
   args -> argsError info b args
 
 dbDescribeKeySet :: (IsBuiltin b, MonadEval b i m) => NativeFunction b i m

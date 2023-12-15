@@ -89,7 +89,7 @@ newtype RowData
 -- | Semantics for running transactions.
 data ExecutionMode
   = Transactional
-    -- ^ `beginTx` and `commitTx` atomically apply actions to the database.
+    -- ^ `beginTx` and `commitTx` atomically commit actions to the database.
   | Local
     -- ^ `beginTx` and `commitTx` have no effect to the database.
   deriving (Eq,Show)
@@ -250,6 +250,8 @@ instance Monoid (Loaded b i) where
 instance Default (Loaded b i) where
   def = Loaded mempty mempty Nothing mempty
 
-
+-- | Map the user's table name into a set of names suitable for
+--   storage in the persistence backend (prefix USER_ and the module name
+--   to avoid conflicts with any system tables).
 toUserTable :: TableName -> Text
 toUserTable (TableName tbl mn) = "USER_" <> renderModuleName mn <> "_" <> tbl

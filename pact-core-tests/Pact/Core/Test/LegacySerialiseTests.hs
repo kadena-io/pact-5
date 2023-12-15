@@ -22,4 +22,5 @@ tests = testGroup "Legacy Serialisation"
     , testCase "pred defaults"  $ assertBool "KeySet decoding failed" (maybe False (\k -> KeysAll == _ksPredFun k) (decodeKeySet "{\"pred\":\"keys-all\",\"keys\":[\"ddd8\",\"ed0\"]}"))
     , testCase "pred invalid" $ assertBool "Accept invalid pred" (isNothing (decodeKeySet "{\"pred\":\"ABC\",\"keys\":[\"ddd8\",\"ed0\"]}"))
     ]
+    -- TODO: Add more test cases.
   ]

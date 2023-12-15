@@ -196,14 +196,14 @@ readOnlyEnv :: CEKEnv b i m -> CEKEnv b i m
 readOnlyEnv e
   | view (cePactDb . pdbPurity) e == PSysOnly = e
   | otherwise =
-      let pdb = view cePactDb  e
+      let pdb = view cePactDb e
           newPactdb =
               PactDb
              { _pdbPurity = PReadOnly
              , _pdbRead = _pdbRead pdb
              , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
              , _pdbKeys = \_ -> dbOpDisallowed
-             , _pdbCreateUserTable = const dbOpDisallowed
+             , _pdbCreateUserTable = \_ -> dbOpDisallowed
              , _pdbBeginTx = \_ -> dbOpDisallowed
              , _pdbCommitTx = dbOpDisallowed
              , _pdbRollbackTx = dbOpDisallowed

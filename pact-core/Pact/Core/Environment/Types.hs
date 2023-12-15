@@ -153,11 +153,10 @@ data EvalState b i
   , _esEvents :: [PactEvent PactValue]
   , _esLoaded :: Loaded b i
   , _esDefPactExec :: Maybe DefPactExec
-  , _esTxId :: Maybe TxId
   } deriving Show
 
 instance Default (EvalState b i) where
-  def = EvalState def [] [] mempty Nothing Nothing
+  def = EvalState def [] [] mempty Nothing
 
 makeClassy ''EvalState
 

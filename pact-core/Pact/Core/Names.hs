@@ -57,8 +57,6 @@ module Pact.Core.Names
  , DefPactId(..)
  , parseModuleName
  , renderDefPactId
- , parseRenderedModuleName
- , renderNamespaceName
  ) where
 
 import Control.Lens
@@ -119,12 +117,6 @@ renderQualName (QualifiedName n (ModuleName m ns)) =
 renderModuleName :: ModuleName -> Text
 renderModuleName (ModuleName m ns) =
   maybe "" ((<> ".") . _namespaceName) ns <> m
-
-parseRenderedModuleName :: Text -> Maybe ModuleName
-parseRenderedModuleName txt = case T.split (== '.') txt of
-  [ns, mn] -> Just (ModuleName mn (Just (NamespaceName ns)))
-  [mn] -> Just (ModuleName mn Nothing)
-  _ -> Nothing
 
 instance Pretty QualifiedName where
   pretty (QualifiedName n m) =
@@ -391,7 +383,3 @@ parseModuleName = MP.parseMaybe moduleNameParser
 
 renderDefPactId :: DefPactId -> Text
 renderDefPactId (DefPactId t) = t
-
-
-renderNamespaceName :: NamespaceName -> Text
-renderNamespaceName (NamespaceName nsn) = nsn
