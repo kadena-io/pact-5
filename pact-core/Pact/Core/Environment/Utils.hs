@@ -182,7 +182,7 @@ mangleNamespace mn@(ModuleName mnraw ns) =
 
 isKeysetInSigs
   :: MonadEval b i m
-  => KeySet FullyQualifiedName
+  => KeySet QualifiedName
   -> m Bool
 isKeysetInSigs (KeySet kskeys ksPred) = do
   matchedSigs <- M.filterWithKey matchKey <$> viewEvalEnv eeMsgSigs

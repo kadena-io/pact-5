@@ -14,8 +14,8 @@ import Pact.Core.PactValue
 
 data Namespace = Namespace
   { _nsName :: !NamespaceName
-  , _nsUser :: !(Guard FullyQualifiedName PactValue)
-  , _nsAdmin :: !(Guard FullyQualifiedName PactValue)
+  , _nsUser :: !(Guard QualifiedName PactValue)
+  , _nsAdmin :: !(Guard QualifiedName PactValue)
   } deriving (Eq, Show)
 
 makeLenses ''Namespace

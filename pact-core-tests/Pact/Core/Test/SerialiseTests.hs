@@ -102,7 +102,7 @@ serialiseModule = property $ do
 
 serialiseKeySet :: Property
 serialiseKeySet = property $ do
-  ks <- forAll (keySetGen fullyQualifiedNameGen)
+  ks <- forAll (keySetGen qualifiedNameGen)
   let
     encoded = _encodeKeySet serialisePact ks
   case _decodeKeySet serialisePact encoded of

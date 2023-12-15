@@ -23,9 +23,6 @@ module Pact.Core.Guards
 )
 where
 
-import qualified Data.Char as Char
-import qualified Data.Set as S
-import qualified Data.Text as T
 import Control.Applicative
 import Control.Monad
 import Data.Attoparsec.Text
@@ -33,6 +30,10 @@ import Data.Foldable
 import Data.String
 import Data.Text(Text)
 import Text.Parser.Token as P
+
+import qualified Data.Char as Char
+import qualified Data.Set as S
+import qualified Data.Text as T
 
 import Pact.Core.Pretty
 import Pact.Core.Names
@@ -97,7 +98,7 @@ data KSPredicate name
   | Keys2
   | KeysAny
   -- | CustomPredicate name -- TODO: When this is brought back, fix up `keySetGen`!
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Functor, Foldable, Traversable)
 
 predicateToString :: IsString s => KSPredicate name -> s
 predicateToString = \case
@@ -112,7 +113,7 @@ data KeySet name
   = KeySet
   { _ksKeys :: !(S.Set PublicKeyText)
   , _ksPredFun :: KSPredicate name
-  } deriving (Eq, Show, Ord)
+  } deriving (Eq, Show, Ord, Functor, Foldable, Traversable)
 
 instance Pretty name => Pretty (KeySet name) where
   pretty (KeySet ks f) = "KeySet" <+> commaBraces

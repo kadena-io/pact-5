@@ -242,7 +242,7 @@ pattern VBool b = VLiteral (LBool b)
 pattern VDecimal :: Decimal -> CEKValue b i m
 pattern VDecimal d = VLiteral (LDecimal d)
 
-pattern VGuard :: Guard FullyQualifiedName PactValue -> CEKValue b i m
+pattern VGuard :: Guard QualifiedName PactValue -> CEKValue b i m
 pattern VGuard g = VPactValue (PGuard g)
 
 pattern VList :: Vector PactValue -> CEKValue b i m

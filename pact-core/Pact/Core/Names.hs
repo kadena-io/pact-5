@@ -18,6 +18,8 @@ module Pact.Core.Names
  , NameKind(..)
  , BareName(..)
  , QualifiedName(..)
+ , qnName
+ , qnModName
  , renderQualName
  , renderModuleName
  , TypeVar(..)
@@ -350,6 +352,7 @@ instance Eq (FQNameRef name) where
   (FQName fqn) == (FQName fqn') = fqn == fqn'
 
 makeLenses ''FullyQualifiedName
+makeLenses ''QualifiedName
 
 -- | The identifier that indexes defpacts in the db,
 --   generally computed from the continuation, or

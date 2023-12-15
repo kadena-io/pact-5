@@ -56,7 +56,7 @@ data DefPactExec
   , _peYield :: Maybe Yield
   , _peStep :: Int
   , _peDefPactId :: DefPactId
-  , _peContinuation :: DefPactContinuation FullyQualifiedName PactValue
+  , _peContinuation :: DefPactContinuation QualifiedName PactValue
   , _peStepHasRollback :: Bool
   , _peNestedDefPactExec :: Map DefPactId DefPactExec
   } deriving (Show, Eq)

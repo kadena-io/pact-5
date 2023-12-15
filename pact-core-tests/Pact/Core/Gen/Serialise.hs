@@ -17,36 +17,19 @@ import qualified Data.Vector as Vec
 import Hedgehog hiding (Var)
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
-
-import Pact.Core.Names (BareName(..), DefPactId(..), DynamicName(..),
-                        DynamicRef(..), Field(..), FQNameRef(FQName),
-                        FullyQualifiedName(..), ModuleName(..), Name(..),
-                        NameKind(NBound, NDynRef, NModRef, NTopLevel),
-                        NamespaceName(..), ParsedName(BN,DN,QN),
-                        QualifiedName(..))
-import Pact.Core.Guards (CapGovRef(UnresolvedGov, ResolvedGov),
-                         Governance(CapGov, KeyGov), Guard(GKeyset,GKeySetRef),
-                         KeySet(..), KeySetName(..),
-                         KSPredicate(KeysAll, Keys2, KeysAny), PublicKeyText(..),
-                         UserGuard(..))
+import Pact.Core.Names
+import Pact.Core.Guards
 import Pact.Core.Hash (Hash(..), ModuleHash(..))
-import Pact.Core.Type (Arg(..), PrimType(PrimBool, PrimDecimal, PrimGuard,
-                                         PrimInt, PrimString, PrimTime,
-                                         PrimUnit),
-                       Schema(Schema, _schema), Type(TyList, TyModRef, TyObject,
-                                                     TyPrim, TyTable))
+import Pact.Core.Type
 import Pact.Core.Imports (Import(..))
 import Pact.Core.IR.Term
 import Pact.Core.Info (SpanInfo)
-import Pact.Core.Builtin (RawBuiltin, BuiltinForm(CAnd, COr, CIf, CEnforce,
-                                                   CEnforceOne))
-import Pact.Core.Literal (Literal(LBool, LDecimal, LInteger, LString, LUnit))
-import Pact.Core.Capabilities (DefManagedMeta(DefManagedMeta, AutoManagedMeta),
-                               DefCapMeta(DefEvent, DefManaged, Unmanaged) )
-import Pact.Core.Persistence (ModuleData(ModuleData, InterfaceData))
-import Pact.Core.PactValue (PactValue(PGuard, PList, PLiteral))
-import Pact.Core.DefPacts.Types (DefPactContinuation(..), DefPactExec(..),
-                                 Provenance(..), Yield(..))
+import Pact.Core.Builtin
+import Pact.Core.Literal
+import Pact.Core.Capabilities
+import Pact.Core.Persistence
+import Pact.Core.PactValue
+import Pact.Core.DefPacts.Types
 import Pact.Core.ChainData (ChainId(..))
 import Pact.Core.Namespace (Namespace(..))
 import Pact.Core.Test.LexerParserTests (identGen)
@@ -57,8 +40,8 @@ namespaceNameGen = NamespaceName <$> identGen
 namespaceGen :: Gen Namespace
 namespaceGen = do
   name <- namespaceNameGen
-  user <- guardGen 3 fullyQualifiedNameGen
-  Namespace name user <$> guardGen 3 fullyQualifiedNameGen
+  user <- guardGen 3 qualifiedNameGen
+  Namespace name user <$> guardGen 3 qualifiedNameGen
 
 moduleNameGen :: Gen ModuleName
 moduleNameGen =  do
@@ -437,7 +420,7 @@ pactValueGen' :: Int ->Gen PactValue
 pactValueGen' depth = Gen.choice
   [ PLiteral <$> literalGen
   , PList . Vec.fromList <$> Gen.list (Range.linear 0 depth) (pactValueGen' (depth - 1))
-  , PGuard <$> guardGen (depth - 1) fullyQualifiedNameGen
+  , PGuard <$> guardGen (depth - 1) qualifiedNameGen
   ]
 
 chainIdGen :: Gen ChainId
@@ -454,9 +437,9 @@ yieldGen = do
   p <- Gen.maybe provenanceGen
   Yield d p <$> Gen.maybe chainIdGen
 
-defPactContinuationGen :: Gen (DefPactContinuation FullyQualifiedName PactValue)
+defPactContinuationGen :: Gen (DefPactContinuation QualifiedName PactValue)
 defPactContinuationGen = do
-  ident <- fullyQualifiedNameGen
+  ident <- qualifiedNameGen
   DefPactContinuation ident <$> Gen.list (Range.linear 0 8) pactValueGen
 
 defPactExecGen :: Gen DefPactExec

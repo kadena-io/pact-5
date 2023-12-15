@@ -19,7 +19,7 @@ import Pact.Core.Guards (KeySet(KeySet), KeySetName(..), PublicKeyText(..), KSPr
 import Pact.Core.Gen.Serialise (keySetGen, keySetNameGen, moduleNameGen, moduleDataGen, builtinGen
                                ,defPactIdGen, defPactExecGen, namespaceNameGen, namespaceGen)
 import Pact.Core.Literal (Literal(LUnit))
-import Pact.Core.Names (Field(..), FullyQualifiedName, RowKey(..), TableName(..), ModuleName(..))
+import Pact.Core.Names 
 import Pact.Core.PactValue
 import qualified Pact.Core.PactValue as PactValue
 import Pact.Core.Persistence.SQLite
@@ -53,7 +53,7 @@ testsWithSerial serial b i =
  , testProperty "Namespace" $ namespaceRoundtrip serial
  ]
 
-keysetPersistRoundtrip :: PactSerialise b i -> Gen (KeySet FullyQualifiedName) -> Property
+keysetPersistRoundtrip :: PactSerialise b i -> Gen (KeySet QualifiedName) -> Property
 keysetPersistRoundtrip serial keysetGen =
   property $ do
     keysetName <- forAll keySetNameGen
@@ -130,7 +130,7 @@ sqliteRegression =
              , (Field "fh", PactValue.PInteger 1)
              ]
       row2Enc = _encodeRowData serialisePact_repl_spaninfo row2
-                 
+
     _pdbWrite pdb Update (DUserTables usert) (RowKey "key1") row2
     Just row2' <- _pdbRead pdb (DUserTables usert) (RowKey "key1")
     assertEqual "user update should overwrite with new value" row2 row2'
@@ -159,7 +159,7 @@ sqliteRegression =
       , TxLog "user1" "key1" row2Enc
       , TxLog "user1" "key1" rowEnc
       ]
- 
+
     -- begin tx
     _ <- _pdbBeginTx pdb Transactional
     tids <- _pdbTxIds pdb usert t1
@@ -183,7 +183,7 @@ sqliteRegression =
 
     rkeys2 <- _pdbKeys pdb (DUserTables usert)
     assertEqual "keys post-rollback [key1]" [RowKey "key1"] rkeys2
-    
+
     where
       loadModule = do
         let src = "(module test G (defcap G () true) (defun f (a: integer) 1))"
@@ -195,4 +195,4 @@ sqliteRegression =
         Right _ <- runReplT ref (interpretReplProgram (SourceCode "test" src) (const (pure ())))
         Just md <- readModule pdb (ModuleName "test" Nothing)
         pure md
-        
+

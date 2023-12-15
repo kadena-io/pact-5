@@ -76,7 +76,7 @@ mdModuleHash f = \case
   InterfaceData iface deps ->
     ifHash f iface <&> \ev' -> InterfaceData ev' deps
 
-type FQKS = KeySet FullyQualifiedName
+type FQKS = KeySet QualifiedName
 
 -- | Data reflecting Key/Value storage in user-tables.
 newtype RowData
@@ -129,7 +129,7 @@ data Domain k v b i where
   -- | User tables accept a TableName and map to an 'ObjectMap PactValue'
   DUserTables :: !TableName -> Domain RowKey RowData b i
   -- | Keysets
-  DKeySets :: Domain KeySetName (KeySet FullyQualifiedName) b i
+  DKeySets :: Domain KeySetName (KeySet QualifiedName) b i
   -- | Modules
   DModules :: Domain ModuleName (ModuleData b i) b i
   -- | Namespaces

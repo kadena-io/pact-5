@@ -1,6 +1,7 @@
 -- |
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE InstanceSigs #-}
 module Pact.Core.Serialise.LegacyPact
   ( decodeModuleData
   , decodeKeySet
@@ -27,7 +28,7 @@ import Data.Maybe (fromMaybe)
 import Pact.Core.ChainData
 import Pact.Core.Hash
 import Pact.Core.ModRefs
-import Pact.Core.Literal 
+import Pact.Core.Literal
 import Data.Decimal
 import Pact.Time
 import qualified Pact.JSON.Decode as JD
@@ -40,7 +41,7 @@ import Text.Read (readMaybe)
 decodeModuleData :: ByteString -> Maybe (ModuleData RawBuiltin ())
 decodeModuleData = JD.decodeStrict'
 
-decodeKeySet :: ByteString -> Maybe (KeySet FullyQualifiedName)
+decodeKeySet :: ByteString -> Maybe (KeySet QualifiedName)
 decodeKeySet = JD.decodeStrict'
 
 decodeDefPactExec :: ByteString -> Maybe (Maybe DefPactExec)
@@ -59,7 +60,7 @@ instance JD.FromJSON NamespaceName where
   parseJSON = JD.withText "NamespaceName" (pure . NamespaceName)
 
 
-instance JD.FromJSON (KeySet FullyQualifiedName) where
+instance JD.FromJSON (KeySet QualifiedName) where
   parseJSON v = JD.withObject "KeySet" keyListPred v <|> keyListOnly
       where
         defPred = KeysAll
@@ -70,7 +71,7 @@ instance JD.FromJSON (KeySet FullyQualifiedName) where
 
         keyListOnly = KeySet <$> JD.parseJSON v <*> pure defPred
 
-instance JD.FromJSON (KSPredicate FullyQualifiedName) where
+instance JD.FromJSON (KSPredicate QualifiedName) where
   parseJSON = JD.withText "KSPredicate" $ \case
     "keys-all" -> pure KeysAll
     "keys-2" -> pure Keys2
@@ -138,29 +139,23 @@ instance JD.FromJSON RowData where
   parseJSON = JD.withObject "RowData" $ \o ->
     RowData <$> o JD..: "$d"
 
-instance JD.FromJSON (DefPactContinuation FullyQualifiedName PactValue) where
+instance JD.FromJSON (DefPactContinuation QualifiedName PactValue) where
   parseJSON = JD.withObject "DefPactContinuation" $ \o ->
     DefPactContinuation
       <$> o JD..: "def"
       <*> o JD..: "args"
 
--- TODO: This feels awkward, legacy pact uses qualified names in defpactexec continuations
--- pact-core relies on fullyqualified names. @Jose, is this a valid approach to overcome the
--- current issue?
-
-instance JD.FromJSON FullyQualifiedName where
+instance JD.FromJSON QualifiedName where
   parseJSON = JD.withText "QualifiedName" $ \n -> case T.split (== '.') n  of
-    [mod', name] -> pure (FullyQualifiedName (ModuleName mod' Nothing) name mh)
-    [ns, mod', name] -> pure (FullyQualifiedName (ModuleName mod' (Just (NamespaceName ns))) name mh)
+    [mod', name] -> pure (QualifiedName name (ModuleName mod' Nothing))
+    [ns, mod', name] -> pure (QualifiedName name (ModuleName mod' (Just (NamespaceName ns))))
     _ -> fail "unexpeced parsing"
-    where
-      mh = ModuleHash defaultPactHash
-    
+
 -- instance JD.FromJSON QualifiedName where
 --   parseJSON = JD.withText "QualifiedName" $ \n -> case T.split (== '.') n  of
 --     [mod', name] -> pure (QualifiedName name (ModuleName mod' Nothing))
 --     _ -> fail "unexpeced parsing"
-    
+
 -- instance JD.FromJSON (DefPactContinuation FullyQualifiedName PactValue) where
 --   parseJSON = JD.withObject "DefPactContinuation" $ \o ->
 --     DefPactContinuation
@@ -189,7 +184,7 @@ instance JD.FromJSON ModuleName where
 instance JD.FromJSON ModRef where
   parseJSON = JD.withObject "ModRef" $ \o ->
     ModRef
-      <$> o JD..: "refName"
+    <$> o JD..: "refName"
       <*> o JD..: "refSpec"
       <*> pure Nothing
 
@@ -211,7 +206,7 @@ data LegacyPactValue
   = Legacy_PLiteral LegacyLiteral
   | Legacy_PList (Vector LegacyPactValue)
   | Legacy_PObject (Map Field LegacyPactValue)
-  | Legacy_PGuard (Guard FullyQualifiedName LegacyPactValue)
+  | Legacy_PGuard (Guard QualifiedName LegacyPactValue)
   | Legacy_PModRef ModRef
 
 instance JD.FromJSON LegacyPactValue where
@@ -268,12 +263,12 @@ instance JD.FromJSON LegacyLiteral where
       highPrecFormat = "%Y-%m-%dT%H:%M:%S.%vZ"
 
 
-instance JD.FromJSON (Guard FullyQualifiedName PactValue) where
-  parseJSON = error "guards" -- fromLegacyPactValue <$> JD.parseJSON v
+instance JD.FromJSON (Guard QualifiedName PactValue) where
+  parseJSON v = guardToPactValue <$> JD.parseJSON v
 
 
 -- https://github.com/kadena-io/pact/blob/ba15517b56eba4fdaf6b2fbd3e5245eeedd0fc9f/src/Pact/Types/Term/Internal.hs#L802
-instance JD.FromJSON (Guard FullyQualifiedName LegacyPactValue) where
+instance JD.FromJSON (Guard QualifiedName LegacyPactValue) where
   parseJSON v = GKeyset <$> JD.parseJSON v
     <|> GKeySetRef <$> parseRef v
     <|> GUserGuard <$> JD.parseJSON v
@@ -286,13 +281,13 @@ instance JD.FromJSON (Guard FullyQualifiedName LegacyPactValue) where
       pure (KeySetName ref ns)
 
 
-instance JD.FromJSON (UserGuard FullyQualifiedName LegacyPactValue) where
+instance JD.FromJSON (UserGuard QualifiedName LegacyPactValue) where
   parseJSON = JD.withObject "UserGuard" $ \o ->
     UserGuard
       <$> o JD..: "fun"
       <*> o JD..: "args"
 
-instance JD.FromJSON (CapabilityGuard FullyQualifiedName LegacyPactValue) where
+instance JD.FromJSON (CapabilityGuard QualifiedName LegacyPactValue) where
   parseJSON = JD.withObject "CapabilityGuard" $ \o ->
     CapabilityGuard
       <$> o JD..: "cgName"
@@ -319,7 +314,7 @@ fromLegacyPactValue = \case
   Legacy_PModRef mref -> PModRef mref
 
 
-guardToPactValue :: Guard FullyQualifiedName LegacyPactValue -> Guard FullyQualifiedName PactValue
+guardToPactValue :: Guard QualifiedName LegacyPactValue -> Guard QualifiedName PactValue
 guardToPactValue = \case
   (GKeyset ks) -> GKeyset ks
   (GKeySetRef kref) -> GKeySetRef kref

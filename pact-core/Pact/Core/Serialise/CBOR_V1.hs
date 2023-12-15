@@ -1,6 +1,5 @@
--- | 
+-- |
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE UndecidableInstances #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -58,10 +57,10 @@ decodeModuleData_repl_spaninfo bs = either (const Nothing) (Just . snd) (deseria
 decodeModuleData_raw_spaninfo :: ByteString -> Maybe (ModuleData RawBuiltin SpanInfo)
 decodeModuleData_raw_spaninfo bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
-encodeKeySet :: KeySet FullyQualifiedName -> ByteString
+encodeKeySet :: KeySet QualifiedName -> ByteString
 encodeKeySet = toStrictByteString . encode
 
-decodeKeySet :: ByteString -> Maybe (KeySet FullyQualifiedName)
+decodeKeySet :: ByteString -> Maybe (KeySet QualifiedName)
 decodeKeySet bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
 
@@ -107,7 +106,7 @@ instance Serialise PublicKeyText where
   encode (PublicKeyText t) = encode t
   decode = PublicKeyText <$> decode
 
-instance Serialise (KeySet FullyQualifiedName) where
+instance Serialise (KeySet QualifiedName) where
   encode (KeySet ks p) = encode ks <> encode p
   decode = KeySet <$> decode <*> decode
 
@@ -353,12 +352,13 @@ instance Serialise (DefCapMeta (FQNameRef Name)) where
     2 -> pure Unmanaged
     _ -> fail "unexpected decoding"
 
-instance
-  (Serialise b,
-   Serialise i,
-   Serialise (Term name Type b i),
-   Serialise (DefCapMeta (FQNameRef name)))
-  => Serialise (DefCap name Type b i) where
+-- instance
+--   (Serialise b,
+--    Serialise i,
+--    Serialise (Term name Type b i),
+--    Serialise (DefCapMeta (FQNameRef name)))
+--   => Serialise (DefCap name Type b i) where
+instance (Serialise b, Serialise i) => Serialise (DefCap Name Type b i) where
   encode (DefCap n arity args ret term meta i) =
     encode n
     <> encode arity
@@ -914,7 +914,7 @@ instance Serialise ReplRawBuiltin where
 
 -- DefPacts
 
-instance Serialise (UserGuard FullyQualifiedName PactValue) where
+instance Serialise (UserGuard QualifiedName PactValue) where
   encode (UserGuard f a) = encode f <> encode a
   decode = UserGuard <$> decode <*> decode
 
@@ -922,7 +922,7 @@ instance Serialise DefPactId where
   encode (DefPactId pid) = encode pid
   decode = DefPactId <$> decode
 
-instance Serialise (CapabilityGuard FullyQualifiedName PactValue) where
+instance Serialise (CapabilityGuard QualifiedName PactValue) where
   encode (CapabilityGuard n a pid) = encode n <> encode a <> encode pid
   decode = CapabilityGuard <$> decode <*> decode <*> decode
 
@@ -930,7 +930,7 @@ instance Serialise ModuleGuard where
   encode (ModuleGuard mn n) = encode mn <> encode n
   decode = ModuleGuard <$> decode <*> decode
 
-instance Serialise (Guard FullyQualifiedName PactValue) where
+instance Serialise (Guard QualifiedName PactValue) where
   encode = \case
     GKeyset ks -> encodeWord 0 <> encode ks
     GKeySetRef ksn -> encodeWord 1 <> encode ksn
@@ -990,7 +990,7 @@ instance Serialise Yield where
   encode (Yield d p s) = encode d <> encode p <> encode s
   decode = Yield <$> decode <*> decode <*> decode
 
-instance Serialise (DefPactContinuation FullyQualifiedName PactValue) where
+instance Serialise (DefPactContinuation QualifiedName PactValue) where
   encode (DefPactContinuation n a) = encode n <> encode a
   decode = DefPactContinuation <$> decode <*> decode
 

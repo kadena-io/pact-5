@@ -247,7 +247,7 @@ mkDefPactClosure info fqn dpact env = case _dpArgs dpact of
 initPact
   :: MonadEval b i m
   => i
-  -> DefPactContinuation FullyQualifiedName PactValue
+  -> DefPactContinuation QualifiedName PactValue
   -> Cont b i m
   -> CEKErrorHandler b i m
   -> CEKEnv b i m
@@ -272,7 +272,7 @@ initPact i pc cont handler cenv = do
 applyPact
   :: MonadEval b i m
   => i
-  -> DefPactContinuation FullyQualifiedName PactValue
+  -> DefPactContinuation QualifiedName PactValue
   -> DefPactStep
   -> Cont b i m
   -> CEKErrorHandler b i m
@@ -281,8 +281,8 @@ applyPact
   -> m (EvalResult b i m)
 applyPact i pc ps cont handler cenv nested = useEvalState esDefPactExec >>= \case
   Just pe ->  throwExecutionError i (MultipleOrNestedDefPactExecFound pe)
-  Nothing -> lookupFqName (pc ^. pcName) >>= \case
-    Just (DPact defPact) -> do
+  Nothing -> getModuleMember i (_cePactDb cenv) (pc ^. pcName) >>= \case
+    DPact defPact -> do
       let nSteps = NE.length (_dpSteps defPact)
 
       -- Check we try to apply the correct pact Step
@@ -311,14 +311,14 @@ applyPact i pc ps cont handler cenv nested = useEvalState esDefPactExec >>= \cas
         (True, StepWithRollback _ rollbackExpr) ->
           evalWithStackFrame i cont' handler cenv sf Nothing rollbackExpr
         (True, Step{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
-    _otherwise -> failInvariant i "DefPact not found"
+    _otherwise -> failInvariant i "defpact continuation does not point to defun"
   where
-  sf = StackFrame (view (pcName . fqName) pc) (view (pcName . fqModule) pc) SFDefPact
+  sf = StackFrame (view (pcName . qnName) pc) (view (pcName . qnModName) pc) SFDefPact
 
 applyNestedPact
   :: MonadEval b i m
   => i
-  -> DefPactContinuation FullyQualifiedName PactValue
+  -> DefPactContinuation QualifiedName PactValue
   -> DefPactStep
   -> Cont b i m
   -> CEKErrorHandler b i m
@@ -328,8 +328,8 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esDefPactExec >>= \case
   Nothing -> failInvariant i $
     "applyNestedPact: Nested DefPact attempted but no pactExec found" <> T.pack (show pc)
 
-  Just pe -> lookupFqName (pc ^. pcName) >>= \case
-    Just (DPact defPact) -> do
+  Just pe -> getModuleMember i (_cePactDb cenv) (pc ^. pcName) >>= \case
+    DPact defPact -> do
       step <- maybe (failInvariant i "Step not found") pure
         $ _dpSteps defPact ^? ix (ps ^. psStep)
 
@@ -377,7 +377,7 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esDefPactExec >>= \case
         (True, Step{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
     _otherwise -> failInvariant i "applyNestedPact: Expected a DefPact bot got something else"
   where
-  sf = StackFrame (view (pcName . fqName) pc) (view (pcName . fqModule) pc) SFDefPact
+  sf = StackFrame (view (pcName . qnName) pc) (view (pcName . qnModName) pc) SFDefPact
 
 resumePact
   :: MonadEval b i m
@@ -538,7 +538,7 @@ evalCap
   -> (CEKEnv b i m -> Maybe (CapToken QualifiedName PactValue) -> Maybe (PactEvent PactValue) -> EvalTerm b i -> Cont b i m -> Cont b i m)
   -> EvalTerm b i
   -> m (EvalResult b i m)
-evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody = isCapInStack origToken >>= \case
+evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody = isCapInStack' origToken >>= \case
   False -> do
     lookupFqName fqn >>= \case
       Just (DCap d) -> do
@@ -715,19 +715,25 @@ requireCap
   -> CEKErrorHandler b i m
   -> FQCapToken
   -> m (EvalResult b i m)
-requireCap info cont handler ct@(CapToken fqn _) = do
-  capInStack <- isCapInStack ct
+requireCap info cont handler (CapToken fqn args) = do
+  capInStack <- isCapInStack (CapToken (fqnToQualName fqn) args)
   if capInStack then returnCEKValue cont handler (VBool True)
   else returnCEK cont handler $ VError ("cap not in scope " <> renderQualName (fqnToQualName fqn)) info
 
 isCapInStack
   :: (MonadEval b i m)
-  => FQCapToken
+  => CapToken QualifiedName PactValue
   -> m Bool
-isCapInStack (CapToken fqn args) = do
-  let ct = CapToken (fqnToQualName fqn) args
+isCapInStack ct = do
   capSet <- getAllStackCaps
   pure $ S.member ct capSet
+
+isCapInStack'
+  :: (MonadEval b i m)
+  => CapToken FullyQualifiedName PactValue
+  -> m Bool
+isCapInStack' (CapToken fqn args) =
+  isCapInStack (CapToken (fqnToQualName fqn) args)
 
 composeCap
   :: (MonadEval b i m)
@@ -738,7 +744,7 @@ composeCap
   -> FQCapToken
   -> m (EvalResult b i m)
 composeCap info cont handler env origToken =
-  isCapInStack origToken >>= \case
+  isCapInStack' origToken >>= \case
     False ->
       evalCap info cont handler env origToken (CapBodyC PopCapComposed) (Constant (LBool True) info)
       -- let ct = CapToken (fqnToQualName fqn) args
@@ -814,7 +820,7 @@ createUserGuard
 createUserGuard info cont handler fqn args =
   lookupFqName fqn >>= \case
     Just (Dfun _) ->
-      returnCEKValue cont handler (VGuard (GUserGuard (UserGuard fqn args)))
+      returnCEKValue cont handler (VGuard (GUserGuard (UserGuard (fqnToQualName fqn) args)))
     Just _ ->
       returnCEK cont handler (VError "create-user-guard pointing to non-guard" info)
     Nothing ->
@@ -1166,11 +1172,11 @@ applyLam (DPC (DefPactClosure fqn argtys arity env i)) args cont handler
     ArgClosure cloargs -> do
       args' <- traverse (enforcePactValue i) args
       tcArgs <- zipWithM (\arg ty -> maybeTCType i arg ty) args' (NE.toList cloargs)
-      let pc = DefPactContinuation fqn tcArgs
+      let pc = DefPactContinuation (fqnToQualName fqn) tcArgs
           env' = set ceLocal (RAList.fromList (reverse (VPactValue <$> tcArgs))) env
       initPact i pc cont handler env'
     NullaryClosure -> do
-      let pc = DefPactContinuation fqn []
+      let pc = DefPactContinuation (fqnToQualName fqn) []
           env' = set ceLocal mempty env
       initPact i pc cont handler env'
   | otherwise = throwExecutionError i ClosureAppliedToTooManyArgs
