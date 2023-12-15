@@ -289,6 +289,18 @@ staticTests =
         (defun f () m.f)
         )
       |])
+  , ("dyninvoke_unbound", isDesugarError _UnboundTermVariable, [text|
+      (module m g (defcap g () true)
+        (defun i () true)
+        )
+      (module n ng (defcap ng () true)
+        (defun g () m::i)
+        )
+      |])
+  , ("dyninvoke_invalid_bound", isDesugarError _InvalidDynamicInvoke, [text|
+      (defun f () 1)
+      (defun invalid-dynamic-invoke () (f::g))
+      |])
   ]
 
 tests :: TestTree
