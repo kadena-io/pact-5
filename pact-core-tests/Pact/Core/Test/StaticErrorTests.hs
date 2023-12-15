@@ -253,6 +253,26 @@ staticTests =
         )
         )
       |])
+  , ("invalid_ifdefcap_ref_mod", isDesugarError _NoSuchModuleMember, [text|
+      (module m g (defcap g () true)
+        (defun i () true)
+        )
+      (interface iface
+        (defcap CAP:bool (a:integer)
+          @managed a m
+        )
+        )
+      |])
+  , ("invalid_ifdefcap_ref_qual", isDesugarError _NoSuchModuleMember, [text|
+      (module m g (defcap g () true)
+        (defun i () true)
+        )
+      (interface iface
+        (defcap CAP:bool (a:integer)
+          @managed a m.i
+        )
+        )
+      |])
   ]
 
 tests :: TestTree
