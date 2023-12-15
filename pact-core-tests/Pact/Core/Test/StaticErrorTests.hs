@@ -301,6 +301,19 @@ staticTests =
       (defun f () 1)
       (defun invalid-dynamic-invoke () (f::g))
       |])
+  , ("cyclic_defs", isDesugarError _RecursionDetected, [text|
+      (module m g (defcap g () true)
+        (defun f1 () f2)
+        (defun f2 () f1)
+        )
+      |])
+  , ("cyclic_defs_longer", isDesugarError _RecursionDetected, [text|
+      (module m g (defcap g () true)
+        (defun f1 () f2)
+        (defun f2 () f3)
+        (defun f3 () f1)
+        )
+      |])
   ]
 
 tests :: TestTree
