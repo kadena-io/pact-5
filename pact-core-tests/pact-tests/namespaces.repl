@@ -268,9 +268,9 @@
 
 (env-namespace-policy false (manage))
 
-;; (module my-root-module G
-;;   (defcap G () true)
-;;   (defun foo () 2))
+(module my-root-module G
+  (defcap G () true)
+  (defun foo () 2))
 
 
 
