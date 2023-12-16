@@ -90,28 +90,6 @@ updateFqNameHash mname mhash (FullyQualifiedName tlmod n mh)
   | tlmod == mname = FullyQualifiedName tlmod n mhash
   | otherwise = FullyQualifiedName tlmod n mh
 
--- updateGuardHash
---   :: ModuleName
---   -> ModuleHash
---   -> Guard QualifiedName PactValue
---   -> Guard QualifiedName PactValue
--- updateGuardHash mname mhash = \case
---   GKeyset ks -> GKeyset ks
---   GKeySetRef ksn -> GKeySetRef ksn
---   GUserGuard (UserGuard fqn pvs) ->
---     GUserGuard $
---       UserGuard
---         (updateFqNameHash mname mhash fqn)
---         (updatePactValueHash mname mhash <$> pvs)
---   GCapabilityGuard (CapabilityGuard fqn pvs pid) ->
---     GCapabilityGuard $
---       CapabilityGuard
---         (updateFqNameHash mname mhash fqn)
---         (updatePactValueHash mname mhash <$> pvs)
---         pid
---   GModuleGuard mg -> GModuleGuard mg
---   g@GDefPactGuard{} -> g
-
 updatePactValueHash :: ModuleName -> ModuleHash -> PactValue -> PactValue
 updatePactValueHash mname mhash = \case
   PLiteral l -> PLiteral l
