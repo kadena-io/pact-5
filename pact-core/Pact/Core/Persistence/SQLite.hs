@@ -1,4 +1,7 @@
--- |
+-- | A SQLite implementation of the PactDb persistence abstraction.
+
+-- TODO: Consider using neat-interpolation to clean up the string literals in this module.
+
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
