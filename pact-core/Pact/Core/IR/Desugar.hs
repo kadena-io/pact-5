@@ -138,7 +138,7 @@ instance (MonadEvalState b i m) => MonadEvalState b i (RenamerT b i m) where
 
 -- Todo: DesugarBuiltin
 -- probably should just be a `data` definition we pass in.
-class DesugarBuiltin b where
+class IsBuiltin b => DesugarBuiltin b where
   liftRaw :: RawBuiltin -> b
   desugarOperator :: i -> Lisp.Operator -> Term ParsedName DesugarType b i
   desugarAppArity :: i -> b -> [Term ParsedName DesugarType b i] -> Term ParsedName DesugarType b i
@@ -227,7 +227,6 @@ desugarAppArityRaw f i b args =
     App (Builtin (f b) i) args i
 
 instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
-  liftRaw :: RawBuiltin -> ReplBuiltin RawBuiltin
   liftRaw = RBuiltinWrap
   desugarOperator i dsg =
     over termBuiltin RBuiltinWrap $ desugarOperator i dsg
@@ -348,8 +347,6 @@ desugarLispTerm = \case
       Builtin b _ -> pure (desugarAppArity i b hs')
       _ -> pure (App e' hs' i)
   Lisp.Operator bop i -> pure (desugarOperator i bop)
-  -- Lisp.DynAccess e fn i ->
-  --   DynInvoke <$> desugarLispTerm e <*> pure fn  <*> pure i
   Lisp.List e1 i ->
     ListLit <$> traverse desugarLispTerm e1 <*> pure i
   Lisp.Constant l i ->

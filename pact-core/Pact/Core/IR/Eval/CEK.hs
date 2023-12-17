@@ -230,28 +230,28 @@ evaluateTerm cont handler env (Sequence e1 e2 _) = do
 --  Todo: enforce and enforce-one
 evaluateTerm cont handler env (Conditional c info) = case c of
   CAnd te te' ->
-    evalCEK (CondC env info (AndFrame te') cont) handler env te
+    evalCEK (CondC env info (AndC te') cont) handler env te
   COr te te' ->
-    evalCEK (CondC env info (OrFrame te') cont) handler env te
+    evalCEK (CondC env info (OrC te') cont) handler env te
   CIf cond e1 e2 ->
-    evalCEK (CondC env info (IfFrame e1 e2) cont) handler env cond
+    evalCEK (CondC env info (IfC e1 e2) cont) handler env cond
   CEnforce cond str ->
     let env' = sysOnlyEnv env
-    in evalCEK (CondC env' info (EnforceFrame str) cont) handler env' cond
+    in evalCEK (CondC env' info (EnforceC str) cont) handler env' cond
   CEnforceOne str conds -> case conds of
     [] -> returnCEK cont handler (VError "enforce-one failure" info)
     x:xs -> do
       errState <- evalStateToErrorState <$> getEvalState
       let env' = readOnlyEnv env
       let handler' = CEKEnforceOne env' info str xs cont errState handler
-      let cont' = CondC env' info (EnforceOneFrame str xs) Mt
+      let cont' = CondC env' info (EnforceOneC str xs) Mt
       evalCEK cont' handler' env' x
 
 evaluateTerm cont handler env (CapabilityForm cf info) =
   case cf of
     WithCapability rawCap body -> do
       enforceNotWithinDefcap info env "with-capability"
-      let capFrame = WithCapFrame body
+      let capFrame = WithCapC body
           cont' = CapInvokeC env info capFrame cont
       evalCEK cont' handler env rawCap
     CreateUserGuard name args -> do
@@ -259,27 +259,9 @@ evaluateTerm cont handler env (CapabilityForm cf info) =
       case args of
         [] -> createUserGuard info cont handler fqn []
         x : xs -> do
-          let usrGuardFrame = CreateUserGuardFrame fqn xs []
+          let usrGuardFrame = CreateUserGuardC fqn xs []
           let cont' = CapInvokeC env info usrGuardFrame cont
           evalCEK cont' handler env x
-    -- WithCapability _ args withCapBody -> do
-    --   enforceNotWithinDefcap info env "with-capability"
-    --   case args of
-    --     x:xs -> do
-    --       let capFrame = WithCapFrame fqn withCapBody
-    --       let cont' = CapInvokeC env info xs [] capFrame cont
-    --       evalCEK cont' handler env x
-    --     [] -> do
-    --       let ct = CapToken fqn []
-    --       let cont' = EvalCapC env info ct withCapBody cont
-    --       guardForModuleCall info cont' handler env (_fqModule fqn) $
-    --         evalCap info cont handler env ct (CapBodyC PopCapInvoke) withCapBody
-    -- CreateUserGuard _ args -> case args of
-    --   [] -> createUserGuard info cont handler fqn []
-    --   x : xs -> let
-    --     capFrame = CreateUserGuardFrame fqn
-    --     cont' = CapInvokeC env info xs [] capFrame cont
-    --     in evalCEK cont' handler env x
 evaluateTerm cont handler env (ListLit ts info) = do
   chargeNodeGas ListNode
   case ts of
@@ -948,7 +930,7 @@ applyCont Mt handler v =
         x:xs -> do
           modifyEvalState (restoreFromErrorState errState)
           let handler' = CEKEnforceOne env i str xs cont errState h
-              oldFrame = CondC env i (EnforceOneFrame str xs) Mt
+              oldFrame = CondC env i (EnforceOneC str xs) Mt
           evalCEK oldFrame handler' env x
       EvalValue v' ->
         returnCEKValue cont h v'
@@ -1008,44 +990,44 @@ applyContToValue (SeqC env e cont) handler _ =
   evalCEK cont handler env e
 applyContToValue (CondC env info frame cont) handler v = case v of
   (VLiteral (LBool b)) -> case frame of
-    AndFrame te ->
+    AndC te ->
       if b then evalCEK cont handler env te
       else returnCEKValue cont handler v
-    OrFrame te ->
+    OrC te ->
       if b then returnCEKValue cont handler v
       else evalCEK cont handler env te
-    IfFrame ifExpr elseExpr ->
+    IfC ifExpr elseExpr ->
       if b then evalCEK cont handler env ifExpr
       else evalCEK cont handler env elseExpr
-    EnforceFrame str ->
+    EnforceC str ->
       if b then returnCEKValue cont handler v
       else do
         let cont' = EnforceErrorC info cont
         evalCEK cont' handler env str
-    FilterFrame clo elem' rest acc -> do
+    FilterC clo elem' rest acc -> do
       let acc' = if b then elem':acc else acc
       case rest of
         x:xs -> do
-          let cont' = CondC env info (FilterFrame clo x xs acc') cont
+          let cont' = CondC env info (FilterC clo x xs acc') cont
           applyLam clo [VPactValue x] cont' handler
         [] -> returnCEKValue cont handler (VList (V.fromList (reverse acc')))
-    EnforceOneFrame str li ->
+    EnforceOneC str li ->
       if b then returnCEKValue cont handler v
       else case li of
         x:xs -> do
-          let cont' = CondC env info (EnforceOneFrame str xs) cont
+          let cont' = CondC env info (EnforceOneC str xs) cont
               handler' = updateEnforceOneList xs handler
           evalCEK cont' handler' env x
         [] -> do
           let cont' = EnforceErrorC info cont
           evalCEK cont' handler env str
-    AndQFrame clo pv ->
+    AndQC clo pv ->
       if b then applyLam clo [VPactValue pv] cont handler
       else returnCEKValue cont handler v
-    OrQFrame clo pv ->
+    OrQC clo pv ->
       if not b then applyLam clo [VPactValue pv] cont handler
       else returnCEKValue cont handler v
-    NotQFrame -> returnCEKValue cont handler (VBool (not b))
+    NotQC -> returnCEKValue cont handler (VBool (not b))
   _ ->
     returnCEK cont handler (VError "Evaluation of conditional expression yielded non-boolean value" info)
   where
@@ -1053,7 +1035,7 @@ applyContToValue (CondC env info frame cont) handler v = case v of
     CEKEnforceOne e i str xs c cs h
   updateEnforceOneList _ e = e
 applyContToValue currCont@(CapInvokeC env info cf cont) handler v = case cf of
-  WithCapFrame body -> case v of
+  WithCapC body -> case v of
     VCapToken ct@(CapToken fqn _) -> do
       -- Todo: CEK-style this
       let cont' = IgnoreValueC (PCapToken ct) currCont
@@ -1061,11 +1043,11 @@ applyContToValue currCont@(CapInvokeC env info cf cont) handler v = case cf of
         evalCap info cont handler env ct (CapBodyC PopCapInvoke) body
     -- Todo: this is actually more like "expected cap token"
     _ -> throwExecutionError info ExpectedPactValue
-  CreateUserGuardFrame fqn terms pvs -> do
+  CreateUserGuardC fqn terms pvs -> do
     pv <- enforcePactValue info v
     case terms of
       x:xs -> do
-        let cf' = CreateUserGuardFrame fqn xs (pv:pvs)
+        let cf' = CreateUserGuardC fqn xs (pv:pvs)
             cont' = CapInvokeC env info cf' cont
         evalCEK cont' handler env x
       [] -> createUserGuard info cont handler fqn (reverse (pv:pvs))
@@ -1086,67 +1068,67 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
   let pdb = _cePactDb env
   case cv of
     VPactValue v -> case frame of
-      MapFrame closure rest acc -> case rest of
+      MapC closure rest acc -> case rest of
         x:xs ->
-          let cont' = BuiltinC env info (MapFrame closure xs (v:acc)) cont
+          let cont' = BuiltinC env info (MapC closure xs (v:acc)) cont
           in applyLam closure [VPactValue x] cont' handler
         [] ->
           returnCEKValue cont handler (VList (V.fromList (reverse (v:acc))))
-      FoldFrame clo rest -> case rest of
+      FoldC clo rest -> case rest of
         x:xs ->
-          let cont' = BuiltinC env info (FoldFrame clo xs) cont
+          let cont' = BuiltinC env info (FoldC clo xs) cont
           in applyLam clo [VPactValue v, VPactValue x] cont' handler
         [] -> returnCEKValue cont handler cv
-      ZipFrame clo (l, r) acc -> case (l, r) of
+      ZipC clo (l, r) acc -> case (l, r) of
         (x:xs, y:ys) ->
-          let cont' = BuiltinC env info (ZipFrame clo (xs, ys) (v:acc)) cont
+          let cont' = BuiltinC env info (ZipC clo (xs, ys) (v:acc)) cont
           in applyLam clo [VPactValue x, VPactValue y] cont' handler
         (_, _) ->
           returnCEKValue cont handler (VList (V.fromList (reverse (v:acc))))
-      PreSelectFrame tv clo mf -> do
+      PreSelectC tv clo mf -> do
         keys <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
         selectRead tv clo keys [] mf
-      SelectFrame tv clo rdata remaining acc mf -> case v of
+      SelectC tv clo rdata remaining acc mf -> case v of
         PBool b -> do
           let acc' = if b then rdata:acc else acc
           selectRead tv clo remaining acc' mf
         _ -> returnCEK cont handler (VError "select query did not return a boolean " info)
-      ReadFrame tv rowkey -> do
+      ReadC tv rowkey -> do
         liftDbFunction info (_pdbRead pdb (tvToDomain tv) rowkey) >>= \case
           Just (RowData rdata) ->
             returnCEKValue cont handler (VObject rdata)
           Nothing -> returnCEK cont handler (VError "no such read object" info)
-      WithReadFrame tv rowkey clo -> do
+      WithReadC tv rowkey clo -> do
         liftDbFunction info (_pdbRead pdb (tvToDomain tv) rowkey) >>= \case
           Just (RowData rdata) ->
             applyLam clo [VObject rdata] cont handler
           Nothing -> returnCEK cont handler (VError "no such read object" info)
-      WithDefaultReadFrame tv rowkey (ObjectData defaultObj) clo -> do
+      WithDefaultReadC tv rowkey (ObjectData defaultObj) clo -> do
         liftDbFunction info (_pdbRead pdb (tvToDomain tv) rowkey) >>= \case
           Just (RowData rdata) ->
             applyLam clo [VObject rdata] cont handler
           Nothing -> applyLam clo [VObject defaultObj] cont handler
-      KeysFrame tv -> do
+      KeysC tv -> do
         ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
         let li = V.fromList (PString . _rowKey <$> ks)
         returnCEKValue cont handler (VList li)
-      WriteFrame tv wt rk (ObjectData rv) -> do
+      WriteC tv wt rk (ObjectData rv) -> do
         let check' = if wt == Update then checkPartialSchema else checkSchema
         if check' rv (_tvSchema tv) then do
           let rdata = RowData rv
           liftDbFunction info (_pdbWrite pdb wt (tvToDomain tv) rk rdata)
           returnCEKValue cont handler (VString "Write succeeded")
         else returnCEK cont handler (VError "object does not match schema" info)
-      PreFoldDbFrame tv queryClo appClo -> do
+      PreFoldDbC tv queryClo appClo -> do
         let tblDomain = DUserTables (_tvName tv)
         -- Todo: keys gas
         keys <- liftDbFunction info (_pdbKeys pdb tblDomain)
         foldDBRead tv queryClo appClo keys []
-      TxIdsFrame tv tid -> do
+      TxIdsC tv tid -> do
         ks <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) (TxId (fromIntegral tid)))
         let li = V.fromList (PInteger . fromIntegral . _txId <$> ks)
         returnCEKValue cont handler (VList li)
-      KeyLogFrame tv (RowKey key) tid -> do
+      KeyLogC tv (RowKey key) tid -> do
         let txId = TxId (fromInteger tid)
         ids <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) txId)
         ks <- concat <$> traverse (\t -> fmap (t,) <$> liftDbFunction info (_pdbGetTxLog pdb (_tvName tv) t)) ids
@@ -1158,18 +1140,18 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
           PObject $ M.fromList
             [ (Field "txid", PInteger (fromIntegral txid))
             , (Field "value", PObject rdata)]
-      FoldDbFilterFrame tv queryClo appClo (rk, ObjectData om) remaining accum -> case v of
+      FoldDbFilterC tv queryClo appClo (rk, ObjectData om) remaining accum -> case v of
         PBool b -> do
           let accum' = if b then (rk, PObject om):accum else accum
           foldDBRead tv queryClo appClo remaining accum'
         _ -> returnCEK cont handler (VError "fold-db error: query returned non-boolean value" info)
-      FoldDbMapFrame tv appClo remaining acc -> case remaining of
+      FoldDbMapC tv appClo remaining acc -> case remaining of
         (RowKey rk, pv):xs -> do
-          let rdf = FoldDbMapFrame tv appClo xs (v:acc)
+          let rdf = FoldDbMapC tv appClo xs (v:acc)
               cont' = BuiltinC env info rdf cont
           applyLam appClo [VString rk, VPactValue pv] cont' handler
         [] -> returnCEKValue cont handler (VList (V.fromList (v:acc)))
-      TxLogFrame tv tid -> do
+      TxLogC tv tid -> do
         let txId = TxId (fromInteger tid)
         ks <- liftDbFunction info (_pdbGetTxLog pdb (_tvName tv) txId)
         let li = V.fromList (txLogToObj <$> ks)
@@ -1180,10 +1162,10 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
             [ (Field "table", PString domain)
             , (Field "key", PString key)
             , (Field "value", PObject rdata)]
-      CreateTableFrame (TableValue tn mn _ _) -> do
+      CreateTableC (TableValue tn mn _ _) -> do
         liftDbFunction info (_pdbCreateUserTable pdb tn mn)
         returnCEKValue cont handler (VString "TableCreated")
-      EmitEventFrame ct@(CapToken fqn _) ->
+      EmitEventC ct@(CapToken fqn _) ->
         lookupFqName (_ctName ct) >>= \case
         Just (DCap d) -> do
           enforceMeta (_dcapMeta d)
@@ -1200,21 +1182,21 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         case remaining of
           rk@(RowKey raw):remaining' -> liftDbFunction info (_pdbRead pdb (tvToDomain tv) rk) >>= \case
             Just (RowData row) -> do
-              let rdf = FoldDbFilterFrame tv queryClo appClo (rk, ObjectData row) remaining' acc
+              let rdf = FoldDbFilterC tv queryClo appClo (rk, ObjectData row) remaining' acc
                   cont' = BuiltinC env info rdf cont
               applyLam queryClo [VString raw, VObject row] cont' handler
             Nothing ->
               failInvariant info "foldDB read a key that is not in the database"
           [] -> case acc of
             (RowKey rk, pv):xs -> do
-              let rdf = FoldDbMapFrame tv appClo xs []
+              let rdf = FoldDbMapC tv appClo xs []
                   cont' = BuiltinC env info rdf cont
               applyLam appClo [VString rk, VPactValue pv] cont' handler
             [] -> returnCEKValue cont handler (VList mempty)
       selectRead tv clo keys acc mf = case keys of
         k:ks -> liftDbFunction info (_pdbRead pdb (tvToDomain tv) k) >>= \case
           Just (RowData r) -> do
-            let bf = SelectFrame tv clo (ObjectData r) ks acc mf
+            let bf = SelectC tv clo (ObjectData r) ks acc mf
                 cont' = BuiltinC env info bf cont
             applyLam clo [VObject r] cont' handler
           Nothing ->

@@ -474,7 +474,7 @@ zipList info b cont handler _env = \case
   [VClosure clo, VList l, VList r] ->
     case (V.toList l, V.toList r) of
       (x:xs, y:ys) -> do
-        let cont' = BuiltinC _env info (ZipFrame clo (xs, ys) []) cont
+        let cont' = BuiltinC _env info (ZipC clo (xs, ys) []) cont
         applyLam clo [VPactValue x, VPactValue y] cont' handler
       (_, _) -> returnCEKValue cont handler (VList mempty)
   args -> argsError info b args
@@ -483,7 +483,7 @@ coreMap :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction 
 coreMap info b cont handler env = \case
   [VClosure clo, VList li] -> case V.toList li of
     x:xs -> do
-      let cont' = BuiltinC env info (MapFrame clo xs []) cont
+      let cont' = BuiltinC env info (MapC clo xs []) cont
       applyLam clo [VPactValue x] cont' handler
     [] -> returnCEKValue cont handler (VList mempty)
   args -> argsError info b args
@@ -492,7 +492,7 @@ coreFilter :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFuncti
 coreFilter info b cont handler _env = \case
   [VClosure clo, VList li] -> case V.toList li of
     x:xs -> do
-      let cont' = CondC _env info (FilterFrame clo x xs []) cont
+      let cont' = CondC _env info (FilterC clo x xs []) cont
       applyLam clo [VPactValue x] cont' handler
     [] -> returnCEKValue cont handler (VList mempty)
   args -> argsError info b args
@@ -502,7 +502,7 @@ coreFold info b cont handler _env = \case
   [VClosure clo, VPactValue initElem, VList li] ->
     case V.toList li of
       x:xs -> do
-        let cont' = BuiltinC _env info (FoldFrame clo xs) cont
+        let cont' = BuiltinC _env info (FoldC clo xs) cont
         applyLam clo [VPactValue initElem, VPactValue x] cont' handler
       [] -> returnCEKValue cont handler (VPactValue initElem)
   args -> argsError info b args
@@ -871,7 +871,7 @@ createTable :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunct
 createTable info b cont handler env = \case
   [VTable tv] -> do
     enforceTopLevelOnly info b
-    let cont' = BuiltinC env info (CreateTableFrame tv) cont
+    let cont' = BuiltinC env info (CreateTableC tv) cont
     guardTable info cont' handler env tv GtCreateTable
     -- guardTable info env tv GtCreateTable
     -- let pdb = view cePactDb env
@@ -884,11 +884,11 @@ createTable info b cont handler env = \case
 dbSelect :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 dbSelect info b cont handler env = \case
   [VTable tv, VClosure clo] -> do
-    let cont' = BuiltinC env info (PreSelectFrame tv clo Nothing) cont
+    let cont' = BuiltinC env info (PreSelectC tv clo Nothing) cont
     guardTable info cont' handler env tv GtSelect
   [VTable tv, VList li, VClosure clo] -> do
     li' <- traverse (fmap Field . asString info b) (V.toList li)
-    let cont' = BuiltinC env info (PreSelectFrame tv clo (Just li')) cont
+    let cont' = BuiltinC env info (PreSelectC tv clo (Just li')) cont
     guardTable info cont' handler env tv GtSelect
   args -> argsError info b args
 
@@ -896,7 +896,7 @@ dbSelect info b cont handler env = \case
 foldDb :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 foldDb info b cont handler env = \case
   [VTable tv, VClosure queryClo, VClosure consumer] -> do
-    let cont' = BuiltinC env info (PreFoldDbFrame tv queryClo consumer) cont
+    let cont' = BuiltinC env info (PreFoldDbC tv queryClo consumer) cont
     guardTable info cont' handler env tv GtSelect
     -- let pdb = view cePactDb env
     -- guardTable info env tv GtSelect
@@ -927,7 +927,7 @@ foldDb info b cont handler env = \case
 dbRead :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 dbRead info b cont handler env = \case
   [VTable tv, VString k] -> do
-    let cont' = BuiltinC env info (ReadFrame tv (RowKey k)) cont
+    let cont' = BuiltinC env info (ReadC tv (RowKey k)) cont
     guardTable info cont' handler env tv GtRead
     -- let pdb = view cePactDb env
     -- guardTable info env tv GtRead
@@ -939,7 +939,7 @@ dbRead info b cont handler env = \case
 dbWithRead :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 dbWithRead info b cont handler env = \case
   [VTable tv, VString k, VClosure clo] -> do
-    let cont' = BuiltinC env info (WithReadFrame tv (RowKey k) clo) cont
+    let cont' = BuiltinC env info (WithReadC tv (RowKey k) clo) cont
     guardTable info cont' handler env tv GtWithRead
     -- let pdb = view cePactDb env
     -- guardTable info env tv GtWithRead
@@ -951,7 +951,7 @@ dbWithRead info b cont handler env = \case
 dbWithDefaultRead :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 dbWithDefaultRead info b cont handler env = \case
   [VTable tv, VString k, VObject defaultObj, VClosure clo] -> do
-    let cont' = BuiltinC env info (WithDefaultReadFrame tv (RowKey k) (ObjectData defaultObj) clo) cont
+    let cont' = BuiltinC env info (WithDefaultReadC tv (RowKey k) (ObjectData defaultObj) clo) cont
     guardTable info cont' handler env tv GtWithDefaultRead
     -- let pdb = view cePactDb env
     -- guardTable info env tv GtWithDefaultRead
@@ -970,7 +970,7 @@ dbInsert = write' Insert
 write' :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => WriteType -> NativeFunction step b i m
 write' wt info b cont handler env = \case
   [VTable tv, VString key, VObject o] -> do
-    let cont' = BuiltinC env info (WriteFrame tv wt (RowKey key) (ObjectData o)) cont
+    let cont' = BuiltinC env info (WriteC tv wt (RowKey key) (ObjectData o)) cont
     guardTable info cont' handler env tv GtWrite
     -- guardTable info env tv GtWrite
     -- if checkSchema o (_tvSchema tv) then do
@@ -997,7 +997,7 @@ dbUpdate = write' Update
 dbKeys :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 dbKeys info b cont handler env = \case
   [VTable tv] -> do
-    let cont' = BuiltinC env info (KeysFrame tv) cont
+    let cont' = BuiltinC env info (KeysC tv) cont
     guardTable info cont' handler env tv GtKeys
     -- guardTable info env tv GtKeys
     -- let pdb = view cePactDb env
@@ -1010,7 +1010,7 @@ dbTxIds :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction 
 dbTxIds info b cont handler env = \case
   [VTable tv, VInteger tid] -> do
     checkNonLocalAllowed info
-    let cont' = BuiltinC env info (TxIdsFrame tv tid) cont
+    let cont' = BuiltinC env info (TxIdsC tv tid) cont
     guardTable info cont' handler env tv GtTxIds
     -- let pdb = view cePactDb env
     -- ks <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) (TxId (fromIntegral tid)))
@@ -1023,7 +1023,7 @@ dbTxLog :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction 
 dbTxLog info b cont handler env = \case
   [VTable tv, VInteger tid] -> do
     checkNonLocalAllowed info
-    let cont' = BuiltinC env info (TxLogFrame tv tid) cont
+    let cont' = BuiltinC env info (TxLogC tv tid) cont
     guardTable info cont' handler env tv GtTxLog
     -- guardTable info env tv GtTxLog
     -- let pdb = view cePactDb env
@@ -1043,7 +1043,7 @@ dbKeyLog :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction
 dbKeyLog info b cont handler env = \case
   [VTable tv, VString key, VInteger tid] -> do
     checkNonLocalAllowed info
-    let cont' = BuiltinC env info (KeyLogFrame tv (RowKey key) tid) cont
+    let cont' = BuiltinC env info (KeyLogC tv (RowKey key) tid) cont
     guardTable info cont' handler env tv GtKeyLog
     -- guardTable info env tv GtKeyLog
     -- let pdb = view cePactDb env
@@ -1148,7 +1148,7 @@ installCapability info b cont handler env = \case
 coreEmitEvent :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreEmitEvent info b cont handler env = \case
   [VCapToken ct@(CapToken fqn _)] -> do
-    let cont' = BuiltinC env info (EmitEventFrame ct) cont
+    let cont' = BuiltinC env info (EmitEventC ct) cont
     guardForModuleCall info cont' handler env (_fqModule fqn) $
       -- Todo: this code is repeated in the EmitEventFrame code
       lookupFqName (_ctName ct) >>= \case
@@ -1321,21 +1321,21 @@ integerToBS v = BS.pack $ reverse $ go v
 coreAndQ :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreAndQ info b cont handler env = \case
   [VClosure l, VClosure r, VPactValue v] -> do
-    let cont' =  CondC env info (AndQFrame r v) cont
+    let cont' =  CondC env info (AndQC r v) cont
     applyLam l [VPactValue v] cont' handler
   args -> argsError info b args
 
 coreOrQ :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreOrQ info b cont handler env = \case
   [VClosure l, VClosure r, VPactValue v] -> do
-    let cont' =  CondC env info (OrQFrame r v) cont
+    let cont' =  CondC env info (OrQC r v) cont
     applyLam l [VPactValue v] cont' handler
   args -> argsError info b args
 
 coreNotQ :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreNotQ info b cont handler env = \case
   [VClosure clo, VPactValue v] -> do
-    let cont' = CondC env info NotQFrame cont
+    let cont' = CondC env info NotQC cont
     applyLam clo [VPactValue v] cont' handler
   args -> argsError info b args
 

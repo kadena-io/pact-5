@@ -671,7 +671,6 @@ replRawBuiltinMap =
 class Show b => IsBuiltin b where
   builtinArity :: b -> Int
   builtinName :: b -> NativeName
-  -- isDbBuiltin :: b -> Bool
 
 
 instance Pretty RawBuiltin where

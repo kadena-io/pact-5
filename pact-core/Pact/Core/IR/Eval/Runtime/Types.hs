@@ -29,7 +29,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , CEKValue(..)
  , Cont(..)
  , CEKErrorHandler(..)
- , CondFrame(..)
+ , CondCont(..)
  , Closure(..)
  , EvalResult(..)
 --  , EvalTEnv(..)
@@ -57,7 +57,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , pattern VPartialNative
  , pattern VCapToken
  , pattern VTime
- , CapFrame(..)
+ , CapCont(..)
  , CapState(..)
  , csSlots, csManaged
  , ManagedCap(..)
@@ -76,11 +76,12 @@ module Pact.Core.IR.Eval.Runtime.Types
  , TableValue(..)
  , ClosureType(..)
  , ErrorState(..)
- , BuiltinFrame(..)
+ , BuiltinCont(..)
 --  , CEKEval(..)
  , CEKReturn(..)
  , CEKEvalResult
  , CEKStepKind(..)
+ , ContType(..)
  ) where
 
 import Control.Lens
@@ -347,71 +348,85 @@ data PartialNativeFn (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.T
   }
 
 
-data CondFrame (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
-  = AndFrame (EvalTerm b i)
-  | OrFrame (EvalTerm b i)
-  | IfFrame (EvalTerm b i) (EvalTerm b i)
-  | EnforceFrame (EvalTerm b i)
-  | EnforceOneFrame (EvalTerm b i) [EvalTerm b i]
-  | FilterFrame (CanApply step b i m) PactValue [PactValue] [PactValue]
-  | AndQFrame (CanApply step b i m) PactValue
-  | OrQFrame (CanApply step b i m) PactValue
-  | NotQFrame
+
+-- | Continuation Frames that handle conditional argument returns in a lazy manner.
+data CondCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
+  = AndC (EvalTerm b i)
+  -- ^ <term to evaluate in the True case>
+  | OrC (EvalTerm b i)
+  -- ^ <term to evaluate in the False case>
+  | IfC (EvalTerm b i) (EvalTerm b i)
+  -- ^ <true case term> <false case term>
+  | EnforceC (EvalTerm b i)
+  -- ^ <error string term>
+  | EnforceOneC (EvalTerm b i) [EvalTerm b i]
+  -- ^ <error string term> [<enforceable term>]
+  | FilterC (CanApply step b i m) PactValue [PactValue] [PactValue]
+  -- ^ {filtering closure} <current focused value> <remaining> <accumulator>
+  | AndQC (CanApply step b i m) PactValue
+  -- ^ {bool comparison closure} <original value>
+  | OrQC (CanApply step b i m) PactValue
+  -- ^ {bool comparison closure} <original value>
+  | NotQC
+  -- ^ Nada
   deriving Show
 
-data BuiltinFrame (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
-  = MapFrame (CanApply step b i m) [PactValue] [PactValue]
+data BuiltinCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
+  = MapC (CanApply step b i m) [PactValue] [PactValue]
   -- ^ {closure} {remaining} {accum}
-  | FoldFrame (CanApply step b i m) [PactValue]
+  | FoldC (CanApply step b i m) [PactValue]
   -- ^ {closure} {accum} {rest}
-  | ZipFrame (CanApply step b i m) ([PactValue],[PactValue]) [PactValue]
+  | ZipC (CanApply step b i m) ([PactValue],[PactValue]) [PactValue]
   -- ^ <zip closure> <lists to zip> <accumulator>
-  | PreSelectFrame TableValue (CanApply step b i m) (Maybe [Field])
+  | PreSelectC TableValue (CanApply step b i m) (Maybe [Field])
   -- ^ <table> <select filter closure> <filter fields>*
-  | PreFoldDbFrame TableValue (CanApply step b i m) (CanApply step b i m)
+  | PreFoldDbC TableValue (CanApply step b i m) (CanApply step b i m)
   -- ^ <table> <select filter closure> <accumulator closure>
-  | SelectFrame TableValue (CanApply step b i m) (ObjectData PactValue) [RowKey] [ObjectData PactValue] (Maybe [Field])
+  | SelectC TableValue (CanApply step b i m) (ObjectData PactValue) [RowKey] [ObjectData PactValue] (Maybe [Field])
   -- ^ <table> <filter closure> <current value> <remaining keys> <accumulator> <fields>
-  | FoldDbFilterFrame TableValue (CanApply step b i m) (CanApply step b i m) (RowKey, ObjectData PactValue) [RowKey] [(RowKey, PactValue)]
+  | FoldDbFilterC TableValue (CanApply step b i m) (CanApply step b i m) (RowKey, ObjectData PactValue) [RowKey] [(RowKey, PactValue)]
   -- ^ <table> <filter closure> <accum closure> <current k/v pair in focus> <remaining keys> <accumulator>
-  | FoldDbMapFrame TableValue (CanApply step b i m) [(RowKey, PactValue)] [PactValue]
+  | FoldDbMapC TableValue (CanApply step b i m) [(RowKey, PactValue)] [PactValue]
   -- ^ <table> <accum closure> <remaining pairs> <accumulator>
-  | ReadFrame TableValue RowKey
+  | ReadC TableValue RowKey
   -- ^ <table> <key to read>
-  | WriteFrame TableValue WriteType RowKey (ObjectData PactValue)
+  | WriteC TableValue WriteType RowKey (ObjectData PactValue)
   -- ^ <table> <write type> <key to write> <value to write>
-  | WithReadFrame TableValue RowKey (CanApply step b i m)
+  | WithReadC TableValue RowKey (CanApply step b i m)
    -- ^ <table> <key to read> <closure to apply afterwards>
-  | WithDefaultReadFrame TableValue RowKey (ObjectData PactValue) (CanApply step b i m)
+  | WithDefaultReadC TableValue RowKey (ObjectData PactValue) (CanApply step b i m)
   -- ^ <table> <key to read> <default value> <closure to apply afterwards>
-  | KeysFrame TableValue
+  | KeysC TableValue
   -- ^ Table to apply `keys` to
-  | TxIdsFrame TableValue Integer
+  | TxIdsC TableValue Integer
   -- ^ <table> <key to read> <default value> <closure to apply afterwards>
-  | TxLogFrame TableValue Integer
+  | TxLogC TableValue Integer
   -- ^ <table> <txid>
-  | KeyLogFrame TableValue RowKey Integer
+  | KeyLogC TableValue RowKey Integer
   -- <table> <key> <txid>
-  | CreateTableFrame TableValue
+  | CreateTableC TableValue
   -- <create-table>
-  | EmitEventFrame (CapToken FullyQualifiedName PactValue)
+  | EmitEventC (CapToken FullyQualifiedName PactValue)
   deriving Show
 
 
 -- | Control flow around Capability special forms, in particular cap token forms
-data CapFrame (b :: K.Type) (i :: K.Type)
-  = WithCapFrame (EvalTerm b i)
-  | CreateUserGuardFrame FullyQualifiedName [EvalTerm b i] [PactValue]
+data CapCont (b :: K.Type) (i :: K.Type)
+  = WithCapC (EvalTerm b i)
+  | CreateUserGuardC FullyQualifiedName [EvalTerm b i] [PactValue]
   deriving (Show)
 
-
+-- | What to do post-cap evaluation: do we pop the cap from the stack,
+-- or compose it within the capset
 data CapPopState
   = PopCapComposed
   | PopCapInvoke
   deriving (Eq, Show)
 
 data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
-  = Fn (CanApply step b i m) (CEKEnv step b i m) [EvalTerm b i] [CEKValue step b i m] (Cont step b i m)
+  = Mt
+  -- ^ Empty Continuation
+  | Fn (CanApply step b i m) (CEKEnv step b i m) [EvalTerm b i] [CEKValue step b i m] (Cont step b i m)
   -- ^ Continuation which evaluates arguments for a function to apply
   | Args (CEKEnv step b i m) i [EvalTerm b i] (Cont step b i m)
   -- ^ Continuation holding the arguments to evaluate in a function application
@@ -423,14 +438,14 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   -- ^ Sequencing expression, holding the next term to evaluate
   | ListC (CEKEnv step b i m) i [EvalTerm b i] [PactValue] (Cont step b i m)
   -- ^ Continuation for list elements
-  | CondC (CEKEnv step b i m) i (CondFrame step b i m) (Cont step b i m)
+  | CondC (CEKEnv step b i m) i (CondCont step b i m) (Cont step b i m)
   -- ^ Continuation for conditionals with lazy semantics
-  | BuiltinC (CEKEnv step b i m) i (BuiltinFrame step b i m) (Cont step b i m)
+  | BuiltinC (CEKEnv step b i m) i (BuiltinCont step b i m) (Cont step b i m)
   -- ^ Continuation for higher-order function builtins
   | ObjC (CEKEnv step b i m) i Field [(Field, EvalTerm b i)] [(Field, PactValue)] (Cont step b i m)
   -- Todo: merge all cap constructors
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
-  | CapInvokeC (CEKEnv step b i m) i (CapFrame b i) (Cont step b i m)
+  | CapInvokeC (CEKEnv step b i m) i (CapCont b i) (Cont step b i m)
   -- ^ Frame for control flow around argument reduction to with-capability and create-user-guard
   | EvalCapC (CEKEnv step b i m) i FQCapToken (EvalTerm b i) (Cont step b i m)
   -- ^ Capability special form frams that eva
@@ -459,9 +474,63 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   -- ^ Pop the current stack frame and check the return value for the declared type
   | EnforceErrorC i (Cont step b i m)
   -- ^ Continuation for "enforced" errors.
-  | Mt
-  -- ^ Empty Continuation
   deriving Show
+
+-- | An enumerable set of frame types
+data ContType
+  = CTFn
+  | CTArgs
+  | CTLetC
+  | CTSeqC
+  | CTListC
+  -- | CTCondC
+  -- Conditionals
+  | CTAndC
+  | CTOrC
+  | CTEnforceC
+  | CTEnforceOneC
+  | CTFilterC
+  | CTAndQC
+  | CTOrQC
+  | CTNotQC
+  -- Builtin forms
+  | CTMapC
+  | CTFoldC
+  | CTZipC
+  | CTPreSelectC
+  | CTPreFoldDbC
+  | CTSelectC
+  | CTFoldDbFilterC
+  | CTFoldDbMapC
+  | CTReadC
+  | CTWriteC
+  | CTWithReadC
+  | CTWithDefaultReadC
+  | CTKeysC
+  | CTTxIdsC
+  | CTTxLogC
+  | CTKeyLogC
+  | CTCreateTableC
+  | CTEmitEventC
+  --
+  | CTObjC
+  -- Cap control flow
+  | CTCapInvokeC
+  -- 
+  | CTEvalCapC
+  | CTCapBodyC
+  | CTCapPopC
+  | CTDefPactStepC
+  | CTNestedDefPactStepC
+  | CTIgnoreValueC
+  | CTEnforceBoolC
+  | CTEnforcePactValueC
+  | CTModuleAdminC
+  | CTStackPopC
+  | CTEnforceErrorC
+  | CTMt
+  deriving (Enum, Bounded)
+
 
 -- | State to preserve in the error handler
 data ErrorState
