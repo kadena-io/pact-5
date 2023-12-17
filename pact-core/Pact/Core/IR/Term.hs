@@ -48,14 +48,14 @@ data Defun name ty builtin info
   , _dfunRType :: Maybe ty
   , _dfunTerm :: Term name ty builtin info
   , _dfunInfo :: info
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Eq)
 
 data Step name ty builtin info
   = Step (Term name ty builtin info)
   | StepWithRollback
     (Term name ty builtin info)
     (Term name ty builtin info)
-  deriving (Show, Functor)
+  deriving (Show, Functor, Eq)
 
 hasRollback :: Step n t b i -> Bool
 hasRollback Step{} = False
@@ -68,7 +68,7 @@ ordinaryDefPactStepExec (StepWithRollback expr _) = expr
 data ConstVal term
   = TermConst term
   | EvaledConst PactValue
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Show, Functor, Foldable, Traversable, Eq)
 
 data DefPact name ty builtin info
   = DefPact
@@ -77,7 +77,7 @@ data DefPact name ty builtin info
   , _dpRetType :: Maybe ty
   , _dpSteps :: NonEmpty (Step name ty builtin info)
   , _dpInfo :: info
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Eq)
 
 data DefConst name ty builtin info
   = DefConst
@@ -85,7 +85,7 @@ data DefConst name ty builtin info
   , _dcType :: Maybe ty
   , _dcTerm :: ConstVal (Term name ty builtin info)
   , _dcInfo :: info
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Eq)
 
 data DefCap name ty builtin info
   = DefCap
@@ -96,14 +96,14 @@ data DefCap name ty builtin info
   , _dcapTerm :: Term name ty builtin info
   , _dcapMeta :: DefCapMeta (FQNameRef name)
   , _dcapInfo :: info
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Eq)
 
 data DefSchema ty info
   = DefSchema
   { _dsName :: Text
   , _dsSchema :: Map Field ty
   , _dsInfo :: info
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Eq)
 
 -- | The type of our desugared table schemas
 -- TODO: This GADT is unnecessarily complicated and only really necessary
@@ -113,6 +113,10 @@ data DefSchema ty info
 data TableSchema name where
   DesugaredTable :: ParsedName -> TableSchema ParsedName
   ResolvedTable :: Schema -> TableSchema Name
+
+instance Eq name => Eq (TableSchema name) where
+  (DesugaredTable a) == (DesugaredTable b) = a == b
+  (ResolvedTable a) == (ResolvedTable b) = a == b
 
 instance Show (TableSchema name) where
   show :: TableSchema name -> String
@@ -124,7 +128,7 @@ data DefTable name info
   { _dtName :: Text
   , _dtSchema :: TableSchema name
   , _dtInfo :: info
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Eq)
 
 data Def name ty builtin info
   = Dfun (Defun name ty builtin info)
@@ -133,7 +137,7 @@ data Def name ty builtin info
   | DSchema (DefSchema ty info)
   | DTable (DefTable name info)
   | DPact (DefPact name ty builtin info)
-  deriving (Show, Functor)
+  deriving (Show, Functor, Eq)
 
 data Module name ty builtin info
   = Module
@@ -145,7 +149,7 @@ data Module name ty builtin info
   , _mImplements :: [ModuleName]
   , _mHash :: ModuleHash
   , _mInfo :: info
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Eq)
 
 data Interface name ty builtin info
   = Interface
@@ -154,7 +158,7 @@ data Interface name ty builtin info
   , _ifImports :: [Import]
   , _ifHash :: ModuleHash
   , _ifInfo :: info
-  } deriving (Show, Functor)
+  } deriving (Show, Eq, Functor)
 
 data IfDefPact ty info
   = IfDefPact
@@ -162,7 +166,7 @@ data IfDefPact ty info
   , _ifdpArgs :: [Arg ty]
   , _ifdpRType :: Maybe ty
   , _ifdpInfo :: info
-  } deriving (Show, Functor)
+  } deriving (Show, Eq, Functor)
 
 data IfDefun ty info
   = IfDefun
@@ -170,7 +174,7 @@ data IfDefun ty info
   , _ifdArgs :: [Arg ty]
   , _ifdRType :: Maybe ty
   , _ifdInfo :: info
-  } deriving (Show, Functor)
+  } deriving (Show, Eq, Functor)
 
 data IfDefCap name ty info
   = IfDefCap
@@ -179,7 +183,7 @@ data IfDefCap name ty info
   , _ifdcRType :: Maybe ty
   , _ifdcMeta :: DefCapMeta BareName
   , _ifdcInfo :: info
-  } deriving (Show, Functor)
+  } deriving (Show, Eq, Functor)
 
 data IfDef name ty builtin info
   = IfDfun (IfDefun ty info)
@@ -187,7 +191,7 @@ data IfDef name ty builtin info
   | IfDCap (IfDefCap name ty info)
   | IfDPact (IfDefPact ty info)
   | IfDSchema (DefSchema ty info)
-  deriving (Show, Functor)
+  deriving (Show, Eq, Functor)
 
 data TopLevel name ty builtin info
   = TLModule (Module name ty builtin info)
@@ -278,7 +282,7 @@ data LamInfo
   | TLDefCap ModuleName Text
   | TLDefPact ModuleName Text
   | AnonLamInfo
-  deriving Show
+  deriving (Show, Eq)
 
 -- | Core IR
 data Term name ty builtin info
@@ -314,7 +318,7 @@ data Term name ty builtin info
   -- ^ Capability Natives
   | Error Text info
   -- ^ Error term
-  deriving (Show, Functor)
+  deriving (Show, Functor, Eq)
 
 instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builtin info) where
   pretty = \case

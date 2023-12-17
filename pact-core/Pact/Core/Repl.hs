@@ -26,22 +26,22 @@ import Data.IORef
 import qualified Data.Text as T
 import qualified Data.Set as Set
 
-import Pact.Core.Persistence
-import Pact.Core.Pretty
 import Pact.Core.Builtin
-import Pact.Core.Names
-import Pact.Core.Interpreter
-
 import Pact.Core.Compile
+import Pact.Core.Environment
+import Pact.Core.Hash
+import Pact.Core.Imports
+import Pact.Core.Interpreter
+import Pact.Core.Names
+import Pact.Core.Persistence.MockPersistence
+import Pact.Core.Pretty
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
-import Pact.Core.Environment
-import Pact.Core.Imports
-import Pact.Core.Hash
+import Pact.Core.Serialise
 
 main :: IO ()
 main = do
-  pdb <- mockPactDb
+  pdb <- mockPactDb serialisePact_repl_spaninfo
   g <- newIORef mempty
   evalLog <- newIORef Nothing
   let ee = defaultEvalEnv pdb replRawBuiltinMap
@@ -61,7 +61,7 @@ main = do
         "loaded interface" <+> pretty mn <> ", hash" <+> pretty (moduleHashToText mh)
       InterpretValue iv -> case iv of
         IPV v _ -> outputStrLn (show (pretty v))
-        IPTable (TableName tn) -> outputStrLn $ "table{" <> T.unpack tn <> "}"
+        IPTable (TableName tn mn) -> outputStrLn $ "table{" <> T.unpack (renderModuleName mn) <> ":" <> T.unpack tn <> "}"
         IPClosure -> outputStrLn "<<closure>>"
       LoadedImports i ->
         outputStrLn $ "loaded imports from" <> show (pretty (_impModuleName i))

@@ -1,11 +1,12 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 
 
 module Pact.Core.Repl.Utils
@@ -101,6 +102,7 @@ newtype ReplM b a
     , Applicative
     , Monad
     , MonadIO
+    , MonadReader (IORef (ReplState b))
     , MonadThrow
     , MonadError (PactError SpanInfo)
     , MonadCatch
@@ -111,13 +113,11 @@ instance MonadState (ReplState b) (ReplM b)  where
   get = ReplT (ExceptT (Right <$> ReaderT readIORef))
   put rs = ReplT (ExceptT (Right <$> ReaderT (`writeIORef` rs)))
 
+
 -- | Passed in repl environment
--- Todo: not a `newtype` since there's
--- more fields we can set.
 data ReplState b
   = ReplState
   { _replFlags :: Set ReplDebugFlag
-  -- , _replLoaded :: Loaded b SpanInfo
   , _replPactDb :: PactDb b SpanInfo
   , _replEvalState :: EvalState b SpanInfo
   , _replEvalEnv :: EvalEnv b SpanInfo
@@ -141,8 +141,13 @@ instance MonadEvalState b SpanInfo (ReplM b) where
     replEvalState %= f
 
 instance MonadGas (ReplM b) where
-  logGas _ _ = error "implement logGas"
-  chargeGas = error "implement chargeGas"
+  logGas msg g = do
+    r <- use replEvalLog
+    liftIO $ modifyIORef' r (fmap ((msg, g):))
+  chargeGas :: Gas -> ReplM b ()
+  chargeGas g = do
+    r <- use replGas
+    liftIO (modifyIORef' r (<> g))
 
 
 instance HasEvalState (ReplState b) b SpanInfo where
