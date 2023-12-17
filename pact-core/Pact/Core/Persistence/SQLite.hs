@@ -201,11 +201,7 @@ write' serial db txId txLog wt domain k v =
           RowKey k' = k
         TxId i <- readIORef txId
         SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-        Direct.stepNoCB stmt >>= \case
-          Left _ -> throwIO P.WriteException
-          Right res
-            | res == SQL.Done -> modifyIORef' txLog (TxLog (_tableName tbl) k' encoded:)
-            | otherwise -> fail "invariant viaolation"
+        doWrite stmt (TxLog (_tableName tbl) k' encoded:)
 
       Just old -> do
         let
@@ -218,53 +214,35 @@ write' serial db txId txLog wt domain k v =
             RowKey k' = k
           TxId i <- readIORef txId
           SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-          Direct.stepNoCB stmt >>= \case
-            Left _ -> throwIO P.WriteException
-            Right res
-              | res == SQL.Done -> modifyIORef' txLog (TxLog (_tableName tbl) k' encoded:)
-              | otherwise -> fail "invariant viaolation"
+          doWrite stmt (TxLog (_tableName tbl) k' encoded:)
 
     DKeySets -> withStmt db "INSERT OR REPLACE INTO \"SYS:KEYSETS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let encoded = _encodeKeySet serial v
       TxId i <- readIORef txId
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderKeySetName k), SQL.SQLBlob encoded]
-      Direct.stepNoCB stmt >>= \case
-        Left _ -> throwIO P.WriteException
-        Right res
-          | res == SQL.Done -> modifyIORef' txLog (TxLog "SYS:KEYSETS" (renderKeySetName k) encoded:)
-          | otherwise -> fail "invariant violation"
+      doWrite stmt (TxLog "SYS:KEYSETS" (renderKeySetName k) encoded:)
 
     DModules -> withStmt db "INSERT OR REPLACE INTO \"SYS:MODULES\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let encoded = _encodeModuleData serial v
       TxId i <- readIORef txId
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderModuleName k), SQL.SQLBlob encoded]
-      Direct.stepNoCB stmt >>= \case
-        Left _err -> throwIO P.WriteException
-        Right res
-          | res == SQL.Done -> modifyIORef' txLog (TxLog "SYS:MODULES" (renderModuleName k) encoded:)
-          | otherwise -> fail "invariant violation"
+      doWrite stmt (TxLog "SYS:MODULES" (renderModuleName k) encoded:)
+
     DDefPacts -> withStmt db "INSERT OR REPLACE INTO \"SYS:PACTS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let
         encoded = _encodeDefPactExec serial v
         DefPactId k' = k
       TxId i <- readIORef txId
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-      Direct.stepNoCB stmt >>= \case
-        Left _ -> throwIO P.WriteException
-        Right res
-          | res == SQL.Done -> modifyIORef' txLog (TxLog "SYS:PACTS" k' encoded:)
-          | otherwise -> fail "invariant violation"
+      doWrite stmt (TxLog "SYS:PACTS" k' encoded:)
+
     DNamespaces -> withStmt db "INSERT OR REPLACE INTO \"SYS:NAMESPACES\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let
         encoded = _encodeNamespace serial v
         NamespaceName k' = k
       TxId i <- readIORef txId
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-      Direct.stepNoCB stmt >>= \case
-        Left _err -> throwIO P.WriteException
-        Right res
-          | res == SQL.Done -> modifyIORef' txLog (TxLog "SYS:NAMESPACES" k' encoded:)
-          | otherwise -> throwIO P.MultipleRowsReturnedFromSingleWrite
+      doWrite stmt  (TxLog "SYS:NAMESPACES" k' encoded:)
   where
     checkInsertOk ::  TableName -> RowKey -> IO (Maybe RowData)
     checkInsertOk tbl rk = do
@@ -277,6 +255,11 @@ write' serial db txId txLog wt domain k v =
         (Just old, Update) -> return $ Just old
         (Nothing, Update) -> throwIO (P.NoRowFound tbl rk)
 
+    doWrite stmt txlog = Direct.stepNoCB stmt >>= \case
+          Left _ -> throwIO P.WriteException
+          Right res
+            | res == SQL.Done -> modifyIORef' txLog txlog
+            | otherwise -> throwIO P.MultipleRowsReturnedFromSingleWrite
 
 read' :: forall k v b i. PactSerialise b i -> SQL.Database -> Domain k v b i -> k -> IO (Maybe v)
 read' serial db domain k = case domain of
