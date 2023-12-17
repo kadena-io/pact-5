@@ -674,7 +674,7 @@ enforceGuard info cont handler env g = case g of
       md <- getModule info (view cePactDb env) mn
       let cont' = IgnoreValueC (PBool True) cont
       acquireModuleAdmin info cont' handler env md
-      -- returnCEKValue cont handler (VBool True)
+      -- returnCEKValue cont handler (VBool True)guard
   GDefPactGuard (DefPactGuard dpid _) -> do
     curDpid <- getDefPactId info
     if curDpid == dpid
@@ -971,7 +971,7 @@ write' :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => WriteType -> Nat
 write' wt info b cont handler env = \case
   [VTable tv, VString key, VObject o] -> do
     let cont' = BuiltinC env info (WriteFrame tv wt (RowKey key) (ObjectData o)) cont
-    guardTable info cont' handler env tv GtWithDefaultRead
+    guardTable info cont' handler env tv GtWrite
     -- guardTable info env tv GtWrite
     -- if checkSchema o (_tvSchema tv) then do
     --     let pdb = view cePactDb env
@@ -1150,6 +1150,7 @@ coreEmitEvent info b cont handler env = \case
   [VCapToken ct@(CapToken fqn _)] -> do
     let cont' = BuiltinC env info (EmitEventFrame ct) cont
     guardForModuleCall info cont' handler env (_fqModule fqn) $
+      -- Todo: this code is repeated in the EmitEventFrame code
       lookupFqName (_ctName ct) >>= \case
         Just (DCap d) -> do
           enforceMeta (_dcapMeta d)

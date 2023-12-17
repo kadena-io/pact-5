@@ -416,7 +416,7 @@ CapExpr :: { SpanInfo -> ParsedExpr }
   : CapForm { CapabilityForm $1 }
 
 CapForm :: { CapForm SpanInfo }
-  : withcap '(' ParsedName AppList ')' Block { WithCapability $3 (reverse $4) $6 }
+  : withcap Expr Block { WithCapability $2 $3 }
   | c_usr_grd '(' ParsedName AppList ')' { CreateUserGuard $3 (reverse $4)}
 
 LamArgs :: { [MArg] }

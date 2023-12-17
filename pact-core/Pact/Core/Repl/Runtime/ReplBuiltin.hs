@@ -63,7 +63,8 @@ rawExpect info b cont handler _env = \case
                 v2s = prettyShowValue (VPactValue v2)
             returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
         else returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
-       _ -> returnCEK cont handler (VError "expect error: evaluation did not return a pact value to compare" info)
+       v -> returnCEK cont handler v
+      --  v -> returnCEK cont handler (VError ("expect error: evaluation did not return a pact value to compare" <> T.pack (show v)) info)
   args -> argsError info b args
 
 coreExpectThat :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
@@ -99,8 +100,8 @@ coreExpectFailure info b cont handler _env = \case
       Left _err -> do
         putEvalState es
         returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
-      Right _ ->
-        returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result"
+      Right (EvalValue v) ->
+        returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result: " <> prettyShowValue v
   args -> argsError info b args
 
 

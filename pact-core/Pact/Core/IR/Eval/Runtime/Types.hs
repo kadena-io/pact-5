@@ -398,10 +398,11 @@ data BuiltinFrame (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type
   deriving Show
 
 
-data CapFrame b i
-  = WithCapFrame FullyQualifiedName (EvalTerm b i)
-  | CreateUserGuardFrame FullyQualifiedName
-  deriving Show
+-- | Control flow around Capability special forms, in particular cap token forms
+data CapFrame (b :: K.Type) (i :: K.Type)
+  = WithCapFrame (EvalTerm b i)
+  | CreateUserGuardFrame FullyQualifiedName [EvalTerm b i] [PactValue]
+  deriving (Show)
 
 
 data CapPopState
@@ -429,7 +430,7 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   | ObjC (CEKEnv step b i m) i Field [(Field, EvalTerm b i)] [(Field, PactValue)] (Cont step b i m)
   -- Todo: merge all cap constructors
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
-  | CapInvokeC (CEKEnv step b i m) i [EvalTerm b i] [PactValue] (CapFrame b i) (Cont step b i m)
+  | CapInvokeC (CEKEnv step b i m) i (CapFrame b i) (Cont step b i m)
   -- ^ Frame for control flow around argument reduction to with-capability and create-user-guard
   | EvalCapC (CEKEnv step b i m) i FQCapToken (EvalTerm b i) (Cont step b i m)
   -- ^ Capability special form frams that eva

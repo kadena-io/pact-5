@@ -51,19 +51,19 @@ dcMetaFqName f = \case
   p -> pure p
 
 data CapForm name e
-  = WithCapability name [e] e
+  = WithCapability e e
   | CreateUserGuard name [e]
   deriving (Show, Functor, Foldable, Traversable)
 
-capFormName :: Lens (CapForm name e) (CapForm name' e) name name'
+capFormName :: Traversal (CapForm name e) (CapForm name' e) name name'
 capFormName f = \case
-  WithCapability name es e -> (\fq -> WithCapability fq es e) <$> f name
+  WithCapability e e' -> pure (WithCapability e e')
   CreateUserGuard name es -> (`CreateUserGuard` es) <$> f name
 
 instance (Pretty name, Pretty e) => Pretty (CapForm name e) where
   pretty = \case
-    WithCapability name es e ->
-      parens ("with-capability" <+> parens (pretty name <+> hsep (pretty <$> es)) <+> pretty e)
+    WithCapability cap body ->
+      parens ("with-capability" <+> parens (pretty cap <+> pretty body))
     CreateUserGuard name es ->
       parens ("create-user-guard" <+> parens (pretty name <+> hsep (pretty <$> es)))
 
