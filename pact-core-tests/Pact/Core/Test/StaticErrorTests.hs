@@ -64,21 +64,6 @@ staticTests =
           )
         )
       |])
-  , ("interface_defcap_meta_impl", isDesugarError _ImplementationError, [text|
-      (interface iface
-        (defcap CAP:bool (a:integer)
-          @managed a CAP-MGR
-        )
-        (defun CAP-MGR:integer (a:integer b:integer))
-        )
-
-      (module m g (defcap g () true)
-        (implements iface)
-
-        (defcap CAP:bool (a:integer) true)
-        (defun CAP-MGR:integer (a:integer b:integer) 1)
-        )
-      |])
   , ("enforce-one_no_list", isDesugarError _InvalidSyntax, [text|
       (module m g (defcap g () true)
         (defun enforce-cap ()
@@ -342,6 +327,90 @@ staticTests =
 
       (module m g (defcap g () true)
         (implements notiface)
+        )
+      |])
+  , ("module_implements_dfun_missing", isDesugarError _NotImplemented, [text|
+      (interface iface
+        (defun f:integer (a:integer b:integer))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        )
+      |])
+  , ("module_implements_dfun_wrong_kind", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defun f:integer (a:integer b:integer))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        (defconst f true)
+        )
+      |])
+  , ("module_implements_dfun_wrong_ret", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defun f:integer (a:integer b:integer))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        (defun f:bool (a:integer b:integer) true)
+        )
+      |])
+  , ("module_implements_dfun_wrong_args_type", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defun f:integer (a:integer b:integer))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        (defun f:bool (a:integer b:bool) true)
+        )
+      |])
+  , ("module_implements_dfun_wrong_args_count_less", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defun f:integer (a:integer b:integer))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        (defun f:bool (a:integer) true)
+        )
+      |])
+  , ("module_implements_dfun_wrong_args_count_more", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defun f:integer (a:integer b:integer))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        (defun f:bool (a:integer b:integer c:integer) true)
+        )
+      |])
+  , ("module_implements_dfun_wrong_args_unspec", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defun f:integer (a:integer b:integer))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        (defun f:integer (a b) a)
+        )
+      |])
+  , ("module_defcap_meta_impl", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defcap CAP:bool (a:integer)
+          @managed a CAP-MGR
+        )
+        (defun CAP-MGR:integer (a:integer b:integer))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+
+        (defcap CAP:bool (a:integer) true)
+        (defun CAP-MGR:integer (a:integer b:integer) 1)
         )
       |])
   ]
