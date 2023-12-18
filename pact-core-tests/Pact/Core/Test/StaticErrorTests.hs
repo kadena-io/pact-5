@@ -332,6 +332,18 @@ staticTests =
   , ("governance_nonexistent", isDesugarError _InvalidGovernanceRef, [text|
       (module m g (defconst k true))
       |])
+  , ("module_implements_nonexistent", isDesugarError _NoSuchModule, [text|
+      (module m g (defcap g () true)
+        (implements nonexistent)
+        )
+      |])
+  , ("module_implements_module", isDesugarError _NoSuchInterface, [text|
+      (module notiface ng (defcap ng () true))
+
+      (module m g (defcap g () true)
+        (implements notiface)
+        )
+      |])
   ]
 
 tests :: TestTree
