@@ -644,42 +644,6 @@ coreB64Decode info b cont handler _env = \case
     Right txt -> returnCEKValue cont handler (VLiteral (LString txt))
   args -> argsError info b args
 
--- | The main logic of enforcing a guard.
---
--- The main difference to `coreEnforceGuard` is this function's type doesn't need to be a `NativeFunction step b i m`,
--- thus there's no need to wrap/unwrap the guard into a `VPactValue`,
--- and moreover it does not need to take a `b` which it does not use anyway.
-enforceGuard
-  :: (CEKEval step b i m, MonadEval b i m)
-  => i
-  -> Cont step b i m
-  -> CEKErrorHandler step b i m
-  -> CEKEnv step b i m
-  -> Guard FullyQualifiedName PactValue
-  -> m (CEKEvalResult step b i m)
-enforceGuard info cont handler env g = case g of
-  GKeyset ks -> do
-    cond <- isKeysetInSigs ks
-    if cond then returnCEKValue cont handler (VBool True)
-    else returnCEK cont handler (VError "enforce keyset failure" info)
-  GKeySetRef ksn -> do
-    cond <- isKeysetNameInSigs info (view cePactDb env) ksn
-    if cond then returnCEKValue cont handler (VBool True)
-    else returnCEK cont handler (VError "enforce keyset ref failure" info)
-  GUserGuard ug -> runUserGuard info cont handler env ug
-  GCapabilityGuard cg -> enforceCapGuard info cont handler cg
-  GModuleGuard (ModuleGuard mn _) -> calledByModule mn >>= \case
-    True -> returnCEKValue cont handler (VBool True)
-    False -> do
-      md <- getModule info (view cePactDb env) mn
-      let cont' = IgnoreValueC (PBool True) cont
-      acquireModuleAdmin info cont' handler env md
-      -- returnCEKValue cont handler (VBool True)guard
-  GDefPactGuard (DefPactGuard dpid _) -> do
-    curDpid <- getDefPactId info
-    if curDpid == dpid
-       then returnCEKValue cont handler (VBool True)
-       else returnCEK cont handler (VError "Capability pact guard failed: invalid pact id" info)
 
 -- | A version of `enforceGuard` that also accepts a continuation
 -- that gets called if the guard is enforced successfully.
@@ -816,45 +780,6 @@ coreReadKeyset info b cont handler _env = \case
       Nothing -> returnCEK cont handler (VError "read-keyset failure" info)
   args -> argsError info b args
 
-enforceCapGuard
-  :: (CEKEval step b i m, MonadEval b i m)
-  => i
-  -> Cont step b i m
-  -> CEKErrorHandler step b i m
-  -> CapabilityGuard FullyQualifiedName PactValue
-  -> m (CEKEvalResult step b i m)
-enforceCapGuard info cont handler (CapabilityGuard fqn args mpid) = case mpid of
-  Nothing -> enforceCap
-  Just pid -> do
-    currPid <- getDefPactId info
-    if currPid == pid then enforceCap
-    else returnCEK cont handler (VError "Capability pact guard failed: invalid pact id" info)
-  where
-  enforceCap = do
-    cond <- isCapInStack (CapToken fqn args)
-    if cond then returnCEKValue cont handler (VBool True)
-    else do
-      let errMsg = "Capability guard enforce failure cap not in scope: " <> renderQualName (fqnToQualName fqn)
-      returnCEK cont handler (VError errMsg info)
-
-runUserGuard
-  :: (CEKEval step b i m, MonadEval b i m)
-  => i
-  -> Cont step b i m
-  -> CEKErrorHandler step b i m
-  -> CEKEnv step b i m
-  -> UserGuard FullyQualifiedName PactValue
-  -> m (CEKEvalResult step b i m)
-runUserGuard info cont handler env (UserGuard fqn args) =
-  lookupFqName fqn >>= \case
-    Just (Dfun d) -> do
-      when (length (_dfunArgs d) /= length args) $ throwExecutionError info CannotApplyPartialClosure
-      let env' = sysOnlyEnv env
-      clo <- mkDefunClosure d (_fqModule fqn) env'
-      -- Todo: sys only here
-      applyLam (C clo) (VPactValue <$> args) (IgnoreValueC (PBool True) cont) handler
-    Just d -> throwExecutionError info (InvalidDefKind (defKind d) "run-user-guard")
-    Nothing -> throwExecutionError info (NameNotInScope fqn)
 
 coreBind :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreBind info b cont handler _env = \case
@@ -1809,7 +1734,7 @@ poseidonHash info b cont handler _env = \case
 -----------------------------------
 
 rawBuiltinEnv
-  :: (CEKEval step RawBuiltin i m, MonadEval RawBuiltin i m)
+  :: forall step i m. (CEKEval step RawBuiltin i m, MonadEval RawBuiltin i m)
   => BuiltinEnv step RawBuiltin i m
 rawBuiltinEnv i b env = mkBuiltinFn i b env (rawBuiltinRuntime b)
 

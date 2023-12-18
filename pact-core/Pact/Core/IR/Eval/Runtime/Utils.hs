@@ -34,6 +34,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , restoreFromErrorState
  , getDefPactId
  , tvToDomain
+ , envFromPurity
  ) where
 
 import Control.Lens
@@ -192,6 +193,11 @@ asBool
   -> m Text
 asBool _ _ (PLiteral (LString b)) = pure b
 asBool i b pv = argsError i b [VPactValue pv]
+
+envFromPurity :: Purity -> CEKEnv step b i m -> CEKEnv step b i m
+envFromPurity PImpure = id
+envFromPurity PReadOnly = readOnlyEnv
+envFromPurity PSysOnly = sysOnlyEnv
 
 readOnlyEnv :: CEKEnv step b i m -> CEKEnv step b i m
 readOnlyEnv e

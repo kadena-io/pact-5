@@ -182,30 +182,16 @@ library
 
 
 
-library typed-core
+library gasmodel
   import: pact-core-common
-  hs-source-dirs: typed-core
+  hs-source-dirs: gasmodel
 
   build-depends:
     , pact-core
+    , criterion
 
   exposed-modules:
-    -- Typed core typecheck
-    Pact.Core.IR.Typecheck
-
-    -- Typed core modules
-    Pact.Core.Typed.Typecheck
-    Pact.Core.Typed.Term
-    Pact.Core.Typed.Overload
-
-    -- Untyped core
-    Pact.Core.Untyped.Term
-    Pact.Core.Untyped.Eval.Runtime
-    Pact.Core.Untyped.Eval.CEK
-    Pact.Core.Untyped.Eval.Runtime.CoreBuiltin
-    Pact.Core.Untyped.Eval.Runtime.RawBuiltin
-    Pact.Core.Untyped.Utils
-
+    Pact.Core.Gas.CEK
 
 executable repl
   main-is: pact-core/Pact/Core/Repl.hs

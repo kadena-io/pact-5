@@ -5,12 +5,12 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE InstanceSigs #-}
 
 module Pact.Core.IR.Eval.CEK
   ( eval
-  -- , returnCEKValue
-  -- , returnCEK
+  , interpretGuard
   , applyLam
   , mkDefPactClosure
   , resumePact
@@ -31,6 +31,7 @@ module Pact.Core.IR.Eval.CEK
   , evalWithStackFrame
   , emitCapability
   , guardForModuleCall
+  , enforceGuard
   , CEKEval(..)) where
 
 
@@ -77,8 +78,7 @@ class CEKEval (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> 
 
   returnFinal :: EvalResult step b i m -> m (CEKEvalResult step b i m)
 
-  -- Todo: remove this
-  evalNormalForm :: Cont step b i m -> CEKErrorHandler step b i m -> CEKEnv step b i m -> EvalTerm b i -> m (EvalResult step b i m)
+  evalNormalForm :: CEKEnv step b i m -> EvalTerm b i -> m (EvalResult step b i m)
 
   applyLamUnsafe :: CanApply step b i m -> [CEKValue step b i m] -> Cont step b i m -> CEKErrorHandler step b i m -> m (EvalResult step b i m)
 
@@ -91,12 +91,12 @@ chargeNodeGas _nt = pure ()
   -- gm <- view (eeGasModel . geGasModel . gmNodes) <$> readEnv
   -- chargeGas (gm nt)
 
-eval
-  :: forall step b i m. (CEKEval step b i m, MonadEval b i m)
-  => CEKEnv step b i m
-  -> EvalTerm b i
-  -> m (CEKEvalResult step b i m)
-eval = evaluateTerm Mt CEKNoHandler
+-- eval
+--   :: forall step b i m. (CEKEval step b i m, MonadEval b i m)
+--   => CEKEnv step b i m
+--   -> EvalTerm b i
+--   -> m (CEKEvalResult step b i m)
+-- eval = evaluateTerm Mt CEKNoHandler
 
 {-
   Our CEKH Machine's transitions when reducing terms.
@@ -1470,13 +1470,9 @@ instance MonadEval b i m => CEKEval CEKSmallStep b i m where
   returnCEK cont handler v = pure (CEKReturn cont handler v)
   evalCEK cont handler env term = pure (CEKEvaluateTerm cont handler env term)
   returnFinal v = pure (CEKReturn Mt CEKNoHandler v)
-  applyLamUnsafe ca vs lc lh = applyLam ca vs lc lh >>= go
-    where
-    go (CEKReturn Mt CEKNoHandler result) = return result
-    go (CEKReturn cont handler result) = applyCont cont handler result >>= go
-    go (CEKEvaluateTerm cont handler env term) = evaluateTerm cont handler env term >>= go
+  applyLamUnsafe ca vs lc lh = applyLam ca vs lc lh >>= evalUnsafe
 
-  evalNormalForm cont handler initialEnv initialTerm = evalUnsafe (CEKEvaluateTerm cont handler initialEnv initialTerm)
+  evalNormalForm initialEnv initialTerm = evalUnsafe (CEKEvaluateTerm Mt CEKNoHandler initialEnv initialTerm)
   evalUnsafe (CEKReturn Mt CEKNoHandler result) = return result
   evalUnsafe (CEKReturn cont handler result) = applyCont cont handler result >>= evalUnsafe
   evalUnsafe (CEKEvaluateTerm cont handler env term) = evaluateTerm cont handler env term >>= evalUnsafe
@@ -1489,6 +1485,121 @@ instance MonadEval b i m => CEKEval CEKBigStep b i m where
   returnFinal = return
   applyLamUnsafe = applyLam
 
-  evalNormalForm = evaluateTerm
+  evalNormalForm = evaluateTerm Mt CEKNoHandler
 
   evalUnsafe = pure
+
+-- | The main logic of enforcing a guard.
+--
+-- The main difference to `coreEnforceGuard` is this function's type doesn't need to be a `NativeFunction step b i m`,
+-- thus there's no need to wrap/unwrap the guard into a `VPactValue`,
+-- and moreover it does not need to take a `b` which it does not use anyway.
+enforceGuard
+  :: (CEKEval step b i m, MonadEval b i m)
+  => i
+  -> Cont step b i m
+  -> CEKErrorHandler step b i m
+  -> CEKEnv step b i m
+  -> Guard FullyQualifiedName PactValue
+  -> m (CEKEvalResult step b i m)
+enforceGuard info cont handler env g = case g of
+  GKeyset ks -> do
+    cond <- isKeysetInSigs ks
+    if cond then returnCEKValue cont handler (VBool True)
+    else returnCEK cont handler (VError "enforce keyset failure" info)
+  GKeySetRef ksn -> do
+    cond <- isKeysetNameInSigs info (view cePactDb env) ksn
+    if cond then returnCEKValue cont handler (VBool True)
+    else returnCEK cont handler (VError "enforce keyset ref failure" info)
+  GUserGuard ug -> runUserGuard info cont handler env ug
+  GCapabilityGuard cg -> enforceCapGuard info cont handler cg
+  GModuleGuard (ModuleGuard mn _) -> calledByModule mn >>= \case
+    True -> returnCEKValue cont handler (VBool True)
+    False -> do
+      md <- getModule info (view cePactDb env) mn
+      let cont' = IgnoreValueC (PBool True) cont
+      acquireModuleAdmin info cont' handler env md
+      -- returnCEKValue cont handler (VBool True)guard
+  GDefPactGuard (DefPactGuard dpid _) -> do
+    curDpid <- getDefPactId info
+    if curDpid == dpid
+       then returnCEKValue cont handler (VBool True)
+       else returnCEK cont handler (VError "Capability pact guard failed: invalid pact id" info)
+
+enforceCapGuard
+  :: (CEKEval step b i m, MonadEval b i m)
+  => i
+  -> Cont step b i m
+  -> CEKErrorHandler step b i m
+  -> CapabilityGuard FullyQualifiedName PactValue
+  -> m (CEKEvalResult step b i m)
+enforceCapGuard info cont handler (CapabilityGuard fqn args mpid) = case mpid of
+  Nothing -> enforceCap
+  Just pid -> do
+    currPid <- getDefPactId info
+    if currPid == pid then enforceCap
+    else returnCEK cont handler (VError "Capability pact guard failed: invalid pact id" info)
+  where
+  enforceCap = do
+    cond <- isCapInStack (CapToken fqn args)
+    if cond then returnCEKValue cont handler (VBool True)
+    else do
+      let errMsg = "Capability guard enforce failure cap not in scope: " <> renderQualName (fqnToQualName fqn)
+      returnCEK cont handler (VError errMsg info)
+
+runUserGuard
+  :: (CEKEval step b i m, MonadEval b i m)
+  => i
+  -> Cont step b i m
+  -> CEKErrorHandler step b i m
+  -> CEKEnv step b i m
+  -> UserGuard FullyQualifiedName PactValue
+  -> m (CEKEvalResult step b i m)
+runUserGuard info cont handler env (UserGuard fqn args) =
+  lookupFqName fqn >>= \case
+    Just (Dfun d) -> do
+      when (length (_dfunArgs d) /= length args) $ throwExecutionError info CannotApplyPartialClosure
+      let env' = sysOnlyEnv env
+      clo <- mkDefunClosure d (_fqModule fqn) env'
+      -- Todo: sys only here
+      applyLam (C clo) (VPactValue <$> args) (IgnoreValueC (PBool True) cont) handler
+    Just d -> throwExecutionError info (InvalidDefKind (defKind d) "run-user-guard")
+    Nothing -> throwExecutionError info (NameNotInScope fqn)
+
+eval
+  :: forall step b i m
+  .  (MonadEval b i m, CEKEval step b i m)
+  => Purity
+  -> BuiltinEnv step b i m
+  -> EvalTerm b i
+  -> m PactValue
+eval purity benv term = do
+  ee <- readEnv
+  let cekEnv = envFromPurity purity (CEKEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) False)
+  evalNormalForm cekEnv term >>= \case
+    VError txt i ->
+      throwExecutionError i (EvalError txt)
+    EvalValue v -> do
+      case v of
+        VPactValue pv -> pure pv
+        _ ->
+          throwExecutionError (view termInfo term) (EvalError "Evaluation did not reduce to a value")
+
+interpretGuard
+  :: forall step b i m
+  .  (CEKEval step b i m, MonadEval b i m)
+  => i
+  -> BuiltinEnv step b i m
+  -> Guard FullyQualifiedName PactValue
+  -> m PactValue
+interpretGuard info bEnv g = do
+  ee <- readEnv
+  let cekEnv = CEKEnv mempty (_eePactDb ee) bEnv (_eeDefPactStep ee) False
+  enforceGuard info Mt CEKNoHandler cekEnv g >>= evalUnsafe @step >>= \case
+    VError txt errInfo ->
+      throwExecutionError errInfo (EvalError txt)
+    EvalValue v -> do
+      case v of
+        VPactValue pv -> pure pv
+        _ ->
+          throwExecutionError info (EvalError "Evaluation did not reduce to a value")

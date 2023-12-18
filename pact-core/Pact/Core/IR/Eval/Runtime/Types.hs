@@ -476,7 +476,7 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   -- ^ Continuation for "enforced" errors.
   deriving Show
 
--- | An enumerable set of frame types
+-- | An enumerable set of frame types, for our gas model
 data ContType
   = CTFn
   | CTArgs
@@ -516,7 +516,7 @@ data ContType
   | CTObjC
   -- Cap control flow
   | CTCapInvokeC
-  -- 
+  --
   | CTEvalCapC
   | CTCapBodyC
   | CTCapPopC
