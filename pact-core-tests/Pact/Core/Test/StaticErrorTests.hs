@@ -398,6 +398,15 @@ staticTests =
         (defun f:integer (a b) a)
         )
       |])
+  , ("module_implements_defcap_missing", isDesugarError _NotImplemented, [text|
+      (interface iface
+        (defcap CAP:bool (a:integer))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        )
+      |])
   , ("module_implements_defcap_wrong_kind", isDesugarError _ImplementationError, [text|
       (interface iface
         (defcap CAP:bool (a:integer))
@@ -461,6 +470,69 @@ staticTests =
       (module m g (defcap g () true)
         (implements iface)
         (defcap CAP:integer (a:integer) 1)
+        )
+      |])
+  , ("module_implements_defpact_missing", isDesugarError _NotImplemented, [text|
+      (interface iface
+        (defpact p:string (arg:string))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        )
+      |])
+  , ("module_implements_defpact_wrong_kind", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defpact p:string (arg:string))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        (defun p:string (arg:string) arg)
+        )
+      |])
+  , ("module_implements_defpact_wrong_ret_type", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defpact p:string (arg:string))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        (defpact p:bool (arg:string)
+          (step "step-0"))
+        )
+      |])
+  , ("module_implements_defpact_wrong_arg_type", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defpact p:string (arg:string))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        (defpact p:string (arg:bool)
+          (step "step-0"))
+        )
+      |])
+  , ("module_implements_defpact_wrong_arg_count_less", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defpact p:string (arg:string))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        (defpact p:string ()
+          (step "step-0"))
+        )
+      |])
+  , ("module_implements_defpact_wrong_arg_count_more", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defpact p:string (arg:string))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        (defpact p:string (arg:string b:bool)
+          (step "step-0"))
         )
       |])
   ]
