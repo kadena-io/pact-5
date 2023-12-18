@@ -535,6 +535,16 @@ staticTests =
           (step "step-0"))
         )
       |])
+  , ("module_use_invalid_hash", isDesugarError _InvalidBlessedHash, [text|
+      (module m g (defcap g () true))
+
+      (use m "definitelynotanykindofhash")
+      |])
+  , ("module_use_wrong_hash", isDesugarError _InvalidImportModuleHash, [text|
+      (module m g (defcap g () true))
+
+      (use m "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY")
+      |])
   ]
 
 tests :: TestTree
