@@ -27,7 +27,6 @@ import qualified Data.Text.IO as T
 import Pact.Core.Persistence
 import Pact.Core.Persistence.MockPersistence (mockPactDb)
 import Pact.Core.Builtin
-import Pact.Core.Info (SpanInfo)
 import Pact.Core.Names
 import Pact.Core.Repl.Utils
 import Pact.Core.IR.Desugar
@@ -124,7 +123,7 @@ interpretReplProgram (SourceCode _ source) display = do
           VPactValue pv -> do
             pure (IPV pv i)
 
-  interpretExpr :: Purity -> EvalTerm ReplRawBuiltin SpanInfo  -> ReplM ReplRawBuiltin InterpretValue
+  interpretExpr :: Purity -> EvalTerm ReplRawBuiltin SpanInfo  -> ReplM ReplRawBuiltin (InterpretValue SpanInfo)
   interpretExpr purity term = do
     pdb <- use (replEvalEnv . eePactDb)
     let builtins = replBuiltinEnv
