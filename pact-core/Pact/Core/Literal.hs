@@ -14,6 +14,9 @@ import Control.Lens(makePrisms)
 import Data.Text(Text)
 import Data.Decimal
 
+import Control.DeepSeq
+import GHC.Generics
+
 import Pact.Core.Pretty
 
 data Literal
@@ -22,7 +25,9 @@ data Literal
   | LDecimal !Decimal
   | LUnit
   | LBool !Bool
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Generic)
+
+instance NFData Literal
 
 makePrisms ''Literal
 

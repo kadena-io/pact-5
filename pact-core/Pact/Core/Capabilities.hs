@@ -24,8 +24,10 @@ module Pact.Core.Capabilities
  ) where
 
 import Control.Lens
+import Control.DeepSeq
 import Data.Text(Text)
 import Data.Set(Set)
+import GHC.Generics
 import Data.Default
 
 
@@ -53,7 +55,9 @@ dcMetaFqName f = \case
 data CapForm name e
   = WithCapability e e
   | CreateUserGuard name [e]
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Show, Functor, Foldable, Traversable, Generic)
+
+instance (NFData name, NFData e) => NFData (CapForm name e)
 
 capFormName :: Traversal (CapForm name e) (CapForm name' e) name name'
 capFormName f = \case

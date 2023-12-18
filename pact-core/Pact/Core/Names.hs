@@ -4,6 +4,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE GADTs #-}
 
 module Pact.Core.Names
@@ -59,6 +60,8 @@ import Control.Lens
 import Data.Text(Text)
 import Data.Word(Word64)
 import Control.Applicative((<|>))
+import Control.DeepSeq
+import GHC.Generics
 import qualified Data.Text as T
 import qualified Data.Char as Char
 import qualified Text.Megaparsec as MP
@@ -69,7 +72,9 @@ import Pact.Core.Pretty(Pretty(..))
 
 -- | Newtype wrapper over bare namespaces
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Generic)
+
+instance NFData NamespaceName
 
 instance Pretty NamespaceName where
   pretty (NamespaceName n) = pretty n
@@ -79,7 +84,9 @@ instance Pretty NamespaceName where
 data ModuleName = ModuleName
   { _mnName      :: Text
   , _mnNamespace :: Maybe NamespaceName
-  } deriving (Eq, Ord, Show)
+  } deriving (Eq, Ord, Show, Generic)
+
+instance NFData ModuleName
 
 instance Pretty ModuleName where
   pretty (ModuleName m mn) =
@@ -98,7 +105,9 @@ data QualifiedName =
   QualifiedName
   { _qnName :: Text
   , _qnModName :: ModuleName
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Generic)
+
+instance NFData QualifiedName
 
 instance Ord QualifiedName where
   compare (QualifiedName qn1 m1) (QualifiedName qn2 m2) =
@@ -157,7 +166,8 @@ instance Pretty ParsedName where
 -- | Object and Schema row labels.
 -- So in Field "a" in {"a":v},
 newtype Field = Field { _field :: Text }
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Generic)
+  deriving newtype NFData
 
 instance Pretty Field where
   pretty (Field f) = pretty f
@@ -227,7 +237,9 @@ data FullyQualifiedName
   { _fqModule :: ModuleName
   , _fqName :: !Text
   , _fqHash :: ModuleHash
-  } deriving (Eq, Show, Ord)
+  } deriving (Eq, Show, Ord, Generic)
+
+instance NFData FullyQualifiedName
 
 fqnToName :: FullyQualifiedName -> Name
 fqnToName (FullyQualifiedName mn name mh) =

@@ -16,6 +16,8 @@ module Pact.Core.DefPacts.Types
 -- Todo: yield
 import Control.Lens
 import Data.Map.Strict (Map)
+import Control.DeepSeq
+import GHC.Generics
 
 import Pact.Core.PactValue
 import Pact.Core.Names
@@ -38,7 +40,7 @@ data Provenance = Provenance
     -- ^ the target chain id for the endorsement
   , _pModuleHash :: ModuleHash
     -- ^ a hash of current containing module
-  } deriving (Eq, Show)
+  } deriving (Eq, Show, Generic)
 
 
 -- | `Yield` representing an object
@@ -47,7 +49,7 @@ data Yield
   { _yData :: Map Field PactValue
   , _yProvenance :: Maybe Provenance
   , _ySourceChain :: Maybe ChainId
-  } deriving Show
+  } deriving (Show, Generic)
 
 -- | Internal representation of pacts
 data DefPactExec
@@ -59,7 +61,7 @@ data DefPactExec
   , _peContinuation :: DefPactContinuation FullyQualifiedName PactValue
   , _peStepHasRollback :: Bool
   , _peNestedDefPactExec :: Map DefPactId DefPactExec
-  } deriving Show
+  } deriving (Show, Generic)
 
 makeLenses ''DefPactExec
 

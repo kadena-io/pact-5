@@ -152,25 +152,25 @@ instance DesugarBuiltin RawBuiltin where
       arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool))
       arg2Name = "#andArg2"
       arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool))
-      in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (CAnd (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
+      in Lam (arg1 :| [arg2]) (Conditional (CAnd (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
     Lisp.OrOp -> let
       arg1Name = "#orArg1"
       arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool))
       arg2Name = "#orArg2"
       arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool))
-      in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (COr (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
+      in Lam (arg1 :| [arg2]) (Conditional (COr (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
     Lisp.EnforceOp -> let
       arg1Name = "#enforceArg1"
       arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool))
       arg2Name = "#enforceArg2"
       arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimString))
-      in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (CEnforce (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
+      in Lam (arg1 :| [arg2]) (Conditional (CEnforce (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
     Lisp.EnforceOneOp -> let
       arg1Name = "#enforceOneArg1"
       arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimString))
       arg2Name = "#enforceOneArg2"
       arg2 = Arg arg2Name (Just (Lisp.TyList (Lisp.TyPrim PrimBool)))
-      in Lam AnonLamInfo (arg1 :| [arg2]) (Conditional (CEnforceOne (Var (BN (BareName arg1Name)) info) [Var (BN (BareName arg2Name)) info]) info) info
+      in Lam (arg1 :| [arg2]) (Conditional (CEnforceOne (Var (BN (BareName arg1Name)) info) [Var (BN (BareName arg2Name)) info]) info) info
   desugarAppArity = desugarAppArityRaw id
 
 desugarAppArityRaw
@@ -283,10 +283,10 @@ desugarLispTerm = \case
         | n == BareName "constantly" -> do
           let c1 = Arg cvar1 Nothing
               c2 = Arg cvar2 Nothing
-          pure $ Lam AnonLamInfo (c1 :| [c2]) (Var (BN (BareName cvar1)) i) i
+          pure $ Lam (c1 :| [c2]) (Var (BN (BareName cvar1)) i) i
         | n == BareName "identity" -> do
           let c1 = Arg ivar1 Nothing
-          pure $ Lam AnonLamInfo (c1 :| []) (Var (BN (BareName ivar1)) i) i
+          pure $ Lam (c1 :| []) (Var (BN (BareName ivar1)) i) i
         | n == BareName "CHARSET_ASCII" -> pure (Constant (LInteger 0) i)
         | n == BareName "CHARSET_LATIN1" -> pure (Constant (LInteger 1) i)
         | otherwise ->
@@ -308,12 +308,12 @@ desugarLispTerm = \case
     let nsts = x :| xs
         args = (\(Lisp.MArg n t) -> Arg n t) <$> nsts
     body' <- desugarLispTerm body
-    pure (Lam AnonLamInfo args body' i)
+    pure (Lam args body' i)
   Lisp.Suspend body i -> desugarLispTerm (Lisp.Lam [] body i)
   Lisp.Binding fs hs i -> do
     hs' <- traverse desugarLispTerm hs
     body <- bindingBody hs'
-    let bodyLam b = Lam AnonLamInfo (pure (Arg objFreshText Nothing)) b i
+    let bodyLam b = Lam (pure (Arg objFreshText Nothing)) b i
     pure $ bodyLam $ foldr bindToLet body fs
       where
       bindingBody hs' = case reverse hs' of
@@ -394,8 +394,8 @@ desugarDefun (Lisp.Defun defname (arg:args) mrt body _ _ i) = do
   let args' = toArg <$> (arg :| args)
   body' <- desugarLispTerm body
   currModuleName >>= \case
-    Just mn -> do
-      let bodyLam = Lam (TLDefun mn defname) args' body' i
+    Just _ -> do
+      let bodyLam = Lam args' body' i
       pure $ Defun defname (NE.toList args') mrt bodyLam i
     Nothing -> throwDesugarError (NotAllowedOutsideModule "defun") i
 
@@ -574,7 +574,7 @@ termSCC currM currDefns = \case
   Var n _ -> parsedNameSCC currM currDefns n
   -- Note: Lambda Args contain types, which may contain names that
   -- show up in the dependency graph
-  Lam _ args e _ ->
+  Lam args e _ ->
     let currDefns' = foldl' (\s t -> S.delete (_argName t) s) currDefns args
         tySCC = foldMap (argSCC currM currDefns) args
     in tySCC <> termSCC currM currDefns' e
@@ -890,7 +890,7 @@ renameTerm (Var n i) = resolveName i n >>= \case
     legalVarDefs = [DKDefun, DKDefConst, DKDefTable, DKDefCap, DKDefPact]
   (n', _) -> pure (Var n' i)
 -- Todo: what happens when an argument is shadowed?
-renameTerm (Lam li nsts body i) = do
+renameTerm (Lam nsts body i) = do
   depth <- view reVarDepth
   let len = fromIntegral (NE.length nsts)
       newDepth = depth + len
@@ -898,7 +898,7 @@ renameTerm (Lam li nsts body i) = do
   let m = M.fromList $ NE.toList $ NE.zip (_argName <$> nsts) ((,Nothing). NBound <$> ixs)
   term' <- local (inEnv m newDepth) (renameTerm body)
   nsts' <- (traversed . argType . _Just) (renameType i) nsts
-  pure (Lam li nsts' term' i)
+  pure (Lam nsts' term' i)
   where
   inEnv m newDepth =
     over reBinds (M.union m) .

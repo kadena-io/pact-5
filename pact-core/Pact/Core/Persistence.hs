@@ -44,6 +44,8 @@ import Data.Word(Word64)
 import Data.IORef
 import Data.Default
 import Data.Map.Strict(Map)
+import Control.DeepSeq
+import GHC.Generics
 
 import Pact.Core.Type
 import Pact.Core.Names
@@ -152,7 +154,9 @@ data Purity
   | PReadOnly
   -- | All database access allowed (normal).
   | PImpure
-  deriving (Eq,Show,Ord,Bounded,Enum)
+  deriving (Eq,Show,Ord,Bounded,Enum, Generic)
+
+instance NFData Purity
 
 -- | Fun-record type for Pact back-ends.
 data PactDb b i
@@ -168,6 +172,12 @@ data PactDb b i
   , _pdbTxIds :: TableName -> TxId -> IO [TxId]
   , _pdbGetTxLog :: TableName -> TxId -> IO [TxLog RowData]
   }
+
+instance NFData (PactDb b i) where
+  -- Note: CommitTX and RollbackTx cannot be rnf'd
+  rnf (PactDb purity r w k cut btx ctx rtx tids txl) =
+    rnf purity `seq` rnf r `seq` rnf w `seq` rnf k `seq` rnf cut
+       `seq` rnf btx `seq` ctx `seq` rtx `seq` rnf tids `seq` rnf txl
 
 makeClassy ''PactDb
 

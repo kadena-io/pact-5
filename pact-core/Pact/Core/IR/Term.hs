@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE InstanceSigs #-}
 
 
@@ -29,6 +30,8 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict(Map)
 import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NE
+import Control.DeepSeq
+import GHC.Generics
 
 import Pact.Core.Guards
 import Pact.Core.Builtin
@@ -115,7 +118,6 @@ data TableSchema name where
   ResolvedTable :: Schema -> TableSchema Name
 
 instance Show (TableSchema name) where
-  show :: TableSchema name -> String
   show (DesugaredTable t) = "DesugardTable(" <> show t <> ")"
   show (ResolvedTable t) = "ResolvedTable(" <> show t <> ")"
 
@@ -273,18 +275,11 @@ type EvalDef b i = Def Name Type b i
 type EvalModule b i = Module Name Type b i
 type EvalInterface b i = Interface Name Type b i
 
-data LamInfo
-  = TLDefun ModuleName Text
-  | TLDefCap ModuleName Text
-  | TLDefPact ModuleName Text
-  | AnonLamInfo
-  deriving Show
-
 -- | Core IR
 data Term name ty builtin info
   = Var name info
   -- ^ single variables e.g x
-  | Lam LamInfo (NonEmpty (Arg ty)) (Term name ty builtin info) info
+  | Lam (NonEmpty (Arg ty)) (Term name ty builtin info) info
   -- ^ $f = \x.e
   -- Lambdas are named for the sake of the callstack.
   | Let (Arg ty) (Term name ty builtin info) (Term name ty builtin info) info
@@ -314,12 +309,14 @@ data Term name ty builtin info
   -- ^ Capability Natives
   | Error Text info
   -- ^ Error term
-  deriving (Show, Functor)
+  deriving (Show, Functor, Generic)
+
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Term name ty b info)
 
 instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builtin info) where
   pretty = \case
     Var name _ -> pretty name
-    Lam _ ne te _ ->
+    Lam ne te _ ->
       parens ("lambda" <+> parens (fold (NE.intersperse ":" (prettyLamArg <$> ne))) <+> pretty te)
     Let n te te' _ ->
       parens $ "let" <+> parens (pretty n <+> pretty te) <+> pretty te'
@@ -363,8 +360,8 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (TopLevel name ty bu
 termType :: Traversal (Term n t b i) (Term n t' b i) t t'
 termType f  = \case
   Var n i -> pure (Var n i)
-  Lam li ne te i ->
-    Lam li <$> (traversed.argType._Just) f ne <*> termType f te <*> pure i
+  Lam ne te i ->
+    Lam <$> (traversed.argType._Just) f ne <*> termType f te <*> pure i
   Let n te te' i ->
     Let <$> (argType . _Just) f n <*> termType f te <*> termType f te' <*> pure i
   App te ne i ->
@@ -391,8 +388,8 @@ termType f  = \case
 termBuiltin :: Traversal (Term n t b i) (Term n t b' i) b b'
 termBuiltin f = \case
   Var n i -> pure (Var n i)
-  Lam li ne te i ->
-    Lam li ne <$> termBuiltin f te <*> pure i
+  Lam ne te i ->
+    Lam ne <$> termBuiltin f te <*> pure i
   Let n te te' i ->
     Let n <$> termBuiltin f te <*> termBuiltin f te' <*> pure i
   App te ne i ->
@@ -422,7 +419,7 @@ termInfo f = \case
   Var n i -> Var n <$> f i
   Let n t1 t2 i ->
     Let n t1 t2 <$> f i
-  Lam li ns term i -> Lam li ns term <$> f i
+  Lam ns term i -> Lam ns term <$> f i
   App t1 t2 i -> App t1 t2 <$> f i
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i
@@ -440,7 +437,7 @@ termInfo f = \case
 instance Plated (Term name ty builtin info) where
   plate f = \case
     Var n i -> pure (Var n i)
-    Lam li ns term i -> Lam li ns <$> f term <*> pure i
+    Lam ns term i -> Lam ns <$> f term <*> pure i
     Let n t1 t2 i -> Let n <$> f t1 <*> f t2 <*> pure i
     App t1 t2 i -> App <$> f t1 <*> traverse f t2 <*> pure i
     Builtin b i -> pure (Builtin b i)

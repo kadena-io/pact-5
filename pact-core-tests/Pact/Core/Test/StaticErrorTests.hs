@@ -8,6 +8,7 @@ import Test.Tasty.HUnit
 
 import Control.Lens
 import Data.Text (Text)
+import Data.Default
 import Data.Maybe(isJust)
 import System.FilePath
 
@@ -31,7 +32,7 @@ runStaticTest :: FilePath -> Text -> (PactErrorI -> Bool) -> Assertion
 runStaticTest fp src predicate = do
   pdb <- mockPactDb
   let evalEnv = defaultEvalEnv pdb rawBuiltinMap
-  v <- fst <$> evaluate evalEnv src
+  v <- fst <$> evaluate evalEnv def src
   case v of
     Left err ->
       assertBool ("Expected Error to match predicate, but got " <> show err <> " instead") (predicate err)

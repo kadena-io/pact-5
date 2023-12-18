@@ -6,7 +6,6 @@
 module Pact.Core.Evaluate where
 
 import Control.Monad.Except
-import Data.Default
 import Data.Text (Text)
 
 import Pact.Core.Builtin
@@ -21,10 +20,11 @@ import qualified Pact.Core.Syntax.Parser as Lisp
 
 evaluate
   :: EvalEnv RawBuiltin SpanInfo
+  -> EvalState RawBuiltin SpanInfo
   -> Text
   -> IO (Either (PactError SpanInfo) [CompileValue SpanInfo],
          EvalState RawBuiltin SpanInfo)
-evaluate evalEnv source = runEvalM evalEnv def $ do
+evaluate evalEnv es source = runEvalM evalEnv es $ do
   let builtins = rawBuiltinEnv @CEKBigStep
   lexx <- liftEither (Lisp.lexer source)
   parsed <- liftEither $ Lisp.parseProgram lexx

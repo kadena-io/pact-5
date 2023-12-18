@@ -3,6 +3,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE TemplateHaskell #-}
 
@@ -37,10 +38,12 @@ module Pact.Core.Type
  ) where
 
 import Control.Lens
+import Control.DeepSeq
 import Data.List
 import Data.Set(Set)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
+import GHC.Generics
 
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
@@ -55,13 +58,14 @@ import qualified Pact.Core.Pretty as Pretty
 data PrimType =
   PrimInt |
   PrimDecimal |
-  -- PrimTime |
   PrimBool |
   PrimString |
   PrimGuard |
   PrimTime |
   PrimUnit
-  deriving (Eq,Ord,Show, Enum, Bounded)
+  deriving (Eq,Ord,Show, Enum, Bounded, Generic)
+
+instance NFData PrimType
 
 renderPrimType :: PrimType -> Text
 renderPrimType = \case
@@ -112,11 +116,13 @@ data Type
   | TyTable Schema
   -- ^ Tables
   | TyCapToken
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Generic)
+
+instance NFData Type
 
 newtype Schema
   = Schema { _schema :: Map Field Type }
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, NFData)
 
 pattern TyInt :: Type
 pattern TyInt = TyPrim PrimInt
@@ -196,7 +202,9 @@ data Arg ty
   = Arg
   { _argName :: !Text
   , _argType :: Maybe ty
-  } deriving (Show, Eq, Functor, Foldable, Traversable)
+  } deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
+
+instance NFData ty => NFData (Arg ty)
 
 instance Pretty ty => Pretty (Arg ty) where
   pretty (Arg n ty) =

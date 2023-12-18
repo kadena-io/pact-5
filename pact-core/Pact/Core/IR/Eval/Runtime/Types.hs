@@ -96,6 +96,8 @@ import Data.Decimal(Decimal)
 import Data.Vector(Vector)
 import Data.RAList(RAList)
 import Pact.Time(UTCTime)
+import GHC.Generics
+import Control.DeepSeq
 
 import qualified Data.Kind as K
 
@@ -136,6 +138,9 @@ data CEKEnv (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.
   , _ceBuiltins :: BuiltinEnv step b i m
   , _ceDefPactStep :: Maybe DefPactStep
   , _ceInCap :: Bool }
+  deriving (Generic)
+
+instance (NFData b, NFData i) => NFData (CEKEnv step b i m)
 
 instance (Show i, Show b) => Show (CEKEnv step b i m) where
   show (CEKEnv e _ _ _ _) = show e
@@ -148,7 +153,9 @@ type BuiltinEnv (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -
 data ClosureType
   = NullaryClosure
   | ArgClosure !(NonEmpty (Maybe Type))
-  deriving Show
+  deriving (Show, Generic)
+
+instance NFData ClosureType
 
 data Closure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = Closure
@@ -160,7 +167,7 @@ data Closure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K
   , _cloRType :: !(Maybe Type)
   , _cloEnv :: !(CEKEnv step b i m)
   , _cloInfo :: i
-  } deriving Show
+  } deriving (Show, Generic)
 
 -- | A closure coming from a lambda application with its accompanying environment capturing args,
 -- but is not partially applied
@@ -172,7 +179,7 @@ data LamClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -
   , _lcloRType :: !(Maybe Type)
   , _lcloEnv :: !(CEKEnv step b i m)
   , _lcloInfo :: i
-  } deriving Show
+  } deriving (Show, Generic)
 
 -- | A partially applied function because we don't allow
 -- them to be applied at the lhs of an app since pact historically hasn't had partial closures.
@@ -186,7 +193,7 @@ data PartialClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Ty
   , _pcloRType :: !(Maybe Type)
   , _pcloEnv :: !(CEKEnv step b i m)
   , _pcloInfo :: i
-  } deriving Show
+  } deriving (Show, Generic)
 
 data DefPactClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = DefPactClosure
@@ -195,7 +202,9 @@ data DefPactClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Ty
   , _pactcloArity :: Int
   , _pactEnv :: !(CEKEnv step b i m)
   , _pactcloInfo :: i
-  } deriving Show
+  } deriving (Show, Generic)
+
+instance (NFData b, NFData i) => NFData (DefPactClosure step b i m)
 
 data CapTokenClosure i
   = CapTokenClosure
@@ -203,7 +212,9 @@ data CapTokenClosure i
   , _ctcTypes :: [Maybe Type]
   , _ctcArity :: Int
   , _ctcInfo :: i
-  } deriving (Eq, Show)
+  } deriving (Eq, Show, Generic)
+
+instance NFData i => NFData (CapTokenClosure i)
 
 data CanApply (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = C {-# UNPACK #-} !(Closure step b i m)
@@ -213,7 +224,9 @@ data CanApply (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> 
   | PN {-# UNPACK #-} !(PartialNativeFn step b i m)
   | DPC {-# UNPACK #-} !(DefPactClosure step b i m)
   | CT {-# UNPACK #-} !(CapTokenClosure i)
-  deriving Show
+  deriving (Show, Generic)
+
+instance (NFData b, NFData i) => NFData (CanApply step b i m)
 
 data TableValue
   = TableValue
@@ -221,7 +234,7 @@ data TableValue
   , _tvModule :: !ModuleName
   , _tvHash :: !ModuleHash
   , _tvSchema :: !Schema
-  } deriving Show
+  } deriving (Show, Generic)
 
 -- | The type of our semantic runtime values
 data CEKValue (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
@@ -232,6 +245,9 @@ data CEKValue (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> 
   -- value with
   | VClosure  !(CanApply step b i m)
   -- ^ Closures, which may contain terms
+  deriving (Generic)
+
+instance (NFData b, NFData i) => NFData (CEKValue step b i m)
 
 instance Show (CEKValue step b i m) where
   show = \case
@@ -345,7 +361,7 @@ data PartialNativeFn (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.T
   , _pNativeArity :: {-# UNPACK #-} !Int
   , _pNativeAppliedArgs :: [CEKValue step b i m]
   , _pNativeLoc :: i
-  }
+  } deriving Generic
 
 
 
@@ -474,7 +490,9 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   -- ^ Pop the current stack frame and check the return value for the declared type
   | EnforceErrorC i (Cont step b i m)
   -- ^ Continuation for "enforced" errors.
-  deriving Show
+  deriving (Show, Generic)
+
+instance (NFData b, NFData i) => NFData (Cont step b i m)
 
 -- | An enumerable set of frame types, for our gas model
 data ContType
@@ -529,7 +547,7 @@ data ContType
   | CTStackPopC
   | CTEnforceErrorC
   | CTMt
-  deriving (Enum, Bounded)
+  deriving (Show, Eq, Enum, Bounded)
 
 
 -- | State to preserve in the error handler

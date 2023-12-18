@@ -74,6 +74,7 @@ common pact-core-common
   default-language:    Haskell2010
   default-extensions:
     OverloadedStrings
+    DeriveGeneric
     ViewPatterns
     LambdaCase
     TupleSections
@@ -191,7 +192,7 @@ library gasmodel
     , criterion
 
   exposed-modules:
-    Pact.Core.Gas.CEK
+    Pact.Core.Gas.InterpreterGas
 
 executable repl
   main-is: pact-core/Pact/Core/Repl.hs

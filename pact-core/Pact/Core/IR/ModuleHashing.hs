@@ -305,7 +305,7 @@ encodeLiteral = \case
 encodeTerm ::  (IsBuiltin b) => Term Name Type b i -> Builder
 encodeTerm = \case
   Var n _ -> encodeName n
-  Lam _li args e _ -> parens $
+  Lam args e _ -> parens $
     "lambda" <> encodeArgList (NE.toList args) <+> encodeTerm e
   -- Todo: collect let args
   Let arg e1 e2 _ -> parens $

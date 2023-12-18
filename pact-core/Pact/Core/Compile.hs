@@ -96,7 +96,6 @@ enforceNamespaceInstall info bEnv =
 -- | Evaluate module governance
 evalModuleGovernance
   :: (HasCompileEnv step b i m)
-  -- => Interpreter b i m
   => BuiltinEnv step b i m
   -> Lisp.TopLevel i
   -> m ()
