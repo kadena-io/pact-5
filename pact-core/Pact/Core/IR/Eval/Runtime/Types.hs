@@ -231,7 +231,6 @@ instance (NFData b, NFData i) => NFData (CanApply step b i m)
 data TableValue
   = TableValue
   { _tvName :: !TableName
-  , _tvModule :: !ModuleName
   , _tvHash :: !ModuleHash
   , _tvSchema :: !Schema
   } deriving (Show, Generic)
@@ -273,7 +272,7 @@ pattern VBool b = VLiteral (LBool b)
 pattern VDecimal :: Decimal -> CEKValue step b i m
 pattern VDecimal d = VLiteral (LDecimal d)
 
-pattern VGuard :: Guard FullyQualifiedName PactValue -> CEKValue step b i m
+pattern VGuard :: Guard QualifiedName PactValue -> CEKValue step b i m
 pattern VGuard g = VPactValue (PGuard g)
 
 pattern VList :: Vector PactValue -> CEKValue step b i m

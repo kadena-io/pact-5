@@ -36,6 +36,7 @@ common pact-core-common
     , containers
     , data-default
     , deepseq
+    , direct-sqlite
     , directory
     , exceptions
     , filepath
@@ -47,6 +48,7 @@ common pact-core-common
     , prettyprinter
     , prettyprinter-ansi-terminal
     , transformers
+    , transformers-base
     , text
     , vector
     , vector-algorithms
@@ -64,6 +66,8 @@ common pact-core-common
     , array
     , pact-json
     , scientific
+    , serialise
+    , cborg
     , unordered-containers
     , groups
     , poly
@@ -136,6 +140,8 @@ library
     Pact.Core.Info
     Pact.Core.Errors
     Pact.Core.Persistence
+    Pact.Core.Persistence.SQLite
+    Pact.Core.Persistence.MockPersistence
     Pact.Core.PactValue
     Pact.Core.Debug
     Pact.Core.Capabilities
@@ -179,9 +185,10 @@ library
     Pact.Core.Repl.Runtime.ReplBuiltin
     Pact.Core.Repl.Compile
 
-    -- Crypto
-
-
+    -- Serialization
+    Pact.Core.Serialise
+    Pact.Core.Serialise.LegacyPact
+    Pact.Core.Serialise.CBOR_V1
 
 library gasmodel
   import: pact-core-common
@@ -225,6 +232,7 @@ executable repl
     , primitive
     , haskeline
     , exceptions
+    , serialise
 
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
@@ -275,6 +283,8 @@ test-suite core-tests
     , tasty
     , tasty-hunit
     , tasty-hedgehog
+    , serialise
+    , cborg
     , groups
     , semirings
     , pact-core:pact-core-crypto
@@ -283,6 +293,10 @@ test-suite core-tests
     , Pact.Core.Test.ReplTests
     , Pact.Core.Test.LexerParserTests
     , Pact.Core.Test.LexerTests
+    , Pact.Core.Test.PersistenceTests
+    , Pact.Core.Test.SerialiseTests
+    , Pact.Core.Test.LegacySerialiseTests
+    , Pact.Core.Gen.Serialise
     , Pact.Core.Test.StaticErrorTests
     , Pact.Core.Test.TestPrisms
     , Pact.Core.Test.ZkTests

@@ -43,7 +43,7 @@ import qualified Pact.Time as PactTime
 prettyShowValue :: CEKValue step b i m -> Text
 prettyShowValue = \case
   VPactValue p -> renderText p
-  VTable (TableValue (TableName tn) _ _ _) -> "table{" <> tn <> "}"
+  VTable (TableValue (TableName tn mn) _ _) -> "table{" <> renderModuleName mn <> "_" <> tn <> "}"
   VClosure _ -> "<#closure>"
 
 corePrint :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
@@ -278,7 +278,7 @@ commitTx :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction s
 commitTx info b cont handler _env = \case
   [] -> do
     pdb <- use (replEvalEnv . eePactDb)
-    liftDbFunction info (_pdbCommitTx pdb)
+    _txLog <- liftDbFunction info (_pdbCommitTx pdb)
     fqdefs <- useEvalState (esLoaded . loAllLoaded)
     cs <- useEvalState esStack
     replEvalState .= set esStack cs (set (esLoaded . loAllLoaded) fqdefs def)

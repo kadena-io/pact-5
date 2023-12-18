@@ -46,7 +46,7 @@ import qualified Pact.Core.Pretty as Pretty
 data PactValue
   = PLiteral Literal
   | PList (Vector PactValue)
-  | PGuard (Guard FullyQualifiedName PactValue)
+  | PGuard (Guard QualifiedName PactValue)
   | PObject (Map Field PactValue)
   | PModRef ModRef
   | PCapToken (CapToken FullyQualifiedName PactValue)
@@ -80,7 +80,7 @@ instance Pretty PactValue where
       objPair (f, t) = pretty f <> ":" <> pretty t
     PModRef md -> pretty md
     PCapToken (CapToken fqn args) ->
-      parens (pretty (fqnToQualName fqn) <> if null args then mempty else hsep (pretty <$> args))
+      parens (pretty fqn) <> if null args then mempty else hsep (pretty <$> args)
     PTime t -> pretty (PactTime.formatTime "%Y-%m-%d %H:%M:%S%Q %Z" t)
 
 synthesizePvType :: PactValue -> Type

@@ -653,7 +653,7 @@ enforceGuardCont
   -> Cont step b i m
   -> CEKErrorHandler step b i m
   -> CEKEnv step b i m
-  -> Guard FullyQualifiedName PactValue
+  -> Guard QualifiedName PactValue
   -> m (CEKEvalResult step b i m)
   -> m (CEKEvalResult step b i m)
 enforceGuardCont info cekCont cekHandler env g successCont = do
@@ -681,7 +681,7 @@ keysetRefGuard info b cont handler env = \case
     Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
     Right ksn -> do
       let pdb = view cePactDb env
-      liftDbFunction info (readKeyset pdb ksn) >>= \case
+      liftDbFunction info (readKeySet pdb ksn) >>= \case
         Nothing -> returnCEK cont handler (VError ("no such keyset defined: " <> g) info)
         Just _ -> returnCEKValue cont handler (VGuard (GKeySetRef ksn))
   args -> argsError info b args
@@ -739,7 +739,7 @@ coreReadString info b cont handler _env = \case
       _ -> returnCEK cont handler (VError "read-integer failure" info)
   args -> argsError info b args
 
-readKeyset' :: (MonadEval b i m) => T.Text -> m (Maybe (KeySet FullyQualifiedName))
+readKeyset' :: (MonadEval b i m) => T.Text -> m (Maybe (KeySet QualifiedName))
 readKeyset' ksn = do
     ObjectData envData <- viewEvalEnv eeMsgBody
     case M.lookup (Field ksn) envData of
@@ -798,12 +798,6 @@ createTable info b cont handler env = \case
     enforceTopLevelOnly info b
     let cont' = BuiltinC env info (CreateTableC tv) cont
     guardTable info cont' handler env tv GtCreateTable
-    -- guardTable info env tv GtCreateTable
-    -- let pdb = view cePactDb env
-    -- Todo: error handling here
-    -- Todo: guard table
-    -- liftDbFunction info (_pdbCreateUserTable pdb tn mn)
-    -- returnCEKValue cont handler VUnit
   args -> argsError info b args
 
 dbSelect :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -1005,7 +999,7 @@ defineKeySet'
   -> CEKErrorHandler step b i m
   -> CEKEnv step b i m
   -> T.Text
-  -> KeySet FullyQualifiedName
+  -> KeySet QualifiedName
   -> m (CEKEvalResult step b i m)
 defineKeySet' info cont handler env ksname newKs  = do
   let pdb = view cePactDb env
@@ -1016,7 +1010,7 @@ defineKeySet' info cont handler env ksname newKs  = do
       let writeKs = do
             liftDbFunction info (writeKeySet pdb Write ksn newKs)
             returnCEKValue cont handler (VString "Keyset write success")
-      liftDbFunction info (readKeyset pdb ksn) >>= \case
+      liftDbFunction info (readKeySet pdb ksn) >>= \case
         Just oldKs -> do
           cond <- isKeysetInSigs oldKs
           if cond then writeKs
@@ -1091,16 +1085,18 @@ coreEmitEvent info b cont handler env = \case
 
 createCapGuard :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 createCapGuard info b cont handler _env = \case
-  [VCapToken ct] ->
-    let cg = CapabilityGuard (_ctName ct) (_ctArgs ct) Nothing
-    in returnCEKValue cont handler (VGuard (GCapabilityGuard cg))
+  [VCapToken ct] -> do
+    let qn = fqnToQualName (_ctName ct)
+        cg = CapabilityGuard qn (_ctArgs ct) Nothing
+    returnCEKValue cont handler (VGuard (GCapabilityGuard cg))
   args -> argsError info b args
 
 createCapabilityPactGuard :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 createCapabilityPactGuard info b cont handler _env = \case
   [VCapToken ct] -> do
     pid <- getDefPactId info
-    let cg = CapabilityGuard (_ctName ct) (_ctArgs ct) (Just pid)
+    let qn = fqnToQualName (_ctName ct)
+    let cg = CapabilityGuard qn (_ctArgs ct) (Just pid)
     returnCEKValue cont handler (VGuard (GCapabilityGuard cg))
   args -> argsError info b args
 
@@ -1388,11 +1384,11 @@ describeModule info b cont handler env = \case
 
 dbDescribeTable :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 dbDescribeTable info b cont handler _env = \case
-  [VTable (TableValue name mname _ _)] ->
+  [VTable (TableValue name _ schema)] ->
     returnCEKValue cont handler $ VObject $ M.fromList $ fmap (over _1 Field)
       [("name", PString (_tableName name))
-      ,("module", PString (renderModuleName mname))
-      ,("type", PString "asdf")]
+      ,("module", PString (renderModuleName (_tableModuleName name)))
+      ,("type", PString (renderType (TyTable schema)))]
   args -> argsError info b args
 
 dbDescribeKeySet :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -1418,7 +1414,7 @@ coreCompose info b cont handler env = \case
     applyLam clo1 [v] cont' handler
   args -> argsError info b args
 
-createPrincipalForGuard :: Guard FullyQualifiedName PactValue -> Pr.Principal
+createPrincipalForGuard :: Guard QualifiedName PactValue -> Pr.Principal
 createPrincipalForGuard = \case
   GKeyset (KeySet ks pf) -> case (toList ks, pf) of
     ([k], KeysAll) -> Pr.K k
@@ -1428,13 +1424,13 @@ createPrincipalForGuard = \case
   GModuleGuard (ModuleGuard mn n) -> Pr.M mn n
   GUserGuard (UserGuard f args) ->
     let h = mkHash $ map encodeStable args
-    in Pr.U (renderQualName $ fqnToQualName f) (hashToText h)
+    in Pr.U (renderQualName f) (hashToText h)
     -- TODO orig pact gets here ^^^^ a Name
     -- which can be any of QualifiedName/BareName/DynamicName/FQN,
     -- and uses the rendered string here. Need to double-check equivalence.
   GCapabilityGuard (CapabilityGuard f args pid) ->
     let args' = map encodeStable args
-        f' = T.encodeUtf8 $ renderQualName $ fqnToQualName f
+        f' = T.encodeUtf8 $ renderQualName f
         pid' = T.encodeUtf8 . renderDefPactId <$> pid
         h = mkHash $ f' : args' ++ maybeToList pid'
     in Pr.C $ hashToText h

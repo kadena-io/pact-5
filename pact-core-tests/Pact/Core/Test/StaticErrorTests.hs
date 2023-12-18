@@ -16,9 +16,10 @@ import qualified Data.Text.IO as T
 
 import Pact.Core.Builtin
 import Pact.Core.Evaluate
-import Pact.Core.Persistence
 import Pact.Core.Environment
 import Pact.Core.Errors
+import Pact.Core.Serialise (serialisePact_raw_spaninfo)
+import Pact.Core.Persistence.MockPersistence (mockPactDb)
 
 import Pact.Core.Test.TestPrisms
 
@@ -30,7 +31,7 @@ isDesugarError p s = isJust $ preview (_PEDesugarError . _1 . p) s
 
 runStaticTest :: FilePath -> Text -> (PactErrorI -> Bool) -> Assertion
 runStaticTest fp src predicate = do
-  pdb <- mockPactDb
+  pdb <- mockPactDb serialisePact_raw_spaninfo
   let evalEnv = defaultEvalEnv pdb rawBuiltinMap
   v <- fst <$> evaluate evalEnv def src
   case v of

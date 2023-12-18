@@ -38,13 +38,14 @@ import Pact.Core.Hash
 data DefManagedMeta name
   = DefManagedMeta (Int, Text) name
   | AutoManagedMeta
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Show, Functor, Foldable, Traversable, Eq)
 
 data DefCapMeta name
   = DefEvent
   | DefManaged (DefManagedMeta name)
   | Unmanaged
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Show, Functor, Foldable, Traversable, Eq)
+
 
 dcMetaFqName :: Traversal' (DefCapMeta (FQNameRef Name)) FullyQualifiedName
 dcMetaFqName f = \case
@@ -55,7 +56,7 @@ dcMetaFqName f = \case
 data CapForm name e
   = WithCapability e e
   | CreateUserGuard name [e]
-  deriving (Show, Functor, Foldable, Traversable, Generic)
+  deriving (Show, Functor, Foldable, Traversable, Eq, Generic)
 
 instance (NFData name, NFData e) => NFData (CapForm name e)
 

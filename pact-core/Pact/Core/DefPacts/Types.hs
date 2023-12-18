@@ -49,7 +49,7 @@ data Yield
   { _yData :: Map Field PactValue
   , _yProvenance :: Maybe Provenance
   , _ySourceChain :: Maybe ChainId
-  } deriving (Show, Generic)
+  } deriving (Show, Eq, Generic)
 
 -- | Internal representation of pacts
 data DefPactExec
@@ -58,10 +58,10 @@ data DefPactExec
   , _peYield :: Maybe Yield
   , _peStep :: Int
   , _peDefPactId :: DefPactId
-  , _peContinuation :: DefPactContinuation FullyQualifiedName PactValue
+  , _peContinuation :: DefPactContinuation QualifiedName PactValue
   , _peStepHasRollback :: Bool
   , _peNestedDefPactExec :: Map DefPactId DefPactExec
-  } deriving (Show, Generic)
+  } deriving (Show, Eq, Generic)
 
 makeLenses ''DefPactExec
 
