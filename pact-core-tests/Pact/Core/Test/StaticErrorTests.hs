@@ -398,7 +398,17 @@ staticTests =
         (defun f:integer (a b) a)
         )
       |])
-  , ("module_defcap_meta_impl", isDesugarError _ImplementationError, [text|
+  , ("module_implements_defcap_wrong_kind", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defcap CAP:bool (a:integer))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        (defun CAP:bool (a:integer) true)
+        )
+      |])
+  , ("module_implements_defcap_wrong_meta", isDesugarError _ImplementationError, [text|
       (interface iface
         (defcap CAP:bool (a:integer)
           @managed a CAP-MGR
@@ -411,6 +421,46 @@ staticTests =
 
         (defcap CAP:bool (a:integer) true)
         (defun CAP-MGR:integer (a:integer b:integer) 1)
+        )
+      |])
+  , ("module_implements_defcap_wrong_args_count_more", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defcap CAP:bool (a:integer))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        (defcap CAP:bool (a:integer b:bool) true)
+        )
+      |])
+  , ("module_implements_defcap_wrong_args_count_less", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defcap CAP:bool (a:integer))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        (defcap CAP:bool () true)
+        )
+      |])
+  , ("module_implements_defcap_wrong_args_type", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defcap CAP:bool (a:integer))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        (defcap CAP:bool (a:bool) true)
+        )
+      |])
+  , ("module_implements_defcap_wrong_ret_type", isDesugarError _ImplementationError, [text|
+      (interface iface
+        (defcap CAP:bool (a:integer))
+        )
+
+      (module m g (defcap g () true)
+        (implements iface)
+        (defcap CAP:integer (a:integer) 1)
         )
       |])
   ]
