@@ -54,8 +54,8 @@ runStaticTest label src predicate = do
       assertBool ("Expected Error to match predicate, but got " <> show err <> " instead") (predicate err)
     Right _v -> assertFailure ("Error: Static failure test succeeded for test: " <> label)
 
-staticTests :: [(String, PactErrorI -> Bool, Text)]
-staticTests =
+desugarTests :: [(String, PactErrorI -> Bool, Text)]
+desugarTests =
   [ ("no_bind_body", isDesugarError _EmptyBindingBody, [text|(bind {"a":1} {"a":=a})|])
   , ("defpact_last_step_rollback", isDesugarError _LastStepWithRollback, [text|
       (module m g (defcap g () true)
@@ -142,16 +142,6 @@ staticTests =
       (namespace 'carl)
       (module m g (defcap g () true)
         (use carl.m)
-        )
-      |])
-  , ("import_unknown_module_namespaced_self_nons", isExecutionError _ModuleDoesNotExist, [text|
-      (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
-      (env-keys ["carl"])
-
-      (define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys))
-      (namespace 'carl)
-      (module m g (defcap g () true)
-        (use m)
         )
       |])
   , ("import_unknown_module_namespaced_outside", isDesugarError _NoSuchModule, [text|
@@ -548,8 +538,22 @@ staticTests =
       |])
   ]
 
+executionTests :: [(String, PactErrorI -> Bool, Text)]
+executionTests =
+  [ ("import_unknown_module_namespaced_self_nons", isExecutionError _ModuleDoesNotExist, [text|
+      (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
+      (env-keys ["carl"])
+
+      (define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys))
+      (namespace 'carl)
+      (module m g (defcap g () true)
+        (use m)
+        )
+      |])
+  ]
+
 tests :: TestTree
 tests =
-  testGroup "CoreStaticTests" (go <$> staticTests)
+  testGroup "CoreStaticTests" (go <$> desugarTests <> executionTests)
   where
   go (label, p, srcText) = testCase label $ runStaticTest label srcText p
