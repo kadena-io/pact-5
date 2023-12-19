@@ -1153,8 +1153,8 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
             [ (Field "table", PString domain)
             , (Field "key", PString key)
             , (Field "value", PObject rdata)]
-      CreateTableC (TableValue tn mn _ _) -> do
-        liftDbFunction info (_pdbCreateUserTable pdb tn mn)
+      CreateTableC (TableValue tn _ _) -> do
+        liftDbFunction info (_pdbCreateUserTable pdb tn)
         returnCEKValue cont handler (VString "TableCreated")
       EmitEventC ct@(CapToken fqn _) ->
         lookupFqName (_ctName ct) >>= \case
@@ -1492,7 +1492,7 @@ enforceGuard
   -> Cont step b i m
   -> CEKErrorHandler step b i m
   -> CEKEnv step b i m
-  -> Guard FullyQualifiedName PactValue
+  -> Guard QualifiedName PactValue
   -> m (CEKEvalResult step b i m)
 enforceGuard info cont handler env g = case g of
   GKeyset ks -> do
@@ -1523,9 +1523,9 @@ enforceCapGuard
   => i
   -> Cont step b i m
   -> CEKErrorHandler step b i m
-  -> CapabilityGuard FullyQualifiedName PactValue
+  -> CapabilityGuard QualifiedName PactValue
   -> m (CEKEvalResult step b i m)
-enforceCapGuard info cont handler (CapabilityGuard fqn args mpid) = case mpid of
+enforceCapGuard info cont handler (CapabilityGuard qn args mpid) = case mpid of
   Nothing -> enforceCap
   Just pid -> do
     currPid <- getDefPactId info
@@ -1533,10 +1533,10 @@ enforceCapGuard info cont handler (CapabilityGuard fqn args mpid) = case mpid of
     else returnCEK cont handler (VError "Capability pact guard failed: invalid pact id" info)
   where
   enforceCap = do
-    cond <- isCapInStack (CapToken fqn args)
+    cond <- isCapInStack (CapToken qn args)
     if cond then returnCEKValue cont handler (VBool True)
     else do
-      let errMsg = "Capability guard enforce failure cap not in scope: " <> renderQualName (fqnToQualName fqn)
+      let errMsg = "Capability guard enforce failure cap not in scope: " <> renderQualName qn
       returnCEK cont handler (VError errMsg info)
 
 runUserGuard
@@ -1545,18 +1545,17 @@ runUserGuard
   -> Cont step b i m
   -> CEKErrorHandler step b i m
   -> CEKEnv step b i m
-  -> UserGuard FullyQualifiedName PactValue
+  -> UserGuard QualifiedName PactValue
   -> m (CEKEvalResult step b i m)
-runUserGuard info cont handler env (UserGuard fqn args) =
-  lookupFqName fqn >>= \case
-    Just (Dfun d) -> do
+runUserGuard info cont handler env (UserGuard qn args) =
+  getModuleMember info (_cePactDb env) qn >>= \case
+    Dfun d -> do
       when (length (_dfunArgs d) /= length args) $ throwExecutionError info CannotApplyPartialClosure
       let env' = sysOnlyEnv env
-      clo <- mkDefunClosure d (_fqModule fqn) env'
+      clo <- mkDefunClosure d (_qnModName qn) env'
       -- Todo: sys only here
       applyLam (C clo) (VPactValue <$> args) (IgnoreValueC (PBool True) cont) handler
-    Just d -> throwExecutionError info (InvalidDefKind (defKind d) "run-user-guard")
-    Nothing -> throwExecutionError info (NameNotInScope fqn)
+    d -> throwExecutionError info (InvalidDefKind (defKind d) "run-user-guard")
 
 eval
   :: forall step b i m
@@ -1582,7 +1581,7 @@ interpretGuard
   .  (CEKEval step b i m, MonadEval b i m)
   => i
   -> BuiltinEnv step b i m
-  -> Guard FullyQualifiedName PactValue
+  -> Guard QualifiedName PactValue
   -> m PactValue
 interpretGuard info bEnv g = do
   ee <- readEnv

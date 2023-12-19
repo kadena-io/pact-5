@@ -169,6 +169,8 @@ data Closure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K
   , _cloInfo :: i
   } deriving (Show, Generic)
 
+instance (NFData b, NFData i) => NFData (Closure step b i m)
+
 -- | A closure coming from a lambda application with its accompanying environment capturing args,
 -- but is not partially applied
 data LamClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
@@ -180,6 +182,8 @@ data LamClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -
   , _lcloEnv :: !(CEKEnv step b i m)
   , _lcloInfo :: i
   } deriving (Show, Generic)
+
+instance (NFData b, NFData i) => NFData (LamClosure step b i m)
 
 -- | A partially applied function because we don't allow
 -- them to be applied at the lhs of an app since pact historically hasn't had partial closures.
@@ -194,6 +198,8 @@ data PartialClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Ty
   , _pcloEnv :: !(CEKEnv step b i m)
   , _pcloInfo :: i
   } deriving (Show, Generic)
+
+instance (NFData b, NFData i) => NFData (PartialClosure step b i m)
 
 data DefPactClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = DefPactClosure
@@ -234,6 +240,8 @@ data TableValue
   , _tvHash :: !ModuleHash
   , _tvSchema :: !Schema
   } deriving (Show, Generic)
+
+instance NFData TableValue
 
 -- | The type of our semantic runtime values
 data CEKValue (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
@@ -347,7 +355,9 @@ data NativeFn (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> 
   , _nativeFn :: NativeFunction step b i m
   , _nativeArity :: {-# UNPACK #-} !Int
   , _nativeLoc :: i
-  }
+  } deriving (Generic)
+
+instance (NFData b, NFData i) => NFData (NativeFn step b i m)
 
 -- | A partially applied native because we don't allow
 -- them to be applied at the lhs of an app since pact historically hasn't had partial closures.
@@ -360,7 +370,9 @@ data PartialNativeFn (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.T
   , _pNativeArity :: {-# UNPACK #-} !Int
   , _pNativeAppliedArgs :: [CEKValue step b i m]
   , _pNativeLoc :: i
-  } deriving Generic
+  } deriving (Generic)
+
+instance (NFData b, NFData i) => NFData (PartialNativeFn step b i m)
 
 
 
@@ -384,7 +396,7 @@ data CondCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> 
   -- ^ {bool comparison closure} <original value>
   | NotQC
   -- ^ Nada
-  deriving Show
+  deriving (Show, Generic)
 
 data BuiltinCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = MapC (CanApply step b i m) [PactValue] [PactValue]
@@ -422,21 +434,23 @@ data BuiltinCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type 
   | CreateTableC TableValue
   -- <create-table>
   | EmitEventC (CapToken FullyQualifiedName PactValue)
-  deriving Show
+  deriving (Show, Generic)
 
 
 -- | Control flow around Capability special forms, in particular cap token forms
 data CapCont (b :: K.Type) (i :: K.Type)
   = WithCapC (EvalTerm b i)
   | CreateUserGuardC FullyQualifiedName [EvalTerm b i] [PactValue]
-  deriving (Show)
+  deriving (Show, Generic)
 
 -- | What to do post-cap evaluation: do we pop the cap from the stack,
 -- or compose it within the capset
 data CapPopState
   = PopCapComposed
   | PopCapInvoke
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
+
+instance NFData CapPopState
 
 data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = Mt
@@ -491,6 +505,9 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   -- ^ Continuation for "enforced" errors.
   deriving (Show, Generic)
 
+instance (NFData b, NFData i) => NFData (BuiltinCont step b i m)
+instance (NFData b, NFData i) => NFData (CapCont b i)
+instance (NFData b, NFData i) => NFData (CondCont step b i m)
 instance (NFData b, NFData i) => NFData (Cont step b i m)
 
 -- | An enumerable set of frame types, for our gas model

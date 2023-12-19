@@ -229,7 +229,7 @@ sysOnlyEnv e
          , _pdbRead = read'
          , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
          , _pdbKeys = const dbOpDisallowed
-         , _pdbCreateUserTable = \_ _ -> dbOpDisallowed
+         , _pdbCreateUserTable = \_ -> dbOpDisallowed
          , _pdbBeginTx = const dbOpDisallowed
          , _pdbCommitTx = dbOpDisallowed
          , _pdbRollbackTx = dbOpDisallowed

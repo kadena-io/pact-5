@@ -67,7 +67,6 @@ import Data.Word(Word64)
 import Control.Applicative((<|>))
 import Control.DeepSeq
 import GHC.Generics
-import qualified Data.Text as T
 import qualified Data.Char as Char
 import qualified Text.Megaparsec as MP
 import qualified Text.Megaparsec.Char as MP
@@ -100,7 +99,7 @@ instance Pretty ModuleName where
 newtype BareName
   = BareName
   { _bnName :: Text }
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, NFData)
 
 instance Pretty BareName where
   pretty (BareName b) = pretty b
@@ -136,7 +135,9 @@ data DynamicName
   = DynamicName
   { _dnName :: Text
   , _dnCall :: Text
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Generic)
+
+instance NFData DynamicName
 
 data ParsedTyName
   = TQN QualifiedName
@@ -152,7 +153,9 @@ data ParsedName
   = QN QualifiedName
   | BN BareName
   | DN DynamicName
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic)
+
+instance NFData ParsedName
 
 -- | The member name of the ParsedName
 -- that is either an atom "f"
@@ -212,14 +215,18 @@ data Name
   = Name
   { _nName :: !Text
   , _nKind :: NameKind }
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Generic)
+
+instance NFData Name
 
 -- Dynamic references.
 data DynamicRef
   = DynamicRef
   { _drNameArg :: !Text
   , _drBindType :: DeBruijn
-  } deriving (Show, Eq, Ord)
+  } deriving (Show, Eq, Ord, Generic)
+
+instance NFData DynamicRef
 
 -- | NameKind distinguishes the identifier
 -- from the binding type, whether it is a free or bound variable,
@@ -235,7 +242,9 @@ data NameKind
   -- ^ module reference, pointing to the module name +
   -- the implemented interfaces
   | NDynRef DynamicRef
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Generic)
+
+instance NFData NameKind
 
 data FullyQualifiedName
   = FullyQualifiedName
@@ -312,7 +321,9 @@ data TableName
   = TableName
   { _tableName :: Text
   , _tableModuleName :: ModuleName
-  } deriving (Eq, Ord, Show)
+  } deriving (Eq, Ord, Show, Generic)
+
+instance NFData TableName
 
 makeLenses ''TableName
 
@@ -337,7 +348,7 @@ renderFullyQualName (FullyQualifiedName mn n mh) =
 -- | Newtype over text user keys
 newtype RowKey
   = RowKey { _rowKey :: Text }
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, NFData)
 
 makeLenses ''RowKey
 
@@ -346,6 +357,10 @@ makeLenses ''RowKey
 data FQNameRef name where
   FQParsed :: ParsedName -> FQNameRef ParsedName
   FQName :: FullyQualifiedName -> FQNameRef Name
+
+instance NFData (FQNameRef name) where
+  rnf (FQParsed pn) = rnf pn
+  rnf (FQName fqn) = rnf fqn
 
 instance Show (FQNameRef name) where
   show = \case
@@ -365,7 +380,7 @@ makeLenses ''QualifiedName
 --   parent + the nested continuation
 newtype DefPactId
   = DefPactId { _defpactId :: Text }
-  deriving (Eq,Ord,Show)
+  deriving (Eq,Ord,Show, NFData)
 
 instance Pretty DefPactId where
   pretty (DefPactId p) = pretty p

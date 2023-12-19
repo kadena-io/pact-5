@@ -223,7 +223,9 @@ data DefKind
   | DKDefPact
   | DKDefSchema Schema
   | DKDefTable
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic)
+
+instance NFData DefKind
 
 -- instance Pretty n => Pretty (Pred n) where
 --   pretty (Pred tc ty) = pretty tc <>  Pretty.angles (pretty ty)

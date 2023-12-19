@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
 
 module Pact.Core.PactValue
@@ -28,6 +29,10 @@ import Data.Map.Strict(Map)
 import Data.Text(Text)
 import Data.Maybe(isJust)
 import Data.Decimal(Decimal)
+
+import Control.DeepSeq
+import GHC.Generics
+
 import qualified Data.Vector as V
 import qualified Data.Map.Strict as M
 import qualified Pact.Time as PactTime
@@ -51,7 +56,9 @@ data PactValue
   | PModRef ModRef
   | PCapToken (CapToken FullyQualifiedName PactValue)
   | PTime !PactTime.UTCTime
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Generic)
+
+instance NFData PactValue
 
 makePrisms ''PactValue
 
@@ -143,7 +150,7 @@ checkPvType ty = \case
 
 newtype ObjectData term
   = ObjectData { _objectData :: Map Field term }
-  deriving (Eq, Show)
+  deriving (Eq, Show, NFData)
 
 envMap
   :: Lens (ObjectData term)

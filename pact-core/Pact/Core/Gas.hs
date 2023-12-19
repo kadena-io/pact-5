@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 
 module Pact.Core.Gas
  ( Gas(..)
@@ -24,6 +25,7 @@ module Pact.Core.Gas
  ) where
 
 import Control.Lens
+import Control.DeepSeq
 import Data.Decimal(Decimal)
 import Data.Word(Word64)
 import Data.Monoid(Sum(..))
@@ -35,7 +37,7 @@ import Data.Semiring(Semiring)
 -- integer, units will go in terms of 1e3 = 2ns
 newtype Gas
   = Gas Word64
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, NFData)
   deriving (Semigroup, Monoid) via (Sum Word64)
   deriving (Semiring, Enum) via Word64
 

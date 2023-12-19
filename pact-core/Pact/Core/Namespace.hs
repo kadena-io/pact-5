@@ -7,6 +7,8 @@ module Pact.Core.Namespace
  ) where
 
 import Control.Lens
+import Control.DeepSeq
+import GHC.Generics
 
 import Pact.Core.Names
 import Pact.Core.Guards
@@ -16,7 +18,9 @@ data Namespace = Namespace
   { _nsName :: !NamespaceName
   , _nsUser :: !(Guard QualifiedName PactValue)
   , _nsAdmin :: !(Guard QualifiedName PactValue)
-  } deriving (Eq, Show)
+  } deriving (Eq, Show, Generic)
+
+instance NFData Namespace
 
 makeLenses ''Namespace
 

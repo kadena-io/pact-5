@@ -62,7 +62,9 @@ import Data.Dynamic (Typeable)
 data ModuleData b i
   = ModuleData (EvalModule b i) (Map FullyQualifiedName (EvalDef b i))
   | InterfaceData (EvalInterface b i) (Map FullyQualifiedName (EvalDef b i))
-  deriving (Show, Eq, Functor)
+  deriving (Show, Eq, Functor, Generic)
+
+instance (NFData b, NFData i) => NFData (ModuleData b i)
 
 mdModuleName :: Lens' (ModuleData b i) ModuleName
 mdModuleName f = \case
@@ -124,7 +126,9 @@ data WriteType =
   -- | Update an existing row, or insert a new row if not found.
   --   Requires complete row value, enforced by pact runtime.
   Write
-  deriving (Eq,Ord,Show,Enum,Bounded)
+  deriving (Eq,Ord,Show,Enum,Bounded, Generic)
+
+instance NFData WriteType
 
 -- | Specify key and value types for database domains.
 data Domain k v b i where
@@ -246,7 +250,9 @@ data Loaded b i
   -- ^ The potentially loaded current namespace
   , _loAllLoaded :: Map FullyQualifiedName (Def Name Type b i)
   -- ^ All of our fully qualified dependencies
-  } deriving Show
+  } deriving (Show, Generic)
+
+instance (NFData b, NFData i) => NFData (Loaded b i)
 
 makeClassy ''Loaded
 

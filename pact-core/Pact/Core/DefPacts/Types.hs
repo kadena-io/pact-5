@@ -28,7 +28,7 @@ data DefPactContinuation name v
   = DefPactContinuation
   { _pcName :: name
   , _pcArgs :: [v]
-  } deriving (Eq, Show)
+  } deriving (Eq, Show, Generic)
 
 makeLenses ''DefPactContinuation
 
@@ -70,6 +70,12 @@ data DefPactStep = DefPactStep
   , _psRollback :: !Bool
   , _psDefPactId :: !DefPactId
   , _psResume :: !(Maybe Yield)
-  } deriving Show
+  } deriving (Show, Generic)
 
 makeLenses ''DefPactStep
+
+instance NFData Provenance
+instance NFData Yield
+instance NFData DefPactStep
+instance (NFData name, NFData v) => NFData (DefPactContinuation name v)
+instance NFData DefPactExec
