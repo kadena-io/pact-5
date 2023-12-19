@@ -5,6 +5,7 @@
 {-# LANGUAGE TypeApplications #-}
 
 
+
 module Pact.Core.Repl.Compile
  ( ReplCompileValue(..)
  , interpretReplProgram
@@ -24,7 +25,9 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
 import Pact.Core.Persistence
+import Pact.Core.Persistence.MockPersistence (mockPactDb)
 import Pact.Core.Builtin
+import Pact.Core.Info (SpanInfo)
 import Pact.Core.Names
 import Pact.Core.Repl.Utils
 import Pact.Core.IR.Desugar
@@ -33,6 +36,7 @@ import Pact.Core.IR.Term
 import Pact.Core.Compile
 import Pact.Core.Interpreter
 import Pact.Core.Environment
+import Pact.Core.Serialise (serialisePact_repl_spaninfo)
 
 
 import Pact.Core.IR.Eval.Runtime
@@ -80,7 +84,7 @@ interpretReplProgram (SourceCode _ source) display = do
         | b -> do
           oldSrc <- use replCurrSource
           evalState .= def
-          pactdb <- liftIO mockPactDb
+          pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
           replPactDb .= pactdb
           replEvalEnv .= defaultEvalEnv pactdb replRawBuiltinMap
           out <- loadFile (T.unpack txt) display
@@ -119,6 +123,7 @@ interpretReplProgram (SourceCode _ source) display = do
           VPactValue pv -> do
             pure (IPV pv i)
 
+  interpretExpr :: Purity -> EvalTerm ReplRawBuiltin SpanInfo  -> ReplM ReplRawBuiltin InterpretValue
   interpretExpr purity term = do
     pdb <- use (replEvalEnv . eePactDb)
     let builtins = replBuiltinEnv

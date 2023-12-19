@@ -1,3 +1,5 @@
+{-# LANGUAGE GADTs #-}
+
 module Pact.Core.Test.ReplTests where
 
 import Test.Tasty
@@ -6,7 +8,6 @@ import Test.Tasty.HUnit
 import Control.Monad(when)
 import Data.IORef
 import Data.Default
-import Data.Text(Text)
 import Data.Foldable(traverse_)
 import System.Directory
 import System.FilePath
@@ -16,22 +17,29 @@ import qualified Data.Text.IO as T
 
 import Pact.Core.Gas
 import Pact.Core.Literal
-import Pact.Core.Persistence
+import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Interpreter
 
 import Pact.Core.Repl.Utils
+import Pact.Core.Persistence (PactDb)
+import Pact.Core.Persistence.SQLite (withSqlitePactDb)
+
+import Pact.Core.Info (SpanInfo)
 import Pact.Core.Compile
 import Pact.Core.Repl.Compile
 import Pact.Core.PactValue
 import Pact.Core.Environment
 import Pact.Core.Builtin
 import Pact.Core.Errors
+import Pact.Core.Serialise
 
 tests :: IO TestTree
 tests = do
   files <- replTestFiles
-  pure $ testGroup "CoreReplTests" (runFileReplTest <$> files)
-
+  pure $ testGroup "ReplTests"
+    [ testGroup "in-memory db" (runFileReplTest <$> files)
+    , testGroup "sqlite db" (runFileReplTestSqlite <$> files)
+    ]
 
 replTestDir :: [Char]
 replTestDir = "pact-core-tests" </> "pact-tests"
@@ -41,13 +49,20 @@ replTestFiles = do
   filter (\f -> isExtensionOf "repl" f || isExtensionOf "pact" f) <$> getDirectoryContents replTestDir
 
 runFileReplTest :: TestName -> TestTree
-runFileReplTest file = testCase file $ T.readFile (replTestDir </> file) >>= runReplTest file
+runFileReplTest file = testCase file $ do
+  pdb <- mockPactDb serialisePact_repl_spaninfo
+  T.readFile (replTestDir </> file) >>= runReplTest pdb file
 
-runReplTest :: FilePath -> Text -> Assertion
-runReplTest file src = do
+runFileReplTestSqlite :: TestName -> TestTree
+runFileReplTestSqlite file = testCase file $ do
+  ctnt <- T.readFile (replTestDir </> file)
+  withSqlitePactDb serialisePact_repl_spaninfo ":memory:" $ \pdb -> do
+    runReplTest pdb file ctnt
+
+runReplTest :: PactDb ReplRawBuiltin SpanInfo -> FilePath -> T.Text -> Assertion
+runReplTest pdb file src = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
-  pdb <- mockPactDb
   let ee = defaultEvalEnv pdb replRawBuiltinMap
       source = SourceCode (takeFileName file) src
   let rstate = ReplState

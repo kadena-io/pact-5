@@ -15,7 +15,6 @@ import Pact.Core.Guards
 import Pact.Core.Names
 import Pact.Core.ModRefs
 import Pact.Core.Hash
-import Pact.Core.Principal
 import Pact.Core.DefPacts.Types
 import Pact.Time
 
@@ -64,7 +63,7 @@ instance J.Encode (StableEncoding Literal) where
 
 
 -- | Stable encoding of `Guard FullyQualifiedName PactValue`
-instance J.Encode (StableEncoding (Guard FullyQualifiedName PactValue)) where
+instance J.Encode (StableEncoding (Guard QualifiedName PactValue)) where
   build (StableEncoding g) = case g of
     GKeyset ks -> J.build (StableEncoding ks)
     GKeySetRef ksn -> J.object ["keysetref" J..= StableEncoding ksn]
@@ -75,7 +74,7 @@ instance J.Encode (StableEncoding (Guard FullyQualifiedName PactValue)) where
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `CapabilityGuard FullyQualifiedName PactValue`
-instance J.Encode (StableEncoding (CapabilityGuard FullyQualifiedName PactValue)) where
+instance J.Encode (StableEncoding (CapabilityGuard QualifiedName PactValue)) where
   build (StableEncoding (CapabilityGuard name args mpid)) = J.object
     [ "cgPactId" J..= fmap StableEncoding mpid
     , "cgArgs" J..= J.Array (StableEncoding <$> args)
@@ -111,10 +110,10 @@ instance J.Encode (StableEncoding DefPactGuard) where
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `UserGuard FullyQualifiedName PactValue`
-instance J.Encode (StableEncoding (UserGuard FullyQualifiedName PactValue)) where
+instance J.Encode (StableEncoding (UserGuard QualifiedName PactValue)) where
   build (StableEncoding (UserGuard fun args)) = J.object
     [ "args" J..= J.array (StableEncoding <$> args)
-    , "fun" J..= StableEncoding (fqnToQualName fun)
+    , "fun" J..= StableEncoding fun
     ]
   {-# INLINABLE build #-}
 
@@ -128,7 +127,7 @@ instance J.Encode (StableEncoding KeySetName) where
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `KeySet FullyQualifiedName`
-instance J.Encode (StableEncoding (KeySet FullyQualifiedName)) where
+instance J.Encode (StableEncoding (KeySet QualifiedName)) where
   build (StableEncoding (KeySet keys predFun)) =J.object
     [ "pred" J..= StableEncoding predFun
     , "keys" J..= J.Array (Set.map StableEncoding keys) -- TODO: is this valid?
@@ -141,7 +140,7 @@ instance J.Encode (StableEncoding (Map Field PactValue)) where
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `KSPredicate FullyQualifiedName`
-instance J.Encode (StableEncoding (KSPredicate FullyQualifiedName)) where
+instance J.Encode (StableEncoding (KSPredicate QualifiedName)) where
   build (StableEncoding ksp) = case ksp of
     KeysAll -> J.build ("keys-all" :: T.Text)
     Keys2 -> J.build ("keys-2" :: T.Text)
@@ -187,19 +186,6 @@ instance J.Encode (StableEncoding UTCTime) where
       denom = denominator . (% 1000) . fromIntegral . toPosixTimestampMicros
   {-# INLINABLE build #-}
 
--- | Stable encoding of `Principal`.
-instance J.Encode (StableEncoding Principal) where
-  build (StableEncoding principal) = case principal of
-    K pk -> kind 'K' [ "pk" J..= StableEncoding pk ]
-    W ph n -> kind 'W' [ "ph" J..= ph, "pred" J..= n ]
-    R ksn -> kind 'R' [ "ksn" J..= StableEncoding ksn ]
-    U fqn args -> kind 'U' [ "fqn" J..= fqn, "args" J..= args ]
-    M mn n -> kind 'M' [ "modname" J..= StableEncoding mn, "guard" J..= n ]
-    P pid n -> kind 'P' [ "pid" J..= StableEncoding pid, "fun" J..= n ]
-    C c -> kind 'C' [ "cap" J..= c ]
-    where
-      kind c rest = J.object $ "kind" J..= T.singleton c : rest
-
 -- | Stable encoding of `PactValue`
 instance J.Encode (StableEncoding PactValue) where
   build (StableEncoding pv) = case pv of
@@ -208,14 +194,15 @@ instance J.Encode (StableEncoding PactValue) where
     PGuard g -> J.build (StableEncoding g)
     PObject o -> J.build (StableEncoding o)
     PModRef mr -> J.build (StableEncoding mr)
+    -- TODO: implement/figure this out
     PCapToken _ct -> error "not implemented"
     PTime pt -> J.build (StableEncoding pt)
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `DefPactContinuation FullyQualifiedName PactValue`
-instance J.Encode (StableEncoding (DefPactContinuation FullyQualifiedName PactValue)) where
+instance J.Encode (StableEncoding (DefPactContinuation QualifiedName PactValue)) where
   build (StableEncoding (DefPactContinuation name args))= J.object
     [ "args" J..= J.Array (StableEncoding <$> args)
-    , "def" J..= J.build (StableEncoding (fqnToQualName name))
+    , "def" J..= J.build (StableEncoding name)
     ]
   {-# INLINABLE build #-}

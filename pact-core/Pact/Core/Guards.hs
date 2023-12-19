@@ -23,9 +23,6 @@ module Pact.Core.Guards
 )
 where
 
-import qualified Data.Char as Char
-import qualified Data.Set as S
-import qualified Data.Text as T
 import Control.Applicative
 import Control.Monad
 import Data.Attoparsec.Text
@@ -33,6 +30,10 @@ import Data.Foldable
 import Data.String
 import Data.Text(Text)
 import Text.Parser.Token as P
+
+import qualified Data.Char as Char
+import qualified Data.Set as S
+import qualified Data.Text as T
 
 import Pact.Core.Pretty
 import Pact.Core.Names
@@ -96,8 +97,8 @@ data KSPredicate name
   = KeysAll
   | Keys2
   | KeysAny
-  -- | CustomPredicate name
-  deriving (Eq, Show, Ord)
+  -- | CustomPredicate name -- TODO: When this is brought back, fix up `keySetGen`!
+  deriving (Eq, Show, Ord, Functor, Foldable, Traversable)
 
 predicateToString :: IsString s => KSPredicate name -> s
 predicateToString = \case
@@ -112,7 +113,7 @@ data KeySet name
   = KeySet
   { _ksKeys :: !(S.Set PublicKeyText)
   , _ksPredFun :: KSPredicate name
-  } deriving (Eq, Show, Ord)
+  } deriving (Eq, Show, Ord, Functor, Foldable, Traversable)
 
 instance Pretty name => Pretty (KeySet name) where
   pretty (KeySet ks f) = "KeySet" <+> commaBraces
@@ -202,13 +203,6 @@ instance (Pretty name, Pretty term) => Pretty (Guard name term) where
     GModuleGuard g -> pretty g
     GDefPactGuard dpg -> pretty dpg
 
-
-data Namespace name term
-  = Namespace
-  { _nsName :: !NamespaceName
-  , _nsUser :: !(Guard name term)
-  , _nsAdmin :: !(Guard name term)
-  } deriving (Eq, Show)
 
 instance (Pretty name, Pretty term) => Pretty (CapabilityGuard name term) where
   pretty (CapabilityGuard cg args pid) = "CapabilityGuard" <+> commaBraces

@@ -14,5 +14,5 @@ data Import
   = Import
   { _impModuleName  :: ModuleName
   , _impModuleHash :: Maybe ModuleHash
-  , _impImported :: Maybe [Text] }
-  deriving Show
+  , _impImported :: Maybe [Text]
+  } deriving (Show, Eq)

@@ -18,9 +18,10 @@ import Pact.Core.Builtin
 import Pact.Core.Environment
 import Pact.Core.Errors
 import Pact.Core.Gas
-import Pact.Core.Persistence
+import Pact.Core.Persistence.MockPersistence (mockPactDb)
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
+import Pact.Core.Serialise (serialisePact_repl_spaninfo)
 import Pact.Core.Test.TestPrisms
 
 isDesugarError :: Prism' DesugarError a -> PactErrorI -> Bool
@@ -33,7 +34,7 @@ runStaticTest :: String -> Text -> (PactErrorI -> Bool) -> Assertion
 runStaticTest label src predicate = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
-  pdb <- mockPactDb
+  pdb <- mockPactDb serialisePact_repl_spaninfo
   let ee = defaultEvalEnv pdb replRawBuiltinMap
       source = SourceCode label src
       rstate = ReplState

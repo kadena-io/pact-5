@@ -90,34 +90,12 @@ updateFqNameHash mname mhash (FullyQualifiedName tlmod n mh)
   | tlmod == mname = FullyQualifiedName tlmod n mhash
   | otherwise = FullyQualifiedName tlmod n mh
 
-updateGuardHash
-  :: ModuleName
-  -> ModuleHash
-  -> Guard FullyQualifiedName PactValue
-  -> Guard FullyQualifiedName PactValue
-updateGuardHash mname mhash = \case
-  GKeyset ks -> GKeyset ks
-  GKeySetRef ksn -> GKeySetRef ksn
-  GUserGuard (UserGuard fqn pvs) ->
-    GUserGuard $
-      UserGuard
-        (updateFqNameHash mname mhash fqn)
-        (updatePactValueHash mname mhash <$> pvs)
-  GCapabilityGuard (CapabilityGuard fqn pvs pid) ->
-    GCapabilityGuard $
-      CapabilityGuard
-        (updateFqNameHash mname mhash fqn)
-        (updatePactValueHash mname mhash <$> pvs)
-        pid
-  GModuleGuard mg -> GModuleGuard mg
-  g@GDefPactGuard{} -> g
-
 updatePactValueHash :: ModuleName -> ModuleHash -> PactValue -> PactValue
 updatePactValueHash mname mhash = \case
   PLiteral l -> PLiteral l
   PList l ->
     PList $ updatePactValueHash mname mhash <$> l
-  PGuard g -> PGuard $ updateGuardHash mname mhash g
+  PGuard g -> PGuard g
   PObject o -> PObject $ updatePactValueHash mname mhash <$> o
   PModRef m -> PModRef m
   PCapToken (CapToken ct pvs) ->
@@ -208,7 +186,7 @@ encodePactValue = \case
   PTime time ->
     B.int64HexFixed (PactTime.toPosixTimestampMicros time)
 
-encodeGuard :: Guard FullyQualifiedName PactValue -> Builder
+encodeGuard :: Guard QualifiedName PactValue -> Builder
 encodeGuard = \case
   GKeyset (KeySet ks pf) ->
     brackets $ commaSep
@@ -221,9 +199,9 @@ encodeGuard = \case
       KeysAny -> "keys-any"
   GKeySetRef (KeySetName name mNs) -> "KeySetName" <> parens (encodeMNamespace mNs <> encodeText name)
   GUserGuard (UserGuard fn args) ->
-    "UG" <> encodeApp (encodeFqnAsQual fn) (encodePactValue <$> args)
+    "UG" <> encodeApp (encodeQualName fn) (encodePactValue <$> args)
   GCapabilityGuard (CapabilityGuard ct args _) ->
-    "CapGuard" <> encodeApp (encodeFqnAsQual ct) (encodePactValue <$> args)
+    "CapGuard" <> encodeApp (encodeQualName ct) (encodePactValue <$> args)
   GModuleGuard (ModuleGuard mg n) ->
     "ModuleGuard" <> parens (encodeModuleName mg <+> encodeText n)
   GDefPactGuard (DefPactGuard (DefPactId dpid) name) -> "DefPactGuard" <> parens (encodeText dpid <+> encodeText name)

@@ -19,7 +19,7 @@ import Pact.Core.Persistence(Purity)
 data Interpreter b i m
   = Interpreter
   { _interpret :: !(Purity -> Term Name Type b i -> m InterpretValue)
-  , _interpretGuard :: !(i -> Guard FullyQualifiedName PactValue -> m InterpretValue)
+  , _interpretGuard :: !(i -> Guard QualifiedName PactValue -> m InterpretValue)
   }
 
 data InterpretValue

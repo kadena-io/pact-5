@@ -18,6 +18,8 @@ module Pact.Core.Names
  , NameKind(..)
  , BareName(..)
  , QualifiedName(..)
+ , qnName
+ , qnModName
  , renderQualName
  , renderModuleName
  , TypeVar(..)
@@ -37,6 +39,8 @@ module Pact.Core.Names
  , OverloadedName(..)
  , FullyQualifiedName(..)
  , TableName(..)
+ , tableName
+ , tableModuleName
  , replRawModuleName
  , replModuleName
  , replModuleHash
@@ -44,12 +48,12 @@ module Pact.Core.Names
  , fqnToQualName
  , NativeName(..)
  , RowKey(..)
+ , rowKey
  , renderFullyQualName
  , FQNameRef(..)
  , fqName
  , fqModule
  , fqHash
- , userTable
  , DefPactId(..)
  , parseModuleName
  , renderDefPactId
@@ -57,9 +61,9 @@ module Pact.Core.Names
 
 import Control.Lens
 import Data.Text(Text)
+import qualified Data.Text as T
 import Data.Word(Word64)
 import Control.Applicative((<|>))
-import qualified Data.Text as T
 import qualified Data.Char as Char
 import qualified Text.Megaparsec as MP
 import qualified Text.Megaparsec.Char as MP
@@ -291,11 +295,16 @@ instance Pretty NamedDeBruijn where
   pretty (NamedDeBruijn _i _n) =
     pretty _n
 
-newtype TableName = TableName { _tableName :: Text }
-  deriving (Eq, Ord, Show)
+data TableName
+  = TableName
+  { _tableName :: Text
+  , _tableModuleName :: ModuleName
+  } deriving (Eq, Ord, Show)
+
+makeLenses ''TableName
 
 instance Pretty TableName where
-  pretty (TableName tn) = pretty tn
+  pretty (TableName tn ns) = pretty ns <> pretty ':' <> pretty tn
 
 -- | Constants for resolving repl things
 replRawModuleName :: Text
@@ -317,6 +326,8 @@ newtype RowKey
   = RowKey { _rowKey :: Text }
   deriving (Eq, Ord, Show)
 
+makeLenses ''RowKey
+
 -- | A Name reference which
 -- is always fully qualified after name resolution
 data FQNameRef name where
@@ -333,9 +344,7 @@ instance Eq (FQNameRef name) where
   (FQName fqn) == (FQName fqn') = fqn == fqn'
 
 makeLenses ''FullyQualifiedName
-
-userTable :: TableName -> TableName
-userTable (TableName tn) = TableName ("USER_" <> tn)
+makeLenses ''QualifiedName
 
 -- | The identifier that indexes defpacts in the db,
 --   generally computed from the continuation, or
