@@ -8,6 +8,7 @@ module Pact.Core.Evaluate
   , setupEvalEnv
   , interpret
   , compileOnly
+  , evaluateDefaultState
   ) where
 
 import Control.Lens
@@ -62,7 +63,7 @@ newtype RawCode = RawCode { _rawCode :: Text }
 data EvalResult = EvalResult
   { _erInput :: !EvalInput
     -- ^ compiled user input
-  , _erOutput :: ![CompileValue ()] -- TODO: it was PactValue previously which was more informative
+  , _erOutput :: ![CompileValue ()]
     -- ^ Output values
   , _erLogs :: ![TxLog ByteString]
     -- ^ Transaction logs
@@ -91,9 +92,9 @@ setupEvalEnv
   -- -> SPVSupport -- <- WIP: Ignore for now
   -> PublicData -- <- we have this
   -> S.Set ExecutionFlag
-  -> IO (EvalEnv RawBuiltin ())
-setupEvalEnv pdb mode msgData np pd efs = do
-  pure EvalEnv
+  -> EvalEnv RawBuiltin ()
+setupEvalEnv pdb mode msgData np pd efs =
+  EvalEnv
     { _eeMsgSigs = mempty
     , _eePactDb = pdb
     , _eeMsgBody = mdData msgData
@@ -106,26 +107,28 @@ setupEvalEnv pdb mode msgData np pd efs = do
     , _eeNamespacePolicy = np
     }
 
-evalExec :: EvalEnv RawBuiltin () -> RawCode -> IO EvalResult
+evalExec :: EvalEnv RawBuiltin () -> RawCode -> IO (Either (PactError ()) EvalResult)
 evalExec evalEnv rc = do
   terms <- either throwM return $ compileOnly rc
-  interpret evalEnv (Right terms)
+  either throwError return <$> interpret evalEnv (Right terms)
 
-interpret :: EvalEnv RawBuiltin () -> EvalInput -> IO EvalResult
+interpret :: EvalEnv RawBuiltin () -> EvalInput -> IO (Either (PactError ()) EvalResult)
 interpret evalEnv evalInput = do
   (result, state) <- runEvalM evalEnv def $ evalWithinTx evalInput
-  (rs, logs, txid) <- either throwM return result
-  return $! EvalResult
-    { _erInput = evalInput
-    , _erOutput = rs
-    , _erLogs = logs
-    , _erExec = _esDefPactExec state
-    , _erGas = Gas 0 -- TODO: return gas
-    , _erLoadedModules = _loModules $ _esLoaded state
-    , _erTxId = txid
-    , _erLogGas = Nothing
-    , _erEvents = _esEvents state
-    }
+  case result of
+    Left err -> return $ Left err
+    Right (rs, logs, txid) ->
+      return $! Right $! EvalResult
+        { _erInput = evalInput
+        , _erOutput = rs
+        , _erLogs = logs
+        , _erExec = _esDefPactExec state
+        , _erGas = Gas 0 -- TODO: return gas
+        , _erLoadedModules = _loModules $ _esLoaded state
+        , _erTxId = txid
+        , _erLogGas = Nothing
+        , _erEvents = _esEvents state
+        }
 
 -- Used to be `evalTerms`
 evalWithinTx
@@ -185,6 +188,9 @@ resumePact mdp = do
         VPactValue pv -> do
           pure (IPV pv ())
 
+-- | Compiles and evaluates the code
+evaluateDefaultState :: RawCode -> EvalM RawBuiltin () [CompileValue ()]
+evaluateDefaultState = either throwError evaluateTerms . compileOnly
 
 evaluateTerms
   :: [Lisp.TopLevel ()]
