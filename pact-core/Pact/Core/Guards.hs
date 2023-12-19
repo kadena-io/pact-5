@@ -48,10 +48,6 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Text.Parser.Token as P
 
-import qualified Data.Char as Char
-import qualified Data.Set as S
-import qualified Data.Text as T
-
 import Pact.Core.Pretty
 import Pact.Core.Names
 import Pact.Core.RuntimeParsers
