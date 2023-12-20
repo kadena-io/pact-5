@@ -558,6 +558,15 @@ executionTests =
         (defun foo:string ())
         )
     |])
+  , ("interface_upgrade", isExecutionError _CannotUpgradeInterface, [text|
+      (interface iface
+        (defun foo:string ())
+        )
+      (interface iface
+        (defun foo:string ())
+        (defun bar:string ())
+        )
+    |])
   , ("import_unknown_module_namespaced_self_nons", isExecutionError _ModuleDoesNotExist, [text|
       (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
       (env-keys ["carl"])
