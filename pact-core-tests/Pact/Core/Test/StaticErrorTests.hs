@@ -24,6 +24,9 @@ import Pact.Core.Repl.Utils
 import Pact.Core.Serialise (serialisePact_repl_spaninfo)
 import Pact.Core.Test.TestPrisms
 
+isParseError :: Prism' ParseError a -> PactErrorI -> Bool
+isParseError p s = isJust $ preview (_PEParseError . _1 . p) s
+
 isDesugarError :: Prism' DesugarError a -> PactErrorI -> Bool
 isDesugarError p s = isJust $ preview (_PEDesugarError . _1 . p) s
 
@@ -54,6 +57,23 @@ runStaticTest label src predicate = do
       assertBool ("Expected Error to match predicate, but got " <> show err <> " instead") (predicate err)
     Right _v -> assertFailure ("Error: Static failure test succeeded for test: " <> label)
 
+parseTests :: [(String, PactErrorI -> Bool, Text)]
+parseTests =
+  [ ("defpact_empty", isParseError _ParsingError, [text|
+      (module m g (defcap g () true)
+        (defpact f ())
+        )
+      |])
+  , ("defpact_outside_module", isParseError _ParsingError, [text|
+      (defpact f ()
+        (step "step-0")
+        )
+      |])
+  , ("defcap_outside_module", isParseError _ParsingError, [text|
+      (defcap G () true)
+      |])
+  ]
+
 desugarTests :: [(String, PactErrorI -> Bool, Text)]
 desugarTests =
   [ ("no_bind_body", isDesugarError _EmptyBindingBody, [text|(bind {"a":1} {"a":=a})|])
@@ -72,26 +92,6 @@ desugarTests =
           )
         )
       |])
-  {- TODO unable to trigger Desugar.hs:336/344 in `desugarDefun`, parser gets there first
-  , ("defun_outside_module", isDesugarError _NotAllowedOutsideModule, [text|
-      (interface iface
-        (defun foo:string (m:string) m)
-        )
-      |]) -}
-  {- TODO ditto in desugarDefPact
-  , ("defpact_empty", isDesugarError _EmptyDefPact, [text|
-      (module m g (defcap g () true)
-        (defpact f ())
-        )
-      |]) -}
-  {- TODO ditto in desugarDefPact
-  , ("defpact_outside_module", isDesugarError _NotAllowedOutsideModule, [text|
-      (defpact f ()
-        (step "step-0")
-        )
-      |]) -}
-  {- TODO ditto in desugarDefCap
-  , ("defcap_outside_module", isDesugarError _NotAllowedOutsideModule, [text|(defcap G () true)|]) -}
   , ("managed_invalid", isDesugarError _InvalidManagedArg, [text|
       (module mgd-mod G
         (defcap G () true)
@@ -554,6 +554,6 @@ executionTests =
 
 tests :: TestTree
 tests =
-  testGroup "CoreStaticTests" (go <$> desugarTests <> executionTests)
+  testGroup "CoreStaticTests" (go <$> parseTests <> desugarTests <> executionTests)
   where
   go (label, p, srcText) = testCase label $ runStaticTest label srcText p
