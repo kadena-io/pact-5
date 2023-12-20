@@ -47,7 +47,6 @@ import Pact.Core.Repl.Runtime.ReplBuiltin
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
-import qualified Pact.Core.IR.Eval.Runtime as Runtime
 
 type Repl = ReplM ReplRawBuiltin
 
