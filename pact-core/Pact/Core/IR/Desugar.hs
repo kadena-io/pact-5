@@ -384,7 +384,7 @@ toArg (Lisp.MArg n mty) = Arg n mty
 
 desugarDefun
   :: (MonadEval b i m, DesugarBuiltin b)
-  => ModuleName
+  => ModuleName             -- ^ proves this function is called within Pact module scope
   -> Lisp.Defun i
   -> RenamerT b i m (Defun ParsedName DesugarType b i)
 desugarDefun _modWitness (Lisp.Defun defname [] mrt body _ _ i) = do
@@ -422,7 +422,7 @@ desugarDefPact mn (Lisp.DefPact dpname margs rt (step:steps) _ _ i) = do
 
 desugarDefConst
   :: (MonadEval b i m, DesugarBuiltin b)
-  => ModuleName
+  => ModuleName             -- ^ proves this function is called within Pact module scope
   -> Lisp.DefConst i
   -> RenamerT b i m (DefConst ParsedName DesugarType b i)
 desugarDefConst _modWitness (Lisp.DefConst n mty e _ i) = do
@@ -449,7 +449,7 @@ desugarDefMeta info args = \case
 
 desugarDefCap
   :: (MonadEval b i m, DesugarBuiltin b)
-  => ModuleName
+  => ModuleName             -- ^ proves this function is called within Pact module scope
   -> Lisp.DefCap i
   -> RenamerT b i m (DefCap ParsedName DesugarType b i)
 desugarDefCap _modWitness (Lisp.DefCap dcn arglist rtype term _docs _model meta i) = do
@@ -460,7 +460,7 @@ desugarDefCap _modWitness (Lisp.DefCap dcn arglist rtype term _docs _model meta 
 
 desugarDefSchema
   :: (MonadEval b i m)
-  => ModuleName
+  => ModuleName             -- ^ proves this function is called within Pact module scope
   -> Lisp.DefSchema i
   -> RenamerT b i m (DefSchema DesugarType i)
 desugarDefSchema _modWitness (Lisp.DefSchema dsn args _docs _model i) = do
@@ -470,7 +470,7 @@ desugarDefSchema _modWitness (Lisp.DefSchema dsn args _docs _model i) = do
 
 desugarDefTable
   :: (MonadEval b i m)
-  => ModuleName
+  => ModuleName             -- ^ proves this function is called within Pact module scope
   -> Lisp.DefTable i
   -> RenamerT b i m  (DefTable ParsedName i)
 desugarDefTable _modWitness (Lisp.DefTable dtn dts _ i) =
