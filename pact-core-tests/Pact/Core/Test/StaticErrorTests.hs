@@ -540,7 +540,25 @@ desugarTests =
 
 executionTests :: [(String, PactErrorI -> Bool, Text)]
 executionTests =
-  [ ("import_unknown_module_namespaced_self_nons", isExecutionError _ModuleDoesNotExist, [text|
+  [ ("enforce_ns_install_module", isExecutionError _NamespaceInstallError, [text|
+      (module m g (defcap g () true)
+        (defun manage (ns guard) true)
+        )
+      (env-namespace-policy false (manage))
+
+      (module another ag (defcap ag () true))
+    |])
+  , ("enforce_ns_install_module", isExecutionError _NamespaceInstallError, [text|
+      (module m g (defcap g () true)
+        (defun manage (ns guard) true)
+        )
+      (env-namespace-policy false (manage))
+
+      (interface iface
+        (defun foo:string ())
+        )
+    |])
+  , ("import_unknown_module_namespaced_self_nons", isExecutionError _ModuleDoesNotExist, [text|
       (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
       (env-keys ["carl"])
 
