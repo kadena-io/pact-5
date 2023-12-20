@@ -128,7 +128,7 @@ pattern PublicKey k <- CheckedPublicKey k
 
 {-# COMPLETE PublicKey #-}
 
--- | Checks whether an 'UncheckedPublicKey' is valid. This is the only way to construct a t'PublicKey'
+-- | Checks whether an 'UncheckedPublicKey' is valid. This is the only way to construct a 'PublicKey'
 checkPublicKey :: UncheckedPublicKey -> Either Text PublicKey
 checkPublicKey key@PublicKeyEdDSA {..}
   | actualSize == expectedSize = Right $ CheckedPublicKey key
