@@ -298,6 +298,7 @@ test-suite core-tests
     , cborg
     , groups
     , semirings
+    , neat-interpolation
     , pact-core:pact-core-crypto
 
   other-modules:
