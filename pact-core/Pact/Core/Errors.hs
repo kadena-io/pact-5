@@ -104,20 +104,12 @@ instance Pretty ParseError where
 data DesugarError
   = UnboundTermVariable Text
   -- ^ Encountered a variable with no binding <varname>
-  | UnsupportedType Text
-  -- ^ Type left over from old pact type system (e.g poly list)
   | UnboundTypeVariable Text
   -- ^ Found an unbound type variable in a type definition
   -- (note: in this current version of core this should never occur,
   --  there are no userland type variables that can be annotated)
-  | UnannotatedArgumentType Text
-  -- ^ A declaration has a type parameter without an annotation <argument name>
-  | UnannotatedReturnType Text
-  -- ^ Function <function name> has an unannotated return type
   | InvalidCapabilityReference Text
   -- ^ Function <function name> is used in a scope that expected a capability
-  | CapabilityOutOfScope Text ModuleName
-  -- ^ Capability <modulename . defname > is used in a scope outside of its static allowable scope
   | NoSuchModuleMember ModuleName Text
   -- ^ Module <modulename> does not have member <membername>
   | NoSuchModule ModuleName
@@ -134,8 +126,6 @@ data DesugarError
   -- ^ Form <text> not allowed within defcap
   | NotAllowedOutsideModule Text
   -- ^ Form not allowed outside of module call <description
-  | UnresolvedQualName QualifiedName
-  -- ^ no such qualified name
   | InvalidGovernanceRef QualifiedName
   -- ^ No such governance
   | InvalidDefInTermVariable Text
@@ -166,20 +156,12 @@ instance Exception DesugarError
 
 instance Pretty DesugarError where
   pretty = \case
-    UnsupportedType t ->
-      Pretty.hsep ["Unsupported type in pact-core:", pretty t]
-    UnannotatedArgumentType t ->
-      Pretty.hsep ["Unannotated type in argument:", pretty t]
-    UnannotatedReturnType t ->
-      Pretty.hsep ["Declaration", pretty t, "is missing a return type"]
     UnboundTermVariable t ->
       Pretty.hsep ["Unbound variable", pretty t]
     UnboundTypeVariable t ->
       Pretty.hsep ["Unbound type variable", pretty t]
     InvalidCapabilityReference t ->
       Pretty.hsep ["Variable or function used in special form is not a capability", pretty t]
-    CapabilityOutOfScope fn mn ->
-      Pretty.hsep [pretty mn <> "." <> pretty fn, "was used in a capability special form outside of the"]
     NoSuchModuleMember mn txt ->
       Pretty.hsep ["Module", pretty mn, "has no such member:", pretty txt]
     NoSuchModule mn ->
@@ -203,8 +185,6 @@ instance Pretty DesugarError where
       , pretty mn
       , "in the following functions:"
       , pretty txts]
-    UnresolvedQualName qual ->
-      Pretty.hsep ["No such name", pretty qual]
     InvalidGovernanceRef gov ->
       Pretty.hsep ["Invalid governance:", pretty gov]
     InvalidDefInTermVariable n ->

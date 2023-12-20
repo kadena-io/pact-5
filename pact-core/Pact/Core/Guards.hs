@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeApplications #-}
 
 
 module Pact.Core.Guards
@@ -12,7 +13,6 @@ module Pact.Core.Guards
 , parseAnyKeysetName
 , Governance(..)
 , KeySet(..)
-, enforceKeyFormats
 , Guard(..)
 , UserGuard(..)
 , CapabilityGuard(..)
@@ -21,27 +21,42 @@ module Pact.Core.Guards
 , predicateToString
 , ModuleGuard(..)
 , CapGovRef(..)
+
+-- * Key Format Validation
+, allKeyFormats
+, ed25519HexFormat
+, webAuthnFormat
+, isValidKeyFormat
+, enforceKeyFormats
 )
 where
 
 import Control.Applicative
+import Control.Lens (_Left, over)
 import Control.Monad
+import Control.DeepSeq
 import Data.Attoparsec.Text
+import Data.ByteString (ByteString)
 import Data.Foldable
+import Data.Maybe (isJust)
 import Data.String
 import Data.Text(Text)
+import GHC.Generics
 import Text.Parser.Token as P
 
-import Control.DeepSeq
-import GHC.Generics
-
-import qualified Data.Char as Char
-import qualified Data.Set as S
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+import qualified Data.Set as S
+import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString.Base16 as B16
+import qualified Data.Char as Char
+import qualified Codec.Serialise as Serialise
 
 import Pact.Core.Pretty
 import Pact.Core.Names
 import Pact.Core.RuntimeParsers
+import qualified Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as WA
+import qualified Pact.Crypto.WebAuthn.Cose.SignAlg as WA
 
 newtype PublicKeyText = PublicKeyText { _pubKey :: Text }
   deriving (Eq,Ord,Show, NFData)
@@ -137,18 +152,57 @@ instance Pretty name => Pretty (KeySet name) where
     , "pred: " <> pretty f
     ]
 
-type KeyFormatValidator = PublicKeyText -> Bool
+ed25519HexFormat :: PublicKeyText -> Bool
+ed25519HexFormat (PublicKeyText k) = T.length k == 64 && T.all isHexDigitLower k
 
-ed22519Hex :: KeyFormatValidator
-ed22519Hex (PublicKeyText k) = T.length k == 64 && T.all isHexDigitLower k
+webAuthnFormat :: PublicKeyText -> Bool
+webAuthnFormat = isJust . parseWebAuthnPublicKeyText
+
+parseWebAuthnPublicKeyText :: PublicKeyText -> Maybe WA.CosePublicKey
+parseWebAuthnPublicKeyText (PublicKeyText k)
+  | Just pkText <- T.stripPrefix webAuthnPrefix k
+  , T.all isHexDigitLower pkText
+  , Right kbs <- B16.decode (T.encodeUtf8 pkText)
+  , Right pk <- parseWebAuthnPublicKey kbs
+  = Just pk
+  | otherwise = Nothing
   where
-  isHexDigitLower c = Char.isDigit c || (fromIntegral (Char.ord c - Char.ord 'a') :: Word) <= 5
+  parseWebAuthnPublicKey :: ByteString -> Either String WA.CosePublicKey
+  parseWebAuthnPublicKey rawPk = do
+    pk <- over _Left (\e -> "WebAuthn public key parsing error: " <> show e) $
+      Serialise.deserialiseOrFail @WA.CosePublicKey (BSL.fromStrict rawPk)
+    webAuthnPubKeyHasValidAlg pk
+    return pk
 
-keyFormats :: [KeyFormatValidator]
-keyFormats = [ed22519Hex]
+  webAuthnPubKeyHasValidAlg :: WA.CosePublicKey -> Either String ()
+  webAuthnPubKeyHasValidAlg (WA.PublicKeyWithSignAlg _ signAlg) =
+    unless (WA.fromCoseSignAlg signAlg `elem` validCoseSignAlgorithms)
+      $ Left "Signing algorithm must be EdDSA or P256"
+
+validCoseSignAlgorithms :: [Int]
+validCoseSignAlgorithms =
+  [ -7 -- ECDSA with SHA-256, the most common WebAuthn signing algorithm.
+  , -8 -- EdDSA, which is also supported by YubiKey.
+  ]
+
+-- | Lower-case hex numbers.
+isHexDigitLower :: Char -> Bool
+isHexDigitLower c =
+  -- adapted from GHC.Unicode#isHexDigit
+  Char.isDigit c || (fromIntegral (Char.ord c - Char.ord 'a')::Word) <= 5
+
+
+-- | Prefix for any webauthn keys.
+-- This prefix is required for recognizing public keys originating from webauthn
+-- attestastion ceremonies later in a pact runtime context.
+webAuthnPrefix :: Text
+webAuthnPrefix = "WEBAUTHN-"
+
+allKeyFormats :: [PublicKeyText -> Bool]
+allKeyFormats = [ed25519HexFormat, webAuthnFormat]
 
 isValidKeyFormat :: PublicKeyText -> Bool
-isValidKeyFormat k = any ($ k) keyFormats
+isValidKeyFormat k = any ($ k) allKeyFormats
 
 enforceKeyFormats :: (PublicKeyText -> err) -> KeySet a -> Either err ()
 enforceKeyFormats onErr (KeySet keys _pred) = traverse_ validateKey keys

@@ -189,6 +189,12 @@ library
     Pact.Core.Serialise.LegacyPact
     Pact.Core.Serialise.CBOR_V1
 
+    -- WebAuthn
+    Pact.Crypto.WebAuthn.Cose.PublicKey
+    Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
+    Pact.Crypto.WebAuthn.Cose.Registry
+    Pact.Crypto.WebAuthn.Cose.SignAlg
+
 executable gasmodel
   import: pact-core-common
   hs-source-dirs: gasmodel
@@ -198,9 +204,6 @@ executable gasmodel
   build-depends:
     , pact-core
     , criterion
-
-  exposed-modules:
-    Pact.Core.Gas.InterpreterGas
 
 executable repl
   main-is: pact-core/Pact/Core/Repl.hs
@@ -288,6 +291,7 @@ test-suite core-tests
     , cborg
     , groups
     , semirings
+    , neat-interpolation
     , pact-core:pact-core-crypto
 
   other-modules:

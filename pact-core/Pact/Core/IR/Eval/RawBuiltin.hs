@@ -1432,7 +1432,8 @@ coreCompose info b cont handler env = \case
 createPrincipalForGuard :: Guard QualifiedName PactValue -> Pr.Principal
 createPrincipalForGuard = \case
   GKeyset (KeySet ks pf) -> case (toList ks, pf) of
-    ([k], KeysAll) -> Pr.K k
+    ([k], KeysAll)
+      | ed25519HexFormat k -> Pr.K k
     (l, _) -> let h = mkHash $ map (T.encodeUtf8 . _pubKey) l
               in Pr.W (hashToText h) (predicateToString pf)
   GKeySetRef ksn -> Pr.R ksn
