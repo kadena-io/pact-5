@@ -205,6 +205,10 @@ executable gasmodel
     , pact-core
     , criterion
 
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+
 executable repl
   main-is: pact-core/Pact/Core/Repl.hs
 
