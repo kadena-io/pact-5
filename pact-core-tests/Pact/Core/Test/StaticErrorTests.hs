@@ -548,7 +548,7 @@ executionTests =
 
       (module another ag (defcap ag () true))
     |])
-  , ("enforce_ns_install_module", isExecutionError _NamespaceInstallError, [text|
+  , ("enforce_ns_install_interface", isExecutionError _NamespaceInstallError, [text|
       (module m g (defcap g () true)
         (defun manage (ns guard) true)
         )
@@ -557,6 +557,18 @@ executionTests =
       (interface iface
         (defun foo:string ())
         )
+    |])
+  , ("enforce_ns_define_namespace", isExecutionError _DefineNamespaceError, [text|
+      (module m g (defcap g () true)
+        (defun manage (ns guard) false)
+        )
+      (env-namespace-policy false (manage))
+
+      (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
+      (env-keys ["carl"])
+
+      (define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys))
+      (namespace 'carl)
     |])
   , ("interface_upgrade", isExecutionError _CannotUpgradeInterface, [text|
       (interface iface
@@ -597,6 +609,14 @@ executionTests =
         (use m)
         )
       |])
+  , ("get_module_unknown", isExecutionError _ModuleDoesNotExist, [text|
+      (describe-module 'nonexistent)
+      |])
+
+  , ("env_namespace_wrong_kind", isExecutionError _NativeArgumentsError, [text|
+      (module m g (defcap g () true))
+      (env-namespace-policy false (m.g))
+    |])
   ]
 
 tests :: TestTree
