@@ -2,6 +2,7 @@
 
 module Pact.Core.Evaluate
   ( MsgData(..)
+  , RawCode(..)
   , EvalResult(..)
   , initMsgData
   , evalExec
