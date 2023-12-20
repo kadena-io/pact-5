@@ -612,6 +612,16 @@ executionTests =
   , ("get_module_unknown", isExecutionError _ModuleDoesNotExist, [text|
       (describe-module 'nonexistent)
       |])
+  , ("defconst_not_a_value_module", isExecutionError _ConstIsNotAPactValue, [text|
+      (module m g (defcap g () true)
+        (defconst not-a-value (lambda (x) x))
+        )
+      |])
+  , ("defconst_not_a_value_iface", isExecutionError _ConstIsNotAPactValue, [text|
+      (interface iface
+        (defconst not-a-value (lambda (x) x))
+        )
+      |])
 
   , ("env_namespace_wrong_kind", isExecutionError _NativeArgumentsError, [text|
       (module m g (defcap g () true))
