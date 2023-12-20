@@ -1,5 +1,6 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Pact.Core.Repl.Runtime.ReplBuiltin where
 
@@ -53,8 +54,8 @@ corePrint info b cont handler _env = \case
     returnCEKValue cont handler (VLiteral LUnit)
   args -> argsError info b args
 
-rawExpect :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
-rawExpect info b cont handler _env = \case
+coreExpect :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+coreExpect info b cont handler _env = \case
   [VLiteral (LString msg), VPactValue v1, VClosure clo] ->
     applyLamUnsafe clo [] Mt CEKNoHandler >>= \case
        EvalValue (VPactValue v2) ->
@@ -106,7 +107,7 @@ coreExpectFailure info b cont handler _env = \case
 
 
 
-continuePact :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+continuePact :: forall step b . (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
 continuePact info b cont handler env = \case
   [VInteger s] -> go s False Nothing Nothing
   [VInteger s, VBool r] -> go s r Nothing Nothing
@@ -125,14 +126,18 @@ continuePact info b cont handler env = \case
             pid = maybe (_peDefPactId pactExec) DefPactId mpid
             yield = case userResume of
               Nothing -> _peYield pactExec
-              Just o -> pure (Yield o Nothing Nothing)
+              Just o -> case _peYield pactExec of
+                Just (Yield _ p _) -> pure (Yield o p Nothing)
+                Nothing ->
+                  pure (Yield o Nothing Nothing)
           in pure (pid, yield)
       let pactStep = DefPactStep (fromInteger step) rollback pid myield
       setEvalState esDefPactExec Nothing
       replEvalEnv . eeDefPactStep .= Just pactStep
-      s <- tryError $ resumePact info cont handler env Nothing
+      merr <- tryError $ evalUnsafe @step =<< resumePact info Mt CEKNoHandler env Nothing
       replEvalEnv . eeDefPactStep .= Nothing
-      liftEither s
+      v <- liftEither merr
+      returnCEK cont handler v
 
 pactState :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
 pactState info b cont handler _env = \case
@@ -374,7 +379,7 @@ replRawBuiltinRuntime = \case
   RBuiltinWrap cb ->
     rawBuiltinRuntime cb
   RBuiltinRepl br -> case br of
-    RExpect -> rawExpect
+    RExpect -> coreExpect
     RExpectFailure -> coreExpectFailure
     RExpectFailureMatch -> coreExpectFailure
     RExpectThat -> coreExpectThat

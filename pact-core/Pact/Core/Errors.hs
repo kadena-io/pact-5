@@ -347,6 +347,7 @@ data EvalError
   -- ^ Non-recoverable guard enforces.
   | ConstIsNotAPactValue QualifiedName
   | PointNotOnCurve
+  | YieldProvenanceDoesNotMatch Provenance [Provenance]
   deriving (Show, Generic)
 
 instance NFData EvalError

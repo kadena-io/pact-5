@@ -36,7 +36,7 @@ module Pact.Core.IR.Eval.CEK
 
 
 import Control.Lens
-import Control.Monad(zipWithM, unless, when)
+import Control.Monad
 import Data.Default
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Foldable(find, foldl', traverse_)
@@ -369,6 +369,29 @@ applyPact i pc ps cont handler cenv nested = useEvalState esDefPactExec >>= \cas
     _otherwise -> failInvariant i "defpact continuation does not point to defun"
   where
   sf = StackFrame (view (pcName . qnName) pc) (view (pcName . qnModName) pc) SFDefPact
+
+emitXChainEvents
+  :: (MonadEval b i m)
+  => Maybe Yield
+  -- ^ from '_psResume', indicating a cross-chain resume.
+  -> DefPactExec
+   -- ^ tested for yield provenance to indicate a cross-chain yield.
+  -> m ()
+emitXChainEvents mResume dpe = do
+  forM_ mResume $ \r -> case r of
+    (Yield _ (Just (Provenance _ mh)) (Just sc)) ->
+      emitXEvent "X_RESUME" sc mh
+    _ -> return ()
+  forM_ (_peYield dpe) $ \y -> case y of
+    (Yield _ (Just (Provenance tc mh)) _) ->
+      emitXEvent "X_YIELD" tc mh
+    _ -> return ()
+  where
+    emitXEvent eName (ChainId cid) mh = emitReservedEvent eName
+      [ PString cid
+      , PString (renderQualName (view (peContinuation . pcName) dpe))
+      , PList (V.fromList (view (peContinuation . pcArgs) dpe)) ]
+      mh
 
 applyNestedPact
   :: (CEKEval step b i m, MonadEval b i m)
@@ -756,6 +779,18 @@ emitEvent info pe = findCallingModule >>= \case
         esEvents %== (++ [pe])
       else throwExecutionError info (EventDoesNotMatchModule mn)
     Nothing -> failInvariant info "emit-event called outside of module code"
+
+emitEventUnsafe
+  :: (MonadEval b i m)
+  => PactEvent PactValue
+  -> m ()
+emitEventUnsafe pe = esEvents %== (++ [pe])
+
+emitReservedEvent :: MonadEval b i m => T.Text -> [PactValue] -> ModuleHash -> m ()
+emitReservedEvent name params mhash = do
+  let pactModule = ModuleName "pact" Nothing
+  let pe = PactEvent name params pactModule mhash
+  emitEventUnsafe pe
 
 emitCapability
   :: (MonadEval b i m)
@@ -1267,6 +1302,7 @@ applyContToValue (DefPactStepC env cont) handler v =
         liftDbFunction def
           (writeDefPacts pdb Write (_psDefPactId ps)
             (if done then Nothing else Just pe))
+        emitXChainEvents (_psResume ps) pe
         returnCEKValue cont handler v
 
 applyContToValue (NestedDefPactStepC env cont parentDefPactExec) handler v =
@@ -1458,10 +1494,14 @@ instance MonadEval b i m => CEKEval CEKSmallStep b i m where
   applyLamUnsafe ca vs lc lh = applyLam ca vs lc lh >>= evalUnsafe
 
   evalNormalForm initialEnv initialTerm = evalUnsafe (CEKEvaluateTerm Mt CEKNoHandler initialEnv initialTerm)
-  evalUnsafe (CEKReturn Mt CEKNoHandler result) = return result
-  evalUnsafe (CEKReturn cont handler (EvalValue v)) = applyContToValue cont handler v >>= evalUnsafe
-  evalUnsafe (CEKReturn cont handler result) = applyCont cont handler result >>= evalUnsafe
-  evalUnsafe (CEKEvaluateTerm cont handler env term) = evaluateTerm cont handler env term >>= evalUnsafe
+  evalUnsafe (CEKReturn Mt CEKNoHandler result) =
+    return result
+  evalUnsafe (CEKReturn cont handler (EvalValue v)) =
+    applyContToValue cont handler v >>= evalUnsafe
+  evalUnsafe (CEKReturn cont handler result) =
+    applyCont cont handler result >>= evalUnsafe
+  evalUnsafe (CEKEvaluateTerm cont handler env term) =
+    evaluateTerm cont handler env term >>= evalUnsafe
 
 
 instance MonadEval b i m => CEKEval CEKBigStep b i m where

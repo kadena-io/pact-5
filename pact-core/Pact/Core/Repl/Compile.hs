@@ -59,17 +59,16 @@ data ReplCompileValue
   deriving Show
 
 loadFile
-  :: FilePath
+  :: (CEKEval step ReplRawBuiltin SpanInfo Repl)
+  => FilePath
+  -> BuiltinEnv step ReplRawBuiltin SpanInfo Repl
   -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
   -> ReplM ReplRawBuiltin [ReplCompileValue]
-loadFile loc display = do
+loadFile loc rEnv display = do
   source <- SourceCode (takeFileName loc) <$> liftIO (T.readFile loc)
   replCurrSource .= source
-  interpretReplProgram source display
+  interpretReplProgram' rEnv source display
 
-
--- replEnv :: BuiltinEnv Runtime.CEKBigStep ReplRawBuiltin SpanInfo (ReplM ReplRawBuiltin)
--- replEnv = replBuiltinEnv @Runtime.CEKBigStep
 
 interpretReplProgram
   :: SourceCode
@@ -108,7 +107,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
           pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
           replPactDb .= pactdb
           replEvalEnv .= defaultEvalEnv pactdb replRawBuiltinMap
-          out <- loadFile (T.unpack txt) display
+          out <- loadFile (T.unpack txt) replEnv display
           replCurrSource .= oldSrc
           pure out
         | otherwise -> do
@@ -116,7 +115,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
           oldEs <- use evalState
           oldEE <- use replEvalEnv
           when b $ evalState .= def
-          out <- loadFile (T.unpack txt) display
+          out <- loadFile (T.unpack txt) replEnv display
           replEvalEnv .= oldEE
           evalState .= oldEs
           replCurrSource .= oldSrc

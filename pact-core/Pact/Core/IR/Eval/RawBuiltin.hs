@@ -601,6 +601,19 @@ corePactId info b cont handler _env = \case
     Nothing -> returnCEK cont handler (VError "pact-id: not in pact execution" info)
   args -> argsError info b args
 
+enforceYield
+  :: (MonadEval b i m)
+  => i
+  -> Yield
+  -> m ()
+enforceYield info y = case _yProvenance y of
+  Nothing -> pure ()
+  Just p -> do
+    m <- getCallingModule info
+    cid <- viewEvalEnv $ eePublicData . pdPublicMeta . pmChainId
+    let p' = Provenance cid (_mHash m):map (Provenance cid) (toList $ _mBlessed m)
+    unless (p `elem` p') $ throwExecutionError info (YieldProvenanceDoesNotMatch p p')
+
 coreResume :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreResume info b cont handler _env = \case
   [VClosure clo] -> do
@@ -609,7 +622,9 @@ coreResume info b cont handler _env = \case
       Nothing -> throwExecutionError info NoActiveDefPactExec
       Just pactStep -> case _psResume pactStep of
         Nothing -> throwExecutionError info (NoYieldInDefPactStep pactStep)
-        Just (Yield resumeObj _ _) -> applyLam clo [VObject resumeObj] cont handler
+        Just y@(Yield resumeObj _ _) -> do
+          enforceYield info y
+          applyLam clo [VObject resumeObj] cont handler
   args -> argsError info b args
 
 -----------------------------------
