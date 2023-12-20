@@ -149,7 +149,7 @@ Module :: { ParsedModule }
       (combineSpan (_ptInfo $1) (_ptInfo $7)) }
 
 Interface :: { ParsedInterface }
-  : '(' interface IDENT MDocOrModel ImportOrIfDef ')'
+  : '(' interface IDENT MDocOrModuleModel ImportOrIfDef ')'
     { Interface (ModuleName (getIdent $3) Nothing) (reverse (lefts $5)) (reverse (rights $5)) (fst $4) (snd $4)
       (combineSpan (_ptInfo $1) (_ptInfo $2)) }
 

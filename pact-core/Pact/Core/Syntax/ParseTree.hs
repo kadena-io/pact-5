@@ -244,7 +244,7 @@ data Interface i
   , _ifDefns :: [IfDef i]
   , _ifImports :: [Import]
   , _ifDocs :: Maybe Text
-  , _ifModel :: Maybe [FVFunModel i]
+  , _ifModel :: [FVModel i]
   , _ifInfo :: i
   } deriving (Show, Functor)
 
