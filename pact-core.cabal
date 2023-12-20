@@ -187,6 +187,12 @@ library
     Pact.Core.Serialise.LegacyPact
     Pact.Core.Serialise.CBOR_V1
 
+    -- WebAuthn
+    Pact.Crypto.WebAuthn.Cose.PublicKey
+    Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
+    Pact.Crypto.WebAuthn.Cose.Registry
+    Pact.Crypto.WebAuthn.Cose.SignAlg
+
 library typed-core
   import: pact-core-common
   hs-source-dirs: typed-core
