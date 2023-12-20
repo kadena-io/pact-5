@@ -153,7 +153,7 @@ parseWebAuthnPublicKeyText (PublicKeyText k)
   where
   parseWebAuthnPublicKey :: ByteString -> Either String WA.CosePublicKey
   parseWebAuthnPublicKey rawPk = do
-    pk <- over _Left (\e -> "WebAuthn public key parsing: " <> show e) $
+    pk <- over _Left (\e -> "WebAuthn public key parsing error: " <> show e) $
       Serialise.deserialiseOrFail @WA.CosePublicKey (BSL.fromStrict rawPk)
     webAuthnPubKeyHasValidAlg pk
     return pk
