@@ -24,6 +24,9 @@ import Control.Exception
 import Data.Text(Text)
 import Data.Dynamic (Typeable)
 
+import Control.DeepSeq
+import GHC.Generics
+
 import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Guards
@@ -47,7 +50,9 @@ data LexerError
   | StringLiteralError Text
   -- ^ Error lexing string literal
   | OutOfInputError Char
-  deriving Show
+  deriving (Show, Generic)
+
+instance NFData LexerError
 
 instance Exception LexerError
 
@@ -77,7 +82,9 @@ data ParseError
   -- ^ Way too many decimal places for `Decimal` to deal with, max 255 precision.
   | InvalidBaseType Text
   -- ^ Invalid primitive type
-  deriving Show
+  deriving (Show, Generic)
+
+instance NFData ParseError
 
 instance Exception ParseError
 
@@ -151,7 +158,9 @@ data DesugarError
   | InvalidDynamicInvoke Text
   | DuplicateDefinition Text
   | InvalidBlessedHash Text
-  deriving Show
+  deriving (Show,  Generic)
+
+instance NFData DesugarError
 
 instance Exception DesugarError
 
@@ -219,7 +228,9 @@ data ArgTypeError
   | ATETable
   | ATEClosure
   | ATEModRef
-  deriving (Show)
+  deriving (Show,  Generic)
+
+instance NFData ArgTypeError
 
 instance Pretty ArgTypeError where
   pretty = \case
@@ -336,7 +347,9 @@ data EvalError
   -- ^ Non-recoverable guard enforces.
   | ConstIsNotAPactValue QualifiedName
   | PointNotOnCurve
-  deriving Show
+  deriving (Show, Generic)
+
+instance NFData EvalError
 
 
 instance Pretty EvalError where
@@ -452,7 +465,9 @@ data PactError info
   -- | PETypecheckError TypecheckError info
   -- | PEOverloadError OverloadError info
   | PEExecutionError EvalError info
-  deriving (Show, Functor)
+  deriving (Show, Functor, Generic)
+
+instance NFData info => NFData (PactError info)
 
 instance Pretty (PactError info) where
   pretty = \case

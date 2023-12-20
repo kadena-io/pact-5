@@ -146,7 +146,6 @@ library
     Pact.Core.Debug
     Pact.Core.Capabilities
     Pact.Core.ModRefs
-    Pact.Core.Interpreter
     Pact.Core.ChainData
     Pact.Core.Environment
     Pact.Core.Environment.Utils
@@ -190,9 +189,11 @@ library
     Pact.Core.Serialise.LegacyPact
     Pact.Core.Serialise.CBOR_V1
 
-library gasmodel
+executable gasmodel
   import: pact-core-common
   hs-source-dirs: gasmodel
+
+  main-is: Pact/Core/Gas/InterpreterGas.hs
 
   build-depends:
     , pact-core

@@ -122,7 +122,6 @@ evaluateTerm
 --
 -- Handles free variable lookups as well as module reference dynamic invokes
 evaluateTerm cont handler env (Var n info)  = do
-  chargeNodeGas VarNode
   case _nKind n of
     NBound i -> case RAList.lookup (view ceLocal env) i of
       -- Todo: module ref anns here
@@ -175,19 +174,16 @@ evaluateTerm cont handler env (Var n info)  = do
 --   <Const l, E, K, H>    <Value l, E, K, H>
 --
 evaluateTerm cont handler _env (Constant l _) = do
-  chargeNodeGas ConstantNode
   returnCEKValue cont handler (VLiteral l)
 -- | ------ From ---------- | ------ To ------ |
 --   <App fn args, E, K, H>    <fn, E, Args(E,args,K), H>
 --
 evaluateTerm cont handler env (App fn args info) = do
-  chargeNodeGas AppNode
   evalCEK (Args env info args cont) handler env fn
 -- | ------ From ---------- | ------ To ------ |
 --   <Nullary body, E, K, H>    <VClosure(body, E), E, K, H>
 --
 evaluateTerm cont handler env (Nullary body info) = do
-  chargeNodeGas LamNode
   let clo = VLamClosure (LamClosure NullaryClosure 0 body Nothing env info)
   returnCEKValue cont handler clo
 -- | ------ From ---------- | ------ To ------ |
@@ -200,7 +196,6 @@ evaluateTerm cont handler env (Let _ e1 e2 _) = do
 --   <Lam args body, E, K, H>      <VLamClo(args, body, E), E, K, H>
 --
 evaluateTerm cont handler env (Lam args body info) = do
-  chargeNodeGas LamNode
   let clo = VLamClosure (LamClosure (ArgClosure (_argType <$> args)) (NE.length args) body Nothing env info)
   returnCEKValue cont handler clo
 -- | ------ From ------ | ------ To ------ |
@@ -256,7 +251,6 @@ evaluateTerm cont handler env (CapabilityForm cf info) =
           let cont' = CapInvokeC env info usrGuardFrame cont
           evalCEK cont' handler env x
 evaluateTerm cont handler env (ListLit ts info) = do
-  chargeNodeGas ListNode
   case ts of
     [] -> returnCEKValue cont handler (VList mempty)
     x:xs -> evalCEK (ListC env info xs [] cont) handler env x

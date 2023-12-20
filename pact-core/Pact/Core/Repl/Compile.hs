@@ -2,6 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -10,6 +11,7 @@
 module Pact.Core.Repl.Compile
  ( ReplCompileValue(..)
  , interpretReplProgram
+ , interpretReplProgramSmallStep
  ) where
 
 import Control.Lens
@@ -39,12 +41,15 @@ import Pact.Core.Serialise (serialisePact_repl_spaninfo)
 
 
 import Pact.Core.IR.Eval.Runtime
+import Pact.Core.IR.Eval.CEK(CEKEval)
 import Pact.Core.Repl.Runtime.ReplBuiltin
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.IR.Eval.Runtime as Runtime
+
+type Repl = ReplM ReplRawBuiltin
 
 -- Small internal debugging function for playing with file loading within
 -- this module
@@ -64,14 +69,29 @@ loadFile loc display = do
   interpretReplProgram source display
 
 
-replEnv :: BuiltinEnv Runtime.CEKBigStep ReplRawBuiltin SpanInfo (ReplM ReplRawBuiltin)
-replEnv = replBuiltinEnv @Runtime.CEKBigStep
+-- replEnv :: BuiltinEnv Runtime.CEKBigStep ReplRawBuiltin SpanInfo (ReplM ReplRawBuiltin)
+-- replEnv = replBuiltinEnv @Runtime.CEKBigStep
 
 interpretReplProgram
   :: SourceCode
   -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
   -> ReplM ReplRawBuiltin [ReplCompileValue]
-interpretReplProgram (SourceCode _ source) display = do
+interpretReplProgram = interpretReplProgram' (replBuiltinEnv @CEKBigStep)
+
+interpretReplProgramSmallStep
+  :: SourceCode
+  -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
+  -> ReplM ReplRawBuiltin [ReplCompileValue]
+interpretReplProgramSmallStep = interpretReplProgram' (replBuiltinEnv @CEKSmallStep)
+
+
+interpretReplProgram'
+  :: (CEKEval step ReplRawBuiltin SpanInfo Repl)
+  => BuiltinEnv step ReplRawBuiltin SpanInfo Repl
+  -> SourceCode
+  -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
+  -> ReplM ReplRawBuiltin [ReplCompileValue]
+interpretReplProgram' replEnv (SourceCode _ source) display = do
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ Lisp.parseReplProgram lexx

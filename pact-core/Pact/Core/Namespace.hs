@@ -33,3 +33,6 @@ data NamespacePolicy
   | SmartNamespacePolicy !Bool !QualifiedName
   -- ^ Bool governs root usage, Name governs ns creation.
   -- Def is (defun xxx:bool (ns:string ns-admin:guard))
+  deriving (Show, Generic)
+
+instance NFData NamespacePolicy

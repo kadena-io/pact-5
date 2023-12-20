@@ -91,7 +91,9 @@ data ExecutionFlag
   | FlagEnforceKeyFormats
   -- | Require keysets to be defined in namespaces
   | FlagRequireKeysetNs
-  deriving (Eq,Ord,Show,Enum,Bounded)
+  deriving (Eq,Ord,Show,Enum,Bounded, Generic)
+
+instance NFData ExecutionFlag
 
 -- | Flag string representation
 flagRep :: ExecutionFlag -> Text
@@ -125,7 +127,9 @@ data EvalEnv b i
   , _eeNatives :: Map Text b
   -- ^ The native resolution map
   , _eeNamespacePolicy :: NamespacePolicy
-  }
+  } deriving (Generic)
+
+instance (NFData b, NFData i) => NFData (EvalEnv b i)
 
 
 makeLenses ''EvalEnv

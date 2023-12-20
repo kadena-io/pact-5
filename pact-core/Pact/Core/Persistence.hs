@@ -5,6 +5,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -96,11 +97,13 @@ data ExecutionMode
     -- ^ `beginTx` and `commitTx` atomically commit actions to the database.
   | Local
     -- ^ `beginTx` and `commitTx` have no effect to the database.
-  deriving (Eq,Show)
+  deriving (Eq,Show, Generic)
+
+instance NFData ExecutionMode
 
 -- | Identifier for transactions
 newtype TxId = TxId { _txId :: Word64 }
-    deriving (Eq,Ord, Show)
+    deriving (Eq,Ord, Show, NFData)
 
 -- | Transaction record.
 --
@@ -218,7 +221,9 @@ data DbOpException
   | NoTxLog TableName TxId
   | OpDisallowed
   | MultipleRowsReturnedFromSingleWrite
-  deriving (Show, Eq, Typeable)
+  deriving (Show, Eq, Typeable, Generic)
+
+instance NFData DbOpException
 
 dbOpDisallowed :: IO a
 dbOpDisallowed = throwIO OpDisallowed

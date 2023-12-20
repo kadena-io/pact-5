@@ -18,7 +18,7 @@ import Pact.Core.Builtin
 import Pact.Core.Evaluate
 import Pact.Core.Environment
 import Pact.Core.Errors
-import Pact.Core.Serialise (serialisePact_raw_spaninfo)
+import Pact.Core.Serialise (serialisePact)
 import Pact.Core.Persistence.MockPersistence (mockPactDb)
 
 import Pact.Core.Test.TestPrisms
@@ -26,12 +26,12 @@ import Pact.Core.Test.TestPrisms
 staticTestDir :: [Char]
 staticTestDir = "pact-core-tests" </> "static-tests"
 
-isDesugarError :: Prism' DesugarError a -> PactErrorI -> Bool
+isDesugarError :: Prism' DesugarError a -> PactError () -> Bool
 isDesugarError p s = isJust $ preview (_PEDesugarError . _1 . p) s
 
-runStaticTest :: FilePath -> Text -> (PactErrorI -> Bool) -> Assertion
+runStaticTest :: FilePath -> Text -> (PactError () -> Bool) -> Assertion
 runStaticTest fp src predicate = do
-  pdb <- mockPactDb serialisePact_raw_spaninfo
+  pdb <- mockPactDb serialisePact
   let evalEnv = defaultEvalEnv pdb rawBuiltinMap
   v <- fst <$> evaluate evalEnv def src
   case v of
@@ -39,7 +39,7 @@ runStaticTest fp src predicate = do
       assertBool ("Expected Error to match predicate, but got " <> show err <> " instead") (predicate err)
     Right _v -> assertFailure ("Error: Static failure test succeeded for file: " <> fp)
 
-staticTests :: [(FilePath, PactErrorI -> Bool)]
+staticTests :: [(FilePath, PactError () -> Bool)]
 staticTests =
   [ ("no_bind_body", isDesugarError _EmptyBindingBody)
   , ("defpact_last_step_rollback", isDesugarError _LastStepWithRollback)

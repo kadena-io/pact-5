@@ -293,7 +293,7 @@ data TypeName
 newtype NativeName
   = NativeName
   { _natName :: Text }
-  deriving (Show, Eq)
+  deriving (Show, Eq, NFData)
 
 makeLenses ''TypeVar
 makeLenses ''TypeName

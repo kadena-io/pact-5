@@ -32,13 +32,13 @@ import Pact.Core.IR.Desugar
 import Pact.Core.Errors
 import Pact.Core.Pretty
 import Pact.Core.IR.Term
-import Pact.Core.Interpreter
 import Pact.Core.Guards
 import Pact.Core.Environment
 import Pact.Core.Capabilities
 import Pact.Core.Literal
 import Pact.Core.Imports
 import Pact.Core.Namespace
+import Pact.Core.PactValue
 import Pact.Core.Hash
 import Pact.Core.IR.Eval.Runtime
 
@@ -70,7 +70,7 @@ data CompileValue i
   = LoadedModule ModuleName ModuleHash
   | LoadedInterface ModuleName ModuleHash
   | LoadedImports Import
-  | InterpretValue (InterpretValue i)
+  | InterpretValue PactValue i
   deriving Show
 
 
@@ -182,5 +182,5 @@ interpretTopLevel bEnv tl = do
             over loToplevel (M.union newTopLevel)
       esLoaded %== loadNewModule
       pure (LoadedInterface (view ifName iface) (view ifHash iface))
-    TLTerm term -> InterpretValue . (`IPV` (view termInfo term)) <$> Eval.eval PImpure bEnv term
+    TLTerm term -> (`InterpretValue` (view termInfo term)) <$> Eval.eval PImpure bEnv term
     TLUse imp _ -> pure (LoadedImports imp)

@@ -123,7 +123,9 @@ import qualified Pact.Core.Pretty as P
 data CEKReturn b i m
   = CEKEvaluateTerm (Cont CEKSmallStep b i m) (CEKErrorHandler CEKSmallStep b i m) (CEKEnv CEKSmallStep b i m) (EvalTerm b i)
   | CEKReturn (Cont CEKSmallStep b i m) (CEKErrorHandler CEKSmallStep b i m) (EvalResult CEKSmallStep b i m)
-  deriving Show
+  deriving (Show, Generic)
+
+instance (NFData b, NFData i) => NFData (CEKReturn b i m)
 
 -- | The top level env map
 type CEKTLEnv b i = Map FullyQualifiedName (EvalDef b i)
@@ -320,7 +322,9 @@ pattern VDefPactClosure clo = VClosure (DPC clo)
 data EvalResult (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = EvalValue (CEKValue step b i m)
   | VError Text i
-  deriving Show
+  deriving (Show, Generic)
+
+instance (NFData b, NFData i) => NFData (EvalResult step b i m)
 
 
 -- Todo: are we going to inject state as the reader monad here?
@@ -569,13 +573,17 @@ data ContType
 -- | State to preserve in the error handler
 data ErrorState
   = ErrorState (CapState QualifiedName PactValue) [StackFrame]
-  deriving Show
+  deriving (Show, Generic)
+
+instance NFData ErrorState
 
 data CEKErrorHandler (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = CEKNoHandler
   | CEKHandler (CEKEnv step b i m) (EvalTerm b i) (Cont step b i m) ErrorState (CEKErrorHandler step b i m)
   | CEKEnforceOne (CEKEnv step b i m) i (EvalTerm b i) [EvalTerm b i] (Cont step b i m) ErrorState (CEKErrorHandler step b i m)
-  deriving Show
+  deriving (Show, Generic)
+
+instance (NFData b, NFData i) => NFData (CEKErrorHandler step b i m)
 
 data CEKStepKind
   = CEKSmallStep
