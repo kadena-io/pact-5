@@ -567,6 +567,26 @@ executionTests =
         (defun bar:string ())
         )
     |])
+  , ("interface_module", isExecutionError _ExpectedModule, [text|
+      (interface iface
+        (defun foo:string ())
+        )
+      (module iface g (defcap g () true))
+    |])
+  , ("modref_namespace", isExecutionError _ExpectedModule, [text|
+      (begin-tx)
+      (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
+      (env-keys ["carl"])
+
+      (define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys))
+      (namespace 'carl)
+      (interface iface
+        (defun foo:string ())
+        )
+      (commit-tx)
+
+      carl.iface
+    |])
   , ("import_unknown_module_namespaced_self_nons", isExecutionError _ModuleDoesNotExist, [text|
       (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
       (env-keys ["carl"])
