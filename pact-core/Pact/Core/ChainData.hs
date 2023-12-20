@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -29,7 +30,9 @@ module Pact.Core.ChainData
 
 import Data.Int(Int64)
 import Data.Word(Word64)
+import Control.DeepSeq
 import Control.Lens
+import GHC.Generics
 import Data.Text(Text)
 import Data.Default
 
@@ -41,17 +44,17 @@ import Pact.Core.Names
 --
 newtype TTLSeconds
   = TTLSeconds Integer
-  deriving (Eq, Show)
+  deriving (Eq, Show, NFData)
 
 -- | Wrapper for 'PublicMeta' creation time field in seconds since POSIX epoch
 --
 newtype TxCreationTime
   = TxCreationTime Integer
-  deriving (Eq, Show)
+  deriving (Eq, Show, NFData)
 
 newtype ChainId
   = ChainId { _chainId :: Text }
-  deriving (Eq, Show)
+  deriving (Eq, Show, NFData)
 
 -- | Allows user to specify execution parameters specific to public-chain
 -- execution, namely gas parameters, TTL, creation time, chain identifier.
@@ -69,7 +72,7 @@ data PublicMeta
     -- ^ TTL in seconds
   , _pmCreationTime :: !TxCreationTime
     -- ^ Creation time in seconds since UNIX epoch
-  } deriving (Eq, Show)
+  } deriving (Eq, Show, Generic)
 makeLenses ''PublicMeta
 
 instance Default PublicMeta where
@@ -95,7 +98,7 @@ data PublicData = PublicData
   , _pdPrevBlockHash :: !Text
     -- ^ block hash of preceding block
   }
-  deriving (Show)
+  deriving (Show, Generic)
 makeLenses ''PublicData
 
 instance Default PublicData where
@@ -120,3 +123,6 @@ cdGasLimit :: Field
 cdGasLimit = Field "gas-limit"
 cdGasPrice :: Field
 cdGasPrice = Field "gas-price"
+
+instance NFData PublicMeta
+instance NFData PublicData

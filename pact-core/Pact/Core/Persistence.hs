@@ -5,6 +5,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -41,6 +42,8 @@ import Control.Exception(throwIO, Exception)
 import Control.Applicative((<|>))
 import Data.Default
 import Data.Map.Strict(Map)
+import Control.DeepSeq
+import GHC.Generics
 import Data.Text(Text)
 import Data.Word(Word64)
 
@@ -60,7 +63,9 @@ import Data.Dynamic (Typeable)
 data ModuleData b i
   = ModuleData (EvalModule b i) (Map FullyQualifiedName (EvalDef b i))
   | InterfaceData (EvalInterface b i) (Map FullyQualifiedName (EvalDef b i))
-  deriving (Show, Eq, Functor)
+  deriving (Show, Eq, Functor, Generic)
+
+instance (NFData b, NFData i) => NFData (ModuleData b i)
 
 mdModuleName :: Lens' (ModuleData b i) ModuleName
 mdModuleName f = \case
@@ -92,11 +97,13 @@ data ExecutionMode
     -- ^ `beginTx` and `commitTx` atomically commit actions to the database.
   | Local
     -- ^ `beginTx` and `commitTx` have no effect to the database.
-  deriving (Eq,Show)
+  deriving (Eq,Show, Generic)
+
+instance NFData ExecutionMode
 
 -- | Identifier for transactions
 newtype TxId = TxId { _txId :: Word64 }
-    deriving (Eq,Ord, Show)
+    deriving (Eq,Ord, Show, NFData)
 
 -- | Transaction record.
 --
@@ -122,7 +129,9 @@ data WriteType =
   -- | Update an existing row, or insert a new row if not found.
   --   Requires complete row value, enforced by pact runtime.
   Write
-  deriving (Eq,Ord,Show,Enum,Bounded)
+  deriving (Eq,Ord,Show,Enum,Bounded, Generic)
+
+instance NFData WriteType
 
 -- | Specify key and value types for database domains.
 data Domain k v b i where
@@ -147,7 +156,9 @@ data Purity
   | PReadOnly
   -- | All database access allowed (normal).
   | PImpure
-  deriving (Eq,Show,Ord,Bounded,Enum)
+  deriving (Eq,Show,Ord,Bounded,Enum, Generic)
+
+instance NFData Purity
 
 -- | Fun-record type for Pact back-ends.
 data PactDb b i
@@ -163,6 +174,12 @@ data PactDb b i
   , _pdbTxIds :: TableName -> TxId -> IO [TxId]
   , _pdbGetTxLog :: TableName -> TxId -> IO [TxLog RowData]
   }
+
+instance NFData (PactDb b i) where
+  -- Note: CommitTX and RollbackTx cannot be rnf'd
+  rnf (PactDb purity r w k cut btx ctx rtx tids txl) =
+    rnf purity `seq` rnf r `seq` rnf w `seq` rnf k `seq` rnf cut
+       `seq` rnf btx `seq` ctx `seq` rtx `seq` rnf tids `seq` rnf txl
 
 makeClassy ''PactDb
 
@@ -204,7 +221,9 @@ data DbOpException
   | NoTxLog TableName TxId
   | OpDisallowed
   | MultipleRowsReturnedFromSingleWrite
-  deriving (Show, Eq, Typeable)
+  deriving (Show, Eq, Typeable, Generic)
+
+instance NFData DbOpException
 
 dbOpDisallowed :: IO a
 dbOpDisallowed = throwIO OpDisallowed
@@ -236,7 +255,9 @@ data Loaded b i
   -- ^ The potentially loaded current namespace
   , _loAllLoaded :: Map FullyQualifiedName (Def Name Type b i)
   -- ^ All of our fully qualified dependencies
-  } deriving Show
+  } deriving (Show, Generic)
+
+instance (NFData b, NFData i) => NFData (Loaded b i)
 
 makeClassy ''Loaded
 

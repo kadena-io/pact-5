@@ -5,7 +5,9 @@ module Pact.Core.Imports
 )
 where
 
+import Control.DeepSeq
 import Data.Text(Text)
+import GHC.Generics
 import Pact.Core.Names
 import Pact.Core.Hash
 
@@ -15,4 +17,6 @@ data Import
   { _impModuleName  :: ModuleName
   , _impModuleHash :: Maybe ModuleHash
   , _impImported :: Maybe [Text]
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Generic)
+
+instance NFData Import

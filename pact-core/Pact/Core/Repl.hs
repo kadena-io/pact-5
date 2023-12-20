@@ -31,8 +31,6 @@ import Pact.Core.Compile
 import Pact.Core.Environment
 import Pact.Core.Hash
 import Pact.Core.Imports
-import Pact.Core.Interpreter
-import Pact.Core.Names
 import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Pretty
 import Pact.Core.Repl.Compile
@@ -59,10 +57,7 @@ main = do
         "loaded module" <+> pretty mn <> ", hash" <+> pretty (moduleHashToText mh)
       LoadedInterface mn mh -> outputStrLn $ show $
         "loaded interface" <+> pretty mn <> ", hash" <+> pretty (moduleHashToText mh)
-      InterpretValue iv -> case iv of
-        IPV v _ -> outputStrLn (show (pretty v))
-        IPTable (TableName tn mn) -> outputStrLn $ "table{" <> T.unpack (renderModuleName mn) <> ":" <> T.unpack tn <> "}"
-        IPClosure -> outputStrLn "<<closure>>"
+      InterpretValue v _ -> outputStrLn (show (pretty v))
       LoadedImports i ->
         outputStrLn $ "loaded imports from" <> show (pretty (_impModuleName i))
     RLoadedDefun mn ->
@@ -98,7 +93,7 @@ main = do
           RAExecuteExpr src -> catch' $ do
             let display' rcv = runInputT replSettings (displayOutput rcv)
             lift (replCurrSource .= defaultSrc{_scPayload=src})
-            eout <- lift (tryError (interpretReplProgram (SourceCode "(interactive)" src) display'))
+            eout <- lift (tryError (interpretReplProgramSmallStep (SourceCode "(interactive)" src) display'))
             case eout of
               Right _ -> pure ()
               Left err -> do

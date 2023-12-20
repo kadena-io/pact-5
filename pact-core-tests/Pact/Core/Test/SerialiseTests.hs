@@ -47,7 +47,6 @@ tests = testGroup "Serialise Roundtrip"
     , testProperty "SpanInfo" $ serialiseRoundtrip infoGen
     , testProperty "Builtin" $ serialiseRoundtrip builtinGen
     , testProperty "Literal" $ serialiseRoundtrip literalGen
-    , testProperty "LamInfo" $ serialiseRoundtrip lamInfoGen
     , testProperty "BuiltinForm" $ serialiseRoundtrip (builtinFormGen builtinGen infoGen)
     , testProperty "Term" $ serialiseRoundtrip (termGen builtinGen infoGen)
     , testProperty "Defun" $ serialiseRoundtrip (defunGen builtinGen infoGen)

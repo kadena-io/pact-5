@@ -57,12 +57,12 @@
     (let ((row (read ints x)))
       (enforce (= 0 (at 'i row)) "int wasn't zero")))
 
-  ;  (defpact test-pact-guards (id:string)
-  ;    (step (step1 id))
-  ;    (step (step2 (read-msg "id"))))
+  (defpact test-pact-guards (id:string)
+    (step (step1 id))
+    (step (step2 (read-msg "id"))))
 
-  ;  (defun step1 (id:string)
-  ;    (insert guard-table id { "g": (create-pact-guard "test")}))
+  (defun step1 (id:string)
+    (insert guard-table id { "g": (create-pact-guard "test")}))
 
   (defun step2:object{yieldschema} (id:string)
     (enforce-guard (get-guard id))
@@ -84,6 +84,7 @@
   (defun test-granted ()
     (require-capability (GRANTED)))
 
+  ; Note: these are caught statically
   ;  (defcap BAD_WITH_CAP ()
   ;    (with-capability (GRANTED) true))
 
@@ -146,8 +147,8 @@
                 (require-capability (KEYSET-ID-CAP "k2")))
 (expect "cap k2 succeeds" 1 (test-id-cap "k2"))
 
-;  (expect-failure "top-level with-capability fails"
-;                  (with-capability (KEYSET-ID-CAP "k2") 1))
+(expect-failure "top-level with-capability fails"
+                (with-capability (KEYSET-ID-CAP "k2") 1))
 
 (expect-failure "module guard fails w/o admin"
                 (enforce-guard (get-module-guard)))
@@ -199,20 +200,20 @@
   (expect-failure "reading db from within user guard" (enforce-guard bad-db-user-guard)))
 
 (env-hash (hash "pact-guards-a-id")) ;; equivalent of pact-id
-;  (test-pact-guards "a")
+(test-pact-guards "a")
 
-;  (pact-state true) ;; clears pact state
-;  (let ((g (get-guard "a"))) ;; doing let so db failure doesn't confuse below
-;    (expect-failure "enforcing pact guard outside of pact" (enforce-guard g)))
+(pact-state true) ;; clears pact state
+(let ((g (get-guard "a"))) ;; doing let so db failure doesn't confuse below
+  (expect-failure "enforcing pact guard outside of pact" (enforce-guard g)))
 
-;  (env-data { "id": "a"})
+(env-data { "id": "a"})
 
-;  (expect "pact enforce succeeds" 1 (at 'result (continue-pact 1 false (hash "pact-guards-a-id"))))
+(expect "pact enforce succeeds" 1 (at 'result (continue-pact 1 false (hash "pact-guards-a-id"))))
 
-;  (pact-state true)
-;  (env-hash (hash "pact-guards-b-id"))
-;  (test-pact-guards "b")
-;  (expect-failure "pact enforce fails in pact 5 for id 'a'" (continue-pact 1 false (hash "pact-guards-b-id")))
+(pact-state true)
+(env-hash (hash "pact-guards-b-id"))
+(test-pact-guards "b")
+(expect-failure "pact enforce fails in pact 5 for id 'a'" (continue-pact 1 false (hash "pact-guards-b-id")))
 
 (env-keys ["a" "b" "c"])
 (expect-failure "cannot compose caps at toplevel" (compose-capability (KALL-CAP)))

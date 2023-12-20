@@ -18,7 +18,6 @@ import qualified Data.Text.IO as T
 import Pact.Core.Gas
 import Pact.Core.Literal
 import Pact.Core.Persistence.MockPersistence
-import Pact.Core.Interpreter
 
 import Pact.Core.Repl.Utils
 import Pact.Core.Persistence (PactDb)
@@ -33,12 +32,16 @@ import Pact.Core.Builtin
 import Pact.Core.Errors
 import Pact.Core.Serialise
 
+type Interpreter = SourceCode -> (ReplCompileValue -> ReplM ReplRawBuiltin ()) -> ReplM ReplRawBuiltin [ReplCompileValue]
+
 tests :: IO TestTree
 tests = do
   files <- replTestFiles
   pure $ testGroup "ReplTests"
-    [ testGroup "in-memory db" (runFileReplTest <$> files)
-    , testGroup "sqlite db" (runFileReplTestSqlite <$> files)
+    [ testGroup "in-memory db:bigstep" (runFileReplTest interpretReplProgram <$> files)
+    , testGroup "sqlite db:bigstep" (runFileReplTestSqlite interpretReplProgram <$> files)
+    , testGroup "in-memory db:smallstep" (runFileReplTest interpretReplProgramSmallStep <$> files)
+    , testGroup "sqlite db:smallstep" (runFileReplTestSqlite interpretReplProgramSmallStep <$> files)
     ]
 
 replTestDir :: [Char]
@@ -48,19 +51,21 @@ replTestFiles :: IO [FilePath]
 replTestFiles = do
   filter (\f -> isExtensionOf "repl" f || isExtensionOf "pact" f) <$> getDirectoryContents replTestDir
 
-runFileReplTest :: TestName -> TestTree
-runFileReplTest file = testCase file $ do
+runFileReplTest :: Interpreter -> TestName -> TestTree
+runFileReplTest interp file = testCase file $ do
   pdb <- mockPactDb serialisePact_repl_spaninfo
-  T.readFile (replTestDir </> file) >>= runReplTest pdb file
+  src <- T.readFile (replTestDir </> file)
+  runReplTest pdb file src interp
 
-runFileReplTestSqlite :: TestName -> TestTree
-runFileReplTestSqlite file = testCase file $ do
+
+runFileReplTestSqlite :: Interpreter -> TestName -> TestTree
+runFileReplTestSqlite interp file = testCase file $ do
   ctnt <- T.readFile (replTestDir </> file)
   withSqlitePactDb serialisePact_repl_spaninfo ":memory:" $ \pdb -> do
-    runReplTest pdb file ctnt
+    runReplTest pdb file ctnt interp
 
-runReplTest :: PactDb ReplRawBuiltin SpanInfo -> FilePath -> T.Text -> Assertion
-runReplTest pdb file src = do
+runReplTest :: PactDb ReplRawBuiltin SpanInfo -> FilePath -> T.Text -> Interpreter -> Assertion
+runReplTest pdb file src interp = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
   let ee = defaultEvalEnv pdb replRawBuiltinMap
@@ -76,14 +81,14 @@ runReplTest pdb file src = do
             , _replTx = Nothing
             }
   stateRef <- newIORef rstate
-  runReplT stateRef (interpretReplProgram source (const (pure ()))) >>= \case
+  runReplT stateRef (interp source (const (pure ()))) >>= \case
     Left e -> let
       rendered = replError (ReplSource (T.pack file) src) e
       in assertFailure (T.unpack rendered)
     Right output -> traverse_ ensurePassing output
   where
   ensurePassing = \case
-    RCompileValue (InterpretValue (IPV v i)) -> case v of
+    RCompileValue (InterpretValue v i) -> case v of
       PLiteral (LString msg) -> do
         let render = replError (ReplSource (T.pack file) src) (PEExecutionError (EvalError msg) i)
         when (T.isPrefixOf "FAILURE:" msg) $ assertFailure (T.unpack render)

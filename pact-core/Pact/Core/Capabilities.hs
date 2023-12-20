@@ -24,9 +24,11 @@ module Pact.Core.Capabilities
  ) where
 
 import Control.Lens
+import Control.DeepSeq
 import Data.Text(Text)
 import Data.Set(Set)
 import Data.Default
+import GHC.Generics
 
 
 import Pact.Core.Pretty
@@ -36,14 +38,13 @@ import Pact.Core.Hash
 data DefManagedMeta name
   = DefManagedMeta (Int, Text) name
   | AutoManagedMeta
-  deriving (Show, Functor, Foldable, Traversable, Eq)
+  deriving (Show, Functor, Foldable, Traversable, Eq, Generic)
 
 data DefCapMeta name
   = DefEvent
   | DefManaged (DefManagedMeta name)
   | Unmanaged
-  deriving (Show, Functor, Foldable, Traversable, Eq)
-
+  deriving (Show, Functor, Foldable, Traversable, Eq, Generic)
 
 dcMetaFqName :: Traversal' (DefCapMeta (FQNameRef Name)) FullyQualifiedName
 dcMetaFqName f = \case
@@ -52,19 +53,20 @@ dcMetaFqName f = \case
   p -> pure p
 
 data CapForm name e
-  = WithCapability name [e] e
+  = WithCapability e e
   | CreateUserGuard name [e]
-  deriving (Show, Functor, Foldable, Traversable, Eq)
+  deriving (Show, Functor, Foldable, Traversable, Eq, Generic)
 
-capFormName :: Lens (CapForm name e) (CapForm name' e) name name'
+
+capFormName :: Traversal (CapForm name e) (CapForm name' e) name name'
 capFormName f = \case
-  WithCapability name es e -> (\fq -> WithCapability fq es e) <$> f name
+  WithCapability e e' -> pure (WithCapability e e')
   CreateUserGuard name es -> (`CreateUserGuard` es) <$> f name
 
 instance (Pretty name, Pretty e) => Pretty (CapForm name e) where
   pretty = \case
-    WithCapability name es e ->
-      parens ("with-capability" <+> parens (pretty name <+> hsep (pretty <$> es)) <+> pretty e)
+    WithCapability cap body ->
+      parens ("with-capability" <+> parens (pretty cap <+> pretty body))
     CreateUserGuard name es ->
       parens ("create-user-guard" <+> parens (pretty name <+> hsep (pretty <$> es)))
 
@@ -74,14 +76,16 @@ data CapToken name v
   = CapToken
   { _ctName :: name
   , _ctArgs :: [v]
-  } deriving (Show, Eq, Ord)
+  } deriving (Show, Eq, Ord, Generic)
+
 
 --
 data CapSlot name v
  = CapSlot
  { _csCap :: CapToken name v
  , _csComposed :: [CapToken name v]
- } deriving (Show, Eq)
+ } deriving (Show, Eq, Generic)
+
 
 -- | The overall capability state
 data CapState name v
@@ -91,7 +95,8 @@ data CapState name v
   , _csModuleAdmin :: Set ModuleName
   , _csAutonomous :: Set (CapToken name v)
   }
-  deriving Show
+  deriving (Show, Generic)
+
 
 instance (Ord name, Ord v) => Default (CapState name v) where
   def = CapState mempty mempty mempty mempty
@@ -104,13 +109,15 @@ data PactEvent v
   , _peArgs :: [v]
   , _peModule :: ModuleName
   , _peModuleHash :: ModuleHash
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Generic)
+
 
 data ManagedCapType v
   = AutoManaged Bool
   | ManagedParam FullyQualifiedName v Int
   -- ^ managed cap, with manager function, managed value
-  deriving Show
+  deriving (Show, Generic)
+
 
 data ManagedCap name v
   = ManagedCap
@@ -120,7 +127,8 @@ data ManagedCap name v
   -- ^ The original, installed token
   , _mcManaged :: ManagedCapType v
   -- ^ Managed capability type
-  } deriving (Show)
+  } deriving (Show, Generic)
+
 
 instance (Eq name, Eq v) => Eq (ManagedCap name v) where
   l == r = _mcCap l == _mcCap r
@@ -134,4 +142,12 @@ makeLenses ''CapSlot
 makeLenses ''ManagedCap
 
 
-
+instance (NFData name, NFData e) => NFData (CapForm name e)
+instance (NFData name, NFData v) => NFData (ManagedCap name v)
+instance NFData v => NFData (ManagedCapType v)
+instance NFData v => NFData (PactEvent v)
+instance (NFData name, NFData v) => NFData (CapState name v)
+instance (NFData name, NFData v) => NFData (CapSlot name v)
+instance (NFData name, NFData v) => NFData (CapToken name v)
+instance (NFData name) => NFData (DefManagedMeta name)
+instance (NFData name) => NFData (DefCapMeta name)

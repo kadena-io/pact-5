@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -30,23 +31,26 @@ module Pact.Core.Guards
 )
 where
 
-import qualified Codec.Serialise as Serialise
 import Control.Applicative
 import Control.Lens (_Left, over)
 import Control.Monad
+import Control.DeepSeq
 import Data.Attoparsec.Text
 import Data.ByteString (ByteString)
+import Data.Foldable
+import Data.Maybe (isJust)
+import Data.String
+import Data.Text(Text)
+import GHC.Generics
+import Text.Parser.Token as P
+
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+import qualified Data.Set as S
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.Char as Char
-import Data.Foldable
-import Data.Maybe (isJust)
-import qualified Data.Set as S
-import Data.String
-import Data.Text(Text)
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
-import Text.Parser.Token as P
+import qualified Codec.Serialise as Serialise
 
 import Pact.Core.Pretty
 import Pact.Core.Names
@@ -55,7 +59,7 @@ import qualified Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as WA
 import qualified Pact.Crypto.WebAuthn.Cose.SignAlg as WA
 
 newtype PublicKeyText = PublicKeyText { _pubKey :: Text }
-  deriving (Eq,Ord,Show)
+  deriving (Eq,Ord,Show, NFData)
 
 instance Pretty PublicKeyText where
   pretty (PublicKeyText t) = pretty t
@@ -66,7 +70,9 @@ renderPublicKeyText = _pubKey
 data KeySetName = KeySetName
   { _keysetName :: Text
   , _keysetNs :: Maybe NamespaceName
-  } deriving (Eq, Ord, Show)
+  } deriving (Eq, Ord, Show, Generic)
+
+instance NFData KeySetName
 
 instance Pretty KeySetName where
   pretty (KeySetName ks Nothing) = "'" <> pretty ks
@@ -94,11 +100,17 @@ parseAnyKeysetName = parseOnly keysetNameParser
 data Governance name
   = KeyGov KeySetName
   | CapGov (CapGovRef name)
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
+
+instance NFData name => NFData (Governance name)
 
 data CapGovRef name where
   UnresolvedGov :: ParsedName -> CapGovRef ParsedName
   ResolvedGov :: FullyQualifiedName -> CapGovRef Name
+
+instance NFData (CapGovRef name) where
+  rnf (UnresolvedGov pn) = rnf pn
+  rnf (ResolvedGov fqn) = rnf fqn
 
 instance Eq (CapGovRef name) where
   (UnresolvedGov g1) == (UnresolvedGov g2) = g1 == g2
@@ -113,7 +125,9 @@ data KSPredicate name
   | Keys2
   | KeysAny
   -- | CustomPredicate name -- TODO: When this is brought back, fix up `keySetGen`!
-  deriving (Eq, Show, Ord, Functor, Foldable, Traversable)
+  deriving (Eq, Show, Ord, Functor, Foldable, Traversable, Generic)
+
+instance NFData name => NFData (KSPredicate name)
 
 predicateToString :: IsString s => KSPredicate name -> s
 predicateToString = \case
@@ -128,7 +142,9 @@ data KeySet name
   = KeySet
   { _ksKeys :: !(S.Set PublicKeyText)
   , _ksPredFun :: KSPredicate name
-  } deriving (Eq, Show, Ord, Functor, Foldable, Traversable)
+  } deriving (Eq, Show, Ord, Functor, Foldable, Traversable, Generic)
+
+instance NFData name => NFData (KeySet name)
 
 instance Pretty name => Pretty (KeySet name) where
   pretty (KeySet ks f) = "KeySet" <+> commaBraces
@@ -198,7 +214,9 @@ data UserGuard name term
   = UserGuard
   { _ugFunction :: name
   , _ugArgs :: [term] }
-  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
+
+instance (NFData name, NFData term) => NFData (UserGuard name term)
 
 instance (Pretty name, Pretty term) => Pretty (UserGuard name term) where
   pretty (UserGuard fn args) = "UserGuard" <+> commaBraces
@@ -210,7 +228,9 @@ data ModuleGuard
   = ModuleGuard
   { _mgModule :: ModuleName
   , _mgName :: Text
-  } deriving (Show, Eq, Ord)
+  } deriving (Show, Eq, Ord, Generic)
+
+instance NFData ModuleGuard
 
 -- Todo: module guards are compared on equality based on name
 -- Why????
@@ -231,13 +251,17 @@ data CapabilityGuard name term
   { _cgName :: !name
   , _cgArgs :: ![term]
   , _cgPactId :: !(Maybe DefPactId) }
-  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
+
+instance (NFData name, NFData term) => NFData (CapabilityGuard name term)
 
 data DefPactGuard
   = DefPactGuard
   { _dpgDefPactId :: !DefPactId
   , _dpgName :: !Text
-  } deriving (Eq, Ord, Show)
+  } deriving (Eq, Ord, Show, Generic)
+
+instance NFData DefPactGuard
 
 data Guard name term
   = GKeyset (KeySet name)
@@ -246,7 +270,9 @@ data Guard name term
   | GCapabilityGuard (CapabilityGuard name term)
   | GModuleGuard ModuleGuard
   | GDefPactGuard DefPactGuard
-  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
+
+instance (NFData name, NFData term) => NFData (Guard name term)
 
 instance (Pretty name, Pretty term) => Pretty (Guard name term) where
   pretty = \case

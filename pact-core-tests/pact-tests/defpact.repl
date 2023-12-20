@@ -23,14 +23,6 @@
 (commit-tx)
 
 
-;; (begin-tx)
-;; (use defcap-module)
-
-;; (expect-failure "should return 'step-0'" "not-step-0" (defpact-single-step))
-;; (commit-tx)
-
-
-
 (begin-tx)
 (use defcap-module)
 

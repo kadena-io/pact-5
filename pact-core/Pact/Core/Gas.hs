@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 
 module Pact.Core.Gas
  ( Gas(..)
@@ -24,6 +25,7 @@ module Pact.Core.Gas
  ) where
 
 import Control.Lens
+import Control.DeepSeq
 import Data.Decimal(Decimal)
 import Data.Word(Word64)
 import Data.Monoid(Sum(..))
@@ -35,33 +37,41 @@ import Data.Semiring(Semiring)
 -- integer, units will go in terms of 1e3 = 2ns
 newtype Gas
   = Gas Word64
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, NFData)
   deriving (Semigroup, Monoid) via (Sum Word64)
   deriving (Semiring, Enum) via Word64
 
 type GasLimit = Gas
 type GasPrice = Decimal
 
+-- | Flat structure of all types of nodes used in evaluation that have an evaluator
+-- type case
 data NodeType
   = VarNode
   | LamNode
+  | LetNode
   | AppNode
   | SeqNode
+  | NullaryNode
+  -- conditional nodes
+  | CondCAndNode
+  | CondCOrNode
+  | CondIfNode
+  | CondEnforceOneNode
+  | CondEnforceNode
+  ---
   | BuiltinNode
   | ConstantNode
   | ListNode
-  deriving (Eq, Show)
+  | TryNode
+  | ObjectLitNode
+  | CapFormWithCapNode
+  | CapFormCreateUGNode
+  | ErrorNode
+  deriving (Eq, Show, Enum, Bounded)
 
 nodeGas :: NodeType -> Gas
-nodeGas = \case
-  VarNode -> Gas 1
-  LamNode -> Gas 1
-  AppNode -> Gas 1
-  SeqNode -> Gas 1
-  BuiltinNode -> Gas 1
-  ConstantNode -> Gas 1
-  ListNode -> Gas 1
-
+nodeGas _ = Gas 1
 
 data GasModel b
   = GasModel

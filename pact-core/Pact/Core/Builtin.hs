@@ -22,6 +22,8 @@ module Pact.Core.Builtin
 
 import Data.Text(Text)
 import Data.Map.Strict(Map)
+import Control.DeepSeq
+import GHC.Generics
 
 import qualified Data.Map.Strict as M
 
@@ -36,7 +38,9 @@ data BuiltinForm o
   | CIf o o o
   | CEnforceOne o [o]
   | CEnforce o o
-  deriving (Show, Eq, Functor, Foldable, Traversable)
+  deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
+
+instance NFData o => NFData (BuiltinForm o)
 
 instance Pretty o => Pretty (BuiltinForm o) where
   pretty = \case
@@ -213,7 +217,9 @@ data RawBuiltin
   -- Misc
   | RawTypeOf
   | RawDec
-  deriving (Eq, Show, Ord, Bounded, Enum)
+  deriving (Eq, Show, Ord, Bounded, Enum, Generic)
+
+instance NFData RawBuiltin
 
 instance HasObjectOps RawBuiltin where
   objectAt = RawAt
@@ -506,6 +512,7 @@ instance IsBuiltin RawBuiltin where
     RawPactId -> 0
     RawTypeOf -> 1
     RawDec -> 1
+
 
 
 rawBuiltinNames :: [Text]

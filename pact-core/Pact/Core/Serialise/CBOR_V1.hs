@@ -174,19 +174,6 @@ instance Serialise ty => Serialise (Arg ty) where
   encode (Arg n ty) = encode n <> encode ty
   decode = Arg <$> decode <*> decode
 
-instance Serialise LamInfo where
-  encode (TLDefun mn t) = encodeWord 0 <> encode mn <> encode t
-  encode (TLDefCap mn t) = encodeWord 1 <> encode mn <> encode t
-  encode (TLDefPact mn t) = encodeWord 2 <> encode mn <> encode t
-  encode AnonLamInfo = encodeWord 3
-
-  decode = decodeWord >>= \case
-    0 -> TLDefun <$> decode <*> decode
-    1 -> TLDefCap <$> decode <*> decode
-    2 -> TLDefPact <$> decode <*> decode
-    3 -> pure AnonLamInfo
-    _ -> fail "unexpected decoding"
-
 
 instance Serialise Decimal where
   encode (Decimal places mantissa) = encode places <> encode mantissa
@@ -212,11 +199,11 @@ instance Serialise Field where
   decode = Field <$> decode
 
 instance (Serialise name, Serialise e) => Serialise (CapForm name e) where
-  encode (WithCapability name es e) = encodeWord 0 <> encode name <> encode es <> encode e
+  encode (WithCapability e1 e2) = encodeWord 0 <> encode e1 <> encode e2
   encode (CreateUserGuard name es) = encodeWord 1 <> encode name <> encode es
 
   decode = decodeWord >>= \case
-    0 -> WithCapability <$> decode <*> decode <*> decode
+    0 -> WithCapability <$> decode <*> decode
     1 -> CreateUserGuard <$> decode <*> decode
     _ -> fail "unexpected decoding"
 
@@ -241,7 +228,7 @@ instance
   (Serialise b, Serialise i)
   => Serialise (Term Name Type b i) where
   encode (Var n i) = encodeWord 0 <> encode n <> encode i
-  encode (Lam li args term i) = encodeWord 1 <> encode li <> encode args <> encode term <> encode i
+  encode (Lam args term i) = encodeWord 1 <> encode args <> encode term <> encode i
   encode (Let arg t1 t2 i) = encodeWord 2 <> encode arg <> encode t1 <> encode t2 <> encode i
   encode (App t1 t2 i) = encodeWord 3 <> encode t1 <> encode t2 <> encode i
   encode (Sequence t1 t2 i) = encodeWord 4 <> encode t1 <> encode t2 <> encode i
@@ -257,7 +244,7 @@ instance
 
   decode = decodeWord >>= \case
     0 -> Var <$> decode <*> decode
-    1 -> Lam <$> decode <*> decode <*> decode <*> decode
+    1 -> Lam <$> decode <*> decode <*> decode
     2 -> Let <$> decode <*> decode <*> decode <*> decode
     3 -> App <$> decode <*> decode <*> decode
     4 -> Sequence <$> decode <*> decode <*> decode
