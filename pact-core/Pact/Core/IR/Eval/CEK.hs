@@ -345,10 +345,10 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esDefPactExec >>= \case
         isRollback = hasRollback step
 
       when (stepCount /= _peStepCount pe) $
-        throwExecutionError i (NestedDefPactParentStepCountMissmatch (_peDefPactId pe) stepCount (_peStepCount pe))
+        throwExecutionError i (NestedDefPactParentStepCountMismatch (_peDefPactId pe) stepCount (_peStepCount pe))
 
       when (isRollback /= _peStepHasRollback pe) $
-        throwExecutionError i (NestedDefPactParentRollbackMissmatch (_peDefPactId pe) isRollback (_peStepHasRollback pe))
+        throwExecutionError i (NestedDefPactParentRollbackMismatch (_peDefPactId pe) isRollback (_peStepHasRollback pe))
 
       exec <- case pe ^. peNestedDefPactExec . at (_psDefPactId ps) of
         Nothing
@@ -424,16 +424,16 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
         --resumeDefPactExec :: MonadEval b i m => DefPactExec -> m (EvalResult b i m)
         resumeDefPactExec pe = do
           when (_psDefPactId ps /= _peDefPactId pe) $
-            throwExecutionError i (DefPactIdMissmatch (_psDefPactId ps) (_peDefPactId pe))
+            throwExecutionError i (DefPactIdMismatch (_psDefPactId ps) (_peDefPactId pe))
 
           when (_psStep ps < 0 || _psStep ps >= _peStepCount pe) $
             throwExecutionError i (InvalidDefPactStepSupplied ps pe)
 
           if _psRollback ps
             then when (_psStep ps /= _peStep pe) $
-                 throwExecutionError i (DefPactRollbackMissmatch ps pe)
+                 throwExecutionError i (DefPactRollbackMismatch ps pe)
             else when (_psStep ps /= succ (_peStep pe)) $
-                 throwExecutionError i (DefPactStepMissmatch ps pe)
+                 throwExecutionError i (DefPactStepMismatch ps pe)
 
           let pc = view peContinuation pe
               args = VPactValue <$> _pcArgs pc

@@ -257,7 +257,7 @@ data EvalError
   -- ^ No Yield available in DefPactStep
   | InvalidDefPactStepSupplied DefPactStep DefPactExec
   -- ^ Supplied DefPactStep requests an invalid step
-  | DefPactIdMissmatch DefPactId DefPactId
+  | DefPactIdMismatch DefPactId DefPactId
   -- ^ Requested PactId does not match context PactId
   | CCDefPactContinuationError DefPactStep DefPactExec DefPactExec
   -- ^ Crosschain DefPact contunation must be at least 2 steps before CC continuation step
@@ -266,9 +266,9 @@ data EvalError
   -- ^ No previouse DefPact execution could be found in the environment or database
   | DefPactAlreadyCompleted DefPactStep
   -- ^ DefPact already completed
-  | NestedDefPactParentStepCountMissmatch DefPactId Int Int
+  | NestedDefPactParentStepCountMismatch DefPactId Int Int
   -- ^ Nested DefPact <stepcount> does not match <parent step count>
-  | NestedDefPactParentRollbackMissmatch DefPactId Bool Bool
+  | NestedDefPactParentRollbackMismatch DefPactId Bool Bool
   -- ^ Nested DefPact <rollback> does not match <parent rollback>
   | NestedDefPactNeverStarted DefPactStep
   -- ^ Nested DefPact never started at prior step
@@ -284,9 +284,9 @@ data EvalError
   -- ^ DefPactStep is not in the environment
   | NoDefPactIdAndExecEnvSupplied
   -- ^ No DefPactId supplied and no DefPactExec found in the environment
-  | DefPactRollbackMissmatch DefPactStep DefPactExec
+  | DefPactRollbackMismatch DefPactStep DefPactExec
   -- ^ DefPact rollback missmatch
-  | DefPactStepMissmatch DefPactStep DefPactExec
+  | DefPactStepMismatch DefPactStep DefPactExec
   -- ^ DefPact missmatch
   | CannotUpgradeInterface ModuleName
   -- ^ Interface cannot be upgrade
@@ -365,7 +365,7 @@ instance Pretty EvalError where
       [ "DefPactStep does not match DefPact properties:"
       , "requested: "<> pretty step
       , "step count:" <> pretty (_peStepCount pe)]
-    DefPactIdMissmatch reqId envId ->
+    DefPactIdMismatch reqId envId ->
       Pretty.hsep
       [ "Requested DefPactId:", pretty reqId
       , "does not match context DefPactId:", pretty envId
@@ -375,14 +375,14 @@ instance Pretty EvalError where
       [ "Crosschain DefPact continuation error:"
       , "DefPactId:" <> pretty (_psStep pactStep)
       ]
-    NestedDefPactParentRollbackMissmatch pid rollback parentRollback ->
+    NestedDefPactParentRollbackMismatch pid rollback parentRollback ->
       Pretty.hsep
       [ "Nested DefPact execution failed, parameter missmatch:"
       , "DefPactId: " <> pretty pid
       , "Rollback: " <> pretty rollback
       , "Parent rollback:" <> pretty parentRollback
       ]
-    NestedDefPactParentStepCountMissmatch pid stepCount parentStepCount ->
+    NestedDefPactParentStepCountMismatch pid stepCount parentStepCount ->
       Pretty.hsep
       [ "Nested DefPact execution failed, parameter missmatch:"
       , "PacId: " <> pretty pid
@@ -408,13 +408,13 @@ instance Pretty EvalError where
       ["Step has no rollback:", "DefPactId: " <> pretty (_psDefPactId ps)]
     DefPactStepNotInEnvironment -> "No DefPactStep in the environment"
     NoDefPactIdAndExecEnvSupplied -> "No DefPactId or execution environment supplied"
-    DefPactRollbackMissmatch ps pe -> Pretty.hsep
+    DefPactRollbackMismatch ps pe -> Pretty.hsep
       [ "Rollback missmatch in DefPactStep and DefPact exeuction environment:"
       , "DefPactId: " <> pretty (_psDefPactId ps)
       , "step rollback: " <> pretty (_psRollback ps)
       , "DefPactExec rollback: " <> pretty (_peStepHasRollback pe)
       ]
-    DefPactStepMissmatch ps pe -> Pretty.hsep
+    DefPactStepMismatch ps pe -> Pretty.hsep
       [ "Step missmatch in DefPactStep and DefPact exeuction environment:"
       , "DefPactId: " <> pretty (_psDefPactId ps)
       , "step: " <> pretty (_psStep ps)
