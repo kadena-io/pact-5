@@ -637,6 +637,12 @@ executionTests =
         )
       |])
 
+  -- CEK errors
+  , ("modref_no_ns", isExecutionError _ModRefNotRefined, [text|
+      (module m g (defcap g () true))
+      m
+      |])
+
   , ("env_namespace_wrong_kind", isExecutionError _NativeArgumentsError, [text|
       (module m g (defcap g () true))
       (env-namespace-policy false (m.g))
