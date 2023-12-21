@@ -643,6 +643,78 @@ executionTests =
       m
       |])
 
+  , ("defpact_not_init", isExecutionError _NoDefPactIdAndExecEnvSupplied, [text|
+      (module m g (defcap g () true))
+      (continue-pact 1)
+      |])
+  , ("defpact_continuing_completed", isExecutionError _DefPactAlreadyCompleted, [text|
+      (module m g (defcap g () true)
+        (defpact p:string ()
+          (step "hello1")
+          (step "hello2")
+          (step "hello3")
+          )
+        )
+
+      (p)
+      (continue-pact 1)
+      (continue-pact 2)
+      (continue-pact 3)
+      |])
+  , ("defpact_continuing_completed_samestep", isExecutionError _DefPactAlreadyCompleted, [text|
+      (module m g (defcap g () true)
+        (defpact p:string ()
+          (step "hello1")
+          (step "hello2")
+          (step "hello3")
+          )
+        )
+
+      (p)
+      (continue-pact 1)
+      (continue-pact 2)
+      (continue-pact 2)
+      |])
+  , ("defpact_continuing_completed_prevstep", isExecutionError _DefPactAlreadyCompleted, [text|
+      (module m g (defcap g () true)
+        (defpact p:string ()
+          (step "hello1")
+          (step "hello2")
+          (step "hello3")
+          )
+        )
+
+      (p)
+      (continue-pact 1)
+      (continue-pact 2)
+      (continue-pact 1)
+      |])
+  , ("defpact_continuing_completed_prevstep", isExecutionError _DefPactStepMismatch, [text|
+      (module m g (defcap g () true)
+        (defpact p:string ()
+          (step "hello1")
+          (step "hello2")
+          (step "hello3")
+          )
+        )
+
+      (p)
+      (continue-pact 0)
+      |])
+  , ("defpact_continuing_completed_prevstep", isExecutionError _DefPactStepMismatch, [text|
+      (module m g (defcap g () true)
+        (defpact p:string ()
+          (step "hello1")
+          (step "hello2")
+          (step "hello3")
+          )
+        )
+
+      (p)
+      (continue-pact 1)
+      (continue-pact 1)
+      |])
+
   , ("env_namespace_wrong_kind", isExecutionError _NativeArgumentsError, [text|
       (module m g (defcap g () true))
       (env-namespace-policy false (m.g))
