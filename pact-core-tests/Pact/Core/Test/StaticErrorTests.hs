@@ -686,6 +686,16 @@ executionTests =
       (continue-pact 1)
       (continue-pact 1)
       |])
+  , ("defpact_continuing_incomplete_badstep", isExecutionError _InvalidDefPactStepSupplied, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 100)
+      |])
+  , ("defpact_continuing_incomplete_negstep", isExecutionError _InvalidDefPactStepSupplied, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact (- 1))
+      |])
 
   ] <> [ ("env_namespace_wrong_kind", isExecutionError _NativeArgumentsError, [text|
       (module m g (defcap g () true))
