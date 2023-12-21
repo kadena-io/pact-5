@@ -675,12 +675,12 @@ executionTests =
       (continue-pact 2)
       (continue-pact 1)
       |])
-  , ("defpact_continuing_completed_prevstep", isExecutionError _DefPactStepMismatch, [text|
+  , ("defpact_continuing_firststep", isExecutionError _DefPactStepMismatch, [text|
       $simpleDefpact
       (p)
       (continue-pact 0)
       |])
-  , ("defpact_continuing_completed_prevstep", isExecutionError _DefPactStepMismatch, [text|
+  , ("defpact_continuing_incomplete_samestep", isExecutionError _DefPactStepMismatch, [text|
       $simpleDefpact
       (p)
       (continue-pact 1)
