@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE InstanceSigs #-}
 
 
@@ -28,6 +29,8 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict(Map)
 import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NE
+import Control.DeepSeq
+import GHC.Generics
 
 import Pact.Core.Guards
 import Pact.Core.Builtin
@@ -47,14 +50,14 @@ data Defun name ty builtin info
   , _dfunRType :: Maybe ty
   , _dfunTerm :: Term name ty builtin info
   , _dfunInfo :: info
-  } deriving (Show, Functor, Eq)
+  } deriving (Show, Functor, Eq, Generic)
 
 data Step name ty builtin info
   = Step (Term name ty builtin info)
   | StepWithRollback
     (Term name ty builtin info)
     (Term name ty builtin info)
-  deriving (Show, Functor, Eq)
+  deriving (Show, Functor, Eq, Generic)
 
 hasRollback :: Step n t b i -> Bool
 hasRollback Step{} = False
@@ -67,7 +70,7 @@ ordinaryDefPactStepExec (StepWithRollback expr _) = expr
 data ConstVal term
   = TermConst term
   | EvaledConst PactValue
-  deriving (Show, Functor, Foldable, Traversable, Eq)
+  deriving (Show, Functor, Foldable, Traversable, Eq, Generic)
 
 data DefPact name ty builtin info
   = DefPact
@@ -76,7 +79,7 @@ data DefPact name ty builtin info
   , _dpRetType :: Maybe ty
   , _dpSteps :: NonEmpty (Step name ty builtin info)
   , _dpInfo :: info
-  } deriving (Show, Functor, Eq)
+  } deriving (Show, Functor, Eq, Generic)
 
 data DefConst name ty builtin info
   = DefConst
@@ -84,7 +87,7 @@ data DefConst name ty builtin info
   , _dcType :: Maybe ty
   , _dcTerm :: ConstVal (Term name ty builtin info)
   , _dcInfo :: info
-  } deriving (Show, Functor, Eq)
+  } deriving (Show, Functor, Eq, Generic)
 
 data DefCap name ty builtin info
   = DefCap
@@ -95,14 +98,14 @@ data DefCap name ty builtin info
   , _dcapTerm :: Term name ty builtin info
   , _dcapMeta :: DefCapMeta (FQNameRef name)
   , _dcapInfo :: info
-  } deriving (Show, Functor, Eq)
+  } deriving (Show, Functor, Eq, Generic)
 
 data DefSchema ty info
   = DefSchema
   { _dsName :: Text
   , _dsSchema :: Map Field ty
   , _dsInfo :: info
-  } deriving (Show, Functor, Eq)
+  } deriving (Show, Functor, Eq, Generic)
 
 -- | The type of our desugared table schemas
 -- TODO: This GADT is unnecessarily complicated and only really necessary
@@ -113,12 +116,15 @@ data TableSchema name where
   DesugaredTable :: ParsedName -> TableSchema ParsedName
   ResolvedTable :: Schema -> TableSchema Name
 
+instance NFData (TableSchema name) where
+  rnf (DesugaredTable pn) = rnf pn
+  rnf (ResolvedTable sc) = rnf sc
+
 instance Eq name => Eq (TableSchema name) where
   (DesugaredTable a) == (DesugaredTable b) = a == b
   (ResolvedTable a) == (ResolvedTable b) = a == b
 
 instance Show (TableSchema name) where
-  show :: TableSchema name -> String
   show (DesugaredTable t) = "DesugardTable(" <> show t <> ")"
   show (ResolvedTable t) = "ResolvedTable(" <> show t <> ")"
 
@@ -127,7 +133,7 @@ data DefTable name info
   { _dtName :: Text
   , _dtSchema :: TableSchema name
   , _dtInfo :: info
-  } deriving (Show, Functor, Eq)
+  } deriving (Show, Functor, Eq, Generic)
 
 data Def name ty builtin info
   = Dfun (Defun name ty builtin info)
@@ -136,7 +142,7 @@ data Def name ty builtin info
   | DSchema (DefSchema ty info)
   | DTable (DefTable name info)
   | DPact (DefPact name ty builtin info)
-  deriving (Show, Functor, Eq)
+  deriving (Show, Functor, Eq, Generic)
 
 data Module name ty builtin info
   = Module
@@ -148,7 +154,7 @@ data Module name ty builtin info
   , _mImplements :: [ModuleName]
   , _mHash :: ModuleHash
   , _mInfo :: info
-  } deriving (Show, Functor, Eq)
+  } deriving (Show, Functor, Eq, Generic)
 
 data Interface name ty builtin info
   = Interface
@@ -157,7 +163,7 @@ data Interface name ty builtin info
   , _ifImports :: [Import]
   , _ifHash :: ModuleHash
   , _ifInfo :: info
-  } deriving (Show, Eq, Functor)
+  } deriving (Show, Eq, Functor, Generic)
 
 data IfDefPact ty info
   = IfDefPact
@@ -165,7 +171,7 @@ data IfDefPact ty info
   , _ifdpArgs :: [Arg ty]
   , _ifdpRType :: Maybe ty
   , _ifdpInfo :: info
-  } deriving (Show, Eq, Functor)
+  } deriving (Show, Eq, Functor, Generic)
 
 data IfDefun ty info
   = IfDefun
@@ -173,7 +179,7 @@ data IfDefun ty info
   , _ifdArgs :: [Arg ty]
   , _ifdRType :: Maybe ty
   , _ifdInfo :: info
-  } deriving (Show, Eq, Functor)
+  } deriving (Show, Eq, Functor, Generic)
 
 data IfDefCap name ty info
   = IfDefCap
@@ -182,7 +188,7 @@ data IfDefCap name ty info
   , _ifdcRType :: Maybe ty
   , _ifdcMeta :: DefCapMeta BareName
   , _ifdcInfo :: info
-  } deriving (Show, Eq, Functor)
+  } deriving (Show, Eq, Functor, Generic)
 
 data IfDef name ty builtin info
   = IfDfun (IfDefun ty info)
@@ -190,7 +196,7 @@ data IfDef name ty builtin info
   | IfDCap (IfDefCap name ty info)
   | IfDPact (IfDefPact ty info)
   | IfDSchema (DefSchema ty info)
-  deriving (Show, Eq, Functor)
+  deriving (Show, Eq, Functor, Generic)
 
 data TopLevel name ty builtin info
   = TLModule (Module name ty builtin info)
@@ -277,18 +283,11 @@ type EvalDef b i = Def Name Type b i
 type EvalModule b i = Module Name Type b i
 type EvalInterface b i = Interface Name Type b i
 
-data LamInfo
-  = TLDefun ModuleName Text
-  | TLDefCap ModuleName Text
-  | TLDefPact ModuleName Text
-  | AnonLamInfo
-  deriving (Show, Eq)
-
 -- | Core IR
 data Term name ty builtin info
   = Var name info
   -- ^ single variables e.g x
-  | Lam LamInfo (NonEmpty (Arg ty)) (Term name ty builtin info) info
+  | Lam (NonEmpty (Arg ty)) (Term name ty builtin info) info
   -- ^ $f = \x.e
   -- Lambdas are named for the sake of the callstack.
   | Let (Arg ty) (Term name ty builtin info) (Term name ty builtin info) info
@@ -318,12 +317,14 @@ data Term name ty builtin info
   -- ^ Capability Natives
   | Error Text info
   -- ^ Error term
-  deriving (Show, Functor, Eq)
+  deriving (Show, Functor, Eq, Generic)
+
+
 
 instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builtin info) where
   pretty = \case
     Var name _ -> pretty name
-    Lam _ ne te _ ->
+    Lam ne te _ ->
       parens ("lambda" <+> parens (fold (NE.intersperse ":" (prettyLamArg <$> ne))) <+> pretty te)
     Let n te te' _ ->
       parens $ "let" <+> parens (pretty n <+> pretty te) <+> pretty te'
@@ -367,8 +368,8 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (TopLevel name ty bu
 termType :: Traversal (Term n t b i) (Term n t' b i) t t'
 termType f  = \case
   Var n i -> pure (Var n i)
-  Lam li ne te i ->
-    Lam li <$> (traversed.argType._Just) f ne <*> termType f te <*> pure i
+  Lam ne te i ->
+    Lam <$> (traversed.argType._Just) f ne <*> termType f te <*> pure i
   Let n te te' i ->
     Let <$> (argType . _Just) f n <*> termType f te <*> termType f te' <*> pure i
   App te ne i ->
@@ -395,8 +396,8 @@ termType f  = \case
 termBuiltin :: Traversal (Term n t b i) (Term n t b' i) b b'
 termBuiltin f = \case
   Var n i -> pure (Var n i)
-  Lam li ne te i ->
-    Lam li ne <$> termBuiltin f te <*> pure i
+  Lam ne te i ->
+    Lam ne <$> termBuiltin f te <*> pure i
   Let n te te' i ->
     Let n <$> termBuiltin f te <*> termBuiltin f te' <*> pure i
   App te ne i ->
@@ -426,7 +427,7 @@ termInfo f = \case
   Var n i -> Var n <$> f i
   Let n t1 t2 i ->
     Let n t1 t2 <$> f i
-  Lam li ns term i -> Lam li ns term <$> f i
+  Lam ns term i -> Lam ns term <$> f i
   App t1 t2 i -> App t1 t2 <$> f i
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i
@@ -444,7 +445,7 @@ termInfo f = \case
 instance Plated (Term name ty builtin info) where
   plate f = \case
     Var n i -> pure (Var n i)
-    Lam li ns term i -> Lam li ns <$> f term <*> pure i
+    Lam ns term i -> Lam ns <$> f term <*> pure i
     Let n t1 t2 i -> Let n <$> f t1 <*> f t2 <*> pure i
     App t1 t2 i -> App <$> f t1 <*> traverse f t2 <*> pure i
     Builtin b i -> pure (Builtin b i)
@@ -477,3 +478,20 @@ makeLenses ''DefPact
 makePrisms ''Def
 makePrisms ''Term
 makePrisms ''IfDef
+
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Term name ty b info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Def name ty b info)
+instance (NFData name, NFData info) => NFData (DefSchema name info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Defun name ty b info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (DefConst name ty b info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (DefCap name ty b info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (DefPact name ty b info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Step name ty b info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Module name ty b info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Interface name ty b info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (IfDef name ty b info)
+instance (NFData ty, NFData info) => NFData (IfDefun ty info)
+instance (NFData ty, NFData info) => NFData (IfDefPact ty info)
+instance (NFData name, NFData ty, NFData info) => NFData (IfDefCap name ty info)
+instance (NFData name, NFData info) => NFData (DefTable name info)
+instance (NFData term) => NFData (ConstVal term)

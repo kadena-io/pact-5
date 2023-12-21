@@ -56,6 +56,9 @@ import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Data.Default
 
+import Control.DeepSeq
+import GHC.Generics
+
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
 
@@ -88,7 +91,9 @@ data ExecutionFlag
   | FlagEnforceKeyFormats
   -- | Require keysets to be defined in namespaces
   | FlagRequireKeysetNs
-  deriving (Eq,Ord,Show,Enum,Bounded)
+  deriving (Eq,Ord,Show,Enum,Bounded, Generic)
+
+instance NFData ExecutionFlag
 
 -- | Flag string representation
 flagRep :: ExecutionFlag -> Text
@@ -107,7 +112,7 @@ data EvalEnv b i
   -- ^ The list of provided keys and scoped capabilities
   , _eePactDb :: PactDb b i
   -- ^ The Pact database store
-  , _eeMsgBody :: ObjectData PactValue
+  , _eeMsgBody :: PactValue
   -- ^ Transaction-provided data
   , _eeHash :: Hash
   -- ^ The transaction hash
@@ -122,7 +127,10 @@ data EvalEnv b i
   , _eeNatives :: Map Text b
   -- ^ The native resolution map
   , _eeNamespacePolicy :: NamespacePolicy
-  }
+  } deriving (Generic)
+
+instance (NFData b, NFData i) => NFData (EvalEnv b i)
+
 
 makeLenses ''EvalEnv
 
@@ -137,14 +145,18 @@ data StackFunctionType
   = SFDefun
   | SFDefcap
   | SFDefPact
-  deriving (Eq, Show, Enum, Bounded)
+  deriving (Eq, Show, Enum, Bounded, Generic)
+
+instance NFData StackFunctionType
 
 data StackFrame
   = StackFrame
   { _sfFunction :: Text
   , _sfModule :: ModuleName
   , _sfFnType :: StackFunctionType }
-  deriving Show
+  deriving (Show, Generic)
+
+instance NFData StackFrame
 
 data EvalState b i
   = EvalState
@@ -153,7 +165,9 @@ data EvalState b i
   , _esEvents :: [PactEvent PactValue]
   , _esLoaded :: Loaded b i
   , _esDefPactExec :: Maybe DefPactExec
-  } deriving Show
+  } deriving (Show, Generic)
+
+instance (NFData b, NFData i) => NFData (EvalState b i)
 
 instance Default (EvalState b i) where
   def = EvalState def [] [] mempty Nothing
@@ -190,7 +204,7 @@ defaultEvalEnv pdb m
   = EvalEnv
   { _eeMsgSigs = mempty
   , _eePactDb = pdb
-  , _eeMsgBody = ObjectData mempty
+  , _eeMsgBody = PObject mempty
   , _eeHash = defaultPactHash
   , _eePublicData = def
   , _eeDefPactStep = Nothing

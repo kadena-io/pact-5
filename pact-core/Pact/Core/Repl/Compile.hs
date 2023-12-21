@@ -2,6 +2,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
 
 
@@ -9,6 +11,7 @@
 module Pact.Core.Repl.Compile
  ( ReplCompileValue(..)
  , interpretReplProgram
+ , interpretReplProgramSmallStep
  ) where
 
 import Control.Lens
@@ -30,23 +33,22 @@ import Pact.Core.Builtin
 import Pact.Core.Names
 import Pact.Core.Repl.Utils
 import Pact.Core.IR.Desugar
-import Pact.Core.Errors
 import Pact.Core.IR.Term
 import Pact.Core.Compile
-import Pact.Core.Interpreter
 import Pact.Core.Environment
-import Pact.Core.Serialise (serialisePact_repl_spaninfo)
 import Pact.Core.Info
+import Pact.Core.Serialise (serialisePact_repl_spaninfo)
 
 
 import Pact.Core.IR.Eval.Runtime
-import Pact.Core.IR.Eval.CEK(eval)
-import Pact.Core.IR.Eval.RawBuiltin
+import Pact.Core.IR.Eval.CEK(CEKEval)
 import Pact.Core.Repl.Runtime.ReplBuiltin
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
+
+type Repl = ReplM ReplRawBuiltin
 
 -- Small internal debugging function for playing with file loading within
 -- this module
@@ -57,19 +59,37 @@ data ReplCompileValue
   deriving Show
 
 loadFile
-  :: FilePath
+  :: (CEKEval step ReplRawBuiltin SpanInfo Repl)
+  => FilePath
+  -> BuiltinEnv step ReplRawBuiltin SpanInfo Repl
   -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
   -> ReplM ReplRawBuiltin [ReplCompileValue]
-loadFile loc display = do
+loadFile loc rEnv display = do
   source <- SourceCode (takeFileName loc) <$> liftIO (T.readFile loc)
   replCurrSource .= source
-  interpretReplProgram source display
+  interpretReplProgram' rEnv source display
+
 
 interpretReplProgram
   :: SourceCode
   -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
   -> ReplM ReplRawBuiltin [ReplCompileValue]
-interpretReplProgram (SourceCode _ source) display = do
+interpretReplProgram = interpretReplProgram' (replBuiltinEnv @CEKBigStep)
+
+interpretReplProgramSmallStep
+  :: SourceCode
+  -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
+  -> ReplM ReplRawBuiltin [ReplCompileValue]
+interpretReplProgramSmallStep = interpretReplProgram' (replBuiltinEnv @CEKSmallStep)
+
+
+interpretReplProgram'
+  :: (CEKEval step ReplRawBuiltin SpanInfo Repl)
+  => BuiltinEnv step ReplRawBuiltin SpanInfo Repl
+  -> SourceCode
+  -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
+  -> ReplM ReplRawBuiltin [ReplCompileValue]
+interpretReplProgram' replEnv (SourceCode _ source) display = do
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ Lisp.parseReplProgram lexx
@@ -87,7 +107,7 @@ interpretReplProgram (SourceCode _ source) display = do
           pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
           replPactDb .= pactdb
           replEvalEnv .= defaultEvalEnv pactdb replRawBuiltinMap
-          out <- loadFile (T.unpack txt) display
+          out <- loadFile (T.unpack txt) replEnv display
           replCurrSource .= oldSrc
           pure out
         | otherwise -> do
@@ -95,55 +115,18 @@ interpretReplProgram (SourceCode _ source) display = do
           oldEs <- use evalState
           oldEE <- use replEvalEnv
           when b $ evalState .= def
-          out <- loadFile (T.unpack txt) display
+          out <- loadFile (T.unpack txt) replEnv display
           replEvalEnv .= oldEE
           evalState .= oldEs
           replCurrSource .= oldSrc
           pure out
   pipe' tl = case tl of
     Lisp.RTLTopLevel toplevel -> do
-      v <- interpretTopLevel (Interpreter interpretExpr interpretGuard) toplevel
+      v <- interpretTopLevel replEnv toplevel
       displayValue (RCompileValue v)
     _ ->  do
       ds <- runDesugarReplTopLevel tl
       interpret ds
-  interpretGuard i g = do
-    pdb <- viewEvalEnv eePactDb
-    ps <- viewEvalEnv eeDefPactStep
-    let env = CEKEnv mempty pdb replBuiltinEnv ps False
-    ev <- coreEnforceGuard i (RBuiltinWrap RawEnforceGuard) Mt CEKNoHandler env [VGuard g]
-    case ev of
-      VError txt _ ->
-        throwError (PEExecutionError (EvalError txt) i)
-      EvalValue v -> do
-        case v of
-          VClosure{} -> do
-            pure IPClosure
-          VTable tv -> pure (IPTable (_tvName tv))
-          VPactValue pv -> do
-            pure (IPV pv i)
-
-  interpretExpr :: Purity -> EvalTerm ReplRawBuiltin SpanInfo  -> ReplM ReplRawBuiltin (InterpretValue SpanInfo)
-  interpretExpr purity term = do
-    pdb <- use (replEvalEnv . eePactDb)
-    let builtins = replBuiltinEnv
-    ps <- viewEvalEnv eeDefPactStep
-    let cekEnv = fromPurity $ CEKEnv mempty pdb builtins ps False
-    eval cekEnv term >>= \case
-      VError txt _ ->
-        throwError (PEExecutionError (EvalError txt) (view termInfo term))
-      EvalValue v -> do
-        case v of
-          VClosure{} -> do
-            pure IPClosure
-          VTable tv -> pure (IPTable (_tvName tv))
-          VPactValue pv -> do
-            pure (IPV pv (view termInfo term))
-    where
-    fromPurity env = case purity of
-      PSysOnly -> sysOnlyEnv env
-      PReadOnly -> readOnlyEnv env
-      PImpure -> env
   interpret (DesugarOutput tl _deps) = do
     case tl of
       RTLDefun df -> do

@@ -47,6 +47,7 @@
       '';
     in rec {
       packages.pact-core-binary = flake.packages."pact-core:exe:repl";
+      packages.pact-core-gasmodel = flake.packages."pact-core:exe:gasmodel";
       packages.pact-core-tests  = flake.packages."pact-core:test:core-tests";
 
       packages.default = packages.pact-core-binary;
@@ -60,6 +61,8 @@
         export LANG=C.UTF-8
 
         echo ${mkCheck "pact-core" packages.default}
+
+        echo ${mkCheck "pact-core" packages.pact-core-gasmodel}
 
         echo ${packages.pact-core-tests}
         (cd ${self}; ${packages.pact-core-tests}/bin/core-tests)

@@ -1,4 +1,6 @@
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DataKinds #-}
 
 module Pact.Core.Evaluate
   ( MsgData(..)
@@ -9,7 +11,11 @@ module Pact.Core.Evaluate
   , setupEvalEnv
   , interpret
   , compileOnly
+  , compileOnlyTerm
   , evaluateDefaultState
+  , builtinEnv
+  , Eval
+  , EvalBuiltinEnv
   ) where
 
 import Control.Lens
@@ -17,10 +23,12 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Exception.Safe
 import Data.ByteString (ByteString)
+import Data.Maybe (fromMaybe)
 import Data.Default
 import Data.Text (Text)
 import Data.Map.Strict(Map)
 
+import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 import Pact.Core.Builtin
@@ -28,32 +36,42 @@ import Pact.Core.Compile
 import Pact.Core.Environment
 import Pact.Core.Errors
 import Pact.Core.Hash (Hash)
-import Pact.Core.Interpreter
 import Pact.Core.IR.Eval.RawBuiltin
 import Pact.Core.IR.Eval.Runtime hiding (EvalResult)
-import Pact.Core.IR.Term
 import Pact.Core.Persistence
 import Pact.Core.DefPacts.Types
 import Pact.Core.Capabilities
 import Pact.Core.PactValue
 import Pact.Core.Gas
 import Pact.Core.Names
+import Pact.Core.Guards
 import Pact.Core.Namespace
 import qualified Pact.Core.IR.Eval.CEK as Eval
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
+import qualified Pact.Core.IR.Eval.Runtime.Types as Eval
+
+-- | Our production evaluation alias
+--   TODO: Maybe export from Runtime.Types?
+type Eval = EvalM RawBuiltin ()
+
+-- Our Builtin environment for evaluation in Chainweb prod
+type EvalBuiltinEnv = BuiltinEnv Eval.CEKBigStep RawBuiltin () Eval
 
 -- | Transaction-payload related environment data.
 data MsgData = MsgData
-  { mdData :: !(ObjectData PactValue)
+  { mdData :: !PactValue
   , mdStep :: !(Maybe DefPactStep)
   , mdHash :: !Hash
-  -- , mdSigners :: [Signer]
+  , mdSigners :: [Signer QualifiedName PactValue]
   }
 
 initMsgData :: Hash -> MsgData
-initMsgData h = MsgData (ObjectData mempty) def h
+initMsgData h = MsgData (PObject mempty) def h mempty
+
+builtinEnv :: EvalBuiltinEnv
+builtinEnv = rawBuiltinEnv @Eval.CEKBigStep
 
 type EvalInput = Either (Maybe DefPactExec) [Lisp.TopLevel ()]
 
@@ -96,7 +114,7 @@ setupEvalEnv
   -> EvalEnv RawBuiltin ()
 setupEvalEnv pdb mode msgData np pd efs =
   EvalEnv
-    { _eeMsgSigs = mempty
+    { _eeMsgSigs = mkMsgSigs $ mdSigners msgData
     , _eePactDb = pdb
     , _eeMsgBody = mdData msgData
     , _eeHash = mdHash msgData
@@ -107,6 +125,11 @@ setupEvalEnv pdb mode msgData np pd efs =
     , _eeNatives = rawBuiltinMap
     , _eeNamespacePolicy = np
     }
+  where
+  mkMsgSigs ss = M.fromList $ map toPair ss
+  toPair (Signer _scheme pubK addr capList) = (pk,S.fromList capList)
+    where
+    pk = PublicKeyText $ fromMaybe pubK addr
 
 evalExec :: EvalEnv RawBuiltin () -> RawCode -> IO (Either (PactError ()) EvalResult)
 evalExec evalEnv rc = do
@@ -170,24 +193,17 @@ evalWithinTx input = withRollback (start runInput >>= end)
 compileOnly :: RawCode -> Either (PactError ()) [Lisp.TopLevel ()]
 compileOnly = bimap void (fmap void) . (Lisp.lexer >=> Lisp.parseProgram) . _rawCode
 
+-- | Runs only compilation pipeline for a single term
+compileOnlyTerm :: RawCode -> Either (PactError ()) (Lisp.Expr ())
+compileOnlyTerm =
+  bimap void void . (Lisp.lexer >=> Lisp.parseExpr) . _rawCode
+
+
 resumePact
   :: Maybe DefPactExec
-  -> EvalM RawBuiltin () (CompileValue ())
-resumePact mdp = do
-  evalEnv <- viewEvalEnv id
-  let pdb = _eePactDb evalEnv
-  let env = CEKEnv mempty pdb rawBuiltinEnv (_eeDefPactStep evalEnv) False
-  ev <- Eval.resumePact () Mt CEKNoHandler env mdp
-  InterpretValue <$> case ev of
-    VError txt i ->
-      throwError (PEExecutionError (EvalError txt) i)
-    EvalValue v -> do
-      case v of
-        VClosure{} -> do
-          pure IPClosure
-        VTable tv -> pure (IPTable (_tvName tv))
-        VPactValue pv -> do
-          pure (IPV pv ())
+  -> Eval (CompileValue ())
+resumePact mdp =
+  (`InterpretValue` ()) <$> Eval.evalResumePact () builtinEnv mdp
 
 -- | Compiles and evaluates the code
 evaluateDefaultState :: RawCode -> EvalM RawBuiltin () [CompileValue ()]
@@ -197,42 +213,4 @@ evaluateTerms
   :: [Lisp.TopLevel ()]
   -> EvalM RawBuiltin () [CompileValue ()]
 evaluateTerms tls = do
-  traverse (interpretTopLevel $ Interpreter interpretExpr interpretGuard) tls
-
-  where
-  interpretGuard i g = do
-    evalEnv <- viewEvalEnv id
-    let pdb = _eePactDb evalEnv
-    let env = CEKEnv mempty pdb rawBuiltinEnv (_eeDefPactStep evalEnv) False
-    ev <- coreEnforceGuard i RawEnforceGuard Mt CEKNoHandler env [VGuard g]
-    case ev of
-      VError txt _ ->
-        throwError (PEExecutionError (EvalError txt) i)
-      EvalValue v -> do
-        case v of
-          VClosure{} -> do
-            pure IPClosure
-          VTable tv -> pure (IPTable (_tvName tv))
-          VPactValue pv -> do
-            pure (IPV pv i)
-
-  interpretExpr purity term = do
-    evalEnv <- viewEvalEnv id
-    let builtins = rawBuiltinEnv
-    let pdb = _eePactDb evalEnv
-    let cekEnv = fromPurity $ CEKEnv mempty pdb builtins (_eeDefPactStep evalEnv) False
-    Eval.eval cekEnv term >>= \case
-      VError txt _ ->
-        throwError (PEExecutionError (EvalError txt) (view termInfo term))
-      EvalValue v -> do
-        case v of
-          VClosure{} -> do
-            pure IPClosure
-          VTable tv -> pure (IPTable (_tvName tv))
-          VPactValue pv -> do
-            pure (IPV pv (view termInfo term))
-    where
-    fromPurity env = case purity of
-      PSysOnly -> sysOnlyEnv env
-      PReadOnly -> readOnlyEnv env
-      PImpure -> env
+  traverse (interpretTopLevel builtinEnv) tls

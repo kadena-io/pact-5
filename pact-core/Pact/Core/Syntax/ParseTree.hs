@@ -244,7 +244,7 @@ data Interface i
   , _ifDefns :: [IfDef i]
   , _ifImports :: [Import]
   , _ifDocs :: Maybe Text
-  , _ifModel :: Maybe [FVFunModel i]
+  , _ifModel :: [FVModel i]
   , _ifInfo :: i
   } deriving (Show, Functor)
 
@@ -322,7 +322,7 @@ instance Pretty (Binder i) where
     parens $ pretty ident <> maybe mempty ((":" <>) . pretty) ty <+> pretty e
 
 data CapForm i
-  = WithCapability ParsedName [Expr i] (Expr i)
+  = WithCapability (Expr i) (Expr i)
   | CreateUserGuard ParsedName [Expr i]
   deriving (Show, Eq, Functor)
 
@@ -427,8 +427,8 @@ instance Pretty (Expr i) where
     Suspend e _ ->
       parens ("suspend" <+> pretty e)
     CapabilityForm c _ -> case c of
-      WithCapability pn exs ex ->
-        parens ("with-capability" <+> capApp pn exs <+> pretty ex)
+      WithCapability cap body ->
+        parens ("with-capability" <+> pretty cap <+> pretty body)
       CreateUserGuard pn exs ->
         parens ("create-user-guard" <> capApp pn exs)
       where

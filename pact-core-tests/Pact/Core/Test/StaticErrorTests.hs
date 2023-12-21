@@ -8,9 +8,9 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import Control.Lens
-import Data.Default
 import Data.IORef
 import Data.Text (Text)
+import Data.Default
 import Data.Maybe(isJust)
 import NeatInterpolation (text)
 

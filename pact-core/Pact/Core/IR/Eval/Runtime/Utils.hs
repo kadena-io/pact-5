@@ -33,6 +33,8 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , evalStateToErrorState
  , restoreFromErrorState
  , getDefPactId
+ , tvToDomain
+ , envFromPurity
  ) where
 
 import Control.Lens
@@ -61,9 +63,9 @@ mkBuiltinFn
   :: (IsBuiltin b)
   => i
   -> b
-  -> CEKEnv b i m
-  -> NativeFunction b i m
-  -> NativeFn b i m
+  -> CEKEnv step b i m
+  -> NativeFunction step b i m
+  -> NativeFn step b i m
 mkBuiltinFn i b env fn =
   NativeFn b env fn (builtinArity b) i
 {-# INLINE mkBuiltinFn #-}
@@ -77,7 +79,7 @@ mkBuiltinFn i b env fn =
   -- EmitEventFrame fqn -> EmitEventFrame <$> f fqn
   -- CreateUserGuardFrame fqn -> CreateUserGuardFrame <$> f fqn
 
-enforcePactValue :: (MonadEval b i m) => i -> CEKValue b i m -> m PactValue
+enforcePactValue :: (MonadEval b i m) => i -> CEKValue step b i m -> m PactValue
 enforcePactValue info = \case
   VPactValue pv -> pure pv
   _ -> throwExecutionError info ExpectedPactValue
@@ -148,10 +150,10 @@ checkNonLocalAllowed :: (MonadEval b i m) => i -> m ()
 checkNonLocalAllowed info = do
   disabledInTx <- isExecutionFlagSet FlagDisableHistoryInTransactionalMode
   mode <- viewEvalEnv eeMode
-  when (mode == Transactional && disabledInTx) $ failInvariant info $
+  when (mode == Transactional && disabledInTx) $ failInvariant info
     "Operation only permitted in local execution mode"
 
-toArgTypeError :: CEKValue b i m -> ArgTypeError
+toArgTypeError :: CEKValue step b i m -> ArgTypeError
 toArgTypeError = \case
   VPactValue pv -> case pv of
     PLiteral l -> ATEPrim (literalPrim l)
@@ -168,7 +170,7 @@ argsError
   :: (MonadEval b i m, IsBuiltin b)
   => i
   -> b
-  -> [CEKValue b3 i2 m2]
+  -> [CEKValue step b3 i2 m2]
   -> m a
 argsError info b args =
   throwExecutionError info (NativeArgumentsError (builtinName b) (toArgTypeError <$> args))
@@ -192,7 +194,12 @@ asBool
 asBool _ _ (PLiteral (LString b)) = pure b
 asBool i b pv = argsError i b [VPactValue pv]
 
-readOnlyEnv :: CEKEnv b i m -> CEKEnv b i m
+envFromPurity :: Purity -> CEKEnv step b i m -> CEKEnv step b i m
+envFromPurity PImpure = id
+envFromPurity PReadOnly = readOnlyEnv
+envFromPurity PSysOnly = sysOnlyEnv
+
+readOnlyEnv :: CEKEnv step b i m -> CEKEnv step b i m
 readOnlyEnv e
   | view (cePactDb . pdbPurity) e == PSysOnly = e
   | otherwise =
@@ -212,24 +219,24 @@ readOnlyEnv e
              }
       in set cePactDb newPactdb e
 
-sysOnlyEnv :: forall b i m. CEKEnv b i m -> CEKEnv b i m
+sysOnlyEnv :: forall step b i m. CEKEnv step b i m -> CEKEnv step b i m
 sysOnlyEnv e
   | view (cePactDb . pdbPurity) e == PSysOnly = e
   | otherwise =
-      let newPactdb =
-              PactDb
-              { _pdbPurity = PSysOnly
-              , _pdbRead = read'
-              , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
-              , _pdbKeys = \_ -> dbOpDisallowed
-              , _pdbCreateUserTable = const dbOpDisallowed
-              , _pdbBeginTx = \_ -> dbOpDisallowed
-              , _pdbCommitTx = dbOpDisallowed
-              , _pdbRollbackTx = dbOpDisallowed
-              , _pdbTxIds = \_ _ -> dbOpDisallowed
-              , _pdbGetTxLog = \_ _ -> dbOpDisallowed
-              }
-      in set cePactDb newPactdb e
+  let newPactdb =
+          PactDb
+         { _pdbPurity = PSysOnly
+         , _pdbRead = read'
+         , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
+         , _pdbKeys = const dbOpDisallowed
+         , _pdbCreateUserTable = \_ -> dbOpDisallowed
+         , _pdbBeginTx = const dbOpDisallowed
+         , _pdbCommitTx = dbOpDisallowed
+         , _pdbRollbackTx = dbOpDisallowed
+         , _pdbTxIds = \_ _ -> dbOpDisallowed
+         , _pdbGetTxLog = \_ _ -> dbOpDisallowed
+         }
+  in set cePactDb newPactdb e
   where
   pdb = view cePactDb e
   read' :: Domain k v b i -> k -> IO (Maybe v)
@@ -243,3 +250,7 @@ getDefPactId info =
     Just pe -> pure (_peDefPactId pe)
     Nothing ->
       throwExecutionError info NotInDefPactExecution
+
+tvToDomain :: TableValue -> Domain RowKey RowData b i
+tvToDomain tv =
+  DUserTables (_tvName tv)

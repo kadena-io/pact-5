@@ -203,14 +203,6 @@ literalGen = Gen.choice
   , LBool <$> Gen.bool_ -- no shrinking
   ]
 
-lamInfoGen :: Gen LamInfo
-lamInfoGen = Gen.choice
-  [ TLDefun <$> moduleNameGen <*> textGen
-  , TLDefCap <$> moduleNameGen <*> textGen
-  , TLDefPact <$> moduleNameGen <*> textGen
-  , pure AnonLamInfo
-  ]
-
 builtinFormGen :: Gen b -> Gen i -> Gen (BuiltinForm (Term Name Type b i))
 builtinFormGen b i = Gen.choice
   [ CAnd <$> termGen b i <*> termGen b i
@@ -227,7 +219,7 @@ termGen b i = Gen.recursive Gen.choice
   , Constant <$> literalGen <*> i
   , Error <$> identGen <*> i
   ]
-  [ Lam <$> lamInfoGen <*> Gen.nonEmpty (Range.linear 1 16) argGen <*> termGen b i <*> i
+  [ Lam <$> Gen.nonEmpty (Range.linear 1 16) argGen <*> termGen b i <*> i
   , Let <$> argGen <*> termGen b i <*> termGen b i <*> i
   , App <$> termGen b i <*> Gen.list (Range.linear 0 16) (termGen b i) <*> i
   , Sequence <$> termGen b i <*> termGen b i <*> i
