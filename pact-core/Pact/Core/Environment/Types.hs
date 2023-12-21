@@ -112,7 +112,7 @@ data EvalEnv b i
   -- ^ The list of provided keys and scoped capabilities
   , _eePactDb :: PactDb b i
   -- ^ The Pact database store
-  , _eeMsgBody :: ObjectData PactValue
+  , _eeMsgBody :: PactValue
   -- ^ Transaction-provided data
   , _eeHash :: Hash
   -- ^ The transaction hash
@@ -204,7 +204,7 @@ defaultEvalEnv pdb m
   = EvalEnv
   { _eeMsgSigs = mempty
   , _eePactDb = pdb
-  , _eeMsgBody = ObjectData mempty
+  , _eeMsgBody = PObject mempty
   , _eeHash = defaultPactHash
   , _eePublicData = def
   , _eeDefPactStep = Nothing

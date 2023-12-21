@@ -196,8 +196,7 @@ envHash info b cont handler _env = \case
 envData :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
 envData info b cont handler _env = \case
   [VObject o] -> do
-    let ed = ObjectData o
-    (replEvalEnv . eeMsgBody) .= ed
+    (replEvalEnv . eeMsgBody) .= PObject o
     returnCEKValue cont handler VUnit
   args -> argsError info b args
 

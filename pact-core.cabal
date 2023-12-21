@@ -155,6 +155,7 @@ library
     Pact.Core.Namespace
     Pact.Core.RuntimeParsers
     Pact.Core.Evaluate
+    Pact.Core.Scheme
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree

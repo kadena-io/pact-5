@@ -20,7 +20,6 @@
 -- The core IR manages to
 --
 
--- Todo: Enumerate imports
 module Pact.Core.IR.Term where
 
 import Control.Lens
@@ -279,6 +278,7 @@ ifDefInfo = \case
   IfDSchema d -> _dsInfo d
 
 type EvalTerm b i = Term Name Type b i
+type EvalTopLevel b i = TopLevel Name Type b i
 type EvalDef b i = Def Name Type b i
 type EvalModule b i = Module Name Type b i
 type EvalInterface b i = Interface Name Type b i

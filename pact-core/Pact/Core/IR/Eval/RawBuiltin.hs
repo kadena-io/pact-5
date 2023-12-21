@@ -718,69 +718,79 @@ coreDec info b cont handler _env = \case
 coreReadInteger :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreReadInteger info b cont handler _env = \case
   [VString s] -> do
-    ObjectData envData <- viewEvalEnv eeMsgBody
-    case M.lookup (Field s) envData of
-      Just (PInteger p) -> returnCEKValue cont handler (VInteger p)
+    viewEvalEnv eeMsgBody >>= \case
+      PObject envData ->
+        case M.lookup (Field s) envData of
+          Just (PInteger p) -> returnCEKValue cont handler (VInteger p)
+          _ -> returnCEK cont handler (VError "read-integer failure" info)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
   args -> argsError info b args
 
 coreReadMsg :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreReadMsg info b cont handler _env = \case
   [VString s] -> do
-    ObjectData envData <- viewEvalEnv eeMsgBody
-    case M.lookup (Field s) envData of
-      Just pv -> returnCEKValue cont handler (VPactValue pv)
-      _ -> returnCEK cont handler (VError "read-integer failure" info)
+    viewEvalEnv eeMsgBody >>= \case
+      PObject envData ->
+        case M.lookup (Field s) envData of
+          Just pv -> returnCEKValue cont handler (VPactValue pv)
+          _ -> returnCEK cont handler (VError "read-msg failure" info)
+      _ -> returnCEK cont handler (VError "read-msg failure: data is not an object" info)
   [] -> do
-    ObjectData envData <- viewEvalEnv eeMsgBody
-    returnCEKValue cont handler (VObject envData)
+    envData <- viewEvalEnv eeMsgBody
+    returnCEKValue cont handler (VPactValue envData)
   args -> argsError info b args
 
 coreReadDecimal :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreReadDecimal info b cont handler _env = \case
   [VString s] -> do
-    ObjectData envData <- viewEvalEnv eeMsgBody
-    case M.lookup (Field s) envData of
-      Just (PDecimal p) -> returnCEKValue cont handler (VDecimal p)
-      _ -> returnCEK cont handler (VError "read-integer failure" info)
+    viewEvalEnv eeMsgBody >>= \case
+      PObject envData ->
+        case M.lookup (Field s) envData of
+          Just (PDecimal p) -> returnCEKValue cont handler (VDecimal p)
+          _ -> returnCEK cont handler (VError "read-decimal failure" info)
+      _ -> returnCEK cont handler (VError "read-decimal failure" info)
   args -> argsError info b args
 
 coreReadString :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreReadString info b cont handler _env = \case
   [VString s] -> do
-    ObjectData envData <- viewEvalEnv eeMsgBody
-    case M.lookup (Field s) envData of
-      Just (PString p) -> returnCEKValue cont handler (VString p)
-      _ -> returnCEK cont handler (VError "read-integer failure" info)
+    viewEvalEnv eeMsgBody >>= \case
+      PObject envData ->
+        case M.lookup (Field s) envData of
+          Just (PString p) -> returnCEKValue cont handler (VString p)
+          _ -> returnCEK cont handler (VError "read-string failure" info)
+      _ -> returnCEK cont handler (VError "read-string failure" info)
   args -> argsError info b args
 
 readKeyset' :: (MonadEval b i m) => T.Text -> m (Maybe (KeySet QualifiedName))
 readKeyset' ksn = do
-    ObjectData envData <- viewEvalEnv eeMsgBody
-    case M.lookup (Field ksn) envData of
-      Just (PObject dat) -> parseObj dat
-        where
-        parseObj d = pure $ do
-          keys <- M.lookup (Field "keys") d
-          keyText <- preview _PList keys >>= traverse (fmap PublicKeyText . preview (_PLiteral . _LString))
-          predRaw <- M.lookup (Field "pred") d
-          p <- preview (_PLiteral . _LString) predRaw
-          pred' <- readPredicate p
-          let ks = S.fromList (V.toList keyText)
-          pure (KeySet ks pred')
-        readPredicate = \case
-          "keys-any" -> pure KeysAny
-          "keys-2" -> pure Keys2
-          "keys-all" -> pure KeysAll
-          _ -> Nothing
-      Just (PList li) ->
-        case parseKeyList li of
-          Just ks -> pure (Just (KeySet ks KeysAll))
-          Nothing -> pure Nothing
-        where
-        parseKeyList d =
-          S.fromList . V.toList . fmap PublicKeyText <$> traverse (preview (_PLiteral . _LString)) d
-      _ -> pure Nothing
+  viewEvalEnv eeMsgBody >>= \case
+    PObject envData ->
+      case M.lookup (Field ksn) envData of
+        Just (PObject dat) -> parseObj dat
+          where
+          parseObj d = pure $ do
+            keys <- M.lookup (Field "keys") d
+            keyText <- preview _PList keys >>= traverse (fmap PublicKeyText . preview (_PLiteral . _LString))
+            predRaw <- M.lookup (Field "pred") d
+            p <- preview (_PLiteral . _LString) predRaw
+            pred' <- readPredicate p
+            let ks = S.fromList (V.toList keyText)
+            pure (KeySet ks pred')
+          readPredicate = \case
+            "keys-any" -> pure KeysAny
+            "keys-2" -> pure Keys2
+            "keys-all" -> pure KeysAll
+            _ -> Nothing
+        Just (PList li) ->
+          case parseKeyList li of
+            Just ks -> pure (Just (KeySet ks KeysAll))
+            Nothing -> pure Nothing
+          where
+          parseKeyList d =
+            S.fromList . V.toList . fmap PublicKeyText <$> traverse (preview (_PLiteral . _LString)) d
+        _ -> pure Nothing
+    _ -> pure Nothing
 
 
 coreReadKeyset :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -832,30 +842,6 @@ foldDb info b cont handler env = \case
   [VTable tv, VClosure queryClo, VClosure consumer] -> do
     let cont' = BuiltinC env info (PreFoldDbC tv queryClo consumer) cont
     guardTable info cont' handler env tv GtSelect
-    -- let pdb = view cePactDb env
-    -- guardTable info env tv GtSelect
-    -- let tblDomain = DUserTables (_tvName tv)
-    -- keys <- liftDbFunction info (_pdbKeys pdb tblDomain)
-    -- go pdb [] keys
-    -- where
-      -- todo: weird key invariant
-      -- go pdb acc (rk@(RowKey k):ks) = do
-      --   liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) rk) >>= \case
-      --     Just (RowData row) -> do
-      --       applyLam queryClo [VString k, VObject row] Mt CEKNoHandler >>= \case
-      --         EvalValue (VBool qry) -> if qry then do
-      --           applyLam consumer [VString k, VObject row] Mt CEKNoHandler >>= \case
-      --             EvalValue (VPactValue v) -> go pdb (v:acc) ks
-      --             EvalValue _ ->
-      --               returnCEK cont handler (VError "Fold db did not return a pact value" info)
-      --             v -> returnCEK cont handler v
-      --           else go pdb acc ks
-      --         EvalValue _ ->
-      --           returnCEK cont handler (VError "Fold db did not return a pact value" info)
-      --         v@VError{} -> returnCEK cont handler v
-      --     Nothing -> error "no key despite keys"
-      -- go _ acc [] =
-      --   returnCEKValue cont handler (VList (V.fromList (reverse acc)))
   args -> argsError info b args
 
 dbRead :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -863,11 +849,6 @@ dbRead info b cont handler env = \case
   [VTable tv, VString k] -> do
     let cont' = BuiltinC env info (ReadC tv (RowKey k)) cont
     guardTable info cont' handler env tv GtRead
-    -- let pdb = view cePactDb env
-    -- guardTable info env tv GtRead
-    -- liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
-    --   Just (RowData v) -> returnCEKValue cont handler (VObject v)
-    --   Nothing -> returnCEK cont handler (VError "no such read object" info)
   args -> argsError info b args
 
 dbWithRead :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -875,11 +856,6 @@ dbWithRead info b cont handler env = \case
   [VTable tv, VString k, VClosure clo] -> do
     let cont' = BuiltinC env info (WithReadC tv (RowKey k) clo) cont
     guardTable info cont' handler env tv GtWithRead
-    -- let pdb = view cePactDb env
-    -- guardTable info env tv GtWithRead
-    -- liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
-    --   Just (RowData v) -> applyLam clo [VObject v] cont handler
-    --   Nothing -> returnCEK cont handler (VError "no such read object" info)
   args -> argsError info b args
 
 dbWithDefaultRead :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -887,11 +863,6 @@ dbWithDefaultRead info b cont handler env = \case
   [VTable tv, VString k, VObject defaultObj, VClosure clo] -> do
     let cont' = BuiltinC env info (WithDefaultReadC tv (RowKey k) (ObjectData defaultObj) clo) cont
     guardTable info cont' handler env tv GtWithDefaultRead
-    -- let pdb = view cePactDb env
-    -- guardTable info env tv GtWithDefaultRead
-    -- liftDbFunction info (_pdbRead pdb (DUserTables (_tvName tv)) (RowKey k)) >>= \case
-    --   Just (RowData v) -> applyLam clo [VObject v] cont handler
-    --   Nothing -> applyLam clo [VObject defaultObj] cont handler
   args -> argsError info b args
 
 -- | Todo: schema checking here? Or only on writes?
@@ -906,38 +877,16 @@ write' wt info b cont handler env = \case
   [VTable tv, VString key, VObject o] -> do
     let cont' = BuiltinC env info (WriteC tv wt (RowKey key) (ObjectData o)) cont
     guardTable info cont' handler env tv GtWrite
-    -- guardTable info env tv GtWrite
-    -- if checkSchema o (_tvSchema tv) then do
-    --     let pdb = view cePactDb env
-    --     let rowData = RowData o
-    --     liftDbFunction info (_pdbWrite pdb wt (tvToDomain tv) (RowKey key) rowData)
-    --     returnCEKValue cont handler (VString "Write succeeded")
-    -- else
-    --     returnCEK cont handler (VError "object does not match schema" info)
   args -> argsError info b args
 
 dbUpdate :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 dbUpdate = write' Update
-  -- [VTable tv, VString key, VObject o] -> do
-    -- guardTable info env tv GtWrite
-    -- if checkPartialSchema o (_tvSchema tv) then do
-  --     let pdb = view cePactDb env
-    --     let rowData = RowData o
-    --     liftDbFunction info (_pdbWrite pdb Update (tvToDomain tv) (RowKey key) rowData)
-    --     returnCEKValue cont handler (VString "Write succeeded")
-    -- else returnCEK cont handler (VError "object does not match schema" info)
-  -- args -> argsError info b args
 
 dbKeys :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 dbKeys info b cont handler env = \case
   [VTable tv] -> do
     let cont' = BuiltinC env info (KeysC tv) cont
     guardTable info cont' handler env tv GtKeys
-    -- guardTable info env tv GtKeys
-    -- let pdb = view cePactDb env
-    -- ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
-    -- let li = V.fromList (PString . _rowKey <$> ks)
-    -- returnCEKValue cont handler (VList li)
   args -> argsError info b args
 
 dbTxIds :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -946,10 +895,6 @@ dbTxIds info b cont handler env = \case
     checkNonLocalAllowed info
     let cont' = BuiltinC env info (TxIdsC tv tid) cont
     guardTable info cont' handler env tv GtTxIds
-    -- let pdb = view cePactDb env
-    -- ks <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) (TxId (fromIntegral tid)))
-    -- let li = V.fromList (PInteger . fromIntegral . _txId <$> ks)
-    -- returnCEKValue cont handler (VList li)
   args -> argsError info b args
 
 
@@ -959,18 +904,6 @@ dbTxLog info b cont handler env = \case
     checkNonLocalAllowed info
     let cont' = BuiltinC env info (TxLogC tv tid) cont
     guardTable info cont' handler env tv GtTxLog
-    -- guardTable info env tv GtTxLog
-    -- let pdb = view cePactDb env
-    --     txId = TxId (fromInteger tid)
-    -- ks <- liftDbFunction info (_pdbGetTxLog pdb (_tvName tv) txId)
-    -- let li = V.fromList (txLogToObj <$> ks)
-    -- returnCEKValue cont handler (VList li)
-    -- where
-    -- txLogToObj (TxLog domain key (RowData v)) = do
-    --   PObject $ M.fromList
-    --     [ (Field "table", PString domain)
-    --     , (Field "key", PString key)
-    --     , (Field "value", PObject v)]
   args -> argsError info b args
 
 dbKeyLog :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -979,33 +912,7 @@ dbKeyLog info b cont handler env = \case
     checkNonLocalAllowed info
     let cont' = BuiltinC env info (KeyLogC tv (RowKey key) tid) cont
     guardTable info cont' handler env tv GtKeyLog
-    -- guardTable info env tv GtKeyLog
-    -- let pdb = view cePactDb env
-    --     txId = TxId (fromInteger tid)
-    -- ids <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) txId)
-    -- ks <- concat <$> traverse (\t -> fmap (t,) <$> liftDbFunction info (_pdbGetTxLog pdb (_tvName tv) t)) ids
-    -- let ks' = filter (\(_, txl) -> _txKey txl == key) ks
-    -- let li = V.fromList (txLogToObj <$> ks')
-    -- returnCEKValue cont handler (VList li)
-    -- where
-    -- txLogToObj (TxId txid, TxLog _domain _key (RowData v)) = do
-    --   PObject $ M.fromList
-    --     [ (Field "txid", PInteger (fromIntegral txid))
-    --     , (Field "value", PObject v)]
   args -> argsError info b args
-
--- | Todo: isProperSubmapOf
--- checkSchema :: M.Map Field PactValue -> Schema -> Bool
--- checkSchema o (Schema sc) = isJust $ do
---   let keys = M.keys o
---   when (keys /= M.keys sc) Nothing
---   traverse_ go (M.toList o)
---   where
---   go (k, v) = M.lookup k sc >>= (`checkPvType` v)
-
--- checkPartialSchema :: M.Map Field PactValue -> Schema -> Bool
--- checkPartialSchema o (Schema sc) =
---   M.isSubmapOfBy (\obj ty -> isJust (checkPvType ty obj)) o sc
 
 defineKeySet'
   :: (CEKEval step b i m, MonadEval b i m)
@@ -1571,32 +1478,6 @@ coreDescribeNamespace info b cont handler _env = \case
         returnCEK cont handler (VError ("Namespace not defined " <> n) info)
   args -> argsError info b args
 
-
--- chainDataDef :: NativeDef
--- chainDataDef = defRNative "chain-data" chainData
---     (funType (tTyObject pcTy) [])
---     ["(chain-data)"]
---     "Get transaction public metadata. Returns an object with 'chain-id', 'block-height', \
---     \'block-time', 'prev-block-hash', 'sender', 'gas-limit', 'gas-price', and 'gas-fee' fields."
---   where
---     pcTy = TyUser (snd chainDataSchema)
---     chainData :: RNativeFun e
---     chainData _ [] = do
---       PublicData{..} <- view eePublicData
-
---       let PublicMeta{..} = _pdPublicMeta
---           toTime = toTerm . fromPosixTimestampMicros
-
---       pure $ toTObject TyAny def
---         [ (cdChainId, toTerm _pmChainId)
---         , (cdBlockHeight, toTerm _pdBlockHeight)
---         , (cdBlockTime, toTime _pdBlockTime)
---         , (cdPrevBlockHash, toTerm _pdPrevBlockHash)
---         , (cdSender, toTerm _pmSender)
---         , (cdGasLimit, toTerm _pmGasLimit)
---         , (cdGasPrice, toTerm _pmGasPrice)
---         ]
---     chainData i as = argsError i as
 
 coreChainData :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreChainData info b cont handler _env = \case

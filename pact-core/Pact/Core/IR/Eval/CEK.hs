@@ -32,6 +32,7 @@ module Pact.Core.IR.Eval.CEK
   , emitCapability
   , guardForModuleCall
   , enforceGuard
+  , evalResumePact
   , CEKEval(..)) where
 
 
@@ -1623,6 +1624,26 @@ interpretGuard info bEnv g = do
   enforceGuard info Mt CEKNoHandler cekEnv g >>= evalUnsafe @step >>= \case
     VError txt errInfo ->
       throwExecutionError errInfo (EvalError txt)
+    EvalValue v -> do
+      case v of
+        VPactValue pv -> pure pv
+        _ ->
+          throwExecutionError info (EvalError "Evaluation did not reduce to a value")
+
+evalResumePact
+  :: forall step b i m
+  . (CEKEval step b i m, MonadEval b i m)
+  => i
+  -> BuiltinEnv step b i m
+  -> Maybe DefPactExec
+  -> m PactValue
+evalResumePact info bEnv mdpe = do
+  ee <- readEnv
+  let pdb = _eePactDb ee
+  let env = CEKEnv mempty pdb bEnv (_eeDefPactStep ee) False
+  resumePact info Mt CEKNoHandler env mdpe >>= evalUnsafe @step >>= \case
+    VError txt i ->
+      throwExecutionError i (EvalError txt)
     EvalValue v -> do
       case v of
         VPactValue pv -> pure pv

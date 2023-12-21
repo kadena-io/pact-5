@@ -21,6 +21,7 @@ module Pact.Core.Capabilities
  , ManagedCapType(..)
  , PactEvent(..)
  , dcMetaFqName
+ , Signer(..)
  ) where
 
 import Control.Lens
@@ -34,6 +35,7 @@ import GHC.Generics
 import Pact.Core.Pretty
 import Pact.Core.Names
 import Pact.Core.Hash
+import Pact.Core.Scheme
 
 data DefManagedMeta name
   = DefManagedMeta (Int, Text) name
@@ -141,7 +143,21 @@ makeLenses ''CapToken
 makeLenses ''CapSlot
 makeLenses ''ManagedCap
 
+-- | Signer combines PPKScheme, PublicKey, and the Address (aka the
+--   formatted PublicKey).
+data Signer name v = Signer
+ { _siScheme :: !(Maybe PPKScheme)
+ -- ^ PPKScheme, which is defaulted to 'defPPKScheme' if not present
+ , _siPubKey :: !Text
+ -- ^ pub key value
+ , _siAddress :: !(Maybe Text)
+ -- ^ optional "address", for different pub key formats like ETH
+ , _siCapList :: [CapToken name v]
+ -- ^ clist for designating signature to specific caps
+ } deriving (Eq, Ord, Show, Generic)
 
+
+instance (NFData name, NFData v) => NFData (Signer name v)
 instance (NFData name, NFData e) => NFData (CapForm name e)
 instance (NFData name, NFData v) => NFData (ManagedCap name v)
 instance NFData v => NFData (ManagedCapType v)
