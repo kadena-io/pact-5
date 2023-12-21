@@ -120,8 +120,13 @@ evalCEK cont handler env (Var n info)  = do
           returnCEKValue cont handler (VClosure (CT clo))
         Just d ->
           throwExecutionError info (InvalidDefKind (defKind d) "in var position")
+          -- TODO ^ shall this be an invariant failure?
+          -- apparently this can never happen because `renameTerm` checks for variable top-level variable occurrences,
+          -- erroring out with `InvalidDefInTermVariable` if it's violated.
+          -- And, the execution can't change that invariant once it's established during desugar.
         Nothing ->
           throwExecutionError info (NameNotInScope (FullyQualifiedName mname (_nName n) mh))
+          -- TODO ^ ditto, `renameTerm` apparently always fails in this case as well
     NModRef m ifs -> case ifs of
       [x] -> returnCEKValue cont handler (VModRef (ModRef m ifs (Just (S.singleton x))))
       [] -> throwExecutionError info (ModRefNotRefined (_nName n))
@@ -227,6 +232,8 @@ mkDefunClosure d mn e = case _dfunTerm d of
     pure (Closure (_dfunName d) mn NullaryClosure 0 body (_dfunRType d) e i)
   _ ->
     throwExecutionError (_dfunInfo d) (DefIsNotClosure (_dfunName d))
+    -- TODO ^ apparently invariant failure, since the parser ensures defun has a form of `(defun ( args ) body)`,
+    -- and desugar converts that into a Lam or Nullary.
 
 mkDefPactClosure
   :: (MonadEval b i m)
