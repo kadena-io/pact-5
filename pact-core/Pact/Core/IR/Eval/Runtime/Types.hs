@@ -118,6 +118,7 @@ import Pact.Core.Debug
 import Pact.Core.Errors
 
 import qualified Pact.Core.Pretty as P
+import Pact.Core.Namespace (Namespace)
 
 data CEKReturn b i m
   = CEKEvaluateTerm (Cont CEKSmallStep b i m) (CEKErrorHandler CEKSmallStep b i m) (CEKEnv CEKSmallStep b i m) (EvalTerm b i)
@@ -438,12 +439,17 @@ data BuiltinCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type 
   | CreateTableC TableValue
   -- <create-table>
   | EmitEventC (CapToken FullyQualifiedName PactValue)
+  | DefineKeysetC KeySetName (KeySet QualifiedName)
+  | DefineNamespaceC Namespace
   deriving (Show, Generic)
 
 
 -- | Control flow around Capability special forms, in particular cap token forms
-data CapCont (b :: K.Type) (i :: K.Type)
+data CapCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = WithCapC (EvalTerm b i)
+  | ApplyMgrFunC (ManagedCap QualifiedName PactValue) (Closure step b i m) PactValue PactValue
+  -- ^ <cap token of the corresponding function> ^mgr closure ^ old value ^ new value
+  | UpdateMgrFunC (ManagedCap QualifiedName PactValue)
   | CreateUserGuardC FullyQualifiedName [EvalTerm b i] [PactValue]
   deriving (Show, Generic)
 
@@ -478,7 +484,7 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   | ObjC (CEKEnv step b i m) i Field [(Field, EvalTerm b i)] [(Field, PactValue)] (Cont step b i m)
   -- Todo: merge all cap constructors
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
-  | CapInvokeC (CEKEnv step b i m) i (CapCont b i) (Cont step b i m)
+  | CapInvokeC (CEKEnv step b i m) i (CapCont step b i m) (Cont step b i m)
   -- ^ Frame for control flow around argument reduction to with-capability and create-user-guard
   | EvalCapC (CEKEnv step b i m) i FQCapToken (EvalTerm b i) (Cont step b i m)
   -- ^ Capability special form frams that eva
@@ -510,7 +516,7 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   deriving (Show, Generic)
 
 instance (NFData b, NFData i) => NFData (BuiltinCont step b i m)
-instance (NFData b, NFData i) => NFData (CapCont b i)
+instance (NFData b, NFData i) => NFData (CapCont step b i m)
 instance (NFData b, NFData i) => NFData (CondCont step b i m)
 instance (NFData b, NFData i) => NFData (Cont step b i m)
 

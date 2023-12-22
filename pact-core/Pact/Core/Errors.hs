@@ -256,6 +256,8 @@ data EvalError
   -- ^ Name does not point to a managed capability
   | CapNotInstalled FullyQualifiedName
   -- ^ Capability not installed
+  | CapAlreadyInstalled FullyQualifiedName
+  -- ^ Capability already installed
   | NameNotInScope FullyQualifiedName
   -- ^ Name not found in the top level environment
   | DefIsNotClosure Text
@@ -329,6 +331,7 @@ data EvalError
   | ConstIsNotAPactValue QualifiedName
   | PointNotOnCurve
   | YieldProvenanceDoesNotMatch Provenance [Provenance]
+  | MismatchingKeysetNamespace NamespaceName
   deriving (Show, Generic)
 
 instance NFData EvalError

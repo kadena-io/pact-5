@@ -68,6 +68,7 @@ import Pact.Core.StableEncoding
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
+import Pact.Core.Namespace
 import Pact.Core.DefPacts.Types
 
 class CEKEval (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type) | m -> b, m -> i where
@@ -630,9 +631,21 @@ pushStackFrame info cont mty sf = do
   esStack %== (sf :)
   pure (StackPopC info mty cont)
 
-
--- | Evaluate a capability in `(with-capability)`
--- the resulting
+-- | Our main workhorse for "Evaluate a capability, then do something else"
+-- `evalCap` handles
+--   - with-capability
+--   - test-capability
+--   - compose-capability
+-- In all cases, evalCap checks if the capability is in scope
+-- if it is, it is a no-op and does simply evaluates `contbody` with the current continuation
+--
+-- If it is not inscope, it pushes the `contbody` into a new continuation that will
+-- evaluate it after cap aquisition, with the cap in scope.
+-- Then:
+--   - If the cap is unmanaged, simply evaluate the cap body with the new continuation
+--   - If the cap is @event, set the event to emit after cap body evaluation, then eval the cap body
+--   - If the cap is managed, install the cap (If possible) then evaluate the body, and if
+--     the cap is user managed, ensure that the manager function run after the cap body
 evalCap
   :: (CEKEval step b i m, MonadEval b i m)
   => i
@@ -643,106 +656,93 @@ evalCap
   -> (CEKEnv step b i m -> Maybe (CapToken QualifiedName PactValue) -> Maybe (PactEvent PactValue) -> EvalTerm b i -> Cont step b i m -> Cont step b i m)
   -> EvalTerm b i
   -> m (CEKEvalResult step b i m)
-evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody = isCapInStack' origToken >>= \case
-  False -> do
-    lookupFqName fqn >>= \case
-      Just (DCap d) -> do
-        when (length args /= _dcapAppArity d) $ failInvariant info "Dcap argument length mismatch"
-        let newLocals = RAList.fromList $ fmap VPactValue (reverse args)
-            capBody = _dcapTerm d
-        -- Todo: clean up the staircase of doom.
-        case _dcapMeta d of
-          -- Managed capability, so we should look for it in the set of csmanaged
-          DefManaged mdm -> do
-            case mdm of
-              -- | Not automanaged, so it must have a defmeta
-              -- We are handling user-managed caps
-              DefManagedMeta (cix,_) _ -> do
-                let filteredCap = CapToken qualCapName (filterIndex cix args)
-                -- Find the capability post-filtering
-                mgdCaps <- useEvalState (esCaps . csManaged)
-                case find ((==) filteredCap . _mcCap) mgdCaps of
-                  Nothing -> do
-                    msgCaps <- S.unions <$> viewEvalEnv eeMsgSigs
-                    case find (findMsgSigCap cix filteredCap) msgCaps of
-                      Just c -> do
-                        let c' = set ctName fqn c
-                            cont' = modCont env (Just qualCapToken) (Just (fqctToPactEvent origToken)) contbody currCont
-                        installCap info env c' False >>= evalUserManagedCap cont' newLocals capBody
-                      Nothing ->
-                        throwExecutionError info (CapNotInstalled fqn)
-                  Just managedCap -> do
-                    let cont' = modCont env (Just qualCapToken) (Just (fqctToPactEvent origToken)) contbody currCont
-                    evalUserManagedCap cont' newLocals capBody managedCap
-              -- handle autonomous caps
-              AutoManagedMeta -> do
-                -- Find the capability post-filtering
-                let cont' = modCont env Nothing (Just (fqctToPactEvent origToken)) contbody currCont
-                mgdCaps <- useEvalState (esCaps . csManaged)
-                case find ((==) qualCapToken . _mcCap) mgdCaps of
-                  Nothing -> do
-                    msgCaps <- S.unions <$> viewEvalEnv eeMsgSigs
-                    case find (== qualCapToken) msgCaps of
-                      Just c -> do
-                        let c' = set ctName fqn c
-                        installCap info env c' False >>= evalAutomanagedCap cont' newLocals capBody
-                      Nothing ->
-                        throwExecutionError info (CapNotInstalled fqn)
-                  Just managedCap ->
-                    evalAutomanagedCap cont' newLocals capBody managedCap
-          DefEvent -> do
-            let cont' = modCont env Nothing (Just (fqctToPactEvent origToken)) contbody currCont
-            let inCapEnv = set ceInCap True $ set ceLocal newLocals env
-            (esCaps . csSlots) %== (CapSlot qualCapToken []:)
-            sfCont <- pushStackFrame info cont' Nothing capStackFrame
-            -- emitCapability info origToken
-            evalCEK sfCont handler inCapEnv capBody
-            -- evalWithStackFrame info cont' handler (set ceLocal newLocals env) capStackFrame Nothing capBody
-          -- Not automanaged _nor_ user managed.
-          -- Todo: a type that's basically `Maybe` here would save us a lot of grief.
-          Unmanaged -> do
-            let cont' = modCont env Nothing Nothing contbody currCont
-                inCapEnv = set ceInCap True $ set ceLocal newLocals env
-            (esCaps . csSlots) %== (CapSlot qualCapToken []:)
-            evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
-      Just {} ->
-        failInvariant info "Captoken references invalid def"
-      Nothing -> failInvariant info "No such def for evalCap"
-  True ->
-    evalCEK currCont handler env contbody
+evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody = do
+  capInStack <- isCapInStack' origToken
+  if not capInStack then go else evalCEK currCont handler env contbody
   where
+  go = do
+    d <- getDefCap info fqn
+    when (length args /= _dcapAppArity d) $ failInvariant info "Dcap argument length mismatch"
+    let newLocals = RAList.fromList $ fmap VPactValue (reverse args)
+        capBody = _dcapTerm d
+    -- Todo: clean up the staircase of doom.
+    case _dcapMeta d of
+      -- Managed capability, so we should look for it in the set of csmanaged
+      DefManaged mdm -> do
+        case mdm of
+          -- | Not automanaged, so it must have a defmeta
+          -- We are handling user-managed caps
+          DefManagedMeta (cix,_) _ -> do
+            let filteredCap = CapToken qualCapName (filterIndex cix args)
+            -- Find the capability post-filtering
+            mgdCaps <- useEvalState (esCaps . csManaged)
+            case find ((==) filteredCap . _mcCap) mgdCaps of
+              Nothing -> do
+                msgCaps <- S.unions <$> viewEvalEnv eeMsgSigs
+                case find (findMsgSigCap cix filteredCap) msgCaps of
+                  Just c -> do
+                    let c' = set ctName fqn c
+                        cont' = modCont env (Just qualCapToken) (Just (fqctToPactEvent origToken)) contbody currCont
+                    installCap info env c' False >>= evalUserManagedCap cont' newLocals capBody
+                  Nothing ->
+                    throwExecutionError info (CapNotInstalled fqn)
+              Just managedCap -> do
+                let cont' = modCont env (Just qualCapToken) (Just (fqctToPactEvent origToken)) contbody currCont
+                evalUserManagedCap cont' newLocals capBody managedCap
+          -- handle autonomous caps
+          AutoManagedMeta -> do
+            -- Find the capability post-filtering
+            let cont' = modCont env Nothing (Just (fqctToPactEvent origToken)) contbody currCont
+            mgdCaps <- useEvalState (esCaps . csManaged)
+            case find ((==) qualCapToken . _mcCap) mgdCaps of
+              Nothing -> do
+                msgCaps <- S.unions <$> viewEvalEnv eeMsgSigs
+                case find (== qualCapToken) msgCaps of
+                  Just c -> do
+                    let c' = set ctName fqn c
+                    installCap info env c' False >>= evalAutomanagedCap cont' newLocals capBody
+                  Nothing ->
+                    throwExecutionError info (CapNotInstalled fqn)
+              Just managedCap ->
+                evalAutomanagedCap cont' newLocals capBody managedCap
+      DefEvent -> do
+        let cont' = modCont env Nothing (Just (fqctToPactEvent origToken)) contbody currCont
+        let inCapEnv = set ceInCap True $ set ceLocal newLocals env
+        (esCaps . csSlots) %== (CapSlot qualCapToken []:)
+        sfCont <- pushStackFrame info cont' Nothing capStackFrame
+        -- emitCapability info origToken
+        evalCEK sfCont handler inCapEnv capBody
+        -- evalWithStackFrame info cont' handler (set ceLocal newLocals env) capStackFrame Nothing capBody
+      -- Not automanaged _nor_ user managed.
+      -- Todo: a type that's basically `Maybe` here would save us a lot of grief.
+      Unmanaged -> do
+        let cont' = modCont env Nothing Nothing contbody currCont
+            inCapEnv = set ceInCap True $ set ceLocal newLocals env
+        (esCaps . csSlots) %== (CapSlot qualCapToken []:)
+        evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
   qualCapName = fqnToQualName fqn
   qualCapToken = CapToken qualCapName args
   capStackFrame = StackFrame (_fqName fqn) (_fqModule fqn) SFDefcap
   -- This function is handles both evaluating the manager function for the installed parameter
   -- and continuing evaluation for the actual capability body.
-  -- Todo: currently, pact does this _after_ evaluation of the cap body. Should we do this?
   evalUserManagedCap cont' env' capBody managedCap =  case _mcManaged managedCap of
-    ManagedParam mpfqn pv managedIx -> do
-      lookupFqName mpfqn >>= \case
-        -- We found the manager function, evaluate it and commit the argument.
-        Just (Dfun dfun) -> do
-          mparam <- maybe (failInvariant info "Managed param does not exist at index") pure (args ^? ix managedIx)
-          evaluate mpfqn (_dfunTerm dfun) pv mparam >>= \case
-            EvalValue res -> do
-              result <- enforcePactValue info res
-              let mcM = ManagedParam mpfqn result managedIx
-              let inCapEnv = set ceInCap True $ set ceLocal env' $ env
-              let inCapBodyToken = _mcOriginalCap managedCap
-              -- BIG SEMANTICS NOTE HERE
-              -- the cap slot here that we push should NOT be the qualified original token.
-              -- Instead, it's the original token from the installed from the static cap. Otherwise, enforce checks
-              -- within the cap body will fail (That is, keyset enforcement). Instead, once we are evaluating the body,
-              -- we pop the current cap stack, then replace the head with the original intended token.
-              -- this is done in `CapBodyC` and this is the only way to do this.
-              esCaps . csManaged %== S.union (S.singleton (set mcManaged mcM managedCap))
-              (esCaps . csSlots) %== (CapSlot inCapBodyToken []:)
-              sfCont <- pushStackFrame info cont' Nothing capStackFrame
-              -- emitCapability info origToken
-              evalCEK sfCont handler inCapEnv capBody
-              -- evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
-            VError v i -> returnCEK currCont handler (VError v i)
-        _ -> failInvariant info "user managed cap is an invalid defn"
+    ManagedParam mpfqn oldV managedIx -> do
+      dfun <- getDefun info mpfqn
+      dfunClo <- mkDefunClosure dfun (_fqModule mpfqn) env
+      newV <- maybe (failInvariant info "Managed param does not exist at index") pure (args ^? ix managedIx)
+      -- Set the mgr fun to evaluate after we apply the capability body
+      let mgrFunCont = CapInvokeC env info (ApplyMgrFunC managedCap dfunClo oldV newV) cont'
+      let inCapEnv = set ceInCap True $ set ceLocal env' $ env
+      let inCapBodyToken = _mcOriginalCap managedCap
+      -- BIG SEMANTICS NOTE HERE
+      -- the cap slot here that we push should NOT be the qualified original token.
+      -- Instead, it's the original token from the installed from the static cap. Otherwise, enforce checks
+      -- within the cap body will fail (That is, keyset enforcement). Instead, once we are evaluating the body,
+      -- we pop the current cap stack, then replace the head with the original intended token.
+      -- this is done in `CapBodyC` and this is the only way to do this.
+      (esCaps . csSlots) %== (CapSlot inCapBodyToken []:)
+      sfCont <- pushStackFrame info mgrFunCont Nothing capStackFrame
+      evalCEK sfCont handler inCapEnv capBody
     _ -> failInvariant info "Invalid managed cap type"
   evalAutomanagedCap cont' env' capBody managedCap = case _mcManaged managedCap of
     AutoManaged b -> do
@@ -753,20 +753,9 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
         esCaps . csSlots %== (CapSlot qualCapToken []:)
         let inCapEnv = set ceLocal env' $ set ceInCap True $ env
         sfCont <- pushStackFrame info cont' Nothing capStackFrame
-        -- emitCapability info origToken
         evalCEK sfCont handler inCapEnv capBody
-        -- evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
     _ -> failInvariant info "Invalid managed cap type"
-  evaluate fqn' term managed value = case term of
-    Lam lamargs body i -> do
-      -- Todo: `applyLam` here gives suboptimal errors
-      -- Todo: this completely violates our "step" semantics.
-      -- This should be its own frame
-      let inCapEnv = set ceInCap True env
-          cloArgs = ArgClosure(_argType <$> lamargs)
-          clo = Closure (_fqName fqn') (_fqModule fqn') cloArgs (NE.length lamargs) body Nothing inCapEnv i
-      applyLamUnsafe (C clo) [VPactValue managed, VPactValue value] Mt CEKNoHandler
-    _t -> failInvariant (view termInfo _t) "Manager function was not a two-argument function"
+
 
 emitEvent
   :: (MonadEval b i m)
@@ -873,32 +862,33 @@ installCap :: (MonadEval b i m)
   -> m (ManagedCap QualifiedName PactValue)
 installCap info _env (CapToken fqn args) autonomous = do
   let ct = CapToken (fqnToQualName fqn) args
-  lookupFqName fqn >>= \case
-    Just (DCap d) -> case _dcapMeta d of
-      DefManaged m -> case m of
-        DefManagedMeta (paramIx,_) (FQName fqnMgr) -> do
-          managedParam <- maybe (throwExecutionError info (InvalidManagedCap fqn)) pure (args ^? ix paramIx)
-          let mcapType = ManagedParam fqnMgr managedParam paramIx
-              ctFiltered = CapToken (fqnToQualName fqn) (filterIndex paramIx args)
-              mcap = ManagedCap ctFiltered ct mcapType
-          (esCaps . csManaged) %== S.insert mcap
-          when autonomous $
-            (esCaps . csAutonomous) %== S.insert ct
-          pure mcap
-        AutoManagedMeta -> do
-          let mcapType = AutoManaged False
-              mcap = ManagedCap ct ct mcapType
-          (esCaps . csManaged) %== S.insert mcap
-          when autonomous $
-            (esCaps . csAutonomous) %== S.insert ct
-          pure mcap
-      DefEvent ->
-        throwExecutionError info (InvalidManagedCap fqn)
-      Unmanaged -> throwExecutionError info (InvalidManagedCap fqn)
-    Just d ->
-      -- todo: error loc here is not in install-cap
-      throwExecutionError (defInfo d) (InvalidDefKind (defKind d) "install-capability")
-    Nothing -> throwExecutionError' (NoSuchDef fqn)
+  d <- getDefCap info fqn
+  case _dcapMeta d of
+    DefManaged m -> case m of
+      DefManagedMeta (paramIx,_) (FQName fqnMgr) -> do
+        managedParam <- maybe (throwExecutionError info (InvalidManagedCap fqn)) pure (args ^? ix paramIx)
+        let mcapType = ManagedParam fqnMgr managedParam paramIx
+            ctFiltered = CapToken (fqnToQualName fqn) (filterIndex paramIx args)
+            mcap = ManagedCap ctFiltered ct mcapType
+        capAlreadyInstalled <- S.member mcap <$> useEvalState (esCaps . csManaged)
+        when capAlreadyInstalled $ throwExecutionError info (CapAlreadyInstalled fqn)
+        (esCaps . csManaged) %== S.insert mcap
+        when autonomous $
+          (esCaps . csAutonomous) %== S.insert ct
+        pure mcap
+      AutoManagedMeta -> do
+        let mcapType = AutoManaged False
+            mcap = ManagedCap ct ct mcapType
+        capAlreadyInstalled <- S.member mcap <$> useEvalState (esCaps . csManaged)
+        when capAlreadyInstalled $ throwExecutionError info (CapAlreadyInstalled fqn)
+        (esCaps . csManaged) %== S.insert mcap
+        when autonomous $
+          (esCaps . csAutonomous) %== S.insert ct
+        pure mcap
+    DefEvent ->
+      throwExecutionError info (InvalidManagedCap fqn)
+    Unmanaged -> throwExecutionError info (InvalidManagedCap fqn)
+
 
 -- Todo: should we typecheck / arity check here?
 createUserGuard
@@ -1085,6 +1075,16 @@ applyContToValue currCont@(CapInvokeC env info cf cont) handler v = case cf of
             cont' = CapInvokeC env info cf' cont
         evalCEK cont' handler env x
       [] -> createUserGuard info cont handler fqn (reverse (pv:pvs))
+  ApplyMgrFunC mgdCap clo old new -> do
+    -- Set the manager fun to update the current managed cap.
+    let cont' = CapInvokeC env info (UpdateMgrFunC mgdCap) cont
+    applyLam (C clo) [VPactValue old, VPactValue new] cont' handler
+  UpdateMgrFunC mcap -> case v of
+    VPactValue v' -> do
+      let mcap' = unsafeUpdateManagedParam v' mcap
+      (esCaps . csManaged) %== S.insert mcap'
+      returnCEKValue cont handler v
+    _ -> returnCEK cont handler (VError "Manager function for managed cap did not return a value" info)
 applyContToValue (BuiltinC env info frame cont) handler cv = do
   let pdb = _cePactDb env
   case cv of
@@ -1198,6 +1198,18 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         where
         enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)
         enforceMeta _ = pure ()
+      DefineKeysetC ksn newKs -> do
+        liftDbFunction info (writeKeySet pdb Write ksn newKs)
+        returnCEKValue cont handler (VString "Keyset write success")
+      DefineNamespaceC ns -> case v of
+        PBool allow ->
+          if allow then do
+            let nsn = _nsName ns
+            liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
+            returnCEKValue cont handler $ VString $ "Namespace defined: " <> (_namespaceName nsn)
+          else throwExecutionError info $ DefineNamespaceError "Namespace definition not permitted"
+        _ ->
+          throwExecutionError info $ DefineNamespaceError "Namespace manager function returned an invalid value"
       where
       foldDBRead tv queryClo appClo remaining acc =
         case remaining of

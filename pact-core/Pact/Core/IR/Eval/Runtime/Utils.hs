@@ -13,6 +13,8 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , enforcePactValue
  , checkSigCaps
  , lookupFqName
+ , getDefCap
+ , getDefun
  , typecheckArgument
  , maybeTCType
  , safeTail
@@ -35,6 +37,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , getDefPactId
  , tvToDomain
  , envFromPurity
+ , unsafeUpdateManagedParam
  ) where
 
 import Control.Lens
@@ -70,15 +73,6 @@ mkBuiltinFn i b env fn =
   NativeFn b env fn (builtinArity b) i
 {-# INLINE mkBuiltinFn #-}
 
--- cfFQN :: Lens' (CapFrame b i) FullyQualifiedName
--- cfFQN f = \case
---   WithCapFrame fqn b -> (`WithCapFrame` b) <$> f fqn
-  -- RequireCapFrame fqn -> RequireCapFrame <$> f fqn
-  -- ComposeCapFrame fqn -> ComposeCapFrame <$> f fqn
-  -- InstallCapFrame fqn -> InstallCapFrame <$> f fqn
-  -- EmitEventFrame fqn -> EmitEventFrame <$> f fqn
-  -- CreateUserGuardFrame fqn -> CreateUserGuardFrame <$> f fqn
-
 enforcePactValue :: (MonadEval b i m) => i -> CEKValue step b i m -> m PactValue
 enforcePactValue info = \case
   VPactValue pv -> pure pv
@@ -87,6 +81,21 @@ enforcePactValue info = \case
 lookupFqName :: (MonadEval b i m) => FullyQualifiedName -> m (Maybe (EvalDef b i))
 lookupFqName fqn =
   views (esLoaded.loAllLoaded) (M.lookup fqn) <$> getEvalState
+
+getDefCap :: (MonadEval b i m) => i -> FullyQualifiedName -> m (EvalDefCap b i)
+getDefCap info fqn = lookupFqName fqn >>= \case
+  Just (DCap d) -> pure d
+  _ -> failInvariant info "Expected DefCap"
+
+getDefun :: (MonadEval b i m) => i -> FullyQualifiedName -> m (EvalDefun b i)
+getDefun info fqn = lookupFqName fqn >>= \case
+  Just (Dfun d) -> pure d
+  _ -> failInvariant info "Expected Defun"
+
+unsafeUpdateManagedParam :: v -> ManagedCap name v -> ManagedCap name v
+unsafeUpdateManagedParam newV (ManagedCap mc orig (ManagedParam fqn _oldV i)) =
+  ManagedCap mc orig (ManagedParam fqn newV i)
+unsafeUpdateManagedParam _ a = a
 
 typecheckArgument :: (MonadEval b i m) => i -> PactValue -> Type -> m PactValue
 typecheckArgument info pv ty = case (pv, checkPvType ty pv) of

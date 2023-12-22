@@ -660,23 +660,6 @@ coreB64Decode info b cont handler _env = \case
   args -> argsError info b args
 
 
--- | A version of `enforceGuard` that also accepts a continuation
--- that gets called if the guard is enforced successfully.
-enforceGuardCont
-  :: forall step b i m. (CEKEval step b i m, MonadEval b i m)
-  => i
-  -> Cont step b i m
-  -> CEKErrorHandler step b i m
-  -> CEKEnv step b i m
-  -> Guard QualifiedName PactValue
-  -> m (CEKEvalResult step b i m)
-  -> m (CEKEvalResult step b i m)
-enforceGuardCont info cekCont cekHandler env g successCont = do
-  cev <- enforceGuard info Mt CEKNoHandler env g
-  evalUnsafe @step cev >>= \case
-    EvalValue {} -> successCont
-    VError e i -> returnCEK cekCont cekHandler (VError e i)
-
 -- | The implementation of `enforce-guard` native.
 coreEnforceGuard :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreEnforceGuard info b cont handler env = \case
@@ -941,10 +924,9 @@ defineKeySet' info cont handler env ksname newKs  = do
         Nothing | otherwise -> useEvalState (esLoaded . loNamespace) >>= \case
           Nothing -> returnCEK cont handler (VError "Cannot define a keyset outside of a namespace" info)
           Just (Namespace ns uGuard _adminGuard) -> do
-            enforceGuardCont info cont handler env uGuard $
-              if Just ns == _keysetNs ksn
-                then writeKs
-                else returnCEK cont handler (VError "Mismatching keyset namespace" info)
+            when (Just ns /= _keysetNs ksn) $ throwExecutionError info (MismatchingKeysetNamespace ns)
+            let cont' = BuiltinC env info (DefineKeysetC ksn newKs) cont
+            enforceGuard info cont' handler env uGuard
 
 defineKeySet :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 defineKeySet info b cont handler env = \case
@@ -1418,43 +1400,31 @@ coreDefineNamespace info b cont handler env = \case
     enforceTopLevelOnly info b
     unless (isValidNsFormat n) $ throwExecutionError info (DefineNamespaceError "invalid namespace format")
     let pdb = view cePactDb env
+    let nsn = NamespaceName n
+        ns = Namespace nsn usrG adminG
     liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
       -- G!
       -- https://static.wikia.nocookie.net/onepiece/images/5/52/Lao_G_Manga_Infobox.png/revision/latest?cb=20150405020446
       -- Enforce the old guard
-      Just (Namespace _ _ laoG) ->
-        enforceGuardCont info cont handler env laoG $ do
-          let nsn = NamespaceName n
-              ns = Namespace nsn usrG adminG
+      Just (Namespace _ _ laoG) -> do
+        let cont' = BuiltinC env info (DefineNamespaceC ns) cont
+        enforceGuard info cont' handler env laoG
+      Nothing -> viewEvalEnv eeNamespacePolicy >>= \case
+        SimpleNamespacePolicy -> do
           liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
           returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
-      Nothing -> do
-        enforcePolicy pdb n adminG
-        let nsn = NamespaceName n
-            ns = Namespace nsn usrG adminG
-        liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
-        returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
+        SmartNamespacePolicy _ fun -> getModuleMember info pdb fun >>= \case
+          Dfun d -> do
+            clo <- mkDefunClosure d (_qnModName fun) env
+            let cont' = BuiltinC env info (DefineNamespaceC ns) cont
+            applyLam (C clo) [VString n, VGuard adminG] cont' handler
+          _ -> failInvariant info "Fatal error: namespace manager function is not a defun"
   args -> argsError info b args
   where
-  enforcePolicy pdb nsn adminG = viewEvalEnv eeNamespacePolicy >>= \case
-    SimpleNamespacePolicy -> pure ()
-    SmartNamespacePolicy _ fun -> getModuleMember info pdb fun >>= \case
-      Dfun d -> do
-        clo <- mkDefunClosure d (_qnModName fun) env
-        -- Todo: nested exec?
-        applyLamUnsafe (C clo) [VString nsn, VGuard adminG] Mt CEKNoHandler >>= \case
-          EvalValue (VBool allow) ->
-            unless allow $ throwExecutionError info $ DefineNamespaceError "Namespace definition not permitted"
-          EvalValue _ ->
-            throwExecutionError info $ DefineNamespaceError "Namespace manager function returned an invalid value"
-          VError e _ ->
-            throwExecutionError info $ DefineNamespaceError e
-      _ -> failInvariant info "Namespace manager function is not a defun"
   isValidNsFormat nsn = case T.uncons nsn of
     Just (h, tl) ->
       isValidNsHead h && T.all isValidNsChar tl
     Nothing -> False
-    -- not (T.null nsn) && isValidNsHead (T.head nsn) && T.all isValidNsChar (T.tail )
   isValidNsHead c =
     Char.isLatin1 c && Char.isAlpha c
   isValidNsChar c =
