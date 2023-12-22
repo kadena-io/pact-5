@@ -8,6 +8,7 @@ module Pact.Core.Evaluate
   , EvalResult(..)
   , initMsgData
   , evalExec
+  , evalExecDefaultState
   , setupEvalEnv
   , interpret
   , compileOnly
@@ -131,14 +132,17 @@ setupEvalEnv pdb mode msgData np pd efs = do
     where
     pk = PublicKeyText $ fromMaybe pubK addr
 
-evalExec :: EvalEnv CoreBuiltin () -> RawCode -> IO (Either (PactError ()) EvalResult)
-evalExec evalEnv rc = do
+evalExec :: EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> RawCode -> IO (Either (PactError ()) EvalResult)
+evalExec evalEnv evalSt rc = do
   terms <- either throwM return $ compileOnly rc
-  either throwError return <$> interpret evalEnv (Right terms)
+  either throwError return <$> interpret evalEnv evalSt (Right terms)
 
-interpret :: EvalEnv CoreBuiltin () -> EvalInput -> IO (Either (PactError ()) EvalResult)
-interpret evalEnv evalInput = do
-  (result, state) <- runEvalM evalEnv def $ evalWithinTx evalInput
+evalExecDefaultState :: EvalEnv CoreBuiltin () -> RawCode -> IO (Either (PactError ()) EvalResult)
+evalExecDefaultState evalEnv rc = evalExec evalEnv def rc
+
+interpret :: EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> EvalInput -> IO (Either (PactError ()) EvalResult)
+interpret evalEnv evalSt evalInput = do
+  (result, state) <- runEvalM evalEnv evalSt $ evalWithinTx evalInput
   case result of
     Left err -> return $ Left err
     Right (rs, logs, txid) ->
