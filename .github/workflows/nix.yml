@@ -50,5 +50,8 @@ jobs:
         echo Deleting the problematic lock file
         nix store delete /nix/store/j71zzjq8lhab7d6l3l2im4r39pw0p8ii-source-root-lib-pact-core-crypto.lock
 
+        echo pre-build the pact-core-crypto source folder
+        nix build .#project.aarch64-darwin.hsPkgs.pact-core.components.sublibs.pact-core-crypto-enis.src.outPath --print-out-paths
+
         echo Build the recursive output
         nix build .#recursive.allDerivations --log-lines 500 --show-trace -vvvv
