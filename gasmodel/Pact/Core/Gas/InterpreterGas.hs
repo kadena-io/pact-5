@@ -29,6 +29,7 @@ import Pact.Core.Names
 import Pact.Core.Gas
 import Pact.Core.Literal
 import Pact.Core.Type
+import Pact.Core.Capabilities
 import Pact.Core.IR.Desugar
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.IR.Eval.RawBuiltin
@@ -40,7 +41,7 @@ import Pact.Core.Persistence.SQLite
 import Pact.Core.Serialise (serialisePact)
 import Pact.Core.Evaluate(compileOnlyTerm, RawCode(..))
 import qualified Pact.Core.IR.Eval.CEK as Eval
-import Pact.Core.Capabilities
+import qualified Pact.Core.IR.Eval.Runtime.Types as Eval
 
 type Eval = EvalM RawBuiltin ()
 type CoreTerm = EvalTerm RawBuiltin ()
@@ -317,3 +318,38 @@ benchmarkNodeType pdb = \case
   CapFormWithCapNode -> withCapFormGas pdb
   CapFormCreateUGNode -> createUserGuardGas pdb
   ErrorNode -> errorGas pdb
+
+
+-- Gas for a lambda with N
+gasMtReturnNoHandler :: PactDb RawBuiltin () -> C.Benchmark
+gasMtReturnNoHandler pdb = do
+  let ee = defaultEvalEnv pdb rawBuiltinMap
+      es = def
+      -- ps = _eeDefPactStep ee
+      frame = Mt
+      value = VUnit
+      handler = CEKNoHandler
+      -- env = CEKEnv { _cePactDb=pdb
+      --              , _ceLocal=mempty
+      --              , _ceInCap=False
+      --              , _ceDefPactStep=ps
+      --              , _ceBuiltins=benchmarkEnv }
+  C.env (pure (es, ee)) $ \ ~(es', ee') -> do
+    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.returnCEKValue @Eval.CEKSmallStep frame handler) value
+
+-- Gas for a lambda with N
+gasMtWithHandler :: PactDb RawBuiltin () -> C.Benchmark
+gasMtWithHandler pdb = do
+  let ee = defaultEvalEnv pdb rawBuiltinMap
+      es = def
+      ps = _eeDefPactStep ee
+      frame = Mt
+      value = VUnit
+      env = CEKEnv { _cePactDb=pdb
+                   , _ceLocal=mempty
+                   , _ceInCap=False
+                   , _ceDefPactStep=ps
+                   , _ceBuiltins=benchmarkEnv }
+      handler = CEKHandler env unitConst
+  C.env (pure (es, ee)) $ \ ~(es', ee') -> do
+    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.returnCEKValue @Eval.CEKSmallStep frame handler) value
