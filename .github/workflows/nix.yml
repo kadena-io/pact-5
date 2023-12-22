@@ -43,4 +43,4 @@ jobs:
         nix build .#check --log-lines 500 --show-trace
 
         echo Build the recursive output
-        nix build .#recursive.allDerivations --log-lines 500 --show-trace
+        nix build .#recursive.allDerivations --log-lines 500 --show-trace -vvvv
