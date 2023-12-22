@@ -39,8 +39,13 @@ jobs:
 
     - name: Build and cache artifacts
       run: |
+        set -x
+
         echo Building the project and its devShell
         nix build .#check --log-lines 500 --show-trace
+
+        echo Check the lock file
+        ls /nix/store/j71zzjq8lhab7d6l3l2im4r39pw0p8ii-source-root-lib-pact-core-crypto.lock
 
         echo Deleting the problematic lock file
         nix store delete /nix/store/j71zzjq8lhab7d6l3l2im4r39pw0p8ii-source-root-lib-pact-core-crypto.lock
