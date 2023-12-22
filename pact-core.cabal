@@ -89,7 +89,7 @@ common pact-core-common
     TypeOperators
 
 -- internal crypto lirbary
-library pact-core-crypto
+library pact-core-crypto-enis
   import: pact-core-common
   hs-source-dirs: crypto
 
@@ -103,7 +103,7 @@ library
   hs-source-dirs: pact-core
 
   build-depends:
-    pact-core:pact-core-crypto
+    pact-core:pact-core-crypto-enis
 
   build-tool-depends:
     , alex:alex
@@ -299,7 +299,7 @@ test-suite core-tests
     , groups
     , semirings
     , neat-interpolation
-    , pact-core:pact-core-crypto
+    , pact-core:pact-core-crypto-enis
 
   other-modules:
     , Pact.Core.Test.ReplTests
