@@ -1,5 +1,7 @@
 # Pact Core Checklist
 
+Phony change to trigger build
+
 ## Todo: Update this to better reflect notion.so pact-core roadmap.
 
 ## Interpreter flow
