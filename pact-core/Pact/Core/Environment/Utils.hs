@@ -144,6 +144,7 @@ getModuleMember info pdb (QualifiedName qn mn) = do
     Nothing -> do
       let fqn = FullyQualifiedName mn qn (_mHash md)
       throwExecutionError info (NameNotInScope fqn)
+      -- TODO ^ failed to find a test
 
 
 mangleNamespace :: (MonadEvalState b i m) => ModuleName -> m ModuleName

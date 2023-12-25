@@ -172,6 +172,7 @@ argsError
   -> m a
 argsError info b args =
   throwExecutionError info (NativeArgumentsError (builtinName b) (toArgTypeError <$> args))
+  -- NOTE ^ this is already tested
 
 
 asString

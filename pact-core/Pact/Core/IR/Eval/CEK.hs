@@ -395,7 +395,7 @@ resumePact
   -> Maybe DefPactExec
   -> m (EvalResult b i m)
 resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep >>= \case
-  Nothing -> throwExecutionError i DefPactStepNotInEnvironment
+  Nothing -> throwExecutionError i DefPactStepNotInEnvironment    -- <- TODO apparently can't happen, `continuePact` ensures that
   Just ps -> do
     pdb <- viewEvalEnv eePactDb
     dbState <- liftDbFunction i (readDefPacts pdb (_psDefPactId ps))
