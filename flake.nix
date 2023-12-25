@@ -5,7 +5,12 @@
     hs-nix-infra.url = "github:kadena-io/hs-nix-infra";
     flake-utils.url = "github:numtide/flake-utils";
   };
-
+  
+  nixConfig = {
+    extra-substituters = "https://nixcache.chainweb.com https://cache.iog.io";
+    trusted-public-keys = "nixcache.chainweb.com:FVN503ABX9F8x8K0ptnc99XEz5SaA4Sks6kNcZn2pBY= iohk.cachix.org-1:DpRUyj7h7V830dp/i6Nti+NEO2/nhblbov/8MW7Rqoo= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=";
+  };
+  
   outputs = { self, flake-utils, hs-nix-infra }:
     flake-utils.lib.eachSystem
       [ "x86_64-linux" "x86_64-darwin"
