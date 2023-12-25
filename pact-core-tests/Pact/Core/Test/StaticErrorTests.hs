@@ -696,6 +696,7 @@ executionTests =
       (p)
       (continue-pact (- 1))
       |])
+      -- TODO (-1) here errors out
 
   ] <> [ ("env_namespace_wrong_kind", isExecutionError _NativeArgumentsError, [text|
       (module m g (defcap g () true))
