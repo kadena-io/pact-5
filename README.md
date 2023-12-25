@@ -1,67 +1,65 @@
-# Pact Core Checklist
+<p align="center">
+<img src="https://i.imgur.com/bAZFAGF.png" width="450" height="243" alt="Kadena" title="Kadena">
+</p>
 
-## Todo: Update this to better reflect notion.so pact-core roadmap.
+<p>&nbsp;</p>
 
-## Interpreter flow
+# The Pact Programming Language
 
-- We receive source as strict `ByteString`, this is [lexed](./pact-core/Pact/Core/Syntax/Lisp/Lexer) and then [parsed](./pact-core/Pact/Core/Syntax/Lisp/Parser.y) into the data structures [here](./pact-core/Pact/Core/Syntax/Lisp/ParseTree.hs), in particular `ParseTree.Expr`. Line locations are provided by the `LineInfo` data type and are emitted by the lexer.
-- From `ParseTree.Expr` which attempts to faithfully represent source syntax, we get rid of all syntactic sugar into an abstract syntax tree in the [Desugar](./pact-core/Pact/Core/IR/Desugar.hs) module.
-- After desugaring into `IR.Term`, we perform name resolution also within `Desugar`, that is: we resolve all top-level scoped names into their respective fully qualified names (that is, a call `(foo 1)` referencing a module's function `m.foo` turns this call into `m.foo 1`, and a call `(foo 1)` referencing a let-bound variable `let foo = ... in (foo 1)` turns this into `(Bound(foo, 0) 1)` (with a debruijn index).
-- After desugaring, we perform [type inference](./pact-core/Pact/Core/IR/Typecheck.hs) which returns a tree with all overloads (e.g `+`) resolved but not yet specialized (That is, we check whether an application of `+` references a valid instance overload of `+`, and this is propagated into the tree).
-- After typechecking, we specialize all overloads aka `(+ 1 2)` becomes `(addInt 1 2)`.
-- Here, we can optionally re-typecheck the tree (Todo: this needs to be implemented/checked for all overloads) via the system f typechecker.
-- After the above step ^, we strip the tree of types into [untyped term](./pact-core/Pact/Core/Untyped/Term.hs), and can then pick an evaluator to compute the value of the program.
+[Pact](http://kadena.io/build) is an open-source, Turing-**in**complete smart contract language that has been purpose-built with blockchains first in mind. Pact focuses on facilitating transactional logic with the optimal mix of functionality in authorization, data management, and workflow.
 
-### Special notes
+Read the whitepaper:
 
-- The loaded builtins for the term are abstracted out into a type vairbale
+- [The Pact Smart Contract Language](https://d31d887a-c1e0-47c2-aa51-c69f9f998b07.filesusr.com/ugd/86a16f_442a542b64554cb2a4c1ae7f528ce4c3.pdf)
 
-### Source -> Typed
-- [x] Parsing new syntax (Term)
-- [x] Renamer to locally nameless for terms
-- [x] Type inference for Term
-- [ ] Core IR Modules (Parsing, Tc)
-- [ ] Core IR Type inference support
-- [x] IR to Typed Core in typechecker
-- [ ] Typeclass overload resolution
+For additional information, press, and development inquiries, please refer to the Kadena [website](https://kadena.io)
 
-#### Optional
-- [ ] Interpreter for IR
+## Table of Contents
+
+  - [Pact Core and Pact](#pact-core-and-pact)
+  - [Documentation](#documentation)
+  - [Quickstart](#quickstart)
+  - [Installing Pact](#installing-pact-core)
+    - [Binary Downloads](#binary-downloads)
+	- [Building from Source](#building-from-source)
+  - [Editor Integration (Language Server)](#editor-integration)
+  - [License](#license)
 
 
-## Typed
-- [x] Core Typed IR
-- [x] Core Type language (Note: potentially `Type` should be 2 different types, for IR and Core)
-- [x] Renaming to locally nameless
-- [x] Type checking for typed Core
-- [x] CEK Interpreter for Typed corew
+## Pact Core and Pact
 
-## Untyped
+## Documentation
 
-- [ ] CEK for untyped core
-- [ ] Optimizations/Jit
+The [Kadena Docs](https://docs.kadena.io) site serves as the primary source of information about Kadena products.
+You can find information about how to get started with the Pact language, how to execute already deployed contracts, and follow
+our step-by-step tutorials. 
 
-# Features
-- [ ] Capabilities Support
-- [ ] Defpact Support
+## Quickstart
 
-## Low Prio
+To quickly begin exploring the Pact language, download the corresponding binary from the
+latest release, see [Binary Downloads](#binary-downloads).
 
-- [ ] Constant folding / Propagation
-- [ ] JIT
+We recommend that new users start with our [beginner`s guide](https://docs.kadena.io/pact/beginner), which provides an 
+understanding of the fundamental concepts and terminology of the language.
 
-# General Compiler flow
+If you prefer a more hands-on approach, download the Pact binaries and execute the REPL.
+This will allow you to begin evaluating expressions, such as `(+ 1 0)`, immediately.
 
-## Source on chain version:
+## Installing Pact Core
 
-Source --> Name resolution + renaming -> Typecheck (Gas!)
-\+ Overload resolution -> Typed core -> Sanity typecheck -> Untyped + onchain persist + execute.
+To install Pact on your infrastructure, you have the option to download a pre-built binary or compile it from the source.
 
-## Typed Core on chain version:
+### Binary Downloads
 
-### Off-chain
-Source (Frontend of choice) --> Name reso + renaming -> Typecheck (No gas :)
-\-> Overload resolution -> Typed Core -> Optional (Optimization)
+You can obtain the latest released version of Pact from our GitHub releases page [here](https://github.com/kadena-io/pact-core/releases).
+Ensure to download the binary that corresponds to your specific architecture.
 
-### On-chain
-Typed Core Source --> Name resolution + renaming -> Typecheck (Gas) -> Untyped + onchain persist + execute.
+### Building from Source
+
+
+
+## Editor Integration
+
+## License
+
+This code is distributed under the terms of the BSD3 license. See [LICENSE](LICENSE) for details.
