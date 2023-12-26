@@ -14,9 +14,20 @@ Read the whitepaper:
 
 For additional information, press, and development inquiries, please refer to the Kadena [website](https://kadena.io)
 
+[!IMPORTANT]
+This repository hosts a rewrite of the Pact language and is not utilized by [chainweb-node](https://github.com/kadena-io/chainweb-node), 
+serving primarily for local development and testing purposes. We detail the planned transition from Pact to Pact Core in [Section Roadmap](#roadmap).
+
+￼
+￼
+￼
+￼
+
+
 ## Table of Contents
 
   - [Pact Core and Pact](#pact-core-and-pact)
+    - [Roadmap](#roadmap)
   - [Documentation](#documentation)
   - [Quickstart](#quickstart)
   - [Installing Pact](#installing-pact-core)
@@ -29,6 +40,9 @@ For additional information, press, and development inquiries, please refer to th
 
 
 ## Pact Core and Pact
+
+### Roadmap
+
 
 ## Documentation
 
