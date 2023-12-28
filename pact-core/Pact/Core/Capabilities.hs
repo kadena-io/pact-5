@@ -35,7 +35,7 @@ import GHC.Generics
 
 import Pact.Core.Pretty
 import Pact.Core.Names
-import Pact.Core.Hash
+import Pact.Core.Hash ( ModuleHash )
 import Pact.Core.Scheme
 
 data DefManagedMeta name

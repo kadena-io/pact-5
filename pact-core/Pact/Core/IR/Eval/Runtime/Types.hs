@@ -81,6 +81,14 @@ module Pact.Core.IR.Eval.Runtime.Types
  , CEKEvalResult
  , CEKStepKind(..)
  , ContType(..)
+ , Eval
+ , CoreTerm
+ , CoreCEKCont
+ , CoreCEKHandler
+ , CoreCEKEnv
+ , CoreBuiltinEnv
+ , CoreCEKValue
+ , CoreEvalResult
  ) where
 
 import Control.Lens
@@ -116,9 +124,10 @@ import Pact.Core.Environment
 import Pact.Core.DefPacts.Types
 import Pact.Core.Debug
 import Pact.Core.Errors
+import Pact.Core.Namespace
+import Pact.Core.Builtin
 
 import qualified Pact.Core.Pretty as P
-import Pact.Core.Namespace (Namespace)
 
 data CEKReturn b i m
   = CEKEvaluateTerm (Cont CEKSmallStep b i m) (CEKErrorHandler CEKSmallStep b i m) (CEKEnv CEKSmallStep b i m) (EvalTerm b i)
@@ -486,8 +495,6 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
   | CapInvokeC (CEKEnv step b i m) i (CapCont step b i m) (Cont step b i m)
   -- ^ Frame for control flow around argument reduction to with-capability and create-user-guard
-  | EvalCapC (CEKEnv step b i m) i FQCapToken (EvalTerm b i) (Cont step b i m)
-  -- ^ Capability special form frams that eva
   | CapBodyC CapPopState (CEKEnv step b i m) (Maybe (CapToken QualifiedName PactValue)) (Maybe (PactEvent PactValue)) (EvalTerm b i) (Cont step b i m)
   -- ^ CapBodyC includes
   --  - what to do after the cap body (pop it, or compose it)
@@ -561,7 +568,6 @@ data ContType
   -- Cap control flow
   | CTCapInvokeC
   --
-  | CTEvalCapC
   | CTCapBodyC
   | CTCapPopC
   | CTDefPactStepC
@@ -643,3 +649,11 @@ instance MonadEvalState b i (EvalM b i) where
   putEvalState p = EvalT (put p)
   modifyEvalState f = EvalT (modify' f)
 
+type Eval = EvalM RawBuiltin ()
+type CoreTerm = EvalTerm RawBuiltin ()
+type CoreCEKCont = Cont CEKBigStep RawBuiltin () Eval
+type CoreCEKHandler = CEKErrorHandler CEKBigStep RawBuiltin () Eval
+type CoreCEKEnv = CEKEnv CEKBigStep RawBuiltin () Eval
+type CoreBuiltinEnv = BuiltinEnv CEKBigStep RawBuiltin () Eval
+type CoreCEKValue = CEKValue CEKBigStep RawBuiltin () Eval
+type CoreEvalResult = EvalResult CEKBigStep RawBuiltin () Eval

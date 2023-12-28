@@ -52,10 +52,6 @@ import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.IR.Eval.Runtime.Types as Eval
 
--- | Our production evaluation alias
---   TODO: Maybe export from Runtime.Types?
-type Eval = EvalM RawBuiltin ()
-
 -- Our Builtin environment for evaluation in Chainweb prod
 type EvalBuiltinEnv = BuiltinEnv Eval.CEKBigStep RawBuiltin () Eval
 
