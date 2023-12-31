@@ -32,74 +32,74 @@ import Pact.Core.Repl.Utils
 import Pact.Core.Environment
 import Pact.Core.Persistence
 
-data ReplEvalEnv b i
-  = ReplEvalEnv
-  { _reGas :: IORef Gas
-  , _reGasLog :: IORef (Maybe [(Text, Gas)])
-  , _reBuiltins :: BuiltinEnv b i (ReplEvalM b i)
-  }
+-- data ReplEvalEnv b i
+--   = ReplEvalEnv
+--   { _reGas :: IORef Gas
+--   , _reGasLog :: IORef (Maybe [(Text, Gas)])
+--   , _reBuiltins :: BuiltinEnv b i (ReplEvalM b i)
+--   }
 
-data ReplEvalState b i
-  = ReplEvalState
-  { _reEnv :: EvalEnv b i
-  , _reState :: EvalState b i
-  , _reSource :: SourceCode
-  , _reTx :: Maybe (TxId, Maybe Text)
-  }
+-- data ReplEvalState b i
+--   = ReplEvalState
+--   { _reEnv :: EvalEnv b i
+--   , _reState :: EvalState b i
+--   , _reSource :: SourceCode
+--   , _reTx :: Maybe (TxId, Maybe Text)
+--   }
 
 -- Todo: are we going to inject state as the reader monad here?
-newtype ReplEvalM b i a =
-  ReplEvalM (ExceptT (PactError i) (StateT (ReplEvalState b i) (ReaderT (ReplEvalEnv b i) IO)) a)
-  deriving
-    ( Functor
-    , Applicative
-    , Monad
-    , MonadReader (ReplEvalEnv b i)
-    , MonadState (ReplEvalState b i)
-    , MonadError (PactError i)
-    , MonadIO
-    , MonadThrow
-    , MonadCatch)
-  via (ExceptT (PactError i) (StateT (ReplEvalState b i) (ReaderT (ReplEvalEnv b i) IO)))
+-- newtype ReplEvalM b i a =
+--   ReplEvalM (ExceptT (PactError i) (StateT (ReplEvalState b i) (ReaderT (ReplEvalEnv b i) IO)) a)
+--   deriving
+--     ( Functor
+--     , Applicative
+--     , Monad
+--     , MonadReader (ReplEvalEnv b i)
+--     , MonadState (ReplEvalState b i)
+--     , MonadError (PactError i)
+--     , MonadIO
+--     , MonadThrow
+--     , MonadCatch)
+--   via (ExceptT (PactError i) (StateT (ReplEvalState b i) (ReaderT (ReplEvalEnv b i) IO)))
 
-makeLenses ''ReplEvalEnv
-makeLenses ''ReplEvalState
+-- makeLenses ''ReplEvalEnv
+-- makeLenses ''ReplEvalState
 
-instance HasEvalState (ReplEvalState b i) b i where
-  evalState = reState
+-- instance HasEvalState (ReplEvalState b i) b i where
+--   evalState = reState
 
-instance MonadEvalEnv b i (ReplEvalM b i) where
-  readEnv = use reEnv
+-- instance MonadEvalEnv b i (ReplEvalM b i) where
+--   readEnv = use reEnv
 
-instance MonadGas (ReplEvalM b i) where
-  logGas msg g = do
-    r <- view reGasLog
-    liftIO $ modifyIORef' r (fmap ((msg, g):))
-  chargeGas g = do
-    r <- view reGas
-    liftIO (modifyIORef' r (<> g))
+-- instance MonadGas (ReplEvalM b i) where
+--   logGas msg g = do
+--     r <- view reGasLog
+--     liftIO $ modifyIORef' r (fmap ((msg, g):))
+--   chargeGas g = do
+--     r <- view reGas
+--     liftIO (modifyIORef' r (<> g))
 
-instance MonadEvalState b i (ReplEvalM b i) where
-  getEvalState = use reState
-  modifyEvalState f =
-    reState %= f
-  putEvalState s =
-    reState .= s
+-- instance MonadEvalState b i (ReplEvalM b i) where
+--   getEvalState = use reState
+--   modifyEvalState f =
+--     reState %= f
+--   putEvalState s =
+--     reState .= s
 
 
 
-runReplEvalM
-  :: ReplEvalEnv b i
-  -> ReplEvalState b i
-  -> ReplEvalM b i a
-  -> IO (Either (PactError i) a, ReplEvalState b i)
-runReplEvalM env st (ReplEvalM action) = runReaderT (runStateT (runExceptT action) st) env
+-- runReplEvalM
+--   :: ReplEvalEnv b i
+--   -> ReplEvalState b i
+--   -> ReplEvalM b i a
+--   -> IO (Either (PactError i) a, ReplEvalState b i)
+-- runReplEvalM env st (ReplEvalM action) = runReaderT (runStateT (runExceptT action) st) env
 
-runReplCEK
-  :: (Default i, Show i)
-  => ReplEvalEnv b i
-  -> ReplEvalState b i
-  -> EvalTerm b i
-  -> IO (Either (PactError i) (EvalResult b i (ReplEvalM b i)), ReplEvalState b i)
-runReplCEK env st term =
-  runReplEvalM env st (eval (CEKEnv mempty (view (reEnv . eePactDb) st) (_reBuiltins env) (view (reEnv . eeDefPactStep) st) False) term)
+-- runReplCEK
+--   :: (Default i, Show i)
+--   => ReplEvalEnv b i
+--   -> ReplEvalState b i
+--   -> EvalTerm b i
+--   -> IO (Either (PactError i) (EvalResult b i (ReplEvalM b i)), ReplEvalState b i)
+-- runReplCEK env st term =
+--   runReplEvalM env st (eval (CEKEnv mempty (view (reEnv . eePactDb) st) (_reBuiltins env) (view (reEnv . eeDefPactStep) st) False) term)

@@ -58,7 +58,6 @@ import Pact.Core.IR.Term
 import Pact.Core.Guards
 import Pact.Core.Imports
 import Pact.Core.Environment
-import Pact.Core.Gas
 import Pact.Core.Namespace
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
@@ -123,9 +122,9 @@ newtype RenamerT b i m a =
 instance MonadTrans (RenamerT b i) where
   lift = RenamerT . lift . lift
 
-instance MonadGas m => MonadGas (RenamerT b i m) where
-  logGas logText g = lift (logGas logText g)
-  chargeGas g = lift (chargeGas g)
+-- instance MonadGas m => MonadGas (RenamerT b i m) where
+  -- logGas logText g = lift (logGas logText g)
+  -- chargeGas g = lift (chargeGas g)
 
 
 instance (MonadEvalEnv b i m) => MonadEvalEnv b i (RenamerT b i m) where

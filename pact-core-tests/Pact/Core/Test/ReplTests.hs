@@ -68,8 +68,8 @@ runReplTest :: PactDb ReplRawBuiltin SpanInfo -> FilePath -> T.Text -> Interpret
 runReplTest pdb file src interp = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
-  let ee = defaultEvalEnv pdb replRawBuiltinMap
-      source = SourceCode (takeFileName file) src
+  ee <- defaultEvalEnv pdb replRawBuiltinMap
+  let source = SourceCode (takeFileName file) src
   let rstate = ReplState
             { _replFlags = mempty
             , _replEvalState = def

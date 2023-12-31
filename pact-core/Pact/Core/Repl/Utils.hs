@@ -127,7 +127,6 @@ data ReplState b
   , _replTx :: Maybe (TxId, Maybe Text)
   }
 
-
 makeLenses ''ReplState
 
 instance MonadEvalEnv b SpanInfo (ReplM b) where
@@ -140,14 +139,14 @@ instance MonadEvalState b SpanInfo (ReplM b) where
   modifyEvalState f =
     replEvalState %= f
 
-instance MonadGas (ReplM b) where
-  logGas msg g = do
-    r <- use replEvalLog
-    liftIO $ modifyIORef' r (fmap ((msg, g):))
-  chargeGas :: Gas -> ReplM b ()
-  chargeGas g = do
-    r <- use replGas
-    liftIO (modifyIORef' r (<> g))
+-- instance MonadGas (ReplM b) where
+  -- logGas msg g = do
+  --   r <- use replEvalLog
+  --   liftIO $ modifyIORef' r (fmap ((msg, milliGasToGas g):))
+  -- chargeGas :: Gas -> ReplM b ()
+  -- chargeGas g = do
+  --   r <- use (replEvalEnv . eeGasRef)
+  --   liftIO (modifyIORef' r (<> g))
 
 
 instance HasEvalState (ReplState b) b SpanInfo where

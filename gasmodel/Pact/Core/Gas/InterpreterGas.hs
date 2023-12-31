@@ -128,14 +128,14 @@ gasVarBound n ee es = do
 
 varGas :: CoreDb -> C.Benchmark
 varGas pdb = do
-  let eEnv = defaultEvalEnv pdb rawBuiltinMap
-      eState = def
-  C.bgroup "Variables: bound" $ (\i -> gasVarBound i eEnv eState) <$> [1..5]
+  ee <- defaultEvalEnv pdb rawBuiltinMap
+      ees = def
+  C.bgroup "Variables: bound" $ (\i -> gasVarBound i ee ee) <$> [1..5]
 
 simpleTermGas :: CoreTerm -> String -> CoreDb -> C.Benchmark
 simpleTermGas term title pdb = do
-  let ee = defaultEvalEnv pdb rawBuiltinMap
-      es = def
+  ee <- defaultEvalEnv pdb rawBuiltinMap
+  let es = def
       ps = _eeDefPactStep ee
       env = CEKEnv { _cePactDb=pdb
                    , _ceLocal=mempty
@@ -174,8 +174,8 @@ constantGasEquiv = do
 -- Simple case for evaluating to normal form for (+ 1 2)
 plusOneTwo :: CoreDb -> C.Benchmark
 plusOneTwo pdb = do
-  let ee = defaultEvalEnv pdb rawBuiltinMap
-      es = def
+  ee <- defaultEvalEnv pdb rawBuiltinMap
+  let es = def
       ps = _eeDefPactStep ee
       env = CEKEnv { _cePactDb=pdb
                    , _ceLocal=mempty
@@ -186,7 +186,7 @@ plusOneTwo pdb = do
   C.env (pure (term, es, ee, env)) $ \ ~(term', es', ee', env') -> do
     C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.evalNormalForm env') term'
 
--- Gas for a lambda with N
+-- Gas for a lambda with N arguments
 gasLamNArgs :: Int -> EvalEnv RawBuiltin () -> EvalState RawBuiltin () -> C.Benchmark
 gasLamNArgs n ee es = do
   let mkArg i = Arg ("Arg#" <> T.pack (show i)) Nothing
@@ -205,8 +205,8 @@ gasLamNArgs n ee es = do
 
 lamGas :: CoreDb -> C.Benchmark
 lamGas pdb = do
-  let ee = defaultEvalEnv pdb rawBuiltinMap
-      es = def
+  ee <- defaultEvalEnv pdb rawBuiltinMap
+  let es = def
   C.bgroup "Lambda Node" $ [ gasLamNArgs i ee es | i <- [1..25]]
 
 seqGas :: CoreDb -> C.Benchmark
@@ -263,7 +263,7 @@ withCapFormGas =
 createUserGuardGasNArgs :: Int -> CoreDb -> C.Benchmark
 createUserGuardGasNArgs nArgs pdb = do
   let args =  [ Arg ("_foo" <> T.pack (show i)) Nothing| i <- [2..nArgs] ]
-  let ee = defaultEvalEnv pdb rawBuiltinMap
+  ee <- defaultEvalEnv pdb rawBuiltinMap
       mn = ModuleName "foomodule" Nothing
       mh = ModuleHash (pactHash "foo")
       fqn = FullyQualifiedName mn "foo" mh
@@ -320,19 +320,19 @@ benchmarkNodeType pdb = \case
 -- Gas for a lambda with N
 gasMtReturnNoHandler :: PactDb RawBuiltin () -> C.Benchmark
 gasMtReturnNoHandler pdb = do
-  let ee = defaultEvalEnv pdb rawBuiltinMap
-      es = def
+  ee <- defaultEvalEnv pdb rawBuiltinMap
+  let es = def
       frame = Mt
       value = VUnit
       handler = CEKNoHandler
   C.env (pure (es, ee)) $ \ ~(es', ee') -> do
-    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep frame handler) value
+    C.bench "MtReturnNoHandler" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep frame handler) value
 
 -- Gas for a lambda with N
 gasMtWithHandlerValue :: PactDb RawBuiltin () -> C.Benchmark
 gasMtWithHandlerValue pdb = do
-  let ee = defaultEvalEnv pdb rawBuiltinMap
-      es = def
+  ee <- defaultEvalEnv pdb rawBuiltinMap
+  let es = def
       ps = _eeDefPactStep ee
       frame = Mt
       value = VUnit
@@ -343,13 +343,13 @@ gasMtWithHandlerValue pdb = do
                    , _ceBuiltins=benchmarkEnv }
       handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
   C.env (pure (es, ee)) $ \ ~(es', ee') -> do
-    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep frame handler) value
+    C.bench "MtWithHandlerValue" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep frame handler) value
 
 -- Gas for a lambda with N
 gasMtWithHandlerError :: PactDb RawBuiltin () -> C.Benchmark
 gasMtWithHandlerError pdb = do
-  let ee = defaultEvalEnv pdb rawBuiltinMap
-      es = def
+  ee <- defaultEvalEnv pdb rawBuiltinMap
+  let es = def
       ps = _eeDefPactStep ee
       frame = Mt
       value = VError "foo" ()
@@ -360,12 +360,12 @@ gasMtWithHandlerError pdb = do
                    , _ceBuiltins=benchmarkEnv }
       handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
   C.env (pure (es, ee)) $ \ ~(es', ee') ->
-    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContSmallStep frame handler) value
+    C.bench "MtWithHandlerError" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContSmallStep frame handler) value
 
 gasArgsWithRemainingArgs :: PactDb RawBuiltin () -> C.Benchmark
 gasArgsWithRemainingArgs pdb = do
-  let ee = defaultEvalEnv pdb rawBuiltinMap
-      es = def
+  ee <- defaultEvalEnv pdb rawBuiltinMap
+  let es = def
       ps = _eeDefPactStep ee
       env = CEKEnv { _cePactDb=pdb
                    , _ceLocal=mempty
@@ -376,12 +376,12 @@ gasArgsWithRemainingArgs pdb = do
       frame = Args env () [unitConst] Mt
       handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
   C.env (pure (es, ee, frame, value)) $ \ ~(es', ee', f', v') ->
-    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
+    C.bench "Args Frame" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
 
 gasFnWithRemainingArgs :: PactDb RawBuiltin () -> C.Benchmark
 gasFnWithRemainingArgs pdb = do
-  let ee = defaultEvalEnv pdb rawBuiltinMap
-      es = def
+  ee <- defaultEvalEnv pdb rawBuiltinMap
+  let es = def
       ps = _eeDefPactStep ee
       env = CEKEnv { _cePactDb=pdb
                    , _ceLocal=mempty
@@ -393,8 +393,7 @@ gasFnWithRemainingArgs pdb = do
       value = VUnit
       handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
   C.env (pure (es, ee, frame, value)) $ \ ~(es', ee', f', v') ->
-    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
-
+    C.bench "Fn Frame" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
 
 
 unitClosureNullary :: CEKEnv step RawBuiltin () m -> Closure step RawBuiltin () m
@@ -462,8 +461,8 @@ boolClosureBinary b env
 
 gasLetC :: PactDb RawBuiltin () -> C.Benchmark
 gasLetC pdb = do
-  let ee = defaultEvalEnv pdb rawBuiltinMap
-      es = def
+  ee <- defaultEvalEnv pdb rawBuiltinMap
+  let es = def
       ps = _eeDefPactStep ee
       env = CEKEnv { _cePactDb=pdb
                    , _ceLocal=mempty
@@ -474,12 +473,12 @@ gasLetC pdb = do
       value = VUnit
       handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
   C.env (pure (es, ee, frame, value)) $ \ ~(es', ee', f', v') ->
-    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
+    C.bench "LetC frame" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
 
 gasSeqC :: PactDb RawBuiltin () -> C.Benchmark
 gasSeqC pdb = do
-  let ee = defaultEvalEnv pdb rawBuiltinMap
-      es = def
+  ee <- defaultEvalEnv pdb rawBuiltinMap
+  let es = def
       ps = _eeDefPactStep ee
       env = CEKEnv { _cePactDb=pdb
                    , _ceLocal=mempty
@@ -489,8 +488,9 @@ gasSeqC pdb = do
       frame = SeqC env unitConst Mt
       value = VUnit
       handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
+      title = "SeqC Frame"
   C.env (pure (es, ee, frame, value)) $ \ ~(es', ee', f', v') ->
-    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
+    C.bench title $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
 
 boolConst :: Bool -> Term name ty builtin ()
 boolConst b = Constant (LBool b) ()
@@ -500,8 +500,8 @@ strConst b = Constant (LString b) ()
 
 gasAndC :: PactDb RawBuiltin () -> Bool -> C.Benchmark
 gasAndC pdb b = do
-  let ee = defaultEvalEnv pdb rawBuiltinMap
-      es = def
+  ee <- defaultEvalEnv pdb rawBuiltinMap
+  let es = def
       ps = _eeDefPactStep ee
       env = CEKEnv { _cePactDb=pdb
                    , _ceLocal=mempty
@@ -511,13 +511,14 @@ gasAndC pdb b = do
       frame = CondC env () (AndC (boolConst b)) Mt
       value = VBool b
       handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
+      title = "OrC gas with VBool(" <> show b <> ")"
   C.env (pure (es, ee, frame, value)) $ \ ~(es', ee', f', v') ->
-    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
+    C.bench title $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
 
 gasOrC :: PactDb RawBuiltin () -> Bool -> C.Benchmark
 gasOrC pdb b = do
-  let ee = defaultEvalEnv pdb rawBuiltinMap
-      es = def
+  ee <- defaultEvalEnv pdb rawBuiltinMap
+  let es = def
       ps = _eeDefPactStep ee
       env = CEKEnv { _cePactDb=pdb
                    , _ceLocal=mempty
@@ -527,13 +528,14 @@ gasOrC pdb b = do
       frame = CondC env () (OrC (boolConst b)) Mt
       value = VBool b
       handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
+      title = "OrC gas with VBool(" <> show b <> ")"
   C.env (pure (es, ee, frame, value)) $ \ ~(es', ee', f', v') ->
-    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
+    C.bench title $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
 
 gasIfC :: PactDb RawBuiltin () -> Bool -> C.Benchmark
 gasIfC pdb b = do
-  let ee = defaultEvalEnv pdb rawBuiltinMap
-      es = def
+  ee <- defaultEvalEnv pdb rawBuiltinMap
+  let es = def
       ps = _eeDefPactStep ee
       env = CEKEnv { _cePactDb=pdb
                    , _ceLocal=mempty
@@ -543,13 +545,14 @@ gasIfC pdb b = do
       frame = CondC env () (OrC (boolConst b)) Mt
       value = VBool b
       handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
+      title = "IfC gas with VBool(" <> show b <> ")"
   C.env (pure (es, ee, frame, value)) $ \ ~(es', ee', f', v') ->
-    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
+    C.bench title $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
 
 gasEnforceC :: PactDb RawBuiltin () -> Bool -> C.Benchmark
 gasEnforceC pdb b = do
-  let ee = defaultEvalEnv pdb rawBuiltinMap
-      es = def
+  ee <- defaultEvalEnv pdb rawBuiltinMap
+  let es = def
       ps = _eeDefPactStep ee
       env = CEKEnv { _cePactDb=pdb
                    , _ceLocal=mempty
@@ -559,13 +562,15 @@ gasEnforceC pdb b = do
       frame = CondC env () (EnforceC (strConst "boom")) Mt
       value = VBool b
       handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
+      title = "EnforceC gas with VBool(" <> show b <> ")"
   C.env (pure (es, ee, frame, value)) $ \ ~(es', ee', f', v') ->
-    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
+    C.bench title $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
 
-gasFilterCEmpty :: PactDb RawBuiltin () -> Bool -> C.Benchmark
-gasFilterCEmpty pdb b = do
-  let ee = defaultEvalEnv pdb rawBuiltinMap
-      es = def
+-- Note: FilterC applies a reverse
+gasFilterCEmptyNElems :: PactDb RawBuiltin () -> Bool -> Int -> C.Benchmark
+gasFilterCEmptyNElems pdb b i = do
+  ee <- defaultEvalEnv pdb rawBuiltinMap
+  let es = def
       ps = _eeDefPactStep ee
       env = CEKEnv { _cePactDb=pdb
                    , _ceLocal=mempty
@@ -573,25 +578,37 @@ gasFilterCEmpty pdb b = do
                    , _ceDefPactStep=ps
                    , _ceBuiltins=benchmarkEnv }
       clo = boolClosureUnary True env
-      frame = CondC env () (FilterC (C clo) (PLiteral LUnit) [] []) Mt
+      frame = CondC env () (FilterC (C clo) (PLiteral LUnit) [] (replicate i PUnit)) Mt
       value = VBool b
       handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
   C.env (pure (es, ee, frame, value)) $ \ ~(es', ee', f', v') ->
-    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
+    C.bench "FilterC empty acc case" $ C.nfAppIO (runEvalM ee' es' . Eval.applyContToValueSmallStep f' handler) v'
 
 _gasContType :: PactDb RawBuiltin () -> ContType -> C.Benchmark
-_gasContType _pdb = \case
-  CTFn -> undefined
-  CTArgs -> undefined
-  CTLetC -> undefined
-  CTSeqC -> undefined
+_gasContType pdb = \case
+  CTFn ->
+    -- Note: applyLam case
+    gasFnWithRemainingArgs pdb
+  CTArgs ->
+    -- Note: applyLam case is not handled
+    gasArgsWithRemainingArgs pdb
+  CTLetC ->
+    gasLetC pdb
+  CTSeqC ->
+    gasSeqC pdb
   CTListC -> undefined
   -- Conditionals
-  CTAndC -> undefined
-  CTOrC -> undefined
-  CTEnforceC -> undefined
+  CTAndC ->
+    C.bgroup "AndC Cases" $ (gasAndC pdb) <$> [minBound .. maxBound]
+  CTOrC ->
+    C.bgroup "OrC Cases" $ (gasOrC pdb) <$> [minBound .. maxBound]
+  CTEnforceC ->
+    C.bgroup "EnforceC Cases" $ (gasEnforceC pdb) <$> [minBound .. maxBound]
   CTEnforceOneC -> undefined
-  CTFilterC -> undefined
+  CTFilterC ->
+    C.bgroup "FilterC Cases" $
+      [gasFilterCEmptyNElems pdb b 10
+      | b <- [False, True] ]
   CTAndQC -> undefined
   CTOrQC -> undefined
   CTNotQC -> undefined

@@ -15,7 +15,6 @@ module Pact.Core.Repl.Compile
  ) where
 
 import Control.Lens
-import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Class(liftIO)
 import Data.Text(Text)
@@ -100,13 +99,14 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
     Lisp.RTL rtl ->
       pure <$> pipe' rtl
     Lisp.RTLReplSpecial rsf -> case rsf of
-      Lisp.ReplLoad txt b _
-        | b -> do
+      Lisp.ReplLoad txt resetState _
+        | resetState -> do
           oldSrc <- use replCurrSource
           evalState .= def
           pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
           replPactDb .= pactdb
-          replEvalEnv .= defaultEvalEnv pactdb replRawBuiltinMap
+          ee <- liftIO (defaultEvalEnv pactdb replRawBuiltinMap)
+          replEvalEnv .= ee
           out <- loadFile (T.unpack txt) replEnv display
           replCurrSource .= oldSrc
           pure out
@@ -114,7 +114,6 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
           oldSrc <- use replCurrSource
           oldEs <- use evalState
           oldEE <- use replEvalEnv
-          when b $ evalState .= def
           out <- loadFile (T.unpack txt) replEnv display
           replEvalEnv .= oldEE
           evalState .= oldEs

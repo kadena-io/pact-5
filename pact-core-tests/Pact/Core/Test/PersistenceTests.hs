@@ -19,7 +19,7 @@ import Pact.Core.Guards (KeySet(KeySet), KeySetName(..), PublicKeyText(..), KSPr
 import Pact.Core.Gen.Serialise (keySetGen, keySetNameGen, moduleNameGen, moduleDataGen, builtinGen
                                ,defPactIdGen, defPactExecGen, namespaceNameGen, namespaceGen)
 import Pact.Core.Literal (Literal(LUnit))
-import Pact.Core.Names 
+import Pact.Core.Names
 import Pact.Core.PactValue
 import qualified Pact.Core.PactValue as PactValue
 import Pact.Core.Persistence.SQLite
@@ -190,7 +190,7 @@ sqliteRegression =
         pdb <- mockPactDb serialisePact_repl_spaninfo
         g <- newIORef mempty
         evalLog <- newIORef Nothing
-        let ee = defaultEvalEnv pdb replRawBuiltinMap
+        ee <- defaultEvalEnv pdb replRawBuiltinMap
         ref <- newIORef (ReplState mempty pdb def ee g evalLog (SourceCode "" "") Nothing)
         Right _ <- runReplT ref (interpretReplProgram (SourceCode "test" src) (const (pure ())))
         Just md <- readModule pdb (ModuleName "test" Nothing)

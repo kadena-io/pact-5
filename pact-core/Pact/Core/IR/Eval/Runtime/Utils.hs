@@ -38,11 +38,15 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , tvToDomain
  , envFromPurity
  , unsafeUpdateManagedParam
+ , chargeFlatNativeGas
+ , chargeGasArgs
  ) where
 
 import Control.Lens
 import Control.Monad(when)
+import Control.Monad.IO.Class
 import Control.Monad.Except(MonadError(..))
+import Data.IORef
 import Data.Text(Text)
 import Data.Maybe(listToMaybe)
 import Data.Foldable(find)
@@ -61,6 +65,7 @@ import Pact.Core.Literal
 import Pact.Core.Persistence
 import Pact.Core.Environment
 import Pact.Core.DefPacts.Types
+import Pact.Core.Gas
 
 mkBuiltinFn
   :: (IsBuiltin b)
@@ -263,3 +268,32 @@ getDefPactId info =
 tvToDomain :: TableValue -> Domain RowKey RowData b i
 tvToDomain tv =
   DUserTables (_tvName tv)
+
+-- Todo: GasLog
+chargeGasArgs :: (MonadEval b i m) => i -> GasArgs -> m ()
+chargeGasArgs info ga = do
+  model <- viewEvalEnv eeGasModel
+  currGas <- getGas
+  let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
+      gUsed = currGas <> (_gmRunModel model) ga
+  putGas gUsed
+  when (gasLimit > gUsed) $
+    throwExecutionError info (GasExceeded limit gUsed)
+
+chargeFlatNativeGas :: (MonadEval b i m) => i -> b -> m ()
+chargeFlatNativeGas info nativeArg = do
+  model <- viewEvalEnv eeGasModel
+  currGas <- getGas
+  let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
+      gUsed = currGas <> (_gmNatives model) nativeArg
+  putGas gUsed
+  when (gasLimit > gUsed) $
+    throwExecutionError info (GasExceeded limit gUsed)
+
+getGas :: (MonadEvalEnv b i m, MonadIO m) => m MilliGas
+getGas = viewEvalEnv eeGasRef >>= liftIO . readIORef
+
+putGas :: (MonadEvalEnv b i m, MonadIO m) => MilliGas -> m ()
+putGas !g = do
+  gasRef <- viewEvalEnv eeGasRef
+  liftIO (writeIORef gasRef g)

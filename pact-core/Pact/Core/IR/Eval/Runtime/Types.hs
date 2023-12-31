@@ -111,7 +111,6 @@ import qualified Data.Kind as K
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Pretty(Pretty(..))
-import Pact.Core.Gas
 import Pact.Core.PactValue
 import Pact.Core.Hash
 import Pact.Core.IR.Term
@@ -163,7 +162,7 @@ type BuiltinEnv (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -
 
 data ClosureType
   = NullaryClosure
-  | ArgClosure !(NonEmpty (Maybe Type))
+  | ArgClosure !(NonEmpty (Arg Type))
   deriving (Show, Generic)
 
 instance NFData ClosureType
@@ -202,7 +201,7 @@ instance (NFData b, NFData i) => NFData (LamClosure step b i m)
 data PartialClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = PartialClosure
   { _pcloFrame :: Maybe StackFrame
-  , _pcloTypes :: !(NonEmpty (Maybe Type))
+  , _pcloTypes :: !(NonEmpty (Arg Type))
   , _pcloArity :: Int
   , _pcloTerm :: !(EvalTerm b i)
   , _pcloRType :: !(Maybe Type)
@@ -345,6 +344,7 @@ newtype EvalM b i a =
     , MonadThrow
     , MonadCatch
     , MonadMask
+    , MonadReader (EvalEnv b i)
     , MonadError (PactError i))
   via (ReaderT (EvalEnv b i) (ExceptT (PactError i) (StateT (EvalState b i) IO)))
 
@@ -636,10 +636,12 @@ instance (Show i, Show b, Pretty b) => Pretty (CEKValue step b i m) where
 
 makeLenses ''CEKEnv
 
-instance MonadGas (EvalM b i) where
-  logGas _msg _g = pure ()
+-- instance MonadGas (EvalM b i) where
+  -- logGas msg g = do
 
-  chargeGas _g = pure ()
+  -- chargeGas g = do
+  --   r <- view eeGasRef
+  --   liftIO (modifyIORef' r (<> g))
 
 instance MonadEvalEnv b i (EvalM b i) where
   readEnv = EvalT ask

@@ -27,6 +27,7 @@ import Data.Maybe (fromMaybe)
 import Data.Default
 import Data.Text (Text)
 import Data.Map.Strict(Map)
+import Data.IORef
 
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -107,9 +108,10 @@ setupEvalEnv
   -- -> SPVSupport -- <- WIP: Ignore for now
   -> PublicData -- <- we have this
   -> S.Set ExecutionFlag
-  -> EvalEnv RawBuiltin ()
-setupEvalEnv pdb mode msgData np pd efs =
-  EvalEnv
+  -> IO (EvalEnv RawBuiltin ())
+setupEvalEnv pdb mode msgData np pd efs = do
+  gasRef <- newIORef mempty
+  pure $ EvalEnv
     { _eeMsgSigs = mkMsgSigs $ mdSigners msgData
     , _eePactDb = pdb
     , _eeMsgBody = mdData msgData
@@ -120,6 +122,8 @@ setupEvalEnv pdb mode msgData np pd efs =
     , _eeFlags = efs
     , _eeNatives = rawBuiltinMap
     , _eeNamespacePolicy = np
+    , _eeGasRef = gasRef
+    , _eeGasModel = freeGasModel
     }
   where
   mkMsgSigs ss = M.fromList $ map toPair ss

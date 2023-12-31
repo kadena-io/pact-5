@@ -19,6 +19,7 @@ module Pact.Core.PactValue
  , pattern PDecimal
  , pattern PString
  , pattern PBool
+ , pattern PUnit
  , synthesizePvType
  ) where
 
@@ -73,6 +74,9 @@ pattern PString s = PLiteral (LString s)
 
 pattern PBool :: Bool -> PactValue
 pattern PBool b = PLiteral (LBool b)
+
+pattern PUnit ::PactValue
+pattern PUnit = PLiteral LUnit
 
 type FQCapToken = CapToken FullyQualifiedName PactValue
 

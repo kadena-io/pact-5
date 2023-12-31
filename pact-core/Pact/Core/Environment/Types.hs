@@ -18,8 +18,8 @@ module Pact.Core.Environment.Types
  , eeHash, eeMsgBody
  , eeDefPactStep
  , eePublicData, eeMode, eeFlags
- , eeNatives
- , eeNamespacePolicy
+ , eeNatives, eeGasModel
+ , eeNamespacePolicy, eeGasRef
  , PactState(..)
  , psLoaded
  , TxCreationTime(..)
@@ -54,6 +54,7 @@ import Control.Monad.IO.Class
 import Data.Set(Set)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
+import Data.IORef
 import Data.Default
 
 import Control.DeepSeq
@@ -127,10 +128,13 @@ data EvalEnv b i
   , _eeNatives :: Map Text b
   -- ^ The native resolution map
   , _eeNamespacePolicy :: NamespacePolicy
+  -- ^ The implemented namespace policy
+  , _eeGasRef :: IORef MilliGas
+  -- ^ The gas ref
+  , _eeGasModel :: GasModel b
   } deriving (Generic)
 
 instance (NFData b, NFData i) => NFData (EvalEnv b i)
-
 
 makeLenses ''EvalEnv
 
@@ -190,7 +194,7 @@ class Monad m => MonadEvalState b i m | m -> b, m -> i where
 type MonadEval b i m =
   ( MonadEvalEnv b i m
   , MonadEvalState b i m
-  , MonadGas m
+  -- , MonadGas m
   , MonadError (PactError i) m
   , MonadIO m
   , Default i
@@ -199,17 +203,20 @@ type MonadEval b i m =
 
 -- | A default evaluation environment meant for
 --   uses such as the repl
-defaultEvalEnv :: PactDb b i -> M.Map Text b -> EvalEnv b i
-defaultEvalEnv pdb m
-  = EvalEnv
-  { _eeMsgSigs = mempty
-  , _eePactDb = pdb
-  , _eeMsgBody = PObject mempty
-  , _eeHash = defaultPactHash
-  , _eePublicData = def
-  , _eeDefPactStep = Nothing
-  , _eeMode = Transactional
-  , _eeFlags = mempty
-  , _eeNatives = m
-  , _eeNamespacePolicy = SimpleNamespacePolicy
-  }
+defaultEvalEnv :: PactDb b i -> M.Map Text b -> IO (EvalEnv b i)
+defaultEvalEnv pdb m = do
+  gasRef <- newIORef mempty
+  pure $ EvalEnv
+    { _eeMsgSigs = mempty
+    , _eePactDb = pdb
+    , _eeMsgBody = PObject mempty
+    , _eeHash = defaultPactHash
+    , _eePublicData = def
+    , _eeDefPactStep = Nothing
+    , _eeMode = Transactional
+    , _eeFlags = mempty
+    , _eeNatives = m
+    , _eeNamespacePolicy = SimpleNamespacePolicy
+    , _eeGasRef = gasRef
+    , _eeGasModel = freeGasModel
+    }

@@ -30,7 +30,7 @@ import Pact.Core.Builtin
 import Pact.Core.Compile
 import Pact.Core.Environment
 import Pact.Core.Hash
-import Pact.Core.Imports
+import Pact.Core.Imports ( Import(_impModuleName) )
 import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Pretty
 import Pact.Core.Repl.Compile
@@ -42,7 +42,7 @@ main = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
   g <- newIORef mempty
   evalLog <- newIORef Nothing
-  let ee = defaultEvalEnv pdb replRawBuiltinMap
+  ee <- defaultEvalEnv pdb replRawBuiltinMap
   ref <- newIORef (ReplState mempty pdb def ee g evalLog defaultSrc Nothing)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do

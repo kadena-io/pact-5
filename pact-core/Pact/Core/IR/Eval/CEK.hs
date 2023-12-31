@@ -90,12 +90,6 @@ class CEKEval (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> 
   evalUnsafe :: CEKEvalResult step b i m -> m (EvalResult step b i m)
 
 
-
-chargeNodeGas :: (MonadEval b i m) => NodeType -> m ()
-chargeNodeGas _nt = pure ()
-  -- gm <- view (eeGasModel . geGasModel . gmNodes) <$> readEnv
-  -- chargeGas (gm nt)
-
 {-
   Our CEKH Machine's transitions when reducing terms.
   `evaluateTerm` reduces a term and either directly produces a value,
@@ -178,43 +172,48 @@ evaluateTerm cont handler env (Var n info)  = do
 -- | ------ From ------ | ------ To ------ |
 --   <Const l, E, K, H>    <Value l, E, K, H>
 --
-evaluateTerm cont handler _env (Constant l _) = do
+evaluateTerm cont handler _env (Constant l info) = do
+  chargeGasArgs info (GAConstant constantWorkNodeGas)
   returnCEKValue cont handler (VLiteral l)
 -- | ------ From ---------- | ------ To ------ |
 --   <App fn args, E, K, H>    <fn, E, Args(E,args,K), H>
 --
 evaluateTerm cont handler env (App fn args info) = do
+  chargeGasArgs info (GAConstant constantWorkNodeGas)
   evalCEK (Args env info args cont) handler env fn
 -- | ------ From ---------- | ------ To ------ |
 --   <Nullary body, E, K, H>    <VClosure(body, E), E, K, H>
 --
 evaluateTerm cont handler env (Nullary body info) = do
+  chargeGasArgs info (GAConstant constantWorkNodeGas)
   let clo = VLamClosure (LamClosure NullaryClosure 0 body Nothing env info)
   returnCEKValue cont handler clo
 -- | ------ From ---------- | ------ To ------ |
 --   <Let e1 e2, E, K, H>      <e1, E, LetC(E,e2,K), H>
 --
-evaluateTerm cont handler env (Let _ e1 e2 _) = do
+evaluateTerm cont handler env (Let _ e1 e2 info) = do
+  chargeGasArgs info (GAConstant constantWorkNodeGas)
   let cont' = LetC env e2 cont
   evalCEK cont' handler env e1
 -- | ------ From ---------- | ------ To ------ |
 --   <Lam args body, E, K, H>      <VLamClo(args, body, E), E, K, H>
 --
 evaluateTerm cont handler env (Lam args body info) = do
-  let clo = VLamClosure (LamClosure (ArgClosure (_argType <$> args)) (NE.length args) body Nothing env info)
+  chargeGasArgs info (GAConstant constantWorkNodeGas)
+  let clo = VLamClosure (LamClosure (ArgClosure args) (NE.length args) body Nothing env info)
   returnCEKValue cont handler clo
 -- | ------ From ------ | ------ To ------ |
 --   <Builtin b, E, K, H>    <E(b), E, K, H>
 --
-evaluateTerm cont handler env (Builtin b i) = do
-  chargeNodeGas BuiltinNode
+evaluateTerm cont handler env (Builtin b info) = do
+  chargeGasArgs info (GAConstant constantWorkNodeGas)
   let builtins = view ceBuiltins env
-  returnCEKValue cont handler (VNative (builtins i b env))
+  returnCEKValue cont handler (VNative (builtins info b env))
 -- | ------ From ------ | ------ To ----------------- |
 --   <Seq e1 e2, E, K, H>    <e1, E, SeqC(E, e2, K), H>
 --
-evaluateTerm cont handler env (Sequence e1 e2 _) = do
-  chargeNodeGas SeqNode
+evaluateTerm cont handler env (Sequence e1 e2 info) = do
+  chargeGasArgs info (GAConstant constantWorkNodeGas)
   evalCEK (SeqC env e2 cont) handler env e1
 -- | ------ From --------------- | ------ To ------------------------ |
 --   <CAnd e1 e2, E, K, H>         <e1, E, CondC(E, AndFrame(e2),K),H>
@@ -222,27 +221,36 @@ evaluateTerm cont handler env (Sequence e1 e2 _) = do
 --   <CIf cond ifc elc, E, K, H>   <cond, E, CondC(E, IfFrame(ifc,elc),K), H>
 --  Todo: enforce and enforce-one
 evaluateTerm cont handler env (Conditional c info) = case c of
-  CAnd te te' ->
+  CAnd te te' -> do
+    chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env info (AndC te') cont) handler env te
-  COr te te' ->
+  COr te te' -> do
+    chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env info (OrC te') cont) handler env te
-  CIf cond e1 e2 ->
+  CIf cond e1 e2 -> do
+    chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env info (IfC e1 e2) cont) handler env cond
   CEnforce cond str -> do
     let env' = sysOnlyEnv env
+    chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env' info (EnforceC str) cont) handler env' cond
-  CEnforceOne str conds -> case conds of
-    [] -> returnCEK cont handler (VError "enforce-one failure" info)
-    x:xs -> do
-      errState <- evalStateToErrorState <$> getEvalState
-      let env' = readOnlyEnv env
-      let handler' = CEKEnforceOne env' info str xs cont errState handler
-      let cont' = CondC env' info (EnforceOneC str xs) Mt
-      evalCEK cont' handler' env' x
+  CEnforceOne str conds -> do
+    chargeGasArgs info (GAConstant constantWorkNodeGas)
+    case conds of
+      [] ->
+        returnCEK cont handler (VError "enforce-one failure" info)
+      x:xs -> do
+        -- Todo: is this a bit too cheap??
+        errState <- evalStateToErrorState <$> getEvalState
+        let env' = readOnlyEnv env
+        let handler' = CEKEnforceOne env' info str xs cont errState handler
+        let cont' = CondC env' info (EnforceOneC str xs) Mt
+        evalCEK cont' handler' env' x
 
 evaluateTerm cont handler env (CapabilityForm cf info) =
   case cf of
     WithCapability rawCap body -> do
+      chargeGasArgs info (GAConstant constantWorkNodeGas)
       enforceNotWithinDefcap info env "with-capability"
       let capFrame = WithCapC body
           cont' = CapInvokeC env info capFrame cont
@@ -256,22 +264,26 @@ evaluateTerm cont handler env (CapabilityForm cf info) =
           let cont' = CapInvokeC env info usrGuardFrame cont
           evalCEK cont' handler env x
 evaluateTerm cont handler env (ListLit ts info) = do
+  chargeGasArgs info (GAConstant unconsWorkNodeGas)
   case ts of
     [] -> returnCEKValue cont handler (VList mempty)
     x:xs -> evalCEK (ListC env info xs [] cont) handler env x
-evaluateTerm cont handler env (Try catchExpr rest _) = do
+evaluateTerm cont handler env (Try catchExpr rest info) = do
+  chargeGasArgs info (GAConstant tryNodeGas)
   errState <- evalStateToErrorState <$> getEvalState
   let handler' = CEKHandler env catchExpr cont errState handler
   let env' = readOnlyEnv env
   evalCEK Mt handler' env' rest
-evaluateTerm cont handler env (ObjectLit o info) =
+evaluateTerm cont handler env (ObjectLit o info) = do
+  chargeGasArgs info (GAConstant unconsWorkNodeGas)
   case o of
     (f, term):rest -> do
       let cont' = ObjC env info f rest [] cont
       evalCEK cont' handler env term
     [] -> returnCEKValue cont handler (VObject mempty)
 -- Error terms ignore the current cont
-evaluateTerm _ handler _ (Error e info) =
+evaluateTerm _ handler _ (Error e info) = do
+  chargeGasArgs info (GAConstant constantWorkNodeGas)
   returnCEK Mt handler (VError e info)
 {-# SPECIALIZE evaluateTerm
    :: CoreCEKCont
@@ -289,7 +301,7 @@ mkDefunClosure
   -> m (Closure step b i m)
 mkDefunClosure d mn e = case _dfunTerm d of
   Lam args body i ->
-    pure (Closure (_dfunName d) mn (ArgClosure (_argType <$> args)) (NE.length args) body (_dfunRType d) e i)
+    pure (Closure (_dfunName d) mn (ArgClosure args) (NE.length args) body (_dfunRType d) e i)
   Nullary body i ->
     pure (Closure (_dfunName d) mn NullaryClosure 0 body (_dfunRType d) e i)
   _ ->
@@ -306,7 +318,7 @@ mkDefPactClosure info fqn dpact env = case _dpArgs dpact of
     let dpc = DefPactClosure fqn NullaryClosure 0 env info
     in VDefPactClosure dpc
   (x:xs) ->
-    let dpc = DefPactClosure fqn (ArgClosure (fmap _argType (x :| xs))) (length (x:xs)) env info
+    let dpc = DefPactClosure fqn (ArgClosure (x :| xs)) (length (x:xs)) env info
     in VDefPactClosure dpc
 
 initPact
@@ -1173,7 +1185,7 @@ applyContToValue (SeqC env e cont) handler _ =
 --                                         else <VBool b, K, H>
 --   <VBool b, CondC(E, OrC(e2), K), H>    if b then <VBool b, K, H>
 --                                         else <e2, E, EnforceBool(K), H>
-
+--
 -- | ------ From ------------------------------ | ------ To ---------------- |
 --   <VBool b, CondC(E, IfC(ifE, elseE), K), H>   if b then <ifE, E, K, H>
 --                                                else <VBool b, K, H>
@@ -1536,7 +1548,7 @@ applyLam vc@(C (Closure fn mn ca arity term mty env cloi)) args cont handler
   | arity == argLen = case ca of
     ArgClosure cloargs -> do
       args' <- traverse (enforcePactValue cloi) args
-      tcArgs <- zipWithM (\arg ty -> VPactValue <$> maybeTCType cloi arg ty) args' (NE.toList cloargs)
+      tcArgs <- zipWithM (\arg (Arg _ ty) -> VPactValue <$> maybeTCType cloi arg ty) args' (NE.toList cloargs)
       esStack %== (StackFrame fn mn SFDefun :)
       let cont' = StackPopC cloi mty cont
           varEnv = RAList.fromList (reverse tcArgs)
@@ -1557,7 +1569,7 @@ applyLam vc@(C (Closure fn mn ca arity term mty env cloi)) args cont handler
   where
   argLen = length args
   -- Here we enforce an argument to a user fn is a
-  apply' e (ty:tys) (x:xs) = do
+  apply' e (Arg _ ty:tys) (x:xs) = do
     x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue cloi x
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e (ty:tys) [] = do
@@ -1584,7 +1596,7 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
   where
   argLen = length args
   -- Todo: runtime TC here
-  apply' e (ty:tys) (x:xs) = do
+  apply' e (Arg _ ty:tys) (x:xs) = do
     x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue cloi x
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e [] [] = do
@@ -1597,7 +1609,7 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
 applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args cont handler =
   apply' (view ceLocal env) (NE.toList argtys) args
   where
-  apply' e (ty:tys) (x:xs) = do
+  apply' e (Arg _ ty:tys) (x:xs) = do
     x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue cloi x
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e [] [] = do
@@ -1615,7 +1627,9 @@ applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args cont handler =
   apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
 
 applyLam nclo@(N (NativeFn b env fn arity i)) args cont handler
-  | arity == argLen = fn i b cont handler env args
+  | arity == argLen = do
+    chargeFlatNativeGas i b
+    fn i b cont handler env args
   | argLen > arity = throwExecutionError i ClosureAppliedToTooManyArgs
   | null args = returnCEKValue cont handler (VClosure nclo)
   | otherwise = apply' arity [] args
@@ -1626,7 +1640,9 @@ applyLam nclo@(N (NativeFn b env fn arity i)) args cont handler
     returnCEKValue cont handler (VPartialNative (PartialNativeFn b env fn a pa i))
 
 applyLam (PN (PartialNativeFn b env fn arity pArgs i)) args cont handler
-  | arity == argLen = fn i b cont handler env (reverse pArgs ++ args)
+  | arity == argLen = do
+    chargeFlatNativeGas i b
+    fn i b cont handler env (reverse pArgs ++ args)
   | argLen > arity = throwExecutionError i ClosureAppliedToTooManyArgs
   | otherwise = apply' arity [] args
   where
@@ -1639,7 +1655,7 @@ applyLam (DPC (DefPactClosure fqn argtys arity env i)) args cont handler
   | arity == argLen = case argtys of
     ArgClosure cloargs -> do
       args' <- traverse (enforcePactValue i) args
-      tcArgs <- zipWithM (\arg ty -> maybeTCType i arg ty) args' (NE.toList cloargs)
+      tcArgs <- zipWithM (\arg (Arg _ ty) -> maybeTCType i arg ty) args' (NE.toList cloargs)
       let pc = DefPactContinuation (fqnToQualName fqn) tcArgs
           env' = set ceLocal (RAList.fromList (reverse (VPactValue <$> tcArgs))) env
       initPact i pc cont handler env'
@@ -1912,3 +1928,21 @@ applyContSmallStep
   -> EvalResult CEKSmallStep RawBuiltin () Eval
   -> Eval (CEKReturn RawBuiltin () Eval)
 applyContSmallStep = applyCont
+
+--------------------------
+-- Gas-related code
+--------------------------
+constantWorkNodeGas :: MilliGas
+constantWorkNodeGas = (MilliGas 50)
+
+unconsWorkNodeGas :: MilliGas
+unconsWorkNodeGas = (MilliGas 100)
+
+tryNodeGas :: MilliGas
+tryNodeGas = (MilliGas 100)
+
+-- nthAccessGas n
+--  = GALinear n (LinearGasArg ())
+
+-- nthAccessSlope
+--   =

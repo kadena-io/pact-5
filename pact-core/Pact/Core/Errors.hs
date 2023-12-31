@@ -32,12 +32,13 @@ import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Info
-import Pact.Core.Pretty(Pretty(..))
+import Pact.Core.Gas
+import Pact.Core.Pretty as Pretty
 import Pact.Core.Hash
 import Pact.Core.Persistence
 import Pact.Core.DefPacts.Types
 
-import qualified Pact.Core.Pretty as Pretty
+
 
 type PactErrorI = PactError SpanInfo
 
@@ -234,7 +235,7 @@ data EvalError
   -- ^ Enumeration error (e.g incorrect bounds with step
   | DecodeError Text
   -- ^ Some form of decoding error
-  | GasExceeded Text
+  | GasExceeded MilliGasLimit MilliGas
   -- ^ Gas went past the gas limit
   | FloatingPointError Text
   -- ^ Floating point operation exception
@@ -338,7 +339,6 @@ instance NFData EvalError
 
 
 instance Pretty EvalError where
-  pretty :: EvalError -> Pretty.Doc ann
   pretty = \case
     ArrayOutOfBoundsException len ix ->
       Pretty.hsep
@@ -357,22 +357,14 @@ instance Pretty EvalError where
     -- Todo: probably enhance this data type
     CapNotInScope txt ->
       Pretty.hsep ["Capability not in scope:", pretty txt]
-    GasExceeded txt ->
-      Pretty.hsep ["Gas Exceeded:", pretty txt]
+    GasExceeded (MilliGasLimit (MilliGas limit)) (MilliGas amt) ->
+      "Gas Limit:" <+> parens (pretty limit) <+> "exceeded:" <+> pretty amt
     InvariantFailure txt ->
       Pretty.hsep ["Fatal execution error, invariant violated:", pretty txt]
     NativeArgumentsError (NativeName n) tys ->
       Pretty.hsep ["Native evaluation error for native", pretty n <> ",", "received incorrect argument(s) of type(s)", Pretty.commaSep tys]
     EvalError txt ->
       Pretty.hsep ["Program encountered an unhandled raised error:", pretty txt]
-    -- ModRefNotRefined _ -> error ""
-    -- InvalidDefKind _ _ -> error ""
-    -- NoSuchDef _ -> error ""
-    -- InvalidManagedCap _ -> error ""
-    -- CapNotInstalled _ -> error ""
-    -- NameNotInScope _ -> error ""
-    -- DefIsNotClosure _ -> error ""
-    -- NoSuchKeySet _ -> error ""
     YieldOutsiteDefPact ->
       "Try to yield a value outside a running DefPact execution"
     NoActiveDefPactExec ->
