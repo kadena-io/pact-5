@@ -74,6 +74,7 @@ import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Namespace
 import Pact.Core.DefPacts.Types
 
+
 class CEKEval (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type) | m -> b, m -> i where
   returnCEKValue :: Cont step b i m -> CEKErrorHandler step b i m -> CEKValue step b i m -> m (CEKEvalResult step b i m)
 
@@ -123,7 +124,6 @@ evaluateTerm
 evaluateTerm cont handler env (Var n info)  = do
   case _nKind n of
     NBound i -> case RAList.lookup (view ceLocal env) i of
-      -- Todo: module ref anns here
       Just v -> returnCEKValue cont handler v
       Nothing -> failInvariant info ("unbound identifier" <> T.pack (show n))
     -- Top level names are not closures, so we wipe the env
@@ -225,7 +225,7 @@ evaluateTerm cont handler env (Conditional c info) = case c of
     chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env info (AndC te') cont) handler env te
   COr te te' -> do
-    chargeGasArgs info (GAConstant constantWorkNodeGas)
+      
     evalCEK (CondC env info (OrC te') cont) handler env te
   CIf cond e1 e2 -> do
     chargeGasArgs info (GAConstant constantWorkNodeGas)
@@ -291,6 +291,13 @@ evaluateTerm _ handler _ (Error e info) = do
    -> CoreCEKEnv
    -> EvalTerm RawBuiltin ()
    -> Eval (EvalResult CEKBigStep RawBuiltin () Eval)
+    #-}
+{-# SPECIALIZE evaluateTerm
+   :: Cont CEKSmallStep RawBuiltin () Eval
+   -> CEKErrorHandler CEKSmallStep RawBuiltin () Eval
+   -> CEKEnv CEKSmallStep RawBuiltin () Eval
+   -> EvalTerm RawBuiltin ()
+   -> Eval (CEKReturn RawBuiltin () Eval)
     #-}
 
 mkDefunClosure

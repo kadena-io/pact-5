@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
 
 module Pact.Core.IR.Eval.Runtime.Utils
@@ -46,7 +47,7 @@ import Control.Lens
 import Control.Monad(when)
 import Control.Monad.IO.Class
 import Control.Monad.Except(MonadError(..))
-import Data.IORef
+-- import Data.IORef
 import Data.Text(Text)
 import Data.Maybe(listToMaybe)
 import Data.Foldable(find)
@@ -180,16 +181,28 @@ toArgTypeError = \case
   VTable{} -> ATETable
   VClosure{} -> ATEClosure
 
+{-# SPECIALIZE argsError
+   :: ()
+   -> RawBuiltin
+   -> [CEKValue step RawBuiltin () Eval]
+   -> Eval (EvalResult step RawBuiltin () Eval)
+    #-}
 argsError
   :: (MonadEval b i m, IsBuiltin b)
   => i
   -> b
-  -> [CEKValue step b3 i2 m2]
+  -> [CEKValue step b i m]
   -> m a
 argsError info b args =
   throwExecutionError info (NativeArgumentsError (builtinName b) (toArgTypeError <$> args))
 
 
+{-# SPECIALIZE asString
+   :: ()
+   -> RawBuiltin
+   -> PactValue
+   -> Eval Text
+    #-}
 asString
   :: (MonadEval b i m, IsBuiltin b)
   => i
@@ -199,13 +212,19 @@ asString
 asString _ _ (PLiteral (LString b)) = pure b
 asString i b pv = argsError i b [VPactValue pv]
 
+{-# SPECIALIZE asBool
+   :: ()
+   -> RawBuiltin
+   -> PactValue
+   -> Eval Bool
+    #-}
 asBool
   :: (MonadEval b i m, IsBuiltin b)
   => i
   -> b
   -> PactValue
-  -> m Text
-asBool _ _ (PLiteral (LString b)) = pure b
+  -> m Bool
+asBool _ _ (PLiteral (LBool b)) = pure b
 asBool i b pv = argsError i b [VPactValue pv]
 
 envFromPurity :: Purity -> CEKEnv step b i m -> CEKEnv step b i m
@@ -270,6 +289,11 @@ tvToDomain tv =
   DUserTables (_tvName tv)
 
 -- Todo: GasLog
+{-# SPECIALIZE chargeGasArgs
+   :: ()
+   -> GasArgs
+   -> Eval ()
+    #-}
 chargeGasArgs :: (MonadEval b i m) => i -> GasArgs -> m ()
 chargeGasArgs info ga = do
   model <- viewEvalEnv eeGasModel
@@ -280,6 +304,11 @@ chargeGasArgs info ga = do
   when (gasLimit > gUsed) $
     throwExecutionError info (GasExceeded limit gUsed)
 
+{-# SPECIALIZE chargeFlatNativeGas
+   :: ()
+   -> RawBuiltin
+   -> Eval ()
+    #-}
 chargeFlatNativeGas :: (MonadEval b i m) => i -> b -> m ()
 chargeFlatNativeGas info nativeArg = do
   model <- viewEvalEnv eeGasModel
@@ -290,10 +319,22 @@ chargeFlatNativeGas info nativeArg = do
   when (gasLimit > gUsed) $
     throwExecutionError info (GasExceeded limit gUsed)
 
-getGas :: (MonadEvalEnv b i m, MonadIO m) => m MilliGas
-getGas = viewEvalEnv eeGasRef >>= liftIO . readIORef
+-- getGas :: (MonadEvalEnv b i m, MonadIO m) => m MilliGas
+{-# SPECIALIZE getGas
+    :: Eval MilliGas
+    #-}
+getGas :: (MonadEvalState b i m) => m MilliGas
+getGas =
+  _esGas <$> getEvalState
+  -- viewEvalEnv eeGasRef >>= liftIO . readIORef
 
-putGas :: (MonadEvalEnv b i m, MonadIO m) => MilliGas -> m ()
-putGas !g = do
-  gasRef <- viewEvalEnv eeGasRef
-  liftIO (writeIORef gasRef g)
+-- putGas :: (MonadEvalEnv b i m, MonadIO m) => MilliGas -> m ()
+{-# SPECIALIZE putGas
+    :: MilliGas -> Eval ()
+    #-}
+putGas :: (MonadEvalState b i m) => MilliGas -> m ()
+putGas !g =
+  modifyEvalState (\es -> es{_esGas = g})
+
+  -- gasRef <- viewEvalEnv eeGasRef
+  -- liftIO (writeIORef gasRef g)
