@@ -50,12 +50,12 @@ import Pact.Core.Capabilities
 import qualified Pact.Core.Pretty as Pretty
 
 data PactValue
-  = PLiteral Literal
-  | PList (Vector PactValue)
-  | PGuard (Guard QualifiedName PactValue)
-  | PObject (Map Field PactValue)
-  | PModRef ModRef
-  | PCapToken (CapToken FullyQualifiedName PactValue)
+  = PLiteral !Literal
+  | PList !(Vector PactValue)
+  | PGuard !(Guard QualifiedName PactValue)
+  | PObject !(Map Field PactValue)
+  | PModRef !ModRef
+  | PCapToken !(CapToken FullyQualifiedName PactValue)
   | PTime !PactTime.UTCTime
   deriving (Eq, Show, Ord, Generic)
 

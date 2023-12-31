@@ -255,7 +255,7 @@ instance NFData TableValue
 
 -- | The type of our semantic runtime values
 data CEKValue (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
-  = VPactValue PactValue
+  = VPactValue !PactValue
   -- ^ PactValue(s), which contain no terms
   | VTable !TableValue
   -- ^ Table references, which despite being a syntactic
@@ -635,13 +635,6 @@ instance (Show i, Show b, Pretty b) => Pretty (CEKValue step b i m) where
       P.angles "closure#"
 
 makeLenses ''CEKEnv
-
--- instance MonadGas (EvalM b i) where
-  -- logGas msg g = do
-
-  -- chargeGas g = do
-  --   r <- view eeGasRef
-  --   liftIO (modifyIORef' r (<> g))
 
 instance MonadEvalEnv b i (EvalM b i) where
   readEnv = EvalT ask
