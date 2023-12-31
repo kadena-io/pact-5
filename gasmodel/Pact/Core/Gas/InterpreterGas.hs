@@ -202,6 +202,24 @@ plusOneTwo pdb = do
     let term = App (Builtin RawAdd ()) [Constant (LInteger 1) (), Constant (LInteger 2) ()] ()
     pure (term, es, ee, env)
 
+constExpr :: CoreDb -> C.Benchmark
+constExpr pdb = do
+  C.env mkEnv $ \ ~(term', es', ee', env') -> do
+    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.evalNormalForm env') term'
+  where
+  mkEnv = do
+    ee <- defaultEvalEnv pdb rawBuiltinMap
+    let es = def
+        ps = _eeDefPactStep ee
+        env = CEKEnv { _cePactDb=pdb
+                    , _ceLocal=mempty
+                    , _ceInCap=False
+                    , _ceDefPactStep=ps
+                    , _ceBuiltins=benchmarkEnv }
+    let lamTerm = Lam (NE.fromList [Arg "_" Nothing, Arg "_" Nothing]) (Var (Name "boop" (NBound 1)) ()) ()
+    let term = App lamTerm [Constant (LInteger 1) (), Constant (LInteger 2) ()] ()
+    pure (term, es, ee, env)
+
 -- Gas for a lambda with N arguments
 -- gasLamNArgs :: Int -> EvalEnv RawBuiltin () -> EvalState RawBuiltin () -> C.Benchmark
 gasLamNArgs :: Int -> CoreDb -> C.Benchmark
@@ -273,7 +291,7 @@ objectLitGas pdb =
     , simpleTermGas (ObjectLit [(Field "x", unitConst), (Field "y", unitConst)] ()) "{x:(), y:()}" pdb ]
 
 termGas :: CoreDb -> [C.Benchmark]
-termGas pdb = [plusOneTwo pdb] ++ (benchmarkNodeType pdb <$> [minBound .. maxBound])
+termGas pdb = [plusOneTwo pdb, constExpr pdb] ++ (benchmarkNodeType pdb <$> [minBound .. maxBound])
 
 withCapFormGas :: CoreDb -> C.Benchmark
 withCapFormGas =

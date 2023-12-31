@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE TypeApplications #-}
@@ -109,6 +110,12 @@ roundingFn op info b cont handler _env = \case
 ---------------------------------
 -- Arithmetic Ops
 ------------------------------
+{-# SPECIALIZE rawAdd
+   :: NativeFunction CEKBigStep RawBuiltin () Eval
+    #-}
+{-# SPECIALIZE rawAdd
+   :: NativeFunction CEKSmallStep RawBuiltin () Eval
+    #-}
 rawAdd :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawAdd info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LInteger (i + i')))
@@ -1596,11 +1603,23 @@ poseidonHash info b cont handler _env = \case
 -- Builtin exports
 -----------------------------------
 
+
+{-# SPECIALIZE rawBuiltinEnv :: CoreBuiltinEnv #-}
+{-# SPECIALIZE rawBuiltinEnv :: BuiltinEnv CEKSmallStep RawBuiltin () Eval #-}
 rawBuiltinEnv
   :: forall step i m. (CEKEval step RawBuiltin i m, MonadEval RawBuiltin i m)
   => BuiltinEnv step RawBuiltin i m
 rawBuiltinEnv i b env = mkBuiltinFn i b env (rawBuiltinRuntime b)
 
+
+{-# SPECIALIZE rawBuiltinRuntime
+   :: RawBuiltin
+   -> NativeFunction CEKBigStep RawBuiltin () Eval
+    #-}
+{-# SPECIALIZE rawBuiltinRuntime
+   :: RawBuiltin
+   -> NativeFunction CEKSmallStep RawBuiltin () Eval
+    #-}
 rawBuiltinRuntime
   :: (CEKEval step b i m, MonadEval b i m, IsBuiltin b)
   => RawBuiltin

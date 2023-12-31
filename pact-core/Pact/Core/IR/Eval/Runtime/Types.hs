@@ -171,7 +171,7 @@ data Closure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K
   = Closure
   { _cloFnName :: !Text
   , _cloModName :: !ModuleName
-  , _cloTypes :: ClosureType
+  , _cloTypes :: !ClosureType
   , _cloArity :: !Int
   , _cloTerm :: !(EvalTerm b i)
   , _cloRType :: !(Maybe Type)
@@ -185,8 +185,8 @@ instance (NFData b, NFData i) => NFData (Closure step b i m)
 -- but is not partially applied
 data LamClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = LamClosure
-  { _lcloTypes :: ClosureType
-  , _lcloArity :: Int
+  { _lcloTypes :: !ClosureType
+  , _lcloArity :: !Int
   , _lcloTerm :: !(EvalTerm b i)
   , _lcloRType :: !(Maybe Type)
   , _lcloEnv :: !(CEKEnv step b i m)
@@ -200,9 +200,9 @@ instance (NFData b, NFData i) => NFData (LamClosure step b i m)
 -- This is a bit annoying to deal with but helps preserve semantics
 data PartialClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = PartialClosure
-  { _pcloFrame :: Maybe StackFrame
+  { _pcloFrame :: !(Maybe StackFrame)
   , _pcloTypes :: !(NonEmpty (Arg Type))
-  , _pcloArity :: Int
+  , _pcloArity :: !Int
   , _pcloTerm :: !(EvalTerm b i)
   , _pcloRType :: !(Maybe Type)
   , _pcloEnv :: !(CEKEnv step b i m)
@@ -213,9 +213,9 @@ instance (NFData b, NFData i) => NFData (PartialClosure step b i m)
 
 data DefPactClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = DefPactClosure
-  { _pactcloFQN :: FullyQualifiedName
+  { _pactcloFQN :: !FullyQualifiedName
   , _pactcloTypes :: !ClosureType
-  , _pactcloArity :: Int
+  , _pactcloArity :: !Int
   , _pactEnv :: !(CEKEnv step b i m)
   , _pactcloInfo :: i
   } deriving (Show, Generic)
@@ -224,7 +224,7 @@ instance (NFData b, NFData i) => NFData (DefPactClosure step b i m)
 
 data CapTokenClosure i
   = CapTokenClosure
-  { _ctcCapName :: FullyQualifiedName
+  { _ctcCapName :: !FullyQualifiedName
   , _ctcTypes :: [Maybe Type]
   , _ctcArity :: Int
   , _ctcInfo :: i
@@ -364,9 +364,9 @@ type NativeFunction (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Ty
 
 data NativeFn (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = NativeFn
-  { _native :: b
-  , _nativeEnv :: CEKEnv step b i m
-  , _nativeFn :: NativeFunction step b i m
+  { _native :: !b
+  , _nativeEnv :: !(CEKEnv step b i m)
+  , _nativeFn :: !(NativeFunction step b i m)
   , _nativeArity :: {-# UNPACK #-} !Int
   , _nativeLoc :: i
   } deriving (Generic)
@@ -378,11 +378,11 @@ instance (NFData b, NFData i) => NFData (NativeFn step b i m)
 -- This is a bit annoying to deal with but helps preserve semantics
 data PartialNativeFn (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = PartialNativeFn
-  { _pNative :: b
-  , _pNativeEnv :: CEKEnv step b i m
-  , _pNativeFn :: NativeFunction step b i m
+  { _pNative :: !b
+  , _pNativeEnv :: !(CEKEnv step b i m)
+  , _pNativeFn :: !(NativeFunction step b i m)
   , _pNativeArity :: {-# UNPACK #-} !Int
-  , _pNativeAppliedArgs :: [CEKValue step b i m]
+  , _pNativeAppliedArgs :: ![CEKValue step b i m]
   , _pNativeLoc :: i
   } deriving (Generic)
 
@@ -474,11 +474,11 @@ instance NFData CapPopState
 data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = Mt
   -- ^ Empty Continuation
-  | Fn (CanApply step b i m) (CEKEnv step b i m) [EvalTerm b i] [CEKValue step b i m] (Cont step b i m)
+  | Fn !(CanApply step b i m) !(CEKEnv step b i m) ![EvalTerm b i] ![CEKValue step b i m] !(Cont step b i m)
   -- ^ Continuation which evaluates arguments for a function to apply
-  | Args (CEKEnv step b i m) i [EvalTerm b i] (Cont step b i m)
+  | Args !(CEKEnv step b i m) i ![EvalTerm b i] !(Cont step b i m)
   -- ^ Continuation holding the arguments to evaluate in a function application
-  | LetC (CEKEnv step b i m) (EvalTerm b i) (Cont step b i m)
+  | LetC !(CEKEnv step b i m) !(EvalTerm b i) !(Cont step b i m)
   -- ^ Let single-variable pushing
   -- Optimization frame: Bypasses closure creation and thus less alloc
   -- Known as a single argument it will not construct a needless closure

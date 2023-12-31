@@ -123,9 +123,11 @@ evaluateTerm
 -- Handles free variable lookups as well as module reference dynamic invokes
 evaluateTerm cont handler env (Var n info)  = do
   case _nKind n of
-    NBound i -> case RAList.lookup (view ceLocal env) i of
-      Just v -> returnCEKValue cont handler v
-      Nothing -> failInvariant info ("unbound identifier" <> T.pack (show n))
+    NBound i -> do
+      chargeGasArgs info (GAConstant unconsWorkNodeGas)
+      case RAList.lookup (view ceLocal env) i of
+        Just v -> returnCEKValue cont handler v
+        Nothing -> failInvariant info ("unbound identifier" <> T.pack (show n))
     -- Top level names are not closures, so we wipe the env
     NTopLevel mname mh -> do
       let fqn = FullyQualifiedName mname (_nName n) mh
@@ -173,13 +175,13 @@ evaluateTerm cont handler env (Var n info)  = do
 --   <Const l, E, K, H>    <Value l, E, K, H>
 --
 evaluateTerm cont handler _env (Constant l info) = do
-  chargeGasArgs info (GAConstant constantWorkNodeGas)
+  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
   returnCEKValue cont handler (VLiteral l)
 -- | ------ From ---------- | ------ To ------ |
 --   <App fn args, E, K, H>    <fn, E, Args(E,args,K), H>
 --
 evaluateTerm cont handler env (App fn args info) = do
-  chargeGasArgs info (GAConstant constantWorkNodeGas)
+  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
   evalCEK (Args env info args cont) handler env fn
 -- | ------ From ---------- | ------ To ------ |
 --   <Nullary body, E, K, H>    <VClosure(body, E), E, K, H>
@@ -206,7 +208,7 @@ evaluateTerm cont handler env (Lam args body info) = do
 --   <Builtin b, E, K, H>    <E(b), E, K, H>
 --
 evaluateTerm cont handler env (Builtin b info) = do
-  chargeGasArgs info (GAConstant constantWorkNodeGas)
+  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
   let builtins = view ceBuiltins env
   returnCEKValue cont handler (VNative (builtins info b env))
 -- | ------ From ------ | ------ To ----------------- |
@@ -225,7 +227,7 @@ evaluateTerm cont handler env (Conditional c info) = case c of
     chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env info (AndC te') cont) handler env te
   COr te te' -> do
-      
+
     evalCEK (CondC env info (OrC te') cont) handler env te
   CIf cond e1 e2 -> do
     chargeGasArgs info (GAConstant constantWorkNodeGas)
