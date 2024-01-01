@@ -89,6 +89,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , CoreBuiltinEnv
  , CoreCEKValue
  , CoreEvalResult
+ , CoreNativeFunction
  ) where
 
 import Control.Lens
@@ -652,3 +653,4 @@ type CoreCEKEnv = CEKEnv CEKBigStep RawBuiltin () Eval
 type CoreBuiltinEnv = BuiltinEnv CEKBigStep RawBuiltin () Eval
 type CoreCEKValue = CEKValue CEKBigStep RawBuiltin () Eval
 type CoreEvalResult = EvalResult CEKBigStep RawBuiltin () Eval
+type CoreNativeFunction = NativeFunction CEKBigStep RawBuiltin () Eval

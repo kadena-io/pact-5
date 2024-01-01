@@ -173,6 +173,7 @@ library
     Pact.Core.IR.Eval.Runtime.Types
     Pact.Core.IR.Eval.Runtime.Utils
     Pact.Core.IR.Eval.CEK
+    Pact.Core.IR.Eval.SpecializedCEK
     -- Pact.Core.IR.Eval.SmallStep.CEK
     -- Pact.Core.IR.Eval.SmallStep.Types
     Pact.Core.IR.Eval.RawBuiltin

@@ -41,6 +41,7 @@ import Pact.Core.Persistence.SQLite
 import Pact.Core.Serialise (serialisePact)
 import Pact.Core.Evaluate(compileOnlyTerm, RawCode(..))
 import qualified Pact.Core.IR.Eval.CEK as Eval
+import qualified Pact.Core.IR.Eval.SpecializedCEK as SpecialEval
 
 type CoreDb = PactDb RawBuiltin ()
 type MachineResult = CEKReturn RawBuiltin () Eval
@@ -202,10 +203,27 @@ plusOneTwo pdb = do
     let term = App (Builtin RawAdd ()) [Constant (LInteger 1) (), Constant (LInteger 2) ()] ()
     pure (term, es, ee, env)
 
+plusOneTwoSafe :: CoreDb -> C.Benchmark
+plusOneTwoSafe pdb = do
+  C.env mkEnv $ \ ~(ee, es, term) -> do
+    C.bench "special (+ 1 2)" $ C.nfAppIO (runEvalM ee es . SpecialEval.safeEval pdb Nothing) term
+  where
+  mkEnv = do
+    ee <- defaultEvalEnv pdb rawBuiltinMap
+    let es = def
+    --     ps = _eeDefPactStep ee
+    --     env = CEKEnv { _cePactDb=pdb
+    --                 , _ceLocal=mempty
+    --                 , _ceInCap=False
+    --                 , _ceDefPactStep=ps
+    --                 , _ceBuiltins=benchmarkEnv }
+    let term = App (Builtin RawAdd ()) [Constant (LInteger 1) (), Constant (LInteger 2) ()] ()
+    pure (ee, es, term)
+
 constExpr :: CoreDb -> C.Benchmark
 constExpr pdb = do
   C.env mkEnv $ \ ~(term', es', ee', env') -> do
-    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.evalNormalForm env') term'
+    C.bench "const specialized" $ C.nfAppIO (runEvalM ee' es' . SpecialEval.safeEval pdb Nothing) term'
   where
   mkEnv = do
     ee <- defaultEvalEnv pdb rawBuiltinMap
@@ -291,7 +309,7 @@ objectLitGas pdb =
     , simpleTermGas (ObjectLit [(Field "x", unitConst), (Field "y", unitConst)] ()) "{x:(), y:()}" pdb ]
 
 termGas :: CoreDb -> [C.Benchmark]
-termGas pdb = [plusOneTwo pdb, constExpr pdb] ++ (benchmarkNodeType pdb <$> [minBound .. maxBound])
+termGas pdb = [plusOneTwo pdb, plusOneTwoSafe pdb, constExpr pdb] ++ (benchmarkNodeType pdb <$> [minBound .. maxBound])
 
 withCapFormGas :: CoreDb -> C.Benchmark
 withCapFormGas =
