@@ -175,13 +175,11 @@ evaluateTerm cont handler env (Var n info)  = do
 --   <Const l, E, K, H>    <Value l, E, K, H>
 --
 evaluateTerm cont handler _env (Constant l info) = do
-  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
   returnCEKValue cont handler (VLiteral l)
 -- | ------ From ---------- | ------ To ------ |
 --   <App fn args, E, K, H>    <fn, E, Args(E,args,K), H>
 --
 evaluateTerm cont handler env (App fn args info) = do
-  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
   evalCEK (Args env info args cont) handler env fn
 -- | ------ From ---------- | ------ To ------ |
 --   <Nullary body, E, K, H>    <VClosure(body, E), E, K, H>
@@ -208,7 +206,7 @@ evaluateTerm cont handler env (Lam args body info) = do
 --   <Builtin b, E, K, H>    <E(b), E, K, H>
 --
 evaluateTerm cont handler env (Builtin b info) = do
-  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
+  chargeGasArgs info (GAConstant constantWorkNodeGas)
   let builtins = view ceBuiltins env
   returnCEKValue cont handler (VNative (builtins info b env))
 -- | ------ From ------ | ------ To ----------------- |
@@ -374,7 +372,7 @@ applyPact
   -> M.Map DefPactId DefPactExec
   -> m (CEKEvalResult step b i m)
 applyPact i pc ps cont handler cenv nested = useEvalState esDefPactExec >>= \case
-  Just pe ->  throwExecutionError i (MultipleOrNestedDefPactExecFound pe)
+  Just pe -> throwExecutionError i (MultipleOrNestedDefPactExecFound pe)
   Nothing -> getModuleMember i (_cePactDb cenv) (pc ^. pcName) >>= \case
     DPact defPact -> do
       let nSteps = NE.length (_dpSteps defPact)

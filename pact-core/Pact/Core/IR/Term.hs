@@ -296,17 +296,17 @@ data Term name ty builtin info
   -- ^ let x = e1 in e2
   | App (Term name ty builtin info) [Term name ty builtin info] info
   -- ^ (e1 e2)
-  | Sequence (Term name ty builtin info) (Term name ty builtin info) info
-  -- ^ sequencing, that is e1 `Sequence` e2 evaluates e1
-  -- discards the result and then evaluates and returns the result of e2
-  | Nullary (Term name ty builtin info) info
-  -- ^ "Lazy terms of arity zero"
   | Conditional (BuiltinForm (Term name ty builtin info)) info
   -- ^ Conditional terms
   | Builtin builtin info
   -- ^ Built-in ops, e.g (+)
   | Constant Literal info
   -- ^ Literals
+  | Sequence (Term name ty builtin info) (Term name ty builtin info) info
+  -- ^ sequencing, that is e1 `Sequence` e2 evaluates e1
+  -- discards the result and then evaluates and returns the result of e2
+  | Nullary (Term name ty builtin info) info
+  -- ^ "Lazy terms of arity zero"
   | ListLit [Term name ty builtin info] info
   -- ^ List Literals
   | Try (Term name ty builtin info) (Term name ty builtin info) info
