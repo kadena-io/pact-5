@@ -68,7 +68,7 @@ initMsgData :: Hash -> MsgData
 initMsgData h = MsgData (PObject mempty) def h mempty
 
 builtinEnv :: EvalBuiltinEnv
-builtinEnv = rawBuiltinEnv @Eval.CEKBigStep
+builtinEnv = Eval.rawBuiltinEnv @Eval.CEKBigStep
 
 type EvalInput = Either (Maybe DefPactExec) [Lisp.TopLevel ()]
 

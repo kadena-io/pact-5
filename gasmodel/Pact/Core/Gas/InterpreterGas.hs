@@ -56,10 +56,10 @@ unitConst :: CoreTerm
 unitConst = Constant LUnit ()
 
 benchmarkEnv :: BuiltinEnv CEKSmallStep RawBuiltin () Eval
-benchmarkEnv = rawBuiltinEnv @CEKSmallStep
+benchmarkEnv = Eval.rawBuiltinEnv @CEKSmallStep
 
 benchmarkBigStepEnv :: BuiltinEnv CEKBigStep RawBuiltin () Eval
-benchmarkBigStepEnv = rawBuiltinEnv @CEKBigStep
+benchmarkBigStepEnv = Eval.rawBuiltinEnv @CEKBigStep
 
 compileTerm
   :: Text
@@ -101,11 +101,11 @@ isFinal _ = False
 evalStep :: MachineResult -> Eval MachineResult
 evalStep c@(CEKReturn cont handler result)
   | isFinal c = return c
-  | otherwise = Eval.returnCEK cont handler result
+  | otherwise = Eval.returnCEK' cont handler result
 evalStep (CEKEvaluateTerm cont handler cekEnv term) = Eval.evaluateTermSmallStep cont handler cekEnv term
 
 unsafeEvalStep :: MachineResult -> Eval MachineResult
-unsafeEvalStep (CEKReturn cont handler result) = Eval.returnCEK cont handler result
+unsafeEvalStep (CEKReturn cont handler result) = Eval.returnCEK' cont handler result
 unsafeEvalStep (CEKEvaluateTerm cont handler cekEnv term) = Eval.evaluateTermSmallStep cont handler cekEnv term
 
 evalNSteps :: Int -> MachineResult -> Eval MachineResult
@@ -189,7 +189,7 @@ constantGasEquiv = do
 plusOneTwo :: CoreDb -> C.Benchmark
 plusOneTwo pdb = do
   C.env mkEnv $ \ ~(term', es', ee', env') -> do
-    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.evalNormalForm env') term'
+    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.evalNormalForm' env') term'
   where
   mkEnv = do
     ee <- defaultEvalEnv pdb rawBuiltinMap
@@ -199,7 +199,7 @@ plusOneTwo pdb = do
                     , _ceLocal=mempty
                     , _ceInCap=False
                     , _ceDefPactStep=ps
-                    , _ceBuiltins=benchmarkEnv }
+                    , _ceBuiltins=benchmarkBigStepEnv }
     let term = App (Builtin RawAdd ()) [Constant (LInteger 1) (), Constant (LInteger 2) ()] ()
     pure (term, es, ee, env)
 
@@ -223,7 +223,7 @@ plusOneTwoSafe pdb = do
 constExpr :: CoreDb -> C.Benchmark
 constExpr pdb = do
   C.env mkEnv $ \ ~(term', es', ee', env') -> do
-    C.bench "const unspecialized" $ C.nfAppIO (runEvalM ee' es' . Eval.evalNormalForm env') term'
+    C.bench "const unspecialized" $ C.nfAppIO (runEvalM ee' es' . Eval.evalNormalForm' env') term'
   where
   mkEnv = do
     ee <- defaultEvalEnv pdb rawBuiltinMap
@@ -233,7 +233,7 @@ constExpr pdb = do
                     , _ceLocal=mempty
                     , _ceInCap=False
                     , _ceDefPactStep=ps
-                    , _ceBuiltins=benchmarkEnv }
+                    , _ceBuiltins=benchmarkBigStepEnv }
     let lamTerm = Lam (NE.fromList [Arg "_" Nothing, Arg "_" Nothing]) (Var (Name "boop" (NBound 1)) ()) ()
     let term = App lamTerm [Constant (LInteger 1) (), Constant (LInteger 2) ()] ()
     pure (term, es, ee, env)
