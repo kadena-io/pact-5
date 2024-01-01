@@ -258,8 +258,8 @@ evaluateTerm cont handler env (Lam args body info) = do
 --
 evaluateTerm cont handler env (Builtin b info) = do
   chargeGasArgs info (GAConstant constantWorkNodeGas)
-  let builtins = view ceBuiltins env
-  applyContToValue cont handler (VNative (builtins info b env))
+  -- let builtins = view ceBuiltins env
+  applyContToValue cont handler (VNative (rawBuiltinEnv info b env))
 -- | ------ From ------ | ------ To ----------------- |
 --   <Seq e1 e2, E, K, H>    <e1, E, SeqC(E, e2, K), H>
 --
