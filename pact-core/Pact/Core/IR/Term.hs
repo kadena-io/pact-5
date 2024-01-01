@@ -43,6 +43,54 @@ import Pact.Core.Capabilities
 import Pact.Core.PactValue
 import Pact.Core.Pretty
 
+-- | Core's IR term
+-- Todo: a few nodes could be merged into one representation, that is:
+-- Nullary = Lam []
+-- CapabilityForm and Conditional could be merged into one
+data Term name ty builtin info
+  = Var name info
+  -- ^ single variables e.g x
+  | Lam (NonEmpty (Arg ty)) (Term name ty builtin info) info
+  -- ^ $f = \x.e
+  -- Lambdas are named for the sake of the callstack.
+  | Let (Arg ty) (Term name ty builtin info) (Term name ty builtin info) info
+  -- ^ let x = e1 in e2
+  | App (Term name ty builtin info) [Term name ty builtin info] info
+  -- ^ (e1 e2)
+  | Conditional (BuiltinForm (Term name ty builtin info)) info
+  -- ^ Conditional terms
+  | Builtin builtin info
+  -- ^ Built-in ops, e.g (+)
+  | Constant Literal info
+  -- ^ Literals
+  | Sequence (Term name ty builtin info) (Term name ty builtin info) info
+  -- ^ sequencing, that is e1 `Sequence` e2 evaluates e1
+  -- discards the result and then evaluates and returns the result of e2
+  | Nullary (Term name ty builtin info) info
+  -- ^ "Lazy terms of arity zero"
+  | ListLit [Term name ty builtin info] info
+  -- ^ List Literals
+  | Try (Term name ty builtin info) (Term name ty builtin info) info
+  -- ^ try (catch expr) (try-expr)
+  | ObjectLit [(Field, Term name ty builtin info)] info
+  -- ^ an object literal
+  -- | DynInvoke (Term name ty builtin info) Text info
+  -- ^ dynamic module reference invocation m::f
+  | CapabilityForm (CapForm name (Term name ty builtin info)) info
+  -- ^ Capability Natives
+  | Error Text info
+  -- ^ Error term
+  deriving (Show, Functor, Eq, Generic)
+
+data ConstVal term
+  = TermConst term
+  | EvaledConst PactValue
+  deriving (Show, Functor, Foldable, Traversable, Eq, Generic)
+
+-- | Our defun representation, that is
+-- (defun <name>(:<ty>)? (<args>*) <body>))
+-- note our IR does not spit out docs.
+-- In that case: refer to the repl.
 data Defun name ty builtin info
   = Defun
   { _dfunName :: Text
@@ -59,19 +107,6 @@ data Step name ty builtin info
     (Term name ty builtin info)
   deriving (Show, Functor, Eq, Generic)
 
-hasRollback :: Step n t b i -> Bool
-hasRollback Step{} = False
-hasRollback StepWithRollback{} = True
-
-ordinaryDefPactStepExec :: Step name ty builtin info -> Term name ty builtin info
-ordinaryDefPactStepExec (Step expr) = expr
-ordinaryDefPactStepExec (StepWithRollback expr _) = expr
-
-data ConstVal term
-  = TermConst term
-  | EvaledConst PactValue
-  deriving (Show, Functor, Foldable, Traversable, Eq, Generic)
-
 data DefPact name ty builtin info
   = DefPact
   { _dpName :: Text
@@ -81,6 +116,10 @@ data DefPact name ty builtin info
   , _dpInfo :: info
   } deriving (Show, Functor, Eq, Generic)
 
+-- | Our defconst representation, that is
+-- (defconst <name>(:<ty>)* <expr>)
+-- Todo: ConstVal is not precisely type-safe.
+-- Maybe a different IR is needed here?
 data DefConst name ty builtin info
   = DefConst
   { _dcName :: Text
@@ -89,10 +128,11 @@ data DefConst name ty builtin info
   , _dcInfo :: info
   } deriving (Show, Functor, Eq, Generic)
 
+-- | Our defcap representation, that is
+-- (defcap <name>:<ty> (<args>) <meta> <body>)
 data DefCap name ty builtin info
   = DefCap
   { _dcapName :: Text
-  , _dcapAppArity :: Int
   , _dcapArgs :: [Arg ty]
   , _dcapRType :: Maybe ty
   , _dcapTerm :: Term name ty builtin info
@@ -106,6 +146,14 @@ data DefSchema ty info
   , _dsSchema :: Map Field ty
   , _dsInfo :: info
   } deriving (Show, Functor, Eq, Generic)
+
+hasRollback :: Step n t b i -> Bool
+hasRollback Step{} = False
+hasRollback StepWithRollback{} = True
+
+ordinaryDefPactStepExec :: Step name ty builtin info -> Term name ty builtin info
+ordinaryDefPactStepExec (Step expr) = expr
+ordinaryDefPactStepExec (StepWithRollback expr _) = expr
 
 -- | The type of our desugared table schemas
 -- TODO: This GADT is unnecessarily complicated and only really necessary
@@ -277,51 +325,6 @@ ifDefInfo = \case
   IfDPact d -> _ifdpInfo d
   IfDSchema d -> _dsInfo d
 
-type EvalTerm b i = Term Name Type b i
-type EvalTopLevel b i = TopLevel Name Type b i
-type EvalDef b i = Def Name Type b i
-type EvalDefun b i = Defun Name Type b i
-type EvalDefCap b i = DefCap Name Type b i
-type EvalModule b i = Module Name Type b i
-type EvalInterface b i = Interface Name Type b i
-
--- | Core IR
-data Term name ty builtin info
-  = Var name info
-  -- ^ single variables e.g x
-  | Lam (NonEmpty (Arg ty)) (Term name ty builtin info) info
-  -- ^ $f = \x.e
-  -- Lambdas are named for the sake of the callstack.
-  | Let (Arg ty) (Term name ty builtin info) (Term name ty builtin info) info
-  -- ^ let x = e1 in e2
-  | App (Term name ty builtin info) [Term name ty builtin info] info
-  -- ^ (e1 e2)
-  | Conditional (BuiltinForm (Term name ty builtin info)) info
-  -- ^ Conditional terms
-  | Builtin builtin info
-  -- ^ Built-in ops, e.g (+)
-  | Constant Literal info
-  -- ^ Literals
-  | Sequence (Term name ty builtin info) (Term name ty builtin info) info
-  -- ^ sequencing, that is e1 `Sequence` e2 evaluates e1
-  -- discards the result and then evaluates and returns the result of e2
-  | Nullary (Term name ty builtin info) info
-  -- ^ "Lazy terms of arity zero"
-  | ListLit [Term name ty builtin info] info
-  -- ^ List Literals
-  | Try (Term name ty builtin info) (Term name ty builtin info) info
-  -- ^ try (catch expr) (try-expr)
-  | ObjectLit [(Field, Term name ty builtin info)] info
-  -- ^ an object literal
-  -- | DynInvoke (Term name ty builtin info) Text info
-  -- ^ dynamic module reference invocation m::f
-  | CapabilityForm (CapForm name (Term name ty builtin info)) info
-  -- ^ Capability Natives
-  | Error Text info
-  -- ^ Error term
-  deriving (Show, Functor, Eq, Generic)
-
-
 
 instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builtin info) where
   pretty = \case
@@ -364,9 +367,9 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (TopLevel name ty bu
     _ -> "todo: pretty defs/modules"
 
 
-----------------------------
--- Aliases for convenience
-----------------------------
+-----------------------------------------
+-- Term traversals and builtins
+-----------------------------------------
 termType :: Traversal (Term n t b i) (Term n t' b i) t t'
 termType f  = \case
   Var n i -> pure (Var n i)
@@ -444,6 +447,44 @@ termInfo f = \case
   Error t i -> Error t <$> f i
   ObjectLit m i -> ObjectLit m <$> f i
 
+traverseDefunTerm
+  :: Traversal (Defun name ty builtin info)
+               (Defun name' ty builtin' info)
+               (Term name ty builtin info)
+               (Term name' ty builtin' info)
+traverseDefunTerm f (Defun n args ret term i) =
+  (\term' -> Defun n args ret term' i) <$> f term
+
+traverseDefConstTerm
+  :: Traversal (DefConst name ty builtin info)
+               (DefConst name' ty builtin' info)
+               (Term name ty builtin info)
+               (Term name' ty builtin' info)
+traverseDefConstTerm f (DefConst n ret term i) =
+  (\term' -> DefConst n ret term' i)  <$> traverse f term
+
+traverseDefCapTerm
+  :: Traversal (DefCap name ty builtin info)
+               (DefCap name ty builtin' info)
+               (Term name ty builtin info)
+               (Term name ty builtin' info)
+traverseDefCapTerm f (DefCap n args ret term meta i) =
+  (\term' -> DefCap n args ret term' meta i) <$> f term
+
+traverseDefTerm
+  :: Traversal (Def name ty builtin info)
+               (Def name ty builtin' info)
+               (Term name ty builtin info)
+               (Term name ty builtin' info)
+traverseDefTerm f = \case
+  Dfun d -> Dfun <$> traverseDefunTerm f d
+  DCap d -> DCap <$> traverseDefCapTerm f d
+  DConst d -> DConst <$> traverseDefConstTerm f d
+  DSchema d -> pure (DSchema d)
+  DTable d -> pure (DTable d)
+  DPact _d -> pure undefined
+
+
 instance Plated (Term name ty builtin info) where
   plate f = \case
     Var n i -> pure (Var n i)
@@ -466,11 +507,6 @@ instance Plated (Term name ty builtin info) where
       ObjectLit <$> (traverse._2) f o <*> pure i
     Error e i -> pure (Error e i)
 
--- defType :: Lens (Def n t b i) (Def n t' b i) t t'
--- defType f = \case
---   Dfun (Defun df)
-
--- Todo: qualify all of these
 makeLenses ''Module
 makeLenses ''Interface
 makeLenses ''Defun
@@ -480,6 +516,18 @@ makeLenses ''DefPact
 makePrisms ''Def
 makePrisms ''Term
 makePrisms ''IfDef
+
+-----------------------------------------
+-- Type Aliases for evaluation
+-----------------------------------------
+type EvalTerm b i = Term Name Type b i
+type EvalTopLevel b i = TopLevel Name Type b i
+type EvalDef b i = Def Name Type b i
+type EvalDefun b i = Defun Name Type b i
+type EvalDefCap b i = DefCap Name Type b i
+type EvalModule b i = Module Name Type b i
+type EvalInterface b i = Interface Name Type b i
+
 
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Term name ty b info)
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Def name ty b info)

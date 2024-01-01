@@ -121,11 +121,12 @@ evaluateTerm
 --   <Var n, E, K, H>      <E(n), E, K, H>
 --
 -- Handles free variable lookups as well as module reference dynamic invokes
-evaluateTerm cont handler env (Var n info)  = do
+-- Todo: it may not be worthwhile if accessing local variables is fast to charge
+-- anything but a constant amount of gas, but it would be a worthwhile exercise.
+evaluateTerm cont handler env (Var n info)  = chargeGasArgs info (GAConstant constantWorkNodeGas) *> do
   case _nKind n of
     NBound i -> do
-      chargeGasArgs info (GAConstant unconsWorkNodeGas)
-      case RAList.lookup (view ceLocal env) i of
+      case RAList.lookup (_ceLocal env) i of
         Just v -> returnCEKValue cont handler v
         Nothing -> failInvariant info ("unbound identifier" <> T.pack (show n))
     -- Top level names are not closures, so we wipe the env
@@ -138,8 +139,9 @@ evaluateTerm cont handler env (Var n info)  = do
         -- Todo: this should be GADT'd out
         -- and defconsts should already be evaluated
         Just (DConst d) -> case _dcTerm d of
-          -- Todo: should this be an error?
-          -- probably.
+          -- Note: `TermConst` cannot and should not be `evalCEK`'d. This is an error
+          -- this can cause semantic divergences, due to things like provided data.
+          -- moreover defcosts are always evaluated in `SysOnly` mode.
           TermConst _term ->
             failInvariant info "Defconst not fully evaluated"
           EvaledConst v ->
@@ -175,11 +177,13 @@ evaluateTerm cont handler env (Var n info)  = do
 --   <Const l, E, K, H>    <Value l, E, K, H>
 --
 evaluateTerm cont handler _env (Constant l info) = do
+  chargeGasArgs info (GAConstant constantWorkNodeGas)
   returnCEKValue cont handler (VLiteral l)
 -- | ------ From ---------- | ------ To ------ |
 --   <App fn args, E, K, H>    <fn, E, Args(E,args,K), H>
 --
 evaluateTerm cont handler env (App fn args info) = do
+  chargeGasArgs info (GAConstant constantWorkNodeGas)
   evalCEK (Args env info args cont) handler env fn
 -- | ------ From ---------- | ------ To ------ |
 --   <Nullary body, E, K, H>    <VClosure(body, E), E, K, H>
@@ -225,7 +229,7 @@ evaluateTerm cont handler env (Conditional c info) = case c of
     chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env info (AndC te') cont) handler env te
   COr te te' -> do
-
+    chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env info (OrC te') cont) handler env te
   CIf cond e1 e2 -> do
     chargeGasArgs info (GAConstant constantWorkNodeGas)
@@ -235,7 +239,7 @@ evaluateTerm cont handler env (Conditional c info) = case c of
     chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env' info (EnforceC str) cont) handler env' cond
   CEnforceOne str conds -> do
-    chargeGasArgs info (GAConstant constantWorkNodeGas)
+    chargeGasArgs info (GAConstant unconsWorkNodeGas)
     case conds of
       [] ->
         returnCEK cont handler (VError "enforce-one failure" info)
@@ -247,10 +251,10 @@ evaluateTerm cont handler env (Conditional c info) = case c of
         let cont' = CondC env' info (EnforceOneC str xs) Mt
         evalCEK cont' handler' env' x
 
-evaluateTerm cont handler env (CapabilityForm cf info) =
+evaluateTerm cont handler env (CapabilityForm cf info) = do
+  chargeGasArgs info (GAConstant constantWorkNodeGas)
   case cf of
     WithCapability rawCap body -> do
-      chargeGasArgs info (GAConstant constantWorkNodeGas)
       enforceNotWithinDefcap info env "with-capability"
       let capFrame = WithCapC body
           cont' = CapInvokeC env info capFrame cont
@@ -764,7 +768,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
   where
   go = do
     d <- getDefCap info fqn
-    when (length args /= _dcapAppArity d) $ failInvariant info "Dcap argument length mismatch"
+    when (length args /= length (_dcapArgs d)) $ failInvariant info "Dcap argument length mismatch"
     let newLocals = RAList.fromList $ fmap VPactValue (reverse args)
         capBody = _dcapTerm d
     -- Todo: clean up the staircase of doom.
@@ -1197,48 +1201,52 @@ applyContToValue (SeqC env e cont) handler _ =
 --   <VBool b, CondC(E, IfC(ifE, elseE), K), H>   if b then <ifE, E, K, H>
 --                                                else <VBool b, K, H>
 --
-applyContToValue (CondC env info frame cont) handler v = case v of
-  (VLiteral (LBool b)) -> case frame of
-    AndC te ->
-      if b then evalCEK (EnforceBoolC info cont) handler env te
-      else returnCEKValue cont handler v
-    OrC te ->
-      if b then returnCEKValue cont handler v
-      else evalCEK (EnforceBoolC info cont) handler env te
-    IfC ifExpr elseExpr ->
-      if b then evalCEK cont handler env ifExpr
-      else evalCEK cont handler env elseExpr
-    EnforceC str ->
-      if b then returnCEKValue cont handler v
-      else do
-        let cont' = EnforceErrorC info cont
-        evalCEK cont' handler env str
-    FilterC clo elem' rest acc -> do
-      let acc' = if b then elem':acc else acc
-      case rest of
-        x:xs -> do
-          let cont' = CondC env info (FilterC clo x xs acc') cont
-          applyLam clo [VPactValue x] cont' handler
-        [] -> returnCEKValue cont handler (VList (V.fromList (reverse acc')))
-    EnforceOneC str li ->
-      if b then returnCEKValue cont handler v
-      else case li of
-        x:xs -> do
-          let cont' = CondC env info (EnforceOneC str xs) cont
-              handler' = updateEnforceOneList xs handler
-          evalCEK cont' handler' env x
-        [] -> do
+-- Note: we charge gas for this reduction here, as these are essentially natives
+-- that match and perform an uncons/match.
+applyContToValue (CondC env info frame cont) handler v = do
+  chargeGasArgs info (GAConstant constantWorkNodeGas)
+  case v of
+    VBool b -> case frame of
+      AndC te ->
+        if b then evalCEK (EnforceBoolC info cont) handler env te
+        else returnCEKValue cont handler v
+      OrC te ->
+        if b then returnCEKValue cont handler v
+        else evalCEK (EnforceBoolC info cont) handler env te
+      IfC ifExpr elseExpr ->
+        if b then evalCEK cont handler env ifExpr
+        else evalCEK cont handler env elseExpr
+      EnforceC str ->
+        if b then returnCEKValue cont handler v
+        else do
           let cont' = EnforceErrorC info cont
           evalCEK cont' handler env str
-    AndQC clo pv ->
-      if b then applyLam clo [VPactValue pv] (EnforceBoolC info cont) handler
-      else returnCEKValue cont handler v
-    OrQC clo pv ->
-      if not b then applyLam clo [VPactValue pv] (EnforceBoolC info cont) handler
-      else returnCEKValue cont handler v
-    NotQC -> returnCEKValue cont handler (VBool (not b))
-  _ ->
-    returnCEK cont handler (VError "Evaluation of conditional expression yielded non-boolean value" info)
+      FilterC clo elem' rest acc -> do
+        let acc' = if b then elem':acc else acc
+        case rest of
+          x:xs -> do
+            let cont' = CondC env info (FilterC clo x xs acc') cont
+            applyLam clo [VPactValue x] cont' handler
+          [] -> returnCEKValue cont handler (VList (V.fromList (reverse acc')))
+      EnforceOneC str li ->
+        if b then returnCEKValue cont handler v
+        else case li of
+          x:xs -> do
+            let cont' = CondC env info (EnforceOneC str xs) cont
+                handler' = updateEnforceOneList xs handler
+            evalCEK cont' handler' env x
+          [] -> do
+            let cont' = EnforceErrorC info cont
+            evalCEK cont' handler env str
+      AndQC clo pv ->
+        if b then applyLam clo [VPactValue pv] (EnforceBoolC info cont) handler
+        else returnCEKValue cont handler v
+      OrQC clo pv ->
+        if not b then applyLam clo [VPactValue pv] (EnforceBoolC info cont) handler
+        else returnCEKValue cont handler v
+      NotQC -> returnCEKValue cont handler (VBool (not b))
+    _ ->
+      returnCEK cont handler (VError "Evaluation of conditional expression yielded non-boolean value" info)
   where
   updateEnforceOneList xs (CEKEnforceOne e i str _ c cs h) =
     CEKEnforceOne e i str xs c cs h

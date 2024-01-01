@@ -198,7 +198,7 @@ plusOneTwo pdb = do
                     , _ceLocal=mempty
                     , _ceInCap=False
                     , _ceDefPactStep=ps
-                    , _ceBuiltins=benchmarkEnv }
+                    , _ceBuiltins=benchmarkBigStepEnv }
     let term = App (Builtin RawAdd ()) [Constant (LInteger 1) (), Constant (LInteger 2) ()] ()
     pure (term, es, ee, env)
 
@@ -215,9 +215,28 @@ constExpr pdb = do
                     , _ceLocal=mempty
                     , _ceInCap=False
                     , _ceDefPactStep=ps
-                    , _ceBuiltins=benchmarkEnv }
+                    , _ceBuiltins=benchmarkBigStepEnv }
     let lamTerm = Lam (NE.fromList [Arg "_" Nothing, Arg "_" Nothing]) (Var (Name "boop" (NBound 1)) ()) ()
     let term = App lamTerm [Constant (LInteger 1) (), Constant (LInteger 2) ()] ()
+    pure (term, es, ee, env)
+
+constExpr2 :: CoreDb -> C.Benchmark
+constExpr2 pdb = do
+  C.env mkEnv $ \ ~(term', es', ee', env') -> do
+    C.bench "(map (+ 1) (enumerate 0 999999))" $ C.nfAppIO (runEvalM ee' es' . Eval.evalNormalForm env') term'
+  where
+  mkEnv = do
+    ee <- defaultEvalEnv pdb rawBuiltinMap
+    let es = def
+        ps = _eeDefPactStep ee
+        env = CEKEnv { _cePactDb=pdb
+                    , _ceLocal=mempty
+                    , _ceInCap=False
+                    , _ceDefPactStep=ps
+                    , _ceBuiltins=benchmarkBigStepEnv }
+    let lamTerm = App (Builtin RawAdd ()) [intConst 1] ()
+        enumerateTerm = App (Builtin RawEnumerate ()) [intConst 0, intConst 999999] ()
+    let term = App (Builtin RawMap ()) [lamTerm, enumerateTerm] ()
     pure (term, es, ee, env)
 
 -- Gas for a lambda with N arguments
@@ -291,7 +310,7 @@ objectLitGas pdb =
     , simpleTermGas (ObjectLit [(Field "x", unitConst), (Field "y", unitConst)] ()) "{x:(), y:()}" pdb ]
 
 termGas :: CoreDb -> [C.Benchmark]
-termGas pdb = [plusOneTwo pdb, constExpr pdb] ++ (benchmarkNodeType pdb <$> [minBound .. maxBound])
+termGas pdb = [plusOneTwo pdb, constExpr pdb, constExpr2 pdb] ++ (benchmarkNodeType pdb <$> [minBound .. maxBound])
 
 withCapFormGas :: CoreDb -> C.Benchmark
 withCapFormGas =
@@ -559,6 +578,9 @@ boolConst b = Constant (LBool b) ()
 
 strConst :: Text -> Term name ty builtin ()
 strConst b = Constant (LString b) ()
+
+intConst :: Integer -> Term name ty builtin ()
+intConst b = Constant (LInteger b) ()
 
 gasAndC :: PactDb RawBuiltin () -> Bool -> C.Benchmark
 gasAndC pdb b =

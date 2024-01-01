@@ -451,7 +451,7 @@ desugarDefCap _modWitness (Lisp.DefCap dcn arglist rtype term _docs _model meta 
   let arglist' = toArg <$> arglist
   term' <- desugarLispTerm term
   meta' <- fmap FQParsed <$> maybe (pure Unmanaged) (desugarDefMeta i arglist') meta
-  pure (DefCap dcn (length arglist) arglist' rtype term' meta' i)
+  pure (DefCap dcn arglist' rtype term' meta' i)
 
 desugarDefSchema
   :: (MonadEval b i m)
@@ -1047,12 +1047,12 @@ renameDefCap
   :: (MonadEval b i m, DesugarBuiltin b)
   => DefCap ParsedName DesugarType b i
   -> RenamerT b i m (DefCap Name Type b i)
-renameDefCap (DefCap name arity argtys rtype term meta info) = do
+renameDefCap (DefCap name argtys rtype term meta info) = do
   meta' <- resolveMeta info meta
   argtys' <- (traverse.traverse) (renameType info) argtys
   rtype' <- traverse (renameType info) rtype
   term' <- local (set reCurrDef (Just DKDefCap) .  bindArgs) $ renameTerm term
-  pure (DefCap name arity argtys' rtype' term' meta' info)
+  pure (DefCap name argtys' rtype' term' meta' info)
   where
   -- Todo: debruijn code should be isolated
   bindArgs rEnv

@@ -359,7 +359,7 @@ encodeDefPact (DefPact dpn args rty steps _i) = parens $
 
 -- todo: defcap meta
 encodeDefCap :: IsBuiltin b => DefCap Name Type b i -> Builder
-encodeDefCap (DefCap dn _ args rty term _meta _info) = parens $
+encodeDefCap (DefCap dn args rty term _meta _info) = parens $
   "defcap" <+> encodeText dn <> encodeTyAnn rty <+> encodeArgList args <+> encodeTerm term
 
 encodeDefSchema :: DefSchema Type info -> Builder

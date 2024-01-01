@@ -14,7 +14,7 @@
 --
 
 
-module Main where
+module Pact.Core.Repl(runRepl) where
 
 import Control.Lens
 import Control.Monad.Catch
@@ -30,15 +30,15 @@ import Pact.Core.Builtin
 import Pact.Core.Compile
 import Pact.Core.Environment
 import Pact.Core.Hash
-import Pact.Core.Imports ( Import(_impModuleName) )
+import Pact.Core.Imports
 import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Pretty
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
 import Pact.Core.Serialise
 
-main :: IO ()
-main = do
+runRepl :: IO ()
+runRepl = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
   g <- newIORef mempty
   evalLog <- newIORef Nothing

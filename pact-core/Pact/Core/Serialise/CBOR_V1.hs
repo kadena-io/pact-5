@@ -346,16 +346,15 @@ instance Serialise (DefCapMeta (FQNameRef Name)) where
 --    Serialise (DefCapMeta (FQNameRef name)))
 --   => Serialise (DefCap name Type b i) where
 instance (Serialise b, Serialise i) => Serialise (DefCap Name Type b i) where
-  encode (DefCap n arity args ret term meta i) =
+  encode (DefCap n args ret term meta i) =
     encode n
-    <> encode arity
     <> encode args
     <> encode ret
     <> encode term
     <> encode meta
     <> encode i
 
-  decode = DefCap <$> decode <*> decode <*> decode
+  decode = DefCap <$> decode <*> decode
            <*> decode <*> decode
            <*> decode <*> decode
 

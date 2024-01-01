@@ -157,6 +157,7 @@ library
     Pact.Core.RuntimeParsers
     Pact.Core.Evaluate
     Pact.Core.Scheme
+    Pact.Core.Repl
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
@@ -212,7 +213,7 @@ executable gasmodel
   default-language:    Haskell2010
 
 executable repl
-  main-is: pact-core/Pact/Core/Repl.hs
+  main-is: repl/Main.hs
 
   build-depends:
     , Decimal

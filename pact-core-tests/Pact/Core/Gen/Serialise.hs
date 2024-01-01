@@ -293,7 +293,7 @@ defCapGen b i = do
   ret <- Gen.maybe typeGen
   term <- termGen b i
   meta <- defCapMetaGen fqNameRefGen
-  DefCap name arity args ret term meta <$> i
+  DefCap name args ret term meta <$> i
 
 ifDefCapGen :: Gen i -> Gen (IfDefCap name Type i)
 ifDefCapGen i = do

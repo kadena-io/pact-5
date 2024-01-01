@@ -169,13 +169,12 @@ data EvalState b i
   , _esEvents :: !([PactEvent PactValue])
   , _esLoaded :: !(Loaded b i)
   , _esDefPactExec :: !(Maybe DefPactExec)
-  , _esGas :: !(MilliGas)
   } deriving (Show, Generic)
 
 instance (NFData b, NFData i) => NFData (EvalState b i)
 
 instance Default (EvalState b i) where
-  def = EvalState def [] [] mempty Nothing mempty
+  def = EvalState def [] [] mempty Nothing
 
 makeClassy ''EvalState
 

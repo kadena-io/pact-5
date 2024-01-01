@@ -47,7 +47,7 @@ import Control.Lens
 import Control.Monad(when)
 import Control.Monad.IO.Class
 import Control.Monad.Except(MonadError(..))
--- import Data.IORef
+import Data.IORef
 import Data.Text(Text)
 import Data.Maybe(listToMaybe)
 import Data.Foldable(find)
@@ -323,18 +323,17 @@ chargeFlatNativeGas info nativeArg = do
 {-# SPECIALIZE getGas
     :: Eval MilliGas
     #-}
-getGas :: (MonadEvalState b i m) => m MilliGas
+getGas :: (MonadEval b i m) => m MilliGas
 getGas =
-  _esGas <$> getEvalState
-  -- viewEvalEnv eeGasRef >>= liftIO . readIORef
+  -- _esGas <$> getEvalState
+  viewEvalEnv eeGasRef >>= liftIO . readIORef
 
 -- putGas :: (MonadEvalEnv b i m, MonadIO m) => MilliGas -> m ()
 {-# SPECIALIZE putGas
     :: MilliGas -> Eval ()
     #-}
-putGas :: (MonadEvalState b i m) => MilliGas -> m ()
-putGas !g =
-  modifyEvalState (\es -> es{_esGas = g})
-
-  -- gasRef <- viewEvalEnv eeGasRef
-  -- liftIO (writeIORef gasRef g)
+putGas :: (MonadEval b i m) => MilliGas -> m ()
+putGas !g = do
+  -- modifyEvalState (\es -> es{_esGas = g})
+  gasRef <- viewEvalEnv eeGasRef
+  liftIO (writeIORef gasRef g)
