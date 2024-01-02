@@ -39,7 +39,7 @@ import Pact.Core.Persistence
 import Pact.Core.Hash
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Serialise (serialisePact)
-import Pact.Core.Evaluate(compileOnlyTerm)
+import Pact.Core.Evaluate
 import qualified Pact.Core.IR.Eval.CEK as Eval
 
 type CoreDb = PactDb CoreBuiltin ()
@@ -64,7 +64,7 @@ compileTerm
   :: Text
   -> Eval CoreTerm
 compileTerm source = do
-  parsed <- liftEither $ compileOnlyTerm (CoreCode source)
+  parsed <- liftEither $ compileOnlyTerm (RawCode source)
   DesugarOutput term _  <- runDesugarTerm parsed
   pure term
 
