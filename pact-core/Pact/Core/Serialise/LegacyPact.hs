@@ -38,7 +38,7 @@ import Data.Map.Strict(Map)
 import Text.Read (readMaybe)
 
 
-decodeModuleData :: ByteString -> Maybe (ModuleData RawBuiltin ())
+decodeModuleData :: ByteString -> Maybe (ModuleData CoreBuiltin ())
 decodeModuleData = JD.decodeStrict'
 
 decodeKeySet :: ByteString -> Maybe (KeySet QualifiedName)
@@ -88,7 +88,7 @@ instance JD.FromJSON Namespace where
     <*> v JD..: "user"
     <*> v JD..: "admin"
 
-instance JD.FromJSON (ModuleData RawBuiltin ()) where
+instance JD.FromJSON (ModuleData CoreBuiltin ()) where
   parseJSON = error "unimplemented"
 
 instance JD.FromJSON DefPactExec where

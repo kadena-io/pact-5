@@ -138,12 +138,12 @@ instance (MonadEvalState b i m) => MonadEvalState b i (RenamerT b i m) where
 -- Todo: DesugarBuiltin
 -- probably should just be a `data` definition we pass in.
 class IsBuiltin b => DesugarBuiltin b where
-  liftRaw :: RawBuiltin -> b
+  liftCoreBuiltin :: CoreBuiltin -> b
   desugarOperator :: i -> Lisp.Operator -> Term ParsedName DesugarType b i
   desugarAppArity :: i -> b -> [Term ParsedName DesugarType b i] -> Term ParsedName DesugarType b i
 
-instance DesugarBuiltin RawBuiltin where
-  liftRaw = id
+instance DesugarBuiltin CoreBuiltin where
+  liftCoreBuiltin = id
   desugarOperator info = \case
     -- Manual eta expansion for and as well as Or
     Lisp.AndOp -> let
@@ -173,9 +173,9 @@ instance DesugarBuiltin RawBuiltin where
   desugarAppArity = desugarAppArityRaw id
 
 desugarAppArityRaw
-  :: (RawBuiltin -> builtin)
+  :: (CoreBuiltin -> builtin)
   -> info
-  -> RawBuiltin
+  -> CoreBuiltin
   -> [Term name Lisp.Type builtin info]
   -> Term name Lisp.Type builtin info
 -- Todo: this presents a really, _really_ annoying case for the map overload :(
@@ -195,38 +195,38 @@ desugarAppArityRaw
 -- this is because prod simply suspends the static term without figuring out the arity which is being used
 -- to apply, vs core which does not attempt to do this, and picks an overload eagerly and statically.
 -- in 99% of cases this is fine, but we overloaded `-` to be completely different functions.
-desugarAppArityRaw f i RawSub [e1] =
-    App (Builtin (f RawNegate) i) ([e1]) i
-desugarAppArityRaw f i RawEnumerate [e1, e2, e3] =
-    App (Builtin (f RawEnumerateStepN) i) ([e1, e2, e3]) i
-desugarAppArityRaw f i RawSelect [e1, e2, e3] =
-    App (Builtin (f RawSelectWithFields) i) ([e1, e2, e3]) i
-desugarAppArityRaw f i RawSort [e1, e2] =
-  App (Builtin (f RawSortObject) i) [e1, e2] i
+desugarAppArityRaw f i CoreSub [e1] =
+    App (Builtin (f CoreNegate) i) ([e1]) i
+desugarAppArityRaw f i CoreEnumerate [e1, e2, e3] =
+    App (Builtin (f CoreEnumerateStepN) i) ([e1, e2, e3]) i
+desugarAppArityRaw f i CoreSelect [e1, e2, e3] =
+    App (Builtin (f CoreSelectWithFields) i) ([e1, e2, e3]) i
+desugarAppArityRaw f i CoreSort [e1, e2] =
+  App (Builtin (f CoreSortObject) i) [e1, e2] i
 -- Rounding functions
-desugarAppArityRaw f i RawRound [e1, e2] =
-  App (Builtin (f RawRoundPrec) i) [e1, e2] i
-desugarAppArityRaw f i RawCeiling [e1, e2] =
-  App (Builtin (f RawCeilingPrec) i) [e1, e2] i
-desugarAppArityRaw f i RawFloor [e1, e2] =
-  App (Builtin (f RawFloorPrec) i) [e1, e2] i
+desugarAppArityRaw f i CoreRound [e1, e2] =
+  App (Builtin (f CoreRoundPrec) i) [e1, e2] i
+desugarAppArityRaw f i CoreCeiling [e1, e2] =
+  App (Builtin (f CoreCeilingPrec) i) [e1, e2] i
+desugarAppArityRaw f i CoreFloor [e1, e2] =
+  App (Builtin (f CoreFloorPrec) i) [e1, e2] i
 
 
-desugarAppArityRaw f i RawStrToInt [e1, e2] =
-  App (Builtin (f RawStrToIntBase) i) [e1, e2] i
-desugarAppArityRaw f i RawReadMsg [] =
-  App (Builtin (f RawReadMsgDefault) i) [] i
-desugarAppArityRaw f i RawDefineKeySet [e1] =
-  App (Builtin (f RawDefineKeysetData) i) [e1] i
-desugarAppArityRaw f i RawPoseidonHashHackachain li =
-  App (Builtin (f RawPoseidonHashHackachain) i )[(ListLit li i)] i
-desugarAppArityRaw f i RawYield [e1, e2] =
-  App (Builtin (f RawYieldToChain) i) [e1, e2] i
+desugarAppArityRaw f i CoreStrToInt [e1, e2] =
+  App (Builtin (f CoreStrToIntBase) i) [e1, e2] i
+desugarAppArityRaw f i CoreReadMsg [] =
+  App (Builtin (f CoreReadMsgDefault) i) [] i
+desugarAppArityRaw f i CoreDefineKeySet [e1] =
+  App (Builtin (f CoreDefineKeysetData) i) [e1] i
+desugarAppArityRaw f i CorePoseidonHashHackachain li =
+  App (Builtin (f CorePoseidonHashHackachain) i )[(ListLit li i)] i
+desugarAppArityRaw f i CoreYield [e1, e2] =
+  App (Builtin (f CoreYieldToChain) i) [e1, e2] i
 desugarAppArityRaw f i b args =
     App (Builtin (f b) i) args i
 
-instance DesugarBuiltin (ReplBuiltin RawBuiltin) where
-  liftRaw = RBuiltinWrap
+instance DesugarBuiltin (ReplBuiltin CoreBuiltin) where
+  liftCoreBuiltin = RBuiltinWrap
   desugarOperator i dsg =
     over termBuiltin RBuiltinWrap $ desugarOperator i dsg
   desugarAppArity i (RBuiltinWrap b) ne =
@@ -323,7 +323,7 @@ desugarLispTerm = \case
       bindToLet (Field field, marg) body =
         let arg = toArg marg
             fieldLit = Constant (LString field) i
-            access = App (Builtin (liftRaw RawAt) i) [fieldLit, objFreshVar] i
+            access = App (Builtin (liftCoreBuiltin CoreAt) i) [fieldLit, objFreshVar] i
         in Let arg access body i
   Lisp.If e1 e2 e3 i -> Conditional <$>
      (CIf <$> desugarLispTerm e1 <*> desugarLispTerm e2 <*> desugarLispTerm e3) <*> pure i

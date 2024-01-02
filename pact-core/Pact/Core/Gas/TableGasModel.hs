@@ -6,7 +6,7 @@ module Pact.Core.Gas.TableGasModel
 import Pact.Core.Builtin
 import Pact.Core.Gas
 
-tableGasModel :: MilliGasLimit -> GasModel RawBuiltin
+tableGasModel :: MilliGasLimit -> GasModel CoreBuiltin
 tableGasModel gl =
   GasModel
   { _gmRunModel = runTableModel
@@ -15,7 +15,7 @@ tableGasModel gl =
   , _gmGasLimit = gl
   , _gmDesc = "table-based cost model"}
 
-replTableGasModel :: MilliGasLimit -> GasModel ReplRawBuiltin
+replTableGasModel :: MilliGasLimit -> GasModel ReplCoreBuiltin
 replTableGasModel gl =
   (tableGasModel gl) { _gmNatives = replNativeGasTable }
 
@@ -26,138 +26,138 @@ runTableModel = \case
   GALinear (MilliGas x) (LinearGasArg (mnum, mdiv) intercept) ->
     MilliGas $ ((x * mnum) `div` mdiv) + intercept
 
-nativeGasTable :: RawBuiltin -> MilliGas
+nativeGasTable :: CoreBuiltin -> MilliGas
 nativeGasTable = MilliGas . \case
-  RawAdd -> 1
-  RawSub -> 1
-  RawMultiply -> 1
-  RawDivide -> 1
-  RawNegate -> 1
-  RawAbs -> 1
-  RawPow -> 1
-  RawNot -> 1
-  RawEq -> 1
-  RawNeq -> 1
-  RawGT -> 1
-  RawGEQ -> 1
-  RawLT -> 1
-  RawLEQ -> 1
-  RawBitwiseAnd -> 1
-  RawBitwiseOr -> 1
-  RawBitwiseXor -> 1
-  RawBitwiseFlip -> 1
-  RawBitShift -> 1
-  RawRound -> 1
-  RawCeiling -> 1
-  RawFloor -> 1
-  RawRoundPrec -> 1
-  RawCeilingPrec -> 1
-  RawFloorPrec -> 1
-  RawExp -> 1
-  RawLn -> 1
-  RawSqrt -> 1
-  RawLogBase -> 1
-  RawLength -> 1
-  RawTake -> 1
-  RawDrop -> 1
-  RawConcat -> 1
-  RawReverse -> 1
-  RawContains -> 1
-  RawSort -> 1
-  RawSortObject -> 1
-  RawRemove -> 1
-  RawMod -> 1
-  RawMap -> 1
-  RawFilter -> 1
-  RawZip -> 1
-  RawIntToStr -> 1
-  RawStrToInt -> 1
-  RawStrToIntBase -> 1
-  RawFold -> 1
-  RawDistinct -> 1
-  RawFormat -> 1
-  RawEnumerate -> 1
-  RawEnumerateStepN -> 1
-  RawShow -> 1
-  RawReadMsg -> 1
-  RawReadMsgDefault -> 1
-  RawReadInteger -> 1
-  RawReadDecimal -> 1
-  RawReadString -> 1
-  RawReadKeyset -> 1
-  RawEnforceGuard -> 1
-  RawEnforceKeyset -> 1
-  RawKeysetRefGuard -> 1
-  RawAt -> 1
-  RawMakeList -> 1
-  RawB64Encode -> 1
-  RawB64Decode -> 1
-  RawStrToList -> 1
-  RawYield -> 1
-  RawYieldToChain -> 1
-  RawResume -> 1
-  RawBind -> 1
-  RawRequireCapability -> 1
-  RawComposeCapability -> 1
-  RawInstallCapability -> 1
-  RawEmitEvent -> 1
-  RawCreateCapabilityGuard -> 1
-  RawCreateCapabilityPactGuard -> 1
-  RawCreateModuleGuard -> 1
-  RawCreateDefPactGuard -> 1
-  RawCreateTable -> 1
-  RawDescribeKeyset -> 1
-  RawDescribeModule -> 1
-  RawDescribeTable -> 1
-  RawDefineKeySet -> 1
-  RawDefineKeysetData -> 1
-  RawFoldDb -> 1
-  RawInsert -> 1
-  RawKeyLog -> 1
-  RawKeys -> 1
-  RawRead -> 1
-  RawSelect -> 1
-  RawSelectWithFields -> 1
-  RawUpdate -> 1
-  RawWithDefaultRead -> 1
-  RawWithRead -> 1
-  RawWrite -> 1
-  RawTxIds -> 1
-  RawTxLog -> 1
-  RawTxHash -> 1
-  RawAndQ -> 1
-  RawOrQ -> 1
-  RawWhere -> 1
-  RawNotQ -> 1
-  RawHash -> 1
-  RawContinue -> 1
-  RawParseTime -> 1
-  RawFormatTime -> 1
-  RawTime -> 1
-  RawAddTime -> 1
-  RawDiffTime -> 1
-  RawHours -> 1
-  RawMinutes -> 1
-  RawDays -> 1
-  RawCompose -> 1
-  RawCreatePrincipal -> 1
-  RawIsPrincipal -> 1
-  RawTypeOfPrincipal -> 1
-  RawValidatePrincipal -> 1
-  RawNamespace -> 1
-  RawDefineNamespace -> 1
-  RawDescribeNamespace -> 1
-  RawChainData -> 1
-  RawIsCharset -> 1
-  RawPactId -> 1
-  RawZkPairingCheck -> 1
-  RawZKScalarMult -> 1
-  RawZkPointAdd -> 1
-  RawPoseidonHashHackachain -> 1
-  RawTypeOf -> 1
-  RawDec -> 1
+  CoreAdd -> 1
+  CoreSub -> 1
+  CoreMultiply -> 1
+  CoreDivide -> 1
+  CoreNegate -> 1
+  CoreAbs -> 1
+  CorePow -> 1
+  CoreNot -> 1
+  CoreEq -> 1
+  CoreNeq -> 1
+  CoreGT -> 1
+  CoreGEQ -> 1
+  CoreLT -> 1
+  CoreLEQ -> 1
+  CoreBitwiseAnd -> 1
+  CoreBitwiseOr -> 1
+  CoreBitwiseXor -> 1
+  CoreBitwiseFlip -> 1
+  CoreBitShift -> 1
+  CoreRound -> 1
+  CoreCeiling -> 1
+  CoreFloor -> 1
+  CoreRoundPrec -> 1
+  CoreCeilingPrec -> 1
+  CoreFloorPrec -> 1
+  CoreExp -> 1
+  CoreLn -> 1
+  CoreSqrt -> 1
+  CoreLogBase -> 1
+  CoreLength -> 1
+  CoreTake -> 1
+  CoreDrop -> 1
+  CoreConcat -> 1
+  CoreReverse -> 1
+  CoreContains -> 1
+  CoreSort -> 1
+  CoreSortObject -> 1
+  CoreRemove -> 1
+  CoreMod -> 1
+  CoreMap -> 1
+  CoreFilter -> 1
+  CoreZip -> 1
+  CoreIntToStr -> 1
+  CoreStrToInt -> 1
+  CoreStrToIntBase -> 1
+  CoreFold -> 1
+  CoreDistinct -> 1
+  CoreFormat -> 1
+  CoreEnumerate -> 1
+  CoreEnumerateStepN -> 1
+  CoreShow -> 1
+  CoreReadMsg -> 1
+  CoreReadMsgDefault -> 1
+  CoreReadInteger -> 1
+  CoreReadDecimal -> 1
+  CoreReadString -> 1
+  CoreReadKeyset -> 1
+  CoreEnforceGuard -> 1
+  CoreEnforceKeyset -> 1
+  CoreKeysetRefGuard -> 1
+  CoreAt -> 1
+  CoreMakeList -> 1
+  CoreB64Encode -> 1
+  CoreB64Decode -> 1
+  CoreStrToList -> 1
+  CoreYield -> 1
+  CoreYieldToChain -> 1
+  CoreResume -> 1
+  CoreBind -> 1
+  CoreRequireCapability -> 1
+  CoreComposeCapability -> 1
+  CoreInstallCapability -> 1
+  CoreEmitEvent -> 1
+  CoreCreateCapabilityGuard -> 1
+  CoreCreateCapabilityPactGuard -> 1
+  CoreCreateModuleGuard -> 1
+  CoreCreateDefPactGuard -> 1
+  CoreCreateTable -> 1
+  CoreDescribeKeyset -> 1
+  CoreDescribeModule -> 1
+  CoreDescribeTable -> 1
+  CoreDefineKeySet -> 1
+  CoreDefineKeysetData -> 1
+  CoreFoldDb -> 1
+  CoreInsert -> 1
+  CoreKeyLog -> 1
+  CoreKeys -> 1
+  CoreRead -> 1
+  CoreSelect -> 1
+  CoreSelectWithFields -> 1
+  CoreUpdate -> 1
+  CoreWithDefaultRead -> 1
+  CoreWithRead -> 1
+  CoreWrite -> 1
+  CoreTxIds -> 1
+  CoreTxLog -> 1
+  CoreTxHash -> 1
+  CoreAndQ -> 1
+  CoreOrQ -> 1
+  CoreWhere -> 1
+  CoreNotQ -> 1
+  CoreHash -> 1
+  CoreContinue -> 1
+  CoreParseTime -> 1
+  CoreFormatTime -> 1
+  CoreTime -> 1
+  CoreAddTime -> 1
+  CoreDiffTime -> 1
+  CoreHours -> 1
+  CoreMinutes -> 1
+  CoreDays -> 1
+  CoreCompose -> 1
+  CoreCreatePrincipal -> 1
+  CoreIsPrincipal -> 1
+  CoreTypeOfPrincipal -> 1
+  CoreValidatePrincipal -> 1
+  CoreNamespace -> 1
+  CoreDefineNamespace -> 1
+  CoreDescribeNamespace -> 1
+  CoreChainData -> 1
+  CoreIsCharset -> 1
+  CorePactId -> 1
+  CoreZkPairingCheck -> 1
+  CoreZKScalarMult -> 1
+  CoreZkPointAdd -> 1
+  CorePoseidonHashHackachain -> 1
+  CoreTypeOf -> 1
+  CoreDec -> 1
 
-replNativeGasTable :: ReplBuiltin RawBuiltin -> MilliGas
+replNativeGasTable :: ReplBuiltin CoreBuiltin -> MilliGas
 replNativeGasTable = \case
   RBuiltinWrap bwrap -> nativeGasTable bwrap
   _ -> mempty

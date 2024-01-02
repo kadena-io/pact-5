@@ -25,7 +25,7 @@ import Pact.Core.IR.Eval.Runtime
 import Pact.Core.DefPacts.Types
 import Pact.Core.IR.Eval.CEK
 import Pact.Core.Names
-import Pact.Core.IR.Eval.RawBuiltin
+import Pact.Core.IR.Eval.CoreBuiltin
 import Pact.Core.Pretty
 import Pact.Core.Environment
 import Pact.Core.PactValue
@@ -365,18 +365,18 @@ envNamespacePolicy info b cont handler _env = \case
   args -> argsError info b args
 
 replBuiltinEnv
-  :: CEKEval step ReplRawBuiltin SpanInfo (ReplM ReplRawBuiltin)
-  => BuiltinEnv step (ReplBuiltin RawBuiltin) SpanInfo (ReplM (ReplBuiltin RawBuiltin))
+  :: CEKEval step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+  => BuiltinEnv step (ReplBuiltin CoreBuiltin) SpanInfo (ReplM (ReplBuiltin CoreBuiltin))
 replBuiltinEnv i b env =
-  mkBuiltinFn i b env (replRawBuiltinRuntime b)
+  mkBuiltinFn i b env (replcoreBuiltinRuntime b)
 
-replRawBuiltinRuntime
-  :: CEKEval step ReplRawBuiltin SpanInfo (ReplM ReplRawBuiltin)
-  => ReplBuiltin RawBuiltin
-  -> NativeFunction step (ReplBuiltin RawBuiltin) SpanInfo (ReplM (ReplBuiltin RawBuiltin))
-replRawBuiltinRuntime = \case
+replcoreBuiltinRuntime
+  :: CEKEval step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+  => ReplBuiltin CoreBuiltin
+  -> NativeFunction step (ReplBuiltin CoreBuiltin) SpanInfo (ReplM (ReplBuiltin CoreBuiltin))
+replcoreBuiltinRuntime = \case
   RBuiltinWrap cb ->
-    rawBuiltinRuntime cb
+    coreBuiltinRuntime cb
   RBuiltinRepl br -> case br of
     RExpect -> coreExpect
     RExpectFailure -> coreExpectFailure

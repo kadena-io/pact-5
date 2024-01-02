@@ -644,11 +644,11 @@ instance MonadEvalState b i (EvalM b i) where
   putEvalState p = EvalT (put p)
   modifyEvalState f = EvalT (modify' f)
 
-type Eval = EvalM RawBuiltin ()
-type CoreTerm = EvalTerm RawBuiltin ()
-type CoreCEKCont = Cont CEKBigStep RawBuiltin () Eval
-type CoreCEKHandler = CEKErrorHandler CEKBigStep RawBuiltin () Eval
-type CoreCEKEnv = CEKEnv CEKBigStep RawBuiltin () Eval
-type CoreBuiltinEnv = BuiltinEnv CEKBigStep RawBuiltin () Eval
-type CoreCEKValue = CEKValue CEKBigStep RawBuiltin () Eval
-type CoreEvalResult = EvalResult CEKBigStep RawBuiltin () Eval
+type Eval = EvalM CoreBuiltin ()
+type CoreTerm = EvalTerm CoreBuiltin ()
+type CoreCEKCont = Cont CEKBigStep CoreBuiltin () Eval
+type CoreCEKHandler = CEKErrorHandler CEKBigStep CoreBuiltin () Eval
+type CoreCEKEnv = CEKEnv CEKBigStep CoreBuiltin () Eval
+type CoreBuiltinEnv = BuiltinEnv CEKBigStep CoreBuiltin () Eval
+type CoreCEKValue = CEKValue CEKBigStep CoreBuiltin () Eval
+type CoreEvalResult = EvalResult CEKBigStep CoreBuiltin () Eval

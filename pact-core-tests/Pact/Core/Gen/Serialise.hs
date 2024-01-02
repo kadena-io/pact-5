@@ -180,7 +180,7 @@ importGen = do
 infoGen :: Gen SpanInfo
 infoGen = pure def
 
-builtinGen :: Gen RawBuiltin
+builtinGen :: Gen CoreBuiltin
 builtinGen = Gen.element [minBound .. maxBound]
 
 textGen :: Gen Text

@@ -38,7 +38,7 @@ runStaticTest label src predicate = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
   pdb <- mockPactDb serialisePact_repl_spaninfo
-  ee <- defaultEvalEnv pdb replRawBuiltinMap
+  ee <- defaultEvalEnv pdb replcoreBuiltinMap
   let source = SourceCode label src
       rstate = ReplState
             { _replFlags = mempty

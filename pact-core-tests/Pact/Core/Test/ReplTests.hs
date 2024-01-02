@@ -32,7 +32,7 @@ import Pact.Core.Builtin
 import Pact.Core.Errors
 import Pact.Core.Serialise
 
-type Interpreter = SourceCode -> (ReplCompileValue -> ReplM ReplRawBuiltin ()) -> ReplM ReplRawBuiltin [ReplCompileValue]
+type Interpreter = SourceCode -> (ReplCompileValue -> ReplM ReplCoreBuiltin ()) -> ReplM ReplCoreBuiltin [ReplCompileValue]
 
 tests :: IO TestTree
 tests = do
@@ -64,11 +64,11 @@ runFileReplTestSqlite interp file = testCase file $ do
   withSqlitePactDb serialisePact_repl_spaninfo ":memory:" $ \pdb -> do
     runReplTest pdb file ctnt interp
 
-runReplTest :: PactDb ReplRawBuiltin SpanInfo -> FilePath -> T.Text -> Interpreter -> Assertion
+runReplTest :: PactDb ReplCoreBuiltin SpanInfo -> FilePath -> T.Text -> Interpreter -> Assertion
 runReplTest pdb file src interp = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
-  ee <- defaultEvalEnv pdb replRawBuiltinMap
+  ee <- defaultEvalEnv pdb replcoreBuiltinMap
   let source = SourceCode (takeFileName file) src
   let rstate = ReplState
             { _replFlags = mempty

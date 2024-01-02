@@ -11,13 +11,13 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Pact.Core.IR.Eval.RawBuiltin
- ( rawBuiltinRuntime
- , rawBuiltinEnv
+module Pact.Core.IR.Eval.CoreBuiltin
+ ( coreBuiltinRuntime
+ , coreBuiltinEnv
  , coreEnforceGuard) where
 
 -- |
--- Module      :  Pact.Core.Eval.RawBuiltin
+-- Module      :  Pact.Core.Eval.CoreBuiltin
 -- Copyright   :  (C) 2022 Kadena
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Jose Cardona <jose@kadena.io>
@@ -111,10 +111,10 @@ roundingFn op info b cont handler _env = \case
 -- Arithmetic Ops
 ------------------------------
 {-# SPECIALIZE rawAdd
-   :: NativeFunction CEKBigStep RawBuiltin () Eval
+   :: NativeFunction CEKBigStep CoreBuiltin () Eval
     #-}
 {-# SPECIALIZE rawAdd
-   :: NativeFunction CEKSmallStep RawBuiltin () Eval
+   :: NativeFunction CEKSmallStep CoreBuiltin () Eval
     #-}
 rawAdd :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawAdd info b cont handler _env = \case
@@ -1604,154 +1604,154 @@ poseidonHash info b cont handler _env = \case
 -----------------------------------
 
 
-{-# SPECIALIZE rawBuiltinEnv :: CoreBuiltinEnv #-}
-{-# SPECIALIZE rawBuiltinEnv :: BuiltinEnv CEKSmallStep RawBuiltin () Eval #-}
-rawBuiltinEnv
-  :: forall step i m. (CEKEval step RawBuiltin i m, MonadEval RawBuiltin i m)
-  => BuiltinEnv step RawBuiltin i m
-rawBuiltinEnv i b env = mkBuiltinFn i b env (rawBuiltinRuntime b)
+{-# SPECIALIZE coreBuiltinEnv :: CoreBuiltinEnv #-}
+{-# SPECIALIZE coreBuiltinEnv :: BuiltinEnv CEKSmallStep CoreBuiltin () Eval #-}
+coreBuiltinEnv
+  :: forall step i m. (CEKEval step CoreBuiltin i m, MonadEval CoreBuiltin i m)
+  => BuiltinEnv step CoreBuiltin i m
+coreBuiltinEnv i b env = mkBuiltinFn i b env (coreBuiltinRuntime b)
 
 
-{-# SPECIALIZE rawBuiltinRuntime
-   :: RawBuiltin
-   -> NativeFunction CEKBigStep RawBuiltin () Eval
+{-# SPECIALIZE coreBuiltinRuntime
+   :: CoreBuiltin
+   -> NativeFunction CEKBigStep CoreBuiltin () Eval
     #-}
-{-# SPECIALIZE rawBuiltinRuntime
-   :: RawBuiltin
-   -> NativeFunction CEKSmallStep RawBuiltin () Eval
+{-# SPECIALIZE coreBuiltinRuntime
+   :: CoreBuiltin
+   -> NativeFunction CEKSmallStep CoreBuiltin () Eval
     #-}
-rawBuiltinRuntime
+coreBuiltinRuntime
   :: (CEKEval step b i m, MonadEval b i m, IsBuiltin b)
-  => RawBuiltin
+  => CoreBuiltin
   -> NativeFunction step b i m
-rawBuiltinRuntime = \case
-  RawAdd -> rawAdd
-  RawSub -> rawSub
-  RawMultiply -> rawMul
-  RawDivide -> rawDiv
-  RawNegate -> rawNegate
-  RawAbs -> rawAbs
-  RawPow -> rawPow
-  RawNot -> notBool
-  RawEq -> rawEq
-  RawNeq -> rawNeq
-  RawGT -> rawGt
-  RawGEQ -> rawGeq
-  RawLT -> rawLt
-  RawLEQ -> rawLeq
-  RawBitwiseAnd -> bitAndInt
-  RawBitwiseOr -> bitOrInt
-  RawBitwiseXor -> bitXorInt
-  RawBitwiseFlip -> bitComplementInt
-  RawBitShift -> bitShiftInt
-  RawRound -> roundDec
-  RawCeiling -> ceilingDec
-  RawFloor -> floorDec
-  RawRoundPrec -> roundDec
-  RawCeilingPrec -> ceilingDec
-  RawFloorPrec -> floorDec
-  RawExp -> rawExp
-  RawLn -> rawLn
-  RawSqrt -> rawSqrt
-  RawLogBase -> rawLogBase
-  RawLength -> rawLength
-  RawTake -> rawTake
-  RawDrop -> rawDrop
-  RawConcat -> coreConcat
-  RawReverse -> rawReverse
-  RawMod -> modInt
-  RawMap -> coreMap
-  RawFilter -> coreFilter
-  RawZip -> zipList
-  RawIntToStr -> coreIntToStr
-  RawStrToInt -> coreStrToInt
-  RawStrToIntBase -> coreStrToIntBase
-  RawFold -> coreFold
-  RawDistinct -> coreDistinct
-  RawFormat -> coreFormat
-  RawContains -> rawContains
-  RawSort -> rawSort
-  RawSortObject -> rawSortObject
-  RawRemove -> coreRemove
-  -- RawEnforce -> coreEnforce
-  -- RawEnforceOne -> unimplemented
-  RawEnumerate -> coreEnumerate
-  RawEnumerateStepN -> coreEnumerateStepN
-  RawShow -> rawShow
-  RawReadMsg -> coreReadMsg
-  RawReadMsgDefault -> coreReadMsg
-  RawReadInteger -> coreReadInteger
-  RawReadDecimal -> coreReadDecimal
-  RawReadString -> coreReadString
-  RawReadKeyset -> coreReadKeyset
-  RawEnforceGuard -> coreEnforceGuard
-  RawYield -> coreYield
-  RawYieldToChain -> coreYield
-  RawResume -> coreResume
-  RawEnforceKeyset -> coreEnforceGuard
-  RawKeysetRefGuard -> keysetRefGuard
-  RawAt -> coreAccess
-  RawMakeList -> makeList
-  RawB64Encode -> coreB64Encode
-  RawB64Decode -> coreB64Decode
-  RawStrToList -> strToList
-  RawBind -> coreBind
-  RawRequireCapability -> requireCapability
-  RawComposeCapability -> composeCapability
-  RawInstallCapability -> installCapability
-  RawCreateCapabilityGuard -> createCapGuard
-  RawCreateCapabilityPactGuard -> createCapabilityPactGuard
-  RawCreateModuleGuard -> createModuleGuard
-  RawCreateDefPactGuard -> createDefPactGuard
-  RawEmitEvent -> coreEmitEvent
-  RawCreateTable -> createTable
-  RawDescribeKeyset -> dbDescribeKeySet
-  RawDescribeModule -> describeModule
-  RawDescribeTable -> dbDescribeTable
-  RawDefineKeySet -> defineKeySet
-  RawDefineKeysetData -> defineKeySet
-  RawFoldDb -> foldDb
-  RawInsert -> dbInsert
-  RawWrite -> dbWrite
-  RawKeyLog -> dbKeyLog
-  RawKeys -> dbKeys
-  RawRead -> dbRead
-  RawSelect -> dbSelect
-  RawUpdate -> dbUpdate
-  RawWithDefaultRead -> dbWithDefaultRead
-  RawWithRead -> dbWithRead
-  RawTxLog -> dbTxLog
-  RawTxIds -> dbTxIds
-  RawAndQ -> coreAndQ
-  RawOrQ -> coreOrQ
-  RawWhere -> coreWhere
-  RawNotQ -> coreNotQ
-  RawHash -> coreHash
-  RawTxHash -> txHash
-  RawContinue -> coreContinue
-  RawParseTime -> parseTime
-  RawFormatTime -> formatTime
-  RawTime -> time
-  RawAddTime -> addTime
-  RawDiffTime -> diffTime
-  RawHours -> hours
-  RawMinutes -> minutes
-  RawDays -> days
-  RawCompose -> coreCompose
-  RawSelectWithFields -> dbSelect
-  RawCreatePrincipal -> coreCreatePrincipal
-  RawIsPrincipal -> coreIsPrincipal
-  RawTypeOfPrincipal -> coreTypeOfPrincipal
-  RawValidatePrincipal -> coreValidatePrincipal
-  RawNamespace -> coreNamespace
-  RawDefineNamespace -> coreDefineNamespace
-  RawDescribeNamespace -> coreDescribeNamespace
-  RawZkPairingCheck -> zkPairingCheck
-  RawZKScalarMult -> zkScalaMult
-  RawZkPointAdd -> zkPointAddition
-  RawPoseidonHashHackachain -> poseidonHash
-  RawChainData -> coreChainData
-  RawIsCharset -> coreIsCharset
-  RawPactId -> corePactId
-  RawTypeOf -> coreTypeOf
-  RawDec -> coreDec
+coreBuiltinRuntime = \case
+  CoreAdd -> rawAdd
+  CoreSub -> rawSub
+  CoreMultiply -> rawMul
+  CoreDivide -> rawDiv
+  CoreNegate -> rawNegate
+  CoreAbs -> rawAbs
+  CorePow -> rawPow
+  CoreNot -> notBool
+  CoreEq -> rawEq
+  CoreNeq -> rawNeq
+  CoreGT -> rawGt
+  CoreGEQ -> rawGeq
+  CoreLT -> rawLt
+  CoreLEQ -> rawLeq
+  CoreBitwiseAnd -> bitAndInt
+  CoreBitwiseOr -> bitOrInt
+  CoreBitwiseXor -> bitXorInt
+  CoreBitwiseFlip -> bitComplementInt
+  CoreBitShift -> bitShiftInt
+  CoreRound -> roundDec
+  CoreCeiling -> ceilingDec
+  CoreFloor -> floorDec
+  CoreRoundPrec -> roundDec
+  CoreCeilingPrec -> ceilingDec
+  CoreFloorPrec -> floorDec
+  CoreExp -> rawExp
+  CoreLn -> rawLn
+  CoreSqrt -> rawSqrt
+  CoreLogBase -> rawLogBase
+  CoreLength -> rawLength
+  CoreTake -> rawTake
+  CoreDrop -> rawDrop
+  CoreConcat -> coreConcat
+  CoreReverse -> rawReverse
+  CoreMod -> modInt
+  CoreMap -> coreMap
+  CoreFilter -> coreFilter
+  CoreZip -> zipList
+  CoreIntToStr -> coreIntToStr
+  CoreStrToInt -> coreStrToInt
+  CoreStrToIntBase -> coreStrToIntBase
+  CoreFold -> coreFold
+  CoreDistinct -> coreDistinct
+  CoreFormat -> coreFormat
+  CoreContains -> rawContains
+  CoreSort -> rawSort
+  CoreSortObject -> rawSortObject
+  CoreRemove -> coreRemove
+  -- CoreEnforce -> coreEnforce
+  -- CoreEnforceOne -> unimplemented
+  CoreEnumerate -> coreEnumerate
+  CoreEnumerateStepN -> coreEnumerateStepN
+  CoreShow -> rawShow
+  CoreReadMsg -> coreReadMsg
+  CoreReadMsgDefault -> coreReadMsg
+  CoreReadInteger -> coreReadInteger
+  CoreReadDecimal -> coreReadDecimal
+  CoreReadString -> coreReadString
+  CoreReadKeyset -> coreReadKeyset
+  CoreEnforceGuard -> coreEnforceGuard
+  CoreYield -> coreYield
+  CoreYieldToChain -> coreYield
+  CoreResume -> coreResume
+  CoreEnforceKeyset -> coreEnforceGuard
+  CoreKeysetRefGuard -> keysetRefGuard
+  CoreAt -> coreAccess
+  CoreMakeList -> makeList
+  CoreB64Encode -> coreB64Encode
+  CoreB64Decode -> coreB64Decode
+  CoreStrToList -> strToList
+  CoreBind -> coreBind
+  CoreRequireCapability -> requireCapability
+  CoreComposeCapability -> composeCapability
+  CoreInstallCapability -> installCapability
+  CoreCreateCapabilityGuard -> createCapGuard
+  CoreCreateCapabilityPactGuard -> createCapabilityPactGuard
+  CoreCreateModuleGuard -> createModuleGuard
+  CoreCreateDefPactGuard -> createDefPactGuard
+  CoreEmitEvent -> coreEmitEvent
+  CoreCreateTable -> createTable
+  CoreDescribeKeyset -> dbDescribeKeySet
+  CoreDescribeModule -> describeModule
+  CoreDescribeTable -> dbDescribeTable
+  CoreDefineKeySet -> defineKeySet
+  CoreDefineKeysetData -> defineKeySet
+  CoreFoldDb -> foldDb
+  CoreInsert -> dbInsert
+  CoreWrite -> dbWrite
+  CoreKeyLog -> dbKeyLog
+  CoreKeys -> dbKeys
+  CoreRead -> dbRead
+  CoreSelect -> dbSelect
+  CoreUpdate -> dbUpdate
+  CoreWithDefaultRead -> dbWithDefaultRead
+  CoreWithRead -> dbWithRead
+  CoreTxLog -> dbTxLog
+  CoreTxIds -> dbTxIds
+  CoreAndQ -> coreAndQ
+  CoreOrQ -> coreOrQ
+  CoreWhere -> coreWhere
+  CoreNotQ -> coreNotQ
+  CoreHash -> coreHash
+  CoreTxHash -> txHash
+  CoreContinue -> coreContinue
+  CoreParseTime -> parseTime
+  CoreFormatTime -> formatTime
+  CoreTime -> time
+  CoreAddTime -> addTime
+  CoreDiffTime -> diffTime
+  CoreHours -> hours
+  CoreMinutes -> minutes
+  CoreDays -> days
+  CoreCompose -> coreCompose
+  CoreSelectWithFields -> dbSelect
+  CoreCreatePrincipal -> coreCreatePrincipal
+  CoreIsPrincipal -> coreIsPrincipal
+  CoreTypeOfPrincipal -> coreTypeOfPrincipal
+  CoreValidatePrincipal -> coreValidatePrincipal
+  CoreNamespace -> coreNamespace
+  CoreDefineNamespace -> coreDefineNamespace
+  CoreDescribeNamespace -> coreDescribeNamespace
+  CoreZkPairingCheck -> zkPairingCheck
+  CoreZKScalarMult -> zkScalaMult
+  CoreZkPointAdd -> zkPointAddition
+  CorePoseidonHashHackachain -> poseidonHash
+  CoreChainData -> coreChainData
+  CoreIsCharset -> coreIsCharset
+  CorePactId -> corePactId
+  CoreTypeOf -> coreTypeOf
+  CoreDec -> coreDec

@@ -250,7 +250,10 @@ evaluateTerm cont handler env (Conditional c info) = case c of
         let handler' = CEKEnforceOne env' info str xs cont errState handler
         let cont' = CondC env' info (EnforceOneC str xs) Mt
         evalCEK cont' handler' env' x
-
+-- | ------ From --------------- | ------ To ------------------------ |
+--   <WithCap cap body, E, K, H>         <cap, E, CapInvokeC(E,WithCapC(body), K),H>
+--   <CreateUG n [], E, K, H>            <UGuard n [], E, K,H>
+--   <CreateUG n (x:xs), E, K,H>         <x, E, CapInvokeC(E,CrUGC(n, xs),K), H>
 evaluateTerm cont handler env (CapabilityForm cf info) = do
   chargeGasArgs info (GAConstant constantWorkNodeGas)
   case cf of
@@ -267,17 +270,26 @@ evaluateTerm cont handler env (CapabilityForm cf info) = do
           let usrGuardFrame = CreateUserGuardC fqn xs []
           let cont' = CapInvokeC env info usrGuardFrame cont
           evalCEK cont' handler env x
+-- | ------ From --------------- | ------ To ------------------------ |
+--   <ListLit [], E, K, H>         <VList [], E, K, H>
+---  <ListLit (x:xs), E, K, H>         <x, E, ListC(E,xs,K), H>
 evaluateTerm cont handler env (ListLit ts info) = do
   chargeGasArgs info (GAConstant unconsWorkNodeGas)
   case ts of
     [] -> returnCEKValue cont handler (VList mempty)
     x:xs -> evalCEK (ListC env info xs [] cont) handler env x
+-- | ------ From --------------- | ------ To ------------------------ |
+--   <Try c body, E, K, H>         <body, E, Mt, CEKHandler(E,c,K,_errState,H)>
+--   _errState - callstack,granted caps,events,gas
 evaluateTerm cont handler env (Try catchExpr rest info) = do
   chargeGasArgs info (GAConstant tryNodeGas)
   errState <- evalStateToErrorState <$> getEvalState
   let handler' = CEKHandler env catchExpr cont errState handler
   let env' = readOnlyEnv env
   evalCEK Mt handler' env' rest
+-- | ------ From --------------- | ------ To ------------------------ |
+--   <Try c body, E, K, H>         <body, E, Mt, CEKHandler(E,c,K,_errState,H)>
+--   _errState - callstack,granted caps,events,gas
 evaluateTerm cont handler env (ObjectLit o info) = do
   chargeGasArgs info (GAConstant unconsWorkNodeGas)
   case o of
@@ -293,15 +305,15 @@ evaluateTerm _ handler _ (Error e info) = do
    :: CoreCEKCont
    -> CoreCEKHandler
    -> CoreCEKEnv
-   -> EvalTerm RawBuiltin ()
-   -> Eval (EvalResult CEKBigStep RawBuiltin () Eval)
+   -> EvalTerm CoreBuiltin ()
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 {-# SPECIALIZE evaluateTerm
-   :: Cont CEKSmallStep RawBuiltin () Eval
-   -> CEKErrorHandler CEKSmallStep RawBuiltin () Eval
-   -> CEKEnv CEKSmallStep RawBuiltin () Eval
-   -> EvalTerm RawBuiltin ()
-   -> Eval (CEKReturn RawBuiltin () Eval)
+   :: Cont CEKSmallStep CoreBuiltin () Eval
+   -> CEKErrorHandler CEKSmallStep CoreBuiltin () Eval
+   -> CEKEnv CEKSmallStep CoreBuiltin () Eval
+   -> EvalTerm CoreBuiltin ()
+   -> Eval (CEKReturn CoreBuiltin () Eval)
     #-}
 
 mkDefunClosure
@@ -362,7 +374,7 @@ initPact i pc cont handler cenv = do
    -> CoreCEKCont
    -> CoreCEKHandler
    -> CoreCEKEnv
-   -> Eval (EvalResult CEKBigStep RawBuiltin () Eval)
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
 applyPact
@@ -418,7 +430,7 @@ applyPact i pc ps cont handler cenv nested = useEvalState esDefPactExec >>= \cas
    -> CoreCEKHandler
    -> CoreCEKEnv
    -> M.Map DefPactId DefPactExec
-   -> Eval (EvalResult CEKBigStep RawBuiltin () Eval)
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
 emitXChainEvents
@@ -514,7 +526,7 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esDefPactExec >>= \case
    -> CoreCEKCont
    -> CoreCEKHandler
    -> CoreCEKEnv
-   -> Eval (EvalResult CEKBigStep RawBuiltin () Eval)
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
 resumePact
@@ -579,7 +591,7 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
    -> CoreCEKHandler
    -> CoreCEKEnv
    -> Maybe DefPactExec
-   -> Eval (EvalResult CEKBigStep RawBuiltin () Eval)
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
 
@@ -638,7 +650,7 @@ guardTable i cont handler env (TableValue tn mh _) dbop = do
    -> CoreCEKEnv
    -> TableValue
    -> GuardTableOp
-   -> Eval (EvalResult CEKBigStep RawBuiltin () Eval)
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
 
@@ -670,8 +682,8 @@ guardForModuleCall i cont handler env currMod onFound =
    -> CoreCEKHandler
    -> CoreCEKEnv
    -> ModuleName
-   -> Eval (EvalResult CEKBigStep RawBuiltin () Eval)
-   -> Eval (EvalResult CEKBigStep RawBuiltin () Eval)
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
 acquireModuleAdmin
@@ -700,8 +712,8 @@ acquireModuleAdmin i cont handler env mdl = do
    -> CoreCEKCont
    -> CoreCEKHandler
    -> CoreCEKEnv
-   -> EvalModule RawBuiltin ()
-   -> Eval (EvalResult CEKBigStep RawBuiltin () Eval)
+   -> EvalModule CoreBuiltin ()
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
 evalWithStackFrame
@@ -867,9 +879,9 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
    -> CoreCEKHandler
    -> CoreCEKEnv
    -> CapToken FullyQualifiedName PactValue
-   -> ModCapCont CEKBigStep RawBuiltin () Eval
+   -> ModCapCont CEKBigStep CoreBuiltin () Eval
    -> CoreTerm
-   -> Eval (EvalResult CEKBigStep RawBuiltin () Eval)
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
 
@@ -1690,11 +1702,11 @@ applyLam (CT (CapTokenClosure fqn argtys arity i)) args cont handler
   where
   argLen = length args
 {-# SPECIALIZE applyLam
-   :: CanApply CEKBigStep RawBuiltin () Eval
+   :: CanApply CEKBigStep CoreBuiltin () Eval
    -> [CoreCEKValue]
    -> CoreCEKCont
    -> CoreCEKHandler
-   -> Eval (EvalResult CEKBigStep RawBuiltin () Eval)
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
 checkSchema :: M.Map Field PactValue -> Schema -> Bool
@@ -1786,7 +1798,7 @@ enforceGuard info cont handler env g = case g of
    -> CoreCEKHandler
    -> CoreCEKEnv
    -> Guard QualifiedName PactValue
-   -> Eval (EvalResult CEKBigStep RawBuiltin () Eval)
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
 enforceCapGuard
@@ -1814,7 +1826,7 @@ enforceCapGuard info cont handler (CapabilityGuard qn args mpid) = case mpid of
    -> CoreCEKCont
    -> CoreCEKHandler
    -> CapabilityGuard QualifiedName PactValue
-   -> Eval (EvalResult CEKBigStep RawBuiltin () Eval)
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
 runUserGuard
@@ -1840,7 +1852,7 @@ runUserGuard info cont handler env (UserGuard qn args) =
    -> CoreCEKHandler
    -> CoreCEKEnv
    -> UserGuard QualifiedName PactValue
-   -> Eval (EvalResult CEKBigStep RawBuiltin () Eval)
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
 eval
@@ -1921,27 +1933,27 @@ evalResumePact info bEnv mdpe = do
 
 
 evaluateTermSmallStep
-  :: Cont CEKSmallStep RawBuiltin () Eval
-  -> CEKErrorHandler CEKSmallStep RawBuiltin () Eval
-  -> CEKEnv CEKSmallStep RawBuiltin () Eval
+  :: Cont CEKSmallStep CoreBuiltin () Eval
+  -> CEKErrorHandler CEKSmallStep CoreBuiltin () Eval
+  -> CEKEnv CEKSmallStep CoreBuiltin () Eval
   -> CoreTerm
-  -> Eval (CEKReturn RawBuiltin () Eval)
+  -> Eval (CEKReturn CoreBuiltin () Eval)
 evaluateTermSmallStep = evaluateTerm
 
 
 applyContToValueSmallStep
-  :: Cont CEKSmallStep RawBuiltin () Eval
-  -> CEKErrorHandler CEKSmallStep RawBuiltin () Eval
-  -> CEKValue CEKSmallStep RawBuiltin () Eval
-  -> Eval (CEKReturn RawBuiltin () Eval)
+  :: Cont CEKSmallStep CoreBuiltin () Eval
+  -> CEKErrorHandler CEKSmallStep CoreBuiltin () Eval
+  -> CEKValue CEKSmallStep CoreBuiltin () Eval
+  -> Eval (CEKReturn CoreBuiltin () Eval)
 applyContToValueSmallStep = applyContToValue
 
 
 applyContSmallStep
-  :: Cont CEKSmallStep RawBuiltin () Eval
-  -> CEKErrorHandler CEKSmallStep RawBuiltin () Eval
-  -> EvalResult CEKSmallStep RawBuiltin () Eval
-  -> Eval (CEKReturn RawBuiltin () Eval)
+  :: Cont CEKSmallStep CoreBuiltin () Eval
+  -> CEKErrorHandler CEKSmallStep CoreBuiltin () Eval
+  -> EvalResult CEKSmallStep CoreBuiltin () Eval
+  -> Eval (CEKReturn CoreBuiltin () Eval)
 applyContSmallStep = applyCont
 
 --------------------------

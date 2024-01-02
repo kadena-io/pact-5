@@ -47,7 +47,7 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 
-type Repl = ReplM ReplRawBuiltin
+type Repl = ReplM ReplCoreBuiltin
 
 -- Small internal debugging function for playing with file loading within
 -- this module
@@ -58,11 +58,11 @@ data ReplCompileValue
   deriving Show
 
 loadFile
-  :: (CEKEval step ReplRawBuiltin SpanInfo Repl)
+  :: (CEKEval step ReplCoreBuiltin SpanInfo Repl)
   => FilePath
-  -> BuiltinEnv step ReplRawBuiltin SpanInfo Repl
-  -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
-  -> ReplM ReplRawBuiltin [ReplCompileValue]
+  -> BuiltinEnv step ReplCoreBuiltin SpanInfo Repl
+  -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
+  -> ReplM ReplCoreBuiltin [ReplCompileValue]
 loadFile loc rEnv display = do
   source <- SourceCode (takeFileName loc) <$> liftIO (T.readFile loc)
   replCurrSource .= source
@@ -71,23 +71,23 @@ loadFile loc rEnv display = do
 
 interpretReplProgram
   :: SourceCode
-  -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
-  -> ReplM ReplRawBuiltin [ReplCompileValue]
+  -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
+  -> ReplM ReplCoreBuiltin [ReplCompileValue]
 interpretReplProgram = interpretReplProgram' (replBuiltinEnv @CEKBigStep)
 
 interpretReplProgramSmallStep
   :: SourceCode
-  -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
-  -> ReplM ReplRawBuiltin [ReplCompileValue]
+  -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
+  -> ReplM ReplCoreBuiltin [ReplCompileValue]
 interpretReplProgramSmallStep = interpretReplProgram' (replBuiltinEnv @CEKSmallStep)
 
 
 interpretReplProgram'
-  :: (CEKEval step ReplRawBuiltin SpanInfo Repl)
-  => BuiltinEnv step ReplRawBuiltin SpanInfo Repl
+  :: (CEKEval step ReplCoreBuiltin SpanInfo Repl)
+  => BuiltinEnv step ReplCoreBuiltin SpanInfo Repl
   -> SourceCode
-  -> (ReplCompileValue -> ReplM ReplRawBuiltin ())
-  -> ReplM ReplRawBuiltin [ReplCompileValue]
+  -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
+  -> ReplM ReplCoreBuiltin [ReplCompileValue]
 interpretReplProgram' replEnv (SourceCode _ source) display = do
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
@@ -105,7 +105,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
           evalState .= def
           pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
           replPactDb .= pactdb
-          ee <- liftIO (defaultEvalEnv pactdb replRawBuiltinMap)
+          ee <- liftIO (defaultEvalEnv pactdb replcoreBuiltinMap)
           replEvalEnv .= ee
           out <- loadFile (T.unpack txt) replEnv display
           replCurrSource .= oldSrc

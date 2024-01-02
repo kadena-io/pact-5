@@ -183,9 +183,9 @@ toArgTypeError = \case
 
 {-# SPECIALIZE argsError
    :: ()
-   -> RawBuiltin
-   -> [CEKValue step RawBuiltin () Eval]
-   -> Eval (EvalResult step RawBuiltin () Eval)
+   -> CoreBuiltin
+   -> [CEKValue step CoreBuiltin () Eval]
+   -> Eval (EvalResult step CoreBuiltin () Eval)
     #-}
 argsError
   :: (MonadEval b i m, IsBuiltin b)
@@ -199,7 +199,7 @@ argsError info b args =
 
 {-# SPECIALIZE asString
    :: ()
-   -> RawBuiltin
+   -> CoreBuiltin
    -> PactValue
    -> Eval Text
     #-}
@@ -214,7 +214,7 @@ asString i b pv = argsError i b [VPactValue pv]
 
 {-# SPECIALIZE asBool
    :: ()
-   -> RawBuiltin
+   -> CoreBuiltin
    -> PactValue
    -> Eval Bool
     #-}
@@ -306,7 +306,7 @@ chargeGasArgs info ga = do
 
 {-# SPECIALIZE chargeFlatNativeGas
    :: ()
-   -> RawBuiltin
+   -> CoreBuiltin
    -> Eval ()
     #-}
 chargeFlatNativeGas :: (MonadEval b i m) => i -> b -> m ()
