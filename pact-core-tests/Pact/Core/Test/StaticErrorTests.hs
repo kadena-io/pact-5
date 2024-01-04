@@ -728,6 +728,20 @@ executionTests =
       (continue-pact 2 true)
       |])
   ] <>
+  [ ("defpact_nested_stepcount", isExecutionError _NestedDefPactParentStepCountMismatch, [text|
+      (module m g (defcap g () true)
+        (defpact n:string ()
+          (step "hello1")
+          (step "hello2")
+          (step "hello3")
+          )
+        (defpact p:string ()
+          (step (n))
+          )
+        )
+      (p)
+      |])
+  ] <>
   [ ("env_namespace_wrong_kind", isExecutionError _NativeArgumentsError, [text|
       (module m g (defcap g () true))
       (env-namespace-policy false (m.g))
