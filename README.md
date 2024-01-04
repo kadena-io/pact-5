@@ -18,14 +18,14 @@ For additional information, press, and development inquiries, please refer to th
 > This repository hosts a rewrite of the Pact language and is not utilized by [chainweb-node](https://github.com/kadena-io/chainweb-node), 
 > serving primarily for local development and testing purposes. We detail the planned transition from Pact to Pact Core in [Section Roadmap](#roadmap).
 
+If you are looking for legacy Pact, see [github.com/kadena-io/pact](https://github.com/kadena-io/pact).
 
 ## Table of Contents
-
-  - [Pact Core and Pact](#pact-core-and-pact)
+  - [Quickstart](#quickstart)
+  - [Pact Core vs Pact](#pact-core-vs-pact)
     - [Roadmap](#roadmap)
   - [Documentation](#documentation)
-  - [Quickstart](#quickstart)
-  - [Installing Pact](#installing-pact-core)
+  - [Installing Pact Core](#installing-pact-core)
     - [Binary Downloads](#binary-downloads)
 	- [Building from Source](#building-from-source)
 	  - [Using the Nix Infrastructure (recommend)](#using-the-nix-infrastructure)
@@ -33,41 +33,73 @@ For additional information, press, and development inquiries, please refer to th
   - [Editor Integration (Language Server)](#editor-integration)
   - [License](#license)
 
-
-## Pact Core and Pact
-
-### Roadmap
-
-
-## Documentation
-
-The [Kadena Docs](https://docs.kadena.io) site serves as the primary source of information about Kadena products.
-You can find information about how to get started with the Pact language, how to execute already deployed contracts, and follow
-our step-by-step tutorials. 
-
 ## Quickstart
 
-To quickly begin exploring the Pact language, download the corresponding binary from the
-latest release, see [Binary Downloads](#binary-downloads).
+1. Download the latest Pact binary from [Github Releases](https://github.com/kadena-io/pact-core/releases/latest).
+2. Extract the `pact` binary, make sure that you have the required permissions to execute it.
+   ```bash
+   chmod +x /path/to/pact
+   ```
+3. (Optional) Add the path to your `$PATH` environment variable or adding the line to your shell profile.
+   ```bash
+   export PATH=$PATH:/path/to/
+   ```
+4. Execute `pact` and have fun :-)
+￼
+## Pact Core vs Pact
+Pact Core is a redevelopment of the Pact language, focusing on enhancing scalability, maintainability, and performance in response to increasingly complex demands from users and partners.
+
+Pact Core enables sustainable growth of the Pact featureset within the Kadena ecosystem by offering a more modular and maintainable internals, enabling the community to further develop and propose enhancements to the language and components that rely on it.
+
+Pact Core maintains semantic equivalence to Pact, aside from minor differences for security and performance. Existing code will behave the same as code written in (legacy) Pact. Breaking modifications will be communicated using the [Kadena Improvement Process](https://github.com/kadena-io/kips) (KIP) process.
+
+### Roadmap
+> [!NOTE]
+> The current roadmap is being sketched by the Pact Team and will be updated appropriatly.
+
+## Documentation
+The [Kadena Docs](https://docs.kadena.io/pact) site serves as the primary source of information about Pact.
+You can find information about how to get started with the Pact language, how to execute already deployed contracts, and follow
+our step-by-step tutorials. 
 
 We recommend that new users start with our [beginner`s guide](https://docs.kadena.io/pact/beginner), which provides an 
 understanding of the fundamental concepts and terminology of the language.
 
-If you prefer a more hands-on approach, download the Pact binaries and execute the REPL.
-This will allow you to begin evaluating expressions, such as `(+ 1 0)`, immediately.
-
 ## Installing Pact Core
-
-To install Pact on your infrastructure, you have the option to download a pre-built binary or compile it from the source.
+To install Pact Core on your infrastructure, you have the option to download a pre-built binary or compile it from the source.
 
 ### Binary Downloads
-
 You can obtain the latest released version of Pact from our GitHub releases page [here](https://github.com/kadena-io/pact-core/releases).
 Ensure to download the binary that corresponds to your specific architecture.
 
 ### Building from Source
-We recommend using [Nix]() to build pact-core from sources.
-Alternatively, you can use [Cabal](https://www.haskell.org/cabal/) along with a properly set up Haskell compiler ([GHC](https://www.haskell.org/ghc/)) as the default approach.
+Two methods are supported for building Pact Core: using bare Cabal and GHC or employing the Nix package manager.
+
+#### Using Cabal and GHC
+
+Building is a process comprising four steps:
+1. Install [GHCup](https://www.haskell.org/ghcup/)
+2. Set and ensure the versions specified below are correctly set:
+   ```bash
+   ghcup install ghc 9.6.3 && ghcup install-cabal
+   ```
+3. Update Haskell packages:
+   ```bash
+   cabal update
+   ```
+4. Build the Pact binary:
+   ```bash
+   cabal build exe:pact
+   ```
+
+5. (Optional) You can either run `pact`￼directly:
+   ```bash
+   cabal run pact
+   ```
+   or, if you prever to make the `pact` executable available in your `$PATH` environment, run:
+   ```bash
+   cabal install exe:pact
+   ```
 
 #### Using the Nix Infrastructure
 Kadena offers a binary cache for all Nix builds, allowing users to accelerate their build times by utilizing our cache infrastructure.
@@ -89,16 +121,17 @@ This will contain the artifact within its `bin` directory.
 Entering the developer shell using `nix develop` will bring all required dependencies into scope, enabling the use of
 `cabal build` to compile the final project.
 
-#### Using Cabal and GHC
-
-To build Pact core using Cabal and GHC directly, we recommend using [GHCup](https://www.haskell.org/ghcup/) to set up the corresponding versions:
-- Cabal version 3.0 or higher
-- GHC version 9.6 or higher
-
-After updating local packages with `cabal update`, the project can be built using `cabal build`.
-￼
 
 ## Editor Integration
+
+We offer built-in integration with Microsoft's [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) (LSP).
+Check your editor's support for the LSP protocol and the specific setup instructions. The server itself can be initiated as follows.
+```bash
+pact --lsp
+```
+
+> ![NOTE]
+> We continue to add specifics on major editors such as Emacs, vim, and VSCode.
 
 ## License
 
