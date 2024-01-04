@@ -647,7 +647,8 @@ executionTests =
       (module m g (defcap g () true))
       (continue-pact 1)
       |])
-  ] <> let simpleDefpact = [text|(module m g (defcap g () true)
+  ] <> let simpleDefpact = [text|
+      (module m g (defcap g () true)
         (defpact p:string ()
           (step "hello1")
           (step "hello2")
@@ -707,8 +708,27 @@ executionTests =
       (continue-pact 1)
       (p)
       |])
-
-  ] <> [ ("env_namespace_wrong_kind", isExecutionError _NativeArgumentsError, [text|
+  , ("defpact_continuing_norollback_samestep", isExecutionError _DefPactStepHasNoRollback, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 1)
+      (continue-pact 1 true)
+      |])
+  , ("defpact_continuing_norollback_diffstep", isExecutionError _DefPactRollbackMismatch, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 1)
+      (continue-pact 2 true)
+      |])
+  , ("defpact_continuing_rollback_final", isExecutionError _DefPactAlreadyCompleted, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 1)
+      (continue-pact 2)
+      (continue-pact 2 true)
+      |])
+  ] <>
+  [ ("env_namespace_wrong_kind", isExecutionError _NativeArgumentsError, [text|
       (module m g (defcap g () true))
       (env-namespace-policy false (m.g))
     |])
