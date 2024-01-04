@@ -126,6 +126,7 @@ Entering the developer shell using `nix develop` will bring all required depende
 
 We offer built-in integration with Microsoft's [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) (LSP).
 Check your editor's support for the LSP protocol and the specific setup instructions. The server itself can be initiated as follows.
+
 ```shell
 pact --lsp
 ```
