@@ -695,8 +695,18 @@ executionTests =
       $simpleDefpact
       (p)
       (continue-pact (- 1))
+      |]) -- TODO (-1) here errors out
+  , ("defpact_same_nested", isExecutionError _MultipleOrNestedDefPactExecFound, [text|
+      $simpleDefpact
+      (p)
+      (p)
       |])
-      -- TODO (-1) here errors out
+  , ("defpact_same_nested_inprogress", isExecutionError _MultipleOrNestedDefPactExecFound, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 1)
+      (p)
+      |])
 
   ] <> [ ("env_namespace_wrong_kind", isExecutionError _NativeArgumentsError, [text|
       (module m g (defcap g () true))
