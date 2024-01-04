@@ -43,11 +43,11 @@ import Control.Monad.Trans (lift)
 import Control.Concurrent.MVar
 import qualified Data.Map.Strict as M
 
-data LocationInfo
-  = LocationInfo
-  { _locNormalizedUri :: NormalizedUri
-  , _locSpanInfo :: SpanInfo
-  } deriving Eq
+-- data LocationInfo
+--   = LocationInfo
+--   { _locNormalizedUri :: NormalizedUri
+--   , _locSpanInfo :: SpanInfo
+--   } deriving Eq
 
 newtype LSState =
   LSState { _unLSState :: M.Map NormalizedUri (ReplState ReplCoreBuiltin) }
