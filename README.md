@@ -94,7 +94,7 @@ Building is a process comprising four steps:
 
 5. (Optional) You can either run `pact` directly:
    ```shell
-   cabal run pact
+   cabal run exe:pact
    ```
    or, if you prever to make the `pact` executable available in your `$PATH` environment, run:
    ```shell
