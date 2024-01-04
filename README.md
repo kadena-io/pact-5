@@ -45,7 +45,7 @@ If you are looking for legacy Pact, see [github.com/kadena-io/pact](https://gith
    export PATH=$PATH:/path/to/
    ```
 4. Execute `pact` and have fun :-)
-￼
+
 ## Pact Core vs Pact
 Pact Core is a redevelopment of the Pact language, focusing on enhancing scalability, maintainability, and performance in response to increasingly complex demands from users and partners.
 
@@ -84,20 +84,20 @@ Building is a process comprising four steps:
    ghcup install ghc 9.6.3 && ghcup install-cabal
    ```
 3. Update Haskell packages:
-   ```bash
+   ```shell
    cabal update
    ```
 4. Build the Pact binary:
-   ```bash
+   ```shell
    cabal build exe:pact
    ```
 
-5. (Optional) You can either run `pact`￼directly:
-   ```bash
+5. (Optional) You can either run `pact` directly:
+   ```shell
    cabal run pact
    ```
    or, if you prever to make the `pact` executable available in your `$PATH` environment, run:
-   ```bash
+   ```shell
    cabal install exe:pact
    ```
 
@@ -126,11 +126,11 @@ Entering the developer shell using `nix develop` will bring all required depende
 
 We offer built-in integration with Microsoft's [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) (LSP).
 Check your editor's support for the LSP protocol and the specific setup instructions. The server itself can be initiated as follows.
-```bash
+```shell
 pact --lsp
 ```
 
-> ![NOTE]
+> [!NOTE]
 > We continue to add specifics on major editors such as Emacs, vim, and VSCode.
 
 ## License
