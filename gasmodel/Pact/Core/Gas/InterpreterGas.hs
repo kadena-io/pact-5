@@ -60,6 +60,10 @@ benchmarkEnv = coreBuiltinEnv @CEKSmallStep
 benchmarkBigStepEnv :: BuiltinEnv CEKBigStep CoreBuiltin () Eval
 benchmarkBigStepEnv = coreBuiltinEnv @CEKBigStep
 
+main :: IO ()
+main = withSqlitePactDb serialisePact ":memory:" $ \pdb -> do
+  C.defaultMain $ [C.bgroup "pact-core-term-gas" (termGas pdb)]
+
 compileTerm
   :: Text
   -> Eval CoreTerm
@@ -344,10 +348,6 @@ createUserGuardGasNArgs nArgs pdb =
 createUserGuardGas :: CoreDb -> C.Benchmark
 createUserGuardGas pdb =
   C.bgroup "Create user guard node" [ createUserGuardGasNArgs i pdb | i <- [0..5]]
-
-main :: IO ()
-main = withSqlitePactDb serialisePact ":memory:" $ \pdb -> do
-  C.defaultMain $ [C.bgroup "pact-core-term-gas" (termGas pdb)]
 
 errorGas :: CoreDb -> C.Benchmark
 errorGas = simpleTermGas (Error "foo" ()) "Error node"

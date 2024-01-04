@@ -143,6 +143,9 @@ runTableModel = \case
   GALinear (MilliGas x) (LinearGasArg mnum mdiv intercept) ->
     MilliGas $ ((x * mnum) `div` mdiv) + intercept
 
+basicWorkGas :: Word64
+basicWorkGas = 25
+
 -- Prod gas table, for reference.
 -- defaultGasTable :: Map Text Gas
 -- defaultGasTable =
@@ -238,7 +241,7 @@ runTableModel = \case
 --   ,("resume", 2)
 --   ,("reverse", 2)
 --   ,("round", 1)
---   ,("shift", 1)
+--   ,("shift", 1)cepo
 --   ,("sort", 2)
 --   ,("sqrt", 6)
 --   ,("str-to-int", 1)
@@ -298,9 +301,6 @@ runTableModel = \case
 
 --   ,("poseidon-hash-hack-a-chain", 124)
 --   ]
-basicWorkGas :: Word64
-basicWorkGas = 25
-
 nativeGasTable :: CoreBuiltin -> MilliGas
 nativeGasTable = MilliGas . \case
   -- Basic arithmetic
@@ -336,12 +336,12 @@ nativeGasTable = MilliGas . \case
   -- given it can actually grow the number
   CoreBitShift -> 1
   -- Todo: rounding likely needs benchmarks, but
-  CoreRound -> 1
-  CoreCeiling -> 1
-  CoreFloor -> 1
-  CoreRoundPrec -> 1
-  CoreCeilingPrec -> 1
-  CoreFloorPrec -> 1
+  CoreRound -> basicWorkGas
+  CoreCeiling -> basicWorkGas
+  CoreFloor -> basicWorkGas
+  CoreRoundPrec -> basicWorkGas
+  CoreCeilingPrec -> basicWorkGas
+  CoreFloorPrec -> basicWorkGas
   --
   CoreExp -> 1
   CoreLn -> 1

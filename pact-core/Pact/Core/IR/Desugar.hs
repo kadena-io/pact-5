@@ -340,11 +340,44 @@ desugarLispTerm = \case
       _ ->
         throwDesugarError (InvalidSyntax "enforce-one: expected argument list") i
   Lisp.App e hs i -> do
-    e' <- desugarLispTerm e
-    hs' <- traverse desugarLispTerm hs
-    case e' of
-      Builtin b _ -> pure (desugarAppArity i b hs')
-      _ -> pure (App e' hs' i)
+    case (e, hs) of
+      (MapV mapI, Lisp.App operand args appI:xs) -> do
+        let v = Lisp.Var injectedArg1Name i
+            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing] (Lisp.App operand (args ++ [v]) appI) appI
+        commonDesugar (MapV mapI) (newArg:xs)
+      (FilterV filterI, Lisp.App operand args appI:xs) -> do
+        let v = Lisp.Var injectedArg1Name i
+            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing] (Lisp.App operand (args ++ [v]) appI) appI
+        commonDesugar (FilterV filterI) (newArg:xs)
+      (FoldV foldI, Lisp.App operand args appI:xs) -> do
+        let v1 = Lisp.Var injectedArg1Name i
+            v2 = Lisp.Var injectedArg2Name i
+            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing, Lisp.MArg injectedArg2 Nothing] (Lisp.App operand (args ++ [v1, v2]) appI) appI
+        commonDesugar (FoldV foldI) (newArg:xs)
+      (ZipV zipI, Lisp.App operand args appI:xs) -> do
+        let v1 = Lisp.Var injectedArg1Name i
+            v2 = Lisp.Var injectedArg2Name i
+            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing, Lisp.MArg injectedArg2 Nothing] (Lisp.App operand (args ++ [v1, v2]) appI) appI
+        commonDesugar (ZipV zipI) (newArg:xs)
+      _ -> commonDesugar e hs
+        -- e' <- desugarLispTerm e
+        -- hs' <- traverse desugarLispTerm hs
+        -- case e' of
+        --   Builtin b _ -> pure (desugarAppArity i b hs')
+        --   _ -> pure (App e' hs' i)
+    where
+    commonDesugar operator operands = do
+      e' <- desugarLispTerm operator
+      hs' <- traverse desugarLispTerm operands
+      case e' of
+        Builtin b _ -> pure (desugarAppArity i b hs')
+        _ -> pure (App e' hs' i)
+    --  stands for "injected Higher order 1". The name is unimportant,
+    --  injected names are not meant to be very readable
+    injectedArg1 = ":ijHO1"
+    injectedArg1Name = BN (BareName injectedArg1)
+    injectedArg2 = ":ijHO2"
+    injectedArg2Name =  BN (BareName injectedArg2)
   Lisp.Operator bop i -> pure (desugarOperator i bop)
   Lisp.List e1 i ->
     ListLit <$> traverse desugarLispTerm e1 <*> pure i
@@ -365,6 +398,15 @@ desugarLispTerm = \case
   binderToLet i (Lisp.Binder n mty expr) term = do
     expr' <- desugarLispTerm expr
     pure $ Let (Arg n mty) expr' term i
+
+pattern MapV :: i -> Lisp.Expr i
+pattern MapV info = Lisp.Var (BN (BareName "map")) info
+pattern FilterV :: i -> Lisp.Expr i
+pattern FilterV info = Lisp.Var (BN (BareName "map")) info
+pattern FoldV :: i -> Lisp.Expr i
+pattern FoldV info = Lisp.Var (BN (BareName "map")) info
+pattern ZipV :: i -> Lisp.Expr i
+pattern ZipV info = Lisp.Var (BN (BareName "map")) info
 
 suspendTerm
   :: Term ParsedName DesugarType builtin info

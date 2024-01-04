@@ -177,13 +177,13 @@ evaluateTerm cont handler env (Var n info)  = chargeGasArgs info (GAConstant con
 --   <Const l, E, K, H>    <Value l, E, K, H>
 --
 evaluateTerm cont handler _env (Constant l _info) = do
-  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
+  chargeGasArgs _info (GAConstant constantWorkNodeGas)
   returnCEKValue cont handler (VLiteral l)
 -- | ------ From ---------- | ------ To ------ |
 --   <App fn args, E, K, H>    <fn, E, Args(E,args,K), H>
 --
 evaluateTerm cont handler env (App fn args info) = do
-  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
+  chargeGasArgs info (GAConstant constantWorkNodeGas)
   evalCEK (Args env info args cont) handler env fn
 -- | ------ From ---------- | ------ To ------ |
 --   <Nullary body, E, K, H>    <VClosure(body, E), E, K, H>
@@ -195,8 +195,8 @@ evaluateTerm cont handler env (Nullary body info) = do
 -- | ------ From ---------- | ------ To ------ |
 --   <Let e1 e2, E, K, H>      <e1, E, LetC(E,e2,K), H>
 --
-evaluateTerm cont handler env (Let _ e1 e2 info) = do
-  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
+evaluateTerm cont handler env (Let _ e1 e2 _info) = do
+  -- chargeGasArgs _info (GAConstant constantWorkNodeGas)
   let cont' = LetC env e2 cont
   evalCEK cont' handler env e1
 -- | ------ From ---------- | ------ To ------ |
@@ -217,7 +217,7 @@ evaluateTerm cont handler env (Builtin b info) = do
 --   <Seq e1 e2, E, K, H>    <e1, E, SeqC(E, e2, K), H>
 --
 evaluateTerm cont handler env (Sequence e1 e2 info) = do
-  chargeGasArgs info (GAConstant constantWorkNodeGas)
+  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
   evalCEK (SeqC env e2 cont) handler env e1
 -- | ------ From --------------- | ------ To ------------------------ |
 --   <CAnd e1 e2, E, K, H>         <e1, E, CondC(E, AndFrame(e2),K),H>
@@ -829,9 +829,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
         let inCapEnv = set ceInCap True $ set ceLocal newLocals env
         (esCaps . csSlots) %== (CapSlot qualCapToken []:)
         sfCont <- pushStackFrame info cont' Nothing capStackFrame
-        -- emitCapability info origToken
         evalCEK sfCont handler inCapEnv capBody
-        -- evalWithStackFrame info cont' handler (set ceLocal newLocals env) capStackFrame Nothing capBody
       -- Not automanaged _nor_ user managed.
       -- Todo: a type that's basically `Maybe` here would save us a lot of grief.
       Unmanaged -> do
@@ -1277,6 +1275,7 @@ applyContToValue currCont@(CapInvokeC env info cf cont) handler v = case cf of
     -- Set the manager fun to update the current managed cap.
     let cont' = CapInvokeC env info (UpdateMgrFunC mgdCap) cont
     applyLam (C clo) [VPactValue old, VPactValue new] cont' handler
+  -- note: typechecking should be handled by the manager function here.
   UpdateMgrFunC mcap -> case v of
     VPactValue v' -> do
       let mcap' = unsafeUpdateManagedParam v' mcap

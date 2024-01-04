@@ -368,13 +368,13 @@ replBuiltinEnv
   :: CEKEval step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
   => BuiltinEnv step (ReplBuiltin CoreBuiltin) SpanInfo (ReplM (ReplBuiltin CoreBuiltin))
 replBuiltinEnv i b env =
-  mkBuiltinFn i b env (replcoreBuiltinRuntime b)
+  mkBuiltinFn i b env (replCoreBuiltinRuntime b)
 
-replcoreBuiltinRuntime
+replCoreBuiltinRuntime
   :: CEKEval step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
   => ReplBuiltin CoreBuiltin
   -> NativeFunction step (ReplBuiltin CoreBuiltin) SpanInfo (ReplM (ReplBuiltin CoreBuiltin))
-replcoreBuiltinRuntime = \case
+replCoreBuiltinRuntime = \case
   RBuiltinWrap cb ->
     coreBuiltinRuntime cb
   RBuiltinRepl br -> case br of
