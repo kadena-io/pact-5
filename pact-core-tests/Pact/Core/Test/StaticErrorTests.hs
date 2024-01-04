@@ -714,6 +714,11 @@ executionTests =
       (continue-pact 1)
       (continue-pact 1 true)
       |])
+  , ("defpact_continuing_norollback_diffstep", isExecutionError _DefPactStepHasNoRollback, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 0 true)
+      |])
   , ("defpact_continuing_norollback_diffstep", isExecutionError _DefPactRollbackMismatch, [text|
       $simpleDefpact
       (p)
