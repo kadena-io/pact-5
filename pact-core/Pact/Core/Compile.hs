@@ -143,10 +143,6 @@ evalModuleGovernance bEnv tl = do
   -> Lisp.TopLevel ()
   -> Eval ()  #-}
 
-{-# SPECIALIZE interpretTopLevel
-  :: CoreBuiltinEnv
-  -> Lisp.TopLevel ()
-  -> Eval (CompileValue ())  #-}
 interpretTopLevel
   :: forall step b i m
   .  (HasCompileEnv step b i m)
@@ -196,3 +192,7 @@ interpretTopLevel bEnv tl = do
       pure (LoadedInterface (view ifName iface) (view ifHash iface))
     TLTerm term -> (`InterpretValue` (view termInfo term)) <$> Eval.eval PImpure bEnv term
     TLUse imp _ -> pure (LoadedImports imp)
+{-# SPECIALIZE interpretTopLevel
+  :: CoreBuiltinEnv
+  -> Lisp.TopLevel ()
+  -> Eval (CompileValue ())  #-}

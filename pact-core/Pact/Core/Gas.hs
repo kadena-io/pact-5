@@ -25,6 +25,9 @@ module Pact.Core.Gas
  , milliGasToGas
  , millisPerGas
  , LinearGasArg(..)
+ , ZKGroup(..)
+ , ZKArg(..)
+ , IntegerPrimOp(..)
  ) where
 
 import Control.Lens
@@ -87,15 +90,49 @@ data NodeType
   | ErrorNode
   deriving (Eq, Show, Enum, Bounded)
 
+-- | Data type representing generally linear computations of the form
+-- f(x) = (slopeNum*x)/slopeDenom + intercept
+-- Todo: `Ratio`? Unfortunately ratio is not strict though
 data LinearGasArg
   = LinearGasArg
-  { _loaSlope :: !(Word64, Word64)
+  { _loaSlopeNum :: !Word64
+  , _loaSlopeDenom :: !Word64
   , _loaIntercept :: !Word64
   } deriving (Eq, Show)
 
+-- | The elliptic curve pairing group we are
+-- handling
+data ZKGroup
+  = ZKG1
+  -- ^ Group one, that is Fq in Pairing
+  | ZKG2
+  -- ^ Group two, that is, Fq2 Pairing
+  deriving Show
+
+data ZKArg
+  = PointAdd !ZKGroup
+  -- ^ Point addition Gas arguments, where the gas is dependent on the group.
+  | ScalarMult !ZKGroup
+  -- ^ Scalar multiplication gas, group dependent
+  | Pairing !Int
+  -- ^ Pairing function gas, dependent on number of pairs
+  deriving Show
+
+data IntegerPrimOp
+  = PrimOpAdd
+  | PrimOpSub
+  | PrimOpMul
+  | PrimOpDiv
+  deriving (Eq, Show, Enum, Ord)
+
 data GasArgs
   = GAConstant !MilliGas
+  -- Todo: integerOpCost seems like a case of `GALinear`
+  -- Maybe we can investigate generalizing the operational costs in terms of a more general structure
+  -- instead of the current `GasArgs` model?
   | GALinear !MilliGas {-# UNPACK #-} !LinearGasArg
+  | GConcat !Integer !Integer
+  | GIntegerOpCost !IntegerPrimOp !Integer !Integer
   deriving (Show)
 
 data GasModel b

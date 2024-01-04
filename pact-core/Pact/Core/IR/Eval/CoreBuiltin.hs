@@ -98,6 +98,19 @@ binaryIntFn op info b cont handler _env = \case
   args -> argsError info b args
 {-# INLINE binaryIntFn #-}
 
+-- The majority of the asymptotic cost in here is this function:
+-- ```
+-- roundTo' :: (Integral i) => (Rational -> i) -> Word8 -> DecimalRaw i -> DecimalRaw i
+-- roundTo' _ d (Decimal _  0) = Decimal d 0
+-- roundTo' f d (Decimal e n) = Decimal d $ f n1
+--    where
+--       divisor = 10 ^ (e-d)
+--       multiplier = 10 ^ (d-e)
+--       n1 = case compare d e of
+--          LT -> toRational n / divisor
+--          EQ -> toRational n
+--          GT -> toRational n * multiplier
+-- `roundTo'`
 roundingFn :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => (Rational -> Integer) -> NativeFunction step b i m
 roundingFn op info b cont handler _env = \case
   [VLiteral (LDecimal d)] ->
@@ -118,8 +131,11 @@ roundingFn op info b cont handler _env = \case
     #-}
 rawAdd :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawAdd info b cont handler _env = \case
-  [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LInteger (i + i')))
-  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LDecimal (i + i')))
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
+
+    returnCEKValue cont handler (VLiteral (LInteger (i + i')))
+  [VLiteral (LDecimal i), VLiteral (LDecimal i')] ->
+    returnCEKValue cont handler (VLiteral (LDecimal (i + i')))
   [VLiteral (LString i), VLiteral (LString i')] ->
     returnCEKValue cont handler  (VLiteral (LString (i <> i')))
   [VObject l, VObject r] ->
@@ -136,8 +152,10 @@ rawSub info b cont handler _env = \case
 
 rawMul :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawMul info b cont handler _env = \case
-  [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LInteger (i * i')))
-  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LDecimal (i * i')))
+  [VLiteral (LInteger i), VLiteral (LInteger i')] ->
+    returnCEKValue cont handler (VLiteral (LInteger (i * i')))
+  [VLiteral (LDecimal i), VLiteral (LDecimal i')] ->
+    returnCEKValue cont handler (VLiteral (LDecimal (i * i')))
   args -> argsError info b args
 
 rawPow :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -844,8 +862,9 @@ dbRead info b cont handler env = \case
 dbWithRead :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 dbWithRead info b cont handler env = \case
   [VTable tv, VString k, VClosure clo] -> do
-    let cont' = BuiltinC env info (WithReadC tv (RowKey k) clo) cont
-    guardTable info cont' handler env tv GtWithRead
+    let cont1 = Fn clo env [] [] cont
+    let cont2 = BuiltinC env info (ReadC tv (RowKey k)) cont1
+    guardTable info cont2 handler env tv GtWithRead
   args -> argsError info b args
 
 dbWithDefaultRead :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m

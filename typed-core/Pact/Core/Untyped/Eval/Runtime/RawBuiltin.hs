@@ -179,11 +179,16 @@ rawMod = binaryIntFn mod
 
 rawEq :: (BuiltinArity b, MonadEval b i m) => b -> NativeFn b i m
 rawEq = mkBuiltinFn \cont handler -> \case
-  [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LBool (i == i')))
-  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LBool (i == i')))
-  [VLiteral (LString i), VLiteral (LString i')] -> returnCEKValue cont handler (VLiteral (LBool (i == i')))
-  [VLiteral (LBool i), VLiteral (LBool i')] -> returnCEKValue cont handler (VLiteral (LBool (i == i')))
-  [VLiteral LUnit, VLiteral LUnit] -> returnCEKValue cont handler (VLiteral (LBool True))
+  [VLiteral (LInteger i), VLiteral (LInteger i')] ->
+    returnCEKValue cont handler (VLiteral (LBool (i == i')))
+  [VLiteral (LDecimal i), VLiteral (LDecimal i')] ->
+    returnCEKValue cont handler (VLiteral (LBool (i == i')))
+  [VLiteral (LString i), VLiteral (LString i')] ->
+    returnCEKValue cont handler (VLiteral (LBool (i == i')))
+  [VLiteral (LBool i), VLiteral (LBool i')] ->
+    returnCEKValue cont handler (VLiteral (LBool (i == i')))
+  [VLiteral LUnit, VLiteral LUnit] ->
+    returnCEKValue cont handler (VLiteral (LBool True))
   [VList l, VList r] ->
     if V.length l /= V.length r then
       returnCEKValue cont handler (VLiteral (LBool False))

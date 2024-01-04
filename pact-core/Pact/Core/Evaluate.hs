@@ -54,7 +54,7 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.IR.Eval.Runtime.Types as Eval
 
 -- Our Builtin environment for evaluation in Chainweb prod
-type EvalBuiltinEnv = BuiltinEnv Eval.CEKBigStep CoreBuiltin () Eval
+type EvalBuiltinEnv = CoreBuiltinEnv
 
 -- | Transaction-payload related environment data.
 data MsgData = MsgData
@@ -206,11 +206,11 @@ resumePact mdp =
   (`InterpretValue` ()) <$> Eval.evalResumePact () builtinEnv mdp
 
 -- | Compiles and evaluates the code
-evaluateDefaultState :: RawCode -> EvalM CoreBuiltin () [CompileValue ()]
+evaluateDefaultState :: RawCode -> Eval [CompileValue ()]
 evaluateDefaultState = either throwError evaluateTerms . compileOnly
 
 evaluateTerms
   :: [Lisp.TopLevel ()]
-  -> EvalM CoreBuiltin () [CompileValue ()]
+  -> Eval [CompileValue ()]
 evaluateTerms tls = do
   traverse (interpretTopLevel builtinEnv) tls

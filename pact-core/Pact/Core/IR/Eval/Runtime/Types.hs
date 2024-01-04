@@ -400,7 +400,7 @@ data CondCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> 
   -- ^ <true case term> <false case term>
   | EnforceC (EvalTerm b i)
   -- ^ <error string term>
-  | EnforceOneC (EvalTerm b i) [EvalTerm b i]
+  | EnforceOneC
   -- ^ <error string term> [<enforceable term>]
   | FilterC (CanApply step b i m) PactValue [PactValue] [PactValue]
   -- ^ {filtering closure} <current focused value> <remaining> <accumulator>
@@ -433,7 +433,6 @@ data BuiltinCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type 
   -- ^ <table> <key to read>
   | WriteC TableValue WriteType RowKey (ObjectData PactValue)
   -- ^ <table> <write type> <key to write> <value to write>
-  | WithReadC TableValue RowKey (CanApply step b i m)
    -- ^ <table> <key to read> <closure to apply afterwards>
   | WithDefaultReadC TableValue RowKey (ObjectData PactValue) (CanApply step b i m)
   -- ^ <table> <key to read> <default value> <closure to apply afterwards>
@@ -448,7 +447,9 @@ data BuiltinCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type 
   | CreateTableC TableValue
   -- <create-table>
   | EmitEventC (CapToken FullyQualifiedName PactValue)
+  -- <create-table>
   | DefineKeysetC KeySetName (KeySet QualifiedName)
+  -- <create-table>
   | DefineNamespaceC Namespace
   deriving (Show, Generic)
 
@@ -495,7 +496,7 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
   | CapInvokeC (CEKEnv step b i m) i (CapCont step b i m) (Cont step b i m)
   -- ^ Frame for control flow around argument reduction to with-capability and create-user-guard
-  | CapBodyC CapPopState (CEKEnv step b i m) (Maybe (CapToken QualifiedName PactValue)) (Maybe (PactEvent PactValue)) (EvalTerm b i) (Cont step b i m)
+  | CapBodyC CapPopState (CEKEnv step b i m) i (Maybe (CapToken QualifiedName PactValue)) (Maybe (PactEvent PactValue)) (EvalTerm b i) (Cont step b i m)
   -- ^ CapBodyC includes
   --  - what to do after the cap body (pop it, or compose it)
   --  - Is it a user managed cap? If so, include the body token

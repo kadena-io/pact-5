@@ -323,7 +323,7 @@ testCapability info b cont handler env = \case
     lookupFqName (_ctName origToken) >>= \case
       Just (DCap d) -> do
         let cBody = Constant LUnit info
-            ignoreContBody _env _mct _mev _cb c = c
+            ignoreContBody _env _info _mct _mev _cb c = c
             cont' = SeqC env cBody cont
         case _dcapMeta d of
           Unmanaged ->
