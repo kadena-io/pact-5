@@ -195,7 +195,7 @@ evaluateTerm cont handler env (Nullary body info) = do
 -- | ------ From ---------- | ------ To ------ |
 --   <Let e1 e2, E, K, H>      <e1, E, LetC(E,e2,K), H>
 --
-evaluateTerm cont handler env (Let _ e1 e2 info) = do
+evaluateTerm cont handler env (Let _ e1 e2 _info) = do
   -- chargeGasArgs info (GAConstant constantWorkNodeGas)
   let cont' = LetC env e2 cont
   evalCEK cont' handler env e1

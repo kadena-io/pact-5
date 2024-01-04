@@ -198,6 +198,19 @@ library
     Pact.Crypto.WebAuthn.Cose.Registry
     Pact.Crypto.WebAuthn.Cose.SignAlg
 
+library pact-core-lsp
+  import: pact-core-common
+  hs-source-dirs: pact-core-lsp
+
+  exposed-modules:
+    Pact.Core.LanguageServer
+
+  build-depends:
+    , pact-core
+    , lsp
+    , lsp-types
+    , filepath
+
 executable gasmodel
   import: pact-core-common
   hs-source-dirs: gasmodel
@@ -215,35 +228,7 @@ executable gasmodel
 executable repl
   main-is: repl/Main.hs
 
-  build-depends:
-    , Decimal
-    , base
-    , base16-bytestring
-    , base64-bytestring
-    , bytestring
-    , containers
-    , data-default
-    , deepseq
-    , directory
-    , exceptions
-    , filepath
-    , lens
-    , mtl
-    , pact-time
-    , prettyprinter
-    , prettyprinter-ansi-terminal
-    , safe
-    , text
-    , unordered-containers
-    , utf8-string
-    , vector
-    , megaparsec
-    , pact-core
-    , ralist
-    , primitive
-    , haskeline
-    , exceptions
-    , serialise
+  build-depends: base, pact-core, pact-core:pact-core-lsp
 
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
@@ -300,7 +285,9 @@ test-suite core-tests
     , semirings
     , neat-interpolation
     , pact-core:pact-core-crypto
-
+    , pact-core:pact-core-lsp
+    , lsp-test
+    , lsp-types
   other-modules:
     , Pact.Core.Test.ReplTests
     , Pact.Core.Test.LexerParserTests
@@ -313,3 +300,4 @@ test-suite core-tests
     , Pact.Core.Test.TestPrisms
     , Pact.Core.Test.ZkTests
     , Pact.Core.Test.PoseidonTests
+    , Pact.Core.Test.LanguageServer

@@ -5,7 +5,11 @@
 
 module Pact.Core.Gas.TableGasModel
  ( tableGasModel
- , replTableGasModel )
+ , replTableGasModel
+  --
+ , pointAddGas
+ , scalarMulGas
+ , pairingGas)
  where
 
 import qualified GHC.Integer.Logarithms as IntLog
@@ -142,6 +146,7 @@ runTableModel = \case
     PrimOpDiv -> intDivCost lop rop
   GALinear (MilliGas x) (LinearGasArg mnum mdiv intercept) ->
     MilliGas $ ((x * mnum) `div` mdiv) + intercept
+  _ -> error "implement me"
 
 -- Prod gas table, for reference.
 -- defaultGasTable :: Map Text Gas
