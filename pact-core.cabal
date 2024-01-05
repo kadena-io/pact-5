@@ -210,7 +210,7 @@ executable gasmodel
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
-executable repl
+executable pact
   main-is: pact-core/Pact/Core/Repl.hs
 
   build-depends:

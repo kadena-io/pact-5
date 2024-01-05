@@ -51,7 +51,7 @@
         echo works > $out
       '';
     in rec {
-      packages.pact-core-binary = flake.packages."pact-core:exe:repl";
+      packages.pact-core-binary = flake.packages."pact-core:exe:pact";
       packages.pact-core-gasmodel = flake.packages."pact-core:exe:gasmodel";
       packages.pact-core-tests  = flake.packages."pact-core:test:core-tests";
 
