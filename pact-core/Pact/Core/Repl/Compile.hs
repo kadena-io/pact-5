@@ -124,7 +124,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
           replCurrSource .= oldSrc
           pure out
   pipe' tl = case tl of
-    Lisp.RTLTopLevel toplevel -> case topLevelIsBuiltin toplevel of
+    Lisp.RTLTopLevel toplevel -> case topLevelHasDocs toplevel of
       Just doc ->  displayValue $ RBuiltinDoc doc
       Nothing -> do
         v <- interpretTopLevel replEnv toplevel

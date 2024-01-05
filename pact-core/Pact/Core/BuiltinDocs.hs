@@ -1,7 +1,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 
 module Pact.Core.BuiltinDocs
-  ( topLevelIsBuiltin
+  ( topLevelHasDocs
   ) where
 
 import NeatInterpolation (text)
@@ -11,9 +11,9 @@ import Pact.Core.Names
 
 import qualified Data.Map.Strict as M
 
-topLevelIsBuiltin :: TopLevel i -> Maybe Text
-topLevelIsBuiltin (TLTerm (Var (BN (BareName bn)) _)) = M.lookup bn builtinDocs
-topLevelIsBuiltin _ = Nothing
+topLevelHasDocs :: TopLevel i -> Maybe Text
+topLevelHasDocs (TLTerm (Var (BN (BareName bn)) _)) = M.lookup bn builtinDocs
+topLevelHasDocs _ = Nothing
 
 builtinDocs :: M.Map Text Text
 builtinDocs = M.fromList [
