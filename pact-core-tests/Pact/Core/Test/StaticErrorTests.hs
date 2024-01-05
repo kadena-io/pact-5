@@ -813,7 +813,7 @@ executionTests =
       (continue-pact 1 true)
       |])
   -- TODO better error type here? v
-  , ("defpact_nested", isExecutionError _NestedDefPactNeverStarted, [text|
+  , ("defpact_nested_dynamic_step_count_mismatch", isExecutionError _NestedDefPactNeverStarted, [text|
       (module m g (defcap g () true)
         (defpact n:string ()
           (step "hello1")
