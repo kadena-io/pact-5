@@ -44,6 +44,8 @@ import Pact.Core.IR.Eval.Runtime
 import Pact.Core.IR.Eval.CEK(CEKEval)
 import Pact.Core.Repl.Runtime.ReplBuiltin
 
+import Pact.Core.BuiltinDocs
+
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
@@ -56,6 +58,7 @@ data ReplCompileValue
   = RCompileValue (CompileValue SpanInfo)
   | RLoadedDefun Text
   | RLoadedDefConst Text
+  | RBuiltinDoc Text
   deriving Show
 
 loadFile
@@ -121,9 +124,11 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
           replCurrSource .= oldSrc
           pure out
   pipe' tl = case tl of
-    Lisp.RTLTopLevel toplevel -> do
-      v <- interpretTopLevel replEnv toplevel
-      displayValue (RCompileValue v)
+    Lisp.RTLTopLevel toplevel -> case topLevelIsBuiltin toplevel of
+      Just doc ->  displayValue $ RBuiltinDoc doc
+      Nothing -> do
+        v <- interpretTopLevel replEnv toplevel
+        displayValue (RCompileValue v)
     _ ->  do
       ds <- runDesugarReplTopLevel tl
       interpret ds

@@ -72,7 +72,9 @@ common pact-core-common
     , groups
     , poly
     , mod
-
+    , neat-interpolation
+    -- ^ is used by the `BuiltinDocs` module.
+  
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
@@ -128,6 +130,7 @@ library
   exposed-modules:
     Pact.Core.Compile
     Pact.Core.Builtin
+    Pact.Core.BuiltinDocs
     Pact.Core.Names
     Pact.Core.Literal
     Pact.Core.Guards
@@ -242,7 +245,7 @@ executable repl
     , haskeline
     , exceptions
     , serialise
-
+  
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010

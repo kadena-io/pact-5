@@ -66,6 +66,7 @@ main = do
     RLoadedDefConst mn ->
       outputStrLn $ show $
         "loaded defconst" <+> pretty mn
+    RBuiltinDoc doc -> outputStrLn (show $ pretty doc)
   catch' ma = catchAll ma (\e -> outputStrLn (show e) *> loop)
   defaultSrc = SourceCode "(interactive)" mempty
   loop = do
