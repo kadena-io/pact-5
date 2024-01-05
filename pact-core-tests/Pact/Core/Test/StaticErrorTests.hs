@@ -778,6 +778,23 @@ executionTests =
       (p)
       (n)
       |])
+  -- TODO better error type here? v
+  , ("defpact_nested", isExecutionError _NestedDefPactNeverStarted, [text|
+      (module m g (defcap g () true)
+        (defpact n:string ()
+          (step "hello1")
+          (step "hello2")
+          (step "hello3")
+          )
+        (defpact p:string ()
+          (step (n))
+          (step (+ (continue (n)) (continue (n))))
+          (step (continue (n)))
+          )
+        )
+      (p)
+      (continue-pact 1)
+      |])
   ] <>
   [ ("env_namespace_wrong_kind", isExecutionError _NativeArgumentsError, [text|
       (module m g (defcap g () true))
