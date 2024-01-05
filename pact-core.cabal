@@ -156,6 +156,7 @@ library
     Pact.Core.RuntimeParsers
     Pact.Core.Evaluate
     Pact.Core.Scheme
+    Pact.Core.IR.GeneralizedDebruijn
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree

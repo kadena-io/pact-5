@@ -10,7 +10,8 @@
 
 module Pact.Core.Type
  ( PrimType(..)
- , Type(..)
+ , Type
+ , PactType(..)
 --  , TypeScheme(..)
  , pattern TyInt
  , pattern TyDecimal
@@ -78,6 +79,7 @@ renderPrimType = \case
   PrimUnit -> "unit"
 
 instance Pretty PrimType where
+  pretty :: PrimType -> Pretty.Doc ann
   pretty = \case
     PrimInt -> "integer"
     PrimDecimal -> "decimal"
@@ -86,6 +88,8 @@ instance Pretty PrimType where
     PrimGuard -> "guard"
     PrimTime -> "time"
     PrimUnit -> "unit"
+
+type Type = PactType Schema
 
 -- Todo: caps are a bit strange here
 -- same with defpacts. Not entirely sure how to type those yet.
@@ -100,49 +104,49 @@ instance Pretty PrimType where
 --
 --    row  ::= {name:t, row*}
 --    row* ::= name:t | ϵ
-data Type
+data PactType sc
   = TyPrim PrimType
   -- ^ Built-in types
-  | TyList Type
+  | TyList (PactType sc)
   -- ^ List aka [a]
   | TyAnyList
   -- ^ Any list
   | TyModRef (Set ModuleName)
   -- ^ Module references
-  | TyObject Schema
+  | TyObject !sc
   -- ^ Objects
   | TyAnyObject
   -- ^ Object with any schema
-  | TyTable Schema
+  | TyTable !sc
   -- ^ Tables
   | TyCapToken
   deriving (Eq, Show, Ord, Generic)
 
-instance NFData Type
+instance NFData sc => NFData (PactType sc)
 
 newtype Schema
-  = Schema { _schema :: Map Field Type }
+  = Schema { _schema :: Map Field (PactType Schema) }
   deriving (Eq, Show, Ord, NFData)
 
-pattern TyInt :: Type
+pattern TyInt :: PactType sc
 pattern TyInt = TyPrim PrimInt
 
-pattern TyDecimal :: Type
+pattern TyDecimal :: PactType sc
 pattern TyDecimal = TyPrim PrimDecimal
 
-pattern TyTime :: Type
+pattern TyTime :: PactType sc
 pattern TyTime = TyPrim PrimTime
 
-pattern TyBool :: Type
+pattern TyBool :: PactType sc
 pattern TyBool = TyPrim PrimBool
 
-pattern TyString :: Type
+pattern TyString :: PactType sc
 pattern TyString = TyPrim PrimString
 
-pattern TyUnit :: Type
+pattern TyUnit :: PactType sc
 pattern TyUnit = TyPrim PrimUnit
 
-pattern TyGuard :: Type
+pattern TyGuard :: PactType sc
 pattern TyGuard = TyPrim PrimGuard
 
 
@@ -181,7 +185,7 @@ pattern TyGuard = TyPrim PrimGuard
 --   | DefcapType [Type tv] (Type tv)
 --   deriving (Show, Functor, Foldable, Traversable)
 
-typeOfLit :: Literal -> Type
+typeOfLit :: Literal -> PactType sc
 typeOfLit = TyPrim . literalPrim
 
 literalPrim :: Literal -> PrimType
@@ -230,7 +234,7 @@ instance NFData DefKind
 -- instance Pretty n => Pretty (Pred n) where
 --   pretty (Pred tc ty) = pretty tc <>  Pretty.angles (pretty ty)
 
-instance Pretty Type where
+instance Pretty sc => Pretty (PactType sc) where
   pretty = \case
     TyPrim p -> pretty p
     TyGuard -> "guard"
@@ -240,15 +244,18 @@ instance Pretty Type where
       liParens t = Pretty.parens (pretty t)
     TyModRef mrs ->
       "module" <> Pretty.braces (Pretty.hsep (Pretty.punctuate Pretty.comma (pretty <$> S.toList mrs))  )
-    TyObject (Schema sc) ->
-      let sc' =  (\(k, v) -> pretty k <> ":" <> pretty v) <$> M.toList sc
-      in "object" <> Pretty.braces (Pretty.hsep (Pretty.punctuate Pretty.comma sc'))
-    TyTable (Schema sc) ->
-      let sc' =  (\(k, v) -> pretty k <> ":" <> pretty v) <$> M.toList sc
-      in "table" <> Pretty.braces (Pretty.hsep (Pretty.punctuate Pretty.comma sc'))
+    TyObject sc ->
+      "object" <> Pretty.braces (pretty sc)
+    TyTable sc ->
+      "table" <> Pretty.braces (pretty sc)
     TyCapToken -> "CAPTOKEN"
     TyAnyList -> "list"
     TyAnyObject -> "object"
+
+instance Pretty Schema where
+  pretty (Schema sc) =
+    let sc' =  (\(k, v) -> pretty k <> ":" <> pretty v) <$> M.toList sc
+    in Pretty.hsep (Pretty.punctuate Pretty.comma sc')
 
 renderType :: Type -> Text
 renderType = \case

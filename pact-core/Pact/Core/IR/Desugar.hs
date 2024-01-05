@@ -272,7 +272,7 @@ throwDesugarError de = RenamerT . lift . throwError . PEDesugarError de
 
 desugarLispTerm
   :: (MonadEval b i m, DesugarBuiltin b)
-  => Lisp.Expr i
+  => Lisp.Expr ParsedName i
   -> RenamerT b i m (Term ParsedName DesugarType b i)
 desugarLispTerm = \case
   Lisp.Var (BN n) i  -> do
@@ -1421,7 +1421,7 @@ runDesugar act = do
 
 runDesugarTerm
   :: (MonadEval b i m, DesugarBuiltin b)
-  => Lisp.Expr i
+  => Lisp.Expr ParsedName i
   -> m (DesugarOutput (Term Name Type b i))
 runDesugarTerm = runDesugar . (desugarLispTerm >=> renameTerm)
 

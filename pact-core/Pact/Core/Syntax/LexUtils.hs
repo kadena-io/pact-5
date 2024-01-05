@@ -27,7 +27,7 @@ import Pact.Core.Pretty (Pretty(..))
 import Pact.Core.Syntax.ParseTree
 
 type ParserT = Either PactErrorI
-type ParsedExpr = Expr SpanInfo
+type ParsedExpr = Expr ParsedName SpanInfo
 type ParsedDefun = Defun SpanInfo
 type ParsedDef = Def SpanInfo
 type ParsedDefConst = DefConst SpanInfo

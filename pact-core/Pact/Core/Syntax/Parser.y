@@ -405,7 +405,7 @@ ErrExpr :: { SpanInfo -> ParsedExpr }
 CapExpr :: { SpanInfo -> ParsedExpr }
   : CapForm { CapabilityForm $1 }
 
-CapForm :: { CapForm SpanInfo }
+CapForm :: { CapForm ParsedName SpanInfo }
   : withcap Expr Block { WithCapability $2 $3 }
   | c_usr_grd '(' ParsedName AppList ')' { CreateUserGuard $3 (reverse $4)}
 
@@ -417,7 +417,7 @@ LamArgs :: { [MArg] }
 LetExpr :: { SpanInfo -> ParsedExpr }
   : let '(' Binders ')' Block { LetIn (NE.fromList (reverse $3)) $5 }
 
-Binders :: { [Binder SpanInfo] }
+Binders :: { [Binder ParsedName SpanInfo] }
   : Binders '(' IDENT MTypeAnn Expr ')' { (Binder (getIdent $3) $4 $5):$1 }
   | '(' IDENT MTypeAnn Expr ')' { [Binder (getIdent $2) $3 $4] }
 

@@ -194,7 +194,7 @@ compileOnly :: RawCode -> Either (PactError ()) [Lisp.TopLevel ()]
 compileOnly = bimap void (fmap void) . (Lisp.lexer >=> Lisp.parseProgram) . _rawCode
 
 -- | Runs only compilation pipeline for a single term
-compileOnlyTerm :: RawCode -> Either (PactError ()) (Lisp.Expr ())
+compileOnlyTerm :: RawCode -> Either (PactError ()) (Lisp.Expr ParsedName ())
 compileOnlyTerm =
   bimap void void . (Lisp.lexer >=> Lisp.parseExpr) . _rawCode
 

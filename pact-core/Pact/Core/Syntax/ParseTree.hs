@@ -102,7 +102,7 @@ data Defun i
   { _dfunName :: Text
   , _dfunArgs :: [MArg]
   , _dfunRetType :: Maybe Type
-  , _dfunTerm :: Expr i
+  , _dfunTerm :: Expr ParsedName i
   , _dfunDocs :: Maybe Text
   , _dfunModel :: Maybe [FVFunModel i]
   , _dfunInfo :: i
@@ -112,7 +112,7 @@ data DefConst i
   = DefConst
   { _dcName :: Text
   , _dcType :: Maybe Type
-  , _dcTerm :: Expr i
+  , _dcTerm :: Expr ParsedName i
   , _dcDocs :: Maybe Text
   , _dcInfo :: i
   } deriving (Show, Functor)
@@ -127,7 +127,7 @@ data DefCap i
   { _dcapName :: Text
   , _dcapArgs :: ![MArg]
   , _dcapRetType :: Maybe Type
-  , _dcapTerm :: Expr i
+  , _dcapTerm :: Expr ParsedName i
   , _dcapDocs :: Maybe Text
   , _dcapModel :: Maybe [FVFunModel i]
   , _dcapMeta :: Maybe DCapMeta
@@ -152,8 +152,8 @@ data DefTable i
   } deriving (Show, Functor)
 
 data PactStep i
-  = Step (Expr i) (Maybe [FVFunModel i])
-  | StepWithRollback (Expr i) (Expr i) (Maybe [FVFunModel i])
+  = Step (Expr ParsedName i) (Maybe [FVFunModel i])
+  | StepWithRollback (Expr ParsedName i) (Expr ParsedName i) (Maybe [FVFunModel i])
   deriving (Show, Functor)
 
 data DefPact i
@@ -198,15 +198,15 @@ data DefProperty i
   = DefProperty
   { _dpropName :: Text
   , _dpropArgs :: [Arg]
-  , _dpropExp :: Expr i
+  , _dpropExp :: Expr ParsedName i
   } deriving (Show, Functor)
 
 newtype Property i
-  = Property (Expr i)
+  = Property (Expr ParsedName i)
   deriving (Show, Functor)
 
 newtype Invariant i
-  = Invariant (Expr i)
+  = Invariant (Expr ParsedName i)
   deriving (Show, Functor)
 
 data FVModel i
@@ -234,7 +234,7 @@ data Module i
 data TopLevel i
   = TLModule (Module i)
   | TLInterface (Interface i)
-  | TLTerm (Expr i)
+  | TLTerm (Expr ParsedName i)
   | TLUse Import i
   deriving (Show, Functor)
 
@@ -313,34 +313,34 @@ instance Pretty (Defun i) where
     parens ("defun" <+> pretty n <+> parens (commaSep args)
       <> ":" <+> pretty rettype <+> "=" <+> pretty term)
 
-data Binder i =
-  Binder Text (Maybe Type) (Expr i)
+data Binder name i =
+  Binder Text (Maybe Type) (Expr name i)
   deriving (Show, Eq, Functor)
 
-instance Pretty (Binder i) where
+instance Pretty name => Pretty (Binder name i) where
   pretty (Binder ident ty e) =
     parens $ pretty ident <> maybe mempty ((":" <>) . pretty) ty <+> pretty e
 
-data CapForm i
-  = WithCapability (Expr i) (Expr i)
-  | CreateUserGuard ParsedName [Expr i]
+data CapForm name i
+  = WithCapability (Expr name i) (Expr name i)
+  | CreateUserGuard name [Expr name i]
   deriving (Show, Eq, Functor)
 
-data Expr i
-  = Var ParsedName i
-  | LetIn (NonEmpty (Binder i)) (Expr i) i
-  | Lam [MArg] (Expr i) i
-  | If (Expr i) (Expr i) (Expr i) i
-  | App (Expr i) [Expr i] i
-  | Block (NonEmpty (Expr i)) i
+data Expr name i
+  = Var name i
+  | LetIn (NonEmpty (Binder name i)) (Expr name i) i
+  | Lam [MArg] (Expr name i) i
+  | If (Expr name i) (Expr name i) (Expr name i) i
+  | App (Expr name i) [Expr name i] i
+  | Block (NonEmpty (Expr name i)) i
   | Operator Operator i
-  | List [Expr i] i
+  | List [Expr name i] i
   | Constant Literal i
-  | Try (Expr i) (Expr i) i
-  | Suspend (Expr i) i
-  | Object [(Field, Expr i)] i
-  | Binding [(Field, MArg)] [Expr i] i
-  | CapabilityForm (CapForm i) i
+  | Try (Expr name i) (Expr name i) i
+  | Suspend (Expr name i) i
+  | Object [(Field, Expr name i)] i
+  | Binding [(Field, MArg)] [Expr name i] i
+  | CapabilityForm (CapForm name i) i
   | Error Text i
   deriving (Show, Eq, Functor)
 
@@ -365,11 +365,11 @@ pattern RTLModule m = RTLTopLevel (TLModule m)
 pattern RTLInterface :: Interface i -> ReplTopLevel i
 pattern RTLInterface m = RTLTopLevel (TLInterface m)
 
-pattern RTLTerm :: Expr i -> ReplTopLevel i
+pattern RTLTerm :: Expr ParsedName i -> ReplTopLevel i
 pattern RTLTerm te = RTLTopLevel (TLTerm te)
 
 
-termInfo :: Lens' (Expr i) i
+termInfo :: Lens' (Expr name i) i
 termInfo f = \case
   Var n i -> Var n <$> f i
   LetIn bnds e1 i ->
@@ -400,7 +400,7 @@ termInfo f = \case
   Binding t e i ->
     Binding t e <$> f i
 
-instance Pretty (Expr i) where
+instance Pretty name => Pretty (Expr name i) where
   pretty = \case
     Var n _ -> pretty n
     LetIn bnds e _ ->
