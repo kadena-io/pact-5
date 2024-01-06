@@ -87,7 +87,6 @@ data NodeType
   | ObjectLitNode
   | CapFormWithCapNode
   | CapFormCreateUGNode
-  | ErrorNode
   deriving (Eq, Show, Enum, Bounded)
 
 -- | Data type representing generally linear computations of the form
@@ -133,6 +132,7 @@ data GasArgs
   | GALinear !MilliGas {-# UNPACK #-} !LinearGasArg
   | GConcat !Integer !Integer
   | GIntegerOpCost !IntegerPrimOp !Integer !Integer
+  | GAApplyLam !Integer
   deriving (Show)
 
 data GasModel b

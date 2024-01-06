@@ -134,7 +134,7 @@ intDivCost !lop !rop
 
 runTableModel :: GasArgs -> MilliGas
 runTableModel = \case
-  GAConstant c -> c
+  GAConstant !c -> c
   GIntegerOpCost !primOp lop rop -> case primOp of
     PrimOpAdd -> intAdditionCost lop rop
     PrimOpSub -> intAdditionCost lop rop
@@ -142,9 +142,13 @@ runTableModel = \case
     PrimOpDiv -> intDivCost lop rop
   GALinear (MilliGas x) (LinearGasArg mnum mdiv intercept) ->
     MilliGas $ ((x * mnum) `div` mdiv) + intercept
+  GAApplyLam !i -> MilliGas $ fromIntegral i * applyLamCostPerArg
 
 basicWorkGas :: Word64
 basicWorkGas = 25
+
+applyLamCostPerArg :: Word64
+applyLamCostPerArg = 50
 
 -- Prod gas table, for reference.
 -- defaultGasTable :: Map Text Gas
@@ -342,19 +346,26 @@ nativeGasTable = MilliGas . \case
   CoreRoundPrec -> basicWorkGas
   CoreCeilingPrec -> basicWorkGas
   CoreFloorPrec -> basicWorkGas
-  --
-  CoreExp -> 1
-  CoreLn -> 1
-  CoreSqrt -> 1
-  CoreLogBase -> 1
-  CoreLength -> 1
-  CoreTake -> 1
-  CoreDrop -> 1
+  -- Todo: transcendental functions are definitely over_gassed
+  CoreExp -> 5_000
+  CoreLn -> 6_000
+  CoreSqrt -> 6_000
+  CoreLogBase -> 3_000
+  -- note: length, take and drop are constant time
+  -- for vector.
+  CoreLength -> basicWorkGas
+  CoreTake -> basicWorkGas
+  CoreDrop -> basicWorkGas
+  -- concat
   CoreConcat -> 1
   CoreReverse -> 1
+  -- note: contains needs to be gassed based on the
+  -- specific data structure, so flat gas won't do
   CoreContains -> 1
+  -- Todo: sorting gas needs to be revisited
   CoreSort -> 1
   CoreSortObject -> 1
+  -- Remove
   CoreRemove -> 1
   CoreMod -> 1
   CoreMap -> 1
@@ -452,3 +463,8 @@ replNativeGasTable = \case
   RBuiltinWrap bwrap -> nativeGasTable bwrap
   _ -> mempty
 
+-- expLengthPenalty :: Integral i => i -> MilliGas
+-- expLengthPenalty v =
+--   let lv = logBase (100::Float) (fromIntegral v)
+--   in gasToMilliGas $ Gas (1 + floor (lv^(10::Int)))
+-- {-# INLINE expLengthPenalty #-}

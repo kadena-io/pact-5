@@ -120,6 +120,9 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
           replCurrSource .= oldSrc
           pure out
   pipe' tl = case tl of
+    --  Lisp.RTLTopLevel (Lisp.Var (BareName somename) _) -> do
+    --   v <- interpretTopLevel replEnv toplevel
+    --   displayValue (RCompileValue v)
     Lisp.RTLTopLevel toplevel -> do
       v <- interpretTopLevel replEnv toplevel
       displayValue (RCompileValue v)

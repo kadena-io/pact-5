@@ -158,6 +158,8 @@ library
     Pact.Core.Evaluate
     Pact.Core.Scheme
     Pact.Core.Repl
+    Pact.Core.SizeOf
+    Pact.Core.Gas.Serialize
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
@@ -207,6 +209,9 @@ executable gasmodel
   build-depends:
     , pact-core
     , criterion
+
+  other-modules:
+    Pact.Core.Gas.BuiltinsGas
 
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls

@@ -385,8 +385,6 @@ desugarLispTerm = \case
     pure (Constant l i)
   Lisp.Try e1 e2 i ->
     Try <$> desugarLispTerm e1 <*> desugarLispTerm e2 <*> pure i
-  Lisp.Error e i ->
-    pure (Error e i)
   Lisp.Object fields i ->
     ObjectLit <$> (traverse._2) desugarLispTerm fields <*> pure i
   Lisp.CapabilityForm cf i -> (`CapabilityForm` i) <$> case cf of
@@ -635,7 +633,6 @@ termSCC currM currDefns = \case
     WithCapability _ _ -> mempty
   ObjectLit m _ ->
     foldMap (termSCC currM currDefns . view _2) m
-  Error {} -> S.empty
 
 parsedNameSCC :: ModuleName -> Set Text -> ParsedName -> Set Text
 parsedNameSCC currM currDefns n = case n of
@@ -976,7 +973,6 @@ renameTerm (CapabilityForm cf i) = case cf of
   WithCapability cap body -> do
     enforceNotWithinDefcap i "with-capability"
     CapabilityForm <$> (WithCapability <$> renameTerm cap <*> renameTerm body) <*> pure i
-renameTerm (Error e i) = pure (Error e i)
 renameTerm (ObjectLit o i) =
   ObjectLit <$> (traverse._2) renameTerm o <*> pure i
 
@@ -1319,11 +1315,11 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash i) = d
       Right ksn -> do
         lift $ enforceKeysetNameAdmin i mname ksn
         pure (KeyGov ksn)
-    CapGov (UnresolvedGov govName) ->
+    CapGov (FQParsed govName) ->
       case find (\d -> BN (BareName (defName d)) == govName) defs of
         Just (DCap d) -> do
           let fqn = FullyQualifiedName mname (_dcapName d) mhash
-          pure (CapGov (ResolvedGov fqn))
+          pure (CapGov (FQName fqn))
         Just d -> throwDesugarError (InvalidGovernanceRef (QualifiedName (defName d) mname)) i
         Nothing -> throwDesugarError (InvalidGovernanceRef (QualifiedName (rawParsedName govName) mname)) i
   mkScc mname dns def = (def, defName def, S.toList (defSCC mname dns def))

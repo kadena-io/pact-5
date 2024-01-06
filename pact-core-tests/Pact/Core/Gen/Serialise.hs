@@ -124,11 +124,11 @@ nameGen = do
   Name name <$> nameKindGen
 
 -- TODO
-unresolvedGovGen :: Gen (CapGovRef ParsedName)
-unresolvedGovGen = UnresolvedGov <$> parsedNameGen
+-- unresolvedGovGen :: Gen (CapGovRef ParsedName)
+-- unresolvedGovGen = UnresolvedGov <$> parsedNameGen
 
-resolvedGovGen :: Gen (CapGovRef Name)
-resolvedGovGen = ResolvedGov <$> fullyQualifiedNameGen
+-- resolvedGovGen :: Gen (CapGovRef Name)
+-- resolvedGovGen = ResolvedGov <$> fullyQualifiedNameGen
 
 governanceGen :: Gen (Governance Name)
 governanceGen = Gen.choice

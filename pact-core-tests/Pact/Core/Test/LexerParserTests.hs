@@ -48,7 +48,6 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
           , TokenIf
           , TokenLambda
           , TokenTry
-          , TokenError
           , TokenModule
           , TokenInterface
           , TokenImport

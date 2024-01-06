@@ -349,8 +349,6 @@ createUserGuardGas :: CoreDb -> C.Benchmark
 createUserGuardGas pdb =
   C.bgroup "Create user guard node" [ createUserGuardGasNArgs i pdb | i <- [0..5]]
 
-errorGas :: CoreDb -> C.Benchmark
-errorGas = simpleTermGas (Error "foo" ()) "Error node"
 
 benchmarkNodeType :: CoreDb -> NodeType -> C.Benchmark
 benchmarkNodeType pdb = \case
@@ -374,7 +372,6 @@ benchmarkNodeType pdb = \case
   ObjectLitNode -> objectLitGas pdb
   CapFormWithCapNode -> withCapFormGas pdb
   CapFormCreateUGNode -> createUserGuardGas pdb
-  ErrorNode -> errorGas pdb
 
 
 -- Gas for a lambda with N
@@ -470,7 +467,7 @@ gasFnWithRemainingArgs pdb =
         handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
     pure (ee, es, frame, handler, value)
 
-
+-- Closures
 unitClosureNullary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m
 unitClosureNullary env
   = Closure
@@ -679,6 +676,122 @@ gasFilterCEmptyNElems pdb b i =
         handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
     pure (ee, es, frame, handler, value)
 
+gasAndQC :: PactDb CoreBuiltin () -> Bool -> C.Benchmark
+gasAndQC pdb b =
+  benchApplyContToValue mkEnv "AndQC boolean case"
+  where
+  mkEnv = do
+    ee <- defaultEvalEnv pdb coreBuiltinMap
+    let es = def
+        ps = _eeDefPactStep ee
+        env = CEKEnv { _cePactDb=pdb
+                    , _ceLocal=mempty
+                    , _ceInCap=False
+                    , _ceDefPactStep=ps
+                    , _ceBuiltins=benchmarkEnv }
+        clo = boolClosureUnary b env
+        frame = CondC env () (AndQC (C clo) (PLiteral LUnit)) Mt
+        value = VBool b
+        handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
+    pure (ee, es, frame, handler, value)
+
+gasOrQC :: PactDb CoreBuiltin () -> Bool -> C.Benchmark
+gasOrQC pdb b =
+  benchApplyContToValue mkEnv "AndQC boolean case"
+  where
+  mkEnv = do
+    ee <- defaultEvalEnv pdb coreBuiltinMap
+    let es = def
+        ps = _eeDefPactStep ee
+        env = CEKEnv { _cePactDb=pdb
+                    , _ceLocal=mempty
+                    , _ceInCap=False
+                    , _ceDefPactStep=ps
+                    , _ceBuiltins=benchmarkEnv }
+        clo = boolClosureUnary b env
+        frame = CondC env () (OrQC (C clo) (PLiteral LUnit)) Mt
+        value = VBool b
+        handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
+    pure (ee, es, frame, handler, value)
+
+gasNotQC :: PactDb CoreBuiltin () -> C.Benchmark
+gasNotQC pdb =
+  benchApplyContToValue mkEnv "AndQC boolean case"
+  where
+  mkEnv = do
+    ee <- defaultEvalEnv pdb coreBuiltinMap
+    let es = def
+        ps = _eeDefPactStep ee
+        env = CEKEnv { _cePactDb=pdb
+                    , _ceLocal=mempty
+                    , _ceInCap=False
+                    , _ceDefPactStep=ps
+                    , _ceBuiltins=benchmarkEnv }
+        frame = CondC env () (NotQC) Mt
+        value = VBool True
+        handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
+    pure (ee, es, frame, handler, value)
+
+gasMapC :: PactDb CoreBuiltin () -> C.Benchmark
+gasMapC pdb =
+  benchApplyContToValue mkEnv "MapC"
+  where
+  mkEnv = do
+    ee <- defaultEvalEnv pdb coreBuiltinMap
+    let es = def
+        ps = _eeDefPactStep ee
+        env = CEKEnv { _cePactDb=pdb
+                    , _ceLocal=mempty
+                    , _ceInCap=False
+                    , _ceDefPactStep=ps
+                    , _ceBuiltins=benchmarkEnv }
+        clo = unitClosureUnary env
+        bframe = MapC (C clo) [PUnit] []
+        frame = BuiltinC env () bframe Mt
+        value = VUnit
+        handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
+    pure (ee, es, frame, handler, value)
+
+gasFoldC :: PactDb CoreBuiltin () -> C.Benchmark
+gasFoldC pdb =
+  benchApplyContToValue mkEnv "FoldC"
+  where
+  mkEnv = do
+    ee <- defaultEvalEnv pdb coreBuiltinMap
+    let es = def
+        ps = _eeDefPactStep ee
+        env = CEKEnv { _cePactDb=pdb
+                    , _ceLocal=mempty
+                    , _ceInCap=False
+                    , _ceDefPactStep=ps
+                    , _ceBuiltins=benchmarkEnv }
+        clo = unitClosureBinary env
+        bframe = FoldC (C clo) [PUnit]
+        frame = BuiltinC env () bframe Mt
+        value = VUnit
+        handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
+    pure (ee, es, frame, handler, value)
+
+gasZipC :: PactDb CoreBuiltin () ->C.Benchmark
+gasZipC pdb =
+  benchApplyContToValue mkEnv "ZipC"
+  where
+  mkEnv = do
+    ee <- defaultEvalEnv pdb coreBuiltinMap
+    let es = def
+        ps = _eeDefPactStep ee
+        env = CEKEnv { _cePactDb=pdb
+                    , _ceLocal=mempty
+                    , _ceInCap=False
+                    , _ceDefPactStep=ps
+                    , _ceBuiltins=benchmarkEnv }
+        clo = unitClosureBinary env
+        bframe = ZipC (C clo) ([PUnit], [PUnit]) []
+        frame = BuiltinC env () bframe Mt
+        value = VUnit
+        handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
+    pure (ee, es, frame, handler, value)
+
 benchApplyContToValue
   :: IO ApplyContToVEnv
   -> String
@@ -712,13 +825,20 @@ _gasContType pdb = \case
     C.bgroup "FilterC Cases" $
       [gasFilterCEmptyNElems pdb b 10
       | b <- [False, True] ]
-  CTAndQC -> undefined
-  CTOrQC -> undefined
-  CTNotQC -> undefined
+  CTAndQC ->
+    C.bgroup "AndQC Cases" $
+      [ gasAndQC pdb b
+      | b <- [False, True] ]
+  CTOrQC ->
+    C.bgroup "OrQC Cases" $
+      [ gasAndQC pdb b
+      | b <- [False, True] ]
+  CTNotQC -> gasNotQC pdb
   -- Builtin forms
-  CTMapC -> undefined
-  CTFoldC -> undefined
-  CTZipC -> undefined
+  CTMapC -> gasMapC pdb
+  CTFoldC -> gasFoldC pdb
+  CTZipC -> gasFoldC pdb
+  -- Todo: db function benchmarks
   CTPreSelectC -> undefined
   CTPreFoldDbC -> undefined
   CTSelectC -> undefined
@@ -747,4 +867,6 @@ _gasContType pdb = \case
   CTModuleAdminC -> undefined
   CTStackPopC -> undefined
   CTEnforceErrorC -> undefined
-  CTMt -> undefined
+  CTMt -> C.bgroup "Mt" []
+
+

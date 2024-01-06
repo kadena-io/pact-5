@@ -341,7 +341,6 @@ data Expr i
   | Object [(Field, Expr i)] i
   | Binding [(Field, MArg)] [Expr i] i
   | CapabilityForm (CapForm i) i
-  | Error Text i
   deriving (Show, Eq, Functor)
 
 data ReplSpecialForm i
@@ -395,8 +394,6 @@ termInfo f = \case
     Try e1 e2 <$> f i
   CapabilityForm e i ->
     CapabilityForm e <$> f i
-  Error t i ->
-    Error t <$> f i
   Binding t e i ->
     Binding t e <$> f i
 
@@ -422,8 +419,6 @@ instance Pretty (Expr i) where
       "[" <> commaSep nel <> "]"
     Try e1 e2 _ ->
       parens ("try" <+> pretty e1 <+> pretty e2)
-    Error e _ ->
-      parens ("error \"" <> pretty e <> "\"")
     Suspend e _ ->
       parens ("suspend" <+> pretty e)
     CapabilityForm c _ -> case c of

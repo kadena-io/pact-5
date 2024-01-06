@@ -110,7 +110,8 @@ binaryIntFn op info b cont handler _env = \case
 --          LT -> toRational n / divisor
 --          EQ -> toRational n
 --          GT -> toRational n * multiplier
--- `roundTo'`
+-- `roundTo'` thus has the same asymptotic complexity as multiplication/division. Thus, worst case, we can upperbound it via
+-- division
 roundingFn :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => (Rational -> Integer) -> NativeFunction step b i m
 roundingFn op info b cont handler _env = \case
   [VLiteral (LDecimal d)] ->
@@ -208,7 +209,6 @@ rawNegate info b cont handler _env = \case
 
 rawEq :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawEq info b cont handler _env = \case
-  -- Todo: rawEqGas
   [VPactValue pv, VPactValue pv'] -> returnCEKValue cont handler (VBool (pv == pv'))
   args -> argsError info b args
 
@@ -1344,35 +1344,44 @@ coreCompose info b cont handler env = \case
     applyLam clo1 [v] cont' handler
   args -> argsError info b args
 
-createPrincipalForGuard :: Guard QualifiedName PactValue -> Pr.Principal
-createPrincipalForGuard = \case
+createPrincipalForGuard :: (MonadEval b i m) => i -> Guard QualifiedName PactValue -> m (Pr.Principal)
+createPrincipalForGuard info = \case
   GKeyset (KeySet ks pf) -> case (toList ks, pf) of
     ([k], KeysAll)
-      | ed25519HexFormat k -> Pr.K k
-    (l, _) -> let h = mkHash $ map (T.encodeUtf8 . _pubKey) l
-              in Pr.W (hashToText h) (predicateToString pf)
-  GKeySetRef ksn -> Pr.R ksn
-  GModuleGuard (ModuleGuard mn n) -> Pr.M mn n
-  GUserGuard (UserGuard f args) ->
-    let h = mkHash $ map encodeStable args
-    in Pr.U (renderQualName f) (hashToText h)
+      | ed25519HexFormat k -> Pr.K k <$ chargeGas 1_000
+    (l, _) -> do
+      h <- mkHash $ map (T.encodeUtf8 . _pubKey) l
+      pure $ Pr.W (hashToText h) (predicateToString pf)
+  GKeySetRef ksn ->
+    Pr.R ksn <$ chargeGas 1_000
+  GModuleGuard (ModuleGuard mn n) ->
+    Pr.M mn n <$ chargeGas 1_000
+  GUserGuard (UserGuard f args) -> do
+    h <- mkHash $ map encodeStable args
+    pure $ Pr.U (renderQualName f) (hashToText h)
     -- TODO orig pact gets here ^^^^ a Name
     -- which can be any of QualifiedName/BareName/DynamicName/FQN,
     -- and uses the rendered string here. Need to double-check equivalence.
-  GCapabilityGuard (CapabilityGuard f args pid) ->
+  GCapabilityGuard (CapabilityGuard f args pid) -> do
     let args' = map encodeStable args
         f' = T.encodeUtf8 $ renderQualName f
         pid' = T.encodeUtf8 . renderDefPactId <$> pid
-        h = mkHash $ f' : args' ++ maybeToList pid'
-    in Pr.C $ hashToText h
-  GDefPactGuard (DefPactGuard dpid name) -> Pr.P dpid name
+    h <- mkHash $ f' : args' ++ maybeToList pid'
+    pure $ Pr.C $ hashToText h
+  GDefPactGuard (DefPactGuard dpid name) -> Pr.P dpid name <$ chargeGas 1_000
   where
-    mkHash bss = pactHash $ mconcat bss
+    chargeGas mg = chargeGasArgs info (GAConstant (MilliGas mg))
+    mkHash bss = do
+      let bs = mconcat bss
+          gasChargeAmt = 1_000 + fromIntegral (BS.length bs `quot` 64) * 1_000
+      chargeGas gasChargeAmt
+      pure $ pactHash bs
+
 
 coreCreatePrincipal :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreCreatePrincipal info b cont handler _env = \case
   [VGuard g] -> do
-    let pr = createPrincipalForGuard g
+    pr <- createPrincipalForGuard info g
     returnCEKValue cont handler $ VString $ Pr.mkPrincipalIdent pr
   args -> argsError info b args
 
@@ -1393,7 +1402,7 @@ coreTypeOfPrincipal info b cont handler _env = \case
 coreValidatePrincipal :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreValidatePrincipal info b cont handler _env = \case
   [VGuard g, VString s] -> do
-    let pr' = createPrincipalForGuard g
+    pr' <- createPrincipalForGuard info g
     returnCEKValue cont handler $ VBool $ Pr.mkPrincipalIdent pr' == s
   args -> argsError info b args
 

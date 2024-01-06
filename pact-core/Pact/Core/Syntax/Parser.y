@@ -65,7 +65,6 @@ import Pact.Core.Syntax.LexUtils
   true       { PosToken TokenTrue _ }
   false      { PosToken TokenFalse _ }
   progn      { PosToken TokenBlockIntro _ }
-  err        { PosToken TokenError _ }
   try        { PosToken TokenTry _ }
   suspend    { PosToken TokenSuspend _ }
   load       { PosToken TokenLoad _ }
@@ -137,7 +136,7 @@ ReplSpecial :: { SpanInfo -> ReplSpecialForm SpanInfo }
 
 Governance :: { Governance ParsedName }
   : StringRaw { KeyGov (KeySetName $1 Nothing) }
-  | IDENT { CapGov (UnresolvedGov (BN (BareName (getIdent $1)))) }
+  | IDENT { CapGov (FQParsed (BN (BareName (getIdent $1)))) }
 
 StringRaw :: { Text }
  : STR  { getStr $1 }
@@ -365,7 +364,6 @@ SExpr :: { SpanInfo -> ParsedExpr }
   | LetExpr { $1 }
   | IfExpr { $1 }
   | TryExpr { $1 }
-  | ErrExpr { $1 }
   | ProgNExpr { $1 }
   | GenAppExpr { $1 }
   | SuspendExpr { $1 }
@@ -398,9 +396,6 @@ TryExpr :: { SpanInfo -> ParsedExpr }
 
 SuspendExpr :: { SpanInfo -> ParsedExpr }
   : suspend Expr { Suspend $2 }
-
-ErrExpr :: { SpanInfo -> ParsedExpr }
-  : err STR { Error (getStr $2) }
 
 CapExpr :: { SpanInfo -> ParsedExpr }
   : CapForm { CapabilityForm $1 }

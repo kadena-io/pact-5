@@ -85,7 +85,6 @@ tokens :-
     -- @installcap  { token TokenInstallCapability }
     -- @emitevent   { token TokenEmitEvent }
     try          { token TokenTry }
-    error        { token TokenError }
     progn        { token TokenBlockIntro }
     suspend      { token TokenSuspend }
 
