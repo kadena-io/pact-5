@@ -458,6 +458,7 @@ nameToFQN info env (Name n nk) = case nk of
       md <- getModule info (view cePactDb env) (_mrModule mr)
       pure (FullyQualifiedName (_mrModule mr) dArg (_mHash md))
     Just _ -> throwExecutionError info (DynNameIsNotModRef dArg)
+    -- TODO this ^ is supposedly caught by the typechecker, so it's an invariant error now
     Nothing -> failInvariant info ("unbound identifier" <> T.pack (show n))
   _ -> failInvariant info ("invalid name in fq position" <> T.pack (show n))
 
