@@ -294,7 +294,7 @@ applyPact i pc ps cont handler cenv nested = useEvalState esDefPactExec >>= \cas
 
       -- Check we try to apply the correct pact Step
       unless (ps ^. psStep < nSteps) $
-        throwExecutionError i (DefPactStepNotFound ps nSteps)
+        throwExecutionError i (DefPactStepNotFound ps nSteps)   -- TODO TODO how to trigger this?
 
       step <- maybe (failInvariant i "Step not found") pure
         $ _dpSteps defPact ^? ix (ps ^. psStep)
@@ -362,7 +362,7 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esDefPactExec >>= \case
                                , _peNestedDefPactExec = mempty
                                }
           | otherwise ->
-            throwExecutionError i (NestedDefPactDoubleExecution ps)
+            throwExecutionError i (NestedDefPactDoubleExecution ps)    -- TODO TODO how to trigger this?
         Just npe
           | _psStep ps >= 0 && isRollback && _peStep npe == _psStep ps ->
             pure (set peStepHasRollback isRollback npe)
@@ -401,7 +401,7 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
     dbState <- liftDbFunction i (readDefPacts pdb (_psDefPactId ps))
     case (dbState, crossChainContinuation) of
       (Just Nothing, _) -> throwExecutionError i (DefPactAlreadyCompleted ps)
-      (Nothing, Nothing) -> throwExecutionError i (NoPreviousDefPactExecutionFound ps)
+      (Nothing, Nothing) -> throwExecutionError i (NoPreviousDefPactExecutionFound ps)  -- TODO TODO how to trigger this?
       (Nothing, Just ccExec) -> resumeDefPactExec ccExec
       (Just (Just dbExec), Nothing) -> resumeDefPactExec dbExec
       (Just (Just dbExec), Just ccExec) -> do
@@ -413,18 +413,18 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
 
         -- Validate continuation db state
         when (_peContinuation dbExec /= _peContinuation ccExec) $
-          throwExecutionError i (CCDefPactContinuationError ps ccExec dbExec)
+          throwExecutionError i (CCDefPactContinuationError ps ccExec dbExec)    -- TODO TODO how to trigger this?
 
         -- Validate step count against db state
         when (_peStepCount dbExec /= _peStepCount ccExec) $
-          throwExecutionError i (CCDefPactContinuationError ps ccExec dbExec)
+          throwExecutionError i (CCDefPactContinuationError ps ccExec dbExec)    -- TODO TODO how to trigger this?
 
         resumeDefPactExec ccExec
       where
         --resumeDefPactExec :: MonadEval b i m => DefPactExec -> m (EvalResult b i m)
         resumeDefPactExec pe = do
           when (_psDefPactId ps /= _peDefPactId pe) $
-            throwExecutionError i (DefPactIdMismatch (_psDefPactId ps) (_peDefPactId pe))
+            throwExecutionError i (DefPactIdMismatch (_psDefPactId ps) (_peDefPactId pe))    -- TODO TODO how to trigger this?
 
           when (_psStep ps < 0 || _psStep ps >= _peStepCount pe) $
             throwExecutionError i (InvalidDefPactStepSupplied ps pe)
@@ -482,7 +482,7 @@ enforceBlessedHashes :: (MonadEval b i m) => i -> EvalModule b i -> ModuleHash -
 enforceBlessedHashes info md mh
   | _mHash md == mh = return ()
   | mh `S.member` (_mBlessed md) = return ()
-  | otherwise = throwExecutionError info (HashNotBlessed (_mName md) mh)
+  | otherwise = throwExecutionError info (HashNotBlessed (_mName md) mh)    -- TODO TODO how to trigger this?
 
 guardForModuleCall :: (MonadEval b i m) => i -> CEKEnv b i m -> ModuleName -> m () -> m ()
 guardForModuleCall i env currMod onFound =
@@ -502,7 +502,7 @@ acquireModuleAdmin i env mdl = do
       -- *special* use of `evalCap` here to evaluate module governance.
       evalCap i Mt CEKNoHandler env (CapToken fqn []) (CapBodyC PopCapInvoke) wcapBody >>= \case
         VError _ _ ->
-          throwExecutionError i (ModuleGovernanceFailure (_mName mdl))
+          throwExecutionError i (ModuleGovernanceFailure (_mName mdl))        -- TODO TODO how to trigger this?
         EvalValue _ -> do
           esCaps . csModuleAdmin %== S.insert (_mName mdl)
 
@@ -573,7 +573,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
                             cont' = modCont env (Just qualCapToken) (Just (fqctToPactEvent origToken)) contbody currCont
                         installCap info env c' False >>= evalUserManagedCap cont' newLocals capBody
                       Nothing ->
-                        throwExecutionError info (CapNotInstalled fqn)
+                        throwExecutionError info (CapNotInstalled fqn) -- TODO TODO how to trigger this?
                   Just managedCap -> do
                     let cont' = modCont env (Just qualCapToken) (Just (fqctToPactEvent origToken)) contbody currCont
                     evalUserManagedCap cont' newLocals capBody managedCap
@@ -590,7 +590,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
                         let c' = set ctName fqn c
                         installCap info env c' False >>= evalAutomanagedCap cont' newLocals capBody
                       Nothing ->
-                        throwExecutionError info (CapNotInstalled fqn)
+                        throwExecutionError info (CapNotInstalled fqn) -- TODO TODO how to trigger this?
                   Just managedCap ->
                     evalAutomanagedCap cont' newLocals capBody managedCap
                       -- if b then
