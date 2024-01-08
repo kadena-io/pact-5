@@ -459,6 +459,26 @@ traverseDefCapTerm
 traverseDefCapTerm f (DefCap n args ret term meta i) =
   (\term' -> DefCap n args ret term' meta i) <$> f term
 
+
+traverseDefPactStep
+  :: Traversal (Step name ty builtin info)
+               (Step name ty builtin' info)
+               (Term name ty builtin info)
+               (Term name ty builtin' info)
+traverseDefPactStep f = \case
+  Step t -> Step <$> f t
+  StepWithRollback a1 a2 ->
+    StepWithRollback <$> f a1 <*> f a2
+
+traverseDefPactTerm
+  :: Traversal (DefPact name ty builtin info)
+               (DefPact name ty builtin' info)
+               (Term name ty builtin info)
+               (Term name ty builtin' info)
+traverseDefPactTerm f (DefPact n args ty steps info) =
+  (\steps' -> DefPact n args ty steps' info) <$> traverse (traverseDefPactStep f) steps
+
+
 traverseDefTerm
   :: Traversal (Def name ty builtin info)
                (Def name ty builtin' info)
@@ -470,7 +490,7 @@ traverseDefTerm f = \case
   DConst d -> DConst <$> traverseDefConstTerm f d
   DSchema d -> pure (DSchema d)
   DTable d -> pure (DTable d)
-  DPact _d -> pure undefined
+  DPact d -> DPact <$> traverseDefPactTerm f d
 
 
 instance Plated (Term name ty builtin info) where
