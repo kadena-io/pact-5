@@ -155,13 +155,13 @@ gmDcapAutoManagedName :: Text
 gmDcapAutoManagedName = "gasModelCapAutoManaged"
 
 gmDcapManagedName :: Text
-gmDcapManagedName = "gasModelCapUnmanaged"
+gmDcapManagedName = "gasModelCapManaged"
 
 gmManagerDfunName :: Text
 gmManagerDfunName = "gasModelDfunManager"
 
 gmDcapEventName :: Text
-gmDcapEventName = "gasModelCapEvent"
+gmDcapEventName = "gasModelDCapEvent"
 
 gmDcapUnmanaged :: EvalDefCap CoreBuiltin ()
 gmDcapUnmanaged = DefCap

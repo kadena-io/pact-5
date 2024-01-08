@@ -78,7 +78,7 @@ pattern PString s = PLiteral (LString s)
 pattern PBool :: Bool -> PactValue
 pattern PBool b = PLiteral (LBool b)
 
-pattern PUnit ::PactValue
+pattern PUnit :: PactValue
 pattern PUnit = PLiteral LUnit
 
 type FQCapToken = CapToken FullyQualifiedName PactValue

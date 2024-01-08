@@ -1322,11 +1322,6 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
           Just (RowData rdata) ->
             returnCEKValue cont handler (VObject rdata)
           Nothing -> returnCEK cont handler (VError "no such read object" info)
-      -- WithReadC tv rowkey clo -> do
-      --   liftDbFunction info (_pdbRead pdb (tvToDomain tv) rowkey) >>= \case
-      --     Just (RowData rdata) ->
-      --       applyLam clo [VObject rdata] cont handler
-      --     Nothing -> returnCEK cont handler (VError "no such read object" info)
       WithDefaultReadC tv rowkey (ObjectData defaultObj) clo -> do
         liftDbFunction info (_pdbRead pdb (tvToDomain tv) rowkey) >>= \case
           Just (RowData rdata) ->

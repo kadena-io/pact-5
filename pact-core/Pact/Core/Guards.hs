@@ -104,22 +104,6 @@ data Governance name
 
 instance NFData name => NFData (Governance name)
 
--- data CapGovRef name where
---   UnresolvedGov :: ParsedName -> CapGovRef ParsedName
---   ResolvedGov :: FullyQualifiedName -> CapGovRef Name
-
--- instance NFData (CapGovRef name) where
---   rnf (UnresolvedGov pn) = rnf pn
---   rnf (ResolvedGov fqn) = rnf fqn
-
--- instance Eq (CapGovRef name) where
---   (UnresolvedGov g1) == (UnresolvedGov g2) = g1 == g2
---   (ResolvedGov g1) == (ResolvedGov g2) = g1 == g2
-
--- instance Show (CapGovRef name) where
---   show (UnresolvedGov ksn) = "(UnresolvedGov " <> show ksn <> ")"
---   show (ResolvedGov g) = "(ResolvedGov" <> show g <> ")"
-
 data KSPredicate name
   = KeysAll
   | Keys2

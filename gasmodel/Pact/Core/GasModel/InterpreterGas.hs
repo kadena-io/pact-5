@@ -45,7 +45,7 @@ benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) -> do
   C.bgroup "pact-core-term-gas" [staticExecutionBenchmarks pdb, termGas pdb, interpReturnGas pdb]
   where
   mkPactDb = do
-    tup@(pdb, _) <- unsafeCreateSqlitePactDb serialisePact "memory"
+    tup@(pdb, _) <- unsafeCreateSqlitePactDb serialisePact ":memory:"
     prepopulateDb pdb
     _ <- _pdbBeginTx pdb Transactional
     pure tup
@@ -567,7 +567,7 @@ gasAndQC pdb b =
 
 gasOrQC :: PactDb CoreBuiltin () -> Bool -> C.Benchmark
 gasOrQC pdb b =
-  benchApplyContToValue mkEnv "AndQC boolean case"
+  benchApplyContToValue mkEnv "OrQC boolean case"
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -586,7 +586,7 @@ gasOrQC pdb b =
 
 gasNotQC :: PactDb CoreBuiltin () -> C.Benchmark
 gasNotQC pdb =
-  benchApplyContToValue mkEnv "AndQC boolean case"
+  benchApplyContToValue mkEnv "NotQC boolean case"
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -997,7 +997,7 @@ gasObjC pdb =
 
 gasCapInvokeCUserGuard :: PactDb CoreBuiltin () -> C.Benchmark
 gasCapInvokeCUserGuard pdb =
-  benchApplyContWithRollback mkEnv "ObjC"
+  benchApplyContWithRollback mkEnv "CapInvokeCUserGuard"
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -1016,7 +1016,7 @@ gasCapInvokeCUserGuard pdb =
 
 gasCapInvokeCWithCapC :: PactDb CoreBuiltin () -> C.Benchmark
 gasCapInvokeCWithCapC pdb =
-  benchApplyContWithRollback mkEnv "ObjC"
+  benchApplyContWithRollback mkEnv "CapInvokeCWithCapC"
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -1035,7 +1035,7 @@ gasCapInvokeCWithCapC pdb =
 
 gasCapInvokeCWithCapCManaged :: PactDb CoreBuiltin () -> C.Benchmark
 gasCapInvokeCWithCapCManaged pdb =
-  benchApplyContWithRollback mkEnv "ObjC"
+  benchApplyContWithRollback mkEnv "CapInvokeCWithCapCManaged"
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -1058,7 +1058,7 @@ gasCapInvokeCWithCapCManaged pdb =
 
 gasCapInvokeCWithCapAutoManaged :: PactDb CoreBuiltin () -> C.Benchmark
 gasCapInvokeCWithCapAutoManaged pdb =
-  benchApplyContWithRollback mkEnv "ObjC"
+  benchApplyContWithRollback mkEnv "CapInvokeCWithCapAutoManaged"
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb

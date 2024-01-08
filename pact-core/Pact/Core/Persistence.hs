@@ -96,6 +96,7 @@ objectDataToRowData (ObjectData obj) = RowData obj
 
 rowDataToObjectData :: RowData -> ObjectData PactValue
 rowDataToObjectData (RowData o) = ObjectData o
+{-# INLINE rowDataToObjectData #-}
 
 -- -------------------------------------------------------------------------- --
 -- ExecutionMode

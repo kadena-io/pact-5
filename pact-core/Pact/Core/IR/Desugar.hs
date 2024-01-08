@@ -122,11 +122,6 @@ newtype RenamerT b i m a =
 instance MonadTrans (RenamerT b i) where
   lift = RenamerT . lift . lift
 
--- instance MonadGas m => MonadGas (RenamerT b i m) where
-  -- logGas logText g = lift (logGas logText g)
-  -- chargeGas g = lift (chargeGas g)
-
-
 instance (MonadEvalEnv b i m) => MonadEvalEnv b i (RenamerT b i m) where
   readEnv = RenamerT (lift (lift readEnv))
 
@@ -366,11 +361,6 @@ desugarLispTerm = \case
             newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing, Lisp.MArg injectedArg2 Nothing] (Lisp.App operand (args ++ [v1, v2]) appI) appI
         commonDesugar (ZipV zipI) (newArg:xs)
       _ -> commonDesugar e hs
-        -- e' <- desugarLispTerm e
-        -- hs' <- traverse desugarLispTerm hs
-        -- case e' of
-        --   Builtin b _ -> pure (desugarAppArity i b hs')
-        --   _ -> pure (App e' hs' i)
     where
     commonDesugar operator operands = do
       e' <- desugarLispTerm operator
