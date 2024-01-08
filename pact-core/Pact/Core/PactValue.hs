@@ -4,6 +4,7 @@
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
 
+
 module Pact.Core.PactValue
  ( PactValue(..)
  , _PLiteral
@@ -57,6 +58,8 @@ data PactValue
   | PModRef !ModRef
   | PCapToken !(CapToken FullyQualifiedName PactValue)
   | PTime !PactTime.UTCTime
+  -- BIG TODO:
+  -- This ord instance is dangerous. Consider removing in favor of newtyping over it.
   deriving (Eq, Show, Ord, Generic)
 
 instance NFData PactValue
@@ -75,7 +78,7 @@ pattern PString s = PLiteral (LString s)
 pattern PBool :: Bool -> PactValue
 pattern PBool b = PLiteral (LBool b)
 
-pattern PUnit ::PactValue
+pattern PUnit :: PactValue
 pattern PUnit = PLiteral LUnit
 
 type FQCapToken = CapToken FullyQualifiedName PactValue

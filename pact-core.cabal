@@ -72,6 +72,7 @@ common pact-core-common
     , groups
     , poly
     , mod
+    , ghc-bignum
 
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
@@ -158,6 +159,7 @@ library
     Pact.Core.Evaluate
     Pact.Core.Scheme
     Pact.Core.Repl
+    Pact.Core.SizeOf
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
@@ -215,11 +217,16 @@ executable gasmodel
   import: pact-core-common
   hs-source-dirs: gasmodel
 
-  main-is: Pact/Core/Gas/InterpreterGas.hs
+  main-is: Main.hs
 
   build-depends:
     , pact-core
     , criterion
+
+  other-modules:
+    Pact.Core.GasModel.BuiltinsGas
+    Pact.Core.GasModel.InterpreterGas
+    Pact.Core.GasModel.Utils
 
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls

@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -74,12 +73,8 @@ data Term name ty builtin info
   -- ^ try (catch expr) (try-expr)
   | ObjectLit [(Field, Term name ty builtin info)] info
   -- ^ an object literal
-  -- | DynInvoke (Term name ty builtin info) Text info
-  -- ^ dynamic module reference invocation m::f
   | CapabilityForm (CapForm name (Term name ty builtin info)) info
   -- ^ Capability Natives
-  | Error Text info
-  -- ^ Error term
   deriving (Show, Functor, Eq, Generic)
 
 data ConstVal term
@@ -350,12 +345,8 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
       pretty cf
     Try te te' _ ->
       parens ("try" <+> pretty te <+> pretty te')
-    -- DynInvoke n t _ ->
-    --   pretty n <> "::" <> pretty t
     ObjectLit n _ ->
       braces (hsep $ punctuate "," $ fmap (\(f, t) -> pretty f <> ":" <> pretty t) n)
-    Error txt _ ->
-      parens ("error" <> pretty txt)
     where
     prettyTyAnn = maybe mempty ((":" <>) . pretty)
     prettyLamArg (Arg n ty) =
@@ -396,7 +387,6 @@ termType f  = \case
     CapabilityForm <$> traverse (termType f) cf <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (termType f) m <*> pure i
-  Error txt i -> pure (Error txt i)
 
 termBuiltin :: Traversal (Term n t b i) (Term n t b' i) b b'
 termBuiltin f = \case
@@ -425,7 +415,6 @@ termBuiltin f = \case
     CapabilityForm <$> traverse (termBuiltin f) cf <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (termBuiltin f) m <*> pure i
-  Error txt i -> pure (Error txt i)
 
 termInfo :: Lens' (Term name ty builtin info) info
 termInfo f = \case
@@ -444,7 +433,6 @@ termInfo f = \case
   Nullary term i ->
     Nullary term <$> f i
   CapabilityForm cf i -> CapabilityForm cf <$> f i
-  Error t i -> Error t <$> f i
   ObjectLit m i -> ObjectLit m <$> f i
 
 traverseDefunTerm
@@ -471,6 +459,26 @@ traverseDefCapTerm
 traverseDefCapTerm f (DefCap n args ret term meta i) =
   (\term' -> DefCap n args ret term' meta i) <$> f term
 
+
+traverseDefPactStep
+  :: Traversal (Step name ty builtin info)
+               (Step name ty builtin' info)
+               (Term name ty builtin info)
+               (Term name ty builtin' info)
+traverseDefPactStep f = \case
+  Step t -> Step <$> f t
+  StepWithRollback a1 a2 ->
+    StepWithRollback <$> f a1 <*> f a2
+
+traverseDefPactTerm
+  :: Traversal (DefPact name ty builtin info)
+               (DefPact name ty builtin' info)
+               (Term name ty builtin info)
+               (Term name ty builtin' info)
+traverseDefPactTerm f (DefPact n args ty steps info) =
+  (\steps' -> DefPact n args ty steps' info) <$> traverse (traverseDefPactStep f) steps
+
+
 traverseDefTerm
   :: Traversal (Def name ty builtin info)
                (Def name ty builtin' info)
@@ -482,7 +490,7 @@ traverseDefTerm f = \case
   DConst d -> DConst <$> traverseDefConstTerm f d
   DSchema d -> pure (DSchema d)
   DTable d -> pure (DTable d)
-  DPact _d -> pure undefined
+  DPact d -> DPact <$> traverseDefPactTerm f d
 
 
 instance Plated (Term name ty builtin info) where
@@ -505,7 +513,6 @@ instance Plated (Term name ty builtin info) where
       Try <$> f e1 <*> f e2 <*> pure i
     ObjectLit o i ->
       ObjectLit <$> (traverse._2) f o <*> pure i
-    Error e i -> pure (Error e i)
 
 makeLenses ''Module
 makeLenses ''Interface

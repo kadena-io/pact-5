@@ -545,13 +545,17 @@ data ReplBuiltins
   | RTestCapability
   | REnvExecConfig
   | REnvNamespacePolicy
-  -- | REnvGas
-  -- | REnvGasLimit
-  -- | REnvGasLog
-  -- | REnvGasModel
+  | REnvGas
+  | REnvGasSet
+  | REnvMilliGas
+  | REnvSetMilliGas
+  | REnvGasLimit
+  | REnvGasLog
+  | REnvGasModel
+  | REnvAskGasModel
+  | REnvGasModelFixed
   -- | REnvGasPrice
   -- | REnvGasRate
-  -- | REnvNamespacePolicy
   -- Defpact
   | RContinuePact
   | RContinuePactRollback
@@ -591,6 +595,15 @@ instance IsBuiltin ReplBuiltins where
     RContinuePactRollbackYieldObj -> 4
     REnvExecConfig -> 1
     REnvNamespacePolicy -> 2
+    REnvGas -> 0
+    REnvGasSet -> 1
+    REnvMilliGas -> 0
+    REnvSetMilliGas -> 1
+    REnvGasLimit -> 1
+    REnvGasLog -> 1
+    REnvGasModel -> 1
+    REnvAskGasModel -> 0
+    REnvGasModelFixed -> 1
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
 -- Note: commented out natives are
@@ -660,6 +673,15 @@ replBuiltinsToText = \case
   RContinuePactRollbackYieldObj -> "continue-pact-rollback-yield-object"
   REnvExecConfig -> "env-exec-config"
   REnvNamespacePolicy -> "env-namespace-policy"
+  REnvGas -> "env-gas"
+  REnvGasSet -> "env-set-gas"
+  REnvMilliGas -> "env-milligas"
+  REnvSetMilliGas -> "env-set-milligas"
+  REnvGasLimit -> "env-gaslimit"
+  REnvGasLog -> "env-gaslog"
+  REnvGasModel -> "env-gasmodel"
+  REnvAskGasModel -> "env-ask-gasmodel"
+  REnvGasModelFixed -> "env-gasmodel-fixed"
 
 replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
 replBuiltinToText f = \case

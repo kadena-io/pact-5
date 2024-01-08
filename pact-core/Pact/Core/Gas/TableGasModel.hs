@@ -138,7 +138,7 @@ intDivCost !lop !rop
 
 runTableModel :: GasArgs -> MilliGas
 runTableModel = \case
-  GAConstant c -> c
+  GAConstant !c -> c
   GIntegerOpCost !primOp lop rop -> case primOp of
     PrimOpAdd -> intAdditionCost lop rop
     PrimOpSub -> intAdditionCost lop rop
@@ -146,7 +146,17 @@ runTableModel = \case
     PrimOpDiv -> intDivCost lop rop
   GALinear (MilliGas x) (LinearGasArg mnum mdiv intercept) ->
     MilliGas $ ((x * mnum) `div` mdiv) + intercept
-  _ -> error "implement me"
+  GAApplyLam !i -> MilliGas $ fromIntegral i * applyLamCostPerArg
+  GAZKArgs zka -> case zka of
+    PointAdd g -> pointAddGas g
+    ScalarMult g -> scalarMulGas g
+    Pairing np -> pairingGas np
+
+basicWorkGas :: Word64
+basicWorkGas = 25
+
+applyLamCostPerArg :: Word64
+applyLamCostPerArg = 50
 
 -- Prod gas table, for reference.
 -- defaultGasTable :: Map Text Gas
@@ -243,7 +253,7 @@ runTableModel = \case
 --   ,("resume", 2)
 --   ,("reverse", 2)
 --   ,("round", 1)
---   ,("shift", 1)
+--   ,("shift", 1)cepo
 --   ,("sort", 2)
 --   ,("sqrt", 6)
 --   ,("str-to-int", 1)
@@ -303,9 +313,6 @@ runTableModel = \case
 
 --   ,("poseidon-hash-hack-a-chain", 124)
 --   ]
-basicWorkGas :: Word64
-basicWorkGas = 25
-
 nativeGasTable :: CoreBuiltin -> MilliGas
 nativeGasTable = MilliGas . \case
   -- Basic arithmetic
@@ -341,25 +348,32 @@ nativeGasTable = MilliGas . \case
   -- given it can actually grow the number
   CoreBitShift -> 1
   -- Todo: rounding likely needs benchmarks, but
-  CoreRound -> 1
-  CoreCeiling -> 1
-  CoreFloor -> 1
-  CoreRoundPrec -> 1
-  CoreCeilingPrec -> 1
-  CoreFloorPrec -> 1
-  --
-  CoreExp -> 1
-  CoreLn -> 1
-  CoreSqrt -> 1
-  CoreLogBase -> 1
-  CoreLength -> 1
-  CoreTake -> 1
-  CoreDrop -> 1
+  CoreRound -> basicWorkGas
+  CoreCeiling -> basicWorkGas
+  CoreFloor -> basicWorkGas
+  CoreRoundPrec -> basicWorkGas
+  CoreCeilingPrec -> basicWorkGas
+  CoreFloorPrec -> basicWorkGas
+  -- Todo: transcendental functions are definitely over_gassed
+  CoreExp -> 5_000
+  CoreLn -> 6_000
+  CoreSqrt -> 6_000
+  CoreLogBase -> 3_000
+  -- note: length, take and drop are constant time
+  -- for vector.
+  CoreLength -> basicWorkGas
+  CoreTake -> basicWorkGas
+  CoreDrop -> basicWorkGas
+  -- concat
   CoreConcat -> 1
   CoreReverse -> 1
+  -- note: contains needs to be gassed based on the
+  -- specific data structure, so flat gas won't do
   CoreContains -> 1
+  -- Todo: sorting gas needs to be revisited
   CoreSort -> 1
   CoreSortObject -> 1
+  -- Remove
   CoreRemove -> 1
   CoreMod -> 1
   CoreMap -> 1
@@ -456,4 +470,3 @@ replNativeGasTable :: ReplBuiltin CoreBuiltin -> MilliGas
 replNativeGasTable = \case
   RBuiltinWrap bwrap -> nativeGasTable bwrap
   _ -> mempty
-

@@ -156,10 +156,6 @@ instance Serialise FullyQualifiedName where
   encode (FullyQualifiedName mn fqn h) = encode mn <> encode fqn <> encode h
   decode = FullyQualifiedName <$> decode <*> decode <*> decode
 
-instance Serialise (CapGovRef Name) where
-  encode (ResolvedGov fqn) = encode fqn
-  decode = ResolvedGov <$> decode
-
 instance Serialise (Governance Name) where
   encode = \case
     KeyGov ksn -> encodeWord 0 <> encode ksn
@@ -240,7 +236,6 @@ instance
   encode (Try t1 t2 i) = encodeWord 10 <> encode t1 <> encode t2 <> encode i
   encode (ObjectLit o i) = encodeWord 11 <> encode o <> encode i
   encode (CapabilityForm cf i) = encodeWord 12 <> encode cf <> encode i
-  encode (Error t i) = encodeWord 13 <> encode t <> encode i
 
   decode = decodeWord >>= \case
     0 -> Var <$> decode <*> decode
@@ -256,7 +251,6 @@ instance
     10 -> Try <$> decode <*> decode <*> decode
     11 -> ObjectLit <$> decode <*> decode
     12 -> CapabilityForm <$> decode <*> decode
-    13 -> Error <$> decode <*> decode
     _ -> fail "unexpected decoding"
 
 instance
@@ -339,12 +333,6 @@ instance Serialise (DefCapMeta (FQNameRef Name)) where
     2 -> pure Unmanaged
     _ -> fail "unexpected decoding"
 
--- instance
---   (Serialise b,
---    Serialise i,
---    Serialise (Term name Type b i),
---    Serialise (DefCapMeta (FQNameRef name)))
---   => Serialise (DefCap name Type b i) where
 instance (Serialise b, Serialise i) => Serialise (DefCap Name Type b i) where
   encode (DefCap n args ret term meta i) =
     encode n

@@ -87,7 +87,6 @@ data NodeType
   | ObjectLitNode
   | CapFormWithCapNode
   | CapFormCreateUGNode
-  | ErrorNode
   deriving (Eq, Show, Enum, Bounded)
 
 -- | Data type representing generally linear computations of the form
@@ -131,8 +130,9 @@ data GasArgs
   -- Maybe we can investigate generalizing the operational costs in terms of a more general structure
   -- instead of the current `GasArgs` model?
   | GALinear !MilliGas {-# UNPACK #-} !LinearGasArg
-  | GConcat !Integer !Integer
   | GIntegerOpCost !IntegerPrimOp !Integer !Integer
+  | GAApplyLam !Integer
+  | GAZKArgs !ZKArg
   deriving (Show)
 
 data GasModel b

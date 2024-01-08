@@ -119,7 +119,7 @@ evalModuleGovernance bEnv tl = do
                   ksrg = App (Builtin (liftCoreBuiltin CoreKeysetRefGuard) info) (pure ksnTerm) info
                   term = App (Builtin (liftCoreBuiltin CoreEnforceGuard) info) (pure ksrg) info
               pure term
-            CapGov (ResolvedGov fqn) -> do
+            CapGov (FQName fqn) -> do
               let cgBody = Constant LUnit info
                   withCapApp = App (Var (fqnToName fqn) info) [] info
                   term = CapabilityForm (WithCapability withCapApp cgBody) info

@@ -539,6 +539,7 @@ data ContType
   -- Conditionals
   | CTAndC
   | CTOrC
+  | CTIfC
   | CTEnforceC
   | CTEnforceOneC
   | CTFilterC
@@ -556,7 +557,6 @@ data ContType
   | CTFoldDbMapC
   | CTReadC
   | CTWriteC
-  | CTWithReadC
   | CTWithDefaultReadC
   | CTKeysC
   | CTTxIdsC
@@ -564,6 +564,8 @@ data ContType
   | CTKeyLogC
   | CTCreateTableC
   | CTEmitEventC
+  | CTDefineNamespaceC
+  | CTDefineKeysetC
   --
   | CTObjC
   -- Cap control flow

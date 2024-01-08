@@ -36,6 +36,7 @@ import Data.ByteString (ByteString)
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Word
+import GHC.Generics
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base64.URL as B64URL
@@ -50,7 +51,7 @@ import Pact.Core.Pretty ( renderCompactString, Pretty(pretty) )
 -- Within Pact these are blake2b_256 but unvalidated as such,
 -- so other hash values are kosher (such as an ETH sha256, etc).
 newtype Hash = Hash { unHash :: ShortByteString }
-  deriving (Eq, Ord, NFData)
+  deriving (Eq, Ord, NFData, Generic)
 
 instance Show Hash where
   show (Hash h) = show $ encodeBase64UrlUnpadded $ fromShort h
@@ -121,7 +122,7 @@ fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
 
 
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Generic)
   deriving newtype (NFData)
 
 placeholderHash :: ModuleHash

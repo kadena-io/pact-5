@@ -50,7 +50,6 @@ data Token
   | TokenIf
   | TokenLambda
   | TokenTry
-  | TokenError
   | TokenModule
   | TokenInterface
   | TokenImport
@@ -282,7 +281,6 @@ renderTokenText = \case
   TokenIf -> "if"
   TokenLambda -> "lambda"
   TokenTry -> "try"
-  TokenError -> "error"
   TokenModule -> "module"
   TokenInterface -> "interface"
   TokenImport -> "use"

@@ -122,11 +122,6 @@ newtype RenamerT b i m a =
 instance MonadTrans (RenamerT b i) where
   lift = RenamerT . lift . lift
 
--- instance MonadGas m => MonadGas (RenamerT b i m) where
-  -- logGas logText g = lift (logGas logText g)
-  -- chargeGas g = lift (chargeGas g)
-
-
 instance (MonadEvalEnv b i m) => MonadEvalEnv b i (RenamerT b i m) where
   readEnv = RenamerT (lift (lift readEnv))
 
@@ -252,6 +247,12 @@ instance DesugarBuiltin (ReplBuiltin CoreBuiltin) where
   -- (continue-pact <arg1> <arg2> <arg3> <arg4>)
   desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2, e3, e4] =
       App (Builtin (RBuiltinRepl RContinuePactRollbackYieldObj) i) [e1, e2, e3, e4] i
+  desugarAppArity i (RBuiltinRepl REnvGas) [e1] =
+      App (Builtin (RBuiltinRepl REnvGasSet) i) [e1] i
+  desugarAppArity i (RBuiltinRepl REnvGasModel) [] =
+      App (Builtin (RBuiltinRepl REnvAskGasModel) i) [] i
+  desugarAppArity i (RBuiltinRepl REnvGasModel) [e1, e2] =
+      App (Builtin (RBuiltinRepl REnvGasModelFixed) i) [e1, e2] i
   desugarAppArity i b ne =
     App (Builtin b i) ne i
 
@@ -340,11 +341,39 @@ desugarLispTerm = \case
       _ ->
         throwDesugarError (InvalidSyntax "enforce-one: expected argument list") i
   Lisp.App e hs i -> do
-    e' <- desugarLispTerm e
-    hs' <- traverse desugarLispTerm hs
-    case e' of
-      Builtin b _ -> pure (desugarAppArity i b hs')
-      _ -> pure (App e' hs' i)
+    case (e, hs) of
+      (MapV mapI, Lisp.App operand args appI:xs) -> do
+        let v = Lisp.Var injectedArg1Name i
+            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing] (Lisp.App operand (args ++ [v]) appI) appI
+        commonDesugar (MapV mapI) (newArg:xs)
+      (FilterV filterI, Lisp.App operand args appI:xs) -> do
+        let v = Lisp.Var injectedArg1Name i
+            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing] (Lisp.App operand (args ++ [v]) appI) appI
+        commonDesugar (FilterV filterI) (newArg:xs)
+      (FoldV foldI, Lisp.App operand args appI:xs) -> do
+        let v1 = Lisp.Var injectedArg1Name i
+            v2 = Lisp.Var injectedArg2Name i
+            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing, Lisp.MArg injectedArg2 Nothing] (Lisp.App operand (args ++ [v1, v2]) appI) appI
+        commonDesugar (FoldV foldI) (newArg:xs)
+      (ZipV zipI, Lisp.App operand args appI:xs) -> do
+        let v1 = Lisp.Var injectedArg1Name i
+            v2 = Lisp.Var injectedArg2Name i
+            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing, Lisp.MArg injectedArg2 Nothing] (Lisp.App operand (args ++ [v1, v2]) appI) appI
+        commonDesugar (ZipV zipI) (newArg:xs)
+      _ -> commonDesugar e hs
+    where
+    commonDesugar operator operands = do
+      e' <- desugarLispTerm operator
+      hs' <- traverse desugarLispTerm operands
+      case e' of
+        Builtin b _ -> pure (desugarAppArity i b hs')
+        _ -> pure (App e' hs' i)
+    --  stands for "injected Higher order 1". The name is unimportant,
+    --  injected names are not meant to be very readable
+    injectedArg1 = ":ijHO1"
+    injectedArg1Name = BN (BareName injectedArg1)
+    injectedArg2 = ":ijHO2"
+    injectedArg2Name =  BN (BareName injectedArg2)
   Lisp.Operator bop i -> pure (desugarOperator i bop)
   Lisp.List e1 i ->
     ListLit <$> traverse desugarLispTerm e1 <*> pure i
@@ -352,8 +381,6 @@ desugarLispTerm = \case
     pure (Constant l i)
   Lisp.Try e1 e2 i ->
     Try <$> desugarLispTerm e1 <*> desugarLispTerm e2 <*> pure i
-  Lisp.Error e i ->
-    pure (Error e i)
   Lisp.Object fields i ->
     ObjectLit <$> (traverse._2) desugarLispTerm fields <*> pure i
   Lisp.CapabilityForm cf i -> (`CapabilityForm` i) <$> case cf of
@@ -365,6 +392,15 @@ desugarLispTerm = \case
   binderToLet i (Lisp.Binder n mty expr) term = do
     expr' <- desugarLispTerm expr
     pure $ Let (Arg n mty) expr' term i
+
+pattern MapV :: i -> Lisp.Expr i
+pattern MapV info = Lisp.Var (BN (BareName "map")) info
+pattern FilterV :: i -> Lisp.Expr i
+pattern FilterV info = Lisp.Var (BN (BareName "map")) info
+pattern FoldV :: i -> Lisp.Expr i
+pattern FoldV info = Lisp.Var (BN (BareName "map")) info
+pattern ZipV :: i -> Lisp.Expr i
+pattern ZipV info = Lisp.Var (BN (BareName "map")) info
 
 suspendTerm
   :: Term ParsedName DesugarType builtin info
@@ -593,7 +629,6 @@ termSCC currM currDefns = \case
     WithCapability _ _ -> mempty
   ObjectLit m _ ->
     foldMap (termSCC currM currDefns . view _2) m
-  Error {} -> S.empty
 
 parsedNameSCC :: ModuleName -> Set Text -> ParsedName -> Set Text
 parsedNameSCC currM currDefns n = case n of
@@ -934,7 +969,6 @@ renameTerm (CapabilityForm cf i) = case cf of
   WithCapability cap body -> do
     enforceNotWithinDefcap i "with-capability"
     CapabilityForm <$> (WithCapability <$> renameTerm cap <*> renameTerm body) <*> pure i
-renameTerm (Error e i) = pure (Error e i)
 renameTerm (ObjectLit o i) =
   ObjectLit <$> (traverse._2) renameTerm o <*> pure i
 
@@ -1277,11 +1311,11 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash i) = d
       Right ksn -> do
         lift $ enforceKeysetNameAdmin i mname ksn
         pure (KeyGov ksn)
-    CapGov (UnresolvedGov govName) ->
+    CapGov (FQParsed govName) ->
       case find (\d -> BN (BareName (defName d)) == govName) defs of
         Just (DCap d) -> do
           let fqn = FullyQualifiedName mname (_dcapName d) mhash
-          pure (CapGov (ResolvedGov fqn))
+          pure (CapGov (FQName fqn))
         Just d -> throwDesugarError (InvalidGovernanceRef (QualifiedName (defName d) mname)) i
         Nothing -> throwDesugarError (InvalidGovernanceRef (QualifiedName (rawParsedName govName) mname)) i
   mkScc mname dns def = (def, defName def, S.toList (defSCC mname dns def))

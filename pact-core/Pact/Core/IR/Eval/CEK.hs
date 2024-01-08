@@ -123,7 +123,7 @@ evaluateTerm
 -- Handles free variable lookups as well as module reference dynamic invokes
 -- Todo: it may not be worthwhile if accessing local variables is fast to charge
 -- anything but a constant amount of gas, but it would be a worthwhile exercise.
-evaluateTerm cont handler env (Var n info)  = chargeGasArgs info (GAConstant constantWorkNodeGas) *> do
+evaluateTerm cont handler env (Var n info)  = do
   case _nKind n of
     NBound i -> do
       case RAList.lookup (_ceLocal env) i of
@@ -177,7 +177,7 @@ evaluateTerm cont handler env (Var n info)  = chargeGasArgs info (GAConstant con
 --   <Const l, E, K, H>    <Value l, E, K, H>
 --
 evaluateTerm cont handler _env (Constant l _info) = do
-  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
+  -- chargeGasArgs _info (GAConstant constantWorkNodeGas)
   returnCEKValue cont handler (VLiteral l)
 -- | ------ From ---------- | ------ To ------ |
 --   <App fn args, E, K, H>    <fn, E, Args(E,args,K), H>
@@ -196,7 +196,7 @@ evaluateTerm cont handler env (Nullary body info) = do
 --   <Let e1 e2, E, K, H>      <e1, E, LetC(E,e2,K), H>
 --
 evaluateTerm cont handler env (Let _ e1 e2 _info) = do
-  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
+  -- chargeGasArgs _info (GAConstant constantWorkNodeGas)
   let cont' = LetC env e2 cont
   evalCEK cont' handler env e1
 -- | ------ From ---------- | ------ To ------ |
@@ -216,8 +216,8 @@ evaluateTerm cont handler env (Builtin b info) = do
 -- | ------ From ------ | ------ To ----------------- |
 --   <Seq e1 e2, E, K, H>    <e1, E, SeqC(E, e2, K), H>
 --
-evaluateTerm cont handler env (Sequence e1 e2 info) = do
-  chargeGasArgs info (GAConstant constantWorkNodeGas)
+evaluateTerm cont handler env (Sequence e1 e2 _info) = do
+  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
   evalCEK (SeqC env e2 cont) handler env e1
 -- | ------ From --------------- | ------ To ------------------------ |
 --   <CAnd e1 e2, E, K, H>         <e1, E, CondC(E, AndFrame(e2),K),H>
@@ -226,17 +226,17 @@ evaluateTerm cont handler env (Sequence e1 e2 info) = do
 --  Todo: enforce and enforce-one
 evaluateTerm cont handler env (Conditional c info) = case c of
   CAnd te te' -> do
-    chargeGasArgs info (GAConstant constantWorkNodeGas)
+    -- chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env info (AndC te') cont) handler env te
   COr te te' -> do
-    chargeGasArgs info (GAConstant constantWorkNodeGas)
+    -- chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env info (OrC te') cont) handler env te
   CIf cond e1 e2 -> do
-    chargeGasArgs info (GAConstant constantWorkNodeGas)
+    -- chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env info (IfC e1 e2) cont) handler env cond
   CEnforce cond str -> do
     let env' = sysOnlyEnv env
-    chargeGasArgs info (GAConstant constantWorkNodeGas)
+    -- chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env' info (EnforceC str) cont) handler env' cond
   CEnforceOne str conds -> do
     chargeGasArgs info (GAConstant unconsWorkNodeGas)
@@ -255,7 +255,7 @@ evaluateTerm cont handler env (Conditional c info) = case c of
 --   <CreateUG n [], E, K, H>            <UGuard n [], E, K,H>
 --   <CreateUG n (x:xs), E, K,H>         <x, E, CapInvokeC(E,CrUGC(n, xs),K), H>
 evaluateTerm cont handler env (CapabilityForm cf info) = do
-  chargeGasArgs info (GAConstant constantWorkNodeGas)
+  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
   case cf of
     WithCapability rawCap body -> do
       enforceNotWithinDefcap info env "with-capability"
@@ -274,7 +274,7 @@ evaluateTerm cont handler env (CapabilityForm cf info) = do
 --   <ListLit [], E, K, H>         <VList [], E, K, H>
 ---  <ListLit (x:xs), E, K, H>         <x, E, ListC(E,xs,K), H>
 evaluateTerm cont handler env (ListLit ts info) = do
-  chargeGasArgs info (GAConstant unconsWorkNodeGas)
+  -- chargeGasArgs info (GAConstant unconsWorkNodeGas)
   case ts of
     [] -> returnCEKValue cont handler (VList mempty)
     x:xs -> evalCEK (ListC env info xs [] cont) handler env x
@@ -297,10 +297,6 @@ evaluateTerm cont handler env (ObjectLit o info) = do
       let cont' = ObjC env info f rest [] cont
       evalCEK cont' handler env term
     [] -> returnCEKValue cont handler (VObject mempty)
--- Error terms ignore the current cont
-evaluateTerm _ handler _ (Error e info) = do
-  chargeGasArgs info (GAConstant constantWorkNodeGas)
-  returnCEK Mt handler (VError e info)
 {-# SPECIALIZE evaluateTerm
    :: CoreCEKCont
    -> CoreCEKHandler
@@ -703,7 +699,7 @@ acquireModuleAdmin i cont handler env mdl = do
       enforceKeysetNameAdmin i (_mName mdl) ksn
       esCaps . csModuleAdmin %== S.insert (_mName mdl)
       returnCEKValue cont handler VUnit
-    CapGov (ResolvedGov fqn) -> do
+    CapGov (FQName fqn) -> do
       let wcapBody = Constant LUnit i
       let cont' = ModuleAdminC (_mName mdl) cont
       evalCap i cont' handler env (CapToken fqn []) (CapBodyC PopCapInvoke) wcapBody
@@ -829,9 +825,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
         let inCapEnv = set ceInCap True $ set ceLocal newLocals env
         (esCaps . csSlots) %== (CapSlot qualCapToken []:)
         sfCont <- pushStackFrame info cont' Nothing capStackFrame
-        -- emitCapability info origToken
         evalCEK sfCont handler inCapEnv capBody
-        -- evalWithStackFrame info cont' handler (set ceLocal newLocals env) capStackFrame Nothing capBody
       -- Not automanaged _nor_ user managed.
       -- Todo: a type that's basically `Maybe` here would save us a lot of grief.
       Unmanaged -> do
@@ -1277,6 +1271,7 @@ applyContToValue currCont@(CapInvokeC env info cf cont) handler v = case cf of
     -- Set the manager fun to update the current managed cap.
     let cont' = CapInvokeC env info (UpdateMgrFunC mgdCap) cont
     applyLam (C clo) [VPactValue old, VPactValue new] cont' handler
+  -- note: typechecking should be handled by the manager function here.
   UpdateMgrFunC mcap -> case v of
     VPactValue v' -> do
       let mcap' = unsafeUpdateManagedParam v' mcap
@@ -1327,11 +1322,6 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
           Just (RowData rdata) ->
             returnCEKValue cont handler (VObject rdata)
           Nothing -> returnCEK cont handler (VError "no such read object" info)
-      -- WithReadC tv rowkey clo -> do
-      --   liftDbFunction info (_pdbRead pdb (tvToDomain tv) rowkey) >>= \case
-      --     Just (RowData rdata) ->
-      --       applyLam clo [VObject rdata] cont handler
-      --     Nothing -> returnCEK cont handler (VError "no such read object" info)
       WithDefaultReadC tv rowkey (ObjectData defaultObj) clo -> do
         liftDbFunction info (_pdbRead pdb (tvToDomain tv) rowkey) >>= \case
           Just (RowData rdata) ->
