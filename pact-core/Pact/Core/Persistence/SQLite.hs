@@ -6,13 +6,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Pact.Core.Persistence.SQLite (
-  withSqlitePactDb
+  withSqlitePactDb,
+  unsafeCreateSqlitePactDb
 ) where
 
 -- import Control.Monad.Trans.Control (MonadBaseControl)
 import Control.Monad.Catch
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Data.IORef 
+import Data.IORef
 import Data.Text (Text)
 import Control.Lens (view)
 import qualified Database.SQLite3 as SQL
@@ -47,6 +48,19 @@ withSqlitePactDb serial connectionString act =
   where
     connect = liftIO $ SQL.open connectionString
     cleanup db = liftIO $ SQL.close db
+
+-- | Acquire the sqlite pact db, but do not close the connection
+-- NOTE: This functions is exposed for benchmarking, but should _not_ be used
+-- anywhere else in the runtime unless otherwise needed
+unsafeCreateSqlitePactDb
+  :: (MonadIO m)
+  => PactSerialise b i
+  -> Text
+  -> m (PactDb b i, SQL.Database)
+unsafeCreateSqlitePactDb serial connectionString  = do
+  db <- liftIO $ SQL.open connectionString
+  (,db) <$> liftIO (initializePactDb serial db)
+
 
 createSysTables :: SQL.Database -> IO ()
 createSysTables db = do

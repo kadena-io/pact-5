@@ -49,7 +49,7 @@ hashModuleAndReplace m@(Module mname mgov defs mblessed imports mimps _mh info) 
   newMhash = ModuleHash $ hash $ B.toStrict $ B.toLazyByteString (encodeModule m)
   gov' = case mgov of
     KeyGov n -> KeyGov n
-    CapGov (ResolvedGov fqn) -> CapGov $ ResolvedGov $ set fqHash newMhash fqn
+    CapGov (FQName fqn) -> CapGov $ FQName $ set fqHash newMhash fqn
 
 hashInterfaceAndReplace :: IsBuiltin b => Interface Name Type b i -> Interface Name Type b i
 hashInterfaceAndReplace iface@(Interface ifn defs imps _mh info) =
@@ -114,7 +114,7 @@ encodeModule (Module mname mgov defs mblessed imports mimps _mh _mi) = parens $
   where
   encodeGov :: Governance Name -> Builder
   encodeGov (KeyGov (KeySetName name mNs)) = encodeMNamespace mNs <> encodeText name
-  encodeGov (CapGov (ResolvedGov fqn)) = encodeFqnAsQual fqn
+  encodeGov (CapGov (FQName fqn)) = encodeFqnAsQual fqn
   encodeBless (ModuleHash (Hash s)) = parens ("bless" <+> B.shortByteString s)
 
 encodeMNamespace :: Maybe NamespaceName -> Builder
@@ -322,8 +322,6 @@ encodeTerm = \case
       "with-capability" <+> encodeTerm cap <+> encodeTerm body
     CreateUserGuard n args ->
       "with-capability" <+> encodeName n <+> hsep (encodeTerm <$> args)
-  Error e _ ->
-    parens ("error" <+> encodeText e)
 
 encodeTyAnn :: Maybe Type -> Builder
 encodeTyAnn = maybe mempty ((":" <>) . encodeType)
@@ -359,7 +357,7 @@ encodeDefPact (DefPact dpn args rty steps _i) = parens $
 
 -- todo: defcap meta
 encodeDefCap :: IsBuiltin b => DefCap Name Type b i -> Builder
-encodeDefCap (DefCap dn _ args rty term _meta _info) = parens $
+encodeDefCap (DefCap dn args rty term _meta _info) = parens $
   "defcap" <+> encodeText dn <> encodeTyAnn rty <+> encodeArgList args <+> encodeTerm term
 
 encodeDefSchema :: DefSchema Type info -> Builder

@@ -35,6 +35,8 @@ module Pact.Core.Persistence
  , dbOpDisallowed
  , toUserTable
  , FQKS
+ , objectDataToRowData
+ , rowDataToObjectData
  ) where
 
 import Control.Lens
@@ -87,6 +89,14 @@ type FQKS = KeySet QualifiedName
 newtype RowData
   = RowData { _unRowData :: Map Field PactValue }
   deriving (Eq, Show)
+
+objectDataToRowData :: ObjectData PactValue -> RowData
+objectDataToRowData (ObjectData obj) = RowData obj
+{-# INLINE objectDataToRowData #-}
+
+rowDataToObjectData :: RowData -> ObjectData PactValue
+rowDataToObjectData (RowData o) = ObjectData o
+{-# INLINE rowDataToObjectData #-}
 
 -- -------------------------------------------------------------------------- --
 -- ExecutionMode

@@ -4,6 +4,7 @@
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
 
+
 module Pact.Core.PactValue
  ( PactValue(..)
  , _PLiteral
@@ -19,6 +20,7 @@ module Pact.Core.PactValue
  , pattern PDecimal
  , pattern PString
  , pattern PBool
+ , pattern PUnit
  , synthesizePvType
  ) where
 
@@ -49,13 +51,15 @@ import Pact.Core.Capabilities
 import qualified Pact.Core.Pretty as Pretty
 
 data PactValue
-  = PLiteral Literal
-  | PList (Vector PactValue)
-  | PGuard (Guard QualifiedName PactValue)
-  | PObject (Map Field PactValue)
-  | PModRef ModRef
-  | PCapToken (CapToken FullyQualifiedName PactValue)
+  = PLiteral !Literal
+  | PList !(Vector PactValue)
+  | PGuard !(Guard QualifiedName PactValue)
+  | PObject !(Map Field PactValue)
+  | PModRef !ModRef
+  | PCapToken !(CapToken FullyQualifiedName PactValue)
   | PTime !PactTime.UTCTime
+  -- BIG TODO:
+  -- This ord instance is dangerous. Consider removing in favor of newtyping over it.
   deriving (Eq, Show, Ord, Generic)
 
 instance NFData PactValue
@@ -73,6 +77,9 @@ pattern PString s = PLiteral (LString s)
 
 pattern PBool :: Bool -> PactValue
 pattern PBool b = PLiteral (LBool b)
+
+pattern PUnit :: PactValue
+pattern PUnit = PLiteral LUnit
 
 type FQCapToken = CapToken FullyQualifiedName PactValue
 

@@ -14,7 +14,7 @@
 --
 
 
-module Main where
+module Pact.Core.Repl(runRepl) where
 
 import Control.Lens
 import Control.Monad.Catch
@@ -37,12 +37,12 @@ import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
 import Pact.Core.Serialise
 
-main :: IO ()
-main = do
+runRepl :: IO ()
+runRepl = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
   g <- newIORef mempty
   evalLog <- newIORef Nothing
-  let ee = defaultEvalEnv pdb replRawBuiltinMap
+  ee <- defaultEvalEnv pdb replcoreBuiltinMap
   ref <- newIORef (ReplState mempty pdb def ee g evalLog defaultSrc Nothing)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
@@ -50,7 +50,7 @@ main = do
       putStrLn $ T.unpack $ replError (ReplSource "(interactive)" "") err
     _ -> pure ()
   where
-  replSettings = Settings (replCompletion rawBuiltinNames) (Just ".pc-history") True
+  replSettings = Settings (replCompletion coreBuiltinNames) (Just ".pc-history") True
   displayOutput = \case
     RCompileValue cv -> case cv of
       LoadedModule mn mh -> outputStrLn $ show $

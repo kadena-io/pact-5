@@ -39,22 +39,22 @@ import Codec.CBOR.Read (deserialiseFromBytes)
 import Codec.CBOR.Write (toStrictByteString)
 import Data.ByteString (ByteString, fromStrict)
 
-encodeModuleData :: ModuleData RawBuiltin () -> ByteString
+encodeModuleData :: ModuleData CoreBuiltin () -> ByteString
 encodeModuleData = toStrictByteString . encode
 
-encodeModuleData_repl_spaninfo :: ModuleData ReplRawBuiltin SpanInfo -> ByteString
+encodeModuleData_repl_spaninfo :: ModuleData ReplCoreBuiltin SpanInfo -> ByteString
 encodeModuleData_repl_spaninfo = toStrictByteString . encode
 
-encodeModuleData_raw_spaninfo :: ModuleData RawBuiltin SpanInfo -> ByteString
+encodeModuleData_raw_spaninfo :: ModuleData CoreBuiltin SpanInfo -> ByteString
 encodeModuleData_raw_spaninfo = toStrictByteString . encode
 
-decodeModuleData :: ByteString -> Maybe (ModuleData RawBuiltin ())
+decodeModuleData :: ByteString -> Maybe (ModuleData CoreBuiltin ())
 decodeModuleData bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
-decodeModuleData_repl_spaninfo :: ByteString -> Maybe (ModuleData ReplRawBuiltin SpanInfo)
+decodeModuleData_repl_spaninfo :: ByteString -> Maybe (ModuleData ReplCoreBuiltin SpanInfo)
 decodeModuleData_repl_spaninfo bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
-decodeModuleData_raw_spaninfo :: ByteString -> Maybe (ModuleData RawBuiltin SpanInfo)
+decodeModuleData_raw_spaninfo :: ByteString -> Maybe (ModuleData CoreBuiltin SpanInfo)
 decodeModuleData_raw_spaninfo bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
 encodeKeySet :: KeySet QualifiedName -> ByteString
@@ -156,10 +156,6 @@ instance Serialise FullyQualifiedName where
   encode (FullyQualifiedName mn fqn h) = encode mn <> encode fqn <> encode h
   decode = FullyQualifiedName <$> decode <*> decode <*> decode
 
-instance Serialise (CapGovRef Name) where
-  encode (ResolvedGov fqn) = encode fqn
-  decode = ResolvedGov <$> decode
-
 instance Serialise (Governance Name) where
   encode = \case
     KeyGov ksn -> encodeWord 0 <> encode ksn
@@ -240,7 +236,6 @@ instance
   encode (Try t1 t2 i) = encodeWord 10 <> encode t1 <> encode t2 <> encode i
   encode (ObjectLit o i) = encodeWord 11 <> encode o <> encode i
   encode (CapabilityForm cf i) = encodeWord 12 <> encode cf <> encode i
-  encode (Error t i) = encodeWord 13 <> encode t <> encode i
 
   decode = decodeWord >>= \case
     0 -> Var <$> decode <*> decode
@@ -256,7 +251,6 @@ instance
     10 -> Try <$> decode <*> decode <*> decode
     11 -> ObjectLit <$> decode <*> decode
     12 -> CapabilityForm <$> decode <*> decode
-    13 -> Error <$> decode <*> decode
     _ -> fail "unexpected decoding"
 
 instance
@@ -339,23 +333,16 @@ instance Serialise (DefCapMeta (FQNameRef Name)) where
     2 -> pure Unmanaged
     _ -> fail "unexpected decoding"
 
--- instance
---   (Serialise b,
---    Serialise i,
---    Serialise (Term name Type b i),
---    Serialise (DefCapMeta (FQNameRef name)))
---   => Serialise (DefCap name Type b i) where
 instance (Serialise b, Serialise i) => Serialise (DefCap Name Type b i) where
-  encode (DefCap n arity args ret term meta i) =
+  encode (DefCap n args ret term meta i) =
     encode n
-    <> encode arity
     <> encode args
     <> encode ret
     <> encode term
     <> encode meta
     <> encode i
 
-  decode = DefCap <$> decode <*> decode <*> decode
+  decode = DefCap <$> decode <*> decode
            <*> decode <*> decode
            <*> decode <*> decode
 
@@ -557,269 +544,269 @@ instance Serialise SpanInfo where
   encode (SpanInfo sl sc el ec) = encode sl <> encode sc <> encode el <> encode ec
   decode = SpanInfo <$> decode <*> decode <*> decode <*> decode
 
-instance Serialise RawBuiltin where
+instance Serialise CoreBuiltin where
   encode = \case
-    RawAdd -> encodeWord 0
-    RawSub-> encodeWord 1
-    RawMultiply -> encodeWord 2
-    RawDivide -> encodeWord 3
-    RawNegate -> encodeWord 4
-    RawAbs -> encodeWord 5
-    RawPow -> encodeWord 6
-    RawNot -> encodeWord 7
-    RawEq -> encodeWord 8
-    RawNeq -> encodeWord 9
-    RawGT -> encodeWord 10
-    RawGEQ -> encodeWord 11
-    RawLT -> encodeWord 12
-    RawLEQ -> encodeWord 13
-    RawBitwiseAnd -> encodeWord 14
-    RawBitwiseOr -> encodeWord 15
-    RawBitwiseXor -> encodeWord 16
-    RawBitwiseFlip -> encodeWord 17
-    RawBitShift -> encodeWord 18
-    RawRound -> encodeWord 19
-    RawCeiling -> encodeWord 20
-    RawFloor -> encodeWord 21
-    RawExp -> encodeWord 22
-    RawLn -> encodeWord 23
-    RawSqrt -> encodeWord 24
-    RawLogBase -> encodeWord 25
-    RawLength -> encodeWord 26
-    RawTake -> encodeWord 27
-    RawDrop -> encodeWord 28
-    RawConcat -> encodeWord 29
-    RawReverse -> encodeWord 30
-    RawContains -> encodeWord 31
-    RawSort -> encodeWord 32
-    RawSortObject -> encodeWord 33
-    RawRemove -> encodeWord 34
-    RawMod -> encodeWord 35
-    RawMap -> encodeWord 36
-    RawFilter -> encodeWord 37
-    RawZip -> encodeWord 38
-    RawIntToStr -> encodeWord 39
-    RawStrToInt -> encodeWord 40
-    RawStrToIntBase -> encodeWord 41
-    RawFold -> encodeWord 42
-    RawDistinct -> encodeWord 43
-    RawFormat -> encodeWord 44
-    RawEnumerate -> encodeWord 45
-    RawEnumerateStepN -> encodeWord 46
-    RawShow -> encodeWord 47
-    RawReadMsg -> encodeWord 48
-    RawReadMsgDefault -> encodeWord 49
-    RawReadInteger -> encodeWord 50
-    RawReadDecimal -> encodeWord 51
-    RawReadString -> encodeWord 52
-    RawReadKeyset -> encodeWord 53
-    RawEnforceGuard -> encodeWord 54
-    RawEnforceKeyset -> encodeWord 55
-    RawKeysetRefGuard -> encodeWord 56
-    RawAt -> encodeWord 57
-    RawMakeList -> encodeWord 58
-    RawB64Encode -> encodeWord 59
-    RawB64Decode -> encodeWord 60
-    RawStrToList -> encodeWord 61
-    RawYield -> encodeWord 62
-    RawResume -> encodeWord 63
-    RawBind -> encodeWord 64
-    RawRequireCapability -> encodeWord 65
-    RawComposeCapability -> encodeWord 66
-    RawInstallCapability -> encodeWord 67
-    RawEmitEvent -> encodeWord 68
-    RawCreateCapabilityGuard -> encodeWord 69
-    RawCreateCapabilityPactGuard -> encodeWord 70
-    RawCreateModuleGuard -> encodeWord 71
-    RawCreateTable -> encodeWord 72
-    RawDescribeKeyset -> encodeWord 73
-    RawDescribeModule -> encodeWord 74
-    RawDescribeTable -> encodeWord 75
-    RawDefineKeySet -> encodeWord 76
-    RawDefineKeysetData -> encodeWord 77
-    RawFoldDb -> encodeWord 78
-    RawInsert -> encodeWord 79
-    RawKeyLog -> encodeWord 80
-    RawKeys -> encodeWord 81
-    RawRead -> encodeWord 82
-    RawSelect -> encodeWord 83
-    RawSelectWithFields -> encodeWord 84
-    RawUpdate -> encodeWord 85
-    RawWithDefaultRead -> encodeWord 86
-    RawWithRead -> encodeWord 87
-    RawWrite -> encodeWord 88
-    RawTxIds -> encodeWord 89
-    RawTxLog -> encodeWord 90
-    RawTxHash -> encodeWord 91
-    RawAndQ -> encodeWord 92
-    RawOrQ -> encodeWord 93
-    RawWhere -> encodeWord 94
-    RawNotQ -> encodeWord 95
-    RawHash -> encodeWord 96
-    RawContinue -> encodeWord 97
-    RawParseTime -> encodeWord 98
-    RawFormatTime -> encodeWord 99
-    RawTime -> encodeWord 100
-    RawAddTime -> encodeWord 101
-    RawDiffTime -> encodeWord 102
-    RawHours -> encodeWord 103
-    RawMinutes -> encodeWord 104
-    RawDays -> encodeWord 105
-    RawCompose -> encodeWord 106
-    RawNamespace -> encodeWord 107
-    RawDefineNamespace -> encodeWord 108
-    RawDescribeNamespace -> encodeWord 109
-    RawCreatePrincipal -> encodeWord 110
-    RawIsPrincipal -> encodeWord 111
-    RawTypeOfPrincipal -> encodeWord 112
-    RawValidatePrincipal -> encodeWord 113
-    RawCreateDefPactGuard -> encodeWord 114
+    CoreAdd -> encodeWord 0
+    CoreSub-> encodeWord 1
+    CoreMultiply -> encodeWord 2
+    CoreDivide -> encodeWord 3
+    CoreNegate -> encodeWord 4
+    CoreAbs -> encodeWord 5
+    CorePow -> encodeWord 6
+    CoreNot -> encodeWord 7
+    CoreEq -> encodeWord 8
+    CoreNeq -> encodeWord 9
+    CoreGT -> encodeWord 10
+    CoreGEQ -> encodeWord 11
+    CoreLT -> encodeWord 12
+    CoreLEQ -> encodeWord 13
+    CoreBitwiseAnd -> encodeWord 14
+    CoreBitwiseOr -> encodeWord 15
+    CoreBitwiseXor -> encodeWord 16
+    CoreBitwiseFlip -> encodeWord 17
+    CoreBitShift -> encodeWord 18
+    CoreRound -> encodeWord 19
+    CoreCeiling -> encodeWord 20
+    CoreFloor -> encodeWord 21
+    CoreExp -> encodeWord 22
+    CoreLn -> encodeWord 23
+    CoreSqrt -> encodeWord 24
+    CoreLogBase -> encodeWord 25
+    CoreLength -> encodeWord 26
+    CoreTake -> encodeWord 27
+    CoreDrop -> encodeWord 28
+    CoreConcat -> encodeWord 29
+    CoreReverse -> encodeWord 30
+    CoreContains -> encodeWord 31
+    CoreSort -> encodeWord 32
+    CoreSortObject -> encodeWord 33
+    CoreRemove -> encodeWord 34
+    CoreMod -> encodeWord 35
+    CoreMap -> encodeWord 36
+    CoreFilter -> encodeWord 37
+    CoreZip -> encodeWord 38
+    CoreIntToStr -> encodeWord 39
+    CoreStrToInt -> encodeWord 40
+    CoreStrToIntBase -> encodeWord 41
+    CoreFold -> encodeWord 42
+    CoreDistinct -> encodeWord 43
+    CoreFormat -> encodeWord 44
+    CoreEnumerate -> encodeWord 45
+    CoreEnumerateStepN -> encodeWord 46
+    CoreShow -> encodeWord 47
+    CoreReadMsg -> encodeWord 48
+    CoreReadMsgDefault -> encodeWord 49
+    CoreReadInteger -> encodeWord 50
+    CoreReadDecimal -> encodeWord 51
+    CoreReadString -> encodeWord 52
+    CoreReadKeyset -> encodeWord 53
+    CoreEnforceGuard -> encodeWord 54
+    CoreEnforceKeyset -> encodeWord 55
+    CoreKeysetRefGuard -> encodeWord 56
+    CoreAt -> encodeWord 57
+    CoreMakeList -> encodeWord 58
+    CoreB64Encode -> encodeWord 59
+    CoreB64Decode -> encodeWord 60
+    CoreStrToList -> encodeWord 61
+    CoreYield -> encodeWord 62
+    CoreResume -> encodeWord 63
+    CoreBind -> encodeWord 64
+    CoreRequireCapability -> encodeWord 65
+    CoreComposeCapability -> encodeWord 66
+    CoreInstallCapability -> encodeWord 67
+    CoreEmitEvent -> encodeWord 68
+    CoreCreateCapabilityGuard -> encodeWord 69
+    CoreCreateCapabilityPactGuard -> encodeWord 70
+    CoreCreateModuleGuard -> encodeWord 71
+    CoreCreateTable -> encodeWord 72
+    CoreDescribeKeyset -> encodeWord 73
+    CoreDescribeModule -> encodeWord 74
+    CoreDescribeTable -> encodeWord 75
+    CoreDefineKeySet -> encodeWord 76
+    CoreDefineKeysetData -> encodeWord 77
+    CoreFoldDb -> encodeWord 78
+    CoreInsert -> encodeWord 79
+    CoreKeyLog -> encodeWord 80
+    CoreKeys -> encodeWord 81
+    CoreRead -> encodeWord 82
+    CoreSelect -> encodeWord 83
+    CoreSelectWithFields -> encodeWord 84
+    CoreUpdate -> encodeWord 85
+    CoreWithDefaultRead -> encodeWord 86
+    CoreWithRead -> encodeWord 87
+    CoreWrite -> encodeWord 88
+    CoreTxIds -> encodeWord 89
+    CoreTxLog -> encodeWord 90
+    CoreTxHash -> encodeWord 91
+    CoreAndQ -> encodeWord 92
+    CoreOrQ -> encodeWord 93
+    CoreWhere -> encodeWord 94
+    CoreNotQ -> encodeWord 95
+    CoreHash -> encodeWord 96
+    CoreContinue -> encodeWord 97
+    CoreParseTime -> encodeWord 98
+    CoreFormatTime -> encodeWord 99
+    CoreTime -> encodeWord 100
+    CoreAddTime -> encodeWord 101
+    CoreDiffTime -> encodeWord 102
+    CoreHours -> encodeWord 103
+    CoreMinutes -> encodeWord 104
+    CoreDays -> encodeWord 105
+    CoreCompose -> encodeWord 106
+    CoreNamespace -> encodeWord 107
+    CoreDefineNamespace -> encodeWord 108
+    CoreDescribeNamespace -> encodeWord 109
+    CoreCreatePrincipal -> encodeWord 110
+    CoreIsPrincipal -> encodeWord 111
+    CoreTypeOfPrincipal -> encodeWord 112
+    CoreValidatePrincipal -> encodeWord 113
+    CoreCreateDefPactGuard -> encodeWord 114
 
-    RawRoundPrec -> encodeWord 125
-    RawCeilingPrec -> encodeWord 126
-    RawFloorPrec -> encodeWord 127
-    RawYieldToChain -> encodeWord 115
-    RawChainData -> encodeWord 116
-    RawIsCharset -> encodeWord 117
-    RawPactId -> encodeWord 118
-    RawZkPairingCheck -> encodeWord 119
-    RawZKScalarMult -> encodeWord 120
-    RawZkPointAdd -> encodeWord 121
-    RawPoseidonHashHackachain -> encodeWord 122
-    RawTypeOf -> encodeWord 123
-    RawDec -> encodeWord 124
+    CoreRoundPrec -> encodeWord 125
+    CoreCeilingPrec -> encodeWord 126
+    CoreFloorPrec -> encodeWord 127
+    CoreYieldToChain -> encodeWord 115
+    CoreChainData -> encodeWord 116
+    CoreIsCharset -> encodeWord 117
+    CorePactId -> encodeWord 118
+    CoreZkPairingCheck -> encodeWord 119
+    CoreZKScalarMult -> encodeWord 120
+    CoreZkPointAdd -> encodeWord 121
+    CorePoseidonHashHackachain -> encodeWord 122
+    CoreTypeOf -> encodeWord 123
+    CoreDec -> encodeWord 124
 
   decode = decodeWord >>= \case
-    0 -> pure RawAdd
-    1 -> pure RawSub
-    2 -> pure RawMultiply
-    3 -> pure RawDivide
-    4 -> pure RawNegate
-    5 -> pure RawAbs
-    6 -> pure RawPow
-    7 -> pure RawNot
-    8 -> pure RawEq
-    9 -> pure RawNeq
-    10 -> pure RawGT
-    11 -> pure RawGEQ
-    12 -> pure RawLT
-    13 -> pure RawLEQ
-    14 -> pure RawBitwiseAnd
-    15 -> pure RawBitwiseOr
-    16 -> pure RawBitwiseXor
-    17 -> pure RawBitwiseFlip
-    18 -> pure RawBitShift
-    19 -> pure RawRound
-    20 -> pure RawCeiling
-    21 -> pure RawFloor
-    22 -> pure RawExp
-    23 -> pure RawLn
-    24 -> pure RawSqrt
-    25 -> pure RawLogBase
-    26 -> pure RawLength
-    27 -> pure RawTake
-    28 -> pure RawDrop
-    29 -> pure RawConcat
-    30 -> pure RawReverse
-    31 -> pure RawContains
-    32 -> pure RawSort
-    33 -> pure RawSortObject
-    34 -> pure RawRemove
-    35 -> pure RawMod
-    36 -> pure RawMap
-    37 -> pure RawFilter
-    38 -> pure RawZip
-    39 -> pure RawIntToStr
-    40 -> pure RawStrToInt
-    41 -> pure RawStrToIntBase
-    42 -> pure RawFold
-    43 -> pure RawDistinct
-    44 -> pure RawFormat
-    45 -> pure RawEnumerate
-    46 -> pure RawEnumerateStepN
-    47 -> pure RawShow
-    48 -> pure RawReadMsg
-    49 -> pure RawReadMsgDefault
-    50 -> pure RawReadInteger
-    51 -> pure RawReadDecimal
-    52 -> pure RawReadString
-    53 -> pure RawReadKeyset
-    54 -> pure RawEnforceGuard
-    55 -> pure RawEnforceKeyset
-    56 -> pure RawKeysetRefGuard
-    57 -> pure RawAt
-    58 -> pure RawMakeList
-    59 -> pure RawB64Encode
-    60 -> pure RawB64Decode
-    61 -> pure RawStrToList
-    62 -> pure RawYield
-    63 -> pure RawResume
-    64 -> pure RawBind
-    65 -> pure RawRequireCapability
-    66 -> pure RawComposeCapability
-    67 -> pure RawInstallCapability
-    68 -> pure RawEmitEvent
-    69 -> pure RawCreateCapabilityGuard
-    70 -> pure RawCreateCapabilityPactGuard
-    71 -> pure RawCreateModuleGuard
-    72 -> pure RawCreateTable
-    73 -> pure RawDescribeKeyset
-    74 -> pure RawDescribeModule
-    75 -> pure RawDescribeTable
-    76 -> pure RawDefineKeySet
-    77 -> pure RawDefineKeysetData
-    78 -> pure RawFoldDb
-    79 -> pure RawInsert
-    80 -> pure RawKeyLog
-    81 -> pure RawKeys
-    82 -> pure RawRead
-    83 -> pure RawSelect
-    84 -> pure RawSelectWithFields
-    85 -> pure RawUpdate
-    86 -> pure RawWithDefaultRead
-    87 -> pure RawWithRead
-    88 -> pure RawWrite
-    89 -> pure RawTxIds
-    90 -> pure RawTxLog
-    91 -> pure RawTxHash
-    92 -> pure RawAndQ
-    93 -> pure RawOrQ
-    94 -> pure RawWhere
-    95 -> pure RawNotQ
-    96 -> pure RawHash
-    97 -> pure RawContinue
-    98 -> pure RawParseTime
-    99 -> pure RawFormatTime
-    100 -> pure RawTime
-    101 -> pure RawAddTime
-    102 -> pure RawDiffTime
-    103 -> pure RawHours
-    104 -> pure RawMinutes
-    105 -> pure RawDays
-    106 -> pure RawCompose
-    107 -> pure RawNamespace
-    108 -> pure RawDefineNamespace
-    109 -> pure RawDescribeNamespace
-    110 -> pure RawCreatePrincipal
-    111 -> pure RawIsPrincipal
-    112 -> pure RawTypeOfPrincipal
-    113 -> pure RawValidatePrincipal
-    114 -> pure RawCreateDefPactGuard
+    0 -> pure CoreAdd
+    1 -> pure CoreSub
+    2 -> pure CoreMultiply
+    3 -> pure CoreDivide
+    4 -> pure CoreNegate
+    5 -> pure CoreAbs
+    6 -> pure CorePow
+    7 -> pure CoreNot
+    8 -> pure CoreEq
+    9 -> pure CoreNeq
+    10 -> pure CoreGT
+    11 -> pure CoreGEQ
+    12 -> pure CoreLT
+    13 -> pure CoreLEQ
+    14 -> pure CoreBitwiseAnd
+    15 -> pure CoreBitwiseOr
+    16 -> pure CoreBitwiseXor
+    17 -> pure CoreBitwiseFlip
+    18 -> pure CoreBitShift
+    19 -> pure CoreRound
+    20 -> pure CoreCeiling
+    21 -> pure CoreFloor
+    22 -> pure CoreExp
+    23 -> pure CoreLn
+    24 -> pure CoreSqrt
+    25 -> pure CoreLogBase
+    26 -> pure CoreLength
+    27 -> pure CoreTake
+    28 -> pure CoreDrop
+    29 -> pure CoreConcat
+    30 -> pure CoreReverse
+    31 -> pure CoreContains
+    32 -> pure CoreSort
+    33 -> pure CoreSortObject
+    34 -> pure CoreRemove
+    35 -> pure CoreMod
+    36 -> pure CoreMap
+    37 -> pure CoreFilter
+    38 -> pure CoreZip
+    39 -> pure CoreIntToStr
+    40 -> pure CoreStrToInt
+    41 -> pure CoreStrToIntBase
+    42 -> pure CoreFold
+    43 -> pure CoreDistinct
+    44 -> pure CoreFormat
+    45 -> pure CoreEnumerate
+    46 -> pure CoreEnumerateStepN
+    47 -> pure CoreShow
+    48 -> pure CoreReadMsg
+    49 -> pure CoreReadMsgDefault
+    50 -> pure CoreReadInteger
+    51 -> pure CoreReadDecimal
+    52 -> pure CoreReadString
+    53 -> pure CoreReadKeyset
+    54 -> pure CoreEnforceGuard
+    55 -> pure CoreEnforceKeyset
+    56 -> pure CoreKeysetRefGuard
+    57 -> pure CoreAt
+    58 -> pure CoreMakeList
+    59 -> pure CoreB64Encode
+    60 -> pure CoreB64Decode
+    61 -> pure CoreStrToList
+    62 -> pure CoreYield
+    63 -> pure CoreResume
+    64 -> pure CoreBind
+    65 -> pure CoreRequireCapability
+    66 -> pure CoreComposeCapability
+    67 -> pure CoreInstallCapability
+    68 -> pure CoreEmitEvent
+    69 -> pure CoreCreateCapabilityGuard
+    70 -> pure CoreCreateCapabilityPactGuard
+    71 -> pure CoreCreateModuleGuard
+    72 -> pure CoreCreateTable
+    73 -> pure CoreDescribeKeyset
+    74 -> pure CoreDescribeModule
+    75 -> pure CoreDescribeTable
+    76 -> pure CoreDefineKeySet
+    77 -> pure CoreDefineKeysetData
+    78 -> pure CoreFoldDb
+    79 -> pure CoreInsert
+    80 -> pure CoreKeyLog
+    81 -> pure CoreKeys
+    82 -> pure CoreRead
+    83 -> pure CoreSelect
+    84 -> pure CoreSelectWithFields
+    85 -> pure CoreUpdate
+    86 -> pure CoreWithDefaultRead
+    87 -> pure CoreWithRead
+    88 -> pure CoreWrite
+    89 -> pure CoreTxIds
+    90 -> pure CoreTxLog
+    91 -> pure CoreTxHash
+    92 -> pure CoreAndQ
+    93 -> pure CoreOrQ
+    94 -> pure CoreWhere
+    95 -> pure CoreNotQ
+    96 -> pure CoreHash
+    97 -> pure CoreContinue
+    98 -> pure CoreParseTime
+    99 -> pure CoreFormatTime
+    100 -> pure CoreTime
+    101 -> pure CoreAddTime
+    102 -> pure CoreDiffTime
+    103 -> pure CoreHours
+    104 -> pure CoreMinutes
+    105 -> pure CoreDays
+    106 -> pure CoreCompose
+    107 -> pure CoreNamespace
+    108 -> pure CoreDefineNamespace
+    109 -> pure CoreDescribeNamespace
+    110 -> pure CoreCreatePrincipal
+    111 -> pure CoreIsPrincipal
+    112 -> pure CoreTypeOfPrincipal
+    113 -> pure CoreValidatePrincipal
+    114 -> pure CoreCreateDefPactGuard
 
-    115 -> pure RawYieldToChain
-    116 -> pure RawChainData
-    117 -> pure RawIsCharset
-    118 -> pure RawPactId
-    119 -> pure RawZkPairingCheck
-    120 -> pure RawZKScalarMult
-    121 -> pure RawZkPointAdd
-    122 -> pure RawPoseidonHashHackachain
-    123 -> pure RawTypeOf
-    124 -> pure RawDec
+    115 -> pure CoreYieldToChain
+    116 -> pure CoreChainData
+    117 -> pure CoreIsCharset
+    118 -> pure CorePactId
+    119 -> pure CoreZkPairingCheck
+    120 -> pure CoreZKScalarMult
+    121 -> pure CoreZkPointAdd
+    122 -> pure CorePoseidonHashHackachain
+    123 -> pure CoreTypeOf
+    124 -> pure CoreDec
 
-    125 -> pure RawRoundPrec
-    126 -> pure RawCeilingPrec
-    127 -> pure RawFloorPrec
+    125 -> pure CoreRoundPrec
+    126 -> pure CoreCeilingPrec
+    127 -> pure CoreFloorPrec
     _ -> fail "unexpeced decoding"
 
 
@@ -831,7 +818,7 @@ instance Serialise ReplBuiltins where
       then pure $ toEnum vInd
       else fail "unexpected encoding"
 
-instance Serialise ReplRawBuiltin where
+instance Serialise ReplCoreBuiltin where
   encode (RBuiltinWrap b) = encodeWord 0 <> encode b
   encode (RBuiltinRepl r) = encodeWord 1 <> encode r
 
