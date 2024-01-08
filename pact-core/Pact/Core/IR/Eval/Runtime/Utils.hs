@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
 
 module Pact.Core.IR.Eval.Runtime.Utils
@@ -13,6 +14,8 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , enforcePactValue
  , checkSigCaps
  , lookupFqName
+ , getDefCap
+ , getDefun
  , typecheckArgument
  , maybeTCType
  , safeTail
@@ -35,11 +38,18 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , getDefPactId
  , tvToDomain
  , envFromPurity
+ , unsafeUpdateManagedParam
+ , chargeFlatNativeGas
+ , chargeGasArgs
+ , getGas
+ , putGas
  ) where
 
 import Control.Lens
 import Control.Monad(when)
+import Control.Monad.IO.Class
 import Control.Monad.Except(MonadError(..))
+import Data.IORef
 import Data.Text(Text)
 import Data.Maybe(listToMaybe)
 import Data.Foldable(find)
@@ -58,6 +68,7 @@ import Pact.Core.Literal
 import Pact.Core.Persistence
 import Pact.Core.Environment
 import Pact.Core.DefPacts.Types
+import Pact.Core.Gas
 
 mkBuiltinFn
   :: (IsBuiltin b)
@@ -70,15 +81,6 @@ mkBuiltinFn i b env fn =
   NativeFn b env fn (builtinArity b) i
 {-# INLINE mkBuiltinFn #-}
 
--- cfFQN :: Lens' (CapFrame b i) FullyQualifiedName
--- cfFQN f = \case
---   WithCapFrame fqn b -> (`WithCapFrame` b) <$> f fqn
-  -- RequireCapFrame fqn -> RequireCapFrame <$> f fqn
-  -- ComposeCapFrame fqn -> ComposeCapFrame <$> f fqn
-  -- InstallCapFrame fqn -> InstallCapFrame <$> f fqn
-  -- EmitEventFrame fqn -> EmitEventFrame <$> f fqn
-  -- CreateUserGuardFrame fqn -> CreateUserGuardFrame <$> f fqn
-
 enforcePactValue :: (MonadEval b i m) => i -> CEKValue step b i m -> m PactValue
 enforcePactValue info = \case
   VPactValue pv -> pure pv
@@ -87,6 +89,21 @@ enforcePactValue info = \case
 lookupFqName :: (MonadEval b i m) => FullyQualifiedName -> m (Maybe (EvalDef b i))
 lookupFqName fqn =
   views (esLoaded.loAllLoaded) (M.lookup fqn) <$> getEvalState
+
+getDefCap :: (MonadEval b i m) => i -> FullyQualifiedName -> m (EvalDefCap b i)
+getDefCap info fqn = lookupFqName fqn >>= \case
+  Just (DCap d) -> pure d
+  _ -> failInvariant info "Expected DefCap"
+
+getDefun :: (MonadEval b i m) => i -> FullyQualifiedName -> m (EvalDefun b i)
+getDefun info fqn = lookupFqName fqn >>= \case
+  Just (Dfun d) -> pure d
+  _ -> failInvariant info "Expected Defun"
+
+unsafeUpdateManagedParam :: v -> ManagedCap name v -> ManagedCap name v
+unsafeUpdateManagedParam newV (ManagedCap mc orig (ManagedParam fqn _oldV i)) =
+  ManagedCap mc orig (ManagedParam fqn newV i)
+unsafeUpdateManagedParam _ a = a
 
 typecheckArgument :: (MonadEval b i m) => i -> PactValue -> Type -> m PactValue
 typecheckArgument info pv ty = case (pv, checkPvType ty pv) of
@@ -166,16 +183,28 @@ toArgTypeError = \case
   VTable{} -> ATETable
   VClosure{} -> ATEClosure
 
+{-# SPECIALIZE argsError
+   :: ()
+   -> CoreBuiltin
+   -> [CEKValue step CoreBuiltin () Eval]
+   -> Eval (EvalResult step CoreBuiltin () Eval)
+    #-}
 argsError
   :: (MonadEval b i m, IsBuiltin b)
   => i
   -> b
-  -> [CEKValue step b3 i2 m2]
+  -> [CEKValue step b i m]
   -> m a
 argsError info b args =
   throwExecutionError info (NativeArgumentsError (builtinName b) (toArgTypeError <$> args))
 
 
+{-# SPECIALIZE asString
+   :: ()
+   -> CoreBuiltin
+   -> PactValue
+   -> Eval Text
+    #-}
 asString
   :: (MonadEval b i m, IsBuiltin b)
   => i
@@ -185,13 +214,19 @@ asString
 asString _ _ (PLiteral (LString b)) = pure b
 asString i b pv = argsError i b [VPactValue pv]
 
+{-# SPECIALIZE asBool
+   :: ()
+   -> CoreBuiltin
+   -> PactValue
+   -> Eval Bool
+    #-}
 asBool
   :: (MonadEval b i m, IsBuiltin b)
   => i
   -> b
   -> PactValue
-  -> m Text
-asBool _ _ (PLiteral (LString b)) = pure b
+  -> m Bool
+asBool _ _ (PLiteral (LBool b)) = pure b
 asBool i b pv = argsError i b [VPactValue pv]
 
 envFromPurity :: Purity -> CEKEnv step b i m -> CEKEnv step b i m
@@ -254,3 +289,51 @@ getDefPactId info =
 tvToDomain :: TableValue -> Domain RowKey RowData b i
 tvToDomain tv =
   DUserTables (_tvName tv)
+
+-- Todo: GasLog
+{-# SPECIALIZE chargeGasArgs
+   :: ()
+   -> GasArgs
+   -> Eval ()
+    #-}
+chargeGasArgs :: (MonadEval b i m) => i -> GasArgs -> m ()
+chargeGasArgs info ga = do
+  model <- viewEvalEnv eeGasModel
+  currGas <- getGas
+  let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
+      gUsed = currGas <> (_gmRunModel model) ga
+  putGas gUsed
+  when (gasLimit > gUsed) $
+    throwExecutionError info (GasExceeded limit gUsed)
+
+{-# SPECIALIZE chargeFlatNativeGas
+   :: ()
+   -> CoreBuiltin
+   -> Eval ()
+    #-}
+chargeFlatNativeGas :: (MonadEval b i m) => i -> b -> m ()
+chargeFlatNativeGas info nativeArg = do
+  model <- viewEvalEnv eeGasModel
+  currGas <- getGas
+  let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
+      gUsed = currGas <> (_gmNatives model) nativeArg
+  putGas gUsed
+  when (gasLimit > gUsed) $
+    throwExecutionError info (GasExceeded limit gUsed)
+
+getGas :: (MonadEval b i m) => m MilliGas
+getGas =
+  viewEvalEnv eeGasRef >>= liftIO . readIORef
+{-# SPECIALIZE getGas
+    :: Eval MilliGas
+    #-}
+{-# INLINE getGas #-}
+
+putGas :: (MonadEval b i m) => MilliGas -> m ()
+putGas !g = do
+  gasRef <- viewEvalEnv eeGasRef
+  liftIO (writeIORef gasRef g)
+{-# INLINE putGas #-}
+{-# SPECIALIZE putGas
+    :: MilliGas -> Eval ()
+    #-}

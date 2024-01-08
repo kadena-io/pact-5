@@ -72,7 +72,7 @@ data PactSerialise b i
   , _decodeRowData :: ByteString -> Maybe (Document RowData)
   }
 
-serialisePact :: PactSerialise RawBuiltin ()
+serialisePact :: PactSerialise CoreBuiltin ()
 serialisePact = PactSerialise
   { _encodeModuleData = docEncode V1.encodeModuleData
   , _decodeModuleData = \bs ->
@@ -118,14 +118,14 @@ serialisePact = PactSerialise
       Left _ -> Nothing
       Right (_, (v,c)) ->  Document v <$> dec v c
 
-serialisePact_repl_spaninfo :: PactSerialise ReplRawBuiltin SpanInfo
+serialisePact_repl_spaninfo :: PactSerialise ReplCoreBuiltin SpanInfo
 serialisePact_repl_spaninfo = serialisePact
   { _encodeModuleData = V1.encodeModuleData_repl_spaninfo
   , _decodeModuleData = fmap LegacyDocument . V1.decodeModuleData_repl_spaninfo
   }
 
 
-serialisePact_raw_spaninfo :: PactSerialise RawBuiltin SpanInfo
+serialisePact_raw_spaninfo :: PactSerialise CoreBuiltin SpanInfo
 serialisePact_raw_spaninfo = serialisePact
   { _encodeModuleData = V1.encodeModuleData_raw_spaninfo
   , _decodeModuleData = fmap LegacyDocument . V1.decodeModuleData_raw_spaninfo

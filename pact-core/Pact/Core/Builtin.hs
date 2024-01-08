@@ -6,15 +6,15 @@
 {-# LANGUAGE InstanceSigs #-}
 
 module Pact.Core.Builtin
- ( RawBuiltin(..)
- , rawBuiltinToText
- , rawBuiltinMap
- , rawBuiltinNames
+ ( CoreBuiltin(..)
+ , coreBuiltinToText
+ , coreBuiltinMap
+ , coreBuiltinNames
  , ReplBuiltin(..)
- , replRawBuiltinNames
- , replRawBuiltinMap
+ , replcoreBuiltinNames
+ , replcoreBuiltinMap
  , IsBuiltin(..)
- , ReplRawBuiltin
+ , ReplCoreBuiltin
  , BuiltinForm(..)
  , ReplBuiltins(..)
  , HasObjectOps(..)
@@ -30,7 +30,8 @@ import qualified Data.Map.Strict as M
 import Pact.Core.Names(NativeName(..))
 import Pact.Core.Pretty
 
-type ReplRawBuiltin = ReplBuiltin RawBuiltin
+-- | Our type alias for the majority of our repl builtins wrap
+type ReplCoreBuiltin = ReplBuiltin CoreBuiltin
 
 data BuiltinForm o
   = CAnd o o
@@ -67,459 +68,459 @@ data DefType
 {-
 
 -}
-data RawBuiltin
+data CoreBuiltin
   -- Operators
   -- Addition/Concatenation
-  = RawAdd
+  = CoreAdd
   -- Num
-  | RawSub
-  | RawMultiply
-  | RawDivide
-  | RawNegate
-  | RawAbs
-  | RawPow
+  | CoreSub
+  | CoreMultiply
+  | CoreDivide
+  | CoreNegate
+  | CoreAbs
+  | CorePow
   -- Boolean Ops
-  | RawNot
+  | CoreNot
   -- Equality and Comparisons
-  | RawEq
-  | RawNeq
+  | CoreEq
+  | CoreNeq
   -- Ord
-  | RawGT
-  | RawGEQ
-  | RawLT
-  | RawLEQ
+  | CoreGT
+  | CoreGEQ
+  | CoreLT
+  | CoreLEQ
   -- Bitwise Ops
-  | RawBitwiseAnd
-  | RawBitwiseOr
-  | RawBitwiseXor
-  | RawBitwiseFlip
-  | RawBitShift
+  | CoreBitwiseAnd
+  | CoreBitwiseOr
+  | CoreBitwiseXor
+  | CoreBitwiseFlip
+  | CoreBitShift
   --  Rounding
-  | RawRound
-  | RawCeiling
-  | RawFloor
-  | RawRoundPrec
-  | RawCeilingPrec
-  | RawFloorPrec
+  | CoreRound
+  | CoreCeiling
+  | CoreFloor
+  | CoreRoundPrec
+  | CoreCeilingPrec
+  | CoreFloorPrec
   -- Fractional
-  | RawExp
-  | RawLn
-  | RawSqrt
-  | RawLogBase
+  | CoreExp
+  | CoreLn
+  | CoreSqrt
+  | CoreLogBase
   -- List like
-  | RawLength
-  | RawTake
-  | RawDrop
-  | RawConcat
-  | RawReverse
-  | RawContains
-  | RawSort
-  | RawSortObject
-  | RawRemove
+  | CoreLength
+  | CoreTake
+  | CoreDrop
+  | CoreConcat
+  | CoreReverse
+  | CoreContains
+  | CoreSort
+  | CoreSortObject
+  | CoreRemove
   -- General
-  | RawMod
-  | RawMap
-  | RawFilter
-  | RawZip
-  | RawIntToStr
-  | RawStrToInt
-  | RawStrToIntBase
-  | RawFold
-  | RawDistinct
-  | RawFormat
-  -- | RawEnforce
-  -- | RawEnforceOne
-  | RawEnumerate
-  | RawEnumerateStepN
+  | CoreMod
+  | CoreMap
+  | CoreFilter
+  | CoreZip
+  | CoreIntToStr
+  | CoreStrToInt
+  | CoreStrToIntBase
+  | CoreFold
+  | CoreDistinct
+  | CoreFormat
+  -- | CoreEnforce
+  -- | CoreEnforceOne
+  | CoreEnumerate
+  | CoreEnumerateStepN
   -- Guards + read functions
-  | RawShow
-  | RawReadMsg
-  | RawReadMsgDefault
-  | RawReadInteger
-  | RawReadDecimal
-  | RawReadString
-  | RawReadKeyset
-  | RawEnforceGuard
-  | RawEnforceKeyset
-  | RawKeysetRefGuard
-  | RawAt
-  | RawMakeList
-  | RawB64Encode
-  | RawB64Decode
-  | RawStrToList
-  | RawYield
-  | RawYieldToChain
-  | RawResume
-  | RawBind
-  | RawRequireCapability
-  | RawComposeCapability
-  | RawInstallCapability
-  | RawEmitEvent
-  | RawCreateCapabilityGuard
-  | RawCreateCapabilityPactGuard
-  | RawCreateModuleGuard
-  | RawCreateDefPactGuard
+  | CoreShow
+  | CoreReadMsg
+  | CoreReadMsgDefault
+  | CoreReadInteger
+  | CoreReadDecimal
+  | CoreReadString
+  | CoreReadKeyset
+  | CoreEnforceGuard
+  | CoreEnforceKeyset
+  | CoreKeysetRefGuard
+  | CoreAt
+  | CoreMakeList
+  | CoreB64Encode
+  | CoreB64Decode
+  | CoreStrToList
+  | CoreYield
+  | CoreYieldToChain
+  | CoreResume
+  | CoreBind
+  | CoreRequireCapability
+  | CoreComposeCapability
+  | CoreInstallCapability
+  | CoreEmitEvent
+  | CoreCreateCapabilityGuard
+  | CoreCreateCapabilityPactGuard
+  | CoreCreateModuleGuard
+  | CoreCreateDefPactGuard
   -- Database functions
-  | RawCreateTable
-  | RawDescribeKeyset
-  | RawDescribeModule
-  | RawDescribeTable
-  | RawDefineKeySet
-  | RawDefineKeysetData
-  | RawFoldDb
-  | RawInsert
-  | RawKeyLog
-  | RawKeys
-  | RawRead
-  | RawSelect
-  | RawSelectWithFields
-  | RawUpdate
-  | RawWithDefaultRead
-  | RawWithRead
-  | RawWrite
-  | RawTxIds
-  | RawTxLog
-  | RawTxHash
+  | CoreCreateTable
+  | CoreDescribeKeyset
+  | CoreDescribeModule
+  | CoreDescribeTable
+  | CoreDefineKeySet
+  | CoreDefineKeysetData
+  | CoreFoldDb
+  | CoreInsert
+  | CoreKeyLog
+  | CoreKeys
+  | CoreRead
+  | CoreSelect
+  | CoreSelectWithFields
+  | CoreUpdate
+  | CoreWithDefaultRead
+  | CoreWithRead
+  | CoreWrite
+  | CoreTxIds
+  | CoreTxLog
+  | CoreTxHash
   -- Db QueryFunctions
-  | RawAndQ
-  | RawOrQ
-  | RawWhere
-  | RawNotQ
-  | RawHash
-  | RawContinue
+  | CoreAndQ
+  | CoreOrQ
+  | CoreWhere
+  | CoreNotQ
+  | CoreHash
+  | CoreContinue
   -- Time functions
-  | RawParseTime
-  | RawFormatTime
-  | RawTime
-  | RawAddTime
-  | RawDiffTime
-  | RawHours
-  | RawMinutes
-  | RawDays
-  | RawCompose
-  | RawCreatePrincipal
-  | RawIsPrincipal
-  | RawTypeOfPrincipal
-  | RawValidatePrincipal
+  | CoreParseTime
+  | CoreFormatTime
+  | CoreTime
+  | CoreAddTime
+  | CoreDiffTime
+  | CoreHours
+  | CoreMinutes
+  | CoreDays
+  | CoreCompose
+  | CoreCreatePrincipal
+  | CoreIsPrincipal
+  | CoreTypeOfPrincipal
+  | CoreValidatePrincipal
   -- Namespaces
-  | RawNamespace
-  | RawDefineNamespace
-  | RawDescribeNamespace
-  | RawChainData
-  | RawIsCharset
-  | RawPactId
+  | CoreNamespace
+  | CoreDefineNamespace
+  | CoreDescribeNamespace
+  | CoreChainData
+  | CoreIsCharset
+  | CorePactId
   -- ZK
-  | RawZkPairingCheck
-  | RawZKScalarMult
-  | RawZkPointAdd
+  | CoreZkPairingCheck
+  | CoreZKScalarMult
+  | CoreZkPointAdd
   -- Poseidon Hackachain
-  | RawPoseidonHashHackachain
+  | CorePoseidonHashHackachain
   -- Misc
-  | RawTypeOf
-  | RawDec
+  | CoreTypeOf
+  | CoreDec
   deriving (Eq, Show, Ord, Bounded, Enum, Generic)
 
-instance NFData RawBuiltin
+instance NFData CoreBuiltin
 
-instance HasObjectOps RawBuiltin where
-  objectAt = RawAt
+instance HasObjectOps CoreBuiltin where
+  objectAt = CoreAt
 
-rawBuiltinToText :: RawBuiltin -> Text
-rawBuiltinToText = \case
+coreBuiltinToText :: CoreBuiltin -> Text
+coreBuiltinToText = \case
   -- Addition
-  RawAdd -> "+"
+  CoreAdd -> "+"
   -- Num
-  RawSub -> "-"
-  RawMultiply -> "*"
-  RawDivide -> "/"
-  RawNegate -> "negate"
-  RawAbs -> "abs"
-  RawPow -> "^"
+  CoreSub -> "-"
+  CoreMultiply -> "*"
+  CoreDivide -> "/"
+  CoreNegate -> "negate"
+  CoreAbs -> "abs"
+  CorePow -> "^"
   -- Boolean ops
-  RawNot -> "not"
+  CoreNot -> "not"
   -- Eq
-  RawEq -> "="
-  RawNeq -> "!="
+  CoreEq -> "="
+  CoreNeq -> "!="
   -- Ord
-  RawGT -> ">"
-  RawGEQ -> ">="
-  RawLT -> "<"
-  RawLEQ -> "<="
+  CoreGT -> ">"
+  CoreGEQ -> ">="
+  CoreLT -> "<"
+  CoreLEQ -> "<="
   -- Int ops
-  RawBitwiseAnd -> "&"
-  RawBitwiseOr -> "|"
-  RawBitwiseXor -> "xor"
-  RawBitwiseFlip -> "~"
-  RawBitShift -> "shift"
-  RawMod -> "mod"
+  CoreBitwiseAnd -> "&"
+  CoreBitwiseOr -> "|"
+  CoreBitwiseXor -> "xor"
+  CoreBitwiseFlip -> "~"
+  CoreBitShift -> "shift"
+  CoreMod -> "mod"
   -- roundings
-  RawRound -> "round"
-  RawCeiling -> "ceiling"
-  RawFloor -> "floor"
-  RawRoundPrec -> "round-prec"
-  RawCeilingPrec -> "ceiling-prec"
-  RawFloorPrec -> "floor-prec"
+  CoreRound -> "round"
+  CoreCeiling -> "ceiling"
+  CoreFloor -> "floor"
+  CoreRoundPrec -> "round-prec"
+  CoreCeilingPrec -> "ceiling-prec"
+  CoreFloorPrec -> "floor-prec"
   -- Fractional
-  RawExp -> "exp"
-  RawLn -> "ln"
-  RawSqrt -> "sqrt"
-  RawLogBase -> "log"
+  CoreExp -> "exp"
+  CoreLn -> "ln"
+  CoreSqrt -> "sqrt"
+  CoreLogBase -> "log"
   -- ListLike
-  RawLength -> "length"
-  RawTake -> "take"
-  RawDrop -> "drop"
-  RawConcat -> "concat"
-  RawReverse -> "reverse"
+  CoreLength -> "length"
+  CoreTake -> "take"
+  CoreDrop -> "drop"
+  CoreConcat -> "concat"
+  CoreReverse -> "reverse"
   -- general
-  RawMap -> "map"
-  RawFilter -> "filter"
-  RawContains -> "contains"
-  RawSort -> "sort"
-  RawSortObject -> "sort-object"
-  RawRemove -> "remove"
-  -- RawIf -> "if"
-  RawIntToStr -> "int-to-str"
-  RawStrToInt -> "str-to-int"
-  RawStrToIntBase -> "str-to-int-base"
-  RawFold -> "fold"
-  RawZip -> "zip"
-  RawDistinct -> "distinct"
-  RawFormat -> "format"
-  RawEnumerate -> "enumerate"
-  RawEnumerateStepN -> "enumerate-step"
-  RawShow -> "show"
-  RawReadMsg -> "read-msg"
-  RawReadMsgDefault -> "read-msg-default"
-  RawReadInteger -> "read-integer"
-  RawReadDecimal -> "read-decimal"
-  RawReadString -> "read-string"
-  RawReadKeyset -> "read-keyset"
-  RawEnforceGuard -> "enforce-guard"
-  RawEnforceKeyset -> "enforce-keyset"
-  RawKeysetRefGuard -> "keyset-ref-guard"
-  RawCreateCapabilityGuard -> "create-capability-guard"
-  RawCreateCapabilityPactGuard -> "create-capability-pact-guard"
-  RawCreateModuleGuard -> "create-module-guard"
-  RawCreateDefPactGuard -> "create-pact-guard"
-  RawAt -> "at"
-  RawMakeList -> "make-list"
-  RawB64Encode -> "base64-encode"
-  RawB64Decode -> "base64-decode"
-  RawStrToList -> "str-to-list"
-  RawYield -> "yield"
-  RawYieldToChain -> "yield-to-chain"
-  RawResume -> "resume"
-  RawBind -> "bind"
-  RawRequireCapability -> "require-capability"
-  RawComposeCapability -> "compose-capability"
-  RawInstallCapability -> "install-capability"
-  RawEmitEvent -> "emit-event"
-  RawCreateTable -> "create-table"
-  RawDescribeKeyset -> "describe-keyset"
-  RawDescribeModule -> "describe-module"
-  RawDescribeTable -> "describe-table"
-  RawDefineKeySet -> "define-keyset"
-  RawDefineKeysetData -> "define-read-keyset"
-  RawFoldDb -> "fold-db"
-  RawInsert -> "insert"
-  RawKeyLog -> "keylog"
-  RawKeys -> "keys"
-  RawRead -> "read"
-  RawSelect -> "select"
-  RawSelectWithFields -> ""
-  RawUpdate -> "update"
-  RawWithDefaultRead -> "with-default-read"
-  RawWithRead -> "with-read"
-  RawWrite -> "write"
-  RawTxIds -> "txids"
-  RawTxLog -> "txlog"
-  RawTxHash -> "tx-hash"
-  RawAndQ -> "and?"
-  RawOrQ -> "or?"
-  RawWhere -> "where"
-  RawNotQ -> "not?"
-  RawHash -> "hash"
-  RawContinue -> "continue"
-  RawParseTime -> "parse-time"
-  RawFormatTime -> "format-time"
-  RawTime -> "time"
-  RawAddTime -> "add-time"
-  RawDiffTime -> "diff-time"
-  RawHours -> "hours"
-  RawMinutes -> "minutes"
-  RawDays -> "days"
-  RawCompose -> "compose"
-  RawCreatePrincipal -> "create-principal"
-  RawIsPrincipal -> "is-principal"
-  RawTypeOfPrincipal -> "typeof-principal"
-  RawValidatePrincipal -> "validate-principal"
-  RawNamespace -> "namespace"
-  RawDefineNamespace -> "define-namespace"
-  RawDescribeNamespace -> "describe-namespace"
-  RawZkPairingCheck -> "pairing-check"
-  RawZKScalarMult -> "scalar-mult"
-  RawZkPointAdd -> "point-add"
-  RawPoseidonHashHackachain -> "poseidon-hash-hack-a-chain"
-  RawChainData -> "chain-data"
-  RawIsCharset -> "is-charset"
-  RawPactId -> "pact-id"
-  RawTypeOf -> "typeof"
-  RawDec -> "dec"
+  CoreMap -> "map"
+  CoreFilter -> "filter"
+  CoreContains -> "contains"
+  CoreSort -> "sort"
+  CoreSortObject -> "sort-object"
+  CoreRemove -> "remove"
+  -- CoreIf -> "if"
+  CoreIntToStr -> "int-to-str"
+  CoreStrToInt -> "str-to-int"
+  CoreStrToIntBase -> "str-to-int-base"
+  CoreFold -> "fold"
+  CoreZip -> "zip"
+  CoreDistinct -> "distinct"
+  CoreFormat -> "format"
+  CoreEnumerate -> "enumerate"
+  CoreEnumerateStepN -> "enumerate-step"
+  CoreShow -> "show"
+  CoreReadMsg -> "read-msg"
+  CoreReadMsgDefault -> "read-msg-default"
+  CoreReadInteger -> "read-integer"
+  CoreReadDecimal -> "read-decimal"
+  CoreReadString -> "read-string"
+  CoreReadKeyset -> "read-keyset"
+  CoreEnforceGuard -> "enforce-guard"
+  CoreEnforceKeyset -> "enforce-keyset"
+  CoreKeysetRefGuard -> "keyset-ref-guard"
+  CoreCreateCapabilityGuard -> "create-capability-guard"
+  CoreCreateCapabilityPactGuard -> "create-capability-pact-guard"
+  CoreCreateModuleGuard -> "create-module-guard"
+  CoreCreateDefPactGuard -> "create-pact-guard"
+  CoreAt -> "at"
+  CoreMakeList -> "make-list"
+  CoreB64Encode -> "base64-encode"
+  CoreB64Decode -> "base64-decode"
+  CoreStrToList -> "str-to-list"
+  CoreYield -> "yield"
+  CoreYieldToChain -> "yield-to-chain"
+  CoreResume -> "resume"
+  CoreBind -> "bind"
+  CoreRequireCapability -> "require-capability"
+  CoreComposeCapability -> "compose-capability"
+  CoreInstallCapability -> "install-capability"
+  CoreEmitEvent -> "emit-event"
+  CoreCreateTable -> "create-table"
+  CoreDescribeKeyset -> "describe-keyset"
+  CoreDescribeModule -> "describe-module"
+  CoreDescribeTable -> "describe-table"
+  CoreDefineKeySet -> "define-keyset"
+  CoreDefineKeysetData -> "define-read-keyset"
+  CoreFoldDb -> "fold-db"
+  CoreInsert -> "insert"
+  CoreKeyLog -> "keylog"
+  CoreKeys -> "keys"
+  CoreRead -> "read"
+  CoreSelect -> "select"
+  CoreSelectWithFields -> ""
+  CoreUpdate -> "update"
+  CoreWithDefaultRead -> "with-default-read"
+  CoreWithRead -> "with-read"
+  CoreWrite -> "write"
+  CoreTxIds -> "txids"
+  CoreTxLog -> "txlog"
+  CoreTxHash -> "tx-hash"
+  CoreAndQ -> "and?"
+  CoreOrQ -> "or?"
+  CoreWhere -> "where"
+  CoreNotQ -> "not?"
+  CoreHash -> "hash"
+  CoreContinue -> "continue"
+  CoreParseTime -> "parse-time"
+  CoreFormatTime -> "format-time"
+  CoreTime -> "time"
+  CoreAddTime -> "add-time"
+  CoreDiffTime -> "diff-time"
+  CoreHours -> "hours"
+  CoreMinutes -> "minutes"
+  CoreDays -> "days"
+  CoreCompose -> "compose"
+  CoreCreatePrincipal -> "create-principal"
+  CoreIsPrincipal -> "is-principal"
+  CoreTypeOfPrincipal -> "typeof-principal"
+  CoreValidatePrincipal -> "validate-principal"
+  CoreNamespace -> "namespace"
+  CoreDefineNamespace -> "define-namespace"
+  CoreDescribeNamespace -> "describe-namespace"
+  CoreZkPairingCheck -> "pairing-check"
+  CoreZKScalarMult -> "scalar-mult"
+  CoreZkPointAdd -> "point-add"
+  CorePoseidonHashHackachain -> "poseidon-hash-hack-a-chain"
+  CoreChainData -> "chain-data"
+  CoreIsCharset -> "is-charset"
+  CorePactId -> "pact-id"
+  CoreTypeOf -> "typeof"
+  CoreDec -> "dec"
 
-instance IsBuiltin RawBuiltin where
-  builtinName = NativeName . rawBuiltinToText
+instance IsBuiltin CoreBuiltin where
+  builtinName = NativeName . coreBuiltinToText
   builtinArity = \case
-    RawAdd -> 2
+    CoreAdd -> 2
     -- Num ->
-    RawSub -> 2
-    RawMultiply -> 2
-    RawDivide -> 2
-    RawNegate -> 1
-    RawAbs -> 1
-    RawPow -> 2
+    CoreSub -> 2
+    CoreMultiply -> 2
+    CoreDivide -> 2
+    CoreNegate -> 1
+    CoreAbs -> 1
+    CorePow -> 2
     -- Boolean Ops ->
-    -- RawAnd -> 2
-    -- RawOr -> 2
-    RawNot -> 1
+    -- CoreAnd -> 2
+    -- CoreOr -> 2
+    CoreNot -> 1
     -- Equality and Comparisons ->
-    RawEq -> 2
-    RawNeq -> 2
+    CoreEq -> 2
+    CoreNeq -> 2
     -- Ord ->
-    RawGT -> 2
-    RawGEQ -> 2
-    RawLT -> 2
-    RawLEQ -> 2
+    CoreGT -> 2
+    CoreGEQ -> 2
+    CoreLT -> 2
+    CoreLEQ -> 2
     -- Bitwise Ops ->
-    RawBitwiseAnd -> 2
-    RawBitwiseOr -> 2
-    RawBitwiseXor -> 2
-    RawBitwiseFlip -> 1
-    RawBitShift -> 2
+    CoreBitwiseAnd -> 2
+    CoreBitwiseOr -> 2
+    CoreBitwiseXor -> 2
+    CoreBitwiseFlip -> 1
+    CoreBitShift -> 2
     --  Rounding ->
-    RawRound -> 1
-    RawCeiling -> 1
-    RawFloor -> 1
-    RawRoundPrec -> 2
-    RawCeilingPrec -> 2
-    RawFloorPrec -> 2
+    CoreRound -> 1
+    CoreCeiling -> 1
+    CoreFloor -> 1
+    CoreRoundPrec -> 2
+    CoreCeilingPrec -> 2
+    CoreFloorPrec -> 2
     -- Fractional ->
-    RawExp -> 1
-    RawLn -> 1
-    RawSqrt -> 1
-    RawLogBase -> 2
+    CoreExp -> 1
+    CoreLn -> 1
+    CoreSqrt -> 1
+    CoreLogBase -> 2
     -- List like ->
-    RawLength -> 1
-    RawTake -> 2
-    RawDrop -> 2
-    RawConcat -> 1
-    RawReverse -> 1
-    RawContains -> 2
-    RawSort -> 1
-    RawSortObject -> 2
-    RawRemove -> 2
+    CoreLength -> 1
+    CoreTake -> 2
+    CoreDrop -> 2
+    CoreConcat -> 1
+    CoreReverse -> 1
+    CoreContains -> 2
+    CoreSort -> 1
+    CoreSortObject -> 2
+    CoreRemove -> 2
     -- General ->
-    RawMod -> 2
-    RawMap -> 2
-    RawFilter -> 2
-    RawZip -> 3
-    -- RawIf -> 3
-    RawIntToStr -> 2
-    RawStrToInt -> 1
-    RawStrToIntBase -> 2
-    RawFold -> 3
-    RawDistinct -> 1
-    RawFormat -> 2
-    -- RawEnforce -> 2
-    -- RawEnforceOne -> 2
-    RawEnumerate -> 2
-    RawEnumerateStepN -> 3
+    CoreMod -> 2
+    CoreMap -> 2
+    CoreFilter -> 2
+    CoreZip -> 3
+    -- CoreIf -> 3
+    CoreIntToStr -> 2
+    CoreStrToInt -> 1
+    CoreStrToIntBase -> 2
+    CoreFold -> 3
+    CoreDistinct -> 1
+    CoreFormat -> 2
+    -- CoreEnforce -> 2
+    -- CoreEnforceOne -> 2
+    CoreEnumerate -> 2
+    CoreEnumerateStepN -> 3
     -- Show ->
-    RawShow -> 1
-    RawReadMsg -> 1
-    RawReadMsgDefault -> 0
-    RawReadInteger -> 1
-    RawReadDecimal -> 1
-    RawReadString -> 1
-    RawReadKeyset -> 1
-    RawEnforceKeyset -> 1
-    RawEnforceGuard -> 1
-    RawKeysetRefGuard -> 1
-    RawCreateCapabilityGuard -> 1
-    RawCreateCapabilityPactGuard -> 1
-    RawCreateModuleGuard -> 1
-    RawCreateDefPactGuard -> 1
-    RawAt -> 2
-    RawMakeList -> 2
-    RawB64Encode -> 1
-    RawB64Decode -> 1
-    RawStrToList -> 1
-    RawYield -> 1
-    RawYieldToChain -> 2
-    RawResume -> 1
-    RawBind -> 2
-    RawRequireCapability -> 1
-    RawComposeCapability -> 1
-    RawInstallCapability -> 1
-    RawEmitEvent -> 1
-    RawCreateTable -> 1
-    RawDescribeKeyset -> 1
-    RawDescribeModule -> 1
-    RawDescribeTable -> 1
-    RawDefineKeySet -> 2
-    RawDefineKeysetData -> 1
-    RawFoldDb -> 3
-    RawInsert -> 3
-    RawKeyLog -> 3
-    RawKeys -> 1
-    RawRead -> 2
-    RawSelect -> 2
-    RawSelectWithFields -> 3
-    RawUpdate -> 3
-    RawWithDefaultRead -> 4
-    RawWithRead -> 3
-    RawWrite -> 3
-    RawTxIds -> 2
-    RawTxLog -> 2
-    RawTxHash -> 0
-    RawAndQ -> 3
-    RawOrQ -> 3
-    RawWhere -> 3
-    RawNotQ -> 2
-    RawHash -> 1
-    RawContinue -> 1
-    RawParseTime -> 2
-    RawFormatTime -> 2
-    RawTime -> 1
-    RawAddTime -> 2
-    RawDiffTime -> 2
-    RawHours -> 1
-    RawMinutes -> 1
-    RawDays -> 1
-    RawCompose -> 3
-    RawCreatePrincipal -> 1
-    RawIsPrincipal -> 1
-    RawTypeOfPrincipal -> 1
-    RawValidatePrincipal -> 2
-    RawNamespace -> 1
-    RawDefineNamespace -> 3
-    RawDescribeNamespace -> 1
-    RawZkPairingCheck -> 2
-    RawZKScalarMult -> 3
-    RawZkPointAdd -> 3
-    RawPoseidonHashHackachain -> 1
-    RawChainData -> 0
-    RawIsCharset -> 2
-    RawPactId -> 0
-    RawTypeOf -> 1
-    RawDec -> 1
+    CoreShow -> 1
+    CoreReadMsg -> 1
+    CoreReadMsgDefault -> 0
+    CoreReadInteger -> 1
+    CoreReadDecimal -> 1
+    CoreReadString -> 1
+    CoreReadKeyset -> 1
+    CoreEnforceKeyset -> 1
+    CoreEnforceGuard -> 1
+    CoreKeysetRefGuard -> 1
+    CoreCreateCapabilityGuard -> 1
+    CoreCreateCapabilityPactGuard -> 1
+    CoreCreateModuleGuard -> 1
+    CoreCreateDefPactGuard -> 1
+    CoreAt -> 2
+    CoreMakeList -> 2
+    CoreB64Encode -> 1
+    CoreB64Decode -> 1
+    CoreStrToList -> 1
+    CoreYield -> 1
+    CoreYieldToChain -> 2
+    CoreResume -> 1
+    CoreBind -> 2
+    CoreRequireCapability -> 1
+    CoreComposeCapability -> 1
+    CoreInstallCapability -> 1
+    CoreEmitEvent -> 1
+    CoreCreateTable -> 1
+    CoreDescribeKeyset -> 1
+    CoreDescribeModule -> 1
+    CoreDescribeTable -> 1
+    CoreDefineKeySet -> 2
+    CoreDefineKeysetData -> 1
+    CoreFoldDb -> 3
+    CoreInsert -> 3
+    CoreKeyLog -> 3
+    CoreKeys -> 1
+    CoreRead -> 2
+    CoreSelect -> 2
+    CoreSelectWithFields -> 3
+    CoreUpdate -> 3
+    CoreWithDefaultRead -> 4
+    CoreWithRead -> 3
+    CoreWrite -> 3
+    CoreTxIds -> 2
+    CoreTxLog -> 2
+    CoreTxHash -> 0
+    CoreAndQ -> 3
+    CoreOrQ -> 3
+    CoreWhere -> 3
+    CoreNotQ -> 2
+    CoreHash -> 1
+    CoreContinue -> 1
+    CoreParseTime -> 2
+    CoreFormatTime -> 2
+    CoreTime -> 1
+    CoreAddTime -> 2
+    CoreDiffTime -> 2
+    CoreHours -> 1
+    CoreMinutes -> 1
+    CoreDays -> 1
+    CoreCompose -> 3
+    CoreCreatePrincipal -> 1
+    CoreIsPrincipal -> 1
+    CoreTypeOfPrincipal -> 1
+    CoreValidatePrincipal -> 2
+    CoreNamespace -> 1
+    CoreDefineNamespace -> 3
+    CoreDescribeNamespace -> 1
+    CoreZkPairingCheck -> 2
+    CoreZKScalarMult -> 3
+    CoreZkPointAdd -> 3
+    CorePoseidonHashHackachain -> 1
+    CoreChainData -> 0
+    CoreIsCharset -> 2
+    CorePactId -> 0
+    CoreTypeOf -> 1
+    CoreDec -> 1
 
 
 
-rawBuiltinNames :: [Text]
-rawBuiltinNames = fmap rawBuiltinToText [minBound .. maxBound]
+coreBuiltinNames :: [Text]
+coreBuiltinNames = fmap coreBuiltinToText [minBound .. maxBound]
 
-rawBuiltinMap :: Map Text RawBuiltin
-rawBuiltinMap = M.fromList $ (\b -> (rawBuiltinToText b, b)) <$> [minBound .. maxBound]
+coreBuiltinMap :: Map Text CoreBuiltin
+coreBuiltinMap = M.fromList $ (\b -> (coreBuiltinToText b, b)) <$> [minBound .. maxBound]
 
 -- Todo: rename
 -- | Our repl builtins.
@@ -544,13 +545,17 @@ data ReplBuiltins
   | RTestCapability
   | REnvExecConfig
   | REnvNamespacePolicy
-  -- | REnvGas
-  -- | REnvGasLimit
-  -- | REnvGasLog
-  -- | REnvGasModel
+  | REnvGas
+  | REnvGasSet
+  | REnvMilliGas
+  | REnvSetMilliGas
+  | REnvGasLimit
+  | REnvGasLog
+  | REnvGasModel
+  | REnvAskGasModel
+  | REnvGasModelFixed
   -- | REnvGasPrice
   -- | REnvGasRate
-  -- | REnvNamespacePolicy
   -- Defpact
   | RContinuePact
   | RContinuePactRollback
@@ -590,6 +595,15 @@ instance IsBuiltin ReplBuiltins where
     RContinuePactRollbackYieldObj -> 4
     REnvExecConfig -> 1
     REnvNamespacePolicy -> 2
+    REnvGas -> 0
+    REnvGasSet -> 1
+    REnvMilliGas -> 0
+    REnvSetMilliGas -> 1
+    REnvGasLimit -> 1
+    REnvGasLog -> 1
+    REnvGasModel -> 1
+    REnvAskGasModel -> 0
+    REnvGasModelFixed -> 1
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
 -- Note: commented out natives are
@@ -622,14 +636,14 @@ instance (Enum b, Bounded b) => Enum (ReplBuiltin b) where
     else RBuiltinRepl (toEnum (i - mbound - 1))
     where
     mbound = fromEnum (maxBound :: b)
-  {-# SPECIALISE toEnum :: Int -> ReplBuiltin RawBuiltin #-}
+  {-# SPECIALIZE toEnum :: Int -> ReplBuiltin CoreBuiltin #-}
 
   fromEnum e =
     let maxContained = fromEnum (maxBound :: b) + 1
     in case e of
       RBuiltinWrap b -> fromEnum b
       RBuiltinRepl rb -> maxContained + fromEnum rb
-  {-# SPECIALISE fromEnum :: ReplBuiltin RawBuiltin -> Int #-}
+  {-# SPECIALIZE fromEnum :: ReplBuiltin CoreBuiltin -> Int #-}
 
 replBuiltinsToText :: ReplBuiltins -> Text
 replBuiltinsToText = \case
@@ -659,18 +673,27 @@ replBuiltinsToText = \case
   RContinuePactRollbackYieldObj -> "continue-pact-rollback-yield-object"
   REnvExecConfig -> "env-exec-config"
   REnvNamespacePolicy -> "env-namespace-policy"
+  REnvGas -> "env-gas"
+  REnvGasSet -> "env-set-gas"
+  REnvMilliGas -> "env-milligas"
+  REnvSetMilliGas -> "env-set-milligas"
+  REnvGasLimit -> "env-gaslimit"
+  REnvGasLog -> "env-gaslog"
+  REnvGasModel -> "env-gasmodel"
+  REnvAskGasModel -> "env-ask-gasmodel"
+  REnvGasModelFixed -> "env-gasmodel-fixed"
 
 replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
 replBuiltinToText f = \case
   RBuiltinWrap b -> f b
   RBuiltinRepl rb -> replBuiltinsToText rb
 
-replRawBuiltinNames :: [Text]
-replRawBuiltinNames = fmap (replBuiltinToText rawBuiltinToText) [minBound .. maxBound]
+replcoreBuiltinNames :: [Text]
+replcoreBuiltinNames = fmap (replBuiltinToText coreBuiltinToText) [minBound .. maxBound]
 
-replRawBuiltinMap :: Map Text (ReplBuiltin RawBuiltin)
-replRawBuiltinMap =
-  M.fromList $ (\b -> (replBuiltinToText rawBuiltinToText b, b)) <$> [minBound .. maxBound]
+replcoreBuiltinMap :: Map Text (ReplBuiltin CoreBuiltin)
+replcoreBuiltinMap =
+  M.fromList $ (\b -> (replBuiltinToText coreBuiltinToText b, b)) <$> [minBound .. maxBound]
 
 -- Todo: is not a great abstraction.
 -- In particular: the arity could be gathered from the type.
@@ -679,8 +702,8 @@ class Show b => IsBuiltin b where
   builtinName :: b -> NativeName
 
 
-instance Pretty RawBuiltin where
-  pretty b = pretty (rawBuiltinToText b)
+instance Pretty CoreBuiltin where
+  pretty b = pretty (coreBuiltinToText b)
 
 instance (Pretty b) => Pretty (ReplBuiltin b) where
   pretty = \case

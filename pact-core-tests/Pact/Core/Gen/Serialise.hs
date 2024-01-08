@@ -123,12 +123,8 @@ nameGen = do
   name <- identGen
   Name name <$> nameKindGen
 
--- TODO
-unresolvedGovGen :: Gen (CapGovRef ParsedName)
-unresolvedGovGen = UnresolvedGov <$> parsedNameGen
-
-resolvedGovGen :: Gen (CapGovRef Name)
-resolvedGovGen = ResolvedGov <$> fullyQualifiedNameGen
+resolvedGovGen :: Gen (FQNameRef Name)
+resolvedGovGen = FQName <$> fullyQualifiedNameGen
 
 governanceGen :: Gen (Governance Name)
 governanceGen = Gen.choice
@@ -180,7 +176,7 @@ importGen = do
 infoGen :: Gen SpanInfo
 infoGen = pure def
 
-builtinGen :: Gen RawBuiltin
+builtinGen :: Gen CoreBuiltin
 builtinGen = Gen.element [minBound .. maxBound]
 
 textGen :: Gen Text
@@ -217,7 +213,6 @@ termGen b i = Gen.recursive Gen.choice
   [ Var <$> nameGen <*> i
   , Builtin <$> b <*> i
   , Constant <$> literalGen <*> i
-  , Error <$> identGen <*> i
   ]
   [ Lam <$> Gen.nonEmpty (Range.linear 1 16) argGen <*> termGen b i <*> i
   , Let <$> argGen <*> termGen b i <*> termGen b i <*> i
@@ -293,7 +288,7 @@ defCapGen b i = do
   ret <- Gen.maybe typeGen
   term <- termGen b i
   meta <- defCapMetaGen fqNameRefGen
-  DefCap name arity args ret term meta <$> i
+  DefCap name args ret term meta <$> i
 
 ifDefCapGen :: Gen i -> Gen (IfDefCap name Type i)
 ifDefCapGen i = do

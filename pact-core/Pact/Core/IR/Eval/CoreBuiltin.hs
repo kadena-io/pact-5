@@ -6,17 +6,18 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Pact.Core.IR.Eval.RawBuiltin
- ( rawBuiltinRuntime
- , rawBuiltinEnv
+module Pact.Core.IR.Eval.CoreBuiltin
+ ( coreBuiltinRuntime
+ , coreBuiltinEnv
  , coreEnforceGuard) where
 
 -- |
--- Module      :  Pact.Core.Eval.RawBuiltin
+-- Module      :  Pact.Core.Eval.CoreBuiltin
 -- Copyright   :  (C) 2022 Kadena
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Jose Cardona <jose@kadena.io>
@@ -97,6 +98,20 @@ binaryIntFn op info b cont handler _env = \case
   args -> argsError info b args
 {-# INLINE binaryIntFn #-}
 
+-- The majority of the asymptotic cost in here is this function:
+-- ```
+-- roundTo' :: (Integral i) => (Rational -> i) -> Word8 -> DecimalRaw i -> DecimalRaw i
+-- roundTo' _ d (Decimal _  0) = Decimal d 0
+-- roundTo' f d (Decimal e n) = Decimal d $ f n1
+--    where
+--       divisor = 10 ^ (e-d)
+--       multiplier = 10 ^ (d-e)
+--       n1 = case compare d e of
+--          LT -> toRational n / divisor
+--          EQ -> toRational n
+--          GT -> toRational n * multiplier
+-- `roundTo'` thus has the same asymptotic complexity as multiplication/division. Thus, worst case, we can upperbound it via
+-- division
 roundingFn :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => (Rational -> Integer) -> NativeFunction step b i m
 roundingFn op info b cont handler _env = \case
   [VLiteral (LDecimal d)] ->
@@ -109,10 +124,19 @@ roundingFn op info b cont handler _env = \case
 ---------------------------------
 -- Arithmetic Ops
 ------------------------------
+{-# SPECIALIZE rawAdd
+   :: NativeFunction CEKBigStep CoreBuiltin () Eval
+    #-}
+{-# SPECIALIZE rawAdd
+   :: NativeFunction CEKSmallStep CoreBuiltin () Eval
+    #-}
 rawAdd :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawAdd info b cont handler _env = \case
-  [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LInteger (i + i')))
-  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LDecimal (i + i')))
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
+
+    returnCEKValue cont handler (VLiteral (LInteger (i + i')))
+  [VLiteral (LDecimal i), VLiteral (LDecimal i')] ->
+    returnCEKValue cont handler (VLiteral (LDecimal (i + i')))
   [VLiteral (LString i), VLiteral (LString i')] ->
     returnCEKValue cont handler  (VLiteral (LString (i <> i')))
   [VObject l, VObject r] ->
@@ -129,8 +153,10 @@ rawSub info b cont handler _env = \case
 
 rawMul :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawMul info b cont handler _env = \case
-  [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LInteger (i * i')))
-  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LDecimal (i * i')))
+  [VLiteral (LInteger i), VLiteral (LInteger i')] ->
+    returnCEKValue cont handler (VLiteral (LInteger (i * i')))
+  [VLiteral (LDecimal i), VLiteral (LDecimal i')] ->
+    returnCEKValue cont handler (VLiteral (LDecimal (i * i')))
   args -> argsError info b args
 
 rawPow :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -183,7 +209,6 @@ rawNegate info b cont handler _env = \case
 
 rawEq :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawEq info b cont handler _env = \case
-  -- Todo: rawEqGas
   [VPactValue pv, VPactValue pv'] -> returnCEKValue cont handler (VBool (pv == pv'))
   args -> argsError info b args
 
@@ -660,23 +685,6 @@ coreB64Decode info b cont handler _env = \case
   args -> argsError info b args
 
 
--- | A version of `enforceGuard` that also accepts a continuation
--- that gets called if the guard is enforced successfully.
-enforceGuardCont
-  :: forall step b i m. (CEKEval step b i m, MonadEval b i m)
-  => i
-  -> Cont step b i m
-  -> CEKErrorHandler step b i m
-  -> CEKEnv step b i m
-  -> Guard QualifiedName PactValue
-  -> m (CEKEvalResult step b i m)
-  -> m (CEKEvalResult step b i m)
-enforceGuardCont info cekCont cekHandler env g successCont = do
-  cev <- enforceGuard info Mt CEKNoHandler env g
-  evalUnsafe @step cev >>= \case
-    EvalValue {} -> successCont
-    VError e i -> returnCEK cekCont cekHandler (VError e i)
-
 -- | The implementation of `enforce-guard` native.
 coreEnforceGuard :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreEnforceGuard info b cont handler env = \case
@@ -854,8 +862,9 @@ dbRead info b cont handler env = \case
 dbWithRead :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 dbWithRead info b cont handler env = \case
   [VTable tv, VString k, VClosure clo] -> do
-    let cont' = BuiltinC env info (WithReadC tv (RowKey k) clo) cont
-    guardTable info cont' handler env tv GtWithRead
+    let cont1 = Fn clo env [] [] cont
+    let cont2 = BuiltinC env info (ReadC tv (RowKey k)) cont1
+    guardTable info cont2 handler env tv GtWithRead
   args -> argsError info b args
 
 dbWithDefaultRead :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -941,10 +950,9 @@ defineKeySet' info cont handler env ksname newKs  = do
         Nothing | otherwise -> useEvalState (esLoaded . loNamespace) >>= \case
           Nothing -> returnCEK cont handler (VError "Cannot define a keyset outside of a namespace" info)
           Just (Namespace ns uGuard _adminGuard) -> do
-            enforceGuardCont info cont handler env uGuard $
-              if Just ns == _keysetNs ksn
-                then writeKs
-                else returnCEK cont handler (VError "Mismatching keyset namespace" info)
+            when (Just ns /= _keysetNs ksn) $ throwExecutionError info (MismatchingKeysetNamespace ns)
+            let cont' = BuiltinC env info (DefineKeysetC ksn newKs) cont
+            enforceGuard info cont' handler env uGuard
 
 defineKeySet :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 defineKeySet info b cont handler env = \case
@@ -1336,35 +1344,44 @@ coreCompose info b cont handler env = \case
     applyLam clo1 [v] cont' handler
   args -> argsError info b args
 
-createPrincipalForGuard :: Guard QualifiedName PactValue -> Pr.Principal
-createPrincipalForGuard = \case
+createPrincipalForGuard :: (MonadEval b i m) => i -> Guard QualifiedName PactValue -> m (Pr.Principal)
+createPrincipalForGuard info = \case
   GKeyset (KeySet ks pf) -> case (toList ks, pf) of
     ([k], KeysAll)
-      | ed25519HexFormat k -> Pr.K k
-    (l, _) -> let h = mkHash $ map (T.encodeUtf8 . _pubKey) l
-              in Pr.W (hashToText h) (predicateToString pf)
-  GKeySetRef ksn -> Pr.R ksn
-  GModuleGuard (ModuleGuard mn n) -> Pr.M mn n
-  GUserGuard (UserGuard f args) ->
-    let h = mkHash $ map encodeStable args
-    in Pr.U (renderQualName f) (hashToText h)
+      | ed25519HexFormat k -> Pr.K k <$ chargeGas 1_000
+    (l, _) -> do
+      h <- mkHash $ map (T.encodeUtf8 . _pubKey) l
+      pure $ Pr.W (hashToText h) (predicateToString pf)
+  GKeySetRef ksn ->
+    Pr.R ksn <$ chargeGas 1_000
+  GModuleGuard (ModuleGuard mn n) ->
+    Pr.M mn n <$ chargeGas 1_000
+  GUserGuard (UserGuard f args) -> do
+    h <- mkHash $ map encodeStable args
+    pure $ Pr.U (renderQualName f) (hashToText h)
     -- TODO orig pact gets here ^^^^ a Name
     -- which can be any of QualifiedName/BareName/DynamicName/FQN,
     -- and uses the rendered string here. Need to double-check equivalence.
-  GCapabilityGuard (CapabilityGuard f args pid) ->
+  GCapabilityGuard (CapabilityGuard f args pid) -> do
     let args' = map encodeStable args
         f' = T.encodeUtf8 $ renderQualName f
         pid' = T.encodeUtf8 . renderDefPactId <$> pid
-        h = mkHash $ f' : args' ++ maybeToList pid'
-    in Pr.C $ hashToText h
-  GDefPactGuard (DefPactGuard dpid name) -> Pr.P dpid name
+    h <- mkHash $ f' : args' ++ maybeToList pid'
+    pure $ Pr.C $ hashToText h
+  GDefPactGuard (DefPactGuard dpid name) -> Pr.P dpid name <$ chargeGas 1_000
   where
-    mkHash bss = pactHash $ mconcat bss
+    chargeGas mg = chargeGasArgs info (GAConstant (MilliGas mg))
+    mkHash bss = do
+      let bs = mconcat bss
+          gasChargeAmt = 1_000 + fromIntegral (BS.length bs `quot` 64) * 1_000
+      chargeGas gasChargeAmt
+      pure $ pactHash bs
+
 
 coreCreatePrincipal :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreCreatePrincipal info b cont handler _env = \case
   [VGuard g] -> do
-    let pr = createPrincipalForGuard g
+    pr <- createPrincipalForGuard info g
     returnCEKValue cont handler $ VString $ Pr.mkPrincipalIdent pr
   args -> argsError info b args
 
@@ -1385,7 +1402,7 @@ coreTypeOfPrincipal info b cont handler _env = \case
 coreValidatePrincipal :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreValidatePrincipal info b cont handler _env = \case
   [VGuard g, VString s] -> do
-    let pr' = createPrincipalForGuard g
+    pr' <- createPrincipalForGuard info g
     returnCEKValue cont handler $ VBool $ Pr.mkPrincipalIdent pr' == s
   args -> argsError info b args
 
@@ -1418,43 +1435,31 @@ coreDefineNamespace info b cont handler env = \case
     enforceTopLevelOnly info b
     unless (isValidNsFormat n) $ throwExecutionError info (DefineNamespaceError "invalid namespace format")
     let pdb = view cePactDb env
+    let nsn = NamespaceName n
+        ns = Namespace nsn usrG adminG
     liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
       -- G!
       -- https://static.wikia.nocookie.net/onepiece/images/5/52/Lao_G_Manga_Infobox.png/revision/latest?cb=20150405020446
       -- Enforce the old guard
-      Just (Namespace _ _ laoG) ->
-        enforceGuardCont info cont handler env laoG $ do
-          let nsn = NamespaceName n
-              ns = Namespace nsn usrG adminG
+      Just (Namespace _ _ laoG) -> do
+        let cont' = BuiltinC env info (DefineNamespaceC ns) cont
+        enforceGuard info cont' handler env laoG
+      Nothing -> viewEvalEnv eeNamespacePolicy >>= \case
+        SimpleNamespacePolicy -> do
           liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
           returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
-      Nothing -> do
-        enforcePolicy pdb n adminG
-        let nsn = NamespaceName n
-            ns = Namespace nsn usrG adminG
-        liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
-        returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
+        SmartNamespacePolicy _ fun -> getModuleMember info pdb fun >>= \case
+          Dfun d -> do
+            clo <- mkDefunClosure d (_qnModName fun) env
+            let cont' = BuiltinC env info (DefineNamespaceC ns) cont
+            applyLam (C clo) [VString n, VGuard adminG] cont' handler
+          _ -> failInvariant info "Fatal error: namespace manager function is not a defun"
   args -> argsError info b args
   where
-  enforcePolicy pdb nsn adminG = viewEvalEnv eeNamespacePolicy >>= \case
-    SimpleNamespacePolicy -> pure ()
-    SmartNamespacePolicy _ fun -> getModuleMember info pdb fun >>= \case
-      Dfun d -> do
-        clo <- mkDefunClosure d (_qnModName fun) env
-        -- Todo: nested exec?
-        applyLamUnsafe (C clo) [VString nsn, VGuard adminG] Mt CEKNoHandler >>= \case
-          EvalValue (VBool allow) ->
-            unless allow $ throwExecutionError info $ DefineNamespaceError "Namespace definition not permitted"
-          EvalValue _ ->
-            throwExecutionError info $ DefineNamespaceError "Namespace manager function returned an invalid value"
-          VError e _ ->
-            throwExecutionError info $ DefineNamespaceError e
-      _ -> failInvariant info "Namespace manager function is not a defun"
   isValidNsFormat nsn = case T.uncons nsn of
     Just (h, tl) ->
       isValidNsHead h && T.all isValidNsChar tl
     Nothing -> False
-    -- not (T.null nsn) && isValidNsHead (T.head nsn) && T.all isValidNsChar (T.tail )
   isValidNsHead c =
     Char.isLatin1 c && Char.isAlpha c
   isValidNsChar c =
@@ -1626,143 +1631,155 @@ poseidonHash info b cont handler _env = \case
 -- Builtin exports
 -----------------------------------
 
-rawBuiltinEnv
-  :: forall step i m. (CEKEval step RawBuiltin i m, MonadEval RawBuiltin i m)
-  => BuiltinEnv step RawBuiltin i m
-rawBuiltinEnv i b env = mkBuiltinFn i b env (rawBuiltinRuntime b)
 
-rawBuiltinRuntime
+{-# SPECIALIZE coreBuiltinEnv :: CoreBuiltinEnv #-}
+{-# SPECIALIZE coreBuiltinEnv :: BuiltinEnv CEKSmallStep CoreBuiltin () Eval #-}
+coreBuiltinEnv
+  :: forall step i m. (CEKEval step CoreBuiltin i m, MonadEval CoreBuiltin i m)
+  => BuiltinEnv step CoreBuiltin i m
+coreBuiltinEnv i b env = mkBuiltinFn i b env (coreBuiltinRuntime b)
+
+
+{-# SPECIALIZE coreBuiltinRuntime
+   :: CoreBuiltin
+   -> NativeFunction CEKBigStep CoreBuiltin () Eval
+    #-}
+{-# SPECIALIZE coreBuiltinRuntime
+   :: CoreBuiltin
+   -> NativeFunction CEKSmallStep CoreBuiltin () Eval
+    #-}
+coreBuiltinRuntime
   :: (CEKEval step b i m, MonadEval b i m, IsBuiltin b)
-  => RawBuiltin
+  => CoreBuiltin
   -> NativeFunction step b i m
-rawBuiltinRuntime = \case
-  RawAdd -> rawAdd
-  RawSub -> rawSub
-  RawMultiply -> rawMul
-  RawDivide -> rawDiv
-  RawNegate -> rawNegate
-  RawAbs -> rawAbs
-  RawPow -> rawPow
-  RawNot -> notBool
-  RawEq -> rawEq
-  RawNeq -> rawNeq
-  RawGT -> rawGt
-  RawGEQ -> rawGeq
-  RawLT -> rawLt
-  RawLEQ -> rawLeq
-  RawBitwiseAnd -> bitAndInt
-  RawBitwiseOr -> bitOrInt
-  RawBitwiseXor -> bitXorInt
-  RawBitwiseFlip -> bitComplementInt
-  RawBitShift -> bitShiftInt
-  RawRound -> roundDec
-  RawCeiling -> ceilingDec
-  RawFloor -> floorDec
-  RawRoundPrec -> roundDec
-  RawCeilingPrec -> ceilingDec
-  RawFloorPrec -> floorDec
-  RawExp -> rawExp
-  RawLn -> rawLn
-  RawSqrt -> rawSqrt
-  RawLogBase -> rawLogBase
-  RawLength -> rawLength
-  RawTake -> rawTake
-  RawDrop -> rawDrop
-  RawConcat -> coreConcat
-  RawReverse -> rawReverse
-  RawMod -> modInt
-  RawMap -> coreMap
-  RawFilter -> coreFilter
-  RawZip -> zipList
-  RawIntToStr -> coreIntToStr
-  RawStrToInt -> coreStrToInt
-  RawStrToIntBase -> coreStrToIntBase
-  RawFold -> coreFold
-  RawDistinct -> coreDistinct
-  RawFormat -> coreFormat
-  RawContains -> rawContains
-  RawSort -> rawSort
-  RawSortObject -> rawSortObject
-  RawRemove -> coreRemove
-  -- RawEnforce -> coreEnforce
-  -- RawEnforceOne -> unimplemented
-  RawEnumerate -> coreEnumerate
-  RawEnumerateStepN -> coreEnumerateStepN
-  RawShow -> rawShow
-  RawReadMsg -> coreReadMsg
-  RawReadMsgDefault -> coreReadMsg
-  RawReadInteger -> coreReadInteger
-  RawReadDecimal -> coreReadDecimal
-  RawReadString -> coreReadString
-  RawReadKeyset -> coreReadKeyset
-  RawEnforceGuard -> coreEnforceGuard
-  RawYield -> coreYield
-  RawYieldToChain -> coreYield
-  RawResume -> coreResume
-  RawEnforceKeyset -> coreEnforceGuard
-  RawKeysetRefGuard -> keysetRefGuard
-  RawAt -> coreAccess
-  RawMakeList -> makeList
-  RawB64Encode -> coreB64Encode
-  RawB64Decode -> coreB64Decode
-  RawStrToList -> strToList
-  RawBind -> coreBind
-  RawRequireCapability -> requireCapability
-  RawComposeCapability -> composeCapability
-  RawInstallCapability -> installCapability
-  RawCreateCapabilityGuard -> createCapGuard
-  RawCreateCapabilityPactGuard -> createCapabilityPactGuard
-  RawCreateModuleGuard -> createModuleGuard
-  RawCreateDefPactGuard -> createDefPactGuard
-  RawEmitEvent -> coreEmitEvent
-  RawCreateTable -> createTable
-  RawDescribeKeyset -> dbDescribeKeySet
-  RawDescribeModule -> describeModule
-  RawDescribeTable -> dbDescribeTable
-  RawDefineKeySet -> defineKeySet
-  RawDefineKeysetData -> defineKeySet
-  RawFoldDb -> foldDb
-  RawInsert -> dbInsert
-  RawWrite -> dbWrite
-  RawKeyLog -> dbKeyLog
-  RawKeys -> dbKeys
-  RawRead -> dbRead
-  RawSelect -> dbSelect
-  RawUpdate -> dbUpdate
-  RawWithDefaultRead -> dbWithDefaultRead
-  RawWithRead -> dbWithRead
-  RawTxLog -> dbTxLog
-  RawTxIds -> dbTxIds
-  RawAndQ -> coreAndQ
-  RawOrQ -> coreOrQ
-  RawWhere -> coreWhere
-  RawNotQ -> coreNotQ
-  RawHash -> coreHash
-  RawTxHash -> txHash
-  RawContinue -> coreContinue
-  RawParseTime -> parseTime
-  RawFormatTime -> formatTime
-  RawTime -> time
-  RawAddTime -> addTime
-  RawDiffTime -> diffTime
-  RawHours -> hours
-  RawMinutes -> minutes
-  RawDays -> days
-  RawCompose -> coreCompose
-  RawSelectWithFields -> dbSelect
-  RawCreatePrincipal -> coreCreatePrincipal
-  RawIsPrincipal -> coreIsPrincipal
-  RawTypeOfPrincipal -> coreTypeOfPrincipal
-  RawValidatePrincipal -> coreValidatePrincipal
-  RawNamespace -> coreNamespace
-  RawDefineNamespace -> coreDefineNamespace
-  RawDescribeNamespace -> coreDescribeNamespace
-  RawZkPairingCheck -> zkPairingCheck
-  RawZKScalarMult -> zkScalaMult
-  RawZkPointAdd -> zkPointAddition
-  RawPoseidonHashHackachain -> poseidonHash
-  RawChainData -> coreChainData
-  RawIsCharset -> coreIsCharset
-  RawPactId -> corePactId
-  RawTypeOf -> coreTypeOf
-  RawDec -> coreDec
+coreBuiltinRuntime = \case
+  CoreAdd -> rawAdd
+  CoreSub -> rawSub
+  CoreMultiply -> rawMul
+  CoreDivide -> rawDiv
+  CoreNegate -> rawNegate
+  CoreAbs -> rawAbs
+  CorePow -> rawPow
+  CoreNot -> notBool
+  CoreEq -> rawEq
+  CoreNeq -> rawNeq
+  CoreGT -> rawGt
+  CoreGEQ -> rawGeq
+  CoreLT -> rawLt
+  CoreLEQ -> rawLeq
+  CoreBitwiseAnd -> bitAndInt
+  CoreBitwiseOr -> bitOrInt
+  CoreBitwiseXor -> bitXorInt
+  CoreBitwiseFlip -> bitComplementInt
+  CoreBitShift -> bitShiftInt
+  CoreRound -> roundDec
+  CoreCeiling -> ceilingDec
+  CoreFloor -> floorDec
+  CoreRoundPrec -> roundDec
+  CoreCeilingPrec -> ceilingDec
+  CoreFloorPrec -> floorDec
+  CoreExp -> rawExp
+  CoreLn -> rawLn
+  CoreSqrt -> rawSqrt
+  CoreLogBase -> rawLogBase
+  CoreLength -> rawLength
+  CoreTake -> rawTake
+  CoreDrop -> rawDrop
+  CoreConcat -> coreConcat
+  CoreReverse -> rawReverse
+  CoreMod -> modInt
+  CoreMap -> coreMap
+  CoreFilter -> coreFilter
+  CoreZip -> zipList
+  CoreIntToStr -> coreIntToStr
+  CoreStrToInt -> coreStrToInt
+  CoreStrToIntBase -> coreStrToIntBase
+  CoreFold -> coreFold
+  CoreDistinct -> coreDistinct
+  CoreFormat -> coreFormat
+  CoreContains -> rawContains
+  CoreSort -> rawSort
+  CoreSortObject -> rawSortObject
+  CoreRemove -> coreRemove
+  -- CoreEnforce -> coreEnforce
+  -- CoreEnforceOne -> unimplemented
+  CoreEnumerate -> coreEnumerate
+  CoreEnumerateStepN -> coreEnumerateStepN
+  CoreShow -> rawShow
+  CoreReadMsg -> coreReadMsg
+  CoreReadMsgDefault -> coreReadMsg
+  CoreReadInteger -> coreReadInteger
+  CoreReadDecimal -> coreReadDecimal
+  CoreReadString -> coreReadString
+  CoreReadKeyset -> coreReadKeyset
+  CoreEnforceGuard -> coreEnforceGuard
+  CoreYield -> coreYield
+  CoreYieldToChain -> coreYield
+  CoreResume -> coreResume
+  CoreEnforceKeyset -> coreEnforceGuard
+  CoreKeysetRefGuard -> keysetRefGuard
+  CoreAt -> coreAccess
+  CoreMakeList -> makeList
+  CoreB64Encode -> coreB64Encode
+  CoreB64Decode -> coreB64Decode
+  CoreStrToList -> strToList
+  CoreBind -> coreBind
+  CoreRequireCapability -> requireCapability
+  CoreComposeCapability -> composeCapability
+  CoreInstallCapability -> installCapability
+  CoreCreateCapabilityGuard -> createCapGuard
+  CoreCreateCapabilityPactGuard -> createCapabilityPactGuard
+  CoreCreateModuleGuard -> createModuleGuard
+  CoreCreateDefPactGuard -> createDefPactGuard
+  CoreEmitEvent -> coreEmitEvent
+  CoreCreateTable -> createTable
+  CoreDescribeKeyset -> dbDescribeKeySet
+  CoreDescribeModule -> describeModule
+  CoreDescribeTable -> dbDescribeTable
+  CoreDefineKeySet -> defineKeySet
+  CoreDefineKeysetData -> defineKeySet
+  CoreFoldDb -> foldDb
+  CoreInsert -> dbInsert
+  CoreWrite -> dbWrite
+  CoreKeyLog -> dbKeyLog
+  CoreKeys -> dbKeys
+  CoreRead -> dbRead
+  CoreSelect -> dbSelect
+  CoreUpdate -> dbUpdate
+  CoreWithDefaultRead -> dbWithDefaultRead
+  CoreWithRead -> dbWithRead
+  CoreTxLog -> dbTxLog
+  CoreTxIds -> dbTxIds
+  CoreAndQ -> coreAndQ
+  CoreOrQ -> coreOrQ
+  CoreWhere -> coreWhere
+  CoreNotQ -> coreNotQ
+  CoreHash -> coreHash
+  CoreTxHash -> txHash
+  CoreContinue -> coreContinue
+  CoreParseTime -> parseTime
+  CoreFormatTime -> formatTime
+  CoreTime -> time
+  CoreAddTime -> addTime
+  CoreDiffTime -> diffTime
+  CoreHours -> hours
+  CoreMinutes -> minutes
+  CoreDays -> days
+  CoreCompose -> coreCompose
+  CoreSelectWithFields -> dbSelect
+  CoreCreatePrincipal -> coreCreatePrincipal
+  CoreIsPrincipal -> coreIsPrincipal
+  CoreTypeOfPrincipal -> coreTypeOfPrincipal
+  CoreValidatePrincipal -> coreValidatePrincipal
+  CoreNamespace -> coreNamespace
+  CoreDefineNamespace -> coreDefineNamespace
+  CoreDescribeNamespace -> coreDescribeNamespace
+  CoreZkPairingCheck -> zkPairingCheck
+  CoreZKScalarMult -> zkScalaMult
+  CoreZkPointAdd -> zkPointAddition
+  CorePoseidonHashHackachain -> poseidonHash
+  CoreChainData -> coreChainData
+  CoreIsCharset -> coreIsCharset
+  CorePactId -> corePactId
+  CoreTypeOf -> coreTypeOf
+  CoreDec -> coreDec

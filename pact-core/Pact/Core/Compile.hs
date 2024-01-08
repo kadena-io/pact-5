@@ -92,6 +92,10 @@ enforceNamespaceInstall info bEnv =
         throwExecutionError info (NamespaceInstallError "cannot install in root namespace")
     allowRoot SimpleNamespacePolicy = True
     allowRoot (SmartNamespacePolicy ar _) = ar
+{-# SPECIALIZE enforceNamespaceInstall
+  :: ()
+  -> CoreBuiltinEnv
+  -> Eval ()  #-}
 
 -- | Evaluate module governance
 evalModuleGovernance
@@ -112,10 +116,10 @@ evalModuleGovernance bEnv tl = do
           term <- case _mGovernance targetModule of
             KeyGov (KeySetName ksn _mNs) -> do
               let ksnTerm = Constant (LString ksn) info
-                  ksrg = App (Builtin (liftRaw RawKeysetRefGuard) info) (pure ksnTerm) info
-                  term = App (Builtin (liftRaw RawEnforceGuard) info) (pure ksrg) info
+                  ksrg = App (Builtin (liftCoreBuiltin CoreKeysetRefGuard) info) (pure ksnTerm) info
+                  term = App (Builtin (liftCoreBuiltin CoreEnforceGuard) info) (pure ksrg) info
               pure term
-            CapGov (ResolvedGov fqn) -> do
+            CapGov (FQName fqn) -> do
               let cgBody = Constant LUnit info
                   withCapApp = App (Var (fqnToName fqn) info) [] info
                   term = CapabilityForm (WithCapability withCapApp cgBody) info
@@ -134,6 +138,10 @@ evalModuleGovernance bEnv tl = do
         Just _ ->
           throwExecutionError info  (CannotUpgradeInterface ifn)
     _ -> pure ()
+{-# SPECIALIZE evalModuleGovernance
+  :: CoreBuiltinEnv
+  -> Lisp.TopLevel ()
+  -> Eval ()  #-}
 
 interpretTopLevel
   :: forall step b i m
@@ -184,3 +192,7 @@ interpretTopLevel bEnv tl = do
       pure (LoadedInterface (view ifName iface) (view ifHash iface))
     TLTerm term -> (`InterpretValue` (view termInfo term)) <$> Eval.eval PImpure bEnv term
     TLUse imp _ -> pure (LoadedImports imp)
+{-# SPECIALIZE interpretTopLevel
+  :: CoreBuiltinEnv
+  -> Lisp.TopLevel ()
+  -> Eval (CompileValue ())  #-}

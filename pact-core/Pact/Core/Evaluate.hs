@@ -27,6 +27,7 @@ import Data.Maybe (fromMaybe)
 import Data.Default
 import Data.Text (Text)
 import Data.Map.Strict(Map)
+import Data.IORef
 
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -36,7 +37,7 @@ import Pact.Core.Compile
 import Pact.Core.Environment
 import Pact.Core.Errors
 import Pact.Core.Hash (Hash)
-import Pact.Core.IR.Eval.RawBuiltin
+import Pact.Core.IR.Eval.CoreBuiltin
 import Pact.Core.IR.Eval.Runtime hiding (EvalResult)
 import Pact.Core.Persistence
 import Pact.Core.DefPacts.Types
@@ -52,12 +53,8 @@ import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.IR.Eval.Runtime.Types as Eval
 
--- | Our production evaluation alias
---   TODO: Maybe export from Runtime.Types?
-type Eval = EvalM RawBuiltin ()
-
 -- Our Builtin environment for evaluation in Chainweb prod
-type EvalBuiltinEnv = BuiltinEnv Eval.CEKBigStep RawBuiltin () Eval
+type EvalBuiltinEnv = CoreBuiltinEnv
 
 -- | Transaction-payload related environment data.
 data MsgData = MsgData
@@ -71,7 +68,7 @@ initMsgData :: Hash -> MsgData
 initMsgData h = MsgData (PObject mempty) def h mempty
 
 builtinEnv :: EvalBuiltinEnv
-builtinEnv = rawBuiltinEnv @Eval.CEKBigStep
+builtinEnv = coreBuiltinEnv @Eval.CEKBigStep
 
 type EvalInput = Either (Maybe DefPactExec) [Lisp.TopLevel ()]
 
@@ -90,7 +87,7 @@ data EvalResult = EvalResult
     -- ^ Result of defpact execution if any
   , _erGas :: Gas
     -- ^ Gas consumed/charged
-  , _erLoadedModules :: Map ModuleName (ModuleData RawBuiltin ())
+  , _erLoadedModules :: Map ModuleName (ModuleData CoreBuiltin ())
     -- ^ Modules loaded, with flag indicating "newly loaded"
   , _erTxId :: !(Maybe TxId)
     -- ^ Transaction id, if executed transactionally
@@ -103,7 +100,7 @@ data EvalResult = EvalResult
   } deriving (Show)
 
 setupEvalEnv
-  :: PactDb RawBuiltin ()
+  :: PactDb CoreBuiltin ()
   -> ExecutionMode -- <- we have this
   -> MsgData -- <- create at type for this
   -- -> GasEnv -- <- also have this, use constant gas model
@@ -111,9 +108,10 @@ setupEvalEnv
   -- -> SPVSupport -- <- WIP: Ignore for now
   -> PublicData -- <- we have this
   -> S.Set ExecutionFlag
-  -> EvalEnv RawBuiltin ()
-setupEvalEnv pdb mode msgData np pd efs =
-  EvalEnv
+  -> IO (EvalEnv CoreBuiltin ())
+setupEvalEnv pdb mode msgData np pd efs = do
+  gasRef <- newIORef mempty
+  pure $ EvalEnv
     { _eeMsgSigs = mkMsgSigs $ mdSigners msgData
     , _eePactDb = pdb
     , _eeMsgBody = mdData msgData
@@ -122,8 +120,10 @@ setupEvalEnv pdb mode msgData np pd efs =
     , _eeDefPactStep = mdStep msgData
     , _eeMode = mode
     , _eeFlags = efs
-    , _eeNatives = rawBuiltinMap
+    , _eeNatives = coreBuiltinMap
     , _eeNamespacePolicy = np
+    , _eeGasRef = gasRef
+    , _eeGasModel = freeGasModel
     }
   where
   mkMsgSigs ss = M.fromList $ map toPair ss
@@ -131,12 +131,12 @@ setupEvalEnv pdb mode msgData np pd efs =
     where
     pk = PublicKeyText $ fromMaybe pubK addr
 
-evalExec :: EvalEnv RawBuiltin () -> RawCode -> IO (Either (PactError ()) EvalResult)
+evalExec :: EvalEnv CoreBuiltin () -> RawCode -> IO (Either (PactError ()) EvalResult)
 evalExec evalEnv rc = do
   terms <- either throwM return $ compileOnly rc
   either throwError return <$> interpret evalEnv (Right terms)
 
-interpret :: EvalEnv RawBuiltin () -> EvalInput -> IO (Either (PactError ()) EvalResult)
+interpret :: EvalEnv CoreBuiltin () -> EvalInput -> IO (Either (PactError ()) EvalResult)
 interpret evalEnv evalInput = do
   (result, state) <- runEvalM evalEnv def $ evalWithinTx evalInput
   case result of
@@ -157,7 +157,7 @@ interpret evalEnv evalInput = do
 -- Used to be `evalTerms`
 evalWithinTx
   :: EvalInput
-  -> EvalM RawBuiltin () ([CompileValue ()], [TxLog ByteString], Maybe TxId)
+  -> EvalM CoreBuiltin () ([CompileValue ()], [TxLog ByteString], Maybe TxId)
 evalWithinTx input = withRollback (start runInput >>= end)
 
   where
@@ -206,11 +206,11 @@ resumePact mdp =
   (`InterpretValue` ()) <$> Eval.evalResumePact () builtinEnv mdp
 
 -- | Compiles and evaluates the code
-evaluateDefaultState :: RawCode -> EvalM RawBuiltin () [CompileValue ()]
+evaluateDefaultState :: RawCode -> Eval [CompileValue ()]
 evaluateDefaultState = either throwError evaluateTerms . compileOnly
 
 evaluateTerms
   :: [Lisp.TopLevel ()]
-  -> EvalM RawBuiltin () [CompileValue ()]
+  -> Eval [CompileValue ()]
 evaluateTerms tls = do
   traverse (interpretTopLevel builtinEnv) tls

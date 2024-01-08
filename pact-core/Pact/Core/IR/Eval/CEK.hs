@@ -33,6 +33,9 @@ module Pact.Core.IR.Eval.CEK
   , guardForModuleCall
   , enforceGuard
   , evalResumePact
+  , applyContSmallStep
+  , applyContToValueSmallStep
+  , evaluateTermSmallStep
   , CEKEval(..)) where
 
 
@@ -68,7 +71,9 @@ import Pact.Core.StableEncoding
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
+import Pact.Core.Namespace
 import Pact.Core.DefPacts.Types
+
 
 class CEKEval (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type) | m -> b, m -> i where
   returnCEKValue :: Cont step b i m -> CEKErrorHandler step b i m -> CEKValue step b i m -> m (CEKEvalResult step b i m)
@@ -85,12 +90,6 @@ class CEKEval (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> 
 
   evalUnsafe :: CEKEvalResult step b i m -> m (EvalResult step b i m)
 
-
-
-chargeNodeGas :: (MonadEval b i m) => NodeType -> m ()
-chargeNodeGas _nt = pure ()
-  -- gm <- view (eeGasModel . geGasModel . gmNodes) <$> readEnv
-  -- chargeGas (gm nt)
 
 {-
   Our CEKH Machine's transitions when reducing terms.
@@ -122,12 +121,14 @@ evaluateTerm
 --   <Var n, E, K, H>      <E(n), E, K, H>
 --
 -- Handles free variable lookups as well as module reference dynamic invokes
+-- Todo: it may not be worthwhile if accessing local variables is fast to charge
+-- anything but a constant amount of gas, but it would be a worthwhile exercise.
 evaluateTerm cont handler env (Var n info)  = do
   case _nKind n of
-    NBound i -> case RAList.lookup (view ceLocal env) i of
-      -- Todo: module ref anns here
-      Just v -> returnCEKValue cont handler v
-      Nothing -> failInvariant info ("unbound identifier" <> T.pack (show n))
+    NBound i -> do
+      case RAList.lookup (_ceLocal env) i of
+        Just v -> returnCEKValue cont handler v
+        Nothing -> failInvariant info ("unbound identifier" <> T.pack (show n))
     -- Top level names are not closures, so we wipe the env
     NTopLevel mname mh -> do
       let fqn = FullyQualifiedName mname (_nName n) mh
@@ -138,14 +139,15 @@ evaluateTerm cont handler env (Var n info)  = do
         -- Todo: this should be GADT'd out
         -- and defconsts should already be evaluated
         Just (DConst d) -> case _dcTerm d of
-          -- Todo: should this be an error?
-          -- probably.
+          -- Note: `TermConst` cannot and should not be `evalCEK`'d. This is an error
+          -- this can cause semantic divergences, due to things like provided data.
+          -- moreover defcosts are always evaluated in `SysOnly` mode.
           TermConst _term ->
             failInvariant info "Defconst not fully evaluated"
           EvaledConst v ->
             returnCEKValue cont handler (VPactValue v)
         Just (DPact d) -> do
-          dpactClo <- mkDefPactClosure info fqn d env
+          let dpactClo = mkDefPactClosure info fqn d env
           returnCEKValue cont handler dpactClo
         Just (DTable d) ->
           let (ResolvedTable sc) = _dtSchema d
@@ -174,43 +176,48 @@ evaluateTerm cont handler env (Var n info)  = do
 -- | ------ From ------ | ------ To ------ |
 --   <Const l, E, K, H>    <Value l, E, K, H>
 --
-evaluateTerm cont handler _env (Constant l _) = do
+evaluateTerm cont handler _env (Constant l _info) = do
+  -- chargeGasArgs _info (GAConstant constantWorkNodeGas)
   returnCEKValue cont handler (VLiteral l)
 -- | ------ From ---------- | ------ To ------ |
 --   <App fn args, E, K, H>    <fn, E, Args(E,args,K), H>
 --
 evaluateTerm cont handler env (App fn args info) = do
+  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
   evalCEK (Args env info args cont) handler env fn
 -- | ------ From ---------- | ------ To ------ |
 --   <Nullary body, E, K, H>    <VClosure(body, E), E, K, H>
 --
 evaluateTerm cont handler env (Nullary body info) = do
+  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
   let clo = VLamClosure (LamClosure NullaryClosure 0 body Nothing env info)
   returnCEKValue cont handler clo
 -- | ------ From ---------- | ------ To ------ |
 --   <Let e1 e2, E, K, H>      <e1, E, LetC(E,e2,K), H>
 --
-evaluateTerm cont handler env (Let _ e1 e2 _) = do
+evaluateTerm cont handler env (Let _ e1 e2 _info) = do
+  -- chargeGasArgs _info (GAConstant constantWorkNodeGas)
   let cont' = LetC env e2 cont
   evalCEK cont' handler env e1
 -- | ------ From ---------- | ------ To ------ |
 --   <Lam args body, E, K, H>      <VLamClo(args, body, E), E, K, H>
 --
 evaluateTerm cont handler env (Lam args body info) = do
-  let clo = VLamClosure (LamClosure (ArgClosure (_argType <$> args)) (NE.length args) body Nothing env info)
+  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
+  let clo = VLamClosure (LamClosure (ArgClosure args) (NE.length args) body Nothing env info)
   returnCEKValue cont handler clo
 -- | ------ From ------ | ------ To ------ |
 --   <Builtin b, E, K, H>    <E(b), E, K, H>
 --
-evaluateTerm cont handler env (Builtin b i) = do
-  chargeNodeGas BuiltinNode
+evaluateTerm cont handler env (Builtin b info) = do
+  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
   let builtins = view ceBuiltins env
-  returnCEKValue cont handler (VNative (builtins i b env))
+  returnCEKValue cont handler (VNative (builtins info b env))
 -- | ------ From ------ | ------ To ----------------- |
 --   <Seq e1 e2, E, K, H>    <e1, E, SeqC(E, e2, K), H>
 --
-evaluateTerm cont handler env (Sequence e1 e2 _) = do
-  chargeNodeGas SeqNode
+evaluateTerm cont handler env (Sequence e1 e2 _info) = do
+  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
   evalCEK (SeqC env e2 cont) handler env e1
 -- | ------ From --------------- | ------ To ------------------------ |
 --   <CAnd e1 e2, E, K, H>         <e1, E, CondC(E, AndFrame(e2),K),H>
@@ -218,25 +225,37 @@ evaluateTerm cont handler env (Sequence e1 e2 _) = do
 --   <CIf cond ifc elc, E, K, H>   <cond, E, CondC(E, IfFrame(ifc,elc),K), H>
 --  Todo: enforce and enforce-one
 evaluateTerm cont handler env (Conditional c info) = case c of
-  CAnd te te' ->
+  CAnd te te' -> do
+    -- chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env info (AndC te') cont) handler env te
-  COr te te' ->
+  COr te te' -> do
+    -- chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env info (OrC te') cont) handler env te
-  CIf cond e1 e2 ->
+  CIf cond e1 e2 -> do
+    -- chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env info (IfC e1 e2) cont) handler env cond
   CEnforce cond str -> do
     let env' = sysOnlyEnv env
+    -- chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env' info (EnforceC str) cont) handler env' cond
-  CEnforceOne str conds -> case conds of
-    [] -> returnCEK cont handler (VError "enforce-one failure" info)
-    x:xs -> do
-      errState <- evalStateToErrorState <$> getEvalState
-      let env' = readOnlyEnv env
-      let handler' = CEKEnforceOne env' info str xs cont errState handler
-      let cont' = CondC env' info (EnforceOneC str xs) Mt
-      evalCEK cont' handler' env' x
-
-evaluateTerm cont handler env (CapabilityForm cf info) =
+  CEnforceOne str conds -> do
+    chargeGasArgs info (GAConstant unconsWorkNodeGas)
+    case conds of
+      [] ->
+        returnCEK cont handler (VError "enforce-one failure" info)
+      x:xs -> do
+        -- Todo: is this a bit too cheap??
+        errState <- evalStateToErrorState <$> getEvalState
+        let env' = readOnlyEnv env
+        let handler' = CEKEnforceOne env' info str xs cont errState handler
+        let cont' = CondC env' info EnforceOneC Mt
+        evalCEK cont' handler' env' x
+-- | ------ From --------------- | ------ To ------------------------ |
+--   <WithCap cap body, E, K, H>         <cap, E, CapInvokeC(E,WithCapC(body), K),H>
+--   <CreateUG n [], E, K, H>            <UGuard n [], E, K,H>
+--   <CreateUG n (x:xs), E, K,H>         <x, E, CapInvokeC(E,CrUGC(n, xs),K), H>
+evaluateTerm cont handler env (CapabilityForm cf info) = do
+  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
   case cf of
     WithCapability rawCap body -> do
       enforceNotWithinDefcap info env "with-capability"
@@ -251,24 +270,47 @@ evaluateTerm cont handler env (CapabilityForm cf info) =
           let usrGuardFrame = CreateUserGuardC fqn xs []
           let cont' = CapInvokeC env info usrGuardFrame cont
           evalCEK cont' handler env x
+-- | ------ From --------------- | ------ To ------------------------ |
+--   <ListLit [], E, K, H>         <VList [], E, K, H>
+---  <ListLit (x:xs), E, K, H>         <x, E, ListC(E,xs,K), H>
 evaluateTerm cont handler env (ListLit ts info) = do
+  -- chargeGasArgs info (GAConstant unconsWorkNodeGas)
   case ts of
     [] -> returnCEKValue cont handler (VList mempty)
     x:xs -> evalCEK (ListC env info xs [] cont) handler env x
-evaluateTerm cont handler env (Try catchExpr rest _) = do
+-- | ------ From --------------- | ------ To ------------------------ |
+--   <Try c body, E, K, H>         <body, E, Mt, CEKHandler(E,c,K,_errState,H)>
+--   _errState - callstack,granted caps,events,gas
+evaluateTerm cont handler env (Try catchExpr rest info) = do
+  chargeGasArgs info (GAConstant tryNodeGas)
   errState <- evalStateToErrorState <$> getEvalState
   let handler' = CEKHandler env catchExpr cont errState handler
   let env' = readOnlyEnv env
   evalCEK Mt handler' env' rest
-evaluateTerm cont handler env (ObjectLit o info) =
+-- | ------ From --------------- | ------ To ------------------------ |
+--   <Try c body, E, K, H>         <body, E, Mt, CEKHandler(E,c,K,_errState,H)>
+--   _errState - callstack,granted caps,events,gas
+evaluateTerm cont handler env (ObjectLit o info) = do
+  chargeGasArgs info (GAConstant unconsWorkNodeGas)
   case o of
     (f, term):rest -> do
       let cont' = ObjC env info f rest [] cont
       evalCEK cont' handler env term
     [] -> returnCEKValue cont handler (VObject mempty)
--- Error terms ignore the current cont
-evaluateTerm _ handler _ (Error e info) =
-  returnCEK Mt handler (VError e info)
+{-# SPECIALIZE evaluateTerm
+   :: CoreCEKCont
+   -> CoreCEKHandler
+   -> CoreCEKEnv
+   -> EvalTerm CoreBuiltin ()
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
+    #-}
+{-# SPECIALIZE evaluateTerm
+   :: Cont CEKSmallStep CoreBuiltin () Eval
+   -> CEKErrorHandler CEKSmallStep CoreBuiltin () Eval
+   -> CEKEnv CEKSmallStep CoreBuiltin () Eval
+   -> EvalTerm CoreBuiltin ()
+   -> Eval (CEKReturn CoreBuiltin () Eval)
+    #-}
 
 mkDefunClosure
   :: (MonadEval b i m)
@@ -278,27 +320,25 @@ mkDefunClosure
   -> m (Closure step b i m)
 mkDefunClosure d mn e = case _dfunTerm d of
   Lam args body i ->
-    pure (Closure (_dfunName d) mn (ArgClosure (_argType <$> args)) (NE.length args) body (_dfunRType d) e i)
+    pure (Closure (_dfunName d) mn (ArgClosure args) (NE.length args) body (_dfunRType d) e i)
   Nullary body i ->
     pure (Closure (_dfunName d) mn NullaryClosure 0 body (_dfunRType d) e i)
   _ ->
     throwExecutionError (_dfunInfo d) (DefIsNotClosure (_dfunName d))
 
 mkDefPactClosure
-  :: (MonadEval b i m)
-  => i
+  :: i
   -> FullyQualifiedName
   -> DefPact Name Type b i
   -> CEKEnv step b i m
-  -> m (CEKValue step b i m)
+  ->CEKValue step b i m
 mkDefPactClosure info fqn dpact env = case _dpArgs dpact of
   [] ->
     let dpc = DefPactClosure fqn NullaryClosure 0 env info
-    in pure (VDefPactClosure dpc)
+    in VDefPactClosure dpc
   (x:xs) ->
-    let dpc = DefPactClosure fqn (ArgClosure (fmap _argType (x :| xs))) (length (x:xs)) env info
-    in pure (VDefPactClosure dpc)
-
+    let dpc = DefPactClosure fqn (ArgClosure (x :| xs)) (length (x:xs)) env info
+    in VDefPactClosure dpc
 
 initPact
   :: (CEKEval step b i m, MonadEval b i m)
@@ -324,6 +364,14 @@ initPact i pc cont handler cenv = do
       in applyNestedPact i pc pStep cont handler cenv
   where
     hashToDefPactId = DefPactId . hashToText
+{-# SPECIALIZE initPact
+   :: ()
+   -> DefPactContinuation QualifiedName PactValue
+   -> CoreCEKCont
+   -> CoreCEKHandler
+   -> CoreCEKEnv
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
+    #-}
 
 applyPact
   :: (CEKEval step b i m, MonadEval b i m)
@@ -336,7 +384,7 @@ applyPact
   -> M.Map DefPactId DefPactExec
   -> m (CEKEvalResult step b i m)
 applyPact i pc ps cont handler cenv nested = useEvalState esDefPactExec >>= \case
-  Just pe ->  throwExecutionError i (MultipleOrNestedDefPactExecFound pe)
+  Just pe -> throwExecutionError i (MultipleOrNestedDefPactExecFound pe)
   Nothing -> getModuleMember i (_cePactDb cenv) (pc ^. pcName) >>= \case
     DPact defPact -> do
       let nSteps = NE.length (_dpSteps defPact)
@@ -370,6 +418,16 @@ applyPact i pc ps cont handler cenv nested = useEvalState esDefPactExec >>= \cas
     _otherwise -> failInvariant i "defpact continuation does not point to defun"
   where
   sf = StackFrame (view (pcName . qnName) pc) (view (pcName . qnModName) pc) SFDefPact
+{-# SPECIALIZE applyPact
+   :: ()
+   -> DefPactContinuation QualifiedName PactValue
+   -> DefPactStep
+   -> CoreCEKCont
+   -> CoreCEKHandler
+   -> CoreCEKEnv
+   -> M.Map DefPactId DefPactExec
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
+    #-}
 
 emitXChainEvents
   :: (MonadEval b i m)
@@ -457,6 +515,15 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esDefPactExec >>= \case
     _otherwise -> failInvariant i "applyNestedPact: Expected a DefPact bot got something else"
   where
   sf = StackFrame (view (pcName . qnName) pc) (view (pcName . qnModName) pc) SFDefPact
+{-# SPECIALIZE applyNestedPact
+   :: ()
+   -> DefPactContinuation QualifiedName PactValue
+   -> DefPactStep
+   -> CoreCEKCont
+   -> CoreCEKHandler
+   -> CoreCEKEnv
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
+    #-}
 
 resumePact
   :: (CEKEval step b i m, MonadEval b i m)
@@ -514,6 +581,14 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
                          Nothing -> _peYield pe
               env' = set ceLocal (RAList.fromList (reverse args)) $ set ceDefPactStep (Just $ set psResume resume ps) env
           applyPact i pc ps cont handler env' (_peNestedDefPactExec pe)
+{-# SPECIALIZE resumePact
+   :: ()
+   -> CoreCEKCont
+   -> CoreCEKHandler
+   -> CoreCEKEnv
+   -> Maybe DefPactExec
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
+    #-}
 
 
 -- Todo: fail invariant
@@ -531,8 +606,14 @@ nameToFQN info env (Name n nk) = case nk of
       md <- getModule info (view cePactDb env) (_mrModule mr)
       pure (FullyQualifiedName (_mrModule mr) dArg (_mHash md))
     Just _ -> throwExecutionError info (DynNameIsNotModRef dArg)
-    Nothing -> failInvariant info ("unbound identifier" <> T.pack (show n))
-  _ -> failInvariant info ("invalid name in fq position" <> T.pack (show n))
+    Nothing -> failInvariant info ("unbound identifier " <> n)
+  _ -> failInvariant info ("invalid name in fq position " <> n)
+{-# SPECIALIZE nameToFQN
+   :: ()
+   -> CoreCEKEnv
+   -> Name
+   -> Eval FullyQualifiedName
+    #-}
 
 guardTable
   :: (CEKEval step b i m, MonadEval b i m)
@@ -558,6 +639,15 @@ guardTable i cont handler env (TableValue tn mh _) dbop = do
       GtCreateTable -> notBypassed
       _ | enabled -> returnCEKValue cont handler VUnit
         | otherwise -> notBypassed
+{-# SPECIALIZE guardTable
+   :: ()
+   -> CoreCEKCont
+   -> CoreCEKHandler
+   -> CoreCEKEnv
+   -> TableValue
+   -> GuardTableOp
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
+    #-}
 
 
 enforceBlessedHashes :: (MonadEval b i m) => i -> EvalModule b i -> ModuleHash -> m ()
@@ -582,6 +672,15 @@ guardForModuleCall i cont handler env currMod onFound =
       mc <- useEvalState (esCaps . csModuleAdmin)
       if S.member currMod mc then onFound
       else getModule i (view cePactDb env) currMod >>= acquireModuleAdmin i cont handler env
+{-# SPECIALIZE guardForModuleCall
+   :: ()
+   -> CoreCEKCont
+   -> CoreCEKHandler
+   -> CoreCEKEnv
+   -> ModuleName
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
+    #-}
 
 acquireModuleAdmin
   :: (CEKEval step b i m, MonadEval b i m)
@@ -600,10 +699,18 @@ acquireModuleAdmin i cont handler env mdl = do
       enforceKeysetNameAdmin i (_mName mdl) ksn
       esCaps . csModuleAdmin %== S.insert (_mName mdl)
       returnCEKValue cont handler VUnit
-    CapGov (ResolvedGov fqn) -> do
+    CapGov (FQName fqn) -> do
       let wcapBody = Constant LUnit i
       let cont' = ModuleAdminC (_mName mdl) cont
       evalCap i cont' handler env (CapToken fqn []) (CapBodyC PopCapInvoke) wcapBody
+{-# SPECIALIZE acquireModuleAdmin
+   :: ()
+   -> CoreCEKCont
+   -> CoreCEKHandler
+   -> CoreCEKEnv
+   -> EvalModule CoreBuiltin ()
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
+    #-}
 
 evalWithStackFrame
   :: (CEKEval step b i m, MonadEval b i m)
@@ -630,9 +737,30 @@ pushStackFrame info cont mty sf = do
   esStack %== (sf :)
   pure (StackPopC info mty cont)
 
+type ModCapCont step b i m
+  = CEKEnv step b i m
+  -> i
+  -> Maybe (CapToken QualifiedName PactValue)
+  -> Maybe (PactEvent PactValue)
+  -> EvalTerm b i
+  -> Cont step b i m
+  -> Cont step b i m
 
--- | Evaluate a capability in `(with-capability)`
--- the resulting
+-- | Our main workhorse for "Evaluate a capability, then do something else"
+-- `evalCap` handles
+--   - with-capability
+--   - test-capability
+--   - compose-capability
+-- In all cases, evalCap checks if the capability is in scope
+-- if it is, it is a no-op and does simply evaluates `contbody` with the current continuation
+--
+-- If it is not inscope, it pushes the `contbody` into a new continuation that will
+-- evaluate it after cap aquisition, with the cap in scope.
+-- Then:
+--   - If the cap is unmanaged, simply evaluate the cap body with the new continuation
+--   - If the cap is @event, set the event to emit after cap body evaluation, then eval the cap body
+--   - If the cap is managed, install the cap (If possible) then evaluate the body, and if
+--     the cap is user managed, ensure that the manager function run after the cap body
 evalCap
   :: (CEKEval step b i m, MonadEval b i m)
   => i
@@ -640,109 +768,94 @@ evalCap
   -> CEKErrorHandler step b i m
   -> CEKEnv step b i m
   -> FQCapToken
-  -> (CEKEnv step b i m -> Maybe (CapToken QualifiedName PactValue) -> Maybe (PactEvent PactValue) -> EvalTerm b i -> Cont step b i m -> Cont step b i m)
+  -> ModCapCont step b i m
   -> EvalTerm b i
   -> m (CEKEvalResult step b i m)
-evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody = isCapInStack' origToken >>= \case
-  False -> do
-    lookupFqName fqn >>= \case
-      Just (DCap d) -> do
-        when (length args /= _dcapAppArity d) $ failInvariant info "Dcap argument length mismatch"
-        let newLocals = RAList.fromList $ fmap VPactValue (reverse args)
-            capBody = _dcapTerm d
-        -- Todo: clean up the staircase of doom.
-        case _dcapMeta d of
-          -- Managed capability, so we should look for it in the set of csmanaged
-          DefManaged mdm -> do
-            case mdm of
-              -- | Not automanaged, so it must have a defmeta
-              -- We are handling user-managed caps
-              DefManagedMeta (cix,_) _ -> do
-                let filteredCap = CapToken qualCapName (filterIndex cix args)
-                -- Find the capability post-filtering
-                mgdCaps <- useEvalState (esCaps . csManaged)
-                case find ((==) filteredCap . _mcCap) mgdCaps of
-                  Nothing -> do
-                    msgCaps <- S.unions <$> viewEvalEnv eeMsgSigs
-                    case find (findMsgSigCap cix filteredCap) msgCaps of
-                      Just c -> do
-                        let c' = set ctName fqn c
-                            cont' = modCont env (Just qualCapToken) (Just (fqctToPactEvent origToken)) contbody currCont
-                        installCap info env c' False >>= evalUserManagedCap cont' newLocals capBody
-                      Nothing ->
-                        throwExecutionError info (CapNotInstalled fqn)
-                  Just managedCap -> do
-                    let cont' = modCont env (Just qualCapToken) (Just (fqctToPactEvent origToken)) contbody currCont
-                    evalUserManagedCap cont' newLocals capBody managedCap
-              -- handle autonomous caps
-              AutoManagedMeta -> do
-                -- Find the capability post-filtering
-                let cont' = modCont env Nothing (Just (fqctToPactEvent origToken)) contbody currCont
-                mgdCaps <- useEvalState (esCaps . csManaged)
-                case find ((==) qualCapToken . _mcCap) mgdCaps of
-                  Nothing -> do
-                    msgCaps <- S.unions <$> viewEvalEnv eeMsgSigs
-                    case find (== qualCapToken) msgCaps of
-                      Just c -> do
-                        let c' = set ctName fqn c
-                        installCap info env c' False >>= evalAutomanagedCap cont' newLocals capBody
-                      Nothing ->
-                        throwExecutionError info (CapNotInstalled fqn)
-                  Just managedCap ->
-                    evalAutomanagedCap cont' newLocals capBody managedCap
-          DefEvent -> do
-            let cont' = modCont env Nothing (Just (fqctToPactEvent origToken)) contbody currCont
-            let inCapEnv = set ceInCap True $ set ceLocal newLocals env
-            (esCaps . csSlots) %== (CapSlot qualCapToken []:)
-            sfCont <- pushStackFrame info cont' Nothing capStackFrame
-            -- emitCapability info origToken
-            evalCEK sfCont handler inCapEnv capBody
-            -- evalWithStackFrame info cont' handler (set ceLocal newLocals env) capStackFrame Nothing capBody
-          -- Not automanaged _nor_ user managed.
-          -- Todo: a type that's basically `Maybe` here would save us a lot of grief.
-          Unmanaged -> do
-            let cont' = modCont env Nothing Nothing contbody currCont
-                inCapEnv = set ceInCap True $ set ceLocal newLocals env
-            (esCaps . csSlots) %== (CapSlot qualCapToken []:)
-            evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
-      Just {} ->
-        failInvariant info "Captoken references invalid def"
-      Nothing -> failInvariant info "No such def for evalCap"
-  True ->
-    evalCEK currCont handler env contbody
+evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody = do
+  capInStack <- isCapInStack' origToken
+  if not capInStack then go else evalCEK currCont handler env contbody
   where
+  go = do
+    d <- getDefCap info fqn
+    when (length args /= length (_dcapArgs d)) $ failInvariant info "Dcap argument length mismatch"
+    let newLocals = RAList.fromList $ fmap VPactValue (reverse args)
+        capBody = _dcapTerm d
+    -- Todo: clean up the staircase of doom.
+    case _dcapMeta d of
+      -- Managed capability, so we should look for it in the set of csmanaged
+      DefManaged mdm -> do
+        case mdm of
+          -- | Not automanaged, so it must have a defmeta
+          -- We are handling user-managed caps
+          DefManagedMeta (cix,_) _ -> do
+            let filteredCap = CapToken qualCapName (filterIndex cix args)
+            -- Find the capability post-filtering
+            mgdCaps <- useEvalState (esCaps . csManaged)
+            case find ((==) filteredCap . _mcCap) mgdCaps of
+              Nothing -> do
+                msgCaps <- S.unions <$> viewEvalEnv eeMsgSigs
+                case find (findMsgSigCap cix filteredCap) msgCaps of
+                  Just c -> do
+                    let c' = set ctName fqn c
+                        cont' = modCont env info (Just qualCapToken) (Just (fqctToPactEvent origToken)) contbody currCont
+                    installCap info env c' False >>= evalUserManagedCap cont' newLocals capBody
+                  Nothing ->
+                    throwExecutionError info (CapNotInstalled fqn)
+              Just managedCap -> do
+                let cont' = modCont env info (Just qualCapToken) (Just (fqctToPactEvent origToken)) contbody currCont
+                evalUserManagedCap cont' newLocals capBody managedCap
+          -- handle autonomous caps
+          AutoManagedMeta -> do
+            -- Find the capability post-filtering
+            let cont' = modCont env info Nothing (Just (fqctToPactEvent origToken)) contbody currCont
+            mgdCaps <- useEvalState (esCaps . csManaged)
+            case find ((==) qualCapToken . _mcCap) mgdCaps of
+              Nothing -> do
+                msgCaps <- S.unions <$> viewEvalEnv eeMsgSigs
+                case find (== qualCapToken) msgCaps of
+                  Just c -> do
+                    let c' = set ctName fqn c
+                    installCap info env c' False >>= evalAutomanagedCap cont' newLocals capBody
+                  Nothing ->
+                    throwExecutionError info (CapNotInstalled fqn)
+              Just managedCap ->
+                evalAutomanagedCap cont' newLocals capBody managedCap
+      DefEvent -> do
+        let cont' = modCont env info Nothing (Just (fqctToPactEvent origToken)) contbody currCont
+        let inCapEnv = set ceInCap True $ set ceLocal newLocals env
+        (esCaps . csSlots) %== (CapSlot qualCapToken []:)
+        sfCont <- pushStackFrame info cont' Nothing capStackFrame
+        evalCEK sfCont handler inCapEnv capBody
+      -- Not automanaged _nor_ user managed.
+      -- Todo: a type that's basically `Maybe` here would save us a lot of grief.
+      Unmanaged -> do
+        let cont' = modCont env info Nothing Nothing contbody currCont
+            inCapEnv = set ceInCap True $ set ceLocal newLocals env
+        (esCaps . csSlots) %== (CapSlot qualCapToken []:)
+        evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
   qualCapName = fqnToQualName fqn
   qualCapToken = CapToken qualCapName args
   capStackFrame = StackFrame (_fqName fqn) (_fqModule fqn) SFDefcap
   -- This function is handles both evaluating the manager function for the installed parameter
   -- and continuing evaluation for the actual capability body.
-  -- Todo: currently, pact does this _after_ evaluation of the cap body. Should we do this?
   evalUserManagedCap cont' env' capBody managedCap =  case _mcManaged managedCap of
-    ManagedParam mpfqn pv managedIx -> do
-      lookupFqName mpfqn >>= \case
-        -- We found the manager function, evaluate it and commit the argument.
-        Just (Dfun dfun) -> do
-          mparam <- maybe (failInvariant info "Managed param does not exist at index") pure (args ^? ix managedIx)
-          evaluate mpfqn (_dfunTerm dfun) pv mparam >>= \case
-            EvalValue res -> do
-              result <- enforcePactValue info res
-              let mcM = ManagedParam mpfqn result managedIx
-              let inCapEnv = set ceInCap True $ set ceLocal env' $ env
-              let inCapBodyToken = _mcOriginalCap managedCap
-              -- BIG SEMANTICS NOTE HERE
-              -- the cap slot here that we push should NOT be the qualified original token.
-              -- Instead, it's the original token from the installed from the static cap. Otherwise, enforce checks
-              -- within the cap body will fail (That is, keyset enforcement). Instead, once we are evaluating the body,
-              -- we pop the current cap stack, then replace the head with the original intended token.
-              -- this is done in `CapBodyC` and this is the only way to do this.
-              esCaps . csManaged %== S.union (S.singleton (set mcManaged mcM managedCap))
-              (esCaps . csSlots) %== (CapSlot inCapBodyToken []:)
-              sfCont <- pushStackFrame info cont' Nothing capStackFrame
-              -- emitCapability info origToken
-              evalCEK sfCont handler inCapEnv capBody
-              -- evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
-            VError v i -> returnCEK currCont handler (VError v i)
-        _ -> failInvariant info "user managed cap is an invalid defn"
+    ManagedParam mpfqn oldV managedIx -> do
+      dfun <- getDefun info mpfqn
+      dfunClo <- mkDefunClosure dfun (_fqModule mpfqn) env
+      newV <- maybe (failInvariant info "Managed param does not exist at index") pure (args ^? ix managedIx)
+      -- Set the mgr fun to evaluate after we apply the capability body
+      let mgrFunCont = CapInvokeC env info (ApplyMgrFunC managedCap dfunClo oldV newV) cont'
+      let inCapEnv = set ceInCap True $ set ceLocal env' $ env
+      let inCapBodyToken = _mcOriginalCap managedCap
+      -- BIG SEMANTICS NOTE HERE
+      -- the cap slot here that we push should NOT be the qualified original token.
+      -- Instead, it's the original token from the installed from the static cap. Otherwise, enforce checks
+      -- within the cap body will fail (That is, keyset enforcement). Instead, once we are evaluating the body,
+      -- we pop the current cap stack, then replace the head with the original intended token.
+      -- this is done in `CapBodyC` and this is the only way to do this.
+      (esCaps . csSlots) %== (CapSlot inCapBodyToken []:)
+      sfCont <- pushStackFrame info mgrFunCont Nothing capStackFrame
+      evalCEK sfCont handler inCapEnv capBody
     _ -> failInvariant info "Invalid managed cap type"
   evalAutomanagedCap cont' env' capBody managedCap = case _mcManaged managedCap of
     AutoManaged b -> do
@@ -753,20 +866,19 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
         esCaps . csSlots %== (CapSlot qualCapToken []:)
         let inCapEnv = set ceLocal env' $ set ceInCap True $ env
         sfCont <- pushStackFrame info cont' Nothing capStackFrame
-        -- emitCapability info origToken
         evalCEK sfCont handler inCapEnv capBody
-        -- evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
     _ -> failInvariant info "Invalid managed cap type"
-  evaluate fqn' term managed value = case term of
-    Lam lamargs body i -> do
-      -- Todo: `applyLam` here gives suboptimal errors
-      -- Todo: this completely violates our "step" semantics.
-      -- This should be its own frame
-      let inCapEnv = set ceInCap True env
-          cloArgs = ArgClosure(_argType <$> lamargs)
-          clo = Closure (_fqName fqn') (_fqModule fqn') cloArgs (NE.length lamargs) body Nothing inCapEnv i
-      applyLamUnsafe (C clo) [VPactValue managed, VPactValue value] Mt CEKNoHandler
-    _t -> failInvariant (view termInfo _t) "Manager function was not a two-argument function"
+{-# SPECIALIZE evalCap
+   :: ()
+   -> CoreCEKCont
+   -> CoreCEKHandler
+   -> CoreCEKEnv
+   -> CapToken FullyQualifiedName PactValue
+   -> ModCapCont CEKBigStep CoreBuiltin () Eval
+   -> CoreTerm
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
+    #-}
+
 
 emitEvent
   :: (MonadEval b i m)
@@ -775,6 +887,9 @@ emitEvent
   -> m ()
 emitEvent info pe = findCallingModule >>= \case
     Just mn -> do
+      -- Todo: ++ definitely feels suboptimal, especially for gas.
+      -- That said: we can simply reverse the events in `env-events` as
+      -- well as after final emission.
       let ctModule = _peModule pe
       if ctModule == mn then do
         esEvents %== (++ [pe])
@@ -800,6 +915,11 @@ emitCapability
   -> m ()
 emitCapability info tkn =
   emitEvent info (fqctToPactEvent tkn)
+{-# SPECIALIZE emitCapability
+   :: ()
+   -> CapToken FullyQualifiedName PactValue
+   -> Eval ()
+    #-}
 
 fqctToPactEvent :: CapToken FullyQualifiedName PactValue -> PactEvent PactValue
 fqctToPactEvent (CapToken fqn args) = PactEvent (_fqName fqn) args (_fqModule fqn) (_fqHash fqn)
@@ -812,6 +932,12 @@ enforceNotWithinDefcap
   -> m ()
 enforceNotWithinDefcap info env form =
   when (_ceInCap env) $ throwExecutionError info (FormIllegalWithinDefcap form)
+{-# SPECIALIZE enforceNotWithinDefcap
+   :: ()
+   -> CoreCEKEnv
+   -> T.Text
+   -> Eval ()
+    #-}
 
 requireCap
   :: (CEKEval step b i m, MonadEval b i m)
@@ -825,6 +951,13 @@ requireCap info cont handler (CapToken fqn args) = do
   if capInStack then returnCEKValue cont handler (VBool True)
   else returnCEK cont handler $
     VError ("cap not in scope " <> renderQualName (fqnToQualName fqn)) info
+{-# SPECIALIZE requireCap
+   :: ()
+   -> CoreCEKCont
+   -> CoreCEKHandler
+   -> FQCapToken
+   -> Eval CoreEvalResult
+    #-}
 
 isCapInStack
   :: (MonadEval b i m)
@@ -833,6 +966,10 @@ isCapInStack
 isCapInStack ct = do
   capSet <- getAllStackCaps
   pure $ S.member ct capSet
+{-# SPECIALIZE isCapInStack
+   :: CapToken QualifiedName PactValue
+   -> Eval Bool
+    #-}
 
 isCapInStack'
   :: (MonadEval b i m)
@@ -840,6 +977,10 @@ isCapInStack'
   -> m Bool
 isCapInStack' (CapToken fqn args) =
   isCapInStack (CapToken (fqnToQualName fqn) args)
+{-# SPECIALIZE isCapInStack'
+   :: FQCapToken
+   -> Eval Bool
+    #-}
 
 composeCap
   :: (CEKEval step b i m, MonadEval b i m)
@@ -855,6 +996,14 @@ composeCap info cont handler env origToken =
       evalCap info cont handler env origToken (CapBodyC PopCapComposed) (Constant (LBool True) info)
     True ->
       returnCEKValue cont handler (VBool True)
+{-# SPECIALIZE composeCap
+   :: ()
+   -> CoreCEKCont
+   -> CoreCEKHandler
+   -> CoreCEKEnv
+   -> FQCapToken
+   -> Eval CoreEvalResult
+    #-}
 
 filterIndex :: Int -> [a] -> [a]
 filterIndex i xs = [x | (x, i') <- zip xs [0..], i /= i']
@@ -873,32 +1022,39 @@ installCap :: (MonadEval b i m)
   -> m (ManagedCap QualifiedName PactValue)
 installCap info _env (CapToken fqn args) autonomous = do
   let ct = CapToken (fqnToQualName fqn) args
-  lookupFqName fqn >>= \case
-    Just (DCap d) -> case _dcapMeta d of
-      DefManaged m -> case m of
-        DefManagedMeta (paramIx,_) (FQName fqnMgr) -> do
-          managedParam <- maybe (throwExecutionError info (InvalidManagedCap fqn)) pure (args ^? ix paramIx)
-          let mcapType = ManagedParam fqnMgr managedParam paramIx
-              ctFiltered = CapToken (fqnToQualName fqn) (filterIndex paramIx args)
-              mcap = ManagedCap ctFiltered ct mcapType
-          (esCaps . csManaged) %== S.insert mcap
-          when autonomous $
-            (esCaps . csAutonomous) %== S.insert ct
-          pure mcap
-        AutoManagedMeta -> do
-          let mcapType = AutoManaged False
-              mcap = ManagedCap ct ct mcapType
-          (esCaps . csManaged) %== S.insert mcap
-          when autonomous $
-            (esCaps . csAutonomous) %== S.insert ct
-          pure mcap
-      DefEvent ->
-        throwExecutionError info (InvalidManagedCap fqn)
-      Unmanaged -> throwExecutionError info (InvalidManagedCap fqn)
-    Just d ->
-      -- todo: error loc here is not in install-cap
-      throwExecutionError (defInfo d) (InvalidDefKind (defKind d) "install-capability")
-    Nothing -> throwExecutionError' (NoSuchDef fqn)
+  d <- getDefCap info fqn
+  case _dcapMeta d of
+    DefManaged m -> case m of
+      DefManagedMeta (paramIx,_) (FQName fqnMgr) -> do
+        managedParam <- maybe (throwExecutionError info (InvalidManagedCap fqn)) pure (args ^? ix paramIx)
+        let mcapType = ManagedParam fqnMgr managedParam paramIx
+            ctFiltered = CapToken (fqnToQualName fqn) (filterIndex paramIx args)
+            mcap = ManagedCap ctFiltered ct mcapType
+        capAlreadyInstalled <- S.member mcap <$> useEvalState (esCaps . csManaged)
+        when capAlreadyInstalled $ throwExecutionError info (CapAlreadyInstalled fqn)
+        (esCaps . csManaged) %== S.insert mcap
+        when autonomous $
+          (esCaps . csAutonomous) %== S.insert ct
+        pure mcap
+      AutoManagedMeta -> do
+        let mcapType = AutoManaged False
+            mcap = ManagedCap ct ct mcapType
+        capAlreadyInstalled <- S.member mcap <$> useEvalState (esCaps . csManaged)
+        when capAlreadyInstalled $ throwExecutionError info (CapAlreadyInstalled fqn)
+        (esCaps . csManaged) %== S.insert mcap
+        when autonomous $
+          (esCaps . csAutonomous) %== S.insert ct
+        pure mcap
+    DefEvent ->
+      throwExecutionError info (InvalidManagedCap fqn)
+    Unmanaged -> throwExecutionError info (InvalidManagedCap fqn)
+{-# SPECIALIZE installCap
+   :: ()
+   -> CoreCEKEnv
+   -> FQCapToken
+   -> Bool
+   -> Eval (ManagedCap QualifiedName PactValue)
+    #-}
 
 -- Todo: should we typecheck / arity check here?
 createUserGuard
@@ -917,6 +1073,14 @@ createUserGuard info cont handler fqn args =
       returnCEK cont handler (VError "create-user-guard pointing to non-guard" info)
     Nothing ->
       failInvariant info "User guard pointing to no defn"
+{-# SPECIALIZE createUserGuard
+   :: ()
+   -> CoreCEKCont
+   -> CoreCEKHandler
+   -> FullyQualifiedName
+   -> [PactValue]
+   -> Eval CoreEvalResult
+    #-}
 
 
 applyCont
@@ -961,13 +1125,19 @@ applyCont Mt handler v =
         x:xs -> do
           modifyEvalState (restoreFromErrorState errState)
           let handler' = CEKEnforceOne env i str xs cont errState h
-              oldFrame = CondC env i (EnforceOneC str xs) Mt
+              oldFrame = CondC env i EnforceOneC Mt
           evalCEK oldFrame handler' env x
       EvalValue v' ->
         returnCEKValue cont h v'
 applyCont cont handler v = case v of
   VError{} -> returnCEK Mt handler v
   EvalValue v' -> applyContToValue cont handler v'
+{-# SPECIALIZE applyCont
+   :: CoreCEKCont
+   -> CoreCEKHandler
+   -> CoreEvalResult
+   -> Eval CoreEvalResult
+    #-}
 
 -- | if true then 1 else 2
 applyContToValue
@@ -988,8 +1158,8 @@ applyContToValue Mt handler v =
 -- "Zero out" the continuation up to the latest handler
 -- returnCEKValue _cont handler v@VError{} =
 --   returnCEK Mt handler v
--- | ------ From ------------------------- | ------ To ---------------- |
---   <VClosure c, E, Args(E, (x:xs), K), H>    <x, E, Fn(c, E, xs, K), H>
+-- | ------ From ------------------------- | ------------ To -------------- |
+--   <VClosure c, Args(E, (x:xs), K), H>     <x, E, Fn(c, E, xs, K), H>
 --
 applyContToValue (Args env i args cont) handler fn = do
   c <- canApply fn
@@ -1011,63 +1181,75 @@ applyContToValue (Args env i args cont) handler fn = do
       throwExecutionError i CannotApplyPartialClosure
     -- Todo: this is _not_ an invariant failure. Requires a better error
     _ -> failInvariant i "Cannot apply non-function to arguments"
-  -- evalCEK (Fn fn cont) handler env arg
+-- | ------ From ------------------------- | ------ To ----------------------- |
+--   <v, _, Fn(clo, E, (x:xs), acc, K), H>   <x, E, Fn(c, E, xs, (v:acc), K), H>
+--   <v, _, Fn(clo, E, [], K), H>            (apply clo (reverse (v:acc)) K H)
+--
 applyContToValue (Fn fn env args vs cont) handler v = do
   case args of
     [] -> do
       applyLam fn (reverse (v:vs)) cont handler
     x:xs ->
       evalCEK (Fn fn env xs (v:vs) cont) handler env x
+-- | ------ From ------------ | ------ To ---------------- |
+--   <v, LetC(E, body, K), H>   <body, (cons v E), K, H>
+--
 applyContToValue (LetC env letbody cont) handler v = do
   evalCEK cont handler (over ceLocal (RAList.cons v) env) letbody
+-- | ------ From ------------ | ------ To ---------------- |
+--   <_, SeqC(E, e2, K), H>     <e2, E, K, H>
+--
 applyContToValue (SeqC env e cont) handler _ =
   evalCEK cont handler env e
-applyContToValue (CondC env info frame cont) handler v = case v of
-  (VLiteral (LBool b)) -> case frame of
-    AndC te ->
-      if b then evalCEK cont handler env te
-      else returnCEKValue cont handler v
-    OrC te ->
-      if b then returnCEKValue cont handler v
-      else evalCEK cont handler env te
-    IfC ifExpr elseExpr ->
-      if b then evalCEK cont handler env ifExpr
-      else evalCEK cont handler env elseExpr
-    EnforceC str ->
-      if b then returnCEKValue cont handler v
-      else do
-        let cont' = EnforceErrorC info cont
-        evalCEK cont' handler env str
-    FilterC clo elem' rest acc -> do
-      let acc' = if b then elem':acc else acc
-      case rest of
-        x:xs -> do
-          let cont' = CondC env info (FilterC clo x xs acc') cont
-          applyLam clo [VPactValue x] cont' handler
-        [] -> returnCEKValue cont handler (VList (V.fromList (reverse acc')))
-    EnforceOneC str li ->
-      if b then returnCEKValue cont handler v
-      else case li of
-        x:xs -> do
-          let cont' = CondC env info (EnforceOneC str xs) cont
-              handler' = updateEnforceOneList xs handler
-          evalCEK cont' handler' env x
-        [] -> do
+-- | ------ From ------------------------ | ------ To ---------------- |
+--   <VBool b, CondC(E, AndC(e2), K), H>   if b then <e2, E, EnforceBool(K), H>
+--                                         else <VBool b, K, H>
+--   <VBool b, CondC(E, OrC(e2), K), H>    if b then <VBool b, K, H>
+--                                         else <e2, E, EnforceBool(K), H>
+--
+-- | ------ From ------------------------------ | ------ To ---------------- |
+--   <VBool b, CondC(E, IfC(ifE, elseE), K), H>   if b then <ifE, E, K, H>
+--                                                else <VBool b, K, H>
+--
+-- Note: we charge gas for this reduction here, as these are essentially natives
+-- that match and perform an uncons/match.
+applyContToValue (CondC env info frame cont) handler v = do
+  chargeGasArgs info (GAConstant constantWorkNodeGas)
+  case v of
+    VBool b -> case frame of
+      AndC te ->
+        if b then evalCEK (EnforceBoolC info cont) handler env te
+        else returnCEKValue cont handler v
+      OrC te ->
+        if b then returnCEKValue cont handler v
+        else evalCEK (EnforceBoolC info cont) handler env te
+      IfC ifExpr elseExpr ->
+        if b then evalCEK cont handler env ifExpr
+        else evalCEK cont handler env elseExpr
+      EnforceC str ->
+        if b then returnCEKValue cont handler v
+        else do
           let cont' = EnforceErrorC info cont
           evalCEK cont' handler env str
-    AndQC clo pv ->
-      if b then applyLam clo [VPactValue pv] cont handler
-      else returnCEKValue cont handler v
-    OrQC clo pv ->
-      if not b then applyLam clo [VPactValue pv] cont handler
-      else returnCEKValue cont handler v
-    NotQC -> returnCEKValue cont handler (VBool (not b))
-  _ ->
-    returnCEK cont handler (VError "Evaluation of conditional expression yielded non-boolean value" info)
-  where
-  updateEnforceOneList xs (CEKEnforceOne e i str _ c cs h) =
-    CEKEnforceOne e i str xs c cs h
-  updateEnforceOneList _ e = e
+      FilterC clo elem' rest acc -> do
+        let acc' = if b then elem':acc else acc
+        case rest of
+          x:xs -> do
+            let cont' = CondC env info (FilterC clo x xs acc') cont
+            applyLam clo [VPactValue x] cont' handler
+          [] -> returnCEKValue cont handler (VList (V.fromList (reverse acc')))
+      EnforceOneC ->
+        if b then returnCEKValue cont handler v
+        else returnCEK cont handler (VError "enforce-one bool check failure" info)
+      AndQC clo pv ->
+        if b then applyLam clo [VPactValue pv] (EnforceBoolC info cont) handler
+        else returnCEKValue cont handler v
+      OrQC clo pv ->
+        if not b then applyLam clo [VPactValue pv] (EnforceBoolC info cont) handler
+        else returnCEKValue cont handler v
+      NotQC -> returnCEKValue cont handler (VBool (not b))
+    _ ->
+      returnCEK cont handler (VError "Evaluation of conditional expression yielded non-boolean value" info)
 applyContToValue currCont@(CapInvokeC env info cf cont) handler v = case cf of
   WithCapC body -> case v of
     VCapToken ct@(CapToken fqn _) -> do
@@ -1085,27 +1267,48 @@ applyContToValue currCont@(CapInvokeC env info cf cont) handler v = case cf of
             cont' = CapInvokeC env info cf' cont
         evalCEK cont' handler env x
       [] -> createUserGuard info cont handler fqn (reverse (pv:pvs))
+  ApplyMgrFunC mgdCap clo old new -> do
+    -- Set the manager fun to update the current managed cap.
+    let cont' = CapInvokeC env info (UpdateMgrFunC mgdCap) cont
+    applyLam (C clo) [VPactValue old, VPactValue new] cont' handler
+  -- note: typechecking should be handled by the manager function here.
+  UpdateMgrFunC mcap -> case v of
+    VPactValue v' -> do
+      let mcap' = unsafeUpdateManagedParam v' mcap
+      (esCaps . csManaged) %== S.insert mcap'
+      returnCEKValue cont handler v
+    _ -> returnCEK cont handler (VError "Manager function for managed cap did not return a value" info)
 applyContToValue (BuiltinC env info frame cont) handler cv = do
   let pdb = _cePactDb env
   case cv of
     VPactValue v -> case frame of
-      MapC closure rest acc -> case rest of
-        x:xs ->
-          let cont' = BuiltinC env info (MapC closure xs (v:acc)) cont
-          in applyLam closure [VPactValue x] cont' handler
-        [] ->
-          returnCEKValue cont handler (VList (V.fromList (reverse (v:acc))))
-      FoldC clo rest -> case rest of
-        x:xs ->
-          let cont' = BuiltinC env info (FoldC clo xs) cont
-          in applyLam clo [VPactValue v, VPactValue x] cont' handler
-        [] -> returnCEKValue cont handler cv
-      ZipC clo (l, r) acc -> case (l, r) of
-        (x:xs, y:ys) ->
-          let cont' = BuiltinC env info (ZipC clo (xs, ys) (v:acc)) cont
-          in applyLam clo [VPactValue x, VPactValue y] cont' handler
-        (_, _) ->
-          returnCEKValue cont handler (VList (V.fromList (reverse (v:acc))))
+      MapC closure rest acc -> do
+        chargeGasArgs info (GAConstant unconsWorkNodeGas)
+        case rest of
+          x:xs -> do
+            let cont' = BuiltinC env info (MapC closure xs (v:acc)) cont
+            applyLam closure [VPactValue x] cont' handler
+          [] ->
+            returnCEKValue cont handler (VList (V.fromList (reverse (v:acc))))
+      FoldC clo rest -> do
+        chargeGasArgs info (GAConstant unconsWorkNodeGas)
+        case rest of
+          x:xs ->
+            let cont' = BuiltinC env info (FoldC clo xs) cont
+            in applyLam clo [VPactValue v, VPactValue x] cont' handler
+          [] -> returnCEKValue cont handler cv
+      ZipC clo (l, r) acc -> do
+        chargeGasArgs info (GAConstant unconsWorkNodeGas)
+        case (l, r) of
+          (x:xs, y:ys) ->
+            let cont' = BuiltinC env info (ZipC clo (xs, ys) (v:acc)) cont
+            in applyLam clo [VPactValue x, VPactValue y] cont' handler
+          (_, _) ->
+            returnCEKValue cont handler (VList (V.fromList (reverse (v:acc))))
+      ---------------------------------------------------------
+      -- Db frames
+      -- Todo: gas costs if post-read actions
+      ---------------------------------------------------------
       PreSelectC tv clo mf -> do
         keys <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
         selectRead tv clo keys [] mf
@@ -1118,11 +1321,6 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         liftDbFunction info (_pdbRead pdb (tvToDomain tv) rowkey) >>= \case
           Just (RowData rdata) ->
             returnCEKValue cont handler (VObject rdata)
-          Nothing -> returnCEK cont handler (VError "no such read object" info)
-      WithReadC tv rowkey clo -> do
-        liftDbFunction info (_pdbRead pdb (tvToDomain tv) rowkey) >>= \case
-          Just (RowData rdata) ->
-            applyLam clo [VObject rdata] cont handler
           Nothing -> returnCEK cont handler (VError "no such read object" info)
       WithDefaultReadC tv rowkey (ObjectData defaultObj) clo -> do
         liftDbFunction info (_pdbRead pdb (tvToDomain tv) rowkey) >>= \case
@@ -1188,16 +1386,28 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         returnCEKValue cont handler (VString "TableCreated")
       EmitEventC ct@(CapToken fqn _) ->
         lookupFqName (_ctName ct) >>= \case
-        Just (DCap d) -> do
-          enforceMeta (_dcapMeta d)
-          emitCapability info ct
-          returnCEKValue cont handler (VBool True)
-        Just _ ->
-          failInvariant info "CapToken does not point to defcap"
-        _ -> failInvariant info "No Capability found in emit-event"
+          Just (DCap d) -> do
+            enforceMeta (_dcapMeta d)
+            emitCapability info ct
+            returnCEKValue cont handler (VBool True)
+          Just _ ->
+            failInvariant info "CapToken does not point to defcap"
+          _ -> failInvariant info "No Capability found in emit-event"
         where
         enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)
         enforceMeta _ = pure ()
+      DefineKeysetC ksn newKs -> do
+        liftDbFunction info (writeKeySet pdb Write ksn newKs)
+        returnCEKValue cont handler (VString "Keyset write success")
+      DefineNamespaceC ns -> case v of
+        PBool allow ->
+          if allow then do
+            let nsn = _nsName ns
+            liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
+            returnCEKValue cont handler $ VString $ "Namespace defined: " <> (_namespaceName nsn)
+          else throwExecutionError info $ DefineNamespaceError "Namespace definition not permitted"
+        _ ->
+          throwExecutionError info $ DefineNamespaceError "Namespace manager function returned an invalid value"
       where
       foldDBRead tv queryClo appClo remaining acc =
         case remaining of
@@ -1230,8 +1440,9 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
             let acc' = PObject . _objectData <$> reverse acc
             in returnCEKValue cont handler (VList (V.fromList acc'))
     _ -> returnCEK cont handler (VError "higher order apply did not return a pactvalue" info)
-applyContToValue (CapBodyC cappop env mcap mevent capbody cont) handler _ = do
+applyContToValue (CapBodyC cappop env info mcap mevent capbody cont) handler _ = do
   -- Todo: I think this requires some administrative check?
+  chargeGasArgs info (GAConstant unconsWorkNodeGas)
   maybe (pure ()) (emitEvent def) mevent
   case mcap of
     Nothing -> do
@@ -1330,8 +1541,14 @@ applyContToValue (ModuleAdminC mn cont) handler v = do
   (esCaps . csModuleAdmin) %== S.insert mn
   returnCEKValue cont handler v
 
-applyContToValue (EvalCapC env info captoken withCapBody cont) handler _ =
-  evalCap info cont handler env captoken (CapBodyC PopCapInvoke) withCapBody
+-- applyContToValue (EvalCapC env info captoken withCapBody cont) handler _ =
+--   evalCap info cont handler env captoken (CapBodyC PopCapInvoke) withCapBody
+{-# SPECIALIZE applyContToValue
+   :: CoreCEKCont
+   -> CoreCEKHandler
+   -> CoreCEKValue
+   -> Eval CoreEvalResult
+    #-}
 
 
 -- | Important check for nested pacts:
@@ -1352,7 +1569,7 @@ applyLam vc@(C (Closure fn mn ca arity term mty env cloi)) args cont handler
   | arity == argLen = case ca of
     ArgClosure cloargs -> do
       args' <- traverse (enforcePactValue cloi) args
-      tcArgs <- zipWithM (\arg ty -> VPactValue <$> maybeTCType cloi arg ty) args' (NE.toList cloargs)
+      tcArgs <- zipWithM (\arg (Arg _ ty) -> VPactValue <$> maybeTCType cloi arg ty) args' (NE.toList cloargs)
       esStack %== (StackFrame fn mn SFDefun :)
       let cont' = StackPopC cloi mty cont
           varEnv = RAList.fromList (reverse tcArgs)
@@ -1373,7 +1590,7 @@ applyLam vc@(C (Closure fn mn ca arity term mty env cloi)) args cont handler
   where
   argLen = length args
   -- Here we enforce an argument to a user fn is a
-  apply' e (ty:tys) (x:xs) = do
+  apply' e (Arg _ ty:tys) (x:xs) = do
     x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue cloi x
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e (ty:tys) [] = do
@@ -1400,7 +1617,7 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
   where
   argLen = length args
   -- Todo: runtime TC here
-  apply' e (ty:tys) (x:xs) = do
+  apply' e (Arg _ ty:tys) (x:xs) = do
     x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue cloi x
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e [] [] = do
@@ -1413,7 +1630,7 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
 applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args cont handler =
   apply' (view ceLocal env) (NE.toList argtys) args
   where
-  apply' e (ty:tys) (x:xs) = do
+  apply' e (Arg _ ty:tys) (x:xs) = do
     x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue cloi x
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e [] [] = do
@@ -1431,7 +1648,9 @@ applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args cont handler =
   apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
 
 applyLam nclo@(N (NativeFn b env fn arity i)) args cont handler
-  | arity == argLen = fn i b cont handler env args
+  | arity == argLen = do
+    chargeFlatNativeGas i b
+    fn i b cont handler env args
   | argLen > arity = throwExecutionError i ClosureAppliedToTooManyArgs
   | null args = returnCEKValue cont handler (VClosure nclo)
   | otherwise = apply' arity [] args
@@ -1442,7 +1661,9 @@ applyLam nclo@(N (NativeFn b env fn arity i)) args cont handler
     returnCEKValue cont handler (VPartialNative (PartialNativeFn b env fn a pa i))
 
 applyLam (PN (PartialNativeFn b env fn arity pArgs i)) args cont handler
-  | arity == argLen = fn i b cont handler env (reverse pArgs ++ args)
+  | arity == argLen = do
+    chargeFlatNativeGas i b
+    fn i b cont handler env (reverse pArgs ++ args)
   | argLen > arity = throwExecutionError i ClosureAppliedToTooManyArgs
   | otherwise = apply' arity [] args
   where
@@ -1455,7 +1676,7 @@ applyLam (DPC (DefPactClosure fqn argtys arity env i)) args cont handler
   | arity == argLen = case argtys of
     ArgClosure cloargs -> do
       args' <- traverse (enforcePactValue i) args
-      tcArgs <- zipWithM (\arg ty -> maybeTCType i arg ty) args' (NE.toList cloargs)
+      tcArgs <- zipWithM (\arg (Arg _ ty) -> maybeTCType i arg ty) args' (NE.toList cloargs)
       let pc = DefPactContinuation (fqnToQualName fqn) tcArgs
           env' = set ceLocal (RAList.fromList (reverse (VPactValue <$> tcArgs))) env
       initPact i pc cont handler env'
@@ -1474,6 +1695,13 @@ applyLam (CT (CapTokenClosure fqn argtys arity i)) args cont handler
   | otherwise = throwExecutionError i ClosureAppliedToTooManyArgs
   where
   argLen = length args
+{-# SPECIALIZE applyLam
+   :: CanApply CEKBigStep CoreBuiltin () Eval
+   -> [CoreCEKValue]
+   -> CoreCEKCont
+   -> CoreCEKHandler
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
+    #-}
 
 checkSchema :: M.Map Field PactValue -> Schema -> Bool
 checkSchema o (Schema sc) = isJust $ do
@@ -1507,12 +1735,18 @@ instance MonadEval b i m => CEKEval CEKSmallStep b i m where
 
 instance MonadEval b i m => CEKEval CEKBigStep b i m where
   returnCEKValue = applyContToValue
+  {-# INLINE returnCEKValue #-}
   returnCEK = applyCont
+  {-# INLINE returnCEK #-}
   evalCEK = evaluateTerm
+  {-# INLINE evalCEK #-}
   returnFinal = return
+  {-# INLINE returnFinal #-}
   applyLamUnsafe = applyLam
+  {-# INLINE applyLamUnsafe #-}
 
   evalNormalForm = evaluateTerm Mt CEKNoHandler
+  {-# INLINE evalNormalForm #-}
 
   evalUnsafe = pure
 
@@ -1552,6 +1786,14 @@ enforceGuard info cont handler env g = case g of
     if curDpid == dpid
        then returnCEKValue cont handler (VBool True)
        else returnCEK cont handler (VError "Capability pact guard failed: invalid pact id" info)
+{-# SPECIALIZE enforceGuard
+   :: ()
+   -> CoreCEKCont
+   -> CoreCEKHandler
+   -> CoreCEKEnv
+   -> Guard QualifiedName PactValue
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
+    #-}
 
 enforceCapGuard
   :: (CEKEval step b i m, MonadEval b i m)
@@ -1573,6 +1815,13 @@ enforceCapGuard info cont handler (CapabilityGuard qn args mpid) = case mpid of
     else do
       let errMsg = "Capability guard enforce failure cap not in scope: " <> renderQualName qn
       returnCEK cont handler (VError errMsg info)
+{-# SPECIALIZE enforceCapGuard
+   :: ()
+   -> CoreCEKCont
+   -> CoreCEKHandler
+   -> CapabilityGuard QualifiedName PactValue
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
+    #-}
 
 runUserGuard
   :: (CEKEval step b i m, MonadEval b i m)
@@ -1591,6 +1840,14 @@ runUserGuard info cont handler env (UserGuard qn args) =
       -- Todo: sys only here
       applyLam (C clo) (VPactValue <$> args) (IgnoreValueC (PBool True) cont) handler
     d -> throwExecutionError info (InvalidDefKind (defKind d) "run-user-guard")
+{-# SPECIALIZE runUserGuard
+   :: ()
+   -> CoreCEKCont
+   -> CoreCEKHandler
+   -> CoreCEKEnv
+   -> UserGuard QualifiedName PactValue
+   -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
+    #-}
 
 eval
   :: forall step b i m
@@ -1610,6 +1867,12 @@ eval purity benv term = do
         VPactValue pv -> pure pv
         _ ->
           throwExecutionError (view termInfo term) (EvalError "Evaluation did not reduce to a value")
+{-# SPECIALIZE eval
+   :: Purity
+   -> CoreBuiltinEnv
+   -> CoreTerm
+   -> Eval PactValue
+    #-}
 
 interpretGuard
   :: forall step b i m
@@ -1629,6 +1892,12 @@ interpretGuard info bEnv g = do
         VPactValue pv -> pure pv
         _ ->
           throwExecutionError info (EvalError "Evaluation did not reduce to a value")
+{-# SPECIALIZE interpretGuard
+   :: ()
+   -> CoreBuiltinEnv
+   -> Guard QualifiedName PactValue
+   -> Eval PactValue
+    #-}
 
 evalResumePact
   :: forall step b i m
@@ -1649,3 +1918,52 @@ evalResumePact info bEnv mdpe = do
         VPactValue pv -> pure pv
         _ ->
           throwExecutionError info (EvalError "Evaluation did not reduce to a value")
+{-# SPECIALIZE evalResumePact
+   :: ()
+   -> CoreBuiltinEnv
+   -> Maybe DefPactExec
+   -> Eval PactValue
+    #-}
+
+
+evaluateTermSmallStep
+  :: Cont CEKSmallStep CoreBuiltin () Eval
+  -> CEKErrorHandler CEKSmallStep CoreBuiltin () Eval
+  -> CEKEnv CEKSmallStep CoreBuiltin () Eval
+  -> CoreTerm
+  -> Eval (CEKReturn CoreBuiltin () Eval)
+evaluateTermSmallStep = evaluateTerm
+
+
+applyContToValueSmallStep
+  :: Cont CEKSmallStep CoreBuiltin () Eval
+  -> CEKErrorHandler CEKSmallStep CoreBuiltin () Eval
+  -> CEKValue CEKSmallStep CoreBuiltin () Eval
+  -> Eval (CEKReturn CoreBuiltin () Eval)
+applyContToValueSmallStep = applyContToValue
+
+
+applyContSmallStep
+  :: Cont CEKSmallStep CoreBuiltin () Eval
+  -> CEKErrorHandler CEKSmallStep CoreBuiltin () Eval
+  -> EvalResult CEKSmallStep CoreBuiltin () Eval
+  -> Eval (CEKReturn CoreBuiltin () Eval)
+applyContSmallStep = applyCont
+
+--------------------------
+-- Gas-related code
+--------------------------
+constantWorkNodeGas :: MilliGas
+constantWorkNodeGas = (MilliGas 50)
+
+unconsWorkNodeGas :: MilliGas
+unconsWorkNodeGas = (MilliGas 100)
+
+tryNodeGas :: MilliGas
+tryNodeGas = (MilliGas 100)
+
+-- nthAccessGas n
+--  = GALinear n (LinearGasArg ())
+
+-- nthAccessSlope
+--   =
