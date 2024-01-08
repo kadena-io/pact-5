@@ -143,6 +143,10 @@ runTableModel = \case
   GALinear (MilliGas x) (LinearGasArg mnum mdiv intercept) ->
     MilliGas $ ((x * mnum) `div` mdiv) + intercept
   GAApplyLam !i -> MilliGas $ fromIntegral i * applyLamCostPerArg
+  GAZKArgs zka -> case zka of
+    PointAdd g -> pointAddGas g
+    ScalarMult g -> scalarMulGas g
+    Pairing np -> pairingGas np
 
 basicWorkGas :: Word64
 basicWorkGas = 25
@@ -462,9 +466,3 @@ replNativeGasTable :: ReplBuiltin CoreBuiltin -> MilliGas
 replNativeGasTable = \case
   RBuiltinWrap bwrap -> nativeGasTable bwrap
   _ -> mempty
-
--- expLengthPenalty :: Integral i => i -> MilliGas
--- expLengthPenalty v =
---   let lv = logBase (100::Float) (fromIntegral v)
---   in gasToMilliGas $ Gas (1 + floor (lv^(10::Int)))
--- {-# INLINE expLengthPenalty #-}

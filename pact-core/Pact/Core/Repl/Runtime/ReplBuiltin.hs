@@ -1,6 +1,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module Pact.Core.Repl.Runtime.ReplBuiltin where
 
@@ -40,6 +41,9 @@ import Pact.Core.Namespace
 
 import Pact.Core.Repl.Utils
 import qualified Pact.Time as PactTime
+import Pact.Core.Gas.TableGasModel
+
+type ReplCEKEval step = CEKEval step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 
 prettyShowValue :: CEKValue step b i m -> Text
 prettyShowValue = \case
@@ -47,14 +51,14 @@ prettyShowValue = \case
   VTable (TableValue (TableName tn mn) _ _) -> "table{" <> renderModuleName mn <> "_" <> tn <> "}"
   VClosure _ -> "<#closure>"
 
-corePrint :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+corePrint :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 corePrint info b cont handler _env = \case
   [v] -> do
     liftIO $ putStrLn $ T.unpack (prettyShowValue v)
     returnCEKValue cont handler (VLiteral LUnit)
   args -> argsError info b args
 
-coreExpect :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+coreExpect :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 coreExpect info b cont handler _env = \case
   [VLiteral (LString msg), VPactValue v1, VClosure clo] ->
     applyLamUnsafe clo [] Mt CEKNoHandler >>= \case
@@ -68,7 +72,7 @@ coreExpect info b cont handler _env = \case
       --  v -> returnCEK cont handler (VError ("expect error: evaluation did not return a pact value to compare" <> T.pack (show v)) info)
   args -> argsError info b args
 
-coreExpectThat :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+coreExpectThat :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 coreExpectThat info b cont handler _env = \case
   [VLiteral (LString msg), VClosure vclo, v] -> do
     applyLamUnsafe vclo [v] Mt CEKNoHandler >>= \case
@@ -79,7 +83,7 @@ coreExpectThat info b cont handler _env = \case
       VError ve i -> returnCEK cont handler (VError ve i)
   args -> argsError info b args
 
-coreExpectFailure :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+coreExpectFailure :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 coreExpectFailure info b cont handler _env = \case
   [VLiteral (LString toMatch), VClosure vclo] -> do
     es <- getEvalState
@@ -107,7 +111,7 @@ coreExpectFailure info b cont handler _env = \case
 
 
 
-continuePact :: forall step b . (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+continuePact :: forall step . ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 continuePact info b cont handler env = \case
   [VInteger s] -> go s False Nothing Nothing
   [VInteger s, VBool r] -> go s r Nothing Nothing
@@ -139,7 +143,7 @@ continuePact info b cont handler env = \case
       v <- liftEither merr
       returnCEK cont handler v
 
-pactState :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+pactState :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 pactState info b cont handler _env = \case
   [] -> go False
   [VBool clear] -> go clear
@@ -160,14 +164,14 @@ pactState info b cont handler _env = \case
         returnCEKValue cont handler (VObject (M.fromList ps))
       Nothing -> returnCEK cont handler (VError "pact-state: no pact exec in context" info)
 
-coreplEvalEnvStackFrame :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+coreplEvalEnvStackFrame :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 coreplEvalEnvStackFrame info b cont handler _env = \case
   [] -> do
     capSet <- getAllStackCaps
     returnCEKValue cont handler $ VString $ T.pack (show capSet)
   args -> argsError info b args
 
-envEvents :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+envEvents :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envEvents info b cont handler _env = \case
   [VBool clear] -> do
     events <- fmap envToObj <$> useEvalState esEvents
@@ -183,7 +187,7 @@ envEvents info b cont handler _env = \case
         , ("module-hash", PString (hashToText (_mhHash mh)))]
   args -> argsError info b args
 
-envHash :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+envHash :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envHash info b cont handler _env = \case
   [VString s] -> do
     case decodeBase64UrlUnpadded (T.encodeUtf8 s) of
@@ -193,14 +197,14 @@ envHash info b cont handler _env = \case
         returnCEKValue cont handler VUnit
   args -> argsError info b args
 
-envData :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+envData :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envData info b cont handler _env = \case
   [VObject o] -> do
     (replEvalEnv . eeMsgBody) .= PObject o
     returnCEKValue cont handler VUnit
   args -> argsError info b args
 
-envChainData :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+envChainData :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envChainData info b cont handler _env = \case
   [VObject cdataObj] -> do
     pd <- viewEvalEnv eePublicData
@@ -230,7 +234,7 @@ envChainData info b cont handler _env = \case
       _ -> returnCEK cont handler (VError ("envChainData: bad public metadata value for key: " <> _field k) info)
   args -> argsError info b args
 
-envKeys :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+envKeys :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envKeys info b cont handler _env = \case
   [VList ks] -> do
     keys <- traverse (asString info b) ks
@@ -238,7 +242,7 @@ envKeys info b cont handler _env = \case
     returnCEKValue cont handler VUnit
   args -> argsError info b args
 
-envSigs :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+envSigs :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envSigs info b cont handler _env = \case
   [VList ks] ->
     case traverse keyCapObj ks of
@@ -259,7 +263,7 @@ envSigs info b cont handler _env = \case
       _ -> Nothing
   args -> argsError info b args
 
-beginTx :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+beginTx :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 beginTx info b cont handler _env = \case
   [VString s] -> begin' info (Just s) >>= returnCEK cont handler . renderTx info "Begin Tx"
   [] -> begin' info Nothing >>= returnCEK cont handler . renderTx info "Begin Tx"
@@ -278,7 +282,7 @@ begin' info mt = do
   replTx .= ((,mt) <$> mTxId)
   return ((,mt) <$> mTxId)
 
-commitTx :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+commitTx :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 commitTx info b cont handler _env = \case
   [] -> do
     pdb <- use (replEvalEnv . eePactDb)
@@ -294,7 +298,7 @@ commitTx info b cont handler _env = \case
   args -> argsError info b args
 
 
-rollbackTx :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+rollbackTx :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 rollbackTx info b cont handler _env = \case
   [] -> do
     pdb <- use (replEvalEnv . eePactDb)
@@ -335,7 +339,7 @@ testCapability info b cont handler env = \case
       _ -> returnCEK cont handler (VError "no such capability" info)
   args -> argsError info b args
 
-envExecConfig :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+envExecConfig :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envExecConfig info b cont handler _env = \case
   [VList s] -> do
     s' <- traverse go (V.toList s)
@@ -350,7 +354,7 @@ envExecConfig info b cont handler _env = \case
         Nothing -> failInvariant info $ "Invalid flag, allowed: " <> T.pack (show (M.keys flagReps))
   args -> argsError info b args
 
-envNamespacePolicy :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step b SpanInfo (ReplM b)
+envNamespacePolicy :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envNamespacePolicy info b cont handler _env = \case
   [VBool allowRoot, VClosure (C clo)] -> do
     pdb <- viewEvalEnv eePactDb
@@ -363,6 +367,61 @@ envNamespacePolicy info b cont handler _env = \case
         returnCEKValue cont handler (VString "Installed namespace policy")
       _ -> returnCEK cont handler (VError "invalid namespace manager function type" info)
   args -> argsError info b args
+
+envGas :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+envGas info b cont handler _env = \case
+  [] -> do
+    Gas gas <- milliGasToGas <$> getGas
+    returnCEKValue cont handler (VInteger (fromIntegral gas))
+  [VInteger g] -> do
+    putGas $ gasToMilliGas (Gas (fromInteger g))
+    returnCEKValue cont handler $ VString $ "Set gas to" <> T.pack (show g)
+  args -> argsError info b args
+
+envMilliGas :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+envMilliGas info b cont handler _env = \case
+  [] -> do
+    MilliGas gas <- getGas
+    returnCEKValue cont handler (VInteger (fromIntegral gas))
+  [VInteger g] -> do
+    putGas (MilliGas (fromIntegral g))
+    returnCEKValue cont handler $ VString $ "Set milligas to" <> T.pack (show g)
+  args -> argsError info b args
+
+envGasLimit :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+envGasLimit info b cont handler _env = \case
+  [VInteger g] -> do
+    (replEvalEnv . eeGasModel . gmGasLimit) .= MilliGasLimit (gasToMilliGas (Gas (fromInteger g)))
+    returnCEKValue cont handler $ VString $ "Set gas limit to " <> T.pack (show g)
+  args -> argsError info b args
+
+envGasLog :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+envGasLog info b cont handler _env = \case
+  [] -> -- TODO: gaslog
+   returnCEKValue cont handler (VList mempty)
+  args -> argsError info b args
+
+envGasModel :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+envGasModel info b cont handler _env = \case
+  [] -> do
+    gm <- viewEvalEnv eeGasModel
+    let msg = "Current gas model is '" <> _gmName gm <> "': " <> _gmDesc gm
+    returnCEKValue cont handler (VString msg)
+  args@[VString model] -> do
+    gm <- viewEvalEnv eeGasModel
+    newmodel' <- case model of
+      "table" -> pure $ replTableGasModel (_gmGasLimit gm)
+      "fixed" -> pure (constantGasModel mempty (_gmGasLimit gm))
+      _ -> argsError info b args
+    replEvalEnv . eeGasModel .= newmodel'
+    returnCEKValue cont handler $ VString $ "Set gas model to " <> _gmDesc newmodel'
+  [VString "fixed", VInteger arg] -> do
+    gm <- viewEvalEnv eeGasModel
+    let newmodel' = constantGasModel (gasToMilliGas (Gas (fromIntegral arg))) (_gmGasLimit gm)
+    replEvalEnv . eeGasModel .= newmodel'
+    returnCEKValue cont handler $ VString $ "Set gas model to " <> _gmDesc newmodel'
+  args -> argsError info b args
+
 
 replBuiltinEnv
   :: CEKEval step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -404,3 +463,13 @@ replCoreBuiltinRuntime = \case
     REnvExecConfig -> envExecConfig
     REnvNamespacePolicy -> envNamespacePolicy
     RContinuePactRollbackYieldObj -> continuePact
+    REnvGas -> envGas
+    REnvGasSet -> envGas
+    REnvMilliGas -> envMilliGas
+    REnvSetMilliGas -> envMilliGas
+    REnvGasLimit -> envGasLimit
+    REnvGasLog -> envGasLog
+    REnvGasModel -> envGasModel
+    REnvAskGasModel -> envGasModel
+    REnvGasModelFixed -> envGasModel
+

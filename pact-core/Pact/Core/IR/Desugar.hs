@@ -252,6 +252,12 @@ instance DesugarBuiltin (ReplBuiltin CoreBuiltin) where
   -- (continue-pact <arg1> <arg2> <arg3> <arg4>)
   desugarAppArity i (RBuiltinRepl RContinuePact) [e1, e2, e3, e4] =
       App (Builtin (RBuiltinRepl RContinuePactRollbackYieldObj) i) [e1, e2, e3, e4] i
+  desugarAppArity i (RBuiltinRepl REnvGas) [e1] =
+      App (Builtin (RBuiltinRepl REnvGasSet) i) [e1] i
+  desugarAppArity i (RBuiltinRepl REnvGasModel) [] =
+      App (Builtin (RBuiltinRepl REnvAskGasModel) i) [] i
+  desugarAppArity i (RBuiltinRepl REnvGasModel) [e1, e2] =
+      App (Builtin (RBuiltinRepl REnvGasModelFixed) i) [e1, e2] i
   desugarAppArity i b ne =
     App (Builtin b i) ne i
 

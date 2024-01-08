@@ -123,12 +123,8 @@ nameGen = do
   name <- identGen
   Name name <$> nameKindGen
 
--- TODO
--- unresolvedGovGen :: Gen (CapGovRef ParsedName)
--- unresolvedGovGen = UnresolvedGov <$> parsedNameGen
-
--- resolvedGovGen :: Gen (CapGovRef Name)
--- resolvedGovGen = ResolvedGov <$> fullyQualifiedNameGen
+resolvedGovGen :: Gen (FQNameRef Name)
+resolvedGovGen = FQName <$> fullyQualifiedNameGen
 
 governanceGen :: Gen (Governance Name)
 governanceGen = Gen.choice
@@ -217,7 +213,6 @@ termGen b i = Gen.recursive Gen.choice
   [ Var <$> nameGen <*> i
   , Builtin <$> b <*> i
   , Constant <$> literalGen <*> i
-  , Error <$> identGen <*> i
   ]
   [ Lam <$> Gen.nonEmpty (Range.linear 1 16) argGen <*> termGen b i <*> i
   , Let <$> argGen <*> termGen b i <*> termGen b i <*> i

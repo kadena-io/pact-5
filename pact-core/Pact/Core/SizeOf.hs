@@ -38,7 +38,6 @@ import GHC.Generics
 import GHC.Int(Int(..))
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
-import qualified GHC.Integer.Logarithms as IntLog
 import qualified Data.List as L
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
@@ -48,6 +47,8 @@ import qualified Data.ByteString.Short as SBS
 import qualified Data.Vector as V
 import qualified Data.Text as T
 import qualified Data.Set as S
+import qualified GHC.Num.Integer as GHC
+import qualified GHC.Num.WordArray as GHC
 
 import Pact.Core.Names
 import Pact.Core.Pretty
@@ -79,7 +80,6 @@ import Pact.Core.ChainData
 
 data SizeOfVersion
   = SizeOfV0
-  | SizeOfV1
   deriving Show
 
 instance Pretty SizeOfVersion where
@@ -91,7 +91,7 @@ class SizeOf t where
   sizeOf v a = gsizeOf v (from a)
 
 
-type Bytes = Int64
+type Bytes = Word64
 
 -- | "word" is 8 bytes on 64-bit
 wordSize64, wordSize :: Bytes
@@ -103,11 +103,11 @@ headerCost :: Bytes
 headerCost = 1 * wordSize
 
 -- | In general, each constructor field costs 1 word
-constructorFieldCost :: Int64 -> Bytes
+constructorFieldCost :: Word64 -> Bytes
 constructorFieldCost numFields = numFields * wordSize
 
 -- | Total cost for constructor
-constructorCost :: Int64 -> Bytes
+constructorCost :: Word64 -> Bytes
 constructorCost numFields = headerCost + (constructorFieldCost numFields)
 
 
@@ -166,14 +166,14 @@ instance SizeOf Text where
   sizeOf _ t = (6 * wordSize) + (2 * (fromIntegral (T.length t)))
 
 instance SizeOf Integer where
-  sizeOf ver i = case ver of
-    SizeOfV0 ->
-      if i <= 0 then 0 else ceiling ((logBase 100000 (realToFrac i)) :: Double)
-    SizeOfV1 ->
-      fromIntegral (max 64 (I# (IntLog.integerLog2# (abs i)) + 1))  `quot` 8
+  sizeOf _ = \case
+    GHC.IS _ -> 2 * wordSize
+    GHC.IP bn -> fromIntegral $ I# (GHC.wordArraySize# bn)
+    GHC.IN bn -> fromIntegral $ I# (GHC.wordArraySize# bn)
+
 
 instance SizeOf Word64 where
-  sizeOf _ _ = wordSize64
+  sizeOf _ _ = 2 * wordSize64
 
 instance SizeOf Int where
   sizeOf _ _ = 2 * wordSize

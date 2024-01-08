@@ -41,6 +41,8 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , unsafeUpdateManagedParam
  , chargeFlatNativeGas
  , chargeGasArgs
+ , getGas
+ , putGas
  ) where
 
 import Control.Lens
@@ -319,21 +321,19 @@ chargeFlatNativeGas info nativeArg = do
   when (gasLimit > gUsed) $
     throwExecutionError info (GasExceeded limit gUsed)
 
--- getGas :: (MonadEvalEnv b i m, MonadIO m) => m MilliGas
+getGas :: (MonadEval b i m) => m MilliGas
+getGas =
+  viewEvalEnv eeGasRef >>= liftIO . readIORef
 {-# SPECIALIZE getGas
     :: Eval MilliGas
     #-}
-getGas :: (MonadEval b i m) => m MilliGas
-getGas =
-  -- _esGas <$> getEvalState
-  viewEvalEnv eeGasRef >>= liftIO . readIORef
+{-# INLINE getGas #-}
 
--- putGas :: (MonadEvalEnv b i m, MonadIO m) => MilliGas -> m ()
+putGas :: (MonadEval b i m) => MilliGas -> m ()
+putGas !g = do
+  gasRef <- viewEvalEnv eeGasRef
+  liftIO (writeIORef gasRef g)
+{-# INLINE putGas #-}
 {-# SPECIALIZE putGas
     :: MilliGas -> Eval ()
     #-}
-putGas :: (MonadEval b i m) => MilliGas -> m ()
-putGas !g = do
-  -- modifyEvalState (\es -> es{_esGas = g})
-  gasRef <- viewEvalEnv eeGasRef
-  liftIO (writeIORef gasRef g)
