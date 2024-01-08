@@ -806,7 +806,7 @@ gasWriteC pdb =
 
 gasWithDefaultReadC :: PactDb CoreBuiltin () -> C.Benchmark
 gasWithDefaultReadC pdb =
-  benchApplyContToValue mkEnv "WithReadC"
+  benchApplyContToValue mkEnv "WithDefaultReadC"
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -941,7 +941,7 @@ gasEmitEventC pdb =
 
 gasDefineKeysetC :: PactDb CoreBuiltin () -> C.Benchmark
 gasDefineKeysetC pdb =
-  benchApplyContWithRollback mkEnv "EmitEventC"
+  benchApplyContWithRollback mkEnv "DefineKeysetC"
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -1109,7 +1109,7 @@ gasCapInvokeCApplyMgrFun pdb =
 
 gasCapInvokeCUpdMgrFun :: PactDb CoreBuiltin () -> C.Benchmark
 gasCapInvokeCUpdMgrFun pdb =
-  benchApplyContWithRollback mkEnv "ApplyMgrFunC"
+  benchApplyContWithRollback mkEnv "UpdMgrFunC"
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -1269,8 +1269,10 @@ benchApplyContToValue mkEnv title =
   C.env mkEnv $ \ ~(ee, es, frame, handler, value) ->
     C.bench title $ C.nfAppIO (runEvalM ee es . Eval.applyContToValueSmallStep frame handler) value
 
--- Note: we preformo a rollback, then begin tx right after.
--- this prevents us from
+-- Note: we preform a rollback, then begin tx right after.
+-- This prevents us from say, inserting a value twice and changing
+-- the asymptotics of the benchmark. Generally, for db inserts, we want to
+-- benchmark the state of the world in the same way every time.
 benchApplyContWithRollback
   :: IO ApplyContToVEnv
   -> String

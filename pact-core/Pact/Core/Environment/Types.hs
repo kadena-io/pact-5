@@ -194,7 +194,6 @@ class Monad m => MonadEvalState b i m | m -> b, m -> i where
 type MonadEval b i m =
   ( MonadEvalEnv b i m
   , MonadEvalState b i m
-  -- , MonadGas m
   , MonadError (PactError i) m
   , MonadIO m
   , Default i
