@@ -788,6 +788,7 @@ readKeyset' ksn = do
             "keys-any" -> pure KeysAny
             "keys-2" -> pure Keys2
             "keys-all" -> pure KeysAll
+            n | Just pn <- parseParsedTyName n -> pure (CustomPredicate pn)
             _ -> Nothing
         Just (PList li) ->
           case parseKeyList li of
