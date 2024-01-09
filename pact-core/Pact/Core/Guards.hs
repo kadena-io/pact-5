@@ -107,7 +107,7 @@ data KSPredicate
   = KeysAll
   | Keys2
   | KeysAny
-  | CustomPredicate ParsedTyName -- TODO: When this is brought back, fix up `keySetGen`!
+  | CustomPredicate ParsedTyName 
   deriving (Eq, Show, Ord, Generic)
 
 instance NFData KSPredicate
