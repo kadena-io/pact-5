@@ -615,6 +615,11 @@ executionTests =
   , ("module_gov_keyset_nonexistent", isExecutionError _NoSuchKeySet, [text|
       (module m 'nonexistent (defun f () true))
       |])
+  , ("module_gov_keyset_nonexistent", isExecutionError _ModuleGovernanceFailure, [text|
+      (env-data {"ks":["jose"]})
+      (define-keyset 'somekeyset (read-keyset 'ks))
+      (module m 'somekeyset (defun f () 1))
+      |])
   , ("module_gov_keyset_empty", isExecutionError _ModuleGovernanceFailure, [text|
       (module m "" (defun f () true))
       |])
