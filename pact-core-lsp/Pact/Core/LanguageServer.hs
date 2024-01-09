@@ -1,6 +1,7 @@
 -- | 
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Pact.Core.LanguageServer
   ( startServer
@@ -30,6 +31,7 @@ import Pact.Core.Repl.Utils
 
 import Pact.Core.Info
 import Pact.Core.Repl.Compile
+import Pact.Core.BuiltinDocs
 import Pact.Core.Environment
 import Pact.Core.Builtin
 import Pact.Core.Errors
@@ -241,64 +243,67 @@ documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req re
         debug msg
         resp (Left err)
       Just rtl -> case getFirst (mconcat $ First . termAt pos <$> rtl) of
+        
         Nothing -> undefined
-        Just p
-          | isNative p -> do
-              let
-                mc = MarkupContent MarkupKind_PlainText ""
-                range = undefined
-                hover = Hover (InL mc) (Just range)
-              resp (Right (InL hover))
+        Just rt -> case builtinDocs rt of
+          Nothing -> undefined
+          Just doc -> let
+                mc = MarkupContent MarkupKind_PlainText doc
+                hover = Hover (InL mc) Nothing
+              in resp (Right (InL hover))
   where
-  isNative :: Lisp.ReplSpecialTL SpanInfo -> Bool
-  isNative (Lisp.RTL (Lisp.RTLTopLevel t)) = topLevelHasDocs t 
+  builtinDocs :: Lisp.ReplSpecialTL SpanInfo -> Maybe Text
+  builtinDocs (Lisp.RTL (Lisp.RTLTopLevel t)) = topLevelHasDocs t
+  builtinDocs _ = Nothing
 
 processFile
   :: SourceCode
   -> ReplM ReplCoreBuiltin [Lisp.ReplSpecialTL SpanInfo]
 processFile (SourceCode _ source) = do
   lexx <- liftEither (Lisp.lexer source)
-  liftEither $ Lisp.parseReplProgram lexx
-  -- concat <$> traverse pipe parsed
-  -- where
-  -- pipe = \case
-  --   Lisp.RTL rtl ->
-  --     pure <$> pipe' rtl
-  --   Lisp.RTLReplSpecial rsf -> case rsf of
-  --     Lisp.ReplLoad txt resetState _
-  --       | resetState -> do
-  --         oldSrc <- use replCurrSource
-  --         evalState .= def
-  --         pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
-  --         replPactDb .= pactdb
-  --         ee <- liftIO (defaultEvalEnv pactdb replcoreBuiltinMap)
-  --         replEvalEnv .= ee
-  --         out <- loadFile (T.unpack txt) replEnv display
-  --         replCurrSource .= oldSrc
-  --         pure out
-  --       | otherwise -> do
-  --         oldSrc <- use replCurrSource
-  --         oldEs <- use evalState
-  --         oldEE <- use replEvalEnv
-  --         out <- loadFile (T.unpack txt) replEnv display
-  --         replEvalEnv .= oldEE
-  --         evalState .= oldEs
-  --         replCurrSource .= oldSrc
-  --         pure out
-  -- pipe' tl = case tl of
-  --   Lisp.RTLTopLevel toplevel -> do
-  --     v <- interpretTopLevel replEnv toplevel
-  --     displayValue (RCompileValue v)
-  --   _ ->  do
-  --     ds <- runDesugarReplTopLevel tl
-  --     interpret ds
-  -- interpret (DesugarOutput tl _deps) = do
-  --   case tl of
-  --     RTLDefun df -> do
-  --       let fqn = FullyQualifiedName replModuleName (_dfunName df) replModuleHash
-  --       loaded . loAllLoaded %= M.insert fqn (Dfun df)
-  --       displayValue $ RLoadedDefun $ _dfunName df
-  --     RTLDefConst dc -> do
-  --       let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
-  --       loaded . loAllLoaded %= M.insert fqn (DConst dc)
-  --       displayValue $ RLoadedDefConst $ _dcName dc
+  parsed <- liftEither $ Lisp.parseReplProgram lexx
+  concat <$> traverse pipe parsed
+  where
+  pipe = \case
+    Lisp.RTL rtl ->
+      pure <$> pipe' rtl
+    Lisp.RTLReplSpecial rsf ->
+      undefined
+      -- case rsf of
+      -- Lisp.ReplLoad txt resetState _
+      --   | resetState -> do
+      --     oldSrc <- use replCurrSource
+      --     evalState .= def
+      --     pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
+      --     replPactDb .= pactdb
+      --     ee <- liftIO (defaultEvalEnv pactdb replcoreBuiltinMap)
+      --     replEvalEnv .= ee
+      --     out <- loadFile (T.unpack txt) replEnv display
+      --     replCurrSource .= oldSrc
+      --     pure out
+      --   | otherwise -> do
+      --     oldSrc <- use replCurrSource
+      --     oldEs <- use evalState
+      --     oldEE <- use replEvalEnv
+      --     out <- loadFile (T.unpack txt) replEnv display
+      --     replEvalEnv .= oldEE
+      --     evalState .= oldEs
+      --     replCurrSource .= oldSrc
+      --     pure out
+  pipe' tl = case tl of
+    Lisp.RTLTopLevel toplevel -> do
+      v <- interpretTopLevel replEnv toplevel
+      displayValue (RCompileValue v)
+    _ ->  do
+      ds <- runDesugarReplTopLevel tl
+      interpret ds
+  interpret (DesugarOutput tl _deps) = do
+    case tl of
+      RTLDefun df -> do
+        let fqn = FullyQualifiedName replModuleName (_dfunName df) replModuleHash
+        loaded . loAllLoaded %= M.insert fqn (Dfun df)
+        displayValue $ RLoadedDefun $ _dfunName df
+      RTLDefConst dc -> do
+        let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
+        loaded . loAllLoaded %= M.insert fqn (DConst dc)
+        displayValue $ RLoadedDefConst $ _dcName dc
