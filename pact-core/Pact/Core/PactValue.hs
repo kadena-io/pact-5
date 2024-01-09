@@ -103,7 +103,7 @@ synthesizePvType = \case
   PList _ -> TyAnyList
   PGuard _ -> TyGuard
   PModRef mr -> TyModRef (S.fromList (_mrImplemented mr))
-  PObject f -> TyAnyObject
+  PObject _ -> TyAnyObject
   PCapToken {} -> TyCapToken
   PTime _ -> TyTime
 
