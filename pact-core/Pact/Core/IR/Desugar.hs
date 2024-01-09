@@ -717,6 +717,7 @@ defTableSCC mn cd dt =
 --   - Defcap terms
 --   - Defcap args
 --   - Defcap return type
+--   - Defcap managed meta
 defCapSCC
   :: ModuleName
   -> Set Text
@@ -725,16 +726,16 @@ defCapSCC
 defCapSCC mn cd dc =
   let argsScc = foldMap (argSCC mn cd) (_dcapArgs dc)
       rtypeScc = maybe mempty (typeSCC mn cd) (_dcapRType dc)
-  in argsScc <> rtypeScc <> case _dcapMeta dc of
-    DefManaged (DefManagedMeta _ (FQParsed pn)) ->
-      termSCC mn cd (_dcapTerm dc) <> parsedNameSCC mn cd pn
-    _ -> termSCC mn cd (_dcapTerm dc)
+      termScc = termSCC mn cd (_dcapTerm dc)
+  in argsScc <> rtypeScc <> termScc <> case _dcapMeta dc of
+    DefManaged (DefManagedMeta _ (FQParsed pn)) -> parsedNameSCC mn cd pn
+    _ -> mempty
 
--- | Get the set of dependencies from a defcap
+-- | Get the set of dependencies from a defpact
 -- Note: names will show up in:
---   - Defcap Steps
---   - Defcap args
---   - Defcap return type
+--   - Defpact Steps
+--   - Defpact args
+--   - Defpact return type
 defPactSCC
   :: ModuleName
   -> Set Text
@@ -757,6 +758,46 @@ defPactStepSCC mn cd = \case
   StepWithRollback step rollback ->
     S.unions $ [termSCC mn cd step, termSCC mn cd rollback]
 
+-- | Get the set of dependencies from a defun signature defn
+-- Note: names will show up in:
+--   - Defun signature arguments
+--   - Defun signature return type
+ifDefunSCC
+  :: ModuleName
+  -> Set Text
+  -> IfDefun DesugarType i
+  -> Set Text
+ifDefunSCC mn currDefs (IfDefun _name args ty _info) =
+   foldMap (argSCC mn currDefs) args <> maybe mempty (typeSCC mn currDefs) ty
+
+-- | Get the set of dependencies from a defcap signature
+-- Note: names will show up in:
+--   - Defcap signature args
+--   - Defcap signature return type
+--   - Defcap signature meta
+ifDefCapSCC
+  :: ModuleName
+  -> Set Text
+  -> IfDefCap ParsedName DesugarType i
+  -> Set Text
+ifDefCapSCC mn currDefs (IfDefCap _name args rty meta _info) =
+   foldMap (argSCC mn currDefs) args <> maybe mempty (typeSCC mn currDefs) rty <> metaSCC meta
+   where
+  metaSCC (DefManaged (DefManagedMeta _ bn)) = parsedNameSCC mn currDefs (BN bn)
+  metaSCC _ = mempty
+
+-- | Get the set of dependencies from a defpact signature
+-- Note: names will show up in:
+--   - Defpact signature args
+--   - Defpact signature return type
+ifDefPactSCC
+  :: ModuleName
+  -> Set Text
+  -> IfDefPact DesugarType i
+  -> Set Text
+ifDefPactSCC mn currDefs (IfDefPact _name args rty _info) =
+   foldMap (argSCC mn currDefs) args <> maybe mempty (typeSCC mn currDefs) rty
+
 -- | Calculate the dependency set for any type of def
 defSCC
   :: ModuleName
@@ -778,10 +819,10 @@ ifDefSCC
   -> IfDef ParsedName DesugarType b i1
   -> Set Text
 ifDefSCC mn currDefs = \case
-  IfDfun _ -> mempty
-  IfDCap _ -> mempty
+  IfDfun ifd -> ifDefunSCC mn currDefs ifd
+  IfDCap d -> ifDefCapSCC mn currDefs d
   IfDConst d -> defConstSCC mn currDefs d
-  IfDPact _ -> mempty
+  IfDPact d -> ifDefPactSCC mn currDefs d
   IfDSchema ds -> foldMap (typeSCC mn currDefs) ( _dsSchema ds)
 
 -- Todo: this handles imports, rename?
