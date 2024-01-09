@@ -14,7 +14,6 @@ import Control.Applicative ((<|>))
 import Pact.Core.Builtin
 import Pact.Core.Persistence
 import Pact.Core.Guards
-import Pact.Core.Names
 import Pact.Core.Namespace
 import Pact.Core.DefPacts.Types
 import Control.Lens
@@ -62,8 +61,8 @@ data PactSerialise b i
   = PactSerialise
   { _encodeModuleData :: ModuleData b i -> ByteString
   , _decodeModuleData :: ByteString -> Maybe (Document (ModuleData b i))
-  , _encodeKeySet :: KeySet QualifiedName -> ByteString
-  , _decodeKeySet :: ByteString -> Maybe (Document (KeySet QualifiedName))
+  , _encodeKeySet :: KeySet -> ByteString
+  , _decodeKeySet :: ByteString -> Maybe (Document KeySet)
   , _encodeDefPactExec :: Maybe DefPactExec -> ByteString
   , _decodeDefPactExec :: ByteString -> Maybe (Document (Maybe DefPactExec))
   , _encodeNamespace :: Namespace -> ByteString

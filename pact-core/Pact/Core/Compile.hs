@@ -118,8 +118,8 @@ evalModuleGovernance bEnv tl = do
       lookupModule (Lisp._mInfo m) pdb mname >>= \case
         Just targetModule -> do
           term <- case _mGovernance targetModule of
-            KeyGov (KeySetName ksn _mNs) -> do
-              let ksnTerm = Constant (LString ksn) info
+            KeyGov ksn -> do
+              let ksnTerm = Constant (LString (renderKeySetName ksn)) info
                   ksrg = App (Builtin (liftCoreBuiltin CoreKeysetRefGuard) info) (pure ksnTerm) info
                   term = App (Builtin (liftCoreBuiltin CoreEnforceGuard) info) (pure ksrg) info
               pure term
@@ -165,6 +165,17 @@ interpretTopLevel bEnv tl = do
   lo0 <- useEvalState esLoaded
   case tlFinal of
     TLModule m -> do
+      -- enforce new module keyset on install
+      case _mGovernance m of
+        KeyGov ksn ->
+          () <$ Eval.interpretGuard (_mInfo m) bEnv (GKeySetRef ksn)
+      -- governance is granted on install without testing the cap.
+      -- rationale is governance might be some vote or something
+      -- that doesn't exist yet, or something like non-upgradable governance.
+      -- Of course, if governance is
+      -- busted somehow, this means we won't find out, and
+      -- can't fix it later.
+        CapGov _ -> pure ()
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = ModuleData m deps'
       chargeGasArgs (_mInfo m) (GModuleMemory (sizeOf SizeOfV0 m))

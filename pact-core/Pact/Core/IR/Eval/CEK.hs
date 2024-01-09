@@ -41,6 +41,7 @@ module Pact.Core.IR.Eval.CEK
 
 import Control.Lens
 import Control.Monad
+import Control.Monad.IO.Class
 import Data.Default
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Foldable(find, foldl', traverse_)
@@ -683,6 +684,10 @@ guardForModuleCall i cont handler env currMod onFound =
    -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
+-- | Acquires module admin for a known module
+-- NOTE: This function should only be called _after_
+-- checking whether `esCaps . csModuleAdmin` for the particular
+-- module is in scope
 acquireModuleAdmin
   :: (CEKEval step b i m, MonadEval b i m)
   => i
@@ -692,14 +697,10 @@ acquireModuleAdmin
   -> EvalModule b i
   -> m (CEKEvalResult step b i m)
 acquireModuleAdmin i cont handler env mdl = do
-  -- mc <- useEvalState (esCaps . csModuleAdmin)
-  -- if S.member (_mName mdl) mc then returnCEKValue cont handler VUnit
-  -- else case _mGovernance mdl of
   case _mGovernance mdl of
     KeyGov ksn -> do
-      enforceKeysetNameAdmin i (_mName mdl) ksn
-      esCaps . csModuleAdmin %== S.insert (_mName mdl)
-      returnCEKValue cont handler VUnit
+      let cont' = ModuleAdminC (_mName mdl) cont
+      isKeysetNameInSigs i cont' handler env ksn
     CapGov (FQName fqn) -> do
       let wcapBody = Constant LUnit i
       let cont' = ModuleAdminC (_mName mdl) cont
@@ -1412,6 +1413,11 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
           else throwExecutionError info $ DefineNamespaceError "Namespace definition not permitted"
         _ ->
           throwExecutionError info $ DefineNamespaceError "Namespace manager function returned an invalid value"
+      RunKeysetPredC -> case v of
+        PBool allow ->
+          if allow then returnCEKValue cont handler (VBool True)
+          else returnCEK cont handler (VError "keyset enforce failure" info)
+        _ -> returnCEK cont handler (VError "keyset enforce failure" info)
       where
       foldDBRead tv queryClo appClo remaining acc =
         case remaining of
@@ -1769,13 +1775,9 @@ enforceGuard
   -> m (CEKEvalResult step b i m)
 enforceGuard info cont handler env g = case g of
   GKeyset ks -> do
-    cond <- isKeysetInSigs ks
-    if cond then returnCEKValue cont handler (VBool True)
-    else returnCEK cont handler (VError "enforce keyset failure" info)
+    isKeysetInSigs info cont handler env ks
   GKeySetRef ksn -> do
-    cond <- isKeysetNameInSigs info (view cePactDb env) ksn
-    if cond then returnCEKValue cont handler (VBool True)
-    else returnCEK cont handler (VError "enforce keyset ref failure" info)
+    isKeysetNameInSigs info cont handler env ksn
   GUserGuard ug -> runUserGuard info cont handler env ug
   GCapabilityGuard cg -> enforceCapGuard info cont handler cg
   GModuleGuard (ModuleGuard mn _) -> calledByModule mn >>= \case
@@ -1954,6 +1956,67 @@ applyContSmallStep
   -> Eval (CEKReturn CoreBuiltin () Eval)
 applyContSmallStep = applyCont
 
+-- Keyset Code
+isKeysetInSigs
+  :: (MonadEval b i m, CEKEval step b i m)
+  => i
+  -> Cont step b i m
+  -> CEKErrorHandler step b i m
+  -> CEKEnv step b i m
+  -> KeySet
+  -> m (CEKEvalResult step b i m)
+isKeysetInSigs info cont handler env (KeySet kskeys ksPred) = do
+  matchedSigs <- M.filterWithKey matchKey <$> viewEvalEnv eeMsgSigs
+  sigs <- checkSigCaps matchedSigs
+  runPred (M.size sigs)
+  where
+  matchKey k _ = k `elem` kskeys
+  atLeast t m = m >= t
+  count = S.size kskeys
+  run p matched =
+    if p count matched then returnCEKValue cont handler (VBool True)
+    else returnCEK cont handler (VError "keyset enforce failure" info)
+  runPred matched =
+    case ksPred of
+      KeysAll -> run atLeast matched
+      KeysAny -> run (\_ m -> atLeast 1 m) matched
+      Keys2 -> run (\_ m -> atLeast 2 m) matched
+      CustomPredicate n -> runCustomPred matched n
+  runCustomPred matched = \case
+    TQN qn -> do
+      pdb <- viewEvalEnv eePactDb
+      getModuleMember info pdb qn >>= \case
+        Dfun d -> do
+          clo <- mkDefunClosure d (_qnModName qn) env
+          let cont' = BuiltinC env info RunKeysetPredC cont
+          applyLam (C clo) [VInteger (fromIntegral count), VInteger (fromIntegral matched)] cont' handler
+        _ -> failInvariant info "invalid def type for custom keyset predicate"
+    TBN (BareName bn) -> do
+      m <- viewEvalEnv eeNatives
+      case M.lookup bn m of
+        Just b -> do
+          let builtins = view ceBuiltins env
+          let nativeclo = builtins info b env
+          let cont' = BuiltinC env info RunKeysetPredC cont
+          applyLam (N nativeclo) [VInteger (fromIntegral count), VInteger (fromIntegral matched)] cont' handler
+        Nothing ->
+          failInvariant info "could not find native definition for custom predicate"
+
+isKeysetNameInSigs
+  :: (MonadEval b i m, CEKEval step b i m)
+  => i
+  -> Cont step b i m
+  -> CEKErrorHandler step b i m
+  -> CEKEnv step b i m
+  -> KeySetName
+  -> m (CEKEvalResult step b i m)
+isKeysetNameInSigs info cont handler env ksn = do
+  pdb <- viewEvalEnv eePactDb
+  liftIO (readKeySet pdb ksn) >>= \case
+    Just ks -> isKeysetInSigs info cont handler env ks
+    Nothing ->
+      throwExecutionError info (NoSuchKeySet ksn)
+
 --------------------------
 -- Gas-related code
 --------------------------
@@ -1966,8 +2029,3 @@ unconsWorkNodeGas = (MilliGas 100)
 tryNodeGas :: MilliGas
 tryNodeGas = (MilliGas 100)
 
--- nthAccessGas n
---  = GALinear n (LinearGasArg ())
-
--- nthAccessSlope
---   =

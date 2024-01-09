@@ -57,10 +57,10 @@ decodeModuleData_repl_spaninfo bs = either (const Nothing) (Just . snd) (deseria
 decodeModuleData_raw_spaninfo :: ByteString -> Maybe (ModuleData CoreBuiltin SpanInfo)
 decodeModuleData_raw_spaninfo bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
-encodeKeySet :: KeySet QualifiedName -> ByteString
+encodeKeySet :: KeySet -> ByteString
 encodeKeySet = toStrictByteString . encode
 
-decodeKeySet :: ByteString -> Maybe (KeySet QualifiedName)
+decodeKeySet :: ByteString -> Maybe KeySet
 decodeKeySet bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
 
@@ -106,19 +106,22 @@ instance Serialise PublicKeyText where
   encode (PublicKeyText t) = encode t
   decode = PublicKeyText <$> decode
 
-instance Serialise (KeySet QualifiedName) where
+instance Serialise KeySet where
   encode (KeySet ks p) = encode ks <> encode p
   decode = KeySet <$> decode <*> decode
 
-instance Serialise (KSPredicate n) where
+instance Serialise KSPredicate where
   encode = \case
     KeysAll -> encodeWord 0
     Keys2 -> encodeWord 1
     KeysAny -> encodeWord 2
+    CustomPredicate pn -> encodeWord 3 <> encode pn
+
   decode = decodeWord >>= \case
     0 -> pure KeysAll
     1 -> pure Keys2
     2 -> pure KeysAny
+    3 -> CustomPredicate <$> decode
     _ -> fail "unexpected decoding"
 
 instance Serialise QualifiedName where
@@ -143,6 +146,16 @@ instance Serialise ParsedName where
     1 -> BN <$> decode
     2 -> DN <$> decode
     _ -> fail "unexpected decoding"
+
+instance Serialise ParsedTyName where
+  encode (TQN qn) = encodeWord 0 <> encode qn
+  encode (TBN bn) = encodeWord 1 <> encode bn
+
+  decode = decodeWord >>= \case
+    0 -> TQN <$> decode
+    1 -> TBN <$> decode
+    _ -> fail "unexpected decoding"
+
 
 instance Serialise Hash where
   encode (Hash h) = encode h

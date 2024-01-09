@@ -197,6 +197,9 @@ encodeGuard = \case
       KeysAll -> "keys-all"
       Keys2 -> "keys-2"
       KeysAny -> "keys-any"
+      CustomPredicate pn -> case pn of
+        TBN (BareName bn) -> encodeText bn
+        TQN qn -> encodeQualName qn
   GKeySetRef (KeySetName name mNs) -> "KeySetName" <> parens (encodeMNamespace mNs <> encodeText name)
   GUserGuard (UserGuard fn args) ->
     "UG" <> encodeApp (encodeQualName fn) (encodePactValue <$> args)

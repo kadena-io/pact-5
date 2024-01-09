@@ -137,7 +137,7 @@ mkGasModelFqn t = FullyQualifiedName gmModuleName t gmModuleHash
 gmPublicKeyText1 :: PublicKeyText
 gmPublicKeyText1 = PublicKeyText "jose"
 
-gmKeyset :: KeySet QualifiedName
+gmKeyset :: KeySet
 gmKeyset = KeySet (S.fromList [gmPublicKeyText1]) KeysAll
 
 gmTableGuard :: Guard QualifiedName PactValue
