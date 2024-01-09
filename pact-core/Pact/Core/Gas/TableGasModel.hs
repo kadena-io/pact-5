@@ -144,10 +144,16 @@ runTableModel = \case
   -- Note: concat values are currently just constant
   -- Todo: get actual metrics on list cat / text cat
   GConcat c -> case c of
-    TextConcat totalLen ->
-      MilliGas (fromIntegral totalLen * 1_000)
-    ListConcat totalLen ->
-      MilliGas (fromIntegral totalLen * 1_000)
+    TextConcat (GasTextLength totalLen) ->
+      MilliGas (fromIntegral totalLen * 100)
+    TextListConcat !(GasTextLength totalCharSize) !(GasListLength nElems) -> MilliGas $
+      fromIntegral totalCharSize * stringLenCost + fromIntegral nElems * listLenCost
+      where
+      stringLenCost,listLenCost :: Word64
+      stringLenCost = 100
+      listLenCost = 40
+    ListConcat (GasListLength totalLen) ->
+      MilliGas (fromIntegral totalLen * 100)
     ObjConcat totalLen ->
       MilliGas (fromIntegral totalLen * 1_000)
   GAApplyLam !i -> MilliGas $ fromIntegral i * applyLamCostPerArg

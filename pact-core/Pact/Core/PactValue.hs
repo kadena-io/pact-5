@@ -117,11 +117,8 @@ checkPvType ty = \case
   PGuard{}
     | ty == TyGuard -> Just TyGuard
     | otherwise -> Nothing
-  -- PTable _ sc1
-  --   | ty == TyTable sc1 -> Just (TyTable sc1)
-  --   | otherwise -> Nothing
-  -- todo: types of objects
   PObject o -> case ty of
+    -- Todo: gas
     TyObject (Schema sc) ->
       let tyList = M.toList sc
           oList = M.toList o
@@ -135,6 +132,7 @@ checkPvType ty = \case
         | otherwise = Nothing
     TyAnyObject -> Just TyAnyObject
     _ -> Nothing
+  -- Todo: gas
   PList l -> case ty of
     TyList t' | all (isJust . checkPvType t') l -> Just (TyList t')
     TyAnyList -> Just TyAnyList

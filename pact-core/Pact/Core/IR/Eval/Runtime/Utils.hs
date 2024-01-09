@@ -303,7 +303,7 @@ chargeGasArgs info ga = do
   let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
       gUsed = currGas <> (_gmRunModel model) ga
   putGas gUsed
-  when (gasLimit > gUsed) $
+  when (gUsed > gasLimit) $
     throwExecutionError info (GasExceeded limit gUsed)
 
 {-# SPECIALIZE chargeFlatNativeGas

@@ -138,14 +138,14 @@ rawAdd info b cont handler _env = \case
     chargeGasArgs info (GIntegerOpCost PrimOpAdd (decimalMantissa i) (decimalMantissa i'))
     returnCEKValue cont handler (VLiteral (LDecimal (i + i')))
   [VLiteral (LString i), VLiteral (LString i')] -> do
-    chargeGasArgs info (GConcat (TextConcat (T.length i + T.length i')))
+    chargeGasArgs info (GConcat (TextConcat (GasTextLength (T.length i + T.length i'))))
     returnCEKValue cont handler  (VLiteral (LString (i <> i')))
   [VObject l, VObject r] -> do
     chargeGasArgs info (GConcat (ObjConcat (M.size l + M.size r)))
     let o' = VObject (l `M.union` r)
     returnCEKValue cont handler o'
   [VList l, VList r] -> do
-    chargeGasArgs info (GConcat (ListConcat (V.length l + V.length r)))
+    chargeGasArgs info (GConcat (ListConcat (GasListLength (V.length l + V.length r))))
     returnCEKValue cont handler (VList (l <> r))
   args -> argsError info b args
 
@@ -491,8 +491,12 @@ rawReverse info b cont handler _env = \case
 
 coreConcat :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreConcat info b cont handler _env = \case
-  [VList li] -> do
+  [VList li]
+    | V.null li -> returnCEKValue cont handler (VString mempty)
+    | otherwise -> do
     li' <- traverse (asString info b) li
+    let totalLen = sum $ T.length <$> li'
+    chargeGasArgs info (GConcat (TextListConcat (GasTextLength totalLen) (GasListLength (V.length li))))
     returnCEKValue cont handler (VString (T.concat (V.toList li')))
   args -> argsError info b args
 
@@ -560,15 +564,16 @@ createEnumerateList
   -- ^ Step
   -> m (Vector Integer)
 createEnumerateList info from to inc
-  | from == to = pure (V.singleton from)
-  | inc == 0 = pure mempty
+  | from == to = chargeGasArgs info (GMakeList 1 (sizeOf SizeOfV0 from)) *>  pure (V.singleton from)
+  | inc == 0 = pure mempty -- note: covered by the flat cost
   | from < to, from + inc < from =
     throwExecutionError info (EnumerationError "enumerate: increment diverges below from interval bounds.")
   | from > to, from + inc > from =
     throwExecutionError info (EnumerationError "enumerate: increment diverges above from interval bounds.")
-  | otherwise = let
-    step = succ (abs (from - to) `div` abs inc)
-    in pure $ V.enumFromStepN from inc (fromIntegral step)
+  | otherwise = do
+    let len = succ (abs (from - to) `div` abs inc)
+    chargeGasArgs info (GMakeList len (sizeOf SizeOfV0 (max (abs from) (abs to))))
+    pure $ V.enumFromStepN from inc (fromIntegral len)
 
 coreEnumerateStepN :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreEnumerateStepN info b cont handler _env = \case

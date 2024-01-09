@@ -29,6 +29,9 @@ module Pact.Core.Gas
  , ZKArg(..)
  , IntegerPrimOp(..)
  , ConcatType(..)
+ , GasTextLength(..)
+ , GasListLength(..)
+ , GasObjectSize(..)
  ) where
 
 import Control.Lens
@@ -146,10 +149,28 @@ data GasArgs
   | GModuleMemory !Word64
   deriving (Show)
 
+newtype GasTextLength
+  = GasTextLength Int
+  deriving Show
+
+newtype GasListLength
+  = GasListLength Int
+  deriving Show
+
+newtype GasObjectSize
+  = GasObjectSize Int
+  deriving Show
+
+
 data ConcatType
-  = TextConcat !Int
-  | ListConcat !Int
+  = TextConcat !GasTextLength
+  -- ^ Total final string length
+  | TextListConcat !GasTextLength !GasListLength
+  -- ^ Total final string length, number of strings
+  | ListConcat !GasListLength
+  -- ^ Final list length
   | ObjConcat !Int
+  -- ^ Upper bound on max object size
   deriving Show
 
 -- -- | DB Read value for per-row gas costing.
