@@ -573,7 +573,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
                             cont' = modCont env (Just qualCapToken) (Just (fqctToPactEvent origToken)) contbody currCont
                         installCap info env c' False >>= evalUserManagedCap cont' newLocals capBody
                       Nothing ->
-                        throwExecutionError info (CapNotInstalled fqn) -- TODO TODO how to trigger this?
+                        throwExecutionError info (CapNotInstalled fqn)
                   Just managedCap -> do
                     let cont' = modCont env (Just qualCapToken) (Just (fqctToPactEvent origToken)) contbody currCont
                     evalUserManagedCap cont' newLocals capBody managedCap
@@ -590,7 +590,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
                         let c' = set ctName fqn c
                         installCap info env c' False >>= evalAutomanagedCap cont' newLocals capBody
                       Nothing ->
-                        throwExecutionError info (CapNotInstalled fqn) -- TODO TODO how to trigger this?
+                        throwExecutionError info (CapNotInstalled fqn)
                   Just managedCap ->
                     evalAutomanagedCap cont' newLocals capBody managedCap
                       -- if b then

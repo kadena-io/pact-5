@@ -854,6 +854,39 @@ executionTests =
 
       (dep.dep-impure "b" 1)
     |])
+  , ("managed_auto_cap_not_installed", isExecutionError _CapNotInstalled, [text|
+      (module m g (defcap g () true)
+        (defcap PAY (sender:string receiver:string amount:integer)
+          @managed
+          (enforce-keyset (read-keyset sender))
+          )
+        (defun pay (sender receiver amount)
+          (with-capability (PAY sender receiver amount) amount)
+          )
+        )
+
+      (env-data { "alice": ["alice"] })
+      (env-keys ["alice"])
+
+      (pay "alice" "bob" 10)
+    |])
+  , ("managed_cap_not_installed", isExecutionError _CapNotInstalled, [text|
+      (module m g (defcap g () true)
+        (defcap PAY (sender:string receiver:string amount:integer)
+          @managed amount PAY-mgr
+          (enforce-keyset (read-keyset sender))
+          )
+        (defun PAY-mgr (mgd req) 0)
+        (defun pay (sender receiver amount)
+          (with-capability (PAY sender receiver amount) amount)
+          )
+        )
+
+      (env-data { "alice": ["alice"] })
+      (env-keys ["alice"])
+
+      (pay "alice" "bob" 10)
+    |])
   ]
 
 tests :: TestTree
