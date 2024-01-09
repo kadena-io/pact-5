@@ -127,7 +127,7 @@ instance J.Encode (StableEncoding KeySetName) where
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `KeySet FullyQualifiedName`
-instance J.Encode (StableEncoding (KeySet QualifiedName)) where
+instance J.Encode (StableEncoding KeySet) where
   build (StableEncoding (KeySet keys predFun)) =J.object
     [ "pred" J..= StableEncoding predFun
     , "keys" J..= J.Array (Set.map StableEncoding keys) -- TODO: is this valid?
@@ -140,11 +140,12 @@ instance J.Encode (StableEncoding (Map Field PactValue)) where
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `KSPredicate FullyQualifiedName`
-instance J.Encode (StableEncoding (KSPredicate QualifiedName)) where
+instance J.Encode (StableEncoding KSPredicate) where
   build (StableEncoding ksp) = case ksp of
     KeysAll -> J.build ("keys-all" :: T.Text)
     Keys2 -> J.build ("keys-2" :: T.Text)
     KeysAny -> J.build ("keys-any" :: T.Text)
+    CustomPredicate pn -> J.build (renderParsedTyName pn)
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `PublicKeyText`

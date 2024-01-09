@@ -304,6 +304,7 @@ instance SizeOf Name
 instance SizeOf QualifiedName
 instance SizeOf DynamicName
 instance SizeOf ParsedName
+instance SizeOf ParsedTyName
 instance SizeOf FullyQualifiedName
 
 -- Type
@@ -330,8 +331,8 @@ deriving newtype instance SizeOf PublicKeyText
 instance SizeOf KeySetName
 instance (SizeOf name, SizeOf v) => SizeOf (UserGuard name v)
 instance (SizeOf name, SizeOf v) => SizeOf (CapabilityGuard name v)
-instance (SizeOf name) => SizeOf (KSPredicate name)
-instance (SizeOf name) => SizeOf (KeySet name)
+instance SizeOf KSPredicate
+instance SizeOf KeySet
 instance SizeOf ModuleGuard
 instance SizeOf DefPactGuard
 instance (SizeOf name, SizeOf v) => SizeOf (Guard name v)

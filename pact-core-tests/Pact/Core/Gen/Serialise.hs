@@ -77,21 +77,27 @@ parsedNameGen = Gen.choice
   , DN <$> dynamicNameGen
   ]
 
+parsedTyNameGen :: Gen ParsedTyName
+parsedTyNameGen = Gen.choice
+  [ TQN <$> qualifiedNameGen
+  , TBN <$> bareNameGen
+  ]
+
 hashGen :: Gen Hash
 hashGen = Hash . BSS.toShort . encodeUtf8 <$> identGen
 
 -- | Generate a keyset, polymorphic over the custom
 -- predicate function `a`. This particular variant is
 -- not supported yet, so the argument is unused.
-keySetGen :: Gen a -> Gen (KeySet a)
+keySetGen :: Gen a -> Gen KeySet
 keySetGen _genA = do
   ksKeysList <- Gen.list (Range.linear 1 10) publicKeyTextGen
   let _ksKeys = Set.fromList ksKeysList
-  -- customPredicate <- CustomPredicate <$> genA
   _ksPredFun <- Gen.choice
     [ pure KeysAll
     , pure Keys2
     , pure KeysAny
+    , CustomPredicate <$> parsedTyNameGen
     -- , customPredicate -- TODO: Reinstantiate this when CustomPredicate is brought back into Guard.hs.
     ]
   pure $ KeySet { _ksKeys, _ksPredFun }

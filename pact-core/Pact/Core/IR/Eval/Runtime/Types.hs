@@ -443,14 +443,17 @@ data BuiltinCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type 
   | TxLogC TableValue Integer
   -- ^ <table> <txid>
   | KeyLogC TableValue RowKey Integer
-  -- <table> <key> <txid>
+  -- ^ <table> <key> <txid>
   | CreateTableC TableValue
-  -- <create-table>
+  -- ^ <create-table>
   | EmitEventC (CapToken FullyQualifiedName PactValue)
-  -- <create-table>
-  | DefineKeysetC KeySetName (KeySet QualifiedName)
-  -- <create-table>
+  -- ^ <event token to emit>
+  | DefineKeysetC KeySetName KeySet
+  -- ^ <keyset to push to the db>
   | DefineNamespaceC Namespace
+  -- ^ namespace to write to the db
+  | RunKeysetPredC
+  -- ^ check the keyset predicate 
   deriving (Show, Generic)
 
 

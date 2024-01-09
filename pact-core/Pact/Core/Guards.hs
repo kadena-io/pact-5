@@ -18,7 +18,7 @@ module Pact.Core.Guards
 , CapabilityGuard(..)
 , DefPactGuard(..)
 , KSPredicate(..)
-, predicateToString
+, predicateToText
 , ModuleGuard(..)
 -- , CapGovRef(..)
 
@@ -39,7 +39,6 @@ import Data.Attoparsec.Text
 import Data.ByteString (ByteString)
 import Data.Foldable
 import Data.Maybe (isJust)
-import Data.String
 import Data.Text(Text)
 import GHC.Generics
 import Text.Parser.Token as P
@@ -104,33 +103,34 @@ data Governance name
 
 instance NFData name => NFData (Governance name)
 
-data KSPredicate name
+data KSPredicate
   = KeysAll
   | Keys2
   | KeysAny
-  -- | CustomPredicate name -- TODO: When this is brought back, fix up `keySetGen`!
-  deriving (Eq, Show, Ord, Functor, Foldable, Traversable, Generic)
+  | CustomPredicate ParsedTyName -- TODO: When this is brought back, fix up `keySetGen`!
+  deriving (Eq, Show, Ord, Generic)
 
-instance NFData name => NFData (KSPredicate name)
+instance NFData KSPredicate
 
-predicateToString :: IsString s => KSPredicate name -> s
-predicateToString = \case
+predicateToText ::  KSPredicate -> Text
+predicateToText = \case
     KeysAll -> "keys-all"
     Keys2 -> "keys2"
     KeysAny -> "keys-any"
+    CustomPredicate pn -> renderParsedTyName pn
 
-instance Pretty (KSPredicate name) where
-  pretty = predicateToString
+instance Pretty KSPredicate where
+  pretty = pretty . predicateToText
 
-data KeySet name
+data KeySet
   = KeySet
   { _ksKeys :: !(S.Set PublicKeyText)
-  , _ksPredFun :: KSPredicate name
-  } deriving (Eq, Show, Ord, Functor, Foldable, Traversable, Generic)
+  , _ksPredFun :: KSPredicate
+  } deriving (Eq, Show, Ord, Generic)
 
-instance NFData name => NFData (KeySet name)
+instance NFData KeySet
 
-instance Pretty name => Pretty (KeySet name) where
+instance Pretty KeySet where
   pretty (KeySet ks f) = "KeySet" <+> commaBraces
     [ "keys: " <> prettyList (S.toList ks)
     , "pred: " <> pretty f
@@ -188,7 +188,7 @@ allKeyFormats = [ed25519HexFormat, webAuthnFormat]
 isValidKeyFormat :: PublicKeyText -> Bool
 isValidKeyFormat k = any ($ k) allKeyFormats
 
-enforceKeyFormats :: (PublicKeyText -> err) -> KeySet a -> Either err ()
+enforceKeyFormats :: (PublicKeyText -> err) -> KeySet -> Either err ()
 enforceKeyFormats onErr (KeySet keys _pred) = traverse_ validateKey keys
   where
   validateKey k = if isValidKeyFormat k then pure () else Left $ onErr k
@@ -248,7 +248,7 @@ data DefPactGuard
 instance NFData DefPactGuard
 
 data Guard name term
-  = GKeyset (KeySet name)
+  = GKeyset KeySet
   | GKeySetRef KeySetName
   | GUserGuard (UserGuard name term)
   | GCapabilityGuard (CapabilityGuard name term)

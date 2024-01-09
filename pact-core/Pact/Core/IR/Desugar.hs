@@ -1309,7 +1309,7 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash i) = d
     KeyGov rawKsn -> case parseAnyKeysetName (_keysetName rawKsn) of
       Left {} -> lift $ throwExecutionError i (ModuleGovernanceFailure mname)
       Right ksn -> do
-        lift $ enforceKeysetNameAdmin i mname ksn
+        -- lift $ enforceKeysetNameAdmin i mname ksn
         pure (KeyGov ksn)
     CapGov (FQParsed govName) ->
       case find (\d -> BN (BareName (defName d)) == govName) defs of

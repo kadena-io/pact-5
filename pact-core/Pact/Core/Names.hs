@@ -58,6 +58,8 @@ module Pact.Core.Names
  , DefPactId(..)
  , parseModuleName
  , renderDefPactId
+ , renderParsedTyName
+ , parseParsedTyName
  ) where
 
 import Control.Lens
@@ -142,7 +144,9 @@ instance NFData DynamicName
 data ParsedTyName
   = TQN QualifiedName
   | TBN BareName
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord, Generic)
+
+instance NFData ParsedTyName
 
 instance Pretty ParsedTyName where
   pretty = \case
@@ -408,8 +412,35 @@ moduleNameParser = do
     p1 <- identParser
     pure (ModuleName p1 (Just (NamespaceName ns)))
 
+-- Here we are parsing either a qualified name, or a bare name
+-- bare names are just the atom `n`, and qualified names are of the form
+-- <n>.<n>(.<n>)?
+-- so therefore, if we've parsed a module name without a namespace, then we actually have
+-- a barename. Otherwise, we either have a qualified name ready, or we need to parse one more
+-- dot identifier to make it work
+parsedTyNameParser :: Parser ParsedTyName
+parsedTyNameParser = do
+  ModuleName n ns <- moduleNameParser
+  case ns of
+    Just nsn@(NamespaceName nsRaw) ->
+      go n nsn <|> pure (TQN (QualifiedName n (ModuleName nsRaw Nothing)))
+    Nothing -> pure (TBN (BareName n))
+  where
+  go n nsn = do
+    _ <- MP.single '.'
+    p1 <- identParser
+    let qual = QualifiedName p1 (ModuleName n (Just nsn))
+    pure (TQN qual)
+
 parseModuleName :: Text -> Maybe ModuleName
 parseModuleName = MP.parseMaybe moduleNameParser
 
+parseParsedTyName :: Text -> Maybe ParsedTyName
+parseParsedTyName = MP.parseMaybe parsedTyNameParser
+
 renderDefPactId :: DefPactId -> Text
 renderDefPactId (DefPactId t) = t
+
+renderParsedTyName :: ParsedTyName -> Text
+renderParsedTyName (TBN (BareName n)) = n
+renderParsedTyName (TQN qn) = renderQualName qn

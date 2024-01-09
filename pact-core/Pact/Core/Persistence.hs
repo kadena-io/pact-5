@@ -34,7 +34,6 @@ module Pact.Core.Persistence
  , TxLog(..)
  , dbOpDisallowed
  , toUserTable
- , FQKS
  , objectDataToRowData
  , rowDataToObjectData
  ) where
@@ -82,8 +81,6 @@ mdModuleHash f = \case
     mHash f ev <&> \ev' -> ModuleData ev' deps
   InterfaceData iface deps ->
     ifHash f iface <&> \ev' -> InterfaceData ev' deps
-
-type FQKS = KeySet QualifiedName
 
 -- | Data reflecting Key/Value storage in user-tables.
 newtype RowData
@@ -148,7 +145,7 @@ data Domain k v b i where
   -- | User tables accept a TableName and map to an 'ObjectMap PactValue'
   DUserTables :: !TableName -> Domain RowKey RowData b i
   -- | Keysets
-  DKeySets :: Domain KeySetName (KeySet QualifiedName) b i
+  DKeySets :: Domain KeySetName KeySet b i
   -- | Modules
   DModules :: Domain ModuleName (ModuleData b i) b i
   -- | Namespaces
@@ -202,10 +199,10 @@ readModule pdb = _pdbRead pdb DModules
 writeModule :: PactDb b i -> WriteType -> ModuleName -> ModuleData b i -> IO ()
 writeModule pdb wt = _pdbWrite pdb wt DModules
 
-readKeySet :: PactDb b i -> KeySetName -> IO (Maybe FQKS)
+readKeySet :: PactDb b i -> KeySetName -> IO (Maybe KeySet)
 readKeySet pdb = _pdbRead pdb DKeySets
 
-writeKeySet :: PactDb b i -> WriteType -> KeySetName -> FQKS -> IO ()
+writeKeySet :: PactDb b i -> WriteType -> KeySetName -> KeySet -> IO ()
 writeKeySet pdb wt = _pdbWrite pdb wt DKeySets
 
 readDefPacts :: PactDb b i -> DefPactId -> IO (Maybe (Maybe DefPactExec))
