@@ -691,11 +691,7 @@ coreEnforceGuard info b cont handler env = \case
   [VGuard g] -> enforceGuard info cont handler env g
   [VString s] -> case parseAnyKeysetName s of
       Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
-      Right ksn -> do
-        cond <- isKeysetNameInSigs info (view cePactDb env) ksn
-        if cond
-          then returnCEKValue cont handler (VBool True)
-          else returnCEK cont handler (VError "enforce keyset ref failure" info)
+      Right ksn -> isKeysetNameInSigs info cont handler env ksn
   args -> argsError info b args
 
 keysetRefGuard :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -770,7 +766,7 @@ coreReadString info b cont handler _env = \case
       _ -> returnCEK cont handler (VError "read-string failure" info)
   args -> argsError info b args
 
-readKeyset' :: (MonadEval b i m) => T.Text -> m (Maybe (KeySet QualifiedName))
+readKeyset' :: (MonadEval b i m) => T.Text -> m (Maybe KeySet)
 readKeyset' ksn = do
   viewEvalEnv eeMsgBody >>= \case
     PObject envData ->
@@ -789,6 +785,7 @@ readKeyset' ksn = do
             "keys-any" -> pure KeysAny
             "keys-2" -> pure Keys2
             "keys-all" -> pure KeysAll
+            n | Just pn <- parseParsedTyName n -> pure (CustomPredicate pn)
             _ -> Nothing
         Just (PList li) ->
           case parseKeyList li of
@@ -930,7 +927,7 @@ defineKeySet'
   -> CEKErrorHandler step b i m
   -> CEKEnv step b i m
   -> T.Text
-  -> KeySet QualifiedName
+  -> KeySet
   -> m (CEKEvalResult step b i m)
 defineKeySet' info cont handler env ksname newKs  = do
   let pdb = view cePactDb env
@@ -943,9 +940,8 @@ defineKeySet' info cont handler env ksname newKs  = do
             returnCEKValue cont handler (VString "Keyset write success")
       liftDbFunction info (readKeySet pdb ksn) >>= \case
         Just oldKs -> do
-          cond <- isKeysetInSigs oldKs
-          if cond then writeKs
-          else returnCEK cont handler (VError "enforce keyset failure" info)
+          let cont' = BuiltinC env info (DefineKeysetC ksn newKs) cont
+          isKeysetInSigs info cont' handler env oldKs
         Nothing | ignoreNamespaces -> writeKs
         Nothing | otherwise -> useEvalState (esLoaded . loNamespace) >>= \case
           Nothing -> returnCEK cont handler (VError "Cannot define a keyset outside of a namespace" info)
@@ -1351,7 +1347,7 @@ createPrincipalForGuard info = \case
       | ed25519HexFormat k -> Pr.K k <$ chargeGas 1_000
     (l, _) -> do
       h <- mkHash $ map (T.encodeUtf8 . _pubKey) l
-      pure $ Pr.W (hashToText h) (predicateToString pf)
+      pure $ Pr.W (hashToText h) (predicateToText pf)
   GKeySetRef ksn ->
     Pr.R ksn <$ chargeGas 1_000
   GModuleGuard (ModuleGuard mn n) ->

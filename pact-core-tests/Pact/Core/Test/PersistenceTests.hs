@@ -53,7 +53,7 @@ testsWithSerial serial b i =
  , testProperty "Namespace" $ namespaceRoundtrip serial
  ]
 
-keysetPersistRoundtrip :: PactSerialise b i -> Gen (KeySet QualifiedName) -> Property
+keysetPersistRoundtrip :: PactSerialise b i -> Gen KeySet -> Property
 keysetPersistRoundtrip serial keysetGen =
   property $ do
     keysetName <- forAll keySetNameGen

@@ -11,21 +11,17 @@ import Data.Maybe (isJust, fromMaybe)
 import Data.List (find)
 import Control.Lens ((^?), (^.), ix, view)
 import Data.Map (Map)
-import qualified Data.Map.Strict as Map --(insertWith, findWithDefault, filterWithKey)
-import Data.IORef (IORef, modifyIORef, modifyIORef', newIORef, readIORef, writeIORef, atomicModifyIORef')
+import qualified Data.Map.Strict as Map
+import Data.IORef
 import Control.Exception(throwIO)
 import qualified Data.Map.Strict as M
 import Data.ByteString (ByteString)
-import Pact.Core.Guards (KeySetName, renderKeySetName)
+import Pact.Core.Guards
 import Pact.Core.Namespace
-import Pact.Core.Names (ModuleName, RowKey, TableName, DefPactId, NamespaceName, rowKey, renderModuleName, NamespaceName(..), renderDefPactId)
+import Pact.Core.Names
 import Pact.Core.DefPacts.Types (DefPactExec)
 import qualified Pact.Core.Persistence as Persistence
-import Pact.Core.Persistence (Domain(..),
-                              ExecutionMode(Local, Transactional), FQKS, TxId(..), TxLog(..), PactDb(..),
-                              RowData, ModuleData, WriteType(Insert, Update, Write), RowData(..),
-                              Purity(PImpure), toUserTable
-                             )
+import Pact.Core.Persistence
 import Pact.Core.Serialise
 
 
@@ -110,7 +106,7 @@ mockPactDb serial = do
 
   keys
     :: forall k v
-    .  IORef (Map KeySetName FQKS)
+    .  IORef (Map KeySetName KeySet)
     -> IORef (Map ModuleName (ModuleData b i))
     -> IORef (Map NamespaceName Namespace)
     -> IORef (Map TableName (Map RowKey RowData))
@@ -154,7 +150,7 @@ mockPactDb serial = do
 
   read'
     :: forall k v
-    .  IORef (Map KeySetName FQKS)
+    .  IORef (Map KeySetName KeySet)
     -> IORef (Map ModuleName (ModuleData b i))
     -> IORef (Map NamespaceName Namespace)
     -> IORef (Map TableName (Map RowKey RowData))
@@ -176,7 +172,7 @@ mockPactDb serial = do
 
   write
     :: forall k v
-    .  IORef (Map KeySetName FQKS)
+    .  IORef (Map KeySetName KeySet)
     -> IORef (Map ModuleName (ModuleData b i))
     -> IORef (Map NamespaceName Namespace)
     -> IORef (Map TableName (Map RowKey RowData))
@@ -240,7 +236,7 @@ mockPactDb serial = do
     m <- readIORef ref
     pure (M.lookup ns m)
 
-  writeKS :: IORef (Map KeySetName Persistence.FQKS) -> IORef TxId -> TxLogQueue -> KeySetName -> Persistence.FQKS -> IO ()
+  writeKS :: IORef (Map KeySetName KeySet) -> IORef TxId -> TxLogQueue -> KeySetName -> KeySet -> IO ()
   writeKS ref refTxId refTxLog ksn ks = do
     modifyIORef' ref (M.insert ksn ks)
     record refTxId refTxLog (TxLog "SYS:KEYSETS" (renderKeySetName ksn) (_encodeKeySet serial ks))
