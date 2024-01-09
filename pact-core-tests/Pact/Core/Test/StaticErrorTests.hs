@@ -910,6 +910,17 @@ executionTests =
 
       (pay "alice" "bob" 10)
     |])
+  , ("emit_event_module_mismatch", isExecutionError _EventDoesNotMatchModule, [text|
+      (module m1 g (defcap g () true)
+        (defcap ev () @event true)
+        )
+      (module m2 g (defcap g () true)
+        (defun emit-ev ()
+          (emit-event (ev))
+          )
+        )
+      (emit-ev)
+    |])
   ]
 
 tests :: TestTree
