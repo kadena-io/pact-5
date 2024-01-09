@@ -22,6 +22,7 @@ module Pact.Core.Capabilities
  , PactEvent(..)
  , dcMetaFqName
  , Signer(..)
+ , getManagedParam
  ) where
 
 import Control.Lens
@@ -34,7 +35,7 @@ import GHC.Generics
 
 import Pact.Core.Pretty
 import Pact.Core.Names
-import Pact.Core.Hash
+import Pact.Core.Hash ( ModuleHash )
 import Pact.Core.Scheme
 
 data DefManagedMeta name
@@ -131,6 +132,9 @@ data ManagedCap name v
   -- ^ Managed capability type
   } deriving (Show, Generic)
 
+getManagedParam :: ManagedCap name v -> Maybe v
+getManagedParam (ManagedCap _mc _orig (ManagedParam _ v _)) = Just v
+getManagedParam _ = Nothing
 
 instance (Eq name, Eq v) => Eq (ManagedCap name v) where
   l == r = _mcCap l == _mcCap r

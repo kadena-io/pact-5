@@ -371,6 +371,8 @@ instance Eq (FQNameRef name) where
   (FQParsed pn) == (FQParsed pn') = pn == pn'
   (FQName fqn) == (FQName fqn') = fqn == fqn'
 
+
+
 makeLenses ''FullyQualifiedName
 makeLenses ''QualifiedName
 

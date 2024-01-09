@@ -20,7 +20,7 @@ module Pact.Core.Guards
 , KSPredicate(..)
 , predicateToString
 , ModuleGuard(..)
-, CapGovRef(..)
+-- , CapGovRef(..)
 
 -- * Key Format Validation
 , allKeyFormats
@@ -99,26 +99,10 @@ parseAnyKeysetName = parseOnly keysetNameParser
 
 data Governance name
   = KeyGov KeySetName
-  | CapGov (CapGovRef name)
+  | CapGov (FQNameRef name)
   deriving (Eq, Show, Generic)
 
 instance NFData name => NFData (Governance name)
-
-data CapGovRef name where
-  UnresolvedGov :: ParsedName -> CapGovRef ParsedName
-  ResolvedGov :: FullyQualifiedName -> CapGovRef Name
-
-instance NFData (CapGovRef name) where
-  rnf (UnresolvedGov pn) = rnf pn
-  rnf (ResolvedGov fqn) = rnf fqn
-
-instance Eq (CapGovRef name) where
-  (UnresolvedGov g1) == (UnresolvedGov g2) = g1 == g2
-  (ResolvedGov g1) == (ResolvedGov g2) = g1 == g2
-
-instance Show (CapGovRef name) where
-  show (UnresolvedGov ksn) = "(UnresolvedGov " <> show ksn <> ")"
-  show (ResolvedGov g) = "(ResolvedGov" <> show g <> ")"
 
 data KSPredicate name
   = KeysAll

@@ -4,6 +4,7 @@ module Pact.Core.Info
  ) where
 
 import Data.Default
+import GHC.Generics
 
 data SpanInfo
   = SpanInfo
@@ -11,7 +12,7 @@ data SpanInfo
   , _liStartColumn :: !Int
   , _liEndLine     :: !Int
   , _liEndColumn   :: !Int
-  } deriving (Eq, Show)
+  } deriving (Eq, Show, Generic)
 
 instance Default SpanInfo where
   def = SpanInfo 0 0 0 0

@@ -72,6 +72,9 @@ common pact-core-common
     , groups
     , poly
     , mod
+    , neat-interpolation
+    -- ^ is used by the `BuiltinDocs` module.
+    , ghc-bignum
 
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
@@ -128,6 +131,7 @@ library
   exposed-modules:
     Pact.Core.Compile
     Pact.Core.Builtin
+    Pact.Core.BuiltinDocs
     Pact.Core.Names
     Pact.Core.Literal
     Pact.Core.Guards
@@ -137,6 +141,7 @@ library
     Pact.Core.Type
     Pact.Core.Pretty
     Pact.Core.Gas
+    Pact.Core.Gas.TableGasModel
     Pact.Core.Info
     Pact.Core.Errors
     Pact.Core.Persistence
@@ -156,6 +161,8 @@ library
     Pact.Core.RuntimeParsers
     Pact.Core.Evaluate
     Pact.Core.Scheme
+    Pact.Core.Repl
+    Pact.Core.SizeOf
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
@@ -174,7 +181,7 @@ library
     Pact.Core.IR.Eval.CEK
     -- Pact.Core.IR.Eval.SmallStep.CEK
     -- Pact.Core.IR.Eval.SmallStep.Types
-    Pact.Core.IR.Eval.RawBuiltin
+    Pact.Core.IR.Eval.CoreBuiltin
     Pact.Core.IR.ModuleHashing
     Pact.Core.IR.ConstEval
 
@@ -200,18 +207,23 @@ executable gasmodel
   import: pact-core-common
   hs-source-dirs: gasmodel
 
-  main-is: Pact/Core/Gas/InterpreterGas.hs
+  main-is: Main.hs
 
   build-depends:
     , pact-core
     , criterion
+
+  other-modules:
+    Pact.Core.GasModel.BuiltinsGas
+    Pact.Core.GasModel.InterpreterGas
+    Pact.Core.GasModel.Utils
 
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
 executable pact
-  main-is: pact-core/Pact/Core/Repl.hs
+  main-is: repl/Main.hs
 
   build-depends:
     , Decimal

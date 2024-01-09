@@ -81,6 +81,14 @@ module Pact.Core.IR.Eval.Runtime.Types
  , CEKEvalResult
  , CEKStepKind(..)
  , ContType(..)
+ , Eval
+ , CoreTerm
+ , CoreCEKCont
+ , CoreCEKHandler
+ , CoreCEKEnv
+ , CoreBuiltinEnv
+ , CoreCEKValue
+ , CoreEvalResult
  ) where
 
 import Control.Lens
@@ -103,7 +111,6 @@ import qualified Data.Kind as K
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Pretty(Pretty(..))
-import Pact.Core.Gas
 import Pact.Core.PactValue
 import Pact.Core.Hash
 import Pact.Core.IR.Term
@@ -116,6 +123,8 @@ import Pact.Core.Environment
 import Pact.Core.DefPacts.Types
 import Pact.Core.Debug
 import Pact.Core.Errors
+import Pact.Core.Namespace
+import Pact.Core.Builtin
 
 import qualified Pact.Core.Pretty as P
 
@@ -153,7 +162,7 @@ type BuiltinEnv (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -
 
 data ClosureType
   = NullaryClosure
-  | ArgClosure !(NonEmpty (Maybe Type))
+  | ArgClosure !(NonEmpty (Arg Type))
   deriving (Show, Generic)
 
 instance NFData ClosureType
@@ -162,7 +171,7 @@ data Closure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K
   = Closure
   { _cloFnName :: !Text
   , _cloModName :: !ModuleName
-  , _cloTypes :: ClosureType
+  , _cloTypes :: !ClosureType
   , _cloArity :: !Int
   , _cloTerm :: !(EvalTerm b i)
   , _cloRType :: !(Maybe Type)
@@ -176,8 +185,8 @@ instance (NFData b, NFData i) => NFData (Closure step b i m)
 -- but is not partially applied
 data LamClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = LamClosure
-  { _lcloTypes :: ClosureType
-  , _lcloArity :: Int
+  { _lcloTypes :: !ClosureType
+  , _lcloArity :: !Int
   , _lcloTerm :: !(EvalTerm b i)
   , _lcloRType :: !(Maybe Type)
   , _lcloEnv :: !(CEKEnv step b i m)
@@ -191,9 +200,9 @@ instance (NFData b, NFData i) => NFData (LamClosure step b i m)
 -- This is a bit annoying to deal with but helps preserve semantics
 data PartialClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = PartialClosure
-  { _pcloFrame :: Maybe StackFrame
-  , _pcloTypes :: !(NonEmpty (Maybe Type))
-  , _pcloArity :: Int
+  { _pcloFrame :: !(Maybe StackFrame)
+  , _pcloTypes :: !(NonEmpty (Arg Type))
+  , _pcloArity :: !Int
   , _pcloTerm :: !(EvalTerm b i)
   , _pcloRType :: !(Maybe Type)
   , _pcloEnv :: !(CEKEnv step b i m)
@@ -204,9 +213,9 @@ instance (NFData b, NFData i) => NFData (PartialClosure step b i m)
 
 data DefPactClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = DefPactClosure
-  { _pactcloFQN :: FullyQualifiedName
+  { _pactcloFQN :: !FullyQualifiedName
   , _pactcloTypes :: !ClosureType
-  , _pactcloArity :: Int
+  , _pactcloArity :: !Int
   , _pactEnv :: !(CEKEnv step b i m)
   , _pactcloInfo :: i
   } deriving (Show, Generic)
@@ -215,7 +224,7 @@ instance (NFData b, NFData i) => NFData (DefPactClosure step b i m)
 
 data CapTokenClosure i
   = CapTokenClosure
-  { _ctcCapName :: FullyQualifiedName
+  { _ctcCapName :: !FullyQualifiedName
   , _ctcTypes :: [Maybe Type]
   , _ctcArity :: Int
   , _ctcInfo :: i
@@ -246,7 +255,7 @@ instance NFData TableValue
 
 -- | The type of our semantic runtime values
 data CEKValue (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
-  = VPactValue PactValue
+  = VPactValue !PactValue
   -- ^ PactValue(s), which contain no terms
   | VTable !TableValue
   -- ^ Table references, which despite being a syntactic
@@ -335,6 +344,7 @@ newtype EvalM b i a =
     , MonadThrow
     , MonadCatch
     , MonadMask
+    , MonadReader (EvalEnv b i)
     , MonadError (PactError i))
   via (ReaderT (EvalEnv b i) (ExceptT (PactError i) (StateT (EvalState b i) IO)))
 
@@ -354,9 +364,9 @@ type NativeFunction (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Ty
 
 data NativeFn (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = NativeFn
-  { _native :: b
-  , _nativeEnv :: CEKEnv step b i m
-  , _nativeFn :: NativeFunction step b i m
+  { _native :: !b
+  , _nativeEnv :: !(CEKEnv step b i m)
+  , _nativeFn :: !(NativeFunction step b i m)
   , _nativeArity :: {-# UNPACK #-} !Int
   , _nativeLoc :: i
   } deriving (Generic)
@@ -368,11 +378,11 @@ instance (NFData b, NFData i) => NFData (NativeFn step b i m)
 -- This is a bit annoying to deal with but helps preserve semantics
 data PartialNativeFn (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = PartialNativeFn
-  { _pNative :: b
-  , _pNativeEnv :: CEKEnv step b i m
-  , _pNativeFn :: NativeFunction step b i m
+  { _pNative :: !b
+  , _pNativeEnv :: !(CEKEnv step b i m)
+  , _pNativeFn :: !(NativeFunction step b i m)
   , _pNativeArity :: {-# UNPACK #-} !Int
-  , _pNativeAppliedArgs :: [CEKValue step b i m]
+  , _pNativeAppliedArgs :: ![CEKValue step b i m]
   , _pNativeLoc :: i
   } deriving (Generic)
 
@@ -390,7 +400,7 @@ data CondCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> 
   -- ^ <true case term> <false case term>
   | EnforceC (EvalTerm b i)
   -- ^ <error string term>
-  | EnforceOneC (EvalTerm b i) [EvalTerm b i]
+  | EnforceOneC
   -- ^ <error string term> [<enforceable term>]
   | FilterC (CanApply step b i m) PactValue [PactValue] [PactValue]
   -- ^ {filtering closure} <current focused value> <remaining> <accumulator>
@@ -423,7 +433,6 @@ data BuiltinCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type 
   -- ^ <table> <key to read>
   | WriteC TableValue WriteType RowKey (ObjectData PactValue)
   -- ^ <table> <write type> <key to write> <value to write>
-  | WithReadC TableValue RowKey (CanApply step b i m)
    -- ^ <table> <key to read> <closure to apply afterwards>
   | WithDefaultReadC TableValue RowKey (ObjectData PactValue) (CanApply step b i m)
   -- ^ <table> <key to read> <default value> <closure to apply afterwards>
@@ -438,12 +447,19 @@ data BuiltinCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type 
   | CreateTableC TableValue
   -- <create-table>
   | EmitEventC (CapToken FullyQualifiedName PactValue)
+  -- <create-table>
+  | DefineKeysetC KeySetName (KeySet QualifiedName)
+  -- <create-table>
+  | DefineNamespaceC Namespace
   deriving (Show, Generic)
 
 
 -- | Control flow around Capability special forms, in particular cap token forms
-data CapCont (b :: K.Type) (i :: K.Type)
+data CapCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = WithCapC (EvalTerm b i)
+  | ApplyMgrFunC (ManagedCap QualifiedName PactValue) (Closure step b i m) PactValue PactValue
+  -- ^ <cap token of the corresponding function> ^mgr closure ^ old value ^ new value
+  | UpdateMgrFunC (ManagedCap QualifiedName PactValue)
   | CreateUserGuardC FullyQualifiedName [EvalTerm b i] [PactValue]
   deriving (Show, Generic)
 
@@ -459,11 +475,11 @@ instance NFData CapPopState
 data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = Mt
   -- ^ Empty Continuation
-  | Fn (CanApply step b i m) (CEKEnv step b i m) [EvalTerm b i] [CEKValue step b i m] (Cont step b i m)
+  | Fn !(CanApply step b i m) !(CEKEnv step b i m) ![EvalTerm b i] ![CEKValue step b i m] !(Cont step b i m)
   -- ^ Continuation which evaluates arguments for a function to apply
-  | Args (CEKEnv step b i m) i [EvalTerm b i] (Cont step b i m)
+  | Args !(CEKEnv step b i m) i ![EvalTerm b i] !(Cont step b i m)
   -- ^ Continuation holding the arguments to evaluate in a function application
-  | LetC (CEKEnv step b i m) (EvalTerm b i) (Cont step b i m)
+  | LetC !(CEKEnv step b i m) !(EvalTerm b i) !(Cont step b i m)
   -- ^ Let single-variable pushing
   -- Optimization frame: Bypasses closure creation and thus less alloc
   -- Known as a single argument it will not construct a needless closure
@@ -478,11 +494,9 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   | ObjC (CEKEnv step b i m) i Field [(Field, EvalTerm b i)] [(Field, PactValue)] (Cont step b i m)
   -- Todo: merge all cap constructors
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
-  | CapInvokeC (CEKEnv step b i m) i (CapCont b i) (Cont step b i m)
+  | CapInvokeC (CEKEnv step b i m) i (CapCont step b i m) (Cont step b i m)
   -- ^ Frame for control flow around argument reduction to with-capability and create-user-guard
-  | EvalCapC (CEKEnv step b i m) i FQCapToken (EvalTerm b i) (Cont step b i m)
-  -- ^ Capability special form frams that eva
-  | CapBodyC CapPopState (CEKEnv step b i m) (Maybe (CapToken QualifiedName PactValue)) (Maybe (PactEvent PactValue)) (EvalTerm b i) (Cont step b i m)
+  | CapBodyC CapPopState (CEKEnv step b i m) i (Maybe (CapToken QualifiedName PactValue)) (Maybe (PactEvent PactValue)) (EvalTerm b i) (Cont step b i m)
   -- ^ CapBodyC includes
   --  - what to do after the cap body (pop it, or compose it)
   --  - Is it a user managed cap? If so, include the body token
@@ -510,7 +524,7 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   deriving (Show, Generic)
 
 instance (NFData b, NFData i) => NFData (BuiltinCont step b i m)
-instance (NFData b, NFData i) => NFData (CapCont b i)
+instance (NFData b, NFData i) => NFData (CapCont step b i m)
 instance (NFData b, NFData i) => NFData (CondCont step b i m)
 instance (NFData b, NFData i) => NFData (Cont step b i m)
 
@@ -525,6 +539,7 @@ data ContType
   -- Conditionals
   | CTAndC
   | CTOrC
+  | CTIfC
   | CTEnforceC
   | CTEnforceOneC
   | CTFilterC
@@ -542,7 +557,6 @@ data ContType
   | CTFoldDbMapC
   | CTReadC
   | CTWriteC
-  | CTWithReadC
   | CTWithDefaultReadC
   | CTKeysC
   | CTTxIdsC
@@ -550,12 +564,13 @@ data ContType
   | CTKeyLogC
   | CTCreateTableC
   | CTEmitEventC
+  | CTDefineNamespaceC
+  | CTDefineKeysetC
   --
   | CTObjC
   -- Cap control flow
   | CTCapInvokeC
   --
-  | CTEvalCapC
   | CTCapBodyC
   | CTCapPopC
   | CTDefPactStepC
@@ -624,11 +639,6 @@ instance (Show i, Show b, Pretty b) => Pretty (CEKValue step b i m) where
 
 makeLenses ''CEKEnv
 
-instance MonadGas (EvalM b i) where
-  logGas _msg _g = pure ()
-
-  chargeGas _g = pure ()
-
 instance MonadEvalEnv b i (EvalM b i) where
   readEnv = EvalT ask
 
@@ -637,3 +647,11 @@ instance MonadEvalState b i (EvalM b i) where
   putEvalState p = EvalT (put p)
   modifyEvalState f = EvalT (modify' f)
 
+type Eval = EvalM CoreBuiltin ()
+type CoreTerm = EvalTerm CoreBuiltin ()
+type CoreCEKCont = Cont CEKBigStep CoreBuiltin () Eval
+type CoreCEKHandler = CEKErrorHandler CEKBigStep CoreBuiltin () Eval
+type CoreCEKEnv = CEKEnv CEKBigStep CoreBuiltin () Eval
+type CoreBuiltinEnv = BuiltinEnv CEKBigStep CoreBuiltin () Eval
+type CoreCEKValue = CEKValue CEKBigStep CoreBuiltin () Eval
+type CoreEvalResult = EvalResult CEKBigStep CoreBuiltin () Eval
