@@ -24,9 +24,6 @@ module Pact.Core.Environment.Utils
  , mangleNamespace
  , getAllStackCaps
  , checkSigCaps
---  , isKeysetInSigs
---  , isKeysetNameInSigs
---  , enforceKeysetNameAdmin
  ) where
 
 import Control.Lens

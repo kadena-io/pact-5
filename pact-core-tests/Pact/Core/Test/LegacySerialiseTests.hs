@@ -20,7 +20,7 @@ tests = testGroup "Legacy Serialisation"
     , testCase "pred: keys-all" $ assertBool "KeySet decoding failed" (isJust (decodeKeySet "{\"pred\":\"keys-all\",\"keys\":[\"ddd8\",\"ed0\"]}"))
     , testCase "pred: keys-any" $ assertBool "KeySet decoding failed" (isJust (decodeKeySet "{\"pred\":\"keys-any\",\"keys\":[\"ddd8\",\"ed0\"]}"))
     , testCase "pred defaults"  $ assertBool "KeySet decoding failed" (maybe False (\k -> KeysAll == _ksPredFun k) (decodeKeySet "{\"pred\":\"keys-all\",\"keys\":[\"ddd8\",\"ed0\"]}"))
-    , testCase "pred invalid" $ assertBool "Accept invalid pred" (isNothing (decodeKeySet "{\"pred\":\"\",\"keys\":[\"ddd8\",\"ed0\"]}"))
+    , testCase "pred invalid" $ assertBool "Accept invalid pred" (isNothing (decodeKeySet "{\"pred\":123,\"keys\":[\"ddd8\",\"ed0\"]}"))
     , testCase "pred empty" $ assertBool "Accept empty pred" (isNothing (decodeKeySet "{\"pred\":\"\",\"keys\":[\"ddd8\",\"ed0\"]}"))
     , testCase "pred custom" $ assertBool "Accept custom pred" (isJust (decodeKeySet "{\"pred\":\"ABC\",\"keys\":[\"ddd8\",\"ed0\"]}"))
     ]

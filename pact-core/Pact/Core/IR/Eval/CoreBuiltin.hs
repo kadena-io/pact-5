@@ -692,9 +692,6 @@ coreEnforceGuard info b cont handler env = \case
   [VString s] -> case parseAnyKeysetName s of
       Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
       Right ksn -> isKeysetNameInSigs info cont handler env ksn
-        -- if cond
-        --   then returnCEKValue cont handler (VBool True)
-        --   else returnCEK cont handler (VError "enforce keyset ref failure" info)
   args -> argsError info b args
 
 keysetRefGuard :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -945,9 +942,6 @@ defineKeySet' info cont handler env ksname newKs  = do
         Just oldKs -> do
           let cont' = BuiltinC env info (DefineKeysetC ksn newKs) cont
           isKeysetInSigs info cont' handler env oldKs
-          -- cond <- isKeysetInSigs oldKs
-          -- if cond then writeKs
-          -- else returnCEK cont handler (VError "enforce keyset failure" info)
         Nothing | ignoreNamespaces -> writeKs
         Nothing | otherwise -> useEvalState (esLoaded . loNamespace) >>= \case
           Nothing -> returnCEK cont handler (VError "Cannot define a keyset outside of a namespace" info)

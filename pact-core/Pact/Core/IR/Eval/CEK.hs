@@ -683,6 +683,10 @@ guardForModuleCall i cont handler env currMod onFound =
    -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
+-- | Acquires module admin for a known module
+-- NOTE: This function should only be called _after_
+-- checking whether `esCaps . csModuleAdmin` for the particular
+-- module is in scope
 acquireModuleAdmin
   :: (CEKEval step b i m, MonadEval b i m)
   => i
@@ -692,16 +696,10 @@ acquireModuleAdmin
   -> EvalModule b i
   -> m (CEKEvalResult step b i m)
 acquireModuleAdmin i cont handler env mdl = do
-  -- mc <- useEvalState (esCaps . csModuleAdmin)
-  -- if S.member (_mName mdl) mc then returnCEKValue cont handler VUnit
-  -- else case _mGovernance mdl of
   case _mGovernance mdl of
     KeyGov ksn -> do
       let cont' = ModuleAdminC (_mName mdl) cont
       isKeysetNameInSigs i cont' handler env ksn
-      -- enforceKeysetNameAdmin i cont' handler env (_mName mdl) ksn
-      -- esCaps . csModuleAdmin %== S.insert (_mName mdl)
-      -- returnCEKValue cont handler VUnit
     CapGov (FQName fqn) -> do
       let wcapBody = Constant LUnit i
       let cont' = ModuleAdminC (_mName mdl) cont

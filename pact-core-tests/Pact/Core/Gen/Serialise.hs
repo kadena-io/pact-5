@@ -98,7 +98,6 @@ keySetGen _genA = do
     , pure Keys2
     , pure KeysAny
     , CustomPredicate <$> parsedTyNameGen
-    -- , customPredicate -- TODO: Reinstantiate this when CustomPredicate is brought back into Guard.hs.
     ]
   pure $ KeySet { _ksKeys, _ksPredFun }
 
