@@ -1972,7 +1972,6 @@ isKeysetInSigs info cont handler env (KeySet kskeys ksPred) = do
   run p matched =
     if p count matched then returnCEKValue cont handler (VBool True)
     else returnCEK cont handler (VError "keyset enforce failure" info)
-    -- returnCEKValue cont handler $ VInteger $ fromIntegral (p count matched)
   runPred matched =
     case ksPred of
       KeysAll -> run atLeast matched
