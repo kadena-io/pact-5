@@ -131,7 +131,6 @@ library
   exposed-modules:
     Pact.Core.Compile
     Pact.Core.Builtin
-    Pact.Core.BuiltinDocs
     Pact.Core.Names
     Pact.Core.Literal
     Pact.Core.Guards
@@ -179,8 +178,6 @@ library
     Pact.Core.IR.Eval.Runtime.Types
     Pact.Core.IR.Eval.Runtime.Utils
     Pact.Core.IR.Eval.CEK
-    -- Pact.Core.IR.Eval.SmallStep.CEK
-    -- Pact.Core.IR.Eval.SmallStep.Types
     Pact.Core.IR.Eval.CoreBuiltin
     Pact.Core.IR.ModuleHashing
     Pact.Core.IR.ConstEval
@@ -191,6 +188,8 @@ library
     Pact.Core.Repl.Utils
     Pact.Core.Repl.Runtime.ReplBuiltin
     Pact.Core.Repl.Compile
+    Pact.Core.Repl.BuiltinDocs
+    Pact.Core.Repl.UserDocs
 
     -- Serialization
     Pact.Core.Serialise

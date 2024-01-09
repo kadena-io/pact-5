@@ -43,7 +43,7 @@ runRepl = do
   g <- newIORef mempty
   evalLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replcoreBuiltinMap
-  ref <- newIORef (ReplState mempty pdb def ee g evalLog defaultSrc Nothing)
+  ref <- newIORef (ReplState mempty pdb def ee g evalLog defaultSrc mempty Nothing)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
@@ -67,6 +67,8 @@ runRepl = do
       outputStrLn $ show $
         "loaded defconst" <+> pretty mn
     RBuiltinDoc doc -> outputStrLn (show $ pretty doc)
+    RUserDoc qn doc -> outputStrLn $ show $
+      vsep ["function" <+> pretty qn <> ":", maybe mempty pretty doc]
   catch' ma = catchAll ma (\e -> outputStrLn (show e) *> loop)
   defaultSrc = SourceCode "(interactive)" mempty
   loop = do
