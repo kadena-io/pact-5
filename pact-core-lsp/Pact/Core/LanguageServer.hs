@@ -1,5 +1,6 @@
 -- | 
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Pact.Core.LanguageServer
   ( startServer
@@ -9,12 +10,13 @@ import Control.Lens hiding (Iso)
 
 import Language.LSP.Server
 import Language.LSP.Protocol.Message
-import Language.LSP.Protocol.Lens (uri, textDocument, params, text)
+import Language.LSP.Protocol.Lens (uri, textDocument, params, text, position)
 import Language.LSP.Protocol.Types
 import Language.LSP.VFS
 import Language.LSP.Diagnostics
 
 import Control.Monad.IO.Class
+import Data.Monoid (First(..), getFirst)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.IORef
@@ -42,6 +44,19 @@ import Control.Monad.Reader (ReaderT, runReaderT, ask)
 import Control.Monad.Trans (lift)
 import Control.Concurrent.MVar
 import qualified Data.Map.Strict as M
+import Data.List (find)
+
+import Pact.Core.IR.Eval.Runtime
+import Pact.Core.IR.Eval.CEK(CEKEval)
+import Pact.Core.Repl.Runtime.ReplBuiltin
+
+import qualified Pact.Core.Syntax.ParseTree as Lisp
+import qualified Pact.Core.Syntax.Lexer as Lisp
+import qualified Pact.Core.Syntax.Parser as Lisp
+import Pact.Core.IR.Desugar
+import Pact.Core.IR.Term
+import Control.Monad.Except
+import Pact.Core.LanguageServer.Utils (termAt)
 
 -- data LocationInfo
 --   = LocationInfo
@@ -49,16 +64,21 @@ import qualified Data.Map.Strict as M
 --   , _locSpanInfo :: SpanInfo
 --   } deriving Eq
 
-newtype LSState =
-  LSState { _unLSState :: M.Map NormalizedUri (ReplState ReplCoreBuiltin) }
+data LSState =
+  LSState
+  { _lsReplState :: M.Map NormalizedUri (ReplState ReplCoreBuiltin)
+  , _lsLexed :: M.Map NormalizedUri [Lisp.ReplSpecialTL SpanInfo]
+  }
+
+makeLenses ''LSState
 
 newLSState :: IO (MVar LSState)
-newLSState = newMVar (LSState mempty)
+newLSState = newMVar (LSState mempty mempty)
 
 type LSM = LspT () (ReaderT (MVar LSState) IO)
 
--- getState :: LSM LSState
--- getState = lift ask >>= liftIO . readMVar
+getState :: LSM LSState
+getState = lift ask >>= liftIO . readMVar
 
 -- setState :: LSState -> LSM ()
 -- setState s = do
@@ -126,11 +146,12 @@ documentDidChangeHandler = notificationHandler SMethod_TextDocumentDidChange $ \
     Just vf -> sendDiagnostics nuri (virtualFileVersion vf) (virtualFileText vf)
 
 
+
 documentDidCloseHandler :: Handlers LSM
 documentDidCloseHandler = notificationHandler SMethod_TextDocumentDidClose $ \msg -> do
   let nuri = msg ^. params . textDocument . uri . to toNormalizedUri
   debug $ "Remove from cache: " <> renderText nuri
-  modifyState (\(LSState old) -> LSState $ M.delete nuri old)
+  modifyState ((lsReplState %~ M.delete nuri) . (lsLexed %~ M.delete nuri))
 
 documentDidSaveHandler :: Handlers LSM
 documentDidSaveHandler = notificationHandler SMethod_TextDocumentDidSave $ \msg -> do
@@ -138,15 +159,15 @@ documentDidSaveHandler = notificationHandler SMethod_TextDocumentDidSave $ \msg 
   debug $ "Document saved: " <> renderText nuri
   sendDiagnostics nuri 0 ""
 
-
+  
 sendDiagnostics :: NormalizedUri -> Int32 -> Text -> LSM ()
 sendDiagnostics nuri v content = liftIO runPact >>= \case
   Left err -> do
     -- We only publish a single diagnostic
     publishDiagnostics 1  nuri (Just v) $ partitionBySource [pactErrorToDiagnostic err]
-  Right (st, _r) -> do
-    st' <- liftIO (readIORef st)
-    modifyState (\(LSState old) -> LSState $ M.insert nuri st' old)
+  Right (stRef, r) -> do
+    st <- liftIO (readIORef stRef)
+    modifyState ((lsReplState %~ M.insert nuri st) . (lsLexed %~ M.insert nuri r))
 
     -- We emit an empty set of diagnostics
     publishDiagnostics 0  nuri (Just v) $ partitionBySource []
@@ -161,7 +182,7 @@ sendDiagnostics nuri v content = liftIO runPact >>= \case
                      then replcoreBuiltinMap
                      else RBuiltinWrap <$> coreBuiltinMap
       
-      ee <-defaultEvalEnv pdb builtinMap
+      ee <- defaultEvalEnv pdb builtinMap
       let
         src = SourceCode (takeFileName file) content
         rstate = ReplState
@@ -175,7 +196,7 @@ sendDiagnostics nuri v content = liftIO runPact >>= \case
           , _replTx = Nothing
           }
       stateRef <- newIORef rstate
-      res <- runReplT stateRef (interpretReplProgram src (const (pure ())))
+      res <- runReplT stateRef (processFile src)
       pure ((stateRef,) <$> res)
 
     pactErrorToDiagnostic :: PactError SpanInfo -> Diagnostic
@@ -207,21 +228,77 @@ sendDiagnostics nuri v content = liftIO runPact >>= \case
       PEDesugarError{} -> "Desugar"
       PEExecutionError{} -> "Execution"
 
--- documentHoverRequestHandler :: Handlers LSM
--- documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req resp ->
---   getState >>= \(LSState cache) -> do
---     let nuri = req ^. params . textDocument . uri . to toNormalizedUri
--- --        pos = req ^. params . position
+documentHoverRequestHandler :: Handlers LSM
+documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req resp ->
+  getState >>= \st -> do
+    let nuri = req ^. params . textDocument . uri . to toNormalizedUri
+        pos = req ^. params . position
 
---     case M.lookup nuri cache of
---       Nothing -> do
---         let msg = "cache does not contain file: " <> renderText nuri
---             err = ResponseError (InR ErrorCodes_InternalError) msg Nothing
---         debug msg
---         resp (Left err)
---       Just st -> do
---         let _lo = view (replEvalState . esLoaded) st
---             mc = MarkupContent MarkupKind_PlainText ""
---             range = undefined
---             hover = Hover (InL mc) (Just range)
---         resp (Right (InL hover))
+    case st ^. lsLexed . at nuri of
+      Nothing -> do
+        let msg = "cache does not contain file: " <> renderText nuri
+            err = ResponseError (InR ErrorCodes_InternalError) msg Nothing
+        debug msg
+        resp (Left err)
+      Just rtl -> case getFirst (mconcat $ First . termAt pos <$> rtl) of
+        Nothing -> undefined
+        Just p
+          | isNative p -> do
+              let
+                mc = MarkupContent MarkupKind_PlainText ""
+                range = undefined
+                hover = Hover (InL mc) (Just range)
+              resp (Right (InL hover))
+  where
+  isNative :: Lisp.ReplSpecialTL SpanInfo -> Bool
+  isNative (Lisp.RTL (Lisp.RTLTopLevel t)) = topLevelHasDocs t 
+
+processFile
+  :: SourceCode
+  -> ReplM ReplCoreBuiltin [Lisp.ReplSpecialTL SpanInfo]
+processFile (SourceCode _ source) = do
+  lexx <- liftEither (Lisp.lexer source)
+  liftEither $ Lisp.parseReplProgram lexx
+  -- concat <$> traverse pipe parsed
+  -- where
+  -- pipe = \case
+  --   Lisp.RTL rtl ->
+  --     pure <$> pipe' rtl
+  --   Lisp.RTLReplSpecial rsf -> case rsf of
+  --     Lisp.ReplLoad txt resetState _
+  --       | resetState -> do
+  --         oldSrc <- use replCurrSource
+  --         evalState .= def
+  --         pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
+  --         replPactDb .= pactdb
+  --         ee <- liftIO (defaultEvalEnv pactdb replcoreBuiltinMap)
+  --         replEvalEnv .= ee
+  --         out <- loadFile (T.unpack txt) replEnv display
+  --         replCurrSource .= oldSrc
+  --         pure out
+  --       | otherwise -> do
+  --         oldSrc <- use replCurrSource
+  --         oldEs <- use evalState
+  --         oldEE <- use replEvalEnv
+  --         out <- loadFile (T.unpack txt) replEnv display
+  --         replEvalEnv .= oldEE
+  --         evalState .= oldEs
+  --         replCurrSource .= oldSrc
+  --         pure out
+  -- pipe' tl = case tl of
+  --   Lisp.RTLTopLevel toplevel -> do
+  --     v <- interpretTopLevel replEnv toplevel
+  --     displayValue (RCompileValue v)
+  --   _ ->  do
+  --     ds <- runDesugarReplTopLevel tl
+  --     interpret ds
+  -- interpret (DesugarOutput tl _deps) = do
+  --   case tl of
+  --     RTLDefun df -> do
+  --       let fqn = FullyQualifiedName replModuleName (_dfunName df) replModuleHash
+  --       loaded . loAllLoaded %= M.insert fqn (Dfun df)
+  --       displayValue $ RLoadedDefun $ _dfunName df
+  --     RTLDefConst dc -> do
+  --       let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
+  --       loaded . loAllLoaded %= M.insert fqn (DConst dc)
+  --       displayValue $ RLoadedDefConst $ _dcName dc

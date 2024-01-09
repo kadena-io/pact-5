@@ -206,6 +206,7 @@ library pact-core-lsp
 
   exposed-modules:
     Pact.Core.LanguageServer
+    Pact.Core.LanguageServer.Utils
 
   build-depends:
     , pact-core

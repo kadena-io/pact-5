@@ -367,6 +367,9 @@ pattern RTLInterface m = RTLTopLevel (TLInterface m)
 pattern RTLTerm :: Expr i -> ReplTopLevel i
 pattern RTLTerm te = RTLTopLevel (TLTerm te)
 
+pattern RTLUse :: Import -> i -> ReplTopLevel i
+pattern RTLUse imp i = RTLTopLevel (TLUse imp i)
+
 
 termInfo :: Lens' (Expr i) i
 termInfo f = \case
