@@ -834,6 +834,26 @@ executionTests =
       (module m g (defcap g () true))
       (env-namespace-policy false (m.g))
     |])
+  , ("changing_hash_makes_it_nonblessed", isExecutionError _HashNotBlessed, [text|
+      (define-keyset 'k (sig-keyset))
+
+      (module impure 'k
+        (defconst VERSION 1)
+        (defschema foo-schema value:integer)
+        (deftable foo:{foo-schema})
+        (defun ins (k v) (insert foo k v)))
+
+      (module dep 'k
+        (defun dep-impure (k v) (ins k { "value": v })))
+
+      (module impure 'k
+        (defconst VERSION 2)
+        (defschema foo-schema value:integer)
+        (deftable foo:{foo-schema})
+        (defun ins (k v) (insert foo k v)))
+
+      (dep.dep-impure "b" 1)
+    |])
   ]
 
 tests :: TestTree

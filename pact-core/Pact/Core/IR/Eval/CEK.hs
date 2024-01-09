@@ -482,7 +482,7 @@ enforceBlessedHashes :: (MonadEval b i m) => i -> EvalModule b i -> ModuleHash -
 enforceBlessedHashes info md mh
   | _mHash md == mh = return ()
   | mh `S.member` (_mBlessed md) = return ()
-  | otherwise = throwExecutionError info (HashNotBlessed (_mName md) mh)    -- TODO TODO how to trigger this?
+  | otherwise = throwExecutionError info (HashNotBlessed (_mName md) mh)
 
 guardForModuleCall :: (MonadEval b i m) => i -> CEKEnv b i m -> ModuleName -> m () -> m ()
 guardForModuleCall i env currMod onFound =
