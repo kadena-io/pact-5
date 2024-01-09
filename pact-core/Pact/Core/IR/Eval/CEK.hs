@@ -73,6 +73,7 @@ import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Namespace
 import Pact.Core.DefPacts.Types
+import Pact.Core.SizeOf
 
 
 class CEKEval (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type) | m -> b, m -> i where
@@ -1335,6 +1336,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         let check' = if wt == Update then checkPartialSchema else checkSchema
         if check' rv (_tvSchema tv) then do
           let rdata = RowData rv
+          chargeGasArgs info (GWrite (sizeOf SizeOfV0 rv))
           liftDbFunction info (_pdbWrite pdb wt (tvToDomain tv) rk rdata)
           returnCEKValue cont handler (VString "Write succeeded")
         else returnCEK cont handler (VError "object does not match schema" info)
@@ -1397,12 +1399,14 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)
         enforceMeta _ = pure ()
       DefineKeysetC ksn newKs -> do
+        chargeGasArgs info (GWrite (sizeOf SizeOfV0 newKs))
         liftDbFunction info (writeKeySet pdb Write ksn newKs)
         returnCEKValue cont handler (VString "Keyset write success")
       DefineNamespaceC ns -> case v of
         PBool allow ->
           if allow then do
             let nsn = _nsName ns
+            chargeGasArgs info (GWrite (sizeOf SizeOfV0 ns))
             liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
             returnCEKValue cont handler $ VString $ "Namespace defined: " <> (_namespaceName nsn)
           else throwExecutionError info $ DefineNamespaceError "Namespace definition not permitted"

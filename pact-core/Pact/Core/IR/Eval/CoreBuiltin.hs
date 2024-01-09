@@ -71,6 +71,7 @@ import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.StableEncoding
 import Pact.Core.IR.Eval.CEK
+import Pact.Core.SizeOf
 
 import qualified Pact.Core.Pretty as Pretty
 import qualified Pact.Core.Principal as Pr
@@ -80,8 +81,6 @@ import qualified Pact.Core.Trans.TOps as Musl
 ----------------------------------------------------------------------
 -- Our builtin definitions start here
 ----------------------------------------------------------------------
-
--- -- Todo: runtime error
 unaryIntFn :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => (Integer -> Integer) -> NativeFunction step b i m
 unaryIntFn op info b cont handler _env = \case
   [VLiteral (LInteger i)] ->
@@ -133,16 +132,21 @@ roundingFn op info b cont handler _env = \case
 rawAdd :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawAdd info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
-
+    chargeGasArgs info (GIntegerOpCost PrimOpAdd i i')
     returnCEKValue cont handler (VLiteral (LInteger (i + i')))
-  [VLiteral (LDecimal i), VLiteral (LDecimal i')] ->
+  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> do
+    chargeGasArgs info (GIntegerOpCost PrimOpAdd (decimalMantissa i) (decimalMantissa i'))
     returnCEKValue cont handler (VLiteral (LDecimal (i + i')))
-  [VLiteral (LString i), VLiteral (LString i')] ->
+  [VLiteral (LString i), VLiteral (LString i')] -> do
+    chargeGasArgs info (GConcat (TextConcat (T.length i + T.length i')))
     returnCEKValue cont handler  (VLiteral (LString (i <> i')))
-  [VObject l, VObject r] ->
+  [VObject l, VObject r] -> do
+    chargeGasArgs info (GConcat (ObjConcat (M.size l + M.size r)))
     let o' = VObject (l `M.union` r)
-    in returnCEKValue cont handler o'
-  [VList l, VList r] -> returnCEKValue cont handler (VList (l <> r))
+    returnCEKValue cont handler o'
+  [VList l, VList r] -> do
+    chargeGasArgs info (GConcat (ListConcat (V.length l + V.length r)))
+    returnCEKValue cont handler (VList (l <> r))
   args -> argsError info b args
 
 rawSub :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -442,6 +446,9 @@ rawTake info b cont handler _env = \case
     | otherwise -> do
       let clamp = fromIntegral $ max (fromIntegral (V.length li) + i) 0
       returnCEKValue cont handler (VList (V.drop clamp li))
+  [VList li, VObject o] -> do
+    strings <- traverse (fmap Field . asString info b) (V.toList li)
+    returnCEKValue cont handler $ VObject $ M.restrictKeys o (S.fromList strings)
   args -> argsError info b args
 
 rawDrop :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -460,6 +467,9 @@ rawDrop info b cont handler _env = \case
     | otherwise -> do
       let clamp = fromIntegral $ max (fromIntegral (V.length li) + i) 0
       returnCEKValue cont handler (VList (V.take clamp li))
+  [VList li, VObject o] -> do
+    strings <- traverse (fmap Field . asString info b) (V.toList li)
+    returnCEKValue cont handler $ VObject $ M.withoutKeys o (S.fromList strings)
   args -> argsError info b args
 
 rawLength :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -570,6 +580,7 @@ coreEnumerateStepN info b cont handler _env = \case
 makeList :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 makeList info b cont handler _env = \case
   [VLiteral (LInteger i), VPactValue v] -> do
+    chargeGasArgs info (GMakeList (fromIntegral i) (sizeOf SizeOfV0 v))
     returnCEKValue cont handler (VList (V.fromList (replicate (fromIntegral i) v)))
   args -> argsError info b args
 
@@ -844,7 +855,6 @@ dbSelect info b cont handler env = \case
     guardTable info cont' handler env tv GtSelect
   args -> argsError info b args
 
--- Todo: error handling
 foldDb :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 foldDb info b cont handler env = \case
   [VTable tv, VClosure queryClo, VClosure consumer] -> do
@@ -939,6 +949,7 @@ defineKeySet' info cont handler env ksname newKs  = do
     Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
     Right ksn -> do
       let writeKs = do
+            chargeGasArgs info (GWrite (sizeOf SizeOfV0 newKs))
             liftDbFunction info (writeKeySet pdb Write ksn newKs)
             returnCEKValue cont handler (VString "Keyset write success")
       liftDbFunction info (readKeySet pdb ksn) >>= \case
@@ -981,6 +992,7 @@ composeCapability info b cont handler env = \case
   [VCapToken ct] ->
     useEvalState esStack >>= \case
       sf:_ -> do
+        -- Todo: compose-capability called outside of capability needs a better error
         when (_sfFnType sf /= SFDefcap) $ failInvariant info "compose-cap"
         composeCap info cont handler env ct
       _ -> failInvariant info "compose-cap at the top level"
@@ -1446,6 +1458,7 @@ coreDefineNamespace info b cont handler env = \case
         enforceGuard info cont' handler env laoG
       Nothing -> viewEvalEnv eeNamespacePolicy >>= \case
         SimpleNamespacePolicy -> do
+          chargeGasArgs info (GWrite (sizeOf SizeOfV0 ns))
           liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
           returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
         SmartNamespacePolicy _ fun -> getModuleMember info pdb fun >>= \case
@@ -1561,6 +1574,7 @@ fromG2 (Point x y) = ObjectData pts
 zkPairingCheck :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 zkPairingCheck info b cont handler _env = \case
   args@[VList p1s, VList p2s] -> do
+    chargeGasArgs info (GAZKArgs (Pairing (min (V.length p1s) (V.length p2s))))
     g1s <- maybe (argsError info b args) pure (traverse (preview _PObject >=> (toG1 . ObjectData)) p1s)
     g2s <- maybe (argsError info b args) pure (traverse (preview _PObject >=> (toG2 . ObjectData)) p2s)
     traverse_ (\p -> ensureOnCurve info p b1) g1s
@@ -1575,12 +1589,14 @@ zkScalaMult info b cont handler _env = \case
     let scalar' = scalar `mod` curveOrder
     case T.toLower ptTy of
       "g1" -> do
+        chargeGasArgs info (GAZKArgs (ScalarMult ZKG1))
         p1' <- maybe (argsError info b args) pure $ toG1 (ObjectData p1)
         ensureOnCurve info p1' b1
         let p2' = multiply p1' scalar'
             ObjectData o = fromG1 p2'
         returnCEKValue cont handler (VObject o)
       "g2" -> do
+        chargeGasArgs info (GAZKArgs (ScalarMult ZKG2))
         p1' <- maybe (argsError info b args) pure $ toG2 (ObjectData p1)
         ensureOnCurve info p1' b2
         let p2' = multiply p1' scalar'
@@ -1597,6 +1613,7 @@ zkPointAddition info b cont handler _env = \case
   args@[VString ptTy, VObject p1, VObject p2] -> do
     case T.toLower ptTy of
       "g1" -> do
+        chargeGasArgs info (GAZKArgs (PointAdd ZKG1))
         p1' <- maybe (argsError info b args) pure $ toG1 (ObjectData p1)
         p2' <- maybe (argsError info b args) pure $ toG1 (ObjectData p2)
         ensureOnCurve info p1' b1
@@ -1605,6 +1622,7 @@ zkPointAddition info b cont handler _env = \case
             ObjectData o = fromG1 p3'
         returnCEKValue cont handler (VObject o)
       "g2" -> do
+        chargeGasArgs info (GAZKArgs (PointAdd ZKG2))
         p1' <- maybe (argsError info b args) pure $ toG2 (ObjectData p1)
         p2' <- maybe (argsError info b args) pure $ toG2 (ObjectData p2)
         ensureOnCurve info p1' b2

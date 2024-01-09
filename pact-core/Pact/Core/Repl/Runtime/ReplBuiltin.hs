@@ -313,7 +313,7 @@ rollbackTx info b cont handler _env = \case
       Nothing -> returnCEK cont handler (renderTx info "Rollback Tx" Nothing)
   args -> argsError info b args
 
-sigKeyset :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step  b SpanInfo (ReplM b)
+sigKeyset :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 sigKeyset info b cont handler _env = \case
   [] -> do
     sigs <- S.fromList . M.keys <$> viewEvalEnv eeMsgSigs
@@ -321,7 +321,7 @@ sigKeyset info b cont handler _env = \case
   args -> argsError info b args
 
 
-testCapability :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step  b SpanInfo (ReplM b)
+testCapability :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 testCapability info b cont handler env = \case
   [VCapToken origToken] -> do
     lookupFqName (_ctName origToken) >>= \case

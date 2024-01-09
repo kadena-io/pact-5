@@ -74,6 +74,7 @@ import Pact.Core.ChainData
 import Pact.Core.Errors
 import Pact.Core.Gas
 import Pact.Core.Namespace
+import Pact.Core.SizeOf
 
 -- | Execution flags specify behavior of the runtime environment,
 -- with an orientation towards some alteration of a default behavior.
@@ -198,6 +199,8 @@ type MonadEval b i m =
   , MonadIO m
   , Default i
   , Show i
+  , SizeOf b
+  , SizeOf i
   , Show b)
 
 -- | A default evaluation environment meant for

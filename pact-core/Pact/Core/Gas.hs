@@ -28,6 +28,7 @@ module Pact.Core.Gas
  , ZKGroup(..)
  , ZKArg(..)
  , IntegerPrimOp(..)
+ , ConcatType(..)
  ) where
 
 import Control.Lens
@@ -129,11 +130,38 @@ data GasArgs
   -- Todo: integerOpCost seems like a case of `GALinear`
   -- Maybe we can investigate generalizing the operational costs in terms of a more general structure
   -- instead of the current `GasArgs` model?
-  | GALinear !MilliGas {-# UNPACK #-} !LinearGasArg
+  | GConcat !ConcatType
+  -- | GALinear !Word64 {-# UNPACK #-} !LinearGasArg
+  -- ^ Cost of linear-based gas
   | GIntegerOpCost !IntegerPrimOp !Integer !Integer
+  -- ^ Cost of integer operations
+  | GMakeList !Integer !Word64
+  -- ^ Cost of creating a list of `n` elements + some memory overhead per elem
   | GAApplyLam !Integer
+  -- ^ Cost of function application
   | GAZKArgs !ZKArg
+  -- ^ Cost of ZK function
+  | GWrite !Word64
+  -- ^ Cost of writes, per bytes, roughly based on in-memory cost.
+  | GModuleMemory !Word64
   deriving (Show)
+
+data ConcatType
+  = TextConcat !Int
+  | ListConcat !Int
+  | ObjConcat !Int
+  deriving Show
+
+-- -- | DB Read value for per-row gas costing.
+-- -- Data is included if variable-size.
+-- data ReadValue
+--   = ReadData !RowData
+--   | ReadKey !RowKey
+--   | ReadTxId
+--   | ReadModule !ModuleName !Code
+--   | ReadInterface !ModuleName !Code
+--   | ReadNamespace !(Namespace PactValue)
+--   | ReadKeySet !KeySetName !KeySet
 
 data GasModel b
   = GasModel
@@ -165,6 +193,8 @@ millisPerGas = 1000
 
 gasToMilliGas :: Gas -> MilliGas
 gasToMilliGas (Gas n) = MilliGas (n * millisPerGas)
+{-# INLINE gasToMilliGas #-}
 
 milliGasToGas :: MilliGas -> Gas
 milliGasToGas (MilliGas n) = Gas (n `quot` millisPerGas)
+{-# INLINE milliGasToGas #-}

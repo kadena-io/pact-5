@@ -563,7 +563,7 @@ data ReplBuiltins
   | RContinuePactRollbackYieldObj
   | RPactState
   | RResetPactState
-  deriving (Show, Enum, Bounded, Eq)
+  deriving (Show, Enum, Bounded, Eq, Generic)
 
 
 instance IsBuiltin ReplBuiltins where
@@ -611,7 +611,7 @@ instance IsBuiltin ReplBuiltins where
 data ReplBuiltin b
   = RBuiltinWrap b
   | RBuiltinRepl ReplBuiltins
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
 
 instance HasObjectOps b => HasObjectOps (ReplBuiltin b) where
   objectAt = RBuiltinWrap objectAt

@@ -100,12 +100,10 @@ instance Pretty PactValue where
 synthesizePvType :: PactValue -> Type
 synthesizePvType = \case
   PLiteral l -> typeOfLit l
-  PList _ -> TyList TyUnit
+  PList _ -> TyAnyList
   PGuard _ -> TyGuard
   PModRef mr -> TyModRef (S.fromList (_mrImplemented mr))
-  PObject f ->
-    let tys = synthesizePvType <$> f
-    in TyObject (Schema tys)
+  PObject f -> TyAnyObject
   PCapToken {} -> TyCapToken
   PTime _ -> TyTime
 
