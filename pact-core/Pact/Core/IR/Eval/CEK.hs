@@ -362,7 +362,7 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esDefPactExec >>= \case
                                , _peNestedDefPactExec = mempty
                                }
           | otherwise ->
-            throwExecutionError i (NestedDefPactDoubleExecution ps)    -- TODO TODO how to trigger this?
+            throwExecutionError i (NestedDefPactDoubleExecution ps)
         Just npe
           | _psStep ps >= 0 && isRollback && _peStep npe == _psStep ps ->
             pure (set peStepHasRollback isRollback npe)
