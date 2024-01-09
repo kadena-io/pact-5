@@ -1413,7 +1413,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         PBool allow ->
           if allow then returnCEKValue cont handler (VBool True)
           else returnCEK cont handler (VError "keyset enforce failure" info)
-        _ -> failInvariant info "Keyset pred function returned a non-boolean"
+        _ -> returnCEK cont handler (VError "keyset enforce failure" info)
       where
       foldDBRead tv queryClo appClo remaining acc =
         case remaining of
