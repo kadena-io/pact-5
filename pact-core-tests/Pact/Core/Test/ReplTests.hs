@@ -32,7 +32,6 @@ import Pact.Core.Builtin
 import Pact.Core.Errors
 import Pact.Core.Serialise
 
-import Debug.Trace
 
 type Interpreter = SourceCode -> (ReplCompileValue -> ReplM ReplCoreBuiltin ()) -> ReplM ReplCoreBuiltin [ReplCompileValue]
 
