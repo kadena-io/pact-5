@@ -333,15 +333,14 @@ testCapability info b cont handler env = \case
     lookupFqName (_ctName origToken) >>= \case
       Just (DCap d) -> do
         let cBody = Constant LUnit info
-            ignoreContBody _env _info _mct _mev _cb c = c
             cont' = SeqC env cBody cont
         case _dcapMeta d of
           Unmanaged ->
-            evalCap info cont' handler env origToken ignoreContBody cBody
+            evalCap info cont' handler env origToken PopCapInvoke TestCapEval cBody
           _ -> do
             -- Installed caps emit and event
             -- so we create a fake stack frame
-            installCap info env origToken False *> evalCap info cont' handler env origToken ignoreContBody cBody
+            installCap info env origToken False *> evalCap info cont' handler env origToken PopCapInvoke TestCapEval cBody
       _ -> returnCEK cont handler (VError "no such capability" info)
   args -> argsError info b args
 

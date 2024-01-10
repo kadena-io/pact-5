@@ -32,6 +32,8 @@ import Pact.Core.Builtin
 import Pact.Core.Errors
 import Pact.Core.Serialise
 
+import Debug.Trace
+
 type Interpreter = SourceCode -> (ReplCompileValue -> ReplM ReplCoreBuiltin ()) -> ReplM ReplCoreBuiltin [ReplCompileValue]
 
 tests :: IO TestTree
@@ -69,7 +71,7 @@ runReplTest pdb file src interp = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replcoreBuiltinMap
-  let source = SourceCode (takeFileName file) src
+  let source = SourceCode (replTestDir </> file) src
   let rstate = ReplState
             { _replFlags = mempty
             , _replEvalState = def

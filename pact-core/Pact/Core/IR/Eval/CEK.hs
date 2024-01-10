@@ -704,7 +704,7 @@ acquireModuleAdmin i cont handler env mdl = do
     CapGov (FQName fqn) -> do
       let wcapBody = Constant LUnit i
       let cont' = ModuleAdminC (_mName mdl) cont
-      evalCap i cont' handler env (CapToken fqn []) (CapBodyC PopCapInvoke) wcapBody
+      evalCap i cont' handler env (CapToken fqn []) PopCapInvoke NormalCapEval wcapBody
 {-# SPECIALIZE acquireModuleAdmin
    :: ()
    -> CoreCEKCont
@@ -739,15 +739,6 @@ pushStackFrame info cont mty sf = do
   esStack %== (sf :)
   pure (StackPopC info mty cont)
 
-type ModCapCont step b i m
-  = CEKEnv step b i m
-  -> i
-  -> Maybe (CapToken QualifiedName PactValue)
-  -> Maybe (PactEvent PactValue)
-  -> EvalTerm b i
-  -> Cont step b i m
-  -> Cont step b i m
-
 -- | Our main workhorse for "Evaluate a capability, then do something else"
 -- `evalCap` handles
 --   - with-capability
@@ -770,10 +761,12 @@ evalCap
   -> CEKErrorHandler step b i m
   -> CEKEnv step b i m
   -> FQCapToken
-  -> ModCapCont step b i m
+  -- -> ModCapCont step b i m
+  -> CapPopState
+  -> EvalCapType
   -> EvalTerm b i
   -> m (CEKEvalResult step b i m)
-evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody = do
+evalCap info currCont handler env origToken@(CapToken fqn args) popType ecType contbody = do
   capInStack <- isCapInStack' origToken
   if not capInStack then go else evalCEK currCont handler env contbody
   where
@@ -799,17 +792,17 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
                 case find (findMsgSigCap cix filteredCap) msgCaps of
                   Just c -> do
                     let c' = set ctName fqn c
-                        cont' = modCont env info (Just qualCapToken) (Just (fqctToPactEvent origToken)) contbody currCont
+                        cont' = CapBodyC popType env info (Just qualCapToken) (mkEvent (Just (fqctToPactEvent origToken))) contbody currCont
                     installCap info env c' False >>= evalUserManagedCap cont' newLocals capBody
                   Nothing ->
                     throwExecutionError info (CapNotInstalled fqn)
               Just managedCap -> do
-                let cont' = modCont env info (Just qualCapToken) (Just (fqctToPactEvent origToken)) contbody currCont
+                let cont' = CapBodyC popType env info (Just qualCapToken) (mkEvent (Just (fqctToPactEvent origToken))) contbody currCont
                 evalUserManagedCap cont' newLocals capBody managedCap
           -- handle autonomous caps
           AutoManagedMeta -> do
             -- Find the capability post-filtering
-            let cont' = modCont env info Nothing (Just (fqctToPactEvent origToken)) contbody currCont
+            let cont' = CapBodyC popType env info Nothing (mkEvent (Just (fqctToPactEvent origToken))) contbody currCont
             mgdCaps <- useEvalState (esCaps . csManaged)
             case find ((==) qualCapToken . _mcCap) mgdCaps of
               Nothing -> do
@@ -823,7 +816,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
               Just managedCap ->
                 evalAutomanagedCap cont' newLocals capBody managedCap
       DefEvent -> do
-        let cont' = modCont env info Nothing (Just (fqctToPactEvent origToken)) contbody currCont
+        let cont' = CapBodyC popType env info Nothing (Just (fqctToPactEvent origToken)) contbody currCont
         let inCapEnv = set ceInCap True $ set ceLocal newLocals env
         (esCaps . csSlots) %== (CapSlot qualCapToken []:)
         sfCont <- pushStackFrame info cont' Nothing capStackFrame
@@ -831,7 +824,8 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
       -- Not automanaged _nor_ user managed.
       -- Todo: a type that's basically `Maybe` here would save us a lot of grief.
       Unmanaged -> do
-        let cont' = modCont env info Nothing Nothing contbody currCont
+        let cont' = if ecType == NormalCapEval then CapBodyC popType env info Nothing Nothing contbody currCont
+                    else currCont
             inCapEnv = set ceInCap True $ set ceLocal newLocals env
         (esCaps . csSlots) %== (CapSlot qualCapToken []:)
         evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
@@ -840,13 +834,20 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
   capStackFrame = StackFrame (_fqName fqn) (_fqModule fqn) SFDefcap
   -- This function is handles both evaluating the manager function for the installed parameter
   -- and continuing evaluation for the actual capability body.
+  mkEvent a
+    | ecType == NormalCapEval = a
+    | otherwise = Nothing
   evalUserManagedCap cont' env' capBody managedCap =  case _mcManaged managedCap of
     ManagedParam mpfqn oldV managedIx -> do
       dfun <- getDefun info mpfqn
       dfunClo <- mkDefunClosure dfun (_fqModule mpfqn) env
       newV <- maybe (failInvariant info "Managed param does not exist at index") pure (args ^? ix managedIx)
       -- Set the mgr fun to evaluate after we apply the capability body
-      let mgrFunCont = CapInvokeC env info (ApplyMgrFunC managedCap dfunClo oldV newV) cont'
+      -- NOTE: test-capability doesn't actually run the manager function, it just runs the cap pop then
+      -- pops it. It would be great to do without this, but a lot of our regressions rely on this.
+      let mgrFunCont = if ecType == NormalCapEval then
+                         CapInvokeC env info (ApplyMgrFunC managedCap dfunClo oldV newV) cont'
+                       else cont'
       let inCapEnv = set ceInCap True $ set ceLocal env' $ env
       let inCapBodyToken = _mcOriginalCap managedCap
       -- BIG SEMANTICS NOTE HERE
@@ -876,7 +877,8 @@ evalCap info currCont handler env origToken@(CapToken fqn args) modCont contbody
    -> CoreCEKHandler
    -> CoreCEKEnv
    -> CapToken FullyQualifiedName PactValue
-   -> ModCapCont CEKBigStep CoreBuiltin () Eval
+   -> CapPopState
+   -> EvalCapType
    -> CoreTerm
    -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
@@ -995,7 +997,7 @@ composeCap
 composeCap info cont handler env origToken =
   isCapInStack' origToken >>= \case
     False ->
-      evalCap info cont handler env origToken (CapBodyC PopCapComposed) (Constant (LBool True) info)
+      evalCap info cont handler env origToken PopCapComposed NormalCapEval (Constant (LBool True) info)
     True ->
       returnCEKValue cont handler (VBool True)
 {-# SPECIALIZE composeCap
@@ -1258,7 +1260,7 @@ applyContToValue currCont@(CapInvokeC env info cf cont) handler v = case cf of
       -- Todo: CEK-style this
       let cont' = IgnoreValueC (PCapToken ct) currCont
       guardForModuleCall info cont' handler env (_fqModule fqn) $
-        evalCap info cont handler env ct (CapBodyC PopCapInvoke) body
+        evalCap info cont handler env ct PopCapInvoke NormalCapEval body
     -- Todo: this is actually more like "expected cap token"
     _ -> throwExecutionError info ExpectedPactValue
   CreateUserGuardC fqn terms pvs -> do
@@ -1453,7 +1455,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
 applyContToValue (CapBodyC cappop env info mcap mevent capbody cont) handler _ = do
   -- Todo: I think this requires some administrative check?
   chargeGasArgs info (GAConstant unconsWorkNodeGas)
-  maybe (pure ()) (emitEvent def) mevent
+  maybe (pure ()) emitEventUnsafe mevent
   case mcap of
     Nothing -> do
       let cont' = CapPopC cappop cont
