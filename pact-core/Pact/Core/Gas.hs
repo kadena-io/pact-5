@@ -144,7 +144,7 @@ data GasArgs
   -- ^ Cost of integer operations
   | GMakeList !Integer !Word64
   -- ^ Cost of creating a list of `n` elements + some memory overhead per elem
-  | GAApplyLam !Integer
+  | GAApplyLam !Int
   -- ^ Cost of function application
   | GAZKArgs !ZKArg
   -- ^ Cost of ZK function
@@ -195,17 +195,6 @@ data ConcatType
   | ObjConcat !Int
   -- ^ Upper bound on max object size
   deriving Show
-
--- -- | DB Read value for per-row gas costing.
--- -- Data is included if variable-size.
--- data ReadValue
---   = ReadData !RowData
---   | ReadKey !RowKey
---   | ReadTxId
---   | ReadModule !ModuleName !Code
---   | ReadInterface !ModuleName !Code
---   | ReadNamespace !(Namespace PactValue)
---   | ReadKeySet !KeySetName !KeySet
 
 data GasModel b
   = GasModel

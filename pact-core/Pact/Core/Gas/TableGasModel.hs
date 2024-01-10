@@ -171,7 +171,7 @@ runTableModel = \case
       MilliGas (fromIntegral totalLen * 100)
     ObjConcat totalLen ->
       MilliGas (fromIntegral totalLen * 100)
-  GAApplyLam !i -> MilliGas $ fromIntegral i * applyLamCostPerArg
+  GAApplyLam !i -> MilliGas $ fromIntegral i * applyLamCostPerArg + 50
   GAZKArgs zka -> case zka of
     PointAdd g -> pointAddGas g
     ScalarMult g -> scalarMulGas g
@@ -221,7 +221,7 @@ perByteFactor = 1%10
 
 
 applyLamCostPerArg :: Word64
-applyLamCostPerArg = 50
+applyLamCostPerArg = 25
 
 memoryCost :: Bytes -> MilliGas
 memoryCost !bytes = gasToMilliGas (Gas totalCost)
@@ -455,10 +455,8 @@ nativeGasTable = MilliGas . \case
   -- define-namespace tx penalty
   CoreDefineNamespace -> 25_000
   CoreDescribeNamespace -> dbMetadataTxPenalty
-  CoreChainData ->
-    1_000
-  CoreIsCharset ->
-    1_000
+  CoreChainData -> 500
+  CoreIsCharset -> 500
   CorePactId -> basicWorkGas
   -- Note: pairing functions have custom gas
   CoreZkPairingCheck -> basicWorkGas

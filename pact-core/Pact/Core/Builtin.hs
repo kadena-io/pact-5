@@ -600,7 +600,7 @@ instance IsBuiltin ReplBuiltins where
     REnvMilliGas -> 0
     REnvSetMilliGas -> 1
     REnvGasLimit -> 1
-    REnvGasLog -> 1
+    REnvGasLog -> 0
     REnvGasModel -> 1
     REnvAskGasModel -> 0
     REnvGasModelFixed -> 1

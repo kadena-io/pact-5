@@ -166,7 +166,7 @@ instance NFData StackFrame
 data EvalState b i
   = EvalState
   { _esCaps :: !(CapState QualifiedName PactValue)
-  , _esStack :: !([StackFrame])
+  , _esStack :: ![StackFrame]
   , _esEvents :: !([PactEvent PactValue])
   , _esLoaded :: !(Loaded b i)
   , _esDefPactExec :: !(Maybe DefPactExec)

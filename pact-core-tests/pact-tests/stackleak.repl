@@ -1,0 +1,20 @@
+; note on this module:
+; the CEK machine is pretty good at handling its own stack pop/push, but
+; our repl natives have to be able to bypass some stepwise mechanics to make their
+; functionality work (E.g, running a suspended subexpression until it reduces to a value),
+; so if they ever catch a thrown runtime error, it can leak the state of the stack.
+; this is a simple test taht ensures that despite thrown errors, we do not leak the stack
+(module stackleak g
+  (defcap g () true)
+
+  (defun leaks-stack ()
+    (+ 1 "asdf"))
+  )
+
+(let*
+  ((unusedResult1 (expect "leaks stack frame" 1 (leaks-stack)))
+   (unusedResult2 (expect-failure "leaks stack frame" (leaks-stack)))
+  )
+  1
+  )
+(expect "does not leak the stack" [] (env-stackframe))
