@@ -24,6 +24,7 @@ module Pact.Core.Persistence
  , ExecutionMode(..)
  , mdModuleName
  , mdModuleHash
+ , allModuleExports
  , readModule, writeModule
  , readKeySet, writeKeySet
  , readDefPacts, writeDefPacts
@@ -42,7 +43,7 @@ import Control.Lens
 import Control.Exception(throwIO, Exception)
 import Control.Applicative((<|>))
 import Data.Default
-import Data.Map.Strict(Map)
+import Data.Map.Strict(Map, empty)
 import Control.DeepSeq
 import GHC.Generics
 import Data.Text(Text)
@@ -74,6 +75,11 @@ mdModuleName f = \case
     mName f ev <&> \ev' -> ModuleData ev' deps
   InterfaceData iface deps ->
     ifName f iface <&> \ev' -> InterfaceData ev' deps
+
+allModuleExports :: ModuleData b i -> (Map FullyQualifiedName (EvalDef b i))
+allModuleExports = \case
+  ModuleData _ deps -> deps
+  InterfaceData _ _ -> empty
 
 mdModuleHash :: Lens' (ModuleData b i) ModuleHash
 mdModuleHash f = \case
