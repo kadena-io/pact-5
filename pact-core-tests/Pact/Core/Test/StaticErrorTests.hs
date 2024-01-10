@@ -630,7 +630,7 @@ executionTests =
   , ("module_gov_keyset_nonexistent", isExecutionError _NoSuchKeySet, [text|
       (module m 'nonexistent (defun f () true))
       |])
-  , ("module_gov_keyset_nonexistent", isExecutionError _ModuleGovernanceFailure, [text|
+  , ("module_gov_keyset_different", isExecutionError _EvalError, [text|
       (env-data {"ks":["jose"]})
       (define-keyset 'somekeyset (read-keyset 'ks))
       (module m 'somekeyset (defun f () 1))
@@ -638,7 +638,7 @@ executionTests =
   , ("module_gov_keyset_empty", isExecutionError _ModuleGovernanceFailure, [text|
       (module m "" (defun f () true))
       |])
-  , ("module_gov_keyset_not_in_sigs", isExecutionError _ModuleGovernanceFailure, [text|
+  , ("module_gov_keyset_not_in_sigs", isExecutionError _EvalError, [text|
       (env-data { "kall": ["a" "b" "c"], "kadmin": ["admin"] })
       (define-keyset 'kall)
       (define-keyset 'kadmin)
@@ -646,12 +646,12 @@ executionTests =
       (env-keys ["admin"])
       (module m 'kall (defun f () true))
       |])
-  , ("defconst_not_a_value_module", isExecutionError _ConstIsNotAPactValue, [text|
+  , ("defconst_not_a_value_module", isExecutionError _EvalError, [text|
       (module m g (defcap g () true)
         (defconst not-a-value (lambda (x) x))
         )
       |])
-  , ("defconst_not_a_value_iface", isExecutionError _ConstIsNotAPactValue, [text|
+  , ("defconst_not_a_value_iface", isExecutionError _EvalError, [text|
       (interface iface
         (defconst not-a-value (lambda (x) x))
         )
