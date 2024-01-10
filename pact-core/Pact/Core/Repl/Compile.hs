@@ -43,7 +43,8 @@ import Pact.Core.IR.Eval.Runtime
 import Pact.Core.IR.Eval.CEK(CEKEval)
 import Pact.Core.Repl.Runtime.ReplBuiltin
 
-import Pact.Core.BuiltinDocs
+import Pact.Core.Repl.UserDocs
+import Pact.Core.Repl.BuiltinDocs
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
@@ -58,6 +59,7 @@ data ReplCompileValue
   | RLoadedDefun Text
   | RLoadedDefConst Text
   | RBuiltinDoc Text
+  | RUserDoc QualifiedName (Maybe Text)
   deriving Show
 
 loadFile
@@ -124,10 +126,24 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
           pure out
   pipe' tl = case tl of
     Lisp.RTLTopLevel toplevel -> case topLevelHasDocs toplevel of
-      Just doc ->  displayValue $ RBuiltinDoc doc
+      Just doc -> displayValue $ RBuiltinDoc doc
       Nothing -> do
-        v <- interpretTopLevel replEnv toplevel
-        displayValue (RCompileValue v)
+        (ds, deps) <- compileDesugarOnly replEnv toplevel
+        case ds of
+          TLModule m -> do
+            functionDocs (_mName m) toplevel
+            v <- evalTopLevel replEnv ds deps
+            displayValue (RCompileValue v)
+          TLTerm (Var (Name n (NTopLevel mn _)) _) -> do
+            let qn = QualifiedName n mn
+            docs <- uses replUserDocs (M.lookup qn)
+            displayValue (RUserDoc qn docs)
+          _ -> do
+            v <- evalTopLevel replEnv ds deps
+            displayValue (RCompileValue v)
+        -- do
+        -- v <- interpretTopLevel replEnv toplevel
+        -- displayValue (RCompileValue v)
     _ ->  do
       ds <- runDesugarReplTopLevel tl
       interpret ds

@@ -97,6 +97,25 @@ data MArg
   , _margType :: Maybe Type
   } deriving (Eq, Show)
 
+defName :: Def i -> Text
+defName = \case
+  Dfun d -> _dfunName d
+  DConst d -> _dcName d
+  DCap d -> _dcapName d
+  DTable d -> _dtName d
+  DPact d -> _dpName d
+  DSchema d -> _dscName d
+
+defDocs :: Def i -> Maybe Text
+defDocs = \case
+  Dfun d -> _dfunDocs d
+  DConst d -> _dcDocs d
+  DCap d -> _dcapDocs d
+  DTable d -> _dtDocs d
+  DPact d -> _dpDocs d
+  DSchema d -> _dscDocs d
+
+
 data Defun i
   = Defun
   { _dfunName :: Text

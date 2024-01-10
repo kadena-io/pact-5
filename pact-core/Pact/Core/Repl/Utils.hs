@@ -22,6 +22,7 @@ module Pact.Core.Repl.Utils
  , replEvalLog
  , replEvalEnv
  , replEvalState
+ , replUserDocs
  , whenReplFlagSet
  , unlessReplFlagSet
  , debugIfFlagSet
@@ -49,6 +50,7 @@ import Data.Set(Set)
 import Data.Text(Text)
 import Data.List(isPrefixOf)
 import Data.Maybe(mapMaybe)
+import Data.Map.Strict(Map)
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
@@ -124,6 +126,7 @@ data ReplState b
   , _replGas :: IORef Gas
   , _replEvalLog :: IORef (Maybe [(Text, Gas)])
   , _replCurrSource :: SourceCode
+  , _replUserDocs :: Map QualifiedName Text
   , _replTx :: Maybe (TxId, Maybe Text)
   }
 
