@@ -796,6 +796,7 @@ installCap info _env (CapToken fqn args) autonomous = do
       DefManaged m -> case m of
         DefManagedMeta (paramIx,_) (FQName fqnMgr) -> do
           managedParam <- maybe (throwExecutionError info (InvalidManagedCap fqn)) pure (args ^? ix paramIx)
+          -- TODO ^ OOB index is invariant failure?
           let mcapType = ManagedParam fqnMgr managedParam paramIx
               ctFiltered = CapToken (fqnToQualName fqn) (filterIndex paramIx args)
               mcap = ManagedCap ctFiltered ct mcapType
@@ -816,6 +817,7 @@ installCap info _env (CapToken fqn args) autonomous = do
     Just d ->
       -- todo: error loc here is not in install-cap
       throwExecutionError (defInfo d) (InvalidDefKind (defKind d) "install-capability")
+      -- TODO apparently this ^ is caught earlier by the type checker?
     Nothing -> throwExecutionError' (NoSuchDef fqn)
 
 -- Todo: should we typecheck / arity check here?

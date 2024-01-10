@@ -936,6 +936,13 @@ executionTests =
         )
       (emit-ev)
     |])
+  , ("install_cap_not_managed", isExecutionError _InvalidManagedCap, [text|
+      (module m g (defcap g () true)
+        (defcap c:bool ()
+          true)
+        )
+      (install-capability (c))
+    |])
   ]
 
 tests :: TestTree
