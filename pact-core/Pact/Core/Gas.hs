@@ -32,6 +32,7 @@ module Pact.Core.Gas
  , GasTextLength(..)
  , GasListLength(..)
  , GasObjectSize(..)
+ , ComparisonType(..)
  ) where
 
 import Control.Lens
@@ -146,6 +147,7 @@ data GasArgs
   -- ^ Cost of ZK function
   | GWrite !Word64
   -- ^ Cost of writes, per bytes, roughly based on in-memory cost.
+  | GComparison !ComparisonType
   | GModuleMemory !Word64
   deriving (Show)
 
@@ -161,6 +163,21 @@ newtype GasObjectSize
   = GasObjectSize Int
   deriving Show
 
+data ComparisonType
+  = TextComparison !Text !Text
+  -- ^ comparing two strings of max `n` length
+  | IntComparison !Integer !Integer
+  -- ^ compare two integers, of at most `n` bits
+  -- Note: decimal comparison overhead should be the same as
+  | DecimalComparison !Decimal !Decimal
+  -- ^ compare decimals with similar mantissas, of at most `n` bits
+  -- | TimeCmp
+  -- ^ TODO: Comparisons gas for time.
+  | ListComparison !Int
+  -- ^ N comparisons constant time overhead
+  | ObjectComparison !Int
+  -- ^ Compare objects of at most size `N`
+  deriving (Show)
 
 data ConcatType
   = TextConcat !GasTextLength

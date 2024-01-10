@@ -18,7 +18,6 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Vector as V
 
-
 import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Hash
@@ -375,7 +374,7 @@ envGas info b cont handler _env = \case
     returnCEKValue cont handler (VInteger (fromIntegral gas))
   [VInteger g] -> do
     putGas $ gasToMilliGas (Gas (fromInteger g))
-    returnCEKValue cont handler $ VString $ "Set gas to" <> T.pack (show g)
+    returnCEKValue cont handler $ VString $ "Set gas to " <> T.pack (show g)
   args -> argsError info b args
 
 envMilliGas :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)

@@ -318,7 +318,7 @@ chargeFlatNativeGas info nativeArg = do
   let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
       gUsed = currGas <> (_gmNatives model) nativeArg
   putGas gUsed
-  when (gasLimit > gUsed) $
+  when (gUsed > gasLimit && gasLimit >= currGas) $
     throwExecutionError info (GasExceeded limit gUsed)
 
 getGas :: (MonadEval b i m) => m MilliGas

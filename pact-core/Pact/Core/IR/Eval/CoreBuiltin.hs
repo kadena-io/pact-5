@@ -226,36 +226,39 @@ rawNeq info b cont handler _env = \case
   args -> argsError info b args
 
 rawGt :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
-rawGt info b cont handler _env = \case
-  [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LBool (i > i')))
-  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LBool (i > i')))
-  [VLiteral (LString i), VLiteral (LString i')] -> returnCEKValue cont handler (VLiteral (LBool (i > i')))
-  [VTime i, VTime i'] -> returnCEKValue cont handler (VLiteral (LBool (i > i')))
-  args -> argsError info b args
+rawGt = defCmp (== GT)
 
 rawLt :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
-rawLt info b cont handler _env = \case
-  [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LBool (i < i')))
-  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LBool (i < i')))
-  [VLiteral (LString i), VLiteral (LString i')] -> returnCEKValue cont handler (VLiteral (LBool (i < i')))
-  [VTime i, VTime i'] -> returnCEKValue cont handler (VLiteral (LBool (i < i')))
-  args -> argsError info b args
+rawLt = defCmp (== LT)
 
 rawGeq :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
-rawGeq info b cont handler _env = \case
-  [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LBool (i >= i')))
-  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LBool (i >= i')))
-  [VLiteral (LString i), VLiteral (LString i')] -> returnCEKValue cont handler (VLiteral (LBool (i >= i')))
-  [VTime i, VTime i'] -> returnCEKValue cont handler (VLiteral (LBool (i >= i')))
-  args -> argsError info b args
+rawGeq = defCmp (`elem` [GT, EQ])
 
 rawLeq :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
-rawLeq info b cont handler _env = \case
-  [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LBool (i <= i')))
-  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LBool (i <= i')))
-  [VLiteral (LString i), VLiteral (LString i')] -> returnCEKValue cont handler (VLiteral (LBool (i <= i')))
-  [VTime i, VTime i'] -> returnCEKValue cont handler (VLiteral (LBool (i <= i')))
+rawLeq = defCmp (`elem` [LT, EQ])
+  -- [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LBool (i <= i')))
+  -- [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LBool (i <= i')))
+  -- [VLiteral (LString i), VLiteral (LString i')] -> returnCEKValue cont handler (VLiteral (LBool (i <= i')))
+  -- [VTime i, VTime i'] -> returnCEKValue cont handler (VLiteral (LBool (i <= i')))
+  -- args -> argsError info b args
+
+defCmp :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => (Ordering -> Bool) -> NativeFunction step b i m
+defCmp predicate info b cont handler _env = \case
+  args@[VLiteral lit1, VLiteral lit2] -> cmp lit1 lit2
+    where
+    cmp (LInteger l) (LInteger r) = do
+      chargeGasArgs info (GComparison (IntComparison l r))
+      returnCEKValue cont handler $ VBool $ predicate (compare l r)
+    cmp (LBool l) (LBool r) = returnCEKValue cont handler $ VBool $ predicate (compare l r)
+    cmp (LString l) (LString r) = do
+      chargeGasArgs info (GComparison (TextComparison l r))
+      returnCEKValue cont handler $ VBool $ predicate (compare l r)
+    cmp LUnit LUnit = returnCEKValue cont handler $ VBool (predicate EQ)
+    cmp _ _ = argsError info b args
+  -- Todo: time comparisons
+  [VTime l, VTime r] -> returnCEKValue cont handler $ VBool $ predicate (compare l r)
   args -> argsError info b args
+{-# INLINE defCmp #-}
 
 bitAndInt :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 bitAndInt = binaryIntFn (.&.)
@@ -1658,6 +1661,8 @@ coreBuiltinEnv
   => BuiltinEnv step CoreBuiltin i m
 coreBuiltinEnv i b env = mkBuiltinFn i b env (coreBuiltinRuntime b)
 
+-- gassedCompare :: MonadEval b i m => PactValue -> PactValue -> m Ordering
+-- gassedCompare (PLiteral l) (PLiteral r) =
 
 {-# SPECIALIZE coreBuiltinRuntime
    :: CoreBuiltin
