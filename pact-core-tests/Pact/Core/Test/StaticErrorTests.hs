@@ -943,6 +943,15 @@ executionTests =
         )
       (install-capability (c))
     |])
+  , ("partial_defun_user", isExecutionError _CannotApplyPartialClosure, [text|
+      (module m g (defcap g () true)
+        (defun f (n:integer s:string) s)
+        )
+      ((f 1) "foo")
+    |])
+  , ("partial_defun_native", isExecutionError _CannotApplyPartialClosure, [text|
+      ((take 1) "foo")
+    |])
   ]
 
 tests :: TestTree
