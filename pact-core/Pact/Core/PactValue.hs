@@ -1,7 +1,9 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
+
 
 module Pact.Core.PactValue
  ( PactValue(..)
@@ -18,6 +20,7 @@ module Pact.Core.PactValue
  , pattern PDecimal
  , pattern PString
  , pattern PBool
+ , pattern PUnit
  , synthesizePvType
  ) where
 
@@ -28,6 +31,10 @@ import Data.Map.Strict(Map)
 import Data.Text(Text)
 import Data.Maybe(isJust)
 import Data.Decimal(Decimal)
+
+import Control.DeepSeq
+import GHC.Generics
+
 import qualified Data.Vector as V
 import qualified Data.Map.Strict as M
 import qualified Pact.Time as PactTime
@@ -44,14 +51,18 @@ import Pact.Core.Capabilities
 import qualified Pact.Core.Pretty as Pretty
 
 data PactValue
-  = PLiteral Literal
-  | PList (Vector PactValue)
-  | PGuard (Guard QualifiedName PactValue)
-  | PObject (Map Field PactValue)
-  | PModRef ModRef
-  | PCapToken (CapToken FullyQualifiedName PactValue)
+  = PLiteral !Literal
+  | PList !(Vector PactValue)
+  | PGuard !(Guard QualifiedName PactValue)
+  | PObject !(Map Field PactValue)
+  | PModRef !ModRef
+  | PCapToken !(CapToken FullyQualifiedName PactValue)
   | PTime !PactTime.UTCTime
-  deriving (Eq, Show, Ord)
+  -- BIG TODO:
+  -- This ord instance is dangerous. Consider removing in favor of newtyping over it.
+  deriving (Eq, Show, Ord, Generic)
+
+instance NFData PactValue
 
 makePrisms ''PactValue
 
@@ -66,6 +77,9 @@ pattern PString s = PLiteral (LString s)
 
 pattern PBool :: Bool -> PactValue
 pattern PBool b = PLiteral (LBool b)
+
+pattern PUnit :: PactValue
+pattern PUnit = PLiteral LUnit
 
 type FQCapToken = CapToken FullyQualifiedName PactValue
 
@@ -142,8 +156,8 @@ checkPvType ty = \case
 
 
 newtype ObjectData term
-  = ObjectData { _envMap :: Map Field term }
-  deriving (Eq, Show)
+  = ObjectData { _objectData :: Map Field term }
+  deriving (Eq, Show, NFData)
 
 envMap
   :: Lens (ObjectData term)

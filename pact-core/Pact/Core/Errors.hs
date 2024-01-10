@@ -1,5 +1,7 @@
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
@@ -23,16 +25,20 @@ import Control.Exception
 import Data.Text(Text)
 import Data.Dynamic (Typeable)
 
+import Control.DeepSeq
+import GHC.Generics
+
 import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Info
-import Pact.Core.Pretty(Pretty(..))
+import Pact.Core.Gas
+import Pact.Core.Pretty as Pretty
 import Pact.Core.Hash
 import Pact.Core.Persistence
 import Pact.Core.DefPacts.Types
 
-import qualified Pact.Core.Pretty as Pretty
+
 
 type PactErrorI = PactError SpanInfo
 
@@ -46,7 +52,9 @@ data LexerError
   | StringLiteralError Text
   -- ^ Error lexing string literal
   | OutOfInputError Char
-  deriving Show
+  deriving (Show, Generic)
+
+instance NFData LexerError
 
 instance Exception LexerError
 
@@ -76,7 +84,9 @@ data ParseError
   -- ^ Way too many decimal places for `Decimal` to deal with, max 255 precision.
   | InvalidBaseType Text
   -- ^ Invalid primitive type
-  deriving Show
+  deriving (Show, Generic)
+
+instance NFData ParseError
 
 instance Exception ParseError
 
@@ -140,7 +150,9 @@ data DesugarError
   | InvalidDynamicInvoke Text
   | DuplicateDefinition Text
   | InvalidBlessedHash Text
-  deriving Show
+  deriving (Show,  Generic)
+
+instance NFData DesugarError
 
 instance Exception DesugarError
 
@@ -198,7 +210,9 @@ data ArgTypeError
   | ATETable
   | ATEClosure
   | ATEModRef
-  deriving (Show)
+  deriving (Show,  Generic)
+
+instance NFData ArgTypeError
 
 instance Pretty ArgTypeError where
   pretty = \case
@@ -221,7 +235,7 @@ data EvalError
   -- ^ Enumeration error (e.g incorrect bounds with step
   | DecodeError Text
   -- ^ Some form of decoding error
-  | GasExceeded Text
+  | GasExceeded MilliGasLimit MilliGas
   -- ^ Gas went past the gas limit
   | FloatingPointError Text
   -- ^ Floating point operation exception
@@ -243,6 +257,8 @@ data EvalError
   -- ^ Name does not point to a managed capability
   | CapNotInstalled FullyQualifiedName
   -- ^ Capability not installed
+  | CapAlreadyInstalled FullyQualifiedName
+  -- ^ Capability already installed
   | NameNotInScope FullyQualifiedName
   -- ^ Name not found in the top level environment
   | DefIsNotClosure Text
@@ -315,11 +331,14 @@ data EvalError
   -- ^ Non-recoverable guard enforces.
   | ConstIsNotAPactValue QualifiedName
   | PointNotOnCurve
-  deriving Show
+  | YieldProvenanceDoesNotMatch Provenance [Provenance]
+  | MismatchingKeysetNamespace NamespaceName
+  deriving (Show, Generic)
+
+instance NFData EvalError
 
 
 instance Pretty EvalError where
-  pretty :: EvalError -> Pretty.Doc ann
   pretty = \case
     ArrayOutOfBoundsException len ix ->
       Pretty.hsep
@@ -338,22 +357,14 @@ instance Pretty EvalError where
     -- Todo: probably enhance this data type
     CapNotInScope txt ->
       Pretty.hsep ["Capability not in scope:", pretty txt]
-    GasExceeded txt ->
-      Pretty.hsep ["Gas Exceeded:", pretty txt]
+    GasExceeded (MilliGasLimit (MilliGas limit)) (MilliGas amt) ->
+      "Gas Limit:" <+> parens (pretty limit) <+> "exceeded:" <+> pretty amt
     InvariantFailure txt ->
       Pretty.hsep ["Fatal execution error, invariant violated:", pretty txt]
     NativeArgumentsError (NativeName n) tys ->
       Pretty.hsep ["Native evaluation error for native", pretty n <> ",", "received incorrect argument(s) of type(s)", Pretty.commaSep tys]
     EvalError txt ->
       Pretty.hsep ["Program encountered an unhandled raised error:", pretty txt]
-    -- ModRefNotRefined _ -> error ""
-    -- InvalidDefKind _ _ -> error ""
-    -- NoSuchDef _ -> error ""
-    -- InvalidManagedCap _ -> error ""
-    -- CapNotInstalled _ -> error ""
-    -- NameNotInScope _ -> error ""
-    -- DefIsNotClosure _ -> error ""
-    -- NoSuchKeySet _ -> error ""
     YieldOutsiteDefPact ->
       "Try to yield a value outside a running DefPact execution"
     NoActiveDefPactExec ->
@@ -431,7 +442,9 @@ data PactError info
   -- | PETypecheckError TypecheckError info
   -- | PEOverloadError OverloadError info
   | PEExecutionError EvalError info
-  deriving Show
+  deriving (Show, Functor, Generic)
+
+instance NFData info => NFData (PactError info)
 
 instance Pretty (PactError info) where
   pretty = \case

@@ -31,7 +31,6 @@ module Pact.Core.Repl.Utils
  , ReplAction(..)
  , parseReplAction
  , prettyReplFlag
- , ReplSource(..)
  , replError
  , SourceCode(..)
  ) where
@@ -127,7 +126,6 @@ data ReplState b
   , _replTx :: Maybe (TxId, Maybe Text)
   }
 
-
 makeLenses ''ReplState
 
 instance MonadEvalEnv b SpanInfo (ReplM b) where
@@ -139,15 +137,6 @@ instance MonadEvalState b SpanInfo (ReplM b) where
     replEvalState .= es
   modifyEvalState f =
     replEvalState %= f
-
-instance MonadGas (ReplM b) where
-  logGas msg g = do
-    r <- use replEvalLog
-    liftIO $ modifyIORef' r (fmap ((msg, g):))
-  chargeGas :: Gas -> ReplM b ()
-  chargeGas g = do
-    r <- use replGas
-    liftIO (modifyIORef' r (<> g))
 
 
 instance HasEvalState (ReplState b) b SpanInfo where
@@ -254,12 +243,6 @@ unlessReplFlagSet :: ReplDebugFlag -> ReplM b () -> ReplM b ()
 unlessReplFlagSet flag ma =
   replFlagSet flag >>= \b -> unless b ma
 
-data ReplSource
-  = ReplSource
-  { _rsFile :: Text
-  , _rsSource :: Text
-  } deriving Show
-
 replCompletion
   :: [Text]
   -- ^ natives
@@ -291,11 +274,12 @@ runReplT :: IORef (ReplState b) -> ReplM b a -> IO (Either (PactError SpanInfo) 
 runReplT env (ReplT act) = runReaderT (runExceptT act) env
 
 replError
-  :: ReplSource
+  :: SourceCode
   -> PactErrorI
   -> Text
-replError (ReplSource file src) pe =
-  let srcLines = T.lines src
+replError (SourceCode srcFile src) pe =
+  let file = T.pack srcFile
+      srcLines = T.lines src
       pei = view peInfo pe
       -- Note: The startline is 0-indexed, but we want our
       -- repl to output errors which are 1-indexed.

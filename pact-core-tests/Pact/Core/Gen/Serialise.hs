@@ -77,22 +77,27 @@ parsedNameGen = Gen.choice
   , DN <$> dynamicNameGen
   ]
 
+parsedTyNameGen :: Gen ParsedTyName
+parsedTyNameGen = Gen.choice
+  [ TQN <$> qualifiedNameGen
+  , TBN <$> bareNameGen
+  ]
+
 hashGen :: Gen Hash
 hashGen = Hash . BSS.toShort . encodeUtf8 <$> identGen
 
 -- | Generate a keyset, polymorphic over the custom
 -- predicate function `a`. This particular variant is
 -- not supported yet, so the argument is unused.
-keySetGen :: Gen a -> Gen (KeySet a)
+keySetGen :: Gen a -> Gen KeySet
 keySetGen _genA = do
   ksKeysList <- Gen.list (Range.linear 1 10) publicKeyTextGen
   let _ksKeys = Set.fromList ksKeysList
-  -- customPredicate <- CustomPredicate <$> genA
   _ksPredFun <- Gen.choice
     [ pure KeysAll
     , pure Keys2
     , pure KeysAny
-    -- , customPredicate -- TODO: Reinstantiate this when CustomPredicate is brought back into Guard.hs.
+    , CustomPredicate <$> parsedTyNameGen
     ]
   pure $ KeySet { _ksKeys, _ksPredFun }
 
@@ -123,12 +128,8 @@ nameGen = do
   name <- identGen
   Name name <$> nameKindGen
 
--- TODO
-unresolvedGovGen :: Gen (CapGovRef ParsedName)
-unresolvedGovGen = UnresolvedGov <$> parsedNameGen
-
-resolvedGovGen :: Gen (CapGovRef Name)
-resolvedGovGen = ResolvedGov <$> fullyQualifiedNameGen
+resolvedGovGen :: Gen (FQNameRef Name)
+resolvedGovGen = FQName <$> fullyQualifiedNameGen
 
 governanceGen :: Gen (Governance Name)
 governanceGen = Gen.choice
@@ -180,7 +181,7 @@ importGen = do
 infoGen :: Gen SpanInfo
 infoGen = pure def
 
-builtinGen :: Gen RawBuiltin
+builtinGen :: Gen CoreBuiltin
 builtinGen = Gen.element [minBound .. maxBound]
 
 textGen :: Gen Text
@@ -203,14 +204,6 @@ literalGen = Gen.choice
   , LBool <$> Gen.bool_ -- no shrinking
   ]
 
-lamInfoGen :: Gen LamInfo
-lamInfoGen = Gen.choice
-  [ TLDefun <$> moduleNameGen <*> textGen
-  , TLDefCap <$> moduleNameGen <*> textGen
-  , TLDefPact <$> moduleNameGen <*> textGen
-  , pure AnonLamInfo
-  ]
-
 builtinFormGen :: Gen b -> Gen i -> Gen (BuiltinForm (Term Name Type b i))
 builtinFormGen b i = Gen.choice
   [ CAnd <$> termGen b i <*> termGen b i
@@ -225,9 +218,8 @@ termGen b i = Gen.recursive Gen.choice
   [ Var <$> nameGen <*> i
   , Builtin <$> b <*> i
   , Constant <$> literalGen <*> i
-  , Error <$> identGen <*> i
   ]
-  [ Lam <$> lamInfoGen <*> Gen.nonEmpty (Range.linear 1 16) argGen <*> termGen b i <*> i
+  [ Lam <$> Gen.nonEmpty (Range.linear 1 16) argGen <*> termGen b i <*> i
   , Let <$> argGen <*> termGen b i <*> termGen b i <*> i
   , App <$> termGen b i <*> Gen.list (Range.linear 0 16) (termGen b i) <*> i
   , Sequence <$> termGen b i <*> termGen b i <*> i
@@ -301,7 +293,7 @@ defCapGen b i = do
   ret <- Gen.maybe typeGen
   term <- termGen b i
   meta <- defCapMetaGen fqNameRefGen
-  DefCap name arity args ret term meta <$> i
+  DefCap name args ret term meta <$> i
 
 ifDefCapGen :: Gen i -> Gen (IfDefCap name Type i)
 ifDefCapGen i = do

@@ -11,7 +11,6 @@ import Control.Monad.State.Strict
 import Control.Exception(throwIO)
 import Data.Char(isSpace)
 import Data.Text(Text)
-
 import qualified Data.Text as T
 
 import Pact.Core.Info
@@ -86,7 +85,6 @@ tokens :-
     -- @installcap  { token TokenInstallCapability }
     -- @emitevent   { token TokenEmitEvent }
     try          { token TokenTry }
-    error        { token TokenError }
     progn        { token TokenBlockIntro }
     suspend      { token TokenSuspend }
 

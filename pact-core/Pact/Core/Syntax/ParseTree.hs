@@ -28,6 +28,13 @@ data Operator
   | EnforceOneOp
   deriving (Show, Eq, Enum, Bounded)
 
+renderOp :: Operator -> Text
+renderOp = \case
+    AndOp -> "and"
+    OrOp -> "or"
+    EnforceOp -> "enforce"
+    EnforceOneOp -> "enforce-one"
+
 instance Pretty Operator where
   pretty = \case
     AndOp -> "and"
@@ -106,7 +113,7 @@ data Defun i
   , _dfunDocs :: Maybe Text
   , _dfunModel :: Maybe [FVFunModel i]
   , _dfunInfo :: i
-  } deriving Show
+  } deriving (Show, Functor)
 
 data DefConst i
   = DefConst
@@ -115,7 +122,7 @@ data DefConst i
   , _dcTerm :: Expr i
   , _dcDocs :: Maybe Text
   , _dcInfo :: i
-  } deriving Show
+  } deriving (Show, Functor)
 
 data DCapMeta
   = DefEvent
@@ -132,7 +139,7 @@ data DefCap i
   , _dcapModel :: Maybe [FVFunModel i]
   , _dcapMeta :: Maybe DCapMeta
   , _dcapInfo :: i
-  } deriving Show
+  } deriving (Show, Functor)
 
 data DefSchema i
   = DefSchema
@@ -141,7 +148,7 @@ data DefSchema i
   , _dscDocs :: Maybe Text
   , _dscModel :: Maybe [FVFunModel i]
   , _dscInfo :: i
-  } deriving Show
+  } deriving (Show, Functor)
 
 data DefTable i
   = DefTable
@@ -149,12 +156,12 @@ data DefTable i
   , _dtSchema :: ParsedName
   , _dtDocs :: Maybe Text
   , _dtInfo :: i
-  } deriving Show
+  } deriving (Show, Functor)
 
 data PactStep i
   = Step (Expr i) (Maybe [FVFunModel i])
   | StepWithRollback (Expr i) (Expr i) (Maybe [FVFunModel i])
-  deriving Show
+  deriving (Show, Functor)
 
 data DefPact i
   = DefPact
@@ -165,7 +172,7 @@ data DefPact i
   , _dpDocs :: Maybe Text
   , _dpModel :: Maybe [FVFunModel i]
   , _dpInfo :: i
-  } deriving Show
+  } deriving (Show, Functor)
 
 data Managed
   = AutoManaged
@@ -179,7 +186,7 @@ data Def i
   | DSchema (DefSchema i)
   | DTable (DefTable i)
   | DPact (DefPact i)
-  deriving Show
+  deriving (Show, Functor)
 
 data Import
   = Import
@@ -199,26 +206,26 @@ data DefProperty i
   { _dpropName :: Text
   , _dpropArgs :: [Arg]
   , _dpropExp :: Expr i
-  } deriving Show
+  } deriving (Show, Functor)
 
 newtype Property i
   = Property (Expr i)
-  deriving Show
+  deriving (Show, Functor)
 
 newtype Invariant i
   = Invariant (Expr i)
-  deriving Show
+  deriving (Show, Functor)
 
 data FVModel i
   = FVDefProperty (DefProperty i)
   | FVProperty (Property i)
   | FVInvariant (Invariant i)
-  deriving Show
+  deriving (Show, Functor)
 
 data FVFunModel i
   = FVFunProperty (Property i)
   | FVFunInvariant (Invariant i)
-  deriving Show
+  deriving (Show, Functor)
 
 data Module i
   = Module
@@ -229,14 +236,14 @@ data Module i
   , _mDoc :: Maybe Text
   , _mModel :: [FVModel i]
   , _mInfo :: i
-  } deriving Show
+  } deriving (Show, Functor)
 
 data TopLevel i
   = TLModule (Module i)
   | TLInterface (Interface i)
   | TLTerm (Expr i)
   | TLUse Import i
-  deriving Show
+  deriving (Show, Functor)
 
 data Interface i
   = Interface
@@ -244,9 +251,9 @@ data Interface i
   , _ifDefns :: [IfDef i]
   , _ifImports :: [Import]
   , _ifDocs :: Maybe Text
-  , _ifModel :: Maybe [FVFunModel i]
+  , _ifModel :: [FVModel i]
   , _ifInfo :: i
-  } deriving Show
+  } deriving (Show, Functor)
 
 data IfDefun i
   = IfDefun
@@ -256,7 +263,7 @@ data IfDefun i
   , _ifdDocs :: Maybe Text
   , _ifdModel :: Maybe [FVFunModel i]
   , _ifdInfo :: i
-  } deriving Show
+  } deriving (Show, Functor)
 
 data IfDefCap i
   = IfDefCap
@@ -267,7 +274,7 @@ data IfDefCap i
   , _ifdcModel :: Maybe [FVFunModel i]
   , _ifdcMeta :: Maybe DCapMeta
   , _ifdcInfo :: i
-  } deriving Show
+  } deriving (Show, Functor)
 
 data IfDefPact i
   = IfDefPact
@@ -277,7 +284,7 @@ data IfDefPact i
   , _ifdpDocs :: Maybe Text
   , _ifdpModel :: Maybe [FVFunModel i]
   , _ifdpInfo :: i
-  } deriving Show
+  } deriving (Show, Functor)
 
 
 -- Interface definitions may be one of:
@@ -292,7 +299,7 @@ data IfDef i
   | IfDCap (IfDefCap i)
   | IfDSchema (DefSchema i)
   | IfDPact (IfDefPact i)
-  deriving Show
+  deriving (Show, Functor)
 
 instance Pretty (DefConst i) where
   pretty (DefConst dcn dcty term _ _) =
@@ -322,7 +329,7 @@ instance Pretty (Binder i) where
     parens $ pretty ident <> maybe mempty ((":" <>) . pretty) ty <+> pretty e
 
 data CapForm i
-  = WithCapability ParsedName [Expr i] (Expr i)
+  = WithCapability (Expr i) (Expr i)
   | CreateUserGuard ParsedName [Expr i]
   deriving (Show, Eq, Functor)
 
@@ -341,7 +348,6 @@ data Expr i
   | Object [(Field, Expr i)] i
   | Binding [(Field, MArg)] [Expr i] i
   | CapabilityForm (CapForm i) i
-  | Error Text i
   deriving (Show, Eq, Functor)
 
 data ReplSpecialForm i
@@ -395,8 +401,6 @@ termInfo f = \case
     Try e1 e2 <$> f i
   CapabilityForm e i ->
     CapabilityForm e <$> f i
-  Error t i ->
-    Error t <$> f i
   Binding t e i ->
     Binding t e <$> f i
 
@@ -422,13 +426,11 @@ instance Pretty (Expr i) where
       "[" <> commaSep nel <> "]"
     Try e1 e2 _ ->
       parens ("try" <+> pretty e1 <+> pretty e2)
-    Error e _ ->
-      parens ("error \"" <> pretty e <> "\"")
     Suspend e _ ->
       parens ("suspend" <+> pretty e)
     CapabilityForm c _ -> case c of
-      WithCapability pn exs ex ->
-        parens ("with-capability" <+> capApp pn exs <+> pretty ex)
+      WithCapability cap body ->
+        parens ("with-capability" <+> pretty cap <+> pretty body)
       CreateUserGuard pn exs ->
         parens ("create-user-guard" <> capApp pn exs)
       where

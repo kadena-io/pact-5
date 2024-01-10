@@ -1,67 +1,139 @@
-# Pact Core Checklist
+<p align="center">
+<img src="https://i.imgur.com/bAZFAGF.png" width="450" height="243" alt="Kadena" title="Kadena">
+</p>
 
-## Todo: Update this to better reflect notion.so pact-core roadmap.
+<p>&nbsp;</p>
 
-## Interpreter flow
+# The Pact Programming Language
 
-- We receive source as strict `ByteString`, this is [lexed](./pact-core/Pact/Core/Syntax/Lisp/Lexer) and then [parsed](./pact-core/Pact/Core/Syntax/Lisp/Parser.y) into the data structures [here](./pact-core/Pact/Core/Syntax/Lisp/ParseTree.hs), in particular `ParseTree.Expr`. Line locations are provided by the `LineInfo` data type and are emitted by the lexer.
-- From `ParseTree.Expr` which attempts to faithfully represent source syntax, we get rid of all syntactic sugar into an abstract syntax tree in the [Desugar](./pact-core/Pact/Core/IR/Desugar.hs) module.
-- After desugaring into `IR.Term`, we perform name resolution also within `Desugar`, that is: we resolve all top-level scoped names into their respective fully qualified names (that is, a call `(foo 1)` referencing a module's function `m.foo` turns this call into `m.foo 1`, and a call `(foo 1)` referencing a let-bound variable `let foo = ... in (foo 1)` turns this into `(Bound(foo, 0) 1)` (with a debruijn index).
-- After desugaring, we perform [type inference](./pact-core/Pact/Core/IR/Typecheck.hs) which returns a tree with all overloads (e.g `+`) resolved but not yet specialized (That is, we check whether an application of `+` references a valid instance overload of `+`, and this is propagated into the tree).
-- After typechecking, we specialize all overloads aka `(+ 1 2)` becomes `(addInt 1 2)`.
-- Here, we can optionally re-typecheck the tree (Todo: this needs to be implemented/checked for all overloads) via the system f typechecker.
-- After the above step ^, we strip the tree of types into [untyped term](./pact-core/Pact/Core/Untyped/Term.hs), and can then pick an evaluator to compute the value of the program.
+[Pact](http://kadena.io/build) is an open-source, Turing-**in**complete smart contract language that has been purpose-built with blockchains first in mind. Pact focuses on facilitating transactional logic with the optimal mix of functionality in authorization, data management, and workflow.
 
-### Special notes
+Read the whitepaper:
 
-- The loaded builtins for the term are abstracted out into a type vairbale
+- [The Pact Smart Contract Language](https://d31d887a-c1e0-47c2-aa51-c69f9f998b07.filesusr.com/ugd/86a16f_442a542b64554cb2a4c1ae7f528ce4c3.pdf)
 
-### Source -> Typed
-- [x] Parsing new syntax (Term)
-- [x] Renamer to locally nameless for terms
-- [x] Type inference for Term
-- [ ] Core IR Modules (Parsing, Tc)
-- [ ] Core IR Type inference support
-- [x] IR to Typed Core in typechecker
-- [ ] Typeclass overload resolution
+For additional information, press, and development inquiries, please refer to the Kadena [website](https://kadena.io)
 
-#### Optional
-- [ ] Interpreter for IR
+> [!IMPORTANT]
+> This repository hosts a rewrite of the Pact language and is not utilized by [chainweb-node](https://github.com/kadena-io/chainweb-node), 
+> serving primarily for local development and testing purposes. We detail the planned transition from Pact to Pact Core in [Section Roadmap](#roadmap).
+
+If you are looking for legacy Pact, see [github.com/kadena-io/pact](https://github.com/kadena-io/pact).
+
+## Table of Contents
+  - [Quickstart](#quickstart)
+  - [Pact Core vs Pact](#pact-core-vs-pact)
+    - [Roadmap](#roadmap)
+  - [Documentation](#documentation)
+  - [Installing Pact Core](#installing-pact-core)
+    - [Binary Downloads](#binary-downloads)
+	- [Building from Source](#building-from-source)
+	  - [Using the Nix Infrastructure (recommend)](#using-the-nix-infrastructure)
+	  - [Using Cabal and GHC](#using-cabal-and-ghc)
+  - [Editor Integration (Language Server)](#editor-integration)
+  - [License](#license)
+
+## Quickstart
+
+1. Download the latest Pact binary from [Github Releases](https://github.com/kadena-io/pact-core/releases/latest).
+2. Extract the `pact` binary, make sure that you have the required permissions to execute it.
+   ```bash
+   chmod +x /path/to/pact
+   ```
+3. (Optional) Add the path to your `$PATH` environment variable or adding the line to your shell profile.
+   ```bash
+   export PATH=$PATH:/path/to/
+   ```
+4. Execute `pact` and have fun :-)
+
+## Pact Core vs Pact
+Pact Core is a redevelopment of the Pact language, focusing on enhancing scalability, maintainability, and performance in response to increasingly complex demands from users and partners.
+
+Pact Core enables sustainable growth of the Pact featureset within the Kadena ecosystem by offering a more modular and maintainable internals, enabling the community to further develop and propose enhancements to the language and components that rely on it.
+
+Pact Core maintains semantic equivalence to Pact, aside from minor differences for security and performance. Existing code will behave the same as code written in (legacy) Pact. Breaking modifications will be communicated using the [Kadena Improvement Process](https://github.com/kadena-io/kips) (KIP) process.
+
+### Roadmap
+> [!NOTE]
+> The current roadmap is being sketched by the Pact Team and will be updated appropriatly.
+
+## Documentation
+The [Kadena Docs](https://docs.kadena.io/pact) site serves as the primary source of information about Pact.
+You can find information about how to get started with the Pact language, how to execute already deployed contracts, and follow
+our step-by-step tutorials. 
+
+We recommend that new users start with our [beginner`s guide](https://docs.kadena.io/pact/beginner), which provides an 
+understanding of the fundamental concepts and terminology of the language.
+
+## Installing Pact Core
+To install Pact Core on your infrastructure, you have the option to download a pre-built binary or compile it from the source.
+
+### Binary Downloads
+You can obtain the latest released version of Pact from our GitHub releases page [here](https://github.com/kadena-io/pact-core/releases).
+Ensure to download the binary that corresponds to your specific architecture.
+
+### Building from Source
+Two methods are supported for building Pact Core: using bare Cabal and GHC or employing the Nix package manager.
+
+#### Using Cabal and GHC
+
+Building is a process comprising four steps:
+1. Install [GHCup](https://www.haskell.org/ghcup/)
+2. Set and ensure the versions specified below are correctly set:
+   ```bash
+   ghcup install ghc 9.6.3 && ghcup install-cabal
+   ```
+3. Update Haskell packages:
+   ```shell
+   cabal update
+   ```
+4. Build the Pact binary:
+   ```shell
+   cabal build exe:pact
+   ```
+
+5. (Optional) You can either run `pact` directly:
+   ```shell
+   cabal run exe:pact
+   ```
+   or, if you prever to make the `pact` executable available in your `$PATH` environment, run:
+   ```shell
+   cabal install exe:pact
+   ```
+
+#### Using the Nix Infrastructure
+Kadena offers a binary cache for all Nix builds, allowing users to accelerate their build times by utilizing our cache infrastructure.
+The specifics of setting up the cache depend on various factors and are beyond the scope of this instruction.
+A good starting point for configuring our cache is the Nix documentation on binary caches, available at: [NixOS Wiki on Binary Cache](https://nixos.wiki/wiki/Binary_Cache).
+
+The binary cache is typically configured using the `nixConfig` attribute in our flake definition as follows:
+
+```
+nixConfig = {
+    extra-substituters = "https://nixcache.chainweb.com https://cache.iog.io";
+    trusted-public-keys = "nixcache.chainweb.com:FVN503ABX9F8x8K0ptnc99XEz5SaA4Sks6kNcZn2pBY= iohk.cachix.org-1:DpRUyj7h7V830dp/i6Nti+NEO2/nhblbov/8MW7Rqoo= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=";
+  };
+```
+
+Executing `nix build` within the root directory of this project will create a build under the `./result` symbolic link.
+This will contain the artifact within its `bin` directory.
+
+Entering the developer shell using `nix develop` will bring all required dependencies into scope, enabling the use of
+`cabal build` to compile the final project.
 
 
-## Typed
-- [x] Core Typed IR
-- [x] Core Type language (Note: potentially `Type` should be 2 different types, for IR and Core)
-- [x] Renaming to locally nameless
-- [x] Type checking for typed Core
-- [x] CEK Interpreter for Typed corew
+## Editor Integration
 
-## Untyped
+We offer built-in integration with Microsoft's [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) (LSP).
+Check your editor's support for the LSP protocol and the specific setup instructions. The server itself can be initiated as follows.
 
-- [ ] CEK for untyped core
-- [ ] Optimizations/Jit
+```shell
+pact --lsp
+```
 
-# Features
-- [ ] Capabilities Support
-- [ ] Defpact Support
+> [!NOTE]
+> We continue to add specifics on major editors such as Emacs, vim, and VSCode.
 
-## Low Prio
+## License
 
-- [ ] Constant folding / Propagation
-- [ ] JIT
-
-# General Compiler flow
-
-## Source on chain version:
-
-Source --> Name resolution + renaming -> Typecheck (Gas!)
-\+ Overload resolution -> Typed core -> Sanity typecheck -> Untyped + onchain persist + execute.
-
-## Typed Core on chain version:
-
-### Off-chain
-Source (Frontend of choice) --> Name reso + renaming -> Typecheck (No gas :)
-\-> Overload resolution -> Typed Core -> Optional (Optimization)
-
-### On-chain
-Typed Core Source --> Name resolution + renaming -> Typecheck (Gas) -> Untyped + onchain persist + execute.
+This code is distributed under the terms of the BSD3 license. See [LICENSE](LICENSE) for details.

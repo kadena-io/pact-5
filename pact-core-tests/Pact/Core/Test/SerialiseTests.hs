@@ -36,7 +36,6 @@ tests = testGroup "Serialise Roundtrip"
     , testProperty "DynamicRef" $ serialiseRoundtrip dynamicRefGen
     , testProperty "NameKind" $ serialiseRoundtrip nameKindGen
     , testProperty "Name" $ serialiseRoundtrip nameGen
-    , testProperty "resolvedGov" $ serialiseRoundtrip resolvedGovGen
     , testProperty "Governance" $ serialiseRoundtrip governanceGen
     , testProperty "PrimType" $ serialiseRoundtrip tyPrimGen
     , testProperty "Field" $ serialiseRoundtrip fieldGen
@@ -47,7 +46,6 @@ tests = testGroup "Serialise Roundtrip"
     , testProperty "SpanInfo" $ serialiseRoundtrip infoGen
     , testProperty "Builtin" $ serialiseRoundtrip builtinGen
     , testProperty "Literal" $ serialiseRoundtrip literalGen
-    , testProperty "LamInfo" $ serialiseRoundtrip lamInfoGen
     , testProperty "BuiltinForm" $ serialiseRoundtrip (builtinFormGen builtinGen infoGen)
     , testProperty "Term" $ serialiseRoundtrip (termGen builtinGen infoGen)
     , testProperty "Defun" $ serialiseRoundtrip (defunGen builtinGen infoGen)

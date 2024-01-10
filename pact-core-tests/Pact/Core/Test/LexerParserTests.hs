@@ -48,7 +48,6 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
           , TokenIf
           , TokenLambda
           , TokenTry
-          , TokenError
           , TokenModule
           , TokenInterface
           , TokenImport
@@ -145,7 +144,6 @@ operatorGen = Gen.choice $ (\x -> pure (Lisp.Operator x ())) <$> [minBound .. ]
 exprGen :: ParserGen
 exprGen = Gen.recursive Gen.choice
   [ varGen
-  , (`Lisp.Error` ()) <$> Gen.text (Range.constant 1 64) Gen.alphaNum
   , constantGen
   , operatorGen
   ]

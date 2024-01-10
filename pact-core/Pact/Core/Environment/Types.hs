@@ -18,8 +18,8 @@ module Pact.Core.Environment.Types
  , eeHash, eeMsgBody
  , eeDefPactStep
  , eePublicData, eeMode, eeFlags
- , eeNatives
- , eeNamespacePolicy
+ , eeNatives, eeGasModel
+ , eeNamespacePolicy, eeGasRef
  , PactState(..)
  , psLoaded
  , TxCreationTime(..)
@@ -54,7 +54,11 @@ import Control.Monad.IO.Class
 import Data.Set(Set)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
+import Data.IORef
 import Data.Default
+
+import Control.DeepSeq
+import GHC.Generics
 
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
@@ -88,7 +92,9 @@ data ExecutionFlag
   | FlagEnforceKeyFormats
   -- | Require keysets to be defined in namespaces
   | FlagRequireKeysetNs
-  deriving (Eq,Ord,Show,Enum,Bounded)
+  deriving (Eq,Ord,Show,Enum,Bounded, Generic)
+
+instance NFData ExecutionFlag
 
 -- | Flag string representation
 flagRep :: ExecutionFlag -> Text
@@ -107,7 +113,7 @@ data EvalEnv b i
   -- ^ The list of provided keys and scoped capabilities
   , _eePactDb :: PactDb b i
   -- ^ The Pact database store
-  , _eeMsgBody :: ObjectData PactValue
+  , _eeMsgBody :: PactValue
   -- ^ Transaction-provided data
   , _eeHash :: Hash
   -- ^ The transaction hash
@@ -122,7 +128,13 @@ data EvalEnv b i
   , _eeNatives :: Map Text b
   -- ^ The native resolution map
   , _eeNamespacePolicy :: NamespacePolicy
-  }
+  -- ^ The implemented namespace policy
+  , _eeGasRef :: IORef MilliGas
+  -- ^ The gas ref
+  , _eeGasModel :: GasModel b
+  } deriving (Generic)
+
+instance (NFData b, NFData i) => NFData (EvalEnv b i)
 
 makeLenses ''EvalEnv
 
@@ -137,23 +149,29 @@ data StackFunctionType
   = SFDefun
   | SFDefcap
   | SFDefPact
-  deriving (Eq, Show, Enum, Bounded)
+  deriving (Eq, Show, Enum, Bounded, Generic)
+
+instance NFData StackFunctionType
 
 data StackFrame
   = StackFrame
   { _sfFunction :: Text
   , _sfModule :: ModuleName
   , _sfFnType :: StackFunctionType }
-  deriving Show
+  deriving (Show, Generic)
+
+instance NFData StackFrame
 
 data EvalState b i
   = EvalState
-  { _esCaps :: CapState QualifiedName PactValue
-  , _esStack :: [StackFrame]
-  , _esEvents :: [PactEvent PactValue]
-  , _esLoaded :: Loaded b i
-  , _esDefPactExec :: Maybe DefPactExec
-  } deriving Show
+  { _esCaps :: !(CapState QualifiedName PactValue)
+  , _esStack :: !([StackFrame])
+  , _esEvents :: !([PactEvent PactValue])
+  , _esLoaded :: !(Loaded b i)
+  , _esDefPactExec :: !(Maybe DefPactExec)
+  } deriving (Show, Generic)
+
+instance (NFData b, NFData i) => NFData (EvalState b i)
 
 instance Default (EvalState b i) where
   def = EvalState def [] [] mempty Nothing
@@ -176,7 +194,6 @@ class Monad m => MonadEvalState b i m | m -> b, m -> i where
 type MonadEval b i m =
   ( MonadEvalEnv b i m
   , MonadEvalState b i m
-  , MonadGas m
   , MonadError (PactError i) m
   , MonadIO m
   , Default i
@@ -185,17 +202,20 @@ type MonadEval b i m =
 
 -- | A default evaluation environment meant for
 --   uses such as the repl
-defaultEvalEnv :: PactDb b i -> M.Map Text b -> EvalEnv b i
-defaultEvalEnv pdb m
-  = EvalEnv
-  { _eeMsgSigs = mempty
-  , _eePactDb = pdb
-  , _eeMsgBody = ObjectData mempty
-  , _eeHash = defaultPactHash
-  , _eePublicData = def
-  , _eeDefPactStep = Nothing
-  , _eeMode = Transactional
-  , _eeFlags = mempty
-  , _eeNatives = m
-  , _eeNamespacePolicy = SimpleNamespacePolicy
-  }
+defaultEvalEnv :: PactDb b i -> M.Map Text b -> IO (EvalEnv b i)
+defaultEvalEnv pdb m = do
+  gasRef <- newIORef mempty
+  pure $ EvalEnv
+    { _eeMsgSigs = mempty
+    , _eePactDb = pdb
+    , _eeMsgBody = PObject mempty
+    , _eeHash = defaultPactHash
+    , _eePublicData = def
+    , _eeDefPactStep = Nothing
+    , _eeMode = Transactional
+    , _eeFlags = mempty
+    , _eeNatives = m
+    , _eeNamespacePolicy = SimpleNamespacePolicy
+    , _eeGasRef = gasRef
+    , _eeGasModel = freeGasModel
+    }

@@ -48,9 +48,9 @@
 (expect "orFF" false (or false false))
 (expect "not" true (not false))
 (expect "and short-circuit" false
-        (and false (error "shouldn't happen")))
+        (and false (enforce false "shouldn't happen")))
 (expect "or short-circuit" true
-        (or true (error "shouldn't happen")))
+        (or true (enforce false "shouldn't happen")))
 
 "===== comparators, eq"
 (expect "< decimal decimal" true (< 10.0 11.0))

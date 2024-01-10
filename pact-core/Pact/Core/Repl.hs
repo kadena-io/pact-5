@@ -14,7 +14,7 @@
 --
 
 
-module Main where
+module Pact.Core.Repl(runRepl) where
 
 import Control.Lens
 import Control.Monad.Catch
@@ -31,38 +31,33 @@ import Pact.Core.Compile
 import Pact.Core.Environment
 import Pact.Core.Hash
 import Pact.Core.Imports
-import Pact.Core.Interpreter
-import Pact.Core.Names
 import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Pretty
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
 import Pact.Core.Serialise
 
-main :: IO ()
-main = do
+runRepl :: IO ()
+runRepl = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
   g <- newIORef mempty
   evalLog <- newIORef Nothing
-  let ee = defaultEvalEnv pdb replRawBuiltinMap
+  ee <- defaultEvalEnv pdb replcoreBuiltinMap
   ref <- newIORef (ReplState mempty pdb def ee g evalLog defaultSrc Nothing)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
-      putStrLn $ T.unpack $ replError (ReplSource "(interactive)" "") err
+      putStrLn $ T.unpack $ replError (SourceCode "(interactive)" "") err
     _ -> pure ()
   where
-  replSettings = Settings (replCompletion rawBuiltinNames) (Just ".pc-history") True
+  replSettings = Settings (replCompletion coreBuiltinNames) (Just ".pc-history") True
   displayOutput = \case
     RCompileValue cv -> case cv of
       LoadedModule mn mh -> outputStrLn $ show $
         "loaded module" <+> pretty mn <> ", hash" <+> pretty (moduleHashToText mh)
       LoadedInterface mn mh -> outputStrLn $ show $
         "loaded interface" <+> pretty mn <> ", hash" <+> pretty (moduleHashToText mh)
-      InterpretValue iv -> case iv of
-        IPV v _ -> outputStrLn (show (pretty v))
-        IPTable (TableName tn mn) -> outputStrLn $ "table{" <> T.unpack (renderModuleName mn) <> ":" <> T.unpack tn <> "}"
-        IPClosure -> outputStrLn "<<closure>>"
+      InterpretValue v _ -> outputStrLn (show (pretty v))
       LoadedImports i ->
         outputStrLn $ "loaded imports from" <> show (pretty (_impModuleName i))
     RLoadedDefun mn ->
@@ -71,6 +66,7 @@ main = do
     RLoadedDefConst mn ->
       outputStrLn $ show $
         "loaded defconst" <+> pretty mn
+    RBuiltinDoc doc -> outputStrLn (show $ pretty doc)
   catch' ma = catchAll ma (\e -> outputStrLn (show e) *> loop)
   defaultSrc = SourceCode "(interactive)" mempty
   loop = do
@@ -98,12 +94,11 @@ main = do
           RAExecuteExpr src -> catch' $ do
             let display' rcv = runInputT replSettings (displayOutput rcv)
             lift (replCurrSource .= defaultSrc{_scPayload=src})
-            eout <- lift (tryError (interpretReplProgram (SourceCode "(interactive)" src) display'))
+            eout <- lift (tryError (interpretReplProgramSmallStep (SourceCode "(interactive)" src) display'))
             case eout of
               Right _ -> pure ()
               Left err -> do
-                SourceCode srcFile currSrcText <- lift (use replCurrSource)
-                let rs = ReplSource (T.pack srcFile) currSrcText
+                rs <- lift (use replCurrSource)
                 lift (replCurrSource .= defaultSrc)
                 outputStrLn (T.unpack (replError rs err))
             loop

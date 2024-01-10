@@ -8,9 +8,9 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import Control.Lens
-import Data.Default
 import Data.IORef
 import Data.Text (Text)
+import Data.Default
 import Data.Maybe(isJust)
 import NeatInterpolation (text)
 
@@ -38,8 +38,8 @@ runStaticTest label src predicate = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
   pdb <- mockPactDb serialisePact_repl_spaninfo
-  let ee = defaultEvalEnv pdb replRawBuiltinMap
-      source = SourceCode label src
+  ee <- defaultEvalEnv pdb replcoreBuiltinMap
+  let source = SourceCode label src
       rstate = ReplState
             { _replFlags = mempty
             , _replEvalState = def

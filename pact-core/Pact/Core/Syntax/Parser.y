@@ -65,7 +65,6 @@ import Pact.Core.Syntax.LexUtils
   true       { PosToken TokenTrue _ }
   false      { PosToken TokenFalse _ }
   progn      { PosToken TokenBlockIntro _ }
-  err        { PosToken TokenError _ }
   try        { PosToken TokenTry _ }
   suspend    { PosToken TokenSuspend _ }
   load       { PosToken TokenLoad _ }
@@ -137,7 +136,7 @@ ReplSpecial :: { SpanInfo -> ReplSpecialForm SpanInfo }
 
 Governance :: { Governance ParsedName }
   : StringRaw { KeyGov (KeySetName $1 Nothing) }
-  | IDENT { CapGov (UnresolvedGov (BN (BareName (getIdent $1)))) }
+  | IDENT { CapGov (FQParsed (BN (BareName (getIdent $1)))) }
 
 StringRaw :: { Text }
  : STR  { getStr $1 }
@@ -149,7 +148,7 @@ Module :: { ParsedModule }
       (combineSpan (_ptInfo $1) (_ptInfo $7)) }
 
 Interface :: { ParsedInterface }
-  : '(' interface IDENT MDocOrModel ImportOrIfDef ')'
+  : '(' interface IDENT MDocOrModuleModel ImportOrIfDef ')'
     { Interface (ModuleName (getIdent $3) Nothing) (reverse (lefts $5)) (reverse (rights $5)) (fst $4) (snd $4)
       (combineSpan (_ptInfo $1) (_ptInfo $2)) }
 
@@ -365,7 +364,6 @@ SExpr :: { SpanInfo -> ParsedExpr }
   | LetExpr { $1 }
   | IfExpr { $1 }
   | TryExpr { $1 }
-  | ErrExpr { $1 }
   | ProgNExpr { $1 }
   | GenAppExpr { $1 }
   | SuspendExpr { $1 }
@@ -399,14 +397,11 @@ TryExpr :: { SpanInfo -> ParsedExpr }
 SuspendExpr :: { SpanInfo -> ParsedExpr }
   : suspend Expr { Suspend $2 }
 
-ErrExpr :: { SpanInfo -> ParsedExpr }
-  : err STR { Error (getStr $2) }
-
 CapExpr :: { SpanInfo -> ParsedExpr }
   : CapForm { CapabilityForm $1 }
 
 CapForm :: { CapForm SpanInfo }
-  : withcap '(' ParsedName AppList ')' Block { WithCapability $3 (reverse $4) $6 }
+  : withcap Expr Block { WithCapability $2 $3 }
   | c_usr_grd '(' ParsedName AppList ')' { CreateUserGuard $3 (reverse $4)}
 
 LamArgs :: { [MArg] }

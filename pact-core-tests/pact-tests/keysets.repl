@@ -156,3 +156,37 @@
 ;; admin/user guard differentiation in keyset
 
 (commit-tx)
+
+(begin-tx)
+(module keyset-custom-pred g
+  (defcap g () true)
+
+  (defun custom-pred:bool (count:integer matched:integer) (>= matched count) )
+  )
+(env-data {"ks":{"keys":["jose"],"pred":"="}})
+(env-sigs [{"key":"jose", "caps":[]}])
+(expect "keyset enforce suceeds with = as a pred" true (enforce-guard (read-keyset "ks")))
+
+(env-data {"ks":{"keys":["jose"],"pred":"keyset-custom-pred.custom-pred"}})
+(expect "keyset enforce suceeds with custom pred as a pred" true (enforce-guard (read-keyset "ks")))
+
+; Keyset with multiple keys, as a litmus test
+(env-data {"ks":{"keys":["jose", "robert"],"pred":"="}})
+(env-sigs [{"key":"jose", "caps":[]}])
+
+(expect-failure "keyset enforce should fail with pred = for two keys" (enforce-guard (read-keyset "ks")))
+(env-data {"ks":{"keys":["jose", "robert"],"pred":"keyset-custom-pred.custom-pred"}})
+(expect-failure "keyset enforce should fail with custom pred for two keys" (enforce-guard (read-keyset "ks")))
+
+(env-sigs [{"key":"jose", "caps":[]}, {"key":"robert", "caps":[]}])
+(expect "keyset enforce should work with pred = for two keys" true (enforce-guard (read-keyset "ks")))
+(commit-tx)
+
+(begin-tx)
+(env-data {"ks":{"keys":["jose", "robert"],"pred":"="}})
+; We can do this since we're call by value :)
+; also: pre-running the json parser may already yield guard values
+(env-data {"ks":(read-keyset "ks")})
+(expect "keyset read works with keyset values" true (enforce-guard (read-keyset "ks")))
+
+(commit-tx)

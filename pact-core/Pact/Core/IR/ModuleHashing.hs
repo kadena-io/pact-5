@@ -49,7 +49,7 @@ hashModuleAndReplace m@(Module mname mgov defs mblessed imports mimps _mh info) 
   newMhash = ModuleHash $ hash $ B.toStrict $ B.toLazyByteString (encodeModule m)
   gov' = case mgov of
     KeyGov n -> KeyGov n
-    CapGov (ResolvedGov fqn) -> CapGov $ ResolvedGov $ set fqHash newMhash fqn
+    CapGov (FQName fqn) -> CapGov $ FQName $ set fqHash newMhash fqn
 
 hashInterfaceAndReplace :: IsBuiltin b => Interface Name Type b i -> Interface Name Type b i
 hashInterfaceAndReplace iface@(Interface ifn defs imps _mh info) =
@@ -114,7 +114,7 @@ encodeModule (Module mname mgov defs mblessed imports mimps _mh _mi) = parens $
   where
   encodeGov :: Governance Name -> Builder
   encodeGov (KeyGov (KeySetName name mNs)) = encodeMNamespace mNs <> encodeText name
-  encodeGov (CapGov (ResolvedGov fqn)) = encodeFqnAsQual fqn
+  encodeGov (CapGov (FQName fqn)) = encodeFqnAsQual fqn
   encodeBless (ModuleHash (Hash s)) = parens ("bless" <+> B.shortByteString s)
 
 encodeMNamespace :: Maybe NamespaceName -> Builder
@@ -197,6 +197,9 @@ encodeGuard = \case
       KeysAll -> "keys-all"
       Keys2 -> "keys-2"
       KeysAny -> "keys-any"
+      CustomPredicate pn -> case pn of
+        TBN (BareName bn) -> encodeText bn
+        TQN qn -> encodeQualName qn
   GKeySetRef (KeySetName name mNs) -> "KeySetName" <> parens (encodeMNamespace mNs <> encodeText name)
   GUserGuard (UserGuard fn args) ->
     "UG" <> encodeApp (encodeQualName fn) (encodePactValue <$> args)
@@ -283,7 +286,7 @@ encodeLiteral = \case
 encodeTerm ::  (IsBuiltin b) => Term Name Type b i -> Builder
 encodeTerm = \case
   Var n _ -> encodeName n
-  Lam _li args e _ -> parens $
+  Lam args e _ -> parens $
     "lambda" <> encodeArgList (NE.toList args) <+> encodeTerm e
   -- Todo: collect let args
   Let arg e1 e2 _ -> parens $
@@ -318,12 +321,10 @@ encodeTerm = \case
     encodePair (Field f, term) =
       "'" <> T.encodeUtf8Builder f <> ":" <> encodeTerm term
   CapabilityForm cf _ -> parens $ case cf of
-    WithCapability n args body ->
-      "with-capability" <+> encodeName n <+> hsep (encodeTerm <$> args) <+> encodeTerm body
+    WithCapability cap body ->
+      "with-capability" <+> encodeTerm cap <+> encodeTerm body
     CreateUserGuard n args ->
       "with-capability" <+> encodeName n <+> hsep (encodeTerm <$> args)
-  Error e _ ->
-    parens ("error" <+> encodeText e)
 
 encodeTyAnn :: Maybe Type -> Builder
 encodeTyAnn = maybe mempty ((":" <>) . encodeType)
@@ -359,7 +360,7 @@ encodeDefPact (DefPact dpn args rty steps _i) = parens $
 
 -- todo: defcap meta
 encodeDefCap :: IsBuiltin b => DefCap Name Type b i -> Builder
-encodeDefCap (DefCap dn _ args rty term _meta _info) = parens $
+encodeDefCap (DefCap dn args rty term _meta _info) = parens $
   "defcap" <+> encodeText dn <> encodeTyAnn rty <+> encodeArgList args <+> encodeTerm term
 
 encodeDefSchema :: DefSchema Type info -> Builder

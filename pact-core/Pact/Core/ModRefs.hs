@@ -9,8 +9,10 @@ module Pact.Core.ModRefs
  ) where
 
 import Control.Lens
-
+import Control.DeepSeq
 import Data.Set(Set)
+import GHC.Generics
+
 import Pact.Core.Names
 import Pact.Core.Pretty
 
@@ -26,7 +28,9 @@ data ModRef
   , _mrRefined :: Maybe (Set ModuleName)
 -- ^ The "Selected" interface from a type refinement
   }
-  deriving (Show)
+  deriving (Show, Generic)
+
+instance NFData ModRef
 
 instance Pretty ModRef where
   pretty (ModRef _mn _imp mref) = case mref of
