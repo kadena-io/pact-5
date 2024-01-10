@@ -28,6 +28,13 @@ data Operator
   | EnforceOneOp
   deriving (Show, Eq, Enum, Bounded)
 
+renderOp :: Operator -> Text
+renderOp = \case
+    AndOp -> "and"
+    OrOp -> "or"
+    EnforceOp -> "enforce"
+    EnforceOneOp -> "enforce-one"
+
 instance Pretty Operator where
   pretty = \case
     AndOp -> "and"

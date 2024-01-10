@@ -180,3 +180,13 @@
 
 (env-sigs [{"key":"jose", "caps":[]}, {"key":"robert", "caps":[]}])
 (expect "keyset enforce should work with pred = for two keys" true (enforce-guard (read-keyset "ks")))
+(commit-tx)
+
+(begin-tx)
+(env-data {"ks":{"keys":["jose", "robert"],"pred":"="}})
+; We can do this since we're call by value :)
+; also: pre-running the json parser may already yield guard values
+(env-data {"ks":(read-keyset "ks")})
+(expect "keyset read works with keyset values" true (enforce-guard (read-keyset "ks")))
+
+(commit-tx)

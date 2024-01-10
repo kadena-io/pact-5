@@ -31,7 +31,6 @@ module Pact.Core.Repl.Utils
  , ReplAction(..)
  , parseReplAction
  , prettyReplFlag
- , ReplSource(..)
  , replError
  , SourceCode(..)
  ) where
@@ -244,12 +243,6 @@ unlessReplFlagSet :: ReplDebugFlag -> ReplM b () -> ReplM b ()
 unlessReplFlagSet flag ma =
   replFlagSet flag >>= \b -> unless b ma
 
-data ReplSource
-  = ReplSource
-  { _rsFile :: Text
-  , _rsSource :: Text
-  } deriving Show
-
 replCompletion
   :: [Text]
   -- ^ natives
@@ -281,11 +274,12 @@ runReplT :: IORef (ReplState b) -> ReplM b a -> IO (Either (PactError SpanInfo) 
 runReplT env (ReplT act) = runReaderT (runExceptT act) env
 
 replError
-  :: ReplSource
+  :: SourceCode
   -> PactErrorI
   -> Text
-replError (ReplSource file src) pe =
-  let srcLines = T.lines src
+replError (SourceCode srcFile src) pe =
+  let file = T.pack srcFile
+      srcLines = T.lines src
       pei = view peInfo pe
       -- Note: The startline is 0-indexed, but we want our
       -- repl to output errors which are 1-indexed.
