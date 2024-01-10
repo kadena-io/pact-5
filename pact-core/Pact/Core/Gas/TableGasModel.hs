@@ -8,13 +8,17 @@ module Pact.Core.Gas.TableGasModel
  , replTableGasModel )
  where
 
-import qualified GHC.Integer.Logarithms as IntLog
 import Data.Word(Word64)
 import Data.Ratio((%))
 import GHC.Int(Int(..))
+import qualified Data.Text as T
+import GHC.Num.Integer
+import GHC.Num.WordArray
+import qualified GHC.Integer.Logarithms as IntLog
 import Pact.Core.Builtin
 import Pact.Core.Gas
 import Pact.Core.SizeOf
+import Data.Decimal
 
 tableGasModel :: MilliGasLimit -> GasModel CoreBuiltin
 tableGasModel gl =
@@ -90,6 +94,13 @@ intCostUpperBound = 664
 -- up to 10^300, so 10^200 seems like a decent upper bound
 -- intAdditionUpperBound =  265
 
+integerBits :: Integer -> Int
+integerBits = \case
+  IS _ -> 64 -- note: Small ints are machine word sized
+  IP wa -> I# (wordArraySize# wa)
+  IN wa -> I# (wordArraySize# wa)
+{-# INLINE integerBits #-}
+
 
 -- | Costing function for binary integer ops
 -- intCost :: IntOpThreshold -> Integer -> Gas
@@ -106,6 +117,8 @@ intAdditionCost !lop !rop
     -- since after 10^(intAdditionUpperBound), we essentially gas bomb it
     in if nbits <= intCostUpperBound then MilliGas 30
        else MilliGas $ fromIntegral (nbits * nbits `quot` 6400)
+{-# INLINE intAdditionCost #-}
+
 
 intMultCost :: Integer -> Integer ->  MilliGas
 intMultCost !lop !rop
@@ -119,6 +132,7 @@ intMultCost !lop !rop
     let !nbits = (I# (IntLog.integerLog2# (abs a)) + 1)
     in if nbits <= intCostUpperBound then MilliGas $ fromIntegral $ ((3*nbits) `quot` 20 + 26)
        else MilliGas $ fromIntegral (nbits * nbits `quot` 6400)
+{-# INLINE intMultCost #-}
 
 intDivCost :: Integer -> Integer ->  MilliGas
 intDivCost !lop !rop
@@ -132,6 +146,7 @@ intDivCost !lop !rop
     let !nbits = (I# (IntLog.integerLog2# (abs a)) + 1)
     in if nbits <= intCostUpperBound then MilliGas $ fromIntegral $ ((3*nbits) `quot` 20 + 26)
        else MilliGas $ fromIntegral (nbits * nbits `quot` 6400)
+{-# INLINE intDivCost #-}
 
 runTableModel :: GasArgs -> MilliGas
 runTableModel = \case
@@ -155,15 +170,37 @@ runTableModel = \case
     ListConcat (GasListLength totalLen) ->
       MilliGas (fromIntegral totalLen * 100)
     ObjConcat totalLen ->
-      MilliGas (fromIntegral totalLen * 1_000)
+      MilliGas (fromIntegral totalLen * 100)
   GAApplyLam !i -> MilliGas $ fromIntegral i * applyLamCostPerArg
   GAZKArgs zka -> case zka of
     PointAdd g -> pointAddGas g
     ScalarMult g -> scalarMulGas g
     Pairing np -> pairingGas np
+  -- Todo: Gwrite needs benchmarking
   GWrite bytes -> memoryCost bytes
   GMakeList len sz ->
     MilliGas $ fromIntegral len * sz
+  GComparison cmpty -> case cmpty of
+    TextComparison l r ->
+      MilliGas $ fromIntegral (max (T.length l) (T.length r)) + basicWorkGas
+    IntComparison l r ->
+      MilliGas $ fromIntegral (max (integerBits l) (integerBits r)) + basicWorkGas
+    -- See [Decimal comparisons]
+    DecimalComparison l r ->
+      let !lmantissa = decimalMantissa l
+          !rmantissa = decimalMantissa r
+      in
+      intDivCost lmantissa rmantissa <> MilliGas (fromIntegral (max (integerBits lmantissa) (integerBits rmantissa)) + basicWorkGas)
+    ListComparison maxSz ->
+      MilliGas $ fromIntegral maxSz * basicWorkGas
+    ObjComparison i ->
+      MilliGas $ fromIntegral i * basicWorkGas
+  GPoseidonHashHackAChain len ->
+    MilliGas $ fromIntegral (len * len) * quadraticGasFactor + fromIntegral len * linearGasFactor
+     where
+     quadraticGasFactor, linearGasFactor :: Word64
+     quadraticGasFactor = 50_000
+     linearGasFactor = 38_000
   GModuleMemory bytes -> moduleMemoryCost bytes
 
 basicWorkGas :: Word64
@@ -215,10 +252,10 @@ nativeGasTable = MilliGas . \case
   -- They require more in-depth analysis than currently is being done
   CoreEq -> 1_000
   CoreNeq -> 1_000
-  CoreGT -> 1_000
-  CoreGEQ -> 1_000
-  CoreLT -> 1_000
-  CoreLEQ -> 1_000
+  CoreGT -> basicWorkGas
+  CoreGEQ -> basicWorkGas
+  CoreLT -> basicWorkGas
+  CoreLEQ -> basicWorkGas
   -- All of the bitwise functions are quite fast, regardless of the size of the integer
   -- constant time gas is fine here
   CoreBitwiseAnd -> 1_000
@@ -455,3 +492,32 @@ dbReadPenalty = 10_000
 
 dbMetadataTxPenalty :: Word64
 dbMetadataTxPenalty = 100_000
+
+-- [Decimal Comparisons]
+-- The `Ord` instance, and by that measure and comparison on two decimals is done via
+-- -- Round the two DecimalRaw values to the largest exponent.
+--
+-- roundMax :: (Integral i) => DecimalRaw i -> DecimalRaw i -> (Word8, i, i)
+-- roundMax (Decimal _  0)   (Decimal _  0)  = (0,0,0)
+-- roundMax (Decimal e1 n1)  (Decimal _  0)  = (e1,n1,0)
+-- roundMax (Decimal _  0)   (Decimal e2 n2) = (e2,0,n2)
+-- roundMax d1@(Decimal e1 n1) d2@(Decimal e2 n2)
+--   | e1 == e2  = (e1, n1, n2)
+--   | otherwise = (e, n1', n2')
+--     where
+--       e = max e1 e2
+--       (Decimal _ n1') = roundTo e d1
+--       (Decimal _ n2') = roundTo e d2
+--
+-- roundTo :: (Integral i) => Word8 -> DecimalRaw i -> DecimalRaw i
+-- roundTo d (Decimal _ 0) = Decimal d 0
+-- roundTo d (Decimal e n) = Decimal d $ fromIntegral n1
+--     where
+--       n1 = case compare d e of
+--              LT -> n `divRound` divisor
+--              EQ -> n
+--              GT -> n * multiplier
+--       divisor = 10 ^ (e-d)
+--       multiplier = 10 ^ (d-e)
+-- so the cost of two decimal comparisons involves a multiplication, and then an integer comparison.
+-- thus, we must charge it as such

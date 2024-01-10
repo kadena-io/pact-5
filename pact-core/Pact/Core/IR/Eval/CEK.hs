@@ -276,7 +276,7 @@ evaluateTerm cont handler env (CapabilityForm cf info) = do
 --   <ListLit [], E, K, H>         <VList [], E, K, H>
 ---  <ListLit (x:xs), E, K, H>         <x, E, ListC(E,xs,K), H>
 evaluateTerm cont handler env (ListLit ts info) = do
-  -- chargeGasArgs info (GAConstant unconsWorkNodeGas)
+  chargeGasArgs info (GConcat (ListConcat (GasListLength (length ts))))
   case ts of
     [] -> returnCEKValue cont handler (VList mempty)
     x:xs -> evalCEK (ListC env info xs [] cont) handler env x
@@ -293,7 +293,7 @@ evaluateTerm cont handler env (Try catchExpr rest info) = do
 --   <Try c body, E, K, H>         <body, E, Mt, CEKHandler(E,c,K,_errState,H)>
 --   _errState - callstack,granted caps,events,gas
 evaluateTerm cont handler env (ObjectLit o info) = do
-  chargeGasArgs info (GAConstant unconsWorkNodeGas)
+  chargeGasArgs info (GConcat (ObjConcat (length o)))
   case o of
     (f, term):rest -> do
       let cont' = ObjC env info f rest [] cont

@@ -486,9 +486,11 @@ rawLength info b cont handler _env = \case
 
 rawReverse :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawReverse info b cont handler _env = \case
-  [VList li] ->
+  [VList li] -> do
+    chargeGasArgs info (GConcat (ListConcat (GasListLength (V.length li))))
     returnCEKValue cont handler (VList (V.reverse li))
   [VLiteral (LString t)] -> do
+    chargeGasArgs info (GConcat (TextConcat (GasTextLength (T.length t))))
     returnCEKValue cont handler  (VLiteral (LString (T.reverse t)))
   args -> argsError info b args
 
@@ -1579,7 +1581,7 @@ fromG2 (Point x y) = ObjectData pts
 zkPairingCheck :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 zkPairingCheck info b cont handler _env = \case
   args@[VList p1s, VList p2s] -> do
-    chargeGasArgs info (GAZKArgs (Pairing (min (V.length p1s) (V.length p2s))))
+    chargeGasArgs info (GAZKArgs (Pairing (max (V.length p1s) (V.length p2s))))
     g1s <- maybe (argsError info b args) pure (traverse (preview _PObject >=> (toG1 . ObjectData)) p1s)
     g2s <- maybe (argsError info b args) pure (traverse (preview _PObject >=> (toG2 . ObjectData)) p2s)
     traverse_ (\p -> ensureOnCurve info p b1) g1s
@@ -1646,7 +1648,8 @@ poseidonHash :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunc
 poseidonHash info b cont handler _env = \case
   [VList as]
     | not (V.null as) && length as <= 8,
-    Just intArgs <- traverse (preview (_PLiteral . _LInteger)) as ->
+    Just intArgs <- traverse (preview (_PLiteral . _LInteger)) as -> do
+      chargeGasArgs info (GPoseidonHashHackAChain (length intArgs))
       returnCEKValue cont handler $ VInteger (poseidon (V.toList intArgs))
   args -> argsError info b args
 

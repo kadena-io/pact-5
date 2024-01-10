@@ -115,7 +115,6 @@ coreExpectFailure info b cont handler _env = \case
   args -> argsError info b args
 
 
-
 continuePact :: forall step . ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 continuePact info b cont handler env = \case
   [VInteger s] -> go s False Nothing Nothing

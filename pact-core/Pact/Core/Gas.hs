@@ -135,6 +135,9 @@ data GasArgs
   -- Maybe we can investigate generalizing the operational costs in terms of a more general structure
   -- instead of the current `GasArgs` model?
   | GConcat !ConcatType
+  -- ^ The cost of concatenating two elements
+  -- TODO: We actually reuse this cost for construction as well for objects/lists. Should we
+  -- instead consider renaming the objcat and listcat constructors to be ListCatOrConstruction
   -- | GALinear !Word64 {-# UNPACK #-} !LinearGasArg
   -- ^ Cost of linear-based gas
   | GIntegerOpCost !IntegerPrimOp !Integer !Integer
@@ -148,6 +151,9 @@ data GasArgs
   | GWrite !Word64
   -- ^ Cost of writes, per bytes, roughly based on in-memory cost.
   | GComparison !ComparisonType
+  -- ^ Gas costs for comparisons
+  | GPoseidonHashHackAChain !Int
+  -- ^ poseidon-hash-hack-a-chain costs
   | GModuleMemory !Word64
   deriving (Show)
 
@@ -175,7 +181,7 @@ data ComparisonType
   -- ^ TODO: Comparisons gas for time.
   | ListComparison !Int
   -- ^ N comparisons constant time overhead
-  | ObjectComparison !Int
+  | ObjComparison !Int
   -- ^ Compare objects of at most size `N`
   deriving (Show)
 
