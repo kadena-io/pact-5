@@ -543,6 +543,14 @@ desugarTests =
 
       (use m "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY")
       |])
+  , ("with_capability_in_defcap", isDesugarError _NotAllowedWithinDefcap, [text|
+      (module m1 g (defcap g () true)
+        (defcap c1 () true)
+        (defcap c2 ()
+          (with-capability (c1) 1)
+          )
+        )
+    |])
   ]
 
 executionTests :: [(String, PactErrorI -> Bool, Text)]

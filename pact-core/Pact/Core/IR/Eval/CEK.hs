@@ -187,6 +187,7 @@ evalCEK cont handler env (CapabilityForm cf info) = do
     -- Todo: duplication here in the x:xs case
     WithCapability _ args body -> do
       enforceNotWithinDefcap info env "with-capability"
+      -- TODO this seems to be an invariant failure at this point since desugar takes care of this check
       case args of
         x:xs -> do
           let capFrame = WithCapFrame fqn body
@@ -715,6 +716,7 @@ enforceNotWithinDefcap
   -> m ()
 enforceNotWithinDefcap info env form =
   when (_ceInCap env) $ throwExecutionError info (FormIllegalWithinDefcap form)
+  -- TODO this seems to be an invariant failure at the point where this is called, since desugar takes care of this
 
 requireCap
   :: MonadEval b i m
