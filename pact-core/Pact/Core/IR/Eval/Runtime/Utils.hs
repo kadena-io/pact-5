@@ -302,6 +302,7 @@ chargeGasArgs info ga = do
   currGas <- getGas
   let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
       gUsed = currGas <> (_gmRunModel model) ga
+  -- evalLogGas %= fmap ((gasLogMsg name args gUsed, milliGasToGas g1):)
   putGas gUsed
   when (gUsed > gasLimit) $
     throwExecutionError info (GasExceeded limit gUsed)
@@ -317,6 +318,7 @@ chargeFlatNativeGas info nativeArg = do
   currGas <- getGas
   let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
       gUsed = currGas <> (_gmNatives model) nativeArg
+  -- evalLogGas %= fmap ((gasLogMsg name args gUsed, milliGasToGas g1):)
   putGas gUsed
   when (gUsed > gasLimit && gasLimit >= currGas) $
     throwExecutionError info (GasExceeded limit gUsed)
