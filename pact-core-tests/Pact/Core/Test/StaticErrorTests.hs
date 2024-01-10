@@ -1001,13 +1001,13 @@ executionTests =
   , ("closure_too_many_native", isExecutionError _ClosureAppliedToTooManyArgs, [text|
       (take 1 "foo" "bar")
     |])
-  , ("closure_too_many_user_map", isExecutionError _NativeArgumentsError, [text|
+  , ("closure_too_many_user_map", isExecutionError _ClosureAppliedToTooManyArgs, [text|
       (module m g (defcap g () true)
         (defun f (n:integer s:string) s)
         )
       (map (f 1 "foo") ["meh"])
     |])
-  , ("closure_too_many_native_map", isExecutionError _NativeArgumentsError, [text|
+  , ("closure_too_many_native_map", isExecutionError _ClosureAppliedToTooManyArgs, [text|
       (map (take 1 "foo") ["meh"])
     |])
   , ("closure_too_many_native_map", isExecutionError _ClosureAppliedToTooManyArgs, [text|
