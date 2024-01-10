@@ -60,15 +60,21 @@ corePrint info b cont handler _env = \case
 coreExpect :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 coreExpect info b cont handler _env = \case
   [VLiteral (LString msg), VPactValue v1, VClosure clo] ->
-    applyLamUnsafe clo [] Mt CEKNoHandler >>= \case
-       EvalValue (VPactValue v2) ->
+    tryError (applyLamUnsafe clo [] Mt CEKNoHandler) >>= \case
+      Right (EvalValue (VPactValue v2)) ->
         if v1 /= v2 then do
             let v1s = prettyShowValue (VPactValue v1)
                 v2s = prettyShowValue (VPactValue v2)
             returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
         else returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
-       v -> returnCEK cont handler v
-      --  v -> returnCEK cont handler (VError ("expect error: evaluation did not return a pact value to compare" <> T.pack (show v)) info)
+      Right (VError errMsg _) ->
+        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> "evaluation of actual failed with error message: " <> errMsg
+      Right _v ->
+        returnCEK cont handler $ VError "FAILURE: expect expression did not return a pact value for comparison" info
+      Left err -> do
+        currSource <- use replCurrSource
+        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> "evaluation of actual failed with error message:\n" <>
+          replError currSource err
   args -> argsError info b args
 
 coreExpectThat :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)

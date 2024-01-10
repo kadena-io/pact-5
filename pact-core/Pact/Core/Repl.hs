@@ -47,7 +47,7 @@ runRepl = do
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
-      putStrLn $ T.unpack $ replError (ReplSource "(interactive)" "") err
+      putStrLn $ T.unpack $ replError (SourceCode "(interactive)" "") err
     _ -> pure ()
   where
   replSettings = Settings (replCompletion coreBuiltinNames) (Just ".pc-history") True
@@ -98,8 +98,7 @@ runRepl = do
             case eout of
               Right _ -> pure ()
               Left err -> do
-                SourceCode srcFile currSrcText <- lift (use replCurrSource)
-                let rs = ReplSource (T.pack srcFile) currSrcText
+                rs <- lift (use replCurrSource)
                 lift (replCurrSource .= defaultSrc)
                 outputStrLn (T.unpack (replError rs err))
             loop

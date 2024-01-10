@@ -83,14 +83,14 @@ runReplTest pdb file src interp = do
   stateRef <- newIORef rstate
   runReplT stateRef (interp source (const (pure ()))) >>= \case
     Left e -> let
-      rendered = replError (ReplSource (T.pack file) src) e
+      rendered = replError (SourceCode file src) e
       in assertFailure (T.unpack rendered)
     Right output -> traverse_ ensurePassing output
   where
   ensurePassing = \case
     RCompileValue (InterpretValue v i) -> case v of
       PLiteral (LString msg) -> do
-        let render = replError (ReplSource (T.pack file) src) (PEExecutionError (EvalError msg) i)
+        let render = replError (SourceCode file src) (PEExecutionError (EvalError msg) i)
         when (T.isPrefixOf "FAILURE:" msg) $ assertFailure (T.unpack render)
       _ -> pure ()
     _ -> pure ()

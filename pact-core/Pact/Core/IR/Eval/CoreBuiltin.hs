@@ -790,6 +790,7 @@ readKeyset' ksn = do
   viewEvalEnv eeMsgBody >>= \case
     PObject envData ->
       case M.lookup (Field ksn) envData of
+        Just (PGuard (GKeyset ks)) -> pure (Just ks)
         Just (PObject dat) -> parseObj dat
           where
           parseObj d = pure $ do
