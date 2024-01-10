@@ -290,6 +290,13 @@ desugarTests =
         (defun f3 () f1)
         )
       |])
+  , ("cyclic_defcap", isDesugarError _RecursionDetected, [text|
+      (module m1 g (defcap g () true)
+        (defcap c ()
+          (with-capability (c) 1)
+          )
+        )
+      |])
   , ("dup_defs", isDesugarError _DuplicateDefinition, [text|
       (module m g (defcap g () true)
         (defun f () true)
