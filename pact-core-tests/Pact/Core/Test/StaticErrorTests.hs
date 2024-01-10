@@ -675,7 +675,11 @@ executionTests =
           (step "hello3")
           )
         )|] in
-  [ ("defpact_continuing_completed", isExecutionError _DefPactAlreadyCompleted, [text|
+  [ ("defpact_args", isExecutionError _ClosureAppliedToTooManyArgs, [text|
+      $simpleDefpact
+      (p 'meh)
+      |])
+  , ("defpact_continuing_completed_samestep", isExecutionError _DefPactAlreadyCompleted, [text|
       $simpleDefpact
       (p)
       (continue-pact 1)
@@ -987,6 +991,38 @@ executionTests =
     |])
   , ("partial_defun_native", isExecutionError _CannotApplyPartialClosure, [text|
       ((take 1) "foo")
+    |])
+  , ("closure_too_many_user", isExecutionError _ClosureAppliedToTooManyArgs, [text|
+      (module m g (defcap g () true)
+        (defun f (n:integer s:string) s)
+        )
+      (f 1 "foo" "bar")
+    |])
+  , ("closure_too_many_native", isExecutionError _ClosureAppliedToTooManyArgs, [text|
+      (take 1 "foo" "bar")
+    |])
+  , ("closure_too_many_user_map", isExecutionError _NativeArgumentsError, [text|
+      (module m g (defcap g () true)
+        (defun f (n:integer s:string) s)
+        )
+      (map (f 1 "foo") ["meh"])
+    |])
+  , ("closure_too_many_native_map", isExecutionError _NativeArgumentsError, [text|
+      (map (take 1 "foo") ["meh"])
+    |])
+  , ("closure_too_many_native_map", isExecutionError _ClosureAppliedToTooManyArgs, [text|
+      (module m g (defcap g () true)
+        (defun f () 1)
+        )
+      (map f ["meh"])
+    |])
+  , ("closure_too_many_native_map", isExecutionError _ClosureAppliedToTooManyArgs, [text|
+      (module m g (defcap g () true)
+        (defcap c:bool ()
+          @managed
+          true)
+        )
+      (install-capability (c "meh"))
     |])
   ]
 
