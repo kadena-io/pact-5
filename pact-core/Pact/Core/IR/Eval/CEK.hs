@@ -792,17 +792,20 @@ evalCap info currCont handler env origToken@(CapToken fqn args) popType ecType c
                 case find (findMsgSigCap cix filteredCap) msgCaps of
                   Just c -> do
                     let c' = set ctName fqn c
-                        cont' = CapBodyC popType env info (Just qualCapToken) (mkEvent (Just (fqctToPactEvent origToken))) contbody currCont
+                        emittedEvent = fqctToPactEvent origToken <$ guard (ecType == NormalCapEval)
+                        cont' = CapBodyC popType env info (Just qualCapToken) emittedEvent contbody currCont
                     installCap info env c' False >>= evalUserManagedCap cont' newLocals capBody
                   Nothing ->
                     throwExecutionError info (CapNotInstalled fqn)
               Just managedCap -> do
-                let cont' = CapBodyC popType env info (Just qualCapToken) (mkEvent (Just (fqctToPactEvent origToken))) contbody currCont
+                let emittedEvent = fqctToPactEvent origToken <$ guard (ecType == NormalCapEval)
+                let cont' = CapBodyC popType env info (Just qualCapToken) emittedEvent contbody currCont
                 evalUserManagedCap cont' newLocals capBody managedCap
           -- handle autonomous caps
           AutoManagedMeta -> do
             -- Find the capability post-filtering
-            let cont' = CapBodyC popType env info Nothing (mkEvent (Just (fqctToPactEvent origToken))) contbody currCont
+            let emittedEvent = fqctToPactEvent origToken <$ guard (ecType == NormalCapEval)
+            let cont' = CapBodyC popType env info Nothing emittedEvent contbody currCont
             mgdCaps <- useEvalState (esCaps . csManaged)
             case find ((==) qualCapToken . _mcCap) mgdCaps of
               Nothing -> do
@@ -834,10 +837,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) popType ecType c
   capStackFrame = StackFrame (_fqName fqn) (_fqModule fqn) SFDefcap
   -- This function is handles both evaluating the manager function for the installed parameter
   -- and continuing evaluation for the actual capability body.
-  mkEvent a
-    | ecType == NormalCapEval = a
-    | otherwise = Nothing
-  evalUserManagedCap cont' env' capBody managedCap =  case _mcManaged managedCap of
+  evalUserManagedCap cont' env' capBody managedCap = case _mcManaged managedCap of
     ManagedParam mpfqn oldV managedIx -> do
       dfun <- getDefun info mpfqn
       dfunClo <- mkDefunClosure dfun (_fqModule mpfqn) env
