@@ -120,6 +120,7 @@ data Token
   | TokenInvariant
   -- Repl-specific tokens
   | TokenLoad
+
   -- Layout
   | TokenEOF
   deriving (Eq, Show)

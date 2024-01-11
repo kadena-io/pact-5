@@ -173,6 +173,10 @@ DefProperty :: { FVModel SpanInfo }
   | '(' property Expr ')' { FVProperty (Property $3) }
   | '(' invariant Expr ')' { FVInvariant (Invariant $3) }
 
+Property :: { Property SpanInfo }
+  : '(' property Expr ')' { Property $3 }
+  | '(' property IDENT NEArgList Expr ')' {% mkQuantifiedProp (combineSpan (_ptInfo $1) (_ptInfo $6)) (getIdent $3) $4 $5  }
+
 -- This rule seems gnarly, but essentially
 -- happy needs to resolve whether the arglist is present or not
 DPropArgList
@@ -296,6 +300,10 @@ MArg :: { MArg }
 ArgList :: { [Arg] }
   : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
   | {- empty -} { [] }
+
+NEArgList :: { [Arg] }
+  : NEArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
+  | IDENT ':' Type { [(Arg (getIdent $1) $3)] }
 
 Type :: { Type }
   : '[' Type ']' { TyList $2 }
@@ -520,6 +528,11 @@ getNumber (PosToken (TokenNumber x) _) = x
 getStr (PosToken (TokenString x) _ ) = x
 getTick (PosToken (TokenSingleTick x) _) = T.drop 1 x
 getIdentField = Field . getIdent
+
+mkQuantifiedProp info txt args expr = case txt of
+  "forall" -> pure $ PropForall args expr
+  "exists" -> pure $ PropExists args expr
+  _ -> throwParseError (ParsingError "invalid FV property") info
 
 mkIntegerConstant n i =
   let (n', f) = if T.head n == '-' then (T.drop 1 n, negate) else (n, id)

@@ -208,8 +208,10 @@ data DefProperty i
   , _dpropExp :: Expr i
   } deriving (Show, Functor)
 
-newtype Property i
+data Property i
   = Property (Expr i)
+  | PropForall [Arg] (Expr i)
+  | PropExists [Arg] (Expr i)
   deriving (Show, Functor)
 
 newtype Invariant i
