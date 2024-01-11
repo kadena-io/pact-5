@@ -1275,6 +1275,9 @@ addTime info b cont handler _env = \case
   [VPactValue (PTime t), VPactValue (PDecimal seconds)] -> do
       let newTime = t PactTime..+^ PactTime.fromSeconds seconds
       returnCEKValue cont handler $ VPactValue (PTime newTime)
+  [VPactValue (PTime t), VPactValue (PInteger seconds)] -> do
+      let newTime = t PactTime..+^ PactTime.fromSeconds (fromIntegral seconds)
+      returnCEKValue cont handler $ VPactValue (PTime newTime)
   args -> argsError info b args
 
 diffTime :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m

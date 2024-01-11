@@ -228,7 +228,7 @@ instance DesugarBuiltin (ReplBuiltin CoreBuiltin) where
     desugarAppArityRaw RBuiltinWrap i b ne
   -- (expect <description> <expected> <expression-to-eval>)
   desugarAppArity i (RBuiltinRepl RExpect) ([e1, e2, e3]) | isn't _Nullary e3 =
-    App (Builtin (RBuiltinRepl RExpect) i) ([e1, e2, suspendTerm e3]) i
+    App (Builtin (RBuiltinRepl RExpect) i) ([e1, suspendTerm e2, suspendTerm e3]) i
   -- (expect-failure <arg1> <term>)
   desugarAppArity i (RBuiltinRepl RExpectFailure) [e1, e2] | isn't _Nullary e2 =
     App (Builtin (RBuiltinRepl RExpectFailure) i) [e1, suspendTerm e2] i
@@ -901,14 +901,6 @@ resolveModuleName i mn@(ModuleName name mNs) =
       InterfaceData _ _ ->
         throwDesugarError (InvalidModuleReference mn) i
 
-    -- _ -> resolveModuleData mn i >>= \case
-    --   ModuleData md _ -> do
-    --     let implementeds = view mImplements md
-    --     pure (mn, implementeds)
-    --   -- todo: error type here
-    --   InterfaceData iface _ ->
-    --     throwDesugarError (InvalidModuleReference (_ifName iface)) i
-
 -- | Resolve a module name, return the implemented members as well if any
 -- including all current
 resolveInterfaceName :: (MonadEval b i m) => i -> ModuleName -> RenamerT b i m (ModuleName)
@@ -1309,13 +1301,6 @@ resolveBare (BareName bn) i = views reBinds (M.lookup bn) >>= \case
       let unmangled = ModuleName bn Nothing
       (mn ,  imps) <- resolveModuleName i unmangled
       pure (Name bn (NModRef mn imps), Nothing)
-      -- view reCurrModule >>= \case
-      --   Just (CurrModule currMod imps _type)
-      --     | currMod == mn ->
-      --     pure (Name bn (NModRef mn imps), Nothing)
-      --   _ -> do
-      --     (mn', imps) <- resolveModuleName i mn
-      --     pure (Name bn (NModRef mn' imps), Nothing)
 
 -- | Resolve a qualified name `<qual>.<name>` with the following
 -- procedure:

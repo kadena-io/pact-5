@@ -59,15 +59,18 @@ corePrint info b cont handler _env = \case
 
 coreExpect :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 coreExpect info b cont handler _env = \case
-  [VLiteral (LString msg), VPactValue v1, VClosure clo] -> do
+  [VLiteral (LString msg), VClosure expected, VClosure provided] -> do
     es <- getEvalState
-    tryError (applyLamUnsafe clo [] Mt CEKNoHandler) >>= \case
-      Right (EvalValue (VPactValue v2)) ->
-        if v1 /= v2 then do
-            let v1s = prettyShowValue (VPactValue v1)
-                v2s = prettyShowValue (VPactValue v2)
-            returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
-        else returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
+    tryError (applyLamUnsafe provided [] Mt CEKNoHandler) >>= \case
+      Right (EvalValue (VPactValue v2)) -> do
+        applyLamUnsafe expected [] Mt CEKNoHandler >>= \case
+          EvalValue (VPactValue v1) -> do
+            if v1 /= v2 then do
+                let v1s = prettyShowValue (VPactValue v1)
+                    v2s = prettyShowValue (VPactValue v2)
+                returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
+            else returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
+          _ -> returnCEK cont handler (VError "evaluation within expect did not return a pact value" info)
       Right (VError errMsg _) ->
         returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> "evaluation of actual failed with error message: " <> errMsg
       Right _v ->
@@ -438,6 +441,15 @@ envGasModel info b cont handler _env = \case
     returnCEKValue cont handler $ VString $ "Set gas model to " <> _gmDesc newmodel'
   args -> argsError info b args
 
+envLoaded :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+envLoaded info b cont handler _env = \case
+  [] -> do
+    lo <- useEvalState esLoaded
+    liftIO $ print (set loAllLoaded mempty lo)
+    returnCEKValue cont handler (VString "loaded")
+  args -> argsError info b args
+
+
 
 replBuiltinEnv
   :: CEKEval step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -488,4 +500,5 @@ replCoreBuiltinRuntime = \case
     REnvGasModel -> envGasModel
     REnvAskGasModel -> envGasModel
     REnvGasModelFixed -> envGasModel
+    REnvLoaded -> envLoaded
 
