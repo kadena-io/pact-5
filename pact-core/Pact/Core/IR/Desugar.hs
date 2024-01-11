@@ -882,16 +882,38 @@ resolveModuleName i mn =
 -- | Resolve a module name, return the implemented members as well if any
 -- including all current
 resolveInterfaceName :: (MonadEval b i m) => i -> ModuleName -> RenamerT b i m (ModuleName)
-resolveInterfaceName i mn =
+resolveInterfaceName i mn@(ModuleName name mNs) =
   view reCurrModule >>= \case
     -- TODO better error message if it's not MTInterface
-    Just (CurrModule currMod _ MTInterface) | currMod == mn -> pure currMod
-    _ -> resolveModuleData mn i >>= \case
+    -- If we are in an interface eval, we will need to check two conditions:
+    -- is the current module name exactly equivalent? if so, return it.
+    -- if not, why not? Is it because the module we're searching for is unmangled, or
+    -- because it lives in the root namespace?
+    -- We therefore check the root namespace first, and if nothing was found, then
+    -- we mangle and check again.
+    Just (CurrModule currMod _ MTInterface)
+      | currMod == mn -> pure mn
+      | otherwise -> do
+          pdb <- viewEvalEnv eePactDb
+          lift (lookupModuleData i pdb mn) >>= \case
+            Just (InterfaceData _ _) -> pure mn
+            Just _ -> throwDesugarError (InvalidModuleReference mn) i
+            Nothing -> case mNs of
+              Just _ -> throwDesugarError (NoSuchModule mn) i
+              -- Over here, it means we have not found it in the root namespace
+              -- and the currModule's name may be mangled
+              Nothing -> useEvalState (esLoaded . loNamespace) >>= \case
+                Nothing -> throwDesugarError (NoSuchModule mn) i
+                Just (Namespace ns _ _)
+                  | ModuleName name (Just ns) == currMod -> pure currMod
+                  | otherwise ->
+                    lift (getModuleData i pdb (ModuleName name (Just ns))) >>= getModName
+    _ -> resolveModuleData mn i >>= getModName
+    where
+    getModName = \case
       ModuleData _ _ ->
         throwDesugarError (InvalidModuleReference mn) i
-      -- TODO: error type here
-      InterfaceData _ _ ->
-        pure mn
+      InterfaceData _ _ -> pure mn
 
 
 -- | Resolve module data, fail if not found
@@ -1349,7 +1371,7 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash i) = d
   resolveGov mname = \case
     KeyGov rawKsn -> case parseAnyKeysetName (_keysetName rawKsn) of
       Left {} -> lift $ throwExecutionError i (ModuleGovernanceFailure mname)
-      Right ksn -> 
+      Right ksn ->
         pure (KeyGov ksn)
     CapGov (FQParsed govName) ->
       case find (\d -> BN (BareName (defName d)) == govName) defs of
