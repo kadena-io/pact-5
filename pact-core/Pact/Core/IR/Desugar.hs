@@ -253,6 +253,8 @@ instance DesugarBuiltin (ReplBuiltin CoreBuiltin) where
       App (Builtin (RBuiltinRepl REnvAskGasModel) i) [] i
   desugarAppArity i (RBuiltinRepl REnvGasModel) [e1, e2] =
       App (Builtin (RBuiltinRepl REnvGasModelFixed) i) [e1, e2] i
+  desugarAppArity i (RBuiltinRepl RBeginTx) [e1] =
+      App (Builtin (RBuiltinRepl RBeginNamedTx) i) [e1] i
   desugarAppArity i b ne =
     App (Builtin b i) ne i
 
@@ -867,17 +869,45 @@ resolveModuleName
   => i
   -> ModuleName
   -> RenamerT b i m (ModuleName, [ModuleName])
-resolveModuleName i mn =
+resolveModuleName i mn@(ModuleName name mNs) =
   view reCurrModule >>= \case
     -- TODO better error message if it's not MTMOdule
-    Just (CurrModule currMod imps MTModule) | currMod == mn -> pure (currMod, imps)
-    _ -> resolveModuleData mn i >>= \case
-      ModuleData md _ -> do
-        let implementeds = view mImplements md
-        pure (mn, implementeds)
-      -- todo: error type here
-      InterfaceData iface _ ->
-        throwDesugarError (InvalidModuleReference (_ifName iface)) i
+    -- If we are in a Module eval, we will need to check two conditions:
+    -- is the current module name exactly equivalent? if so, return it.
+    -- if not, why not? Is it because the module we're searching for is unmangled, or
+    -- because it lives in the root namespace?
+    -- We therefore check the root namespace first, and if nothing was found, then
+    -- we mangle and check again.
+    Just (CurrModule currMod imps MTModule)
+      | currMod == mn -> pure (currMod, imps)
+      | otherwise -> do
+        pdb <- viewEvalEnv eePactDb
+        lift (lookupModuleData i pdb mn) >>= \case
+          Just md -> getModName md
+          Nothing -> case mNs of
+            Just _ -> throwDesugarError (NoSuchModule mn) i
+            -- Over here, it means we have not found it in the root namespace
+            -- and the currModule's name may be mangled
+            Nothing -> useEvalState (esLoaded . loNamespace) >>= \case
+              Nothing -> throwDesugarError (NoSuchModule mn) i
+              Just (Namespace ns _ _)
+                | ModuleName name (Just ns) == currMod -> pure (currMod, imps)
+                | otherwise ->
+                  lift (getModuleData i pdb (ModuleName name (Just ns))) >>= getModName
+    _ -> resolveModuleData mn i >>= getModName
+    where
+    getModName = \case
+      ModuleData module_ _ -> pure (_mName module_, _mImplements module_)
+      InterfaceData _ _ ->
+        throwDesugarError (InvalidModuleReference mn) i
+
+    -- _ -> resolveModuleData mn i >>= \case
+    --   ModuleData md _ -> do
+    --     let implementeds = view mImplements md
+    --     pure (mn, implementeds)
+    --   -- todo: error type here
+    --   InterfaceData iface _ ->
+    --     throwDesugarError (InvalidModuleReference (_ifName iface)) i
 
 -- | Resolve a module name, return the implemented members as well if any
 -- including all current
@@ -1276,13 +1306,16 @@ resolveBare (BareName bn) i = views reBinds (M.lookup bn) >>= \case
   Nothing -> usesEvalState (esLoaded . loToplevel) (M.lookup bn) >>= \case
     Just (fqn, dk) -> pure (Name bn (NTopLevel (_fqModule fqn) (_fqHash fqn)), Just dk)
     Nothing -> do
-      let mn = ModuleName bn Nothing
-      view reCurrModule >>= \case
-        Just (CurrModule currMod imps _type) | currMod == mn ->
-          pure (Name bn (NModRef mn imps), Nothing)
-        _ -> do
-          (mn', imps) <- resolveModuleName i mn
-          pure (Name bn (NModRef mn' imps), Nothing)
+      let unmangled = ModuleName bn Nothing
+      (mn ,  imps) <- resolveModuleName i unmangled
+      pure (Name bn (NModRef mn imps), Nothing)
+      -- view reCurrModule >>= \case
+      --   Just (CurrModule currMod imps _type)
+      --     | currMod == mn ->
+      --     pure (Name bn (NModRef mn imps), Nothing)
+      --   _ -> do
+      --     (mn', imps) <- resolveModuleName i mn
+      --     pure (Name bn (NModRef mn' imps), Nothing)
 
 -- | Resolve a qualified name `<qual>.<name>` with the following
 -- procedure:
