@@ -75,6 +75,7 @@ import Pact.Core.Errors
 import Pact.Core.Gas
 import Pact.Core.Namespace
 import Pact.Core.SizeOf
+import Pact.Core.Builtin (IsBuiltin)
 
 -- | Execution flags specify behavior of the runtime environment,
 -- with an orientation towards some alteration of a default behavior.
@@ -203,6 +204,7 @@ type MonadEval b i m =
   , Show i
   , SizeOf b
   , SizeOf i
+  , IsBuiltin b
   , Show b)
 
 -- | A default evaluation environment meant for

@@ -14,7 +14,6 @@ module Pact.Core.Gas
  , GasLimit
  , GasPrice
  , MilliGasLimit(..)
- , gasLogMsg
  , gmName
  , gmDesc
  , gmNatives
@@ -150,7 +149,7 @@ data GasArgs
   -- ^ Cost of integer operations
   | GMakeList !Integer !Word64
   -- ^ Cost of creating a list of `n` elements + some memory overhead per elem
-  | GAApplyLam !Int
+  | GAApplyLam Text !Int
   -- ^ Cost of function application
   | GAZKArgs !ZKArg
   -- ^ Cost of ZK function
@@ -162,6 +161,9 @@ data GasArgs
   -- ^ poseidon-hash-hack-a-chain costs
   | GModuleMemory !Word64
   deriving (Show)
+
+instance Pretty GasArgs where
+  pretty = pretty . show
 
 newtype GasTextLength
   = GasTextLength Int
@@ -237,12 +239,3 @@ gasToMilliGas (Gas n) = MilliGas (n * millisPerGas)
 milliGasToGas :: MilliGas -> Gas
 milliGasToGas (MilliGas n) = Gas (n `quot` millisPerGas)
 {-# INLINE milliGasToGas #-}
-
--- TODO: Pretty GasArgs
-gasLogMsg
-  :: Text
-  -> GasArgs
-  -> MilliGas
-  -> Text
-gasLogMsg name args used =
-  renderCompactText' (pretty name <> ":" <> pretty (show args) <> ":currTotalMilliGas=" <> pretty used)

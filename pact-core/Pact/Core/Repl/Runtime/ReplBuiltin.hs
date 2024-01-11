@@ -403,12 +403,11 @@ envGasLimit info b cont handler _env = \case
 envGasLog :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envGasLog info b cont handler _env = \case
   [] -> do
-    gl :: Maybe [(Text, MilliGas)] <- useEvalState esGasLog
+    gl <- useEvalState esGasLog
     setEvalState esGasLog $ Just []
     case gl of
       Nothing ->
-        returnCEKValue cont handler
-        (VList $ V.singleton $ PString "Enabled gas log")
+        returnCEKValue cont handler (VString "Enabled gas log")
       Just logs -> let
         total = MilliGas $ sum (map ((\(MilliGas g) -> g) . snd) logs)
         totalLine = PString . ("TOTAL: " <> ) $ renderCompactText total

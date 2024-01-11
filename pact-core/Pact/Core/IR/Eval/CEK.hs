@@ -1580,7 +1580,8 @@ applyLam
 applyLam vc@(C (Closure fn mn ca arity term mty env cloi)) args cont handler
   | arity == argLen = case ca of
     ArgClosure cloargs -> do
-      chargeGasArgs cloi (GAApplyLam argLen)
+      let qn = QualifiedName fn mn
+      chargeGasArgs cloi (GAApplyLam (renderQualName qn) argLen)
       args' <- traverse (enforcePactValue cloi) args
       tcArgs <- zipWithM (\arg (Arg _ ty) -> VPactValue <$> maybeTCType cloi arg ty) args' (NE.toList cloargs)
       esStack %== (StackFrame fn mn SFDefun :)
@@ -1599,7 +1600,7 @@ applyLam vc@(C (Closure fn mn ca arity term mty env cloi)) args cont handler
       | null args ->
         returnCEKValue cont handler (VClosure vc)
       | otherwise -> do
-        chargeGasArgs cloi (GAApplyLam argLen)
+        chargeGasArgs cloi (GAApplyLam fn argLen)
         apply' mempty (NE.toList cloargs) args
   where
   argLen = length args
@@ -1616,7 +1617,8 @@ applyLam vc@(C (Closure fn mn ca arity term mty env cloi)) args cont handler
 applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
   | arity == argLen = case ca of
     ArgClosure _ -> do
-      chargeGasArgs cloi (GAApplyLam argLen)
+      -- Todo: maybe lambda application should mangle some sort of name?
+      chargeGasArgs cloi (GAApplyLam "#lambda" argLen)
       let locals = view ceLocal env
           locals' = foldl' (flip RAList.cons) locals args
           cont' = EnforcePactValueC cloi cont
@@ -1628,7 +1630,7 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
   | otherwise = case ca of
       NullaryClosure -> throwExecutionError cloi ClosureAppliedToTooManyArgs
       ArgClosure cloargs -> do
-        chargeGasArgs cloi (GAApplyLam argLen)
+        chargeGasArgs cloi (GAApplyLam "#lambda" argLen)
         apply' (view ceLocal env) (NE.toList cloargs) args
   where
   argLen = length args
@@ -1644,7 +1646,7 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
   apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
 
 applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args cont handler = do
-  chargeGasArgs cloi (GAApplyLam (length args))
+  chargeGasArgs cloi (GAApplyLam (getSfName li) (length args))
   apply' (view ceLocal env) (NE.toList argtys) args
   where
   apply' e (Arg _ ty:tys) (x:xs) = do
@@ -1694,14 +1696,14 @@ applyLam (DPC (DefPactClosure fqn argtys arity env i)) args cont handler
   | arity == argLen = case argtys of
     ArgClosure cloargs -> do
       -- Todo: defpact has much higher overhead, we must charge a bit more gas for this
-      chargeGasArgs i (GAApplyLam (fromIntegral argLen))
+      chargeGasArgs i (GAApplyLam (renderQualName (fqnToQualName fqn)) (fromIntegral argLen))
       args' <- traverse (enforcePactValue i) args
       tcArgs <- zipWithM (\arg (Arg _ ty) -> maybeTCType i arg ty) args' (NE.toList cloargs)
       let pc = DefPactContinuation (fqnToQualName fqn) tcArgs
           env' = set ceLocal (RAList.fromList (reverse (VPactValue <$> tcArgs))) env
       initPact i pc cont handler env'
     NullaryClosure -> do
-      chargeGasArgs i (GAApplyLam (fromIntegral argLen))
+      chargeGasArgs i (GAApplyLam (renderQualName (fqnToQualName fqn)) (fromIntegral argLen))
       let pc = DefPactContinuation (fqnToQualName fqn) []
           env' = set ceLocal mempty env
       -- Todo: defpact has much higher overhead, we must charge a bit more gas for this
@@ -1711,7 +1713,7 @@ applyLam (DPC (DefPactClosure fqn argtys arity env i)) args cont handler
   argLen = length args
 applyLam (CT (CapTokenClosure fqn argtys arity i)) args cont handler
   | arity == argLen = do
-    chargeGasArgs i (GAApplyLam (fromIntegral argLen))
+    chargeGasArgs i (GAApplyLam (renderQualName (fqnToQualName fqn)) (fromIntegral argLen))
     args' <- traverse (enforcePactValue i) args
     tcArgs <- zipWithM (\arg ty -> maybeTCType i arg ty) args' argtys
     returnCEKValue cont handler (VPactValue (PCapToken (CapToken fqn tcArgs)))
@@ -1725,6 +1727,11 @@ applyLam (CT (CapTokenClosure fqn argtys arity i)) args cont handler
    -> CoreCEKHandler
    -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
+
+getSfName :: Maybe StackFrame -> T.Text
+getSfName = \case
+  Just sf -> renderQualName (QualifiedName (_sfFunction sf) (_sfModule sf))
+  Nothing -> "#lambda"
 
 checkSchema :: M.Map Field PactValue -> Schema -> Bool
 checkSchema o (Schema sc) = isJust $ do

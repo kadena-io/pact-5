@@ -171,7 +171,7 @@ runTableModel = \case
       MilliGas (fromIntegral totalLen * 100)
     ObjConcat totalLen ->
       MilliGas (fromIntegral totalLen * 100)
-  GAApplyLam !i -> MilliGas $ fromIntegral i * applyLamCostPerArg + 50
+  GAApplyLam _ !i -> MilliGas $ fromIntegral i * applyLamCostPerArg + 50
   GAZKArgs zka -> case zka of
     PointAdd g -> pointAddGas g
     ScalarMult g -> scalarMulGas g
