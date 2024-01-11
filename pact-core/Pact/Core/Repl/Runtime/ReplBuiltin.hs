@@ -200,14 +200,14 @@ envHash info b cont handler _env = \case
       Left e -> returnCEK cont handler (VError (T.pack e) info)
       Right hs -> do
         (replEvalEnv . eeHash) .= Hash (toShort hs)
-        returnCEKValue cont handler VUnit
+        returnCEKValue cont handler $ VString $ "Set tx hash to " <> s
   args -> argsError info b args
 
 envData :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envData info b cont handler _env = \case
-  [VObject o] -> do
-    (replEvalEnv . eeMsgBody) .= PObject o
-    returnCEKValue cont handler VUnit
+  [VPactValue pv] -> do
+    (replEvalEnv . eeMsgBody) .= pv
+    returnCEKValue cont handler (VString "Setting transaction data")
   args -> argsError info b args
 
 envChainData :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -245,7 +245,7 @@ envKeys info b cont handler _env = \case
   [VList ks] -> do
     keys <- traverse (asString info b) ks
     replEvalEnv . eeMsgSigs .= M.fromList ((,mempty) . PublicKeyText <$> V.toList keys)
-    returnCEKValue cont handler VUnit
+    returnCEKValue cont handler (VString "Setting transaction keys")
   args -> argsError info b args
 
 envSigs :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -254,7 +254,7 @@ envSigs info b cont handler _env = \case
     case traverse keyCapObj ks of
       Just sigs -> do
         (replEvalEnv . eeMsgSigs) .= M.fromList (V.toList sigs)
-        returnCEKValue cont handler VUnit
+        returnCEKValue cont handler $ VString "Setting transaction signatures/caps"
       Nothing -> returnCEK cont handler (VError ("env-sigs format is wrong") info)
     where
     keyCapObj = \case
