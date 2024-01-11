@@ -14,7 +14,7 @@ import Control.Lens hiding (Iso)
 
 import Language.LSP.Server
 import Language.LSP.Protocol.Message
-import Language.LSP.Protocol.Lens (uri, textDocument, params, text, position)
+import Language.LSP.Protocol.Lens (uri, textDocument, params, text, position) --, newName)
 import Language.LSP.Protocol.Types
 import Language.LSP.VFS
 import Language.LSP.Diagnostics
@@ -56,6 +56,7 @@ import Control.Monad.Except
 import Pact.Core.LanguageServer.Utils
 import Pact.Core.Repl.Runtime.ReplBuiltin
 import Pact.Core.Repl.BuiltinDocs
+import Pact.Core.Repl.UserDocs
 import Pact.Core.Names
 
 data LSState =
@@ -224,6 +225,24 @@ spanInfoToRange (SpanInfo sl sc el ec) = mkRange
   (fromIntegral sl)  (fromIntegral sc)
   (fromIntegral el)  (fromIntegral ec)
 
+-- documentDefinitionRequestHandler :: Handlers LSM
+-- documentDefinitionRequestHandler = requestHandler SMethod_TextDocumentDefinition $ \req resp ->
+--   getState >>= \st -> do
+--     let nuri = req ^. params . textDocument . uri . to toNormalizedUri
+--         pos = req ^. params . position
+
+--     let loc = Location undefined undefined
+--     resp (Right $ InL $ Definition (InL loc))
+
+-- documentRenameRequestHandler :: Handlers LSM
+-- documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req resp ->
+--   getState >>= \st -> do
+--     let nuri = req ^. params . textDocument . uri . to toNormalizedUri
+--         pos = req ^. params . position
+--         newName' = req ^. params . newName
+
+--     undefined
+
 documentHoverRequestHandler :: Handlers LSM
 documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req resp ->
   getState >>= \st -> do
@@ -265,6 +284,10 @@ processFile replEnv (SourceCode _ source) = do
   concat <$> traverse pipe parsed
   where
   pipe = \case
-    Lisp.RTL (Lisp.RTLTopLevel tl) ->
-      pure . fst <$> compileDesugarOnly replEnv tl
+    Lisp.RTL (Lisp.RTLTopLevel tl) -> do
+      (ds, _) <- compileDesugarOnly replEnv tl
+      case ds of
+        TLModule m -> functionDocs (_mName m) tl
+        
+        
     _ -> pure []
