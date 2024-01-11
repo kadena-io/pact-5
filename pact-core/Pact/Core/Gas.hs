@@ -14,6 +14,7 @@ module Pact.Core.Gas
  , GasLimit
  , GasPrice
  , MilliGasLimit(..)
+ , gasLogMsg
  , gmName
  , gmDesc
  , gmNatives
@@ -46,6 +47,8 @@ import GHC.Generics
 
 import qualified Data.Text as T
 
+import Pact.Core.Pretty
+
 -- | Gas in pact-core, represented as an unsigned
 -- integer, units will go in terms of 1e3 = 2ns
 newtype MilliGas
@@ -53,6 +56,9 @@ newtype MilliGas
   deriving (Eq, Ord, Show, NFData)
   deriving (Semigroup, Monoid) via (Sum Word64)
   deriving (Semiring, Enum) via Word64
+
+instance Pretty MilliGas where
+  pretty (MilliGas g) = pretty g <> "mG"
 
 newtype MilliGasLimit
   = MilliGasLimit MilliGas
@@ -231,3 +237,12 @@ gasToMilliGas (Gas n) = MilliGas (n * millisPerGas)
 milliGasToGas :: MilliGas -> Gas
 milliGasToGas (MilliGas n) = Gas (n `quot` millisPerGas)
 {-# INLINE milliGasToGas #-}
+
+-- TODO: Pretty GasArgs
+gasLogMsg
+  :: Text
+  -> GasArgs
+  -> MilliGas
+  -> Text
+gasLogMsg name args used =
+  renderCompactText' (pretty name <> ":" <> pretty (show args) <> ":currTotalMilliGas=" <> pretty used)

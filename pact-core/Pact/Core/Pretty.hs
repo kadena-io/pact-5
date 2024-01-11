@@ -4,6 +4,8 @@ module Pact.Core.Pretty
 ( module Pretty
 , renderCompactString
 , renderCompactString'
+, renderCompactText
+, renderCompactText'
 , renderText
 , renderText'
 , commaSep
@@ -31,6 +33,12 @@ renderCompactString = renderString . layoutPretty defaultLayoutOptions . pretty
 
 renderCompactString' :: Doc ann -> String
 renderCompactString' = renderString . layoutPretty defaultLayoutOptions
+
+renderCompactText :: Pretty a => a -> Text
+renderCompactText = renderStrict . layoutPretty defaultLayoutOptions . pretty
+
+renderCompactText' :: Doc ann -> Text
+renderCompactText' = renderStrict . layoutPretty defaultLayoutOptions
 
 renderText :: Pretty a => a -> Text
 renderText = renderStrict . layoutPretty defaultLayoutOptions . pretty
