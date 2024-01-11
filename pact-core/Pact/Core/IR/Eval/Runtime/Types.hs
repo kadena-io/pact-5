@@ -89,6 +89,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , CoreBuiltinEnv
  , CoreCEKValue
  , CoreEvalResult
+ , EvalCapType(..)
  ) where
 
 import Control.Lens
@@ -453,7 +454,7 @@ data BuiltinCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type 
   | DefineNamespaceC Namespace
   -- ^ namespace to write to the db
   | RunKeysetPredC
-  -- ^ check the keyset predicate 
+  -- ^ check the keyset predicate
   deriving (Show, Generic)
 
 
@@ -587,6 +588,10 @@ data ContType
   | CTMt
   deriving (Show, Eq, Enum, Bounded)
 
+data EvalCapType
+  = NormalCapEval
+  | TestCapEval
+  deriving (Show, Eq, Enum, Bounded)
 
 -- | State to preserve in the error handler
 data ErrorState

@@ -55,6 +55,7 @@ import Data.Maybe(listToMaybe)
 import Data.Foldable(find)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
+import qualified Pact.Core.Pretty as Pretty
 
 import Pact.Core.Names
 import Pact.Core.PactValue
@@ -190,7 +191,7 @@ toArgTypeError = \case
    -> Eval (EvalResult step CoreBuiltin () Eval)
     #-}
 argsError
-  :: (MonadEval b i m, IsBuiltin b)
+  :: (MonadEval b i m)
   => i
   -> b
   -> [CEKValue step b i m]
@@ -206,7 +207,7 @@ argsError info b args =
    -> Eval Text
     #-}
 asString
-  :: (MonadEval b i m, IsBuiltin b)
+  :: (MonadEval b i m)
   => i
   -> b
   -> PactValue
@@ -221,7 +222,7 @@ asString i b pv = argsError i b [VPactValue pv]
    -> Eval Bool
     #-}
 asBool
-  :: (MonadEval b i m, IsBuiltin b)
+  :: (MonadEval b i m)
   => i
   -> b
   -> PactValue
@@ -299,12 +300,18 @@ tvToDomain tv =
 chargeGasArgs :: (MonadEval b i m) => i -> GasArgs -> m ()
 chargeGasArgs info ga = do
   model <- viewEvalEnv eeGasModel
-  currGas <- getGas
+  !currGas <- getGas
   let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
-      gUsed = currGas <> (_gmRunModel model) ga
+      !g1 = _gmRunModel model ga
+      !gUsed = currGas <> g1
+  esGasLog %== fmap ((gasLogMsg ga gUsed, g1):)
   putGas gUsed
-  when (gasLimit > gUsed) $
+  when (gUsed > gasLimit) $
     throwExecutionError info (GasExceeded limit gUsed)
+  where
+    gasLogMsg arg (MilliGas millisUsed) =
+      Pretty.renderCompactText' $
+          Pretty.pretty arg <> ":currTotalGas=" <> Pretty.pretty millisUsed
 
 {-# SPECIALIZE chargeFlatNativeGas
    :: ()
@@ -314,12 +321,20 @@ chargeGasArgs info ga = do
 chargeFlatNativeGas :: (MonadEval b i m) => i -> b -> m ()
 chargeFlatNativeGas info nativeArg = do
   model <- viewEvalEnv eeGasModel
-  currGas <- getGas
+  !currGas <- getGas
   let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
-      gUsed = currGas <> (_gmNatives model) nativeArg
+      !g1 = _gmNatives model nativeArg
+      !gUsed = currGas <> g1
+  esGasLog %== fmap ((gasLogMsg gUsed, g1):)
   putGas gUsed
-  when (gasLimit > gUsed) $
+  when (gUsed > gasLimit && gasLimit >= currGas) $
     throwExecutionError info (GasExceeded limit gUsed)
+  where
+  gasLogMsg (MilliGas millisUsed) =
+    let (NativeName n) = builtinName nativeArg
+    in Pretty.renderCompactText' $
+      "Native" <> Pretty.parens (Pretty.pretty n) <> ":currTotalGas=" <> Pretty.pretty millisUsed
+
 
 getGas :: (MonadEval b i m) => m MilliGas
 getGas =
@@ -337,3 +352,4 @@ putGas !g = do
 {-# SPECIALIZE putGas
     :: MilliGas -> Eval ()
     #-}
+

@@ -18,7 +18,6 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Vector as V
 
-
 import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Hash
@@ -60,7 +59,8 @@ corePrint info b cont handler _env = \case
 
 coreExpect :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 coreExpect info b cont handler _env = \case
-  [VLiteral (LString msg), VPactValue v1, VClosure clo] ->
+  [VLiteral (LString msg), VPactValue v1, VClosure clo] -> do
+    es <- getEvalState
     tryError (applyLamUnsafe clo [] Mt CEKNoHandler) >>= \case
       Right (EvalValue (VPactValue v2)) ->
         if v1 /= v2 then do
@@ -73,6 +73,7 @@ coreExpect info b cont handler _env = \case
       Right _v ->
         returnCEK cont handler $ VError "FAILURE: expect expression did not return a pact value for comparison" info
       Left err -> do
+        putEvalState es
         currSource <- use replCurrSource
         returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> "evaluation of actual failed with error message:\n" <>
           replError currSource err
@@ -114,7 +115,6 @@ coreExpectFailure info b cont handler _env = \case
       Right (EvalValue v) ->
         returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result: " <> prettyShowValue v
   args -> argsError info b args
-
 
 
 continuePact :: forall step . ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -173,8 +173,8 @@ pactState info b cont handler _env = \case
 coreplEvalEnvStackFrame :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 coreplEvalEnvStackFrame info b cont handler _env = \case
   [] -> do
-    capSet <- getAllStackCaps
-    returnCEKValue cont handler $ VString $ T.pack (show capSet)
+    sfs <- fmap (PString . T.pack . show) <$> use (replEvalState . esStack)
+    returnCEKValue cont handler $ VList (V.fromList sfs)
   args -> argsError info b args
 
 envEvents :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -200,14 +200,14 @@ envHash info b cont handler _env = \case
       Left e -> returnCEK cont handler (VError (T.pack e) info)
       Right hs -> do
         (replEvalEnv . eeHash) .= Hash (toShort hs)
-        returnCEKValue cont handler VUnit
+        returnCEKValue cont handler $ VString $ "Set tx hash to " <> s
   args -> argsError info b args
 
 envData :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envData info b cont handler _env = \case
-  [VObject o] -> do
-    (replEvalEnv . eeMsgBody) .= PObject o
-    returnCEKValue cont handler VUnit
+  [VPactValue pv] -> do
+    (replEvalEnv . eeMsgBody) .= pv
+    returnCEKValue cont handler (VString "Setting transaction data")
   args -> argsError info b args
 
 envChainData :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -245,7 +245,7 @@ envKeys info b cont handler _env = \case
   [VList ks] -> do
     keys <- traverse (asString info b) ks
     replEvalEnv . eeMsgSigs .= M.fromList ((,mempty) . PublicKeyText <$> V.toList keys)
-    returnCEKValue cont handler VUnit
+    returnCEKValue cont handler (VString "Setting transaction keys")
   args -> argsError info b args
 
 envSigs :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -254,7 +254,7 @@ envSigs info b cont handler _env = \case
     case traverse keyCapObj ks of
       Just sigs -> do
         (replEvalEnv . eeMsgSigs) .= M.fromList (V.toList sigs)
-        returnCEKValue cont handler VUnit
+        returnCEKValue cont handler $ VString "Setting transaction signatures/caps"
       Nothing -> returnCEK cont handler (VError ("env-sigs format is wrong") info)
     where
     keyCapObj = \case
@@ -319,7 +319,7 @@ rollbackTx info b cont handler _env = \case
       Nothing -> returnCEK cont handler (renderTx info "Rollback Tx" Nothing)
   args -> argsError info b args
 
-sigKeyset :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step  b SpanInfo (ReplM b)
+sigKeyset :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 sigKeyset info b cont handler _env = \case
   [] -> do
     sigs <- S.fromList . M.keys <$> viewEvalEnv eeMsgSigs
@@ -327,21 +327,20 @@ sigKeyset info b cont handler _env = \case
   args -> argsError info b args
 
 
-testCapability :: (IsBuiltin b, CEKEval step b SpanInfo (ReplM b)) => NativeFunction step  b SpanInfo (ReplM b)
+testCapability :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 testCapability info b cont handler env = \case
   [VCapToken origToken] -> do
     lookupFqName (_ctName origToken) >>= \case
       Just (DCap d) -> do
         let cBody = Constant LUnit info
-            ignoreContBody _env _info _mct _mev _cb c = c
             cont' = SeqC env cBody cont
         case _dcapMeta d of
           Unmanaged ->
-            evalCap info cont' handler env origToken ignoreContBody cBody
+            evalCap info cont' handler env origToken PopCapInvoke TestCapEval cBody
           _ -> do
             -- Installed caps emit and event
             -- so we create a fake stack frame
-            installCap info env origToken False *> evalCap info cont' handler env origToken ignoreContBody cBody
+            installCap info env origToken False *> evalCap info cont' handler env origToken PopCapInvoke TestCapEval cBody
       _ -> returnCEK cont handler (VError "no such capability" info)
   args -> argsError info b args
 
@@ -381,7 +380,7 @@ envGas info b cont handler _env = \case
     returnCEKValue cont handler (VInteger (fromIntegral gas))
   [VInteger g] -> do
     putGas $ gasToMilliGas (Gas (fromInteger g))
-    returnCEKValue cont handler $ VString $ "Set gas to" <> T.pack (show g)
+    returnCEKValue cont handler $ VString $ "Set gas to " <> T.pack (show g)
   args -> argsError info b args
 
 envMilliGas :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -403,8 +402,19 @@ envGasLimit info b cont handler _env = \case
 
 envGasLog :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envGasLog info b cont handler _env = \case
-  [] -> -- TODO: gaslog
-   returnCEKValue cont handler (VList mempty)
+  [] -> do
+    gl <- useEvalState esGasLog
+    setEvalState esGasLog $ Just []
+    case gl of
+      Nothing ->
+        returnCEKValue cont handler (VString "Enabled gas log")
+      Just logs -> let
+        total = MilliGas $ sum (map ((\(MilliGas g) -> g) . snd) logs)
+        totalLine = PString . ("TOTAL: " <> ) $ renderCompactText total
+        logLines = flip map (reverse logs) $ \(n,g) ->
+          PString $ renderCompactText' $ pretty n <> ": " <> pretty g
+        in
+          returnCEKValue cont handler (VList $ V.fromList (totalLine:logLines))
   args -> argsError info b args
 
 envGasModel :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)

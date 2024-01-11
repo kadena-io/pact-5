@@ -28,6 +28,11 @@ module Pact.Core.Gas
  , ZKGroup(..)
  , ZKArg(..)
  , IntegerPrimOp(..)
+ , ConcatType(..)
+ , GasTextLength(..)
+ , GasListLength(..)
+ , GasObjectSize(..)
+ , ComparisonType(..)
  ) where
 
 import Control.Lens
@@ -41,6 +46,8 @@ import GHC.Generics
 
 import qualified Data.Text as T
 
+import Pact.Core.Pretty
+
 -- | Gas in pact-core, represented as an unsigned
 -- integer, units will go in terms of 1e3 = 2ns
 newtype MilliGas
@@ -48,6 +55,9 @@ newtype MilliGas
   deriving (Eq, Ord, Show, NFData)
   deriving (Semigroup, Monoid) via (Sum Word64)
   deriving (Semiring, Enum) via Word64
+
+instance Pretty MilliGas where
+  pretty (MilliGas g) = pretty g <> "mG"
 
 newtype MilliGasLimit
   = MilliGasLimit MilliGas
@@ -129,11 +139,70 @@ data GasArgs
   -- Todo: integerOpCost seems like a case of `GALinear`
   -- Maybe we can investigate generalizing the operational costs in terms of a more general structure
   -- instead of the current `GasArgs` model?
-  | GALinear !MilliGas {-# UNPACK #-} !LinearGasArg
+  | GConcat !ConcatType
+  -- ^ The cost of concatenating two elements
+  -- TODO: We actually reuse this cost for construction as well for objects/lists. Should we
+  -- instead consider renaming the objcat and listcat constructors to be ListCatOrConstruction
+  -- | GALinear !Word64 {-# UNPACK #-} !LinearGasArg
+  -- ^ Cost of linear-based gas
   | GIntegerOpCost !IntegerPrimOp !Integer !Integer
-  | GAApplyLam !Integer
+  -- ^ Cost of integer operations
+  | GMakeList !Integer !Word64
+  -- ^ Cost of creating a list of `n` elements + some memory overhead per elem
+  | GAApplyLam Text !Int
+  -- ^ Cost of function application
   | GAZKArgs !ZKArg
+  -- ^ Cost of ZK function
+  | GWrite !Word64
+  -- ^ Cost of writes, per bytes, roughly based on in-memory cost.
+  | GComparison !ComparisonType
+  -- ^ Gas costs for comparisons
+  | GPoseidonHashHackAChain !Int
+  -- ^ poseidon-hash-hack-a-chain costs
+  | GModuleMemory !Word64
   deriving (Show)
+
+instance Pretty GasArgs where
+  pretty = pretty . show
+
+newtype GasTextLength
+  = GasTextLength Int
+  deriving Show
+
+newtype GasListLength
+  = GasListLength Int
+  deriving Show
+
+newtype GasObjectSize
+  = GasObjectSize Int
+  deriving Show
+
+data ComparisonType
+  = TextComparison !Text !Text
+  -- ^ comparing two strings of max `n` length
+  | IntComparison !Integer !Integer
+  -- ^ compare two integers, of at most `n` bits
+  -- Note: decimal comparison overhead should be the same as
+  | DecimalComparison !Decimal !Decimal
+  -- ^ compare decimals with similar mantissas, of at most `n` bits
+  -- | TimeCmp
+  -- ^ TODO: Comparisons gas for time.
+  | ListComparison !Int
+  -- ^ N comparisons constant time overhead
+  | ObjComparison !Int
+  -- ^ Compare objects of at most size `N`
+  deriving (Show)
+
+data ConcatType
+  = TextConcat !GasTextLength
+  -- ^ Total final string length
+  | TextListConcat !GasTextLength !GasListLength
+  -- ^ Total final string length, number of strings
+  | ListConcat !GasListLength
+  -- ^ Final list length
+  | ObjConcat !Int
+  -- ^ Upper bound on max object size
+  deriving Show
 
 data GasModel b
   = GasModel
@@ -165,6 +234,8 @@ millisPerGas = 1000
 
 gasToMilliGas :: Gas -> MilliGas
 gasToMilliGas (Gas n) = MilliGas (n * millisPerGas)
+{-# INLINE gasToMilliGas #-}
 
 milliGasToGas :: MilliGas -> Gas
 milliGasToGas (MilliGas n) = Gas (n `quot` millisPerGas)
+{-# INLINE milliGasToGas #-}

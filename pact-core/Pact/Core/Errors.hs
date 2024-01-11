@@ -1,6 +1,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
@@ -357,7 +358,7 @@ instance Pretty EvalError where
     -- Todo: probably enhance this data type
     CapNotInScope txt ->
       Pretty.hsep ["Capability not in scope:", pretty txt]
-    GasExceeded (MilliGasLimit (MilliGas limit)) (MilliGas amt) ->
+    GasExceeded (MilliGasLimit (milliGasToGas -> Gas limit)) (milliGasToGas -> Gas amt) ->
       "Gas Limit:" <+> parens (pretty limit) <+> "exceeded:" <+> pretty amt
     InvariantFailure txt ->
       Pretty.hsep ["Fatal execution error, invariant violated:", pretty txt]

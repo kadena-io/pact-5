@@ -71,7 +71,9 @@ defaultGasEvalState =
   , _esLoaded=gmLoaded
   , _esEvents=[]
   , _esDefPactExec=Nothing
-  , _esCaps=capState}
+  , _esCaps=capState
+  , _esGasLog=Nothing
+  }
   where
   capState = CapState [] mempty (S.singleton gmModuleName) mempty
 

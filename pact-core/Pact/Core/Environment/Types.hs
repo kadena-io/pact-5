@@ -74,6 +74,8 @@ import Pact.Core.ChainData
 import Pact.Core.Errors
 import Pact.Core.Gas
 import Pact.Core.Namespace
+import Pact.Core.SizeOf
+import Pact.Core.Builtin (IsBuiltin)
 
 -- | Execution flags specify behavior of the runtime environment,
 -- with an orientation towards some alteration of a default behavior.
@@ -165,16 +167,18 @@ instance NFData StackFrame
 data EvalState b i
   = EvalState
   { _esCaps :: !(CapState QualifiedName PactValue)
-  , _esStack :: !([StackFrame])
+  , _esStack :: ![StackFrame]
   , _esEvents :: !([PactEvent PactValue])
   , _esLoaded :: !(Loaded b i)
   , _esDefPactExec :: !(Maybe DefPactExec)
+  , _esGasLog :: Maybe [(Text, MilliGas)]
+    -- ^ Sequence of gas expendature events.
   } deriving (Show, Generic)
 
 instance (NFData b, NFData i) => NFData (EvalState b i)
 
 instance Default (EvalState b i) where
-  def = EvalState def [] [] mempty Nothing
+  def = EvalState def [] [] mempty Nothing Nothing
 
 makeClassy ''EvalState
 
@@ -198,6 +202,9 @@ type MonadEval b i m =
   , MonadIO m
   , Default i
   , Show i
+  , SizeOf b
+  , SizeOf i
+  , IsBuiltin b
   , Show b)
 
 -- | A default evaluation environment meant for

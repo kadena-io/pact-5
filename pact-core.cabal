@@ -34,6 +34,7 @@ common pact-core-common
     , base64-bytestring
     , bytestring
     , containers
+    , criterion
     , data-default
     , deepseq
     , direct-sqlite
