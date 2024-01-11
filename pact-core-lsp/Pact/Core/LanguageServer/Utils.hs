@@ -7,61 +7,92 @@ import Data.Monoid (Alt(..))
 
 import Language.LSP.Protocol.Types
 import Pact.Core.Info
-import Pact.Core.Syntax.ParseTree
--- import Pact.Core.IR.Term
--- import Pact.Core.Builtin
+import Pact.Core.IR.Term
+import Pact.Core.Builtin
 import Control.Lens hiding (inside)
+import Pact.Core.Imports
 
 termAt
   :: Position
-  -> ReplSpecialTL SpanInfo
-  -> Maybe (ReplSpecialTL SpanInfo)
-termAt p = \case
-  RTL (RTLModule m) -> goModule m
-  RTL (RTLInterface _inf) ->  Nothing
-  RTL (RTLUse _imp _) -> Nothing
-  RTL (RTLDefun df) -> goDefun df
-  RTL (RTLDefConst dc) -> goDefConst dc
-  RTL (RTLTerm term) -> RTL . RTLTerm <$> goTerm term
-  RTLReplSpecial _ -> Nothing
-  RTL _ -> Nothing
+  -> EvalTerm ReplCoreBuiltin SpanInfo
+  -> Maybe (EvalTerm ReplCoreBuiltin SpanInfo)
+termAt p term =
+  if p `inside` view termInfo term
+  then case term of
+         t@(Lam _ b _) -> termAt p b <|> Just t
+         t@(App tm1 tm2 _) ->
+           termAt p tm1 <|> getAlt (foldMap (Alt . termAt p) tm2) <|> Just t
+         t@(Let _ tm1 tm2 _) -> termAt p tm1 <|> termAt p tm2 <|> Just t
+         t@(Sequence tm1 tm2 _) -> termAt p tm1 <|> termAt p tm2 <|> Just t
+         t@(Conditional op' _) ->
+           (case op' of
+               CAnd a b  -> termAt p a <|> termAt p b
+               COr a b   -> termAt p a <|> termAt p b
+               CIf a b c -> termAt p a <|> termAt p b <|> termAt p c
+               CEnforceOne a bs -> termAt p a <|> getAlt (foldMap (Alt . termAt p) bs)
+               CEnforce a b -> termAt p a <|> termAt p b) <|> Just t
+         t@(ListLit tms _) -> getAlt (foldMap (Alt . termAt p) tms) <|> Just t
+         t@(Try tm1 tm2 _) -> termAt p tm1 <|> termAt p tm2 <|> Just t
+         t -> Just t
+  else Nothing
+  
+
+data PositionMatch b i
+  = ModuleMatch (EvalModule b i)
+  | InterfaceMatch (EvalInterface b i)
+  | TermMatch (EvalTerm b i)
+  | UseMatch Import i
+  | DefunMatch (EvalDefun b i) 
+  | ConstMatch (EvalDefConst b i)
+  | SchemaMatch (EvalSchema i)
+  | TableMatch (EvalTable i)
+  | DefPactMatch (EvalDefPact b i)
+  | DefCapMatch (EvalDefCap b i)
+  deriving Show
+
+topLevelTermAt
+  :: Position
+  -> EvalTopLevel ReplCoreBuiltin SpanInfo
+  -> Maybe (PositionMatch ReplCoreBuiltin SpanInfo)
+topLevelTermAt p = \case
+  TLModule m -> goModule m
+  TLInterface i -> goInterface i
+  TLTerm t  -> TermMatch <$> termAt p t
+  TLUse imp i
+    | p `inside` i -> Just (UseMatch imp i)
+    | otherwise -> Nothing
   where
-    goTerm :: Expr SpanInfo -> Maybe (Expr SpanInfo)
-    goTerm term = if p `inside` view termInfo term
-                  then case term of
-                         t@(Lam _ b _) -> goTerm b <|> Just t
-                         t@(App tm1 tm2 _) ->
-                           goTerm tm1 <|> getAlt (foldMap (Alt . goTerm) tm2) <|> Just t
-                         t@(LetIn _ tm2 _) -> goTerm tm2 <|> Just t
-                         -- t@(TyApp tm _ _) -> goTerm tm <|> Just t
-                         -- t@(TyAbs _ tm _) -> goTerm tm <|> Just t
-                         -- t@(Sequence tm1 tm2 _) -> goTerm tm1 <|> goTerm tm2 <|> Just t
-                         _t@(Operator _op _) -> Nothing
-                           -- (case op of
-                           --     CAnd a b  -> goTerm a <|> goTerm b
-                           --     COr a b   -> goTerm a <|> goTerm b
-                           --     CIf a b c -> goTerm a <|> goTerm b <|> goTerm c) <|> Just t
-                         -- t@(List _ tms _) -> getAlt (foldMap (Alt . goTerm) tms) <|> Just t 
-                         -- t@(DynInvoke tm _ _) -> goTerm tm <|> Just t
-                         t@(Try tm1 tm2 _) -> goTerm tm1 <|> goTerm tm2 <|> Just t
-                         t -> Just t
-                  else Nothing
-    goDefun = undefined
-    goDefConst = undefined
-    goModule = undefined
-    -- goDefun = \case
-    --   t@(Defun _ _ tm i)
-    --     | p `inside` i -> (RTLTerm <$> goTerm tm) <|> Just (RTLDefun t)
-    --   _otherwise -> Nothing
-    -- goDefConst = \case
-    --   t@(DefConst _ _ tm i)
-    --     | p `inside` i -> (RTLTerm <$> goTerm tm) <|> Just (RTLDefConst t)
-    --   _otherwise -> Nothing
-    -- goModule (Module _ defs _ _ _ _) = let
-    --   goDef = \case
-    --     Dfun t -> goDefun t
-    --     DConst t -> goDefConst t
-      -- in getAlt (foldMap (Alt . goDef) defs)
+    goInterface iface@(Interface _ _idefs _ _ i)
+      | p `inside` i = Just (InterfaceMatch iface) -- TODO add interace defs
+      | otherwise = Nothing
+    goDefs = \case
+      Dfun d@(Defun _ _ _ tm i)
+        | p `inside` i -> TermMatch <$> termAt p tm <|> Just (DefunMatch d)
+        | otherwise -> Nothing
+      DConst d@(DefConst _ _ tc i)
+        | p `inside` i -> (case tc of
+                             TermConst tm -> TermMatch <$> termAt p tm
+                             _ -> Nothing) <|> Just (ConstMatch d)
+        | otherwise -> Nothing
+      DCap dc@(DefCap _ _ _ tm _ i)
+        | p `inside` i -> TermMatch <$> termAt p tm <|> Just (DefCapMatch dc)
+        | otherwise -> Nothing
+      DSchema ds@(DefSchema _ _ i)
+        | p `inside` i -> Just (SchemaMatch ds)
+        | otherwise -> Nothing
+      DTable dt@(DefTable _ _ i)
+        | p `inside` i -> Just (TableMatch dt)
+        | otherwise -> Nothing
+      DPact dp@(DefPact _ _ _ steps i)
+        | p `inside` i -> getAlt (foldMap (Alt . goStep) steps) <|> Just (DefPactMatch dp)
+        | otherwise -> Nothing
+    goModule m@(Module _ _ defs _ _ _ _ i)
+      | p `inside` i = getAlt (foldMap (Alt . goDefs) defs) <|> Just (ModuleMatch m)
+      | otherwise = Nothing
+      
+    goStep = \case
+      Step tm -> TermMatch <$> termAt p tm
+      StepWithRollback tm1 tm2 -> TermMatch <$> (termAt p tm1 <|> termAt p tm2)
 
 -- | Check if a `Position` is contained within a `Span`
 inside :: Position -> SpanInfo -> Bool

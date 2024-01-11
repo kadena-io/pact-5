@@ -531,10 +531,14 @@ type EvalTerm b i = Term Name Type b i
 type EvalTopLevel b i = TopLevel Name Type b i
 type EvalDef b i = Def Name Type b i
 type EvalDefun b i = Defun Name Type b i
+type EvalDefConst b i = DefConst Name Type b i
 type EvalDefCap b i = DefCap Name Type b i
+type EvalDefPact b i = DefPact Name Type b i
 type EvalModule b i = Module Name Type b i
 type EvalInterface b i = Interface Name Type b i
 
+type EvalTable i = DefTable Name i
+type EvalSchema i = DefSchema Type i
 
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Term name ty b info)
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Def name ty b info)
