@@ -1,4 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
+
+
 -- |
 
 module Pact.Core.Test.LanguageServer
@@ -21,6 +24,7 @@ import Pact.Core.Builtin
 import Data.Maybe (isJust)
 import qualified Data.Map.Strict as M
 import Pact.Core.Repl.BuiltinDocs
+import Data.Either (isLeft)
 
 tests :: TestTree
 tests = testGroup "Pact LSP"
@@ -28,6 +32,7 @@ tests = testGroup "Pact LSP"
   , testGroup "Hovers" [
       testGroup "Builtin docs" builtinHoverTests,
       testGroup "User docs" userDocHoverTests]
+  , testGroup "Definition" definitionRequestTests
   ]
 
 diagnosticTests :: [TestTree]
@@ -44,7 +49,7 @@ diagnosticTests
   ]
 
 userDocHoverTests :: [TestTree]
-userDocHoverTests = [ hoverTest "defun my-fun" 11 "This is my-fun documentation"]
+userDocHoverTests = [hoverTest "defun my-fun" 11 "This is my-fun documentation"]
   where
     title b = "Get hover docs for: "  <> b
     hoverTest b l expected = testCase (title b) $ runPactLSP $ do
@@ -52,9 +57,23 @@ userDocHoverTests = [ hoverTest "defun my-fun" 11 "This is my-fun documentation"
       h <- getHover doc (Position l 2)
       liftIO $ do
         assertBool "Return hover information" (isJust h)
-        let Just hover = h
-        assertEqual "Match builtin docs" (view contents hover) (InL $ MarkupContent MarkupKind_PlainText expected)
+        let Just hov' = h
+        assertEqual "Match builtin docs" (view contents hov') (InL $ MarkupContent MarkupKind_PlainText expected)
 
+
+definitionRequestTests :: [TestTree]
+definitionRequestTests = [defTest "my-fun-1" (Position 13 2) (Range (Position 5 2) (Position 6 6))
+                         ,defTest "my-fun-1 (inside my-fun-2)" (Position 9 6) (Range (Position 5 2) (Position 6 6))]
+  where
+    title b = "Get toplevel definition of: "  <> b
+    defTest b pos expected = testCase (title b) $ runPactLSP $ do
+      doc <- openDoc "definition-request.repl" "pact"
+      _ <- waitForDiagnostics
+      def <- toEither <$> getDefinitions doc pos
+      liftIO $ do
+        assertBool "Return definition position" (isLeft def)
+        let Left defPos = def
+        assertEqual "Match position" defPos (Definition . InL $ Location (view uri doc) expected)
 
 
 builtinHoverTests :: [TestTree]
@@ -78,10 +97,9 @@ builtinHoverTests
       liftIO $ do
         assertBool "Return hover information" (isJust h)
         let
-          Just hover = h
+          Just hov' = h
           Just expectedDocs =  M.lookup (replBuiltinToText coreBuiltinToText b) builtinDocs
-        assertEqual "Match builtin docs" (view contents hover) (InL $ MarkupContent MarkupKind_PlainText expectedDocs)
-
+        assertEqual "Match builtin docs" (view contents hov') (InL $ MarkupContent MarkupKind_PlainText expectedDocs)
 
 
 cfg :: SessionConfig

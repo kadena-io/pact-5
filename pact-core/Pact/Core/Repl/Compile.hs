@@ -134,7 +134,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
           TLTerm (Var (Name n (NTopLevel mn _)) _) -> do
             let qn = QualifiedName n mn
             docs <- uses replUserDocs (M.lookup qn)
-            displayValue (RUserDoc qn (fst <$> docs))
+            displayValue (RUserDoc qn docs)
           _ -> do
             v <- evalTopLevel replEnv ds deps
             displayValue (RCompileValue v)

@@ -117,6 +117,7 @@ startServer = do
       , documentDidSaveHandler
       -- request handler
       , documentHoverRequestHandler
+      , documentDefinitionRequestHandler
       ]
 
 debug :: MonadIO m => Text -> m ()
@@ -141,7 +142,6 @@ documentDidChangeHandler = notificationHandler SMethod_TextDocumentDidChange $ \
   case mdoc of
     Nothing -> debug $ "No virtual file found for: " <> renderText nuri
     Just vf -> sendDiagnostics nuri (virtualFileVersion vf) (virtualFileText vf)
-
 
 
 documentDidCloseHandler :: Handlers LSM
@@ -192,6 +192,7 @@ sendDiagnostics nuri v content = liftIO runPact >>= \case
           , _replEvalEnv = ee
           , _replTx = Nothing
           , _replUserDocs = mempty
+          , _replTLDefPos = mempty
           }
       stateRef <- newIORef rstate
       res <- runReplT stateRef (processFile (replBuiltinEnv @CEKSmallStep) src)
@@ -210,8 +211,6 @@ sendDiagnostics nuri v content = liftIO runPact >>= \case
       , _data_ = Nothing
       }
 
-
-
     isReplScript :: NormalizedUri -> Bool
     isReplScript = maybe False ((==) ".repl" . takeExtension) . uriToFilePath . fromNormalizedUri
 
@@ -227,14 +226,26 @@ spanInfoToRange (SpanInfo sl sc el ec) = mkRange
   (fromIntegral sl)  (fromIntegral sc)
   (fromIntegral el)  (fromIntegral ec)
 
--- documentDefinitionRequestHandler :: Handlers LSM
--- documentDefinitionRequestHandler = requestHandler SMethod_TextDocumentDefinition $ \req resp ->
---   getState >>= \st -> do
---     let nuri = req ^. params . textDocument . uri . to toNormalizedUri
---         pos = req ^. params . position
+documentDefinitionRequestHandler :: Handlers LSM
+documentDefinitionRequestHandler = requestHandler SMethod_TextDocumentDefinition $ \req resp ->
+  getState >>= \st -> do
+    let uri' = req ^. params . textDocument . uri
+        nuri = toNormalizedUri uri'
+        pos = req ^. params . position
+        getMatch tl = getAlt (foldMap (Alt . topLevelTermAt pos) tl)
+   
+    tlDefSpan <- case getMatch =<< view (lsTopLevel . at nuri) st of
+      Just tlm -> case tlm of
+        TermMatch (Var (Name n (NTopLevel mn _)) _) -> do
+          let qn = QualifiedName n mn
+          pure $ preview (lsReplState . at nuri . _Just . replTLDefPos . ix qn) st
+        _ -> pure Nothing
+      _ -> pure Nothing
 
---     let loc = Location undefined undefined
---     resp (Right $ InL $ Definition (InL loc))
+    let loc = Location uri' . spanInfoToRange
+    case loc <$> tlDefSpan of
+      Just x -> resp (Right $ InL $ Definition (InL x))
+      Nothing -> resp (Right $ InR $ InR Null)
 
 -- documentRenameRequestHandler :: Handlers LSM
 -- documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req resp ->
@@ -250,8 +261,8 @@ documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req re
   getState >>= \st -> do
     let nuri = req ^. params . textDocument . uri . to toNormalizedUri
         pos = req ^. params . position
-
         getMatch tl = getAlt (foldMap (Alt . topLevelTermAt pos) tl)
+
     case getMatch =<< view (lsTopLevel . at nuri) st of
       Just tlm -> case tlm of
         TermMatch (Builtin builtin i) -> let
@@ -267,7 +278,7 @@ documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req re
           -- Access user-annotated documentation using the @doc command.
           let qn = QualifiedName n mn
               toHover d = Hover (InL $ MarkupContent MarkupKind_PlainText d) Nothing
-              doc = preview (lsReplState . at nuri . _Just . replUserDocs . at qn . _Just . to fst) st
+              doc = preview (lsReplState . at nuri . _Just . replUserDocs . ix qn) st
           in resp (Right (maybeToNull (toHover <$> doc)))
         _other -> do
           debug $ "Encounter: " <> renderText (show _other)

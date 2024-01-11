@@ -23,6 +23,7 @@ module Pact.Core.Repl.Utils
  , replEvalEnv
  , replEvalState
  , replUserDocs
+ , replTLDefPos
  , whenReplFlagSet
  , unlessReplFlagSet
  , debugIfFlagSet
@@ -126,7 +127,12 @@ data ReplState b
   , _replGas :: IORef Gas
   , _replEvalLog :: IORef (Maybe [(Text, Gas)])
   , _replCurrSource :: SourceCode
-  , _replUserDocs :: Map QualifiedName (Text, SpanInfo)
+  , _replUserDocs :: Map QualifiedName Text
+  -- ^ Used by Repl and LSP Server, reflects the user
+  --   annotated @doc string.
+  , _replTLDefPos :: Map QualifiedName SpanInfo
+  -- ^ Used by LSP Server, reflects the span information
+  --   of the TL definitions for the qualified name.
   , _replTx :: Maybe (TxId, Maybe Text)
   }
 
