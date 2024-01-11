@@ -441,13 +441,6 @@ envGasModel info b cont handler _env = \case
     returnCEKValue cont handler $ VString $ "Set gas model to " <> _gmDesc newmodel'
   args -> argsError info b args
 
-envLoaded :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
-envLoaded info b cont handler _env = \case
-  [] -> do
-    lo <- useEvalState esLoaded
-    liftIO $ print (set loAllLoaded mempty lo)
-    returnCEKValue cont handler (VString "loaded")
-  args -> argsError info b args
 
 
 
@@ -500,5 +493,4 @@ replCoreBuiltinRuntime = \case
     REnvGasModel -> envGasModel
     REnvAskGasModel -> envGasModel
     REnvGasModelFixed -> envGasModel
-    REnvLoaded -> envLoaded
 

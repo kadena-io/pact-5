@@ -563,7 +563,6 @@ data ReplBuiltins
   | RContinuePactRollbackYieldObj
   | RPactState
   | RResetPactState
-  | REnvLoaded
   deriving (Show, Enum, Bounded, Eq, Generic)
 
 
@@ -605,7 +604,6 @@ instance IsBuiltin ReplBuiltins where
     REnvGasModel -> 1
     REnvAskGasModel -> 0
     REnvGasModelFixed -> 1
-    REnvLoaded -> 0
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
 -- Note: commented out natives are
@@ -684,7 +682,6 @@ replBuiltinsToText = \case
   REnvGasModel -> "env-gasmodel"
   REnvAskGasModel -> "env-ask-gasmodel"
   REnvGasModelFixed -> "env-gasmodel-fixed"
-  REnvLoaded -> "env-loaded-names"
 
 replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
 replBuiltinToText f = \case
