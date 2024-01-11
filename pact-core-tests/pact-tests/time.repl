@@ -65,3 +65,7 @@
 (expect "roundtrip 1" T (time-rt "%Y-%m-%dT%H:%M:%S%N" T))
 (expect "roundtrip 2" T (time-rt "%a, %_d %b %Y %H:%M:%S %Z" T))
 (expect "roundtrip 3" T2 (time-rt "%Y-%m-%d %H:%M:%S.%v" T2))
+
+;; New core test: checking both overloads
+(expect "add-time works with integer overload" (time "2016-07-22T11:26:36Z") (add-time (time "2016-07-22T11:26:35Z") 1))
+(expect "add-time works with decimal overload" (time "2016-07-22T11:26:36Z") (add-time (time "2016-07-22T11:26:35Z") 1.0))

@@ -1,0 +1,70 @@
+(begin-tx)
+(module ezfree g
+  (defcap g () true)
+  (defun ALLOW () true)
+  )
+
+(define-namespace 'free (create-user-guard (ALLOW)) (create-user-guard (ALLOW)))
+(commit-tx)
+
+(begin-tx)
+(interface iface
+  (defun f:integer (a:integer))
+  )
+(commit-tx)
+(begin-tx)
+(module self-reference1 SR1G
+  (implements iface)
+  (defcap SR1G () true)
+
+  (defun f:integer (a:integer) (+ a 1))
+
+  (defun self-referential1(a:module{iface}) (a::f 1))
+
+  (defun run ()
+    (self-referential1 self-reference1)
+  )
+  )
+
+(expect "self-reference without a namespace works" 2 (run))
+
+(commit-tx)
+
+(begin-tx)
+(namespace 'free)
+
+(module self-reference2 SR2G
+  (implements iface)
+  (defcap SR2G () true)
+
+  (defun f:integer (a:integer) (+ a 1))
+
+  (defun self-referential2(a:module{iface}) (a::f 1))
+
+  (defun run ()
+    (self-referential2 self-reference2)
+  )
+  )
+
+
+(expect "self-reference with a namespace works" 2 (run))
+(commit-tx)
+(begin-tx)
+(namespace 'free)
+
+(module self-reference2 SR2G
+  (implements iface)
+  (defcap SR2G () true)
+
+  (defun f:integer (a:integer) (+ a 1))
+
+  (defun self-referential2(a:module{iface}) (a::f 2))
+
+  (defun run ()
+    (self-referential2 free.self-reference2)
+  )
+  )
+
+  (expect "self-reference with a namespace qualified works" 3 (run))
+
+(commit-tx)

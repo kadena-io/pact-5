@@ -112,6 +112,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
           evalState .= def
           replEvalEnv .= ee
         fp <- mangleFilePath (T.unpack txt)
+        when (isPactFile fp) $ esLoaded . loToplevel .= mempty
         out <- loadFile fp replEnv display
         replCurrSource .= oldSrc
         unless reset $ do
@@ -133,6 +134,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
     _ ->  do
       ds <- runDesugarReplTopLevel tl
       interpret ds
+  isPactFile f = takeExtension f == ".pact"
   interpret (DesugarOutput tl _deps) = do
     case tl of
       RTLDefun df -> do
