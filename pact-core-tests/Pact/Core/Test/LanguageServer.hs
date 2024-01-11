@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
--- | 
+-- |
 
 module Pact.Core.Test.LanguageServer
   ( tests
   ) where
 
 import Language.LSP.Test
-import Language.LSP.Protocol.Types 
+import Language.LSP.Protocol.Types
 import Language.LSP.Protocol.Lens hiding (length, title)
 
 import Control.Lens
@@ -49,7 +49,7 @@ userDocHoverTests = [ hoverTest "defun my-fun" 11 "This is my-fun documentation"
     title b = "Get hover docs for: "  <> b
     hoverTest b l expected = testCase (title b) $ runPactLSP $ do
       doc <- openDoc "userdocs-hover.repl" "pact"
-      h <- getHover doc (Position l 8)
+      h <- getHover doc (Position l 2)
       liftIO $ do
         assertBool "Return hover information" (isJust h)
         let Just hover = h

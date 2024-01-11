@@ -115,6 +115,15 @@ defDocs = \case
   DPact d -> _dpDocs d
   DSchema d -> _dscDocs d
 
+defInfo :: Def i -> i
+defInfo = \case
+  Dfun d -> _dfunInfo d
+  DConst d -> _dcInfo d
+  DCap d -> _dcapInfo d
+  DTable d -> _dtInfo d
+  DPact d -> _dpInfo d
+  DSchema d -> _dscInfo d
+
 
 data Defun i
   = Defun

@@ -1,4 +1,4 @@
--- | 
+-- |
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -11,6 +11,7 @@ module Pact.Core.LanguageServer
   ) where
 
 import Control.Lens hiding (Iso)
+import Control.Monad.Except
 
 import Language.LSP.Server
 import Language.LSP.Protocol.Message
@@ -52,12 +53,13 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import Pact.Core.IR.Term
-import Control.Monad.Except
 import Pact.Core.LanguageServer.Utils
 import Pact.Core.Repl.Runtime.ReplBuiltin
 import Pact.Core.Repl.BuiltinDocs
 import Pact.Core.Repl.UserDocs
 import Pact.Core.Names
+import qualified Pact.Core.IR.ModuleHashing as MHash
+import qualified Pact.Core.IR.ConstEval as ConstEval
 
 data LSState =
   LSState
@@ -154,7 +156,7 @@ documentDidSaveHandler = notificationHandler SMethod_TextDocumentDidSave $ \msg 
   debug $ "Document saved: " <> renderText nuri
   sendDiagnostics nuri 0 ""
 
-  
+
 sendDiagnostics :: NormalizedUri -> Int32 -> Text -> LSM ()
 sendDiagnostics nuri v content = liftIO runPact >>= \case
   Left err -> do
@@ -176,7 +178,7 @@ sendDiagnostics nuri v content = liftIO runPact >>= \case
         builtinMap = if isReplScript nuri
                      then replcoreBuiltinMap
                      else RBuiltinWrap <$> coreBuiltinMap
-      
+
       ee <- defaultEvalEnv pdb builtinMap
       let
         src = SourceCode (takeFileName file) content
@@ -255,17 +257,17 @@ documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req re
         TermMatch (Builtin builtin i) -> let
                 docs = fromMaybe "No docs available"
                   (M.lookup (replBuiltinToText coreBuiltinToText builtin) builtinDocs)
-                
+
                 mc = MarkupContent MarkupKind_PlainText docs
                 range = spanInfoToRange i
                 hover = Hover (InL mc) (Just range)
                 in resp (Right (InL hover))
 
-        TermMatch (Var (Name n (NTopLevel mn _)) _) -> 
+        TermMatch (Var (Name n (NTopLevel mn _)) _) ->
           -- Access user-annotated documentation using the @doc command.
           let qn = QualifiedName n mn
               toHover d = Hover (InL $ MarkupContent MarkupKind_PlainText d) Nothing
-              doc = view (lsReplState . at nuri ._Just . replUserDocs . at qn) st
+              doc = preview (lsReplState . at nuri . _Just . replUserDocs . at qn . _Just . to fst) st
           in resp (Right (maybeToNull (toHover <$> doc)))
         _other -> do
           debug $ "Encounter: " <> renderText (show _other)
@@ -285,9 +287,10 @@ processFile replEnv (SourceCode _ source) = do
   where
   pipe = \case
     Lisp.RTL (Lisp.RTLTopLevel tl) -> do
-      (ds, _) <- compileDesugarOnly replEnv tl
-      case ds of
-        TLModule m -> functionDocs (_mName m) tl
-        
-        
+      functionDocs tl
+      (ds, deps) <- compileDesugarOnly replEnv tl
+      constEvaled <- ConstEval.evalTLConsts replEnv ds
+      let tlFinal = MHash.hashTopLevel constEvaled
+      let act = [ds] <$ evalTopLevel replEnv tlFinal deps
+      catchError act $ (const (pure []))
     _ -> pure []

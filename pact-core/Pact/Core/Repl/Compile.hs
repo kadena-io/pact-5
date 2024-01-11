@@ -128,22 +128,16 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
     Lisp.RTLTopLevel toplevel -> case topLevelHasDocs toplevel of
       Just doc -> displayValue $ RBuiltinDoc doc
       Nothing -> do
+        functionDocs toplevel
         (ds, deps) <- compileDesugarOnly replEnv toplevel
         case ds of
-          TLModule m -> do
-            functionDocs (_mName m) toplevel
-            v <- evalTopLevel replEnv ds deps
-            displayValue (RCompileValue v)
           TLTerm (Var (Name n (NTopLevel mn _)) _) -> do
             let qn = QualifiedName n mn
             docs <- uses replUserDocs (M.lookup qn)
-            displayValue (RUserDoc qn docs)
+            displayValue (RUserDoc qn (fst <$> docs))
           _ -> do
             v <- evalTopLevel replEnv ds deps
             displayValue (RCompileValue v)
-        -- do
-        -- v <- interpretTopLevel replEnv toplevel
-        -- displayValue (RCompileValue v)
     _ ->  do
       ds <- runDesugarReplTopLevel tl
       interpret ds
