@@ -1299,7 +1299,7 @@ resolveBare (BareName bn) i = views reBinds (M.lookup bn) >>= \case
     Just (fqn, dk) -> pure (Name bn (NTopLevel (_fqModule fqn) (_fqHash fqn)), Just dk)
     Nothing -> do
       let unmangled = ModuleName bn Nothing
-      (mn ,  imps) <- resolveModuleName i unmangled
+      (mn, imps) <- resolveModuleName i unmangled
       pure (Name bn (NModRef mn imps), Nothing)
 
 -- | Resolve a qualified name `<qual>.<name>` with the following
