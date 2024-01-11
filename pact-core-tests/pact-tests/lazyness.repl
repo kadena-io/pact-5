@@ -1,0 +1,16 @@
+
+(module lazyEval g
+  (defcap g () true)
+
+  (defschema lazy-schema field1:integer)
+
+  (deftable lazy-table:{lazy-schema})
+
+  (defun write-dummy-value ()
+    (write lazy-table "greg-key" {"field1":100000})
+    {"field1":100000}
+  )
+)
+
+(create-table lazy-table)
+(expect "expect first and second arguments are lazy" (read lazy-table "greg-key") (write-dummy-value))
