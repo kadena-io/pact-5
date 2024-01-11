@@ -24,16 +24,11 @@ module Pact.Core.Environment.Utils
  , mangleNamespace
  , getAllStackCaps
  , checkSigCaps
- , isKeysetInSigs
- , isKeysetNameInSigs
- , enforceKeysetNameAdmin
  ) where
 
 import Control.Lens
 import Control.Applicative((<|>))
-import Control.Monad(unless)
 import Control.Monad.Except
-import Control.Monad.IO.Class
 import Data.Default
 import Data.Maybe(mapMaybe)
 import qualified Data.Map.Strict as M
@@ -180,26 +175,6 @@ mangleNamespace mn@(ModuleName mnraw ns) =
     Nothing -> pure mn
     Just (Namespace currNs _ _) -> pure (ModuleName mnraw (ns <|> Just currNs))
 
-isKeysetInSigs
-  :: MonadEval b i m
-  => KeySet QualifiedName
-  -> m Bool
-isKeysetInSigs (KeySet kskeys ksPred) = do
-  matchedSigs <- M.filterWithKey matchKey <$> viewEvalEnv eeMsgSigs
-  sigs <- checkSigCaps matchedSigs
-  runPred (M.size sigs)
-  where
-  matchKey k _ = k `elem` kskeys
-  atLeast t m = m >= t
-  count = S.size kskeys
-  runPred matched =
-    case ksPred of
-      KeysAll -> run atLeast
-      KeysAny -> run (\_ m -> atLeast 1 m)
-      Keys2 -> run (\_ m -> atLeast 2 m)
-    where
-    run p = pure (p count matched)
-
 getAllStackCaps
   :: (MonadEval b i m)
   => m (S.Set (CapToken QualifiedName PactValue))
@@ -227,25 +202,4 @@ checkSigCaps sigs = do
     (S.null sigCaps && allowEmpty) ||
     not (S.null (S.intersection granted sigCaps))
 
-isKeysetNameInSigs
-  :: (MonadEval b i m)
-  => i
-  -> PactDb b i
-  -> KeySetName
-  -> m Bool
-isKeysetNameInSigs info pdb ksn = do
-  liftIO (readKeySet pdb ksn) >>= \case
-    Just ks -> isKeysetInSigs ks
-    Nothing ->
-      throwExecutionError info (NoSuchKeySet ksn)
 
-enforceKeysetNameAdmin
-  :: MonadEval b i m
-  => i
-  -> ModuleName
-  -> KeySetName
-  -> m ()
-enforceKeysetNameAdmin i modName ksn = do
-  pdb <- viewEvalEnv eePactDb
-  signed <- isKeysetNameInSigs i pdb ksn
-  unless signed $ throwExecutionError i (ModuleGovernanceFailure modName)

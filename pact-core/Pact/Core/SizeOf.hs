@@ -65,6 +65,7 @@ import Pact.Core.Imports
 import Pact.Core.Info
 import Pact.Core.ModRefs
 import Pact.Core.ChainData
+import Pact.Core.Namespace (Namespace)
 
 
 -- |  Estimate of number of bytes needed to represent data type
@@ -304,6 +305,7 @@ instance SizeOf Name
 instance SizeOf QualifiedName
 instance SizeOf DynamicName
 instance SizeOf ParsedName
+instance SizeOf ParsedTyName
 instance SizeOf FullyQualifiedName
 
 -- Type
@@ -322,6 +324,12 @@ instance SizeOf DefPactExec
 -- spaninfo
 instance SizeOf SpanInfo
 
+-- builtins
+instance SizeOf CoreBuiltin
+instance SizeOf ReplBuiltins
+instance SizeOf b => SizeOf (ReplBuiltin b)
+
+
 -- Import
 instance SizeOf Import
 
@@ -330,8 +338,8 @@ deriving newtype instance SizeOf PublicKeyText
 instance SizeOf KeySetName
 instance (SizeOf name, SizeOf v) => SizeOf (UserGuard name v)
 instance (SizeOf name, SizeOf v) => SizeOf (CapabilityGuard name v)
-instance (SizeOf name) => SizeOf (KSPredicate name)
-instance (SizeOf name) => SizeOf (KeySet name)
+instance SizeOf KSPredicate
+instance SizeOf KeySet
 instance SizeOf ModuleGuard
 instance SizeOf DefPactGuard
 instance (SizeOf name, SizeOf v) => SizeOf (Guard name v)
@@ -366,3 +374,4 @@ instance (SizeOf n, SizeOf t, SizeOf i) => SizeOf (IfDefCap n t i)
 instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (IfDef n t b i)
 instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Interface n t b i)
 
+instance SizeOf Namespace

@@ -41,7 +41,7 @@ import Text.Read (readMaybe)
 decodeModuleData :: ByteString -> Maybe (ModuleData CoreBuiltin ())
 decodeModuleData = JD.decodeStrict'
 
-decodeKeySet :: ByteString -> Maybe (KeySet QualifiedName)
+decodeKeySet :: ByteString -> Maybe KeySet
 decodeKeySet = JD.decodeStrict'
 
 decodeDefPactExec :: ByteString -> Maybe (Maybe DefPactExec)
@@ -60,7 +60,7 @@ instance JD.FromJSON NamespaceName where
   parseJSON = JD.withText "NamespaceName" (pure . NamespaceName)
 
 
-instance JD.FromJSON (KeySet QualifiedName) where
+instance JD.FromJSON KeySet where
   parseJSON v = JD.withObject "KeySet" keyListPred v <|> keyListOnly
       where
         defPred = KeysAll
@@ -71,11 +71,12 @@ instance JD.FromJSON (KeySet QualifiedName) where
 
         keyListOnly = KeySet <$> JD.parseJSON v <*> pure defPred
 
-instance JD.FromJSON (KSPredicate QualifiedName) where
+instance JD.FromJSON KSPredicate where
   parseJSON = JD.withText "KSPredicate" $ \case
     "keys-all" -> pure KeysAll
     "keys-2" -> pure Keys2
     "keys-any" -> pure KeysAny
+    n | Just ptn <- parseParsedTyName n -> pure (CustomPredicate ptn)
     _ -> fail "unexpected parsing"
 
 instance JD.FromJSON PublicKeyText where

@@ -100,12 +100,10 @@ instance Pretty PactValue where
 synthesizePvType :: PactValue -> Type
 synthesizePvType = \case
   PLiteral l -> typeOfLit l
-  PList _ -> TyList TyUnit
+  PList _ -> TyAnyList
   PGuard _ -> TyGuard
   PModRef mr -> TyModRef (S.fromList (_mrImplemented mr))
-  PObject f ->
-    let tys = synthesizePvType <$> f
-    in TyObject (Schema tys)
+  PObject _ -> TyAnyObject
   PCapToken {} -> TyCapToken
   PTime _ -> TyTime
 
@@ -119,11 +117,8 @@ checkPvType ty = \case
   PGuard{}
     | ty == TyGuard -> Just TyGuard
     | otherwise -> Nothing
-  -- PTable _ sc1
-  --   | ty == TyTable sc1 -> Just (TyTable sc1)
-  --   | otherwise -> Nothing
-  -- todo: types of objects
   PObject o -> case ty of
+    -- Todo: gas
     TyObject (Schema sc) ->
       let tyList = M.toList sc
           oList = M.toList o
@@ -137,6 +132,7 @@ checkPvType ty = \case
         | otherwise = Nothing
     TyAnyObject -> Just TyAnyObject
     _ -> Nothing
+  -- Todo: gas
   PList l -> case ty of
     TyList t' | all (isJust . checkPvType t') l -> Just (TyList t')
     TyAnyList -> Just TyAnyList

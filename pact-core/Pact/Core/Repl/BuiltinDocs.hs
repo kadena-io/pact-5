@@ -12,8 +12,14 @@ import Pact.Core.Names
 
 import qualified Data.Map.Strict as M
 
+
 topLevelHasDocs :: TopLevel i -> Maybe Text
-topLevelHasDocs (TLTerm (Var (BN (BareName bn)) _)) = M.lookup bn builtinDocs
+topLevelHasDocs (TLTerm term) = case term of
+  Var (BN (BareName bn)) _ -> M.lookup bn builtinDocs
+  Operator op _ -> M.lookup (renderOp op) builtinDocs
+  _ -> mempty
+
+
 topLevelHasDocs _ = Nothing
 
 builtinDocs :: M.Map Text Text

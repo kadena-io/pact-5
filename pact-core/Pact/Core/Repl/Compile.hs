@@ -15,11 +15,12 @@ module Pact.Core.Repl.Compile
  ) where
 
 import Control.Lens
+import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Class(liftIO)
 import Data.Text(Text)
 import Data.Default
-import System.FilePath(takeFileName)
+import System.FilePath.Posix
 
 
 import qualified Data.Map.Strict as M
@@ -69,7 +70,7 @@ loadFile
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
 loadFile loc rEnv display = do
-  source <- SourceCode (takeFileName loc) <$> liftIO (T.readFile loc)
+  source <- SourceCode loc <$> liftIO (T.readFile loc)
   replCurrSource .= source
   interpretReplProgram' rEnv source display
 
@@ -104,26 +105,27 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
     Lisp.RTL rtl ->
       pure <$> pipe' rtl
     Lisp.RTLReplSpecial rsf -> case rsf of
-      Lisp.ReplLoad txt resetState _
-        | resetState -> do
-          oldSrc <- use replCurrSource
-          evalState .= def
-          pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
-          replPactDb .= pactdb
+      Lisp.ReplLoad txt reset _ -> do
+        oldSrc <- use replCurrSource
+        pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
+        oldEE <- use replEvalEnv
+        when reset $ do
           ee <- liftIO (defaultEvalEnv pactdb replcoreBuiltinMap)
+          evalState .= def
           replEvalEnv .= ee
-          out <- loadFile (T.unpack txt) replEnv display
-          replCurrSource .= oldSrc
-          pure out
-        | otherwise -> do
-          oldSrc <- use replCurrSource
-          oldEs <- use evalState
-          oldEE <- use replEvalEnv
-          out <- loadFile (T.unpack txt) replEnv display
+        fp <- mangleFilePath (T.unpack txt)
+        out <- loadFile fp replEnv display
+        replCurrSource .= oldSrc
+        unless reset $ do
           replEvalEnv .= oldEE
-          evalState .= oldEs
-          replCurrSource .= oldSrc
-          pure out
+        pure out
+  mangleFilePath fp = do
+    (SourceCode currFile _) <- use replCurrSource
+    case currFile of
+      "(interactive)" -> pure fp
+      _ | isAbsolute fp -> pure fp
+        | takeFileName currFile == currFile -> pure fp
+        | otherwise -> pure $ combine (takeDirectory currFile) fp
   pipe' tl = case tl of
     Lisp.RTLTopLevel toplevel -> case topLevelHasDocs toplevel of
       Just doc -> displayValue $ RBuiltinDoc doc

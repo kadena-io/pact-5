@@ -34,6 +34,7 @@ common pact-core-common
     , base64-bytestring
     , bytestring
     , containers
+    , criterion
     , data-default
     , deepseq
     , direct-sqlite
@@ -235,7 +236,7 @@ executable gasmodel
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
-executable repl
+executable pact
   main-is: repl/Main.hs
 
   build-depends: base, pact-core, pact-core:pact-core-lsp

@@ -32,6 +32,7 @@ import Pact.Core.Builtin
 import Pact.Core.Errors
 import Pact.Core.Serialise
 
+
 type Interpreter = SourceCode -> (ReplCompileValue -> ReplM ReplCoreBuiltin ()) -> ReplM ReplCoreBuiltin [ReplCompileValue]
 
 tests :: IO TestTree
@@ -69,7 +70,7 @@ runReplTest pdb file src interp = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replcoreBuiltinMap
-  let source = SourceCode (takeFileName file) src
+  let source = SourceCode (replTestDir </> file) src
   let rstate = ReplState
             { _replFlags = mempty
             , _replEvalState = def
@@ -84,14 +85,14 @@ runReplTest pdb file src interp = do
   stateRef <- newIORef rstate
   runReplT stateRef (interp source (const (pure ()))) >>= \case
     Left e -> let
-      rendered = replError (ReplSource (T.pack file) src) e
+      rendered = replError (SourceCode file src) e
       in assertFailure (T.unpack rendered)
     Right output -> traverse_ ensurePassing output
   where
   ensurePassing = \case
     RCompileValue (InterpretValue v i) -> case v of
       PLiteral (LString msg) -> do
-        let render = replError (ReplSource (T.pack file) src) (PEExecutionError (EvalError msg) i)
+        let render = replError (SourceCode file src) (PEExecutionError (EvalError msg) i)
         when (T.isPrefixOf "FAILURE:" msg) $ assertFailure (T.unpack render)
       _ -> pure ()
     _ -> pure ()

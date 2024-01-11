@@ -57,7 +57,7 @@
   (defun f () (env-sigs [{'key: "bob",'caps: []}])))
 (expect
  "env-sigs in module"
- ()
+ "Setting transaction signatures/caps"
  (f))
 
 (env-data { 'b: "hello"})

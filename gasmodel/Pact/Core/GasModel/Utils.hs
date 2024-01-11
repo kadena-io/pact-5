@@ -71,7 +71,9 @@ defaultGasEvalState =
   , _esLoaded=gmLoaded
   , _esEvents=[]
   , _esDefPactExec=Nothing
-  , _esCaps=capState}
+  , _esCaps=capState
+  , _esGasLog=Nothing
+  }
   where
   capState = CapState [] mempty (S.singleton gmModuleName) mempty
 
@@ -137,7 +139,7 @@ mkGasModelFqn t = FullyQualifiedName gmModuleName t gmModuleHash
 gmPublicKeyText1 :: PublicKeyText
 gmPublicKeyText1 = PublicKeyText "jose"
 
-gmKeyset :: KeySet QualifiedName
+gmKeyset :: KeySet
 gmKeyset = KeySet (S.fromList [gmPublicKeyText1]) KeysAll
 
 gmTableGuard :: Guard QualifiedName PactValue
