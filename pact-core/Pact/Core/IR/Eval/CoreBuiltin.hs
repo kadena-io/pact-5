@@ -180,8 +180,6 @@ rawLogBase info b cont handler _env = \case
         result = Musl.trans_logBase base' n'
     guardNanOrInf info result
     returnCEKValue cont handler (VLiteral (LInteger (round result)))
-    -- if i' == 0 then throwExecutionError' (ArithmeticException "div by zero")
-    -- else returnCEKValue cont handler (VLiteral (LInteger (div i i')))
   [VLiteral (LDecimal base), VLiteral (LDecimal arg)] -> do
     checkArgs base arg
     let result = Musl.trans_logBase (dec2F base) (dec2F arg)
