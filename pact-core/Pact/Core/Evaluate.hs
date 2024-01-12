@@ -155,6 +155,7 @@ evalExecDefaultState evalEnv rc = evalExec evalEnv def rc
 interpret :: EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> EvalInput -> IO (Either (PactError ()) (EvalResult [Lisp.TopLevel ()]))
 interpret evalEnv evalSt evalInput = do
   (result, state) <- runEvalM evalEnv evalSt $ evalWithinTx evalInput
+  gas <- readIORef (_eeGasRef evalEnv)
   case result of
     Left err -> return $ Left err
     Right (rs, logs, txid) ->
@@ -163,7 +164,8 @@ interpret evalEnv evalSt evalInput = do
         , _erOutput = rs
         , _erLogs = logs
         , _erExec = _esDefPactExec state
-        , _erGas = Gas 0 -- TODO: return gas
+        -- Todo: quotrem
+        , _erGas = milliGasToGas gas
         , _erLoadedModules = _loModules $ _esLoaded state
         , _erTxId = txid
         , _erLogGas = Nothing
@@ -177,6 +179,7 @@ interpretOnlyTerm
   -> IO (Either (PactError ()) (EvalResult (Lisp.Expr ())))
 interpretOnlyTerm evalEnv evalSt term = do
   (result, state) <- runEvalM evalEnv evalSt $ evalCompiledTermWithinTx term
+  gas <- readIORef (_eeGasRef evalEnv)
   case result of
     Left err -> return $ Left err
     Right (rs, logs, txid) ->
@@ -185,7 +188,8 @@ interpretOnlyTerm evalEnv evalSt term = do
         , _erOutput = [InterpretValue rs (view Lisp.termInfo term)]
         , _erLogs = logs
         , _erExec = _esDefPactExec state
-        , _erGas = Gas 0 -- TODO: return gas
+        -- todo: quotrem
+        , _erGas = milliGasToGas gas
         , _erLoadedModules = _loModules $ _esLoaded state
         , _erTxId = txid
         , _erLogGas = Nothing
