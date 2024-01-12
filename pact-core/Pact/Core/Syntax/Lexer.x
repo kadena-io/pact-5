@@ -35,10 +35,6 @@ $psymbol = [\%\#\+\-\_\&\$\@\<\>\=\^\?\*\!\|\/\~]
 @cruserguard = create\-user\-guard
 @enforce = enforce
 @enforceOne = enforce\-one
--- @reqcap = require\-capability
--- @installcap = install\-capability
--- @composecap = compose\-capability
--- @emitevent = emit\-event
 
 
 
@@ -55,9 +51,6 @@ tokens :-
     defschema    { token TokenDefSchema }
     deftable     { token TokenDefTable }
     defpact      { token TokenDefPact }
-    defproperty  { token TokenDefProperty }
-    property     { token TokenProperty }
-    invariant    { token TokenInvariant }
     interface    { token TokenInterface }
     module       { token TokenModule }
     bless        { token TokenBless }
@@ -80,10 +73,6 @@ tokens :-
     step         { token TokenStep }
     @withcap     { token TokenWithCapability }
     @cruserguard { token TokenCreateUserGuard }
-    -- @composecap  { token TokenComposeCapability }
-    -- @reqcap      { token TokenRequireCapability }
-    -- @installcap  { token TokenInstallCapability }
-    -- @emitevent   { token TokenEmitEvent }
     try          { token TokenTry }
     progn        { token TokenBlockIntro }
     suspend      { token TokenSuspend }

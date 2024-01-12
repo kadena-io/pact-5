@@ -1,0 +1,23 @@
+(module fv-regression g
+  (defcap g () true)
+
+  (defun f ()
+    @model
+    [(property (+ 1 2))
+    (property
+      (forall (a:integer)
+        123
+      )
+      )
+    (property
+      (exists (a:integer b:string c:time)
+        456
+      )
+      )
+     (whatever (it parses literally:anything{}[][]&%^@)
+      as long as it is legal lisp)
+    ]
+  1
+  )
+
+  )

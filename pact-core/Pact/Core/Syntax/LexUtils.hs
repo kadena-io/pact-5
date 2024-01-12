@@ -62,8 +62,6 @@ data Token
   | TokenDefPact
   | TokenDefSchema
   | TokenDefTable
-  | TokenDefProperty
-  | TokenProperty
   | TokenBless
   | TokenImplements
   -- Annotations
@@ -84,25 +82,7 @@ data Token
     -- Capabilities
   | TokenWithCapability
   | TokenCreateUserGuard
-  -- | TokenRequireCapability
-  -- | TokenComposeCapability
-  -- | TokenInstallCapability
-  -- | TokenEmitEvent
-  -- Operators
-  -- | TokenEq
-  -- | TokenNeq
-  -- | TokenGT
-  -- | TokenGEQ
-  -- | TokenLT
-  -- | TokenLEQ
-  -- | TokenPlus
-  -- | TokenMinus
-  -- | TokenMult
-  -- | TokenDiv
-  -- | TokenPow
-  -- | TokenBitAnd
-  -- | TokenBitOr
-  -- | TokenBitComplement
+  -- Operators with lazy semantics
   | TokenAnd
   | TokenOr
   | TokenEnforce
@@ -117,9 +97,9 @@ data Token
   | TokenSuspend
   | TokenDynAcc
   | TokenBindAssign
-  | TokenInvariant
   -- Repl-specific tokens
   | TokenLoad
+
   -- Layout
   | TokenEOF
   deriving (Eq, Show)
@@ -291,7 +271,6 @@ renderTokenText = \case
   TokenDefCap -> "defcap"
   TokenDefPact -> "defpact"
   TokenDefSchema -> "defschema"
-  TokenDefProperty -> "defproperty"
   TokenDefTable -> "deftable"
   TokenDocAnn -> "@doc"
   TokenEventAnn -> "@event"
@@ -310,22 +289,6 @@ renderTokenText = \case
   TokenDot -> "."
   TokenBindAssign -> ":="
   TokenDynAcc -> "::"
-  TokenProperty -> "property"
-  TokenInvariant -> "invariant"
-  -- TokenEq -> "="
-  -- TokenNeq -> "!="
-  -- TokenGT -> ">"
-  -- TokenGEQ -> ">="
-  -- TokenLT -> "<"
-  -- TokenLEQ -> "<="
-  -- TokenPlus -> "+"
-  -- TokenMinus -> "-"
-  -- TokenMult -> "*"
-  -- TokenDiv -> "/"
-  -- TokenPow -> "^"
-  -- TokenBitAnd -> "&"
-  -- TokenBitOr -> "|"
-  -- TokenBitComplement -> "~"
   TokenBlockIntro -> "progn"
   TokenAnd -> "and"
   TokenOr -> "or"
@@ -342,11 +305,6 @@ renderTokenText = \case
   TokenLoad -> "load"
   TokenWithCapability -> "with-capability"
   TokenCreateUserGuard -> "create-user-guard"
-  -- TokenRequireCapability -> "require-capability"
-  -- TokenComposeCapability -> "compose-capability"
-  -- TokenInstallCapability -> "install-capability"
-  -- TokenEmitEvent -> "emit-event"
-
 
 
 instance Pretty Token where

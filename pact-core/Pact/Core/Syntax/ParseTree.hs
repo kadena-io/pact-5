@@ -111,7 +111,7 @@ data Defun i
   , _dfunRetType :: Maybe Type
   , _dfunTerm :: Expr i
   , _dfunDocs :: Maybe Text
-  , _dfunModel :: Maybe [FVFunModel i]
+  , _dfunModel :: [PropertyExpr i]
   , _dfunInfo :: i
   } deriving (Show, Functor)
 
@@ -136,7 +136,7 @@ data DefCap i
   , _dcapRetType :: Maybe Type
   , _dcapTerm :: Expr i
   , _dcapDocs :: Maybe Text
-  , _dcapModel :: Maybe [FVFunModel i]
+  , _dcapModel :: [PropertyExpr i]
   , _dcapMeta :: Maybe DCapMeta
   , _dcapInfo :: i
   } deriving (Show, Functor)
@@ -146,7 +146,7 @@ data DefSchema i
   { _dscName :: Text
   , _dscArgs :: [Arg]
   , _dscDocs :: Maybe Text
-  , _dscModel :: Maybe [FVFunModel i]
+  , _dscModel :: [PropertyExpr i]
   , _dscInfo :: i
   } deriving (Show, Functor)
 
@@ -159,8 +159,8 @@ data DefTable i
   } deriving (Show, Functor)
 
 data PactStep i
-  = Step (Expr i) (Maybe [FVFunModel i])
-  | StepWithRollback (Expr i) (Expr i) (Maybe [FVFunModel i])
+  = Step (Expr i) [PropertyExpr i]
+  | StepWithRollback (Expr i) (Expr i) [PropertyExpr i]
   deriving (Show, Functor)
 
 data DefPact i
@@ -170,7 +170,7 @@ data DefPact i
   , _dpRetType :: Maybe Type
   , _dpSteps :: [PactStep i]
   , _dpDocs :: Maybe Text
-  , _dpModel :: Maybe [FVFunModel i]
+  , _dpModel :: [PropertyExpr i]
   , _dpInfo :: i
   } deriving (Show, Functor)
 
@@ -201,32 +201,6 @@ data ExtDecl
   | ExtImplements ModuleName
   deriving Show
 
-data DefProperty i
-  = DefProperty
-  { _dpropName :: Text
-  , _dpropArgs :: [Arg]
-  , _dpropExp :: Expr i
-  } deriving (Show, Functor)
-
-newtype Property i
-  = Property (Expr i)
-  deriving (Show, Functor)
-
-newtype Invariant i
-  = Invariant (Expr i)
-  deriving (Show, Functor)
-
-data FVModel i
-  = FVDefProperty (DefProperty i)
-  | FVProperty (Property i)
-  | FVInvariant (Invariant i)
-  deriving (Show, Functor)
-
-data FVFunModel i
-  = FVFunProperty (Property i)
-  | FVFunInvariant (Invariant i)
-  deriving (Show, Functor)
-
 data Module i
   = Module
   { _mName :: ModuleName
@@ -234,7 +208,7 @@ data Module i
   , _mExternal :: [ExtDecl]
   , _mDefs :: NonEmpty (Def i)
   , _mDoc :: Maybe Text
-  , _mModel :: [FVModel i]
+  , _mModel :: [PropertyExpr i]
   , _mInfo :: i
   } deriving (Show, Functor)
 
@@ -251,7 +225,7 @@ data Interface i
   , _ifDefns :: [IfDef i]
   , _ifImports :: [Import]
   , _ifDocs :: Maybe Text
-  , _ifModel :: [FVModel i]
+  , _ifModel :: [PropertyExpr i]
   , _ifInfo :: i
   } deriving (Show, Functor)
 
@@ -261,7 +235,7 @@ data IfDefun i
   , _ifdArgs :: [MArg]
   , _ifdRetType :: Maybe Type
   , _ifdDocs :: Maybe Text
-  , _ifdModel :: Maybe [FVFunModel i]
+  , _ifdModel :: [PropertyExpr i]
   , _ifdInfo :: i
   } deriving (Show, Functor)
 
@@ -271,7 +245,7 @@ data IfDefCap i
   , _ifdcArgs :: [MArg]
   , _ifdcRetType :: Maybe Type
   , _ifdcDocs :: Maybe Text
-  , _ifdcModel :: Maybe [FVFunModel i]
+  , _ifdcModel :: [PropertyExpr i]
   , _ifdcMeta :: Maybe DCapMeta
   , _ifdcInfo :: i
   } deriving (Show, Functor)
@@ -282,9 +256,43 @@ data IfDefPact i
   , _ifdpArgs :: [MArg]
   , _ifdpRetType :: Maybe Type
   , _ifdpDocs :: Maybe Text
-  , _ifdpModel :: Maybe [FVFunModel i]
+  , _ifdpModel :: [PropertyExpr i]
   , _ifdpInfo :: i
   } deriving (Show, Functor)
+
+data PropKeyword
+  = KwLet
+  | KwLambda
+  | KwIf
+  | KwProgn
+  | KwSuspend
+  | KwTry
+  | KwCreateUserGuard
+  | KwWithCapability
+  | KwEnforce
+  | KwEnforceOne
+  | KwAnd
+  | KwOr
+  | KwDefProperty
+  deriving (Eq, Show)
+
+data PropDelim
+  = DelimLBracket
+  | DelimRBracket
+  | DelimLBrace
+  | DelimRBrace
+  | DelimComma
+  | DelimColon
+  | DelimWalrus -- := operator
+  deriving Show
+
+data PropertyExpr i
+  = PropAtom ParsedName i
+  | PropKeyword PropKeyword i
+  | PropDelim PropDelim i
+  | PropSequence [PropertyExpr i] i
+  | PropConstant Literal i
+  deriving (Show, Functor)
 
 
 -- Interface definitions may be one of:
