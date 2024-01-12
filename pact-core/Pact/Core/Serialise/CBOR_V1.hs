@@ -464,6 +464,7 @@ instance Serialise Type where
   encode TyAnyObject = encodeWord 5
   encode (TyTable s) = encodeWord 6 <> encode s
   encode TyCapToken = encodeWord 7
+  encode TyAny = encodeWord 8
 
   decode = decodeWord >>= \case
     0 -> TyPrim <$> decode

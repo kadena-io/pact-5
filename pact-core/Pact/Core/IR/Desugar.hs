@@ -663,6 +663,7 @@ typeSCC currM currDefs = \case
   Lisp.TyPolyList -> mempty
   Lisp.TyPolyObject -> mempty
   Lisp.TyTable pn -> tyNameSCC currM currDefs pn
+  Lisp.TyAny -> mempty
 
 -- | Get the dependent components from an `Arg`
 -- Args mean local bindings to something, therefore
@@ -973,6 +974,7 @@ renameType i = \case
     TyTable <$> resolveSchema pn
   Lisp.TyPolyList -> pure TyAnyList
   Lisp.TyPolyObject -> pure TyAnyObject
+  Lisp.TyAny -> pure TyAny
   where
   resolveSchema = \case
     TBN bn -> do
