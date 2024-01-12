@@ -251,6 +251,7 @@ encodeType = \case
   TyCapToken -> "captoken"
   TyAnyList -> "list"
   TyAnyObject -> "object"
+  TyAny -> "*"
 
 encodeImport :: Import -> Builder
 encodeImport (Import mname mmh mimps) = parens $
