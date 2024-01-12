@@ -457,7 +457,7 @@ String :: { ParsedExpr }
  | TICK { Constant (LString (getTick $1)) (_ptInfo $1) }
 
 Object :: { ParsedExpr }
-: '{' ObjectBody '}' { Object $2 (combineSpan (_ptInfo $1) (_ptInfo $3)) }
+  : '{' ObjectBody '}' { Object $2 (combineSpan (_ptInfo $1) (_ptInfo $3)) }
 
 ObjectBody :: { [(Field, ParsedExpr)] }
   : FieldPairs { $1 }
