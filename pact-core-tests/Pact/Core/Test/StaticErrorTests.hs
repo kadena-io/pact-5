@@ -1046,6 +1046,13 @@ builtinTests =
   , ("mixed_log_negative_base_flr", isExecutionError _NativeArgumentsError, "(log -1 10.0)")
   , ("mixed_log_negative_arg_flr", isExecutionError _NativeArgumentsError, "(log 2 -1.0)")
   , ("mixed_log_zero_arg_flr", isExecutionError _NativeArgumentsError, "(log 2 0.0)")
+  , ("integer_div_zero", isExecutionError _ArithmeticException, "(/ 2 0)")
+  , ("floating_div_zero", isExecutionError _ArithmeticException, "(/ 2.0 0.0)")
+  -- TODO better error messages for the mixed ones
+  , ("mixed_div_zero_fll", isExecutionError _NativeArgumentsError, "(/ 2.0 0)")
+  , ("mixed_div_zero_flr", isExecutionError _NativeArgumentsError, "(/ 2 0.0)")
+  , ("integer_square_negative", isExecutionError _ArithmeticException, "(sqrt -1)")
+  , ("floating_square_negative", isExecutionError _ArithmeticException, "(sqrt -1.0)")
   ]
 
 tests :: TestTree
