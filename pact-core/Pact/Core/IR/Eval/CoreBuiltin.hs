@@ -171,10 +171,10 @@ rawPow info b cont handler _env = \case
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
 
-rawLogBase :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
+rawLogBase :: forall step b i m. (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawLogBase info b cont handler _env = \case
   [VLiteral (LInteger base), VLiteral (LInteger n)] -> do
-    when (base < 0 || n <= 0) $ throwExecutionError info (ArithmeticException "Illegal log base")
+    checkArgs base n
     let base' = fromIntegral base :: Double
         n' = fromIntegral n
         result = Musl.trans_logBase base' n'
@@ -183,11 +183,16 @@ rawLogBase info b cont handler _env = \case
     -- if i' == 0 then throwExecutionError' (ArithmeticException "div by zero")
     -- else returnCEKValue cont handler (VLiteral (LInteger (div i i')))
   [VLiteral (LDecimal base), VLiteral (LDecimal arg)] -> do
-    when (base < 0 || arg <= 0) $ throwExecutionError info (ArithmeticException "Invalid base or argument in log")
+    checkArgs base arg
     let result = Musl.trans_logBase (dec2F base) (dec2F arg)
     guardNanOrInf info result
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
+  where
+  checkArgs :: (Num a, Ord a) => a -> a -> m ()
+  checkArgs base arg = do
+    when (base < 0) $ throwExecutionError info (ArithmeticException "Negative log base")
+    when (arg <= 0) $ throwExecutionError info (ArithmeticException "Non-positive log argument")
 
 rawDiv :: (IsBuiltin b, CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawDiv info b cont handler _env = \case
