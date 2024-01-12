@@ -62,8 +62,9 @@ data Token
   | TokenDefPact
   | TokenDefSchema
   | TokenDefTable
-  | TokenDefProperty
-  | TokenProperty
+  -- | TokenDefProperty
+  -- | TokenProperty
+  -- | TokenInvariant
   | TokenBless
   | TokenImplements
   -- Annotations
@@ -117,7 +118,6 @@ data Token
   | TokenSuspend
   | TokenDynAcc
   | TokenBindAssign
-  | TokenInvariant
   -- Repl-specific tokens
   | TokenLoad
 
@@ -292,7 +292,6 @@ renderTokenText = \case
   TokenDefCap -> "defcap"
   TokenDefPact -> "defpact"
   TokenDefSchema -> "defschema"
-  TokenDefProperty -> "defproperty"
   TokenDefTable -> "deftable"
   TokenDocAnn -> "@doc"
   TokenEventAnn -> "@event"
@@ -311,8 +310,9 @@ renderTokenText = \case
   TokenDot -> "."
   TokenBindAssign -> ":="
   TokenDynAcc -> "::"
-  TokenProperty -> "property"
-  TokenInvariant -> "invariant"
+  -- TokenProperty -> "property"
+  -- TokenInvariant -> "invariant"
+  -- TokenDefProperty -> "defproperty"
   -- TokenEq -> "="
   -- TokenNeq -> "!="
   -- TokenGT -> ">"

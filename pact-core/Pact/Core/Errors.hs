@@ -40,7 +40,6 @@ import Pact.Core.Persistence
 import Pact.Core.DefPacts.Types
 
 
-
 type PactErrorI = PactError SpanInfo
 
 data LexerError

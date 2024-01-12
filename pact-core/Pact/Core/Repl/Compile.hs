@@ -37,6 +37,7 @@ import Pact.Core.IR.Term
 import Pact.Core.Compile
 import Pact.Core.Environment
 import Pact.Core.Info
+import Pact.Core.PactValue
 import Pact.Core.Serialise (serialisePact_repl_spaninfo)
 
 
@@ -103,7 +104,9 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
     Lisp.RTL rtl ->
       pure <$> pipe' rtl
     Lisp.RTLReplSpecial rsf -> case rsf of
-      Lisp.ReplLoad txt reset _ -> do
+      Lisp.ReplLoad txt reset i -> do
+        let loading = RCompileValue (InterpretValue (PString ("Loading " <> txt <> "...")) i)
+        display loading
         oldSrc <- use replCurrSource
         pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
         oldEE <- use replEvalEnv

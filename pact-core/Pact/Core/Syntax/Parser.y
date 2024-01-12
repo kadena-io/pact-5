@@ -57,9 +57,6 @@ import Pact.Core.Syntax.LexUtils
   defschema  { PosToken TokenDefSchema _ }
   deftable   { PosToken TokenDefTable _ }
   defpact    { PosToken TokenDefPact _ }
-  defprop    { PosToken TokenDefProperty _}
-  property   { PosToken TokenProperty _ }
-  invariant  { PosToken TokenInvariant _ }
   bless      { PosToken TokenBless _}
   implements { PosToken TokenImplements _ }
   true       { PosToken TokenTrue _ }
@@ -143,52 +140,14 @@ StringRaw :: { Text }
  | TICK { getTick $1 }
 
 Module :: { ParsedModule }
-  : '(' module IDENT Governance MDocOrModuleModel ExtOrDefs ')'
+  : '(' module IDENT Governance MDocOrModel ExtOrDefs ')'
     { Module (ModuleName (getIdent $3) Nothing) $4 (reverse (rights $6)) (NE.fromList (reverse (lefts $6))) (fst $5) (snd $5)
       (combineSpan (_ptInfo $1) (_ptInfo $7)) }
 
 Interface :: { ParsedInterface }
-  : '(' interface IDENT MDocOrModuleModel ImportOrIfDef ')'
+  : '(' interface IDENT MDocOrModel ImportOrIfDef ')'
     { Interface (ModuleName (getIdent $3) Nothing) (reverse (lefts $5)) (reverse (rights $5)) (fst $4) (snd $4)
       (combineSpan (_ptInfo $1) (_ptInfo $2)) }
-
-MDocOrModuleModel :: { (Maybe Text, [FVModel SpanInfo])}
-  : DocAnn ModuleModel { (Just $1, $2)}
-  | ModuleModel DocAnn { (Just $2, $1) }
-  | DocAnn { (Just $1, [])}
-  | ModuleModel { (Nothing, $1)}
-  | DocStr { (Just $1, []) }
-  | {- empty -} { (Nothing, []) }
-
-
-ModuleModel :: { [FVModel SpanInfo] }
-  : modelAnn '[' DefProperties ']' { reverse $3 }
-
-DefProperties :: { [FVModel SpanInfo] }
-  : DefProperties DefProperty { $2:$1 }
-  | {- empty -} { [] }
-
-DefProperty :: { FVModel SpanInfo }
-  : '(' defprop IDENT DPropArgList ')' { FVDefProperty (DefProperty (getIdent $3) (fst $4) (snd $4)) }
-  | '(' Property ')' { FVProperty $2 }
-  | '(' invariant Expr ')' { FVInvariant (Invariant $3) }
-
-Property :: { Property SpanInfo }
-  : property '(' IDENT '(' NEArgList ')' Expr ')'
-    {% mkQuantifiedProp (combineSpan (_ptInfo $1) (_ptInfo $8)) (getIdent $3) $5 $7  }
-  | property '(' SExpr ')'  { Property ($3 (combineSpan (_ptInfo $2) (_ptInfo $4))) }
-
-PropArgList
-  : '(' IDENT '(' IDENT ':' Type ArgList ')' ')' Expr { (Left (getIdent $3), Arg (getIdent $2) $4 : reverse $5, $7) }
-  | '(' SExpr ')' { ([], $2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
-
-
--- This rule seems gnarly, but essentially
--- happy needs to resolve whether the arglist is present or not
-DPropArgList
-  : '(' IDENT ':' Type ArgList ')' Expr { (Arg (getIdent $2) $4 : reverse $5, $7) }
-  | '(' SExpr ')' { ([], $2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
-
 
 Ext :: { ExtDecl }
   : Use { ExtImport (fst $1)  }
@@ -307,10 +266,6 @@ ArgList :: { [Arg] }
   : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
   | {- empty -} { [] }
 
-NEArgList :: { [Arg] }
-  : NEArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
-  | IDENT ':' Type { [(Arg (getIdent $1) $3)] }
-
 Type :: { Type }
   : '[' Type ']' { TyList $2 }
   | module '{' ModuleNames '}' { TyModRef (reverse $3) }
@@ -328,25 +283,20 @@ DocAnn :: { Text }
 DocStr :: { Text }
   : STR { getStr $1 }
 
-ModelExprs :: { [FVFunModel SpanInfo] }
-  : ModelExprs '(' Property ')' { FVFunProperty $3 :$1 }
-  | ModelExprs '(' invariant Expr ')' { FVFunInvariant (Invariant $4) :$1 }
-  | {- empty -} { [] }
+MModel :: { [PropertyExpr SpanInfo] }
+  : ModelAnn { $1 }
+  | {- empty -}  { [] }
 
-MModel :: { Maybe [FVFunModel SpanInfo] }
-  : ModelAnn { Just $1 }
-  | {- empty -}  { Nothing }
+ModelAnn :: { [PropertyExpr SpanInfo] }
+  : modelAnn '[' PactFVModels ']' { $3 }
 
-ModelAnn :: { [FVFunModel SpanInfo] }
-  : modelAnn '[' ModelExprs ']' { reverse $3 }
-
-MDocOrModel :: { (Maybe Text, Maybe [FVFunModel SpanInfo])}
-  : DocAnn ModelAnn { (Just $1, Just $2)}
-  | ModelAnn DocAnn { (Just $2, Just $1) }
-  | DocAnn { (Just $1, Nothing)}
-  | ModelAnn { (Nothing, Just $1)}
-  | DocStr { (Just $1, Nothing) }
-  | {- empty -} { (Nothing, Nothing) }
+MDocOrModel :: { (Maybe Text, [PropertyExpr SpanInfo])}
+  : DocAnn ModelAnn { (Just $1, $2)}
+  | ModelAnn DocAnn { (Just $2, $1) }
+  | DocAnn { (Just $1, [])}
+  | ModelAnn { (Nothing, $1)}
+  | DocStr { (Just $1, []) }
+  | {- empty -} { (Nothing, []) }
 
 -- This production causes parser ambugity in two productions: defun and defcap
 -- (defun f () "a")
@@ -499,15 +449,15 @@ ModQual :: { (Text, Maybe Text) }
   | IDENT { (getIdent $1, Nothing) }
 
 Number :: { ParsedExpr }
-  : NUM '.' NUM {% mkDecimal (getNumber $1) (getNumber $3) (_ptInfo $1) }
-  | NUM { mkIntegerConstant (getNumber $1) (_ptInfo $1) }
+  : NUM '.' NUM {% mkDecimal Constant (getNumber $1) (getNumber $3) (_ptInfo $1) }
+  | NUM { mkIntegerConstant Constant (getNumber $1) (_ptInfo $1) }
 
 String :: { ParsedExpr }
  : STR  { Constant (LString (getStr $1)) (_ptInfo $1) }
  | TICK { Constant (LString (getTick $1)) (_ptInfo $1) }
 
 Object :: { ParsedExpr }
-  : '{' ObjectBody '}' { Object $2 (combineSpan (_ptInfo $1) (_ptInfo $3)) }
+: '{' ObjectBody '}' { Object $2 (combineSpan (_ptInfo $1) (_ptInfo $3)) }
 
 ObjectBody :: { [(Field, ParsedExpr)] }
   : FieldPairs { $1 }
@@ -520,6 +470,67 @@ FieldPairs :: { [(Field, ParsedExpr)] }
   : FieldPairs ',' FieldPair { $3 : $1 }
   | FieldPair { [$1] }
   | {- empty -} { [] }
+
+PactFVModels :: { [PropertyExpr SpanInfo] }
+  : PropExprList { reverse $1 }
+
+PropExprList :: { [PropertyExpr SpanInfo] }
+  : PropExprList PropExpr { $2:$1 }
+  | {- empty -} { [] }
+
+PropExpr :: { PropertyExpr SpanInfo }
+  : PropAtom { $1 }
+  | '(' PropExprList ')' { PropSequence (reverse $2) (combineSpan (_ptInfo $1) (_ptInfo $3)) }
+  | '[' PropExprList ']' { propExprList $1 (reverse $2) $3 }
+
+
+PropAtom :: { PropertyExpr SpanInfo }
+  : FVVar { uncurry PropAtom $1  }
+  | FVNumber { $1 }
+  | FVString { $1 }
+  | FVKeyword { $1 }
+  | FVDelim { $1 }
+  | FVBool { $1 }
+
+FVKeyword :: { PropertyExpr SpanInfo }
+  : let { PropKeyword KwLet (_ptInfo $1) }
+  | lam { PropKeyword KwLambda (_ptInfo $1) }
+  | if { PropKeyword KwIf (_ptInfo $1) }
+  | progn { PropKeyword KwProgn (_ptInfo $1) }
+  | suspend { PropKeyword KwSuspend (_ptInfo $1) }
+  | try { PropKeyword KwTry (_ptInfo $1) }
+  | enforce { PropKeyword KwEnforce (_ptInfo $1) }
+  | enforceOne { PropKeyword KwEnforceOne (_ptInfo $1) }
+  | and { PropKeyword KwAnd (_ptInfo $1) }
+  | or { PropKeyword KwOr (_ptInfo $1) }
+  | c_usr_grd { PropKeyword KwCreateUserGuard (_ptInfo $1) }
+  | withcap { PropKeyword KwWithCapability (_ptInfo $1) }
+
+FVDelim :: { PropertyExpr SpanInfo }
+  : '{' { PropDelim DelimLBrace (_ptInfo $1) }
+  | '}' { PropDelim DelimRBrace (_ptInfo $1) }
+  | ':' { PropDelim DelimColon (_ptInfo $1) }
+  | ',' { PropDelim DelimComma (_ptInfo $1) }
+
+FVBool :: { PropertyExpr SpanInfo }
+  : true { PropConstant (LBool True) (_ptInfo $1) }
+  | false { PropConstant (LBool False) (_ptInfo $1) }
+
+FVNumber :: { PropertyExpr SpanInfo }
+  : NUM '.' NUM {% mkDecimal PropConstant (getNumber $1) (getNumber $3) (_ptInfo $1) }
+  | NUM { mkIntegerConstant PropConstant (getNumber $1) (_ptInfo $1) }
+
+FVString :: { PropertyExpr SpanInfo }
+ : STR  { PropConstant (LString (getStr $1)) (_ptInfo $1) }
+ | TICK { PropConstant (LString (getTick $1)) (_ptInfo $1) }
+
+
+FVVar :: { (ParsedName, SpanInfo) }
+  -- Todo: modqual spaninfos fix here
+  -- fixed in https://github.com/kadena-io/pact-core/pull/63
+  : IDENT '.' ModQual  { (QN (mkQualName (getIdent $1) $3), _ptInfo $1) }
+  | IDENT { (BN (mkBarename (getIdent $1)), _ptInfo $1) }
+  | IDENT '::' IDENT { (DN (DynamicName (getIdent $1) (getIdent $3)), combineSpan (_ptInfo $1) (_ptInfo $3)) }
 
 {
 
@@ -534,23 +545,18 @@ getStr (PosToken (TokenString x) _ ) = x
 getTick (PosToken (TokenSingleTick x) _) = T.drop 1 x
 getIdentField = Field . getIdent
 
-mkQuantifiedProp info txt args expr = case txt of
-  "forall" -> pure $ PropForall args expr
-  "exists" -> pure $ PropExists args expr
-  _ -> throwParseError (ParsingError "invalid FV property") info
-
-mkIntegerConstant n i =
+mkIntegerConstant ctor n i =
   let (n', f) = if T.head n == '-' then (T.drop 1 n, negate) else (n, id)
       strToNum = T.foldl' (\x d -> 10*x + toInteger (digitToInt d))
-  in Constant (LInteger (f (strToNum 0 n'))) i
+  in ctor (LInteger (f (strToNum 0 n'))) i
 
-mkDecimal num dec i = do
+mkDecimal ctor num dec i = do
   let (num', f) = if T.head num == '-' then (T.drop 1 num, negate) else (num, id)
       strToNum = T.foldl' (\x d -> 10*x + toInteger (digitToInt d))
       prec = T.length dec
   when (prec > 255) $ throwParseError (PrecisionOverflowError prec) i
   let out = Decimal (fromIntegral prec) (f (strToNum (strToNum 0 num') dec))
-  pure $ Constant (LDecimal out) i
+  pure $ ctor (LDecimal out) i
 
 mkQualName ns (mod, (Just ident)) =
   let ns' = NamespaceName ns
@@ -567,6 +573,12 @@ mkQualName' mod (ident, Nothing) = QualifiedName ident (ModuleName mod Nothing)
 mkModName (ident, Nothing) = ModuleName ident Nothing
 mkModName (ns, Just ident) = ModuleName ident (Just (NamespaceName ns))
 
+propExprList tokLBracket li tokRBracket =
+  let lbracket = PropDelim DelimLBracket (_ptInfo tokLBracket)
+      rbracket = PropDelim DelimRBracket (_ptInfo tokRBracket)
+      finfo = combineSpan (_ptInfo tokLBracket) (_ptInfo tokRBracket)
+  in PropSequence ((lbracket:li)++[rbracket]) finfo
+
 mkBlock = \case
   [x] -> x
   li -> let
@@ -574,10 +586,7 @@ mkBlock = \case
     i = combineSpans (NE.head nel) (NE.last nel)
     in Block nel i
 
--- ln0 = BN (BareName "")
-
 mkBarename tx = BareName tx
 
 
 }
-

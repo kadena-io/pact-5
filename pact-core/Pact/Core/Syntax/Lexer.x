@@ -55,9 +55,9 @@ tokens :-
     defschema    { token TokenDefSchema }
     deftable     { token TokenDefTable }
     defpact      { token TokenDefPact }
-    defproperty  { token TokenDefProperty }
-    property     { token TokenProperty }
-    invariant    { token TokenInvariant }
+    -- defproperty  { token TokenDefProperty }
+    -- property     { token TokenProperty }
+    -- invariant    { token TokenInvariant }
     interface    { token TokenInterface }
     module       { token TokenModule }
     bless        { token TokenBless }
