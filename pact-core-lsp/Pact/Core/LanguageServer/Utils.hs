@@ -1,4 +1,4 @@
--- | 
+-- |
 
 module Pact.Core.LanguageServer.Utils where
 
@@ -16,33 +16,32 @@ termAt
   :: Position
   -> EvalTerm ReplCoreBuiltin SpanInfo
   -> Maybe (EvalTerm ReplCoreBuiltin SpanInfo)
-termAt p term =
-  if p `inside` view termInfo term
-  then case term of
-         t@(Lam _ b _) -> termAt p b <|> Just t
-         t@(App tm1 tm2 _) ->
-           termAt p tm1 <|> getAlt (foldMap (Alt . termAt p) tm2) <|> Just t
-         t@(Let _ tm1 tm2 _) -> termAt p tm1 <|> termAt p tm2 <|> Just t
-         t@(Sequence tm1 tm2 _) -> termAt p tm1 <|> termAt p tm2 <|> Just t
-         t@(Conditional op' _) ->
-           (case op' of
-               CAnd a b  -> termAt p a <|> termAt p b
-               COr a b   -> termAt p a <|> termAt p b
-               CIf a b c -> termAt p a <|> termAt p b <|> termAt p c
-               CEnforceOne a bs -> termAt p a <|> getAlt (foldMap (Alt . termAt p) bs)
-               CEnforce a b -> termAt p a <|> termAt p b) <|> Just t
-         t@(ListLit tms _) -> getAlt (foldMap (Alt . termAt p) tms) <|> Just t
-         t@(Try tm1 tm2 _) -> termAt p tm1 <|> termAt p tm2 <|> Just t
-         t -> Just t
-  else Nothing
-  
+termAt p term
+  | p `inside` view termInfo term = case term of
+      t@(Lam _ b _) -> termAt p b <|> Just t
+      t@(App tm1 tm2 _) ->
+        termAt p tm1 <|> getAlt (foldMap (Alt . termAt p) tm2) <|> Just t
+      t@(Let _ tm1 tm2 _) -> termAt p tm1 <|> termAt p tm2 <|> Just t
+      t@(Sequence tm1 tm2 _) -> termAt p tm1 <|> termAt p tm2 <|> Just t
+      t@(Conditional op' _) ->
+        case op' of
+          CAnd a b  -> termAt p a <|> termAt p b
+          COr a b   -> termAt p a <|> termAt p b
+          CIf a b c -> termAt p a <|> termAt p b <|> termAt p c
+          CEnforceOne a bs -> termAt p a <|> getAlt (foldMap (Alt . termAt p) bs)
+          CEnforce a b -> termAt p a <|> termAt p b
+        <|> Just t
+      t@(ListLit tms _) -> getAlt (foldMap (Alt . termAt p) tms) <|> Just t
+      t@(Try tm1 tm2 _) -> termAt p tm1 <|> termAt p tm2 <|> Just t
+      t -> Just t
+  | otherwise = Nothing
 
 data PositionMatch b i
   = ModuleMatch (EvalModule b i)
   | InterfaceMatch (EvalInterface b i)
   | TermMatch (EvalTerm b i)
   | UseMatch Import i
-  | DefunMatch (EvalDefun b i) 
+  | DefunMatch (EvalDefun b i)
   | ConstMatch (EvalDefConst b i)
   | SchemaMatch (EvalSchema i)
   | TableMatch (EvalTable i)
@@ -89,7 +88,7 @@ topLevelTermAt p = \case
     goModule m@(Module _ _ defs _ _ _ _ i)
       | p `inside` i = getAlt (foldMap (Alt . goDefs) defs) <|> Just (ModuleMatch m)
       | otherwise = Nothing
-      
+
     goStep = \case
       Step tm -> TermMatch <$> termAt p tm
       StepWithRollback tm1 tm2 -> TermMatch <$> (termAt p tm1 <|> termAt p tm2)

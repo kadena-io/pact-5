@@ -131,6 +131,11 @@ Check your editor's support for the LSP protocol and the specific setup instruct
 pact --lsp
 ```
 
+We currently support the following featureset:
+- Document diagnostics
+- Hover information (Builtins and user specified docs)
+- Jump to definition (Toplevel)
+
 > [!NOTE]
 > We continue to add specifics on major editors such as Emacs, vim, and VSCode.
 

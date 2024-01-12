@@ -115,6 +115,6 @@ runPactLSP f = do
   -- or by using cabal and run the corresponding binary.
   cmd <- lookupEnv "PACT_CORE_NIXBUILD" >>= \case
     Just p -> pure (p <> " --lsp")
-    Nothing -> pure "cabal exec repl -- --lsp"
+    Nothing -> pure "cabal exec pact -- --lsp"
 
   runSessionWithConfig cfg cmd fullCaps "pact-core-tests/pact-tests-lsp" f

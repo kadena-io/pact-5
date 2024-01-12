@@ -8,5 +8,5 @@ import System.Environment
 
 main :: IO ()
 main = getArgs >>= \case
-  ["--lsp"] -> startServer
+  ["--lsp"] -> startLSP
   _ -> runRepl

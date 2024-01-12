@@ -7,7 +7,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Pact.Core.LanguageServer
-  ( startServer
+  ( startLSP
   ) where
 
 import Control.Lens hiding (Iso)
@@ -15,13 +15,12 @@ import Control.Monad.Except
 
 import Language.LSP.Server
 import Language.LSP.Protocol.Message
-import Language.LSP.Protocol.Lens (uri, textDocument, params, text, position) --, newName)
+import Language.LSP.Protocol.Lens (uri, textDocument, params, text, position)
 import Language.LSP.Protocol.Types
 import Language.LSP.VFS
 import Language.LSP.Diagnostics
 import Data.Monoid (Alt(..))
 import Control.Monad.IO.Class
--- import Data.Monoid (First(..), getFirst)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.IORef
@@ -64,7 +63,10 @@ import qualified Pact.Core.IR.ConstEval as ConstEval
 data LSState =
   LSState
   { _lsReplState :: M.Map NormalizedUri (ReplState ReplCoreBuiltin)
+  -- ^ Post-Compilation State for each opened file
   , _lsTopLevel :: M.Map NormalizedUri [EvalTopLevel ReplCoreBuiltin SpanInfo]
+  -- ^ Top-level terms for each opened file. Used to find the match of a
+  --   particular (cursor) position inside the file.
   }
 
 makeLenses ''LSState
@@ -77,19 +79,13 @@ type LSM = LspT () (ReaderT (MVar LSState) IO)
 getState :: LSM LSState
 getState = lift ask >>= liftIO . readMVar
 
--- setState :: LSState -> LSM ()
--- setState s = do
---   st <- lift ask
---   liftIO (putMVar st s)
-
 modifyState :: (LSState -> LSState) -> LSM ()
 modifyState f = do
   st <- lift ask
   liftIO (modifyMVar_ st $ \s -> pure $ f s)
 
-
-startServer :: IO ()
-startServer = do
+startLSP :: IO ()
+startLSP = do
   lsState <- newLSState
   runServer (server lsState) >>= \case
     0 -> exitSuccess
@@ -98,6 +94,8 @@ startServer = do
     server state = ServerDefinition
       { defaultConfig = ()
       , configSection = "pact"
+      -- In general, we can configure the pact LSP server via
+      -- a server specific section. This is currently unused.
       , parseConfig = const $ const $ pure ()
       , onConfigChange = const $ pure ()
       , doInitialize = \env _ -> pure (Right env)
@@ -123,6 +121,7 @@ startServer = do
 debug :: MonadIO m => Text -> m ()
 debug msg = liftIO $ T.hPutStrLn stderr $ "[pact-lsp] " <> msg
 
+-- Handler executed after the LSP client initiates a connection to our server.
 initializedHandler :: Handlers LSM
 initializedHandler = notificationHandler SMethod_Initialized $ \_ -> pure ()
 
@@ -131,7 +130,7 @@ documentDidOpenHandler = notificationHandler SMethod_TextDocumentDidOpen $ \msg 
   let nuri = msg ^. params . textDocument . uri . to toNormalizedUri
       content = msg ^. params . textDocument . text
 
-  debug $ "open file" <> renderText nuri
+  debug $ "open file " <> renderText nuri
   sendDiagnostics nuri 0 content
 
 documentDidChangeHandler :: Handlers LSM
@@ -147,16 +146,18 @@ documentDidChangeHandler = notificationHandler SMethod_TextDocumentDidChange $ \
 documentDidCloseHandler :: Handlers LSM
 documentDidCloseHandler = notificationHandler SMethod_TextDocumentDidClose $ \msg -> do
   let nuri = msg ^. params . textDocument . uri . to toNormalizedUri
-  debug $ "Remove from cache: " <> renderText nuri
+
+  debug $ "Remove from cache " <> renderText nuri
   modifyState ((lsReplState %~ M.delete nuri) . (lsTopLevel %~ M.delete nuri))
 
 documentDidSaveHandler :: Handlers LSM
 documentDidSaveHandler = notificationHandler SMethod_TextDocumentDidSave $ \msg -> do
   let nuri = msg ^. params . textDocument . uri . to toNormalizedUri
+
   debug $ "Document saved: " <> renderText nuri
   sendDiagnostics nuri 0 ""
 
-
+-- Working horse for producing document diagnostics.
 sendDiagnostics :: NormalizedUri -> Int32 -> Text -> LSM ()
 sendDiagnostics nuri v content = liftIO runPact >>= \case
   Left err -> do
@@ -226,15 +227,21 @@ spanInfoToRange (SpanInfo sl sc el ec) = mkRange
   (fromIntegral sl)  (fromIntegral sc)
   (fromIntegral el)  (fromIntegral ec)
 
+
+getMatch
+  :: Position
+  -> [EvalTopLevel ReplCoreBuiltin SpanInfo]
+  -> Maybe (PositionMatch ReplCoreBuiltin SpanInfo)
+getMatch pos tl = getAlt (foldMap (Alt . topLevelTermAt pos) tl)
+
 documentDefinitionRequestHandler :: Handlers LSM
 documentDefinitionRequestHandler = requestHandler SMethod_TextDocumentDefinition $ \req resp ->
   getState >>= \st -> do
     let uri' = req ^. params . textDocument . uri
         nuri = toNormalizedUri uri'
         pos = req ^. params . position
-        getMatch tl = getAlt (foldMap (Alt . topLevelTermAt pos) tl)
-   
-    tlDefSpan <- case getMatch =<< view (lsTopLevel . at nuri) st of
+
+    tlDefSpan <- case getMatch pos =<< view (lsTopLevel . at nuri) st of
       Just tlm -> case tlm of
         TermMatch (Var (Name n (NTopLevel mn _)) _) -> do
           let qn = QualifiedName n mn
@@ -247,23 +254,13 @@ documentDefinitionRequestHandler = requestHandler SMethod_TextDocumentDefinition
       Just x -> resp (Right $ InL $ Definition (InL x))
       Nothing -> resp (Right $ InR $ InR Null)
 
--- documentRenameRequestHandler :: Handlers LSM
--- documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req resp ->
---   getState >>= \st -> do
---     let nuri = req ^. params . textDocument . uri . to toNormalizedUri
---         pos = req ^. params . position
---         newName' = req ^. params . newName
-
---     undefined
-
 documentHoverRequestHandler :: Handlers LSM
 documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req resp ->
   getState >>= \st -> do
     let nuri = req ^. params . textDocument . uri . to toNormalizedUri
         pos = req ^. params . position
-        getMatch tl = getAlt (foldMap (Alt . topLevelTermAt pos) tl)
 
-    case getMatch =<< view (lsTopLevel . at nuri) st of
+    case getMatch pos =<< view (lsTopLevel . at nuri) st of
       Just tlm -> case tlm of
         TermMatch (Builtin builtin i) -> let
                 docs = fromMaybe "No docs available"
@@ -284,7 +281,7 @@ documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req re
           debug $ "Encounter: " <> renderText (show _other)
           resp (Right (InR Null))
       Nothing -> do
-        debug $ "documentHover: could not find term on position"
+        debug "documentHover: could not find term on position"
         resp (Right (InR Null))
 
 processFile
@@ -303,5 +300,5 @@ processFile replEnv (SourceCode _ source) = do
       constEvaled <- ConstEval.evalTLConsts replEnv ds
       let tlFinal = MHash.hashTopLevel constEvaled
       let act = [ds] <$ evalTopLevel replEnv tlFinal deps
-      catchError act $ (const (pure []))
+      catchError act (const (pure []))
     _ -> pure []

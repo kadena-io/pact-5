@@ -1,5 +1,6 @@
 ;; This test file serves as a comprehensive list of all built-in functions
-;; and constructs available in the programming language.
+;; and constructs available in the programming language. We use it in the
+;; LSP Tests to get the hover information at a particular line.
 
 ;; "!="
 (!= "pact-core" "pact")
