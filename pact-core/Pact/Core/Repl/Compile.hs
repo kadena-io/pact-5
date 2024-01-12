@@ -37,6 +37,7 @@ import Pact.Core.IR.Term
 import Pact.Core.Compile
 import Pact.Core.Environment
 import Pact.Core.Info
+import Pact.Core.PactValue
 import Pact.Core.Serialise (serialisePact_repl_spaninfo)
 
 
@@ -105,7 +106,9 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
     Lisp.RTL rtl ->
       pure <$> pipe' rtl
     Lisp.RTLReplSpecial rsf -> case rsf of
-      Lisp.ReplLoad txt reset _ -> do
+      Lisp.ReplLoad txt reset i -> do
+        let loading = RCompileValue (InterpretValue (PString ("Loading " <> txt <> "...")) i)
+        display loading
         oldSrc <- use replCurrSource
         pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
         oldEE <- use replEvalEnv
@@ -114,6 +117,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
           evalState .= def
           replEvalEnv .= ee
         fp <- mangleFilePath (T.unpack txt)
+        when (isPactFile fp) $ esLoaded . loToplevel .= mempty
         out <- loadFile fp replEnv display
         replCurrSource .= oldSrc
         unless reset $ do
@@ -143,6 +147,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
     _ ->  do
       ds <- runDesugarReplTopLevel tl
       interpret ds
+  isPactFile f = takeExtension f == ".pact"
   interpret (DesugarOutput tl _deps) = do
     case tl of
       RTLDefun df -> do

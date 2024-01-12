@@ -54,18 +54,18 @@ runRepl = do
   displayOutput = \case
     RCompileValue cv -> case cv of
       LoadedModule mn mh -> outputStrLn $ show $
-        "loaded module" <+> pretty mn <> ", hash" <+> pretty (moduleHashToText mh)
+        "Loaded module" <+> pretty mn <> ", hash" <+> pretty (moduleHashToText mh)
       LoadedInterface mn mh -> outputStrLn $ show $
-        "loaded interface" <+> pretty mn <> ", hash" <+> pretty (moduleHashToText mh)
+        "Loaded interface" <+> pretty mn <> ", hash" <+> pretty (moduleHashToText mh)
       InterpretValue v _ -> outputStrLn (show (pretty v))
       LoadedImports i ->
-        outputStrLn $ "loaded imports from" <> show (pretty (_impModuleName i))
+        outputStrLn $ "Loaded imports from" <> show (pretty (_impModuleName i))
     RLoadedDefun mn ->
       outputStrLn $ show $
-        "loaded defun" <+> pretty mn
+        "Loaded defun" <+> pretty mn
     RLoadedDefConst mn ->
       outputStrLn $ show $
-        "loaded defconst" <+> pretty mn
+        "Loaded defconst" <+> pretty mn
     RBuiltinDoc doc -> outputStrLn (show $ pretty doc)
     RUserDoc qn doc -> outputStrLn $ show $
       vsep ["function" <+> pretty qn <> ":", maybe mempty pretty doc]
