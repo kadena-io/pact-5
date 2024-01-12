@@ -1028,12 +1028,8 @@ executionTests =
 
 builtinTests :: [(String, PactErrorI -> Bool, Text)]
 builtinTests =
-  [ ("integer_pow_negative", isExecutionError _ArithmeticException, [text|
-      (^ 0 -1)
-    |])
-  , ("floating_pow_negative", isExecutionError _FloatingPointError, [text|
-      (^ 0.0 -1.0)
-    |])
+  [ ("integer_pow_negative", isExecutionError _ArithmeticException, "(^ 0 -1)")
+  , ("floating_pow_negative", isExecutionError _FloatingPointError, "(^ 0.0 -1.0)")
   ]
 
 tests :: TestTree
