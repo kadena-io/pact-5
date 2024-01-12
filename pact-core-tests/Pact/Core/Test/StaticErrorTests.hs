@@ -1026,8 +1026,18 @@ executionTests =
     |])
   ]
 
+builtinTests :: [(String, PactErrorI -> Bool, Text)]
+builtinTests =
+  [ ("integer_pow_negative", isExecutionError _ArithmeticException, [text|
+      (^ 0 -1)
+    |])
+  , ("floating_pow_negative", isExecutionError _FloatingPointError, [text|
+      (^ 0.0 -1.0)
+    |])
+  ]
+
 tests :: TestTree
 tests =
-  testGroup "CoreStaticTests" (go <$> parseTests <> desugarTests <> executionTests)
+  testGroup "CoreStaticTests" (go <$> parseTests <> desugarTests <> executionTests <> builtinTests)
   where
   go (label, p, srcText) = testCase label $ runStaticTest label srcText p
