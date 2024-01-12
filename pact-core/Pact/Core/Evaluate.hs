@@ -18,6 +18,7 @@ module Pact.Core.Evaluate
   , Eval
   , EvalBuiltinEnv
   , evalTermExec
+  , allModuleExports
   ) where
 
 import Control.Lens

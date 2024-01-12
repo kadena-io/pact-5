@@ -24,6 +24,7 @@ module Pact.Core.Environment.Utils
  , mangleNamespace
  , getAllStackCaps
  , checkSigCaps
+ , allModuleExports
  ) where
 
 import Control.Lens
@@ -72,6 +73,16 @@ toFqDep :: ModuleName -> ModuleHash -> Def name t b i -> (FullyQualifiedName, De
 toFqDep modName mhash defn =
   let fqn = FullyQualifiedName modName (defName defn) mhash
   in (fqn, defn)
+
+allModuleExports :: ModuleData b i -> M.Map FullyQualifiedName (EvalDef b i)
+allModuleExports = \case
+  ModuleData newMdl deps ->
+    let allNewDeps = M.fromList $ toFqDep (_mName newMdl) (_mHash newMdl) <$> _mDefs newMdl
+    in allNewDeps <> deps
+  InterfaceData iface deps ->
+    let defs = mapMaybe ifDefToDef (_ifDefns iface)
+        allNewDeps = M.fromList $ toFqDep (_ifName iface) (_ifHash iface) <$> defs
+    in allNewDeps <> deps
 
 throwExecutionError :: (MonadEval b i m) => i -> EvalError -> m a
 throwExecutionError i e = throwError (PEExecutionError e i)
