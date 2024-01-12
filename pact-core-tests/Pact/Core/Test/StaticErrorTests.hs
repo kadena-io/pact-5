@@ -1053,6 +1053,9 @@ builtinTests =
   , ("mixed_div_zero_flr", isExecutionError _NativeArgumentsError, "(/ 2 0.0)")
   , ("integer_square_negative", isExecutionError _ArithmeticException, "(sqrt -1)")
   , ("floating_square_negative", isExecutionError _ArithmeticException, "(sqrt -1.0)")
+
+  , ("enumerate_up_diverging", isExecutionError _EnumerationError, "(enumerate 0 10 -1)")
+  , ("enumerate_down_diverging", isExecutionError _EnumerationError, "(enumerate 10 0 1)")
   ]
 
 tests :: TestTree
