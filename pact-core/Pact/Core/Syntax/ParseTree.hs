@@ -201,32 +201,6 @@ data ExtDecl
   | ExtImplements ModuleName
   deriving Show
 
-data DefProperty i
-  = DefProperty
-  { _dpropName :: Text
-  , _dpropArgs :: [Arg]
-  , _dpropExp :: Expr i
-  } deriving (Show, Functor)
-
-newtype Property i
-  = Property (PropertyExpr i)
-  deriving (Show, Functor)
-
-newtype Invariant i
-  = Invariant (Expr i)
-  deriving (Show, Functor)
-
--- data FVModel i
---   = FVDefProperty (DefProperty i)
---   | FVProperty (Property i)
---   | FVInvariant (Invariant i)
---   deriving (Show, Functor)
-
--- data PropertyExpr i
---   = FVFunProperty (Property i)
---   | FVFunInvariant (Invariant i)
---   deriving (Show, Functor)
-
 data Module i
   = Module
   { _mName :: ModuleName
