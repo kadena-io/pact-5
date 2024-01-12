@@ -11,6 +11,8 @@
 
 module Pact.Core.Compile
  ( interpretTopLevel
+ , compileDesugarOnly
+ , evalTopLevel
  , CompileValue(..)
  ) where
 
@@ -147,6 +149,22 @@ evalModuleGovernance bEnv tl = do
   -> Lisp.TopLevel ()
   -> Eval ()  #-}
 
+compileDesugarOnly
+  :: forall step b i m
+  .  (HasCompileEnv step b i m)
+  => BuiltinEnv step b i m
+  -> Lisp.TopLevel i
+  -> m (EvalTopLevel b i, S.Set ModuleName)
+compileDesugarOnly bEnv tl = do
+  evalModuleGovernance bEnv tl
+  -- Todo: pretty instance for modules and all of toplevel
+  debugPrint (DPParser @b) tl
+  (DesugarOutput ds deps) <- runDesugarTopLevel tl
+  constEvaled <- ConstEval.evalTLConsts bEnv ds
+  let tlFinal = MHash.hashTopLevel constEvaled
+  debugPrint DPDesugar ds
+  pure (tlFinal, deps)
+
 interpretTopLevel
   :: forall step b i m
   .  (HasCompileEnv step b i m)
@@ -155,14 +173,28 @@ interpretTopLevel
   -> m (CompileValue i)
 interpretTopLevel bEnv tl = do
   evalModuleGovernance bEnv tl
-  pdb <- viewEvalEnv eePactDb
   -- Todo: pretty instance for modules and all of toplevel
   debugPrint (DPParser @b) tl
   (DesugarOutput ds deps) <- runDesugarTopLevel tl
   constEvaled <- ConstEval.evalTLConsts bEnv ds
   let tlFinal = MHash.hashTopLevel constEvaled
   debugPrint DPDesugar ds
+  evalTopLevel bEnv tlFinal deps
+{-# SPECIALIZE interpretTopLevel
+  :: CoreBuiltinEnv
+  -> Lisp.TopLevel ()
+  -> Eval (CompileValue ())  #-}
+
+evalTopLevel
+  :: forall step b i m
+  .  (HasCompileEnv step b i m)
+  => BuiltinEnv step b i m
+  -> EvalTopLevel b i
+  -> S.Set ModuleName
+  -> m (CompileValue i)
+evalTopLevel bEnv tlFinal deps = do
   lo0 <- useEvalState esLoaded
+  pdb <- viewEvalEnv eePactDb
   case tlFinal of
     TLModule m -> do
       -- enforce new module keyset on install
@@ -196,7 +228,7 @@ interpretTopLevel bEnv tl = do
       chargeGasArgs (_ifInfo iface) (GModuleMemory (sizeOf SizeOfV0 iface))
       liftDbFunction (_ifInfo iface) (writeModule pdb Write (view ifName iface) mdata)
       let fqDeps = toFqDep (_ifName iface) (_ifHash iface)
-                   <$> mapMaybe ifDefToDef (_ifDefns iface)
+                  <$> mapMaybe ifDefToDef (_ifDefns iface)
           newLoaded = M.fromList fqDeps
           newTopLevel = M.fromList
                         $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind d)))
@@ -209,7 +241,10 @@ interpretTopLevel bEnv tl = do
       pure (LoadedInterface (view ifName iface) (view ifHash iface))
     TLTerm term -> (`InterpretValue` (view termInfo term)) <$> Eval.eval PImpure bEnv term
     TLUse imp _ -> pure (LoadedImports imp)
-{-# SPECIALIZE interpretTopLevel
+{-# SPECIALIZE evalTopLevel
   :: CoreBuiltinEnv
-  -> Lisp.TopLevel ()
+  -> EvalTopLevel CoreBuiltin ()
+  -> S.Set ModuleName
   -> Eval (CompileValue ())  #-}
+{-# INLINE evalTopLevel #-}
+

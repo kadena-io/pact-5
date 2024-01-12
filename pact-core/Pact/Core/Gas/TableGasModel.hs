@@ -5,7 +5,11 @@
 
 module Pact.Core.Gas.TableGasModel
  ( tableGasModel
- , replTableGasModel )
+ , replTableGasModel
+  --
+ , pointAddGas
+ , scalarMulGas
+ , pairingGas)
  where
 
 import Data.Word(Word64)

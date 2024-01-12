@@ -53,8 +53,10 @@
     in rec {
       packages.pact-core-binary = flake.packages."pact-core:exe:pact";
       packages.pact-core-gasmodel = flake.packages."pact-core:exe:gasmodel";
-      packages.pact-core-tests  = flake.packages."pact-core:test:core-tests";
-
+      packages.pact-core-tests = flake.checks."pact-core:test:core-tests".overrideAttrs (old: {
+        PACT_CORE_NIXBUILD=packages.pact-core-binary.exePath;
+      });
+      
       packages.default = packages.pact-core-binary;
 
       packages.recursive = with hs-nix-infra.lib.recursive system;
@@ -63,14 +65,11 @@
       inherit (flake) devShell;
 
       packages.check = pkgs.runCommand "check" {} ''
-        export LANG=C.UTF-8
-
         echo ${mkCheck "pact-core" packages.default}
 
         echo ${mkCheck "pact-core" packages.pact-core-gasmodel}
 
-        echo ${packages.pact-core-tests}
-        (cd ${self}; ${packages.pact-core-tests}/bin/core-tests)
+        echo ${mkCheck "pact-core-test" packages.pact-core-tests} 
 
         echo ${mkCheck "devShell" devShell}
         echo works > $out

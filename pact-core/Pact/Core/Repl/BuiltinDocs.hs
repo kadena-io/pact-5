@@ -1,7 +1,8 @@
 {-# LANGUAGE QuasiQuotes #-}
 
-module Pact.Core.BuiltinDocs
+module Pact.Core.Repl.BuiltinDocs
   ( topLevelHasDocs
+  , builtinDocs
   ) where
 
 import NeatInterpolation (text)

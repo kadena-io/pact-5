@@ -22,6 +22,8 @@ module Pact.Core.Repl.Utils
  , replEvalLog
  , replEvalEnv
  , replEvalState
+ , replUserDocs
+ , replTLDefPos
  , whenReplFlagSet
  , unlessReplFlagSet
  , debugIfFlagSet
@@ -48,6 +50,7 @@ import Data.Set(Set)
 import Data.Text(Text)
 import Data.List(isPrefixOf)
 import Data.Maybe(mapMaybe)
+import Data.Map.Strict(Map)
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
@@ -123,6 +126,12 @@ data ReplState b
   , _replGas :: IORef Gas
   , _replEvalLog :: IORef (Maybe [(Text, Gas)])
   , _replCurrSource :: SourceCode
+  , _replUserDocs :: Map QualifiedName Text
+  -- ^ Used by Repl and LSP Server, reflects the user
+  --   annotated @doc string.
+  , _replTLDefPos :: Map QualifiedName SpanInfo
+  -- ^ Used by LSP Server, reflects the span information
+  --   of the TL definitions for the qualified name.
   , _replTx :: Maybe (TxId, Maybe Text)
   }
 
@@ -142,7 +151,7 @@ instance MonadEvalState b SpanInfo (ReplM b) where
 instance HasEvalState (ReplState b) b SpanInfo where
   evalState = replEvalState
 
-instance Pretty b => PhaseDebug b i (ReplM b) where
+instance (Pretty b, Show b) => PhaseDebug b SpanInfo (ReplM b) where
   debugPrint dp term = do
     case dp of
       DPLexer -> whenReplFlagSet ReplDebugLexer $ liftIO $ do
@@ -159,6 +168,8 @@ instance Pretty b => PhaseDebug b i (ReplM b) where
           liftIO $ do
             putStrLn "----------- Desugar output ---------------"
             print (pretty t)
+            print (show t)
+            print $ "At span information: " <> show (view Term.termInfo t)
         _ -> pure ()
 
 

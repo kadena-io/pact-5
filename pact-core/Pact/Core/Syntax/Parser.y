@@ -5,7 +5,7 @@
 
 module Pact.Core.Syntax.Parser where
 
-import Control.Lens(preview, view, _head)
+import Control.Lens(preview, view, _head, _3)
 import Control.Monad(when)
 import Control.Monad.Except
 
@@ -431,9 +431,9 @@ BOOLEAN :: { Bool }
   | false { False }
 
 Var :: { ParsedExpr }
-  : IDENT '.' ModQual  { Var (QN (mkQualName (getIdent $1) $3)) (_ptInfo $1) }
+  : IDENT '.' ModQual  { Var (QN (mkQualName (getIdent $1) $3)) (combineSpan (_ptInfo $1) (view _3 $3))  }
   | IDENT { Var (BN (mkBarename (getIdent $1))) (_ptInfo $1) }
-  | IDENT '::' IDENT { Var (DN (DynamicName (getIdent $1) (getIdent $3))) (_ptInfo $1) }
+  | IDENT '::' IDENT { Var (DN (DynamicName (getIdent $1) (getIdent $3))) (combineSpan (_ptInfo $1) (_ptInfo $3)) }
 
 ParsedName :: { ParsedName }
   : IDENT '.' ModQual { QN (mkQualName (getIdent $1) $3) }
@@ -444,9 +444,9 @@ ParsedTyName :: { ParsedTyName }
   : IDENT '.' ModQual { TQN (mkQualName (getIdent $1) $3) }
   | IDENT { TBN (mkBarename (getIdent $1)) }
 
-ModQual :: { (Text, Maybe Text) }
-  : IDENT '.' IDENT { (getIdent $1, Just (getIdent $3)) }
-  | IDENT { (getIdent $1, Nothing) }
+ModQual :: { (Text, Maybe Text, SpanInfo) }
+  : IDENT '.' IDENT { (getIdent $1, Just (getIdent $3), (combineSpan (_ptInfo $1) (_ptInfo $3))) }
+  | IDENT { (getIdent $1, Nothing, _ptInfo $1) }
 
 Number :: { ParsedExpr }
   : NUM '.' NUM {% mkDecimal Constant (getNumber $1) (getNumber $3) (_ptInfo $1) }
@@ -558,10 +558,10 @@ mkDecimal ctor num dec i = do
   let out = Decimal (fromIntegral prec) (f (strToNum (strToNum 0 num') dec))
   pure $ ctor (LDecimal out) i
 
-mkQualName ns (mod, (Just ident)) =
+mkQualName ns (mod, (Just ident), _) =
   let ns' = NamespaceName ns
   in QualifiedName ident (ModuleName mod (Just ns'))
-mkQualName mod (ident, Nothing) =
+mkQualName mod (ident, Nothing, _) =
   QualifiedName ident (ModuleName mod Nothing)
 
 mkQualName' ns (mod, (Just ident)) =
@@ -570,8 +570,8 @@ mkQualName' ns (mod, (Just ident)) =
 mkQualName' mod (ident, Nothing) = QualifiedName ident (ModuleName mod Nothing)
 
 
-mkModName (ident, Nothing) = ModuleName ident Nothing
-mkModName (ns, Just ident) = ModuleName ident (Just (NamespaceName ns))
+mkModName (ident, Nothing, _) = ModuleName ident Nothing
+mkModName (ns, Just ident, _) = ModuleName ident (Just (NamespaceName ns))
 
 propExprList tokLBracket li tokRBracket =
   let lbracket = PropDelim DelimLBracket (_ptInfo tokLBracket)

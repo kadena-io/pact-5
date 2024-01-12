@@ -79,6 +79,8 @@ runReplTest pdb file src interp = do
             , _replEvalLog = gasLog
             , _replCurrSource = source
             , _replEvalEnv = ee
+            , _replUserDocs = mempty
+            , _replTLDefPos = mempty
             , _replTx = Nothing
             }
   stateRef <- newIORef rstate

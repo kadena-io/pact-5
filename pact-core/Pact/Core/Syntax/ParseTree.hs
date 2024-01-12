@@ -104,6 +104,34 @@ data MArg
   , _margType :: Maybe Type
   } deriving (Eq, Show)
 
+defName :: Def i -> Text
+defName = \case
+  Dfun d -> _dfunName d
+  DConst d -> _dcName d
+  DCap d -> _dcapName d
+  DTable d -> _dtName d
+  DPact d -> _dpName d
+  DSchema d -> _dscName d
+
+defDocs :: Def i -> Maybe Text
+defDocs = \case
+  Dfun d -> _dfunDocs d
+  DConst d -> _dcDocs d
+  DCap d -> _dcapDocs d
+  DTable d -> _dtDocs d
+  DPact d -> _dpDocs d
+  DSchema d -> _dscDocs d
+
+defInfo :: Def i -> i
+defInfo = \case
+  Dfun d -> _dfunInfo d
+  DConst d -> _dcInfo d
+  DCap d -> _dcapInfo d
+  DTable d -> _dtInfo d
+  DPact d -> _dpInfo d
+  DSchema d -> _dscInfo d
+
+
 data Defun i
   = Defun
   { _dfunName :: Text
@@ -381,6 +409,9 @@ pattern RTLInterface m = RTLTopLevel (TLInterface m)
 
 pattern RTLTerm :: Expr i -> ReplTopLevel i
 pattern RTLTerm te = RTLTopLevel (TLTerm te)
+
+pattern RTLUse :: Import -> i -> ReplTopLevel i
+pattern RTLUse imp i = RTLTopLevel (TLUse imp i)
 
 
 termInfo :: Lens' (Expr i) i
