@@ -1030,6 +1030,12 @@ builtinTests :: [(String, PactErrorI -> Bool, Text)]
 builtinTests =
   [ ("integer_pow_negative", isExecutionError _ArithmeticException, "(^ 0 -1)")
   , ("floating_pow_negative", isExecutionError _FloatingPointError, "(^ 0.0 -1.0)")
+  , ("integer_log_negative_base", isExecutionError _ArithmeticException, "(log -1 10)")
+  , ("integer_log_negative_arg", isExecutionError _ArithmeticException, "(log 2 -1)")
+  , ("integer_log_zero_arg", isExecutionError _ArithmeticException, "(log 2 0)")
+  , ("floating_log_negative_base", isExecutionError _ArithmeticException, "(log -1.0 10.0)")
+  , ("floating_log_negative_arg", isExecutionError _ArithmeticException, "(log 2.0 -1.0)")
+  , ("floating_log_zero_arg", isExecutionError _ArithmeticException, "(log 2.0 0.0)")
   ]
 
 tests :: TestTree
