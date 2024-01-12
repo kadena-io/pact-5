@@ -236,7 +236,14 @@ Steps :: { [PactStep SpanInfo] }
 
 Step :: { PactStep SpanInfo }
   : '(' step Expr MModel ')' { Step $3 $4 }
+  -- Note: this production which ignores its input
+  -- is due to the legacy form of:
+  -- (step ENTITY EXPR)
+  | '(' step Expr Expr MModel ')' { Step $4 $5 }
   | '(' steprb Expr Expr MModel ')' { StepWithRollback $3 $4 $5 }
+  -- (step-with-rollback ENTITY EXPR ROLLBACK-EXPR)
+  -- hence we ignore entity
+  | '(' steprb Expr Expr Expr MModel ')' { StepWithRollback $4 $5 $6 }
 
 MDCapMeta :: { Maybe DCapMeta }
   : Managed { Just $1 }
