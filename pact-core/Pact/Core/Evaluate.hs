@@ -40,7 +40,6 @@ import Pact.Core.Compile
 import Pact.Core.Environment
 import Pact.Core.Errors
 import Pact.Core.Hash (Hash)
-import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.CoreBuiltin
 import Pact.Core.IR.Eval.Runtime hiding (EvalResult)
 import Pact.Core.Persistence
@@ -51,6 +50,7 @@ import Pact.Core.Gas
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Namespace
+import Pact.Core.IR.Desugar
 import qualified Pact.Core.IR.Eval.CEK as Eval
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
@@ -143,8 +143,8 @@ evalExec evalEnv evalSt rc = do
 evalTermExec
   :: EvalEnv CoreBuiltin ()
   -> EvalState CoreBuiltin ()
-  -> EvalTerm CoreBuiltin ()
-  -> IO (Either (PactError ()) (EvalResult CoreTerm))
+  -> Lisp.Expr ()
+  -> IO (Either (PactError ()) (EvalResult (Lisp.Expr ())))
 evalTermExec evalEnv evalSt term =
   either throwError return <$> interpretOnlyTerm evalEnv evalSt term
 
@@ -173,8 +173,8 @@ interpret evalEnv evalSt evalInput = do
 interpretOnlyTerm
   :: EvalEnv CoreBuiltin ()
   -> EvalState CoreBuiltin ()
-  -> CoreTerm
-  -> IO (Either (PactError ()) (EvalResult CoreTerm))
+  -> Lisp.Expr ()
+  -> IO (Either (PactError ()) (EvalResult (Lisp.Expr ())))
 interpretOnlyTerm evalEnv evalSt term = do
   (result, state) <- runEvalM evalEnv evalSt $ evalCompiledTermWithinTx term
   case result of
@@ -182,7 +182,7 @@ interpretOnlyTerm evalEnv evalSt term = do
     Right (rs, logs, txid) ->
       return $! Right $! EvalResult
         { _erInput = Right term
-        , _erOutput = [InterpretValue rs (view termInfo term)]
+        , _erOutput = [InterpretValue rs (view Lisp.termInfo term)]
         , _erLogs = logs
         , _erExec = _esDefPactExec state
         , _erGas = Gas 0 -- TODO: return gas
@@ -228,7 +228,7 @@ evalWithinTx input = withRollback (start runInput >>= end)
       liftDbFunction () (_pdbRollbackTx pdb)
 
 evalCompiledTermWithinTx
-  :: EvalTerm CoreBuiltin ()
+  :: Lisp.Expr ()
   -> EvalM CoreBuiltin () (PactValue, [TxLog ByteString], Maybe TxId)
 evalCompiledTermWithinTx input = withRollback (start runInput >>= end)
 
@@ -252,7 +252,9 @@ evalCompiledTermWithinTx input = withRollback (start runInput >>= end)
       -- maybe might want to decode using serialisepact
       return (rs, logs, txid)
 
-    runInput = Eval.eval PImpure builtinEnv input
+    runInput = do
+      DesugarOutput term' _ <- runDesugarTerm input
+      Eval.eval PImpure builtinEnv term'
 
     evalRollbackTx = do
       esCaps .== def
