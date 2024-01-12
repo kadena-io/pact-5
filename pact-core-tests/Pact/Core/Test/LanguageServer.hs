@@ -78,16 +78,16 @@ definitionRequestTests = [defTest "my-fun-1" (Position 13 2) (Range (Position 5 
 
 builtinHoverTests :: [TestTree]
 builtinHoverTests
-  = [ hoverTest (RBuiltinWrap CoreNeq) 4
-    , hoverTest (RBuiltinWrap CoreBitwiseAnd) 7
-    , hoverTest (RBuiltinWrap CoreMultiply) 10
-    , hoverTest (RBuiltinWrap CoreAdd) 13
-    , hoverTest (RBuiltinWrap CoreSub) 16
-    , hoverTest (RBuiltinWrap CoreDivide) 19
-    , hoverTest (RBuiltinWrap CoreLEQ) 25
-    , hoverTest (RBuiltinWrap CoreEq) 28
-    , hoverTest (RBuiltinWrap CoreGT) 31
-    , hoverTest (RBuiltinWrap CoreGEQ) 34
+  = [ hoverTest (RBuiltinWrap CoreNeq) 5
+    , hoverTest (RBuiltinWrap CoreBitwiseAnd) 8
+    , hoverTest (RBuiltinWrap CoreMultiply) 11
+    , hoverTest (RBuiltinWrap CoreAdd) 14
+    , hoverTest (RBuiltinWrap CoreSub) 17
+    , hoverTest (RBuiltinWrap CoreDivide) 20
+    , hoverTest (RBuiltinWrap CoreLEQ) 26
+    , hoverTest (RBuiltinWrap CoreEq) 29
+    , hoverTest (RBuiltinWrap CoreGT) 32
+    , hoverTest (RBuiltinWrap CoreGEQ) 35
     ]
   where
     title b = "Get hover docs for: "  <> show (replBuiltinToText coreBuiltinToText b)
