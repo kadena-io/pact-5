@@ -17,6 +17,7 @@ module Pact.Core.Evaluate
   , builtinEnv
   , Eval
   , EvalBuiltinEnv
+  , evalTermExec
   ) where
 
 import Control.Lens
@@ -38,6 +39,7 @@ import Pact.Core.Compile
 import Pact.Core.Environment
 import Pact.Core.Errors
 import Pact.Core.Hash (Hash)
+import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.CoreBuiltin
 import Pact.Core.IR.Eval.Runtime hiding (EvalResult)
 import Pact.Core.Persistence
@@ -77,8 +79,8 @@ newtype RawCode = RawCode { _rawCode :: Text }
   deriving (Eq, Show)
 
 -- | Results of evaluation.
-data EvalResult = EvalResult
-  { _erInput :: !EvalInput
+data EvalResult tv = EvalResult
+  { _erInput :: !(Either (Maybe DefPactExec) tv)
     -- ^ compiled user input
   , _erOutput :: ![CompileValue ()]
     -- ^ Output values
@@ -132,15 +134,24 @@ setupEvalEnv pdb mode msgData np pd efs = do
     where
     pk = PublicKeyText $ fromMaybe pubK addr
 
-evalExec :: EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> RawCode -> IO (Either (PactError ()) EvalResult)
+evalExec :: EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> RawCode -> IO (Either (PactError ()) (EvalResult [Lisp.TopLevel ()]))
 evalExec evalEnv evalSt rc = do
   terms <- either throwM return $ compileOnly rc
   either throwError return <$> interpret evalEnv evalSt (Right terms)
 
-evalExecDefaultState :: EvalEnv CoreBuiltin () -> RawCode -> IO (Either (PactError ()) EvalResult)
+evalTermExec
+  :: EvalEnv CoreBuiltin ()
+  -> EvalState CoreBuiltin ()
+  -> EvalTerm CoreBuiltin ()
+  -> IO (Either (PactError ()) (EvalResult CoreTerm))
+evalTermExec evalEnv evalSt term =
+  either throwError return <$> interpretOnlyTerm evalEnv evalSt term
+
+
+evalExecDefaultState :: EvalEnv CoreBuiltin () -> RawCode -> IO (Either (PactError ()) (EvalResult [Lisp.TopLevel ()]))
 evalExecDefaultState evalEnv rc = evalExec evalEnv def rc
 
-interpret :: EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> EvalInput -> IO (Either (PactError ()) EvalResult)
+interpret :: EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> EvalInput -> IO (Either (PactError ()) (EvalResult [Lisp.TopLevel ()]))
 interpret evalEnv evalSt evalInput = do
   (result, state) <- runEvalM evalEnv evalSt $ evalWithinTx evalInput
   case result of
@@ -149,6 +160,28 @@ interpret evalEnv evalSt evalInput = do
       return $! Right $! EvalResult
         { _erInput = evalInput
         , _erOutput = rs
+        , _erLogs = logs
+        , _erExec = _esDefPactExec state
+        , _erGas = Gas 0 -- TODO: return gas
+        , _erLoadedModules = _loModules $ _esLoaded state
+        , _erTxId = txid
+        , _erLogGas = Nothing
+        , _erEvents = _esEvents state
+        }
+
+interpretOnlyTerm
+  :: EvalEnv CoreBuiltin ()
+  -> EvalState CoreBuiltin ()
+  -> CoreTerm
+  -> IO (Either (PactError ()) (EvalResult CoreTerm))
+interpretOnlyTerm evalEnv evalSt term = do
+  (result, state) <- runEvalM evalEnv evalSt $ evalCompiledTermWithinTx term
+  case result of
+    Left err -> return $ Left err
+    Right (rs, logs, txid) ->
+      return $! Right $! EvalResult
+        { _erInput = Right term
+        , _erOutput = [InterpretValue rs (view termInfo term)]
         , _erLogs = logs
         , _erExec = _esDefPactExec state
         , _erGas = Gas 0 -- TODO: return gas
@@ -187,6 +220,38 @@ evalWithinTx input = withRollback (start runInput >>= end)
     runInput = case input of
       Right ts -> evaluateTerms ts
       Left pe -> (:[]) <$> resumePact pe
+
+    evalRollbackTx = do
+      esCaps .== def
+      pdb <- viewEvalEnv eePactDb
+      liftDbFunction () (_pdbRollbackTx pdb)
+
+evalCompiledTermWithinTx
+  :: EvalTerm CoreBuiltin ()
+  -> EvalM CoreBuiltin () (PactValue, [TxLog ByteString], Maybe TxId)
+evalCompiledTermWithinTx input = withRollback (start runInput >>= end)
+
+  where
+
+    withRollback act =
+      act `onException` safeRollback
+
+    safeRollback =
+      void (tryAny evalRollbackTx)
+
+    start act = do
+      pdb <- viewEvalEnv eePactDb
+      mode <- viewEvalEnv eeMode
+      txid <- liftDbFunction () (_pdbBeginTx pdb mode)
+      (,txid) <$> act
+
+    end (rs,txid) = do
+      pdb <- viewEvalEnv eePactDb
+      logs <- liftDbFunction () (_pdbCommitTx pdb)
+      -- maybe might want to decode using serialisepact
+      return (rs, logs, txid)
+
+    runInput = Eval.eval PImpure builtinEnv input
 
     evalRollbackTx = do
       esCaps .== def
