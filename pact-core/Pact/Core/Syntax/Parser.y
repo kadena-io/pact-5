@@ -170,12 +170,18 @@ DefProperties :: { [FVModel SpanInfo] }
 
 DefProperty :: { FVModel SpanInfo }
   : '(' defprop IDENT DPropArgList ')' { FVDefProperty (DefProperty (getIdent $3) (fst $4) (snd $4)) }
-  | '(' property Expr ')' { FVProperty (Property $3) }
+  | '(' Property ')' { FVProperty $2 }
   | '(' invariant Expr ')' { FVInvariant (Invariant $3) }
 
 Property :: { Property SpanInfo }
-  : '(' property Expr ')' { Property $3 }
-  | '(' property IDENT NEArgList Expr ')' {% mkQuantifiedProp (combineSpan (_ptInfo $1) (_ptInfo $6)) (getIdent $3) $4 $5  }
+  : property '(' IDENT '(' NEArgList ')' Expr ')'
+    {% mkQuantifiedProp (combineSpan (_ptInfo $1) (_ptInfo $8)) (getIdent $3) $5 $7  }
+  | property '(' SExpr ')'  { Property ($3 (combineSpan (_ptInfo $2) (_ptInfo $4))) }
+
+PropArgList
+  : '(' IDENT '(' IDENT ':' Type ArgList ')' ')' Expr { (Left (getIdent $3), Arg (getIdent $2) $4 : reverse $5, $7) }
+  | '(' SExpr ')' { ([], $2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
+
 
 -- This rule seems gnarly, but essentially
 -- happy needs to resolve whether the arglist is present or not
@@ -323,7 +329,7 @@ DocStr :: { Text }
   : STR { getStr $1 }
 
 ModelExprs :: { [FVFunModel SpanInfo] }
-  : ModelExprs '(' property Expr ')' { FVFunProperty (Property $4) :$1 }
+  : ModelExprs '(' Property ')' { FVFunProperty $3 :$1 }
   | ModelExprs '(' invariant Expr ')' { FVFunInvariant (Invariant $4) :$1 }
   | {- empty -} { [] }
 
@@ -365,7 +371,6 @@ BlockBody :: { [ParsedExpr] }
 Expr :: { ParsedExpr }
   : '(' SExpr ')' { $2 (combineSpan (_ptInfo $1) (_ptInfo $3)) }
   | Atom { $1 }
-  -- | Expr '::' IDENT { DynAccess $1 (getIdent $3) (combineSpan (view termInfo $1) (_ptInfo $3)) }
 
 SExpr :: { SpanInfo -> ParsedExpr }
   : LamExpr { $1 }
