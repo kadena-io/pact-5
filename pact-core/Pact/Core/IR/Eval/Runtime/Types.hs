@@ -140,8 +140,6 @@ instance (NFData b, NFData i) => NFData (CEKReturn b i m)
 type CEKTLEnv b i = Map FullyQualifiedName (EvalDef b i)
 
 -- | Locally bound variables
--- type CEKEnv step b i m = RAList (CEKValue b i m)
-
 data CEKEnv (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = CEKEnv
   { _ceLocal :: RAList (CEKValue step b i m)
@@ -388,8 +386,6 @@ data PartialNativeFn (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.T
   } deriving (Generic)
 
 instance (NFData b, NFData i) => NFData (PartialNativeFn step b i m)
-
-
 
 -- | Continuation Frames that handle conditional argument returns in a lazy manner.
 data CondCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)

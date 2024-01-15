@@ -125,7 +125,7 @@ evaluateTerm
 -- Handles free variable lookups as well as module reference dynamic invokes
 -- Todo: it may not be worthwhile if accessing local variables is fast to charge
 -- anything but a constant amount of gas, but it would be a worthwhile exercise.
-evaluateTerm cont handler env (Var n info)  = do
+evaluateTerm cont handler env (Var n info) = do
   case _nKind n of
     NBound i -> do
       case RAList.lookup (_ceLocal env) i of
@@ -2032,7 +2032,7 @@ isKeysetNameInSigs
   -> m (CEKEvalResult step b i m)
 isKeysetNameInSigs info cont handler env ksn = do
   pdb <- viewEvalEnv eePactDb
-  liftIO (readKeySet pdb ksn) >>= \case
+  liftDbFunction info (readKeySet pdb ksn) >>= \case
     Just ks -> isKeysetInSigs info cont handler env ks
     Nothing ->
       throwExecutionError info (NoSuchKeySet ksn)

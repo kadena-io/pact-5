@@ -20,6 +20,7 @@ module Pact.Core.Environment.Utils
  , lookupModuleData
  , throwExecutionError
  , throwExecutionError'
+ , throwRecoverableError
  , toFqDep
  , mangleNamespace
  , getAllStackCaps
@@ -29,6 +30,7 @@ module Pact.Core.Environment.Utils
 import Control.Lens
 import Control.Applicative((<|>))
 import Control.Monad.Except
+import Data.Text(Text)
 import Data.Default
 import Data.Maybe(mapMaybe)
 import qualified Data.Map.Strict as M
@@ -75,6 +77,9 @@ toFqDep modName mhash defn =
 
 throwExecutionError :: (MonadEval b i m) => i -> EvalError -> m a
 throwExecutionError i e = throwError (PEExecutionError e i)
+
+throwRecoverableError :: MonadEval b i m => i -> Text -> m a
+throwRecoverableError i e = throwError (PERecoverableError (RecoverableError e) i)
 
 throwExecutionError' :: (MonadEval b i m) => EvalError -> m a
 throwExecutionError' = throwExecutionError def
