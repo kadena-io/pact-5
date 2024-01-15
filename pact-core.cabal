@@ -253,7 +253,7 @@ executable pact
 
 
 test-suite core-tests
-  main-is:          PactCoreTests.hs
+  main-is:          CorpusTests.hs
   type:             exitcode-stdio-1.0
   hs-source-dirs:   pact-core-tests
   default-language: Haskell2010

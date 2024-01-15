@@ -8,7 +8,7 @@ import Test.Tasty.HUnit
 import Control.Monad(when)
 import Data.IORef
 import Data.Default
-import Data.Foldable(traverse_)
+import Data.Foldable(traverse_,find)
 import System.Directory
 import System.FilePath
 
@@ -97,3 +97,36 @@ runReplTest pdb file src interp = do
         when (T.isPrefixOf "FAILURE:" msg) $ assertFailure (T.unpack render)
       _ -> pure ()
     _ -> pure ()
+
+
+
+
+runReplTest' :: PactDb ReplCoreBuiltin SpanInfo -> FilePath -> T.Text -> Interpreter -> IO (FilePath, Bool)
+runReplTest' pdb file src interp = do
+  gasRef <- newIORef (Gas 0)
+  gasLog <- newIORef Nothing
+  ee <- defaultEvalEnv pdb replcoreBuiltinMap
+  let source = SourceCode (replTestDir </> file) src
+  let rstate = ReplState
+            { _replFlags = mempty
+            , _replEvalState = def
+            , _replPactDb = pdb
+            , _replGas = gasRef
+            , _replEvalLog = gasLog
+            , _replCurrSource = source
+            , _replEvalEnv = ee
+            , _replUserDocs = mempty
+            , _replTLDefPos = mempty
+            , _replTx = Nothing
+            }
+  stateRef <- newIORef rstate
+  result <- runReplT stateRef (interp source (const (pure ())))
+  return $ case result of
+    Left _ -> (file, False)
+    Right output -> maybe (file, True) (\_ -> (file, False)) (find isFailure output)
+  where
+  isFailure = \case
+    RCompileValue (InterpretValue v i) -> case v of
+      PLiteral (LString msg) | T.isPrefixOf "FAILURE:" msg -> True
+      _ -> False
+    _ -> False
