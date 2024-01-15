@@ -202,30 +202,34 @@ throwLexerError' le = getSpanInfo >>= throwLexerError le
 throwParseError :: ParseError -> SpanInfo -> ParserT a
 throwParseError pe = throwError . PEParseError pe
 
-toAppExprList :: SpanInfo -> [Either ParsedExpr [(Field, MArg)]] -> [ParsedExpr]
+toAppExprList :: SpanInfo -> [Either ParsedExpr ([(ParsedField SpanInfo, MArg SpanInfo)] , SpanInfo)]
+                          -> [ParsedExpr]
 toAppExprList i  (h:hs) = case h of
   Left e -> e : toAppExprList i hs
-  Right binds -> [Binding binds (toAppExprList i hs) i]
+  Right (binds , i') ->
+     let el = toAppExprList i hs
+         bI = foldl combineSpan i' (view termInfo <$> el)                               
+     in [Binding binds el bI]
 toAppExprList _ [] = []
 
-primType :: SpanInfo -> Text -> ParserT Type
+primType :: SpanInfo -> Text -> ParserT (Type SpanInfo)
 primType i = \case
-  "integer" -> pure TyInt
-  "bool" -> pure TyBool
-  "unit" -> pure TyUnit
-  "guard" -> pure TyGuard
-  "decimal" -> pure TyDecimal
-  "time" -> pure TyTime
-  "string" -> pure TyString
-  "list" -> pure TyPolyList
-  "object" -> pure TyPolyObject
-  "keyset" -> pure TyKeyset
+  "integer" -> pure $ TyInt i
+  "bool" -> pure $ TyBool i
+  "unit" -> pure $ TyUnit i
+  "guard" -> pure $ TyGuard i
+  "decimal" -> pure $ TyDecimal i
+  "time" -> pure $ TyTime i
+  "string" -> pure $ TyString i
+  "list" -> pure $ TyPolyList i
+  "object" -> pure $ TyPolyObject i
+  "keyset" -> pure $ TyKeyset i
   e -> throwParseError (InvalidBaseType e) i
 
-objType :: SpanInfo -> Text -> ParsedTyName -> ParserT Type
+objType :: SpanInfo -> Text -> ParsedTyName -> ParserT (Type SpanInfo)
 objType i t p = case t of
-  "object" -> pure (TyObject p)
-  "table" -> pure (TyTable p)
+  "object" -> pure (TyObject p i)
+  "table" -> pure (TyTable p i)
   e -> throwParseError (InvalidBaseType e) i
 
 parseError :: ([PosToken], [String]) -> ParserT a

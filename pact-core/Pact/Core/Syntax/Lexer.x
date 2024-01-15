@@ -119,21 +119,23 @@ scan = do
       action t span'
 
 stringLiteral :: Text -> SpanInfo -> LexerM PosToken
-stringLiteral _ info = do
+stringLiteral _ (SpanInfo sLine sCol _ _) = do
   inp <- get
-  body <- loop [] inp
+  (body , info) <- loop [] inp
   pure (PosToken (TokenString (T.pack body)) info)
   where
   loop acc inp =
     case lexerGetChar inp of
-      Just (c, rest) ->
+      Just (c, rest) -> do
         handleChar acc c rest
       Nothing -> throwLexerError' $ StringLiteralError "did not close string literal"
-  handleChar acc c rest
+  handleChar acc c rest@(AlexInput eLine eCol _ _)
     | c == '\\' = escape acc rest
     | c == '\n' = throwLexerError' $ StringLiteralError "newline in string literal"
     | c == '\r' = throwLexerError' $ StringLiteralError "carriage return in string literal"
-    | c == '\"' = reverse acc <$ put rest
+    | c == '\"' = do
+          b <- reverse acc <$ put rest
+          return (b , (SpanInfo sLine sCol eLine eCol))
     | otherwise = loop (c:acc) rest
   multiLine acc inp =
     case lexerGetChar inp of

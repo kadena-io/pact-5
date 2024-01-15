@@ -149,6 +149,38 @@ Interface :: { ParsedInterface }
     { Interface (ModuleName (getIdent $3) Nothing) (reverse (lefts $5)) (reverse (rights $5)) (fst $4) (snd $4)
       (combineSpan (_ptInfo $1) (_ptInfo $2)) }
 
+-- <<<<<<< HEAD
+-- MDocOrModuleModel :: { (Maybe (ParsedDoc SpanInfo), [DefProperty SpanInfo])}
+--  : DocAnn ModuleModel { (Just $1, $2)}
+-- | ModuleModel DocAnn { (Just $2, $1) }
+--   | DocAnn { (Just $1, [])} */
+--   | ModuleModel { (Nothing, $1)} */
+--   | DocStr { (Just $1, []) } */
+--   | {- empty -} { (Nothing, []) } */
+
+
+-- ModuleModel :: { [DefProperty SpanInfo] } */
+--   : modelAnn '[' DefProperties ']' { reverse $3 } */
+
+-- DefProperties :: { [DefProperty SpanInfo] } */
+--   : DefProperties DefProperty { $2:$1 } */
+--   | {- empty -} { [] } */
+
+-- DefProperty :: { DefProperty SpanInfo } */
+--   : '(' defprop IDENT DPropArgList ')' { DefProperty (getIdent $3) (fst $4) (snd $4) } */
+
+-- -\- This rule seems gnarly, but essentially */
+-- -\- happy needs to resolve whether the arglist is present or not */
+-- DPropArgList */
+--   : '(' IDENT ':' Type ArgList ')' Expr { (Arg (getIdent $2) $4 (_ptInfo $2) : reverse $5, $7) } */
+--   | '(' SExpr ')' { ([], $2 (combineSpan (_ptInfo $1) (_ptInfo $3))) } */
+
+-- Exts :: { [ExtDecl] } */
+--   : Exts Ext { $2:$1 } */
+--   | {- empty -} { [] } */
+
+-- ======= */
+-- >>>>>>> e46d60c74821f1b471a3e05d5e011e181117439f */
 Ext :: { ExtDecl }
   : Use { ExtImport (fst $1)  }
   | '(' implements ModQual ')' { ExtImplements (mkModName $3) }
@@ -188,16 +220,16 @@ IfDef :: { ParsedIfDef }
 
 -- ident = $2,
 IfDefun :: { SpanInfo -> IfDefun SpanInfo }
-  : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel
-    { IfDefun (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) }
+  : defun DefinedIdentifier MTypeAnn '(' MArgs ')' MDocOrModel
+    { IfDefun $2 (reverse $5) $3 (fst $7) (snd $7) }
 
 IfDefCap :: { SpanInfo -> IfDefCap SpanInfo }
-  : defcap IDENT MTypeAnn'(' MArgs ')' MDocOrModel MDCapMeta
-    { IfDefCap (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) $8 }
+  : defcap DefinedIdentifier MTypeAnn'(' MArgs ')' MDocOrModel MDCapMeta
+    { IfDefCap $2 (reverse $5) $3 (fst $7) (snd $7) $8 }
 
 IfDefPact :: { SpanInfo -> IfDefPact SpanInfo }
-  : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel
-    { IfDefPact (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) }
+  : defpact DefinedIdentifier MTypeAnn '(' MArgs ')' MDocOrModel
+    { IfDefPact $2 (reverse $5) $3 (fst $7) (snd $7) }
 
 ImportList :: { Maybe [Text] }
   : '[' ImportNames ']' { Just (reverse $2) }
@@ -207,36 +239,44 @@ ImportNames :: { [Text] }
   : ImportNames IDENT { (getIdent $2):$1 }
   | {- empty -} { [] }
 
+DefinedIdentifier :: { DefinedIdentifier SpanInfo }
+  : IDENT { DefinedIdentifier (getIdent $1) (_ptInfo $1) }
+
 DefConst :: { SpanInfo -> ParsedDefConst }
-  : defconst IDENT MTypeAnn Expr MDoc { DefConst (getIdent $2) $3 $4 $5 }
+  : defconst DefinedIdentifier MTypeAnn Expr MDoc { DefConst $2 $3 $4 $5 }
 
 -- All defs
 Defun :: { SpanInfo -> ParsedDefun }
-  : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel Block
-    { Defun (getIdent $2) (reverse $5) $3 $8 (fst $7) (snd $7) }
+  : defun DefinedIdentifier MTypeAnn '(' MArgs ')' MDocOrModel Block
+    { Defun $2 (reverse $5) $3 $8 (fst $7) (snd $7) }
 
 Defschema :: { SpanInfo -> DefSchema SpanInfo }
-  : defschema IDENT MDocOrModel ArgList
-    { DefSchema (getIdent $2) (reverse $4) (fst $3) (snd $3) }
+-- <<<<<<< HEAD */
+  : defschema DefinedIdentifier MDocOrModel NEArgList
+    { DefSchema $2 (reverse $4) (fst $3) (snd $3) }
+-- ======= */
+--   : defschema IDENT MDocOrModel ArgList */
+--     { DefSchema (getIdent $2) (reverse $4) (fst $3) (snd $3) } */
+-- >>>>>>> e46d60c74821f1b471a3e05d5e011e181117439f */
 
 Deftable :: { SpanInfo -> DefTable SpanInfo }
-  : deftable IDENT ':' '{' ParsedName '}' MDoc { DefTable (getIdent $2) $5 $7 }
+  : deftable DefinedIdentifier ':' '{' ParsedName '}' MDoc { DefTable $2 $5 $7 }
 
 Defcap :: { SpanInfo -> DefCap SpanInfo }
-  : defcap IDENT MTypeAnn '(' MArgs ')' MDocOrModel MDCapMeta Block
-    { DefCap (getIdent $2) (reverse $5) $3 $9 (fst $7) (snd $7) $8 }
+  : defcap DefinedIdentifier MTypeAnn '(' MArgs ')' MDocOrModel MDCapMeta Block
+    { DefCap $2 (reverse $5) $3 $9 (fst $7) (snd $7) $8 }
 
 DefPact :: { SpanInfo -> DefPact SpanInfo }
-  : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel Steps
-  { DefPact (getIdent $2) (reverse $5) $3 (reverse $8) (fst $7) (snd $7) }
+  : defpact DefinedIdentifier MTypeAnn '(' MArgs ')' MDocOrModel Steps
+  { DefPact $2 (reverse $5) $3 (reverse $8) (fst $7) (snd $7) }
 
 Steps :: { [PactStep SpanInfo] }
   : Steps Step { $2:$1 }
   | Step { [$1] }
 
 Step :: { PactStep SpanInfo }
-  : '(' step Expr MModel ')' { Step $3 $4 }
-  | '(' steprb Expr Expr MModel ')' { StepWithRollback $3 $4 $5 }
+  : '(' step Expr MModel ')' { Step $3 $4 (combineSpan (_ptInfo $1) (_ptInfo $5) )}
+  | '(' steprb Expr Expr MModel ')' { StepWithRollback $3 $4 $5 (combineSpan (_ptInfo $1) (_ptInfo $6) ) }
 
 MDCapMeta :: { Maybe DCapMeta }
   : Managed { Just $1 }
@@ -254,21 +294,34 @@ Managed :: { DCapMeta }
 Event :: { DCapMeta }
   : eventAnn { DefEvent }
 
-MArgs :: { [MArg] }
+MArgs :: { [MArg SpanInfo] }
   : MArgs MArg { $2:$1 }
   | {- empty -} { [] }
 
-MArg :: { MArg }
-  : IDENT ':' Type { MArg (getIdent $1) (Just $3) }
-  | IDENT { MArg (getIdent $1) Nothing }
+MArg :: { MArg SpanInfo  }
+  : IDENT ':' Type { MArg (getIdent $1) (Just $3) (_ptInfo $1) }
+  | IDENT { MArg (getIdent $1) Nothing (_ptInfo $1)}
 
-ArgList :: { [Arg] }
-  : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
+-- <<<<<<< HEAD */
+NEArgList :: { [Arg SpanInfo] }
+  : ArgList IDENT ':' Type { (Arg (getIdent $2) $4 (_ptInfo $2)):$1 }
+
+ArgList :: { [Arg SpanInfo] }
+  : ArgList IDENT ':' Type { (Arg (getIdent $2) $4 (_ptInfo $2)):$1 }
   | {- empty -} { [] }
 
-Type :: { Type }
-  : '[' Type ']' { TyList $2 }
-  | module '{' ModuleNames '}' { TyModRef (reverse $3) }
+Type :: { (Type SpanInfo) }
+  : '[' Type ']' { TyList $2 (tyInfo $2)}
+  | module '{' ModuleNames '}' { TyModRef (reverse $3) (_ptInfo $1) }
+-- ======= */
+-- ArgList :: { [Arg] } */
+--   : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 } */
+--   | {- empty -} { [] } */
+
+-- Type :: { Type } */
+--   : '[' Type ']' { TyList $2 } */
+--   | module '{' ModuleNames '}' { TyModRef (reverse $3) } */
+-- >>>>>>> e46d60c74821f1b471a3e05d5e011e181117439f */
   | IDENT '{' ParsedTyName '}' {% objType (_ptInfo $1) (getIdent $1) $3}
   | IDENT {% primType (_ptInfo $1) (getIdent $1) }
 
@@ -277,11 +330,11 @@ ModuleNames :: { [ModuleName] }
   | ModQual { [mkModName $1] }
 
 -- Annotations
-DocAnn :: { Text }
-  : docAnn STR { getStr $2 }
+DocAnn :: { ParsedDoc SpanInfo }
+  : docAnn STR { ParsedDoc (getStr $2) (_ptInfo $2) }
 
-DocStr :: { Text }
-  : STR { getStr $1 }
+DocStr :: { ParsedDoc SpanInfo }
+  : STR { ParsedDoc (getStr $1) (_ptInfo $1) }
 
 MModel :: { [PropertyExpr SpanInfo] }
   : ModelAnn { $1 }
@@ -290,7 +343,7 @@ MModel :: { [PropertyExpr SpanInfo] }
 ModelAnn :: { [PropertyExpr SpanInfo] }
   : modelAnn '[' PactFVModels ']' { $3 }
 
-MDocOrModel :: { (Maybe Text, [PropertyExpr SpanInfo])}
+MDocOrModel :: { (Maybe (ParsedDoc SpanInfo) , [PropertyExpr SpanInfo])}
   : DocAnn ModelAnn { (Just $1, $2)}
   | ModelAnn DocAnn { (Just $2, $1) }
   | DocAnn { (Just $1, [])}
@@ -298,16 +351,34 @@ MDocOrModel :: { (Maybe Text, [PropertyExpr SpanInfo])}
   | DocStr { (Just $1, []) }
   | {- empty -} { (Nothing, []) }
 
+-- <<<<<<< HEAD */
+-- MDocOrModel :: { (Maybe (ParsedDoc SpanInfo) , Maybe [Expr SpanInfo])} */
+--   : DocAnn ModelAnn { (Just $1, Just $2)} */
+--   | ModelAnn DocAnn { (Just $2, Just $1) } */
+--   | DocAnn { (Just $1, Nothing)} */
+--   | ModelAnn { (Nothing, Just $1)} */
+--   | DocStr { (Just $1, Nothing) } */
+--   | {- empty -} { (Nothing, Nothing) } */
+-- ======= */
+-- MDocOrModel :: { (Maybe Text, [PropertyExpr SpanInfo])} */
+--   : DocAnn ModelAnn { (Just $1, $2)} */
+--   | ModelAnn DocAnn { (Just $2, $1) } */
+--   | DocAnn { (Just $1, [])} */
+--   | ModelAnn { (Nothing, $1)} */
+--   | DocStr { (Just $1, []) } */
+--   | {- empty -} { (Nothing, []) } */
+-- >>>>>>> e46d60c74821f1b471a3e05d5e011e181117439f */
+
 -- This production causes parser ambugity in two productions: defun and defcap
 -- (defun f () "a")
 -- (defcap f () "a")
 -- it isn't clear whether "a" is a docstring or a string literal.
-MDoc :: { Maybe Text }
+MDoc :: { Maybe (ParsedDoc SpanInfo) }
   : DocAnn { Just $1 }
   | DocStr { Just $1 }
   | {- empty -} { Nothing }
 
-MTypeAnn :: { Maybe Type }
+MTypeAnn :: { Maybe (Type SpanInfo) }
   : ':' Type { Just $2 }
   | {- empty -} { Nothing }
 
@@ -364,20 +435,29 @@ CapExpr :: { SpanInfo -> ParsedExpr }
   : CapForm { CapabilityForm $1 }
 
 CapForm :: { CapForm SpanInfo }
-  : withcap Expr Block { WithCapability $2 $3 }
-  | c_usr_grd '(' ParsedName AppList ')' { CreateUserGuard $3 (reverse $4)}
+-- <<<<<<< HEAD */
+--   : withcap '(' CapName AppList ')' Block { WithCapability $3 (reverse $4) $6 } */
+--   | c_usr_grd '(' CapName AppList ')' { CreateUserGuard $3 (reverse $4)} */
+--   -\- | installcap '(' ParsedName AppList ')' { InstallCapability $3 $4 } */
+--   -\- | reqcap '(' ParsedName AppList ')' { RequireCapability $3 $4 } */
+--   -\- | composecap '(' ParsedName AppList ')' { ComposeCapability $3 $4 } */
+--   -\- | emitevent '(' ParsedName AppList ')' { EmitEvent $3 $4 } */
+-- ======= */
+  : withcap Expr Block { WithCapability $2 $3 (combineSpan (_ptInfo $1) (view termInfo $3))}
+  | c_usr_grd '(' CapName AppList ')' { CreateUserGuard $3 (reverse $4)}
+-- >>>>>>> e46d60c74821f1b471a3e05d5e011e181117439f */
 
-LamArgs :: { [MArg] }
-  : LamArgs IDENT ':' Type { (MArg (getIdent $2) (Just $4)):$1 }
-  | LamArgs IDENT { (MArg (getIdent $2) Nothing):$1 }
+LamArgs :: { [MArg SpanInfo] }
+: LamArgs IDENT ':' Type { (MArg (getIdent $2) (Just $4) (_ptInfo $2)):$1 }
+  | LamArgs IDENT { (MArg (getIdent $2) Nothing (_ptInfo $2)):$1 }
   | {- empty -} { [] }
 
 LetExpr :: { SpanInfo -> ParsedExpr }
   : let '(' Binders ')' Block { LetIn (NE.fromList (reverse $3)) $5 }
 
 Binders :: { [Binder SpanInfo] }
-  : Binders '(' IDENT MTypeAnn Expr ')' { (Binder (getIdent $3) $4 $5):$1 }
-  | '(' IDENT MTypeAnn Expr ')' { [Binder (getIdent $2) $3 $4] }
+  : Binders '(' IDENT MTypeAnn Expr ')' { (Binder (getIdent $3) $4 $5 (_ptInfo $3)):$1 }
+  | '(' IDENT MTypeAnn Expr ')' { [Binder (getIdent $2) $3 $4 (_ptInfo $2)] }
 
 GenAppExpr :: { SpanInfo -> ParsedExpr }
   : Expr AppBindList { \i -> App $1 (toAppExprList i (reverse $2)) i }
@@ -389,19 +469,28 @@ AppList :: { [ParsedExpr] }
   : AppList Expr { $2:$1 }
   | {- empty -} { [] }
 
-AppBindList :: { [Either ParsedExpr [(Field, MArg)]] }
+AppBindList :: { [Either ParsedExpr ([(ParsedField SpanInfo, MArg SpanInfo)] , SpanInfo)] }
   : AppBindList Expr { (Left $2):$1 }
   | AppBindList BindingForm { (Right $2):$1}
   | {- empty -} { [] }
 
-BindingForm :: { [(Field, MArg)] }
-  : '{' BindPairs '}' { $2 }
+-- <<<<<<< HEAD */
+BindingForm :: { ([(ParsedField SpanInfo, MArg SpanInfo)] , SpanInfo) }
+  : '{' BindPairs '}' { ($2 , combineSpan (_ptInfo $1) (_ptInfo $3))  }
 
-BindPair :: { (Field, MArg) }
-  : STR ':=' MArg { (Field (getStr $1), $3) }
-  | TICK ':=' MArg { (Field (getTick $1), $3) }
+BindPair :: { (ParsedField SpanInfo, MArg SpanInfo) }
+  : STR ':=' MArg { (ParsedField (Field (getStr $1)) (_ptInfo $1), $3) }
+  | TICK ':=' MArg { (ParsedField (Field (getTick $1)) (_ptInfo $1), $3) }
+-- ======= */
+-- BindingForm :: { [(Field, MArg)] } */
+--   : '{' BindPairs '}' { $2 } */
 
-BindPairs :: { [(Field, MArg)] }
+-- BindPair :: { (Field, MArg) } */
+--   : STR ':=' MArg { (Field (getStr $1), $3) } */
+--   | TICK ':=' MArg { (Field (getTick $1), $3) } */
+-- >>>>>>> e46d60c74821f1b471a3e05d5e011e181117439f */
+
+BindPairs :: { [(ParsedField SpanInfo, MArg SpanInfo)] }
   : BindPairs ',' BindPair { $3 : $1 }
   | BindPair { [$1] }
 
@@ -440,6 +529,12 @@ ParsedName :: { ParsedName }
   | IDENT { BN (mkBarename (getIdent $1)) }
   | IDENT '::' IDENT { DN (DynamicName (getIdent $1) (getIdent $3)) }
 
+CapName :: { CapName SpanInfo }
+  : IDENT '.' ModQual { CapName (QN (mkQualName (getIdent $1) $3)) (_ptInfo $1) }
+  | IDENT { CapName (BN (mkBarename (getIdent $1))) (_ptInfo $1) }
+  | IDENT '::' IDENT { CapName (DN (DynamicName (getIdent $1) (getIdent $3)))
+				  (combineSpan (_ptInfo $1) (_ptInfo $3)) }
+
 ParsedTyName :: { ParsedTyName }
   : IDENT '.' ModQual { TQN (mkQualName (getIdent $1) $3) }
   | IDENT { TBN (mkBarename (getIdent $1)) }
@@ -449,8 +544,16 @@ ModQual :: { (Text, Maybe Text, SpanInfo) }
   | IDENT { (getIdent $1, Nothing, _ptInfo $1) }
 
 Number :: { ParsedExpr }
-  : NUM '.' NUM {% mkDecimal Constant (getNumber $1) (getNumber $3) (_ptInfo $1) }
+  : NUM '.' NUM {% mkDecimal Constant (getNumber $1) (getNumber $3) (combineSpan (_ptInfo $1) (_ptInfo $3)) }
   | NUM { mkIntegerConstant Constant (getNumber $1) (_ptInfo $1) }
+
+-- <<<<<<< HEAD */
+--   : NUM '.' NUM {% mkDecimal (getNumber $1) (getNumber $3) (combineSpan (_ptInfo $1) (_ptInfo $3)) } */
+--   | NUM { mkIntegerConstant (getNumber $1) (_ptInfo $1) } */
+-- ======= */
+--   : NUM '.' NUM {% mkDecimal Constant (getNumber $1) (getNumber $3) (_ptInfo $1) } */
+--   | NUM { mkIntegerConstant Constant (getNumber $1) (_ptInfo $1) } */
+-- >>>>>>> e46d60c74821f1b471a3e05d5e011e181117439f */
 
 String :: { ParsedExpr }
  : STR  { Constant (LString (getStr $1)) (_ptInfo $1) }
@@ -459,14 +562,14 @@ String :: { ParsedExpr }
 Object :: { ParsedExpr }
   : '{' ObjectBody '}' { Object $2 (combineSpan (_ptInfo $1) (_ptInfo $3)) }
 
-ObjectBody :: { [(Field, ParsedExpr)] }
+ObjectBody :: { [(ParsedField SpanInfo, ParsedExpr)] }
   : FieldPairs { $1 }
 
-FieldPair :: { (Field, ParsedExpr) }
-  : STR ':' Expr { (Field (getStr $1), $3) }
-  | TICK ':' Expr { (Field (getTick $1), $3) }
+FieldPair :: { (ParsedField SpanInfo, ParsedExpr) }
+  : STR ':' Expr { (ParsedField (Field (getStr $1)) (_ptInfo $1), $3) }
+  | TICK ':' Expr { (ParsedField (Field (getTick $1)) (_ptInfo $1), $3) }
 
-FieldPairs :: { [(Field, ParsedExpr)] }
+FieldPairs :: { [(ParsedField SpanInfo, ParsedExpr)] }
   : FieldPairs ',' FieldPair { $3 : $1 }
   | FieldPair { [$1] }
   | {- empty -} { [] }
