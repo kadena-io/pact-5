@@ -11,7 +11,6 @@ import Pact.Core.Compile
 import Pact.Core.Syntax.Node.Node
 import Pact.Core.Syntax.ParseTreeNode
 
--- import import System.File.Tree (getDirectory, copyTo_)
 
 import Control.Monad
 import System.Environment (getArgs)
@@ -26,15 +25,40 @@ import Path.Posix (parseAbsDir)
 import Path.IO (copyDirRecur)
 
 
+import System.Directory
+import System.FilePath
+import System.FilePath.Posix ((</>))
+import System.IO (writeFile)
+import qualified Data.Text as T
+import qualified Data.Text.IO as TextIO
+
+
+usage :: IO ()
+usage = do
+   putStrLn "  Command to process a file: cmd <source_file.pact> <output_dir>"
+   putStrLn "  Command to process a directory: cmd <source_dir> <output_dir>"
+   putStrLn "Here, "
+   putStrLn "  <source_file.pact> is a .pact file to process."
+   putStrLn "  <source_dir> is a directory which contains .pact files to process."
+   putStrLn "  <output_dir> is the directory where the outputs will be stored."
+
 main :: IO ()
 main = 
   getArgs >>= \case
+    ("-h" : _) -> do putStrLn "HTML backend for pact compiler:"
+                     usage
     (target:output:_) -> do
        if (takeExtension target ==".pact")
        then processFile target output
-       else processDir target output
+       else do processDir target output
+               createHTMLIndex output
       
-    _ -> putStrLn "TODO: usage info"
+    _ -> do
+         putStrLn "Incorrect usage. Here are the correct ways to use this tool:"
+         usage
+
+         
+
 
 folderWithAssets :: FilePath
 folderWithAssets = "/Users/marcin/www-pact"
@@ -109,3 +133,43 @@ copyAsset source dest asset = do
      copyDirRecur s d 
     else do
       copyFile (source </> asset) (dest </> asset)
+
+data Tree a = Node a [Tree a]
+
+createHTMLIndex :: FilePath -> IO ()
+createHTMLIndex path = do
+    tree <- getDirectoryTreeRecursive path
+    let html = "<!DOCTYPE html><html><head><link rel=\"stylesheet\" href=\"root/style.css\"></head><body class=\"proj-index\">" ++ (htmlTreeList tree) ++ "</body></html>"
+    
+    
+    writeFile (path </> "index.html") html
+
+getDirectoryTreeRecursive :: FilePath -> IO (Tree FilePath)
+getDirectoryTreeRecursive top = do
+    dirContent <- listDirectory top
+    paths <- forM dirContent $ \name -> do
+        let path = top </> name
+        isDir <- doesDirectoryExist path
+        if isDir
+        then getDirectoryTreeRecursive path
+        else return (Node path [])
+    return (Node top paths)
+
+htmlTreeList :: Tree FilePath -> String
+htmlTreeList (Node path nodes) =
+ case (takeFileName  path , takeExtension path) of
+    ("dat",_) -> ""
+    ("webfonts",_) -> ""
+    ("index.html",_) -> ""
+    (_ , ".html") -> 
+         ("<ul>\n" ++ 
+         "<li><a target=\"_parent\" href=\"" ++ path ++ "\">" ++ reverse (drop 5 (reverse (takeFileName path))) ++ ".pact</a></li>\n" ++
+         (concatMap htmlTreeList nodes) ++ 
+         "</ul>\n")
+    (_ , "") -> 
+         ("<ul>\n" ++ 
+         "<li><span>" ++ takeFileName  path ++ "</span></li>\n" ++
+         (concatMap htmlTreeList nodes) ++ 
+         "</ul>\n")
+    (_ , _) -> ""
+
