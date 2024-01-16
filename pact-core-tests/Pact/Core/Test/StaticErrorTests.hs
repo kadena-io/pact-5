@@ -1062,6 +1062,17 @@ builtinTests =
   , ("at_oob_empty", isExecutionError _ArrayOutOfBoundsException, "(at 0 [])")
   , ("at_key_missing", isExecutionError _EvalError, "(at 'bar { 'foo: 1 })")
   , ("yield_outside", isExecutionError _YieldOutsiteDefPact, "(yield {})")
+  , ("resume_no_defpact", isExecutionError _NoActiveDefPactExec, "(resume { 'field := binder } binder)")
+  , ("resume_no_yield", isExecutionError _NoYieldInDefPactStep, [text|
+      (module m g (defcap g () true)
+        (defpact p ()
+          (step "hello")
+          (step (resume { 'field := binder } binder)))
+        )
+
+      (p)
+      (continue-pact 1)
+    |])
   ]
 
 tests :: TestTree
