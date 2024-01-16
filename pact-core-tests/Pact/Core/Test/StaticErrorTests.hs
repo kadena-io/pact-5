@@ -1056,6 +1056,11 @@ builtinTests =
 
   , ("enumerate_up_diverging", isExecutionError _EnumerationError, "(enumerate 0 10 -1)")
   , ("enumerate_down_diverging", isExecutionError _EnumerationError, "(enumerate 10 0 1)")
+  , ("at_oob_bigger", isExecutionError _ArrayOutOfBoundsException, "(at 100 [1 2 3])")
+  , ("at_oob_bound", isExecutionError _ArrayOutOfBoundsException, "(at 3 [1 2 3])")
+  , ("at_oob_smaller", isExecutionError _ArrayOutOfBoundsException, "(at -1 [1 2 3])")
+  , ("at_oob_empty", isExecutionError _ArrayOutOfBoundsException, "(at 0 [])")
+  , ("at_key_missing", isExecutionError _EvalError, "(at 'bar { 'foo: 1 })")
   ]
 
 tests :: TestTree
