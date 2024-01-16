@@ -1136,6 +1136,9 @@ builtinTests =
         )
       (f)
     |])
+  , ("b64decode", isExecutionError _DecodeError, [text|
+      (base64-decode "foobar!")
+    |])
   ]
 
 tests :: TestTree
