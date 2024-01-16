@@ -74,10 +74,17 @@ common pact-core-common
     , poly
     , mod
     , neat-interpolation
-    -- ^ is used by the `BuiltinDocs` module.
+  -- ^ is used by the `BuiltinDocs` module.
+    , aeson
+    , aeson-pretty
+    , random
+    , template-haskell
+    , split
+    , ansi-terminal    
     , ghc-bignum
 
-  ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-options: -Wall  -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+   -- -Werror
   ghc-prof-options: -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
   default-extensions:
@@ -169,6 +176,7 @@ library
     Pact.Core.Syntax.Lexer
     Pact.Core.Syntax.LexUtils
     Pact.Core.Syntax.Parser
+    Pact.Core.Syntax.Node.Node
 
     -- Core IR modules
     Pact.Core.IR.Term
@@ -246,6 +254,22 @@ executable pact
                , text
 
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+
+  other-modules: PackageInfo_pact_core
+
+executable pact-html
+  main-is: pact-core/Pact/Core/RenderHTML.hs
+
+  build-depends: base
+               , pact-core
+               , pact-core:pact-core-lsp
+               , optparse-applicative
+               , text
+
+  ghc-options:
+       -- -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 

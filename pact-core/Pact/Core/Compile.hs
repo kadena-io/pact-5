@@ -14,6 +14,7 @@ module Pact.Core.Compile
  , compileDesugarOnly
  , evalTopLevel
  , CompileValue(..)
+ , _parseOnlyFile
  ) where
 
 import Control.Lens
