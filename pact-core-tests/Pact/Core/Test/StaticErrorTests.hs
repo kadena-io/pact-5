@@ -1061,6 +1061,7 @@ builtinTests =
   , ("at_oob_smaller", isExecutionError _ArrayOutOfBoundsException, "(at -1 [1 2 3])")
   , ("at_oob_empty", isExecutionError _ArrayOutOfBoundsException, "(at 0 [])")
   , ("at_key_missing", isExecutionError _EvalError, "(at 'bar { 'foo: 1 })")
+  , ("yield_outside", isExecutionError _YieldOutsiteDefPact, "(yield {})")
   ]
 
 tests :: TestTree
