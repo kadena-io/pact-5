@@ -1073,6 +1073,69 @@ builtinTests =
       (p)
       (continue-pact 1)
     |])
+  , ("toplevel_create_table", isExecutionError _NativeIsTopLevelOnly, [text|
+      (module m g (defcap g () true)
+        (defschema s a:integer)
+        (deftable t:{s})
+        (defun f () (create-table t))
+        )
+      (f)
+    |])
+  , ("toplevel_describe_table", isExecutionError _NativeIsTopLevelOnly, [text|
+      (module m g (defcap g () true)
+        (defschema s a:integer)
+        (deftable t:{s})
+        (defun f () (describe-table t))
+        )
+      (f)
+    |])
+  , ("toplevel_define_keyset", isExecutionError _NativeIsTopLevelOnly, [text|
+      (env-data { "kall": ["a" "b" "c"] })
+      (module m g (defcap g () true)
+        (defun f () (define-keyset 'kall))
+        )
+      (f)
+    |])
+  , ("toplevel_define_keyset_guarded", isExecutionError _NativeIsTopLevelOnly, [text|
+      (env-data { "kall": ["a" "b" "c"] })
+      (module m g (defcap g () true)
+        (defun f () (define-keyset 'kall (sig-keyset)))
+        )
+      (f)
+    |])
+  , ("toplevel_describe_module", isExecutionError _NativeIsTopLevelOnly, [text|
+      (module m g (defcap g () true)
+        (defun f () (describe-module 'm))
+        )
+      (f)
+    |])
+  , ("toplevel_describe_keyset", isExecutionError _NativeIsTopLevelOnly, [text|
+      (env-data { "kall": ["a" "b" "c"] })
+      (define-keyset 'kall)
+      (module m g (defcap g () true)
+        (defun f () (describe-keyset 'kall))
+        )
+      (f)
+    |])
+  , ("toplevel_namespace", isExecutionError _NativeIsTopLevelOnly, [text|
+      (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
+      (env-keys ["carl"])
+
+      (define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys))
+      (module m g (defcap g () true)
+        (defun f () (namespace 'carl))
+        )
+      (f)
+    |])
+  , ("toplevel_define_namespace", isExecutionError _NativeIsTopLevelOnly, [text|
+      (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
+      (env-keys ["carl"])
+
+      (module m g (defcap g () true)
+        (defun f () (define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys)))
+        )
+      (f)
+    |])
   ]
 
 tests :: TestTree
