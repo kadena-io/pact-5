@@ -7,6 +7,7 @@ module Pact.Core.Test.StaticErrorTests(tests) where
 import Test.Tasty
 import Test.Tasty.HUnit
 
+import qualified Data.Text as T
 import Control.Lens
 import Data.IORef
 import Data.Text (Text)
@@ -1138,6 +1139,12 @@ builtinTests =
     |])
   , ("b64decode", isExecutionError _DecodeError, [text|(base64-decode "foobar!")|])
   , ("b64decode-str-to-int", isExecutionError _DecodeError, [text|(str-to-int 64 "foobar!")|])
+  , let long = T.replicate 513 "0" in
+    ("str-to-int-too-long", isExecutionError _DecodeError, [text|(str-to-int "$long")|])
+  , let long = T.replicate 513 "0" in
+    ("str-to-int-base-too-long", isExecutionError _DecodeError, [text|(str-to-int 2 "$long")|])
+  , ("str-to-int-empty", isExecutionError _DecodeError, [text|(str-to-int "")|])
+  , ("str-to-int-base-empty", isExecutionError _DecodeError, [text|(str-to-int 2 "")|])
   , ("keyset_def_ns_mismatch", isExecutionError _MismatchingKeysetNamespace, [text|
       (env-exec-config ["RequireKeysetNs"])
       (env-data
