@@ -1139,6 +1139,26 @@ builtinTests =
   , ("b64decode", isExecutionError _DecodeError, [text|
       (base64-decode "foobar!")
     |])
+  , ("keyset_def_ns_mismatch", isExecutionError _MismatchingKeysetNamespace, [text|
+      (env-exec-config ["RequireKeysetNs"])
+      (env-data
+        { "alice-keys" : ["alice"]
+        , "bob-keys"   : ["bob"]
+        , "alice.alice-keys": ["alice"]
+        , "bob.bob-keys" : ["bob"]
+        })
+      (env-keys ["alice", "bob"])
+
+      (define-namespace 'alice
+        (read-keyset 'alice-keys)
+        (read-keyset 'alice-keys))
+
+      (define-namespace 'bob
+        (read-keyset 'bob-keys)
+        (read-keyset 'bob-keys))
+      (namespace 'alice)
+      (define-keyset "bob.bob-keys")
+    |])
   ]
 
 tests :: TestTree
