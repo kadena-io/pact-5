@@ -1159,6 +1159,10 @@ builtinTests =
       (namespace 'alice)
       (define-keyset "bob.bob-keys")
     |])
+  , ("emit_event_unmanaged", isExecutionError _InvalidEventCap, [text|
+      (module m g (defcap g () true))
+      (emit-event (g))
+    |])
   ]
 
 tests :: TestTree
