@@ -10,7 +10,7 @@ import Pact.Core.LanguageServer
 import qualified Options.Applicative as O
 import Control.Applicative ((<|>))
 
-import qualified PackageInfo_pact as PI
+import qualified PackageInfo_pact_tng as PI
 import Data.Version (showVersion)
 import qualified Data.Text.IO as T
 import Data.Foldable

@@ -1,5 +1,5 @@
 cabal-version:       3.8
-name:                pact
+name:                pact-tng
 version:             5.0
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
 synopsis:            Smart contract language library and REPL
@@ -7,8 +7,8 @@ description:
             Pact is a transactional, database-focused, Turing-incomplete, interpreted language for smart contracts,
             logic to be deployed and executed on a blockchain/distributed ledger. For more information see
             <http://kadena.io/pact>.
-homepage:            https://github.com/kadena-io/pact
-bug-reports:         https://github.com/kadena-io/pact/issues
+homepage:            https://github.com/kadena-io/pact-5
+bug-reports:         https://github.com/kadena-io/pact-5/issues
 license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Jose Cardona
@@ -108,7 +108,7 @@ library
   hs-source-dirs: pact
 
   build-depends:
-    pact:pact-crypto
+    pact-tng:pact-crypto
 
   build-tool-depends:
     , alex:alex
@@ -212,7 +212,7 @@ library pact-lsp
     Pact.Core.LanguageServer.Utils
 
   build-depends:
-    , pact
+    , pact-tng
     , lsp
     , lsp-types
     , filepath
@@ -224,7 +224,7 @@ executable gasmodel
   main-is: Main.hs
 
   build-depends:
-    , pact
+    , pact-tng
     , criterion
 
   other-modules:
@@ -240,8 +240,8 @@ executable pact
   main-is: repl/Main.hs
 
   build-depends: base
-               , pact
-               , pact:pact-lsp
+               , pact-tng
+               , pact-tng:pact-lsp
                , optparse-applicative
                , text
 
@@ -250,7 +250,7 @@ executable pact
   default-language:    Haskell2010
 
   -- beware of the autogen modules. Remember to `cabal clean`!
-  other-modules: PackageInfo_pact
+  other-modules: PackageInfo_pact_tng
 
 
 test-suite core-tests
@@ -291,7 +291,7 @@ test-suite core-tests
     , mtl
     , text
     , transformers
-    , pact
+    , pact-tng
     , prettyprinter
     , vector
     , tasty
@@ -302,8 +302,8 @@ test-suite core-tests
     , groups
     , semirings
     , neat-interpolation
-    , pact:pact-crypto
-    , pact:pact-lsp
+    , pact-tng:pact-crypto
+    , pact-tng:pact-lsp
     , lsp-test
     , lsp-types
   other-modules:
