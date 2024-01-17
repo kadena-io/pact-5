@@ -1136,9 +1136,8 @@ builtinTests =
         )
       (f)
     |])
-  , ("b64decode", isExecutionError _DecodeError, [text|
-      (base64-decode "foobar!")
-    |])
+  , ("b64decode", isExecutionError _DecodeError, [text|(base64-decode "foobar!")|])
+  , ("b64decode-str-to-int", isExecutionError _DecodeError, [text|(str-to-int 64 "foobar!")|])
   , ("keyset_def_ns_mismatch", isExecutionError _MismatchingKeysetNamespace, [text|
       (env-exec-config ["RequireKeysetNs"])
       (env-data
