@@ -164,7 +164,7 @@ exprGen = Gen.recursive Gen.choice
       par <- Gen.list (Range.linear 0 8) $ do
         i <- identGen
         ty <- Gen.maybe typeGen
-        pure (Lisp.MArg i ty)
+        pure (Lisp.MArg i ty ())
       expr <- Gen.subterm exprGen id
       pure $ Lisp.Lam par expr ()
 
@@ -172,23 +172,23 @@ exprGen = Gen.recursive Gen.choice
       binders <- Gen.nonEmpty (Range.constant 1 8) binderGen
       pure $ Lisp.LetIn binders inner ()
 
-    typeGen :: Gen Lisp.Type
+    typeGen :: Gen (Lisp.Type ())
     typeGen = Gen.recursive Gen.choice
-      (Gen.constant . Lisp.TyPrim <$> [minBound ..])
-      [Lisp.TyList <$> typeGen
-      ,pure Lisp.TyPolyList
-      ,Lisp.TyModRef <$> Gen.list (Range.constant 1 5) moduleNameGen
-      ,pure Lisp.TyGuard
-      ,pure Lisp.TyKeyset
-      ,Lisp.TyObject <$> parsedTyNameGen
-      ,pure Lisp.TyTime
-      ,pure Lisp.TyPolyObject]
+      (Gen.constant . flip Lisp.TyPrim () <$> [minBound ..])
+      [flip Lisp.TyList () <$> typeGen
+      ,pure $ Lisp.TyPolyList ()
+      ,flip Lisp.TyModRef ()  <$> Gen.list (Range.constant 1 5) moduleNameGen
+      ,pure $ Lisp.TyGuard ()
+      ,pure $ Lisp.TyKeyset ()
+      ,flip Lisp.TyObject () <$> parsedTyNameGen
+      ,pure $ Lisp.TyTime ()
+      ,pure $ Lisp.TyPolyObject ()]
 
     binderGen = do
       name <- identGen
       ty <- Gen.maybe typeGen
       expr <- Gen.subterm exprGen id
-      pure $ Lisp.Binder name ty expr
+      pure $ Lisp.Binder name ty expr ()
 
 
 parserRoundtrip :: Property

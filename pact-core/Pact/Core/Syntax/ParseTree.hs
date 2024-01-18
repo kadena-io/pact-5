@@ -3,10 +3,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ExistentialQuantification #-}
+
 
 module Pact.Core.Syntax.ParseTree where
 
-import Control.Lens hiding (List, op)
+import Control.Lens hiding (List, op, _head)
 import Data.Foldable(fold)
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
@@ -20,6 +25,7 @@ import Pact.Core.Pretty
 import Pact.Core.Type(PrimType(..))
 import Pact.Core.Guards
 
+import Data.Functor.Const()
 
 data Operator
   = AndOp
@@ -44,83 +50,108 @@ instance Pretty Operator where
 
 -- | Type representing all pact syntactic types.
 -- Note: A few types (mainly TyPoly*) do not exist in pact-core.
-data Type
-  = TyPrim PrimType
-  | TyList Type
-  | TyPolyList
-  | TyModRef [ModuleName]
-  | TyKeyset
-  | TyObject ParsedTyName
-  | TyTable ParsedTyName
-  | TyPolyObject
-  deriving (Show, Eq)
+data Type i
+  = TyPrim PrimType i
+  | TyList (Type i) i
+  | TyPolyList i
+  | TyModRef [ModuleName] i
+  | TyKeyset i
+  | TyObject ParsedTyName i
+  | TyTable ParsedTyName i
+  | TyPolyObject i
+  deriving (Show, Eq, Functor)
 
-pattern TyInt :: Type
-pattern TyInt = TyPrim PrimInt
+tyInfo :: Type i -> i
+tyInfo = \case
+    TyPrim _ i -> i
+    TyList _ i -> i
+    TyModRef _ i -> i
+    TyPolyList i -> i
+    TyKeyset i -> i
+    TyObject _ i -> i
+    TyPolyObject i -> i
+    TyTable _ i -> i
 
-pattern TyDecimal :: Type
-pattern TyDecimal = TyPrim PrimDecimal
+pattern TyInt :: i -> Type i
+pattern TyInt i = TyPrim PrimInt i
 
-pattern TyBool :: Type
-pattern TyBool = TyPrim PrimBool
+pattern TyDecimal :: i -> Type i
+pattern TyDecimal i = TyPrim PrimDecimal i
 
-pattern TyString :: Type
-pattern TyString = TyPrim PrimString
+pattern TyBool :: i -> Type i
+pattern TyBool i = TyPrim PrimBool i
 
-pattern TyTime :: Type
-pattern TyTime = TyPrim PrimTime
+pattern TyString :: i -> Type i
+pattern TyString i = TyPrim PrimString i
 
-pattern TyUnit :: Type
-pattern TyUnit = TyPrim PrimUnit
+pattern TyTime :: i -> Type i
+pattern TyTime i = TyPrim PrimTime i
 
-pattern TyGuard :: Type
-pattern TyGuard = TyPrim PrimGuard
+pattern TyUnit :: i -> Type i
+pattern TyUnit i = TyPrim PrimUnit i
 
-instance Pretty Type where
+pattern TyGuard :: i -> Type i
+pattern TyGuard i = TyPrim PrimGuard i
+
+instance Pretty (Type i) where
   pretty = \case
-    TyPrim prim -> pretty prim
-    TyList t -> brackets (pretty t)
-    TyModRef mn -> "module" <> braces (hsep (punctuate comma (pretty <$> mn)))
-    TyPolyList -> "list"
-    TyKeyset -> "keyset"
-    TyObject qn -> "object" <> braces (pretty qn)
-    TyPolyObject -> "object"
-    TyTable o -> "table" <> braces (pretty o)
-
+    TyPrim prim _ -> pretty prim
+    TyList t _ -> brackets (pretty t)
+    TyModRef mn _ -> "module" <> braces (hsep (punctuate comma (pretty <$> mn)))
+    TyPolyList _ -> "list"
+    TyKeyset _ -> "keyset"
+    TyObject qn _ -> "object" <> braces (pretty qn)
+    TyPolyObject _ -> "object"
+    TyTable o _ -> "table" <> braces (pretty o)
 
 ----------------------------------------------------
 -- Common structures
 ----------------------------------------------------
 
-data Arg
+data Arg i
   = Arg
   { _argName :: Text
-  , _argType :: Type
-  } deriving Show
+  , _argType :: Type i
+  , _argInfo :: i
+  } deriving (Show , Functor)
 
-data MArg
+data MArg i
   = MArg
   { _margName :: Text
-  , _margType :: Maybe Type
-  } deriving (Eq, Show)
+  , _margType :: Maybe (Type i)
+  , _margInfo :: i
+  } deriving (Eq, Show, Functor)
+
+data DefinedIdentifier i
+  = DefinedIdentifier
+  { _diText :: Text
+  , _diInfo :: i
+  } deriving (Show , Functor)
+
+data ParsedDoc i
+  = ParsedDoc
+  { _dText :: Text
+  , _dInfo :: i
+  } deriving (Show , Functor)
+
 
 defName :: Def i -> Text
-defName = \case
+defName = _diText . (\case
   Dfun d -> _dfunName d
   DConst d -> _dcName d
   DCap d -> _dcapName d
   DTable d -> _dtName d
   DPact d -> _dpName d
-  DSchema d -> _dscName d
+  DSchema d -> _dscName d)
 
 defDocs :: Def i -> Maybe Text
-defDocs = \case
+defDocs = fmap _dText . (\case
   Dfun d -> _dfunDocs d
   DConst d -> _dcDocs d
   DCap d -> _dcapDocs d
   DTable d -> _dtDocs d
   DPact d -> _dpDocs d
-  DSchema d -> _dscDocs d
+  DSchema d -> _dscDocs d)
 
 defInfo :: Def i -> i
 defInfo = \case
@@ -134,21 +165,21 @@ defInfo = \case
 
 data Defun i
   = Defun
-  { _dfunName :: Text
-  , _dfunArgs :: [MArg]
-  , _dfunRetType :: Maybe Type
+  { _dfunName :: DefinedIdentifier i
+  , _dfunArgs :: [MArg i]
+  , _dfunRetType :: Maybe (Type i)
   , _dfunTerm :: Expr i
-  , _dfunDocs :: Maybe Text
+  , _dfunDocs :: Maybe (ParsedDoc i)
   , _dfunModel :: [PropertyExpr i]
   , _dfunInfo :: i
   } deriving (Show, Functor)
 
 data DefConst i
   = DefConst
-  { _dcName :: Text
-  , _dcType :: Maybe Type
+  { _dcName :: DefinedIdentifier i
+  , _dcType :: Maybe (Type i)
   , _dcTerm :: Expr i
-  , _dcDocs :: Maybe Text
+  , _dcDocs :: Maybe (ParsedDoc i)
   , _dcInfo :: i
   } deriving (Show, Functor)
 
@@ -159,11 +190,11 @@ data DCapMeta
 
 data DefCap i
   = DefCap
-  { _dcapName :: Text
-  , _dcapArgs :: ![MArg]
-  , _dcapRetType :: Maybe Type
+  { _dcapName :: DefinedIdentifier i
+  , _dcapArgs :: ![MArg i]
+  , _dcapRetType :: Maybe (Type i)
   , _dcapTerm :: Expr i
-  , _dcapDocs :: Maybe Text
+  , _dcapDocs :: Maybe (ParsedDoc i)
   , _dcapModel :: [PropertyExpr i]
   , _dcapMeta :: Maybe DCapMeta
   , _dcapInfo :: i
@@ -171,33 +202,33 @@ data DefCap i
 
 data DefSchema i
   = DefSchema
-  { _dscName :: Text
-  , _dscArgs :: [Arg]
-  , _dscDocs :: Maybe Text
+  { _dscName :: DefinedIdentifier i
+  , _dscArgs :: [Arg i]
+  , _dscDocs :: Maybe (ParsedDoc i)
   , _dscModel :: [PropertyExpr i]
   , _dscInfo :: i
   } deriving (Show, Functor)
 
 data DefTable i
   = DefTable
-  { _dtName :: Text
+  { _dtName :: DefinedIdentifier i
   , _dtSchema :: ParsedName
-  , _dtDocs :: Maybe Text
+  , _dtDocs :: Maybe (ParsedDoc i)
   , _dtInfo :: i
   } deriving (Show, Functor)
 
 data PactStep i
-  = Step (Expr i) [PropertyExpr i]
-  | StepWithRollback (Expr i) (Expr i) [PropertyExpr i]
+  = Step (Expr i) [PropertyExpr i] i
+  | StepWithRollback (Expr i) (Expr i) [PropertyExpr i] i
   deriving (Show, Functor)
 
 data DefPact i
   = DefPact
-  { _dpName :: Text
-  , _dpArgs :: [MArg]
-  , _dpRetType :: Maybe Type
+  { _dpName :: DefinedIdentifier i
+  , _dpArgs :: [MArg i]
+  , _dpRetType :: Maybe (Type i)
   , _dpSteps :: [PactStep i]
-  , _dpDocs :: Maybe Text
+  , _dpDocs :: Maybe (ParsedDoc i)
   , _dpModel :: [PropertyExpr i]
   , _dpInfo :: i
   } deriving (Show, Functor)
@@ -235,7 +266,7 @@ data Module i
   , _mGovernance :: Governance ParsedName
   , _mExternal :: [ExtDecl]
   , _mDefs :: NonEmpty (Def i)
-  , _mDoc :: Maybe Text
+  , _mDoc :: Maybe (ParsedDoc i)
   , _mModel :: [PropertyExpr i]
   , _mInfo :: i
   } deriving (Show, Functor)
@@ -252,27 +283,27 @@ data Interface i
   { _ifName :: ModuleName
   , _ifDefns :: [IfDef i]
   , _ifImports :: [Import]
-  , _ifDocs :: Maybe Text
+  , _ifDocs :: Maybe (ParsedDoc i)
   , _ifModel :: [PropertyExpr i]
   , _ifInfo :: i
   } deriving (Show, Functor)
 
 data IfDefun i
   = IfDefun
-  { _ifdName :: Text
-  , _ifdArgs :: [MArg]
-  , _ifdRetType :: Maybe Type
-  , _ifdDocs :: Maybe Text
+  { _ifdName :: DefinedIdentifier i
+  , _ifdArgs :: [MArg i]
+  , _ifdRetType :: Maybe (Type i)
+  , _ifdDocs :: Maybe (ParsedDoc i)
   , _ifdModel :: [PropertyExpr i]
   , _ifdInfo :: i
   } deriving (Show, Functor)
 
 data IfDefCap i
   = IfDefCap
-  { _ifdcName :: Text
-  , _ifdcArgs :: [MArg]
-  , _ifdcRetType :: Maybe Type
-  , _ifdcDocs :: Maybe Text
+  { _ifdcName :: DefinedIdentifier i
+  , _ifdcArgs :: [MArg i]
+  , _ifdcRetType :: Maybe (Type i)
+  , _ifdcDocs :: Maybe (ParsedDoc i)
   , _ifdcModel :: [PropertyExpr i]
   , _ifdcMeta :: Maybe DCapMeta
   , _ifdcInfo :: i
@@ -280,10 +311,10 @@ data IfDefCap i
 
 data IfDefPact i
   = IfDefPact
-  { _ifdpName :: Text
-  , _ifdpArgs :: [MArg]
-  , _ifdpRetType :: Maybe Type
-  , _ifdpDocs :: Maybe Text
+  { _ifdpName :: DefinedIdentifier i
+  , _ifdpArgs :: [MArg i]
+  , _ifdpRetType :: Maybe (Type i)
+  , _ifdpDocs :: Maybe (ParsedDoc i)
   , _ifdpModel :: [PropertyExpr i]
   , _ifdpInfo :: i
   } deriving (Show, Functor)
@@ -337,18 +368,24 @@ data IfDef i
   | IfDPact (IfDefPact i)
   deriving (Show, Functor)
 
+instance Pretty (DefinedIdentifier i) where
+  pretty (DefinedIdentifier t _) = pretty t
+
+instance Pretty (ParsedField i) where
+  pretty (ParsedField f _) = pretty f
+
 instance Pretty (DefConst i) where
   pretty (DefConst dcn dcty term _ _) =
     parens ("defconst" <+> pretty dcn <> mprettyTy dcty <+> pretty term)
     where
     mprettyTy = maybe mempty ((":" <>) . pretty)
 
-instance Pretty Arg where
-  pretty (Arg n ty) =
+instance Pretty (Arg i) where
+  pretty (Arg n ty _) =
     pretty n <> ":" <+> pretty ty
 
-instance Pretty MArg where
-  pretty (MArg n mty) =
+instance Pretty (MArg i) where
+  pretty (MArg n mty _) =
     pretty n <> maybe mempty (\ty -> ":" <+> pretty ty) mty
 
 instance Pretty (Defun i) where
@@ -357,22 +394,40 @@ instance Pretty (Defun i) where
       <> ":" <+> pretty rettype <+> "=" <+> pretty term)
 
 data Binder i =
-  Binder Text (Maybe Type) (Expr i)
+  Binder Text (Maybe (Type i)) (Expr i) i
   deriving (Show, Eq, Functor)
 
 instance Pretty (Binder i) where
-  pretty (Binder ident ty e) =
+  pretty (Binder ident ty e _) =
     parens $ pretty ident <> maybe mempty ((":" <>) . pretty) ty <+> pretty e
 
+data CapName i
+  = CapName
+  { _cnParsedName :: ParsedName
+  , _cnInfo :: i
+  } deriving (Show, Eq, Functor)
+
 data CapForm i
-  = WithCapability (Expr i) (Expr i)
-  | CreateUserGuard ParsedName [Expr i]
+  = WithCapability (Expr i) (Expr i) i
+  | CreateUserGuard (CapName i) [Expr i]
   deriving (Show, Eq, Functor)
+
+mbCapName :: CapForm i -> Maybe (CapName i)
+mbCapName = \case
+  WithCapability _ _ _ -> Nothing
+  CreateUserGuard cn _ -> Just cn
+  
+data ParsedField i
+  = ParsedField
+  { _pfField :: Field
+  , _pfInfo :: i
+  } deriving (Show , Functor, Eq)
+
 
 data Expr i
   = Var ParsedName i
   | LetIn (NonEmpty (Binder i)) (Expr i) i
-  | Lam [MArg] (Expr i) i
+  | Lam [MArg i] (Expr i) i
   | If (Expr i) (Expr i) (Expr i) i
   | App (Expr i) [Expr i] i
   | Block (NonEmpty (Expr i)) i
@@ -381,8 +436,8 @@ data Expr i
   | Constant Literal i
   | Try (Expr i) (Expr i) i
   | Suspend (Expr i) i
-  | Object [(Field, Expr i)] i
-  | Binding [(Field, MArg)] [Expr i] i
+  | Object [(ParsedField i, Expr i)] i
+  | Binding [(ParsedField i, MArg i)] [Expr i] i
   | CapabilityForm (CapForm i) i
   deriving (Show, Eq, Functor)
 
@@ -468,10 +523,10 @@ instance Pretty (Expr i) where
     Suspend e _ ->
       parens ("suspend" <+> pretty e)
     CapabilityForm c _ -> case c of
-      WithCapability cap body ->
+      WithCapability cap body _ ->
         parens ("with-capability" <+> pretty cap <+> pretty body)
       CreateUserGuard pn exs ->
-        parens ("create-user-guard" <> capApp pn exs)
+        parens ("create-user-guard" <> capApp (_cnParsedName pn) exs)
       where
       capApp pn exns =
         parens (pretty pn <+> hsep (pretty <$> exns))
@@ -483,7 +538,8 @@ instance Pretty (Expr i) where
     where
     prettyBind (f, e) = pretty f <+> ":=" <+> pretty e
     prettyObj = fmap (\(n, k) -> dquotes (pretty n) <> ":" <> pretty k)
-    renderLamPair (MArg n mt) = case mt of
+    renderLamPair (MArg n mt _) = case mt of
       Nothing -> pretty n
       Just t -> pretty n <> ":" <> pretty t
     renderLamTypes = fold . intersperse " " . fmap renderLamPair
+
