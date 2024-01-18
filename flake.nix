@@ -54,10 +54,10 @@
       packages.pact-binary = flake.packages."pact-tng:exe:pact";
       packages.pact-gasmodel = flake.packages."pact-tng:exe:gasmodel";
       packages.pact-tests = flake.checks."pact-tng:test:core-tests".overrideAttrs (old: {
-        PACT_CORE_NIXBUILD=packages.pact-tng-binary.exePath;
+        PACT_CORE_NIXBUILD=packages.pact-binary.exePath;
       });
 
-      packages.default = packages.pact-tng-binary;
+      packages.default = packages.pact-binary;
 
       packages.recursive = with hs-nix-infra.lib.recursive system;
         wrapRecursiveWithMeta "pact-tng" "${wrapFlake self}.default";
