@@ -161,7 +161,7 @@ rawAdd info b cont handler _env = \case
 rawSub :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawSub info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
-    chargeGasArgs info (GIntegerOpCost PrimOpAdd i i')
+    chargeGasArgs info (GIntegerOpCost PrimOpSub i i')
     returnCEKValue cont handler (VLiteral (LInteger (i - i')))
   -- Overloaded decimal cases
   [VLiteral (LDecimal i), VLiteral (LDecimal i')] ->
@@ -173,7 +173,7 @@ rawSub info b cont handler _env = \case
   args -> argsError info b args
   where
   decimalSub i i' = do
-    chargeGasArgs info (GIntegerOpCost PrimOpAdd (decimalMantissa i) (decimalMantissa i'))
+    chargeGasArgs info (GIntegerOpCost PrimOpSub (decimalMantissa i) (decimalMantissa i'))
     returnCEKValue cont handler (VLiteral (LDecimal (i - i')))
 
 
