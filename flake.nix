@@ -67,7 +67,7 @@
       packages.check = pkgs.runCommand "check" {} ''
         echo ${mkCheck "pact-tng" packages.default}
 
-        echo ${mkCheck "pact-tng" packages.pact-tng-gasmodel}
+        echo ${mkCheck "pact-tng" packages.pact-gasmodel}
 
         echo ${mkCheck "pact-tng-test" packages.pact-tests}
 
