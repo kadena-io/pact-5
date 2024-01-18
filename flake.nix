@@ -5,12 +5,12 @@
     hs-nix-infra.url = "github:kadena-io/hs-nix-infra";
     flake-utils.url = "github:numtide/flake-utils";
   };
-  
+
   nixConfig = {
     extra-substituters = "https://nixcache.chainweb.com https://cache.iog.io";
     trusted-public-keys = "nixcache.chainweb.com:FVN503ABX9F8x8K0ptnc99XEz5SaA4Sks6kNcZn2pBY= iohk.cachix.org-1:DpRUyj7h7V830dp/i6Nti+NEO2/nhblbov/8MW7Rqoo= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=";
   };
-  
+
   outputs = { self, flake-utils, hs-nix-infra }:
     flake-utils.lib.eachSystem
       [ "x86_64-linux" "x86_64-darwin"
@@ -22,12 +22,12 @@
         inherit system overlays;
         inherit (haskellNix) config;
       };
-      project = pkgs.pact-core;
+      project = pkgs.pact-tng;
       flake = project.flake {
       };
       overlays = [ haskellNix.overlay
         (final: prev: {
-          pact-core =
+          pact-tng =
             final.haskell-nix.project' {
               src = ./.;
               compiler-nix-name = "ghc962";
@@ -51,25 +51,25 @@
         echo works > $out
       '';
     in rec {
-      packages.pact-core-binary = flake.packages."pact-core:exe:pact";
-      packages.pact-core-gasmodel = flake.packages."pact-core:exe:gasmodel";
-      packages.pact-core-tests = flake.checks."pact-core:test:core-tests".overrideAttrs (old: {
-        PACT_CORE_NIXBUILD=packages.pact-core-binary.exePath;
+      packages.pact-binary = flake.packages."pact-tng:exe:pact";
+      packages.pact-gasmodel = flake.packages."pact-tng:exe:gasmodel";
+      packages.pact-tests = flake.checks."pact-tng:test:core-tests".overrideAttrs (old: {
+        PACT_CORE_NIXBUILD=packages.pact-tng-binary.exePath;
       });
-      
-      packages.default = packages.pact-core-binary;
+
+      packages.default = packages.pact-tng-binary;
 
       packages.recursive = with hs-nix-infra.lib.recursive system;
-        wrapRecursiveWithMeta "pact-core" "${wrapFlake self}.default";
+        wrapRecursiveWithMeta "pact-tng" "${wrapFlake self}.default";
 
       inherit (flake) devShell;
 
       packages.check = pkgs.runCommand "check" {} ''
-        echo ${mkCheck "pact-core" packages.default}
+        echo ${mkCheck "pact-tng" packages.default}
 
-        echo ${mkCheck "pact-core" packages.pact-core-gasmodel}
+        echo ${mkCheck "pact-tng" packages.pact-tng-gasmodel}
 
-        echo ${mkCheck "pact-core-test" packages.pact-core-tests} 
+        echo ${mkCheck "pact-tng-test" packages.pact-tests}
 
         echo ${mkCheck "devShell" devShell}
         echo works > $out
