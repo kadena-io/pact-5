@@ -65,11 +65,11 @@
       inherit (flake) devShell;
 
       packages.check = pkgs.runCommand "check" {} ''
-        echo ${mkCheck "pact-tng" packages.default}
+        echo ${mkCheck "pact" packages.default}
 
-        echo ${mkCheck "pact-tng" packages.pact-gasmodel}
+        echo ${mkCheck "pact-gasmodel" packages.pact-gasmodel}
 
-        echo ${mkCheck "pact-tng-test" packages.pact-tests}
+        echo ${mkCheck "pact-tests" packages.pact-tests}
 
         echo ${mkCheck "devShell" devShell}
         echo works > $out
