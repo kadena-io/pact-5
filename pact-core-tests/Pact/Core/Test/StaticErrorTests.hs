@@ -1074,6 +1074,17 @@ builtinTests =
       (p)
       (continue-pact 1)
     |])
+  , ("yield_provenance_mismatch", isExecutionError _YieldProvenanceDoesNotMatch, [text|
+      (module m g (defcap g () true)
+        (defpact p ()
+          (step (yield { 'field: 1 } "1"))
+          (step (resume { 'field := binder } binder)))
+        )
+
+      (env-chain-data { 'chain-id: "0" })
+      (p)
+      (continue-pact 1)
+    |])
   , ("toplevel_create_table", isExecutionError _NativeIsTopLevelOnly, [text|
       (module m g (defcap g () true)
         (defschema s a:integer)
