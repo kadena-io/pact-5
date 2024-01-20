@@ -41,7 +41,6 @@ module Pact.Core.IR.Eval.CEK
 
 import Control.Lens
 import Control.Monad
-import Control.Monad.IO.Class
 import Data.Default
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Foldable(find, foldl', traverse_)
@@ -761,7 +760,6 @@ evalCap
   -> CEKErrorHandler step b i m
   -> CEKEnv step b i m
   -> FQCapToken
-  -- -> ModCapCont step b i m
   -> CapPopState
   -> EvalCapType
   -> EvalTerm b i

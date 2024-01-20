@@ -13,3 +13,6 @@ source-repository-package
     --sha256: sha256-q5QQFYAJLoQcaW+qCUS8XRzuyca7zc4vnDNXLwlkQ0M=
 
 constraints: aeson <2.2
+
+package pact-tng
+  ghc-options: -Wwarn
