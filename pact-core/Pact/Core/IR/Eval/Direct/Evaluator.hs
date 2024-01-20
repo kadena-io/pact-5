@@ -929,14 +929,24 @@ applyNestedPact i pc ps cenv = useEvalState esDefPactExec >>= \case
       setEvalState esDefPactExec (Just exec)
       let
         cenv' = set ceDefPactStep (Just ps) cenv
-        -- cont' = NestedDefPactStepC cenv' cont pe
 
       result <- case (ps ^. psRollback, step) of
         (False, _) ->
-          evalWithStackFrame i cont' handler cenv' sf Nothing  (ordinaryDefPactStepExec step)
+          evalWithStackFrame i sf Nothing $ evaluate cenv' (ordinaryDefPactStepExec step)
         (True, StepWithRollback _ rollbackExpr) ->
-          evalWithStackFrame i cont' handler cenv' sf Nothing rollbackExpr
+          evalWithStackFrame i sf Nothing $ evaluate cenv' rollbackExpr
         (True, Step{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
+      useEvalState esDefPactExec >>= \case
+        Nothing -> failInvariant i "No DefPactExec found"
+        Just resultExec -> do
+          -- case cenv ^. ceDefPactStep of
+          -- Nothing -> failInvariant i "Expected a DefPactStep in the environment"
+          -- Just ps -> do
+          when (nestedPactsNotAdvanced resultExec ps) $
+            throwExecutionError i (NestedDefpactsNotAdvanced (_peDefPactId resultExec))
+          let npe = pe & peNestedDefPactExec %~ M.insert (_psDefPactId ps) resultExec
+          setEvalState esDefPactExec (Just npe)
+          return result
     _otherwise -> failInvariant i "applyNestedPact: Expected a DefPact bot got something else"
   where
   sf = StackFrame (view (pcName . qnName) pc) (view (pcName . qnModName) pc) SFDefPact
@@ -1001,7 +1011,7 @@ resumePact i env crossChainContinuation = viewEvalEnv eeDefPactStep >>= \case
                          r@Just{} -> r
                          Nothing -> _peYield pe
               env' = set ceLocal (RAList.fromList (reverse args)) $ set ceDefPactStep (Just $ set psResume resume ps) env
-          applyPact i pc ps cont handler env' (_peNestedDefPactExec pe)
+          applyPact i pc ps env' (_peNestedDefPactExec pe)
 {-# SPECIALIZE resumePact
    :: ()
    -> DirectEnv CoreBuiltin () Eval
