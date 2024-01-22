@@ -274,7 +274,7 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
           AutoManagedMeta -> do
             -- Find the capability post-filtering
             let emittedEvent = fqctToPactEvent origToken <$ guard (ecType == NormalCapEval)
-            let cont' = CapBodyC popType env info Nothing emittedEvent contbody currCont
+            -- let cont' = CapBodyC popType env info Nothing emittedEvent contbody currCont
             mgdCaps <- useEvalState (esCaps . csManaged)
             case find ((==) qualCapToken . _mcCap) mgdCaps of
               Nothing -> do
@@ -282,17 +282,20 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
                 case find (== qualCapToken) msgCaps of
                   Just c -> do
                     let c' = set ctName fqn c
-                    installCap info env c' False >>= evalAutomanagedCap cont' newLocals capBody
+                    installCap info env c' False >>= evalAutomanagedCap emittedEvent newLocals capBody
                   Nothing ->
                     throwExecutionError info (CapNotInstalled fqn)
               Just managedCap ->
                 evalAutomanagedCap cont' newLocals capBody managedCap
       DefEvent -> do
-        let cont' = CapBodyC popType env info Nothing (Just (fqctToPactEvent origToken)) contbody currCont
+        -- let cont' = CapBodyC popType env info Nothing () contbody currCont
+        let event = Just (fqctToPactEvent origToken)
         let inCapEnv = set ceInCap True $ set ceLocal newLocals env
         (esCaps . csSlots) %== (CapSlot qualCapToken []:)
-        sfCont <- pushStackFrame info cont' Nothing capStackFrame
-        evalCEK sfCont handler inCapEnv capBody
+        _ <- evalWithStackFrame info capStackFrame Nothing (evaluate inCapEnv capBody)
+        evalWithCapBody info popType Nothing event contbody
+        -- sfCont <- pushStackFrame info cont' Nothing capStackFrame
+        -- evalCEK sfCont handler inCapEnv capBody
       -- Not automanaged _nor_ user managed.
       -- Todo: a type that's basically `Maybe` here would save us a lot of grief.
       Unmanaged -> do
@@ -301,7 +304,13 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
         --             else currCont
         (esCaps . csSlots) %== (CapSlot qualCapToken []:)
         -- we ignore the capbody here
-        _ <- evalWithStackFrame capStackFrame Nothing $ evaluate inCapEnv capBody
+        _ <- evalWithStackFrame info capStackFrame Nothing $ evaluate inCapEnv capBody
+        case ecType of
+          NormalCapEval -> do
+            evalWithCapBody info popType Nothing Nothing env contbody
+          TestCapEval ->
+            -- todo: check with prod the return type of testCap
+            return VUnit
         -- evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
   qualCapName = fqnToQualName fqn
   qualCapToken = CapToken qualCapName args
@@ -331,29 +340,43 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
       sfCont <- pushStackFrame info mgrFunCont Nothing capStackFrame
       evalCEK sfCont handler inCapEnv capBody
     _ -> failInvariant info "Invalid managed cap type"
-  evalAutomanagedCap cont' env' capBody managedCap = case _mcManaged managedCap of
+  evalAutomanagedCap emittedEvent env' capBody managedCap = case _mcManaged managedCap of
     AutoManaged b -> do
-      if b then returnCEK currCont handler (VError "Automanaged capability used more than once" info)
+      if b then throwRecoverableError info "Automanaged capability used more than once"
       else do
         let newManaged = AutoManaged True
         esCaps . csManaged %== S.union (S.singleton (set mcManaged newManaged managedCap))
         esCaps . csSlots %== (CapSlot qualCapToken []:)
         let inCapEnv = set ceLocal env' $ set ceInCap True $ env
-        sfCont <- pushStackFrame info cont' Nothing capStackFrame
-        evalCEK sfCont handler inCapEnv capBody
+        -- sfCont <- pushStackFrame info cont' Nothing capStackFrame
+        -- evalCEK sfCont handler inCapEnv capBody
+        _ <- evalWithStackFrame info capStackFrame Nothing (evaluate inCapEnv capBody)
     _ -> failInvariant info "Invalid managed cap type"
 
-evalCapBody info cappop mcap mevent env capbody = do
+evalWithCapBody info cappop mcap mevent env capbody = do
   maybe (pure ()) emitEventUnsafe mevent
   case mcap of
     Nothing -> do
       v <- evaluate env capbody
+      popCap info cappop v
     Just cap -> useEvalState (esCaps . csSlots) >>= \case
       (CapSlot _ tl:rest) -> do
         setEvalState (esCaps . csSlots)  (CapSlot cap tl:rest)
         v <- evaluate env capbody
-        popCap 
+        popCap info cappop v
       [] -> failInvariant info "In CapBodyC but with no caps in stack"
+
+popCap info cappop v = case cappop of
+  PopCapInvoke -> v <$ (esCaps . csSlots %== safeTail)
+  PopCapComposed -> do
+    useEvalState (esCaps . csSlots) >>= \case
+      cap:cs -> do
+        let csList = _csCap cap : _csComposed cap
+            caps' = over (_head . csComposed) (++ csList) cs
+        setEvalState (esCaps . csSlots) caps'
+        return v
+      [] -> failInvariant info "Invariant failure: composed cap with empty cap stack"
+
 
 
 -- Todo: fail invariant
