@@ -923,3 +923,35 @@
    (call-op2 "goodbye" false))
 
 (commit-tx)
+
+(begin-tx)
+"Test managed cap composition"
+(module cap-mgd-compose g
+  (defcap g () true)
+
+  (defun f-mgr:integer (a:integer b:integer) 1)
+
+  (defcap C1 (a:integer)
+    @managed a f-mgr
+    1)
+
+  (defcap C2 (a:integer)
+    @managed a f-mgr
+    (compose-capability (C1 a))
+  )
+
+  (defcap C3 (a:integer)
+    @managed a f-mgr
+    (compose-capability (C2 a))
+  )
+
+  (defun run ()
+    (with-capability (C3 1)
+      (require-capability (C1 1))
+      111
+    )
+  )
+  )
+
+(env-sigs [{"key":"jose", "caps":[(C1 1) (C2 1) (C3 1)]}])
+(expect "managed capabilities compose correctly" 111 (run))
