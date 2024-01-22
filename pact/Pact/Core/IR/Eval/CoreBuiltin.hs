@@ -1394,7 +1394,8 @@ describeModule info b cont handler env = \case
 
 dbDescribeTable :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 dbDescribeTable info b cont handler _env = \case
-  [VTable (TableValue name _ schema)] ->
+  [VTable (TableValue name _ schema)] -> do
+    enforceTopLevelOnly info b
     returnCEKValue cont handler $ VObject $ M.fromList $ fmap (over _1 Field)
       [("name", PString (_tableName name))
       ,("module", PString (renderModuleName (_tableModuleName name)))
