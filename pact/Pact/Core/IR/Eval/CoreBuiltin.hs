@@ -77,7 +77,6 @@ import qualified Pact.Core.Pretty as Pretty
 import qualified Pact.Core.Principal as Pr
 import qualified Pact.Core.Trans.TOps as Musl
 
-
 ----------------------------------------------------------------------
 -- Our builtin definitions start here
 ----------------------------------------------------------------------
@@ -1714,6 +1713,7 @@ poseidonHash info b cont handler _env = \case
       chargeGasArgs info (GPoseidonHashHackAChain (length intArgs))
       returnCEKValue cont handler $ VInteger (poseidon (V.toList intArgs))
   args -> argsError info b args
+
 
 -----------------------------------
 -- Builtin exports

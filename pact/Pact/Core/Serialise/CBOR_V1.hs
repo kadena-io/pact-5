@@ -675,10 +675,6 @@ instance Serialise CoreBuiltin where
     CoreTypeOfPrincipal -> encodeWord 112
     CoreValidatePrincipal -> encodeWord 113
     CoreCreateDefPactGuard -> encodeWord 114
-
-    CoreRoundPrec -> encodeWord 125
-    CoreCeilingPrec -> encodeWord 126
-    CoreFloorPrec -> encodeWord 127
     CoreYieldToChain -> encodeWord 115
     CoreChainData -> encodeWord 116
     CoreIsCharset -> encodeWord 117
@@ -689,6 +685,9 @@ instance Serialise CoreBuiltin where
     CorePoseidonHashHackachain -> encodeWord 122
     CoreTypeOf -> encodeWord 123
     CoreDec -> encodeWord 124
+    CoreRoundPrec -> encodeWord 125
+    CoreCeilingPrec -> encodeWord 126
+    CoreFloorPrec -> encodeWord 127
 
   decode = decodeWord >>= \case
     0 -> pure CoreAdd
