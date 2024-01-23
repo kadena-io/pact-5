@@ -472,9 +472,6 @@ nativeGasTable = MilliGas . \case
   -- note: Dec requires less gas overall
   CoreDec ->
     basicWorkGas
-  CorePactVersion -> basicWorkGas
-  CoreEnforcePactVersionMin -> basicWorkGas
-  CoreEnforcePactVersionRange -> basicWorkGas
 
 replNativeGasTable :: ReplBuiltin CoreBuiltin -> MilliGas
 replNativeGasTable = \case

@@ -219,10 +219,6 @@ data CoreBuiltin
   -- Misc
   | CoreTypeOf
   | CoreDec
-  -- Pact Version
-  | CorePactVersion
-  | CoreEnforcePactVersionMin
-  | CoreEnforcePactVersionRange
   deriving (Eq, Show, Ord, Bounded, Enum, Generic)
 
 instance NFData CoreBuiltin
@@ -371,9 +367,6 @@ coreBuiltinToText = \case
   CorePactId -> "pact-id"
   CoreTypeOf -> "typeof"
   CoreDec -> "dec"
-  CorePactVersion -> "pact-version"
-  CoreEnforcePactVersionMin -> "enforce-pact-version"
-  CoreEnforcePactVersionRange -> "enforce-pact-version-range"
 
 instance IsBuiltin CoreBuiltin where
   builtinName = NativeName . coreBuiltinToText
@@ -521,9 +514,6 @@ instance IsBuiltin CoreBuiltin where
     CorePactId -> 0
     CoreTypeOf -> 1
     CoreDec -> 1
-    CorePactVersion -> 0
-    CoreEnforcePactVersionMin -> 1
-    CoreEnforcePactVersionRange -> 2
 
 
 
@@ -574,6 +564,9 @@ data ReplBuiltins
   | RContinuePactRollbackYieldObj
   | RPactState
   | RResetPactState
+  | RPactVersion
+  | REnforcePactVersionMin
+  | REnforcePactVersionRange
   deriving (Show, Enum, Bounded, Eq, Generic)
 
 
@@ -615,6 +608,10 @@ instance IsBuiltin ReplBuiltins where
     REnvGasModel -> 1
     REnvAskGasModel -> 0
     REnvGasModelFixed -> 1
+    RPactVersion -> 0
+    REnforcePactVersionMin -> 1
+    REnforcePactVersionRange -> 2
+
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
 -- Note: commented out natives are
@@ -693,6 +690,9 @@ replBuiltinsToText = \case
   REnvGasModel -> "env-gasmodel"
   REnvAskGasModel -> "env-ask-gasmodel"
   REnvGasModelFixed -> "env-gasmodel-fixed"
+  RPactVersion -> "pact-version"
+  REnforcePactVersionMin -> "enforce-pact-version"
+  REnforcePactVersionRange -> "enforce-pact-version-range"
 
 replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
 replBuiltinToText f = \case

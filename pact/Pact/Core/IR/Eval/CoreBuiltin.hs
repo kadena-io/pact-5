@@ -29,7 +29,6 @@ import Control.Lens hiding (from, to, op, parts)
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Attoparsec.Text(parseOnly)
-import qualified Data.Attoparsec.Text as A
 import Data.Containers.ListUtils(nubOrd)
 import Data.Bits
 import Data.Either(isLeft, isRight)
@@ -77,8 +76,6 @@ import Pact.Core.SizeOf
 import qualified Pact.Core.Pretty as Pretty
 import qualified Pact.Core.Principal as Pr
 import qualified Pact.Core.Trans.TOps as Musl
-import qualified PackageInfo_pact_tng as PI
-import qualified Data.Version as V
 
 ----------------------------------------------------------------------
 -- Our builtin definitions start here
@@ -1717,41 +1714,6 @@ poseidonHash info b cont handler _env = \case
       returnCEKValue cont handler $ VInteger (poseidon (V.toList intArgs))
   args -> argsError info b args
 
------------------------------------
--- Pact Version
------------------------------------
-
-coreVersion :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
-coreVersion info b  cont handler _env = \case
-  [] -> do
-    enforceTopLevelOnly info b
-    let v = T.pack (V.showVersion PI.version)
-    returnCEKValue cont handler (VString v)
-  args -> argsError info b args
-
-
-coreEnforceVersion :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
-coreEnforceVersion info b cont handler _env = \case
-  [VString lowerBound] -> do
-    enforceTopLevelOnly info b
-    lowerBound' <- mkVersion lowerBound
-    if lowerBound' <= PI.version
-      then returnCEKValue cont handler (VBool True)
-      else throwExecutionError info (EnforcePactVersionFailure lowerBound' Nothing)
-  [VString lowerBound, VString upperBound] -> do
-    enforceTopLevelOnly info b
-    lowerBound' <- mkVersion lowerBound
-    upperBound' <- mkVersion upperBound
-    if lowerBound' <= PI.version && PI.version <= upperBound'
-      then returnCEKValue cont handler (VBool True)
-      else throwExecutionError info (EnforcePactVersionFailure lowerBound' (Just upperBound'))
-  args -> argsError info b args
-  where
-    mkVersion s =
-      case parseOnly ((A.decimal `A.sepBy` A.char '.') <* A.endOfInput) s of
-        Left _msg -> throwExecutionError info (EnforcePactVersionParseFailure s)
-        Right li -> pure (V.makeVersion li)
-
 
 -----------------------------------
 -- Builtin exports
@@ -1911,6 +1873,3 @@ coreBuiltinRuntime = \case
   CorePactId -> corePactId
   CoreTypeOf -> coreTypeOf
   CoreDec -> coreDec
-  CorePactVersion -> coreVersion
-  CoreEnforcePactVersionMin -> coreEnforceVersion
-  CoreEnforcePactVersionRange -> coreEnforceVersion

@@ -687,9 +687,6 @@ instance Serialise CoreBuiltin where
     CoreRoundPrec -> encodeWord 125
     CoreCeilingPrec -> encodeWord 126
     CoreFloorPrec -> encodeWord 127
-    CorePactVersion -> encodeWord 128
-    CoreEnforcePactVersionMin -> encodeWord 129
-    CoreEnforcePactVersionRange -> encodeWord 130
 
   decode = decodeWord >>= \case
     0 -> pure CoreAdd
@@ -822,9 +819,6 @@ instance Serialise CoreBuiltin where
     125 -> pure CoreRoundPrec
     126 -> pure CoreCeilingPrec
     127 -> pure CoreFloorPrec
-    128 -> pure CorePactVersion
-    129 -> pure CoreEnforcePactVersionMin
-    130 -> pure CoreEnforcePactVersionRange
     _ -> fail "unexpeced decoding"
 
 

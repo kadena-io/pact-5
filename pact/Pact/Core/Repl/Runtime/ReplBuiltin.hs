@@ -38,6 +38,11 @@ import Pact.Core.IR.Term
 import Pact.Core.Info
 import Pact.Core.Namespace
 
+import qualified PackageInfo_pact_tng as PI
+import qualified Data.Version as V
+import qualified Data.Attoparsec.Text as A
+
+
 import Pact.Core.Repl.Utils
 import qualified Pact.Time as PactTime
 import Pact.Core.Gas.TableGasModel
@@ -442,6 +447,38 @@ envGasModel info b cont handler _env = \case
   args -> argsError info b args
 
 
+-----------------------------------
+-- Pact Version
+-----------------------------------
+
+coreVersion :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
+coreVersion info b  cont handler _env = \case
+  [] -> let
+    v = T.pack (V.showVersion PI.version)
+    in returnCEKValue cont handler (VString v)
+  args -> argsError info b args
+
+
+coreEnforceVersion :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
+coreEnforceVersion info b cont handler _env = \case
+  [VString lowerBound] -> do
+    lowerBound' <- mkVersion lowerBound
+    if lowerBound' <= PI.version
+      then returnCEKValue cont handler (VBool True)
+      else throwExecutionError info (EnforcePactVersionFailure lowerBound' Nothing)
+  [VString lowerBound, VString upperBound] -> do
+    lowerBound' <- mkVersion lowerBound
+    upperBound' <- mkVersion upperBound
+    if lowerBound' <= PI.version && PI.version <= upperBound'
+      then returnCEKValue cont handler (VBool True)
+      else throwExecutionError info (EnforcePactVersionFailure lowerBound' (Just upperBound'))
+  args -> argsError info b args
+  where
+    mkVersion s =
+      case A.parseOnly ((A.decimal `A.sepBy` A.char '.') <* A.endOfInput) s of
+        Left _msg -> throwExecutionError info (EnforcePactVersionParseFailure s)
+        Right li -> pure (V.makeVersion li)
+
 
 
 replBuiltinEnv
@@ -493,4 +530,6 @@ replCoreBuiltinRuntime = \case
     REnvGasModel -> envGasModel
     REnvAskGasModel -> envGasModel
     REnvGasModelFixed -> envGasModel
-
+    RPactVersion -> coreVersion
+    REnforcePactVersionMin -> coreEnforceVersion
+    REnforcePactVersionRange -> coreEnforceVersion
