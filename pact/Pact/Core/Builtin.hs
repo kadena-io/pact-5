@@ -219,6 +219,10 @@ data CoreBuiltin
   -- Misc
   | CoreTypeOf
   | CoreDec
+  -- Pact Version
+  | CorePactVersion
+  | CoreEnforcePactVersionMin
+  | CoreEnforcePactVersionRange
   deriving (Eq, Show, Ord, Bounded, Enum, Generic)
 
 instance NFData CoreBuiltin
@@ -367,6 +371,9 @@ coreBuiltinToText = \case
   CorePactId -> "pact-id"
   CoreTypeOf -> "typeof"
   CoreDec -> "dec"
+  CorePactVersion -> "pact-version"
+  CoreEnforcePactVersionMin -> "enforce-pact-version"
+  CoreEnforcePactVersionRange -> "enforce-pact-version-range"
 
 instance IsBuiltin CoreBuiltin where
   builtinName = NativeName . coreBuiltinToText
@@ -514,6 +521,9 @@ instance IsBuiltin CoreBuiltin where
     CorePactId -> 0
     CoreTypeOf -> 1
     CoreDec -> 1
+    CorePactVersion -> 0
+    CoreEnforcePactVersionMin -> 1
+    CoreEnforcePactVersionRange -> 2
 
 
 

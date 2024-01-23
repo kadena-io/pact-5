@@ -129,6 +129,8 @@ library
     cbits/musl/sqrt.c
     cbits/musl/sqrt_data.c
 
+  other-modules: PackageInfo_pact_tng
+
   exposed-modules:
     Pact.Core.Compile
     Pact.Core.Builtin
