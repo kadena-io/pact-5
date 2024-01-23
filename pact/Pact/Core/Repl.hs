@@ -50,7 +50,7 @@ runRepl = do
       putStrLn $ T.unpack $ replError (SourceCode "(interactive)" "") err
     _ -> pure ()
   where
-  replSettings = Settings (replCompletion coreBuiltinNames) (Just ".pc-history") True
+  replSettings = Settings (replCompletion replcoreBuiltinNames) (Just ".pc-history") True
   displayOutput = \case
     RCompileValue cv -> case cv of
       LoadedModule mn mh -> outputStrLn $ show $
