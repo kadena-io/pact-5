@@ -443,7 +443,7 @@ instance Pretty EvalError where
       ]
     EnforcePactVersionParseFailure str -> Pretty.hsep
       [ "Enforce pact-version failed:"
-      , "Could not parse " <> pretty str <> ", expect list of integer seperated by dot"
+      , "Could not parse " <> pretty str <> ", expect list of dot-separated integers"
       ]
     e -> pretty (show e)
 
