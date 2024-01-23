@@ -216,7 +216,7 @@ Defun :: { SpanInfo -> ParsedDefun }
     { Defun (getIdent $2) (reverse $5) $3 $8 (fst $7) (snd $7) }
 
 Defschema :: { SpanInfo -> DefSchema SpanInfo }
-  : defschema IDENT MDocOrModel ArgList
+  : defschema IDENT MDocOrModel SchemaArgList
     { DefSchema (getIdent $2) (reverse $4) (fst $3) (snd $3) }
 
 Deftable :: { SpanInfo -> DefTable SpanInfo }
@@ -236,7 +236,14 @@ Steps :: { [PactStep SpanInfo] }
 
 Step :: { PactStep SpanInfo }
   : '(' step Expr MModel ')' { Step $3 $4 }
+  -- Note: this production which ignores its input
+  -- is due to the legacy form of:
+  -- (step ENTITY EXPR)
+  | '(' step Expr Expr MModel ')' { Step $4 $5 }
   | '(' steprb Expr Expr MModel ')' { StepWithRollback $3 $4 $5 }
+  -- (step-with-rollback ENTITY EXPR ROLLBACK-EXPR)
+  -- hence we ignore entity
+  | '(' steprb Expr Expr Expr MModel ')' { StepWithRollback $4 $5 $6 }
 
 MDCapMeta :: { Maybe DCapMeta }
   : Managed { Just $1 }
@@ -262,8 +269,9 @@ MArg :: { MArg }
   : IDENT ':' Type { MArg (getIdent $1) (Just $3) }
   | IDENT { MArg (getIdent $1) Nothing }
 
-ArgList :: { [Arg] }
-  : ArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
+SchemaArgList :: { [Arg] }
+  : SchemaArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
+  | SchemaArgList IDENT { (Arg (getIdent $2) TyAny):$1 }
   | {- empty -} { [] }
 
 Type :: { Type }

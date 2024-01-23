@@ -53,6 +53,7 @@ data Type
   | TyObject ParsedTyName
   | TyTable ParsedTyName
   | TyPolyObject
+  | TyAny
   deriving (Show, Eq)
 
 pattern TyInt :: Type
@@ -86,6 +87,7 @@ instance Pretty Type where
     TyObject qn -> "object" <> braces (pretty qn)
     TyPolyObject -> "object"
     TyTable o -> "table" <> braces (pretty o)
+    TyAny -> "*"
 
 
 ----------------------------------------------------

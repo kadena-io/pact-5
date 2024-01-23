@@ -110,6 +110,7 @@ synthesizePvType = \case
 -- | Check that a `PactValue` has the provided `Type`, returning
 -- `Just ty` if so and `Nothing` otherwise.
 checkPvType :: Type -> PactValue -> Maybe Type
+checkPvType TyAny = const (Just TyAny)
 checkPvType ty = \case
   PLiteral l
     | typeOfLit l == ty -> Just ty

@@ -75,6 +75,7 @@ mdModuleName f = \case
   InterfaceData iface deps ->
     ifName f iface <&> \ev' -> InterfaceData ev' deps
 
+
 mdModuleHash :: Lens' (ModuleData b i) ModuleHash
 mdModuleHash f = \case
   ModuleData ev deps ->

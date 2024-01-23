@@ -11,7 +11,6 @@
 module Pact.Core.Type
  ( PrimType(..)
  , Type(..)
---  , TypeScheme(..)
  , pattern TyInt
  , pattern TyDecimal
  , pattern TyTime
@@ -21,11 +20,6 @@ module Pact.Core.Type
  , pattern TyGuard
  , typeOfLit
  , literalPrim
---  , BuiltinTC(..)
---  , Pred(..)
---  , renderType
---  , renderPred
---  , TypeOfDef(..)
  , Arg(..)
  , argName
  , argType
@@ -116,6 +110,8 @@ data Type
   | TyTable Schema
   -- ^ Tables
   | TyCapToken
+  -- ^ type of cap tokens
+  | TyAny
   deriving (Eq, Show, Ord, Generic)
 
 instance NFData Type
@@ -249,6 +245,7 @@ instance Pretty Type where
     TyCapToken -> "CAPTOKEN"
     TyAnyList -> "list"
     TyAnyObject -> "object"
+    TyAny -> "*"
 
 renderType :: Type -> Text
 renderType = \case
@@ -267,6 +264,7 @@ renderType = \case
   TyCapToken -> "CAPTOKEN"
   TyAnyObject -> "object"
   TyAnyList -> "list"
+  TyAny -> "*"
 
 makeLenses ''Arg
 makeLenses ''TypedArg
