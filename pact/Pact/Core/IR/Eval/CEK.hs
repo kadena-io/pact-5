@@ -1464,7 +1464,7 @@ applyContToValue (CapBodyC cappop env info mcap mevent capbody cont) handler _ =
     Just cap -> useEvalState (esCaps . csSlots) >>= \case
       (CapSlot _ tl:rest) -> do
         setEvalState (esCaps . csSlots)  (CapSlot cap tl:rest)
-        let cont' = CapPopC PopCapInvoke cont
+        let cont' = CapPopC cappop cont
         evalCEK cont' handler env capbody
       [] -> failInvariant def "In CapBodyC but with no caps in stack"
 

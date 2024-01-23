@@ -134,9 +134,14 @@ rawAdd info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
     chargeGasArgs info (GIntegerOpCost PrimOpAdd i i')
     returnCEKValue cont handler (VLiteral (LInteger (i + i')))
+  -- Overloaded decimal cases
   [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> do
-    chargeGasArgs info (GIntegerOpCost PrimOpAdd (decimalMantissa i) (decimalMantissa i'))
-    returnCEKValue cont handler (VLiteral (LDecimal (i + i')))
+    decimalAdd i i'
+  [VLiteral (LInteger i), VLiteral (LDecimal i')] -> do
+    decimalAdd (fromInteger i) i'
+  [VLiteral (LDecimal i), VLiteral (LInteger i')] -> do
+    decimalAdd i (Decimal 0 i')
+
   [VLiteral (LString i), VLiteral (LString i')] -> do
     chargeGasArgs info (GConcat (TextConcat (GasTextLength (T.length i + T.length i'))))
     returnCEKValue cont handler  (VLiteral (LString (i <> i')))
@@ -148,20 +153,49 @@ rawAdd info b cont handler _env = \case
     chargeGasArgs info (GConcat (ListConcat (GasListLength (V.length l + V.length r))))
     returnCEKValue cont handler (VList (l <> r))
   args -> argsError info b args
+  where
+  decimalAdd i i' = do
+    chargeGasArgs info (GIntegerOpCost PrimOpAdd (decimalMantissa i) (decimalMantissa i'))
+    returnCEKValue cont handler (VLiteral (LDecimal (i + i')))
 
 rawSub :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawSub info b cont handler _env = \case
-  [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LInteger (i - i')))
-  [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LDecimal (i - i')))
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
+    chargeGasArgs info (GIntegerOpCost PrimOpSub i i')
+    returnCEKValue cont handler (VLiteral (LInteger (i - i')))
+  -- Overloaded decimal cases
+  [VLiteral (LDecimal i), VLiteral (LDecimal i')] ->
+    decimalSub i i'
+  [VLiteral (LInteger i), VLiteral (LDecimal i')] ->
+    decimalSub (Decimal 0 i) i'
+  [VLiteral (LDecimal i), VLiteral (LInteger i')] ->
+    decimalSub i (Decimal 0 i')
   args -> argsError info b args
+  where
+  decimalSub i i' = do
+    chargeGasArgs info (GIntegerOpCost PrimOpSub (decimalMantissa i) (decimalMantissa i'))
+    returnCEKValue cont handler (VLiteral (LDecimal (i - i')))
+
+
 
 rawMul :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawMul info b cont handler _env = \case
-  [VLiteral (LInteger i), VLiteral (LInteger i')] ->
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
+    chargeGasArgs info (GIntegerOpCost PrimOpMul i i')
     returnCEKValue cont handler (VLiteral (LInteger (i * i')))
+  -- overloads for decimal multiplication
   [VLiteral (LDecimal i), VLiteral (LDecimal i')] ->
-    returnCEKValue cont handler (VLiteral (LDecimal (i * i')))
+    decimalMul i i'
+  [VLiteral (LInteger i), VLiteral (LDecimal i')] ->
+    decimalMul (Decimal 0 i) i'
+  [VLiteral (LDecimal i), VLiteral (LInteger i')] ->
+    decimalMul i (Decimal 0 i')
+
   args -> argsError info b args
+  where
+  decimalMul i i' = do
+    chargeGasArgs info (GIntegerOpCost PrimOpMul (decimalMantissa i) (decimalMantissa i'))
+    returnCEKValue cont handler (VLiteral (LDecimal (i * i')))
 
 rawPow :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawPow info b cont handler _env = \case
@@ -170,10 +204,17 @@ rawPow info b cont handler _env = \case
     -- Todo: move to iterated pow
     returnCEKValue cont handler (VLiteral (LInteger (i ^ i')))
   [VLiteral (LDecimal l), VLiteral (LDecimal r)] -> do
+    decPow l r
+  [VLiteral (LInteger i), VLiteral (LDecimal i')] ->
+    decPow (Decimal 0 i) i'
+  [VLiteral (LDecimal i), VLiteral (LInteger i')] ->
+    decPow i (Decimal 0 i')
+  args -> argsError info b args
+  where
+  decPow l r = do
     let result = Musl.trans_pow (dec2F l) (dec2F r)
     guardNanOrInf info result
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
-  args -> argsError info b args
 
 rawLogBase :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawLogBase info b cont handler _env = \case
@@ -184,24 +225,42 @@ rawLogBase info b cont handler _env = \case
         result = Musl.trans_logBase base' n'
     guardNanOrInf info result
     returnCEKValue cont handler (VLiteral (LInteger (round result)))
-    -- if i' == 0 then throwExecutionError' (ArithmeticException "div by zero")
-    -- else returnCEKValue cont handler (VLiteral (LInteger (div i i')))
   [VLiteral (LDecimal base), VLiteral (LDecimal arg)] -> do
+     decLogBase base arg
+  [VLiteral (LInteger base), VLiteral (LDecimal arg)] -> do
+     decLogBase (Decimal 0 base) arg
+  [VLiteral (LDecimal base), VLiteral (LInteger arg)] -> do
+     decLogBase base (Decimal 0 arg)
+  args -> argsError info b args
+  where
+  decLogBase base arg = do
     when (base < 0 || arg <= 0) $ throwExecutionError info (ArithmeticException "Invalid base or argument in log")
     let result = Musl.trans_logBase (dec2F base) (dec2F arg)
     guardNanOrInf info result
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
-  args -> argsError info b args
+
 
 rawDiv :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawDiv info b cont handler _env = \case
-  [VLiteral (LInteger i), VLiteral (LInteger i')] ->
-    if i' == 0 then throwExecutionError info (ArithmeticException "div by zero")
-    else returnCEKValue cont handler (VLiteral (LInteger (div i i')))
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
+    when (i' == 0) $ throwExecutionError info (ArithmeticException "div by zero")
+    chargeGasArgs info (GIntegerOpCost PrimOpDiv i i')
+    returnCEKValue cont handler (VLiteral (LInteger (div i i')))
+
+  [VLiteral (LInteger i), VLiteral (LDecimal i')] ->
+    decimalDiv (Decimal 0 i) i'
+  [VLiteral (LDecimal i), VLiteral (LInteger i')] ->
+    decimalDiv i (Decimal 0 i')
   [VLiteral (LDecimal i), VLiteral (LDecimal i')] ->
-    if i' == 0 then throwExecutionError info (ArithmeticException "div by zero, decimal")
-    else returnCEKValue cont handler (VLiteral (LDecimal (i / i')))
+    decimalDiv i i'
+
   args -> argsError info b args
+  where
+  decimalDiv i i' = do
+    when (i' == 0) $ throwExecutionError info (ArithmeticException "div by zero, decimal")
+    chargeGasArgs info (GIntegerOpCost PrimOpDiv (decimalMantissa i) (decimalMantissa i'))
+    returnCEKValue cont handler (VLiteral (LDecimal (i / i')))
+
 
 rawNegate :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawNegate info b cont handler _env = \case
@@ -213,7 +272,8 @@ rawNegate info b cont handler _env = \case
 
 rawEq :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawEq info b cont handler _env = \case
-  [VPactValue pv, VPactValue pv'] -> returnCEKValue cont handler (VBool (pv == pv'))
+  [VPactValue pv, VPactValue pv'] ->
+    returnCEKValue cont handler (VBool (pv == pv'))
   args -> argsError info b args
 
 modInt :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -236,11 +296,6 @@ rawGeq = defCmp (`elem` [GT, EQ])
 
 rawLeq :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawLeq = defCmp (`elem` [LT, EQ])
-  -- [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LBool (i <= i')))
-  -- [VLiteral (LDecimal i), VLiteral (LDecimal i')] -> returnCEKValue cont handler (VLiteral (LBool (i <= i')))
-  -- [VLiteral (LString i), VLiteral (LString i')] -> returnCEKValue cont handler (VLiteral (LBool (i <= i')))
-  -- [VTime i, VTime i'] -> returnCEKValue cont handler (VLiteral (LBool (i <= i')))
-  -- args -> argsError info b args
 
 defCmp :: (CEKEval step b i m, MonadEval b i m) => (Ordering -> Bool) -> NativeFunction step b i m
 defCmp predicate info b cont handler _env = \case
@@ -280,7 +335,7 @@ bitShiftInt =  binaryIntFn (\i s -> shift i (fromIntegral s))
 
 rawAbs :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawAbs info b cont handler _env = \case
-  [VLiteral (LInteger i)] ->
+  [VLiteral (LInteger i)] -> do
     returnCEKValue cont handler (VLiteral (LInteger (abs i)))
   [VLiteral (LDecimal e)] -> do
     returnCEKValue cont handler (VLiteral (LDecimal (abs e)))
@@ -1339,7 +1394,8 @@ describeModule info b cont handler env = \case
 
 dbDescribeTable :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 dbDescribeTable info b cont handler _env = \case
-  [VTable (TableValue name _ schema)] ->
+  [VTable (TableValue name _ schema)] -> do
+    enforceTopLevelOnly info b
     returnCEKValue cont handler $ VObject $ M.fromList $ fmap (over _1 Field)
       [("name", PString (_tableName name))
       ,("module", PString (renderModuleName (_tableModuleName name)))

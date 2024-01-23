@@ -46,7 +46,7 @@ tests = do
     ]
 
 replTestDir :: [Char]
-replTestDir = "pact-core-tests" </> "pact-tests"
+replTestDir = "pact-tests" </> "pact-tests"
 
 replTestFiles :: IO [FilePath]
 replTestFiles = do
