@@ -7,13 +7,13 @@
 
 module Pact.Core.Builtin
  ( CoreBuiltin(..)
- , coreBuiltinToText
  , coreBuiltinMap
  , coreBuiltinNames
  , ReplBuiltin(..)
- , replcoreBuiltinNames
- , replcoreBuiltinMap
- , replBuiltinToText
+ , replCoreBuiltinNames
+ , replCoreBuiltinMap
+ , replCoreBuiltinToText
+ , coreBuiltinToUserText
  , IsBuiltin(..)
  , ReplCoreBuiltin
  , BuiltinForm(..)
@@ -223,9 +223,29 @@ data CoreBuiltin
 
 instance NFData CoreBuiltin
 
+coreBuiltinOverloads :: [CoreBuiltin]
+coreBuiltinOverloads =
+  [ CoreEnumerateStepN
+  , CoreSelectWithFields
+  , CoreSortObject
+  , CoreRoundPrec
+  , CoreCeilingPrec
+  , CoreFloorPrec
+  , CoreStrToIntBase
+  , CoreReadMsgDefault
+  , CoreDefineKeysetData
+  , CoreYieldToChain]
+
+
 instance HasObjectOps CoreBuiltin where
   objectAt = CoreAt
 
+-- | NOTE: this function spits out fully resolved overload name of a native.
+--   This is used for both errors and hashes. DO NOT CHANGE unless you know what you are doing,
+--   or we are forking this change.
+--
+--   coreBuiltinToText giuves us a hashable representation of each function. For a function for UX use, see
+--   coreBuiltinTextRepr
 coreBuiltinToText :: CoreBuiltin -> Text
 coreBuiltinToText = \case
   -- Addition
@@ -288,7 +308,7 @@ coreBuiltinToText = \case
   CoreDistinct -> "distinct"
   CoreFormat -> "format"
   CoreEnumerate -> "enumerate"
-  CoreEnumerateStepN -> ""
+  CoreEnumerateStepN -> "enumerate-step-n"
   CoreShow -> "show"
   CoreReadMsg -> "read-msg"
   CoreReadMsgDefault -> "read-msg-default"
@@ -328,7 +348,151 @@ coreBuiltinToText = \case
   CoreKeys -> "keys"
   CoreRead -> "read"
   CoreSelect -> "select"
-  CoreSelectWithFields -> ""
+  CoreSelectWithFields -> "select-with-fields"
+  CoreUpdate -> "update"
+  CoreWithDefaultRead -> "with-default-read"
+  CoreWithRead -> "with-read"
+  CoreWrite -> "write"
+  CoreTxIds -> "txids"
+  CoreTxLog -> "txlog"
+  CoreTxHash -> "tx-hash"
+  CoreAndQ -> "and?"
+  CoreOrQ -> "or?"
+  CoreWhere -> "where"
+  CoreNotQ -> "not?"
+  CoreHash -> "hash"
+  CoreContinue -> "continue"
+  CoreParseTime -> "parse-time"
+  CoreFormatTime -> "format-time"
+  CoreTime -> "time"
+  CoreAddTime -> "add-time"
+  CoreDiffTime -> "diff-time"
+  CoreHours -> "hours"
+  CoreMinutes -> "minutes"
+  CoreDays -> "days"
+  CoreCompose -> "compose"
+  CoreCreatePrincipal -> "create-principal"
+  CoreIsPrincipal -> "is-principal"
+  CoreTypeOfPrincipal -> "typeof-principal"
+  CoreValidatePrincipal -> "validate-principal"
+  CoreNamespace -> "namespace"
+  CoreDefineNamespace -> "define-namespace"
+  CoreDescribeNamespace -> "describe-namespace"
+  CoreZkPairingCheck -> "pairing-check"
+  CoreZKScalarMult -> "scalar-mult"
+  CoreZkPointAdd -> "point-add"
+  CorePoseidonHashHackachain -> "poseidon-hash-hack-a-chain"
+  CoreChainData -> "chain-data"
+  CoreIsCharset -> "is-charset"
+  CorePactId -> "pact-id"
+  CoreTypeOf -> "typeof"
+  CoreDec -> "dec"
+
+-- | Our `CoreBuiltin` user-facing representation.
+-- note: `coreBuiltinToUserText`
+coreBuiltinToUserText :: CoreBuiltin -> Text
+coreBuiltinToUserText = \case
+  -- Addition
+  CoreAdd -> "+"
+  -- Num
+  CoreSub -> "-"
+  CoreMultiply -> "*"
+  CoreDivide -> "/"
+  CoreNegate -> "negate"
+  CoreAbs -> "abs"
+  CorePow -> "^"
+  -- Boolean ops
+  CoreNot -> "not"
+  -- Eq
+  CoreEq -> "="
+  CoreNeq -> "!="
+  -- Ord
+  CoreGT -> ">"
+  CoreGEQ -> ">="
+  CoreLT -> "<"
+  CoreLEQ -> "<="
+  -- Int ops
+  CoreBitwiseAnd -> "&"
+  CoreBitwiseOr -> "|"
+  CoreBitwiseXor -> "xor"
+  CoreBitwiseFlip -> "~"
+  CoreBitShift -> "shift"
+  CoreMod -> "mod"
+  -- roundings
+  CoreRound -> "round"
+  CoreCeiling -> "ceiling"
+  CoreFloor -> "floor"
+  CoreRoundPrec -> "round"
+  CoreCeilingPrec -> "ceiling"
+  CoreFloorPrec -> "floor"
+  -- Fractional
+  CoreExp -> "exp"
+  CoreLn -> "ln"
+  CoreSqrt -> "sqrt"
+  CoreLogBase -> "log"
+  -- ListLike
+  CoreLength -> "length"
+  CoreTake -> "take"
+  CoreDrop -> "drop"
+  CoreConcat -> "concat"
+  CoreReverse -> "reverse"
+  -- general
+  CoreMap -> "map"
+  CoreFilter -> "filter"
+  CoreContains -> "contains"
+  CoreSort -> "sort"
+  CoreSortObject -> "sort"
+  CoreRemove -> "remove"
+  -- CoreIf -> "if"
+  CoreIntToStr -> "int-to-str"
+  CoreStrToInt -> "str-to-int"
+  CoreStrToIntBase -> "str-to-int"
+  CoreFold -> "fold"
+  CoreZip -> "zip"
+  CoreDistinct -> "distinct"
+  CoreFormat -> "format"
+  CoreEnumerate -> "enumerate"
+  CoreEnumerateStepN -> "enumerate"
+  CoreShow -> "show"
+  CoreReadMsg -> "read-msg"
+  CoreReadMsgDefault -> "read-msg"
+  CoreReadInteger -> "read-integer"
+  CoreReadDecimal -> "read-decimal"
+  CoreReadString -> "read-string"
+  CoreReadKeyset -> "read-keyset"
+  CoreEnforceGuard -> "enforce-guard"
+  CoreEnforceKeyset -> "enforce-keyset"
+  CoreKeysetRefGuard -> "keyset-ref-guard"
+  CoreCreateCapabilityGuard -> "create-capability-guard"
+  CoreCreateCapabilityPactGuard -> "create-capability-pact-guard"
+  CoreCreateModuleGuard -> "create-module-guard"
+  CoreCreateDefPactGuard -> "create-pact-guard"
+  CoreAt -> "at"
+  CoreMakeList -> "make-list"
+  CoreB64Encode -> "base64-encode"
+  CoreB64Decode -> "base64-decode"
+  CoreStrToList -> "str-to-list"
+  CoreYield -> "yield"
+  CoreYieldToChain -> "yield"
+  CoreResume -> "resume"
+  CoreBind -> "bind"
+  CoreRequireCapability -> "require-capability"
+  CoreComposeCapability -> "compose-capability"
+  CoreInstallCapability -> "install-capability"
+  CoreEmitEvent -> "emit-event"
+  CoreCreateTable -> "create-table"
+  CoreDescribeKeyset -> "describe-keyset"
+  CoreDescribeModule -> "describe-module"
+  CoreDescribeTable -> "describe-table"
+  CoreDefineKeySet -> "define-keyset"
+  CoreDefineKeysetData -> "define-keyset"
+  CoreFoldDb -> "fold-db"
+  CoreInsert -> "insert"
+  CoreKeyLog -> "keylog"
+  CoreKeys -> "keys"
+  CoreRead -> "read"
+  CoreSelect -> "select"
+  CoreSelectWithFields -> "select"
   CoreUpdate -> "update"
   CoreWithDefaultRead -> "with-default-read"
   CoreWithRead -> "with-read"
@@ -516,12 +680,17 @@ instance IsBuiltin CoreBuiltin where
     CoreDec -> 1
 
 
-
 coreBuiltinNames :: [Text]
-coreBuiltinNames = fmap coreBuiltinToText [minBound .. maxBound]
+coreBuiltinNames =
+  [ coreBuiltinToText b
+  | b <- [minBound .. maxBound]
+  , b `notElem` coreBuiltinOverloads]
 
 coreBuiltinMap :: Map Text CoreBuiltin
-coreBuiltinMap = M.fromList $ (\b -> (coreBuiltinToText b, b)) <$> [minBound .. maxBound]
+coreBuiltinMap = M.fromList
+  [ (coreBuiltinToText b, b)
+  | b <- [minBound .. maxBound]
+  , b `notElem` coreBuiltinOverloads]
 
 -- Todo: rename
 -- | Our repl builtins.
@@ -689,12 +858,24 @@ replBuiltinToText f = \case
   RBuiltinWrap b -> f b
   RBuiltinRepl rb -> replBuiltinsToText rb
 
-replcoreBuiltinNames :: [Text]
-replcoreBuiltinNames = fmap (replBuiltinToText coreBuiltinToText) [minBound .. maxBound]
+replCoreBuiltinToText :: ReplCoreBuiltin -> Text
+replCoreBuiltinToText = replBuiltinToText coreBuiltinToUserText
 
-replcoreBuiltinMap :: Map Text (ReplBuiltin CoreBuiltin)
-replcoreBuiltinMap =
-  M.fromList $ (\b -> (replBuiltinToText coreBuiltinToText b, b)) <$> [minBound .. maxBound]
+replCoreBuiltinNames :: [Text]
+replCoreBuiltinNames =
+  [ txtRepr
+  | b <- [minBound .. maxBound]
+  , b `notElem` (RBuiltinWrap <$> coreBuiltinOverloads)
+  , let !txtRepr = replCoreBuiltinToText b]
+
+replCoreBuiltinMap :: Map Text (ReplBuiltin CoreBuiltin)
+replCoreBuiltinMap =
+  M.fromList $
+    [ (txtRepr, b)
+    | b <- [minBound .. maxBound]
+    , b `notElem` (RBuiltinWrap <$> coreBuiltinOverloads)
+    , let !txtRepr = replCoreBuiltinToText b]
+
 
 -- Todo: is not a great abstraction.
 -- In particular: the arity could be gathered from the type.
@@ -704,7 +885,7 @@ class Show b => IsBuiltin b where
 
 
 instance Pretty CoreBuiltin where
-  pretty b = pretty (coreBuiltinToText b)
+  pretty b = pretty (coreBuiltinToUserText b)
 
 instance (Pretty b) => Pretty (ReplBuiltin b) where
   pretty = \case

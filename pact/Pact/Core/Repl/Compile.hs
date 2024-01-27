@@ -113,7 +113,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
         pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
         oldEE <- use replEvalEnv
         when reset $ do
-          ee <- liftIO (defaultEvalEnv pactdb replcoreBuiltinMap)
+          ee <- liftIO (defaultEvalEnv pactdb replCoreBuiltinMap)
           evalState .= def
           replEvalEnv .= ee
         fp <- mangleFilePath (T.unpack txt)
