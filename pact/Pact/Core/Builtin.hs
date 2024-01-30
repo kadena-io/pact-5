@@ -376,6 +376,7 @@ coreBuiltinToText = \case
   CorePactId -> "pact-id"
   CoreTypeOf -> "typeof"
   CoreDec -> "dec"
+  CoreCond -> "cond"
 
 -- | Our `CoreBuiltin` user-facing representation.
 -- note: `coreBuiltinToUserText`
