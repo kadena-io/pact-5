@@ -90,7 +90,7 @@ builtinHoverTests
     , hoverTest (RBuiltinWrap CoreGEQ) 35
     ]
   where
-    title b = "Get hover docs for: "  <> show (replCoreBuiltinToText b)
+    title b = "Get hover docs for: "  <> show (replCoreBuiltinToUserText b)
     hoverTest b l = testCase (title b) $ runPactLSP $ do
       doc <- openDoc "builtin-hover.repl" "pact"
       h <- getHover doc (Position l 2)
@@ -98,7 +98,7 @@ builtinHoverTests
         assertBool "Return hover information" (isJust h)
         let
           Just hov' = h
-          Just expectedDocs =  M.lookup (replCoreBuiltinToText b) builtinDocs
+          Just expectedDocs =  M.lookup (replCoreBuiltinToUserText b) builtinDocs
         assertEqual "Match builtin docs" (view contents hov') (InL $ MarkupContent MarkupKind_PlainText expectedDocs)
 
 

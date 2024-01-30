@@ -264,7 +264,7 @@ documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req re
       Just tlm -> case tlm of
         TermMatch (Builtin builtin i) -> let
                 docs = fromMaybe "No docs available"
-                  (M.lookup (replCoreBuiltinToText builtin) builtinDocs)
+                  (M.lookup (replCoreBuiltinToUserText builtin) builtinDocs)
 
                 mc = MarkupContent MarkupKind_PlainText docs
                 range = spanInfoToRange i

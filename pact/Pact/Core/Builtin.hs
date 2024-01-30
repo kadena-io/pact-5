@@ -14,6 +14,7 @@ module Pact.Core.Builtin
  , replCoreBuiltinMap
  , replCoreBuiltinToText
  , coreBuiltinToUserText
+ , replCoreBuiltinToUserText
  , IsBuiltin(..)
  , ReplCoreBuiltin
  , BuiltinForm(..)
@@ -859,7 +860,11 @@ replBuiltinToText f = \case
   RBuiltinRepl rb -> replBuiltinsToText rb
 
 replCoreBuiltinToText :: ReplCoreBuiltin -> Text
-replCoreBuiltinToText = replBuiltinToText coreBuiltinToUserText
+replCoreBuiltinToText = replBuiltinToText coreBuiltinToText
+
+-- | UX version of replCoreBuiltinToText, for use with LSP
+replCoreBuiltinToUserText :: ReplCoreBuiltin -> Text
+replCoreBuiltinToUserText = replBuiltinToText coreBuiltinToText
 
 replCoreBuiltinNames :: [Text]
 replCoreBuiltinNames =
