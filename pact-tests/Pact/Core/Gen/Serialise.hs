@@ -153,8 +153,9 @@ fieldGen = Field <$> identGen
 
 schemaGen :: Gen Schema
 schemaGen = do
+  qual <- qualifiedNameGen
   elems <- Gen.list (Range.linear 0 10) $ (,) <$> fieldGen <*> typeGen
-  pure (Schema (fromList elems))
+  pure (Schema qual (fromList elems))
 
 typeGen :: Gen Type
 typeGen = Gen.recursive Gen.choice
@@ -306,7 +307,7 @@ ifDefCapGen i = do
 defSchemaGen :: Gen i -> Gen (DefSchema Type i)
 defSchemaGen i = do
   name <- identGen
-  schema <- _schema <$> schemaGen
+  Schema _ schema <- schemaGen
   DefSchema name schema <$> i
 
 defTableGen :: Gen i -> Gen (DefTable Name i)

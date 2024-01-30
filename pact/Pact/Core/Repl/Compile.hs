@@ -61,7 +61,7 @@ data ReplCompileValue
   | RLoadedDefun Text
   | RLoadedDefConst Text
   | RBuiltinDoc Text
-  | RUserDoc QualifiedName (Maybe Text)
+  | RUserDoc (EvalDef ReplCoreBuiltin SpanInfo) (Maybe Text)
   deriving Show
 
 loadFile
@@ -137,10 +137,21 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
         functionDocs toplevel
         (ds, deps) <- compileDesugarOnly replEnv toplevel
         case ds of
-          TLTerm (Var (Name n (NTopLevel mn _)) _) -> do
-            let qn = QualifiedName n mn
-            docs <- uses replUserDocs (M.lookup qn)
-            displayValue (RUserDoc qn docs)
+          TLTerm (Var (Name n (NTopLevel mn mh)) varI) -> do
+            let fqn = FullyQualifiedName mn n mh
+            lookupFqName fqn >>= \case
+              -- Just (DConst d) -> do
+              --   case _dcTerm d of
+              --     TermConst _ ->
+              --       failInvariant varI "Defconst not fully evaluated"
+              --     EvaledConst v ->
+              --       displayValue (RCompileValue (InterpretValue v varI))
+              Just d -> do
+                let qn = QualifiedName n mn
+                docs <- uses replUserDocs (M.lookup qn)
+                displayValue (RUserDoc d docs)
+              Nothing ->
+                failInvariant varI "repl invariant violated: resolved to a top level free variable without a binder"
           _ -> do
             v <- evalTopLevel replEnv ds deps
             displayValue (RCompileValue v)

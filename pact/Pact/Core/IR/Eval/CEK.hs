@@ -161,7 +161,7 @@ evaluateTerm cont handler env (Var n info)  = do
               clo = CapTokenClosure fqn args (length args) info
           returnCEKValue cont handler (VClosure (CT clo))
         Just d ->
-          throwExecutionError info (InvalidDefKind (defKind d) "in var position")
+          throwExecutionError info (InvalidDefKind (defKind mname d) "in var position")
         Nothing ->
           throwExecutionError info (NameNotInScope (FullyQualifiedName mname (_nName n) mh))
     NModRef m ifs -> case ifs of
@@ -1734,7 +1734,7 @@ getSfName = \case
   Nothing -> "#lambda"
 
 checkSchema :: M.Map Field PactValue -> Schema -> Bool
-checkSchema o (Schema sc) = isJust $ do
+checkSchema o (Schema _ sc) = isJust $ do
   let keys = M.keys o
   when (keys /= M.keys sc) Nothing
   traverse_ go (M.toList o)
@@ -1742,7 +1742,7 @@ checkSchema o (Schema sc) = isJust $ do
   go (k, v) = M.lookup k sc >>= (`checkPvType` v)
 
 checkPartialSchema :: M.Map Field PactValue -> Schema -> Bool
-checkPartialSchema o (Schema sc) =
+checkPartialSchema o (Schema _ sc) =
   M.isSubmapOfBy (\obj ty -> isJust (checkPvType ty obj)) o sc
 
 instance MonadEval b i m => CEKEval CEKSmallStep b i m where
@@ -1865,7 +1865,7 @@ runUserGuard info cont handler env (UserGuard qn args) =
       clo <- mkDefunClosure d (_qnModName qn) env'
       -- Todo: sys only here
       applyLam (C clo) (VPactValue <$> args) (IgnoreValueC (PBool True) cont) handler
-    d -> throwExecutionError info (InvalidDefKind (defKind d) "run-user-guard")
+    d -> throwExecutionError info (InvalidDefKind (defKind (_qnModName qn) d) "run-user-guard")
 {-# SPECIALIZE runUserGuard
    :: ()
    -> CoreCEKCont
