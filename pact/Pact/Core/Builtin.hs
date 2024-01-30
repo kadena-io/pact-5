@@ -12,14 +12,12 @@ module Pact.Core.Builtin
  , ReplBuiltin(..)
  , replCoreBuiltinNames
  , replCoreBuiltinMap
- , replCoreBuiltinToText
  , coreBuiltinToUserText
  , replCoreBuiltinToUserText
  , IsBuiltin(..)
  , ReplCoreBuiltin
  , BuiltinForm(..)
  , ReplBuiltins(..)
- , HasObjectOps(..)
  )where
 
 import Data.Text(Text)
@@ -35,6 +33,8 @@ import Pact.Core.Pretty
 -- | Our type alias for the majority of our repl builtins wrap
 type ReplCoreBuiltin = ReplBuiltin CoreBuiltin
 
+-- | Our syntactic builtin forms, which capture terms and may evaluate them lazily
+--   Note: this does not include capability forms
 data BuiltinForm o
   = CAnd o o
   | COr o o
@@ -58,18 +58,7 @@ instance Pretty o => Pretty (BuiltinForm o) where
     CEnforce o o' ->
       parens ("enforce" <+> pretty o <+> pretty o')
 
-class HasObjectOps b where
-  objectAt :: b
-
-data DefType
-  = DTDefun
-  | DTDefcap
-  | DTDefConst
-  deriving Show
-
-{-
-
--}
+-- | Our list of base-builtins to pact.
 data CoreBuiltin
   -- Operators
   -- Addition/Concatenation
@@ -224,6 +213,7 @@ data CoreBuiltin
 
 instance NFData CoreBuiltin
 
+-- | A list of our internal overloads.
 coreBuiltinOverloads :: [CoreBuiltin]
 coreBuiltinOverloads =
   [ CoreEnumerateStepN
@@ -237,16 +227,12 @@ coreBuiltinOverloads =
   , CoreDefineKeysetData
   , CoreYieldToChain]
 
-
-instance HasObjectOps CoreBuiltin where
-  objectAt = CoreAt
-
 -- | NOTE: this function spits out fully resolved overload name of a native.
 --   This is used for both errors and hashes. DO NOT CHANGE unless you know what you are doing,
 --   or we are forking this change.
 --
---   coreBuiltinToText giuves us a hashable representation of each function. For a function for UX use, see
---   coreBuiltinTextRepr
+--   coreBuiltinToText gives us a unique text representation of each function. For a function for UX use, see
+--   coreBuiltinToUserText
 coreBuiltinToText :: CoreBuiltin -> Text
 coreBuiltinToText = \case
   -- Addition
@@ -784,9 +770,6 @@ data ReplBuiltin b
   | RBuiltinRepl ReplBuiltins
   deriving (Eq, Show, Generic)
 
-instance HasObjectOps b => HasObjectOps (ReplBuiltin b) where
-  objectAt = RBuiltinWrap objectAt
-
 -- NOTE: Maybe `ReplBuiltin` is not a great abstraction, given
 -- expect arity changes based on whether it's corebuiltin or rawbuiltin
 instance IsBuiltin b => IsBuiltin (ReplBuiltin b) where
@@ -863,8 +846,10 @@ replCoreBuiltinToText :: ReplCoreBuiltin -> Text
 replCoreBuiltinToText = replBuiltinToText coreBuiltinToText
 
 -- | UX version of replCoreBuiltinToText, for use with LSP
+-- this function takes a `ReplCoreBuiltin` and prints its name
+-- while removing the overloaded internal names
 replCoreBuiltinToUserText :: ReplCoreBuiltin -> Text
-replCoreBuiltinToUserText = replBuiltinToText coreBuiltinToText
+replCoreBuiltinToUserText = replBuiltinToText coreBuiltinToUserText
 
 replCoreBuiltinNames :: [Text]
 replCoreBuiltinNames =
@@ -895,4 +880,4 @@ instance Pretty CoreBuiltin where
 instance (Pretty b) => Pretty (ReplBuiltin b) where
   pretty = \case
     RBuiltinWrap b -> pretty b
-    t -> pretty (replBuiltinToText (const "") t)
+    RBuiltinRepl t -> pretty (replBuiltinsToText t)
