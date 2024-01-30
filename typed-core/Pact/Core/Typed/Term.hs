@@ -40,154 +40,50 @@ module Pact.Core.Typed.Term
  , CoreEvalTopLevel
  , CoreEvalReplTopLevel
  , defName
- , defType
- , defTerm
+--  , defType
+--  , defTerm
  -- Prisms and lenses
  , _IfDfun
  , _IfDConst
+ , hasRollback
+ , ordinaryDefPactStepExec
  ) where
 
 import Control.Lens
+import Control.DeepSeq
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty)
+import Data.Map.Strict(Map)
 import Data.Void
 import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NE
+import GHC.Generics
+
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Names
-import Pact.Core.Type
 import Pact.Core.Imports
 import Pact.Core.Hash
 import Pact.Core.Guards
 import Pact.Core.Capabilities
+import Pact.Core.PactValue(PactValue)
 import Pact.Core.Pretty(Pretty(..), pretty, (<+>))
 
+import Pact.Core.Typed.Type
+
 import qualified Pact.Core.Pretty as Pretty
-
-data Defun name tyname builtin info
-  = Defun
-  { _dfunName :: Text
-  , _dfunType :: Type Void
-  , _dfunTerm :: Term name tyname builtin info
-  , _dfunInfo :: info
-  } deriving Show
-
-data DefConst name tyname builtin info
-  = DefConst
-  { _dcName :: Text
-  , _dcType :: Type Void
-  , _dcTerm :: Term name tyname builtin info
-  , _dcInfo :: info
-  } deriving Show
-
-data DefCap name tyname builtin info
-  = DefCap
-  { _dcapName :: Text
-  , _dcapAppArity :: Int
-  , _dcapArgTypes :: [Type Void]
-  , _dcapRType :: Type Void
-  , _dcapTerm :: Term name tyname builtin info
-  , _dcapMeta :: Maybe (DefCapMeta name)
-  , _dcapInfo :: info
-  } deriving Show
-
-
-data Def name tyname builtin info
-  = Dfun (Defun name tyname builtin info)
-  | DConst (DefConst name tyname builtin info)
-  | DCap (DefCap name tyname builtin info)
-  deriving Show
-
--- Todo: deftypes to support
--- DCap (DefCap name builtin info)
--- DPact (DefPact name builtin info)
--- DSchema (DefSchema name info)
--- DTable (DefTable name info)
-defType :: Def name tyname builtin info -> TypeOfDef Void
-defType = \case
-  Dfun d -> DefunType (_dfunType d)
-  DConst d -> DefunType (_dcType d)
-  DCap d -> DefcapType (_dcapArgTypes d) (_dcapRType d)
-
-defName :: Def name tyname builtin i -> Text
-defName = \case
-  Dfun d -> _dfunName d
-  DConst d -> _dcName d
-  DCap d -> _dcapName d
-
-defTerm :: Def name tyname builtin info -> Term name tyname builtin info
-defTerm = \case
-  Dfun d -> _dfunTerm d
-  DConst d -> _dcTerm d
-  DCap d -> _dcapTerm d
-
-data Module name tyname builtin info
-  = Module
-  { _mName :: ModuleName
-  , _mGovernance :: Governance name
-  , _mDefs :: [Def name tyname builtin info]
-  , _mBlessed :: !(Set.Set ModuleHash)
-  , _mImports :: [Import]
-  , _mImplemented :: [ModuleName]
-  , _mHash :: ModuleHash
-  , _mInfo :: info
-  } deriving Show
-
-data Interface name tyname builtin info
-  = Interface
-  { _ifName :: ModuleName
-  , _ifDefns :: [IfDef name tyname builtin info]
-  , _ifHash :: ModuleHash
-  , _ifInfo :: info
-  } deriving Show
-
-data IfDefun info
-  = IfDefun
-  { _ifdName :: Text
-  , _ifdType :: Type Void
-  , _ifdInfo :: info
-  } deriving Show
-
-data IfDefCap info
-  = IfDefCap
-  { _ifdcName :: Text
-  , _ifdcArgTys :: [Type Void]
-  , _ifdcRType :: Type Void
-  , _ifdcInfo :: info
-  } deriving (Show, Functor)
-
-data IfDef name tyname builtin info
-  = IfDfun (IfDefun info)
-  | IfDConst (DefConst name tyname builtin info)
-  | IfDCap (IfDefCap info)
-  deriving Show
-
-data TopLevel name tyname builtin info
-  = TLModule (Module name tyname builtin info)
-  | TLInterface (Interface name tyname builtin info)
-  | TLTerm (Term name tyname builtin info)
-  deriving Show
-
-data ReplTopLevel name tyname builtin info
-  = RTLModule (Module name tyname builtin info)
-  | RTLInterface (Interface name tyname builtin info)
-  | RTLDefun (Defun name tyname builtin info)
-  | RTLDefConst (DefConst name tyname builtin info)
-  | RTLTerm (Term name tyname builtin info)
-  deriving Show
 
 -- | Typed pact core terms
 data Term name tyname builtin info
   = Var name info
   -- ^ single variables, e.g the term `x`
-  | Lam (NonEmpty (Text, Type tyname)) (Term name tyname builtin info) info
+  | Lam [Arg tyname] (Term name tyname builtin info) info
   -- ^ f = \a b c -> e
   -- All lambdas, even anonymous ones, are named, for the sake of them adding a stack frame
-  | App (Term name tyname builtin info) (NonEmpty (Term name tyname builtin info)) info
+  | App (Term name tyname builtin info) [Term name tyname builtin info] info
   -- let n = e1 in e2
-  | Let Text (Term name tyname builtin info) (Term name tyname builtin info) info
+  | Let (Arg tyname) (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ (e_1 e_2 .. e_n)
   | Builtin builtin info
   -- ^ Built-in functions (or natives)
@@ -203,15 +99,186 @@ data Term name tyname builtin info
   -- ^ Conditional exprs
   | ListLit (Type tyname) [Term name tyname builtin info] info
   -- ^ List literals
-  | DynInvoke (Term name tyname builtin info) Text info
-  -- ^ Dynamic invoke.
+  | ObjectLit [(Field, Term name tyname builtin info)] info
+  -- ^ an object literal
   | Try (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ Error handling
   | CapabilityForm (CapForm name (Term name tyname builtin info)) info
   -- ^ Capabilities
-  | Error (Type tyname) Text info
-  -- ^ Error term
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
+
+-- | Our defun representation, that is
+-- (defun <name>(:<ty>)? (<args>*) <body>))
+-- note our IR does not spit out docs.
+-- In that case: refer to the repl.
+data Defun name tyname builtin info
+  = Defun
+  { _dfunName :: Text
+  , _dfunArgs :: [Arg tyname]
+  , _dfunRType :: Type tyname
+  , _dfunTerm :: Term name tyname builtin info
+  , _dfunInfo :: info
+  } deriving (Show, Functor, Eq, Generic)
+
+data Step name ty builtin info
+  = Step (Term name ty builtin info)
+  | StepWithRollback
+    (Term name ty builtin info)
+    (Term name ty builtin info)
+  deriving (Show, Functor, Eq, Generic)
+
+data DefPact name ty builtin info
+  = DefPact
+  { _dpName :: Text
+  , _dpArgs :: [Arg ty]
+  , _dpRetType :: Type ty
+  , _dpSteps :: NonEmpty (Step name ty builtin info)
+  , _dpInfo :: info
+  } deriving (Show, Functor, Eq, Generic)
+
+-- | Our defconst representation, that is
+-- (defconst <name>(:<ty>)* <expr>)
+-- Todo: ConstVal is not precisely type-safe.
+-- Maybe a different IR is needed here?
+data DefConst name ty builtin info
+  = DefConst
+  { _dcName :: Text
+  , _dcType :: Maybe ty
+  , _dcTerm :: PactValue
+  , _dcInfo :: info
+  } deriving (Show, Functor, Eq, Generic)
+
+-- | Our defcap representation, that is
+-- (defcap <name>:<ty> (<args>) <meta> <body>)
+data DefCap name ty builtin info
+  = DefCap
+  { _dcapName :: Text
+  , _dcapArgs :: [Arg ty]
+  , _dcapRType :: Type ty
+  , _dcapTerm :: Term name ty builtin info
+  , _dcapMeta :: DefCapMeta FullyQualifiedName
+  , _dcapInfo :: info
+  } deriving (Show, Functor, Eq, Generic)
+
+data DefSchema ty info
+  = DefSchema
+  { _dsName :: Text
+  , _dsSchema :: Map Field (Type Void)
+  , _dsInfo :: info
+  } deriving (Show, Functor, Eq, Generic)
+
+data DefTable info
+  = DefTable
+  { _dtName :: Text
+  , _dtSchema :: Map Field (Type Void)
+  , _dtInfo :: info
+  } deriving (Show, Functor, Eq, Generic)
+
+hasRollback :: Step n t b i -> Bool
+hasRollback Step{} = False
+hasRollback StepWithRollback{} = True
+
+ordinaryDefPactStepExec :: Step name ty builtin info -> Term name ty builtin info
+ordinaryDefPactStepExec (Step expr) = expr
+ordinaryDefPactStepExec (StepWithRollback expr _) = expr
+
+data Def name ty builtin info
+  = Dfun (Defun name ty builtin info)
+  | DConst (DefConst name ty builtin info)
+  | DCap (DefCap name ty builtin info)
+  | DSchema (DefSchema ty info)
+  | DTable (DefTable info)
+  | DPact (DefPact name ty builtin info)
+  deriving (Show, Functor, Eq, Generic)
+
+-- Todo: deftypes to support
+-- DCap (DefCap name builtin info)
+-- DPact (DefPact name builtin info)
+-- DSchema (DefSchema name info)
+-- DTable (DefTable name info)
+-- defType :: Def name tyname builtin info -> TypeOfDef Void
+-- defType = \case
+--   Dfun d -> DefunType (_dfunType d)
+--   DConst d -> DefunType (_dcType d)
+--   DCap d -> DefcapType (_dcapArgTypes d) (_dcapRType d)
+
+defName :: Def name tyname builtin i -> Text
+defName = \case
+  Dfun d -> _dfunName d
+  DConst d -> _dcName d
+  DCap d -> _dcapName d
+  DTable t -> _dtName t
+  DSchema s -> _dsName s
+  DPact d -> _dpName d
+
+data Module name tyname builtin info
+  = Module
+  { _mName :: ModuleName
+  , _mGovernance :: Governance name
+  , _mDefs :: [Def name tyname builtin info]
+  , _mBlessed :: !(Set.Set ModuleHash)
+  , _mImports :: [Import]
+  , _mImplemented :: [ModuleName]
+  , _mHash :: ModuleHash
+  , _mInfo :: info
+  } deriving (Show, Generic)
+
+data Interface name ty builtin info
+  = Interface
+  { _ifName :: ModuleName
+  , _ifDefns :: [IfDef name ty builtin info]
+  , _ifImports :: [Import]
+  , _ifHash :: ModuleHash
+  , _ifInfo :: info
+  } deriving (Show, Eq, Functor, Generic)
+
+data IfDefPact ty info
+  = IfDefPact
+  { _ifdpName :: Text
+  , _ifdpArgs :: [Arg ty]
+  , _ifdpRType :: Maybe ty
+  , _ifdpInfo :: info
+  } deriving (Show, Eq, Functor, Generic)
+
+data IfDefun ty info
+  = IfDefun
+  { _ifdName :: Text
+  , _ifdArgs :: [Arg ty]
+  , _ifdRType :: Maybe ty
+  , _ifdInfo :: info
+  } deriving (Show, Eq, Functor, Generic)
+
+data IfDefCap name ty info
+  = IfDefCap
+  { _ifdcName :: Text
+  , _ifdcArgs :: [Arg ty]
+  , _ifdcRType :: Maybe ty
+  , _ifdcMeta :: DefCapMeta BareName
+  , _ifdcInfo :: info
+  } deriving (Show, Eq, Functor, Generic)
+
+data IfDef name ty builtin info
+  = IfDfun (IfDefun ty info)
+  | IfDConst (DefConst name ty builtin info)
+  | IfDCap (IfDefCap name ty info)
+  | IfDPact (IfDefPact ty info)
+  | IfDSchema (DefSchema ty info)
+  deriving (Show, Eq, Functor, Generic)
+
+data TopLevel name tyname builtin info
+  = TLModule (Module name tyname builtin info)
+  | TLInterface (Interface name tyname builtin info)
+  | TLTerm (Term name tyname builtin info)
+  | TLUse Import info
+  deriving (Show, Generic)
+
+data ReplTopLevel name tyname builtin info
+  = RTLModule (Module name tyname builtin info)
+  | RTLInterface (Interface name tyname builtin info)
+  | RTLDefun (Defun name tyname builtin info)
+  | RTLDefConst (DefConst name tyname builtin info)
+  | RTLTerm (Term name tyname builtin info)
+  deriving Show
 
 -- Post Typecheck terms + modules
 type OverloadedTerm tyname b i =
@@ -260,10 +327,11 @@ type CoreEvalReplTopLevel tyname i = ReplTopLevel Name tyname CoreBuiltin i
 instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
   pretty = \case
     Var n _ -> pretty n
-    Lam (NE.toList -> ns) body _ ->
-      "λ" <> Pretty.hsep (fmap (\(n, t) -> Pretty.parens (pretty n <> ":" <+> pretty t)) ns) <+> "->" <+> pretty body
-    App l (NE.toList -> nel) _ ->
-      pretty l <> Pretty.parens (Pretty.hsep (Pretty.punctuate Pretty.comma (pretty <$> nel)))
+    Lam ns body _ ->
+      let lamArgs = Pretty.parens $ Pretty.hsep (pretty <$> ns)
+      in "λ" <> lamArgs <> "." <+> pretty body
+    App l nel _ ->
+      Pretty.parens (pretty l <+> Pretty.hsep (pretty <$> nel))
     Let n e1 e2 _ ->
       "let" <+> pretty n <+> "=" <+> pretty e1 <+> prettyFollowing e2
       where
@@ -283,9 +351,8 @@ instance (Pretty n, Pretty tn, Pretty b) => Pretty (Term n tn b i) where
     Try e1 e2 _ ->
       Pretty.parens ("try" <+> pretty e1 <+> pretty e2)
     CapabilityForm cf _ -> pretty cf
-    DynInvoke{} -> error "implement dyn invoke"
-    Error _ e _ ->
-      Pretty.parens ("error \"" <> pretty e <> "\"")
+    ObjectLit n _ ->
+      Pretty.braces (Pretty.hsep $ Pretty.punctuate "," $ fmap (\(f, t) -> pretty f <> ":" <> pretty t) n)
     where
     prettyTyApp ty = "@(" <> pretty ty <> ")"
 
@@ -320,10 +387,8 @@ termBuiltin f = \case
     Try <$> termBuiltin f te <*> termBuiltin f te' <*> pure info
   CapabilityForm cf i ->
     CapabilityForm <$> traverse (termBuiltin f) cf <*> pure i
-  DynInvoke te t i ->
-    DynInvoke <$> termBuiltin f te <*> pure t <*> pure i
-  Error ty txt info ->
-    pure (Error ty txt info)
+  ObjectLit m i ->
+    ObjectLit <$> (traverse._2) (termBuiltin f) m <*> pure i
 
 termInfo :: Lens' (Term name tyname builtin info) info
 termInfo f = \case
@@ -345,6 +410,8 @@ termInfo f = \case
     Conditional o <$> f info
   ListLit ty v i ->
     ListLit ty v <$> f i
+  ObjectLit m i ->
+    ObjectLit m <$> f i
   Builtin b i ->
     Builtin b <$> f i
   Constant l i ->
@@ -353,11 +420,6 @@ termInfo f = \case
     Try e1 e2 <$> f i
   CapabilityForm cf i ->
     CapabilityForm cf <$> f i
-  DynInvoke t e i -> DynInvoke t e <$> f i
-  Error t e i ->
-    Error t e <$> f i
-  -- ObjectLit obj i -> ObjectLit obj <$> f i
-  -- ObjectOp o i -> ObjectOp o <$> f i
 
 instance Plated (Term name tyname builtin info) where
   plate f = \case
@@ -371,6 +433,8 @@ instance Plated (Term name tyname builtin info) where
       TyAbs ns <$> f term <*> pure i
     ListLit ty ts i ->
       ListLit ty <$> traverse f ts <*> pure i
+    ObjectLit ts i ->
+      ObjectLit <$> (traverse._2) f ts <*> pure i
     Sequence e1 e2 i ->
       Sequence <$> f e1 <*> f e2 <*> pure i
     Conditional o i ->
@@ -381,13 +445,22 @@ instance Plated (Term name tyname builtin info) where
       Try <$> f e1 <*> f e2 <*> pure i
     CapabilityForm cf i ->
       CapabilityForm <$> traverse f cf <*> pure i
-    DynInvoke e1 t i ->
-      DynInvoke <$> f e1 <*> pure t <*> pure i
-    Error t e i -> pure (Error t e i)
-    -- ObjectLit tm i ->
-    --   ObjectLit <$> traverse f tm <*> pure i
-    -- ObjectOp oop i ->
-    --   ObjectOp <$> traverse f oop <*> pure i
 
 makePrisms ''IfDef
 makePrisms ''Def
+
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Term name ty b info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Def name ty b info)
+instance (NFData name, NFData info) => NFData (DefSchema name info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Defun name ty b info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (DefConst name ty b info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (DefCap name ty b info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (DefPact name ty b info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Step name ty b info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Module name ty b info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Interface name ty b info)
+instance (NFData name, NFData ty, NFData b, NFData info) => NFData (IfDef name ty b info)
+instance (NFData ty, NFData info) => NFData (IfDefun ty info)
+instance (NFData ty, NFData info) => NFData (IfDefPact ty info)
+instance (NFData name, NFData ty, NFData info) => NFData (IfDefCap name ty info)
+instance (NFData info) => NFData (DefTable info)

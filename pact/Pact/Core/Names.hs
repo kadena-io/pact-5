@@ -23,10 +23,7 @@ module Pact.Core.Names
  , qnModName
  , renderQualName
  , renderModuleName
- , TypeVar(..)
  , Unique
- , tyVarName
- , tyVarUnique
  , tyname
  , tynameUnique
  , Supply
@@ -270,24 +267,6 @@ fqnToQualName (FullyQualifiedName mn name _) =
 instance Pretty FullyQualifiedName where
   pretty fq = pretty $ fqnToQualName fq
 
-data TypeVar
-  = TypeVar
-  { _tyVarName :: !Text
-  , _tyVarUnique :: !Unique }
-  | UnificationVar
-  { _tyVarName :: !Text
-  , _tyVarUnique :: !Unique }
-  deriving (Show)
-
-instance Eq TypeVar where
-  l == r = _tyVarUnique l == _tyVarUnique r
-
-instance Ord TypeVar where
-  l <= r = _tyVarUnique l <= _tyVarUnique r
-
-instance Pretty TypeVar where
-  pretty t = pretty (_tyVarName t)
-
 data TypeName
   = TypeName
   { _tyname :: !Text
@@ -299,7 +278,6 @@ newtype NativeName
   { _natName :: Text }
   deriving (Show, Eq, NFData)
 
-makeLenses ''TypeVar
 makeLenses ''TypeName
 makeLenses ''NamedDeBruijn
 makeClassy ''NativeName

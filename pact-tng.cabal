@@ -175,6 +175,7 @@ library
     -- Core IR modules
     Pact.Core.IR.Term
     Pact.Core.IR.Desugar
+    Pact.Core.IR.GeneralizedDebruijn
 
     -- Core IR Evaluator modules
     Pact.Core.IR.Eval.Runtime
@@ -218,6 +219,21 @@ library pact-lsp
     , lsp
     , lsp-types
     , filepath
+
+library pact-tng-typed
+  import: pact-common
+  hs-source-dirs: typed-core
+
+  build-depends:
+    , pact-tng
+
+  exposed-modules:
+    Pact.Core.Typed.Infer
+    Pact.Core.Typed.Builtin
+    Pact.Core.Typed.Type
+
+    -- Typed term
+    Pact.Core.Typed.Term
 
 executable gasmodel
   import: pact-common
