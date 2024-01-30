@@ -13,6 +13,7 @@ module Pact.Core.Builtin
  , replCoreBuiltinNames
  , replCoreBuiltinMap
  , coreBuiltinToUserText
+ , coreBuiltinToText
  , replCoreBuiltinToUserText
  , IsBuiltin(..)
  , ReplCoreBuiltin

@@ -31,7 +31,9 @@ tests = testGroup "Pact LSP"
   [ testGroup "Diagnostics" diagnosticTests
   , testGroup "Hovers" [
       testGroup "Builtin docs" builtinHoverTests,
-      testGroup "User docs" userDocHoverTests]
+      testGroup "User docs" userDocHoverTests,
+      testGroup "Overloaded builtins" overloadBuiltinHoverTests
+      ]
   , testGroup "Definition" definitionRequestTests
   ]
 
@@ -101,6 +103,30 @@ builtinHoverTests
           Just expectedDocs =  M.lookup (replCoreBuiltinToUserText b) builtinDocs
         assertEqual "Match builtin docs" (view contents hov') (InL $ MarkupContent MarkupKind_PlainText expectedDocs)
 
+overloadBuiltinHoverTests :: [TestTree]
+overloadBuiltinHoverTests
+  = hoverTest <$> [(CoreEnumerate, CoreEnumerateStepN, 14)
+                  ,(CoreSelect, CoreSelectWithFields, 18)
+                  ,(CoreSort, CoreSortObject, 22)
+                  ,(CoreRound, CoreRoundPrec, 26)
+                  ,(CoreCeiling, CoreCeilingPrec, 30)
+                  ,(CoreFloor, CoreFloorPrec, 34)
+                  ,(CoreStrToInt, CoreStrToIntBase, 38)
+                  ,(CoreReadMsg, CoreReadMsgDefault, 42)
+                  ,(CoreDefineKeySet, CoreDefineKeysetData, 46)
+                  ,(CoreYield, CoreYieldToChain, 50)]
+    where
+      title b ob = "Check hover docs for overload: "
+        <> show (coreBuiltinToText b) <> " / " <> show (coreBuiltinToText ob)
+      hoverTest (b, ob, p) = testCase (title b ob) $ runPactLSP $ do
+        doc <- openDoc "builtin-overloads-hover.repl" "pact"
+        h1 <- getHover doc (Position p 8)
+        h2 <- getHover doc (Position (succ p) 8)
+        liftIO $ do
+          let
+            Just h1' = h1
+            Just h2' = h2
+          assertEqual "Match builtin docs" (view contents h1') (view contents h2')
 
 cfg :: SessionConfig
 cfg = defaultConfig
