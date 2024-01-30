@@ -491,8 +491,16 @@ notBool info b cont handler _env = \case
 ---------------------------
 
 -- Note: [Take/Drop Clamping]
--- The place of `fromIntegral` here matters. if we cast to `Int` when doing the
--- `min` or `max` check, it may overflow when past the the max `Int` value
+-- Take an expression like one of the following:
+--  When i >= 0:
+--    let clamp = fromIntegral $ min i (fromIntegral (T.length t))
+--  When i < 0:
+--    let clamp = fromIntegral $ max (fromIntegral (T.length t) + i) 0
+--
+-- Note that it's `max (fromIntegral (T.length t) + i) 0` and not `max (T.length t + fromIntegral i) 0`.
+-- That's because `i` may contain values larger than `Int`, which is the type `length` typically returns.
+-- The sum `i + length t` may overflow `Int`, so it's converted to `Integer`, and the result of the `clamp` is always
+-- below `maxBound :: Int`, so it can be safely casted back without overflow.
 rawTake :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawTake info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LString t)]
