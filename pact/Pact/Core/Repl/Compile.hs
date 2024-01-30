@@ -51,6 +51,7 @@ import Pact.Core.Repl.BuiltinDocs
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
+import qualified Pact.Core.IR.Eval.CEK as CEK
 
 type Repl = ReplM ReplCoreBuiltin
 
@@ -159,7 +160,14 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
         let fqn = FullyQualifiedName replModuleName (_dfunName df) replModuleHash
         loaded . loAllLoaded %= M.insert fqn (Dfun df)
         displayValue $ RLoadedDefun $ _dfunName df
-      RTLDefConst dc -> do
-        let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
-        loaded . loAllLoaded %= M.insert fqn (DConst dc)
-        displayValue $ RLoadedDefConst $ _dcName dc
+      RTLDefConst dc -> case _dcTerm dc of
+        TermConst term -> do
+          v <- CEK.eval PSysOnly replEnv term
+          let dc' = set dcTerm (EvaledConst v) dc
+          let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
+          loaded . loAllLoaded %= M.insert fqn (DConst dc')
+          displayValue $ RLoadedDefConst $ _dcName dc'
+        EvaledConst _ -> do
+          let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
+          loaded . loAllLoaded %= M.insert fqn (DConst dc)
+          displayValue $ RLoadedDefConst $ _dcName dc
