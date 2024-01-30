@@ -140,12 +140,6 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
           TLTerm (Var (Name n (NTopLevel mn mh)) varI) -> do
             let fqn = FullyQualifiedName mn n mh
             lookupFqName fqn >>= \case
-              -- Just (DConst d) -> do
-              --   case _dcTerm d of
-              --     TermConst _ ->
-              --       failInvariant varI "Defconst not fully evaluated"
-              --     EvaledConst v ->
-              --       displayValue (RCompileValue (InterpretValue v varI))
               Just d -> do
                 let qn = QualifiedName n mn
                 docs <- uses replUserDocs (M.lookup qn)
