@@ -295,7 +295,7 @@ coreBuiltinToText = \case
   CoreDistinct -> "distinct"
   CoreFormat -> "format"
   CoreEnumerate -> "enumerate"
-  CoreEnumerateStepN -> "enumerate-step-n"
+  CoreEnumerateStepN -> "enumerate-step"
   CoreShow -> "show"
   CoreReadMsg -> "read-msg"
   CoreReadMsgDefault -> "read-msg-default"
