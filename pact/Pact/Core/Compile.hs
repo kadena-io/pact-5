@@ -218,7 +218,7 @@ evalTopLevel bEnv tlFinal deps = do
       liftDbFunction (_mInfo m) (writeModule pdb Write (view mName m) mdata)
       let fqDeps = toFqDep (_mName m) (_mHash m) <$> _mDefs m
           newLoaded = M.fromList fqDeps
-          newTopLevel = M.fromList $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind d))) <$> fqDeps
+          newTopLevel = M.fromList $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind (_mName m) d))) <$> fqDeps
           loadNewModule =
             over loModules (M.insert (_mName m) mdata) .
             over loAllLoaded (M.union newLoaded) .
@@ -235,7 +235,7 @@ evalTopLevel bEnv tlFinal deps = do
                   <$> mapMaybe ifDefToDef (_ifDefns iface)
           newLoaded = M.fromList fqDeps
           newTopLevel = M.fromList
-                        $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind d)))
+                        $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind (_ifName iface) d)))
                         <$> fqDeps
           loadNewModule =
             over loModules (M.insert (_ifName iface) mdata) .

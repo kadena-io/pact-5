@@ -68,7 +68,7 @@ runRepl = do
         "Loaded defconst" <+> pretty mn
     RBuiltinDoc doc -> outputStrLn (show $ pretty doc)
     RUserDoc qn doc -> outputStrLn $ show $
-      vsep ["function" <+> pretty qn <> ":", maybe mempty pretty doc]
+      vsep [pretty qn, "Docs:", maybe mempty pretty doc]
   catch' ma = catchAll ma (\e -> outputStrLn (show e) *> loop)
   defaultSrc = SourceCode "(interactive)" mempty
   loop = do

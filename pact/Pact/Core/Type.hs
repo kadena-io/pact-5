@@ -40,7 +40,6 @@ import Data.Map.Strict(Map)
 import GHC.Generics
 
 import qualified Data.Text as T
-import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 import Pact.Core.Literal
@@ -116,9 +115,11 @@ data Type
 
 instance NFData Type
 
-newtype Schema
-  = Schema { _schema :: Map Field Type }
-  deriving (Eq, Show, Ord, NFData)
+data Schema
+  = Schema QualifiedName (Map Field Type)
+  deriving (Eq, Show, Ord, Generic)
+
+instance NFData Schema
 
 pattern TyInt :: Type
 pattern TyInt = TyPrim PrimInt
@@ -236,12 +237,10 @@ instance Pretty Type where
       liParens t = Pretty.parens (pretty t)
     TyModRef mrs ->
       "module" <> Pretty.braces (Pretty.hsep (Pretty.punctuate Pretty.comma (pretty <$> S.toList mrs))  )
-    TyObject (Schema sc) ->
-      let sc' =  (\(k, v) -> pretty k <> ":" <> pretty v) <$> M.toList sc
-      in "object" <> Pretty.braces (Pretty.hsep (Pretty.punctuate Pretty.comma sc'))
-    TyTable (Schema sc) ->
-      let sc' =  (\(k, v) -> pretty k <> ":" <> pretty v) <$> M.toList sc
-      in "table" <> Pretty.braces (Pretty.hsep (Pretty.punctuate Pretty.comma sc'))
+    TyObject (Schema n _sc) ->
+      "object" <> Pretty.braces (pretty n)
+    TyTable (Schema n _sc) ->
+      "table" <> Pretty.braces (pretty n)
     TyCapToken -> "CAPTOKEN"
     TyAnyList -> "list"
     TyAnyObject -> "object"
@@ -255,12 +254,10 @@ renderType = \case
   TyModRef s ->
     let s' = T.concat (intersperse ", " (renderModuleName <$> S.toList s))
     in "module" <> "{" <> s' <> "}"
-  TyObject (Schema sc) ->
-    let sc' =  (\(k, v) ->  _field k <> ":" <> renderType v) <$> M.toList sc
-    in "object{" <> T.concat (intersperse ", " sc') <> "}"
-  TyTable (Schema sc) ->
-    let sc' =  (\(k, v) ->  _field k <> ":" <> renderType v) <$> M.toList sc
-    in "table{" <> T.concat (intersperse ", " sc') <> "}"
+  TyObject (Schema n _sc) ->
+    "object{" <> renderQualName n <> "}"
+  TyTable (Schema n _sc) ->
+    "table{" <> renderQualName n <> "}"
   TyCapToken -> "CAPTOKEN"
   TyAnyObject -> "object"
   TyAnyList -> "list"

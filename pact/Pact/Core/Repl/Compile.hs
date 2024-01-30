@@ -51,6 +51,7 @@ import Pact.Core.Repl.BuiltinDocs
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
+import qualified Pact.Core.IR.Eval.CEK as CEK
 
 type Repl = ReplM ReplCoreBuiltin
 
@@ -61,7 +62,7 @@ data ReplCompileValue
   | RLoadedDefun Text
   | RLoadedDefConst Text
   | RBuiltinDoc Text
-  | RUserDoc QualifiedName (Maybe Text)
+  | RUserDoc (EvalDef ReplCoreBuiltin SpanInfo) (Maybe Text)
   deriving Show
 
 loadFile
@@ -137,10 +138,15 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
         functionDocs toplevel
         (ds, deps) <- compileDesugarOnly replEnv toplevel
         case ds of
-          TLTerm (Var (Name n (NTopLevel mn _)) _) -> do
-            let qn = QualifiedName n mn
-            docs <- uses replUserDocs (M.lookup qn)
-            displayValue (RUserDoc qn docs)
+          TLTerm (Var (Name n (NTopLevel mn mh)) varI) -> do
+            let fqn = FullyQualifiedName mn n mh
+            lookupFqName fqn >>= \case
+              Just d -> do
+                let qn = QualifiedName n mn
+                docs <- uses replUserDocs (M.lookup qn)
+                displayValue (RUserDoc d docs)
+              Nothing ->
+                failInvariant varI "repl invariant violated: resolved to a top level free variable without a binder"
           _ -> do
             v <- evalTopLevel replEnv ds deps
             displayValue (RCompileValue v)
@@ -154,7 +160,15 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
         let fqn = FullyQualifiedName replModuleName (_dfunName df) replModuleHash
         loaded . loAllLoaded %= M.insert fqn (Dfun df)
         displayValue $ RLoadedDefun $ _dfunName df
-      RTLDefConst dc -> do
-        let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
-        loaded . loAllLoaded %= M.insert fqn (DConst dc)
-        displayValue $ RLoadedDefConst $ _dcName dc
+      RTLDefConst dc -> case _dcTerm dc of
+        TermConst term -> do
+          pv <- CEK.eval PSysOnly replEnv term
+          pv' <- maybeTCType (_dcInfo dc) pv (_dcType dc)
+          let dc' = set dcTerm (EvaledConst pv') dc
+          let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
+          loaded . loAllLoaded %= M.insert fqn (DConst dc')
+          displayValue $ RLoadedDefConst $ _dcName dc'
+        EvaledConst _ -> do
+          let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
+          loaded . loAllLoaded %= M.insert fqn (DConst dc)
+          displayValue $ RLoadedDefConst $ _dcName dc

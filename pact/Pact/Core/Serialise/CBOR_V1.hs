@@ -452,8 +452,9 @@ instance Serialise PrimType where
     _ -> fail "unexpected decoding"
 
 instance Serialise Schema where
-  encode (Schema m) = encode m
-  decode = Schema <$> decode
+  encode (Schema sc m) =
+    encode sc <> encode m
+  decode = Schema <$> decode <*> decode
 
 instance Serialise Type where
   encode (TyPrim pt) = encodeWord 0 <> encode pt
