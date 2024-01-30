@@ -364,6 +364,19 @@ desugarLispTerm = \case
             v2 = Lisp.Var injectedArg2Name i
             newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing, Lisp.MArg injectedArg2 Nothing] (Lisp.App operand (args ++ [v1, v2]) appI) appI
         commonDesugar (ZipV zipI) (newArg:xs)
+      (CondV condI, l) -> case reverse l of
+        defCase:xs -> do
+          defCase' <- desugarLispTerm defCase
+          body <- foldlM toNestedIf defCase' xs
+          pure $ App (Builtin (liftCoreBuiltin CoreCond) i) [Nullary body condI] condI
+        _ -> throwDesugarError (InvalidSyntax "cond: expected list of conditions with a default case") i
+        where
+        toNestedIf b (Lisp.App cond [body] i') = do
+          cond' <- desugarLispTerm cond
+          body' <- desugarLispTerm body
+          pure $ Conditional (CIf cond' body' b) i'
+        toNestedIf _ _ =
+          throwDesugarError (InvalidSyntax "cond: expected application of conditions") i
       _ -> commonDesugar e hs
     where
     commonDesugar operator operands = do
@@ -405,6 +418,9 @@ pattern FoldV :: i -> Lisp.Expr i
 pattern FoldV info = Lisp.Var (BN (BareName "map")) info
 pattern ZipV :: i -> Lisp.Expr i
 pattern ZipV info = Lisp.Var (BN (BareName "map")) info
+
+pattern CondV :: i -> Lisp.Expr i
+pattern CondV info = Lisp.Var (BN (BareName "cond")) info
 
 suspendTerm
   :: Term ParsedName DesugarType builtin info

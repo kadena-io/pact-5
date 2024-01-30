@@ -1506,6 +1506,12 @@ coreValidatePrincipal info b cont handler _env = \case
   args -> argsError info b args
 
 
+coreCond :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
+coreCond info b cont handler _env = \case
+  [VClosure clo] -> applyLam clo [] cont handler
+  args -> argsError info b args
+
+
 --------------------------------------------------
 -- Namespace functions
 --------------------------------------------------
@@ -1892,3 +1898,4 @@ coreBuiltinRuntime = \case
   CorePactId -> corePactId
   CoreTypeOf -> coreTypeOf
   CoreDec -> coreDec
+  CoreCond -> coreCond

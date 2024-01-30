@@ -472,6 +472,7 @@ nativeGasTable = MilliGas . \case
   -- note: Dec requires less gas overall
   CoreDec ->
     basicWorkGas
+  CoreCond -> basicWorkGas
 
 replNativeGasTable :: ReplBuiltin CoreBuiltin -> MilliGas
 replNativeGasTable = \case

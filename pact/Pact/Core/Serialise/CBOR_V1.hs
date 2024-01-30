@@ -688,6 +688,7 @@ instance Serialise CoreBuiltin where
     CoreRoundPrec -> encodeWord 125
     CoreCeilingPrec -> encodeWord 126
     CoreFloorPrec -> encodeWord 127
+    CoreCond -> encodeWord 128
 
   decode = decodeWord >>= \case
     0 -> pure CoreAdd
@@ -820,7 +821,8 @@ instance Serialise CoreBuiltin where
     125 -> pure CoreRoundPrec
     126 -> pure CoreCeilingPrec
     127 -> pure CoreFloorPrec
-    _ -> fail "unexpeced decoding"
+    128 -> pure CoreCond
+    _ -> fail "unexpected decoding"
 
 
 instance Serialise ReplBuiltins where

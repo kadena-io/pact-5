@@ -210,6 +210,7 @@ data CoreBuiltin
   -- Misc
   | CoreTypeOf
   | CoreDec
+  | CoreCond
   deriving (Eq, Show, Ord, Bounded, Enum, Generic)
 
 instance NFData CoreBuiltin
@@ -519,6 +520,7 @@ coreBuiltinToUserText = \case
   CorePactId -> "pact-id"
   CoreTypeOf -> "typeof"
   CoreDec -> "dec"
+  CoreCond -> "cond"
 
 instance IsBuiltin CoreBuiltin where
   builtinName = NativeName . coreBuiltinToText
@@ -666,6 +668,7 @@ instance IsBuiltin CoreBuiltin where
     CorePactId -> 0
     CoreTypeOf -> 1
     CoreDec -> 1
+    CoreCond -> 1
 
 
 coreBuiltinNames :: [Text]
