@@ -1418,8 +1418,8 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
       RunKeysetPredC -> case v of
         PBool allow ->
           if allow then returnCEKValue cont handler (VBool True)
-          else returnCEK cont handler (VError "keyset enforce failure" info)
-        _ -> returnCEK cont handler (VError "keyset enforce failure" info)
+          else returnCEK cont handler (VError "Keyset enforce failure" info)
+        _ -> returnCEK cont handler (VError "Keyset enforce failure" info)
       where
       foldDBRead tv queryClo appClo remaining acc =
         case remaining of
@@ -1995,7 +1995,7 @@ isKeysetInSigs info cont handler env (KeySet kskeys ksPred) = do
   count = S.size kskeys
   run p matched =
     if p count matched then returnCEKValue cont handler (VBool True)
-    else returnCEK cont handler (VError "keyset enforce failure" info)
+    else returnCEK cont handler (VError "Keyset enforce failure" info)
   runPred matched =
     case ksPred of
       KeysAll -> run atLeast matched
