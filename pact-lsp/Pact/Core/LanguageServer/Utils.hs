@@ -11,6 +11,7 @@ import Pact.Core.IR.Term
 import Pact.Core.Builtin
 import Control.Lens hiding (inside)
 import Pact.Core.Imports
+import Pact.Core.Capabilities
 
 termAt
   :: Position
@@ -33,8 +34,15 @@ termAt p term
         <|> Just t
       t@(ListLit tms _) -> getAlt (foldMap (Alt . termAt p) tms) <|> Just t
       t@(Try tm1 tm2 _) -> termAt p tm1 <|> termAt p tm2 <|> Just t
+      t@(Nullary tm _) -> termAt p tm <|> Just t
+      t@(ObjectLit l _) -> getAlt (foldMap (\(_, tm) -> Alt (termAt p tm)) l) <|> Just t
+      t@(CapabilityForm cf _) -> termAtCapForm cf <|> Just t
       t -> Just t
   | otherwise = Nothing
+  where
+    termAtCapForm = \case
+      WithCapability tm1 tm2 -> termAt p tm1 <|> termAt p tm2
+      CreateUserGuard _ tms -> getAlt (foldMap (Alt . termAt p) tms)
 
 data PositionMatch b i
   = ModuleMatch (EvalModule b i)
