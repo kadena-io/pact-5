@@ -116,7 +116,7 @@ coreExpectFailure info b cont handler _env = \case
     tryError (applyLamUnsafe vclo [] Mt CEKNoHandler) >>= \case
       Right (VError err _) -> do
         putEvalState es
-        if err == toMatch
+        if toMatch `T.isPrefixOf` err
           then returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
           else returnCEKValue cont handler $ VLiteral $ LString $
                "FAILURE: " <> desc <> ": expected error message '" <> toMatch <> "', got '" <> err <> "'"
