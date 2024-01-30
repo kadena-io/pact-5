@@ -100,23 +100,26 @@ coreExpectThat info b cont handler _env = \case
 
 coreExpectFailure :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 coreExpectFailure info b cont handler _env = \case
-  [VLiteral (LString toMatch), VClosure vclo] -> do
+  [VString doc, VClosure vclo] -> do
     es <- getEvalState
     tryError (applyLamUnsafe vclo [] Mt CEKNoHandler) >>= \case
       Right (VError _ _) -> do
         putEvalState es
-        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
+        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> doc
       Left _err -> do
         putEvalState es
-        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
+        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> doc
       Right _ ->
-        returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result"
+        returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> doc <> ": expected failure, got result"
   [VString desc, VString toMatch, VClosure vclo] -> do
     es <- getEvalState
     tryError (applyLamUnsafe vclo [] Mt CEKNoHandler) >>= \case
-      Right (VError _ _) -> do
+      Right (VError err _) -> do
         putEvalState es
-        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
+        if err == toMatch
+          then returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
+          else returnCEKValue cont handler $ VLiteral $ LString $
+               "FAILURE: " <> desc <> ": expected error message '" <> toMatch <> "', got '" <> err <> "'"
       Left _err -> do
         putEvalState es
         returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
