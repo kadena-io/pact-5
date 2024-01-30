@@ -162,8 +162,9 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
         displayValue $ RLoadedDefun $ _dfunName df
       RTLDefConst dc -> case _dcTerm dc of
         TermConst term -> do
-          v <- CEK.eval PSysOnly replEnv term
-          let dc' = set dcTerm (EvaledConst v) dc
+          pv <- CEK.eval PSysOnly replEnv term
+          pv' <- maybeTCType (_dcInfo dc) pv (_dcType dc)
+          let dc' = set dcTerm (EvaledConst pv') dc
           let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
           loaded . loAllLoaded %= M.insert fqn (DConst dc')
           displayValue $ RLoadedDefConst $ _dcName dc'
