@@ -490,20 +490,27 @@ notBool info b cont handler _env = \case
 -- string ops
 ---------------------------
 
+-- Note: [Take/Drop Clamping]
+-- The place of `fromIntegral` here matters. if we cast to `Int` when doing the
+-- `min` or `max` check, it may overflow when past the the max `Int` value
 rawTake :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawTake info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LString t)]
     | i >= 0 -> do
-      let clamp = min (fromIntegral i) (T.length t)
+      -- See Note: [Take/Drop Clamping]
+      let clamp = fromIntegral $ min i (fromIntegral (T.length t))
       returnCEKValue cont handler  (VLiteral (LString (T.take clamp t)))
     | otherwise -> do
-      let clamp = min (abs (T.length t + fromIntegral i)) (T.length t)
+      -- See Note: [Take/Drop Clamping]
+      let clamp = fromIntegral $ max (fromIntegral (T.length t) + i) 0
       returnCEKValue cont handler  (VLiteral (LString (T.drop clamp t)))
   [VLiteral (LInteger i), VList li]
     | i >= 0 -> do
+      -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ min i (fromIntegral (V.length li))
       returnCEKValue cont handler  (VList (V.take clamp li))
     | otherwise -> do
+      -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ max (fromIntegral (V.length li) + i) 0
       returnCEKValue cont handler (VList (V.drop clamp li))
   [VList li, VObject o] -> do
@@ -515,16 +522,20 @@ rawDrop :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawDrop info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LString t)]
     | i >= 0 -> do
-      let clamp = min (fromIntegral i) (T.length t)
+      -- See Note: [Take/Drop Clamping]
+      let clamp = fromIntegral $ min i (fromIntegral (T.length t))
       returnCEKValue cont handler  (VLiteral (LString (T.drop clamp t)))
     | otherwise -> do
-      let clamp = min (abs (T.length t + fromIntegral i)) (T.length t)
+      -- See Note: [Take/Drop Clamping]
+      let clamp = fromIntegral $ max (fromIntegral (T.length t) + i) 0
       returnCEKValue cont handler  (VLiteral (LString (T.take clamp t)))
   [VLiteral (LInteger i), VList li]
     | i >= 0 -> do
+      -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ min i (fromIntegral (V.length li))
       returnCEKValue cont handler  (VList (V.drop clamp li))
     | otherwise -> do
+      -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ max (fromIntegral (V.length li) + i) 0
       returnCEKValue cont handler (VList (V.take clamp li))
   [VList li, VObject o] -> do
