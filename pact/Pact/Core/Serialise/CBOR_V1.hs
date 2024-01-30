@@ -822,7 +822,7 @@ instance Serialise CoreBuiltin where
     126 -> pure CoreCeilingPrec
     127 -> pure CoreFloorPrec
     128 -> pure CoreCond
-    _ -> fail "unexpeced decoding"
+    _ -> fail "unexpected decoding"
 
 
 instance Serialise ReplBuiltins where
