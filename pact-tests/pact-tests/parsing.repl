@@ -1,0 +1,87 @@
+;; parsing.repl: success means forms in this file parsed successfully.
+;; errors have to be handled via "bad" scripts in tests/pact/bad
+
+;; semicolon in expr
+;; ===========
+(+ 1 2
+  ;
+  )
+
+;; in-module productions
+;; note this is parsed, compiled, and loaded, so not just parsing
+;; ===========
+(interface quux (defun f ()))
+
+(define-namespace 'bar (sig-keyset) (sig-keyset))
+
+(namespace 'bar)
+
+(interface baz (defun f ()))
+
+(module mod-parse-test G
+  "test in-module parsing"
+  (defcap G () true)
+
+  (defun defun-with-semicolon ()
+    "parses with semicolon"
+    1
+    ;
+    ;;
+  )
+
+  (defun modref-types
+    ( ref:module{bar.baz, quux} )
+    "test module ref parsing"
+    1)
+
+   (defun test-cond (a)
+     (cond ((< a 10) "a")
+           ((< a 20) "b")
+           ((< a 30) "c")
+           "d"))
+
+
+   ;; regression github:kadena-io/pact #1118
+   (defun unknown:string (name:string)
+    (format "I don't know {}" [name]))
+
+
+  (defun is-boy-or-girl:string (name:string)
+    (cond
+      ((= name "alice") "Girl")
+      ((= name "bob")   "Boy")
+      ((= name "carol") "Girl")
+      ((= name "david") "Boy")
+      (unknown name))
+  )
+)
+
+(expect "cond: default case hit"
+        (is-boy-or-girl "Jose")
+        "I don't know Jose")
+
+(expect "cond: first case, alice is a girl"
+        (is-boy-or-girl "alice")
+        "Girl")
+
+(expect "cond: last case, david is a boy"
+        (is-boy-or-girl "david")
+        "Boy")
+
+
+;; semicolon in expr again
+(+ 1
+  ; This is fine
+  2
+  )
+
+
+(expect
+ "list equivalence with commas or without"
+ [1 "2" true (+ 3 4)]
+ [1, "2", true, (+ 3 4)])
+
+ (expect
+   "cond folds ifs correctly"
+   "acbd"
+   (fold (+) "" [(test-cond 1) (test-cond 21)  (test-cond 11) (test-cond 31)]))

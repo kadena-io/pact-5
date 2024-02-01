@@ -1,0 +1,12 @@
+;; File used to test the documentation of a defun
+
+(module test G
+  (defcap G () true)
+
+  (defun my-fun (a: integer)
+    @doc "This is my-fun documentation"
+    1)
+  )
+
+;; used for the hover position
+(test.my-fun 1)

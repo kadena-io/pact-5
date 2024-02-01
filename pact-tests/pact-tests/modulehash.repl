@@ -1,0 +1,108 @@
+(env-data {'k:1})
+
+(defun check-hash-equivalent (mstring:string h:string mobj:object)
+  (expect (concat ["Hash of module ", mstring, " matches"]) h (at "hash" mobj))
+  )
+
+(module m m-gov
+  (defcap m-gov () true)
+
+  (defconst fconst:integer (read-integer "k"))
+
+  (defun mdfn () 1)
+
+  (defpact mdpact ()
+    (step 1))
+
+  (defschema sc a:integer)
+
+  (deftable mdtbl:{sc})
+  )
+
+; base case
+(check-hash-equivalent "m" "D-tSVlEyV_Ash0vvSNNMbETXon2UHZiVBWHYmMe5cuM" (describe-module "m"))
+
+(env-data {'k:2})
+(module m m-gov
+  (defcap m-gov () true)
+
+  (defconst fconst:integer (read-integer "k"))
+
+  (defun mdfn () 1)
+
+  (defpact mdpact ()
+    (step 1))
+
+  (defschema sc a:integer)
+
+  (deftable mdtbl:{sc})
+  )
+
+
+; Defconst changed, ensure hash changed
+(check-hash-equivalent "m" "vUNCMX5aqSPTka1slI3q3DZZUPbQkjoI5CXYk6LXlo8" (describe-module "m"))
+
+(module m m-gov
+  (defcap m-gov () true)
+
+  (defconst fconst:integer (read-integer "k"))
+
+  (defun mdfn () 2)
+
+  (defpact mdpact ()
+    (step 1))
+
+  (defschema sc a:integer)
+
+  (deftable mdtbl:{sc})
+  )
+
+
+; Basic code changed: hash should change
+(check-hash-equivalent "m" "Cv79jToVuuuwFy7_JT94bKRxmQalcyQMDQ8zC-VKJPM" (describe-module "m"))
+
+; Modules, interfaces and deps
+(module n gg
+  (use m)
+  (defcap gg () true)
+
+  (defconst nfconst:integer (read-integer "k"))
+
+  (defun nf () (mdfn))
+
+  )
+
+(check-hash-equivalent "n" "5QVOIDMpg7JX99D554K6jrXNOpToDiJcqpTnOa6O8J8" (describe-module "n"))
+
+; Update dependent module, ensure hash changes
+(module m m-gov
+  (defcap m-gov () true)
+
+  (defconst fconst:integer (read-integer "k"))
+
+  (defun mdfn () 3)
+
+  (defpact mdpact ()
+    (step 1))
+
+  (defschema sc a:integer)
+
+  (deftable mdtbl:{sc})
+  )
+
+; n has not changed, but m has, it should change the dep
+(module n gg
+  (use m)
+  (defcap gg () true)
+
+  (defconst nfconst:integer (read-integer "k"))
+
+  (defun nf () (mdfn))
+
+  )
+
+; m changed, hash should have changed
+(check-hash-equivalent "m" "tpECIytIOCJWkLHbIpUzQPGp5D-mbg3NLQu-FbjT-v8" (describe-module "m"))
+
+; n did not change, but the dependency hash changed, so it should also change the hash
+(check-hash-equivalent "n" "F0U7k7lBAZV3JWBRgCyJkJST4NJb_9Ma4Td_2dc2V-Y" (describe-module "n"))

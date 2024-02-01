@@ -1,0 +1,323 @@
+cabal-version:       3.8
+name:                pact-tng
+version:             5.0
+-- ^ 4 digit is prerelease, 3- or 2-digit for prod release
+synopsis:            Smart contract language library and REPL
+description:
+            Pact is a transactional, database-focused, Turing-incomplete, interpreted language for smart contracts,
+            logic to be deployed and executed on a blockchain/distributed ledger. For more information see
+            <http://kadena.io/pact>.
+homepage:            https://github.com/kadena-io/pact-5
+bug-reports:         https://github.com/kadena-io/pact-5/issues
+license:             BSD-3-Clause
+license-file:        LICENSE
+author:              Jose Cardona
+maintainer:          jose@kadena.io
+copyright:           Copyright (C) 2022 Kadena
+category:            Language
+build-type:          Simple
+
+extra-source-files:
+    cbits/musl/libm.h
+    cbits/musl/endian.h
+    cbits/musl/exp_data.h
+    cbits/musl/log_data.h
+    cbits/musl/pow_data.h
+    cbits/musl/sqrt_data.h
+
+common pact-common
+  build-depends:
+    , Decimal
+    , attoparsec
+    , base
+    , base16-bytestring
+    , base64-bytestring
+    , bytestring
+    , containers
+    , criterion
+    , data-default
+    , deepseq
+    , direct-sqlite
+    , directory
+    , exceptions
+    , filepath
+    , lens
+    , mtl
+    , pact-json
+    , pact-time
+    , parsers
+    , prettyprinter
+    , prettyprinter-ansi-terminal
+    , transformers
+    , transformers-base
+    , text
+    , vector
+    , vector-algorithms
+    , megaparsec
+    , cryptonite
+    , memory
+    , safe-exceptions
+    , statistics
+    , ralist >= 0.4.0.0
+    , primitive
+    , haskeline
+    , semirings
+    , utf8-string
+    , exceptions
+    , array
+    , pact-json
+    , scientific
+    , serialise
+    , cborg
+    , unordered-containers
+    , groups
+    , poly
+    , mod
+    , neat-interpolation
+    -- ^ is used by the `BuiltinDocs` module.
+    , ghc-bignum
+
+  ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options: -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+  default-extensions:
+    OverloadedStrings
+    DeriveGeneric
+    ViewPatterns
+    LambdaCase
+    TupleSections
+    BangPatterns
+    ScopedTypeVariables
+    FlexibleContexts
+    FlexibleInstances
+    NumericUnderscores
+    TypeOperators
+
+-- internal crypto lirbary
+library pact-crypto
+  import: pact-common
+  hs-source-dirs: crypto
+
+  exposed-modules:
+    Pact.Core.Crypto.Hash.Poseidon
+    Pact.Core.Crypto.Pairing
+    Pact.Core.Crypto.Pairing.Fields
+
+library
+  import: pact-common
+  hs-source-dirs: pact
+
+  build-depends:
+    pact-tng:pact-crypto
+
+  build-tool-depends:
+    , alex:alex
+    , happy:happy
+
+  c-sources:
+    cbits/musl/__math_invalid.c
+    cbits/musl/__math_divzero.c
+    cbits/musl/__math_oflow.c
+    cbits/musl/__math_uflow.c
+    cbits/musl/__math_xflow.c
+    cbits/musl/exp.c
+    cbits/musl/exp_data.c
+    cbits/musl/log.c
+    cbits/musl/log_data.c
+    cbits/musl/pow.c
+    cbits/musl/pow_data.c
+    cbits/musl/sqrt.c
+    cbits/musl/sqrt_data.c
+
+  other-modules: PackageInfo_pact_tng
+
+  exposed-modules:
+    Pact.Core.Compile
+    Pact.Core.Builtin
+    Pact.Core.Names
+    Pact.Core.Literal
+    Pact.Core.Guards
+    Pact.Core.Imports
+    Pact.Core.DefPacts.Types
+    Pact.Core.Hash
+    Pact.Core.Type
+    Pact.Core.Pretty
+    Pact.Core.Gas
+    Pact.Core.Gas.TableGasModel
+    Pact.Core.Info
+    Pact.Core.Errors
+    Pact.Core.Persistence
+    Pact.Core.Persistence.SQLite
+    Pact.Core.Persistence.MockPersistence
+    Pact.Core.PactValue
+    Pact.Core.Debug
+    Pact.Core.Capabilities
+    Pact.Core.ModRefs
+    Pact.Core.ChainData
+    Pact.Core.Environment
+    Pact.Core.Environment.Utils
+    Pact.Core.Environment.Types
+    Pact.Core.StableEncoding
+    Pact.Core.Principal
+    Pact.Core.Namespace
+    Pact.Core.RuntimeParsers
+    Pact.Core.Evaluate
+    Pact.Core.Scheme
+    Pact.Core.Repl
+    Pact.Core.SizeOf
+
+     -- Syntax modules
+    Pact.Core.Syntax.ParseTree
+    Pact.Core.Syntax.Lexer
+    Pact.Core.Syntax.LexUtils
+    Pact.Core.Syntax.Parser
+
+    -- Core IR modules
+    Pact.Core.IR.Term
+    Pact.Core.IR.Desugar
+
+    -- Core IR Evaluator modules
+    Pact.Core.IR.Eval.Runtime
+    Pact.Core.IR.Eval.Runtime.Types
+    Pact.Core.IR.Eval.Runtime.Utils
+    Pact.Core.IR.Eval.CEK
+    Pact.Core.IR.Eval.CoreBuiltin
+    Pact.Core.IR.ModuleHashing
+    Pact.Core.IR.ConstEval
+
+    Pact.Core.Trans.TOps
+
+    -- Repl
+    Pact.Core.Repl.Utils
+    Pact.Core.Repl.Runtime.ReplBuiltin
+    Pact.Core.Repl.Compile
+    Pact.Core.Repl.BuiltinDocs
+    Pact.Core.Repl.UserDocs
+
+    -- Serialization
+    Pact.Core.Serialise
+    Pact.Core.Serialise.LegacyPact
+    Pact.Core.Serialise.CBOR_V1
+
+    -- WebAuthn
+    Pact.Crypto.WebAuthn.Cose.PublicKey
+    Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
+    Pact.Crypto.WebAuthn.Cose.Registry
+    Pact.Crypto.WebAuthn.Cose.SignAlg
+
+library pact-lsp
+  import: pact-common
+  hs-source-dirs: pact-lsp
+
+  exposed-modules:
+    Pact.Core.LanguageServer
+    Pact.Core.LanguageServer.Utils
+
+  build-depends:
+    , pact-tng
+    , lsp
+    , lsp-types
+    , filepath
+
+executable gasmodel
+  import: pact-common
+  hs-source-dirs: gasmodel
+
+  main-is: Main.hs
+
+  build-depends:
+    , pact-tng
+    , criterion
+
+  other-modules:
+    Pact.Core.GasModel.BuiltinsGas
+    Pact.Core.GasModel.InterpreterGas
+    Pact.Core.GasModel.Utils
+
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+
+executable pact
+  main-is: repl/Main.hs
+
+  build-depends: base
+               , pact-tng
+               , pact-tng:pact-lsp
+               , optparse-applicative
+               , text
+
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+
+  -- beware of the autogen modules. Remember to `cabal clean`!
+  other-modules: PackageInfo_pact_tng
+
+
+test-suite core-tests
+  main-is:          PactCoreTests.hs
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   pact-tests
+  default-language: Haskell2010
+  ghc-options:      -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+
+  default-extensions:
+    OverloadedStrings
+    ViewPatterns
+    LambdaCase
+    TupleSections
+    BangPatterns
+    ScopedTypeVariables
+    FlexibleContexts
+    FlexibleInstances
+
+  build-depends:
+    , aeson
+    , attoparsec
+    , base
+    , bound
+    , bytestring
+    , containers
+    , data-default
+    , Decimal
+    , QuickCheck
+    , deepseq
+    , directory
+    , exceptions
+    , hedgehog
+    , base16-bytestring
+    , directory
+    , filepath
+    , lens
+    , mtl
+    , text
+    , transformers
+    , pact-tng
+    , prettyprinter
+    , vector
+    , tasty
+    , tasty-hunit
+    , tasty-hedgehog
+    , serialise
+    , cborg
+    , groups
+    , semirings
+    , neat-interpolation
+    , pact-tng:pact-crypto
+    , pact-tng:pact-lsp
+    , lsp-test
+    , lsp-types
+  other-modules:
+    , Pact.Core.Test.ReplTests
+    , Pact.Core.Test.LexerParserTests
+    , Pact.Core.Test.LexerTests
+    , Pact.Core.Test.PersistenceTests
+    , Pact.Core.Test.SerialiseTests
+    , Pact.Core.Test.LegacySerialiseTests
+    , Pact.Core.Gen.Serialise
+    , Pact.Core.Test.StaticErrorTests
+    , Pact.Core.Test.TestPrisms
+    , Pact.Core.Test.ZkTests
+    , Pact.Core.Test.PoseidonTests
+    , Pact.Core.Test.LanguageServer

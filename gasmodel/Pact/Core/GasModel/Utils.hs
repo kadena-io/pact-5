@@ -71,7 +71,9 @@ defaultGasEvalState =
   , _esLoaded=gmLoaded
   , _esEvents=[]
   , _esDefPactExec=Nothing
-  , _esCaps=capState}
+  , _esCaps=capState
+  , _esGasLog=Nothing
+  }
   where
   capState = CapState [] mempty (S.singleton gmModuleName) mempty
 
@@ -85,7 +87,7 @@ gmKeysetName :: KeySetName
 gmKeysetName = KeySetName "gasModelKeyset" Nothing
 
 gasModelSampleSchema :: Schema
-gasModelSampleSchema =  Schema $ M.fromList
+gasModelSampleSchema =  Schema (QualifiedName "gasModelSchema" gmModuleName) $ M.fromList
   [(Field "a", TyInt)
   ,(Field "b", TyString)
   ,(Field "c", TyBool)]
