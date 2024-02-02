@@ -101,8 +101,15 @@ startLSP = do
       , doInitialize = \env _ -> pure (Right env)
       , staticHandlers = const handlers
       , interpretHandler = \env -> Iso (\lsm -> runLSM lsm state env) liftIO
-      , options = defaultOptions
+      , options = defaultOptions { optTextDocumentSync = Just syncOptions }
       }
+
+    syncOptions = TextDocumentSyncOptions
+                  (Just True)
+                  (Just TextDocumentSyncKind_Incremental)
+                  (Just False)
+                  (Just False)
+                  (Just $ InR $ SaveOptions $ Just False)
 
     runLSM lsm state cfg = runReaderT (runLspT cfg lsm) state
 
@@ -137,6 +144,8 @@ documentDidChangeHandler :: Handlers LSM
 documentDidChangeHandler = notificationHandler SMethod_TextDocumentDidChange $ \msg -> do
   let nuri = msg ^. params . textDocument . uri . to toNormalizedUri
 
+  debug $ "didChangeHandler notification: " <> renderText nuri
+
   mdoc <- getVirtualFile nuri
   case mdoc of
     Nothing -> debug $ "No virtual file found for: " <> renderText nuri
@@ -147,14 +156,14 @@ documentDidCloseHandler :: Handlers LSM
 documentDidCloseHandler = notificationHandler SMethod_TextDocumentDidClose $ \msg -> do
   let nuri = msg ^. params . textDocument . uri . to toNormalizedUri
 
-  debug $ "Remove from cache " <> renderText nuri
+  debug $ "didCloseHandler notification: " <> renderText nuri
   modifyState ((lsReplState %~ M.delete nuri) . (lsTopLevel %~ M.delete nuri))
 
 documentDidSaveHandler :: Handlers LSM
 documentDidSaveHandler = notificationHandler SMethod_TextDocumentDidSave $ \msg -> do
   let nuri = msg ^. params . textDocument . uri . to toNormalizedUri
 
-  debug $ "Document saved: " <> renderText nuri
+  debug $ "didSaveHandler notification: " <> renderText nuri
   sendDiagnostics nuri 0 ""
 
 -- Working horse for producing document diagnostics.
@@ -246,9 +255,11 @@ documentDefinitionRequestHandler = requestHandler SMethod_TextDocumentDefinition
         TermMatch (Var (Name n (NTopLevel mn _)) _) -> do
           let qn = QualifiedName n mn
           pure $ preview (lsReplState . at nuri . _Just . replTLDefPos . ix qn) st
-        _ -> pure Nothing
+        o -> do
+          debug $ "defi match " <> renderText (show o)
+          pure Nothing
       _ -> pure Nothing
-
+    debug $ "documentDefinition request: " <> renderText nuri
     let loc = Location uri' . spanInfoToRange
     case loc <$> tlDefSpan of
       Just x -> resp (Right $ InL $ Definition (InL x))
@@ -277,9 +288,7 @@ documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req re
               toHover d = Hover (InL $ MarkupContent MarkupKind_PlainText d) Nothing
               doc = preview (lsReplState . at nuri . _Just . replUserDocs . ix qn) st
           in resp (Right (maybeToNull (toHover <$> doc)))
-        _other -> do
-          debug $ "Encounter: " <> renderText (show _other)
-          resp (Right (InR Null))
+        _ ->  resp (Right (InR Null))
       Nothing -> do
         debug "documentHover: could not find term on position"
         resp (Right (InR Null))
