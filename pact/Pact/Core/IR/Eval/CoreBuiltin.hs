@@ -1147,6 +1147,8 @@ createDefPactGuard info b cont handler _env = \case
 coreIntToStr :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreIntToStr info b cont handler _env = \case
   [VInteger base, VInteger v]
+    | v < 0 ->
+      returnCEK cont handler (VError "int-to-str error: cannot show negative integer" info)
     | base >= 2 && base <= 16 -> do
       let v' = T.pack $ showIntAtBase base Char.intToDigit v ""
       returnCEKValue cont handler (VString v')
@@ -1237,6 +1239,7 @@ baseStrToInt :: Integer -> T.Text -> Either T.Text Integer
 baseStrToInt base t
   | base <= 1 || base > 16 = Left $ "unsupported base: " `T.append` T.pack (show base)
   | T.null t = Left $ "empty text: " `T.append` t
+  | T.any (not . Char.isHexDigit) t = Left "invalid digit: supported digits are 0-9, A-F"
   | otherwise = foldM go 0 $ T.unpack t
   where
       go :: Integer -> Char -> Either T.Text Integer
