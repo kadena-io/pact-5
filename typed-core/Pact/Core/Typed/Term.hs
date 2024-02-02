@@ -47,6 +47,7 @@ module Pact.Core.Typed.Term
  , _IfDConst
  , hasRollback
  , ordinaryDefPactStepExec
+ , Apply(..)
  ) where
 
 import Control.Lens
@@ -73,6 +74,10 @@ import Pact.Core.Pretty(Pretty(..), pretty, (<+>))
 import Pact.Core.Typed.Type
 
 import qualified Pact.Core.Pretty as Pretty
+
+-- data TypeApp tyname
+--   = TyAppType (Type tyname)
+--   | RowAppType (RowCtor )
 
 -- | Typed pact core terms
 data Term name tyname builtin info
@@ -106,6 +111,10 @@ data Term name tyname builtin info
   | CapabilityForm (CapForm name (Term name tyname builtin info)) info
   -- ^ Capabilities
   deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
+
+data Apply term i =
+  Apply term [term] i
+  deriving (Show, Functor, Foldable, Traversable)
 
 -- | Our defun representation, that is
 -- (defun <name>(:<ty>)? (<args>*) <body>))

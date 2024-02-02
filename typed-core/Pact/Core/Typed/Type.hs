@@ -14,6 +14,7 @@ module Pact.Core.Typed.Type where
 import Control.Lens
 import Control.DeepSeq
 import Data.List
+import Data.Void
 import Data.Set(Set)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
@@ -26,6 +27,7 @@ import qualified Data.Set as S
 import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.Pretty(Pretty(..), (<+>))
+import qualified Pact.Core.Type as CoreType
 
 import qualified Pact.Core.Pretty as Pretty
 
@@ -49,6 +51,32 @@ renderPrimType = \case
   PrimTime -> "time"
   PrimUnit -> "unit"
 
+fromCorePrimType :: CoreType.PrimType -> PrimType
+fromCorePrimType = \case
+  CoreType.PrimInt -> PrimInt
+  CoreType.PrimDecimal -> PrimDecimal
+  CoreType.PrimBool -> PrimBool
+  CoreType.PrimString -> PrimString
+  CoreType.PrimGuard -> PrimGuard
+  CoreType.PrimTime -> PrimTime
+  CoreType.PrimUnit -> PrimUnit
+
+liftCoreType :: CoreType.Type -> Type a
+liftCoreType = \case
+  CoreType.TyPrim p -> TyPrim (fromCorePrimType p)
+  CoreType.TyList t ->
+    TyList $ liftCoreType t
+  CoreType.TyModRef mns -> TyModRef mns
+  CoreType.TyObject (CoreType.Schema m) ->
+    TyObject $ RowConcrete $ liftCoreType <$> m
+  CoreType.TyTable (CoreType.Schema m) ->
+    TyObject $ RowConcrete $ liftCoreType <$> m
+  _ -> error "unsupported type for typechecking"
+
+liftType :: Type Void -> Type a
+liftType = fmap absurd
+
+
 instance Pretty PrimType where
   pretty = \case
     PrimInt -> "integer"
@@ -68,7 +96,12 @@ data Type n
   | TyObject (RowCtor n)
   | TyTable (RowCtor n)
   | TyModRef (Set ModuleName)
-  | TyCapToken n
+  | TyCapToken (CapRef n)
+  deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
+
+data CapRef n
+  = CapVar n
+  | CapConcrete QualifiedName
   deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
 
 data RowCtor n
@@ -86,6 +119,15 @@ data TypeVar n
   = TypeVar n PactKind
   deriving (Show, Eq)
 
+tyVarKind :: TypeVar n -> PactKind
+tyVarKind (TypeVar _ k) = k
+
+tyFunToArgList :: Type n -> ([Type n], Type n)
+tyFunToArgList (TyFun l r) =
+  let (args, ret) = tyFunToArgList r
+  in (l:args, ret)
+tyFunToArgList ret = ([], ret)
+
 type DebruijnTypeVar = TypeVar NamedDeBruijn
 
 pattern RowVariable :: DeBruijn -> Text -> TypeVar NamedDeBruijn
@@ -94,6 +136,11 @@ pattern TypeVariable :: DeBruijn -> Text -> TypeVar NamedDeBruijn
 pattern TypeVariable ix a = TypeVar (NamedDeBruijn ix a) TyKind
 pattern UserDefVariable :: DeBruijn -> Text -> TypeVar NamedDeBruijn
 pattern UserDefVariable ix a = TypeVar (NamedDeBruijn ix a) UserDefKind
+
+instance Pretty n => Pretty (CapRef n) where
+  pretty = \case
+    CapVar n -> pretty n
+    CapConcrete qn -> pretty qn
 
 instance Pretty n => Pretty (RowCtor n) where
   pretty = \case
@@ -152,7 +199,7 @@ data RoseConstraint v
 data Arg ty
   = Arg
   { _argName :: !Text
-  , _argType :: ty
+  , _argType :: Type ty
   } deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
 
 instance Pretty ty => Pretty (Arg ty) where
@@ -222,5 +269,6 @@ literalPrim = \case
 
 instance NFData PrimType
 instance NFData ty => NFData (RowCtor ty)
+instance NFData ty => NFData (CapRef ty)
 instance NFData ty => NFData (Type ty)
 instance NFData ty => NFData (Arg ty)
