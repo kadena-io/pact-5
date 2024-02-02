@@ -76,6 +76,11 @@ common pact-common
     , neat-interpolation
     -- ^ is used by the `BuiltinDocs` module.
     , ghc-bignum
+    -- Legacy pact decoding
+    , bound
+    , aeson
+    , trifecta
+    , hashable
 
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
@@ -197,6 +202,7 @@ library
     -- Serialization
     Pact.Core.Serialise
     Pact.Core.Serialise.LegacyPact
+    Pact.Core.Serialise.LegacyPact.Types
     Pact.Core.Serialise.CBOR_V1
 
     -- WebAuthn
