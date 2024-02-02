@@ -37,12 +37,68 @@ import Data.Vector(Vector)
 import Data.Map.Strict(Map)
 import Text.Read (readMaybe)
 
+import Pact.Core.IR.Term
+
+import qualified Pact.Core.Serialise.LegacyPact.Types as Legacy
 
 decodeModuleData :: ByteString -> Maybe (ModuleData CoreBuiltin ())
-decodeModuleData = JD.decodeStrict'
+decodeModuleData bs = fromLegacyModuleData =<< JD.decodeStrict' bs
+
+
+fromLegacyModuleData
+  :: Legacy.ModuleData (Legacy.Ref' Legacy.PersistDirect)
+  -> Maybe (ModuleData CoreBuiltin ())
+fromLegacyModuleData (Legacy.ModuleData md mref mdeps) = case md of
+  Legacy.MDModule m -> fromLegacyModule m
+  Legacy.MDInterface i -> undefined
+
+
+-- fromLegacyModule :: Legacy.Module -> Maybe (EvalModule ())
+-- fromLegacyModule = undeinfed
+-- fromLegacyModule
+--   :: Legacy.ModuleDef (Legacy.Def Legacy.Ref)
+--   -> Map Text Legacy.Ref
+--   -> Maybe (EvalModule CoreBuiltin ())
+-- fromLegacyModule mi r = case mi of
+--   Legacy.MDModule m -> do
+--     defs <- sequence $ M.foldrWithKey' (\k v a -> toDef k v : a) mempty r
+--     pure $ Module
+--       (Legacy._mName m) -- module name
+--       undefined -- governance
+--       defs
+--       (Legacy._mBlessed m)
+--       (toImports <$> Legacy._mImports m)
+--       (Legacy._mInterfaces m)
+--       (Legacy._mHash m)
+--       ()
+
+--    toDef k = \case
+--     Legacy.Direct (Legacy.TDef d)
+--       | Legacy._dDefType d == Legacy.Defun -> do
+--           let fty = Legacy._dFunType d
+--           ret <- fromLegacyType (Legacy._ftReturn fty)
+--           let lArgs = Legacy._ftArgs fty
+--           args <- mapM fromLegacyArg lArgs
+--           pure $ Dfun $ Defun
+--             k  -- defun name
+--             args -- args
+--             (Just ret)
+--             undefined -- term
+--             () -- info
+
+--   fromLegacyBody
+--   :: Scope Int Legacy.Term Legacy.Name
+--   -> Maybe (EvalTerm CoreBuiltin ())
+-- fromLegacyBody s = do
+--   let x = fromScope s
 
 decodeKeySet :: ByteString -> Maybe KeySet
-decodeKeySet = JD.decodeStrict'
+decodeKeySet bs = fromLegacyKeySet <$> JD.decodeStrict' bs
+
+fromLegacyKeySet
+  :: Legacy.KeySet
+  -> KeySet
+fromLegacyKeySet = undefined
 
 decodeDefPactExec :: ByteString -> Maybe (Maybe DefPactExec)
 decodeDefPactExec = JD.decodeStrict'
@@ -60,16 +116,16 @@ instance JD.FromJSON NamespaceName where
   parseJSON = JD.withText "NamespaceName" (pure . NamespaceName)
 
 
-instance JD.FromJSON KeySet where
-  parseJSON v = JD.withObject "KeySet" keyListPred v <|> keyListOnly
-      where
-        defPred = KeysAll
+-- instance JD.FromJSON KeySet where
+--   parseJSON v = JD.withObject "KeySet" keyListPred v <|> keyListOnly
+--       where
+--         defPred = KeysAll
 
-        keyListPred o = KeySet
-          <$> o JD..: "keys"
-          <*> (fromMaybe defPred <$> o JD..:? "pred")
+--         keyListPred o = KeySet
+--           <$> o JD..: "keys"
+--           <*> (fromMaybe defPred <$> o JD..:? "pred")
 
-        keyListOnly = KeySet <$> JD.parseJSON v <*> pure defPred
+--         keyListOnly = KeySet <$> JD.parseJSON v <*> pure defPred
 
 instance JD.FromJSON KSPredicate where
   parseJSON = JD.withText "KSPredicate" $ \case
