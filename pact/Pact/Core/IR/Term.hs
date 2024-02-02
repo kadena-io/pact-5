@@ -552,7 +552,7 @@ instance Plated (Term name ty builtin info) where
     Constant l i -> pure (Constant l i)
     Sequence e1 e2 i -> Sequence <$> f e1 <*> f e2 <*> pure i
     Conditional o i ->
-      Conditional <$> traverse (plate f) o <*> pure i
+      Conditional <$> traverse f o <*> pure i
     ListLit m i -> ListLit <$> traverse f m <*> pure i
     Nullary term i ->
       Nullary <$> f term <*> pure i
