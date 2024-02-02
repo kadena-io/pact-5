@@ -38,7 +38,7 @@ import Data.Map.Strict(Map)
 import Text.Read (readMaybe)
 
 import Pact.Core.IR.Term
-
+import qualified Data.HashMap.Strict as HM
 import qualified Pact.Core.Serialise.LegacyPact.Types as Legacy
 
 decodeModuleData :: ByteString -> Maybe (ModuleData CoreBuiltin ())
@@ -49,12 +49,38 @@ fromLegacyModuleData
   :: Legacy.ModuleData (Legacy.Ref' Legacy.PersistDirect)
   -> Maybe (ModuleData CoreBuiltin ())
 fromLegacyModuleData (Legacy.ModuleData md mref mdeps) = case md of
-  Legacy.MDModule m -> fromLegacyModule m
+  Legacy.MDModule m -> do
+    m' <- fromLegacyModule m
+    ModuleData m' <$> fromLegacyDeps mdeps
   Legacy.MDInterface i -> undefined
 
 
--- fromLegacyModule :: Legacy.Module -> Maybe (EvalModule ())
--- fromLegacyModule = undeinfed
+fromLegacyDeps
+  :: HM.HashMap Legacy.FullyQualifiedName (Legacy.Ref' Legacy.PersistDirect)
+  -> Maybe (Map FullyQualifiedName (EvalDef CoreBuiltin ()))
+fromLegacyDeps = undefined
+
+fromLegacyModule
+  :: Legacy.Module (Legacy.Def (Legacy.Ref' Legacy.PersistDirect))
+  -> Maybe (EvalModule CoreBuiltin ())
+fromLegacyModule lm = do
+  mn <- fromLegacyModuleName (Legacy._mName lm)
+  gov <- fromLegacyGovernance (Legacy._mGovernance lm)
+  pure (Module mn gov defs blessed imps impl mhash ())
+
+
+fromLegacyGovernance (Legacy.Governance (Left ks)) = KeyGov <$> fromLegacyKeySetName ks
+fromLegacyGovernance (Legacy.Governance (Right n)) = undefined
+
+fromLegacyKeySetName (Legacy.KeySetName ksn ns) = undefined
+
+fromLegacyNamespace :: Legacy.NamespaceName -> Maybe NamespaceName
+fromLegacyNamespace (Legacy.NamespaceName ns) = pure (NamespaceName ns)
+
+fromLegacyModuleName :: Applicative f => Legacy.ModuleName -> f ModuleName
+fromLegacyModuleName (Legacy.ModuleName n ns) = do
+  pure (ModuleName n (fromLegacyNs
+
 -- fromLegacyModule
 --   :: Legacy.ModuleDef (Legacy.Def Legacy.Ref)
 --   -> Map Text Legacy.Ref
