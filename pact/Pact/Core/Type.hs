@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE TemplateHaskell #-}
 
@@ -33,6 +34,7 @@ module Pact.Core.Type
 
 import Control.Lens
 import Control.DeepSeq
+import Data.Data(Data)
 import Data.List
 import Data.Set(Set)
 import Data.Text(Text)
@@ -56,7 +58,7 @@ data PrimType =
   PrimGuard |
   PrimTime |
   PrimUnit
-  deriving (Eq,Ord,Show, Enum, Bounded, Generic)
+  deriving (Eq,Ord,Show, Enum, Bounded, Generic, Data)
 
 instance NFData PrimType
 
@@ -111,13 +113,13 @@ data Type
   | TyCapToken
   -- ^ type of cap tokens
   | TyAny
-  deriving (Eq, Show, Ord, Generic)
+  deriving (Eq, Show, Ord, Generic, Data)
 
 instance NFData Type
 
 data Schema
   = Schema QualifiedName (Map Field Type)
-  deriving (Eq, Show, Ord, Generic)
+  deriving (Eq, Show, Ord, Generic, Data)
 
 instance NFData Schema
 
@@ -199,7 +201,7 @@ data Arg ty
   = Arg
   { _argName :: !Text
   , _argType :: Maybe ty
-  } deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
+  } deriving (Show, Eq, Functor, Foldable, Traversable, Generic, Data)
 
 instance NFData ty => NFData (Arg ty)
 

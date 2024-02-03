@@ -19,6 +19,7 @@ module Pact.Core.Compile
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad
+import Data.Data(Data)
 import Data.Maybe(mapMaybe)
 import Data.Text(Text)
 import qualified Data.Map.Strict as M
@@ -155,7 +156,7 @@ evalModuleGovernance bEnv tl = do
 
 compileDesugarOnly
   :: forall step b i m
-  .  (HasCompileEnv step b i m)
+  .  (HasCompileEnv step b i m, Data i)
   => BuiltinEnv step b i m
   -> Lisp.TopLevel i
   -> m (EvalTopLevel b i, S.Set ModuleName)
@@ -171,7 +172,7 @@ compileDesugarOnly bEnv tl = do
 
 interpretTopLevel
   :: forall step b i m
-  .  (HasCompileEnv step b i m)
+  .  (HasCompileEnv step b i m, Data i)
   => BuiltinEnv step b i m
   -> Lisp.TopLevel i
   -> m (CompileValue i)

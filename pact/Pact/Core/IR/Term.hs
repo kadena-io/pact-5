@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -22,6 +23,7 @@
 module Pact.Core.IR.Term where
 
 import Control.Lens
+import Data.Data(Data)
 import Data.Foldable(fold, find)
 import Data.Text(Text)
 import Data.List.NonEmpty (NonEmpty)
@@ -76,7 +78,7 @@ data Term name ty builtin info
   -- ^ an object literal
   | CapabilityForm (CapForm name (Term name ty builtin info)) info
   -- ^ Capability Natives
-  deriving (Show, Functor, Eq, Generic)
+  deriving (Show, Functor, Eq, Generic, Data)
 
 data ConstVal term
   = TermConst term
@@ -542,26 +544,7 @@ traverseDefTerm f = \case
   DPact d -> DPact <$> traverseDefPactTerm f d
 
 
-instance Plated (Term name ty builtin info) where
-  plate f = \case
-    Var n i -> pure (Var n i)
-    Lam ns term i -> Lam ns <$> f term <*> pure i
-    Let n t1 t2 i -> Let n <$> f t1 <*> f t2 <*> pure i
-    App t1 t2 i -> App <$> f t1 <*> traverse f t2 <*> pure i
-    Builtin b i -> pure (Builtin b i)
-    Constant l i -> pure (Constant l i)
-    Sequence e1 e2 i -> Sequence <$> f e1 <*> f e2 <*> pure i
-    Conditional o i ->
-      Conditional <$> traverse f o <*> pure i
-    ListLit m i -> ListLit <$> traverse f m <*> pure i
-    Nullary term i ->
-      Nullary <$> f term <*> pure i
-    CapabilityForm cf i ->
-      CapabilityForm <$> traverse f cf <*> pure i
-    Try e1 e2 i ->
-      Try <$> f e1 <*> f e2 <*> pure i
-    ObjectLit o i ->
-      ObjectLit <$> (traverse._2) f o <*> pure i
+instance (Data ty, Data name, Data builtin, Data info) => Plated (Term name ty builtin info)
 
 makeLenses ''Module
 makeLenses ''Interface

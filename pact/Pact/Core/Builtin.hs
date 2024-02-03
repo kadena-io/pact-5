@@ -4,6 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Pact.Core.Builtin
  ( CoreBuiltin(..)
@@ -21,6 +22,7 @@ module Pact.Core.Builtin
  , ReplBuiltins(..)
  )where
 
+import Data.Data(Data)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Control.DeepSeq
@@ -42,7 +44,7 @@ data BuiltinForm o
   | CIf o o o
   | CEnforceOne o [o]
   | CEnforce o o
-  deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
+  deriving (Show, Eq, Functor, Foldable, Traversable, Generic, Data)
 
 instance NFData o => NFData (BuiltinForm o)
 
@@ -211,7 +213,7 @@ data CoreBuiltin
   | CoreTypeOf
   | CoreDec
   | CoreCond
-  deriving (Eq, Show, Ord, Bounded, Enum, Generic)
+  deriving (Eq, Show, Ord, Bounded, Enum, Generic, Data)
 
 instance NFData CoreBuiltin
 
@@ -728,7 +730,7 @@ data ReplBuiltins
   | RPactVersion
   | REnforcePactVersionMin
   | REnforcePactVersionRange
-  deriving (Show, Enum, Bounded, Eq, Generic)
+  deriving (Show, Enum, Bounded, Eq, Generic, Data)
 
 
 instance IsBuiltin ReplBuiltins where
@@ -780,7 +782,7 @@ instance IsBuiltin ReplBuiltins where
 data ReplBuiltin b
   = RBuiltinWrap b
   | RBuiltinRepl ReplBuiltins
-  deriving (Eq, Show, Generic)
+  deriving (Eq, Show, Generic, Data)
 
 -- NOTE: Maybe `ReplBuiltin` is not a great abstraction, given
 -- expect arity changes based on whether it's corebuiltin or rawbuiltin
@@ -884,7 +886,7 @@ replCoreBuiltinMap =
 
 -- Todo: is not a great abstraction.
 -- In particular: the arity could be gathered from the type.
-class Show b => IsBuiltin b where
+class (Show b, Data b) => IsBuiltin b where
   builtinArity :: b -> Int
   builtinName :: b -> NativeName
 

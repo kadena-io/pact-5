@@ -1,6 +1,9 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Pact.Core.Literal
  ( _LString
@@ -8,9 +11,11 @@ module Pact.Core.Literal
  , _LDecimal
  , _LUnit
  , _LBool
- , Literal(..)) where
+ , Literal(..)
+ ) where
 
 import Control.Lens(makePrisms)
+import Data.Data(Data)
 import Data.Text(Text)
 import Data.Decimal
 
@@ -19,13 +24,15 @@ import GHC.Generics
 
 import Pact.Core.Pretty
 
+deriving instance Data Decimal
+
 data Literal
   = LString !Text
   | LInteger !Integer
   | LDecimal !Decimal
   | LUnit
   | LBool !Bool
-  deriving (Show, Eq, Ord, Generic)
+  deriving (Show, Eq, Ord, Generic, Data)
 
 instance NFData Literal
 

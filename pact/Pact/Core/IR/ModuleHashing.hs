@@ -7,6 +7,7 @@ module Pact.Core.IR.ModuleHashing
  ) where
 
 import Control.Lens
+import Data.Data (Data)
 import Data.Decimal(DecimalRaw(..))
 import Data.List(intersperse)
 import Data.Foldable(fold)
@@ -34,14 +35,14 @@ import Pact.Core.PactValue
 import Pact.Core.ModRefs
 import Pact.Core.Imports
 
-hashTopLevel :: IsBuiltin b => TopLevel Name Type b i -> TopLevel Name Type b i
+hashTopLevel :: (IsBuiltin b, Data i) => TopLevel Name Type b i -> TopLevel Name Type b i
 hashTopLevel = \case
   TLTerm t -> TLTerm t
   TLModule m -> TLModule $ hashModuleAndReplace m
   TLInterface iface -> TLInterface $ hashInterfaceAndReplace iface
   TLUse u i -> TLUse u i
 
-hashModuleAndReplace :: IsBuiltin b => Module Name Type b i -> Module Name Type b i
+hashModuleAndReplace :: (IsBuiltin b, Data i) => Module Name Type b i -> Module Name Type b i
 hashModuleAndReplace m@(Module mname mgov defs mblessed imports mimps _mh info) =
   let defs' = updateDefHashes mname newMhash <$> defs
   in Module mname gov' defs' mblessed imports mimps newMhash info
@@ -57,7 +58,7 @@ hashInterfaceAndReplace iface@(Interface ifn defs imps _mh info) =
   where
   newMhash = ModuleHash $ hash $ B.toStrict $ B.toLazyByteString (encodeInterface iface)
 
-updateDefHashes :: ModuleName -> ModuleHash -> Def Name Type b i -> Def Name Type b i
+updateDefHashes :: (Data b, Data i) => ModuleName -> ModuleHash -> Def Name Type b i -> Def Name Type b i
 updateDefHashes mname mhash = \case
   Dfun d -> Dfun $ over dfunTerm (updateTermHashes mname mhash) d
   DConst d -> DConst $ case _dcTerm d of
@@ -73,7 +74,7 @@ updateDefHashes mname mhash = \case
   DTable d -> DTable d
   DSchema s -> DSchema s
 
-updateTermHashes :: ModuleName -> ModuleHash -> Term Name Type b i -> Term Name Type b i
+updateTermHashes :: (Data b, Data i) => ModuleName -> ModuleHash -> Term Name Type b i -> Term Name Type b i
 updateTermHashes mname mhash = transform $ \case
   Var n i -> Var (updateNameHash mname mhash n) i
   CapabilityForm cf i ->
