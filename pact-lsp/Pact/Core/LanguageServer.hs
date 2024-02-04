@@ -120,6 +120,7 @@ startLSP = do
       , documentDidChangeHandler
       , documentDidCloseHandler
       , documentDidSaveHandler
+      , workspaceDidChangeConfigurationHandler
       -- request handler
       , documentHoverRequestHandler
       , documentDefinitionRequestHandler
@@ -131,6 +132,10 @@ debug msg = liftIO $ T.hPutStrLn stderr $ "[pact-lsp] " <> msg
 -- Handler executed after the LSP client initiates a connection to our server.
 initializedHandler :: Handlers LSM
 initializedHandler = notificationHandler SMethod_Initialized $ \_ -> pure ()
+
+workspaceDidChangeConfigurationHandler :: Handlers LSM
+workspaceDidChangeConfigurationHandler
+  = notificationHandler SMethod_WorkspaceDidChangeConfiguration $ \_ -> pure ()
 
 documentDidOpenHandler :: Handlers LSM
 documentDidOpenHandler = notificationHandler SMethod_TextDocumentDidOpen $ \msg -> do
