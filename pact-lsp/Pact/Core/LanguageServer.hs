@@ -116,7 +116,7 @@ startLSP = do
                   -- incrementally to the server.
                   (Just False) -- dont send `willSave` notification.
                   (Just False) -- dont send `willSaveWaitUntil` request.
-                  (Just $ InR $ SaveOptions $ Just False) -- Dont include content on save.
+                  (Just $ InR $ SaveOptions $ Just True) -- Include content on save.
 
     runLSM lsm state cfg = runReaderT (runLspT cfg lsm) state
 
