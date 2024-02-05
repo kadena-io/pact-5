@@ -150,7 +150,7 @@ documentDidOpenHandler = notificationHandler SMethod_TextDocumentDidOpen $ \msg 
       content = msg ^. params . textDocument . text
 
   debug $ "open file " <> renderText nuri
-  sendDiagnostics nuri 0 content
+  sendDiagnostics nuri (Just 0) content
 
 documentDidChangeHandler :: Handlers LSM
 documentDidChangeHandler = notificationHandler SMethod_TextDocumentDidChange $ \msg -> do
@@ -161,7 +161,7 @@ documentDidChangeHandler = notificationHandler SMethod_TextDocumentDidChange $ \
   mdoc <- getVirtualFile nuri
   case mdoc of
     Nothing -> debug $ "No virtual file found for: " <> renderText nuri
-    Just vf -> sendDiagnostics nuri (virtualFileVersion vf) (virtualFileText vf)
+    Just vf -> sendDiagnostics nuri (Just $ virtualFileVersion vf) (virtualFileText vf)
 
 
 documentDidCloseHandler :: Handlers LSM
@@ -174,22 +174,32 @@ documentDidCloseHandler = notificationHandler SMethod_TextDocumentDidClose $ \ms
 documentDidSaveHandler :: Handlers LSM
 documentDidSaveHandler = notificationHandler SMethod_TextDocumentDidSave $ \msg -> do
   let nuri = msg ^. params . textDocument . uri . to toNormalizedUri
-
+      content =  msg ^. params . text
   debug $ "didSaveHandler notification: " <> renderText nuri
-  sendDiagnostics nuri 0 ""
+
+  case content of
+    Nothing -> do
+      debug "didSaveHandler: read content from VFS"
+      mdoc <- getVirtualFile nuri
+      case mdoc of
+        Nothing -> debug $ "No virtual file found for: " <> renderText nuri
+        Just vf -> sendDiagnostics nuri (Just $ virtualFileVersion vf) (virtualFileText vf)
+    Just t -> do
+      debug "didSaveHandler: content from request"
+      sendDiagnostics nuri Nothing t
 
 -- Working horse for producing document diagnostics.
-sendDiagnostics :: NormalizedUri -> Int32 -> Text -> LSM ()
-sendDiagnostics nuri v content = liftIO runPact >>= \case
+sendDiagnostics :: NormalizedUri -> Maybe Int32 -> Text -> LSM ()
+sendDiagnostics nuri mv content = liftIO runPact >>= \case
   Left err -> do
     -- We only publish a single diagnostic
-    publishDiagnostics 1  nuri (Just v) $ partitionBySource [pactErrorToDiagnostic err]
+    publishDiagnostics 1  nuri mv $ partitionBySource [pactErrorToDiagnostic err]
   Right (stRef, r) -> do
     st <- liftIO (readIORef stRef)
     modifyState ((lsReplState %~ M.insert nuri st) . (lsTopLevel %~ M.insert nuri r))
 
     -- We emit an empty set of diagnostics
-    publishDiagnostics 0  nuri (Just v) $ partitionBySource []
+    publishDiagnostics 0  nuri mv $ partitionBySource []
   where
     runPact = do
       let file = fromMaybe "<local>" $ uriToFilePath (fromNormalizedUri nuri)
