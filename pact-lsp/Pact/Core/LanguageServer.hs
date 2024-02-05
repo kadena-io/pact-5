@@ -104,12 +104,19 @@ startLSP = do
       , options = defaultOptions { optTextDocumentSync = Just syncOptions }
       }
 
+    -- Note: Syncing options are related to problems highlighted in #83.
+    -- Some IDEs differ in what kind of notification they send, also the
+    -- `TextDocumentSyncOptions` control the frequency (incremental, full)
+    -- the server is being informed.
     syncOptions = TextDocumentSyncOptions
-                  (Just True)
+                  (Just True) -- send open/close notification
                   (Just TextDocumentSyncKind_Incremental)
-                  (Just False)
-                  (Just False)
-                  (Just $ InR $ SaveOptions $ Just False)
+                  -- Documents are synce by sending the full content once
+                  -- a file is being opened. Later updates are send
+                  -- incrementally to the server.
+                  (Just False) -- dont send `willSave` notification.
+                  (Just False) -- dont send `willSaveWaitUntil` request.
+                  (Just $ InR $ SaveOptions $ Just False) -- Dont include content on save.
 
     runLSM lsm state cfg = runReaderT (runLspT cfg lsm) state
 
