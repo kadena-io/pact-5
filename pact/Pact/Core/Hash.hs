@@ -28,6 +28,8 @@ module Pact.Core.Hash
 , placeholderHash
 , moduleHashToText
 , parseModuleHash
+  -- unsafe 
+, unsafeBsToModuleHash
 ) where
 
 import Control.DeepSeq

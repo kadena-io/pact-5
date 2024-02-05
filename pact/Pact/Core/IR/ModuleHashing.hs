@@ -224,7 +224,8 @@ encodeApp operator operands =
 
 encodeSchema :: Schema -> Builder
 encodeSchema (Schema n _sc) =
-  encodeQualName n
+  -- TODO: This changes the hash, is this fine @Jose?
+  maybe mempty encodeQualName n
 
 encodePrim :: PrimType -> Builder
 encodePrim = \case
@@ -323,6 +324,7 @@ encodeTerm = \case
       "with-capability" <+> encodeTerm cap <+> encodeTerm body
     CreateUserGuard n args ->
       "with-capability" <+> encodeName n <+> hsep (encodeTerm <$> args)
+  InlineValue{} -> mempty
 
 encodeTyAnn :: Maybe Type -> Builder
 encodeTyAnn = maybe mempty ((":" <>) . encodeType)
@@ -363,7 +365,7 @@ encodeDefCap (DefCap dn args rty term _meta _info) = parens $
 
 encodeDefSchema :: ModuleName -> DefSchema Type info -> Builder
 encodeDefSchema mn (DefSchema dcn sch _i) =
-  parens $ "defschema" <+> encodeText dcn <+> encodeSchema (Schema (QualifiedName dcn mn) sch)
+  parens $ "defschema" <+> encodeText dcn <+> encodeSchema (Schema (Just $ QualifiedName dcn mn) sch)
 
 encodeDefTable :: DefTable Name info -> Builder
 encodeDefTable (DefTable dtn (ResolvedTable sc) _i) = parens $

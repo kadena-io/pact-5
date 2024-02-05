@@ -76,6 +76,9 @@ data Term name ty builtin info
   -- ^ an object literal
   | CapabilityForm (CapForm name (Term name ty builtin info)) info
   -- ^ Capability Natives
+  | InlineValue PactValue info
+  -- ^ Node for compatibility with production. this never shows up in our term language or the parser,
+  -- but unfortunately, It's possible that this shows up as a value from pact < 5
   deriving (Show, Functor, Eq, Generic)
 
 data ConstVal term
@@ -271,7 +274,7 @@ defKind mn = \case
   Dfun{} -> DKDefun
   DConst{} -> DKDefConst
   DCap{} -> DKDefCap
-  DSchema ds -> DKDefSchema (Schema (QualifiedName (_dsName ds) mn) (_dsSchema ds))
+  DSchema ds -> DKDefSchema (Schema (Just $ QualifiedName (_dsName ds) mn) (_dsSchema ds))
   DTable{} -> DKDefTable
   DPact{} -> DKDefPact
 
@@ -281,7 +284,7 @@ ifDefKind mn = \case
   IfDCap{} -> Nothing
   IfDConst{} -> Just DKDefConst
   IfDPact{} -> Nothing
-  IfDSchema ds -> Just $ DKDefSchema $ (Schema (QualifiedName (_dsName ds) mn) (_dsSchema ds))
+  IfDSchema ds -> Just $ DKDefSchema $ (Schema (Just $ QualifiedName (_dsName ds) mn) (_dsSchema ds))
 
 ifDefName :: IfDef name ty builtin i -> Text
 ifDefName = \case
@@ -347,6 +350,9 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
       parens ("try" <+> pretty te <+> pretty te')
     ObjectLit n _ ->
       braces (hsep $ punctuate "," $ fmap (\(f, t) -> pretty f <> ":" <> pretty t) n)
+    InlineValue{} ->
+      -- Note: This term is only used for back compat. with Pact < 5
+      "INTERNAL: encounter `InlineValue` which is only used for compat. with pact < 5"
     where
     prettyTyAnn = maybe mempty ((":" <>) . pretty)
     prettyLamArg (Arg n ty) =
@@ -436,6 +442,8 @@ termType f  = \case
     CapabilityForm <$> traverse (termType f) cf <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (termType f) m <*> pure i
+  InlineValue v i ->
+    pure (InlineValue v i)
 
 termBuiltin :: Traversal (Term n t b i) (Term n t b' i) b b'
 termBuiltin f = \case
@@ -464,6 +472,7 @@ termBuiltin f = \case
     CapabilityForm <$> traverse (termBuiltin f) cf <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (termBuiltin f) m <*> pure i
+  InlineValue v i -> pure (InlineValue v i)
 
 termInfo :: Lens' (Term name ty builtin info) info
 termInfo f = \case
@@ -483,6 +492,7 @@ termInfo f = \case
     Nullary term <$> f i
   CapabilityForm cf i -> CapabilityForm cf <$> f i
   ObjectLit m i -> ObjectLit m <$> f i
+  InlineValue v i -> InlineValue v <$> f i
 
 traverseDefunTerm
   :: Traversal (Defun name ty builtin info)
@@ -562,6 +572,7 @@ instance Plated (Term name ty builtin info) where
       Try <$> f e1 <*> f e2 <*> pure i
     ObjectLit o i ->
       ObjectLit <$> (traverse._2) f o <*> pure i
+    InlineValue v i -> pure (InlineValue v i)
 
 makeLenses ''Module
 makeLenses ''Interface
@@ -585,9 +596,11 @@ type EvalDefCap b i = DefCap Name Type b i
 type EvalDefPact b i = DefPact Name Type b i
 type EvalModule b i = Module Name Type b i
 type EvalInterface b i = Interface Name Type b i
-
+type EvalInterfaceDef b i = IfDef Name Type b i
+type EvalGuard b i = Guard Name (EvalTerm b i)
 type EvalTable i = DefTable Name i
 type EvalSchema i = DefSchema Type i
+type EvalStep b i = Step Name Type b i
 
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Term name ty b info)
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Def name ty b info)

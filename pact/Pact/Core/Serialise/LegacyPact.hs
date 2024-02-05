@@ -1,407 +1,742 @@
 -- |
 {-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE PartialTypeSignatures  #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE InstanceSigs #-}
+
 module Pact.Core.Serialise.LegacyPact
   ( decodeModuleData
   , decodeKeySet
   , decodeDefPactExec
   , decodeNamespace
   , decodeRowData
-  , decodeDefPactExec1
   ) where
 
+--import Control.Lens
 import Pact.Core.Names
 import Pact.Core.Persistence
 import Pact.Core.Guards
-import Pact.Core.Builtin
 import Pact.Core.DefPacts.Types
 import Pact.Core.Namespace
 import Pact.Core.PactValue
 
+import Data.List.NonEmpty(NonEmpty(..))
+import Data.List (findIndex)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Short as SB
 import qualified Data.Text.Encoding as T
-import Control.Applicative ((<|>))
 import Data.Maybe (fromMaybe)
 
-import Pact.Core.ChainData
-import Pact.Core.Hash
+import Pact.Core.Builtin
 import Pact.Core.ModRefs
 import Pact.Core.Literal
-import Data.Decimal
-import Pact.Time
+import Pact.Core.Type
+import Pact.Core.Imports
+import Pact.Core.IR.Desugar
+import Pact.Core.Capabilities
+import Pact.Core.ChainData
 import qualified Pact.JSON.Decode as JD
 import qualified Data.Text as T
-import Data.Vector(Vector)
 import Data.Map.Strict(Map)
-import Text.Read (readMaybe)
+import Control.Monad
 
 import Pact.Core.IR.Term
 import qualified Data.HashMap.Strict as HM
+import qualified Data.HashSet as HS
+import qualified Data.Set as S
+import qualified Data.Vector as V
+import qualified Data.Map.Strict as M
 import qualified Pact.Core.Serialise.LegacyPact.Types as Legacy
+import Pact.Core.Hash
+import qualified Pact.Core.Serialise.CBOR_V1 as CBOR
+import qualified Data.List.NonEmpty as NE
+import Control.Monad.State.Strict
+import Control.Monad.Except
+
+import Bound (Scope)
+import qualified Bound
+import Data.Foldable (foldl')
+
+
+type LegacyRef = Legacy.Ref' Legacy.PersistDirect
+type CoreTerm = EvalTerm CoreBuiltin ()
+type CoreDef = EvalDef CoreBuiltin ()
+
+
+type TranslateM = StateT [CoreDef] (Except String)
+
+runTranslateM :: TranslateM a -> Either String a
+runTranslateM a = runExcept (evalStateT a [])
 
 decodeModuleData :: ByteString -> Maybe (ModuleData CoreBuiltin ())
-decodeModuleData bs = fromLegacyModuleData =<< JD.decodeStrict' bs
+decodeModuleData bs = do
+  obj <- JD.decodeStrict' bs
+  let mhash = placeholderHash
+  either (const Nothing) Just (runTranslateM (fromLegacyModuleData mhash obj))
 
 
 fromLegacyModuleData
-  :: Legacy.ModuleData (Legacy.Ref' Legacy.PersistDirect)
-  -> Maybe (ModuleData CoreBuiltin ())
-fromLegacyModuleData (Legacy.ModuleData md mref mdeps) = case md of
-  Legacy.MDModule m -> do
-    m' <- fromLegacyModule m
-    ModuleData m' <$> fromLegacyDeps mdeps
-  Legacy.MDInterface i -> undefined
+  :: ModuleHash
+  -> Legacy.ModuleData (Legacy.Ref' Legacy.PersistDirect)
+  -> TranslateM (ModuleData CoreBuiltin ())
+fromLegacyModuleData mh (Legacy.ModuleData md mref mdeps) = do
+  deps <- fromLegacyDeps mh mdeps
+  case md of
+    Legacy.MDModule m -> do
+      m' <- fromLegacyModule mh m mref
+      pure (ModuleData m' deps)
+    Legacy.MDInterface i -> do
+      i'<- fromLegacyInterface mh i mref
+      pure (InterfaceData i' deps)
 
+
+fromLegacyInterface
+  :: ModuleHash
+  -> Legacy.Interface
+  -> HM.HashMap T.Text LegacyRef
+  -> TranslateM (EvalInterface CoreBuiltin ())
+fromLegacyInterface mh (Legacy.Interface n imp) mref = do
+  let n' = fromLegacyModuleName n
+      use' = fmap fromLegacyUse imp
+  defs <- traverse (fromLegacyInterfaceDefRef mh) $ HM.elems mref
+  pure (Interface n' defs use' mh ())
 
 fromLegacyDeps
-  :: HM.HashMap Legacy.FullyQualifiedName (Legacy.Ref' Legacy.PersistDirect)
-  -> Maybe (Map FullyQualifiedName (EvalDef CoreBuiltin ()))
-fromLegacyDeps = undefined
+  :: ModuleHash
+  -> HM.HashMap Legacy.FullyQualifiedName (Legacy.Ref' Legacy.PersistDirect)
+  -> TranslateM (Map FullyQualifiedName (EvalDef CoreBuiltin ()))
+fromLegacyDeps mh hm = M.fromList <$> traverse f (HM.toList hm)
+  where
+  f (k,v) = (fromLegacyFullyQualifiedName k,) <$> fromLegacyDefRef mh v
+
+fromLegacyDefRef :: ModuleHash -> LegacyRef -> TranslateM CoreDef
+fromLegacyDefRef mh = \case
+  Legacy.Ref (Legacy.TDef d) ->
+    fromLegacyDef mh $ Right <$> d
+  _ -> throwError "fromLegacyDefRef: invariant"
+
+fromLegacyInterfaceDefRef :: ModuleHash -> LegacyRef -> TranslateM (EvalInterfaceDef CoreBuiltin ())
+fromLegacyInterfaceDefRef mh = \case
+  Legacy.Ref (Legacy.TDef d) ->
+    fromLegacyInterfDef mh $ Right <$> d
+  _ -> throwError "fromLegacyDefRef: invariant"
+
+
+fromLegacyFullyQualifiedName
+  :: Legacy.FullyQualifiedName
+  -> FullyQualifiedName
+fromLegacyFullyQualifiedName (Legacy.FullyQualifiedName n mn h) = let
+  mn' = fromLegacyModuleName mn
+  h' = fromLegacyHash h
+  in FullyQualifiedName mn' n (ModuleHash h')
+
+fromLegacyQualifiedName
+  :: Legacy.QualifiedName
+  -> QualifiedName
+fromLegacyQualifiedName (Legacy.QualifiedName mn n) =
+  QualifiedName n (fromLegacyModuleName mn)
+
+fromLegacyDef
+  :: ModuleHash -- parent module hash
+  -> Legacy.Def (Either CoreTerm LegacyRef)
+  -> TranslateM CoreDef
+fromLegacyDef mh (Legacy.Def (Legacy.DefName n) _mn dt funty body meta) = do
+  ret <- fromLegacyType (Legacy._ftReturn funty)
+  let lArgs = Legacy._ftArgs funty
+  args <- traverse fromLegacyArg lArgs
+  case dt of
+    Legacy.Defun -> do
+      body' <- fromLegacyBodyForm' mh args body
+      pure $ Dfun $ Defun
+        n  -- defun name
+        args -- args
+        (Just ret)
+        body'
+        () -- info
+    Legacy.Defpact -> do
+      steps' <- fromLegacyStepForm' mh args body
+      pure $ DPact (DefPact n args (Just ret) steps' ())
+    Legacy.Defcap -> do
+        body' <- fromLegacyBodyForm' mh args body
+        meta' <- case meta of
+          -- Note: Empty `meta` implies the cap is
+          -- unmanaged.
+          Just meta' -> fromLegacyDefMeta mh args meta'
+          Nothing -> pure Unmanaged
+        pure $ DCap (DefCap n args (Just ret) body' meta' ())
+
+
+fromLegacyInterfDef
+  :: ModuleHash -- parent module hash
+  -> Legacy.Def (Either CoreTerm LegacyRef)
+  -> TranslateM (EvalInterfaceDef CoreBuiltin ())
+fromLegacyInterfDef mh (Legacy.Def (Legacy.DefName n) _mn dt funty _body meta) = do
+  ret <- fromLegacyType (Legacy._ftReturn funty)
+  let lArgs = Legacy._ftArgs funty
+  args <- traverse fromLegacyArg lArgs
+  case dt of
+    Legacy.Defun -> do
+      pure $ IfDfun $ IfDefun
+        n  -- defun name
+        args -- args
+        (Just ret)
+        () -- info
+    Legacy.Defpact -> do
+      pure $ IfDPact (IfDefPact n args (Just ret) ())
+    Legacy.Defcap -> do
+        meta' <- case meta of
+          -- Note: Empty `meta` implies the cap is
+          -- unmanaged.
+          Just meta' -> fromLegacyDefMetaInterface mh args meta'
+          Nothing -> pure Unmanaged
+        pure $ IfDCap (IfDefCap n args (Just ret) meta' ())
+
+fromLegacyDefMetaInterface
+  :: ModuleHash
+  -> [Arg Type]
+  -> Legacy.DefMeta (Legacy.Term (Either CoreTerm LegacyRef))
+  -> TranslateM (DefCapMeta BareName)
+fromLegacyDefMetaInterface mh args
+  = \case
+  Legacy.DMDefcap (Legacy.DefcapManaged m) -> case m of
+    Nothing -> pure (DefManaged AutoManagedMeta)
+    Just (p, f) -> case findIndex (\x -> _argName x == p) args of
+      Nothing -> throwError "fromLegacyDefMeta: invariant, index not found!"
+      Just idx' -> do
+        f' <- fromLegacyTerm mh f >>= \case
+          Var (Name _n (NTopLevel _mn _mh')) _ -> error "todo: Jose ??"
+          _ -> throwError ""
+        pure (DefManaged $ DefManagedMeta (idx', p) f')
+  Legacy.DMDefcap Legacy.DefcapEvent -> pure DefEvent
+
+
+
+fromLegacyDefMeta
+  :: ModuleHash
+  -> [Arg Type]
+  -> Legacy.DefMeta (Legacy.Term (Either CoreTerm LegacyRef))
+  -> TranslateM (DefCapMeta (FQNameRef Name))
+fromLegacyDefMeta mh args = \case
+  Legacy.DMDefcap (Legacy.DefcapManaged m) -> case m of
+    Nothing -> pure (DefManaged AutoManagedMeta)
+    Just (p, f) -> case findIndex (\x -> _argName x == p) args of
+      Nothing -> throwError "fromLegacyDefMeta: invariant, index not found!"
+      Just idx' -> do
+        f' <- fromLegacyTerm mh f >>= \case
+          Var (Name n (NTopLevel mn mh')) _ -> pure (FullyQualifiedName mn n mh')
+          _ -> throwError "fromLegacyDefMeta: invariant, expected FullyQualifiedName!"
+        pure (DefManaged $ DefManagedMeta (idx', p) (FQName f'))
+  Legacy.DMDefcap Legacy.DefcapEvent -> pure DefEvent
+
+
+
+fromLegacyModuleHash
+  :: Legacy.ModuleHash
+  -> ModuleHash
+fromLegacyModuleHash (Legacy.ModuleHash h) = ModuleHash (fromLegacyHash h)
+
+fromLegacyHash
+  :: Legacy.Hash
+  -> Hash
+fromLegacyHash (Legacy.Hash h) = Hash h
 
 fromLegacyModule
-  :: Legacy.Module (Legacy.Def (Legacy.Ref' Legacy.PersistDirect))
-  -> Maybe (EvalModule CoreBuiltin ())
-fromLegacyModule lm = do
-  mn <- fromLegacyModuleName (Legacy._mName lm)
+  :: ModuleHash
+  -> Legacy.Module (Legacy.Def LegacyRef)
+  -> HM.HashMap T.Text LegacyRef
+  -> TranslateM (EvalModule CoreBuiltin ())
+fromLegacyModule mh lm depMap = do
+  let mn = fromLegacyModuleName (Legacy._mName lm)
+      mhash = fromLegacyModuleHash (Legacy._mHash lm)
+      impl = fmap fromLegacyModuleName (Legacy._mInterfaces lm)
+      blessed = fmap fromLegacyModuleHash (HS.toList (Legacy._mBlessed lm))
+      imps = fmap fromLegacyUse (Legacy._mImports lm)
   gov <- fromLegacyGovernance (Legacy._mGovernance lm)
-  pure (Module mn gov defs blessed imps impl mhash ())
+
+  defs <- traverse (fromLegacyDefRef mh) $ HM.elems depMap
+  pure (Module mn gov defs (S.fromList blessed) imps impl mhash ())
 
 
-fromLegacyGovernance (Legacy.Governance (Left ks)) = KeyGov <$> fromLegacyKeySetName ks
-fromLegacyGovernance (Legacy.Governance (Right n)) = undefined
+fromLegacyBodyForm'
+  :: Foldable t
+  => ModuleHash -- parent module hash
+  -> t a
+  -> Scope Int Legacy.Term (Either CoreTerm LegacyRef)
+  -> TranslateM CoreTerm
+fromLegacyBodyForm' mh args body = do
+  case debruijnize (length args) body of
+    Legacy.TList li _ -> traverse (fromLegacyTerm mh) (reverse (V.toList li)) >>= \case
+      x:xs -> pure $ foldl' (\a b -> Sequence b a ()) x xs
+      _ -> throwError "fromLegacyBodyForm': invariant"
+    _ -> throwError "fromLegacyBodyForm': invariant"
 
-fromLegacyKeySetName (Legacy.KeySetName ksn ns) = undefined
 
-fromLegacyNamespace :: Legacy.NamespaceName -> Maybe NamespaceName
-fromLegacyNamespace (Legacy.NamespaceName ns) = pure (NamespaceName ns)
+fromLegacyStepForm'
+  :: Foldable t
+  => ModuleHash
+  -> t a
+  -> Scope Int Legacy.Term (Either CoreTerm LegacyRef)
+  -> TranslateM (NonEmpty (EvalStep CoreBuiltin ()))
+fromLegacyStepForm' mh args body = case debruijnize (length args) body of
+    Legacy.TList li _ -> traverse fromStepForm (V.toList li) >>= \case
+      x:xs -> pure (x NE.:| xs)
+      _ -> throwError "fromLegacyStepForm': invariant"
+    _ -> throwError "fromLegacyBodyForm': invariant"
+  where
+  fromStepForm = \case
+    Legacy.TStep step -> fromLegacyStep mh step
+    _ -> throwError "fromLegacyStepForm: invariant"
 
-fromLegacyModuleName :: Applicative f => Legacy.ModuleName -> f ModuleName
-fromLegacyModuleName (Legacy.ModuleName n ns) = do
-  pure (ModuleName n (fromLegacyNs
+fromLegacyStep
+  :: ModuleHash
+  -> Legacy.Step (Legacy.Term (Either CoreTerm LegacyRef))
+  -> TranslateM (EvalStep CoreBuiltin ())
+fromLegacyStep mh (Legacy.Step _ t mrb) = do
+  t' <- fromLegacyTerm mh t
+  case mrb of
+    Nothing -> pure (Step t')
+    Just rb ->
+      StepWithRollback t' <$> fromLegacyTerm mh rb
 
--- fromLegacyModule
---   :: Legacy.ModuleDef (Legacy.Def Legacy.Ref)
---   -> Map Text Legacy.Ref
---   -> Maybe (EvalModule CoreBuiltin ())
--- fromLegacyModule mi r = case mi of
---   Legacy.MDModule m -> do
---     defs <- sequence $ M.foldrWithKey' (\k v a -> toDef k v : a) mempty r
---     pure $ Module
---       (Legacy._mName m) -- module name
---       undefined -- governance
---       defs
---       (Legacy._mBlessed m)
---       (toImports <$> Legacy._mImports m)
---       (Legacy._mInterfaces m)
---       (Legacy._mHash m)
---       ()
+debruijnize
+  :: Int
+  -> Scope Int Legacy.Term (Either CoreTerm LegacyRef)
+  -> Legacy.Term (Either CoreTerm LegacyRef)
+debruijnize totalLen = Bound.instantiate $ \i ->
+  -- Todo: get the argname from the provided args
+    let boundVar = NBound $ fromIntegral (totalLen - i - 1)
+    in Legacy.TVar (Left (Var (Name "_" boundVar) ()))
 
---    toDef k = \case
---     Legacy.Direct (Legacy.TDef d)
---       | Legacy._dDefType d == Legacy.Defun -> do
---           let fty = Legacy._dFunType d
---           ret <- fromLegacyType (Legacy._ftReturn fty)
---           let lArgs = Legacy._ftArgs fty
---           args <- mapM fromLegacyArg lArgs
---           pure $ Dfun $ Defun
---             k  -- defun name
---             args -- args
---             (Just ret)
---             undefined -- term
---             () -- info
 
---   fromLegacyBody
---   :: Scope Int Legacy.Term Legacy.Name
---   -> Maybe (EvalTerm CoreBuiltin ())
--- fromLegacyBody s = do
---   let x = fromScope s
+fromLegacyPactValue :: Legacy.PactValue -> Either String PactValue
+fromLegacyPactValue = \case
+  Legacy.PLiteral l -> pure $ fromLegacyLiteral l
+  Legacy.PList p -> do
+    l <- traverse fromLegacyPactValue p
+    pure (PList l)
+  Legacy.PObject (Legacy.ObjectMap om) -> do
+    om' <- traverse fromLegacyPactValue om
+    pure (PObject $ M.mapKeys (\(Legacy.FieldKey k) -> Field k) om')
+  Legacy.PGuard g -> case g of
+    Legacy.GPact (Legacy.PactGuard p n) -> let
+      p' = fromLegacyPactId p
+      in pure (PGuard (GDefPactGuard (DefPactGuard p' n)))
+    Legacy.GKeySet (Legacy.KeySet k pred') ->  let
+      ks = S.map (PublicKeyText . Legacy._pubKey)  k
+      p' = \case
+        (Legacy.Name (Legacy.BareName bn))
+          | bn == "keys-all" -> pure KeysAll
+          | bn == "keys-any" -> pure KeysAny
+          | bn == "keys-2"   -> pure Keys2
+        _ -> Left "fromLegacyPactValue: pred invariant"
+      in (PGuard . GKeyset . KeySet ks <$> p' pred')
+    Legacy.GKeySetRef (Legacy.KeySetName ksn ns) -> let
+      ns' = fromLegacyNamespaceName <$> ns
+      in pure (PGuard . GKeySetRef $ KeySetName ksn ns')
+    Legacy.GModule (Legacy.ModuleGuard mn n) -> let
+      mn' = fromLegacyModuleName mn
+      in pure (PGuard $ GModuleGuard (ModuleGuard mn' n))
+    Legacy.GUser (Legacy.UserGuard n a) -> case n of
+      Legacy.QName n' -> do
+        let qn = fromLegacyQualifiedName n'
+        args <- traverse fromLegacyPactValue a
+        pure (PGuard $ GUserGuard (UserGuard qn args))
+      _ -> Left "fromLegacyPactValue: invariant"
+    Legacy.GCapability (Legacy.CapabilityGuard n a i) -> do
+      let qn = fromLegacyQualifiedName n
+      args <- traverse fromLegacyPactValue a
+      pure (PGuard $ GCapabilityGuard (CapabilityGuard qn args (fromLegacyPactId <$> i)))
+  Legacy.PModRef (Legacy.ModRef mn mmn) -> let
+    mn' = fromLegacyModuleName mn
+    imp = fmap fromLegacyModuleName (fromMaybe [] mmn)
+    in pure (PModRef $ ModRef mn' imp Nothing)
+
+
+fromLegacyPersistDirect
+  :: Legacy.PersistDirect
+  -> Either String CoreTerm
+fromLegacyPersistDirect = \case
+  Legacy.PDValue v -> (`InlineValue` ()) <$> fromLegacyPactValue v
+  Legacy.PDNative (Legacy.NativeDefName n) -> case M.lookup n coreBuiltinMap of
+    Just b -> pure (Builtin b ())
+    _ -> Left "fromLegacyPersistDirect: invariant"
+  Legacy.PDFreeVar fqn -> let
+    fqn' = fromLegacyFullyQualifiedName fqn
+    in pure $ Var (fqnToName fqn') ()
+
+fromLegacyTerm
+  :: ModuleHash
+  -> Legacy.Term (Either CoreTerm LegacyRef)
+  -> TranslateM CoreTerm
+fromLegacyTerm mh = \case
+  Legacy.TVar n -> case n of
+    Left t -> pure t
+    Right v -> case v of
+      Legacy.Direct v' -> liftEither $ fromLegacyPersistDirect v'
+      Legacy.Ref t -> fromLegacyTerm mh (Right <$> t)
+
+  Legacy.TApp (Legacy.App fn args) -> do
+    fn' <- fromLegacyTerm mh fn
+    args' <- traverse (fromLegacyTerm mh) args
+    case fn' of
+      Builtin b _
+        | b == CoreMap -> error "todo: implement all special forms"
+        | otherwise -> pure (desugarAppArity () b args')
+      var@Var{} -> pure (App var args' ())
+      _ -> throwError "fromLegacyTerm: invariant"
+
+  Legacy.TLam (Legacy.Lam _ (Legacy.FunType args _) body) -> do
+    args' <- traverse fromLegacyArg args
+    body' <- fromLegacyBodyForm' mh args body
+    case args' of
+      [] -> pure $ Nullary body' ()
+      x:xs -> pure (Lam (x :| xs) body' ())
+
+  Legacy.TList l _ -> do
+    l' <- traverse (fromLegacyTerm mh) (V.toList l)
+    pure (ListLit l' ())
+
+  Legacy.TConst _args _module (Legacy.CVEval _ v) ->
+    fromLegacyTerm mh v
+  -- Note: this use case may appear in the `TConst` constructor
+
+  Legacy.TGuard g ->
+    (\v -> InlineValue (PGuard v) ()) <$> fromLegacyGuard mh g
+
+  -- Todo: binding pairs should be done like in `Desugar.hs`
+  Legacy.TBinding _bp _body _ -> error "todo: bind pairs"
+
+  Legacy.TObject (Legacy.Object o _ _) -> do
+   let m = M.toList (Legacy._objectMap o)
+   obj <- traverse (\(Legacy.FieldKey f, t) -> (Field f,) <$> fromLegacyTerm mh t) m
+   pure (ObjectLit obj ())
+
+  -- Note: this does not show up in the prod database
+  Legacy.TNative{} -> throwError "fromLegacyTerm: invariant"
+
+  Legacy.TLiteral l ->
+    pure $ InlineValue (fromLegacyLiteral l) ()
+
+  Legacy.TTable (Legacy.TableName tbl) mn mh' _ -> let
+    -- Todo : emit Def of DefTable
+    mn' = fromLegacyModuleName mn
+    mh'' = fromLegacyModuleHash mh'
+    nk = NTopLevel mn' mh''
+    in pure (Var (Name tbl nk) ())
+
+  -- Note: impossible
+  Legacy.TModule{} -> throwError "fromLegacyTerm: invariant"
+
+  -- Note: impossible
+  Legacy.TStep{} -> throwError "fromLegacyTerm: invariant"
+
+  -- Note: TDef may show up in some old modules
+  Legacy.TDef d@(Legacy.Def n mn _dt (Legacy.FunType _args _) _body _) -> do
+    let mn' = fromLegacyModuleName mn
+        dn  = Legacy._unDefName n
+        h = CBOR.encodeModuleName mn' <> T.encodeUtf8 dn <> CBOR.encodeModuleHash mh
+        newHash = unsafeBsToModuleHash h
+        nk = NTopLevel mn' newHash
+        name = Name dn nk
+
+    def <- fromLegacyDef mh d
+    modify' (def:)
+    pure (Var name ())
+
+  Legacy.TDynamic{} -> error "todo: TDynamic"
+
+  -- Note: impossible
+  Legacy.TSchema{} -> throwError "fromLegacyTerm: invariant"
+
+  -- Note: impossible in terms
+  Legacy.TUse{} -> throwError "fromLegacyTerm: invariant"
+
+  Legacy.TModRef (Legacy.ModRef mn mmn) -> let
+    mn' = fromLegacyModuleName mn
+    imp = fmap fromLegacyModuleName (fromMaybe [] mmn)
+    in pure (InlineValue (PModRef (ModRef mn' imp Nothing)) ())
+
+  _ -> throwError "fromLegacyTerm: invariant"
+
+fromLegacyGuard
+  :: ModuleHash
+  -> Legacy.Guard (Legacy.Term (Either CoreTerm LegacyRef))
+  -> TranslateM (Guard QualifiedName PactValue)
+fromLegacyGuard mh = \case
+  Legacy.GPact (Legacy.PactGuard i n) -> let
+    Legacy.PactId pid = i
+    in pure (GDefPactGuard (DefPactGuard (DefPactId pid) n))
+  Legacy.GKeySet (Legacy.KeySet k pred') -> let
+    ks = S.map (PublicKeyText . Legacy._pubKey)  k
+    p' = \case
+      (Legacy.Name (Legacy.BareName bn))
+        | bn == "keys-all" -> pure KeysAll
+        | bn == "keys-any" -> pure KeysAny
+        | bn == "keys-2"   -> pure Keys2
+      _ -> throwError "fromLegacyGuard: pred invariant"
+    in GKeyset . KeySet ks <$> p' pred'
+  Legacy.GKeySetRef (Legacy.KeySetName ksn ns) -> let
+    ns' = fromLegacyNamespaceName <$>  ns
+    in pure (GKeySetRef $ KeySetName ksn ns')
+  Legacy.GCapability (Legacy.CapabilityGuard n a i) -> do
+    let qn = fromLegacyQualifiedName n
+    args <- traverse (extract <=< fromLegacyTerm mh) a
+    let pid = fmap fromLegacyPactId i
+    pure (GCapabilityGuard (CapabilityGuard qn args pid))
+
+  Legacy.GModule (Legacy.ModuleGuard mn n) -> let
+    mn' = fromLegacyModuleName mn
+    in pure (GModuleGuard (ModuleGuard mn' n))
+
+  Legacy.GUser (Legacy.UserGuard n a) -> case n of
+    Legacy.QName n' -> do
+      let qn = fromLegacyQualifiedName n'
+      args <- traverse (extract <=< fromLegacyTerm mh) a
+      pure (GUserGuard (UserGuard qn args))
+    _ -> error "todo: jose?"
+ where
+   extract = \case
+     InlineValue p _ -> pure p
+     _ -> throwError "fromLegacyGuard: extract invariant"
+
+
+fromLegacyPactId
+  :: Legacy.PactId
+  -> DefPactId
+fromLegacyPactId (Legacy.PactId pid) = DefPactId pid
+
+fromLegacyLiteral
+  :: Legacy.Literal
+  -> PactValue
+fromLegacyLiteral = \case
+  Legacy.LString s -> PLiteral (LString s)
+  Legacy.LInteger i -> PLiteral (LInteger i)
+  Legacy.LDecimal d -> PLiteral (LDecimal d)
+  Legacy.LBool b -> PLiteral (LBool b)
+  Legacy.LTime l -> PTime l
+
+fromLegacyUse
+  :: Legacy.Use
+  -> Import
+fromLegacyUse (Legacy.Use mn mh imp) = let
+  mn' = fromLegacyModuleName mn
+  mh' = fromLegacyModuleHash <$> mh
+  imp' = V.toList <$> imp
+  in Import mn' mh' imp'
+
+fromLegacyArg
+  :: Legacy.Arg (Legacy.Term (Either CoreTerm LegacyRef))
+  -> TranslateM (Arg Type)
+fromLegacyArg (Legacy.Arg n ty) = Arg n . Just <$> fromLegacyType ty
+
+fromLegacyType
+  :: Legacy.Type (Legacy.Term (Either CoreTerm LegacyRef))
+  -> TranslateM Type
+fromLegacyType = \case
+  Legacy.TyAny -> pure TyAny
+  Legacy.TyList Legacy.TyAny -> pure TyAnyList
+  Legacy.TyList t -> TyList <$> fromLegacyType t
+  Legacy.TyPrim prim -> pure $ TyPrim (fromLegacyPrimType prim)
+  Legacy.TySchema s _ty _
+    | s == Legacy.TyTable -> TyTable <$> fromLegacySchema s
+    | s == Legacy.TyObject -> TyObject <$> fromLegacySchema s
+  _ -> throwError "fromLegacyType: invariant"
+
+-- Unclear how to implement: Core `Schema` requires a `QualifiedName`
+-- fromLegacySchema
+--   :: Legacy.SchemaType
+--   -> Maybe (
+fromLegacySchema :: a
+fromLegacySchema = undefined
+
+fromLegacyPrimType
+  :: Legacy.PrimType
+  -> PrimType
+fromLegacyPrimType = \case
+  Legacy.TyInteger -> PrimInt
+  Legacy.TyDecimal -> PrimDecimal
+  Legacy.TyTime -> PrimTime
+  Legacy.TyBool -> PrimBool
+  Legacy.TyString -> PrimString
+  Legacy.TyGuard _ -> PrimGuard
+
+fromLegacyGovernance
+  :: Legacy.Governance (Legacy.Def LegacyRef)
+  -> TranslateM (Governance Name)
+  -- TODO: pure?
+fromLegacyGovernance (Legacy.Governance (Left ks)) = pure $ KeyGov (fromLegacyKeySetName ks)
+fromLegacyGovernance (Legacy.Governance (Right _n)) = error "todo: Jose ?"
+
+fromLegacyKeySetName
+  :: Legacy.KeySetName
+  -> KeySetName
+fromLegacyKeySetName (Legacy.KeySetName ksn ns)
+  = KeySetName ksn (fromLegacyNamespaceName <$> ns)
+
+fromLegacyNamespaceName :: Legacy.NamespaceName -> NamespaceName
+fromLegacyNamespaceName (Legacy.NamespaceName ns) = NamespaceName ns
+
+fromLegacyModuleName
+  :: Legacy.ModuleName
+  -> ModuleName
+fromLegacyModuleName (Legacy.ModuleName n ns)
+  = ModuleName n (fromLegacyNamespaceName <$> ns)
 
 decodeKeySet :: ByteString -> Maybe KeySet
-decodeKeySet bs = fromLegacyKeySet <$> JD.decodeStrict' bs
+decodeKeySet bs = do
+  obj <- JD.decodeStrict' bs
+  either (const Nothing) Just (fromLegacyKeySet obj)
 
 fromLegacyKeySet
   :: Legacy.KeySet
-  -> KeySet
-fromLegacyKeySet = undefined
+  -> Either String KeySet
+fromLegacyKeySet (Legacy.KeySet ks p) = do
+  let ks' = S.map fromLegacyPublicKeyText ks
+  pred' <- case p of
+    Legacy.Name (Legacy.BareName "keys-all") -> pure KeysAll
+    Legacy.Name (Legacy.BareName "keys-2") -> pure Keys2
+    Legacy.Name (Legacy.BareName "keys-any") -> pure KeysAny
+    _ -> Left "fromLegacyKeySet: pred invariant"
+  pure (KeySet ks' pred')
+
+fromLegacyPublicKeyText
+  :: Legacy.PublicKeyText
+  -> PublicKeyText
+fromLegacyPublicKeyText (Legacy.PublicKeyText t) = PublicKeyText t
 
 decodeDefPactExec :: ByteString -> Maybe (Maybe DefPactExec)
-decodeDefPactExec = JD.decodeStrict'
+decodeDefPactExec o = do
+  obj <- JD.decodeStrict' o
+  either (const Nothing) Just (fromLegacyDefPactExec obj)
 
-decodeDefPactExec1 :: ByteString -> Either String (Maybe DefPactExec)
-decodeDefPactExec1 = JD.eitherDecodeStrict'
+fromLegacyDefPactExec'
+  :: Legacy.PactExec
+  -> Either String DefPactExec
+fromLegacyDefPactExec' (Legacy.PactExec sc y _ step pid cont rb nest) = do
+  y' <- traverse fromLegacyYield y
+  cont' <- fromLegacyContinuation cont
+  nest' <- traverse
+    (\(k,v) -> (fromLegacyPactId k,) <$> fromLegacyDefPactExec' (fromNestedPactExec rb v))
+    (M.toList nest)
+  pure $
+    DefPactExec sc y' step (fromLegacyPactId pid)
+    cont'
+    rb
+    (M.fromList nest')
+
+fromLegacyDefPactExec
+  :: Maybe Legacy.PactExec
+  -> Either String (Maybe DefPactExec)
+fromLegacyDefPactExec = \case
+  Nothing -> pure Nothing
+  Just n -> Just <$> fromLegacyDefPactExec' n
+
+
+fromNestedPactExec :: Bool -> Legacy.NestedPactExec -> Legacy.PactExec
+fromNestedPactExec rollback (Legacy.NestedPactExec stepCount yield exec step pid cont nested) =
+  Legacy.PactExec stepCount yield exec step pid cont rollback nested
+
+fromLegacyContinuation
+  :: Legacy.PactContinuation
+  -> Either String (DefPactContinuation QualifiedName PactValue)
+fromLegacyContinuation (Legacy.PactContinuation n args) = do
+  n' <- toQualifiedName n
+  args' <- traverse fromLegacyPactValue args
+  pure (DefPactContinuation n' args')
+  where
+  toQualifiedName = \case
+    Legacy.QName qn -> pure (fromLegacyQualifiedName qn)
+    _ -> Left "fromLegacyContinuation invariant: expected qualified name"
+
+
+fromLegacyYield :: Legacy.Yield -> Either String Yield
+fromLegacyYield (Legacy.Yield (Legacy.ObjectMap o) yprov ychain)
+  = do
+  o' <- traverse (\(k, v) -> (fromLegacyField k,) <$> fromLegacyPactValue v) (M.toList o)
+  pure $ Yield
+      (M.fromList o')
+      (fromLegacyProvenance <$> yprov)
+      (fromLegacyChainId <$> ychain)
+
+fromLegacyField :: Legacy.FieldKey -> Field
+fromLegacyField (Legacy.FieldKey f) = Field f
+
+fromLegacyChainId :: Legacy.ChainId -> ChainId
+fromLegacyChainId (Legacy.ChainId i) = ChainId i
+
+fromLegacyProvenance :: Legacy.Provenance -> Provenance
+fromLegacyProvenance (Legacy.Provenance tchain mh)
+  = Provenance (fromLegacyChainId tchain) (fromLegacyModuleHash mh)
+
 
 decodeNamespace :: ByteString -> Maybe Namespace
-decodeNamespace = JD.decodeStrict'
+decodeNamespace o = do
+  obj <- JD.decodeStrict' o
+  either (const Nothing) Just (fromLegacyNamespace obj)
+
+fromLegacyNamespace
+  :: Legacy.Namespace Legacy.PactValue
+  -> Either String Namespace
+fromLegacyNamespace (Legacy.Namespace ns u a) = do
+  let ns' = fromLegacyNamespaceName ns
+  u' <- fromLegacyGuard' u
+  a' <- fromLegacyGuard' a
+  pure (Namespace ns' u' a')
+
+fromLegacyGuard'
+  :: Legacy.Guard Legacy.PactValue
+  -> Either String (Guard QualifiedName PactValue)
+fromLegacyGuard' = \case
+  Legacy.GPact (Legacy.PactGuard i n) -> let
+    Legacy.PactId pid = i
+    in pure (GDefPactGuard (DefPactGuard (DefPactId pid) n))
+  Legacy.GKeySet (Legacy.KeySet k pred') -> let
+    ks = S.map (PublicKeyText . Legacy._pubKey)  k
+    p' = \case
+      (Legacy.Name (Legacy.BareName bn))
+        | bn == "keys-all" -> pure KeysAll
+        | bn == "keys-any" -> pure KeysAny
+        | bn == "keys-2"   -> pure Keys2
+      _ -> throwError "fromLegacyGuard: pred invariant"
+    in GKeyset . KeySet ks <$> p' pred'
+  Legacy.GKeySetRef (Legacy.KeySetName ksn ns) -> let
+    ns' = fromLegacyNamespaceName <$>  ns
+    in pure (GKeySetRef $ KeySetName ksn ns')
+  Legacy.GCapability (Legacy.CapabilityGuard n a i) -> do
+    let qn = fromLegacyQualifiedName n
+    let pid = fmap fromLegacyPactId i
+    args <- traverse fromLegacyPactValue a
+    pure (GCapabilityGuard (CapabilityGuard qn args pid))
+
+  Legacy.GModule (Legacy.ModuleGuard mn n) -> let
+    mn' = fromLegacyModuleName mn
+    in pure (GModuleGuard (ModuleGuard mn' n))
+
+  Legacy.GUser (Legacy.UserGuard n a) -> case n of
+    Legacy.QName n' -> do
+      let qn = fromLegacyQualifiedName n'
+      args <- traverse fromLegacyPactValue a
+      pure (GUserGuard (UserGuard qn args))
+    _ -> error "todo: jose, other cases relevant?"
 
 decodeRowData :: ByteString -> Maybe RowData
-decodeRowData = JD.decodeStrict'
+decodeRowData o = do
+  obj <- JD.decodeStrict' o
+  either (const Nothing) Just (fromLegacyRowData obj)
 
-instance JD.FromJSON NamespaceName where
-  parseJSON = JD.withText "NamespaceName" (pure . NamespaceName)
+fromLegacyRowData
+  :: Legacy.RowData
+  -> Either String RowData
+fromLegacyRowData (Legacy.RowData _ (Legacy.ObjectMap m)) = do
+  let f = fromLegacyPactValue .rowDataToPactValue
+  m' <- traverse (\(k,v) -> (fromLegacyField k,) <$> f v) (M.toList m)
+  pure (RowData (M.fromList m'))
 
-
--- instance JD.FromJSON KeySet where
---   parseJSON v = JD.withObject "KeySet" keyListPred v <|> keyListOnly
---       where
---         defPred = KeysAll
-
---         keyListPred o = KeySet
---           <$> o JD..: "keys"
---           <*> (fromMaybe defPred <$> o JD..:? "pred")
-
---         keyListOnly = KeySet <$> JD.parseJSON v <*> pure defPred
-
-instance JD.FromJSON KSPredicate where
-  parseJSON = JD.withText "KSPredicate" $ \case
-    "keys-all" -> pure KeysAll
-    "keys-2" -> pure Keys2
-    "keys-any" -> pure KeysAny
-    n | Just ptn <- parseParsedTyName n -> pure (CustomPredicate ptn)
-    _ -> fail "unexpected parsing"
-
-instance JD.FromJSON PublicKeyText where
-  parseJSON = JD.withText "PublicKeyText" (pure . PublicKeyText)
-
-
-instance JD.FromJSON Namespace where
-  parseJSON = JD.withObject "Namespace" $ \v -> Namespace
-    <$> v JD..: "name"
-    <*> v JD..: "user"
-    <*> v JD..: "admin"
-
-instance JD.FromJSON (ModuleData CoreBuiltin ()) where
-  parseJSON = error "unimplemented"
-
-instance JD.FromJSON DefPactExec where
-  parseJSON = JD.withObject "PactExec" $ \o ->
-    DefPactExec
-      <$> o JD..: "stepCount"
-      <*> o JD..: "yield"
-      <*> o JD..: "step"
-      <*> o JD..: "pactId"
-      <*> o JD..: "continuation"
-      <*> o JD..: "stepHasRollback"
-      <*> (fromMaybe mempty <$> o JD..:? "nested")
-
-instance JD.FromJSONKey DefPactId where
-  fromJSONKey = JD.FromJSONKeyTextParser $ JD.parseJSON . JD.String
-
-instance JD.FromJSON Yield where
-  parseJSON = JD.withObject "Yield" $ \o ->
-    Yield
-      <$> o JD..: "data"
-      <*> o JD..: "provenance"
-      <*> o JD..:? "source"
-
-instance JD.FromJSON ChainId where
-  parseJSON = JD.withText "ChainId" (pure . ChainId)
-
-instance JD.FromJSON Provenance where
-  parseJSON = JD.withObject "Provenance" $ \o ->
-    Provenance
-      <$> o JD..: "targetChainId"
-      <*> o JD..: "moduleHash"
-
-instance JD.FromJSON ModuleHash where
-  parseJSON v = ModuleHash <$> JD.parseJSON v
-
-instance JD.FromJSON Hash where
-  parseJSON = JD.withText "Hash" $ \h ->
-    case decodeBase64UrlUnpadded (T.encodeUtf8 h) of
-      Left err -> fail ("Base64URL decode failed: " <> err)
-      Right r -> pure (Hash (SB.toShort r))
-
-instance JD.FromJSON DefPactId where
-  parseJSON = JD.withText "DefPactId" (pure . DefPactId)
-
--- https://github.com/kadena-io/pact/blob/09f3b43fc10fbcdd798b01af45e4ddb6cecb91e7/src/Pact/Types/RowData.hs#L179C7-L181C24
--- We currently ignore the version field
-instance JD.FromJSON RowData where
-  parseJSON = JD.withObject "RowData" $ \o ->
-    RowData <$> o JD..: "$d"
-
-instance JD.FromJSON (DefPactContinuation QualifiedName PactValue) where
-  parseJSON = JD.withObject "DefPactContinuation" $ \o ->
-    DefPactContinuation
-      <$> o JD..: "def"
-      <*> o JD..: "args"
-
-instance JD.FromJSON QualifiedName where
-  parseJSON = JD.withText "QualifiedName" $ \n -> case T.split (== '.') n  of
-    [mod', name] -> pure (QualifiedName name (ModuleName mod' Nothing))
-    [ns, mod', name] -> pure (QualifiedName name (ModuleName mod' (Just (NamespaceName ns))))
-    _ -> fail "unexpeced parsing"
-
--- instance JD.FromJSON QualifiedName where
---   parseJSON = JD.withText "QualifiedName" $ \n -> case T.split (== '.') n  of
---     [mod', name] -> pure (QualifiedName name (ModuleName mod' Nothing))
---     _ -> fail "unexpeced parsing"
-
--- instance JD.FromJSON (DefPactContinuation FullyQualifiedName PactValue) where
---   parseJSON = JD.withObject "DefPactContinuation" $ \o ->
---     DefPactContinuation
---       <$> o JD..: "def"
---       <*> o JD..: "args"
-
--- instance JD.FromJSON FullyQualifiedName where
---   parseJSON = JD.withText "FullyQualifiedName" $ \f ->
---     case AP.parseOnly (fullyQualNameParser <* AP.endOfInput) f of
---       Left s  -> fail s
---       Right n -> return n
-
-instance JD.FromJSON PactValue where
-  parseJSON v = fromLegacyPactValue <$> JD.parseJSON v
-
-
-instance JD.FromJSONKey Field where
-  fromJSONKey = JD.FromJSONKeyTextParser $ JD.parseJSON . JD.String
-
-instance JD.FromJSON ModuleName where
-  parseJSON = JD.withObject "ModuleName" $ \o ->
-    ModuleName
-      <$> o JD..: "name"
-      <*> o JD..:? "namespace"
-
-instance JD.FromJSON ModRef where
-  parseJSON = JD.withObject "ModRef" $ \o ->
-    ModRef
-    <$> o JD..: "refName"
-      <*> o JD..: "refSpec"
-      <*> pure Nothing
-
-instance JD.FromJSON Field where
-  parseJSON = JD.withText "Field" (pure . Field)
-
-
--- | LegacyLiteral and `LegacyPactValue` are used to represent the old
---   structure, used in legacy pact.
-
-data LegacyLiteral
-  = Legacy_LString T.Text
-  | Legacy_LInteger Integer
-  | Legacy_LDecimal Decimal
-  | Legacy_LBool Bool
-  | Legacy_LTime UTCTime
-
-data LegacyPactValue
-  = Legacy_PLiteral LegacyLiteral
-  | Legacy_PList (Vector LegacyPactValue)
-  | Legacy_PObject (Map Field LegacyPactValue)
-  | Legacy_PGuard (Guard QualifiedName LegacyPactValue)
-  | Legacy_PModRef ModRef
-
-instance JD.FromJSON LegacyPactValue where
-  parseJSON v =
-    (Legacy_PLiteral <$> JD.parseJSON v) <|>
-    (Legacy_PList <$> JD.parseJSON v) <|>
-    (Legacy_PGuard <$> JD.parseJSON v) <|>
-    (Legacy_PModRef <$> (parseNoInfo v <|> JD.parseJSON v)) <|>
-    (Legacy_PObject <$> JD.parseJSON v)
-    where
-      parseNoInfo = JD.withObject "ModRef" $ \o -> ModRef
-        <$> o JD..: "refName"
-        <*> o JD..: "refSpec"
-        <*> pure Nothing
-
-instance JD.FromJSON LegacyLiteral where
-  parseJSON = \case
-    n@JD.Number{} -> Legacy_LDecimal <$> decodeDecimal n
-    JD.String s -> pure $ Legacy_LString s
-    JD.Bool b -> pure $ Legacy_LBool b
-    o@JD.Object {} ->
-      (Legacy_LInteger <$> decodeInteger o) <|>
-      (Legacy_LTime <$> decodeTime o) <|>
-      (Legacy_LDecimal <$> decodeDecimal o)
-    _t -> fail "Literal parse failed"
-    where
-      decodeInteger = JD.withObject "Integer" $ \o -> do
-        s <- o JD..: "int"
-        case s of
-          JD.Number n -> return (round n)
-          JD.String n -> case readMaybe (T.unpack n) of
-            Just i -> return i
-            Nothing -> fail $ "Invalid integer value: " ++ show s
-          _ -> fail $ "Invalid integer value: " ++ show s
-
-      decodeDecimal (JD.Number n) = return $ fromRational $ toRational n
-      decodeDecimal (JD.Object o) = o JD..: "decimal" >>= \s -> case readMaybe (T.unpack s) of
-        Just d -> return d
-        Nothing -> fail $ "Invalid decimal value: " ++ show s
-      decodeDecimal v = fail $ "Invalid decimal value: " ++ show v
-
-      decodeTime = JD.withObject "time" $ \o ->
-        (o JD..: "time" >>= mkTime pactISO8601Format) <|>
-        (o JD..: "timep" >>= mkTime highPrecFormat)
-
-      mkTime fmt v = case parseTime fmt v of
-              Just t -> return t
-              Nothing -> fail $ "Invalid time value, expected " ++ fmt
-
-      pactISO8601Format :: String
-      pactISO8601Format = "%Y-%m-%dT%H:%M:%SZ"
-
-      highPrecFormat :: String
-      highPrecFormat = "%Y-%m-%dT%H:%M:%S.%vZ"
-
-
-instance JD.FromJSON (Guard QualifiedName PactValue) where
-  parseJSON v = guardToPactValue <$> JD.parseJSON v
-
-
--- https://github.com/kadena-io/pact/blob/ba15517b56eba4fdaf6b2fbd3e5245eeedd0fc9f/src/Pact/Types/Term/Internal.hs#L802
-instance JD.FromJSON (Guard QualifiedName LegacyPactValue) where
-  parseJSON v = GKeyset <$> JD.parseJSON v
-    <|> GKeySetRef <$> parseRef v
-    <|> GUserGuard <$> JD.parseJSON v
-    <|> GCapabilityGuard <$> JD.parseJSON v
-    <|> GModuleGuard <$> JD.parseJSON v
-    where
-    parseRef = JD.withObject "KeySetRef" $ \o -> do
-      ref <- o JD..: "ksn"
-      ns <- o JD..:? "ns"
-      pure (KeySetName ref ns)
-
-
-instance JD.FromJSON (UserGuard QualifiedName LegacyPactValue) where
-  parseJSON = JD.withObject "UserGuard" $ \o ->
-    UserGuard
-      <$> o JD..: "fun"
-      <*> o JD..: "args"
-
-instance JD.FromJSON (CapabilityGuard QualifiedName LegacyPactValue) where
-  parseJSON = JD.withObject "CapabilityGuard" $ \o ->
-    CapabilityGuard
-      <$> o JD..: "cgName"
-      <*> o JD..: "cgArgs"
-      <*> o JD..:? "cgPactId"
-
-instance JD.FromJSON ModuleGuard where
-  parseJSON = JD.withObject "ModuleGuard" $ \o ->
-    ModuleGuard
-      <$> o JD..: "moduleName"
-      <*> o JD..: "name"
-
-fromLegacyPactValue :: LegacyPactValue -> PactValue
-fromLegacyPactValue = \case
-  Legacy_PLiteral ll -> case ll of
-    Legacy_LString t -> PLiteral (LString t)
-    Legacy_LInteger i -> PLiteral (LInteger i)
-    Legacy_LDecimal d -> PLiteral (LDecimal d)
-    Legacy_LBool b -> PLiteral (LBool b)
-    Legacy_LTime utc -> PTime utc
-  Legacy_PList v -> PList (fromLegacyPactValue <$> v)
-  Legacy_PObject o -> PObject (fromLegacyPactValue <$> o)
-  Legacy_PGuard g -> PGuard (guardToPactValue g)
-  Legacy_PModRef mref -> PModRef mref
-
-
-guardToPactValue :: Guard QualifiedName LegacyPactValue -> Guard QualifiedName PactValue
-guardToPactValue = \case
-  (GKeyset ks) -> GKeyset ks
-  (GKeySetRef kref) -> GKeySetRef kref
-  (GUserGuard (UserGuard n tm)) -> GUserGuard (UserGuard n (fromLegacyPactValue <$> tm))
-  (GCapabilityGuard (CapabilityGuard n args i)) -> GCapabilityGuard (CapabilityGuard n (fromLegacyPactValue <$> args) i)
-  (GModuleGuard mg) -> GModuleGuard mg
-  (GDefPactGuard dpg) -> GDefPactGuard dpg
+rowDataToPactValue :: Legacy.RowDataValue -> Legacy.PactValue
+rowDataToPactValue rdv = case rdv of
+  Legacy.RDLiteral l -> Legacy.PLiteral l
+  Legacy.RDList l -> Legacy.PList $ recur l
+  Legacy.RDObject o -> Legacy.PObject $ recur o
+  Legacy.RDGuard g -> Legacy.PGuard $ recur g
+  Legacy.RDModRef m -> Legacy.PModRef m
+  where
+    recur :: Functor f => f Legacy.RowDataValue -> f Legacy.PactValue
+    recur = fmap rowDataToPactValue
