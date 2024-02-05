@@ -1,4 +1,4 @@
--- | 
+-- |
 
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -10,6 +10,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Pact.Core.Serialise.LegacyPact.Types where
 
 import Data.Text (Text)
@@ -22,7 +23,7 @@ import GHC.Generics
 import qualified Data.List.NonEmpty as NE
 
 import qualified Pact.JSON.Decode as JD
-import qualified Pact.JSON.Value as JDV
+-- import qualified Pact.JSON.Value as JDV
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import Data.Set (Set)
@@ -37,7 +38,7 @@ import qualified Data.Vector as V
 import qualified Data.Attoparsec.Text as AP
 import Data.Decimal (Decimal)
 import Pact.Time
-import Control.Applicative ((<|>))
+--import Control.Applicative ((<|>))
 -- import qualified Text.Trifecta.Delta as D
 import qualified Pact.Core.Hash as PC
 
@@ -49,7 +50,7 @@ import qualified Data.Aeson.KeyMap as A
 import Pact.JSON.Legacy.Hashable
 import Data.String (IsString, fromString)
 import Data.List (sort)
-import Text.Trifecta (ident,TokenParsing,(<?>),dot,eof, alphaNum, between, char, CharParsing, IdentifierStyle(..), optional, letter,  digit, oneOf, some)
+import Text.Trifecta (ident,TokenParsing,(<?>),dot, alphaNum, between, char, CharParsing, IdentifierStyle(..), letter,  digit, oneOf)
 import Pact.Core.Hash (decodeBase64UrlUnpadded)
 import Text.Parser.Token.Highlight
 import Data.Hashable
@@ -1533,3 +1534,222 @@ allModuleExports md = case _mdModule md of
     let toFQ k = FullyQualifiedName k (_mName m) (_mhHash (_mHash m))
     in HM.mapKeys toFQ (_mdRefMap md) `HM.union` (_mdDependencies md)
   _ -> HM.empty
+
+
+-- nativeMap :: NativeDefName -> Maybe (Term Name)
+-- nativeMap = \case
+--   n@(NativeDefName "format") -> Just (TNative b undefined
+data Namespace a = Namespace
+  { _nsName :: !NamespaceName
+  , _nsUser :: !(Guard a)
+  , _nsAdmin :: !(Guard a)
+  } deriving (Eq, Show, Generic)
+
+instance JD.FromJSON a => JD.FromJSON (Namespace a) where
+  parseJSON = JD.withObject "Namespace" $ \o ->
+    Namespace
+    <$> o JD..: "name"
+    <*> o JD..: "user"
+    <*> o JD..: "admin"
+
+
+
+
+
+
+
+newtype ChainId = ChainId { _chainId :: Text }
+  deriving stock (Eq, Generic)
+  deriving newtype
+    ( Show, JD.FromJSON )
+
+data Provenance = Provenance
+  { _pTargetChainId :: !ChainId
+    -- ^ the target chain id for the endorsement
+  , _pModuleHash :: ModuleHash
+    -- ^ a hash of current containing module
+  } deriving (Eq, Show, Generic)
+
+instance JD.FromJSON Provenance where
+  parseJSON = JD.withObject "Provenance" $ \o ->
+    Provenance <$> o JD..: "targetChainId" <*> o JD..: "moduleHash"
+
+data Yield = Yield
+  { _yData :: !(ObjectMap PactValue)
+    -- ^ Yield data from the pact continuation
+  , _yProvenance :: !(Maybe Provenance)
+    -- ^ Provenance data
+  , _ySourceChain :: !(Maybe ChainId)
+  } deriving (Eq, Show, Generic)
+
+
+instance JD.FromJSON Yield where
+  parseJSON = JD.withObject "Yield" $ \o ->
+    Yield <$> o JD..: "data" <*> o JD..: "provenance" <*> o JD..:? "source"
+
+--
+data PactContinuation = PactContinuation
+  { _pcDef :: Name
+  , _pcArgs :: [PactValue]
+  } deriving (Eq, Show, Generic)
+
+instance JD.FromJSON PactContinuation where
+  parseJSON = JD.withObject "PactContinuation" $ \o ->
+    PactContinuation <$> o JD..: "def" <*> o JD..: "args"
+
+
+data PactStep = PactStep
+  { _psStep :: !Int
+    -- ^ intended step to execute
+  , _psRollback :: !Bool
+    -- ^ rollback
+  , _psPactId :: !PactId
+    -- ^ pact id
+  , _psResume :: !(Maybe Yield)
+    -- ^ resume value. Note that this is only set in Repl tests and in private use cases;
+    -- in all other cases resume value comes out of PactExec.
+} deriving (Eq,Show)
+
+data PactExec = PactExec
+  { _peStepCount :: Int
+    -- ^ Count of steps in pact (discovered when code is executed)
+  , _peYield :: !(Maybe Yield)
+    -- ^ Yield value if invoked
+  , _peExecuted :: Maybe Bool
+    -- ^ Only populated for private pacts, indicates if step was executed or skipped.
+  , _peStep :: Int
+    -- ^ Step that was executed or skipped
+  , _pePactId :: PactId
+    -- ^ Pact id. On a new pact invocation, is copied from tx id.
+  , _peContinuation :: PactContinuation
+    -- ^ Strict (in arguments) application of pact, for future step invocations.
+  , _peStepHasRollback :: !Bool
+    -- ^ Track whether a current step has a rollback
+  , _peNested :: M.Map PactId NestedPactExec
+    -- ^ Track whether a current step has nested defpact evaluation results
+  } deriving (Eq, Show, Generic)
+
+data NestedPactExec = NestedPactExec
+  { _npeStepCount :: Int
+    -- ^ Count of steps in pact (discovered when code is executed)
+  , _npeYield :: !(Maybe Yield)
+    -- ^ Yield value if invoked
+  , _npeExecuted :: Maybe Bool
+    -- ^ Only populated for private pacts, indicates if step was executed or skipped.
+  , _npeStep :: Int
+    -- ^ Step that was executed or skipped
+  , _npePactId :: PactId
+    -- ^ Pact id. On a new pact invocation, is copied from tx id.
+  , _npeContinuation :: PactContinuation
+    -- ^ Strict (in arguments) application of pact, for future step invocations.
+  , _npeNested :: M.Map PactId NestedPactExec
+    -- ^ Track whether a current step has nested defpact evaluation results
+  } deriving (Eq, Show, Generic)
+
+instance JD.FromJSON NestedPactExec where
+  parseJSON = JD.withObject "NestedPactExec" $ \o ->
+    NestedPactExec
+      <$> o JD..: "stepCount"
+      <*> o JD..: "yield"
+      <*> o JD..: "executed"
+      <*> o JD..: "step"
+      <*> o JD..: "pactId"
+      <*> o JD..: "continuation"
+      <*> o JD..: "nested"
+
+instance JD.FromJSON PactExec where
+  parseJSON = JD.withObject "PactExec" $ \o ->
+    PactExec
+      <$> o JD..: "stepCount"
+      <*> o JD..: "yield"
+      <*> o JD..: "executed"
+      <*> o JD..: "step"
+      <*> o JD..: "pactId"
+      <*> o JD..: "continuation"
+      <*> o JD..: "stepHasRollback"
+      <*> (fromMaybe mempty <$> o JD..:? "nested")
+
+
+-- RowData
+data RowData = RowData
+    { _rdVersion :: !RowDataVersion
+    , _rdData :: !(ObjectMap RowDataValue)
+    }
+  deriving (Eq,Show,Generic,Ord)
+
+instance JD.FromJSON RowData where
+  parseJSON v =
+    parseVersioned v <|>
+    -- note: Parsing into `OldPactValue` here defaults to the code used in
+    -- the old FromJSON instance for PactValue, prior to the fix of moving
+    -- the `PModRef` parsing before PObject
+    RowData RDV0 . fmap oldPactValueToRowData <$> JD.parseJSON v
+    where
+      oldPactValueToRowData = \case
+        OldPLiteral l -> RDLiteral l
+        OldPList l -> RDList $ recur l
+        OldPObject o -> RDObject $ recur o
+        OldPGuard g -> RDGuard $ recur g
+        OldPModRef m -> RDModRef m
+      recur :: Functor f => f OldPactValue -> f RowDataValue
+      recur = fmap oldPactValueToRowData
+      parseVersioned = JD.withObject "RowData" $ \o -> RowData
+          <$> o JD..: "$v"
+          <*> o JD..: "$d"
+
+data OldPactValue
+  = OldPLiteral !Literal
+  | OldPList !(Vector OldPactValue)
+  | OldPObject !(ObjectMap OldPactValue)
+  | OldPGuard !(Guard OldPactValue)
+  | OldPModRef !ModRef
+
+
+instance JD.FromJSON OldPactValue where
+  parseJSON v =
+    (OldPLiteral <$> JD.parseJSON v) <|>
+    (OldPList <$> JD.parseJSON v) <|>
+    (OldPGuard <$> JD.parseJSON v) <|>
+    (OldPObject <$> JD.parseJSON v) <|>
+    (OldPModRef <$> (parseNoInfo v <|> JD.parseJSON v))
+    where
+      parseNoInfo = JD.withObject "ModRef" $ \o -> ModRef
+        <$> o JD..: "refName"
+        <*> o JD..: "refSpec"
+--        <*> (fromMaybe def <$> o JD..:? "refInfo")
+
+data RowDataVersion = RDV0 | RDV1
+  deriving (Eq,Show,Generic,Ord,Enum,Bounded)
+
+instance JD.FromJSON RowDataVersion where
+  parseJSON = JD.withScientific "RowDataVersion" $ \case
+    0 -> pure RDV0
+    1 -> pure RDV1
+    _ -> fail "RowDataVersion"
+
+data RowDataValue
+    = RDLiteral !Literal
+    | RDList !(Vector RowDataValue)
+    | RDObject !(ObjectMap RowDataValue)
+    | RDGuard !(Guard RowDataValue)
+    | RDModRef !ModRef
+    deriving (Eq,Show,Generic,Ord)
+
+instance JD.FromJSON RowDataValue where
+  parseJSON v1 =
+    (RDLiteral <$> JD.parseJSON v1) <|>
+    (RDList <$> JD.parseJSON v1) <|>
+    parseTagged v1
+    where
+      parseTagged = JD.withObject "tagged RowData" $ \o -> do
+        (t :: Text) <- o JD..: "$t"
+        val <- o JD..: "$v"
+        case t of
+          "o" -> RDObject <$> JD.parseJSON val
+          "g" -> RDGuard <$> JD.parseJSON val
+          "m" -> RDModRef <$> parseMR val
+          _ -> fail "tagged RowData"
+      parseMR = JD.withObject "tagged ModRef" $ \o -> ModRef
+          <$> o JD..: "refName"
+          <*> o JD..: "refSpec"
+--          <*> pure def

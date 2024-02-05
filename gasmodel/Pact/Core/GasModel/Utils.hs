@@ -89,7 +89,7 @@ gmKeysetName :: KeySetName
 gmKeysetName = KeySetName "gasModelKeyset" Nothing
 
 gasModelSampleSchema :: Schema
-gasModelSampleSchema =  Schema (QualifiedName "gasModelSchema" gmModuleName) $ M.fromList
+gasModelSampleSchema =  Schema (Just $ QualifiedName "gasModelSchema" gmModuleName) $ M.fromList
   [(Field "a", TyInt)
   ,(Field "b", TyString)
   ,(Field "c", TyBool)]
