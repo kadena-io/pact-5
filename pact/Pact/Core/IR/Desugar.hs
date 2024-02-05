@@ -135,7 +135,7 @@ instance (MonadEvalState b i m) => MonadEvalState b i (RenamerT b i m) where
 class IsBuiltin b => DesugarBuiltin b where
   liftCoreBuiltin :: CoreBuiltin -> b
   desugarOperator :: i -> Lisp.Operator -> Term ParsedName DesugarType b i
-  desugarAppArity :: i -> b -> [Term ParsedName DesugarType b i] -> Term ParsedName DesugarType b i
+  desugarAppArity :: i -> b -> [Term n dt b i] -> Term n dt b i
 
 instance DesugarBuiltin CoreBuiltin where
   liftCoreBuiltin = id
@@ -171,8 +171,8 @@ desugarAppArityRaw
   :: (CoreBuiltin -> builtin)
   -> info
   -> CoreBuiltin
-  -> [Term name Lisp.Type builtin info]
-  -> Term name Lisp.Type builtin info
+  -> [Term name t builtin info]
+  -> Term name t builtin info
 -- Todo: this presents a really, _really_ annoying case for the map overload :(
 -- Jose: I am unsure how to fix this so far, but it does not break any tests.
 -- that is:
@@ -419,8 +419,8 @@ pattern CondV :: i -> Lisp.Expr i
 pattern CondV info = Lisp.Var (BN (BareName "cond")) info
 
 suspendTerm
-  :: Term ParsedName DesugarType builtin info
-  -> Term ParsedName DesugarType builtin info
+  :: Term n dt builtin info
+  -> Term n dt builtin info
 suspendTerm e' =
   Nullary e' (view termInfo e')
 
@@ -651,6 +651,7 @@ termSCC currM currDefns = \case
     WithCapability _ _ -> mempty
   ObjectLit m _ ->
     foldMap (termSCC currM currDefns . view _2) m
+  InlineValue{} -> mempty
 
 parsedNameSCC :: ModuleName -> Set Text -> ParsedName -> Set Text
 parsedNameSCC currM currDefns n = case n of
@@ -1080,6 +1081,7 @@ renameTerm (CapabilityForm cf i) = case cf of
     CapabilityForm <$> (WithCapability <$> renameTerm cap <*> renameTerm body) <*> pure i
 renameTerm (ObjectLit o i) =
   ObjectLit <$> (traverse._2) renameTerm o <*> pure i
+renameTerm (InlineValue pb i) = pure (InlineValue pb i)
 
 enforceNotWithinDefcap
   :: (MonadEval b i m)
