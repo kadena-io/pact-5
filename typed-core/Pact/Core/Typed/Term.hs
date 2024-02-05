@@ -291,34 +291,34 @@ data ReplTopLevel name tyname builtin info
 
 -- Post Typecheck terms + modules
 type OverloadedTerm tyname b i =
-  Term Name tyname (b, [Type tyname], [Pred tyname]) i
+  Term Name tyname (b, [Type tyname], [Pred (Type tyname)]) i
 
 type OverloadedDefun tyname b i =
-  Defun Name tyname (b, [Type tyname], [Pred tyname]) i
+  Defun Name tyname (b, [Type tyname], [Pred (Type tyname)]) i
 
 type OverloadedDefConst tyname b i =
-  DefConst Name tyname (b, [Type tyname], [Pred tyname]) i
+  DefConst Name tyname (b, [Type tyname], [Pred (Type tyname)]) i
 
 type OverloadedDefCap tyname b i =
-  DefCap Name tyname (b, [Type tyname], [Pred tyname]) i
+  DefCap Name tyname (b, [Type tyname], [Pred (Type tyname)]) i
 
 type OverloadedDef tyname b i =
-  Def Name tyname (b, [Type tyname], [Pred tyname]) i
+  Def Name tyname (b, [Type tyname], [Pred (Type tyname)]) i
 
 type OverloadedIfDef tyname b i =
-  IfDef Name tyname (b, [Type tyname], [Pred tyname]) i
+  IfDef Name tyname (b, [Type tyname], [Pred (Type tyname)]) i
 
 type OverloadedModule tyname b i =
-  Module Name tyname (b, [Type tyname], [Pred tyname]) i
+  Module Name tyname (b, [Type tyname], [Pred (Type tyname)]) i
 
 type OverloadedInterface tyname b i =
-  Interface Name tyname (b, [Type tyname], [Pred tyname]) i
+  Interface Name tyname (b, [Type tyname], [Pred (Type tyname)]) i
 
 type OverloadedTopLevel tyname b i =
-  TopLevel Name tyname (b, [Type tyname], [Pred tyname]) i
+  TopLevel Name tyname (b, [Type tyname], [Pred (Type tyname)]) i
 
 type OverloadedReplTopLevel tyname b i =
-  ReplTopLevel Name tyname (b, [Type tyname], [Pred tyname]) i
+  ReplTopLevel Name tyname (b, [Type tyname], [Pred (Type tyname)]) i
 
 -- type OverloadedDefCap b i =
 --   DefCap Name (b, [Type Void], [Pred Void]) i

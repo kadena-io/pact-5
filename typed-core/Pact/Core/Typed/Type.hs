@@ -173,28 +173,28 @@ instance Pretty n => Pretty (Type n) where
 
 
 -- Built in typeclasses
-data BuiltinTC v
-  = Eq
-  | Ord
-  | Show
-  | Add
-  | Num
-  | ListLike
-  | Fractional
-  | EnforceRead
-  | RowConstr (RoseConstraint v)
+data BuiltinTC ty
+  = Eq ty
+  | Ord ty
+  | Show ty
+  | Add ty
+  | Num ty
+  | ListLike ty
+  | Fractional ty
+  | EnforceRead ty
+  | EqRow ty
+  | RoseSubRow (RoseRow ty) (RoseRow ty)
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
-data RoseRow v
-  = RoseObject [(Field, Type v)]
-  | RowRowVar v
-  | RowRowCat (RoseRow v) (RoseRow v)
+data RoseRow ty
+  = RowTy ty
+  | RowRowCat (RoseRow ty) (RoseRow ty)
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
-data RoseConstraint v
-  = RoseSubRow (RoseRow v) (RoseRow v)
-  | RoseRowEq (RoseRow v) (RoseRow v)
-  deriving (Show, Eq, Functor, Foldable, Traversable)
+-- data RoseConstraint v
+--   = RoseSubRow (RoseRow v) (RoseRow v)
+--   | RoseRowEq (RoseRow v) (RoseRow v)
+--   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 data Arg ty
   = Arg
@@ -232,25 +232,25 @@ pattern l :~> r = TyFun l r
 
 infixr 5 :~>
 
-instance Pretty (BuiltinTC v) where
+instance (Show ty, Pretty ty) => Pretty (BuiltinTC ty) where
   pretty = \case
-    Eq -> "Eq"
-    Ord -> "Ord"
-    Show -> "Show"
-    Add -> "Add"
-    Num -> "Num"
-    ListLike -> "ListLike"
-    Fractional -> "Fractional"
-    EnforceRead -> "EnforceRead"
-    _ -> error "todo"
+    Eq t -> "Eq" <> Pretty.braces (pretty t)
+    Ord t -> "Ord" <> Pretty.braces (pretty t)
+    Show t -> "Show" <> Pretty.braces (pretty t)
+    Add t -> "Add" <> Pretty.braces (pretty t)
+    Num t -> "Num" <> Pretty.braces (pretty t)
+    ListLike t -> "ListLike" <> Pretty.braces (pretty t)
+    Fractional t -> "Fractional" <> Pretty.braces (pretty t)
+    EnforceRead t -> "EnforceRead" <> Pretty.braces (pretty t)
+    e -> pretty (show e)
 
 -- Note, no superclasses, for now
-data Pred tv
-  = Pred (BuiltinTC tv) (Type tv)
+newtype Pred tv
+  = Pred (BuiltinTC tv)
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 data TypeScheme tv =
-  TypeScheme [tv] [Pred tv]  (Type tv)
+  TypeScheme [tv] [Pred (Type tv)]  (Type tv)
   deriving Show
 
 pattern NonGeneric :: Type tyname -> TypeScheme tyname
@@ -272,3 +272,5 @@ instance NFData ty => NFData (RowCtor ty)
 instance NFData ty => NFData (CapRef ty)
 instance NFData ty => NFData (Type ty)
 instance NFData ty => NFData (Arg ty)
+
+makeLenses ''Arg
