@@ -1,23 +1,24 @@
 # Pact Semantics document
 
-This document should serve as a record of known pact semantics, covering as much of the language as possible, including
-corner cases, and semantic divergences between core and prod pact.
+This document should serve as a record of known Pact semantics, covering as much of the language as possible, including
+corner cases, and semantic divergences between core and prod Pact.
 
-Bullet points that are not filled are potential tasks
+Bullet points that are not filled are potential tasks.
 
 ## Pact Syntax
 
-EBNF of Pact, Roughly speaking
+Approximate (in-progress) grammar definition of Pact
+in [Extended Backus-Naur form (EBNF)](https://en.wikipedia.org/wiki/Extended_Backus–Naur_form).
 
 ### Legend
 
 | Usage         | Notation  | Meaning                               |
 |---------------|:---------:|---------------------------------------|
-| concatenation |           | One token immediately follows another 
-| alternation   |    \|     | One or the order                      
-| optional      | \[ ... \] | none or once                          
-| repetition    | \{ ... \} | none or many                          
-| grouping      | \( ... \) | Groups tokens to match                
+| concatenation |           | One token immediately follows another |
+| alternation   |    \|     | One or the other                      |
+| optional      | \[ ... \] | none or once                          |
+| repetition    | \{ ... \} | none or many                          |
+| grouping      | \( ... \) | Groups tokens to match                |
 
 ### Lexical Syntax
 
