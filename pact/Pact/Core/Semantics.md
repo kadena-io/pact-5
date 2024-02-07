@@ -23,8 +23,8 @@ in [Extended Backus-Naur form (EBNF)](https://en.wikipedia.org/wiki/Extended_Bac
 ### Lexical Syntax
 
 ```
-lower          ::= 'a' | ... | 'z' (Ascii only, no unicode lower case)
-upper          ::= 'A' | ... | 'Z' (Ascii only, no unicode lower case)
+lower          ::= 'a' | ... | 'z' // Ascii only, no unicode lower case
+upper          ::= 'A' | ... | 'Z' // Ascii only, no unicode lower case
 special-symbol ::= '%' | '#' | '+' | '-' | '_' | '&' | '$' | '@'
                      | '<' | '>' | '=' | '^' | '?' | '*' | '!'
                      | '|' | '/' | '~'
@@ -63,17 +63,288 @@ TICKSTRING     ::= '\'' alpha {alpha | digit | '-' | '_'}
 
 #### Productions
 
-TODO: fill
+##### Verified
 
+```bnf
+//<program> ::= <toplevel> { <toplevel> }
+//
+//<toplevel> ::= <module> | <interface> | <use> | <expr>
+//
+//<module> ::= '(' module IDENT <Governance> <MDocOrModuleModel> <ExtOrDefs> ')'
+//
+//<interface> ::= '(' interface IDENT <MDocOrModel> <ImportOrIfDef> ')'
 ```
-<program> ::= <toplevel> { <toplevel> }
 
-<toplevel> ::= <module> | <interface> | <use> | <expr>
+##### In Progress
 
-<module> ::= '(' module IDENT <Governance> <MDocOrModuleModel> <ExtOrDefs> ')'
+```bnf
+Program ::= ProgramList | ReplProgramList
 
-<interface> ::= '(' interface IDENT <MDocOrModel> <ImportOrIfDef> ')'
+ProgramList ::= TopLevel+
 
+ReplProgramList ::= ReplTopLevel+
+
+TopLevel ::= Module
+           | Interface
+           | Expr
+           | Use
+
+ReplTopLevel ::= TopLevel
+               | "(" Defun ")"
+               | "(" DefConst ")"
+               | "(" ReplSpecial ")"
+
+ReplSpecial ::= "load" STR BOOLEAN
+              | "load" STR
+
+Governance ::= StringRaw
+             | IDENT
+
+StringRaw ::= STR
+            | TICK
+
+Module ::= "(" "module" IDENT Governance [MDocOrModel] ExtOrDefs ")"
+
+Interface ::= "(" "interface" IDENT [MDocOrModel] ImportOrIfDef ")"
+
+Ext ::= Use
+        | "(" "implements" ModQual ")"
+        | "(" "bless" StringRaw ")"
+
+Use ::= "(" "import" ModQual ImportList ")"
+        | "(" "import" ModQual STR ImportList ")"
+
+ExtOrDefs ::= (Def | Ext)+
+
+Def ::= Defun
+              | DefConst
+              | Defcap
+              | Defschema
+              | Deftable
+              | DefPact
+
+ImportOrIfDef ::= (IfDef | Use)+
+
+IfDef ::= IfDefun
+                | DefConst
+                | IfDefCap
+                | Defschema
+                | IfDefPact
+
+IfDefun   ::= "(" "defun" IDENT [MTypeAnn] "(" MArgs ")" [MDocOrModel] ")"
+IfDefCap  ::= "(" "defcap" IDENT [MTypeAnn] "(" MArgs ")" [MDocOrModel] [MDCapMeta] ")"
+IfDefPact ::= "(" "defpact" IDENT [MTypeAnn] "(" MArgs ")" [MDocOrModel] ")"
+
+ImportList ::= "[" ImportNames "]"
+
+ImportNames ::= IDENT+
+
+Defun     ::= "(" "defun" IDENT [MTypeAnn] "(" [MArgs] ")" [MDocOrModel] Block ")"
+Defcap    ::= "(" "defcap" IDENT [MTypeAnn] "(" [MArgs] ")" [MDocOrModel] [MDCapMeta] Block ")"
+DefPact   ::= "(" "defpact" IDENT [MTypeAnn] "(" MArgs ")" [MDocOrModel] Steps ")"
+DefConst  ::= "(" "defconst" IDENT [MTypeAnn] Expr [MDoc] ")"
+Defschema ::= "(" "defschema" IDENT [MDocOrModel] SchemaArgList ")"
+Deftable  ::= "(" "deftable" IDENT ":" "{" ParsedName "}" [MDoc] ")"
+
+Steps ::= Step+
+
+Step ::= "(" "step" Expr [MModel] ")"
+       | "(" "step" Expr Expr [MModel] ")"
+       | "(" "step-with-rollback" Expr Expr [MModel] ")"
+       | "(" "step-with-rollback" Expr Expr Expr [MModel] ")"
+
+MDCapMeta ::= Managed
+            | Event
+
+Managed ::= "@managed" (IDENT ParsedName)*
+
+Event ::= "@event"
+
+MArgs ::= MArg*
+
+MArg ::= IDENT ":" Type
+       | IDENT
+
+SchemaArgList ::= SchemaArg (SchemaArg) *
+
+SchemaArg ::= IDENT (":" Type)?
+
+Type ::= "[" Type "]"
+       | "module" "{" ModuleNames "}"
+       | IDENT "{" ParsedTyName "}"
+       | IDENT
+
+ModuleNames ::= ModQual ("," ModQual) *
+
+DocAnn ::= "@doc" STR
+
+DocStr ::= STR
+
+MModel ::= ModelAnn
+
+ModelAnn ::= "@model" "[" PactFVModels "]"
+
+MDocOrModel ::= DocAnn ModelAnn
+              | ModelAnn DocAnn
+              | DocAnn
+              | ModelAnn
+              | DocStr
+
+MDoc ::= DocAnn
+       | DocStr
+
+MTypeAnn ::= ":" Type
+
+Block ::= BlockBody
+
+BlockBody ::= Expr+
+
+Expr ::= "(" SExpr ")"
+       | Atom
+
+SExpr ::= LamExpr
+        | LetExpr
+        | IfExpr
+        | TryExpr
+        | ProgNExpr
+        | GenAppExpr
+        | SuspendExpr
+        | CapExpr
+
+List ::= "[" [ListExprs] "]"
+
+ListExprs ::= Expr MCommaExpr?
+
+MCommaExpr ::= "," ExprCommaSep
+             | AppList
+
+ExprCommaSep ::= Expr ("," Expr) *
+
+LamExpr ::= "lambda" "(" LamArgs ")" Block
+
+IfExpr ::= "if" Expr Expr Expr
+
+TryExpr ::= "try" Expr Expr
+
+SuspendExpr ::= "suspend" Expr
+
+CapExpr ::= CapForm
+
+CapForm ::= "with-capability" Expr Block
+          | "create-user-guard" "(" ParsedName AppList ")"
+
+LamArgs ::= LamArg (LamArg)*
+LamArg ::= IDENT (":" Type)?
+
+
+LetExpr ::= LET_KEYWORD "(" Binders ")" Block
+
+Binders ::= ("(" IDENT MTypeAnn Expr ")")+ // Type annotation fault
+
+GenAppExpr ::= Expr AppBindList // Check * ?
+
+ProgNExpr ::= "progn" BlockBody
+
+AppList ::= Expr* // Was +
+
+AppBindList ::= (Expr | BindingForm)*
+
+BindingForm ::= "{" BindPairs "}"
+
+BindPair ::= STR ":=" MArg
+           | TICK ":=" MArg
+
+BindPairs ::= BindPair ("," BindPair)*
+
+Atom ::= Var
+       | Number
+       | String
+       | List
+       | Bool
+       | Operator
+       | Object
+       | "(" ")"
+
+Operator ::= "and"
+           | "or"
+           | "enforce"
+           | "enforce-one"
+
+Bool ::= "true"
+       | "false"
+
+Var ::= IDENT "." ModQual
+      | IDENT
+      | IDENT "::" IDENT
+
+ParsedName ::= IDENT "." ModQual
+             | IDENT
+             | IDENT "::" IDENT
+
+ParsedTyName ::= IDENT "." ModQual
+               | IDENT
+
+ModQual ::= IDENT "." IDENT
+          | IDENT
+
+Number ::= ["+" | "-"] NUM+ ["." NUM+]
+
+String ::= STR
+         | TICK
+
+Object ::= "{" ObjectBody "}"
+
+ObjectBody ::= FieldPairs
+
+FieldPair ::= STR ":" Expr
+            | TICK ":" Expr
+
+FieldPairs ::= FieldPair ("," FieldPair)*
+
+PactFVModels ::= PropExprList
+
+PropExprList ::= PropExpr* // Verify *
+
+PropExpr ::= PropAtom
+           | "(" PropExprList ")"
+           | "[" PropExprList "]"
+
+PropAtom ::= FVVar
+           | FVNumber
+           | FVString
+           | FVKeyword
+           | FVDelim
+           | FVBool
+
+FVKeyword ::= "let"
+            | "lambda"
+            | "if"
+            | "progn"
+            | "suspend"
+            | "try"
+            | "enforce"
+            | "enforce-one"
+            | "and"
+            | "or"
+            | "create-user-guard"
+            | "with-capability"
+
+FVDelim ::= "{"
+          | "}"
+          | ":"
+          | ","
+
+FVBool ::= "true"
+         | "false"
+
+FVNumber ::= ["+" | "-"] NUM+ ["." NUM+]
+
+FVString ::= STR
+           | TICK
+
+FVVar ::= IDENT "." ModQual
+        | IDENT
+        | IDENT "::" IDENT
 ```
 
 ## Modules
