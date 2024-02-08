@@ -399,9 +399,11 @@ applyPact i pc ps cont handler cenv nested = useEvalState esDefPactExec >>= \cas
     DPact defPact -> do
       let nSteps = NE.length (_dpSteps defPact)
 
-      -- Check we try to apply the correct pact Step
-      unless (ps ^. psStep < nSteps) $
-        throwExecutionError i (DefPactStepNotFound ps nSteps)   -- TODO TODO how to trigger this?
+      -- `applyPact` is only called from `initPact` or `resumePact`.
+      -- `initPact` ensures that the step is 0,
+      -- and there are guaranteed more than 0 steps due to how the parser is written.
+      -- `resumePact` does a similar check before calling this function.
+      when (ps ^. psStep >= nSteps) $ failInvariant i "Step not found"
 
       step <- maybe (failInvariant i "Step not found") pure
         $ _dpSteps defPact ^? ix (ps ^. psStep)
