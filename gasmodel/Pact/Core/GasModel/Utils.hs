@@ -269,7 +269,8 @@ evalStep :: MachineResult -> Eval MachineResult
 evalStep c@(CEKReturn cont handler result)
   | isFinal c = return c
   | otherwise = Eval.returnCEK cont handler result
-evalStep (CEKEvaluateTerm cont handler cekEnv term) = Eval.evaluateTermSmallStep cont handler cekEnv term
+evalStep (CEKEvaluateTerm cont handler cekEnv term) =
+   Eval.evaluateTermSmallStep cont handler cekEnv term
 
 unsafeEvalStep :: MachineResult -> Eval MachineResult
 unsafeEvalStep (CEKReturn cont handler result) = Eval.returnCEK cont handler result
