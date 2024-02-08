@@ -294,8 +294,6 @@ data EvalError
   -- ^ Nested DefPact is executed twice
   | MultipleOrNestedDefPactExecFound DefPactExec
   -- ^ Unexpected DefPactExec found in the environment
-  | DefPactStepNotFound DefPactStep Int
-  -- ^ The expected step could not be found in the DefPact
   | DefPactStepHasNoRollback DefPactStep
   -- ^ The requested DefPactStep has no rollback
   | DefPactStepNotInEnvironment
@@ -414,11 +412,6 @@ instance Pretty EvalError where
       ["Requested nested DefPact double execution:", "DefPactId: " <> pretty (_psDefPactId ps)]
     MultipleOrNestedDefPactExecFound pe -> Pretty.hsep
       ["DefPact execution context already in the environment: ", "DefPactId: " <> pretty (_peDefPactId pe)]
-    DefPactStepNotFound ps maxSteps -> Pretty.hsep
-      [ "Requested DefPact step exceeds available steps:"
-      , "requested: " <> pretty (_psStep ps)
-      , "available: " <> pretty maxSteps
-      ]
     DefPactStepHasNoRollback ps -> Pretty.hsep
       ["Step has no rollback:", "DefPactId: " <> pretty (_psDefPactId ps)]
     DefPactStepNotInEnvironment -> "No DefPactStep in the environment"
