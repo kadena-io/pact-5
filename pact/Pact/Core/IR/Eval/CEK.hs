@@ -161,14 +161,9 @@ evaluateTerm cont handler env (Var n info)  = do
               clo = CapTokenClosure fqn args (length args) info
           returnCEKValue cont handler (VClosure (CT clo))
         Just d ->
-          throwExecutionError info (InvalidDefKind (defKind mname d) "in var position")
-          -- TODO ^ shall this be an invariant failure?
-          -- apparently this can never happen because `renameTerm` checks for variable top-level variable occurrences,
-          -- erroring out with `InvalidDefInTermVariable` if it's violated.
-          -- And, the execution can't change that invariant once it's established during desugar.
+          failInvariant info ("invalid def kind in var position: " <> T.pack (show $ defKind mname d))
         Nothing ->
-          throwExecutionError info (NameNotInScope (FullyQualifiedName mname (_nName n) mh))
-          -- TODO ^ ditto, `renameTerm` apparently always fails in this case as well
+          failInvariant info ("name not in scope: " <> T.pack (show $ FullyQualifiedName mname (_nName n) mh))
     NModRef m ifs -> case ifs of
       [x] -> returnCEKValue cont handler (VModRef (ModRef m ifs (Just (S.singleton x))))
       [] -> throwExecutionError info (ModRefNotRefined (_nName n))
@@ -331,9 +326,7 @@ mkDefunClosure d mn e = case _dfunTerm d of
   Nullary body i ->
     pure (Closure (_dfunName d) mn NullaryClosure 0 body (_dfunRType d) e i)
   _ ->
-    throwExecutionError (_dfunInfo d) (DefIsNotClosure (_dfunName d))
-    -- TODO ^ apparently invariant failure, since the parser ensures defun has a form of `(defun ( args ) body)`,
-    -- and desugar converts that into a Lam or Nullary.
+    failInvariant (_dfunInfo d) ("definition is not a closure: " <> T.pack (show d))
 
 mkDefPactClosure
   :: i
@@ -545,13 +538,13 @@ resumePact
   -> Maybe DefPactExec
   -> m (CEKEvalResult step b i m)
 resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep >>= \case
-  Nothing -> throwExecutionError i DefPactStepNotInEnvironment    -- <- TODO apparently can't happen, `continuePact` ensures that
+  Nothing -> throwExecutionError i DefPactStepNotInEnvironment -- TODO check with multichain
   Just ps -> do
     pdb <- viewEvalEnv eePactDb
     dbState <- liftDbFunction i (readDefPacts pdb (_psDefPactId ps))
     case (dbState, crossChainContinuation) of
       (Just Nothing, _) -> throwExecutionError i (DefPactAlreadyCompleted ps)
-      (Nothing, Nothing) -> throwExecutionError i (NoPreviousDefPactExecutionFound ps)  -- TODO TODO how to trigger this?
+      (Nothing, Nothing) -> throwExecutionError i (NoPreviousDefPactExecutionFound ps)  -- TODO check with multichain
       (Nothing, Just ccExec) -> resumeDefPactExec ccExec
       (Just (Just dbExec), Nothing) -> resumeDefPactExec dbExec
       (Just (Just dbExec), Just ccExec) -> do
@@ -563,18 +556,18 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
 
         -- Validate continuation db state
         when (_peContinuation dbExec /= _peContinuation ccExec) $
-          throwExecutionError i (CCDefPactContinuationError ps ccExec dbExec)    -- TODO TODO how to trigger this?
+          throwExecutionError i (CCDefPactContinuationError ps ccExec dbExec)    -- TODO check with multichain
 
         -- Validate step count against db state
         when (_peStepCount dbExec /= _peStepCount ccExec) $
-          throwExecutionError i (CCDefPactContinuationError ps ccExec dbExec)    -- TODO TODO how to trigger this?
+          throwExecutionError i (CCDefPactContinuationError ps ccExec dbExec)    -- TODO check with multichain
 
         resumeDefPactExec ccExec
       where
         --resumeDefPactExec :: CEKEval step b i m, MonadEval b i m => DefPactExec -> m (CEKEvalResult step b i m)
         resumeDefPactExec pe = do
           when (_psDefPactId ps /= _peDefPactId pe) $
-            throwExecutionError i (DefPactIdMismatch (_psDefPactId ps) (_peDefPactId pe))    -- TODO TODO how to trigger this?
+            throwExecutionError i (DefPactIdMismatch (_psDefPactId ps) (_peDefPactId pe))    -- TODO check with multichain
 
           when (_psStep ps < 0 || _psStep ps >= _peStepCount pe) $
             throwExecutionError i (InvalidDefPactStepSupplied ps pe)
@@ -1039,8 +1032,7 @@ installCap info _env (CapToken fqn args) autonomous = do
   case _dcapMeta d of
     DefManaged m -> case m of
       DefManagedMeta (paramIx,_) (FQName fqnMgr) -> do
-        managedParam <- maybe (throwExecutionError info (InvalidManagedCap fqn)) pure (args ^? ix paramIx)
-        -- TODO ^ OOB index is invariant failure?
+        managedParam <- maybe (failInvariant info $ "invalid managed cap idx: " <> T.pack (show fqn)) pure (args ^? ix paramIx)
         let mcapType = ManagedParam fqnMgr managedParam paramIx
             ctFiltered = CapToken (fqnToQualName fqn) (filterIndex paramIx args)
             mcap = ManagedCap ctFiltered ct mcapType
