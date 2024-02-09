@@ -630,6 +630,26 @@ executionTests =
   , ("get_module_unknown", isExecutionError _ModuleDoesNotExist, [text|
       (describe-module 'nonexistent)
       |])
+  , ("reexposed_module_missing_name", isExecutionError _NameNotInScope, [text|
+      (module m g
+        (defcap g () true)
+
+        (defun f () 1)
+
+        (defschema foo-schema elem:guard)
+        (deftable foo:{foo-schema})
+        )
+      (create-table foo)
+      (insert foo "k" {"elem":(create-user-guard (f))})
+
+      (module m g
+        (defcap g () true)
+        (defschema foo-schema elem:guard)
+        (deftable foo:{foo-schema})
+        )
+
+      (enforce-guard (at "elem" (read foo "k")))
+      |])
   , ("module_gov_keyset_nonexistent", isExecutionError _NoSuchKeySet, [text|
       (module m 'nonexistent (defun f () true))
       |])
