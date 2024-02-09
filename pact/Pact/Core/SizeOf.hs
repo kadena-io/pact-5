@@ -10,6 +10,7 @@
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DerivingVia #-}
 
 -- |
 -- Module      :  Pact.Types.SizeOf
@@ -25,9 +26,20 @@ module Pact.Core.SizeOf
   , Bytes
   , wordSize
   , SizeOfVersion(..)
+  , SizeOfByteLimit(..)
+
+  -- * SizeOf 
+  , SizeOfM(..)
+  , countBytes
+  , runSizeOf
+  , runSizeOfM
   ) where
 
+import Control.Monad
+import Control.Monad.State.Strict
+import Control.Monad.Except
 import Data.Decimal
+import Data.Foldable (traverse_)
 import Data.Int (Int64)
 import Data.Set (Set)
 import Data.Text (Text)
@@ -47,8 +59,7 @@ import qualified Data.ByteString.Short as SBS
 import qualified Data.Vector as V
 import qualified Data.Text as T
 import qualified Data.Set as S
-import qualified GHC.Num.Integer as GHC
-import qualified GHC.Num.WordArray as GHC
+import qualified GHC.Integer.Logarithms as IntLog
 
 import Pact.Core.Names
 import Pact.Core.Pretty
@@ -80,15 +91,70 @@ import Pact.Core.Namespace (Namespace)
 -- 2. https://stackoverflow.com/questions/3254758/memory-footprint-of-haskell-data-types
 
 data SizeOfVersion
-  = SizeOfV0
+  = SizeOfV2
+  | SizeOfV1
+  | SizeOfV0
   deriving Show
 
 instance Pretty SizeOfVersion where
   pretty = viaShow
 
+newtype SizeOfByteLimit 
+  = SizeOfByteLimit Bytes
+  deriving Show
+
+instance Pretty SizeOfByteLimit where
+  pretty = pretty . show
+
+data SizeOfState
+  = SizeOfState
+  { _szCurrByteCount :: !Bytes
+  , _szByteLimit :: !SizeOfByteLimit
+  }
+
+newtype ByteCountExceeded
+  = ByteCountExceeded Bytes
+  deriving Show
+
+newtype SizeOfM a
+  = SizeOfM (ExceptT ByteCountExceeded (State SizeOfState) a)
+  deriving
+  ( Functor
+  , Applicative
+  , Monad
+  , MonadState SizeOfState
+  , MonadError ByteCountExceeded)
+  via (ExceptT ByteCountExceeded (State SizeOfState))
+
+evalSizeOfM :: SizeOfState -> SizeOfM a -> (Either ByteCountExceeded a, SizeOfState)
+evalSizeOfM st (SizeOfM act) =
+  runState (runExceptT act) st
+
+runSizeOf :: SizeOf a => SizeOfByteLimit -> SizeOfVersion -> a -> Bytes
+runSizeOf bl ver a =
+  let st = SizeOfState 0 bl
+      (_, SizeOfState !byteCnt _) = evalSizeOfM st (sizeOf ver a)
+  in byteCnt
+
+runSizeOfM :: SizeOfByteLimit -> SizeOfM a -> Bytes
+runSizeOfM bl a =
+  let st = SizeOfState 0 bl
+      (_, SizeOfState !byteCnt _) = evalSizeOfM st a
+  in byteCnt
+
+countBytes :: SizeOfVersion -> Bytes -> SizeOfM ()
+countBytes szver bytes = do
+  SizeOfState count byteLim@(SizeOfByteLimit limit) <- get
+  let !newByteCount = bytes + count
+  put (SizeOfState newByteCount byteLim)
+  case szver of
+    SizeOfV2 -> do
+      when (newByteCount > limit) $ throwError (ByteCountExceeded newByteCount)
+    _ -> pure ()
+
 class SizeOf t where
-  sizeOf :: SizeOfVersion -> t -> Bytes
-  default sizeOf :: (Generic t, GSizeOf (Rep t)) => SizeOfVersion -> t -> Bytes
+  sizeOf :: SizeOfVersion -> t -> SizeOfM ()
+  default sizeOf :: (Generic t, GSizeOf (Rep t)) => SizeOfVersion -> t -> SizeOfM ()
   sizeOf v a = gsizeOf v (from a)
 
 
@@ -113,44 +179,51 @@ constructorCost numFields = headerCost + (constructorFieldCost numFields)
 
 
 instance (SizeOf v) => SizeOf (Vector v) where
-  sizeOf ver v = vectorSize
+  sizeOf ver v = do
+    let rawVecSize = (7 + vectorLength) * wordSize
+    countBytes ver rawVecSize
+    traverse_ (sizeOf ver) v
     where
-      vectorSize =
-        ((7 + vectorLength) * wordSize) + sizeOfContents
       vectorLength = fromIntegral (V.length v)
-      sizeOfContents = V.foldl' (\acc pv -> acc + (sizeOf ver pv)) 0 v
 
 instance (SizeOf a) => SizeOf (Set a) where
-  sizeOf ver s = setSize
+  sizeOf ver s = do
+    let !setSizeOverhead = (1 + 3 * setLength) * wordSize
+    countBytes ver setSizeOverhead
+    traverse_ (sizeOf ver) s
     where
-      setSize = ((1 + 3 * setLength) * wordSize) + sizeOfSet
-      setLength = fromIntegral $ S.size s
-      sizeOfSet = S.foldl' (\acc a -> acc + sizeOf ver a) 0 s
+      setLength = fromIntegral (S.size s)
 
 instance (SizeOf k, SizeOf v) => SizeOf (M.Map k v) where
-  sizeOf ver m = mapSize
+  sizeOf ver m = do
+    let !mapSizeOverhead = 6 * mapLength * wordSize
+    countBytes ver mapSizeOverhead
+    traverse_ (\(k,v) -> sizeOf ver k >> sizeOf ver v) (M.toList m)
     where
-      mapSize = (6 * mapLength * wordSize) + contentSize
       mapLength = fromIntegral (M.size m)
-      contentSize = M.foldlWithKey' (\acc fk v -> acc + (sizeOf ver fk) + sizeOf ver v) 0 m
 
 instance (SizeOf a, SizeOf b) => SizeOf (a,b) where
-  sizeOf ver (a,b) = constructorCost 3 + sizeOf ver a + sizeOf ver b
+  sizeOf ver (a,b) = do
+    countBytes ver (constructorCost 3)
+    sizeOf ver a >> sizeOf ver b
 
 instance (SizeOf a) => SizeOf (Maybe a) where
-  sizeOf ver (Just e) = constructorCost 1 + sizeOf ver e
-  sizeOf _ Nothing = constructorCost 0
-
+  sizeOf ver (Just e) =
+    countBytes ver (constructorCost 1) >> sizeOf ver e
+  sizeOf ver Nothing =
+    countBytes ver (constructorCost 0)
 
 instance (SizeOf a) => SizeOf [a] where
-  sizeOf ver arr = arrSize
+  sizeOf ver arr = do
+    let listSzOverhead = (1 + (3 * listLength)) * wordSize
+    countBytes ver listSzOverhead
+    traverse_ (sizeOf ver) arr
     where
-      arrSize = ((1 + (3 * arrLength)) * wordSize) + sizeOfContents
-      arrLength = fromIntegral (L.length arr)
-      sizeOfContents = L.foldl' (\acc e -> acc + (sizeOf ver e)) 0 arr
+      listLength = fromIntegral (L.length arr)
 
 instance SizeOf BS.ByteString where
-  sizeOf _ bs = byteStringSize
+  sizeOf ver bs =
+    countBytes ver byteStringSize
     where
       byteStringSize = (9 * wordSize) + byteStringLength
 
@@ -164,69 +237,76 @@ instance SizeOf SBS.ShortByteString where
   sizeOf ver = sizeOf ver . SBS.fromShort
 
 instance SizeOf Text where
-  sizeOf _ t = (6 * wordSize) + (2 * (fromIntegral (T.length t)))
+  sizeOf ver t =
+    countBytes ver $ (6 * wordSize) + (2 * (fromIntegral (T.length t)))
 
 instance SizeOf Integer where
-  sizeOf _ = \case
-    GHC.IS _ -> 2 * wordSize
-    GHC.IP bn -> fromIntegral $ I# (GHC.wordArraySize# bn)
-    GHC.IN bn -> fromIntegral $ I# (GHC.wordArraySize# bn)
-
-
-instance SizeOf Word64 where
-  sizeOf _ _ = 2 * wordSize64
+  sizeOf ver i = countBytes ver $ case ver of
+    SizeOfV0 ->
+      if i < 0 then 0 else ceiling ((logBase 100000 (realToFrac i)) :: Double)
+    _ ->
+      fromIntegral (max 64 (I# (IntLog.integerLog2# (abs i)) + 1)) `quot` 8
 
 instance SizeOf Int where
-  sizeOf _ _ = 2 * wordSize
+  sizeOf ver _ = countBytes ver $ 2 * wordSize
 
 instance SizeOf Word8 where
-  sizeOf _ _ = 2 * wordSize
+  sizeOf ver _ = countBytes ver $ 2 * wordSize
 
 instance (SizeOf i) => SizeOf (DecimalRaw i) where
-  sizeOf ver (Decimal p m) = (constructorCost 2) + (sizeOf ver p) + (sizeOf ver m)
+  sizeOf ver (Decimal p m) =
+    countBytes ver (constructorCost 2) >> sizeOf ver p >> sizeOf ver m
 
 instance SizeOf Int64 where
   -- Assumes 64-bit machine
-  sizeOf _ _ = 2 * wordSize
+  sizeOf ver _ = countBytes ver $ 2 * wordSize
+
+
+instance SizeOf Word64 where
+  -- Assumes 64-bit machine
+  sizeOf ver _ = countBytes ver $ 2 * wordSize
+
 
 instance SizeOf UTCTime where
   -- newtype is free
   -- Internally 'UTCTime' is just a 64-bit count of 'microseconds'
   sizeOf ver ti =
-    constructorCost 1 + sizeOf ver (toPosixTimestampMicros ti)
+    countBytes ver (constructorCost 1) >> sizeOf ver (toPosixTimestampMicros ti)
 
 instance SizeOf Bool where
-  sizeOf _ _ = wordSize
+  sizeOf ver _ = countBytes ver wordSize
 
 instance SizeOf () where
-  sizeOf _ _ = 0
+  sizeOf _ _ = pure ()
 
 -- See ghc memory note above
 -- as well as https://blog.johantibell.com/2011/06/memory-footprints-of-some-common-data.html
 -- for both hash sets and hashmaps.
 instance (SizeOf k, SizeOf v) => SizeOf (HM.HashMap k v) where
-  sizeOf ver m = hmSize
+  sizeOf ver m = do
+    countBytes ver hmOverhead
+    traverse_ (\(k,v) -> sizeOf ver k >> sizeOf ver v) (HM.toList m)
     where
-    hmSize = (5 * hmLength + 4 * (hmLength - 1)) * wordSize + contentLength
-    contentLength = HM.foldlWithKey' (\a k v -> a + sizeOf ver k + sizeOf ver v) 0 m
-    hmLength = fromIntegral (HM.size m)
+      !hmOverhead = (5 * hmLength + 4 * (hmLength - 1)) * wordSize
+      hmLength = fromIntegral (HM.size m)
 
 -- Note: Atm hashset is only a newtype wrapper over hashmap with unit as the element
 -- member of every entry. This means you don't pay at all for the cost of (),
 -- but you do pay for the extra constructor field of holding it, hence the `hsSize` bit
 -- stays roughly the same.
 instance (SizeOf k) => SizeOf (HS.HashSet k) where
-  sizeOf ver hs = hsSize
+  sizeOf ver hs = do
+    countBytes ver hsSizeOverhead
+    traverse_ (sizeOf ver) hs
     where
-    hsSize = (5 * hsLength + 4 * (hsLength - 1)) * wordSize + contentLength
-    contentLength = HS.foldl' (\a v -> a + sizeOf ver v) 0 hs
-    hsLength = fromIntegral (HS.size hs)
+      hsSizeOverhead = (5 + hsLength + 4 * (hsLength - 1)) * wordSize
+      hsLength = fromIntegral (HS.size hs)
 
 instance (SizeOf a, SizeOf b) => SizeOf (Either a b)
 
 instance  (SizeOf a) => SizeOf (NE.NonEmpty a) where
   sizeOf ver (a NE.:| rest) =
-    constructorCost 2 + sizeOf ver a + sizeOf ver rest
+    countBytes ver (constructorCost 2) >> sizeOf ver a >> sizeOf ver rest
 
 
 class SizeOf1 f where
@@ -234,12 +314,12 @@ class SizeOf1 f where
 
 -- Generic deriving
 class GSizeOf f where
-  gsizeOf :: SizeOfVersion -> f a -> Bytes
+  gsizeOf :: SizeOfVersion -> f a -> SizeOfM ()
 
 -- For sizes of products, we'll calculate the size at the leaves,
 -- and simply add 1 extra word for every leaf.
 instance (GSizeOf f, GSizeOf g) => GSizeOf (f :*: g) where
-  gsizeOf ver (a :*: b) = gsizeOf ver a + gsizeOf ver b
+  gsizeOf ver (a :*: b) = gsizeOf ver a >> gsizeOf ver b
 
 -- Sums we can just branch recursively as usual
 -- Ctor information is one level lower.
@@ -252,12 +332,12 @@ instance (GSizeOf a, GSizeOf b) => GSizeOf (a :+: b) where
 -- No fields ctors are shared.
 -- We are ok charging a bit extra here.
 instance {-# OVERLAPS #-} GSizeOf (C1 c U1) where
-  gsizeOf _ (M1 _) = wordSize
+  gsizeOf ver (M1 _) = countBytes ver wordSize
 
 -- Regular constructors pay the header cost
 -- and 1 word for each field, which is added @ the leaves.
 instance (GSizeOf f) => GSizeOf (C1 c f) where
-  gsizeOf ver (M1 p) = headerCost + gsizeOf ver p
+  gsizeOf ver (M1 p) = countBytes ver headerCost >> gsizeOf ver p
 
 -- Metainfo about selectors
 instance (GSizeOf f) => GSizeOf (S1 c f) where
@@ -269,7 +349,7 @@ instance (GSizeOf f) => GSizeOf (D1 c f) where
 
 -- Single field, means cost of field + 1 word.
 instance (SizeOf c) => GSizeOf (K1 i c) where
-  gsizeOf ver (K1 c) = sizeOf ver c + wordSize
+  gsizeOf ver (K1 c) = sizeOf ver c >> countBytes ver wordSize
 
 -- No-argument constructors are always shared by ghc
 -- so they don't really allocate.
@@ -278,19 +358,23 @@ instance (SizeOf c) => GSizeOf (K1 i c) where
 -- 0-cost constructor `SizeOf` is caught by the `GSizeOf (C1 c U1)`
 -- instance
 instance GSizeOf U1 where
-  gsizeOf _ U1 = wordSize
+  gsizeOf ver U1 = countBytes ver wordSize
 
 --- Pact-core instances
 -- Putting some of the more annoying GADTs here
 instance SizeOf (FQNameRef name) where
-  sizeOf ver c =  headerCost + wordSize + (case c of
-    FQParsed n -> sizeOf ver n
-    FQName fqn -> sizeOf ver fqn)
+  sizeOf ver c = do
+    countBytes ver (headerCost + wordSize)
+    case c of
+      FQParsed n -> sizeOf ver n
+      FQName fqn -> sizeOf ver fqn
 
 instance SizeOf (TableSchema name) where
-  sizeOf ver c =  headerCost + wordSize + (case c of
-    DesugaredTable n -> sizeOf ver n
-    ResolvedTable fqn -> sizeOf ver fqn)
+  sizeOf ver c = do
+    countBytes ver (headerCost + wordSize)
+    case c of
+      DesugaredTable n -> sizeOf ver n
+      ResolvedTable fqn -> sizeOf ver fqn
 
 instance SizeOf Literal
 deriving newtype instance SizeOf Hash
