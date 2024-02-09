@@ -266,7 +266,6 @@ evaluateTerm cont handler env (CapabilityForm cf info) = do
   case cf of
     WithCapability rawCap body -> do
       enforceNotWithinDefcap info env "with-capability"
-      -- TODO this seems to be an invariant failure at this point since desugar takes care of this check
       let capFrame = WithCapC body
           cont' = CapInvokeC env info capFrame cont
       evalCEK cont' handler env rawCap
