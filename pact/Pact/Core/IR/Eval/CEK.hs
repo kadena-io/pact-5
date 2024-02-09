@@ -617,7 +617,6 @@ nameToFQN info env (Name n nk) = case nk of
       md <- getModule info (view cePactDb env) (_mrModule mr)
       pure (FullyQualifiedName (_mrModule mr) dArg (_mHash md))
     Just _ -> throwExecutionError info (DynNameIsNotModRef dArg)
-    -- TODO this ^ is supposedly caught by the typechecker, so it's an invariant error now
     Nothing -> failInvariant info ("unbound identifier " <> n)
   _ -> failInvariant info ("invalid name in fq position " <> n)
 {-# SPECIALIZE nameToFQN
@@ -946,7 +945,6 @@ enforceNotWithinDefcap
   -> m ()
 enforceNotWithinDefcap info env form =
   when (_ceInCap env) $ throwExecutionError info (FormIllegalWithinDefcap form)
-  -- TODO this seems to be an invariant failure at the point where this is called, since desugar takes care of this
 {-# SPECIALIZE enforceNotWithinDefcap
    :: ()
    -> CoreCEKEnv
