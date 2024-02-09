@@ -1356,8 +1356,8 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         let check' = if wt == Update then checkPartialSchema else checkSchema
         if check' rv (_tvSchema tv) then do
           let rdata = RowData rv
-          chargeGasArgs info (GWrite (sizeOf SizeOfV0 rv))
-          let serializationGasser = chargeGasArgs info . GPassthrough
+          rvSize <- sizeOf SizeOfV2 rv
+          chargeGasArgs info (GWrite rvSize)
           _ <- liftDbFunction2 info $ _pdbWrite pdb serializationGasser wt (tvToDomain tv) rk rdata
           returnCEKValue cont handler (VString "Write succeeded")
         else returnCEK cont handler (VError "object does not match schema" info)
@@ -1420,15 +1420,16 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)
         enforceMeta _ = pure ()
       DefineKeysetC ksn newKs -> do
-        chargeGasArgs info (GWrite (sizeOf SizeOfV0 newKs))
+        newKsSize <- sizeOf SizeOfV2 newKs
+        chargeGasArgs info (GWrite newKsSize)
         liftDbFunction2 info $ writeKeySet pdb Write ksn newKs
         returnCEKValue cont handler (VString "Keyset write success")
       DefineNamespaceC ns -> case v of
         PBool allow ->
           if allow then do
             let nsn = _nsName ns
-            chargeGasArgs info (GWrite (sizeOf SizeOfV0 ns))
-            let serializationGasser = chargeGasArgs info . GPassthrough
+            nsSize <- sizeOf SizeOfV2 ns
+            chargeGasArgs info (GWrite nsSize)
             liftDbFunction2 info $ _pdbWrite pdb serializationGasser Write DNamespaces nsn ns
             returnCEKValue cont handler $ VString $ "Namespace defined: " <> (_namespaceName nsn)
           else throwExecutionError info $ DefineNamespaceError "Namespace definition not permitted"

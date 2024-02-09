@@ -651,7 +651,10 @@ createEnumerateList
   -- ^ Step
   -> m (Vector Integer)
 createEnumerateList info from to inc
-  | from == to = chargeGasArgs info (GMakeList 1 (sizeOf SizeOfV0 from)) *>  pure (V.singleton from)
+  | from == to = do
+    fromSize <- sizeOf SizeOfV0 from
+    chargeGasArgs info (GMakeList 1 fromSize)
+    pure (V.singleton from)
   | inc == 0 = pure mempty -- note: covered by the flat cost
   | from < to, from + inc < from =
     throwExecutionError info (EnumerationError "enumerate: increment diverges below from interval bounds.")
@@ -659,7 +662,8 @@ createEnumerateList info from to inc
     throwExecutionError info (EnumerationError "enumerate: increment diverges above from interval bounds.")
   | otherwise = do
     let len = succ (abs (from - to) `div` abs inc)
-    chargeGasArgs info (GMakeList len (sizeOf SizeOfV0 (max (abs from) (abs to))))
+    listSize <- sizeOf SizeOfV0 (max (abs from) (abs to))
+    chargeGasArgs info (GMakeList len listSize)
     pure $ V.enumFromStepN from inc (fromIntegral len)
 
 coreEnumerateStepN :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -672,7 +676,8 @@ coreEnumerateStepN info b cont handler _env = \case
 makeList :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 makeList info b cont handler _env = \case
   [VLiteral (LInteger i), VPactValue v] -> do
-    chargeGasArgs info (GMakeList (fromIntegral i) (sizeOf SizeOfV0 v))
+    vSize <- sizeOf SizeOfV0 v
+    chargeGasArgs info (GMakeList (fromIntegral i) vSize)
     returnCEKValue cont handler (VList (V.fromList (replicate (fromIntegral i) v)))
   args -> argsError info b args
 
@@ -1101,7 +1106,8 @@ defineKeySet' info cont handler env ksname newKs  = do
     Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
     Right ksn -> do
       let writeKs = do
-            chargeGasArgs info (GWrite (sizeOf SizeOfV0 newKs))
+            newKsSize <- sizeOf SizeOfV0 newKs
+            chargeGasArgs info (GWrite newKsSize)
             liftDbFunction2 info $ writeKeySet pdb Write ksn newKs
             returnCEKValue cont handler (VString "Keyset write success")
       liftDbFunction info (readKeySet pdb ksn) >>= \case
@@ -1635,8 +1641,8 @@ coreDefineNamespace info b cont handler env = \case
         enforceGuard info cont' handler env laoG
       Nothing -> viewEvalEnv eeNamespacePolicy >>= \case
         SimpleNamespacePolicy -> do
-          chargeGasArgs info (GWrite (sizeOf SizeOfV0 ns))
-          let serializationGasser = chargeGasArgs info . GPassthrough
+          nsSize <- sizeOf SizeOfV0 ns
+          chargeGasArgs info (GWrite nsSize)
           liftDbFunction2 info $ _pdbWrite pdb serializationGasser Write DNamespaces nsn ns
           returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
         SmartNamespacePolicy _ fun -> getModuleMember info pdb fun >>= \case
