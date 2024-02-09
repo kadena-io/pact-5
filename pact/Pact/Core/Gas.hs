@@ -166,8 +166,10 @@ data GasArgs
   | GSearch !SearchType
   -- ^ Gas costs for searches
   | GPoseidonHashHackAChain !Int
-  -- ^ poseidon-hash-hack-a-chain costs
+  -- ^ poseidon-hash-hack-a-chain costs.
   | GModuleMemory !Word64
+  | GCountBytes
+  -- ^ Cost of computing SizeOf for N bytes.
   deriving (Show, Generic, NFData)
 
 instance Pretty GasArgs where

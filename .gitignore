@@ -35,3 +35,5 @@ coverage
 hie.yaml
 commands.sqlite
 cabal.project.local*
+.envrc
+.direnv
