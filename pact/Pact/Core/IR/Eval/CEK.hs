@@ -541,10 +541,25 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
     pdb <- viewEvalEnv eePactDb
     dbState <- liftDbFunction i (readDefPacts pdb (_psDefPactId ps))
     case (dbState, crossChainContinuation) of
+
+      -- Terminate defpact in db: always fail
       (Just Nothing, _) -> throwExecutionError i (DefPactAlreadyCompleted ps)
+
+      -- Nothing in db, Nothing in cross-chain continuation: fail
       (Nothing, Nothing) -> throwExecutionError i (NoPreviousDefPactExecutionFound ps)
+
+      -- Nothing in db, Just cross-chain continuation: proceed with cross-chain
       (Nothing, Just ccExec) -> resumeDefPactExec ccExec
+
+      -- Active db record, Nothing chross-chain continuation: proceed with db
       (Just (Just dbExec), Nothing) -> resumeDefPactExec dbExec
+
+      -- Active db record and cross-chain continuation:
+      -- A valid possibility iff this is a flip-flop from another chain, e.g.
+      --   0. This chain: start pact
+      --   1. Other chain: continue pact
+      --   2. This chain: continue pact
+      -- Thus check at least one step skipped.
       (Just (Just dbExec), Just ccExec) -> do
 
         -- Validate CC execution environment progressed far enough
