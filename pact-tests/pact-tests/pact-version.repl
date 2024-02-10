@@ -7,6 +7,12 @@
 (expect "min version in history" true (enforce-pact-version "1.0"))
 (expect "min version in history" true (enforce-pact-version "1.0.100"))
 
+(expect
+  "enforce-pact-version works for current pact version"
+  true
+  (enforce-pact-version (pact-version)))
+
+
 (expect-failure "min and max version in history"
                 (enforce-pact-version "1.0" "2.0"))
 
