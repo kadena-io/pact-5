@@ -96,3 +96,22 @@
 (expect "Demonstrate correct resolution with non-namespace-qualified reference." 1 (f1))
 
 (commit-tx)
+; Regression: the `Plated` instance for
+; `Term` was not correctly traversing all of its subterms (due to an incorrect `nested (plate f)` call)
+; on conditional forms
+(begin-tx)
+(module my-module GOV
+  (defcap GOV () true)
+
+  (defconst CONSTANT true)
+
+  (defun enforce-constant-true:bool ()
+    (enforce CONSTANT "Err: Constant is FALSE"))
+
+  (defun enforce-constant-false:bool ()
+    (enforce (not CONSTANT) "Err: Constant is TRUE"))
+
+)
+(expect "constant true works" true (enforce-constant-true))
+(expect-failure "constant-false worse" (enforce-constant-false))
+(commit-tx)
