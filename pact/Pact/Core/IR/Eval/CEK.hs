@@ -161,12 +161,13 @@ evaluateTerm cont handler env (Var n info)  = do
               clo = CapTokenClosure fqn args (length args) info
           returnCEKValue cont handler (VClosure (CT clo))
         Just d ->
-          throwExecutionError info (InvalidDefKind (defKind d) "in var position")
+          throwExecutionError info (InvalidDefKind (defKind mname d) "in var position")
         Nothing ->
           throwExecutionError info (NameNotInScope (FullyQualifiedName mname (_nName n) mh))
     NModRef m ifs -> case ifs of
       [x] -> returnCEKValue cont handler (VModRef (ModRef m ifs (Just (S.singleton x))))
-      [] -> throwExecutionError info (ModRefNotRefined (_nName n))
+
+      -- [] -> throwExecutionError info (ModRefNotRefined (_nName n))
       _ -> returnCEKValue cont handler (VModRef (ModRef m ifs Nothing))
     NDynRef (DynamicRef dArg i) -> case RAList.lookup (view ceLocal env) i of
       Just (VModRef mr) -> do
@@ -541,10 +542,25 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
     pdb <- viewEvalEnv eePactDb
     dbState <- liftDbFunction i (readDefPacts pdb (_psDefPactId ps))
     case (dbState, crossChainContinuation) of
+
+      -- Terminate defpact in db: always fail
       (Just Nothing, _) -> throwExecutionError i (DefPactAlreadyCompleted ps)
+
+      -- Nothing in db, Nothing in cross-chain continuation: fail
       (Nothing, Nothing) -> throwExecutionError i (NoPreviousDefPactExecutionFound ps)
+
+      -- Nothing in db, Just cross-chain continuation: proceed with cross-chain
       (Nothing, Just ccExec) -> resumeDefPactExec ccExec
+
+      -- Active db record, Nothing chross-chain continuation: proceed with db
       (Just (Just dbExec), Nothing) -> resumeDefPactExec dbExec
+
+      -- Active db record and cross-chain continuation:
+      -- A valid possibility iff this is a flip-flop from another chain, e.g.
+      --   0. This chain: start pact
+      --   1. Other chain: continue pact
+      --   2. This chain: continue pact
+      -- Thus check at least one step skipped.
       (Just (Just dbExec), Just ccExec) -> do
 
         -- Validate CC execution environment progressed far enough
@@ -1418,8 +1434,8 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
       RunKeysetPredC -> case v of
         PBool allow ->
           if allow then returnCEKValue cont handler (VBool True)
-          else returnCEK cont handler (VError "keyset enforce failure" info)
-        _ -> returnCEK cont handler (VError "keyset enforce failure" info)
+          else returnCEK cont handler (VError "Keyset enforce failure" info)
+        _ -> returnCEK cont handler (VError "Keyset enforce failure" info)
       where
       foldDBRead tv queryClo appClo remaining acc =
         case remaining of
@@ -1734,7 +1750,7 @@ getSfName = \case
   Nothing -> "#lambda"
 
 checkSchema :: M.Map Field PactValue -> Schema -> Bool
-checkSchema o (Schema sc) = isJust $ do
+checkSchema o (Schema _ sc) = isJust $ do
   let keys = M.keys o
   when (keys /= M.keys sc) Nothing
   traverse_ go (M.toList o)
@@ -1742,7 +1758,7 @@ checkSchema o (Schema sc) = isJust $ do
   go (k, v) = M.lookup k sc >>= (`checkPvType` v)
 
 checkPartialSchema :: M.Map Field PactValue -> Schema -> Bool
-checkPartialSchema o (Schema sc) =
+checkPartialSchema o (Schema _ sc) =
   M.isSubmapOfBy (\obj ty -> isJust (checkPvType ty obj)) o sc
 
 instance MonadEval b i m => CEKEval CEKSmallStep b i m where
@@ -1865,7 +1881,7 @@ runUserGuard info cont handler env (UserGuard qn args) =
       clo <- mkDefunClosure d (_qnModName qn) env'
       -- Todo: sys only here
       applyLam (C clo) (VPactValue <$> args) (IgnoreValueC (PBool True) cont) handler
-    d -> throwExecutionError info (InvalidDefKind (defKind d) "run-user-guard")
+    d -> throwExecutionError info (InvalidDefKind (defKind (_qnModName qn) d) "run-user-guard")
 {-# SPECIALIZE runUserGuard
    :: ()
    -> CoreCEKCont
@@ -1995,7 +2011,7 @@ isKeysetInSigs info cont handler env (KeySet kskeys ksPred) = do
   count = S.size kskeys
   run p matched =
     if p count matched then returnCEKValue cont handler (VBool True)
-    else returnCEK cont handler (VError "keyset enforce failure" info)
+    else returnCEK cont handler (VError "Keyset enforce failure" info)
   runPred matched =
     case ksPred of
       KeysAll -> run atLeast matched

@@ -38,6 +38,7 @@ import Pact.Core.Compile
 import Pact.Core.Environment
 import Pact.Core.Info
 import Pact.Core.PactValue
+import Pact.Core.Errors
 import Pact.Core.Serialise (serialisePact_repl_spaninfo)
 
 
@@ -51,6 +52,9 @@ import Pact.Core.Repl.BuiltinDocs
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
+import qualified Pact.Core.IR.Eval.CEK as CEK
+
+import qualified Pact.Core.Typed.Infer as Infer
 
 type Repl = ReplM ReplCoreBuiltin
 
@@ -61,7 +65,7 @@ data ReplCompileValue
   | RLoadedDefun Text
   | RLoadedDefConst Text
   | RBuiltinDoc Text
-  | RUserDoc QualifiedName (Maybe Text)
+  | RUserDoc (EvalDef ReplCoreBuiltin SpanInfo) (Maybe Text)
   deriving Show
 
 loadFile
@@ -88,6 +92,21 @@ interpretReplProgramSmallStep
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
 interpretReplProgramSmallStep = interpretReplProgram' (replBuiltinEnv @CEKSmallStep)
 
+handleTypecheck
+  :: EvalTopLevel ReplCoreBuiltin SpanInfo
+  -> ReplM ReplCoreBuiltin ()
+handleTypecheck toplevel = do
+  v <- use replTyEnv
+  lo <- use loaded
+  let tcs = _rtcState v
+  when (_rtcEnabled v) $ do
+    let (tl', tcs') = Infer.runInferTopLevel lo tcs toplevel
+    case tl' of
+      Left err -> do
+        let errMsg = T.pack (show err)
+        when (_rtcFatal v) $ throwExecutionError (topLevelInfo toplevel) (EvalError errMsg)
+      Right _ -> do
+        replTyEnv.rtcState .= tcs'
 
 interpretReplProgram'
   :: (CEKEval step ReplCoreBuiltin SpanInfo Repl)
@@ -113,7 +132,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
         pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
         oldEE <- use replEvalEnv
         when reset $ do
-          ee <- liftIO (defaultEvalEnv pactdb replcoreBuiltinMap)
+          ee <- liftIO (defaultEvalEnv pactdb replCoreBuiltinMap)
           evalState .= def
           replEvalEnv .= ee
         fp <- mangleFilePath (T.unpack txt)
@@ -136,11 +155,17 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
       Nothing -> do
         functionDocs toplevel
         (ds, deps) <- compileDesugarOnly replEnv toplevel
+        handleTypecheck ds
         case ds of
-          TLTerm (Var (Name n (NTopLevel mn _)) _) -> do
-            let qn = QualifiedName n mn
-            docs <- uses replUserDocs (M.lookup qn)
-            displayValue (RUserDoc qn docs)
+          TLTerm (Var (Name n (NTopLevel mn mh)) varI) -> do
+            let fqn = FullyQualifiedName mn n mh
+            lookupFqName fqn >>= \case
+              Just d -> do
+                let qn = QualifiedName n mn
+                docs <- uses replUserDocs (M.lookup qn)
+                displayValue (RUserDoc d docs)
+              Nothing ->
+                failInvariant varI "repl invariant violated: resolved to a top level free variable without a binder"
           _ -> do
             v <- evalTopLevel replEnv ds deps
             displayValue (RCompileValue v)
@@ -154,7 +179,15 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
         let fqn = FullyQualifiedName replModuleName (_dfunName df) replModuleHash
         loaded . loAllLoaded %= M.insert fqn (Dfun df)
         displayValue $ RLoadedDefun $ _dfunName df
-      RTLDefConst dc -> do
-        let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
-        loaded . loAllLoaded %= M.insert fqn (DConst dc)
-        displayValue $ RLoadedDefConst $ _dcName dc
+      RTLDefConst dc -> case _dcTerm dc of
+        TermConst term -> do
+          pv <- CEK.eval PSysOnly replEnv term
+          pv' <- maybeTCType (_dcInfo dc) pv (_dcType dc)
+          let dc' = set dcTerm (EvaledConst pv') dc
+          let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
+          loaded . loAllLoaded %= M.insert fqn (DConst dc')
+          displayValue $ RLoadedDefConst $ _dcName dc'
+        EvaledConst _ -> do
+          let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
+          loaded . loAllLoaded %= M.insert fqn (DConst dc)
+          displayValue $ RLoadedDefConst $ _dcName dc

@@ -91,10 +91,10 @@ instance Pretty PactValue where
     PObject o ->
       braces $ hsep $ punctuate comma (objPair <$> M.toList o)
       where
-      objPair (f, t) = pretty f <> ":" <> pretty t
+      objPair (f, t) = dquotes (pretty f) <> ":" <> pretty t
     PModRef md -> pretty md
     PCapToken (CapToken fqn args) ->
-      parens (pretty fqn) <> if null args then mempty else hsep (pretty <$> args)
+      parens (pretty (fqnToQualName fqn)) <> if null args then mempty else hsep (pretty <$> args)
     PTime t -> pretty (PactTime.formatTime "%Y-%m-%d %H:%M:%S%Q %Z" t)
 
 synthesizePvType :: PactValue -> Type
@@ -120,13 +120,13 @@ checkPvType ty = \case
     | otherwise -> Nothing
   PObject o -> case ty of
     -- Todo: gas
-    TyObject (Schema sc) ->
+    TyObject (Schema n sc) ->
       let tyList = M.toList sc
           oList = M.toList o
       in tcObj oList tyList
       where
       tcObj l1 l2
-        | length l1 == length l2 = TyObject . Schema . M.fromList <$> zipWithM mcheck l1 l2
+        | length l1 == length l2 = TyObject . Schema n . M.fromList <$> zipWithM mcheck l1 l2
         | otherwise = Nothing
       mcheck (f1, pv) (f2, t)
         | f1 == f2 = (f1,) <$> checkPvType t pv

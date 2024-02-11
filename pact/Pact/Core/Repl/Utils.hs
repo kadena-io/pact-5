@@ -30,11 +30,16 @@ module Pact.Core.Repl.Utils
  , replCompletion
  , replCurrSource
  , replTx
+ , replTyEnv
  , ReplAction(..)
  , parseReplAction
  , prettyReplFlag
  , replError
  , SourceCode(..)
+ , ReplTypecheckEnv(..)
+ , rtcEnabled
+ , rtcState
+ , rtcFatal
  ) where
 
 import Control.Lens
@@ -51,6 +56,7 @@ import Data.Text(Text)
 import Data.List(isPrefixOf)
 import Data.Maybe(mapMaybe)
 import Data.Map.Strict(Map)
+import Data.Default
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
@@ -66,8 +72,11 @@ import Pact.Core.Gas
 import Pact.Core.Errors
 import Pact.Core.Debug
 import Pact.Core.Environment
+import Pact.Core.Builtin
 import qualified Pact.Core.IR.Term as Term
 import qualified Pact.Core.Syntax.ParseTree as Syntax
+
+import qualified Pact.Core.Typed.Infer as Typed
 
 import System.Console.Haskeline.Completion
 
@@ -115,6 +124,15 @@ instance MonadState (ReplState b) (ReplM b)  where
   get = ReplT (ExceptT (Right <$> ReaderT readIORef))
   put rs = ReplT (ExceptT (Right <$> ReaderT (`writeIORef` rs)))
 
+data ReplTypecheckEnv
+  = ReplTypecheckEnv
+  { _rtcEnabled :: Bool
+  , _rtcFatal :: Bool
+  , _rtcState :: Typed.TCState ReplCoreBuiltin SpanInfo
+  } deriving (Show)
+
+instance Default ReplTypecheckEnv where
+  def = ReplTypecheckEnv False False def
 
 -- | Passed in repl environment
 data ReplState b
@@ -133,9 +151,13 @@ data ReplState b
   -- ^ Used by LSP Server, reflects the span information
   --   of the TL definitions for the qualified name.
   , _replTx :: Maybe (TxId, Maybe Text)
+  -- ^ The current repl tx info
+  , _replTyEnv :: ReplTypecheckEnv
+  -- ^ the repl typecheck environment
   }
 
 makeLenses ''ReplState
+makeLenses ''ReplTypecheckEnv
 
 instance MonadEvalEnv b SpanInfo (ReplM b) where
   readEnv = use replEvalEnv

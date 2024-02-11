@@ -13,14 +13,12 @@ module Pact.Core.Typed.Type where
 
 import Control.Lens
 import Control.DeepSeq
-import Data.List
 import Data.Void
 import Data.Set(Set)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 import GHC.Generics
 
-import qualified Data.Text as T
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
@@ -67,9 +65,9 @@ liftCoreType = \case
   CoreType.TyList t ->
     TyList $ liftCoreType t
   CoreType.TyModRef mns -> TyModRef mns
-  CoreType.TyObject (CoreType.Schema m) ->
+  CoreType.TyObject (CoreType.Schema _qn m) ->
     TyObject $ RowConcrete $ liftCoreType <$> m
-  CoreType.TyTable (CoreType.Schema m) ->
+  CoreType.TyTable (CoreType.Schema _qn m) ->
     TyObject $ RowConcrete $ liftCoreType <$> m
   _ -> error "unsupported type for typechecking"
 
@@ -115,9 +113,11 @@ data PactKind
   | UserDefKind
   deriving (Show, Eq)
 
-newtype Schema
-  = Schema { _schema :: Map Field (Type Void) }
-  deriving (Eq, Show, NFData)
+data Schema
+  = Schema QualifiedName (Map Field (Type Void))
+  deriving (Eq, Show, Generic)
+
+instance NFData Schema
 
 data TypeVar n
   = TypeVar n PactKind
@@ -236,7 +236,7 @@ pattern l :~> r = TyFun l r
 
 infixr 5 :~>
 
-instance (Show ty, Pretty ty) => Pretty (BuiltinTC ty) where
+instance (Pretty ty) => Pretty (BuiltinTC ty) where
   pretty = \case
     Eq t -> "Eq" <> Pretty.braces (pretty t)
     Ord t -> "Ord" <> Pretty.braces (pretty t)
@@ -246,16 +246,32 @@ instance (Show ty, Pretty ty) => Pretty (BuiltinTC ty) where
     ListLike t -> "ListLike" <> Pretty.braces (pretty t)
     Fractional t -> "Fractional" <> Pretty.braces (pretty t)
     EnforceRead t -> "EnforceRead" <> Pretty.braces (pretty t)
-    e -> pretty (show e)
+    EqRow t -> "EqRow" <> Pretty.braces (pretty t)
+    RoseSubRow _ _ -> "WIP:RoseSubRow"
 
 -- Note, no superclasses, for now
 newtype Pred tv
   = Pred (BuiltinTC tv)
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
+instance Pretty ty => Pretty (Pred ty) where
+  pretty (Pred ty) = pretty ty
+
+
 data TypeScheme tv =
   TypeScheme [tv] [Pred (Type tv)]  (Type tv)
   deriving Show
+
+instance Pretty ty => Pretty (TypeScheme ty) where
+  pretty (TypeScheme tvs preds ty) =
+    case tvs of
+      [] -> pretty ty
+      _ ->
+        "forall"
+          <+> Pretty.parens (Pretty.commaSep tvs)
+          <> "."
+          <> if null preds then mempty else (" " <> Pretty.parens (Pretty.commaSep preds))
+          <+> pretty ty
 
 pattern NonGeneric :: Type tyname -> TypeScheme tyname
 pattern NonGeneric ty = TypeScheme [] [] ty

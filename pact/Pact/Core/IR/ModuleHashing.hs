@@ -110,7 +110,7 @@ encodeModule (Module mname mgov defs mblessed imports mimps _mh _mi) = parens $
   <> (if null mblessed then mempty else hsep (encodeBless <$> S.toList mblessed))
   <> (if null imports then mempty else hsep (encodeImport <$> imports) )
   <> (if null mimps then mempty else hsep (encodeModuleName <$> mimps))
-  <> hsep (encodeDef <$> defs)
+  <> hsep (encodeDef mname <$> defs)
   where
   encodeGov :: Governance Name -> Builder
   encodeGov (KeyGov (KeySetName name mNs)) = encodeMNamespace mNs <> encodeText name
@@ -126,7 +126,7 @@ encodeInterface (Interface ifn idefs imports _h _i) = parens $
   "interface"
   <+> encodeModuleName ifn
   <> (if null imports then mempty else hsep (encodeImport <$> imports) )
-  <> hsep (encodeIfDef <$> idefs)
+  <> hsep (encodeIfDef ifn <$> idefs)
 
 encodeText :: T.Text -> Builder
 encodeText = T.encodeUtf8Builder
@@ -223,11 +223,8 @@ encodeApp operator operands =
   parens $ hsep (operator:operands)
 
 encodeSchema :: Schema -> Builder
-encodeSchema (Schema sc) =
-  hsep (encodePair <$> M.toList sc)
-  where
-  encodePair (Field f, ty) =
-    T.encodeUtf8Builder f <> ":" <> encodeType ty
+encodeSchema (Schema n _sc) =
+  encodeQualName n
 
 encodePrim :: PrimType -> Builder
 encodePrim = \case
@@ -330,12 +327,12 @@ encodeTerm = \case
 encodeTyAnn :: Maybe Type -> Builder
 encodeTyAnn = maybe mempty ((":" <>) . encodeType)
 
-encodeDef :: IsBuiltin b => Def Name Type b i -> Builder
-encodeDef = \case
+encodeDef :: IsBuiltin b => ModuleName -> Def Name Type b i -> Builder
+encodeDef mn = \case
   Dfun d -> encodeDefun d
   DConst d -> encodeDefConst d
   DCap d -> encodeDefCap d
-  DSchema s -> encodeDefSchema s
+  DSchema s -> encodeDefSchema mn s
   DTable d -> encodeDefTable d
   DPact d -> encodeDefPact d
 
@@ -364,9 +361,9 @@ encodeDefCap :: IsBuiltin b => DefCap Name Type b i -> Builder
 encodeDefCap (DefCap dn args rty term _meta _info) = parens $
   "defcap" <+> encodeText dn <> encodeTyAnn rty <+> encodeArgList args <+> encodeTerm term
 
-encodeDefSchema :: DefSchema Type info -> Builder
-encodeDefSchema (DefSchema dcn sch _i) =
-  parens $ "defschema" <+> encodeText dcn <+> encodeSchema (Schema sch)
+encodeDefSchema :: ModuleName -> DefSchema Type info -> Builder
+encodeDefSchema mn (DefSchema dcn sch _i) =
+  parens $ "defschema" <+> encodeText dcn <+> encodeSchema (Schema (QualifiedName dcn mn) sch)
 
 encodeDefTable :: DefTable Name info -> Builder
 encodeDefTable (DefTable dtn (ResolvedTable sc) _i) = parens $
@@ -385,10 +382,10 @@ encodeIfDefPact :: IfDefPact Type info -> Builder
 encodeIfDefPact (IfDefPact dn args rty _i) = parens $
   "defpact" <+> encodeText dn <> encodeTyAnn rty <+> encodeArgList args
 
-encodeIfDef :: IsBuiltin b => IfDef Name Type b i -> Builder
-encodeIfDef = \case
+encodeIfDef :: IsBuiltin b => ModuleName -> IfDef Name Type b i -> Builder
+encodeIfDef mn = \case
   IfDfun df -> encodeIfDefun df
   IfDCap dc -> encodeIfDefCap dc
   IfDPact dp -> encodeIfDefPact dp
   IfDConst dc -> encodeDefConst dc
-  IfDSchema dc -> encodeDefSchema dc
+  IfDSchema dc -> encodeDefSchema mn dc

@@ -525,7 +525,7 @@
 (install-capability (C "alice" 0 true))
 (expect-failure
  "Autonomous install on unscoped user sig cannot acquire"
- "Keyset failure"
+ "Keyset enforce failure"
  (go "alice" 0))
 
 ;; scenario: autonomous install, but fails anyway because call is not from module.
@@ -552,7 +552,7 @@
 (install-capability (C "bob" 1 true))
 (expect-failure
  "Attack with different parameters than signature cap fails"
- "Keyset failure"
+ "Keyset enforce failure"
  (go "bob" 1))
 
 (commit-tx)
@@ -584,7 +584,7 @@
 ;; scenario: alice signs caps, only works in non-managed cap
 (env-sigs [{ "key": "alice", "caps": [(GUARD "alice-keyset")]}])
 (expect "cap-scoped works with cap" true (enforce-cap "alice-keyset"))
-(expect-failure "cap-scoped does not work without cap" "Keyset failure"
+(expect-failure "cap-scoped does not work without cap" "Keyset enforce failure"
                 (enforce-wo-cap "alice-keyset"))
 
 
@@ -644,7 +644,7 @@
 
 (expect-failure
  "auto managed fails after first time"
- "Capability already fired"
+ "Automanaged capability used more than once"
  (doA "auto-a"))
 
 (expect
@@ -815,7 +815,7 @@
 
 (expect-failure
  "cap guard fails on wrong cap"
- "Capability not acquired"
+ "Capability guard enforce failure cap not in scope"
  (test-cap-guard "A" "B"))
 
 (env-hash (hash 1))
@@ -832,7 +832,7 @@
 (cg-pact 'k2 'k2 "D" "E")
 (expect-failure
  "cap pact guard fails on wrong cap"
- "Capability not acquired"
+ "Capability guard enforce failure cap not in scope"
  (continue-pact 1))
 
 (pact-state true)
@@ -841,7 +841,7 @@
 (cg-pact 'k3 'k1 "C" "C")
 (expect-failure
  "cap pact guard fails on wrong pact id"
- "Invalid Pact ID"
+ "Capability pact guard failed: invalid pact id"
  (continue-pact 1))
 (commit-tx)
 
@@ -915,7 +915,7 @@
 
 (expect-failure
   "out-of-band call fails"
-  "Capability not acquired"
+  "Capability guard enforce failure cap not in scope"
   (call-op1 "hello" 2))
 (expect
    "normal case succeeds for both callees post-fork"

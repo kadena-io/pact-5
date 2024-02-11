@@ -23,14 +23,14 @@
 --
 -- HM type inference for core IR.
 --
-module Pact.Core.Typed.Infer where
---  ( runInferTerm
---  , runInferTermNonGen
---  , runInferModule
---  , runInferTopLevel
---  , runInferReplTopLevel
---  , TypeOfBuiltin(..)
---  ) where
+module Pact.Core.Typed.Infer
+ ( runInferTerm
+ , runInferTopLevel
+ , runInferModule
+ , runInferReplTopLevel
+ , TypeOfBuiltin(..)
+ , TCState(..)
+ ) where
 
 import Control.Lens hiding (Level)
 import Control.Monad
@@ -44,12 +44,10 @@ import Data.Void
 -- import Data.Dynamic (Typeable)
 import Data.RAList(RAList)
 import Data.Foldable(traverse_, foldlM)
-import Data.Functor(($>))
+import Data.Default
 import Data.STRef
-import Data.Maybe(mapMaybe)
 import Data.Map(Map)
 import Data.Text(Text)
-import Data.List.NonEmpty(NonEmpty(..))
 
 import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
@@ -59,20 +57,16 @@ import qualified Data.Set as Set
 
 import Pact.Core.Builtin
 import Pact.Core.Names
-import Pact.Core.Errors
 import Pact.Core.Persistence
 import Pact.Core.Capabilities
 import Pact.Core.ModRefs
-import qualified Pact.Core.IR.Term as IR
-import qualified Pact.Core.Type as IR
--- import qualified Pact.Core.Term as Typed
-
 import Pact.Core.Typed.Term
 import Pact.Core.Typed.Type
-import GHC.IO (unsafePerformIO)
-import Control.Monad.ST.Unsafe (unsafeSTToIO)
 import Pact.Core.PactValue
-import Pact.Core.Hash (ModuleHash)
+import Pact.Core.Hash
+
+import qualified Pact.Core.IR.Term as IR
+import qualified Pact.Core.Type as IR
 
 -- inference based on https://okmij.org/ftp/ML/generalization.html
 -- Note: Type inference levels in the types
@@ -111,21 +105,28 @@ data TCEnv s b i
   -- ^ Builtins map, that uses the enum instance
   , _tcLevel :: STRef s Level
   -- ^ Type Variable "Region"
+  , _tcLoaded :: Loaded b i
   }
 
 makeLenses ''TCEnv
 
-newtype TCState
-  = TCState { _tcFree :: Map FullyQualifiedName (Type Void) }
+data TCState b i
+  = TCState
+  { _tcFree :: Map FullyQualifiedName (Type Void)
+  , _tcInterfaces :: Map ModuleName (Interface Name Void b i)
+  }
   deriving Show
   -- ^ Free variables
+
+instance Default (TCState b i) where
+  def = TCState mempty mempty
 
 makeLenses ''TCState
 
 -- | Term emitted by desugar
 type IRTerm b i = IR.Term Name IR.Type b i
 type IRTopLevel b i = IR.TopLevel Name IR.Type b i
-type IRModule b i = IR.Module Name b i
+type IRModule b i = IR.Module Name IR.Type b i
 type IRInterface b i = IR.Interface Name b i
 
 -- | Term emitted by the typechecker prior to final generalization/unification.
@@ -162,13 +163,13 @@ data TypecheckFailure i
 -- | Our inference monad, where we can plumb through generalization "regions",
 -- our variable environment and our "supply" of unique names
 newtype InferM s b i a =
-  InferT (ExceptT (TypecheckFailure i) (ReaderT (TCEnv s b i) (StateT TCState (ST s))) a)
+  InferM (ExceptT (TypecheckFailure i) (ReaderT (TCEnv s b i) (StateT (TCState b i) (ST s))) a)
   deriving
     ( Functor, Applicative, Monad
     , MonadReader (TCEnv s b i)
-    , MonadState TCState
+    , MonadState (TCState b i)
     , MonadError (TypecheckFailure i))
-  via (ExceptT (TypecheckFailure i) (ReaderT (TCEnv s b i) (StateT TCState (ST s))))
+  via (ExceptT (TypecheckFailure i) (ReaderT (TCEnv s b i) (StateT (TCState b i) (ST s))))
 
 class TypeOfBuiltin b where
   typeOfBuiltin :: b -> TypeScheme DebruijnTypeVar
@@ -542,6 +543,7 @@ instance TypeOfBuiltin CoreBuiltin where
       error "todo: support function"
     CoreDec ->
       error "todo: support function"
+    CoreCond -> error "todo: nothing"
     where
     nd = flip TypeVariable
     unaryNumType =
@@ -604,10 +606,10 @@ instance TypeOfBuiltin b => TypeOfBuiltin (ReplBuiltin b) where
     --   in TypeScheme [aVar] [Pred Show aTv] (aTv :~> TyUnit)
 
 liftST :: ST s a -> InferM s b i a
-liftST action = InferT $ lift $ lift $ lift action
+liftST action = InferM $ lift $ lift $ lift action
 
--- throwTypecheckError :: TypecheckError -> i -> InferM s b i a
--- throwTypecheckError te = throwError . PETypecheckError te
+throwTypecheckError :: i -> Text -> InferM s b i a
+throwTypecheckError i msg = throwError (TypecheckFailure msg i)
 
 -- _dbgTypedTerm
 --   :: TCTerm s b i
@@ -752,7 +754,9 @@ byInst (Pred p) = case p of
   Show ty -> showInst ty
   ListLike ty -> listLikeInst ty
   Fractional ty -> fractionalInst ty
-  _ -> error "boom"
+  EnforceRead{} -> error "todo: implement"
+  EqRow{} -> error "todo: eqrow"
+  RoseSubRow{} -> error "todo: rosesubrow"
 
 -- | Instances of Eq:
 --
@@ -1346,11 +1350,11 @@ checkTermType checkty = \case
       pure (TyGuard, CreateUserGuard ne args', pe1)
   -- Todo: numeric integer literal inference
   IR.Constant lit i -> case lit of
-    LInteger{} -> do
-      tv <- TyVar . (`TypeVar` TyKind) <$> newTvRef
-      let p = Pred (Num tv)
-      unify i checkty tv
-      pure (tv, Constant lit i, [p])
+    -- LInteger{} -> do
+    --   tv <- TyVar . (`TypeVar` TyKind) <$> newTvRef
+    --   let p = Pred (Num tv)
+    --   unify i checkty tv
+    --   pure (tv, Constant lit i, [p])
     _ -> do
       let ty = typeOfLit lit
       unify i checkty ty
@@ -1654,9 +1658,18 @@ inferDefCap mn mh (IR.DefCap name args rty term meta i) = do
   tcFree %= M.insert (FullyQualifiedName mn name mh) capRty
   pure (DefCap name argsF rtyf fterm meta i)
 
-inferTable mn mh (IR.DefTable tn schema info) = do
+inferTable
+  :: ModuleName
+  -> ModuleHash
+  -> IR.DefTable Name i
+  -> InferM s b i (DefTable i)
+inferTable mn mh (IR.DefTable tn (IR.ResolvedTable (IR.Schema qn schema)) info) = do
   let schema' = liftCoreType <$> schema
-  pure (DefTable)
+  tcFree %= M.insert (FullyQualifiedName mn tn mh) (TyTable (RowConcrete schema'))
+  pure (DefTable tn (Schema qn schema') info)
+
+inferDefSchema :: IR.DefSchema IR.Type info -> DefSchema ty info
+inferDefSchema (IR.DefSchema n ds i) = DefSchema n (liftCoreType <$> ds) i
 
 inferDef
   :: TypeOfBuiltin b
@@ -1668,19 +1681,14 @@ inferDef mn mh = \case
   IR.Dfun d -> Dfun <$> inferDefun mn mh d
   IR.DConst d -> DConst <$> inferDefConst mn mh d
   IR.DCap dc -> DCap <$> inferDefCap mn mh dc
-  IR.DTable tbl  -> inferTable
+  IR.DTable tbl -> DTable <$> inferTable mn mh tbl
+  IR.DSchema s -> pure $ DSchema (inferDefSchema s)
+  IR.DPact{} -> error "todo: defpacts"
 
--- inferIfDef
---   :: TypeOfBuiltin b
---   => IR.IfDef Name IR.Type b i
---   -> InferM s b' i (TypedIfDef b i)
--- inferIfDef = \case
---   IR.IfDfun ifd ->
---     pure (IfDfun (IfDefun (IR._ifdName ifd) (IR._ifdType ifd) (IR._ifdInfo ifd)))
---   IR.IfDConst dc ->
---     IfDConst <$> inferDefConst dc
---   IR.IfDCap (IR.IfDefCap n argtys rty i) ->
---     pure $ IfDCap (IfDefCap n argtys rty i)
+inferIfDef
+  :: IR.IfDef Name IR.Type b i
+  -> InferM s b' i (TypedIfDef b i)
+inferIfDef = error "todo: implement"
 
 inferModule
   :: TypeOfBuiltin b
@@ -1735,51 +1743,22 @@ inferTopLevel
 inferTopLevel = \case
   IR.TLModule m ->
     TLModule <$> inferModule m
-    -- tcm <- inferModule m
-    -- let toFqn df = FullyQualifiedName (_mName tcm) (defName df) (_mHash tcm)
-    --     newTLs = M.fromList $ (\df -> (toFqn df, defType df)) <$> _mDefs tcm
-    --     loaded' = over loAllTyped (M.union newTLs) loaded
-    -- pure (TLModule tcm, loaded')
   IR.TLTerm m -> TLTerm . snd <$> inferTermNonGen m
-  IR.TLInterface i -> undefined
-    -- tci <- inferInterface i
-    -- let toFqn dc = FullyQualifiedName (_ifName tci) (_dcName dc) (_ifHash tci)
-    --     newTLs = M.fromList $ fmap (\df -> (toFqn df, DefunType (_dcType df))) $ mapMaybe (preview _IfDConst) (_ifDefns tci)
-    --     loaded' = over loAllTyped (M.union newTLs) loaded
-    -- pure (TLInterface tci, loaded')
+  IR.TLInterface _i -> undefined
   IR.TLUse tl i -> pure (TLUse tl i)
 
--- inferReplTopLevel
---   :: TypeOfBuiltin b
---   => Loaded reso i
---   -> IR.ReplTopLevel Name b i
---   -> InferM s reso i (TypedReplTopLevel b i, Loaded reso i)
--- inferReplTopLevel loaded = \case
---   IR.RTLModule m ->  do
---     tcm <- inferModule m
---     let toFqn df = FullyQualifiedName (_mName tcm) (defName df) (_mHash tcm)
---         newTLs = M.fromList $ (\df -> (toFqn df, defType df)) <$> _mDefs tcm
---         loaded' = over loAllTyped (M.union newTLs) loaded
---     pure (RTLModule tcm, loaded')
---   IR.RTLTerm m -> (, loaded) . RTLTerm . snd <$> inferTermNonGen m
---   -- Todo: if we don't update the module hash to update linking,
---   -- repl defuns and defconsts will break invariants about
---   IR.RTLDefun dfn -> do
---     dfn' <- inferDefun dfn
---     let newFqn = FullyQualifiedName replModuleName (_dfunName dfn') replModuleHash
---     let loaded' = over loAllTyped (M.insert newFqn (DefunType (_dfunType dfn'))) loaded
---     pure (RTLDefun dfn', loaded')
---   IR.RTLDefConst dconst -> do
---     dc <- inferDefConst dconst
---     let newFqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
---     let loaded' = over loAllTyped (M.insert newFqn (DefunType (_dcType dc))) loaded
---     pure (RTLDefConst dc, loaded')
---   IR.RTLInterface i -> do
---     tci <- inferInterface i
---     let toFqn dc = FullyQualifiedName (_ifName tci) (_dcName dc) (_ifHash tci)
---         newTLs = M.fromList $ fmap (\df -> (toFqn df, DefunType (_dcType df))) $ mapMaybe (preview _IfDConst) (_ifDefns tci)
---         loaded' = over loAllTyped (M.union newTLs) loaded
---     pure (RTLInterface tci, loaded')
+inferReplTopLevel
+  :: TypeOfBuiltin b
+  => IR.ReplTopLevel Name IR.Type b i
+  -> InferM s b i (TypedReplTopLevel b i)
+inferReplTopLevel = \case
+  IR.RTLDefun dfn -> do
+    dfn' <- inferDefun replModuleName replModuleHash dfn
+    pure (RTLDefun dfn')
+  IR.RTLDefConst dconst -> do
+    dc <- inferDefConst replModuleName replModuleHash dconst
+    pure (RTLDefConst dc)
+
 
 
 -- | Transform types into their debruijn-indexed version
@@ -2023,23 +2002,25 @@ dbjTyp _i env = go
 -- --   mdefs =  Un_mDefs . _mdModule <$> tl
 -- --   in M.fromList . fmap toTy <$> mdefs
 
--- runInfer
---   :: Loaded b i
---   -> InferM s b i a
---   -> ST s (Either (PactError i) a)
--- runInfer loaded (InferT act) = do
---   uref <- newSTRef 0
---   lref <- newSTRef 1
---   let tcs = TCState uref mempty (_loAllTyped loaded) lref (_loModules loaded)
---   runReaderT (runExceptT act) tcs
+runInfer
+  :: Loaded b i
+  -> TCState b i
+  -> InferM s b i a
+  -> ST s (Either (TypecheckFailure i) a, TCState b i)
+runInfer lo tcs (InferM act) = do
+  uref <- newSTRef 0
+  lref <- newSTRef 1
+  let env = TCEnv uref mempty lref lo
+  runStateT (runReaderT (runExceptT act) env) tcs
 
--- runInferTerm
---   :: TypeOfBuiltin b
---   => Loaded b' i
---   -> IRTerm b i
---   -> Either (PactError i) (TypeScheme NamedDeBruijn, TypedGenTerm b i)
--- runInferTerm loaded term0 = runST $
---   runInfer loaded $ inferTermGen term0
+runInferTerm
+  :: TypeOfBuiltin b
+  => Loaded b i
+  -> TCState b i
+  -> IRTerm b i
+  -> Either (TypecheckFailure i) (TypeScheme NamedDeBruijn, TypedTerm b i)
+runInferTerm lo tcs term0 =
+  fst $ runST $ runInfer lo tcs (inferTermNonGen term0)
 
 -- runInferTermNonGen
 --   :: TypeOfBuiltin b
@@ -2049,27 +2030,30 @@ dbjTyp _i env = go
 -- runInferTermNonGen loaded term0 = runST $
 --   runInfer loaded $ inferTermNonGen term0
 
--- runInferModule
---   :: TypeOfBuiltin b
---   => Loaded b' i
---   -> IRModule b i
---   -> Either (PactError i) (TypedModule b i)
--- runInferModule loaded term0 =
---   runST $ runInfer loaded (inferModule term0)
+runInferModule
+  :: TypeOfBuiltin b
+  => Loaded b i
+  -> TCState b i
+  -> IRModule b i
+  -> (Either (TypecheckFailure i) (TypedModule b i), TCState b i)
+runInferModule lo tcs m =
+  runST $ runInfer lo tcs (inferModule m)
 
--- runInferTopLevel
---   :: TypeOfBuiltin b
---   => Loaded reso i
---   -> IR.TopLevel Name b i
---   -> Either (PactError i) (TypedTopLevel b i, Loaded reso i)
--- runInferTopLevel l tl =
---   runST $ runInfer l (inferTopLevel l tl)
+runInferTopLevel
+  :: TypeOfBuiltin b
+  => Loaded b i
+  -> TCState b i
+  -> IR.TopLevel Name IR.Type b i
+  -> (Either (TypecheckFailure i) (TypedTopLevel b i), TCState b i)
+runInferTopLevel l tcs tl =
+  runST $ runInfer l tcs (inferTopLevel tl)
 
 
--- runInferReplTopLevel
---   :: TypeOfBuiltin b
---   => Loaded reso i
---   -> IR.ReplTopLevel Name b i
---   -> Either (PactError i) (TypedReplTopLevel b i, Loaded reso i)
--- runInferReplTopLevel l tl =
---   runST $ runInfer l (inferReplTopLevel l tl)
+runInferReplTopLevel
+  :: TypeOfBuiltin b
+  => Loaded b i
+  -> TCState b i
+  -> IR.ReplTopLevel Name IR.Type b i
+  -> (Either (TypecheckFailure i) (TypedReplTopLevel b i), TCState b i)
+runInferReplTopLevel l tcs tl =
+  runST $ runInfer l tcs (inferReplTopLevel tl)

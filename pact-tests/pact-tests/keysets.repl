@@ -130,7 +130,7 @@
 
 (expect-failure
   "keyset definition parsing is not permissive post-pact-4.4 - define-keyset"
-  "namespace"
+  "Cannot define a keyset outside"
   (define-keyset "TEST <2>."))
 
 (expect-failure

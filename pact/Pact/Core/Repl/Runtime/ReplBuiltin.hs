@@ -6,7 +6,7 @@
 module Pact.Core.Repl.Runtime.ReplBuiltin where
 
 import Control.Lens
-import Control.Monad(when)
+import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Class(liftIO)
 import Data.Default
@@ -37,10 +37,13 @@ import Pact.Core.Persistence
 import Pact.Core.IR.Term
 import Pact.Core.Info
 import Pact.Core.Namespace
+import Pact.Core.ModRefs
 
 import qualified PackageInfo_pact_tng as PI
 import qualified Data.Version as V
 import qualified Data.Attoparsec.Text as A
+
+import qualified Pact.Core.Typed.Infer as Infer
 
 
 import Pact.Core.Repl.Utils
@@ -100,23 +103,26 @@ coreExpectThat info b cont handler _env = \case
 
 coreExpectFailure :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 coreExpectFailure info b cont handler _env = \case
-  [VLiteral (LString toMatch), VClosure vclo] -> do
+  [VString doc, VClosure vclo] -> do
     es <- getEvalState
     tryError (applyLamUnsafe vclo [] Mt CEKNoHandler) >>= \case
       Right (VError _ _) -> do
         putEvalState es
-        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
+        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> doc
       Left _err -> do
         putEvalState es
-        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
+        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> doc
       Right _ ->
-        returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result"
+        returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> doc <> ": expected failure, got result"
   [VString desc, VString toMatch, VClosure vclo] -> do
     es <- getEvalState
     tryError (applyLamUnsafe vclo [] Mt CEKNoHandler) >>= \case
-      Right (VError _ _) -> do
+      Right (VError err _) -> do
         putEvalState es
-        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
+        if toMatch `T.isInfixOf` err
+          then returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
+          else returnCEKValue cont handler $ VLiteral $ LString $
+               "FAILURE: " <> desc <> ": expected error message '" <> toMatch <> "', got '" <> err <> "'"
       Left _err -> do
         putEvalState es
         returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
@@ -479,6 +485,50 @@ coreEnforceVersion info b cont handler _env = \case
         Left _msg -> throwExecutionError info (EnforcePactVersionParseFailure s)
         Right li -> pure (V.makeVersion li)
 
+coreEnvEnableTypechecking :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+coreEnvEnableTypechecking info b cont handler _env = \case
+  [VBool enabled] ->
+    enableTC enabled "warn" >>= returnCEKValue cont handler . VString
+  [VBool enabled, VString mode] ->
+    enableTC enabled mode >>= returnCEKValue cont handler . VString
+  args -> argsError info b args
+  where
+  enableTC :: Bool -> Text -> ReplM ReplCoreBuiltin Text
+  enableTC enabled mode = do
+    unless (mode `elem` ["warn", "fatal"]) $
+      throwExecutionError info (EvalError "invalid typecheck failure mode")
+    (replTyEnv . rtcEnabled) .= enabled
+    (replTyEnv . rtcFatal) .= (mode == "fatal")
+    if enabled then pure "typechecking enabled"
+    else pure "typechecking disabled"
+
+coreTypecheckTerm :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+coreTypecheckTerm info b cont handler _env = \case
+  [VClosure (LC (LamClosure NullaryClosure _ term _ _ _))] -> do
+    tcs <- use (replTyEnv . rtcState)
+    lo <- use loaded
+    case Infer.runInferTerm lo tcs term of
+      Left err -> returnCEK cont handler (VError (T.pack (show err)) info)
+      Right (tys, _) -> do
+        liftIO $ print $ "Inferred type: " <> show (pretty tys)
+        returnCEKValue cont handler VUnit
+  args -> argsError info b args
+
+coreTypecheck :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+coreTypecheck info b cont handler _env = \case
+  [VModRef m] -> do
+    tcs <- use (replTyEnv . rtcState)
+    lo <- use loaded
+    pdb <- viewEvalEnv eePactDb
+    md <- getModule info pdb (_mrModule m)
+    let (result, tcs') = Infer.runInferModule lo tcs md
+    case result of
+      Left err -> returnCEK cont handler (VError (T.pack (show err)) info)
+      Right _ -> do
+        liftIO $ print $ "Module typecheck successful" <> T.unpack (renderModuleName (_mrModule m))
+        (replTyEnv . rtcState) .= tcs'
+        returnCEKValue cont handler VUnit
+  args -> argsError info b args
 
 
 replBuiltinEnv
@@ -533,3 +583,7 @@ replCoreBuiltinRuntime = \case
     RPactVersion -> coreVersion
     REnforcePactVersionMin -> coreEnforceVersion
     REnforcePactVersionRange -> coreEnforceVersion
+    REnvEnableTypechecking -> coreEnvEnableTypechecking
+    REnvEnableTypecheckingFatal -> coreEnvEnableTypechecking
+    RTypecheckTerm -> coreTypecheckTerm
+    RTypecheck -> coreTypecheck

@@ -490,20 +490,35 @@ notBool info b cont handler _env = \case
 -- string ops
 ---------------------------
 
+-- Note: [Take/Drop Clamping]
+-- Take an expression like one of the following:
+--  When i >= 0:
+--    let clamp = fromIntegral $ min i (fromIntegral (T.length t))
+--  When i < 0:
+--    let clamp = fromIntegral $ max (fromIntegral (T.length t) + i) 0
+--
+-- Note that it's `max (fromIntegral (T.length t) + i) 0` and not `max (T.length t + fromIntegral i) 0`.
+-- That's because `i` may contain values larger than `Int`, which is the type `length` typically returns.
+-- The sum `i + length t` may overflow `Int`, so it's converted to `Integer`, and the result of the `clamp` is always
+-- below `maxBound :: Int`, so it can be safely casted back without overflow.
 rawTake :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawTake info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LString t)]
     | i >= 0 -> do
-      let clamp = min (fromIntegral i) (T.length t)
+      -- See Note: [Take/Drop Clamping]
+      let clamp = fromIntegral $ min i (fromIntegral (T.length t))
       returnCEKValue cont handler  (VLiteral (LString (T.take clamp t)))
     | otherwise -> do
-      let clamp = min (abs (T.length t + fromIntegral i)) (T.length t)
+      -- See Note: [Take/Drop Clamping]
+      let clamp = fromIntegral $ max (fromIntegral (T.length t) + i) 0
       returnCEKValue cont handler  (VLiteral (LString (T.drop clamp t)))
   [VLiteral (LInteger i), VList li]
     | i >= 0 -> do
+      -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ min i (fromIntegral (V.length li))
       returnCEKValue cont handler  (VList (V.take clamp li))
     | otherwise -> do
+      -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ max (fromIntegral (V.length li) + i) 0
       returnCEKValue cont handler (VList (V.drop clamp li))
   [VList li, VObject o] -> do
@@ -515,16 +530,20 @@ rawDrop :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawDrop info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LString t)]
     | i >= 0 -> do
-      let clamp = min (fromIntegral i) (T.length t)
+      -- See Note: [Take/Drop Clamping]
+      let clamp = fromIntegral $ min i (fromIntegral (T.length t))
       returnCEKValue cont handler  (VLiteral (LString (T.drop clamp t)))
     | otherwise -> do
-      let clamp = min (abs (T.length t + fromIntegral i)) (T.length t)
+      -- See Note: [Take/Drop Clamping]
+      let clamp = fromIntegral $ max (fromIntegral (T.length t) + i) 0
       returnCEKValue cont handler  (VLiteral (LString (T.take clamp t)))
   [VLiteral (LInteger i), VList li]
     | i >= 0 -> do
+      -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ min i (fromIntegral (V.length li))
       returnCEKValue cont handler  (VList (V.drop clamp li))
     | otherwise -> do
+      -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ max (fromIntegral (V.length li) + i) 0
       returnCEKValue cont handler (VList (V.take clamp li))
   [VList li, VObject o] -> do
@@ -1128,6 +1147,8 @@ createDefPactGuard info b cont handler _env = \case
 coreIntToStr :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreIntToStr info b cont handler _env = \case
   [VInteger base, VInteger v]
+    | v < 0 ->
+      returnCEK cont handler (VError "int-to-str error: cannot show negative integer" info)
     | base >= 2 && base <= 16 -> do
       let v' = T.pack $ showIntAtBase base Char.intToDigit v ""
       returnCEKValue cont handler (VString v')
@@ -1218,6 +1239,7 @@ baseStrToInt :: Integer -> T.Text -> Either T.Text Integer
 baseStrToInt base t
   | base <= 1 || base > 16 = Left $ "unsupported base: " `T.append` T.pack (show base)
   | T.null t = Left $ "empty text: " `T.append` t
+  | T.any (not . Char.isHexDigit) t = Left "invalid digit: supported digits are 0-9, A-F"
   | otherwise = foldM go 0 $ T.unpack t
   where
       go :: Integer -> Char -> Either T.Text Integer
@@ -1484,6 +1506,12 @@ coreValidatePrincipal info b cont handler _env = \case
   [VGuard g, VString s] -> do
     pr' <- createPrincipalForGuard info g
     returnCEKValue cont handler $ VBool $ Pr.mkPrincipalIdent pr' == s
+  args -> argsError info b args
+
+
+coreCond :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
+coreCond info b cont handler _env = \case
+  [VClosure clo] -> applyLam clo [] cont handler
   args -> argsError info b args
 
 
@@ -1873,3 +1901,4 @@ coreBuiltinRuntime = \case
   CorePactId -> corePactId
   CoreTypeOf -> coreTypeOf
   CoreDec -> coreDec
+  CoreCond -> coreCond

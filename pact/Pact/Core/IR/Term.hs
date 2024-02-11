@@ -28,6 +28,7 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict(Map)
 import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NE
+import qualified Data.Map.Strict as M
 import Control.DeepSeq
 import GHC.Generics
 
@@ -265,23 +266,22 @@ findDefInModule :: Text -> Module name ty b i -> Maybe (Def name ty b i)
 findDefInModule defnName targetModule =
   find ((==) defnName . defName) (_mDefs targetModule)
 
-defKind :: Def name Type b i -> DefKind
-defKind = \case
+defKind :: ModuleName -> Def name Type b i -> DefKind
+defKind mn = \case
   Dfun{} -> DKDefun
   DConst{} -> DKDefConst
   DCap{} -> DKDefCap
-  DSchema ds -> DKDefSchema (Schema (_dsSchema ds))
+  DSchema ds -> DKDefSchema (Schema (QualifiedName (_dsName ds) mn) (_dsSchema ds))
   DTable{} -> DKDefTable
   DPact{} -> DKDefPact
 
-ifDefKind :: IfDef name Type b i -> Maybe DefKind
-ifDefKind = \case
+ifDefKind :: ModuleName -> IfDef name Type b i -> Maybe DefKind
+ifDefKind mn = \case
   IfDfun{} -> Nothing
   IfDCap{} -> Nothing
   IfDConst{} -> Just DKDefConst
   IfDPact{} -> Nothing
-
-  IfDSchema ds -> Just (DKDefSchema (Schema (_dsSchema ds)))
+  IfDSchema ds -> Just $ DKDefSchema $ (Schema (QualifiedName (_dsName ds) mn) (_dsSchema ds))
 
 ifDefName :: IfDef name ty builtin i -> Text
 ifDefName = \case
@@ -320,6 +320,13 @@ ifDefInfo = \case
   IfDPact d -> _ifdpInfo d
   IfDSchema d -> _dsInfo d
 
+topLevelInfo :: TopLevel name ty b i -> i
+topLevelInfo = \case
+  TLModule m -> _mInfo m
+  TLTerm t -> view termInfo t
+  TLInterface i -> _ifInfo i
+  TLUse _ i -> i
+
 
 instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builtin info) where
   pretty = \case
@@ -356,6 +363,55 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (TopLevel name ty bu
   pretty = \case
     TLTerm tm -> pretty tm
     _ -> "todo: pretty defs/modules"
+
+prettyDef :: Pretty ty => Doc ann -> Text -> Maybe ty -> [Arg ty] -> Doc ann
+prettyDef deftoken defname defRTy defArgs =
+  let dfNameArg = Arg defname defRTy
+      argList = parens (hsep (pretty <$> defArgs))
+  in parens $ deftoken <+> pretty dfNameArg <+> argList
+
+instance Pretty ty => Pretty (Defun name ty b i) where
+  pretty (Defun name args rty _ _) =
+    prettyDef "defun" name rty args
+
+instance Pretty ty => Pretty (DefPact name ty b i) where
+  pretty (DefPact name args rty _ _) =
+    prettyDef "defpact" name rty args
+
+instance Pretty ty => Pretty (DefCap name ty b i) where
+  pretty (DefCap name args rty _ _ _) =
+    prettyDef "defcap" name rty args
+
+instance Pretty ty => Pretty (DefSchema ty info) where
+  pretty (DefSchema n schema _) =
+    let argList = [pretty arg | (Field k, t) <- M.toList schema, let arg = Arg k (Just t)]
+    in parens $ "defschema" <+> pretty n <> (if null argList then mempty else " " <> hsep argList)
+
+instance Pretty (TableSchema name) where
+  pretty (DesugaredTable pn) = pretty pn
+  pretty (ResolvedTable (Schema pn _)) = pretty pn
+
+instance Pretty (DefTable name info) where
+  pretty (DefTable tblname schema _) =
+    parens $ "deftable" <+> pretty tblname <> ":" <> pretty schema
+
+instance Pretty term => Pretty (ConstVal term) where
+  pretty = \case
+    TermConst t -> pretty t
+    EvaledConst v -> pretty v
+
+instance (Pretty name, Pretty ty, Pretty b) => Pretty (DefConst name ty b i) where
+  pretty (DefConst n ty term _) =
+    parens $ "defconst" <+> pretty n <> maybe mempty ((":" <>) . pretty) ty <+> pretty term
+
+instance (Pretty name, Pretty ty, Pretty b) => Pretty (Def name ty b i) where
+  pretty = \case
+    Dfun d -> pretty d
+    DConst d -> pretty d
+    DCap d -> pretty d
+    DSchema d -> pretty d
+    DTable d -> pretty d
+    DPact d -> pretty d
 
 
 -----------------------------------------
@@ -503,7 +559,7 @@ instance Plated (Term name ty builtin info) where
     Constant l i -> pure (Constant l i)
     Sequence e1 e2 i -> Sequence <$> f e1 <*> f e2 <*> pure i
     Conditional o i ->
-      Conditional <$> traverse (plate f) o <*> pure i
+      Conditional <$> traverse f o <*> pure i
     ListLit m i -> ListLit <$> traverse f m <*> pure i
     Nullary term i ->
       Nullary <$> f term <*> pure i

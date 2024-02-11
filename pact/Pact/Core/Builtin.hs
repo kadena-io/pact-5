@@ -7,18 +7,18 @@
 
 module Pact.Core.Builtin
  ( CoreBuiltin(..)
- , coreBuiltinToText
  , coreBuiltinMap
  , coreBuiltinNames
  , ReplBuiltin(..)
- , replcoreBuiltinNames
- , replcoreBuiltinMap
- , replBuiltinToText
+ , replCoreBuiltinNames
+ , replCoreBuiltinMap
+ , coreBuiltinToUserText
+ , coreBuiltinToText
+ , replCoreBuiltinToUserText
  , IsBuiltin(..)
  , ReplCoreBuiltin
  , BuiltinForm(..)
  , ReplBuiltins(..)
- , HasObjectOps(..)
  )where
 
 import Data.Text(Text)
@@ -34,6 +34,8 @@ import Pact.Core.Pretty
 -- | Our type alias for the majority of our repl builtins wrap
 type ReplCoreBuiltin = ReplBuiltin CoreBuiltin
 
+-- | Our syntactic builtin forms, which capture terms and may evaluate them lazily
+--   Note: this does not include capability forms
 data BuiltinForm o
   = CAnd o o
   | COr o o
@@ -57,18 +59,7 @@ instance Pretty o => Pretty (BuiltinForm o) where
     CEnforce o o' ->
       parens ("enforce" <+> pretty o <+> pretty o')
 
-class HasObjectOps b where
-  objectAt :: b
-
-data DefType
-  = DTDefun
-  | DTDefcap
-  | DTDefConst
-  deriving Show
-
-{-
-
--}
+-- | Our list of base-builtins to pact.
 data CoreBuiltin
   -- Operators
   -- Addition/Concatenation
@@ -219,13 +210,31 @@ data CoreBuiltin
   -- Misc
   | CoreTypeOf
   | CoreDec
+  | CoreCond
   deriving (Eq, Show, Ord, Bounded, Enum, Generic)
 
 instance NFData CoreBuiltin
 
-instance HasObjectOps CoreBuiltin where
-  objectAt = CoreAt
+-- | A list of our internal overloads.
+coreBuiltinOverloads :: [CoreBuiltin]
+coreBuiltinOverloads =
+  [ CoreEnumerateStepN
+  , CoreSelectWithFields
+  , CoreSortObject
+  , CoreRoundPrec
+  , CoreCeilingPrec
+  , CoreFloorPrec
+  , CoreStrToIntBase
+  , CoreReadMsgDefault
+  , CoreDefineKeysetData
+  , CoreYieldToChain]
 
+-- | NOTE: this function spits out fully resolved overload name of a native.
+--   This is used for both errors and hashes. DO NOT CHANGE unless you know what you are doing,
+--   or we are forking this change.
+--
+--   coreBuiltinToText gives us a unique text representation of each function. For a function for UX use, see
+--   coreBuiltinToUserText
 coreBuiltinToText :: CoreBuiltin -> Text
 coreBuiltinToText = \case
   -- Addition
@@ -328,7 +337,7 @@ coreBuiltinToText = \case
   CoreKeys -> "keys"
   CoreRead -> "read"
   CoreSelect -> "select"
-  CoreSelectWithFields -> ""
+  CoreSelectWithFields -> "select-with-fields"
   CoreUpdate -> "update"
   CoreWithDefaultRead -> "with-default-read"
   CoreWithRead -> "with-read"
@@ -367,6 +376,152 @@ coreBuiltinToText = \case
   CorePactId -> "pact-id"
   CoreTypeOf -> "typeof"
   CoreDec -> "dec"
+  CoreCond -> "cond"
+
+-- | Our `CoreBuiltin` user-facing representation.
+-- note: `coreBuiltinToUserText`
+coreBuiltinToUserText :: CoreBuiltin -> Text
+coreBuiltinToUserText = \case
+  -- Addition
+  CoreAdd -> "+"
+  -- Num
+  CoreSub -> "-"
+  CoreMultiply -> "*"
+  CoreDivide -> "/"
+  CoreNegate -> "negate"
+  CoreAbs -> "abs"
+  CorePow -> "^"
+  -- Boolean ops
+  CoreNot -> "not"
+  -- Eq
+  CoreEq -> "="
+  CoreNeq -> "!="
+  -- Ord
+  CoreGT -> ">"
+  CoreGEQ -> ">="
+  CoreLT -> "<"
+  CoreLEQ -> "<="
+  -- Int ops
+  CoreBitwiseAnd -> "&"
+  CoreBitwiseOr -> "|"
+  CoreBitwiseXor -> "xor"
+  CoreBitwiseFlip -> "~"
+  CoreBitShift -> "shift"
+  CoreMod -> "mod"
+  -- roundings
+  CoreRound -> "round"
+  CoreCeiling -> "ceiling"
+  CoreFloor -> "floor"
+  CoreRoundPrec -> "round"
+  CoreCeilingPrec -> "ceiling"
+  CoreFloorPrec -> "floor"
+  -- Fractional
+  CoreExp -> "exp"
+  CoreLn -> "ln"
+  CoreSqrt -> "sqrt"
+  CoreLogBase -> "log"
+  -- ListLike
+  CoreLength -> "length"
+  CoreTake -> "take"
+  CoreDrop -> "drop"
+  CoreConcat -> "concat"
+  CoreReverse -> "reverse"
+  -- general
+  CoreMap -> "map"
+  CoreFilter -> "filter"
+  CoreContains -> "contains"
+  CoreSort -> "sort"
+  CoreSortObject -> "sort"
+  CoreRemove -> "remove"
+  -- CoreIf -> "if"
+  CoreIntToStr -> "int-to-str"
+  CoreStrToInt -> "str-to-int"
+  CoreStrToIntBase -> "str-to-int"
+  CoreFold -> "fold"
+  CoreZip -> "zip"
+  CoreDistinct -> "distinct"
+  CoreFormat -> "format"
+  CoreEnumerate -> "enumerate"
+  CoreEnumerateStepN -> "enumerate"
+  CoreShow -> "show"
+  CoreReadMsg -> "read-msg"
+  CoreReadMsgDefault -> "read-msg"
+  CoreReadInteger -> "read-integer"
+  CoreReadDecimal -> "read-decimal"
+  CoreReadString -> "read-string"
+  CoreReadKeyset -> "read-keyset"
+  CoreEnforceGuard -> "enforce-guard"
+  CoreEnforceKeyset -> "enforce-keyset"
+  CoreKeysetRefGuard -> "keyset-ref-guard"
+  CoreCreateCapabilityGuard -> "create-capability-guard"
+  CoreCreateCapabilityPactGuard -> "create-capability-pact-guard"
+  CoreCreateModuleGuard -> "create-module-guard"
+  CoreCreateDefPactGuard -> "create-pact-guard"
+  CoreAt -> "at"
+  CoreMakeList -> "make-list"
+  CoreB64Encode -> "base64-encode"
+  CoreB64Decode -> "base64-decode"
+  CoreStrToList -> "str-to-list"
+  CoreYield -> "yield"
+  CoreYieldToChain -> "yield"
+  CoreResume -> "resume"
+  CoreBind -> "bind"
+  CoreRequireCapability -> "require-capability"
+  CoreComposeCapability -> "compose-capability"
+  CoreInstallCapability -> "install-capability"
+  CoreEmitEvent -> "emit-event"
+  CoreCreateTable -> "create-table"
+  CoreDescribeKeyset -> "describe-keyset"
+  CoreDescribeModule -> "describe-module"
+  CoreDescribeTable -> "describe-table"
+  CoreDefineKeySet -> "define-keyset"
+  CoreDefineKeysetData -> "define-keyset"
+  CoreFoldDb -> "fold-db"
+  CoreInsert -> "insert"
+  CoreKeyLog -> "keylog"
+  CoreKeys -> "keys"
+  CoreRead -> "read"
+  CoreSelect -> "select"
+  CoreSelectWithFields -> "select"
+  CoreUpdate -> "update"
+  CoreWithDefaultRead -> "with-default-read"
+  CoreWithRead -> "with-read"
+  CoreWrite -> "write"
+  CoreTxIds -> "txids"
+  CoreTxLog -> "txlog"
+  CoreTxHash -> "tx-hash"
+  CoreAndQ -> "and?"
+  CoreOrQ -> "or?"
+  CoreWhere -> "where"
+  CoreNotQ -> "not?"
+  CoreHash -> "hash"
+  CoreContinue -> "continue"
+  CoreParseTime -> "parse-time"
+  CoreFormatTime -> "format-time"
+  CoreTime -> "time"
+  CoreAddTime -> "add-time"
+  CoreDiffTime -> "diff-time"
+  CoreHours -> "hours"
+  CoreMinutes -> "minutes"
+  CoreDays -> "days"
+  CoreCompose -> "compose"
+  CoreCreatePrincipal -> "create-principal"
+  CoreIsPrincipal -> "is-principal"
+  CoreTypeOfPrincipal -> "typeof-principal"
+  CoreValidatePrincipal -> "validate-principal"
+  CoreNamespace -> "namespace"
+  CoreDefineNamespace -> "define-namespace"
+  CoreDescribeNamespace -> "describe-namespace"
+  CoreZkPairingCheck -> "pairing-check"
+  CoreZKScalarMult -> "scalar-mult"
+  CoreZkPointAdd -> "point-add"
+  CorePoseidonHashHackachain -> "poseidon-hash-hack-a-chain"
+  CoreChainData -> "chain-data"
+  CoreIsCharset -> "is-charset"
+  CorePactId -> "pact-id"
+  CoreTypeOf -> "typeof"
+  CoreDec -> "dec"
+  CoreCond -> "cond"
 
 instance IsBuiltin CoreBuiltin where
   builtinName = NativeName . coreBuiltinToText
@@ -514,14 +669,20 @@ instance IsBuiltin CoreBuiltin where
     CorePactId -> 0
     CoreTypeOf -> 1
     CoreDec -> 1
-
+    CoreCond -> 1
 
 
 coreBuiltinNames :: [Text]
-coreBuiltinNames = fmap coreBuiltinToText [minBound .. maxBound]
+coreBuiltinNames =
+  [ coreBuiltinToText b
+  | b <- [minBound .. maxBound]
+  , b `notElem` coreBuiltinOverloads]
 
 coreBuiltinMap :: Map Text CoreBuiltin
-coreBuiltinMap = M.fromList $ (\b -> (coreBuiltinToText b, b)) <$> [minBound .. maxBound]
+coreBuiltinMap = M.fromList
+  [ (coreBuiltinToText b, b)
+  | b <- [minBound .. maxBound]
+  , b `notElem` coreBuiltinOverloads]
 
 -- Todo: rename
 -- | Our repl builtins.
@@ -567,6 +728,10 @@ data ReplBuiltins
   | RPactVersion
   | REnforcePactVersionMin
   | REnforcePactVersionRange
+  | REnvEnableTypechecking
+  | REnvEnableTypecheckingFatal
+  | RTypecheckTerm
+  | RTypecheck
   deriving (Show, Enum, Bounded, Eq, Generic)
 
 
@@ -611,6 +776,10 @@ instance IsBuiltin ReplBuiltins where
     RPactVersion -> 0
     REnforcePactVersionMin -> 1
     REnforcePactVersionRange -> 2
+    REnvEnableTypechecking -> 1
+    REnvEnableTypecheckingFatal -> 2
+    RTypecheckTerm -> 1
+    RTypecheck -> 1
 
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
@@ -620,9 +789,6 @@ data ReplBuiltin b
   = RBuiltinWrap b
   | RBuiltinRepl ReplBuiltins
   deriving (Eq, Show, Generic)
-
-instance HasObjectOps b => HasObjectOps (ReplBuiltin b) where
-  objectAt = RBuiltinWrap objectAt
 
 -- NOTE: Maybe `ReplBuiltin` is not a great abstraction, given
 -- expect arity changes based on whether it's corebuiltin or rawbuiltin
@@ -693,18 +859,40 @@ replBuiltinsToText = \case
   RPactVersion -> "pact-version"
   REnforcePactVersionMin -> "enforce-pact-version"
   REnforcePactVersionRange -> "enforce-pact-version-range"
+  REnvEnableTypechecking -> "env-enable-typechecking"
+  REnvEnableTypecheckingFatal -> "env-enable-typecheck-fatal"
+  RTypecheckTerm -> "typecheck-term"
+  RTypecheck -> "typecheck"
 
 replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
 replBuiltinToText f = \case
   RBuiltinWrap b -> f b
   RBuiltinRepl rb -> replBuiltinsToText rb
 
-replcoreBuiltinNames :: [Text]
-replcoreBuiltinNames = fmap (replBuiltinToText coreBuiltinToText) [minBound .. maxBound]
+replCoreBuiltinToText :: ReplCoreBuiltin -> Text
+replCoreBuiltinToText = replBuiltinToText coreBuiltinToText
 
-replcoreBuiltinMap :: Map Text (ReplBuiltin CoreBuiltin)
-replcoreBuiltinMap =
-  M.fromList $ (\b -> (replBuiltinToText coreBuiltinToText b, b)) <$> [minBound .. maxBound]
+-- | UX version of replCoreBuiltinToText, for use with LSP
+-- this function takes a `ReplCoreBuiltin` and prints its name
+-- while removing the overloaded internal names
+replCoreBuiltinToUserText :: ReplCoreBuiltin -> Text
+replCoreBuiltinToUserText = replBuiltinToText coreBuiltinToUserText
+
+replCoreBuiltinNames :: [Text]
+replCoreBuiltinNames =
+  [ txtRepr
+  | b <- [minBound .. maxBound]
+  , b `notElem` (RBuiltinWrap <$> coreBuiltinOverloads)
+  , let !txtRepr = replCoreBuiltinToText b]
+
+replCoreBuiltinMap :: Map Text (ReplBuiltin CoreBuiltin)
+replCoreBuiltinMap =
+  M.fromList $
+    [ (txtRepr, b)
+    | b <- [minBound .. maxBound]
+    , b `notElem` (RBuiltinWrap <$> coreBuiltinOverloads)
+    , let !txtRepr = replCoreBuiltinToText b]
+
 
 -- Todo: is not a great abstraction.
 -- In particular: the arity could be gathered from the type.
@@ -714,9 +902,9 @@ class Show b => IsBuiltin b where
 
 
 instance Pretty CoreBuiltin where
-  pretty b = pretty (coreBuiltinToText b)
+  pretty b = pretty (coreBuiltinToUserText b)
 
 instance (Pretty b) => Pretty (ReplBuiltin b) where
   pretty = \case
     RBuiltinWrap b -> pretty b
-    t -> pretty (replBuiltinToText (const "") t)
+    RBuiltinRepl t -> pretty (replBuiltinsToText t)

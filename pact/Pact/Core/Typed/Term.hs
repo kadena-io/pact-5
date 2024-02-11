@@ -9,6 +9,9 @@ module Pact.Core.Typed.Term
  , DefConst(..)
  , Def(..)
  , DefCap(..)
+ , DefTable(..)
+ , DefSchema(..)
+ , DefPact(..)
  , Term(..)
  , Module(..)
  , Interface(..)
@@ -179,7 +182,7 @@ data DefSchema ty info
 data DefTable info
   = DefTable
   { _dtName :: Text
-  , _dtSchema :: Map Field (Type Void)
+  , _dtSchema :: Schema
   , _dtInfo :: info
   } deriving (Show, Functor, Eq, Generic)
 
@@ -245,7 +248,7 @@ data IfDefPact ty info
   = IfDefPact
   { _ifdpName :: Text
   , _ifdpArgs :: [Arg ty]
-  , _ifdpRType :: Maybe ty
+  , _ifdpRType :: Type ty
   , _ifdpInfo :: info
   } deriving (Show, Eq, Functor, Generic)
 
@@ -253,7 +256,7 @@ data IfDefun ty info
   = IfDefun
   { _ifdName :: Text
   , _ifdArgs :: [Arg ty]
-  , _ifdRType :: Maybe ty
+  , _ifdRType :: Type ty
   , _ifdInfo :: info
   } deriving (Show, Eq, Functor, Generic)
 
@@ -261,7 +264,7 @@ data IfDefCap name ty info
   = IfDefCap
   { _ifdcName :: Text
   , _ifdcArgs :: [Arg ty]
-  , _ifdcRType :: Maybe ty
+  , _ifdcRType :: Type ty
   , _ifdcMeta :: DefCapMeta BareName
   , _ifdcInfo :: info
   } deriving (Show, Eq, Functor, Generic)
@@ -281,13 +284,10 @@ data TopLevel name tyname builtin info
   | TLUse Import info
   deriving (Show, Generic)
 
-data ReplTopLevel name tyname builtin info
-  = RTLModule (Module name tyname builtin info)
-  | RTLInterface (Interface name tyname builtin info)
-  | RTLDefun (Defun name tyname builtin info)
-  | RTLDefConst (DefConst name tyname builtin info)
-  | RTLTerm (Term name tyname builtin info)
-  deriving Show
+data ReplTopLevel name ty builtin info
+  = RTLDefConst (DefConst name ty builtin info)
+  | RTLDefun (Defun name ty builtin info)
+  deriving (Show, Functor)
 
 -- Post Typecheck terms + modules
 type OverloadedTerm tyname b i =

@@ -257,6 +257,10 @@ instance DesugarBuiltin (ReplBuiltin CoreBuiltin) where
       App (Builtin (RBuiltinRepl RBeginNamedTx) i) [e1] i
   desugarAppArity i (RBuiltinRepl REnforcePactVersionMin) [e1, e2] =
       App (Builtin (RBuiltinRepl REnforcePactVersionRange) i) [e1, e2] i
+  desugarAppArity i (RBuiltinRepl RTypecheckTerm) [e1] =
+      App (Builtin (RBuiltinRepl RTypecheckTerm) i) [suspendTerm e1] i
+  desugarAppArity i (RBuiltinRepl REnvEnableTypechecking) [e1, e2] =
+      App (Builtin (RBuiltinRepl REnvEnableTypecheckingFatal) i) [e1, e2] i
   desugarAppArity i b ne =
     App (Builtin b i) ne i
 
@@ -364,6 +368,19 @@ desugarLispTerm = \case
             v2 = Lisp.Var injectedArg2Name i
             newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing, Lisp.MArg injectedArg2 Nothing] (Lisp.App operand (args ++ [v1, v2]) appI) appI
         commonDesugar (ZipV zipI) (newArg:xs)
+      (CondV condI, l) -> case reverse l of
+        defCase:xs -> do
+          defCase' <- desugarLispTerm defCase
+          body <- foldlM toNestedIf defCase' xs
+          pure $ App (Builtin (liftCoreBuiltin CoreCond) i) [Nullary body condI] condI
+        _ -> throwDesugarError (InvalidSyntax "cond: expected list of conditions with a default case") i
+        where
+        toNestedIf b (Lisp.App cond [body] i') = do
+          cond' <- desugarLispTerm cond
+          body' <- desugarLispTerm body
+          pure $ Conditional (CIf cond' body' b) i'
+        toNestedIf _ _ =
+          throwDesugarError (InvalidSyntax "cond: expected application of conditions") i
       _ -> commonDesugar e hs
     where
     commonDesugar operator operands = do
@@ -405,6 +422,9 @@ pattern FoldV :: i -> Lisp.Expr i
 pattern FoldV info = Lisp.Var (BN (BareName "map")) info
 pattern ZipV :: i -> Lisp.Expr i
 pattern ZipV info = Lisp.Var (BN (BareName "map")) info
+
+pattern CondV :: i -> Lisp.Expr i
+pattern CondV info = Lisp.Var (BN (BareName "cond")) info
 
 suspendTerm
   :: Term ParsedName DesugarType builtin info
@@ -853,8 +873,8 @@ loadTopLevelMembers i mimports mdata binds = case mdata of
         loadedDeps = M.fromList $ toLoadedDepMap ifname ifhash <$> dcDeps
     loadWithImports depMap loadedDeps
   where
-  toLocalDepMap modName mhash defn = (defName defn, (NTopLevel modName mhash, Just (defKind defn)))
-  toLoadedDepMap modName mhash defn = (defName defn, (FullyQualifiedName modName (defName defn) mhash, defKind defn))
+  toLocalDepMap modName mhash defn = (defName defn, (NTopLevel modName mhash, Just (defKind modName defn)))
+  toLoadedDepMap modName mhash defn = (defName defn, (FullyQualifiedName modName (defName defn) mhash, defKind modName defn))
   loadWithImports depMap loadedDeps = case mimports of
       Just st -> do
         let depsKeys = M.keysSet depMap
@@ -1337,11 +1357,12 @@ resolveQualified (QualifiedName qn qmn@(ModuleName modName mns)) i = do
       ModuleData module' _ -> do
         d <- hoistMaybe (findDefInModule defnName module' )
         lift $ rsDependencies %= S.insert moduleName
-        pure (Name qn (NTopLevel moduleName (_mHash module')), Just (defKind d))
+        pure (Name qn (NTopLevel moduleName (_mHash module')), Just (defKind (_mName module') d))
       InterfaceData iface _ -> do
+        let ifn = _ifName iface
         d <- hoistMaybe (findDefInInterface defnName iface)
         lift $ rsDependencies %= S.insert moduleName
-        pure (Name qn (NTopLevel moduleName (_ifHash iface)), Just (defKind d))
+        pure (Name qn (NTopLevel moduleName (_ifHash iface)), Just (defKind ifn d))
   modRefLookup pdb = case mns of
     -- Fail eagerly: the previous lookup was fully qualified
     Just _ -> MaybeT (throwDesugarError (NoSuchModuleMember qmn qn) i)
@@ -1384,7 +1405,7 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash i) = d
     let dn = defName defn
     defn' <- local (set reCurrModule (Just $ CurrModule mname implements MTModule) . set reCurrModuleTmpBinds mlocals)
              $ local (set reBinds m) $ renameDef defn
-    let dk = defKind defn'
+    let dk = defKind mname defn'
     let depPair = (NTopLevel mname mhash, dk)
     let m' = M.insert dn (over _2 Just depPair) m
         mlocals' = M.insert dn depPair mlocals
@@ -1508,7 +1529,7 @@ renameInterface (Interface unmangled defs imports ih info) = do
           local (set reCurrModule (Just $ CurrModule ifn [] MTInterface)) $ renameIfDef ifn dfnSet d
     let m' = case ifDefToDef d' of
               Just defn ->
-                let dk = defKind defn
+                let dk = defKind ifn defn
                 in M.insert dn (NTopLevel ifn ih, Just dk) m
               Nothing -> m
         dfnSet' = case d of

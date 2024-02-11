@@ -69,7 +69,7 @@ runReplTest :: PactDb ReplCoreBuiltin SpanInfo -> FilePath -> T.Text -> Interpre
 runReplTest pdb file src interp = do
   gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
-  ee <- defaultEvalEnv pdb replcoreBuiltinMap
+  ee <- defaultEvalEnv pdb replCoreBuiltinMap
   let source = SourceCode (replTestDir </> file) src
   let rstate = ReplState
             { _replFlags = mempty
