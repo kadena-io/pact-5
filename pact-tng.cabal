@@ -206,6 +206,13 @@ library
     Pact.Crypto.WebAuthn.Cose.Registry
     Pact.Crypto.WebAuthn.Cose.SignAlg
 
+    -- Typed core
+    Pact.Core.Typed.Infer
+    Pact.Core.Typed.Builtin
+    Pact.Core.Typed.Type
+    -- Typed term
+    Pact.Core.Typed.Term
+
 library pact-lsp
   import: pact-common
   hs-source-dirs: pact-lsp
@@ -220,20 +227,15 @@ library pact-lsp
     , lsp-types
     , filepath
 
-library pact-tng-typed
-  import: pact-common
-  hs-source-dirs: typed-core
+-- library pact-tng-typed
+--   import: pact-common
+--   hs-source-dirs: typed-core
 
-  build-depends:
-    , pact-tng
+--   build-depends:
+--     , pact-tng
 
-  exposed-modules:
-    Pact.Core.Typed.Infer
-    Pact.Core.Typed.Builtin
-    Pact.Core.Typed.Type
+--   exposed-modules:
 
-    -- Typed term
-    Pact.Core.Typed.Term
 
 executable gasmodel
   import: pact-common

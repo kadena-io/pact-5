@@ -33,7 +33,7 @@ module Pact.Core.Typed.Infer where
 --  ) where
 
 import Control.Lens hiding (Level)
-import Control.Monad ( when, unless, zipWithM, foldM )
+import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.ST
 -- import Control.Monad.ST.Unsafe(unsafeIOToST, unsafeSTToIO)
@@ -62,6 +62,7 @@ import Pact.Core.Names
 import Pact.Core.Errors
 import Pact.Core.Persistence
 import Pact.Core.Capabilities
+import Pact.Core.ModRefs
 import qualified Pact.Core.IR.Term as IR
 import qualified Pact.Core.Type as IR
 -- import qualified Pact.Core.Term as Typed
@@ -71,6 +72,7 @@ import Pact.Core.Typed.Type
 import GHC.IO (unsafePerformIO)
 import Control.Monad.ST.Unsafe (unsafeSTToIO)
 import Pact.Core.PactValue
+import Pact.Core.Hash (ModuleHash)
 
 -- inference based on https://okmij.org/ftp/ML/generalization.html
 -- Note: Type inference levels in the types
@@ -102,23 +104,27 @@ newtype TvRef s =
 
 
 data TCEnv s b i
-  = TCState
+  = TCEnv
   { _tcSupply :: UniqueSupply s
   -- ^ Supply for fresh variables.
   , _tcVarEnv :: RAList (TCType s)
   -- ^ Builtins map, that uses the enum instance
-  -- , _tcFree :: Map ModuleName (Map Text (Type Void))
-  , _tcFree :: Map FullyQualifiedName (Type Void)
-  -- ^ Free variables
   , _tcLevel :: STRef s Level
   -- ^ Type Variable "Region"
-  , _tcModules :: Map ModuleName (ModuleData b i)
   }
 
 makeLenses ''TCEnv
 
+newtype TCState
+  = TCState { _tcFree :: Map FullyQualifiedName (Type Void) }
+  deriving Show
+  -- ^ Free variables
+
+makeLenses ''TCState
+
 -- | Term emitted by desugar
 type IRTerm b i = IR.Term Name IR.Type b i
+type IRTopLevel b i = IR.TopLevel Name IR.Type b i
 type IRModule b i = IR.Module Name b i
 type IRInterface b i = IR.Interface Name b i
 
@@ -156,12 +162,13 @@ data TypecheckFailure i
 -- | Our inference monad, where we can plumb through generalization "regions",
 -- our variable environment and our "supply" of unique names
 newtype InferM s b i a =
-  InferT (ExceptT (TypecheckFailure i) (ReaderT (TCEnv s b i) (ST s)) a)
+  InferT (ExceptT (TypecheckFailure i) (ReaderT (TCEnv s b i) (StateT TCState (ST s))) a)
   deriving
     ( Functor, Applicative, Monad
     , MonadReader (TCEnv s b i)
+    , MonadState TCState
     , MonadError (TypecheckFailure i))
-  via (ExceptT (TypecheckFailure i) (ReaderT (TCEnv s b i) (ST s)))
+  via (ExceptT (TypecheckFailure i) (ReaderT (TCEnv s b i) (StateT TCState (ST s))))
 
 class TypeOfBuiltin b where
   typeOfBuiltin :: b -> TypeScheme DebruijnTypeVar
@@ -597,7 +604,7 @@ instance TypeOfBuiltin b => TypeOfBuiltin (ReplBuiltin b) where
     --   in TypeScheme [aVar] [Pred Show aTv] (aTv :~> TyUnit)
 
 liftST :: ST s a -> InferM s b i a
-liftST action = InferT (lift (lift action))
+liftST action = InferT $ lift $ lift $ lift action
 
 -- throwTypecheckError :: TypecheckError -> i -> InferM s b i a
 -- throwTypecheckError te = throwError . PETypecheckError te
@@ -758,7 +765,9 @@ byInst (Pred p) = case p of
 --
 --  instance (Eq 'a) => Eq (list 'a)
 --  For rows:
---  instance (Eq {l1:t1, .., ln:tn}) where t1..tn are monotypes without type variables.
+--  instance (Eq t_1,..,Eq t_n) => Eq (RowConcrete {l_1:t1,..,l_n)
+--    where t_1..t_n are monotypes without type variables.
+--  instance (EqRow r) => Eq (Object {r})
 --
 eqInst :: TCType s -> InferM s b i (Maybe [TCPred s])
 eqInst = \case
@@ -769,7 +778,18 @@ eqInst = \case
   TyPrim _ -> pure (Just [])
   TyModRef _ -> pure (Just [])
   TyList t -> pure (Just [Pred (Eq t)])
-  TyObject r -> pure (Just [Pred (EqRow (TyObject r))])
+  TyCapToken cr -> case cr of
+    CapConcrete{} -> pure $ Just []
+    CapVar tv -> readTvRef tv >>= \case
+      LinkCap cvar' -> eqInst (TyCapToken cvar')
+      _ -> pure Nothing
+  TyObject r -> case r of
+    RowVar rv -> readTvRef rv >>= \case
+      LinkRow row' -> eqInst (TyObject row')
+      _ -> pure Nothing
+    RowConcrete row -> do
+      preds <- M.elems <$> traverse eqInst row
+      pure $ concat <$> sequence preds
   _ -> pure Nothing
 
 -- | Instances of Ord:
@@ -896,6 +916,7 @@ isHnf (Pred t) = do
   unbounds <- traverse tyHnf t
   pure $ and unbounds
 
+tyHnf :: TCType s -> InferM s b i Bool
 tyHnf = \case
   TyVar tv -> readTvRef tv >>= \case
     LinkTy ty -> tyHnf ty
@@ -903,17 +924,21 @@ tyHnf = \case
     _ -> pure False
   TyObject c -> rowCtorHnf c
   TyTable c -> rowCtorHnf c
+  TyCapToken cr -> case cr of
+    CapVar tv -> readTvRef tv >>= \case
+      Bound{} -> pure True
+      LinkCap cvar -> tyHnf (TyCapToken cvar)
+      _ -> pure False
+    CapConcrete{} -> pure False
   _ -> pure False
   where
   rowCtorHnf = \case
     RowVar v -> readTvRef v >>= \case
-      LinkTy ty -> error "invariant failure"
-      LinkRow r ->
-
-  -- TyVar tv -> readTvRef tv >>= \case
-  --   LinkTy ty -> isHnf (Pred c ty)
-  --   _ -> pure True
-  -- _ -> pure False
+      LinkRow r -> rowCtorHnf r
+      Bound{} -> pure True
+      _ -> pure False
+    RowConcrete rows ->
+      and <$> traverse tyHnf rows
 
 toHnf :: TCPred s -> i -> InferM s b i [TCPred s]
 toHnf p i = isHnf p >>= \case
@@ -990,51 +1015,51 @@ checkReducible ps i =
 ---- Instantiations
 ---------------------------------------------------------------------
 
--- -- | Instantiate a typescheme with bound variables with fresh bound variables
--- -- Corresponds to the following inference rule
--- --
--- -- That is (∀E):
--- --     P | Γ ⊢ E : ∀a_1..a_n. ρ
--- --     b_1, ..,  b_n fresh
--- --     ---------------------------------------
--- --     P | Γ ⊢ E ~> E_f[b_1,..,b c_n] : ρ
--- -- instantiateWithTerm
--- --   :: TypeScheme (TvRef s)
--- --   -> TCTerm s b i
--- --   -> InferM s b i (TCType s, TCTerm s b i, [TCPred s])
--- -- instantiateWithTerm (TypeScheme ts preds ty) term = do
--- --   nts <- fmap TyVar <$> traverse (const newTvRef) ts
--- --   let m = zip ts nts
--- --   preds' <- traverse (instPred m) preds
--- --   ty' <- instBound m ty
--- --   case nts of
--- --     x:xs -> do
--- --       let tyapps = TyApp term (x:|xs) info
--- --       dvars <- traverse toDVar preds'
--- --       case dvars of
--- --         p:ps -> pure (ty', App tyapps (p:|ps) info, preds')
--- --         [] -> pure (ty', tyapps, [])
--- --     [] -> pure (ty', term, [])
--- --   where
--- --   info = term ^. termInfo
---   -- toDVar p = do
---   --   i <- newSupplyIx
---   --   let n = OverloadedName ("_dict" <> T.pack (show i)) (OBuiltinDict p)
---   --   pure $ Var n info
---   -- instPred m (Pred n tt) =
---   --   Pred n <$> instBound m tt
---   -- instBound m = \case
---   --   t@(TyVar tv) -> readTvRef tv >>= \case
---   --     Bound{} -> case lookup tv m of
---   --       Just t' -> pure t'
---   --       Nothing -> pure t
---   --     Link lt -> instBound m lt
---   --     _ -> pure t
---   --   TyPrim p -> pure (TyPrim p)
---   --   TyFun l r ->
---   --     TyFun <$> instBound m l <*> instBound m r
---   --   TyList t -> TyList <$> instBound m t
---   --   t -> pure t
+-- | Instantiate a typescheme with bound variables with fresh bound variables
+-- Corresponds to the following inference rule
+--
+-- That is (∀E):
+--     P | Γ ⊢ E : ∀a_1..a_n. ρ
+--     b_1, ..,  b_n fresh
+--     ---------------------------------------
+--     P | Γ ⊢ E ~> E_f[b_1,..,b c_n] : ρ
+-- instantiateWithTerm
+--   :: TypeScheme (TvRef s)
+--   -> TCTerm s b i
+--   -> InferM s b i (TCType s, TCTerm s b i, [TCPred s])
+-- instantiateWithTerm (TypeScheme ts preds ty) term = do
+--   nts <- fmap TyVar <$> traverse (const newTvRef) ts
+--   let m = zip ts nts
+--   preds' <- traverse (instPred m) preds
+--   ty' <- instBound m ty
+--   case nts of
+--     x:xs -> do
+--       let tyapps = TyApp term (x:|xs) info
+--       dvars <- traverse toDVar preds'
+--       case dvars of
+--         p:ps -> pure (ty', App tyapps (p:|ps) info, preds')
+--         [] -> pure (ty', tyapps, [])
+--     [] -> pure (ty', term, [])
+--   where
+--   info = term ^. termInfo
+  -- toDVar p = do
+  --   i <- newSupplyIx
+  --   let n = OverloadedName ("_dict" <> T.pack (show i)) (OBuiltinDict p)
+  --   pure $ Var n info
+  -- instPred m (Pred n tt) =
+  --   Pred n <$> instBound m tt
+  -- instBound m = \case
+  --   t@(TyVar tv) -> readTvRef tv >>= \case
+  --     Bound{} -> case lookup tv m of
+  --       Just t' -> pure t'
+  --       Nothing -> pure t
+  --     Link lt -> instBound m lt
+  --     _ -> pure t
+  --   TyPrim p -> pure (TyPrim p)
+  --   TyFun l r ->
+  --     TyFun <$> instBound m l <*> instBound m r
+  --   TyList t -> TyList <$> instBound m t
+  --   t -> pure t
 
 instantiateImported
   :: TypeScheme DebruijnTypeVar
@@ -1197,134 +1222,6 @@ unifyRow i (RowConcrete lrow) (RowConcrete rrow) = do
   when (M.keys lrow /= M.keys rrow) $ error  $ "cannot unify rows"
   () <$ zipWithM (unify i) (M.elems lrow) (M.elems rrow)
 
-
--- -- | We essentially only
--- -- generalize on lambdas atm.
--- generalizeWithTerm
---   :: TCType s
---   -> [TCPred s]
---   -> TCTerm s b i
---   -> InferM s b i (TypeScheme (TCTypeVar s), TCTerm s b i, [TCPred s])
--- generalizeWithTerm ty pp term
---   | isValue term = generalizeWithTerm' ty pp term
---   | otherwise = do
---     pp' <- reduce pp (view termInfo term)
---     pure (TypeScheme [] [] ty, term, pp')
---   where
---   isValue = \case
---     Var{} -> True
---     Constant{} -> True
---     Lam{} -> True
---     -- Error{} -> True
---     Builtin{} -> True
---     _ -> False
-
--- -- Generalization that emits a typed term
--- -- Note: Deferred predicates are purely for the sake of
--- -- callsite dictionary overloaded variables.
--- -- These are currently disabled.
--- generalizeWithTerm'
---   :: TCType s
---   -> [TCPred s]
---   -> TCTerm s b i
---   -> InferM s b i (TypeScheme (TCTypeVar s), TCTerm s b i, [TCPred s])
--- generalizeWithTerm' ty pp term = do
---   preds <- nubPreds pp
---   ((ftvs, ty'), s) <- runStateT (gen' ty) Set.empty
---   (deferred, retained) <- split preds (view termInfo term)
---   retained' <- evalStateT (traverse genPred retained) s
---   -- when (retained' /= []) $
---     -- retained'' <- traverse _dbgPred retained
---     -- throwTypecheckError (UnsupportedTypeclassGeneralization retained'') info
---   case ftvs of
---     [] -> do
---       pure (TypeScheme [] retained' ty' , term, deferred)
---     (x:xs) -> do
---       pure (TypeScheme ftvs retained' ty', TyAbs (x :| xs) term info, deferred)
---   where
---   nubPreds li = nubPreds' li []
---   -- we expect
---   nubPreds' (p@(Pred tc) : xs) elems = case tc of
---     Eq t -> np Eq t
---     where
---     np con t = case t of
---       TyVar rv -> readTvRef rv >>= \case
---         LinkTy tl -> nubPreds' (Pred (con tl) :xs) elems
---         _ ->
---           if elem p elems
---           then nubPreds' xs elems
---           else nubPreds' xs (Pred (con t):elems)
---       _ -> nubPreds' xs elems
---   nubPreds' [] elems = pure (reverse elems)
---   info = term ^. termInfo
---   genPred (Pred t) = do
---     (o, p') <- case t of
---         Eq t' -> over _2 (Pred . Eq) <$> gen' t'
---     when (o /= []) $ error "predicate is introducing unquantified tyvars"
---     pure p'
---     -- (o, pty')  <- gen' pty
---     -- when (o /= []) $
---     --   error "Predicate is introducing an unquantified type variable"
---     -- pure (Pred t pty')
---   gen' (TyVar tv) = lift (readTvRef tv) >>= \case
---     Unbound n u l -> do
---       cl <- lift currentLevel
---       if l > cl then do
---         lift (writeTvRef tv (Bound n u))
---         gets (Set.member u) >>= \case
---           True -> pure ([], TyVar tv)
---           False -> modify' (Set.insert u) $> ([tv], TyVar tv)
---       else pure ([], TyVar tv)
---     LinkTy t' -> gen' t'
---     LinkRow _ -> error "invariant failure: tyvar instantiated as row"
---     LinkCap _ -> error "invariant failure: tyvar instantiated as cap"
---     Bound _ _ -> pure ([], TyVar tv)
---   gen' (TyFun l r) = do
---     (ftvl, l') <- gen' l
---     (ftvr, r') <- gen' r
---     pure (ftvl ++ ftvr,TyFun l' r')
---   gen' t@TyPrim{} = pure ([], t)
---   gen' (TyList t) = over _2 TyList <$> gen' t
---   gen' (TyModRef mr) = pure ([], TyModRef mr)
---   gen' (TyCapToken cv) = case cv of
---     CapVar tv ->
---       lift (readTvRef tv) >>= \case
---         Unbound n u l -> do
---           cl <- lift currentLevel
---           if l > cl then do
---             lift (writeTvRef tv (Bound n u))
---             gets (Set.member u) >>= \case
---               True -> pure ([], TyCapToken (CapVar tv))
---               False -> modify' (Set.insert u) $> ([tv], TyCapToken (CapVar tv))
---           else pure ([], TyCapToken (CapVar tv))
---         LinkTy _ -> error "invariant failure: tycaptoken instantiated as type"
---         LinkRow _ -> error "invariant failure: tyvar instantiated as row"
---         LinkCap qn -> gen' (TyCapToken qn)
---         Bound _ _ -> pure ([], TyCapToken cv)
---     CapConcrete qn -> pure ([], TyCapToken (CapConcrete qn))
---   gen' (TyNullary n) = over _2 TyNullary <$> gen' n
---   gen' (TyObject row) = over _2 TyObject <$> genRow' row
---   gen' (TyTable row) = over _2 TyTable <$> genRow' row
---   genRow' (RowVar tv) = lift (readTvRef tv) >>= \case
---     Unbound n u l -> do
---       cl <- lift currentLevel
---       if l > cl then do
---         lift (writeTvRef tv (Bound n u))
---         gets (Set.member u) >>= \case
---           True -> pure ([], RowVar tv)
---           False -> modify' (Set.insert u) $> ([tv], RowVar tv)
---       else pure ([], RowVar tv)
---     LinkTy _ -> error "invariant failure: rowvar instantiated as type"
---     LinkRow row -> genRow' row
---     LinkCap _ -> error "invariant failure: rowvar instantiated as cap"
---     Bound _ _ -> pure ([], RowVar tv)
---   genRow' (RowConcrete row) = do
---     rowTup <- traverse gen' row
---     let row' = view _2 <$> rowTup
---         ps = concat (M.elems (view _1 <$> rowTup))
---     pure (ps, RowConcrete row')
-
-
 checkTermType
   :: (TypeOfBuiltin b)
   => TCType s
@@ -1342,7 +1239,7 @@ checkTermType checkty = \case
           error "unbound term variable"
           -- throwTypecheckError (TCUnboundTermVariable n) i
     NTopLevel mn mh ->
-      view (tcFree . at (FullyQualifiedName mn n mh)) >>= \case
+      use (tcFree . at (FullyQualifiedName mn n mh)) >>= \case
         Just nty -> do
           let newVar = Var irn i
               rty = liftType nty
@@ -1499,7 +1396,7 @@ inferTerm = \case
           error "unbound term variable"
           -- throwTypecheckError (TCUnboundTermVariable n) i
     NTopLevel mn _mh ->
-      view (tcFree . at (FullyQualifiedName mn n _mh)) >>= \case
+      use (tcFree . at (FullyQualifiedName mn n _mh)) >>= \case
         Just ty -> do
           let newVar = Var irn i
           pure (liftType ty, newVar, [])
@@ -1684,9 +1581,10 @@ enforceArgType (IR.Arg n ty) =
 inferDefun
   :: TypeOfBuiltin b
   => ModuleName
+  -> ModuleHash
   -> IR.Defun Name IR.Type b i
   -> InferM s b i (TypedDefun b i)
-inferDefun _mn (IR.Defun name dfargs dfRetType term info) = do
+inferDefun mn mh (IR.Defun name dfargs dfRetType term info) = do
   let typedArgs = enforceArgType <$> dfargs
       rty = enforceTypeIsPresent dfRetType
   enterLevel
@@ -1697,61 +1595,84 @@ inferDefun _mn (IR.Defun name dfargs dfRetType term info) = do
   -- fail "typeclass constraints not supported in defun"
   unify info (liftType dfTy) termTy
   fterm <- noTyVarsinTerm info term'
+  tcFree %= M.insert (FullyQualifiedName mn name mh) dfTy
   pure (Defun name (fmap absurd <$> typedArgs) (liftType rty) fterm info)
 
--- inferDefConst
---   :: TypeOfBuiltin b
---   => IR.DefConst Name IR.Type b i
---   -> InferM s b i (TypedDefConst b i)
--- inferDefConst (IR.DefConst name dcTy term info) = do
---   enterLevel
---   (termTy, term', preds) <- inferTerm term
---   leaveLevel
---   checkReducible preds info
---   fterm <- noTyVarsinTerm info term'
---   let dcTy' = liftType <$> dcTy
---   _ <- maybe (pure ()) (\dct -> unify dct termTy info) dcTy'
---   rty' <- ensureNoTyVars info (maybe termTy id dcTy')
---   pure (DefConst name rty' fterm info)
+inferDefConst
+  :: ModuleName
+  -> ModuleHash
+  -> IR.DefConst Name IR.Type b i
+  -> InferM s b i (TypedDefConst b i)
+inferDefConst mn mh (IR.DefConst name dcTy cv info) = case cv of
+  IR.EvaledConst v -> do
+    pvt <- inferPactValue info v
+    let dcTy' = liftCoreType <$> dcTy
+    _ <- traverse (unify info pvt) dcTy'
+    rty <- ensureNoTyVars info (maybe pvt id dcTy')
+    tcFree %= M.insert (FullyQualifiedName mn name mh) rty
+    pure (DefConst name (liftType rty) v info)
+  _ -> error "invariant violated: defconst not evalted"
 
--- inferPactValue :: i -> PactValue -> InferM s b i (TCType s)
--- inferPactValue i = \case
---   PLiteral l -> typeOfLit l
---   PGuard _ -> TyGuard
---   PObject o ->
---     TyObject $ RowConcrete $
---       inferPactValue <$> o
---   PList l -> do
---     v <- TyVar . (`TypeVar` TyKind) <$> newTvRef
---     l' <- traverse (inferPactValue >=> unify i v) l
+inferPactValue :: i -> PactValue -> InferM s b i (TCType s)
+inferPactValue i = \case
+  PLiteral l -> pure $ typeOfLit l
+  PGuard _ -> pure $ TyGuard
+  PObject o ->
+    TyObject . RowConcrete <$>
+      traverse (inferPactValue i) o
+  PList l -> do
+    v <- TyVar . (`TypeVar` TyKind) <$> newTvRef
+    _ <- traverse (inferPactValue i >=> unify i v) l
+    pure (TyList v)
+  PModRef mr -> case _mrRefined mr of
+    Just s -> pure (TyModRef s)
+    Nothing -> error "cannot infer non-refined modref"
+  PCapToken ct ->
+    pure $ TyCapToken $ CapConcrete $ fqnToQualName $ _ctName ct
+  PTime _ -> pure $ TyTime
 
 
 
 
--- inferDefCap
---   :: TypeOfBuiltin b
---   => IR.DefCap Name b i
---   -> InferM s b' i (TypedDefCap b i)
--- inferDefCap (IR.DefCap name arity argtys rty term meta i) = do
---   let ty = foldr TyFun rty argtys
---   (termTy, term', preds) <- checkTermType (liftType ty) term
---   checkReducible preds i
---   unify (liftType ty) (termTy) i
---   fterm <- noTyVarsinTerm i term'
---   pure (DefCap name arity argtys rty fterm meta i)
+inferDefCap
+  :: TypeOfBuiltin b
+  => ModuleName
+  -> ModuleHash
+  -> IR.DefCap Name IR.Type b i
+  -> InferM s b i (TypedDefCap b i)
+inferDefCap mn mh (IR.DefCap name args rty term meta i) = do
+  let args' = enforceArgType <$> args
+  rty' <- maybe (TyVar . (`TypeVar` TyKind) <$> newTvRef) (pure . liftCoreType) rty
+  let ty = foldr TyFun rty' (liftType . _argType <$> args')
+  (termTy, term', preds) <- inferTerm term
+  checkReducible preds i
+  unify i ty termTy
+  fterm <- noTyVarsinTerm i term'
+  rtyf <- ensureNoTyVars i rty'
+  let argsF = over argType liftType <$> args'
+  let capRty = foldr TyFun (TyCapToken (CapConcrete (QualifiedName name mn))) (_argType <$> args')
+  tcFree %= M.insert (FullyQualifiedName mn name mh) capRty
+  pure (DefCap name argsF rtyf fterm meta i)
 
--- inferDef
---   :: TypeOfBuiltin b
---   => IR.Def Name b i
---   -> InferM s b' i (TypedDef b i)
--- inferDef = \case
---   IR.Dfun d -> Dfun <$> inferDefun d
---   IR.DConst d -> DConst <$> inferDefConst d
---   IR.DCap dc -> DCap <$> inferDefCap dc
+inferTable mn mh (IR.DefTable tn schema info) = do
+  let schema' = liftCoreType <$> schema
+  pure (DefTable)
+
+inferDef
+  :: TypeOfBuiltin b
+  => ModuleName
+  -> ModuleHash
+  -> IR.Def Name IR.Type b i
+  -> InferM s b i (TypedDef b i)
+inferDef mn mh = \case
+  IR.Dfun d -> Dfun <$> inferDefun mn mh d
+  IR.DConst d -> DConst <$> inferDefConst mn mh d
+  IR.DCap dc -> DCap <$> inferDefCap mn mh dc
+  IR.DTable tbl  -> inferTable
 
 -- inferIfDef
 --   :: TypeOfBuiltin b
---   => IR.IfDef Name b i
+--   => IR.IfDef Name IR.Type b i
 --   -> InferM s b' i (TypedIfDef b i)
 -- inferIfDef = \case
 --   IR.IfDfun ifd ->
@@ -1761,21 +1682,13 @@ inferDefun _mn (IR.Defun name dfargs dfRetType term info) = do
 --   IR.IfDCap (IR.IfDefCap n argtys rty i) ->
 --     pure $ IfDCap (IfDefCap n argtys rty i)
 
--- inferModule
---   :: TypeOfBuiltin b
---   => IR.Module Name b i
---   -> InferM s b' i (TypedModule b i)
--- inferModule (IR.Module mname mgov defs blessed imports impl mh info) = do
---   fv <- view tcFree
---   (defs', _) <- foldlM infer' ([], fv) defs
---   pure (Module mname mgov (reverse defs') blessed imports impl mh info)
---   where
---   infer' (xs, m) d = do
---     def' <- local (set tcFree m) (inferDef d)
---     let name' = FullyQualifiedName mname (defName def') mh
---         dty = fmap absurd (defType def')
---         m' = M.insert name' dty  m
---     pure (def':xs, m')
+inferModule
+  :: TypeOfBuiltin b
+  => IR.Module Name IR.Type b i
+  -> InferM s b i (TypedModule b i)
+inferModule (IR.Module mname mgov defs blessed imports impl mh info) = do
+  defs' <- traverse (inferDef mname mh) defs
+  pure (Module mname mgov defs' blessed imports impl mh info)
 
 -- inferInterface
 --   :: TypeOfBuiltin b
@@ -1785,18 +1698,18 @@ inferDefun _mn (IR.Defun name dfargs dfRetType term info) = do
 --   defns' <- traverse inferIfDef defns
 --   pure (Interface n defns' h info)
 
--- -- | Note: debruijnizeType will
--- -- ensure that terms that are generic will fail
--- inferTermNonGen
---   :: TypeOfBuiltin b
---   => IRTerm b i
---   -> InferM s b' i (TypeScheme NamedDeBruijn, TypedTerm b i)
--- inferTermNonGen t = do
---   (ty, t', preds) <- inferTerm t
---   checkReducible preds (view IR.termInfo t)
---   tys <- ensureNoTyVars (view IR.termInfo t) ty
---   tt <- noTyVarsinTerm (view IR.termInfo t) t'
---   pure (TypeScheme [] [] tys, tt)
+-- | Note: debruijnizeType will
+-- ensure that terms that are generic will fail
+inferTermNonGen
+  :: TypeOfBuiltin b
+  => IRTerm b i
+  -> InferM s b i (TypeScheme NamedDeBruijn, TypedTerm b i)
+inferTermNonGen t = do
+  (ty, t', preds) <- inferTerm t
+  checkReducible preds (view IR.termInfo t)
+  tys <- ensureNoTyVars (view IR.termInfo t) ty
+  tt <- noTyVarsinTerm (view IR.termInfo t) t'
+  pure (TypeScheme [] [] tys, tt)
 
 -- inferTermGen
 --   :: TypeOfBuiltin b
@@ -1815,25 +1728,26 @@ inferDefun _mn (IR.Defun name dfargs dfRetType term info) = do
 --   dbjTerm <- debruijnizeTermTypes info typedTerm
 --   pure (dbjTyScheme, dbjTerm)
 
--- inferTopLevel
---   :: TypeOfBuiltin b
---   => Loaded reso i
---   -> IR.TopLevel Name b i
---   -> InferM s reso i (TypedTopLevel b i, Loaded reso i)
--- inferTopLevel loaded = \case
---   IR.TLModule m -> do
---     tcm <- inferModule m
---     let toFqn df = FullyQualifiedName (_mName tcm) (defName df) (_mHash tcm)
---         newTLs = M.fromList $ (\df -> (toFqn df, defType df)) <$> _mDefs tcm
---         loaded' = over loAllTyped (M.union newTLs) loaded
---     pure (TLModule tcm, loaded')
---   IR.TLTerm m -> (, loaded) . TLTerm . snd <$> inferTermNonGen m
---   IR.TLInterface i -> do
---     tci <- inferInterface i
---     let toFqn dc = FullyQualifiedName (_ifName tci) (_dcName dc) (_ifHash tci)
---         newTLs = M.fromList $ fmap (\df -> (toFqn df, DefunType (_dcType df))) $ mapMaybe (preview _IfDConst) (_ifDefns tci)
---         loaded' = over loAllTyped (M.union newTLs) loaded
---     pure (TLInterface tci, loaded')
+inferTopLevel
+  :: TypeOfBuiltin b
+  => IRTopLevel b i
+  -> InferM s b i (TypedTopLevel b i)
+inferTopLevel = \case
+  IR.TLModule m ->
+    TLModule <$> inferModule m
+    -- tcm <- inferModule m
+    -- let toFqn df = FullyQualifiedName (_mName tcm) (defName df) (_mHash tcm)
+    --     newTLs = M.fromList $ (\df -> (toFqn df, defType df)) <$> _mDefs tcm
+    --     loaded' = over loAllTyped (M.union newTLs) loaded
+    -- pure (TLModule tcm, loaded')
+  IR.TLTerm m -> TLTerm . snd <$> inferTermNonGen m
+  IR.TLInterface i -> undefined
+    -- tci <- inferInterface i
+    -- let toFqn dc = FullyQualifiedName (_ifName tci) (_dcName dc) (_ifHash tci)
+    --     newTLs = M.fromList $ fmap (\df -> (toFqn df, DefunType (_dcType df))) $ mapMaybe (preview _IfDConst) (_ifDefns tci)
+    --     loaded' = over loAllTyped (M.union newTLs) loaded
+    -- pure (TLInterface tci, loaded')
+  IR.TLUse tl i -> pure (TLUse tl i)
 
 -- inferReplTopLevel
 --   :: TypeOfBuiltin b
@@ -1868,25 +1782,25 @@ inferDefun _mn (IR.Defun name dfargs dfRetType term info) = do
 --     pure (RTLInterface tci, loaded')
 
 
--- -- | Transform types into their debruijn-indexed version
--- -- Essentially: Start at depth 0:
--- --  rename : (Term, Γ, Int) -> IxTerm
--- --  rename (ΛX.e, tyEnv, DEPTH) = Λ. (rename (e, tyEnv[depth/X], DEPTH+1))
--- --  .. other cases are simply renaming recursively and calling `renameType`
--- --  on occurences of Type
--- --
--- --  NOTE: the passed in DEPTH is 1 higher than the highest binder.
--- --
--- --  renameType : (Type, Γ, Int) -> IxType
--- --  renameType (a, env, DEPTH) = DEPTH - env(a) - 1
--- --  .. other recursive cases are straightforward
--- --
--- --  Quip: when we debruijnize types, we expect no impredicative polymorphism atm,
--- --  thus we will fail on universially quantified types found in application and
--- --  var binding sites.
--- --  The typechecker does not spit out impredicative polymorphism, but while
--- --  it would be trivial to support their renaming here, I'd rather fail
--- --  for now as the typechecker does not support it and it functions as a sanity check
+-- | Transform types into their debruijn-indexed version
+-- Essentially: Start at depth 0:
+--  rename : (Term, Γ, Int) -> IxTerm
+--  rename (ΛX.e, tyEnv, DEPTH) = Λ. (rename (e, tyEnv[depth/X], DEPTH+1))
+--  .. other cases are simply renaming recursively and calling `renameType`
+--  on occurences of Type
+--
+--  NOTE: the passed in DEPTH is 1 higher than the highest binder.
+--
+--  renameType : (Type, Γ, Int) -> IxType
+--  renameType (a, env, DEPTH) = DEPTH - env(a) - 1
+--  .. other recursive cases are straightforward
+--
+--  Quip: when we debruijnize types, we expect no impredicative polymorphism atm,
+--  thus we will fail on universially quantified types found in application and
+--  var binding sites.
+--  The typechecker does not spit out impredicative polymorphism, but while
+--  it would be trivial to support their renaming here, I'd rather fail
+--  for now as the typechecker does not support it and it functions as a sanity check
 debruijnizeTermTypes
   :: forall s b b' i. i
   -> TCTerm s b i

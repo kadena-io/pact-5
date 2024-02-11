@@ -115,6 +115,10 @@ data PactKind
   | UserDefKind
   deriving (Show, Eq)
 
+newtype Schema
+  = Schema { _schema :: Map Field (Type Void) }
+  deriving (Eq, Show, NFData)
+
 data TypeVar n
   = TypeVar n PactKind
   deriving (Show, Eq)

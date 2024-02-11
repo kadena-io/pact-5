@@ -152,7 +152,7 @@ data DefPact name ty builtin info
 data DefConst name ty builtin info
   = DefConst
   { _dcName :: Text
-  , _dcType :: Maybe ty
+  , _dcType :: Type ty
   , _dcTerm :: PactValue
   , _dcInfo :: info
   } deriving (Show, Functor, Eq, Generic)
@@ -165,7 +165,7 @@ data DefCap name ty builtin info
   , _dcapArgs :: [Arg ty]
   , _dcapRType :: Type ty
   , _dcapTerm :: Term name ty builtin info
-  , _dcapMeta :: DefCapMeta FullyQualifiedName
+  , _dcapMeta :: DefCapMeta (FQNameRef Name)
   , _dcapInfo :: info
   } deriving (Show, Functor, Eq, Generic)
 
