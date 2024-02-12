@@ -171,7 +171,7 @@ newtype InferM s b i a =
     , MonadError (TypecheckFailure i))
   via (ExceptT (TypecheckFailure i) (ReaderT (TCEnv s b i) (StateT (TCState b i) (ST s))))
 
-class TypeOfBuiltin b where
+class AsCoreBuiltin b => TypeOfBuiltin b where
   typeOfBuiltin :: b -> TypeScheme DebruijnTypeVar
 
 instance TypeOfBuiltin CoreBuiltin where
@@ -755,8 +755,9 @@ byInst (Pred p) = case p of
   ListLike ty -> listLikeInst ty
   Fractional ty -> fractionalInst ty
   EnforceRead{} -> error "todo: implement"
-  EqRow{} -> error "todo: eqrow"
-  RoseSubRow{} -> error "todo: rosesubrow"
+  EqRow l -> eqRow l
+  RoseSubRow l r -> roseSubRow l r
+  RoseRowEq l r -> roseRowEq l r
 
 -- | Instances of Eq:
 --
@@ -885,6 +886,20 @@ listLikeInst = \case
     _ -> Nothing
   TyList _ -> pure $ Just []
   _ -> pure Nothing
+
+eqRow = undefined
+roseSubRow = undefined
+roseRowEq = undefined
+
+normalizeRoseSubrow
+  :: RoseRow (TCType s)
+  -> InferM s b i (Map Field (TCType s))
+normalizeRoseSubrow (RoseRowCat l r) = do
+  l' <- normalizeRoseSubrow l
+  r' <- normalizeRoseSubrow r
+  pure $ l' <> r'
+-- normalizeRoseSubrow (RoseRowTy )
+
 
 -- | Instances of Show:
 --
@@ -1397,15 +1412,15 @@ inferTerm = \case
           let v' = Var irn i
           pure (ty, v', [])
         Nothing ->
-          error "unbound term variable"
-          -- throwTypecheckError (TCUnboundTermVariable n) i
+          throwTypecheckError i "unbound term variable"
+    -- Todo: lazily calculate topelvel call
     NTopLevel mn _mh ->
       use (tcFree . at (FullyQualifiedName mn n _mh)) >>= \case
         Just ty -> do
           let newVar = Var irn i
           pure (liftType ty, newVar, [])
         _ ->
-          error "unbound free variable"
+          throwTypecheckError i "unbound free variable"
     NModRef _ ifs -> case ifs of
       [iface] -> do
         let v' = Var irn i
@@ -1426,32 +1441,9 @@ inferTerm = \case
     withTypeInfo (IR.Arg n p) = case p of
       Just ty -> pure (Arg n (liftCoreType ty))
       Nothing -> Arg n . TyVar . (`TypeVar` TyKind) <$> newTvRef
-  IR.App te [] i -> do
-    tv1 <- TyVar . (`TypeVar` TyKind) <$> newTvRef
-    (tfun, te', pe1) <- inferTerm te
-    unify i (TyNullary tv1) tfun
-    pure (tv1, App te' [] i, pe1)
-  IR.App te (h:hs) i -> do
-    (tfun, te', pe1) <- inferTerm te
-    (rty, xs, ps) <- foldlM inferFunctionArgs (tfun,[], []) (h:hs)
-    let term' = App te' (reverse xs) i
-    pure (rty, term', pe1 ++ ps)
-    where
-    inferFunctionArgs (ta, xs, ps) fnArg = case ta of
-      TyFun arg ret -> do
-        (_, x', p) <- checkTermType arg fnArg
-        pure (ret, x':xs, ps ++ p)
-      _ -> do
-        tv1 <- TyVar . (`TypeVar` TyKind) <$> newTvRef
-        (tArg, fnArg', predsArg) <- inferTerm fnArg
-        unify i ta (TyFun tArg tv1)
-        pure (tv1,fnArg':xs,ps ++ predsArg)
-        -- as <- traverse inferTerm args
-        -- let tys = view _1 <$> as
-        --     args' = view _2 <$> as
-        --     preds' = concat (pte : NE.toList (view _3 <$> as))
-        -- unify te (foldr TyFun tv1 tys) i
-        -- pure (tv1, App e' args' i, preds')
+  IR.App te apps i -> do
+    (ty, Apply te' apps' _, preds) <- inferApply (Apply te apps i)
+    pure (ty, App te' apps' i, preds)
   IR.Let (IR.Arg n mty) e1 e2 i -> do
     enterLevel
     (te1, e1', pe1) <- case mty of
@@ -1634,8 +1626,6 @@ inferPactValue i = \case
   PCapToken ct ->
     pure $ TyCapToken $ CapConcrete $ fqnToQualName $ _ctName ct
   PTime _ -> pure $ TyTime
-
-
 
 
 inferDefCap

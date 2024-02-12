@@ -4,6 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Pact.Core.Builtin
  ( CoreBuiltin(..)
@@ -19,8 +20,10 @@ module Pact.Core.Builtin
  , ReplCoreBuiltin
  , BuiltinForm(..)
  , ReplBuiltins(..)
- )where
+ , AsCoreBuiltin(..)
+ ) where
 
+import Control.Lens
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Control.DeepSeq
@@ -900,6 +903,8 @@ class Show b => IsBuiltin b where
   builtinArity :: b -> Int
   builtinName :: b -> NativeName
 
+makeClassyPrisms ''CoreBuiltin
+makePrisms ''ReplBuiltin
 
 instance Pretty CoreBuiltin where
   pretty b = pretty (coreBuiltinToUserText b)
@@ -908,3 +913,7 @@ instance (Pretty b) => Pretty (ReplBuiltin b) where
   pretty = \case
     RBuiltinWrap b -> pretty b
     RBuiltinRepl t -> pretty (replBuiltinsToText t)
+
+
+instance AsCoreBuiltin b => AsCoreBuiltin (ReplBuiltin b) where
+  _CoreBuiltin = (_RBuiltinWrap . _CoreBuiltin)

@@ -188,12 +188,19 @@ data BuiltinTC ty
   | EnforceRead ty
   | EqRow ty
   | RoseSubRow (RoseRow ty) (RoseRow ty)
+  | RoseRowEq (RoseRow ty) (RoseRow ty)
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 data RoseRow ty
-  = RowTy ty
-  | RowRowCat (RoseRow ty) (RoseRow ty)
+  = RoseRowTy ty
+  | RoseRowCat (RoseRow ty) (RoseRow ty)
   deriving (Show, Eq, Functor, Foldable, Traversable)
+
+instance Pretty ty => Pretty (RoseRow ty) where
+  pretty = \case
+    RoseRowTy ty -> pretty ty
+    RoseRowCat l r ->
+      Pretty.parens (pretty l <+> "⊙" <+> pretty r)
 
 -- data RoseConstraint v
 --   = RoseSubRow (RoseRow v) (RoseRow v)
@@ -247,7 +254,10 @@ instance (Pretty ty) => Pretty (BuiltinTC ty) where
     Fractional t -> "Fractional" <> Pretty.braces (pretty t)
     EnforceRead t -> "EnforceRead" <> Pretty.braces (pretty t)
     EqRow t -> "EqRow" <> Pretty.braces (pretty t)
-    RoseSubRow _ _ -> "WIP:RoseSubRow"
+    RoseSubRow l r ->
+      pretty l <+> "≼" <+> pretty r
+    RoseRowEq l r ->
+      pretty l <+> "~" <+> pretty r
 
 -- Note, no superclasses, for now
 newtype Pred tv
