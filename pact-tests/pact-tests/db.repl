@@ -82,43 +82,43 @@
 (begin-tx)
 (use dbtest)
 (expect-failure
- "write protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ "write protected by admin key" "Keyset enforce failure"
  (write persons "foo" ROW_A))
 (expect-failure
- "update protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ "update protected by admin key" "Keyset enforce failure"
  (update persons "foo" ROW_A))
 (expect-failure
- "insert protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ "insert protected by admin key" "Keyset enforce failure"
  (insert persons "foo" ROW_A))
 (expect-failure
- "keys protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ "keys protected by admin key" "Keyset enforce failure"
  (keys persons))
 (expect-failure
- "txids protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ "txids protected by admin key" "Keyset enforce failure"
  (txids persons 0))
 (expect-failure
- "txlog protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ "txlog protected by admin key" "Keyset enforce failure"
  (txlog persons 2))
 (expect-failure
- "keylogs protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ "keylogs protected by admin key" "Keyset enforce failure"
  (keylog persons "" 2))
 (expect-failure
- "read protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ "read protected by admin key" "Keyset enforce failure"
  (read persons ID_A))
 (expect-failure
- "with-read protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ "with-read protected by admin key" "Keyset enforce failure"
  (with-read persons ID_A { 'name:= name } name))
 (expect-failure
- "with-default-read protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ "with-default-read protected by admin key" "Keyset enforce failure"
  (with-default-read persons ID_A { 'name: "stu" } { 'name:= name } name))
 (expect-failure
- "select protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ "select protected by admin key" "Keyset enforce failure"
  (select persons (constantly true)))
 (expect-failure
- "keys protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ "keys protected by admin key" "Keyset enforce failure"
  (keys persons))
 (expect-failure
- "create-table protected by admin key" "Keyset failure (=): 'dbtest-admin"
+ "create-table protected by admin key" "Keyset enforce failure"
  (create-table persons2))
 
 ;; just making sure this doesn't blow up, output is still TBD on better Term output in general
@@ -129,13 +129,13 @@
 (env-exec-config ["AllowReadInLocal"])
 (use dbtest)
 (expect-failure
- "write protected by admin key in local" "Keyset failure (=): 'dbtest-admin"
+ "write protected by admin key in local" "Keyset enforce failure"
  (write persons "foo" ROW_A))
 (expect-failure
- "update protected by admin key in local" "Keyset failure (=): 'dbtest-admin"
+ "update protected by admin key in local" "Keyset enforce failure"
  (update persons "foo" ROW_A))
 (expect-failure
- "insert protected by admin key in local" "Keyset failure (=): 'dbtest-admin"
+ "insert protected by admin key in local" "Keyset enforce failure"
  (insert persons "foo" ROW_A))
 (expect
  "keys allowed in local" [ID_A]
@@ -165,7 +165,7 @@
  "keys allowed in local" [ID_A]
  (keys persons))
 (expect-failure
- "create-table protected by admin key in local" "Keyset failure (=): 'dbtest-admin"
+ "create-table protected by admin key in local" "Keyset enforce failure"
  (create-table persons2))
 
 ;; test nested commits

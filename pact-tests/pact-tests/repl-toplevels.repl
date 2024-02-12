@@ -1,0 +1,6 @@
+
+(defconst repl-const1:integer 1)
+
+(defun repl-defun1:integer (a:integer b:integer) (+ a b))
+
+(expect "repl-consts work with repl defuns" 3 (repl-defun1 repl-const1 (repl-defun1 repl-const1 repl-const1)))

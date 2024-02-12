@@ -119,19 +119,23 @@ evalModuleGovernance bEnv tl = do
       mname <- mangleNamespace unmangled
       lookupModule (Lisp._mInfo m) pdb mname >>= \case
         Just targetModule -> do
-          term <- case _mGovernance targetModule of
+          case _mGovernance targetModule of
             KeyGov ksn -> do
               let ksnTerm = Constant (LString (renderKeySetName ksn)) info
                   ksrg = App (Builtin (liftCoreBuiltin CoreKeysetRefGuard) info) (pure ksnTerm) info
                   term = App (Builtin (liftCoreBuiltin CoreEnforceGuard) info) (pure ksrg) info
-              pure term
+              void $ Eval.eval PImpure bEnv term
             CapGov (FQName fqn) -> do
-              let cgBody = Constant LUnit info
-                  withCapApp = App (Var (fqnToName fqn) info) [] info
-                  term = CapabilityForm (WithCapability withCapApp cgBody) info
-              pure term
-          void $ Eval.eval PImpure bEnv term
-          esCaps . csModuleAdmin %== S.insert (Lisp._mName m)
+              hasModAdmin <- usesEvalState (esCaps . csModuleAdmin) (S.member mname)
+              if hasModAdmin then pure ()
+              else do
+                -- check whether we already have module admin.
+                -- if we do, we don't need to run this.
+                let cgBody = Constant LUnit info
+                    withCapApp = App (Var (fqnToName fqn) info) [] info
+                    term = CapabilityForm (WithCapability withCapApp cgBody) info
+                void $ Eval.eval PImpure bEnv term
+                esCaps . csModuleAdmin %== S.insert mname
           -- | Restore the state to pre-module admin acquisition
           esLoaded .== lo
         Nothing -> enforceNamespaceInstall info bEnv
@@ -214,7 +218,7 @@ evalTopLevel bEnv tlFinal deps = do
       liftDbFunction (_mInfo m) (writeModule pdb Write (view mName m) mdata)
       let fqDeps = toFqDep (_mName m) (_mHash m) <$> _mDefs m
           newLoaded = M.fromList fqDeps
-          newTopLevel = M.fromList $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind d))) <$> fqDeps
+          newTopLevel = M.fromList $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind (_mName m) d))) <$> fqDeps
           loadNewModule =
             over loModules (M.insert (_mName m) mdata) .
             over loAllLoaded (M.union newLoaded) .
@@ -231,7 +235,7 @@ evalTopLevel bEnv tlFinal deps = do
                   <$> mapMaybe ifDefToDef (_ifDefns iface)
           newLoaded = M.fromList fqDeps
           newTopLevel = M.fromList
-                        $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind d)))
+                        $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind (_ifName iface) d)))
                         <$> fqDeps
           loadNewModule =
             over loModules (M.insert (_ifName iface) mdata) .

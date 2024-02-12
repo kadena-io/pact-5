@@ -38,7 +38,8 @@ evalModuleDefConsts bEnv (Module mname mgov defs blessed imports implements mhas
       DConst dc -> case _dcTerm dc of
         TermConst term -> do
           pv <- Eval.eval PSysOnly bEnv term
-          pure (DConst (set dcTerm (EvaledConst pv) dc))
+          pv' <- maybeTCType (_dcInfo dc) pv (_dcType dc)
+          pure (DConst (set dcTerm (EvaledConst pv') dc))
         EvaledConst _ -> pure defn
       _ -> pure defn
     let dn = defName defn

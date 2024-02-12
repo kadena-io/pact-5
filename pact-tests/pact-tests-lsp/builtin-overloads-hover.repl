@@ -1,0 +1,53 @@
+
+(module test-overload-builtins G
+  (defcap G () true)
+
+  (defschema schema
+      "simple table schema"
+    a: integer)
+
+  (deftable example-table:{schema})
+
+  
+  (defun test-overloaded-builtins ()
+
+    ;; check `Enumerate` and `EnumerateStepN`
+    (enumerate 0 10)
+    (enumerate 0 10 1)
+
+    ;; check `Select` and `SelectN`
+    (select example-table (where 'a ( > 0)))
+    (select example-table ['a] (where 'a ( > 0)))
+
+    ;; check `Sort` and `SortObject`
+    (sort [3 2 1])
+    (sort ['a] [{'a: 3}])
+
+    ;; check `Round` and `RoundPrec`
+    (round 3.5)
+    (round 3.555 2)
+
+    ;; check `Ceiling` and `CeilingPrec`
+    (ceiling 3.5)
+    (ceiling 3.555 2)
+
+    ;; check `Floor` and `FloorPrec`
+    (floor 3.5)
+    (floor 3.555 2)
+
+    ;; check `StrToInt` and `StrToIntBase`
+    (str-to-int "1234")
+    (str-to-int 16 "1234")
+
+    ;; check `ReadMsg` and `ReadMsgDefault`
+    (read-msg)
+    (read-msg "abc")
+
+    ;; check `DefineKeyset` and `DefineKeysetData`
+    (define-keyset "abc" "def")
+    (define-keyset "abc")
+
+    ;; check `Yield` and `YieldToChain`
+    (yield {'a : 1})
+    (yield {'a : 1} 1)
+    ))

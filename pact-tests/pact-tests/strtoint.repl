@@ -19,3 +19,5 @@
 (expect "int-to-str 16" "12345abcdef" (int-to-str 16 1251004370415))
 (expect "int-to-str 64" "q80" (int-to-str 64 43981))
 (expect-failure "int-to-str 17" (int-to-str 17 3245342))
+(expect-failure "str-to-int on negative number" (str-to-int "-123"))
+(expect-failure "int-to-str on negative numbers" (int-to-str 10 -36))

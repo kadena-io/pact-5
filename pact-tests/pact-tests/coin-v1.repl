@@ -58,22 +58,22 @@
 ; accounts conform to account structure
 (expect-failure
   "non-latin1+ascii account names fail to create"
-  "charset"
+  "Account does not conform to the coin contract charset"
   (create-account "emilyπ" (read-keyset 'emily)))
 
 (expect-failure
   "empty account names fail to create"
-  "min length"
+  "Account name does not conform to the min length"
   (create-account "" (read-keyset 'doug)))
 
 (expect-failure
   "account names not >= 3 chars fail"
-  "min length"
+  "Account name does not conform to the min length"
   (create-account "jo" (read-keyset 'stuart)))
 
 (expect-failure
   "account names not <= 256 chars fail"
-  "max length"
+  "Account name does not conform to the max length"
   (create-account
     "Before getting down to business, let us ask why it should be that category theory has such far-reaching applications. \
     \Well, we said that it's the abstract theory of functions; so the answer is simply this: Functions are everywhere! \
@@ -114,12 +114,12 @@
 ; w/o capability
 (expect-failure
   "direct call to credit fails"
-  "not granted"
+  "cap not in scope"
   (credit 'emily (read-keyset 'emily) 1.0))
 
 (expect-failure
   "direct call to debit fails"
-  "not granted"
+  "cap not in scope"
   (debit 'emily 1.0))
 
 (env-gas 0) (env-gaslog)
@@ -132,12 +132,12 @@
 ; debit tests
 (expect-failure
   "debit not > 0.0 quantities fail fast"
-  "must be positive"
+  "debit amount must be positive"
   (debit 'emily 0.0))
 
 (expect-failure
   "debit not > 0.0 quantities fail fast"
-  "must be positive"
+  "debit amount must be positive"
   (debit 'emily (- 1.0)))
 
 (expect-failure
@@ -147,17 +147,17 @@
 
 (expect-failure
   "cannot debit to poorly formatted accounts: charset"
-  "charset"
+  "Account does not conform to the coin contract charset"
   (debit "emilyπ" 1.0))
 
 (expect-failure
   "cannot debit to poorly formatted accounts: min length"
-  "min length"
+  "Account name does not conform to the min length"
   (debit "l" 1.0))
 
 (expect-failure
   "cannot debit to poorly formatted accounts: max length"
-  "max length"
+  "Account name does not conform to the max length"
   (debit "a mathematical object X is best thought of in the context of a category surrounding it, \
   \and is determined by the network of relations it enjoys with all the objects of that category. \
   \Moreover, to understand X it might be more germane to deal directly with the functor representing it" 1.0))
@@ -173,17 +173,17 @@
 
 (expect-failure
   "cannot credit to poorly formatted accounts: charset"
-  "charset"
+  "Account does not conform to the coin contract charset"
   (credit "emilyπ" (read-keyset 'emily) 1.0))
 
 (expect-failure
   "cannot credit to poorly formatted accounts: min length"
-  "min length"
+  "Account name does not conform to the min length"
   (credit "l" (read-keyset 'emily) 1.0))
 
 (expect-failure
   "cannot credit to poorly formatted accounts: max length"
-  "max length"
+  "Account name does not conform to the max length"
   (credit "The aim of theory really is, to a great extent, that of systematically organizing past experience in such a way that the next generation, our students and their students and so on, will be able to absorb the essential aspects in as painless a way as possible, and this is the only way in which you can go on cumulatively building up any kind of scientific activity without eventually coming to a dead end." (read-keyset 'emily) 1.0))
 
 (test-capability (DEBIT "emily"))
@@ -199,12 +199,12 @@
 
 (expect-failure
   "crediting trivial or negative funds fails fast"
-  "positive"
+  "credit amount must be positive"
   (credit 'stuart (read-keyset 'stuart) 0.0))
 
 (expect-failure
   "crediting trivial or negative funds fails fast"
-  "positive"
+  "credit amount must be positive"
   (credit 'stuart (read-keyset 'stuart) (- 1.0)))
 
 (credit 'stuart (read-keyset 'stuart) 1.0)
@@ -230,7 +230,7 @@
 
 (expect-failure
  "fund-tx should fail when GAS is not in scope"
- "not granted: (coin.GAS)"
+ "cap not in scope coin.GAS"
  (fund-tx 'emily 'doug (read-keyset 'doug) 1.0))
 
 (test-capability (GAS))
@@ -238,24 +238,24 @@
 
 (expect-failure
   "fund-tx fails without signature"
-  "Keyset failure"
+  "Keyset enforce failure"
   (fund-tx 'emily 'doug (read-keyset 'doug) 1.0))
 
 (env-sigs [{"key": "keys1", "caps": [(TRANSFER "emily" "doug" 1.0)]}])
 
 (expect-failure
   "fund-tx fails for no gas cap"
-  "Keyset failure"
+  "Keyset enforce failure"
   (fund-tx 'emily 'doug (read-keyset 'doug) 1.0))
 
 (expect-failure
   "fund-tx fails for trivial or negative quantities"
-  "positive"
+  "gas supply must be a positive quantity"
   (fund-tx 'emily 'doug (read-keyset 'doug) 0.0))
 
 (expect-failure
   "fund-tx fails for trivial or negative quantities"
-  "positive"
+  "gas supply must be a positive quantity"
   (fund-tx 'emily 'doug (read-keyset 'doug) (- 1.0)))
 
 (env-sigs [{"key": "keys1", "caps": [(GAS)]}])
@@ -375,7 +375,7 @@
 
 (expect-failure
   "transfers of trivial or negative quantities fails fast"
-  "positive"
+  "transfer amount must be positive"
   (transfer 'emily 'doug 0.0))
 
 (expect-failure "can't install negative"
@@ -422,7 +422,7 @@
   (transfer 'emily 'doug 1.0))
 
 (expect-failure "No account for will"
-  "row not found"
+  "no such read object"
   (get-balance 'will))
 
 (test-capability (TRANSFER 'doug 'will 1.0))
@@ -458,7 +458,7 @@
 
 (expect-failure
   "coinbase fails when capability is not in scope"
-  "not granted: (coin.COINBASE)"
+  "cap not in scope"
   (coinbase 'emily (read-keyset 'emily) 0.0))
 
 (test-capability (COINBASE))
@@ -467,12 +467,12 @@
 
 (expect-failure
   "coinbasing trivial or negative amounts fails fast"
-  "positive"
+  "credit amount must be positive"
   (coinbase 'emily (read-keyset 'emily) 0.0))
 
 (expect-failure
   "coinbasing trivial or negative amounts fails fast"
-  "positive"
+  "credit amount must be positive"
   (coinbase 'emily (read-keyset 'emily) (- 1.0)))
 
 (expect
@@ -484,7 +484,7 @@
 (env-data { "miner2": ["miner2"] })
 
 (expect-failure "no account for miner2"
-  "row not found"
+  "no such read object"
   (get-balance 'miner2))
 
 (coinbase 'miner2 (read-keyset 'miner2) 1.0)
@@ -506,12 +506,12 @@
 
 (expect-failure
   "cross-chain transfers fail for trivial or negative quantities"
-  "positive"
+  "transfer quantity must be positive"
   (transfer-crosschain 'emily 'doug (read-keyset 'doug) "1" 0.0))
 
 (expect-failure
   "cross-chain transfers fail for trivial or negative quantities"
-  "positive"
+  "transfer quantity must be positive"
   (transfer-crosschain 'emily 'doug (read-keyset 'doug) "1" (- 1.0)))
 
 (expect
@@ -587,12 +587,12 @@
 
 (expect-failure
   "invalid precision"
-  "minimum precision"
+  "Amount violates minimum precision"
   (enforce-unit 1.1234567890123))
 
 (expect-failure
   "too small"
-  "minimum precision"
+  "Amount violates minimum precision"
   (enforce-unit UNIT_BAD))
 
 (expect
@@ -610,7 +610,7 @@
 
  (expect-failure
    "bad transfer fails"
-   "precision"
+   "Amount violates minimum precision"
    (transfer 'emily 'doug UNIT_BAD))
 
 ;; transfer-create
@@ -629,7 +629,7 @@
   (transfer-create 'emily 'doug (read-keyset 'doug) UNIT_GOOD))
  (expect-failure
    "bad transfer-create fails"
-   "minimum precision"
+   "Amount violates minimum precision"
    (transfer-create 'emily 'doug (read-keyset 'doug) UNIT_BAD))
 
 ;;transfer-crosschain (step 0 only covered)
@@ -644,7 +644,7 @@
 
 (expect-failure
   "bad transfer-crosschain fails"
-  "minimum precision"
+  "Amount violates minimum precision"
   (transfer-crosschain 'emily 'doug (read-keyset 'doug) "chain" UNIT_BAD))
 
 ;;coinbase
@@ -656,7 +656,7 @@
 
 (expect-failure
   "bad coinbase fails"
-  "minimum precision"
+  "Amount violates minimum precision"
   (coinbase 'doug (read-keyset 'doug) UNIT_BAD))
 ;;buy-gas
 (test-capability (GAS))
@@ -667,7 +667,7 @@
 
 (expect-failure
   "bad buy-gas fails"
-  "minimum precision"
+  "Amount violates minimum precision"
   (buy-gas 'emily UNIT_BAD))
 
 ;;redeem-gas
@@ -682,7 +682,7 @@
 
 (expect-failure
   "bad redeem-gas fails"
-  "minimum precision"
+  "Amount violates minimum precision"
   (redeem-gas 'doug (read-keyset 'doug) 'emily UNIT_BAD))
 (commit-tx)
 
@@ -696,23 +696,23 @@
 
 (expect-failure
   "allocation account creation only occurs at genesis"
-  "not granted: (coin.GENESIS)"
+  "cap not in scope coin.GENESIS"
   (create-allocation-account "brandon" (time "1900-10-31T00:00:00Z") "brandon" 200000.0))
 (test-capability (GENESIS))
 
 (expect-failure
   "all allocation amounts must be positive"
-  "non-negative"
+  "allocation amount must be non-negative"
   (create-allocation-account "brandon" (time "1900-10-31T00:00:00Z") "brandon" -200000.0))
 
 (expect-failure
   "all allocation accounts must satisfy coin contract account min chars"
-  "min length"
+  "Account name does not conform to the min length"
   (create-allocation-account "br" (time "1900-10-31T00:00:00Z") "brandon" 200000.0))
 
 (expect-failure
   "all allocation accounts must satisfy coin contract account max chars"
-  "max length"
+  "Account name does not conform to the max length"
   (create-allocation-account
     "There he met Saunders Mac Lane. Mac Lane, then visiting Paris, was anxious \
     \to learn from Yoneda, and commenced an interview with Yoneda in a cafe at \
@@ -723,7 +723,7 @@
 
 (expect-failure
  "account creation fails when no keyset corresponds with keyset ref"
- "Keyset reference"
+ "no such keyset defined"
  (create-allocation-account "brandon" (time "2020-10-31T00:00:00Z") "brandon" 200000.0))
 
 ; successful keyset refs require defined keyset
@@ -751,7 +751,7 @@
 
 (expect-failure
   "allocation release fails when keys are not in scope"
-  "Keyset failure"
+  "Keyset enforce failure"
   (release-allocation "brandon"))
 
 (env-keys ["brandon"])
@@ -763,7 +763,7 @@
 
 (expect-failure
  "releases fail when funds have been redeemed"
- "funds have already been redeemed"
+ "allocation funds have already been redeemed"
  (release-allocation "brandon"))
 
 (expect
@@ -778,12 +778,12 @@
 
 (expect-failure
   "gas-only fails without the presence of GAS"
-  "not granted: (coin.GAS)"
+  "cap not in scope coin.GAS"
   (gas-only))
 
 (expect-failure
   "gas-guard fails when GAS is not present"
-  "Failure: Tx Failed: Enforce either the presence of a GAS cap or keyset"
+  "Enforce either the presence of a GAS cap or keyset"
   (gas-guard (keyset-ref-guard "emily")))
 
 (test-capability (GAS))

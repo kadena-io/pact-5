@@ -38,6 +38,11 @@ import Pact.Core.IR.Term
 import Pact.Core.Info
 import Pact.Core.Namespace
 
+import qualified PackageInfo_pact_tng as PI
+import qualified Data.Version as V
+import qualified Data.Attoparsec.Text as A
+
+
 import Pact.Core.Repl.Utils
 import qualified Pact.Time as PactTime
 import Pact.Core.Gas.TableGasModel
@@ -95,23 +100,26 @@ coreExpectThat info b cont handler _env = \case
 
 coreExpectFailure :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 coreExpectFailure info b cont handler _env = \case
-  [VLiteral (LString toMatch), VClosure vclo] -> do
+  [VString doc, VClosure vclo] -> do
     es <- getEvalState
     tryError (applyLamUnsafe vclo [] Mt CEKNoHandler) >>= \case
       Right (VError _ _) -> do
         putEvalState es
-        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
+        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> doc
       Left _err -> do
         putEvalState es
-        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> toMatch
+        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> doc
       Right _ ->
-        returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result"
+        returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> doc <> ": expected failure, got result"
   [VString desc, VString toMatch, VClosure vclo] -> do
     es <- getEvalState
     tryError (applyLamUnsafe vclo [] Mt CEKNoHandler) >>= \case
-      Right (VError _ _) -> do
+      Right (VError err _) -> do
         putEvalState es
-        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
+        if toMatch `T.isInfixOf` err
+          then returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
+          else returnCEKValue cont handler $ VLiteral $ LString $
+               "FAILURE: " <> desc <> ": expected error message '" <> toMatch <> "', got '" <> err <> "'"
       Left _err -> do
         putEvalState es
         returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
@@ -442,6 +450,38 @@ envGasModel info b cont handler _env = \case
   args -> argsError info b args
 
 
+-----------------------------------
+-- Pact Version
+-----------------------------------
+
+coreVersion :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
+coreVersion info b  cont handler _env = \case
+  [] -> let
+    v = T.pack (V.showVersion PI.version)
+    in returnCEKValue cont handler (VString v)
+  args -> argsError info b args
+
+
+coreEnforceVersion :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
+coreEnforceVersion info b cont handler _env = \case
+  [VString lowerBound] -> do
+    lowerBound' <- mkVersion lowerBound
+    if lowerBound' <= PI.version
+      then returnCEKValue cont handler (VBool True)
+      else throwExecutionError info (EnforcePactVersionFailure lowerBound' Nothing)
+  [VString lowerBound, VString upperBound] -> do
+    lowerBound' <- mkVersion lowerBound
+    upperBound' <- mkVersion upperBound
+    if lowerBound' <= PI.version && PI.version <= upperBound'
+      then returnCEKValue cont handler (VBool True)
+      else throwExecutionError info (EnforcePactVersionFailure lowerBound' (Just upperBound'))
+  args -> argsError info b args
+  where
+    mkVersion s =
+      case A.parseOnly ((A.decimal `A.sepBy` A.char '.') <* A.endOfInput) s of
+        Left _msg -> throwExecutionError info (EnforcePactVersionParseFailure s)
+        Right li -> pure (V.makeVersion li)
+
 
 
 replBuiltinEnv
@@ -493,4 +533,6 @@ replCoreBuiltinRuntime = \case
     REnvGasModel -> envGasModel
     REnvAskGasModel -> envGasModel
     REnvGasModelFixed -> envGasModel
-
+    RPactVersion -> coreVersion
+    REnforcePactVersionMin -> coreEnforceVersion
+    REnforcePactVersionRange -> coreEnforceVersion

@@ -452,8 +452,9 @@ instance Serialise PrimType where
     _ -> fail "unexpected decoding"
 
 instance Serialise Schema where
-  encode (Schema m) = encode m
-  decode = Schema <$> decode
+  encode (Schema sc m) =
+    encode sc <> encode m
+  decode = Schema <$> decode <*> decode
 
 instance Serialise Type where
   encode (TyPrim pt) = encodeWord 0 <> encode pt
@@ -464,6 +465,7 @@ instance Serialise Type where
   encode TyAnyObject = encodeWord 5
   encode (TyTable s) = encodeWord 6 <> encode s
   encode TyCapToken = encodeWord 7
+  encode TyAny = encodeWord 8
 
   decode = decodeWord >>= \case
     0 -> TyPrim <$> decode
@@ -674,10 +676,6 @@ instance Serialise CoreBuiltin where
     CoreTypeOfPrincipal -> encodeWord 112
     CoreValidatePrincipal -> encodeWord 113
     CoreCreateDefPactGuard -> encodeWord 114
-
-    CoreRoundPrec -> encodeWord 125
-    CoreCeilingPrec -> encodeWord 126
-    CoreFloorPrec -> encodeWord 127
     CoreYieldToChain -> encodeWord 115
     CoreChainData -> encodeWord 116
     CoreIsCharset -> encodeWord 117
@@ -688,6 +686,10 @@ instance Serialise CoreBuiltin where
     CorePoseidonHashHackachain -> encodeWord 122
     CoreTypeOf -> encodeWord 123
     CoreDec -> encodeWord 124
+    CoreRoundPrec -> encodeWord 125
+    CoreCeilingPrec -> encodeWord 126
+    CoreFloorPrec -> encodeWord 127
+    CoreCond -> encodeWord 128
 
   decode = decodeWord >>= \case
     0 -> pure CoreAdd
@@ -820,7 +822,8 @@ instance Serialise CoreBuiltin where
     125 -> pure CoreRoundPrec
     126 -> pure CoreCeilingPrec
     127 -> pure CoreFloorPrec
-    _ -> fail "unexpeced decoding"
+    128 -> pure CoreCond
+    _ -> fail "unexpected decoding"
 
 
 instance Serialise ReplBuiltins where

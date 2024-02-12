@@ -13,21 +13,20 @@ import Test.Tasty.Hedgehog
 import Test.Tasty.HUnit (assertEqual, testCase)
 import qualified Hedgehog.Gen as Gen
 
-import Pact.Core.Builtin (replcoreBuiltinMap)
+import Pact.Core.Builtin
 import Pact.Core.Environment (defaultEvalEnv)
-import Pact.Core.Guards (KeySet(KeySet), KeySetName(..), PublicKeyText(..), KSPredicate(KeysAll))
-import Pact.Core.Gen.Serialise (keySetGen, keySetNameGen, moduleNameGen, moduleDataGen, builtinGen
-                               ,defPactIdGen, defPactExecGen, namespaceNameGen, namespaceGen)
+import Pact.Core.Guards
+import Pact.Core.Gen.Serialise
 import Pact.Core.Literal (Literal(LUnit))
 import Pact.Core.Names
 import Pact.Core.PactValue
 import qualified Pact.Core.PactValue as PactValue
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Persistence
-import Pact.Core.Persistence.MockPersistence (mockPactDb)
-import Pact.Core.Repl.Compile (interpretReplProgram)
-import Pact.Core.Repl.Utils (ReplState(..), SourceCode(..), runReplT)
-import Pact.Core.Serialise (PactSerialise(..), serialisePact, serialisePact_repl_spaninfo)
+import Pact.Core.Persistence.MockPersistence
+import Pact.Core.Repl.Compile
+import Pact.Core.Repl.Utils
+import Pact.Core.Serialise
 
 -- | Top-level TestTree for Persistence Tests.
 tests :: TestTree
@@ -190,7 +189,7 @@ sqliteRegression =
         pdb <- mockPactDb serialisePact_repl_spaninfo
         g <- newIORef mempty
         evalLog <- newIORef Nothing
-        ee <- defaultEvalEnv pdb replcoreBuiltinMap
+        ee <- defaultEvalEnv pdb replCoreBuiltinMap
         ref <- newIORef (ReplState mempty pdb def ee g evalLog (SourceCode "" "") mempty mempty Nothing)
         Right _ <- runReplT ref (interpretReplProgram (SourceCode "test" src) (const (pure ())))
         Just md <- readModule pdb (ModuleName "test" Nothing)

@@ -310,7 +310,7 @@ instance SizeOf FullyQualifiedName
 
 -- Type
 instance SizeOf PrimType
-deriving newtype instance SizeOf Schema
+instance SizeOf Schema
 instance SizeOf Type
 
 -- defpacts

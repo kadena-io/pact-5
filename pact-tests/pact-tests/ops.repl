@@ -508,6 +508,7 @@
 (expect "shift -255 -1" -128 (shift -255 -1))
 
 "===== drop"
+; Drop on lists
 (expect "pos drop within range" [3 4 5] (drop 2 [1 2 3 4 5]))
 (expect "neg drop within range" [1 2 3] (drop -2 [1 2 3 4 5]))
 (expect "pos drop beyond range" [] (drop 10 [1 2 3 4 5]))
@@ -515,10 +516,27 @@
 (expect "pos drop at 63-bit boundary" (drop 9223372036854775807 [1 2 3 4 5]) (drop 9223372036854775808 [1 2 3 4 5]))
 (expect "neg drop at 63-bit boundary" (drop -9223372036854775807 [1 2 3 4 5]) (drop -9223372036854775808 [1 2 3 4 5]))
 
+; Drop on strings
+(expect "pos string drop within range" "345" (drop 2 "12345"))
+(expect "neg string drop within range" "123" (drop -2 "12345"))
+(expect "pos string drop beyond range" "" (drop 10 "12345"))
+(expect "neg string drop beyond range" "" (drop -10 "12345"))
+(expect "pos string drop at 63-bit boundary" (drop 9223372036854775807 "12345") (drop 9223372036854775808 "12345"))
+(expect "neg string drop at 63-bit boundary" (drop -9223372036854775807 "12345") (drop -9223372036854775808 "12345"))
+
 "===== take"
+; Take on lists
 (expect "pos take within range" [1 2] (take 2 [1 2 3 4 5]))
 (expect "neg take within range" [4 5] (take -2 [1 2 3 4 5]))
 (expect "pos take beyond range" [1 2 3 4 5] (take 10 [1 2 3 4 5]))
 (expect "neg take beyond range" [1 2 3 4 5] (take -10 [1 2 3 4 5]))
 (expect "pos take at 63-bit boundary" (take 9223372036854775807 [1 2 3 4 5]) (take 9223372036854775808 [1 2 3 4 5]))
 (expect "neg take at 63-bit boundary" (take -9223372036854775807 [1 2 3 4 5]) (take -9223372036854775808 [1 2 3 4 5]))
+
+; Take on strings
+(expect "pos string take within range" "12" (take 2 "12345"))
+(expect "neg string take within range" "45" (take -2 "12345"))
+(expect "pos string take beyond range" "12345" (take 10 "12345"))
+(expect "neg string take beyond range" "12345" (take -10 "12345"))
+(expect "pos string take at 63-bit boundary" (take 9223372036854775807 "12345") (take 9223372036854775808 "12345"))
+(expect "neg string take at 63-bit boundary" (take -9223372036854775807 "12345") (take -9223372036854775808 "12345"))

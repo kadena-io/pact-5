@@ -1,0 +1,13 @@
+(module anyschema g
+  (defcap g () true)
+
+  (defschema anydata lol1 lol2)
+
+  (deftable anytable:{anydata})
+  )
+
+(create-table anytable)
+(insert anytable "row1" {"lol1":1, "lol2":"hello"})
+(insert anytable "row2" {"lol1":{"beep":1}, "lol2":["hi friends"]})
+(insert anytable "row3" {"lol1":[1 2 3 4 5], "lol2":123.2312})
+

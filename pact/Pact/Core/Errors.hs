@@ -26,6 +26,8 @@ import Control.Monad.IO.Class(MonadIO(..))
 import Control.Exception
 import Data.Text(Text)
 import Data.Dynamic (Typeable)
+import qualified Data.Version as V
+import qualified PackageInfo_pact_tng as PI
 
 import Control.DeepSeq
 import GHC.Generics
@@ -334,6 +336,8 @@ data EvalError
   | PointNotOnCurve
   | YieldProvenanceDoesNotMatch Provenance [Provenance]
   | MismatchingKeysetNamespace NamespaceName
+  | EnforcePactVersionFailure V.Version (Maybe V.Version)
+  | EnforcePactVersionParseFailure Text
   deriving (Show, Generic)
 
 instance NFData EvalError
@@ -431,6 +435,16 @@ instance Pretty EvalError where
       , "DefPactId: " <> pretty (_psDefPactId ps)
       , "step: " <> pretty (_psStep ps)
       , "DefPactExec step: " <> pretty (_peStep pe + 1)
+      ]
+    EnforcePactVersionFailure min' max' -> Pretty.hsep
+      [ "Enforce pact-version failed:"
+      , "Current Version: " <> pretty (V.showVersion PI.version)
+      , "Minimum Version: " <> pretty (V.showVersion min')
+      , maybe mempty (\v -> "Maximum Version: " <> pretty (V.showVersion v)) max'
+      ]
+    EnforcePactVersionParseFailure str -> Pretty.hsep
+      [ "Enforce pact-version failed:"
+      , "Could not parse " <> pretty str <> ", expect list of dot-separated integers"
       ]
     e -> pretty (show e)
 

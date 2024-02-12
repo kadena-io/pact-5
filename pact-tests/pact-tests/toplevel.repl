@@ -23,9 +23,8 @@
   (defun bad-describe-keyset (k) (describe-keyset k))
   (defun bad-describe-module (m) (describe-module m))
   (defun bad-define-keyset (n k) (define-keyset n k))
-  ;  (defun bad-pact-version () (pact-version))
   ;  (defun bad-list-modules () (list-modules))
-  ;  (defun bad-enforce-pact-version (v) (enforce-pact-version v))
+  (defun bad-enforce-pact-version (v) (enforce-pact-version v))
   )
 
 ;; Success cases
@@ -35,9 +34,9 @@
 (describe-table toplevel.atable)
 (describe-keyset 'k)
 (describe-module "toplevel")
-;  (pact-version)
+(pact-version)
 ;  (list-modules)
-;  (enforce-pact-version (pact-version))
+(enforce-pact-version (pact-version))
 (use toplevel)
 
 ;; failure cases
@@ -47,9 +46,7 @@
 (expect-failure "bad-describe-keyset" (bad-describe-keyset 'k))
 (expect-failure "bad-describe-module" (bad-describe-module "toplevel"))
 (expect-failure "bad-define-keyset" (bad-define-keyset 'j (sig-keyset)))
-;  (expect-failure "bad-pact-version" (bad-pact-version))
 ;  (expect-failure "bad-list-modules" (bad-list-modules))
-;  (expect-failure "bad-enforce-pact-version" (bad-enforce-pact-version (pact-version)))
 
 ; todo: enable repl natives
 ;  (env-enable-repl-natives true)
@@ -67,4 +64,3 @@
  (let ((a 1))
    (env-data { 'b: 2 }) ;; normally would not be in effect until next top-level
    (+ a (read-integer "b"))))
-

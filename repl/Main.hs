@@ -39,4 +39,4 @@ main = O.execParser argParser >>= \case
   Nothing -> runRepl
   where
     printVersion = putStrLn ("pact version " <> showVersion PI.version)
-    printBuiltins = traverse_ (\bi -> T.putStrLn $ "\"" <> bi <> "\"") replcoreBuiltinNames
+    printBuiltins = traverse_ (\bi -> T.putStrLn $ "\"" <> bi <> "\"") replCoreBuiltinNames

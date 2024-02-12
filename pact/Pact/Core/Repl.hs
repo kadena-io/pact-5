@@ -42,7 +42,7 @@ runRepl = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
   g <- newIORef mempty
   evalLog <- newIORef Nothing
-  ee <- defaultEvalEnv pdb replcoreBuiltinMap
+  ee <- defaultEvalEnv pdb replCoreBuiltinMap
   ref <- newIORef (ReplState mempty pdb def ee g evalLog defaultSrc mempty mempty Nothing)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
@@ -50,7 +50,7 @@ runRepl = do
       putStrLn $ T.unpack $ replError (SourceCode "(interactive)" "") err
     _ -> pure ()
   where
-  replSettings = Settings (replCompletion coreBuiltinNames) (Just ".pc-history") True
+  replSettings = Settings (replCompletion replCoreBuiltinNames) (Just ".pc-history") True
   displayOutput = \case
     RCompileValue cv -> case cv of
       LoadedModule mn mh -> outputStrLn $ show $
@@ -68,7 +68,7 @@ runRepl = do
         "Loaded defconst" <+> pretty mn
     RBuiltinDoc doc -> outputStrLn (show $ pretty doc)
     RUserDoc qn doc -> outputStrLn $ show $
-      vsep ["function" <+> pretty qn <> ":", maybe mempty pretty doc]
+      vsep [pretty qn, "Docs:", maybe mempty pretty doc]
   catch' ma = catchAll ma (\e -> outputStrLn (show e) *> loop)
   defaultSrc = SourceCode "(interactive)" mempty
   loop = do
