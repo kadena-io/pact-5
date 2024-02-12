@@ -254,6 +254,25 @@ executable pact
   -- beware of the autogen modules. Remember to `cabal clean`!
   other-modules: PackageInfo_pact_tng
 
+executable docs-utils
+  main-is: docs-utils/Main.hs
+
+  build-depends: base
+               , pact-tng
+               , text
+               , mmark
+               , megaparsec
+               , directory
+               , filepath
+               , lucid
+               , ansi-terminal
+
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+
+  other-modules: PackageInfo_pact_tng
+
 
 test-suite core-tests
   main-is:          PactCoreTests.hs
