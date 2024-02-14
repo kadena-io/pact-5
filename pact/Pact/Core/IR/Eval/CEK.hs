@@ -36,6 +36,7 @@ module Pact.Core.IR.Eval.CEK
   , applyContSmallStep
   , applyContToValueSmallStep
   , evaluateTermSmallStep
+  , evaluateTerm
   , CEKEval(..)) where
 
 
@@ -93,7 +94,8 @@ class CEKEval (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> 
   evalUnsafe :: CEKEvalResult step b i m -> m (EvalResult step b i m)
 
 
-{-
+{- You might want to use 'evaluateTermSmallStep' which is specialized to the 'Eval' monad for performance.
+
   Our CEKH Machine's transitions when reducing terms.
   `evaluateTerm` reduces a term and either directly produces a value,
   or grows the continuation with the information about evaluation of its subterms
@@ -1967,6 +1969,7 @@ evalResumePact info bEnv mdpe = do
     #-}
 
 
+-- | 'evaluateTerm' specialized to the 'Eval' monad for performance.
 evaluateTermSmallStep
   :: Cont CEKSmallStep CoreBuiltin () Eval
   -> CEKErrorHandler CEKSmallStep CoreBuiltin () Eval
