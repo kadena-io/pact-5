@@ -12,6 +12,8 @@ module Pact.Core.Repl.Compile
  ( ReplCompileValue(..)
  , interpretReplProgram
  , interpretReplProgramSmallStep
+ , loadPactReplFile
+ , loadPactReplFile'
  ) where
 
 import Control.Lens
@@ -65,17 +67,24 @@ data ReplCompileValue
   | RUserDoc (EvalDef ReplCoreBuiltin SpanInfo) (Maybe Text)
   deriving Show
 
-loadFile
+loadPactReplFile
   :: (CEKEval step ReplCoreBuiltin SpanInfo Repl)
-  => FilePath
-  -> BuiltinEnv step ReplCoreBuiltin SpanInfo Repl
+  => BuiltinEnv step ReplCoreBuiltin SpanInfo Repl
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
+  -> FilePath
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
-loadFile loc rEnv display = do
+loadPactReplFile rEnv display loc = do
   source <- SourceCode loc <$> liftIO (T.readFile loc)
   replCurrSource .= source
   interpretReplProgram' rEnv source display
 
+-- Todo: this name sucks.
+loadPactReplFile'
+  :: (ReplCompileValue -> ReplM ReplCoreBuiltin ())
+  -> FilePath
+  -> ReplM ReplCoreBuiltin ()
+loadPactReplFile' display fp =
+  () <$ loadPactReplFile (replBuiltinEnv @CEKSmallStep) display fp
 
 interpretReplProgram
   :: SourceCode
@@ -119,7 +128,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
           replEvalEnv .= ee
         fp <- mangleFilePath (T.unpack txt)
         when (isPactFile fp) $ esLoaded . loToplevel .= mempty
-        out <- loadFile fp replEnv display
+        out <- loadPactReplFile replEnv display fp
         replCurrSource .= oldSrc
         unless reset $ do
           replEvalEnv .= oldEE

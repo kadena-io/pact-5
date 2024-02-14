@@ -64,7 +64,7 @@ import Pact.Core.Syntax.LexUtils
   progn      { PosToken TokenBlockIntro _ }
   try        { PosToken TokenTry _ }
   suspend    { PosToken TokenSuspend _ }
-  load       { PosToken TokenLoad _ }
+  -- load       { PosToken TokenLoad _ }
   docAnn     { PosToken TokenDocAnn _ }
   modelAnn   { PosToken TokenModelAnn _ }
   eventAnn   { PosToken TokenEventAnn _ }
@@ -119,7 +119,7 @@ TopLevel :: { ParsedTopLevel }
 
 RTL :: { ReplSpecialTL SpanInfo }
   : ReplTopLevel { RTL $1 }
-  | '(' ReplSpecial ')' { RTLReplSpecial  ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
+  -- | '(' ReplSpecial ')' { RTLReplSpecial  ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
 ReplTopLevel :: { ParsedReplTopLevel }
   : TopLevel { RTLTopLevel $1 }
@@ -127,9 +127,9 @@ ReplTopLevel :: { ParsedReplTopLevel }
   | '(' DefConst ')' { RTLDefConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
 
-ReplSpecial :: { SpanInfo -> ReplSpecialForm SpanInfo }
-  : load STR BOOLEAN { ReplLoad (getStr $2) $3 }
-  | load STR { ReplLoad (getStr $2) False }
+-- ReplSpecial :: { SpanInfo -> ReplSpecialForm SpanInfo }
+--   : load STR BOOLEAN { ReplLoad (getStr $2) $3 }
+--   | load STR { ReplLoad (getStr $2) False }
 
 Governance :: { Governance ParsedName }
   : StringRaw { KeyGov (KeySetName $1 Nothing) }
