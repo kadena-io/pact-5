@@ -1,8 +1,6 @@
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE GADTs #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Pact.Core.GasModel.Utils where
@@ -12,7 +10,6 @@ import Control.Monad.Except
 import Control.DeepSeq
 import Data.Text (Text)
 import Data.Map.Strict(Map)
-import qualified Data.Kind as K
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -37,8 +34,6 @@ import Pact.Core.Guards
 import Pact.Core.Evaluate
 import Pact.Core.Namespace
 import qualified Pact.Core.IR.Eval.CEK as Eval
-import Pact.Core.Repl.Utils
-import Pact.Core.Info
 
 type CoreDb = PactDb CoreBuiltin ()
 type MachineResult = CEKReturn CoreBuiltin () Eval
@@ -275,38 +270,6 @@ evalStep c@(CEKReturn cont handler result)
   | isFinal c = return c
   | otherwise = Eval.returnCEK cont handler result
 evalStep (CEKEvaluateTerm cont handler cekEnv term) = Eval.evaluateTermSmallStep cont handler cekEnv term
-
-
-isBreakpoint :: EvalTerm CoreBuiltin SpanInfo -> Bool
-isBreakpoint term = undefined
-
-data BpEvalKind = BpEvalStep | BpEvalManySteps
-
-data BpEvalResult :: BpEvalKind -> K.Type where
-  FinishedBeforeBp :: BpEvalResult k
-  BpNotHit :: BpEvalResult BpEvalStep
-  BpHit :: BpEvalResult k -- TODO carry around the frame/context
-
-type BpStepEvalResult = BpEvalResult BpEvalStep
-type BpManyStepsEvalResult = BpEvalResult BpEvalManySteps
-type BpMachineResult = CEKReturn CoreBuiltin SpanInfo (ReplM CoreBuiltin)
-
-evalStepBp :: BpMachineResult -> ReplM CoreBuiltin (BpStepEvalResult, BpMachineResult)
-evalStepBp c@(CEKReturn cont handler result)
-  | isFinal c = pure (FinishedBeforeBp, c)
-  | otherwise = (BpNotHit, ) <$> Eval.returnCEK cont handler result
-evalStepBp c@(CEKEvaluateTerm cont handler cekEnv term)
-  | isBreakpoint term = pure (BpHit, c)
-  | otherwise = (BpNotHit, ) <$> Eval.evaluateTerm cont handler cekEnv term
-
-evalUntilBp :: BpMachineResult -> ReplM CoreBuiltin (BpManyStepsEvalResult, BpMachineResult)
-evalUntilBp c = do
-  (bpr, c') <- evalStepBp c
-  case bpr of
-    BpNotHit -> evalUntilBp c'
-    BpHit -> pure (BpHit, c')
-    FinishedBeforeBp -> pure (FinishedBeforeBp, c')
-
 
 unsafeEvalStep :: MachineResult -> Eval MachineResult
 unsafeEvalStep (CEKReturn cont handler result) = Eval.returnCEK cont handler result
