@@ -92,6 +92,7 @@ common pact-common
     FlexibleInstances
     NumericUnderscores
     TypeOperators
+    GADTs
 
 -- internal crypto lirbary
 library pact-crypto

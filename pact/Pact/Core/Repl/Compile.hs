@@ -12,6 +12,7 @@ module Pact.Core.Repl.Compile
  ( ReplCompileValue(..)
  , interpretReplProgram
  , interpretReplProgramSmallStep
+ , interpretWithBreakpoints
  ) where
 
 import Control.Lens
@@ -26,6 +27,7 @@ import System.FilePath.Posix
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import qualified Data.Kind as K
 
 import Pact.Core.Persistence
 import Pact.Core.Persistence.MockPersistence (mockPactDb)
@@ -37,12 +39,13 @@ import Pact.Core.IR.Term
 import Pact.Core.Compile
 import Pact.Core.Environment
 import Pact.Core.Info
+import Pact.Core.Errors
 import Pact.Core.PactValue
 import Pact.Core.Serialise (serialisePact_repl_spaninfo)
 
 
 import Pact.Core.IR.Eval.Runtime
-import Pact.Core.IR.Eval.CEK(CEKEval)
+import Pact.Core.IR.Eval.CEK
 import Pact.Core.Repl.Runtime.ReplBuiltin
 
 import Pact.Core.Repl.UserDocs
@@ -76,6 +79,8 @@ loadFile loc rEnv display = do
   replCurrSource .= source
   interpretReplProgram' rEnv source display
 
+smallStepEnv :: BuiltinEnv   CEKSmallStep   (ReplBuiltin CoreBuiltin)   SpanInfo   (ReplM (ReplBuiltin CoreBuiltin))
+smallStepEnv = replBuiltinEnv @CEKSmallStep
 
 interpretReplProgram
   :: SourceCode
@@ -88,6 +93,163 @@ interpretReplProgramSmallStep
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
 interpretReplProgramSmallStep = interpretReplProgram' (replBuiltinEnv @CEKSmallStep)
+
+isBreakpoint :: EvalTerm ReplCoreBuiltin SpanInfo -> Bool
+isBreakpoint term = undefined
+
+data BpEvalKind = BpEvalStep | BpEvalManySteps
+
+data BpEvalResult :: BpEvalKind -> K.Type where
+  FinishedExec :: BpEvalResult k
+  BpNotHit :: BpEvalResult BpEvalStep
+  BpHit :: BpEvalResult k -- TODO carry around the frame/context
+
+type BpStepEvalResult = BpEvalResult BpEvalStep
+type BpManyStepsEvalResult = BpEvalResult BpEvalManySteps
+type BpMachineResult = CEKReturn ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+
+isFinal :: CEKReturn b i m -> Bool
+isFinal (CEKReturn Mt CEKNoHandler _) = True
+isFinal _ = False
+
+evalStepBp :: BpMachineResult -> ReplM ReplCoreBuiltin (BpStepEvalResult, BpMachineResult)
+evalStepBp c@(CEKReturn cont handler result)
+  | isFinal c = pure (FinishedExec, c)
+  | otherwise = (BpNotHit, ) <$> CEK.returnCEK cont handler result
+evalStepBp c@(CEKEvaluateTerm cont handler cekEnv term)
+  | isBreakpoint term = pure (BpHit, c)
+  | otherwise = (BpNotHit, ) <$> CEK.evaluateTerm cont handler cekEnv term
+
+evalUntilBp :: BpMachineResult -> ReplM ReplCoreBuiltin (BpManyStepsEvalResult, BpMachineResult)
+evalUntilBp c = do
+  (bpr, c') <- evalStepBp c
+  case bpr of
+    BpNotHit -> evalUntilBp c'
+    BpHit -> pure (BpHit, c')
+    FinishedExec -> pure (FinishedExec, c')
+
+-- | Interpretation of a program, with optional resumption
+-- interactiveInterpret = undefined
+
+data ReplProgramContext
+  = HaltedInterpretation (BpManyStepsEvalResult, BpMachineResult) [Lisp.ReplSpecialTL SpanInfo] [ReplCompileValue]
+  | InterpretationComplete [ReplCompileValue]
+
+interpretWithBreakpoints
+  :: SourceCode
+  -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
+  -> ReplM ReplCoreBuiltin ReplProgramContext
+interpretWithBreakpoints (SourceCode _ source) display = do
+  lexx <- liftEither (Lisp.lexer source)
+  debugIfFlagSet ReplDebugLexer lexx
+  parsed <- liftEither $ Lisp.parseReplProgram lexx
+  go parsed []
+  where
+  go [] acc = pure $ InterpretationComplete (reverse acc)
+  go (toInterpret : rest) acc = case toInterpret of
+    Lisp.RTL rtl ->
+      goTL rtl rest acc
+    Lisp.RTLReplSpecial rsf -> case rsf of
+      Lisp.ReplLoad txt reset i -> do
+        let loading = RCompileValue (InterpretValue (PString ("Loading " <> txt <> "...")) i)
+        display loading
+        oldSrc <- use replCurrSource
+        pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
+        oldEE <- use replEvalEnv
+        when reset $ do
+          ee <- liftIO (defaultEvalEnv pactdb replCoreBuiltinMap)
+          evalState .= def
+          replEvalEnv .= ee
+        fp <- mangleFilePath (T.unpack txt)
+        when (isPactFile fp) $ esLoaded . loToplevel .= mempty
+        out <- loadFile fp smallStepEnv display
+        replCurrSource .= oldSrc
+        unless reset $ do
+          replEvalEnv .= oldEE
+        go rest (out ++ acc)
+  mangleFilePath fp = do
+    (SourceCode currFile _) <- use replCurrSource
+    case currFile of
+      "(interactive)" -> pure fp
+      _ | isAbsolute fp -> pure fp
+        | takeFileName currFile == currFile -> pure fp
+        | otherwise -> pure $ combine (takeDirectory currFile) fp
+  goTL tl rest acc = case tl of
+    -- Todo: this is actually referring to builtin docs
+    -- The naming is sort of confusing
+    Lisp.RTLTopLevel toplevel -> case topLevelHasDocs toplevel of
+      Just doc -> do
+        let v = RBuiltinDoc doc
+        display v
+        go rest (v:acc)
+      Nothing -> do
+        -- `functionDocs` handles user-defined docs for functions within a module
+        functionDocs toplevel
+        (ds, deps) <- compileDesugarOnly smallStepEnv toplevel
+        case ds of
+          TLTerm (Var (Name n (NTopLevel mn mh)) varI) -> do
+            let fqn = FullyQualifiedName mn n mh
+            lookupFqName fqn >>= \case
+              Just d -> do
+                let qn = QualifiedName n mn
+                docs <- uses replUserDocs (M.lookup qn)
+                let v = RUserDoc d docs
+                display v
+                go rest (v:acc)
+              Nothing ->
+                failInvariant varI "repl invariant violated: resolved to a top level free variable without a binder"
+          TLTerm t -> do
+            -- todo: breakpoint traversal
+            ee <- readEnv
+            let cekEnv = envFromPurity PImpure (CEKEnv mempty (_eePactDb ee) smallStepEnv (_eeDefPactStep ee) False)
+            evalUntilBp (CEKEvaluateTerm Mt CEKNoHandler cekEnv t) >>= \case
+              tup@(BpHit, _) -> pure $ HaltedInterpretation tup rest acc
+              (_, CEKReturn _ _ r) -> case r of
+                VError txt i -> throwExecutionError i (EvalError txt)
+                EvalValue ev -> case ev of
+                  VPactValue pv -> do
+                    let v = RCompileValue (InterpretValue pv (view termInfo t))
+                    display v
+                    go rest (v:acc)
+                  _ ->
+                    throwExecutionError (view termInfo t) (EvalError "Evaluation did not reduce to a value")
+              _ -> error "invariant-failure: impossible"
+            -- v <- evalTopLevel smallStepEnv ds deps
+            -- displayValue (RCompileValue v)
+          _ -> do
+            v <- RCompileValue <$> evalTopLevel smallStepEnv ds deps
+            display v
+            go rest (v:acc)
+    -- Case handling special top-level repl-only cases
+    _ ->  do
+      ds <- runDesugarReplTopLevel tl
+      interpret rest acc ds
+  isPactFile f = takeExtension f == ".pact"
+  interpret rest acc (DesugarOutput tl _deps) = do
+    case tl of
+      RTLDefun df -> do
+        let fqn = FullyQualifiedName replModuleName (_dfunName df) replModuleHash
+        loaded . loAllLoaded %= M.insert fqn (Dfun df)
+        let v = RLoadedDefun $ _dfunName df
+        display v
+        go rest (v:acc)
+      RTLDefConst dc -> case _dcTerm dc of
+        TermConst term -> do
+          pv <- CEK.eval PSysOnly smallStepEnv term
+          pv' <- maybeTCType (_dcInfo dc) pv (_dcType dc)
+          let dc' = set dcTerm (EvaledConst pv') dc
+          let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
+          loaded . loAllLoaded %= M.insert fqn (DConst dc')
+          let v = RLoadedDefConst $ _dcName dc'
+          display v
+          go rest (v:acc)
+        EvaledConst _ -> do
+          let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
+          loaded . loAllLoaded %= M.insert fqn (DConst dc)
+          let v = RLoadedDefConst $ _dcName dc
+          display v
+          go rest (v:acc)
+
 
 
 interpretReplProgram'
@@ -132,9 +294,12 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
         | takeFileName currFile == currFile -> pure fp
         | otherwise -> pure $ combine (takeDirectory currFile) fp
   pipe' tl = case tl of
+    -- Todo: this is actually referring to builtin docs
+    -- The naming is sort of confusing
     Lisp.RTLTopLevel toplevel -> case topLevelHasDocs toplevel of
       Just doc -> displayValue $ RBuiltinDoc doc
       Nothing -> do
+        -- `functionDocs` handles user-defined docs for functions within a module
         functionDocs toplevel
         (ds, deps) <- compileDesugarOnly replEnv toplevel
         case ds of
@@ -150,6 +315,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
           _ -> do
             v <- evalTopLevel replEnv ds deps
             displayValue (RCompileValue v)
+    -- Case handling special top-level repl-only cases
     _ ->  do
       ds <- runDesugarReplTopLevel tl
       interpret ds
