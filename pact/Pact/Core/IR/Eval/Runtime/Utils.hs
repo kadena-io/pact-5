@@ -291,7 +291,6 @@ tvToDomain :: TableValue -> Domain RowKey RowData b i
 tvToDomain tv =
   DUserTables (_tvName tv)
 
--- Todo: GasLog
 {-# SPECIALIZE chargeGasArgs
    :: ()
    -> GasArgs
