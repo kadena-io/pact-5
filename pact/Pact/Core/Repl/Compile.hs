@@ -186,6 +186,7 @@ interpretWithBreakpoints (SourceCode _ source) display = do
         -- `functionDocs` handles user-defined docs for functions within a module
         functionDocs toplevel
         (ds, deps) <- compileDesugarOnly smallStepEnv toplevel
+        -- TODO TODO: Set breakpoint here.
         case ds of
           TLTerm (Var (Name n (NTopLevel mn mh)) varI) -> do
             let fqn = FullyQualifiedName mn n mh
