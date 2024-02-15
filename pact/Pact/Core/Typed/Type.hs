@@ -202,10 +202,11 @@ instance Pretty ty => Pretty (RoseRow ty) where
     RoseRowCat l r ->
       Pretty.parens (pretty l <+> "⊙" <+> pretty r)
 
--- data RoseConstraint v
---   = RoseSubRow (RoseRow v) (RoseRow v)
---   | RoseRowEq (RoseRow v) (RoseRow v)
---   deriving (Show, Eq, Functor, Foldable, Traversable)
+pattern RoseConcrete :: Map Field (Type n) -> RoseRow (Type n)
+pattern RoseConcrete o = RoseRowTy (TyObject (RowConcrete o))
+
+pattern RoseVar :: n -> RoseRow (Type n)
+pattern RoseVar v = (RoseRowTy (TyObject (RowVar v)))
 
 data Arg ty
   = Arg
