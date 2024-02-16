@@ -103,7 +103,7 @@ type WithReplTypes ty = ty ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 data BpEvalKind = BpEvalStep | BpEvalManySteps
 
 data BpEvalResult :: BpEvalKind -> K.Type where
-  FinishedExec :: WithReplTypes (EvalResult CEKSmallStep) -> BpEvalResult k
+  FinishedEval :: WithReplTypes (EvalResult CEKSmallStep) -> BpEvalResult k
   BpNotHit :: BpEvalResult BpEvalStep
   BpHit :: BpEvalResult k -- TODO carry around the frame/context
 
@@ -117,7 +117,7 @@ isFinal _ = False
 
 evalStepBp :: BpMachineResult -> ReplM ReplCoreBuiltin (BpStepEvalResult, BpMachineResult)
 evalStepBp c@(CEKReturn cont handler result)
-  | isFinal c = pure (FinishedExec result, c)
+  | isFinal c = pure (FinishedEval result, c)
   | otherwise = (BpNotHit, ) <$> CEK.returnCEK cont handler result
 evalStepBp c@(CEKEvaluateTerm cont handler cekEnv term)
   | isBreakpoint term = pure (BpHit, c)
@@ -129,7 +129,7 @@ evalUntilBp c = do
   case bpr of
     BpNotHit -> evalUntilBp c'
     BpHit -> pure (BpHit, c')
-    FinishedExec r -> pure (FinishedExec r, c')
+    FinishedEval r -> pure (FinishedEval r, c')
 
 data ReplProgramContext
   = HaltedInterpretation (BpManyStepsEvalResult, BpMachineResult) [Lisp.ReplSpecialTL SpanInfo] [ReplCompileValue]
@@ -205,7 +205,7 @@ interpretWithBreakpoints (SourceCode _ source) display = do
             let cekEnv = envFromPurity PImpure (CEKEnv mempty (_eePactDb ee) smallStepEnv (_eeDefPactStep ee) False)
             evalUntilBp (CEKEvaluateTerm Mt CEKNoHandler cekEnv t) >>= \case
               tup@(BpHit, _) -> pure $ HaltedInterpretation tup rest acc
-              (FinishedExec r, _) -> case r of
+              (FinishedEval r, _) -> case r of
                 VError txt i -> throwExecutionError i (EvalError txt)
                 EvalValue ev -> case ev of
                   VPactValue pv -> do
