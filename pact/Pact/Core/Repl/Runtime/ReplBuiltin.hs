@@ -449,6 +449,13 @@ envGasModel info b cont handler _env = \case
     returnCEKValue cont handler $ VString $ "Set gas model to " <> _gmDesc newmodel'
   args -> argsError info b args
 
+envClearBreakpoints :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+envClearBreakpoints info b cont handler _env = \case
+  [] -> do
+    replBreakpoints .= mempty
+    returnCEKValue cont handler (VString "cleared breakpoints")
+  args -> argsError info b args
+
 
 -----------------------------------
 -- Pact Version
@@ -536,3 +543,4 @@ replCoreBuiltinRuntime = \case
     RPactVersion -> coreVersion
     REnforcePactVersionMin -> coreEnforceVersion
     REnforcePactVersionRange -> coreEnforceVersion
+    RClearBreakpoints -> envClearBreakpoints

@@ -728,6 +728,7 @@ data ReplBuiltins
   | RPactVersion
   | REnforcePactVersionMin
   | REnforcePactVersionRange
+  | RClearBreakpoints
   deriving (Show, Enum, Bounded, Eq, Generic)
 
 
@@ -772,6 +773,7 @@ instance IsBuiltin ReplBuiltins where
     RPactVersion -> 0
     REnforcePactVersionMin -> 1
     REnforcePactVersionRange -> 2
+    RClearBreakpoints -> 0
 
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
@@ -851,6 +853,7 @@ replBuiltinsToText = \case
   RPactVersion -> "pact-version"
   REnforcePactVersionMin -> "enforce-pact-version"
   REnforcePactVersionRange -> "enforce-pact-version-range"
+  RClearBreakpoints -> "env-breaks-clear"
 
 replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
 replBuiltinToText f = \case
