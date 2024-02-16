@@ -97,16 +97,19 @@ interpretReplProgramSmallStep = interpretReplProgram' (replBuiltinEnv @CEKSmallS
 isBreakpoint :: EvalTerm ReplCoreBuiltin SpanInfo -> Bool
 isBreakpoint term = undefined
 
+
+type WithReplTypes ty = ty ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+
 data BpEvalKind = BpEvalStep | BpEvalManySteps
 
 data BpEvalResult :: BpEvalKind -> K.Type where
-  FinishedExec :: BpEvalResult k
+  FinishedExec :: WithReplTypes (EvalResult CEKSmallStep) -> BpEvalResult k
   BpNotHit :: BpEvalResult BpEvalStep
   BpHit :: BpEvalResult k -- TODO carry around the frame/context
 
 type BpStepEvalResult = BpEvalResult BpEvalStep
 type BpManyStepsEvalResult = BpEvalResult BpEvalManySteps
-type BpMachineResult = CEKReturn ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+type BpMachineResult = WithReplTypes CEKReturn
 
 isFinal :: CEKReturn b i m -> Bool
 isFinal (CEKReturn Mt CEKNoHandler _) = True
@@ -114,7 +117,7 @@ isFinal _ = False
 
 evalStepBp :: BpMachineResult -> ReplM ReplCoreBuiltin (BpStepEvalResult, BpMachineResult)
 evalStepBp c@(CEKReturn cont handler result)
-  | isFinal c = pure (FinishedExec, c)
+  | isFinal c = pure (FinishedExec result, c)
   | otherwise = (BpNotHit, ) <$> CEK.returnCEK cont handler result
 evalStepBp c@(CEKEvaluateTerm cont handler cekEnv term)
   | isBreakpoint term = pure (BpHit, c)
@@ -126,10 +129,7 @@ evalUntilBp c = do
   case bpr of
     BpNotHit -> evalUntilBp c'
     BpHit -> pure (BpHit, c')
-    FinishedExec -> pure (FinishedExec, c')
-
--- | Interpretation of a program, with optional resumption
--- interactiveInterpret = undefined
+    FinishedExec r -> pure (FinishedExec r, c')
 
 data ReplProgramContext
   = HaltedInterpretation (BpManyStepsEvalResult, BpMachineResult) [Lisp.ReplSpecialTL SpanInfo] [ReplCompileValue]
@@ -205,7 +205,7 @@ interpretWithBreakpoints (SourceCode _ source) display = do
             let cekEnv = envFromPurity PImpure (CEKEnv mempty (_eePactDb ee) smallStepEnv (_eeDefPactStep ee) False)
             evalUntilBp (CEKEvaluateTerm Mt CEKNoHandler cekEnv t) >>= \case
               tup@(BpHit, _) -> pure $ HaltedInterpretation tup rest acc
-              (_, CEKReturn _ _ r) -> case r of
+              (FinishedExec r, _) -> case r of
                 VError txt i -> throwExecutionError i (EvalError txt)
                 EvalValue ev -> case ev of
                   VPactValue pv -> do
@@ -214,9 +214,6 @@ interpretWithBreakpoints (SourceCode _ source) display = do
                     go rest (v:acc)
                   _ ->
                     throwExecutionError (view termInfo t) (EvalError "Evaluation did not reduce to a value")
-              _ -> error "invariant-failure: impossible"
-            -- v <- evalTopLevel smallStepEnv ds deps
-            -- displayValue (RCompileValue v)
           _ -> do
             v <- RCompileValue <$> evalTopLevel smallStepEnv ds deps
             display v
