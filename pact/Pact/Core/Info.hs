@@ -12,7 +12,7 @@ data SpanInfo
   , _liStartColumn :: !Int
   , _liEndLine     :: !Int
   , _liEndColumn   :: !Int
-  } deriving (Eq, Show, Generic)
+  } deriving (Eq, Ord, Show, Generic)
 
 instance Default SpanInfo where
   def = SpanInfo 0 0 0 0

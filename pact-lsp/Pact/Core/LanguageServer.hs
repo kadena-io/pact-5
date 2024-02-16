@@ -225,6 +225,7 @@ sendDiagnostics nuri mv content = liftIO runPact >>= \case
           , _replTx = Nothing
           , _replUserDocs = mempty
           , _replTLDefPos = mempty
+          , _replBreakpoints = mempty
           }
       stateRef <- newIORef rstate
       res <- runReplT stateRef (processFile (replBuiltinEnv @CEKSmallStep) src)
