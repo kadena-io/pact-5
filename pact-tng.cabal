@@ -255,7 +255,8 @@ executable pact
   other-modules: PackageInfo_pact_tng
 
 executable docs-utils
-  main-is: docs-utils/Main.hs
+  hs-source-dirs:   docs-utils
+  main-is: Main.hs
 
   build-depends: base
                , pact-tng
@@ -266,12 +267,17 @@ executable docs-utils
                , filepath
                , lucid
                , ansi-terminal
+               , containers
+               , transformers
 
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
+  other-modules: 
+    , Linter
+    , LintRules
+    , ExtractLegacyDefs
 
-  other-modules: PackageInfo_pact_tng
 
 
 test-suite core-tests

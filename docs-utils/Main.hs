@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -5,11 +6,12 @@ module Main where
 
 import System.Directory (listDirectory, doesFileExist)
 import System.FilePath ((</>),(<.>), takeBaseName, takeExtension)
-import Data.List (sort, (\\),intersperse)
+import Data.List (sort, (\\),intersperse,sortOn)
 import Control.Monad (filterM,forM,forM_, when, unless)
 import Pact.Core.Builtin
 
 import qualified Data.Text.IO          as T
+import qualified Data.Text.Lazy.IO          as LT
 import Data.Text (Text)
 import qualified Data.Text as Text
 
@@ -33,11 +35,17 @@ import Data.List.NonEmpty (NonEmpty(..))
 
 import System.Console.ANSI
 
-someMd :: FilePath
-someMd = "/Users/marcin/pact-core/docs/native/define-keyset.md"
+import Linter
+import LintRules
+
+import ExtractLegacyDefs
+
+import qualified Data.Map as Map
+
+import qualified Lucid             as L
 
 docsDir :: FilePath
-docsDir = "/Users/marcin/pact-core/docs/native"
+docsDir = "/Users/marcin/pact-core/docs/functions"
 
 
 data DocumentationReport = DocumentationReport
@@ -47,18 +55,12 @@ data DocumentationReport = DocumentationReport
 
 
 
--- Helper function to apply rules to a given CoreBuiltin and its associated Bni list
-applyRules :: CoreBuiltin -> [Bni] -> IO [(Rule, (Text, Maybe (IO ())))] -- Collects (rule, violation)
-applyRules cb bnis = do
-  ruleViolations <- forM (enumFrom (toEnum 0)) $ \r -> do
-    let rule = rules r
-    validationResult <- _chValidator rule cb bnis
-    return $ fmap (\v -> (r, v)) validationResult
-  return $ catMaybes ruleViolations
-
 
 ident :: Int -> String -> String
 ident k = concat . map  (++ ('\n' : ([0..k] *> pure ' '))) . lines
+
+allCoreBuiltins  :: [CoreBuiltin]
+allCoreBuiltins = [minBound .. maxBound]
 
 -- Altering the `checkCoreBuiltinDocs` function
 checkCoreBuiltinDocs :: FilePath -> DocUtilMode -> IO ()
@@ -73,7 +75,7 @@ checkCoreBuiltinDocs dir mode = do
     if filename `elem` presentFiles
       then do
         bnis <- toBNIs $ dir </> filename <.> "md"
-        when (builtin == CoreDefineKeySet) $ putStrLn $ show bnis
+        -- when (builtin == CoreDefineKeySet) $ putStrLn $ show bnis
         violations <- applyRules builtin bnis
         return (Just (builtin , filename), violations)
       else return (Nothing, [])
@@ -95,7 +97,7 @@ checkCoreBuiltinDocs dir mode = do
        interactWithUser invalidFiles
 
   where
-    allCoreBuiltins = [minBound .. maxBound] :: [CoreBuiltin]
+
     isMarkdownFile :: FilePath -> FilePath -> IO Bool
     isMarkdownFile directory file = do
       exists <- doesFileExist (directory </> file)
@@ -252,80 +254,18 @@ checkCoreBuiltinDocs dir mode = do
           interactiveMissingBuiltins missingBuiltins
 
 
-data BuiltInDocRule = BuiltInDocRule
- { _chName :: Text -- name of the rule
- , _chDesc :: Text -- description of the rule
- , _chValidator :: CoreBuiltin -> [Bni] -> IO (Maybe (Text , Maybe (IO ())))
-     -- returnign just onlly in case of violation of the rule
-     -- secound field of the tuple might cointain "fix" for the rule, wich when executes, fixes violation
- }
-
-data Rule =
-   HeaderIsNameOfNative
- | SectionsHeaders
- deriving (Enum)
-
-
-toBNIs :: FilePath -> IO [Bni]
-toBNIs input = do
-  txt <- T.readFile input
-  case MMark.parse input txt of -- (2)
-    Left bundle -> error (M.errorBundlePretty bundle) -- (3)
-    Right r -> do
-      let i = MMark.runScanner r (scanner [] (\x bni -> x ++ [bni]))
-      return i
-   
-
-
-simpleHeadingView :: Bni -> Maybe (Int , Text) 
-simpleHeadingView = \case
-  Heading1 (Plain t :| _) -> Just (1 , t)
-  Heading2 (Plain t :| _) -> Just (2 , t)
-  Heading3 (Plain t :| _) -> Just (3 , t)
-  Heading4 (Plain t :| _) -> Just (4 , t)
-  Heading5 (Plain t :| _) -> Just (5 , t)
-  Heading6 (Plain t :| _) -> Just (6 , t)  
-  _ -> Nothing
-
-correctHeaders :: [Text]
-correctHeaders =
-   [ "Basic usage"
-   , "Prerequisites"
-   , "Arguments"
-   , "Return values"
-   , "Examples"
-   ]
-
-
-
-
-rules :: Rule -> BuiltInDocRule
-rules = \case
-  HeaderIsNameOfNative -> BuiltInDocRule
-     { _chName = "HeaderIsNameOfNative"
-     , _chDesc = "abs"
-     , _chValidator = \t -> \case
-          (Heading1 ((Plain t') :| _) : _) -> return $
-              if (coreBuiltinToText t == t') then Nothing
-              else (Just ("bad content of first header", Nothing))
-          _ -> return (Just ("bad content of first header", Nothing))
-     }
-    
-  SectionsHeaders -> BuiltInDocRule
-     { _chName = "SectionHeaders"
-     , _chDesc = "abs"
-     , _chValidator = \ _ l -> 
-          case (catMaybes $ map simpleHeadingView l) of
-            hdrs@(( 1 , _) : r) -> return $
-              if (all ((== 2 ) . fst) r) && (map snd r == correctHeaders)
-              then Nothing
-              else let msg = Text.intercalate "\n" (map snd hdrs)
-                   in Just ("Dettected headers:\n " <> msg  , Nothing)
-            _ -> return (Just undefined)           
-     }
-
-
-     
+checkSingleBuiltin :: CoreBuiltin -> IO Text
+checkSingleBuiltin b = do
+  let filename = Text.unpack $ coreBuiltinToText b
+      fPath = docsDir </> filename <.> "md"
+  exists <- doesFileExist fPath
+  if exists
+     then do bnis <- toBNIs $ fPath
+             (\violations ->
+                 Text.pack $ if null violations then "✅(0)" else ("❗(" ++ (show (length violations)) ++ ")"))
+               <$> (applyRules b bnis)
+             
+     else return $ "❎"
 
 data DocUtilMode =
      Basic
@@ -396,3 +336,35 @@ createStubContent builtin =
      , ""
      , sections
      ]
+
+-- Function to create markdown table
+markdownTable :: [[Text]] -> Text
+markdownTable [] = ""
+markdownTable (h:t) = Text.unlines $ header : separator : body
+  where
+    header = rowToString h
+    separator = rowToString $ replicate (length h) "---"
+    body = rowToString <$> t
+
+-- Function to convert row List[Text] to Text
+rowToString :: [Text] -> Text
+rowToString t = Text.intercalate " | " ([""] ++ t ++ [""]) 
+
+makeReport :: IO ()
+makeReport = do
+ lDefs <- getAllDefsMap 
+ tD <- forM allCoreBuiltins
+   (\b -> do
+      let s = coreBuiltinToText b
+      let lDefsCells = (\b -> if b then "✔" else "✗") <$>
+             (case (Map.lookup s lDefs) of
+               Nothing -> [False , False]
+               Just y -> [Map.member "legacy" y , Map.member "kadena.js" y])
+      docState <- checkSingleBuiltin b          
+      return ([coreBuiltinToText b , docState] ++ lDefsCells))
+ T.writeFile "/Users/marcin/table.md" (markdownTable
+                                        (["" , "pact-core" ,"legacy-pact" ,"kadena.js"] : (presentFirst  tD)))
+
+ where
+ presentFirst :: [[Text]] -> [[Text]]
+ presentFirst = reverse . sortOn (Text.length . head . (drop 1))
