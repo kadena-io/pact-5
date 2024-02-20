@@ -36,6 +36,7 @@ module Pact.Core.Repl.Utils
  , prettyReplFlag
  , replError
  , SourceCode(..)
+ , BpLoc(..)
  ) where
 
 import Control.Lens
@@ -75,7 +76,8 @@ import System.Console.Haskeline.Completion
 data SourceCode
   = SourceCode
   { _scFileName :: String
-  , _scPayload :: Text }
+  , _scPayload :: Text
+  }
   deriving Show
 
 data ReplDebugFlag
@@ -116,6 +118,12 @@ instance MonadState (ReplState b) (ReplM b)  where
   get = ReplT (ExceptT (Right <$> ReaderT readIORef))
   put rs = ReplT (ExceptT (Right <$> ReaderT (`writeIORef` rs)))
 
+data BpLoc = BpLoc
+  { bpLine :: !Int
+  , bpCol :: !Int
+  }
+  deriving (Eq, Ord, Show)
+
 
 -- | Passed in repl environment
 data ReplState b
@@ -134,7 +142,7 @@ data ReplState b
   -- ^ Used by LSP Server, reflects the span information
   --   of the TL definitions for the qualified name.
   , _replTx :: Maybe (TxId, Maybe Text)
-  , _replBreakpoints :: Set (String, SpanInfo)
+  , _replBreakpoints :: Map String (Set BpLoc)
   }
 
 makeLenses ''ReplState
