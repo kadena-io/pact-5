@@ -304,16 +304,19 @@ replError (SourceCode srcFile src) pe =
       pei = view peInfo pe
       -- Note: The startline is 0-indexed, but we want our
       -- repl to output errors which are 1-indexed.
-      start = _liStartLine pei
-      spanLen = _liEndLine pei - _liStartLine pei
+      startLine = _pLine $ _liStart pei
+      endLine = _pLine $ _liEnd pei
+      startCol = _pCol $ _liStart pei
+      endCol = _pCol $ _liEnd pei
+      spanLen = endLine - startLine
       -- We want the padding to be the biggest line number we will show, which
       -- is endLine + 1
-      maxPad = length (show (_liEndLine pei + 1)) + 1
-      slice = withLine start maxPad $ take (max 1 spanLen) $ drop start srcLines
+      maxPad = length (show (endLine + 1)) + 1
+      slice = withLine startLine maxPad $ take (max 1 spanLen) $ drop startLine srcLines
       -- Render ^^^ only in the column slice
-      colMarker = T.replicate (maxPad+1) " " <> "| " <> T.replicate (_liStartColumn pei) " " <> T.replicate (max 1 (_liEndColumn pei - _liStartColumn pei)) "^"
+      colMarker = T.replicate (maxPad+1) " " <> "| " <> T.replicate startCol " " <> T.replicate (max 1 (endCol - startCol)) "^"
       errRender = renderText pe
-      fileErr = file <> ":" <> T.pack (show (_liStartLine pei + 1)) <> ":" <> T.pack (show (_liStartColumn pei)) <> ": "
+      fileErr = file <> ":" <> T.pack (show (startLine + 1)) <> ":" <> T.pack (show startCol) <> ": "
   in T.unlines ([fileErr <> errRender] ++ slice ++ [colMarker])
   where
   padLeft t pad = T.replicate (pad - (T.length t)) " " <> t <> " "
