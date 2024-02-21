@@ -9,6 +9,14 @@ module Pact.Core.Serialise.LegacyPact
   , decodeDefPactExec
   , decodeNamespace
   , decodeRowData
+  --
+  , fromLegacyRowData
+  , fromLegacyModule
+  , fromLegacyModuleData
+  , fromLegacyKeySet
+  , fromLegacyNamespace
+  , fromLegacyDefPactExec
+  , runTranslateM
   ) where
 
 --import Control.Lens
@@ -326,7 +334,8 @@ fromLegacyPactValue = \case
           | bn == "keys-all" -> pure KeysAll
           | bn == "keys-any" -> pure KeysAny
           | bn == "keys-2"   -> pure Keys2
-        _ -> Left "fromLegacyPactValue: pred invariant"
+        (Legacy.QName qn) -> pure (CustomPredicate (TQN $ fromLegacyQualifiedName qn))
+        o -> Left $ "fromLegacyPactValue: pred invariant: " <> show o
       in (PGuard . GKeyset . KeySet ks <$> p' pred')
     Legacy.GKeySetRef (Legacy.KeySetName ksn ns) -> let
       ns' = fromLegacyNamespaceName <$> ns
@@ -471,6 +480,7 @@ fromLegacyGuard mh = \case
         | bn == "keys-all" -> pure KeysAll
         | bn == "keys-any" -> pure KeysAny
         | bn == "keys-2"   -> pure Keys2
+      (Legacy.QName qn) -> pure (CustomPredicate (TQN $ fromLegacyQualifiedName qn))
       _ -> throwError "fromLegacyGuard: pred invariant"
     in GKeyset . KeySet ks <$> p' pred'
   Legacy.GKeySetRef (Legacy.KeySetName ksn ns) -> let
@@ -538,7 +548,12 @@ fromLegacyType = \case
   Legacy.TySchema s _ty _
     | s == Legacy.TyTable -> TyTable <$> fromLegacySchema s
     | s == Legacy.TyObject -> TyObject <$> fromLegacySchema s
-  _ -> throwError "fromLegacyType: invariant"
+    | s == Legacy.TyBinding -> error "unkown"
+  Legacy.TyFun _ -> error "tyfun"
+  Legacy.TyModule _ -> error "tymodule"
+  Legacy.TyUser _ -> error "tyuser"
+  Legacy.TyVar _ -> error "tyvar"
+  _ -> throwError $ "fromLegacyType: invariant"
 
 -- Unclear how to implement: Core `Schema` requires a `QualifiedName`
 -- fromLegacySchema
@@ -594,7 +609,8 @@ fromLegacyKeySet (Legacy.KeySet ks p) = do
     Legacy.Name (Legacy.BareName "keys-all") -> pure KeysAll
     Legacy.Name (Legacy.BareName "keys-2") -> pure Keys2
     Legacy.Name (Legacy.BareName "keys-any") -> pure KeysAny
-    _ -> Left "fromLegacyKeySet: pred invariant"
+    Legacy.QName qn -> pure (CustomPredicate (TQN $ fromLegacyQualifiedName qn))
+    other -> Left $ "fromLegacyKeySet: pred invariant" <> show other
   pure (KeySet ks' pred')
 
 fromLegacyPublicKeyText
