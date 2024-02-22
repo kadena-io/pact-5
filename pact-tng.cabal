@@ -341,3 +341,17 @@ test-suite core-tests
     , Pact.Core.Test.LanguageServer
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
+
+
+-- tools
+executable legacyPactDbCheck
+  import: pact-common
+  hs-source-dirs: tools
+
+  main-is: LegacyPactDbCheck.hs
+
+  build-depends:
+    , pact-tng
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
