@@ -257,7 +257,7 @@ fromLegacyModule mh lm depMap = do
       impl = fmap fromLegacyModuleName (Legacy._mInterfaces lm)
       blessed = fmap fromLegacyModuleHash (HS.toList (Legacy._mBlessed lm))
       imps = fmap fromLegacyUse (Legacy._mImports lm)
-  gov <- fromLegacyGovernance (Legacy._mGovernance lm)
+      gov = fromLegacyGovernance mh (Legacy._mGovernance lm)
 
   defs <- traverse (fromLegacyDefRef mh) $ HM.elems depMap
   pure (Module mn gov defs (S.fromList blessed) imps impl mhash ())
@@ -364,9 +364,13 @@ fromLegacyPersistDirect
   -> Either String CoreTerm
 fromLegacyPersistDirect = \case
   Legacy.PDValue v -> (`InlineValue` ()) <$> fromLegacyPactValue v
-  Legacy.PDNative (Legacy.NativeDefName n) -> case M.lookup n coreBuiltinMap of
-    Just b -> pure (Builtin b ())
-    _ -> Left "fromLegacyPersistDirect: invariant"
+  Legacy.PDNative (Legacy.NativeDefName n)
+    | n == "enforce" -> pure (Conditional (CEnforce undefined undefined) ())
+    | n == "enforce-one" -> pure (Conditional (CEnforceOne undefined undefined) ())
+    | n == "if" -> pure (Conditional (CIf undefined undefined undefined) ())
+    | otherwise -> case M.lookup n coreBuiltinMap of
+        Just b -> pure (Builtin b ())
+        _ -> Left $ "fromLegacyPersistDirect: invariant -> " <> show n
   Legacy.PDFreeVar fqn -> let
     fqn' = fromLegacyFullyQualifiedName fqn
     in pure $ Var (fqnToName fqn') ()
@@ -385,12 +389,18 @@ fromLegacyTerm mh = \case
   Legacy.TApp (Legacy.App fn args) -> do
     fn' <- fromLegacyTerm mh fn
     args' <- traverse (fromLegacyTerm mh) args
-    case fn' of
-      Builtin b _
+    case (fn', args') of
+      (Builtin b _, _)
         | b == CoreMap -> error "todo: implement all special forms"
         | otherwise -> pure (desugarAppArity () b args')
-      var@Var{} -> pure (App var args' ())
+
+      (Conditional CEnforce{} _, [t1,t2]) -> pure (Conditional (CEnforce t1 t2) ())
+
+      (Conditional CIf{} _, [cond, b1, b2]) -> pure (Conditional (CIf cond b1 b2) ())
+
+      (var@Var{},_) -> pure (App var args' ())
       _ -> throwError "fromLegacyTerm: invariant"
+
 
   Legacy.TLam (Legacy.Lam _ (Legacy.FunType args _) body) -> do
     args' <- traverse fromLegacyArg args
@@ -411,7 +421,9 @@ fromLegacyTerm mh = \case
     (\v -> InlineValue (PGuard v) ()) <$> fromLegacyGuard mh g
 
   -- Todo: binding pairs should be done like in `Desugar.hs`
-  Legacy.TBinding _bp _body _ -> error "todo: bind pairs"
+  Legacy.TBinding _bp _body _ ->
+    pure (Var undefined ())
+    --error "todo: bind pairs"
 
   Legacy.TObject (Legacy.Object o _ _) -> do
    let m = M.toList (Legacy._objectMap o)
@@ -473,19 +485,9 @@ fromLegacyGuard mh = \case
   Legacy.GPact (Legacy.PactGuard i n) -> let
     Legacy.PactId pid = i
     in pure (GDefPactGuard (DefPactGuard (DefPactId pid) n))
-  Legacy.GKeySet (Legacy.KeySet k pred') -> let
-    ks = S.map (PublicKeyText . Legacy._pubKey)  k
-    p' = \case
-      (Legacy.Name (Legacy.BareName bn))
-        | bn == "keys-all" -> pure KeysAll
-        | bn == "keys-any" -> pure KeysAny
-        | bn == "keys-2"   -> pure Keys2
-      (Legacy.QName qn) -> pure (CustomPredicate (TQN $ fromLegacyQualifiedName qn))
-      _ -> throwError "fromLegacyGuard: pred invariant"
-    in GKeyset . KeySet ks <$> p' pred'
-  Legacy.GKeySetRef (Legacy.KeySetName ksn ns) -> let
-    ns' = fromLegacyNamespaceName <$>  ns
-    in pure (GKeySetRef $ KeySetName ksn ns')
+  Legacy.GKeySet ks -> liftEither (GKeyset <$> fromLegacyKeySet ks)
+  Legacy.GKeySetRef ks -> pure (GKeySetRef $ fromLegacyKeySetName ks)
+
   Legacy.GCapability (Legacy.CapabilityGuard n a i) -> do
     let qn = fromLegacyQualifiedName n
     args <- traverse (extract <=< fromLegacyTerm mh) a
@@ -501,7 +503,7 @@ fromLegacyGuard mh = \case
       let qn = fromLegacyQualifiedName n'
       args <- traverse (extract <=< fromLegacyTerm mh) a
       pure (GUserGuard (UserGuard qn args))
-    _ -> error "todo: jose?"
+    _ -> error "invariant"
  where
    extract = \case
      InlineValue p _ -> pure p
@@ -551,9 +553,9 @@ fromLegacyType = \case
     | s == Legacy.TyBinding -> error "unkown"
   Legacy.TyFun _ -> error "tyfun"
   Legacy.TyModule _ -> error "tymodule"
-  Legacy.TyUser _ -> error "tyuser"
-  Legacy.TyVar _ -> error "tyvar"
-  _ -> throwError $ "fromLegacyType: invariant"
+  Legacy.TyUser _ -> error "tyuser" -- handled inside fromLegacySchema
+  Legacy.TyVar _ -> pure TyAny
+  _ -> throwError "fromLegacyType: invariant"
 
 -- Unclear how to implement: Core `Schema` requires a `QualifiedName`
 -- fromLegacySchema
@@ -574,11 +576,16 @@ fromLegacyPrimType = \case
   Legacy.TyGuard _ -> PrimGuard
 
 fromLegacyGovernance
-  :: Legacy.Governance (Legacy.Def LegacyRef)
-  -> TranslateM (Governance Name)
-  -- TODO: pure?
-fromLegacyGovernance (Legacy.Governance (Left ks)) = pure $ KeyGov (fromLegacyKeySetName ks)
-fromLegacyGovernance (Legacy.Governance (Right _n)) = error "todo: Jose ?"
+  :: ModuleHash
+  -> Legacy.Governance (Legacy.Def LegacyRef)
+  -> Governance Name
+fromLegacyGovernance _ (Legacy.Governance (Left ks)) = KeyGov (fromLegacyKeySetName ks)
+fromLegacyGovernance mh (Legacy.Governance (Right n)) = let
+  fqn = FullyQualifiedName
+    (fromLegacyModuleName $ Legacy._dModule n)
+    (Legacy._unDefName $ Legacy._dDefName n)
+    mh
+  in CapGov (FQName fqn)
 
 fromLegacyKeySetName
   :: Legacy.KeySetName
@@ -704,15 +711,7 @@ fromLegacyGuard' = \case
   Legacy.GPact (Legacy.PactGuard i n) -> let
     Legacy.PactId pid = i
     in pure (GDefPactGuard (DefPactGuard (DefPactId pid) n))
-  Legacy.GKeySet (Legacy.KeySet k pred') -> let
-    ks = S.map (PublicKeyText . Legacy._pubKey)  k
-    p' = \case
-      (Legacy.Name (Legacy.BareName bn))
-        | bn == "keys-all" -> pure KeysAll
-        | bn == "keys-any" -> pure KeysAny
-        | bn == "keys-2"   -> pure Keys2
-      _ -> throwError "fromLegacyGuard: pred invariant"
-    in GKeyset . KeySet ks <$> p' pred'
+  Legacy.GKeySet ks -> GKeyset <$> fromLegacyKeySet ks
   Legacy.GKeySetRef (Legacy.KeySetName ksn ns) -> let
     ns' = fromLegacyNamespaceName <$>  ns
     in pure (GKeySetRef $ KeySetName ksn ns')
