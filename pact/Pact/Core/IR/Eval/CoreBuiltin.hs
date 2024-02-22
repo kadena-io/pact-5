@@ -312,7 +312,7 @@ defCmp predicate info b cont handler _env = \case
       chargeGasArgs info (GComparison (DecimalComparison l r))
       returnCEKValue cont handler $ VBool $ predicate (compare l r)
     cmp (LString l) (LString r) = do
-      chargeGasArgs info (GComparison (TextComparison l r))
+      chargeGasArgs info (GComparison (TextComparison l))
       returnCEKValue cont handler $ VBool $ predicate (compare l r)
     cmp LUnit LUnit = returnCEKValue cont handler $ VBool (predicate EQ)
     cmp _ _ = argsError info b args

@@ -178,8 +178,11 @@ newtype GasObjectSize
   deriving Show
 
 data ComparisonType
-  = TextComparison !Text !Text
-  -- ^ comparing two strings of max `n` length
+  = TextComparison !Text
+  -- ^ comparing with a string of length `n`
+  -- Note: comparing two strings of different lengths always returns early
+  -- and thus is independent of the length of the strings,
+  -- hence we only care about one string for the case when their lengths are equal.
   | IntComparison !Integer !Integer
   -- ^ compare two integers, of at most `n` bits
   -- Note: decimal comparison overhead should be the same as

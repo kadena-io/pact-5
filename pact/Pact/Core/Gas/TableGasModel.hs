@@ -185,8 +185,8 @@ runTableModel = \case
   GMakeList len sz ->
     MilliGas $ fromIntegral len * sz
   GComparison cmpty -> case cmpty of
-    TextComparison l r ->
-      MilliGas $ fromIntegral (max (T.length l) (T.length r)) + basicWorkGas
+    TextComparison str ->
+      MilliGas $ fromIntegral (T.length str) + basicWorkGas
     IntComparison l r ->
       MilliGas $ fromIntegral (max (integerBits l) (integerBits r)) + basicWorkGas
     -- See [Decimal comparisons]
