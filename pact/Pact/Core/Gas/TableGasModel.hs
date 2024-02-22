@@ -165,7 +165,7 @@ runTableModel = \case
   GConcat c -> case c of
     TextConcat (GasTextLength totalLen) ->
       MilliGas (fromIntegral totalLen * 100)
-    TextListConcat !(GasTextLength totalCharSize) !(GasListLength nElems) -> MilliGas $
+    TextListConcat (GasTextLength totalCharSize) (GasListLength nElems) -> MilliGas $
       fromIntegral totalCharSize * stringLenCost + fromIntegral nElems * listLenCost
       where
       stringLenCost,listLenCost :: Word64

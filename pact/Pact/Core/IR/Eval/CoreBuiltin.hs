@@ -1171,7 +1171,7 @@ coreStrToIntBase info b cont handler _env = \case
   -- Todo: DOS and gas analysis
   bsToInteger :: BS.ByteString -> Integer
   bsToInteger bs = fst $ foldl' go (0,(BS.length bs - 1) * 8) $ BS.unpack bs
-  go (i,p) w = (i .|. (shift (fromIntegral w) p),p - 8)
+  go (i,p) w = (i .|. (shift (fromIntegral w) p), p - 8)
 
 coreDistinct  :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreDistinct info b cont handler _env = \case
