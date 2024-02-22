@@ -43,6 +43,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , chargeGasArgs
  , getGas
  , putGas
+ , litCmpGassed
  ) where
 
 import Control.Lens
@@ -352,3 +353,21 @@ putGas !g = do
     :: MilliGas -> Eval ()
     #-}
 
+litCmpGassed :: (MonadEval b i m) => i -> Literal -> Literal -> m (Maybe Ordering)
+litCmpGassed info = cmp
+  where
+  cmp (LInteger l) (LInteger r) = do
+    chargeGasArgs info (GComparison (IntComparison l r))
+    pure $ Just $ compare l r
+  cmp (LBool l) (LBool r) = pure $ Just $ compare l r
+  cmp (LDecimal l) (LDecimal r) = do
+    chargeGasArgs info (GComparison (DecimalComparison l r))
+    pure $ Just $ compare l r
+  cmp (LString l) (LString r) = do
+    chargeGasArgs info (GComparison (TextComparison l))
+    pure $ Just $ compare l r
+  cmp LUnit LUnit = pure $ Just EQ
+  cmp _ _ = pure Nothing
+{-# SPECIALIZE litCmpGassed
+    :: () -> Literal -> Literal -> Eval (Maybe Ordering)
+    #-}

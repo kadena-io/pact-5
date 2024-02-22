@@ -302,20 +302,9 @@ rawLeq = defCmp (`elem` [LT, EQ])
 
 defCmp :: (CEKEval step b i m, MonadEval b i m) => (Ordering -> Bool) -> NativeFunction step b i m
 defCmp predicate info b cont handler _env = \case
-  args@[VLiteral lit1, VLiteral lit2] -> cmp lit1 lit2
-    where
-    cmp (LInteger l) (LInteger r) = do
-      chargeGasArgs info (GComparison (IntComparison l r))
-      returnCEKValue cont handler $ VBool $ predicate (compare l r)
-    cmp (LBool l) (LBool r) = returnCEKValue cont handler $ VBool $ predicate (compare l r)
-    cmp (LDecimal l) (LDecimal r) = do
-      chargeGasArgs info (GComparison (DecimalComparison l r))
-      returnCEKValue cont handler $ VBool $ predicate (compare l r)
-    cmp (LString l) (LString r) = do
-      chargeGasArgs info (GComparison (TextComparison l))
-      returnCEKValue cont handler $ VBool $ predicate (compare l r)
-    cmp LUnit LUnit = returnCEKValue cont handler $ VBool (predicate EQ)
-    cmp _ _ = argsError info b args
+  args@[VLiteral lit1, VLiteral lit2] -> litCmpGassed info lit1 lit2 >>= \case
+    Just ordering -> returnCEKValue cont handler $ VBool $ predicate ordering
+    Nothing -> argsError info b args
   -- Todo: time comparisons
   [VTime l, VTime r] -> returnCEKValue cont handler $ VBool $ predicate (compare l r)
   args -> argsError info b args
