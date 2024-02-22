@@ -13,6 +13,20 @@ import Data.Maybe
 import Pact.Core.Serialise.LegacyPact
 import Pact.Core.Guards
 
+import Control.Monad (forM)
+import System.Directory
+import System.FilePath
+import qualified Data.ByteString as BS
+import qualified Data.Text.IO as T
+import Pact.Core.Test.ReplTests (runReplTest)
+import Pact.Core.Persistence
+import Pact.Core.Persistence.MockPersistence
+import Pact.Core.Serialise
+import Data.Foldable (traverse_)
+import Control.Lens
+import Pact.Core.Repl.Compile
+import Data.Default
+
 tests :: TestTree
 tests = testGroup "Legacy Serialisation"
   [ testGroup "KeySet"
@@ -26,3 +40,44 @@ tests = testGroup "Legacy Serialisation"
     ]
     -- TODO: Add more test cases.
   ]
+
+
+
+legacyTestDir :: String
+legacyTestDir = "pact-tests" </> "legacy-serial-test"
+
+
+replTestFiles :: IO [(String, [FilePath], [FilePath])]
+replTestFiles = do
+  base <- getDirectoryContents legacyTestDir
+  forM base $ \p -> do
+    let testPath = legacyTestDir </> p
+    files <- getDirectoryContents testPath
+    let replFiles = filter (isExtensionOf "repl") files
+        modFiles =  filter (isExtensionOf "json") files
+    pure (p, replFiles, modFiles)
+
+legacyTests :: IO [TestTree]
+legacyTests = do
+  t <- replTestFiles
+  forM t $ \(p, repl, lm) -> do
+    lm' <- sequence <$> traverse toModuleData lm
+    case lm' of
+      Nothing -> error "Reading existing modules failed"
+      Just ms -> do
+        pdb <- mockPactDb serialisePact_raw_spaninfo
+
+        -- add default spaninfo
+        let ms' = (fmap.fmap) (const def)  ms
+
+        -- write modules into module cache
+        traverse_ (\m -> writeModule pdb Write (view mdModuleName m) m) ms'
+
+        modTests <- forM repl $ \r -> do
+          let filePath = legacyTestDir </> p </> r
+          src <- T.readFile filePath
+          pure $ testCase r (runReplTest undefined filePath src interpretReplProgram)
+        pure (testGroup p modTests)
+  where
+  toModuleData fp =
+    decodeModuleData <$> BS.readFile fp
