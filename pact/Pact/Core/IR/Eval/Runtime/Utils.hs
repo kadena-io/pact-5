@@ -44,6 +44,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , getGas
  , putGas
  , litCmpGassed
+ , valEqGassed
  ) where
 
 import Control.Lens
@@ -51,9 +52,9 @@ import Control.Monad(when)
 import Control.Monad.IO.Class
 import Control.Monad.Except(MonadError(..))
 import Data.IORef
-import Data.Text(Text)
+import Data.Foldable(find, toList)
 import Data.Maybe(listToMaybe)
-import Data.Foldable(find)
+import Data.Text(Text)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Pact.Core.Pretty as Pretty
@@ -71,6 +72,8 @@ import Pact.Core.Persistence
 import Pact.Core.Environment
 import Pact.Core.DefPacts.Types
 import Pact.Core.Gas
+import Pact.Core.Guards
+import Pact.Core.Capabilities
 
 mkBuiltinFn
   :: (IsBuiltin b)
@@ -370,4 +373,52 @@ litCmpGassed info = cmp
   cmp _ _ = pure Nothing
 {-# SPECIALIZE litCmpGassed
     :: () -> Literal -> Literal -> Eval (Maybe Ordering)
+    #-}
+
+valEqGassed :: (MonadEval b i m) => i -> PactValue -> PactValue -> m Bool
+valEqGassed info = go
+  where
+  go (PLiteral l1) (PLiteral l2) = litCmpGassed info l1 l2 >>= \case
+    Just EQ -> pure True
+    _ -> pure False
+  go (PList vs1) (PList vs2)
+    | length vs1 == length vs2 = do
+      chargeGasArgs info (GComparison (ListComparison $ length vs1))
+      goList (toList vs1) (toList vs2)
+  go (PGuard g1) (PGuard g2) = goGuard g1 g2
+  go (PObject o1) (PObject o2)
+    | length o1 == length o2 = do
+      chargeGasArgs info (GComparison (ObjComparison $ length o1))
+      if M.keys o1 == M.keys o2
+         then goList (toList o1) (toList o2)
+         else pure False
+  go (PModRef mr1) (PModRef mr2) = pure $ mr1 == mr2
+  go (PCapToken (CapToken n1 args1)) (PCapToken (CapToken n2 args2))
+    | n1 == n2 && length args1 == length args2 = do
+      chargeGasArgs info (GComparison (ListComparison $ length args1))
+      goList args1 args2
+  go (PTime t1) (PTime t2) = pure $ t1 == t2
+  go _ _ = pure False
+
+  goList [] [] = pure True
+  goList (x:xs) (y:ys) = do
+    r <- x `go` y
+    if r then goList xs ys else pure False
+  goList _ _ = pure False
+
+  goGuard (GKeyset ks1) (GKeyset ks2) = pure $ ks1 == ks2
+  goGuard (GKeySetRef ksn1) (GKeySetRef ksn2) = pure $ ksn1 == ksn2
+  goGuard (GUserGuard (UserGuard f1 args1)) (GUserGuard (UserGuard f2 args2))
+    | f1 == f2 && length args1 == length args2 = do
+      chargeGasArgs info (GComparison (ListComparison $ length args1))
+      goList args1 args2
+  goGuard (GCapabilityGuard (CapabilityGuard n1 args1 pid1)) (GCapabilityGuard (CapabilityGuard n2 args2 pid2))
+    | n1 == n2 && pid1 == pid2 && length args1 == length args2 = do
+      chargeGasArgs info (GComparison (ListComparison $ length args1))
+      goList args1 args2
+  goGuard (GModuleGuard g1) (GModuleGuard g2) = pure $ g1 == g2
+  goGuard (GDefPactGuard g1) (GDefPactGuard g2) = pure $ g1 == g2
+  goGuard _ _ = pure False
+{-# SPECIALIZE valEqGassed
+    :: () -> PactValue -> PactValue -> Eval Bool
     #-}
