@@ -123,6 +123,7 @@ data TypeVar n
   = TypeVar n PactKind
   deriving (Show, Eq)
 
+
 tyVarKind :: TypeVar n -> PactKind
 tyVarKind (TypeVar _ k) = k
 
@@ -186,6 +187,7 @@ data BuiltinTC ty
   | ListLike ty
   | Fractional ty
   | EnforceRead ty
+  | IsValue ty
   | EqRow ty
   | RoseSubRow (RoseRow ty) (RoseRow ty)
   | RoseRowEq (RoseRow ty) (RoseRow ty)
@@ -255,6 +257,7 @@ instance (Pretty ty) => Pretty (BuiltinTC ty) where
     Fractional t -> "Fractional" <> Pretty.braces (pretty t)
     EnforceRead t -> "EnforceRead" <> Pretty.braces (pretty t)
     EqRow t -> "EqRow" <> Pretty.braces (pretty t)
+    IsValue t -> "IsValue" <> Pretty.braces (pretty t)
     RoseSubRow l r ->
       pretty l <+> "≼" <+> pretty r
     RoseRowEq l r ->

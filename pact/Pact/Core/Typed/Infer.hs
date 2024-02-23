@@ -64,9 +64,12 @@ import Pact.Core.Typed.Term
 import Pact.Core.Typed.Type
 import Pact.Core.PactValue
 import Pact.Core.Hash
+import Pact.Core.Pretty(pretty)
 
 import qualified Pact.Core.IR.Term as IR
 import qualified Pact.Core.Type as IR
+
+import Debug.Trace
 
 -- inference based on https://okmij.org/ftp/ML/generalization.html
 -- Note: Type inference levels in the types
@@ -342,7 +345,7 @@ instance TypeOfBuiltin CoreBuiltin where
     CoreShow ->
       let aVar = nd "a" 0
           a = TyVar aVar
-      in TypeScheme [aVar] [Pred (Ord a)] (TyList a :~> TyList a)
+      in TypeScheme [aVar] [Pred (Show a)] (a :~> TyString)
     CoreReadMsg ->
       let aVar = nd "a" 0
           a = TyVar aVar
@@ -424,11 +427,23 @@ instance TypeOfBuiltin CoreBuiltin where
       let aVar = UserDefVariable 0 "a"
       in TypeScheme [aVar] [] (TyCapToken (CapVar aVar) :~> TyString)
     CoreDescribeKeyset ->
-      error "todo: unsupported"
-    CoreDescribeModule ->
-      error "todo: unsupported"
-    CoreDescribeTable ->
-      error "todo: unsupported"
+      TypeScheme [] [] (TyString :~> TyGuard)
+    CoreDescribeModule -> let
+      o = TyObject (RowConcrete schema)
+      in TypeScheme [] [] (TyString :~> o)
+      where
+      schema = M.fromList
+        [(Field "hash", TyString)
+        ,(Field "interfaces", TyList TyString)
+        ,(Field "name", TyString)]
+    CoreDescribeTable -> let
+      o = TyObject (RowConcrete schema)
+      in TypeScheme [] [] (TyString :~> o)
+      where
+      schema = M.fromList
+        [(Field "type", TyString)
+        ,(Field "module", TyString)
+        ,(Field "name", TyString)]
     CoreDefineKeySet ->
       NonGeneric (TyString :~> TyGuard :~> TyString)
     CoreDefineKeysetData ->
@@ -450,8 +465,14 @@ instance TypeOfBuiltin CoreBuiltin where
       rowVar = RowVariable 0 "row"
       fnTy = TyTable (RowVar rowVar) :~> TyString :~> TyObject (RowVar rowVar) :~> TyString
       in TypeScheme [rowVar] [] fnTy
-    CoreKeyLog ->
-       error "todo: unsupported"
+    CoreKeyLog -> let
+      rowVar = RowVariable 0 "row"
+      o = TyObject (RowVar rowVar)
+      in TypeScheme [rowVar] [] (TyTable (RowVar rowVar) :~> TyString :~> TyInt :~> TyList (TyObject (RowConcrete (schema o))))
+      where
+      schema o = M.fromList
+        [(Field "txid", TyString)
+        ,(Field "value", o)]
     CoreKeys -> let
       rowVar = RowVariable 0 "row"
       fnTy = TyTable (RowVar rowVar) :~> TyList TyString
@@ -460,20 +481,20 @@ instance TypeOfBuiltin CoreBuiltin where
       rowVar = RowVariable 0 "row"
       fnTy = TyTable (RowVar rowVar) :~> TyString :~> TyObject (RowVar rowVar)
       in TypeScheme [rowVar] [] fnTy
-    CoreSelect ->let
+    CoreSelect -> let
       rowVar = RowVariable 0 "row"
       fnTy = TyTable (RowVar rowVar) :~> (TyObject (RowVar rowVar) :~> TyBool) :~> TyList (TyObject (RowVar rowVar))
       in TypeScheme [rowVar] [] fnTy
     CoreSelectWithFields ->
       error "todo: not supported"
-    -- update : forall (r1: ROW, r2: ROW) . (r1 ≼ r2) => table<r1> -> string -> object<r2> -> string
+    -- update : forall (r1: ROW, r2: ROW) . (r2 ≼ r1) => table<r1> -> string -> object<r2> -> string
     CoreUpdate -> let
       -- r1
       r1 = RowVariable 1 "r1"
       -- r2
       r2 = RowVariable 0 "r2"
       -- r1 ≼ r2
-      rowConstr = RoseSubRow (RoseRowTy (TyObject (RowVar r1))) (RoseRowTy (TyObject (RowVar r2)))
+      rowConstr = RoseSubRow (RoseRowTy (TyObject (RowVar r2))) (RoseRowTy (TyObject (RowVar r1)))
       --
       fnTy = TyTable (RowVar r1) :~> TyString :~> TyObject (RowVar r2) :~> TyString
       in TypeScheme [r1, r2] [Pred rowConstr] fnTy
@@ -493,56 +514,101 @@ instance TypeOfBuiltin CoreBuiltin where
       aVar = TypeVariable 0 "a1"
       fnTy = TyTable (RowVar r1) :~> TyString :~> (TyObject (RowVar r1) :~> TyVar aVar) :~> TyVar aVar
       in TypeScheme [r1, aVar] [] fnTy
-    CoreTxIds ->
-      error "todo: support function"
-    CoreTxLog ->
-      error "todo: support function"
+    CoreTxIds -> let
+      rowVar = RowVariable 0 "row"
+      fnTy = TyTable (RowVar rowVar) :~> TyInt :~> TyList TyInt
+      in TypeScheme [rowVar] [] fnTy
+    CoreTxLog -> let
+      rowVar = RowVariable 0 "row"
+      objTy = TyObject (RowVar rowVar)
+      fnTy = TyTable (RowVar rowVar) :~> TyInt :~> TyList (TyObject (RowConcrete (schema objTy)))
+      in TypeScheme [rowVar] [] fnTy
+      where
+      schema r = M.fromList
+        [ (Field "table", TyString)
+        , (Field "key", TyString)
+        , (Field "value", r)]
     CoreTxHash ->
-      error "todo: support function"
-    CoreAndQ ->
-      error "todo: support function"
-    CoreOrQ ->
-      error "todo: support function"
+      TypeScheme [] [] (TyNullary TyString)
+    CoreAndQ -> let
+        aVar = nd "a" 0
+        a = TyVar aVar
+        cloTy = a :~> TyBool
+      in TypeScheme [aVar] [] (cloTy :~> cloTy :~> a :~> TyBool)
+    CoreOrQ -> let
+        aVar = nd "a" 0
+        a = TyVar aVar
+        cloTy = a :~> TyBool
+      in TypeScheme [aVar] [] (cloTy :~> cloTy :~> a :~> TyBool)
     CoreWhere ->
-      error "todo: support function"
-    CoreNotQ ->
-      error "todo: support function"
-    CoreHash ->
-      error "todo: support function"
-    CoreContinue ->
-      error "todo: support function"
+      error "where must be pattern matched"
+    CoreNotQ -> let
+        aVar = nd "a" 0
+        a = TyVar aVar
+        cloTy = a :~> TyBool
+      in TypeScheme [aVar] [] (cloTy :~> a :~> TyBool)
+    CoreHash -> let
+        aVar = nd "a" 0
+        a = TyVar aVar
+      in TypeScheme [aVar] [Pred (IsValue a)] (a :~> TyString)
+    -- note: continue is basically the indentity function
+    CoreContinue -> let
+        aVar = nd "a" 0
+        a = TyVar aVar
+      in TypeScheme [aVar] [] (a :~> a)
     CoreParseTime ->
-      error "todo: support function"
+      TypeScheme [] [] (TyString :~> TyString :~> TyTime)
     CoreFormatTime ->
-      error "todo: support function"
+      TypeScheme [] [] (TyString :~> TyTime :~> TyString)
     CoreTime ->
-      error "todo: support function"
-    CoreAddTime ->
-      error "todo: support function"
+      TypeScheme [] [] (TyString :~> TyTime)
+    CoreAddTime -> let
+        aVar = nd "a" 0
+        a = TyVar aVar
+      in TypeScheme [aVar] [Pred (Num a)] (TyTime :~> a :~> TyTime)
     CoreDiffTime ->
-      error "todo: support function"
-    CoreHours ->
-      error "todo: support function"
-    CoreMinutes ->
-      error "todo: support function"
-    CoreDays ->
-      error "todo: support function"
-    CoreCompose ->
-      error "todo: support function"
+      TypeScheme [] [] (TyTime :~> TyTime :~> TyDecimal)
+    CoreHours -> let
+        aVar = nd "a" 0
+        a = TyVar aVar
+      in TypeScheme [aVar] [Pred (Num a)] (a :~> TyDecimal)
+    CoreMinutes -> let
+        aVar = nd "a" 0
+        a = TyVar aVar
+      in TypeScheme [aVar] [Pred (Num a)] (a :~> TyDecimal)
+    CoreDays -> let
+        aVar = nd "a" 0
+        a = TyVar aVar
+      in TypeScheme [aVar] [Pred (Num a)] (a :~> TyDecimal)
+    CoreCompose -> let
+        aVar = TypeVariable 2 "a"
+        bVar = TypeVariable 1 "b"
+        cVar = TypeVariable 0 "c"
+        a = TyVar aVar
+      in TypeScheme [aVar] [Pred (Num a)]
+          ((TyVar aVar :~> TyVar bVar)
+            :~> (TyVar bVar :~> TyVar cVar)
+            :~> TyVar aVar
+            :~> TyVar cVar)
     CoreCreatePrincipal ->
-      error "todo: support function"
+      TypeScheme [] [] (TyGuard :~> TyString)
     CoreIsPrincipal ->
-      error "todo: support function"
+      TypeScheme [] [] (TyString :~> TyBool)
     CoreTypeOfPrincipal ->
-      error "todo: support function"
+      TypeScheme [] [] (TyString :~> TyString)
     CoreValidatePrincipal ->
-      error "todo: support function"
+      TypeScheme [] [] (TyGuard :~> TyString :~> TyBool)
     CoreNamespace ->
-      error "todo: support function"
+      TypeScheme [] [] (TyString :~> TyString)
     CoreDefineNamespace ->
-      error "todo: support function"
-    CoreDescribeNamespace ->
-      error "todo: support function"
+      TypeScheme [] [] (TyString :~> TyGuard :~> TyGuard :~> TyString)
+    CoreDescribeNamespace -> let
+      in TypeScheme [] [] (TyString :~> TyObject (RowConcrete schema))
+      where
+      schema = M.fromList
+        [ (Field "admin-guard", TyGuard)
+        , (Field "namespace-name", TyString)
+        , (Field "user-guard", TyGuard)]
     CoreZkPairingCheck ->
       error "todo: support function"
     CoreZKScalarMult ->
@@ -556,12 +622,15 @@ instance TypeOfBuiltin CoreBuiltin where
     CoreIsCharset ->
       error "todo: support function"
     CorePactId ->
-      error "todo: support function"
+      TypeScheme [] [] (TyNullary TyString)
     CoreTypeOf ->
       error "todo: support function"
     CoreDec ->
-      error "todo: support function"
-    CoreCond -> error "todo: nothing"
+      TypeScheme [] [] (TyInt :~> TyDecimal)
+    CoreCond -> let
+        aVar = nd "a" 0
+        a = TyVar aVar
+      in TypeScheme [aVar] [] (TyNullary a :~> a)
     where
     nd = flip TypeVariable
     unaryNumType =
@@ -605,23 +674,127 @@ instance TypeOfBuiltin CoreBuiltin where
 instance TypeOfBuiltin b => TypeOfBuiltin (ReplBuiltin b) where
   typeOfBuiltin = \case
     RBuiltinWrap b -> typeOfBuiltin b
-    _ -> error "todo: type repl builtins"
-    -- RExpect -> let
-    --   aVar = nd "a" 0
-    --   aTv = TyVar aVar
-    --   in TypeScheme [aVar] [Pred Eq aTv, Pred Show aTv] (TyString :~> aTv :~> (TyUnit :~> aTv) :~> TyString)
-    -- RExpectFailure -> let
-    --   aVar = nd "a" 0
-    --   aTv = TyVar aVar
-    --   in TypeScheme [aVar] [] (TyString :~> (TyUnit :~> aTv) :~> TyString)
-    -- RExpectThat -> let
-    --   aVar = nd "a" 0
-    --   aTv = TyVar aVar
-    --   in TypeScheme [aVar] [] (TyString :~> (aTv :~> TyBool) :~> aTv :~> TyString)
-    -- RPrint -> let
-    --   aVar = nd "a" 0
-    --   aTv = TyVar aVar
-    --   in TypeScheme [aVar] [Pred Show aTv] (aTv :~> TyUnit)
+    RBuiltinRepl b -> case b of
+      RExpect -> let
+        aVar = TypeVariable 0 "a"
+        a = TyNullary (TyVar aVar)
+        in TypeScheme [aVar] [] (TyString :~> a :~> a :~> TyString)
+      RExpectFailure -> let
+        aVar = TypeVariable 0 "a"
+        a = TyNullary (TyVar aVar)
+        in TypeScheme [aVar] [] (TyString :~> a :~> TyString)
+      RExpectFailureMatch -> let
+        aVar = TypeVariable 0 "a"
+        a = TyNullary (TyVar aVar)
+        in TypeScheme [aVar] [] (TyString :~> TyString :~> a :~> TyString)
+      RExpectThat -> let
+        aVar = TypeVariable 0 "a"
+        in TypeScheme [aVar] [] (TyString :~> (TyVar aVar :~> TyBool) :~> TyVar aVar :~> TyString)
+      RPrint ->
+        let aVar = TypeVariable 0 "a"
+            a = TyVar aVar
+        in TypeScheme [aVar] [Pred (Show a)] (TyList a :~> TyString)
+      RPactState ->
+        error "todo: pact-state"
+      RResetPactState ->
+        error "todo: pact-state"
+      REnvStackFrame ->
+        TypeScheme [] [] (TyNullary (TyList TyString))
+      REnvChainData -> let
+        -- r1
+        r1 = RowVariable 0 "r1"
+        -- r2
+        -- r1 ≼ r2
+        rowConstr = RoseSubRow (RoseRowTy (TyObject (RowVar r1))) (RoseRowTy (TyObject (RowConcrete chainDataSchema)))
+        --
+        in TypeScheme [r1] [Pred rowConstr] (TyObject (RowVar r1) :~> TyString)
+      REnvData -> let
+        aVar = TypeVariable 0 "a"
+        a = TyVar aVar
+        in TypeScheme [aVar] [Pred (IsValue a)] (a :~> TyString)
+      REnvEvents ->
+        error "todo: env-events"
+      REnvHash ->
+        TypeScheme [] [] (TyString :~> TyString)
+      REnvKeys ->
+        TypeScheme [] [] (TyList TyString :~> TyString)
+      REnvSigs ->
+        error "todo"
+      RBeginTx ->
+        TypeScheme [] [] (TyNullary TyString)
+      RBeginNamedTx ->
+        TypeScheme [] [] (TyString :~> TyString)
+      RCommitTx ->
+        TypeScheme [] [] (TyNullary TyString)
+      RRollbackTx ->
+        TypeScheme [] [] (TyNullary TyString)
+      RSigKeyset ->
+        TypeScheme [] [] (TyNullary TyGuard)
+      RTestCapability ->
+        let aVar = UserDefVariable 0 "a"
+        in TypeScheme [aVar] [] (TyCapToken (CapVar aVar) :~> TyString)
+      RContinuePact ->
+        TypeScheme [] [] (TyInt :~> TyString)
+      RContinuePactRollback ->
+        TypeScheme [] [] (TyInt :~> TyBool :~> TyString)
+      RContinuePactRollbackYield ->
+        TypeScheme [] [] (TyInt :~> TyBool :~> TyString :~> TyString)
+      RContinuePactRollbackYieldObj ->
+        let aVar = RowVariable 0 "a"
+        in TypeScheme [aVar] [] (TyInt :~> TyBool :~> TyString :~> TyObject (RowVar aVar) :~> TyString)
+      REnvExecConfig ->
+        TypeScheme [] [] (TyList TyString :~> TyString)
+      REnvNamespacePolicy -> error "todo"
+      REnvGas ->
+        TypeScheme [] [] (TyNullary TyInt)
+      REnvGasSet ->
+        TypeScheme [] [] (TyInt :~> TyString)
+      REnvMilliGas ->
+        TypeScheme [] [] (TyNullary TyInt)
+      REnvSetMilliGas ->
+        TypeScheme [] [] (TyInt :~> TyString)
+      REnvGasLimit ->
+        TypeScheme [] [] (TyInt :~> TyString)
+      REnvGasLog ->
+        TypeScheme [] [] (TyNullary TyString)
+      REnvGasModel ->
+        TypeScheme [] [] (TyString :~> TyString)
+      REnvAskGasModel ->
+        TypeScheme [] [] (TyNullary TyString)
+      REnvGasModelFixed ->
+        TypeScheme [] [] (TyString :~> TyInt :~> TyString)
+      RPactVersion ->
+        TypeScheme [] [] (TyNullary TyString)
+      REnforcePactVersionMin ->
+        TypeScheme [] [] (TyString :~> TyString :~> TyBool)
+      REnforcePactVersionRange ->
+        TypeScheme [] [] (TyString :~> TyBool)
+      REnvEnableTypechecking ->
+        TypeScheme [] [] (TyBool :~> TyString)
+      REnvEnableTypecheckingFatal ->
+        TypeScheme [] [] (TyBool :~> TyString :~> TyString)
+      RTypecheckTerm ->
+        let aVar = TypeVariable 0 "a"
+        in TypeScheme [aVar] [] (TyVar aVar :~> TyString)
+      RTypecheck ->
+        TypeScheme [] [] (TyString :~> TyString)
+
+chainDataSchema :: Map Field (Type n)
+chainDataSchema = M.fromList
+  [ (Field "chain-id", TyString)
+  , (Field "block-height", TyInt)
+  , (Field "block-time", TyTime)
+  , (Field "prev-block-hash", TyString)
+  , (Field "sender", TyString)
+  , (Field "gas-limit", TyInt)
+  , (Field "gas-price", TyDecimal)]
+-- [ chain-id:string
+-- , block-height:integer
+-- , block-time:time
+-- , prev-block-hash:string
+-- , sender:string
+-- , gas-limit:integer
+-- , gas-price:decimal ]
 
 liftST :: ST s a -> InferM s b i a
 liftST action = InferM $ lift $ lift $ lift action
@@ -696,17 +869,34 @@ throwTypecheckError i msg = throwError (TypecheckFailure msg i)
 -- _dbgPred :: TCPred s -> InferM s b i (Pred Text)
 -- _dbgPred (Pred i t) = Pred i <$> _dbgType t
 
--- _dbgType :: TCType s -> InferM s b i (Type Text)
--- _dbgType = \case
---   TyVar tv -> readTvRef tv >>= \case
---     Unbound u l _ -> pure (TyVar ("unbound" <> T.pack (show (u, l))))
---     Bound u l -> pure (TyVar ("bound" <> T.pack (show (u, l))))
---     Link ty -> _dbgType ty
---   TyFun l r -> TyFun <$> _dbgType l <*> _dbgType r
---   TyList t -> TyList <$> _dbgType t
---   TyPrim p -> pure (TyPrim p)
---   TyModRef mr -> pure (TyModRef mr)
---   TyForall {} -> error "impredicative"
+_dbgType :: TCType s -> InferM s b i (Type Text)
+_dbgType = \case
+  TyVar tv -> _dbgVar tv
+  TyFun l r -> TyFun <$> _dbgType l <*> _dbgType r
+  TyList t -> TyList <$> _dbgType t
+  TyPrim p -> pure (TyPrim p)
+  TyModRef mr -> pure (TyModRef mr)
+  TyObject o -> _dbgRowCtor TyObject o
+  TyTable o -> _dbgRowCtor TyTable o
+  TyCapToken _v -> undefined
+  TyNullary t -> TyNullary <$> _dbgType t
+  where
+  _dbgRowCtor f = \case
+    RowConcrete o -> do
+      o' <- traverse _dbgType o
+      pure (f (RowConcrete o'))
+    RowVar tv -> readTvRef tv >>= \case
+      Unbound u l _ -> pure (TyVar ("unbound" <> T.pack (show (u, l))))
+      Bound u l -> pure (TyVar ("bound" <> T.pack (show (u, l))))
+      LinkTy _ty -> error "invariant-broken"
+      LinkRow ty -> _dbgType (TyObject ty)
+      LinkCap _t -> error "invariant-broken"
+  _dbgVar tv = readTvRef tv >>= \case
+    Unbound u l _ -> pure (TyVar ("unbound" <> T.pack (show (u, l))))
+    Bound u l -> pure (TyVar ("bound" <> T.pack (show (u, l))))
+    LinkTy ty -> _dbgType ty
+    LinkRow ty -> _dbgType (TyObject ty)
+    LinkCap t -> _dbgType (TyCapToken t)
 
 
 enterLevel :: InferM s b i ()
@@ -775,7 +965,7 @@ byInst i (Pred p) = case p of
   EnforceRead{} -> error "todo: implement"
   EqRow l -> eqRow l
   RoseSubRow l r -> roseSubRow i l r
-  RoseRowEq l r -> roseRowEq l r
+  RoseRowEq l r -> roseRowEq i l r
 
 -- | Instances of Eq:
 --
@@ -935,13 +1125,22 @@ roseRowEq i l r = do
   l' <- normalizeRoseSubrow l
   r' <- normalizeRoseSubrow r
   case (l', r') of
+    (RoseConcrete lrow, RoseVar rvar) ->
+      unifyConcrete rvar lrow *> pure (Just [])
+    (RoseVar lvar, RoseConcrete rrow) ->
+      unifyConcrete lvar rrow *> pure (Just [])
     (RoseConcrete lrow, RoseConcrete rrow) -> do
       let lkeys = S.fromList (M.keys lrow)
           rkeys = S.fromList (M.keys rrow)
-      unless (lkeys `S.isSubsetOf` rkeys) $ error "cannot satisfy subrow constraint: objects do not match"
+      unless (lkeys == rkeys) $ error "cannot satisfy subrow constraint: objects do not match"
       zipWithM_ (unify i) (M.elems lrow) (M.elems rrow)
       pure $ Just []
+    (RoseVar lvar, RoseVar rvar) ->
+      unifyRowVar i lvar (RowVar rvar ) *> pure Nothing
     _ -> pure Nothing
+  where
+  unifyConcrete var row =
+    unifyRowVar i var (RowConcrete row)
 
 normalizeRoseSubrow
   :: RoseRow (TCType s)
@@ -1147,7 +1346,8 @@ instantiateImported
   :: TypeScheme DebruijnTypeVar
   -> i
   -> InferM s b i (TCType s, [TCTypeVar s], [TCPred s])
-instantiateImported (TypeScheme tvs preds ty) _i = do
+instantiateImported ts@(TypeScheme tvs preds ty) _i = do
+    traceM $ "instantiating: " <> show ts
     ntvs <- traverse (const newTvRef) tvs
     let ntvs' = zipWith (\tvr (TypeVar _ kind) -> TypeVar tvr kind) ntvs tvs
     let rl = RAList.fromList (reverse ntvs)
@@ -1167,7 +1367,7 @@ instantiateImported (TypeScheme tvs preds ty) _i = do
     TyModRef mr -> pure (TyModRef mr)
     TyNullary n -> TyNullary <$> inst rl n
     TyObject rc -> TyObject <$> instRow rl rc
-    TyTable rc -> TyObject <$> instRow rl rc
+    TyTable rc -> TyTable <$> instRow rl rc
     TyCapToken n -> TyCapToken <$> instCapVar rl n
   instCapVar rl = \case
     CapVar n -> CapVar <$> instNamed rl n
@@ -1271,6 +1471,7 @@ unifyRowVar _ tv t1 = readTvRef tv >>= \case
 --   _ -> pure ()
 --   | otherwise = error "attempted to unify a variable of incorrect kind"
 
+-- TODO: Captoken unif.
 unify
   :: i
   -> TCType s
@@ -1285,11 +1486,10 @@ unify _ (TyPrim p) (TyPrim p') | p == p' = pure ()
 unify i (TyObject r) (TyObject l) = unifyRow i l r
 unify i (TyTable r) (TyTable l) = unifyRow i l r
 unify _i (TyModRef mr) (TyModRef mr') | mr == mr' = pure ()
-unify _i _t1 _t2 =
-  error "unification error"
-  -- t1' <- _dbgType t1
-  -- t2' <- _dbgType t2
-  -- throwTypecheckError (UnificationError t1' t2') i
+unify i t1 t2 = do
+  t1' <- _dbgType t1
+  t2' <- _dbgType t2
+  throwTypecheckError i ("unification error: " <> T.pack (show t1')  <> " ~ " <> T.pack (show t2'))
 
 unifyRow
   :: i
@@ -1610,16 +1810,21 @@ inferApply (Apply fun args i) = case args of
     unify i (TyNullary tv1) tfun
     pure (tv1, Apply fun' [] i, pe1)
   h:hs -> do
+    traceM "HERE RN"
     (tfun, te', pe1) <- inferTerm fun
+    traceM "inferred fun"
     (rty, xs, ps) <- foldlM inferFunctionArgs (tfun,[], []) (h:hs)
+    traceM "inferred args"
     let term' = Apply te' (reverse xs) i
     pure (rty, term', pe1 ++ ps)
     where
     inferFunctionArgs (ta, xs, ps) fnArg = case ta of
       TyFun arg ret -> do
+        traceM "bidir-"
         (_, x', p) <- checkTermType arg fnArg
         pure (ret, x':xs, ps ++ p)
       _ -> do
+        traceM "inference case"
         tv1 <- TyVar . (`TypeVar` TyKind) <$> newTvRef
         (tArg, fnArg', predsArg) <- inferTerm fnArg
         unify i ta (TyFun tArg tv1)
@@ -1908,9 +2113,11 @@ ensureNoTyVars
 ensureNoTyVars i = \case
   TyVar n -> readTvRef n >>= \case
     LinkTy ty -> ensureNoTyVars i ty
-    _ ->
-      error "Inferred generic signature"
-      -- throwTypecheckError (DisabledGeneralization "Inferred generic signature") i
+    LinkRow row -> ensureNoTyVars i (TyObject row)
+    LinkCap r -> ensureNoTyVars i (TyCapToken r)
+    _ -> do
+      dbg <- _dbgType (TyVar n)
+      throwTypecheckError i $ "Inferred generic signature" <> T.pack (show dbg)
   TyPrim p -> pure (TyPrim p)
   TyFun l r -> TyFun <$> ensureNoTyVars i l <*> ensureNoTyVars i r
   TyList l -> TyList <$> ensureNoTyVars i l
