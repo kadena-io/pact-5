@@ -1074,4 +1074,3 @@ fixTreeIndices = \case
       WithCapability <$> fixTreeIndices cap <*> fixTreeIndices body
   InlineValue p i ->
     pure $ InlineValue p i
-
