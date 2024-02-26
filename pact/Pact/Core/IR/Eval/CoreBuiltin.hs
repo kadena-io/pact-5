@@ -31,7 +31,7 @@ import Control.Monad.IO.Class
 import Data.Attoparsec.Text(parseOnly)
 import Data.Bits
 import Data.Either(isLeft, isRight)
-import Data.Foldable(foldl', traverse_, toList)
+import Data.Foldable(foldl', traverse_, toList, foldlM)
 import Data.Decimal(roundTo', Decimal, DecimalRaw(..))
 import Data.Vector(Vector)
 import Data.Maybe(maybeToList)
@@ -392,8 +392,11 @@ rawContains info b cont handler _env = \case
     returnCEKValue cont handler (VBool (M.member (Field f) o))
   [VString s, VString s'] ->
     returnCEKValue cont handler (VBool (s `T.isInfixOf` s'))
-  [VPactValue v, VList vli] ->
-    returnCEKValue cont handler (VBool (v `V.elem` vli))
+  [VPactValue v, VList vli] -> do
+    let search True _ = pure True
+        search _ el = valEqGassed info v el
+    res <- foldlM search False vli
+    returnCEKValue cont handler (VBool res)
   args -> argsError info b args
 
 rawSort :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
