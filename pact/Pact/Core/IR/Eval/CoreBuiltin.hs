@@ -29,7 +29,6 @@ import Control.Lens hiding (from, to, op, parts)
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Attoparsec.Text(parseOnly)
-import Data.Containers.ListUtils(nubOrd)
 import Data.Bits
 import Data.Either(isLeft, isRight)
 import Data.Foldable(foldl', traverse_, toList)
@@ -1173,14 +1172,21 @@ coreStrToIntBase info b cont handler _env = \case
   bsToInteger bs = fst $ foldl' go (0,(BS.length bs - 1) * 8) $ BS.unpack bs
   go (i,p) w = (i .|. (shift (fromIntegral w) p), p - 8)
 
+nubByM :: Monad m => (a -> a -> m Bool) -> [a] -> m [a]
+nubByM eq = go
+  where
+  go [] = pure []
+  go (x:xs) = do
+    xs' <- filterM (fmap not . eq x) xs
+    (x :) <$> go xs'
+
 coreDistinct  :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreDistinct info b cont handler _env = \case
-  [VList s] ->
+  [VList s] -> do
+    uniques <- nubByM (valEqGassed info) $ V.toList s
     returnCEKValue cont handler
       $ VList
-      $ V.fromList
-      $ nubOrd
-      $ V.toList s
+      $ V.fromList uniques
   args -> argsError info b args
 
 coreFormat  :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
