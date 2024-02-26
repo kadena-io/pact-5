@@ -199,6 +199,9 @@ runTableModel = \case
       MilliGas $ fromIntegral maxSz * basicWorkGas
     ObjComparison i ->
       MilliGas $ fromIntegral i * basicWorkGas
+  GSearch sty -> case sty of
+    SubstringSearch needle hay -> MilliGas $ fromIntegral (T.length needle + T.length hay) + basicWorkGas
+    FieldSearch cnt -> MilliGas $ fromIntegral cnt + basicWorkGas
   GPoseidonHashHackAChain len ->
     MilliGas $ fromIntegral (len * len) * quadraticGasFactor + fromIntegral len * linearGasFactor
      where

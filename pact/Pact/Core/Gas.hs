@@ -33,6 +33,7 @@ module Pact.Core.Gas
  , GasListLength(..)
  , GasObjectSize(..)
  , ComparisonType(..)
+ , SearchType(..)
  ) where
 
 import Control.Lens
@@ -157,6 +158,8 @@ data GasArgs
   -- ^ Cost of writes, per bytes, roughly based on in-memory cost.
   | GComparison !ComparisonType
   -- ^ Gas costs for comparisons
+  | GSearch !SearchType
+  -- ^ Gas costs for searches
   | GPoseidonHashHackAChain !Int
   -- ^ poseidon-hash-hack-a-chain costs
   | GModuleMemory !Word64
@@ -176,6 +179,13 @@ newtype GasListLength
 newtype GasObjectSize
   = GasObjectSize Int
   deriving Show
+
+data SearchType
+  = SubstringSearch !Text !Text
+  -- ^ searching `needle` in `stack`
+  | FieldSearch !Int
+  -- ^ checking if an object has a field
+  deriving (Show)
 
 data ComparisonType
   = TextComparison !Text

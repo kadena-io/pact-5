@@ -388,10 +388,12 @@ rawShow info b cont handler _env = \case
 -- Todo: Gas here is complicated, greg worked on this previously
 rawContains :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawContains info b cont handler _env = \case
-  [VString f, VObject o] ->
+  [VString f, VObject o] -> do
+    chargeGasArgs info $ GSearch $ FieldSearch (M.size o)
     returnCEKValue cont handler (VBool (M.member (Field f) o))
-  [VString s, VString s'] ->
-    returnCEKValue cont handler (VBool (s `T.isInfixOf` s'))
+  [VString needle, VString hay] -> do
+    chargeGasArgs info $ GSearch $ SubstringSearch needle hay
+    returnCEKValue cont handler (VBool (needle `T.isInfixOf` hay))
   [VPactValue v, VList vli] -> do
     let search True _ = pure True
         search _ el = valEqGassed info v el
