@@ -552,6 +552,18 @@ traverseDefTerm f = \case
   DPact d -> DPact <$> traverseDefPactTerm f d
 
 
+traverseIfDefTerm
+  :: Traversal (IfDef name ty builtin info)
+               (IfDef name ty builtin' info)
+               (Term name ty builtin info)
+               (Term name ty builtin' info)
+traverseIfDefTerm f = \case
+  IfDfun d -> pure (IfDfun d)
+  IfDConst d -> IfDConst <$> traverseDefConstTerm f d
+  IfDCap d -> pure (IfDCap d)
+  IfDPact d -> pure (IfDPact d)
+  IfDSchema d -> pure (IfDSchema d)
+
 instance Plated (Term name ty builtin info) where
   plate f = \case
     Var n i -> pure (Var n i)
