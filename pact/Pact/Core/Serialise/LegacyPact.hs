@@ -90,7 +90,7 @@ instance JD.FromJSON Namespace where
     <*> v JD..: "admin"
 
 instance JD.FromJSON (ModuleData CoreBuiltin ()) where
-  parseJSON = error "unimplemented"
+  parseJSON _ = fail "unimplemented"
 
 instance JD.FromJSON DefPactExec where
   parseJSON = JD.withObject "PactExec" $ \o ->

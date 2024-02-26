@@ -61,6 +61,7 @@ import Pact.Core.Errors
 import Pact.Core.Gas
 import Pact.Core.Literal
 import Pact.Core.PactValue
+import Pact.Core.Pretty
 import Pact.Core.Capabilities
 import Pact.Core.Type
 import Pact.Core.Guards
@@ -1435,8 +1436,8 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
       RunKeysetPredC -> case v of
         PBool allow ->
           if allow then returnCEKValue cont handler (VBool True)
-          else returnCEK cont handler (VError "Keyset enforce failure" info)
-        _ -> returnCEK cont handler (VError "Keyset enforce failure" info)
+          else returnCEK cont handler (VError "Keyset enforce failure 1" info)
+        _ -> returnCEK cont handler (VError "Keyset enforce failure 2" info)
       where
       foldDBRead tv queryClo appClo remaining acc =
         case remaining of
@@ -2012,7 +2013,12 @@ isKeysetInSigs info cont handler env (KeySet kskeys ksPred) = do
   count = S.size kskeys
   run p matched =
     if p count matched then returnCEKValue cont handler (VBool True)
-    else returnCEK cont handler (VError "Keyset enforce failure" info)
+    else do
+      let
+        elide pk | T.length pk < 8 = pk
+                 | otherwise = T.take 8 pk <> "..."
+        errMsg = "Keyset failure (" <> predicateToText ksPred <> "): " <> renderText' (pretty $ map (elide . renderPublicKeyText) $ S.toList kskeys)
+      returnCEK cont handler (VError errMsg info)
   runPred matched =
     case ksPred of
       KeysAll -> run atLeast matched
