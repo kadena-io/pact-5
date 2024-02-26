@@ -8,10 +8,8 @@
 module Pact.Core.Test.LegacySerialiseTests where
 
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (assertBool, testCase)
-import Data.Maybe
+import Test.Tasty.HUnit
 import Pact.Core.Serialise.LegacyPact
-import Pact.Core.Guards
 
 import Control.Monad (forM)
 import System.Directory
@@ -22,29 +20,18 @@ import Pact.Core.Test.ReplTests (runReplTest)
 import Pact.Core.Persistence
 import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Serialise
+import Pact.Core.Builtin
 import Data.Foldable (traverse_)
 import Control.Lens
 import Pact.Core.Repl.Compile
 import Data.Default
+import Pact.Core.IR.Term
 
-tests :: TestTree
-tests = testGroup "Legacy Serialisation"
-  [ testGroup "KeySet"
-    [ testCase "pred: keys-2"   $ assertBool "KeySet decoding failed" (isJust (decodeKeySet "{\"pred\":\"keys-2\",\"keys\":[\"ddd8\",\"ed0\"]}"))
-    , testCase "pred: keys-all" $ assertBool "KeySet decoding failed" (isJust (decodeKeySet "{\"pred\":\"keys-all\",\"keys\":[\"ddd8\",\"ed0\"]}"))
-    , testCase "pred: keys-any" $ assertBool "KeySet decoding failed" (isJust (decodeKeySet "{\"pred\":\"keys-any\",\"keys\":[\"ddd8\",\"ed0\"]}"))
-    , testCase "pred defaults"  $ assertBool "KeySet decoding failed" (maybe False (\k -> KeysAll == _ksPredFun k) (decodeKeySet "{\"pred\":\"keys-all\",\"keys\":[\"ddd8\",\"ed0\"]}"))
-    , testCase "pred invalid" $ assertBool "Accept invalid pred" (isNothing (decodeKeySet "{\"pred\":123,\"keys\":[\"ddd8\",\"ed0\"]}"))
-    , testCase "pred empty" $ assertBool "Accept empty pred" (isNothing (decodeKeySet "{\"pred\":\"\",\"keys\":[\"ddd8\",\"ed0\"]}"))
-    , testCase "pred custom" $ assertBool "Accept custom pred" (isJust (decodeKeySet "{\"pred\":\"b.ABC\",\"keys\":[\"ddd8\",\"ed0\"]}"))
-    ]
-    -- TODO: Add more test cases.
-  ]
-
-
+tests :: IO TestTree
+tests = testGroup "Legacy Repl Tests" <$> legacyTests
 
 legacyTestDir :: String
-legacyTestDir = "pact-tests" </> "legacy-serial-test"
+legacyTestDir = "pact-tests" </> "legacy-serial-tests"
 
 
 replTestFiles :: IO [(String, [FilePath], [FilePath])]
@@ -61,23 +48,37 @@ legacyTests :: IO [TestTree]
 legacyTests = do
   t <- replTestFiles
   forM t $ \(p, repl, lm) -> do
-    lm' <- sequence <$> traverse toModuleData lm
+    lm' <- sequence <$> traverse (toModuleData p) lm
     case lm' of
       Nothing -> error "Reading existing modules failed"
       Just ms -> do
-        pdb <- mockPactDb serialisePact_raw_spaninfo
+        pdb <- mockPactDb serialisePact_repl_spaninfo
 
         -- add default spaninfo
-        let ms' = (fmap.fmap) (const def)  ms
+        let ms' = (fmap.fmap) (const def) ms
 
         -- write modules into module cache
-        traverse_ (\m -> writeModule pdb Write (view mdModuleName m) m) ms'
+        traverse_ (\m -> writeModule pdb Write (view mdModuleName m) (liftReplBuiltin m)) ms'
 
         modTests <- forM repl $ \r -> do
           let filePath = legacyTestDir </> p </> r
           src <- T.readFile filePath
-          pure $ testCase r (runReplTest undefined filePath src interpretReplProgram)
+          pure $ testCase r (runReplTest pdb filePath src interpretReplProgram)
         pure (testGroup p modTests)
   where
-  toModuleData fp =
-    decodeModuleData <$> BS.readFile fp
+  toModuleData p fp =
+    decodeModuleData <$> BS.readFile (legacyTestDir </> p </> fp)
+
+  -- Boilerplate for lifting `CoreBuiltin` into `ReplCoreBuiltin`
+  -- Note: this is only used in this test.
+  liftReplBuiltin :: ModuleData CoreBuiltin a -> ModuleData ReplCoreBuiltin a
+  liftReplBuiltin = \case
+    ModuleData em ed -> let
+      defs' = over (traverseDefTerm . termBuiltin) RBuiltinWrap <$> _mDefs em
+      ed' = over (traverseDefTerm . termBuiltin) RBuiltinWrap <$> ed
+      in ModuleData (em{_mDefs = defs'}) ed'
+    InterfaceData im ed -> let
+      ifdefs = over (traverseIfDefTerm . termBuiltin) RBuiltinWrap <$> _ifDefns im
+      ed' = over (traverseDefTerm . termBuiltin) RBuiltinWrap <$> ed
+      in InterfaceData (im{_ifDefns = ifdefs}) ed'
+      
