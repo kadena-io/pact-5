@@ -820,13 +820,53 @@ coreDec info b cont handler _env = \case
   [VInteger i] -> returnCEKValue cont handler $ VDecimal $ Decimal 0 i
   args -> argsError info b args
 
+{-
+[Note: Parsed Integer]
+`read-integer` corresponds to prod's `ParsedInteger` newtype. That handles, in particular, the following codecs:
+
+instance FromJSON Literal where
+  parseJSON n@Number{} = LDecimal <$> decoder decimalCodec n
+  parseJSON (String s) = pure $ LString s
+  parseJSON (Bool b) = pure $ LBool b
+  parseJSON o@Object {} =
+    (LInteger <$> decoder integerCodec o) <|>
+    (LTime <$> decoder timeCodec o) <|>
+    (LDecimal <$> decoder decimalCodec o)
+  parseJSON _t = fail "Literal parse failed"
+
+instance A.FromJSON ParsedInteger where
+  parseJSON (A.String s) =
+    ParsedInteger <$> case pactAttoParseOnly (unPactParser number) s of
+                        Right (LInteger i) -> return i
+                        _ -> fail $ "Failure parsing integer string: " ++ show s
+  parseJSON (A.Number n) = return $ ParsedInteger (round n)
+  parseJSON v@A.Object{} = A.parseJSON v >>= \i -> case i of
+    PLiteral (LInteger li) -> return $ ParsedInteger li
+    _ -> fail $ "Failure parsing integer PactValue object: " ++ show i
+  parseJSON v = fail $ "Failure parsing integer: " ++ show v
+
+In prod, env data is just a json object. In core, we parse eagerly using the `PactValue` parser, so the following
+can happen:
+  - We may see a PString, we must run the number parser `parseNumLiteral`
+  - We may see a PDecimal, in which case we round
+  - We may see a PInteger, which we read as-is.
+-}
 coreReadInteger :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreReadInteger info b cont handler _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
       PObject envData ->
         case M.lookup (Field s) envData of
-          Just (PInteger p) -> returnCEKValue cont handler (VInteger p)
+          -- See [Note: Parsed Integer]
+          Just (PDecimal p) ->
+            returnCEKValue cont handler (VInteger (round p))
+          Just (PInteger p) ->
+            returnCEKValue cont handler (VInteger p)
+          -- See [Note: Parsed Integer]
+          Just (PString raw) ->  case parseNumLiteral raw of
+            Just (LInteger i) -> returnCEKValue cont handler (VInteger i)
+            _ -> returnCEK cont handler (VError "read-integer failure" info)
+
           _ -> returnCEK cont handler (VError "read-integer failure" info)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
   args -> argsError info b args
@@ -845,6 +885,22 @@ coreReadMsg info b cont handler _env = \case
     returnCEKValue cont handler (VPactValue envData)
   args -> argsError info b args
 
+{-
+[Note: Parsed Decimal]
+
+Simlar to [Note: Parsed Integer], except the decimal case handles:
+
+instance A.FromJSON ParsedDecimal where
+  parseJSON (A.String s) =
+    ParsedDecimal <$> case pactAttoParseOnly (unPactParser number) s of
+                        Right (LDecimal d) -> return d
+                        Right (LInteger i) -> return (fromIntegral i)
+                        _ -> fail $ "Failure parsing decimal string: " ++ show s
+  parseJSON (A.Number n) = return $ ParsedDecimal (fromRational $ toRational n)
+  parseJSON v = fail $ "Failure parsing decimal: " ++ show v
+
+So the string parsing case accepts both the integer, and decimal output
+-}
 coreReadDecimal :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreReadDecimal info b cont handler _env = \case
   [VString s] -> do
@@ -852,6 +908,11 @@ coreReadDecimal info b cont handler _env = \case
       PObject envData ->
         case M.lookup (Field s) envData of
           Just (PDecimal p) -> returnCEKValue cont handler (VDecimal p)
+          -- See [Note: Parsed Decimal]
+          Just (PString raw) -> case parseNumLiteral raw of
+            Just (LInteger i) -> returnCEKValue cont handler (VDecimal (Decimal 0 i))
+            Just (LDecimal l) -> returnCEKValue cont handler (VDecimal l)
+            _ -> returnCEK cont handler (VError "read-decimal failure" info)
           _ -> returnCEK cont handler (VError "read-decimal failure" info)
       _ -> returnCEK cont handler (VError "read-decimal failure" info)
   args -> argsError info b args
