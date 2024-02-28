@@ -93,10 +93,6 @@ interpretReplProgramSmallStep
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
 interpretReplProgramSmallStep = interpretReplProgram' (replBuiltinEnv @CEKSmallStep)
 
-isBreakpoint :: EvalTerm ReplCoreBuiltin SpanInfo -> Bool
-isBreakpoint term = undefined
-
-
 type WithReplTypes ty = ty ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 
 data BpEvalKind = BpEvalStep | BpEvalManySteps
@@ -114,13 +110,23 @@ isFinal :: CEKReturn b i m -> Bool
 isFinal (CEKReturn Mt CEKNoHandler _) = True
 isFinal _ = False
 
+isBreakpoint :: EvalTerm ReplCoreBuiltin SpanInfo -> ReplM ReplCoreBuiltin Bool
+isBreakpoint term = do
+  currSrc <- use replCurrSource
+  bps <- M.findWithDefault mempty (_scFileName currSrc) <$> use replBreakpoints
+  pure False
+  where
+  info = view termInfo term
+
 evalStepBp :: BpMachineResult -> ReplM ReplCoreBuiltin (BpStepEvalResult, BpMachineResult)
 evalStepBp c@(CEKReturn cont handler result)
   | isFinal c = pure (FinishedEval result, c)
   | otherwise = (BpNotHit, ) <$> CEK.returnCEK cont handler result
-evalStepBp c@(CEKEvaluateTerm cont handler cekEnv term)
-  | isBreakpoint term = pure (BpHit, c)
-  | otherwise = (BpNotHit, ) <$> CEK.evaluateTerm cont handler cekEnv term
+evalStepBp c@(CEKEvaluateTerm cont handler cekEnv term) = do
+  isBp <- isBreakpoint term
+  if isBp
+     then pure (BpHit, c)
+     else (BpNotHit, ) <$> CEK.evaluateTerm cont handler cekEnv term
 
 evalUntilBp :: BpMachineResult -> ReplM ReplCoreBuiltin (BpManyStepsEvalResult, BpMachineResult)
 evalUntilBp c = do
