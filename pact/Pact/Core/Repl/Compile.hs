@@ -18,7 +18,8 @@ module Pact.Core.Repl.Compile
 import Control.Lens
 import Control.Monad
 import Control.Monad.Except
-import Control.Monad.IO.Class(liftIO)
+import Control.Monad.IO.Class(liftIO, MonadIO)
+import Control.Monad.State(MonadState)
 import Data.Text(Text)
 import Data.Default
 import System.FilePath.Posix
@@ -69,15 +70,13 @@ data ReplCompileValue
   deriving Show
 
 loadFile
-  :: (CEKEval step ReplCoreBuiltin SpanInfo Repl)
+  :: (MonadIO m, MonadState (ReplState b) m)
   => FilePath
-  -> BuiltinEnv step ReplCoreBuiltin SpanInfo Repl
-  -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
-  -> ReplM ReplCoreBuiltin [ReplCompileValue]
-loadFile loc rEnv display = do
+  -> m SourceCode
+loadFile loc = do
   source <- SourceCode loc <$> liftIO (T.readFile loc)
   replCurrSource .= source
-  interpretReplProgram' rEnv source display
+  pure source
 
 smallStepEnv :: BuiltinEnv   CEKSmallStep   (ReplBuiltin CoreBuiltin)   SpanInfo   (ReplM (ReplBuiltin CoreBuiltin))
 smallStepEnv = replBuiltinEnv @CEKSmallStep
@@ -135,6 +134,11 @@ data ReplProgramContext
   = HaltedInterpretation (BpManyStepsEvalResult, BpMachineResult) [Lisp.ReplSpecialTL SpanInfo] [ReplCompileValue]
   | InterpretationComplete [ReplCompileValue]
 
+ctxValues :: ReplProgramContext -> [ReplCompileValue]
+ctxValues = \case
+  HaltedInterpretation _ _ vals -> vals
+  InterpretationComplete vals -> vals
+
 interpretWithBreakpoints
   :: SourceCode
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
@@ -162,11 +166,13 @@ interpretWithBreakpoints (SourceCode _ source) display = do
           replEvalEnv .= ee
         fp <- mangleFilePath (T.unpack txt)
         when (isPactFile fp) $ esLoaded . loToplevel .= mempty
-        out <- loadFile fp smallStepEnv display
+        src <- loadFile fp
+        -- TODO better handling of halted interpretation
+        result <- interpretWithBreakpoints src display
         replCurrSource .= oldSrc
         unless reset $ do
           replEvalEnv .= oldEE
-        go rest (out ++ acc)
+        go rest (ctxValues result ++ acc)
   mangleFilePath fp = do
     (SourceCode currFile _) <- use replCurrSource
     case currFile of
@@ -279,7 +285,8 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
           replEvalEnv .= ee
         fp <- mangleFilePath (T.unpack txt)
         when (isPactFile fp) $ esLoaded . loToplevel .= mempty
-        out <- loadFile fp replEnv display
+        src <- loadFile fp
+        out <- interpretReplProgram' smallStepEnv src display
         replCurrSource .= oldSrc
         unless reset $ do
           replEvalEnv .= oldEE
