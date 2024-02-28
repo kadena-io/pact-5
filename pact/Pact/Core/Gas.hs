@@ -182,7 +182,7 @@ newtype GasObjectSize
 
 data SearchType
   = SubstringSearch !Text !Text
-  -- ^ searching `needle` in `stack`
+  -- ^ searching `needle` in `hay`
   | FieldSearch !Int
   -- ^ checking if an object has a field
   deriving (Show)
