@@ -214,9 +214,10 @@ replAction =
   cmdKw kw = MP.chunk kw *> MP.space1
   cmd = do
     _ <- MP.chunk ":"
-    setFlag <?> "asdf"
-  setFlag =
-    cmdKw "debug" *> ((RASetFlag <$> replFlag) <|> (RADebugAll <$ MP.chunk "all") <|> (RADebugNone <$ MP.chunk "none"))
+    setFlag <?> "unknown command"
+  setFlag = cmdKw "debug" *> ((RASetFlag <$> replFlag)
+        <|> (RADebugAll <$ MP.chunk "all")
+        <|> (RADebugNone <$ MP.chunk "none"))
 
 
 parseReplAction :: Text -> Maybe ReplAction
