@@ -909,6 +909,7 @@ coreReadDecimal info b cont handler _env = \case
         case M.lookup (Field s) envData of
           Just (PDecimal p) -> returnCEKValue cont handler (VDecimal p)
           -- See [Note: Parsed Decimal]
+          Just (PInteger i) -> returnCEKValue cont handler (VDecimal (Decimal 0 i))
           Just (PString raw) -> case parseNumLiteral raw of
             Just (LInteger i) -> returnCEKValue cont handler (VDecimal (Decimal 0 i))
             Just (LDecimal l) -> returnCEKValue cont handler (VDecimal l)
