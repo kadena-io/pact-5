@@ -38,6 +38,7 @@ import Pact.Core.Compile
 import Pact.Core.Environment
 import Pact.Core.Info
 import Pact.Core.PactValue
+import Pact.Core.Errors
 import Pact.Core.Serialise (serialisePact_repl_spaninfo)
 
 
@@ -89,6 +90,18 @@ interpretReplProgramSmallStep
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
 interpretReplProgramSmallStep = interpretReplProgram' (replBuiltinEnv @CEKSmallStep)
 
+checkReplNativesEnabled :: TopLevel n t (ReplBuiltin b) SpanInfo -> ReplM ReplCoreBuiltin ()
+checkReplNativesEnabled = \case
+  TLModule m -> do
+    flag <- use replNativesEnabled
+    unless flag $
+      () <$ traverseModuleTerm hasReplNatives m
+  _ -> pure ()
+  where
+  hasReplNatives = transformM $ \case
+    Builtin (RBuiltinRepl _) i ->
+      throwExecutionError i (EvalError "repl native disallowed in module code. If you want to use this, enable them with (env-enable-repl-natives true)")
+    a ->  pure a
 
 interpretReplProgram'
   :: (CEKEval step ReplCoreBuiltin SpanInfo Repl)
@@ -137,6 +150,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
       Nothing -> do
         functionDocs toplevel
         (ds, deps) <- compileDesugarOnly replEnv toplevel
+        checkReplNativesEnabled ds
         case ds of
           TLTerm (Var (Name n (NTopLevel mn mh)) varI) -> do
             let fqn = FullyQualifiedName mn n mh

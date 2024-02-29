@@ -428,6 +428,14 @@ envGasLog info b cont handler _env = \case
           returnCEKValue cont handler (VList $ V.fromList (totalLine:logLines))
   args -> argsError info b args
 
+envEnableReplNatives :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+envEnableReplNatives info b cont handler _env = \case
+  [VBool enabled] -> do
+    let s = if enabled then "enabled" else "disabled"
+    replNativesEnabled .= enabled
+    returnCEKValue cont handler $ VString $ "repl natives " <> s
+  args -> argsError info b args
+
 envGasModel :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envGasModel info b cont handler _env = \case
   [] -> do
@@ -536,3 +544,4 @@ replCoreBuiltinRuntime = \case
     RPactVersion -> coreVersion
     REnforcePactVersionMin -> coreEnforceVersion
     REnforcePactVersionRange -> coreEnforceVersion
+    REnvEnableReplNatives -> envEnableReplNatives

@@ -171,7 +171,7 @@
 ;; test nested commits
 
 (begin-tx)
-;  (env-enable-repl-natives true)
+(env-enable-repl-natives true)
 (module nested-tx G
   (defcap G () true)
   (defschema s x:integer)

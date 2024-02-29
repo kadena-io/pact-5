@@ -82,6 +82,7 @@ runReplTest pdb file src interp = do
             , _replUserDocs = mempty
             , _replTLDefPos = mempty
             , _replTx = Nothing
+            , _replNativesEnabled = False
             }
   stateRef <- newIORef rstate
   runReplT stateRef (interp source (const (pure ()))) >>= \case
