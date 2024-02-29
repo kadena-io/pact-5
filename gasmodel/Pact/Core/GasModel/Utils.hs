@@ -10,6 +10,7 @@ import Control.Monad.Except
 import Control.DeepSeq
 import Data.Text (Text)
 import Data.Map.Strict(Map)
+import qualified Criterion as C
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -288,12 +289,38 @@ compileTerm source = do
   DesugarOutput term _  <- runDesugarTerm parsed
   pure term
 
+type BenchEvalEnv = EvalEnv CoreBuiltin ()
+type BenchEvalState = EvalState CoreBuiltin ()
+
 runCompileTerm
-  :: EvalEnv CoreBuiltin ()
-  -> EvalState CoreBuiltin ()
+  :: BenchEvalEnv
+  -> BenchEvalState
   -> Text
   -> IO (Either (PactError ()) CoreTerm, EvalState CoreBuiltin ())
 runCompileTerm es ee = runEvalM es ee . compileTerm
+
+runNativeBenchmark'
+  :: (BenchEvalEnv -> IO BenchEvalEnv)
+  -> (BenchEvalState -> IO BenchEvalState)
+  -> PactDb CoreBuiltin ()
+  -> Text
+  -> String
+  -> C.Benchmark
+runNativeBenchmark' envMod stMod pdb src title = C.env mkEnv $ \ ~(term, es, ee) ->
+  C.bench title $ C.nfAppIO (runEvalM ee es . Eval.eval PImpure benchmarkBigStepEnv) term
+  where
+  mkEnv = do
+    ee <- defaultGasEvalEnv pdb >>= envMod
+    es <- stMod defaultGasEvalState
+    (Right term, _) <- runCompileTerm ee es src
+    pure (term, es, ee)
+
+runNativeBenchmark
+  :: PactDb CoreBuiltin ()
+  -> Text
+  -> String
+  -> C.Benchmark
+runNativeBenchmark = runNativeBenchmark' pure pure
 
 -- Closures
 unitClosureNullary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m
