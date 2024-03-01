@@ -303,10 +303,10 @@ runNativeBenchmark'
   :: (BenchEvalEnv -> IO BenchEvalEnv)
   -> (BenchEvalState -> IO BenchEvalState)
   -> PactDb CoreBuiltin ()
-  -> Text
   -> String
+  -> Text
   -> C.Benchmark
-runNativeBenchmark' envMod stMod pdb src title = C.env mkEnv $ \ ~(term, es, ee) ->
+runNativeBenchmark' envMod stMod pdb title src = C.env mkEnv $ \ ~(term, es, ee) ->
   C.bench title $ C.nfAppIO (runEvalM ee es . Eval.eval PImpure benchmarkBigStepEnv) term
   where
   mkEnv = do
@@ -317,8 +317,8 @@ runNativeBenchmark' envMod stMod pdb src title = C.env mkEnv $ \ ~(term, es, ee)
 
 runNativeBenchmark
   :: PactDb CoreBuiltin ()
-  -> Text
   -> String
+  -> Text
   -> C.Benchmark
 runNativeBenchmark = runNativeBenchmark' pure pure
 
