@@ -42,14 +42,25 @@ import Pact.Core.GasModel.Utils
 showText :: Show a => a -> T.Text
 showText = T.pack . show
 
-benchEnumerate :: PactDb CoreBuiltin () -> C.Benchmark
-benchEnumerate pdb = C.bgroup "enumerate" [ bench cnt | cnt <- [1000 :: Int, 10000, 100000] ]
-  where
-  bench cnt = let cnt' = showText cnt in runNativeBenchmark pdb (show cnt) [text|(enumerate 0 $cnt')|]
+benchEnumerate :: PactDb CoreBuiltin () -> [C.Benchmark]
+benchEnumerate pdb = [ runNativeBenchmark pdb (show cnt) [text|(enumerate 0 $cnt')|]
+                     | cnt <- [1000, 10000, 100000] :: [Int]
+                     , let cnt' = showText cnt
+                     ]
+
+benchesForFun :: PactDb CoreBuiltin () -> CoreBuiltin -> [C.Benchmark]
+benchesForFun pdb bn = case bn of
+  CoreEnumerate -> benchEnumerate pdb
+  _ -> []
 
 benchmarks :: C.Benchmark
 benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) -> do
-  C.bgroup "pact-core-builtin-gas" [ benchEnumerate pdb ]
+  C.bgroup "pact-core-builtin-gas"
+    [ C.bgroup (T.unpack $ coreBuiltinToText coreBuiltin) benches
+    | coreBuiltin <- [minBound .. maxBound]
+    , let benches = benchesForFun pdb coreBuiltin
+    , not $ null benches
+    ]
   where
   mkPactDb = do
     tup@(pdb, _) <- unsafeCreateSqlitePactDb serialisePact ":memory:"
