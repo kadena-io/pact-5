@@ -39,12 +39,17 @@ import qualified Pact.Core.IR.Eval.CEK as Eval
 
 import Pact.Core.GasModel.Utils
 
-benchOnePlusTwo :: PactDb CoreBuiltin () -> C.Benchmark
-benchOnePlusTwo pdb = runNativeBenchmark pdb "(+ 1 2)" "(+ 1 2)"
+showText :: Show a => a -> T.Text
+showText = T.pack . show
+
+benchEnumerate :: PactDb CoreBuiltin () -> C.Benchmark
+benchEnumerate pdb = C.bgroup "enumerate" [ bench cnt | cnt <- [1000 :: Int, 10000, 100000] ]
+  where
+  bench cnt = let cnt' = showText cnt in runNativeBenchmark pdb (show cnt) [text|(enumerate 0 $cnt')|]
 
 benchmarks :: C.Benchmark
 benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) -> do
-  C.bgroup "pact-core-builtin-gas" [benchOnePlusTwo pdb]
+  C.bgroup "pact-core-builtin-gas" [ benchEnumerate pdb ]
   where
   mkPactDb = do
     tup@(pdb, _) <- unsafeCreateSqlitePactDb serialisePact ":memory:"
