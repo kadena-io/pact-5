@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GADTs #-}
@@ -27,6 +28,7 @@ module Pact.Core.Capabilities
 
 import Control.Lens
 import Control.DeepSeq
+import Data.Data(Data)
 import Data.Text(Text)
 import Data.Set(Set)
 import Data.Default
@@ -58,7 +60,7 @@ dcMetaFqName f = \case
 data CapForm name e
   = WithCapability e e
   | CreateUserGuard name [e]
-  deriving (Show, Functor, Foldable, Traversable, Eq, Generic)
+  deriving (Show, Functor, Foldable, Traversable, Eq, Generic, Data)
 
 
 capFormName :: Traversal (CapForm name e) (CapForm name' e) name name'

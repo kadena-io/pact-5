@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE InstanceSigs #-}
@@ -63,6 +64,7 @@ module Pact.Core.Names
  ) where
 
 import Control.Lens
+import Data.Data(Data)
 import Data.Text(Text)
 import qualified Data.Text as T
 import Data.Word(Word64)
@@ -78,7 +80,7 @@ import Pact.Core.Pretty(Pretty(..))
 
 -- | Newtype wrapper over bare namespaces
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
-  deriving (Eq, Ord, Show, Generic)
+  deriving (Eq, Ord, Show, Generic, Data)
 
 instance NFData NamespaceName
 
@@ -90,7 +92,7 @@ instance Pretty NamespaceName where
 data ModuleName = ModuleName
   { _mnName      :: Text
   , _mnNamespace :: Maybe NamespaceName
-  } deriving (Eq, Ord, Show, Generic)
+  } deriving (Eq, Ord, Show, Generic, Data)
 
 instance NFData ModuleName
 
@@ -111,7 +113,7 @@ data QualifiedName =
   QualifiedName
   { _qnName :: Text
   , _qnModName :: ModuleName
-  } deriving (Show, Eq, Generic)
+  } deriving (Show, Eq, Generic, Data)
 
 instance NFData QualifiedName
 
@@ -178,7 +180,7 @@ instance Pretty ParsedName where
 -- | Object and Schema row labels.
 -- So in Field "a" in {"a":v},
 newtype Field = Field { _field :: Text }
-  deriving (Eq, Ord, Show, Generic)
+  deriving (Eq, Ord, Show, Generic, Data)
   deriving newtype NFData
 
 instance Pretty Field where
@@ -219,7 +221,7 @@ data Name
   = Name
   { _nName :: !Text
   , _nKind :: NameKind }
-  deriving (Show, Eq, Ord, Generic)
+  deriving (Show, Eq, Ord, Generic, Data)
 
 instance NFData Name
 
@@ -228,7 +230,7 @@ data DynamicRef
   = DynamicRef
   { _drNameArg :: !Text
   , _drBindType :: DeBruijn
-  } deriving (Show, Eq, Ord, Generic)
+  } deriving (Show, Eq, Ord, Generic, Data)
 
 instance NFData DynamicRef
 
@@ -246,7 +248,7 @@ data NameKind
   -- ^ module reference, pointing to the module name +
   -- the implemented interfaces
   | NDynRef DynamicRef
-  deriving (Show, Eq, Ord, Generic)
+  deriving (Show, Eq, Ord, Generic, Data)
 
 instance NFData NameKind
 

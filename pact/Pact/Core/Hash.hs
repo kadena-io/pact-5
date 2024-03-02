@@ -1,6 +1,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -33,6 +34,7 @@ module Pact.Core.Hash
 import Control.DeepSeq
 import Data.ByteString.Short (ShortByteString, fromShort, toShort)
 import Data.ByteString (ByteString)
+import Data.Data (Data)
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Word
@@ -51,7 +53,7 @@ import Pact.Core.Pretty ( renderCompactString, Pretty(pretty) )
 -- Within Pact these are blake2b_256 but unvalidated as such,
 -- so other hash values are kosher (such as an ETH sha256, etc).
 newtype Hash = Hash { unHash :: ShortByteString }
-  deriving (Eq, Ord, NFData, Generic)
+  deriving (Eq, Ord, NFData, Generic, Data)
 
 instance Show Hash where
   show (Hash h) = show $ encodeBase64UrlUnpadded $ fromShort h
@@ -122,7 +124,7 @@ fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
 
 
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }
-  deriving (Eq, Ord, Show, Generic)
+  deriving (Eq, Ord, Show, Generic, Data)
   deriving newtype (NFData)
 
 placeholderHash :: ModuleHash
