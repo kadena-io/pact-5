@@ -86,14 +86,14 @@ fromLegacyModuleData
   -> Legacy.ModuleData (Legacy.Ref' Legacy.PersistDirect)
   -> TranslateM (ModuleData CoreBuiltin ())
 fromLegacyModuleData mh (Legacy.ModuleData md mref mdeps) = do
-  deps <- fromLegacyDeps mh mdeps
   case md of
     Legacy.MDModule m -> do
+      deps <- fromLegacyDeps mh mdeps
       m' <- fromLegacyModule mh m mref
       pure (ModuleData m' deps)
     Legacy.MDInterface i -> do
       i'<- fromLegacyInterface mh i mref
-      pure (InterfaceData i' deps)
+      pure (InterfaceData i' M.empty)
 
 
 fromLegacyInterface
@@ -119,11 +119,47 @@ fromLegacyDefRef :: ModuleHash -> LegacyRef -> TranslateM CoreDef
 fromLegacyDefRef mh = \case
   Legacy.Ref (Legacy.TDef d) ->
     fromLegacyDef mh $ Right <$> d
+
   Legacy.Ref (Legacy.TTable tn mn mh' ty) ->
     fromLegacyTableDef tn mn mh' ty
 
+  Legacy.Ref (Legacy.TSchema sn m fields) ->
+    fromLegacySchemaDef sn m fields
+
+  Legacy.Ref (Legacy.TConst arg m ce) ->
+    fromLegacyConstDef mh arg m ce
+
   Legacy.Ref t -> throwError $ "fromLegacyDefRef: " <>  show t
   Legacy.Direct _d -> throwError "fromLegacyDefRef: invariant Direct"
+
+fromLegacyConstDef
+  :: ModuleHash
+  -> Legacy.Arg (Legacy.Term LegacyRef)
+  -> Maybe Legacy.ModuleName
+  -> Legacy.ConstVal (Legacy.Term LegacyRef)
+  -> TranslateM CoreDef
+fromLegacyConstDef mh arg _mn cv = do
+  let arg' = (fmap.fmap) Right arg
+  Arg n mty <- fromLegacyArg arg'
+  cval <- case cv of
+    Legacy.CVRaw _ -> throwError "fromLegacyConstDef: invariant"
+    Legacy.CVEval _ t -> fromLegacyTerm mh (Right <$> t) >>= \case
+      InlineValue pv _ -> pure pv
+      _ -> throwError "fromLEgacyConstDef: invariant, not InlineValue"
+  pure (DConst (DefConst n mty (EvaledConst cval) ()))
+
+fromLegacySchemaDef
+  :: Legacy.TypeName
+  -> Maybe Legacy.ModuleName
+  -> [Legacy.Arg (Legacy.Term LegacyRef)]
+  -> TranslateM CoreDef
+fromLegacySchemaDef (Legacy.TypeName sn) _mn largs = do
+  let largs' = (fmap.fmap.fmap) Right largs
+  args <- traverse fromLegacyArg largs'
+  schema <- traverse (\(Arg n mty) -> pure (Field n, fromMaybe TyAny mty)) args
+  pure (DSchema (DefSchema sn (M.fromList schema) ()))
+
+
 
 fromLegacyTableDef
   :: Legacy.TableName
@@ -138,7 +174,7 @@ fromLegacyTableDef (Legacy.TableName tn) _mn _mh ty = do
         let qn = QualifiedName n . fromLegacyModuleName <$> mmn
         args <- traverse (\(Legacy.Arg n' ty') -> (Field n',) <$> fromLegacyType ty') f
         let sc = Schema qn (M.fromList args)
-        pure $ (DTable (DefTable tn (ResolvedTable sc) ()))
+        pure (DTable (DefTable tn (ResolvedTable sc) ()))
       _ -> throwError "fromLegacyTableDef: invariant 1"
     _ -> throwError "fromLegacyTableDef: invariant 2"
 
@@ -146,7 +182,19 @@ fromLegacyInterfaceDefRef :: ModuleHash -> LegacyRef -> TranslateM (EvalIfDef Co
 fromLegacyInterfaceDefRef mh = \case
   Legacy.Ref (Legacy.TDef d) ->
     fromLegacyInterfDef mh $ Right <$> d
-  _ -> throwError "fromLegacyDefRef: invariant"
+
+  Legacy.Ref (Legacy.TTable _tn _mn _mh' _ty) ->
+    undefined
+
+  Legacy.Ref (Legacy.TSchema _sn _m _fields) ->
+    undefined
+
+
+  Legacy.Ref (Legacy.TConst _arg _m _ce) ->
+    undefined
+
+  Legacy.Ref t -> throwError $ "fromLegacyDefRef: " <>  show t
+  Legacy.Direct _d -> throwError "fromLegacyDefRef: invariant Direct"
 
 
 fromLegacyFullyQualifiedName
@@ -294,8 +342,8 @@ fromLegacyBodyForm' mh args body = do
   case debruijnize (length args) body of
     Legacy.TList li _ -> traverse (fromLegacyTerm mh) (reverse (V.toList li)) >>= \case
       x:xs -> pure $ foldl' (\a b -> Sequence b a ()) x xs
-      _ -> throwError "fromLegacyBodyForm': invariant"
-    _ -> throwError "fromLegacyBodyForm': invariant"
+      t -> throwError $ "fromLegacyBodyForm': invariant1: " <> show t
+    t -> throwError $ "fromLegacyBodyForm': invariant2: " <> show t
 
 
 fromLegacyStepForm'
@@ -396,6 +444,13 @@ fromLegacyPersistDirect = \case
     | n == "create-user-guard" -> pure (CapabilityForm (CreateUserGuard unitName [unitValue]) ())
     | n == "try" -> pure (Try unitValue unitValue ())
 
+    | n == "CHARSET_ASCII" -> pure (Constant (LInteger 0) ()) -- see Desugar.hs
+    | n == "CHARSET_LATIN1" -> pure (Constant (LInteger 1) ())
+    | n == "constantly" -> let
+        c1 = Arg "#constantlyA1" Nothing
+        c2 = Arg "#constantlyA2" Nothing
+        in pure $ Lam (c1 :| [c2]) (Var (Name "#constantlyA1" (NBound 1)) ()) ()
+
     | otherwise -> case M.lookup n coreBuiltinMap of
         Just b -> pure (Builtin b ())
         _ -> Left $ "fromLegacyPersistDirect: invariant -> " <> show n
@@ -447,8 +502,7 @@ fromLegacyTerm mh = \case
 
       (Try t1 t2 _, _) -> pure (Try t1 t2 ())
 
-      (var@Var{},_) -> pure (App var args' ())
-      _ -> throwError "fromLegacyTerm: invariant"
+      (operator, operands) -> pure (App operator operands ())
 
 
   Legacy.TLam (Legacy.Lam _ (Legacy.FunType args _) body) -> do
@@ -513,14 +567,13 @@ fromLegacyTerm mh = \case
   Legacy.TDynamic mr dm -> do
     mr' <- fromLegacyTerm mh mr
     case mr' of
-     InlineValue (PModRef (ModRef m imp _)) _ -> case dm of
-       Legacy.TVar (Right (Legacy.Ref (Legacy.TDef d))) -> do
-         let
-           dname = Legacy._unDefName (Legacy._dDefName d)
-           name = Name dname (NModRef m imp)
-         pure (Var name ())
-       _ -> throwError "fromLegacyTerm: TDynamic dm invariant"
-     _ -> throwError "fromLegacyTerm: TDynamic invariant"
+      Var (Name n (NBound db)) _ -> case unTVar dm of
+        Legacy.TDef d -> let
+          dname = Legacy._unDefName (Legacy._dDefName d)
+          name = Name n (NDynRef (DynamicRef dname db))
+          in pure (Var name ())
+        _ -> throwError "fromLegacyTerm: invariant not a TDEF"
+      _ -> throwError "fromLegacyTerm: invariant"
 
   -- Note: impossible
   Legacy.TSchema{} -> throwError "fromLegacyTerm: invariant"
@@ -650,11 +703,13 @@ fromLegacySchema st ty = case (st, ty) of
       pure (TyObject (Schema qn (M.fromList args)))
     _ -> throwError "fromLegacySchema: invariant tyobject"
 
+  (Legacy.TyObject, Legacy.TyAny) -> pure TyAnyObject
+
   (Legacy.TyBinding, _) -> throwError "tybinding"
   -- (Legacy.TyObject, Legacy.TySchema _ _ _) -> throwError "tySchema 1"
   -- (Legacy.TyTable, Legacy.TySchema _ _ _) -> throwError "tySchema 2"
 
-  (s,_) -> throwError $ "fromLegacySchema: invariant 2: " <> show s
+  (s,t) -> throwError $ "fromLegacySchema: invariant 2: " <> show s <> " : " <> show t
 
 
 fromLegacyPrimType
