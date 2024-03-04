@@ -119,7 +119,23 @@ fromLegacyDefRef :: ModuleHash -> LegacyRef -> TranslateM CoreDef
 fromLegacyDefRef mh = \case
   Legacy.Ref (Legacy.TDef d) ->
     fromLegacyDef mh $ Right <$> d
-  _ -> throwError "fromLegacyDefRef: invariant"
+  Legacy.Ref (Legacy.TTable tn mn mh' ty) ->
+    fromLegacyTableDef tn mn mh' ty
+
+  Legacy.Ref t -> throwError $ "fromLegacyDefRef: " <>  show t
+  Legacy.Direct _d -> throwError "fromLegacyDefRef: invariant Direct"
+
+fromLegacyTableDef
+  :: Legacy.TableName
+  -> Legacy.ModuleName
+  -> Legacy.ModuleHash
+  -> Legacy.Type (Legacy.Term LegacyRef)
+  -> TranslateM CoreDef
+fromLegacyTableDef (Legacy.TableName tn) _mn _mh ty = do
+  let ty' = (fmap.fmap) Right ty
+  fromLegacyType ty' >>= \case
+    TyTable s -> pure (DTable (DefTable tn (ResolvedTable s) ()))
+    t -> throwError $ "fromLegacyDefTable: invariant: " <> show t
 
 fromLegacyInterfaceDefRef :: ModuleHash -> LegacyRef -> TranslateM (EvalInterfaceDef CoreBuiltin ())
 fromLegacyInterfaceDefRef mh = \case
@@ -365,17 +381,26 @@ fromLegacyPersistDirect
 fromLegacyPersistDirect = \case
   Legacy.PDValue v -> (`InlineValue` ()) <$> fromLegacyPactValue v
   Legacy.PDNative (Legacy.NativeDefName n)
-    | n == "enforce" -> pure (Conditional (CEnforce undefined undefined) ())
-    | n == "enforce-one" -> pure (Conditional (CEnforceOne undefined undefined) ())
-    | n == "if" -> pure (Conditional (CIf undefined undefined undefined) ())
-    | n == "and" -> pure (Conditional (CAnd undefined undefined) ())
-    | n == "or" -> pure (Conditional (COr undefined undefined) ())
+    | n == "enforce" -> pure (Conditional (CEnforce unitValue unitValue) ())
+    | n == "enforce-one" -> pure (Conditional (CEnforceOne unitValue [unitValue]) ())
+    | n == "if" -> pure (Conditional (CIf unitValue unitValue unitValue) ())
+    | n == "and" -> pure (Conditional (CAnd unitValue unitValue) ())
+    | n == "or" -> pure (Conditional (COr unitValue unitValue) ())
+    | n == "with-capability" -> pure (CapabilityForm (WithCapability unitValue unitValue) ())
+    | n == "create-capability" -> pure (CapabilityForm (CreateUserGuard unitName [unitValue]) ()) -- TODO: Jose ?
+    | n == "create-user-guard" -> pure (CapabilityForm (CreateUserGuard unitName [unitValue]) ())
+    | n == "try" -> pure (Try unitValue unitValue ())
+
     | otherwise -> case M.lookup n coreBuiltinMap of
         Just b -> pure (Builtin b ())
         _ -> Left $ "fromLegacyPersistDirect: invariant -> " <> show n
   Legacy.PDFreeVar fqn -> let
     fqn' = fromLegacyFullyQualifiedName fqn
     in pure $ Var (fqnToName fqn') ()
+  where
+    -- Note: unit* is used as placeholder, which gets replaced in `fromLegacyTerm`
+    unitValue = InlineValue PUnit ()
+    unitName = Name "unitName" (NBound 0)
 
 fromLegacyTerm
   :: ModuleHash
@@ -393,18 +418,29 @@ fromLegacyTerm mh = \case
     args' <- traverse (fromLegacyTerm mh) args
     case (fn', args') of
       (Builtin b _, _)
-        | b == CoreMap -> error "todo: implement all special forms"
+        -- | b == CoreMap -> error "todo: implement all special forms"
         | otherwise -> pure (desugarAppArity () b args')
 
       -- TODO: Add addtional cases
       (Conditional CEnforce{} _, arg) -> case arg of
         [t1,t2] -> pure (Conditional (CEnforce t1 t2) ())
-        [_t1]    -> error "lambda case TODO: JOSE"
+        [_t1]    -> error "cenforce case TODO: JOSE"
         _ -> error "TODO"
 
       (Conditional CIf{} _, arg) -> case arg of
         [cond, b1, b2] -> pure (Conditional (CIf cond b1 b2) ())
-        _ -> error "lambda case TODO: JOSE"
+        _ -> error "if case TODO: JOSE"
+
+      (CapabilityForm WithCapability{} _, arg) -> case arg of
+        [t1, t2] -> pure (CapabilityForm (WithCapability  t1 t2) ())
+        _ -> error "withcapability case TODO: JOSE"
+
+      (CapabilityForm CreateUserGuard{} _, arg) -> case arg of
+        -- TODO case is wrong
+        [t2] -> pure (CapabilityForm (CreateUserGuard  undefined [t2]) ())
+        t -> error $ "createuserguard case TODO: JOSE" <> show t
+
+      (Try t1 t2 _, _) -> pure (Try t1 t2 ())
 
       (var@Var{},_) -> pure (App var args' ())
       _ -> throwError "fromLegacyTerm: invariant"
@@ -445,7 +481,6 @@ fromLegacyTerm mh = \case
     pure $ InlineValue (fromLegacyLiteral l) ()
 
   Legacy.TTable (Legacy.TableName tbl) mn mh' _ -> let
-    -- Todo : emit Def of DefTable
     mn' = fromLegacyModuleName mn
     mh'' = fromLegacyModuleHash mh'
     nk = NTopLevel mn' mh''
@@ -470,7 +505,17 @@ fromLegacyTerm mh = \case
     modify' (def:)
     pure (Var name ())
 
-  Legacy.TDynamic{} -> error "todo: TDynamic"
+  Legacy.TDynamic mr dm -> do
+    mr' <- fromLegacyTerm mh mr
+    case mr' of
+     InlineValue (PModRef (ModRef m imp _)) _ -> case dm of
+       Legacy.TVar (Right (Legacy.Ref (Legacy.TDef d))) -> do
+         let
+           dname = Legacy._unDefName (Legacy._dDefName d)
+           name = Name dname (NModRef m imp)
+         pure (Var name ())
+       _ -> throwError "fromLegacyTerm: TDynamic dm invariant"
+     _ -> throwError "fromLegacyTerm: TDynamic invariant"
 
   -- Note: impossible
   Legacy.TSchema{} -> throwError "fromLegacyTerm: invariant"
@@ -558,7 +603,7 @@ fromLegacyType = \case
   Legacy.TySchema s ty _ -> fromLegacySchema s ty
   Legacy.TyFun _ -> error "tyfun"
   Legacy.TyModule m -> fromLegacyTypeModule m
-  Legacy.TyUser _ -> throwError "fromLegacyType: TyUser invariant"
+  Legacy.TyUser t -> throwError $ "fromLegacyType: TyUser invariant: " <> show t
   Legacy.TyVar _ -> pure TyAny
 
 unTVar
@@ -592,8 +637,21 @@ fromLegacySchema st ty = case (st, ty) of
       let qn = QualifiedName n . fromLegacyModuleName <$> mmn
       args <- traverse (\(Legacy.Arg n' ty') -> (Field n',) <$> fromLegacyType ty') f
       pure (TyTable (Schema qn (M.fromList args)))
-    _ -> throwError "fromLegacySchema: invariant"
-  _ -> throwError "fromLegacySchema: invariant"
+    _ -> throwError "fromLegacySchema: invariant 1"
+  (Legacy.TyObject, Legacy.TyUser t) -> case unTVar t of
+    Legacy.TSchema (Legacy.TypeName n) mmn f -> do
+      let qn = QualifiedName n . fromLegacyModuleName <$> mmn
+      args <- traverse (\(Legacy.Arg n' ty') -> (Field n',) <$> fromLegacyType ty') f
+      pure (TyObject (Schema qn (M.fromList args)))
+    _ -> throwError "fromLegacySchema: invariant tyobject"
+
+  (Legacy.TyBinding, _) -> throwError "tybinding"
+  -- (Legacy.TyObject, Legacy.TySchema _ _ _) -> throwError "tySchema 1"
+  -- (Legacy.TyTable, Legacy.TySchema _ _ _) -> throwError "tySchema 2"
+
+  (s,_) -> throwError $ "fromLegacySchema: invariant 2: " <> show s
+
+
 fromLegacyPrimType
   :: Legacy.PrimType
   -> PrimType
