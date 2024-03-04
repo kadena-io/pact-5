@@ -132,10 +132,15 @@ fromLegacyTableDef
   -> Legacy.Type (Legacy.Term LegacyRef)
   -> TranslateM CoreDef
 fromLegacyTableDef (Legacy.TableName tn) _mn _mh ty = do
-  let ty' = (fmap.fmap) Right ty
-  fromLegacyType ty' >>= \case
-    TyTable s -> pure (DTable (DefTable tn (ResolvedTable s) ()))
-    t -> throwError $ "fromLegacyDefTable: invariant: " <> show t
+  case ty of
+    Legacy.TyUser t -> case unTVar (Right <$> t) of
+      Legacy.TSchema (Legacy.TypeName n) mmn f -> do
+        let qn = QualifiedName n . fromLegacyModuleName <$> mmn
+        args <- traverse (\(Legacy.Arg n' ty') -> (Field n',) <$> fromLegacyType ty') f
+        let sc = Schema qn (M.fromList args)
+        pure $ (DTable (DefTable tn (ResolvedTable sc) ()))
+      _ -> throwError "fromLegacyTableDef: invariant 1"
+    _ -> throwError "fromLegacyTableDef: invariant 2"
 
 fromLegacyInterfaceDefRef :: ModuleHash -> LegacyRef -> TranslateM (EvalInterfaceDef CoreBuiltin ())
 fromLegacyInterfaceDefRef mh = \case
