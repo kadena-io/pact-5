@@ -39,13 +39,12 @@ import qualified Pact.Core.IR.Eval.CEK as Eval
 
 import Pact.Core.GasModel.Utils
 
-showText :: Show a => a -> T.Text
-showText = T.pack . show
+enumExp :: Int -> Int -> [(String, T.Text)]
+enumExp base mult = [ (show val, T.pack $ show val) | val <- iterate (* mult) base ]
 
 benchEnumerate :: PactDb CoreBuiltin () -> [C.Benchmark]
-benchEnumerate pdb = [ runNativeBenchmark pdb (show cnt) [text|(enumerate 0 $cnt')|]
-                     | cnt <- [1000, 10000, 100000] :: [Int]
-                     , let cnt' = showText cnt
+benchEnumerate pdb = [ runNativeBenchmark pdb title [text|(enumerate 0 $cnt)|]
+                     | (title, cnt) <- take 3 $ enumExp 1000 10
                      ]
 
 benchesForFun :: PactDb CoreBuiltin () -> CoreBuiltin -> [C.Benchmark]
