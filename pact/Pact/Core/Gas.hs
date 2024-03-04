@@ -4,6 +4,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module Pact.Core.Gas
  ( MilliGas(..)
@@ -53,7 +54,8 @@ import Pact.Core.Pretty
 -- integer, units will go in terms of 1e3 = 2ns
 newtype MilliGas
   = MilliGas Word64
-  deriving (Eq, Ord, Show, NFData)
+  deriving (Eq, Ord, Show)
+  deriving newtype NFData
   deriving (Semigroup, Monoid) via (Sum Word64)
   deriving (Semiring, Enum) via Word64
 
@@ -62,15 +64,17 @@ instance Pretty MilliGas where
 
 newtype MilliGasLimit
   = MilliGasLimit MilliGas
-  deriving (Eq, Ord, Show, NFData)
+  deriving (Eq, Ord, Show)
+  deriving newtype NFData
 
 -- | Gas in pact-core, represented as an unsigned
 -- integer, units will go in terms of 1e3 = 2ns
 newtype Gas
   = Gas Word64
-  deriving (Eq, Ord, Show, NFData)
+  deriving (Eq, Ord, Show)
   deriving (Semigroup, Monoid) via (Sum Word64)
   deriving (Semiring, Enum) via Word64
+  deriving newtype NFData
 
 type GasLimit = Gas
 type GasPrice = Decimal
@@ -117,7 +121,7 @@ data ZKGroup
   -- ^ Group one, that is Fq in Pairing
   | ZKG2
   -- ^ Group two, that is, Fq2 Pairing
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 data ZKArg
   = PointAdd !ZKGroup
@@ -126,14 +130,14 @@ data ZKArg
   -- ^ Scalar multiplication gas, group dependent
   | Pairing !Int
   -- ^ Pairing function gas, dependent on number of pairs
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 data IntegerPrimOp
   = PrimOpAdd
   | PrimOpSub
   | PrimOpMul
   | PrimOpDiv
-  deriving (Eq, Show, Enum, Ord)
+  deriving (Eq, Show, Enum, Ord, Generic, NFData)
 
 data GasArgs
   = GAConstant !MilliGas
@@ -163,7 +167,7 @@ data GasArgs
   | GPoseidonHashHackAChain !Int
   -- ^ poseidon-hash-hack-a-chain costs
   | GModuleMemory !Word64
-  deriving (Show)
+  deriving (Show, Generic, NFData)
 
 instance Pretty GasArgs where
   pretty = pretty . show
@@ -171,21 +175,24 @@ instance Pretty GasArgs where
 newtype GasTextLength
   = GasTextLength Int
   deriving Show
+  deriving newtype NFData
 
 newtype GasListLength
   = GasListLength Int
   deriving Show
+  deriving newtype NFData
 
 newtype GasObjectSize
   = GasObjectSize Int
   deriving Show
+  deriving newtype NFData
 
 data SearchType
   = SubstringSearch !Text !Text
   -- ^ searching `needle` in `hay`
   | FieldSearch !Int
   -- ^ checking if an object has a field
-  deriving (Show)
+  deriving (Show, Generic, NFData)
 
 data ComparisonType
   = TextComparison !Text
@@ -204,7 +211,7 @@ data ComparisonType
   -- ^ N comparisons constant time overhead
   | ObjComparison !Int
   -- ^ Compare objects of at most size `N`
-  deriving (Show)
+  deriving (Show, Generic, NFData)
 
 data ConcatType
   = TextConcat !GasTextLength
@@ -215,7 +222,7 @@ data ConcatType
   -- ^ Final list length
   | ObjConcat !Int
   -- ^ Upper bound on max object size
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 data GasModel b
   = GasModel
@@ -224,10 +231,8 @@ data GasModel b
   , _gmNatives :: !(b -> MilliGas)
   , _gmRunModel :: !(GasArgs -> MilliGas)
   , _gmGasLimit :: !MilliGasLimit
-  } deriving Generic
+  } deriving (Generic, NFData)
 makeLenses ''GasModel
-
-instance NFData (GasModel b)
 
 constantGasModel :: MilliGas -> MilliGasLimit -> GasModel b
 constantGasModel unitPrice gl
