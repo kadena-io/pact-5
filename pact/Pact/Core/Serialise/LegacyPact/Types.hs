@@ -1,5 +1,5 @@
 -- |
-
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DerivingStrategies #-}
@@ -9,8 +9,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# language MonoLocalBinds #-}
+-- {-# LANGUAGE UndecidableInstances #-}
+
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module Pact.Core.Serialise.LegacyPact.Types where
 
 import Data.Text (Text)
@@ -56,8 +60,6 @@ import Text.Parser.Token.Highlight
 import Data.Hashable
 import Control.Applicative
 import Control.Monad (ap)
-
---import Data.Eq.Deriving
 import Data.Functor.Classes (Eq1(..), Show1(..))
 
 data ModuleData r = ModuleData
@@ -406,6 +408,8 @@ data Def n = Def
   }
   deriving (Functor,Foldable,Traversable,Generic)
 
+deriving instance (Show1 Term, Show n) => Show (Def n)
+
 data DefcapMeta n =
   DefcapManaged
   { _dcManaged :: !(Maybe (Text,n))
@@ -644,6 +648,8 @@ data FunApp = FunApp
   , _faDocs :: !(Maybe Text)
   } deriving (Generic)
 
+-- deriving instance (Show1 Term) => Show FunApp
+
 instance JD.FromJSON FunApp where
 --  parseJSON = lensyParseJSON 3
   parseJSON = JD.withObject "FunApp" $ \o ->
@@ -659,6 +665,10 @@ data NativeDFun = NativeDFun
   , _nativeFun :: !(forall m . Monad m => FunApp -> [Term Ref] -> m (Term Name))
   }
 
+instance Show NativeDFun where
+  showsPrec p (NativeDFun name _) = showParen (p > 10) $
+    showString "NativeDFun " . showsPrec 11 name . showString " _"
+
 type Ref = Ref' (Term Name)
 -- | Variable type for an evaluable 'Term'.
 data Ref' d =
@@ -669,6 +679,7 @@ data Ref' d =
 --  deriving (Functor,Foldable,Traversable,Generic)
   deriving (Generic)
 
+deriving instance (Show1 Term, Show d) => Show (Ref' d)
 type FunTypes o = NE.NonEmpty (FunType o)
 
 data Example
@@ -851,6 +862,32 @@ data Term n =
     deriving (Functor,Foldable,Traversable,Generic)
 --    deriving (Generic)
 
+
+deriving instance (Show1 Term, Show n) => Show (Term n)
+
+instance Show1 Term where
+  liftShowsPrec _ _ _ = \case
+    TModule{} -> showString "TModule"
+    TList{} -> showString "TList"
+    TDef{} -> showString "TDef"
+    TNative{} -> showString "TNative"
+    TConst{} -> showString "TConst"
+    TApp{} -> showString "TApp"
+    TVar{} -> showString "TVar"
+    TBinding{} -> showString "TBinding"
+    TLam{} -> showString "TLam"
+    TObject{} -> showString "TObject"
+    TSchema{} -> showString "TSchema"
+    TLiteral{} -> showString "TLiteral"
+    TGuard{} -> showString "TGuard"
+    TUse{} -> showString "TUser"
+    TStep{} -> showString "TStep"
+    TModRef{} -> showString "TModRef"
+    TTable{} -> showString "TTable"
+    TDynamic{} -> showString "TDynamic"
+--instance Show1 Term where
+
+
 newtype FieldKey = FieldKey Text
   deriving (Show,Eq,Ord,Generic)
   deriving newtype (JD.FromJSON)
@@ -868,6 +905,8 @@ data Object n = Object
   , _oKeyOrder :: !(Maybe [FieldKey])
 --  , _oInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Generic)
+
+deriving instance (Show1 Term, Show n) => Show (Object n)
 
 instance JD.FromJSON n => JD.FromJSON (Object n) where
   parseJSON = JD.withObject "Object" $ \o ->
@@ -1753,3 +1792,4 @@ instance JD.FromJSON RowDataValue where
           <$> o JD..: "refName"
           <*> o JD..: "refSpec"
 --          <*> pure def
+

@@ -52,11 +52,13 @@ rawTest :: JD.FromJSON a => SQL.Database -> Text -> (a -> Either String c) -> IO
 rawTest db tbl fromLegacy = do
   print tbl
   keys <- getRawData db tbl
-  forM_ keys $ \(RawRow i txid payload) -> case JD.decodeStrict' payload of
-      Just lo -> case fromLegacy lo of
+  forM_ keys $ \(RawRow i txid payload) -> case JD.eitherDecodeStrict' payload of
+      Right lo -> case fromLegacy lo of
         Left e -> putStrLn $ "\t" <> show i <> " " <> show txid <> " " <> e
         Right _ -> pure ()
-      Nothing -> putStrLn "Fatal: decoding into legacy format failed!"
+      Left err -> putStrLn $ "Fatal: decoding into legacy format failed: "
+          <> show tbl <> " = " <> show i <> " " <> show txid <> " with : " <> err 
+
 
 
 main :: IO ()
@@ -76,6 +78,7 @@ main = getArgs >>= \case
         Just lo -> case fromLegacyRowData lo of
           Left e -> putStrLn $ "\t" <> show k <> " " <> show txid <> " : " <> e
           Right _ -> pure ()
-        Nothing -> putStrLn "Fatal: decoding into legacy format failed!"
+        Nothing -> putStrLn $ "Fatal: decoding into legacy format failed at: "
+          <> show k <> " " <> show txid
 
   _ -> error "Wrong number of arguments, expected 'file.sqlite'"
