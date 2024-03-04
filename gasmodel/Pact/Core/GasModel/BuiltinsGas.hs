@@ -47,9 +47,17 @@ benchEnumerate pdb = [ runNativeBenchmark pdb title [text|(enumerate 0 $cnt)|]
                      | (title, cnt) <- take 3 $ enumExp 1000 10
                      ]
 
+benchDistinct :: PactDb CoreBuiltin () -> [C.Benchmark]
+benchDistinct pdb = [C.bgroup "flat" flats]
+  where
+  flats = [ runNativeBenchmark pdb title [text|(distinct (enumerate 0 $cnt))|]
+          | (title, cnt) <- take 3 $ enumExp 1000 2
+          ]
+
 benchesForFun :: PactDb CoreBuiltin () -> CoreBuiltin -> [C.Benchmark]
 benchesForFun pdb bn = case bn of
   CoreEnumerate -> benchEnumerate pdb
+  CoreDistinct -> benchDistinct pdb
   _ -> []
 
 benchmarks :: C.Benchmark
