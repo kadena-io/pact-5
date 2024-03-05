@@ -11,6 +11,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module Pact.Core.Environment.Types
  ( EvalEnv(..)
@@ -45,6 +46,7 @@ module Pact.Core.Environment.Types
  , MonadEvalState(..)
  , MonadEval
  , defaultEvalEnv
+ , GasLogEntry(..)
  ) where
 
 
@@ -164,6 +166,12 @@ data StackFrame
 
 instance NFData StackFrame
 
+data GasLogEntry b = GasLogEntry
+  { _gleCause :: Either GasArgs b
+  , _gleThisUsed :: MilliGas
+  , _gleTotalUsed :: MilliGas
+  } deriving (Show, Generic, NFData)
+
 data EvalState b i
   = EvalState
   { _esCaps :: !(CapState QualifiedName PactValue)
@@ -171,7 +179,7 @@ data EvalState b i
   , _esEvents :: ![PactEvent PactValue]
   , _esLoaded :: !(Loaded b i)
   , _esDefPactExec :: !(Maybe DefPactExec)
-  , _esGasLog :: !(Maybe [(Either GasArgs b, MilliGas, MilliGas)])
+  , _esGasLog :: !(Maybe [GasLogEntry b])
     -- ^ Sequence of gas expendature events.
   } deriving (Show, Generic)
 
