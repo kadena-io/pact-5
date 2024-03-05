@@ -168,10 +168,10 @@ data EvalState b i
   = EvalState
   { _esCaps :: !(CapState QualifiedName PactValue)
   , _esStack :: ![StackFrame]
-  , _esEvents :: !([PactEvent PactValue])
+  , _esEvents :: ![PactEvent PactValue]
   , _esLoaded :: !(Loaded b i)
   , _esDefPactExec :: !(Maybe DefPactExec)
-  , _esGasLog :: Maybe [(Text, MilliGas)]
+  , _esGasLog :: Maybe [(Either GasArgs b, MilliGas, MilliGas)]
     -- ^ Sequence of gas expendature events.
   } deriving (Show, Generic)
 

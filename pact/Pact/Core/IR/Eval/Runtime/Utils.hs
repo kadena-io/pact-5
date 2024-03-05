@@ -307,14 +307,10 @@ chargeGasArgs info ga = do
   let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
       !g1 = _gmRunModel model ga
       !gUsed = currGas <> g1
-  esGasLog %== fmap ((gasLogMsg ga gUsed, g1):)
+  esGasLog %== fmap ((Left ga, gUsed, g1):)
   putGas gUsed
   when (gUsed > gasLimit) $
     throwExecutionError info (GasExceeded limit gUsed)
-  where
-    gasLogMsg arg (MilliGas millisUsed) =
-      Pretty.renderCompactText' $
-          Pretty.pretty arg <> ":currTotalGas=" <> Pretty.pretty millisUsed
 
 {-# SPECIALIZE chargeFlatNativeGas
    :: ()
@@ -328,15 +324,10 @@ chargeFlatNativeGas info nativeArg = do
   let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
       !g1 = _gmNatives model nativeArg
       !gUsed = currGas <> g1
-  esGasLog %== fmap ((gasLogMsg gUsed, g1):)
+  esGasLog %== fmap ((Right nativeArg, gUsed, g1):)
   putGas gUsed
   when (gUsed > gasLimit && gasLimit >= currGas) $
     throwExecutionError info (GasExceeded limit gUsed)
-  where
-  gasLogMsg (MilliGas millisUsed) =
-    let (NativeName n) = builtinName nativeArg
-    in Pretty.renderCompactText' $
-      "Native" <> Pretty.parens (Pretty.pretty n) <> ":currTotalGas=" <> Pretty.pretty millisUsed
 
 
 getGas :: (MonadEval b i m) => m MilliGas
