@@ -863,7 +863,7 @@ coreReadInteger info b cont handler _env = \case
           Just (PInteger p) ->
             returnCEKValue cont handler (VInteger p)
           -- See [Note: Parsed Integer]
-          Just (PString raw) ->  case parseNumLiteral raw of
+          Just (PString raw) -> case parseNumLiteral raw of
             Just (LInteger i) -> returnCEKValue cont handler (VInteger i)
             _ -> returnCEK cont handler (VError "read-integer failure" info)
 
