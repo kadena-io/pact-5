@@ -171,7 +171,7 @@ data EvalState b i
   , _esEvents :: ![PactEvent PactValue]
   , _esLoaded :: !(Loaded b i)
   , _esDefPactExec :: !(Maybe DefPactExec)
-  , _esGasLog :: Maybe [(Either GasArgs b, MilliGas, MilliGas)]
+  , _esGasLog :: !(Maybe [(Either GasArgs b, MilliGas, MilliGas)])
     -- ^ Sequence of gas expendature events.
   } deriving (Show, Generic)
 
