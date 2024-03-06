@@ -48,7 +48,6 @@ import qualified Data.Char as Char
 import qualified Data.ByteString as BS
 import qualified GHC.Exts as Exts
 import qualified Pact.Time as PactTime
-import qualified Data.Poly as Poly
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
@@ -1660,9 +1659,7 @@ fromG2 CurveInf = ObjectData pts
     , (Field "y", PList (V.fromList [PLiteral (LInteger 0)]))]
 fromG2 (Point x y) = ObjectData pts
   where
-  toPactPt (Extension e) = let
-    elems' = fmap (PInteger . fromIntegral) (Poly.unPoly e)
-    in PList elems'
+  toPactPt ext = PList $ PInteger . fromIntegral <$> extElements ext
   x' = toPactPt x
   y' = toPactPt y
   pts =
