@@ -183,15 +183,19 @@ fromLegacyInterfaceDefRef mh = \case
   Legacy.Ref (Legacy.TDef d) ->
     fromLegacyInterfDef mh $ Right <$> d
 
-  Legacy.Ref (Legacy.TTable _tn _mn _mh' _ty) ->
-    undefined
+  -- Legacy.Ref (Legacy.TTable _tn _mn _mh' _ty) ->
+  --   fromLegacyInterfDConst
 
-  Legacy.Ref (Legacy.TSchema _sn _m _fields) ->
-    undefined
+  Legacy.Ref (Legacy.TSchema sn m fields) ->
+    fromLegacySchemaDef sn m fields >>= \case
+      DSchema s -> pure (IfDSchema s)
+      _ -> throwError "fromLegacyInterfaceDefRef: invariant fromLegacySchemaDef"
 
 
-  Legacy.Ref (Legacy.TConst _arg _m _ce) ->
-    undefined
+  Legacy.Ref (Legacy.TConst arg m ce) ->
+    fromLegacyConstDef mh arg m ce >>= \case
+    DConst dc -> pure (IfDConst dc)
+    _ -> throwError "fromLegacyInterfaceDefRef: invariant fromLegacyConstDef"
 
   Legacy.Ref t -> throwError $ "fromLegacyDefRef: " <>  show t
   Legacy.Direct _d -> throwError "fromLegacyDefRef: invariant Direct"
@@ -271,19 +275,21 @@ fromLegacyDefMetaInterface
   -> [Arg Type]
   -> Legacy.DefMeta (Legacy.Term (Either CoreTerm LegacyRef))
   -> TranslateM (DefCapMeta BareName)
-fromLegacyDefMetaInterface mh args
+fromLegacyDefMetaInterface _mh args
   = \case
   Legacy.DMDefcap (Legacy.DefcapManaged m) -> case m of
     Nothing -> pure (DefManaged AutoManagedMeta)
-    Just (p, f) -> case findIndex (\x -> _argName x == p) args of
+    Just (p,f) -> case findIndex (\x -> _argName x == p) args of
       Nothing -> throwError "fromLegacyDefMeta: invariant, index not found!"
       Just idx' -> do
-        f' <- fromLegacyTerm mh f >>= \case
-          Var (Name _n (NTopLevel _mn _mh')) _ -> error "todo: Jose ??"
-          _ -> throwError ""
-        pure (DefManaged $ DefManagedMeta (idx', p) f')
+        n <- extract f
+        pure (DefManaged $ DefManagedMeta (idx', p) (BareName n))
   Legacy.DMDefcap Legacy.DefcapEvent -> pure DefEvent
-
+  where
+    extract = \case
+      Legacy.TVar (Right (Legacy.Ref ((Legacy.TDef d)))) ->
+        pure (Legacy._unDefName (Legacy._dDefName d))
+      _ -> throwError "fromLEgacyDefMetaInterface: extract invariant"
 
 
 fromLegacyDefMeta
@@ -342,8 +348,8 @@ fromLegacyBodyForm' mh args body = do
   case debruijnize (length args) body of
     Legacy.TList li _ -> traverse (fromLegacyTerm mh) (reverse (V.toList li)) >>= \case
       x:xs -> pure $ foldl' (\a b -> Sequence b a ()) x xs
-      t -> throwError $ "fromLegacyBodyForm': invariant1: " <> show t
-    t -> throwError $ "fromLegacyBodyForm': invariant2: " <> show t
+      _ -> throwError "fromLegacyBodyForm': invariant 1"
+    _ -> throwError "fromLegacyBodyForm': invariant 2"
 
 
 fromLegacyStepForm'

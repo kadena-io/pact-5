@@ -147,7 +147,7 @@ instance JD.FromJSON ModuleName where
   parseJSON = JD.withObject "ModuleName" $ \o ->
     ModuleName
       <$> o JD..: "name"
-      <*> o JD..:? "namespace"
+      <*> o JD..: "namespace" -- TODO: is this JD..:?
 
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
   deriving (Eq, Ord, Show, Generic)
@@ -430,14 +430,14 @@ instance JD.FromJSON n => JD.FromJSON (Def n) where
       <*> o JD..: "defMeta"
 
 instance (JD.FromJSON b, Traversable f, JD.FromJSON (f JD.Value), JD.FromJSON (f a)) =>
-  A.FromJSON (Scope b f a) where
-  parseJSON = A.withObject "Scope" $ \o -> do
-    f <- o A..: "scope"
+  JD.FromJSON (Scope b f a) where
+  parseJSON = JD.withObject "Scope" $ \o -> do
+    f <- o JD..: "scope"
     Scope <$> traverse JD.parseJSON f
 
 instance (A.FromJSON a, A.FromJSON b) =>
-  A.FromJSON (Var b a) where
-  parseJSON = A.withObject "Var" $ \v ->
+  JD.FromJSON (Var b a) where
+  parseJSON = JD.withObject "Var" $ \v ->
     (B <$> v A..: "b") <|> (F <$> v A..: "f")
 
 instance JD.FromJSON n => JD.FromJSON (DefcapMeta n) where
@@ -756,9 +756,9 @@ instance JD.FromJSON n => JD.FromJSON (Lam n) where
 --  parseJSON = lensyParseJSON 2
   parseJSON = JD.withObject "Lam" $ \o ->
     Lam
-      <$> o JD..: "arg"
-      <*> o JD..: "ty"
-      <*> o JD..: "bindBody"
+      <$> o JD..: "amArg"
+      <*> o JD..: "amTy"
+      <*> o JD..: "amBindBody"
 
 newtype TypeName = TypeName Text
   deriving (Show,Eq,Ord,Generic)
@@ -945,104 +945,6 @@ newtype TableName = TableName Text
   deriving (Show,Eq,Ord)
   deriving newtype (JD.FromJSON)
 
-instance JD.FromJSON n => JD.FromJSON (Term n) where
-
-  -- "info" and "i" may be optional, so we don't consider those for matching
-  --
-  parseJSON v = flip (A.<?>) (A.Key "Term") $ case propsWithoutOptionals of
-    [TermBody, TermModule] ->  wo "Module" $ \o -> TModule
-      <$> o JD..: p TermModule
-      <*> o JD..: p TermBody
---      <*> inf o
-    [TermList, TermType] -> wo "List" $ \o -> TList
-      <$> o JD..: p TermList
-      <*> o JD..: p TermType
---      <*> inf o
-    [TermDefBody, TermDefMeta, TermDefName, TermDefType, TermFunType, TermMeta, TermModule] -> TDef <$> JD.parseJSON v
-
-    -- TNative intentionally not marshallable
-    -- [TermFun, TermName, TermNatDocs, TermNatExamples, TermNatFunTypes, TermNatTopLevel] ->
-    --   wo "Native" $ \o -> TNative
-    --     <$> o JD..: p TermName
-    --     <*> error "not supported" -- TermFun serialized as Null
-    --     <*> o JD..: p TermFunType
-    --     <*> return [] -- TermNatExamples serialized as Null
-    --     <*> o JD..: p TermNatDocs
-    --     <*> o JD..: p TermNatTopLevel
-    --     <*> inf o
-
-    [TermConstArg, TermConstVal, TermMeta, TermModName] -> wo "Const" $ \o -> TConst
-      <$> o JD..: p TermConstArg
-      <*> o JD..: p TermModName
-      <*> o JD..: p TermConstVal
---      <*> o JD..: p TermMeta
---      <*> inf o
---    [TermArgs, TermFun] -> parseWithInfo TApp
-    [TermArgs, TermFun] -> TApp <$> JD.parseJSON v
-    [TermVar] -> wo "Var" $ \o -> TVar
-        <$>  o JD..: p TermVar
---        <*> inf o
-    [TermBody, TermPairs, TermType] -> wo "Binding" $ \o -> TBinding
-      <$> o JD..: p TermPairs
-      <*> o JD..: p TermBody
-      <*> o JD..: p TermType
---      <*> inf o
---    [TermObjectObj, TermType] -> parseWithInfo TObject -- FIXME keyorder is optional
-    [TermObjectObj, TermType] -> TObject <$> JD.parseJSON v
-    [TermLiteral] -> wo "Literal" $ \o -> TLiteral
-      <$> o JD..: p TermLiteral
---      <*> inf o
-    [TermGuard] -> wo "Guard" $ \o -> TGuard
-      <$> o JD..: p TermGuard
---      <*> inf o
---    [TermHash, TermModule, TermUseImports] -> parseWithInfo TUse
-    [TermHash, TermModule, TermUseImports] -> TUse <$> JD.parseJSON v
---    [TermLamArg, TermLamBindBody, TermLamInfo, TermLamTy] -> parseWithInfo TLam
-    [TermLamArg, TermLamBindBody, TermLamInfo, TermLamTy] -> TLam <$> JD.parseJSON v
-    [TermBody, TermMeta] -> wo "Step" $ \o -> TStep
-      <$> o JD..: p TermBody
---      <*> o JD..: p TermMeta
---      <*> inf o
-     --  parseWithInfo TStep
-    [TermFields, TermMeta, TermModName, TermName] -> wo "Schema" $ \o -> TSchema
-      <$>  o JD..: p TermName
-      <*> o JD..: p TermModName
---      <*> o JD..: p TermMeta
-      <*> o JD..: p TermFields
---      <*> inf o
-    [TermHash, TermMeta, TermModName, TermName, TermType] -> wo "Table" $ \o -> TTable
-      <$>  o JD..: p TermName
-      <*> o JD..: p TermModName
-      <*> o JD..: p TermHash
-      <*> o JD..: p TermType
---      <*> o JD..: p TermMeta
---      <*> inf o
-    [TermDynMem, TermDynRef] -> wo "Dynamic" $ \o -> TDynamic
-      <$> o JD..: p TermDynRef
-      <*> o JD..: p TermDynMem
---      <*> inf o
---    [TermModRefInfo, TermModRefName, TermModRefSpec] -> parseWithInfo TModRef
-    [TermModRefInfo, TermModRefName, TermModRefSpec] -> TModRef <$> JD.parseJSON v
-    _ -> fail "unexpected decoding"
-    -- _ -> fail $ "unexpected properties for Term: "
-    --   <> "[" <> T.unpack (T.intercalate "," (props v)) <> "]"
-    --   <> ", " <> show propsWithoutOptionals
-    --   <> ", " <> show (J.encode v)
-    -- A.<?> A.Key (A.fromText $ "Term[" <> T.intercalate "," (props v) <> "]")
-   where
-    p = prop
---    inf o = o JD..:? "i" .!= Info Nothing
-    wo n f = JD.withObject n f v
-    props (JD.Object m) = A.toText <$> A.keys m
-    props _ = []
-
-    propsWithoutOptionals = sort $ unprop
-        <$> filter (\x -> x `notElem` ["i", "info", "keyorder"]) (props v)
-
-    -- parseWithInfo :: HasInfo a => JD.FromJSON a => (a -> Info -> Term n) -> A.Parser (Term n)
-    -- parseWithInfo f = (\a -> f a $ getInfo a) <$> parseJSON v
-
-
 
 prop :: IsString a => Semigroup a => TermProperties -> a
 prop TermArgs = "args"
@@ -1086,7 +988,6 @@ prop TermType = "type"
 prop (TermUnknown t) = "UNKNOWN_TERM[" <> fromString t <> "]"
 prop TermUseImports = "imports"
 prop TermVar = "var"
-{-# INLINE prop #-}
 
 unprop :: IsString a => Eq a => Show a => a -> TermProperties
 unprop "args" = TermArgs
@@ -1131,7 +1032,6 @@ unprop "imports" = TermUseImports
 unprop "var" = TermVar
 unprop t = TermUnknown (show t)
 {-# INLINE unprop #-}
-
 
 data TermProperties
   = TermArgs
@@ -1547,8 +1447,8 @@ instance JD.FromJSON PersistDirect where
 
 instance JD.FromJSON (Ref' PersistDirect) where
   parseJSON v =
-    JD.withObject "Ref" (\o -> Ref <$> o JD..: "ref") v <|>
-    JD.withObject "Direct" (\o -> Direct <$> o JD..: "direct") v
+    JD.withObject "Direct" (\o -> Direct <$> o JD..: "direct") v <|>
+        JD.withObject "Ref" (\o -> Ref <$> o JD..: "ref") v 
   {-# INLINE parseJSON #-}
 
 fromPactValue :: PactValue -> Term Name
@@ -1792,3 +1692,97 @@ instance JD.FromJSON RowDataValue where
           <*> o JD..: "refSpec"
 --          <*> pure def
 
+
+
+instance JD.FromJSON n => JD.FromJSON (Term n) where
+
+  -- "info" and "i" may be optional, so we don't consider those for matching
+  --
+  parseJSON v = flip (A.<?>) (A.Key "Term") $ case propsWithoutOptionals of
+    [TermBody, TermModule] ->  wo "Module" $ \o -> TModule
+      <$> o JD..: p TermModule
+      <*> o JD..: p TermBody
+--      <*> inf o
+    [TermList, TermType] -> wo "List" $ \o -> TList
+      <$> o JD..: p TermList
+      <*> o JD..: p TermType
+  --    <*> inf o
+    [TermDefBody, TermDefMeta, TermDefName, TermDefType, TermFunType, TermMeta, TermModule] -> parseWithInfo TDef
+
+    -- TNative intentionally not marshallable
+    -- [TermFun, TermName, TermNatDocs, TermNatExamples, TermNatFunTypes, TermNatTopLevel] ->
+    --   wo "Native" $ \o -> TNative
+    --     <$> o .: p TermName
+    --     <*> error "not supported" -- TermFun serialized as Null
+    --     <*> o .: p TermFunType
+    --     <*> return [] -- TermNatExamples serialized as Null
+    --     <*> o .: p TermNatDocs
+    --     <*> o .: p TermNatTopLevel
+    --     <*> inf o
+
+    [TermConstArg, TermConstVal, TermMeta, TermModName] -> wo "Const" $ \o -> TConst
+      <$> o JD..: p TermConstArg
+      <*> o JD..: p TermModName
+      <*> o JD..: p TermConstVal
+--      <*> o JD..: p TermMeta
+--      <*> inf o
+    [TermArgs, TermFun] -> parseWithInfo TApp
+    [TermVar] -> wo "Var" $ \o -> TVar
+        <$>  o JD..: p TermVar
+--        <*> inf o
+    [TermBody, TermPairs, TermType] -> wo "Binding" $ \o -> TBinding
+      <$> o JD..: p TermPairs
+      <*> o JD..: p TermBody
+      <*> o JD..: p TermType
+--      <*> inf o
+    [TermObjectObj, TermType] -> parseWithInfo TObject -- FIXME keyorder is optional
+    [TermLiteral] -> wo "Literal" $ \o -> TLiteral
+      <$> o JD..: p TermLiteral
+--      <*> inf o
+    [TermGuard] -> wo "Guard" $ \o -> TGuard
+      <$> o JD..: p TermGuard
+  --    <*> inf o
+    [TermHash, TermModule, TermUseImports] -> parseWithInfo TUse
+    [TermLamArg, TermLamBindBody, TermLamInfo, TermLamTy] -> parseWithInfo TLam
+    [TermBody, TermMeta] -> wo "Step" $ \o -> TStep
+      <$> o JD..: p TermBody
+--      <*> o JD..: p TermMeta
+--      <*> inf o
+     --  parseWithInfo TStep
+    [TermFields, TermMeta, TermModName, TermName] -> wo "Schema" $ \o -> TSchema
+      <$>  o JD..: p TermName
+      <*> o JD..: p TermModName
+  --    <*> o JD..: p TermMeta
+      <*> o JD..: p TermFields
+--      <*> inf o
+    [TermHash, TermMeta, TermModName, TermName, TermType] -> wo "Table" $ \o -> TTable
+      <$>  o JD..: p TermName
+      <*> o JD..: p TermModName
+      <*> o JD..: p TermHash
+      <*> o JD..: p TermType
+--      <*> o .: p TermMeta
+--      <*> inf o
+    [TermDynMem, TermDynRef] -> wo "Dynamic" $ \o -> TDynamic
+      <$> o JD..: p TermDynRef
+      <*> o JD..: p TermDynMem
+--      <*> inf o
+    [TermModRefInfo, TermModRefName, TermModRefSpec] -> parseWithInfo TModRef
+    _ -> fail $ "unexpected properties for Term: "
+      <> "[" <> T.unpack (T.intercalate "," (props v)) <> "]"
+      <> ", " <> show propsWithoutOptionals
+--      <> ", " <> show (J.encode v)
+    -- A.<?> A.Key (A.fromText $ "Term[" <> T.intercalate "," (props v) <> "]")
+   where
+    p = prop
+  --  inf o = o .:? "i" .!= Info Nothing
+    wo n f = JD.withObject n f v
+    props (A.Object m) = A.toText <$> A.keys m
+    props _ = []
+
+    propsWithoutOptionals = sort $ unprop
+        <$> filter (\x -> x `notElem` ["i", "info", "keyorder"]) (props v)
+
+    -- parseWithInfo :: HasInfo a => FromJSON a => (a -> Info -> Term n) -> A.Parser (Term n)
+    -- parseWithInfo f = (\a -> f a $ getInfo a) <$> parseJSON v
+    parseWithInfo :: JD.FromJSON a => (a -> Term n) -> A.Parser (Term n)
+    parseWithInfo f = f <$> JD.parseJSON v
