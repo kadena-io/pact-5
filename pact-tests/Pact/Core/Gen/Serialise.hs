@@ -153,7 +153,7 @@ fieldGen = Field <$> identGen
 
 schemaGen :: Gen Schema
 schemaGen = do
-  qual <- qualifiedNameGen
+  qual <- Gen.maybe qualifiedNameGen
   elems <- Gen.list (Range.linear 0 10) $ (,) <$> fieldGen <*> typeGen
   pure (Schema qual (fromList elems))
 

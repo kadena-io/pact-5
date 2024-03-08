@@ -16,12 +16,13 @@ import qualified Pact.Core.Test.LanguageServer as LanguageServer
 main :: IO ()
 main = do
   replTests <- ReplTests.tests
+  legacyTests <- LegacySerialiseTests.tests
   defaultMain $ testGroup "pactTests"
     [ replTests
     , LexerTests.tests
     , LexerParserTests.tests
     , SerialiseTests.tests
-    , LegacySerialiseTests.tests
+    , legacyTests
     , StaticErrorTests.tests
     , ZkTests.tests
     , PoseidonTests.tests

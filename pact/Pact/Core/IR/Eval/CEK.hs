@@ -299,6 +299,9 @@ evaluateTerm cont handler env (ObjectLit o info) = do
       let cont' = ObjC env info f rest [] cont
       evalCEK cont' handler env term
     [] -> returnCEKValue cont handler (VObject mempty)
+
+evaluateTerm _cont _handler _env (InlineValue _ i) = throwExecutionError i
+    (InvariantFailure "Encounter `InlineValue` which is used for back. compat pact < 5")
 {-# SPECIALIZE evaluateTerm
    :: CoreCEKCont
    -> CoreCEKHandler
