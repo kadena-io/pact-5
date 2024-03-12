@@ -48,7 +48,6 @@
 (expect-failure "bad-define-keyset" (bad-define-keyset 'j (sig-keyset)))
 ;  (expect-failure "bad-list-modules" (bad-list-modules))
 
-(env-enable-repl-natives true)
 (module repl-natives 'k
   (defun f () (env-sigs [{'key: "bob",'caps: []}])))
 (expect
