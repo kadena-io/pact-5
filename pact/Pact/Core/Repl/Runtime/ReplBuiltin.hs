@@ -11,6 +11,7 @@ import Control.Monad.Except
 import Control.Monad.IO.Class(liftIO)
 import Data.Default
 import Data.Text(Text)
+import Data.Maybe(fromMaybe)
 import Data.ByteString.Short(toShort)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -37,6 +38,7 @@ import Pact.Core.Persistence
 import Pact.Core.IR.Term
 import Pact.Core.Info
 import Pact.Core.Namespace
+import qualified Pact.Core.Legacy.LegacyPactValue as Legacy
 
 import qualified PackageInfo_pact_tng as PI
 import qualified Data.Version as V
@@ -217,7 +219,10 @@ envHash info b cont handler _env = \case
 envData :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envData info b cont handler _env = \case
   [VPactValue pv] -> do
-    (replEvalEnv . eeMsgBody) .= pv
+    -- to mimic prod, we must roundtrip here
+    -- if it fails silently, this is fine.
+    let pv' = fromMaybe pv (Legacy.roundtripPactValue pv)
+    (replEvalEnv . eeMsgBody) .= pv'
     returnCEKValue cont handler (VString "Setting transaction data")
   args -> argsError info b args
 
