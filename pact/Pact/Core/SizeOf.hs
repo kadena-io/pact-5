@@ -31,7 +31,6 @@ module Pact.Core.SizeOf
   -- * SizeOf 
   , SizeOfM(..)
   , countBytes
-  , runSizeOf
   , runSizeOfM
   ) where
 
@@ -39,7 +38,7 @@ import Control.Monad
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Data.Decimal
-import Data.Foldable (traverse_)
+import Data.Default (def)
 import Data.Int (Int64)
 import Data.Set (Set)
 import Data.Text (Text)
@@ -61,12 +60,15 @@ import qualified Data.Text as T
 import qualified Data.Set as S
 import qualified GHC.Integer.Logarithms as IntLog
 
+import Pact.Core.Errors
 import Pact.Core.Names
 import Pact.Core.Pretty
 import Pact.Core.Hash
 import Pact.Core.IR.Term
 import Pact.Core.Capabilities
 import Pact.Core.Type
+import Pact.Core.Environment.Types
+import Pact.Core.Environment.Utils
 import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.PactValue
@@ -75,7 +77,6 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.Imports
 import Pact.Core.Info
 import Pact.Core.ModRefs
-import Pact.Core.ChainData
 import Pact.Core.Namespace (Namespace)
 
 
@@ -99,12 +100,6 @@ data SizeOfVersion
 instance Pretty SizeOfVersion where
   pretty = viaShow
 
-newtype SizeOfByteLimit 
-  = SizeOfByteLimit Bytes
-  deriving Show
-
-instance Pretty SizeOfByteLimit where
-  pretty = pretty . show
 
 data SizeOfState
   = SizeOfState
@@ -130,11 +125,11 @@ evalSizeOfM :: SizeOfState -> SizeOfM a -> (Either ByteCountExceeded a, SizeOfSt
 evalSizeOfM st (SizeOfM act) =
   runState (runExceptT act) st
 
-runSizeOf :: SizeOf a => SizeOfByteLimit -> SizeOfVersion -> a -> Bytes
-runSizeOf bl ver a =
-  let st = SizeOfState 0 bl
-      (_, SizeOfState !byteCnt _) = evalSizeOfM st (sizeOf ver a)
-  in byteCnt
+-- runSizeOf :: SizeOf a => SizeOfByteLimit -> SizeOfVersion -> a -> Bytes
+-- runSizeOf bl ver a =
+--   let st = SizeOfState 0 bl
+--       (_, SizeOfState !byteCnt _) = evalSizeOfM st (sizeOf ver a)
+--   in byteCnt
 
 runSizeOfM :: SizeOfByteLimit -> SizeOfM a -> Bytes
 runSizeOfM bl a =
@@ -142,23 +137,23 @@ runSizeOfM bl a =
       (_, SizeOfState !byteCnt _) = evalSizeOfM st a
   in byteCnt
 
-countBytes :: SizeOfVersion -> Bytes -> SizeOfM ()
+countBytes :: MonadEval b i m => SizeOfVersion -> Bytes -> m Bytes
 countBytes szver bytes = do
-  SizeOfState count byteLim@(SizeOfByteLimit limit) <- get
+  count <- _esSizeOfByteCount <$> getEvalState
+  limit <- _esSizeOfByteLimit <$> getEvalState
   let !newByteCount = bytes + count
-  put (SizeOfState newByteCount byteLim)
+  esSizeOfByteCount .== newByteCount
   case szver of
     SizeOfV2 -> do
-      when (newByteCount > limit) $ throwError (ByteCountExceeded newByteCount)
-    _ -> pure ()
+      when (newByteCount > limit) $ throwError (PEByteCountExceeded newByteCount def) -- TODO: do we have info for bytecountexceeded location?
+      pure bytes
+    _ -> pure bytes
 
 class SizeOf t where
-  sizeOf :: SizeOfVersion -> t -> SizeOfM ()
-  default sizeOf :: (Generic t, GSizeOf (Rep t)) => SizeOfVersion -> t -> SizeOfM ()
+  sizeOf :: forall m b i. MonadEval b i m => SizeOfVersion -> t -> m Bytes
+  default sizeOf :: forall b i m.(Generic t, GSizeOf (Rep t), MonadEval b i m) => SizeOfVersion -> t -> m Bytes
   sizeOf v a = gsizeOf v (from a)
 
-
-type Bytes = Word64
 
 -- | "word" is 8 bytes on 64-bit
 wordSize64, wordSize :: Bytes
@@ -181,31 +176,36 @@ constructorCost numFields = headerCost + (constructorFieldCost numFields)
 instance (SizeOf v) => SizeOf (Vector v) where
   sizeOf ver v = do
     let rawVecSize = (7 + vectorLength) * wordSize
-    countBytes ver rawVecSize
-    traverse_ (sizeOf ver) v
+    spineSize <- countBytes ver rawVecSize
+    elementSizes <- traverse (sizeOf ver) v
+    pure $ spineSize + sum elementSizes
     where
       vectorLength = fromIntegral (V.length v)
 
 instance (SizeOf a) => SizeOf (Set a) where
   sizeOf ver s = do
     let !setSizeOverhead = (1 + 3 * setLength) * wordSize
-    countBytes ver setSizeOverhead
-    traverse_ (sizeOf ver) s
+    spineSize <- countBytes ver setSizeOverhead
+    elementSizes <- traverse (sizeOf ver) (S.toList s)
+    pure $ spineSize + sum elementSizes
     where
       setLength = fromIntegral (S.size s)
 
 instance (SizeOf k, SizeOf v) => SizeOf (M.Map k v) where
   sizeOf ver m = do
     let !mapSizeOverhead = 6 * mapLength * wordSize
-    countBytes ver mapSizeOverhead
-    traverse_ (\(k,v) -> sizeOf ver k >> sizeOf ver v) (M.toList m)
+    spineSize <- countBytes ver mapSizeOverhead
+    elementSizes <- traverse (\(k,v) -> sizeOf ver k >> sizeOf ver v) (M.toList m)
+    pure $ spineSize + sum elementSizes
     where
       mapLength = fromIntegral (M.size m)
 
 instance (SizeOf a, SizeOf b) => SizeOf (a,b) where
   sizeOf ver (a,b) = do
-    countBytes ver (constructorCost 3)
-    sizeOf ver a >> sizeOf ver b
+    headBytes <- countBytes ver (constructorCost 3)
+    aBytes <- sizeOf ver a
+    bBytes <- sizeOf ver b
+    pure $ headBytes + aBytes + bBytes
 
 instance (SizeOf a) => SizeOf (Maybe a) where
   sizeOf ver (Just e) =
@@ -216,8 +216,9 @@ instance (SizeOf a) => SizeOf (Maybe a) where
 instance (SizeOf a) => SizeOf [a] where
   sizeOf ver arr = do
     let listSzOverhead = (1 + (3 * listLength)) * wordSize
-    countBytes ver listSzOverhead
-    traverse_ (sizeOf ver) arr
+    spineSize <- countBytes ver listSzOverhead
+    elementSizes <- traverse (sizeOf ver) arr
+    pure $ spineSize + sum elementSizes
     where
       listLength = fromIntegral (L.length arr)
 
@@ -277,15 +278,16 @@ instance SizeOf Bool where
   sizeOf ver _ = countBytes ver wordSize
 
 instance SizeOf () where
-  sizeOf _ _ = pure ()
+  sizeOf _ _ = pure 0
 
 -- See ghc memory note above
 -- as well as https://blog.johantibell.com/2011/06/memory-footprints-of-some-common-data.html
 -- for both hash sets and hashmaps.
 instance (SizeOf k, SizeOf v) => SizeOf (HM.HashMap k v) where
   sizeOf ver m = do
-    countBytes ver hmOverhead
-    traverse_ (\(k,v) -> sizeOf ver k >> sizeOf ver v) (HM.toList m)
+    spineSize <- countBytes ver hmOverhead
+    elementSizes <- traverse (\(k,v) -> sizeOf ver k >> sizeOf ver v) (HM.toList m)
+    pure $ spineSize + sum elementSizes
     where
       !hmOverhead = (5 * hmLength + 4 * (hmLength - 1)) * wordSize
       hmLength = fromIntegral (HM.size m)
@@ -296,8 +298,9 @@ instance (SizeOf k, SizeOf v) => SizeOf (HM.HashMap k v) where
 -- stays roughly the same.
 instance (SizeOf k) => SizeOf (HS.HashSet k) where
   sizeOf ver hs = do
-    countBytes ver hsSizeOverhead
-    traverse_ (sizeOf ver) hs
+    spineSize <- countBytes ver hsSizeOverhead
+    elementSizes <- traverse (sizeOf ver) (HS.toList hs)
+    pure $ spineSize + sum elementSizes
     where
       hsSizeOverhead = (5 + hsLength + 4 * (hsLength - 1)) * wordSize
       hsLength = fromIntegral (HS.size hs)
@@ -314,7 +317,7 @@ class SizeOf1 f where
 
 -- Generic deriving
 class GSizeOf f where
-  gsizeOf :: SizeOfVersion -> f a -> SizeOfM ()
+  gsizeOf :: forall b i m a. MonadEval b i m => SizeOfVersion -> f a -> m Bytes
 
 -- For sizes of products, we'll calculate the size at the leaves,
 -- and simply add 1 extra word for every leaf.
@@ -364,17 +367,19 @@ instance GSizeOf U1 where
 -- Putting some of the more annoying GADTs here
 instance SizeOf (FQNameRef name) where
   sizeOf ver c = do
-    countBytes ver (headerCost + wordSize)
-    case c of
+    headBytes <- countBytes ver (headerCost + wordSize)
+    tailBytes <- case c of
       FQParsed n -> sizeOf ver n
       FQName fqn -> sizeOf ver fqn
+    pure $ headBytes + tailBytes
 
 instance SizeOf (TableSchema name) where
   sizeOf ver c = do
-    countBytes ver (headerCost + wordSize)
-    case c of
+    headBytes <- countBytes ver (headerCost + wordSize)
+    tailBytes <- case c of
       DesugaredTable n -> sizeOf ver n
       ResolvedTable fqn -> sizeOf ver fqn
+    pure $ headBytes + tailBytes
 
 instance SizeOf Literal
 deriving newtype instance SizeOf Hash

@@ -316,6 +316,7 @@ test-suite core-tests
     , Pact.Core.Test.SerialiseTests
     , Pact.Core.Test.LegacySerialiseTests
     , Pact.Core.Gen.Serialise
+    , Pact.Core.Test.SizeOfTests
     , Pact.Core.Test.StaticErrorTests
     , Pact.Core.Test.TestPrisms
     , Pact.Core.Test.ZkTests

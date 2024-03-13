@@ -252,6 +252,7 @@ sendDiagnostics nuri mv content = liftIO runPact >>= \case
       PEParseError{} -> "Parse"
       PEDesugarError{} -> "Desugar"
       PEExecutionError{} -> "Execution"
+      PEByteCountExceeded{} -> "Execution" -- TODO: probably fold this into ExecutionError
 
 spanInfoToRange :: SpanInfo -> Range
 spanInfoToRange (SpanInfo sl sc el ec) = mkRange

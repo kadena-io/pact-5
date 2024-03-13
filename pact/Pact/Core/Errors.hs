@@ -26,6 +26,7 @@ import Control.Exception
 import Data.Text(Text)
 import Data.Dynamic (Typeable)
 import qualified Data.Version as V
+import Data.Word (Word64)
 import qualified PackageInfo_pact_tng as PI
 
 import Control.DeepSeq
@@ -449,6 +450,7 @@ data PactError info
   -- | PETypecheckError TypecheckError info
   -- | PEOverloadError OverloadError info
   | PEExecutionError EvalError info
+  | PEByteCountExceeded Word64 info
   deriving (Show, Functor, Generic)
 
 instance NFData info => NFData (PactError info)
@@ -459,6 +461,7 @@ instance Pretty (PactError info) where
     PEParseError e _ -> pretty e
     PEDesugarError e _ -> pretty e
     PEExecutionError e _ -> pretty e
+    PEByteCountExceeded bytes _ -> pretty $ "ByteCountExceeded: " <> show bytes
 
 peInfo :: Lens (PactError info) (PactError info') info info'
 peInfo f = \case
@@ -470,6 +473,8 @@ peInfo f = \case
     PEDesugarError de <$> f info
   PEExecutionError ee info ->
     PEExecutionError ee <$> f info
+  PEByteCountExceeded bytes info ->
+    PEByteCountExceeded bytes <$> f info
 
 instance (Show info, Typeable info) => Exception (PactError info)
 
