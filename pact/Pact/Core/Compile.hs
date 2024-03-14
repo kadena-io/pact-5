@@ -53,6 +53,8 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 import Pact.Core.Gas
 import Pact.Core.SizeOf
 
+import Debug.Trace -- TODO: Temporary
+
 type HasCompileEnv step b i m
   = ( MonadEval b i m
     , DesugarBuiltin b
@@ -214,8 +216,8 @@ evalTopLevel bEnv tlFinal deps = do
         CapGov _ -> pure ()
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = ModuleData m deps'
-      mSize <- sizeOf SizeOfV0 m
-      chargeGasArgs (_mInfo m) (GModuleMemory mSize)
+      mSize <- sizeOf SizeOfV0 m -- TOOD: Why do we assume SizeOfV0 here?
+      chargeGasArgs (_mInfo m) (trace (show mSize) $ GModuleMemory mSize)
       liftDbFunction (_mInfo m) (writeModule pdb Write (view mName m) mdata)
       let fqDeps = toFqDep (_mName m) (_mHash m) <$> _mDefs m
           newLoaded = M.fromList fqDeps
@@ -230,8 +232,8 @@ evalTopLevel bEnv tlFinal deps = do
     TLInterface iface -> do
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = InterfaceData iface deps'
-      ifaceSize <- sizeOf SizeOfV0 iface
-      chargeGasArgs (_ifInfo iface) (GModuleMemory ifaceSize)
+      ifaceSize <- sizeOf SizeOfV0 iface -- TOOD: Why do we assume SizeOfV0 here?
+      chargeGasArgs (_ifInfo iface) (trace (show ifaceSize) $ GModuleMemory ifaceSize)
       liftDbFunction (_ifInfo iface) (writeModule pdb Write (view ifName iface) mdata)
       let fqDeps = toFqDep (_ifName iface) (_ifHash iface)
                   <$> mapMaybe ifDefToDef (_ifDefns iface)

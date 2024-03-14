@@ -79,6 +79,8 @@ import Pact.Core.Info
 import Pact.Core.ModRefs
 import Pact.Core.Namespace (Namespace)
 
+import Debug.Trace
+
 
 -- |  Estimate of number of bytes needed to represent data type
 --
@@ -134,8 +136,8 @@ evalSizeOfM st (SizeOfM act) =
 runSizeOfM :: SizeOfByteLimit -> SizeOfM a -> Bytes
 runSizeOfM bl a =
   let st = SizeOfState 0 bl
-      (_, SizeOfState !byteCnt _) = evalSizeOfM st a
-  in byteCnt
+      (_, SizeOfState !_byteCnt _) = evalSizeOfM st a
+  in error "Hello"
 
 countBytes :: MonadEval b i m => SizeOfVersion -> Bytes -> m Bytes
 countBytes szver bytes = do
@@ -145,9 +147,11 @@ countBytes szver bytes = do
   esSizeOfByteCount .== newByteCount
   case szver of
     SizeOfV2 -> do
+      -- TODO: This should fail based on gas usage, not bytecount exceeded.
+      -- In fact we should not have a "bytecount limit" concept. Only the concept of gas.
       when (newByteCount > limit) $ throwError (PEByteCountExceeded newByteCount def) -- TODO: do we have info for bytecountexceeded location?
-      pure bytes
-    _ -> pure bytes
+      pure $ trace (show bytes) bytes
+    _ -> pure $ trace (show bytes) bytes
 
 class SizeOf t where
   sizeOf :: forall m b i. MonadEval b i m => SizeOfVersion -> t -> m Bytes
@@ -322,7 +326,7 @@ class GSizeOf f where
 -- For sizes of products, we'll calculate the size at the leaves,
 -- and simply add 1 extra word for every leaf.
 instance (GSizeOf f, GSizeOf g) => GSizeOf (f :*: g) where
-  gsizeOf ver (a :*: b) = gsizeOf ver a >> gsizeOf ver b
+  gsizeOf ver (a :*: b) = liftA2 (+) (gsizeOf ver a) (gsizeOf ver b)
 
 -- Sums we can just branch recursively as usual
 -- Ctor information is one level lower.
@@ -381,7 +385,14 @@ instance SizeOf (TableSchema name) where
       ResolvedTable fqn -> sizeOf ver fqn
     pure $ headBytes + tailBytes
 
-instance SizeOf Literal
+instance SizeOf Literal where
+  sizeOf ver literal = fmap (constructorCost 1 +) $ case literal of
+    LString s -> sizeOf ver s
+    LInteger i -> sizeOf ver i
+    LDecimal d -> sizeOf ver d
+    LBool _b -> pure 0
+    LUnit -> pure 0
+
 deriving newtype instance SizeOf Hash
 deriving newtype instance SizeOf Field
 deriving newtype instance SizeOf NamespaceName
@@ -440,7 +451,16 @@ instance SizeOf n => SizeOf (DefCapMeta n)
 instance SizeOf n => SizeOf (Governance n)
 
 instance SizeOf ModRef
-instance SizeOf PactValue
+
+instance SizeOf PactValue where
+  sizeOf ver pactValue = fmap (constructorCost 1 +) $ case pactValue of
+    PLiteral l -> sizeOf ver l
+    PObject obj -> sizeOf ver obj
+    PList l -> sizeOf ver l
+    PGuard g -> sizeOf ver g
+    PModRef m -> sizeOf ver m
+    PCapToken t -> sizeOf ver t
+    PTime t -> sizeOf ver t
 
 -- Modules and interfaces
 instance SizeOf ty => SizeOf (Arg ty)

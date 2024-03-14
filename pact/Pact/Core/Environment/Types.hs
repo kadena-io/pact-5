@@ -183,7 +183,7 @@ data EvalState b i
 instance (NFData b, NFData i) => NFData (EvalState b i)
 
 instance Default (EvalState b i) where
-  def = EvalState def [] [] mempty Nothing Nothing 0 1000000 -- TODO: what should be the default byte limit?
+  def = EvalState def [] [] mempty Nothing Nothing 0 10 -- TODO: what should be the default byte limit?
 
 makeClassy ''EvalState
 
