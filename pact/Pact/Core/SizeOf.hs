@@ -79,7 +79,7 @@ import Pact.Core.Info
 import Pact.Core.ModRefs
 import Pact.Core.Namespace (Namespace)
 
-import Debug.Trace
+-- import Debug.Trace
 
 
 -- |  Estimate of number of bytes needed to represent data type
@@ -150,8 +150,8 @@ countBytes szver bytes = do
       -- TODO: This should fail based on gas usage, not bytecount exceeded.
       -- In fact we should not have a "bytecount limit" concept. Only the concept of gas.
       when (newByteCount > limit) $ throwError (PEByteCountExceeded newByteCount def) -- TODO: do we have info for bytecountexceeded location?
-      pure $ trace (show bytes) bytes
-    _ -> pure $ trace (show bytes) bytes
+      pure bytes
+    _ -> pure bytes
 
 class SizeOf t where
   sizeOf :: forall m b i. MonadEval b i m => SizeOfVersion -> t -> m Bytes
