@@ -199,7 +199,7 @@ instance (SizeOf k, SizeOf v) => SizeOf (M.Map k v) where
   sizeOf ver m = do
     let !mapSizeOverhead = 6 * mapLength * wordSize
     spineSize <- countBytes ver mapSizeOverhead
-    elementSizes <- traverse (\(k,v) -> sizeOf ver k >> sizeOf ver v) (M.toList m)
+    elementSizes <- traverse (\(k,v) -> liftA2 (+) (sizeOf ver k) (sizeOf ver v)) (M.toList m)
     pure $ spineSize + sum elementSizes
     where
       mapLength = fromIntegral (M.size m)
@@ -213,7 +213,7 @@ instance (SizeOf a, SizeOf b) => SizeOf (a,b) where
 
 instance (SizeOf a) => SizeOf (Maybe a) where
   sizeOf ver (Just e) =
-    countBytes ver (constructorCost 1) >> sizeOf ver e
+    liftA2 (+) (countBytes ver (constructorCost 1)) (sizeOf ver e)
   sizeOf ver Nothing =
     countBytes ver (constructorCost 0)
 
@@ -259,8 +259,11 @@ instance SizeOf Word8 where
   sizeOf ver _ = countBytes ver $ 2 * wordSize
 
 instance (SizeOf i) => SizeOf (DecimalRaw i) where
-  sizeOf ver (Decimal p m) =
-    countBytes ver (constructorCost 2) >> sizeOf ver p >> sizeOf ver m
+  sizeOf ver (Decimal p m) = do
+    constructorSize <- countBytes ver (constructorCost 2)
+    pSize <- sizeOf ver p
+    mSize <- sizeOf ver m
+    pure $ constructorSize + pSize + mSize
 
 instance SizeOf Int64 where
   -- Assumes 64-bit machine
@@ -276,7 +279,7 @@ instance SizeOf UTCTime where
   -- newtype is free
   -- Internally 'UTCTime' is just a 64-bit count of 'microseconds'
   sizeOf ver ti =
-    countBytes ver (constructorCost 1) >> sizeOf ver (toPosixTimestampMicros ti)
+    liftA2 (+) (countBytes ver (constructorCost 1)) (sizeOf ver (toPosixTimestampMicros ti))
 
 instance SizeOf Bool where
   sizeOf ver _ = countBytes ver wordSize
@@ -290,7 +293,7 @@ instance SizeOf () where
 instance (SizeOf k, SizeOf v) => SizeOf (HM.HashMap k v) where
   sizeOf ver m = do
     spineSize <- countBytes ver hmOverhead
-    elementSizes <- traverse (\(k,v) -> sizeOf ver k >> sizeOf ver v) (HM.toList m)
+    elementSizes <- traverse (\(k,v) -> liftA2 (+) (sizeOf ver k) (sizeOf ver v)) (HM.toList m)
     pure $ spineSize + sum elementSizes
     where
       !hmOverhead = (5 * hmLength + 4 * (hmLength - 1)) * wordSize
@@ -312,8 +315,11 @@ instance (SizeOf k) => SizeOf (HS.HashSet k) where
 instance (SizeOf a, SizeOf b) => SizeOf (Either a b)
 
 instance  (SizeOf a) => SizeOf (NE.NonEmpty a) where
-  sizeOf ver (a NE.:| rest) =
-    countBytes ver (constructorCost 2) >> sizeOf ver a >> sizeOf ver rest
+  sizeOf ver (a NE.:| rest) = do
+    constructorSize <- countBytes ver (constructorCost 2)
+    aSize <- sizeOf ver a
+    restSize <- sizeOf ver rest
+    pure $ constructorSize + aSize + restSize
 
 
 class SizeOf1 f where
@@ -344,7 +350,7 @@ instance {-# OVERLAPS #-} GSizeOf (C1 c U1) where
 -- Regular constructors pay the header cost
 -- and 1 word for each field, which is added @ the leaves.
 instance (GSizeOf f) => GSizeOf (C1 c f) where
-  gsizeOf ver (M1 p) = countBytes ver headerCost >> gsizeOf ver p
+  gsizeOf ver (M1 p) = liftA2 (+) (countBytes ver headerCost) (gsizeOf ver p)
 
 -- Metainfo about selectors
 instance (GSizeOf f) => GSizeOf (S1 c f) where
@@ -354,9 +360,9 @@ instance (GSizeOf f) => GSizeOf (S1 c f) where
 instance (GSizeOf f) => GSizeOf (D1 c f) where
   gsizeOf ver (M1 p) = gsizeOf ver p
 
--- Single field, means cost of field + 1 word.
+-- Single field, means size of field + 1 word.
 instance (SizeOf c) => GSizeOf (K1 i c) where
-  gsizeOf ver (K1 c) = sizeOf ver c >> countBytes ver wordSize
+  gsizeOf ver (K1 c) = liftA2 (+) (sizeOf ver c) (countBytes ver wordSize)
 
 -- No-argument constructors are always shared by ghc
 -- so they don't really allocate.
