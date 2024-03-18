@@ -100,10 +100,10 @@ scan :: LexerM PosToken
 scan = do
   input@(AlexInput sLine sCol _ txt) <- get
   case alexScan input 0 of
-    AlexEOF -> pure (PosToken TokenEOF (SpanInfo sLine sCol (sLine+1) 0))
+    AlexEOF -> pure (PosToken TokenEOF (SpanInfo (Position sLine sCol) (Position (sLine+1) 0)))
 
     AlexError (AlexInput eLine eCol  _last inp) ->
-      let li = SpanInfo sLine sCol eLine eCol
+      let li = SpanInfo (Position sLine sCol) (Position eLine eCol)
       in case T.uncons inp of
         Just (h, _) ->
           throwLexerError (LexicalError h _last) li
@@ -114,7 +114,7 @@ scan = do
     AlexToken input'@(AlexInput eLine eCol _ _) tokl action -> do
       put input'
       let
-        span' = SpanInfo sLine sCol eLine eCol
+        span' = SpanInfo (Position sLine sCol) (Position eLine eCol)
         t = T.take (fromIntegral tokl) txt
       action t span'
 

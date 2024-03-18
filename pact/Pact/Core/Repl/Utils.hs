@@ -24,6 +24,7 @@ module Pact.Core.Repl.Utils
  , replEvalState
  , replUserDocs
  , replTLDefPos
+ , replBreakpoints
  , whenReplFlagSet
  , unlessReplFlagSet
  , debugIfFlagSet
@@ -35,6 +36,7 @@ module Pact.Core.Repl.Utils
  , prettyReplFlag
  , replError
  , SourceCode(..)
+ , BpLoc(..)
  ) where
 
 import Control.Lens
@@ -74,7 +76,8 @@ import System.Console.Haskeline.Completion
 data SourceCode
   = SourceCode
   { _scFileName :: String
-  , _scPayload :: Text }
+  , _scPayload :: Text
+  }
   deriving Show
 
 data ReplDebugFlag
@@ -115,6 +118,12 @@ instance MonadState (ReplState b) (ReplM b)  where
   get = ReplT (ExceptT (Right <$> ReaderT readIORef))
   put rs = ReplT (ExceptT (Right <$> ReaderT (`writeIORef` rs)))
 
+data BpLoc = BpLoc
+  { bpLine :: !Int
+  , bpCol :: !Int
+  }
+  deriving (Eq, Ord, Show)
+
 
 -- | Passed in repl environment
 data ReplState b
@@ -133,6 +142,7 @@ data ReplState b
   -- ^ Used by LSP Server, reflects the span information
   --   of the TL definitions for the qualified name.
   , _replTx :: Maybe (TxId, Maybe Text)
+  , _replBreakpoints :: Map String (Set BpLoc)
   }
 
 makeLenses ''ReplState
@@ -204,9 +214,10 @@ replAction =
   cmdKw kw = MP.chunk kw *> MP.space1
   cmd = do
     _ <- MP.chunk ":"
-    setFlag <?> "asdf"
-  setFlag =
-    cmdKw "debug" *> ((RASetFlag <$> replFlag) <|> (RADebugAll <$ MP.chunk "all") <|> (RADebugNone <$ MP.chunk "none"))
+    setFlag <?> "unknown command"
+  setFlag = cmdKw "debug" *> ((RASetFlag <$> replFlag)
+        <|> (RADebugAll <$ MP.chunk "all")
+        <|> (RADebugNone <$ MP.chunk "none"))
 
 
 parseReplAction :: Text -> Maybe ReplAction
@@ -294,16 +305,19 @@ replError (SourceCode srcFile src) pe =
       pei = view peInfo pe
       -- Note: The startline is 0-indexed, but we want our
       -- repl to output errors which are 1-indexed.
-      start = _liStartLine pei
-      spanLen = _liEndLine pei - _liStartLine pei
+      startLine = _pLine $ _liStart pei
+      endLine = _pLine $ _liEnd pei
+      startCol = _pCol $ _liStart pei
+      endCol = _pCol $ _liEnd pei
+      spanLen = endLine - startLine
       -- We want the padding to be the biggest line number we will show, which
       -- is endLine + 1
-      maxPad = length (show (_liEndLine pei + 1)) + 1
-      slice = withLine start maxPad $ take (max 1 spanLen) $ drop start srcLines
+      maxPad = length (show (endLine + 1)) + 1
+      slice = withLine startLine maxPad $ take (max 1 spanLen) $ drop startLine srcLines
       -- Render ^^^ only in the column slice
-      colMarker = T.replicate (maxPad+1) " " <> "| " <> T.replicate (_liStartColumn pei) " " <> T.replicate (max 1 (_liEndColumn pei - _liStartColumn pei)) "^"
+      colMarker = T.replicate (maxPad+1) " " <> "| " <> T.replicate startCol " " <> T.replicate (max 1 (endCol - startCol)) "^"
       errRender = renderText pe
-      fileErr = file <> ":" <> T.pack (show (_liStartLine pei + 1)) <> ":" <> T.pack (show (_liStartColumn pei)) <> ": "
+      fileErr = file <> ":" <> T.pack (show (startLine + 1)) <> ":" <> T.pack (show startCol) <> ": "
   in T.unlines ([fileErr <> errRender] ++ slice ++ [colMarker])
   where
   padLeft t pad = T.replicate (pad - (T.length t)) " " <> t <> " "

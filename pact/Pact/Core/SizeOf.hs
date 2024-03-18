@@ -322,6 +322,7 @@ instance SizeOf Yield
 instance SizeOf DefPactExec
 
 -- spaninfo
+instance SizeOf Position
 instance SizeOf SpanInfo
 
 -- builtins

@@ -76,7 +76,6 @@ module Pact.Core.IR.Eval.Runtime.Types
  , ClosureType(..)
  , ErrorState(..)
  , BuiltinCont(..)
---  , CEKEval(..)
  , CEKReturn(..)
  , CEKEvalResult
  , CEKStepKind(..)
@@ -148,7 +147,8 @@ data CEKEnv (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.
   , _cePactDb :: PactDb b i
   , _ceBuiltins :: BuiltinEnv step b i m
   , _ceDefPactStep :: Maybe DefPactStep
-  , _ceInCap :: Bool }
+  , _ceInCap :: Bool
+  }
   deriving (Generic)
 
 instance (NFData b, NFData i) => NFData (CEKEnv step b i m)

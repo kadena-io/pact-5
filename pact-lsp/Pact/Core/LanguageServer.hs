@@ -31,7 +31,8 @@ import Pact.Core.Gas
 import Pact.Core.Persistence.MockPersistence
 
 import Pact.Core.Repl.Utils
-import Pact.Core.Info
+import Pact.Core.Info hiding (Position)
+import qualified Pact.Core.Info as Pact
 import Pact.Core.Compile
 import Pact.Core.Environment
 import Pact.Core.Builtin
@@ -225,6 +226,7 @@ sendDiagnostics nuri mv content = liftIO runPact >>= \case
           , _replTx = Nothing
           , _replUserDocs = mempty
           , _replTLDefPos = mempty
+          , _replBreakpoints = mempty
           }
       stateRef <- newIORef rstate
       res <- runReplT stateRef (processFile (replBuiltinEnv @CEKSmallStep) src)
@@ -254,7 +256,7 @@ sendDiagnostics nuri mv content = liftIO runPact >>= \case
       PEExecutionError{} -> "Execution"
 
 spanInfoToRange :: SpanInfo -> Range
-spanInfoToRange (SpanInfo sl sc el ec) = mkRange
+spanInfoToRange (SpanInfo (Pact.Position sl sc) (Pact.Position el ec)) = mkRange
   (fromIntegral sl)  (fromIntegral sc)
   (fromIntegral el)  (fromIntegral ec)
 

@@ -62,7 +62,7 @@ gmSigs = M.fromList
 defaultGasEvalEnv :: PactDb CoreBuiltin i -> IO (EvalEnv CoreBuiltin i)
 defaultGasEvalEnv pdb = do
   ee <- defaultEvalEnv pdb coreBuiltinMap
-  pure $ set eeMsgSigs gmSigs $ ee
+  pure $ set eeMsgSigs gmSigs ee
 
 defaultGasEvalState :: EvalState CoreBuiltin ()
 defaultGasEvalState =
@@ -261,7 +261,7 @@ evaluateN evalEnv es source nSteps = runEvalM evalEnv es $ do
   step1 <- Eval.evaluateTermSmallStep Mt CEKNoHandler env term
   evalNSteps (nSteps - 1) step1
 
-isFinal :: MachineResult -> Bool
+isFinal :: CEKReturn b i m -> Bool
 isFinal (CEKReturn Mt CEKNoHandler _) = True
 isFinal _ = False
 

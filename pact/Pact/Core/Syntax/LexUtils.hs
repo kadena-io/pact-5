@@ -185,7 +185,8 @@ initState = AlexInput 0 0 '\n'
 getSpanInfo :: LexerM SpanInfo
 getSpanInfo = do
   input <- get
-  pure (SpanInfo (_inpLine input) (_inpColumn input) (_inpLine input) (_inpColumn input))
+  let pos = Position (_inpLine input) (_inpColumn input)
+  pure (SpanInfo pos pos)
 
 emit :: (Text -> Token) -> Text -> SpanInfo -> LexerM PosToken
 emit f e s = pure (PosToken (f e) s)

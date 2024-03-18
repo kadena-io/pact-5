@@ -43,7 +43,7 @@ runRepl = do
   g <- newIORef mempty
   evalLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replCoreBuiltinMap
-  ref <- newIORef (ReplState mempty pdb def ee g evalLog defaultSrc mempty mempty Nothing)
+  ref <- newIORef (ReplState mempty pdb def ee g evalLog defaultSrc mempty mempty Nothing mempty)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"

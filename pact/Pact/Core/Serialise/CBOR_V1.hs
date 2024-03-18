@@ -555,9 +555,13 @@ instance
     1 -> InterfaceData <$> decode <*> decode
     _ -> fail "unexpected decoding"
 
+instance Serialise Position where
+  encode (Position l c) = encode l <> encode c
+  decode = Position <$> decode <*> decode
+
 instance Serialise SpanInfo where
-  encode (SpanInfo sl sc el ec) = encode sl <> encode sc <> encode el <> encode ec
-  decode = SpanInfo <$> decode <*> decode <*> decode <*> decode
+  encode (SpanInfo s e) = encode s <> encode e
+  decode = SpanInfo <$> decode <*> decode
 
 instance Serialise CoreBuiltin where
   encode = \case
