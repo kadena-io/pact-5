@@ -40,10 +40,9 @@ import Pact.Core.Serialise
 runRepl :: IO ()
 runRepl = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
-  g <- newIORef mempty
-  evalLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replCoreBuiltinMap
-  ref <- newIORef (ReplState mempty pdb def ee g evalLog defaultSrc mempty mempty Nothing)
+  rs <- mkReplState pdb ee (loadPactReplFile' display')
+  ref <- newIORef rs
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
@@ -69,8 +68,8 @@ runRepl = do
     RBuiltinDoc doc -> outputStrLn (show $ pretty doc)
     RUserDoc qn doc -> outputStrLn $ show $
       vsep [pretty qn, "Docs:", maybe mempty pretty doc]
+  display' rcv = runInputT replSettings (displayOutput rcv)
   catch' ma = catchAll ma (\e -> outputStrLn (show e) *> loop)
-  defaultSrc = SourceCode "(interactive)" mempty
   loop = do
     minput <- fmap T.pack <$> getInputLine "pact>"
     case minput of
@@ -94,7 +93,6 @@ runRepl = do
             outputStrLn $ unwords ["Remove all debug flags"]
             loop
           RAExecuteExpr src -> catch' $ do
-            let display' rcv = runInputT replSettings (displayOutput rcv)
             lift (replCurrSource .= defaultSrc{_scPayload=src})
             eout <- lift (tryError (interpretReplProgramSmallStep (SourceCode "(interactive)" src) display'))
             case eout of

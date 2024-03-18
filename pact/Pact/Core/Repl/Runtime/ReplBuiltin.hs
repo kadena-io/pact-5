@@ -13,6 +13,7 @@ import Data.Default
 import Data.Text(Text)
 import Data.Maybe(fromMaybe)
 import Data.ByteString.Short(toShort)
+import System.FilePath.Posix
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Map.Strict as M
@@ -487,6 +488,38 @@ coreEnforceVersion info b cont handler _env = \case
         Left _msg -> throwExecutionError info (EnforcePactVersionParseFailure s)
         Right li -> pure (V.makeVersion li)
 
+coreLoad  :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+coreLoad info b cont handler _env = \case
+  [VString file] -> loadFile file False
+  [VString file, VBool clear] -> loadFile file clear
+  args -> argsError info b args
+  where
+  mangleFilePath fp = do
+    (SourceCode currFile _) <- use replCurrSource
+    case currFile of
+      "(interactive)" -> pure fp
+      _ | isAbsolute fp -> pure fp
+        | takeFileName currFile == currFile -> pure fp
+        | otherwise -> pure $ combine (takeDirectory currFile) fp
+  loadFile filePath reset = do
+    display <- use replDisplay
+    -- let loading = RCompileValue (InterpretValue (PString ("Loading " <> txt <> "...")) i)
+    display $ T.unpack ("Loading " <> filePath <> "...")
+    -- display loading
+    oldSrc <- use replCurrSource
+    pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
+    oldEE <- use replEvalEnv
+    when reset $ do
+      ee <- liftIO (defaultEvalEnv pactdb replCoreBuiltinMap)
+      evalState .= def
+      replEvalEnv .= ee
+    fp <- mangleFilePath (T.unpack txt)
+    when (isPactFile fp) $ esLoaded . loToplevel .= mempty
+    out <- loadPactReplFile replEnv display fp
+    replCurrSource .= oldSrc
+    unless reset $ do
+      replEvalEnv .= oldEE
+    pure out
 
 
 replBuiltinEnv

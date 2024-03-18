@@ -62,7 +62,7 @@ tokens :-
 
     and          { token TokenAnd }
     or           { token TokenOr }
-    load         { token TokenLoad }
+    -- load         { token TokenLoad }
     \@doc        { token TokenDocAnn }
     \@model      { token TokenModelAnn}
     \@event      { token TokenEventAnn }

@@ -17,7 +17,9 @@ module Pact.Core.Repl.Utils
  , runReplT
  , ReplState(..)
  , replFlags
- , replPactDb
+--  , replPactDb
+ , replPactDbs
+ , replEvaluate
  , replGas
  , replEvalLog
  , replEvalEnv
@@ -35,6 +37,10 @@ module Pact.Core.Repl.Utils
  , prettyReplFlag
  , replError
  , SourceCode(..)
+ , validReplChainIds
+ , defaultSrc
+ , mkReplState
+ , replDisplay
  ) where
 
 import Control.Lens
@@ -46,6 +52,7 @@ import Control.Monad.Except
 
 import Data.Void
 import Data.IORef
+import Data.Default
 import Data.Set(Set)
 import Data.Text(Text)
 import Data.List(isPrefixOf)
@@ -120,12 +127,18 @@ instance MonadState (ReplState b) (ReplM b)  where
 data ReplState b
   = ReplState
   { _replFlags :: Set ReplDebugFlag
-  , _replPactDb :: PactDb b SpanInfo
+  -- ^ The set of repl debug flags
   , _replEvalState :: EvalState b SpanInfo
+  -- ^ Interpretation evalstate
   , _replEvalEnv :: EvalEnv b SpanInfo
+  -- ^ interpretation evalenv
   , _replGas :: IORef Gas
+  -- ^ the gas ref for the repl
   , _replEvalLog :: IORef (Maybe [(Text, Gas)])
+  -- ^ Gaslog, from the POV of the repl
   , _replCurrSource :: SourceCode
+  -- ^ The current source file being evaluated,
+  -- or just interactive input
   , _replUserDocs :: Map QualifiedName Text
   -- ^ Used by Repl and LSP Server, reflects the user
   --   annotated @doc string.
@@ -133,9 +146,49 @@ data ReplState b
   -- ^ Used by LSP Server, reflects the span information
   --   of the TL definitions for the qualified name.
   , _replTx :: Maybe (TxId, Maybe Text)
+  -- ^ The current repl transaction, and tx descriptor
+  , _replEvaluate :: FilePath -> ReplM b ()
+  -- ^ a knot tie for the `load` native
+  , _replPactDbs :: Map ChainId (PactDb b SpanInfo)
+  -- ^ The list of pact dbs correspnding to a particular chain
+  , _replDisplay :: String -> ReplM b ()
+  -- ^ our "output to console". The only reason this is not necessarily
+  -- just `liftIO . putStrLn` is because of reasons such as piping to something else
+  -- (e.g some sort of logging structure) or a library such as haskeline.
   }
 
 makeLenses ''ReplState
+
+defaultSrc :: SourceCode
+defaultSrc = SourceCode "(interactive)" mempty
+
+mkReplState
+  :: PactDb b SpanInfo
+  -> EvalEnv b SpanInfo
+  -> (FilePath -> ReplM b ())
+  -> (String -> ReplM b ())
+  -> IO (ReplState b)
+mkReplState pdb ee loadFn displayFn = do
+  g <- newIORef mempty
+  evalLog <- newIORef Nothing
+  let chain0Pactdb = M.singleton (ChainId "0") pdb
+  pure $ ReplState
+    { _replFlags = mempty
+    , _replEvalState = def
+    , _replEvalEnv = ee
+    , _replGas = g
+    , _replEvalLog = evalLog
+    , _replCurrSource = defaultSrc
+    , _replUserDocs = mempty
+    , _replTLDefPos = mempty
+    , _replTx = Nothing
+    , _replEvaluate = loadFn
+    , _replPactDbs = chain0Pactdb
+    , _replDisplay = displayFn
+    }
+
+validReplChainIds :: [ChainId]
+validReplChainIds = ChainId . T.pack . show <$> [(0 :: Int)..19]
 
 instance MonadEvalEnv b SpanInfo (ReplM b) where
   readEnv = use replEvalEnv
