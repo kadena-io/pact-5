@@ -18,10 +18,17 @@ import Pact.Core.GasModel.Utils
 enumExp :: Int -> Int -> [(String, T.Text)]
 enumExp base mult = [ (show val, T.pack $ show val) | val <- iterate (* mult) base ]
 
-benchEnumerate :: PactDb CoreBuiltin () -> [C.Benchmark]
-benchEnumerate pdb = [ runNativeBenchmark pdb title [text|(enumerate 0 $cnt)|]
-                     | (title, cnt) <- take 3 $ enumExp 1000 10
-                     ]
+benchAdd :: PactDb CoreBuiltin () -> [C.Benchmark]
+benchAdd pdb =
+  [ C.bgroup "integer"
+    [ runNativeBenchmark pdb title [text|(+ $x $x)|] | (title, x) <- vals ]
+  , C.bgroup "float"
+    [ runNativeBenchmark pdb title [text|(+ $x.0 $x.0)|] | (title, x) <- vals ]
+  , C.bgroup "mixed"
+    [ runNativeBenchmark pdb title [text|(+ $x $x.0)|] | (title, x) <- vals ]
+  ]
+  where
+  vals = take 3 $ enumExp 1000 1000000
 
 benchDistinct :: PactDb CoreBuiltin () -> [C.Benchmark]
 benchDistinct pdb = [C.bgroup "flat" flats]
@@ -30,10 +37,16 @@ benchDistinct pdb = [C.bgroup "flat" flats]
           | (title, cnt) <- take 3 $ enumExp 1000 2
           ]
 
+benchEnumerate :: PactDb CoreBuiltin () -> [C.Benchmark]
+benchEnumerate pdb = [ runNativeBenchmark pdb title [text|(enumerate 0 $cnt)|]
+                     | (title, cnt) <- take 3 $ enumExp 1000 10
+                     ]
+
 benchesForFun :: PactDb CoreBuiltin () -> CoreBuiltin -> [C.Benchmark]
 benchesForFun pdb bn = case bn of
-  CoreEnumerate -> benchEnumerate pdb
+  CoreAdd -> benchAdd pdb
   CoreDistinct -> benchDistinct pdb
+  CoreEnumerate -> benchEnumerate pdb
   _ -> []
 
 benchmarks :: C.Benchmark
