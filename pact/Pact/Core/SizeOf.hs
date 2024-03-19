@@ -29,14 +29,10 @@ module Pact.Core.SizeOf
   , SizeOfByteLimit(..)
 
   -- * SizeOf 
-  , SizeOfM(..)
   , countBytes
-  , runSizeOfM
   ) where
 
 import Control.Monad
-import Control.Monad.State.Strict
-import Control.Monad.Except
 import Data.Decimal
 import Data.Default (def)
 import Data.Int (Int64)
@@ -60,7 +56,6 @@ import qualified Data.Text as T
 import qualified Data.Set as S
 import qualified GHC.Integer.Logarithms as IntLog
 
-import Pact.Core.Errors
 import Pact.Core.Names
 import Pact.Core.Pretty
 import Pact.Core.Hash
@@ -68,7 +63,6 @@ import Pact.Core.IR.Term
 import Pact.Core.Capabilities
 import Pact.Core.Type
 import Pact.Core.Environment.Types
-import Pact.Core.Environment.Utils
 import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.PactValue
@@ -78,8 +72,8 @@ import Pact.Core.Imports
 import Pact.Core.Info
 import Pact.Core.ModRefs
 import Pact.Core.Namespace (Namespace)
-
--- import Debug.Trace
+import Pact.Core.IR.Eval.Runtime.Utils (chargeGasArgs)
+import Pact.Core.Gas (GasArgs(GCountBytes))
 
 
 -- |  Estimate of number of bytes needed to represent data type
@@ -97,67 +91,26 @@ data SizeOfVersion
   = SizeOfV2
   | SizeOfV1
   | SizeOfV0
-  deriving Show
+  deriving (Show, Eq)
 
 instance Pretty SizeOfVersion where
   pretty = viaShow
 
 
-data SizeOfState
-  = SizeOfState
-  { _szCurrByteCount :: !Bytes
-  , _szByteLimit :: !SizeOfByteLimit
-  }
-
 newtype ByteCountExceeded
   = ByteCountExceeded Bytes
   deriving Show
 
-newtype SizeOfM a
-  = SizeOfM (ExceptT ByteCountExceeded (State SizeOfState) a)
-  deriving
-  ( Functor
-  , Applicative
-  , Monad
-  , MonadState SizeOfState
-  , MonadError ByteCountExceeded)
-  via (ExceptT ByteCountExceeded (State SizeOfState))
-
-evalSizeOfM :: SizeOfState -> SizeOfM a -> (Either ByteCountExceeded a, SizeOfState)
-evalSizeOfM st (SizeOfM act) =
-  runState (runExceptT act) st
-
--- runSizeOf :: SizeOf a => SizeOfByteLimit -> SizeOfVersion -> a -> Bytes
--- runSizeOf bl ver a =
---   let st = SizeOfState 0 bl
---       (_, SizeOfState !byteCnt _) = evalSizeOfM st (sizeOf ver a)
---   in byteCnt
-
-runSizeOfM :: SizeOfByteLimit -> SizeOfM a -> Bytes
-runSizeOfM bl a =
-  let st = SizeOfState 0 bl
-      (_, SizeOfState !_byteCnt _) = evalSizeOfM st a
-  in error "Hello"
 
 countBytes :: MonadEval b i m => SizeOfVersion -> Bytes -> m Bytes
 countBytes szver bytes = do
-  count <- _esSizeOfByteCount <$> getEvalState
-  limit <- _esSizeOfByteLimit <$> getEvalState
-  let !newByteCount = bytes + count
-  esSizeOfByteCount .== newByteCount
-  case szver of
-    SizeOfV2 -> do
-      -- TODO: This should fail based on gas usage, not bytecount exceeded.
-      -- In fact we should not have a "bytecount limit" concept. Only the concept of gas.
-      when (newByteCount > limit) $ throwError (PEByteCountExceeded newByteCount def) -- TODO: do we have info for bytecountexceeded location?
-      pure bytes
-    _ -> pure bytes
+  when (szver == SizeOfV2) (chargeGasArgs def (GCountBytes bytes))
+  pure bytes
 
 class SizeOf t where
   sizeOf :: forall m b i. MonadEval b i m => SizeOfVersion -> t -> m Bytes
   default sizeOf :: forall b i m.(Generic t, GSizeOf (Rep t), MonadEval b i m) => SizeOfVersion -> t -> m Bytes
   sizeOf v a = gsizeOf v (from a)
-
 
 -- | "word" is 8 bytes on 64-bit
 wordSize64, wordSize :: Bytes
@@ -482,7 +435,9 @@ instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (DefPact n t b i)
 instance (SizeOf t, SizeOf i) => SizeOf (DefSchema t i)
 instance (SizeOf n, SizeOf i) => SizeOf (DefTable n i)
 instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Def n t b i)
+
 instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Module n t b i)
+
 instance (SizeOf t, SizeOf i) => SizeOf (IfDefun t i)
 instance (SizeOf t, SizeOf i) => SizeOf (IfDefPact t i)
 instance (SizeOf n, SizeOf t, SizeOf i) => SizeOf (IfDefCap n t i)

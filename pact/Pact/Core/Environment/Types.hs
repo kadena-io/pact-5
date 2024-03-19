@@ -176,14 +176,12 @@ data EvalState b i
   , _esDefPactExec :: !(Maybe DefPactExec)
   , _esGasLog :: Maybe [(Text, MilliGas)]
     -- ^ Sequence of gas expendature events.
-  , _esSizeOfByteCount :: Word64
-  , _esSizeOfByteLimit :: Word64
   } deriving (Show, Generic)
 
 instance (NFData b, NFData i) => NFData (EvalState b i)
 
 instance Default (EvalState b i) where
-  def = EvalState def [] [] mempty Nothing Nothing 0 100000 -- TODO: what should be the default byte limit?
+  def = EvalState def [] [] mempty Nothing Nothing
 
 makeClassy ''EvalState
 

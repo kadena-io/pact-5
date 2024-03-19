@@ -158,9 +158,10 @@ data GasArgs
   | GComparison !ComparisonType
   -- ^ Gas costs for comparisons
   | GPoseidonHashHackAChain !Int
-  -- ^ poseidon-hash-hack-a-chain costs
+  -- ^ poseidon-hash-hack-a-chain costs.
   | GModuleMemory !Word64
   | GCountBytes !Word64
+  -- ^ Cost of computing SizeOf for N bytes.
   deriving (Show)
 
 instance Pretty GasArgs where

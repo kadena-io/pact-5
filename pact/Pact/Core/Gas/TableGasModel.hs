@@ -206,6 +206,7 @@ runTableModel = \case
      quadraticGasFactor = 50_000
      linearGasFactor = 38_000
   GModuleMemory bytes -> moduleMemoryCost bytes
+  GCountBytes bytes -> memoryCost bytes
 
 basicWorkGas :: Word64
 basicWorkGas = 25
