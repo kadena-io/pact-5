@@ -18,7 +18,9 @@ import Pact.Core.GasModel.Utils
 enumExp :: Integer -> Integer -> [(String, T.Text)]
 enumExp base mult = [ (show val, T.pack $ show val) | val <- iterate (* mult) base ]
 
-benchArithOp' :: Integer -> T.Text -> PactDb CoreBuiltin () -> [C.Benchmark]
+type BuiltinBenches = PactDb CoreBuiltin () -> [C.Benchmark]
+
+benchArithOp' :: Integer -> T.Text -> BuiltinBenches
 benchArithOp' growthFactor op pdb =
   [ C.bgroup "integer"
     [ runNativeBenchmark pdb title [text|($op $x $x)|] | (title, x) <- vals ]
@@ -30,10 +32,10 @@ benchArithOp' growthFactor op pdb =
   where
   vals = take 3 $ enumExp 1000 growthFactor
 
-benchArithOp :: T.Text -> PactDb CoreBuiltin () -> [C.Benchmark]
+benchArithOp :: T.Text -> BuiltinBenches
 benchArithOp = benchArithOp' 1000000
 
-benchAbs :: PactDb CoreBuiltin () -> [C.Benchmark]
+benchAbs :: BuiltinBenches
 benchAbs pdb =
   [ C.bgroup "integer"
     [ runNativeBenchmark pdb title [text|(abs -$x)|] | (title, x) <- vals ]
@@ -43,7 +45,7 @@ benchAbs pdb =
   where
   vals = take 3 $ enumExp 1000 1000000
 
-benchNegate :: PactDb CoreBuiltin () -> [C.Benchmark]
+benchNegate :: BuiltinBenches
 benchNegate pdb =
   [ C.bgroup "integer"
     [ runNativeBenchmark pdb title [text|(negate $x)|] | (title, x) <- vals ]
@@ -53,20 +55,20 @@ benchNegate pdb =
   where
   vals = take 3 $ enumExp 1000 1000000
 
-benchDistinct :: PactDb CoreBuiltin () -> [C.Benchmark]
+benchDistinct :: BuiltinBenches
 benchDistinct pdb = [C.bgroup "flat" flats]
   where
   flats = [ runNativeBenchmark pdb title [text|(distinct (enumerate 0 $cnt))|]
           | (title, cnt) <- take 3 $ enumExp 1000 2
           ]
 
-benchEnumerate :: PactDb CoreBuiltin () -> [C.Benchmark]
+benchEnumerate :: BuiltinBenches
 benchEnumerate pdb = [ runNativeBenchmark pdb title [text|(enumerate 0 $cnt)|]
                      | (title, cnt) <- take 3 $ enumExp 1000 10
                      ]
 
-benchesForFun :: PactDb CoreBuiltin () -> CoreBuiltin -> [C.Benchmark]
-benchesForFun pdb bn = case bn of
+benchesForFun :: CoreBuiltin -> BuiltinBenches
+benchesForFun bn pdb = case bn of
   CoreAdd -> benchArithOp "+" pdb
   CoreSub -> benchArithOp "-" pdb
   CoreMultiply -> benchArithOp "-" pdb
@@ -83,7 +85,7 @@ benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) -> do
   C.bgroup "pact-core-builtin-gas"
     [ C.bgroup (T.unpack $ coreBuiltinToText coreBuiltin) benches
     | coreBuiltin <- [minBound .. maxBound]
-    , let benches = benchesForFun pdb coreBuiltin
+    , let benches = benchesForFun coreBuiltin pdb
     , not $ null benches
     ]
   where
