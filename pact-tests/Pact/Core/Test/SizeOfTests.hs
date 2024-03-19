@@ -26,9 +26,12 @@ import Pact.Core.Errors
 import Pact.Core.Environment.Types
 import Pact.Core.Environment.Utils
 import Pact.Core.Gas
+import Pact.Core.IR.Term
+import Pact.Core.Literal
 import Pact.Core.PactValue
 import Pact.Core.Serialise
 import Pact.Core.IR.Eval.Runtime.Types (runEvalM)
+import Pact.Core.IR.Term (Defun(..))
 
 tests :: TestTree
 tests = testGroup "SizeOfTests" $
@@ -49,6 +52,8 @@ tests = testGroup "SizeOfTests" $
   , sizeOfGenericsTest SizeOfV0
   , sizeOfGenericsTest SizeOfV1
   , sizeOfGenericsTest SizeOfV2
+  , sizeOfDefunTest SizeOfV0
+  , sizeOfDefunTest SizeOfV2
   ]
 
 getSize :: SizeOf a => SizeOfVersion -> a -> IO (Either PactErrorI Bytes)
@@ -85,7 +90,7 @@ newtype F = F Int
   deriving (Eq, Show, SizeOf)
 
 sizeOfGenericsTest :: SizeOfVersion -> TestTree
-sizeOfGenericsTest szVer = do
+sizeOfGenericsTest szVer =
   testCase ("SizeOf " <> show szVer <> " generics conform to specification") $ do
     Right a1Size <- getSize szVer A1
     Right a2Size <- getSize szVer A2
@@ -108,3 +113,19 @@ sizeOfGenericsTest szVer = do
 
     Right fSize <- getSize szVer (F 1)
     assertEqual "F size" intSize fSize
+
+sizeOfDefunTest :: SizeOfVersion -> TestTree
+sizeOfDefunTest szVer =
+  testCase ("SizeOf " <> show szVer <> " defun conform to specification") $ do
+    Right defunSize <- getSize szVer defun
+    assertEqual "defun size matches" 100 defunSize
+
+  where
+    defun :: EvalDefun () ()
+    defun = Defun
+      { _dfunName = "foo"
+      , _dfunArgs = []
+      , _dfunRType = Nothing
+      , _dfunTerm = Constant (LInteger 1) def
+      , _dfunInfo = def
+    }

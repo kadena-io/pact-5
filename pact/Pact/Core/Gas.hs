@@ -160,6 +160,7 @@ data GasArgs
   | GPoseidonHashHackAChain !Int
   -- ^ poseidon-hash-hack-a-chain costs
   | GModuleMemory !Word64
+  | GCountBytes !Word64
   deriving (Show)
 
 instance Pretty GasArgs where
