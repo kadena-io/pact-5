@@ -15,7 +15,7 @@ import Pact.Core.Serialise (serialisePact)
 
 import Pact.Core.GasModel.Utils
 
-enumExp :: Int -> Int -> [(String, T.Text)]
+enumExp :: Integer -> Integer -> [(String, T.Text)]
 enumExp base mult = [ (show val, T.pack $ show val) | val <- iterate (* mult) base ]
 
 benchArithOp :: T.Text -> PactDb CoreBuiltin () -> [C.Benchmark]
