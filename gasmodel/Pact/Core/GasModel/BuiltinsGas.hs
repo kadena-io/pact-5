@@ -28,6 +28,25 @@ benchArithOp op pdb =
     [ runNativeBenchmark pdb title [text|($op $x $x.0)|] | (title, x) <- vals ]
   ]
   where
+
+benchAbs :: PactDb CoreBuiltin () -> [C.Benchmark]
+benchAbs pdb =
+  [ C.bgroup "integer"
+    [ runNativeBenchmark pdb title [text|(abs -$x)|] | (title, x) <- vals ]
+  , C.bgroup "float"
+    [ runNativeBenchmark pdb title [text|(abs -$x.0)|] | (title, x) <- vals ]
+  ]
+  where
+  vals = take 3 $ enumExp 1000 1000000
+
+benchNegate :: PactDb CoreBuiltin () -> [C.Benchmark]
+benchNegate pdb =
+  [ C.bgroup "integer"
+    [ runNativeBenchmark pdb title [text|(negate $x)|] | (title, x) <- vals ]
+  , C.bgroup "float"
+    [ runNativeBenchmark pdb title [text|(negate $x.0)|] | (title, x) <- vals ]
+  ]
+  where
   vals = take 3 $ enumExp 1000 1000000
 
 benchDistinct :: PactDb CoreBuiltin () -> [C.Benchmark]
@@ -48,6 +67,8 @@ benchesForFun pdb bn = case bn of
   CoreSub -> benchArithOp "-" pdb
   CoreMultiply -> benchArithOp "-" pdb
   CoreDivide -> benchArithOp "-" pdb
+  CoreNegate -> benchNegate pdb
+  CoreAbs -> benchAbs pdb
   CoreDistinct -> benchDistinct pdb
   CoreEnumerate -> benchEnumerate pdb
   _ -> []
