@@ -18,8 +18,8 @@ import Pact.Core.GasModel.Utils
 enumExp :: Integer -> Integer -> [(String, T.Text)]
 enumExp base mult = [ (show val, T.pack $ show val) | val <- iterate (* mult) base ]
 
-benchArithOp :: T.Text -> PactDb CoreBuiltin () -> [C.Benchmark]
-benchArithOp op pdb =
+benchArithOp' :: Integer -> T.Text -> PactDb CoreBuiltin () -> [C.Benchmark]
+benchArithOp' growthFactor op pdb =
   [ C.bgroup "integer"
     [ runNativeBenchmark pdb title [text|($op $x $x)|] | (title, x) <- vals ]
   , C.bgroup "float"
@@ -28,6 +28,10 @@ benchArithOp op pdb =
     [ runNativeBenchmark pdb title [text|($op $x $x.0)|] | (title, x) <- vals ]
   ]
   where
+  vals = take 3 $ enumExp 1000 growthFactor
+
+benchArithOp :: T.Text -> PactDb CoreBuiltin () -> [C.Benchmark]
+benchArithOp = benchArithOp' 1000000
 
 benchAbs :: PactDb CoreBuiltin () -> [C.Benchmark]
 benchAbs pdb =
@@ -69,6 +73,7 @@ benchesForFun pdb bn = case bn of
   CoreDivide -> benchArithOp "-" pdb
   CoreNegate -> benchNegate pdb
   CoreAbs -> benchAbs pdb
+  CorePow -> benchArithOp' 100 "^" pdb
   CoreDistinct -> benchDistinct pdb
   CoreEnumerate -> benchEnumerate pdb
   _ -> []
