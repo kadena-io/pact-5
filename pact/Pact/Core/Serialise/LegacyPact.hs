@@ -138,7 +138,29 @@ instance JD.FromJSON DefPactId where
 -- We currently ignore the version field
 instance JD.FromJSON RowData where
   parseJSON = JD.withObject "RowData" $ \o ->
-    RowData <$> o JD..: "$d"
+    RowData . fmap _unRowDataValue <$> o JD..: "$d"
+
+newtype RowDataValue = RowDataValue { _unRowDataValue :: PactValue }
+
+instance JD.FromJSON RowDataValue where
+  parseJSON v1 = fmap RowDataValue $
+    (fromLegacyLiteral <$> JD.parseJSON v1) <|>
+    (PList . fmap _unRowDataValue <$> JD.parseJSON v1) <|>
+    parseTagged v1
+    where
+      parseTagged = JD.withObject "tagged RowData" $ \o -> do
+        (t :: T.Text) <- o JD..: "$t"
+        val <- o JD..: "$v"
+        case t of
+          "o" -> PObject . fmap _unRowDataValue <$> JD.parseJSON val
+          "g" -> PGuard . fmap _unRowDataValue <$> JD.parseJSON val
+          "m" -> PModRef <$> parseMR val
+          _ -> fail "tagged RowData"
+      parseMR = JD.withObject "tagged ModRef" $ \o -> ModRef
+          <$> o JD..: "refName"
+          <*> o JD..: "refSpec"
+          <*> pure Nothing
+
 
 instance JD.FromJSON (DefPactContinuation QualifiedName PactValue) where
   parseJSON = JD.withObject "DefPactContinuation" $ \o ->
@@ -264,12 +286,12 @@ instance JD.FromJSON LegacyLiteral where
       highPrecFormat = "%Y-%m-%dT%H:%M:%S.%vZ"
 
 
-instance JD.FromJSON (Guard QualifiedName PactValue) where
-  parseJSON v = guardToPactValue <$> JD.parseJSON v
+-- instance JD.FromJSON (Guard QualifiedName PactValue) where
+--   parseJSON v = guardToPactValue <$> JD.parseJSON v
 
 
--- https://github.com/kadena-io/pact/blob/ba15517b56eba4fdaf6b2fbd3e5245eeedd0fc9f/src/Pact/Types/Term/Internal.hs#L802
-instance JD.FromJSON (Guard QualifiedName LegacyPactValue) where
+-- -- https://github.com/kadena-io/pact/blob/ba15517b56eba4fdaf6b2fbd3e5245eeedd0fc9f/src/Pact/Types/Term/Internal.hs#L802
+instance JD.FromJSON v => JD.FromJSON (Guard QualifiedName v) where
   parseJSON v = GKeyset <$> JD.parseJSON v
     <|> GKeySetRef <$> parseRef v
     <|> GUserGuard <$> JD.parseJSON v
@@ -282,13 +304,13 @@ instance JD.FromJSON (Guard QualifiedName LegacyPactValue) where
       pure (KeySetName ref ns)
 
 
-instance JD.FromJSON (UserGuard QualifiedName LegacyPactValue) where
+instance JD.FromJSON v => JD.FromJSON (UserGuard QualifiedName v) where
   parseJSON = JD.withObject "UserGuard" $ \o ->
     UserGuard
       <$> o JD..: "fun"
       <*> o JD..: "args"
 
-instance JD.FromJSON (CapabilityGuard QualifiedName LegacyPactValue) where
+instance JD.FromJSON v => JD.FromJSON (CapabilityGuard QualifiedName v) where
   parseJSON = JD.withObject "CapabilityGuard" $ \o ->
     CapabilityGuard
       <$> o JD..: "cgName"
@@ -303,16 +325,19 @@ instance JD.FromJSON ModuleGuard where
 
 fromLegacyPactValue :: LegacyPactValue -> PactValue
 fromLegacyPactValue = \case
-  Legacy_PLiteral ll -> case ll of
-    Legacy_LString t -> PLiteral (LString t)
-    Legacy_LInteger i -> PLiteral (LInteger i)
-    Legacy_LDecimal d -> PLiteral (LDecimal d)
-    Legacy_LBool b -> PLiteral (LBool b)
-    Legacy_LTime utc -> PTime utc
+  Legacy_PLiteral ll -> fromLegacyLiteral ll
   Legacy_PList v -> PList (fromLegacyPactValue <$> v)
   Legacy_PObject o -> PObject (fromLegacyPactValue <$> o)
   Legacy_PGuard g -> PGuard (guardToPactValue g)
   Legacy_PModRef mref -> PModRef mref
+
+fromLegacyLiteral :: LegacyLiteral -> PactValue
+fromLegacyLiteral = \case
+  Legacy_LString t -> PLiteral (LString t)
+  Legacy_LInteger i -> PLiteral (LInteger i)
+  Legacy_LDecimal d -> PLiteral (LDecimal d)
+  Legacy_LBool b -> PLiteral (LBool b)
+  Legacy_LTime utc -> PTime utc
 
 
 guardToPactValue :: Guard QualifiedName LegacyPactValue -> Guard QualifiedName PactValue
