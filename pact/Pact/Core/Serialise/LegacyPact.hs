@@ -137,8 +137,11 @@ instance JD.FromJSON DefPactId where
 -- https://github.com/kadena-io/pact/blob/09f3b43fc10fbcdd798b01af45e4ddb6cecb91e7/src/Pact/Types/RowData.hs#L179C7-L181C24
 -- We currently ignore the version field
 instance JD.FromJSON RowData where
-  parseJSON = JD.withObject "RowData" $ \o ->
-    RowData . fmap _unRowDataValue <$> o JD..: "$d"
+  parseJSON v =
+    parseTagged v <|> RowData . fmap fromLegacyPactValue <$> JD.parseJSON v
+    where
+    parseTagged = JD.withObject "RowData" $ \o ->
+      (RowData . fmap _unRowDataValue <$> o JD..: "$d")
 
 data RowDataVersion = RDV0 | RDV1
   deriving (Eq,Show,Ord,Enum,Bounded)
