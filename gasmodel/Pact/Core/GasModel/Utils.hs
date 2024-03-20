@@ -312,8 +312,8 @@ runNativeBenchmark' envMod stMod pdb title src = C.env mkEnv $ \ ~(term, es, ee)
   mkEnv = do
     ee <- envMod =<< defaultGasEvalEnv pdb
     es <- stMod defaultGasEvalState
-    (Right term, _) <- runCompileTerm ee es src
-    pure (term, es, ee)
+    (Right term, es') <- runCompileTerm ee es src
+    pure (term, es', ee)
 
 runNativeBenchmark
   :: PactDb CoreBuiltin ()
