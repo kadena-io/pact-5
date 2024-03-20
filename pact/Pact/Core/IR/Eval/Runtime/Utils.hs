@@ -71,6 +71,8 @@ import Pact.Core.Environment
 import Pact.Core.DefPacts.Types
 import Pact.Core.Gas
 
+import Debug.Trace
+
 mkBuiltinFn
   :: (IsBuiltin b)
   => i
@@ -197,7 +199,8 @@ argsError
   -> [CEKValue step b i m]
   -> m a
 argsError info b args =
-  throwExecutionError info (NativeArgumentsError (builtinName b) (toArgTypeError <$> args))
+  traceM ("BOOP BOOP" <> show args) *>
+    throwExecutionError info (NativeArgumentsError (builtinName b) (toArgTypeError <$> args))
 
 
 {-# SPECIALIZE asString
