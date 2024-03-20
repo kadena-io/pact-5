@@ -310,7 +310,7 @@ runNativeBenchmark' envMod stMod pdb title src = C.env mkEnv $ \ ~(term, es, ee)
   C.bench title $ C.nfAppIO (runEvalM ee es . Eval.eval PImpure benchmarkBigStepEnv) term
   where
   mkEnv = do
-    ee <- defaultGasEvalEnv pdb >>= envMod
+    ee <- envMod =<< defaultGasEvalEnv pdb
     es <- stMod defaultGasEvalState
     (Right term, _) <- runCompileTerm ee es src
     pure (term, es, ee)
