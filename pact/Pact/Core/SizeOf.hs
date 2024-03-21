@@ -87,6 +87,28 @@ import Pact.Core.Gas (GasArgs(GCountBytes))
 -- 1. http://wiki.haskell.org/GHC/Memory_Footprint
 -- 2. https://stackoverflow.com/questions/3254758/memory-footprint-of-haskell-data-types
 
+-- | Size estimates determine the gas cost of various operations,
+--   (e.g., writing data to a user table or loading a module), so
+--   we must version the estimation process in order to allow us to
+--   update our estimates without breaking compatibility.
+--
+--   In other words, a particular combination of (SizeOfVersion, Type)
+--   must always produce the same answer, across all releases of pact.
+--   An exception is made when we are certain that a particular pact
+--   release will never encounter a given (SizeOfVersion, Type) combination;
+--   this combination may be ignored.
+--
+--   Although SizeOfVersion is the mechanism used to link a pact version
+--   to a size estimate, it is not always necessary to use your pact version's
+--   SizeOf version when computing sizes of things. In other words, different
+--   contexts have different reasons for computing the size of something,
+--   and are free to use different SizeOfVersion when calling `sizeOf`.
+--   For example, we have found the SizeOfV0 measurements to be sufficient
+--   when computing the size of a module during module-loading, so the
+--   code that charges gas for module load hardcodes SizeOfVersion to
+--   SizeOfV0. Size estimates for writing to user tables change more
+--   frequenly, so the gas computation for that refers to pact version
+--   flags to get the appropriate SizeOfVersion.
 data SizeOfVersion
   = SizeOfV2
   | SizeOfV1
