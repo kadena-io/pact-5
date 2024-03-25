@@ -362,6 +362,31 @@ runNativeBenchmarkArgsText
   -> C.Benchmark
 runNativeBenchmarkArgsText = runNativeBenchmarkArgsText' pure pure
 
+runNativeBenchmarkArgsTerms'
+  :: (BenchEvalEnv -> IO BenchEvalEnv)
+  -> (BenchEvalState -> IO BenchEvalState)
+  -> PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> [CoreTerm]
+  -> C.Benchmark
+runNativeBenchmarkArgsTerms' envMod stMod pdb title lamSrc terms = C.env mkEnv $ \ ~(term, es, ee) ->
+  C.bench title $ C.nfAppIO (runEvalM ee es . Eval.eval PImpure benchmarkBigStepEnv) term
+  where
+  mkEnv = do
+    ee <- envMod =<< defaultGasEvalEnv pdb
+    es <- stMod defaultGasEvalState
+    (Right lamBody, es') <- runCompileTerm ee es lamSrc
+    pure (App lamBody terms (), es', ee)
+
+runNativeBenchmarkArgsTerms
+  :: PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> [CoreTerm]
+  -> C.Benchmark
+runNativeBenchmarkArgsTerms = runNativeBenchmarkArgsTerms' pure pure
+
 -- Closures
 unitClosureNullary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m
 unitClosureNullary env
