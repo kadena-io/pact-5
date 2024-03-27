@@ -6,6 +6,7 @@ module Pact.Core.GasModel.BuiltinsGas where
 import qualified Criterion as C
 import qualified Data.Text as T
 import qualified Database.SQLite3 as SQL
+import Data.Bifunctor
 import NeatInterpolation (text)
 
 import Pact.Core.Builtin
@@ -15,8 +16,11 @@ import Pact.Core.Serialise (serialisePact)
 
 import Pact.Core.GasModel.Utils
 
-enumExp :: Integer -> Integer -> [(String, T.Text)]
-enumExp base mult = [ (show val, T.pack $ show val) | val <- iterate (* mult) base ]
+enumExpNum :: Integer -> Integer -> [(String, Integer)]
+enumExpNum base mult = [ (show val, val) | val <- iterate (* mult) base ]
+
+enumExpText :: Integer -> Integer -> [(String, T.Text)]
+enumExpText base mult = second (T.pack . show) <$> enumExpNum base mult
 
 type BuiltinBenches = PactDb CoreBuiltin () -> [C.Benchmark]
 
@@ -30,7 +34,7 @@ benchArithOp' growthFactor op pdb =
     [ runNativeBenchmark pdb title [text|($op $x $x.0)|] | (title, x) <- vals ]
   ]
   where
-  vals = take 3 $ enumExp 1000 growthFactor
+  vals = take 3 $ enumExpText 1000 growthFactor
 
 benchArithOp :: T.Text -> BuiltinBenches
 benchArithOp = benchArithOp' 1000000
@@ -43,7 +47,7 @@ benchAbs pdb =
     [ runNativeBenchmark pdb title [text|(abs -$x.0)|] | (title, x) <- vals ]
   ]
   where
-  vals = take 3 $ enumExp 1000 1000000
+  vals = take 3 $ enumExpText 1000 1000000
 
 benchNegate :: BuiltinBenches
 benchNegate pdb =
@@ -53,7 +57,7 @@ benchNegate pdb =
     [ runNativeBenchmark pdb title [text|(negate $x.0)|] | (title, x) <- vals ]
   ]
   where
-  vals = take 3 $ enumExp 1000 1000000
+  vals = take 3 $ enumExpText 1000 1000000
 
 benchDistinct :: BuiltinBenches
 benchDistinct pdb = [C.bgroup "flat" flats]
@@ -64,7 +68,7 @@ benchDistinct pdb = [C.bgroup "flat" flats]
 
 benchEnumerate :: BuiltinBenches
 benchEnumerate pdb = [ runNativeBenchmark pdb title [text|(enumerate 0 $cnt)|]
-                     | (title, cnt) <- take 3 $ enumExp 1000 10
+                     | (title, cnt) <- take 3 $ enumExpText 1000 10
                      ]
 
 benchesForFun :: CoreBuiltin -> BuiltinBenches
