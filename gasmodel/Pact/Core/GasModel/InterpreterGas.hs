@@ -1300,7 +1300,7 @@ gasContType pdb = \case
     gasLetC pdb
   CTSeqC ->
     gasSeqC pdb
-  CTListC -> undefined
+  CTListC -> C.bgroup "list" []
   -- Conditionals
   CTAndC ->
     C.bgroup "AndC Cases" $ (gasAndC pdb) <$> [minBound .. maxBound]
@@ -1312,7 +1312,7 @@ gasContType pdb = \case
       | b <- [False, True] ]
   CTEnforceC ->
     C.bgroup "EnforceC Cases" $ (gasEnforceC pdb) <$> [minBound .. maxBound]
-  CTEnforceOneC -> undefined
+  CTEnforceOneC -> C.bgroup "enforce one" []
   CTFilterC ->
     C.bgroup "FilterC Cases" $
       [gasFilterCEmptyNElems pdb b 10

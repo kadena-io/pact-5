@@ -6,6 +6,7 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE StrictData #-}
 
 module Pact.Core.Names
  ( ModuleName(..)

@@ -369,7 +369,7 @@ data NativeFn (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> 
   , _nativeEnv :: !(CEKEnv step b i m)
   , _nativeFn :: !(NativeFunction step b i m)
   , _nativeArity :: {-# UNPACK #-} !Int
-  , _nativeLoc :: i
+  , _nativeLoc :: !i
   } deriving (Generic)
 
 instance (NFData b, NFData i) => NFData (NativeFn step b i m)
@@ -384,7 +384,7 @@ data PartialNativeFn (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.T
   , _pNativeFn :: !(NativeFunction step b i m)
   , _pNativeArity :: {-# UNPACK #-} !Int
   , _pNativeAppliedArgs :: ![CEKValue step b i m]
-  , _pNativeLoc :: i
+  , _pNativeLoc :: !i
   } deriving (Generic)
 
 instance (NFData b, NFData i) => NFData (PartialNativeFn step b i m)

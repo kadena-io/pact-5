@@ -9,6 +9,7 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE StrictData #-}
 
 
 module Pact.Core.Persistence
