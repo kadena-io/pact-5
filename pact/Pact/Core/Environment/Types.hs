@@ -45,6 +45,8 @@ module Pact.Core.Environment.Types
  , MonadEvalState(..)
  , MonadEval
  , defaultEvalEnv
+ , Bytes
+ , SizeOfByteLimit(..)
  ) where
 
 
@@ -56,6 +58,7 @@ import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Data.IORef
 import Data.Default
+import Data.Word (Word64)
 
 import Control.DeepSeq
 import GHC.Generics
@@ -64,6 +67,7 @@ import qualified Data.Text as T
 import qualified Data.Map.Strict as M
 
 import Pact.Core.Persistence
+import Pact.Core.Pretty
 import Pact.Core.Capabilities
 import Pact.Core.Guards
 import Pact.Core.PactValue
@@ -74,7 +78,6 @@ import Pact.Core.ChainData
 import Pact.Core.Errors
 import Pact.Core.Gas
 import Pact.Core.Namespace
-import Pact.Core.SizeOf
 import Pact.Core.Builtin (IsBuiltin)
 
 -- | Execution flags specify behavior of the runtime environment,
@@ -202,8 +205,6 @@ type MonadEval b i m =
   , MonadIO m
   , Default i
   , Show i
-  , SizeOf b
-  , SizeOf i
   , IsBuiltin b
   , Show b)
 
@@ -226,3 +227,12 @@ defaultEvalEnv pdb m = do
     , _eeGasRef = gasRef
     , _eeGasModel = freeGasModel
     }
+
+type Bytes = Word64
+
+newtype SizeOfByteLimit 
+  = SizeOfByteLimit Bytes
+  deriving Show
+
+instance Pretty SizeOfByteLimit where
+  pretty = pretty . show

@@ -12,6 +12,7 @@ import qualified Pact.Core.Test.StaticErrorTests as StaticErrorTests
 import qualified Pact.Core.Test.ZkTests as ZkTests
 import qualified Pact.Core.Test.PoseidonTests as PoseidonTests
 import qualified Pact.Core.Test.LanguageServer as LanguageServer
+import qualified Pact.Core.Test.SizeOfTests as SizeOfTests
 
 main :: IO ()
 main = do
@@ -27,4 +28,5 @@ main = do
     , PoseidonTests.tests
     , PersistenceTests.tests
     , LanguageServer.tests
+    , SizeOfTests.tests
     ]
