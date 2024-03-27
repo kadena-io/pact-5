@@ -33,8 +33,8 @@ import Data.Decimal
 import Pact.Time
 import qualified Pact.JSON.Decode as JD
 import qualified Data.Text as T
-import Data.Vector(Vector)
-import Data.Map.Strict(Map)
+-- import Data.Vector(Vector)
+-- import Data.Map.Strict(Map)
 import Text.Read (readMaybe)
 
 
@@ -90,7 +90,7 @@ instance JD.FromJSON Namespace where
     <*> v JD..: "admin"
 
 instance JD.FromJSON (ModuleData CoreBuiltin ()) where
-  parseJSON = error "unimplemented"
+  parseJSON _ = fail "unimplemented"
 
 instance JD.FromJSON DefPactExec where
   parseJSON = JD.withObject "PactExec" $ \o ->
@@ -137,8 +137,43 @@ instance JD.FromJSON DefPactId where
 -- https://github.com/kadena-io/pact/blob/09f3b43fc10fbcdd798b01af45e4ddb6cecb91e7/src/Pact/Types/RowData.hs#L179C7-L181C24
 -- We currently ignore the version field
 instance JD.FromJSON RowData where
-  parseJSON = JD.withObject "RowData" $ \o ->
-    RowData <$> o JD..: "$d"
+  parseJSON v =
+    parseTagged v <|> RowData . fmap fromLegacyPactValue <$> JD.parseJSON v
+    where
+    parseTagged = JD.withObject "RowData" $ \o ->
+      (RowData . fmap _unRowDataValue <$> o JD..: "$d")
+
+data RowDataVersion = RDV0 | RDV1
+  deriving (Eq,Show,Ord,Enum,Bounded)
+
+instance JD.FromJSON RowDataVersion where
+  parseJSON = JD.withScientific "RowDataVersion" $ \case
+    0 -> pure RDV0
+    1 -> pure RDV1
+    _ -> fail "RowDataVersion"
+
+
+newtype RowDataValue = RowDataValue { _unRowDataValue :: PactValue }
+
+instance JD.FromJSON RowDataValue where
+  parseJSON v1 = fmap RowDataValue $
+    (fromLegacyLiteral <$> JD.parseJSON v1) <|>
+    (PList . fmap _unRowDataValue <$> JD.parseJSON v1) <|>
+    parseTagged v1
+    where
+      parseTagged = JD.withObject "tagged RowData" $ \o -> do
+        (t :: T.Text) <- o JD..: "$t"
+        val <- o JD..: "$v"
+        case t of
+          "o" -> PObject . fmap _unRowDataValue <$> JD.parseJSON val
+          "g" -> PGuard . fmap _unRowDataValue <$> JD.parseJSON val
+          "m" -> PModRef <$> parseMR val
+          _ -> fail "tagged RowData"
+      parseMR = JD.withObject "tagged ModRef" $ \o -> ModRef
+          <$> o JD..: "refName"
+          <*> o JD..: "refSpec"
+          <*> pure Nothing
+
 
 instance JD.FromJSON (DefPactContinuation QualifiedName PactValue) where
   parseJSON = JD.withObject "DefPactContinuation" $ \o ->
@@ -151,23 +186,6 @@ instance JD.FromJSON QualifiedName where
     [mod', name] -> pure (QualifiedName name (ModuleName mod' Nothing))
     [ns, mod', name] -> pure (QualifiedName name (ModuleName mod' (Just (NamespaceName ns))))
     _ -> fail "unexpeced parsing"
-
--- instance JD.FromJSON QualifiedName where
---   parseJSON = JD.withText "QualifiedName" $ \n -> case T.split (== '.') n  of
---     [mod', name] -> pure (QualifiedName name (ModuleName mod' Nothing))
---     _ -> fail "unexpeced parsing"
-
--- instance JD.FromJSON (DefPactContinuation FullyQualifiedName PactValue) where
---   parseJSON = JD.withObject "DefPactContinuation" $ \o ->
---     DefPactContinuation
---       <$> o JD..: "def"
---       <*> o JD..: "args"
-
--- instance JD.FromJSON FullyQualifiedName where
---   parseJSON = JD.withText "FullyQualifiedName" $ \f ->
---     case AP.parseOnly (fullyQualNameParser <* AP.endOfInput) f of
---       Left s  -> fail s
---       Right n -> return n
 
 instance JD.FromJSON PactValue where
   parseJSON v = fromLegacyPactValue <$> JD.parseJSON v
@@ -203,20 +221,16 @@ data LegacyLiteral
   | Legacy_LBool Bool
   | Legacy_LTime UTCTime
 
-data LegacyPactValue
-  = Legacy_PLiteral LegacyLiteral
-  | Legacy_PList (Vector LegacyPactValue)
-  | Legacy_PObject (Map Field LegacyPactValue)
-  | Legacy_PGuard (Guard QualifiedName LegacyPactValue)
-  | Legacy_PModRef ModRef
+newtype LegacyPactValue
+  = LegacyPactValue { fromLegacyPactValue :: PactValue }
 
 instance JD.FromJSON LegacyPactValue where
-  parseJSON v =
-    (Legacy_PLiteral <$> JD.parseJSON v) <|>
-    (Legacy_PList <$> JD.parseJSON v) <|>
-    (Legacy_PGuard <$> JD.parseJSON v) <|>
-    (Legacy_PModRef <$> (parseNoInfo v <|> JD.parseJSON v)) <|>
-    (Legacy_PObject <$> JD.parseJSON v)
+  parseJSON v = fmap LegacyPactValue $
+    (fromLegacyLiteral <$> JD.parseJSON v) <|>
+    (PList . fmap fromLegacyPactValue <$> JD.parseJSON v) <|>
+    (PGuard . fmap fromLegacyPactValue <$> JD.parseJSON v) <|>
+    (PModRef <$> (parseNoInfo v <|> JD.parseJSON v)) <|>
+    (PObject . fmap fromLegacyPactValue <$> JD.parseJSON v)
     where
       parseNoInfo = JD.withObject "ModRef" $ \o -> ModRef
         <$> o JD..: "refName"
@@ -264,12 +278,8 @@ instance JD.FromJSON LegacyLiteral where
       highPrecFormat = "%Y-%m-%dT%H:%M:%S.%vZ"
 
 
-instance JD.FromJSON (Guard QualifiedName PactValue) where
-  parseJSON v = guardToPactValue <$> JD.parseJSON v
-
-
--- https://github.com/kadena-io/pact/blob/ba15517b56eba4fdaf6b2fbd3e5245eeedd0fc9f/src/Pact/Types/Term/Internal.hs#L802
-instance JD.FromJSON (Guard QualifiedName LegacyPactValue) where
+-- -- https://github.com/kadena-io/pact/blob/ba15517b56eba4fdaf6b2fbd3e5245eeedd0fc9f/src/Pact/Types/Term/Internal.hs#L802
+instance JD.FromJSON v => JD.FromJSON (Guard QualifiedName v) where
   parseJSON v = GKeyset <$> JD.parseJSON v
     <|> GKeySetRef <$> parseRef v
     <|> GUserGuard <$> JD.parseJSON v
@@ -282,13 +292,13 @@ instance JD.FromJSON (Guard QualifiedName LegacyPactValue) where
       pure (KeySetName ref ns)
 
 
-instance JD.FromJSON (UserGuard QualifiedName LegacyPactValue) where
+instance JD.FromJSON v => JD.FromJSON (UserGuard QualifiedName v) where
   parseJSON = JD.withObject "UserGuard" $ \o ->
     UserGuard
       <$> o JD..: "fun"
       <*> o JD..: "args"
 
-instance JD.FromJSON (CapabilityGuard QualifiedName LegacyPactValue) where
+instance JD.FromJSON v => JD.FromJSON (CapabilityGuard QualifiedName v) where
   parseJSON = JD.withObject "CapabilityGuard" $ \o ->
     CapabilityGuard
       <$> o JD..: "cgName"
@@ -301,25 +311,11 @@ instance JD.FromJSON ModuleGuard where
       <$> o JD..: "moduleName"
       <*> o JD..: "name"
 
-fromLegacyPactValue :: LegacyPactValue -> PactValue
-fromLegacyPactValue = \case
-  Legacy_PLiteral ll -> case ll of
-    Legacy_LString t -> PLiteral (LString t)
-    Legacy_LInteger i -> PLiteral (LInteger i)
-    Legacy_LDecimal d -> PLiteral (LDecimal d)
-    Legacy_LBool b -> PLiteral (LBool b)
-    Legacy_LTime utc -> PTime utc
-  Legacy_PList v -> PList (fromLegacyPactValue <$> v)
-  Legacy_PObject o -> PObject (fromLegacyPactValue <$> o)
-  Legacy_PGuard g -> PGuard (guardToPactValue g)
-  Legacy_PModRef mref -> PModRef mref
 
-
-guardToPactValue :: Guard QualifiedName LegacyPactValue -> Guard QualifiedName PactValue
-guardToPactValue = \case
-  (GKeyset ks) -> GKeyset ks
-  (GKeySetRef kref) -> GKeySetRef kref
-  (GUserGuard (UserGuard n tm)) -> GUserGuard (UserGuard n (fromLegacyPactValue <$> tm))
-  (GCapabilityGuard (CapabilityGuard n args i)) -> GCapabilityGuard (CapabilityGuard n (fromLegacyPactValue <$> args) i)
-  (GModuleGuard mg) -> GModuleGuard mg
-  (GDefPactGuard dpg) -> GDefPactGuard dpg
+fromLegacyLiteral :: LegacyLiteral -> PactValue
+fromLegacyLiteral = \case
+  Legacy_LString t -> PLiteral (LString t)
+  Legacy_LInteger i -> PLiteral (LInteger i)
+  Legacy_LDecimal d -> PLiteral (LDecimal d)
+  Legacy_LBool b -> PLiteral (LBool b)
+  Legacy_LTime utc -> PTime utc
