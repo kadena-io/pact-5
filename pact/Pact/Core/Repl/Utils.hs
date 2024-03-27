@@ -24,6 +24,7 @@ module Pact.Core.Repl.Utils
  , replEvalState
  , replUserDocs
  , replTLDefPos
+ , replNativesEnabled
  , whenReplFlagSet
  , unlessReplFlagSet
  , debugIfFlagSet
@@ -133,6 +134,7 @@ data ReplState b
   -- ^ Used by LSP Server, reflects the span information
   --   of the TL definitions for the qualified name.
   , _replTx :: Maybe (TxId, Maybe Text)
+  , _replNativesEnabled :: Bool
   }
 
 makeLenses ''ReplState

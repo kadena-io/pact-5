@@ -225,6 +225,10 @@ sendDiagnostics nuri mv content = liftIO runPact >>= \case
           , _replTx = Nothing
           , _replUserDocs = mempty
           , _replTLDefPos = mempty
+          -- Note: for the lsp, we don't want it to fail on repl natives not enabled,
+          -- since there may be no way for us to set it for the LSP from pact directly.
+          -- Once this is possible, we can set it to `False` as is the default
+          , _replNativesEnabled = True
           }
       stateRef <- newIORef rstate
       res <- runReplT stateRef (processFile (replBuiltinEnv @CEKSmallStep) src)
