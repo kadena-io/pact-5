@@ -189,7 +189,7 @@ gasLamNArgs n pdb =
         term = Lam (NE.fromList args) (Constant LUnit ()) ()
         ps = _eeDefPactStep ee
         env = CEKEnv { _cePactDb=pdb
-                    , _ceLocal = RA.fromList mempty
+                    , _ceLocal = mempty
                     , _ceInCap=False
                     , _ceDefPactStep=ps
                     , _ceBuiltins= benchmarkEnv }
@@ -1300,7 +1300,7 @@ gasContType pdb = \case
     gasLetC pdb
   CTSeqC ->
     gasSeqC pdb
-  CTListC -> undefined
+  CTListC -> C.bgroup "meh1" []
   -- Conditionals
   CTAndC ->
     C.bgroup "AndC Cases" $ (gasAndC pdb) <$> [minBound .. maxBound]
@@ -1312,7 +1312,7 @@ gasContType pdb = \case
       | b <- [False, True] ]
   CTEnforceC ->
     C.bgroup "EnforceC Cases" $ (gasEnforceC pdb) <$> [minBound .. maxBound]
-  CTEnforceOneC -> undefined
+  CTEnforceOneC -> C.bgroup "meh2" []
   CTFilterC ->
     C.bgroup "FilterC Cases" $
       [gasFilterCEmptyNElems pdb b 10
