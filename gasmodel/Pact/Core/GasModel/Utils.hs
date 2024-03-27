@@ -8,8 +8,11 @@ module Pact.Core.GasModel.Utils where
 import Control.Lens
 import Control.Monad.Except
 import Control.DeepSeq
+import Data.Bifunctor
+import Data.Foldable (foldrM, Foldable (..))
 import Data.Text (Text)
 import Data.Map.Strict(Map)
+import qualified Criterion as C
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -288,12 +291,101 @@ compileTerm source = do
   DesugarOutput term _  <- runDesugarTerm parsed
   pure term
 
+type BenchEvalEnv = EvalEnv CoreBuiltin ()
+type BenchEvalState = EvalState CoreBuiltin ()
+
 runCompileTerm
-  :: EvalEnv CoreBuiltin ()
-  -> EvalState CoreBuiltin ()
+  :: BenchEvalEnv
+  -> BenchEvalState
   -> Text
   -> IO (Either (PactError ()) CoreTerm, EvalState CoreBuiltin ())
 runCompileTerm es ee = runEvalM es ee . compileTerm
+
+runNativeBenchmark'
+  :: (BenchEvalEnv -> IO BenchEvalEnv)
+  -> (BenchEvalState -> IO BenchEvalState)
+  -> PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> C.Benchmark
+runNativeBenchmark' envMod stMod pdb title src = C.env mkEnv $ \ ~(term, es, ee) ->
+  C.bench title $ C.nfAppIO (runEvalM ee es . Eval.eval PImpure benchmarkBigStepEnv) term
+  where
+  mkEnv = do
+    ee <- envMod =<< defaultGasEvalEnv pdb
+    es <- stMod defaultGasEvalState
+    (Right term, es') <- runCompileTerm ee es src
+    pure (term, es', ee)
+
+runNativeBenchmark
+  :: PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> C.Benchmark
+runNativeBenchmark = runNativeBenchmark' pure pure
+
+pvToTerm :: PactValue -> CoreTerm
+pvToTerm pv = case pv of
+  PLiteral lit -> Constant lit ()
+  PList pvs -> ListLit (toList $ pvToTerm <$> pvs) ()
+  PObject fields -> ObjectLit (second pvToTerm <$> M.toList fields) ()
+  _ -> error "unsupported value"
+
+runNativeBenchmarkArgsText'
+  :: (BenchEvalEnv -> IO BenchEvalEnv)
+  -> (BenchEvalState -> IO BenchEvalState)
+  -> PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> [Text]
+  -> C.Benchmark
+runNativeBenchmarkArgsText' envMod stMod pdb title lamSrc argsSrcs = C.env mkEnv $ \ ~(term, es, ee) ->
+  C.bench title $ C.nfAppIO (runEvalM ee es . Eval.eval PImpure benchmarkBigStepEnv) term
+  where
+  mkEnv = do
+    ee <- envMod =<< defaultGasEvalEnv pdb
+    es <- stMod defaultGasEvalState
+    (Right lamBody, es') <- runCompileTerm ee es lamSrc
+    (args, es'') <- foldrM (argsFoldStep ee) ([], es') argsSrcs
+    pure (App lamBody args (), es'', ee)
+
+  argsFoldStep ee argSrc (evaledTerms, es) = do
+    (Right term, es') <- runCompileTerm ee es argSrc
+    (Right evaledTerm, es'') <- runEvalM ee es' $ Eval.eval PImpure benchmarkBigStepEnv term
+    pure (pvToTerm evaledTerm : evaledTerms, es'')
+
+runNativeBenchmarkArgsText
+  :: PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> [Text]
+  -> C.Benchmark
+runNativeBenchmarkArgsText = runNativeBenchmarkArgsText' pure pure
+
+runNativeBenchmarkArgsTerms'
+  :: (BenchEvalEnv -> IO BenchEvalEnv)
+  -> (BenchEvalState -> IO BenchEvalState)
+  -> PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> [CoreTerm]
+  -> C.Benchmark
+runNativeBenchmarkArgsTerms' envMod stMod pdb title lamSrc terms = C.env mkEnv $ \ ~(term, es, ee) ->
+  C.bench title $ C.nfAppIO (runEvalM ee es . Eval.eval PImpure benchmarkBigStepEnv) term
+  where
+  mkEnv = do
+    ee <- envMod =<< defaultGasEvalEnv pdb
+    es <- stMod defaultGasEvalState
+    (Right lamBody, es') <- runCompileTerm ee es lamSrc
+    pure (App lamBody terms (), es', ee)
+
+runNativeBenchmarkArgsTerms
+  :: PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> [CoreTerm]
+  -> C.Benchmark
+runNativeBenchmarkArgsTerms = runNativeBenchmarkArgsTerms' pure pure
 
 -- Closures
 unitClosureNullary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m

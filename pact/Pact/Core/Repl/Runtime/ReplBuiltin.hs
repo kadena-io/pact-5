@@ -425,13 +425,19 @@ envGasLog info b cont handler _env = \case
       Nothing ->
         returnCEKValue cont handler (VString "Enabled gas log")
       Just logs -> let
-        total = MilliGas $ sum (map ((\(MilliGas g) -> g) . snd) logs)
+        total = MilliGas $ sum [g | MilliGas g <- _gleThisUsed <$> logs]
         totalLine = PString . ("TOTAL: " <> ) $ renderCompactText total
-        logLines = flip map (reverse logs) $ \(n,g) ->
-          PString $ renderCompactText' $ pretty n <> ": " <> pretty g
+        logLines = renderLine <$> reverse logs
         in
           returnCEKValue cont handler (VList $ V.fromList (totalLine:logLines))
   args -> argsError info b args
+  where
+  renderLine :: GasLogEntry (ReplBuiltin CoreBuiltin) -> PactValue
+  renderLine (GasLogEntry entry (MilliGas millisUsed) entryGas) = PString $ renderCompactText' $ n <> ": " <> pretty entryGas
+    where
+      n = case entry of
+            Left ga -> pretty ga <> ":currTotalGas=" <> pretty millisUsed
+            Right nativeArg -> "Native" <> parens (pretty nativeArg) <> ":currTotalGas=" <> pretty millisUsed
 
 envEnableReplNatives :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envEnableReplNatives info b cont handler _env = \case

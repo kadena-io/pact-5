@@ -165,7 +165,7 @@ runTableModel = \case
   GConcat c -> case c of
     TextConcat (GasTextLength totalLen) ->
       MilliGas (fromIntegral totalLen * 100)
-    TextListConcat !(GasTextLength totalCharSize) !(GasListLength nElems) -> MilliGas $
+    TextListConcat (GasTextLength totalCharSize) (GasListLength nElems) -> MilliGas $
       fromIntegral totalCharSize * stringLenCost + fromIntegral nElems * listLenCost
       where
       stringLenCost,listLenCost :: Word64
@@ -185,8 +185,8 @@ runTableModel = \case
   GMakeList len sz ->
     MilliGas $ fromIntegral len * sz
   GComparison cmpty -> case cmpty of
-    TextComparison l r ->
-      MilliGas $ fromIntegral (max (T.length l) (T.length r)) + basicWorkGas
+    TextComparison str ->
+      MilliGas $ fromIntegral (T.length str) + basicWorkGas
     IntComparison l r ->
       MilliGas $ fromIntegral (max (integerBits l) (integerBits r)) + basicWorkGas
     -- See [Decimal comparisons]
@@ -199,6 +199,9 @@ runTableModel = \case
       MilliGas $ fromIntegral maxSz * basicWorkGas
     ObjComparison i ->
       MilliGas $ fromIntegral i * basicWorkGas
+  GSearch sty -> case sty of
+    SubstringSearch needle hay -> MilliGas $ fromIntegral (T.length needle + T.length hay) + basicWorkGas
+    FieldSearch cnt -> MilliGas $ fromIntegral cnt + basicWorkGas
   GPoseidonHashHackAChain len ->
     MilliGas $ fromIntegral (len * len) * quadraticGasFactor + fromIntegral len * linearGasFactor
      where
