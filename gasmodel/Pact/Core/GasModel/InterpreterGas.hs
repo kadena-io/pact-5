@@ -23,6 +23,7 @@ import qualified Database.SQLite3 as SQL
 
 import Pact.Core.Builtin
 import Pact.Core.Environment
+import Pact.Core.Errors
 import Pact.Core.Names
 import Pact.Core.Gas
 import Pact.Core.Literal
@@ -39,6 +40,13 @@ import qualified Pact.Core.IR.Eval.CEK as Eval
 
 import Pact.Core.GasModel.Utils
 
+
+runEvalDropState
+  :: EvalEnv b i
+  -> EvalState b i
+  -> EvalM b i a
+  -> IO (Either (PactError i) a)
+runEvalDropState ee es = fmap fst . runEvalM ee es
 
 benchmarks :: C.Benchmark
 benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) -> do
@@ -64,7 +72,7 @@ gasVarBound n ee es = do
                   , _ceBuiltins= benchmarkEnv }
   let title = "Var: " <> show n <> "th var case"
   C.env (pure (term, es, ee, env)) $ \ ~(term', es', ee', env') -> do
-    C.bench title $ C.nfAppIO (runEvalM ee' es' . Eval.evaluateTermSmallStep Mt CEKNoHandler env') term'
+    C.bench title $ C.nfAppIO (runEvalDropState ee' es' . Eval.evaluateTermSmallStep Mt CEKNoHandler env') term'
 
 varGas :: CoreDb -> C.Benchmark
 varGas pdb =
@@ -79,7 +87,7 @@ varGas pdb =
 simpleTermGas :: CoreTerm -> String -> CoreDb -> C.Benchmark
 simpleTermGas term title pdb =
   C.env mkEnv $ \ ~(term', es', ee', env') -> do
-    C.bench title $ C.nfAppIO (runEvalM ee' es' . Eval.evaluateTermSmallStep Mt CEKNoHandler env') term'
+    C.bench title $ C.nfAppIO (runEvalDropState ee' es' . Eval.evaluateTermSmallStep Mt CEKNoHandler env') term'
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -122,7 +130,7 @@ constantGasEquiv = do
 plusOneTwo :: CoreDb -> C.Benchmark
 plusOneTwo pdb = do
   C.env mkEnv $ \ ~(term', es', ee', env') -> do
-    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalM ee' es' . Eval.evalNormalForm env') term'
+    C.bench "(+ 1 2)" $ C.nfAppIO (runEvalDropState ee' es' . Eval.evalNormalForm env') term'
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -139,7 +147,7 @@ plusOneTwo pdb = do
 constExpr :: CoreDb -> C.Benchmark
 constExpr pdb = do
   C.env mkEnv $ \ ~(term', es', ee', env') -> do
-    C.bench "constExpr" $ C.nfAppIO (runEvalM ee' es' . Eval.evalNormalForm env') term'
+    C.bench "constExpr" $ C.nfAppIO (runEvalDropState ee' es' . Eval.evalNormalForm env') term'
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -157,7 +165,7 @@ constExpr pdb = do
 constExpr2 :: CoreDb -> C.Benchmark
 constExpr2 pdb = do
   C.env mkEnv $ \ ~(term', es', ee', env') -> do
-    C.bench "(map (+ 1) (enumerate 0 999999))" $ C.nfAppIO (runEvalM ee' es' . Eval.evalNormalForm env') term'
+    C.bench "(map (+ 1) (enumerate 0 999999))" $ C.nfAppIO (runEvalDropState ee' es' . Eval.evalNormalForm env') term'
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -178,7 +186,7 @@ constExpr2 pdb = do
 gasLamNArgs :: Int -> CoreDb -> C.Benchmark
 gasLamNArgs n pdb =
   C.env mkEnv $ \ ~(term', es', ee', env') ->
-    C.bench title $ C.nfAppIO (runEvalM ee' es' . Eval.evaluateTermSmallStep Mt CEKNoHandler env') term'
+    C.bench title $ C.nfAppIO (runEvalDropState ee' es' . Eval.evaluateTermSmallStep Mt CEKNoHandler env') term'
   where
   title = "Lam: " <> show n <> " args case"
   mkEnv = do
@@ -266,7 +274,7 @@ withCapFormGas =
 createUserGuardGasNArgs :: Int -> CoreDb -> C.Benchmark
 createUserGuardGasNArgs nArgs pdb =
   C.env mkEnv $ \ ~(term', es', ee', env') -> do
-    C.bench title $ C.nfAppIO (runEvalM ee' es' . Eval.evaluateTermSmallStep Mt CEKNoHandler env') term'
+    C.bench title $ C.nfAppIO (runEvalDropState ee' es' . Eval.evaluateTermSmallStep Mt CEKNoHandler env') term'
   where
   title = "Create User Guard, " <> show nArgs <> " args"
   mkEnv = do
@@ -320,7 +328,7 @@ benchmarkNodeType pdb = \case
 gasMtReturnNoHandler :: PactDb CoreBuiltin () -> C.Benchmark
 gasMtReturnNoHandler pdb =
   C.env mkEnv $ \ ~(ee, es, frame, handler, v) -> do
-    C.bench "MtReturnNoHandler" $ C.nfAppIO (runEvalM ee es . Eval.applyContToValueSmallStep frame handler) v
+    C.bench "MtReturnNoHandler" $ C.nfAppIO (runEvalDropState ee es . Eval.applyContToValueSmallStep frame handler) v
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -334,7 +342,7 @@ gasMtReturnNoHandler pdb =
 gasMtWithHandlerValue :: PactDb CoreBuiltin () -> C.Benchmark
 gasMtWithHandlerValue pdb = do
   C.env mkEnv $ \ ~(ee, es, frame, handler, v) -> do
-    C.bench "MtWithHandlerValue" $ C.nfAppIO (runEvalM ee es . Eval.applyContToValueSmallStep frame handler) v
+    C.bench "MtWithHandlerValue" $ C.nfAppIO (runEvalDropState ee es . Eval.applyContToValueSmallStep frame handler) v
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -354,7 +362,7 @@ gasMtWithHandlerValue pdb = do
 gasMtWithHandlerError :: PactDb CoreBuiltin () -> C.Benchmark
 gasMtWithHandlerError pdb =
   C.env mkEnv $ \ ~(ee, es, frame, handler, value) ->
-    C.bench "MtWithHandlerError" $ C.nfAppIO (runEvalM ee es . Eval.applyContSmallStep frame handler) value
+    C.bench "MtWithHandlerError" $ C.nfAppIO (runEvalDropState ee es . Eval.applyContSmallStep frame handler) value
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -373,7 +381,7 @@ gasMtWithHandlerError pdb =
 gasArgsWithRemainingArgs :: PactDb CoreBuiltin () -> C.Benchmark
 gasArgsWithRemainingArgs pdb =
   C.env mkEnv $ \ ~(ee, es, frame, handler, value) ->
-    C.bench "Args Frame" $ C.nfAppIO (runEvalM ee es . Eval.applyContToValueSmallStep frame handler) value
+    C.bench "Args Frame" $ C.nfAppIO (runEvalDropState ee es . Eval.applyContToValueSmallStep frame handler) value
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -392,7 +400,7 @@ gasArgsWithRemainingArgs pdb =
 gasFnWithRemainingArgs :: PactDb CoreBuiltin () -> C.Benchmark
 gasFnWithRemainingArgs pdb =
   C.env mkEnv $ \ ~(ee, es, frame, handler, value) ->
-    C.bench "Fn Frame" $ C.nfAppIO (runEvalM ee es . Eval.applyContToValueSmallStep frame handler) value
+    C.bench "Fn Frame" $ C.nfAppIO (runEvalDropState ee es . Eval.applyContToValueSmallStep frame handler) value
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -413,7 +421,7 @@ gasFnWithRemainingArgs pdb =
 gasLetC :: PactDb CoreBuiltin () -> C.Benchmark
 gasLetC pdb =
   C.env mkEnv $ \ ~(ee, es, frame, handler, value) ->
-    C.bench "LetC frame" $ C.nfAppIO (runEvalM ee es . Eval.applyContToValueSmallStep frame handler) value
+    C.bench "LetC frame" $ C.nfAppIO (runEvalDropState ee es . Eval.applyContToValueSmallStep frame handler) value
   where
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
@@ -432,7 +440,7 @@ gasLetC pdb =
 gasSeqC :: PactDb CoreBuiltin () -> C.Benchmark
 gasSeqC pdb = do
   C.env mkEnv $ \ ~(ee, es, frame, handler, value) ->
-    C.bench title $ C.nfAppIO (runEvalM ee es . Eval.applyContToValueSmallStep frame handler) value
+    C.bench title $ C.nfAppIO (runEvalDropState ee es . Eval.applyContToValueSmallStep frame handler) value
   where
   title = "SeqC Frame"
   mkEnv = do
@@ -452,7 +460,7 @@ gasSeqC pdb = do
 gasAndC :: PactDb CoreBuiltin () -> Bool -> C.Benchmark
 gasAndC pdb b =
   C.env mkEnv $ \ ~(ee, es, frame, handler, value) ->
-    C.bench title $ C.nfAppIO (runEvalM ee es . Eval.applyContToValueSmallStep frame handler) value
+    C.bench title $ C.nfAppIO (runEvalDropState ee es . Eval.applyContToValueSmallStep frame handler) value
   where
   title = "AndC gas with VBool(" <> show b <> ")"
   mkEnv = do
@@ -1267,7 +1275,7 @@ benchApplyContToValue
   -> C.Benchmark
 benchApplyContToValue mkEnv title =
   C.env mkEnv $ \ ~(ee, es, frame, handler, value) ->
-    C.bench title $ C.nfAppIO (runEvalM ee es . Eval.applyContToValueSmallStep frame handler) value
+    C.bench title $ C.nfAppIO (runEvalDropState ee es . Eval.applyContToValueSmallStep frame handler) value
 
 -- Note: we preform a rollback, then begin tx right after.
 -- This prevents us from say, inserting a value twice and changing
@@ -1279,7 +1287,7 @@ benchApplyContWithRollback
   -> C.Benchmark
 benchApplyContWithRollback mkEnv title =
   C.bench title $ C.perRunEnvWithCleanup mkEnv cleanup $ \ ~(ee, es, frame, handler, value) ->
-    runEvalM ee es $ Eval.applyContToValueSmallStep frame handler value
+    runEvalDropState ee es $ Eval.applyContToValueSmallStep frame handler value
   where
   cleanup (ee, _, _, _, _) = do
     let pdb = _eePactDb ee
