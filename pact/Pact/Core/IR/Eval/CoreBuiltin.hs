@@ -9,7 +9,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE MultiWayIf #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE CPP #-}
 
 module Pact.Core.IR.Eval.CoreBuiltin
  ( coreBuiltinRuntime
@@ -32,12 +32,11 @@ import Data.Attoparsec.Text(parseOnly)
 import Data.Containers.ListUtils(nubOrd)
 import Data.Bits
 import Data.Either(isLeft, isRight)
-import Data.Foldable(foldl', traverse_, toList)
+import Data.Foldable(foldl', toList)
 import Data.Decimal(roundTo', Decimal, DecimalRaw(..))
 import Data.Vector(Vector)
 import Data.Maybe(maybeToList)
 import Numeric(showIntAtBase)
-import qualified Control.Lens as Lens
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
 import qualified Data.Text as T
@@ -46,9 +45,13 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Char as Char
 import qualified Data.ByteString as BS
-import qualified GHC.Exts as Exts
 import qualified Pact.Time as PactTime
-import qualified Data.Poly as Poly
+
+#ifndef WITHOUT_CRYPTO
+import Data.Foldable(traverse_)
+import qualified Control.Lens as Lens
+import qualified GHC.Exts as Exts
+#endif
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
@@ -63,9 +66,11 @@ import Pact.Core.Environment
 import Pact.Core.Capabilities
 import Pact.Core.Namespace
 import Pact.Core.Gas
-import Pact.Core.Crypto.Pairing
 import Pact.Core.Type
+#ifndef WITHOUT_CRYPTO
+import Pact.Core.Crypto.Pairing
 import Pact.Core.Crypto.Hash.Poseidon
+#endif
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
@@ -1679,6 +1684,7 @@ coreChainData info b cont handler _env = \case
 -- ZK defns
 -- -------------------------
 
+#ifndef WITHOUT_CRYPTO
 ensureOnCurve :: (Num p, Eq p, MonadEval b i m) => i -> CurvePoint p -> p -> m ()
 ensureOnCurve info p bp = unless (isOnCurve p bp) $ throwExecutionError info PointNotOnCurve
 
@@ -1722,9 +1728,7 @@ fromG2 CurveInf = ObjectData pts
     , (Field "y", PList (V.fromList [PLiteral (LInteger 0)]))]
 fromG2 (Point x y) = ObjectData pts
   where
-  toPactPt (Extension e) = let
-    elems' = fmap (PInteger . fromIntegral) (Poly.unPoly e)
-    in PList elems'
+  toPactPt ext = PList $ PInteger . fromIntegral <$> extElements ext
   x' = toPactPt x
   y' = toPactPt y
   pts =
@@ -1795,6 +1799,7 @@ zkPointAddition info b cont handler _env = \case
       _ -> argsError info b args
   args -> argsError info b args
 
+
 -----------------------------------
 -- Poseidon
 -----------------------------------
@@ -1807,6 +1812,22 @@ poseidonHash info b cont handler _env = \case
       chargeGasArgs info (GPoseidonHashHackAChain (length intArgs))
       returnCEKValue cont handler $ VInteger (poseidon (V.toList intArgs))
   args -> argsError info b args
+
+#else
+
+zkPairingCheck :: (MonadEval b i m) => NativeFunction step b i m
+zkPairingCheck info _b _cont _handler _env _args = failInvariant info "crypto disabled"
+
+zkScalaMult :: (MonadEval b i m) => NativeFunction step b i m
+zkScalaMult info _b _cont _handler _env _args = failInvariant info "crypto disabled"
+
+zkPointAddition :: (MonadEval b i m) => NativeFunction step b i m
+zkPointAddition info _b _cont _handler _env _args = failInvariant info "crypto disabled"
+
+poseidonHash :: (MonadEval b i m) => NativeFunction step b i m
+poseidonHash info _b _cont _handler _env _args = failInvariant info "crypto disabled"
+
+#endif
 
 
 -----------------------------------

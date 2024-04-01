@@ -42,6 +42,7 @@ module Pact.Core.Crypto.Pairing
   , pairingCheck
   , isOnCurve
   , Extension(..)
+  , extElements
   -- , toG1
   -- , fromG1
   -- , toG2
@@ -88,6 +89,9 @@ class GaloisField k => ExtensionField p k | p -> k, k -> p where
 newtype Extension p k
   = Extension (VPoly k)
   deriving (Show, Eq, Ord, NFData)
+
+extElements :: Extension p k -> Vector k
+extElements (Extension e) = unPoly e
 
 -- | Frobenius endomorphism precomputation.
 frobenius' :: GaloisField k => Vector k -> Vector k -> Maybe (Vector k)
