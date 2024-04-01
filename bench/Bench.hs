@@ -9,6 +9,7 @@ module Main where
 
 import Control.Monad.Error.Class
 import Control.Monad.IO.Class
+import Control.Monad.State
 import Criterion.Main hiding (env)
 import Data.Default (Default, def)
 import Data.List qualified as List
@@ -19,6 +20,7 @@ import System.FilePath
 
 import Pact.Core.Builtin
 import Pact.Core.Environment.Types
+import Pact.Core.Environment.Utils ((.==), useEvalState, usesEvalState)
 import Pact.Core.IR.Eval.Runtime.Types
 import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Names (Name)
@@ -36,10 +38,15 @@ import qualified Pact.Core.Syntax.Lexer as Lisp
 import Pact.Core.Errors (PactErrorI)
 import Paths_pact_tng
 
-getSize :: (Default i, SizeOf a, IsBuiltin b, Show i) => EvalEnv b i -> EvalState b i -> SizeOfVersion -> a -> IO Word64
-getSize env state version value = do
-  (Right v, _state) <- liftIO $ runEvalM env state (sizeOf version value)
-  return v
+getSizeAndCounts :: (Default i, SizeOf a, IsBuiltin b, Show i) => EvalEnv b i -> EvalState b i -> SizeOfVersion -> a -> IO (Word64, Int)
+getSizeAndCounts env state version value = do
+  (Right (v,counts), _state) <-
+    runEvalM env state $ do
+      countBytesCounter .== 0
+      size <- sizeOf version value
+      counts <- useEvalState countBytesCounter
+      pure $ (size, counts)
+  return (v, counts)
 
 expectEval :: Show i => EvalEnv b i -> EvalState b i -> EvalM b i a -> IO a
 expectEval env state action = do
@@ -59,34 +66,37 @@ main = do
   coinModule <- expectEval ee es $ getModule coinModuleCode
   defaultMain
     [
-      -- 0.003 ms
+      -- 0.003 ms / 0 calls
       bench "nil" $ nfIO $ expectEval ee es (pure ())
 
-      -- 0.9 ms
-    , bench "int" $ nfIO $ getSize ee es SizeOfV2 (1 :: Int)
+      -- 0.9 ms / 1 call
+    , bench "int" $ nfIO $ getSizeAndCounts ee es SizeOfV2 (1 :: Int)
 
-      -- 0.9 ms
-    , bench "long-string" $ nfIO $ getSize ee es SizeOfV2 longString
+      -- 0.9 ms / 1 call
+    , bench "long-string" $ nfIO $ getSizeAndCounts ee es SizeOfV2 longString
 
-      -- 152 ms
-    , bench "long-bool-list" $ nfIO $ getSize ee es SizeOfV2 longBoolList
+      -- 152 ms / 100000 calls
+    , bench "long-bool-list" $ nfIO $ getSizeAndCounts ee es SizeOfV2 longBoolList
 
-      -- 165 ms
-    , bench "long-int-list" $ nfIO $ getSize ee es SizeOfV2 longIntList
+      -- 165 ms / 100000 calls
+    , bench "long-int-list" $ nfIO $ getSizeAndCounts ee es SizeOfV2 longIntList
     
-      -- 218 ms
-    , bench "long-nested-bool-list" $ nfIO $ getSize ee es SizeOfV2 longNestedBoolList
+      -- 218 ms / 100100 calls
+    , bench "long-nested-bool-list" $ nfIO $ getSizeAndCounts ee es SizeOfV2 longNestedBoolList
 
-      -- 214 ms
-    , bench "long-nested-bool-list-2" $ nfIO $ getSize ee es SizeOfV2 longNestedBoolList
+      -- 214 ms / 101000 calls
+    , bench "long-nested-bool-list-2" $ nfIO $ getSizeAndCounts ee es SizeOfV2 longNestedBoolList
 
-      -- 0.2 ms
-    , bench "module-1" $ nfIO $ getSize ee es SizeOfV2 module1
+      -- 0.2 ms / 1646 bytes / 125 calls
+    , bench "module-1" $ nfIO $ do
+        (size, nCalls) <- getSizeAndCounts ee es SizeOfV2 module1
+        liftIO $ putStrLn $ unwords ["Size: ", show size, " calls: " ++ show nCalls]
+        getSizeAndCounts ee es SizeOfV2 module1
 
-      -- 36 ms / 253338 bytes
+      -- 36 ms / 253338 bytes / 18637 calls to countBytes
     , bench "module-coin" $ nfIO $ do
-        size <- getSize ee es SizeOfV2 coinModule
-        liftIO $ print size
+        (size, nCalls) <- getSizeAndCounts ee es SizeOfV2 coinModule
+        liftIO $ putStrLn $ unwords ["Size: ", show size, " calls: " ++ show nCalls]
     ]
   where
     !longString = Text.replicate 100_000 "a"

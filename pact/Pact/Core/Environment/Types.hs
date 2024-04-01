@@ -175,13 +175,14 @@ data EvalState b i
   , _esLoaded :: !(Loaded b i)
   , _esDefPactExec :: !(Maybe DefPactExec)
   , _esGasLog :: Maybe [(Text, MilliGas)]
+  , _countBytesCounter :: Int
     -- ^ Sequence of gas expendature events.
   } deriving (Show, Generic)
 
 instance (NFData b, NFData i) => NFData (EvalState b i)
 
 instance Default (EvalState b i) where
-  def = EvalState def [] [] mempty Nothing Nothing
+  def = EvalState def [] [] mempty Nothing Nothing 0
 
 makeClassy ''EvalState
 

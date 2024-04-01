@@ -74,6 +74,7 @@ import Pact.Core.ModRefs
 import Pact.Core.Namespace (Namespace)
 import Pact.Core.IR.Eval.Runtime.Utils (chargeGasArgs)
 import Pact.Core.Gas (GasArgs(GCountBytes))
+import Pact.Core.Environment.Utils
 
 
 -- |  Estimate of number of bytes needed to represent data type
@@ -127,6 +128,7 @@ newtype ByteCountExceeded
 countBytes :: MonadEval b i m => SizeOfVersion -> Bytes -> m Bytes
 countBytes szver bytes = do
   when (szver == SizeOfV2) (chargeGasArgs def (GCountBytes bytes))
+  countBytesCounter %== succ
   pure bytes
 
 class SizeOf t where
