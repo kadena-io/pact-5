@@ -52,6 +52,7 @@ runStaticTest label src predicate = do
             , _replUserDocs = mempty
             , _replTLDefPos = mempty
             , _replTx = Nothing
+            , _replNativesEnabled = True
             }
   stateRef <- newIORef rstate
   v <- runReplT stateRef (interpretReplProgram source (const (pure ())))

@@ -80,6 +80,7 @@ common pact-common
     , neat-interpolation
     -- ^ is used by the `BuiltinDocs` module.
     , ghc-bignum
+    , aeson
 
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
@@ -173,6 +174,8 @@ library
     Pact.Core.Scheme
     Pact.Core.Repl
     Pact.Core.SizeOf
+    Pact.Core.Legacy.LegacyPactValue
+    Pact.Core.Legacy.LegacyCodec
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
