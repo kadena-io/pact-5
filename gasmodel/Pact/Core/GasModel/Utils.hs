@@ -8,14 +8,11 @@ module Pact.Core.GasModel.Utils where
 import Control.Lens
 import Control.Monad.Except
 import Control.DeepSeq
-import Data.Bifunctor
-import Data.Foldable (foldrM, Foldable (..))
 import Data.Text (Text)
 import Data.Map.Strict(Map)
 import qualified Criterion as C
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
-import qualified Data.RAList as RA
 import qualified Data.Set as S
 import qualified Database.SQLite3 as SQL
 
