@@ -333,12 +333,15 @@ runNativeBenchmarkPrepared
   -> String
   -> Text
   -> C.Benchmark
-runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure pure cekMod (transform bindVar)
+runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure stMod id id
   where
-  cekMod cekEnv = cekEnv { _ceLocal = RA.fromList $ VPactValue . snd <$> envVars }
-  vars = M.fromList $ zip (fst <$> envVars) [0..]
-  bindVar (Var (Name n _) i) | Just idx <- n `M.lookup` vars = Var (Name n $ NBound idx) i
-  bindVar x = x
+  synthLoaded = Loaded
+    { _loModules = mempty
+    , _loToplevel = M.fromList [ (n, (mkGasModelFqn n, DKDefConst)) | n <- fst <$> envVars ]
+    , _loNamespace = Nothing
+    , _loAllLoaded = M.fromList [ (mkGasModelFqn n, DConst $ DefConst n Nothing (EvaledConst v) ()) | (n, v) <- envVars ]
+    }
+  stMod = pure . (esLoaded .~ synthLoaded)
 
 -- Closures
 unitClosureNullary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m
