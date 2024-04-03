@@ -302,27 +302,25 @@ runCompileTerm es ee = runEvalM es ee . compileTerm
 runNativeBenchmark'
   :: (BenchEvalEnv -> IO BenchEvalEnv)
   -> (BenchEvalState -> IO BenchEvalState)
-  -> (CoreCEKEnv -> CoreCEKEnv)
-  -> (CoreTerm -> CoreTerm)
   -> PactDb CoreBuiltin ()
   -> String
   -> Text
   -> C.Benchmark
-runNativeBenchmark' envMod stMod cekMod termMod pdb title src = C.env mkEnv $ \ ~(term, es, ee) ->
-  C.bench title $ C.nfAppIO (runEvalM ee es . Eval.eval' cekMod PImpure benchmarkBigStepEnv) term
+runNativeBenchmark' envMod stMod pdb title src = C.env mkEnv $ \ ~(term, es, ee) ->
+  C.bench title $ C.nfAppIO (runEvalM ee es . Eval.eval PImpure benchmarkBigStepEnv) term
   where
   mkEnv = do
     ee <- envMod =<< defaultGasEvalEnv pdb
     es <- stMod defaultGasEvalState
     (Right term, es') <- runCompileTerm ee es src
-    pure (termMod term, es', ee)
+    pure (term, es', ee)
 
 runNativeBenchmark
   :: PactDb CoreBuiltin ()
   -> String
   -> Text
   -> C.Benchmark
-runNativeBenchmark = runNativeBenchmark' pure pure id id
+runNativeBenchmark = runNativeBenchmark' pure pure
 
 runNativeBenchmarkPrepared
   :: [(Text, PactValue)]
@@ -330,7 +328,7 @@ runNativeBenchmarkPrepared
   -> String
   -> Text
   -> C.Benchmark
-runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure stMod id id
+runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure stMod
   where
   synthLoaded = Loaded
     { _loModules = mempty

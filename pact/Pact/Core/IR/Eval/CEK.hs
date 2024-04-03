@@ -10,7 +10,6 @@
 
 module Pact.Core.IR.Eval.CEK
   ( eval
-  , eval'
   , interpretGuard
   , applyLam
   , mkDefPactClosure
@@ -1893,17 +1892,16 @@ runUserGuard info cont handler env (UserGuard qn args) =
    -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
-eval'
+eval
   :: forall step b i m
   .  (MonadEval b i m, CEKEval step b i m)
-  => (CEKEnv step b i m -> CEKEnv step b i m)
-  -> Purity
+  => Purity
   -> BuiltinEnv step b i m
   -> EvalTerm b i
   -> m PactValue
-eval' envMod purity benv term = do
+eval purity benv term = do
   ee <- readEnv
-  let cekEnv = envMod $ envFromPurity purity (CEKEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) False)
+  let cekEnv = envFromPurity purity (CEKEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) False)
   evalNormalForm cekEnv term >>= \case
     VError txt i ->
       throwExecutionError i (EvalError txt)
@@ -1912,23 +1910,12 @@ eval' envMod purity benv term = do
         VPactValue pv -> pure pv
         _ ->
           throwExecutionError (view termInfo term) (EvalError "Evaluation did not reduce to a value")
-{-# SPECIALIZE eval'
-   :: (CoreCEKEnv -> CoreCEKEnv)
-   -> Purity
+{-# SPECIALIZE eval
+   :: Purity
    -> CoreBuiltinEnv
    -> CoreTerm
    -> Eval PactValue
     #-}
-
-eval
-  :: forall step b i m
-  .  (MonadEval b i m, CEKEval step b i m)
-  => Purity
-  -> BuiltinEnv step b i m
-  -> EvalTerm b i
-  -> m PactValue
-eval = eval' id
-{-# INLINE eval #-}
 
 interpretGuard
   :: forall step b i m
