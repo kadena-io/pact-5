@@ -5,11 +5,13 @@ module Pact.Core.GasModel.BuiltinsGas where
 
 import qualified Criterion as C
 import qualified Data.Text as T
+import qualified Data.Vector as V
 import qualified Database.SQLite3 as SQL
 import Data.Bifunctor
 import NeatInterpolation (text)
 
 import Pact.Core.Builtin
+import Pact.Core.PactValue
 import Pact.Core.Persistence
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Serialise (serialisePact)
@@ -62,8 +64,9 @@ benchNegate pdb =
 benchDistinct :: BuiltinBenches
 benchDistinct pdb = [C.bgroup "flat" flats]
   where
-  flats = [ runNativeBenchmark pdb title [text|(distinct (enumerate 0 $cnt))|]
-          | (title, cnt) <- take 3 $ enumExp 1000 2
+  flats = [ runNativeBenchmarkPrepared [("x", PList vals)] pdb title [text|(distinct x)|]
+          | (title, cnt) <- take 3 $ enumExpNum 1000 2
+          , let vals = V.fromList [ PInteger n | n <- [0 .. cnt] ]
           ]
 
 benchEnumerate :: BuiltinBenches
