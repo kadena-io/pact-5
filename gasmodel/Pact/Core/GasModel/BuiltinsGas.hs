@@ -67,6 +67,21 @@ benchNegate pdb =
   where
   vals = take 3 $ enumExpText 1000 1000000
 
+benchEq :: BuiltinBenches
+benchEq pdb =
+  [ C.bgroup "lists-eq" listsEq
+  , C.bgroup "lists-neq" listsNeq
+  ]
+  where
+  listsEq =
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(= x x)|]
+    | (title, list) <- take 3 $ enumExpList 1000 100
+    ]
+  listsNeq =
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(= x [])|]
+    | (title, list) <- take 3 $ enumExpList 1000 100
+    ]
+
 benchDistinct :: BuiltinBenches
 benchDistinct pdb = [C.bgroup "flat" flats]
   where
@@ -89,6 +104,7 @@ benchesForFun bn pdb = case bn of
   CoreAbs -> benchAbs pdb
   CorePow -> benchArithOp' 100 "^" pdb
   CoreNot -> omittedDeliberately
+  CoreEq -> benchEq pdb
   CoreDistinct -> benchDistinct pdb
   CoreEnumerate -> benchEnumerate pdb
   _ -> []
