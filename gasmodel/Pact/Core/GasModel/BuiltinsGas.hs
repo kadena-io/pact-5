@@ -24,6 +24,12 @@ enumExpNum base mult = [ (show val, val) | val <- iterate (* mult) base ]
 enumExpText :: Integer -> Integer -> [(String, T.Text)]
 enumExpText base mult = second (T.pack . show) <$> enumExpNum base mult
 
+enumExpList :: Integer -> Integer -> [(String, PactValue)]
+enumExpList base mult =
+  [ (title, PList $ V.fromList $ PInteger <$> [0 .. cnt])
+  | (title, cnt) <- enumExpNum base mult
+  ]
+
 type BuiltinBenches = PactDb CoreBuiltin () -> [C.Benchmark]
 
 benchArithOp' :: Integer -> T.Text -> BuiltinBenches
@@ -64,9 +70,8 @@ benchNegate pdb =
 benchDistinct :: BuiltinBenches
 benchDistinct pdb = [C.bgroup "flat" flats]
   where
-  flats = [ runNativeBenchmarkPrepared [("x", PList vals)] pdb title [text|(distinct x)|]
-          | (title, cnt) <- take 3 $ enumExpNum 1000 2
-          , let vals = V.fromList [ PInteger n | n <- [0 .. cnt] ]
+  flats = [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(distinct x)|]
+          | (title, list) <- take 3 $ enumExpList 1000 2
           ]
 
 benchEnumerate :: BuiltinBenches
