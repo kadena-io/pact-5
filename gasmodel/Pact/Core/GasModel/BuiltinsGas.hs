@@ -80,6 +80,7 @@ benchEq :: BuiltinBenches
 benchEq pdb =
   [ C.bgroup "lists-eq" listsEq
   , C.bgroup "lists-neq" listsNeq
+  , C.bgroup "lists-deep" listsDeep
   ]
   where
   listsEq =
@@ -89,6 +90,10 @@ benchEq pdb =
   listsNeq =
     [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(= x [])|]
     | (title, list) <- take 3 $ enumExpList 1000 100
+    ]
+  listsDeep =
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(= x x)|]
+    | (title, list) <- take 3 $ enumExpListDeep 3 5 3
     ]
 
 benchDistinct :: BuiltinBenches
