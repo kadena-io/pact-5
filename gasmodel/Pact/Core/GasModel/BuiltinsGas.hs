@@ -83,9 +83,12 @@ benchesForFun bn pdb = case bn of
   CoreNegate -> benchNegate pdb
   CoreAbs -> benchAbs pdb
   CorePow -> benchArithOp' 100 "^" pdb
+  CoreNot -> omittedDeliberately
   CoreDistinct -> benchDistinct pdb
   CoreEnumerate -> benchEnumerate pdb
   _ -> []
+  where
+  omittedDeliberately = []
 
 benchmarks :: C.Benchmark
 benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) -> do
