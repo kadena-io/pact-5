@@ -30,6 +30,15 @@ enumExpList base mult =
   | (title, cnt) <- enumExpNum base mult
   ]
 
+enumExpListDeep :: Integer -> Integer -> Integer -> [(String, PactValue)]
+enumExpListDeep depth base mult =
+  [ (title <> " depth " <> show depth, mkList depth cnt)
+  | (title, cnt) <- enumExpNum base mult
+  ]
+  where
+  mkList 0 cnt = PList $ V.fromList $ PInteger <$> [0 .. cnt]
+  mkList d cnt = PList $ V.fromList $ replicate (fromIntegral cnt) (mkList (d - 1) cnt)
+
 type BuiltinBenches = PactDb CoreBuiltin () -> [C.Benchmark]
 
 benchArithOp' :: Integer -> T.Text -> BuiltinBenches
