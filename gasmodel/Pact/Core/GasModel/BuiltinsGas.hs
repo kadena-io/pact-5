@@ -97,11 +97,19 @@ benchEq pdb =
     ]
 
 benchDistinct :: BuiltinBenches
-benchDistinct pdb = [C.bgroup "flat" flats]
+benchDistinct pdb =
+  [ C.bgroup "flat" flats
+  , C.bgroup "nested" nesteds
+  ]
   where
-  flats = [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(distinct x)|]
-          | (title, list) <- take 3 $ enumExpList 1000 2
-          ]
+  flats =
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(distinct x)|]
+    | (title, list) <- take 3 $ enumExpList 1000 2
+    ]
+  nesteds =
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(distinct)|]
+    | (title, list) <- take 3 $ enumExpListDeep 3 5 4
+    ]
 
 benchEnumerate :: BuiltinBenches
 benchEnumerate pdb = [ runNativeBenchmark pdb title [text|(enumerate 0 $cnt)|]
