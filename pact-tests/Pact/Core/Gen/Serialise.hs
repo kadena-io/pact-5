@@ -167,10 +167,10 @@ typeGen = Gen.recursive Gen.choice
  , TyTable <$> schemaGen
  ]
 
-argGen :: Gen (Arg Type)
-argGen = do
+argGen :: Gen i -> Gen (Arg Type i)
+argGen i = do
   name <- identGen
-  Arg name <$> Gen.maybe typeGen
+  Arg name <$> Gen.maybe typeGen <*> i
 
 importGen :: Gen Import
 importGen = do
@@ -220,8 +220,8 @@ termGen b i = Gen.recursive Gen.choice
   , Builtin <$> b <*> i
   , Constant <$> literalGen <*> i
   ]
-  [ Lam <$> Gen.nonEmpty (Range.linear 1 16) argGen <*> termGen b i <*> i
-  , Let <$> argGen <*> termGen b i <*> termGen b i <*> i
+  [ Lam <$> Gen.nonEmpty (Range.linear 1 16) (argGen i) <*> termGen b i <*> i
+  , Let <$> argGen i <*> termGen b i <*> termGen b i <*> i
   , App <$> termGen b i <*> Gen.list (Range.linear 0 16) (termGen b i) <*> i
   , Sequence <$> termGen b i <*> termGen b i <*> i
   , Nullary <$> termGen b i <*> i
@@ -234,7 +234,7 @@ termGen b i = Gen.recursive Gen.choice
 defunGen :: Gen b -> Gen i -> Gen (Defun Name Type b i)
 defunGen b i = do
   name <- identGen
-  args <- Gen.list (Range.linear 0 100) argGen
+  args <- Gen.list (Range.linear 0 100) (argGen i)
   ret <- Gen.maybe typeGen
   term <- termGen b i
   Defun name args ret term <$> i
@@ -242,7 +242,7 @@ defunGen b i = do
 ifDefunGen ::Gen i -> Gen (IfDefun Type i)
 ifDefunGen i = do
   name <- identGen
-  args <- Gen.list (Range.linear 0 100) argGen
+  args <- Gen.list (Range.linear 0 100) (argGen i)
   ret <- Gen.maybe typeGen
   IfDefun name args ret <$> i
 
@@ -290,7 +290,7 @@ defCapGen :: Gen b -> Gen i -> Gen (DefCap Name Type b i)
 defCapGen b i = do
   name <- identGen
   arity <- Gen.int (Range.linear 0 16)
-  args <- Gen.list (Range.singleton arity) argGen
+  args <- Gen.list (Range.singleton arity) (argGen i)
   ret <- Gen.maybe typeGen
   term <- termGen b i
   meta <- defCapMetaGen fqNameRefGen
@@ -299,7 +299,7 @@ defCapGen b i = do
 ifDefCapGen :: Gen i -> Gen (IfDefCap name Type i)
 ifDefCapGen i = do
   name <- identGen
-  args <- Gen.list (Range.linear 1 8) argGen
+  args <- Gen.list (Range.linear 1 8) (argGen i)
   ret <- Gen.maybe typeGen
   meta <- defCapMetaGen bareNameGen
   IfDefCap name args ret meta <$> i
@@ -325,7 +325,7 @@ stepGen b i = Gen.choice
 defPactGen :: Gen b -> Gen i -> Gen (DefPact Name Type b i)
 defPactGen b i = do
   name <- identGen
-  args <- Gen.list (Range.linear 0 16) argGen
+  args <- Gen.list (Range.linear 0 16) (argGen i)
   ret <- Gen.maybe typeGen
   steps <- Gen.nonEmpty (Range.linear 0 16) (stepGen b i)
   DefPact name args ret steps <$> i
@@ -334,7 +334,7 @@ defPactGen b i = do
 ifDefPactGen :: Gen i -> Gen (IfDefPact Type i)
 ifDefPactGen i = do
   name <- identGen
-  args <- Gen.list (Range.linear 0 16) argGen
+  args <- Gen.list (Range.linear 0 16) (argGen i)
   ret <- Gen.maybe typeGen
   IfDefPact name args ret <$> i
 

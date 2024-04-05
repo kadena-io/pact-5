@@ -310,6 +310,7 @@ test-suite core-tests
     , tasty
     , tasty-hunit
     , tasty-hedgehog
+    , tasty-golden
     , serialise
     , cborg
     , groups

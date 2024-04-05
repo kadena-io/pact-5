@@ -12,10 +12,10 @@ module Pact.Core.LanguageServer
 
 import Control.Lens hiding (Iso)
 import Control.Monad.Except
-
+import Control.Monad (forM)
 import Language.LSP.Server
 import Language.LSP.Protocol.Message
-import Language.LSP.Protocol.Lens (uri, textDocument, params, text, position)
+import Language.LSP.Protocol.Lens (uri, textDocument, params, text, position, newName)
 import Language.LSP.Protocol.Types
 import Language.LSP.VFS
 import Language.LSP.Diagnostics
@@ -38,9 +38,10 @@ import Pact.Core.Builtin
 import Pact.Core.Errors
 import Pact.Core.Serialise
 import Pact.Core.Pretty (renderText)
-
+-- import Pact.Core.Hash
 import System.IO (stderr)
 import qualified Data.Text.IO as T
+-- import qualified Data.Text as T
 import System.Exit
 
 import Control.Monad.Reader (ReaderT, runReaderT, ask)
@@ -59,6 +60,9 @@ import Pact.Core.Repl.UserDocs
 import Pact.Core.Names
 import qualified Pact.Core.IR.ModuleHashing as MHash
 import qualified Pact.Core.IR.ConstEval as ConstEval
+
+-- sshow :: Show a => a -> Text
+-- sshow = T.pack . show
 
 data LSState =
   LSState
@@ -131,6 +135,7 @@ startLSP = do
       -- request handler
       , documentHoverRequestHandler
       , documentDefinitionRequestHandler
+      , documentRenameRequestHandler
       ]
 
 debug :: MonadIO m => Text -> m ()
@@ -291,6 +296,7 @@ documentDefinitionRequestHandler = requestHandler SMethod_TextDocumentDefinition
       Just x -> resp (Right $ InL $ Definition (InL x))
       Nothing -> resp (Right $ InR $ InR Null)
 
+
 documentHoverRequestHandler :: Handlers LSM
 documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req resp ->
   getState >>= \st -> do
@@ -318,6 +324,68 @@ documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req re
       Nothing -> do
         debug "documentHover: could not find term on position"
         resp (Right (InR Null))
+
+
+-- newtype Collect a = Collect { getCollect :: [a] }
+--   deriving (Eq, Show)
+
+-- instance Semigroup (Collect a) where
+--   Collect a <> Collect b = Collect (a ++ b)
+
+-- instance Monoid (Collect a) where
+--   mempty = Collect []
+
+-- collectIf :: Traversable t => t a -> (a -> Bool) -> [a]
+-- collectIf t p = getCollect (foldMap (\x -> if p x then Collect [x] else mempty) t)
+
+
+documentRenameRequestHandler :: Handlers LSM
+documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req resp ->
+  getState >>= \st -> do
+    let
+        uri' = req ^. params . textDocument . uri
+        nuri = req ^. params . textDocument . uri . to toNormalizedUri
+        pos = req ^. params . position
+        nName = req ^. params . newName
+        tls = fromMaybe [] $ view (lsTopLevel . at nuri) st
+        toTextEdit r = TextEdit r nName
+    case getMatch pos tls of
+      Nothing -> do
+        debug "documentRenameRequestHandler: could not find term at position"
+        resp (Right (InR Null))
+      Just tm -> do
+        changes <- case tm of
+                     TermMatch (Var (Name n vt) _) -> case vt of
+                       NBound _db -> error "nbound"
+                       NTopLevel _mn _mh -> do
+                         let isSameVar = \case
+                               Var (Name n' vt') _
+                                 | n == n' && vt == vt' -> True
+                               _ -> False
+                             occurences = concatMap (matchingTerms isSameVar) tls
+
+                         forM occurences $ \case
+                           Var _ i -> pure $ toTextEdit (spanInfoToRange i)
+                           _ -> error "invariant"
+                       _ -> pure []
+                     _ -> pure []
+        let
+          te = TextDocumentEdit
+                 (OptionalVersionedTextDocumentIdentifier uri' $ InR Null)
+                 (InL <$> changes)
+          we = WorkspaceEdit Nothing (Just [InL te]) Nothing
+        resp (Right (InL we))
+
+matchingTerms
+  :: forall ty name builtin info. (Term name ty builtin info -> Bool)
+  -> TopLevel name ty builtin info
+  -> [Term name ty builtin info]
+matchingTerms predicate topLevel = let
+  terms = toListOf topLevelTerms topLevel
+  in concatMap (toListOf filteredTerms) terms
+  where
+  filteredTerms :: Traversal' (Term name ty builtin info) (Term name ty builtin info)
+  filteredTerms = traverseTerm . filtered predicate
 
 processFile
   :: BuiltinEnv CEKSmallStep ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)

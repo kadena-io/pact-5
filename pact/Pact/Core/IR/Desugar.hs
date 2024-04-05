@@ -143,27 +143,27 @@ instance DesugarBuiltin CoreBuiltin where
     -- Manual eta expansion for and as well as Or
     Lisp.AndOp -> let
       arg1Name = "#andArg1"
-      arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool))
+      arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool)) info
       arg2Name = "#andArg2"
-      arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool))
+      arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool)) info
       in Lam (arg1 :| [arg2]) (Conditional (CAnd (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
     Lisp.OrOp -> let
       arg1Name = "#orArg1"
-      arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool))
+      arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool)) info
       arg2Name = "#orArg2"
-      arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool))
+      arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool)) info
       in Lam (arg1 :| [arg2]) (Conditional (COr (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
     Lisp.EnforceOp -> let
       arg1Name = "#enforceArg1"
-      arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool))
+      arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool)) info
       arg2Name = "#enforceArg2"
-      arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimString))
+      arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimString)) info
       in Lam (arg1 :| [arg2]) (Conditional (CEnforce (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
     Lisp.EnforceOneOp -> let
       arg1Name = "#enforceOneArg1"
-      arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimString))
+      arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimString)) info
       arg2Name = "#enforceOneArg2"
-      arg2 = Arg arg2Name (Just (Lisp.TyList (Lisp.TyPrim PrimBool)))
+      arg2 = Arg arg2Name (Just (Lisp.TyList (Lisp.TyPrim PrimBool))) info
       in Lam (arg1 :| [arg2]) (Conditional (CEnforceOne (Var (BN (BareName arg1Name)) info) [Var (BN (BareName arg2Name)) info]) info) info
   desugarAppArity = desugarAppArityRaw id
 
@@ -285,11 +285,11 @@ desugarLispTerm = \case
       Just b -> pure (Builtin b i)
       Nothing
         | n == BareName "constantly" -> do
-          let c1 = Arg cvar1 Nothing
-              c2 = Arg cvar2 Nothing
+          let c1 = Arg cvar1 Nothing i
+              c2 = Arg cvar2 Nothing i
           pure $ Lam (c1 :| [c2]) (Var (BN (BareName cvar1)) i) i
         | n == BareName "identity" -> do
-          let c1 = Arg ivar1 Nothing
+          let c1 = Arg ivar1 Nothing i
           pure $ Lam (c1 :| []) (Var (BN (BareName ivar1)) i) i
         | n == BareName "CHARSET_ASCII" -> pure (Constant (LInteger 0) i)
         | n == BareName "CHARSET_LATIN1" -> pure (Constant (LInteger 1) i)
@@ -310,14 +310,14 @@ desugarLispTerm = \case
     Nullary <$> desugarLispTerm body <*> pure i
   Lisp.Lam (x:xs) body i -> do
     let nsts = x :| xs
-        args = (\(Lisp.MArg n t) -> Arg n t) <$> nsts
+        args = (\(Lisp.MArg n t ai) -> Arg n t ai) <$> nsts
     body' <- desugarLispTerm body
     pure (Lam args body' i)
   Lisp.Suspend body i -> desugarLispTerm (Lisp.Lam [] body i)
   Lisp.Binding fs hs i -> do
     hs' <- traverse desugarLispTerm hs
     body <- bindingBody hs'
-    let bodyLam b = Lam (pure (Arg objFreshText Nothing)) b i
+    let bodyLam b = Lam (pure (Arg objFreshText Nothing i)) b i
     pure $ bodyLam $ foldr bindToLet body fs
       where
       bindingBody hs' = case reverse hs' of
@@ -348,21 +348,21 @@ desugarLispTerm = \case
     case (e, hs) of
       (MapV mapI, Lisp.App operand args appI:xs) -> do
         let v = Lisp.Var injectedArg1Name i
-            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing] (Lisp.App operand (args ++ [v]) appI) appI
+            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing i] (Lisp.App operand (args ++ [v]) appI) appI
         commonDesugar (MapV mapI) (newArg:xs)
       (FilterV filterI, Lisp.App operand args appI:xs) -> do
         let v = Lisp.Var injectedArg1Name i
-            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing] (Lisp.App operand (args ++ [v]) appI) appI
+            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing i] (Lisp.App operand (args ++ [v]) appI) appI
         commonDesugar (FilterV filterI) (newArg:xs)
       (FoldV foldI, Lisp.App operand args appI:xs) -> do
         let v1 = Lisp.Var injectedArg1Name i
             v2 = Lisp.Var injectedArg2Name i
-            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing, Lisp.MArg injectedArg2 Nothing] (Lisp.App operand (args ++ [v1, v2]) appI) appI
+            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing i, Lisp.MArg injectedArg2 Nothing i] (Lisp.App operand (args ++ [v1, v2]) appI) appI
         commonDesugar (FoldV foldI) (newArg:xs)
       (ZipV zipI, Lisp.App operand args appI:xs) -> do
         let v1 = Lisp.Var injectedArg1Name i
             v2 = Lisp.Var injectedArg2Name i
-            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing, Lisp.MArg injectedArg2 Nothing] (Lisp.App operand (args ++ [v1, v2]) appI) appI
+            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing i, Lisp.MArg injectedArg2 Nothing i] (Lisp.App operand (args ++ [v1, v2]) appI) appI
         commonDesugar (ZipV zipI) (newArg:xs)
       (CondV condI, l) -> case reverse l of
         defCase:xs -> do
@@ -408,7 +408,7 @@ desugarLispTerm = \case
   where
   binderToLet i (Lisp.Binder n mty expr) term = do
     expr' <- desugarLispTerm expr
-    pure $ Let (Arg n mty) expr' term i
+    pure $ Let (Arg n mty i) expr' term i
 
 pattern MapV :: i -> Lisp.Expr i
 pattern MapV info = Lisp.Var (BN (BareName "map")) info
@@ -429,9 +429,9 @@ suspendTerm e' =
   Nullary e' (view termInfo e')
 
 toArg
-  :: Lisp.MArg
-  -> Arg DesugarType
-toArg (Lisp.MArg n mty) = Arg n mty
+  :: Lisp.MArg i
+  -> Arg DesugarType i
+toArg (Lisp.MArg n mty i) = Arg n mty i
 
 desugarDefun
   :: (MonadEval b i m, DesugarBuiltin b)
@@ -483,7 +483,7 @@ desugarDefConst _modWitness (Lisp.DefConst n mty e _ i) = do
 desugarDefMeta
   :: (MonadEval b i m)
   => i
-  -> [Arg t]
+  -> [Arg t i]
   -> Lisp.DCapMeta
   -> RenamerT b i m (DefCapMeta ParsedName)
 desugarDefMeta info args = \case
@@ -515,7 +515,7 @@ desugarDefSchema
   -> Lisp.DefSchema i
   -> RenamerT b i m (DefSchema DesugarType i)
 desugarDefSchema _modWitness (Lisp.DefSchema dsn args _docs _model i) = do
-  let args' = (\(Lisp.Arg n ty) -> (Field n, ty)) <$> args
+  let args' = (\(Lisp.Arg n ty _) -> (Field n, ty)) <$> args
       scd = M.fromList args'
   pure $ DefSchema dsn scd i
 
@@ -687,8 +687,8 @@ typeSCC currM currDefs = \case
 -- Args mean local bindings to something, therefore
 -- the actual arg name _cannot_ refer to a dependency,
 -- but the type annotation may contain a reference to a schema ann
-argSCC :: ModuleName -> Set Text -> Arg DesugarType -> Set Text
-argSCC currM currDefs (Arg _ ty) = case ty of
+argSCC :: ModuleName -> Set Text -> Arg DesugarType i -> Set Text
+argSCC currM currDefs (Arg _ ty _) = case ty of
   Just t -> typeSCC currM currDefs t
   Nothing -> mempty
 
@@ -1008,6 +1008,8 @@ renameType i = \case
         Just (DKDefSchema sc) -> pure sc
         _ -> throwDesugarError (InvalidDefInSchemaPosition (_qnName qn)) i
 
+argType' :: Traversal (Arg ty i) (Arg ty' i) ty ty'
+argType' f (Arg n ty i) = Arg n <$> traverse f ty <*> pure i
 
 -- Rename a term (that is part of a module)
 -- emitting the list of dependent calls
@@ -1039,7 +1041,7 @@ renameTerm (Lam nsts body i) = do
     set reVarDepth newDepth
 renameTerm (Let arg e1 e2 i) = do
   depth <- view reVarDepth
-  arg' <- traverse (renameType i) arg
+  arg' <- argType' (renameType i) arg
   let inEnv = over reVarDepth succ .
               over reBinds (M.insert (_argName arg) (NBound depth, Nothing))
   e1' <- renameTerm e1
@@ -1092,7 +1094,7 @@ renameDefun
   -> RenamerT b i m (Defun Name Type b i)
 renameDefun (Defun n args ret term i) = do
   -- Todo: put type variables in scope here, if we want to support polymorphism
-  args' <- (traverse.traverse) (renameType i) args
+  args' <- (traverse.argType') (renameType i) args
   ret' <- traverse (renameType i) ret
   term' <- local (set reCurrDef (Just DKDefun)) $ renameTerm term
   pure (Defun n args' ret' term' i)
@@ -1112,7 +1114,7 @@ renameDefPact
   => DefPact ParsedName DesugarType b i
   -> RenamerT b i m (DefPact Name Type b i)
 renameDefPact (DefPact n argtys mret steps i) = do
-  args' <- (traverse.traverse) (renameType i) argtys
+  args' <- (traverse.argType') (renameType i) argtys
   mret' <- traverse (renameType i) mret
   steps' <- local (set reCurrDef (Just DKDefPact) . bindArgs) $
     traverse renamePactStep steps
@@ -1156,7 +1158,7 @@ renameReplDefun
   -> RenamerT b i m (Defun Name Type b i)
 renameReplDefun (Defun n args ret term i) = do
   let fqn = FullyQualifiedName replModuleName n replModuleHash
-  args' <- (traverse.traverse) (renameType i) args
+  args' <- (traverse.argType') (renameType i) args
   ret' <- traverse (renameType i) ret
   esLoaded . loToplevel %== M.insert n (fqn, DKDefun)
   term' <- local (set reCurrDef (Just DKDefun)) $ renameTerm term
@@ -1188,7 +1190,7 @@ renameDefCap
   -> RenamerT b i m (DefCap Name Type b i)
 renameDefCap (DefCap name argtys rtype term meta info) = do
   meta' <- resolveMeta info meta
-  argtys' <- (traverse.traverse) (renameType info) argtys
+  argtys' <- (traverse.argType') (renameType info) argtys
   rtype' <- traverse (renameType info) rtype
   term' <- local (set reCurrDef (Just DKDefCap) .  bindArgs) $ renameTerm term
   pure (DefCap name argtys' rtype' term' meta' info)
@@ -1250,14 +1252,14 @@ renameIfDef mn ifDefuns = \case
   -- Todo: export and use lenses lol
   IfDfun d -> do
     let i = _ifdInfo d
-    args' <- (traverse.traverse) (renameType i) (_ifdArgs d)
+    args' <- (traverse.argType') (renameType i) (_ifdArgs d)
     rtype' <- traverse (renameType i) (_ifdRType d)
     pure (IfDfun (d{_ifdArgs = args', _ifdRType = rtype'}))
   IfDConst d -> IfDConst <$> renameDefConst d
   IfDSchema d -> IfDSchema <$> renameDefSchema d
   IfDCap d -> do
     let i = _ifdcInfo d
-    args' <- (traverse.traverse) (renameType i) (_ifdcArgs d)
+    args' <- (traverse.argType') (renameType i) (_ifdcArgs d)
     rtype' <- traverse (renameType i) (_ifdcRType d)
     traverse_ (ensureInLocals i) (_ifdcMeta d)
     pure (IfDCap (d{_ifdcArgs = args', _ifdcRType = rtype'}))
@@ -1268,7 +1270,7 @@ renameIfDef mn ifDefuns = \case
 
   IfDPact d -> do
     let i = _ifdpInfo d
-    args' <- (traverse.traverse) (renameType i) (_ifdpArgs d)
+    args' <- (traverse.argType') (renameType i) (_ifdpArgs d)
     rtype' <- traverse (renameType i) (_ifdpRType d)
     pure (IfDPact (d{_ifdpArgs = args', _ifdpRType = rtype'}))
 
@@ -1456,7 +1458,7 @@ checkImplements i defs moduleName ifaceName = do
     IfDfun ifd ->
       case find (\df -> _ifdName ifd == defName df) defs of
         Just (Dfun v) ->
-          when (_dfunArgs v /= _ifdArgs ifd || _dfunRType v /= _ifdRType ifd) $
+          when (weakArgsNeq (_dfunArgs v) (_ifdArgs ifd) || _dfunRType v /= _ifdRType ifd) $
             throwDesugarError (ImplementationError moduleName ifaceName (_dfunName v)) i
         Just d ->
           throwDesugarError (ImplementationError moduleName ifaceName  (defName d)) i
@@ -1467,7 +1469,7 @@ checkImplements i defs moduleName ifaceName = do
         Just (DCap v) -> do
           unless (checkMetaMatches (_dcapMeta v) (_ifdcMeta ifd)) $
              throwDesugarError (ImplementationError moduleName ifaceName $ ": defcap mismatch for " <> _dcapName v) i
-          when (_dcapArgs v /= _ifdcArgs ifd || _dcapRType v /= _ifdcRType ifd) $
+          when (weakArgsNeq (_dcapArgs v) (_ifdcArgs ifd) || _dcapRType v /= _ifdcRType ifd) $
             throwDesugarError (ImplementationError moduleName ifaceName (_dcapName v)) i
         Just d -> throwDesugarError (ImplementationError moduleName ifaceName  (defName d)) i
         Nothing ->
@@ -1475,11 +1477,12 @@ checkImplements i defs moduleName ifaceName = do
     IfDPact ifd ->
       case find (\df -> _ifdpName ifd == defName df) defs of
         Just (DPact v) ->
-          when (_dpArgs v /= _ifdpArgs ifd || _dpRetType v /= _ifdpRType ifd) $
+          when (weakArgsNeq (_dpArgs v) (_ifdpArgs ifd) || _dpRetType v /= _ifdpRType ifd) $
           throwDesugarError (ImplementationError moduleName ifaceName (_ifdpName ifd)) i
         Just _ ->  throwDesugarError (ImplementationError moduleName ifaceName (_ifdpName ifd)) i
         Nothing -> throwDesugarError (NotImplemented moduleName ifaceName (_ifdpName ifd)) i
 
+  weakArgsNeq a b = fmap void a /= fmap void b
   checkMetaMatches :: DefCapMeta (FQNameRef Name) -> DefCapMeta BareName -> Bool
   checkMetaMatches Unmanaged Unmanaged = True
   checkMetaMatches DefEvent DefEvent = True

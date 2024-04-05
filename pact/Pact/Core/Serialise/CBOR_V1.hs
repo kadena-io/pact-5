@@ -179,9 +179,9 @@ instance Serialise (Governance Name) where
     1 -> CapGov <$> decode
     _ -> fail "unexpected decoding"
 
-instance Serialise ty => Serialise (Arg ty) where
-  encode (Arg n ty) = encode n <> encode ty
-  decode = Arg <$> decode <*> decode
+instance (Serialise ty, Serialise i) => Serialise (Arg ty i) where
+  encode (Arg n ty i) = encode n <> encode ty <> encode i
+  decode = Arg <$> decode <*> decode <*> decode
 
 
 instance Serialise Decimal where

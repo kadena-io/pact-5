@@ -113,7 +113,7 @@ nullaryGas = simpleTermGas (Nullary unitConst ()) "Nullary Node"
 
 letGas :: CoreDb ->  C.Benchmark
 letGas =
-  let letBind = Let (Arg "_" Nothing) unitConst unitConst ()
+  let letBind = Let (Arg "_" Nothing ()) unitConst unitConst ()
   in simpleTermGas letBind "Let Node"
 
 constantExample :: CoreTerm -> CEKValue CEKSmallStep CoreBuiltin () Eval
@@ -158,7 +158,7 @@ constExpr pdb = do
                     , _ceInCap=False
                     , _ceDefPactStep=ps
                     , _ceBuiltins=benchmarkBigStepEnv }
-    let lamTerm = Lam (NE.fromList [Arg "_" Nothing, Arg "_" Nothing]) (Var (Name "boop" (NBound 1)) ()) ()
+    let lamTerm = Lam (NE.fromList [Arg "_" Nothing (), Arg "_" Nothing ()]) (Var (Name "boop" (NBound 1)) ()) ()
     let term = App lamTerm [Constant (LInteger 1) (), Constant (LInteger 2) ()] ()
     pure (term, es, ee, env)
 
@@ -192,7 +192,7 @@ gasLamNArgs n pdb =
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
     let es = defaultGasEvalState
-        mkArg i = Arg ("Arg#" <> T.pack (show i)) Nothing
+        mkArg i = Arg ("Arg#" <> T.pack (show i)) Nothing ()
         args = mkArg <$> [1..n]
         term = Lam (NE.fromList args) (Constant LUnit ()) ()
         ps = _eeDefPactStep ee
@@ -278,7 +278,7 @@ createUserGuardGasNArgs nArgs pdb =
   where
   title = "Create User Guard, " <> show nArgs <> " args"
   mkEnv = do
-    let args =  [ Arg ("_foo" <> T.pack (show i)) Nothing| i <- [2..nArgs] ]
+    let args =  [ Arg ("_foo" <> T.pack (show i)) Nothing () | i <- [2..nArgs] ]
     ee <- liftIO $ defaultGasEvalEnv pdb
     let mn = ModuleName "foomodule" Nothing
         mh = ModuleHash (pactHash "foo")

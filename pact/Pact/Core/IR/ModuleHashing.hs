@@ -256,11 +256,11 @@ encodeImport (Import mname mmh mimps) = parens $
   <> maybe mempty (lpad . encodeModuleHash) mmh
   <> maybe mempty (lpad . list . fmap encodeText) mimps
 
-encodeArg :: Arg Type -> Builder
-encodeArg (Arg n mty) =
+encodeArg :: Arg Type i -> Builder
+encodeArg (Arg n mty _) =
   T.encodeUtf8Builder n <> maybe mempty ((":" <>) . encodeType) mty
 
-encodeArgList :: [Arg Type] -> Builder
+encodeArgList :: [Arg Type i] -> Builder
 encodeArgList li =
   parens $ hsep $ encodeArg <$> li
 

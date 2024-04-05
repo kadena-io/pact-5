@@ -94,17 +94,19 @@ instance Pretty Type where
 -- Common structures
 ----------------------------------------------------
 
-data Arg
+data Arg i
   = Arg
   { _argName :: Text
   , _argType :: Type
-  } deriving Show
+  , _argInfo :: i
+  } deriving (Show, Functor)
 
-data MArg
+data MArg i
   = MArg
   { _margName :: Text
   , _margType :: Maybe Type
-  } deriving (Eq, Show)
+  , _margInfo :: i
+  } deriving (Eq, Show, Functor)
 
 defName :: Def i -> Text
 defName = \case
@@ -137,7 +139,7 @@ defInfo = \case
 data Defun i
   = Defun
   { _dfunName :: Text
-  , _dfunArgs :: [MArg]
+  , _dfunArgs :: [MArg i]
   , _dfunRetType :: Maybe Type
   , _dfunTerm :: Expr i
   , _dfunDocs :: Maybe Text
@@ -162,7 +164,7 @@ data DCapMeta
 data DefCap i
   = DefCap
   { _dcapName :: Text
-  , _dcapArgs :: ![MArg]
+  , _dcapArgs :: ![MArg i]
   , _dcapRetType :: Maybe Type
   , _dcapTerm :: Expr i
   , _dcapDocs :: Maybe Text
@@ -174,7 +176,7 @@ data DefCap i
 data DefSchema i
   = DefSchema
   { _dscName :: Text
-  , _dscArgs :: [Arg]
+  , _dscArgs :: [Arg i]
   , _dscDocs :: Maybe Text
   , _dscModel :: [PropertyExpr i]
   , _dscInfo :: i
@@ -196,7 +198,7 @@ data PactStep i
 data DefPact i
   = DefPact
   { _dpName :: Text
-  , _dpArgs :: [MArg]
+  , _dpArgs :: [MArg i]
   , _dpRetType :: Maybe Type
   , _dpSteps :: [PactStep i]
   , _dpDocs :: Maybe Text
@@ -262,7 +264,7 @@ data Interface i
 data IfDefun i
   = IfDefun
   { _ifdName :: Text
-  , _ifdArgs :: [MArg]
+  , _ifdArgs :: [MArg i]
   , _ifdRetType :: Maybe Type
   , _ifdDocs :: Maybe Text
   , _ifdModel :: [PropertyExpr i]
@@ -272,7 +274,7 @@ data IfDefun i
 data IfDefCap i
   = IfDefCap
   { _ifdcName :: Text
-  , _ifdcArgs :: [MArg]
+  , _ifdcArgs :: [MArg i]
   , _ifdcRetType :: Maybe Type
   , _ifdcDocs :: Maybe Text
   , _ifdcModel :: [PropertyExpr i]
@@ -283,7 +285,7 @@ data IfDefCap i
 data IfDefPact i
   = IfDefPact
   { _ifdpName :: Text
-  , _ifdpArgs :: [MArg]
+  , _ifdpArgs :: [MArg i]
   , _ifdpRetType :: Maybe Type
   , _ifdpDocs :: Maybe Text
   , _ifdpModel :: [PropertyExpr i]
@@ -345,12 +347,12 @@ instance Pretty (DefConst i) where
     where
     mprettyTy = maybe mempty ((":" <>) . pretty)
 
-instance Pretty Arg where
-  pretty (Arg n ty) =
+instance Pretty (Arg i) where
+  pretty (Arg n ty _) =
     pretty n <> ":" <+> pretty ty
 
-instance Pretty MArg where
-  pretty (MArg n mty) =
+instance Pretty (MArg i) where
+  pretty (MArg n mty _) =
     pretty n <> maybe mempty (\ty -> ":" <+> pretty ty) mty
 
 instance Pretty (Defun i) where
@@ -374,7 +376,7 @@ data CapForm i
 data Expr i
   = Var ParsedName i
   | LetIn (NonEmpty (Binder i)) (Expr i) i
-  | Lam [MArg] (Expr i) i
+  | Lam [MArg i] (Expr i) i
   | If (Expr i) (Expr i) (Expr i) i
   | App (Expr i) [Expr i] i
   | Block (NonEmpty (Expr i)) i
@@ -384,7 +386,7 @@ data Expr i
   | Try (Expr i) (Expr i) i
   | Suspend (Expr i) i
   | Object [(Field, Expr i)] i
-  | Binding [(Field, MArg)] [Expr i] i
+  | Binding [(Field, MArg i)] [Expr i] i
   | CapabilityForm (CapForm i) i
   deriving (Show, Eq, Functor)
 
@@ -485,7 +487,7 @@ instance Pretty (Expr i) where
     where
     prettyBind (f, e) = pretty f <+> ":=" <+> pretty e
     prettyObj = fmap (\(n, k) -> dquotes (pretty n) <> ":" <> pretty k)
-    renderLamPair (MArg n mt) = case mt of
+    renderLamPair (MArg n mt _) = case mt of
       Nothing -> pretty n
       Just t -> pretty n <> ":" <> pretty t
     renderLamTypes = fold . intersperse " " . fmap renderLamPair

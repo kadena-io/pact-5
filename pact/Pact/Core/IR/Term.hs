@@ -22,6 +22,7 @@
 module Pact.Core.IR.Term where
 
 import Control.Lens
+import Debug.Trace
 import Data.Foldable(fold, find)
 import Data.Text(Text)
 import Data.List.NonEmpty (NonEmpty)
@@ -50,10 +51,10 @@ import Pact.Core.Pretty
 data Term name ty builtin info
   = Var name info
   -- ^ single variables e.g x
-  | Lam (NonEmpty (Arg ty)) (Term name ty builtin info) info
+  | Lam (NonEmpty (Arg ty info)) (Term name ty builtin info) info
   -- ^ $f = \x.e
   -- Lambdas are named for the sake of the callstack.
-  | Let (Arg ty) (Term name ty builtin info) (Term name ty builtin info) info
+  | Let (Arg ty info) (Term name ty builtin info) (Term name ty builtin info) info
   -- ^ let x = e1 in e2
   | App (Term name ty builtin info) [Term name ty builtin info] info
   -- ^ (e1 e2)
@@ -90,7 +91,7 @@ data ConstVal term
 data Defun name ty builtin info
   = Defun
   { _dfunName :: Text
-  , _dfunArgs :: [Arg ty]
+  , _dfunArgs :: [Arg ty info]
   , _dfunRType :: Maybe ty
   , _dfunTerm :: Term name ty builtin info
   , _dfunInfo :: info
@@ -106,7 +107,7 @@ data Step name ty builtin info
 data DefPact name ty builtin info
   = DefPact
   { _dpName :: Text
-  , _dpArgs :: [Arg ty]
+  , _dpArgs :: [Arg ty info]
   , _dpRetType :: Maybe ty
   , _dpSteps :: NonEmpty (Step name ty builtin info)
   , _dpInfo :: info
@@ -129,7 +130,7 @@ data DefConst name ty builtin info
 data DefCap name ty builtin info
   = DefCap
   { _dcapName :: Text
-  , _dcapArgs :: [Arg ty]
+  , _dcapArgs :: [Arg ty info]
   , _dcapRType :: Maybe ty
   , _dcapTerm :: Term name ty builtin info
   , _dcapMeta :: DefCapMeta (FQNameRef name)
@@ -212,7 +213,7 @@ data Interface name ty builtin info
 data IfDefPact ty info
   = IfDefPact
   { _ifdpName :: Text
-  , _ifdpArgs :: [Arg ty]
+  , _ifdpArgs :: [Arg ty info]
   , _ifdpRType :: Maybe ty
   , _ifdpInfo :: info
   } deriving (Show, Eq, Functor, Generic)
@@ -220,7 +221,7 @@ data IfDefPact ty info
 data IfDefun ty info
   = IfDefun
   { _ifdName :: Text
-  , _ifdArgs :: [Arg ty]
+  , _ifdArgs :: [Arg ty info]
   , _ifdRType :: Maybe ty
   , _ifdInfo :: info
   } deriving (Show, Eq, Functor, Generic)
@@ -228,7 +229,7 @@ data IfDefun ty info
 data IfDefCap name ty info
   = IfDefCap
   { _ifdcName :: Text
-  , _ifdcArgs :: [Arg ty]
+  , _ifdcArgs :: [Arg ty info]
   , _ifdcRType :: Maybe ty
   , _ifdcMeta :: DefCapMeta BareName
   , _ifdcInfo :: info
@@ -349,7 +350,7 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
       braces (hsep $ punctuate "," $ fmap (\(f, t) -> pretty f <> ":" <> pretty t) n)
     where
     prettyTyAnn = maybe mempty ((":" <>) . pretty)
-    prettyLamArg (Arg n ty) =
+    prettyLamArg (Arg n ty _) =
       pretty n <> prettyTyAnn ty
 
 instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (TopLevel name ty builtin info) where
@@ -357,27 +358,27 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (TopLevel name ty bu
     TLTerm tm -> pretty tm
     _ -> "todo: pretty defs/modules"
 
-prettyDef :: Pretty ty => Doc ann -> Text -> Maybe ty -> [Arg ty] -> Doc ann
-prettyDef deftoken defname defRTy defArgs =
-  let dfNameArg = Arg defname defRTy
+prettyDef :: Pretty ty => Doc ann -> Text -> Maybe ty -> info -> [Arg ty info] -> Doc ann
+prettyDef deftoken defname defRTy dInfo defArgs =
+  let dfNameArg = Arg defname defRTy dInfo
       argList = parens (hsep (pretty <$> defArgs))
   in parens $ deftoken <+> pretty dfNameArg <+> argList
 
 instance Pretty ty => Pretty (Defun name ty b i) where
-  pretty (Defun name args rty _ _) =
-    prettyDef "defun" name rty args
+  pretty (Defun name args rty _ i) =
+    prettyDef "defun" name rty i args
 
 instance Pretty ty => Pretty (DefPact name ty b i) where
-  pretty (DefPact name args rty _ _) =
-    prettyDef "defpact" name rty args
+  pretty (DefPact name args rty _ i) =
+    prettyDef "defpact" name rty i args
 
 instance Pretty ty => Pretty (DefCap name ty b i) where
-  pretty (DefCap name args rty _ _ _) =
-    prettyDef "defcap" name rty args
+  pretty (DefCap name args rty _ _ i) =
+    prettyDef "defcap" name rty i args
 
 instance Pretty ty => Pretty (DefSchema ty info) where
-  pretty (DefSchema n schema _) =
-    let argList = [pretty arg | (Field k, t) <- M.toList schema, let arg = Arg k (Just t)]
+  pretty (DefSchema n schema i) =
+    let argList = [pretty arg | (Field k, t) <- M.toList schema, let arg = Arg k (Just t) i]
     in parens $ "defschema" <+> pretty n <> (if null argList then mempty else " " <> hsep argList)
 
 instance Pretty (TableSchema name) where
@@ -494,6 +495,53 @@ termInfo f = \case
   CapabilityForm cf i -> CapabilityForm cf <$> f i
   ObjectLit m i -> ObjectLit m <$> f i
 
+traverseTerm
+  :: Traversal' (Term name ty builtin info)
+                (Term name ty builtin info)
+traverseTerm f x= trace "AAAAAAAAAAA" $ case x of
+  Var n i -> trace "VAR" $ f (Var n i)
+  Lam ne te i ->
+    Lam ne <$> traverseTerm f te <*> pure i
+  Let n te te' i ->
+    Let n <$> traverseTerm f te <*> traverseTerm f te' <*> pure i
+  App te ne i ->
+    App <$> traverseTerm f te <*> traverse (traverseTerm f) ne <*> pure i
+  Sequence te te' i ->
+    Sequence <$> traverseTerm f te <*> traverseTerm f te' <*> pure i
+  Conditional bf i ->
+    Conditional <$> traverse (traverseTerm f) bf <*> pure i
+  Builtin b i -> f (Builtin b i)
+  Nullary term i ->
+    Nullary <$> traverseTerm f term <*> pure i
+  Constant lit i ->
+    f (Constant lit i)
+  ListLit tes i ->
+    ListLit <$> traverse (traverseTerm f) tes <*> pure i
+  Try te te' i ->
+    Try <$> traverseTerm f te <*> traverseTerm f te' <*> pure i
+  CapabilityForm cf i ->
+    CapabilityForm <$> traverse (traverseTerm f) cf <*> pure i
+  ObjectLit m i ->
+    ObjectLit <$> (traverse._2) (traverseTerm f) m <*> pure i
+
+topLevelTerms :: Traversal' (TopLevel name ty builtin info) (Term name ty builtin info)
+topLevelTerms f = \case
+  TLModule md -> TLModule <$> traverseModuleTerms f md
+  TLInterface _iface -> error ""
+  TLTerm t -> trace "ddd " $ TLTerm <$> f t
+  TLUse u i -> pure (TLUse u i)
+
+
+traverseModuleTerms :: Traversal' (Module name ty builtin info) (Term name ty builtin info)
+traverseModuleTerms f (Module n g defs b imp impl h i) =
+  Module n g
+    <$> traverse (traverseDefTerm f) defs
+    <*> pure b
+    <*> pure imp
+    <*> pure impl
+    <*> pure h
+    <*> pure i
+
 traverseDefunTerm
   :: Traversal (Defun name ty builtin info)
                (Defun name' ty builtin' info)
@@ -594,7 +642,7 @@ type EvalDefCap b i = DefCap Name Type b i
 type EvalDefPact b i = DefPact Name Type b i
 type EvalModule b i = Module Name Type b i
 type EvalInterface b i = Interface Name Type b i
-
+type EvalIfDef b i = IfDef Name Type b i
 type EvalTable i = DefTable Name i
 type EvalSchema i = DefSchema Type i
 

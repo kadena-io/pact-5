@@ -189,7 +189,7 @@ gmManagerDfun =
   , _dfunRType = Nothing
   , _dfunName=gmManagerDfunName
   , _dfunInfo=()
-  , _dfunArgs=[Arg "arg1" Nothing, Arg "arg2" Nothing] }
+  , _dfunArgs=[Arg "arg1" Nothing (), Arg "arg2" Nothing ()] }
 
 gmDcapManaged :: EvalDefCap CoreBuiltin ()
 gmDcapManaged = DefCap
@@ -198,7 +198,7 @@ gmDcapManaged = DefCap
   , _dcapName = gmDcapAutoManagedName
   , _dcapMeta= DefManaged (DefManagedMeta (0, "arg1") (FQName (mkGasModelFqn gmManagerDfunName)))
   , _dcapInfo=()
-  , _dcapArgs=[Arg "arg1" Nothing]}
+  , _dcapArgs=[Arg "arg1" Nothing ()]}
 
 gmModuleDefns :: [EvalDef CoreBuiltin ()]
 gmModuleDefns =
@@ -314,7 +314,7 @@ unitClosureUnary env
   = Closure
   { _cloFnName = "foo"
   , _cloModName = ModuleName "foomodule" Nothing
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg" Nothing])
+  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg" Nothing ()])
   , _cloArity = 1
   , _cloTerm = unitConst
   , _cloRType = Nothing
@@ -326,7 +326,7 @@ unitClosureBinary env
   = Closure
   { _cloFnName = "foo"
   , _cloModName = ModuleName "foomodule" Nothing
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing, Arg "fooCloArg2" Nothing])
+  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing (), Arg "fooCloArg2" Nothing ()])
   , _cloArity = 2
   , _cloTerm = unitConst
   , _cloRType = Nothing
@@ -339,7 +339,7 @@ boolClosureUnary b env
   = Closure
   { _cloFnName = "foo"
   , _cloModName = ModuleName "foomodule" Nothing
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing])
+  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing ()])
   , _cloArity = 1
   , _cloTerm = boolConst b
   , _cloRType = Nothing
@@ -351,7 +351,7 @@ boolClosureBinary b env
   = Closure
   { _cloFnName = "foo"
   , _cloModName = ModuleName "fooModule" Nothing
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing, Arg "fooCloArg2" Nothing])
+  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing (), Arg "fooCloArg2" Nothing ()])
   , _cloArity = 2
   , _cloTerm = boolConst b
   , _cloRType = Nothing
@@ -363,7 +363,7 @@ intClosureBinary b env
   = Closure
   { _cloFnName = "foo"
   , _cloModName = ModuleName "fooModule" Nothing
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing, Arg "fooCloArg2" Nothing])
+  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing (), Arg "fooCloArg2" Nothing ()])
   , _cloArity = 2
   , _cloTerm = intConst b
   , _cloRType = Nothing
