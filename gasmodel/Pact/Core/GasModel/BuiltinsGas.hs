@@ -4,6 +4,7 @@
 module Pact.Core.GasModel.BuiltinsGas where
 
 import qualified Criterion as C
+import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Database.SQLite3 as SQL
@@ -11,6 +12,7 @@ import Data.Bifunctor
 import NeatInterpolation (text)
 
 import Pact.Core.Builtin
+import Pact.Core.Names
 import Pact.Core.PactValue
 import Pact.Core.Persistence
 import Pact.Core.Persistence.SQLite
@@ -38,6 +40,15 @@ enumExpListDeep depth base mult =
   where
   mkList 0 cnt = PList $ V.fromList $ PInteger <$> [0 .. cnt]
   mkList d cnt = PList $ V.fromList $ replicate (fromIntegral cnt) (mkList (d - 1) cnt)
+
+mkMap :: Integer -> M.Map Field PactValue
+mkMap cnt = M.fromList [ (Field $ T.pack $ show n, PInteger n) | n <- [0..cnt] ]
+
+enumExpObject :: Integer -> Integer -> [(String, PactValue)]
+enumExpObject base mult =
+  [ (title, PObject $ mkMap cnt)
+  | (title, cnt) <- enumExpNum base mult
+  ]
 
 type BuiltinBenches = PactDb CoreBuiltin () -> [C.Benchmark]
 
