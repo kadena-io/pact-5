@@ -161,10 +161,22 @@ benchesForBuiltin bn pdb = case bn of
   where
   omittedDeliberately = []
 
+benchmarkName :: CoreBuiltin -> String
+benchmarkName = \case
+  CoreAdd -> "add"
+  CoreSub -> "sub"
+  CoreMultiply -> "mul"
+  CoreDivide -> "div"
+  CoreNegate -> "neg"
+  CorePow -> "pow"
+  CoreEq -> "eq"
+  CoreNeq -> "neq"
+  b -> T.unpack $ coreBuiltinToText b
+
 benchmarks :: C.Benchmark
 benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) -> do
   C.bgroup "pact-core-builtin-gas"
-    [ C.bgroup (T.unpack $ coreBuiltinToText coreBuiltin) benches
+    [ C.bgroup (benchmarkName coreBuiltin) benches
     | coreBuiltin <- [minBound .. maxBound]
     , let benches = benchesForBuiltin coreBuiltin pdb
     , not $ null benches
