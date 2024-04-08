@@ -147,8 +147,8 @@ benchesForFun :: CoreBuiltin -> BuiltinBenches
 benchesForFun bn pdb = case bn of
   CoreAdd -> benchArithOp "+" pdb
   CoreSub -> benchArithOp "-" pdb
-  CoreMultiply -> benchArithOp "-" pdb
-  CoreDivide -> benchArithOp "-" pdb
+  CoreMultiply -> benchArithOp "*" pdb
+  CoreDivide -> benchArithOp "/" pdb
   CoreNegate -> benchNegate pdb
   CoreAbs -> benchAbs pdb
   CorePow -> benchArithOp' 100 "^" pdb
