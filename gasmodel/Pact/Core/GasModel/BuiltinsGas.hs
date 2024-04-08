@@ -143,8 +143,8 @@ benchEnumerate pdb = [ runNativeBenchmark pdb title [text|(enumerate 0 $cnt)|]
                      | (title, cnt) <- take 3 $ enumExpText 1000 10
                      ]
 
-benchesForFun :: CoreBuiltin -> BuiltinBenches
-benchesForFun bn pdb = case bn of
+benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
+benchesForBuiltin bn pdb = case bn of
   CoreAdd -> benchArithOp "+" pdb
   CoreSub -> benchArithOp "-" pdb
   CoreMultiply -> benchArithOp "*" pdb
@@ -166,7 +166,7 @@ benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) -> do
   C.bgroup "pact-core-builtin-gas"
     [ C.bgroup (T.unpack $ coreBuiltinToText coreBuiltin) benches
     | coreBuiltin <- [minBound .. maxBound]
-    , let benches = benchesForFun coreBuiltin pdb
+    , let benches = benchesForBuiltin coreBuiltin pdb
     , not $ null benches
     ]
   where
