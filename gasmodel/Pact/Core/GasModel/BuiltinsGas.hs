@@ -26,20 +26,20 @@ enumExpNum base mult = [ (show val, val) | val <- iterate (* mult) base ]
 enumExpText :: Integer -> Integer -> [(String, T.Text)]
 enumExpText base mult = second (T.pack . show) <$> enumExpNum base mult
 
+mkList :: Integer -> PactValue
+mkList cnt = PList $ V.fromList $ PInteger <$> [0 .. cnt]
+
 enumExpList :: Integer -> Integer -> [(String, PactValue)]
-enumExpList base mult =
-  [ (title, PList $ V.fromList $ PInteger <$> [0 .. cnt])
-  | (title, cnt) <- enumExpNum base mult
-  ]
+enumExpList base mult = [ (title, mkList cnt) | (title, cnt) <- enumExpNum base mult ]
 
 enumExpListDeep :: Integer -> Integer -> Integer -> [(String, PactValue)]
 enumExpListDeep depth base mult =
-  [ (title <> " depth " <> show depth, mkList depth cnt)
+  [ (title <> " depth " <> show depth, go depth cnt)
   | (title, cnt) <- enumExpNum base mult
   ]
   where
-  mkList 0 cnt = PList $ V.fromList $ PInteger <$> [0 .. cnt]
-  mkList d cnt = PList $ V.fromList $ replicate (fromIntegral cnt) (mkList (d - 1) cnt)
+  go 0 cnt = mkList cnt
+  go d cnt = PList $ V.fromList $ replicate (fromIntegral cnt) (go (d - 1) cnt)
 
 mkMap :: Integer -> M.Map Field PactValue
 mkMap cnt = M.fromList [ (Field $ T.pack $ show n, PInteger n) | n <- [0..cnt] ]
