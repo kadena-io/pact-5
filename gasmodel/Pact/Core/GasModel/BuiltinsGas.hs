@@ -41,12 +41,18 @@ enumExpListDeep depth base mult =
   go 0 cnt = mkList cnt
   go d cnt = PList $ V.fromList $ replicate (fromIntegral cnt) (go (d - 1) cnt)
 
-mkMap :: Integer -> M.Map Field PactValue
-mkMap cnt = M.fromList [ (Field $ T.pack $ show n, PInteger n) | n <- [0..cnt] ]
+mkMap :: (Integer -> PactValue) -> Integer -> M.Map Field PactValue
+mkMap mkVal cnt = M.fromList [ (Field $ T.pack $ show n, mkVal n) | n <- [0..cnt] ]
 
 enumExpObject :: Integer -> Integer -> [(String, PactValue)]
 enumExpObject base mult =
-  [ (title, PObject $ mkMap cnt)
+  [ (title, PObject $ mkMap PInteger cnt)
+  | (title, cnt) <- enumExpNum base mult
+  ]
+
+enumExpObjectComplex :: Integer -> Integer -> [(String, PactValue)]
+enumExpObjectComplex base mult =
+  [ (title, PObject $ mkMap mkList cnt)
   | (title, cnt) <- enumExpNum base mult
   ]
 
