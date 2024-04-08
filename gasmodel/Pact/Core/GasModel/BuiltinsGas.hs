@@ -98,6 +98,8 @@ benchEq pdb =
   [ C.bgroup "lists-eq" listsEq
   , C.bgroup "lists-neq" listsNeq
   , C.bgroup "lists-deep" listsDeep
+  , C.bgroup "objects-simple" objsSimple
+  , C.bgroup "objects-complex" objsComplex
   ]
   where
   listsEq =
@@ -111,6 +113,14 @@ benchEq pdb =
   listsDeep =
     [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(= x x)|]
     | (title, list) <- take 3 $ enumExpListDeep 3 5 3
+    ]
+  objsSimple =
+    [ runNativeBenchmarkPrepared [("x", obj)] pdb title [text|(= x x)|]
+    | (title, obj) <- take 3 $ enumExpObject 1000 10
+    ]
+  objsComplex =
+    [ runNativeBenchmarkPrepared [("x", obj)] pdb title [text|(= x x)|]
+    | (title, obj) <- take 3 $ enumExpObjectComplex 1000 2
     ]
 
 benchDistinct :: BuiltinBenches
