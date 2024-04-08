@@ -93,8 +93,8 @@ benchNegate pdb =
   where
   vals = take 3 $ enumExpText 1000 1000000
 
-benchEq :: BuiltinBenches
-benchEq pdb =
+benchEqOp :: T.Text -> BuiltinBenches
+benchEqOp op pdb =
   [ C.bgroup "lists-eq" listsEq
   , C.bgroup "lists-neq" listsNeq
   , C.bgroup "lists-deep" listsDeep
@@ -103,23 +103,23 @@ benchEq pdb =
   ]
   where
   listsEq =
-    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(= x x)|]
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|($op x x)|]
     | (title, list) <- take 3 $ enumExpList 1000 100
     ]
   listsNeq =
-    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(= x [])|]
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|($op x [])|]
     | (title, list) <- take 3 $ enumExpList 1000 100
     ]
   listsDeep =
-    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(= x x)|]
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|($op x x)|]
     | (title, list) <- take 3 $ enumExpListDeep 3 5 3
     ]
   objsSimple =
-    [ runNativeBenchmarkPrepared [("x", obj)] pdb title [text|(= x x)|]
+    [ runNativeBenchmarkPrepared [("x", obj)] pdb title [text|($op x x)|]
     | (title, obj) <- take 3 $ enumExpObject 1000 10
     ]
   objsComplex =
-    [ runNativeBenchmarkPrepared [("x", obj)] pdb title [text|(= x x)|]
+    [ runNativeBenchmarkPrepared [("x", obj)] pdb title [text|($op x x)|]
     | (title, obj) <- take 3 $ enumExpObjectComplex 1000 2
     ]
 
@@ -153,7 +153,8 @@ benchesForFun bn pdb = case bn of
   CoreAbs -> benchAbs pdb
   CorePow -> benchArithOp' 100 "^" pdb
   CoreNot -> omittedDeliberately
-  CoreEq -> benchEq pdb
+  CoreEq -> benchEqOp "=" pdb
+  CoreNeq -> benchEqOp "!=" pdb
   CoreDistinct -> benchDistinct pdb
   CoreEnumerate -> benchEnumerate pdb
   _ -> []
