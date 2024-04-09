@@ -64,7 +64,9 @@ benchArithOp' growthFactor op pdb =
     [ runNativeBenchmark pdb title [text|($op $x $x)|] | (title, x) <- vals ]
   , C.bgroup "float"
     [ runNativeBenchmark pdb title [text|($op $x.0 $x.0)|] | (title, x) <- vals ]
-  , C.bgroup "mixed"
+  , C.bgroup "float_int"
+    [ runNativeBenchmark pdb title [text|($op $x.0 $x)|] | (title, x) <- vals ]
+  , C.bgroup "int_float"
     [ runNativeBenchmark pdb title [text|($op $x $x.0)|] | (title, x) <- vals ]
   ]
   where
