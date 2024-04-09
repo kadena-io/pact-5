@@ -123,6 +123,12 @@ benchEqOp op pdb =
     | (title, obj) <- take 3 $ enumExpObjectComplex 1000 2
     ]
 
+benchBitwiseBinOp :: Integer -> T.Text -> BuiltinBenches
+benchBitwiseBinOp growth op pdb =
+  [ runNativeBenchmark pdb title [text|($op $x $x)|]
+  | (title, x) <- take 3 $ enumExpText 1000 growth
+  ]
+
 benchDistinct :: BuiltinBenches
 benchDistinct pdb =
   [ C.bgroup "flat" flats
@@ -159,6 +165,10 @@ benchesForBuiltin bn pdb = case bn of
   CoreGEQ -> benchEqOp ">=" pdb
   CoreLT -> benchEqOp "<" pdb
   CoreLEQ -> benchEqOp "<=" pdb
+  CoreBitwiseAnd -> benchBitwiseBinOp 1000000 "&" pdb
+  CoreBitwiseOr -> benchBitwiseBinOp 1000000 "|" pdb
+  CoreBitwiseXor -> benchBitwiseBinOp 1000000 "xor" pdb
+  CoreBitShift -> benchBitwiseBinOp 1000 "shift" pdb
   CoreDistinct -> benchDistinct pdb
   CoreEnumerate -> benchEnumerate pdb
   _ -> []
@@ -179,6 +189,8 @@ benchmarkName = \case
   CoreGEQ -> "geq"
   CoreLT -> "lt"
   CoreLEQ -> "leq"
+  CoreBitwiseAnd -> "and"
+  CoreBitwiseOr -> "or"
   b -> T.unpack $ coreBuiltinToText b
 
 benchmarks :: C.Benchmark
