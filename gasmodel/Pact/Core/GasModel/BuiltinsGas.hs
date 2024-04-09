@@ -58,8 +58,8 @@ enumExpObjectComplex base mult =
 
 type BuiltinBenches = PactDb CoreBuiltin () -> [C.Benchmark]
 
-benchArithOp' :: Integer -> T.Text -> BuiltinBenches
-benchArithOp' growthFactor op pdb =
+benchArithBinOp' :: Integer -> T.Text -> BuiltinBenches
+benchArithBinOp' growthFactor op pdb =
   [ C.bgroup "integer"
     [ runNativeBenchmark pdb title [text|($op $x $x)|] | (title, x) <- vals ]
   , C.bgroup "float"
@@ -72,8 +72,8 @@ benchArithOp' growthFactor op pdb =
   where
   vals = take 3 $ enumExpText 1000 growthFactor
 
-benchArithOp :: T.Text -> BuiltinBenches
-benchArithOp = benchArithOp' 1000000
+benchArithBinOp :: T.Text -> BuiltinBenches
+benchArithBinOp = benchArithBinOp' 1000000
 
 benchArithUnOp :: T.Text -> BuiltinBenches
 benchArithUnOp op pdb =
@@ -171,13 +171,13 @@ benchEnumerate pdb = [ runNativeBenchmark pdb title [text|(enumerate 0 $cnt)|]
 
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn pdb = case bn of
-  CoreAdd -> benchArithOp "+" pdb
-  CoreSub -> benchArithOp "-" pdb
-  CoreMultiply -> benchArithOp "*" pdb
-  CoreDivide -> benchArithOp "/" pdb
+  CoreAdd -> benchArithBinOp "+" pdb
+  CoreSub -> benchArithBinOp "-" pdb
+  CoreMultiply -> benchArithBinOp "*" pdb
+  CoreDivide -> benchArithBinOp "/" pdb
   CoreNegate -> benchNegate pdb
   CoreAbs -> benchArithUnOp "abs" pdb
-  CorePow -> benchArithOp' 100 "^" pdb
+  CorePow -> benchArithBinOp' 100 "^" pdb
   CoreNot -> omittedDeliberately
   CoreEq -> benchEqOp "=" pdb
   CoreNeq -> benchEqOp "!=" pdb
@@ -199,7 +199,7 @@ benchesForBuiltin bn pdb = case bn of
   CoreExp -> benchArithUnOp "exp" pdb
   CoreLn -> benchArithUnOp "ln" pdb
   CoreSqrt -> benchArithUnOp "sqrt" pdb
-  CoreLogBase -> benchArithOp "log" pdb
+  CoreLogBase -> benchArithBinOp "log" pdb
   CoreDistinct -> benchDistinct pdb
   CoreEnumerate -> benchEnumerate pdb
   _ -> []
