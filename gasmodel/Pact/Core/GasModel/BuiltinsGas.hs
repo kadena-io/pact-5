@@ -135,6 +135,18 @@ benchBitwiseFlip pdb =
   | (title, x) <- take 3 $ enumExpText 1000 1000000
   ]
 
+benchFloatingUnOp :: T.Text -> BuiltinBenches
+benchFloatingUnOp op pdb =
+  [ runNativeBenchmark pdb title [text|($op $x.0)|]
+  | (title, x) <- take 3 $ enumExpText 1000 1000
+  ]
+
+benchFloatingMixedOp :: T.Text -> BuiltinBenches
+benchFloatingMixedOp op pdb =
+  [ runNativeBenchmark pdb title [text|($op $x.0 $x)|]
+  | (title, x) <- take 3 $ enumExpText 1000 1000
+  ]
+
 benchDistinct :: BuiltinBenches
 benchDistinct pdb =
   [ C.bgroup "flat" flats
@@ -176,6 +188,12 @@ benchesForBuiltin bn pdb = case bn of
   CoreBitwiseXor -> benchBitwiseBinOp 1000000 "xor" pdb
   CoreBitwiseFlip -> benchBitwiseFlip pdb
   CoreBitShift -> benchBitwiseBinOp 1000 "shift" pdb
+  CoreRound -> benchFloatingUnOp "round" pdb
+  CoreCeiling -> benchFloatingUnOp "ceiling" pdb
+  CoreFloor -> benchFloatingUnOp "floor" pdb
+  CoreRoundPrec -> benchFloatingMixedOp "round" pdb
+  CoreCeilingPrec -> benchFloatingMixedOp "ceiling" pdb
+  CoreFloorPrec -> benchFloatingMixedOp "floor" pdb
   CoreDistinct -> benchDistinct pdb
   CoreEnumerate -> benchEnumerate pdb
   _ -> []
