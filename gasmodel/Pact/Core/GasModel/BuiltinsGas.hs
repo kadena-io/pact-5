@@ -155,6 +155,10 @@ benchesForBuiltin bn pdb = case bn of
   CoreNot -> omittedDeliberately
   CoreEq -> benchEqOp "=" pdb
   CoreNeq -> benchEqOp "!=" pdb
+  CoreGT -> benchEqOp ">" pdb
+  CoreGEQ -> benchEqOp ">=" pdb
+  CoreLT -> benchEqOp "<" pdb
+  CoreLEQ -> benchEqOp "<=" pdb
   CoreDistinct -> benchDistinct pdb
   CoreEnumerate -> benchEnumerate pdb
   _ -> []
@@ -171,6 +175,10 @@ benchmarkName = \case
   CorePow -> "pow"
   CoreEq -> "eq"
   CoreNeq -> "neq"
+  CoreGT -> "gt"
+  CoreGEQ -> "geq"
+  CoreLT -> "lt"
+  CoreLEQ -> "leq"
   b -> T.unpack $ coreBuiltinToText b
 
 benchmarks :: C.Benchmark
