@@ -199,6 +199,7 @@ benchesForBuiltin bn pdb = case bn of
   CoreExp -> benchArithUnOp "exp" pdb
   CoreLn -> benchArithUnOp "ln" pdb
   CoreSqrt -> benchArithUnOp "sqrt" pdb
+  CoreLogBase -> benchArithOp "log" pdb
   CoreDistinct -> benchDistinct pdb
   CoreEnumerate -> benchEnumerate pdb
   _ -> []
