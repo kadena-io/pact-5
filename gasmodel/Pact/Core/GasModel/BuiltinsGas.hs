@@ -95,8 +95,8 @@ benchNegate pdb =
 
 benchEqOp :: T.Text -> BuiltinBenches
 benchEqOp op pdb =
-  [ C.bgroup "lists-eq" listsEq
-  , C.bgroup "lists-neq" listsNeq
+  [ C.bgroup "lists-same" listsEq
+  , C.bgroup "lists-diff" listsNeq
   , C.bgroup "lists-deep" listsDeep
   , C.bgroup "objects-simple" objsSimple
   , C.bgroup "objects-complex" objsComplex
