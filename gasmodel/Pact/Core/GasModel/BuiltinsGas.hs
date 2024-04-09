@@ -73,12 +73,12 @@ benchArithOp' growthFactor op pdb =
 benchArithOp :: T.Text -> BuiltinBenches
 benchArithOp = benchArithOp' 1000000
 
-benchAbs :: BuiltinBenches
-benchAbs pdb =
+benchArithUnOp :: T.Text -> BuiltinBenches
+benchArithUnOp op pdb =
   [ C.bgroup "integer"
-    [ runNativeBenchmark pdb title [text|(abs -$x)|] | (title, x) <- vals ]
+    [ runNativeBenchmark pdb title [text|($op $x)|] | (title, x) <- vals ]
   , C.bgroup "float"
-    [ runNativeBenchmark pdb title [text|(abs -$x.0)|] | (title, x) <- vals ]
+    [ runNativeBenchmark pdb title [text|($op $x.0)|] | (title, x) <- vals ]
   ]
   where
   vals = take 3 $ enumExpText 1000 1000000
@@ -174,7 +174,7 @@ benchesForBuiltin bn pdb = case bn of
   CoreMultiply -> benchArithOp "*" pdb
   CoreDivide -> benchArithOp "/" pdb
   CoreNegate -> benchNegate pdb
-  CoreAbs -> benchAbs pdb
+  CoreAbs -> benchArithUnOp "abs" pdb
   CorePow -> benchArithOp' 100 "^" pdb
   CoreNot -> omittedDeliberately
   CoreEq -> benchEqOp "=" pdb
@@ -194,6 +194,9 @@ benchesForBuiltin bn pdb = case bn of
   CoreRoundPrec -> benchFloatingMixedOp "round" pdb
   CoreCeilingPrec -> benchFloatingMixedOp "ceiling" pdb
   CoreFloorPrec -> benchFloatingMixedOp "floor" pdb
+  CoreExp -> benchArithUnOp "exp" pdb
+  CoreLn -> benchArithUnOp "ln" pdb
+  CoreSqrt -> benchArithUnOp "sqrt" pdb
   CoreDistinct -> benchDistinct pdb
   CoreEnumerate -> benchEnumerate pdb
   _ -> []
