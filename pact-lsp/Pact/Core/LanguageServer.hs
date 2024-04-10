@@ -377,14 +377,15 @@ documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req 
         resp (Right (InL we))
 
 matchingTerms
-  :: forall ty name builtin info. (Term name ty builtin info -> Bool)
-  -> TopLevel name ty builtin info
-  -> [Term name ty builtin info]
+  :: (EvalTerm ReplCoreBuiltin SpanInfo -> Bool)
+  -> EvalTopLevel ReplCoreBuiltin SpanInfo
+  -> [EvalTerm ReplCoreBuiltin SpanInfo]
 matchingTerms predicate topLevel = let
   terms = toListOf topLevelTerms topLevel
   in concatMap (toListOf filteredTerms) terms
   where
-  filteredTerms :: Traversal' (Term name ty builtin info) (Term name ty builtin info)
+  filteredTerms :: Traversal'
+    (EvalTerm ReplCoreBuiltin SpanInfo) (EvalTerm ReplCoreBuiltin SpanInfo)
   filteredTerms = traverseTerm . filtered predicate
 
 processFile

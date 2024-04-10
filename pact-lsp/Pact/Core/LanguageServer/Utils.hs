@@ -73,15 +73,15 @@ topLevelTermAt p = \case
       | p `inside` i = Just (InterfaceMatch iface) -- TODO add interace defs
       | otherwise = Nothing
     goDefs = \case
-      Dfun d@(Defun _ _ _ tm i)
+      Dfun d@(Defun _ _ tm i)
         | p `inside` i -> TermMatch <$> termAt p tm <|> Just (DefunMatch d)
         | otherwise -> Nothing
-      DConst d@(DefConst _ _ tc i)
+      DConst d@(DefConst _ tc i)
         | p `inside` i -> (case tc of
                              TermConst tm -> TermMatch <$> termAt p tm
                              _ -> Nothing) <|> Just (ConstMatch d)
         | otherwise -> Nothing
-      DCap dc@(DefCap _ _ _ tm _ i)
+      DCap dc@(DefCap _ _ tm _ i)
         | p `inside` i -> TermMatch <$> termAt p tm <|> Just (DefCapMatch dc)
         | otherwise -> Nothing
       DSchema ds@(DefSchema _ _ i)
@@ -90,7 +90,7 @@ topLevelTermAt p = \case
       DTable dt@(DefTable _ _ i)
         | p `inside` i -> Just (TableMatch dt)
         | otherwise -> Nothing
-      DPact dp@(DefPact _ _ _ steps i)
+      DPact dp@(DefPact _ _ steps i)
         | p `inside` i -> getAlt (foldMap (Alt . goStep) steps) <|> Just (DefPactMatch dp)
         | otherwise -> Nothing
     goModule m@(Module _ _ defs _ _ _ _ i)

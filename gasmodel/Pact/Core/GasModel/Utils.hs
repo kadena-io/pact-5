@@ -168,37 +168,37 @@ gmDcapEventName = "gasModelDCapEvent"
 gmDcapUnmanaged :: EvalDefCap CoreBuiltin ()
 gmDcapUnmanaged = DefCap
   { _dcapTerm = boolConst True
-  , _dcapRType = Nothing
-  , _dcapName = gmDcapUnmanagedName
+  , _dcapSpec = Arg gmDcapUnmanagedName Nothing ()
   , _dcapMeta=DefEvent
   , _dcapInfo=()
-  , _dcapArgs=[]}
+  , _dcapArgs=[]
+  }
 
 gmDcapAutomanaged :: EvalDefCap CoreBuiltin ()
 gmDcapAutomanaged = DefCap
   { _dcapTerm = boolConst True
-  , _dcapRType = Nothing
-  , _dcapName = gmDcapAutoManagedName
+  , _dcapSpec = Arg gmDcapAutoManagedName Nothing ()
   , _dcapMeta= DefManaged AutoManagedMeta
   , _dcapInfo=()
   , _dcapArgs=[]}
 
 gmManagerDfun :: EvalDefun CoreBuiltin ()
 gmManagerDfun =
-  Defun {_dfunTerm = intConst 1
-  , _dfunRType = Nothing
-  , _dfunName=gmManagerDfunName
+  Defun
+  { _dfunTerm = intConst 1
+  , _dfunSpec = Arg gmManagerDfunName Nothing ()
   , _dfunInfo=()
-  , _dfunArgs=[Arg "arg1" Nothing (), Arg "arg2" Nothing ()] }
+  , _dfunArgs=[Arg "arg1" Nothing (), Arg "arg2" Nothing ()]
+  }
 
 gmDcapManaged :: EvalDefCap CoreBuiltin ()
 gmDcapManaged = DefCap
   { _dcapTerm = boolConst True
-  , _dcapRType = Nothing
-  , _dcapName = gmDcapAutoManagedName
+  , _dcapSpec = Arg gmDcapAutoManagedName Nothing ()
   , _dcapMeta= DefManaged (DefManagedMeta (0, "arg1") (FQName (mkGasModelFqn gmManagerDfunName)))
   , _dcapInfo=()
-  , _dcapArgs=[Arg "arg1" Nothing ()]}
+  , _dcapArgs=[Arg "arg1" Nothing ()]
+  }
 
 gmModuleDefns :: [EvalDef CoreBuiltin ()]
 gmModuleDefns =

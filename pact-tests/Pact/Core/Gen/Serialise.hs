@@ -231,27 +231,25 @@ termGen b i = Gen.recursive Gen.choice
   , ObjectLit <$> Gen.list (Range.linear 1 16) ((,) <$> fieldGen <*> termGen b i) <*> i
   ]
 
+
 defunGen :: Gen b -> Gen i -> Gen (Defun Name Type b i)
 defunGen b i = do
-  name <- identGen
   args <- Gen.list (Range.linear 0 100) (argGen i)
-  ret <- Gen.maybe typeGen
   term <- termGen b i
-  Defun name args ret term <$> i
+  spec <- argGen i
+  Defun spec args term <$> i
 
 ifDefunGen ::Gen i -> Gen (IfDefun Type i)
 ifDefunGen i = do
-  name <- identGen
   args <- Gen.list (Range.linear 0 100) (argGen i)
-  ret <- Gen.maybe typeGen
-  IfDefun name args ret <$> i
+  spec <- argGen i
+  IfDefun spec args <$> i
 
 defConstGen :: Gen b -> Gen i -> Gen (DefConst Name Type b i)
 defConstGen b i = do
-  name <- identGen
-  ty <- Gen.maybe typeGen
+  spec <- argGen i
   cval <- constValGen (termGen b i)
-  DefConst name ty cval <$> i
+  DefConst spec cval <$> i
 
 constValGen :: Gen (Term name ty b i) -> Gen (ConstVal (Term name ty b i))
 constValGen t = Gen.choice
@@ -288,21 +286,19 @@ defCapMetaGen genName = Gen.choice
 
 defCapGen :: Gen b -> Gen i -> Gen (DefCap Name Type b i)
 defCapGen b i = do
-  name <- identGen
   arity <- Gen.int (Range.linear 0 16)
   args <- Gen.list (Range.singleton arity) (argGen i)
-  ret <- Gen.maybe typeGen
   term <- termGen b i
   meta <- defCapMetaGen fqNameRefGen
-  DefCap name args ret term meta <$> i
+  spec <- argGen i
+  DefCap spec args term meta <$> i
 
 ifDefCapGen :: Gen i -> Gen (IfDefCap name Type i)
 ifDefCapGen i = do
-  name <- identGen
   args <- Gen.list (Range.linear 1 8) (argGen i)
-  ret <- Gen.maybe typeGen
   meta <- defCapMetaGen bareNameGen
-  IfDefCap name args ret meta <$> i
+  spec <- argGen i
+  IfDefCap spec args  meta <$> i
 
 defSchemaGen :: Gen i -> Gen (DefSchema Type i)
 defSchemaGen i = do
@@ -324,19 +320,17 @@ stepGen b i = Gen.choice
 
 defPactGen :: Gen b -> Gen i -> Gen (DefPact Name Type b i)
 defPactGen b i = do
-  name <- identGen
   args <- Gen.list (Range.linear 0 16) (argGen i)
-  ret <- Gen.maybe typeGen
   steps <- Gen.nonEmpty (Range.linear 0 16) (stepGen b i)
-  DefPact name args ret steps <$> i
+  spec <- argGen i
+  DefPact spec args steps <$> i
 
 
 ifDefPactGen :: Gen i -> Gen (IfDefPact Type i)
 ifDefPactGen i = do
-  name <- identGen
   args <- Gen.list (Range.linear 0 16) (argGen i)
-  ret <- Gen.maybe typeGen
-  IfDefPact name args ret <$> i
+  spec <- argGen i
+  IfDefPact spec args <$> i
 
 
 defGen :: Gen b -> Gen i -> Gen (Def Name Type b i)

@@ -320,13 +320,13 @@ mkDefunClosure
   -> ModuleName
   -> CEKEnv step b i m
   -> m (Closure step b i m)
-mkDefunClosure d mn e = case _dfunTerm d of
+mkDefunClosure d@(Defun (Arg n mty _) _ _ di) mn e = case _dfunTerm d of
   Lam args body i ->
-    pure (Closure (_dfunName d) mn (ArgClosure args) (NE.length args) body (_dfunRType d) e i)
+    pure (Closure n mn (ArgClosure args) (NE.length args) body mty e i)
   Nullary body i ->
-    pure (Closure (_dfunName d) mn NullaryClosure 0 body (_dfunRType d) e i)
+    pure (Closure n mn NullaryClosure 0 body mty e i)
   _ ->
-    failInvariant (_dfunInfo d) ("definition is not a closure: " <> T.pack (show d))
+    failInvariant di ("definition is not a closure: " <> T.pack (show d))
 
 mkDefPactClosure
   :: i

@@ -84,15 +84,17 @@ data ConstVal term
   | EvaledConst PactValue
   deriving (Show, Functor, Foldable, Traversable, Eq, Generic)
 
+-- Note about `def*`: The name and return type is part of the `*Spec :: Arg ty info`
+-- to include position information of the name
+
 -- | Our defun representation, that is
 -- (defun <name>(:<ty>)? (<args>*) <body>))
 -- note our IR does not spit out docs.
 -- In that case: refer to the repl.
 data Defun name ty builtin info
   = Defun
-  { _dfunName :: Text
+  { _dfunSpec :: Arg ty info
   , _dfunArgs :: [Arg ty info]
-  , _dfunRType :: Maybe ty
   , _dfunTerm :: Term name ty builtin info
   , _dfunInfo :: info
   } deriving (Show, Functor, Eq, Generic)
@@ -106,9 +108,8 @@ data Step name ty builtin info
 
 data DefPact name ty builtin info
   = DefPact
-  { _dpName :: Text
+  { _dpSpec :: Arg ty info
   , _dpArgs :: [Arg ty info]
-  , _dpRetType :: Maybe ty
   , _dpSteps :: NonEmpty (Step name ty builtin info)
   , _dpInfo :: info
   } deriving (Show, Functor, Eq, Generic)
@@ -119,8 +120,7 @@ data DefPact name ty builtin info
 -- Maybe a different IR is needed here?
 data DefConst name ty builtin info
   = DefConst
-  { _dcName :: Text
-  , _dcType :: Maybe ty
+  { _dcSpec :: Arg ty info
   , _dcTerm :: ConstVal (Term name ty builtin info)
   , _dcInfo :: info
   } deriving (Show, Functor, Eq, Generic)
@@ -129,9 +129,8 @@ data DefConst name ty builtin info
 -- (defcap <name>:<ty> (<args>) <meta> <body>)
 data DefCap name ty builtin info
   = DefCap
-  { _dcapName :: Text
+  { _dcapSpec :: Arg ty info
   , _dcapArgs :: [Arg ty info]
-  , _dcapRType :: Maybe ty
   , _dcapTerm :: Term name ty builtin info
   , _dcapMeta :: DefCapMeta (FQNameRef name)
   , _dcapInfo :: info
@@ -212,25 +211,22 @@ data Interface name ty builtin info
 
 data IfDefPact ty info
   = IfDefPact
-  { _ifdpName :: Text
+  { _ifdpSpec :: Arg ty info
   , _ifdpArgs :: [Arg ty info]
-  , _ifdpRType :: Maybe ty
   , _ifdpInfo :: info
   } deriving (Show, Eq, Functor, Generic)
 
 data IfDefun ty info
   = IfDefun
-  { _ifdName :: Text
+  { _ifdSpec :: Arg ty info
   , _ifdArgs :: [Arg ty info]
-  , _ifdRType :: Maybe ty
   , _ifdInfo :: info
   } deriving (Show, Eq, Functor, Generic)
 
 data IfDefCap name ty info
   = IfDefCap
-  { _ifdcName :: Text
+  { _ifdcSpec :: Arg ty info
   , _ifdcArgs :: [Arg ty info]
-  , _ifdcRType :: Maybe ty
   , _ifdcMeta :: DefCapMeta BareName
   , _ifdcInfo :: info
   } deriving (Show, Eq, Functor, Generic)
@@ -256,12 +252,12 @@ data ReplTopLevel name ty builtin info
   deriving (Show, Functor)
 
 defName :: Def name t b i -> Text
-defName (Dfun d) = _dfunName d
-defName (DConst d) = _dcName d
-defName (DCap d) = _dcapName d
+defName (Dfun d) = _argName $ _dfunSpec d
+defName (DConst d) = _argName $ _dcSpec d
+defName (DCap d) = _argName $ _dcapSpec d
 defName (DSchema d) = _dsName d
 defName (DTable d) = _dtName d
-defName (DPact d) = _dpName d
+defName (DPact d) = _argName $ _dpSpec d
 
 findDefInModule :: Text -> Module name ty b i -> Maybe (Def name ty b i)
 findDefInModule defnName targetModule =
@@ -286,10 +282,10 @@ ifDefKind mn = \case
 
 ifDefName :: IfDef name ty builtin i -> Text
 ifDefName = \case
-  IfDfun ifd -> _ifdName ifd
-  IfDConst dc -> _dcName dc
-  IfDCap ifd -> _ifdcName ifd
-  IfDPact ifd -> _ifdpName ifd
+  IfDfun ifd -> _argName $ _ifdSpec ifd
+  IfDConst dc -> _argName $ _dcSpec dc
+  IfDCap ifd -> _argName $ _ifdcSpec ifd
+  IfDPact ifd -> _argName $ _ifdpSpec ifd
   IfDSchema dc -> _dsName dc
 
 defInfo :: Def name ty b i -> i
@@ -358,23 +354,23 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (TopLevel name ty bu
     TLTerm tm -> pretty tm
     _ -> "todo: pretty defs/modules"
 
-prettyDef :: Pretty ty => Doc ann -> Text -> Maybe ty -> info -> [Arg ty info] -> Doc ann
-prettyDef deftoken defname defRTy dInfo defArgs =
+prettyDef :: Pretty ty => Doc ann -> Arg ty info -> info -> [Arg ty info] -> Doc ann
+prettyDef deftoken (Arg defname defRTy _) dInfo defArgs =
   let dfNameArg = Arg defname defRTy dInfo
       argList = parens (hsep (pretty <$> defArgs))
   in parens $ deftoken <+> pretty dfNameArg <+> argList
 
 instance Pretty ty => Pretty (Defun name ty b i) where
-  pretty (Defun name args rty _ i) =
-    prettyDef "defun" name rty i args
+  pretty (Defun spec args _ i) =
+    prettyDef "defun" spec i args
 
 instance Pretty ty => Pretty (DefPact name ty b i) where
-  pretty (DefPact name args rty _ i) =
-    prettyDef "defpact" name rty i args
+  pretty (DefPact spec args _ i) =
+    prettyDef "defpact" spec i args
 
 instance Pretty ty => Pretty (DefCap name ty b i) where
-  pretty (DefCap name args rty _ _ i) =
-    prettyDef "defcap" name rty i args
+  pretty (DefCap spec args _ _ i) =
+    prettyDef "defcap" spec i args
 
 instance Pretty ty => Pretty (DefSchema ty info) where
   pretty (DefSchema n schema i) =
@@ -395,8 +391,8 @@ instance Pretty term => Pretty (ConstVal term) where
     EvaledConst v -> pretty v
 
 instance (Pretty name, Pretty ty, Pretty b) => Pretty (DefConst name ty b i) where
-  pretty (DefConst n ty term _) =
-    parens $ "defconst" <+> pretty n <> maybe mempty ((":" <>) . pretty) ty <+> pretty term
+  pretty (DefConst (Arg n mty _) term _) =
+    parens $ "defconst" <+> pretty n <> maybe mempty ((":" <>) . pretty) mty <+> pretty term
 
 instance (Pretty name, Pretty ty, Pretty b) => Pretty (Def name ty b i) where
   pretty = \case
@@ -417,6 +413,9 @@ makePrisms ''Def
 makePrisms ''Term
 makePrisms ''IfDef
 
+makeLenses ''IfDefun
+makeLenses ''IfDefPact
+makeLenses ''IfDefCap
 
 -----------------------------------------
 -- Term traversals and builtins
@@ -547,24 +546,24 @@ traverseDefunTerm
                (Defun name' ty builtin' info)
                (Term name ty builtin info)
                (Term name' ty builtin' info)
-traverseDefunTerm f (Defun n args ret term i) =
-  (\term' -> Defun n args ret term' i) <$> f term
+traverseDefunTerm f (Defun spec args term i) =
+  (\term' -> Defun spec args term' i) <$> f term
 
 traverseDefConstTerm
   :: Traversal (DefConst name ty builtin info)
                (DefConst name' ty builtin' info)
                (Term name ty builtin info)
                (Term name' ty builtin' info)
-traverseDefConstTerm f (DefConst n ret term i) =
-  (\term' -> DefConst n ret term' i)  <$> traverse f term
+traverseDefConstTerm f (DefConst spec term i) =
+  (\term' -> DefConst spec term' i)  <$> traverse f term
 
 traverseDefCapTerm
   :: Traversal (DefCap name ty builtin info)
                (DefCap name ty builtin' info)
                (Term name ty builtin info)
                (Term name ty builtin' info)
-traverseDefCapTerm f (DefCap n args ret term meta i) =
-  (\term' -> DefCap n args ret term' meta i) <$> f term
+traverseDefCapTerm f (DefCap spec args term meta i) =
+  (\term' -> DefCap spec args term' meta i) <$> f term
 
 
 traverseDefPactStep
@@ -582,8 +581,8 @@ traverseDefPactTerm
                (DefPact name ty builtin' info)
                (Term name ty builtin info)
                (Term name ty builtin' info)
-traverseDefPactTerm f (DefPact n args ty steps info) =
-  (\steps' -> DefPact n args ty steps' info) <$> traverse (traverseDefPactStep f) steps
+traverseDefPactTerm f (DefPact spec args steps info) =
+  (\steps' -> DefPact spec args steps' info) <$> traverse (traverseDefPactStep f) steps
 
 
 traverseDefTerm

@@ -67,6 +67,7 @@ import Pact.Core.Gas
 import Pact.Core.Errors
 import Pact.Core.Debug
 import Pact.Core.Environment
+import Pact.Core.Type
 import qualified Pact.Core.IR.Term as Term
 import qualified Pact.Core.Syntax.ParseTree as Syntax
 
@@ -276,7 +277,7 @@ replCompletion natives =
     ModuleData md _ ->
       Term.defName <$> Term._mDefs md
     InterfaceData iface _ ->
-      fmap Term._dcName $ mapMaybe (preview Term._IfDConst) $ Term._ifDefns iface
+      fmap (_argName . Term._dcSpec) $ mapMaybe (preview Term._IfDConst) $ Term._ifDefns iface
   toPrefixed m =
     concat $ prefixF <$> M.toList m
   prefixF (mn, ems) = let

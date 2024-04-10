@@ -189,15 +189,15 @@ IfDef :: { ParsedIfDef }
 -- ident = $2,
 IfDefun :: { SpanInfo -> IfDefun SpanInfo }
   : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel
-    { IfDefun (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) }
+    { IfDefun (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) (fst $7) (snd $7) }
 
 IfDefCap :: { SpanInfo -> IfDefCap SpanInfo }
   : defcap IDENT MTypeAnn'(' MArgs ')' MDocOrModel MDCapMeta
-    { IfDefCap (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) $8 }
+    { IfDefCap (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) (fst $7) (snd $7) $8 }
 
 IfDefPact :: { SpanInfo -> IfDefPact SpanInfo }
   : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel
-    { IfDefPact (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) }
+    { IfDefPact (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) (fst $7) (snd $7) }
 
 ImportList :: { Maybe [Text] }
   : '[' ImportNames ']' { Just (reverse $2) }
@@ -208,12 +208,12 @@ ImportNames :: { [Text] }
   | {- empty -} { [] }
 
 DefConst :: { SpanInfo -> ParsedDefConst }
-  : defconst IDENT MTypeAnn Expr MDoc { DefConst (getIdent $2) $3 $4 $5 }
+  : defconst IDENT MTypeAnn Expr MDoc { DefConst (MArg (getIdent $2) $3 (_ptInfo $2)) $4 $5 }
 
 -- All defs
 Defun :: { SpanInfo -> ParsedDefun }
   : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel Block
-    { Defun (getIdent $2) (reverse $5) $3 $8 (fst $7) (snd $7) }
+    { Defun (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $8 (fst $7) (snd $7) }
 
 Defschema :: { SpanInfo -> DefSchema SpanInfo }
   : defschema IDENT MDocOrModel SchemaArgList
@@ -224,11 +224,11 @@ Deftable :: { SpanInfo -> DefTable SpanInfo }
 
 Defcap :: { SpanInfo -> DefCap SpanInfo }
   : defcap IDENT MTypeAnn '(' MArgs ')' MDocOrModel MDCapMeta Block
-    { DefCap (getIdent $2) (reverse $5) $3 $9 (fst $7) (snd $7) $8 }
+    { DefCap (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $9 (fst $7) (snd $7) $8 }
 
 DefPact :: { SpanInfo -> DefPact SpanInfo }
   : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel Steps
-  { DefPact (getIdent $2) (reverse $5) $3 (reverse $8) (fst $7) (snd $7) }
+  { DefPact (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) (reverse $8) (fst $7) (snd $7) }
 
 Steps :: { [PactStep SpanInfo] }
   : Steps Step { $2:$1 }

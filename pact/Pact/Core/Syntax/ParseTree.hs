@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Pact.Core.Syntax.ParseTree where
 
@@ -110,11 +111,11 @@ data MArg i
 
 defName :: Def i -> Text
 defName = \case
-  Dfun d -> _dfunName d
-  DConst d -> _dcName d
-  DCap d -> _dcapName d
+  Dfun d -> _margName $ _dfunSpec d
+  DConst d ->_margName $ _dcSpec d
+  DCap d -> _margName $ _dcapSpec d
   DTable d -> _dtName d
-  DPact d -> _dpName d
+  DPact d -> _margName $ _dpSpec d
   DSchema d -> _dscName d
 
 defDocs :: Def i -> Maybe Text
@@ -138,9 +139,8 @@ defInfo = \case
 
 data Defun i
   = Defun
-  { _dfunName :: Text
+  { _dfunSpec :: MArg i
   , _dfunArgs :: [MArg i]
-  , _dfunRetType :: Maybe Type
   , _dfunTerm :: Expr i
   , _dfunDocs :: Maybe Text
   , _dfunModel :: [PropertyExpr i]
@@ -149,8 +149,7 @@ data Defun i
 
 data DefConst i
   = DefConst
-  { _dcName :: Text
-  , _dcType :: Maybe Type
+  { _dcSpec :: MArg i
   , _dcTerm :: Expr i
   , _dcDocs :: Maybe Text
   , _dcInfo :: i
@@ -163,9 +162,8 @@ data DCapMeta
 
 data DefCap i
   = DefCap
-  { _dcapName :: Text
+  { _dcapSpec :: MArg i
   , _dcapArgs :: ![MArg i]
-  , _dcapRetType :: Maybe Type
   , _dcapTerm :: Expr i
   , _dcapDocs :: Maybe Text
   , _dcapModel :: [PropertyExpr i]
@@ -197,9 +195,8 @@ data PactStep i
 
 data DefPact i
   = DefPact
-  { _dpName :: Text
+  { _dpSpec :: MArg i
   , _dpArgs :: [MArg i]
-  , _dpRetType :: Maybe Type
   , _dpSteps :: [PactStep i]
   , _dpDocs :: Maybe Text
   , _dpModel :: [PropertyExpr i]
@@ -263,9 +260,8 @@ data Interface i
 
 data IfDefun i
   = IfDefun
-  { _ifdName :: Text
+  { _ifdSpec :: MArg i
   , _ifdArgs :: [MArg i]
-  , _ifdRetType :: Maybe Type
   , _ifdDocs :: Maybe Text
   , _ifdModel :: [PropertyExpr i]
   , _ifdInfo :: i
@@ -273,9 +269,8 @@ data IfDefun i
 
 data IfDefCap i
   = IfDefCap
-  { _ifdcName :: Text
+  { _ifdcSpec :: MArg i
   , _ifdcArgs :: [MArg i]
-  , _ifdcRetType :: Maybe Type
   , _ifdcDocs :: Maybe Text
   , _ifdcModel :: [PropertyExpr i]
   , _ifdcMeta :: Maybe DCapMeta
@@ -284,9 +279,8 @@ data IfDefCap i
 
 data IfDefPact i
   = IfDefPact
-  { _ifdpName :: Text
+  { _ifdpSpec :: MArg i
   , _ifdpArgs :: [MArg i]
-  , _ifdpRetType :: Maybe Type
   , _ifdpDocs :: Maybe Text
   , _ifdpModel :: [PropertyExpr i]
   , _ifdpInfo :: i
@@ -342,7 +336,7 @@ data IfDef i
   deriving (Show, Functor)
 
 instance Pretty (DefConst i) where
-  pretty (DefConst dcn dcty term _ _) =
+  pretty (DefConst (MArg dcn dcty _) term _ _) =
     parens ("defconst" <+> pretty dcn <> mprettyTy dcty <+> pretty term)
     where
     mprettyTy = maybe mempty ((":" <>) . pretty)
@@ -356,7 +350,7 @@ instance Pretty (MArg i) where
     pretty n <> maybe mempty (\ty -> ":" <+> pretty ty) mty
 
 instance Pretty (Defun i) where
-  pretty (Defun n args rettype term _ _ _) =
+  pretty (Defun (MArg n rettype _) args term _ _ _) =
     parens ("defun" <+> pretty n <+> parens (commaSep args)
       <> ":" <+> pretty rettype <+> "=" <+> pretty term)
 
@@ -491,3 +485,13 @@ instance Pretty (Expr i) where
       Nothing -> pretty n
       Just t -> pretty n <> ":" <> pretty t
     renderLamTypes = fold . intersperse " " . fmap renderLamPair
+
+makeLenses ''Arg
+makeLenses ''MArg
+makeLenses ''Defun
+makeLenses ''DefConst
+makeLenses ''DefCap
+makeLenses ''DefSchema
+makeLenses ''DefTable
+makeLenses ''DefPact
+makeLenses ''Def
