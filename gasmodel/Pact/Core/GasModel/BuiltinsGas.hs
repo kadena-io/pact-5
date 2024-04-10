@@ -85,6 +85,22 @@ benchArithUnOp op pdb =
   where
   vals = take 3 $ enumExpText 1000 1000000
 
+benchAddNonArithOverloads :: BuiltinBenches
+benchAddNonArithOverloads pdb =
+  [ C.bgroup "list-shallow"
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(+ x x)|]
+    | (title, list) <- take 3 $ enumExpList 1000 100
+    ]
+  , C.bgroup "list-deep"
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(+ x x)|]
+    | (title, list) <- take 3 $ enumExpListDeep 3 5 3
+    ]
+  , C.bgroup "object"
+    [ runNativeBenchmarkPrepared [("x", obj)] pdb title [text|(+ x x)|]
+    | (title, obj) <- take 3 $ enumExpObject 1000 100
+    ]
+  ]
+
 benchNegate :: BuiltinBenches
 benchNegate pdb =
   [ C.bgroup "integer"
@@ -171,7 +187,7 @@ benchEnumerate pdb = [ runNativeBenchmark pdb title [text|(enumerate 0 $cnt)|]
 
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn pdb = case bn of
-  CoreAdd -> benchArithBinOp "+" pdb
+  CoreAdd -> benchArithBinOp "+" pdb <> benchAddNonArithOverloads pdb
   CoreSub -> benchArithBinOp "-" pdb
   CoreMultiply -> benchArithBinOp "*" pdb
   CoreDivide -> benchArithBinOp "/" pdb
