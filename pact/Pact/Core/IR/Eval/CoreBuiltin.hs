@@ -9,7 +9,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE MultiWayIf #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE CPP #-}
 
 module Pact.Core.IR.Eval.CoreBuiltin
  ( coreBuiltinRuntime
@@ -31,12 +31,11 @@ import Control.Monad.IO.Class
 import Data.Attoparsec.Text(parseOnly)
 import Data.Bits
 import Data.Either(isLeft, isRight)
-import Data.Foldable(foldl', traverse_, toList, foldlM)
+import Data.Foldable(foldl', toList, foldlM)
 import Data.Decimal(roundTo', Decimal, DecimalRaw(..))
 import Data.Vector(Vector)
 import Data.Maybe(maybeToList)
 import Numeric(showIntAtBase)
-import qualified Control.Lens as Lens
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
 import qualified Data.Text as T
@@ -45,9 +44,13 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Char as Char
 import qualified Data.ByteString as BS
-import qualified GHC.Exts as Exts
 import qualified Pact.Time as PactTime
-import qualified Data.Poly as Poly
+
+#ifndef WITHOUT_CRYPTO
+import Data.Foldable(traverse_)
+import qualified Control.Lens as Lens
+import qualified GHC.Exts as Exts
+#endif
 
 import Pact.Core.Builtin
 import Pact.Core.Literal
@@ -62,9 +65,11 @@ import Pact.Core.Environment
 import Pact.Core.Capabilities
 import Pact.Core.Namespace
 import Pact.Core.Gas
-import Pact.Core.Crypto.Pairing
 import Pact.Core.Type
+#ifndef WITHOUT_CRYPTO
+import Pact.Core.Crypto.Pairing
 import Pact.Core.Crypto.Hash.Poseidon
+#endif
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
@@ -813,13 +818,53 @@ coreDec info b cont handler _env = \case
   [VInteger i] -> returnCEKValue cont handler $ VDecimal $ Decimal 0 i
   args -> argsError info b args
 
+{-
+[Note: Parsed Integer]
+`read-integer` corresponds to prod's `ParsedInteger` newtype. That handles, in particular, the following codecs:
+
+instance FromJSON Literal where
+  parseJSON n@Number{} = LDecimal <$> decoder decimalCodec n
+  parseJSON (String s) = pure $ LString s
+  parseJSON (Bool b) = pure $ LBool b
+  parseJSON o@Object {} =
+    (LInteger <$> decoder integerCodec o) <|>
+    (LTime <$> decoder timeCodec o) <|>
+    (LDecimal <$> decoder decimalCodec o)
+  parseJSON _t = fail "Literal parse failed"
+
+instance A.FromJSON ParsedInteger where
+  parseJSON (A.String s) =
+    ParsedInteger <$> case pactAttoParseOnly (unPactParser number) s of
+                        Right (LInteger i) -> return i
+                        _ -> fail $ "Failure parsing integer string: " ++ show s
+  parseJSON (A.Number n) = return $ ParsedInteger (round n)
+  parseJSON v@A.Object{} = A.parseJSON v >>= \i -> case i of
+    PLiteral (LInteger li) -> return $ ParsedInteger li
+    _ -> fail $ "Failure parsing integer PactValue object: " ++ show i
+  parseJSON v = fail $ "Failure parsing integer: " ++ show v
+
+In prod, env data is just a json object. In core, we parse eagerly using the `PactValue` parser, so the following
+can happen:
+  - We may see a PString, we must run the number parser `parseNumLiteral`
+  - We may see a PDecimal, in which case we round
+  - We may see a PInteger, which we read as-is.
+-}
 coreReadInteger :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreReadInteger info b cont handler _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
       PObject envData ->
         case M.lookup (Field s) envData of
-          Just (PInteger p) -> returnCEKValue cont handler (VInteger p)
+          -- See [Note: Parsed Integer]
+          Just (PDecimal p) ->
+            returnCEKValue cont handler (VInteger (round p))
+          Just (PInteger p) ->
+            returnCEKValue cont handler (VInteger p)
+          -- See [Note: Parsed Integer]
+          Just (PString raw) -> case parseNumLiteral raw of
+            Just (LInteger i) -> returnCEKValue cont handler (VInteger i)
+            _ -> returnCEK cont handler (VError "read-integer failure" info)
+
           _ -> returnCEK cont handler (VError "read-integer failure" info)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
   args -> argsError info b args
@@ -838,6 +883,22 @@ coreReadMsg info b cont handler _env = \case
     returnCEKValue cont handler (VPactValue envData)
   args -> argsError info b args
 
+{-
+[Note: Parsed Decimal]
+
+Simlar to [Note: Parsed Integer], except the decimal case handles:
+
+instance A.FromJSON ParsedDecimal where
+  parseJSON (A.String s) =
+    ParsedDecimal <$> case pactAttoParseOnly (unPactParser number) s of
+                        Right (LDecimal d) -> return d
+                        Right (LInteger i) -> return (fromIntegral i)
+                        _ -> fail $ "Failure parsing decimal string: " ++ show s
+  parseJSON (A.Number n) = return $ ParsedDecimal (fromRational $ toRational n)
+  parseJSON v = fail $ "Failure parsing decimal: " ++ show v
+
+So the string parsing case accepts both the integer, and decimal output
+-}
 coreReadDecimal :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreReadDecimal info b cont handler _env = \case
   [VString s] -> do
@@ -845,6 +906,12 @@ coreReadDecimal info b cont handler _env = \case
       PObject envData ->
         case M.lookup (Field s) envData of
           Just (PDecimal p) -> returnCEKValue cont handler (VDecimal p)
+          -- See [Note: Parsed Decimal]
+          Just (PInteger i) -> returnCEKValue cont handler (VDecimal (Decimal 0 i))
+          Just (PString raw) -> case parseNumLiteral raw of
+            Just (LInteger i) -> returnCEKValue cont handler (VDecimal (Decimal 0 i))
+            Just (LDecimal l) -> returnCEKValue cont handler (VDecimal l)
+            _ -> returnCEK cont handler (VError "read-decimal failure" info)
           _ -> returnCEK cont handler (VError "read-decimal failure" info)
       _ -> returnCEK cont handler (VError "read-decimal failure" info)
   args -> argsError info b args
@@ -1617,6 +1684,7 @@ coreChainData info b cont handler _env = \case
 -- ZK defns
 -- -------------------------
 
+#ifndef WITHOUT_CRYPTO
 ensureOnCurve :: (Num p, Eq p, MonadEval b i m) => i -> CurvePoint p -> p -> m ()
 ensureOnCurve info p bp = unless (isOnCurve p bp) $ throwExecutionError info PointNotOnCurve
 
@@ -1660,9 +1728,7 @@ fromG2 CurveInf = ObjectData pts
     , (Field "y", PList (V.fromList [PLiteral (LInteger 0)]))]
 fromG2 (Point x y) = ObjectData pts
   where
-  toPactPt (Extension e) = let
-    elems' = fmap (PInteger . fromIntegral) (Poly.unPoly e)
-    in PList elems'
+  toPactPt ext = PList $ PInteger . fromIntegral <$> extElements ext
   x' = toPactPt x
   y' = toPactPt y
   pts =
@@ -1733,6 +1799,7 @@ zkPointAddition info b cont handler _env = \case
       _ -> argsError info b args
   args -> argsError info b args
 
+
 -----------------------------------
 -- Poseidon
 -----------------------------------
@@ -1745,6 +1812,22 @@ poseidonHash info b cont handler _env = \case
       chargeGasArgs info (GPoseidonHashHackAChain (length intArgs))
       returnCEKValue cont handler $ VInteger (poseidon (V.toList intArgs))
   args -> argsError info b args
+
+#else
+
+zkPairingCheck :: (MonadEval b i m) => NativeFunction step b i m
+zkPairingCheck info _b _cont _handler _env _args = failInvariant info "crypto disabled"
+
+zkScalaMult :: (MonadEval b i m) => NativeFunction step b i m
+zkScalaMult info _b _cont _handler _env _args = failInvariant info "crypto disabled"
+
+zkPointAddition :: (MonadEval b i m) => NativeFunction step b i m
+zkPointAddition info _b _cont _handler _env _args = failInvariant info "crypto disabled"
+
+poseidonHash :: (MonadEval b i m) => NativeFunction step b i m
+poseidonHash info _b _cont _handler _env _args = failInvariant info "crypto disabled"
+
+#endif
 
 
 -----------------------------------

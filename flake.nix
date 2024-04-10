@@ -30,7 +30,7 @@
           pact-tng =
             final.haskell-nix.project' {
               src = ./.;
-              compiler-nix-name = "ghc962";
+              compiler-nix-name = "ghc964";
               shell.tools = {
                 cabal = {};
                 haskell-language-server = {};
@@ -38,7 +38,7 @@
               shell.buildInputs = with pkgs; [
                 zlib
                 z3
-                pkgconfig
+                pkg-config
               ];
             };
         })

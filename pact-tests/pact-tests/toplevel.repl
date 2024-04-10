@@ -11,7 +11,7 @@
 ;; ease restrictions requiring namespaced keysets
 ;; define-keyset success case
 (define-keyset 'k (sig-keyset))
-
+(env-enable-repl-natives true)
 (module toplevel 'k
   (defschema tl a:integer)
 
@@ -48,8 +48,6 @@
 (expect-failure "bad-define-keyset" (bad-define-keyset 'j (sig-keyset)))
 ;  (expect-failure "bad-list-modules" (bad-list-modules))
 
-; todo: enable repl natives
-;  (env-enable-repl-natives true)
 (module repl-natives 'k
   (defun f () (env-sigs [{'key: "bob",'caps: []}])))
 (expect
