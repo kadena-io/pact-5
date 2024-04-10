@@ -106,6 +106,10 @@ benchAddNonArithOverloads pdb =
     [ runNativeBenchmarkPrepared [("x", obj)] pdb title [text|(+ x x)|]
     | (title, obj) <- take 3 $ enumExpObject 1000 100
     ]
+  , C.bgroup "string"
+    [ runNativeBenchmarkPrepared [("x", str)] pdb title [text|(+ x x)|]
+    | (title, str) <- take 3 $ enumExpString "a" 1000 1000
+    ]
   ]
 
 benchNegate :: BuiltinBenches
