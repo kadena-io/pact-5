@@ -12,6 +12,7 @@ import Data.Bifunctor
 import NeatInterpolation (text)
 
 import Pact.Core.Builtin
+import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.PactValue
 import Pact.Core.Persistence
@@ -53,6 +54,12 @@ enumExpObject base mult =
 enumExpObjectComplex :: Integer -> Integer -> [(String, PactValue)]
 enumExpObjectComplex base mult =
   [ (title, PObject $ mkMap mkList cnt)
+  | (title, cnt) <- enumExpNum base mult
+  ]
+
+enumExpString :: T.Text -> Integer -> Integer -> [(String, PactValue)]
+enumExpString rep base mult =
+  [ (title, PLiteral $ LString $ T.replicate (fromIntegral cnt) rep)
   | (title, cnt) <- enumExpNum base mult
   ]
 
