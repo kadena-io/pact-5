@@ -21,7 +21,7 @@ import Language.LSP.VFS
 import Language.LSP.Diagnostics
 import Data.Monoid (Alt(..))
 import Control.Monad.IO.Class
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, maybeToList, catMaybes)
 import Data.Text (Text)
 import Data.IORef
 import Data.Default
@@ -338,7 +338,6 @@ documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req re
 -- collectIf :: Traversable t => t a -> (a -> Bool) -> [a]
 -- collectIf t p = getCollect (foldMap (\x -> if p x then Collect [x] else mempty) t)
 
-
 documentRenameRequestHandler :: Handlers LSM
 documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req resp ->
   getState >>= \st -> do
@@ -357,16 +356,20 @@ documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req 
         changes <- case tm of
                      TermMatch (Var (Name n vt) _) -> case vt of
                        NBound _db -> error "nbound"
-                       NTopLevel _mn _mh -> do
+                       NTopLevel mn _mh -> do
                          let isSameVar = \case
                                Var (Name n' vt') _
                                  | n == n' && vt == vt' -> True
                                _ -> False
                              occurences = concatMap (matchingTerms isSameVar) tls
 
-                         forM occurences $ \case
+                         termChanges <- forM occurences $ \case
                            Var _ i -> pure $ toTextEdit (spanInfoToRange i)
                            _ -> error "invariant"
+
+                         let tlChanges = bimap (ifDefInfo) (defInfo) (matchingDefs tls mn n)
+
+                         pure $ tlChanges ++ termChanges
                        _ -> pure []
                      _ -> pure []
         let
@@ -375,6 +378,13 @@ documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req 
                  (InL <$> changes)
           we = WorkspaceEdit Nothing (Just [InL te]) Nothing
         resp (Right (InL we))
+
+matchingDefs
+  :: [EvalTopLevel ReplCoreBuiltin SpanInfo]
+  -> ModuleName
+  -> Text
+  -> (Maybe (EvalIfDef ReplCoreBuiltin SpanInfo), Maybe (EvalDef ReplCoreBuiltin SpanInfo))
+matchingDefs = error "unimplemented"
 
 matchingTerms
   :: (EvalTerm ReplCoreBuiltin SpanInfo -> Bool)
