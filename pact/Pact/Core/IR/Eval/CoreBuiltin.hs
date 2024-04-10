@@ -327,7 +327,11 @@ bitXorInt :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 bitXorInt = binaryIntFn xor
 
 bitShiftInt :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
-bitShiftInt =  binaryIntFn (\i s -> shift i (fromIntegral s))
+bitShiftInt info b cont handler _env = \case
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
+    chargeGasArgs info $ GIntegerOpCost PrimOpShift i i'
+    returnCEKValue cont handler (VLiteral (LInteger (i `shift` fromIntegral i')))
+  args -> argsError info b args
 
 rawAbs :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawAbs info b cont handler _env = \case

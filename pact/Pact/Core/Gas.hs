@@ -137,6 +137,7 @@ data IntegerPrimOp
   | PrimOpSub
   | PrimOpMul
   | PrimOpDiv
+  | PrimOpShift
   deriving (Eq, Show, Enum, Ord, Generic, NFData)
 
 data GasArgs

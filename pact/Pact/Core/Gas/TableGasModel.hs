@@ -152,6 +152,11 @@ intDivCost !lop !rop
        else MilliGas $ fromIntegral (nbits * nbits `quot` 6400)
 {-# INLINE intDivCost #-}
 
+intShiftCost :: Integer -> Integer -> MilliGas
+intShiftCost _ !rop
+  | rop > 0 = MilliGas $ fromIntegral $ rop `quot` 1000
+  | otherwise = MilliGas 0
+
 runTableModel :: GasArgs -> MilliGas
 runTableModel = \case
   GAConstant !c -> c
@@ -160,6 +165,7 @@ runTableModel = \case
     PrimOpSub -> intAdditionCost lop rop
     PrimOpMul -> intMultCost lop rop
     PrimOpDiv -> intDivCost lop rop
+    PrimOpShift -> intShiftCost lop rop
   -- Note: concat values are currently just constant
   -- Todo: get actual metrics on list cat / text cat
   GConcat c -> case c of
