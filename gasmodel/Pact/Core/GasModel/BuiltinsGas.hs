@@ -176,6 +176,26 @@ benchFloatingMixedOp op pdb =
   | (title, x) <- take 3 $ enumExpText 1000 1000
   ]
 
+benchLength :: BuiltinBenches
+benchLength pdb =
+  [ C.bgroup "list"
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(length x)|]
+    | (title, list) <- take 3 $ enumExpList 1000 100
+    ]
+  , C.bgroup "string"
+    [ runNativeBenchmarkPrepared [("x", str)] pdb title [text|(length x)|]
+    | (title, str) <- take 3 $ enumExpString "a" 1000 1000
+    ]
+  , C.bgroup "object"
+    [ runNativeBenchmarkPrepared [("x", obj)] pdb title [text|(length x)|]
+    | (title, obj) <- take 3 $ enumExpObject 1000 10
+    ]
+  , C.bgroup "object-complex"
+    [ runNativeBenchmarkPrepared [("x", obj)] pdb title [text|(length x)|]
+    | (title, obj) <- take 3 $ enumExpObjectComplex 1000 2
+    ]
+  ]
+
 benchDistinct :: BuiltinBenches
 benchDistinct pdb =
   [ C.bgroup "flat" flats
@@ -228,6 +248,7 @@ benchesForBuiltin bn pdb = case bn of
   CoreLn -> benchArithUnOp "ln" pdb
   CoreSqrt -> benchArithUnOp "sqrt" pdb
   CoreLogBase -> benchArithBinOp "log" pdb
+  CoreLength -> benchLength pdb
   CoreDistinct -> benchDistinct pdb
   CoreEnumerate -> benchEnumerate pdb
   _ -> []
