@@ -560,6 +560,7 @@ rawDrop info b cont handler _env = \case
 rawLength :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawLength info b cont handler _env = \case
   [VString t] -> do
+    chargeGasArgs info $ GStrOp $ StrOpLength $ T.length t
     returnCEKValue cont handler  (VLiteral (LInteger (fromIntegral (T.length t))))
   [VList li] -> returnCEKValue cont handler (VLiteral (LInteger (fromIntegral (V.length li))))
   [VObject o] ->

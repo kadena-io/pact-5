@@ -29,6 +29,7 @@ module Pact.Core.Gas
  , ZKGroup(..)
  , ZKArg(..)
  , IntegerPrimOp(..)
+ , StrOp(..)
  , ConcatType(..)
  , GasTextLength(..)
  , GasListLength(..)
@@ -140,6 +141,10 @@ data IntegerPrimOp
   | PrimOpShift
   deriving (Eq, Show, Enum, Ord, Generic, NFData)
 
+data StrOp
+  = StrOpLength !Int
+  deriving (Eq, Show, Ord, Generic, NFData)
+
 data GasArgs
   = GAConstant !MilliGas
   -- Todo: integerOpCost seems like a case of `GALinear`
@@ -168,6 +173,7 @@ data GasArgs
   | GPoseidonHashHackAChain !Int
   -- ^ poseidon-hash-hack-a-chain costs
   | GModuleMemory !Word64
+  | GStrOp !StrOp
   deriving (Show, Generic, NFData)
 
 instance Pretty GasArgs where
