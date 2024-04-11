@@ -22,7 +22,6 @@
 module Pact.Core.IR.Term where
 
 import Control.Lens
-import Debug.Trace
 import Data.Foldable(fold, find)
 import Data.Text(Text)
 import Data.List.NonEmpty (NonEmpty)
@@ -297,6 +296,15 @@ defInfo = \case
   DTable dt -> _dtInfo dt
   DPact dp -> _dpInfo dp
 
+defNameInfo :: Def name ty b i -> i
+defNameInfo = \case
+  Dfun de -> _argInfo $ _dfunSpec de
+  DConst dc -> _argInfo $ _dcSpec dc
+  DCap dc -> _argInfo $  _dcapSpec dc
+  DSchema dc -> _dsInfo dc
+  DTable dt -> _dtInfo dt
+  DPact dp -> _argInfo $ _dpSpec dp
+
 ifDefToDef :: IfDef name ty b i -> Maybe (Def name ty b i)
 ifDefToDef = \case
   IfDfun _ -> Nothing
@@ -315,6 +323,14 @@ ifDefInfo = \case
   IfDConst dc -> _dcInfo dc
   IfDCap d -> _ifdcInfo d
   IfDPact d -> _ifdpInfo d
+  IfDSchema d -> _dsInfo d
+
+ifDefNameInfo :: IfDef name ty b i -> i
+ifDefNameInfo = \case
+  IfDfun de -> _argInfo $ _ifdSpec de
+  IfDConst dc -> _argInfo $ _dcSpec dc
+  IfDCap d -> _argInfo $ _ifdcSpec d
+  IfDPact d -> _argInfo $ _ifdpSpec d
   IfDSchema d -> _dsInfo d
 
 
@@ -497,8 +513,8 @@ termInfo f = \case
 traverseTerm
   :: Traversal' (Term name ty builtin info)
                 (Term name ty builtin info)
-traverseTerm f x= trace "AAAAAAAAAAA" $ case x of
-  Var n i -> trace "VAR" $ f (Var n i)
+traverseTerm f x= case x of
+  Var n i -> f (Var n i)
   Lam ne te i ->
     Lam ne <$> traverseTerm f te <*> pure i
   Let n te te' i ->
@@ -526,8 +542,8 @@ traverseTerm f x= trace "AAAAAAAAAAA" $ case x of
 topLevelTerms :: Traversal' (TopLevel name ty builtin info) (Term name ty builtin info)
 topLevelTerms f = \case
   TLModule md -> TLModule <$> traverseModuleTerms f md
-  TLInterface _iface -> error ""
-  TLTerm t -> trace "ddd " $ TLTerm <$> f t
+  TLInterface iface -> pure (TLInterface iface)
+  TLTerm t -> TLTerm <$> f t
   TLUse u i -> pure (TLUse u i)
 
 

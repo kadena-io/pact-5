@@ -21,7 +21,8 @@ import Language.LSP.VFS
 import Language.LSP.Diagnostics
 import Data.Monoid (Alt(..))
 import Control.Monad.IO.Class
-import Data.Maybe (fromMaybe, maybeToList, catMaybes)
+import Data.Maybe (fromMaybe, maybeToList)
+import Data.List (find)
 import Data.Text (Text)
 import Data.IORef
 import Data.Default
@@ -325,19 +326,6 @@ documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req re
         debug "documentHover: could not find term on position"
         resp (Right (InR Null))
 
-
--- newtype Collect a = Collect { getCollect :: [a] }
---   deriving (Eq, Show)
-
--- instance Semigroup (Collect a) where
---   Collect a <> Collect b = Collect (a ++ b)
-
--- instance Monoid (Collect a) where
---   mempty = Collect []
-
--- collectIf :: Traversable t => t a -> (a -> Bool) -> [a]
--- collectIf t p = getCollect (foldMap (\x -> if p x then Collect [x] else mempty) t)
-
 documentRenameRequestHandler :: Handlers LSM
 documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req resp ->
   getState >>= \st -> do
@@ -367,7 +355,11 @@ documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req 
                            Var _ i -> pure $ toTextEdit (spanInfoToRange i)
                            _ -> error "invariant"
 
-                         let tlChanges = bimap (ifDefInfo) (defInfo) (matchingDefs tls mn n)
+                         let toTlChanges t = maybeToList . fmap (toTextEdit . spanInfoToRange . t)
+                             tlChanges = case bimap (toTlChanges ifDefNameInfo)
+                                                    (toTlChanges defNameInfo)
+                                                    (matchingDefs tls mn n) of
+                               (a,b) -> a ++ b
 
                          pure $ tlChanges ++ termChanges
                        _ -> pure []
@@ -384,7 +376,25 @@ matchingDefs
   -> ModuleName
   -> Text
   -> (Maybe (EvalIfDef ReplCoreBuiltin SpanInfo), Maybe (EvalDef ReplCoreBuiltin SpanInfo))
-matchingDefs = error "unimplemented"
+matchingDefs tls mn n = (interfaceDef, moduleDef)
+  where
+    interfaceDef = do
+      let p = \case
+            TLInterface (Interface mn' _ _ _ _)
+              | mn == mn' -> True
+            _ -> False
+
+      TLInterface interf <- find p tls
+      find (\x -> ifDefName x == n) (_ifDefns interf)
+
+    moduleDef = do
+      let p = \case
+            TLModule (Module mn' _ _ _ _ _ _ _)
+              | mn == mn' -> True
+            _ -> False
+
+      TLModule module' <- find p tls
+      find (\x -> defName x == n) (_mDefs module')
 
 matchingTerms
   :: (EvalTerm ReplCoreBuiltin SpanInfo -> Bool)

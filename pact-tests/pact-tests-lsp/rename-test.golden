@@ -5,7 +5,7 @@
   (defun defun-1 (param1:integer param2: integer)
     param1)
 
-  (defun defun-2 (param1: integer)
+  (defun new-param (param1: integer)
     (defun-1 param1 param1))
 
   (defun defun-3 (param1: integer)
