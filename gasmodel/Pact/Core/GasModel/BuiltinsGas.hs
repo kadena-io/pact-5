@@ -196,6 +196,17 @@ benchLength pdb =
     ]
   ]
 
+benchTake :: BuiltinBenches
+benchTake pdb =
+  [ C.bgroup "list"
+    [ runNativeBenchmarkPrepared [("x", list), ("len", PInteger len)] pdb title [text|(take len x)|]
+    | (listTitle, list@(PList vec)) <- take 3 $ enumExpList 1000 100
+    , (takeTitle, len) <- take 3 $ enumExpNum 1000 100
+    , fromIntegral len <= V.length vec
+    , let title = listTitle <> "_" <> takeTitle
+    ]
+  ]
+
 benchDistinct :: BuiltinBenches
 benchDistinct pdb =
   [ C.bgroup "flat" flats
@@ -249,6 +260,7 @@ benchesForBuiltin bn pdb = case bn of
   CoreSqrt -> benchArithUnOp "sqrt" pdb
   CoreLogBase -> benchArithBinOp "log" pdb
   CoreLength -> benchLength pdb
+  CoreTake -> benchTake pdb
   CoreDistinct -> benchDistinct pdb
   CoreEnumerate -> benchEnumerate pdb
   _ -> []
