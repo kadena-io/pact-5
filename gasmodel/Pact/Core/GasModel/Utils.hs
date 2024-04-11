@@ -10,6 +10,7 @@ import Control.Monad.Except
 import Control.DeepSeq
 import Data.Text (Text)
 import Data.Map.Strict(Map)
+import qualified Criterion as C
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -288,12 +289,54 @@ compileTerm source = do
   DesugarOutput term _  <- runDesugarTerm parsed
   pure term
 
+type BenchEvalEnv = EvalEnv CoreBuiltin ()
+type BenchEvalState = EvalState CoreBuiltin ()
+
 runCompileTerm
-  :: EvalEnv CoreBuiltin ()
-  -> EvalState CoreBuiltin ()
+  :: BenchEvalEnv
+  -> BenchEvalState
   -> Text
   -> IO (Either (PactError ()) CoreTerm, EvalState CoreBuiltin ())
 runCompileTerm es ee = runEvalM es ee . compileTerm
+
+runNativeBenchmark'
+  :: (BenchEvalEnv -> IO BenchEvalEnv)
+  -> (BenchEvalState -> IO BenchEvalState)
+  -> PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> C.Benchmark
+runNativeBenchmark' envMod stMod pdb title src = C.env mkEnv $ \ ~(term, es, ee) ->
+  C.bench title $ C.nfAppIO (runEvalM ee es . Eval.eval PImpure benchmarkBigStepEnv) term
+  where
+  mkEnv = do
+    ee <- envMod =<< defaultGasEvalEnv pdb
+    es <- stMod defaultGasEvalState
+    (Right term, es') <- runCompileTerm ee es src
+    pure (term, es', ee)
+
+runNativeBenchmark
+  :: PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> C.Benchmark
+runNativeBenchmark = runNativeBenchmark' pure pure
+
+runNativeBenchmarkPrepared
+  :: [(Text, PactValue)]
+  -> PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> C.Benchmark
+runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure stMod
+  where
+  synthLoaded = Loaded
+    { _loModules = mempty
+    , _loToplevel = M.fromList [ (n, (mkGasModelFqn n, DKDefConst)) | n <- fst <$> envVars ]
+    , _loNamespace = Nothing
+    , _loAllLoaded = M.fromList [ (mkGasModelFqn n, DConst $ DefConst n Nothing (EvaledConst v) ()) | (n, v) <- envVars ]
+    }
+  stMod = pure . (esLoaded .~ synthLoaded)
 
 -- Closures
 unitClosureNullary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m

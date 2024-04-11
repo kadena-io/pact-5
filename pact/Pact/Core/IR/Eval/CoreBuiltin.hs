@@ -29,10 +29,9 @@ import Control.Lens hiding (from, to, op, parts)
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Attoparsec.Text(parseOnly)
-import Data.Containers.ListUtils(nubOrd)
 import Data.Bits
 import Data.Either(isLeft, isRight)
-import Data.Foldable(foldl', toList)
+import Data.Foldable(foldl', toList, foldlM)
 import Data.Decimal(roundTo', Decimal, DecimalRaw(..))
 import Data.Vector(Vector)
 import Data.Maybe(maybeToList)
@@ -307,20 +306,9 @@ rawLeq = defCmp (`elem` [LT, EQ])
 
 defCmp :: (CEKEval step b i m, MonadEval b i m) => (Ordering -> Bool) -> NativeFunction step b i m
 defCmp predicate info b cont handler _env = \case
-  args@[VLiteral lit1, VLiteral lit2] -> cmp lit1 lit2
-    where
-    cmp (LInteger l) (LInteger r) = do
-      chargeGasArgs info (GComparison (IntComparison l r))
-      returnCEKValue cont handler $ VBool $ predicate (compare l r)
-    cmp (LBool l) (LBool r) = returnCEKValue cont handler $ VBool $ predicate (compare l r)
-    cmp (LDecimal l) (LDecimal r) = do
-      chargeGasArgs info (GComparison (DecimalComparison l r))
-      returnCEKValue cont handler $ VBool $ predicate (compare l r)
-    cmp (LString l) (LString r) = do
-      chargeGasArgs info (GComparison (TextComparison l r))
-      returnCEKValue cont handler $ VBool $ predicate (compare l r)
-    cmp LUnit LUnit = returnCEKValue cont handler $ VBool (predicate EQ)
-    cmp _ _ = argsError info b args
+  args@[VLiteral lit1, VLiteral lit2] -> litCmpGassed info lit1 lit2 >>= \case
+    Just ordering -> returnCEKValue cont handler $ VBool $ predicate ordering
+    Nothing -> argsError info b args
   -- Todo: time comparisons
   [VTime l, VTime r] -> returnCEKValue cont handler $ VBool $ predicate (compare l r)
   args -> argsError info b args
@@ -339,7 +327,11 @@ bitXorInt :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 bitXorInt = binaryIntFn xor
 
 bitShiftInt :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
-bitShiftInt =  binaryIntFn (\i s -> shift i (fromIntegral s))
+bitShiftInt info b cont handler _env = \case
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
+    chargeGasArgs info $ GIntegerOpCost PrimOpShift i i'
+    returnCEKValue cont handler (VLiteral (LInteger (i `shift` fromIntegral i')))
+  args -> argsError info b args
 
 rawAbs :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawAbs info b cont handler _env = \case
@@ -405,12 +397,17 @@ rawShow info b cont handler _env = \case
 -- Todo: Gas here is complicated, greg worked on this previously
 rawContains :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawContains info b cont handler _env = \case
-  [VString f, VObject o] ->
+  [VString f, VObject o] -> do
+    chargeGasArgs info $ GSearch $ FieldSearch (M.size o)
     returnCEKValue cont handler (VBool (M.member (Field f) o))
-  [VString s, VString s'] ->
-    returnCEKValue cont handler (VBool (s `T.isInfixOf` s'))
-  [VPactValue v, VList vli] ->
-    returnCEKValue cont handler (VBool (v `V.elem` vli))
+  [VString needle, VString hay] -> do
+    chargeGasArgs info $ GSearch $ SubstringSearch needle hay
+    returnCEKValue cont handler (VBool (needle `T.isInfixOf` hay))
+  [VPactValue v, VList vli] -> do
+    let search True _ = pure True
+        search _ el = valEqGassed info v el
+    res <- foldlM search False vli
+    returnCEKValue cont handler (VBool res)
   args -> argsError info b args
 
 rawSort :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -1249,16 +1246,23 @@ coreStrToIntBase info b cont handler _env = \case
   -- Todo: DOS and gas analysis
   bsToInteger :: BS.ByteString -> Integer
   bsToInteger bs = fst $ foldl' go (0,(BS.length bs - 1) * 8) $ BS.unpack bs
-  go (i,p) w = (i .|. (shift (fromIntegral w) p),p - 8)
+  go (i,p) w = (i .|. (shift (fromIntegral w) p), p - 8)
+
+nubByM :: Monad m => (a -> a -> m Bool) -> [a] -> m [a]
+nubByM eq = go
+  where
+  go [] = pure []
+  go (x:xs) = do
+    xs' <- filterM (fmap not . eq x) xs
+    (x :) <$> go xs'
 
 coreDistinct  :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreDistinct info b cont handler _env = \case
-  [VList s] ->
+  [VList s] -> do
+    uniques <- nubByM (valEqGassed info) $ V.toList s
     returnCEKValue cont handler
       $ VList
-      $ V.fromList
-      $ nubOrd
-      $ V.toList s
+      $ V.fromList uniques
   args -> argsError info b args
 
 coreFormat  :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
