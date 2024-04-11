@@ -192,9 +192,10 @@ benchDistinct pdb =
     ]
 
 benchEnumerate :: BuiltinBenches
-benchEnumerate pdb = [ runNativeBenchmark pdb title [text|(enumerate 0 $cnt)|]
-                     | (title, cnt) <- take 3 $ enumExpText 1000 10
-                     ]
+benchEnumerate pdb =
+  [ runNativeBenchmark pdb title [text|(enumerate 0 $cnt)|]
+  | (title, cnt) <- take 3 $ enumExpText 1000 10
+  ]
 
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn pdb = case bn of
