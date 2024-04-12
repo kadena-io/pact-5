@@ -205,6 +205,13 @@ benchTake pdb =
     , fromIntegral len <= V.length vec
     , let title = listTitle <> "_" <> takeTitle
     ]
+  , C.bgroup "string"
+    [ runNativeBenchmarkPrepared [("x", str), ("len", PInteger len)] pdb title [text|(take len x)|]
+    | (strTitle, str@(PString vec)) <- take 3 $ enumExpString "a" 1000 100
+    , (takeTitle, len) <- take 3 $ enumExpNum 1000 100
+    , fromIntegral len <= T.length vec
+    , let title = strTitle <> "_" <> takeTitle
+    ]
   ]
 
 benchDistinct :: BuiltinBenches
