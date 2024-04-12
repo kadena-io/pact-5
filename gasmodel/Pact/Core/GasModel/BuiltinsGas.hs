@@ -244,7 +244,7 @@ benchEnumerate pdb =
 
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
-  CoreAdd -> \pdb -> benchArithBinOp "+" pdb <> benchAddNonArithOverloads pdb
+  CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
   CoreSub -> benchArithBinOp "-"
   CoreMultiply -> benchArithBinOp "*"
   CoreDivide -> benchArithBinOp "/"
