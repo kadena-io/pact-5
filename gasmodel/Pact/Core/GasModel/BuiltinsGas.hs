@@ -206,9 +206,9 @@ benchTakeDrop op pdb =
     ]
   , C.bgroup "string"
     [ runNativeBenchmarkPrepared [("x", str), ("len", PInteger len)] pdb title [text|($op len x)|]
-    | (strTitle, str@(PString vec)) <- take 3 $ enumExpString "a" 1000 100
+    | (strTitle, str@(PString s)) <- take 3 $ enumExpString "a" 1000 100
     , (takeTitle, len) <- take 3 $ enumExpNum 1000 100
-    , fromIntegral len <= T.length vec
+    , fromIntegral len <= T.length s
     , let title = strTitle <> "_" <> takeTitle
     ]
   , C.bgroup "object"
