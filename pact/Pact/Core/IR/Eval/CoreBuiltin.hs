@@ -513,22 +513,27 @@ rawTake info b cont handler _env = \case
     | i >= 0 -> do
       -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ min i (fromIntegral (T.length t))
+      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength clamp
       returnCEKValue cont handler  (VLiteral (LString (T.take clamp t)))
     | otherwise -> do
       -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ max (fromIntegral (T.length t) + i) 0
+      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral $ negate i
       returnCEKValue cont handler  (VLiteral (LString (T.drop clamp t)))
   [VLiteral (LInteger i), VList li]
     | i >= 0 -> do
       -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ min i (fromIntegral (V.length li))
+      chargeGasArgs info $ GConcat $ ListConcat $ GasListLength clamp
       returnCEKValue cont handler  (VList (V.take clamp li))
     | otherwise -> do
       -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ max (fromIntegral (V.length li) + i) 0
+      chargeGasArgs info $ GConcat $ ListConcat $ GasListLength $ fromIntegral $ negate i
       returnCEKValue cont handler (VList (V.drop clamp li))
   [VList li, VObject o] -> do
     strings <- traverse (fmap Field . asString info b) (V.toList li)
+    chargeGasArgs info $ GConcat $ ObjConcat $ V.length li
     returnCEKValue cont handler $ VObject $ M.restrictKeys o (S.fromList strings)
   args -> argsError info b args
 
