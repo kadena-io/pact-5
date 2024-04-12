@@ -56,6 +56,6 @@ jobs:
         retention-days: 5
 
     - name: Release latest build
-      uses: ncipollo/release-action
+      uses: ncipollo/release-action@v1.14.0
       with:
         artifacts: pact-binary-bundle
