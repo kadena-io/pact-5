@@ -44,7 +44,7 @@ jobs:
 
         echo Build the bundle
         nix build .#pact-binary-bundle --log-lines 500 --show-trace --out-link pact-binary-bundle
-        tar -zcvf pact-binary-bundle-.${{ matrix.os }}.tar.gz ./pact-binary-bundle
+        tar -zcvf pact-binary-bundle.${{ matrix.os }}.tar.gz ./pact-binary-bundle
 
         echo Build the recursive output
         nix build .#recursive.allDerivations --log-lines 500 --show-trace
