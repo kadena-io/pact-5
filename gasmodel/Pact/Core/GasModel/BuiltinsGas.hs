@@ -212,6 +212,14 @@ benchTake pdb =
     , fromIntegral len <= T.length vec
     , let title = strTitle <> "_" <> takeTitle
     ]
+  , C.bgroup "object"
+    [ runNativeBenchmarkPrepared [("x", obj), ("keys", PList keys)] pdb title [text|(take keys x)|]
+    | (strTitle, obj@(PObject m)) <- take 3 $ enumExpObject 1000 100
+    , (takeTitle, len) <- take 3 $ enumExpNum 1000 100
+    , fromIntegral len <= M.size m
+    , let title = strTitle <> "_" <> takeTitle
+    , let keys = V.fromList $ fmap (PString . _field) $ take (fromIntegral len) $ M.keys m
+    ]
   ]
 
 benchDistinct :: BuiltinBenches
@@ -225,7 +233,7 @@ benchDistinct pdb =
     | (title, list) <- take 3 $ enumExpList 1000 2
     ]
   nesteds =
-    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(distinct)|]
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(distinct x)|]
     | (title, list) <- take 3 $ enumExpListDeep 3 5 4
     ]
 
