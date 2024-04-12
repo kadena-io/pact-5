@@ -243,44 +243,44 @@ benchEnumerate pdb =
   ]
 
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
-benchesForBuiltin bn pdb = case bn of
-  CoreAdd -> benchArithBinOp "+" pdb <> benchAddNonArithOverloads pdb
-  CoreSub -> benchArithBinOp "-" pdb
-  CoreMultiply -> benchArithBinOp "*" pdb
-  CoreDivide -> benchArithBinOp "/" pdb
-  CoreNegate -> benchNegate pdb
-  CoreAbs -> benchArithUnOp "abs" pdb
-  CorePow -> benchArithBinOp' 100 "^" pdb
+benchesForBuiltin bn = case bn of
+  CoreAdd -> \pdb -> benchArithBinOp "+" pdb <> benchAddNonArithOverloads pdb
+  CoreSub -> benchArithBinOp "-"
+  CoreMultiply -> benchArithBinOp "*"
+  CoreDivide -> benchArithBinOp "/"
+  CoreNegate -> benchNegate
+  CoreAbs -> benchArithUnOp "abs"
+  CorePow -> benchArithBinOp' 100 "^"
   CoreNot -> omittedDeliberately
-  CoreEq -> benchEqOp "=" pdb
-  CoreNeq -> benchEqOp "!=" pdb
-  CoreGT -> benchEqOp ">" pdb
-  CoreGEQ -> benchEqOp ">=" pdb
-  CoreLT -> benchEqOp "<" pdb
-  CoreLEQ -> benchEqOp "<=" pdb
-  CoreBitwiseAnd -> benchBitwiseBinOp 1000000 "&" pdb
-  CoreBitwiseOr -> benchBitwiseBinOp 1000000 "|" pdb
-  CoreBitwiseXor -> benchBitwiseBinOp 1000000 "xor" pdb
-  CoreBitwiseFlip -> benchBitwiseFlip pdb
-  CoreBitShift -> benchBitwiseBinOp 1000 "shift" pdb
-  CoreRound -> benchFloatingUnOp "round" pdb
-  CoreCeiling -> benchFloatingUnOp "ceiling" pdb
-  CoreFloor -> benchFloatingUnOp "floor" pdb
-  CoreRoundPrec -> benchFloatingMixedOp "round" pdb
-  CoreCeilingPrec -> benchFloatingMixedOp "ceiling" pdb
-  CoreFloorPrec -> benchFloatingMixedOp "floor" pdb
-  CoreExp -> benchArithUnOp "exp" pdb
-  CoreLn -> benchArithUnOp "ln" pdb
-  CoreSqrt -> benchArithUnOp "sqrt" pdb
-  CoreLogBase -> benchArithBinOp "log" pdb
-  CoreLength -> benchLength pdb
-  CoreTake -> benchTakeDrop "take" pdb
-  CoreDrop -> benchTakeDrop "drop" pdb
-  CoreDistinct -> benchDistinct pdb
-  CoreEnumerate -> benchEnumerate pdb
-  _ -> []
+  CoreEq -> benchEqOp "="
+  CoreNeq -> benchEqOp "!="
+  CoreGT -> benchEqOp ">"
+  CoreGEQ -> benchEqOp ">="
+  CoreLT -> benchEqOp "<"
+  CoreLEQ -> benchEqOp "<="
+  CoreBitwiseAnd -> benchBitwiseBinOp 1000000 "&"
+  CoreBitwiseOr -> benchBitwiseBinOp 1000000 "|"
+  CoreBitwiseXor -> benchBitwiseBinOp 1000000 "xor"
+  CoreBitwiseFlip -> benchBitwiseFlip
+  CoreBitShift -> benchBitwiseBinOp 1000 "shift"
+  CoreRound -> benchFloatingUnOp "round"
+  CoreCeiling -> benchFloatingUnOp "ceiling"
+  CoreFloor -> benchFloatingUnOp "floor"
+  CoreRoundPrec -> benchFloatingMixedOp "round"
+  CoreCeilingPrec -> benchFloatingMixedOp "ceiling"
+  CoreFloorPrec -> benchFloatingMixedOp "floor"
+  CoreExp -> benchArithUnOp "exp"
+  CoreLn -> benchArithUnOp "ln"
+  CoreSqrt -> benchArithUnOp "sqrt"
+  CoreLogBase -> benchArithBinOp "log"
+  CoreLength -> benchLength
+  CoreTake -> benchTakeDrop "take"
+  CoreDrop -> benchTakeDrop "drop"
+  CoreDistinct -> benchDistinct
+  CoreEnumerate -> benchEnumerate
+  _ -> const []
   where
-  omittedDeliberately = []
+  omittedDeliberately = const []
 
 benchmarkName :: CoreBuiltin -> String
 benchmarkName = \case
