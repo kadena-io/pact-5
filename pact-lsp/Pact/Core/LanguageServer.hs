@@ -340,7 +340,6 @@ documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req 
         debug "documentRenameRequestHandler: could not find term at position"
         resp (Right (InR Null))
       Just changePos -> do
-        debug $ "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ " <> sshow changePos
         debug $ "documentRenameRequestHandler: got " <> sshow (length changePos) <> " changes"
         let changes = InL . toTextEdit . spanInfoToRange <$> changePos
             te = TextDocumentEdit
