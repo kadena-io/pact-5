@@ -59,7 +59,7 @@ enumExpObjectComplex base mult =
 
 enumExpString :: T.Text -> Integer -> Integer -> [(String, PactValue)]
 enumExpString rep base mult =
-  [ (title, PLiteral $ LString $ T.replicate (fromIntegral cnt) rep)
+  [ (title, PString $ T.replicate (fromIntegral cnt) rep)
   | (title, cnt) <- enumExpNum base mult
   ]
 
