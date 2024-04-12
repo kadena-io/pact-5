@@ -12,7 +12,6 @@ import Data.Bifunctor
 import NeatInterpolation (text)
 
 import Pact.Core.Builtin
-import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.PactValue
 import Pact.Core.Persistence
