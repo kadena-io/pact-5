@@ -134,12 +134,27 @@ overloadBuiltinHoverTests
 
 
 renameTests :: TestTree
-renameTests = goldenVsString "Renaming" "pact-tests/pact-tests-lsp/rename-test.golden" $
+renameTests = testGroup "Renaming" [renameTest1, renameTest2]
+
+renameTest1 :: TestTree
+renameTest1 = goldenVsString "Renaming term referencing defun" p $
   runPactLSP $ do
   doc <- openDoc "rename-test.repl" "pact"
   rename doc (Position 12 7) "new-param"
   cnt <- documentContents doc
   pure $ LBS.fromStrict (encodeUtf8 cnt)
+  where
+  p = "pact-tests/pact-tests-lsp/rename-test.golden"
+
+renameTest2 :: TestTree
+renameTest2 = goldenVsString "Renaming defun" p $
+  runPactLSP $ do
+  doc <- openDoc "rename-test.repl" "pact"
+  rename doc (Position 7 6) "new-def"
+  cnt <- documentContents doc
+  pure $ LBS.fromStrict (encodeUtf8 cnt)
+  where
+  p = "pact-tests/pact-tests-lsp/rename-test1.golden"
 
 cfg :: SessionConfig
 cfg = defaultConfig

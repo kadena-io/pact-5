@@ -74,7 +74,15 @@ topLevelTermAt p = \case
       | otherwise = Nothing
     goDefs = \case
       Dfun d@(Defun _ _ tm i)
-        | p `inside` i -> TermMatch <$> termAt p tm <|> Just (DefunMatch d)
+        | p `inside` i ->
+            -- Remark: this pattern might apply to many constructs where we add terms
+            -- as part of the desugar phase. Here, we first check, if the nested term is a lambda
+            -- otherwise, we follow as usual.
+            case termAt p tm of
+              Nothing -> Just (DefunMatch d)
+              Just tm' -> if i == view termInfo tm'
+                          then Just (DefunMatch d)
+                          else TermMatch <$> termAt p tm
         | otherwise -> Nothing
       DConst d@(DefConst _ tc i)
         | p `inside` i -> (case tc of

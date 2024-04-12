@@ -12,7 +12,6 @@ module Pact.Core.LanguageServer
 
 import Control.Lens hiding (Iso)
 import Control.Monad.Except
-import Control.Monad (forM)
 import Language.LSP.Server
 import Language.LSP.Protocol.Message
 import Language.LSP.Protocol.Lens (uri, textDocument, params, text, position, newName)
@@ -21,8 +20,7 @@ import Language.LSP.VFS
 import Language.LSP.Diagnostics
 import Data.Monoid (Alt(..))
 import Control.Monad.IO.Class
-import Data.Maybe (fromMaybe, maybeToList)
-import Data.List (find)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.IORef
 import Data.Default
@@ -39,10 +37,9 @@ import Pact.Core.Builtin
 import Pact.Core.Errors
 import Pact.Core.Serialise
 import Pact.Core.Pretty (renderText)
--- import Pact.Core.Hash
 import System.IO (stderr)
 import qualified Data.Text.IO as T
--- import qualified Data.Text as T
+import qualified Data.Text as T
 import System.Exit
 
 import Control.Monad.Reader (ReaderT, runReaderT, ask)
@@ -55,6 +52,7 @@ import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import Pact.Core.IR.Term
 import Pact.Core.LanguageServer.Utils
+import Pact.Core.LanguageServer.Renaming
 import Pact.Core.Repl.Runtime.ReplBuiltin
 import Pact.Core.Repl.BuiltinDocs
 import Pact.Core.Repl.UserDocs
@@ -62,8 +60,8 @@ import Pact.Core.Names
 import qualified Pact.Core.IR.ModuleHashing as MHash
 import qualified Pact.Core.IR.ConstEval as ConstEval
 
--- sshow :: Show a => a -> Text
--- sshow = T.pack . show
+sshow :: Show a => a -> Text
+sshow = T.pack . show
 
 data LSState =
   LSState
@@ -336,77 +334,20 @@ documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req 
         nName = req ^. params . newName
         tls = fromMaybe [] $ view (lsTopLevel . at nuri) st
         toTextEdit r = TextEdit r nName
-    case getMatch pos tls of
+
+    case getRenameSpanInfo tls <$> getMatch pos tls of
       Nothing -> do
         debug "documentRenameRequestHandler: could not find term at position"
         resp (Right (InR Null))
-      Just tm -> do
-        changes <- case tm of
-                     TermMatch (Var (Name n vt) _) -> case vt of
-                       NBound _db -> error "nbound"
-                       NTopLevel mn _mh -> do
-                         let isSameVar = \case
-                               Var (Name n' vt') _
-                                 | n == n' && vt == vt' -> True
-                               _ -> False
-                             occurences = concatMap (matchingTerms isSameVar) tls
-
-                         termChanges <- forM occurences $ \case
-                           Var _ i -> pure $ toTextEdit (spanInfoToRange i)
-                           _ -> error "invariant"
-
-                         let toTlChanges t = maybeToList . fmap (toTextEdit . spanInfoToRange . t)
-                             tlChanges = case bimap (toTlChanges ifDefNameInfo)
-                                                    (toTlChanges defNameInfo)
-                                                    (matchingDefs tls mn n) of
-                               (a,b) -> a ++ b
-
-                         pure $ tlChanges ++ termChanges
-                       _ -> pure []
-                     _ -> pure []
-        let
-          te = TextDocumentEdit
+      Just changePos -> do
+        debug $ "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ " <> sshow changePos
+        debug $ "documentRenameRequestHandler: got " <> sshow (length changePos) <> " changes"
+        let changes = InL . toTextEdit . spanInfoToRange <$> changePos
+            te = TextDocumentEdit
                  (OptionalVersionedTextDocumentIdentifier uri' $ InR Null)
-                 (InL <$> changes)
-          we = WorkspaceEdit Nothing (Just [InL te]) Nothing
+                 changes
+            we = WorkspaceEdit Nothing (Just [InL te]) Nothing
         resp (Right (InL we))
-
-matchingDefs
-  :: [EvalTopLevel ReplCoreBuiltin SpanInfo]
-  -> ModuleName
-  -> Text
-  -> (Maybe (EvalIfDef ReplCoreBuiltin SpanInfo), Maybe (EvalDef ReplCoreBuiltin SpanInfo))
-matchingDefs tls mn n = (interfaceDef, moduleDef)
-  where
-    interfaceDef = do
-      let p = \case
-            TLInterface (Interface mn' _ _ _ _)
-              | mn == mn' -> True
-            _ -> False
-
-      TLInterface interf <- find p tls
-      find (\x -> ifDefName x == n) (_ifDefns interf)
-
-    moduleDef = do
-      let p = \case
-            TLModule (Module mn' _ _ _ _ _ _ _)
-              | mn == mn' -> True
-            _ -> False
-
-      TLModule module' <- find p tls
-      find (\x -> defName x == n) (_mDefs module')
-
-matchingTerms
-  :: (EvalTerm ReplCoreBuiltin SpanInfo -> Bool)
-  -> EvalTopLevel ReplCoreBuiltin SpanInfo
-  -> [EvalTerm ReplCoreBuiltin SpanInfo]
-matchingTerms predicate topLevel = let
-  terms = toListOf topLevelTerms topLevel
-  in concatMap (toListOf filteredTerms) terms
-  where
-  filteredTerms :: Traversal'
-    (EvalTerm ReplCoreBuiltin SpanInfo) (EvalTerm ReplCoreBuiltin SpanInfo)
-  filteredTerms = traverseTerm . filtered predicate
 
 processFile
   :: BuiltinEnv CEKSmallStep ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
