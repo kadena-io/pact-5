@@ -196,24 +196,24 @@ benchLength pdb =
     ]
   ]
 
-benchTake :: BuiltinBenches
-benchTake pdb =
+benchTakeDrop :: T.Text -> BuiltinBenches
+benchTakeDrop op pdb =
   [ C.bgroup "list"
-    [ runNativeBenchmarkPrepared [("x", list), ("len", PInteger len)] pdb title [text|(take len x)|]
+    [ runNativeBenchmarkPrepared [("x", list), ("len", PInteger len)] pdb title [text|($op len x)|]
     | (listTitle, list@(PList vec)) <- take 3 $ enumExpList 1000 100
     , (takeTitle, len) <- take 3 $ enumExpNum 1000 100
     , fromIntegral len <= V.length vec
     , let title = listTitle <> "_" <> takeTitle
     ]
   , C.bgroup "string"
-    [ runNativeBenchmarkPrepared [("x", str), ("len", PInteger len)] pdb title [text|(take len x)|]
+    [ runNativeBenchmarkPrepared [("x", str), ("len", PInteger len)] pdb title [text|($op len x)|]
     | (strTitle, str@(PString vec)) <- take 3 $ enumExpString "a" 1000 100
     , (takeTitle, len) <- take 3 $ enumExpNum 1000 100
     , fromIntegral len <= T.length vec
     , let title = strTitle <> "_" <> takeTitle
     ]
   , C.bgroup "object"
-    [ runNativeBenchmarkPrepared [("x", obj), ("keys", PList keys)] pdb title [text|(take keys x)|]
+    [ runNativeBenchmarkPrepared [("x", obj), ("keys", PList keys)] pdb title [text|($op keys x)|]
     | (strTitle, obj@(PObject m)) <- take 3 $ enumExpObject 1000 100
     , (takeTitle, len) <- take 3 $ enumExpNum 1000 100
     , fromIntegral len <= M.size m
@@ -275,7 +275,8 @@ benchesForBuiltin bn pdb = case bn of
   CoreSqrt -> benchArithUnOp "sqrt" pdb
   CoreLogBase -> benchArithBinOp "log" pdb
   CoreLength -> benchLength pdb
-  CoreTake -> benchTake pdb
+  CoreTake -> benchTakeDrop "take" pdb
+  CoreDrop -> benchTakeDrop "drop" pdb
   CoreDistinct -> benchDistinct pdb
   CoreEnumerate -> benchEnumerate pdb
   _ -> []
