@@ -262,9 +262,19 @@ benchContains pdb =
     | (title, obj@(PObject m)) <- take 3 $ enumExpObject 1000 100
     , let key = PString $ (<> "surelydoesntexist") $ _field $ last $ M.keys m
     ]
-  , C.bgroup "string"
+  , C.bgroup "string-short"
     [ runNativeBenchmarkPrepared [("x", str), ("needle", PString "b")] pdb title "(contains needle x)"
     | (title, str) <- take 3 $ enumExpString "a" 1000 100
+    ]
+  , C.bgroup "string-long-failfast"
+    [ runNativeBenchmarkPrepared [("x", str), ("needle", needle)] pdb title "(contains needle x)"
+    | let needle = PString $ T.replicate 1000 "b"
+    , (title, str) <- take 3 $ enumExpString "a" 1000 100
+    ]
+  , C.bgroup "string-long-failfar"
+    [ runNativeBenchmarkPrepared [("x", str), ("needle", needle)] pdb title "(contains needle x)"
+    | let needle = PString $ T.replicate 999 "a" <> "b"
+    , (title, str) <- take 3 $ enumExpString "a" 1000 100
     ]
   , C.bgroup "list"
     [ runNativeBenchmarkPrepared [("x", list), ("needle", PString "b")] pdb title "(contains needle x)"
