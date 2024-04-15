@@ -245,6 +245,33 @@ benchReverse pdb =
     ]
   ]
 
+benchContains :: BuiltinBenches
+benchContains pdb =
+  [ C.bgroup "object-first"
+    [ runNativeBenchmarkPrepared [("x", obj), ("key", key)] pdb title "(contains key x)"
+    | (title, obj@(PObject m)) <- take 3 $ enumExpObject 1000 100
+    , let key = fieldToValue $ head $ M.keys m
+    ]
+  , C.bgroup "object-last"
+    [ runNativeBenchmarkPrepared [("x", obj), ("key", key)] pdb title "(contains key x)"
+    | (title, obj@(PObject m)) <- take 3 $ enumExpObject 1000 100
+    , let key = fieldToValue $ last $ M.keys m
+    ]
+  , C.bgroup "object-nonexistent"
+    [ runNativeBenchmarkPrepared [("x", obj), ("key", key)] pdb title "(contains key x)"
+    | (title, obj@(PObject m)) <- take 3 $ enumExpObject 1000 100
+    , let key = PString $ (<> "surelydoesntexist") $ _field $ last $ M.keys m
+    ]
+  , C.bgroup "string"
+    [ runNativeBenchmarkPrepared [("x", str), ("needle", PString "b")] pdb title "(contains needle x)"
+    | (title, str) <- take 3 $ enumExpString "a" 1000 100
+    ]
+  , C.bgroup "list"
+    [ runNativeBenchmarkPrepared [("x", list), ("needle", PString "b")] pdb title "(contains needle x)"
+    | (title, list) <- take 3 $ enumExpList 1000 100
+    ]
+  ]
+
 benchDistinct :: BuiltinBenches
 benchDistinct pdb =
   [ C.bgroup "flat" flats
@@ -302,6 +329,7 @@ benchesForBuiltin bn = case bn of
   CoreDrop -> benchTakeDrop "drop"
   CoreConcat -> benchConcat
   CoreReverse -> benchReverse
+  CoreContains -> benchContains
   CoreDistinct -> benchDistinct
   CoreEnumerate -> benchEnumerate
   _ -> const []
