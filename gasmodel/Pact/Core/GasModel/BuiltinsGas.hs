@@ -195,6 +195,9 @@ benchLength pdb =
     ]
   ]
 
+fieldToValue :: Field -> PactValue
+fieldToValue = PString . _field
+
 benchTakeDrop :: T.Text -> BuiltinBenches
 benchTakeDrop op pdb =
   [ C.bgroup "list"
@@ -217,7 +220,7 @@ benchTakeDrop op pdb =
     , (takeTitle, len) <- take 3 $ enumExpNum 1000 100
     , fromIntegral len <= M.size m
     , let title = strTitle <> "_" <> takeTitle
-    , let keys = V.fromList $ fmap (PString . _field) $ take (fromIntegral len) $ M.keys m
+    , let keys = V.fromList $ fmap fieldToValue $ take (fromIntegral len) $ M.keys m
     ]
   ]
 
