@@ -230,6 +230,18 @@ benchConcat pdb =
   , let strs = PList $ V.replicate (fromIntegral reps) str
   ]
 
+benchReverse :: BuiltinBenches
+benchReverse pdb =
+  [ C.bgroup "list"
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title "(reverse x)"
+    | (title, list) <- take 3 $ enumExpList 1000 100
+    ]
+  , C.bgroup "string"
+    [ runNativeBenchmarkPrepared [("x", str)] pdb title "(reverse x)"
+    | (title, str) <- take 3 $ enumExpString "a" 1000 100
+    ]
+  ]
+
 benchDistinct :: BuiltinBenches
 benchDistinct pdb =
   [ C.bgroup "flat" flats
@@ -286,6 +298,7 @@ benchesForBuiltin bn = case bn of
   CoreTake -> benchTakeDrop "take"
   CoreDrop -> benchTakeDrop "drop"
   CoreConcat -> benchConcat
+  CoreReverse -> benchReverse
   CoreDistinct -> benchDistinct
   CoreEnumerate -> benchEnumerate
   _ -> const []
