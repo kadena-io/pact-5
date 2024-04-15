@@ -221,6 +221,15 @@ benchTakeDrop op pdb =
     ]
   ]
 
+benchConcat :: BuiltinBenches
+benchConcat pdb =
+  [ runNativeBenchmarkPrepared [("x", strs)] pdb title [text|(concat x)|]
+  | (strTitle, str) <- take 4 $ enumExpString "a" 1 10
+  , (repTitle, reps) <- take 3 $ enumExpNum 100 10
+  , let title = strTitle <> "_" <> repTitle
+  , let strs = PList $ V.replicate (fromIntegral reps) str
+  ]
+
 benchDistinct :: BuiltinBenches
 benchDistinct pdb =
   [ C.bgroup "flat" flats
@@ -276,6 +285,7 @@ benchesForBuiltin bn = case bn of
   CoreLength -> benchLength
   CoreTake -> benchTakeDrop "take"
   CoreDrop -> benchTakeDrop "drop"
+  CoreConcat -> benchConcat
   CoreDistinct -> benchDistinct
   CoreEnumerate -> benchEnumerate
   _ -> const []
