@@ -282,6 +282,12 @@ benchContains pdb =
     ]
   ]
 
+benchSort :: BuiltinBenches
+benchSort pdb =
+  [ runNativeBenchmarkPrepared [("x", list)] pdb title "(sort x)"
+  | (title, list) <- take 3 $ enumExpList 1000 100
+  ]
+
 benchDistinct :: BuiltinBenches
 benchDistinct pdb =
   [ C.bgroup "flat" flats
@@ -340,6 +346,7 @@ benchesForBuiltin bn = case bn of
   CoreConcat -> benchConcat
   CoreReverse -> benchReverse
   CoreContains -> benchContains
+  CoreSort -> benchSort
   CoreDistinct -> benchDistinct
   CoreEnumerate -> benchEnumerate
   _ -> const []
