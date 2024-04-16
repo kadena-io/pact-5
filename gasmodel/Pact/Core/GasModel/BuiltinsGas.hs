@@ -284,8 +284,14 @@ benchContains pdb =
 
 benchSort :: BuiltinBenches
 benchSort pdb =
-  [ runNativeBenchmarkPrepared [("x", list)] pdb title "(sort x)"
-  | (title, list) <- take 3 $ enumExpList 1000 100
+  [ C.bgroup "flat"
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title "(sort x)"
+    | (title, list) <- take 3 $ enumExpList 1000 100
+    ]
+  , C.bgroup "nested"
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title "(sort x)"
+    | (title, list) <- take 3 $ enumExpListDeep 3 5 4
+    ]
   ]
 
 benchDistinct :: BuiltinBenches
