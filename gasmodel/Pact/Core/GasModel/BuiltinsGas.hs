@@ -312,6 +312,13 @@ benchSort pdb =
     ]
   ]
 
+benchRemove :: BuiltinBenches
+benchRemove pdb =
+  [ runNativeBenchmarkPrepared [("x", obj), ("key", key)] pdb title "(remove key x)"
+  | (title, obj@(PObject m)) <- take 3 $ enumExpObject 1000 100
+  , let key = fieldToValue $ last $ M.keys m
+  ]
+
 benchDistinct :: BuiltinBenches
 benchDistinct pdb =
   [ C.bgroup "flat"
@@ -368,6 +375,7 @@ benchesForBuiltin bn = case bn of
   CoreReverse -> benchReverse
   CoreContains -> benchContains
   CoreSort -> benchSort
+  CoreRemove -> benchRemove
   CoreDistinct -> benchDistinct
   CoreEnumerate -> benchEnumerate
   _ -> const []
