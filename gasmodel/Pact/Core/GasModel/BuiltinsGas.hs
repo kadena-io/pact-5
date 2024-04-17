@@ -151,8 +151,8 @@ benchEqOp op pdb =
     | (title, obj) <- take 3 $ enumExpObjectComplex 1000 2
     ]
 
-benchBitwiseBinOp :: Integer -> T.Text -> BuiltinBenches
-benchBitwiseBinOp growth op pdb =
+benchIntegerBinOp :: Integer -> T.Text -> BuiltinBenches
+benchIntegerBinOp growth op pdb =
   [ runNativeBenchmark pdb title [text|($op $x $x)|]
   | (title, x) <- take 3 $ enumExpText 1000 growth
   ]
@@ -353,11 +353,11 @@ benchesForBuiltin bn = case bn of
   CoreGEQ -> benchEqOp ">="
   CoreLT -> benchEqOp "<"
   CoreLEQ -> benchEqOp "<="
-  CoreBitwiseAnd -> benchBitwiseBinOp 1000000 "&"
-  CoreBitwiseOr -> benchBitwiseBinOp 1000000 "|"
-  CoreBitwiseXor -> benchBitwiseBinOp 1000000 "xor"
+  CoreBitwiseAnd -> benchIntegerBinOp 1000000 "&"
+  CoreBitwiseOr -> benchIntegerBinOp 1000000 "|"
+  CoreBitwiseXor -> benchIntegerBinOp 1000000 "xor"
   CoreBitwiseFlip -> benchBitwiseFlip
-  CoreBitShift -> benchBitwiseBinOp 1000 "shift"
+  CoreBitShift -> benchIntegerBinOp 1000 "shift"
   CoreRound -> benchFloatingUnOp "round"
   CoreCeiling -> benchFloatingUnOp "ceiling"
   CoreFloor -> benchFloatingUnOp "floor"
