@@ -358,6 +358,7 @@ benchesForBuiltin bn = case bn of
   CoreBitwiseXor -> benchIntegerBinOp 1000000 "xor"
   CoreBitwiseFlip -> benchBitwiseFlip
   CoreBitShift -> benchIntegerBinOp 1000 "shift"
+  CoreMod -> benchIntegerBinOp 1000 "mod"
   CoreRound -> benchFloatingUnOp "round"
   CoreCeiling -> benchFloatingUnOp "ceiling"
   CoreFloor -> benchFloatingUnOp "floor"
