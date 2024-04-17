@@ -293,22 +293,22 @@ benchSort pdb =
     | (title, list) <- take 3 $ enumExpListDeep 3 5 4
     ]
   , C.bgroup "object-simple"
-    [ runNativeBenchmarkPrepared [("x", objs), ("keys", PList keys)] pdb title "(sort keys x)"
-    | (objTitle, obj@(PObject m)) <- take 3 $ enumExpObject 1000 10
-    , (repTitle, reps) <- take 3 $ enumExpNum 1000 10
-    , (keysTitle, keysLen) <- take 3 $ enumExpNum 10 10
-    , let title = objTitle <> "_" <> repTitle <> "_" <> keysTitle
+    [ runNativeBenchmarkPrepared [("x", objs), ("keys", keys)] pdb title "(sort keys x)"
+    | (_, obj@(PObject m)) <- [head $ enumExpObject 1000 1]
+    , (repTitle, reps) <- take 3 $ enumExpNum 1000 3
+    , (keysTitle, keysLen) <- take 3 $ enumExpNum 10 2
+    , let title = repTitle <> "_" <> keysTitle
     , let objs = PList $ V.replicate (fromIntegral reps) obj
-    , let keys = V.fromList $ fmap fieldToValue $ take (fromIntegral keysLen) $ M.keys m
+    , let keys = PList $ V.fromList $ fmap fieldToValue $ take (fromIntegral keysLen) $ M.keys m
     ]
   , C.bgroup "object-complex"
-    [ runNativeBenchmarkPrepared [("x", objs), ("keys", PList keys)] pdb title "(sort keys x)"
-    | (objTitle, obj@(PObject m)) <- take 3 $ enumExpObjectComplex 1000 2
-    , (repTitle, reps) <- take 3 $ enumExpNum 1000 10
-    , (keysTitle, keysLen) <- take 3 $ enumExpNum 10 10
-    , let title = objTitle <> "_" <> repTitle <> "_" <> keysTitle
+    [ runNativeBenchmarkPrepared [("x", objs), ("keys", keys)] pdb title "(sort keys x)"
+    | (_, obj@(PObject m)) <- [head $ enumExpObjectComplex 1000 1]
+    , (repTitle, reps) <- take 3 $ enumExpNum 1000 3
+    , (keysTitle, keysLen) <- take 3 $ enumExpNum 10 2
+    , let title = repTitle <> "_" <> keysTitle
     , let objs = PList $ V.replicate (fromIntegral reps) obj
-    , let keys = V.fromList $ fmap fieldToValue $ take (fromIntegral keysLen) $ M.keys m
+    , let keys = PList $ V.fromList $ fmap fieldToValue $ take (fromIntegral keysLen) $ M.keys m
     ]
   ]
 
