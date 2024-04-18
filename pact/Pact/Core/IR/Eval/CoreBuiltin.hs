@@ -9,6 +9,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE CPP #-}
 
 module Pact.Core.IR.Eval.CoreBuiltin
@@ -44,12 +45,13 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Char as Char
 import qualified Data.ByteString as BS
+import qualified GHC.Exts as Exts
+import qualified GHC.Integer.Logarithms as IntLog
 import qualified Pact.Time as PactTime
 
 #ifndef WITHOUT_CRYPTO
 import Data.Foldable(traverse_)
 import qualified Control.Lens as Lens
-import qualified GHC.Exts as Exts
 #endif
 
 import Pact.Core.Builtin
@@ -1226,9 +1228,14 @@ coreIntToStr info b cont handler _env = \case
     | v < 0 ->
       returnCEK cont handler (VError "int-to-str error: cannot show negative integer" info)
     | base >= 2 && base <= 16 -> do
+      let strLen = 1 + Exts.I# (IntLog.integerLogBase# base v)
+      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
       let v' = T.pack $ showIntAtBase base Char.intToDigit v ""
       returnCEKValue cont handler (VString v')
     | base == 64 && v >= 0 -> do
+      let bsLen = 1 + Exts.I# (IntLog.integerLogBase# 256 v)
+          strLen = (bsLen * 4) `div` 3
+      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
       let v' = toB64UrlUnpaddedText $ integerToBS v
       returnCEKValue cont handler (VString v')
     | base == 64 -> returnCEK cont handler (VError "only positive values allowed for base64URL conversion" info)
