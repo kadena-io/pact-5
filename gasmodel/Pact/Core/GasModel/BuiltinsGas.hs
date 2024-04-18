@@ -343,6 +343,19 @@ benchZip pdb =
   | (title, list) <- take 3 $ enumExpList 10000 10
   ]
 
+benchIntToStr :: BuiltinBenches
+benchIntToStr pdb =
+  [ C.bgroup "basic"
+    [ runNativeBenchmark pdb (T.unpack base <> "_" <> title) [text|(int-to-str $base $x)|]
+    | base <- ["2", "10", "16"]
+    , (title, x) <- take 3 $ enumExpText 1000 10000
+    ]
+  , C.bgroup "base64"
+    [ runNativeBenchmark pdb title [text|(int-to-str 64 $x)|]
+    | (title, x) <- take 3 $ enumExpText 1000 10000
+    ]
+  ]
+
 benchDistinct :: BuiltinBenches
 benchDistinct pdb =
   [ C.bgroup "flat"
@@ -404,6 +417,7 @@ benchesForBuiltin bn = case bn of
   CoreMap -> benchMap
   CoreZip -> benchZip
   CoreFilter -> benchFilter
+  CoreIntToStr -> benchIntToStr
   CoreDistinct -> benchDistinct
   CoreEnumerate -> benchEnumerate
   _ -> const []
