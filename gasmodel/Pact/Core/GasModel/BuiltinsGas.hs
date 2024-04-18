@@ -325,6 +325,12 @@ benchMap pdb =
   | (title, list) <- take 3 $ enumExpList 10000 10
   ]
 
+benchFilter :: BuiltinBenches
+benchFilter pdb =
+  [ runNativeBenchmarkPrepared [("x", list)] pdb title "(filter (lambda (e) true) x)"
+  | (title, list) <- take 3 $ enumExpList 10000 10
+  ]
+
 benchDistinct :: BuiltinBenches
 benchDistinct pdb =
   [ C.bgroup "flat"
@@ -384,6 +390,7 @@ benchesForBuiltin bn = case bn of
   CoreSort -> benchSort
   CoreRemove -> benchRemove
   CoreMap -> benchMap
+  CoreFilter -> benchFilter
   CoreDistinct -> benchDistinct
   CoreEnumerate -> benchEnumerate
   _ -> const []
