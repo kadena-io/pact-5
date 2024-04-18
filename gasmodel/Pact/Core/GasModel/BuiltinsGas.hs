@@ -327,8 +327,14 @@ benchMap pdb =
 
 benchFilter :: BuiltinBenches
 benchFilter pdb =
-  [ runNativeBenchmarkPrepared [("x", list)] pdb title "(filter (lambda (e) true) x)"
-  | (title, list) <- take 3 $ enumExpList 10000 10
+  [ C.bgroup "all"
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title "(filter (lambda (e) true) x)"
+    | (title, list) <- take 3 $ enumExpList 10000 10
+    ]
+  , C.bgroup "none"
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title "(filter (lambda (e) false) x)"
+    | (title, list) <- take 3 $ enumExpList 10000 10
+    ]
   ]
 
 benchDistinct :: BuiltinBenches
