@@ -321,8 +321,8 @@ benchRemove pdb =
 
 benchMap :: BuiltinBenches
 benchMap pdb =
-  [ runNativeBenchmarkPrepared [("x", list)] pdb title "(map (lambda (x) x) x)"
-  | (title, list) <- take 3 $ enumExpList 1000 100
+  [ runNativeBenchmarkPrepared [("x", list)] pdb title "(map (lambda (e) e) x)"
+  | (title, list) <- take 3 $ enumExpList 10000 10
   ]
 
 benchDistinct :: BuiltinBenches
