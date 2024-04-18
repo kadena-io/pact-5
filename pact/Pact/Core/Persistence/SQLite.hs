@@ -21,6 +21,8 @@ import qualified Database.SQLite3.Direct as Direct
 import Data.ByteString (ByteString)
 import qualified Data.Map.Strict as Map
 
+import Pact.Core.Environment.Types (MonadEval)
+import Pact.Core.Persistence
 import Pact.Core.Guards (renderKeySetName, parseAnyKeysetName)
 import Pact.Core.Names
 import Pact.Core.Persistence
@@ -39,7 +41,7 @@ import Pact.Core.Serialise
 --
 withSqlitePactDb
   :: (MonadMask m, MonadIO m)
-  => PactSerialise b i
+  => PactSerialise b i m
   -> Text
   -> (PactDb b i -> m a)
   -> m a
@@ -54,7 +56,7 @@ withSqlitePactDb serial connectionString act =
 -- anywhere else in the runtime unless otherwise needed
 unsafeCreateSqlitePactDb
   :: (MonadIO m)
-  => PactSerialise b i
+  => PactSerialise b i m
   -> Text
   -> m (PactDb b i, SQL.Database)
 unsafeCreateSqlitePactDb serial connectionString  = do
@@ -77,7 +79,7 @@ createSysTables db = do
 
 -- | Create all tables that should exist in a fresh pact db,
 --   or ensure that they are already created.
-initializePactDb :: PactSerialise b i -> SQL.Database  -> IO (PactDb b i)
+initializePactDb :: PactSerialise b i m -> SQL.Database  -> IO (PactDb b i)
 initializePactDb serial db = do
   createSysTables db
   txId <- newIORef (TxId 0)
@@ -95,7 +97,7 @@ initializePactDb serial db = do
     , _pdbGetTxLog = getTxLog serial db txId txLog
     }
 
-getTxLog :: PactSerialise b i -> SQL.Database -> IORef TxId -> IORef [TxLog ByteString] -> TableName -> TxId -> IO [TxLog RowData]
+getTxLog :: PactSerialise b i m -> SQL.Database -> IORef TxId -> IORef [TxLog ByteString] -> TableName -> TxId -> IO [TxLog RowData]
 getTxLog serial db currTxId txLog tab txId = do
   currTxId' <- readIORef currTxId
   if currTxId' == txId
@@ -175,7 +177,7 @@ rollbackTx db txLog = do
   SQL.exec db "ROLLBACK TRANSACTION"
   writeIORef txLog []
 
-createUserTable :: PactSerialise b i -> SQL.Database -> IORef [TxLog ByteString] -> TableName -> IO ()
+createUserTable :: PactSerialise b i m -> SQL.Database -> IORef [TxLog ByteString] -> TableName -> IO ()
 createUserTable serial db txLog tbl = do
   SQL.exec db stmt
   let
@@ -196,8 +198,10 @@ createUserTable serial db txLog tbl = do
     tblName = "\"" <> toUserTable tbl <> "\""
 
 write'
-  :: forall k v b i.
-     PactSerialise b i
+  :: forall k v b i m.
+     MonadEval b i m
+  =>
+     PactSerialise b i m
   -> SQL.Database
   -> IORef TxId
   -> IORef [TxLog ByteString]
@@ -275,7 +279,7 @@ write' serial db txId txLog wt domain k v =
             | res == SQL.Done -> modifyIORef' txLog txlog
             | otherwise -> throwIO P.MultipleRowsReturnedFromSingleWrite
 
-read' :: forall k v b i. PactSerialise b i -> SQL.Database -> Domain k v b i -> k -> IO (Maybe v)
+read' :: forall k v b i m. PactSerialise b i m -> SQL.Database -> Domain k v b i -> k -> IO (Maybe v)
 read' serial db domain k = case domain of
   DKeySets -> withStmt db (selStmt "SYS:KEYSETS")
     (doRead (renderKeySetName k) (\v -> pure (view document <$> _decodeKeySet serial v)))
