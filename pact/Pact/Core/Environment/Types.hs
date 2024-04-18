@@ -47,6 +47,8 @@ module Pact.Core.Environment.Types
  , MonadEval
  , defaultEvalEnv
  , GasLogEntry(..)
+ , Bytes
+ , SizeOfByteLimit(..)
  ) where
 
 
@@ -58,14 +60,17 @@ import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Data.IORef
 import Data.Default
+import Data.Word (Word64)
 
 import Control.DeepSeq
 import GHC.Generics
+import Control.Monad.Catch as Exceptions
 
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
 
 import Pact.Core.Persistence
+import Pact.Core.Pretty
 import Pact.Core.Capabilities
 import Pact.Core.Guards
 import Pact.Core.PactValue
@@ -76,7 +81,6 @@ import Pact.Core.ChainData
 import Pact.Core.Errors
 import Pact.Core.Gas
 import Pact.Core.Namespace
-import Pact.Core.SizeOf
 import Pact.Core.Builtin (IsBuiltin)
 
 -- | Execution flags specify behavior of the runtime environment,
@@ -181,12 +185,13 @@ data EvalState b i
   , _esDefPactExec :: !(Maybe DefPactExec)
   , _esGasLog :: !(Maybe [GasLogEntry b])
     -- ^ Sequence of gas expendature events.
+  , _countBytesCounter :: Int
   } deriving (Show, Generic)
 
 instance (NFData b, NFData i) => NFData (EvalState b i)
 
 instance Default (EvalState b i) where
-  def = EvalState def [] [] mempty Nothing Nothing
+  def = EvalState def [] [] mempty Nothing Nothing 0
 
 makeClassy ''EvalState
 
@@ -208,10 +213,9 @@ type MonadEval b i m =
   , MonadEvalState b i m
   , MonadError (PactError i) m
   , MonadIO m
+  , Exceptions.MonadCatch m
   , Default i
   , Show i
-  , SizeOf b
-  , SizeOf i
   , IsBuiltin b
   , Show b)
 
@@ -234,3 +238,12 @@ defaultEvalEnv pdb m = do
     , _eeGasRef = gasRef
     , _eeGasModel = freeGasModel
     }
+
+type Bytes = Word64
+
+newtype SizeOfByteLimit 
+  = SizeOfByteLimit Bytes
+  deriving Show
+
+instance Pretty SizeOfByteLimit where
+  pretty = pretty . show

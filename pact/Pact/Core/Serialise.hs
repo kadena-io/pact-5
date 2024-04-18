@@ -1,3 +1,5 @@
+{-# LANGUAGE RankNTypes #-}
+
 -- | The canonical way of encoding and decoding Pact entities into bytestrings.
 --   There are two places where in Pact where serialization is needed:
 --     - Computing module hashes
@@ -26,6 +28,7 @@ import Codec.CBOR.Read (deserialiseFromBytes)
 
 import qualified Pact.Core.Serialise.LegacyPact as LegacyPact
 import qualified Pact.Core.Serialise.CBOR_V1 as V1
+import Pact.Core.Gas (MilliGas)
 import Pact.Core.Info (SpanInfo)
 
 data DocumentVersion
@@ -67,7 +70,7 @@ data PactSerialise b i
   , _decodeDefPactExec :: ByteString -> Maybe (Document (Maybe DefPactExec))
   , _encodeNamespace :: Namespace -> ByteString
   , _decodeNamespace :: ByteString -> Maybe (Document Namespace)
-  , _encodeRowData :: RowData -> ByteString
+  , _encodeRowData :: forall m. Monad m => (MilliGas -> m ()) -> RowData -> m ByteString
   , _decodeRowData :: ByteString -> Maybe (Document RowData)
   }
 
@@ -101,7 +104,9 @@ serialisePact = PactSerialise
                            V1_CBOR -> V1.decodeNamespace
                        )
 
-  , _encodeRowData = docEncode V1.encodeRowData
+  , _encodeRowData = \chargeGas rd -> do
+    encodedRow <- V1.encodeRowData chargeGas rd
+    pure $ toStrictByteString $ encodeVersion V1_CBOR <> S.encodeBytes encodedRow
   , _decodeRowData = \bs ->
       LegacyDocument <$> LegacyPact.decodeRowData bs
       <|> docDecode bs (\case
@@ -122,7 +127,6 @@ serialisePact_repl_spaninfo = serialisePact
   { _encodeModuleData = V1.encodeModuleData_repl_spaninfo
   , _decodeModuleData = fmap LegacyDocument . V1.decodeModuleData_repl_spaninfo
   }
-
 
 serialisePact_raw_spaninfo :: PactSerialise CoreBuiltin SpanInfo
 serialisePact_raw_spaninfo = serialisePact

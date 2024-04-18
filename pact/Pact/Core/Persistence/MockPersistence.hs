@@ -6,6 +6,7 @@ module Pact.Core.Persistence.MockPersistence (
   )where
 
 
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad (unless)
 import Data.Maybe (isJust, fromMaybe)
 import Data.List (find)
@@ -22,7 +23,9 @@ import Pact.Core.Names
 import Pact.Core.DefPacts.Types (DefPactExec)
 import qualified Pact.Core.Persistence as Persistence
 import Pact.Core.Persistence
+import qualified Pact.Core.Errors as Errors
 import Pact.Core.Serialise
+import Pact.Core.Gas (MilliGas)
 
 
 type TxLogQueue = IORef (Map TxId [TxLog ByteString])
@@ -78,7 +81,7 @@ mockPactDb serial = do
         txId <- readIORef refTxId
         pure (Map.findWithDefault [] txId txl)
     Nothing ->
-      throwIO Persistence.NoTxToCommit
+      throwIO Errors.NoTxToCommit
 
   rollbackTx refRb refTxLog refMod refKs refUsrTbl = readIORef refRb >>= \case
     Just (_, txl, mods, ks, usr) -> do
@@ -87,7 +90,7 @@ mockPactDb serial = do
       writeIORef refMod mods
       writeIORef refKs ks
       writeIORef refUsrTbl usr
-    Nothing -> throwIO Persistence.NoTxToCommit
+    Nothing -> throwIO Errors.NoTxToCommit
 
   txLog :: TxLogQueue -> TableName -> TxId -> IO [TxLog RowData]
   txLog refTxLog tn tid = do
@@ -125,7 +128,7 @@ mockPactDb serial = do
 --      let tblName = toUserTable tbl
       case M.lookup tbl r of
         Just t -> return (M.keys t)
-        Nothing -> throwIO (Persistence.NoSuchTable tbl)
+        Nothing -> throwIO (Errors.NoSuchTable tbl)
     DDefPacts -> do
       r <- readIORef refPacts
       return (M.keys r)
@@ -146,7 +149,7 @@ mockPactDb serial = do
         -- TODO: Do we need a TxLog when a usertable is created?
         modifyIORef refUsrTbl (M.insert tbl mempty)
         pure ()
-      Just _ -> throwIO (Persistence.TableAlreadyExists tbl)
+      Just _ -> throwIO (Errors.TableAlreadyExists tbl)
 
   read'
     :: forall k v
@@ -166,30 +169,33 @@ mockPactDb serial = do
     DDefPacts -> readPacts' refPacts k
     DNamespaces -> readNS refNS k
 
-  checkTable tbl ref = do
+  checkTable :: forall m. MonadIO m => TableName -> IORef (Map TableName (Map RowKey RowData)) -> m ()
+  checkTable tbl ref = liftIO $ do
     r <- readIORef ref
-    unless (isJust (M.lookup tbl r)) $ throwIO (Persistence.NoSuchTable tbl)
+    unless (isJust (M.lookup tbl r)) $ throwIO (Errors.NoSuchTable tbl)
 
   write
-    :: forall k v
-    .  IORef (Map KeySetName KeySet)
+    :: forall k v m
+    .  MonadIO m
+    => IORef (Map KeySetName KeySet)
     -> IORef (Map ModuleName (ModuleData b i))
     -> IORef (Map NamespaceName Namespace)
     -> IORef (Map TableName (Map RowKey RowData))
     -> IORef TxId
     -> TxLogQueue
     -> IORef (Map DefPactId (Maybe DefPactExec))
+    -> (MilliGas -> m ())
     -> WriteType
     -> Domain k v b i
     -> k
     -> v
-    -> IO ()
-  write refKs refMod refNS refUsrTbl refTxId refTxLog refPacts wt domain k v = case domain of
-    DKeySets -> writeKS refKs refTxId refTxLog k v
-    DModules -> writeMod refMod refTxId refTxLog v
-    DUserTables tbl -> writeRowData refUsrTbl refTxId refTxLog tbl wt k v
-    DDefPacts -> writePacts' refPacts refTxId refTxLog k v
-    DNamespaces -> writeNS refNS refTxId refTxLog k v
+    -> m ()
+  write refKs refMod refNS refUsrTbl refTxId refTxLog refPacts gasHandler wt domain k v = case domain of
+    DKeySets -> liftIO $ writeKS refKs refTxId refTxLog k v
+    DModules -> liftIO $ writeMod refMod refTxId refTxLog v
+    DUserTables tbl -> writeRowData refUsrTbl refTxId refTxLog tbl gasHandler wt k v
+    DDefPacts -> liftIO $ writePacts' refPacts refTxId refTxLog k v
+    DNamespaces -> liftIO $ writeNS refNS refTxId refTxLog k v
 
   readRowData ref tbl k = do
     -- let tblName = toUserTable tbl
@@ -198,34 +204,39 @@ mockPactDb serial = do
     pure (r ^? ix tbl . ix k)
 
   writeRowData
-    :: IORef (Map TableName (Map RowKey RowData))
+    :: MonadIO m
+    => IORef (Map TableName (Map RowKey RowData))
     -> IORef TxId
     -> TxLogQueue
     -> TableName
+    -> (MilliGas -> m ())
     -> WriteType
     -> RowKey
     -> RowData
-    -> IO ()
-  writeRowData ref refTxId refTxLog tbl wt k v = checkTable tbl ref *> case wt of
+    -> m ()
+  writeRowData ref refTxId refTxLog tbl handleGas wt k v = checkTable tbl ref *> case wt of
     Write -> do
-      record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) (_encodeRowData serial v))
-      modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
+      encodedData <- _encodeRowData serial handleGas v
+      liftIO $ record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
+      liftIO $ modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
     Insert -> do
-      r <- readIORef ref
+      r <- liftIO $ readIORef ref
       case M.lookup tbl r >>= M.lookup k of
-        Just _ -> throwIO Persistence.WriteException
+        Just _ -> liftIO $ throwIO Errors.WriteException
         Nothing -> do
-          record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) (_encodeRowData serial v))
-          modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
+          encodedData <- _encodeRowData serial handleGas v
+          liftIO $ record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
+          liftIO $ modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
     Update -> do
-      r <- readIORef ref
+      r <- liftIO $ readIORef ref
       case M.lookup tbl r >>= M.lookup k of
         Just (RowData m) -> do
           let (RowData v') = v
               nrd = RowData (M.union v' m)
-          record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) (_encodeRowData serial nrd))
-          modifyIORef' ref (M.insertWith M.union tbl (M.singleton k nrd))
-        Nothing -> throwIO Persistence.WriteException
+          encodedData <- _encodeRowData serial handleGas nrd
+          liftIO $ record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
+          liftIO $ modifyIORef' ref (M.insertWith M.union tbl (M.singleton k nrd))
+        Nothing -> liftIO $ throwIO Errors.WriteException
 
 
   readKS ref ksn = do

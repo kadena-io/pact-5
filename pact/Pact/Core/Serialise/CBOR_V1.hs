@@ -17,10 +17,13 @@ import Codec.Serialise.Class
 import Codec.CBOR.Encoding
 import Codec.CBOR.Decoding
 import Data.Decimal
+import Data.Foldable (forM_)
+import qualified Data.Text as Text
 
 import Pact.Core.Names
 import Pact.Core.Persistence
 import Pact.Core.IR.Term
+import Pact.Core.Gas
 import Pact.Core.Guards
 import Pact.Core.Hash
 import Pact.Core.Type
@@ -38,6 +41,7 @@ import Pact.Time.Internal (UTCTime(..), NominalDiffTime(..))
 import Codec.CBOR.Read (deserialiseFromBytes)
 import Codec.CBOR.Write (toStrictByteString)
 import Data.ByteString (ByteString, fromStrict)
+import qualified Data.Map as Map
 
 encodeModuleData :: ModuleData CoreBuiltin () -> ByteString
 encodeModuleData = toStrictByteString . encode
@@ -76,8 +80,39 @@ encodeNamespace = toStrictByteString . encode
 decodeNamespace :: ByteString -> Maybe Namespace
 decodeNamespace bs =either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
-encodeRowData :: RowData -> ByteString
-encodeRowData = toStrictByteString . encode
+encodeRowData :: (Monad m) => (MilliGas -> m ()) -> RowData -> m ByteString
+encodeRowData chargeGas rd@(RowData fields) = do
+  -- Charge for keys.
+  
+  chargeGas . MilliGas $
+    1000 * fromIntegral (sum $ Text.length . _field <$> Map.keys fields)
+  -- Charge for values.
+  forM_ (Map.toList fields) $ \(_, pv) -> do
+    gasSerializePactValue chargeGas pv
+  pure . toStrictByteString $ encode rd
+
+gasSerializePactValue :: Monad m => (MilliGas -> m ()) -> PactValue -> m ()
+gasSerializePactValue chargeGas = \case
+  PLiteral l -> gasSerializeLiteral l
+  PList vs -> do
+    chargeGas $ MilliGas 1000
+    forM_ vs $ gasSerializePactValue chargeGas
+  PGuard _ -> chargeGas $ MilliGas 1000
+  PModRef _ -> chargeGas $ MilliGas 1000
+  PObject o -> do
+    chargeGas $ MilliGas $ (1000 *) $ sum $ fromIntegral . Text.length . _field <$> Map.keys o
+    forM_ o (gasSerializePactValue chargeGas)
+  PCapToken {} -> chargeGas $ MilliGas 1000
+  PTime _ -> chargeGas $ MilliGas 1000
+  
+  where
+    gasSerializeLiteral = \case
+      LString s -> chargeGas $ MilliGas $ 1000 * fromIntegral (Text.length s)
+      LInteger i -> chargeGas $ MilliGas $ 1000 * fromIntegral (length (show i))
+      LDecimal d -> chargeGas $ MilliGas $ 1000 * fromIntegral (length (show d))
+      LBool _ -> chargeGas $ MilliGas 1000
+      LUnit -> chargeGas $ MilliGas 1000
+
 
 decodeRowData :: ByteString -> Maybe RowData
 decodeRowData bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))

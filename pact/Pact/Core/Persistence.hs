@@ -8,6 +8,7 @@
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StrictData #-}
 
@@ -30,18 +31,21 @@ module Pact.Core.Persistence
  , readDefPacts, writeDefPacts
  , readNamespace, writeNamespace
  , GuardTableOp(..)
- , DbOpException(..)
  , TxId(..)
  , TxLog(..)
  , dbOpDisallowed
+ , dbOpDisallowed2
  , toUserTable
  , objectDataToRowData
  , rowDataToObjectData
  ) where
 
-import Control.Lens
-import Control.Exception(throwIO, Exception)
 import Control.Applicative((<|>))
+import Control.Lens
+import Control.Exception(throwIO)
+import qualified Control.Monad.Catch as Exceptions
+import Control.Monad.Error.Class (MonadError, throwError)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Default
 import Data.Map.Strict(Map)
 import Control.DeepSeq
@@ -56,10 +60,11 @@ import Pact.Core.Guards
 import Pact.Core.Hash
 import Pact.Core.PactValue
 import Pact.Core.DefPacts.Types
+import Pact.Core.Gas (MilliGas)
 import Pact.Core.Namespace
 import Data.ByteString (ByteString)
 
-import Data.Dynamic (Typeable)
+import Pact.Core.Errors (PactError (PEExecutionError), DbOpException(OpDisallowed), EvalError (DbOpFailure))
 
 -- | Modules as they are stored in our backend.
 data ModuleData b i
@@ -170,11 +175,13 @@ data Purity
 instance NFData Purity
 
 -- | Fun-record type for Pact back-ends.
+-- b: The type of builtin functions.
+-- i: The type of Info (usually SpanInfo or ()).
 data PactDb b i
   = PactDb
   { _pdbPurity :: !Purity
   , _pdbRead :: forall k v. Domain k v b i -> k -> IO (Maybe v)
-  , _pdbWrite :: forall k v. WriteType -> Domain k v b i -> k -> v -> IO ()
+  , _pdbWrite :: forall k v m. (MonadIO m, Exceptions.MonadCatch m, MonadError (PactError i) m, Default i) => (MilliGas -> m ()) -> WriteType -> Domain k v b i -> k -> v -> m ()
   , _pdbKeys :: forall k v. Domain k v b i -> IO [k]
   , _pdbCreateUserTable :: TableName -> IO ()
   , _pdbBeginTx :: ExecutionMode -> IO (Maybe TxId)
@@ -186,8 +193,8 @@ data PactDb b i
 
 instance NFData (PactDb b i) where
   -- Note: CommitTX and RollbackTx cannot be rnf'd
-  rnf (PactDb purity r w k cut btx ctx rtx tids txl) =
-    rnf purity `seq` rnf r `seq` rnf w `seq` rnf k `seq` rnf cut
+  rnf (PactDb purity r _ k cut btx ctx rtx tids txl) =
+    rnf purity `seq` rnf r `seq` rnf k `seq` rnf cut
        `seq` rnf btx `seq` ctx `seq` rtx `seq` rnf tids `seq` rnf txl
 
 makeClassy ''PactDb
@@ -198,46 +205,38 @@ makeClassy ''PactDb
 readModule :: PactDb b i -> ModuleName -> IO (Maybe (ModuleData b i))
 readModule pdb = _pdbRead pdb DModules
 
-writeModule :: PactDb b i -> WriteType -> ModuleName -> ModuleData b i -> IO ()
-writeModule pdb wt = _pdbWrite pdb wt DModules
+writeModule :: (MonadIO m , MonadError (PactError i) m, Default i, Exceptions.MonadCatch m) => PactDb b i -> WriteType -> ModuleName -> ModuleData b i -> m ()
+writeModule pdb wt = _pdbWrite pdb failIfUsesGas wt DModules
 
 readKeySet :: PactDb b i -> KeySetName -> IO (Maybe KeySet)
 readKeySet pdb = _pdbRead pdb DKeySets
 
-writeKeySet :: PactDb b i -> WriteType -> KeySetName -> KeySet -> IO ()
-writeKeySet pdb wt = _pdbWrite pdb wt DKeySets
+writeKeySet :: (MonadIO m, MonadError (PactError i) m, Default i, Exceptions.MonadCatch m) => PactDb b i -> WriteType -> KeySetName -> KeySet -> m ()
+writeKeySet pdb wt = _pdbWrite pdb failIfUsesGas wt DKeySets
 
 readDefPacts :: PactDb b i -> DefPactId -> IO (Maybe (Maybe DefPactExec))
 readDefPacts pdb = _pdbRead pdb DDefPacts
 
-writeDefPacts :: PactDb b i -> WriteType -> DefPactId -> Maybe DefPactExec -> IO ()
-writeDefPacts pdb wt = _pdbWrite pdb wt DDefPacts
+writeDefPacts :: (MonadIO m, MonadError (PactError i) m, Default i, Exceptions.MonadCatch m) => PactDb b i -> WriteType -> DefPactId -> Maybe DefPactExec -> m ()
+writeDefPacts pdb wt = _pdbWrite pdb failIfUsesGas wt DDefPacts
 
 readNamespace :: PactDb b i -> NamespaceName -> IO (Maybe Namespace)
 readNamespace pdb = _pdbRead pdb DNamespaces
 
-writeNamespace :: PactDb b i -> WriteType -> NamespaceName -> Namespace -> IO ()
-writeNamespace pdb wt = _pdbWrite pdb wt DNamespaces
+writeNamespace :: (MonadIO m, MonadError (PactError i) m, Default i, Exceptions.MonadCatch m) => PactDb b i -> WriteType -> NamespaceName -> Namespace -> m ()
+writeNamespace pdb wt = _pdbWrite pdb failIfUsesGas wt DNamespaces
 
-data DbOpException
-  = WriteException
-  | RowFoundException TableName RowKey
-  | NoRowFound TableName RowKey
-  | NoSuchTable TableName
-  | TableAlreadyExists TableName
-  | TxAlreadyBegun TxId
-  | NoTxToCommit
-  | NoTxLog TableName TxId
-  | OpDisallowed
-  | MultipleRowsReturnedFromSingleWrite
-  deriving (Show, Eq, Typeable, Generic)
+-- | For several db operations, we expect not to use gas. This
+--   function tests that assumption by failing if it is violated.
+failIfUsesGas :: MilliGas -> m ()
+failIfUsesGas _ = error "Expected no gas use (even charges of 0 gas)"
 
-instance NFData DbOpException
 
-dbOpDisallowed :: IO a
-dbOpDisallowed = throwIO OpDisallowed
+dbOpDisallowed :: MonadIO m => m a
+dbOpDisallowed = liftIO $ putStrLn "OpDisallowed" >> throwIO OpDisallowed
 
-instance Exception DbOpException
+dbOpDisallowed2 :: forall i m a. (MonadError (PactError i) m, MonadIO m, Default i) => m a
+dbOpDisallowed2 = liftIO (putStrLn "OpDisallowed") >> throwError (PEExecutionError (DbOpFailure OpDisallowed) def)
 
 data GuardTableOp
   = GtRead

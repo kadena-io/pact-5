@@ -237,12 +237,15 @@ prepopulateDb :: PactDb CoreBuiltin i -> IO ()
 prepopulateDb pdb = do
   _ <- _pdbBeginTx pdb Transactional
   _pdbCreateUserTable pdb gasModelTable
-  _pdbWrite pdb Write (DUserTables gasModelTable) gmTableK1 gmTableV1
-  _pdbWrite pdb Write (DUserTables gasModelTable) gmTableK1 gmTableV1
-  _pdbWrite pdb Write DNamespaces gmNamespaceName gmNamespace
-  _pdbWrite pdb Write DKeySets gmKeysetName gmKeyset
+  _pdbWrite pdb expectNoGas Write (DUserTables gasModelTable) gmTableK1 gmTableV1
+  _pdbWrite pdb expectNoGas Write (DUserTables gasModelTable) gmTableK1 gmTableV1
+  _pdbWrite pdb expectNoGas Write DNamespaces gmNamespaceName gmNamespace
+  _pdbWrite pdb expectNoGas Write DKeySets gmKeysetName gmKeyset
   _ <- _pdbCommitTx pdb
   pure ()
+
+  where
+    expectNoGas = \_ -> error "Expected no gas use (even charges of 0 gas)"
 
 evaluateN
   :: EvalEnv CoreBuiltin ()
