@@ -43,6 +43,7 @@ import Control.Lens
 import Control.Exception(throwIO, Exception)
 import Control.Applicative((<|>))
 import Data.Default
+import qualified Data.Kind as GHC
 import Data.Map.Strict(Map)
 import Control.DeepSeq
 import GHC.Generics
@@ -170,21 +171,24 @@ data Purity
 instance NFData Purity
 
 -- | Fun-record type for Pact back-ends.
-data PactDb b i
+-- b: The type of builtin functions.
+-- i: The type of Info (usually SpanInfo or ()).
+-- m: Some execution monad - usually an instance of MonadEval.
+data PactDb b i (m :: GHC.Type -> GHC.Type)
   = PactDb
   { _pdbPurity :: !Purity
-  , _pdbRead :: forall k v. Domain k v b i -> k -> IO (Maybe v)
-  , _pdbWrite :: forall k v. WriteType -> Domain k v b i -> k -> v -> IO ()
-  , _pdbKeys :: forall k v. Domain k v b i -> IO [k]
-  , _pdbCreateUserTable :: TableName -> IO ()
-  , _pdbBeginTx :: ExecutionMode -> IO (Maybe TxId)
-  , _pdbCommitTx :: IO [TxLog ByteString]
-  , _pdbRollbackTx :: IO ()
-  , _pdbTxIds :: TableName -> TxId -> IO [TxId]
-  , _pdbGetTxLog :: TableName -> TxId -> IO [TxLog RowData]
+  , _pdbRead :: forall k v. Domain k v b i -> k -> m (Maybe v)
+  , _pdbWrite :: forall k v. WriteType -> Domain k v b i -> k -> v -> m ()
+  , _pdbKeys :: forall k v. Domain k v b i -> m [k]
+  , _pdbCreateUserTable :: TableName -> m ()
+  , _pdbBeginTx :: ExecutionMode -> m (Maybe TxId)
+  , _pdbCommitTx :: m [TxLog ByteString]
+  , _pdbRollbackTx :: m ()
+  , _pdbTxIds :: TableName -> TxId -> m [TxId]
+  , _pdbGetTxLog :: TableName -> TxId -> m [TxLog RowData]
   }
 
-instance NFData (PactDb b i) where
+instance NFData (PactDb b i m) where
   -- Note: CommitTX and RollbackTx cannot be rnf'd
   rnf (PactDb purity r w k cut btx ctx rtx tids txl) =
     rnf purity `seq` rnf r `seq` rnf w `seq` rnf k `seq` rnf cut
@@ -195,28 +199,28 @@ makeClassy ''PactDb
 -- Potentially new Pactdb abstraction
 -- That said: changes in `Purity` that restrict read/write
 -- have to be done for all read functions.
-readModule :: PactDb b i -> ModuleName -> IO (Maybe (ModuleData b i))
+readModule :: PactDb b i m -> ModuleName -> m (Maybe (ModuleData b i))
 readModule pdb = _pdbRead pdb DModules
 
-writeModule :: PactDb b i -> WriteType -> ModuleName -> ModuleData b i -> IO ()
+writeModule :: PactDb b i m -> WriteType -> ModuleName -> ModuleData b i -> m ()
 writeModule pdb wt = _pdbWrite pdb wt DModules
 
-readKeySet :: PactDb b i -> KeySetName -> IO (Maybe KeySet)
+readKeySet :: PactDb b i  m -> KeySetName -> m (Maybe KeySet)
 readKeySet pdb = _pdbRead pdb DKeySets
 
-writeKeySet :: PactDb b i -> WriteType -> KeySetName -> KeySet -> IO ()
+writeKeySet :: PactDb b i m -> WriteType -> KeySetName -> KeySet -> m ()
 writeKeySet pdb wt = _pdbWrite pdb wt DKeySets
 
-readDefPacts :: PactDb b i -> DefPactId -> IO (Maybe (Maybe DefPactExec))
+readDefPacts :: PactDb b i m -> DefPactId -> m (Maybe (Maybe DefPactExec))
 readDefPacts pdb = _pdbRead pdb DDefPacts
 
-writeDefPacts :: PactDb b i -> WriteType -> DefPactId -> Maybe DefPactExec -> IO ()
+writeDefPacts :: PactDb b i m -> WriteType -> DefPactId -> Maybe DefPactExec -> m ()
 writeDefPacts pdb wt = _pdbWrite pdb wt DDefPacts
 
-readNamespace :: PactDb b i -> NamespaceName -> IO (Maybe Namespace)
+readNamespace :: PactDb b i m -> NamespaceName -> m (Maybe Namespace)
 readNamespace pdb = _pdbRead pdb DNamespaces
 
-writeNamespace :: PactDb b i -> WriteType -> NamespaceName -> Namespace -> IO ()
+writeNamespace :: PactDb b i m -> WriteType -> NamespaceName -> Namespace -> m ()
 writeNamespace pdb wt = _pdbWrite pdb wt DNamespaces
 
 data DbOpException

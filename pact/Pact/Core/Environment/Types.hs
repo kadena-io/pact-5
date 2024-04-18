@@ -115,7 +115,7 @@ data EvalEnv b i
   = EvalEnv
   { _eeMsgSigs :: Map PublicKeyText (Set (CapToken QualifiedName PactValue))
   -- ^ The list of provided keys and scoped capabilities
-  , _eePactDb :: PactDb b i
+  , _eePactDb :: PactDb b i IO
   -- ^ The Pact database store
   , _eeMsgBody :: PactValue
   -- ^ Transaction-provided data
@@ -217,7 +217,7 @@ type MonadEval b i m =
 
 -- | A default evaluation environment meant for
 --   uses such as the repl
-defaultEvalEnv :: PactDb b i -> M.Map Text b -> IO (EvalEnv b i)
+defaultEvalEnv :: PactDb b i IO  -> M.Map Text b -> IO (EvalEnv b i)
 defaultEvalEnv pdb m = do
   gasRef <- newIORef mempty
   pure $ EvalEnv
