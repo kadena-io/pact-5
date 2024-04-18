@@ -1,3 +1,5 @@
+{-# LANGUAGE RankNTypes #-}
+
 -- | The canonical way of encoding and decoding Pact entities into bytestrings.
 --   There are two places where in Pact where serialization is needed:
 --     - Computing module hashes
@@ -26,7 +28,9 @@ import Codec.CBOR.Read (deserialiseFromBytes)
 
 import qualified Pact.Core.Serialise.LegacyPact as LegacyPact
 import qualified Pact.Core.Serialise.CBOR_V1 as V1
+import Pact.Core.Gas
 import Pact.Core.Info (SpanInfo)
+import Pact.Core.Errors
 
 data DocumentVersion
   = V1_CBOR
@@ -67,7 +71,7 @@ data PactSerialise b i
   , _decodeDefPactExec :: ByteString -> Maybe (Document (Maybe DefPactExec))
   , _encodeNamespace :: Namespace -> ByteString
   , _decodeNamespace :: ByteString -> Maybe (Document Namespace)
-  , _encodeRowData :: RowData -> ByteString
+  , _encodeRowData :: i -> RowData -> GasM (PactError i) ByteString
   , _decodeRowData :: ByteString -> Maybe (Document RowData)
   }
 
@@ -101,7 +105,7 @@ serialisePact = PactSerialise
                            V1_CBOR -> V1.decodeNamespace
                        )
 
-  , _encodeRowData = docEncode V1.encodeRowData
+  , _encodeRowData = gEncodeRowData
   , _decodeRowData = \bs ->
       LegacyDocument <$> LegacyPact.decodeRowData bs
       <|> docDecode bs (\case
@@ -117,15 +121,21 @@ serialisePact = PactSerialise
       Left _ -> Nothing
       Right (_, (v,c)) ->  Document v <$> dec v c
 
+gEncodeRowData :: i -> RowData -> GasM (PactError i) ByteString
+gEncodeRowData info rd = do
+  encodedRow <- V1.encodeRowData info rd
+  pure $ toStrictByteString $ encodeVersion V1_CBOR <> S.encodeBytes encodedRow
+
 serialisePact_repl_spaninfo :: PactSerialise ReplCoreBuiltin SpanInfo
 serialisePact_repl_spaninfo = serialisePact
   { _encodeModuleData = V1.encodeModuleData_repl_spaninfo
   , _decodeModuleData = fmap LegacyDocument . V1.decodeModuleData_repl_spaninfo
+  , _encodeRowData = gEncodeRowData
   }
-
 
 serialisePact_raw_spaninfo :: PactSerialise CoreBuiltin SpanInfo
 serialisePact_raw_spaninfo = serialisePact
   { _encodeModuleData = V1.encodeModuleData_raw_spaninfo
   , _decodeModuleData = fmap LegacyDocument . V1.decodeModuleData_raw_spaninfo
+  , _encodeRowData = gEncodeRowData
   }

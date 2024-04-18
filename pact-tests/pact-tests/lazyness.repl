@@ -1,4 +1,3 @@
-
 (module lazyEval g
   (defcap g () true)
 

@@ -277,8 +277,10 @@ runTableModel = \case
     CapOpRequire cnt ->
       let mgPerCap = 100
       in MilliGas $ fromIntegral $ cnt * mgPerCap
+  GCountBytes -> MilliGas 1 
   where
   textCompareCost str = fromIntegral $ T.length str
+  -- Running CountBytes costs 0.9 MilliGas, according to the analysis in bench/Bench.hs
 
 basicWorkGas :: Word64
 basicWorkGas = 25

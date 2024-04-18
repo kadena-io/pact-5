@@ -25,6 +25,8 @@ module Pact.Core.IR.Desugar
  , runDesugarReplTopLevel
  , DesugarOutput(..)
  , DesugarBuiltin(..)
+
+ , runDesugarModule
  ) where
 
 import Control.Applicative((<|>))

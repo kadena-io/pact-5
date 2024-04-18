@@ -15,6 +15,7 @@ module Pact.Core.Errors
  , EvalError(..)
  , PactError(..)
  , ArgTypeError(..)
+ , DbOpException(..)
  , peInfo
  , viewErrorStack
  ) where
@@ -33,10 +34,9 @@ import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Info
-import Pact.Core.Gas
+import Pact.Core.Gas.Types
 import Pact.Core.Pretty as Pretty
 import Pact.Core.Hash
-import Pact.Core.Persistence
 import Pact.Core.StackFrame
 import Pact.Core.DefPacts.Types
 
@@ -487,6 +487,23 @@ instance Pretty EvalError where
 
 instance Exception EvalError
 
+data DbOpException
+  = WriteException
+  | RowFoundException TableName RowKey
+  | NoRowFound TableName RowKey
+  | NoSuchTable TableName
+  | TableAlreadyExists TableName
+  | TxAlreadyBegun Text
+  | NoTxToCommit
+  | NoTxLog TableName Text
+  | OpDisallowed
+  | MultipleRowsReturnedFromSingleWrite
+  deriving (Show, Eq, Typeable, Generic)
+
+instance NFData DbOpException
+
+instance Exception DbOpException
+
 data PactError info
   = PELexerError LexerError info
   | PEParseError ParseError info
@@ -523,4 +540,3 @@ viewErrorStack = \case
   _ -> []
 
 instance (Show info, Typeable info) => Exception (PactError info)
-
