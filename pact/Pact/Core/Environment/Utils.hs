@@ -40,7 +40,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 import Pact.Core.Names
-import Pact.Core.Persistence
+import Pact.Core.Persistence.Types
 import Pact.Core.IR.Term
 import Pact.Core.Errors
 import Pact.Core.Environment.Types

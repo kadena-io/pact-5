@@ -214,8 +214,9 @@ evalTopLevel bEnv tlFinal deps = do
         CapGov _ -> pure ()
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = ModuleData m deps'
-      chargeGasArgs (_mInfo m) (GModuleMemory (sizeOf SizeOfV0 m))
-      liftDbFunction (_mInfo m) (writeModule pdb Write (view mName m) mdata)
+      mSize <- sizeOf SizeOfV0 m
+      chargeGasArgs (_mInfo m) (GModuleMemory mSize)
+      writeModule (_mInfo m) pdb Write (view mName m) mdata
       let fqDeps = toFqDep (_mName m) (_mHash m) <$> _mDefs m
           newLoaded = M.fromList fqDeps
           newTopLevel = M.fromList $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind (_mName m) d))) <$> fqDeps
@@ -229,8 +230,9 @@ evalTopLevel bEnv tlFinal deps = do
     TLInterface iface -> do
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = InterfaceData iface deps'
-      chargeGasArgs (_ifInfo iface) (GModuleMemory (sizeOf SizeOfV0 iface))
-      liftDbFunction (_ifInfo iface) (writeModule pdb Write (view ifName iface) mdata)
+      ifaceSize <- sizeOf SizeOfV0 iface
+      chargeGasArgs (_ifInfo iface) (GModuleMemory ifaceSize)
+      writeModule (_ifInfo iface) pdb Write (view ifName iface) mdata
       let fqDeps = toFqDep (_ifName iface) (_ifHash iface)
                   <$> mapMaybe ifDefToDef (_ifDefns iface)
           newLoaded = M.fromList fqDeps

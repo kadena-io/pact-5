@@ -15,14 +15,18 @@ module Pact.Core.Errors
  , EvalError(..)
  , PactError(..)
  , ArgTypeError(..)
+ , DbOpException(..)
  , peInfo
  , viewErrorStack
+  , liftDbFunction
+ , liftDbFunction2 -- TODO Rename
  ) where
 
 import Control.Lens hiding (ix)
 import Control.Exception
 import Data.Text(Text)
 import Data.Dynamic (Typeable)
+import qualified Control.Monad.Catch as Exceptions
 import qualified Data.Version as V
 import qualified PackageInfo_pact_tng as PI
 
@@ -33,7 +37,7 @@ import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Info
-import Pact.Core.Gas
+import Pact.Core.Gas.Types
 import Pact.Core.Pretty as Pretty
 import Pact.Core.Hash
 import Pact.Core.Persistence
@@ -487,6 +491,23 @@ instance Pretty EvalError where
 
 instance Exception EvalError
 
+data DbOpException
+  = WriteException
+  | RowFoundException TableName RowKey
+  | NoRowFound TableName RowKey
+  | NoSuchTable TableName
+  | TableAlreadyExists TableName
+  | TxAlreadyBegun Text
+  | NoTxToCommit
+  | NoTxLog TableName Text
+  | OpDisallowed
+  | MultipleRowsReturnedFromSingleWrite
+  deriving (Show, Eq, Typeable, Generic)
+
+instance NFData DbOpException
+
+instance Exception DbOpException
+
 data PactError info
   = PELexerError LexerError info
   | PEParseError ParseError info
@@ -524,3 +545,21 @@ viewErrorStack = \case
 
 instance (Show info, Typeable info) => Exception (PactError info)
 
+liftDbFunction
+  :: (MonadError (PactError i) m, MonadIO m)
+  => i
+  -> IO a
+  -> m a
+liftDbFunction info action = do
+  e <- liftIO $ catch (Right <$> action) (pure . Left . DbOpFailure)
+  either (throwError . (`PEExecutionError` info)) pure e
+
+
+liftDbFunction2
+  :: forall i m a. (MonadError (PactError i) m, Exceptions.MonadCatch m)
+  => i
+  -> m a
+  -> m a
+liftDbFunction2 info action = do
+  e <- Exceptions.catch (Right <$> action) (pure . Left . DbOpFailure)
+  either (throwError . (`PEExecutionError` info)) pure e

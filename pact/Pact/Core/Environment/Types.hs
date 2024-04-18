@@ -46,6 +46,8 @@ module Pact.Core.Environment.Types
  , defaultEvalEnv
  , GasLogEntry(..)
  , RecursionCheck(..)
+ , Bytes
+ , SizeOfByteLimit(..)
  ) where
 
 
@@ -58,14 +60,17 @@ import Data.Map.Strict(Map)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.IORef
 import Data.Default
+import Data.Word (Word64)
 
 import Control.DeepSeq
 import GHC.Generics
+import Control.Monad.Catch as Exceptions
 
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
 
-import Pact.Core.Persistence
+import Pact.Core.Persistence.Types
+import Pact.Core.Pretty
 import Pact.Core.Capabilities
 import Pact.Core.Guards
 import Pact.Core.PactValue
@@ -186,7 +191,7 @@ data EvalState b i
 instance (NFData b, NFData i) => NFData (EvalState b i)
 
 instance Default (EvalState b i) where
-  def = EvalState def [] [] mempty Nothing Nothing (RecursionCheck mempty :| [])
+  def = EvalState def [] [] mempty Nothing Nothing (RecursionCheck mempty :| []) 0
 
 makeClassy ''EvalState
 
@@ -208,10 +213,9 @@ type MonadEval b i m =
   , MonadEvalState b i m
   , MonadError (PactError i) m
   , MonadIO m
+  , Exceptions.MonadCatch m
   , Default i
   , Show i
-  , SizeOf b
-  , SizeOf i
   , IsBuiltin b
   , Show b)
 
@@ -235,3 +239,12 @@ defaultEvalEnv pdb m = do
     , _eeGasModel = freeGasModel
     , _eeSPVSupport = noSPVSupport
     }
+
+type Bytes = Word64
+
+newtype SizeOfByteLimit
+  = SizeOfByteLimit Bytes
+  deriving Show
+
+instance Pretty SizeOfByteLimit where
+  pretty = pretty . show

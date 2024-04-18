@@ -215,6 +215,8 @@ runTableModel = \case
      quadraticGasFactor = 50_000
      linearGasFactor = 38_000
   GModuleMemory bytes -> moduleMemoryCost bytes
+  -- Running CountBytes costs 0.9 MilliGas, according to the analysis in bench/Bench.hs
+  GCountBytes -> MilliGas 1 
 
 basicWorkGas :: Word64
 basicWorkGas = 25

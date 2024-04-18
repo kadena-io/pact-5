@@ -37,7 +37,7 @@ import Data.Text(Text)
 import Data.Default
 
 
-import Pact.Core.Gas
+import Pact.Core.Gas.Types
 import Pact.Core.Names
 
 -- | Wrapper for 'PublicMeta' ttl field in seconds since offset
