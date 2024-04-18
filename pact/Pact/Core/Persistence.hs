@@ -57,6 +57,7 @@ import Pact.Core.Guards
 import Pact.Core.Hash
 import Pact.Core.PactValue
 import Pact.Core.DefPacts.Types
+import Pact.Core.Gas (MilliGas)
 import Pact.Core.Namespace
 import Data.ByteString (ByteString)
 
@@ -173,22 +174,21 @@ instance NFData Purity
 -- | Fun-record type for Pact back-ends.
 -- b: The type of builtin functions.
 -- i: The type of Info (usually SpanInfo or ()).
--- m: Some execution monad - usually an instance of MonadEval.
-data PactDb b i (m :: GHC.Type -> GHC.Type)
+data PactDb b i
   = PactDb
   { _pdbPurity :: !Purity
-  , _pdbRead :: forall k v. Domain k v b i -> k -> m (Maybe v)
-  , _pdbWrite :: forall k v. WriteType -> Domain k v b i -> k -> v -> m ()
-  , _pdbKeys :: forall k v. Domain k v b i -> m [k]
-  , _pdbCreateUserTable :: TableName -> m ()
-  , _pdbBeginTx :: ExecutionMode -> m (Maybe TxId)
-  , _pdbCommitTx :: m [TxLog ByteString]
-  , _pdbRollbackTx :: m ()
-  , _pdbTxIds :: TableName -> TxId -> m [TxId]
-  , _pdbGetTxLog :: TableName -> TxId -> m [TxLog RowData]
+  , _pdbRead :: forall k v. Domain k v b i -> k -> IO (Maybe v)
+  , _pdbWrite :: forall k v m. (MilliGas -> m ()) -> WriteType -> Domain k v b i -> k -> v -> m ()
+  , _pdbKeys :: forall k v. Domain k v b i -> IO [k]
+  , _pdbCreateUserTable :: TableName -> IO ()
+  , _pdbBeginTx :: ExecutionMode -> IO (Maybe TxId)
+  , _pdbCommitTx :: IO [TxLog ByteString]
+  , _pdbRollbackTx :: IO ()
+  , _pdbTxIds :: TableName -> TxId -> IO [TxId]
+  , _pdbGetTxLog :: TableName -> TxId -> IO [TxLog RowData]
   }
 
-instance NFData (PactDb b i m) where
+instance NFData (PactDb b i) where
   -- Note: CommitTX and RollbackTx cannot be rnf'd
   rnf (PactDb purity r w k cut btx ctx rtx tids txl) =
     rnf purity `seq` rnf r `seq` rnf w `seq` rnf k `seq` rnf cut
@@ -199,29 +199,34 @@ makeClassy ''PactDb
 -- Potentially new Pactdb abstraction
 -- That said: changes in `Purity` that restrict read/write
 -- have to be done for all read functions.
-readModule :: PactDb b i m -> ModuleName -> m (Maybe (ModuleData b i))
+readModule :: PactDb b i -> ModuleName -> IO (Maybe (ModuleData b i))
 readModule pdb = _pdbRead pdb DModules
 
-writeModule :: PactDb b i m -> WriteType -> ModuleName -> ModuleData b i -> m ()
-writeModule pdb wt = _pdbWrite pdb wt DModules
+writeModule :: PactDb b i -> WriteType -> ModuleName -> ModuleData b i -> m ()
+writeModule pdb wt = _pdbWrite pdb failIfUsesGas wt DModules
 
-readKeySet :: PactDb b i  m -> KeySetName -> m (Maybe KeySet)
+readKeySet :: PactDb b i -> KeySetName -> IO (Maybe KeySet)
 readKeySet pdb = _pdbRead pdb DKeySets
 
-writeKeySet :: PactDb b i m -> WriteType -> KeySetName -> KeySet -> m ()
-writeKeySet pdb wt = _pdbWrite pdb wt DKeySets
+writeKeySet :: PactDb b i -> WriteType -> KeySetName -> KeySet -> m ()
+writeKeySet pdb wt = _pdbWrite pdb failIfUsesGas wt DKeySets
 
-readDefPacts :: PactDb b i m -> DefPactId -> m (Maybe (Maybe DefPactExec))
+readDefPacts :: PactDb b i -> DefPactId -> IO (Maybe (Maybe DefPactExec))
 readDefPacts pdb = _pdbRead pdb DDefPacts
 
-writeDefPacts :: PactDb b i m -> WriteType -> DefPactId -> Maybe DefPactExec -> m ()
-writeDefPacts pdb wt = _pdbWrite pdb wt DDefPacts
+writeDefPacts :: PactDb b i -> WriteType -> DefPactId -> Maybe DefPactExec -> m ()
+writeDefPacts pdb wt = _pdbWrite pdb failIfUsesGas wt DDefPacts
 
-readNamespace :: PactDb b i m -> NamespaceName -> m (Maybe Namespace)
+readNamespace :: PactDb b i -> NamespaceName -> IO (Maybe Namespace)
 readNamespace pdb = _pdbRead pdb DNamespaces
 
-writeNamespace :: PactDb b i m -> WriteType -> NamespaceName -> Namespace -> m ()
-writeNamespace pdb wt = _pdbWrite pdb wt DNamespaces
+writeNamespace :: PactDb b i -> WriteType -> NamespaceName -> Namespace -> m ()
+writeNamespace pdb wt = _pdbWrite pdb failIfUsesGas wt DNamespaces
+
+-- | For several db operations, we expect not to use gas. This
+--   function tests that assumption by failing if it is violated.
+failIfUsesGas :: MilliGas -> m ()
+failIfUsesGas _ = error "Expected no gas use (even charges of 0 gas)"
 
 data DbOpException
   = WriteException

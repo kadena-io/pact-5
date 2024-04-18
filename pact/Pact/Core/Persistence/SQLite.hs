@@ -25,6 +25,7 @@ import Pact.Core.Environment.Types (MonadEval)
 import Pact.Core.Persistence
 import Pact.Core.Guards (renderKeySetName, parseAnyKeysetName)
 import Pact.Core.Names
+import Pact.Core.Gas (MilliGas)
 import Pact.Core.Persistence
 import Pact.Core.PactValue
 import Pact.Core.Literal
@@ -87,7 +88,7 @@ initializePactDb serial db = do
   pure $ PactDb
     { _pdbPurity = PImpure
     , _pdbRead = read' serial db
-    , _pdbWrite = write' serial db txId txLog
+    , _pdbWrite = write' serial db txId txLog undefined -- TODO (pass a gas-charging callback)
     , _pdbKeys = readKeys db
     , _pdbCreateUserTable = createUserTable serial db txLog
     , _pdbBeginTx = beginTx txId db txLog
@@ -177,17 +178,17 @@ rollbackTx db txLog = do
   SQL.exec db "ROLLBACK TRANSACTION"
   writeIORef txLog []
 
-createUserTable :: PactSerialise b i m -> SQL.Database -> IORef [TxLog ByteString] -> TableName -> IO ()
+createUserTable :: MonadEval b i m => PactSerialise b i m -> SQL.Database -> IORef [TxLog ByteString] -> TableName -> m ()
 createUserTable serial db txLog tbl = do
-  SQL.exec db stmt
+  liftIO $ SQL.exec db stmt
   let
     rd = RowData $ Map.singleton (Field "utModule")
          (PObject $ Map.fromList
           [ (Field "namespace", maybe (PLiteral LUnit) (PString . _namespaceName) (_mnNamespace (_tableModuleName tbl)))
           , (Field "name", PString (_tableName tbl))
           ])
-    rdEnc = _encodeRowData serial rd
-  modifyIORef' txLog (TxLog "SYS:usertables" (_tableName tbl) rdEnc :)
+  rdEnc <- _encodeRowData serial rd
+  liftIO $ modifyIORef' txLog (TxLog "SYS:usertables" (_tableName tbl) rdEnc :)
 
   where
     stmt = "CREATE TABLE IF NOT EXISTS " <> tblName <> " \
@@ -205,17 +206,17 @@ write'
   -> SQL.Database
   -> IORef TxId
   -> IORef [TxLog ByteString]
+  -> (MilliGas -> m ())
   -> WriteType
   -> Domain k v b i
   -> k
   -> v
-  -> IO ()
-write' serial db txId txLog wt domain k v =
+  -> m ()
+write' serial db txId txLog gasCallback wt domain k v = do
   case domain of
-    DUserTables tbl -> checkInsertOk tbl k >>= \case
-      Nothing -> withStmt db ("INSERT INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
+    DUserTables tbl -> _encodeRowData serial v >>= \encoded -> liftIO (checkInsertOk tbl k) >>= \case
+      Nothing -> liftIO $ withStmt db ("INSERT INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
         let
-          encoded = _encodeRowData serial v
           RowKey k' = k
         TxId i <- readIORef txId
         SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
@@ -226,27 +227,27 @@ write' serial db txId txLog wt domain k v =
           RowData old' = old
           RowData v' = v
           new = RowData (Map.union v' old')
-        withStmt db ("INSERT OR REPLACE INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
+        encoded <- _encodeRowData serial new
+        liftIO $ withStmt db ("INSERT OR REPLACE INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
           let
-            encoded = _encodeRowData serial new
             RowKey k' = k
           TxId i <- readIORef txId
           SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
           doWrite stmt (TxLog (_tableName tbl) k' encoded:)
 
-    DKeySets -> withStmt db "INSERT OR REPLACE INTO \"SYS:KEYSETS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
+    DKeySets -> liftIO $ withStmt db "INSERT OR REPLACE INTO \"SYS:KEYSETS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let encoded = _encodeKeySet serial v
       TxId i <- readIORef txId
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderKeySetName k), SQL.SQLBlob encoded]
       doWrite stmt (TxLog "SYS:KEYSETS" (renderKeySetName k) encoded:)
 
-    DModules -> withStmt db "INSERT OR REPLACE INTO \"SYS:MODULES\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
+    DModules -> liftIO $ withStmt db "INSERT OR REPLACE INTO \"SYS:MODULES\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let encoded = _encodeModuleData serial v
       TxId i <- readIORef txId
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderModuleName k), SQL.SQLBlob encoded]
       doWrite stmt (TxLog "SYS:MODULES" (renderModuleName k) encoded:)
 
-    DDefPacts -> withStmt db "INSERT OR REPLACE INTO \"SYS:PACTS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
+    DDefPacts -> liftIO $ withStmt db "INSERT OR REPLACE INTO \"SYS:PACTS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let
         encoded = _encodeDefPactExec serial v
         DefPactId k' = k
@@ -254,7 +255,7 @@ write' serial db txId txLog wt domain k v =
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
       doWrite stmt (TxLog "SYS:PACTS" k' encoded:)
 
-    DNamespaces -> withStmt db "INSERT OR REPLACE INTO \"SYS:NAMESPACES\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
+    DNamespaces -> liftIO $ withStmt db "INSERT OR REPLACE INTO \"SYS:NAMESPACES\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let
         encoded = _encodeNamespace serial v
         NamespaceName k' = k
