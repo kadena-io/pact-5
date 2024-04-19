@@ -143,6 +143,7 @@ data IntegerPrimOp
 
 data StrOp
   = StrOpLength !Int
+  | StrOpConvToInt !Int
   deriving (Eq, Show, Ord, Generic, NFData)
 
 data GasArgs

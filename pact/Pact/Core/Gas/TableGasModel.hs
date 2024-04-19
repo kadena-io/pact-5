@@ -216,8 +216,12 @@ runTableModel = \case
      linearGasFactor = 38_000
   GModuleMemory bytes -> moduleMemoryCost bytes
   GStrOp op -> case op of
-    StrOpLength len -> let charsPerMg = 100
-                       in MilliGas $ fromIntegral (len `quot` charsPerMg + 1)
+    StrOpLength len ->
+      let charsPerMg = 100
+      in MilliGas $ fromIntegral $ len `quot` charsPerMg + 1
+    StrOpConvToInt len ->
+      let mgPerChar = 20
+       in MilliGas $ fromIntegral $ len * mgPerChar + 1
 
 basicWorkGas :: Word64
 basicWorkGas = 25
