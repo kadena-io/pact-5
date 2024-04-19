@@ -358,8 +358,15 @@ benchIntToStr pdb =
 
 benchStrToInt :: BuiltinBenches
 benchStrToInt pdb =
-  [ runNativeBenchmarkPrepared [("x", str)] pdb title "(str-to-int x)"
-  | (title, str) <- take 3 $ enumExpString "1" 100 2
+  [ C.bgroup "single-arg"
+    [ runNativeBenchmarkPrepared [("x", str)] pdb title "(str-to-int x)"
+    | (title, str) <- take 3 $ enumExpString "1" 100 2
+    ]
+  , C.bgroup "with-base"
+    [ runNativeBenchmarkPrepared [("x", str)] pdb (T.unpack base <> "_" <> title) [text|(str-to-int $base x)|]
+    | base <- ["2", "10", "16"]
+    , (title, str) <- take 3 $ enumExpString "1" 100 2
+    ]
   ]
 
 benchDistinct :: BuiltinBenches
