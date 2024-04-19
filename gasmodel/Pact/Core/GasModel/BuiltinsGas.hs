@@ -369,6 +369,12 @@ benchStrToInt pdb =
     ]
   ]
 
+benchFold :: BuiltinBenches
+benchFold pdb =
+  [ runNativeBenchmarkPrepared [("x", list)] pdb title "(fold (lambda (a b) a) 0 x)"
+  | (title, list) <- take 3 $ enumExpList 10000 10
+  ]
+
 benchDistinct :: BuiltinBenches
 benchDistinct pdb =
   [ C.bgroup "flat"
@@ -432,6 +438,7 @@ benchesForBuiltin bn = case bn of
   CoreFilter -> benchFilter
   CoreIntToStr -> benchIntToStr
   CoreStrToInt -> benchStrToInt
+  CoreFold -> benchFold
   CoreDistinct -> benchDistinct
   CoreEnumerate -> benchEnumerate
   _ -> const []
