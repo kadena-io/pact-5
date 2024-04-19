@@ -143,7 +143,9 @@ data IntegerPrimOp
 
 data StrOp
   = StrOpLength !Int
+  -- ^ The cost of computing the length. In a sense, it's charged post-factum.
   | StrOpConvToInt !Int
+  -- ^ The cost of converting a string of a given length to an integer.
   deriving (Eq, Show, Ord, Generic, NFData)
 
 data GasArgs
