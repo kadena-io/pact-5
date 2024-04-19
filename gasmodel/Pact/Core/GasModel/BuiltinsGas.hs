@@ -356,6 +356,12 @@ benchIntToStr pdb =
     ]
   ]
 
+benchStrToInt :: BuiltinBenches
+benchStrToInt pdb =
+  [ runNativeBenchmarkPrepared [("x", str)] pdb title "(str-to-int x)"
+  | (title, str) <- take 3 $ enumExpString "1" 100 2
+  ]
+
 benchDistinct :: BuiltinBenches
 benchDistinct pdb =
   [ C.bgroup "flat"
@@ -418,6 +424,7 @@ benchesForBuiltin bn = case bn of
   CoreZip -> benchZip
   CoreFilter -> benchFilter
   CoreIntToStr -> benchIntToStr
+  CoreStrToInt -> benchStrToInt
   CoreDistinct -> benchDistinct
   CoreEnumerate -> benchEnumerate
   _ -> const []
