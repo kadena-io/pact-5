@@ -1488,7 +1488,9 @@ checkImplements i defs moduleName ifaceName = do
         Just _ ->  throwDesugarError (ImplementationError moduleName ifaceName ifdpName) i
         Nothing -> throwDesugarError (NotImplemented moduleName ifaceName ifdpName) i
 
+  -- Weak comparison of 'Arg' by ignoring '_argInfo' via mapping it to unit.
   weakArgsNeq a b = fmap void a /= fmap void b
+
   checkMetaMatches :: DefCapMeta (FQNameRef Name) -> DefCapMeta BareName -> Bool
   checkMetaMatches Unmanaged Unmanaged = True
   checkMetaMatches DefEvent DefEvent = True

@@ -139,7 +139,8 @@ defInfo = \case
 
 data Defun i
   = Defun
-  { _dfunSpec :: MArg i
+  { _dfunSpec :: MArg i  -- ^ 'MArg' contains the name ('_margName') and
+                         -- optional return type ('_margType'). The 'i' reflects the name info.
   , _dfunArgs :: [MArg i]
   , _dfunTerm :: Expr i
   , _dfunDocs :: Maybe Text
@@ -149,7 +150,8 @@ data Defun i
 
 data DefConst i
   = DefConst
-  { _dcSpec :: MArg i
+  { _dcSpec :: MArg i  -- ^ 'MArg' contains the name ('_margName') and
+                       -- optional return type ('_margType'). The 'i' reflects the name info.
   , _dcTerm :: Expr i
   , _dcDocs :: Maybe Text
   , _dcInfo :: i
@@ -162,7 +164,8 @@ data DCapMeta
 
 data DefCap i
   = DefCap
-  { _dcapSpec :: MArg i
+  { _dcapSpec :: MArg i  -- ^ 'MArg' contains the name ('_margName') and
+                         -- optional return type ('_margType'). The 'i' reflects the name info.
   , _dcapArgs :: ![MArg i]
   , _dcapTerm :: Expr i
   , _dcapDocs :: Maybe Text
@@ -195,7 +198,8 @@ data PactStep i
 
 data DefPact i
   = DefPact
-  { _dpSpec :: MArg i
+  { _dpSpec :: MArg i -- ^ 'MArg' contains the name ('_margName') and
+                      -- optional return type ('_margType'). The 'i' reflects the name info.
   , _dpArgs :: [MArg i]
   , _dpSteps :: [PactStep i]
   , _dpDocs :: Maybe Text
@@ -260,7 +264,8 @@ data Interface i
 
 data IfDefun i
   = IfDefun
-  { _ifdSpec :: MArg i
+  { _ifdSpec :: MArg i  -- ^ 'MArg' contains the name ('_margName') and
+                        -- optional return type ('_margType'). The 'i' reflects the name info.
   , _ifdArgs :: [MArg i]
   , _ifdDocs :: Maybe Text
   , _ifdModel :: [PropertyExpr i]
@@ -269,7 +274,8 @@ data IfDefun i
 
 data IfDefCap i
   = IfDefCap
-  { _ifdcSpec :: MArg i
+  { _ifdcSpec :: MArg i  -- ^ 'MArg' contains the name ('_margName') and
+                         -- optional return type ('_margType'). The 'i' reflects the name info.
   , _ifdcArgs :: [MArg i]
   , _ifdcDocs :: Maybe Text
   , _ifdcModel :: [PropertyExpr i]
@@ -279,7 +285,8 @@ data IfDefCap i
 
 data IfDefPact i
   = IfDefPact
-  { _ifdpSpec :: MArg i
+  { _ifdpSpec :: MArg i  -- ^ 'MArg' contains the name ('_margName') and
+                         -- optional return type ('_margType'). The 'i' reflects the name info.
   , _ifdpArgs :: [MArg i]
   , _ifdpDocs :: Maybe Text
   , _ifdpModel :: [PropertyExpr i]

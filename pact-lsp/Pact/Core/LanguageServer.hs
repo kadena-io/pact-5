@@ -60,9 +60,6 @@ import Pact.Core.Names
 import qualified Pact.Core.IR.ModuleHashing as MHash
 import qualified Pact.Core.IR.ConstEval as ConstEval
 
-sshow :: Show a => a -> Text
-sshow = T.pack . show
-
 data LSState =
   LSState
   { _lsReplState :: M.Map NormalizedUri (ReplState ReplCoreBuiltin)
@@ -366,3 +363,6 @@ processFile replEnv (SourceCode _ source) = do
       let act = [ds] <$ evalTopLevel replEnv tlFinal deps
       catchError act (const (pure []))
     _ -> pure []
+
+sshow :: Show a => a -> Text
+sshow = T.pack . show

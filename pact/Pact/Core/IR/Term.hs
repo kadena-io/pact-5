@@ -510,6 +510,7 @@ termInfo f = \case
   CapabilityForm cf i -> CapabilityForm cf <$> f i
   ObjectLit m i -> ObjectLit m <$> f i
 
+-- TODO: add test cases for all traversal
 traverseTerm
   :: Traversal' (Term name ty builtin info)
                 (Term name ty builtin info)
