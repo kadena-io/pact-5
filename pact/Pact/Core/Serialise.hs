@@ -1,3 +1,5 @@
+{-# LANGUAGE RankNTypes #-}
+
 -- | The canonical way of encoding and decoding Pact entities into bytestrings.
 --   There are two places where in Pact where serialization is needed:
 --     - Computing module hashes
@@ -26,6 +28,7 @@ import Codec.CBOR.Read (deserialiseFromBytes)
 
 import qualified Pact.Core.Serialise.LegacyPact as LegacyPact
 import qualified Pact.Core.Serialise.CBOR_V1 as V1
+import Pact.Core.Gas (MilliGas)
 import Pact.Core.Environment.Types (MonadEval)
 import Pact.Core.Info (SpanInfo)
 
@@ -58,7 +61,7 @@ encodeVersion = \case
 
 
 -- | The main serialization API for Pact entities.
-data PactSerialise b i m
+data PactSerialise b i
   = PactSerialise
   { _encodeModuleData :: ModuleData b i -> ByteString
   , _decodeModuleData :: ByteString -> Maybe (Document (ModuleData b i))
@@ -68,11 +71,11 @@ data PactSerialise b i m
   , _decodeDefPactExec :: ByteString -> Maybe (Document (Maybe DefPactExec))
   , _encodeNamespace :: Namespace -> ByteString
   , _decodeNamespace :: ByteString -> Maybe (Document Namespace)
-  , _encodeRowData :: RowData -> m ByteString
+  , _encodeRowData :: forall m. Monad m => (MilliGas -> m ()) -> RowData -> m ByteString
   , _decodeRowData :: ByteString -> Maybe (Document RowData)
   }
 
-serialisePact :: forall b i m. MonadEval b i m => PactSerialise CoreBuiltin () m
+serialisePact :: PactSerialise CoreBuiltin ()
 serialisePact = PactSerialise
   { _encodeModuleData = docEncode V1.encodeModuleData
   , _decodeModuleData = \bs ->
@@ -102,7 +105,7 @@ serialisePact = PactSerialise
                            V1_CBOR -> V1.decodeNamespace
                        )
 
-  , _encodeRowData = pure . docEncode V1.encodeRowData
+  , _encodeRowData = \_chargeGas rd -> pure $ docEncode V1.encodeRowData rd
   , _decodeRowData = \bs ->
       LegacyDocument <$> LegacyPact.decodeRowData bs
       <|> docDecode bs (\case
@@ -118,13 +121,13 @@ serialisePact = PactSerialise
       Left _ -> Nothing
       Right (_, (v,c)) ->  Document v <$> dec v c
 
-serialisePact_repl_spaninfo :: forall b i m. MonadEval b i m => PactSerialise ReplCoreBuiltin SpanInfo m
+serialisePact_repl_spaninfo :: PactSerialise ReplCoreBuiltin SpanInfo
 serialisePact_repl_spaninfo = serialisePact
   { _encodeModuleData = V1.encodeModuleData_repl_spaninfo
   , _decodeModuleData = fmap LegacyDocument . V1.decodeModuleData_repl_spaninfo
   }
 
-serialisePact_raw_spaninfo :: forall b i m. MonadEval b i m => PactSerialise CoreBuiltin SpanInfo m
+serialisePact_raw_spaninfo :: PactSerialise CoreBuiltin SpanInfo
 serialisePact_raw_spaninfo = serialisePact
   { _encodeModuleData = V1.encodeModuleData_raw_spaninfo
   , _decodeModuleData = fmap LegacyDocument . V1.decodeModuleData_raw_spaninfo
