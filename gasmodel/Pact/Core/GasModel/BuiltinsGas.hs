@@ -375,6 +375,22 @@ benchFold pdb =
   | (title, list) <- take 3 $ enumExpList 10000 10
   ]
 
+benchFormat :: BuiltinBenches
+benchFormat pdb =
+  [ C.bgroup "simple"
+    [ runNativeBenchmarkPrepared [("str", str), ("list", list)] pdb title "(format str list)"
+    | (title, list@(PList vec)) <- take 3 $ enumExpList 10000 10
+    , let len = V.length vec
+    , let str = PString $ T.replicate len "{} "
+    ]
+  , C.bgroup "complex"
+    [ runNativeBenchmarkPrepared [("str", str), ("list", list)] pdb title "(format str list)"
+    | (title, list@(PList vec)) <- take 3 $ enumExpListDeep 3 10 2
+    , let len = V.length vec
+    , let str = PString $ T.replicate len "{} "
+    ]
+  ]
+
 benchDistinct :: BuiltinBenches
 benchDistinct pdb =
   [ C.bgroup "flat"
@@ -440,6 +456,7 @@ benchesForBuiltin bn = case bn of
   CoreStrToInt -> benchStrToInt
   CoreFold -> benchFold
   CoreDistinct -> benchDistinct
+  CoreFormat -> benchFormat
   CoreEnumerate -> benchEnumerate
   _ -> const []
   where
