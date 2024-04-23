@@ -85,7 +85,7 @@ findSnippets phrases repos = do
 
 findSnippetsInRepo :: [Text] -> Repo -> IO (Map Text [Snippet])
 findSnippetsInRepo phrases repo@(url, relativePath) = do
-    let repoPath = "/tmp" </> Text.unpack url     -- assuming '/tmp' as base path
+    let repoPath = "/tmp" </> "temprepo" ---Text.unpack url     -- assuming '/tmp' as base path
     cloneRepo repoPath repo
     files <- getPactOrReplFiles (repoPath </> relativePath)
     fileSnippetMaps <- mapM (\file -> createSnippets phrases file (drop (length (repoPath </> relativePath)) file) repo) files

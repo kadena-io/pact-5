@@ -82,6 +82,7 @@ generateSectionPrompt docOfCurrentFromLegacyDocs snippets exampleDocInNewFormat 
   , Message "user" $ "Additionally, consider the following snippets from our repositories which show examples or use-cases of the `" ++ builtInName ++ "` function:"
   , Message "user" snippets
   , Message "user" $ "Using the provided example, legacy documentation, and code snippets, please write the '" ++ Text.unpack sectionHeading ++ "' section of the documentation taking into account the following description and instruction, remember! Generate only requested section, nothing more! :"
+  , Message "user" "Most importantly, be extreamly carefull to not introduce anything what cannot be directly infered from code snippets and previous version of documentation! Generated content must be as brief as possible."
   , Message "user" sectionDescription
   ]
   where
@@ -133,7 +134,7 @@ generateDocumentationForBuiltin verbose builtin = do
         -- Use the ChatGPT API to generate content for the section
         maybeSectionContent <- GPT.makeChatGPTRequest' messages
         case maybeSectionContent of
-          Just sectionContent -> return sectionContent
+          Just sectionContent -> return $ sectionContent ++ "\n"
           Nothing -> do
             -- Log or handle the error case here
             when verbose $

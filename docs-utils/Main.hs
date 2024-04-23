@@ -4,8 +4,8 @@
 
 module Main where
 
-import System.Directory (listDirectory, doesFileExist)
-import System.FilePath ((</>),(<.>), takeBaseName, takeExtension)
+import System.Directory (listDirectory, doesFileExist, createDirectoryIfMissing)
+import System.FilePath ((</>),(<.>), takeBaseName, takeExtension,takeDirectory)
 import Data.List (sort, (\\),intersperse,sortOn)
 import Control.Monad (filterM,forM,forM_, when, unless)
 import Pact.Core.Builtin
@@ -427,3 +427,30 @@ makeReport = do
  where
  presentFirst :: [[Text]] -> [[Text]]
  presentFirst = reverse . sortOn (Text.length . head . (drop 1))
+
+
+
+genInFolder :: Bool -> (a -> FilePath) -> (a -> IO Text) -> [ a ] -> IO ()
+genInFolder verbose pathGenerator contentGenerator list
+  = forM_ list $ \item -> do
+      let path = pathGenerator item
+      let directoryPath = takeDirectory path
+      createDirectoryIfMissing True directoryPath
+      content <- contentGenerator item
+      withFile path WriteMode $ \h -> do
+          T.hPutStr h content
+      if verbose 
+        then putStrLn $ "File " ++ path ++ " created."
+        else return ()
+
+genDocumentation :: Bool -> FilePath -> Maybe Int -> IO ()
+genDocumentation verbose path limit = do
+    let limitedBuiltins = case limit of
+                            Just n  -> take n $ drop 40 allCoreBuiltins
+                            Nothing -> allCoreBuiltins
+    genInFolder verbose fileName contentGen limitedBuiltins
+  where 
+    fileName :: CoreBuiltin -> FilePath
+    fileName bi = path </> (Text.unpack (coreBuiltinToText bi)) ++ ".md"
+    contentGen :: CoreBuiltin -> IO Text
+    contentGen = generateDocumentationForBuiltin verbose
