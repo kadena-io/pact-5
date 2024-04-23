@@ -159,3 +159,25 @@ showAllDefsMapStats :: IO ()
 showAllDefsMapStats = fmap Map.toList getAllDefsMap >>=
   (mapM_ $ \(defId , m) -> do
            TIO.putStr defId >> putStr (unwords $ ((:) ' ') <$> Map.keys m) >> putStrLn "" )
+
+ppCIAC :: Map.Map String Chapter -> IO ()
+ppCIAC x = mapM_
+  (\(s,c) -> do
+      putStrLn ""
+      putStrLn s
+      putStrLn (T.unpack c)
+      ) (Map.toList x)
+  
+  
+getChapterInAllContexts :: ChapterName -> IO (Map.Map String Chapter)
+getChapterInAllContexts chapterName = do
+    chaptersMapList <- mapM getChapterForCtx allExtractCtxs
+    return $ Map.fromList (concat chaptersMapList)
+  where
+    -- Helper function to get a chapter for a specific context
+    getChapterForCtx :: ExtractCtx -> IO [(String, Chapter)]
+    getChapterForCtx ec = do
+        chapters <- getDefs ec
+        return $ maybe [] (\x -> [(originId ec, x)]) $ lookup chapterName chapters
+        -- return (chapterContent)
+

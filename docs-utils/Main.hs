@@ -44,6 +44,8 @@ import qualified Data.Map as Map
 
 import qualified Lucid             as L
 
+import StubGen
+
 docsDir :: FilePath
 docsDir = "/Users/marcin/pact-core/docs/functions"
 
@@ -275,6 +277,23 @@ data DocUtilMode =
 
 
 
+-- main :: IO ()
+-- main = do
+--     clearScreen
+--     setCursorPosition 0 0
+--     setSGR [SetColor Foreground Vivid Blue]
+--     putStrLn "Please select the documentation utility mode:"
+--     setSGR [Reset]
+--     putStrLn "Press 'b' for Basic mode"
+--     putStrLn "Press 'v' for Verbose mode"
+--     putStrLn "Press 'i' for Interactive mode"
+--     setSGR [SetUnderlining SingleUnderline]
+--     putStrLn "Choice: "
+--     setSGR [Reset]
+
+--     mode <- getModeSelection
+--     checkCoreBuiltinDocs docsDir mode
+
 main :: IO ()
 main = do
     clearScreen
@@ -285,12 +304,52 @@ main = do
     putStrLn "Press 'b' for Basic mode"
     putStrLn "Press 'v' for Verbose mode"
     putStrLn "Press 'i' for Interactive mode"
+    putStrLn "Press 'g' to generate documentation for a specific built-in"
     setSGR [SetUnderlining SingleUnderline]
     putStrLn "Choice: "
     setSGR [Reset]
 
-    mode <- getModeSelection
-    checkCoreBuiltinDocs docsDir mode
+    choice <- getChar
+    putStrLn "" -- to move to the next line after the user input
+
+    case choice of
+        'b' -> checkCoreBuiltinDocs docsDir Basic
+        'v' -> checkCoreBuiltinDocs docsDir Verbose
+        'i' -> checkCoreBuiltinDocs docsDir Interactive
+        'g' -> generateBuiltinDocs
+        _   -> do
+            setSGR [SetColor Foreground Vivid Red]
+            putStrLn "Invalid selection, please choose 'b', 'v', 'i' or 'g'."
+            setSGR [Reset]
+            main
+
+-- Helper function to produce documentation for a given builtin
+generateBuiltinDocs :: IO ()
+generateBuiltinDocs = do
+    setSGR [SetColor Foreground Vivid Blue]
+    putStrLn "Enter the name of the built-in for which you need documentation: "
+    setSGR [Reset]
+    builtinName <- getLine
+
+    let maybeBuiltin = Map.lookup (Text.pack builtinName) coreBuiltinMap
+    case maybeBuiltin of
+      Nothing -> do
+        setSGR [SetColor Foreground Vivid Red]
+        putStrLn "Invalid built-in name, please try again."
+        setSGR [Reset]
+        generateBuiltinDocs
+      Just builtin -> do
+        putStrLn "Do you want verbose output? (y/n)"
+        choice <- getLine
+        case choice of
+          "y" -> generateDocumentationForBuiltin True builtin >>= putStrLn . Text.unpack
+          "n" -> generateDocumentationForBuiltin False builtin >>= putStrLn . Text.unpack
+          _   -> do
+            setSGR [SetColor Foreground Vivid Red]
+            putStrLn "Invalid option selected. Please, type 'y' or 'n'."
+            setSGR [Reset]
+            generateBuiltinDocs
+
 
 -- Helper function to get the documentation utility mode selection from user
 getModeSelection :: IO DocUtilMode
@@ -330,7 +389,7 @@ generateStubsForMissingFiles missingBuiltins dir = do
 createStubContent :: CoreBuiltin -> String
 createStubContent builtin =
   let title = Text.unpack $ coreBuiltinToText builtin
-      sections = unlines $ map (\h -> "## " ++ Text.unpack h) correctHeaders
+      sections = unlines $ map (\(_ , h) -> "## " ++ Text.unpack h) correctHeaders
   in unlines
      [ "# " ++ title
      , ""

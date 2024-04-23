@@ -269,6 +269,13 @@ executable docs-utils
                , ansi-terminal
                , containers
                , transformers
+               , process
+               , async
+               , aeson
+               , http-conduit
+               , bytestring
+               , lens
+               , raw-strings-qq
 
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
@@ -277,6 +284,9 @@ executable docs-utils
     , Linter
     , LintRules
     , ExtractLegacyDefs
+    , Snippets
+    , StubGen
+    , GPTUtils
 
 
 
