@@ -307,8 +307,9 @@ runNativeBenchmark'
   -> Text
   -> C.Benchmark
 runNativeBenchmark' envMod stMod pdb title src = C.env mkEnv $ \ ~(term, es, ee) ->
-  C.bench title $ C.nfAppIO (fmap fst . runEvalM ee es . Eval.eval PImpure benchmarkBigStepEnv) term
+  C.bench title $ C.nfAppIO (fmap (ensureNonError . fst) . runEvalM ee es . Eval.eval PImpure benchmarkBigStepEnv) term
   where
+  ensureNonError = either (error . show) id
   mkEnv = do
     ee <- envMod =<< defaultGasEvalEnv pdb
     es <- stMod defaultGasEvalState
