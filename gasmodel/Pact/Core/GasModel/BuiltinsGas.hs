@@ -391,18 +391,6 @@ benchFormat pdb =
     ]
   ]
 
-benchDistinct :: BuiltinBenches
-benchDistinct pdb =
-  [ C.bgroup "flat"
-    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(distinct x)|]
-    | (title, list) <- take 3 $ enumExpList 1000 2
-    ]
-  , C.bgroup "nested"
-    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(distinct x)|]
-    | (title, list) <- take 3 $ enumExpListDeep 3 5 4
-    ]
-  ]
-
 benchEnumerate :: BuiltinBenches
 benchEnumerate pdb =
   [ C.bgroup "no-step"
@@ -412,6 +400,34 @@ benchEnumerate pdb =
   , C.bgroup "with-step"
     [ runNativeBenchmark pdb title [text|(enumerate 0 $cnt 1)|]
     | (title, cnt) <- take 3 $ enumExpText 1000 10
+    ]
+  ]
+
+benchShow :: BuiltinBenches
+benchShow pdb =
+  [ C.bgroup "integer"
+    [ runNativeBenchmarkPrepared [("x", PInteger num)] pdb title "(show x)"
+    | (title, num) <- take 3 $ enumExpNum 1000 1000
+    ]
+  , C.bgroup "decimal"
+    [ runNativeBenchmark pdb title [text|(show $num.0)|]
+    | (title, num) <- take 3 $ enumExpText 1000 1000
+    ]
+  , C.bgroup "string"
+    [ runNativeBenchmarkPrepared [("x", str)] pdb title "(show x)"
+    | (title, str) <- take 3 $ enumExpString "a" 1000 100
+    ]
+  ]
+
+benchDistinct :: BuiltinBenches
+benchDistinct pdb =
+  [ C.bgroup "flat"
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(distinct x)|]
+    | (title, list) <- take 3 $ enumExpList 1000 2
+    ]
+  , C.bgroup "nested"
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(distinct x)|]
+    | (title, list) <- take 3 $ enumExpListDeep 3 5 4
     ]
   ]
 
@@ -466,6 +482,7 @@ benchesForBuiltin bn = case bn of
   CoreFormat -> benchFormat
   CoreEnumerate -> benchEnumerate
   CoreEnumerateStepN -> alreadyCovered
+  CoreShow -> benchShow
   CoreDistinct -> benchDistinct
   _ -> const []
   where
