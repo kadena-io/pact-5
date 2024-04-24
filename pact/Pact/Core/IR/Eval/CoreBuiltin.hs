@@ -384,11 +384,16 @@ rawSqrt info b cont handler _env = \case
 -- Todo: fix all show instances
 rawShow :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawShow info b cont handler _env = \case
-  [VLiteral (LInteger i)] ->
+  [VLiteral (LInteger i)] -> do
+    let strLen = 1 + Exts.I# (IntLog.integerLog2# i)
+    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
     returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
-  [VLiteral (LDecimal i)] ->
+  [VLiteral (LDecimal i)] -> do
+    let strLen = 1 + Exts.I# (IntLog.integerLog2# $ decimalMantissa i)
+    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
     returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
-  [VLiteral (LString i)] ->
+  [VLiteral (LString i)] -> do
+    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ T.length i
     returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
   [VLiteral (LBool i)] ->
     returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
