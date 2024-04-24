@@ -454,19 +454,23 @@ benchesForBuiltin bn = case bn of
   CoreReverse -> benchReverse
   CoreContains -> benchContains
   CoreSort -> benchSort
+  CoreSortObject -> alreadyCovered
   CoreRemove -> benchRemove
   CoreMap -> benchMap
   CoreZip -> benchZip
   CoreFilter -> benchFilter
   CoreIntToStr -> benchIntToStr
   CoreStrToInt -> benchStrToInt
+  CoreStrToIntBase -> alreadyCovered
   CoreFold -> benchFold
-  CoreDistinct -> benchDistinct
   CoreFormat -> benchFormat
   CoreEnumerate -> benchEnumerate
+  CoreEnumerateStepN -> alreadyCovered
+  CoreDistinct -> benchDistinct
   _ -> const []
   where
   omittedDeliberately = const []
+  alreadyCovered = const []
 
 benchmarkName :: CoreBuiltin -> String
 benchmarkName = \case
