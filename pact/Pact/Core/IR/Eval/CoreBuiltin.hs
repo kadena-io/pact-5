@@ -1590,6 +1590,12 @@ coreCond info b cont handler _env = \case
   args -> argsError info b args
 
 
+coreIdentity :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
+coreIdentity info b cont handler _env = \case
+  [VPactValue pv] -> returnCEKValue cont handler $ VPactValue pv
+  args -> argsError info b args
+
+
 --------------------------------------------------
 -- Namespace functions
 --------------------------------------------------
@@ -1993,3 +1999,4 @@ coreBuiltinRuntime = \case
   CoreTypeOf -> coreTypeOf
   CoreDec -> coreDec
   CoreCond -> coreCond
+  CoreIdentity -> coreIdentity

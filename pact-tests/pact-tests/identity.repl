@@ -1,0 +1,19 @@
+
+;; tests on literals
+(expect "identity on string literal" (identity "abc") "abc")
+(expect "identity on integer literal" (identity 123) 123)
+(expect "identity on decimal literal" (identity 12.3) 12.3)
+(expect "identity on bool literal: true" (identity true) true)
+(expect "identity on bool literal: false" (identity false) false)
+
+(expect-failure "identity on string literals can fail" (enforce (= (identity "a") "b")))
+
+;; tests on lists
+(expect "identity on list of literal" (identity ["a" "b" "c"]) ["a" "b" "c"])
+(expect "identity on nested list of literal" (identity [["a"]]) [["a"]])
+
+;; tests on object
+(expect "identity on object" (identity {"a": 1}) {"a": 1})
+
+;; tests on time
+(expect "identity on timel" (identity (time "2016-07-22T12:00:00Z")) (time "2016-07-22T12:00:00Z"))
