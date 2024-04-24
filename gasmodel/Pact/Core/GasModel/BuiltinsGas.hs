@@ -295,7 +295,7 @@ benchSort pdb =
   , C.bgroup "object-simple"
     [ runNativeBenchmarkPrepared [("x", objs), ("ks", keys)] pdb title "(sort ks x)"
     | (_, obj@(PObject m)) <- [head $ enumExpObject 1000 1]
-    , (repTitle, reps) <- take 3 $ enumExpNum 1000 3
+    , (repTitle, reps) <- take 3 $ enumExpNum 1000 4
     , (keysTitle, keysLen) <- take 3 $ enumExpNum 10 2
     , let title = repTitle <> "_" <> keysTitle
     , let objs = PList $ V.replicate (fromIntegral reps) obj
@@ -304,7 +304,7 @@ benchSort pdb =
   , C.bgroup "object-complex"
     [ runNativeBenchmarkPrepared [("x", objs), ("ks", keys)] pdb title "(sort ks x)"
     | (_, obj@(PObject m)) <- [head $ enumExpObjectComplex 1000 1]
-    , (repTitle, reps) <- take 3 $ enumExpNum 1000 3
+    , (repTitle, reps) <- take 3 $ enumExpNum 100 4
     , (keysTitle, keysLen) <- take 3 $ enumExpNum 10 2
     , let title = repTitle <> "_" <> keysTitle
     , let objs = PList $ V.replicate (fromIntegral reps) obj
