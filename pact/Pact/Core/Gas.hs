@@ -30,6 +30,7 @@ module Pact.Core.Gas
  , ZKArg(..)
  , IntegerPrimOp(..)
  , StrOp(..)
+ , ObjOp(..)
  , ConcatType(..)
  , GasTextLength(..)
  , GasListLength(..)
@@ -148,6 +149,13 @@ data StrOp
   -- ^ The cost of converting a string of a given length to an integer.
   deriving (Eq, Show, Ord, Generic, NFData)
 
+data ObjOp
+  = ObjOpLookup !T.Text !Int
+  -- ^ The cost of looking up a key in an object with the given fields count.
+  | ObjOpRemove !T.Text !Int
+  -- ^ The cost of removing a key from an object with the given fields count.
+  deriving (Eq, Show, Ord, Generic, NFData)
+
 data GasArgs
   = GAConstant !MilliGas
   -- Todo: integerOpCost seems like a case of `GALinear`
@@ -177,6 +185,9 @@ data GasArgs
   -- ^ poseidon-hash-hack-a-chain costs
   | GModuleMemory !Word64
   | GStrOp !StrOp
+  -- ^ Gas costs for string operations
+  | GObjOp !ObjOp
+  -- ^ Gas cost for object-specific operations
   deriving (Show, Generic, NFData)
 
 instance Pretty GasArgs where

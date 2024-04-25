@@ -192,7 +192,7 @@ runTableModel = \case
     MilliGas $ fromIntegral len * sz
   GComparison cmpty -> case cmpty of
     TextComparison str ->
-      MilliGas $ fromIntegral (T.length str) + basicWorkGas
+      MilliGas $ textCompareCost str
     IntComparison l r ->
       MilliGas $ fromIntegral (max (integerBits l) (integerBits r)) + basicWorkGas
     -- See [Decimal comparisons]
@@ -221,7 +221,16 @@ runTableModel = \case
       in MilliGas $ fromIntegral $ len `quot` charsPerMg + 1
     StrOpConvToInt len ->
       let mgPerChar = 20
-       in MilliGas $ fromIntegral $ len * mgPerChar + 1
+      in MilliGas $ fromIntegral $ len * mgPerChar + 1
+  GObjOp op -> case op of
+    ObjOpLookup key objSize ->
+      let objSzLog = fromIntegral $ I# (IntLog.integerLog2# $ fromIntegral objSize)
+      in MilliGas $ fromIntegral $ objSzLog * textCompareCost key
+    ObjOpRemove key objSize ->
+      let objSzLog = fromIntegral $ I# (IntLog.integerLog2# $ fromIntegral objSize)
+      in MilliGas $ fromIntegral $ objSzLog * textCompareCost key
+  where
+  textCompareCost str = fromIntegral (T.length str) + basicWorkGas
 
 basicWorkGas :: Word64
 basicWorkGas = 25
