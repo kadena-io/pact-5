@@ -323,13 +323,8 @@ runNativeBenchmark
   -> C.Benchmark
 runNativeBenchmark = runNativeBenchmark' pure pure
 
-runNativeBenchmarkPrepared
-  :: [(Text, PactValue)]
-  -> PactDb CoreBuiltin ()
-  -> String
-  -> Text
-  -> C.Benchmark
-runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure stMod
+envStMod :: [(Text, PactValue)] -> (BenchEvalState -> IO BenchEvalState)
+envStMod envVars = pure . (esLoaded .~ synthLoaded)
   where
   synthLoaded = Loaded
     { _loModules = mempty
@@ -337,7 +332,35 @@ runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure stMod
     , _loNamespace = Nothing
     , _loAllLoaded = M.fromList [ (mkGasModelFqn n, DConst $ DefConst n Nothing (EvaledConst v) ()) | (n, v) <- envVars ]
     }
-  stMod = pure . (esLoaded .~ synthLoaded)
+
+runNativeBenchmarkPrepared
+  :: [(Text, PactValue)]
+  -> PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> C.Benchmark
+runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure (envStMod envVars)
+
+runNativeBenchmarkWithMsg
+  :: Map Field PactValue
+  -> PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> C.Benchmark
+runNativeBenchmarkWithMsg msgBody = runNativeBenchmark' envMod pure
+  where
+  envMod = pure . (eeMsgBody .~ PObject msgBody)
+
+runNativeBenchmarkPreparedWithMsg
+  :: Map Field PactValue
+  -> [(Text, PactValue)]
+  -> PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> C.Benchmark
+runNativeBenchmarkPreparedWithMsg msgBody envVars = runNativeBenchmark' envMod (envStMod envVars)
+  where
+  envMod = pure . (eeMsgBody .~ PObject msgBody)
 
 -- Closures
 unitClosureNullary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m
