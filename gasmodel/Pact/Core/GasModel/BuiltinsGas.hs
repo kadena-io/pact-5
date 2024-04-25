@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
@@ -53,6 +54,12 @@ enumExpObject base mult =
 enumExpObjectComplex :: Integer -> Integer -> [(String, PactValue)]
 enumExpObjectComplex base mult =
   [ (title, PObject $ mkMap mkList cnt)
+  | (title, cnt) <- enumExpNum base mult
+  ]
+
+enumExpObjectWithStrings :: Integer -> Integer -> [(String, PactValue)]
+enumExpObjectWithStrings base mult =
+  [ (title, PObject $ mkMap (PString . T.replicate 10 . T.pack . show) cnt)
   | (title, cnt) <- enumExpNum base mult
   ]
 
@@ -422,11 +429,11 @@ benchShow pdb =
 benchDistinct :: BuiltinBenches
 benchDistinct pdb =
   [ C.bgroup "flat"
-    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(distinct x)|]
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title "(distinct x)"
     | (title, list) <- take 3 $ enumExpList 1000 2
     ]
   , C.bgroup "nested"
-    [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(distinct x)|]
+    [ runNativeBenchmarkPrepared [("x", list)] pdb title "(distinct x)"
     | (title, list) <- take 3 $ enumExpListDeep 3 5 4
     ]
   ]
@@ -435,6 +442,13 @@ benchReadOp :: T.Text -> BuiltinBenches
 benchReadOp readOp pdb =
   [ runNativeBenchmarkPreparedWithMsg obj [("k", key)] pdb title [text|($readOp k)|]
   | (title, PObject obj) <- take 3 $ enumExpObject 1000 100
+  , let key = fieldToValue $ last $ M.keys obj
+  ]
+
+benchReadString :: BuiltinBenches
+benchReadString pdb =
+  [ runNativeBenchmarkPreparedWithMsg obj [("k", key)] pdb title "(read-string k)"
+  | (title, PObject obj) <- take 3 $ enumExpObjectWithStrings 1000 100
   , let key = fieldToValue $ last $ M.keys obj
   ]
 
@@ -495,6 +509,7 @@ benchesForBuiltin bn = case bn of
   CoreReadMsgDefault -> omittedDeliberately
   CoreReadInteger -> benchReadOp "read-integer"
   CoreReadDecimal -> benchReadOp "read-decimal"
+  CoreReadString -> benchReadString
   _ -> const []
   where
   omittedDeliberately = const []
