@@ -432,7 +432,7 @@ rawSort info b cont handler _env = \case
 coreRemove :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreRemove info b cont handler _env = \case
   [VString s, VObject o] -> do
-    chargeGasArgs info $ GConcat $ ObjConcat $ M.size o
+    chargeGasArgs info $ GObjOp $ ObjOpRemove s (M.size o)
     returnCEKValue cont handler (VObject (M.delete (Field s) o))
   args -> argsError info b args
 
