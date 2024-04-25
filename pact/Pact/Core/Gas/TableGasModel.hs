@@ -192,7 +192,7 @@ runTableModel = \case
     MilliGas $ fromIntegral len * sz
   GComparison cmpty -> case cmpty of
     TextComparison str ->
-      MilliGas $ textCompareCost str
+      MilliGas $ textCompareCost str + basicWorkGas
     IntComparison l r ->
       MilliGas $ fromIntegral (max (integerBits l) (integerBits r)) + basicWorkGas
     -- See [Decimal comparisons]
@@ -224,13 +224,15 @@ runTableModel = \case
       in MilliGas $ fromIntegral $ len * mgPerChar + 1
   GObjOp op -> case op of
     ObjOpLookup key objSize ->
-      let objSzLog = fromIntegral $ I# (IntLog.integerLog2# $ fromIntegral objSize)
-      in MilliGas $ fromIntegral $ objSzLog * textCompareCost key
+      let objSzLog = fromIntegral $ I# (IntLog.integerLog2# $ fromIntegral objSize) + 1
+      in MilliGas $ objSzLog * textCompareCost key
     ObjOpRemove key objSize ->
-      let objSzLog = fromIntegral $ I# (IntLog.integerLog2# $ fromIntegral objSize)
-      in MilliGas $ fromIntegral $ objSzLog * textCompareCost key
+      -- an object with 10⁷ keys takes about 200 ms (≈10⁸ milligas) to remove a key of length 1,
+      -- and the execution time grows linearly, hence it's about 10 milligas per key/value pair in the object
+      let objSizeFactor = 10
+      in MilliGas $ fromIntegral $ objSize * textCompareCost key * objSizeFactor
   where
-  textCompareCost str = fromIntegral (T.length str) + basicWorkGas
+  textCompareCost str = fromIntegral $ T.length str
 
 basicWorkGas :: Word64
 basicWorkGas = 25
