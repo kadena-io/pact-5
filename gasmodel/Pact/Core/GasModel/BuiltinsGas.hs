@@ -431,9 +431,9 @@ benchDistinct pdb =
     ]
   ]
 
-benchReadMsg :: BuiltinBenches
-benchReadMsg pdb =
-  [ runNativeBenchmarkPreparedWithMsg obj [("k", key)] pdb title "(read-msg k)"
+benchReadOp :: T.Text -> BuiltinBenches
+benchReadOp readOp pdb =
+  [ runNativeBenchmarkPreparedWithMsg obj [("k", key)] pdb title [text|($readOp k)|]
   | (title, PObject obj) <- take 3 $ enumExpObject 1000 100
   , let key = fieldToValue $ last $ M.keys obj
   ]
@@ -491,8 +491,10 @@ benchesForBuiltin bn = case bn of
   CoreEnumerate -> benchEnumerate
   CoreEnumerateStepN -> alreadyCovered
   CoreShow -> benchShow
-  CoreReadMsg -> benchReadMsg
+  CoreReadMsg -> benchReadOp "read-msg"
   CoreReadMsgDefault -> omittedDeliberately
+  CoreReadInteger -> benchReadOp "read-integer"
+  CoreReadDecimal -> benchReadOp "read-decimal"
   _ -> const []
   where
   omittedDeliberately = const []
