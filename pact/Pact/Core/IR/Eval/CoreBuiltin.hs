@@ -872,7 +872,8 @@ coreReadInteger :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step 
 coreReadInteger info b cont handler _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
-      PObject envData ->
+      PObject envData -> do
+        chargeGasArgs info $ GObjOp $ ObjOpLookup s $ M.size envData
         case M.lookup (Field s) envData of
           -- See [Note: Parsed Integer]
           Just (PDecimal p) ->
@@ -880,9 +881,11 @@ coreReadInteger info b cont handler _env = \case
           Just (PInteger p) ->
             returnCEKValue cont handler (VInteger p)
           -- See [Note: Parsed Integer]
-          Just (PString raw) -> case parseNumLiteral raw of
-            Just (LInteger i) -> returnCEKValue cont handler (VInteger i)
-            _ -> returnCEK cont handler (VError "read-integer failure" info)
+          Just (PString raw) -> do
+            chargeGasArgs info $ GStrOp $ StrOpLength $ T.length raw
+            case parseNumLiteral raw of
+              Just (LInteger i) -> returnCEKValue cont handler (VInteger i)
+              _ -> returnCEK cont handler (VError "read-integer failure" info)
 
           _ -> returnCEK cont handler (VError "read-integer failure" info)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
@@ -923,15 +926,18 @@ coreReadDecimal :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step 
 coreReadDecimal info b cont handler _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
-      PObject envData ->
+      PObject envData -> do
+        chargeGasArgs info $ GObjOp $ ObjOpLookup s $ M.size envData
         case M.lookup (Field s) envData of
           Just (PDecimal p) -> returnCEKValue cont handler (VDecimal p)
           -- See [Note: Parsed Decimal]
           Just (PInteger i) -> returnCEKValue cont handler (VDecimal (Decimal 0 i))
-          Just (PString raw) -> case parseNumLiteral raw of
-            Just (LInteger i) -> returnCEKValue cont handler (VDecimal (Decimal 0 i))
-            Just (LDecimal l) -> returnCEKValue cont handler (VDecimal l)
-            _ -> returnCEK cont handler (VError "read-decimal failure" info)
+          Just (PString raw) -> do
+            chargeGasArgs info $ GStrOp $ StrOpLength $ T.length raw
+            case parseNumLiteral raw of
+              Just (LInteger i) -> returnCEKValue cont handler (VDecimal (Decimal 0 i))
+              Just (LDecimal l) -> returnCEKValue cont handler (VDecimal l)
+              _ -> returnCEK cont handler (VError "read-decimal failure" info)
           _ -> returnCEK cont handler (VError "read-decimal failure" info)
       _ -> returnCEK cont handler (VError "read-decimal failure" info)
   args -> argsError info b args
@@ -940,7 +946,8 @@ coreReadString :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b
 coreReadString info b cont handler _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
-      PObject envData ->
+      PObject envData -> do
+        chargeGasArgs info $ GObjOp $ ObjOpLookup s $ M.size envData
         case M.lookup (Field s) envData of
           Just (PString p) -> returnCEKValue cont handler (VString p)
           _ -> returnCEK cont handler (VError "read-string failure" info)
