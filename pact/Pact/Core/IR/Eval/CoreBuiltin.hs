@@ -892,7 +892,8 @@ coreReadMsg :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i 
 coreReadMsg info b cont handler _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
-      PObject envData ->
+      PObject envData -> do
+        chargeGasArgs info $ GObjOp $ ObjOpLookup s $ M.size envData
         case M.lookup (Field s) envData of
           Just pv -> returnCEKValue cont handler (VPactValue pv)
           _ -> returnCEK cont handler (VError "read-msg failure" info)
