@@ -2,7 +2,8 @@
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 
--- |
+-- | Note: if these tests fail, make sure to actually build the project.
+-- These tests rely on the binary executable and you might have an old version available.
 
 module Pact.Core.Test.LanguageServer
   ( tests
@@ -140,7 +141,7 @@ renameTest1 :: TestTree
 renameTest1 = goldenVsString "Renaming term referencing defun" p $
   runPactLSP $ do
   doc <- openDoc "rename-test.repl" "pact"
-  rename doc (Position 12 7) "new-param"
+  rename doc (Position 12 7) "new-def"
   cnt <- documentContents doc
   pure $ LBS.fromStrict (encodeUtf8 cnt)
   where
