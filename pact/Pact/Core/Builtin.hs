@@ -211,6 +211,7 @@ data CoreBuiltin
   | CoreTypeOf
   | CoreDec
   | CoreCond
+  | CoreIdentity
   deriving (Eq, Show, Ord, Bounded, Enum, Generic)
 
 instance NFData CoreBuiltin
@@ -377,6 +378,7 @@ coreBuiltinToText = \case
   CoreTypeOf -> "typeof"
   CoreDec -> "dec"
   CoreCond -> "cond"
+  CoreIdentity -> "identity"
 
 -- | Our `CoreBuiltin` user-facing representation.
 -- note: `coreBuiltinToUserText`
@@ -522,6 +524,7 @@ coreBuiltinToUserText = \case
   CoreTypeOf -> "typeof"
   CoreDec -> "dec"
   CoreCond -> "cond"
+  CoreIdentity -> "identity"
 
 instance IsBuiltin CoreBuiltin where
   builtinName = NativeName . coreBuiltinToText
@@ -670,6 +673,7 @@ instance IsBuiltin CoreBuiltin where
     CoreTypeOf -> 1
     CoreDec -> 1
     CoreCond -> 1
+    CoreIdentity -> 1
 
 
 coreBuiltinNames :: [Text]
