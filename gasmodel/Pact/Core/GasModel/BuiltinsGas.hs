@@ -452,6 +452,15 @@ benchReadString pdb =
   , let key = fieldToValue $ last $ M.keys obj
   ]
 
+benchReadKeyset :: BuiltinBenches
+benchReadKeyset pdb =
+  [ runNativeBenchmarkWithMsg obj pdb title "(read-keyset 'thekeyset)"
+  | (_, PObject objBase) <- [head $ enumExpObjectWithStrings 1000 1]
+  , (title, PString str) <- take 3 $ enumExpString "a" 1000 100
+  , let ksn = PObject [(Field "keys", PList [PString "publickeytext"]), (Field "pred", PString $ str <> "." <> str)]
+  , let obj = M.insert (Field "thekeyset") ksn objBase
+  ]
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -510,6 +519,7 @@ benchesForBuiltin bn = case bn of
   CoreReadInteger -> benchReadOp "read-integer"
   CoreReadDecimal -> benchReadOp "read-decimal"
   CoreReadString -> benchReadString
+  CoreReadKeyset -> benchReadKeyset
   _ -> const []
   where
   omittedDeliberately = const []
