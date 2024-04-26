@@ -25,8 +25,7 @@ matchingDefs tls mn n = (interfaceDef, moduleDef)
   where
     interfaceDef = do
       let p = \case
-            TLInterface (Interface mn' _ _ _ _)
-              | mn == mn' -> True
+            TLInterface (Interface mn' _ _ _ _) -> mn == mn'
             _ -> False
 
       TLInterface interf <- find p tls
@@ -34,8 +33,7 @@ matchingDefs tls mn n = (interfaceDef, moduleDef)
 
     moduleDef = do
       let p = \case
-            TLModule (Module mn' _ _ _ _ _ _ _)
-              | mn == mn' -> True
+            TLModule (Module mn' _ _ _ _ _ _ _) -> mn == mn'
             _ -> False
 
       TLModule module' <- find p tls
@@ -66,8 +64,7 @@ getRenameSpanInfo tls = \case
      NBound _db -> mempty
      NTopLevel mn _mh -> do
        let isSameVar = \case
-             Var (Name n' vt') _
-               | n == n' && vt == vt' -> True
+             Var (Name n' vt') _ ->  n == n' && vt == vt'
              _ -> False
            termOccurences = toListOf (each . termInfo) $ concatMap (matchingTerms isSameVar) tls
            (mInterfPos, mDefPos) = bimap (fmap ifDefNameInfo) (fmap defNameInfo) (matchingDefs tls mn n)
@@ -76,8 +73,7 @@ getRenameSpanInfo tls = \case
    DefunMatch (Defun spec _args _body _) -> do
      let dName = _argName spec
          isSameVar = \case
-           Var (Name n _) _
-             | n == dName -> True
+           Var (Name n _) _ -> n == dName
            _ -> False
          termOccurences = toListOf (each . termInfo) $ concatMap (matchingTerms isSameVar) tls
      _argInfo spec : termOccurences
