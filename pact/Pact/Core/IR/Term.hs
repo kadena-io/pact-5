@@ -407,6 +407,16 @@ instance (Pretty name, Pretty ty, Pretty b) => Pretty (Def name ty b i) where
     DTable d -> pretty d
     DPact d -> pretty d
 
+makeLenses ''Module
+makeLenses ''Interface
+makeLenses ''Defun
+makeLenses ''DefConst
+makeLenses ''DefCap
+makeLenses ''DefPact
+makePrisms ''Def
+makePrisms ''Term
+makePrisms ''IfDef
+
 
 -----------------------------------------
 -- Term traversals and builtins
@@ -542,6 +552,14 @@ traverseDefTerm f = \case
   DTable d -> pure (DTable d)
   DPact d -> DPact <$> traverseDefPactTerm f d
 
+traverseModuleTerm
+  :: Traversal (Module name ty builtin info)
+               (Module name ty builtin' info)
+               (Term name ty builtin info)
+               (Term name ty builtin' info)
+traverseModuleTerm f m =
+  (mDefs . traversed) (traverseDefTerm f) m
+
 
 instance Plated (Term name ty builtin info) where
   plate f = \case
@@ -564,15 +582,6 @@ instance Plated (Term name ty builtin info) where
     ObjectLit o i ->
       ObjectLit <$> (traverse._2) f o <*> pure i
 
-makeLenses ''Module
-makeLenses ''Interface
-makeLenses ''Defun
-makeLenses ''DefConst
-makeLenses ''DefCap
-makeLenses ''DefPact
-makePrisms ''Def
-makePrisms ''Term
-makePrisms ''IfDef
 
 -----------------------------------------
 -- Type Aliases for evaluation

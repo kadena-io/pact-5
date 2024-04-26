@@ -43,6 +43,8 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , chargeGasArgs
  , getGas
  , putGas
+ , litCmpGassed
+ , valEqGassed
  ) where
 
 import Control.Lens
@@ -50,12 +52,11 @@ import Control.Monad(when)
 import Control.Monad.IO.Class
 import Control.Monad.Except(MonadError(..))
 import Data.IORef
-import Data.Text(Text)
+import Data.Foldable(find, toList)
 import Data.Maybe(listToMaybe)
-import Data.Foldable(find)
+import Data.Text(Text)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
-import qualified Pact.Core.Pretty as Pretty
 
 import Pact.Core.Names
 import Pact.Core.PactValue
@@ -70,6 +71,8 @@ import Pact.Core.Persistence
 import Pact.Core.Environment
 import Pact.Core.DefPacts.Types
 import Pact.Core.Gas
+import Pact.Core.Guards
+import Pact.Core.Capabilities
 
 mkBuiltinFn
   :: (IsBuiltin b)
@@ -291,7 +294,6 @@ tvToDomain :: TableValue -> Domain RowKey RowData b i
 tvToDomain tv =
   DUserTables (_tvName tv)
 
--- Todo: GasLog
 {-# SPECIALIZE chargeGasArgs
    :: ()
    -> GasArgs
@@ -304,14 +306,10 @@ chargeGasArgs info ga = do
   let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
       !g1 = _gmRunModel model ga
       !gUsed = currGas <> g1
-  esGasLog %== fmap ((gasLogMsg ga gUsed, g1):)
+  esGasLog %== fmap (GasLogEntry (Left ga) gUsed g1 :)
   putGas gUsed
   when (gUsed > gasLimit) $
     throwExecutionError info (GasExceeded limit gUsed)
-  where
-    gasLogMsg arg (MilliGas millisUsed) =
-      Pretty.renderCompactText' $
-          Pretty.pretty arg <> ":currTotalGas=" <> Pretty.pretty millisUsed
 
 {-# SPECIALIZE chargeFlatNativeGas
    :: ()
@@ -325,15 +323,10 @@ chargeFlatNativeGas info nativeArg = do
   let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
       !g1 = _gmNatives model nativeArg
       !gUsed = currGas <> g1
-  esGasLog %== fmap ((gasLogMsg gUsed, g1):)
+  esGasLog %== fmap (GasLogEntry (Right nativeArg) gUsed g1 :)
   putGas gUsed
   when (gUsed > gasLimit && gasLimit >= currGas) $
     throwExecutionError info (GasExceeded limit gUsed)
-  where
-  gasLogMsg (MilliGas millisUsed) =
-    let (NativeName n) = builtinName nativeArg
-    in Pretty.renderCompactText' $
-      "Native" <> Pretty.parens (Pretty.pretty n) <> ":currTotalGas=" <> Pretty.pretty millisUsed
 
 
 getGas :: (MonadEval b i m) => m MilliGas
@@ -353,3 +346,69 @@ putGas !g = do
     :: MilliGas -> Eval ()
     #-}
 
+litCmpGassed :: (MonadEval b i m) => i -> Literal -> Literal -> m (Maybe Ordering)
+litCmpGassed info = cmp
+  where
+  cmp (LInteger l) (LInteger r) = do
+    chargeGasArgs info (GComparison (IntComparison l r))
+    pure $ Just $ compare l r
+  cmp (LBool l) (LBool r) = pure $ Just $ compare l r
+  cmp (LDecimal l) (LDecimal r) = do
+    chargeGasArgs info (GComparison (DecimalComparison l r))
+    pure $ Just $ compare l r
+  cmp (LString l) (LString r) = do
+    chargeGasArgs info (GComparison (TextComparison l))
+    pure $ Just $ compare l r
+  cmp LUnit LUnit = pure $ Just EQ
+  cmp _ _ = pure Nothing
+{-# SPECIALIZE litCmpGassed
+    :: () -> Literal -> Literal -> Eval (Maybe Ordering)
+    #-}
+
+valEqGassed :: (MonadEval b i m) => i -> PactValue -> PactValue -> m Bool
+valEqGassed info = go
+  where
+  go (PLiteral l1) (PLiteral l2) = litCmpGassed info l1 l2 >>= \case
+    Just EQ -> pure True
+    _ -> pure False
+  go (PList vs1) (PList vs2)
+    | length vs1 == length vs2 = do
+      chargeGasArgs info (GComparison (ListComparison $ length vs1))
+      goList (toList vs1) (toList vs2)
+  go (PGuard g1) (PGuard g2) = goGuard g1 g2
+  go (PObject o1) (PObject o2)
+    | length o1 == length o2 = do
+      chargeGasArgs info (GComparison (ObjComparison $ length o1))
+      if M.keys o1 == M.keys o2
+         then goList (toList o1) (toList o2)
+         else pure False
+  go (PModRef mr1) (PModRef mr2) = pure $ mr1 == mr2
+  go (PCapToken (CapToken n1 args1)) (PCapToken (CapToken n2 args2))
+    | n1 == n2 && length args1 == length args2 = do
+      chargeGasArgs info (GComparison (ListComparison $ length args1))
+      goList args1 args2
+  go (PTime t1) (PTime t2) = pure $ t1 == t2
+  go _ _ = pure False
+
+  goList [] [] = pure True
+  goList (x:xs) (y:ys) = do
+    r <- x `go` y
+    if r then goList xs ys else pure False
+  goList _ _ = pure False
+
+  goGuard (GKeyset ks1) (GKeyset ks2) = pure $ ks1 == ks2
+  goGuard (GKeySetRef ksn1) (GKeySetRef ksn2) = pure $ ksn1 == ksn2
+  goGuard (GUserGuard (UserGuard f1 args1)) (GUserGuard (UserGuard f2 args2))
+    | f1 == f2 && length args1 == length args2 = do
+      chargeGasArgs info (GComparison (ListComparison $ length args1))
+      goList args1 args2
+  goGuard (GCapabilityGuard (CapabilityGuard n1 args1 pid1)) (GCapabilityGuard (CapabilityGuard n2 args2 pid2))
+    | n1 == n2 && pid1 == pid2 && length args1 == length args2 = do
+      chargeGasArgs info (GComparison (ListComparison $ length args1))
+      goList args1 args2
+  goGuard (GModuleGuard g1) (GModuleGuard g2) = pure $ g1 == g2
+  goGuard (GDefPactGuard g1) (GDefPactGuard g2) = pure $ g1 == g2
+  goGuard _ _ = pure False
+{-# SPECIALIZE valEqGassed
+    :: () -> PactValue -> PactValue -> Eval Bool
+    #-}

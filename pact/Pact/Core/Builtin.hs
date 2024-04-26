@@ -212,6 +212,7 @@ data CoreBuiltin
   | CoreTypeOf
   | CoreDec
   | CoreCond
+  | CoreIdentity
   deriving (Eq, Show, Ord, Bounded, Enum, Generic)
 
 instance NFData CoreBuiltin
@@ -378,6 +379,7 @@ coreBuiltinToText = \case
   CoreTypeOf -> "typeof"
   CoreDec -> "dec"
   CoreCond -> "cond"
+  CoreIdentity -> "identity"
 
 -- | Our `CoreBuiltin` user-facing representation.
 -- note: `coreBuiltinToUserText`
@@ -523,6 +525,7 @@ coreBuiltinToUserText = \case
   CoreTypeOf -> "typeof"
   CoreDec -> "dec"
   CoreCond -> "cond"
+  CoreIdentity -> "identity"
 
 instance IsBuiltin CoreBuiltin where
   builtinName = NativeName . coreBuiltinToText
@@ -671,6 +674,7 @@ instance IsBuiltin CoreBuiltin where
     CoreTypeOf -> 1
     CoreDec -> 1
     CoreCond -> 1
+    CoreIdentity -> 1
 
 
 coreBuiltinNames :: [Text]
@@ -729,6 +733,7 @@ data ReplBuiltins
   | RPactVersion
   | REnforcePactVersionMin
   | REnforcePactVersionRange
+  | REnvEnableReplNatives
   deriving (Show, Enum, Bounded, Eq, Generic)
 
 
@@ -773,6 +778,7 @@ instance IsBuiltin ReplBuiltins where
     RPactVersion -> 0
     REnforcePactVersionMin -> 1
     REnforcePactVersionRange -> 2
+    REnvEnableReplNatives -> 1
 
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
@@ -852,6 +858,7 @@ replBuiltinsToText = \case
   RPactVersion -> "pact-version"
   REnforcePactVersionMin -> "enforce-pact-version"
   REnforcePactVersionRange -> "enforce-pact-version-range"
+  REnvEnableReplNatives -> "env-enable-repl-natives"
 
 replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
 replBuiltinToText f = \case

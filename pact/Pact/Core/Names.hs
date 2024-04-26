@@ -61,6 +61,7 @@ module Pact.Core.Names
  , renderDefPactId
  , renderParsedTyName
  , parseParsedTyName
+ , parseQualifiedName
  ) where
 
 import Control.Lens
@@ -413,6 +414,20 @@ moduleNameParser = do
     p1 <- identParser
     pure (ModuleName p1 (Just (NamespaceName ns)))
 
+qualNameParser :: Parser QualifiedName
+qualNameParser = do
+  ModuleName n ns <- moduleNameParser
+  case ns of
+    Just nsn@(NamespaceName nsRaw) ->
+      go n nsn <|> pure (QualifiedName n (ModuleName nsRaw Nothing))
+    Nothing -> fail "invalid qualified name"
+  where
+  go n nsn = do
+    _ <- MP.single '.'
+    p1 <- identParser
+    let qual = QualifiedName p1 (ModuleName n (Just nsn))
+    pure qual
+
 -- Here we are parsing either a qualified name, or a bare name
 -- bare names are just the atom `n`, and qualified names are of the form
 -- <n>.<n>(.<n>)?
@@ -438,6 +453,9 @@ parseModuleName = MP.parseMaybe moduleNameParser
 
 parseParsedTyName :: Text -> Maybe ParsedTyName
 parseParsedTyName = MP.parseMaybe parsedTyNameParser
+
+parseQualifiedName :: Text -> Maybe QualifiedName
+parseQualifiedName = MP.parseMaybe qualNameParser
 
 renderDefPactId :: DefPactId -> Text
 renderDefPactId (DefPactId t) = t

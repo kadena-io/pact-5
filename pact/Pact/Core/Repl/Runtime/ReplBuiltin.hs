@@ -11,6 +11,7 @@ import Control.Monad.Except
 import Control.Monad.IO.Class(liftIO)
 import Data.Default
 import Data.Text(Text)
+import Data.Maybe(fromMaybe)
 import Data.ByteString.Short(toShort)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -37,6 +38,7 @@ import Pact.Core.Persistence
 import Pact.Core.IR.Term
 import Pact.Core.Info
 import Pact.Core.Namespace
+import qualified Pact.Core.Legacy.LegacyPactValue as Legacy
 
 import qualified PackageInfo_pact_tng as PI
 import qualified Data.Version as V
@@ -217,7 +219,10 @@ envHash info b cont handler _env = \case
 envData :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envData info b cont handler _env = \case
   [VPactValue pv] -> do
-    (replEvalEnv . eeMsgBody) .= pv
+    -- to mimic prod, we must roundtrip here
+    -- if it fails silently, this is fine.
+    let pv' = fromMaybe pv (Legacy.roundtripPactValue pv)
+    (replEvalEnv . eeMsgBody) .= pv'
     returnCEKValue cont handler (VString "Setting transaction data")
   args -> argsError info b args
 
@@ -420,12 +425,26 @@ envGasLog info b cont handler _env = \case
       Nothing ->
         returnCEKValue cont handler (VString "Enabled gas log")
       Just logs -> let
-        total = MilliGas $ sum (map ((\(MilliGas g) -> g) . snd) logs)
+        total = MilliGas $ sum [g | MilliGas g <- _gleThisUsed <$> logs]
         totalLine = PString . ("TOTAL: " <> ) $ renderCompactText total
-        logLines = flip map (reverse logs) $ \(n,g) ->
-          PString $ renderCompactText' $ pretty n <> ": " <> pretty g
+        logLines = renderLine <$> reverse logs
         in
           returnCEKValue cont handler (VList $ V.fromList (totalLine:logLines))
+  args -> argsError info b args
+  where
+  renderLine :: GasLogEntry (ReplBuiltin CoreBuiltin) -> PactValue
+  renderLine (GasLogEntry entry (MilliGas millisUsed) entryGas) = PString $ renderCompactText' $ n <> ": " <> pretty entryGas
+    where
+      n = case entry of
+            Left ga -> pretty ga <> ":currTotalGas=" <> pretty millisUsed
+            Right nativeArg -> "Native" <> parens (pretty nativeArg) <> ":currTotalGas=" <> pretty millisUsed
+
+envEnableReplNatives :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+envEnableReplNatives info b cont handler _env = \case
+  [VBool enabled] -> do
+    let s = if enabled then "enabled" else "disabled"
+    replNativesEnabled .= enabled
+    returnCEKValue cont handler $ VString $ "repl natives " <> s
   args -> argsError info b args
 
 envGasModel :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -536,3 +555,4 @@ replCoreBuiltinRuntime = \case
     RPactVersion -> coreVersion
     REnforcePactVersionMin -> coreEnforceVersion
     REnforcePactVersionRange -> coreEnforceVersion
+    REnvEnableReplNatives -> envEnableReplNatives

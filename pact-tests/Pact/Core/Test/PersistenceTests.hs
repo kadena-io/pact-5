@@ -190,7 +190,7 @@ sqliteRegression =
         g <- newIORef mempty
         evalLog <- newIORef Nothing
         ee <- defaultEvalEnv pdb replCoreBuiltinMap
-        ref <- newIORef (ReplState mempty pdb def ee g evalLog (SourceCode "" "") mempty mempty Nothing)
+        ref <- newIORef (ReplState mempty pdb def ee g evalLog (SourceCode "" "") mempty mempty Nothing False)
         Right _ <- runReplT ref (interpretReplProgram (SourceCode "test" src) (const (pure ())))
         Just md <- readModule pdb (ModuleName "test" Nothing)
         pure md

@@ -152,6 +152,11 @@ intDivCost !lop !rop
        else MilliGas $ fromIntegral (nbits * nbits `quot` 6400)
 {-# INLINE intDivCost #-}
 
+intShiftCost :: Integer -> Integer -> MilliGas
+intShiftCost _ !rop
+  | rop > 0 = MilliGas $ fromIntegral $ rop `quot` 1000
+  | otherwise = MilliGas 0
+
 runTableModel :: GasArgs -> MilliGas
 runTableModel = \case
   GAConstant !c -> c
@@ -160,12 +165,13 @@ runTableModel = \case
     PrimOpSub -> intAdditionCost lop rop
     PrimOpMul -> intMultCost lop rop
     PrimOpDiv -> intDivCost lop rop
+    PrimOpShift -> intShiftCost lop rop
   -- Note: concat values are currently just constant
   -- Todo: get actual metrics on list cat / text cat
   GConcat c -> case c of
     TextConcat (GasTextLength totalLen) ->
       MilliGas (fromIntegral totalLen * 100)
-    TextListConcat !(GasTextLength totalCharSize) !(GasListLength nElems) -> MilliGas $
+    TextListConcat (GasTextLength totalCharSize) (GasListLength nElems) -> MilliGas $
       fromIntegral totalCharSize * stringLenCost + fromIntegral nElems * listLenCost
       where
       stringLenCost,listLenCost :: Word64
@@ -185,8 +191,8 @@ runTableModel = \case
   GMakeList len sz ->
     MilliGas $ fromIntegral len * sz
   GComparison cmpty -> case cmpty of
-    TextComparison l r ->
-      MilliGas $ fromIntegral (max (T.length l) (T.length r)) + basicWorkGas
+    TextComparison str ->
+      MilliGas $ fromIntegral (T.length str) + basicWorkGas
     IntComparison l r ->
       MilliGas $ fromIntegral (max (integerBits l) (integerBits r)) + basicWorkGas
     -- See [Decimal comparisons]
@@ -199,6 +205,9 @@ runTableModel = \case
       MilliGas $ fromIntegral maxSz * basicWorkGas
     ObjComparison i ->
       MilliGas $ fromIntegral i * basicWorkGas
+  GSearch sty -> case sty of
+    SubstringSearch needle hay -> MilliGas $ fromIntegral (T.length needle + T.length hay) + basicWorkGas
+    FieldSearch cnt -> MilliGas $ fromIntegral cnt + basicWorkGas
   GPoseidonHashHackAChain len ->
     MilliGas $ fromIntegral (len * len) * quadraticGasFactor + fromIntegral len * linearGasFactor
      where
@@ -473,6 +482,7 @@ nativeGasTable = MilliGas . \case
   CoreDec ->
     basicWorkGas
   CoreCond -> basicWorkGas
+  CoreIdentity -> basicWorkGas
 
 replNativeGasTable :: ReplBuiltin CoreBuiltin -> MilliGas
 replNativeGasTable = \case

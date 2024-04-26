@@ -25,6 +25,11 @@ extra-source-files:
     cbits/musl/pow_data.h
     cbits/musl/sqrt_data.h
 
+flag with-crypto
+  description: Enable crypto primitives
+  manual: True
+  default: True
+
 common pact-common
   build-depends:
     , Decimal
@@ -71,11 +76,11 @@ common pact-common
     , cborg
     , unordered-containers
     , groups
-    , poly
     , mod
     , neat-interpolation
     -- ^ is used by the `BuiltinDocs` module.
     , ghc-bignum
+    , aeson
 
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
@@ -97,18 +102,22 @@ common pact-common
 library pact-crypto
   import: pact-common
   hs-source-dirs: crypto
-
+  build-depends: poly
   exposed-modules:
     Pact.Core.Crypto.Hash.Poseidon
     Pact.Core.Crypto.Pairing
     Pact.Core.Crypto.Pairing.Fields
+  if !(flag(with-crypto))
+    buildable: False
 
 library
   import: pact-common
   hs-source-dirs: pact
 
-  build-depends:
-    pact-tng:pact-crypto
+  if (flag(with-crypto))
+    build-depends: pact-tng:pact-crypto
+  else
+    cpp-options: -DWITHOUT_CRYPTO
 
   build-tool-depends:
     , alex:alex
@@ -165,6 +174,8 @@ library
     Pact.Core.Scheme
     Pact.Core.Repl
     Pact.Core.SizeOf
+    Pact.Core.Legacy.LegacyPactValue
+    Pact.Core.Legacy.LegacyCodec
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
@@ -304,7 +315,6 @@ test-suite core-tests
     , groups
     , semirings
     , neat-interpolation
-    , pact-tng:pact-crypto
     , pact-tng:pact-lsp
     , lsp-test
     , lsp-types
@@ -321,3 +331,5 @@ test-suite core-tests
     , Pact.Core.Test.ZkTests
     , Pact.Core.Test.PoseidonTests
     , Pact.Core.Test.LanguageServer
+  if (flag(with-crypto))
+    build-depends: pact-tng:pact-crypto

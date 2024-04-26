@@ -42,5 +42,24 @@ jobs:
         echo Building the project and its devShell
         nix build .#check --log-lines 500 --show-trace
 
+        echo Build the bundle
+        nix build .#pact-binary-bundle --log-lines 500 --show-trace --out-link pact-binary-bundle
+        tar -zcvf pact-binary-bundle.${{ matrix.os }}.tar.gz $(readlink pact-binary-bundle)
+
         echo Build the recursive output
         nix build .#recursive.allDerivations --log-lines 500 --show-trace
+
+    - name: Publish the bundle
+      uses: actions/upload-artifact@v4
+      with:
+        name: pact-bundle.${{ matrix.os }}
+        path: pact-binary-bundle
+        retention-days: 5
+
+    - name: Release latest build
+      uses: ncipollo/release-action@v1.14.0
+      with:
+        artifacts: pact-binary-bundle.${{ matrix.os }}.tar.gz
+        tag: development-latest
+        replacesArtifacts: true
+        allowUpdates: true

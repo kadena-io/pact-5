@@ -9,6 +9,16 @@ module Pact.Core.StableEncoding
   (encodeStable)
 where
 
+import Data.Decimal (DecimalRaw(..))
+import Data.Scientific (Scientific)
+import Data.Map.Strict (Map)
+import Pact.JSON.Legacy.Utils
+import Data.Ratio ((%), denominator)
+import Data.ByteString (ByteString)
+import qualified Data.Text as T
+import qualified Pact.JSON.Encode as J
+import qualified Data.Set as Set
+
 import Pact.Core.PactValue
 import Pact.Core.Literal
 import Pact.Core.Guards
@@ -18,21 +28,12 @@ import Pact.Core.Hash
 import Pact.Core.DefPacts.Types
 import Pact.Time
 
-import Data.Decimal (DecimalRaw(..))
-
-import qualified Data.Text as T
-import Data.Scientific (Scientific)
-import qualified Pact.JSON.Encode as J
-import qualified Data.Set as Set
-import Data.Map.Strict (Map)
-import Pact.JSON.Legacy.Utils
-import Data.Ratio ((%), denominator)
-import Data.ByteString (ByteString)
 
 encodeStable :: J.Encode (StableEncoding a) => a -> ByteString
 encodeStable = J.encodeStrict . StableEncoding
 
-newtype StableEncoding a = StableEncoding a
+
+newtype StableEncoding a = StableEncoding { _stableEncoding :: a }
   deriving (Ord, Eq)
 
 instance J.Encode (StableEncoding DefPactId) where
