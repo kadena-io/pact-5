@@ -147,6 +147,8 @@ data StrOp
   -- ^ The cost of computing the length. In a sense, it's charged post-factum.
   | StrOpConvToInt !Int
   -- ^ The cost of converting a string of a given length to an integer.
+  | StrOpParse !Int
+  -- ^ The cost of a general scanning parse of a string of a given length.
   deriving (Eq, Show, Ord, Generic, NFData)
 
 data ObjOp

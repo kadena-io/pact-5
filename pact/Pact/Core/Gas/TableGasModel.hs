@@ -222,6 +222,9 @@ runTableModel = \case
     StrOpConvToInt len ->
       let mgPerChar = 20
       in MilliGas $ fromIntegral $ len * mgPerChar + 1
+    StrOpParse len ->
+      let mgPerChar = 5
+      in MilliGas $ fromIntegral $ len * mgPerChar + 1
   GObjOp op -> case op of
     ObjOpLookup key objSize ->
       let objSzLog = fromIntegral $ I# (IntLog.integerLog2# $ fromIntegral objSize) + 1
