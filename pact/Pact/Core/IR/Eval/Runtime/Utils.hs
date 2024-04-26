@@ -247,7 +247,7 @@ readOnlyEnv e
               PactDb
              { _pdbPurity = PReadOnly
              , _pdbRead = _pdbRead pdb
-             , _pdbWrite = \_ _ _ _ -> error "TODO"
+             , _pdbWrite = \_ _ _ _ _ -> dbOpDisallowed
              , _pdbKeys = \_ -> dbOpDisallowed
              , _pdbCreateUserTable = \_ -> dbOpDisallowed
              , _pdbBeginTx = \_ -> dbOpDisallowed
@@ -266,7 +266,7 @@ sysOnlyEnv e
           PactDb
          { _pdbPurity = PSysOnly
          , _pdbRead = read'
-         , _pdbWrite = \_ _ _ _ -> error "TODO"
+         , _pdbWrite = \_ _ _ _ _ -> dbOpDisallowed
          , _pdbKeys = const dbOpDisallowed
          , _pdbCreateUserTable = \_ -> dbOpDisallowed
          , _pdbBeginTx = const dbOpDisallowed

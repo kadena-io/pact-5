@@ -110,7 +110,7 @@ sqliteRegression =
           [ (Field "namespace", PLiteral LUnit)
           , (Field "name", PString user1)
           ])
-      rdEnc = _encodeRowData serialisePact_repl_spaninfo rd
+    rdEnc <- _encodeRowData serialisePact_repl_spaninfo (const $ pure ()) rd
     assertEqual "output of commit" txs1 [ TxLog "SYS:usertables" "user1" rdEnc ]
 
 
@@ -118,8 +118,8 @@ sqliteRegression =
     Just t1 <- _pdbBeginTx pdb Transactional
     let
       row = RowData $ Map.fromList [(Field "gah", PactValue.PDecimal 123.454345)]
-      rowEnc = _encodeRowData serialisePact_repl_spaninfo row
-    _pdbWrite pdb Insert (DUserTables usert) (RowKey "key1") row
+    rowEnc <- _encodeRowData serialisePact_repl_spaninfo (const $ pure ()) row
+    _pdbWrite pdb (const $ pure ()) Insert (DUserTables usert) (RowKey "key1") row
     Just row' <- _pdbRead pdb (DUserTables usert) (RowKey "key1")
     assertEqual "row should be identical to its saved/recalled value" row row'
 
@@ -128,16 +128,16 @@ sqliteRegression =
              [ (Field "gah", PactValue.PBool False)
              , (Field "fh", PactValue.PInteger 1)
              ]
-      row2Enc = _encodeRowData serialisePact_repl_spaninfo row2
+    row2Enc <- _encodeRowData serialisePact_repl_spaninfo (const $ pure ()) row2
 
-    _pdbWrite pdb Update (DUserTables usert) (RowKey "key1") row2
+    _pdbWrite pdb (const $ pure ()) Update (DUserTables usert) (RowKey "key1") row2
     Just row2' <- _pdbRead pdb (DUserTables usert) (RowKey "key1")
     assertEqual "user update should overwrite with new value" row2 row2'
 
     let
       ks = KeySet (Set.fromList [PublicKeyText "skdjhfskj"]) KeysAll
       ksEnc = _encodeKeySet serialisePact_repl_spaninfo ks
-    _ <- _pdbWrite pdb Write DKeySets (KeySetName "ks1" Nothing) ks
+    _ <- _pdbWrite pdb (const $ pure ()) Write DKeySets (KeySetName "ks1" Nothing) ks
     Just ks' <- _pdbRead pdb DKeySets (KeySetName "ks1" Nothing)
     assertEqual "keyset should be equal after storage/retrieval" ks ks'
 
@@ -146,7 +146,7 @@ sqliteRegression =
     let mn = ModuleName "test" Nothing
     md <- loadModule
     let mdEnc = _encodeModuleData serialisePact_repl_spaninfo md
-    _pdbWrite pdb Write DModules mn md
+    _pdbWrite pdb (const $ pure ()) Write DModules mn md
 
     Just md' <- _pdbRead pdb DModules mn
     assertEqual "module should be identical to its saved/recalled value" md md'
@@ -169,7 +169,7 @@ sqliteRegression =
       [ TxLog "USER_someModule_user1" "key1" (RowData $ Map.union (_unRowData row2) (_unRowData row))
       ]
 
-    _pdbWrite pdb Insert (DUserTables usert) (RowKey "key2") row
+    _pdbWrite pdb (const $ pure ()) Insert (DUserTables usert) (RowKey "key2") row
     Just r1 <- _pdbRead pdb (DUserTables usert) (RowKey "key2")
     assertEqual "user insert key2 pre-rollback" row r1
 

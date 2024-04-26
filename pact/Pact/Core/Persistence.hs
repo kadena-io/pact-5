@@ -43,7 +43,7 @@ module Pact.Core.Persistence
 import Control.Lens
 import Control.Exception(throwIO, Exception)
 import Control.Applicative((<|>))
-import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Default
 import Data.Map.Strict(Map)
 import Control.DeepSeq
@@ -244,8 +244,8 @@ data DbOpException
 
 instance NFData DbOpException
 
-dbOpDisallowed :: IO a
-dbOpDisallowed = throwIO OpDisallowed
+dbOpDisallowed :: MonadIO m => m a
+dbOpDisallowed = liftIO $ throwIO OpDisallowed
 
 instance Exception DbOpException
 
