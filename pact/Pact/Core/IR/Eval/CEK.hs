@@ -1357,7 +1357,8 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         if check' rv (_tvSchema tv) then do
           let rdata = RowData rv
           chargeGasArgs info (GWrite (sizeOf SizeOfV0 rv))
-          liftDbFunction info (_pdbWrite pdb wt (tvToDomain tv) rk rdata)
+          let serializationGasser = \g -> chargeGasArgs info (GPassthrough g)
+          _ <- (_pdbWrite pdb serializationGasser wt (tvToDomain tv) rk rdata)
           returnCEKValue cont handler (VString "Write succeeded")
         else returnCEK cont handler (VError "object does not match schema" info)
       PreFoldDbC tv queryClo appClo -> do
@@ -1427,7 +1428,8 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
           if allow then do
             let nsn = _nsName ns
             chargeGasArgs info (GWrite (sizeOf SizeOfV0 ns))
-            liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
+            let serializationGasser = chargeGasArgs info . GPassthrough
+            _pdbWrite pdb serializationGasser Write DNamespaces nsn ns
             returnCEKValue cont handler $ VString $ "Namespace defined: " <> (_namespaceName nsn)
           else throwExecutionError info $ DefineNamespaceError "Namespace definition not permitted"
         _ ->

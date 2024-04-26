@@ -1636,7 +1636,8 @@ coreDefineNamespace info b cont handler env = \case
       Nothing -> viewEvalEnv eeNamespacePolicy >>= \case
         SimpleNamespacePolicy -> do
           chargeGasArgs info (GWrite (sizeOf SizeOfV0 ns))
-          liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
+          let serializationGasser = \g -> chargeGasArgs info (GPassthrough g)
+          _pdbWrite pdb serializationGasser Write DNamespaces nsn ns
           returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
         SmartNamespacePolicy _ fun -> getModuleMember info pdb fun >>= \case
           Dfun d -> do

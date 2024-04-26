@@ -21,12 +21,10 @@ import qualified Database.SQLite3.Direct as Direct
 import Data.ByteString (ByteString)
 import qualified Data.Map.Strict as Map
 
-import Pact.Core.Environment.Types (MonadEval)
 import Pact.Core.Persistence
 import Pact.Core.Guards (renderKeySetName, parseAnyKeysetName)
 import Pact.Core.Names
 import Pact.Core.Gas (MilliGas)
-import Pact.Core.Persistence
 import Pact.Core.PactValue
 import Pact.Core.Literal
 import qualified Pact.Core.Persistence as P
@@ -88,7 +86,7 @@ initializePactDb serial db = do
   pure $ PactDb
     { _pdbPurity = PImpure
     , _pdbRead = read' serial db
-    , _pdbWrite = write' serial db txId txLog -- TODO (pass a gas-charging callback)
+    , _pdbWrite = write' serial db txId txLog
     , _pdbKeys = readKeys db
     , _pdbCreateUserTable = createUserTable serial db txLog
     , _pdbBeginTx = beginTx txId db txLog
@@ -187,7 +185,7 @@ createUserTable serial db txLog tbl = do
           [ (Field "namespace", maybe (PLiteral LUnit) (PString . _namespaceName) (_mnNamespace (_tableModuleName tbl)))
           , (Field "name", PString (_tableName tbl))
           ])
-  rdEnc <- _encodeRowData serial (\_ -> print "TODO: FYI usertable creation runs in IO for now so gas is ignored") rd
+  rdEnc <- _encodeRowData serial (\_ -> error "Expended no gas charging during usertable creation") rd
   liftIO $ modifyIORef' txLog (TxLog "SYS:usertables" (_tableName tbl) rdEnc :)
 
   where
@@ -200,7 +198,7 @@ createUserTable serial db txLog tbl = do
 
 write'
   :: forall k v b i m.
-     MonadEval b i m
+     MonadIO m
   =>
      PactSerialise b i
   -> SQL.Database
@@ -214,7 +212,7 @@ write'
   -> m ()
 write' serial db txId txLog gasCallback wt domain k v = do
   case domain of
-    DUserTables tbl -> _encodeRowData serial (error "TODO: chargeGas") v >>= \encoded -> liftIO (checkInsertOk tbl k) >>= \case
+    DUserTables tbl -> _encodeRowData serial gasCallback v >>= \encoded -> liftIO (checkInsertOk tbl k) >>= \case
       Nothing -> liftIO $ withStmt db ("INSERT INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
         let
           RowKey k' = k
@@ -227,13 +225,13 @@ write' serial db txId txLog gasCallback wt domain k v = do
           RowData old' = old
           RowData v' = v
           new = RowData (Map.union v' old')
-        encoded <- _encodeRowData serial (error "TODO: chargeGas") new
+        encoded2 <- _encodeRowData serial gasCallback new
         liftIO $ withStmt db ("INSERT OR REPLACE INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
           let
             RowKey k' = k
           TxId i <- readIORef txId
-          SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-          doWrite stmt (TxLog (_tableName tbl) k' encoded:)
+          SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded2]
+          doWrite stmt (TxLog (_tableName tbl) k' encoded2:)
 
     DKeySets -> liftIO $ withStmt db "INSERT OR REPLACE INTO \"SYS:KEYSETS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let encoded = _encodeKeySet serial v

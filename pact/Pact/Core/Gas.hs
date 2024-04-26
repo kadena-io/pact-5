@@ -168,6 +168,8 @@ data GasArgs
   | GPoseidonHashHackAChain !Int
   -- ^ poseidon-hash-hack-a-chain costs
   | GModuleMemory !Word64
+  | GPassthrough MilliGas
+  -- ^ Charge precise gas -- TODO: TEMPORARY
   deriving (Show, Generic, NFData)
 
 instance Pretty GasArgs where

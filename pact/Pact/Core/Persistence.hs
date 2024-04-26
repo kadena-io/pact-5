@@ -8,6 +8,7 @@
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StrictData #-}
 
@@ -42,8 +43,8 @@ module Pact.Core.Persistence
 import Control.Lens
 import Control.Exception(throwIO, Exception)
 import Control.Applicative((<|>))
+import Control.Monad.IO.Class (MonadIO)
 import Data.Default
-import qualified Data.Kind as GHC
 import Data.Map.Strict(Map)
 import Control.DeepSeq
 import GHC.Generics
@@ -178,7 +179,7 @@ data PactDb b i
   = PactDb
   { _pdbPurity :: !Purity
   , _pdbRead :: forall k v. Domain k v b i -> k -> IO (Maybe v)
-  , _pdbWrite :: forall k v m. (MilliGas -> m ()) -> WriteType -> Domain k v b i -> k -> v -> m ()
+  , _pdbWrite :: forall k v m. MonadIO m => (MilliGas -> m ()) -> WriteType -> Domain k v b i -> k -> v -> m ()
   , _pdbKeys :: forall k v. Domain k v b i -> IO [k]
   , _pdbCreateUserTable :: TableName -> IO ()
   , _pdbBeginTx :: ExecutionMode -> IO (Maybe TxId)
@@ -190,8 +191,8 @@ data PactDb b i
 
 instance NFData (PactDb b i) where
   -- Note: CommitTX and RollbackTx cannot be rnf'd
-  rnf (PactDb purity r w k cut btx ctx rtx tids txl) =
-    rnf purity `seq` rnf r `seq` rnf w `seq` rnf k `seq` rnf cut
+  rnf (PactDb purity r _ k cut btx ctx rtx tids txl) =
+    rnf purity `seq` rnf r `seq` rnf k `seq` rnf cut
        `seq` rnf btx `seq` ctx `seq` rtx `seq` rnf tids `seq` rnf txl
 
 makeClassy ''PactDb
@@ -202,25 +203,25 @@ makeClassy ''PactDb
 readModule :: PactDb b i -> ModuleName -> IO (Maybe (ModuleData b i))
 readModule pdb = _pdbRead pdb DModules
 
-writeModule :: PactDb b i -> WriteType -> ModuleName -> ModuleData b i -> m ()
+writeModule :: MonadIO m => PactDb b i -> WriteType -> ModuleName -> ModuleData b i -> m ()
 writeModule pdb wt = _pdbWrite pdb failIfUsesGas wt DModules
 
 readKeySet :: PactDb b i -> KeySetName -> IO (Maybe KeySet)
 readKeySet pdb = _pdbRead pdb DKeySets
 
-writeKeySet :: PactDb b i -> WriteType -> KeySetName -> KeySet -> m ()
+writeKeySet :: MonadIO m => PactDb b i -> WriteType -> KeySetName -> KeySet -> m ()
 writeKeySet pdb wt = _pdbWrite pdb failIfUsesGas wt DKeySets
 
 readDefPacts :: PactDb b i -> DefPactId -> IO (Maybe (Maybe DefPactExec))
 readDefPacts pdb = _pdbRead pdb DDefPacts
 
-writeDefPacts :: PactDb b i -> WriteType -> DefPactId -> Maybe DefPactExec -> m ()
+writeDefPacts :: MonadIO m => PactDb b i -> WriteType -> DefPactId -> Maybe DefPactExec -> m ()
 writeDefPacts pdb wt = _pdbWrite pdb failIfUsesGas wt DDefPacts
 
 readNamespace :: PactDb b i -> NamespaceName -> IO (Maybe Namespace)
 readNamespace pdb = _pdbRead pdb DNamespaces
 
-writeNamespace :: PactDb b i -> WriteType -> NamespaceName -> Namespace -> m ()
+writeNamespace :: MonadIO m => PactDb b i -> WriteType -> NamespaceName -> Namespace -> m ()
 writeNamespace pdb wt = _pdbWrite pdb failIfUsesGas wt DNamespaces
 
 -- | For several db operations, we expect not to use gas. This
