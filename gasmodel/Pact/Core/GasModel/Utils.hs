@@ -324,8 +324,8 @@ runNativeBenchmark
   -> C.Benchmark
 runNativeBenchmark = runNativeBenchmark' pure pure
 
-envStMod :: [(Text, PactValue)] -> (BenchEvalState -> IO BenchEvalState)
-envStMod envVars = pure . (esLoaded .~ synthLoaded)
+withLoaded :: [(Text, PactValue)] -> (BenchEvalState -> IO BenchEvalState)
+withLoaded envVars = pure . (esLoaded .~ synthLoaded)
   where
   synthLoaded = Loaded
     { _loModules = mempty
@@ -340,7 +340,7 @@ runNativeBenchmarkPrepared
   -> String
   -> Text
   -> C.Benchmark
-runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure (envStMod envVars)
+runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure (withLoaded envVars)
 
 type EnvMod = Endo BenchEvalEnv
 
@@ -357,7 +357,7 @@ runNativeBenchmarkPreparedWith
   -> String
   -> Text
   -> C.Benchmark
-runNativeBenchmarkPreparedWith (Endo envMod) envVars = runNativeBenchmark' (pure . envMod) (envStMod envVars)
+runNativeBenchmarkPreparedWith (Endo envMod) envVars = runNativeBenchmark' (pure . envMod) (withLoaded envVars)
 
 -- Closures
 unitClosureNullary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m
