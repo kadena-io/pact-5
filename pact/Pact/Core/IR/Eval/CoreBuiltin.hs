@@ -954,22 +954,30 @@ coreReadString info b cont handler _env = \case
       _ -> returnCEK cont handler (VError "read-string failure" info)
   args -> argsError info b args
 
-readKeyset' :: (MonadEval b i m) => T.Text -> m (Maybe KeySet)
-readKeyset' ksn = do
+readKeyset' :: (MonadEval b i m) => i -> T.Text -> m (Maybe KeySet)
+readKeyset' info ksn = do
   viewEvalEnv eeMsgBody >>= \case
-    PObject envData ->
+    PObject envData -> do
+      chargeGasArgs info $ GObjOp $ ObjOpLookup ksn $ M.size envData
       case M.lookup (Field ksn) envData of
         Just (PGuard (GKeyset ks)) -> pure (Just ks)
-        Just (PObject dat) -> parseObj dat
+        Just (PObject dat) -> do
+          chargeGasArgs info $ GObjOp $ ObjOpLookup "keys" objSize
+          chargeGasArgs info $ GObjOp $ ObjOpLookup "pred" objSize
+          case parseObj dat of
+            Nothing -> pure Nothing
+            Just (ks, p) -> do
+              chargeGasArgs info $ GStrOp $ StrOpParse $ T.length p
+              pure $ KeySet ks <$> readPredicate p
           where
-          parseObj d = pure $ do
+          objSize = M.size dat
+          parseObj d = do
             keys <- M.lookup (Field "keys") d
             keyText <- preview _PList keys >>= traverse (fmap PublicKeyText . preview (_PLiteral . _LString))
             predRaw <- M.lookup (Field "pred") d
             p <- preview (_PLiteral . _LString) predRaw
-            pred' <- readPredicate p
             let ks = S.fromList (V.toList keyText)
-            pure (KeySet ks pred')
+            pure (ks, p)
           readPredicate = \case
             "keys-any" -> pure KeysAny
             "keys-2" -> pure Keys2
@@ -990,7 +998,7 @@ readKeyset' ksn = do
 coreReadKeyset :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreReadKeyset info b cont handler _env = \case
   [VString ksn] ->
-    readKeyset' ksn >>= \case
+    readKeyset' info ksn >>= \case
       Just ks -> do
         shouldEnforce <- isExecutionFlagSet FlagEnforceKeyFormats
         if shouldEnforce && isLeft (enforceKeyFormats (const ()) ks)
@@ -1146,7 +1154,7 @@ defineKeySet info b cont handler env = \case
     defineKeySet' info cont handler env ksname ks
   [VString ksname] -> do
     enforceTopLevelOnly info b
-    readKeyset' ksname >>= \case
+    readKeyset' info ksname >>= \case
       Just newKs ->
         defineKeySet' info cont handler env ksname newKs
       Nothing -> returnCEK cont handler (VError "read-keyset failure" info)
