@@ -600,9 +600,9 @@ traverseDefCapTerm f (DefCap spec args term meta i) =
 
 traverseDefPactStep
   :: Traversal (Step name ty builtin info)
-               (Step name ty builtin' info)
+               (Step name' ty' builtin' info')
                (Term name ty builtin info)
-               (Term name ty builtin' info)
+               (Term name' ty' builtin' info')
 traverseDefPactStep f = \case
   Step t -> Step <$> f t
   StepWithRollback a1 a2 ->
