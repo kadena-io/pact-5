@@ -1851,6 +1851,7 @@ coreBuiltinEnv
   :: forall step i m. (CEKEval step CoreBuiltin i m, MonadEval CoreBuiltin i m)
   => BuiltinEnv step CoreBuiltin i m
 coreBuiltinEnv i b env = mkBuiltinFn i b env (coreBuiltinRuntime b)
+{-# INLINEABLE coreBuiltinEnv #-}
 
 -- gassedCompare :: MonadEval b i m => PactValue -> PactValue -> m Ordering
 -- gassedCompare (PLiteral l) (PLiteral r) =
