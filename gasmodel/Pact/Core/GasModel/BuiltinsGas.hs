@@ -446,21 +446,21 @@ benchDistinct pdb =
 
 benchReadOp :: T.Text -> BuiltinBenches
 benchReadOp readOp pdb =
-  [ runNativeBenchmarkPreparedWithMsg obj [("k", key)] pdb title [text|($readOp k)|]
+  [ runNativeBenchmarkPreparedWith (msgBody obj) [("k", key)] pdb title [text|($readOp k)|]
   | (title, PObject obj) <- take 3 $ enumExpObject 1000 100
   , let key = fieldToValue $ last $ M.keys obj
   ]
 
 benchReadString :: BuiltinBenches
 benchReadString pdb =
-  [ runNativeBenchmarkPreparedWithMsg obj [("k", key)] pdb title "(read-string k)"
+  [ runNativeBenchmarkPreparedWith (msgBody obj) [("k", key)] pdb title "(read-string k)"
   | (title, PObject obj) <- take 3 $ enumExpObjectWithStrings 1000 100
   , let key = fieldToValue $ last $ M.keys obj
   ]
 
 benchReadKeyset :: BuiltinBenches
 benchReadKeyset pdb =
-  [ runNativeBenchmarkWithMsg obj pdb title "(read-keyset 'thekeyset)"
+  [ runNativeBenchmarkPreparedWith (msgBody obj) [] pdb title "(read-keyset 'thekeyset)"
   | (_, PObject objBase) <- [head $ enumExpObjectWithStrings 1000 1]
   , (title, str) <- take 3 $ enumExpScopedIdent 1000 100
   , let ksn = PObject [(Field "keys", PList [PString "publickeytext"]), (Field "pred", str)]

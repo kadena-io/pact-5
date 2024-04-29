@@ -10,6 +10,7 @@ import Control.Monad.Except
 import Control.DeepSeq
 import Data.Text (Text)
 import Data.Map.Strict(Map)
+import Data.Monoid
 import qualified Criterion as C
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
@@ -341,26 +342,19 @@ runNativeBenchmarkPrepared
   -> C.Benchmark
 runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure (envStMod envVars)
 
-runNativeBenchmarkWithMsg
-  :: Map Field PactValue
-  -> PactDb CoreBuiltin ()
-  -> String
-  -> Text
-  -> C.Benchmark
-runNativeBenchmarkWithMsg msgBody = runNativeBenchmark' envMod pure
-  where
-  envMod = pure . (eeMsgBody .~ PObject msgBody)
+type EnvMod = Endo BenchEvalEnv
 
-runNativeBenchmarkPreparedWithMsg
-  :: Map Field PactValue
+msgBody :: Map Field PactValue -> EnvMod
+msgBody body = Endo $ eeMsgBody .~ PObject body
+
+runNativeBenchmarkPreparedWith
+  :: EnvMod
   -> [(Text, PactValue)]
   -> PactDb CoreBuiltin ()
   -> String
   -> Text
   -> C.Benchmark
-runNativeBenchmarkPreparedWithMsg msgBody envVars = runNativeBenchmark' envMod (envStMod envVars)
-  where
-  envMod = pure . (eeMsgBody .~ PObject msgBody)
+runNativeBenchmarkPreparedWith (Endo envMod) envVars = runNativeBenchmark' (pure . envMod) (envStMod envVars)
 
 -- Closures
 unitClosureNullary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m
