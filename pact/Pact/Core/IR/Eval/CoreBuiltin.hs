@@ -807,7 +807,9 @@ coreB64Decode info b cont handler _env = \case
 coreEnforceGuard :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreEnforceGuard info b cont handler env = \case
   [VGuard g] -> enforceGuard info cont handler env g
-  [VString s] -> case parseAnyKeysetName s of
+  [VString s] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
+    case parseAnyKeysetName s of
       Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
       Right ksn -> isKeysetNameInSigs info cont handler env ksn
   args -> argsError info b args
