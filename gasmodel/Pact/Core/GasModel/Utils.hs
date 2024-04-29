@@ -347,6 +347,9 @@ type EnvMod = Endo BenchEvalEnv
 msgBody :: Map Field PactValue -> EnvMod
 msgBody body = Endo $ eeMsgBody .~ PObject body
 
+msgSigsNoCap :: [PublicKeyText] -> EnvMod
+msgSigsNoCap pkts = Endo $ eeMsgSigs .~ M.fromList ((, mempty) <$> pkts)
+
 runNativeBenchmarkPreparedWith
   :: EnvMod
   -> [(Text, PactValue)]
