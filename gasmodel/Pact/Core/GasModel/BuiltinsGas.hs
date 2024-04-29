@@ -69,6 +69,12 @@ enumExpString rep base mult =
   | (title, cnt) <- enumExpNum base mult
   ]
 
+enumExpScopedIdent :: Integer -> Integer -> [(String, PactValue)]
+enumExpScopedIdent base mult =
+  [ (title, PString $ str <> "." <> str)
+  | (title, PString str) <- enumExpString "a" base mult
+  ]
+
 type BuiltinBenches = PactDb CoreBuiltin () -> [C.Benchmark]
 
 benchArithBinOp' :: Integer -> T.Text -> BuiltinBenches
@@ -456,8 +462,8 @@ benchReadKeyset :: BuiltinBenches
 benchReadKeyset pdb =
   [ runNativeBenchmarkWithMsg obj pdb title "(read-keyset 'thekeyset)"
   | (_, PObject objBase) <- [head $ enumExpObjectWithStrings 1000 1]
-  , (title, PString str) <- take 3 $ enumExpString "a" 1000 100
-  , let ksn = PObject [(Field "keys", PList [PString "publickeytext"]), (Field "pred", PString $ str <> "." <> str)]
+  , (title, str) <- take 3 $ enumExpScopedIdent 1000 100
+  , let ksn = PObject [(Field "keys", PList [PString "publickeytext"]), (Field "pred", str)]
   , let obj = M.insert (Field "thekeyset") ksn objBase
   ]
 
