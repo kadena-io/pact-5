@@ -61,6 +61,7 @@ import Data.Default
 
 import Control.DeepSeq
 import GHC.Generics
+import Control.Monad.Catch as Exceptions
 
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
@@ -208,6 +209,7 @@ type MonadEval b i m =
   , MonadEvalState b i m
   , MonadError (PactError i) m
   , MonadIO m
+  , Exceptions.MonadCatch m
   , Default i
   , Show i
   , SizeOf b

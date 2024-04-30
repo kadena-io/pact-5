@@ -23,6 +23,7 @@ import Pact.Core.Names
 import Pact.Core.DefPacts.Types (DefPactExec)
 import qualified Pact.Core.Persistence as Persistence
 import Pact.Core.Persistence
+import qualified Pact.Core.Errors as Errors
 import Pact.Core.Serialise
 import Pact.Core.Gas (MilliGas)
 
@@ -80,7 +81,7 @@ mockPactDb serial = do
         txId <- readIORef refTxId
         pure (Map.findWithDefault [] txId txl)
     Nothing ->
-      throwIO Persistence.NoTxToCommit
+      throwIO Errors.NoTxToCommit
 
   rollbackTx refRb refTxLog refMod refKs refUsrTbl = readIORef refRb >>= \case
     Just (_, txl, mods, ks, usr) -> do
@@ -89,7 +90,7 @@ mockPactDb serial = do
       writeIORef refMod mods
       writeIORef refKs ks
       writeIORef refUsrTbl usr
-    Nothing -> throwIO Persistence.NoTxToCommit
+    Nothing -> throwIO Errors.NoTxToCommit
 
   txLog :: TxLogQueue -> TableName -> TxId -> IO [TxLog RowData]
   txLog refTxLog tn tid = do
@@ -127,7 +128,7 @@ mockPactDb serial = do
 --      let tblName = toUserTable tbl
       case M.lookup tbl r of
         Just t -> return (M.keys t)
-        Nothing -> throwIO (Persistence.NoSuchTable tbl)
+        Nothing -> throwIO (Errors.NoSuchTable tbl)
     DDefPacts -> do
       r <- readIORef refPacts
       return (M.keys r)
@@ -148,7 +149,7 @@ mockPactDb serial = do
         -- TODO: Do we need a TxLog when a usertable is created?
         modifyIORef refUsrTbl (M.insert tbl mempty)
         pure ()
-      Just _ -> throwIO (Persistence.TableAlreadyExists tbl)
+      Just _ -> throwIO (Errors.TableAlreadyExists tbl)
 
   read'
     :: forall k v
@@ -171,7 +172,7 @@ mockPactDb serial = do
   checkTable :: forall m. MonadIO m => TableName -> IORef (Map TableName (Map RowKey RowData)) -> m ()
   checkTable tbl ref = liftIO $ do
     r <- readIORef ref
-    unless (isJust (M.lookup tbl r)) $ throwIO (Persistence.NoSuchTable tbl)
+    unless (isJust (M.lookup tbl r)) $ throwIO (Errors.NoSuchTable tbl)
 
   write
     :: forall k v m
@@ -221,7 +222,7 @@ mockPactDb serial = do
     Insert -> do
       r <- liftIO $ readIORef ref
       case M.lookup tbl r >>= M.lookup k of
-        Just _ -> liftIO $ throwIO Persistence.WriteException
+        Just _ -> liftIO $ throwIO Errors.WriteException
         Nothing -> do
           encodedData <- _encodeRowData serial handleGas v
           liftIO $ record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
@@ -235,7 +236,7 @@ mockPactDb serial = do
           encodedData <- _encodeRowData serial handleGas nrd
           liftIO $ record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
           liftIO $ modifyIORef' ref (M.insertWith M.union tbl (M.singleton k nrd))
-        Nothing -> liftIO $ throwIO Persistence.WriteException
+        Nothing -> liftIO $ throwIO Errors.WriteException
 
 
   readKS ref ksn = do

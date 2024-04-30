@@ -1358,7 +1358,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
           let rdata = RowData rv
           chargeGasArgs info (GWrite (sizeOf SizeOfV0 rv))
           let serializationGasser = \g -> chargeGasArgs info (GPassthrough g)
-          _ <- (_pdbWrite pdb serializationGasser wt (tvToDomain tv) rk rdata)
+          _ <- _pdbWrite pdb serializationGasser wt (tvToDomain tv) rk rdata
           returnCEKValue cont handler (VString "Write succeeded")
         else returnCEK cont handler (VError "object does not match schema" info)
       PreFoldDbC tv queryClo appClo -> do
@@ -1421,7 +1421,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         enforceMeta _ = pure ()
       DefineKeysetC ksn newKs -> do
         chargeGasArgs info (GWrite (sizeOf SizeOfV0 newKs))
-        liftDbFunction info (writeKeySet pdb Write ksn newKs)
+        writeKeySet pdb Write ksn newKs
         returnCEKValue cont handler (VString "Keyset write success")
       DefineNamespaceC ns -> case v of
         PBool allow ->
@@ -1542,9 +1542,8 @@ applyContToValue (DefPactStepC env cont) handler v =
           done = (not (_psRollback ps) && isLastStep) || _psRollback ps
         when (nestedPactsNotAdvanced pe ps) $
           throwExecutionError def (NestedDefpactsNotAdvanced (_peDefPactId pe))
-        liftDbFunction def
-          (writeDefPacts pdb Write (_psDefPactId ps)
-            (if done then Nothing else Just pe))
+        writeDefPacts pdb Write (_psDefPactId ps)
+            (if done then Nothing else Just pe)
         emitXChainEvents (_psResume ps) pe
         returnCEKValue cont handler v
 

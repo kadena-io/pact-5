@@ -1102,7 +1102,7 @@ defineKeySet' info cont handler env ksname newKs  = do
     Right ksn -> do
       let writeKs = do
             chargeGasArgs info (GWrite (sizeOf SizeOfV0 newKs))
-            liftDbFunction info (writeKeySet pdb Write ksn newKs)
+            writeKeySet pdb Write ksn newKs
             returnCEKValue cont handler (VString "Keyset write success")
       liftDbFunction info (readKeySet pdb ksn) >>= \case
         Just oldKs -> do

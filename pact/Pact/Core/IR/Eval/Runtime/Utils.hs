@@ -247,7 +247,7 @@ readOnlyEnv e
               PactDb
              { _pdbPurity = PReadOnly
              , _pdbRead = _pdbRead pdb
-             , _pdbWrite = \_ _ _ _ _ -> dbOpDisallowed
+             , _pdbWrite = \_ _ _ _ _ -> dbOpDisallowed2
              , _pdbKeys = \_ -> dbOpDisallowed
              , _pdbCreateUserTable = \_ -> dbOpDisallowed
              , _pdbBeginTx = \_ -> dbOpDisallowed

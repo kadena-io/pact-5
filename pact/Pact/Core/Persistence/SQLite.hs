@@ -24,10 +24,10 @@ import qualified Data.Map.Strict as Map
 import Pact.Core.Persistence
 import Pact.Core.Guards (renderKeySetName, parseAnyKeysetName)
 import Pact.Core.Names
+import qualified Pact.Core.Errors as E
 import Pact.Core.Gas (MilliGas)
 import Pact.Core.PactValue
 import Pact.Core.Literal
-import qualified Pact.Core.Persistence as P
 import Control.Exception (throwIO)
 import Pact.Core.Serialise
 
@@ -266,17 +266,17 @@ write' serial db txId txLog gasCallback wt domain k v = do
       curr <- read' serial db (DUserTables tbl) rk
       case (curr, wt) of
         (Nothing, Insert) -> return Nothing
-        (Just _, Insert) -> throwIO (P.RowFoundException tbl rk)
+        (Just _, Insert) -> throwIO (E.RowFoundException tbl rk)
         (Nothing, Write) -> return Nothing
         (Just old, Write) -> return $ Just old
         (Just old, Update) -> return $ Just old
-        (Nothing, Update) -> throwIO (P.NoRowFound tbl rk)
+        (Nothing, Update) -> throwIO (E.NoRowFound tbl rk)
 
     doWrite stmt txlog = Direct.stepNoCB stmt >>= \case
-          Left _ -> throwIO P.WriteException
+          Left _ -> throwIO E.WriteException
           Right res
             | res == SQL.Done -> modifyIORef' txLog txlog
-            | otherwise -> throwIO P.MultipleRowsReturnedFromSingleWrite
+            | otherwise -> throwIO E.MultipleRowsReturnedFromSingleWrite
 
 read' :: forall k v b i. PactSerialise b i -> SQL.Database -> Domain k v b i -> k -> IO (Maybe v)
 read' serial db domain k = case domain of
