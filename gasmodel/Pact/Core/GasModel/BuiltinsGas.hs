@@ -559,9 +559,6 @@ benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) -> do
     , not $ null benches
     ]
   where
-  mkPactDb = do
-    tup@(pdb, _) <- unsafeCreateSqlitePactDb serialisePact ":memory:"
-    _ <- _pdbBeginTx pdb Transactional
-    pure tup
+  mkPactDb = unsafeCreateSqlitePactDb serialisePact ":memory:"
 
   cleanupPactDb (_, db) = SQL.close db
