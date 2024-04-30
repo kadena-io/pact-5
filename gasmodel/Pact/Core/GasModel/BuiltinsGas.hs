@@ -9,10 +9,12 @@ import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Database.SQLite3 as SQL
+import Control.Monad
 import Data.Bifunctor
 import NeatInterpolation (text)
 
 import Pact.Core.Builtin
+import Pact.Core.Guards
 import Pact.Core.Names
 import Pact.Core.PactValue
 import Pact.Core.Persistence
@@ -467,6 +469,20 @@ benchReadKeyset pdb =
   , let obj = M.insert (Field "thekeyset") ksn objBase
   ]
 
+benchEnforceGuard :: BuiltinBenches
+benchEnforceGuard pdb = dummyTx pdb initDb
+  [ runNativeBenchmarkPreparedWith (msgSigsNoCap [pkt]) [("x", str)] pdb title "(enforce-guard x)"
+  | (title, str) <- keys
+  ]
+  where
+  pkt = PublicKeyText "somepubkey"
+  keys = take 3 $ enumExpScopedIdent 1000 100
+  initDb = forM_ keys $ \(_title, ident) ->
+    case ident of
+      PString s
+        | Right ksn <- parseAnyKeysetName s -> writeKeySet pdb Insert ksn $ KeySet [pkt] KeysAny
+      _ -> error "not a string"
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -526,6 +542,7 @@ benchesForBuiltin bn = case bn of
   CoreReadDecimal -> benchReadOp "read-decimal"
   CoreReadString -> benchReadString
   CoreReadKeyset -> benchReadKeyset
+  CoreEnforceGuard -> benchEnforceGuard
   _ -> const []
   where
   omittedDeliberately = const []
