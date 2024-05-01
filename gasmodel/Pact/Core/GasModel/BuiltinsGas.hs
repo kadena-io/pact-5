@@ -476,7 +476,7 @@ benchKeysetGuardOp op pdb = dummyTx pdb initDb
   ]
   where
   pkt = PublicKeyText "somepubkey"
-  keys = take 3 $ enumExpScopedIdent 1000 100
+  keys = take 3 $ enumExpScopedIdent 10000 10
   initDb = forM_ keys $ \(_title, ident) -> case ident of
     PString s
       | Right ksn <- parseAnyKeysetName s -> writeKeySet pdb Insert ksn $ KeySet [pkt] KeysAny
