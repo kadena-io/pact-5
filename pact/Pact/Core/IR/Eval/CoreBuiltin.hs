@@ -1102,7 +1102,7 @@ defineKeySet' info cont handler env ksname newKs  = do
     Right ksn -> do
       let writeKs = do
             chargeGasArgs info (GWrite (sizeOf SizeOfV0 newKs))
-            writeKeySet pdb Write ksn newKs
+            liftDbFunction2 info $ writeKeySet pdb Write ksn newKs
             returnCEKValue cont handler (VString "Keyset write success")
       liftDbFunction info (readKeySet pdb ksn) >>= \case
         Just oldKs -> do
@@ -1636,8 +1636,8 @@ coreDefineNamespace info b cont handler env = \case
       Nothing -> viewEvalEnv eeNamespacePolicy >>= \case
         SimpleNamespacePolicy -> do
           chargeGasArgs info (GWrite (sizeOf SizeOfV0 ns))
-          let serializationGasser = \g -> chargeGasArgs info (GPassthrough g)
-          _pdbWrite pdb serializationGasser Write DNamespaces nsn ns
+          let serializationGasser = chargeGasArgs info . GPassthrough
+          liftDbFunction2 info $ _pdbWrite pdb serializationGasser Write DNamespaces nsn ns
           returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
         SmartNamespacePolicy _ fun -> getModuleMember info pdb fun >>= \case
           Dfun d -> do

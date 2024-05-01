@@ -1357,8 +1357,8 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         if check' rv (_tvSchema tv) then do
           let rdata = RowData rv
           chargeGasArgs info (GWrite (sizeOf SizeOfV0 rv))
-          let serializationGasser = \g -> chargeGasArgs info (GPassthrough g)
-          _ <- _pdbWrite pdb serializationGasser wt (tvToDomain tv) rk rdata
+          let serializationGasser = chargeGasArgs info . GPassthrough
+          _ <- liftDbFunction2 info $ _pdbWrite pdb serializationGasser wt (tvToDomain tv) rk rdata
           returnCEKValue cont handler (VString "Write succeeded")
         else returnCEK cont handler (VError "object does not match schema" info)
       PreFoldDbC tv queryClo appClo -> do
@@ -1421,7 +1421,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         enforceMeta _ = pure ()
       DefineKeysetC ksn newKs -> do
         chargeGasArgs info (GWrite (sizeOf SizeOfV0 newKs))
-        writeKeySet pdb Write ksn newKs
+        liftDbFunction2 info $ writeKeySet pdb Write ksn newKs
         returnCEKValue cont handler (VString "Keyset write success")
       DefineNamespaceC ns -> case v of
         PBool allow ->
@@ -1429,7 +1429,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
             let nsn = _nsName ns
             chargeGasArgs info (GWrite (sizeOf SizeOfV0 ns))
             let serializationGasser = chargeGasArgs info . GPassthrough
-            _pdbWrite pdb serializationGasser Write DNamespaces nsn ns
+            liftDbFunction2 info $ _pdbWrite pdb serializationGasser Write DNamespaces nsn ns
             returnCEKValue cont handler $ VString $ "Namespace defined: " <> (_namespaceName nsn)
           else throwExecutionError info $ DefineNamespaceError "Namespace definition not permitted"
         _ ->
@@ -1542,7 +1542,7 @@ applyContToValue (DefPactStepC env cont) handler v =
           done = (not (_psRollback ps) && isLastStep) || _psRollback ps
         when (nestedPactsNotAdvanced pe ps) $
           throwExecutionError def (NestedDefpactsNotAdvanced (_peDefPactId pe))
-        writeDefPacts pdb Write (_psDefPactId ps)
+        liftDbFunction2 def $ writeDefPacts pdb Write (_psDefPactId ps)
             (if done then Nothing else Just pe)
         emitXChainEvents (_psResume ps) pe
         returnCEKValue cont handler v
