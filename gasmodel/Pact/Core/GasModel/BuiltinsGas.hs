@@ -469,19 +469,18 @@ benchReadKeyset pdb =
   , let obj = M.insert (Field "thekeyset") ksn objBase
   ]
 
-benchEnforceGuard :: BuiltinBenches
-benchEnforceGuard pdb = dummyTx pdb initDb
-  [ runNativeBenchmarkPreparedWith (msgSigsNoCap [pkt]) [("x", str)] pdb title "(enforce-guard x)"
+benchKeysetGuardOp :: T.Text -> BuiltinBenches
+benchKeysetGuardOp op pdb = dummyTx pdb initDb
+  [ runNativeBenchmarkPreparedWith (msgSigsNoCap [pkt]) [("x", str)] pdb title [text|($op x)|]
   | (title, str) <- keys
   ]
   where
   pkt = PublicKeyText "somepubkey"
   keys = take 3 $ enumExpScopedIdent 1000 100
-  initDb = forM_ keys $ \(_title, ident) ->
-    case ident of
-      PString s
-        | Right ksn <- parseAnyKeysetName s -> writeKeySet pdb Insert ksn $ KeySet [pkt] KeysAny
-      _ -> error "not a string"
+  initDb = forM_ keys $ \(_title, ident) -> case ident of
+    PString s
+      | Right ksn <- parseAnyKeysetName s -> writeKeySet pdb Insert ksn $ KeySet [pkt] KeysAny
+    _ -> error "not a string"
 
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
@@ -542,7 +541,9 @@ benchesForBuiltin bn = case bn of
   CoreReadDecimal -> benchReadOp "read-decimal"
   CoreReadString -> benchReadString
   CoreReadKeyset -> benchReadKeyset
-  CoreEnforceGuard -> benchEnforceGuard
+  CoreEnforceGuard -> benchKeysetGuardOp "enforce-guard"
+  CoreEnforceKeyset -> alreadyCovered
+  CoreKeysetRefGuard -> benchKeysetGuardOp "keyset-ref-guard"
   _ -> const []
   where
   omittedDeliberately = const []
