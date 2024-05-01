@@ -515,6 +515,12 @@ benchB64Op op pdb =
   | (title, str) <- take 3 $ enumExpString "YWEK" 250 100
   ]
 
+benchStrToList :: BuiltinBenches
+benchStrToList pdb =
+  [ runNativeBenchmarkPrepared [("s", str)] pdb title "(str-to-list s)"
+  | (title, str) <- take 3 $ enumExpString "a" 1000 10
+  ]
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -581,6 +587,7 @@ benchesForBuiltin bn = case bn of
   CoreMakeList -> benchMakeList
   CoreB64Encode -> benchB64Op "base64-encode"
   CoreB64Decode -> benchB64Op "base64-decode"
+  CoreStrToList -> benchStrToList
   _ -> const []
   where
   omittedDeliberately = const []
