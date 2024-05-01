@@ -482,6 +482,19 @@ benchKeysetGuardOp op pdb = dummyTx pdb initDb
       | Right ksn <- parseAnyKeysetName s -> writeKeySet pdb Insert ksn $ KeySet [pkt] KeysAny
     _ -> error "not a string"
 
+benchAt :: BuiltinBenches
+benchAt pdb =
+  [ C.bgroup "list"
+    [ runNativeBenchmarkPrepared [("x", list), ("pos", pos)] pdb title "(at pos x)"
+    | (title, list@(PList v)) <- take 3 $ enumExpList 1000 100
+    , let pos = PInteger $ fromIntegral $ V.length v `div` 2
+    ]
+  , C.bgroup "object"
+    [ runNativeBenchmarkPrepared [("x", obj)] pdb title "(at \"999\" x)"
+    | (title, obj) <- take 3 $ enumExpObject 1000 100
+    ]
+  ]
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -544,6 +557,7 @@ benchesForBuiltin bn = case bn of
   CoreEnforceGuard -> benchKeysetGuardOp "enforce-guard"
   CoreEnforceKeyset -> alreadyCovered
   CoreKeysetRefGuard -> benchKeysetGuardOp "keyset-ref-guard"
+  CoreAt -> benchAt
   _ -> const []
   where
   omittedDeliberately = const []
