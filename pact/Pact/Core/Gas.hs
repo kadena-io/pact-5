@@ -149,6 +149,8 @@ data StrOp
   -- ^ The cost of converting a string of a given length to an integer.
   | StrOpParse !Int
   -- ^ The cost of a general scanning parse of a string of a given length.
+  | StrOpExplode !Int
+  -- ^ The cost of splitting a string into a list of chars.
   deriving (Eq, Show, Ord, Generic, NFData)
 
 data ObjOp

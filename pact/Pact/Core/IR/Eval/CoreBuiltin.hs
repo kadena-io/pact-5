@@ -605,6 +605,7 @@ coreConcat info b cont handler _env = \case
 strToList :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 strToList info b cont handler _env = \case
   [VLiteral (LString s)] -> do
+    chargeGasArgs info $ GStrOp $ StrOpExplode $ T.length s
     let v = VList (V.fromList (PLiteral . LString . T.singleton <$> T.unpack s))
     returnCEKValue cont handler v
   args -> argsError info b args
