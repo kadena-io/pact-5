@@ -790,16 +790,19 @@ enforceTopLevelOnly info b = do
 
 coreB64Encode :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreB64Encode info b cont handler _env = \case
-  [VLiteral (LString l)] ->
+  [VLiteral (LString l)] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length l
     returnCEKValue cont handler $ VLiteral $ LString $ toB64UrlUnpaddedText $ T.encodeUtf8 l
   args -> argsError info b args
 
 
 coreB64Decode :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreB64Decode info b cont handler _env = \case
-  [VLiteral (LString s)] -> case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
-    Left{} -> throwExecutionError info (DecodeError "invalid b64 encoding")
-    Right txt -> returnCEKValue cont handler (VLiteral (LString txt))
+  [VLiteral (LString s)] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
+    case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
+      Left{} -> throwExecutionError info (DecodeError "invalid b64 encoding")
+      Right txt -> returnCEKValue cont handler (VLiteral (LString txt))
   args -> argsError info b args
 
 
