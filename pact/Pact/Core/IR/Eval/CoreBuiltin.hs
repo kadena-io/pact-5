@@ -816,13 +816,15 @@ coreEnforceGuard info b cont handler env = \case
 
 keysetRefGuard :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 keysetRefGuard info b cont handler env = \case
-  [VString g] -> case parseAnyKeysetName g of
-    Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
-    Right ksn -> do
-      let pdb = view cePactDb env
-      liftDbFunction info (readKeySet pdb ksn) >>= \case
-        Nothing -> returnCEK cont handler (VError ("no such keyset defined: " <> g) info)
-        Just _ -> returnCEKValue cont handler (VGuard (GKeySetRef ksn))
+  [VString g] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length g
+    case parseAnyKeysetName g of
+      Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
+      Right ksn -> do
+        let pdb = view cePactDb env
+        liftDbFunction info (readKeySet pdb ksn) >>= \case
+          Nothing -> returnCEK cont handler (VError ("no such keyset defined: " <> g) info)
+          Just _ -> returnCEKValue cont handler (VGuard (GKeySetRef ksn))
   args -> argsError info b args
 
 coreTypeOf :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
