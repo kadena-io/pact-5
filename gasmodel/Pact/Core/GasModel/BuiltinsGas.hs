@@ -495,6 +495,20 @@ benchAt pdb =
     ]
   ]
 
+benchMakeList :: BuiltinBenches
+benchMakeList pdb =
+  [ C.bgroup "flat"
+    [ runNativeBenchmarkPrepared [("cnt", PInteger cnt)] pdb title "(make-list cnt 0)"
+    | (title, cnt) <- take 3 $ enumExpNum 1000 100
+    ]
+  , C.bgroup "nested"
+    [ runNativeBenchmarkPrepared [("cnt", PInteger cnt), ("elt", elt)] pdb title "(make-list cnt elt)"
+    | (repTitle, cnt) <- take 3 $ enumExpNum 1000 10
+    , (lstTitle, elt) <- take 3 $ enumExpList 100 2
+    , let title = repTitle <> "_" <> lstTitle
+    ]
+  ]
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -558,6 +572,7 @@ benchesForBuiltin bn = case bn of
   CoreEnforceKeyset -> alreadyCovered
   CoreKeysetRefGuard -> benchKeysetGuardOp "keyset-ref-guard"
   CoreAt -> benchAt
+  CoreMakeList -> benchMakeList
   _ -> const []
   where
   omittedDeliberately = const []
