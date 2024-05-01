@@ -509,6 +509,12 @@ benchMakeList pdb =
     ]
   ]
 
+benchB64Op :: T.Text -> BuiltinBenches
+benchB64Op op pdb =
+  [ runNativeBenchmarkPrepared [("s", str)] pdb title [text|($op s)|]
+  | (title, str) <- take 3 $ enumExpString "YWEK" 250 100
+  ]
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -573,6 +579,8 @@ benchesForBuiltin bn = case bn of
   CoreKeysetRefGuard -> benchKeysetGuardOp "keyset-ref-guard"
   CoreAt -> benchAt
   CoreMakeList -> benchMakeList
+  CoreB64Encode -> benchB64Op "base64-encode"
+  CoreB64Decode -> benchB64Op "base64-decode"
   _ -> const []
   where
   omittedDeliberately = const []
