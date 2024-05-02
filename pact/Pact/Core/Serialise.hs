@@ -104,7 +104,9 @@ serialisePact = PactSerialise
                            V1_CBOR -> V1.decodeNamespace
                        )
 
-  , _encodeRowData = \_chargeGas rd -> pure $ docEncode V1.encodeRowData rd
+  , _encodeRowData = \chargeGas rd -> do
+    encodedRow <- V1.encodeRowData chargeGas rd
+    pure $ toStrictByteString $ encodeVersion V1_CBOR <> S.encodeBytes encodedRow
   , _decodeRowData = \bs ->
       LegacyDocument <$> LegacyPact.decodeRowData bs
       <|> docDecode bs (\case

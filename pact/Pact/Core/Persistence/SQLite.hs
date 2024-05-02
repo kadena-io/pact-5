@@ -185,7 +185,7 @@ createUserTable serial db txLog tbl = do
           [ (Field "namespace", maybe (PLiteral LUnit) (PString . _namespaceName) (_mnNamespace (_tableModuleName tbl)))
           , (Field "name", PString (_tableName tbl))
           ])
-  rdEnc <- _encodeRowData serial (\_ -> error "Expended no gas charging during usertable creation") rd
+  rdEnc <- _encodeRowData serial (\_ -> return ()) rd
   liftIO $ modifyIORef' txLog (TxLog "SYS:usertables" (_tableName tbl) rdEnc :)
 
   where
