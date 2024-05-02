@@ -205,6 +205,7 @@ rawMul info b cont handler _env = \case
 rawPow :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawPow info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
+    chargeGasArgs info $ GIntegerOpCost PrimOpPow i i'
     when (i' < 0) $ throwExecutionError info (ArithmeticException "negative exponent in integer power")
     -- Todo: move to iterated pow
     returnCEKValue cont handler (VLiteral (LInteger (i ^ i')))

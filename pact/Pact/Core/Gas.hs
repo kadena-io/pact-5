@@ -140,6 +140,7 @@ data IntegerPrimOp
   | PrimOpMul
   | PrimOpDiv
   | PrimOpShift
+  | PrimOpPow
   deriving (Eq, Show, Enum, Ord, Generic, NFData)
 
 data StrOp

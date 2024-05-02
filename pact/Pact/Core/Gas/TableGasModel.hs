@@ -156,6 +156,35 @@ intShiftCost _ !rop
   | rop > 0 = MilliGas $ fromIntegral $ rop `quot` 1000
   | otherwise = MilliGas 0
 
+intPowCost :: Integer -> Integer -> MilliGas
+intPowCost !base !power
+  | base < 0 = MilliGas 0
+  | otherwise = MilliGas $ g (I# (IntLog.integerLogBase# 10 base)) (I# (IntLog.integerLogBase# 10 power))
+  where
+  g x y = f ((x - 3) `div` 2) ((y - 3) `div` 2)
+  f x y
+    | x < 0 || y < 0 = f00
+    | otherwise = f00 * 2 ^ x * 300 ^ y
+  f00 = 1000
+{- The benchmarks show the run time t, for x = log₁₀ base, y = log₁₀ power:
+           |  y = 3  | y = 5  | y = 7
+    x = 3  |  3 μs   | 1.2 ms | 302 ms
+    x = 5  |  7 μs   | 2.1 ms | 591 ms
+    x = 7  |  12 μs  | 4.3 ms | 988 ms
+
+    Let `g(x, y)` the function describing this dependency.
+    Note that `g(x + 2, y) = 2 g(x, y)`  and `g(x, y + 2) = 300 g(x, y)` with a good precision ε.
+    For simplicity, let also `f` be such that `g(x, y) = f((x - 3) / 2, (y - 3) / 2)`.
+    With a good precision ε, we thus need f such that
+    ```
+    f(0, 0) = 3 [μs]
+    f(x + 1, y) = 2 f(x, y)
+    f(x, y + 1) = 300 f(x, y)
+    ```
+    This means `f(x, y) = a^x • b^y • f₀₀`.
+    The first equation above means `f₀₀ = 3 [μs] ≈ 1000 [milligas]`, the second one means `a = 2`, and the third one means `b = 300`.
+ -}
+
 runTableModel :: GasArgs -> MilliGas
 runTableModel = \case
   GAConstant !c -> c
@@ -165,6 +194,7 @@ runTableModel = \case
     PrimOpMul -> intMultCost lop rop
     PrimOpDiv -> intDivCost lop rop
     PrimOpShift -> intShiftCost lop rop
+    PrimOpPow -> intPowCost lop rop
   -- Note: concat values are currently just constant
   -- Todo: get actual metrics on list cat / text cat
   GConcat c -> case c of
