@@ -1,5 +1,4 @@
 {-# LANGUAGE PartialTypeSignatures #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE DataKinds #-}
 
@@ -134,7 +133,7 @@ intMultCost !lop !rop
     -- have the cost intMul(n) = 0.1523*n + 26.2 ~ 1.5n+26 ~ (3*n)/20+26
     -- after the bound,
     let !nbits = (I# (IntLog.integerLog2# (abs a)) + 1)
-    in if nbits <= intCostUpperBound then MilliGas $ fromIntegral $ ((3*nbits) `quot` 20 + 26)
+    in if nbits <= intCostUpperBound then MilliGas $ fromIntegral $ (3*nbits) `quot` 20 + 26
        else MilliGas $ fromIntegral (nbits * nbits `quot` 6400)
 {-# INLINE intMultCost #-}
 
@@ -148,7 +147,7 @@ intDivCost !lop !rop
     -- With a bit of squinting (okay maybe a lot), we can simply charge as much as multiplication
     -- below our threshold, benchmarks find integer and rational division to be quite fast
     let !nbits = (I# (IntLog.integerLog2# (abs a)) + 1)
-    in if nbits <= intCostUpperBound then MilliGas $ fromIntegral $ ((3*nbits) `quot` 20 + 26)
+    in if nbits <= intCostUpperBound then MilliGas $ fromIntegral $ (3*nbits) `quot` 20 + 26
        else MilliGas $ fromIntegral (nbits * nbits `quot` 6400)
 {-# INLINE intDivCost #-}
 
