@@ -83,8 +83,9 @@ decodeNamespace bs =either (const Nothing) (Just . snd) (deserialiseFromBytes de
 encodeRowData :: (Monad m) => (MilliGas -> m ()) -> RowData -> m ByteString
 encodeRowData chargeGas rd@(RowData fields) = do
   -- Charge for keys.
+  
   chargeGas . MilliGas $
-    1 * fromIntegral (sum $ Text.length . _field <$> Map.keys fields)
+    1000 * fromIntegral (sum $ Text.length . _field <$> Map.keys fields)
   -- Charge for values.
   forM_ (Map.toList fields) $ \(_, pv) -> do
     gasSerializePactValue chargeGas pv
@@ -94,23 +95,23 @@ gasSerializePactValue :: Monad m => (MilliGas -> m ()) -> PactValue -> m ()
 gasSerializePactValue chargeGas = \case
   PLiteral l -> gasSerializeLiteral l
   PList vs -> do
-    chargeGas $ MilliGas 1
+    chargeGas $ MilliGas 1000
     forM_ vs $ gasSerializePactValue chargeGas
-  PGuard _ -> chargeGas $ MilliGas 1
-  PModRef _ -> chargeGas $ MilliGas 1
+  PGuard _ -> chargeGas $ MilliGas 1000
+  PModRef _ -> chargeGas $ MilliGas 1000
   PObject o -> do
-    chargeGas $ MilliGas $ (1 *) $ sum $ fromIntegral . Text.length . _field <$> Map.keys o
+    chargeGas $ MilliGas $ (1000 *) $ sum $ fromIntegral . Text.length . _field <$> Map.keys o
     forM_ o (gasSerializePactValue chargeGas)
-  PCapToken {} -> chargeGas $ MilliGas 1
-  PTime _ -> chargeGas $ MilliGas 1
+  PCapToken {} -> chargeGas $ MilliGas 1000
+  PTime _ -> chargeGas $ MilliGas 1000
   
   where
     gasSerializeLiteral = \case
-      LString s -> chargeGas $ MilliGas $ 1 * fromIntegral (Text.length s)
-      LInteger i -> chargeGas $ MilliGas $ 1 * fromIntegral (length (show i))
-      LDecimal d -> chargeGas $ MilliGas $ 1 * fromIntegral (length (show d))
-      LBool _ -> chargeGas $ MilliGas 1
-      LUnit -> chargeGas $ MilliGas 1
+      LString s -> chargeGas $ MilliGas $ 1000 * fromIntegral (Text.length s)
+      LInteger i -> chargeGas $ MilliGas $ 1000 * fromIntegral (length (show i))
+      LDecimal d -> chargeGas $ MilliGas $ 1000 * fromIntegral (length (show d))
+      LBool _ -> chargeGas $ MilliGas 1000
+      LUnit -> chargeGas $ MilliGas 1000
 
 
 decodeRowData :: ByteString -> Maybe RowData

@@ -212,26 +212,28 @@ write'
   -> m ()
 write' serial db txId txLog gasCallback wt domain k v = do
   case domain of
-    DUserTables tbl -> _encodeRowData serial gasCallback v >>= \encoded -> liftIO (checkInsertOk tbl k) >>= \case
-      Nothing -> liftIO $ withStmt db ("INSERT INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
-        let
-          RowKey k' = k
-        TxId i <- readIORef txId
-        SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-        doWrite stmt (TxLog (_tableName tbl) k' encoded:)
+    DUserTables tbl -> liftIO (checkInsertOk tbl k) >>= \case
+      Nothing -> do
+        encoded <- _encodeRowData serial gasCallback v
+        liftIO $ withStmt db ("INSERT INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
+          let
+            RowKey k' = k
+          TxId i <- readIORef txId
+          SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
+          doWrite stmt (TxLog (_tableName tbl) k' encoded:)
 
       Just old -> do
         let
           RowData old' = old
           RowData v' = v
           new = RowData (Map.union v' old')
-        encoded2 <- _encodeRowData serial gasCallback new
+        encoded <- _encodeRowData serial gasCallback new
         liftIO $ withStmt db ("INSERT OR REPLACE INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
           let
             RowKey k' = k
           TxId i <- readIORef txId
-          SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded2]
-          doWrite stmt (TxLog (_tableName tbl) k' encoded2:)
+          SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
+          doWrite stmt (TxLog (_tableName tbl) k' encoded:)
 
     DKeySets -> liftIO $ withStmt db "INSERT OR REPLACE INTO \"SYS:KEYSETS\" (txid, rowkey, rowdata) VALUES (?,?,?)" $ \stmt -> do
       let encoded = _encodeKeySet serial v
