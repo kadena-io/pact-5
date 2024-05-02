@@ -96,7 +96,10 @@ benchArithBinOp op pdb =
 benchPow :: BuiltinBenches
 benchPow pdb =
   [ C.bgroup "integer"
-    [ runNativeBenchmark pdb title [text|(^ $x $x)|] | (title, x) <- take 3 $ enumExpText 1000 100 ]
+    [ runNativeBenchmark pdb (xTitle <> "_" <> yTitle) [text|(^ $x $y)|]
+    | (xTitle, x) <- take 3 $ enumExpText 1000 100
+    , (yTitle, y) <- take 3 $ enumExpText 1000 100
+    ]
   , C.bgroup "float"
     [ runNativeBenchmark pdb title [text|(^ $x.0 $x.0)|] | (title, x) <- floatVals ]
   , C.bgroup "float_int"
