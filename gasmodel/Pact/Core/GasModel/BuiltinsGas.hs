@@ -79,8 +79,8 @@ enumExpScopedIdent base mult =
 
 type BuiltinBenches = PactDb CoreBuiltin () -> [C.Benchmark]
 
-benchArithBinOp' :: Integer -> T.Text -> BuiltinBenches
-benchArithBinOp' growthFactor op pdb =
+benchArithBinOp :: T.Text -> BuiltinBenches
+benchArithBinOp op pdb =
   [ C.bgroup "integer"
     [ runNativeBenchmark pdb title [text|($op $x $x)|] | (title, x) <- vals ]
   , C.bgroup "float"
@@ -91,10 +91,21 @@ benchArithBinOp' growthFactor op pdb =
     [ runNativeBenchmark pdb title [text|($op $x $x.0)|] | (title, x) <- vals ]
   ]
   where
-  vals = take 3 $ enumExpText 1000 growthFactor
+  vals = take 3 $ enumExpText 1000 1000000
 
-benchArithBinOp :: T.Text -> BuiltinBenches
-benchArithBinOp = benchArithBinOp' 1000000
+benchPow :: BuiltinBenches
+benchPow pdb =
+  [ C.bgroup "integer"
+    [ runNativeBenchmark pdb title [text|(^ $x $x)|] | (title, x) <- take 3 $ enumExpText 1000 100 ]
+  , C.bgroup "float"
+    [ runNativeBenchmark pdb title [text|(^ $x.0 $x.0)|] | (title, x) <- floatVals ]
+  , C.bgroup "float_int"
+    [ runNativeBenchmark pdb title [text|(^ $x.0 $x)|] | (title, x) <- floatVals ]
+  , C.bgroup "int_float"
+    [ runNativeBenchmark pdb title [text|(^ $x $x.0)|] | (title, x) <- floatVals ]
+  ]
+  where
+  floatVals = take 3 $ enumExpText 10 3
 
 benchArithUnOp :: T.Text -> BuiltinBenches
 benchArithUnOp op pdb =
@@ -529,7 +540,7 @@ benchesForBuiltin bn = case bn of
   CoreDivide -> benchArithBinOp "/"
   CoreNegate -> benchNegate
   CoreAbs -> benchArithUnOp "abs"
-  CorePow -> benchArithBinOp' 100 "^"
+  CorePow -> benchPow
   CoreNot -> omittedDeliberately
   CoreEq -> benchEqOp "="
   CoreNeq -> benchEqOp "!="
