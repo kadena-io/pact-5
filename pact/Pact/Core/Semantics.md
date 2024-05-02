@@ -61,260 +61,424 @@ TICKSTRING     ::= '\'' alpha {alpha | digit | '-' | '_'}
 | enforce-one |  with-capability   | create-user-guard |
 |     try     |       error        |       progn       |
 
-#### Productions
-
-##### Verified
-
-```bnf
-//<program> ::= <toplevel> { <toplevel> }
-//
-//<toplevel> ::= <module> | <interface> | <use> | <expr>
-//
-//<module> ::= '(' module IDENT <Governance> <MDocOrModuleModel> <ExtOrDefs> ')'
-//
-//<interface> ::= '(' interface IDENT <MDocOrModel> <ImportOrIfDef> ')'
-```
-
 ##### In Progress
 
+```javascript
+/* Whitespace */
+CRLF="regexp:\R"
+WHITE_SPACE="regexp:[ \n\t\f]"
+
+/* Comments */
+COMMENT="regexp:(;.*\n*)"
+
+/* Keywords */
+KEYWORD_BLESS="bless"
+KEYWORD_ENFORCE="enforce"
+KEYWORD_ENFORCE_ONE="enforce-one"
+KEYWORD_IF="if"
+KEYWORD_IMPLEMENTS="implements"
+KEYWORD_INTERFACE="interface"
+KEYWORD_LAMBDA="lambda"
+KEYWORD_LET="regexp:(let\*?)"
+KEYWORD_MODULE="module"
+KEYWORD_BLOCK_INTRO="progn"
+KEYWORD_STEP="step"
+KEYWORD_STEP_WITH_ROLLBACK="step-with-rollback"
+KEYWORD_SUSPEND="suspend"
+KEYWORD_TRY="try"
+KEYWORD_IMPORT="use"
+
+/* Keywords (Capabilities) */
+KEYWORD_CREATE_USER_GUARD="create-user-guard"
+KEYWORD_WITH_CAPABILITY="with-capability"
+
+/* Keywords (Definitions) */
+KEYWORD_DEF_CAP="defcap"
+KEYWORD_DEF_CONST="defconst"
+KEYWORD_DEF_PACT="defpact"
+KEYWORD_DEF_SCHEMA="defschema"
+KEYWORD_DEF_TABLE="deftable"
+KEYWORD_DEFUN="defun"
+
+/* Keywords (REPL) */
+KEYWORD_LOAD="load"
+
+/* Annotations */
+KEYWORD_DOC_ANNOTATION="@doc"
+KEYWORD_EVENT_ANNOTATION="@event"
+KEYWORD_MANAGED_ANNOTATION="@managed"
+KEYWORD_MODEL_ANNOTATION="@model"
+
+/* Literals */
+STR="regexp:(\"([^\"\\]|\\\"|\\)*\")"
+INTEGER="regexp:([+-]?[0-9]+)"
+FLOATING_POINT="regexp:([+-]?([0-9]+\.[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?)"
+TRUE="true"
+FALSE="false"
+
+/* Identifiers */
+TICK="regexp:'[a-zA-Z][a-zA-Z0-9\-_]*"
+IDENTIFIER="regexp:[a-zA-Z_][a-zA-Z0-9\-_]*"
+
+/* Operators (Arithmetic) */
+PLUS="+"
+MINUS="-"
+MULTIPLY="*"
+DIVIDE="/"
+POW="^"
+ABS="abs"
+CEILING="ceiling"
+FLOOR="floor"
+LOG="log"
+LN="ln"
+DECIMAL="dec"
+EXP="exp"
+MOD="mod"
+ROUND="round"
+SQRT="sqrt"
+
+/* Operators (Assignment) */
+BIND_ASSIGN=":="
+
+/* Operators (Bitwise) */
+BITWISE_AND="&"
+BITWISE_OR="|"
+BITWISE_REVERSE="~"
+BITWISE_SHIFT="shift"
+BITWISE_XOR="xor"
+
+/* Operators (Logical) */
+AND="and"
+AND_SHORT_CIRCUIT="and?"
+NOT="not"
+NOT_SHORT_CIRCUIT="not?"
+OR="or"
+OR_SHORT_CIRCUIT="or?"
+
+/* Operators (Relational) */
+EQUAL="="
+NOT_EQUAL="!="
+LESS_THAN="<"
+LESS_THAN_OR_EQUAL="<="
+GREATER_THAN=">"
+GREATER_THAN_OR_EQUAL=">="
+
+/* Delimiters */
+PAREN_OPEN="("
+PAREN_CLOSE=")"
+BRACE_OPEN="{"
+BRACE_CLOSE="}"
+BRACKET_OPEN="["
+BRACKET_CLOSE="]"
+COLON=":"
+COMMA=","
+DOT="."
+DYN_ACC="::"
+```
+
+#### Productions
+
 ```bnf
-Program ::= ProgramList | ReplProgramList
+Program ::= ReplProgramList
+          | ProgramList
+
+/* Top Level */
 
 ProgramList ::= TopLevel+
 
-ReplProgramList ::= ReplTopLevel+
-
 TopLevel ::= Module
            | Interface
-           | Expr
            | Use
+           | Expression
 
-ReplTopLevel ::= TopLevel
-               | "(" Defun ")"
-               | "(" DefConst ")"
-               | "(" ReplSpecial ")"
+/* Top Level (REPL) */
 
-ReplSpecial ::= "load" STR BOOLEAN
-              | "load" STR
+ReplProgramList ::= ReplTopLevel+
 
-Governance ::= StringRaw
-             | IDENT
+ReplTopLevel ::= ReplSpecial
+               | Defun
+               | DefConst
+               | TopLevel
 
-StringRaw ::= STR
-            | TICK
+ReplSpecial ::= "(" KEYWORD_LOAD STR Boolean? ")"
 
-Module ::= "(" "module" IDENT Governance [MDocOrModel] ExtOrDefs ")"
+/* Annotations & Documentation */
 
-Interface ::= "(" "interface" IDENT [MDocOrModel] ImportOrIfDef ")"
+MDocOrModel ::= DocumentationAnnotation ModelAnnotation
+              | ModelAnnotation DocumentationAnnotation
+              | DocumentationAnnotation
+              | ModelAnnotation
+              | DocumentationString
 
-Ext ::= Use
-        | "(" "implements" ModQual ")"
-        | "(" "bless" StringRaw ")"
+MDCapMeta ::= ManagedAnnotation
+            | EventAnnotation
 
-Use ::= "(" "import" ModQual ImportList ")"
-        | "(" "import" ModQual STR ImportList ")"
+MModel ::= ModelAnnotation
 
-ExtOrDefs ::= (Def | Ext)+
+MDoc ::= DocumentationAnnotation
+       | DocumentationString
 
-Def ::= Defun
-              | DefConst
-              | Defcap
-              | Defschema
-              | Deftable
-              | DefPact
+DocumentationAnnotation ::= KEYWORD_DOC_ANNOTATION STR
 
-ImportOrIfDef ::= (IfDef | Use)+
+DocumentationString ::= STR
 
-IfDef ::= IfDefun
-                | DefConst
-                | IfDefCap
-                | Defschema
-                | IfDefPact
+EventAnnotation ::= KEYWORD_EVENT_ANNOTATION
 
-IfDefun   ::= "(" "defun" IDENT [MTypeAnn] "(" MArgs ")" [MDocOrModel] ")"
-IfDefCap  ::= "(" "defcap" IDENT [MTypeAnn] "(" MArgs ")" [MDocOrModel] [MDCapMeta] ")"
-IfDefPact ::= "(" "defpact" IDENT [MTypeAnn] "(" MArgs ")" [MDocOrModel] ")"
+ManagedAnnotation ::= KEYWORD_MANAGED_ANNOTATION (IDENTIFIER ParsedName)*
 
-ImportList ::= "[" ImportNames "]"
+ModelAnnotation ::= KEYWORD_MODEL_ANNOTATION "[" PactFVModels "]"
 
-ImportNames ::= IDENT+
+/* Module */
 
-Defun     ::= "(" "defun" IDENT [MTypeAnn] "(" [MArgs] ")" [MDocOrModel] Block ")"
-Defcap    ::= "(" "defcap" IDENT [MTypeAnn] "(" [MArgs] ")" [MDocOrModel] [MDCapMeta] Block ")"
-DefPact   ::= "(" "defpact" IDENT [MTypeAnn] "(" MArgs ")" [MDocOrModel] Steps ")"
-DefConst  ::= "(" "defconst" IDENT [MTypeAnn] Expr [MDoc] ")"
-Defschema ::= "(" "defschema" IDENT [MDocOrModel] SchemaArgList ")"
-Deftable  ::= "(" "deftable" IDENT ":" "{" ParsedName "}" [MDoc] ")"
+Module ::= "(" KEYWORD_MODULE IDENTIFIER Governance [MDocOrModel] (Definition | Extension)+ ")"
 
-Steps ::= Step+
+ModuleNames ::= ModuleQualifier ("," ModuleQualifier)*
 
-Step ::= "(" "step" Expr [MModel] ")"
-       | "(" "step" Expr Expr [MModel] ")"
-       | "(" "step-with-rollback" Expr Expr [MModel] ")"
-       | "(" "step-with-rollback" Expr Expr Expr [MModel] ")"
+Governance ::= String
+             | IDENTIFIER
 
-MDCapMeta ::= Managed
-            | Event
+Interface ::= "(" KEYWORD_INTERFACE IDENTIFIER [MDocOrModel] (InterfaceDefinition | Use)+ ")"
 
-Managed ::= "@managed" (IDENT ParsedName)*
+/* Extensions */
 
-Event ::= "@event"
+Extension ::= Use
+            | "(" KEYWORD_IMPLEMENTS ModuleQualifier ")"
+            | "(" KEYWORD_BLESS String ")"
+
+Use ::= "(" KEYWORD_IMPORT ModuleQualifier STR? ImportList? ")"
+
+ImportList ::= "[" [IDENTIFIER+] "]"
+
+/* Definitions */
+
+Definition ::= DefCap
+             | DefConst
+             | DefPact
+             | DefSchema
+             | DefTable
+             | Defun
+
+DefCap    ::= "(" KEYWORD_DEF_CAP IDENTIFIER [MTypeAnn] "(" [MArgs] ")" [MDocOrModel] [MDCapMeta] Block ")"
+DefConst  ::= "(" KEYWORD_DEF_CONST IDENTIFIER [MTypeAnn] Expression [MDoc] ")"
+DefPact   ::= "(" KEYWORD_DEF_PACT IDENTIFIER [MTypeAnn] "(" MArgs ")" [MDocOrModel] Steps ")"
+DefSchema ::= "(" KEYWORD_DEF_SCHEMA IDENTIFIER [MDocOrModel] SchemaArgumentList ")"
+DefTable  ::= "(" KEYWORD_DEF_TABLE IDENTIFIER ":" "{" ParsedName "}" [MDoc] ")"
+Defun     ::= "(" KEYWORD_DEFUN IDENTIFIER [MTypeAnn] "(" [MArgs] ")" [MDocOrModel] Block ")"
 
 MArgs ::= MArg*
 
-MArg ::= IDENT ":" Type
-       | IDENT
+MArg ::= IDENTIFIER ":" TypeDeclaration
+       | IDENTIFIER
 
-SchemaArgList ::= SchemaArg (SchemaArg) *
+MTypeAnn ::= ":" TypeDeclaration
 
-SchemaArg ::= IDENT (":" Type)?
+SchemaArgumentList ::= SchemaArgument (SchemaArgument)*
 
-Type ::= "[" Type "]"
-       | "module" "{" ModuleNames "}"
-       | IDENT "{" ParsedTyName "}"
-       | IDENT
+SchemaArgument ::= IDENTIFIER (":" TypeDeclaration)?
 
-ModuleNames ::= ModQual ("," ModQual) *
+/* Definitions (Interface) */
 
-DocAnn ::= "@doc" STR
+InterfaceDefinition ::= IfDefCap
+                      | DefConst
+                      | IfDefPact
+                      | DefSchema
+                      | IfDefun
 
-DocStr ::= STR
+IfDefCap  ::= "(" KEYWORD_DEF_CAP IDENTIFIER [MTypeAnn] "(" MArgs ")" [MDocOrModel] [MDCapMeta] ")"
+IfDefPact ::= "(" KEYWORD_DEF_PACT IDENTIFIER [MTypeAnn] "(" MArgs ")" [MDocOrModel] ")"
+IfDefun   ::= "(" KEYWORD_DEFUN IDENTIFIER [MTypeAnn] "(" MArgs ")" [MDocOrModel] ")"
 
-MModel ::= ModelAnn
-
-ModelAnn ::= "@model" "[" PactFVModels "]"
-
-MDocOrModel ::= DocAnn ModelAnn
-              | ModelAnn DocAnn
-              | DocAnn
-              | ModelAnn
-              | DocStr
-
-MDoc ::= DocAnn
-       | DocStr
-
-MTypeAnn ::= ":" Type
+/* Expressions */
 
 Block ::= BlockBody
 
-BlockBody ::= Expr+
+BlockBody ::= Expression+
 
-Expr ::= "(" SExpr ")"
-       | Atom
+Expression ::= "(" SymbolicExpression ")"
+             | Variable
+             | DataType
+             | Operator
 
-SExpr ::= LamExpr
-        | LetExpr
-        | IfExpr
-        | TryExpr
-        | ProgNExpr
-        | GenAppExpr
-        | SuspendExpr
-        | CapExpr
+SymbolicExpression ::= LambdaExpression
+                     | LetExpression
+                     | IfExpression
+                     | TryExpression
+                     | SuspendExpression
+                     | ProgNExpression
+                     | CapabilityExpression
+                     | GenericExpression
 
-List ::= "[" [ListExprs] "]"
+LambdaExpression ::= KEYWORD_LAMBDA "(" LambdaArguments ")" Block
 
-ListExprs ::= Expr MCommaExpr?
+LambdaArguments ::= LambdaArgument (LambdaArgument)*
 
-MCommaExpr ::= "," ExprCommaSep
-             | AppList
+LambdaArgument ::= IDENTIFIER (":" TypeDeclaration)?
 
-ExprCommaSep ::= Expr ("," Expr) *
+LetExpression ::= KEYWORD_LET "(" Binders ")" Block
 
-LamExpr ::= "lambda" "(" LamArgs ")" Block
+Binders ::= ("(" IDENTIFIER [MTypeAnn] Expression ")")+
 
-IfExpr ::= "if" Expr Expr Expr
+IfExpression ::= KEYWORD_IF Expression Expression Expression
 
-TryExpr ::= "try" Expr Expr
+TryExpression ::= KEYWORD_TRY Expression Expression
 
-SuspendExpr ::= "suspend" Expr
+SuspendExpression ::= KEYWORD_SUSPEND Expression
 
-CapExpr ::= CapForm
+ProgNExpression ::= KEYWORD_BLOCK_INTRO BlockBody
 
-CapForm ::= "with-capability" Expr Block
-          | "create-user-guard" "(" ParsedName AppList ")"
+CapabilityExpression ::= CapabilityForm
 
-LamArgs ::= LamArg (LamArg)*
-LamArg ::= IDENT (":" Type)?
+CapabilityForm ::= KEYWORD_WITH_CAPABILITY Expression Block
+                 | KEYWORD_CREATE_USER_GUARD "(" ParsedName AppList ")"
 
+AppList ::= Expression*
 
-LetExpr ::= LET_KEYWORD "(" Binders ")" Block
+GenericExpression ::= Expression AppBindList
 
-Binders ::= ("(" IDENT MTypeAnn Expr ")")+ // Type annotation fault
-
-GenAppExpr ::= Expr AppBindList // Check * ?
-
-ProgNExpr ::= "progn" BlockBody
-
-AppList ::= Expr* // Was +
-
-AppBindList ::= (Expr | BindingForm)*
+AppBindList ::= (Expression | BindingForm)*
 
 BindingForm ::= "{" BindPairs "}"
+
+BindPairs ::= BindPair ("," BindPair)*
 
 BindPair ::= STR ":=" MArg
            | TICK ":=" MArg
 
-BindPairs ::= BindPair ("," BindPair)*
+/* Steps */
 
-Atom ::= Var
-       | Number
-       | String
-       | List
-       | Bool
-       | Operator
-       | Object
-       | "(" ")"
+Steps ::= Step+
 
-Operator ::= "and"
-           | "or"
-           | "enforce"
-           | "enforce-one"
+Step ::= "(" KEYWORD_STEP Expression [MModel] ")"
+       | "(" KEYWORD_STEP Expression Expression [MModel] ")"
+       | "(" KEYWORD_STEP_WITH_ROLLBACK Expression Expression [MModel] ")"
+       | "(" KEYWORD_STEP_WITH_ROLLBACK Expression Expression Expression [MModel] ")"
 
-Bool ::= "true"
-       | "false"
+/* Variables & Names */
 
-Var ::= IDENT "." ModQual
-      | IDENT
-      | IDENT "::" IDENT
+Variable ::= IDENTIFIER "." ModuleQualifier
+           | IDENTIFIER "::" IDENTIFIER
+           | IDENTIFIER
 
-ParsedName ::= IDENT "." ModQual
-             | IDENT
-             | IDENT "::" IDENT
+ParsedName ::= IDENTIFIER "." ModuleQualifier
+             | IDENTIFIER "::" IDENTIFIER
+             | IDENTIFIER
 
-ParsedTyName ::= IDENT "." ModQual
-               | IDENT
+ParsedTypeName ::= IDENTIFIER "." ModuleQualifier
+                 | IDENTIFIER
 
-ModQual ::= IDENT "." IDENT
-          | IDENT
+ModuleQualifier ::= IDENTIFIER "." IDENTIFIER
+                  | IDENTIFIER
 
-Number ::= ["+" | "-"] NUM+ ["." NUM+]
+/* Data Types */
+
+TypeDeclaration ::= "[" TypeDeclaration "]"
+                  | "module" "{" ModuleNames "}"
+                  | IDENTIFIER "{" ParsedTypeName "}"
+                  | IDENTIFIER
+
+DataType ::= CompositeDataType
+           | AtomicDataType
+           | "(" ")"
+
+CompositeDataType ::= List
+                    | Object
+
+AtomicDataType ::= Number
+                 | String
+                 | Boolean
+
+/* Data Types (Composite) */
+
+List ::= "[" [ListExpression] "]"
+
+ListExpression ::= Expression MCommaExpression?
+
+MCommaExpression ::= "," ExpressionCommaSep
+                   | AppList
+
+ExpressionCommaSep ::= Expression ("," Expression)*
+
+Object ::= "{" ObjectBody? "}"
+
+ObjectBody ::= FieldPair ("," FieldPair)*
+
+FieldPair ::= STR ":" Expression
+            | TICK ":" Expression
+
+/* Data Types (Atomic) */
+
+Number ::= FLOATING_POINT
+         | INTEGER
 
 String ::= STR
          | TICK
 
-Object ::= "{" ObjectBody "}"
+Boolean ::= TRUE
+          | FALSE
 
-ObjectBody ::= FieldPairs
+/* Operators */
 
-FieldPair ::= STR ":" Expr
-            | TICK ":" Expr
+Operator ::= ArithmeticOperator
+           | AssignmentOperator
+           | LogicalOperator
+           | RelationalOperator
+           | BitwiseOperator
+           | KEYWORD_ENFORCE
+           | KEYWORD_ENFORCE_ONE
 
-FieldPairs ::= FieldPair ("," FieldPair)*
+ArithmeticOperator ::= PLUS
+                     | MINUS
+                     | MULTIPLY
+                     | DIVIDE
+                     | POW
+                     | ABS
+                     | CEILING
+                     | FLOOR
+                     | LOG
+                     | LN
+                     | DECIMAL
+                     | EXP
+                     | MOD
+                     | ROUND
+                     | SQRT
 
-PactFVModels ::= PropExprList
+AssignmentOperator ::= BIND_ASSIGN
 
-PropExprList ::= PropExpr* // Verify *
+BitwiseOperator ::= BITWISE_AND
+                  | BITWISE_OR
+                  | BITWISE_REVERSE
+                  | BITWISE_SHIFT
+                  | BITWISE_XOR
 
-PropExpr ::= PropAtom
-           | "(" PropExprList ")"
-           | "[" PropExprList "]"
+LogicalOperator ::= AND
+                  | AND_SHORT_CIRCUIT
+                  | NOT
+                  | NOT_SHORT_CIRCUIT
+                  | OR
+                  | OR_SHORT_CIRCUIT
 
-PropAtom ::= FVVar
-           | FVNumber
-           | FVString
+RelationalOperator ::= EQUAL
+                     | NOT_EQUAL
+                     | LESS_THAN
+                     | LESS_THAN_OR_EQUAL
+                     | GREATER_THAN
+                     | GREATER_THAN_OR_EQUAL
+
+PactFVModels ::= PropExpressionList
+
+PropExpressionList ::= PropExpression*
+
+PropExpression ::= PropAtom
+                 | "(" PropExpressionList ")"
+                 | "[" PropExpressionList "]"
+
+PropAtom ::= Variable
+           | Number
+           | String
            | FVKeyword
            | FVDelim
-           | FVBool
+           | Boolean
+           | Operator
 
 FVKeyword ::= "let"
             | "lambda"
@@ -333,18 +497,6 @@ FVDelim ::= "{"
           | "}"
           | ":"
           | ","
-
-FVBool ::= "true"
-         | "false"
-
-FVNumber ::= ["+" | "-"] NUM+ ["." NUM+]
-
-FVString ::= STR
-           | TICK
-
-FVVar ::= IDENT "." ModQual
-        | IDENT
-        | IDENT "::" IDENT
 ```
 
 ## Modules
