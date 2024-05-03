@@ -1,23 +1,23 @@
 ## create-capability-pact-guard
-Use `create-capability-pact-guard` to create a guard that enforces that a specified *`CAPABILITY`* is acquired and that the currently-executing `defpact` is operational.
+Use `create-capability-pact-guard` to create a guard that enforces that a specified `CAPABILITY` is acquired and that the currently-executing `defpact` is operational.
 
 ### Basic syntax
 
-To create a guard that enforces the acquisition of a *`CAPABILITY`* and checks for an operational `defpact`, use the following syntax:
+To create a guard that enforces the acquisition of a `CAPABILITY` and checks for an operational `defpact`, use the following syntax:
 
-create-capability-pact-guard *`CAPABILITY`*
+`(create-capability-pact-guard CAPABILITY)`
 
 ### Arguments
 
-Use the following argument to specify the *`CAPABILITY`* for the `create-capability-pact-guard` Pact function.
+Use the following argument to specify the `CAPABILITY` for the `create-capability-pact-guard` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| capability | capability | Specifies the capability that the guard will enforce acquisition for. |
+| `CAPABILITY` | `capability` | Specifies the capability that the guard will enforce acquisition for. |
 
 ### Return values
 
-The `create-capability-pact-guard` function returns a guard that enforces the acquisition of the specified *`CAPABILITY`* and checks for an operational `defpact`.
+The `create-capability-pact-guard` function returns a guard that enforces the acquisition of the specified `CAPABILITY` and checks for an operational `defpact`.
 
 ### Examples
 
