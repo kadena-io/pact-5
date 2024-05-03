@@ -1,24 +1,24 @@
 ## constantly
-Use `constantly` to lazily ignore the specified arguments *`IGNORE*` and return the specified *`VALUE`*.
+Use `constantly` to lazily ignore the specified arguments `IGNORE` and return the specified `VALUE`.
 
 ### Basic syntax
 
 To lazily ignore arguments and return a value, use the following syntax:
 
-constantly *value* *ignore1* *ignore2* *ignore3* ...
+`(constantly value ignore1 ignore2 ignore3 ...)`
 
 ### Arguments
 
-Use the following arguments to specify the *`VALUE`* to return and the *`IGNORE*` arguments for the `constantly` Pact function.
+Use the following arguments to specify the `VALUE` to return and the `IGNORE` arguments for the `constantly` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| value | <a> | Specifies the value to return. |
-| ignore1, ignore2, ignore3, ... | <b>, <c>, <d>, ... | (Optional) Specifies the arguments to ignore. You can have multiple ignore arguments. |
+| `value` | `<a>` | Specifies the value to return. |
+| `ignore1, ignore2, ignore3, ...` | `<b>, <c>, <d>, ...` | (Optional) Specifies the arguments to ignore. You can have multiple ignore arguments. |
 
 ### Return values
 
-The `constantly` function returns the specified *`VALUE`*, ignoring any additional arguments.
+The `constantly` function returns the specified `VALUE`, ignoring any additional arguments.
 
 ### Examples
 
