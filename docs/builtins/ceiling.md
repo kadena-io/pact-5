@@ -1,28 +1,28 @@
 ## ceiling
-Use `ceiling` to round up the value of a decimal *`x`* to the nearest integer or to a specified precision *`prec`* as a decimal.
+Use `ceiling` to round up the value of a decimal `x` to the nearest integer or to a specified precision `prec` as a decimal.
 
 ### Basic syntax
 
-To round up the value of a decimal *`x`* to the nearest integer, use the following syntax:
+To round up the value of a decimal `x` to the nearest integer, use the following syntax:
 
-ceiling *x*
+`(ceiling x)`
 
-To round up the value of a decimal *`x`* to a specified precision *`prec`* as a decimal, use the following syntax:
+To round up the value of a decimal `x` to a specified precision `prec` as a decimal, use the following syntax:
 
-ceiling *x* *prec*
+`(ceiling x prec)`
 
 ### Arguments
 
-Use the following arguments to specify the decimal *`x`* and optional precision *`prec`* for the `ceiling` Pact function.
+Use the following arguments to specify the decimal `x` and optional precision `prec` for the `ceiling` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| x | decimal | Specifies the decimal value to round up. |
-| prec | integer | (Optional) Specifies the precision to which to round the *`x`* value. If not provided, *`x`* is rounded up to the nearest integer. |
+| `x` | `decimal` | Specifies the decimal value to round up. |
+| `prec` | `integer` | (Optional) Specifies the precision to which to round the `x` value. If not provided, `x` is rounded up to the nearest integer. |
 
 ### Return values
 
-The `ceiling` function returns the rounded-up value of *`x`* as either an integer or a decimal based on the input and precision.
+The `ceiling` function returns the rounded-up value of `x` as either an integer or a decimal based on the input and precision.
 
 ### Examples
 
