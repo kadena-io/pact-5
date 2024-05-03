@@ -1,12 +1,12 @@
 The `^` function raises the first argument `x` to the power of the second argument `y`.
 
-## Basic syntax
+### Basic syntax
 
 To raise `x` to the power of `y`, use the following syntax:
 
 ^ *x* *y*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the base and exponent for raising to a power using the `^` Pact function.
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the base and exponent for raising to a po
 | x | <a[integer,decimal]> | Specifies the base value. |
 | y | <a[integer,decimal]> | Specifies the exponent value. |
 
-## Return value
+### Return value
 
 The `^` function returns the result of raising `x` to the power of `y`.
 
-## Examples
+### Examples
 
 The following example demonstrates the usage of the `^` function within a Pact script. It raises `2` to the power of `3`:
 

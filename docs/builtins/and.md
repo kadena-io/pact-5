@@ -1,12 +1,12 @@
 Use `and` to perform a boolean logic AND operation with short-circuiting.
 
-## Basic syntax
+### Basic syntax
 
 To perform a boolean logic AND operation between two boolean values, use the following syntax:
 
 and *x* *y*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the boolean values for the `and` operation.
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the boolean values for the `and` operatio
 | x | bool | Specifies the first boolean value for the AND operation. |
 | y | bool | Specifies the second boolean value for the AND operation. |
 
-## Return values
+### Return values
 
 The `and` function returns a boolean value based on the result of the AND operation between the input boolean values.
 
-## Examples
+### Examples
 
 The following example demonstrates the `and` operation in the Pact REPL:
 

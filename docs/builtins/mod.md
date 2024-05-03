@@ -1,12 +1,12 @@
 Use `mod` to compute the remainder of X divided by Y.
 
-## Basic syntax
+### Basic syntax
 
 To compute the remainder of X divided by Y, use the following syntax:
 
 mod *x y*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the integers for which you want to compute the remainder using the `mod` Pact function.
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the integers for which you want to comput
 | x | integer | Specifies the dividend. |
 | y | integer | Specifies the divisor. |
 
-## Return value
+### Return value
 
 The `mod` function returns the remainder of the division of X by Y.
 
-## Examples
+### Examples
 
 The following example demonstrates the use of `mod` in the Pact REPL:
 

@@ -1,12 +1,12 @@
 Use `abs` to calculate the absolute value of a given *`number`*.
 
-## Basic syntax
+### Basic syntax
 
 To calculate the absolute value of a *`number`*, use the following syntax:
 
 abs *number*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the *`number`* for which you want to calculate the absolute value using the `abs` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the *`number`* for which you want to calcu
 | --- | --- | --- |
 | number | decimal or integer | Specifies the number for which to calculate the absolute value. |
 
-## Return values
+### Return values
 
 The `abs` function returns the absolute value of the *`number`* as a decimal or integer, depending on the input type.
 
-## Examples
+### Examples
 
 The following example calculates the absolute value of a decimal number in the Pact REPL:
 

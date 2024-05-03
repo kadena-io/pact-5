@@ -1,12 +1,12 @@
 The `&` function computes the bitwise AND operation between the first argument `x` and the second argument `y`.
 
-## Basic syntax
+### Basic syntax
 
 To compute the bitwise AND operation between `x` and `y`, use the following syntax:
 
 & *x* *y*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the values for bitwise AND operation using the `&` Pact function.
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the values for bitwise AND operation usin
 | x | integer | Specifies the first operand. |
 | y | integer | Specifies the second operand. |
 
-## Return value
+### Return value
 
 The `&` function returns the result of the bitwise AND operation between `x` and `y`.
 
-## Examples
+### Examples
 
 The following examples demonstrate the usage of the `&` function within a Pact script. They perform bitwise AND operations:
 

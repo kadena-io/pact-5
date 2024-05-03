@@ -1,12 +1,12 @@
 Use `filter` to filter a list by applying a function *`APP`* to each element. For each element where *`APP`* returns true, the original value is kept in the resulting list.
 
-## Basic syntax
+### Basic syntax
 
 To filter a list by applying a function to each element, use the following syntax:
 
 filter *app* *list* -> [*result*]
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the function and list for the `filter` Pact function:
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the function and list for the `filter` Pa
 | app      | x:\<a>->bool| Specifies the function to apply to each element of the list. |
 | list     | [\<a>]     | Specifies the list to filter.               |
 
-## Return values
+### Return values
 
 The `filter` function returns a new list containing elements from the original list for which the *`APP`* function returns true.
 
-## Examples
+### Examples
 
 The following example demonstrates the `filter` function:
 

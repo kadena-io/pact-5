@@ -1,12 +1,12 @@
 Use `emit-event` to emit a specified *`CAPABILITY`* as an event without evaluating the body of the capability. This function fails if the *`CAPABILITY`* is not marked as `@managed` or `@event`.
 
-## Basic syntax
+### Basic syntax
 
 To emit a *`CAPABILITY`* as an event without evaluating its body, use the following syntax:
 
 emit-event *capability* -> bool -> bool
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the *`CAPABILITY`* for the `emit-event` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the *`CAPABILITY`* for the `emit-event` Pa
 |------------|------|---------------------------------------------------|
 | capability |      | Specifies the capability to emit as an event.      |
 
-## Return values
+### Return values
 
 The `emit-event` function returns a boolean value indicating success or failure of emitting the event.
 
-## Examples
+### Examples
 
 The following example demonstrates the `emit-event` function:
 

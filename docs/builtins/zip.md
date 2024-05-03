@@ -1,12 +1,12 @@
 The `zip` function combines two lists using a specified function `f` into a new list. The length of the resulting list is determined by the length of the shortest input list.
 
-## Basic syntax
+### Basic syntax
 
 To combine two lists with a specified function `f` into a new list, use the following syntax:
 
 zip *f* *list1* *list2*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the function and the lists for combination using the `zip` Pact function.
 
@@ -16,11 +16,11 @@ Use the following arguments to specify the function and the lists for combinatio
 | list1 | [<a>] | Specifies the first list to be combined. |
 | list2 | [<b>] | Specifies the second list to be combined. |
 
-## Return value
+### Return value
 
 The `zip` function returns a new list containing elements combined from the input lists according to the specified function `f`.
 
-## Examples
+### Examples
 
 The following examples demonstrate the usage of the `zip` function within a Pact script. They combine two lists using specified functions `+` and `-` into new lists:
 

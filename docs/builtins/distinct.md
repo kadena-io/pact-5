@@ -1,12 +1,12 @@
 Use `distinct` to return a list with duplicates removed from a homogeneous list of *`VALUES`*. The original order of the values is preserved.
 
-## Basic syntax
+### Basic syntax
 
 To return a list with duplicates removed from a list of *`VALUES`*, use the following syntax:
 
 distinct *`VALUES`*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the list of *`VALUES`* for the `distinct` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the list of *`VALUES`* for the `distinct` 
 |----------|-------------|------------------------------------------------|
 | values   | [<a>]      | Specifies the list of values with duplicates. |
 
-## Return values
+### Return values
 
 The `distinct` function returns a list with duplicates removed from the specified list of *`VALUES`*.
 
-## Examples
+### Examples
 
 The following example demonstrates the `distinct` function:
 

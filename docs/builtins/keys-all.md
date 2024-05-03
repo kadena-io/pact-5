@@ -1,12 +1,12 @@
 Use `keys-all` as a keyset predicate function to determine if all keys in the keyset are matched.
 
-## Basic syntax
+### Basic syntax
 
 To use `keys-all` to check if all keys in a keyset are matched, use the following syntax:
 
 keys-all *count matched*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the count of keys in the keyset and the count of matched keys using the `keys-all` Pact function.
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the count of keys in the keyset and the c
 | count | integer | Specifies the total count of keys in the keyset. |
 | matched | integer | Specifies the count of matched keys. |
 
-## Return value
+### Return value
 
 The `keys-all` function returns a boolean value indicating whether all keys in the keyset are matched.
 
-## Examples
+### Examples
 
 The following example demonstrates the use of `keys-all` in the Pact REPL:
 

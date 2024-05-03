@@ -1,12 +1,12 @@
 The `shift` function performs a bitwise shift operation on the integer *`X`* by *`Y`* bits. If *`Y`* is positive, it shifts *`X`* to the left; otherwise, it shifts *`X`* to the right. Right shifts perform sign extension on signed number types, filling the top bits with 1 if *`X`* is negative and with 0 otherwise.
 
-## Basic syntax
+### Basic syntax
 
 To shift the integer *`X`* by *`Y`* bits, use the following syntax:
 
 shift *x* *y*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the integer values to be shifted using the `shift` Pact function.
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the integer values to be shifted using th
 | x | integer | Specifies the integer value to be shifted. |
 | y | integer | Specifies the number of bits to shift *`x`* by. |
 
-## Return value
+### Return value
 
 The `shift` function returns the result of shifting *`x`* by *`y`* bits.
 
-## Examples
+### Examples
 
 The following examples demonstrate the usage of the `shift` function within a Pact script.
 

@@ -1,12 +1,12 @@
 Use `dec` to cast an integer *`X`* to a decimal value.
 
-## Basic syntax
+### Basic syntax
 
 To cast an integer *`X`* to a decimal value, use the following syntax:
 
 dec *`X`*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the integer *`X`* for the `dec` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the integer *`X`* for the `dec` Pact funct
 | --- | --- | --- |
 | x | integer | Specifies the integer to cast to a decimal value. |
 
-## Return values
+### Return values
 
 The `dec` function returns the specified integer *`X`* as a decimal value.
 
-## Example
+### Example
 
 The following example demonstrates the `dec` function:
 

@@ -1,12 +1,12 @@
 Use `not?` to apply logical 'not' to the results of applying a value to an application function.
 
-## Basic syntax
+### Basic syntax
 
 To apply logical 'not' to the results of applying a value to an application function, use the following syntax:
 
 not? *app value*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the application function and the value to be applied using the `not?` Pact function.
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the application function and the value to
 | app | x:<r> -> bool | Specifies the application function. |
 | value | <r> | Specifies the value to be applied to the application function. |
 
-## Return value
+### Return value
 
 The `not?` function returns a boolean value representing the logical negation of the result of applying the value to the application function.
 
-## Examples
+### Examples
 
 The following example demonstrates the use of `not?` in the Pact REPL:
 

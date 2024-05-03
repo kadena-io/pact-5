@@ -1,12 +1,12 @@
 The `read-keyset` function is used to read a *`key`* from the message data body as a keyset, where a keyset consists of a list of keys (*`KEYLIST`*) and a predicate function (*`PREDFUN`*).
 
-## Basic syntax
+### Basic syntax
 
 To read a *`key`* from the message data body as a keyset, use the following syntax:
 
 read-keyset *key*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the *`key`* to be read as a keyset using the `read-keyset` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the *`key`* to be read as a keyset using t
 | --- | --- | --- |
 | key | string | Specifies the key to be read from the message data body as a keyset. |
 
-## Return value
+### Return value
 
 The `read-keyset` function returns the keyset object corresponding to the specified *`key`*.
 
-## Example
+### Example
 
 The following example demonstrates the usage of the `read-keyset` function within a Pact script. It reads the *`admin-keyset`* from the message data body:
 

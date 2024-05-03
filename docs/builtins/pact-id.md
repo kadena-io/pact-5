@@ -1,16 +1,16 @@
 Use `pact-id` to return the ID if called during the current pact execution, failing if not.
 
-## Basic syntax
+### Basic syntax
 
 To return the ID during the current pact execution, use the following syntax:
 
 pact-id
 
-## Return value
+### Return value
 
 The `pact-id` function returns a string representing the ID of the current pact execution.
 
-## Examples
+### Examples
 
 The `pact-id` function is called without any arguments. It returns the ID if called during the current pact execution.
 

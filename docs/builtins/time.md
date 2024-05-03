@@ -1,12 +1,12 @@
 The `time` function constructs a time object from a UTC value using the ISO8601 format (%Y-%m-%dT%H:%M:%SZ).
 
-## Basic syntax
+### Basic syntax
 
 To construct a time object from a UTC value, use the following syntax:
 
 time *utcval*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the UTC value for constructing the time object using the `time` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the UTC value for constructing the time ob
 | --- | --- | --- |
 | utcval | string | Specifies the UTC value in ISO8601 format (%Y-%m-%dT%H:%M:%SZ). |
 
-## Return value
+### Return value
 
 The `time` function returns a time object constructed from the provided UTC value.
 
-## Examples
+### Examples
 
 The following example demonstrates the usage of the `time` function within a Pact script. It constructs a time object from the UTC value "2016-07-22T11:26:35Z":
 

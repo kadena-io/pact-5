@@ -1,6 +1,6 @@
 The `select` function retrieves full rows or specified columns from a table by applying a `WHERE` clause to each row to determine inclusion.
 
-## Basic syntax
+### Basic syntax
 
 To select full rows from a table based on a `WHERE` clause, use the following syntax:
 
@@ -10,7 +10,7 @@ To select specific columns from a table based on a `WHERE` clause, use the follo
 
 select *table* [*columns*] *where*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the table, columns, and `WHERE` clause for selecting rows using the `select` Pact function.
 
@@ -20,11 +20,11 @@ Use the following arguments to specify the table, columns, and `WHERE` clause fo
 | columns | [string] | (Optional) Specifies the list of columns to select from the table. |
 | where | row:object:<{row}> | Specifies the `WHERE` clause to apply to each row to determine inclusion. |
 
-## Return value
+### Return value
 
 The `select` function returns a list of objects representing the selected rows from the table that satisfy the `WHERE` condition.
 
-## Examples
+### Examples
 
 The following examples demonstrate the usage of the `select` function within a Pact script.
 

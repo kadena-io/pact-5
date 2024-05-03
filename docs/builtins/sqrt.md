@@ -1,12 +1,12 @@
 The `sqrt` function computes the square root of the given value *`X`*.
 
-## Basic syntax
+### Basic syntax
 
 To calculate the square root of a value, use the following syntax:
 
 sqrt *x*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the value for which to compute the square root using the `sqrt` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the value for which to compute the square 
 | --- | --- | --- |
 | x | \<a[integer,decimal]> | Specifies the value for which to compute the square root. |
 
-## Return value
+### Return value
 
 The `sqrt` function returns the square root of the specified value. The return type matches the type of the input value, either an integer or a decimal.
 
-## Examples
+### Examples
 
 The following example demonstrates the usage of the `sqrt` function within a Pact script. It calculates the square root of the value 25:
 

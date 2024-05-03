@@ -1,12 +1,12 @@
 Use `create-principal` to create a principal that unambiguously identifies a specified *`GUARD`*.
 
-## Basic syntax
+### Basic syntax
 
 To create a principal that identifies a *`GUARD`*, use the following syntax:
 
 create-principal *`GUARD`*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the *`GUARD`* for the `create-principal` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the *`GUARD`* for the `create-principal` P
 | --- | --- | --- |
 | guard | guard | Specifies the guard for which to create a principal. |
 
-## Return values
+### Return values
 
 The `create-principal` function returns a string representing a principal that unambiguously identifies the specified *`GUARD`*.
 
-## Example
+### Example
 
 The following example demonstrates the `create-principal` function:
 

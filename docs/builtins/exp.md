@@ -1,12 +1,12 @@
 Use `exp` to calculate the exponential function of the specified *`X`*.
 
-## Basic syntax
+### Basic syntax
 
 To calculate the exponential function of a value, use the following syntax:
 
 exp *x* -> *result*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the value for the `exp` Pact function:
 
@@ -14,11 +14,11 @@ Use the following argument to specify the value for the `exp` Pact function:
 |----------|------------------|---------------------------------------------|
 | x        | integer or decimal| Specifies the value for which to calculate the exponential function. |
 
-## Return values
+### Return values
 
 The `exp` function returns the exponential function of the specified value.
 
-## Examples
+### Examples
 
 The following example demonstrates the `exp` function:
 

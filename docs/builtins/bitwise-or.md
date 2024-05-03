@@ -1,12 +1,12 @@
 The `|` function computes the bitwise OR operation between two integers.
 
-## Basic syntax
+### Basic syntax
 
 To compute the bitwise OR operation between two integers, use the following syntax:
 
 | *x* *y*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the integers for the bitwise OR operation using the `|` Pact function.
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the integers for the bitwise OR operation
 | x | integer | Specifies the first integer for the OR operation. |
 | y | integer | Specifies the second integer for the OR operation. |
 
-## Return value
+### Return value
 
 The `|` function returns the result of the bitwise OR operation as an integer.
 
-## Examples
+### Examples
 
 The following examples demonstrate the usage of the `|` function within a Pact script. They compute the bitwise OR operation between two integers:
 

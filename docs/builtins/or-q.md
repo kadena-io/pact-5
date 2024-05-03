@@ -1,12 +1,12 @@
 Use `or?` to apply logical 'or' with short-circuit evaluation to the results of applying a value to two application functions.
 
-## Basic syntax
+### Basic syntax
 
 To apply logical 'or' with short-circuit evaluation to the results of applying a value to two application functions, use the following syntax:
 
 or? *a b value*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the application functions and the value to be applied using the `or?` Pact function.
 
@@ -16,11 +16,11 @@ Use the following arguments to specify the application functions and the value t
 | b | x:<r> -> bool | Specifies the second application function. |
 | value | <r> | Specifies the value to be applied to both application functions. |
 
-## Return value
+### Return value
 
 The `or?` function returns a boolean value representing the logical 'or' operation with short-circuit evaluation applied to the results of applying the value to the two application functions.
 
-## Examples
+### Examples
 
 The following example demonstrates the use of `or?` in the Pact REPL:
 

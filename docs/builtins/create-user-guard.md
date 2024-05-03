@@ -1,12 +1,12 @@
 Use `create-user-guard` to define a custom guard *`CLOSURE`* whose arguments are strictly evaluated at definition time and supplied to the indicated function at enforcement time.
 
-## Basic syntax
+### Basic syntax
 
 To define a custom guard *`CLOSURE`* for use in Pact, use the following syntax:
 
 create-user-guard *`CLOSURE`*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the *`CLOSURE`* for the `create-user-guard` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the *`CLOSURE`* for the `create-user-guard
 | --- | --- | --- |
 | closure | closure | Specifies the custom guard closure to define. The closure is a function that takes no arguments and returns a boolean value. |
 
-## Return values
+### Return values
 
 The `create-user-guard` function returns a guard that utilizes the specified custom *`CLOSURE`*.
 
-## Example
+### Example
 
 The following example demonstrates the `create-user-guard` function:
 

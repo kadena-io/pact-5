@@ -1,12 +1,12 @@
 Use `describe-module` to get metadata for a specified *`MODULE`*. This function returns an object with fields including 'name', 'hash', 'blessed', 'code', and 'keyset'.
 
-## Basic syntax
+### Basic syntax
 
 To get metadata for a *`MODULE`*, use the following syntax:
 
 describe-module *`MODULE`*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the *`MODULE`* for the `describe-module` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the *`MODULE`* for the `describe-module` P
 |----------|--------|----------------------------------------------|
 | module   | string | Specifies the name of the module to describe.|
 
-## Return values
+### Return values
 
 The `describe-module` function returns an object with metadata for the specified *`MODULE`*.
 
-## Examples
+### Examples
 
 The following example demonstrates the `describe-module` function:
 

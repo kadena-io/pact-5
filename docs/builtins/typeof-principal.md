@@ -1,12 +1,12 @@
 The `typeof-principal` function returns the protocol type of a given PRINCIPAL value. If the input value is not a principal type, then an empty string is returned.
 
-## Basic syntax
+### Basic syntax
 
 To determine the protocol type of a principal value, use the following syntax:
 
 typeof-principal *principal*
 
-## Argument
+### Argument
 
 Use the following argument to specify the PRINCIPAL value for which to determine the protocol type using the `typeof-principal` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the PRINCIPAL value for which to determine
 | --- | --- | --- |
 | principal | string | Specifies the principal value for which to determine the protocol type. |
 
-## Return value
+### Return value
 
 The `typeof-principal` function returns the protocol type of the given PRINCIPAL value as a string. If the input value is not a principal type, an empty string is returned.
 
-## Examples
+### Examples
 
 The following example demonstrates the usage of the `typeof-principal` function within a Pact script. It determines the protocol type of a given principal value:
 

@@ -1,6 +1,6 @@
 The `hours` function calculates a time duration in hours, which can be used with the `add-time` function to add a specific number of hours to a given time.
 
-## Syntax
+### Syntax
 
 The syntax for the `hours` function is as follows:
 
@@ -8,17 +8,17 @@ The syntax for the `hours` function is as follows:
 hours *n* -> *decimal*
 ```
 
-## Arguments
+### Arguments
 
 - `n`: Specifies the number of hours as either a decimal or an integer.
 
-## Return Value
+### Return Value
 
 The `hours` function returns a decimal value representing the specified number of hours.
 
-## Examples
+### Examples
 
-### Adding hours to a time:
+#### Adding hours to a time:
 
 ```lisp
 (add-time (time "2016-07-22T12:00:00Z") (hours 1))
@@ -26,7 +26,7 @@ The `hours` function returns a decimal value representing the specified number o
 
 In this example, the `add-time` function is used to add one hour to the time represented by the string `"2016-07-22T12:00:00Z"`.
 
-### Specifying hours as an integer:
+#### Specifying hours as an integer:
 
 ```lisp
 (hours 3)
@@ -34,7 +34,7 @@ In this example, the `add-time` function is used to add one hour to the time rep
 
 In this example, the `hours` function specifies 3 hours as an integer value.
 
-### Specifying hours as a decimal:
+#### Specifying hours as a decimal:
 
 ```lisp
 (hours 2.5)

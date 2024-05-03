@@ -1,6 +1,6 @@
 Use `ceiling` to round up the value of a decimal *`x`* to the nearest integer or to a specified precision *`prec`* as a decimal.
 
-## Basic syntax
+### Basic syntax
 
 To round up the value of a decimal *`x`* to the nearest integer, use the following syntax:
 
@@ -10,7 +10,7 @@ To round up the value of a decimal *`x`* to a specified precision *`prec`* as a 
 
 ceiling *x* *prec*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the decimal *`x`* and optional precision *`prec`* for the `ceiling` Pact function.
 
@@ -19,11 +19,11 @@ Use the following arguments to specify the decimal *`x`* and optional precision 
 | x | decimal | Specifies the decimal value to round up. |
 | prec | integer | (Optional) Specifies the precision to which to round the *`x`* value. If not provided, *`x`* is rounded up to the nearest integer. |
 
-## Return values
+### Return values
 
 The `ceiling` function returns the rounded-up value of *`x`* as either an integer or a decimal based on the input and precision.
 
-## Examples
+### Examples
 
 The following example rounds up a decimal value to the nearest integer in the Pact REPL:
 

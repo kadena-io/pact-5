@@ -1,12 +1,12 @@
 The `read-string` function is used to parse a *`key`* string or number value from the top level of the message data body as a string.
 
-## Basic syntax
+### Basic syntax
 
 To parse a *`key`* string as a string, use the following syntax:
 
 read-string *key*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the *`key`* to be parsed as a string using the `read-string` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the *`key`* to be parsed as a string using
 | --- | --- | --- |
 | key | string | Specifies the key string or number value to parse as a string. |
 
-## Return value
+### Return value
 
 The `read-string` function returns the parsed value as a string.
 
-## Example
+### Example
 
 The following example demonstrates the usage of the `read-string` function within a Pact script. It parses the *`sender`* from the message data body as a string:
 

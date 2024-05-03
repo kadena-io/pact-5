@@ -1,12 +1,12 @@
 Use `chain-data` to retrieve transaction public metadata, returning an object with fields including 'chain-id', 'block-height', 'block-time', 'prev-block-hash', 'sender', 'gas-limit', 'gas-price', and 'gas-fee'.
 
-## Basic syntax
+### Basic syntax
 
 To retrieve transaction public metadata using `chain-data`, use the following syntax:
 
 chain-data
 
-## Return values
+### Return values
 
 The `chain-data` function returns an object with the following fields of public transaction metadata:
 
@@ -19,7 +19,7 @@ The `chain-data` function returns an object with the following fields of public 
 - 'gas-price': The gas price for the transaction.
 - 'gas-fee': The gas fee for the transaction.
 
-## Examples
+### Examples
 
 The following example retrieves transaction public metadata in the Pact REPL:
 

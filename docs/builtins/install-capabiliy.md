@@ -6,13 +6,13 @@ Any capability matching the 'static' (non-managed) parameters will cause this fu
 
 Note that signatures scoped to a managed capability cause the capability to be automatically provisioned for installation similarly to one installed with this function.
 
-## Basic syntax
+### Basic syntax
 
 To specify and provision the installation of a managed capability, use the following syntax:
 
 install-capability *capability*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the capability you want to install using the `install-capability` Pact function.
 
@@ -20,11 +20,11 @@ Use the following argument to specify the capability you want to install using t
 | --- | --- | --- |
 | capability | any | Specifies the capability to be installed. |
 
-## Return value
+### Return value
 
 The `install-capability` function returns a boolean value indicating the success or failure of the installation, along with a string message providing additional information.
 
-## Examples
+### Examples
 
 The following example demonstrates the use of `install-capability` in the Pact REPL to install a capability named `PAY` with specified parameters:
 

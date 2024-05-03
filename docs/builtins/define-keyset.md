@@ -1,13 +1,13 @@
 Use `define-keyset` to define a keyset as *`NAME`* with *`KEYSET`*, or if unspecified, read *`NAME`* from the message payload as a keyset, similarly to 'read-keyset'. If the keyset *`NAME`* already exists, the keyset will be enforced before updating to the new value.
 
-## Basic syntax
+### Basic syntax
 
 To define a keyset as *`NAME`* with *`KEYSET`*, or read *`NAME`* from the message payload, use the following syntax:
 
 define-keyset *`NAME`* *`KEYSET`*
 define-keyset *`NAME`*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the inputs for the `define-keyset` Pact function:
 
@@ -16,11 +16,11 @@ Use the following arguments to specify the inputs for the `define-keyset` Pact f
 | name     | string | Specifies the name of the keyset to define or read.         |
 | keyset   | string | Specifies the keyset to associate with the *`NAME`*.        |
 
-## Return values
+### Return values
 
 The `define-keyset` function returns a string representing the result of defining the keyset.
 
-## Examples
+### Examples
 
 The following examples demonstrate the `define-keyset` function:
 

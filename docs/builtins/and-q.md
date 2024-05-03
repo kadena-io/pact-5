@@ -1,12 +1,12 @@
 Use `and?` to apply a logical AND operation to the results of applying a *`value`* to *`a`* and *`b`*, with short-circuiting.
 
-## Basic syntax
+### Basic syntax
 
 To apply logical 'and' to the results of applying *`value`* to *`a`* and *`b`*, use the following syntax:
 
 and? *a* *b* *value*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the functions and *`value`* for the `and?` operation.
 
@@ -16,11 +16,11 @@ Use the following arguments to specify the functions and *`value`* for the `and?
 | b | *x*:<r> | Specifies the second function to apply *`value`* to. |
 | value | *<r>* | Specifies the value to apply to both *`a`* and *`b`* functions. |
 
-## Return values
+### Return values
 
 The `and?` function returns a boolean value based on the result of applying *`value`* to *`a`* and *`b`* with the logical AND operation.
 
-## Examples
+### Examples
 
 The following example demonstrates the `and?` operation in the Pact REPL:
 

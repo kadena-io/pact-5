@@ -1,12 +1,12 @@
 The `yield` function is used to yield an object for use with the 'resume' function in the subsequent Pact step. It optionally allows targeting the subsequent step to execute on a specific chain using automated SPV (Simplified Payment Verification) endorsement-based dispatch.
 
-## Basic syntax
+### Basic syntax
 
 To yield an object for use with 'resume', use the following syntax:
 
 yield *object* [*target-chain*]
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the object and, optionally, the target chain for the subsequent step using the `yield` Pact function.
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the object and, optionally, the target ch
 | object | object:<{y}> | Specifies the object to be yielded for use with 'resume'. |
 | target-chain | string | (Optional) Specifies the chain ID on which the subsequent step should execute. |
 
-## Return value
+### Return value
 
 The `yield` function returns the yielded object.
 
-## Examples
+### Examples
 
 The following examples demonstrate the usage of the `yield` function within a Pact script. They yield an object for use with 'resume', optionally targeting the subsequent step to execute on a specific chain:
 

@@ -2,13 +2,13 @@ Here's the reformatted documentation for the `describe-namespace` Pact function:
 
 Use `describe-namespace` to describe the namespace *`NS`*, returning a row object containing the user and admin guards of the namespace, as well as its name.
 
-## Basic syntax
+### Basic syntax
 
 To describe the namespace *`NS`*, use the following syntax:
 
 describe-namespace *`NS`*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the *`NS`* for the `describe-namespace` Pact function.
 
@@ -16,11 +16,11 @@ Use the following argument to specify the *`NS`* for the `describe-namespace` Pa
 |----------|--------|---------------------------------------------|
 | ns       | string | Specifies the name of the namespace to describe.|
 
-## Return values
+### Return values
 
 The `describe-namespace` function returns an object with detailed information about the specified *`NS`*.
 
-## Examples
+### Examples
 
 The following example demonstrates the `describe-namespace` function:
 

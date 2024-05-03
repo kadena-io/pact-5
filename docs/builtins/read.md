@@ -1,6 +1,6 @@
 Use the `read` function to retrieve information from a specified *`table`* based on a given *`key`*. This function returns the database record object corresponding to the *`key`*. Optionally, you can specify a list of *`columns`* to retrieve specific data from the record.
 
-## Basic syntax
+### Basic syntax
 
 To retrieve the entire record associated with the specified *`key`*, use the following syntax:
 
@@ -10,7 +10,7 @@ To retrieve specific columns from the record associated with the specified *`key
 
 read *table* *key* [*columns*]
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the table and key for retrieving data using the `read` Pact function.
 
@@ -19,7 +19,7 @@ Use the following arguments to specify the table and key for retrieving data usi
 | table | table:<{row}> | Specifies the table from which to retrieve data. |
 | key | string | Specifies the unique identifier (key) for the record to retrieve. |
 
-## Options
+### Options
 
 Use the following option to specify particular columns to retrieve from the record associated with the specified *`key`* in the `read` Pact function.
 
@@ -27,11 +27,11 @@ Use the following option to specify particular columns to retrieve from the reco
 | --- | --- | --- |
 | columns | [string] | Specifies the list of columns to retrieve from the record. |
 
-## Return values
+### Return values
 
 The `read` function returns the database record object corresponding to the specified *`key`*, or the specified columns from the record, as an object.
 
-## Examples
+### Examples
 
 The following example retrieves the entire record associated with the *`id`* key from the *`accounts`* table:
 

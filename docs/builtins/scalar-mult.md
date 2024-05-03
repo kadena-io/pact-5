@@ -1,12 +1,12 @@
 The `scalar-mult` function multiplies a point that lies on the curve BN254 by an integer value.
 
-## Basic syntax
+### Basic syntax
 
 To multiply a point by an integer value, use the following syntax:
 
 scalar-mult *type* *point1* *scalar*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the type, point, and scalar value for multiplication using the `scalar-mult` Pact function.
 
@@ -16,11 +16,11 @@ Use the following arguments to specify the type, point, and scalar value for mul
 | point1 | \<a> | Specifies the point on the curve BN254 to be multiplied. |
 | scalar | integer | Specifies the integer value to multiply the point by. |
 
-## Return value
+### Return value
 
 The `scalar-mult` function returns the result of multiplying the specified point by the integer scalar value.
 
-## Examples
+### Examples
 
 The following example demonstrates the usage of the `scalar-mult` function within a Pact script. It multiplies the point `{ 'x: 1, 'y: 2 }` on curve `'g1` by the scalar value `2`:
 

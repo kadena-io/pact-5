@@ -1,12 +1,12 @@
 Use `fold-db` to select rows from a table using a predicate `QRY` with both key and value, and then accumulate the results of the query using a `CONSUMER` function. The output is sorted by the ordering of keys.
 
-## Basic syntax
+### Basic syntax
 
 To select rows from a table, apply a predicate, and accumulate the results using a consumer function, use the following syntax:
 
 fold-db *table* *qry* *consumer*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the table, predicate, and consumer function for the `fold-db` Pact function:
 
@@ -16,11 +16,11 @@ Use the following arguments to specify the table, predicate, and consumer functi
 | qry       | a:string b:object:<{row}> -> bool | Specifies the predicate function to apply to each row.          |
 | consumer  | a:string b:object:<{row}> -> <b>  | Specifies the consumer function to accumulate results.          |
 
-## Return values
+### Return values
 
 The `fold-db` function returns a list of accumulated results based on the predicate `QRY` and the consumer function `CONSUMER`.
 
-## Examples
+### Examples
 
 The following example demonstrates the `fold-db` function:
 

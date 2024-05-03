@@ -1,12 +1,12 @@
 Use `compose` to compose functions *`x`* and *`y`* such that *`x`* operates on *`value`*, and *`y`* operates on the results of *`x`*.
 
-## Basic syntax
+### Basic syntax
 
 To compose functions *`x`* and *`y`* with *`value`*, use the following syntax:
 
 compose *x* *y* *value*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the functions *`x`* and *`y`* for composing with *`value`* using the `compose` Pact function.
 
@@ -16,11 +16,11 @@ Use the following arguments to specify the functions *`x`* and *`y`* for composi
 | y | x:<b> -> <c> | Specifies the second function *`y`* to operate on the results of *`x`*. |
 | value | <a> | Specifies the value on which *`x`* operates. |
 
-## Return values
+### Return values
 
 The `compose` function returns the result of applying the composed functions *`x`* and *`y`* on the *`value`*.
 
-## Examples
+### Examples
 
 The following example demonstrates the `compose` function in the Pact REPL:
 

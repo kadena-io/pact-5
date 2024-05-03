@@ -1,12 +1,12 @@
 Use `keys-2` as a keyset predicate function to determine if at least two keys are matched in the keyset.
 
-## Basic syntax
+### Basic syntax
 
 To use `keys-2` to check if at least two keys are matched in a keyset, use the following syntax:
 
 keys-2 *count matched*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the count of keys in the keyset and the count of matched keys using the `keys-2` Pact function.
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the count of keys in the keyset and the c
 | count | integer | Specifies the total count of keys in the keyset. |
 | matched | integer | Specifies the count of matched keys. |
 
-## Return value
+### Return value
 
 The `keys-2` function returns a boolean value indicating whether at least two keys are matched in the keyset.
 
-## Examples
+### Examples
 
 The following example demonstrates the use of `keys-2` in the Pact REPL:
 

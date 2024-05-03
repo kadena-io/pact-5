@@ -1,12 +1,12 @@
 Use `not` to compute the boolean negation of a value.
 
-## Basic syntax
+### Basic syntax
 
 To compute the boolean negation of a value, use the following syntax:
 
 not *x*
 
-## Argument
+### Argument
 
 Use the following argument to specify the boolean value for which you want to compute the negation using the `not` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the boolean value for which you want to co
 | --- | --- | --- |
 | x | bool | Specifies the boolean value to be negated. |
 
-## Return value
+### Return value
 
 The `not` function returns the boolean negation of the input value.
 
-## Examples
+### Examples
 
 The following example demonstrates the use of `not` in the Pact REPL:
 

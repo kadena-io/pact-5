@@ -1,12 +1,12 @@
 The `!=` function returns true if the first argument `x` does not equal the second argument `y`.
 
-## Basic syntax
+### Basic syntax
 
 To check if `x` does not equal `y`, use the following syntax:
 
 != *x* *y*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the values for comparison using the `!=` Pact function.
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the values for comparison using the `!=` 
 | x | <a[integer, string, time, decimal, bool, [<l>], object:<{o}>, keyset, guard, module{}]> | Specifies the first value for comparison. |
 | y | <a[integer, string, time, decimal, bool, [<l>], object:<{o}>, keyset, guard, module{}]> | Specifies the second value for comparison. |
 
-## Return value
+### Return value
 
 The `!=` function returns true if `x` does not equal `y`, otherwise false.
 
-## Examples
+### Examples
 
 The following example demonstrates the usage of the `!=` function within a Pact script. It checks if two strings are not equal:
 

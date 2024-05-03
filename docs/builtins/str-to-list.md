@@ -1,12 +1,12 @@
 The `str-to-list` function takes a string *`STR`* and returns a list where each element is a single-character string.
 
-## Basic syntax
+### Basic syntax
 
 To convert a string into a list of single-character strings, use the following syntax:
 
 str-to-list *str*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the string to be converted into a list of single-character strings using the `str-to-list` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the string to be converted into a list of 
 | --- | --- | --- |
 | str | string | Specifies the string to be converted into a list. |
 
-## Return value
+### Return value
 
 The `str-to-list` function returns a list where each element represents a single character from the input string *`STR`*.
 
-## Examples
+### Examples
 
 The following examples demonstrate the usage of the `str-to-list` function within a Pact script.
 

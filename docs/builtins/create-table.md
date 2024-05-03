@@ -1,12 +1,12 @@
 Use `create-table` to create a table identified by the specified *`TABLE`*.
 
-## Basic syntax
+### Basic syntax
 
 To create a table identified by *`TABLE`*, use the following syntax:
 
 create-table *`TABLE`*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the *`TABLE`* for the `create-table` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the *`TABLE`* for the `create-table` Pact 
 | --- | --- | --- |
 | table | table:<{row}> | Specifies the table to create. |
 
-## Return values
+### Return values
 
 The `create-table` function returns a string representing the identifier of the created *`TABLE`*.
 
-## Example
+### Example
 
 The following example demonstrates the `create-table` function:
 

@@ -2,13 +2,13 @@ Use `compose-capability` to specify and request the grant of a *`CAPABILITY`*, w
 
 Thus, a call to `(with-capability (OUTER-CAP) OUTER-BODY)`, where the `OUTER-CAP` defcap calls `(compose-capability (INNER-CAP))`, will result in `INNER-CAP` being granted in the scope of `OUTER-BODY`.
 
-## Basic syntax
+### Basic syntax
 
 To specify and request the grant of a *`CAPABILITY`* within a 'defcap' body, use the following syntax:
 
 compose-capability *`CAPABILITY`*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the *`CAPABILITY`* for the `compose-capability` Pact function.
 
@@ -16,11 +16,11 @@ Use the following argument to specify the *`CAPABILITY`* for the `compose-capabi
 | --- | --- | --- |
 | capability | capability | Specifies the capability to compose and request grant for. |
 
-## Return values
+### Return values
 
 The `compose-capability` function returns a boolean value to indicate success or failure in requesting the grant of the specified *`CAPABILITY`*.
 
-## Examples
+### Examples
 
 The following example demonstrates the `compose-capability` function:
 

@@ -1,12 +1,12 @@
 Use `days` to specify a number of days *`N`*, which can be used with 'add-time' to add or subtract days from a given time.
 
-## Basic syntax
+### Basic syntax
 
 To specify a number of days *`N`*, use the following syntax:
 
 days *`N`*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the number of days *`N`* for the `days` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the number of days *`N`* for the `days` Pa
 | --- | --- | --- |
 | n | decimal or integer | Specifies the number of days to add or subtract. |
 
-## Return values
+### Return values
 
 The `days` function returns the specified number of days as a decimal value.
 
-## Example
+### Example
 
 The following example demonstrates the `days` function in combination with 'add-time':
 

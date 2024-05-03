@@ -1,12 +1,12 @@
 Use `continue` to continue a previously started nested `defpact`.
 
-## Basic syntax
+### Basic syntax
 
 To continue a previously started nested `defpact`, use the following syntax:
 
 continue *value*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the *`value`* to continue the nested `defpact`.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the *`value`* to continue the nested `defp
 | --- | --- | --- |
 | value | * | Specifies the value to continue the nested `defpact`. |
 
-## Return values
+### Return values
 
 The `continue` function continues the execution of the nested `defpact` with the specified *`value`*.
 
-## Examples
+### Examples
 
 The following example demonstrates the use of `continue` to continue a nested `defpact`:
 

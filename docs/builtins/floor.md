@@ -1,13 +1,13 @@
 Use `floor` to round down the value of a decimal *`X`* to an integer, or to a specified precision *`PREC`* as a decimal.
 
-## Basic syntax
+### Basic syntax
 
 To round down a decimal value to an integer or to a specified precision, use the following syntax:
 
 floor *x* -> *result*
 floor *x* *prec* -> *result*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the decimal value and precision for the `floor` Pact function:
 
@@ -16,14 +16,14 @@ Use the following arguments to specify the decimal value and precision for the `
 | x        | decimal  | Specifies the decimal value to round down.           |
 | prec     | integer  | Specifies the precision for the rounding (optional). |
 
-## Return values
+### Return values
 
 The `floor` function returns the rounded-down value of the specified decimal:
 
 - If only *`x`* is provided, it returns an integer.
 - If *`prec`* is provided, it returns a decimal with the specified precision.
 
-## Examples
+### Examples
 
 The following examples demonstrate the `floor` function:
 

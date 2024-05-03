@@ -1,12 +1,12 @@
 Use `point-add` to add two points together that lie on the curve BN254. Point addition can be performed either in Fq or in Fq2.
 
-## Basic syntax
+### Basic syntax
 
 To add two points together that lie on the curve BN254, use the following syntax:
 
 point-add *type point1 point2*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the type of addition and the points to be added using the `point-add` Pact function.
 
@@ -16,11 +16,11 @@ Use the following arguments to specify the type of addition and the points to be
 | point1 | <a> | Specifies the first point to be added. |
 | point2 | <a> | Specifies the second point to be added. |
 
-## Return value
+### Return value
 
 The `point-add` function returns the result of adding the specified points together.
 
-## Examples
+### Examples
 
 The following example demonstrates the use of `point-add` in the Pact REPL:
 

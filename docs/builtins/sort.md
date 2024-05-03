@@ -1,6 +1,6 @@
 The `sort` function is used to sort a list of primitive values or objects based on either the values themselves or specific fields within the objects.
 
-## Basic syntax
+### Basic syntax
 
 To sort a list of primitive values, use the following syntax:
 
@@ -10,7 +10,7 @@ To sort a list of objects based on specific fields, use the following syntax:
 
 sort *fields* *values*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the values or fields for sorting using the `sort` Pact function.
 
@@ -19,11 +19,11 @@ Use the following arguments to specify the values or fields for sorting using th
 | values | [\<a>] | Specifies the list of primitive values to be sorted. |
 | fields | [string] | Specifies the list of fields within objects to be used for sorting. |
 
-## Return value
+### Return value
 
 The `sort` function returns a sorted list of values or objects based on the specified sorting criteria.
 
-## Examples
+### Examples
 
 The following examples demonstrate the usage of the `sort` function within a Pact script.
 

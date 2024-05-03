@@ -1,12 +1,12 @@
 Use `base64-decode` to decode a *`string`* from unpadded base64 encoding.
 
-## Basic syntax
+### Basic syntax
 
 To decode a *`string`* from unpadded base64 encoding, use the following syntax:
 
 base64-decode *string*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the *`string`* to decode using the `base64-decode` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the *`string`* to decode using the `base64
 | --- | --- | --- |
 | string | string | Specifies the base64 encoded *`string`* to decode. |
 
-## Return values
+### Return values
 
 The `base64-decode` function returns the decoded *`string`*.
 
-## Examples
+### Examples
 
 The following example decodes a base64 encoded string in the Pact REPL:
 

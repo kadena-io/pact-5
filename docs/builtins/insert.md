@@ -1,12 +1,12 @@
 Use `insert` to write an entry in a specified table for a given key of object column data. This operation fails if data already exists for the specified key.
 
-## Basic syntax
+### Basic syntax
 
 To insert data into a table for a specified key, use the following syntax:
 
 insert *table* *key* *object*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the table, key, and object data you want to insert using the `insert` Pact function.
 
@@ -16,11 +16,11 @@ Use the following arguments to specify the table, key, and object data you want 
 | key | string | Specifies the key for which the data will be inserted. |
 | object | object<{row}> | Specifies the object data to be inserted for the specified key. |
 
-## Return value
+### Return value
 
 The `insert` function returns a string indicating the success or failure of the operation.
 
-## Examples
+### Examples
 
 The following example demonstrates the use of `insert` in the Pact REPL to insert data into the `accounts` table:
 

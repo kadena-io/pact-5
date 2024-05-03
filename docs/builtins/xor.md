@@ -1,12 +1,12 @@
 The `xor` function computes the bitwise XOR (exclusive OR) operation between two integers.
 
-## Basic syntax
+### Basic syntax
 
 To compute the bitwise XOR operation between two integers, use the following syntax:
 
 xor *x* *y*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the integers for the bitwise XOR operation using the `xor` Pact function.
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the integers for the bitwise XOR operatio
 | x | integer | Specifies the first integer for the XOR operation. |
 | y | integer | Specifies the second integer for the XOR operation. |
 
-## Return value
+### Return value
 
 The `xor` function returns the result of the bitwise XOR operation as an integer.
 
-## Examples
+### Examples
 
 The following examples demonstrate the usage of the `xor` function within a Pact script. They compute the bitwise XOR operation between two integers:
 

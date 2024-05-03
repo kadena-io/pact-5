@@ -1,12 +1,12 @@
 Use `ln` to compute the natural logarithm of X.
 
-## Basic syntax
+### Basic syntax
 
 To compute the natural logarithm of a value, use the following syntax:
 
 ln *x*
 
-## Argument
+### Argument
 
 Use the following argument to specify the value for which you want to compute the natural logarithm using the `ln` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the value for which you want to compute th
 | --- | --- | --- |
 | x | integer, decimal | Specifies the value for which you want to compute the natural logarithm. |
 
-## Return value
+### Return value
 
 The `ln` function returns the natural logarithm of the specified value.
 
-## Examples
+### Examples
 
 The following example demonstrates the use of `ln` in the Pact REPL:
 

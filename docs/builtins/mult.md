@@ -1,12 +1,12 @@
 The `*` function multiplies the first argument `x` by the second argument `y`.
 
-## Basic syntax
+### Basic syntax
 
 To multiply `x` by `y`, use the following syntax:
 
 * *x* *y*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the values for multiplication using the `*` Pact function.
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the values for multiplication using the `
 | x | <a[integer,decimal]> | Specifies the first multiplier. |
 | y | <a[integer,decimal]> | Specifies the second multiplier. |
 
-## Return value
+### Return value
 
 The `*` function returns the result of multiplying `x` by `y`.
 
-## Examples
+### Examples
 
 The following examples demonstrate the usage of the `*` function within a Pact script. They perform multiplication:
 

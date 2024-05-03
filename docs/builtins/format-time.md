@@ -1,12 +1,12 @@
 Use `format-time` to format a `TIME` value using a specified `FORMAT`. See the ["Time Formats" documentation](pact-reference.html#time-formats) for supported formats.
 
-## Basic syntax
+### Basic syntax
 
 To format a time value using a specified format, use the following syntax:
 
 format-time *format* *time* -> *result*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the format and time for the `format-time` Pact function:
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the format and time for the `format-time`
 | format    | string | Specifies the format string for the time.        |
 | time      | time   | Specifies the time value to format.              |
 
-## Return values
+### Return values
 
 The `format-time` function returns a new string with the formatted time value.
 
-## Examples
+### Examples
 
 The following example demonstrates the `format-time` function:
 

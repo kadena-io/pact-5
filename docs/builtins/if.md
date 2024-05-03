@@ -1,12 +1,12 @@
 Use `if` to test a condition. If the condition is true, evaluate the *`then`* expression; otherwise, evaluate the *`else`* expression.
 
-## Basic syntax
+### Basic syntax
 
 To test a condition and execute different expressions based on the result, use the following syntax:
 
 if *condition then else*
 
-## Arguments
+### Arguments
 
 Use the following arguments to define the condition and expressions to be evaluated based on the outcome of the condition using the `if` Pact function.
 
@@ -16,11 +16,11 @@ Use the following arguments to define the condition and expressions to be evalua
 | then | any | Specifies the expression to be evaluated if the condition is true. |
 | else | any | Specifies the expression to be evaluated if the condition is false. |
 
-## Return value
+### Return value
 
 The `if` function returns the result of evaluating either the *`then`* expression or the *`else`* expression, depending on the outcome of the condition.
 
-## Examples
+### Examples
 
 The following example demonstrates the use of `if` to test a condition in the Pact REPL:
 

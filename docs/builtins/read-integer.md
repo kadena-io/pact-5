@@ -1,12 +1,12 @@
 The `read-integer` function is used to parse a *`key`* string or number value from the top level of the message data body as an integer.
 
-## Basic syntax
+### Basic syntax
 
 To parse a *`key`* string as an integer, use the following syntax:
 
 read-integer *key*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the *`key`* to be parsed as an integer using the `read-integer` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the *`key`* to be parsed as an integer usi
 | --- | --- | --- |
 | key | string | Specifies the key string or number value to parse as an integer. |
 
-## Return value
+### Return value
 
 The `read-integer` function returns the parsed value as an integer.
 
-## Example
+### Example
 
 The following example demonstrates the usage of the `read-integer` function within a Pact script. It parses the *`age`* from the message data body as an integer:
 

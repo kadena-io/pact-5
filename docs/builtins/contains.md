@@ -1,6 +1,6 @@
 Use `contains` to test whether a *`LIST`* contains a *`VALUE`*, an *`OBJECT`* has a *`KEY`* entry, or a *`STRING`* contains a substring *`VALUE`*.
 
-## Basic syntax
+### Basic syntax
 
 To test whether a *`LIST`* contains a *`VALUE`*, use the following syntax:
 
@@ -14,7 +14,7 @@ To test whether a *`STRING`* contains a substring *`VALUE`*, use the following s
 
 contains *value* *string*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the *`VALUE`*, *`LIST`*, *`KEY`*, *`OBJECT`*, *`STRING`* for the `contains` Pact function.
 
@@ -26,11 +26,11 @@ Use the following arguments to specify the *`VALUE`*, *`LIST`*, *`KEY`*, *`OBJEC
 | object | object:<{o}> | Specifies the object in which to check for the *`KEY`*. |
 | string | string | Specifies the string in which to search for the substring *`VALUE`*. |
 
-## Return values
+### Return values
 
 The `contains` function returns a boolean value indicating whether the *`LIST`* contains the *`VALUE`*, the *`OBJECT`* has the *`KEY`* entry, or the *`STRING`* contains the substring *`VALUE`*.
 
-## Examples
+### Examples
 
 The following examples demonstrate the `contains` function in the Pact REPL:
 

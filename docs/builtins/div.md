@@ -1,12 +1,12 @@
 The `/` function divides the first argument `x` by the second argument `y`.
 
-## Basic syntax
+### Basic syntax
 
 To divide `x` by `y`, use the following syntax:
 
 / *x* *y*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the values for division using the `/` Pact function.
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the values for division using the `/` Pac
 | x | <a[integer,decimal]> | Specifies the dividend. |
 | y | <a[integer,decimal]> | Specifies the divisor. |
 
-## Return value
+### Return value
 
 The `/` function returns the result of dividing `x` by `y`.
 
-## Examples
+### Examples
 
 The following examples demonstrate the usage of the `/` function within a Pact script. They divide two values:
 

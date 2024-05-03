@@ -1,12 +1,12 @@
 Use `decrypt-cc20p1305` to perform decryption of a *`CIPHERTEXT`* using the CHACHA20-POLY1305 Authenticated Encryption with Associated Data (AEAD) construction described in IETF RFC 7539.
 
-## Basic syntax
+### Basic syntax
 
 To perform decryption of a *`CIPHERTEXT`* using CHACHA20-POLY1305, use the following syntax:
 
 decrypt-cc20p1305 *ciphertext* *nonce* *aad* *mac* *public-key* *secret-key*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the inputs for the `decrypt-cc20p1305` Pact function:
 
@@ -19,11 +19,11 @@ Use the following arguments to specify the inputs for the `decrypt-cc20p1305` Pa
 | public-key | string | Specifies the base-16 Curve25519 public key.                |
 | secret-key | string | Specifies the base-16 Curve25519 secret key.                |
 
-## Return values
+### Return values
 
 The `decrypt-cc20p1305` function returns the decrypted plaintext as an unpadded base64URL string.
 
-## Example
+### Example
 
 The following example demonstrates the `decrypt-cc20p1305` function:
 

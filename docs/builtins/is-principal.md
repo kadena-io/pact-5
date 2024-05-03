@@ -1,12 +1,12 @@
 Use `is-principal` to determine whether a principal string conforms to the principal format without proving its validity.
 
-## Basic syntax
+### Basic syntax
 
 To check whether a principal string conforms to the principal format, use the following syntax:
 
 is-principal *principal*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the principal string you want to check using the `is-principal` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the principal string you want to check usi
 | --- | --- | --- |
 | principal | string | Specifies the principal string to be checked. |
 
-## Return value
+### Return value
 
 The `is-principal` function returns a boolean value indicating whether the input principal string conforms to the principal format.
 
-## Examples
+### Examples
 
 The following example demonstrates the use of `is-principal` within an `enforce` statement:
 

@@ -1,12 +1,12 @@
 Use `hash` to compute the BLAKE2b 256-bit hash of a `VALUE`, represented in unpadded base64-url. Strings are converted directly, while other values are converted using their JSON representation. Non-value-level arguments are not allowed.
 
-## Basic syntax
+### Basic syntax
 
 To compute the BLAKE2b 256-bit hash of a value, use the following syntax:
 
 hash *value* -> *result*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the value for the `hash` Pact function:
 
@@ -14,11 +14,11 @@ Use the following argument to specify the value for the `hash` Pact function:
 |-----------|--------|---------------------------------------------------|
 | value     | <a>    | Specifies the value to be hashed.                 |
 
-## Return values
+### Return values
 
 The `hash` function returns a string representing the computed hash value.
 
-## Examples
+### Examples
 
 The following examples demonstrate the `hash` function:
 

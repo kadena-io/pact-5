@@ -1,12 +1,12 @@
 The `resume` function is a special form that binds to a yielded object value from the prior step execution in a Pact. If the yield step was executed on a foreign chain, it enforces endorsement via Simple Payment Verification (SPV).
 
-## Basic syntax
+### Basic syntax
 
 To bind to a yielded object value from the prior step execution, use the following syntax:
 
 resume *binding*
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the *`binding`* to be resumed using the `resume` Pact function.
 
@@ -14,11 +14,11 @@ Use the following argument to specify the *`binding`* to be resumed using the `r
 | --- | --- | --- |
 | binding | binding:<{r}> | Specifies the binding representing the yielded object value from the prior step execution. |
 
-## Return value
+### Return value
 
 The `resume` function returns the value bound to the specified *`binding`*.
 
-## Example
+### Example
 
 The following example demonstrates the usage of the `resume` function within a Pact script. It binds to the yielded object value from the prior step execution:
 

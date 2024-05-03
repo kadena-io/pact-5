@@ -1,12 +1,12 @@
 Use `fold` to iteratively reduce a list by applying a function *`APP`* to the last result and each element, starting with an initial value *`INIT`*.
 
-## Basic syntax
+### Basic syntax
 
 To iteratively reduce a list by applying a function to each element, starting with an initial value, use the following syntax:
 
 fold *app* *init* *list* -> *result*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the function, initial value, and list for the `fold` Pact function:
 
@@ -16,11 +16,11 @@ Use the following arguments to specify the function, initial value, and list for
 | init     | \<a>       | Specifies the initial value for the reduction.    |
 | list     | [\<b>]     | Specifies the list to iterate over.               |
 
-## Return values
+### Return values
 
 The `fold` function returns the final result of the iterative reduction of the list.
 
-## Examples
+### Examples
 
 The following example demonstrates the `fold` function:
 

@@ -1,12 +1,12 @@
 The `>` function returns true if the first argument `x` is greater than the second argument `y`.
 
-## Basic syntax
+### Basic syntax
 
 To check if `x` is greater than `y`, use the following syntax:
 
 > *x* *y*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the values for comparison using the `>` Pact function.
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the values for comparison using the `>` P
 | x | <a[integer,decimal,string,time]> | Specifies the first value for comparison. |
 | y | <a[integer,decimal,string,time]> | Specifies the second value for comparison. |
 
-## Return value
+### Return value
 
 The `>` function returns a boolean value indicating whether `x` is greater than `y`.
 
-## Examples
+### Examples
 
 The following examples demonstrate the usage of the `>` function within a Pact script. They compare two values to check if the first value is greater than the second value:
 

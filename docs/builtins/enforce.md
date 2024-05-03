@@ -1,12 +1,12 @@
 Use `enforce` to fail a transaction with a specified error message *`MSG`* if a pure expression *`TEST`* evaluates to false. Otherwise, it returns true.
 
-## Basic syntax
+### Basic syntax
 
 To fail a transaction with a specified error message if a test expression evaluates to false, use the following syntax:
 
 enforce *test* *msg* -> bool
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the test expression and error message for the `enforce` Pact function:
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the test expression and error message for
 | test     | bool   | Specifies the test expression to evaluate.     |
 | msg      | string | Specifies the error message if the test fails. |
 
-## Return values
+### Return values
 
 The `enforce` function returns true if the test expression is true. If the test expression is false, it fails the transaction with the specified error message.
 
-## Examples
+### Examples
 
 The following example demonstrates the `enforce` function:
 

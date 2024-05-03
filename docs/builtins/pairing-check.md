@@ -1,12 +1,12 @@
 Use `pairing-check` to perform pairing and final exponentiation on points in G1 and G2 in BN254, and check if the result is 1.
 
-## Basic syntax
+### Basic syntax
 
 To perform pairing and final exponentiation on points in G1 and G2, and check if the result is 1, use the following syntax:
 
 pairing-check *points-g1 points-g2*
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the lists of points in G1 and G2 for which you want to perform the pairing check using the `pairing-check` Pact function.
 
@@ -15,11 +15,11 @@ Use the following arguments to specify the lists of points in G1 and G2 for whic
 | points-g1 | [<a>] | Specifies the list of points in G1. |
 | points-g2 | [<b>] | Specifies the list of points in G2. |
 
-## Return value
+### Return value
 
 The `pairing-check` function returns a boolean value indicating whether the result of the pairing and final exponentiation is 1.
 
-## Examples
+### Examples
 
 The following example demonstrates the use of `pairing-check` in the Pact REPL:
 

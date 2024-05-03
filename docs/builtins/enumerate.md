@@ -4,7 +4,7 @@ By default, the sequence increments by one from the *`first`* number to the *`la
 
 If you specify a *`first`* number that’s greater than the *`last`* number, the sequence decrements by one from the *`first`* number to the *`last`* number.
 
-## Basic syntax
+### Basic syntax
 
 To increment or decrement the sequence by one, use the following syntax:
 
@@ -14,7 +14,7 @@ To specify a value to increment or decrement the sequence by, use the following 
 
 enumerate *first* *last inc*
 
-## Arguments
+### Arguments
 
 Use the following arguments to define the beginning and end of the sequence you want to list using the `enumerate` Pact function.
 
@@ -23,7 +23,7 @@ Use the following arguments to define the beginning and end of the sequence you 
 | first | integer | Specifies the first number in the sequence. |
 | last | integer | Specifies the last number in the sequence. |
 
-## Options
+### Options
 
 Use the following option to define the increment to use between the beginning and end of the sequence in the `enumerate` Pact function.
 
@@ -31,11 +31,11 @@ Use the following option to define the increment to use between the beginning an
 | --- | --- | --- |
 | inc | integer | Specifies the increment to use between numbers in the sequence. The value can be a positive or negative integer. |
 
-## Return values
+### Return values
 
 The `enumerate` function returns the resulting sequence of numbers as a list.
 
-## Examples
+### Examples
 
 The following example enumerates a sequence of numbers using the default increment of one in the Pact REPL:
 
