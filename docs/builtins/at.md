@@ -1,26 +1,28 @@
 ## at
-Use `at` to index a *`list`* at a specified *`idx`* or to get the value with key *`idx`* from an *`object`*.
+Use `at` to index a `list` at a specified `idx` or to get the value with key `idx` from an `object`.
 
 ### Basic syntax
 
-To index a *`list`* at a specified *`idx`* or get the value with key *`idx`* from an *`object`*, use the following syntax:
+To index a `list` at a specified `idx` or get the value with key `idx` from an `object`, use the following syntax:
 
-at *idx* *list*\
-at *idx* *object*
+```lisp
+(at idx list)
+(at idx object)
+```
 
 ### Arguments
 
-Use the following arguments to specify the *`idx`* and *`list`* for indexing, or *`idx`* and *`object`* for key-based retrieval with the `at` Pact function.
+Use the following arguments to specify the `idx` and `list` for indexing, or `idx` and `object` for key-based retrieval with the `at` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| idx | integer | Specifies the index for the *`list`* or the key for the *`object`*. |
-| list | [<l>] | Specifies the list from which to retrieve the value at *`idx`*. |
-| object | object:<{o}> | Specifies the object from which to retrieve the value with key *`idx`*. |
+| idx | `integer` | Specifies the index for the `list` or the key for the `object`. |
+| list | `[<l>]` | Specifies the list from which to retrieve the value at `idx`. |
+| object | `object:<{o}>` | Specifies the object from which to retrieve the value with key `idx`. |
 
 ### Return values
 
-The `at` function returns the value at the specified *`idx`* in the *`list`* or the value with key *`idx`* from the *`object`*.
+The `at` function returns the value at the specified `idx` in the `list` or the value with key `idx` from the `object`.
 
 ### Examples
 
