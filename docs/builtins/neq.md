@@ -1,11 +1,12 @@
 ## !=
-The `!=` function returns true if the first argument `*x*` does not equal the second argument `*y*`.
+
+The `!=` function returns true if the first argument `x` does not equal the second argument `y`.
 
 ### Basic syntax
 
-To check if `*x*` does not equal `*y*`, use the following syntax:
+To check if `x` does not equal `y`, use the following syntax:
 
-`(!= *x* *y*)`
+`(!= x y)`
 
 ### Arguments
 
@@ -13,12 +14,12 @@ Use the following arguments to specify the values for comparison using the `!=` 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `*x*` | `<a[integer, string, time, decimal, bool, [<l>], object:<{o}>, keyset, guard, module{}]>` | Specifies the first value for comparison. |
-| `*y*` | `<a[integer, string, time, decimal, bool, [<l>], object:<{o}>, keyset, guard, module{}]>` | Specifies the second value for comparison. |
+| `x` | `<a[integer, string, time, decimal, bool, [<l>], object:<{o}>, keyset, guard, module{}]>` | Specifies the first value for comparison. |
+| `y` | `<a[integer, string, time, decimal, bool, [<l>], object:<{o}>, keyset, guard, module{}]>` | Specifies the second value for comparison. |
 
 ### Return value
 
-The `!=` function returns true if `*x*` does not equal `*y*`, otherwise false.
+The `!=` function returns true if `x` does not equal `y`, otherwise false.
 
 ### Examples
 
