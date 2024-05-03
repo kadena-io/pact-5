@@ -350,14 +350,14 @@ msgBody body = Endo $ eeMsgBody .~ PObject body
 msgSigsNoCap :: [PublicKeyText] -> EnvMod
 msgSigsNoCap pkts = Endo $ eeMsgSigs .~ M.fromList ((, mempty) <$> pkts)
 
-runNativeBenchmarkPreparedWith
+runNativeBenchmarkPreparedEnvMod
   :: EnvMod
   -> [(Text, PactValue)]
   -> PactDb CoreBuiltin ()
   -> String
   -> Text
   -> C.Benchmark
-runNativeBenchmarkPreparedWith (Endo envMod) envVars = runNativeBenchmark' (pure . envMod) (withLoaded envVars)
+runNativeBenchmarkPreparedEnvMod (Endo envMod) envVars = runNativeBenchmark' (pure . envMod) (withLoaded envVars)
 
 
 dummyTx :: PactDb b i -> IO () -> [C.Benchmark] -> [C.Benchmark]

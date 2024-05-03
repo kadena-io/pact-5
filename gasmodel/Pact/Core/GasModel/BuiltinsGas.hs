@@ -462,21 +462,21 @@ benchDistinct pdb =
 
 benchReadOp :: T.Text -> BuiltinBenches
 benchReadOp readOp pdb =
-  [ runNativeBenchmarkPreparedWith (msgBody obj) [("k", key)] pdb title [text|($readOp k)|]
+  [ runNativeBenchmarkPreparedEnvMod (msgBody obj) [("k", key)] pdb title [text|($readOp k)|]
   | (title, PObject obj) <- take 3 $ enumExpObject 1000 100
   , let key = fieldToValue $ last $ M.keys obj
   ]
 
 benchReadString :: BuiltinBenches
 benchReadString pdb =
-  [ runNativeBenchmarkPreparedWith (msgBody obj) [("k", key)] pdb title "(read-string k)"
+  [ runNativeBenchmarkPreparedEnvMod (msgBody obj) [("k", key)] pdb title "(read-string k)"
   | (title, PObject obj) <- take 3 $ enumExpObjectWithStrings 1000 100
   , let key = fieldToValue $ last $ M.keys obj
   ]
 
 benchReadKeyset :: BuiltinBenches
 benchReadKeyset pdb =
-  [ runNativeBenchmarkPreparedWith (msgBody obj) [] pdb title "(read-keyset 'thekeyset)"
+  [ runNativeBenchmarkPreparedEnvMod (msgBody obj) [] pdb title "(read-keyset 'thekeyset)"
   | (_, PObject objBase) <- [head $ enumExpObjectWithStrings 1000 1]
   , (title, str) <- take 3 $ enumExpScopedIdent 1000 100
   , let ksn = PObject [(Field "keys", PList [PString "publickeytext"]), (Field "pred", str)]
@@ -485,7 +485,7 @@ benchReadKeyset pdb =
 
 benchKeysetGuardOp :: T.Text -> BuiltinBenches
 benchKeysetGuardOp op pdb = dummyTx pdb initDb
-  [ runNativeBenchmarkPreparedWith (msgSigsNoCap [pkt]) [("x", str)] pdb title [text|($op x)|]
+  [ runNativeBenchmarkPreparedEnvMod (msgSigsNoCap [pkt]) [("x", str)] pdb title [text|($op x)|]
   | (title, str) <- keys
   ]
   where
