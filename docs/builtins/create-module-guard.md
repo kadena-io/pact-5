@@ -1,23 +1,23 @@
 ## create-module-guard
-Use `create-module-guard` to define a guard by *`NAME`* that enforces the current module admin predicate.
+Use `create-module-guard` to define a guard by `NAME` that enforces the current module admin predicate.
 
 ### Basic syntax
 
-To define a guard by *`NAME`* that enforces the current module admin predicate, use the following syntax:
+To define a guard by `NAME` that enforces the current module admin predicate, use the following syntax:
 
-create-module-guard *`NAME`*
+`(create-module-guard NAME)`
 
 ### Arguments
 
-Use the following argument to specify the *`NAME`* for the `create-module-guard` Pact function.
+Use the following argument to specify the `NAME` for the `create-module-guard` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| name | string | Specifies the name of the guard to create, enforcing the current module admin predicate. |
+| `NAME` | `string` | Specifies the name of the guard to create, enforcing the current module admin predicate. |
 
 ### Return values
 
-The `create-module-guard` function returns a guard that enforces the current module admin predicate, identified by the specified *`NAME`*.
+The `create-module-guard` function returns a guard that enforces the current module admin predicate, identified by the specified `NAME`.
 
 ### Example
 
