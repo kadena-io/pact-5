@@ -5,19 +5,19 @@ Use `continue` to continue a previously started nested `defpact`.
 
 To continue a previously started nested `defpact`, use the following syntax:
 
-continue *value*
+`(continue value)`
 
 ### Arguments
 
-Use the following argument to specify the *`value`* to continue the nested `defpact`.
+Use the following argument to specify the `value` to continue the nested `defpact`.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| value | * | Specifies the value to continue the nested `defpact`. |
+| `value` | `*` | Specifies the value to continue the nested `defpact`. |
 
 ### Return values
 
-The `continue` function continues the execution of the nested `defpact` with the specified *`value`*.
+The `continue` function continues the execution of the nested `defpact` with the specified `value`.
 
 ### Examples
 
