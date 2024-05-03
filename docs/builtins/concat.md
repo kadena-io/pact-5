@@ -1,23 +1,23 @@
 ## concat
-Use `concat` to take a list of strings *`str-list`* and concatenate each of the strings in the list, returning the resulting string.
+Use `concat` to take a list of strings `str-list` and concatenate each of the strings in the list, returning the resulting string.
 
 ### Basic syntax
 
 To concatenate each string in a list, use the following syntax:
 
-concat *str-list*
+`(concat str-list)`
 
 ### Arguments
 
-Use the following argument to specify the list of strings *`str-list`* for the `concat` Pact function.
+Use the following argument to specify the list of strings `str-list` for the `concat` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| str-list | [string] | Specifies the list of strings to concatenate. |
+| `str-list` | `[string]` | Specifies the list of strings to concatenate. |
 
 ### Return values
 
-The `concat` function returns the resulting string after concatenating all the strings in the *`str-list`*.
+The `concat` function returns the resulting string after concatenating all the strings in the `str-list`.
 
 ### Examples
 
