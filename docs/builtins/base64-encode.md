@@ -1,11 +1,11 @@
 ## base64-encode
-Use `base64-encode` to encode a *`string`* as unpadded base64.
+Use `base64-encode` to encode a `string` as unpadded base64.
 
 ### Basic syntax
 
-To encode a *`string`* as unpadded base64, use the following syntax:
+To encode a `string` as unpadded base64, use the following syntax:
 
-base64-encode *string*
+`(base64-encode string)`
 
 ### Arguments
 
@@ -13,11 +13,11 @@ Use the following argument to specify the *`string`* to encode using the `base64
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| string | string | Specifies the *`string`* to encode as unpadded base64. |
+| `string` | `string` | Specifies the `string` to encode as unpadded base64. |
 
 ### Return values
 
-The `base64-encode` function returns the unpadded base64 encoded *`string`*.
+The `base64-encode` function returns the unpadded base64 encoded `string`.
 
 ### Examples
 
