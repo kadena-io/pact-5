@@ -1,23 +1,23 @@
 ## create-capability-guard
-Use `create-capability-guard` to create a guard that will enforce that a specified *`CAPABILITY`* is acquired.
+Use `create-capability-guard` to create a guard that will enforce that a specified `CAPABILITY` is acquired.
 
 ### Basic syntax
 
-To create a guard that enforces the acquisition of a *`CAPABILITY`*, use the following syntax:
+To create a guard that enforces the acquisition of a `CAPABILITY`, use the following syntax:
 
-create-capability-guard *`CAPABILITY`*
+`(create-capability-guard CAPABILITY)`
 
 ### Arguments
 
-Use the following argument to specify the *`CAPABILITY`* for the `create-capability-guard` Pact function.
+Use the following argument to specify the `CAPABILITY` for the `create-capability-guard` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| capability | capability | Specifies the capability that the guard will enforce acquisition for. |
+| `CAPABILITY` | `capability` | Specifies the capability that the guard will enforce acquisition for. |
 
 ### Return values
 
-The `create-capability-guard` function returns a guard that enforces the acquisition of the specified *`CAPABILITY`*.
+The `create-capability-guard` function returns a guard that enforces the acquisition of the specified `CAPABILITY`.
 
 ### Examples
 
