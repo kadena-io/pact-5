@@ -5,11 +5,11 @@ The `-` function negates the argument `x`, or subtracts `y` from `x`.
 
 To negate `x`, use the following syntax:
 
-- *x*
+`(- x)`
 
 To subtract `y` from `x`, use the following syntax:
 
-- *x* *y*
+`(- x y)`
 
 ### Arguments
 
@@ -17,8 +17,8 @@ Use the following arguments to specify the values for negation or subtraction us
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| x | <a[integer,decimal]> | Specifies the value to be negated or subtracted from. |
-| y | <a[integer,decimal]> | Specifies the value to subtract from `x`. |
+| `x` | `<a[integer,decimal]>` | Specifies the value to be negated or subtracted from. |
+| `y` | `<a[integer,decimal]>` | Specifies the value to subtract from `x`. |
 
 ### Return value
 
@@ -26,13 +26,16 @@ The `-` function returns the negation of `x`, or the result of subtracting `y` f
 
 ### Examples
 
-The following examples demonstrate the usage of the `-` function within a Pact script. They negate values or perform subtraction:
+The following examples demonstrate the usage of the `-` function within a Pact REPL. They negate values or perform subtraction:
 
 ```lisp
-(- 1.0)
+pact>(- 1.0)
+-1.0
 ```
+
 ```lisp
-(- 3 2)
+pact>(- 3 2)
+1
 ```
 
 These examples illustrate how to use the `-` function to negate values or perform subtraction operations in Pact, facilitating arithmetic calculations with both integer and decimal values.
