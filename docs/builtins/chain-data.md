@@ -5,20 +5,20 @@ Use `chain-data` to retrieve transaction public metadata, returning an object wi
 
 To retrieve transaction public metadata using `chain-data`, use the following syntax:
 
-chain-data
+`(chain-data)`
 
 ### Return values
 
 The `chain-data` function returns an object with the following fields of public transaction metadata:
 
-- 'chain-id': The ID of the blockchain.
-- 'block-height': The height of the block.
-- 'block-time': The timestamp of the block.
-- 'prev-block-hash': The hash of the previous block.
-- 'sender': The sender of the transaction.
-- 'gas-limit': The gas limit for the transaction.
-- 'gas-price': The gas price for the transaction.
-- 'gas-fee': The gas fee for the transaction.
+- `chain-id`: The ID of the blockchain.
+- `block-height`: The height of the block.
+- `block-time`: The timestamp of the block.
+- `prev-block-hash`: The hash of the previous block.
+- `sender`: The sender of the transaction.
+- `gas-limit`: The gas limit for the transaction.
+- `gas-price`: The gas price for the transaction.
+- `gas-fee`: The gas fee for the transaction.
 
 ### Examples
 
