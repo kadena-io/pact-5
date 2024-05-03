@@ -602,10 +602,15 @@ benchesForBuiltin bn = case bn of
   CoreB64Encode -> benchB64Op "base64-encode"
   CoreB64Decode -> benchB64Op "base64-decode"
   CoreStrToList -> benchStrToList
+  CoreYield -> todo
+  CoreYieldToChain -> todo
+  CoreResume -> todo
+  CoreBind -> omittedDeliberately
   _ -> const []
   where
   omittedDeliberately = const []
   alreadyCovered = const []
+  todo = const []
 
 benchmarkName :: CoreBuiltin -> String
 benchmarkName = \case
