@@ -1,15 +1,15 @@
-## add
+## +
 The `+` function performs addition for numbers, concatenation for strings/lists, or merging for objects.
 
 ### Basic syntax
 
 To perform addition for numbers, use the following syntax:
 
-+ *x* *y*
+`(+ x y)`
 
 To concatenate strings/lists or merge objects, use the following syntax:
 
-+ *x* *y*
+`(+ x y)`
 
 ### Arguments
 
@@ -17,8 +17,8 @@ Use the following arguments to specify the values for addition, concatenation, o
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| x | <a[integer,decimal,string,[<l>],object:<{o}>]> | Specifies the first operand. |
-| y | <a[integer,decimal,string,[<l>],object:<{o}>]> | Specifies the second operand. |
+| `x` | `<a[integer,decimal,string,[<l>],object:<{o}>]>` | Specifies the first operand. |
+| `y` | `<a[integer,decimal,string,[<l>],object:<{o}>]>` | Specifies the second operand. |
 
 ### Return value
 
@@ -26,22 +26,31 @@ The `+` function returns the result of addition for numbers, concatenation for s
 
 ### Examples
 
-The following examples demonstrate the usage of the `+` function within a Pact script. They perform addition, concatenation, or merging:
+The following examples demonstrate the usage of the `+` function within a Pact REPL. They perform addition, concatenation, or merging:
 
 ```lisp
-(+ 1 2)
+pact>(+ 1 2)
+3
 ```
+
 ```lisp
-(+ 5.0 0.5)
+pact>(+ 5.0 0.5)
+5.5
 ```
+
 ```lisp
-(+ "every" "body")
+pact>(+ "every" "body")
+"everybody"
 ```
+
 ```lisp
-(+ [1 2] [3 4])
+pact>(+ [1 2] [3 4])
+[1 2 3 4]
 ```
+
 ```lisp
-(+ { "foo": 100 } { "foo": 1, "bar": 2 })
+pact>(+ { "foo": 100 } { "foo": 1, "bar": 2 })
+{"bar": 2,"foo": 100}
 ```
 
 These examples illustrate how to use the `+` function to perform addition for numbers, concatenation for strings/lists, or merging for objects in Pact, facilitating various types of operations.
