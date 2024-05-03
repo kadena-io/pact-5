@@ -1,11 +1,11 @@
 ## add-time
-Use `add-time` to add a specified number of *`seconds`* to a given *`time`*.
+Use `add-time` to add a specified number of `seconds` to a given `time`.
 
 ### Basic syntax
 
-To add *`seconds`* to a *`time`*, use the following syntax:
+To add `seconds` to a `time`, use the following syntax:
 
-add-time *time* *seconds*
+`(add-time time seconds)`
 
 ### Arguments
 
@@ -13,12 +13,12 @@ Use the following arguments to specify the *`time`* to which you want to add *`s
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| time | time | Specifies the time to which you want to add *`seconds`*. |
-| seconds | decimal or integer | Specifies the number of seconds to add to the *`time`*. |
+| `time` | `time` | Specifies the time to which you want to add `seconds`. |
+| `seconds` | `decimal` or `integer` | Specifies the number of seconds to add to the `time`. |
 
 ### Return values
 
-The `add-time` function returns the resulting time after adding the specified *`seconds`* as a time.
+The `add-time` function returns the resulting time after adding the specified `seconds` as a time.
 
 ### Examples
 
