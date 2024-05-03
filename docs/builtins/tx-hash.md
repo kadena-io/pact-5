@@ -1,3 +1,4 @@
+## tx-hash
 The `tx-hash` function obtains the hash of the current transaction as a string.
 
 ### Basic syntax

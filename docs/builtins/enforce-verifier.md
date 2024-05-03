@@ -1,3 +1,4 @@
+## enforce-verifier
 Use `enforce-verifier` to enforce that a verifier with the specified *`VERIFIERNAME`* is in scope.
 
 ### Basic syntax

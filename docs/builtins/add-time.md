@@ -1,3 +1,4 @@
+## add-time
 Use `add-time` to add a specified number of *`seconds`* to a given *`time`*.
 
 ### Basic syntax

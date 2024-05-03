@@ -1,3 +1,4 @@
+## not-q
 Use `not?` to apply logical 'not' to the results of applying a value to an application function.
 
 ### Basic syntax

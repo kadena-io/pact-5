@@ -1,3 +1,4 @@
+## create-user-guard
 Use `create-user-guard` to define a custom guard *`CLOSURE`* whose arguments are strictly evaluated at definition time and supplied to the indicated function at enforcement time.
 
 ### Basic syntax

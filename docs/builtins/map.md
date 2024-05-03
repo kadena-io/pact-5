@@ -1,3 +1,4 @@
+## map
 Use `map` to apply an application function (APP) to each element in a list (LIST), returning a new list of results.
 
 ### Basic syntax

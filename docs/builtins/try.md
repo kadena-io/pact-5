@@ -1,3 +1,4 @@
+## try
 The `try` function attempts a pure action, returning a default value in the case of failure. Pure expressions are expressions that do not involve I/O operations or work with non-deterministic state, unlike impure expressions such as reading and writing to a table.
 
 ### Basic syntax

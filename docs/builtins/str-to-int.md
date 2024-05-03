@@ -1,3 +1,4 @@
+## str-to-int
 The `str-to-int` function computes the integer value of the string *`STR-VAL`* interpreted in base 10, or in a specified *`BASE`* if provided. The length of *`STR-VAL`* can be up to 512 characters. If *`BASE`* is specified, it must be between 2 and 16, or 64 to perform unpadded base64url conversion. Each digit in *`STR-VAL`* must be in the correct range for the base.
 
 ### Basic syntax

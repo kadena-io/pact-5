@@ -1,3 +1,4 @@
+## constantly
 Use `constantly` to lazily ignore the specified arguments *`IGNORE*` and return the specified *`VALUE`*.
 
 ### Basic syntax

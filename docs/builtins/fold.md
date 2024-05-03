@@ -1,3 +1,4 @@
+## fold
 Use `fold` to iteratively reduce a list by applying a function *`APP`* to the last result and each element, starting with an initial value *`INIT`*.
 
 ### Basic syntax

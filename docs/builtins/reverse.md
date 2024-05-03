@@ -1,3 +1,4 @@
+## reverse
 The `reverse` function reverses the order of elements in a given list.
 
 ### Basic syntax

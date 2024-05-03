@@ -1,3 +1,4 @@
+## describe-namespace
 Here's the reformatted documentation for the `describe-namespace` Pact function:
 
 Use `describe-namespace` to describe the namespace *`NS`*, returning a row object containing the user and admin guards of the namespace, as well as its name.

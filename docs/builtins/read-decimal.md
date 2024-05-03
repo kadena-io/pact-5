@@ -1,3 +1,4 @@
+## read-decimal
 The `read-decimal` function is used to parse a *`key`* string or number value from the top level of the message data body as a decimal.
 
 ### Basic syntax

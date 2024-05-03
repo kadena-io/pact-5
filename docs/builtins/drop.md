@@ -1,3 +1,4 @@
+## drop
 Use `drop` to remove *`COUNT`* values from a *`LIST`* (or string), or entries having keys in *`KEYS`* from an *`OBJECT`*.
 
 ### Basic syntax

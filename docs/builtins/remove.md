@@ -1,3 +1,4 @@
+## remove
 The `remove` function is used to remove an entry associated with a specified *`key`* from an *`OBJECT`*.
 
 ### Basic syntax

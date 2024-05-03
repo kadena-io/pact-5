@@ -1,3 +1,4 @@
+## base64-encode
 Use `base64-encode` to encode a *`string`* as unpadded base64.
 
 ### Basic syntax

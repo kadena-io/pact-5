@@ -1,3 +1,4 @@
+## compose-capability
 Use `compose-capability` to specify and request the grant of a *`CAPABILITY`*, which is an application of a 'defcap' production. This function is only valid within a (distinct) 'defcap' body. It is used as a way to compose *`CAPABILITY`* with the outer capability, such that the scope of the containing 'with-capability' call will "import" this capability. 
 
 Thus, a call to `(with-capability (OUTER-CAP) OUTER-BODY)`, where the `OUTER-CAP` defcap calls `(compose-capability (INNER-CAP))`, will result in `INNER-CAP` being granted in the scope of `OUTER-BODY`.

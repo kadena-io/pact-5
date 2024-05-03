@@ -1,3 +1,4 @@
+## define-keyset
 Use `define-keyset` to define a keyset as *`NAME`* with *`KEYSET`*, or if unspecified, read *`NAME`* from the message payload as a keyset, similarly to 'read-keyset'. If the keyset *`NAME`* already exists, the keyset will be enforced before updating to the new value.
 
 ### Basic syntax

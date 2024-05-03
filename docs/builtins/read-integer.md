@@ -1,3 +1,4 @@
+## read-integer
 The `read-integer` function is used to parse a *`key`* string or number value from the top level of the message data body as an integer.
 
 ### Basic syntax

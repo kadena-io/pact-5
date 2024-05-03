@@ -1,3 +1,4 @@
+## read-msg
 The `read-msg` function is used to read a *`key`* from the top level of the message data body, or the data body itself if not provided. It coerces the value to its corresponding Pact type, such as string, integer, boolean, list, or object.
 
 ### Basic syntax

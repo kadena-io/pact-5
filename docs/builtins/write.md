@@ -1,3 +1,4 @@
+## write
 The `write` function writes an entry in the specified table for a given key with the data provided in the object column.
 
 ### Basic syntax

@@ -1,3 +1,4 @@
+## resume
 The `resume` function is a special form that binds to a yielded object value from the prior step execution in a Pact. If the yield step was executed on a foreign chain, it enforces endorsement via Simple Payment Verification (SPV).
 
 ### Basic syntax

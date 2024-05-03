@@ -1,3 +1,4 @@
+## enforce-pact-version
 Use `enforce-pact-version` to enforce the runtime Pact version to be within a specified range, where the version is greater than or equal to *`MIN-VERSION`* and less than or equal to *`MAX-VERSION`*. Version values are matched numerically from the left, meaning versions like '2', '2.2', and '2.2.3' would all allow '2.2.3'.
 
 ### Basic syntax

@@ -1,3 +1,4 @@
+## bind
 Use `bind` as a special form to evaluate *`src`* to an object which is then bound to with *`bindings`* over subsequent body statements.
 
 ### Basic syntax

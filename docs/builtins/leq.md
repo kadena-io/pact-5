@@ -1,3 +1,4 @@
+## leq
 The `<=` function returns true if the first argument `x` is less than or equal to the second argument `y`.
 
 ### Basic syntax

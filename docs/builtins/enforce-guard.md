@@ -1,3 +1,4 @@
+## enforce-guard
 Use `enforce-guard` to execute a specified *`GUARD`* or a defined keyset named *`KEYSETNAME`* to enforce the desired predicate logic.
 
 ### Basic syntax

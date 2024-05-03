@@ -1,3 +1,4 @@
+## make-list
 Use `make-list` to create a list by repeating a specified value a certain number of times.
 
 ### Basic syntax

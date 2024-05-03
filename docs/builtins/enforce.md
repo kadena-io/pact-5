@@ -1,3 +1,4 @@
+## enforce
 Use `enforce` to fail a transaction with a specified error message *`MSG`* if a pure expression *`TEST`* evaluates to false. Otherwise, it returns true.
 
 ### Basic syntax

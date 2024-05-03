@@ -1,3 +1,4 @@
+## where
 The `where` function is a utility primarily used in conjunction with `filter` and `select` operations. It applies a specified application function (`APP`) to a field (`FIELD`) in a given value (`VALUE`), returning a boolean value based on the result of the application.
 
 ### Basic syntax

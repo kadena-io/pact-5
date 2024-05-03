@@ -1,3 +1,4 @@
+## take
 The `take` function retrieves a specified number of values from a list (or string), or entries with keys specified in *`KEYS`* from an object. If *`COUNT`* is negative, values are taken from the end of the list. If *`COUNT`* exceeds the interval (-2^63,2^63), it is truncated to that range.
 
 ### Basic syntax

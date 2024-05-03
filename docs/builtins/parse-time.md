@@ -1,3 +1,4 @@
+## parse-time
 Use `parse-time` to construct time from a UTC value using a specified format. See ["Time Formats" docs](pact-reference.html#time-formats) for supported formats.
 
 ### Basic syntax

@@ -1,3 +1,4 @@
+## and
 Use `and` to perform a boolean logic AND operation with short-circuiting.
 
 ### Basic syntax

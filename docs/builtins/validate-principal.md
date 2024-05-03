@@ -1,3 +1,4 @@
+## validate-principal
 The `validate-principal` function validates that a principal unambiguously identifies a specified guard.
 
 ### Basic syntax

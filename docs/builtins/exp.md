@@ -1,3 +1,4 @@
+## exp
 Use `exp` to calculate the exponential function of the specified *`X`*.
 
 ### Basic syntax

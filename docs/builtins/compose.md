@@ -1,3 +1,4 @@
+## compose
 Use `compose` to compose functions *`x`* and *`y`* such that *`x`* operates on *`value`*, and *`y`* operates on the results of *`x`*.
 
 ### Basic syntax

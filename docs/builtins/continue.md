@@ -1,3 +1,4 @@
+## continue
 Use `continue` to continue a previously started nested `defpact`.
 
 ### Basic syntax

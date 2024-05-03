@@ -1,3 +1,4 @@
+## format-time
 Use `format-time` to format a `TIME` value using a specified `FORMAT`. See the ["Time Formats" documentation](pact-reference.html#time-formats) for supported formats.
 
 ### Basic syntax

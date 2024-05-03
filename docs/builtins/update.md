@@ -1,3 +1,4 @@
+## update
 The `update` function writes an entry in the specified table for a given key with the data provided in the object column. It fails if data does not exist for the specified key.
 
 ### Basic syntax

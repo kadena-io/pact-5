@@ -1,3 +1,4 @@
+## keyset-ref-guard
 Use `keyset-ref-guard` to create a guard for the keyset registered as KEYSET-REF with the `define-keyset` function. Concrete keysets are themselves guard types; this function is specifically to store references alongside other guards in the database, etc.
 
 ### Basic syntax

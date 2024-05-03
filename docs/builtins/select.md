@@ -1,3 +1,4 @@
+## select
 The `select` function retrieves full rows or specified columns from a table by applying a `WHERE` clause to each row to determine inclusion.
 
 ### Basic syntax

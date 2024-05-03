@@ -1,3 +1,4 @@
+## abs
 Use `abs` to calculate the absolute value of a given *`number`*.
 
 ### Basic syntax

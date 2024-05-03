@@ -1,3 +1,4 @@
+## sub
 The `-` function negates the argument `x`, or subtracts `y` from `x`.
 
 ### Basic syntax

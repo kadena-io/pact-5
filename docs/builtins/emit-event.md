@@ -1,3 +1,4 @@
+## emit-event
 Use `emit-event` to emit a specified *`CAPABILITY`* as an event without evaluating the body of the capability. This function fails if the *`CAPABILITY`* is not marked as `@managed` or `@event`.
 
 ### Basic syntax

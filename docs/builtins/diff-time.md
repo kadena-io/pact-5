@@ -1,3 +1,4 @@
+## diff-time
 Use `diff-time` to compute the difference between *`TIME1`* and *`TIME2`* in seconds.
 
 ### Basic syntax

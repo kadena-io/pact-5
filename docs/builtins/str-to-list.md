@@ -1,3 +1,4 @@
+## str-to-list
 The `str-to-list` function takes a string *`STR`* and returns a list where each element is a single-character string.
 
 ### Basic syntax

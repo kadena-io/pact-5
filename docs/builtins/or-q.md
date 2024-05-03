@@ -1,3 +1,4 @@
+## or-q
 Use `or?` to apply logical 'or' with short-circuit evaluation to the results of applying a value to two application functions.
 
 ### Basic syntax

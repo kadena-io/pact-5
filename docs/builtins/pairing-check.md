@@ -1,3 +1,4 @@
+## pairing-check
 Use `pairing-check` to perform pairing and final exponentiation on points in G1 and G2 in BN254, and check if the result is 1.
 
 ### Basic syntax

@@ -1,3 +1,4 @@
+## gt
 The `>` function returns true if the first argument `x` is greater than the second argument `y`.
 
 ### Basic syntax

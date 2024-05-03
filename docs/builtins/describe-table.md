@@ -1,3 +1,4 @@
+## describe-table
 Use `describe-table` to get metadata for a specified *`TABLE`*. This function returns an object with fields including 'name', 'hash', 'blessed', 'code', and 'keyset'.
 
 ### Basic syntax

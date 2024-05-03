@@ -1,3 +1,4 @@
+## concat
 Use `concat` to take a list of strings *`str-list`* and concatenate each of the strings in the list, returning the resulting string.
 
 ### Basic syntax

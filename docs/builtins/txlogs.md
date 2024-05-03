@@ -1,3 +1,4 @@
+## txlogs
 The `txlog` function returns all updates made to a specified table in a particular transaction identified by its transaction ID (TXID).
 
 ### Basic syntax

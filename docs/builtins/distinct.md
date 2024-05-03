@@ -1,3 +1,4 @@
+## distinct
 Use `distinct` to return a list with duplicates removed from a homogeneous list of *`VALUES`*. The original order of the values is preserved.
 
 ### Basic syntax

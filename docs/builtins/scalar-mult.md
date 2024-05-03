@@ -1,3 +1,4 @@
+## scalar-mult
 The `scalar-mult` function multiplies a point that lies on the curve BN254 by an integer value.
 
 ### Basic syntax

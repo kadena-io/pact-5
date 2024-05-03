@@ -1,3 +1,4 @@
+## not
 Use `not` to compute the boolean negation of a value.
 
 ### Basic syntax

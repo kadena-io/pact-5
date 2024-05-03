@@ -1,3 +1,4 @@
+## keys-all
 Use `keys-all` as a keyset predicate function to determine if all keys in the keyset are matched.
 
 ### Basic syntax

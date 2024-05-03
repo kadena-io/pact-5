@@ -1,3 +1,4 @@
+## dec
 Use `dec` to cast an integer *`X`* to a decimal value.
 
 ### Basic syntax

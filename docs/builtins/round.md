@@ -1,3 +1,4 @@
+## round
 The `round` function performs Banker's rounding, returning either an integer value if no precision is specified or a decimal value with the specified precision.
 
 ### Basic syntax

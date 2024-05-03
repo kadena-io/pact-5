@@ -1,3 +1,4 @@
+## poseidon-hash-hack-a-chain
 Use `poseidon-hash-hack-a-chain` to compute the Poseidon Hash Function. Note: This is a reference version of the Poseidon hash function used by Hack-a-Chain.
 
 ### Basic syntax

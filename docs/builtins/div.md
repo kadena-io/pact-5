@@ -1,3 +1,4 @@
+## div
 The `/` function divides the first argument `x` by the second argument `y`.
 
 ### Basic syntax

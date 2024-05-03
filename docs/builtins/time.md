@@ -1,3 +1,4 @@
+## time
 The `time` function constructs a time object from a UTC value using the ISO8601 format (%Y-%m-%dT%H:%M:%SZ).
 
 ### Basic syntax

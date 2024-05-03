@@ -1,3 +1,4 @@
+## read-string
 The `read-string` function is used to parse a *`key`* string or number value from the top level of the message data body as a string.
 
 ### Basic syntax

@@ -1,3 +1,4 @@
+## log
 Use `log` to compute the logarithm of Y with base X.
 
 ### Basic syntax

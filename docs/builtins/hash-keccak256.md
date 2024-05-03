@@ -1,3 +1,4 @@
+## hash-keccak256
 Use `hash-keccak256` to compute the hash of a list of unpadded base64url-encoded inputs. The hash is computed incrementally over all of the decoded inputs.
 
 ### Basic syntax

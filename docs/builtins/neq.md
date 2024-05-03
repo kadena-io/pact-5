@@ -1,3 +1,4 @@
+## neq
 The `!=` function returns true if the first argument `x` does not equal the second argument `y`.
 
 ### Basic syntax

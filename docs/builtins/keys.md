@@ -1,3 +1,4 @@
+## keys
 Use `keys` to return all keys present in a specified table.
 
 ### Basic syntax

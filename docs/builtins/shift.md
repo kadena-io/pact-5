@@ -1,3 +1,4 @@
+## shift
 The `shift` function performs a bitwise shift operation on the integer *`X`* by *`Y`* bits. If *`Y`* is positive, it shifts *`X`* to the left; otherwise, it shifts *`X`* to the right. Right shifts perform sign extension on signed number types, filling the top bits with 1 if *`X`* is negative and with 0 otherwise.
 
 ### Basic syntax

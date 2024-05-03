@@ -1,3 +1,4 @@
+## and-q
 Use `and?` to apply a logical AND operation to the results of applying a *`value`* to *`a`* and *`b`*, with short-circuiting.
 
 ### Basic syntax

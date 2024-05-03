@@ -1,3 +1,4 @@
+## create-module-guard
 Use `create-module-guard` to define a guard by *`NAME`* that enforces the current module admin predicate.
 
 ### Basic syntax

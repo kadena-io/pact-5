@@ -1,3 +1,4 @@
+## verify-spv
 The `verify-spv` function performs a platform-specific SPV (Simplified Payment Verification) proof of a specified type on a given payload. The format of the payload object depends on the type of proof (TYPE), as does the format of the return object. Specific payload types and return values are documented for platforms such as Chainweb.
 
 ### Basic syntax

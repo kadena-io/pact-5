@@ -1,3 +1,4 @@
+## minutes
 Use `minutes` to represent a duration of N minutes, primarily for use with the `add-time` function.
 
 ### Basic syntax

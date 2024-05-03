@@ -1,3 +1,4 @@
+## read
 Use the `read` function to retrieve information from a specified *`table`* based on a given *`key`*. This function returns the database record object corresponding to the *`key`*. Optionally, you can specify a list of *`columns`* to retrieve specific data from the record.
 
 ### Basic syntax

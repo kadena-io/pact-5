@@ -1,3 +1,4 @@
+## typeof
 The `typeof` function returns the type of the provided value *`X`* as a string.
 
 ### Basic syntax

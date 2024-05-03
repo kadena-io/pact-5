@@ -1,3 +1,4 @@
+## contains
 Use `contains` to test whether a *`LIST`* contains a *`VALUE`*, an *`OBJECT`* has a *`KEY`* entry, or a *`STRING`* contains a substring *`VALUE`*.
 
 ### Basic syntax

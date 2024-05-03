@@ -1,3 +1,4 @@
+## filter
 Use `filter` to filter a list by applying a function *`APP`* to each element. For each element where *`APP`* returns true, the original value is kept in the resulting list.
 
 ### Basic syntax

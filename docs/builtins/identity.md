@@ -1,3 +1,4 @@
+## identity
 Use `identity` to return the provided value.
 
 ### Basic syntax

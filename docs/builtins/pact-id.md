@@ -1,3 +1,4 @@
+## pact-id
 Use `pact-id` to return the ID if called during the current pact execution, failing if not.
 
 ### Basic syntax

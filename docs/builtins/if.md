@@ -1,3 +1,4 @@
+## if
 Use `if` to test a condition. If the condition is true, evaluate the *`then`* expression; otherwise, evaluate the *`else`* expression.
 
 ### Basic syntax

@@ -1,3 +1,4 @@
+## add
 The `+` function performs addition for numbers, concatenation for strings/lists, or merging for objects.
 
 ### Basic syntax

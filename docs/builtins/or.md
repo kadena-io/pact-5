@@ -1,3 +1,4 @@
+## or
 Use `or` for boolean logic with short-circuit evaluation.
 
 ### Basic syntax

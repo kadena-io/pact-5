@@ -1,3 +1,4 @@
+## is-principal
 Use `is-principal` to determine whether a principal string conforms to the principal format without proving its validity.
 
 ### Basic syntax

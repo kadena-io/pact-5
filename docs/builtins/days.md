@@ -1,3 +1,4 @@
+## days
 Use `days` to specify a number of days *`N`*, which can be used with 'add-time' to add or subtract days from a given time.
 
 ### Basic syntax

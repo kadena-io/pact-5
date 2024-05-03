@@ -1,3 +1,4 @@
+## pact-version
 Use `pact-version` to obtain the current Pact build version.
 
 ### Basic syntax

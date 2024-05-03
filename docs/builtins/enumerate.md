@@ -1,3 +1,4 @@
+## enumerate
 Use `enumerate` to return a sequence of numbers from the specified *`first`* number to the specified *`last`* number, inclusively, as a list. 
 
 By default, the sequence increments by one from the *`first`* number to the *`last`* number. Optionally, you can specify an increment other than one to use between numbers in the sequence. 

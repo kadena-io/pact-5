@@ -1,3 +1,4 @@
+## base64-decode
 Use `base64-decode` to decode a *`string`* from unpadded base64 encoding.
 
 ### Basic syntax

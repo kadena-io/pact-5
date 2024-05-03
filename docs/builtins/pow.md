@@ -1,3 +1,4 @@
+## pow
 The `^` function raises the first argument `x` to the power of the second argument `y`.
 
 ### Basic syntax

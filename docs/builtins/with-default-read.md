@@ -1,3 +1,4 @@
+## with-default-read
 The `with-default-read` special form is used to read a row from a specified table for a given key and bind columns according to provided bindings. If the row is not found, it reads columns from defaults, an object with matching key names.
 
 ### Basic syntax

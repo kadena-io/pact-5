@@ -1,3 +1,4 @@
+## validate-keypair
 The `validate-keypair` function enforces that the Curve25519 keypair composed of the public key (PUBLIC) and the private key (SECRET) provided as base-16 strings of length 32 match each other.
 
 ### Basic syntax

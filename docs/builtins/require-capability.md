@@ -1,3 +1,4 @@
+## require-capability
 The `require-capability` function specifies and tests for the existing grant of a specified *`CAPABILITY`*, failing if it is not found in the environment.
 
 ### Basic syntax

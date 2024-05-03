@@ -1,3 +1,4 @@
+## typeof-principal
 The `typeof-principal` function returns the protocol type of a given PRINCIPAL value. If the input value is not a principal type, then an empty string is returned.
 
 ### Basic syntax

@@ -1,3 +1,4 @@
+## fold-db
 Use `fold-db` to select rows from a table using a predicate `QRY` with both key and value, and then accumulate the results of the query using a `CONSUMER` function. The output is sorted by the ordering of keys.
 
 ### Basic syntax

@@ -1,3 +1,4 @@
+## ln
 Use `ln` to compute the natural logarithm of X.
 
 ### Basic syntax

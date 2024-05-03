@@ -1,3 +1,4 @@
+## mult
 The `*` function multiplies the first argument `x` by the second argument `y`.
 
 ### Basic syntax

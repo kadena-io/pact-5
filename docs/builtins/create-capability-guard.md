@@ -1,3 +1,4 @@
+## create-capability-guard
 Use `create-capability-guard` to create a guard that will enforce that a specified *`CAPABILITY`* is acquired.
 
 ### Basic syntax

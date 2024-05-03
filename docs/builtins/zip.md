@@ -1,3 +1,4 @@
+## zip
 The `zip` function combines two lists using a specified function `f` into a new list. The length of the resulting list is determined by the length of the shortest input list.
 
 ### Basic syntax

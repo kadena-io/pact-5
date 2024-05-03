@@ -1,3 +1,4 @@
+## list
 Use `list` to create a list from the specified elements. Note that this function is deprecated in Pact 2.1.1 with support for literal lists.
 
 ### Basic syntax

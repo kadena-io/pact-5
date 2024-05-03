@@ -1,3 +1,4 @@
+## sqrt
 The `sqrt` function computes the square root of the given value *`X`*.
 
 ### Basic syntax

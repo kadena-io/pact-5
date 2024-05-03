@@ -1,3 +1,4 @@
+## create-table
 Use `create-table` to create a table identified by the specified *`TABLE`*.
 
 ### Basic syntax

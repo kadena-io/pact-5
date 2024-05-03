@@ -1,3 +1,4 @@
+## chain-data
 Use `chain-data` to retrieve transaction public metadata, returning an object with fields including 'chain-id', 'block-height', 'block-time', 'prev-block-hash', 'sender', 'gas-limit', 'gas-price', and 'gas-fee'.
 
 ### Basic syntax

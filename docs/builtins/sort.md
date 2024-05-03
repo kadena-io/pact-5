@@ -1,3 +1,4 @@
+## sort
 The `sort` function is used to sort a list of primitive values or objects based on either the values themselves or specific fields within the objects.
 
 ### Basic syntax

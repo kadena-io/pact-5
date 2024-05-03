@@ -1,3 +1,4 @@
+## decrypt-cc20p1305
 Use `decrypt-cc20p1305` to perform decryption of a *`CIPHERTEXT`* using the CHACHA20-POLY1305 Authenticated Encryption with Associated Data (AEAD) construction described in IETF RFC 7539.
 
 ### Basic syntax

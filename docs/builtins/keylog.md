@@ -1,3 +1,4 @@
+## keylog
 Use `keylog` to return updates to a specified table for a given key in transactions at or after a specified transaction ID (TXID), in a list of objects indexed by transaction ID.
 
 ### Basic syntax

@@ -1,3 +1,4 @@
+## create-capability-pact-guard
 Use `create-capability-pact-guard` to create a guard that enforces that a specified *`CAPABILITY`* is acquired and that the currently-executing `defpact` is operational.
 
 ### Basic syntax

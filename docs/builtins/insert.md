@@ -1,3 +1,4 @@
+## insert
 Use `insert` to write an entry in a specified table for a given key of object column data. This operation fails if data already exists for the specified key.
 
 ### Basic syntax

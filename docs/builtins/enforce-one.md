@@ -1,3 +1,4 @@
+## enforce-one
 Use `enforce-one` to run a series of tests in order (in a pure context, plus keyset enforces). If all tests fail, the transaction fails. This function short-circuits on the first successful test.
 
 ### Basic syntax

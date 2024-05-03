@@ -1,3 +1,4 @@
+## point-add
 Use `point-add` to add two points together that lie on the curve BN254. Point addition can be performed either in Fq or in Fq2.
 
 ### Basic syntax

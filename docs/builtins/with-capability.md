@@ -1,3 +1,4 @@
+## with-capability
 The `with-capability` function specifies and requests the grant of an acquired capability, which is an application of a 'defcap' production. It ensures that the specified unique token granted by this application is present in the environment during the execution of the provided body. 
 
 `with-capability` can only be called in the same module that declares the corresponding 'defcap'. If the token is not present, the capability is evaluated, and upon successful completion, the token is installed or granted in the environment. The token will be automatically revoked upon completion of the body. Nested `with-capability` calls for the same token detect the presence of the token and execute the body without reapplying the capability.

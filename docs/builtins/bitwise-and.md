@@ -1,3 +1,4 @@
+## bitwise-and
 The `&` function computes the bitwise AND operation between the first argument `x` and the second argument `y`.
 
 ### Basic syntax

@@ -1,3 +1,4 @@
+## hash
 Use `hash` to compute the BLAKE2b 256-bit hash of a `VALUE`, represented in unpadded base64-url. Strings are converted directly, while other values are converted using their JSON representation. Non-value-level arguments are not allowed.
 
 ### Basic syntax

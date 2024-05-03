@@ -1,3 +1,4 @@
+## describe-module
 Use `describe-module` to get metadata for a specified *`MODULE`*. This function returns an object with fields including 'name', 'hash', 'blessed', 'code', and 'keyset'.
 
 ### Basic syntax

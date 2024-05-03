@@ -1,3 +1,4 @@
+## xor
 The `xor` function computes the bitwise XOR (exclusive OR) operation between two integers.
 
 ### Basic syntax

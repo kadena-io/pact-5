@@ -1,3 +1,4 @@
+## yield
 The `yield` function is used to yield an object for use with the 'resume' function in the subsequent Pact step. It optionally allows targeting the subsequent step to execute on a specific chain using automated SPV (Simplified Payment Verification) endorsement-based dispatch.
 
 ### Basic syntax

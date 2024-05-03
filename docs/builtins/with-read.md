@@ -1,3 +1,4 @@
+## with-read
 The `with-read` special form is used to read a row from a specified table for a given key and bind columns according to provided bindings over subsequent body statements.
 
 ### Basic syntax

@@ -1,3 +1,4 @@
+## ceiling
 Use `ceiling` to round up the value of a decimal *`x`* to the nearest integer or to a specified precision *`prec`* as a decimal.
 
 ### Basic syntax

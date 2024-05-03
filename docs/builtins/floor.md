@@ -1,3 +1,4 @@
+## floor
 Use `floor` to round down the value of a decimal *`X`* to an integer, or to a specified precision *`PREC`* as a decimal.
 
 ### Basic syntax

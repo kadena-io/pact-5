@@ -1,3 +1,4 @@
+## install-capabiliy
 Use `install-capability` to specify and provision the installation of a managed CAPABILITY. Managed capabilities are defined within a 'defcap' block, where a '@managed' tag designates a single parameter to be managed by a specified function. After installation, the CAPABILITY must still be brought into scope using 'with-capability', at which time the 'manager function' is invoked to validate the request.
 
 The manager function is of type 'managed:<p> requested:<p> -> <p>', where '<p>' indicates the type of the managed parameter. For example, if you have '(defcap FOO (bar:string baz:integer) @managed baz FOO-mgr ...)', the manager function would be '(defun FOO-mgr:integer (managed:integer requested:integer) ...)'. 

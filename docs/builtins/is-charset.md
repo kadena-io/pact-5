@@ -1,3 +1,4 @@
+## is-charset
 Use `is-charset` to check whether a string conforms to a supported character set. The character sets currently supported are 'CHARSET_LATIN1' (ISO-8859-1) and 'CHARSET_ASCII' (ASCII). Support for additional sets, including those up through ISO 8859-5 supplement, will be added in the future.
 
 ### Basic syntax

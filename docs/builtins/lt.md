@@ -1,3 +1,4 @@
+## lt
 The `<` function returns true if the first argument `x` is less than the second argument `y`.
 
 ### Basic syntax

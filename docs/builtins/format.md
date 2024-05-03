@@ -1,3 +1,4 @@
+## format
 Use `format` to interpolate variables `VARS` into a `TEMPLATE` string using `{}` placeholders.
 
 ### Basic syntax

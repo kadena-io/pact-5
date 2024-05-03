@@ -1,3 +1,4 @@
+## mod
 Use `mod` to compute the remainder of X divided by Y.
 
 ### Basic syntax

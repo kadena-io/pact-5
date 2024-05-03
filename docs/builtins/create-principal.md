@@ -1,3 +1,4 @@
+## create-principal
 Use `create-principal` to create a principal that unambiguously identifies a specified *`GUARD`*.
 
 ### Basic syntax

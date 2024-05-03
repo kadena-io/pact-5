@@ -1,3 +1,4 @@
+## txids
 The `txids` function returns all transaction IDs (txids) greater than or equal to a specified txid in a given table.
 
 ### Basic syntax

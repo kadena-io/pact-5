@@ -1,3 +1,4 @@
+## bitwise-reverse
 The `~` function reverses all bits in the provided integer.
 
 ### Basic syntax
