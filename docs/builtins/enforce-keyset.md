@@ -1,21 +1,21 @@
 ## enforce-keyset
-Use `enforce-keyset` to execute a specified *`GUARD`* or a defined keyset named *`KEYSETNAME`* to enforce the desired predicate logic.
+Use `enforce-keyset` to execute a specified `GUARD` or a defined keyset named `KEYSETNAME` to enforce the desired predicate logic.
 
 ### Basic syntax
 
-To execute a *`GUARD`* or a defined keyset to enforce desired predicate logic, use the following syntax:
+To execute a `GUARD` or a defined keyset to enforce desired predicate logic, use the following syntax:
 
-enforce-keyset *guard* -> bool
-enforce-keyset *keysetname* -> bool
+`(enforce-keyset GUARD)`
+`(enforce-keyset KEYSETNAME)`
 
 ### Arguments
 
-Use the following arguments to specify the *`GUARD`* or *`KEYSETNAME`* for the `enforce-keyset` Pact function:
+Use the following arguments to specify the `GUARD` or `KEYSETNAME` for the `enforce-keyset` Pact function:
 
 | Argument   | Type   | Description                                        |
 |------------|--------|----------------------------------------------------|
-| guard      | guard  | Specifies the guard to execute.                    |
-| keysetname | string | Specifies the name of the defined keyset to enforce.|
+| `GUARD`    | `guard`  | Specifies the guard to execute.                    |
+| `KEYSETNAME` | `string` | Specifies the name of the defined keyset to enforce.|
 
 ### Return values
 
