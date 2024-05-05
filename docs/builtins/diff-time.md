@@ -13,8 +13,8 @@ Use the following arguments to specify the times for the `diff-time` Pact functi
 
 | Argument | Type | Description                                   |
 |----------|------|-----------------------------------------------|
-| `TIME1`  | `time` | Specifies the first time for the calculation.|
-| `TIME2`    | `time` | Specifies the second time for the calculation.|
+| `time1`    | `time` | Specifies the first time for the calculation.|
+| `time2`    | `time` | Specifies the second time for the calculation.|
 
 ### Return values
 
@@ -25,7 +25,8 @@ The `diff-time` function returns the difference between `TIME1` and `TIME2` in s
 The following example demonstrates the `diff-time` function:
 
 ```lisp
-(diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
+pact>(diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
+23400.0
 ```
 
 In this example, `(diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))` is used to compute the difference between the times "16:00:00" and "09:30:00" in seconds. The function returns the result of this computation as a decimal, representing the time difference between the two specified times.
