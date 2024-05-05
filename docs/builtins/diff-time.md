@@ -1,11 +1,11 @@
 ## diff-time
-Use `diff-time` to compute the difference between *`TIME1`* and *`TIME2`* in seconds.
+Use `diff-time` to compute the difference between `TIME1` and `TIME2` in seconds.
 
 ### Basic syntax
 
-To compute the difference between two times *`TIME1`* and *`TIME2`* in seconds, use the following syntax:
+To compute the difference between two times `TIME1` and `TIME2` in seconds, use the following syntax:
 
-diff-time *`TIME1`* *`TIME2`*
+`(diff-time TIME1 TIME2)`
 
 ### Arguments
 
@@ -13,12 +13,12 @@ Use the following arguments to specify the times for the `diff-time` Pact functi
 
 | Argument | Type | Description                                   |
 |----------|------|-----------------------------------------------|
-| time1    | time | Specifies the first time for the calculation.|
-| time2    | time | Specifies the second time for the calculation.|
+| `TIME1`  | `time` | Specifies the first time for the calculation.|
+| `TIME2`    | `time` | Specifies the second time for the calculation.|
 
 ### Return values
 
-The `diff-time` function returns the difference between *`TIME1`* and *`TIME2`* in seconds as a decimal.
+The `diff-time` function returns the difference between `TIME1` and `TIME2` in seconds as a decimal.
 
 ### Examples
 
