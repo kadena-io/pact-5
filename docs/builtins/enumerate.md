@@ -1,19 +1,19 @@
 ## enumerate
-Use `enumerate` to return a sequence of numbers from the specified *`first`* number to the specified *`last`* number, inclusively, as a list. 
+Use `enumerate` to return a sequence of numbers from the specified `first` number to the specified `last` number, inclusively, as a list. 
 
-By default, the sequence increments by one from the *`first`* number to the *`last`* number. Optionally, you can specify an increment other than one to use between numbers in the sequence. 
+By default, the sequence increments by one from the `first` number to the `last` number. Optionally, you can specify an increment other than one to use between numbers in the sequence. 
 
-If you specify a *`first`* number that’s greater than the *`last`* number, the sequence decrements by one from the *`first`* number to the *`last`* number.
+If you specify a `first` number that’s greater than the `last` number, the sequence decrements by one from the `first` number to the `last` number.
 
 ### Basic syntax
 
 To increment or decrement the sequence by one, use the following syntax:
 
-enumerate *first* *last*
+`(enumerate first last)`
 
 To specify a value to increment or decrement the sequence by, use the following syntax:
 
-enumerate *first* *last inc*
+`(enumerate first last inc)`
 
 ### Arguments
 
@@ -21,8 +21,8 @@ Use the following arguments to define the beginning and end of the sequence you 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| first | integer | Specifies the first number in the sequence. |
-| last | integer | Specifies the last number in the sequence. |
+| `first` | `integer` | Specifies the first number in the sequence. |
+| `last` | `integer` | Specifies the last number in the sequence. |
 
 ### Options
 
@@ -30,7 +30,7 @@ Use the following option to define the increment to use between the beginning an
 
 | Option | Type | Description |
 | --- | --- | --- |
-| inc | integer | Specifies the increment to use between numbers in the sequence. The value can be a positive or negative integer. |
+| `inc` | `integer` | Specifies the increment to use between numbers in the sequence. The value can be a positive or negative integer. |
 
 ### Return values
 
