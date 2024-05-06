@@ -1,11 +1,12 @@
 ## or
+
 Use `or` for boolean logic with short-circuit evaluation.
 
 ### Basic syntax
 
 To perform boolean logic with short-circuit evaluation, use the following syntax:
 
-or *x y*
+`(or x y)`
 
 ### Arguments
 
@@ -13,8 +14,8 @@ Use the following arguments to specify the boolean values for which you want to 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| x | bool | Specifies the first boolean value. |
-| y | bool | Specifies the second boolean value. |
+| `x` | `bool` | Specifies the first boolean value. |
+| `y` | `bool` | Specifies the second boolean value. |
 
 ### Return value
 
