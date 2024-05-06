@@ -1,24 +1,25 @@
 ## log
-Use `log` to compute the logarithm of Y with base X.
+
+Use `log` to compute the logarithm of `Y` with base `X`.
 
 ### Basic syntax
 
-To compute the logarithm of Y with base X, use the following syntax:
+To compute the logarithm of `Y` with base `X`, use the following syntax:
 
-log *x y*
+`(log X Y)`
 
 ### Arguments
 
-Use the following arguments to specify the base (X) and value (Y) for which you want to compute the logarithm using the `log` Pact function.
+Use the following arguments to specify the base (`X`) and value (`Y`) for which you want to compute the logarithm using the `log` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| x | integer, decimal | Specifies the base of the logarithm. |
-| y | integer, decimal | Specifies the value for which you want to compute the logarithm. |
+| `X` | `integer` or `decimal` | Specifies the base of the logarithm. |
+| `Y` | `integer` or `decimal` | Specifies the value for which you want to compute the logarithm. |
 
 ### Return value
 
-The `log` function returns the logarithm of Y with base X.
+The `log` function returns the logarithm of `Y` with base `X`.
 
 ### Examples
 
