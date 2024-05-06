@@ -5,7 +5,7 @@ The `validate-keypair` function enforces that the Curve25519 keypair composed of
 
 To validate a Curve25519 keypair, use the following syntax:
 
-validate-keypair *public* *secret*
+`(validate-keypair PUBLIC SECRET)`
 
 ### Arguments
 
@@ -13,8 +13,8 @@ Use the following arguments to specify the public key and the private key for va
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| public | string | Specifies the public key as a base-16 string of length 32. |
-| secret | string | Specifies the private key as a base-16 string of length 32. |
+| `PUBLIC` | `string` | Specifies the public key as a base-16 string of length 32. |
+| `SECRET` | `string` | Specifies the private key as a base-16 string of length 32. |
 
 ### Return value
 
@@ -26,6 +26,7 @@ The following example demonstrates the usage of the `validate-keypair` function 
 
 ```lisp
 (validate-keypair pubkey privkey)
+true
 ```
 
 This example illustrates how to use the `validate-keypair` function to ensure that a given public and private key pair match in Pact, verifying their integrity.

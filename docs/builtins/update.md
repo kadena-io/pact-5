@@ -3,9 +3,9 @@ The `update` function writes an entry in the specified table for a given key wit
 
 ### Basic syntax
 
-To update an entry in a table for a specific key with the provided object column data, use the following syntax:
+To update an entry in `TABLE` for a specific `KEY` with the provided `OBJECT` column data, use the following syntax:
 
-update *table* *key* *object*
+`(update table key object)`
 
 ### Arguments
 
@@ -13,9 +13,9 @@ Use the following arguments to specify the table, key, and object data for updat
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| table | table:<{row}> | Specifies the table in which to update the entry. |
-| key | string | Specifies the key for the entry to be updated. |
-| object | object:~<{row}> | Specifies the object column data to be written for the key. |
+| `TABLE` | `table:<{row}>` | Specifies the table in which to update the entry. |
+| `KEY` | `string` | Specifies the key for the entry to be updated. |
+| `OBJECT` | `object:<{row}>` | Specifies the object column data to be written for the key. |
 
 ### Return value
 

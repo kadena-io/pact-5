@@ -5,9 +5,9 @@ The `with-capability` function specifies and requests the grant of an acquired c
 
 ### Basic syntax
 
-To specify and request the grant of an acquired capability, use the following syntax:
+To specify and request the grant of an acquired `CAPABILITY`, use the following syntax:
 
-with-capability *capability* *body*
+`(with-capability CAPABILITY BODY)`
 
 ### Arguments
 
@@ -15,8 +15,8 @@ Use the following arguments to specify the capability and the body for execution
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| capability | capability | Specifies the capability to be acquired. |
-| body | [*] | Specifies the body of expressions to be executed under the granted capability. |
+| `CAPABILITY` | `capability` | Specifies the capability to be acquired. |
+| `BODY` | `[]` | Specifies the body of expressions to be executed under the granted capability. |
 
 ### Return value
 
@@ -24,7 +24,7 @@ The `with-capability` function returns the result of executing the provided body
 
 ### Examples
 
-The following example demonstrates the usage of the `with-capability` function within a Pact script. It requests the grant of an 'UPDATE-USERS' capability and executes the body, updating user information:
+The following example demonstrates the usage of the `with-capability` function within a Pact script. It requests the grant of an `'UPDATE-USERS'` capability and executes the body, updating user information:
 
 ```lisp
 (with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))

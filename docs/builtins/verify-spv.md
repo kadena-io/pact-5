@@ -3,9 +3,9 @@ The `verify-spv` function performs a platform-specific SPV (Simplified Payment V
 
 ### Basic syntax
 
-To perform an SPV proof of a specified type on a payload, use the following syntax:
+To perform an SPV proof of a specified `TYPE` on a `PAYLOAD`, use the following syntax:
 
-verify-spv *type* *payload*
+`(verify-spv TYPE PAYLOAD)`
 
 ### Arguments
 
@@ -13,8 +13,8 @@ Use the following arguments to specify the type of SPV proof and the payload for
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| type | string | Specifies the type of SPV proof to be performed. |
-| payload | object:<in> | Specifies the payload object to be used for verification. |
+| `TYPE` | `string` | Specifies the type of SPV proof to be performed. |
+| `PAYLOAD` | `object:<in>` | Specifies the payload object to be used for verification. |
 
 ### Return value
 
@@ -22,7 +22,7 @@ The `verify-spv` function returns an object whose format depends on the specific
 
 ### Examples
 
-The following example demonstrates the usage of the `verify-spv` function within a Pact script. It verifies an SPV proof of type "TXOUT" using the payload obtained from reading a message:
+The following example demonstrates the usage of the `verify-spv` function within a Pact script. It verifies an SPV proof of type `"TXOUT"` using the payload obtained from reading a message:
 
 ```lisp
 (verify-spv "TXOUT" (read-msg "proof"))

@@ -3,9 +3,9 @@ The `validate-principal` function validates that a principal unambiguously ident
 
 ### Basic syntax
 
-To validate a principal against a guard, use the following syntax:
+To validate a `principal` against `GUARD`, use the following syntax:
 
-validate-principal *guard* *principal*
+`(validate-principal GUARD PRINCIPAL)`
 
 ### Arguments
 
@@ -13,12 +13,12 @@ Use the following arguments to specify the guard and the principal for validatio
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| guard | guard | Specifies the guard to validate against. |
-| principal | string | Specifies the principal to be validated. |
+| `GUARD` | `guard` | Specifies the guard to validate against. |
+| `PRINCIPAL` | `string` | Specifies the principal to be validated. |
 
 ### Return value
 
-The `validate-principal` function returns a boolean value indicating whether the provided principal unambiguously identifies the specified guard.
+The `validate-principal` function returns a `boolean` value indicating whether the provided principal unambiguously identifies the specified guard.
 
 ### Examples
 
