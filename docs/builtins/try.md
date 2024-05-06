@@ -5,7 +5,7 @@ The `try` function attempts a pure action, returning a default value in the case
 
 To attempt a pure action and return a default value in case of failure, use the following syntax:
 
-try *default* *action*
+`(try DEFAULT ACTION)`
 
 ### Arguments
 
@@ -13,8 +13,8 @@ Use the following arguments to specify the default value and the action to be at
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| default | \<a> | Specifies the default value to be returned in case the action fails. |
-| action | \<a> | Specifies the action to be attempted. |
+| `DEFAULT` | `<a>` | Specifies the default value to be returned in case the action fails. |
+| `ACTION` | `<a>` | Specifies the action to be attempted. |
 
 ### Return value
 
@@ -22,10 +22,11 @@ The `try` function returns the result of the attempted action. If the action fai
 
 ### Examples
 
-The following example demonstrates the usage of the `try` function within a Pact script. It attempts to enforce a condition, and if it fails, it returns the default value:
+The following example demonstrates the usage of the `try` function within the Pact REPL. It attempts to enforce a condition, and if it fails, it returns the default value:
 
 ```lisp
-(try 3 (enforce (= 1 2) "this will definitely fail"))
+pact>(try 3 (enforce (= 1 2) "this will definitely fail"))
+3
 ```
 
 This example illustrates how to use the `try` function to attempt a pure action and return a default value in case of failure in Pact.

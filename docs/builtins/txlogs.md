@@ -3,9 +3,9 @@ The `txlog` function returns all updates made to a specified table in a particul
 
 ### Basic syntax
 
-To retrieve all updates made to a table in a specific transaction, use the following syntax:
+To retrieve all updates made to `TABLE` in a specific transaction `TXID`, use the following syntax:
 
-txlog *table* *txid*
+`(txlog TABLE TXID)`
 
 ### Arguments
 
@@ -13,8 +13,8 @@ Use the following arguments to specify the table and transaction ID (TXID) for r
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| table | table:<{row}> | Specifies the table from which to retrieve updates. |
-| txid | integer | Specifies the transaction ID (TXID) for which updates are to be retrieved. |
+| `table` | `table:<{row}>` | Specifies the table from which to retrieve updates. |
+| `TXID` | `integer` | Specifies the transaction ID (TXID) for which updates are to be retrieved. |
 
 ### Return value
 
@@ -22,7 +22,7 @@ The `txlog` function returns a list of objects representing all updates made to 
 
 ### Examples
 
-The following example demonstrates the usage of the `txlog` function within a Pact script. It retrieves all updates made to the `accounts` table in the transaction with the TXID 123485945:
+The following example demonstrates the usage of the `txlog` function within a Pact script. It retrieves all updates made to the `accounts` table in the transaction with the `TXID` `123485945`:
 
 ```lisp
 (txlog accounts 123485945)

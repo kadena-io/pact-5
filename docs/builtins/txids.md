@@ -5,7 +5,7 @@ The `txids` function returns all transaction IDs (txids) greater than or equal t
 
 To retrieve all txid values greater than or equal to a specified txid in a table, use the following syntax:
 
-txids *table* *txid*
+`(txids TABLE TXID)`
 
 ### Arguments
 
@@ -13,8 +13,8 @@ Use the following arguments to specify the table and txid for retrieval using th
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| table | table:<{row}> | Specifies the table from which to retrieve txids. |
-| txid | integer | Specifies the txid value to compare against. |
+| `TABLE` | `table:<{row}>` | Specifies the table from which to retrieve txids. |
+| `TXID` | `integer` | Specifies the txid value to compare against. |
 
 ### Return value
 
@@ -22,7 +22,7 @@ The `txids` function returns a list of transaction IDs (txids) greater than or e
 
 ### Examples
 
-The following example demonstrates the usage of the `txids` function within a Pact script. It retrieves all txid values greater than or equal to 123849535 in the `accounts` table:
+The following example demonstrates the usage of the `txids` function within a Pact script. It retrieves all txid values greater than or equal to `123849535` in the `accounts` table:
 
 ```lisp
 (txids accounts 123849535)
