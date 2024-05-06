@@ -1,11 +1,12 @@
 ## ln
-Use `ln` to compute the natural logarithm of X.
+
+Use `ln` to compute the natural logarithm of `X`.
 
 ### Basic syntax
 
 To compute the natural logarithm of a value, use the following syntax:
 
-ln *x*
+`(ln X)`
 
 ### Argument
 
@@ -13,7 +14,7 @@ Use the following argument to specify the value for which you want to compute th
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| x | integer, decimal | Specifies the value for which you want to compute the natural logarithm. |
+| `X` | `integer` or `decimal` | Specifies the value for which you want to compute the natural logarithm. |
 
 ### Return value
 
