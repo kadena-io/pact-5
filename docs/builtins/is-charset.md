@@ -1,11 +1,14 @@
 ## is-charset
-Use `is-charset` to check whether a string conforms to a supported character set. The character sets currently supported are 'CHARSET_LATIN1' (ISO-8859-1) and 'CHARSET_ASCII' (ASCII). Support for additional sets, including those up through ISO 8859-5 supplement, will be added in the future.
+
+Use `is-charset` to check whether a string conforms to a supported character set.
+The character sets currently supported are `CHARSET_LATIN1` (ISO-8859-1) and `CHARSET_ASCII` (ASCII).
+Support for additional sets, including those up through ISO 8859-5 supplement, will be added in the future.
 
 ### Basic syntax
 
 To check whether a string conforms to a specified character set, use the following syntax:
 
-is-charset *charset input*
+`(is-charset charset input)`
 
 ### Arguments
 
@@ -13,8 +16,8 @@ Use the following arguments to specify the character set and input string you wa
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| charset | integer | Specifies the character set to which the input string should conform. Currently supported values are 'CHARSET_LATIN1' (ISO-8859-1) and 'CHARSET_ASCII' (ASCII). |
-| input | string | Specifies the input string to be checked for conformity to the specified character set. |
+| `charset` | `integer` | Specifies the character set to which the input string should conform. Currently supported values are `0` for 'CHARSET_LATIN1' (ISO-8859-1) and `1` for 'CHARSET_ASCII' (ASCII). |
+| `input` | `string` | Specifies the input string to be checked for conformity to the specified character set. |
 
 ### Return value
 
