@@ -1,11 +1,12 @@
 ## if
-Use `if` to test a condition. If the condition is true, evaluate the *`then`* expression; otherwise, evaluate the *`else`* expression.
+
+Use `if` to test a condition. If the condition `cond` is true, evaluate the `then` expression; otherwise, evaluate the `else` expression.
 
 ### Basic syntax
 
 To test a condition and execute different expressions based on the result, use the following syntax:
 
-if *condition then else*
+`(if cond then else)`
 
 ### Arguments
 
@@ -13,13 +14,13 @@ Use the following arguments to define the condition and expressions to be evalua
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| cond | boolean | Specifies the condition to be tested. |
-| then | any | Specifies the expression to be evaluated if the condition is true. |
-| else | any | Specifies the expression to be evaluated if the condition is false. |
+| `cond` | `boolean` | Specifies the condition to be tested. |
+| `then` | `<a>` | Specifies the expression to be evaluated if the condition is true. |
+| `else` | `<a>` | Specifies the expression to be evaluated if the condition is false. |
 
 ### Return value
 
-The `if` function returns the result of evaluating either the *`then`* expression or the *`else`* expression, depending on the outcome of the condition.
+The `if` function returns the result of evaluating either the `then` expression or the `else` expression, depending on the outcome of the condition.
 
 ### Examples
 
