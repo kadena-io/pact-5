@@ -3,9 +3,9 @@ The `with-default-read` special form is used to read a row from a specified tabl
 
 ### Basic syntax
 
-To read a row from a table with default values and bind columns according to provided bindings, use the following syntax:
+To read a row from a `TABLE` with `DEFAULTs` values and bind columns according to provided `BINDINGS`, use the following syntax:
 
-with-default-read *table* *key* *defaults* *bindings* -> *body*
+`(with-default-read TABLE KEY DEFAULTS BINDINGS)`
 
 ### Arguments
 
@@ -13,11 +13,11 @@ Use the following arguments to specify the table, key, defaults, bindings, and b
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| table | table:<{row}> | Specifies the table from which to read the row. |
-| key | string | Specifies the key for which to read the row. |
-| defaults | object:~<{row}> | Specifies the defaults object containing values for missing columns. |
-| bindings | binding:~<{row}> | Specifies the bindings for columns to be bound. |
-| body | <a> | Specifies the subsequent body statements to be executed. |
+| `TABLE` | `table:<{row}>` | Specifies the table from which to read the row. |
+| `KEY` | `string` | Specifies the key for which to read the row. |
+| `DEFAULTS` | `object:<{row}>` | Specifies the defaults object containing values for missing columns. |
+| `BINDINGS` | `binding:<{row}>` | Specifies the bindings for columns to be bound. |
+| `BODY` | `<a>` | Specifies the subsequent body statements to be executed. |
 
 ### Return value
 

@@ -3,9 +3,9 @@ The `yield` function is used to yield an object for use with the 'resume' functi
 
 ### Basic syntax
 
-To yield an object for use with 'resume', use the following syntax:
+To yield an `OBJECT` for use with `resume`, use the following syntax:
 
-yield *object* [*target-chain*]
+`(yield OBJECT [TARGET-CHAIN])`
 
 ### Arguments
 
@@ -13,8 +13,8 @@ Use the following arguments to specify the object and, optionally, the target ch
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| object | object:<{y}> | Specifies the object to be yielded for use with 'resume'. |
-| target-chain | string | (Optional) Specifies the chain ID on which the subsequent step should execute. |
+| `OBJECT` | `object:<{y}>` | Specifies the object to be yielded for use with 'resume'. |
+| `TARGET-CHAIN` | `string` | (Optional) Specifies the chain ID on which the subsequent step should execute. |
 
 ### Return value
 
@@ -22,7 +22,7 @@ The `yield` function returns the yielded object.
 
 ### Examples
 
-The following examples demonstrate the usage of the `yield` function within a Pact script. They yield an object for use with 'resume', optionally targeting the subsequent step to execute on a specific chain:
+The following examples demonstrate the usage of the `yield` function within a Pact script. They yield an object for use with `resume`, optionally targeting the subsequent step to execute on a specific chain:
 
 ```lisp
 (yield { "amount": 100.0 })

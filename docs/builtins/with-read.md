@@ -3,9 +3,9 @@ The `with-read` special form is used to read a row from a specified table for a 
 
 ### Basic syntax
 
-To read a row from a table and bind columns according to provided bindings, use the following syntax:
+To read a row from a `TABLE` and bind columns according to provided `BINDINGS`, use the following syntax:
 
-with-read *table* *key* *bindings* -> *body*
+`(with-read TABLE KEY BINDINGS)`
 
 ### Arguments
 
@@ -13,10 +13,10 @@ Use the following arguments to specify the table, key, bindings, and body for ex
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| table | table:<{row}> | Specifies the table from which to read the row. |
-| key | string | Specifies the key for which to read the row. |
-| bindings | binding:<{row}> | Specifies the bindings for columns to be bound. |
-| body | <a> | Specifies the subsequent body statements to be executed. |
+| `TABLE` | `table:<{row}>` | Specifies the table from which to read the row. |
+| `KEY` | `string` | Specifies the key for which to read the row. |
+| `BINDINGS` | `binding:<{row}>` | Specifies the bindings for columns to be bound. |
+| `BODY` | `<a>` | Specifies the subsequent body statements to be executed. |
 
 ### Return value
 
