@@ -5,11 +5,11 @@ The `select` function retrieves full rows or specified columns from a table by a
 
 To select full rows from a table based on a `WHERE` clause, use the following syntax:
 
-select *table* *where*
+`(select TABLE WHERE)`
 
 To select specific columns from a table based on a `WHERE` clause, use the following syntax:
 
-select *table* [*columns*] *where*
+`(select TABLE COLUMNS WHERE)`
 
 ### Arguments
 
@@ -17,9 +17,9 @@ Use the following arguments to specify the table, columns, and `WHERE` clause fo
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| table | table:<{row}> | Specifies the table from which to select rows. |
-| columns | [string] | (Optional) Specifies the list of columns to select from the table. |
-| where | row:object:<{row}> | Specifies the `WHERE` clause to apply to each row to determine inclusion. |
+| `TABLE` | `table:<{row}>` | Specifies the table from which to select rows. |
+| `COLUMNS` | `[string]` | (Optional) Specifies the list of columns to select from the table. |
+| `WHERE` | `row:object:<{row}>` | Specifies the `WHERE` clause to apply to each row to determine inclusion. |
 
 ### Return value
 
