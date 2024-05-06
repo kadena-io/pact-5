@@ -1,11 +1,12 @@
 ## map
-Use `map` to apply an application function (APP) to each element in a list (LIST), returning a new list of results.
+
+Use `map` to apply an application function (`APP`) to each element in a list (`LIST`), returning a new list of results.
 
 ### Basic syntax
 
 To apply an application function to each element in a list, use the following syntax:
 
-map *app list*
+`(map APP LIST)`
 
 ### Arguments
 
@@ -13,8 +14,8 @@ Use the following arguments to specify the application function and the list of 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| app | x:<b> -> <a> | Specifies the application function to be applied to each element in the list. |
-| list | [<b>] | Specifies the list of elements to be mapped. |
+| `APP` | `x:<b> -> <a>` | Specifies the application function to be applied to each element in the list. |
+| `LIST` | `[<b>]` | Specifies the list of elements to be mapped. |
 
 ### Return value
 
