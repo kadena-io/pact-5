@@ -14,6 +14,7 @@ import Data.Bifunctor
 import NeatInterpolation (text)
 
 import Pact.Core.Builtin
+import Pact.Core.Capabilities
 import Pact.Core.Guards
 import Pact.Core.Names
 import Pact.Core.PactValue
@@ -535,6 +536,14 @@ benchStrToList pdb =
   | (title, str) <- take 3 $ enumExpString "a" 1000 10
   ]
 
+benchRequireCapability :: BuiltinBenches
+benchRequireCapability pdb =
+  [ runNativeBenchmarkPreparedStMod (stCaps caps) [("c", cap)] pdb title "(require-capability c)"
+  | let cap = PCapToken $ CapToken (mkGasModelFqn "0") []
+  , (title, cnt) <- take 3 $ enumExpNum 1000 10
+  , let caps = [ CapToken (fqnToQualName $ mkGasModelFqn $ T.pack $ show n) [] | n <- [0..cnt] ]
+  ]
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -606,6 +615,7 @@ benchesForBuiltin bn = case bn of
   CoreYieldToChain -> todo
   CoreResume -> todo
   CoreBind -> omittedDeliberately
+  CoreRequireCapability -> benchRequireCapability
   _ -> const []
   where
   omittedDeliberately = const []
