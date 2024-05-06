@@ -14,7 +14,7 @@ Use the following arguments to specify the `TYPE`, `POINT`, and `SCALAR` value f
 | Argument | Type | Description |
 | --- | --- | --- |
 | `TYPE` | `string` | Specifies the type of point (e.g., `'g1`). |
-| `POINT1` | `\<a>` | Specifies the point on the curve BN254 to be multiplied. |
+| `POINT1` | `<a>` | Specifies the point on the curve BN254 to be multiplied. |
 | `SCALAR` | `integer` | Specifies the `integer` value to multiply the point by. |
 
 ### Return value

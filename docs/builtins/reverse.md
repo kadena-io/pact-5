@@ -13,7 +13,7 @@ Use the following argument to specify the `LIST` to be reversed using the `rever
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `LIST` | `[\<a>]` | Specifies the list to be reversed. |
+| `LIST` | `[<a>]` | Specifies the list to be reversed. |
 
 ### Return value
 
