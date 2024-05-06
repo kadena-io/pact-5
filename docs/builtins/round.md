@@ -5,11 +5,11 @@ The `round` function performs Banker's rounding, returning either an integer val
 
 To round a decimal value to the nearest integer, use the following syntax:
 
-round *x*
+`(round X)`
 
 To round a decimal value to a specified precision, use the following syntax:
 
-round *x* *prec*
+`(round X PREC)`
 
 ### Arguments
 
@@ -17,27 +17,29 @@ Use the following arguments to specify the value to be rounded and, optionally, 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| x | decimal | Specifies the decimal value to be rounded. |
-| prec | integer | (Optional) Specifies the precision to round to, if applicable. |
+| `X` | `decimal` | Specifies the decimal value to be rounded. |
+| `PREC` | `integer` | (Optional) Specifies the precision to round to, if applicable. |
 
 ### Return value
 
-If no precision is specified, the `round` function returns the rounded value as an integer. If precision is specified, it returns the rounded value as a decimal.
+If no precision is specified, the `round` function returns the rounded value as an `integer`. If precision is specified, it returns the rounded value as a `decimal`.
 
 ### Examples
 
-The following examples demonstrate the usage of the `round` function within a Pact script.
+The following examples demonstrate the usage of the `round` function within the Pact REPL.
 
 To round the decimal value 3.5 to the nearest integer:
 
 ```lisp
-(round 3.5)
+pact>(round 3.5)
+4
 ```
 
 To round the decimal value 100.15234 to 2 decimal places:
 
 ```lisp
-(round 100.15234 2)
+pact>(round 100.15234 2)
+10.15
 ```
 
-These examples illustrate how to use the `round` function to perform Banker's rounding on decimal values in Pact, either to the nearest integer or to a specified precision.
+These examples illustrate how to use the `round` function to perform Banker's rounding on `decimal` values in Pact, either to the nearest `integer` or to a specified precision.
