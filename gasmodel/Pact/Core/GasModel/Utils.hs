@@ -324,8 +324,8 @@ runNativeBenchmark
   -> C.Benchmark
 runNativeBenchmark = runNativeBenchmark' pure pure
 
-withLoaded :: [(Text, PactValue)] -> (BenchEvalState -> IO BenchEvalState)
-withLoaded envVars = pure . (esLoaded .~ synthLoaded)
+withLoaded :: [(Text, PactValue)] -> (BenchEvalState -> BenchEvalState)
+withLoaded envVars = esLoaded .~ synthLoaded
   where
   synthLoaded = Loaded
     { _loModules = mempty
@@ -340,7 +340,7 @@ runNativeBenchmarkPrepared
   -> String
   -> Text
   -> C.Benchmark
-runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure (withLoaded envVars)
+runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure (pure . withLoaded envVars)
 
 type EnvMod = Endo BenchEvalEnv
 
@@ -357,7 +357,21 @@ runNativeBenchmarkPreparedEnvMod
   -> String
   -> Text
   -> C.Benchmark
-runNativeBenchmarkPreparedEnvMod (Endo envMod) envVars = runNativeBenchmark' (pure . envMod) (withLoaded envVars)
+runNativeBenchmarkPreparedEnvMod (Endo envMod) envVars = runNativeBenchmark' (pure . envMod) (pure . withLoaded envVars)
+
+type StMod = Endo BenchEvalState
+
+stCaps :: [CapToken QualifiedName PactValue] -> StMod
+stCaps capToks = Endo $ esCaps .~ CapState ((`CapSlot` []) <$> capToks) mempty mempty mempty
+
+runNativeBenchmarkPreparedStMod
+  :: StMod
+  -> [(Text, PactValue)]
+  -> PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> C.Benchmark
+runNativeBenchmarkPreparedStMod (Endo stMod) envVars = runNativeBenchmark' pure (pure . stMod . withLoaded envVars)
 
 
 dummyTx :: PactDb b i -> IO () -> [C.Benchmark] -> [C.Benchmark]
