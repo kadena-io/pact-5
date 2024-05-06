@@ -1,11 +1,12 @@
 ## not
+
 Use `not` to compute the boolean negation of a value.
 
 ### Basic syntax
 
-To compute the boolean negation of a value, use the following syntax:
+To compute the boolean negation of `X`, use the following syntax:
 
-not *x*
+`(not X)`
 
 ### Argument
 
@@ -13,7 +14,7 @@ Use the following argument to specify the boolean value for which you want to co
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| x | bool | Specifies the boolean value to be negated. |
+| `X` | `bool` | Specifies the boolean value to be negated. |
 
 ### Return value
 
