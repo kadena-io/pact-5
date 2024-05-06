@@ -5,7 +5,7 @@ Use `identity` to return the provided value.
 
 To return the provided value, use the following syntax:
 
-identity *value*
+`(identity value)`
 
 ### Arguments
 
@@ -13,7 +13,7 @@ Use the following argument to specify the value you want to return using the `id
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| value | any | Specifies the value to be returned. |
+| `value` | `*` | Specifies the value to be returned. |
 
 ### Return value
 
