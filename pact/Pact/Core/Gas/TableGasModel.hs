@@ -266,6 +266,10 @@ runTableModel = \case
       -- and the execution time grows linearly, hence it's about 10 milligas per key/value pair in the object
       let objSizeFactor = 10
       in MilliGas $ fromIntegral $ objSize * textCompareCost key * objSizeFactor
+  GCapOp op -> case op of
+    CapOpRequire cnt ->
+      let mgPerCap = 100
+      in MilliGas $ fromIntegral $ cnt * mgPerCap
   where
   textCompareCost str = fromIntegral $ T.length str
 

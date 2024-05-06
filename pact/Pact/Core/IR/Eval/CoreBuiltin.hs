@@ -1175,7 +1175,11 @@ defineKeySet info b cont handler env = \case
 
 requireCapability :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 requireCapability info b cont handler _env = \case
-  [VCapToken ct] -> requireCap info cont handler ct
+  [VCapToken ct] -> do
+    slots <- useEvalState $ esCaps . csSlots
+    let cnt = sum [1 + length cs | CapSlot _ cs <- slots]
+    chargeGasArgs info $ GCapOp $ CapOpRequire cnt
+    requireCap info cont handler ct
   args -> argsError info b args
 
 composeCapability :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m

@@ -984,9 +984,7 @@ isCapInStack
   :: (MonadEval b i m)
   => CapToken QualifiedName PactValue
   -> m Bool
-isCapInStack ct = do
-  capSet <- getAllStackCaps
-  pure $ S.member ct capSet
+isCapInStack ct = S.member ct <$> getAllStackCaps
 {-# SPECIALIZE isCapInStack
    :: CapToken QualifiedName PactValue
    -> Eval Bool

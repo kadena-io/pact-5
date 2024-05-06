@@ -31,6 +31,7 @@ module Pact.Core.Gas
  , IntegerPrimOp(..)
  , StrOp(..)
  , ObjOp(..)
+ , CapOp(..)
  , ConcatType(..)
  , GasTextLength(..)
  , GasListLength(..)
@@ -161,6 +162,10 @@ data ObjOp
   -- ^ The cost of removing a key from an object with the given fields count.
   deriving (Eq, Show, Ord, Generic, NFData)
 
+data CapOp
+  = CapOpRequire !Int
+  deriving (Eq, Show, Ord, Generic, NFData)
+
 data GasArgs
   = GAConstant !MilliGas
   -- Todo: integerOpCost seems like a case of `GALinear`
@@ -193,6 +198,8 @@ data GasArgs
   -- ^ Gas costs for string operations
   | GObjOp !ObjOp
   -- ^ Gas cost for object-specific operations
+  | GCapOp !CapOp
+  -- ^ Gas cost for capabilities ops
   deriving (Show, Generic, NFData)
 
 instance Pretty GasArgs where
