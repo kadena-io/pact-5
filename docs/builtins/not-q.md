@@ -1,11 +1,12 @@
-## not-q
+## not?
+
 Use `not?` to apply logical 'not' to the results of applying a value to an application function.
 
 ### Basic syntax
 
-To apply logical 'not' to the results of applying a value to an application function, use the following syntax:
+To apply logical 'not' to the results of applying a `value` to an application function `app`, use the following syntax:
 
-not? *app value*
+`(not? app value)`
 
 ### Arguments
 
@@ -13,8 +14,8 @@ Use the following arguments to specify the application function and the value to
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| app | x:<r> -> bool | Specifies the application function. |
-| value | <r> | Specifies the value to be applied to the application function. |
+| `app` | `x:<r> -> bool` | Specifies the application function. |
+| `value` | `<r>` | Specifies the value to be applied to the application function. |
 
 ### Return value
 
