@@ -1,11 +1,11 @@
 ## fold-db
-Use `fold-db` to select rows from a table using a predicate `QRY` with both key and value, and then accumulate the results of the query using a `CONSUMER` function. The output is sorted by the ordering of keys.
+Use `fold-db` to select rows from a table `TABLE` using a predicate `QRY` with both key and value, and then accumulate the results of the query using a `CONSUMER` function. The output is sorted by the ordering of keys.
 
 ### Basic syntax
 
 To select rows from a table, apply a predicate, and accumulate the results using a consumer function, use the following syntax:
 
-fold-db *table* *qry* *consumer*
+`(fold-db TABLE QRT CONSUMER)`
 
 ### Arguments
 
@@ -13,9 +13,9 @@ Use the following arguments to specify the table, predicate, and consumer functi
 
 | Argument  | Type               | Description                                                      |
 |-----------|--------------------|------------------------------------------------------------------|
-| table     | table:<{row}>      | Specifies the table from which to select rows.                   |
-| qry       | a:string b:object:<{row}> -> bool | Specifies the predicate function to apply to each row.          |
-| consumer  | a:string b:object:<{row}> -> <b>  | Specifies the consumer function to accumulate results.          |
+| `TABLE`     | `table:<{row}>`      | Specifies the table from which to select rows.                   |
+| `QRY`       | `a:string b:object:<{row}> -> bool` | Specifies the predicate function to apply to each row.          |
+| `CONSUMER`  | `a:string b:object:<{row}> -> <b> -> [<b>]`  | Specifies the consumer function to accumulate results.          |
 
 ### Return values
 
@@ -26,7 +26,7 @@ The `fold-db` function returns a list of accumulated results based on the predic
 The following example demonstrates the `fold-db` function:
 
 ```lisp
-(let*
+(let
   ((qry (lambda (k obj) true)) ;; Select all rows
    (f (lambda (x) [(at 'firstName x), (at 'b x)])) ;; Example consumer function
   )
