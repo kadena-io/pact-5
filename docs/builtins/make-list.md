@@ -1,11 +1,12 @@
 ## make-list
+
 Use `make-list` to create a list by repeating a specified value a certain number of times.
 
 ### Basic syntax
 
-To create a list by repeating a value a specified number of times, use the following syntax:
+To create a list by repeating a `value` a specified number of `times`, use the following syntax:
 
-make-list *length value*
+`(make-list times value)`
 
 ### Arguments
 
@@ -13,8 +14,8 @@ Use the following arguments to specify the length of the list and the value to b
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| length | integer | Specifies the length of the list to be created. |
-| value | any | Specifies the value to be repeated to create the list. |
+| `times` | `integer` | Specifies the length of the list to be created. |
+| `value` | `any` | Specifies the value to be repeated to create the list. |
 
 ### Return value
 
