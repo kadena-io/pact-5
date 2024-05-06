@@ -1,11 +1,12 @@
 ## namespace
-Use `namespace` to set the current namespace to a specified value. All expressions that occur in the current transaction will be contained in the specified namespace. Once committed, they may be accessed via their fully qualified name, which will include the namespace. Subsequent namespace calls in the same transaction will set a new namespace for all declarations until either the next namespace declaration or the end of the transaction.
+
+Use `namespace` to set the current `namespace` to a specified value. All expressions that occur in the current transaction will be contained in the specified namespace. Once committed, they may be accessed via their fully qualified name, which will include the namespace. Subsequent namespace calls in the same transaction will set a new namespace for all declarations until either the next namespace declaration or the end of the transaction.
 
 ### Basic syntax
 
-To set the current namespace to a specified value, use the following syntax:
+To set the current `namespace` to a specified value, use the following syntax:
 
-namespace *namespace*
+`(namespace namespace)`
 
 ### Argument
 
@@ -13,7 +14,7 @@ Use the following argument to specify the namespace to be set using the `namespa
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| namespace | string | Specifies the namespace to be set. |
+| `namespace` | `string` | Specifies the namespace to be set. |
 
 ### Return value
 
