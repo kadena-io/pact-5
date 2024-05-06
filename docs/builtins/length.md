@@ -1,11 +1,12 @@
 ## length
-Use `length` to compute the length of X, where X can be a list, a string, or an object.
+
+Use `length` to compute the length of `X`, where `X` can be a list, a string, or an object.
 
 ### Basic syntax
 
 To compute the length of a list, string, or object, use the following syntax:
 
-length *x*
+`(length X)`
 
 ### Argument
 
@@ -13,7 +14,7 @@ Use the following argument to specify the value for which you want to compute th
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| x | list, string, object | Specifies the value for which you want to compute the length. |
+| `X` | `list`, `string`, `object` | Specifies the value for which you want to compute the length. |
 
 ### Return value
 
