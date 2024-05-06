@@ -1,11 +1,12 @@
 ## mod
-Use `mod` to compute the remainder of X divided by Y.
+
+Use `mod` to compute the remainder of `X` divided by `Y`.
 
 ### Basic syntax
 
-To compute the remainder of X divided by Y, use the following syntax:
+To compute the remainder of `X` divided by `Y`, use the following syntax:
 
-mod *x y*
+`(mod X Y)`
 
 ### Arguments
 
@@ -13,12 +14,12 @@ Use the following arguments to specify the integers for which you want to comput
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| x | integer | Specifies the dividend. |
-| y | integer | Specifies the divisor. |
+| `X` | `integer` | Specifies the dividend. |
+| `Y` | `integer` | Specifies the divisor. |
 
 ### Return value
 
-The `mod` function returns the remainder of the division of X by Y.
+The `mod` function returns the remainder of the division of `X` by `Y`.
 
 ### Examples
 
