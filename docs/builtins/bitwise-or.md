@@ -1,4 +1,4 @@
-## bitwise-or
+## |
 The `|` function computes the bitwise OR operation between two integers.
 
 ### Basic syntax
