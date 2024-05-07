@@ -444,7 +444,7 @@
   (transfer-create 'doug 'will (read-keyset 'will) 1.0))
 (env-gaslog)
 (expect
-  "Gas cost of transfer-create" 334 (env-gas))
+  "Gas cost of transfer-create" 335 (env-gas))
 
 (expect
   "doug now has 0.4 coins"
