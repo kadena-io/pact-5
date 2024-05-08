@@ -417,6 +417,12 @@ instance Pretty term => Pretty (ConstVal term) where
     TermConst t -> pretty t
     EvaledConst v -> pretty v
 
+instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Step name ty builtin info) where
+  pretty = \case
+    Step t -> parens ("step" <+> pretty t)
+    StepWithRollback t1 t2 -> parens ("step-with-rollback" <+> pretty t1 <+> pretty t2)
+
+
 instance (Pretty name, Pretty ty, Pretty b) => Pretty (DefConst name ty b i) where
   pretty (DefConst (Arg n mty _) term _) =
     parens $ "defconst" <+> pretty n <> maybe mempty ((":" <>) . pretty) mty <+> pretty term

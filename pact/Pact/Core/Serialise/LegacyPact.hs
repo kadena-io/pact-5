@@ -62,12 +62,10 @@ import qualified Pact.JSON.Decode as JD
 import Pact.Core.IR.Term
 import qualified Pact.Core.Serialise.CBOR_V1 as CBOR
 import qualified Pact.Core.Serialise.LegacyPact.Types as Legacy
-import qualified Pact.Core.Pretty as Pretty
 
 import Text.Show.Deriving
 import Data.Functor.Classes (Show1(..))
 
-import Debug.Trace
 
 
 
@@ -275,11 +273,7 @@ fromLegacyDef mh (Legacy.Def (Legacy.DefName n) _mn dt funty body meta) = do
   ret <- fromLegacyType (Legacy._ftReturn funty)
   let lArgs = Legacy._ftArgs funty
   args <- traverse fromLegacyArg lArgs
-  catchError (go mn ret args) $ \e -> do
-    traceM $ "For function " <> show mn <> show n
-    traceM $ show body
-    throwError e
-
+  go mn ret args
   where
     lamFromArgs args b = case args of
       [] -> Nullary b ()
@@ -295,8 +289,9 @@ fromLegacyDef mh (Legacy.Def (Legacy.DefName n) _mn dt funty body meta) = do
             (lamFromArgs args body')
             () -- info
         Legacy.Defpact -> do
-          steps' <- fromLegacyStepForm' mh args body >>= local (+ fromIntegral (length args)) . (traversed.traverseDefPactStep) fixTreeIndices
-          pure $ DPact (DefPact n args (Just ret) steps' ())
+          steps' <- fromLegacyStepForm' mh args body
+          steps'' <- local (+ fromIntegral (length args)) $ (traversed.traverseDefPactStep) fixTreeIndices steps'
+          pure $ DPact (DefPact n args (Just ret) steps'' ())
         Legacy.Defcap -> do
             body' <- local (+ fromIntegral (length args)) . fixTreeIndices =<< fromLegacyBodyForm' mh args body
             meta' <- case meta of
@@ -418,7 +413,7 @@ fromLegacyStepForm'
   -> [Arg Type]
   -> Scope Int Legacy.Term (Either CorePreNormalizedTerm LegacyRef)
   -> TranslateM (NonEmpty (Step (Name, DeBruijn) Type CoreBuiltin ()))
-fromLegacyStepForm' mh args body = do
+fromLegacyStepForm' mh args body = local (+ fromIntegral (length args)) $ do
   currDepth <- ask
   case debruijnize (length args) currDepth args body of
     Legacy.TList li _ -> traverse fromStepForm (V.toList li) >>= \case
@@ -668,12 +663,21 @@ fromLegacyTerm mh = \case
         [_t1]    -> error "cenforce case TODO: JOSE"
         _ -> error "TODO"
 
+      Conditional CEnforceOne{} _ -> traverse (fromLegacyTerm mh) args >>= \case
+        [t1, ListLit t2 _] -> pure (Conditional (CEnforceOne t1 t2) ())
+        [_t1]    -> error "cenforce case TODO: JOSE"
+        _ -> error "TODO"
+
       Conditional CIf{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [cond, b1, b2] -> pure (Conditional (CIf cond b1 b2) ())
         _ -> error "if case TODO: JOSE"
 
       CapabilityForm WithCapability{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [t1, t2] -> pure (CapabilityForm (WithCapability t1 t2) ())
+        [t1, ListLit t2 _] -> case reverse t2 of
+          [] -> error "invariant failure: with-cap empty body"
+          x:xs -> do
+            let body' = foldl' (\r l -> Sequence l r ()) x xs
+            pure (CapabilityForm (WithCapability t1 body') ())
         _ -> error "withcapability case TODO: JOSE"
 
       CapabilityForm CreateUserGuard{} _ ->
