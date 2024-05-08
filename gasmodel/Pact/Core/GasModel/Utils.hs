@@ -362,10 +362,10 @@ runNativeBenchmarkPreparedEnvMod (Endo envMod) envVars = runNativeBenchmark' (pu
 type StMod = Endo BenchEvalState
 
 stCaps :: [CapToken QualifiedName PactValue] -> StMod
-stCaps capToks = Endo $ esCaps .~ CapState ((`CapSlot` []) <$> capToks) mempty mempty mempty
+stCaps capToks = Endo $ esCaps.csSlots .~ ((`CapSlot` []) <$> capToks)
 
 stManaged :: [ManagedCap QualifiedName PactValue] -> StMod
-stManaged manageds = Endo $ esCaps .~ CapState mempty (S.fromList manageds) mempty mempty
+stManaged manageds = Endo $ esCaps.csManaged .~ S.fromList manageds
 
 runNativeBenchmarkPreparedStMod
   :: StMod
