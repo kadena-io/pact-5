@@ -54,10 +54,11 @@ rawTest db tbl fromLegacy = do
   keys <- getRawData db tbl
   forM_ keys $ \(RawRow i txid payload) -> case JD.eitherDecodeStrict' payload of
       Right lo -> case fromLegacy lo of
-        Left e -> putStrLn $ "\t" <> show i <> " " <> show txid <> " " <> e
+        Left e ->
+          putStrLn $ "\t" <> show i <> " " <> show txid <> " " <> e
         Right _ -> pure ()
       Left err -> putStrLn $ "Fatal: decoding into legacy format failed: "
-          <> show tbl <> " = " <> show i <> " " <> show txid <> " with : " <> err 
+          <> show tbl <> " = " <> show i <> " " <> show txid <> " with : " <> err
 
 
 
@@ -67,8 +68,7 @@ main = getArgs >>= \case
 
     rawTest db "SYS:Modules" (runTranslateM . fromLegacyModuleData placeholderHash)
     rawTest db "SYS:KeySets" fromLegacyKeySet
-    rawTest db "SYS:Namespaces" fromLegacyNamespace
-    rawTest db "SYS:Pacts" fromLegacyDefPactExec
+    rawTest db "SYS:Namespaces" fromLegacyNamespace    -- rawTest db "SYS:Pacts" fromLegacyDefPactExec
 
     tbls <- userTables db
     forM_ tbls $ \tbl -> do

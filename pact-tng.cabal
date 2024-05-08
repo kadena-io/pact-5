@@ -78,6 +78,7 @@ common pact-common
     , groups
     , mod
     , neat-interpolation
+    , deriving-compat
     -- ^ is used by the `BuiltinDocs` module.
     , ghc-bignum
     -- Legacy pact decoding

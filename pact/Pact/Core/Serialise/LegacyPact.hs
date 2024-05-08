@@ -63,6 +63,10 @@ import Pact.Core.IR.Term
 import qualified Pact.Core.Serialise.CBOR_V1 as CBOR
 import qualified Pact.Core.Serialise.LegacyPact.Types as Legacy
 
+import Text.Show.Deriving
+import Data.Functor.Classes (Show1(..))
+
+import Debug.Trace
 
 
 
@@ -75,6 +79,53 @@ type TranslateState = [CoreDef]
 
 
 type TranslateM = ReaderT DeBruijn (StateT TranslateState (Except String))
+
+instance Show1 Legacy.Def where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Def)
+instance Show1 Legacy.Lam where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Lam)
+instance Show1 Legacy.Object where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Object)
+instance Show1 Legacy.Term where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Term)
+
+instance Show1 Legacy.Type where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Type)
+instance Show1 Legacy.TypeVar where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.TypeVar)
+instance Show1 Legacy.FunType where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.FunType)
+instance Show1 Legacy.Arg where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Arg)
+
+instance Show1 Legacy.Guard where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Guard)
+instance Show1 Legacy.CapabilityGuard where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.CapabilityGuard)
+instance Show1 Legacy.UserGuard where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.UserGuard)
+instance Show1 Legacy.BindPair where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.BindPair)
+instance Show1 Legacy.App where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.App)
+instance Show1 Legacy.ObjectMap where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.ObjectMap)
+instance Show1 Legacy.BindType where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.BindType)
+instance Show1 Legacy.ConstVal where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.ConstVal)
+instance Show1 Legacy.DefcapMeta where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.DefcapMeta)
+instance Show1 Legacy.DefMeta where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.DefMeta)
+instance Show1 Legacy.ModuleDef where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.ModuleDef)
+instance Show1 Legacy.Module where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Module)
+instance Show1 Legacy.Governance where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Governance)
+instance Show1 Legacy.Step where
+  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Step)
 
 runTranslateM :: TranslateM a -> Either String a
 runTranslateM a = runExcept (evalStateT (runReaderT a 0) [])
@@ -142,7 +193,7 @@ fromLegacyConstDef
   -> Legacy.Arg (Legacy.Term LegacyRef)
   -> Maybe Legacy.ModuleName
   -> Legacy.ConstVal (Legacy.Term LegacyRef)
-  -> _
+  -> TranslateM (DefConst n Type b ())
 fromLegacyConstDef mh arg _mn cv = do
   let arg' = (fmap.fmap) Right arg
   Arg n mty <- fromLegacyArg arg'
@@ -150,14 +201,14 @@ fromLegacyConstDef mh arg _mn cv = do
     Legacy.CVRaw _ -> throwError "fromLegacyConstDef: invariant"
     Legacy.CVEval _ t -> fromLegacyTerm mh (Right <$> t) >>= \case
       InlineValue pv _ -> pure pv
-      _ -> throwError "fromLEgacyConstDef: invariant, not InlineValue"
+      _ -> throwError "fromLegacyConstDef: invariant, not InlineValue"
   pure (DefConst n mty (EvaledConst cval) ())
 
 fromLegacySchemaDef
   :: Legacy.TypeName
   -> Maybe Legacy.ModuleName
   -> [Legacy.Arg (Legacy.Term LegacyRef)]
-  -> TranslateM _
+  -> TranslateM (DefSchema Type ())
 fromLegacySchemaDef (Legacy.TypeName sn) _mn largs = do
   let largs' = (fmap.fmap.fmap) Right largs
   args <- traverse fromLegacyArg largs'
@@ -195,7 +246,7 @@ fromLegacyInterfaceDefRef mh = \case
   Legacy.Ref (Legacy.TConst arg m ce) ->
     IfDConst <$> fromLegacyConstDef mh arg m ce
 
-  Legacy.Ref t -> throwError $ "fromLegacyDefRef: " <>  show t
+  Legacy.Ref t -> throwError $ "fromLegacyDefRef: " <> show t
   Legacy.Direct _d -> throwError "fromLegacyDefRef: invariant Direct"
 
 
@@ -222,26 +273,33 @@ fromLegacyDef mh (Legacy.Def (Legacy.DefName n) _mn dt funty body meta) = do
   ret <- fromLegacyType (Legacy._ftReturn funty)
   let lArgs = Legacy._ftArgs funty
   args <- traverse fromLegacyArg lArgs
-  case dt of
-    Legacy.Defun -> do
-      body' <- fixTreeIndices =<< fromLegacyBodyForm' mh args body
-      pure $ Dfun $ Defun
-        n  -- defun name
-        args -- args
-        (Just ret)
-        body'
-        () -- info
-    Legacy.Defpact -> do
-      steps' <- fromLegacyStepForm' mh args body >>= (traversed.traverseDefPactStep) fixTreeIndices
-      pure $ DPact (DefPact n args (Just ret) steps' ())
-    Legacy.Defcap -> do
-        body' <- fixTreeIndices =<< fromLegacyBodyForm' mh args body
-        meta' <- case meta of
-          -- Note: Empty `meta` implies the cap is
-          -- unmanaged.
-          Just meta' -> fromLegacyDefMeta mn mh args meta'
-          Nothing -> pure Unmanaged
-        pure $ DCap (DefCap n args (Just ret) body' meta' ())
+  catchError (go mn ret args) $ \e -> do
+    traceM $ "For function " <> show mn <> show n
+    traceM $ show body
+    throwError e
+
+  where
+    go mn ret args=
+      case dt of
+        Legacy.Defun -> do
+          body' <- fixTreeIndices =<< fromLegacyBodyForm' mh args body
+          pure $ Dfun $ Defun
+            n  -- defun name
+            args -- args
+            (Just ret)
+            body'
+            () -- info
+        Legacy.Defpact -> do
+          steps' <- fromLegacyStepForm' mh args body >>= (traversed.traverseDefPactStep) fixTreeIndices
+          pure $ DPact (DefPact n args (Just ret) steps' ())
+        Legacy.Defcap -> do
+            body' <- fixTreeIndices =<< fromLegacyBodyForm' mh args body
+            meta' <- case meta of
+              -- Note: Empty `meta` implies the cap is
+              -- unmanaged.
+              Just meta' -> fromLegacyDefMeta mn mh args meta'
+              Nothing -> pure Unmanaged
+            pure $ DCap (DefCap n args (Just ret) body' meta' ())
 
 
 fromLegacyInterfDef
@@ -281,7 +339,7 @@ fromLegacyDefMetaInterface args = \case
         Legacy.TDef td -> do
           let (Legacy.DefName dn) = Legacy._dDefName td
           pure (DefManaged (DefManagedMeta (idx', p) (BareName dn)))
-        _ -> throwError "invariant: interface defmeta invariant violated"
+        f' -> throwError $ "invariant: interface defmeta invariant1 violated " <> show f'
   Legacy.DMDefcap Legacy.DefcapEvent -> pure DefEvent
 
 
@@ -301,7 +359,10 @@ fromLegacyDefMeta mn mh args = \case
           let (Legacy.DefName dn) = Legacy._dDefName td
           let fqn = FullyQualifiedName mn dn mh
           pure (DefManaged (DefManagedMeta (idx', p) (FQName fqn)))
-        _ -> throwError "invariant: interface defmeta invariant violated"
+        Legacy.TVar (Right (Legacy.Direct (Legacy.PDFreeVar fqn))) -> do
+          let fqn' = fromLegacyFullyQualifiedName fqn
+          pure $ DefManaged (DefManagedMeta (idx', p) (FQName fqn'))
+        f' -> throwError $ "invariant: interface defmeta invariant2 violated " <> show f'
   Legacy.DMDefcap Legacy.DefcapEvent -> pure DefEvent
 
 
@@ -390,7 +451,7 @@ debruijnize totalLen depth = Bound.instantiate $ \i ->
 
 fromLegacyPactValue :: Legacy.PactValue -> Either String PactValue
 fromLegacyPactValue = \case
-  Legacy.PLiteral l -> pure $ fromLegacyLiteral l
+  Legacy.PLiteral l -> pure $ either PLiteral id $ fromLegacyLiteral l
   Legacy.PList p -> do
     l <- traverse fromLegacyPactValue p
     pure (PList l)
@@ -469,12 +530,6 @@ fromLegacyPersistDirect = \case
     unitValue = InlineValue PUnit ()
     unitName = (Name "unitName" (NBound 0), 0)
 
--- {"a" := b} ... b
--- =>
--- lambda (obj) .
---  let b = (at "a" obj) -- obj here is ix 0
---  in .. b -- obj here is ix 1
-
 objBindingToLet
   :: Foldable t
   => ModuleHash
@@ -504,6 +559,17 @@ objBindingToLet mh bps scope = do
         pure $ Let larg accessTerm body ()
       _ -> throwError "fromLegacyBindPair: Invariant"
 
+desugarApp :: DesugarBuiltin b => Term n dt b i -> [Term n dt b i] -> i -> Term n dt b i
+desugarApp fn args i = case fn of
+  Builtin b _ -> desugarAppArity i b args
+  _ -> App fn args i
+
+higherOrder1Arg :: [CoreBuiltin]
+higherOrder1Arg = [CoreMap, CoreFilter]
+
+higherOrder2Arg :: [CoreBuiltin]
+higherOrder2Arg = [CoreFold, CoreZip]
+
 fromLegacyTerm
   :: ModuleHash
   -> Legacy.Term (Either CorePreNormalizedTerm LegacyRef)
@@ -526,7 +592,7 @@ fromLegacyTerm mh = \case
             lam <- objBindingToLet mh bps scope
             pure (App fn' [bObj', lam] ())
 
-          _ -> throwError "invariant failure: CoreBind"
+          _ -> throwError $ "invariant failure: CoreBind"
         CoreWithRead -> case args of
           [tbl, rowkey, Legacy.TBinding bps scope _] -> do
             tbl' <- fromLegacyTerm mh tbl
@@ -536,18 +602,49 @@ fromLegacyTerm mh = \case
 
           _ -> throwError "invariant failure: CoreWithRead"
         CoreWithDefaultRead -> case args of
-          [tbl, rowkey, Legacy.TBinding bps scope _] -> do
+          [tbl, rowkey, defaultObj, Legacy.TBinding bps scope _] -> do
             tbl' <- fromLegacyTerm mh tbl
             rowkey' <- fromLegacyTerm mh rowkey
+            defaultObj' <- fromLegacyTerm mh defaultObj
             lam <- objBindingToLet mh bps scope
-            pure (App fn' [tbl', rowkey', lam] ())
+            pure (App fn' [tbl', rowkey', defaultObj', lam] ())
+
+          _ -> throwError "invariant failure: CoreWithDefaultRead"
+        CoreResume -> case args of
+          [Legacy.TBinding bps scope _] -> do
+            lam <- objBindingToLet mh bps scope
+            pure (App fn' [lam] ())
 
           _ -> throwError "invariant failure: CoreWithRead"
+        -- [HOF Translation]
+        -- Note: The following sections of translation are explained as follows:
+        -- we transform, for example `(map (+ k) other-arg)` into
+        -- `(map (lambda (arg) (+ k arg)) other-arg)
+        -- This eta expansion is necessary to
+        _ | b `elem` higherOrder1Arg
+          , Legacy.TApp (Legacy.App mapOperator mapOperands): xs <- args -> do
+          d <- ask
+          let injectedArg = (Var (Name "" (NBound 0), d + 1) () :: CorePreNormalizedTerm)
+          let containingLam e = Lam (pure (Arg "" Nothing)) e ()
+          (mapOperator', mapOperands') <- local (+ 1) $ (,) <$> fromLegacyTerm mh mapOperator <*> traverse (fromLegacyTerm mh) mapOperands
+          let body = containingLam (desugarApp mapOperator' (mapOperands' ++ [injectedArg]) ())
+          xs' <- traverse (fromLegacyTerm mh) xs
+          pure (App fn' (body:xs') ())
+
+        _ | b `elem` higherOrder2Arg
+          , Legacy.TApp (Legacy.App mapOperator mapOperands): xs <- args -> do
+          d <- ask
+          let injectedArg1 = (Var (Name "" (NBound 1), d + 2) () :: CorePreNormalizedTerm)
+              injectedArg2 = (Var (Name "" (NBound 0), d + 2) () :: CorePreNormalizedTerm)
+          let containingLam e = Lam (pure (Arg "" Nothing)) e ()
+          (mapOperator', mapOperands') <- local (+ 2) $ (,) <$> fromLegacyTerm mh mapOperator <*> traverse (fromLegacyTerm mh) mapOperands
+          let body = containingLam (desugarApp mapOperator' (mapOperands' ++ [injectedArg1, injectedArg2]) ())
+          xs' <- traverse (fromLegacyTerm mh) xs
+          pure (App fn' (body:xs') ())
+
         _ -> do
           args' <- traverse (fromLegacyTerm mh) args
           pure (desugarAppArity () b args')
-
-        -- | otherwise -> pure (desugarAppArity () b args')
 
       -- TODO: Add addtional cases
       Conditional CEnforce{} _ -> traverse (fromLegacyTerm mh) args >>= \case
@@ -560,17 +657,19 @@ fromLegacyTerm mh = \case
         _ -> error "if case TODO: JOSE"
 
       CapabilityForm WithCapability{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [t1, t2] -> pure (CapabilityForm (WithCapability  t1 t2) ())
+        [t1, t2] -> pure (CapabilityForm (WithCapability t1 t2) ())
         _ -> error "withcapability case TODO: JOSE"
 
-      CapabilityForm CreateUserGuard{} _ ->traverse (fromLegacyTerm mh) args >>= \case
+      CapabilityForm CreateUserGuard{} _ ->
+        traverse (fromLegacyTerm mh) args >>= \case
         -- TODO case is wrong
-        [t2] -> pure (CapabilityForm (CreateUserGuard  undefined [t2]) ())
+        [App (Var n _) cugargs _] ->
+          pure (CapabilityForm (CreateUserGuard n cugargs) ())
         t -> error $ "createuserguard case TODO: JOSE" <> show t
 
       Try _ _ _ -> traverse (fromLegacyTerm mh) args >>= \case
         [t1, t2] -> pure (Try t1 t2 ())
-        t -> error $ "createuserguard case TODO: JOSE" <> show t
+        t -> error $ "try case TODO: JOSE" <> show t
 
       _ -> do
         args' <- traverse (fromLegacyTerm mh) args
@@ -596,9 +695,16 @@ fromLegacyTerm mh = \case
     (\v -> InlineValue (PGuard v) ()) <$> fromLegacyGuard mh g
 
   -- Todo: binding pairs should be done like in `Desugar.hs`
-  Legacy.TBinding _bp _body _ ->
-    pure (Var undefined ())
-    --error "todo: bind pairs"
+  Legacy.TBinding bps body bt -> case bt of
+    Legacy.BindLet -> do
+      body' <- fromLegacyBodyForm' mh bps body
+      foldrM goLet body' bps
+      where
+      goLet (Legacy.BindPair arg val) rest = do
+        arg' <- fromLegacyArg arg
+        v' <- fromLegacyTerm mh val
+        pure $ Let arg' v' rest ()
+    _ -> throwError "unsupported: object binds outside of designated callsite"
 
   Legacy.TObject (Legacy.Object o _ _) -> do
    let m = M.toList (Legacy._objectMap o)
@@ -606,10 +712,10 @@ fromLegacyTerm mh = \case
    pure (ObjectLit obj ())
 
   -- Note: this does not show up in the prod database
-  Legacy.TNative{} -> throwError "fromLegacyTerm: invariant"
+  -- Legacy.TNative{} -> throwError "fromLegacyTerm: invariant"
 
   Legacy.TLiteral l ->
-    pure $ InlineValue (fromLegacyLiteral l) ()
+    pure $ either (`Constant` ()) (`InlineValue` ()) $ fromLegacyLiteral l
 
   Legacy.TTable (Legacy.TableName tbl) mn mh' _ -> let
     mn' = fromLegacyModuleName mn
@@ -701,13 +807,13 @@ fromLegacyPactId (Legacy.PactId pid) = DefPactId pid
 
 fromLegacyLiteral
   :: Legacy.Literal
-  -> PactValue
+  -> Either Literal PactValue
 fromLegacyLiteral = \case
-  Legacy.LString s -> PLiteral (LString s)
-  Legacy.LInteger i -> PLiteral (LInteger i)
-  Legacy.LDecimal d -> PLiteral (LDecimal d)
-  Legacy.LBool b -> PLiteral (LBool b)
-  Legacy.LTime l -> PTime l
+  Legacy.LString s -> Left (LString s)
+  Legacy.LInteger i -> Left (LInteger i)
+  Legacy.LDecimal d -> Left (LDecimal d)
+  Legacy.LBool b -> Left (LBool b)
+  Legacy.LTime l -> Right $ PTime l
 
 fromLegacyUse
   :: Legacy.Use
