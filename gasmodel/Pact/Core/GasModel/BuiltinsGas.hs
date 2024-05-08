@@ -13,9 +13,11 @@ import Control.Monad
 import Data.Bifunctor
 import NeatInterpolation (text)
 
+import Pact.Core.IR.Term
 import Pact.Core.Builtin
 import Pact.Core.Capabilities
 import Pact.Core.Guards
+import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.PactValue
 import Pact.Core.Persistence
@@ -553,6 +555,18 @@ benchRequireCapability pdb =
     ]
   ]
 
+benchInstallCapability :: BuiltinBenches
+benchInstallCapability pdb =
+  [ runNativeBenchmarkPreparedStMod (stManaged manageds <> stAddDef "theCap" theCapDef) [("c", capTok)] pdb title "(install-capability c)"
+  | let capTok = PCapToken $ CapToken (mkGasModelFqn "theCap") []
+        theCapDef = DCap $ DefCap "theCap" [] Nothing (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
+  , (title, cnt) <- take 3 $ enumExpNum 1000 100
+  , let manageds = [ ManagedCap ct ct (AutoManaged False)
+                   | n <- [0..cnt]
+                   , let ct = CapToken (fqnToQualName $ mkGasModelFqn $ T.pack $ show n) []
+                   ]
+  ]
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -625,6 +639,7 @@ benchesForBuiltin bn = case bn of
   CoreResume -> todo
   CoreBind -> omittedDeliberately
   CoreRequireCapability -> benchRequireCapability
+  CoreInstallCapability -> benchInstallCapability
   _ -> const []
   where
   omittedDeliberately = const []
