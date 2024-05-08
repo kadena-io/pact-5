@@ -367,6 +367,19 @@ stCaps capToks = Endo $ esCaps.csSlots .~ ((`CapSlot` []) <$> capToks)
 stManaged :: [ManagedCap QualifiedName PactValue] -> StMod
 stManaged manageds = Endo $ esCaps.csManaged .~ S.fromList manageds
 
+stAddDef :: Text -> Def Name Type CoreBuiltin () -> StMod
+stAddDef name dfn = Endo $ (esLoaded.loToplevel %~ M.insert name (fqn, dkind))
+                         . (esLoaded.loAllLoaded %~ M.insert fqn dfn)
+  where
+  fqn = mkGasModelFqn name
+  dkind = case dfn of
+    Dfun{} -> DKDefun
+    DConst{} -> DKDefConst
+    DCap{} -> DKDefCap
+    DSchema{} -> error "stAddDef: todo support schemas"
+    DTable{} -> DKDefTable
+    DPact{} -> DKDefPact
+
 runNativeBenchmarkPreparedStMod
   :: StMod
   -> [(Text, PactValue)]
