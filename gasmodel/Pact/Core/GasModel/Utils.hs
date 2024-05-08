@@ -334,7 +334,7 @@ runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure stMod
     { _loModules = mempty
     , _loToplevel = M.fromList [ (n, (mkGasModelFqn n, DKDefConst)) | n <- fst <$> envVars ]
     , _loNamespace = Nothing
-    , _loAllLoaded = M.fromList [ (mkGasModelFqn n, DConst $ DefConst n Nothing (EvaledConst v) ()) | (n, v) <- envVars ]
+    , _loAllLoaded = M.fromList [ (mkGasModelFqn n, DConst $ DefConst (Arg n Nothing ()) (EvaledConst v) ()) | (n, v) <- envVars ]
     }
   stMod = pure . (esLoaded .~ synthLoaded)
 
