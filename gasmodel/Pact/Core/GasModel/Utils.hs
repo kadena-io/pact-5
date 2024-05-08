@@ -364,6 +364,9 @@ type StMod = Endo BenchEvalState
 stCaps :: [CapToken QualifiedName PactValue] -> StMod
 stCaps capToks = Endo $ esCaps .~ CapState ((`CapSlot` []) <$> capToks) mempty mempty mempty
 
+stManaged :: [ManagedCap QualifiedName PactValue] -> StMod
+stManaged manageds = Endo $ esCaps .~ CapState mempty (S.fromList manageds) mempty mempty
+
 runNativeBenchmarkPreparedStMod
   :: StMod
   -> [(Text, PactValue)]
