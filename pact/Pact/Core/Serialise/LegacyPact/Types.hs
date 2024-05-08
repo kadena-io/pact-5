@@ -8,8 +8,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# language MonoLocalBinds #-}
--- {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -779,15 +778,15 @@ data Term n =
       _tDef :: !(Def n)
 --    , _tInfo :: !Info
     } |
-    TNative {
-      _tNativeName :: !NativeDefName
-    , _tNativeFun :: !NativeDFun
-    , _tFunTypes :: !(FunTypes (Term n))
-    , _tNativeExamples :: ![Example]
-    , _tNativeDocs :: !Text
-    , _tNativeTopLevelOnly :: !Bool
---    , _tInfo :: !Info
-    } |
+--     TNative {
+--       _tNativeName :: !NativeDefName
+--     , _tNativeFun :: !NativeDFun
+--     , _tFunTypes :: !(FunTypes (Term n))
+--     , _tNativeExamples :: ![Example]
+--     , _tNativeDocs :: !Text
+--     , _tNativeTopLevelOnly :: !Bool
+-- --    , _tInfo :: !Info
+--     } |
     TConst {
       _tConstArg :: !(Arg (Term n))
     , _tModule :: !(Maybe ModuleName)
@@ -861,30 +860,11 @@ data Term n =
     deriving (Functor,Foldable,Traversable,Generic)
 --    deriving (Generic)
 
+-- instance (Show a, Show b, Show1 f) => (Show (Scope b f a)) where
+--   show (Scope f)
 
 deriving instance (Show1 Term, Show n) => Show (Term n)
 
-instance Show1 Term where
-  liftShowsPrec _ _ _ = \case
-    TModule{} -> showString "TModule"
-    TList{} -> showString "TList"
-    TDef{} -> showString "TDef"
-    TNative{} -> showString "TNative"
-    TConst{} -> showString "TConst"
-    TApp{} -> showString "TApp"
-    TVar{} -> showString "TVar"
-    TBinding{} -> showString "TBinding"
-    TLam{} -> showString "TLam"
-    TObject{} -> showString "TObject"
-    TSchema{} -> showString "TSchema"
-    TLiteral{} -> showString "TLiteral"
-    TGuard{} -> showString "TGuard"
-    TUse{} -> showString "TUser"
-    TStep{} -> showString "TStep"
-    TModRef{} -> showString "TModRef"
-    TTable{} -> showString "TTable"
-    TDynamic{} -> showString "TDynamic"
---instance Show1 Term where
 
 
 newtype FieldKey = FieldKey Text
@@ -1377,7 +1357,7 @@ instance Monad Term where
     TList bs t >>= f = TList (V.map (>>= f) bs) (fmap (>>= f) t)
     TDef (Def n m dt ft b dm) >>= f =
       TDef (Def n m dt (fmap (>>= f) ft) (b >>>= f) (fmap (fmap (>>= f)) dm))
-    TNative n fn t exs d tl >>= f = TNative n fn (fmap (fmap (>>= f)) t) exs d tl
+    -- TNative n fn t exs d tl >>= f = TNative n fn (fmap (fmap (>>= f)) t) exs d tl
     TConst d m c >>= f = TConst (fmap (>>= f) d) m (fmap (>>= f) c)
     TApp a >>= f = TApp (fmap (>>= f) a)
     TVar n >>= f = (f n)
@@ -1448,7 +1428,7 @@ instance JD.FromJSON PersistDirect where
 instance JD.FromJSON (Ref' PersistDirect) where
   parseJSON v =
     JD.withObject "Direct" (\o -> Direct <$> o JD..: "direct") v <|>
-        JD.withObject "Ref" (\o -> Ref <$> o JD..: "ref") v 
+        JD.withObject "Ref" (\o -> Ref <$> o JD..: "ref") v
   {-# INLINE parseJSON #-}
 
 fromPactValue :: PactValue -> Term Name
@@ -1489,11 +1469,6 @@ instance JD.FromJSON a => JD.FromJSON (Namespace a) where
     <$> o JD..: "name"
     <*> o JD..: "user"
     <*> o JD..: "admin"
-
-
-
-
-
 
 
 newtype ChainId = ChainId { _chainId :: Text }
@@ -1786,3 +1761,6 @@ instance JD.FromJSON n => JD.FromJSON (Term n) where
     -- parseWithInfo f = (\a -> f a $ getInfo a) <$> parseJSON v
     parseWithInfo :: JD.FromJSON a => (a -> Term n) -> A.Parser (Term n)
     parseWithInfo f = f <$> JD.parseJSON v
+
+
+
