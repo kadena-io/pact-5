@@ -300,8 +300,8 @@ evaluateTerm cont handler env (ObjectLit o info) = do
       evalCEK cont' handler env term
     [] -> returnCEKValue cont handler (VObject mempty)
 
-evaluateTerm _cont _handler _env (InlineValue _ i) = throwExecutionError i
-    (InvariantFailure "Encounter `InlineValue` which is used for back. compat pact < 5")
+evaluateTerm cont handler _env (InlineValue v _) =
+  returnCEKValue cont handler (VPactValue v)
 {-# SPECIALIZE evaluateTerm
    :: CoreCEKCont
    -> CoreCEKHandler
