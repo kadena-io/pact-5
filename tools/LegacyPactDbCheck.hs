@@ -66,7 +66,7 @@ main :: IO ()
 main = getArgs >>= \case
   [dbstr] -> bracket (SQL.open (T.pack dbstr)) SQL.close $ \db -> do
 
-    rawTest db "SYS:Modules" (runTranslateM . fromLegacyModuleData placeholderHash)
+    rawTest db "SYS:Modules" (runTranslateM . fromLegacyModuleData)
     rawTest db "SYS:KeySets" fromLegacyKeySet
     rawTest db "SYS:Namespaces" fromLegacyNamespace    -- rawTest db "SYS:Pacts" fromLegacyDefPactExec
 

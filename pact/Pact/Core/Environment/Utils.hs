@@ -36,6 +36,7 @@ import Control.Exception
 import Control.Monad.IO.Class(MonadIO(..))
 import Data.Default
 import Data.Maybe(mapMaybe)
+import Control.Monad.IO.Class
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
@@ -132,6 +133,7 @@ lookupModuleData info pdb mn =
    Nothing -> do
     liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
       Just mdata@(ModuleData md deps) -> do
+        liftIO $ print $ "LOADING " <> show (_mName md) <> "_" <> show (_mHash md)
         let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> _mDefs md
         (esLoaded . loAllLoaded) %== M.union newLoaded . M.union deps
         (esLoaded . loModules) %== M.insert mn mdata

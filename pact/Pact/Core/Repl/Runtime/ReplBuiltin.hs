@@ -32,6 +32,7 @@ import Pact.Core.Environment
 import Pact.Core.PactValue
 import Pact.Core.Gas
 import Pact.Core.Guards
+import Pact.Core.ModRefs
 import Pact.Core.Capabilities
 import Pact.Core.Errors
 import Pact.Core.Persistence
@@ -478,6 +479,15 @@ envGasModel info b cont handler _env = \case
   args -> argsError info b args
 
 
+envModuleAdmin :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+envModuleAdmin info b cont handler _env = \case
+  [VModRef modRef] -> do
+    let modName = _mrModule modRef
+    (esCaps . csModuleAdmin) %== S.insert modName
+    returnCEKValue cont handler $ VString $ "Acquired module admin for: " <> renderModuleName modName
+  args -> argsError info b args
+
+
 -----------------------------------
 -- Pact Version
 -----------------------------------
@@ -565,3 +575,4 @@ replCoreBuiltinRuntime = \case
     REnforcePactVersionMin -> coreEnforceVersion
     REnforcePactVersionRange -> coreEnforceVersion
     REnvEnableReplNatives -> envEnableReplNatives
+    REnvModuleAdmin -> envModuleAdmin

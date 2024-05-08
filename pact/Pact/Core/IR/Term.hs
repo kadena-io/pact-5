@@ -346,7 +346,7 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
   pretty = \case
     Var name _ -> pretty name
     Lam ne te _ ->
-      parens ("lambda" <+> parens (fold (NE.intersperse ":" (prettyLamArg <$> ne))) <+> pretty te)
+      parens ("lambda" <+> parens (fold (NE.intersperse " " (prettyLamArg <$> ne))) <+> pretty te)
     Let n te te' _ ->
       parens $ "let" <+> parens (pretty n <+> pretty te) <+> pretty te'
     App te ne _ ->

@@ -11,6 +11,7 @@
 (env-gasmodel "table")
 (env-gaslimit 150000)
 
+(env-module-admin coin)
 
 (env-gasmodel "table")
 (env-gas 0) (env-gaslog)
