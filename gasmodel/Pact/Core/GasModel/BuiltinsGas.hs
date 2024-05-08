@@ -539,17 +539,17 @@ benchStrToList pdb =
 benchRequireCapability :: BuiltinBenches
 benchRequireCapability pdb =
   [ C.bgroup "flat"
-    [ runNativeBenchmarkPreparedStMod (stCaps caps) [("c", cap)] pdb title "(require-capability c)"
-    | let cap = PCapToken $ CapToken (mkGasModelFqn "0") []
+    [ runNativeBenchmarkPreparedStMod (stCaps capToks) [("c", capTok)] pdb title "(require-capability c)"
+    | let capTok = PCapToken $ CapToken (mkGasModelFqn "0") []
     , (title, cnt) <- take 3 $ enumExpNum 1000 10
-    , let caps = [ CapToken (fqnToQualName $ mkGasModelFqn $ T.pack $ show n) [] | n <- [0..cnt] ]
+    , let capToks = [ CapToken (fqnToQualName $ mkGasModelFqn $ T.pack $ show n) [] | n <- [0..cnt] ]
     ]
   , C.bgroup "nested"
-    [ runNativeBenchmarkPreparedStMod (stCaps caps) [("c", cap)] pdb (cntTitle <> "_" <> argTitle) "(require-capability c)"
+    [ runNativeBenchmarkPreparedStMod (stCaps capToks) [("c", capTok)] pdb (cntTitle <> "_" <> argTitle) "(require-capability c)"
     | (cntTitle, cnt) <- take 3 $ enumExpNum 10 10
     , (argTitle, pv) <- take 3 $ enumExpListDeep 2 5 3
-    , let cap = PCapToken $ CapToken (mkGasModelFqn "0") [pv, PInteger cnt]
-    , let caps = [ CapToken (fqnToQualName $ mkGasModelFqn "0") [pv, PInteger n] | n <- [0..cnt] ]
+    , let capTok = PCapToken $ CapToken (mkGasModelFqn "0") [pv, PInteger cnt]
+    , let capToks = [ CapToken (fqnToQualName $ mkGasModelFqn "0") [pv, PInteger n] | n <- [0..cnt] ]
     ]
   ]
 
