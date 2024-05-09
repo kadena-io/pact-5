@@ -23,6 +23,7 @@ import Pact.Core.PactValue
 import Pact.Core.Persistence
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Serialise (serialisePact)
+import Pact.Core.Type
 
 import Pact.Core.GasModel.Utils
 
@@ -557,14 +558,29 @@ benchRequireCapability pdb =
 
 benchInstallCapability :: BuiltinBenches
 benchInstallCapability pdb =
-  [ runNativeBenchmarkPreparedStMod (stManaged manageds <> stAddDef "theCap" theCapDef) [("c", capTok)] pdb title "(install-capability c)"
-  | let capTok = PCapToken $ CapToken (mkGasModelFqn "theCap") []
-        theCapDef = DCap $ DefCap "theCap" [] Nothing (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
-  , (title, cnt) <- take 3 $ enumExpNum 1000 100
-  , let manageds = [ ManagedCap ct ct (AutoManaged False)
-                   | n <- [0..cnt]
-                   , let ct = CapToken (fqnToQualName $ mkGasModelFqn $ T.pack $ show n) []
-                   ]
+  [ C.bgroup "flat"
+    [ runNativeBenchmarkPreparedStMod (stManaged manageds <> stAddDef "theCap" theCapDef) [("c", capTok)] pdb title "(install-capability c)"
+    | let capTok = PCapToken $ CapToken (mkGasModelFqn "theCap") []
+          theCapDef = DCap $ DefCap "theCap" [] Nothing (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
+    , (title, cnt) <- take 3 $ enumExpNum 1000 100
+    , let manageds = [ ManagedCap ct ct (AutoManaged False)
+                     | n <- [0..cnt]
+                     , let ct = CapToken (fqnToQualName $ mkGasModelFqn $ T.pack $ show n) []
+                     ]
+    ]
+  , C.bgroup "nested"
+    [ runNativeBenchmarkPreparedStMod (stManaged manageds <> stAddDef "theCap" theCapDef) [("c", capTok)] pdb title "(install-capability c)"
+    | let theCapDef = DCap $ DefCap "theCap" [Arg "a1" Nothing, Arg "a2" Nothing] Nothing (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
+          capFqn = mkGasModelFqn "theCap"
+    , (cntTitle, cnt) <- take 3 $ enumExpNum 10 10
+    , (argTitle, pv) <- take 3 $ enumExpListDeep 3 5 3
+    , let title = cntTitle <> "_" <> argTitle
+          capTok = PCapToken $ CapToken capFqn [pv, PInteger (-1)]
+          manageds = [ ManagedCap ct ct (AutoManaged False)
+                     | n <- [0..cnt]
+                     , let ct = CapToken (fqnToQualName capFqn) [pv, PInteger n]
+                     ]
+    ]
   ]
 
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
