@@ -16,6 +16,7 @@ import NeatInterpolation (text)
 import Pact.Core.IR.Term
 import Pact.Core.Builtin
 import Pact.Core.Capabilities
+import Pact.Core.Environment
 import Pact.Core.Guards
 import Pact.Core.Literal
 import Pact.Core.Names
@@ -556,6 +557,22 @@ benchRequireCapability pdb =
     ]
   ]
 
+benchComposeCapability :: BuiltinBenches
+benchComposeCapability pdb =
+  [ runNativeBenchmarkPreparedStMod stMod [("c", theCapTok)] pdb title "(compose-capability c)"
+  | (title, cnt) <- take 3 $ enumExpNum 1000 10
+  , let sf = StackFrame mempty gmModuleName SFDefcap
+        theCapName = T.pack $ "theCap" <> show cnt
+        theCapTok = PCapToken $ CapToken (mkGasModelFqn theCapName) []
+        theCapDef = DCap $ DefCap theCapName [] Nothing (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
+        capToksStack = [ CapToken (fqnToQualName $ mkGasModelFqn $ T.pack $ show n) [] | n <- [0..cnt] ]
+        manageds = [ ManagedCap ct ct (AutoManaged False)
+                   | n <- [0..cnt]
+                   , let ct = CapToken (fqnToQualName $ mkGasModelFqn $ T.pack $ "theCap" <> show n) []
+                   ]
+  , let stMod = stStack [sf] <> stCaps capToksStack <> stManaged manageds <> stAddDef theCapName theCapDef
+  ]
+
 benchInstallCapability :: BuiltinBenches
 benchInstallCapability pdb =
   [ C.bgroup "flat"
@@ -655,6 +672,7 @@ benchesForBuiltin bn = case bn of
   CoreResume -> todo
   CoreBind -> omittedDeliberately
   CoreRequireCapability -> benchRequireCapability
+  CoreComposeCapability -> benchComposeCapability
   CoreInstallCapability -> benchInstallCapability
   _ -> const []
   where
