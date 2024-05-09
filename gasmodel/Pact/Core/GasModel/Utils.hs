@@ -380,6 +380,9 @@ stAddDef name dfn = Endo $ (esLoaded.loToplevel %~ M.insert name (fqn, dkind))
     DTable{} -> DKDefTable
     DPact{} -> DKDefPact
 
+stStack :: [StackFrame] -> StMod
+stStack s = Endo $ esStack .~ s
+
 runNativeBenchmarkPreparedStMod
   :: StMod
   -> [(Text, PactValue)]
