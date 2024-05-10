@@ -618,6 +618,14 @@ benchInstallCapability pdb =
     ]
   ]
 
+benchEmitEvent :: BuiltinBenches
+benchEmitEvent pdb = [ runNativeBenchmarkPreparedStMod stMod [("c", capTok)] pdb "novar" "(emit-event c)" ]
+  where
+  capTok = PCapToken $ CapToken (mkGasModelFqn "theCap") []
+  theCapDef = DCap $ DefCap "theCap" [] Nothing (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
+  sf = StackFrame mempty gmModuleName SFDefcap
+  stMod = stAddDef "theCap" theCapDef <> stStack [sf]
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -692,6 +700,7 @@ benchesForBuiltin bn = case bn of
   CoreRequireCapability -> benchRequireCapability
   CoreComposeCapability -> benchComposeCapability
   CoreInstallCapability -> benchInstallCapability
+  CoreEmitEvent -> benchEmitEvent
   _ -> const []
   where
   omittedDeliberately = const []
