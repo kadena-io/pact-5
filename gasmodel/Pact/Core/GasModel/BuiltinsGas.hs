@@ -701,6 +701,10 @@ benchesForBuiltin bn = case bn of
   CoreComposeCapability -> benchComposeCapability
   CoreInstallCapability -> benchInstallCapability
   CoreEmitEvent -> benchEmitEvent
+  CoreCreateCapabilityGuard -> omittedDeliberately
+  CoreCreateCapabilityPactGuard -> omittedDeliberately
+  CoreCreateModuleGuard -> omittedDeliberately
+  CoreCreateDefPactGuard -> omittedDeliberately
   _ -> const []
   where
   omittedDeliberately = const []
