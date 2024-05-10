@@ -383,6 +383,9 @@ stAddDef name dfn = Endo $ (esLoaded.loToplevel %~ M.insert name (fqn, dkind))
 stStack :: [StackFrame] -> StMod
 stStack s = Endo $ esStack .~ s
 
+stModAdmin :: [ModuleName] -> StMod
+stModAdmin names = Endo $ esCaps.csModuleAdmin .~ S.fromList names
+
 runNativeBenchmarkPreparedStMod
   :: StMod
   -> [(Text, PactValue)]
