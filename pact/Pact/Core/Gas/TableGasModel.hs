@@ -263,6 +263,9 @@ runTableModel = \case
       let fmtCharSqPerMg = 4
           unpackMgPerChar = 10
       in MilliGas $ fromIntegral $ (fmtLen * fmtLen) `div` fmtCharSqPerMg + unpackMgPerChar * strLen + 1
+    StrOpFormatTime fmtLen ->
+      let mgPerChar = 20
+      in MilliGas $ fromIntegral $ fmtLen * mgPerChar + 1
   GObjOp op -> case op of
     ObjOpLookup key objSize ->
       let objSzLog = fromIntegral $ I# (IntLog.integerLog2# $ fromIntegral objSize) + 1

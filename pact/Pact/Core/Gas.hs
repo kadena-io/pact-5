@@ -155,6 +155,8 @@ data StrOp
   -- ^ The cost of splitting a string into a list of chars.
   | StrOpParseTime !Int !Int
   -- ^ The cost of parsing time with the given format string and time string lengths.
+  | StrOpFormatTime !Int
+  -- ^ The cost of formatting time with the given format string length.
   deriving (Eq, Show, Ord, Generic, NFData)
 
 data ObjOp

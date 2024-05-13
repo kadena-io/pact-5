@@ -1472,6 +1472,7 @@ parseTime info b cont handler _env = \case
 formatTime :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 formatTime info b cont handler _env = \case
   [VString fmt, VPactValue (PTime t)] -> do
+    chargeGasArgs info $ GStrOp $ StrOpFormatTime $ T.length fmt
     let timeString = PactTime.formatTime (T.unpack fmt) t
     returnCEKValue cont handler $ VString (T.pack timeString)
   args -> argsError info b args
