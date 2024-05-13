@@ -153,6 +153,8 @@ data StrOp
   -- ^ The cost of a general scanning parse of a string of a given length.
   | StrOpExplode !Int
   -- ^ The cost of splitting a string into a list of chars.
+  | StrOpParseTime !Int !Int
+  -- ^ The cost of parsing time with the given format string and time string lengths.
   deriving (Eq, Show, Ord, Generic, NFData)
 
 data ObjOp

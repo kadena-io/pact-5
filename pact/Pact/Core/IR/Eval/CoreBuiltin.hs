@@ -1461,7 +1461,8 @@ coreContinue info b cont handler _env = \case
 
 parseTime :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 parseTime info b cont handler _env = \case
-  [VString fmt, VString s] ->
+  [VString fmt, VString s] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParseTime (T.length fmt) (T.length s)
     case PactTime.parseTime (T.unpack fmt) (T.unpack s) of
       Just t -> returnCEKValue cont handler $ VPactValue (PTime t)
       Nothing ->

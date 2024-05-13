@@ -257,6 +257,12 @@ runTableModel = \case
     StrOpExplode len ->
       let mgPerChar = 100
       in MilliGas $ fromIntegral $ len * mgPerChar + 1
+    StrOpParseTime fmtLen strLen ->
+      -- a test string of 1000 %Y's (hence 2000 chars) is processed in about 10³ [g] = 10⁶ [mg]
+      -- and there's also a cost of unpacking the strings
+      let fmtCharSqPerMg = 4
+          unpackMgPerChar = 10
+      in MilliGas $ fromIntegral $ (fmtLen * fmtLen) `div` fmtCharSqPerMg + unpackMgPerChar * strLen + 1
   GObjOp op -> case op of
     ObjOpLookup key objSize ->
       let objSzLog = fromIntegral $ I# (IntLog.integerLog2# $ fromIntegral objSize) + 1
