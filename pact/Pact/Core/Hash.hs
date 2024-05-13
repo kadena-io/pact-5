@@ -9,6 +9,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE StrictData #-}
 
 
 module Pact.Core.Hash

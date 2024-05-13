@@ -3,6 +3,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE StrictData #-}
 
 
 module Pact.Core.PactValue

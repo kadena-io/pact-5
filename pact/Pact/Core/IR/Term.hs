@@ -7,6 +7,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE StrictData #-}
 
 
 -- |

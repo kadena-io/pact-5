@@ -1590,6 +1590,12 @@ coreCond info b cont handler _env = \case
   args -> argsError info b args
 
 
+coreIdentity :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
+coreIdentity info b cont handler _env = \case
+  [VPactValue pv] -> returnCEKValue cont handler $ VPactValue pv
+  args -> argsError info b args
+
+
 --------------------------------------------------
 -- Namespace functions
 --------------------------------------------------
@@ -1845,6 +1851,7 @@ coreBuiltinEnv
   :: forall step i m. (CEKEval step CoreBuiltin i m, MonadEval CoreBuiltin i m)
   => BuiltinEnv step CoreBuiltin i m
 coreBuiltinEnv i b env = mkBuiltinFn i b env (coreBuiltinRuntime b)
+{-# INLINEABLE coreBuiltinEnv #-}
 
 -- gassedCompare :: MonadEval b i m => PactValue -> PactValue -> m Ordering
 -- gassedCompare (PLiteral l) (PLiteral r) =
@@ -1993,3 +2000,4 @@ coreBuiltinRuntime = \case
   CoreTypeOf -> coreTypeOf
   CoreDec -> coreDec
   CoreCond -> coreCond
+  CoreIdentity -> coreIdentity

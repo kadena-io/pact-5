@@ -682,6 +682,7 @@ instance Serialise CoreBuiltin where
     CoreCeilingPrec -> encodeWord 126
     CoreFloorPrec -> encodeWord 127
     CoreCond -> encodeWord 128
+    CoreIdentity -> encodeWord 129
 
   decode = decodeWord >>= \case
     0 -> pure CoreAdd
@@ -815,6 +816,7 @@ instance Serialise CoreBuiltin where
     126 -> pure CoreCeilingPrec
     127 -> pure CoreFloorPrec
     128 -> pure CoreCond
+    129 -> pure CoreIdentity
     _ -> fail "unexpected decoding"
 
 
