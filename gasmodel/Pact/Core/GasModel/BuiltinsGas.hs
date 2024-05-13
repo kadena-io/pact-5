@@ -731,6 +731,12 @@ benchesForBuiltin bn = case bn of
   CoreCreateDefPactGuard -> omittedDeliberately
   CoreParseTime -> benchParseTime
   CoreFormatTime -> benchFormatTime
+  CoreTime -> omittedDeliberately
+  CoreAddTime -> omittedDeliberately
+  CoreDiffTime -> omittedDeliberately
+  CoreHours -> omittedDeliberately
+  CoreMinutes -> omittedDeliberately
+  CoreDays -> omittedDeliberately
   _ -> const []
   where
   omittedDeliberately = const []
