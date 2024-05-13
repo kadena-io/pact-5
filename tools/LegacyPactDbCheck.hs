@@ -12,7 +12,6 @@ import Data.ByteString (ByteString)
 import Data.Int (Int64)
 import Control.Monad
 import Pact.Core.Serialise.LegacyPact
-import Pact.Core.Hash
 
 import System.Environment
 import qualified Pact.JSON.Decode as JD
