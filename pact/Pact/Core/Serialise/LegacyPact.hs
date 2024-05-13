@@ -339,7 +339,7 @@ fromLegacyDefMetaInterface args = \case
         Legacy.TDef td -> do
           let (Legacy.DefName dn) = Legacy._dDefName td
           pure (DefManaged (DefManagedMeta (idx', p) (BareName dn)))
-        f' -> throwError $ "invariant: interface defmeta invariant1 violated " <> show f'
+        f' -> throwError $ "invariant: interface defmeta invariant violated " <> show f'
   Legacy.DMDefcap Legacy.DefcapEvent -> pure DefEvent
 
 
@@ -507,7 +507,7 @@ fromLegacyPersistDirect = \case
     | n == "and" -> pure (Conditional (CAnd unitValue unitValue) ())
     | n == "or" -> pure (Conditional (COr unitValue unitValue) ())
     | n == "with-capability" -> pure (CapabilityForm (WithCapability unitValue unitValue) ())
-    | n == "create-capability" -> pure (CapabilityForm (CreateUserGuard unitName [unitValue]) ()) -- TODO: Jose ?
+    | n == "create-capability" -> pure (CapabilityForm (CreateUserGuard unitName [unitValue]) ())
     | n == "create-user-guard" -> pure (CapabilityForm (CreateUserGuard unitName [unitValue]) ())
     | n == "try" -> pure (Try unitValue unitValue ())
 
@@ -530,17 +530,6 @@ fromLegacyPersistDirect = \case
     unitValue = InlineValue PUnit ()
     unitName = (Name "unitName" (NBound 0), 0)
 
-{-
-{"balance" := balance, "rob" := rob}
-  (+ balance rob) ==>
-
-(let
-  _a(n+1) = (at "balance" someObj)
-  _an = (at "rob" someObj)
-  in
-  (+ _a1 a0)
-  )
--}
 objBindingToLet
   :: ModuleHash
   -> [Legacy.BindPair (Legacy.Term (Either CorePreNormalizedTerm LegacyRef))]
@@ -594,7 +583,6 @@ fromLegacyTerm mh = \case
 
   Legacy.TApp (Legacy.App fn args) -> do
     fn' <- fromLegacyTerm mh fn
-    -- args' <- traverse (fromLegacyTerm mh) args
     case fn' of
       Builtin b _ -> case b of
         CoreBind -> case args of
@@ -635,8 +623,8 @@ fromLegacyTerm mh = \case
         _ | b `elem` higherOrder1Arg
           , Legacy.TApp (Legacy.App mapOperator mapOperands): xs <- args -> do
           d <- ask
-          let injectedArg = (Var (Name "" (NBound 0), d + 1) () :: CorePreNormalizedTerm)
-          let containingLam e = Lam (pure (Arg "" Nothing)) e ()
+          let injectedArg = (Var (Name "iArg" (NBound 0), d + 1) () :: CorePreNormalizedTerm)
+          let containingLam e = Lam (pure (Arg "lArg" Nothing)) e ()
           (mapOperator', mapOperands') <- local (+ 1) $ (,) <$> fromLegacyTerm mh mapOperator <*> traverse (fromLegacyTerm mh) mapOperands
           let body = containingLam (desugarApp mapOperator' (mapOperands' ++ [injectedArg]) ())
           xs' <- traverse (fromLegacyTerm mh) xs
@@ -645,8 +633,8 @@ fromLegacyTerm mh = \case
         _ | b `elem` higherOrder2Arg
           , Legacy.TApp (Legacy.App mapOperator mapOperands): xs <- args -> do
           d <- ask
-          let injectedArg1 = (Var (Name "" (NBound 1), d + 2) () :: CorePreNormalizedTerm)
-              injectedArg2 = (Var (Name "" (NBound 0), d + 2) () :: CorePreNormalizedTerm)
+          let injectedArg1 = (Var (Name "iArg1" (NBound 1), d + 2) () :: CorePreNormalizedTerm)
+              injectedArg2 = (Var (Name "iArg2" (NBound 0), d + 2) () :: CorePreNormalizedTerm)
           let containingLam e = Lam (pure (Arg "" Nothing)) e ()
           (mapOperator', mapOperands') <- local (+ 2) $ (,) <$> fromLegacyTerm mh mapOperator <*> traverse (fromLegacyTerm mh) mapOperands
           let body = containingLam (desugarApp mapOperator' (mapOperands' ++ [injectedArg1, injectedArg2]) ())
@@ -657,20 +645,17 @@ fromLegacyTerm mh = \case
           args' <- traverse (fromLegacyTerm mh) args
           pure (desugarAppArity () b args')
 
-      -- TODO: Add addtional cases
       Conditional CEnforce{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [t1,t2] -> pure (Conditional (CEnforce t1 t2) ())
-        [_t1]    -> error "cenforce case TODO: JOSE"
-        _ -> error "TODO"
+        _ -> throwError "invariant failure"
 
       Conditional CEnforceOne{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [t1, ListLit t2 _] -> pure (Conditional (CEnforceOne t1 t2) ())
-        [_t1]    -> error "cenforce case TODO: JOSE"
-        _ -> error "TODO"
+        _ -> throwError "invariant failure"
 
       Conditional CIf{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [cond, b1, b2] -> pure (Conditional (CIf cond b1 b2) ())
-        _ -> error "if case TODO: JOSE"
+        _ -> throwError "invariant failure"
 
       CapabilityForm WithCapability{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [t1, ListLit t2 _] -> case reverse t2 of
@@ -678,7 +663,7 @@ fromLegacyTerm mh = \case
           x:xs -> do
             let body' = foldl' (\r l -> Sequence l r ()) x xs
             pure (CapabilityForm (WithCapability t1 body') ())
-        _ -> error "withcapability case TODO: JOSE"
+        _ -> throwError "invariant failure"
 
       CapabilityForm CreateUserGuard{} _ ->
         traverse (fromLegacyTerm mh) args >>= \case
@@ -687,9 +672,9 @@ fromLegacyTerm mh = \case
           pure (CapabilityForm (CreateUserGuard n cugargs) ())
         t -> error $ "createuserguard case TODO: JOSE" <> show t
 
-      Try _ _ _ -> traverse (fromLegacyTerm mh) args >>= \case
+      Try{} -> traverse (fromLegacyTerm mh) args >>= \case
         [t1, t2] -> pure (Try t1 t2 ())
-        t -> error $ "try case TODO: JOSE" <> show t
+        _ -> throwError "invariant failure"
 
       _ -> do
         args' <- traverse (fromLegacyTerm mh) args
@@ -859,7 +844,7 @@ fromLegacyType = \case
   Legacy.TyList t -> TyList <$> fromLegacyType t
   Legacy.TyPrim prim -> pure $ TyPrim (fromLegacyPrimType prim)
   Legacy.TySchema s ty _ -> fromLegacySchema s ty
-  Legacy.TyFun _ -> error "tyfun"
+  Legacy.TyFun _ -> throwError "invariant failure"
   Legacy.TyModule m -> fromLegacyTypeModule m
   Legacy.TyUser t -> throwError $ "fromLegacyType: TyUser invariant: " <> show t
   Legacy.TyVar _ -> pure TyAny
@@ -905,9 +890,7 @@ fromLegacySchema st ty = case (st, ty) of
 
   (Legacy.TyObject, Legacy.TyAny) -> pure TyAnyObject
 
-  (Legacy.TyBinding, _) -> throwError "tybinding"
-  -- (Legacy.TyObject, Legacy.TySchema _ _ _) -> throwError "tySchema 1"
-  -- (Legacy.TyTable, Legacy.TySchema _ _ _) -> throwError "tySchema 2"
+  (Legacy.TyBinding, _) -> throwError "invariant failure: tybinding"
 
   (s,t) -> throwError $ "fromLegacySchema: invariant 2: " <> show s <> " : " <> show t
 
