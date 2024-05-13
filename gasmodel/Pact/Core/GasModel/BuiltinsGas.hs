@@ -618,6 +618,21 @@ benchInstallCapability pdb =
     ]
   ]
 
+benchParseTime :: BuiltinBenches
+benchParseTime pdb =
+  [ C.bgroup "matching length"
+    [ runNativeBenchmarkPrepared [("f", fmtStr), ("t", timeStr)] pdb title "(parse-time f t)"
+    | (title, reps) <- take 3 $ enumExpNum 100 10
+    , let fmtStr = PString $ T.replicate (fromIntegral reps) "%Y"
+          timeStr = PString $ T.replicate (fromIntegral reps) "2020"
+    ]
+  , C.bgroup "fmt shorter"
+    [ runNativeBenchmarkPrepared [("f", PString "%Y"), ("t", timeStr)] pdb title "(parse-time f t)"
+    | (title, reps) <- take 3 $ enumExpNum 100 10
+    , let timeStr = PString $ T.replicate (fromIntegral reps) "2020"
+    ]
+  ]
+
 benchEmitEvent :: BuiltinBenches
 benchEmitEvent pdb = [ runNativeBenchmarkPreparedStMod stMod [("c", capTok)] pdb "novar" "(emit-event c)" ]
   where
@@ -705,6 +720,7 @@ benchesForBuiltin bn = case bn of
   CoreCreateCapabilityPactGuard -> omittedDeliberately
   CoreCreateModuleGuard -> omittedDeliberately
   CoreCreateDefPactGuard -> omittedDeliberately
+  CoreParseTime -> benchParseTime
   _ -> const []
   where
   omittedDeliberately = const []
