@@ -25,6 +25,7 @@ import Pact.Core.Persistence
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Serialise (serialisePact)
 import Pact.Core.Type
+import Pact.Time
 
 import Pact.Core.GasModel.Utils
 
@@ -633,6 +634,14 @@ benchParseTime pdb =
     ]
   ]
 
+benchFormatTime :: BuiltinBenches
+benchFormatTime pdb =
+  [ runNativeBenchmarkPrepared [("f", fmtStr), ("t", time)] pdb title "(format-time f t)"
+  | (title, reps) <- take 3 $ enumExpNum 100 10
+  , let fmtStr = PString $ T.replicate (fromIntegral reps) "%Y"
+        time = PTime posixEpoch
+  ]
+
 benchEmitEvent :: BuiltinBenches
 benchEmitEvent pdb = [ runNativeBenchmarkPreparedStMod stMod [("c", capTok)] pdb "novar" "(emit-event c)" ]
   where
@@ -721,6 +730,7 @@ benchesForBuiltin bn = case bn of
   CoreCreateModuleGuard -> omittedDeliberately
   CoreCreateDefPactGuard -> omittedDeliberately
   CoreParseTime -> benchParseTime
+  CoreFormatTime -> benchFormatTime
   _ -> const []
   where
   omittedDeliberately = const []
