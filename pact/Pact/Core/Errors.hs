@@ -200,7 +200,18 @@ instance Pretty DesugarError where
       Pretty.hsep ["rollbacks aren't allowed on the last step in:", pretty mn]
     ExpectedFreeVariable t ->
       Pretty.hsep ["Expected free variable in expression, found locally bound: ", pretty t]
-    e -> pretty (show e)
+    -- Todo: pretty these
+    e@InvalidManagedArg{} -> pretty e
+    e@NotImplemented{} -> pretty e
+    e@InvalidImports{} -> pretty e
+    e@InvalidImportModuleHash{} -> pretty e
+    -- todo: maybe this is a syntaxError???
+    e@InvalidSyntax{} -> pretty e
+    e@InvalidDefInSchemaPosition{} -> pretty e
+    e@InvalidDynamicInvoke{} -> pretty e
+    e@DuplicateDefinition{} -> pretty e
+    e@InvalidBlessedHash{} -> pretty e
+    -- e -> pretty (show e)
 
 -- | Argument type mismatch meant for errors
 --   that does not force you to show the whole PactValue
@@ -324,11 +335,9 @@ data EvalError
   | NestedDefpactsNotAdvanced DefPactId
   | ExpectedPactValue
   | NotInDefPactExecution
-  | GuardEnforceError Text
   | NamespaceInstallError Text
   | DefineNamespaceError Text
   -- ^ Non-recoverable guard enforces.
-  | ConstIsNotAPactValue QualifiedName
   | PointNotOnCurve
   | YieldProvenanceDoesNotMatch Provenance [Provenance]
   | MismatchingKeysetNamespace NamespaceName
@@ -438,7 +447,41 @@ instance Pretty EvalError where
       [ "Enforce pact-version failed:"
       , "Could not parse " <> pretty str <> ", expect list of dot-separated integers"
       ]
-    e -> pretty (show e)
+    -- Todo: Fix each case
+    e@ModRefNotRefined{} -> pretty e
+    e@InvalidDefKind{} -> pretty e
+    e@NoSuchDef{} -> pretty e
+    e@InvalidManagedCap{} -> pretty e
+    e@CapNotInstalled{} -> pretty e
+    e@CapAlreadyInstalled{} -> pretty e
+    e@NameNotInScope{} -> pretty e
+    e@DefIsNotClosure{} -> pretty e
+    e@NoSuchKeySet{} -> pretty e
+    e@CannotUpgradeInterface{} -> pretty e
+    e@ModuleGovernanceFailure{} -> pretty e
+    e@DbOpFailure{} -> pretty e
+    e@DynNameIsNotModRef{} -> pretty e
+    e@ModuleDoesNotExist{} -> pretty e
+    e@ExpectedModule{} -> pretty e
+    e@HashNotBlessed{} -> pretty e
+    e@CannotApplyPartialClosure{} -> pretty e
+    e@ClosureAppliedToTooManyArgs{} -> pretty e
+    e@FormIllegalWithinDefcap{} -> pretty e
+    e@RunTimeTypecheckFailure{} -> pretty e
+    e@NativeIsTopLevelOnly{} -> pretty e
+    e@EventDoesNotMatchModule{} -> pretty e
+    e@InvalidEventCap{} -> pretty e
+    e@NestedDefpactsNotAdvanced{} -> pretty e
+    e@ExpectedPactValue{} -> pretty e
+    e@NotInDefPactExecution{} -> pretty e
+    e@NamespaceInstallError{} -> pretty e
+    e@DefineNamespaceError{} -> pretty e
+    e@PointNotOnCurve{} -> pretty e
+    e@YieldProvenanceDoesNotMatch{} -> pretty e
+    e@MismatchingKeysetNamespace{} -> pretty e
+    e@RuntimeRecursionDetected{} -> pretty e
+
+
 
 instance Exception EvalError
 
