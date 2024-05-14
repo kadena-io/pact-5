@@ -74,6 +74,7 @@ defaultGasEvalState =
   , _esDefPactExec=Nothing
   , _esCaps=capState
   , _esGasLog=Nothing
+  , _esCheckRecursion = pure (RecursionCheck mempty)
   }
   where
   capState = CapState [] mempty (S.singleton gmModuleName) mempty
@@ -342,8 +343,7 @@ runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure stMod
 unitClosureNullary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m
 unitClosureNullary env
   = Closure
-  { _cloFnName = "foo"
-  , _cloModName = ModuleName "foomodule" Nothing
+  { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
   , _cloTypes = NullaryClosure
   , _cloArity = 0
   , _cloTerm = unitConst
@@ -355,8 +355,7 @@ unitClosureNullary env
 unitClosureUnary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m
 unitClosureUnary env
   = Closure
-  { _cloFnName = "foo"
-  , _cloModName = ModuleName "foomodule" Nothing
+  { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
   , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg" Nothing ()])
   , _cloArity = 1
   , _cloTerm = unitConst
@@ -367,8 +366,7 @@ unitClosureUnary env
 unitClosureBinary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m
 unitClosureBinary env
   = Closure
-  { _cloFnName = "foo"
-  , _cloModName = ModuleName "foomodule" Nothing
+  { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
   , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing (), Arg "fooCloArg2" Nothing ()])
   , _cloArity = 2
   , _cloTerm = unitConst
@@ -380,8 +378,7 @@ unitClosureBinary env
 boolClosureUnary :: Bool -> CEKEnv step b () m -> Closure step b () m
 boolClosureUnary b env
   = Closure
-  { _cloFnName = "foo"
-  , _cloModName = ModuleName "foomodule" Nothing
+  { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
   , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing ()])
   , _cloArity = 1
   , _cloTerm = boolConst b
@@ -392,8 +389,7 @@ boolClosureUnary b env
 boolClosureBinary :: Bool -> CEKEnv step b () m -> Closure step b () m
 boolClosureBinary b env
   = Closure
-  { _cloFnName = "foo"
-  , _cloModName = ModuleName "fooModule" Nothing
+  { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
   , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing (), Arg "fooCloArg2" Nothing ()])
   , _cloArity = 2
   , _cloTerm = boolConst b
@@ -404,8 +400,7 @@ boolClosureBinary b env
 intClosureBinary :: Integer -> CEKEnv step b () m -> Closure step b () m
 intClosureBinary b env
   = Closure
-  { _cloFnName = "foo"
-  , _cloModName = ModuleName "fooModule" Nothing
+  { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
   , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing (), Arg "fooCloArg2" Nothing ()])
   , _cloArity = 2
   , _cloTerm = intConst b

@@ -201,16 +201,16 @@ instance Pretty DesugarError where
     ExpectedFreeVariable t ->
       Pretty.hsep ["Expected free variable in expression, found locally bound: ", pretty t]
     -- Todo: pretty these
-    e@InvalidManagedArg{} -> pretty e
-    e@NotImplemented{} -> pretty e
-    e@InvalidImports{} -> pretty e
-    e@InvalidImportModuleHash{} -> pretty e
+    e@InvalidManagedArg{} -> pretty (show e)
+    e@NotImplemented{} -> pretty (show e)
+    e@InvalidImports{} -> pretty (show e)
+    e@InvalidImportModuleHash{} -> pretty (show e)
     -- todo: maybe this is a syntaxError???
-    e@InvalidSyntax{} -> pretty e
-    e@InvalidDefInSchemaPosition{} -> pretty e
-    e@InvalidDynamicInvoke{} -> pretty e
-    e@DuplicateDefinition{} -> pretty e
-    e@InvalidBlessedHash{} -> pretty e
+    e@InvalidSyntax{} -> pretty (show e)
+    e@InvalidDefInSchemaPosition{} -> pretty (show e)
+    e@InvalidDynamicInvoke{} -> pretty (show e)
+    e@DuplicateDefinition{} -> pretty (show e)
+    e@InvalidBlessedHash{} -> pretty (show e)
     -- e -> pretty (show e)
 
 -- | Argument type mismatch meant for errors
@@ -448,38 +448,38 @@ instance Pretty EvalError where
       , "Could not parse " <> pretty str <> ", expect list of dot-separated integers"
       ]
     -- Todo: Fix each case
-    e@ModRefNotRefined{} -> pretty e
-    e@InvalidDefKind{} -> pretty e
-    e@NoSuchDef{} -> pretty e
-    e@InvalidManagedCap{} -> pretty e
-    e@CapNotInstalled{} -> pretty e
-    e@CapAlreadyInstalled{} -> pretty e
-    e@NameNotInScope{} -> pretty e
-    e@DefIsNotClosure{} -> pretty e
-    e@NoSuchKeySet{} -> pretty e
-    e@CannotUpgradeInterface{} -> pretty e
-    e@ModuleGovernanceFailure{} -> pretty e
-    e@DbOpFailure{} -> pretty e
-    e@DynNameIsNotModRef{} -> pretty e
-    e@ModuleDoesNotExist{} -> pretty e
-    e@ExpectedModule{} -> pretty e
-    e@HashNotBlessed{} -> pretty e
-    e@CannotApplyPartialClosure{} -> pretty e
-    e@ClosureAppliedToTooManyArgs{} -> pretty e
-    e@FormIllegalWithinDefcap{} -> pretty e
-    e@RunTimeTypecheckFailure{} -> pretty e
-    e@NativeIsTopLevelOnly{} -> pretty e
-    e@EventDoesNotMatchModule{} -> pretty e
-    e@InvalidEventCap{} -> pretty e
-    e@NestedDefpactsNotAdvanced{} -> pretty e
-    e@ExpectedPactValue{} -> pretty e
-    e@NotInDefPactExecution{} -> pretty e
-    e@NamespaceInstallError{} -> pretty e
-    e@DefineNamespaceError{} -> pretty e
-    e@PointNotOnCurve{} -> pretty e
-    e@YieldProvenanceDoesNotMatch{} -> pretty e
-    e@MismatchingKeysetNamespace{} -> pretty e
-    e@RuntimeRecursionDetected{} -> pretty e
+    e@ModRefNotRefined{} -> pretty (show e)
+    e@InvalidDefKind{} -> pretty (show e)
+    e@NoSuchDef{} -> pretty (show e)
+    e@InvalidManagedCap{} -> pretty (show e)
+    e@CapNotInstalled{} -> pretty (show e)
+    e@CapAlreadyInstalled{} -> pretty (show e)
+    e@NameNotInScope{} -> pretty (show e)
+    e@DefIsNotClosure{} -> pretty (show e)
+    e@NoSuchKeySet{} -> pretty (show e)
+    e@CannotUpgradeInterface{} -> pretty (show e)
+    e@ModuleGovernanceFailure{} -> pretty (show e)
+    e@DbOpFailure{} -> pretty (show e)
+    e@DynNameIsNotModRef{} -> pretty (show e)
+    e@ModuleDoesNotExist{} -> pretty (show e)
+    e@ExpectedModule{} -> pretty (show e)
+    e@HashNotBlessed{} -> pretty (show e)
+    e@CannotApplyPartialClosure{} -> pretty (show e)
+    e@ClosureAppliedToTooManyArgs{} -> pretty (show e)
+    e@FormIllegalWithinDefcap{} -> pretty (show e)
+    e@RunTimeTypecheckFailure{} -> pretty (show e)
+    e@NativeIsTopLevelOnly{} -> pretty (show e)
+    e@EventDoesNotMatchModule{} -> pretty (show e)
+    e@InvalidEventCap{} -> pretty (show e)
+    e@NestedDefpactsNotAdvanced{} -> pretty (show e)
+    e@ExpectedPactValue{} -> pretty (show e)
+    e@NotInDefPactExecution{} -> pretty (show e)
+    e@NamespaceInstallError{} -> pretty (show e)
+    e@DefineNamespaceError{} -> pretty (show e)
+    e@PointNotOnCurve{} -> pretty (show e)
+    e@YieldProvenanceDoesNotMatch{} -> pretty (show e)
+    e@MismatchingKeysetNamespace{} -> pretty (show e)
+    e@RuntimeRecursionDetected{} -> pretty (show e)
 
 
 
