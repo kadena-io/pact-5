@@ -288,9 +288,6 @@ desugarLispTerm = \case
           let c1 = Arg cvar1 Nothing
               c2 = Arg cvar2 Nothing
           pure $ Lam (c1 :| [c2]) (Var (BN (BareName cvar1)) i) i
-        | n == BareName "identity" -> do
-          let c1 = Arg ivar1 Nothing
-          pure $ Lam (c1 :| []) (Var (BN (BareName ivar1)) i) i
         | n == BareName "CHARSET_ASCII" -> pure (Constant (LInteger 0) i)
         | n == BareName "CHARSET_LATIN1" -> pure (Constant (LInteger 1) i)
         | otherwise ->
@@ -298,7 +295,6 @@ desugarLispTerm = \case
     where
     cvar1 = "#constantlyA1"
     cvar2 = "#constantlyA2"
-    ivar1 = "#identityA1"
   Lisp.Var n i -> pure (Var n i)
   Lisp.Block nel i -> do
     nel' <- traverse desugarLispTerm nel

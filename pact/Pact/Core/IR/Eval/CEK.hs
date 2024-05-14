@@ -161,9 +161,9 @@ evaluateTerm cont handler env (Var n info)  = do
               clo = CapTokenClosure fqn args (length args) info
           returnCEKValue cont handler (VClosure (CT clo))
         Just d ->
-          throwExecutionError info (InvalidDefKind (defKind mname d) "in var position")
+          failInvariant info ("invalid def kind in var position: " <> T.pack (show $ defKind mname d))
         Nothing ->
-          throwExecutionError info (NameNotInScope (FullyQualifiedName mname (_nName n) mh))
+          failInvariant info ("name not in scope: " <> T.pack (show $ FullyQualifiedName mname (_nName n) mh))
     NModRef m ifs -> case ifs of
       [x] -> returnCEKValue cont handler (VModRef (ModRef m ifs (Just (S.singleton x))))
       [] -> throwExecutionError info (ModRefNotRefined (_nName n))
@@ -329,7 +329,7 @@ mkDefunClosure d mn e = case _dfunTerm d of
   Nullary body i ->
     pure (Closure (_dfunName d) mn NullaryClosure 0 body (_dfunRType d) e i)
   _ ->
-    throwExecutionError (_dfunInfo d) (DefIsNotClosure (_dfunName d))
+    failInvariant (_dfunInfo d) ("definition is not a closure: " <> T.pack (show d))
 
 mkDefPactClosure
   :: i
@@ -394,9 +394,11 @@ applyPact i pc ps cont handler cenv nested = useEvalState esDefPactExec >>= \cas
     DPact defPact -> do
       let nSteps = NE.length (_dpSteps defPact)
 
-      -- Check we try to apply the correct pact Step
-      unless (ps ^. psStep < nSteps) $
-        throwExecutionError i (DefPactStepNotFound ps nSteps)
+      -- `applyPact` is only called from `initPact` or `resumePact`.
+      -- `initPact` ensures that the step is 0,
+      -- and there are guaranteed more than 0 steps due to how the parser is written.
+      -- `resumePact` does a similar check before calling this function.
+      when (ps ^. psStep >= nSteps) $ failInvariant i "Step not found"
 
       step <- maybe (failInvariant i "Step not found") pure
         $ _dpSteps defPact ^? ix (ps ^. psStep)
@@ -480,10 +482,10 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esDefPactExec >>= \case
         isRollback = hasRollback step
 
       when (stepCount /= _peStepCount pe) $
-        throwExecutionError i (NestedDefPactParentStepCountMissmatch (_peDefPactId pe) stepCount (_peStepCount pe))
+        throwExecutionError i (NestedDefPactParentStepCountMismatch (_peDefPactId pe) stepCount (_peStepCount pe))
 
       when (isRollback /= _peStepHasRollback pe) $
-        throwExecutionError i (NestedDefPactParentRollbackMissmatch (_peDefPactId pe) isRollback (_peStepHasRollback pe))
+        throwExecutionError i (NestedDefPactParentRollbackMismatch (_peDefPactId pe) isRollback (_peStepHasRollback pe))
 
       exec <- case pe ^. peNestedDefPactExec . at (_psDefPactId ps) of
         Nothing
@@ -539,15 +541,30 @@ resumePact
   -> Maybe DefPactExec
   -> m (CEKEvalResult step b i m)
 resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep >>= \case
-  Nothing -> throwExecutionError i DefPactStepNotInEnvironment
+  Nothing -> throwExecutionError i DefPactStepNotInEnvironment -- TODO check with multichain
   Just ps -> do
     pdb <- viewEvalEnv eePactDb
     dbState <- liftDbFunction i (readDefPacts pdb (_psDefPactId ps))
     case (dbState, crossChainContinuation) of
+
+      -- Terminate defpact in db: always fail
       (Just Nothing, _) -> throwExecutionError i (DefPactAlreadyCompleted ps)
-      (Nothing, Nothing) -> throwExecutionError i (NoPreviousDefPactExecutionFound ps)
+
+      -- Nothing in db, Nothing in cross-chain continuation: fail
+      (Nothing, Nothing) -> throwExecutionError i (NoPreviousDefPactExecutionFound ps)  -- TODO check with multichain
+
+      -- Nothing in db, Just cross-chain continuation: proceed with cross-chain
       (Nothing, Just ccExec) -> resumeDefPactExec ccExec
+
+      -- Active db record, Nothing chross-chain continuation: proceed with db
       (Just (Just dbExec), Nothing) -> resumeDefPactExec dbExec
+
+      -- Active db record and cross-chain continuation:
+      -- A valid possibility iff this is a flip-flop from another chain, e.g.
+      --   0. This chain: start pact
+      --   1. Other chain: continue pact
+      --   2. This chain: continue pact
+      -- Thus check at least one step skipped.
       (Just (Just dbExec), Just ccExec) -> do
 
         -- Validate CC execution environment progressed far enough
@@ -557,27 +574,27 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
 
         -- Validate continuation db state
         when (_peContinuation dbExec /= _peContinuation ccExec) $
-          throwExecutionError i (CCDefPactContinuationError ps ccExec dbExec)
+          throwExecutionError i (CCDefPactContinuationError ps ccExec dbExec)    -- TODO check with multichain
 
         -- Validate step count against db state
         when (_peStepCount dbExec /= _peStepCount ccExec) $
-          throwExecutionError i (CCDefPactContinuationError ps ccExec dbExec)
+          throwExecutionError i (CCDefPactContinuationError ps ccExec dbExec)    -- TODO check with multichain
 
         resumeDefPactExec ccExec
       where
         --resumeDefPactExec :: CEKEval step b i m, MonadEval b i m => DefPactExec -> m (CEKEvalResult step b i m)
         resumeDefPactExec pe = do
           when (_psDefPactId ps /= _peDefPactId pe) $
-            throwExecutionError i (DefPactIdMissmatch (_psDefPactId ps) (_peDefPactId pe))
+            throwExecutionError i (DefPactIdMismatch (_psDefPactId ps) (_peDefPactId pe))    -- TODO check with multichain
 
           when (_psStep ps < 0 || _psStep ps >= _peStepCount pe) $
             throwExecutionError i (InvalidDefPactStepSupplied ps pe)
 
           if _psRollback ps
             then when (_psStep ps /= _peStep pe) $
-                 throwExecutionError i (DefPactRollbackMissmatch ps pe)
+                 throwExecutionError i (DefPactRollbackMismatch ps pe)
             else when (_psStep ps /= succ (_peStep pe)) $
-                 throwExecutionError i (DefPactStepMissmatch ps pe)
+                 throwExecutionError i (DefPactStepMismatch ps pe)
 
           let pc = view peContinuation pe
               args = VPactValue <$> _pcArgs pc
@@ -1033,7 +1050,7 @@ installCap info _env (CapToken fqn args) autonomous = do
   case _dcapMeta d of
     DefManaged m -> case m of
       DefManagedMeta (paramIx,_) (FQName fqnMgr) -> do
-        managedParam <- maybe (throwExecutionError info (InvalidManagedCap fqn)) pure (args ^? ix paramIx)
+        managedParam <- maybe (failInvariant info $ "invalid managed cap idx: " <> T.pack (show fqn)) pure (args ^? ix paramIx)
         let mcapType = ManagedParam fqnMgr managedParam paramIx
             ctFiltered = CapToken (fqnToQualName fqn) (filterIndex paramIx args)
             mcap = ManagedCap ctFiltered ct mcapType

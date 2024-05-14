@@ -1,5 +1,4 @@
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE QuasiQuotes #-}
 
 module Pact.Core.Test.StaticErrorTests(tests) where
@@ -7,6 +6,7 @@ module Pact.Core.Test.StaticErrorTests(tests) where
 import Test.Tasty
 import Test.Tasty.HUnit
 
+import qualified Data.Text as T
 import Control.Lens
 import Data.IORef
 import Data.Text (Text)
@@ -51,6 +51,7 @@ runStaticTest label src predicate = do
             , _replUserDocs = mempty
             , _replTLDefPos = mempty
             , _replTx = Nothing
+            , _replNativesEnabled = True
             }
   stateRef <- newIORef rstate
   v <- runReplT stateRef (interpretReplProgram source (const (pure ())))
@@ -290,6 +291,13 @@ desugarTests =
         (defun f1 () f2)
         (defun f2 () f3)
         (defun f3 () f1)
+        )
+      |])
+  , ("cyclic_defcap", isDesugarError _RecursionDetected, [text|
+      (module m1 g (defcap g () true)
+        (defcap c ()
+          (with-capability (c) 1)
+          )
         )
       |])
   , ("dup_defs", isDesugarError _DuplicateDefinition, [text|
@@ -538,11 +546,78 @@ desugarTests =
 
       (use m "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY")
       |])
+  , ("with_capability_in_defcap", isDesugarError _NotAllowedWithinDefcap, [text|
+      (module m1 g (defcap g () true)
+        (defcap c1 () true)
+        (defcap c2 ()
+          (with-capability (c1) 1)
+          )
+        )
+    |])
   ]
 
 executionTests :: [(String, PactErrorI -> Bool, Text)]
 executionTests =
-  [ ("import_unknown_module_namespaced_self_nons", isExecutionError _ModuleDoesNotExist, [text|
+  [ ("enforce_ns_install_module", isExecutionError _NamespaceInstallError, [text|
+      (module m g (defcap g () true)
+        (defun manage (ns guard) true)
+        )
+      (env-namespace-policy false (manage))
+
+      (module another ag (defcap ag () true))
+    |])
+  , ("enforce_ns_install_interface", isExecutionError _NamespaceInstallError, [text|
+      (module m g (defcap g () true)
+        (defun manage (ns guard) true)
+        )
+      (env-namespace-policy false (manage))
+
+      (interface iface
+        (defun foo:string ())
+        )
+    |])
+  , ("enforce_ns_define_namespace", isExecutionError _DefineNamespaceError, [text|
+      (module m g (defcap g () true)
+        (defun manage (ns guard) false)
+        )
+      (env-namespace-policy false (manage))
+
+      (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
+      (env-keys ["carl"])
+
+      (define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys))
+      (namespace 'carl)
+    |])
+  , ("interface_upgrade", isExecutionError _CannotUpgradeInterface, [text|
+      (interface iface
+        (defun foo:string ())
+        )
+      (interface iface
+        (defun foo:string ())
+        (defun bar:string ())
+        )
+    |])
+  , ("interface_module", isExecutionError _ExpectedModule, [text|
+      (interface iface
+        (defun foo:string ())
+        )
+      (module iface g (defcap g () true))
+    |])
+  , ("modref_namespace", isExecutionError _ExpectedModule, [text|
+      (begin-tx)
+      (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
+      (env-keys ["carl"])
+
+      (define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys))
+      (namespace 'carl)
+      (interface iface
+        (defun foo:string ())
+        )
+      (commit-tx)
+
+      carl.iface
+    |])
+  , ("import_unknown_module_namespaced_self_nons", isExecutionError _ModuleDoesNotExist, [text|
       (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
       (env-keys ["carl"])
 
@@ -552,10 +627,585 @@ executionTests =
         (use m)
         )
       |])
+  , ("get_module_unknown", isExecutionError _ModuleDoesNotExist, [text|
+      (describe-module 'nonexistent)
+      |])
+  , ("reexposed_module_missing_name", isExecutionError _NameNotInScope, [text|
+      (module m g
+        (defcap g () true)
+
+        (defun f () 1)
+
+        (defschema foo-schema elem:guard)
+        (deftable foo:{foo-schema})
+        )
+      (create-table foo)
+      (insert foo "k" {"elem":(create-user-guard (f))})
+
+      (module m g
+        (defcap g () true)
+        (defschema foo-schema elem:guard)
+        (deftable foo:{foo-schema})
+        )
+
+      (enforce-guard (at "elem" (read foo "k")))
+      |])
+  , ("module_gov_keyset_nonexistent", isExecutionError _NoSuchKeySet, [text|
+      (module m 'nonexistent (defun f () true))
+      |])
+  , ("module_gov_keyset_different", isExecutionError _EvalError, [text|
+      (env-data {"ks":["jose"]})
+      (define-keyset 'somekeyset (read-keyset 'ks))
+      (module m 'somekeyset (defun f () 1))
+      |])
+  , ("module_gov_keyset_empty", isExecutionError _ModuleGovernanceFailure, [text|
+      (module m "" (defun f () true))
+      |])
+  , ("module_gov_keyset_not_in_sigs", isExecutionError _EvalError, [text|
+      (env-data { "kall": ["a" "b" "c"], "kadmin": ["admin"] })
+      (define-keyset 'kall)
+      (define-keyset 'kadmin)
+
+      (env-keys ["admin"])
+      (module m 'kall (defun f () true))
+      |])
+  , ("defconst_not_a_value_module", isExecutionError _EvalError, [text|
+      (module m g (defcap g () true)
+        (defconst not-a-value (lambda (x) x))
+        )
+      |])
+  , ("defconst_not_a_value_iface", isExecutionError _EvalError, [text|
+      (interface iface
+        (defconst not-a-value (lambda (x) x))
+        )
+      |])
+
+  -- CEK errors
+  , ("modref_no_ns", isExecutionError _ModRefNotRefined, [text|
+      (module m g (defcap g () true))
+      m
+      |])
+
+  , ("defpact_not_init", isExecutionError _NoDefPactIdAndExecEnvSupplied, [text|
+      (module m g (defcap g () true))
+      (continue-pact 1)
+      |])
+  ] <> let simpleDefpact = [text|
+      (module m g (defcap g () true)
+        (defpact p:string ()
+          (step "hello1")
+          (step "hello2")
+          (step "hello3")
+          )
+        )|] in
+  [ ("defpact_args", isExecutionError _ClosureAppliedToTooManyArgs, [text|
+      $simpleDefpact
+      (p 'meh)
+      |])
+  , ("defpact_continuing_completed_samestep", isExecutionError _DefPactAlreadyCompleted, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 1)
+      (continue-pact 2)
+      (continue-pact 3)
+      |])
+  , ("defpact_continuing_completed_samestep", isExecutionError _DefPactAlreadyCompleted, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 1)
+      (continue-pact 2)
+      (continue-pact 2)
+      |])
+  , ("defpact_continuing_completed_prevstep", isExecutionError _DefPactAlreadyCompleted, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 1)
+      (continue-pact 2)
+      (continue-pact 1)
+      |])
+  , ("defpact_continuing_firststep", isExecutionError _DefPactStepMismatch, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 0)
+      |])
+  , ("defpact_continuing_incomplete_samestep", isExecutionError _DefPactStepMismatch, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 1)
+      (continue-pact 1)
+      |])
+  , ("defpact_continuing_incomplete_badstep", isExecutionError _InvalidDefPactStepSupplied, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 100)
+      |])
+  , ("defpact_continuing_incomplete_negstep", isExecutionError _InvalidDefPactStepSupplied, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact (- 1))
+      |]) -- TODO (-1) here errors out
+  , ("defpact_same_nested", isExecutionError _MultipleOrNestedDefPactExecFound, [text|
+      $simpleDefpact
+      (p)
+      (p)
+      |])
+  , ("defpact_same_nested_inprogress", isExecutionError _MultipleOrNestedDefPactExecFound, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 1)
+      (p)
+      |])
+  , ("defpact_continuing_norollback_samestep", isExecutionError _DefPactStepHasNoRollback, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 1)
+      (continue-pact 1 true)
+      |])
+  , ("defpact_continuing_norollback_diffstep", isExecutionError _DefPactStepHasNoRollback, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 0 true)
+      |])
+  , ("defpact_continuing_norollback_diffstep", isExecutionError _DefPactRollbackMismatch, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 1)
+      (continue-pact 2 true)
+      |])
+  , ("defpact_continuing_rollback_final", isExecutionError _DefPactAlreadyCompleted, [text|
+      $simpleDefpact
+      (p)
+      (continue-pact 1)
+      (continue-pact 2)
+      (continue-pact 2 true)
+      |])
+  ] <>
+  [ ("defpact_nested_stepcount", isExecutionError _NestedDefPactParentStepCountMismatch, [text|
+      (module m g (defcap g () true)
+        (defpact n:string ()
+          (step "hello1")
+          (step "hello2")
+          (step "hello3")
+          )
+        (defpact p:string ()
+          (step (n))
+          )
+        )
+      (p)
+      |])
+  , ("defpact_nested_already_started_before", isExecutionError _MultipleOrNestedDefPactExecFound, [text|
+      (module m g (defcap g () true)
+        (defpact n:string ()
+          (step "hello1")
+          (step "hello2")
+          (step "hello3")
+          )
+        (defpact p:string ()
+          (step (n))
+          (step (continue (n)))
+          (step (continue (n)))
+          )
+        )
+      (n)
+      (p)
+      |])
+  , ("defpact_nested_already_started_after", isExecutionError _MultipleOrNestedDefPactExecFound, [text|
+      (module m g (defcap g () true)
+        (defpact n:string ()
+          (step "hello1")
+          (step "hello2")
+          (step "hello3")
+          )
+        (defpact p:string ()
+          (step (n))
+          (step (continue (n)))
+          (step (continue (n)))
+          )
+        )
+      (p)
+      (n)
+      |])
+  , ("defpact_nested_rollback_mismatch_outer_missing", isExecutionError _NestedDefPactParentRollbackMismatch, [text|
+      (module m g (defcap g () true)
+        (defpact n:string ()
+          (step "hello1")
+          (step-with-rollback "hello2" "bye2")
+          (step "hello3")
+          )
+        (defpact p:string ()
+          (step (n))
+          (step (continue (n)))
+          (step (continue (n)))
+          )
+        )
+      (p)
+      (continue-pact 1)
+      (continue-pact 1 true)
+      |])
+  , ("defpact_nested_rollback_mismatch_inner_missing", isExecutionError _NestedDefPactParentRollbackMismatch, [text|
+      (module m g (defcap g () true)
+        (defpact n:string ()
+          (step "hello1")
+          (step "hello2")
+          (step "hello3")
+          )
+        (defpact p:string ()
+          (step (n))
+          (step-with-rollback (continue (n)) "bye-outer")
+          (step (continue (n)))
+          )
+        )
+      (p)
+      (continue-pact 1)
+      (continue-pact 1 true)
+      |])
+  -- TODO better error type here? v
+  , ("defpact_nested_dynamic_step_count_mismatch", isExecutionError _NestedDefPactNeverStarted, [text|
+      (module m g (defcap g () true)
+        (defpact n:string ()
+          (step "hello1")
+          (step "hello2")
+          (step "hello3")
+          )
+        (defpact p:string ()
+          (step (n))
+          (step (+ (continue (n)) (continue (n))))
+          (step (continue (n)))
+          )
+        )
+      (p)
+      (continue-pact 1)
+      |])
+  , ("defpact_nested_double_execution", isExecutionError _NestedDefPactDoubleExecution, [text|
+      (module m g (defcap g () true)
+        (defpact n1:string ()
+          (step "hello1")
+          (step "hello2")
+        )
+        (defpact n2:string ()
+          (step "hello1")
+          (step "hello2")
+        )
+        (defpact p:string ()
+          (step (n1))
+          (step (n2))
+        )
+        )
+      (p)
+      (continue-pact 1)
+      |])
+  , ("defpact_nested_advance_all", isExecutionError _NestedDefpactsNotAdvanced, [text|
+      (module m g (defcap g () true)
+        (defpact n1:string ()
+          (step "hello1")
+          (step "hello2")
+        )
+        (defpact n2:string ()
+          (step "hello1")
+          (step "hello2")
+        )
+        (defpact p:string ()
+          (step [(n1) (n2)])
+          (step ["hello2" "hello2"])
+        )
+        )
+      (p)
+      (continue-pact 1)
+      |])
+  , ("defpact_nested_advance_some", isExecutionError _NestedDefpactsNotAdvanced, [text|
+      (module m g (defcap g () true)
+        (defpact n1:string ()
+          (step "hello1")
+          (step "hello2")
+        )
+        (defpact n2:string ()
+          (step "hello1")
+          (step "hello2")
+        )
+        (defpact p:string ()
+          (step [(n1) (n2)])
+          (step [(n1) "hello2"])
+        )
+        )
+      (p)
+      (continue-pact 1)
+      |])
+  ] <>
+  [ ("env_namespace_wrong_kind", isExecutionError _NativeArgumentsError, [text|
+      (module m g (defcap g () true))
+      (env-namespace-policy false (m.g))
+    |])
+  , ("changing_hash_makes_it_nonblessed", isExecutionError _HashNotBlessed, [text|
+      (define-keyset 'k (sig-keyset))
+
+      (module impure 'k
+        (defconst VERSION 1)
+        (defschema foo-schema value:integer)
+        (deftable foo:{foo-schema})
+        (defun ins (k v) (insert foo k v)))
+
+      (module dep 'k
+        (defun dep-impure (k v) (ins k { "value": v })))
+
+      (module impure 'k
+        (defconst VERSION 2)
+        (defschema foo-schema value:integer)
+        (deftable foo:{foo-schema})
+        (defun ins (k v) (insert foo k v)))
+
+      (dep.dep-impure "b" 1)
+    |])
+  , ("managed_auto_cap_not_installed", isExecutionError _CapNotInstalled, [text|
+      (module m g (defcap g () true)
+        (defcap PAY (sender:string receiver:string amount:integer)
+          @managed
+          (enforce-keyset (read-keyset sender))
+          )
+        (defun pay (sender receiver amount)
+          (with-capability (PAY sender receiver amount) amount)
+          )
+        )
+
+      (env-data { "alice": ["alice"] })
+      (env-keys ["alice"])
+
+      (pay "alice" "bob" 10)
+    |])
+  , ("managed_cap_not_installed", isExecutionError _CapNotInstalled, [text|
+      (module m g (defcap g () true)
+        (defcap PAY (sender:string receiver:string amount:integer)
+          @managed amount PAY-mgr
+          (enforce-keyset (read-keyset sender))
+          )
+        (defun PAY-mgr (mgd req) 0)
+        (defun pay (sender receiver amount)
+          (with-capability (PAY sender receiver amount) amount)
+          )
+        )
+
+      (env-data { "alice": ["alice"] })
+      (env-keys ["alice"])
+
+      (pay "alice" "bob" 10)
+    |])
+  , ("emit_event_module_mismatch", isExecutionError _EventDoesNotMatchModule, [text|
+      (module m1 g (defcap g () true)
+        (defcap ev () @event true)
+        )
+      (module m2 g (defcap g () true)
+        (defun emit-ev ()
+          (emit-event (ev))
+          )
+        )
+      (emit-ev)
+    |])
+  , ("install_cap_not_managed", isExecutionError _InvalidManagedCap, [text|
+      (module m g (defcap g () true)
+        (defcap c:bool ()
+          true)
+        )
+      (install-capability (c))
+    |])
+  , ("partial_defun_user", isExecutionError _CannotApplyPartialClosure, [text|
+      (module m g (defcap g () true)
+        (defun f (n:integer s:string) s)
+        )
+      ((f 1) "foo")
+    |])
+  , ("partial_defun_native", isExecutionError _CannotApplyPartialClosure, [text|
+      ((take 1) "foo")
+    |])
+  , ("closure_too_many_user", isExecutionError _ClosureAppliedToTooManyArgs, [text|
+      (module m g (defcap g () true)
+        (defun f (n:integer s:string) s)
+        )
+      (f 1 "foo" "bar")
+    |])
+  , ("closure_too_many_native", isExecutionError _ClosureAppliedToTooManyArgs, [text|
+      (take 1 "foo" "bar")
+    |])
+  , ("closure_too_many_user_map", isExecutionError _ClosureAppliedToTooManyArgs, [text|
+      (module m g (defcap g () true)
+        (defun f (n:integer s:string) s)
+        )
+      (map (f 1 "foo") ["meh"])
+    |])
+  , ("closure_too_many_native_map", isExecutionError _ClosureAppliedToTooManyArgs, [text|
+      (map (take 1 "foo") ["meh"])
+    |])
+  , ("closure_too_many_user_map_unary", isExecutionError _ClosureAppliedToTooManyArgs, [text|
+      (module m g (defcap g () true)
+        (defun f () 1)
+        )
+      (map f ["meh"])
+    |])
+  , ("closure_too_many_defcap", isExecutionError _ClosureAppliedToTooManyArgs, [text|
+      (module m g (defcap g () true)
+        (defcap c:bool ()
+          @managed
+          true)
+        )
+      (install-capability (c "meh"))
+    |])
+  ]
+
+builtinTests :: [(String, PactErrorI -> Bool, Text)]
+builtinTests =
+  [ ("integer_pow_negative", isExecutionError _ArithmeticException, "(^ 0 -1)")
+  , ("floating_pow_negative", isExecutionError _FloatingPointError, "(^ 0.0 -1.0)")
+  -- TODO better error messages for the mixed ones
+  , ("mixed_pow_negative_flr", isExecutionError _FloatingPointError, "(^ 0 -1.0)")
+  , ("mixed_pow_negative_fll", isExecutionError _FloatingPointError, "(^ 0.0 -1)")
+  , ("integer_log_negative_base", isExecutionError _ArithmeticException, "(log -1 10)")
+  , ("integer_log_negative_arg", isExecutionError _ArithmeticException, "(log 2 -1)")
+  , ("integer_log_zero_arg", isExecutionError _ArithmeticException, "(log 2 0)")
+  , ("floating_log_negative_base", isExecutionError _ArithmeticException, "(log -1.0 10.0)")
+  , ("floating_log_negative_arg", isExecutionError _ArithmeticException, "(log 2.0 -1.0)")
+  , ("floating_log_zero_arg", isExecutionError _ArithmeticException, "(log 2.0 0.0)")
+  -- TODO better error messages for the mixed ones
+  , ("mixed_log_negative_base_fll", isExecutionError _ArithmeticException, "(log -1.0 10)")
+  , ("mixed_log_negative_arg_fll", isExecutionError _ArithmeticException, "(log 2.0 -1)")
+  , ("mixed_log_zero_arg_fll", isExecutionError _ArithmeticException, "(log 2.0 0)")
+  , ("mixed_log_negative_base_flr", isExecutionError _ArithmeticException, "(log -1 10.0)")
+  , ("mixed_log_negative_arg_flr", isExecutionError _ArithmeticException, "(log 2 -1.0)")
+  , ("mixed_log_zero_arg_flr", isExecutionError _ArithmeticException, "(log 2 0.0)")
+  , ("integer_div_zero", isExecutionError _ArithmeticException, "(/ 2 0)")
+  , ("floating_div_zero", isExecutionError _ArithmeticException, "(/ 2.0 0.0)")
+  -- TODO better error messages for the mixed ones
+  , ("mixed_div_zero_fll", isExecutionError _ArithmeticException, "(/ 2.0 0)")
+  , ("mixed_div_zero_flr", isExecutionError _ArithmeticException, "(/ 2 0.0)")
+  , ("integer_square_negative", isExecutionError _ArithmeticException, "(sqrt -1)")
+  , ("floating_square_negative", isExecutionError _ArithmeticException, "(sqrt -1.0)")
+
+  , ("enumerate_up_diverging", isExecutionError _EnumerationError, "(enumerate 0 10 -1)")
+  , ("enumerate_down_diverging", isExecutionError _EnumerationError, "(enumerate 10 0 1)")
+  , ("at_oob_bigger", isExecutionError _ArrayOutOfBoundsException, "(at 100 [1 2 3])")
+  , ("at_oob_bound", isExecutionError _ArrayOutOfBoundsException, "(at 3 [1 2 3])")
+  , ("at_oob_smaller", isExecutionError _ArrayOutOfBoundsException, "(at -1 [1 2 3])")
+  , ("at_oob_empty", isExecutionError _ArrayOutOfBoundsException, "(at 0 [])")
+  , ("at_key_missing", isExecutionError _EvalError, "(at 'bar { 'foo: 1 })")
+  , ("yield_outside", isExecutionError _YieldOutsiteDefPact, "(yield {})")
+  , ("resume_no_defpact", isExecutionError _NoActiveDefPactExec, "(resume { 'field := binder } binder)")
+  , ("resume_no_yield", isExecutionError _NoYieldInDefPactStep, [text|
+      (module m g (defcap g () true)
+        (defpact p ()
+          (step "hello")
+          (step (resume { 'field := binder } binder)))
+        )
+
+      (p)
+      (continue-pact 1)
+    |])
+  , ("yield_provenance_mismatch", isExecutionError _YieldProvenanceDoesNotMatch, [text|
+      (module m g (defcap g () true)
+        (defpact p ()
+          (step (yield { 'field: 1 } "1"))
+          (step (resume { 'field := binder } binder)))
+        )
+
+      (env-chain-data { 'chain-id: "0" })
+      (p)
+      (continue-pact 1)
+    |])
+  , ("toplevel_create_table", isExecutionError _NativeIsTopLevelOnly, [text|
+      (module m g (defcap g () true)
+        (defschema s a:integer)
+        (deftable t:{s})
+        (defun f () (create-table t))
+        )
+      (f)
+    |])
+  , ("toplevel_describe_table", isExecutionError _NativeIsTopLevelOnly, [text|
+      (module m g (defcap g () true)
+        (defschema s a:integer)
+        (deftable t:{s})
+        (defun f () (describe-table t))
+        )
+      (f)
+    |])
+  , ("toplevel_define_keyset", isExecutionError _NativeIsTopLevelOnly, [text|
+      (env-data { "kall": ["a" "b" "c"] })
+      (module m g (defcap g () true)
+        (defun f () (define-keyset 'kall))
+        )
+      (f)
+    |])
+  , ("toplevel_define_keyset_guarded", isExecutionError _NativeIsTopLevelOnly, [text|
+      (env-data { "kall": ["a" "b" "c"] })
+      (module m g (defcap g () true)
+        (defun f () (define-keyset 'kall (sig-keyset)))
+        )
+      (f)
+    |])
+  , ("toplevel_describe_module", isExecutionError _NativeIsTopLevelOnly, [text|
+      (module m g (defcap g () true)
+        (defun f () (describe-module 'm))
+        )
+      (f)
+    |])
+  , ("toplevel_describe_keyset", isExecutionError _NativeIsTopLevelOnly, [text|
+      (env-data { "kall": ["a" "b" "c"] })
+      (define-keyset 'kall)
+      (module m g (defcap g () true)
+        (defun f () (describe-keyset 'kall))
+        )
+      (f)
+    |])
+  , ("toplevel_namespace", isExecutionError _NativeIsTopLevelOnly, [text|
+      (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
+      (env-keys ["carl"])
+
+      (define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys))
+      (module m g (defcap g () true)
+        (defun f () (namespace 'carl))
+        )
+      (f)
+    |])
+  , ("toplevel_define_namespace", isExecutionError _NativeIsTopLevelOnly, [text|
+      (env-data { "carl-keys" : ["carl"], "carl.carl-keys": ["carl"] })
+      (env-keys ["carl"])
+
+      (module m g (defcap g () true)
+        (defun f () (define-namespace 'carl (read-keyset 'carl-keys) (read-keyset 'carl-keys)))
+        )
+      (f)
+    |])
+  , ("b64decode", isExecutionError _DecodeError, [text|(base64-decode "foobar!")|])
+  , ("b64decode-str-to-int", isExecutionError _DecodeError, [text|(str-to-int 64 "foobar!")|])
+  , let long = T.replicate 513 "0" in
+    ("str-to-int-too-long", isExecutionError _DecodeError, [text|(str-to-int "$long")|])
+  , let long = T.replicate 513 "0" in
+    ("str-to-int-base-too-long", isExecutionError _DecodeError, [text|(str-to-int 2 "$long")|])
+  , ("str-to-int-empty", isExecutionError _DecodeError, [text|(str-to-int "")|])
+  , ("str-to-int-base-empty", isExecutionError _DecodeError, [text|(str-to-int 2 "")|])
+  , ("keyset_def_ns_mismatch", isExecutionError _MismatchingKeysetNamespace, [text|
+      (env-exec-config ["RequireKeysetNs"])
+      (env-data
+        { "alice-keys" : ["alice"]
+        , "bob-keys"   : ["bob"]
+        , "alice.alice-keys": ["alice"]
+        , "bob.bob-keys" : ["bob"]
+        })
+      (env-keys ["alice", "bob"])
+
+      (define-namespace 'alice
+        (read-keyset 'alice-keys)
+        (read-keyset 'alice-keys))
+
+      (define-namespace 'bob
+        (read-keyset 'bob-keys)
+        (read-keyset 'bob-keys))
+      (namespace 'alice)
+      (define-keyset "bob.bob-keys")
+    |])
+  , ("emit_event_unmanaged", isExecutionError _InvalidEventCap, [text|
+      (module m g (defcap g () true))
+      (emit-event (g))
+    |])
   ]
 
 tests :: TestTree
 tests =
-  testGroup "CoreStaticTests" (go <$> parseTests <> desugarTests <> executionTests)
+  testGroup "CoreStaticTests" (go <$> parseTests <> desugarTests <> executionTests <> builtinTests)
   where
   go (label, p, srcText) = testCase label $ runStaticTest label srcText p

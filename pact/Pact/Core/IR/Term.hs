@@ -7,6 +7,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE StrictData #-}
 
 
 -- |
@@ -412,6 +413,16 @@ instance (Pretty name, Pretty ty, Pretty b) => Pretty (Def name ty b i) where
     DTable d -> pretty d
     DPact d -> pretty d
 
+makeLenses ''Module
+makeLenses ''Interface
+makeLenses ''Defun
+makeLenses ''DefConst
+makeLenses ''DefCap
+makeLenses ''DefPact
+makePrisms ''Def
+makePrisms ''Term
+makePrisms ''IfDef
+
 
 -----------------------------------------
 -- Term traversals and builtins
@@ -551,6 +562,14 @@ traverseDefTerm f = \case
   DTable d -> pure (DTable d)
   DPact d -> DPact <$> traverseDefPactTerm f d
 
+traverseModuleTerm
+  :: Traversal (Module name ty builtin info)
+               (Module name ty builtin' info)
+               (Term name ty builtin info)
+               (Term name ty builtin' info)
+traverseModuleTerm f m =
+  (mDefs . traversed) (traverseDefTerm f) m
+
 
 traverseIfDefTerm
   :: Traversal (IfDef name ty builtin info)
@@ -574,7 +593,7 @@ instance Plated (Term name ty builtin info) where
     Constant l i -> pure (Constant l i)
     Sequence e1 e2 i -> Sequence <$> f e1 <*> f e2 <*> pure i
     Conditional o i ->
-      Conditional <$> traverse (plate f) o <*> pure i
+      Conditional <$> traverse f o <*> pure i
     ListLit m i -> ListLit <$> traverse f m <*> pure i
     Nullary term i ->
       Nullary <$> f term <*> pure i
@@ -586,15 +605,6 @@ instance Plated (Term name ty builtin info) where
       ObjectLit <$> (traverse._2) f o <*> pure i
     InlineValue v i -> pure (InlineValue v i)
 
-makeLenses ''Module
-makeLenses ''Interface
-makeLenses ''Defun
-makeLenses ''DefConst
-makeLenses ''DefCap
-makeLenses ''DefPact
-makePrisms ''Def
-makePrisms ''Term
-makePrisms ''IfDef
 
 -----------------------------------------
 -- Type Aliases for evaluation

@@ -131,45 +131,17 @@ lookupModuleData info pdb mn =
 
 -- | getModuleData, but only for modules, no interfaces
 getModule :: (MonadEval b i m) => i -> PactDb b i -> ModuleName -> m (EvalModule b i)
-getModule info pdb mn =
- useEvalState (esLoaded . loModules . at mn) >>= \case
-   Just (ModuleData md _) -> pure md
-   Just (InterfaceData _ _) ->
-    throwExecutionError info (ExpectedModule mn)
-   Nothing -> do
-    liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
-      Just mdata@(ModuleData md deps) -> do
-        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> _mDefs md
-        (esLoaded . loAllLoaded) %== M.union newLoaded . M.union deps
-        (esLoaded . loModules) %== M.insert mn mdata
-        pure md
-      Just (InterfaceData _ _) ->
-        throwExecutionError info (ExpectedModule mn)
-      Nothing ->
-        throwExecutionError info (ModuleDoesNotExist mn)
+getModule info pdb mn = lookupModule info pdb mn >>= \case
+  Just md -> pure md
+  Nothing -> throwExecutionError info (ModuleDoesNotExist mn)
 
 -- | Get or load a module or interface based on the module name
 getModuleData :: (MonadEval b i m) => i -> PactDb b i -> ModuleName -> m (ModuleData b i)
-getModuleData info pdb mn =
- useEvalState (esLoaded . loModules . at mn) >>= \case
-   Just md -> pure md
-   Nothing -> do
-    liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
-      Just mdata@(ModuleData md deps) -> do
-        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> _mDefs md
-        (esLoaded . loAllLoaded) %== M.union newLoaded . M.union deps
-        (esLoaded . loModules) %== M.insert mn mdata
-        pure mdata
-      Just ifdata@(InterfaceData iface deps) -> do
-        let mdefs = mapMaybe ifDefToDef (_ifDefns iface)
-        let newLoaded = M.fromList $ toFqDep mn (_ifHash iface) <$> mdefs
-        (esLoaded . loAllLoaded) %== M.union newLoaded . M.union deps
-        (esLoaded . loModules) %== M.insert mn ifdata
-        pure ifdata
-      Nothing ->
-        throwExecutionError info (ModuleDoesNotExist mn)
+getModuleData info pdb mn = lookupModuleData info pdb mn >>= \case
+  Just md -> pure md
+  Nothing -> throwExecutionError info (ModuleDoesNotExist mn)
 
--- | getModuleData, but only for modules, no interfaces
+-- | Returns a module member, but only for modules, no interfaces
 getModuleMember :: (MonadEval b i m) => i -> PactDb b i -> QualifiedName -> m (EvalDef b i)
 getModuleMember info pdb (QualifiedName qn mn) = do
   md <- getModule info pdb mn

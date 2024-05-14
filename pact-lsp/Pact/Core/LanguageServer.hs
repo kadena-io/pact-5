@@ -101,8 +101,22 @@ startLSP = do
       , doInitialize = \env _ -> pure (Right env)
       , staticHandlers = const handlers
       , interpretHandler = \env -> Iso (\lsm -> runLSM lsm state env) liftIO
-      , options = defaultOptions
+      , options = defaultOptions { optTextDocumentSync = Just syncOptions }
       }
+
+    -- Note: Syncing options are related to problems highlighted in #83.
+    -- Some IDEs differ in what kind of notification they send, also the
+    -- `TextDocumentSyncOptions` control the frequency (incremental, full)
+    -- the server is being informed.
+    syncOptions = TextDocumentSyncOptions
+                  (Just True) -- send open/close notification
+                  (Just TextDocumentSyncKind_Incremental)
+                  -- Documents are synce by sending the full content once
+                  -- a file is being opened. Later updates are send
+                  -- incrementally to the server.
+                  (Just False) -- dont send `willSave` notification.
+                  (Just False) -- dont send `willSaveWaitUntil` request.
+                  (Just $ InR $ SaveOptions $ Just True) -- Include content on save.
 
     runLSM lsm state cfg = runReaderT (runLspT cfg lsm) state
 
@@ -113,6 +127,7 @@ startLSP = do
       , documentDidChangeHandler
       , documentDidCloseHandler
       , documentDidSaveHandler
+      , workspaceDidChangeConfigurationHandler
       -- request handler
       , documentHoverRequestHandler
       , documentDefinitionRequestHandler
@@ -125,50 +140,66 @@ debug msg = liftIO $ T.hPutStrLn stderr $ "[pact-lsp] " <> msg
 initializedHandler :: Handlers LSM
 initializedHandler = notificationHandler SMethod_Initialized $ \_ -> pure ()
 
+workspaceDidChangeConfigurationHandler :: Handlers LSM
+workspaceDidChangeConfigurationHandler
+  = notificationHandler SMethod_WorkspaceDidChangeConfiguration $ \_ -> pure ()
+
 documentDidOpenHandler :: Handlers LSM
 documentDidOpenHandler = notificationHandler SMethod_TextDocumentDidOpen $ \msg -> do
   let nuri = msg ^. params . textDocument . uri . to toNormalizedUri
       content = msg ^. params . textDocument . text
 
   debug $ "open file " <> renderText nuri
-  sendDiagnostics nuri 0 content
+  sendDiagnostics nuri (Just 0) content
 
 documentDidChangeHandler :: Handlers LSM
 documentDidChangeHandler = notificationHandler SMethod_TextDocumentDidChange $ \msg -> do
   let nuri = msg ^. params . textDocument . uri . to toNormalizedUri
 
+  debug $ "didChangeHandler notification: " <> renderText nuri
+
   mdoc <- getVirtualFile nuri
   case mdoc of
     Nothing -> debug $ "No virtual file found for: " <> renderText nuri
-    Just vf -> sendDiagnostics nuri (virtualFileVersion vf) (virtualFileText vf)
+    Just vf -> sendDiagnostics nuri (Just $ virtualFileVersion vf) (virtualFileText vf)
 
 
 documentDidCloseHandler :: Handlers LSM
 documentDidCloseHandler = notificationHandler SMethod_TextDocumentDidClose $ \msg -> do
   let nuri = msg ^. params . textDocument . uri . to toNormalizedUri
 
-  debug $ "Remove from cache " <> renderText nuri
+  debug $ "didCloseHandler notification: " <> renderText nuri
   modifyState ((lsReplState %~ M.delete nuri) . (lsTopLevel %~ M.delete nuri))
 
 documentDidSaveHandler :: Handlers LSM
 documentDidSaveHandler = notificationHandler SMethod_TextDocumentDidSave $ \msg -> do
   let nuri = msg ^. params . textDocument . uri . to toNormalizedUri
+      content =  msg ^. params . text
+  debug $ "didSaveHandler notification: " <> renderText nuri
 
-  debug $ "Document saved: " <> renderText nuri
-  sendDiagnostics nuri 0 ""
+  case content of
+    Nothing -> do
+      debug "didSaveHandler: read content from VFS"
+      mdoc <- getVirtualFile nuri
+      case mdoc of
+        Nothing -> debug $ "No virtual file found for: " <> renderText nuri
+        Just vf -> sendDiagnostics nuri (Just $ virtualFileVersion vf) (virtualFileText vf)
+    Just t -> do
+      debug "didSaveHandler: content from request"
+      sendDiagnostics nuri Nothing t
 
 -- Working horse for producing document diagnostics.
-sendDiagnostics :: NormalizedUri -> Int32 -> Text -> LSM ()
-sendDiagnostics nuri v content = liftIO runPact >>= \case
+sendDiagnostics :: NormalizedUri -> Maybe Int32 -> Text -> LSM ()
+sendDiagnostics nuri mv content = liftIO runPact >>= \case
   Left err -> do
     -- We only publish a single diagnostic
-    publishDiagnostics 1  nuri (Just v) $ partitionBySource [pactErrorToDiagnostic err]
+    publishDiagnostics 1  nuri mv $ partitionBySource [pactErrorToDiagnostic err]
   Right (stRef, r) -> do
     st <- liftIO (readIORef stRef)
     modifyState ((lsReplState %~ M.insert nuri st) . (lsTopLevel %~ M.insert nuri r))
 
     -- We emit an empty set of diagnostics
-    publishDiagnostics 0  nuri (Just v) $ partitionBySource []
+    publishDiagnostics 0  nuri mv $ partitionBySource []
   where
     runPact = do
       let file = fromMaybe "<local>" $ uriToFilePath (fromNormalizedUri nuri)
@@ -194,6 +225,10 @@ sendDiagnostics nuri v content = liftIO runPact >>= \case
           , _replTx = Nothing
           , _replUserDocs = mempty
           , _replTLDefPos = mempty
+          -- Note: for the lsp, we don't want it to fail on repl natives not enabled,
+          -- since there may be no way for us to set it for the LSP from pact directly.
+          -- Once this is possible, we can set it to `False` as is the default
+          , _replNativesEnabled = True
           }
       stateRef <- newIORef rstate
       res <- runReplT stateRef (processFile (replBuiltinEnv @CEKSmallStep) src)
@@ -246,9 +281,11 @@ documentDefinitionRequestHandler = requestHandler SMethod_TextDocumentDefinition
         TermMatch (Var (Name n (NTopLevel mn _)) _) -> do
           let qn = QualifiedName n mn
           pure $ preview (lsReplState . at nuri . _Just . replTLDefPos . ix qn) st
-        _ -> pure Nothing
+        o -> do
+          debug $ "defi match " <> renderText (show o)
+          pure Nothing
       _ -> pure Nothing
-
+    debug $ "documentDefinition request: " <> renderText nuri
     let loc = Location uri' . spanInfoToRange
     case loc <$> tlDefSpan of
       Just x -> resp (Right $ InL $ Definition (InL x))
@@ -277,9 +314,7 @@ documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req re
               toHover d = Hover (InL $ MarkupContent MarkupKind_PlainText d) Nothing
               doc = preview (lsReplState . at nuri . _Just . replUserDocs . ix qn) st
           in resp (Right (maybeToNull (toHover <$> doc)))
-        _other -> do
-          debug $ "Encounter: " <> renderText (show _other)
-          resp (Right (InR Null))
+        _ ->  resp (Right (InR Null))
       Nothing -> do
         debug "documentHover: could not find term on position"
         resp (Right (InR Null))

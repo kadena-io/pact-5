@@ -1,0 +1,18 @@
+; Read integer repl test cases
+(env-data {"a":1})
+(expect "read-integer works for naiive case" 1 (read-integer "a"))
+(expect "read-decimal works for a set integer" (dec 1) (read-decimal "a"))
+
+(env-data {"a":"1"})
+(expect "read-integer works for an integer string" 1 (read-integer "a"))
+(expect "read-decimal works for an integer string" (dec 1) (read-decimal "a"))
+
+(env-data {"a":"123.1"})
+(expect-failure "read-integer fails on decimal strings" (read-integer "a"))
+(expect "read-decimal works on a decimal string" 123.1 (read-decimal "a"))
+
+(env-data {"a":1.1})
+(expect "read-integer rounds a decimal correctly" 1 (read-integer "a"))
+
+(env-data {"a":{"int":"1234"}})
+(expect "read-integer works with json encoding of integer-2" 1234 (read-integer "a"))

@@ -55,7 +55,7 @@ Pact Core maintains semantic equivalence to Pact, aside from minor differences f
 
 ### Roadmap
 > [!NOTE]
-> The current roadmap is being sketched by the Pact Team and will be updated appropriatly.
+> The current roadmap is being sketched by the Pact Team and will be updated.
 
 ## Documentation
 The [Kadena Docs](https://docs.kadena.io/pact) site serves as the primary source of information about Pact.
