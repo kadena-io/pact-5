@@ -737,6 +737,7 @@ benchesForBuiltin bn = case bn of
   CoreHours -> omittedDeliberately
   CoreMinutes -> omittedDeliberately
   CoreDays -> omittedDeliberately
+  CoreCompose -> omittedDeliberately
   _ -> const []
   where
   omittedDeliberately = const []
