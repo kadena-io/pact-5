@@ -154,7 +154,7 @@ instance MonadEvalState b SpanInfo (ReplM b) where
 instance HasEvalState (ReplState b) b SpanInfo where
   evalState = replEvalState
 
-instance (Pretty b, Show b) => PhaseDebug b SpanInfo (ReplM b) where
+instance (Pretty b) => PhaseDebug b SpanInfo (ReplM b) where
   debugPrint dp term = do
     case dp of
       DPLexer -> whenReplFlagSet ReplDebugLexer $ liftIO $ do
@@ -171,8 +171,6 @@ instance (Pretty b, Show b) => PhaseDebug b SpanInfo (ReplM b) where
           liftIO $ do
             putStrLn "----------- Desugar output ---------------"
             print (pretty t)
-            print (show t)
-            print $ "At span information: " <> show (view Term.termInfo t)
         _ -> pure ()
 
 
