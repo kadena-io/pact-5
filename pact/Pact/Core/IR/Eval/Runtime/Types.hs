@@ -594,7 +594,7 @@ data EvalCapType
 
 -- | State to preserve in the error handler
 data ErrorState i
-  = ErrorState (CapState QualifiedName PactValue) [StackFrame i]
+  = ErrorState (CapState QualifiedName PactValue) [StackFrame i] (NonEmpty RecursionCheck)
   deriving (Show, Generic)
 
 instance NFData i => NFData (ErrorState i)

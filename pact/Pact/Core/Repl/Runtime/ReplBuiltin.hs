@@ -78,14 +78,15 @@ coreExpect info b cont handler _env = \case
                 returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
             else returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
           _ -> returnCEK cont handler (VError "evaluation within expect did not return a pact value" info)
-      Right (VError errMsg _) ->
-        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> "evaluation of actual failed with error message: " <> errMsg
+      Right (VError errMsg _) -> do
+        putEvalState es
+        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> " evaluation of actual failed with error message: " <> errMsg
       Right _v ->
         returnCEK cont handler $ VError "FAILURE: expect expression did not return a pact value for comparison" info
       Left err -> do
         putEvalState es
         currSource <- use replCurrSource
-        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> "evaluation of actual failed with error message:\n" <>
+        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> " evaluation of actual failed with error message:\n" <>
           replError currSource err
   args -> argsError info b args
 

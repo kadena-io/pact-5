@@ -163,11 +163,11 @@ isExecutionFlagSet flag = viewsEvalEnv eeFlags (S.member flag)
 
 evalStateToErrorState :: EvalState b i -> ErrorState i
 evalStateToErrorState es =
-  ErrorState (_esCaps es) (_esStack es)
+  ErrorState (_esCaps es) (_esStack es) (_esCheckRecursion es)
 
 restoreFromErrorState :: ErrorState i -> EvalState b i -> EvalState b i
-restoreFromErrorState (ErrorState caps stack) =
-  set esCaps caps . set esStack stack
+restoreFromErrorState (ErrorState caps stack recur) =
+  set esCaps caps . set esStack stack . set esCheckRecursion recur
 
 checkNonLocalAllowed :: (MonadEval b i m) => i -> m ()
 checkNonLocalAllowed info = do
