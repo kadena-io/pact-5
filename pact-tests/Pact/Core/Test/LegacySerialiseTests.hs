@@ -53,7 +53,9 @@ legacyTests :: IO [TestTree]
 legacyTests = do
   t <- replTestFiles
   forM t $ \(p, repl, lm) -> do
+    -- Perform legacy decoding on all `.json` files for that test
     lm' <- sequence <$> traverse (toModuleData p) lm
+
     case lm' of
       Nothing -> error "Reading existing modules failed"
       Just ms -> do
@@ -86,4 +88,4 @@ legacyTests = do
       ifdefs = over (traverseIfDefTerm . termBuiltin) RBuiltinWrap <$> _ifDefns im
       ed' = over (traverseDefTerm . termBuiltin) RBuiltinWrap <$> ed
       in InterfaceData (im{_ifDefns = ifdefs}) ed'
-      
+

@@ -75,8 +75,6 @@ import Pact.Core.Gas
 import Pact.Core.Guards
 import Pact.Core.Capabilities
 
-import Debug.Trace
-
 mkBuiltinFn
   :: (IsBuiltin b)
   => i
@@ -118,10 +116,7 @@ typecheckArgument info pv ty = case (pv, checkPvType ty pv) of
     | _mrRefined mr == Nothing -> pure (PModRef (mr & mrRefined ?~ m))
     | otherwise -> pure (PModRef mr)
   (_, Just _) -> pure pv
-  (_, Nothing) -> do
-    stack <- useEvalState esStack
-    traceM "STACK DURING ERROR"
-    traceM $ show stack
+  (_, Nothing) ->
     throwExecutionError info (RunTimeTypecheckFailure (toArgTypeError (VPactValue pv)) ty)
 
 maybeTCType :: (MonadEval b i m) => i -> PactValue -> Maybe Type -> m PactValue

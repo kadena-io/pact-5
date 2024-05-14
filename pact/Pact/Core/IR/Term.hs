@@ -368,9 +368,9 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
       parens ("try" <+> pretty te <+> pretty te')
     ObjectLit n _ ->
       braces (hsep $ punctuate "," $ fmap (\(f, t) -> pretty f <> ":" <> pretty t) n)
-    InlineValue{} ->
+    InlineValue pv _ ->
       -- Note: This term is only used for back compat. with Pact < 5
-      "INTERNAL: encounter `InlineValue` which is only used for compat. with pact < 5"
+      pretty pv
     where
     prettyTyAnn = maybe mempty ((":" <>) . pretty)
     prettyLamArg (Arg n ty _) =
