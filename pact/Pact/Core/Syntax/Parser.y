@@ -189,15 +189,15 @@ IfDef :: { ParsedIfDef }
 -- ident = $2,
 IfDefun :: { SpanInfo -> IfDefun SpanInfo }
   : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel
-    { IfDefun (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) }
+    { IfDefun (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) (fst $7) (snd $7) }
 
 IfDefCap :: { SpanInfo -> IfDefCap SpanInfo }
   : defcap IDENT MTypeAnn'(' MArgs ')' MDocOrModel MDCapMeta
-    { IfDefCap (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) $8 }
+    { IfDefCap (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) (fst $7) (snd $7) $8 }
 
 IfDefPact :: { SpanInfo -> IfDefPact SpanInfo }
   : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel
-    { IfDefPact (getIdent $2) (reverse $5) $3 (fst $7) (snd $7) }
+    { IfDefPact (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) (fst $7) (snd $7) }
 
 ImportList :: { Maybe [Text] }
   : '[' ImportNames ']' { Just (reverse $2) }
@@ -208,12 +208,12 @@ ImportNames :: { [Text] }
   | {- empty -} { [] }
 
 DefConst :: { SpanInfo -> ParsedDefConst }
-  : defconst IDENT MTypeAnn Expr MDoc { DefConst (getIdent $2) $3 $4 $5 }
+  : defconst IDENT MTypeAnn Expr MDoc { DefConst (MArg (getIdent $2) $3 (_ptInfo $2)) $4 $5 }
 
 -- All defs
 Defun :: { SpanInfo -> ParsedDefun }
   : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel Block
-    { Defun (getIdent $2) (reverse $5) $3 $8 (fst $7) (snd $7) }
+    { Defun (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $8 (fst $7) (snd $7) }
 
 Defschema :: { SpanInfo -> DefSchema SpanInfo }
   : defschema IDENT MDocOrModel SchemaArgList
@@ -224,11 +224,11 @@ Deftable :: { SpanInfo -> DefTable SpanInfo }
 
 Defcap :: { SpanInfo -> DefCap SpanInfo }
   : defcap IDENT MTypeAnn '(' MArgs ')' MDocOrModel MDCapMeta Block
-    { DefCap (getIdent $2) (reverse $5) $3 $9 (fst $7) (snd $7) $8 }
+    { DefCap (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $9 (fst $7) (snd $7) $8 }
 
 DefPact :: { SpanInfo -> DefPact SpanInfo }
   : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel Steps
-  { DefPact (getIdent $2) (reverse $5) $3 (reverse $8) (fst $7) (snd $7) }
+  { DefPact (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) (reverse $8) (fst $7) (snd $7) }
 
 Steps :: { [PactStep SpanInfo] }
   : Steps Step { $2:$1 }
@@ -261,17 +261,17 @@ Managed :: { DCapMeta }
 Event :: { DCapMeta }
   : eventAnn { DefEvent }
 
-MArgs :: { [MArg] }
+MArgs :: { [MArg SpanInfo] }
   : MArgs MArg { $2:$1 }
   | {- empty -} { [] }
 
-MArg :: { MArg }
-  : IDENT ':' Type { MArg (getIdent $1) (Just $3) }
-  | IDENT { MArg (getIdent $1) Nothing }
+MArg :: { MArg SpanInfo }
+  : IDENT ':' Type { MArg (getIdent $1) (Just $3) (_ptInfo $1)}
+  | IDENT { MArg (getIdent $1) Nothing (_ptInfo $1)}
 
-SchemaArgList :: { [Arg] }
-  : SchemaArgList IDENT ':' Type { (Arg (getIdent $2) $4):$1 }
-  | SchemaArgList IDENT { (Arg (getIdent $2) TyAny):$1 }
+SchemaArgList :: { [Arg SpanInfo] }
+  : SchemaArgList IDENT ':' Type { (Arg (getIdent $2) $4 (_ptInfo $2)):$1 }
+  | SchemaArgList IDENT { (Arg (getIdent $2) TyAny (_ptInfo $2)):$1 }
   | {- empty -} { [] }
 
 Type :: { Type }
@@ -375,9 +375,9 @@ CapForm :: { CapForm SpanInfo }
   : withcap Expr Block { WithCapability $2 $3 }
   | c_usr_grd '(' ParsedName AppList ')' { CreateUserGuard $3 (reverse $4)}
 
-LamArgs :: { [MArg] }
-  : LamArgs IDENT ':' Type { (MArg (getIdent $2) (Just $4)):$1 }
-  | LamArgs IDENT { (MArg (getIdent $2) Nothing):$1 }
+LamArgs :: { [MArg SpanInfo] }
+  : LamArgs IDENT ':' Type { (MArg (getIdent $2) (Just $4) (_ptInfo $2)):$1 }
+  | LamArgs IDENT { (MArg (getIdent $2) Nothing (_ptInfo $2)):$1 }
   | {- empty -} { [] }
 
 LetExpr :: { SpanInfo -> ParsedExpr }
@@ -397,19 +397,19 @@ AppList :: { [ParsedExpr] }
   : AppList Expr { $2:$1 }
   | {- empty -} { [] }
 
-AppBindList :: { [Either ParsedExpr [(Field, MArg)]] }
+AppBindList :: { [Either ParsedExpr [(Field, MArg SpanInfo)]] }
   : AppBindList Expr { (Left $2):$1 }
   | AppBindList BindingForm { (Right $2):$1}
   | {- empty -} { [] }
 
-BindingForm :: { [(Field, MArg)] }
+BindingForm :: { [(Field, MArg SpanInfo)] }
   : '{' BindPairs '}' { $2 }
 
-BindPair :: { (Field, MArg) }
+BindPair :: { (Field, MArg SpanInfo) }
   : STR ':=' MArg { (Field (getStr $1), $3) }
   | TICK ':=' MArg { (Field (getTick $1), $3) }
 
-BindPairs :: { [(Field, MArg)] }
+BindPairs :: { [(Field, MArg SpanInfo)] }
   : BindPairs ',' BindPair { $3 : $1 }
   | BindPair { [$1] }
 

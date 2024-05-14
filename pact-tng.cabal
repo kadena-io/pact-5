@@ -223,6 +223,7 @@ library pact-lsp
   exposed-modules:
     Pact.Core.LanguageServer
     Pact.Core.LanguageServer.Utils
+    Pact.Core.LanguageServer.Renaming
 
   build-depends:
     , pact-tng
@@ -310,6 +311,7 @@ test-suite core-tests
     , tasty
     , tasty-hunit
     , tasty-hedgehog
+    , tasty-golden
     , serialise
     , cborg
     , groups

@@ -24,6 +24,7 @@ module Pact.Core.Type
  , Arg(..)
  , argName
  , argType
+ , argInfo
  , TypedArg(..)
  , targName
  , targType
@@ -196,16 +197,17 @@ literalPrim = \case
 -- renderPred :: (Pretty n) => Pred n -> Text
 -- renderPred = T.pack . show . pretty
 
-data Arg ty
+data Arg ty i
   = Arg
   { _argName :: !Text
   , _argType :: Maybe ty
+  , _argInfo :: i
   } deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
 
-instance NFData ty => NFData (Arg ty)
+instance (NFData ty, NFData i) => NFData (Arg ty i)
 
-instance Pretty ty => Pretty (Arg ty) where
-  pretty (Arg n ty) =
+instance Pretty ty => Pretty (Arg ty i) where
+  pretty (Arg n ty _) =
     pretty n <> maybe mempty ((":" <>) . pretty) ty
 
 data TypedArg ty

@@ -169,37 +169,37 @@ gmDcapEventName = "gasModelDCapEvent"
 gmDcapUnmanaged :: EvalDefCap CoreBuiltin ()
 gmDcapUnmanaged = DefCap
   { _dcapTerm = boolConst True
-  , _dcapRType = Nothing
-  , _dcapName = gmDcapUnmanagedName
+  , _dcapSpec = Arg gmDcapUnmanagedName Nothing ()
   , _dcapMeta=DefEvent
   , _dcapInfo=()
-  , _dcapArgs=[]}
+  , _dcapArgs=[]
+  }
 
 gmDcapAutomanaged :: EvalDefCap CoreBuiltin ()
 gmDcapAutomanaged = DefCap
   { _dcapTerm = boolConst True
-  , _dcapRType = Nothing
-  , _dcapName = gmDcapAutoManagedName
+  , _dcapSpec = Arg gmDcapAutoManagedName Nothing ()
   , _dcapMeta= DefManaged AutoManagedMeta
   , _dcapInfo=()
   , _dcapArgs=[]}
 
 gmManagerDfun :: EvalDefun CoreBuiltin ()
 gmManagerDfun =
-  Defun {_dfunTerm = intConst 1
-  , _dfunRType = Nothing
-  , _dfunName=gmManagerDfunName
+  Defun
+  { _dfunTerm = intConst 1
+  , _dfunSpec = Arg gmManagerDfunName Nothing ()
   , _dfunInfo=()
-  , _dfunArgs=[Arg "arg1" Nothing, Arg "arg2" Nothing] }
+  , _dfunArgs=[Arg "arg1" Nothing (), Arg "arg2" Nothing ()]
+  }
 
 gmDcapManaged :: EvalDefCap CoreBuiltin ()
 gmDcapManaged = DefCap
   { _dcapTerm = boolConst True
-  , _dcapRType = Nothing
-  , _dcapName = gmDcapAutoManagedName
+  , _dcapSpec = Arg gmDcapAutoManagedName Nothing ()
   , _dcapMeta= DefManaged (DefManagedMeta (0, "arg1") (FQName (mkGasModelFqn gmManagerDfunName)))
   , _dcapInfo=()
-  , _dcapArgs=[Arg "arg1" Nothing]}
+  , _dcapArgs=[Arg "arg1" Nothing ()]
+  }
 
 gmModuleDefns :: [EvalDef CoreBuiltin ()]
 gmModuleDefns =
@@ -334,7 +334,7 @@ runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure stMod
     { _loModules = mempty
     , _loToplevel = M.fromList [ (n, (mkGasModelFqn n, DKDefConst)) | n <- fst <$> envVars ]
     , _loNamespace = Nothing
-    , _loAllLoaded = M.fromList [ (mkGasModelFqn n, DConst $ DefConst n Nothing (EvaledConst v) ()) | (n, v) <- envVars ]
+    , _loAllLoaded = M.fromList [ (mkGasModelFqn n, DConst $ DefConst (Arg n Nothing ()) (EvaledConst v) ()) | (n, v) <- envVars ]
     }
   stMod = pure . (esLoaded .~ synthLoaded)
 
@@ -357,7 +357,7 @@ unitClosureUnary env
   = Closure
   { _cloFnName = "foo"
   , _cloModName = ModuleName "foomodule" Nothing
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg" Nothing])
+  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg" Nothing ()])
   , _cloArity = 1
   , _cloTerm = unitConst
   , _cloRType = Nothing
@@ -369,7 +369,7 @@ unitClosureBinary env
   = Closure
   { _cloFnName = "foo"
   , _cloModName = ModuleName "foomodule" Nothing
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing, Arg "fooCloArg2" Nothing])
+  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing (), Arg "fooCloArg2" Nothing ()])
   , _cloArity = 2
   , _cloTerm = unitConst
   , _cloRType = Nothing
@@ -382,7 +382,7 @@ boolClosureUnary b env
   = Closure
   { _cloFnName = "foo"
   , _cloModName = ModuleName "foomodule" Nothing
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing])
+  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing ()])
   , _cloArity = 1
   , _cloTerm = boolConst b
   , _cloRType = Nothing
@@ -394,7 +394,7 @@ boolClosureBinary b env
   = Closure
   { _cloFnName = "foo"
   , _cloModName = ModuleName "fooModule" Nothing
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing, Arg "fooCloArg2" Nothing])
+  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing (), Arg "fooCloArg2" Nothing ()])
   , _cloArity = 2
   , _cloTerm = boolConst b
   , _cloRType = Nothing
@@ -406,7 +406,7 @@ intClosureBinary b env
   = Closure
   { _cloFnName = "foo"
   , _cloModName = ModuleName "fooModule" Nothing
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing, Arg "fooCloArg2" Nothing])
+  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing (), Arg "fooCloArg2" Nothing ()])
   , _cloArity = 2
   , _cloTerm = intConst b
   , _cloRType = Nothing

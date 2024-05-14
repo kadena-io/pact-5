@@ -2,7 +2,8 @@
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 
--- |
+-- | Note: if these tests fail, make sure to actually build the project.
+-- These tests rely on the binary executable and you might have an old version available.
 
 module Pact.Core.Test.LanguageServer
   ( tests
@@ -10,13 +11,14 @@ module Pact.Core.Test.LanguageServer
 
 import Language.LSP.Test
 import Language.LSP.Protocol.Types
-import Language.LSP.Protocol.Lens hiding (length, title)
+import Language.LSP.Protocol.Lens hiding (length, title, rename)
 
 import Control.Lens
 
 import System.Environment
 import Test.Tasty
 import Test.Tasty.HUnit
+import Test.Tasty.Golden
 import qualified Data.Aeson.KeyMap as A
 import Data.Aeson as A
 import Control.Monad.IO.Class
@@ -25,6 +27,8 @@ import Data.Maybe (isJust)
 import qualified Data.Map.Strict as M
 import Pact.Core.Repl.BuiltinDocs
 import Data.Either (isLeft)
+import Data.Text.Encoding
+import qualified Data.ByteString.Lazy as LBS
 
 tests :: TestTree
 tests = testGroup "Pact LSP"
@@ -35,6 +39,7 @@ tests = testGroup "Pact LSP"
       testGroup "Overloaded builtins" overloadBuiltinHoverTests
       ]
   , testGroup "Definition" definitionRequestTests
+  , renameTests
   ]
 
 diagnosticTests :: [TestTree]
@@ -127,6 +132,30 @@ overloadBuiltinHoverTests
             Just h1' = h1
             Just h2' = h2
           assertEqual "Match builtin docs" (view contents h1') (view contents h2')
+
+
+renameTests :: TestTree
+renameTests = testGroup "Renaming" [renameTest1, renameTest2]
+
+renameTest1 :: TestTree
+renameTest1 = goldenVsString "Renaming term referencing defun" p $
+  runPactLSP $ do
+  doc <- openDoc "rename-test.repl" "pact"
+  rename doc (Position 12 7) "new-def"
+  cnt <- documentContents doc
+  pure $ LBS.fromStrict (encodeUtf8 cnt)
+  where
+  p = "pact-tests/pact-tests-lsp/rename-test.golden"
+
+renameTest2 :: TestTree
+renameTest2 = goldenVsString "Renaming defun" p $
+  runPactLSP $ do
+  doc <- openDoc "rename-test.repl" "pact"
+  rename doc (Position 7 6) "new-def"
+  cnt <- documentContents doc
+  pure $ LBS.fromStrict (encodeUtf8 cnt)
+  where
+  p = "pact-tests/pact-tests-lsp/rename-test1.golden"
 
 cfg :: SessionConfig
 cfg = defaultConfig

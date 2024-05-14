@@ -161,18 +161,18 @@ type BuiltinEnv (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -
   = i -> b -> CEKEnv step b i m -> NativeFn step b i m
 
 
-data ClosureType
+data ClosureType i
   = NullaryClosure
-  | ArgClosure !(NonEmpty (Arg Type))
+  | ArgClosure !(NonEmpty (Arg Type i))
   deriving (Show, Generic)
 
-instance NFData ClosureType
+instance NFData i => NFData (ClosureType i)
 
 data Closure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = Closure
   { _cloFnName :: !Text
   , _cloModName :: !ModuleName
-  , _cloTypes :: !ClosureType
+  , _cloTypes :: !(ClosureType i)
   , _cloArity :: !Int
   , _cloTerm :: !(EvalTerm b i)
   , _cloRType :: !(Maybe Type)
@@ -186,7 +186,7 @@ instance (NFData b, NFData i) => NFData (Closure step b i m)
 -- but is not partially applied
 data LamClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = LamClosure
-  { _lcloTypes :: !ClosureType
+  { _lcloTypes :: !(ClosureType i)
   , _lcloArity :: !Int
   , _lcloTerm :: !(EvalTerm b i)
   , _lcloRType :: !(Maybe Type)
@@ -202,7 +202,7 @@ instance (NFData b, NFData i) => NFData (LamClosure step b i m)
 data PartialClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = PartialClosure
   { _pcloFrame :: !(Maybe StackFrame)
-  , _pcloTypes :: !(NonEmpty (Arg Type))
+  , _pcloTypes :: !(NonEmpty (Arg Type i))
   , _pcloArity :: !Int
   , _pcloTerm :: !(EvalTerm b i)
   , _pcloRType :: !(Maybe Type)
@@ -215,7 +215,7 @@ instance (NFData b, NFData i) => NFData (PartialClosure step b i m)
 data DefPactClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = DefPactClosure
   { _pactcloFQN :: !FullyQualifiedName
-  , _pactcloTypes :: !ClosureType
+  , _pactcloTypes :: !(ClosureType i)
   , _pactcloArity :: !Int
   , _pactEnv :: !(CEKEnv step b i m)
   , _pactcloInfo :: i

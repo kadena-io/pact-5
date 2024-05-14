@@ -35,6 +35,7 @@ import Pact.Core.Repl.Utils
 import Pact.Core.IR.Desugar
 import Pact.Core.IR.Term
 import Pact.Core.Compile
+import Pact.Core.Type
 import Pact.Core.Environment
 import Pact.Core.Info
 import Pact.Core.PactValue
@@ -171,18 +172,18 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
   interpret (DesugarOutput tl _deps) = do
     case tl of
       RTLDefun df -> do
-        let fqn = FullyQualifiedName replModuleName (_dfunName df) replModuleHash
+        let fqn = FullyQualifiedName replModuleName (_argName $ _dfunSpec df) replModuleHash
         loaded . loAllLoaded %= M.insert fqn (Dfun df)
-        displayValue $ RLoadedDefun $ _dfunName df
+        displayValue $ RLoadedDefun $ _argName $ _dfunSpec df
       RTLDefConst dc -> case _dcTerm dc of
         TermConst term -> do
           pv <- CEK.eval PSysOnly replEnv term
-          pv' <- maybeTCType (_dcInfo dc) pv (_dcType dc)
+          pv' <- maybeTCType (_dcInfo dc) pv (_argType $ _dcSpec dc)
           let dc' = set dcTerm (EvaledConst pv') dc
-          let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
+          let fqn = FullyQualifiedName replModuleName (_argName $ _dcSpec dc) replModuleHash
           loaded . loAllLoaded %= M.insert fqn (DConst dc')
-          displayValue $ RLoadedDefConst $ _dcName dc'
+          displayValue $ RLoadedDefConst $ _argName $ _dcSpec dc'
         EvaledConst _ -> do
-          let fqn = FullyQualifiedName replModuleName (_dcName dc) replModuleHash
+          let fqn = FullyQualifiedName replModuleName (_argName $ _dcSpec dc) replModuleHash
           loaded . loAllLoaded %= M.insert fqn (DConst dc)
-          displayValue $ RLoadedDefConst $ _dcName dc
+          displayValue $ RLoadedDefConst $ _argName $ _dcSpec dc

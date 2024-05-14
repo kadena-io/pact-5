@@ -320,13 +320,13 @@ mkDefunClosure
   -> ModuleName
   -> CEKEnv step b i m
   -> m (Closure step b i m)
-mkDefunClosure d mn e = case _dfunTerm d of
+mkDefunClosure d@(Defun (Arg n mty _) _ _ di) mn e = case _dfunTerm d of
   Lam args body i ->
-    pure (Closure (_dfunName d) mn (ArgClosure args) (NE.length args) body (_dfunRType d) e i)
+    pure (Closure n mn (ArgClosure args) (NE.length args) body mty e i)
   Nullary body i ->
-    pure (Closure (_dfunName d) mn NullaryClosure 0 body (_dfunRType d) e i)
+    pure (Closure n mn NullaryClosure 0 body mty e i)
   _ ->
-    failInvariant (_dfunInfo d) ("definition is not a closure: " <> T.pack (show d))
+    failInvariant di ("definition is not a closure: " <> T.pack (show d))
 
 mkDefPactClosure
   :: i
@@ -1600,7 +1600,7 @@ applyLam vc@(C (Closure fn mn ca arity term mty env cloi)) args cont handler
       let qn = QualifiedName fn mn
       chargeGasArgs cloi (GAApplyLam (renderQualName qn) argLen)
       args' <- traverse (enforcePactValue cloi) args
-      tcArgs <- zipWithM (\arg (Arg _ ty) -> VPactValue <$> maybeTCType cloi arg ty) args' (NE.toList cloargs)
+      tcArgs <- zipWithM (\arg (Arg _ ty _) -> VPactValue <$> maybeTCType cloi arg ty) args' (NE.toList cloargs)
       esStack %== (StackFrame fn mn SFDefun :)
       let cont' = StackPopC cloi mty cont
           varEnv = RAList.fromList (reverse tcArgs)
@@ -1622,7 +1622,7 @@ applyLam vc@(C (Closure fn mn ca arity term mty env cloi)) args cont handler
   where
   argLen = length args
   -- Here we enforce an argument to a user fn is a
-  apply' e (Arg _ ty:tys) (x:xs) = do
+  apply' e (Arg _ ty _:tys) (x:xs) = do
     x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue cloi x
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e (ty:tys) [] = do
@@ -1652,7 +1652,7 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
   where
   argLen = length args
   -- Todo: runtime TC here
-  apply' e (Arg _ ty:tys) (x:xs) = do
+  apply' e (Arg _ ty _:tys) (x:xs) = do
     x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue cloi x
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e [] [] = do
@@ -1666,7 +1666,7 @@ applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args cont handler =
   chargeGasArgs cloi (GAApplyLam (getSfName li) (length args))
   apply' (view ceLocal env) (NE.toList argtys) args
   where
-  apply' e (Arg _ ty:tys) (x:xs) = do
+  apply' e (Arg _ ty _:tys) (x:xs) = do
     x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue cloi x
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e [] [] = do
@@ -1715,7 +1715,7 @@ applyLam (DPC (DefPactClosure fqn argtys arity env i)) args cont handler
       -- Todo: defpact has much higher overhead, we must charge a bit more gas for this
       chargeGasArgs i (GAApplyLam (renderQualName (fqnToQualName fqn)) (fromIntegral argLen))
       args' <- traverse (enforcePactValue i) args
-      tcArgs <- zipWithM (\arg (Arg _ ty) -> maybeTCType i arg ty) args' (NE.toList cloargs)
+      tcArgs <- zipWithM (\arg (Arg _ ty _) -> maybeTCType i arg ty) args' (NE.toList cloargs)
       let pc = DefPactContinuation (fqnToQualName fqn) tcArgs
           env' = set ceLocal (RAList.fromList (reverse (VPactValue <$> tcArgs))) env
       initPact i pc cont handler env'

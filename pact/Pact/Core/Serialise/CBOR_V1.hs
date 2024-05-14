@@ -179,9 +179,9 @@ instance Serialise (Governance Name) where
     1 -> CapGov <$> decode
     _ -> fail "unexpected decoding"
 
-instance Serialise ty => Serialise (Arg ty) where
-  encode (Arg n ty) = encode n <> encode ty
-  decode = Arg <$> decode <*> decode
+instance (Serialise ty, Serialise i) => Serialise (Arg ty i) where
+  encode (Arg n ty i) = encode n <> encode ty <> encode i
+  decode = Arg <$> decode <*> decode <*> decode
 
 
 instance Serialise Decimal where
@@ -269,19 +269,16 @@ instance
 instance
   (Serialise b, Serialise i)
   =>Serialise (Defun Name Type b i) where
-  encode (Defun n args ret term i) = encode n <> encode args <> encode ret
-                                     <> encode term <> encode i
+  encode (Defun spec args term i) = encode spec <> encode args <> encode term <> encode i
 
-  decode = Defun <$> decode <*> decode <*> decode
-           <*> decode <*> decode
+  decode = Defun <$> decode <*> decode <*> decode <*> decode
 
 instance
   (Serialise b, Serialise i)
   => Serialise (DefConst Name Type b i) where
-  encode (DefConst n ret term i) = encode n <> encode ret
-                                   <> encode term <> encode i
+  encode (DefConst spec term i) = encode spec <> encode term <> encode i
 
-  decode = DefConst <$> decode <*> decode <*> decode <*> decode
+  decode = DefConst <$> decode <*> decode <*> decode
 
 instance (Serialise b, Serialise i) => Serialise (ConstVal (Term Name Type b i)) where
   encode = \case
@@ -347,17 +344,15 @@ instance Serialise (DefCapMeta (FQNameRef Name)) where
     _ -> fail "unexpected decoding"
 
 instance (Serialise b, Serialise i) => Serialise (DefCap Name Type b i) where
-  encode (DefCap n args ret term meta i) =
-    encode n
+  encode (DefCap spec args term meta i) =
+    encode spec
     <> encode args
-    <> encode ret
     <> encode term
     <> encode meta
     <> encode i
 
   decode = DefCap <$> decode <*> decode
-           <*> decode <*> decode
-           <*> decode <*> decode
+           <*> decode <*> decode <*> decode
 
 
 instance Serialise i => Serialise (DefSchema Type i) where
@@ -386,10 +381,10 @@ instance
 instance
   (Serialise b, Serialise i)
   => Serialise (DefPact Name Type b i) where
-  encode (DefPact n args ret steps i) = encode n <> encode args
-    <> encode ret <> encode steps <> encode i
+  encode (DefPact spec args steps i) = encode spec <> encode args
+    <> encode steps <> encode i
 
-  decode = DefPact <$> decode <*> decode <*> decode <*> decode <*> decode
+  decode = DefPact <$> decode <*> decode <*> decode <*> decode
 
 instance
   (Serialise b, Serialise i)
@@ -497,27 +492,24 @@ instance
 instance
   Serialise i
   => Serialise (IfDefun Type i) where
-  encode (IfDefun n args ret i) = encode n <> encode args <> encode ret
-                                  <> encode i
+  encode (IfDefun spec args i) = encode spec <> encode args <> encode i
 
-  decode = IfDefun <$> decode <*> decode
-           <*> decode <*> decode
+  decode = IfDefun <$> decode <*> decode <*> decode
 
 instance
   Serialise i
   => Serialise (IfDefCap name Type i) where
-  encode (IfDefCap n args ret meta i) = encode n <> encode args
-                                   <> encode ret <> encode meta <> encode i
+  encode (IfDefCap spec args meta i) = encode spec <> encode args
+                                   <> encode meta <> encode i
 
-  decode = IfDefCap <$> decode <*> decode <*> decode <*> decode <*> decode
+  decode = IfDefCap <$> decode <*> decode <*> decode <*> decode
 
 instance
   Serialise i
   => Serialise (IfDefPact Type i) where
-  encode (IfDefPact n args ret i) = encode n <> encode args
-                                    <> encode ret <> encode i
+  encode (IfDefPact spec args i) = encode spec <> encode args <> encode i
 
-  decode = IfDefPact <$> decode <*> decode <*> decode <*> decode
+  decode = IfDefPact <$> decode <*> decode <*> decode
 
 instance
   (Serialise b, Serialise i)

@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Pact.Core.Syntax.ParseTree where
 
@@ -94,25 +95,27 @@ instance Pretty Type where
 -- Common structures
 ----------------------------------------------------
 
-data Arg
+data Arg i
   = Arg
   { _argName :: Text
   , _argType :: Type
-  } deriving Show
+  , _argInfo :: i
+  } deriving (Show, Functor)
 
-data MArg
+data MArg i
   = MArg
   { _margName :: Text
   , _margType :: Maybe Type
-  } deriving (Eq, Show)
+  , _margInfo :: i
+  } deriving (Eq, Show, Functor)
 
 defName :: Def i -> Text
 defName = \case
-  Dfun d -> _dfunName d
-  DConst d -> _dcName d
-  DCap d -> _dcapName d
+  Dfun d -> _margName $ _dfunSpec d
+  DConst d ->_margName $ _dcSpec d
+  DCap d -> _margName $ _dcapSpec d
   DTable d -> _dtName d
-  DPact d -> _dpName d
+  DPact d -> _margName $ _dpSpec d
   DSchema d -> _dscName d
 
 defDocs :: Def i -> Maybe Text
@@ -136,9 +139,9 @@ defInfo = \case
 
 data Defun i
   = Defun
-  { _dfunName :: Text
-  , _dfunArgs :: [MArg]
-  , _dfunRetType :: Maybe Type
+  { _dfunSpec :: MArg i  -- ^ 'MArg' contains the name ('_margName') and
+                         -- optional return type ('_margType'). The 'i' reflects the name info.
+  , _dfunArgs :: [MArg i]
   , _dfunTerm :: Expr i
   , _dfunDocs :: Maybe Text
   , _dfunModel :: [PropertyExpr i]
@@ -147,8 +150,8 @@ data Defun i
 
 data DefConst i
   = DefConst
-  { _dcName :: Text
-  , _dcType :: Maybe Type
+  { _dcSpec :: MArg i  -- ^ 'MArg' contains the name ('_margName') and
+                       -- optional return type ('_margType'). The 'i' reflects the name info.
   , _dcTerm :: Expr i
   , _dcDocs :: Maybe Text
   , _dcInfo :: i
@@ -161,9 +164,9 @@ data DCapMeta
 
 data DefCap i
   = DefCap
-  { _dcapName :: Text
-  , _dcapArgs :: ![MArg]
-  , _dcapRetType :: Maybe Type
+  { _dcapSpec :: MArg i  -- ^ 'MArg' contains the name ('_margName') and
+                         -- optional return type ('_margType'). The 'i' reflects the name info.
+  , _dcapArgs :: ![MArg i]
   , _dcapTerm :: Expr i
   , _dcapDocs :: Maybe Text
   , _dcapModel :: [PropertyExpr i]
@@ -174,7 +177,7 @@ data DefCap i
 data DefSchema i
   = DefSchema
   { _dscName :: Text
-  , _dscArgs :: [Arg]
+  , _dscArgs :: [Arg i]
   , _dscDocs :: Maybe Text
   , _dscModel :: [PropertyExpr i]
   , _dscInfo :: i
@@ -195,9 +198,9 @@ data PactStep i
 
 data DefPact i
   = DefPact
-  { _dpName :: Text
-  , _dpArgs :: [MArg]
-  , _dpRetType :: Maybe Type
+  { _dpSpec :: MArg i -- ^ 'MArg' contains the name ('_margName') and
+                      -- optional return type ('_margType'). The 'i' reflects the name info.
+  , _dpArgs :: [MArg i]
   , _dpSteps :: [PactStep i]
   , _dpDocs :: Maybe Text
   , _dpModel :: [PropertyExpr i]
@@ -261,9 +264,9 @@ data Interface i
 
 data IfDefun i
   = IfDefun
-  { _ifdName :: Text
-  , _ifdArgs :: [MArg]
-  , _ifdRetType :: Maybe Type
+  { _ifdSpec :: MArg i  -- ^ 'MArg' contains the name ('_margName') and
+                        -- optional return type ('_margType'). The 'i' reflects the name info.
+  , _ifdArgs :: [MArg i]
   , _ifdDocs :: Maybe Text
   , _ifdModel :: [PropertyExpr i]
   , _ifdInfo :: i
@@ -271,9 +274,9 @@ data IfDefun i
 
 data IfDefCap i
   = IfDefCap
-  { _ifdcName :: Text
-  , _ifdcArgs :: [MArg]
-  , _ifdcRetType :: Maybe Type
+  { _ifdcSpec :: MArg i  -- ^ 'MArg' contains the name ('_margName') and
+                         -- optional return type ('_margType'). The 'i' reflects the name info.
+  , _ifdcArgs :: [MArg i]
   , _ifdcDocs :: Maybe Text
   , _ifdcModel :: [PropertyExpr i]
   , _ifdcMeta :: Maybe DCapMeta
@@ -282,9 +285,9 @@ data IfDefCap i
 
 data IfDefPact i
   = IfDefPact
-  { _ifdpName :: Text
-  , _ifdpArgs :: [MArg]
-  , _ifdpRetType :: Maybe Type
+  { _ifdpSpec :: MArg i  -- ^ 'MArg' contains the name ('_margName') and
+                         -- optional return type ('_margType'). The 'i' reflects the name info.
+  , _ifdpArgs :: [MArg i]
   , _ifdpDocs :: Maybe Text
   , _ifdpModel :: [PropertyExpr i]
   , _ifdpInfo :: i
@@ -340,21 +343,21 @@ data IfDef i
   deriving (Show, Functor)
 
 instance Pretty (DefConst i) where
-  pretty (DefConst dcn dcty term _ _) =
+  pretty (DefConst (MArg dcn dcty _) term _ _) =
     parens ("defconst" <+> pretty dcn <> mprettyTy dcty <+> pretty term)
     where
     mprettyTy = maybe mempty ((":" <>) . pretty)
 
-instance Pretty Arg where
-  pretty (Arg n ty) =
+instance Pretty (Arg i) where
+  pretty (Arg n ty _) =
     pretty n <> ":" <+> pretty ty
 
-instance Pretty MArg where
-  pretty (MArg n mty) =
+instance Pretty (MArg i) where
+  pretty (MArg n mty _) =
     pretty n <> maybe mempty (\ty -> ":" <+> pretty ty) mty
 
 instance Pretty (Defun i) where
-  pretty (Defun n args rettype term _ _ _) =
+  pretty (Defun (MArg n rettype _) args term _ _ _) =
     parens ("defun" <+> pretty n <+> parens (commaSep args)
       <> ":" <+> pretty rettype <+> "=" <+> pretty term)
 
@@ -374,7 +377,7 @@ data CapForm i
 data Expr i
   = Var ParsedName i
   | LetIn (NonEmpty (Binder i)) (Expr i) i
-  | Lam [MArg] (Expr i) i
+  | Lam [MArg i] (Expr i) i
   | If (Expr i) (Expr i) (Expr i) i
   | App (Expr i) [Expr i] i
   | Block (NonEmpty (Expr i)) i
@@ -384,7 +387,7 @@ data Expr i
   | Try (Expr i) (Expr i) i
   | Suspend (Expr i) i
   | Object [(Field, Expr i)] i
-  | Binding [(Field, MArg)] [Expr i] i
+  | Binding [(Field, MArg i)] [Expr i] i
   | CapabilityForm (CapForm i) i
   deriving (Show, Eq, Functor)
 
@@ -485,7 +488,17 @@ instance Pretty (Expr i) where
     where
     prettyBind (f, e) = pretty f <+> ":=" <+> pretty e
     prettyObj = fmap (\(n, k) -> dquotes (pretty n) <> ":" <> pretty k)
-    renderLamPair (MArg n mt) = case mt of
+    renderLamPair (MArg n mt _) = case mt of
       Nothing -> pretty n
       Just t -> pretty n <> ":" <> pretty t
     renderLamTypes = fold . intersperse " " . fmap renderLamPair
+
+makeLenses ''Arg
+makeLenses ''MArg
+makeLenses ''Defun
+makeLenses ''DefConst
+makeLenses ''DefCap
+makeLenses ''DefSchema
+makeLenses ''DefTable
+makeLenses ''DefPact
+makeLenses ''Def
