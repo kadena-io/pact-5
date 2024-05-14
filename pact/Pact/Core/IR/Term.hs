@@ -99,6 +99,10 @@ data Defun name ty builtin info
   , _dfunInfo :: info
   } deriving (Show, Functor, Eq, Generic)
 
+-- | accessor for compat
+_dfunRType :: Defun name ty builtin info -> Maybe ty
+_dfunRType (Defun (Arg _ mty _) _ _ _) = mty
+
 data Step name ty builtin info
   = Step (Term name ty builtin info)
   | StepWithRollback

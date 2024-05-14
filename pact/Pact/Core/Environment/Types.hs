@@ -21,8 +21,6 @@ module Pact.Core.Environment.Types
  , eePublicData, eeMode, eeFlags
  , eeNatives, eeGasModel
  , eeNamespacePolicy, eeGasRef
- , PactState(..)
- , psLoaded
  , TxCreationTime(..)
  , PublicData(..)
  , pdPublicMeta, pdBlockHeight
@@ -47,6 +45,7 @@ module Pact.Core.Environment.Types
  , MonadEval
  , defaultEvalEnv
  , GasLogEntry(..)
+ , RecursionCheck(..)
  ) where
 
 
@@ -56,6 +55,7 @@ import Control.Monad.IO.Class
 import Data.Set(Set)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.IORef
 import Data.Default
 
@@ -77,6 +77,7 @@ import Pact.Core.Errors
 import Pact.Core.Gas
 import Pact.Core.Namespace
 import Pact.Core.SizeOf
+import Pact.Core.StackFrame
 import Pact.Core.Builtin (IsBuiltin)
 
 -- | Execution flags specify behavior of the runtime environment,
@@ -96,6 +97,8 @@ data ExecutionFlag
   | FlagEnforceKeyFormats
   -- | Require keysets to be defined in namespaces
   | FlagRequireKeysetNs
+  -- | Flag disabling return type checking
+  | FlagDisableRTC
   deriving (Eq,Ord,Show,Enum,Bounded, Generic)
 
 instance NFData ExecutionFlag
@@ -136,35 +139,13 @@ data EvalEnv b i
   , _eeGasRef :: IORef MilliGas
   -- ^ The gas ref
   , _eeGasModel :: GasModel b
+  -- ^ The current gas model
   } deriving (Generic)
 
 instance (NFData b, NFData i) => NFData (EvalEnv b i)
 
 makeLenses ''EvalEnv
 
-newtype PactState b i
-  = PactState
-  { _psLoaded :: Loaded b i
-  }
-
-makeLenses ''PactState
-
-data StackFunctionType
-  = SFDefun
-  | SFDefcap
-  | SFDefPact
-  deriving (Eq, Show, Enum, Bounded, Generic)
-
-instance NFData StackFunctionType
-
-data StackFrame
-  = StackFrame
-  { _sfFunction :: Text
-  , _sfModule :: ModuleName
-  , _sfFnType :: StackFunctionType }
-  deriving (Show, Generic)
-
-instance NFData StackFrame
 
 data GasLogEntry b = GasLogEntry
   { _gleCause :: Either GasArgs b
@@ -172,21 +153,37 @@ data GasLogEntry b = GasLogEntry
   , _gleTotalUsed :: MilliGas
   } deriving (Show, Generic, NFData)
 
+newtype RecursionCheck
+  = RecursionCheck (Set QualifiedName)
+  deriving (Show, Generic, NFData)
+
+instance Default RecursionCheck where
+  def = RecursionCheck mempty
+
+-- | Interpreter mutable state.
 data EvalState b i
   = EvalState
   { _esCaps :: !(CapState QualifiedName PactValue)
-  , _esStack :: ![StackFrame]
+  -- ^ The current set of granted and installed
+  -- capabilities
+  , _esStack :: ![StackFrame i]
+  -- ^ The runtime callstack, as a structure
   , _esEvents :: ![PactEvent PactValue]
+  -- ^ The list of emitted pact events, if any
   , _esLoaded :: !(Loaded b i)
+  -- ^ The runtime symbol table and module environment
   , _esDefPactExec :: !(Maybe DefPactExec)
+  -- ^ The current defpact execution state, if any
   , _esGasLog :: !(Maybe [GasLogEntry b])
+  -- ^ The current gas log
+  , _esCheckRecursion :: NonEmpty RecursionCheck
     -- ^ Sequence of gas expendature events.
   } deriving (Show, Generic)
 
 instance (NFData b, NFData i) => NFData (EvalState b i)
 
 instance Default (EvalState b i) where
-  def = EvalState def [] [] mempty Nothing Nothing
+  def = EvalState def [] [] mempty Nothing Nothing (RecursionCheck mempty :| [])
 
 makeClassy ''EvalState
 

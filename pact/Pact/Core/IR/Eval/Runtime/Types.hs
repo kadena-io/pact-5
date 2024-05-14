@@ -170,8 +170,7 @@ instance NFData i => NFData (ClosureType i)
 
 data Closure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = Closure
-  { _cloFnName :: !Text
-  , _cloModName :: !ModuleName
+  { _cloFqName :: !FullyQualifiedName
   , _cloTypes :: !(ClosureType i)
   , _cloArity :: !Int
   , _cloTerm :: !(EvalTerm b i)
@@ -201,7 +200,7 @@ instance (NFData b, NFData i) => NFData (LamClosure step b i m)
 -- This is a bit annoying to deal with but helps preserve semantics
 data PartialClosure (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = PartialClosure
-  { _pcloFrame :: !(Maybe StackFrame)
+  { _pcloFrame :: !(Maybe (StackFrame i))
   , _pcloTypes :: !(NonEmpty (Arg Type i))
   , _pcloArity :: !Int
   , _pcloTerm :: !(EvalTerm b i)
@@ -594,16 +593,16 @@ data EvalCapType
   deriving (Show, Eq, Enum, Bounded)
 
 -- | State to preserve in the error handler
-data ErrorState
-  = ErrorState (CapState QualifiedName PactValue) [StackFrame]
+data ErrorState i
+  = ErrorState (CapState QualifiedName PactValue) [StackFrame i]
   deriving (Show, Generic)
 
-instance NFData ErrorState
+instance NFData i => NFData (ErrorState i)
 
 data CEKErrorHandler (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = CEKNoHandler
-  | CEKHandler (CEKEnv step b i m) (EvalTerm b i) (Cont step b i m) ErrorState (CEKErrorHandler step b i m)
-  | CEKEnforceOne (CEKEnv step b i m) i (EvalTerm b i) [EvalTerm b i] (Cont step b i m) ErrorState (CEKErrorHandler step b i m)
+  | CEKHandler (CEKEnv step b i m) (EvalTerm b i) (Cont step b i m) (ErrorState i) (CEKErrorHandler step b i m)
+  | CEKEnforceOne (CEKEnv step b i m) i (EvalTerm b i) [EvalTerm b i] (Cont step b i m) (ErrorState i) (CEKErrorHandler step b i m)
   deriving (Show, Generic)
 
 instance (NFData b, NFData i) => NFData (CEKErrorHandler step b i m)

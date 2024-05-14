@@ -16,12 +16,10 @@ module Pact.Core.Errors
  , PactError(..)
  , ArgTypeError(..)
  , peInfo
- , liftDbFunction
+ , viewErrorStack
  ) where
 
 import Control.Lens hiding (ix)
-import Control.Monad.Except(MonadError(..))
-import Control.Monad.IO.Class(MonadIO(..))
 import Control.Exception
 import Data.Text(Text)
 import Data.Dynamic (Typeable)
@@ -39,6 +37,7 @@ import Pact.Core.Gas
 import Pact.Core.Pretty as Pretty
 import Pact.Core.Hash
 import Pact.Core.Persistence
+import Pact.Core.StackFrame
 import Pact.Core.DefPacts.Types
 
 
@@ -219,11 +218,11 @@ instance NFData ArgTypeError
 instance Pretty ArgTypeError where
   pretty = \case
     ATEPrim p -> Pretty.brackets $ pretty p
-    ATEList -> "[list]"
-    ATEObject -> "[object]"
-    ATETable -> "[table]"
-    ATEClosure -> "[closure]"
-    ATEModRef -> "[modref]"
+    ATEList -> "list"
+    ATEObject -> "object"
+    ATETable -> "table"
+    ATEClosure -> "closure"
+    ATEModRef -> "modref"
 
 
 -- | All fatal execution errors which should pause
@@ -335,6 +334,7 @@ data EvalError
   | MismatchingKeysetNamespace NamespaceName
   | EnforcePactVersionFailure V.Version (Maybe V.Version)
   | EnforcePactVersionParseFailure Text
+  | RuntimeRecursionDetected QualifiedName
   deriving (Show, Generic)
 
 instance NFData EvalError
@@ -448,7 +448,7 @@ data PactError info
   | PEDesugarError DesugarError info
   -- | PETypecheckError TypecheckError info
   -- | PEOverloadError OverloadError info
-  | PEExecutionError EvalError info
+  | PEExecutionError EvalError [StackFrame info] info
   deriving (Show, Functor, Generic)
 
 instance NFData info => NFData (PactError info)
@@ -458,9 +458,10 @@ instance Pretty (PactError info) where
     PELexerError e _ -> pretty e
     PEParseError e _ -> pretty e
     PEDesugarError e _ -> pretty e
-    PEExecutionError e _ -> pretty e
+    PEExecutionError e _ _ ->
+      pretty e
 
-peInfo :: Lens (PactError info) (PactError info') info info'
+peInfo :: Lens (PactError info) (PactError info) info info
 peInfo f = \case
   PELexerError le info ->
     PELexerError le <$> f info
@@ -468,16 +469,13 @@ peInfo f = \case
     PEParseError pe <$> f info
   PEDesugarError de info ->
     PEDesugarError de <$> f info
-  PEExecutionError ee info ->
-    PEExecutionError ee <$> f info
+  PEExecutionError ee stack info ->
+    PEExecutionError ee stack <$> f info
+
+viewErrorStack :: PactError info -> [StackFrame info]
+viewErrorStack = \case
+  PEExecutionError _ stack _ -> stack
+  _ -> []
 
 instance (Show info, Typeable info) => Exception (PactError info)
 
-liftDbFunction
-  :: (MonadError (PactError i) m, MonadIO m)
-  => i
-  -> IO a
-  -> m a
-liftDbFunction info action = do
-  e <- liftIO $ catch (Right <$> action) (pure . Left . DbOpFailure)
-  either (throwError . (`PEExecutionError` info)) pure e

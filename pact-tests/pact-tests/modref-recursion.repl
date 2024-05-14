@@ -1,0 +1,32 @@
+
+(interface call
+
+  (defun callF (m:module{call}))
+  )
+
+(module knot1 g
+  (defcap g () true)
+
+  (implements call)
+
+  (defun callF (m:module{call})
+    (+ 1 2) ; call something so it costs gas
+    (m::callF knot1)
+  )
+  )
+
+(module knot2 g
+  (defcap g () true)
+
+  (implements call)
+
+  (defun callF (m:module{call})
+    (+ 1 2) ; call something so it costs gas
+    (m::callF knot2)
+  )
+  )
+
+(env-gasmodel "table")
+(env-gaslimit 10) ; ensures test does not run forever in case recursion breaks
+
+(expect-failure "Recursion should fail @ runtime" "asdf" (knot2.callF knot1))

@@ -304,14 +304,24 @@ begin' info mt = do
   replTx .= ((,mt) <$> mTxId)
   return ((,mt) <$> mTxId)
 
+emptyTxState :: ReplM b ()
+emptyTxState = do
+  fqdefs <- useEvalState (esLoaded . loAllLoaded)
+  cs <- useEvalState esStack
+  esc <- useEvalState esCheckRecursion
+  let newEvalState =
+        set esStack cs
+        $ set (esLoaded . loAllLoaded) fqdefs
+        $ set esCheckRecursion esc def
+  replEvalState .= newEvalState
+
+
 commitTx :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 commitTx info b cont handler _env = \case
   [] -> do
     pdb <- use (replEvalEnv . eePactDb)
     _txLog <- liftDbFunction info (_pdbCommitTx pdb)
-    fqdefs <- useEvalState (esLoaded . loAllLoaded)
-    cs <- useEvalState esStack
-    replEvalState .= set esStack cs (set (esLoaded . loAllLoaded) fqdefs def)
+    emptyTxState
     use replTx >>= \case
       Just tx -> do
         replTx .= Nothing
@@ -325,9 +335,7 @@ rollbackTx info b cont handler _env = \case
   [] -> do
     pdb <- use (replEvalEnv . eePactDb)
     liftDbFunction info (_pdbRollbackTx pdb)
-    fqdefs <- useEvalState (esLoaded . loAllLoaded)
-    cs <- useEvalState esStack
-    replEvalState .= set esStack cs (set (esLoaded . loAllLoaded) fqdefs def)
+    emptyTxState
     use replTx >>= \case
       Just tx -> do
         replTx .= Nothing
@@ -379,7 +387,7 @@ envNamespacePolicy :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin Sp
 envNamespacePolicy info b cont handler _env = \case
   [VBool allowRoot, VClosure (C clo)] -> do
     pdb <- viewEvalEnv eePactDb
-    let qn = QualifiedName (_cloFnName clo) (_cloModName clo)
+    let qn = fqnToQualName (_cloFqName clo)
     when (_cloArity clo /= 2) $ failInvariant info "Namespace manager function has invalid argument length"
     getModuleMember info pdb qn >>= \case
       Dfun _ -> do

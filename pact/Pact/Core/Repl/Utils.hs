@@ -307,8 +307,11 @@ replError (SourceCode srcFile src) pe =
       colMarker = T.replicate (maxPad+1) " " <> "| " <> T.replicate (_liStartColumn pei) " " <> T.replicate (max 1 (_liEndColumn pei - _liStartColumn pei)) "^"
       errRender = renderText pe
       fileErr = file <> ":" <> T.pack (show (_liStartLine pei + 1)) <> ":" <> T.pack (show (_liStartColumn pei)) <> ": "
-  in T.unlines ([fileErr <> errRender] ++ slice ++ [colMarker])
+  in T.unlines ([fileErr <> errRender] ++ slice ++ [colMarker, sfRender])
   where
+  sfRender = case viewErrorStack pe of
+    [] -> mempty
+    sfs -> renderText' $ vsep (("  at" <+>) . pretty <$> sfs)
   padLeft t pad = T.replicate (pad - (T.length t)) " " <> t <> " "
   -- Zip the line number with the source text, and apply the number padding correctly
   withLine st pad lns = zipWith (\i e -> padLeft (T.pack (show i)) pad <> "| " <> e) [st+1..] lns
