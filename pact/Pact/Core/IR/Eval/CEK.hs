@@ -326,7 +326,7 @@ mkDefunClosure d fqn e = case _dfunTerm d of
   Nullary body i ->
     pure (Closure fqn NullaryClosure 0 body (_dfunRType d) e i)
   _ ->
-    failInvariant di ("definition is not a closure: " <> T.pack (show d))
+    failInvariant (_dfunInfo d) ("definition is not a closure: " <> T.pack (show d))
 
 mkDefPactClosure
   :: i
