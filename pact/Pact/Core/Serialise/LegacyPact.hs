@@ -1,7 +1,6 @@
 -- |
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE PartialTypeSignatures  #-}
-{-# LANGUAGE TemplateHaskell  #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Pact.Core.Serialise.LegacyPact

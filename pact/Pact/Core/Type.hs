@@ -258,9 +258,9 @@ renderType = \case
     let s' = T.concat (intersperse ", " (renderModuleName <$> S.toList s))
     in "module" <> "{" <> s' <> "}"
   TyObject (Schema n _sc) ->
-    "object{" <> maybe "unkown" renderQualName n <> "}"
+    "object{" <> maybe "unknown" renderQualName n <> "}"
   TyTable (Schema n _sc) ->
-    "table{" <> maybe "unkown" renderQualName n <> "}"
+    "table{" <> maybe "unknown" renderQualName n <> "}"
   TyCapToken -> "CAPTOKEN"
   TyAnyObject -> "object"
   TyAnyList -> "list"
