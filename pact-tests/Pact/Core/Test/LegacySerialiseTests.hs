@@ -34,6 +34,11 @@ legacyTestDir :: String
 legacyTestDir = "pact-tests" </> "legacy-serial-tests"
 
 
+-- Load a set of test cases from the file system.
+-- Returns a list of tuples of:
+--    - Test case name
+--    - Test repl scripts with `expect` calls (*.repl)
+--    - Legacy-encoded version of the same module (*.json)
 replTestFiles :: IO [(String, [FilePath], [FilePath])]
 replTestFiles = do
   base <- getDirectoryContents legacyTestDir
