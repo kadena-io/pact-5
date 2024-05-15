@@ -355,7 +355,7 @@ gasMtWithHandlerValue pdb = do
                     , _ceInCap=False
                     , _ceDefPactStep=ps
                     , _ceBuiltins=benchmarkEnv }
-        handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
+        handler = CEKHandler env unitConst Mt (ErrorState def [] (pure def)) CEKNoHandler
     pure (ee, es, frame, handler, value)
 
 -- Gas for a lambda with N
@@ -375,7 +375,7 @@ gasMtWithHandlerError pdb =
                     , _ceInCap=False
                     , _ceDefPactStep=ps
                     , _ceBuiltins=benchmarkEnv }
-        handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
+        handler = CEKHandler env unitConst Mt (ErrorState def [] (pure def)) CEKNoHandler
     pure (ee, es, frame, handler, value)
 
 gasArgsWithRemainingArgs :: PactDb CoreBuiltin () -> C.Benchmark
