@@ -672,6 +672,12 @@ benchCreatePrincipal pdb =
     , (strTitle, str) <- take 3 $ enumExpString "a" 100 10
     , let ug = PGuard $ GUserGuard $ UserGuard (fqnToQualName $ mkGasModelFqn "somepred") (replicate (fromIntegral reps) str)
     ]
+  , C.bgroup "capguard"
+    [ runNativeBenchmarkPrepared [("cg", cg)] pdb (repsTitle <> "_" <> strTitle) "(create-principal cg)"
+    | (repsTitle, reps) <- take 3 $ enumExpNum 100 10
+    , (strTitle, str) <- take 3 $ enumExpString "a" 100 10
+    , let cg = PGuard $ GCapabilityGuard $ CapabilityGuard (fqnToQualName $ mkGasModelFqn "somepred") (replicate (fromIntegral reps) str) Nothing
+    ]
   ]
 
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
