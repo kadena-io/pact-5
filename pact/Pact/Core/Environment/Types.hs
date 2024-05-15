@@ -69,7 +69,7 @@ import Control.Monad.Catch as Exceptions
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
 
-import Pact.Core.Persistence
+import Pact.Core.Persistence.Types
 import Pact.Core.Pretty
 import Pact.Core.Capabilities
 import Pact.Core.Guards
@@ -241,7 +241,7 @@ defaultEvalEnv pdb m = do
 
 type Bytes = Word64
 
-newtype SizeOfByteLimit 
+newtype SizeOfByteLimit
   = SizeOfByteLimit Bytes
   deriving Show
 

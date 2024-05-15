@@ -5,6 +5,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DerivingVia #-}
 
 module Pact.Core.Gas
  ( MilliGas(..)
@@ -35,10 +36,16 @@ module Pact.Core.Gas
  , GasObjectSize(..)
  , ComparisonType(..)
  , SearchType(..)
+ , GasMEnv(..)
+ , GasM(..)
+ , runGasM
  ) where
 
 import Control.Lens
 import Control.DeepSeq
+import Control.Monad.Reader
+import Control.Monad.Except
+import Data.IORef
 import Data.Decimal(Decimal)
 import Data.Word(Word64)
 import Data.Monoid(Sum(..))
@@ -121,7 +128,9 @@ data ZKGroup
   -- ^ Group one, that is Fq in Pairing
   | ZKG2
   -- ^ Group two, that is, Fq2 Pairing
-  deriving (Show, Generic, NFData)
+  deriving (Show, Generic)
+
+instance NFData ZKGroup
 
 data ZKArg
   = PointAdd !ZKGroup
@@ -262,3 +271,26 @@ gasToMilliGas (Gas n) = MilliGas (n * millisPerGas)
 milliGasToGas :: MilliGas -> Gas
 milliGasToGas (MilliGas n) = Gas (n `quot` millisPerGas)
 {-# INLINE milliGasToGas #-}
+
+data GasMEnv
+  = GasMEnv
+  { _gasMRef :: IORef MilliGas
+  , _gasMLimit :: MilliGasLimit
+  }
+
+newtype GasM e a
+  = GasM (ReaderT GasMEnv (ExceptT e IO) a)
+  deriving
+  ( Functor
+  , Applicative
+  , Monad
+  , MonadReader GasMEnv
+  , MonadError e
+  , MonadIO) via (ReaderT GasMEnv (ExceptT e IO))
+
+runGasM
+  :: GasMEnv
+  -> GasM e a
+  -> IO (Either e a)
+runGasM env (GasM m) =
+  runExceptT $ runReaderT m env

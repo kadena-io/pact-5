@@ -1,5 +1,6 @@
 -- |
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -13,11 +14,15 @@ module Pact.Core.Serialise.CBOR_V1
   , encodeRowData, decodeRowData
   ) where
 
+import Control.Monad
+import Control.Monad.Reader
+import Control.Monad.Except
 import Codec.Serialise.Class
 import Codec.CBOR.Encoding
 import Codec.CBOR.Decoding
 import Data.Decimal
-import Data.Foldable (forM_)
+import Data.Foldable
+import Data.IORef
 import qualified Data.Text as Text
 
 import Pact.Core.Names
@@ -42,6 +47,7 @@ import Codec.CBOR.Read (deserialiseFromBytes)
 import Codec.CBOR.Write (toStrictByteString)
 import Data.ByteString (ByteString, fromStrict)
 import qualified Data.Map as Map
+import Pact.Core.Errors
 
 encodeModuleData :: ModuleData CoreBuiltin () -> ByteString
 encodeModuleData = toStrictByteString . encode
@@ -80,38 +86,47 @@ encodeNamespace = toStrictByteString . encode
 decodeNamespace :: ByteString -> Maybe Namespace
 decodeNamespace bs =either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
-encodeRowData :: (Monad m) => (MilliGas -> m ()) -> RowData -> m ByteString
-encodeRowData chargeGas rd@(RowData fields) = do
+-- TODO: Do we want a gas log entry here???
+-- most likely not, maybe just pre/post?
+chargeGasMSerialize :: i -> MilliGas -> GasM (PactError i) ()
+chargeGasMSerialize info amount = do
+  (GasMEnv gasRef mgl@(MilliGasLimit gasLimit)) <- ask
+  !currGas <- liftIO $ readIORef gasRef
+  let !used = currGas <> amount
+  liftIO (writeIORef gasRef used)
+  when (used > gasLimit) $ throwError (PEExecutionError (GasExceeded mgl used) info)
+
+encodeRowData :: i -> RowData -> GasM (PactError i) ByteString
+encodeRowData info rd@(RowData fields) = do
   -- Charge for keys.
-  
-  chargeGas . MilliGas $
+
+  chargeGasMSerialize info $ MilliGas $
     1000 * fromIntegral (sum $ Text.length . _field <$> Map.keys fields)
   -- Charge for values.
-  forM_ (Map.toList fields) $ \(_, pv) -> do
-    gasSerializePactValue chargeGas pv
+  traverse_ (gasSerializePactValue info) fields
   pure . toStrictByteString $ encode rd
 
-gasSerializePactValue :: Monad m => (MilliGas -> m ()) -> PactValue -> m ()
-gasSerializePactValue chargeGas = \case
+gasSerializePactValue :: i -> PactValue -> _
+gasSerializePactValue info = \case
   PLiteral l -> gasSerializeLiteral l
   PList vs -> do
-    chargeGas $ MilliGas 1000
-    forM_ vs $ gasSerializePactValue chargeGas
-  PGuard _ -> chargeGas $ MilliGas 1000
-  PModRef _ -> chargeGas $ MilliGas 1000
+    chargeGasMSerialize info $ MilliGas 1000
+    traverse_ (gasSerializePactValue info) vs
+  PGuard _ -> chargeGasMSerialize info $ MilliGas 1000
+  PModRef _ -> chargeGasMSerialize info $ MilliGas 1000
   PObject o -> do
-    chargeGas $ MilliGas $ (1000 *) $ sum $ fromIntegral . Text.length . _field <$> Map.keys o
-    forM_ o (gasSerializePactValue chargeGas)
-  PCapToken {} -> chargeGas $ MilliGas 1000
-  PTime _ -> chargeGas $ MilliGas 1000
-  
+    chargeGasMSerialize info $ MilliGas $ (1000 *) $ sum $ fromIntegral . Text.length . _field <$> Map.keys o
+    traverse_ (gasSerializePactValue info) o
+  PCapToken {} -> chargeGasMSerialize info $ MilliGas 1000
+  PTime _ -> chargeGasMSerialize info $ MilliGas 1000
+
   where
     gasSerializeLiteral = \case
-      LString s -> chargeGas $ MilliGas $ 1000 * fromIntegral (Text.length s)
-      LInteger i -> chargeGas $ MilliGas $ 1000 * fromIntegral (length (show i))
-      LDecimal d -> chargeGas $ MilliGas $ 1000 * fromIntegral (length (show d))
-      LBool _ -> chargeGas $ MilliGas 1000
-      LUnit -> chargeGas $ MilliGas 1000
+      LString s -> chargeGasMSerialize info $ MilliGas $ 1000 * fromIntegral (Text.length s)
+      LInteger i -> chargeGasMSerialize info $ MilliGas $ 1000 * fromIntegral (length (show i))
+      LDecimal d -> chargeGasMSerialize info $ MilliGas $ 1000 * fromIntegral (length (show d))
+      LBool _ -> chargeGasMSerialize info $ MilliGas 1000
+      LUnit -> chargeGasMSerialize info $ MilliGas 1000
 
 
 decodeRowData :: ByteString -> Maybe RowData
