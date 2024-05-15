@@ -666,6 +666,12 @@ benchCreatePrincipal pdb =
     , let keys = S.fromList [ PublicKeyText $ T.pack $ "key" ++ show n | n <- [1..reps] ]
           keyset = PGuard $ GKeyset $ KeySet keys (CustomPredicate $ TBN $ BareName "somepred")
     ]
+  , C.bgroup "userguard"
+    [ runNativeBenchmarkPrepared [("ug", ug)] pdb (repsTitle <> "_" <> strTitle) "(create-principal ug)"
+    | (repsTitle, reps) <- take 3 $ enumExpNum 100 10
+    , (strTitle, str) <- take 3 $ enumExpString "a" 100 10
+    , let ug = PGuard $ GUserGuard $ UserGuard (fqnToQualName $ mkGasModelFqn "somepred") (replicate (fromIntegral reps) str)
+    ]
   ]
 
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
