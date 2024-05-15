@@ -1593,6 +1593,11 @@ createPrincipalForGuard info = \case
       | ed25519HexFormat k -> Pr.K k <$ chargeGas 1_000
     (l, _) -> do
       h <- mkHash $ map (T.encodeUtf8 . _pubKey) l
+      case pf of
+        CustomPredicate (TQN (QualifiedName n (ModuleName mn mns))) -> do
+          let totalLength = T.length n + T.length mn + maybe 0 (T.length . _namespaceName) mns
+          chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength totalLength
+        _ -> pure ()
       pure $ Pr.W (hashToText h) (predicateToText pf)
   GKeySetRef ksn ->
     Pr.R ksn <$ chargeGas 1_000
