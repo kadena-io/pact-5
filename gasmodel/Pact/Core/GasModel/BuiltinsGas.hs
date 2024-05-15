@@ -6,6 +6,7 @@ module Pact.Core.GasModel.BuiltinsGas where
 
 import qualified Criterion as C
 import qualified Data.Map.Strict as M
+import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Database.SQLite3 as SQL
@@ -650,6 +651,23 @@ benchEmitEvent pdb = [ runNativeBenchmarkPreparedStMod stMod [("c", capTok)] pdb
   sf = StackFrame mempty gmModuleName SFDefcap
   stMod = stAddDef "theCap" theCapDef <> stStack [sf]
 
+benchCreatePrincipal :: BuiltinBenches
+benchCreatePrincipal pdb =
+  [ C.bgroup "keyset/pred"
+    [ runNativeBenchmarkPrepared [("ks", keyset)] pdb title "(create-principal ks)"
+    | (title, reps) <- take 3 $ enumExpNum 1000 10
+    , let predName = BareName $ T.replicate (fromIntegral reps) "a"
+          keys = S.fromList [ PublicKeyText "k1", PublicKeyText "k2" ]
+          keyset = PGuard $ GKeyset $ KeySet keys (CustomPredicate $ TBN predName)
+    ]
+  , C.bgroup "keyset/keys"
+    [ runNativeBenchmarkPrepared [("ks", keyset)] pdb title "(create-principal ks)"
+    | (title, reps) <- take 3 $ enumExpNum 100 10
+    , let keys = S.fromList [ PublicKeyText $ T.pack $ "key" ++ show n | n <- [1..reps] ]
+          keyset = PGuard $ GKeyset $ KeySet keys (CustomPredicate $ TBN $ BareName "somepred")
+    ]
+  ]
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -738,6 +756,7 @@ benchesForBuiltin bn = case bn of
   CoreMinutes -> omittedDeliberately
   CoreDays -> omittedDeliberately
   CoreCompose -> omittedDeliberately
+  CoreCreatePrincipal -> benchCreatePrincipal
   _ -> const []
   where
   omittedDeliberately = const []
