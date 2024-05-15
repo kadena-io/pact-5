@@ -1207,7 +1207,7 @@ coreEmitEvent info b cont handler env = \case
     let cont' = BuiltinC env info (EmitEventC ct) cont
     guardForModuleCall info cont' handler env (_fqModule fqn) $
       -- Todo: this code is repeated in the EmitEventFrame code
-      lookupFqName (_ctName ct) >>= \case
+      lookupFqName fqn >>= \case
         Just (DCap d) -> do
           enforceMeta (_dcapMeta d)
           emitCapability info ct
