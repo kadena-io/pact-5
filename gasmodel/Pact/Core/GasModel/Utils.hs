@@ -236,7 +236,7 @@ gmLoaded = Loaded
 prepopulateDb :: PactDb CoreBuiltin i -> IO ()
 prepopulateDb pdb = do
   _ <- _pdbBeginTx pdb Transactional
-  _pdbCreateUserTable pdb gasModelTable
+  _pdbCreateUserTable pdb def gasModelTable
   _pdbWrite pdb expectNoGas Write (DUserTables gasModelTable) gmTableK1 gmTableV1
   _pdbWrite pdb expectNoGas Write (DUserTables gasModelTable) gmTableK1 gmTableV1
   _pdbWrite pdb expectNoGas Write DNamespaces gmNamespaceName gmNamespace

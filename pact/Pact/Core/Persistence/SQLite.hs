@@ -21,6 +21,7 @@ import qualified Database.SQLite3.Direct as Direct
 import Data.ByteString (ByteString)
 import qualified Data.Map.Strict as Map
 
+import qualified Pact.Core.Errors as E
 import Pact.Core.Persistence
 import Pact.Core.Guards (renderKeySetName, parseAnyKeysetName)
 import Pact.Core.Names
@@ -88,7 +89,7 @@ initializePactDb serial db = do
     , _pdbRead = read' serial db
     , _pdbWrite = write' serial db txId txLog
     , _pdbKeys = readKeys db
-    , _pdbCreateUserTable = createUserTable serial db txLog
+    , _pdbCreateUserTable = \info tn -> createUserTable info serial db txLog tn
     , _pdbBeginTx = beginTx txId db txLog
     , _pdbCommitTx = commitTx txId db txLog
     , _pdbRollbackTx = rollbackTx db txLog
@@ -176,9 +177,8 @@ rollbackTx db txLog = do
   SQL.exec db "ROLLBACK TRANSACTION"
   writeIORef txLog []
 
-createUserTable :: PactSerialise b i -> SQL.Database -> IORef [TxLog ByteString] -> TableName -> IO ()
-createUserTable serial db txLog tbl = do
-  liftIO $ SQL.exec db stmt
+createUserTable :: i -> PactSerialise b i -> SQL.Database -> IORef [TxLog ByteString] -> TableName -> GasM (PactError i) ()
+createUserTable info serial db txLog tbl = do
   let
     rd = RowData $ Map.singleton (Field "utModule")
          (PObject $ Map.fromList
@@ -186,6 +186,7 @@ createUserTable serial db txLog tbl = do
           , (Field "name", PString (_tableName tbl))
           ])
   rdEnc <- _encodeRowData serial info rd
+  liftIO $ SQL.exec db stmt
   liftIO $ modifyIORef' txLog (TxLog "SYS:usertables" (_tableName tbl) rdEnc :)
 
   where
@@ -197,9 +198,8 @@ createUserTable serial db txLog tbl = do
     tblName = "\"" <> toUserTable tbl <> "\""
 
 write'
-  :: forall k v b i m.
-     MonadIO m
-  => PactSerialise b i
+  :: forall k v b i
+  .  PactSerialise b i
   -> SQL.Database
   -> IORef TxId
   -> IORef [TxLog ByteString]

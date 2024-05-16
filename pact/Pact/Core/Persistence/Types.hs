@@ -183,7 +183,7 @@ data PactDb b i
   , _pdbRead :: forall k v. Domain k v b i -> k -> IO (Maybe v)
   , _pdbWrite :: forall k v. i -> WriteType -> Domain k v b i -> k -> v -> GasM (PactError i) ()
   , _pdbKeys :: forall k v. Domain k v b i -> IO [k]
-  , _pdbCreateUserTable :: TableName -> IO ()
+  , _pdbCreateUserTable :: i -> TableName -> GasM (PactError i) ()
   , _pdbBeginTx :: ExecutionMode -> IO (Maybe TxId)
   , _pdbCommitTx :: IO [TxLog ByteString]
   , _pdbRollbackTx :: IO ()

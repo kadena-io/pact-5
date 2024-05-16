@@ -17,7 +17,6 @@ import Data.IORef
 import qualified Data.Map.Strict as Map
 import qualified Data.Map.Strict as M
 import Data.ByteString (ByteString)
-import Data.IORef
 
 
 import Pact.Core.Guards
@@ -31,6 +30,8 @@ import Pact.Core.Errors
 
 import qualified Pact.Core.Errors as Errors
 import qualified Pact.Core.Persistence as Persistence
+import Pact.Core.PactValue
+import Pact.Core.Literal
 
 
 type TxLogQueue = IORef (Map TxId [TxLog ByteString])
@@ -50,7 +51,7 @@ mockPactDb serial = do
     , _pdbRead = read' refKs refMod refNS refUsrTbl refPacts
     , _pdbWrite = write refKs refMod refNS refUsrTbl refTxId refTxLog refPacts
     , _pdbKeys = keys refKs refMod refNS refUsrTbl refPacts
-    , _pdbCreateUserTable = createUsrTable refUsrTbl refTxId refTxLog
+    , _pdbCreateUserTable = \info tn -> createUsrTable info refUsrTbl refTxId refTxLog tn
     , _pdbBeginTx = beginTx refRb refTxId refTxLog refMod refKs refUsrTbl
     , _pdbCommitTx = commitTx refRb refTxId refTxLog refMod refKs refUsrTbl
     , _pdbRollbackTx = rollbackTx refRb refTxLog refMod refKs refUsrTbl
@@ -142,19 +143,26 @@ mockPactDb serial = do
       pure (M.keys r)
 
   createUsrTable
-    :: IORef (Map TableName (Map RowKey RowData))
+    :: i
+    -> IORef (Map TableName (Map RowKey RowData))
     -> IORef TxId
     -> TxLogQueue
     -> TableName
-    -> IO ()
-  createUsrTable refUsrTbl _refTxId _refTxLog tbl = do
-    ref <- readIORef refUsrTbl
+    -> GasM (PactError i) ()
+  createUsrTable info refUsrTbl _refTxId _refTxLog tbl = do
+    let rd = RowData $ Map.singleton (Field "utModule")
+          (PObject $ Map.fromList
+            [ (Field "namespace", maybe (PLiteral LUnit) (PString . _namespaceName) (_mnNamespace (_tableModuleName tbl)))
+            , (Field "name", PString (_tableName tbl))
+            ])
+    _rdEnc <- _encodeRowData serial info rd
+    ref <- liftIO $ readIORef refUsrTbl
     case M.lookup tbl ref of
       Nothing -> do
         -- TODO: Do we need a TxLog when a usertable is created?
-        modifyIORef refUsrTbl (M.insert tbl mempty)
+        liftIO $ modifyIORef refUsrTbl (M.insert tbl mempty)
         pure ()
-      Just _ -> throwIO (Errors.TableAlreadyExists tbl)
+      Just _ -> liftIO $ throwIO (Errors.TableAlreadyExists tbl)
 
   read'
     :: forall k v

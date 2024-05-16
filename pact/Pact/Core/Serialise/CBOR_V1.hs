@@ -106,7 +106,7 @@ encodeRowData info rd@(RowData fields) = do
   traverse_ (gasSerializePactValue info) fields
   pure . toStrictByteString $ encode rd
 
-gasSerializePactValue :: i -> PactValue -> _
+gasSerializePactValue :: i -> PactValue -> GasM (PactError i) ()
 gasSerializePactValue info = \case
   PLiteral l -> gasSerializeLiteral l
   PList vs -> do
