@@ -67,6 +67,7 @@ import Pact.Core.Guards
 import Pact.Core.ModRefs
 import Pact.Core.Environment
 import Pact.Core.Persistence
+import Pact.Core.Pretty
 import Pact.Core.Hash
 import Pact.Core.StableEncoding
 
@@ -984,7 +985,7 @@ requireCap info cont handler (CapToken fqn args) = do
   capInStack <- isCapInStack (CapToken (fqnToQualName fqn) args)
   if capInStack then returnCEKValue cont handler (VBool True)
   else returnCEK cont handler $
-    VError ("cap not in scope " <> renderQualName (fqnToQualName fqn)) info
+    VError ("require-capability: not granted: (" <> renderQualName (fqnToQualName fqn) <> ")") info
 {-# SPECIALIZE requireCap
    :: ()
    -> CoreCEKCont
@@ -1448,8 +1449,8 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
       RunKeysetPredC -> case v of
         PBool allow ->
           if allow then returnCEKValue cont handler (VBool True)
-          else returnCEK cont handler (VError "Keyset enforce failure" info)
-        _ -> returnCEK cont handler (VError "Keyset enforce failure" info)
+          else returnCEK cont handler (VError "Keyset failure" info)
+        _ -> returnCEK cont handler (VError "Keyset failure" info)
       where
       foldDBRead tv queryClo appClo remaining acc =
         case remaining of
@@ -2025,10 +2026,15 @@ isKeysetInSigs info cont handler env (KeySet kskeys ksPred) = do
   where
   matchKey k _ = k `elem` kskeys
   atLeast t m = m >= t
+  elide pk | T.length pk < 8 = pk
+           | otherwise = T.take 8 pk <> "..."
   count = S.size kskeys
   run p matched =
     if p count matched then returnCEKValue cont handler (VBool True)
-    else returnCEK cont handler (VError "Keyset enforce failure" info)
+    else let
+      errMsg = "Keyset failure (" <> predicateToText ksPred <> "): "
+               <> renderCompactText (map (elide . renderPublicKeyText) $ S.toList kskeys)
+      in returnCEK cont handler (VError errMsg info)
   runPred matched =
     case ksPred of
       KeysAll -> run atLeast matched

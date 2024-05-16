@@ -126,12 +126,12 @@
 ; w/o capability
 (expect-failure
   "direct call to credit fails"
-  "cap not in scope"
+  "require-capability: not granted: "
   (credit 'emily (read-keyset 'emily) 1.0))
 
 (expect-failure
   "direct call to debit fails"
-  "cap not in scope"
+  "require-capability: not granted: "
   (debit 'emily 1.0))
 
 (env-gas 0) (env-gaslog)
@@ -242,7 +242,7 @@
 
 (expect-failure
  "fund-tx should fail when GAS is not in scope"
- "cap not in scope coin.GAS"
+ "require-capability: not granted: (coin.GAS)"
  (fund-tx 'emily 'doug (read-keyset 'doug) 1.0))
 
 (test-capability (GAS))
@@ -250,14 +250,14 @@
 
 (expect-failure
   "fund-tx fails without signature"
-  "Keyset enforce failure"
+  "Keyset failure"
   (fund-tx 'emily 'doug (read-keyset 'doug) 1.0))
 
 (env-sigs [{"key": "keys1", "caps": [(TRANSFER "emily" "doug" 1.0)]}])
 
 (expect-failure
   "fund-tx fails for no gas cap"
-  "Keyset enforce failure"
+  "Keyset failure"
   (fund-tx 'emily 'doug (read-keyset 'doug) 1.0))
 
 (expect-failure
@@ -470,7 +470,7 @@
 
 (expect-failure
   "coinbase fails when capability is not in scope"
-  "cap not in scope coin.COINBASE"
+  "require-capability: not granted: (coin.COINBASE)"
   (coinbase 'emily (read-keyset 'emily) 0.0))
 
 (test-capability (COINBASE))
@@ -528,7 +528,7 @@
 
 (expect-failure
   "cross-chain transfers fail wrong key"
-  "Keyset enforce failure"
+  "Keyset failure"
   (transfer-crosschain 'emily 'doug (read-keyset 'doug) "1" 1.0))
 
 (env-sigs [{ 'key: "keys1", 'caps: [(coin.TRANSFER_XCHAIN 'emily 'doug 1.0 "1")]}])
@@ -751,7 +751,7 @@
 
 (expect-failure
   "allocation account creation only occurs at genesis"
-  "cap not in scope coin.GENESIS"
+  "require-capability: not granted: (coin.GENESIS)"
   (create-allocation-account "brandon" (time "1900-10-31T00:00:00Z") "brandon" 200000.0))
 
 (test-capability (GENESIS))
@@ -808,7 +808,7 @@
 
 (expect-failure
   "allocation release fails when keys are not in scope"
-  "Keyset enforce failure"
+  "Keyset failure"
   (release-allocation "brandon"))
 
 (env-keys ["brandon"])
@@ -835,7 +835,7 @@
 
 (expect-failure
   "gas-only fails without the presence of GAS"
-  "cap not in scope coin.GAS"
+  "require-capability: not granted: (coin.GAS)"
   (gas-only))
 
 (expect-failure
@@ -878,7 +878,7 @@
 
 (expect-failure
   "Remediations fail without the presence of REMEDIATE"
-  "cap not in scope"
+  "require-capability: not granted: "
   (remediate "brandon" 1.0))
 
 (test-capability (REMEDIATE))
