@@ -185,13 +185,12 @@ data EvalState b i
   , _esDefPactExec :: !(Maybe DefPactExec)
   , _esGasLog :: !(Maybe [GasLogEntry b])
     -- ^ Sequence of gas expendature events.
-  , _countBytesCounter :: Int
   } deriving (Show, Generic)
 
 instance (NFData b, NFData i) => NFData (EvalState b i)
 
 instance Default (EvalState b i) where
-  def = EvalState def [] [] mempty Nothing Nothing 0
+  def = EvalState def [] [] mempty Nothing Nothing
 
 makeClassy ''EvalState
 
