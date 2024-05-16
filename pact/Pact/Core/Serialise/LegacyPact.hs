@@ -62,9 +62,6 @@ import Pact.Core.IR.Term
 import qualified Pact.Core.Serialise.CBOR_V1 as CBOR
 import qualified Pact.Core.Serialise.LegacyPact.Types as Legacy
 
-import Text.Show.Deriving
-import Data.Functor.Classes (Show1(..))
-
 
 
 
@@ -77,53 +74,6 @@ type TranslateState = [CoreDef]
 
 
 type TranslateM = ReaderT DeBruijn (StateT TranslateState (Except String))
-
-instance Show1 Legacy.Def where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Def)
-instance Show1 Legacy.Lam where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Lam)
-instance Show1 Legacy.Object where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Object)
-instance Show1 Legacy.Term where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Term)
-
-instance Show1 Legacy.Type where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Type)
-instance Show1 Legacy.TypeVar where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.TypeVar)
-instance Show1 Legacy.FunType where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.FunType)
-instance Show1 Legacy.Arg where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Arg)
-
-instance Show1 Legacy.Guard where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Guard)
-instance Show1 Legacy.CapabilityGuard where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.CapabilityGuard)
-instance Show1 Legacy.UserGuard where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.UserGuard)
-instance Show1 Legacy.BindPair where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.BindPair)
-instance Show1 Legacy.App where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.App)
-instance Show1 Legacy.ObjectMap where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.ObjectMap)
-instance Show1 Legacy.BindType where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.BindType)
-instance Show1 Legacy.ConstVal where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.ConstVal)
-instance Show1 Legacy.DefcapMeta where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.DefcapMeta)
-instance Show1 Legacy.DefMeta where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.DefMeta)
-instance Show1 Legacy.ModuleDef where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.ModuleDef)
-instance Show1 Legacy.Module where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Module)
-instance Show1 Legacy.Governance where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Governance)
-instance Show1 Legacy.Step where
-  liftShowsPrec = $(makeLiftShowsPrec ''Legacy.Step)
 
 runTranslateM :: TranslateM a -> Either String a
 runTranslateM a = runExcept (evalStateT (runReaderT a 0) [])
@@ -195,13 +145,13 @@ fromLegacyConstDef
   -> TranslateM (DefConst n Type b ())
 fromLegacyConstDef mh arg _mn cv = do
   let arg' = (fmap.fmap) Right arg
-  Arg n mty <- fromLegacyArg arg'
+  arg'' <- fromLegacyArg arg'
   cval <- case cv of
     Legacy.CVRaw _ -> throwError "fromLegacyConstDef: invariant"
     Legacy.CVEval _ t -> fromLegacyTerm mh (Right <$> t) >>= \case
       InlineValue pv _ -> pure pv
       _ -> throwError "fromLegacyConstDef: invariant, not InlineValue"
-  pure (DefConst n mty (EvaledConst cval) ())
+  pure (DefConst arg'' (EvaledConst cval) ())
 
 fromLegacySchemaDef
   :: Legacy.TypeName
@@ -211,7 +161,7 @@ fromLegacySchemaDef
 fromLegacySchemaDef (Legacy.TypeName sn) _mn largs = do
   let largs' = (fmap.fmap.fmap) Right largs
   args <- traverse fromLegacyArg largs'
-  schema <- traverse (\(Arg n mty) -> pure (Field n, fromMaybe TyAny mty)) args
+  schema <- traverse (\(Arg n mty _) -> pure (Field n, fromMaybe TyAny mty)) args
   pure (DefSchema sn (M.fromList schema) ())
 
 
@@ -282,15 +232,14 @@ fromLegacyDef mh (Legacy.Def (Legacy.DefName n) _mn dt funty body meta) = do
         Legacy.Defun -> do
           body' <- local (+ fromIntegral (length args)) . fixTreeIndices =<< fromLegacyBodyForm' mh args body
           pure $ Dfun $ Defun
-            n  -- defun name
-            args -- args
-            (Just ret)
+            (Arg n (Just ret) ())
+            args
             (lamFromArgs args body')
             () -- info
         Legacy.Defpact -> do
           steps' <- fromLegacyStepForm' mh args body
           steps'' <- local (+ fromIntegral (length args)) $ (traversed.traverseDefPactStep) fixTreeIndices steps'
-          pure $ DPact (DefPact n args (Just ret) steps'' ())
+          pure $ DPact (DefPact (Arg n (Just ret) ()) args steps'' ())
         Legacy.Defcap -> do
             body' <- local (+ fromIntegral (length args)) . fixTreeIndices =<< fromLegacyBodyForm' mh args body
             meta' <- case meta of
@@ -298,11 +247,11 @@ fromLegacyDef mh (Legacy.Def (Legacy.DefName n) _mn dt funty body meta) = do
               -- unmanaged.
               Just meta' -> fromLegacyDefMeta mn mh args meta'
               Nothing -> pure Unmanaged
-            pure $ DCap (DefCap n args (Just ret) body' meta' ())
+            pure $ DCap (DefCap (Arg n (Just ret) ()) args body' meta' ())
 
 
 fromLegacyInterfDef
-  :: Legacy.Def (Either CoreTerm LegacyRef)
+  :: Legacy.Def (Either CorePreNormalizedTerm LegacyRef)
   -> TranslateM (EvalIfDef CoreBuiltin ())
 fromLegacyInterfDef (Legacy.Def (Legacy.DefName n) _mn dt funty _body meta) = do
   ret <- fromLegacyType (Legacy._ftReturn funty)
@@ -311,22 +260,21 @@ fromLegacyInterfDef (Legacy.Def (Legacy.DefName n) _mn dt funty _body meta) = do
   case dt of
     Legacy.Defun -> do
       pure $ IfDfun $ IfDefun
-        n  -- defun name
+        (Arg n (Just ret) ())  -- defun name
         args -- args
-        (Just ret)
         () -- info
     Legacy.Defpact -> do
-      pure $ IfDPact (IfDefPact n args (Just ret) ())
+      pure $ IfDPact (IfDefPact (Arg n (Just ret) ()) args ())
     Legacy.Defcap -> do
         meta' <- case meta of
           -- Note: Empty `meta` implies the cap is
           -- unmanaged.
-          Just meta' -> fromLegacyDefMetaInterface args meta'
+          Just m -> fromLegacyDefMetaInterface args m
           Nothing -> pure Unmanaged
-        pure $ IfDCap (IfDefCap n args (Just ret) meta' ())
+        pure $ IfDCap (IfDefCap (Arg n (Just ret) ()) args meta' ())
 
 fromLegacyDefMetaInterface
-  :: [Arg Type]
+  :: [Arg Type ()]
   -> Legacy.DefMeta (Legacy.Term (Either CorePreNormalizedTerm LegacyRef))
   -> TranslateM (DefCapMeta BareName)
 fromLegacyDefMetaInterface args = \case
@@ -345,7 +293,7 @@ fromLegacyDefMetaInterface args = \case
 fromLegacyDefMeta
   :: ModuleName
   -> ModuleHash
-  -> [Arg Type]
+  -> [Arg Type ()]
   -> Legacy.DefMeta (Legacy.Term (Either CorePreNormalizedTerm LegacyRef))
   -> TranslateM (DefCapMeta (FQNameRef Name))
 fromLegacyDefMeta mn mh args = \case
@@ -395,7 +343,7 @@ fromLegacyModule mh lm depMap = do
 
 fromLegacyBodyForm'
   :: ModuleHash -- parent module hash
-  -> [Arg Type]
+  -> [Arg Type ()]
   -> Scope Int Legacy.Term (Either CorePreNormalizedTerm LegacyRef)
   -> TranslateM CorePreNormalizedTerm
 fromLegacyBodyForm' mh args body = local (+ fromIntegral (length args)) $ do
@@ -409,7 +357,7 @@ fromLegacyBodyForm' mh args body = local (+ fromIntegral (length args)) $ do
 
 fromLegacyStepForm'
   :: ModuleHash
-  -> [Arg Type]
+  -> [Arg Type ()]
   -> Scope Int Legacy.Term (Either CorePreNormalizedTerm LegacyRef)
   -> TranslateM (NonEmpty (Step (Name, DeBruijn) Type CoreBuiltin ()))
 fromLegacyStepForm' mh args body = local (+ fromIntegral (length args)) $ do
@@ -438,13 +386,13 @@ fromLegacyStep mh (Legacy.Step _ t mrb) = do
 debruijnize
   :: Int
   -> DeBruijn
-  -> _
+  -> [Arg ty i]
   -> Scope Int Legacy.Term (Either CorePreNormalizedTerm LegacyRef)
   -> Legacy.Term (Either CorePreNormalizedTerm LegacyRef)
 debruijnize totalLen depth args = Bound.instantiate $ \i ->
   -- Todo: get the argname from the provided args
     let boundVar = NBound $ fromIntegral (totalLen - i - 1)
-        Arg n _ = args !! i
+        Arg n _ _ = args !! i
     in Legacy.TVar (Left (Var (Name n boundVar, depth) ()))
 
 
@@ -513,8 +461,8 @@ fromLegacyPersistDirect = \case
     | n == "CHARSET_ASCII" -> pure (Constant (LInteger 0) ()) -- see Desugar.hs
     | n == "CHARSET_LATIN1" -> pure (Constant (LInteger 1) ())
     | n == "constantly" -> do
-        let c1 = Arg "#constantlyA1" Nothing
-        let c2 = Arg "#constantlyA2" Nothing
+        let c1 = Arg "#constantlyA1" Nothing ()
+        let c2 = Arg "#constantlyA2" Nothing ()
         d <- ask
         pure $ Lam (c1 :| [c2]) (Var (Name "#constantlyA1" (NBound 1), d) ()) ()
 
@@ -548,11 +496,11 @@ objBindingToLet mh bps scope = do
     pure (body', len')
   objBindVar = "`objBind"
   baseLam term =
-    Lam (pure (Arg objBindVar Nothing)) term ()
+    Lam (pure (Arg objBindVar Nothing ())) term ()
   bpToObjLet currDepth objVarIx (Legacy.BindPair (Legacy.Arg n _) v) body = do
     fromLegacyTerm mh v >>= \case
       fieldLit@(Constant (LString _) _) -> do
-        let larg = Arg n Nothing
+        let larg = Arg n Nothing ()
             accessObj = Var (Name objBindVar (NBound objVarIx), currDepth) ()
             accessTerm = App (Builtin CoreAt ()) [fieldLit, accessObj] ()
         pure $ Let larg accessTerm body ()
@@ -623,7 +571,7 @@ fromLegacyTerm mh = \case
           , Legacy.TApp (Legacy.App mapOperator mapOperands): xs <- args -> do
           d <- ask
           let injectedArg = (Var (Name "iArg" (NBound 0), d + 1) () :: CorePreNormalizedTerm)
-          let containingLam e = Lam (pure (Arg "lArg" Nothing)) e ()
+          let containingLam e = Lam (pure (Arg "lArg" Nothing ())) e ()
           (mapOperator', mapOperands') <- local (+ 1) $ (,) <$> fromLegacyTerm mh mapOperator <*> traverse (fromLegacyTerm mh) mapOperands
           let body = containingLam (desugarApp mapOperator' (mapOperands' ++ [injectedArg]) ())
           xs' <- traverse (fromLegacyTerm mh) xs
@@ -634,7 +582,7 @@ fromLegacyTerm mh = \case
           d <- ask
           let injectedArg1 = (Var (Name "iArg1" (NBound 1), d + 2) () :: CorePreNormalizedTerm)
               injectedArg2 = (Var (Name "iArg2" (NBound 0), d + 2) () :: CorePreNormalizedTerm)
-          let containingLam e = Lam (pure (Arg "" Nothing)) e ()
+          let containingLam e = Lam (pure (Arg "" Nothing ())) e ()
           (mapOperator', mapOperands') <- local (+ 2) $ (,) <$> fromLegacyTerm mh mapOperator <*> traverse (fromLegacyTerm mh) mapOperands
           let body = containingLam (desugarApp mapOperator' (mapOperands' ++ [injectedArg1, injectedArg2]) ())
           xs' <- traverse (fromLegacyTerm mh) xs
@@ -831,8 +779,8 @@ fromLegacyUse (Legacy.Use mn mh imp) = let
 
 fromLegacyArg
   :: Legacy.Arg (Legacy.Term (Either CorePreNormalizedTerm LegacyRef))
-  -> TranslateM (Arg Type)
-fromLegacyArg (Legacy.Arg n ty) = Arg n . Just <$> fromLegacyType ty
+  -> TranslateM (Arg Type ())
+fromLegacyArg (Legacy.Arg n ty) = (\t -> Arg n (Just t) ()) <$> fromLegacyType ty
 
 fromLegacyType
   :: Legacy.Type (Legacy.Term (Either CorePreNormalizedTerm LegacyRef))

@@ -59,6 +59,7 @@ import Data.Hashable
 import Control.Applicative
 import Control.Monad (ap)
 import Data.Functor.Classes (Eq1(..), Show1(..))
+import Text.Show.Deriving
 
 data ModuleData r = ModuleData
   { _mdModule :: !(ModuleDef (Def r))
@@ -1762,5 +1763,59 @@ instance JD.FromJSON n => JD.FromJSON (Term n) where
     parseWithInfo :: JD.FromJSON a => (a -> Term n) -> A.Parser (Term n)
     parseWithInfo f = f <$> JD.parseJSON v
 
+-- Necessary to make this compile
+-- Otherwise we get the following error
+-- pact/Pact/Core/Serialise/LegacyPact/Types.hs:1861:20: error: [GHC-79890]
+--     • ‘Step’ is not in the type environment at a reify
+--     • In the untyped splice: $(makeLiftShowsPrec ''Step)
+--      |
+-- 1861 |   liftShowsPrec = $(makeLiftShowsPrec ''Step)
+-- see: https://gitlab.haskell.org/ghc/ghc/-/issues/9813
+$( return [] )
 
+instance Show1 Def where
+  liftShowsPrec = $(makeLiftShowsPrec ''Def)
+instance Show1 Lam where
+  liftShowsPrec = $(makeLiftShowsPrec ''Lam)
+instance Show1 Object where
+  liftShowsPrec = $(makeLiftShowsPrec ''Object)
+instance Show1 Term where
+  liftShowsPrec = $(makeLiftShowsPrec ''Term)
 
+instance Show1 Type where
+  liftShowsPrec = $(makeLiftShowsPrec ''Type)
+instance Show1 TypeVar where
+  liftShowsPrec = $(makeLiftShowsPrec ''TypeVar)
+instance Show1 FunType where
+  liftShowsPrec = $(makeLiftShowsPrec ''FunType)
+instance Show1 Arg where
+  liftShowsPrec = $(makeLiftShowsPrec ''Arg)
+
+instance Show1 Guard where
+  liftShowsPrec = $(makeLiftShowsPrec ''Guard)
+instance Show1 CapabilityGuard where
+  liftShowsPrec = $(makeLiftShowsPrec ''CapabilityGuard)
+instance Show1 UserGuard where
+  liftShowsPrec = $(makeLiftShowsPrec ''UserGuard)
+instance Show1 BindPair where
+  liftShowsPrec = $(makeLiftShowsPrec ''BindPair)
+instance Show1 App where
+  liftShowsPrec = $(makeLiftShowsPrec ''App)
+instance Show1 ObjectMap where
+  liftShowsPrec = $(makeLiftShowsPrec ''ObjectMap)
+instance Show1 BindType where
+  liftShowsPrec = $(makeLiftShowsPrec ''BindType)
+instance Show1 ConstVal where
+  liftShowsPrec = $(makeLiftShowsPrec ''ConstVal)
+instance Show1 DefcapMeta where
+  liftShowsPrec = $(makeLiftShowsPrec ''DefcapMeta)
+instance Show1 DefMeta where
+  liftShowsPrec = $(makeLiftShowsPrec ''DefMeta)
+instance Show1 ModuleDef where
+  liftShowsPrec = $(makeLiftShowsPrec ''ModuleDef)
+instance Show1 Module where
+  liftShowsPrec = $(makeLiftShowsPrec ''Module)
+instance Show1 Governance where
+  liftShowsPrec = $(makeLiftShowsPrec ''Governance)
+instance Show1 Step where
+  liftShowsPrec = $(makeLiftShowsPrec ''Step)
