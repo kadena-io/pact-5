@@ -16,7 +16,7 @@ import System.Directory
 import System.FilePath
 import qualified Data.ByteString as BS
 import qualified Data.Text.IO as T
-import Pact.Core.Test.ReplTests (runReplTest)
+import Pact.Core.Test.ReplTests
 import Pact.Core.Persistence
 import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Serialise
@@ -68,9 +68,9 @@ legacyTests = do
         traverse_ (\m -> writeModule pdb Write (view mdModuleName m) (liftReplBuiltin m)) ms'
 
         modTests <- forM repl $ \r -> do
-          let filePath = legacyTestDir </> p </> r
-          src <- T.readFile filePath
-          pure $ testCase r (runReplTest pdb filePath src interpretReplProgram)
+          let filePath = p </> r
+          src <- T.readFile (legacyTestDir </> filePath)
+          pure $ testCase r (runReplTest (ReplSourceDir legacyTestDir) pdb filePath src interpretReplProgram)
         pure (testGroup p modTests)
   where
   toModuleData p fp =
