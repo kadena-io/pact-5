@@ -1,0 +1,4 @@
+;; This REPL file loads the pinned marmalade tests (via Git submodules)
+;; to run these tests as part of our test suite
+
+(load "marmalade/pact/marmalade.repl")
