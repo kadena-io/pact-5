@@ -70,7 +70,6 @@ common pact-common
     , utf8-string
     , exceptions
     , array
-    , pact-json
     , scientific
     , serialise
     , cborg

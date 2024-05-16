@@ -177,16 +177,6 @@ getModuleMemberWithHash info pdb (QualifiedName qn mn) = do
       throwExecutionError info (NameNotInScope fqn)
 
 
-getModuleMemberWithHash :: (MonadEval b i m) => i -> PactDb b i -> QualifiedName -> m (EvalDef b i, ModuleHash)
-getModuleMemberWithHash info pdb (QualifiedName qn mn) = do
-  md <- getModule info pdb mn
-  case findDefInModule qn md of
-    Just d -> pure (d, _mHash md)
-    Nothing -> do
-      let fqn = FullyQualifiedName mn qn (_mHash md)
-      throwExecutionError info (NameNotInScope fqn)
-
-
 mangleNamespace :: (MonadEvalState b i m) => ModuleName -> m ModuleName
 mangleNamespace mn@(ModuleName mnraw ns) =
   useEvalState (esLoaded . loNamespace) >>= \case

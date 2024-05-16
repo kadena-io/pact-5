@@ -560,6 +560,8 @@ traverseTerm f x= case x of
     CapabilityForm <$> traverse (traverseTerm f) cf <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (traverseTerm f) m <*> pure i
+  InlineValue v i ->
+    f (InlineValue v i)
 
 topLevelTerms :: Traversal' (TopLevel name ty builtin info) (Term name ty builtin info)
 topLevelTerms f = \case
