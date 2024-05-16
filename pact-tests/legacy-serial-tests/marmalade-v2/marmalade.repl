@@ -4,13 +4,11 @@
     , 'ns-genesis-keyset:[]
     , 'ns-operate-keyset:[] })
   ;; The following contracts are injected into the runtime for this test
-  ; Todo: inject
   ;  (load "../../pact-tests/marmalade/pact/root/fungible-v2.pact")
   ;  (load "../../pact-tests/marmalade/pact/root/fungible-xchain-v1.pact")
   ;  (load "./root/coin.pact")
 
-  ;; TODO: load into repl
-  (load "../../pact-tests/marmalade/pact/root/gas-payer-v1.pact")
+  ;  (load "../../pact-tests/marmalade/pact/root/gas-payer-v1.pact")
 
   ;; (env-exec-config ["DisablePact44"])
   (load "../../pact-tests/marmalade/pact/root/ns.pact")
@@ -24,16 +22,16 @@
   { 'ns: "kip"
   , 'upgrade: false })
 
-  ; Todo: are we copying them over?
-  (load "../../pact-tests/marmalade/pact/kip/manifest.pact")
-  (load "../../pact-tests/marmalade/pact/kip/token-policy-v2.pact")
-  (load "../../pact-tests/marmalade/pact/kip/updatable-uri-policy-v1.pact")
-  (load "../../pact-tests/marmalade/pact/kip/poly-fungible-v3.pact")
+  ; The following contracts are injected into the runtime for this test
+;  (load "../../pact-tests/marmalade/pact/kip/manifest.pact")
+;  (load "../../pact-tests/marmalade/pact/kip/token-policy-v2.pact")
+;  (load "../../pact-tests/marmalade/pact/kip/updatable-uri-policy-v1.pact")
+;  (load "../../pact-tests/marmalade/pact/kip/poly-fungible-v3.pact")
 
   (define-namespace 'util (sig-keyset) (sig-keyset))
-  ; Todo: do we copy these as well?
-  (load "../../pact-tests/marmalade/pact/util/fungible-util.pact")
-  (load "../../pact-tests/marmalade/pact/util/guards1.pact")
+  ; The following contracts are injected into the runtime for this test
+;  (load "../../pact-tests/marmalade/pact/util/fungible-util.pact")
+;  (load "../../pact-tests/marmalade/pact/util/guards1.pact")
 (commit-tx)
 
 (begin-tx "deploy marmalade-v2 namespace and admin keyset")
@@ -99,26 +97,17 @@
 
 (begin-tx)
 
-  (load "../../pact-tests/marmalade/pact/ledger/ledger.interface.pact")
   (load "../../pact-tests/marmalade/pact/ledger/ledger-v2.interface.pact")
-  (load "../../pact-tests/marmalade/pact/policy-manager/sale.interface.pact")
+  (load "../../pact-tests/marmalade/pact/policy-manager/sale.interface.pact") 
   (load "../../pact-tests/marmalade/pact/policy-manager/policy-manager.pact")
   (load "../../pact-tests/marmalade/pact/ledger/ledger.pact")
-  (load "../../pact-tests/marmalade/pact/marmalade-util/util-v1.pact")
-  (load "../../pact-tests/marmalade/pact/test/abc.pact")
-  (load "../../pact-tests/marmalade/pact/test/def.pact")
 (commit-tx)
 
 (begin-tx "load concrete-polices")
 ; Injected
 ;;   (load "./concrete-policies/non-fungible-policy/non-fungible-policy-v1.pact")
 
-; Todo: Inject
 (load "../../pact-tests/marmalade/pact/concrete-policies/royalty-policy/royalty-policy-v1.pact")
-
-;;   (load "./concrete-policies/collection-policy/collection-policy-v1.pact")
-
-;;   (load "./concrete-policies/guard-policy/guard-policy-v1.pact")
 
 (load "../../pact-tests/marmalade/pact/policy-manager/manager-init.pact")
 (commit-tx)
@@ -146,9 +135,7 @@
    , 'ns: "marmalade-v2"
    , 'upgrade: true
    , 'upgrade_version_1: true })
-   ; note: injected
-  ;; (load "./ledger/ledger.pact")
-  ;; (load "./concrete-policies/guard-policy/guard-policy-v1.pact")
+
 
 (use marmalade-v2.ledger)
 (create-table versions)

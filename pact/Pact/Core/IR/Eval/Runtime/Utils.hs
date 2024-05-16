@@ -56,7 +56,6 @@ import Data.Maybe(listToMaybe)
 import Data.Text(Text)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
-import qualified Pact.Core.Pretty as Pretty
 import qualified Data.Text as T
 
 import Pact.Core.Names
