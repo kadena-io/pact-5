@@ -90,9 +90,9 @@ instance Pretty PactValue where
     PList p -> Pretty.list (V.toList (pretty <$> p))
     PGuard g -> pretty g
     PObject o ->
-      braces $ hsep $ punctuate comma (objPair <$> M.toList o)
+      braces $ mconcat $ punctuate comma (objPair <$> M.toList o)
       where
-      objPair (f, t) = dquotes (pretty f) <> ":" <> pretty t
+      objPair (f, t) = dquotes (pretty f) <> ":" <+> pretty t
     PModRef md -> pretty md
     PCapToken (CapToken fqn args) ->
       parens (pretty (fqnToQualName fqn)) <> if null args then mempty else hsep (pretty <$> args)

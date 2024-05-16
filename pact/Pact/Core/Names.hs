@@ -48,6 +48,7 @@ module Pact.Core.Names
  , replModuleHash
  , fqnToName
  , fqnToQualName
+ , qualNameToFqn
  , NativeName(..)
  , RowKey(..)
  , rowKey
@@ -268,6 +269,10 @@ fqnToName (FullyQualifiedName mn name mh) =
 fqnToQualName :: FullyQualifiedName -> QualifiedName
 fqnToQualName (FullyQualifiedName mn name _) =
   QualifiedName name mn
+
+qualNameToFqn :: QualifiedName -> ModuleHash -> FullyQualifiedName
+qualNameToFqn (QualifiedName name mn) mh =
+  FullyQualifiedName mn name mh
 
 instance Pretty FullyQualifiedName where
   pretty fq = pretty $ fqnToQualName fq

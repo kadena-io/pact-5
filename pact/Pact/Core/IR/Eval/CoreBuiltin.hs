@@ -1143,10 +1143,11 @@ composeCapability info b cont handler env = \case
   [VCapToken ct] ->
     useEvalState esStack >>= \case
       sf:_ -> do
-        -- Todo: compose-capability called outside of capability needs a better error
-        when (_sfFnType sf /= SFDefcap) $ failInvariant info "compose-cap"
+        when (_sfFnType sf /= SFDefcap) $
+          throwExecutionError info (EvalError "compose-capability called outside of a defcap")
         composeCap info cont handler env ct
-      _ -> failInvariant info "compose-cap at the top level"
+      _ ->
+        returnCEK cont handler (VError "compose-capability called at the top level" info)
   args -> argsError info b args
 
 installCapability :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -1638,9 +1639,9 @@ coreDefineNamespace info b cont handler env = \case
           chargeGasArgs info (GWrite (sizeOf SizeOfV0 ns))
           liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
           returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
-        SmartNamespacePolicy _ fun -> getModuleMember info pdb fun >>= \case
-          Dfun d -> do
-            clo <- mkDefunClosure d (_qnModName fun) env
+        SmartNamespacePolicy _ fun -> getModuleMemberWithHash info pdb fun >>= \case
+          (Dfun d, mh) -> do
+            clo <- mkDefunClosure d (qualNameToFqn fun mh) env
             let cont' = BuiltinC env info (DefineNamespaceC ns) cont
             applyLam (C clo) [VString n, VGuard adminG] cont' handler
           _ -> failInvariant info "Fatal error: namespace manager function is not a defun"

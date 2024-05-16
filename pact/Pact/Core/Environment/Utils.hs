@@ -16,6 +16,7 @@ module Pact.Core.Environment.Utils
  , getModuleData
  , getModule
  , getModuleMember
+ , getModuleMemberWithHash
  , lookupModule
  , lookupModuleData
  , throwExecutionError
@@ -25,11 +26,14 @@ module Pact.Core.Environment.Utils
  , getAllStackCaps
  , checkSigCaps
  , allModuleExports
+ , liftDbFunction
  ) where
 
 import Control.Lens
 import Control.Applicative((<|>))
 import Control.Monad.Except
+import Control.Exception
+import Control.Monad.IO.Class(MonadIO(..))
 import Data.Default
 import Data.Maybe(mapMaybe)
 import qualified Data.Map.Strict as M
@@ -84,10 +88,22 @@ allModuleExports = \case
         allNewDeps = M.fromList $ toFqDep (_ifName iface) (_ifHash iface) <$> defs
     in allNewDeps <> deps
 
-throwExecutionError :: (MonadEval b i m) => i -> EvalError -> m a
-throwExecutionError i e = throwError (PEExecutionError e i)
+liftDbFunction
+  :: (MonadEvalState b i m, MonadError (PactError i) m, MonadIO m)
+  => i
+  -> IO a
+  -> m a
+liftDbFunction info action = do
+  liftIO (try action) >>= \case
+    Left dbopErr -> throwExecutionError info (DbOpFailure dbopErr)
+    Right e -> pure e
 
-throwExecutionError' :: (MonadEval b i m) => EvalError -> m a
+throwExecutionError :: (MonadEvalState b i m, MonadError (PactError i) m) => i -> EvalError -> m a
+throwExecutionError i e = do
+  st <- useEvalState esStack
+  throwError (PEExecutionError e st i)
+
+throwExecutionError' :: (MonadEvalState b i m, MonadError (PactError i) m, Default i) => EvalError -> m a
 throwExecutionError' = throwExecutionError def
 
 -- | lookupModuleData for only modules
@@ -147,6 +163,16 @@ getModuleMember info pdb (QualifiedName qn mn) = do
   md <- getModule info pdb mn
   case findDefInModule qn md of
     Just d -> pure d
+    Nothing -> do
+      let fqn = FullyQualifiedName mn qn (_mHash md)
+      throwExecutionError info (NameNotInScope fqn)
+
+
+getModuleMemberWithHash :: (MonadEval b i m) => i -> PactDb b i -> QualifiedName -> m (EvalDef b i, ModuleHash)
+getModuleMemberWithHash info pdb (QualifiedName qn mn) = do
+  md <- getModule info pdb mn
+  case findDefInModule qn md of
+    Just d -> pure (d, _mHash md)
     Nothing -> do
       let fqn = FullyQualifiedName mn qn (_mHash md)
       throwExecutionError info (NameNotInScope fqn)

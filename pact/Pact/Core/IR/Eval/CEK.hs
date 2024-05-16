@@ -136,7 +136,7 @@ evaluateTerm cont handler env (Var n info)  = do
       let fqn = FullyQualifiedName mname (_nName n) mh
       lookupFqName fqn >>= \case
         Just (Dfun d) -> do
-          dfunClo <- VDefClosure <$> mkDefunClosure d mname env
+          dfunClo <- VDefClosure <$> mkDefunClosure d fqn env
           returnCEKValue cont handler dfunClo
         -- Todo: this should be GADT'd out
         -- and defconsts should already be evaluated
@@ -317,16 +317,16 @@ evaluateTerm cont handler env (ObjectLit o info) = do
 mkDefunClosure
   :: (MonadEval b i m)
   => Defun Name Type b i
-  -> ModuleName
+  -> FullyQualifiedName
   -> CEKEnv step b i m
   -> m (Closure step b i m)
-mkDefunClosure d@(Defun (Arg n mty _) _ _ di) mn e = case _dfunTerm d of
+mkDefunClosure d fqn e = case _dfunTerm d of
   Lam args body i ->
-    pure (Closure n mn (ArgClosure args) (NE.length args) body mty e i)
+    pure (Closure fqn (ArgClosure args) (NE.length args) body (_dfunRType d) e i)
   Nullary body i ->
-    pure (Closure n mn NullaryClosure 0 body mty e i)
+    pure (Closure fqn NullaryClosure 0 body (_dfunRType d) e i)
   _ ->
-    failInvariant di ("definition is not a closure: " <> T.pack (show d))
+    failInvariant (_dfunInfo d) ("definition is not a closure: " <> T.pack (show d))
 
 mkDefPactClosure
   :: i
@@ -387,8 +387,8 @@ applyPact
   -> m (CEKEvalResult step b i m)
 applyPact i pc ps cont handler cenv nested = useEvalState esDefPactExec >>= \case
   Just pe -> throwExecutionError i (MultipleOrNestedDefPactExecFound pe)
-  Nothing -> getModuleMember i (_cePactDb cenv) (pc ^. pcName) >>= \case
-    DPact defPact -> do
+  Nothing -> getModuleMemberWithHash i (_cePactDb cenv) (pc ^. pcName) >>= \case
+    (DPact defPact, mh) -> do
       let nSteps = NE.length (_dpSteps defPact)
 
       -- `applyPact` is only called from `initPact` or `resumePact`.
@@ -412,16 +412,15 @@ applyPact i pc ps cont handler cenv nested = useEvalState esDefPactExec >>= \cas
 
       setEvalState esDefPactExec (Just pe)
       let cont' = DefPactStepC cenv cont
-
+          contFqn = qualNameToFqn (pc ^. pcName) mh
+          sf = StackFrame contFqn (pc ^. pcArgs) SFDefPact i
       case (ps ^. psRollback, step) of
         (False, _) ->
-          evalWithStackFrame i cont' handler cenv sf Nothing (ordinaryDefPactStepExec step)
+          evalWithStackFrame i cont' handler cenv Nothing sf (ordinaryDefPactStepExec step)
         (True, StepWithRollback _ rollbackExpr) ->
-          evalWithStackFrame i cont' handler cenv sf Nothing rollbackExpr
+          evalWithStackFrame i cont' handler cenv Nothing sf rollbackExpr
         (True, Step{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
     _otherwise -> failInvariant i "defpact continuation does not point to defun"
-  where
-  sf = StackFrame (view (pcName . qnName) pc) (view (pcName . qnModName) pc) SFDefPact
 {-# SPECIALIZE applyPact
    :: ()
    -> DefPactContinuation QualifiedName PactValue
@@ -469,8 +468,8 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esDefPactExec >>= \case
   Nothing -> failInvariant i $
     "applyNestedPact: Nested DefPact attempted but no pactExec found" <> T.pack (show pc)
 
-  Just pe -> getModuleMember i (_cePactDb cenv) (pc ^. pcName) >>= \case
-    DPact defPact -> do
+  Just pe -> getModuleMemberWithHash i (_cePactDb cenv) (pc ^. pcName) >>= \case
+    (DPact defPact, mh) -> do
       step <- maybe (failInvariant i "Step not found") pure
         $ _dpSteps defPact ^? ix (ps ^. psStep)
 
@@ -509,16 +508,16 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esDefPactExec >>= \case
       let
         cenv' = set ceDefPactStep (Just ps) cenv
         cont' = NestedDefPactStepC cenv' cont pe
+        contFqn = FullyQualifiedName (pc ^. pcName . qnModName) (pc ^. pcName . qnName) mh
+        sf = StackFrame contFqn (pc ^. pcArgs) SFDefPact i
 
       case (ps ^. psRollback, step) of
         (False, _) ->
-          evalWithStackFrame i cont' handler cenv' sf Nothing  (ordinaryDefPactStepExec step)
+          evalWithStackFrame i cont' handler cenv' Nothing sf (ordinaryDefPactStepExec step)
         (True, StepWithRollback _ rollbackExpr) ->
-          evalWithStackFrame i cont' handler cenv' sf Nothing rollbackExpr
+          evalWithStackFrame i cont' handler cenv' Nothing sf rollbackExpr
         (True, Step{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
     _otherwise -> failInvariant i "applyNestedPact: Expected a DefPact bot got something else"
-  where
-  sf = StackFrame (view (pcName . qnName) pc) (view (pcName . qnModName) pc) SFDefPact
 {-# SPECIALIZE applyNestedPact
    :: ()
    -> DefPactContinuation QualifiedName PactValue
@@ -731,30 +730,41 @@ acquireModuleAdmin i cont handler env mdl = do
    -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
+-- | Evaluate a term with all the stack manipulation logic
 evalWithStackFrame
   :: (CEKEval step b i m, MonadEval b i m)
   => i
   -> Cont step b i m
   -> CEKErrorHandler step b i m
   -> CEKEnv step b i m
-  -> StackFrame
   -> Maybe Type
+  -> StackFrame i
   -> EvalTerm b i
   -> m (CEKEvalResult step b i m)
-evalWithStackFrame info cont handler env sf mty body = do
+evalWithStackFrame info cont handler env mty sf body = do
   cont' <- pushStackFrame info cont mty sf
   evalCEK cont' handler env body
 
+-- | Push a stack frame into the stack, and check it for recursion
 pushStackFrame
   :: (MonadEval b i m)
   => i
   -> Cont step b i m
   -> Maybe Type
-  -> StackFrame
+  -> StackFrame i
   -> m (Cont step b i m)
 pushStackFrame info cont mty sf = do
+  checkRecursion
   esStack %== (sf :)
   pure (StackPopC info mty cont)
+  where
+  checkRecursion = do
+    RecursionCheck currentCalled <- usesEvalState esCheckRecursion NE.head
+    let qn = fqnToQualName (_sfName sf)
+    when (S.member qn currentCalled) $ throwExecutionError info (RuntimeRecursionDetected qn)
+    esCheckRecursion %== NE.cons (RecursionCheck (S.insert qn currentCalled))
+
+
 
 -- | Our main workhorse for "Evaluate a capability, then do something else"
 -- `evalCap` handles
@@ -848,16 +858,16 @@ evalCap info currCont handler env origToken@(CapToken fqn args) popType ecType c
                     else currCont
             inCapEnv = set ceInCap True $ set ceLocal newLocals env
         (esCaps . csSlots) %== (CapSlot qualCapToken []:)
-        evalWithStackFrame info cont' handler inCapEnv capStackFrame Nothing capBody
+        evalWithStackFrame info cont' handler inCapEnv Nothing capStackFrame capBody
   qualCapName = fqnToQualName fqn
   qualCapToken = CapToken qualCapName args
-  capStackFrame = StackFrame (_fqName fqn) (_fqModule fqn) SFDefcap
+  capStackFrame = StackFrame fqn args SFDefcap info
   -- This function is handles both evaluating the manager function for the installed parameter
   -- and continuing evaluation for the actual capability body.
   evalUserManagedCap cont' env' capBody managedCap = case _mcManaged managedCap of
     ManagedParam mpfqn oldV managedIx -> do
       dfun <- getDefun info mpfqn
-      dfunClo <- mkDefunClosure dfun (_fqModule mpfqn) env
+      dfunClo <- mkDefunClosure dfun mpfqn env
       newV <- maybe (failInvariant info "Managed param does not exist at index") pure (args ^? ix managedIx)
       -- Set the mgr fun to evaluate after we apply the capability body
       -- NOTE: test-capability doesn't actually run the manager function, it just runs the cap pop then
@@ -1518,16 +1528,22 @@ applyContToValue (ObjC env info currfield fs vs cont) handler v = do
 
 applyContToValue (EnforceErrorC info _) handler v = case v of
   VString err -> returnCEK Mt handler (VError err info)
-  _ -> failInvariant info "enforce function did not return a string"
+  -- TODO: remove
+  _ -> failInvariant info $ "enforce function did not return a string" <> T.pack (show v)
 -- Discard the value of running a user guard, no error occured, so
 applyContToValue (IgnoreValueC v cont) handler _v =
   returnCEKValue cont handler (VPactValue v)
 
 applyContToValue (StackPopC i mty cont) handler v = do
   v' <- (\pv -> maybeTCType i pv mty) =<< enforcePactValue i v
-  -- Todo: this seems like an invariant failure, so maybe safeTail is not what we want?
-  -- Testing will determine whether this is observable.
-  (esStack %== safeTail) *> returnCEKValue cont handler (VPactValue v')
+  esStack %== safeTail
+  esCheckRecursion %== getPrevRecCheck
+  returnCEKValue cont handler (VPactValue v')
+  where
+  getPrevRecCheck (_ :| l) = case l of
+    top : rest -> top :| rest
+    [] -> def :| []
+
 applyContToValue (DefPactStepC env cont) handler v =
   useEvalState esDefPactExec >>= \case
     Nothing -> failInvariant def "No PactExec found"
@@ -1587,6 +1603,8 @@ nestedPactsNotAdvanced resultState ps =
   any (\npe -> _peStep npe /= _psStep ps) (_peNestedDefPactExec resultState)
 {-# INLINE nestedPactsNotAdvanced #-}
 
+-- | Apply a closure to its arguments,
+--   dispatching based on closure type.
 applyLam
   :: (CEKEval step b i m, MonadEval b i m)
   => CanApply step b i m
@@ -1594,22 +1612,18 @@ applyLam
   -> Cont step b i m
   -> CEKErrorHandler step b i m
   -> m (CEKEvalResult step b i m)
-applyLam vc@(C (Closure fn mn ca arity term mty env cloi)) args cont handler
+applyLam vc@(C (Closure fqn ca arity term mty env cloi)) args cont handler
+  -- Fully apply closure and evaluate
   | arity == argLen = case ca of
     ArgClosure cloargs -> do
-      let qn = QualifiedName fn mn
-      chargeGasArgs cloi (GAApplyLam (renderQualName qn) argLen)
+      chargeGasArgs cloi (GAApplyLam (renderFullyQualName fqn) argLen)
       args' <- traverse (enforcePactValue cloi) args
       tcArgs <- zipWithM (\arg (Arg _ ty _) -> VPactValue <$> maybeTCType cloi arg ty) args' (NE.toList cloargs)
-      esStack %== (StackFrame fn mn SFDefun :)
-      let cont' = StackPopC cloi mty cont
-          varEnv = RAList.fromList (reverse tcArgs)
-      evalCEK cont' handler (set ceLocal varEnv env) term
+      let varEnv = RAList.fromList (reverse tcArgs)
+      evalWithStackFrame cloi cont handler (set ceLocal varEnv env) mty (StackFrame fqn args' SFDefun cloi) term
     NullaryClosure -> do
-      esStack %== (StackFrame fn mn SFDefun :)
-      let cont' = StackPopC cloi mty cont
-          varEnv = mempty
-      evalCEK cont' handler (set ceLocal varEnv env) term
+      let varEnv = mempty
+      evalWithStackFrame cloi cont handler (set ceLocal varEnv env) mty (StackFrame fqn [] SFDefun cloi) term
   | argLen > arity = throwExecutionError cloi ClosureAppliedToTooManyArgs
   | otherwise = case ca of
     NullaryClosure -> throwExecutionError cloi ClosureAppliedToTooManyArgs
@@ -1617,17 +1631,18 @@ applyLam vc@(C (Closure fn mn ca arity term mty env cloi)) args cont handler
       | null args ->
         returnCEKValue cont handler (VClosure vc)
       | otherwise -> do
-        chargeGasArgs cloi (GAApplyLam fn argLen)
+        chargeGasArgs cloi (GAApplyLam (renderFullyQualName fqn) argLen)
         apply' mempty (NE.toList cloargs) args
   where
   argLen = length args
-  -- Here we enforce an argument to a user fn is a
+  -- Here we enforce an argument to a user fn is a pact value
   apply' e (Arg _ ty _:tys) (x:xs) = do
     x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue cloi x
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e (ty:tys) [] = do
     let env' = set ceLocal e env
-        pclo = PartialClosure (Just (StackFrame fn mn SFDefun)) (ty :| tys) (length tys + 1) term mty env' cloi
+        -- Todo: fix partial SF args
+        pclo = PartialClosure (Just (StackFrame fqn [] SFDefun cloi)) (ty :| tys) (length tys + 1) term mty env' cloi
     returnCEKValue cont handler (VPartialClosure pclo)
   apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
 
@@ -1672,9 +1687,7 @@ applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args cont handler =
   apply' e [] [] = do
     case li of
       Just sf -> do
-        let cont' = StackPopC cloi mty cont
-        esStack %== (sf :)
-        evalCEK cont' handler (set ceLocal e env) term
+        evalWithStackFrame cloi cont handler (set ceLocal e env) mty sf term
       Nothing -> do
         let cont' = EnforcePactValueC cloi cont
         evalCEK cont' handler (set ceLocal e env) term
@@ -1745,9 +1758,9 @@ applyLam (CT (CapTokenClosure fqn argtys arity i)) args cont handler
    -> Eval (EvalResult CEKBigStep CoreBuiltin () Eval)
     #-}
 
-getSfName :: Maybe StackFrame -> T.Text
+getSfName :: Maybe (StackFrame i) -> T.Text
 getSfName = \case
-  Just sf -> renderQualName (QualifiedName (_sfFunction sf) (_sfModule sf))
+  Just sf -> renderFullyQualName (_sfName sf)
   Nothing -> "#lambda"
 
 checkSchema :: M.Map Field PactValue -> Schema -> Bool
@@ -1875,14 +1888,14 @@ runUserGuard
   -> UserGuard QualifiedName PactValue
   -> m (CEKEvalResult step b i m)
 runUserGuard info cont handler env (UserGuard qn args) =
-  getModuleMember info (_cePactDb env) qn >>= \case
-    Dfun d -> do
+  getModuleMemberWithHash info (_cePactDb env) qn >>= \case
+    (Dfun d, mh) -> do
       when (length (_dfunArgs d) /= length args) $ throwExecutionError info CannotApplyPartialClosure
       let env' = sysOnlyEnv env
-      clo <- mkDefunClosure d (_qnModName qn) env'
+      clo <- mkDefunClosure d (qualNameToFqn qn mh) env'
       -- Todo: sys only here
       applyLam (C clo) (VPactValue <$> args) (IgnoreValueC (PBool True) cont) handler
-    d -> throwExecutionError info (InvalidDefKind (defKind (_qnModName qn) d) "run-user-guard")
+    (d, _) -> throwExecutionError info (InvalidDefKind (defKind (_qnModName qn) d) "run-user-guard")
 {-# SPECIALIZE runUserGuard
    :: ()
    -> CoreCEKCont
@@ -2022,9 +2035,9 @@ isKeysetInSigs info cont handler env (KeySet kskeys ksPred) = do
   runCustomPred matched = \case
     TQN qn -> do
       pdb <- viewEvalEnv eePactDb
-      getModuleMember info pdb qn >>= \case
-        Dfun d -> do
-          clo <- mkDefunClosure d (_qnModName qn) env
+      getModuleMemberWithHash info pdb qn >>= \case
+        (Dfun d, mh) -> do
+          clo <- mkDefunClosure d (qualNameToFqn qn mh) env
           let cont' = BuiltinC env info RunKeysetPredC cont
           applyLam (C clo) [VInteger (fromIntegral count), VInteger (fromIntegral matched)] cont' handler
         _ -> failInvariant info "invalid def type for custom keyset predicate"
@@ -2065,4 +2078,3 @@ unconsWorkNodeGas = (MilliGas 100)
 
 tryNodeGas :: MilliGas
 tryNodeGas = (MilliGas 100)
-

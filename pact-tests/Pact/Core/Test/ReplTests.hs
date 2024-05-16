@@ -94,7 +94,7 @@ runReplTest pdb file src interp = do
   ensurePassing = \case
     RCompileValue (InterpretValue v i) -> case v of
       PLiteral (LString msg) -> do
-        let render = replError (SourceCode file src) (PEExecutionError (EvalError msg) i)
+        let render = replError (SourceCode file src) (PEExecutionError (EvalError msg) [] i)
         when (T.isPrefixOf "FAILURE:" msg) $ assertFailure (T.unpack render)
       _ -> pure ()
     _ -> pure ()

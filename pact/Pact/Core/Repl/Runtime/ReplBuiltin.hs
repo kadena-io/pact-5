@@ -78,14 +78,15 @@ coreExpect info b cont handler _env = \case
                 returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
             else returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
           _ -> returnCEK cont handler (VError "evaluation within expect did not return a pact value" info)
-      Right (VError errMsg _) ->
-        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> "evaluation of actual failed with error message: " <> errMsg
+      Right (VError errMsg _) -> do
+        putEvalState es
+        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> " evaluation of actual failed with error message: " <> errMsg
       Right _v ->
         returnCEK cont handler $ VError "FAILURE: expect expression did not return a pact value for comparison" info
       Left err -> do
         putEvalState es
         currSource <- use replCurrSource
-        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> "evaluation of actual failed with error message:\n" <>
+        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> " evaluation of actual failed with error message:\n" <>
           replError currSource err
   args -> argsError info b args
 
@@ -304,14 +305,24 @@ begin' info mt = do
   replTx .= ((,mt) <$> mTxId)
   return ((,mt) <$> mTxId)
 
+emptyTxState :: ReplM b ()
+emptyTxState = do
+  fqdefs <- useEvalState (esLoaded . loAllLoaded)
+  cs <- useEvalState esStack
+  esc <- useEvalState esCheckRecursion
+  let newEvalState =
+        set esStack cs
+        $ set (esLoaded . loAllLoaded) fqdefs
+        $ set esCheckRecursion esc def
+  replEvalState .= newEvalState
+
+
 commitTx :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 commitTx info b cont handler _env = \case
   [] -> do
     pdb <- use (replEvalEnv . eePactDb)
     _txLog <- liftDbFunction info (_pdbCommitTx pdb)
-    fqdefs <- useEvalState (esLoaded . loAllLoaded)
-    cs <- useEvalState esStack
-    replEvalState .= set esStack cs (set (esLoaded . loAllLoaded) fqdefs def)
+    emptyTxState
     use replTx >>= \case
       Just tx -> do
         replTx .= Nothing
@@ -325,9 +336,7 @@ rollbackTx info b cont handler _env = \case
   [] -> do
     pdb <- use (replEvalEnv . eePactDb)
     liftDbFunction info (_pdbRollbackTx pdb)
-    fqdefs <- useEvalState (esLoaded . loAllLoaded)
-    cs <- useEvalState esStack
-    replEvalState .= set esStack cs (set (esLoaded . loAllLoaded) fqdefs def)
+    emptyTxState
     use replTx >>= \case
       Just tx -> do
         replTx .= Nothing
@@ -379,7 +388,7 @@ envNamespacePolicy :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin Sp
 envNamespacePolicy info b cont handler _env = \case
   [VBool allowRoot, VClosure (C clo)] -> do
     pdb <- viewEvalEnv eePactDb
-    let qn = QualifiedName (_cloFnName clo) (_cloModName clo)
+    let qn = fqnToQualName (_cloFqName clo)
     when (_cloArity clo /= 2) $ failInvariant info "Namespace manager function has invalid argument length"
     getModuleMember info pdb qn >>= \case
       Dfun _ -> do
