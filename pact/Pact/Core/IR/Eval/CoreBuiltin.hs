@@ -1643,7 +1643,7 @@ coreDefineNamespace info b cont handler env = \case
         SimpleNamespacePolicy -> do
           nsSize <- sizeOf SizeOfV0 ns
           chargeGasArgs info (GWrite nsSize)
-          liftGasM $ _pdbWrite pdb info Write DNamespaces nsn ns
+          liftGasM info $ _pdbWrite pdb info Write DNamespaces nsn ns
           returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
         SmartNamespacePolicy _ fun -> getModuleMember info pdb fun >>= \case
           Dfun d -> do

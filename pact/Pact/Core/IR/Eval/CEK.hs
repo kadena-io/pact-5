@@ -1358,7 +1358,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
           let rdata = RowData rv
           rvSize <- sizeOf SizeOfV2 rv
           chargeGasArgs info (GWrite rvSize)
-          _ <- liftGasM $ _pdbWrite pdb info wt (tvToDomain tv) rk rdata
+          _ <- liftGasM info $ _pdbWrite pdb info wt (tvToDomain tv) rk rdata
           returnCEKValue cont handler (VString "Write succeeded")
         else returnCEK cont handler (VError "object does not match schema" info)
       PreFoldDbC tv queryClo appClo -> do
@@ -1405,7 +1405,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
             , (Field "key", PString key)
             , (Field "value", PObject rdata)]
       CreateTableC (TableValue tn _ _) -> do
-        liftGasM (_pdbCreateUserTable pdb info tn)
+        liftGasM info (_pdbCreateUserTable pdb info tn)
         returnCEKValue cont handler (VString "TableCreated")
       EmitEventC ct@(CapToken fqn _) ->
         lookupFqName (_ctName ct) >>= \case
@@ -1430,7 +1430,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
             let nsn = _nsName ns
             nsSize <- sizeOf SizeOfV2 ns
             chargeGasArgs info (GWrite nsSize)
-            liftGasM $ _pdbWrite pdb info Write DNamespaces nsn ns
+            liftGasM info $ _pdbWrite pdb info Write DNamespaces nsn ns
             returnCEKValue cont handler $ VString $ "Namespace defined: " <> (_namespaceName nsn)
           else throwExecutionError info $ DefineNamespaceError "Namespace definition not permitted"
         _ ->

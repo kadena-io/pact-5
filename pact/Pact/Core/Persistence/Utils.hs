@@ -23,28 +23,28 @@ readModule pdb = _pdbRead pdb DModules
 
 writeModule :: (MonadEval b i m) => i -> PactDb b i -> WriteType -> ModuleName -> ModuleData b i -> m ()
 writeModule info pdb wt mn md =
-  liftGasM $ _pdbWrite pdb info wt DModules mn md
+  liftGasM info $ _pdbWrite pdb info wt DModules mn md
 
 readKeySet :: PactDb b i -> KeySetName -> IO (Maybe KeySet)
 readKeySet pdb = _pdbRead pdb DKeySets
 
 writeKeySet :: (MonadEval b i m) => i -> PactDb b i -> WriteType -> KeySetName -> KeySet -> m ()
 writeKeySet info pdb wt ksn ks = do
-  liftGasM $ _pdbWrite pdb info wt DKeySets ksn ks
+  liftGasM info $ _pdbWrite pdb info wt DKeySets ksn ks
 
 readDefPacts :: PactDb b i -> DefPactId -> IO (Maybe (Maybe DefPactExec))
 readDefPacts pdb = _pdbRead pdb DDefPacts
 
 writeDefPacts :: (MonadEval b i m) => i -> PactDb b i -> WriteType -> DefPactId -> Maybe DefPactExec -> m ()
 writeDefPacts info pdb wt defpactId defpactExec =
-  liftGasM $ _pdbWrite pdb info wt DDefPacts defpactId defpactExec
+  liftGasM info $ _pdbWrite pdb info wt DDefPacts defpactId defpactExec
 
 readNamespace :: PactDb b i -> NamespaceName -> IO (Maybe Namespace)
 readNamespace pdb = _pdbRead pdb DNamespaces
 
 writeNamespace :: (MonadEval b i m) => i -> PactDb b i -> WriteType -> NamespaceName -> Namespace -> m ()
 writeNamespace info pdb wt namespaceName namespace =
-  liftGasM $ _pdbWrite pdb info wt DNamespaces namespaceName namespace
+  liftGasM info $ _pdbWrite pdb info wt DNamespaces namespaceName namespace
 
 -- | For several db operations, we expect not to use gas. This
 --   function tests that assumption by failing if it is violated.
@@ -59,8 +59,9 @@ dbOpDisallowed2 :: forall i m a. (MonadError (PactError i) m, MonadIO m, Default
 dbOpDisallowed2 = liftIO (putStrLn "OpDisallowed") >> throwError (PEExecutionError (DbOpFailure OpDisallowed) def)
 
 -- | A utility function that lifts a `GasM` action into a `MonadEval` action.
-liftGasM :: MonadEval b i m => GasM (PactError i) a -> m a
-liftGasM action = do
+liftGasM :: MonadEval b i m => i -> GasM (PactError i) a -> m a
+liftGasM info action = do
   gasRef <- viewEvalEnv eeGasRef
   gasLimit <- viewEvalEnv (eeGasModel . gmGasLimit)
-  either throwError pure =<< liftIO (runGasM (GasMEnv gasRef gasLimit) action)
+  either throwError pure =<<
+    liftIO (runGasM info (GasMEnv gasRef gasLimit) action)

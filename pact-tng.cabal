@@ -153,6 +153,7 @@ library
     Pact.Core.Type
     Pact.Core.Pretty
     Pact.Core.Gas
+    Pact.Core.Gas.Types
     Pact.Core.Gas.TableGasModel
     Pact.Core.Info
     Pact.Core.Errors
