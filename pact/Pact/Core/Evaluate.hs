@@ -118,13 +118,13 @@ setupEvalEnv
   :: PactDb CoreBuiltin ()
   -> ExecutionMode -- <- we have this
   -> MsgData -- <- create at type for this
-  -- -> GasEnv -- <- also have this, use constant gas model
+  -> GasModel CoreBuiltin -- <- also have this, use constant gas model
   -> NamespacePolicy
   -> SPVSupport
   -> PublicData
   -> S.Set ExecutionFlag
   -> IO (EvalEnv CoreBuiltin ())
-setupEvalEnv pdb mode msgData np spv pd efs = do
+setupEvalEnv pdb mode msgData gasModel np spv pd efs = do
   gasRef <- newIORef mempty
   pure $ EvalEnv
     { _eeMsgSigs = mkMsgSigs $ mdSigners msgData
@@ -138,7 +138,7 @@ setupEvalEnv pdb mode msgData np spv pd efs = do
     , _eeNatives = coreBuiltinMap
     , _eeNamespacePolicy = np
     , _eeGasRef = gasRef
-    , _eeGasModel = freeGasModel
+    , _eeGasModel = gasModel
     ,_eeSPVSupport = spv
     }
   where
