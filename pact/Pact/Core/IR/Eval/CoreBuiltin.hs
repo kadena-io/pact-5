@@ -1586,7 +1586,7 @@ coreCompose info b cont handler env = \case
     applyLam clo1 [v] cont' handler
   args -> argsError info b args
 
-createPrincipalForGuard :: (MonadEval b i m) => i -> Guard QualifiedName PactValue -> m (Pr.Principal)
+createPrincipalForGuard :: (MonadEval b i m) => i -> Guard QualifiedName PactValue -> m Pr.Principal
 createPrincipalForGuard info = \case
   GKeyset (KeySet ks pf) -> case (toList ks, pf) of
     ([k], KeysAll)
