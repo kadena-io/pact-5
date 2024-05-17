@@ -1,3 +1,6 @@
+(env-gasmodel "table")
+(env-gaslimit 80000)
+
 (module anyschema g
   (defcap g () true)
 

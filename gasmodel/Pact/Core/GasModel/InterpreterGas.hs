@@ -54,7 +54,7 @@ benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) -> do
   where
   mkPactDb = do
     tup@(pdb, _) <- unsafeCreateSqlitePactDb serialisePact ":memory:"
-    prepopulateDb pdb
+    ignoreGas $ prepopulateDb pdb
     _ <- _pdbBeginTx pdb Transactional
     pure tup
 

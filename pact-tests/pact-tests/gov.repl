@@ -1,3 +1,5 @@
+(env-gasmodel "table")
+(env-gaslimit 1500000)
 
 (begin-tx)
 

@@ -1,3 +1,6 @@
+(env-gasmodel "table")
+(env-gaslimit 800000)
+
 (expect "repl starts with empty hash" (hash "") (tx-hash))
 (env-hash (hash "hello"))
 (expect "hash roundtrip" (hash "hello") (tx-hash))

@@ -39,6 +39,7 @@ module Pact.Core.Gas
  , GasMEnv(..)
  , GasM(..)
  , runGasM
+ , ignoreGas
  ) where
 
 import Control.Lens
@@ -259,7 +260,7 @@ constantGasModel unitPrice gl
   }
 
 freeGasModel :: GasModel b
-freeGasModel = constantGasModel mempty (MilliGasLimit mempty)
+freeGasModel = constantGasModel mempty (MilliGasLimit (MilliGas maxBound)) -- TODO: some tests seem to charge gas even with freeGasModel.
 
 millisPerGas :: Word64
 millisPerGas = 1000
@@ -294,3 +295,14 @@ runGasM
   -> IO (Either e a)
 runGasM env (GasM m) =
   runExceptT $ runReaderT m env
+
+ignoreGas
+  :: GasM e a
+  -> IO a
+ignoreGas m = do
+  gasRef <- newIORef (MilliGas 0)
+  let maxLimit = MilliGasLimit (MilliGas maxBound)
+  runGasM (GasMEnv gasRef maxLimit) m >>=
+    \case
+      Left _ -> error "impossible case: ran out of gas with an infinite limit"
+      Right a -> pure a

@@ -1,4 +1,7 @@
 
+(env-gasmodel "table")
+(env-gaslimit 150000)
+
 ;;
 ;; toplevel.repl: test that toplevel-only builtins
 ;; fail in module context but work in non-module context.
