@@ -19,6 +19,8 @@ module Pact.Core.Evaluate
   , EvalBuiltinEnv
   , evalTermExec
   , allModuleExports
+  , ContMsg(..)
+  , evalContinuation
   ) where
 
 import Control.Lens
@@ -71,6 +73,14 @@ data MsgData = MsgData
 
 initMsgData :: Hash -> MsgData
 initMsgData h = MsgData (PObject mempty) def h mempty
+
+data ContMsg = ContMsg
+  { _cmPactId :: !DefPactId
+  , _cmStep :: !Int
+  , _cmRollback :: !Bool
+  , _cmData :: !PactValue
+  , _cmProof :: !(Maybe ContProof)
+  } deriving (Eq,Show)
 
 builtinEnv :: EvalBuiltinEnv
 builtinEnv = coreBuiltinEnv @Eval.CEKBigStep
@@ -292,3 +302,15 @@ evaluateTerms
   -> Eval [CompileValue ()]
 evaluateTerms tls = do
   traverse (interpretTopLevel builtinEnv) tls
+
+evalContinuation :: EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> ContMsg -> IO (Either (PactError ()) (EvalResult [Lisp.TopLevel ()]))
+evalContinuation evalEnv evalSt cm = case _cmProof cm of
+  Nothing ->
+    interpret (setStep Nothing) evalSt (Left Nothing)
+  Just p -> do
+    etpe <- (_spvVerifyContinuation . _eeSPVSupport $ evalEnv) p
+    pe <- either contError return etpe
+    interpret (setStep (_peYield pe)) evalSt (Left $ Just pe)
+  where
+    contError spvErr = throw $ PEExecutionError (SPVVerificationFailure spvErr) [] ()
+    setStep y = set eeDefPactStep (Just $ DefPactStep (_cmStep cm) (_cmRollback cm) (_cmPactId cm) y) evalEnv

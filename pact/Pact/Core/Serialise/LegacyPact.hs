@@ -1,7 +1,6 @@
 -- |
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE PartialTypeSignatures  #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Pact.Core.Serialise.LegacyPact
   ( decodeModuleData
