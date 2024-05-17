@@ -76,6 +76,7 @@ import Pact.Core.IR.Eval.Runtime
 import Pact.Core.StableEncoding
 import Pact.Core.IR.Eval.CEK
 import Pact.Core.SizeOf
+import Pact.Core.SPV
 
 import qualified Pact.Core.Pretty as Pretty
 import qualified Pact.Core.Principal as Pr
@@ -1840,6 +1841,18 @@ poseidonHash info _b _cont _handler _env _args = failInvariant info "crypto disa
 
 #endif
 
+-----------------------------------
+-- SPV
+-----------------------------------
+
+coreVerifySPV :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
+coreVerifySPV info b cont handler _env = \case
+  [VString proofType, VObject o] -> do
+    SPVSupport f _ <- viewEvalEnv eeSPVSupport
+    liftIO (f proofType (ObjectData o)) >>= \case
+      Left err -> throwExecutionError info (SPVVerificationFailure err)
+      Right (ObjectData o') -> returnCEKValue cont handler (VObject o')
+  args -> argsError info b args
 
 -----------------------------------
 -- Builtin exports
@@ -2002,3 +2015,4 @@ coreBuiltinRuntime = \case
   CoreDec -> coreDec
   CoreCond -> coreCond
   CoreIdentity -> coreIdentity
+  CoreVerifySPV -> coreVerifySPV

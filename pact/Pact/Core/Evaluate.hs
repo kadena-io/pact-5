@@ -51,6 +51,7 @@ import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Namespace
 import Pact.Core.IR.Desugar
+import Pact.Core.SPV
 import qualified Pact.Core.IR.Eval.CEK as Eval
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
@@ -108,12 +109,12 @@ setupEvalEnv
   -> ExecutionMode -- <- we have this
   -> MsgData -- <- create at type for this
   -- -> GasEnv -- <- also have this, use constant gas model
-  -> NamespacePolicy -- <- also have this, as-is
-  -- -> SPVSupport -- <- WIP: Ignore for now
-  -> PublicData -- <- we have this
+  -> NamespacePolicy
+  -> SPVSupport
+  -> PublicData
   -> S.Set ExecutionFlag
   -> IO (EvalEnv CoreBuiltin ())
-setupEvalEnv pdb mode msgData np pd efs = do
+setupEvalEnv pdb mode msgData np spv pd efs = do
   gasRef <- newIORef mempty
   pure $ EvalEnv
     { _eeMsgSigs = mkMsgSigs $ mdSigners msgData
@@ -128,6 +129,7 @@ setupEvalEnv pdb mode msgData np pd efs = do
     , _eeNamespacePolicy = np
     , _eeGasRef = gasRef
     , _eeGasModel = freeGasModel
+    ,_eeSPVSupport = spv
     }
   where
   mkMsgSigs ss = M.fromList $ map toPair ss
