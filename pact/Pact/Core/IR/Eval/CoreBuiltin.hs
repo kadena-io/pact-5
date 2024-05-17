@@ -1634,7 +1634,9 @@ coreCreatePrincipal info b cont handler _env = \case
 
 coreIsPrincipal :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreIsPrincipal info b cont handler _env = \case
-  [VString p] -> returnCEKValue cont handler $ VBool $ isRight $ parseOnly Pr.principalParser p
+  [VString p] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length p
+    returnCEKValue cont handler $ VBool $ isRight $ parseOnly Pr.principalParser p
   args -> argsError info b args
 
 coreTypeOfPrincipal :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
