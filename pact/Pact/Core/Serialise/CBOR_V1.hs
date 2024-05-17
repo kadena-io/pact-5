@@ -818,6 +818,7 @@ instance Serialise CoreBuiltin where
     127 -> pure CoreFloorPrec
     128 -> pure CoreCond
     129 -> pure CoreIdentity
+    130 -> pure CoreVerifySPV
     _ -> fail "unexpected decoding"
 
 

@@ -142,6 +142,7 @@ data EvalEnv b i
   , _eeGasModel :: GasModel b
   -- ^ The current gas model
   , _eeSPVSupport :: SPVSupport
+  -- ^ The SPV backend
   } deriving (Generic)
 
 instance (NFData b, NFData i) => NFData (EvalEnv b i)
