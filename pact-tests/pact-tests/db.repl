@@ -1,6 +1,3 @@
-(env-gasmodel "table")
-(env-gaslimit 1500000)
-
 ;  (env-exec-config ["DisablePact44"])
 (env-data { "k": { "keys": ["admin"], "pred": "keys-all" },
             "k2": { "keys": ["admin"], "pred": "keys-all" } })
