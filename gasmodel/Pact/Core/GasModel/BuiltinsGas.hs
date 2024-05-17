@@ -680,6 +680,12 @@ benchCreatePrincipal pdb =
     ]
   ]
 
+benchIsPrincipal :: BuiltinBenches
+benchIsPrincipal pdb =
+  [ runNativeBenchmarkPrepared [("s", PString $ "r:" <> str)] pdb title "(is-principal s)"
+  | (title, PString str) <- take 3 $ enumExpString "a" 1000 100
+  ]
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -769,6 +775,7 @@ benchesForBuiltin bn = case bn of
   CoreDays -> omittedDeliberately
   CoreCompose -> omittedDeliberately
   CoreCreatePrincipal -> benchCreatePrincipal
+  CoreIsPrincipal -> benchIsPrincipal
   _ -> const []
   where
   omittedDeliberately = const []
