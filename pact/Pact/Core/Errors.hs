@@ -38,7 +38,7 @@ import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Info
-import Pact.Core.Gas
+import Pact.Core.Gas.Types
 import Pact.Core.Pretty as Pretty
 import Pact.Core.Hash
 import Pact.Core.DefPacts.Types

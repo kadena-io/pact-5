@@ -49,43 +49,16 @@ import Control.Monad.Except
 import Data.IORef
 import Data.Decimal(Decimal)
 import Data.Word(Word64)
-import Data.Monoid(Sum(..))
 import Data.Text(Text)
-import Data.Semiring(Semiring)
 import GHC.Generics
 
 import qualified Data.Text as T
 
 import Pact.Core.Pretty
+import Pact.Core.Gas.Types
+import Pact.Core.Errors
+import Control.Exception
 
--- | Gas in pact-core, represented as an unsigned
--- integer, units will go in terms of 1e3 = 2ns
-newtype MilliGas
-  = MilliGas Word64
-  deriving (Eq, Ord, Show)
-  deriving newtype NFData
-  deriving (Semigroup, Monoid) via (Sum Word64)
-  deriving (Semiring, Enum) via Word64
-
-instance Pretty MilliGas where
-  pretty (MilliGas g) = pretty g <> "mG"
-
-newtype MilliGasLimit
-  = MilliGasLimit MilliGas
-  deriving (Eq, Ord, Show)
-  deriving newtype NFData
-
--- | Gas in pact-core, represented as an unsigned
--- integer, units will go in terms of 1e3 = 2ns
-newtype Gas
-  = Gas Word64
-  deriving (Eq, Ord, Show)
-  deriving (Semigroup, Monoid) via (Sum Word64)
-  deriving (Semiring, Enum) via Word64
-  deriving newtype NFData
-
-type GasLimit = Gas
-type GasPrice = Decimal
 
 -- | Flat structure of all types of nodes used in evaluation that have an evaluator
 -- type case
@@ -180,8 +153,6 @@ data GasArgs
   | GModuleMemory !Word64
   | GCountBytes
   -- ^ Cost of computing SizeOf for N bytes.
-  | GPassthrough MilliGas
-  -- ^ Charge precise gas -- TODO: TEMPORARY
   deriving (Show, Generic, NFData)
 
 instance Pretty GasArgs where
@@ -262,17 +233,6 @@ constantGasModel unitPrice gl
 freeGasModel :: GasModel b
 freeGasModel = constantGasModel mempty (MilliGasLimit (MilliGas maxBound)) -- TODO: some tests seem to charge gas even with freeGasModel.
 
-millisPerGas :: Word64
-millisPerGas = 1000
-
-gasToMilliGas :: Gas -> MilliGas
-gasToMilliGas (Gas n) = MilliGas (n * millisPerGas)
-{-# INLINE gasToMilliGas #-}
-
-milliGasToGas :: MilliGas -> Gas
-milliGasToGas (MilliGas n) = Gas (n `quot` millisPerGas)
-{-# INLINE milliGasToGas #-}
-
 data GasMEnv
   = GasMEnv
   { _gasMRef :: IORef MilliGas
@@ -290,19 +250,24 @@ newtype GasM e a
   , MonadIO) via (ReaderT GasMEnv (ExceptT e IO))
 
 runGasM
-  :: GasMEnv
-  -> GasM e a
-  -> IO (Either e a)
-runGasM env (GasM m) =
-  runExceptT $ runReaderT m env
+  :: i
+  -> GasMEnv
+  -> GasM (PactError i) a
+  -> IO (Either (PactError i) a)
+runGasM info env (GasM m) = do
+  res <- try $ runExceptT $ runReaderT m env
+  case res of
+    Left (e :: DbOpException) -> pure $ Left $ PEExecutionError (DbOpFailure e) info
+    Right a -> pure a
 
 ignoreGas
-  :: GasM e a
+  :: i
+  -> GasM (PactError i) a
   -> IO a
-ignoreGas m = do
+ignoreGas info m = do
   gasRef <- newIORef (MilliGas 0)
   let maxLimit = MilliGasLimit (MilliGas maxBound)
-  runGasM (GasMEnv gasRef maxLimit) m >>=
+  runGasM info (GasMEnv gasRef maxLimit) m >>=
     \case
       Left _ -> error "impossible case: ran out of gas with an infinite limit"
       Right a -> pure a
