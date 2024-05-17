@@ -344,6 +344,7 @@ data EvalError
   | EnforcePactVersionFailure V.Version (Maybe V.Version)
   | EnforcePactVersionParseFailure Text
   | RuntimeRecursionDetected QualifiedName
+  | SPVVerificationFailure Text
   deriving (Show, Generic)
 
 instance NFData EvalError
@@ -480,6 +481,7 @@ instance Pretty EvalError where
     e@YieldProvenanceDoesNotMatch{} -> pretty (show e)
     e@MismatchingKeysetNamespace{} -> pretty (show e)
     e@RuntimeRecursionDetected{} -> pretty (show e)
+    e@SPVVerificationFailure{} -> pretty (show e)
 
 
 

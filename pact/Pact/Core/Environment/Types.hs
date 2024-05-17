@@ -17,7 +17,7 @@ module Pact.Core.Environment.Types
  ( EvalEnv(..)
  , eeMsgSigs, eePactDb
  , eeHash, eeMsgBody
- , eeDefPactStep
+ , eeDefPactStep, eeSPVSupport
  , eePublicData, eeMode, eeFlags
  , eeNatives, eeGasModel
  , eeNamespacePolicy, eeGasRef
@@ -79,6 +79,7 @@ import Pact.Core.Namespace
 import Pact.Core.SizeOf
 import Pact.Core.StackFrame
 import Pact.Core.Builtin (IsBuiltin)
+import Pact.Core.SPV
 
 -- | Execution flags specify behavior of the runtime environment,
 -- with an orientation towards some alteration of a default behavior.
@@ -140,6 +141,7 @@ data EvalEnv b i
   -- ^ The gas ref
   , _eeGasModel :: GasModel b
   -- ^ The current gas model
+  , _eeSPVSupport :: SPVSupport
   } deriving (Generic)
 
 instance (NFData b, NFData i) => NFData (EvalEnv b i)
@@ -230,4 +232,5 @@ defaultEvalEnv pdb m = do
     , _eeNamespacePolicy = SimpleNamespacePolicy
     , _eeGasRef = gasRef
     , _eeGasModel = freeGasModel
+    , _eeSPVSupport = noSPVSupport
     }

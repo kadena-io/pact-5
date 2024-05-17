@@ -683,6 +683,7 @@ instance Serialise CoreBuiltin where
     CoreFloorPrec -> encodeWord 127
     CoreCond -> encodeWord 128
     CoreIdentity -> encodeWord 129
+    CoreVerifySPV -> encodeWord 130
 
   decode = decodeWord >>= \case
     0 -> pure CoreAdd

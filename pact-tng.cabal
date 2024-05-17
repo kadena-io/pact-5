@@ -172,6 +172,7 @@ library
     Pact.Core.RuntimeParsers
     Pact.Core.Evaluate
     Pact.Core.Scheme
+    Pact.Core.SPV
     Pact.Core.Repl
     Pact.Core.SizeOf
     Pact.Core.StackFrame

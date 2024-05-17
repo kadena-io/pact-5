@@ -213,6 +213,7 @@ data CoreBuiltin
   | CoreDec
   | CoreCond
   | CoreIdentity
+  | CoreVerifySPV
   deriving (Eq, Show, Ord, Bounded, Enum, Generic)
 
 instance NFData CoreBuiltin
@@ -380,9 +381,10 @@ coreBuiltinToText = \case
   CoreDec -> "dec"
   CoreCond -> "cond"
   CoreIdentity -> "identity"
+  CoreVerifySPV -> "verify-spv"
 
 -- | Our `CoreBuiltin` user-facing representation.
--- note: `coreBuiltinToUserText`
+-- note: `coreBuiltinToUserText` is primarily for pretty printing
 coreBuiltinToUserText :: CoreBuiltin -> Text
 coreBuiltinToUserText = \case
   -- Addition
@@ -526,6 +528,7 @@ coreBuiltinToUserText = \case
   CoreDec -> "dec"
   CoreCond -> "cond"
   CoreIdentity -> "identity"
+  CoreVerifySPV -> "verify-spv"
 
 instance IsBuiltin CoreBuiltin where
   builtinName = NativeName . coreBuiltinToText
@@ -675,6 +678,7 @@ instance IsBuiltin CoreBuiltin where
     CoreDec -> 1
     CoreCond -> 1
     CoreIdentity -> 1
+    CoreVerifySPV -> 2
 
 
 coreBuiltinNames :: [Text]
