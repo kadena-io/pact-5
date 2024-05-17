@@ -1,6 +1,3 @@
-(env-gasmodel "table")
-(env-gaslimit 500000)
-
 (begin-tx)
 (define-keyset 'k (sig-keyset))
 

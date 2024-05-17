@@ -1,6 +1,3 @@
-(env-gasmodel "table")
-(env-gaslimit 80000)
-
 (module lazyEval g
   (defcap g () true)
 
