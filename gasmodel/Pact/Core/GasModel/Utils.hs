@@ -399,6 +399,9 @@ runNativeBenchmarkPreparedStMod (Endo stMod) envVars = runNativeBenchmark' pure 
 dummyTx :: PactDb b i -> IO () -> [C.Benchmark] -> [C.Benchmark]
 dummyTx pdb initDbState bs = C.envWithCleanup (_pdbBeginTx pdb Transactional >> initDbState) (const $ _pdbRollbackTx pdb) . const <$> bs
 
+ignoreWrites :: PactDb b i -> PactDb b i
+ignoreWrites pdb = pdb { _pdbWrite = \_ _ _ _ -> pure () }
+
 -- Closures
 unitClosureNullary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m
 unitClosureNullary env
