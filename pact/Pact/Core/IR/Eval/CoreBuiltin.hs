@@ -1653,6 +1653,7 @@ coreValidatePrincipal :: (CEKEval step b i m, MonadEval b i m) => NativeFunction
 coreValidatePrincipal info b cont handler _env = \case
   [VGuard g, VString s] -> do
     pr' <- createPrincipalForGuard info g
+    chargeGasArgs info $ GComparison $ TextComparison s
     returnCEKValue cont handler $ VBool $ Pr.mkPrincipalIdent pr' == s
   args -> argsError info b args
 
