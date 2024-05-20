@@ -69,7 +69,7 @@ import Control.Monad.Catch as Exceptions
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
 
-import Pact.Core.Persistence
+import Pact.Core.Persistence.Types
 import Pact.Core.Pretty
 import Pact.Core.Capabilities
 import Pact.Core.Guards
@@ -185,13 +185,12 @@ data EvalState b i
   , _esDefPactExec :: !(Maybe DefPactExec)
   , _esGasLog :: !(Maybe [GasLogEntry b])
     -- ^ Sequence of gas expendature events.
-  , _countBytesCounter :: Int
   } deriving (Show, Generic)
 
 instance (NFData b, NFData i) => NFData (EvalState b i)
 
 instance Default (EvalState b i) where
-  def = EvalState def [] [] mempty Nothing Nothing 0
+  def = EvalState def [] [] mempty Nothing Nothing
 
 makeClassy ''EvalState
 
@@ -241,7 +240,7 @@ defaultEvalEnv pdb m = do
 
 type Bytes = Word64
 
-newtype SizeOfByteLimit 
+newtype SizeOfByteLimit
   = SizeOfByteLimit Bytes
   deriving Show
 

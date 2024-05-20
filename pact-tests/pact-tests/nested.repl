@@ -1,0 +1,43 @@
+(env-gasmodel "table")
+(env-gaslimit 80000)
+
+(env-gas 0)
+(env-gas)
+(module m G
+  (defcap G () true)
+  (defschema fooschema
+    "schema fo foo superlists"
+    ; superfoo: [[[[[[[[[[[integer]]]]]]]]]]]
+    superfoo: [[[[[[[[[integer]]]]]]]]]
+    )
+  (deftable superfoo-table:{fooschema})
+
+  (defun go()
+    "docs"
+
+    (let ((foo1 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1,1, 1, 1, 1, 1])
+          (foo2 [foo1, foo1, foo1, foo1, foo1, foo1, foo1, foo1, foo1])
+          (foo3 [foo2, foo2, foo2, foo2, foo2, foo2, foo2, foo2, foo2])
+          (foo4 [foo3, foo3, foo3, foo3, foo3, foo3, foo3, foo3, foo3])
+          (foo5 [foo4, foo4, foo4, foo4, foo4, foo4, foo4, foo4, foo4])
+          (foo6 [foo5, foo5, foo5, foo5, foo5, foo5, foo5, foo5, foo5])
+          (foo7 [foo6, foo6, foo6, foo6, foo6, foo6, foo6, foo6, foo6])
+          (foo8 [foo7, foo7, foo7, foo7, foo7, foo7, foo7, foo7, foo7])
+          (foo9 [foo8, foo8, foo8, foo8, foo8, foo8, foo8, foo8, foo8])
+          (fooa [foo9, foo9, foo9, foo9, foo9, foo9, foo9, foo9, foo9])
+          (foob [fooa, fooa, fooa, fooa, fooa, fooa, fooa, fooa, fooa])
+          (fooid "1")
+        )
+
+        ; (insert superfoo-table fooid {
+        ;   "superfoo": foo9
+        ; })
+        1
+    )
+  )
+)
+
+(create-table superfoo-table)
+
+(go)
+(env-gas)

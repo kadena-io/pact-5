@@ -21,15 +21,16 @@ import qualified Database.SQLite3.Direct as Direct
 import Data.ByteString (ByteString)
 import qualified Data.Map.Strict as Map
 
+import qualified Pact.Core.Errors as E
 import Pact.Core.Persistence
 import Pact.Core.Guards (renderKeySetName, parseAnyKeysetName)
 import Pact.Core.Names
-import qualified Pact.Core.Errors as E
-import Pact.Core.Gas (MilliGas)
+import Pact.Core.Gas
 import Pact.Core.PactValue
 import Pact.Core.Literal
 import Control.Exception (throwIO)
 import Pact.Core.Serialise
+import Pact.Core.Errors
 
 -- | Acquire a SQLite-backed `PactDB`.
 --
@@ -88,7 +89,7 @@ initializePactDb serial db = do
     , _pdbRead = read' serial db
     , _pdbWrite = write' serial db txId txLog
     , _pdbKeys = readKeys db
-    , _pdbCreateUserTable = createUserTable serial db txLog
+    , _pdbCreateUserTable = \info tn -> createUserTable info serial db txLog tn
     , _pdbBeginTx = beginTx txId db txLog
     , _pdbCommitTx = commitTx txId db txLog
     , _pdbRollbackTx = rollbackTx db txLog
@@ -176,16 +177,16 @@ rollbackTx db txLog = do
   SQL.exec db "ROLLBACK TRANSACTION"
   writeIORef txLog []
 
-createUserTable :: PactSerialise b i -> SQL.Database -> IORef [TxLog ByteString] -> TableName -> IO ()
-createUserTable serial db txLog tbl = do
-  liftIO $ SQL.exec db stmt
+createUserTable :: i -> PactSerialise b i -> SQL.Database -> IORef [TxLog ByteString] -> TableName -> GasM (PactError i) ()
+createUserTable info serial db txLog tbl = do
   let
     rd = RowData $ Map.singleton (Field "utModule")
          (PObject $ Map.fromList
           [ (Field "namespace", maybe (PLiteral LUnit) (PString . _namespaceName) (_mnNamespace (_tableModuleName tbl)))
           , (Field "name", PString (_tableName tbl))
           ])
-  rdEnc <- _encodeRowData serial (\_ -> return ()) rd
+  rdEnc <- _encodeRowData serial info rd
+  liftIO $ SQL.exec db stmt
   liftIO $ modifyIORef' txLog (TxLog "SYS:usertables" (_tableName tbl) rdEnc :)
 
   where
@@ -197,24 +198,22 @@ createUserTable serial db txLog tbl = do
     tblName = "\"" <> toUserTable tbl <> "\""
 
 write'
-  :: forall k v b i m.
-     MonadIO m
-  =>
-     PactSerialise b i
+  :: forall k v b i
+  .  PactSerialise b i
   -> SQL.Database
   -> IORef TxId
   -> IORef [TxLog ByteString]
-  -> (MilliGas -> m ())
+  -> i
   -> WriteType
   -> Domain k v b i
   -> k
   -> v
-  -> m ()
-write' serial db txId txLog gasCallback wt domain k v = do
+  -> GasM (PactError i) ()
+write' serial db txId txLog info wt domain k v = do
   case domain of
     DUserTables tbl -> liftIO (checkInsertOk tbl k) >>= \case
       Nothing -> do
-        encoded <- _encodeRowData serial gasCallback v
+        encoded <- _encodeRowData serial info v
         liftIO $ withStmt db ("INSERT INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
           let
             RowKey k' = k
@@ -227,7 +226,7 @@ write' serial db txId txLog gasCallback wt domain k v = do
           RowData old' = old
           RowData v' = v
           new = RowData (Map.union v' old')
-        encoded <- _encodeRowData serial gasCallback new
+        encoded <- _encodeRowData serial info new
         liftIO $ withStmt db ("INSERT OR REPLACE INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
           let
             RowKey k' = k

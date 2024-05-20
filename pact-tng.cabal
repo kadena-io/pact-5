@@ -97,6 +97,7 @@ common pact-common
     FlexibleInstances
     NumericUnderscores
     TypeOperators
+    PartialTypeSignatures
 
 -- internal crypto lirbary
 library pact-crypto
@@ -152,10 +153,13 @@ library
     Pact.Core.Type
     Pact.Core.Pretty
     Pact.Core.Gas
+    Pact.Core.Gas.Types
     Pact.Core.Gas.TableGasModel
     Pact.Core.Info
     Pact.Core.Errors
     Pact.Core.Persistence
+    Pact.Core.Persistence.Types
+    Pact.Core.Persistence.Utils
     Pact.Core.Persistence.SQLite
     Pact.Core.Persistence.MockPersistence
     Pact.Core.PactValue
@@ -278,7 +282,7 @@ benchmark bench
     , mtl
     , pact-tng
     , text
-  ghc-options: -WAll -threaded -rtsopts "-with-rtsopts=-N" 
+  ghc-options: -WAll -threaded -rtsopts "-with-rtsopts=-N"
   hs-source-dirs: bench
   default-language: Haskell2010
 

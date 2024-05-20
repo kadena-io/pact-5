@@ -1358,7 +1358,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
           let rdata = RowData rv
           rvSize <- sizeOf SizeOfV2 rv
           chargeGasArgs info (GWrite rvSize)
-          _ <- liftDbFunction2 info $ _pdbWrite pdb serializationGasser wt (tvToDomain tv) rk rdata
+          _ <- liftGasM info $ _pdbWrite pdb info wt (tvToDomain tv) rk rdata
           returnCEKValue cont handler (VString "Write succeeded")
         else returnCEK cont handler (VError "object does not match schema" info)
       PreFoldDbC tv queryClo appClo -> do
@@ -1405,7 +1405,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
             , (Field "key", PString key)
             , (Field "value", PObject rdata)]
       CreateTableC (TableValue tn _ _) -> do
-        liftDbFunction info (_pdbCreateUserTable pdb tn)
+        liftGasM info (_pdbCreateUserTable pdb info tn)
         returnCEKValue cont handler (VString "TableCreated")
       EmitEventC ct@(CapToken fqn _) ->
         lookupFqName (_ctName ct) >>= \case
@@ -1422,7 +1422,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
       DefineKeysetC ksn newKs -> do
         newKsSize <- sizeOf SizeOfV2 newKs
         chargeGasArgs info (GWrite newKsSize)
-        liftDbFunction2 info $ writeKeySet pdb Write ksn newKs
+        _ <- writeKeySet info pdb Write ksn newKs
         returnCEKValue cont handler (VString "Keyset write success")
       DefineNamespaceC ns -> case v of
         PBool allow ->
@@ -1430,7 +1430,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
             let nsn = _nsName ns
             nsSize <- sizeOf SizeOfV2 ns
             chargeGasArgs info (GWrite nsSize)
-            liftDbFunction2 info $ _pdbWrite pdb serializationGasser Write DNamespaces nsn ns
+            liftGasM info $ _pdbWrite pdb info Write DNamespaces nsn ns
             returnCEKValue cont handler $ VString $ "Namespace defined: " <> (_namespaceName nsn)
           else throwExecutionError info $ DefineNamespaceError "Namespace definition not permitted"
         _ ->
@@ -1543,7 +1543,7 @@ applyContToValue (DefPactStepC env cont) handler v =
           done = (not (_psRollback ps) && isLastStep) || _psRollback ps
         when (nestedPactsNotAdvanced pe ps) $
           throwExecutionError def (NestedDefpactsNotAdvanced (_peDefPactId pe))
-        liftDbFunction2 def $ writeDefPacts pdb Write (_psDefPactId ps)
+        writeDefPacts def pdb Write (_psDefPactId ps) -- TODO: def used because we have no `info`.
             (if done then Nothing else Just pe)
         emitXChainEvents (_psResume ps) pe
         returnCEKValue cont handler v

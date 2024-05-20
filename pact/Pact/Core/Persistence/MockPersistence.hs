@@ -8,24 +8,30 @@ module Pact.Core.Persistence.MockPersistence (
 
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad (unless)
+import Control.Exception(throwIO)
+import Control.Lens ((^?), (^.), ix, view)
 import Data.Maybe (isJust, fromMaybe)
 import Data.List (find)
-import Control.Lens ((^?), (^.), ix, view)
 import Data.Map (Map)
-import qualified Data.Map.Strict as Map
 import Data.IORef
-import Control.Exception(throwIO)
+import qualified Data.Map.Strict as Map
 import qualified Data.Map.Strict as M
 import Data.ByteString (ByteString)
+
+
 import Pact.Core.Guards
 import Pact.Core.Namespace
 import Pact.Core.Names
 import Pact.Core.DefPacts.Types (DefPactExec)
-import qualified Pact.Core.Persistence as Persistence
 import Pact.Core.Persistence
-import qualified Pact.Core.Errors as Errors
 import Pact.Core.Serialise
-import Pact.Core.Gas (MilliGas)
+import Pact.Core.Gas
+import Pact.Core.Errors
+
+import qualified Pact.Core.Errors as Errors
+import qualified Pact.Core.Persistence as Persistence
+import Pact.Core.PactValue
+import Pact.Core.Literal
 
 
 type TxLogQueue = IORef (Map TxId [TxLog ByteString])
@@ -45,7 +51,7 @@ mockPactDb serial = do
     , _pdbRead = read' refKs refMod refNS refUsrTbl refPacts
     , _pdbWrite = write refKs refMod refNS refUsrTbl refTxId refTxLog refPacts
     , _pdbKeys = keys refKs refMod refNS refUsrTbl refPacts
-    , _pdbCreateUserTable = createUsrTable refUsrTbl refTxId refTxLog
+    , _pdbCreateUserTable = \info tn -> createUsrTable info refUsrTbl refTxId refTxLog tn
     , _pdbBeginTx = beginTx refRb refTxId refTxLog refMod refKs refUsrTbl
     , _pdbCommitTx = commitTx refRb refTxId refTxLog refMod refKs refUsrTbl
     , _pdbRollbackTx = rollbackTx refRb refTxLog refMod refKs refUsrTbl
@@ -137,19 +143,26 @@ mockPactDb serial = do
       pure (M.keys r)
 
   createUsrTable
-    :: IORef (Map TableName (Map RowKey RowData))
+    :: i
+    -> IORef (Map TableName (Map RowKey RowData))
     -> IORef TxId
     -> TxLogQueue
     -> TableName
-    -> IO ()
-  createUsrTable refUsrTbl _refTxId _refTxLog tbl = do
-    ref <- readIORef refUsrTbl
+    -> GasM (PactError i) ()
+  createUsrTable info refUsrTbl _refTxId _refTxLog tbl = do
+    let rd = RowData $ Map.singleton (Field "utModule")
+          (PObject $ Map.fromList
+            [ (Field "namespace", maybe (PLiteral LUnit) (PString . _namespaceName) (_mnNamespace (_tableModuleName tbl)))
+            , (Field "name", PString (_tableName tbl))
+            ])
+    _rdEnc <- _encodeRowData serial info rd
+    ref <- liftIO $ readIORef refUsrTbl
     case M.lookup tbl ref of
       Nothing -> do
         -- TODO: Do we need a TxLog when a usertable is created?
-        modifyIORef refUsrTbl (M.insert tbl mempty)
+        liftIO $ modifyIORef refUsrTbl (M.insert tbl mempty)
         pure ()
-      Just _ -> throwIO (Errors.TableAlreadyExists tbl)
+      Just _ -> liftIO $ throwIO (Errors.TableAlreadyExists tbl)
 
   read'
     :: forall k v
@@ -175,25 +188,25 @@ mockPactDb serial = do
     unless (isJust (M.lookup tbl r)) $ throwIO (Errors.NoSuchTable tbl)
 
   write
-    :: forall k v m
-    .  MonadIO m
-    => IORef (Map KeySetName KeySet)
+    :: forall k v
+    .  IORef (Map KeySetName KeySet)
     -> IORef (Map ModuleName (ModuleData b i))
     -> IORef (Map NamespaceName Namespace)
     -> IORef (Map TableName (Map RowKey RowData))
     -> IORef TxId
     -> TxLogQueue
     -> IORef (Map DefPactId (Maybe DefPactExec))
-    -> (MilliGas -> m ())
+    -> i
     -> WriteType
     -> Domain k v b i
     -> k
     -> v
-    -> m ()
-  write refKs refMod refNS refUsrTbl refTxId refTxLog refPacts gasHandler wt domain k v = case domain of
+    -> GasM (PactError i) ()
+  write refKs refMod refNS refUsrTbl refTxId refTxLog refPacts info wt domain k v = case domain of
+    -- Todo : incrementally serialize other types
     DKeySets -> liftIO $ writeKS refKs refTxId refTxLog k v
     DModules -> liftIO $ writeMod refMod refTxId refTxLog v
-    DUserTables tbl -> writeRowData refUsrTbl refTxId refTxLog tbl gasHandler wt k v
+    DUserTables tbl -> writeRowData refUsrTbl refTxId refTxLog tbl info wt k v
     DDefPacts -> liftIO $ writePacts' refPacts refTxId refTxLog k v
     DNamespaces -> liftIO $ writeNS refNS refTxId refTxLog k v
 
@@ -204,19 +217,18 @@ mockPactDb serial = do
     pure (r ^? ix tbl . ix k)
 
   writeRowData
-    :: MonadIO m
-    => IORef (Map TableName (Map RowKey RowData))
+    :: IORef (Map TableName (Map RowKey RowData))
     -> IORef TxId
     -> TxLogQueue
     -> TableName
-    -> (MilliGas -> m ())
+    -> i
     -> WriteType
     -> RowKey
     -> RowData
-    -> m ()
-  writeRowData ref refTxId refTxLog tbl handleGas wt k v = checkTable tbl ref *> case wt of
+    -> GasM (PactError i) ()
+  writeRowData ref refTxId refTxLog tbl info wt k v = checkTable tbl ref *> case wt of
     Write -> do
-      encodedData <- _encodeRowData serial handleGas v
+      encodedData <- _encodeRowData serial info v
       liftIO $ record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
       liftIO $ modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
     Insert -> do
@@ -224,7 +236,7 @@ mockPactDb serial = do
       case M.lookup tbl r >>= M.lookup k of
         Just _ -> liftIO $ throwIO Errors.WriteException
         Nothing -> do
-          encodedData <- _encodeRowData serial handleGas v
+          encodedData <- _encodeRowData serial info v
           liftIO $ record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
           liftIO $ modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
     Update -> do
@@ -233,7 +245,7 @@ mockPactDb serial = do
         Just (RowData m) -> do
           let (RowData v') = v
               nrd = RowData (M.union v' m)
-          encodedData <- _encodeRowData serial handleGas nrd
+          encodedData <- _encodeRowData serial info nrd
           liftIO $ record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
           liftIO $ modifyIORef' ref (M.insertWith M.union tbl (M.singleton k nrd))
         Nothing -> liftIO $ throwIO Errors.WriteException
