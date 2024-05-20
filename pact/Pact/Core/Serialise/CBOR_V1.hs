@@ -90,11 +90,12 @@ decodeNamespace bs =either (const Nothing) (Just . snd) (deserialiseFromBytes de
 -- most likely not, maybe just pre/post?
 chargeGasMSerialize :: i -> MilliGas -> GasM (PactError i) ()
 chargeGasMSerialize info amount = do
+  let fakeStackFrame = [] -- TODO: Greg: use real stack frame?
   (GasMEnv gasRef mgl@(MilliGasLimit gasLimit)) <- ask
   !currGas <- liftIO $ readIORef gasRef
   let !used = currGas <> amount
   liftIO (writeIORef gasRef used)
-  when (used > gasLimit) $ throwError (PEExecutionError (GasExceeded mgl used) info)
+  when (used > gasLimit) $ throwError (PEExecutionError (GasExceeded mgl used) fakeStackFrame info)
 
 encodeRowData :: i -> RowData -> GasM (PactError i) ByteString
 encodeRowData info rd = do

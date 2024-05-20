@@ -18,15 +18,12 @@ module Pact.Core.Errors
  , DbOpException(..)
  , peInfo
  , viewErrorStack
-  , liftDbFunction
- , liftDbFunction2 -- TODO Rename
  ) where
 
 import Control.Lens hiding (ix)
 import Control.Exception
 import Data.Text(Text)
 import Data.Dynamic (Typeable)
-import qualified Control.Monad.Catch as Exceptions
 import qualified Data.Version as V
 import qualified PackageInfo_pact_tng as PI
 
@@ -40,7 +37,6 @@ import Pact.Core.Info
 import Pact.Core.Gas.Types
 import Pact.Core.Pretty as Pretty
 import Pact.Core.Hash
-import Pact.Core.Persistence
 import Pact.Core.StackFrame
 import Pact.Core.DefPacts.Types
 
@@ -544,22 +540,3 @@ viewErrorStack = \case
   _ -> []
 
 instance (Show info, Typeable info) => Exception (PactError info)
-
-liftDbFunction
-  :: (MonadError (PactError i) m, MonadIO m)
-  => i
-  -> IO a
-  -> m a
-liftDbFunction info action = do
-  e <- liftIO $ catch (Right <$> action) (pure . Left . DbOpFailure)
-  either (throwError . (`PEExecutionError` info)) pure e
-
-
-liftDbFunction2
-  :: forall i m a. (MonadError (PactError i) m, Exceptions.MonadCatch m)
-  => i
-  -> m a
-  -> m a
-liftDbFunction2 info action = do
-  e <- Exceptions.catch (Right <$> action) (pure . Left . DbOpFailure)
-  either (throwError . (`PEExecutionError` info)) pure e

@@ -14,7 +14,7 @@ import Criterion.Main hiding (env)
 import Data.Default (Default, def)
 import Data.List qualified as List
 import Data.Either (fromRight)
-import Data.Text qualified as Text 
+import Data.Text qualified as Text
 import Data.Word (Word64)
 import System.FilePath
 
@@ -83,7 +83,7 @@ main = do
 
       -- 165 ms (66000 gas) / 100000 calls => 0.6 milligas per call
     , bench "long-int-list" $ nfIO $ getSize ee es SizeOfV2 longIntList
-    
+
       -- 218 ms (87200 milligas) / 100100 calls => 0.9 milligas per call
     , bench "long-nested-bool-list" $ nfIO $ getSize ee es SizeOfV2 longNestedBoolList
 

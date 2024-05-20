@@ -56,7 +56,9 @@ dbOpDisallowed :: MonadIO m => m a
 dbOpDisallowed = liftIO $ putStrLn "OpDisallowed" >> throwIO OpDisallowed
 
 dbOpDisallowed2 :: forall i m a. (MonadError (PactError i) m, MonadIO m, Default i) => m a
-dbOpDisallowed2 = liftIO (putStrLn "OpDisallowed") >> throwError (PEExecutionError (DbOpFailure OpDisallowed) def)
+dbOpDisallowed2 = do
+  liftIO (putStrLn "OpDisallowed")
+  throwError (PEExecutionError (DbOpFailure OpDisallowed) [] def)
 
 -- | A utility function that lifts a `GasM` action into a `MonadEval` action.
 liftGasM :: MonadEval b i m => i -> GasM (PactError i) a -> m a

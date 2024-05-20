@@ -256,8 +256,9 @@ runGasM
   -> IO (Either (PactError i) a)
 runGasM info env (GasM m) = do
   res <- try $ runExceptT $ runReaderT m env
+  let fakeStackFrame = []
   case res of
-    Left (e :: DbOpException) -> pure $ Left $ PEExecutionError (DbOpFailure e) info
+    Left (e :: DbOpException) -> pure $ Left $ PEExecutionError (DbOpFailure e) fakeStackFrame info
     Right a -> pure a
 
 ignoreGas

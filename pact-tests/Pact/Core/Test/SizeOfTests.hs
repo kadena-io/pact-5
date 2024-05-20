@@ -16,10 +16,6 @@ import Pact.Core.Builtin
 import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Names
 import Pact.Core.SizeOf
-    ( constructorCost,
-      wordSize,
-      SizeOf(..),
-      SizeOfVersion(SizeOfV0, SizeOfV1, SizeOfV2) )
 import Pact.Core.Errors
 import Pact.Core.Environment.Types
 import Pact.Core.PactValue

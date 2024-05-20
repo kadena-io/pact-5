@@ -53,6 +53,7 @@ import GHC.Generics
 import Data.Text(Text)
 import Data.Word(Word64)
 
+import Pact.Core.Gas
 import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.IR.Term
@@ -60,7 +61,6 @@ import Pact.Core.Guards
 import Pact.Core.Hash
 import Pact.Core.PactValue
 import Pact.Core.DefPacts.Types
-import Pact.Core.Gas
 import Pact.Core.Namespace
 import Data.ByteString (ByteString)
 

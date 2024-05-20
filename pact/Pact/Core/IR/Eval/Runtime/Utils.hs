@@ -72,6 +72,7 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.Gas
 import Pact.Core.Guards
 import Pact.Core.Capabilities
+import Control.Monad.Error.Class
 
 mkBuiltinFn
   :: (IsBuiltin b)
@@ -250,7 +251,7 @@ readOnlyEnv e
              { _pdbPurity = PReadOnly
              , _pdbRead = _pdbRead pdb
              , _pdbWrite = \info _wt _d _k _v ->
-                throwError (PEExecutionError (DbOpFailure OpDisallowed) info)
+                throwError (PEExecutionError (DbOpFailure OpDisallowed) [] info)
              , _pdbKeys = \_ -> dbOpDisallowed
              , _pdbCreateUserTable = \_ _ -> dbOpDisallowed
              , _pdbBeginTx = \_ -> dbOpDisallowed

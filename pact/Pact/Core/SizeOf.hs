@@ -26,9 +26,11 @@ module Pact.Core.SizeOf
   , Bytes
   , wordSize
   , SizeOfVersion(..)
+  , SizeOfByteLimit(..)
 
   -- * SizeOf 
   , countBytes
+
   ) where
 
 import Control.Monad
@@ -460,3 +462,13 @@ instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (IfDef n t b i)
 instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Interface n t b i)
 
 instance SizeOf Namespace
+
+
+type Bytes = Word64
+
+newtype SizeOfByteLimit
+  = SizeOfByteLimit Bytes
+  deriving Show
+
+instance Pretty SizeOfByteLimit where
+  pretty = pretty . show
