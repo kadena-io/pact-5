@@ -692,6 +692,13 @@ benchTypeOfPrincipal pdb =
   | (title, PString str) <- take 3 $ enumExpString "a" 1000 100
   ]
 
+benchValidatePrincipal :: BuiltinBenches
+benchValidatePrincipal pdb =
+  [ runNativeBenchmarkPrepared [("s", PString $ "r:" <> str), ("g", g)] pdb title "(validate-principal g s)"
+  | (title, PString str) <- take 3 $ enumExpString "a" 1000 100
+  , let g = PGuard $ GKeySetRef $ KeySetName str Nothing
+  ]
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -783,6 +790,7 @@ benchesForBuiltin bn = case bn of
   CoreCreatePrincipal -> benchCreatePrincipal
   CoreIsPrincipal -> benchIsPrincipal
   CoreTypeOfPrincipal -> benchTypeOfPrincipal
+  CoreValidatePrincipal -> benchValidatePrincipal
   _ -> const []
   where
   omittedDeliberately = const []
