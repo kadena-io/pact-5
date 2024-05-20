@@ -699,6 +699,14 @@ benchValidatePrincipal pdb =
   , let g = PGuard $ GKeySetRef $ KeySetName str Nothing
   ]
 
+benchDefineNamespace :: BuiltinBenches
+benchDefineNamespace pdb =
+  [ runNativeBenchmarkPrepared [("s", str), ("g", g)] (ignoreWrites pdb) title "(define-namespace s g g)"
+  | (title, str) <- take 3 $ enumExpString "a" 1000 100
+  ]
+  where
+  g = PGuard $ GKeySetRef $ KeySetName "ks" Nothing
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -791,6 +799,7 @@ benchesForBuiltin bn = case bn of
   CoreIsPrincipal -> benchIsPrincipal
   CoreTypeOfPrincipal -> benchTypeOfPrincipal
   CoreValidatePrincipal -> benchValidatePrincipal
+  CoreDefineNamespace -> benchDefineNamespace
   _ -> const []
   where
   omittedDeliberately = const []
