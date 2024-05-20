@@ -1642,6 +1642,7 @@ coreIsPrincipal info b cont handler _env = \case
 coreTypeOfPrincipal :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreTypeOfPrincipal info b cont handler _env = \case
   [VString p] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length p
     let prty = case parseOnly Pr.principalParser p of
           Left _ -> ""
           Right pr -> Pr.showPrincipalType pr
