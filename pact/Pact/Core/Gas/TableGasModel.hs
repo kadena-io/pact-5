@@ -217,6 +217,10 @@ runTableModel = \case
     Pairing np -> pairingGas np
   -- Todo: Gwrite needs benchmarking
   GWrite bytes -> memoryCost bytes
+  GRead bytes ->
+    let mgPerByte = 1
+    in MilliGas $ fromIntegral $ bytes * mgPerByte
+    -- a string of 10⁶ chars (which is 2×10⁶ sizeof bytes) takes a little less than 2×10⁶ to write
   GMakeList len sz ->
     MilliGas $ fromIntegral len * sz
   GComparison cmpty -> case cmpty of

@@ -191,6 +191,8 @@ data GasArgs
   -- ^ Cost of ZK function
   | GWrite !Word64
   -- ^ Cost of writes, per bytes, roughly based on in-memory cost.
+  | GRead !Word64
+  -- ^ Cost of reads, per bytes, roughly based on in-memory cost.
   | GComparison !ComparisonType
   -- ^ Gas costs for comparisons
   | GSearch !SearchType
