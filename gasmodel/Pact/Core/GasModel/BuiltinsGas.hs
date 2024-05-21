@@ -721,6 +721,19 @@ benchDefineNamespace pdb =
   where
   g = PGuard $ GKeySetRef $ KeySetName "ks" Nothing
 
+benchDescribeNamespace :: BuiltinBenches
+benchDescribeNamespace pdb = dummyTx pdb initDb
+  [ runNativeBenchmarkPrepared [("s", str)] pdb title "(describe-namespace s)"
+  | (title, str) <- names
+  ]
+  where
+  names = take 3 $ enumExpString "a" 1000 100
+  g = GKeySetRef $ KeySetName "ks" Nothing
+  initDb = forM_ names $ \(_title, name) -> case name of
+    PString n -> let nsn = NamespaceName n
+                 in writeNamespace pdb Insert nsn (Namespace nsn g g)
+    _ -> error "not a string"
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -815,6 +828,7 @@ benchesForBuiltin bn = case bn of
   CoreValidatePrincipal -> benchValidatePrincipal
   CoreNamespace -> benchNamespace
   CoreDefineNamespace -> benchDefineNamespace
+  CoreDescribeNamespace -> benchDescribeNamespace
   _ -> const []
   where
   omittedDeliberately = const []
