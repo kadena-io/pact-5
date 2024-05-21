@@ -1694,6 +1694,7 @@ coreDefineNamespace info b cont handler env = \case
     let pdb = view cePactDb env
     let nsn = NamespaceName n
         ns = Namespace nsn usrG adminG
+    chargeGasArgs info $ GRead $ sizeOf SizeOfV0 n
     liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
       -- G!
       -- https://static.wikia.nocookie.net/onepiece/images/5/52/Lao_G_Manga_Infobox.png/revision/latest?cb=20150405020446
