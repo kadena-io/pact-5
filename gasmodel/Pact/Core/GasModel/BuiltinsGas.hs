@@ -21,6 +21,7 @@ import Pact.Core.Environment
 import Pact.Core.Guards
 import Pact.Core.Literal
 import Pact.Core.Names
+import Pact.Core.Namespace
 import Pact.Core.PactValue
 import Pact.Core.Persistence
 import Pact.Core.Persistence.SQLite
@@ -699,6 +700,19 @@ benchValidatePrincipal pdb =
   , let g = PGuard $ GKeySetRef $ KeySetName str Nothing
   ]
 
+benchNamespace :: BuiltinBenches
+benchNamespace pdb = dummyTx pdb initDb
+  [ runNativeBenchmarkPrepared [("s", str)] pdb title "(namespace s)"
+  | (title, str) <- names
+  ]
+  where
+  names = take 3 $ enumExpString "a" 1000 100
+  g = GKeySetRef $ KeySetName "ks" Nothing
+  initDb = forM_ names $ \(_title, name) -> case name of
+    PString n -> let nsn = NamespaceName n
+                 in writeNamespace pdb Insert nsn (Namespace nsn g g)
+    _ -> error "not a string"
+
 benchDefineNamespace :: BuiltinBenches
 benchDefineNamespace pdb =
   [ runNativeBenchmarkPrepared [("s", str), ("g", g)] (ignoreWrites pdb) title "(define-namespace s g g)"
@@ -799,6 +813,7 @@ benchesForBuiltin bn = case bn of
   CoreIsPrincipal -> benchIsPrincipal
   CoreTypeOfPrincipal -> benchTypeOfPrincipal
   CoreValidatePrincipal -> benchValidatePrincipal
+  CoreNamespace -> benchNamespace
   CoreDefineNamespace -> benchDefineNamespace
   _ -> const []
   where
