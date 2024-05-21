@@ -1699,7 +1699,8 @@ coreDefineNamespace info b cont handler env = \case
       -- G!
       -- https://static.wikia.nocookie.net/onepiece/images/5/52/Lao_G_Manga_Infobox.png/revision/latest?cb=20150405020446
       -- Enforce the old guard
-      Just (Namespace _ _ laoG) -> do
+      Just existing@(Namespace _ _ laoG) -> do
+        chargeGasArgs info $ GRead $ sizeOf SizeOfV0 existing
         let cont' = BuiltinC env info (DefineNamespaceC ns) cont
         enforceGuard info cont' handler env laoG
       Nothing -> viewEvalEnv eeNamespacePolicy >>= \case
