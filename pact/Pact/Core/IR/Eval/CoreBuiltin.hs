@@ -1675,9 +1675,11 @@ coreNamespace info b cont handler env = \case
     if T.null n then do
       (esLoaded . loNamespace) .== Nothing
       returnCEKValue cont handler (VString "Namespace reset to root")
-    else
+    else do
+      chargeGasArgs info $ GRead $ sizeOf SizeOfV0 n
       liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
         Just ns -> do
+          chargeGasArgs info $ GRead $ sizeOf SizeOfV0 ns
           (esLoaded . loNamespace) .== Just ns
           let msg = "Namespace set to " <> n
           returnCEKValue cont handler (VString msg)
