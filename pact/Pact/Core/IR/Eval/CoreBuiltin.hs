@@ -1734,8 +1734,10 @@ coreDescribeNamespace :: (CEKEval step b i m, MonadEval b i m) => NativeFunction
 coreDescribeNamespace info b cont handler _env = \case
   [VString n] -> do
     pdb <- viewEvalEnv eePactDb
+    chargeGasArgs info $ GRead $ sizeOf SizeOfV0 n
     liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
-      Just (Namespace _ usrG laoG) -> do
+      Just existing@(Namespace _ usrG laoG) -> do
+        chargeGasArgs info $ GRead $ sizeOf SizeOfV0 existing
         let obj = M.fromList
                   [ (Field "user-guard", PGuard usrG)
                   , (Field "admin-guard", PGuard laoG)
