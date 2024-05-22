@@ -847,6 +847,9 @@ benchesForBuiltin bn = case bn of
   CoreChainData -> benchChainData
   CoreIsCharset -> benchIsCharset
   CorePactId -> omittedDeliberately
+  CoreZkPairingCheck -> omittedDeliberately
+  CoreZKScalarMult -> omittedDeliberately
+  CoreZkPointAdd -> omittedDeliberately
   _ -> const []
   where
   omittedDeliberately = const []
