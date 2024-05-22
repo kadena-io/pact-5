@@ -197,11 +197,17 @@ library
     Pact.Core.IR.Term
     Pact.Core.IR.Desugar
 
+    Pact.Core.IR.Eval.Direct.Evaluator
+    Pact.Core.IR.Eval.Direct.Natives
+    Pact.Core.IR.Eval.Direct.Types
+
     -- Core IR Evaluator modules
     Pact.Core.IR.Eval.Runtime
     Pact.Core.IR.Eval.Runtime.Types
     Pact.Core.IR.Eval.Runtime.Utils
     Pact.Core.IR.Eval.CEK
+    Pact.Core.IR.Eval.CEK.Types
+    Pact.Core.IR.Eval.CEK.Utils
     Pact.Core.IR.Eval.CoreBuiltin
     Pact.Core.IR.ModuleHashing
     Pact.Core.IR.ConstEval

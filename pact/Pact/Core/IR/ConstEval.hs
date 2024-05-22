@@ -14,7 +14,11 @@ import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
 import qualified Pact.Core.IR.Eval.CEK as Eval
 
-evalTLConsts :: (MonadEval b i m, Eval.CEKEval step b i m) => BuiltinEnv step b i m -> TopLevel Name Type b i -> m (TopLevel Name Type b i)
+evalTLConsts
+  :: (MonadEval b i m, Eval.CEKEval step b i m)
+  => Eval.BuiltinEnv step b i m
+  -> TopLevel Name Type b i
+  -> m (TopLevel Name Type b i)
 evalTLConsts bEnv = \case
   TLTerm t -> pure $ TLTerm t
   TLInterface ti -> TLInterface <$> evalIfaceDefConsts bEnv ti
@@ -24,7 +28,7 @@ evalTLConsts bEnv = \case
 -- Todo: this may need a different IR for module, or at least a newtype wrapper over `Name`
 evalModuleDefConsts
   :: (MonadEval b i m, Eval.CEKEval step b i m)
-  => BuiltinEnv step b i m
+  => Eval.BuiltinEnv step b i m
   -> Module Name Type b i
   -> m (Module Name Type b i)
 evalModuleDefConsts bEnv (Module mname mgov defs blessed imports implements mhash info) = do
@@ -51,7 +55,7 @@ evalModuleDefConsts bEnv (Module mname mgov defs blessed imports implements mhas
 -- Todo: this may need a different IR for module, or at least a newtype wrapper over `Name`
 evalIfaceDefConsts
   :: (MonadEval b i m, Eval.CEKEval step b i m)
-  => BuiltinEnv step b i m
+  => Eval.BuiltinEnv step b i m
   -> Interface Name Type b i
   -> m (Interface Name Type b i)
 evalIfaceDefConsts bEnv (Interface ifname ifdefns imps ifh info) = do

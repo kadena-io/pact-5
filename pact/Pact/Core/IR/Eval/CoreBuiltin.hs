@@ -32,7 +32,7 @@ import Control.Monad.IO.Class
 import Data.Attoparsec.Text(parseOnly)
 import Data.Bits
 import Data.Either(isLeft, isRight)
-import Data.Foldable(foldl', toList, foldlM)
+import Data.Foldable
 import Data.Decimal(roundTo', Decimal, DecimalRaw(..))
 import Data.Vector(Vector)
 import Data.Maybe(maybeToList)
@@ -50,7 +50,6 @@ import qualified GHC.Integer.Logarithms as IntLog
 import qualified Pact.Time as PactTime
 
 #ifndef WITHOUT_CRYPTO
-import Data.Foldable(traverse_)
 import qualified Control.Lens as Lens
 #endif
 
