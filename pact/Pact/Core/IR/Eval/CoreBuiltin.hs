@@ -709,7 +709,8 @@ coreAccess info b cont handler _env = \case
 
 coreIsCharset :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreIsCharset info b cont handler _env = \case
-  [VLiteral (LInteger i), VString s] ->
+  [VLiteral (LInteger i), VString s] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
     case i of
       0 -> returnCEKValue cont handler $ VBool $ T.all Char.isAscii s
       1 -> returnCEKValue cont handler $ VBool $ T.all Char.isLatin1 s
