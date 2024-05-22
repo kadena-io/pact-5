@@ -1834,8 +1834,8 @@ zkPairingCheck info b cont handler _env = \case
     returnCEKValue cont handler $ VBool $ pairingCheck pairs
   args -> argsError info b args
 
-zkScalaMult :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
-zkScalaMult info b cont handler _env = \case
+zkScalarMult :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
+zkScalarMult info b cont handler _env = \case
   args@[VString ptTy, VObject p1, VInteger scalar] -> do
     let scalar' = scalar `mod` curveOrder
     case T.toLower ptTy of
@@ -1903,8 +1903,8 @@ poseidonHash info b cont handler _env = \case
 zkPairingCheck :: (MonadEval b i m) => NativeFunction step b i m
 zkPairingCheck info _b _cont _handler _env _args = failInvariant info "crypto disabled"
 
-zkScalaMult :: (MonadEval b i m) => NativeFunction step b i m
-zkScalaMult info _b _cont _handler _env _args = failInvariant info "crypto disabled"
+zkScalarMult :: (MonadEval b i m) => NativeFunction step b i m
+zkScalarMult info _b _cont _handler _env _args = failInvariant info "crypto disabled"
 
 zkPointAddition :: (MonadEval b i m) => NativeFunction step b i m
 zkPointAddition info _b _cont _handler _env _args = failInvariant info "crypto disabled"
@@ -2065,7 +2065,7 @@ coreBuiltinRuntime = \case
   CoreDefineNamespace -> coreDefineNamespace
   CoreDescribeNamespace -> coreDescribeNamespace
   CoreZkPairingCheck -> zkPairingCheck
-  CoreZKScalarMult -> zkScalaMult
+  CoreZKScalarMult -> zkScalarMult
   CoreZkPointAdd -> zkPointAddition
   CorePoseidonHashHackachain -> poseidonHash
   CoreChainData -> coreChainData
