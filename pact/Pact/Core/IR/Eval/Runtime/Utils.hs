@@ -10,25 +10,19 @@
 {-# LANGUAGE ConstraintKinds #-}
 
 module Pact.Core.IR.Eval.Runtime.Utils
- ( mkBuiltinFn
- , enforcePactValue
- , checkSigCaps
+ ( checkSigCaps
  , lookupFqName
  , getDefCap
  , getDefun
  , typecheckArgument
  , maybeTCType
  , safeTail
- , toArgTypeError
  , asString
  , asBool
  , throwExecutionError
  , throwExecutionError'
- , argsError
  , findCallingModule
  , getCallingModule
- , readOnlyEnv
- , sysOnlyEnv
  , calledByModule
  , failInvariant
  , isExecutionFlagSet
@@ -37,7 +31,6 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , restoreFromErrorState
  , getDefPactId
  , tvToDomain
- , envFromPurity
  , unsafeUpdateManagedParam
  , chargeFlatNativeGas
  , chargeGasArgs
@@ -45,6 +38,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , putGas
  , litCmpGassed
  , valEqGassed
+ , enforceBlessedHashes
  ) where
 
 import Control.Lens
@@ -72,22 +66,8 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.Gas
 import Pact.Core.Guards
 import Pact.Core.Capabilities
+import Pact.Core.Hash
 
-mkBuiltinFn
-  :: (IsBuiltin b)
-  => i
-  -> b
-  -> CEKEnv step b i m
-  -> NativeFunction step b i m
-  -> NativeFn step b i m
-mkBuiltinFn i b env fn =
-  NativeFn b env fn (builtinArity b) i
-{-# INLINE mkBuiltinFn #-}
-
-enforcePactValue :: (MonadEval b i m) => i -> CEKValue step b i m -> m PactValue
-enforcePactValue info = \case
-  VPactValue pv -> pure pv
-  _ -> throwExecutionError info ExpectedPactValue
 
 lookupFqName :: (MonadEval b i m) => FullyQualifiedName -> m (Maybe (EvalDef b i))
 lookupFqName fqn =
@@ -115,10 +95,20 @@ typecheckArgument info pv ty = case (pv, checkPvType ty pv) of
     | otherwise -> pure (PModRef mr)
   (_, Just _) -> pure pv
   (_, Nothing) ->
-    throwExecutionError info (RunTimeTypecheckFailure (toArgTypeError (VPactValue pv)) ty)
+    throwExecutionError info (RunTimeTypecheckFailure (pvToArgTypeError pv) ty)
 
 maybeTCType :: (MonadEval b i m) => i -> PactValue -> Maybe Type -> m PactValue
 maybeTCType i pv = maybe (pure pv) (typecheckArgument i pv)
+
+pvToArgTypeError :: PactValue -> ArgTypeError
+pvToArgTypeError = \case
+  PLiteral l -> ATEPrim (literalPrim l)
+  PTime _ -> ATEPrim PrimTime
+  PList _ -> ATEList
+  PObject _ -> ATEObject
+  PGuard _ -> ATEPrim PrimGuard
+  PModRef _ -> ATEModRef
+  PCapToken _ -> ATEClosure
 
 findCallingModule :: (MonadEval b i m) => m (Maybe ModuleName)
 findCallingModule = do
@@ -176,35 +166,6 @@ checkNonLocalAllowed info = do
   when (mode == Transactional && disabledInTx) $ failInvariant info
     "Operation only permitted in local execution mode"
 
-toArgTypeError :: CEKValue step b i m -> ArgTypeError
-toArgTypeError = \case
-  VPactValue pv -> case pv of
-    PLiteral l -> ATEPrim (literalPrim l)
-    PTime _ -> ATEPrim PrimTime
-    PList _ -> ATEList
-    PObject _ -> ATEObject
-    PGuard _ -> ATEPrim PrimGuard
-    PModRef _ -> ATEModRef
-    PCapToken _ -> ATEClosure
-  VTable{} -> ATETable
-  VClosure{} -> ATEClosure
-
-{-# SPECIALIZE argsError
-   :: ()
-   -> CoreBuiltin
-   -> [CEKValue step CoreBuiltin () Eval]
-   -> Eval (EvalResult step CoreBuiltin () Eval)
-    #-}
-argsError
-  :: (MonadEval b i m)
-  => i
-  -> b
-  -> [CEKValue step b i m]
-  -> m a
-argsError info b args =
-  throwExecutionError info (NativeArgumentsError (builtinName b) (toArgTypeError <$> args))
-
-
 {-# SPECIALIZE asString
    :: ()
    -> CoreBuiltin
@@ -218,7 +179,8 @@ asString
   -> PactValue
   -> m Text
 asString _ _ (PLiteral (LString b)) = pure b
-asString i b pv = argsError i b [VPactValue pv]
+asString info b pv =
+  throwExecutionError info (NativeArgumentsError (builtinName b) [pvToArgTypeError pv])
 
 {-# SPECIALIZE asBool
    :: ()
@@ -233,57 +195,10 @@ asBool
   -> PactValue
   -> m Bool
 asBool _ _ (PLiteral (LBool b)) = pure b
-asBool i b pv = argsError i b [VPactValue pv]
+asBool info b pv =
+  throwExecutionError info (NativeArgumentsError (builtinName b) [pvToArgTypeError pv])
 
-envFromPurity :: Purity -> CEKEnv step b i m -> CEKEnv step b i m
-envFromPurity PImpure = id
-envFromPurity PReadOnly = readOnlyEnv
-envFromPurity PSysOnly = sysOnlyEnv
 
-readOnlyEnv :: CEKEnv step b i m -> CEKEnv step b i m
-readOnlyEnv e
-  | view (cePactDb . pdbPurity) e == PSysOnly = e
-  | otherwise =
-      let pdb = view cePactDb e
-          newPactdb =
-              PactDb
-             { _pdbPurity = PReadOnly
-             , _pdbRead = _pdbRead pdb
-             , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
-             , _pdbKeys = \_ -> dbOpDisallowed
-             , _pdbCreateUserTable = \_ -> dbOpDisallowed
-             , _pdbBeginTx = \_ -> dbOpDisallowed
-             , _pdbCommitTx = dbOpDisallowed
-             , _pdbRollbackTx = dbOpDisallowed
-             , _pdbTxIds = \_ _ -> dbOpDisallowed
-             , _pdbGetTxLog = \_ _ -> dbOpDisallowed
-             }
-      in set cePactDb newPactdb e
-
-sysOnlyEnv :: forall step b i m. CEKEnv step b i m -> CEKEnv step b i m
-sysOnlyEnv e
-  | view (cePactDb . pdbPurity) e == PSysOnly = e
-  | otherwise =
-  let newPactdb =
-          PactDb
-         { _pdbPurity = PSysOnly
-         , _pdbRead = read'
-         , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
-         , _pdbKeys = const dbOpDisallowed
-         , _pdbCreateUserTable = \_ -> dbOpDisallowed
-         , _pdbBeginTx = const dbOpDisallowed
-         , _pdbCommitTx = dbOpDisallowed
-         , _pdbRollbackTx = dbOpDisallowed
-         , _pdbTxIds = \_ _ -> dbOpDisallowed
-         , _pdbGetTxLog = \_ _ -> dbOpDisallowed
-         }
-  in set cePactDb newPactdb e
-  where
-  pdb = view cePactDb e
-  read' :: Domain k v b i -> k -> IO (Maybe v)
-  read' dom k = case dom of
-    DUserTables _ -> dbOpDisallowed
-    _ -> _pdbRead pdb dom k
 
 getDefPactId :: (MonadEval b i m) => i -> m DefPactId
 getDefPactId info =
@@ -414,3 +329,9 @@ valEqGassed info = go
 {-# SPECIALIZE valEqGassed
     :: () -> PactValue -> PactValue -> Eval Bool
     #-}
+
+enforceBlessedHashes :: (MonadEval b i m) => i -> EvalModule b i -> ModuleHash -> m ()
+enforceBlessedHashes info md mh
+  | _mHash md == mh = return ()
+  | mh `S.member` _mBlessed md = return ()
+  | otherwise = throwExecutionError info (HashNotBlessed (_mName md) mh)

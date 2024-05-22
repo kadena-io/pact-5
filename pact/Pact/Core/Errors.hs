@@ -15,6 +15,7 @@ module Pact.Core.Errors
  , EvalError(..)
  , PactError(..)
  , ArgTypeError(..)
+ , RecoverableError(..)
  , peInfo
  , viewErrorStack
  ) where
@@ -487,6 +488,18 @@ instance Pretty EvalError where
 
 instance Exception EvalError
 
+data RecoverableError
+  = RecoverableError Text
+  deriving (Show, Typeable, Generic)
+
+instance Exception RecoverableError
+
+instance Pretty RecoverableError where
+  pretty = \case
+    RecoverableError txt -> pretty txt
+
+instance NFData RecoverableError
+
 data PactError info
   = PELexerError LexerError info
   | PEParseError ParseError info
@@ -494,6 +507,7 @@ data PactError info
   -- | PETypecheckError TypecheckError info
   -- | PEOverloadError OverloadError info
   | PEExecutionError EvalError [StackFrame info] info
+  | PERecoverableError RecoverableError info
   deriving (Show, Functor, Generic)
 
 instance NFData info => NFData (PactError info)
@@ -505,6 +519,7 @@ instance Pretty (PactError info) where
     PEDesugarError e _ -> pretty e
     PEExecutionError e _ _ ->
       pretty e
+    PERecoverableError e _ -> pretty e
 
 peInfo :: Lens (PactError info) (PactError info) info info
 peInfo f = \case
@@ -516,6 +531,8 @@ peInfo f = \case
     PEDesugarError de <$> f info
   PEExecutionError ee stack info ->
     PEExecutionError ee stack <$> f info
+  PERecoverableError ee info ->
+     PERecoverableError ee <$> f info
 
 viewErrorStack :: PactError info -> [StackFrame info]
 viewErrorStack = \case

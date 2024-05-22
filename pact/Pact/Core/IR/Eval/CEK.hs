@@ -36,12 +36,14 @@ module Pact.Core.IR.Eval.CEK
   , applyContSmallStep
   , applyContToValueSmallStep
   , evaluateTermSmallStep
-  , CEKEval(..)) where
+  , CEKEval(..)
+  , module Pact.Core.IR.Eval.CEK.Types
+  , module Pact.Core.IR.Eval.CEK.Utils
+  ) where
 
 
 import Control.Lens
 import Control.Monad
-import Control.Monad.IO.Class
 import Data.Default
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Foldable(find, foldl', traverse_)
@@ -76,6 +78,9 @@ import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Namespace
 import Pact.Core.DefPacts.Types
 import Pact.Core.SizeOf
+
+import Pact.Core.IR.Eval.CEK.Types
+import Pact.Core.IR.Eval.CEK.Utils
 
 
 class CEKEval (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type) | m -> b, m -> i where
@@ -126,7 +131,7 @@ evaluateTerm
 -- Handles free variable lookups as well as module reference dynamic invokes
 -- Todo: it may not be worthwhile if accessing local variables is fast to charge
 -- anything but a constant amount of gas, but it would be a worthwhile exercise.
-evaluateTerm cont handler env (Var n info)  = do
+evaluateTerm cont handler env (Var n info) = do
   case _nKind n of
     NBound i -> do
       case RAList.lookup (_ceLocal env) i of
@@ -672,12 +677,6 @@ guardTable i cont handler env (TableValue tn mh _) dbop = do
     #-}
 
 
-enforceBlessedHashes :: (MonadEval b i m) => i -> EvalModule b i -> ModuleHash -> m ()
-enforceBlessedHashes info md mh
-  | _mHash md == mh = return ()
-  | mh `S.member` _mBlessed md = return ()
-  | otherwise = throwExecutionError info (HashNotBlessed (_mName md) mh)
-
 guardForModuleCall
   :: (CEKEval step b i m, MonadEval b i m)
   => i
@@ -792,7 +791,6 @@ evalCap
   -> CEKErrorHandler step b i m
   -> CEKEnv step b i m
   -> FQCapToken
-  -- -> ModCapCont step b i m
   -> CapPopState
   -> EvalCapType
   -> EvalTerm b i
@@ -2070,19 +2068,8 @@ isKeysetNameInSigs
   -> m (CEKEvalResult step b i m)
 isKeysetNameInSigs info cont handler env ksn = do
   pdb <- viewEvalEnv eePactDb
-  liftIO (readKeySet pdb ksn) >>= \case
+  liftDbFunction info (readKeySet pdb ksn) >>= \case
     Just ks -> isKeysetInSigs info cont handler env ks
     Nothing ->
       throwExecutionError info (NoSuchKeySet ksn)
 
---------------------------
--- Gas-related code
---------------------------
-constantWorkNodeGas :: MilliGas
-constantWorkNodeGas = (MilliGas 50)
-
-unconsWorkNodeGas :: MilliGas
-unconsWorkNodeGas = (MilliGas 100)
-
-tryNodeGas :: MilliGas
-tryNodeGas = (MilliGas 100)

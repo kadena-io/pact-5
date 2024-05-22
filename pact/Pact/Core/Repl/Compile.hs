@@ -70,7 +70,7 @@ data ReplCompileValue
 loadFile
   :: (CEKEval step ReplCoreBuiltin SpanInfo Repl)
   => FilePath
-  -> BuiltinEnv step ReplCoreBuiltin SpanInfo Repl
+  -> CEK.BuiltinEnv step ReplCoreBuiltin SpanInfo Repl
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
 loadFile loc rEnv display = do
@@ -83,13 +83,13 @@ interpretReplProgram
   :: SourceCode
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
-interpretReplProgram = interpretReplProgram' (replBuiltinEnv @CEKBigStep)
+interpretReplProgram = interpretReplProgram' (replBuiltinEnv @CEK.CEKBigStep)
 
 interpretReplProgramSmallStep
   :: SourceCode
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
-interpretReplProgramSmallStep = interpretReplProgram' (replBuiltinEnv @CEKSmallStep)
+interpretReplProgramSmallStep = interpretReplProgram' (replBuiltinEnv @CEK.CEKSmallStep)
 
 checkReplNativesEnabled :: TopLevel n t (ReplBuiltin b) SpanInfo -> ReplM ReplCoreBuiltin ()
 checkReplNativesEnabled = \case
@@ -106,7 +106,7 @@ checkReplNativesEnabled = \case
 
 interpretReplProgram'
   :: (CEKEval step ReplCoreBuiltin SpanInfo Repl)
-  => BuiltinEnv step ReplCoreBuiltin SpanInfo Repl
+  => CEK.BuiltinEnv step ReplCoreBuiltin SpanInfo Repl
   -> SourceCode
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]

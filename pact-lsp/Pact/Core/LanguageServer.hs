@@ -46,7 +46,7 @@ import Control.Monad.Reader (ReaderT, runReaderT, ask)
 import Control.Monad.Trans (lift)
 import Control.Concurrent.MVar
 import qualified Data.Map.Strict as M
-import Pact.Core.IR.Eval.Runtime.Types
+import Pact.Core.IR.Eval.CEK.Types
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
@@ -257,6 +257,7 @@ sendDiagnostics nuri mv content = liftIO runPact >>= \case
       PEParseError{} -> "Parse"
       PEDesugarError{} -> "Desugar"
       PEExecutionError{} -> "Execution"
+      PERecoverableError{} -> "Execution"
 
 spanInfoToRange :: SpanInfo -> Range
 spanInfoToRange (SpanInfo sl sc el ec) = mkRange
