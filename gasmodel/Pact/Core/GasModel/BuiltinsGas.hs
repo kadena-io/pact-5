@@ -734,6 +734,9 @@ benchDescribeNamespace pdb = dummyTx pdb initDb
                  in writeNamespace pdb Insert nsn (Namespace nsn g g)
     _ -> error "not a string"
 
+benchChainData :: BuiltinBenches
+benchChainData pdb = [runNativeBenchmark pdb "simple" "(chain-data)"]
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -829,6 +832,7 @@ benchesForBuiltin bn = case bn of
   CoreNamespace -> benchNamespace
   CoreDefineNamespace -> benchDefineNamespace
   CoreDescribeNamespace -> benchDescribeNamespace
+  CoreChainData -> benchChainData
   _ -> const []
   where
   omittedDeliberately = const []
