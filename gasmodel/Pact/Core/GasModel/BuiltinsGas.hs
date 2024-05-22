@@ -737,6 +737,18 @@ benchDescribeNamespace pdb = dummyTx pdb initDb
 benchChainData :: BuiltinBenches
 benchChainData pdb = [runNativeBenchmark pdb "simple" "(chain-data)"]
 
+benchIsCharset :: BuiltinBenches
+benchIsCharset pdb =
+  [ C.bgroup "ascii"
+    [ runNativeBenchmarkPrepared [("s", str)] pdb title "(is-charset 0 s)"
+    | (title, str) <- take 3 $ enumExpString "a" 1000 100
+    ]
+  , C.bgroup "latin1"
+    [ runNativeBenchmarkPrepared [("s", str)] pdb title "(is-charset 1 s)"
+    | (title, str) <- take 3 $ enumExpString "a" 1000 100
+    ]
+  ]
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -833,6 +845,7 @@ benchesForBuiltin bn = case bn of
   CoreDefineNamespace -> benchDefineNamespace
   CoreDescribeNamespace -> benchDescribeNamespace
   CoreChainData -> benchChainData
+  CoreIsCharset -> benchIsCharset
   _ -> const []
   where
   omittedDeliberately = const []
