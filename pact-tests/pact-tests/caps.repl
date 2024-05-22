@@ -955,3 +955,5 @@
 
 (env-sigs [{"key":"jose", "caps":[(C1 1) (C2 1) (C3 1)]}])
 (expect "managed capabilities compose correctly" 111 (run))
+(commit-tx)
+

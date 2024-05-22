@@ -1157,7 +1157,8 @@ gasCapBodyC pdb =
                     , _ceBuiltins=benchmarkEnv }
 
         value = VUnit
-        frame = CapBodyC PopCapInvoke env () Nothing Nothing unitConst Mt
+        cbState = CapBodyState PopCapInvoke Nothing Nothing unitConst
+        frame = CapBodyC env () cbState Mt
         handler = CEKNoHandler
     pure (ee, es, frame, handler, value)
 
@@ -1174,11 +1175,10 @@ gasCapPopCInvoke pdb =
                     , _ceInCap=False
                     , _ceDefPactStep=ps
                     , _ceBuiltins=benchmarkEnv }
-        -- capTokenFqn = CapToken (mkGasModelFqn gmDcapManagedName) [PInteger 1]
-        -- capTokenQnFiltered = CapToken (QualifiedName gmDcapManagedName gmModuleName) []
         capTokenQn = CapToken (QualifiedName gmDcapManagedName gmModuleName) [PInteger 1]
         es' = over (esCaps . csSlots) (CapSlot capTokenQn [] :) es
-        frame = CapBodyC PopCapInvoke env () Nothing Nothing unitConst Mt
+        cbState = CapBodyState PopCapInvoke Nothing Nothing unitConst
+        frame = CapBodyC env () cbState Mt
         handler = CEKNoHandler
         value = VUnit
     pure (ee, es', frame, handler, value)
@@ -1196,11 +1196,10 @@ gasCapPopCComposed pdb =
                     , _ceInCap=False
                     , _ceDefPactStep=ps
                     , _ceBuiltins=benchmarkEnv }
-        -- capTokenFqn = CapToken (mkGasModelFqn gmDcapManagedName) [PInteger 1]
-        -- capTokenQnFiltered = CapToken (QualifiedName gmDcapManagedName gmModuleName) []
         capTokenQn = CapToken (QualifiedName gmDcapManagedName gmModuleName) [PInteger 1]
         es' = over (esCaps . csSlots) (CapSlot capTokenQn [] :) es
-        frame = CapBodyC PopCapComposed env () Nothing Nothing unitConst Mt
+        cbState = CapBodyState PopCapInvoke Nothing Nothing unitConst
+        frame = CapBodyC env () cbState Mt
         handler = CEKNoHandler
         value = VUnit
     pure (ee, es', frame, handler, value)
@@ -1213,8 +1212,6 @@ gasIgnoreValueC pdb =
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
     let es = defaultGasEvalState
-        -- capTokenFqn = CapToken (mkGasModelFqn gmDcapManagedName) [PInteger 1]
-        -- capTokenQnFiltered = CapToken (QualifiedName gmDcapManagedName gmModuleName) []
         frame = IgnoreValueC PUnit Mt
         handler = CEKNoHandler
         value = VUnit

@@ -182,6 +182,7 @@ library
     Pact.Core.StackFrame
     Pact.Core.Legacy.LegacyPactValue
     Pact.Core.Legacy.LegacyCodec
+    Pact.Core.Verifiers
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree

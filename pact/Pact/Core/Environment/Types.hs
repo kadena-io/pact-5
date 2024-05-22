@@ -21,6 +21,7 @@ module Pact.Core.Environment.Types
  , eePublicData, eeMode, eeFlags
  , eeNatives, eeGasModel
  , eeNamespacePolicy, eeGasRef
+ , eeMsgVerifiers
  , TxCreationTime(..)
  , PublicData(..)
  , pdPublicMeta, pdBlockHeight
@@ -79,6 +80,7 @@ import Pact.Core.Namespace
 import Pact.Core.SizeOf
 import Pact.Core.StackFrame
 import Pact.Core.Builtin (IsBuiltin)
+import Pact.Core.Verifiers
 import Pact.Core.SPV
 
 -- | Execution flags specify behavior of the runtime environment,
@@ -119,6 +121,8 @@ data EvalEnv b i
   = EvalEnv
   { _eeMsgSigs :: Map PublicKeyText (Set (CapToken QualifiedName PactValue))
   -- ^ The list of provided keys and scoped capabilities
+  , _eeMsgVerifiers :: Map VerifierName (Set (CapToken QualifiedName PactValue))
+  -- ^ The list of provided verifiers
   , _eePactDb :: PactDb b i
   -- ^ The Pact database store
   , _eeMsgBody :: PactValue
@@ -222,6 +226,7 @@ defaultEvalEnv pdb m = do
   gasRef <- newIORef mempty
   pure $ EvalEnv
     { _eeMsgSigs = mempty
+    , _eeMsgVerifiers = mempty
     , _eePactDb = pdb
     , _eeMsgBody = PObject mempty
     , _eeHash = defaultPactHash

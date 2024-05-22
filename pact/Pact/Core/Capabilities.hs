@@ -17,6 +17,7 @@ module Pact.Core.Capabilities
  , CapState(..)
  , csSlots, csManaged
  , csModuleAdmin, csAutonomous
+ , csCapsBeingEvaluated
  , ManagedCap(..)
  , mcCap, mcManaged, mcOriginalCap
  , ManagedCapType(..)
@@ -98,12 +99,13 @@ data CapState name v
   , _csManaged :: Set (ManagedCap name v)
   , _csModuleAdmin :: Set ModuleName
   , _csAutonomous :: Set (CapToken name v)
+  , _csCapsBeingEvaluated :: Set (CapToken name v)
   }
   deriving (Show, Generic)
 
 
 instance (Ord name, Ord v) => Default (CapState name v) where
-  def = CapState mempty mempty mempty mempty
+  def = CapState mempty mempty mempty mempty mempty
 
 -- Todo: Is there a reason why module + name is
 -- an unqualified

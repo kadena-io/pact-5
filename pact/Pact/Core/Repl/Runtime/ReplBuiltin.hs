@@ -30,6 +30,7 @@ import Pact.Core.Names
 import Pact.Core.IR.Eval.CoreBuiltin
 import Pact.Core.Pretty
 import Pact.Core.Environment
+import Pact.Core.Verifiers
 import Pact.Core.PactValue
 import Pact.Core.Gas
 import Pact.Core.Guards
@@ -274,7 +275,7 @@ envSigs info b cont handler _env = \case
       Just sigs -> do
         (replEvalEnv . eeMsgSigs) .= M.fromList (V.toList sigs)
         returnCEKValue cont handler $ VString "Setting transaction signatures/caps"
-      Nothing -> returnCEK cont handler (VError ("env-sigs format is wrong") info)
+      Nothing -> returnCEK cont handler (VError ("env-sigs: Expected object with 'key': string, 'caps': [capability]") info)
     where
     keyCapObj = \case
       PObject o -> do
@@ -285,6 +286,27 @@ envSigs info b cont handler _env = \case
         caps <- traverse (preview _PCapToken) capsListPV
         let cts = over ctName fqnToQualName <$> caps
         pure (PublicKeyText kt, S.fromList (V.toList cts))
+      _ -> Nothing
+  args -> argsError info b args
+
+envVerifiers :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+envVerifiers info b cont handler _env = \case
+  [VList ks] ->
+    case traverse verifCapObj ks of
+      Just sigs -> do
+        (replEvalEnv . eeMsgVerifiers) .= M.fromList (V.toList sigs)
+        returnCEKValue cont handler $ VString "Setting transaction verifiers/caps"
+      Nothing -> returnCEK cont handler (VError ("env-verifiers: Expected object with 'name': string, 'caps': [capability]") info)
+    where
+    verifCapObj = \case
+      PObject o -> do
+        keyRaw<- M.lookup (Field "name") o
+        kt <- preview (_PLiteral . _LString) keyRaw
+        capsRaw <- M.lookup (Field "caps") o
+        capsListPV <- preview _PList capsRaw
+        caps <- traverse (preview _PCapToken) capsListPV
+        let cts = over ctName fqnToQualName <$> caps
+        pure (VerifierName kt, S.fromList (V.toList cts))
       _ -> Nothing
   args -> argsError info b args
 
@@ -579,3 +601,4 @@ replCoreBuiltinRuntime = \case
     REnforcePactVersionRange -> coreEnforceVersion
     REnvEnableReplNatives -> envEnableReplNatives
     REnvModuleAdmin -> envModuleAdmin
+    REnvVerifiers -> envVerifiers
