@@ -284,6 +284,7 @@ benchmark bench
     , mtl
     , pact-tng
     , text
+    , deepseq
   ghc-options: -WAll -threaded -rtsopts "-with-rtsopts=-N"
   hs-source-dirs: bench
   default-language: Haskell2010

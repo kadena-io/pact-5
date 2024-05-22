@@ -17,6 +17,7 @@ import Data.Either (fromRight)
 import Data.Text qualified as Text
 import Data.Word (Word64)
 import System.FilePath
+import qualified Data.Map as M
 
 import Pact.Core.Builtin
 import Pact.Core.Environment.Types
@@ -26,9 +27,15 @@ import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Names (Name)
 import Pact.Core.Serialise
 import Pact.Core.Info
+import Pact.Core.Persistence.Types
 import Pact.Core.Type
 import Pact.Core.IR.Desugar
 import Pact.Core.IR.Term
+import Pact.Core.Gas
+import Pact.Core.Names
+import Pact.Core.Literal
+import Pact.Core.PactValue
+import Pact.Core.Serialise.CBOR_V1
 import Pact.Core.Syntax.LexUtils qualified as Lisp
 import Pact.Core.Syntax.ParseTree qualified as Lisp
 import Pact.Core.Syntax.Parser
@@ -36,6 +43,7 @@ import Pact.Core.SizeOf
 import Pact.Core.Syntax.Parser qualified as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import Pact.Core.Errors (PactErrorI)
+import Control.DeepSeq
 
 getSize :: (Default i, SizeOf a, IsBuiltin b, Show i) => EvalEnv b i -> EvalState b i -> SizeOfVersion -> a -> IO Word64
 getSize env state version value = do
@@ -58,6 +66,18 @@ main = do
   let es = def
   !module1 <- expectEval ee es $ getModule exampleModule1
   coinModule <- expectEval ee es $ getModule coinModuleCode
+
+
+  let rd1 = rowData 1
+      _ = id rd1
+      rd2 = rowData 1000
+      _ = id rd2
+      rd3 = rowData 10_000
+      _ = id rd3
+      rd4 = rowData 100_000
+      _ = id rd4
+      rd5 = rowData 100_000_000
+      _ = id rd5
 
   -- The comments list the time that each action takes, and the
   -- number of calls made to the countBytes function.
@@ -95,6 +115,13 @@ main = do
 
       -- 36 ms (14400 milligas) / 253338 bytes / 18637 calls to countBytes => 0.8 milligas per call
     , bench "module-coin" $ nfIO $ getSize ee es SizeOfV2 coinModule
+
+      --
+    , bench "row-data 1" $ nfIO $ ignoreGas () (encodeRowData () $ rd1)
+    , bench "row-data 2" $ nfIO $ ignoreGas () (encodeRowData () $ rd2)
+    , bench "row-data 3" $ nfIO $ ignoreGas () (encodeRowData () $ rd3)
+    , bench "row-data 4" $ nfIO $ ignoreGas () (encodeRowData () $ rd4)
+    , bench "row-data 5" $ nfIO $ ignoreGas () (encodeRowData () $ rd5)
     ]
   where
     !longString = Text.replicate 100_000 "a"
@@ -102,6 +129,9 @@ main = do
     !longIntList = List.replicate 100_000 (1 :: Integer)
     !longNestedBoolList = List.replicate 100 (List.replicate 1000 True)
     !longNestedBoolList2 = List.replicate 10_000 (List.replicate 10 True)
+
+rowData :: Int -> RowData
+rowData n = RowData (M.fromList [(Field $ Text.pack (replicate n 'a'), PLiteral $ LInteger 1)])
 
 getModule :: String -> EvalM ReplCoreBuiltin SpanInfo (Module Name Type ReplCoreBuiltin SpanInfo)
 getModule code = do

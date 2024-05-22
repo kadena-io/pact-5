@@ -92,7 +92,7 @@ mdModuleHash f = \case
 -- | Data reflecting Key/Value storage in user-tables.
 newtype RowData
   = RowData { _unRowData :: Map Field PactValue }
-  deriving (Eq, Show)
+  deriving (Eq, Show, NFData)
 
 objectDataToRowData :: ObjectData PactValue -> RowData
 objectDataToRowData (ObjectData obj) = RowData obj
