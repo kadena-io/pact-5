@@ -846,6 +846,7 @@ benchesForBuiltin bn = case bn of
   CoreDescribeNamespace -> benchDescribeNamespace
   CoreChainData -> benchChainData
   CoreIsCharset -> benchIsCharset
+  CorePactId -> omittedDeliberately
   _ -> const []
   where
   omittedDeliberately = const []
