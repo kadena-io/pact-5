@@ -415,7 +415,7 @@ applyPact i pc ps cont handler cenv nested = useEvalState esDefPactExec >>= \cas
                }
 
       setEvalState esDefPactExec (Just pe)
-      let cont' = DefPactStepC cenv cont
+      let cont' = DefPactStepC cenv i cont
           contFqn = qualNameToFqn (pc ^. pcName) mh
           sf = StackFrame contFqn (pc ^. pcArgs) SFDefPact i
       case (ps ^. psRollback, step) of
@@ -511,7 +511,7 @@ applyNestedPact i pc ps cont handler cenv = useEvalState esDefPactExec >>= \case
       setEvalState esDefPactExec (Just exec)
       let
         cenv' = set ceDefPactStep (Just ps) cenv
-        cont' = NestedDefPactStepC cenv' cont pe
+        cont' = NestedDefPactStepC cenv' i cont pe
         contFqn = FullyQualifiedName (pc ^. pcName . qnModName) (pc ^. pcName . qnName) mh
         sf = StackFrame contFqn (pc ^. pcArgs) SFDefPact i
 
@@ -1189,7 +1189,7 @@ applyCont cont handler v = case v of
 
 -- | if true then 1 else 2
 applyContToValue
-  :: (CEKEval step b i m, MonadEval b i m)
+  :: forall step b i m.(CEKEval step b i m, MonadEval b i m)
   => Cont step b i m
   -> CEKErrorHandler step b i m
   -> CEKValue step b i m
@@ -1328,6 +1328,7 @@ applyContToValue currCont@(CapInvokeC env info cf cont) handler v = case cf of
     _ -> returnCEK cont handler (VError "Manager function for managed cap did not return a value" info)
 applyContToValue (BuiltinC env info frame cont) handler cv = do
   let pdb = _cePactDb env
+  stack <- useEvalState esStack
   case cv of
     VPactValue v -> case frame of
       MapC closure rest acc -> do
@@ -1383,9 +1384,9 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         let check' = if wt == Update then checkPartialSchema else checkSchema
         if check' rv (_tvSchema tv) then do
           let rdata = RowData rv
-          rvSize <- sizeOf SizeOfV2 rv
+          rvSize <- sizeOf SizeOfV0 rv
           chargeGasArgs info (GWrite rvSize)
-          _ <- liftGasM info $ _pdbWrite pdb info wt (tvToDomain tv) rk rdata
+          _ <- liftGasM stack info $ _pdbWrite pdb stack info wt (tvToDomain tv) rk rdata
           returnCEKValue cont handler (VString "Write succeeded")
         else returnCEK cont handler (VError "object does not match schema" info)
       PreFoldDbC tv queryClo appClo -> do
@@ -1432,7 +1433,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
             , (Field "key", PString key)
             , (Field "value", PObject rdata)]
       CreateTableC (TableValue tn _ _) -> do
-        liftGasM info (_pdbCreateUserTable pdb info tn)
+        liftGasM stack info (_pdbCreateUserTable pdb stack info tn)
         returnCEKValue cont handler (VString "TableCreated")
       EmitEventC ct@(CapToken fqn _) ->
         lookupFqName (_ctName ct) >>= \case
@@ -1447,17 +1448,17 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)
         enforceMeta _ = pure ()
       DefineKeysetC ksn newKs -> do
-        newKsSize <- sizeOf SizeOfV2 newKs
+        newKsSize <- sizeOf SizeOfV0 newKs
         chargeGasArgs info (GWrite newKsSize)
-        _ <- writeKeySet info pdb Write ksn newKs
+        _ <- writeKeySet stack info pdb Write ksn newKs
         returnCEKValue cont handler (VString "Keyset write success")
       DefineNamespaceC ns -> case v of
         PBool allow ->
           if allow then do
             let nsn = _nsName ns
-            nsSize <- sizeOf SizeOfV2 ns
+            nsSize <- sizeOf SizeOfV0 ns
             chargeGasArgs info (GWrite nsSize)
-            liftGasM info $ _pdbWrite pdb info Write DNamespaces nsn ns
+            liftGasM stack info $ _pdbWrite pdb stack info Write DNamespaces nsn ns
             returnCEKValue cont handler $ VString $ "Namespace defined: " <> (_namespaceName nsn)
           else throwExecutionError info $ DefineNamespaceError "Namespace definition not permitted"
         _ ->
@@ -1567,31 +1568,32 @@ applyContToValue (StackPopC i mty cont) handler v = do
     top : rest -> top :| rest
     [] -> def :| []
 
-applyContToValue (DefPactStepC env cont) handler v =
+applyContToValue (DefPactStepC env info cont) handler v =
+  useEvalState esStack >>= \stack ->
   useEvalState esDefPactExec >>= \case
-    Nothing -> failInvariant def "No PactExec found"
+    Nothing -> failInvariant info "No PactExec found"
     Just pe -> case env ^. ceDefPactStep of
-      Nothing -> failInvariant def "Expected a PactStep in the environment"
+      Nothing -> failInvariant info "Expected a PactStep in the environment"
       Just ps -> do
         let
           pdb = view cePactDb env
           isLastStep = _psStep ps == pred (_peStepCount pe)
           done = (not (_psRollback ps) && isLastStep) || _psRollback ps
         when (nestedPactsNotAdvanced pe ps) $
-          throwExecutionError def (NestedDefpactsNotAdvanced (_peDefPactId pe))
-        writeDefPacts def pdb Write (_psDefPactId ps) -- TODO: def used because we have no `info`.
+          throwExecutionError info (NestedDefpactsNotAdvanced (_peDefPactId pe))
+        writeDefPacts stack info pdb Write (_psDefPactId ps)
             (if done then Nothing else Just pe)
         emitXChainEvents (_psResume ps) pe
         returnCEKValue cont handler v
 
-applyContToValue (NestedDefPactStepC env cont parentDefPactExec) handler v =
+applyContToValue (NestedDefPactStepC env info cont parentDefPactExec) handler v =
   useEvalState esDefPactExec >>= \case
-    Nothing -> failInvariant def "No DefPactExec found"
+    Nothing -> failInvariant info "No DefPactExec found"
     Just pe ->  case env ^. ceDefPactStep of
-      Nothing -> failInvariant def "Expected a DefPactStep in the environment"
+      Nothing -> failInvariant info "Expected a DefPactStep in the environment"
       Just ps -> do
         when (nestedPactsNotAdvanced pe ps) $
-          throwExecutionError def (NestedDefpactsNotAdvanced (_peDefPactId pe))
+          throwExecutionError info (NestedDefpactsNotAdvanced (_peDefPactId pe))
         let npe = parentDefPactExec & peNestedDefPactExec %~ M.insert (_psDefPactId ps) pe
         setEvalState esDefPactExec (Just npe)
         returnCEKValue cont handler v

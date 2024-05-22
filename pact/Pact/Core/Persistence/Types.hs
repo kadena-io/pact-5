@@ -26,15 +26,9 @@ module Pact.Core.Persistence.Types
  , ExecutionMode(..)
  , mdModuleName
  , mdModuleHash
---  , readModule, writeModule
---  , readKeySet, writeKeySet
---  , readDefPacts, writeDefPacts
---  , readNamespace, writeNamespace
  , GuardTableOp(..)
  , TxId(..)
  , TxLog(..)
---  , dbOpDisallowed
---  , dbOpDisallowed2
  , toUserTable
  , objectDataToRowData
  , rowDataToObjectData
@@ -42,10 +36,6 @@ module Pact.Core.Persistence.Types
 
 import Control.Applicative((<|>))
 import Control.Lens
--- import Control.Exception(throwIO)
--- import qualified Control.Monad.Catch as Exceptions
--- import Control.Monad.Error.Class (MonadError, throwError)
--- import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Default
 import Data.Map.Strict(Map)
 import Control.DeepSeq
@@ -62,6 +52,7 @@ import Pact.Core.Hash
 import Pact.Core.PactValue
 import Pact.Core.DefPacts.Types
 import Pact.Core.Namespace
+import Pact.Core.StackFrame
 import Data.ByteString (ByteString)
 
 import Pact.Core.Errors
@@ -92,7 +83,7 @@ mdModuleHash f = \case
 -- | Data reflecting Key/Value storage in user-tables.
 newtype RowData
   = RowData { _unRowData :: Map Field PactValue }
-  deriving (Eq, Show)
+  deriving (Eq, Show, NFData)
 
 objectDataToRowData :: ObjectData PactValue -> RowData
 objectDataToRowData (ObjectData obj) = RowData obj
@@ -181,9 +172,9 @@ data PactDb b i
   = PactDb
   { _pdbPurity :: !Purity
   , _pdbRead :: forall k v. Domain k v b i -> k -> IO (Maybe v)
-  , _pdbWrite :: forall k v. i -> WriteType -> Domain k v b i -> k -> v -> GasM (PactError i) ()
+  , _pdbWrite :: forall k v. [StackFrame i] -> i -> WriteType -> Domain k v b i -> k -> v -> GasM (PactError i) ()
   , _pdbKeys :: forall k v. Domain k v b i -> IO [k]
-  , _pdbCreateUserTable :: i -> TableName -> GasM (PactError i) ()
+  , _pdbCreateUserTable :: [StackFrame i] -> i -> TableName -> GasM (PactError i) ()
   , _pdbBeginTx :: ExecutionMode -> IO (Maybe TxId)
   , _pdbCommitTx :: IO [TxLog ByteString]
   , _pdbRollbackTx :: IO ()

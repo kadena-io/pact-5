@@ -197,6 +197,7 @@ evalTopLevel
   -> S.Set ModuleName
   -> m (CompileValue i)
 evalTopLevel bEnv tlFinal deps = do
+  stack <- useEvalState esStack
   lo0 <- useEvalState esLoaded
   pdb <- viewEvalEnv eePactDb
   case tlFinal of
@@ -216,7 +217,7 @@ evalTopLevel bEnv tlFinal deps = do
           mdata = ModuleData m deps'
       mSize <- sizeOf SizeOfV0 m
       chargeGasArgs (_mInfo m) (GModuleMemory mSize)
-      writeModule (_mInfo m) pdb Write (view mName m) mdata
+      writeModule stack (_mInfo m) pdb Write (view mName m) mdata
       let fqDeps = toFqDep (_mName m) (_mHash m) <$> _mDefs m
           newLoaded = M.fromList fqDeps
           newTopLevel = M.fromList $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind (_mName m) d))) <$> fqDeps
@@ -232,7 +233,7 @@ evalTopLevel bEnv tlFinal deps = do
           mdata = InterfaceData iface deps'
       ifaceSize <- sizeOf SizeOfV0 iface
       chargeGasArgs (_ifInfo iface) (GModuleMemory ifaceSize)
-      writeModule (_ifInfo iface) pdb Write (view ifName iface) mdata
+      writeModule stack (_ifInfo iface) pdb Write (view ifName iface) mdata
       let fqDeps = toFqDep (_ifName iface) (_ifHash iface)
                   <$> mapMaybe ifDefToDef (_ifDefns iface)
           newLoaded = M.fromList fqDeps

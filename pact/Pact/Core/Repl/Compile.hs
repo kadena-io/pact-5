@@ -12,6 +12,7 @@ module Pact.Core.Repl.Compile
  ( ReplCompileValue(..)
  , interpretReplProgram
  , interpretReplProgramSmallStep
+ , loadFile
  ) where
 
 import Control.Lens
@@ -67,6 +68,8 @@ data ReplCompileValue
   | RUserDoc (EvalDef ReplCoreBuiltin SpanInfo) (Maybe Text)
   deriving Show
 
+-- | Internal function for loading a file.
+--   Exported because it is used in the tests.
 loadFile
   :: (CEKEval step ReplCoreBuiltin SpanInfo Repl)
   => FilePath

@@ -31,6 +31,7 @@ import Pact.Core.Errors
 import qualified Pact.Core.Errors as Errors
 import qualified Pact.Core.Persistence as Persistence
 import Pact.Core.PactValue
+import Pact.Core.StackFrame
 import Pact.Core.Literal
 
 
@@ -51,7 +52,7 @@ mockPactDb serial = do
     , _pdbRead = read' refKs refMod refNS refUsrTbl refPacts
     , _pdbWrite = write refKs refMod refNS refUsrTbl refTxId refTxLog refPacts
     , _pdbKeys = keys refKs refMod refNS refUsrTbl refPacts
-    , _pdbCreateUserTable = \info tn -> createUsrTable info refUsrTbl refTxId refTxLog tn
+    , _pdbCreateUserTable = \stackFrame info tn -> createUsrTable stackFrame info refUsrTbl refTxId refTxLog tn
     , _pdbBeginTx = beginTx refRb refTxId refTxLog refMod refKs refUsrTbl
     , _pdbCommitTx = commitTx refRb refTxId refTxLog refMod refKs refUsrTbl
     , _pdbRollbackTx = rollbackTx refRb refTxLog refMod refKs refUsrTbl
@@ -143,19 +144,20 @@ mockPactDb serial = do
       pure (M.keys r)
 
   createUsrTable
-    :: i
+    :: [StackFrame i]
+    -> i
     -> IORef (Map TableName (Map RowKey RowData))
     -> IORef TxId
     -> TxLogQueue
     -> TableName
     -> GasM (PactError i) ()
-  createUsrTable info refUsrTbl _refTxId _refTxLog tbl = do
+  createUsrTable stackFrame info refUsrTbl _refTxId _refTxLog tbl = do
     let rd = RowData $ Map.singleton (Field "utModule")
           (PObject $ Map.fromList
             [ (Field "namespace", maybe (PLiteral LUnit) (PString . _namespaceName) (_mnNamespace (_tableModuleName tbl)))
             , (Field "name", PString (_tableName tbl))
             ])
-    _rdEnc <- _encodeRowData serial info rd
+    _rdEnc <- _encodeRowData serial stackFrame info rd
     ref <- liftIO $ readIORef refUsrTbl
     case M.lookup tbl ref of
       Nothing -> do
@@ -196,17 +198,18 @@ mockPactDb serial = do
     -> IORef TxId
     -> TxLogQueue
     -> IORef (Map DefPactId (Maybe DefPactExec))
+    -> [StackFrame i]
     -> i
     -> WriteType
     -> Domain k v b i
     -> k
     -> v
     -> GasM (PactError i) ()
-  write refKs refMod refNS refUsrTbl refTxId refTxLog refPacts info wt domain k v = case domain of
+  write refKs refMod refNS refUsrTbl refTxId refTxLog refPacts stackFrame info wt domain k v = case domain of
     -- Todo : incrementally serialize other types
     DKeySets -> liftIO $ writeKS refKs refTxId refTxLog k v
     DModules -> liftIO $ writeMod refMod refTxId refTxLog v
-    DUserTables tbl -> writeRowData refUsrTbl refTxId refTxLog tbl info wt k v
+    DUserTables tbl -> writeRowData refUsrTbl refTxId refTxLog tbl stackFrame info wt k v
     DDefPacts -> liftIO $ writePacts' refPacts refTxId refTxLog k v
     DNamespaces -> liftIO $ writeNS refNS refTxId refTxLog k v
 
@@ -221,14 +224,15 @@ mockPactDb serial = do
     -> IORef TxId
     -> TxLogQueue
     -> TableName
+    -> [StackFrame i]
     -> i
     -> WriteType
     -> RowKey
     -> RowData
     -> GasM (PactError i) ()
-  writeRowData ref refTxId refTxLog tbl info wt k v = checkTable tbl ref *> case wt of
+  writeRowData ref refTxId refTxLog tbl stackFrame info wt k v = checkTable tbl ref *> case wt of
     Write -> do
-      encodedData <- _encodeRowData serial info v
+      encodedData <- _encodeRowData serial stackFrame info v
       liftIO $ record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
       liftIO $ modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
     Insert -> do
@@ -236,7 +240,7 @@ mockPactDb serial = do
       case M.lookup tbl r >>= M.lookup k of
         Just _ -> liftIO $ throwIO Errors.WriteException
         Nothing -> do
-          encodedData <- _encodeRowData serial info v
+          encodedData <- _encodeRowData serial stackFrame info v
           liftIO $ record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
           liftIO $ modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
     Update -> do
@@ -245,7 +249,7 @@ mockPactDb serial = do
         Just (RowData m) -> do
           let (RowData v') = v
               nrd = RowData (M.union v' m)
-          encodedData <- _encodeRowData serial info nrd
+          encodedData <- _encodeRowData serial stackFrame info nrd
           liftIO $ record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
           liftIO $ modifyIORef' ref (M.insertWith M.union tbl (M.singleton k nrd))
         Nothing -> liftIO $ throwIO Errors.WriteException

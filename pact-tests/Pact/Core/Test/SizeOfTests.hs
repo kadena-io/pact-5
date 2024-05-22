@@ -35,12 +35,9 @@ tests = testGroup "SizeOfTests" $
       assertEqual "size should be 50" 50 size
   , testCase "PactValue1" $ do
       Right size <- getSize SizeOfV0 (PInteger 1)
-      assertEqual "size should be 32" 32 size
-  , sizeOfSmallObject SizeOfV0 146
-  , sizeOfSmallObject SizeOfV1 154
+      assertEqual "size should be 40" 40 size
+  , sizeOfSmallObject SizeOfV0 154
   , sizeOfGenericsTest SizeOfV0
-  , sizeOfGenericsTest SizeOfV1
-  , sizeOfGenericsTest SizeOfV2
   ]
 
 getSize :: SizeOf a => SizeOfVersion -> a -> IO (Either PactErrorI Bytes)

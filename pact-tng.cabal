@@ -101,7 +101,6 @@ common pact-common
     FlexibleInstances
     NumericUnderscores
     TypeOperators
-    PartialTypeSignatures
 
 -- internal crypto lirbary
 library pact-crypto
@@ -286,10 +285,13 @@ benchmark bench
     , containers
     , criterion
     , data-default
+    , Decimal
     , filepath
     , mtl
     , pact-tng
     , text
+    , deepseq
+    , pact-time
   ghc-options: -WAll -threaded -rtsopts "-with-rtsopts=-N"
   hs-source-dirs: bench
   default-language: Haskell2010

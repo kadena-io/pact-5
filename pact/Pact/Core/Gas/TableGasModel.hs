@@ -8,7 +8,9 @@ module Pact.Core.Gas.TableGasModel
   --
  , pointAddGas
  , scalarMulGas
- , pairingGas)
+ , pairingGas
+ , SerializationCosts(..)
+ , serializationCosts)
  where
 
 import Data.Word(Word64)
@@ -573,6 +575,32 @@ dbReadPenalty = 10_000
 
 dbMetadataTxPenalty :: Word64
 dbMetadataTxPenalty = 100_000
+
+-- PactValue serialization costs
+
+data SerializationCosts = SerializationCosts
+  { objectKeyCostMilliGasOffset :: Word64
+  , objectKeyCostMilliGasPer1000Chars :: Word64
+  , boolMilliGasCost :: Word64
+  , unitMilliGasCost :: Word64
+  , integerCostMilliGasPerDigit :: Word64
+  , decimalCostMilliGasOffset :: Word64
+  , decimalCostMilliGasPerDigit :: Word64
+  , timeCostMilliGas :: Word64
+  }
+
+serializationCosts :: SerializationCosts
+serializationCosts = SerializationCosts
+  { objectKeyCostMilliGasOffset = 1
+  , objectKeyCostMilliGasPer1000Chars = 69
+  , boolMilliGasCost = 52
+  , unitMilliGasCost = 51
+  , integerCostMilliGasPerDigit = 2
+  , decimalCostMilliGasOffset = 59
+  , decimalCostMilliGasPerDigit = 2
+  , timeCostMilliGas = 184
+  }
+
 
 -- [Decimal Comparisons]
 -- The `Ord` instance, and by that measure and comparison on two decimals is done via

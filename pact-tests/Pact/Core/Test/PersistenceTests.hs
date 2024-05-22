@@ -67,7 +67,7 @@ keysetPersistRoundtrip serial builtins keysetGen =
     keyset <- forAll keysetGen
     evalEnv <- liftIO $ getEvalEnv serial builtins
     writtenKeySetResult <- liftIO $ runEvalM evalEnv def  $ withSqlitePactDb serial ":memory:" $ \db -> do
-      () <- writeKeySet def db Insert keysetName keyset
+      () <- writeKeySet [] def db Insert keysetName keyset
       liftIO $ readKeySet db keysetName
     case writtenKeySetResult of
       (Left _, _) -> fail "Unexpected EvalM error"
@@ -79,7 +79,7 @@ moduleDataRoundtrip serial builtins b i = property $ do
   moduleName <- forAll moduleNameGen
   evalEnv <- liftIO $ getEvalEnv serial builtins
   readResult <- liftIO $ runEvalM evalEnv def $ withSqlitePactDb serial ":memory:" $ \db -> do
-    () <- writeModule def db Insert moduleName moduleData
+    () <- writeModule [] def db Insert moduleName moduleData
     liftIO $ readModule db moduleName
   case readResult of
     (Left _, _) -> fail "Unexpected EvalM error"
@@ -92,7 +92,7 @@ defPactExecRoundtrip serial builtins _b _i = property $ do
   defPactExec <- forAll (Gen.maybe defPactExecGen)
   evalEnv <- liftIO $ getEvalEnv serial builtins
   writeResult <- liftIO $ runEvalM evalEnv def $ withSqlitePactDb serial ":memory:" $ \db -> do
-    () <- writeDefPacts def db Insert defPactId defPactExec
+    () <- writeDefPacts [] def db Insert defPactId defPactExec
     liftIO $ readDefPacts db defPactId
   case writeResult of
     (Left _, _) -> fail "Unexpected EvalM error"
@@ -105,7 +105,7 @@ namespaceRoundtrip serial builtins = property $ do
   namespace <- forAll namespaceGen
   evalEnv <- liftIO $ getEvalEnv serial builtins
   writeResult <- liftIO $ runEvalM evalEnv def $ withSqlitePactDb serial ":memory:" $ \db -> do
-    () <- writeNamespace def db Insert ns namespace
+    () <- writeNamespace [] def db Insert ns namespace
     liftIO $ readNamespace db ns
   case writeResult of
     (Left _, _) -> fail "Unexpected EvalM error"
@@ -126,7 +126,7 @@ sqliteRegression =
         user1 = "user1"
         usert = TableName user1 (ModuleName "someModule" Nothing)
       _txId1 <- liftIO $ _pdbBeginTx pdb Transactional
-      liftGasM def $ _pdbCreateUserTable pdb def usert
+      liftGasM [] def $ _pdbCreateUserTable pdb [] def usert
 
       txs1 <- liftIO $ _pdbCommitTx pdb
       let
@@ -135,7 +135,7 @@ sqliteRegression =
             [ (Field "namespace", PLiteral LUnit)
             , (Field "name", PString user1)
             ])
-      rdEnc <- liftGasM def $ _encodeRowData serialisePact_repl_spaninfo def rd
+      rdEnc <- liftGasM [] def $ _encodeRowData serialisePact_repl_spaninfo [] def rd
       liftIO $ assertEqual "output of commit" txs1 [ TxLog "SYS:usertables" "user1" rdEnc ]
 
 
@@ -145,8 +145,8 @@ sqliteRegression =
         Just t -> pure t
       let
         row = RowData $ Map.fromList [(Field "gah", PactValue.PDecimal 123.454345)]
-      rowEnc <- liftGasM def $ _encodeRowData serialisePact_repl_spaninfo def row
-      liftGasM def $ _pdbWrite pdb def Insert (DUserTables usert) (RowKey "key1") row
+      rowEnc <- liftGasM [] def $ _encodeRowData serialisePact_repl_spaninfo [] def row
+      liftGasM [] def $ _pdbWrite pdb [] def Insert (DUserTables usert) (RowKey "key1") row
       row' <- liftIO $ do
          _pdbRead pdb (DUserTables usert) (RowKey "key1") >>= \case
            Nothing -> error "expected row"
@@ -158,9 +158,9 @@ sqliteRegression =
               [ (Field "gah", PactValue.PBool False)
               , (Field "fh", PactValue.PInteger 1)
               ]
-      row2Enc <- liftGasM def $ _encodeRowData serialisePact_repl_spaninfo def row2
+      row2Enc <- liftGasM [] def $ _encodeRowData serialisePact_repl_spaninfo [] def row2
 
-      liftGasM def $ _pdbWrite pdb def Update (DUserTables usert) (RowKey "key1") row2
+      liftGasM [] def $ _pdbWrite pdb [] def Update (DUserTables usert) (RowKey "key1") row2
       row2' <- liftIO $ _pdbRead pdb (DUserTables usert) (RowKey "key1") >>= \case
         Nothing -> error "expected row"
         Just r -> pure r
@@ -169,7 +169,7 @@ sqliteRegression =
       let
         ks = KeySet (Set.fromList [PublicKeyText "skdjhfskj"]) KeysAll
         ksEnc = _encodeKeySet serialisePact_repl_spaninfo ks
-      _ <- liftGasM def $ _pdbWrite pdb def Write DKeySets (KeySetName "ks1" Nothing) ks
+      _ <- liftGasM [] def $ _pdbWrite pdb [] def Write DKeySets (KeySetName "ks1" Nothing) ks
       ks' <- liftIO $ _pdbRead pdb DKeySets (KeySetName "ks1" Nothing) >>= \case
         Nothing -> error "expected keyset"
         Just r -> pure r
@@ -180,7 +180,7 @@ sqliteRegression =
       let mn = ModuleName "test" Nothing
       md <- liftIO loadModule
       let mdEnc = _encodeModuleData serialisePact_repl_spaninfo md
-      liftGasM def $ _pdbWrite pdb def Write DModules mn md
+      liftGasM [] def $ _pdbWrite pdb [] def Write DModules mn md
 
       md' <- liftIO $ _pdbRead pdb DModules mn >>= \case
         Nothing -> error "Expected module"
@@ -206,7 +206,7 @@ sqliteRegression =
           [ TxLog "USER_someModule_user1" "key1" (RowData $ Map.union (_unRowData row2) (_unRowData row))
           ]
 
-      liftGasM def $ _pdbWrite pdb def Insert (DUserTables usert) (RowKey "key2") row
+      liftGasM [] def $ _pdbWrite pdb [] def Insert (DUserTables usert) (RowKey "key2") row
       r1 <- liftIO $ _pdbRead pdb (DUserTables usert) (RowKey "key2") >>= \case
         Nothing -> error "expected row"
         Just r -> pure r

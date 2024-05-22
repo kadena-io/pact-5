@@ -1135,14 +1135,15 @@ dbKeyLog info b cont handler env = \case
 
 defineKeySet'
   :: (CEKEval step b i m, MonadEval b i m)
-  => i
+  => [StackFrame i]
+  -> i
   -> Cont step b i m
   -> CEKErrorHandler step b i m
   -> CEKEnv step b i m
   -> T.Text
   -> KeySet
   -> m (CEKEvalResult step b i m)
-defineKeySet' info cont handler env ksname newKs  = do
+defineKeySet' stack info cont handler env ksname newKs  = do
   let pdb = view cePactDb env
   ignoreNamespaces <- not <$> isExecutionFlagSet FlagRequireKeysetNs
   case parseAnyKeysetName ksname of
@@ -1151,7 +1152,7 @@ defineKeySet' info cont handler env ksname newKs  = do
       let writeKs = do
             newKsSize <- sizeOf SizeOfV0 newKs
             chargeGasArgs info (GWrite newKsSize)
-            writeKeySet info pdb Write ksn newKs
+            writeKeySet stack info pdb Write ksn newKs
             returnCEKValue cont handler (VString "Keyset write success")
       liftDbFunction info (readKeySet pdb ksn) >>= \case
         Just oldKs -> do
@@ -1166,17 +1167,19 @@ defineKeySet' info cont handler env ksname newKs  = do
             enforceGuard info cont' handler env uGuard
 
 defineKeySet :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
-defineKeySet info b cont handler env = \case
-  [VString ksname, VGuard (GKeyset ks)] -> do
-    enforceTopLevelOnly info b
-    defineKeySet' info cont handler env ksname ks
-  [VString ksname] -> do
-    enforceTopLevelOnly info b
-    readKeyset' info ksname >>= \case
-      Just newKs ->
-        defineKeySet' info cont handler env ksname newKs
-      Nothing -> returnCEK cont handler (VError "read-keyset failure" info)
-  args -> argsError info b args
+defineKeySet info b cont handler env args = do
+  stack <- useEvalState esStack
+  case args of
+    [VString ksname, VGuard (GKeyset ks)] -> do
+      enforceTopLevelOnly info b
+      defineKeySet' stack info cont handler env ksname ks
+    [VString ksname] -> do
+      enforceTopLevelOnly info b
+      readKeyset' info ksname >>= \case
+        Just newKs ->
+          defineKeySet' stack info cont handler env ksname newKs
+        Nothing -> returnCEK cont handler (VError "read-keyset failure" info)
+    _ -> argsError info b args
 
 --------------------------------------------------
 -- Capabilities
@@ -1733,9 +1736,10 @@ coreDefineNamespace info b cont handler env = \case
         enforceGuard info cont' handler env laoG
       Nothing -> viewEvalEnv eeNamespacePolicy >>= \case
         SimpleNamespacePolicy -> do
+          stack <- useEvalState esStack
           nsSize <- sizeOf SizeOfV0 ns
           chargeGasArgs info (GWrite nsSize)
-          liftGasM info $ _pdbWrite pdb info Write DNamespaces nsn ns
+          liftGasM stack info $ _pdbWrite pdb stack info Write DNamespaces nsn ns
           returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
         SmartNamespacePolicy _ fun -> getModuleMemberWithHash info pdb fun >>= \case
           (Dfun d, mh) -> do

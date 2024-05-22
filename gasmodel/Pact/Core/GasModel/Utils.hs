@@ -242,11 +242,11 @@ gmLoaded = Loaded
 prepopulateDb :: Default i => PactDb CoreBuiltin i -> GasM (PactError i) ()
 prepopulateDb pdb = do
   _ <- liftIO $ _pdbBeginTx pdb Transactional
-  _pdbCreateUserTable pdb def gasModelTable
-  _pdbWrite pdb def Write (DUserTables gasModelTable) gmTableK1 gmTableV1
-  _pdbWrite pdb def Write (DUserTables gasModelTable) gmTableK1 gmTableV1
-  _pdbWrite pdb def Write DNamespaces gmNamespaceName gmNamespace
-  _pdbWrite pdb def Write DKeySets gmKeysetName gmKeyset
+  _pdbCreateUserTable pdb [] def gasModelTable
+  _pdbWrite pdb [] def Write (DUserTables gasModelTable) gmTableK1 gmTableV1
+  _pdbWrite pdb [] def Write (DUserTables gasModelTable) gmTableK1 gmTableV1
+  _pdbWrite pdb [] def Write DNamespaces gmNamespaceName gmNamespace
+  _pdbWrite pdb [] def Write DKeySets gmKeysetName gmKeyset
   _ <- liftIO $ _pdbCommitTx pdb
   pure ()
 
