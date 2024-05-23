@@ -68,16 +68,21 @@ main = do
   coinModule <- expectEval ee es $ getModule coinModuleCode
 
 
-  let rd1 = rowData 1
-      _ = id rd1
-      rd2 = rowData 1000
-      _ = id rd2
-      rd3 = rowData 10_000
-      _ = id rd3
-      rd4 = rowData 100_000
-      _ = id rd4
-      rd5 = rowData 100_000_000
-      _ = id rd5
+  let rd1 = rowData 1 1
+      -- deepseq rd1
+      _ = rnf rd1
+      rd2 = rowData 1000 1
+      _ = rnf rd2
+      rd3 = rowData 10_000 1
+      _ = rnf rd3
+      rd4 = rowData 100_000 1
+      _ = rnf rd4
+      rd5 = rowData 100_000_000 1
+      _ = rnf rd5
+
+      rd1b = rowData 10 10
+      rd2b = rowData 1000 10
+      rd3b = rowData 1_000_000 1000
 
   -- The comments list the time that each action takes, and the
   -- number of calls made to the countBytes function.
@@ -116,12 +121,26 @@ main = do
       -- 36 ms (14400 milligas) / 253338 bytes / 18637 calls to countBytes => 0.8 milligas per call
     , bench "module-coin" $ nfIO $ getSize ee es SizeOfV2 coinModule
 
-      --
-    , bench "row-data 1" $ nfIO $ ignoreGas () (encodeRowData () $ rd1)
-    , bench "row-data 2" $ nfIO $ ignoreGas () (encodeRowData () $ rd2)
-    , bench "row-data 3" $ nfIO $ ignoreGas () (encodeRowData () $ rd3)
-    , bench "row-data 4" $ nfIO $ ignoreGas () (encodeRowData () $ rd4)
-    , bench "row-data 5" $ nfIO $ ignoreGas () (encodeRowData () $ rd5)
+    --   -- 453 ns (183 milligas)
+    -- , bench "row-data 1" $ nfIO $ (ignoreGas () . encodeRowData ()) rd1
+
+    --   -- 600 ns (60 milligas)
+    -- , bench "row-data 2" $ nfIO $ (ignoreGas () . encodeRowData ()) rd2
+
+    --   -- 5987 ns (1090 milligas)
+    -- , bench "row-data 3" $ nfIO $ (ignoreGas () . encodeRowData ()) rd3
+
+    --   -- 5.9 micros (8500000 milligas)
+    -- , bench "row-data 5" $ nfIO $ (ignoreGas () . encodeRowData ()) rd5
+
+    -- 1700 nanos ()/ 10 chars
+    , bench "row-data 1b" $ nfIO $ (ignoreGas () . encodeRowData ()) rd1b
+    
+    -- 1954 nanos () / 1000 characters
+    , bench "row-data 2b" $ nfIO $ (ignoreGas () . encodeRowData ()) rd2b
+
+    -- 337 micros () / 1_000_000 characters
+    , bench "row-data 3b" $ nfIO $ (ignoreGas () . encodeRowData ()) rd3b
     ]
   where
     !longString = Text.replicate 100_000 "a"
@@ -130,8 +149,16 @@ main = do
     !longNestedBoolList = List.replicate 100 (List.replicate 1000 True)
     !longNestedBoolList2 = List.replicate 10_000 (List.replicate 10 True)
 
-rowData :: Int -> RowData
-rowData n = RowData (M.fromList [(Field $ Text.pack (replicate n 'a'), PLiteral $ LInteger 1)])
+-- | For a given target length for all the keys, and a given number of elements,
+--   Create a RowData with desired size, with  keys of length that add up to
+--   the target.
+rowData :: Int -> Int -> RowData
+rowData nChars nElems =
+  RowData (M.fromList $ map (\i -> (fieldName i, PLiteral (LInteger (fromIntegral i)))) [0..nElems] )
+  where
+    fieldNameLength = nChars `div` nElems
+    fieldName i = padName $ Field $ Text.pack (show i)
+    padName (Field f) = Field $ Text.replicate (fieldNameLength - Text.length f) "0" <> f
 
 getModule :: String -> EvalM ReplCoreBuiltin SpanInfo (Module Name Type ReplCoreBuiltin SpanInfo)
 getModule code = do

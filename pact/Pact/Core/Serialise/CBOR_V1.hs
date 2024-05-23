@@ -104,8 +104,16 @@ encodeRowData info rd = do
 
 gasSerializeRowData :: forall i. i -> RowData -> GasM (PactError i) ()
 gasSerializeRowData info (RowData fields) = do
+
   -- Charge for keys
-  chargeGasMSerialize info $ MilliGas $ 1000 * fromIntegral (sum $ Text.length . _field <$> Map.keys fields)
+  -- According to our benchmarking (see `Bench.hs`), it costs
+  -- 183 + (250 * nKiloCharacters in keys) to serialize the keys in a RowData.
+  -- We pad this for safety.
+  let offsetCostMilligas = 200
+  let perKiloCharacterCostMilligas = 400
+  let nKiloCharacters = fromIntegral (sum $ Text.length . _field <$> Map.keys fields) `div` 1000
+  chargeGasMSerialize info $ MilliGas $ offsetCostMilligas + perKiloCharacterCostMilligas * nKiloCharacters 
+
   -- Charge for values
   traverse_ gasSerializePactValue fields
 
