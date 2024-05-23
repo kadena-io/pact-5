@@ -30,4 +30,4 @@ pact>(and? (> 20) (> 10) 15)
 true
 ```
 
-In this example, the `and?` function applies the functions `> 20` and `> 10` to the value `15`, resulting in `true` because both conditions are met (`15 > 20` is false, and `15 > 10` is true).
+In this example, the `and?` function applies the functions `> 20` and `> 10` to the value `15`, resulting in `false` because the second conditions `10 > 15` is false.
