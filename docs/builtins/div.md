@@ -13,8 +13,8 @@ Use the following arguments to specify the values for division using the `/` Pac
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `x` | `<a[integer,decimal]>` | Specifies the dividend. |
-| `y` | `<a[integer,decimal]>` | Specifies the divisor. |
+| `x` | `integer` or `decimal` | Specifies the dividend. |
+| `y` | `integer` or `decimal` | Specifies the divisor. |
 
 ### Return value
 
