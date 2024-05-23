@@ -749,6 +749,13 @@ benchIsCharset pdb =
     ]
   ]
 
+benchPoseidon :: BuiltinBenches
+benchPoseidon pdb =
+  [ runNativeBenchmark pdb (show cnt) [text|(poseidon-hash-hack-a-chain $args)|]
+  | cnt <- [1..8] :: [Int]
+  , let args = T.unwords $ T.pack . show <$> [1..cnt]
+  ]
+
 benchesForBuiltin :: CoreBuiltin -> BuiltinBenches
 benchesForBuiltin bn = case bn of
   CoreAdd -> benchArithBinOp "+" <> benchAddNonArithOverloads
@@ -850,6 +857,7 @@ benchesForBuiltin bn = case bn of
   CoreZkPairingCheck -> omittedDeliberately
   CoreZKScalarMult -> omittedDeliberately
   CoreZkPointAdd -> omittedDeliberately
+  CorePoseidonHashHackachain -> benchPoseidon
   _ -> const []
   where
   omittedDeliberately = const []
