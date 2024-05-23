@@ -5,7 +5,7 @@ Use `base64-decode` to decode a `string` from unpadded base64 encoding.
 
 To decode a `string` from unpadded base64 encoding, use the following syntax:
 
-base64-decode string
+`(base64-decode string)`
 
 ### Arguments
 
@@ -13,7 +13,7 @@ Use the following argument to specify the `string` to decode using the `base64-d
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| string | string | Specifies the base64 encoded `string` to decode. |
+| `string` | `string` | Specifies the base64 encoded `string` to decode. |
 
 ### Return values
 
