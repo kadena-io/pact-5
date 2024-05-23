@@ -30,3 +30,10 @@ pact>(add-time (time "2016-07-22T12:00:00Z") 15)
 ```
 
 In this example, `add-time` returns the time "2016-07-22T12:00:15Z" after adding 15 seconds to the specified time "2016-07-22T12:00:00Z".
+
+Usually, `add-time` is being used with `hours` and `minutes` as follows:
+
+```pact
+pact>(add-time (time "2016-07-22T12:00:00Z") (+ (hours 1) (+ (minutes 17) 5)))
+2016-07-22 13:17:05 UTC
+```pact
