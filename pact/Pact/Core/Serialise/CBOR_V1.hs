@@ -1,4 +1,5 @@
 -- |
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 
@@ -24,6 +25,8 @@ import Data.Decimal
 import Data.Foldable
 import Data.IORef
 import qualified Data.Text as Text
+import qualified GHC.Integer.Logarithms as IntLog
+import GHC.Int(Int(..))
 
 import Pact.Core.Names
 import Pact.Core.Persistence
@@ -39,6 +42,7 @@ import Pact.Core.Imports
 import Pact.Core.Info
 import Pact.Core.DefPacts.Types
 import Pact.Core.PactValue
+import Pact.Core.Pretty
 import Pact.Core.ModRefs
 import Pact.Core.ChainData
 import Pact.Core.Namespace
@@ -130,15 +134,22 @@ gasSerializeRowData info (RowData fields) = do
       PObject o -> do
         chargeGasMSerialize info $ MilliGas $ (1000 *) $ sum $ fromIntegral . Text.length . _field <$> Map.keys o
         traverse_ gasSerializePactValue o
-      PCapToken {} -> chargeGasMSerialize info $ MilliGas 1000
-      PTime _ -> chargeGasMSerialize info $ MilliGas 1000
+      PCapToken (CapToken name args) -> do
+        chargeGasMSerialize info $ MilliGas $ 1 + 69 * fromIntegral (Text.length (renderText name))
+        traverse_ gasSerializePactValue args
+      PTime _ -> chargeGasMSerialize info $ MilliGas 184
 
     gasSerializeLiteral = \case
-      LString s -> chargeGasMSerialize info $ MilliGas $ 1000 * fromIntegral (Text.length s)
-      LInteger i -> chargeGasMSerialize info $ MilliGas $ 1000 * fromIntegral (length (show i))
-      LDecimal d -> chargeGasMSerialize info $ MilliGas $ 1000 * fromIntegral (length (show d))
-      LBool _ -> chargeGasMSerialize info $ MilliGas 1000
-      LUnit -> chargeGasMSerialize info $ MilliGas 1000
+      LString s ->
+        -- See the analysis in `Bench.hs` - `pact-string-2` for details.
+        chargeGasMSerialize info $ MilliGas $ 1 + 69 * fromIntegral (Text.length s) `div` 1000
+      LInteger i ->
+        -- See the analysis in `Bench.hs` - `pact-ineger-2` for details.
+        chargeGasMSerialize info $ MilliGas $ 2 * fromIntegral (I# (IntLog.integerLogBase# 10 (abs i)))
+      LDecimal d ->
+        chargeGasMSerialize info $ MilliGas $ 59 + 2 * fromIntegral (I# (IntLog.integerLogBase# 10 (decimalMantissa d)))
+      LBool _ -> chargeGasMSerialize info $ MilliGas 52
+      LUnit -> chargeGasMSerialize info $ MilliGas 51
 
 
 decodeRowData :: ByteString -> Maybe RowData

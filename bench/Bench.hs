@@ -12,9 +12,11 @@ import Control.Monad.IO.Class
 import Control.Monad.State
 import Criterion.Main hiding (env)
 import Data.Default (Default, def)
+import Data.Decimal
 import Data.List qualified as List
 import Data.Either (fromRight)
 import Data.Text qualified as Text
+import Data.Int (Int64)
 import Data.Word (Word64)
 import System.FilePath
 import qualified Data.Map as M
@@ -40,10 +42,12 @@ import Pact.Core.Syntax.LexUtils qualified as Lisp
 import Pact.Core.Syntax.ParseTree qualified as Lisp
 import Pact.Core.Syntax.Parser
 import Pact.Core.SizeOf
+import qualified Pact.Time as PactTime
 import Pact.Core.Syntax.Parser qualified as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import Pact.Core.Errors (PactErrorI)
 import Control.DeepSeq
+import qualified Data.Type.Bool as Bool
 
 getSize :: (Default i, SizeOf a, IsBuiltin b, Show i) => EvalEnv b i -> EvalState b i -> SizeOfVersion -> a -> IO Word64
 getSize env state version value = do
@@ -83,6 +87,29 @@ main = do
       rd1b = rowData 10 10
       rd2b = rowData 1000 10
       rd3b = rowData 1_000_000 1000
+
+      int1 = rowInteger 1000 1
+      int2 = rowInteger 1000 1_000_000_000_000
+      int3 = rowInteger 2000 1_000_000_000_000
+
+      str1 = rowString 1000 1
+      str2 = rowString 1000 1000
+      str3 = rowString 2000 1000
+
+      decimal1 = rowDecimal 1 1
+      decimal2 = rowDecimal 1 111_111_111
+      decimal3 = rowDecimal 1 0.111_111_111
+      decimal4 = rowDecimal 1000 1
+      decimal5 = rowDecimal 2000 1
+
+      bool1 = rowBool 1
+      bool2 = rowBool 1000
+
+      unit1 = rowUnit 1
+      unit2 = rowUnit 1000
+
+      time1 = rowTime 2024
+      time2 = rowTime 20_000_000_000_000_000
 
   -- The comments list the time that each action takes, and the
   -- number of calls made to the countBytes function.
@@ -141,6 +168,74 @@ main = do
 
     -- 337 micros () / 1_000_000 characters
     , bench "row-data 3b" $ nfIO $ (ignoreGas () . encodeRowData ()) rd3b
+
+    -- 144 micros (57600 milligas) : 1000 small integers
+    , bench "pact-integer-1" $ nfIO $ (ignoreGas () . encodeRowData ()) int1
+
+    -- 190 micros (76000 milligas) : 1000 large integers (1e12).
+    -- (this - pact-integer-2) / 1000 = 46 nanos per integer, when we move
+    -- from 1 digit to 12 digits. Each digit adds 4 nanos, or 2 milligas.
+    , bench "pact-integer-2" $ nfIO $ (ignoreGas () . encodeRowData ()) int2
+
+    -- 381 micros (152400 milligas) : 2000 large integers (1e12).
+    -- This bench differs from pact-integer-2 by having 2000 integers instead of 1000.
+    -- It takes about twice as long as pact-integer-2, validating the linear
+    -- effect of integer count on encoding time.
+    , bench "pact-integer-3" $ nfIO $ (ignoreGas () . encodeRowData ()) int3
+
+    -- 154 micros (61600 milligas) : 1000 strings of length 1
+    , bench "pact-string-1" $ nfIO $ (ignoreGas () . encodeRowData ()) str1
+
+    -- 327 micros (130800 milligas) : 1000 strings of length 1000.
+    -- This bench differs from pact-string-1 by using strings of length 1000
+    -- instead of strings of length 1.
+    -- It takes an extra 173 micros, 173 nanos (69 milligas) per element.
+    -- So the gas cost of a string is 69 milligas per 1000 characters.
+    , bench "pact-string-2" $ nfIO $ (ignoreGas () . encodeRowData ()) str2
+    
+    -- 652 micros. This bench differs from pact-string-2 by having twice
+    -- as many elements, and it takes twice as long, as expected.
+    , bench "pact-string-3" $ nfIO $ (ignoreGas () . encodeRowData ()) str3
+
+    -- 599 nanos (240 milligas) : 1 decimal with 1 digit
+    , bench "pact-decimal-1" $ nfIO $ (ignoreGas () . encodeRowData ()) decimal1
+
+    -- 670 nanos (268 milligas) : 1 decimal with 9 digits
+    , bench "pact-decimal-2" $ nfIO $ (ignoreGas () . encodeRowData ()) decimal2
+
+    -- 641 nanos (256 milligas) : 1 decimal with 9 digits and a different exponent
+    -- Each digit adds 7 nanos, or 2.8 milligas.
+    , bench "pact-decimal-3" $ nfIO $ (ignoreGas () . encodeRowData ()) decimal3
+
+    -- 145 micros  (58000 milligas) : 1000 decimals with 1 digit
+    -- Scaling up to 1000 Decimals (each with 1 digit), serialization
+    -- takes 145 nanos per Decimal, or 58 milligas. We use this as the
+    -- per-Decimal offset gas cost.
+    , bench "pact-decimal-4" $ nfIO $ (ignoreGas () . encodeRowData ()) decimal4
+
+    -- 294 micros (117600 milligas) : 2000 decimals with 1 digit
+    , bench "pact-decimal-5" $ nfIO $ (ignoreGas () . encodeRowData ()) decimal5
+
+    -- 537 nanos (214 milligas) : 1 boolean
+    , bench "pact-bool-1" $ nfIO $ (ignoreGas () . encodeRowData ()) bool1
+
+    -- 131 micros (52400 milligas) : 1000 booleans.
+    -- Serializing each boolean costs 131 nanos (52 milligas).
+    , bench "pact-bool-2" $ nfIO $ (ignoreGas () . encodeRowData ()) bool2
+
+    -- 541 nanos (216 milligas) : 1 unit
+    , bench "pact-unit-1" $ nfIO $ (ignoreGas () . encodeRowData ()) unit1
+
+    -- 128 micros (51200 milligas) : 1000 units.
+    -- Serializing each unit costs 128 nanos (51 milligas).
+    , bench "pact-unit-2" $ nfIO $ (ignoreGas () . encodeRowData ()) unit2
+
+    -- 460 nanos (184 milligas) : 1 time
+    , bench "pact-time-1" $ nfIO $ (ignoreGas () . encodeRowData ()) time1
+
+    -- 460 nanos (184 milligas) : 1 time much further in the future.
+    -- No matter the time, serializing a time costs 184 milligas.
+    , bench "pact-time-2" $ nfIO $ (ignoreGas () . encodeRowData ()) time2
     ]
   where
     !longString = Text.replicate 100_000 "a"
@@ -159,6 +254,51 @@ rowData nChars nElems =
     fieldNameLength = nChars `div` nElems
     fieldName i = padName $ Field $ Text.pack (show i)
     padName (Field f) = Field $ Text.replicate (fieldNameLength - Text.length f) "0" <> f
+
+rowInteger :: Int -> Int -> RowData
+rowInteger nElems intValue =
+  RowData (M.fromList $ map (\i -> (fieldName i, PLiteral (LInteger (fromIntegral intValue)))) [0..nElems] )
+  where
+    fieldNameLength = 10
+    fieldName i = padName $ Field $ Text.pack (show i)
+    padName (Field f) = Field $ Text.replicate (20 - Text.length f) "0" <> f
+
+rowString :: Int -> Int -> RowData
+rowString nElems elemLength =
+  RowData (M.fromList $ map (\i -> (fieldName i, PString (Text.replicate elemLength "."))) [0..nElems] )
+  where
+    fieldNameLength = 10
+    fieldName i = padName $ Field $ Text.pack (show i)
+    padName (Field f) = Field $ Text.replicate (20 - Text.length f) "0" <> f
+
+rowDecimal :: Int -> Decimal -> RowData
+rowDecimal nElems decimalValue =
+  RowData (M.fromList $ map (\i -> (fieldName i, PDecimal decimalValue)) [0..nElems] )
+  where
+    fieldNameLength = 10
+    fieldName i = padName $ Field $ Text.pack (show i)
+    padName (Field f) = Field $ Text.replicate (20 - Text.length f) "0" <> f
+
+rowBool :: Int -> RowData
+rowBool nElems =
+  RowData (M.fromList $ map (\i -> (fieldName i, PBool False)) [0..nElems] )
+  where
+    fieldNameLength = 10
+    fieldName i = padName $ Field $ Text.pack (show i)
+    padName (Field f) = Field $ Text.replicate (20 - Text.length f) "0" <> f
+
+rowUnit :: Int -> RowData
+rowUnit nElems =
+  RowData (M.fromList $ map (\i -> (fieldName i, PUnit)) [0..nElems] )
+  where
+    fieldNameLength = 10
+    fieldName i = padName $ Field $ Text.pack (show i)
+    padName (Field f) = Field $ Text.replicate (4 - Text.length f) "0" <> f
+
+rowTime :: Int64 -> RowData
+rowTime extraMicros =
+  RowData (M.fromList [(Field "0", PTime (PactTime.fromPosixTimestampMicros extraMicros))] )
+
 
 getModule :: String -> EvalM ReplCoreBuiltin SpanInfo (Module Name Type ReplCoreBuiltin SpanInfo)
 getModule code = do
