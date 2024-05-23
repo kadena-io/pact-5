@@ -1,3 +1,4 @@
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -99,14 +100,14 @@ benchArithBinOp op pdb =
     [ runNativeBenchmark pdb title [text|($op $x $x.0)|] | (title, x) <- vals ]
   ]
   where
-  vals = take 3 $ enumExpText 1000 1000000
+  vals = take 3 $ enumExpText 1_000 1_000_000
 
 benchPow :: BuiltinBenches
 benchPow pdb =
   [ C.bgroup "integer"
     [ runNativeBenchmark pdb (xTitle <> "_" <> yTitle) [text|(^ $x $y)|]
-    | (xTitle, x) <- take 3 $ enumExpText 1000 100
-    , (yTitle, y) <- take 3 $ enumExpText 1000 100
+    | (xTitle, x) <- take 3 $ enumExpText 1_000 100
+    , (yTitle, y) <- take 3 $ enumExpText 1_000 100
     ]
   , C.bgroup "float"
     [ runNativeBenchmark pdb title [text|(^ $x.0 $x.0)|] | (title, x) <- floatVals ]
@@ -126,13 +127,13 @@ benchArithUnOp op pdb =
     [ runNativeBenchmark pdb title [text|($op $x.0)|] | (title, x) <- vals ]
   ]
   where
-  vals = take 3 $ enumExpText 1000 1000000
+  vals = take 3 $ enumExpText 1_000 1_000_000
 
 benchAddNonArithOverloads :: BuiltinBenches
 benchAddNonArithOverloads pdb =
   [ C.bgroup "list-shallow"
     [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(+ x x)|]
-    | (title, list) <- take 3 $ enumExpList 1000 100
+    | (title, list) <- take 3 $ enumExpList 1_000 100
     ]
   , C.bgroup "list-deep"
     [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(+ x x)|]
@@ -140,11 +141,11 @@ benchAddNonArithOverloads pdb =
     ]
   , C.bgroup "object"
     [ runNativeBenchmarkPrepared [("x", obj)] pdb title [text|(+ x x)|]
-    | (title, obj) <- take 3 $ enumExpObject 1000 100
+    | (title, obj) <- take 3 $ enumExpObject 1_000 100
     ]
   , C.bgroup "string"
     [ runNativeBenchmarkPrepared [("x", str)] pdb title [text|(+ x x)|]
-    | (title, str) <- take 3 $ enumExpString "a" 1000 1000
+    | (title, str) <- take 3 $ enumExpString "a" 1_000 1_000
     ]
   ]
 
@@ -156,7 +157,7 @@ benchNegate pdb =
     [ runNativeBenchmark pdb title [text|(negate $x.0)|] | (title, x) <- vals ]
   ]
   where
-  vals = take 3 $ enumExpText 1000 1000000
+  vals = take 3 $ enumExpText 1_000 1_000_000
 
 benchEqOp :: T.Text -> BuiltinBenches
 benchEqOp op pdb =
@@ -169,11 +170,11 @@ benchEqOp op pdb =
   where
   listsEq =
     [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|($op x x)|]
-    | (title, list) <- take 3 $ enumExpList 1000 100
+    | (title, list) <- take 3 $ enumExpList 1_000 100
     ]
   listsNeq =
     [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|($op x [])|]
-    | (title, list) <- take 3 $ enumExpList 1000 100
+    | (title, list) <- take 3 $ enumExpList 1_000 100
     ]
   listsDeep =
     [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|($op x x)|]
@@ -181,54 +182,54 @@ benchEqOp op pdb =
     ]
   objsSimple =
     [ runNativeBenchmarkPrepared [("x", obj)] pdb title [text|($op x x)|]
-    | (title, obj) <- take 3 $ enumExpObject 1000 10
+    | (title, obj) <- take 3 $ enumExpObject 1_000 10
     ]
   objsComplex =
     [ runNativeBenchmarkPrepared [("x", obj)] pdb title [text|($op x x)|]
-    | (title, obj) <- take 3 $ enumExpObjectComplex 1000 2
+    | (title, obj) <- take 3 $ enumExpObjectComplex 1_000 2
     ]
 
 benchIntegerBinOp :: Integer -> T.Text -> BuiltinBenches
 benchIntegerBinOp growth op pdb =
   [ runNativeBenchmark pdb title [text|($op $x $x)|]
-  | (title, x) <- take 3 $ enumExpText 1000 growth
+  | (title, x) <- take 3 $ enumExpText 1_000 growth
   ]
 
 benchBitwiseFlip :: BuiltinBenches
 benchBitwiseFlip pdb =
   [ runNativeBenchmark pdb title [text|(~ $x $x)|]
-  | (title, x) <- take 3 $ enumExpText 1000 1000000
+  | (title, x) <- take 3 $ enumExpText 1_000 1_000_000
   ]
 
 benchFloatingUnOp :: T.Text -> BuiltinBenches
 benchFloatingUnOp op pdb =
   [ runNativeBenchmark pdb title [text|($op $x.0)|]
-  | (title, x) <- take 3 $ enumExpText 1000 1000
+  | (title, x) <- take 3 $ enumExpText 1_000 1_000
   ]
 
 benchFloatingMixedOp :: T.Text -> BuiltinBenches
 benchFloatingMixedOp op pdb =
   [ runNativeBenchmark pdb title [text|($op $x.0 $x)|]
-  | (title, x) <- take 3 $ enumExpText 1000 1000
+  | (title, x) <- take 3 $ enumExpText 1_000 1_000
   ]
 
 benchLength :: BuiltinBenches
 benchLength pdb =
   [ C.bgroup "list"
     [ runNativeBenchmarkPrepared [("x", list)] pdb title [text|(length x)|]
-    | (title, list) <- take 3 $ enumExpList 1000 100
+    | (title, list) <- take 3 $ enumExpList 1_000 100
     ]
   , C.bgroup "string"
     [ runNativeBenchmarkPrepared [("x", str)] pdb title [text|(length x)|]
-    | (title, str) <- take 3 $ enumExpString "a" 1000 1000
+    | (title, str) <- take 3 $ enumExpString "a" 1_000 1_000
     ]
   , C.bgroup "object"
     [ runNativeBenchmarkPrepared [("x", obj)] pdb title [text|(length x)|]
-    | (title, obj) <- take 3 $ enumExpObject 1000 10
+    | (title, obj) <- take 3 $ enumExpObject 1_000 10
     ]
   , C.bgroup "object-complex"
     [ runNativeBenchmarkPrepared [("x", obj)] pdb title [text|(length x)|]
-    | (title, obj) <- take 3 $ enumExpObjectComplex 1000 2
+    | (title, obj) <- take 3 $ enumExpObjectComplex 1_000 2
     ]
   ]
 
@@ -239,22 +240,22 @@ benchTakeDrop :: T.Text -> BuiltinBenches
 benchTakeDrop op pdb =
   [ C.bgroup "list"
     [ runNativeBenchmarkPrepared [("x", list), ("len", PInteger len)] pdb title [text|($op len x)|]
-    | (listTitle, list@(PList vec)) <- take 3 $ enumExpList 1000 100
-    , (takeTitle, len) <- take 3 $ enumExpNum 1000 100
+    | (listTitle, list@(PList vec)) <- take 3 $ enumExpList 1_000 100
+    , (takeTitle, len) <- take 3 $ enumExpNum 1_000 100
     , fromIntegral len <= V.length vec
     , let title = listTitle <> "_" <> takeTitle
     ]
   , C.bgroup "string"
     [ runNativeBenchmarkPrepared [("x", str), ("len", PInteger len)] pdb title [text|($op len x)|]
-    | (strTitle, str@(PString s)) <- take 3 $ enumExpString "a" 1000 100
-    , (takeTitle, len) <- take 3 $ enumExpNum 1000 100
+    | (strTitle, str@(PString s)) <- take 3 $ enumExpString "a" 1_000 100
+    , (takeTitle, len) <- take 3 $ enumExpNum 1_000 100
     , fromIntegral len <= T.length s
     , let title = strTitle <> "_" <> takeTitle
     ]
   , C.bgroup "object"
     [ runNativeBenchmarkPrepared [("x", obj), ("keys", PList keys)] pdb title [text|($op keys x)|]
-    | (strTitle, obj@(PObject m)) <- take 3 $ enumExpObject 1000 100
-    , (takeTitle, len) <- take 3 $ enumExpNum 1000 100
+    | (strTitle, obj@(PObject m)) <- take 3 $ enumExpObject 1_000 100
+    , (takeTitle, len) <- take 3 $ enumExpNum 1_000 100
     , fromIntegral len <= M.size m
     , let title = strTitle <> "_" <> takeTitle
     , let keys = V.fromList $ fmap fieldToValue $ take (fromIntegral len) $ M.keys m
@@ -274,11 +275,11 @@ benchReverse :: BuiltinBenches
 benchReverse pdb =
   [ C.bgroup "list"
     [ runNativeBenchmarkPrepared [("x", list)] pdb title "(reverse x)"
-    | (title, list) <- take 3 $ enumExpList 1000 100
+    | (title, list) <- take 3 $ enumExpList 1_000 100
     ]
   , C.bgroup "string"
     [ runNativeBenchmarkPrepared [("x", str)] pdb title "(reverse x)"
-    | (title, str) <- take 3 $ enumExpString "a" 1000 100
+    | (title, str) <- take 3 $ enumExpString "a" 1_000 100
     ]
   ]
 
@@ -286,36 +287,36 @@ benchContains :: BuiltinBenches
 benchContains pdb =
   [ C.bgroup "object-first"
     [ runNativeBenchmarkPrepared [("x", obj), ("key", key)] pdb title "(contains key x)"
-    | (title, obj@(PObject m)) <- take 3 $ enumExpObject 1000 100
+    | (title, obj@(PObject m)) <- take 3 $ enumExpObject 1_000 100
     , let key = fieldToValue $ head $ M.keys m
     ]
   , C.bgroup "object-last"
     [ runNativeBenchmarkPrepared [("x", obj), ("key", key)] pdb title "(contains key x)"
-    | (title, obj@(PObject m)) <- take 3 $ enumExpObject 1000 100
+    | (title, obj@(PObject m)) <- take 3 $ enumExpObject 1_000 100
     , let key = fieldToValue $ last $ M.keys m
     ]
   , C.bgroup "object-nonexistent"
     [ runNativeBenchmarkPrepared [("x", obj), ("key", key)] pdb title "(contains key x)"
-    | (title, obj@(PObject m)) <- take 3 $ enumExpObject 1000 100
+    | (title, obj@(PObject m)) <- take 3 $ enumExpObject 1_000 100
     , let key = PString $ (<> "surelydoesntexist") $ _field $ last $ M.keys m
     ]
   , C.bgroup "string-short"
     [ runNativeBenchmarkPrepared [("x", str), ("needle", PString "b")] pdb title "(contains needle x)"
-    | (title, str) <- take 3 $ enumExpString "a" 1000 100
+    | (title, str) <- take 3 $ enumExpString "a" 1_000 100
     ]
   , C.bgroup "string-long-failfast"
     [ runNativeBenchmarkPrepared [("x", str), ("needle", needle)] pdb title "(contains needle x)"
-    | let needle = PString $ T.replicate 1000 "b"
-    , (title, str) <- take 3 $ enumExpString "a" 1000 100
+    | let needle = PString $ T.replicate 1_000 "b"
+    , (title, str) <- take 3 $ enumExpString "a" 1_000 100
     ]
   , C.bgroup "string-long-failfar"
     [ runNativeBenchmarkPrepared [("x", str), ("needle", needle)] pdb title "(contains needle x)"
     | let needle = PString $ T.replicate 999 "a" <> "b"
-    , (title, str) <- take 3 $ enumExpString "a" 1000 100
+    , (title, str) <- take 3 $ enumExpString "a" 1_000 100
     ]
   , C.bgroup "list"
     [ runNativeBenchmarkPrepared [("x", list), ("needle", PString "b")] pdb title "(contains needle x)"
-    | (title, list) <- take 3 $ enumExpList 1000 100
+    | (title, list) <- take 3 $ enumExpList 1_000 100
     ]
   ]
 
@@ -323,7 +324,7 @@ benchSort :: BuiltinBenches
 benchSort pdb =
   [ C.bgroup "flat"
     [ runNativeBenchmarkPrepared [("x", list)] pdb title "(sort x)"
-    | (title, list) <- take 3 $ enumExpList 1000 100
+    | (title, list) <- take 3 $ enumExpList 1_000 100
     ]
   , C.bgroup "nested"
     [ runNativeBenchmarkPrepared [("x", list)] pdb title "(sort x)"
@@ -331,8 +332,8 @@ benchSort pdb =
     ]
   , C.bgroup "object-simple"
     [ runNativeBenchmarkPrepared [("x", objs), ("ks", keys)] pdb title "(sort ks x)"
-    | (_, obj@(PObject m)) <- [head $ enumExpObject 1000 1]
-    , (repTitle, reps) <- take 3 $ enumExpNum 1000 4
+    | (_, obj@(PObject m)) <- [head $ enumExpObject 1_000 1]
+    , (repTitle, reps) <- take 3 $ enumExpNum 1_000 4
     , (keysTitle, keysLen) <- take 3 $ enumExpNum 10 2
     , let title = repTitle <> "_" <> keysTitle
     , let objs = PList $ V.replicate (fromIntegral reps) obj
@@ -340,7 +341,7 @@ benchSort pdb =
     ]
   , C.bgroup "object-complex"
     [ runNativeBenchmarkPrepared [("x", objs), ("ks", keys)] pdb title "(sort ks x)"
-    | (_, obj@(PObject m)) <- [head $ enumExpObjectComplex 1000 1]
+    | (_, obj@(PObject m)) <- [head $ enumExpObjectComplex 1_000 1]
     , (repTitle, reps) <- take 3 $ enumExpNum 100 4
     , (keysTitle, keysLen) <- take 3 $ enumExpNum 10 2
     , let title = repTitle <> "_" <> keysTitle
@@ -352,32 +353,32 @@ benchSort pdb =
 benchRemove :: BuiltinBenches
 benchRemove pdb =
   [ runNativeBenchmarkPrepared [("x", obj), ("key", key)] pdb title "(remove key x)"
-  | (title, obj@(PObject m)) <- take 3 $ enumExpObject 1000 100
+  | (title, obj@(PObject m)) <- take 3 $ enumExpObject 1_000 100
   , let key = fieldToValue $ last $ M.keys m
   ]
 
 benchMap :: BuiltinBenches
 benchMap pdb =
   [ runNativeBenchmarkPrepared [("x", list)] pdb title "(map (lambda (e) e) x)"
-  | (title, list) <- take 3 $ enumExpList 10000 10
+  | (title, list) <- take 3 $ enumExpList 10_000 10
   ]
 
 benchFilter :: BuiltinBenches
 benchFilter pdb =
   [ C.bgroup "all"
     [ runNativeBenchmarkPrepared [("x", list)] pdb title "(filter (lambda (e) true) x)"
-    | (title, list) <- take 3 $ enumExpList 10000 10
+    | (title, list) <- take 3 $ enumExpList 10_000 10
     ]
   , C.bgroup "none"
     [ runNativeBenchmarkPrepared [("x", list)] pdb title "(filter (lambda (e) false) x)"
-    | (title, list) <- take 3 $ enumExpList 10000 10
+    | (title, list) <- take 3 $ enumExpList 10_000 10
     ]
   ]
 
 benchZip :: BuiltinBenches
 benchZip pdb =
   [ runNativeBenchmarkPrepared [("x", list)] pdb title "(zip (lambda (a b) a) x x)"
-  | (title, list) <- take 3 $ enumExpList 10000 10
+  | (title, list) <- take 3 $ enumExpList 10_000 10
   ]
 
 benchIntToStr :: BuiltinBenches
@@ -385,11 +386,11 @@ benchIntToStr pdb =
   [ C.bgroup "basic"
     [ runNativeBenchmark pdb (T.unpack base <> "_" <> title) [text|(int-to-str $base $x)|]
     | base <- ["2", "10", "16"]
-    , (title, x) <- take 3 $ enumExpText 1000 10000
+    , (title, x) <- take 3 $ enumExpText 1_000 10_000
     ]
   , C.bgroup "base64"
     [ runNativeBenchmark pdb title [text|(int-to-str 64 $x)|]
-    | (title, x) <- take 3 $ enumExpText 1000 10000
+    | (title, x) <- take 3 $ enumExpText 1_000 10_000
     ]
   ]
 
@@ -409,14 +410,14 @@ benchStrToInt pdb =
 benchFold :: BuiltinBenches
 benchFold pdb =
   [ runNativeBenchmarkPrepared [("x", list)] pdb title "(fold (lambda (a b) a) 0 x)"
-  | (title, list) <- take 3 $ enumExpList 10000 10
+  | (title, list) <- take 3 $ enumExpList 10_000 10
   ]
 
 benchFormat :: BuiltinBenches
 benchFormat pdb =
   [ C.bgroup "simple"
     [ runNativeBenchmarkPrepared [("str", str), ("list", list)] pdb title "(format str list)"
-    | (title, list@(PList vec)) <- take 3 $ enumExpList 10000 10
+    | (title, list@(PList vec)) <- take 3 $ enumExpList 10_000 10
     , let len = V.length vec
     , let str = PString $ T.replicate len "{} "
     ]
@@ -432,11 +433,11 @@ benchEnumerate :: BuiltinBenches
 benchEnumerate pdb =
   [ C.bgroup "no-step"
     [ runNativeBenchmark pdb title [text|(enumerate 0 $cnt)|]
-    | (title, cnt) <- take 3 $ enumExpText 1000 10
+    | (title, cnt) <- take 3 $ enumExpText 1_000 10
     ]
   , C.bgroup "with-step"
     [ runNativeBenchmark pdb title [text|(enumerate 0 $cnt 1)|]
-    | (title, cnt) <- take 3 $ enumExpText 1000 10
+    | (title, cnt) <- take 3 $ enumExpText 1_000 10
     ]
   ]
 
@@ -444,15 +445,15 @@ benchShow :: BuiltinBenches
 benchShow pdb =
   [ C.bgroup "integer"
     [ runNativeBenchmarkPrepared [("x", PInteger num)] pdb title "(show x)"
-    | (title, num) <- take 3 $ enumExpNum 1000 1000
+    | (title, num) <- take 3 $ enumExpNum 1_000 1_000
     ]
   , C.bgroup "decimal"
     [ runNativeBenchmark pdb title [text|(show $num.0)|]
-    | (title, num) <- take 3 $ enumExpText 1000 1000
+    | (title, num) <- take 3 $ enumExpText 1_000 1_000
     ]
   , C.bgroup "string"
     [ runNativeBenchmarkPrepared [("x", str)] pdb title "(show x)"
-    | (title, str) <- take 3 $ enumExpString "a" 1000 100
+    | (title, str) <- take 3 $ enumExpString "a" 1_000 100
     ]
   ]
 
@@ -460,7 +461,7 @@ benchDistinct :: BuiltinBenches
 benchDistinct pdb =
   [ C.bgroup "flat"
     [ runNativeBenchmarkPrepared [("x", list)] pdb title "(distinct x)"
-    | (title, list) <- take 3 $ enumExpList 1000 2
+    | (title, list) <- take 3 $ enumExpList 1_000 2
     ]
   , C.bgroup "nested"
     [ runNativeBenchmarkPrepared [("x", list)] pdb title "(distinct x)"
@@ -471,22 +472,22 @@ benchDistinct pdb =
 benchReadOp :: T.Text -> BuiltinBenches
 benchReadOp readOp pdb =
   [ runNativeBenchmarkPreparedEnvMod (msgBody obj) [("k", key)] pdb title [text|($readOp k)|]
-  | (title, PObject obj) <- take 3 $ enumExpObject 1000 100
+  | (title, PObject obj) <- take 3 $ enumExpObject 1_000 100
   , let key = fieldToValue $ last $ M.keys obj
   ]
 
 benchReadString :: BuiltinBenches
 benchReadString pdb =
   [ runNativeBenchmarkPreparedEnvMod (msgBody obj) [("k", key)] pdb title "(read-string k)"
-  | (title, PObject obj) <- take 3 $ enumExpObjectWithStrings 1000 100
+  | (title, PObject obj) <- take 3 $ enumExpObjectWithStrings 1_000 100
   , let key = fieldToValue $ last $ M.keys obj
   ]
 
 benchReadKeyset :: BuiltinBenches
 benchReadKeyset pdb =
   [ runNativeBenchmarkPreparedEnvMod (msgBody obj) [] pdb title "(read-keyset 'thekeyset)"
-  | (_, PObject objBase) <- [head $ enumExpObjectWithStrings 1000 1]
-  , (title, str) <- take 3 $ enumExpScopedIdent 1000 100
+  | (_, PObject objBase) <- [head $ enumExpObjectWithStrings 1_000 1]
+  , (title, str) <- take 3 $ enumExpScopedIdent 1_000 100
   , let ksn = PObject [(Field "keys", PList [PString "publickeytext"]), (Field "pred", str)]
   , let obj = M.insert (Field "thekeyset") ksn objBase
   ]
@@ -498,7 +499,7 @@ benchKeysetGuardOp op pdb = dummyTx pdb initDb
   ]
   where
   pkt = PublicKeyText "somepubkey"
-  keys = take 3 $ enumExpScopedIdent 10000 10
+  keys = take 3 $ enumExpScopedIdent 10_000 10
   initDb = forM_ keys $ \(_title, ident) -> case ident of
     PString s
       | Right ksn <- parseAnyKeysetName s -> writeKeySet pdb Insert ksn $ KeySet [pkt] KeysAny
@@ -508,12 +509,12 @@ benchAt :: BuiltinBenches
 benchAt pdb =
   [ C.bgroup "list"
     [ runNativeBenchmarkPrepared [("x", list), ("pos", pos)] pdb title "(at pos x)"
-    | (title, list@(PList v)) <- take 3 $ enumExpList 1000 100
+    | (title, list@(PList v)) <- take 3 $ enumExpList 1_000 100
     , let pos = PInteger $ fromIntegral $ V.length v `div` 2
     ]
   , C.bgroup "object"
     [ runNativeBenchmarkPrepared [("x", obj)] pdb title "(at \"999\" x)"
-    | (title, obj) <- take 3 $ enumExpObject 1000 100
+    | (title, obj) <- take 3 $ enumExpObject 1_000 100
     ]
   ]
 
@@ -521,11 +522,11 @@ benchMakeList :: BuiltinBenches
 benchMakeList pdb =
   [ C.bgroup "flat"
     [ runNativeBenchmarkPrepared [("cnt", PInteger cnt)] pdb title "(make-list cnt 0)"
-    | (title, cnt) <- take 3 $ enumExpNum 1000 100
+    | (title, cnt) <- take 3 $ enumExpNum 1_000 100
     ]
   , C.bgroup "nested"
     [ runNativeBenchmarkPrepared [("cnt", PInteger cnt), ("elt", elt)] pdb title "(make-list cnt elt)"
-    | (repTitle, cnt) <- take 3 $ enumExpNum 1000 10
+    | (repTitle, cnt) <- take 3 $ enumExpNum 1_000 10
     , (lstTitle, elt) <- take 3 $ enumExpList 100 2
     , let title = repTitle <> "_" <> lstTitle
     ]
@@ -540,7 +541,7 @@ benchB64Op op pdb =
 benchStrToList :: BuiltinBenches
 benchStrToList pdb =
   [ runNativeBenchmarkPrepared [("s", str)] pdb title "(str-to-list s)"
-  | (title, str) <- take 3 $ enumExpString "a" 1000 10
+  | (title, str) <- take 3 $ enumExpString "a" 1_000 10
   ]
 
 benchRequireCapability :: BuiltinBenches
@@ -548,7 +549,7 @@ benchRequireCapability pdb =
   [ C.bgroup "flat"
     [ runNativeBenchmarkPreparedStMod (stCaps capToks) [("c", capTok)] pdb title "(require-capability c)"
     | let capTok = PCapToken $ CapToken (mkGasModelFqn "0") []
-    , (title, cnt) <- take 3 $ enumExpNum 1000 10
+    , (title, cnt) <- take 3 $ enumExpNum 1_000 10
     , let capToks = [ CapToken (fqnToQualName $ mkGasModelFqn $ T.pack $ show n) [] | n <- [0..cnt] ]
     ]
   , C.bgroup "nested"
@@ -564,7 +565,7 @@ benchComposeCapability :: BuiltinBenches
 benchComposeCapability pdb =
   [ C.bgroup "flat"
     [ runNativeBenchmarkPreparedStMod stMod [("c", theCapTok)] pdb title "(compose-capability c)"
-    | (title, cnt) <- take 3 $ enumExpNum 1000 10
+    | (title, cnt) <- take 3 $ enumExpNum 1_000 10
     , let sf = StackFrame mempty gmModuleName SFDefcap
           theCapName = T.pack $ "theCap" <> show cnt
           theCapTok = PCapToken $ CapToken (mkGasModelFqn theCapName) []
@@ -600,7 +601,7 @@ benchInstallCapability pdb =
     [ runNativeBenchmarkPreparedStMod (stManaged manageds <> stAddDef "theCap" theCapDef) [("c", capTok)] pdb title "(install-capability c)"
     | let capTok = PCapToken $ CapToken (mkGasModelFqn "theCap") []
           theCapDef = DCap $ DefCap "theCap" [] Nothing (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
-    , (title, cnt) <- take 3 $ enumExpNum 1000 100
+    , (title, cnt) <- take 3 $ enumExpNum 1_000 100
     , let manageds = [ ManagedCap ct ct (AutoManaged False)
                      | n <- [0..cnt]
                      , let ct = CapToken (fqnToQualName $ mkGasModelFqn $ T.pack $ show n) []
@@ -656,7 +657,7 @@ benchCreatePrincipal :: BuiltinBenches
 benchCreatePrincipal pdb =
   [ C.bgroup "keyset/pred"
     [ runNativeBenchmarkPrepared [("ks", keyset)] pdb title "(create-principal ks)"
-    | (title, reps) <- take 3 $ enumExpNum 1000 10
+    | (title, reps) <- take 3 $ enumExpNum 1_000 10
     , let predName = BareName $ T.replicate (fromIntegral reps) "a"
           keys = S.fromList [ PublicKeyText "k1", PublicKeyText "k2" ]
           keyset = PGuard $ GKeyset $ KeySet keys (CustomPredicate $ TBN predName)
@@ -684,19 +685,19 @@ benchCreatePrincipal pdb =
 benchIsPrincipal :: BuiltinBenches
 benchIsPrincipal pdb =
   [ runNativeBenchmarkPrepared [("s", PString $ "r:" <> str)] pdb title "(is-principal s)"
-  | (title, PString str) <- take 3 $ enumExpString "a" 1000 100
+  | (title, PString str) <- take 3 $ enumExpString "a" 1_000 100
   ]
 
 benchTypeOfPrincipal :: BuiltinBenches
 benchTypeOfPrincipal pdb =
   [ runNativeBenchmarkPrepared [("s", PString $ "r:" <> str)] pdb title "(typeof-principal s)"
-  | (title, PString str) <- take 3 $ enumExpString "a" 1000 100
+  | (title, PString str) <- take 3 $ enumExpString "a" 1_000 100
   ]
 
 benchValidatePrincipal :: BuiltinBenches
 benchValidatePrincipal pdb =
   [ runNativeBenchmarkPrepared [("s", PString $ "r:" <> str), ("g", g)] pdb title "(validate-principal g s)"
-  | (title, PString str) <- take 3 $ enumExpString "a" 1000 100
+  | (title, PString str) <- take 3 $ enumExpString "a" 1_000 100
   , let g = PGuard $ GKeySetRef $ KeySetName str Nothing
   ]
 
@@ -706,7 +707,7 @@ benchNamespace pdb = dummyTx pdb initDb
   | (title, str) <- names
   ]
   where
-  names = take 3 $ enumExpString "a" 1000 100
+  names = take 3 $ enumExpString "a" 1_000 100
   g = GKeySetRef $ KeySetName "ks" Nothing
   initDb = forM_ names $ \(_title, name) -> case name of
     PString n -> let nsn = NamespaceName n
@@ -716,7 +717,7 @@ benchNamespace pdb = dummyTx pdb initDb
 benchDefineNamespace :: BuiltinBenches
 benchDefineNamespace pdb =
   [ runNativeBenchmarkPrepared [("s", str), ("g", g)] (ignoreWrites pdb) title "(define-namespace s g g)"
-  | (title, str) <- take 3 $ enumExpString "a" 1000 100
+  | (title, str) <- take 3 $ enumExpString "a" 1_000 100
   ]
   where
   g = PGuard $ GKeySetRef $ KeySetName "ks" Nothing
@@ -727,7 +728,7 @@ benchDescribeNamespace pdb = dummyTx pdb initDb
   | (title, str) <- names
   ]
   where
-  names = take 3 $ enumExpString "a" 1000 100
+  names = take 3 $ enumExpString "a" 1_000 100
   g = GKeySetRef $ KeySetName "ks" Nothing
   initDb = forM_ names $ \(_title, name) -> case name of
     PString n -> let nsn = NamespaceName n
@@ -741,11 +742,11 @@ benchIsCharset :: BuiltinBenches
 benchIsCharset pdb =
   [ C.bgroup "ascii"
     [ runNativeBenchmarkPrepared [("s", str)] pdb title "(is-charset 0 s)"
-    | (title, str) <- take 3 $ enumExpString "a" 1000 100
+    | (title, str) <- take 3 $ enumExpString "a" 1_000 100
     ]
   , C.bgroup "latin1"
     [ runNativeBenchmarkPrepared [("s", str)] pdb title "(is-charset 1 s)"
-    | (title, str) <- take 3 $ enumExpString "a" 1000 100
+    | (title, str) <- take 3 $ enumExpString "a" 1_000 100
     ]
   ]
 
@@ -772,12 +773,12 @@ benchesForBuiltin bn = case bn of
   CoreGEQ -> benchEqOp ">="
   CoreLT -> benchEqOp "<"
   CoreLEQ -> benchEqOp "<="
-  CoreBitwiseAnd -> benchIntegerBinOp 1000000 "&"
-  CoreBitwiseOr -> benchIntegerBinOp 1000000 "|"
-  CoreBitwiseXor -> benchIntegerBinOp 1000000 "xor"
+  CoreBitwiseAnd -> benchIntegerBinOp 1_000_000 "&"
+  CoreBitwiseOr -> benchIntegerBinOp 1_000_000 "|"
+  CoreBitwiseXor -> benchIntegerBinOp 1_000_000 "xor"
   CoreBitwiseFlip -> benchBitwiseFlip
-  CoreBitShift -> benchIntegerBinOp 1000 "shift"
-  CoreMod -> benchIntegerBinOp 1000 "mod"
+  CoreBitShift -> benchIntegerBinOp 1_000 "shift"
+  CoreMod -> benchIntegerBinOp 1_000 "mod"
   CoreRound -> benchFloatingUnOp "round"
   CoreCeiling -> benchFloatingUnOp "ceiling"
   CoreFloor -> benchFloatingUnOp "floor"
