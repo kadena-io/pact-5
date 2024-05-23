@@ -62,7 +62,7 @@
 (env-gaslog)
 (expect
   "Gas cost of coin contract account creation"
-  151 (env-gas))
+  152 (env-gas))
 
 (create-account 'doug (read-keyset 'doug))
 
