@@ -16,9 +16,9 @@ Use the following arguments to specify the `idx` and `list` for indexing, or `id
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| idx | `integer` | Specifies the index for the `list` or the key for the `object`. |
-| list | `[<l>]` | Specifies the list from which to retrieve the value at `idx`. |
-| object | `object:<{o}>` | Specifies the object from which to retrieve the value with key `idx`. |
+| `idx` | `integer` | Specifies the index for the `list` or the key for the `object`. |
+| `list` | `[<l>]` | Specifies the list from which to retrieve the value at `idx`. |
+| `object` | `object:<{o}>` | Specifies the object from which to retrieve the value with key `idx`. |
 
 ### Return values
 
