@@ -858,6 +858,9 @@ benchesForBuiltin bn = case bn of
   CoreZKScalarMult -> omittedDeliberately
   CoreZkPointAdd -> omittedDeliberately
   CorePoseidonHashHackachain -> benchPoseidon
+  CoreTypeOf -> omittedDeliberately
+  CoreDec -> omittedDeliberately
+  CoreCond -> omittedDeliberately
   _ -> const []
   where
   omittedDeliberately = const []
