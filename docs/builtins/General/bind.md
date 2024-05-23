@@ -1,11 +1,11 @@
 ## bind
-Use `bind` as a special form to evaluate *`src`* to an object which is then bound to with *`bindings`* over subsequent body statements.
+Use `bind` as a special form to evaluate `src` to an object which is then bound to with `bindings` over subsequent body statements.
 
 ### Basic syntax
 
-To evaluate *`src`* to an object and bind it with *`bindings`* over subsequent body statements, use the following syntax:
+To evaluate `src` to an object and bind it with `bindings` over subsequent body statements, use the following syntax:
 
-bind *src* *bindings* -> *result*
+`(bind src bindings bval)`
 
 ### Arguments
 
