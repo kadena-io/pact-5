@@ -24,7 +24,7 @@ The `is-principal` function returns a boolean value indicating whether the input
 
 The following example demonstrates the use of `is-principal` within an `enforce` statement:
 
-```lisp
+```pact
 pact>(enforce (is-principal "k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69") "Invalid account structure: non-principal account")
 true
 ```

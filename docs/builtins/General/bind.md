@@ -24,7 +24,7 @@ The `bind` special form returns the result of evaluating the *`src`* object with
 
 The following example demonstrates the `bind` special form in the Pact REPL:
 
-```lisp
+```pact
 pact>(bind { "a": 1, "b": 2 } { "a" := a-value } a-value)
 1
 ```

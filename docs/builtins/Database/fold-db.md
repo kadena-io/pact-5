@@ -25,7 +25,7 @@ The `fold-db` function returns a list of accumulated results based on the predic
 
 The following example demonstrates the `fold-db` function:
 
-```lisp
+```pact
 (let
   ((qry (lambda (k obj) true)) ;; Select all rows
    (f (lambda (x) [(at 'firstName x), (at 'b x)])) ;; Example consumer function

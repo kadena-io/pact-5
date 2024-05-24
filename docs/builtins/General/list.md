@@ -23,7 +23,7 @@ The `list` function returns a list containing the specified elements.
 
 The following example demonstrates the use of `list` in the Pact REPL:
 
-```lisp
+```pact
 pact>(list 1 2 3)
 [1 2 3]
 ```

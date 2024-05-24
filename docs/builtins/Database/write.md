@@ -25,7 +25,7 @@ The `write` function returns a `string` indicating the success of the write oper
 
 The following example demonstrates the usage of the `write` function within a Pact script. It writes an entry in the `accounts` table for the specified key with the provided object column data:
 
-```lisp
+```pact
 (write accounts id { "balance": 100.0 })
 ```
 

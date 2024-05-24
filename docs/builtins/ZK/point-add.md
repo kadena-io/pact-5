@@ -25,7 +25,7 @@ The `point-add` function returns the result of adding the specified points toget
 
 The following example demonstrates the use of `point-add` in the Pact REPL:
 
-```lisp
+```pact
 pact>(point-add 'g1 {'x': 1, 'y': 2} {'x': 1, 'y': 2})
 ```
 

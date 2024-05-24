@@ -23,7 +23,7 @@ The `minutes` function returns the duration in decimal format.
 
 The following example demonstrates the use of `minutes` in combination with `add-time` in the Pact REPL:
 
-```lisp
+```pact
 pact>(add-time (time "2016-07-22T12:00:00Z") (minutes 1))
 ```
 

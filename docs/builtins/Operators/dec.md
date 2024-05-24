@@ -23,7 +23,7 @@ The `dec` function returns the specified integer `x` as a decimal value.
 
 The following example demonstrates the `dec` function:
 
-```lisp
+```pact
 pact> (dec 3)
 3.0
 ```

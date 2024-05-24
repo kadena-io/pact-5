@@ -24,7 +24,7 @@ The `remove` function returns the modified object with the entry associated with
 
 The following example demonstrates the usage of the `remove` function within the Pact repl. It removes the entry for the `bar` key from the given object:
 
-```lisp
+```pact
 pact>(remove "bar" { "foo": 1, "bar": 2 })
 { "foo": 1 }
 ```

@@ -30,21 +30,21 @@ The following examples demonstrate the usage of the `str-to-int` function within
 
 To compute the integer value of the string "abcdef123456" interpreted in base 16:
 
-```lisp
+```pact
 pact>(str-to-int 16 "abcdef123456")
 188900967593046
 ```
 
 To compute the integer value of the string "123456" interpreted in base 10:
 
-```lisp
+```pact
 pact>(str-to-int "123456")
 123456
 ```
 
 To compute the integer value of the string "q80" interpreted in base 64 for unpadded base64url conversion:
 
-```lisp
+```pact
 pact>(str-to-int 64 "q80")
 43981
 ```

@@ -23,14 +23,14 @@ The `abs` function returns the absolute value of the `number` as a `decimal` or 
 
 The following example calculates the absolute value of a decimal number in the Pact REPL:
 
-```lisp
+```pact
 pact>(abs (- 10.5 23.7))
 13.2
 ```
 
 The following example calculates the absolute value of an integer:
 
-```lisp
+```pact
 pact>(abs (- 10 23))
 13
 ```

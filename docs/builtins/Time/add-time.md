@@ -24,7 +24,7 @@ The `add-time` function returns the resulting time after adding the specified `s
 
 The following example adds 15 seconds to a specific time in the Pact REPL:
 
-```lisp
+```pact
 pact>(add-time (time "2016-07-22T12:00:00Z") 15)
 "2016-07-22T12:00:15Z"
 ```

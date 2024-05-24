@@ -23,7 +23,7 @@ The `enforce-verifier` function returns a boolean value indicating whether the s
 
 The following example demonstrates the `enforce-verifier` function:
 
-```lisp
+```pact
 pact>(enforce-verifier 'COOLZK)
 <interactive>:0:0:Error: Verifier failure COOLZK: not in transaction
 ```

@@ -17,7 +17,7 @@ The `list-modules` function returns a list of strings representing the available
 
 The following example demonstrates the use of `list-modules` in the Pact REPL:
 
-```lisp
+```pact
 pact> list-modules
 ```
 

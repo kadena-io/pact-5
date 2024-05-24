@@ -24,7 +24,7 @@ The `describe-namespace` function returns an object with detailed information ab
 
 The following example demonstrates the `describe-namespace` function:
 
-```lisp
+```pact
 pact>(env-data { "keyset": ["fake-key"]})
 "Setting transaction data"
 pact>(define-namespace 'my-namespace (read-keyset 'keyset) (read-keyset 'keyset))

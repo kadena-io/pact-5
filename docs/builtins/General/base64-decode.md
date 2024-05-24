@@ -23,7 +23,7 @@ The `base64-decode` function returns the decoded `string`.
 
 The following example decodes a base64 encoded string in the Pact REPL:
 
-```lisp
+```pact
 pact>(base64-decode "aGVsbG8gd29ybGQh")
 "hello world!"
 ```

@@ -27,21 +27,21 @@ The `is-charset` function returns a boolean value indicating whether the input s
 
 The following examples demonstrate the use of `is-charset` in the Pact REPL:
 
-```lisp
+```pact
 pact>(is-charset CHARSET_ASCII "hello world")
 true
 ```
 
 In this example, the input string "hello world" conforms to the ASCII character set.
 
-```lisp
+```pact
 pact>(is-charset CHARSET_ASCII "I am nÖt ascii")
 false
 ```
 
 In this example, the input string "I am nÖt ascii" contains characters that are not part of the ASCII character set.
 
-```lisp
+```pact
 pact>(is-charset CHARSET_LATIN1 "I am nÖt ascii, but I am latin1!")
 true
 ```

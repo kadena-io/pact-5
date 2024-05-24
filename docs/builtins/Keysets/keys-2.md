@@ -25,7 +25,7 @@ The `keys-2` function returns a boolean value indicating whether at least two ke
 
 The following example demonstrates the use of `keys-2` in the Pact REPL:
 
-```lisp
+```pact
 pact>(keys-2 3 1)
 false
 ```

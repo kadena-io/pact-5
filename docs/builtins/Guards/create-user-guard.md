@@ -23,7 +23,7 @@ The `create-user-guard` function returns a guard that utilizes the specified cus
 
 The following example demonstrates the `create-user-guard` function:
 
-```lisp
+```pact
 (create-user-guard (read-keyset 'my-keyset))
 ```
 

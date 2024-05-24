@@ -24,7 +24,7 @@ The `validate-keypair` function returns a boolean value indicating whether the p
 
 The following example demonstrates the usage of the `validate-keypair` function within a Pact script. It validates that the Curve25519 keypair composed of the public key `pubkey` and the private key `privkey` match each other:
 
-```lisp
+```pact
 (validate-keypair pubkey privkey)
 true
 ```

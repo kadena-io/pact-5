@@ -23,7 +23,7 @@ The `poseidon-hash-hack-a-chain` function returns an integer representing the co
 
 The following examples demonstrate the use of `poseidon-hash-hack-a-chain` in the Pact REPL:
 
-```lisp
+```pact
 pact>(poseidon-hash-hack-a-chain 1)
 pact>(poseidon-hash-hack-a-chain 1 2)
 pact>(poseidon-hash-hack-a-chain 1 2 3 4 5 6)

@@ -24,7 +24,7 @@ The `format` function returns a new string with the variables interpolated into 
 
 The following example demonstrates the `format` function:
 
-```lisp
+```pact
 pact>(format "My {} has {}" ["dog" "fleas"])
 "My dog has fleas"
 ```

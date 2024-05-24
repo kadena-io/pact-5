@@ -24,7 +24,7 @@ The `chain-data` function returns an object with the following fields of public 
 
 The following example retrieves transaction public metadata in the Pact REPL:
 
-```lisp
+```pact
 pact>(chain-data)
 {
   "chain-id": "example-chain",

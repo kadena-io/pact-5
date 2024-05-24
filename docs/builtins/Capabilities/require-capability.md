@@ -23,7 +23,7 @@ The `require-capability` function returns a `boolean` value indicating whether t
 
 The following example demonstrates the usage of the `require-capability` function within a Pact script. It tests for the existing grant of the capability to transfer funds from one source to another:
 
-```lisp
+```pact
 (require-capability (TRANSFER src dest))
 ```
 

@@ -23,7 +23,7 @@ The `concat` function returns the resulting string after concatenating all the s
 
 The following example demonstrates the `concat` function in the Pact REPL:
 
-```lisp
+```pact
 pact>(concat ["k" "d" "a"])
 "kda"
 ```
@@ -32,7 +32,7 @@ In this example, `concat` takes the list `["k" "d" "a"]` and concatenates each s
 
 The following example shows how to concatenate a list of strings after mapping each element with a function:
 
-```lisp
+```pact
 pact>(concat (map (+ " ") (str-to-list "abcde")))
 "a b c d e"
 ```

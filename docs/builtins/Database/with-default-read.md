@@ -27,7 +27,7 @@ The `with-default-read` special form returns the result of executing the provide
 
 The following example demonstrates the usage of the `with-default-read` special form within a Pact script. It reads a row from the `accounts` table for the specified key, using default values if the row is not found, and binds the 'balance' and 'ccy' columns for further processing:
 
-```lisp
+```pact
 (with-default-read accounts id { "balance": 0, "ccy": "USD" } { "balance":= bal, "ccy":= ccy }
   (format "Balance for {} is {} {}" [id bal ccy]))
 ```

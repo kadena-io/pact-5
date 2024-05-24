@@ -25,14 +25,14 @@ The following examples demonstrate the usage of the `str-to-list` function withi
 
 To convert the string "hello" into a list of single-character strings:
 
-```lisp
+```pact
 pact>(str-to-list "hello")
 ["h", "e", "l", "l", "o"]
 ```
 
 To concatenate spaces between each character in the string "abcde":
 
-```lisp
+```pact
 (concat (map (+ " ") (str-to-list "abcde")))
 " a b c d e"
 ```

@@ -24,7 +24,7 @@ The `create-pact-guard` function returns a guard predicate identified by the spe
 
 The following example demonstrates the `create-pact-guard` function:
 
-```lisp
+```pact
 (create-pact-guard "pact-id-guard")
 ```
 

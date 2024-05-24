@@ -23,7 +23,7 @@ The `continue` function continues the execution of the nested `defpact` with the
 
 The following example demonstrates the use of `continue` to continue a nested `defpact`:
 
-```lisp
+```pact
 (continue f)
 ```
 

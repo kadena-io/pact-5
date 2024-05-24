@@ -23,7 +23,7 @@ The `describe-module` function returns an object with metadata for the specified
 
 The following example demonstrates the `describe-module` function:
 
-```lisp
+```pact
 pact>(module m G (defcap G () true))
 pact>(describe-module 'm)
 {"hash":"0RpFOMAZ2787-fNFO6DokGf_V5WiSLMK10v4xnOymX0", "interfaces":[  ], "name":"m"}

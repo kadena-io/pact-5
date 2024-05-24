@@ -24,7 +24,7 @@ The `txlog` function returns a list of objects representing all updates made to 
 
 The following example demonstrates the usage of the `txlog` function within a Pact script. It retrieves all updates made to the `accounts` table in the transaction with the `TXID` `123485945`:
 
-```lisp
+```pact
 (txlog accounts 123485945)
 ```
 

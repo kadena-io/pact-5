@@ -23,7 +23,7 @@ The `resume` function returns the value bound to the specified `BINDING`.
 
 The following example demonstrates the usage of the `resume` function within a Pact script. It binds to the yielded object value from the prior step execution:
 
-```lisp
+```pact
 (resume BINDING)
 ```
 

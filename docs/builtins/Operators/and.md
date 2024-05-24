@@ -24,7 +24,7 @@ The `and` function returns a boolean value based on the result of the AND operat
 
 The following example demonstrates the `and` operation in the Pact REPL:
 
-```lisp
+```pact
 pact>(and true false)
 false
 ```

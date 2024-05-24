@@ -16,7 +16,7 @@ The `pact-version` function returns a string representing the current Pact build
 
 The `pact-version` function is called without any arguments to obtain the current Pact build version.
 
-```lisp
+```pact
 pact>(pact-version)
 "4.11"
 ```

@@ -24,7 +24,7 @@ The `ln` function returns the natural logarithm of the specified value.
 
 The following example demonstrates the use of `ln` in the Pact REPL:
 
-```lisp
+```pact
 pact>(round (ln 60) 6)
 4.094345
 ```

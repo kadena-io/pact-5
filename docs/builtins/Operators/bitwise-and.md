@@ -25,12 +25,12 @@ The `&` function returns the result of the bitwise AND operation between `x` and
 
 The following examples demonstrate the usage of the `&` function within a Pact REPL. They perform bitwise AND operations:
 
-```lisp
+```pact
 pact>(& 2 3)
 2
 ```
 
-```lisp
+```pact
 pact>(& 5 -7)
 1
 ```

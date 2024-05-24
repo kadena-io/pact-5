@@ -5,7 +5,7 @@ Use `days` to specify a number of days `N`, which can be used with 'add-time' to
 
 To specify a number of days `N`, use the following syntax:
 
-```lisp
+```pact
 (days N)
 ```
 
@@ -25,7 +25,7 @@ The `days` function returns the number of seconds in the given number of days, a
 
 The following example demonstrates the `days` function in combination with `add-time`:
 
-```lisp
+```pact
 (add-time (time "2016-07-22T12:00:00Z") (days 1))
 "2016-07-23T12:00:00Z"
 ```

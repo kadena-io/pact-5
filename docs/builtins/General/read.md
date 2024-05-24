@@ -36,13 +36,13 @@ The `read` function returns the database record object corresponding to the spec
 
 The following example retrieves the entire record associated with the `user_1` key from the `accounts` table:
 
-```lisp
+```pact
 pact>(read accounts "user_1")
 ```
 
 The following example retrieves the `balance` and `ccy` columns from the record associated with the `user_1` key in the `accounts` table:
 
-```lisp
+```pact
 pact>(read accounts "user_1" ['balance 'ccy])
 ```
 

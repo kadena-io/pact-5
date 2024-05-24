@@ -145,7 +145,7 @@ The `format-time` function returns a new string with the formatted time value.
 
 The following example demonstrates the `format-time` function:
 
-```lisp
+```pact
 pact>(format-time "%F" (time "2016-07-22T12:00:00Z"))
 "2016-07-22"
 ```

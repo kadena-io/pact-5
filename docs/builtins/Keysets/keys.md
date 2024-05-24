@@ -24,7 +24,7 @@ The `keys` function returns a list of strings containing all keys present in the
 
 The following example demonstrates the use of `keys` in the Pact REPL to retrieve all keys present in the "accounts" table:
 
-```lisp
+```pact
 (keys accounts)
 ```
 

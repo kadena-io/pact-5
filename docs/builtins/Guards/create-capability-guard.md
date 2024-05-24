@@ -23,7 +23,7 @@ The `create-capability-guard` function returns a guard that enforces the acquisi
 
 The following example demonstrates the `create-capability-guard` function:
 
-```lisp
+```pact
 (create-capability-guard (BANK_DEBIT 10.0))
 ```
 

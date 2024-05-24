@@ -25,7 +25,7 @@ The `fold` function returns the final result of the iterative reduction of the l
 
 The following example demonstrates the `fold` function:
 
-```lisp
+```pact
 pact>(fold (+) 0 [100 10 5])
 115
 ```

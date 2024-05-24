@@ -24,7 +24,7 @@ The `txids` function returns a list of transaction IDs (txids) greater than or e
 
 The following example demonstrates the usage of the `txids` function within a Pact script. It retrieves all txid values greater than or equal to `123849535` in the `accounts` table:
 
-```lisp
+```pact
 (txids accounts 123849535)
 ```
 

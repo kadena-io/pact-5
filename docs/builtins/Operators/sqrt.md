@@ -23,7 +23,7 @@ The `sqrt` function returns the square root of the specified value. The return t
 
 The following example demonstrates the usage of the `sqrt` function within the Pact REPL. It calculates the square root of the value 25:
 
-```lisp
+```pact
 pact>(sqrt 25)
 5
 ```

@@ -23,7 +23,7 @@ The `exp` function returns the exponential function of the specified value.
 
 The following example demonstrates the `exp` function:
 
-```lisp
+```pact
 pact>(round (exp 3) 6)
 20.085537
 ```

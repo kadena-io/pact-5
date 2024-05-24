@@ -23,7 +23,7 @@ The `read-string` function returns the parsed value as a `string`.
 
 The following example demonstrates the usage of the `read-string` function within a Pact script. It parses the `sender` from the message data body as a string:
 
-```lisp
+```pact
 (read-string 'sender)
 ```
 

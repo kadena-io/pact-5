@@ -24,7 +24,7 @@ The `not` function returns the boolean negation of the input value.
 
 The following example demonstrates the use of `not` in the Pact REPL:
 
-```lisp
+```pact
 pact>(not (> 1 2))
 true
 ```

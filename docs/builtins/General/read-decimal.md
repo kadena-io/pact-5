@@ -23,7 +23,7 @@ The `read-decimal` function returns the parsed value as a decimal.
 
 The following example demonstrates the usage of the `read-decimal` function within a Pact script. It parses the `amount` from the message data body as a decimal and transfers it from one account to another:
 
-```lisp
+```pact
 (defun exec ()
    (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
 ```

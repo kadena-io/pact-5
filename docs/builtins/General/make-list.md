@@ -25,7 +25,7 @@ The `make-list` function returns a list containing the specified value repeated 
 
 The following example demonstrates the use of `make-list` in the Pact REPL:
 
-```lisp
+```pact
 pact>(make-list 5 true)
 [true true true true true]
 ```

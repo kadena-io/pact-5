@@ -25,7 +25,7 @@ The `or` function returns a boolean value based on the logical OR operation of t
 
 The following example demonstrates the use of `or` in the Pact REPL:
 
-```lisp
+```pact
 pact>(or true false)
 true
 ```

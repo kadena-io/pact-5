@@ -23,7 +23,7 @@ The `create-capability-pact-guard` function returns a guard that enforces the ac
 
 The following example demonstrates the `create-capability-pact-guard` function:
 
-```lisp
+```pact
 (create-capability-pact-guard (ESCROW owner))
 ```
 

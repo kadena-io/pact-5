@@ -30,14 +30,14 @@ The following examples demonstrate the usage of the `round` function within the 
 
 To round the decimal value 3.5 to the nearest integer:
 
-```lisp
+```pact
 pact>(round 3.5)
 4
 ```
 
 To round the decimal value 100.15234 to 2 decimal places:
 
-```lisp
+```pact
 pact>(round 100.15234 2)
 10.15
 ```

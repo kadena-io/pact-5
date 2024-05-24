@@ -25,7 +25,7 @@ The `mod` function returns the remainder of the division of `X` by `Y`.
 
 The following example demonstrates the use of `mod` in the Pact REPL:
 
-```lisp
+```pact
 pact>(mod 13 8)
 5
 ```

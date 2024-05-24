@@ -26,7 +26,7 @@ The `enforce-pact-version` function returns a boolean value indicating whether t
 
 The following example demonstrates the `enforce-pact-version` function:
 
-```lisp
+```pact
 pact>(enforce-pact-version "2.3")
 true
 ```
@@ -35,7 +35,7 @@ In this example, `(enforce-pact-version "2.3")` is used to enforce that the runt
 
 You can also specify a maximum Pact version:
 
-```lisp
+```pact
 pact>(enforce-pact-version "2.3" "2.4")
 <interactive>:0:0:Error: Invalid pact version 4.11, maximum allowed: 2.4
 ```

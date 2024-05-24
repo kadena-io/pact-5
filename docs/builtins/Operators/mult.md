@@ -25,12 +25,12 @@ The `*` function returns the result of multiplying `x` by `y`.
 
 The following examples demonstrate the usage of the `*` function within a Pact script. They perform multiplication:
 
-```lisp
+```pact
 pact>(* 0.5 10.0)
 5.0
 ```
 
-```lisp
+```pact
 pact>(* 3 5)
 15
 ```

@@ -23,7 +23,7 @@ The `typeof-principal` function returns the protocol type of the given PRINCIPAL
 
 The following example demonstrates the usage of the `typeof-principal` function within a Pact script. It determines the protocol type of a given principal value:
 
-```lisp
+```pact
 (typeof-principal 'k:462e97a099987f55f6a2b52e7bfd52a36b4b5b470fed0816a3d9b26f9450ba69)
 ```
 

@@ -26,7 +26,7 @@ The `with-capability` function returns the result of executing the provided body
 
 The following example demonstrates the usage of the `with-capability` function within a Pact script. It requests the grant of an `'UPDATE-USERS'` capability and executes the body, updating user information:
 
-```lisp
+```pact
 (with-capability (UPDATE-USERS id) (update users id { salary: new-salary }))
 ```
 

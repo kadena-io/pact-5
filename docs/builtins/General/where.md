@@ -25,7 +25,7 @@ The `where` function returns a `boolean` value based on the result of applying t
 
 The following example demonstrates the usage of the `where` function within a Pact script. It applies a condition where the field `"age"` in a value should be greater than `20`:
 
-```lisp
+```pact
 (filter (where 'age (> 20)) [{'name: "Mary",'age: 30} {'name: "Juan",'age: 15}])
 [{"age":15, "name":"Juan"}]
 ```

@@ -26,28 +26,28 @@ The following examples demonstrate the usage of the `shift` function within a Pa
 
 To shift the integer 255 8 bits to the left:
 
-```lisp
+```pact
 (shift 255 8)
 65280
 ```
 
 To shift the integer 255 1 bit to the right:
 
-```lisp
+```pact
 (shift 255 -1)
 127
 ```
 
 To shift the negative integer -255 8 bits to the left:
 
-```lisp
+```pact
 (shift -255 8)
 -65280
 ```
 
 To shift the negative integer -255 1 bit to the right:
 
-```lisp
+```pact
 (shift -255 -1)
 -128
 ```

@@ -30,14 +30,14 @@ The following examples demonstrate the usage of the `sort` function within a Pac
 
 To sort a list of primitive values `[3, 1, 2]`:
 
-```lisp
+```pact
 pact>(sort [3 1 2])
 [1, 2, 3]
 ```
 
 To sort a list of objects `[{ 'name: "Lin", 'age: 30 }, { 'name: "Val", 'age: 25 }]` based on the `'age` field:
 
-```lisp
+```pact
 pact>(sort ['age] [{'name: "Lin", 'age: 30} {'name: "Val", 'age: 25}])
 [{"age":25, "name":"Val"}, {"age":30, "name":"Lin"}]
 ```

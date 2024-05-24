@@ -23,7 +23,7 @@ The `emit-event` function returns a boolean value indicating success or failure 
 
 The following example demonstrates the `emit-event` function:
 
-```lisp
+```pact
 pact>(emit-event (TRANSFER "Bob" "Alice" 12.0))
 true
 ```

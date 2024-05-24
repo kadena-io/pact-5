@@ -25,7 +25,7 @@ The `compose-capability` function returns a boolean value to indicate success or
 
 The following example demonstrates the `compose-capability` function:
 
-```lisp
+```pact
 (compose-capability (TRANSFER src dest))
 ```
 

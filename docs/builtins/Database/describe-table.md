@@ -23,7 +23,7 @@ The `describe-table` function returns an object with metadata for the specified 
 
 The following example demonstrates the `describe-table` function:
 
-```lisp
+```pact
 pact>(module m G (defcap G () true) (defschema s i:integer) (deftable t:{s}))
 Loaded module m, hash UAnq05ArrOYCFbeJDjCLpWecBq5bS5I0WA6Mj0O041o
 pact>(describe-table m.t)

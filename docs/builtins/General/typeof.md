@@ -23,7 +23,7 @@ The `typeof` function returns the type of the provided value `X` as a string.
 
 The following example demonstrates the usage of the `typeof` function within a Pact script. It determines the type of the string `"hello"`:
 
-```lisp
+```pact
 (typeof "hello")
 "string"
 ```

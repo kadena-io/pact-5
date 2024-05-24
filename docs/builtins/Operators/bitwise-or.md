@@ -24,12 +24,12 @@ The `|` function returns the result of the bitwise OR operation as an integer.
 
 The following examples demonstrate the usage of the `|` function within a Pact script. They compute the bitwise OR operation between two integers:
 
-```lisp
+```pact
 pact>(| 2 3)
 3
 ```
 
-```lisp
+```pact
 pact>(| 5 -7)
 -3
 ```

@@ -24,7 +24,7 @@ The `create-principal` function returns a string representing a principal that u
 
 The following example demonstrates the `create-principal` function:
 
-```lisp
+```pact
 (create-principal (read-keyset 'keyset))
 ```
 

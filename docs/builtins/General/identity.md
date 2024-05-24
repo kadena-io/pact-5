@@ -23,7 +23,7 @@ The `identity` function returns the provided value.
 
 The following example demonstrates the use of `identity` within a `map` function in the Pact REPL:
 
-```lisp
+```pact
 pact>(map (identity) [1 2 3])
 [1 2 3]
 ```

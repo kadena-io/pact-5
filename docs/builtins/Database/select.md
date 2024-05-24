@@ -31,13 +31,13 @@ The following examples demonstrate the usage of the `select` function within a P
 
 To select the columns `'firstName` and `'lastName` from the `people` table where the `name` is equal to "Fatima":
 
-```lisp
+```pact
 (select people ['firstName 'lastName] (where 'name (= "Fatima")))
 ```
 
 To select all columns from the `people` table where the `age` is greater than 30:
 
-```lisp
+```pact
 (select people (where 'age (> 30)))
 ```
 

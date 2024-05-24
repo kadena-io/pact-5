@@ -15,7 +15,7 @@ The `tx-hash` function returns the hash of the current transaction as a string.
 
 The following example demonstrates the usage of the `tx-hash` function within the Pact REPL. It obtains the hash of the current transaction:
 
-```lisp
+```pact
 (tx-hash)
 "DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g"
 ```

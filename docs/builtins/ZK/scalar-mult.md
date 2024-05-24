@@ -25,7 +25,7 @@ The `scalar-mult` function returns the result of multiplying the specified point
 
 The following example demonstrates the usage of the `scalar-mult` function within a Pact script. It multiplies the point `{ 'x: 1, 'y: 2 }` on curve `'g1` by the scalar value `2`:
 
-```lisp
+```pact
 pact>(scalar-mult 'g1 {'x: 1, 'y: 2} 2)
 {"x":1368015179489954701390400359078579693043519447331113978918064868415326638035, "y":9918110051302171585080402603319702774565515993150576347155970296011118125764}
 ```

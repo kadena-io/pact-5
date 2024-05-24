@@ -25,7 +25,7 @@ The `keys-all` function returns a boolean value indicating whether all keys in t
 
 The following example demonstrates the use of `keys-all` in the Pact REPL:
 
-```lisp
+```pact
 pact>(keys-all 3 3)
 true
 ```

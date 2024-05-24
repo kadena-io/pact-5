@@ -25,7 +25,7 @@ The `update` function returns a string indicating the success of the update oper
 
 The following example demonstrates the usage of the `update` function within a Pact script. It updates an entry in the `accounts` table for the specified key with the provided object column data:
 
-```lisp
+```pact
 (update accounts id { "balance": (+ bal amount), "change": amount, "note": "credit" })
 ```
 

@@ -24,7 +24,7 @@ The `enforce` function returns true if the test expression is true. If the test 
 
 The following example demonstrates the `enforce` function inside the Pact REPL:
 
-```lisp
+```pact
 pact>(enforce (!= (+ 2 2) 4) "Chaos reigns")
 <interactive>:0:0:Error: Chaos reigns
 ```

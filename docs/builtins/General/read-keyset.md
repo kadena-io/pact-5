@@ -23,7 +23,7 @@ The `read-keyset` function returns the keyset object corresponding to the specif
 
 The following example demonstrates the usage of the `read-keyset` function within a Pact script. It reads the `admin-keyset` from the message data body:
 
-```lisp
+```pact
 (read-keyset 'admin-keyset)
 ```
 

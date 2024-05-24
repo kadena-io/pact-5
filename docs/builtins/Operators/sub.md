@@ -28,12 +28,12 @@ The `-` function returns the negation of `x`, or the result of subtracting `y` f
 
 The following examples demonstrate the usage of the `-` function within a Pact REPL. They negate values or perform subtraction:
 
-```lisp
+```pact
 pact>(- 1.0)
 -1.0
 ```
 
-```lisp
+```pact
 pact>(- 3 2)
 1
 ```

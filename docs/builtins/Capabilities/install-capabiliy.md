@@ -29,7 +29,7 @@ The `install-capability` function returns a boolean value indicating the success
 
 The following example demonstrates the use of `install-capability` in the Pact REPL to install a capability named `PAY` with specified parameters:
 
-```lisp
+```pact
 pact>(install-capability (PAY "alice" "bob" 10.0))
 ```
 

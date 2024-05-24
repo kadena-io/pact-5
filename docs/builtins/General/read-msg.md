@@ -25,7 +25,7 @@ The `read-msg` function returns the value corresponding to the specified `KEY` f
 
 The following example demonstrates the usage of the `read-msg` function within a Pact script. It reads the `from` and `to` keys from the message data body and the `amount` as a decimal:
 
-```lisp
+```pact
 (defun exec ()
    (transfer (read-msg "from") (read-msg "to") (read-decimal "amount")))
 ```

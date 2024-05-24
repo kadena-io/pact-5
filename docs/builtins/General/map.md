@@ -25,7 +25,7 @@ The `map` function returns a new list containing the results of applying the app
 
 The following example demonstrates the use of `map` in the Pact REPL:
 
-```lisp
+```pact
 pact>(map (+ 1) [1 2 3])
 [2 3 4]
 ```

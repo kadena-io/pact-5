@@ -24,7 +24,7 @@ The `namespace` function returns the string representing the namespace that has 
 
 The following example demonstrates the use of `namespace` in a Pact script:
 
-```lisp
+```pact
 (namespace 'my-namespace)
 ```
 

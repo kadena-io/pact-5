@@ -25,7 +25,7 @@ The `!=` function returns true if `x` does not equal `y`, otherwise false.
 
 The following example demonstrates the usage of the `!=` function within the Pact REPL. It checks if two strings are not equal:
 
-```lisp
+```pact
 pact>(!= "hello" "goodbye")
 true
 ```

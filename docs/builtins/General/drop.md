@@ -29,14 +29,14 @@ The following examples demonstrate the `drop` function:
 
 1. Drop 2 values from the string "vwxyz":
 
-```lisp
+```pact
 pact>(drop 2 "vwxyz")
 "xyz"
 ```
 
 2. Drop 2 values from the end of the list [1 2 3 4 5]:
 
-```lisp
+```pact
 pact>(drop (- 2) [1 2 3 4 5])
 [1, 2, 3]
 
@@ -44,7 +44,7 @@ pact>(drop (- 2) [1 2 3 4 5])
 
 3. Drop entries with the key 'name' from the object { 'name': "Vlad", 'active': false }:
 
-```lisp
+```pact
 pact>(drop ['name] { 'name': "Vlad", 'active': false })
 { 'active': false }
 ```

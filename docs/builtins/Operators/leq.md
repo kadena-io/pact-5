@@ -25,17 +25,17 @@ The `<=` function returns a boolean value indicating whether `x` is less than or
 
 The following examples demonstrate the usage of the `<=` function within a Pact script. They compare two values to check if the first value is less than or equal to the second value:
 
-```lisp
+```pact
 pact>(<= 1 3)
 true
 ```
 
-```lisp
+```pact
 pact>(<= 5.24 2.52)
 false
 ```
 
-```lisp
+```pact
 pact>(<= "abc" "def")
 true
 ```

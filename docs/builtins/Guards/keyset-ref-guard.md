@@ -25,7 +25,7 @@ The `keyset-ref-guard` function returns a `guard` type corresponding to the spec
 
 The following example demonstrates the use of `keyset-ref-guard`:
 
-```lisp
+```pact
 (keyset-ref-guard "my-keyset")
 ```
 

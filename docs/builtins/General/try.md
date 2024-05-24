@@ -24,7 +24,7 @@ The `try` function returns the result of the attempted action. If the action fai
 
 The following example demonstrates the usage of the `try` function within the Pact REPL. It attempts to enforce a condition, and if it fails, it returns the default value:
 
-```lisp
+```pact
 pact>(try 3 (enforce (= 1 2) "this will definitely fail"))
 3
 ```

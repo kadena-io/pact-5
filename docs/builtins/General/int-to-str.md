@@ -27,14 +27,14 @@ The `int-to-str` function returns the string representation of the integer value
 
 The following examples demonstrate the use of `int-to-str` in the Pact REPL:
 
-```lisp
+```pact
 pact>(int-to-str 16 65535)
 "FFFF"
 ```
 
 In this example, the integer value 65535 is represented as a string in base 16, resulting in "FFFF".
 
-```lisp
+```pact
 pact>(int-to-str 64 43981)
 "XA"
 ```

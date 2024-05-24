@@ -23,7 +23,7 @@ The `base64-encode` function returns the unpadded base64 encoded `string`.
 
 The following example encodes a string as unpadded base64 in the Pact REPL:
 
-```lisp
+```pact
 pact>(base64-encode "hello world!")
 "aGVsbG8gd29ybGQh"
 ```

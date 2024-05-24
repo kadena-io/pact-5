@@ -28,7 +28,7 @@ The `decrypt-cc20p1305` function returns the decrypted plaintext as an unpadded 
 
 The following example demonstrates the `decrypt-cc20p1305` function:
 
-```lisp
+```pact
 (decrypt-cc20p1305 "aGVsbG8gd29ybGQh" "jXg5EEna3ncA" "QW5kcm9pZCBBdXRob3JpemF0aW9uIERhdGE" "yzNz8N5cc0ZT4vp_zV-6PmfYvgEtZhhlS8_JZ6odS0A" "A9Fp8OL3Mgu_8haIjy8JhsmLzPmzJ0JcbE9kSVNB5Y" "MwYTMzc2NjVhZGFmY2QxMzM4Y2I1ZmU2ZDM1YjQ3MzU") 
 ```
 

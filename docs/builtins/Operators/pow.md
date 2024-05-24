@@ -24,7 +24,7 @@ The `^` function returns the result of raising `x` to the power of `y`.
 
 The following example demonstrates the usage of the `^` function within a Pact REPL. It raises `2` to the power of `3`:
 
-```lisp
+```pact
 pact>(^ 2 3)
 8
 ```

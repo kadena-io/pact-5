@@ -34,14 +34,14 @@ The following examples demonstrate the `floor` function:
 
 1. Rounding down a decimal to an integer:
 
-```lisp
+```pact
 pact>(floor 3.5)
 3
 ```
 
 2. Rounding down a decimal to a specified precision:
 
-```lisp
+```pact
 pact>(floor 100.15234 2)
 100.15
 ```

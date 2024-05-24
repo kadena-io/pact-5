@@ -25,7 +25,7 @@ The `or?` function returns a boolean value representing the logical 'or' operati
 
 The following example demonstrates the use of `or?` in the Pact REPL:
 
-```lisp
+```pact
 pact>(or? (> 20) (> 10) 15)
 true
 ```

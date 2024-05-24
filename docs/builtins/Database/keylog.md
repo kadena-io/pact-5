@@ -26,7 +26,7 @@ The `keylog` function returns a list of objects containing updates to the specif
 
 The following example demonstrates the use of `keylog` in the Pact REPL to retrieve updates for the "accounts" table, specifically for the key "Alice", starting from transaction ID 123485945:
 
-```lisp
+```pact
 (keylog accounts "Alice" 123485945)
 ```
 

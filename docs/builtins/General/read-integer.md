@@ -23,7 +23,7 @@ The `read-integer` function returns the parsed value as an integer.
 
 The following example demonstrates the usage of the `read-integer` function within a Pact script. It parses the `age` from the message data body as an integer:
 
-```lisp
+```pact
 (read-integer 'age)
 ```
 

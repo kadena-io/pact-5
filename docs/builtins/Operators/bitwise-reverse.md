@@ -24,7 +24,7 @@ The `~` function returns the result of reversing all bits in the provided intege
 
 The following example demonstrates the usage of the `~` function within a Pact script. It reverses all bits in the integer `15`:
 
-```lisp
+```pact
 pact>(~ 15)
 -16
 ```

@@ -24,7 +24,7 @@ The `filter` function returns a new list containing elements from the original l
 
 The following example demonstrates the `filter` function:
 
-```lisp
+```pact
 pact>(filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 ["dog" "has" "fleas"]
 ```

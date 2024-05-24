@@ -24,7 +24,7 @@ The `diff-time` function returns the difference between `TIME1` and `TIME2` in s
 
 The following example demonstrates the `diff-time` function:
 
-```lisp
+```pact
 pact>(diff-time (parse-time "%T" "16:00:00") (parse-time "%T" "09:30:00"))
 23400.0
 ```

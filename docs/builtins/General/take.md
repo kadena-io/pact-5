@@ -32,21 +32,21 @@ The following examples demonstrate the usage of the `take` function within the P
 
 To retrieve the first 2 characters from the string "abcd":
 
-```lisp
+```pact
 pact>(take 2 "abcd")
 "ab"
 ```
 
 To retrieve the last 3 values from the list [1, 2, 3, 4, 5]:
 
-```lisp
+```pact
 pact>(take (- 3) [1 2 3 4 5])
 [3, 4, 5]
 ```
 
 To retrieve entries with the key `'name` from the object `{ 'name: "Vlad", 'active: false }`:
 
-```lisp
+```pact
 (take ['name] { 'name: "Vlad", 'active: false })
 {"name":"Vlad"}
 ```

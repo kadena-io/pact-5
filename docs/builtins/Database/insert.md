@@ -27,7 +27,7 @@ The `insert` function returns a string indicating the success or failure of the 
 
 The following example demonstrates the use of `insert` to insert data into the `accounts` table:
 
-```lisp
+```pact
 (insert accounts id { "balance": 0.0, "note": "Created account." })
 ```
 

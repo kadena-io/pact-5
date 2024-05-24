@@ -23,7 +23,7 @@ The `reverse` function returns a new list with the elements in reverse order.
 
 The following example demonstrates the usage of the `reverse` function within the Pact REPL. It reverses the order of elements in a given list:
 
-```lisp
+```pact
 pact>(reverse [1 2 3])
 ```
 

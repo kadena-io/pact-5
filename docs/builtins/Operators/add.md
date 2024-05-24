@@ -28,27 +28,27 @@ The `+` function returns the result of addition for numbers, concatenation for s
 
 The following examples demonstrate the usage of the `+` function within a Pact REPL. They perform addition, concatenation, or merging:
 
-```lisp
+```pact
 pact>(+ 1 2)
 3
 ```
 
-```lisp
+```pact
 pact>(+ 5.0 0.5)
 5.5
 ```
 
-```lisp
+```pact
 pact>(+ "every" "body")
 "everybody"
 ```
 
-```lisp
+```pact
 pact>(+ [1 2] [3 4])
 [1 2 3 4]
 ```
 
-```lisp
+```pact
 pact>(+ { "foo": 100 } { "foo": 1, "bar": 2 })
 {"bar": 2,"foo": 100}
 ```

@@ -25,7 +25,7 @@ The `and?` function returns a boolean value based on the result of applying `val
 
 The following example demonstrates the `and?` operation in the Pact REPL:
 
-```lisp
+```pact
 pact>(and? (> 20) (> 10) 15)
 true
 ```

@@ -24,21 +24,21 @@ The `length` function returns an integer representing the length of the specifie
 
 The following examples demonstrate the use of `length` in the Pact REPL:
 
-```lisp
+```pact
 pact>(length [1 2 3])
 3
 ```
 
 In this example, the length of the list `[1, 2, 3]` is computed, resulting in 3.
 
-```lisp
+```pact
 pact>(length "abcdefgh")
 8
 ```
 
 In this example, the length of the string `"abcdefgh"` is computed, resulting in 8.
 
-```lisp
+```pact
 pact>(length { "a": 1, "b": 2 })
 2
 ```

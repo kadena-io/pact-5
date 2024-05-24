@@ -24,7 +24,7 @@ The `validate-principal` function returns a `boolean` value indicating whether t
 
 The following example demonstrates the usage of the `validate-principal` function within a Pact script. It enforces that the principal obtained from reading a keyset matches the specified account, ensuring it is valid:
 
-```lisp
+```pact
 (enforce (validate-principal (read-keyset 'keyset) account) "Invalid account ID")
 ```
 

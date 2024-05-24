@@ -27,13 +27,13 @@ The following examples demonstrate the `enforce-guard` function:
 
 1. Execute a guard named 'admin-keyset' to enforce desired logic:
 
-```lisp
+```pact
 (enforce-guard 'admin-keyset)
 ```
 
 2. Execute a row guard named 'row-guard' to enforce desired logic:
 
-```lisp
+```pact
 (enforce-guard row-guard)
 ```
 

@@ -26,14 +26,14 @@ The `if` function returns the result of evaluating either the `then` expression 
 
 The following example demonstrates the use of `if` to test a condition in the Pact REPL:
 
-```lisp
+```pact
 pact>(if (= (+ 2 2) 4) "Sanity prevails" "Chaos reigns")
 "Sanity prevails"
 ```
 
 In this example, the condition `(= (+ 2 2) 4)` evaluates to true, so the expression `"Sanity prevails"` is returned.
 
-```lisp
+```pact
 pact>(if (= (+ 2 2) 5) "Sanity prevails" "Chaos reigns")
 "Chaos reigns"
 ```

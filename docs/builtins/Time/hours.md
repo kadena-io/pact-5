@@ -5,7 +5,7 @@ The `hours` function calculates a time duration in hours, which can be used with
 
 The syntax for the `hours` function is as follows:
 
-```lisp
+```pact
 hours *n* -> *decimal*
 ```
 
@@ -21,7 +21,7 @@ The `hours` function returns a decimal value representing the specified number o
 
 #### Adding hours to a time:
 
-```lisp
+```pact
 (add-time (time "2016-07-22T12:00:00Z") (hours 1))
 ```
 
@@ -29,7 +29,7 @@ In this example, the `add-time` function is used to add one hour to the time rep
 
 #### Specifying hours as an integer:
 
-```lisp
+```pact
 (hours 3)
 ```
 
@@ -37,7 +37,7 @@ In this example, the `hours` function specifies 3 hours as an integer value.
 
 #### Specifying hours as a decimal:
 
-```lisp
+```pact
 (hours 2.5)
 ```
 

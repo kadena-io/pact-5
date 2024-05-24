@@ -24,12 +24,12 @@ The `xor` function returns the result of the bitwise XOR operation as an integer
 
 The following examples demonstrate the usage of the `xor` function within the Pact REPL. They compute the bitwise XOR operation between two integers:
 
-```lisp
+```pact
 (xor 127 64)
 63
 ```
 
-```lisp
+```pact
 (xor 5 -7)
 -4
 ```

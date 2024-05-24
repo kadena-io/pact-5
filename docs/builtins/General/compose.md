@@ -25,7 +25,7 @@ The `compose` function returns the result of applying the composed functions `x`
 
 The following example demonstrates the `compose` function in the Pact REPL:
 
-```lisp
+```pact
 pact>(filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
 ["my" "has"]
 ```

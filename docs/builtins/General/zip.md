@@ -25,15 +25,15 @@ The `zip` function returns a new list containing elements combined from the inpu
 
 The following examples demonstrate the usage of the `zip` function within the Pact REPL. They combine two lists using specified functions `+` and `-` into new lists:
 
-```lisp
+```pact
 pact>(zip (+) [1 2 3 4] [4 5 6 7])
 [5, 7, 9, 11]
 ```
-```lisp
+```pact
 pact>(zip (-) [1 2 3 4] [4 5 6])
 [-3, -3, -3]
 ```
-```lisp
+```pact
 pact>(zip (+) [1 2 3] [4 5 6 7])
 [5, 7, 9]
 ```

@@ -23,7 +23,7 @@ The `create-table` function returns a string representing the identifier of the 
 
 The following example demonstrates the `create-table` function:
 
-```lisp
+```pact
 (create-table accounts)
 ```
 

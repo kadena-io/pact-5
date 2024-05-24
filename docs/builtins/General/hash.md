@@ -23,14 +23,14 @@ The `hash` function returns a string representing the computed hash value.
 
 The following examples demonstrate the `hash` function:
 
-```lisp
+```pact
 pact>(hash "hello")
 "Mk3PAn3UowqTLEQfNlol6GsXPe-kuOWJSCU0cbgbcs8"
 ```
 
 In this example, `"hello"` is a string value. The `hash` function computes the BLAKE2b 256-bit hash of the string "hello" and returns the hash value.
 
-```lisp
+```pact
 (hash { 'foo: 1 })
 "h9BZgylRf_M4HxcBXr15IcSXXXSz74ZC2IAViGle_z4"
 ```

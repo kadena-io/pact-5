@@ -38,7 +38,7 @@ The following examples demonstrate the `contains` function in the Pact REPL:
 
 1. Testing if a `LIST` contains a `VALUE`:
 
-```lisp
+```pact
 pact>(contains 2 [1 2 3])
 true
 ```
@@ -47,7 +47,7 @@ In this example, `contains 2 [1 2 3]` checks if the list `[1 2 3]` contains the 
 
 2. Testing if an `OBJECT` has a `KEY` entry:
 
-```lisp
+```pact
 pact>(contains 'name { 'name: "Ted", 'age: 72 })
 true
 ```
@@ -56,7 +56,7 @@ In this example, `contains 'name { 'name: "Ted", 'age: 72 }` checks if the objec
 
 3. Testing if a `STRING` contains a substring `VALUE`:
 
-```lisp
+```pact
 pact>(contains "foo" "foobar")
 true
 ```

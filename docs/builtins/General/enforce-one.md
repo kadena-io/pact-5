@@ -25,7 +25,7 @@ The `enforce-one` function returns true if at least one test succeeds. If all te
 
 The following example demonstrates the `enforce-one` function:
 
-```lisp
+```pact
 pact>(enforce-one "Should succeed on second test" [(enforce false "Skip me") (enforce (= (+ 2 2) 4) "Chaos reigns")])
 true
 ```

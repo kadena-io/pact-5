@@ -24,7 +24,7 @@ The `constantly` function returns the specified `VALUE`, ignoring any additional
 
 The following example demonstrates the `constantly` function in the Pact REPL:
 
-```lisp
+```pact
 pact>(filter (constantly true) [1 2 3])
 [1 2 3]
 ```
@@ -35,7 +35,7 @@ In this example, `constantly true` is used as the predicate function for `filter
 
 Here are a few more examples of using `constantly`:
 
-```lisp
+```pact
 pact>(constantly "hello" 1)
 "hello"
 

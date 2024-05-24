@@ -24,10 +24,10 @@ The `yield` function returns the yielded object.
 
 The following examples demonstrate the usage of the `yield` function within a Pact script. They yield an object for use with `resume`, optionally targeting the subsequent step to execute on a specific chain:
 
-```lisp
+```pact
 (yield { "amount": 100.0 })
 ```
-```lisp
+```pact
 (yield { "amount": 100.0 } "some-chain-id")
 ```
 

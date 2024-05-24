@@ -24,7 +24,7 @@ The `parse-time` function returns a time value constructed from the provided UTC
 
 The following example demonstrates the use of `parse-time` in the Pact REPL:
 
-```lisp
+```pact
 pact>(parse-time "%F" "2016-09-12")
 ```
 

@@ -28,7 +28,7 @@ The `ceiling` function returns the rounded-up value of `x` as either an integer 
 
 The following example rounds up a decimal value to the nearest integer in the Pact REPL:
 
-```lisp
+```pact
 pact>(ceiling 3.5)
 4
 ```
@@ -37,7 +37,7 @@ In this example, `ceiling` rounds up the decimal value `3.5` to the nearest inte
 
 The following example rounds up a decimal value to a precision of 2 decimal places:
 
-```lisp
+```pact
 pact>(ceiling 100.15234 2)
 100.16
 ```

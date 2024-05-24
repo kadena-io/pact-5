@@ -26,7 +26,7 @@ The `with-read` special form returns the result of executing the provided body s
 
 The following example demonstrates the usage of the `with-read` special form within a Pact script. It reads a row from the `accounts` table for the specified key and binds the 'balance' and 'ccy' columns for further processing:
 
-```lisp
+```pact
 (with-read accounts id { "balance":= bal, "ccy":= ccy }
   (format "Balance for {} is {} {}" [id bal ccy]))
 ```

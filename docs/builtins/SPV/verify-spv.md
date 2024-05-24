@@ -24,7 +24,7 @@ The `verify-spv` function returns an object whose format depends on the specific
 
 The following example demonstrates the usage of the `verify-spv` function within a Pact script. It verifies an SPV proof of type `"TXOUT"` using the payload obtained from reading a message:
 
-```lisp
+```pact
 (verify-spv "TXOUT" (read-msg "proof"))
 ```
 

@@ -25,7 +25,7 @@ The `not?` function returns a boolean value representing the logical negation of
 
 The following example demonstrates the use of `not?` in the Pact REPL:
 
-```lisp
+```pact
 pact>(not? (> 20) 15)
 false
 ```

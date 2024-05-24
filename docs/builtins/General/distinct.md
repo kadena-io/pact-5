@@ -23,7 +23,7 @@ The `distinct` function returns a list with duplicates removed from the specifie
 
 The following example demonstrates the `distinct` function:
 
-```lisp
+```pact
 pact>(distinct [3 3 1 1 2 2])
 [3, 1, 2]
 ```

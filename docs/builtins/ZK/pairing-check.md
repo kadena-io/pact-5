@@ -24,7 +24,7 @@ The `pairing-check` function returns a boolean value indicating whether the resu
 
 The following example demonstrates the use of `pairing-check` in the Pact REPL:
 
-```lisp
+```pact
 pact>(pairing-check [point1_g1 point2_g1] [point1_g2 point2_g2])
 ```
 

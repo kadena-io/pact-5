@@ -25,7 +25,7 @@ The `log` function returns the logarithm of `Y` with base `X`.
 
 The following example demonstrates the use of `log` in the Pact REPL:
 
-```lisp
+```pact
 pact>(log 2 256)
 8
 ```

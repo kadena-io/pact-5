@@ -23,7 +23,7 @@ The `time` function returns a time object constructed from the provided UTC valu
 
 The following example demonstrates the usage of the `time` function within the Pact REPL. It constructs a time object from the UTC value `"2016-07-22T11:26:35Z"`:
 
-```lisp
+```pact
 pact>(time "2016-07-22T11:26:35Z")
 2016-07-22 11:26:35 UTC
 ```

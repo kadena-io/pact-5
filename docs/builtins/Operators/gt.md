@@ -24,17 +24,17 @@ The `>` function returns a boolean value indicating whether `x` is greater than 
 
 The following examples demonstrate the usage of the `>` function within a Pact script. They compare two values to check if the first value is greater than the second value:
 
-```lisp
+```pact
 pact>(> 1 3)
 false
 ```
 
-```lisp
+```pact
 pact>(> 5.24 2.52)
 true
 ```
 
-```lisp
+```pact
 pact>(> "abc" "def")
 false
 ```

@@ -27,7 +27,7 @@ The following examples demonstrate the `define-keyset` function:
 
 1. Define a keyset named 'admin-keyset' with a specified keyset:
 
-```lisp
+```pact
 (define-keyset 'admin-keyset "my-keyset")
 ```
 
@@ -35,7 +35,7 @@ In this example, `(define-keyset 'admin-keyset "my-keyset")` is used to define a
 
 2. Read the keyset from the message payload and associate it with 'admin-keyset':
 
-```lisp
+```pact
 (define-keyset 'admin-keyset)
 ```
 

@@ -24,12 +24,12 @@ The `/` function returns the result of dividing `x` by `y`.
 
 The following examples demonstrate the usage of the `/` function within a Pact REPL. They divide two values:
 
-```lisp
+```pact
 pact>(/ 10.0 2.0)
 5.0
 ```
 
-```lisp
+```pact
 pact>(/ 8 3)
 2
 ```

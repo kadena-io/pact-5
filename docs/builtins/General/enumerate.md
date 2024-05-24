@@ -40,21 +40,21 @@ The `enumerate` function returns the resulting sequence of numbers as a list.
 
 The following example enumerates a sequence of numbers using the default increment of one in the Pact REPL:
 
-```lisp
+```pact
 pact>(enumerate 0 10)
 [0 1 2 3 4 5 6 7 8 9 10]
 ```
 
 The following example enumerates a sequence of numbers using an increment of two between numbers in the sequence:
 
-```lisp
+```pact
 pact>(enumerate 0 10 2)
 [0 2 4 6 8 10]
 ```
 
 The following example illustrates decrementing a sequence of numbers using an `inc` value of -2 between numbers in the sequence:
 
-```lisp
+```pact
 (enumerate 20 10 -2)
 [20 18 16 14 12 10]
 ```

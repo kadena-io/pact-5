@@ -23,7 +23,7 @@ The `create-module-guard` function returns a guard that enforces the current mod
 
 The following example demonstrates the `create-module-guard` function:
 
-```lisp
+```pact
 (create-module-guard "module-admin-guard")
 ```
 
