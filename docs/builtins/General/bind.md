@@ -5,7 +5,7 @@ Use `bind` as a special form to evaluate `src` to an object which is then bound 
 
 To evaluate `src` to an object and bind it with `bindings` over subsequent body statements, use the following syntax:
 
-`(bind src bindings bval)`
+`(bind src bindings)`
 
 ### Arguments
 
@@ -13,8 +13,8 @@ Use the following arguments to specify the *`src`* object and *`bindings`* for t
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| src | object:<{row}> | Specifies the source object to evaluate. |
-| bindings | binding:<{row}> | Specifies the bindings to apply to the *`src`* object. |
+| `src` | `object:<{row}>` | Specifies the source object to evaluate. |
+| `bindings` | `binding:<{row}>` | Specifies the bindings to apply to the `src` object. |
 
 ### Return values
 
