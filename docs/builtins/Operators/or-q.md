@@ -1,11 +1,11 @@
-## or-q
+## or?
 Use `or?` to apply logical 'or' with short-circuit evaluation to the results of applying a value to two application functions.
 
 ### Basic syntax
 
 To apply logical 'or' with short-circuit evaluation to the results of applying a value to two application functions, use the following syntax:
 
-or? *a b value*
+`(or? a b value)`
 
 ### Arguments
 
@@ -13,9 +13,9 @@ Use the following arguments to specify the application functions and the value t
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| a | x:<r> -> bool | Specifies the first application function. |
-| b | x:<r> -> bool | Specifies the second application function. |
-| value | <r> | Specifies the value to be applied to both application functions. |
+| `a` | `x:<r> -> bool` | Specifies the first application function. |
+| `b` | `x:<r> -> bool` | Specifies the second application function. |
+| `value` | `<r>` | Specifies the value to be applied to both application functions. |
 
 ### Return value
 

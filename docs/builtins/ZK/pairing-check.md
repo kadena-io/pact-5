@@ -5,7 +5,7 @@ Use `pairing-check` to perform pairing and final exponentiation on points in G1 
 
 To perform pairing and final exponentiation on points in G1 and G2, and check if the result is 1, use the following syntax:
 
-pairing-check *points-g1 points-g2*
+`(pairing-check points-g1 points-g2)`
 
 ### Arguments
 
@@ -13,8 +13,8 @@ Use the following arguments to specify the lists of points in G1 and G2 for whic
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| points-g1 | [<a>] | Specifies the list of points in G1. |
-| points-g2 | [<b>] | Specifies the list of points in G2. |
+| `points-g1` | `[<a>]` | Specifies the list of points in G1. |
+| `points-g2` | `[<b>]` | Specifies the list of points in G2. |
 
 ### Return value
 

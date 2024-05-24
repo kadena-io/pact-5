@@ -5,7 +5,7 @@ Use `minutes` to represent a duration of N minutes, primarily for use with the `
 
 To represent a duration of N minutes, use the following syntax:
 
-minutes *n*
+`(minutes n)`
 
 ### Argument
 
@@ -13,7 +13,7 @@ Use the following argument to specify the number of minutes for the duration usi
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| n | decimal or integer | Specifies the number of minutes for the duration. |
+| `n` | `decimal` or `integer` | Specifies the number of minutes for the duration. |
 
 ### Return value
 
@@ -25,6 +25,5 @@ The following example demonstrates the use of `minutes` in combination with `add
 
 ```pact
 pact>(add-time (time "2016-07-22T12:00:00Z") (minutes 1))
+2016-07-22 12:01:00 UTC
 ```
-
-In this example, `add-time` is used to add 1 minute to the time "2016-07-22T12:00:00Z". The `minutes` function represents the duration of 1 minute.

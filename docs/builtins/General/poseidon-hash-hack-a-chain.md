@@ -5,7 +5,7 @@ Use `poseidon-hash-hack-a-chain` to compute the Poseidon Hash Function. Note: Th
 
 To compute the Poseidon Hash Function using the reference version, use the following syntax:
 
-poseidon-hash-hack-a-chain *i j k l m n o p*
+`(poseidon-hash-hack-a-chain i j k l m n o p)`
 
 ### Arguments
 
@@ -13,7 +13,7 @@ Use the following arguments to specify the inputs for computing the Poseidon has
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| i, j, k, l, m, n, o, p | integer | Specifies the inputs for the Poseidon hash function. |
+| `i`, `j`, `k`, `l`, `m`, `n`, `o`, `p` | `integer` | Specifies the inputs for the Poseidon hash function. |
 
 ### Return value
 

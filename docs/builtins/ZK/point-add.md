@@ -5,7 +5,7 @@ Use `point-add` to add two points together that lie on the curve BN254. Point ad
 
 To add two points together that lie on the curve BN254, use the following syntax:
 
-point-add *type point1 point2*
+`(point-add type point1 point2)`
 
 ### Arguments
 
@@ -13,9 +13,9 @@ Use the following arguments to specify the type of addition and the points to be
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| type | string | Specifies the type of point addition (either 'g1' or 'g2'). |
-| point1 | <a> | Specifies the first point to be added. |
-| point2 | <a> | Specifies the second point to be added. |
+| `type` | `string` | Specifies the type of point addition (either 'g1' or 'g2'). |
+| `point1` | `<a>` | Specifies the first point to be added. |
+| `point2` | `<a>` | Specifies the second point to be added. |
 
 ### Return value
 

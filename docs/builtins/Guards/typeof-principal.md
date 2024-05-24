@@ -5,7 +5,7 @@ The `typeof-principal` function returns the protocol type of a given PRINCIPAL v
 
 To determine the protocol type of a principal value, use the following syntax:
 
-typeof-principal *principal*
+`(typeof-principal principal)
 
 ### Argument
 
@@ -13,7 +13,7 @@ Use the following argument to specify the PRINCIPAL value for which to determine
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| principal | string | Specifies the principal value for which to determine the protocol type. |
+| `principal` | `string` | Specifies the principal value for which to determine the protocol type. |
 
 ### Return value
 

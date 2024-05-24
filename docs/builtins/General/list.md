@@ -5,7 +5,7 @@ Use `list` to create a list from the specified elements. Note that this function
 
 To create a list from elements, use the following syntax:
 
-list *elems*
+`(list elems)`
 
 ### Argument
 
@@ -13,7 +13,7 @@ Use the following argument to specify the elements from which you want to create
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| elems | * | Specifies the elements to be included in the list. |
+| `elems` | `*` | Specifies the elements to be included in the list. |
 
 ### Return value
 

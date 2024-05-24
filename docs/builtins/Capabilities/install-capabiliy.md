@@ -11,7 +11,7 @@ Note that signatures scoped to a managed capability cause the capability to be a
 
 To specify and provision the installation of a managed capability, use the following syntax:
 
-install-capability *capability*
+`(install-capability capability)`
 
 ### Arguments
 
@@ -19,7 +19,7 @@ Use the following argument to specify the capability you want to install using t
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| capability | any | Specifies the capability to be installed. |
+| `capability` | `any` | Specifies the capability to be installed. |
 
 ### Return value
 
