@@ -482,9 +482,7 @@ data CapBodyState b i
   { _cbPopState :: !CapPopState
   , _cbBodyCap :: !(Maybe (CapToken QualifiedName PactValue))
   , _cbEmittedEvent :: !(Maybe (PactEvent PactValue))
-  -- , _cbOldCapsBeingEvaluated :: Set (CapToken QualifiedName PactValue)
   , _cbEvalBody :: !(EvalTerm b i)
-  -- , _cbEvalType :: !EvalCapType
   } deriving (Show, Generic)
 
 instance (NFData b, NFData i) => NFData (CapBodyState b i)
@@ -513,7 +511,6 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
   | CapInvokeC (CEKEnv step b i m) i (CapCont step b i m) (Cont step b i m)
   -- ^ Frame for control flow around argument reduction to with-capability and create-user-guard
-  -- | CapBodyC CapPopState (CEKEnv step b i m) i (Maybe (CapToken QualifiedName PactValue)) (Maybe (PactEvent PactValue)) (EvalTerm b i) (Cont step b i m)
   | CapBodyC (CEKEnv step b i m) i {-# UNPACK #-} !(CapBodyState b i) (Cont step b i m)
   -- ^ CapBodyC includes
   --  - what to do after the cap body (pop it, or compose it)
@@ -523,6 +520,7 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   --  - The rest of the continuation
   | CapPopC CapPopState (Cont step b i m)
   -- ^ What to do after returning from a defcap: do we compose the returned cap, or do we simply pop it from the stack
+  -- or alternatively: after cap evaluation finishes, pop the caps 
   | DefPactStepC (CEKEnv step b i m) (Cont step b i m)
   -- ^ Cont frame after a defpact, ensuring we save the defpact to the database and whatnot
   | NestedDefPactStepC (CEKEnv step b i m) (Cont step b i m) DefPactExec

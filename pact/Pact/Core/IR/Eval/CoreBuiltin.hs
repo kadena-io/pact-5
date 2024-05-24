@@ -1868,20 +1868,6 @@ coreVerifySPV info b cont handler _env = \case
 -----------------------------------
 -- Verifiers
 -----------------------------------
-  -- enforceVerifier :: RNativeFun e
-  -- enforceVerifier i as = case as of
-  --   [TLitString verName] -> do
-  --     views eeMsgVerifiers (Map.lookup (VerifierName verName)) >>= \case
-  --       Just verCaps -> do
-  --         inCap <- defcapInStack Nothing
-  --         unless inCap $
-  --           failTx (getInfo i) $ "enforce-verifier must be run in a capability"
-  --         verifierInScope <- anyCapabilityBeingEvaluated verCaps
-  --         if verifierInScope then return (toTerm True)
-  --         else failTx (getInfo i) $ "Verifier failure " <> pretty verName <> ": not in scope"
-  --       Nothing ->
-  --         failTx (getInfo i) $ "Verifier failure " <> pretty verName <> ": not in transaction"
-  --   _ -> argsError i as
 coreEnforceVerifier :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreEnforceVerifier info b cont handler _env = \case
   [VString verName] -> do
