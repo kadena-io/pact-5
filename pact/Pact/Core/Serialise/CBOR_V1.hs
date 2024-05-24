@@ -11,7 +11,7 @@ module Pact.Core.Serialise.CBOR_V1
   , encodeDefPactExec, decodeDefPactExec
   , encodeNamespace, decodeNamespace
   , encodeRowData, decodeRowData
-  -- used for
+  -- only used for legacy translation
   , encodeModuleName
   , encodeModuleHash
   ) where

@@ -118,7 +118,7 @@ data Type
 instance NFData Type
 
 data Schema
-  = Schema (Maybe QualifiedName) (Map Field Type)
+  = Schema QualifiedName (Map Field Type)
   deriving (Eq, Show, Ord, Generic)
 
 instance NFData Schema
@@ -258,9 +258,9 @@ renderType = \case
     let s' = T.concat (intersperse ", " (renderModuleName <$> S.toList s))
     in "module" <> "{" <> s' <> "}"
   TyObject (Schema n _sc) ->
-    "object{" <> maybe "unknown" renderQualName n <> "}"
+    "object{" <> renderQualName n <> "}"
   TyTable (Schema n _sc) ->
-    "table{" <> maybe "unknown" renderQualName n <> "}"
+    "table{" <> renderQualName n <> "}"
   TyCapToken -> "CAPTOKEN"
   TyAnyObject -> "object"
   TyAnyList -> "list"

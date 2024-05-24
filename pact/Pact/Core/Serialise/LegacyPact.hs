@@ -1,6 +1,5 @@
 -- |
 {-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE PartialTypeSignatures  #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Pact.Core.Serialise.LegacyPact
@@ -83,7 +82,6 @@ decodeModuleData bs = do
   obj <- JD.decodeStrict' bs
   either (const Nothing) Just (runTranslateM (fromLegacyModuleData obj))
 
-
 fromLegacyModuleData
   :: Legacy.ModuleData (Legacy.Ref' Legacy.PersistDirect)
   -> TranslateM (ModuleData CoreBuiltin ())
@@ -99,7 +97,6 @@ fromLegacyModuleData (Legacy.ModuleData md mref mdeps) = do
       let mh = ModuleHash $ pactHash $ T.encodeUtf8 (renderModuleName ifn)
       i'<- fromLegacyInterface mh i mref
       pure (InterfaceData i' M.empty)
-
 
 fromLegacyInterface
   :: ModuleHash
@@ -164,8 +161,6 @@ fromLegacySchemaDef (Legacy.TypeName sn) _mn largs = do
   schema <- traverse (\(Arg n mty _) -> pure (Field n, fromMaybe TyAny mty)) args
   pure (DefSchema sn (M.fromList schema) ())
 
-
-
 fromLegacyTableDef
   :: Legacy.TableName
   -> Legacy.ModuleName
@@ -175,8 +170,8 @@ fromLegacyTableDef
 fromLegacyTableDef (Legacy.TableName tn) _mn _mh ty = do
   case ty of
     Legacy.TyUser t -> case unTVar (Right <$> t) of
-      Legacy.TSchema (Legacy.TypeName n) mmn f -> do
-        let qn = QualifiedName n . fromLegacyModuleName <$> mmn
+      Legacy.TSchema (Legacy.TypeName n) (Just mn) f -> do
+        let qn = QualifiedName n (fromLegacyModuleName mn)
         args <- traverse (\(Legacy.Arg n' ty') -> (Field n',) <$> fromLegacyType ty') f
         let sc = Schema qn (M.fromList args)
         pure (DTable (DefTable tn (ResolvedTable sc) ()))
@@ -197,7 +192,6 @@ fromLegacyInterfaceDefRef mh = \case
 
   Legacy.Ref t -> throwError $ "fromLegacyDefRef: " <> show t
   Legacy.Direct _d -> throwError "fromLegacyDefRef: invariant Direct"
-
 
 fromLegacyFullyQualifiedName
   :: Legacy.FullyQualifiedName
@@ -230,6 +224,8 @@ fromLegacyDef mh (Legacy.Def (Legacy.DefName n) _mn dt funty body meta) = do
     go mn ret args =
       case dt of
         Legacy.Defun -> do
+          -- Increment the depth by the number of arguments and fix the indices
+          -- before converting the body to its new form.
           body' <- local (+ fromIntegral (length args)) . fixTreeIndices =<< fromLegacyBodyForm' mh args body
           pure $ Dfun $ Defun
             (Arg n (Just ret) ())
@@ -238,9 +234,11 @@ fromLegacyDef mh (Legacy.Def (Legacy.DefName n) _mn dt funty body meta) = do
             () -- info
         Legacy.Defpact -> do
           steps' <- fromLegacyStepForm' mh args body
+          -- Increment the depth by the number of arguments and fix the indices
           steps'' <- local (+ fromIntegral (length args)) $ (traversed.traverseDefPactStep) fixTreeIndices steps'
           pure $ DPact (DefPact (Arg n (Just ret) ()) args steps'' ())
         Legacy.Defcap -> do
+            -- Increment the depth by the number of argument and fix the indices
             body' <- local (+ fromIntegral (length args)) . fixTreeIndices =<< fromLegacyBodyForm' mh args body
             meta' <- case meta of
               -- Note: Empty `meta` implies the cap is
@@ -248,7 +246,6 @@ fromLegacyDef mh (Legacy.Def (Legacy.DefName n) _mn dt funty body meta) = do
               Just meta' -> fromLegacyDefMeta mn mh args meta'
               Nothing -> pure Unmanaged
             pure $ DCap (DefCap (Arg n (Just ret) ()) args body' meta' ())
-
 
 fromLegacyInterfDef
   :: Legacy.Def (Either CorePreNormalizedTerm LegacyRef)
@@ -289,7 +286,6 @@ fromLegacyDefMetaInterface args = \case
         f' -> throwError $ "invariant: interface defmeta invariant violated " <> show f'
   Legacy.DMDefcap Legacy.DefcapEvent -> pure DefEvent
 
-
 fromLegacyDefMeta
   :: ModuleName
   -> ModuleHash
@@ -311,8 +307,6 @@ fromLegacyDefMeta mn mh args = \case
           pure $ DefManaged (DefManagedMeta (idx', p) (FQName fqn'))
         f' -> throwError $ "invariant: interface defmeta invariant2 violated " <> show f'
   Legacy.DMDefcap Legacy.DefcapEvent -> pure DefEvent
-
-
 
 fromLegacyModuleHash
   :: Legacy.ModuleHash
@@ -340,7 +334,6 @@ fromLegacyModule mh lm depMap = do
   defs <- traverse (fromLegacyDefRef mh) $ HM.elems depMap
   pure (Module mn gov defs (S.fromList blessed) imps impl mhash ())
 
-
 fromLegacyBodyForm'
   :: ModuleHash -- parent module hash
   -> [Arg Type ()]
@@ -348,12 +341,11 @@ fromLegacyBodyForm'
   -> TranslateM CorePreNormalizedTerm
 fromLegacyBodyForm' mh args body = local (+ fromIntegral (length args)) $ do
   currDepth <- ask
-  case debruijnize (length args) currDepth args body of
+  case debruijnize currDepth args body of
     Legacy.TList li _ -> traverse (fromLegacyTerm mh) (reverse (V.toList li)) >>= \case
       x:xs -> pure $ foldl' (\a b -> Sequence b a ()) x xs
       _ -> throwError "fromLegacyBodyForm': invariant 1"
     _ -> throwError "fromLegacyBodyForm': invariant 2"
-
 
 fromLegacyStepForm'
   :: ModuleHash
@@ -362,7 +354,7 @@ fromLegacyStepForm'
   -> TranslateM (NonEmpty (Step (Name, DeBruijn) Type CoreBuiltin ()))
 fromLegacyStepForm' mh args body = local (+ fromIntegral (length args)) $ do
   currDepth <- ask
-  case debruijnize (length args) currDepth args body of
+  case debruijnize currDepth args body of
     Legacy.TList li _ -> traverse fromStepForm (V.toList li) >>= \case
       x:xs -> pure (x NE.:| xs)
       _ -> throwError "fromLegacyStepForm': invariant"
@@ -384,17 +376,18 @@ fromLegacyStep mh (Legacy.Step _ t mrb) = do
       StepWithRollback t' <$> fromLegacyTerm mh rb
 
 debruijnize
-  :: Int
-  -> DeBruijn
+  :: DeBruijn
   -> [Arg ty i]
   -> Scope Int Legacy.Term (Either CorePreNormalizedTerm LegacyRef)
   -> Legacy.Term (Either CorePreNormalizedTerm LegacyRef)
-debruijnize totalLen depth args = Bound.instantiate $ \i ->
-  -- Todo: get the argname from the provided args
-    let boundVar = NBound $ fromIntegral (totalLen - i - 1)
-        Arg n _ _ = args !! i
+debruijnize depth args = Bound.instantiate $ \i ->
+    let
+      totalLen = length args
+      boundVar = NBound $ fromIntegral (totalLen - i - 1)
+      -- Note, this action is safe as we knoe that there is
+      -- at least one `args`.
+      Arg n _ _ = args !! i
     in Legacy.TVar (Left (Var (Name n boundVar, depth) ()))
-
 
 fromLegacyPactValue :: Legacy.PactValue -> Either String PactValue
 fromLegacyPactValue = \case
@@ -823,14 +816,14 @@ fromLegacySchema
   -> TranslateM Type
 fromLegacySchema st ty = case (st, ty) of
   (Legacy.TyTable, Legacy.TyUser t) -> case unTVar t of
-    Legacy.TSchema (Legacy.TypeName n) mmn f -> do
-      let qn = QualifiedName n . fromLegacyModuleName <$> mmn
+    Legacy.TSchema (Legacy.TypeName n) (Just mn) f -> do
+      let qn = QualifiedName n (fromLegacyModuleName mn)
       args <- traverse (\(Legacy.Arg n' ty') -> (Field n',) <$> fromLegacyType ty') f
       pure (TyTable (Schema qn (M.fromList args)))
     _ -> throwError "fromLegacySchema: invariant 1"
   (Legacy.TyObject, Legacy.TyUser t) -> case unTVar t of
-    Legacy.TSchema (Legacy.TypeName n) mmn f -> do
-      let qn = QualifiedName n . fromLegacyModuleName <$> mmn
+    Legacy.TSchema (Legacy.TypeName n) (Just mn) f -> do
+      let qn = QualifiedName n (fromLegacyModuleName mn)
       args <- traverse (\(Legacy.Arg n' ty') -> (Field n',) <$> fromLegacyType ty') f
       pure (TyObject (Schema qn (M.fromList args)))
     _ -> throwError "fromLegacySchema: invariant tyobject"

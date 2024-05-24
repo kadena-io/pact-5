@@ -29,7 +29,8 @@ module Pact.Core.Hash
 , placeholderHash
 , moduleHashToText
 , parseModuleHash
-  -- unsafe 
+  -- unsafe creating of a 'ModuleHash', only used in the
+  -- legacy translation process.
 , unsafeBsToModuleHash
 ) where
 
@@ -78,9 +79,16 @@ pactInitialHash = initialHash
 pactHashLength :: Int
 pactHashLength = 32
 
+-- | Creates a 'Hash' value directly from a 'ByteString' without using the hashing functions.
+-- This function is unsafe because it bypasses the hashing process and assumes the provided 'ByteString'
+-- is a valid hash.
 unsafeBsToPactHash :: ByteString -> Hash
 unsafeBsToPactHash = Hash . toShort
 
+
+-- | Creates a 'ModuleHash' value directly from a 'ByteString' without using the hashing functions.
+-- This function is unsafe because it bypasses the hashing process and assumes the provided 'ByteString'
+-- is a valid hash.
 unsafeBsToModuleHash :: ByteString -> ModuleHash
 unsafeBsToModuleHash = ModuleHash . unsafeBsToPactHash
 

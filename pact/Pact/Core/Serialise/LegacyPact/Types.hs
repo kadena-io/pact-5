@@ -1,7 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RankNTypes #-}
@@ -25,7 +24,6 @@ import GHC.Generics
 import qualified Data.List.NonEmpty as NE
 
 import qualified Pact.JSON.Decode as JD
--- import qualified Pact.JSON.Value as JDV
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
 import Data.Set (Set)
@@ -40,8 +38,6 @@ import qualified Data.Vector as V
 import qualified Data.Attoparsec.Text as AP
 import Data.Decimal (Decimal)
 import Pact.Time
---import Control.Applicative ((<|>))
--- import qualified Text.Trifecta.Delta as D
 import qualified Pact.Core.Hash as PC
 
 import qualified Data.Aeson as A
@@ -87,21 +83,17 @@ data ModuleDef g
 
 
 instance JD.FromJSON g => JD.FromJSON (ModuleDef g) where
-  -- parseJSON v = MDModule <$> parseJSON v <|> MDInterface <$> parseJSON v
   parseJSON v
     = MDModule <$> JD.parseJSON v
     <|> MDInterface <$> JD.parseJSON v
 
 data Interface = Interface
   { _interfaceName :: !ModuleName
---  , _interfaceCode :: !Code
---  , _interfaceMeta :: !Meta
   , _interfaceImports :: ![Use]
   }
   deriving (Eq,Show,Generic)
 
 instance JD.FromJSON Interface where
---  parseJSON = JD.lensyParseJSON 10
   parseJSON = JD.withObject "Interface" $ \o ->
     Interface
       <$> o JD..: "name"
@@ -110,8 +102,6 @@ instance JD.FromJSON Interface where
 data Module g = Module
   { _mName :: !ModuleName
   , _mGovernance :: !(Governance g)
---  , _mMeta :: !Meta
---  , _mCode :: !Code
   , _mHash :: !ModuleHash
   , _mBlessed :: !(HS.HashSet ModuleHash)
   , _mInterfaces :: ![ModuleName]
@@ -120,7 +110,6 @@ data Module g = Module
   deriving (Eq,Functor,Foldable,Traversable,Show,Generic)
 
 instance JD.FromJSON g => JD.FromJSON (Module g) where
---  parseJSON = lensyParseJSON 2
   parseJSON = JD.withObject "Module" $ \o ->
     Module
       <$> o JD..: "name"
@@ -143,18 +132,14 @@ instance Hashable ModuleName where
 
 
 instance JD.FromJSON ModuleName where
---  parseJSON = lensyParseJSON 3
   parseJSON = JD.withObject "ModuleName" $ \o ->
     ModuleName
       <$> o JD..: "name"
-      <*> o JD..: "namespace" -- TODO: is this JD..:?
+      <*> o JD..: "namespace"
 
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (JD.FromJSON, Hashable)
---  deriving newtype (LegacyHashable)
-
-
 
 newtype Governance g = Governance { _gGovernance :: Either KeySetName g }
   deriving (Eq,Ord,Functor,Foldable,Traversable,Show,Generic)
@@ -180,92 +165,6 @@ instance JD.FromJSON KeySetName where
         <$> o JD..: "ksn"
         <*> (fromMaybe Nothing <$> o JD..:? "ns")
 
--- data Meta = Meta
---   { _mDocs  :: !(Maybe Text) -- ^ docs
---   , _mModel :: ![Exp Info]   -- ^ models
---   } deriving (Eq, Show, Generic)
-
--- instance JD.FromJSON Meta where parseJSON = lensyParseJSON 2
-
--- | Pact syntax expressions
--- data Exp i =
---   ELiteral (LiteralExp i) |
---   EAtom (AtomExp i) |
---   EList (ListExp i) |
---   ESeparator (SeparatorExp i)
---   deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
-
--- instance JD.FromJSON i => JD.FromJSON (Exp i) where
---   parseJSON v =
---     (ELiteral <$> parseJSON v) <|>
---     (EAtom <$> parseJSON v) <|>
---     (EList <$> parseJSON v) <|>
---     (ESeparator <$> parseJSON v)
-
--- data LiteralExp i = LiteralExp
---   { _litLiteral :: !Literal
---   , _litInfo :: !i
---   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
-
-
--- instance JD.FromJSON i => JD.FromJSON (LiteralExp i) where
---   parseJSON = JD.withObject "LiteralExp" $ \o ->
---     LiteralExp <$> o JD..: "lit" <*> o JD..: expInfoField
-
-
--- data AtomExp i = AtomExp
---   { _atomAtom :: !Text
---   , _atomQualifiers :: ![Text]
---   , _atomDynamic :: Bool
---   , _atomInfo :: i
---   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
-
--- instance JD.FromJSON i => JD.FromJSON (AtomExp i) where
---   parseJSON = JD.withObject "AtomExp" $ \o ->
---     AtomExp <$> o JD..: "atom" <*> o JD..: "q"
---     <*> (fromMaybe False <$> o JD..:? "dyn")
---     <*> o JD..: expInfoField
-
--- data ListExp i = ListExp
---   { _listList :: ![Exp i]
---   , _listDelimiter :: !ListDelimiter
---   , _listInfo :: !i
---   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
-
--- instance JD.FromJSON i => JD.FromJSON (ListExp i) where
---   parseJSON = JD.withObject "ListExp" $ \o ->
---     ListExp <$> o JD..: "list" <*> o JD..: "d" <*> o JD..: expInfoField
-
--- data ListDelimiter = Parens|Brackets|Braces deriving (Eq,Show,Ord,Generic,Bounded,Enum)
-
-
--- instance JD.FromJSON ListDelimiter where
---   parseJSON = withText "ListDelimiter" $ \t -> case t of
---     "()" -> pure Parens
---     "[]" -> pure Brackets
---     "{}" -> pure Braces
---     _ -> fail "Invalid ListDelimiter"
-
--- data SeparatorExp i = SeparatorExp
---   { _sepSeparator :: !Separator
---   , _sepInfo :: !i
---   } deriving (Eq,Ord,Generic,Functor,Foldable,Traversable,Show)
-
-
--- instance JD.FromJSON i => JD.FromJSON (SeparatorExp i) where
---   parseJSON = JD.withObject "SeparatorExp" $ \o ->
---     SeparatorExp <$> o JD..: "sep" <*> oJD..: expInfoField
-
--- data Separator = Colon|ColonEquals|Comma deriving (Eq,Ord,Generic,Bounded,Enum,Show)
-
-
--- instance JD.FromJSON Separator where
---   parseJSON = withText "Separator" $ \t -> case t of
---     ":" -> pure Colon
---     ":=" -> pure ColonEquals
---     "," -> pure Comma
---     _ -> fail "Invalid separator"
-
 data Literal =
     LString { _lString :: !Text } |
     LInteger { _lInteger :: !Integer } |
@@ -273,18 +172,6 @@ data Literal =
     LBool { _lBool :: !Bool } |
     LTime { _lTime :: !UTCTime }
         deriving (Eq,Generic,Ord,Show)
-
-
--- instance JD.FromJSON Literal where
---   parseJSON n@JD.Number{} = LDecimal <$> decoder decimalCodec n
---   parseJSON (JD.String s) = pure $ LString s
---   parseJSON (JD.Bool b) = pure $ LBool b
---   parseJSON o@JD.Object {} =
---     (LInteger <$> decoder integerCodec o) <|>
---     (LTime <$> decoder timeCodec o) <|>
---     (LDecimal <$> decoder decimalCodec o)
---   parseJSON _t = fail "Literal parse failed"
-
 
 instance JD.FromJSON Literal where
   parseJSON = \case
@@ -326,42 +213,9 @@ instance JD.FromJSON Literal where
       highPrecFormat :: String
       highPrecFormat = "%Y-%m-%dT%H:%M:%S.%vZ"
 
-
-
-
--- newtype Info = Info { _iInfo :: Maybe (Code,Parsed) }
---   deriving (Eq,Ord,Generic)
-
--- instance JD.FromJSON Info where
---   parseJSON Null = pure $ Info Nothing
---   parseJSON v = JD.withObject "Info" go v
---     where
---       go o = Info . Just <$>
---         ((,) <$> o JD..: "c" <*> (o JD..: "d" >>= withArray "Delta" doParsed))
---       doParsed d = parsed $ case V.length d of
---         6 -> Directed <$> (encodeUtf8 <$> col 1) <*> col 2 <*> col 3 <*> col 4 <*> col 5
---         5 -> Lines <$> col 1 <*> col 2 <*> col 3 <*> col 4
---         4 -> Tab <$> col 1 <*> col 2 <*> col 3
---         3 -> Columns <$> col 1 <*> col 2
---         _ -> fail "Delta: invalid JSON"
---         where -- col :: JD.FromJSON v => Int -> A.Parser v
---               col i = parseJSON (d V.! i)
---               parsed p = Parsed <$> p <*> col 0
-
--- newtype Code = Code { _unCode :: Text }
---   deriving (Eq,Ord,Generic)
---   deriving newtype (JD.FromJSON,Semigroup,Monoid)
-
--- data Parsed = Parsed {
---   _pDelta :: !Delta,
---   _pLength :: !Int
---   } deriving (Eq,Show,Ord,Generic)
---
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable, JD.FromJSON)
-  -- deriving newtype (LegacyHashable)
-  -- deriving newtype (NFData, SizeOf)
 
 newtype Hash = Hash { unHash :: ShortByteString }
   deriving (Eq, Ord, Generic, Hashable,LegacyHashable, Show)
@@ -377,23 +231,18 @@ instance JD.FromJSONKey Hash where
         Left _ -> fail "cant decode"
         Right t' -> pure (Hash $ toShort t')
 
-
 data Use = Use
   { _uModuleName :: !ModuleName
   , _uModuleHash :: !(Maybe ModuleHash)
   , _uImports :: !(Maybe (Vector Text))
---  , _uInfo :: !Info
   }
   deriving (Show, Eq, Generic)
-
-
 
 instance JD.FromJSON Use where
   parseJSON = JD.withObject "Use" $ \o ->
     Use <$> o JD..: "module"
         <*> o JD..:? "hash"
         <*> o JD..:? "imports"
---        <*> o JD..:? "i" .!= Info Nothing
 
 data Def n = Def
   { _dDefName :: !DefName
@@ -401,11 +250,8 @@ data Def n = Def
   , _dDefType :: !DefType
   , _dFunType :: !(FunType (Term n))
   , _dDefBody :: !(Scope Int Term n)
---  , _dMeta :: !Meta
   , _dDefMeta :: !(Maybe (DefMeta (Term n)))
---  , _dInfo :: !Info
-  }
-  deriving (Functor,Foldable,Traversable,Generic)
+  } deriving (Functor,Foldable,Traversable,Generic)
 
 deriving instance (Show1 Term, Show n) => Show (Def n)
 
@@ -419,7 +265,6 @@ data DefcapMeta n =
   deriving (Functor,Foldable,Traversable,Generic,Eq,Show,Ord)
 
 instance JD.FromJSON n => JD.FromJSON (Def n) where
---  parseJSON = lensyParseJSON 2
   parseJSON = JD.withObject "Def" $ \o ->
     Def
       <$> o JD..: "defName"
@@ -471,7 +316,6 @@ data DefType
   | Defcap
   deriving (Eq,Show,Generic, Bounded, Enum)
 
-
 instance JD.FromJSON DefType
 
 -- | Function type
@@ -489,17 +333,13 @@ instance JD.FromJSON o => JD.FromJSON (FunType o) where
 data Arg o = Arg {
   _aName :: Text,
   _aType :: Type o
---  _aInfo :: Info
   }
   deriving (Eq,Ord,Functor,Foldable,Traversable,Generic,Show)
---   deriving (Eq,Ord,Functor,Foldable,Traversable,Generic)
 
 instance JD.FromJSON o => JD.FromJSON (Arg o) where
   parseJSON = JD.withObject "Arg" $ \o -> Arg
     <$> o JD..: "name"
     <*> o JD..: "type"
---    <*> o JD..:? "info" .!= Info Nothing
-  {-# INLINE parseJSON #-}
 
 -- | Pact types.
 data Type v =
@@ -551,7 +391,7 @@ instance JD.FromJSON v => JD.FromJSON (TypeVar v) where
   parseJSON = JD.withObject "TypeVar" $ \o -> (o JD..: "tag") >>= \case
     ("TypeVar" :: Text) -> TypeVar <$> o JD..: "name" <*> o JD..: "constraint"
     "SchemaVar" -> SchemaVar <$> o JD..: "name"
-    _t -> fail "unexpected decoding" -- ("unexpected constructor tag: " <> unpack t)
+    _t -> fail "unexpected decoding"
 
 newtype TypeVarName = TypeVarName { _typeVarName :: Text }
   deriving (Eq,Ord,Generic, Show)
@@ -639,18 +479,14 @@ newtype NativeDefName = NativeDefName Text
   deriving newtype (JD.FromJSON)
 
 data FunApp = FunApp
-  { -- _faInfo :: Info
-   _faName :: !Text
+  { _faName :: !Text
   , _faModule :: !(Maybe ModuleName)
   , _faDefType :: !DefType
   , _faTypes :: !(FunTypes (Term Name))
   , _faDocs :: !(Maybe Text)
   } deriving (Generic)
 
--- deriving instance (Show1 Term) => Show FunApp
-
 instance JD.FromJSON FunApp where
---  parseJSON = lensyParseJSON 3
   parseJSON = JD.withObject "FunApp" $ \o ->
     FunApp
       <$> o JD..: "name"
@@ -707,14 +543,12 @@ instance JD.FromJSON n => JD.FromJSON (ConstVal n) where
 data App t = App
   { _appFun :: !t
   , _appArgs :: ![t]
---  , _appInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Eq,Show,Generic)
 
 instance JD.FromJSON t => JD.FromJSON (App t) where
   parseJSON = JD.withObject "App" $ \o -> App
     <$> o JD..: "fun"
     <*> o JD..: "args"
---    <*> o JD..:? "info" .!= Info Nothing
 
 data BindPair n = BindPair
   { _bpArg :: !(Arg n)
@@ -722,7 +556,6 @@ data BindPair n = BindPair
   deriving (Eq,Show,Functor,Traversable,Foldable,Generic)
 
 instance JD.FromJSON n => JD.FromJSON (BindPair n) where
---  parseJSON = lensyParseJSON 3
   parseJSON = JD.withObject "BindPair" $ \o ->
     BindPair
       <$> o JD..: "arg"
@@ -746,14 +579,12 @@ data Lam n
   { _lamArg :: !Text
   , _lamTy  :: !(FunType (Term n))
   , _lamBindBody :: !(Scope Int Term n)
---  , _lamInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Generic)
 
 deriving instance (Show1 Term, Show n) => Show (Lam n)
 deriving instance (Eq1 Term, Eq n) => Eq (Lam n)
 
 instance JD.FromJSON n => JD.FromJSON (Lam n) where
---  parseJSON = lensyParseJSON 2
   parseJSON = JD.withObject "Lam" $ \o ->
     Lam
       <$> o JD..: "amArg"
@@ -768,101 +599,67 @@ data Term n =
     TModule {
       _tModuleDef :: !(ModuleDef (Term n))
     , _tModuleBody :: !(Scope () Term n)
---    , _tInfo :: !Info
     } |
     TList {
       _tList :: !(Vector (Term n))
     , _tListType :: !(Type (Term n))
---    , _tInfo :: !Info
     } |
     TDef {
       _tDef :: !(Def n)
---    , _tInfo :: !Info
     } |
---     TNative {
---       _tNativeName :: !NativeDefName
---     , _tNativeFun :: !NativeDFun
---     , _tFunTypes :: !(FunTypes (Term n))
---     , _tNativeExamples :: ![Example]
---     , _tNativeDocs :: !Text
---     , _tNativeTopLevelOnly :: !Bool
--- --    , _tInfo :: !Info
---     } |
     TConst {
       _tConstArg :: !(Arg (Term n))
     , _tModule :: !(Maybe ModuleName)
     , _tConstVal :: !(ConstVal (Term n))
-    -- , _tMeta :: !Meta
-    -- , _tInfo :: !Info
     } |
     TApp {
       _tApp :: !(App (Term n))
---    , _tInfo :: !Info
     } |
     TVar {
       _tVar :: !n
---    , _tInfo :: !Info
     } |
     TBinding {
       _tBindPairs :: ![BindPair (Term n)]
     , _tBindBody :: !(Scope Int Term n)
     , _tBindType :: !(BindType (Type (Term n)))
---    , _tInfo :: !Info
     } |
     TLam {
       _tLam :: Lam n
---    , _tInfo :: !Info
     } |
     TObject {
       _tObject :: !(Object n)
---    , _tInfo :: !Info
     } |
     TSchema {
       _tSchemaName :: !TypeName
     , _tModule :: !(Maybe ModuleName)
---    , _tMeta :: !Meta
     , _tFields :: ![Arg (Term n)]
---    , _tInfo :: !Info
     } |
     TLiteral {
       _tLiteral :: !Literal
---    , _tInfo :: !Info
     } |
     TGuard {
       _tGuard :: !(Guard (Term n))
---    , _tInfo :: !Info
     } |
     TUse {
       _tUse :: !Use
---    , _tInfo :: !Info
     } |
     TStep {
       _tStep :: !(Step (Term n))
-    -- , _tMeta :: !Meta
-    -- , _tInfo :: !Info
     } |
     TModRef {
       _tModRef :: !ModRef
---    , _tInfo :: !Info
     } |
     TTable {
       _tTableName :: !TableName
     , _tModuleName :: !ModuleName
     , _tHash :: !ModuleHash
     , _tTableType :: !(Type (Term n))
---    , _tMeta :: !Meta
---    , _tInfo :: !Info
     } |
     TDynamic {
       _tDynModRef :: !(Term n)
     , _tDynMember :: !(Term n)
---    , _tInfo :: !Info
     }
     deriving (Functor,Foldable,Traversable,Generic)
---    deriving (Generic)
-
--- instance (Show a, Show b, Show1 f) => (Show (Scope b f a)) where
---   show (Scope f)
 
 deriving instance (Show1 Term, Show n) => Show (Term n)
 
@@ -883,7 +680,6 @@ data Object n = Object
   { _oObject :: !(ObjectMap (Term n))
   , _oObjectType :: !(Type (Term n))
   , _oKeyOrder :: !(Maybe [FieldKey])
---  , _oInfo :: !Info
   } deriving (Functor,Foldable,Traversable,Generic)
 
 deriving instance (Show1 Term, Show n) => Show (Object n)
@@ -896,7 +692,6 @@ data Step n = Step
   { _sEntity :: !(Maybe n)
   , _sExec :: !n
   , _sRollback :: !(Maybe n)
---  , _sInfo :: !Info
   } deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 
 instance JD.FromJSON n => JD.FromJSON (Step n) where
@@ -904,7 +699,6 @@ instance JD.FromJSON n => JD.FromJSON (Step n) where
     <$> o JD..: "entity"
     <*> o JD..: "exec"
     <*> o JD..: "rollback"
---    <*> o JD..:? "info" .!= Info Nothing
 
 data ModRef = ModRef
     { _modRefName :: !ModuleName
@@ -912,11 +706,9 @@ data ModRef = ModRef
     , _modRefSpec :: !(Maybe [ModuleName])
       -- ^ Specification: for modules, 'Just' implemented interfaces;
       -- for interfaces, 'Nothing'.
---    , _modRefInfo :: !Info
     } deriving (Eq,Show,Generic, Ord)
 
 instance JD.FromJSON ModRef where
---  parseJSON = lensyParseJSON 4
   parseJSON = JD.withObject "ModRef" $ \o ->
     ModRef
       <$> o JD..: "refName"
@@ -1078,9 +870,7 @@ instance JD.FromJSON a => JD.FromJSON (Guard a) where
     [GuardModuleName, GuardName] -> GModule <$> JD.parseJSON v
     [GuardArgs, GuardFun] -> GUser <$> JD.parseJSON v
     [GuardCgArgs, GuardCgName, GuardCgPactId] -> GCapability <$> JD.parseJSON v
-    _ -> fail $ "unexpected properties for Guard: "
-      -- <> show (props v)
-      -- <> ", " <> show (J.encode v)
+    _ -> fail "unexpected properties for Guard"
    where
     props (JD.Object o) = sort $ ungprop <$> A.keys o
     props _ = []
@@ -1124,12 +914,10 @@ data PactGuard = PactGuard
   } deriving (Eq,Generic,Show,Ord)
 
 instance JD.FromJSON PactGuard where
---  parseJSON = lensyParseJSON 3
   parseJSON = JD.withObject "PactGuard" $ \o ->
     PactGuard
       <$> o JD..: "PactId"
       <*> o JD..: "Name"
-
 
 newtype PactId = PactId Text
   deriving (Eq,Ord,Show,Generic)
@@ -1174,7 +962,6 @@ instance JD.FromJSON Name where
     Right n -> return n
 
 parseName :: Text -> Either String Name
---parseName = AP.parseOnly (nameParser <* eof)
 parseName = AP.parseOnly (nameParser <* AP.endOfInput)
 
 fullyQualNameParser :: AP.Parser FullyQualifiedName
@@ -1183,7 +970,6 @@ fullyQualNameParser = do
   mname <- dot *> ident style
   oname <- optional (dot *> ident style)
   h <- dot *> (between (char '{') (char '}') $ some (alphaNum <|> char '-' <|> char '_'))
---  hash' <- case parseB64UrlUnpaddedText' (T.pack h) of
   hash' <- case decodeBase64UrlUnpadded (T.encodeUtf8 $ T.pack h) of
     Right hash' -> pure $ toShort hash'
     Left _ -> fail "invalid hash encoding"
@@ -1222,7 +1008,6 @@ nameParser = (QName <$> qualifiedNameParser <?> "qualifiedName") <|>
 data QualifiedName = QualifiedName
   { _qnQual :: ModuleName
   , _qnName :: Text
---  , _qnInfo :: Info
   } deriving (Generic,Show)
 
 instance Eq QualifiedName where
@@ -1239,12 +1024,10 @@ instance JD.FromJSON QualifiedName where
       Right n -> return n
 
 parseQualifiedName :: Text -> Either String QualifiedName
---parseQualifiedName = AP.parseOnly (qualifiedNameParser <* eof)
 parseQualifiedName = AP.parseOnly (qualifiedNameParser <* AP.endOfInput)
 
 data BareName = BareName
   { _bnName :: Text
---  , _bnInfo :: Info
   } deriving (Generic,Eq,Show)
 
 
@@ -1252,11 +1035,9 @@ data DynamicName = DynamicName
     { _dynMember :: !Text
     , _dynRefArg :: !Text
     , _dynInterfaces :: !(Set ModuleName)
---    , _dynInfo :: Info
     } deriving (Generic,Eq,Show)
 
 instance JD.FromJSON DynamicName where
---  parseJSON = lensyParseJSON 4
   parseJSON = JD.withObject "DynamicName" $ \o ->
     DynamicName
       <$> o JD..: "Member"
@@ -1272,7 +1053,6 @@ data FullyQualifiedName
 
 instance JD.FromJSON FullyQualifiedName where
   parseJSON = JD.withText "FullyQualifiedName" $ \f ->
---    case AP.parseOnly (fullyQualNameParser <* eof) f of
     case AP.parseOnly (fullyQualNameParser <* AP.endOfInput) f of
       Left s  -> fail s
       Right n -> return n
@@ -1283,7 +1063,6 @@ data ModuleGuard = ModuleGuard
   } deriving (Eq,Generic,Show,Ord)
 
 instance JD.FromJSON ModuleGuard where
-  --parseJSON = lensyParseJSON 3
   parseJSON = JD.withObject "ModuleGuard" $ \o ->
     ModuleGuard
     <$> o JD..: "ModuleName"
@@ -1325,7 +1104,6 @@ instance Ord FullyQualifiedName where
     (fq, fm, fh) `compare` (fq', fm', fh')
 
 instance JD.FromJSON a => JD.FromJSON (UserGuard a) where
-  --parseJSON = lensyParseJSON 3
   parseJSON = JD.withObject "UserGuard" $ \o ->
     UserGuard
     <$> o JD..: "fun"
@@ -1339,7 +1117,6 @@ data CapabilityGuard n = CapabilityGuard
   deriving (Eq,Show,Generic,Functor,Foldable,Traversable, Ord)
 
 instance JD.FromJSON a => JD.FromJSON (CapabilityGuard a) where
---  parseJSON = lensyParseJSON 1
   parseJSON = JD.withObject "CapabilityGuard" $ \o ->
     CapabilityGuard
     <$> o JD..: "cgName"
@@ -1358,7 +1135,6 @@ instance Monad Term where
     TList bs t >>= f = TList (V.map (>>= f) bs) (fmap (>>= f) t)
     TDef (Def n m dt ft b dm) >>= f =
       TDef (Def n m dt (fmap (>>= f) ft) (b >>>= f) (fmap (fmap (>>= f)) dm))
-    -- TNative n fn t exs d tl >>= f = TNative n fn (fmap (fmap (>>= f)) t) exs d tl
     TConst d m c >>= f = TConst (fmap (>>= f) d) m (fmap (>>= f) c)
     TApp a >>= f = TApp (fmap (>>= f) a)
     TVar n >>= f = (f n)
@@ -1380,14 +1156,7 @@ instance Monad Term where
     TDynamic r m>>= f = TDynamic (r >>= f) (m >>= f)
     TModRef mr >>= _ = TModRef mr
 
-
-
-
-
-
 -- Persistence
-
-
 
 data PactValue
   = PLiteral Literal
@@ -1435,7 +1204,6 @@ instance JD.FromJSON (Ref' PersistDirect) where
 fromPactValue :: PactValue -> Term Name
 fromPactValue (PLiteral l) = TLiteral l
 fromPactValue (PObject o) = TObject (Object (fmap fromPactValue o) TyAny Nothing)
-  -- TODO: check pact source, used def for Maybe [FieldKey]
 fromPactValue (PList l) = TList (fmap fromPactValue l) TyAny
 fromPactValue (PGuard x) = TGuard (fmap fromPactValue x)
 fromPactValue (PModRef r) = TModRef r
@@ -1445,7 +1213,7 @@ fromPersistDirect _ (PDValue v) = return $! fromPactValue v
 fromPersistDirect _ (PDFreeVar f) = return $ TVar (FQName f)
 fromPersistDirect natLookup (PDNative nn) = case natLookup nn of
   Just t -> return t
-  Nothing -> Left $ "Native lookup failed" -- <> tShow nn
+  Nothing -> Left  "Native lookup failed"
 
 allModuleExports :: ModuleData Ref -> HM.HashMap FullyQualifiedName Ref
 allModuleExports md = case _mdModule md of
@@ -1454,10 +1222,6 @@ allModuleExports md = case _mdModule md of
     in HM.mapKeys toFQ (_mdRefMap md) `HM.union` (_mdDependencies md)
   _ -> HM.empty
 
-
--- nativeMap :: NativeDefName -> Maybe (Term Name)
--- nativeMap = \case
---   n@(NativeDefName "format") -> Just (TNative b undefined
 data Namespace a = Namespace
   { _nsName :: !NamespaceName
   , _nsUser :: !(Guard a)
@@ -1501,7 +1265,6 @@ instance JD.FromJSON Yield where
   parseJSON = JD.withObject "Yield" $ \o ->
     Yield <$> o JD..: "data" <*> o JD..: "provenance" <*> o JD..:? "source"
 
---
 data PactContinuation = PactContinuation
   { _pcDef :: Name
   , _pcArgs :: [PactValue]
@@ -1510,7 +1273,6 @@ data PactContinuation = PactContinuation
 instance JD.FromJSON PactContinuation where
   parseJSON = JD.withObject "PactContinuation" $ \o ->
     PactContinuation <$> o JD..: "def" <*> o JD..: "args"
-
 
 data PactStep = PactStep
   { _psStep :: !Int
@@ -1630,7 +1392,6 @@ instance JD.FromJSON OldPactValue where
       parseNoInfo = JD.withObject "ModRef" $ \o -> ModRef
         <$> o JD..: "refName"
         <*> o JD..: "refSpec"
---        <*> (fromMaybe def <$> o JD..:? "refInfo")
 
 data RowDataVersion = RDV0 | RDV1
   deriving (Eq,Show,Generic,Ord,Enum,Bounded)
@@ -1666,91 +1427,55 @@ instance JD.FromJSON RowDataValue where
       parseMR = JD.withObject "tagged ModRef" $ \o -> ModRef
           <$> o JD..: "refName"
           <*> o JD..: "refSpec"
---          <*> pure def
-
-
 
 instance JD.FromJSON n => JD.FromJSON (Term n) where
-
-  -- "info" and "i" may be optional, so we don't consider those for matching
-  --
   parseJSON v = flip (A.<?>) (A.Key "Term") $ case propsWithoutOptionals of
     [TermBody, TermModule] ->  wo "Module" $ \o -> TModule
       <$> o JD..: p TermModule
       <*> o JD..: p TermBody
---      <*> inf o
     [TermList, TermType] -> wo "List" $ \o -> TList
       <$> o JD..: p TermList
       <*> o JD..: p TermType
-  --    <*> inf o
     [TermDefBody, TermDefMeta, TermDefName, TermDefType, TermFunType, TermMeta, TermModule] -> parseWithInfo TDef
-
-    -- TNative intentionally not marshallable
-    -- [TermFun, TermName, TermNatDocs, TermNatExamples, TermNatFunTypes, TermNatTopLevel] ->
-    --   wo "Native" $ \o -> TNative
-    --     <$> o .: p TermName
-    --     <*> error "not supported" -- TermFun serialized as Null
-    --     <*> o .: p TermFunType
-    --     <*> return [] -- TermNatExamples serialized as Null
-    --     <*> o .: p TermNatDocs
-    --     <*> o .: p TermNatTopLevel
-    --     <*> inf o
-
     [TermConstArg, TermConstVal, TermMeta, TermModName] -> wo "Const" $ \o -> TConst
       <$> o JD..: p TermConstArg
       <*> o JD..: p TermModName
       <*> o JD..: p TermConstVal
---      <*> o JD..: p TermMeta
---      <*> inf o
     [TermArgs, TermFun] -> parseWithInfo TApp
     [TermVar] -> wo "Var" $ \o -> TVar
         <$>  o JD..: p TermVar
---        <*> inf o
     [TermBody, TermPairs, TermType] -> wo "Binding" $ \o -> TBinding
       <$> o JD..: p TermPairs
       <*> o JD..: p TermBody
       <*> o JD..: p TermType
---      <*> inf o
     [TermObjectObj, TermType] -> parseWithInfo TObject -- FIXME keyorder is optional
     [TermLiteral] -> wo "Literal" $ \o -> TLiteral
       <$> o JD..: p TermLiteral
---      <*> inf o
     [TermGuard] -> wo "Guard" $ \o -> TGuard
       <$> o JD..: p TermGuard
-  --    <*> inf o
     [TermHash, TermModule, TermUseImports] -> parseWithInfo TUse
     [TermLamArg, TermLamBindBody, TermLamInfo, TermLamTy] -> parseWithInfo TLam
     [TermBody, TermMeta] -> wo "Step" $ \o -> TStep
       <$> o JD..: p TermBody
---      <*> o JD..: p TermMeta
---      <*> inf o
      --  parseWithInfo TStep
     [TermFields, TermMeta, TermModName, TermName] -> wo "Schema" $ \o -> TSchema
       <$>  o JD..: p TermName
       <*> o JD..: p TermModName
-  --    <*> o JD..: p TermMeta
       <*> o JD..: p TermFields
---      <*> inf o
     [TermHash, TermMeta, TermModName, TermName, TermType] -> wo "Table" $ \o -> TTable
       <$>  o JD..: p TermName
       <*> o JD..: p TermModName
       <*> o JD..: p TermHash
       <*> o JD..: p TermType
---      <*> o .: p TermMeta
---      <*> inf o
     [TermDynMem, TermDynRef] -> wo "Dynamic" $ \o -> TDynamic
       <$> o JD..: p TermDynRef
       <*> o JD..: p TermDynMem
---      <*> inf o
     [TermModRefInfo, TermModRefName, TermModRefSpec] -> parseWithInfo TModRef
     _ -> fail $ "unexpected properties for Term: "
       <> "[" <> T.unpack (T.intercalate "," (props v)) <> "]"
       <> ", " <> show propsWithoutOptionals
---      <> ", " <> show (J.encode v)
-    -- A.<?> A.Key (A.fromText $ "Term[" <> T.intercalate "," (props v) <> "]")
    where
     p = prop
-  --  inf o = o .:? "i" .!= Info Nothing
     wo n f = JD.withObject n f v
     props (A.Object m) = A.toText <$> A.keys m
     props _ = []
@@ -1758,8 +1483,6 @@ instance JD.FromJSON n => JD.FromJSON (Term n) where
     propsWithoutOptionals = sort $ unprop
         <$> filter (\x -> x `notElem` ["i", "info", "keyorder"]) (props v)
 
-    -- parseWithInfo :: HasInfo a => FromJSON a => (a -> Info -> Term n) -> A.Parser (Term n)
-    -- parseWithInfo f = (\a -> f a $ getInfo a) <$> parseJSON v
     parseWithInfo :: JD.FromJSON a => (a -> Term n) -> A.Parser (Term n)
     parseWithInfo f = f <$> JD.parseJSON v
 

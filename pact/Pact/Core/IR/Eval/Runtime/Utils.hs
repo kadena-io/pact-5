@@ -56,7 +56,6 @@ import Data.Maybe(listToMaybe)
 import Data.Text(Text)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
-import qualified Data.Text as T
 
 import Pact.Core.Names
 import Pact.Core.PactValue
@@ -97,7 +96,7 @@ lookupFqName fqn =
 getDefCap :: (MonadEval b i m) => i -> FullyQualifiedName -> m (EvalDefCap b i)
 getDefCap info fqn = lookupFqName fqn >>= \case
   Just (DCap d) -> pure d
-  d -> failInvariant info $ "Expected DefCap " <> renderFullyQualName fqn <> T.pack (show d)
+  _ -> failInvariant info "Expected DefCap"
 
 getDefun :: (MonadEval b i m) => i -> FullyQualifiedName -> m (EvalDefun b i)
 getDefun info fqn = lookupFqName fqn >>= \case

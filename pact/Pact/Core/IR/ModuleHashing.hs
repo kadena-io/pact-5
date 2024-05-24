@@ -223,9 +223,7 @@ encodeApp operator operands =
   parens $ hsep (operator:operands)
 
 encodeSchema :: Schema -> Builder
-encodeSchema (Schema n _sc) =
-  -- TODO: This changes the hash, is this fine @Jose?
-  maybe mempty encodeQualName n
+encodeSchema (Schema n _sc) = encodeQualName n
 
 encodePrim :: PrimType -> Builder
 encodePrim = \case
@@ -365,7 +363,7 @@ encodeDefCap (DefCap (Arg dn rty _) args term _meta _info) = parens $
 
 encodeDefSchema :: ModuleName -> DefSchema Type info -> Builder
 encodeDefSchema mn (DefSchema dcn sch _i) =
-  parens $ "defschema" <+> encodeText dcn <+> encodeSchema (Schema (Just $ QualifiedName dcn mn) sch)
+  parens $ "defschema" <+> encodeText dcn <+> encodeSchema (Schema (QualifiedName dcn mn) sch)
 
 encodeDefTable :: DefTable Name info -> Builder
 encodeDefTable (DefTable dtn (ResolvedTable sc) _i) = parens $

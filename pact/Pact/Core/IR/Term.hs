@@ -275,7 +275,7 @@ defKind mn = \case
   Dfun{} -> DKDefun
   DConst{} -> DKDefConst
   DCap{} -> DKDefCap
-  DSchema ds -> DKDefSchema (Schema (Just $ QualifiedName (_dsName ds) mn) (_dsSchema ds))
+  DSchema ds -> DKDefSchema (Schema (QualifiedName (_dsName ds) mn) (_dsSchema ds))
   DTable{} -> DKDefTable
   DPact{} -> DKDefPact
 
@@ -285,7 +285,7 @@ ifDefKind mn = \case
   IfDCap{} -> Nothing
   IfDConst{} -> Just DKDefConst
   IfDPact{} -> Nothing
-  IfDSchema ds -> Just $ DKDefSchema $ (Schema (Just $ QualifiedName (_dsName ds) mn) (_dsSchema ds))
+  IfDSchema ds -> Just $ DKDefSchema (Schema (QualifiedName (_dsName ds) mn) (_dsSchema ds))
 
 ifDefName :: IfDef name ty builtin i -> Text
 ifDefName = \case
@@ -695,7 +695,6 @@ type EvalDefPact b i = DefPact Name Type b i
 type EvalModule b i = Module Name Type b i
 type EvalInterface b i = Interface Name Type b i
 type EvalIfDef b i = IfDef Name Type b i
-type EvalGuard b i = Guard Name (EvalTerm b i)
 type EvalTable i = DefTable Name i
 type EvalSchema i = DefSchema Type i
 type EvalStep b i = Step Name Type b i

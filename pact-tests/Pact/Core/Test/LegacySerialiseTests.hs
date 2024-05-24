@@ -64,7 +64,7 @@ legacyTests = do
         -- add default spaninfo
         let ms' = (fmap.fmap) (const def) ms
 
-        -- write modules into module cache
+        -- write modules into the pactdb
         traverse_ (\m -> writeModule pdb Write (view mdModuleName m) (liftReplBuiltin m)) ms'
 
         modTests <- forM repl $ \r -> do
