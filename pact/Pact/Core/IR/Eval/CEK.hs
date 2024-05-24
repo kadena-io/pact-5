@@ -2026,8 +2026,7 @@ isKeysetInSigs info cont handler env (KeySet kskeys ksPred) = do
   where
   matchKey k _ = k `elem` kskeys
   atLeast t m = m >= t
-  elide pk | T.length pk < 8 = pk
-           | otherwise = T.take 8 pk <> "..."
+  elide pk = T.take 8 pk <> "..."
   count = S.size kskeys
   run p matched =
     if p count matched then returnCEKValue cont handler (VBool True)
