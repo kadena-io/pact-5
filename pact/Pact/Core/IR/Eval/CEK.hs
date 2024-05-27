@@ -247,12 +247,12 @@ evaluateTerm cont handler env (Conditional c info) = case c of
     -- chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env' info (EnforceC str) cont) handler env' cond
   CEnforceOne str conds -> do
-    chargeGasArgs info (GAConstant unconsWorkNodeGas)
     case conds of
       [] ->
         returnCEK cont handler (VError "enforce-one failure" info)
       x:xs -> do
         -- Todo: is this a bit too cheap??
+        chargeGasArgs info (GAConstant unconsWorkNodeGas)
         errState <- evalStateToErrorState <$> getEvalState
         let env' = readOnlyEnv env
         let handler' = CEKEnforceOne env' info str xs cont errState handler
@@ -1329,26 +1329,26 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
   case cv of
     VPactValue v -> case frame of
       MapC closure rest acc -> do
-        chargeGasArgs info (GAConstant unconsWorkNodeGas)
         case rest of
           x:xs -> do
             let cont' = BuiltinC env info (MapC closure xs (v:acc)) cont
+            chargeGasArgs info (GAConstant unconsWorkNodeGas)
             applyLam closure [VPactValue x] cont' handler
           [] ->
             returnCEKValue cont handler (VList (V.fromList (reverse (v:acc))))
       FoldC clo rest -> do
-        chargeGasArgs info (GAConstant unconsWorkNodeGas)
         case rest of
-          x:xs ->
+          x:xs -> do
             let cont' = BuiltinC env info (FoldC clo xs) cont
-            in applyLam clo [VPactValue v, VPactValue x] cont' handler
+            chargeGasArgs info (GAConstant unconsWorkNodeGas)
+            applyLam clo [VPactValue v, VPactValue x] cont' handler
           [] -> returnCEKValue cont handler cv
       ZipC clo (l, r) acc -> do
-        chargeGasArgs info (GAConstant unconsWorkNodeGas)
         case (l, r) of
-          (x:xs, y:ys) ->
+          (x:xs, y:ys) -> do
             let cont' = BuiltinC env info (ZipC clo (xs, ys) (v:acc)) cont
-            in applyLam clo [VPactValue x, VPactValue y] cont' handler
+            chargeGasArgs info (GAConstant unconsWorkNodeGas)
+            applyLam clo [VPactValue x, VPactValue y] cont' handler
           (_, _) ->
             returnCEKValue cont handler (VList (V.fromList (reverse (v:acc))))
       ---------------------------------------------------------
@@ -1499,7 +1499,6 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
     _ -> returnCEK cont handler (VError "higher order apply did not return a pactvalue" info)
 applyContToValue (CapBodyC env info (CapBodyState cappop mcap mevent capbody) cont) handler _ = do
   -- Todo: I think this requires some administrative check?
-  chargeGasArgs info (GAConstant unconsWorkNodeGas)
   maybe (pure ()) emitEventUnsafe mevent
   case mcap of
     Nothing -> do

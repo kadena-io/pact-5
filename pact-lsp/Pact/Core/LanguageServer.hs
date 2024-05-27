@@ -45,19 +45,19 @@ import Control.Monad.Reader (ReaderT, runReaderT, ask)
 import Control.Monad.Trans (lift)
 import Control.Concurrent.MVar
 import qualified Data.Map.Strict as M
-import Pact.Core.IR.Eval.CEK.Types
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import Pact.Core.IR.Term
 import Pact.Core.LanguageServer.Utils
 import Pact.Core.LanguageServer.Renaming
-import Pact.Core.Repl.Runtime.ReplBuiltin
 import Pact.Core.Repl.BuiltinDocs
 import Pact.Core.Repl.UserDocs
 import Pact.Core.Names
+import Pact.Core.Interpreter
 import qualified Pact.Core.IR.ModuleHashing as MHash
 import qualified Pact.Core.IR.ConstEval as ConstEval
+import qualified Pact.Core.Repl.Compile as Repl
 
 data LSState =
   LSState
@@ -229,7 +229,7 @@ sendDiagnostics nuri mv content = liftIO runPact >>= \case
           , _replNativesEnabled = True
           }
       stateRef <- newIORef rstate
-      res <- runReplT stateRef (processFile (replBuiltinEnv @CEKSmallStep) src)
+      res <- runReplT stateRef (processFile Repl.interpretEvalSmallStep src)
       pure ((stateRef,) <$> res)
 
     pactErrorToDiagnostic :: PactError SpanInfo -> Diagnostic
@@ -344,7 +344,7 @@ documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req 
         resp (Right (InL we))
 
 processFile
-  :: BuiltinEnv CEKSmallStep ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+  :: Interpreter ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
   -> SourceCode
   -> ReplM ReplCoreBuiltin [EvalTopLevel ReplCoreBuiltin SpanInfo]
 processFile replEnv (SourceCode _ source) = do

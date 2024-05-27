@@ -16,7 +16,18 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE CPP #-}
 
-module Pact.Core.IR.Eval.Direct.Evaluator where
+module Pact.Core.IR.Eval.Direct.Evaluator
+ ( eval
+ , evalResumePact
+ , interpretGuard
+ , coreBuiltinEnv
+ , resumePact
+ , applyPact
+ , constantWorkNodeGas
+ , applyLamUnsafe
+ , evalCap
+ , installCap
+ , coreBuiltinRuntime) where
 
 import Control.Lens hiding (op, from, to, parts)
 import Control.Monad
@@ -118,6 +129,51 @@ mkDefPactClosure info fqn dpact env = case _dpArgs dpact of
     let dpc = DefPactClosure fqn (ArgClosure (x :| xs)) (length (x:xs)) env info
     in VDefPactClosure dpc
 
+envFromPurity :: Purity -> DirectEnv b i m -> DirectEnv b i m
+envFromPurity PImpure = id
+envFromPurity PReadOnly = readOnlyEnv
+envFromPurity PSysOnly = sysOnlyEnv
+
+eval
+  :: (MonadEval b i m)
+  => Purity
+  -> BuiltinEnv b i m
+  -> EvalTerm b i
+  -> m PactValue
+eval purity benv term = do
+  ee <- readEnv
+  let directEnv = envFromPurity purity (DirectEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) False)
+  evaluate directEnv term >>= \case
+    VPactValue pv -> pure pv
+    _ -> throwExecutionError (view termInfo term) (EvalError "Evaluation did not reduce to a value")
+
+interpretGuard
+  :: forall b i m
+  .  (MonadEval b i m)
+  => i
+  -> BuiltinEnv b i m
+  -> Guard QualifiedName PactValue
+  -> m Bool
+interpretGuard info bEnv g = do
+  ee <- readEnv
+  let eEnv = DirectEnv mempty (_eePactDb ee) bEnv (_eeDefPactStep ee) False
+  enforceGuard info eEnv g
+
+evalResumePact
+  :: (MonadEval b i m)
+  => i
+  -> BuiltinEnv b i m
+  -> Maybe DefPactExec
+  -> m PactValue
+evalResumePact info bEnv mdpe = do
+  ee <- readEnv
+  let pdb = _eePactDb ee
+  let env = DirectEnv mempty pdb bEnv (_eeDefPactStep ee) False
+  resumePact info env mdpe >>= \case
+    VPactValue pv -> pure pv
+    _ ->
+      throwExecutionError info (EvalError "Evaluation did not reduce to a value")
+
 evaluate
   :: MonadEval b i m
   => DirectEnv b i m
@@ -200,24 +256,39 @@ evaluate env = \case
   Conditional c info -> case c of
     CAnd te te' -> do
       b <- evaluate env te >>= enforceBool info
+      chargeGasArgs info (GAConstant constantWorkNodeGas)
       if b then evaluate env te' >>= enforceBoolValue info
       else pure (VBool False)
     COr te te' -> do
       b <- evaluate env te >>= enforceBool info
+      chargeGasArgs info (GAConstant constantWorkNodeGas)
       if b then pure (VBool True)
       else evaluate env te' >>= enforceBoolValue info
     CIf bExpr ifExpr elseExpr -> do
       b <- enforceBool info =<< evaluate env bExpr
+      chargeGasArgs info (GAConstant constantWorkNodeGas)
       if b then evaluate env ifExpr
       else evaluate env elseExpr
     CEnforce cond str -> do
       let env' = sysOnlyEnv env
       b <- enforceBool info =<< evaluate env' cond
+      chargeGasArgs info (GAConstant constantWorkNodeGas)
       if b then return (VBool True)
       else do
         msg <- enforceString info =<< evaluate env str
         throwRecoverableError info msg
-    CEnforceOne _ _ -> error "unsupported: todo"
+    CEnforceOne str conds ->
+      go conds
+      where
+      go (x:xs) = do
+        cond <- catchRecoverable (enforceBool info =<< evaluate env x) (\_ _ -> pure False)
+        chargeGasArgs info (GAConstant constantWorkNodeGas)
+        if cond then return (VBool True)
+        else go xs
+      go [] = do
+        msg <- enforceString info =<< evaluate env str
+        throwRecoverableError info msg
+
   CapabilityForm cf info -> case cf of
     WithCapability cap body -> do
       enforceNotWithinDefcap info env "with-capability"
@@ -548,11 +619,15 @@ enforcePactValue' info = \case
   _ -> throwExecutionError info ExpectedPactValue
 
 catchRecoverable :: forall b i m a. (MonadEval b i m) => m a -> (i -> RecoverableError -> m a) -> m a
-catchRecoverable act catch = catchError act handler
+catchRecoverable act catch = do
+  eState <- evalStateToErrorState <$> getEvalState
+  catchError act (handler eState)
   where
-  handler :: PactError i -> m a
-  handler (PERecoverableError r i) = catch i r
-  handler e = throwError e
+  handler :: ErrorState i -> PactError i -> m a
+  handler eState (PERecoverableError r i) = do
+    modifyEvalState (restoreFromErrorState eState)
+    catch i r
+  handler _ e = throwError e
 
 readOnlyEnv :: DirectEnv b i m -> DirectEnv b i m
 readOnlyEnv e
@@ -609,6 +684,12 @@ evalWithStackFrame info sf mty act = do
   return (VPactValue pv')
 {-# INLINE evalWithStackFrame #-}
 
+applyLamUnsafe
+  :: (MonadEval b i m)
+  => CanApply b i m
+  -> [EvalValue b i m]
+  -> m (EvalValue b i m)
+applyLamUnsafe = applyLam
 
 applyLam
   :: (MonadEval b i m)
@@ -878,7 +959,7 @@ isKeysetInSigs info env (KeySet kskeys ksPred) = do
   count = S.size kskeys
   run p matched =
     if p count matched then pure True
-    else throwRecoverableError info "keyset enforce failure"
+    else throwRecoverableError info "Keyset enforce failure"
   runPred matched =
     case ksPred of
       KeysAll -> run atLeast matched
@@ -892,7 +973,7 @@ isKeysetInSigs info env (KeySet kskeys ksPred) = do
         (Dfun d, mh) -> do
           clo <- mkDefunClosure d (qualNameToFqn qn mh) env
           p <- enforceBool info =<< applyLam (C clo) [VInteger (fromIntegral count), VInteger (fromIntegral matched)]
-          unless p $ throwRecoverableError info "keyset enforce failure"
+          unless p $ throwRecoverableError info "Keyset enforce failure"
           pure p
         _ -> failInvariant info "invalid def type for custom keyset predicate"
     TBN (BareName bn) -> do
@@ -1874,6 +1955,7 @@ coreMap info b _env = \case
     VList <$> traverse go li
     where
     go x = do
+      chargeGasArgs info (GAConstant unconsWorkNodeGas)
       applyLam clo [VPactValue x] >>= enforcePactValue info
   args -> argsError info b args
 
@@ -2086,13 +2168,53 @@ coreDec info b _env = \case
   [VInteger i] -> return $ VDecimal $ Decimal 0 i
   args -> argsError info b args
 
+{-
+[Note: Parsed Integer]
+`read-integer` corresponds to prod's `ParsedInteger` newtype. That handles, in particular, the following codecs:
+
+instance FromJSON Literal where
+  parseJSON n@Number{} = LDecimal <$> decoder decimalCodec n
+  parseJSON (String s) = pure $ LString s
+  parseJSON (Bool b) = pure $ LBool b
+  parseJSON o@Object {} =
+    (LInteger <$> decoder integerCodec o) <|>
+    (LTime <$> decoder timeCodec o) <|>
+    (LDecimal <$> decoder decimalCodec o)
+  parseJSON _t = fail "Literal parse failed"
+
+instance A.FromJSON ParsedInteger where
+  parseJSON (A.String s) =
+    ParsedInteger <$> case pactAttoParseOnly (unPactParser number) s of
+                        Right (LInteger i) -> return i
+                        _ -> fail $ "Failure parsing integer string: " ++ show s
+  parseJSON (A.Number n) = return $ ParsedInteger (round n)
+  parseJSON v@A.Object{} = A.parseJSON v >>= \i -> case i of
+    PLiteral (LInteger li) -> return $ ParsedInteger li
+    _ -> fail $ "Failure parsing integer PactValue object: " ++ show i
+  parseJSON v = fail $ "Failure parsing integer: " ++ show v
+
+In prod, env data is just a json object. In core, we parse eagerly using the `PactValue` parser, so the following
+can happen:
+  - We may see a PString, we must run the number parser `parseNumLiteral`
+  - We may see a PDecimal, in which case we round
+  - We may see a PInteger, which we read as-is.
+-}
 coreReadInteger :: (MonadEval b i m) => NativeFunction b i m
 coreReadInteger info b _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
       PObject envData ->
         case M.lookup (Field s) envData of
-          Just (PInteger p) -> return (VInteger p)
+          -- See [Note: Parsed Integer]
+          Just (PDecimal p) ->
+            return (VInteger (round p))
+          Just (PInteger p) ->
+            return (VInteger p)
+          -- See [Note: Parsed Integer]
+          Just (PString raw) -> case parseNumLiteral raw of
+            Just (LInteger i) -> return (VInteger i)
+            _ -> throwRecoverableError info "read-integer failure"
+
           _ -> throwRecoverableError info "read-integer failure"
       _ -> throwRecoverableError info "read-integer failure"
   args -> argsError info b args
@@ -2111,6 +2233,22 @@ coreReadMsg info b _env = \case
     return (VPactValue envData)
   args -> argsError info b args
 
+{-
+[Note: Parsed Decimal]
+
+Simlar to [Note: Parsed Integer], except the decimal case handles:
+
+instance A.FromJSON ParsedDecimal where
+  parseJSON (A.String s) =
+    ParsedDecimal <$> case pactAttoParseOnly (unPactParser number) s of
+                        Right (LDecimal d) -> return d
+                        Right (LInteger i) -> return (fromIntegral i)
+                        _ -> fail $ "Failure parsing decimal string: " ++ show s
+  parseJSON (A.Number n) = return $ ParsedDecimal (fromRational $ toRational n)
+  parseJSON v = fail $ "Failure parsing decimal: " ++ show v
+
+So the string parsing case accepts both the integer, and decimal output
+-}
 coreReadDecimal :: (MonadEval b i m) => NativeFunction b i m
 coreReadDecimal info b _env = \case
   [VString s] -> do
@@ -2118,6 +2256,12 @@ coreReadDecimal info b _env = \case
       PObject envData ->
         case M.lookup (Field s) envData of
           Just (PDecimal p) -> return (VDecimal p)
+          -- See [Note: Parsed Decimal]
+          Just (PInteger i) -> return (VDecimal (Decimal 0 i))
+          Just (PString raw) -> case parseNumLiteral raw of
+            Just (LInteger i) -> return (VDecimal (Decimal 0 i))
+            Just (LDecimal l) -> return (VDecimal l)
+            _ -> throwRecoverableError info "read-decimal failure"
           _ -> throwRecoverableError info "read-decimal failure"
       _ -> throwRecoverableError info "read-decimal failure"
   args -> argsError info b args

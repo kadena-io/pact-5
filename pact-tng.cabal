@@ -186,6 +186,7 @@ library
     Pact.Core.Legacy.LegacyPactValue
     Pact.Core.Legacy.LegacyCodec
     Pact.Core.Verifiers
+    Pact.Core.Interpreter
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
@@ -198,7 +199,7 @@ library
     Pact.Core.IR.Desugar
 
     Pact.Core.IR.Eval.Direct.Evaluator
-    Pact.Core.IR.Eval.Direct.Natives
+    Pact.Core.IR.Eval.Direct.ReplBuiltin
     Pact.Core.IR.Eval.Direct.Types
 
     -- Core IR Evaluator modules

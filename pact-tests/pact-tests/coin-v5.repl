@@ -21,11 +21,12 @@
   60000 (env-gas))
 (commit-tx)
 (begin-tx)
+(env-gas 0)
 (load "coin-v5/coin-v5.pact")
 (env-gaslog)
 (expect
   "Gas cost of loading coin contract"
-  120029
+  60005
   (env-gas))
 
 (create-table coin.coin-table)

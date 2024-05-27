@@ -36,6 +36,7 @@ import Pact.Core.Persistence
 import Pact.Core.Hash
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Serialise (serialisePact)
+import Pact.Core.IR.Eval.CEK.Types
 import qualified Pact.Core.IR.Eval.CEK as Eval
 
 import Pact.Core.GasModel.Utils

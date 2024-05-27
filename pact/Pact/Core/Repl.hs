@@ -95,7 +95,7 @@ runRepl = do
           RAExecuteExpr src -> catch' $ do
             let display' rcv = runInputT replSettings (displayOutput rcv)
             lift (replCurrSource .= defaultSrc{_scPayload=src})
-            eout <- lift (tryError (interpretReplProgramSmallStep (SourceCode "(interactive)" src) display'))
+            eout <- lift (tryError (interpretReplProgramDirect (SourceCode "(interactive)" src) display'))
             case eout of
               Right _ -> pure ()
               Left err -> do

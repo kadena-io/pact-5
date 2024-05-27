@@ -55,6 +55,7 @@ import Pact.Core.SPV
 import Pact.Core.Namespace
 import Pact.Core.IR.Desugar
 import Pact.Core.Verifiers
+import Pact.Core.Interpreter
 import qualified Pact.Core.IR.Eval.CEK as Eval
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
@@ -62,6 +63,14 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 
 -- Our Builtin environment for evaluation in Chainweb prod
 type EvalBuiltinEnv = Eval.CoreBuiltinEnv
+
+evalInterpreter :: Interpreter CoreBuiltin () Eval
+evalInterpreter =
+  Interpreter runGuard runTerm
+  where
+  runTerm purity term = Eval.eval purity env term
+  runGuard info g = Eval.interpretGuard info env g
+  env = coreBuiltinEnv @Eval.CEKBigStep
 
 -- | Transaction-payload related environment data.
 data MsgData = MsgData
@@ -317,4 +326,4 @@ evaluateTerms
   :: [Lisp.TopLevel ()]
   -> Eval [CompileValue ()]
 evaluateTerms tls = do
-  traverse (interpretTopLevel builtinEnv) tls
+  traverse (interpretTopLevel evalInterpreter) tls

@@ -38,6 +38,7 @@ import Pact.Core.Hash
 import Pact.Core.Guards
 import Pact.Core.Evaluate
 import Pact.Core.Namespace
+import Pact.Core.IR.Eval.CEK.Types
 import qualified Pact.Core.IR.Eval.CEK as Eval
 
 type CoreDb = PactDb CoreBuiltin ()

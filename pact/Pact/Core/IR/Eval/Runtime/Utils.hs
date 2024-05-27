@@ -224,7 +224,7 @@ chargeGasArgs info ga = do
   let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
       !g1 = _gmRunModel model ga
       !gUsed = currGas <> g1
-  esGasLog %== fmap (GasLogEntry (Left ga) gUsed g1 :)
+  esGasLog %== fmap (GasLogEntry (Left ga) g1 gUsed :)
   putGas gUsed
   when (gUsed > gasLimit) $
     throwExecutionError info (GasExceeded limit gUsed)
@@ -241,7 +241,7 @@ chargeFlatNativeGas info nativeArg = do
   let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
       !g1 = _gmNatives model nativeArg
       !gUsed = currGas <> g1
-  esGasLog %== fmap (GasLogEntry (Right nativeArg) gUsed g1 :)
+  esGasLog %== fmap (GasLogEntry (Right nativeArg) g1 gUsed :)
   putGas gUsed
   when (gUsed > gasLimit && gasLimit >= currGas) $
     throwExecutionError info (GasExceeded limit gUsed)

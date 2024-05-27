@@ -630,6 +630,7 @@ coreMap info b cont handler env = \case
   [VClosure clo, VList li] -> case V.toList li of
     x:xs -> do
       let cont' = BuiltinC env info (MapC clo xs []) cont
+      chargeGasArgs info (GAConstant unconsWorkNodeGas)
       applyLam clo [VPactValue x] cont' handler
     [] -> returnCEKValue cont handler (VList mempty)
   args -> argsError info b args
@@ -638,6 +639,7 @@ coreFilter :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreFilter info b cont handler _env = \case
   [VClosure clo, VList li] -> case V.toList li of
     x:xs -> do
+      chargeGasArgs info (GAConstant unconsWorkNodeGas)
       let cont' = CondC _env info (FilterC clo x xs []) cont
       applyLam clo [VPactValue x] cont' handler
     [] -> returnCEKValue cont handler (VList mempty)
@@ -648,6 +650,7 @@ coreFold info b cont handler _env = \case
   [VClosure clo, VPactValue initElem, VList li] ->
     case V.toList li of
       x:xs -> do
+        chargeGasArgs info (GAConstant unconsWorkNodeGas)
         let cont' = BuiltinC _env info (FoldC clo xs) cont
         applyLam clo [VPactValue initElem, VPactValue x] cont' handler
       [] -> returnCEKValue cont handler (VPactValue initElem)
