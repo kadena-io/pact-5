@@ -68,9 +68,9 @@ enumExpObjectComplex base mult =
   | (title, cnt) <- enumExpNum base mult
   ]
 
-enumExpObjectWithStrings :: Integer -> Integer -> [(String, PactValue)]
-enumExpObjectWithStrings base mult =
-  [ (title, PObject $ mkMap (PString . T.replicate 10 . T.pack . show) cnt)
+enumExpObjectWithStrings :: Int -> Integer -> Integer -> [(String, PactValue)]
+enumExpObjectWithStrings repCount base mult =
+  [ (title, PObject $ mkMap (PString . T.replicate repCount . T.pack . show) cnt)
   | (title, cnt) <- enumExpNum base mult
   ]
 
@@ -479,14 +479,14 @@ benchReadOp readOp pdb =
 benchReadString :: BuiltinBenches
 benchReadString pdb =
   [ runNativeBenchmarkPreparedEnvMod (msgBody obj) [("k", key)] pdb title "(read-string k)"
-  | (title, PObject obj) <- take 3 $ enumExpObjectWithStrings 1_000 100
+  | (title, PObject obj) <- take 3 $ enumExpObjectWithStrings 10 1_000 100
   , let key = fieldToValue $ last $ M.keys obj
   ]
 
 benchReadKeyset :: BuiltinBenches
 benchReadKeyset pdb =
   [ runNativeBenchmarkPreparedEnvMod (msgBody obj) [] pdb title "(read-keyset 'thekeyset)"
-  | (_, PObject objBase) <- [head $ enumExpObjectWithStrings 1_000 1]
+  | (_, PObject objBase) <- [head $ enumExpObjectWithStrings 10 1_000 1]
   , (title, str) <- take 3 $ enumExpScopedIdent 1_000 100
   , let ksn = PObject [(Field "keys", PList [PString "publickeytext"]), (Field "pred", str)]
   , let obj = M.insert (Field "thekeyset") ksn objBase
