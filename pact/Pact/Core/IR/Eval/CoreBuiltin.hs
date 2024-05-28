@@ -1677,7 +1677,7 @@ coreNamespace info b cont handler env = \case
       (esLoaded . loNamespace) .== Nothing
       returnCEKValue cont handler (VString "Namespace reset to root")
     else do
-      chargeGasArgs info $ GRead $ sizeOf SizeOfV0 n
+      chargeGasArgs info $ GRead $ fromIntegral $ T.length n
       liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
         Just ns -> do
           chargeGasArgs info $ GRead $ sizeOf SizeOfV0 ns
@@ -1697,7 +1697,7 @@ coreDefineNamespace info b cont handler env = \case
     let pdb = view cePactDb env
     let nsn = NamespaceName n
         ns = Namespace nsn usrG adminG
-    chargeGasArgs info $ GRead $ sizeOf SizeOfV0 n
+    chargeGasArgs info $ GRead $ fromIntegral $ T.length n
     liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
       -- G!
       -- https://static.wikia.nocookie.net/onepiece/images/5/52/Lao_G_Manga_Infobox.png/revision/latest?cb=20150405020446
@@ -1735,7 +1735,7 @@ coreDescribeNamespace :: (CEKEval step b i m, MonadEval b i m) => NativeFunction
 coreDescribeNamespace info b cont handler _env = \case
   [VString n] -> do
     pdb <- viewEvalEnv eePactDb
-    chargeGasArgs info $ GRead $ sizeOf SizeOfV0 n
+    chargeGasArgs info $ GRead $ fromIntegral $ T.length n
     liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
       Just existing@(Namespace _ usrG laoG) -> do
         chargeGasArgs info $ GRead $ sizeOf SizeOfV0 existing
