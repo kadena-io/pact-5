@@ -162,9 +162,7 @@ intPowCost !base !power
   | otherwise = MilliGas $ g (I# (IntLog.integerLogBase# 10 base)) (I# (IntLog.integerLogBase# 10 power))
   where
   g x y = f ((x - 3) `div` 2) ((y - 3) `div` 2)
-  f x y
-    | x < 0 || y < 0 = f00
-    | otherwise = f00 * 2 ^ x * 300 ^ y
+  f x y = f00 * 2 ^ max x 0 * 300 ^ max y 0
   f00 = 1000
 {- The benchmarks show the run time t, for x = log₁₀ base, y = log₁₀ power:
            |  y = 3  | y = 5  | y = 7
