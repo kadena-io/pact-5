@@ -12,6 +12,7 @@ import Control.Monad.IO.Class(liftIO)
 import Data.Default
 import Data.Text(Text)
 import Data.Maybe(fromMaybe)
+import Data.Either (partitionEithers)
 import Data.ByteString.Short(toShort)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -32,6 +33,7 @@ import Pact.Core.Environment
 import Pact.Core.PactValue
 import Pact.Core.Gas
 import Pact.Core.Guards
+import Pact.Core.ModRefs
 import Pact.Core.Capabilities
 import Pact.Core.Errors
 import Pact.Core.Persistence
@@ -373,15 +375,17 @@ envExecConfig :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInf
 envExecConfig info b cont handler _env = \case
   [VList s] -> do
     s' <- traverse go (V.toList s)
-    replEvalEnv . eeFlags .= S.fromList s'
-    let reps = PString . flagRep <$> s'
+    let (knownFlags, _unkownFlags) = partitionEithers s'
+    -- TODO: Emit warnings of unkown flags
+    replEvalEnv . eeFlags .= S.fromList knownFlags
+    let reps = PString . flagRep <$> knownFlags
     returnCEKValue cont handler (VList (V.fromList reps))
     where
     go str = do
       str' <- asString info b str
-      case M.lookup str' flagReps of
-        Just f -> pure f
-        Nothing -> failInvariant info $ "Invalid flag, allowed: " <> T.pack (show (M.keys flagReps))
+      maybe (pure $ Right str') (pure . Left) (M.lookup str' flagReps)
+      --failInvariant info $ "Invalid flag, allowed: " <> T.pack (show (M.keys flagReps))
+
   args -> argsError info b args
 
 envNamespacePolicy :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -478,6 +482,15 @@ envGasModel info b cont handler _env = \case
   args -> argsError info b args
 
 
+envModuleAdmin :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+envModuleAdmin info b cont handler _env = \case
+  [VModRef modRef] -> do
+    let modName = _mrModule modRef
+    (esCaps . csModuleAdmin) %== S.insert modName
+    returnCEKValue cont handler $ VString $ "Acquired module admin for: " <> renderModuleName modName
+  args -> argsError info b args
+
+
 -----------------------------------
 -- Pact Version
 -----------------------------------
@@ -565,3 +578,4 @@ replCoreBuiltinRuntime = \case
     REnforcePactVersionMin -> coreEnforceVersion
     REnforcePactVersionRange -> coreEnforceVersion
     REnvEnableReplNatives -> envEnableReplNatives
+    REnvModuleAdmin -> envModuleAdmin

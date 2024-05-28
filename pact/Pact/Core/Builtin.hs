@@ -738,6 +738,7 @@ data ReplBuiltins
   | REnforcePactVersionMin
   | REnforcePactVersionRange
   | REnvEnableReplNatives
+  | REnvModuleAdmin
   deriving (Show, Enum, Bounded, Eq, Generic)
 
 
@@ -783,6 +784,7 @@ instance IsBuiltin ReplBuiltins where
     REnforcePactVersionMin -> 1
     REnforcePactVersionRange -> 2
     REnvEnableReplNatives -> 1
+    REnvModuleAdmin -> 1
 
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
@@ -863,6 +865,7 @@ replBuiltinsToText = \case
   REnforcePactVersionMin -> "enforce-pact-version"
   REnforcePactVersionRange -> "enforce-pact-version-range"
   REnvEnableReplNatives -> "env-enable-repl-natives"
+  REnvModuleAdmin -> "env-module-admin"
 
 replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
 replBuiltinToText f = \case

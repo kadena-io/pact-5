@@ -11,6 +11,9 @@ module Pact.Core.Serialise.CBOR_V1
   , encodeDefPactExec, decodeDefPactExec
   , encodeNamespace, decodeNamespace
   , encodeRowData, decodeRowData
+  -- only used for legacy translation
+  , encodeModuleName
+  , encodeModuleHash
   ) where
 
 import Codec.Serialise.Class
@@ -56,6 +59,13 @@ decodeModuleData_repl_spaninfo bs = either (const Nothing) (Just . snd) (deseria
 
 decodeModuleData_raw_spaninfo :: ByteString -> Maybe (ModuleData CoreBuiltin SpanInfo)
 decodeModuleData_raw_spaninfo bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
+
+
+encodeModuleName :: ModuleName -> ByteString
+encodeModuleName = toStrictByteString . encode
+
+encodeModuleHash :: ModuleHash -> ByteString
+encodeModuleHash = toStrictByteString . encode
 
 encodeKeySet :: KeySet -> ByteString
 encodeKeySet = toStrictByteString . encode
@@ -249,6 +259,7 @@ instance
   encode (Try t1 t2 i) = encodeWord 10 <> encode t1 <> encode t2 <> encode i
   encode (ObjectLit o i) = encodeWord 11 <> encode o <> encode i
   encode (CapabilityForm cf i) = encodeWord 12 <> encode cf <> encode i
+  encode (InlineValue pv i) = encodeWord 13 <> encode pv <> encode i
 
   decode = decodeWord >>= \case
     0 -> Var <$> decode <*> decode
@@ -264,6 +275,8 @@ instance
     10 -> Try <$> decode <*> decode <*> decode
     11 -> ObjectLit <$> decode <*> decode
     12 -> CapabilityForm <$> decode <*> decode
+    -- Internal term used for back. compat pact < 5
+    13 -> InlineValue <$> decode <*> decode
     _ -> fail "unexpected decoding"
 
 instance

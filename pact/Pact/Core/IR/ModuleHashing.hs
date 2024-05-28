@@ -223,8 +223,7 @@ encodeApp operator operands =
   parens $ hsep (operator:operands)
 
 encodeSchema :: Schema -> Builder
-encodeSchema (Schema n _sc) =
-  encodeQualName n
+encodeSchema (Schema n _sc) = encodeQualName n
 
 encodePrim :: PrimType -> Builder
 encodePrim = \case
@@ -323,6 +322,7 @@ encodeTerm = \case
       "with-capability" <+> encodeTerm cap <+> encodeTerm body
     CreateUserGuard n args ->
       "with-capability" <+> encodeName n <+> hsep (encodeTerm <$> args)
+  InlineValue{} -> mempty
 
 encodeTyAnn :: Maybe Type -> Builder
 encodeTyAnn = maybe mempty ((":" <>) . encodeType)
