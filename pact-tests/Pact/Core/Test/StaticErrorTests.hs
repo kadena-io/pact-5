@@ -17,7 +17,6 @@ import NeatInterpolation (text)
 import Pact.Core.Builtin
 import Pact.Core.Environment
 import Pact.Core.Errors
-import Pact.Core.Gas
 import Pact.Core.Persistence.MockPersistence (mockPactDb)
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
@@ -35,7 +34,6 @@ isExecutionError p s = isJust $ preview (_PEExecutionError . _1 . p) s
 
 runStaticTest :: String -> Text -> (PactErrorI -> Bool) -> Assertion
 runStaticTest label src predicate = do
-  gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
   pdb <- mockPactDb serialisePact_repl_spaninfo
   ee <- defaultEvalEnv pdb replCoreBuiltinMap
@@ -44,7 +42,6 @@ runStaticTest label src predicate = do
             { _replFlags = mempty
             , _replEvalState = def
             , _replPactDb = pdb
-            , _replGas = gasRef
             , _replEvalLog = gasLog
             , _replCurrSource = source
             , _replEvalEnv = ee

@@ -187,10 +187,9 @@ sqliteRegression =
       loadModule = do
         let src = "(module test G (defcap G () true) (defun f (a: integer) 1))"
         pdb <- mockPactDb serialisePact_repl_spaninfo
-        g <- newIORef mempty
         evalLog <- newIORef Nothing
         ee <- defaultEvalEnv pdb replCoreBuiltinMap
-        ref <- newIORef (ReplState mempty pdb def ee g evalLog (SourceCode "" "") mempty mempty Nothing False)
+        ref <- newIORef (ReplState mempty pdb def ee evalLog (SourceCode "" "") mempty mempty Nothing False)
         Right _ <- runReplT ref (interpretReplProgram (SourceCode "test" src) (const (pure ())))
         Just md <- readModule pdb (ModuleName "test" Nothing)
         pure md

@@ -26,7 +26,6 @@ import Data.IORef
 import Data.Default
 import System.FilePath
 
-import Pact.Core.Gas
 import Pact.Core.Persistence.MockPersistence
 
 import Pact.Core.Repl.Utils
@@ -205,7 +204,6 @@ sendDiagnostics nuri mv content = liftIO runPact >>= \case
     runPact = do
       let file = fromMaybe "<local>" $ uriToFilePath (fromNormalizedUri nuri)
       pdb <- mockPactDb serialisePact_repl_spaninfo
-      gasRef <- newIORef (Gas 0)
       gasLog <- newIORef Nothing
       let
         builtinMap = if isReplScript nuri
@@ -219,7 +217,6 @@ sendDiagnostics nuri mv content = liftIO runPact >>= \case
           { _replFlags = mempty
           , _replEvalState = def
           , _replPactDb = pdb
-          , _replGas = gasRef
           , _replEvalLog = gasLog
           , _replCurrSource = src
           , _replEvalEnv = ee

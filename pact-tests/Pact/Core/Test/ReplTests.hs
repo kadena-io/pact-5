@@ -15,7 +15,6 @@ import System.FilePath
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
-import Pact.Core.Gas
 import Pact.Core.Literal
 import Pact.Core.Persistence.MockPersistence
 
@@ -66,7 +65,6 @@ runFileReplTestSqlite interp file = testCase file $ do
 
 runReplTest :: PactDb ReplCoreBuiltin SpanInfo -> FilePath -> T.Text -> Interpreter -> Assertion
 runReplTest pdb file src interp = do
-  gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replCoreBuiltinMap
   let source = SourceCode (replTestDir </> file) src
@@ -74,7 +72,6 @@ runReplTest pdb file src interp = do
             { _replFlags = mempty
             , _replEvalState = def
             , _replPactDb = pdb
-            , _replGas = gasRef
             , _replEvalLog = gasLog
             , _replCurrSource = source
             , _replEvalEnv = ee

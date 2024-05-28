@@ -27,6 +27,8 @@ import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
+import Pact.Core.Gas.TableGasModel
+import Control.Lens
 
 tests :: IO TestTree
 tests = do
@@ -64,7 +66,7 @@ gasGoldenTests c = do
     mGas <- runGasTest (gasTestDir </> fp)
     case mGas of
       Nothing -> fail $ "Could not execute the gas tests for: " <> show fp
-      Just (Gas consumed) -> pure $ BS.fromStrict $ T.encodeUtf8 (lookupOp fn <> ": " <> T.pack (show consumed))
+      Just (MilliGas consumed) -> pure $ BS.fromStrict $ T.encodeUtf8 (lookupOp fn <> ": " <> T.pack (show consumed))
   pure (BS.intercalate "\n" gasOutputs)
 
 
@@ -93,22 +95,22 @@ opToFileName = M.fromList
 fileNameToOp :: M.Map Text Text
 fileNameToOp = M.fromList [(v,k) | (k, v) <- M.toList opToFileName]
 
-runGasTest :: FilePath -> IO (Maybe Gas)
+runGasTest :: FilePath -> IO (Maybe MilliGas)
 runGasTest file = do
   src <- T.readFile file
   pdb <-  mockPactDb serialisePact_repl_spaninfo
-  gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replCoreBuiltinMap
+  let ee' = ee & eeGasModel .~ replTableGasModel (maxBound :: MilliGasLimit)
+      gasRef = ee' ^. eeGasRef
   let source = SourceCode file src
   let rstate = ReplState
             { _replFlags = mempty
             , _replEvalState = def
             , _replPactDb = pdb
-            , _replGas = gasRef
             , _replEvalLog = gasLog
             , _replCurrSource = source
-            , _replEvalEnv = ee
+            , _replEvalEnv = ee'
             , _replUserDocs = mempty
             , _replTLDefPos = mempty
             , _replTx = Nothing

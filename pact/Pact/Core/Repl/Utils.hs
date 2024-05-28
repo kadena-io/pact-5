@@ -18,7 +18,6 @@ module Pact.Core.Repl.Utils
  , ReplState(..)
  , replFlags
  , replPactDb
- , replGas
  , replEvalLog
  , replEvalEnv
  , replEvalState
@@ -125,7 +124,6 @@ data ReplState b
   , _replPactDb :: PactDb b SpanInfo
   , _replEvalState :: EvalState b SpanInfo
   , _replEvalEnv :: EvalEnv b SpanInfo
-  , _replGas :: IORef Gas
   , _replEvalLog :: IORef (Maybe [(Text, Gas)])
   , _replCurrSource :: SourceCode
   , _replUserDocs :: Map QualifiedName Text

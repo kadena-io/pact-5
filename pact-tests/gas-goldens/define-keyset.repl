@@ -1,0 +1,7 @@
+(env-data {"jose": ["key1"]})
+
+;(env-keys ["key1"])
+
+;(define-keyset 'jose "key1")
+
+(define-keyset 'jose)
