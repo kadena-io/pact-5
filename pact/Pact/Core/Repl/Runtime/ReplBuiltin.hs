@@ -300,7 +300,7 @@ envVerifiers info b cont handler _env = \case
     where
     verifCapObj = \case
       PObject o -> do
-        keyRaw<- M.lookup (Field "name") o
+        keyRaw <- M.lookup (Field "name") o
         kt <- preview (_PLiteral . _LString) keyRaw
         capsRaw <- M.lookup (Field "caps") o
         capsListPV <- preview _PList capsRaw

@@ -1498,11 +1498,9 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
             let acc' = PObject . _objectData <$> reverse acc
             in returnCEKValue cont handler (VList (V.fromList acc'))
     _ -> returnCEK cont handler (VError "higher order apply did not return a pactvalue" info)
--- applyContToValue (CapBodyC cappop env info mcap mevent capbody cont) handler _ = do
 applyContToValue (CapBodyC env info (CapBodyState cappop mcap mevent capbody) cont) handler _ = do
   -- Todo: I think this requires some administrative check?
   chargeGasArgs info (GAConstant unconsWorkNodeGas)
-  -- (esCaps . csCapsBeingEvaluated) .= ceval
   maybe (pure ()) emitEventUnsafe mevent
   case mcap of
     Nothing -> do

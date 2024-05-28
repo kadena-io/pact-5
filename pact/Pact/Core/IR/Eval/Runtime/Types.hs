@@ -90,7 +90,6 @@ module Pact.Core.IR.Eval.Runtime.Types
  , CapBodyState(..)
  -- Todo: turn into individual lenses
  -- this is purely a lazy export
- , HasCapBodyState(..)
  ) where
 
 import Control.Lens
@@ -520,7 +519,7 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   --  - The rest of the continuation
   | CapPopC CapPopState (Cont step b i m)
   -- ^ What to do after returning from a defcap: do we compose the returned cap, or do we simply pop it from the stack
-  -- or alternatively: after cap evaluation finishes, pop the caps 
+  -- or alternatively: after cap evaluation finishes, pop the caps
   | DefPactStepC (CEKEnv step b i m) (Cont step b i m)
   -- ^ Cont frame after a defpact, ensuring we save the defpact to the database and whatnot
   | NestedDefPactStepC (CEKEnv step b i m) (Cont step b i m) DefPactExec
@@ -660,7 +659,6 @@ instance (Show i, Show b, Pretty b) => Pretty (CEKValue step b i m) where
       P.angles "closure#"
 
 makeLenses ''CEKEnv
-makeClassy ''CapBodyState
 
 instance MonadEvalEnv b i (EvalM b i) where
   readEnv = EvalT ask
