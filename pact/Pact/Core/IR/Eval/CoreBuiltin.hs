@@ -386,11 +386,11 @@ rawSqrt info b cont handler _env = \case
 rawShow :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawShow info b cont handler _env = \case
   [VLiteral (LInteger i)] -> do
-    let strLen = 1 + Exts.I# (IntLog.integerLog2# i)
+    let strLen = 1 + Exts.I# (IntLog.integerLog2# $ abs i)
     chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
     returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
   [VLiteral (LDecimal i)] -> do
-    let strLen = 1 + Exts.I# (IntLog.integerLog2# $ decimalMantissa i)
+    let strLen = 1 + Exts.I# (IntLog.integerLog2# $ abs $ decimalMantissa i)
     chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
     returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
   [VLiteral (LString i)] -> do
@@ -1263,12 +1263,12 @@ coreIntToStr info b cont handler _env = \case
     | v < 0 ->
       returnCEK cont handler (VError "int-to-str error: cannot show negative integer" info)
     | base >= 2 && base <= 16 -> do
-      let strLen = 1 + Exts.I# (IntLog.integerLogBase# base v)
+      let strLen = 1 + Exts.I# (IntLog.integerLogBase# base $ abs v)
       chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
       let v' = T.pack $ showIntAtBase base Char.intToDigit v ""
       returnCEKValue cont handler (VString v')
     | base == 64 && v >= 0 -> do
-      let bsLen = 1 + Exts.I# (IntLog.integerLogBase# 256 v)
+      let bsLen = 1 + Exts.I# (IntLog.integerLogBase# 256 $ abs v)
           strLen = (bsLen * 4) `div` 3
       chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
       let v' = toB64UrlUnpaddedText $ integerToBS v

@@ -157,9 +157,7 @@ intShiftCost _ !rop
   | otherwise = MilliGas 0
 
 intPowCost :: Integer -> Integer -> MilliGas
-intPowCost !base !power
-  | base < 0 = MilliGas 0
-  | otherwise = MilliGas $ g (I# (IntLog.integerLogBase# 10 base)) (I# (IntLog.integerLogBase# 10 power))
+intPowCost !base !power = MilliGas $ g (I# (IntLog.integerLogBase# 10 (abs base))) (I# (IntLog.integerLogBase# 10 (abs power)))
   where
   g x y = f ((x - 3) `div` 2) ((y - 3) `div` 2)
   f x y = f00 * 2 ^ max x 0 * 300 ^ max y 0
