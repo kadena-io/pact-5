@@ -16,7 +16,6 @@ import Data.Ratio((%))
 import GHC.Int(Int(..))
 import qualified Data.Text as T
 import GHC.Num.Integer
-import GHC.Num.WordArray
 import qualified GHC.Integer.Logarithms as IntLog
 import Pact.Core.Builtin
 import Pact.Core.Gas
