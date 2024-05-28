@@ -47,6 +47,7 @@ import Data.Maybe(maybeToList)
 import Data.Attoparsec.Text(parseOnly)
 import Data.Containers.ListUtils(nubOrd)
 import Numeric(showIntAtBase)
+import System.Clock
 import qualified Data.RAList as RAList
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -316,6 +317,8 @@ evaluate env = \case
     go (f, e) = do
       v <- evaluate env e
       (f,) <$> enforcePactValue info v
+  InlineValue v _ ->
+    return (VPactValue v)
 
 -- | Our main workhorse for "Evaluate a capability, then do something else"
 -- `evalCap` handles
@@ -447,6 +450,7 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
         let inCapEnv = set ceLocal env' $ set ceInCap True $ env
         -- sfCont <- pushStackFrame info cont' Nothing capStackFrame
         -- evalCEK sfCont handler inCapEnv capBody
+
         _ <- evalWithStackFrame info capStackFrame Nothing (evaluate inCapEnv capBody)
         evalWithCapBody info popType Nothing emittedEvent env contbody
     _ -> failInvariant info "Invalid managed cap type"
@@ -677,10 +681,18 @@ sysOnlyEnv e
 evalWithStackFrame :: MonadEval b i m => i -> StackFrame i -> Maybe Type -> m (EvalValue b i m) -> m (EvalValue b i m)
 evalWithStackFrame info sf mty act = do
   esStack %== (sf:)
+#ifdef WITH_TRACING
+  timeEnter <- liftIO $ getTime ProcessCPUTime
+  esTraceOutput %== (TraceFunctionEnter timeEnter sf info:)
+#endif
   v <- act
   esStack %== safeTail
   pv <- enforcePactValue info v
   pv' <- maybeTCType info pv mty
+#ifdef WITH_TRACING
+  timeExit <- liftIO $ getTime ProcessCPUTime
+  esTraceOutput %== (TraceFunctionExit timeExit sf info:)
+#endif
   return (VPactValue pv')
 {-# INLINE evalWithStackFrame #-}
 
@@ -956,10 +968,15 @@ isKeysetInSigs info env (KeySet kskeys ksPred) = do
   where
   matchKey k _ = k `elem` kskeys
   atLeast t m = m >= t
+  elide pk = T.take 8 pk <> "..."
   count = S.size kskeys
   run p matched =
     if p count matched then pure True
-    else throwRecoverableError info "Keyset enforce failure"
+    else do
+      let
+       errMsg = "Keyset failure (" <> predicateToText ksPred <> "): "
+               <> Pretty.renderCompactText (map (elide . renderPublicKeyText) $ S.toList kskeys)
+      throwRecoverableError info errMsg
   runPred matched =
     case ksPred of
       KeysAll -> run atLeast matched
@@ -1015,7 +1032,7 @@ requireCap info (CapToken fqn args) = do
   capInStack <- isCapInStack (CapToken (fqnToQualName fqn) args)
   if capInStack then return (VBool True)
   else throwRecoverableError info
-      ("cap not in scope " <> renderQualName (fqnToQualName fqn))
+      ("require-capability: not granted: (" <> renderQualName (fqnToQualName fqn) <> ")")
 
 isCapInStack
   :: (MonadEval b i m)
@@ -3201,8 +3218,8 @@ zkPairingCheck info b _env = \case
     return $ VBool $ pairingCheck pairs
   args -> argsError info b args
 
-zkScalaMult :: (MonadEval b i m) => NativeFunction b i m
-zkScalaMult info b _env = \case
+zkScalarMult :: (MonadEval b i m) => NativeFunction b i m
+zkScalarMult info b _env = \case
   args@[VString ptTy, VObject p1, VInteger scalar] -> do
     let scalar' = scalar `mod` curveOrder
     case T.toLower ptTy of
@@ -3317,137 +3334,154 @@ coreBuiltinRuntime
   :: (MonadEval b i m)
   => CoreBuiltin
   -> NativeFunction b i m
-coreBuiltinRuntime = \case
-  CoreAdd -> rawAdd
-  CoreSub -> rawSub
-  CoreMultiply -> rawMul
-  CoreDivide -> rawDiv
-  CoreNegate -> rawNegate
-  CoreAbs -> rawAbs
-  CorePow -> rawPow
-  CoreNot -> notBool
-  CoreEq -> rawEq
-  CoreNeq -> rawNeq
-  CoreGT -> rawGt
-  CoreGEQ -> rawGeq
-  CoreLT -> rawLt
-  CoreLEQ -> rawLeq
-  CoreBitwiseAnd -> bitAndInt
-  CoreBitwiseOr -> bitOrInt
-  CoreBitwiseXor -> bitXorInt
-  CoreBitwiseFlip -> bitComplementInt
-  CoreBitShift -> bitShiftInt
-  CoreRound -> roundDec
-  CoreCeiling -> ceilingDec
-  CoreFloor -> floorDec
-  CoreRoundPrec -> roundDec
-  CoreCeilingPrec -> ceilingDec
-  CoreFloorPrec -> floorDec
-  CoreExp -> rawExp
-  CoreLn -> rawLn
-  CoreSqrt -> rawSqrt
-  CoreLogBase -> rawLogBase
-  CoreLength -> rawLength
-  CoreTake -> rawTake
-  CoreDrop -> rawDrop
-  CoreConcat -> coreConcat
-  CoreReverse -> rawReverse
-  CoreMod -> modInt
-  CoreMap -> coreMap
-  CoreFilter -> coreFilter
-  CoreZip -> zipList
-  CoreIntToStr -> coreIntToStr
-  CoreStrToInt -> coreStrToInt
-  CoreStrToIntBase -> coreStrToIntBase
-  CoreFold -> coreFold
-  CoreDistinct -> coreDistinct
-  CoreFormat -> coreFormat
-  CoreContains -> rawContains
-  CoreSort -> rawSort
-  CoreSortObject -> rawSortObject
-  CoreRemove -> coreRemove
-  -- CoreEnforce -> coreEnforce
-  -- CoreEnforceOne -> unimplemented
-  CoreEnumerate -> coreEnumerate
-  CoreEnumerateStepN -> coreEnumerateStepN
-  CoreShow -> rawShow
-  CoreReadMsg -> coreReadMsg
-  CoreReadMsgDefault -> coreReadMsg
-  CoreReadInteger -> coreReadInteger
-  CoreReadDecimal -> coreReadDecimal
-  CoreReadString -> coreReadString
-  CoreReadKeyset -> coreReadKeyset
-  CoreEnforceGuard -> coreEnforceGuard
-  CoreYield -> coreYield
-  CoreYieldToChain -> coreYield
-  CoreResume -> coreResume
-  CoreEnforceKeyset -> coreEnforceGuard
-  CoreKeysetRefGuard -> keysetRefGuard
-  CoreAt -> coreAccess
-  CoreMakeList -> makeList
-  CoreB64Encode -> coreB64Encode
-  CoreB64Decode -> coreB64Decode
-  CoreStrToList -> strToList
-  CoreBind -> coreBind
-  CoreRequireCapability -> requireCapability
-  CoreComposeCapability -> composeCapability
-  CoreInstallCapability -> installCapability
-  CoreCreateCapabilityGuard -> createCapGuard
-  CoreCreateCapabilityPactGuard -> createCapabilityPactGuard
-  CoreCreateModuleGuard -> createModuleGuard
-  CoreCreateDefPactGuard -> createDefPactGuard
-  CoreEmitEvent -> coreEmitEvent
-  CoreCreateTable -> createTable
-  CoreDescribeKeyset -> dbDescribeKeySet
-  CoreDescribeModule -> describeModule
-  CoreDescribeTable -> dbDescribeTable
-  CoreDefineKeySet -> defineKeySet
-  CoreDefineKeysetData -> defineKeySet
-  CoreFoldDb -> foldDb
-  CoreInsert -> dbInsert
-  CoreWrite -> dbWrite
-  CoreKeyLog -> dbKeyLog
-  CoreKeys -> dbKeys
-  CoreRead -> dbRead
-  CoreSelect -> dbSelect
-  CoreUpdate -> dbUpdate
-  CoreWithDefaultRead -> dbWithDefaultRead
-  CoreWithRead -> dbWithRead
-  CoreTxLog -> dbTxLog
-  CoreTxIds -> dbTxIds
-  CoreAndQ -> coreAndQ
-  CoreOrQ -> coreOrQ
-  CoreWhere -> coreWhere
-  CoreNotQ -> coreNotQ
-  CoreHash -> coreHash
-  CoreTxHash -> txHash
-  CoreContinue -> coreContinue
-  CoreParseTime -> parseTime
-  CoreFormatTime -> formatTime
-  CoreTime -> time
-  CoreAddTime -> addTime
-  CoreDiffTime -> diffTime
-  CoreHours -> hours
-  CoreMinutes -> minutes
-  CoreDays -> days
-  CoreCompose -> coreCompose
-  CoreSelectWithFields -> dbSelect
-  CoreCreatePrincipal -> coreCreatePrincipal
-  CoreIsPrincipal -> coreIsPrincipal
-  CoreTypeOfPrincipal -> coreTypeOfPrincipal
-  CoreValidatePrincipal -> coreValidatePrincipal
-  CoreNamespace -> coreNamespace
-  CoreDefineNamespace -> coreDefineNamespace
-  CoreDescribeNamespace -> coreDescribeNamespace
-  CoreZkPairingCheck -> zkPairingCheck
-  CoreZKScalarMult -> zkScalaMult
-  CoreZkPointAdd -> zkPointAddition
-  CorePoseidonHashHackachain -> poseidonHash
-  CoreChainData -> coreChainData
-  CoreIsCharset -> coreIsCharset
-  CorePactId -> corePactId
-  CoreTypeOf -> coreTypeOf
-  CoreDec -> coreDec
-  CoreCond -> coreCond
-  CoreIdentity -> coreIdentity
-  CoreVerifySPV -> coreVerifySPV
+coreBuiltinRuntime =
+#ifdef WITH_TRACING
+  _traceNative . go
+  where
+  _traceNative
+    :: (MonadEval b i m)
+    => NativeFunction b i m
+    -> NativeFunction b i m
+  _traceNative f info b env args = do
+    timeEnter <- liftIO $ getTime ProcessCPUTime
+    esTraceOutput %== (TraceNativeEnter timeEnter b info:)
+    output <- f info b env args
+    timeExit <- liftIO $ getTime ProcessCPUTime
+    esTraceOutput %== (TraceNativeExit timeExit b info:)
+    pure output
+#else
+  go
+  where
+#endif
+  go = \case
+    CoreAdd -> rawAdd
+    CoreSub -> rawSub
+    CoreMultiply -> rawMul
+    CoreDivide -> rawDiv
+    CoreNegate -> rawNegate
+    CoreAbs -> rawAbs
+    CorePow -> rawPow
+    CoreNot -> notBool
+    CoreEq -> rawEq
+    CoreNeq -> rawNeq
+    CoreGT -> rawGt
+    CoreGEQ -> rawGeq
+    CoreLT -> rawLt
+    CoreLEQ -> rawLeq
+    CoreBitwiseAnd -> bitAndInt
+    CoreBitwiseOr -> bitOrInt
+    CoreBitwiseXor -> bitXorInt
+    CoreBitwiseFlip -> bitComplementInt
+    CoreBitShift -> bitShiftInt
+    CoreRound -> roundDec
+    CoreCeiling -> ceilingDec
+    CoreFloor -> floorDec
+    CoreRoundPrec -> roundDec
+    CoreCeilingPrec -> ceilingDec
+    CoreFloorPrec -> floorDec
+    CoreExp -> rawExp
+    CoreLn -> rawLn
+    CoreSqrt -> rawSqrt
+    CoreLogBase -> rawLogBase
+    CoreLength -> rawLength
+    CoreTake -> rawTake
+    CoreDrop -> rawDrop
+    CoreConcat -> coreConcat
+    CoreReverse -> rawReverse
+    CoreMod -> modInt
+    CoreMap -> coreMap
+    CoreFilter -> coreFilter
+    CoreZip -> zipList
+    CoreIntToStr -> coreIntToStr
+    CoreStrToInt -> coreStrToInt
+    CoreStrToIntBase -> coreStrToIntBase
+    CoreFold -> coreFold
+    CoreDistinct -> coreDistinct
+    CoreFormat -> coreFormat
+    CoreContains -> rawContains
+    CoreSort -> rawSort
+    CoreSortObject -> rawSortObject
+    CoreRemove -> coreRemove
+    CoreEnumerate -> coreEnumerate
+    CoreEnumerateStepN -> coreEnumerateStepN
+    CoreShow -> rawShow
+    CoreReadMsg -> coreReadMsg
+    CoreReadMsgDefault -> coreReadMsg
+    CoreReadInteger -> coreReadInteger
+    CoreReadDecimal -> coreReadDecimal
+    CoreReadString -> coreReadString
+    CoreReadKeyset -> coreReadKeyset
+    CoreEnforceGuard -> coreEnforceGuard
+    CoreYield -> coreYield
+    CoreYieldToChain -> coreYield
+    CoreResume -> coreResume
+    CoreEnforceKeyset -> coreEnforceGuard
+    CoreKeysetRefGuard -> keysetRefGuard
+    CoreAt -> coreAccess
+    CoreMakeList -> makeList
+    CoreB64Encode -> coreB64Encode
+    CoreB64Decode -> coreB64Decode
+    CoreStrToList -> strToList
+    CoreBind -> coreBind
+    CoreRequireCapability -> requireCapability
+    CoreComposeCapability -> composeCapability
+    CoreInstallCapability -> installCapability
+    CoreCreateCapabilityGuard -> createCapGuard
+    CoreCreateCapabilityPactGuard -> createCapabilityPactGuard
+    CoreCreateModuleGuard -> createModuleGuard
+    CoreCreateDefPactGuard -> createDefPactGuard
+    CoreEmitEvent -> coreEmitEvent
+    CoreCreateTable -> createTable
+    CoreDescribeKeyset -> dbDescribeKeySet
+    CoreDescribeModule -> describeModule
+    CoreDescribeTable -> dbDescribeTable
+    CoreDefineKeySet -> defineKeySet
+    CoreDefineKeysetData -> defineKeySet
+    CoreFoldDb -> foldDb
+    CoreInsert -> dbInsert
+    CoreWrite -> dbWrite
+    CoreKeyLog -> dbKeyLog
+    CoreKeys -> dbKeys
+    CoreRead -> dbRead
+    CoreSelect -> dbSelect
+    CoreUpdate -> dbUpdate
+    CoreWithDefaultRead -> dbWithDefaultRead
+    CoreWithRead -> dbWithRead
+    CoreTxLog -> dbTxLog
+    CoreTxIds -> dbTxIds
+    CoreAndQ -> coreAndQ
+    CoreOrQ -> coreOrQ
+    CoreWhere -> coreWhere
+    CoreNotQ -> coreNotQ
+    CoreHash -> coreHash
+    CoreTxHash -> txHash
+    CoreContinue -> coreContinue
+    CoreParseTime -> parseTime
+    CoreFormatTime -> formatTime
+    CoreTime -> time
+    CoreAddTime -> addTime
+    CoreDiffTime -> diffTime
+    CoreHours -> hours
+    CoreMinutes -> minutes
+    CoreDays -> days
+    CoreCompose -> coreCompose
+    CoreSelectWithFields -> dbSelect
+    CoreCreatePrincipal -> coreCreatePrincipal
+    CoreIsPrincipal -> coreIsPrincipal
+    CoreTypeOfPrincipal -> coreTypeOfPrincipal
+    CoreValidatePrincipal -> coreValidatePrincipal
+    CoreNamespace -> coreNamespace
+    CoreDefineNamespace -> coreDefineNamespace
+    CoreDescribeNamespace -> coreDescribeNamespace
+    CoreZkPairingCheck -> zkPairingCheck
+    CoreZKScalarMult -> zkScalarMult
+    CoreZkPointAdd -> zkPointAddition
+    CorePoseidonHashHackachain -> poseidonHash
+    CoreChainData -> coreChainData
+    CoreIsCharset -> coreIsCharset
+    CorePactId -> corePactId
+    CoreTypeOf -> coreTypeOf
+    CoreDec -> coreDec
+    CoreCond -> coreCond
+    CoreIdentity -> coreIdentity
+    CoreVerifySPV -> coreVerifySPV

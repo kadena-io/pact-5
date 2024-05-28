@@ -8,6 +8,7 @@ import Control.Monad(when)
 import Control.Monad.Except
 import Control.Monad.IO.Class(liftIO)
 import Data.Default
+import Data.Either(partitionEithers)
 import Data.Text(Text)
 import Data.Maybe(fromMaybe)
 import Data.ByteString.Short(toShort)
@@ -36,6 +37,7 @@ import Pact.Core.Persistence
 import Pact.Core.IR.Term
 import Pact.Core.Info
 import Pact.Core.Namespace
+import Pact.Core.ModRefs
 import qualified Pact.Core.Legacy.LegacyPactValue as Legacy
 
 import qualified PackageInfo_pact_tng as PI
@@ -369,15 +371,16 @@ envExecConfig :: NativeFunction ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envExecConfig info b _env = \case
   [VList s] -> do
     s' <- traverse go (V.toList s)
-    replEvalEnv . eeFlags .= S.fromList s'
-    let reps = PString . flagRep <$> s'
+    let (knownFlags, _unkownFlags) = partitionEithers s'
+    -- TODO: Emit warnings of unkown flags
+    replEvalEnv . eeFlags .= S.fromList knownFlags
+    let reps = PString . flagRep <$> knownFlags
     return (VList (V.fromList reps))
     where
     go str = do
       str' <- asString info b str
-      case M.lookup str' flagReps of
-        Just f -> pure f
-        Nothing -> failInvariant info $ "Invalid flag, allowed: " <> T.pack (show (M.keys flagReps))
+      maybe (pure $ Right str') (pure . Left) (M.lookup str' flagReps)
+      --failInvariant info $ "Invalid flag, allowed: " <> T.pack (show (M.keys flagReps))
   args -> argsError info b args
 
 envNamespacePolicy :: NativeFunction ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -507,6 +510,14 @@ coreEnforceVersion info b _env = \case
         Left _msg -> throwExecutionError info (EnforcePactVersionParseFailure s)
         Right li -> pure (V.makeVersion li)
 
+envModuleAdmin ::  NativeFunction ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+envModuleAdmin info b _env = \case
+  [VModRef modRef] -> do
+    let modName = _mrModule modRef
+    (esCaps . csModuleAdmin) %== S.insert modName
+    return $ VString $ "Acquired module admin for: " <> renderModuleName modName
+  args -> argsError info b args
+
 
 
 replBuiltinEnv
@@ -560,3 +571,4 @@ replCoreBuiltinRuntime = \case
     REnforcePactVersionMin -> coreEnforceVersion
     REnforcePactVersionRange -> coreEnforceVersion
     REnvEnableReplNatives -> envEnableReplNatives
+    REnvModuleAdmin -> envModuleAdmin

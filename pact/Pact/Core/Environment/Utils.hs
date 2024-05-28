@@ -105,17 +105,6 @@ throwExecutionError i e = do
   st <- useEvalState esStack
   throwError (PEExecutionError e st i)
 
--- %%%%%%%
--- +throwRecoverableError :: MonadEval b i m => i -> Text -> m a
--- +throwRecoverableError i e = throwError (PERecoverableError (RecoverableError e) i)
--- +
---  throwExecutionError' :: (MonadEval b i m) => EvalError -> m a
--- %%%%%%%
---  throwRecoverableError :: MonadEval b i m => i -> Text -> m a
---  throwRecoverableError i e = throwError (PERecoverableError (RecoverableError e) i)
-
---  throwExecutionError' :: (MonadEval b i m) => EvalError -> m a
--- %%%%%%%
 throwRecoverableError :: MonadEval b i m => i -> Text -> m a
 throwRecoverableError i e = throwError (PERecoverableError (RecoverableError e) i)
 

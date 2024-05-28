@@ -30,6 +30,11 @@ flag with-crypto
   manual: True
   default: True
 
+flag with-tracing
+  description: Enable Tracing primitives
+  manual: True
+  default: True
+
 common pact-common
   build-depends:
     , Decimal
@@ -73,6 +78,7 @@ common pact-common
     , scientific
     , serialise
     , cborg
+    , clock
     , unordered-containers
     , groups
     , mod
@@ -117,6 +123,9 @@ library pact-crypto
 library
   import: pact-common
   hs-source-dirs: pact
+
+  if (flag(with-tracing))
+    cpp-options: -DWITH_TRACING
 
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
