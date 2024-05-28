@@ -892,7 +892,7 @@ coreReadInteger info b cont handler _env = \case
             returnCEKValue cont handler (VInteger p)
           -- See [Note: Parsed Integer]
           Just (PString raw) -> do
-            chargeGasArgs info $ GStrOp $ StrOpLength $ T.length raw
+            chargeGasArgs info $ GStrOp $ StrOpConvToInt $ T.length raw
             case parseNumLiteral raw of
               Just (LInteger i) -> returnCEKValue cont handler (VInteger i)
               _ -> returnCEK cont handler (VError "read-integer failure" info)
@@ -943,7 +943,7 @@ coreReadDecimal info b cont handler _env = \case
           -- See [Note: Parsed Decimal]
           Just (PInteger i) -> returnCEKValue cont handler (VDecimal (Decimal 0 i))
           Just (PString raw) -> do
-            chargeGasArgs info $ GStrOp $ StrOpLength $ T.length raw
+            chargeGasArgs info $ GStrOp $ StrOpConvToInt $ T.length raw
             case parseNumLiteral raw of
               Just (LInteger i) -> returnCEKValue cont handler (VDecimal (Decimal 0 i))
               Just (LDecimal l) -> returnCEKValue cont handler (VDecimal l)
