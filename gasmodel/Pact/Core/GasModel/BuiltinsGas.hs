@@ -472,7 +472,7 @@ benchDistinct pdb =
 benchReadOp :: T.Text -> BuiltinBenches
 benchReadOp readOp pdb =
   [ runNativeBenchmarkPreparedEnvMod (msgBody obj) [("k", key)] pdb title [text|($readOp k)|]
-  | (title, PObject obj) <- take 3 $ enumExpObject 1_000 100
+  | (title, PObject obj) <- take 3 $ enumExpObjectWithStrings 100 1_000 100
   , let key = fieldToValue $ last $ M.keys obj
   ]
 
