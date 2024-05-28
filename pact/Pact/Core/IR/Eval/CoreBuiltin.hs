@@ -1280,7 +1280,7 @@ coreIntToStr info b cont handler _env = \case
 coreStrToInt :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreStrToInt info b cont handler _env = \case
   [VString s] -> do
-    chargeGasArgs info $ GStrOp $ StrOpLength $ T.length s
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
     checkLen info s
     doBase info cont handler 10 s
   args -> argsError info b args
@@ -1289,13 +1289,13 @@ coreStrToIntBase :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step
 coreStrToIntBase info b cont handler _env = \case
   [VInteger base, VString s]
     | base == 64 -> do
-        chargeGasArgs info $ GStrOp $ StrOpLength $ T.length s
+        chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
         checkLen info s
         case decodeBase64UrlUnpadded $ T.encodeUtf8 s of
           Left{} -> throwExecutionError info (DecodeError "invalid b64 encoding")
           Right bs -> returnCEKValue cont handler $ VInteger (bsToInteger bs)
     | base >= 2 && base <= 16 -> do
-        chargeGasArgs info $ GStrOp $ StrOpLength $ T.length s
+        chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
         checkLen info s
         doBase info cont handler base s
     | otherwise -> returnCEK cont handler (VError "Base value must be >= 2 and <= 16, or 64" info)
