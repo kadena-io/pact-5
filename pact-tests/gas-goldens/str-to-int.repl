@@ -1,0 +1,5 @@
+(str-to-int 16 "abcdef123456")
+
+(str-to-int "123456")
+
+(str-to-int 64 "q80")

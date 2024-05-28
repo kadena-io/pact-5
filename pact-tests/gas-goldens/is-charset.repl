@@ -1,0 +1,5 @@
+(is-charset CHARSET_ASCII "hello world")
+
+(is-charset CHARSET_ASCII "I am nÖt ascii")
+
+(is-charset CHARSET_LATIN1 "I am nÖt ascii, but I am latin1!")

@@ -1,0 +1,13 @@
+(module T G
+  (defcap G () true)
+
+  (defschema table-schema
+    "test schema"
+    col1: integer
+    col2: string)
+
+  (deftable test-table:{table-schema})
+)
+
+
+(create-table test-table)

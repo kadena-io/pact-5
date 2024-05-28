@@ -49,8 +49,7 @@ replTestDir :: [Char]
 replTestDir = "pact-tests" </> "pact-tests"
 
 replTestFiles :: IO [FilePath]
-replTestFiles = do
-  filter (\f -> isExtensionOf "repl" f || isExtensionOf "pact" f) <$> getDirectoryContents replTestDir
+replTestFiles = filter (\f -> isExtensionOf "repl" f || isExtensionOf "pact" f) <$> getDirectoryContents replTestDir
 
 runFileReplTest :: Interpreter -> TestName -> TestTree
 runFileReplTest interp file = testCase file $ do
