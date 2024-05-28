@@ -100,8 +100,7 @@ intCostUpperBound = 664
 integerBits :: Integer -> Int
 integerBits = \case
   IS _ -> 64 -- note: Small ints are machine word sized
-  IP wa -> I# (wordArraySize# wa)
-  IN wa -> I# (wordArraySize# wa)
+  i -> I# (IntLog.integerLog2# (abs i))
 {-# INLINE integerBits #-}
 
 
