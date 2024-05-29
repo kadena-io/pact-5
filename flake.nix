@@ -4,6 +4,7 @@
   inputs = {
     hs-nix-infra.url = "github:kadena-io/hs-nix-infra";
     flake-utils.url = "github:numtide/flake-utils";
+    nix-bundle-exe = { url = "github:3noch/nix-bundle-exe"; flake = false; };
   };
 
   nixConfig = {
@@ -11,7 +12,7 @@
     trusted-public-keys = "nixcache.chainweb.com:FVN503ABX9F8x8K0ptnc99XEz5SaA4Sks6kNcZn2pBY= iohk.cachix.org-1:DpRUyj7h7V830dp/i6Nti+NEO2/nhblbov/8MW7Rqoo= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=";
   };
 
-  outputs = { self, flake-utils, hs-nix-infra }:
+  outputs = inputs@{ self, flake-utils, hs-nix-infra, ... }:
     flake-utils.lib.eachSystem
       [ "x86_64-linux" "x86_64-darwin"
         "aarch64-linux" "aarch64-darwin"
@@ -52,6 +53,8 @@
       '';
     in rec {
       packages.pact-binary = flake.packages."pact-tng:exe:pact";
+      packages.pact-binary-bundle = pkgs.callPackage inputs.nix-bundle-exe {}
+        packages.pact-binary;
       packages.pact-gasmodel = flake.packages."pact-tng:exe:gasmodel";
       packages.pact-tests = flake.checks."pact-tng:test:core-tests".overrideAttrs (old: {
         PACT_CORE_NIXBUILD=packages.pact-binary.exePath;
