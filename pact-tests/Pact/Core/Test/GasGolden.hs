@@ -107,7 +107,7 @@ fileNameToOp = M.fromList [(v,k) | (k, v) <- M.toList opToFileName]
 runGasTest :: FilePath -> IO (Maybe MilliGas)
 runGasTest file = do
   src <- T.readFile file
-  pdb <-  mockPactDb serialisePact_repl_spaninfo
+  pdb <- mockPactDb serialisePact_repl_spaninfo
   gasLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replCoreBuiltinMap
   let ee' = ee & eeGasModel .~ replTableGasModel (maxBound :: MilliGasLimit)
