@@ -67,6 +67,7 @@ import Pact.Core.Gas
 import Pact.Core.Errors
 import Pact.Core.Debug
 import Pact.Core.Environment
+import Pact.Core.Type
 import qualified Pact.Core.IR.Term as Term
 import qualified Pact.Core.Syntax.ParseTree as Syntax
 
@@ -153,7 +154,7 @@ instance MonadEvalState b SpanInfo (ReplM b) where
 instance HasEvalState (ReplState b) b SpanInfo where
   evalState = replEvalState
 
-instance (Pretty b, Show b) => PhaseDebug b SpanInfo (ReplM b) where
+instance (Pretty b) => PhaseDebug b SpanInfo (ReplM b) where
   debugPrint dp term = do
     case dp of
       DPLexer -> whenReplFlagSet ReplDebugLexer $ liftIO $ do
@@ -170,8 +171,6 @@ instance (Pretty b, Show b) => PhaseDebug b SpanInfo (ReplM b) where
           liftIO $ do
             putStrLn "----------- Desugar output ---------------"
             print (pretty t)
-            print (show t)
-            print $ "At span information: " <> show (view Term.termInfo t)
         _ -> pure ()
 
 
@@ -276,7 +275,7 @@ replCompletion natives =
     ModuleData md _ ->
       Term.defName <$> Term._mDefs md
     InterfaceData iface _ ->
-      fmap Term._dcName $ mapMaybe (preview Term._IfDConst) $ Term._ifDefns iface
+      fmap (_argName . Term._dcSpec) $ mapMaybe (preview Term._IfDConst) $ Term._ifDefns iface
   toPrefixed m =
     concat $ prefixF <$> M.toList m
   prefixF (mn, ems) = let
@@ -306,8 +305,11 @@ replError (SourceCode srcFile src) pe =
       colMarker = T.replicate (maxPad+1) " " <> "| " <> T.replicate (_liStartColumn pei) " " <> T.replicate (max 1 (_liEndColumn pei - _liStartColumn pei)) "^"
       errRender = renderText pe
       fileErr = file <> ":" <> T.pack (show (_liStartLine pei + 1)) <> ":" <> T.pack (show (_liStartColumn pei)) <> ": "
-  in T.unlines ([fileErr <> errRender] ++ slice ++ [colMarker])
+  in T.unlines ([fileErr <> errRender] ++ slice ++ [colMarker, sfRender])
   where
+  sfRender = case viewErrorStack pe of
+    [] -> mempty
+    sfs -> renderText' $ vsep (("  at" <+>) . pretty <$> sfs)
   padLeft t pad = T.replicate (pad - (T.length t)) " " <> t <> " "
   -- Zip the line number with the source text, and apply the number padding correctly
   withLine st pad lns = zipWith (\i e -> padLeft (T.pack (show i)) pad <> "| " <> e) [st+1..] lns

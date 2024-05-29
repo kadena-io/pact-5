@@ -12,6 +12,7 @@ import Control.Monad.IO.Class(liftIO)
 import Data.Default
 import Data.Text(Text)
 import Data.Maybe(fromMaybe)
+import Data.Either (partitionEithers)
 import Data.ByteString.Short(toShort)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -29,9 +30,11 @@ import Pact.Core.Names
 import Pact.Core.IR.Eval.CoreBuiltin
 import Pact.Core.Pretty
 import Pact.Core.Environment
+import Pact.Core.Verifiers
 import Pact.Core.PactValue
 import Pact.Core.Gas
 import Pact.Core.Guards
+import Pact.Core.ModRefs
 import Pact.Core.Capabilities
 import Pact.Core.Errors
 import Pact.Core.Persistence
@@ -78,14 +81,15 @@ coreExpect info b cont handler _env = \case
                 returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
             else returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
           _ -> returnCEK cont handler (VError "evaluation within expect did not return a pact value" info)
-      Right (VError errMsg _) ->
-        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> "evaluation of actual failed with error message: " <> errMsg
+      Right (VError errMsg _) -> do
+        putEvalState es
+        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> " evaluation of actual failed with error message: " <> errMsg
       Right _v ->
         returnCEK cont handler $ VError "FAILURE: expect expression did not return a pact value for comparison" info
       Left err -> do
         putEvalState es
         currSource <- use replCurrSource
-        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> "evaluation of actual failed with error message:\n" <>
+        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> " evaluation of actual failed with error message:\n" <>
           replError currSource err
   args -> argsError info b args
 
@@ -271,7 +275,7 @@ envSigs info b cont handler _env = \case
       Just sigs -> do
         (replEvalEnv . eeMsgSigs) .= M.fromList (V.toList sigs)
         returnCEKValue cont handler $ VString "Setting transaction signatures/caps"
-      Nothing -> returnCEK cont handler (VError ("env-sigs format is wrong") info)
+      Nothing -> returnCEK cont handler (VError ("env-sigs: Expected object with 'key': string, 'caps': [capability]") info)
     where
     keyCapObj = \case
       PObject o -> do
@@ -282,6 +286,27 @@ envSigs info b cont handler _env = \case
         caps <- traverse (preview _PCapToken) capsListPV
         let cts = over ctName fqnToQualName <$> caps
         pure (PublicKeyText kt, S.fromList (V.toList cts))
+      _ -> Nothing
+  args -> argsError info b args
+
+envVerifiers :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+envVerifiers info b cont handler _env = \case
+  [VList ks] ->
+    case traverse verifCapObj ks of
+      Just sigs -> do
+        (replEvalEnv . eeMsgVerifiers) .= M.fromList (V.toList sigs)
+        returnCEKValue cont handler $ VString "Setting transaction verifiers/caps"
+      Nothing -> returnCEK cont handler (VError ("env-verifiers: Expected object with 'name': string, 'caps': [capability]") info)
+    where
+    verifCapObj = \case
+      PObject o -> do
+        keyRaw <- M.lookup (Field "name") o
+        kt <- preview (_PLiteral . _LString) keyRaw
+        capsRaw <- M.lookup (Field "caps") o
+        capsListPV <- preview _PList capsRaw
+        caps <- traverse (preview _PCapToken) capsListPV
+        let cts = over ctName fqnToQualName <$> caps
+        pure (VerifierName kt, S.fromList (V.toList cts))
       _ -> Nothing
   args -> argsError info b args
 
@@ -304,14 +329,24 @@ begin' info mt = do
   replTx .= ((,mt) <$> mTxId)
   return ((,mt) <$> mTxId)
 
+emptyTxState :: ReplM b ()
+emptyTxState = do
+  fqdefs <- useEvalState (esLoaded . loAllLoaded)
+  cs <- useEvalState esStack
+  esc <- useEvalState esCheckRecursion
+  let newEvalState =
+        set esStack cs
+        $ set (esLoaded . loAllLoaded) fqdefs
+        $ set esCheckRecursion esc def
+  replEvalState .= newEvalState
+
+
 commitTx :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 commitTx info b cont handler _env = \case
   [] -> do
     pdb <- use (replEvalEnv . eePactDb)
     _txLog <- liftDbFunction info (_pdbCommitTx pdb)
-    fqdefs <- useEvalState (esLoaded . loAllLoaded)
-    cs <- useEvalState esStack
-    replEvalState .= set esStack cs (set (esLoaded . loAllLoaded) fqdefs def)
+    emptyTxState
     use replTx >>= \case
       Just tx -> do
         replTx .= Nothing
@@ -325,9 +360,7 @@ rollbackTx info b cont handler _env = \case
   [] -> do
     pdb <- use (replEvalEnv . eePactDb)
     liftDbFunction info (_pdbRollbackTx pdb)
-    fqdefs <- useEvalState (esLoaded . loAllLoaded)
-    cs <- useEvalState esStack
-    replEvalState .= set esStack cs (set (esLoaded . loAllLoaded) fqdefs def)
+    emptyTxState
     use replTx >>= \case
       Just tx -> do
         replTx .= Nothing
@@ -364,22 +397,24 @@ envExecConfig :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInf
 envExecConfig info b cont handler _env = \case
   [VList s] -> do
     s' <- traverse go (V.toList s)
-    replEvalEnv . eeFlags .= S.fromList s'
-    let reps = PString . flagRep <$> s'
+    let (knownFlags, _unkownFlags) = partitionEithers s'
+    -- TODO: Emit warnings of unkown flags
+    replEvalEnv . eeFlags .= S.fromList knownFlags
+    let reps = PString . flagRep <$> knownFlags
     returnCEKValue cont handler (VList (V.fromList reps))
     where
     go str = do
       str' <- asString info b str
-      case M.lookup str' flagReps of
-        Just f -> pure f
-        Nothing -> failInvariant info $ "Invalid flag, allowed: " <> T.pack (show (M.keys flagReps))
+      maybe (pure $ Right str') (pure . Left) (M.lookup str' flagReps)
+      --failInvariant info $ "Invalid flag, allowed: " <> T.pack (show (M.keys flagReps))
+
   args -> argsError info b args
 
 envNamespacePolicy :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envNamespacePolicy info b cont handler _env = \case
   [VBool allowRoot, VClosure (C clo)] -> do
     pdb <- viewEvalEnv eePactDb
-    let qn = QualifiedName (_cloFnName clo) (_cloModName clo)
+    let qn = fqnToQualName (_cloFqName clo)
     when (_cloArity clo /= 2) $ failInvariant info "Namespace manager function has invalid argument length"
     getModuleMember info pdb qn >>= \case
       Dfun _ -> do
@@ -466,6 +501,15 @@ envGasModel info b cont handler _env = \case
     let newmodel' = constantGasModel (gasToMilliGas (Gas (fromIntegral arg))) (_gmGasLimit gm)
     replEvalEnv . eeGasModel .= newmodel'
     returnCEKValue cont handler $ VString $ "Set gas model to " <> _gmDesc newmodel'
+  args -> argsError info b args
+
+
+envModuleAdmin :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+envModuleAdmin info b cont handler _env = \case
+  [VModRef modRef] -> do
+    let modName = _mrModule modRef
+    (esCaps . csModuleAdmin) %== S.insert modName
+    returnCEKValue cont handler $ VString $ "Acquired module admin for: " <> renderModuleName modName
   args -> argsError info b args
 
 
@@ -556,3 +600,5 @@ replCoreBuiltinRuntime = \case
     REnforcePactVersionMin -> coreEnforceVersion
     REnforcePactVersionRange -> coreEnforceVersion
     REnvEnableReplNatives -> envEnableReplNatives
+    REnvModuleAdmin -> envModuleAdmin
+    REnvVerifiers -> envVerifiers

@@ -547,6 +547,8 @@ nativeGasTable = MilliGas . \case
     basicWorkGas
   CoreCond -> basicWorkGas
   CoreIdentity -> basicWorkGas
+  CoreVerifySPV -> 100_000
+  CoreEnforceVerifier -> 10_000
 
 replNativeGasTable :: ReplBuiltin CoreBuiltin -> MilliGas
 replNativeGasTable = \case

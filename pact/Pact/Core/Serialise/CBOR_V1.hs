@@ -11,6 +11,9 @@ module Pact.Core.Serialise.CBOR_V1
   , encodeDefPactExec, decodeDefPactExec
   , encodeNamespace, decodeNamespace
   , encodeRowData, decodeRowData
+  -- only used for legacy translation
+  , encodeModuleName
+  , encodeModuleHash
   ) where
 
 import Codec.Serialise.Class
@@ -56,6 +59,13 @@ decodeModuleData_repl_spaninfo bs = either (const Nothing) (Just . snd) (deseria
 
 decodeModuleData_raw_spaninfo :: ByteString -> Maybe (ModuleData CoreBuiltin SpanInfo)
 decodeModuleData_raw_spaninfo bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
+
+
+encodeModuleName :: ModuleName -> ByteString
+encodeModuleName = toStrictByteString . encode
+
+encodeModuleHash :: ModuleHash -> ByteString
+encodeModuleHash = toStrictByteString . encode
 
 encodeKeySet :: KeySet -> ByteString
 encodeKeySet = toStrictByteString . encode
@@ -179,9 +189,9 @@ instance Serialise (Governance Name) where
     1 -> CapGov <$> decode
     _ -> fail "unexpected decoding"
 
-instance Serialise ty => Serialise (Arg ty) where
-  encode (Arg n ty) = encode n <> encode ty
-  decode = Arg <$> decode <*> decode
+instance (Serialise ty, Serialise i) => Serialise (Arg ty i) where
+  encode (Arg n ty i) = encode n <> encode ty <> encode i
+  decode = Arg <$> decode <*> decode <*> decode
 
 
 instance Serialise Decimal where
@@ -249,6 +259,7 @@ instance
   encode (Try t1 t2 i) = encodeWord 10 <> encode t1 <> encode t2 <> encode i
   encode (ObjectLit o i) = encodeWord 11 <> encode o <> encode i
   encode (CapabilityForm cf i) = encodeWord 12 <> encode cf <> encode i
+  encode (InlineValue pv i) = encodeWord 13 <> encode pv <> encode i
 
   decode = decodeWord >>= \case
     0 -> Var <$> decode <*> decode
@@ -264,24 +275,23 @@ instance
     10 -> Try <$> decode <*> decode <*> decode
     11 -> ObjectLit <$> decode <*> decode
     12 -> CapabilityForm <$> decode <*> decode
+    -- Internal term used for back. compat pact < 5
+    13 -> InlineValue <$> decode <*> decode
     _ -> fail "unexpected decoding"
 
 instance
   (Serialise b, Serialise i)
   =>Serialise (Defun Name Type b i) where
-  encode (Defun n args ret term i) = encode n <> encode args <> encode ret
-                                     <> encode term <> encode i
+  encode (Defun spec args term i) = encode spec <> encode args <> encode term <> encode i
 
-  decode = Defun <$> decode <*> decode <*> decode
-           <*> decode <*> decode
+  decode = Defun <$> decode <*> decode <*> decode <*> decode
 
 instance
   (Serialise b, Serialise i)
   => Serialise (DefConst Name Type b i) where
-  encode (DefConst n ret term i) = encode n <> encode ret
-                                   <> encode term <> encode i
+  encode (DefConst spec term i) = encode spec <> encode term <> encode i
 
-  decode = DefConst <$> decode <*> decode <*> decode <*> decode
+  decode = DefConst <$> decode <*> decode <*> decode
 
 instance (Serialise b, Serialise i) => Serialise (ConstVal (Term Name Type b i)) where
   encode = \case
@@ -347,17 +357,15 @@ instance Serialise (DefCapMeta (FQNameRef Name)) where
     _ -> fail "unexpected decoding"
 
 instance (Serialise b, Serialise i) => Serialise (DefCap Name Type b i) where
-  encode (DefCap n args ret term meta i) =
-    encode n
+  encode (DefCap spec args term meta i) =
+    encode spec
     <> encode args
-    <> encode ret
     <> encode term
     <> encode meta
     <> encode i
 
   decode = DefCap <$> decode <*> decode
-           <*> decode <*> decode
-           <*> decode <*> decode
+           <*> decode <*> decode <*> decode
 
 
 instance Serialise i => Serialise (DefSchema Type i) where
@@ -386,10 +394,10 @@ instance
 instance
   (Serialise b, Serialise i)
   => Serialise (DefPact Name Type b i) where
-  encode (DefPact n args ret steps i) = encode n <> encode args
-    <> encode ret <> encode steps <> encode i
+  encode (DefPact spec args steps i) = encode spec <> encode args
+    <> encode steps <> encode i
 
-  decode = DefPact <$> decode <*> decode <*> decode <*> decode <*> decode
+  decode = DefPact <$> decode <*> decode <*> decode <*> decode
 
 instance
   (Serialise b, Serialise i)
@@ -497,27 +505,24 @@ instance
 instance
   Serialise i
   => Serialise (IfDefun Type i) where
-  encode (IfDefun n args ret i) = encode n <> encode args <> encode ret
-                                  <> encode i
+  encode (IfDefun spec args i) = encode spec <> encode args <> encode i
 
-  decode = IfDefun <$> decode <*> decode
-           <*> decode <*> decode
+  decode = IfDefun <$> decode <*> decode <*> decode
 
 instance
   Serialise i
   => Serialise (IfDefCap name Type i) where
-  encode (IfDefCap n args ret meta i) = encode n <> encode args
-                                   <> encode ret <> encode meta <> encode i
+  encode (IfDefCap spec args meta i) = encode spec <> encode args
+                                   <> encode meta <> encode i
 
-  decode = IfDefCap <$> decode <*> decode <*> decode <*> decode <*> decode
+  decode = IfDefCap <$> decode <*> decode <*> decode <*> decode
 
 instance
   Serialise i
   => Serialise (IfDefPact Type i) where
-  encode (IfDefPact n args ret i) = encode n <> encode args
-                                    <> encode ret <> encode i
+  encode (IfDefPact spec args i) = encode spec <> encode args <> encode i
 
-  decode = IfDefPact <$> decode <*> decode <*> decode <*> decode
+  decode = IfDefPact <$> decode <*> decode <*> decode
 
 instance
   (Serialise b, Serialise i)
@@ -691,6 +696,8 @@ instance Serialise CoreBuiltin where
     CoreFloorPrec -> encodeWord 127
     CoreCond -> encodeWord 128
     CoreIdentity -> encodeWord 129
+    CoreVerifySPV -> encodeWord 130
+    CoreEnforceVerifier -> encodeWord 131
 
   decode = decodeWord >>= \case
     0 -> pure CoreAdd
@@ -825,6 +832,8 @@ instance Serialise CoreBuiltin where
     127 -> pure CoreFloorPrec
     128 -> pure CoreCond
     129 -> pure CoreIdentity
+    130 -> pure CoreVerifySPV
+    131 -> pure CoreEnforceVerifier
     _ -> fail "unexpected decoding"
 
 

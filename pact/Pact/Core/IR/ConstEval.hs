@@ -38,7 +38,7 @@ evalModuleDefConsts bEnv (Module mname mgov defs blessed imports implements mhas
       DConst dc -> case _dcTerm dc of
         TermConst term -> do
           pv <- Eval.eval PSysOnly bEnv term
-          pv' <- maybeTCType (_dcInfo dc) pv (_dcType dc)
+          pv' <- maybeTCType (_dcInfo dc) pv (_argType $ _dcSpec dc)
           pure (DConst (set dcTerm (EvaledConst pv') dc))
         EvaledConst _ -> pure defn
       _ -> pure defn
@@ -64,7 +64,7 @@ evalIfaceDefConsts bEnv (Interface ifname ifdefns imps ifh info) = do
       IfDConst dc -> case _dcTerm dc of
         TermConst term -> do
           pv <- Eval.eval PSysOnly bEnv term
-          let dn = _dcName dc
+          let dn = _argName $ _dcSpec dc
               fqn = FullyQualifiedName ifname dn ifh
           loAllLoaded %== M.insert fqn (DConst dc)
           pure (IfDConst (set dcTerm (EvaledConst pv) dc))

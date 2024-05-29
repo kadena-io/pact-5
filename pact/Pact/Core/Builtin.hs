@@ -213,6 +213,8 @@ data CoreBuiltin
   | CoreDec
   | CoreCond
   | CoreIdentity
+  | CoreVerifySPV
+  | CoreEnforceVerifier
   deriving (Eq, Show, Ord, Bounded, Enum, Generic)
 
 instance NFData CoreBuiltin
@@ -380,9 +382,11 @@ coreBuiltinToText = \case
   CoreDec -> "dec"
   CoreCond -> "cond"
   CoreIdentity -> "identity"
+  CoreVerifySPV -> "verify-spv"
+  CoreEnforceVerifier -> "enforce-verifier"
 
 -- | Our `CoreBuiltin` user-facing representation.
--- note: `coreBuiltinToUserText`
+-- note: `coreBuiltinToUserText` is primarily for pretty printing
 coreBuiltinToUserText :: CoreBuiltin -> Text
 coreBuiltinToUserText = \case
   -- Addition
@@ -526,6 +530,8 @@ coreBuiltinToUserText = \case
   CoreDec -> "dec"
   CoreCond -> "cond"
   CoreIdentity -> "identity"
+  CoreVerifySPV -> "verify-spv"
+  CoreEnforceVerifier -> "enforce-verifier"
 
 instance IsBuiltin CoreBuiltin where
   builtinName = NativeName . coreBuiltinToText
@@ -675,6 +681,8 @@ instance IsBuiltin CoreBuiltin where
     CoreDec -> 1
     CoreCond -> 1
     CoreIdentity -> 1
+    CoreVerifySPV -> 2
+    CoreEnforceVerifier -> 1
 
 
 coreBuiltinNames :: [Text]
@@ -734,6 +742,8 @@ data ReplBuiltins
   | REnforcePactVersionMin
   | REnforcePactVersionRange
   | REnvEnableReplNatives
+  | REnvModuleAdmin
+  | REnvVerifiers
   deriving (Show, Enum, Bounded, Eq, Generic)
 
 
@@ -779,6 +789,8 @@ instance IsBuiltin ReplBuiltins where
     REnforcePactVersionMin -> 1
     REnforcePactVersionRange -> 2
     REnvEnableReplNatives -> 1
+    REnvModuleAdmin -> 1
+    REnvVerifiers -> 1
 
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
@@ -859,6 +871,8 @@ replBuiltinsToText = \case
   REnforcePactVersionMin -> "enforce-pact-version"
   REnforcePactVersionRange -> "enforce-pact-version-range"
   REnvEnableReplNatives -> "env-enable-repl-natives"
+  REnvModuleAdmin -> "env-module-admin"
+  REnvVerifiers -> "env-verifiers"
 
 replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
 replBuiltinToText f = \case

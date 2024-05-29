@@ -12,10 +12,9 @@ module Pact.Core.LanguageServer
 
 import Control.Lens hiding (Iso)
 import Control.Monad.Except
-
 import Language.LSP.Server
 import Language.LSP.Protocol.Message
-import Language.LSP.Protocol.Lens (uri, textDocument, params, text, position)
+import Language.LSP.Protocol.Lens (uri, textDocument, params, text, position, newName)
 import Language.LSP.Protocol.Types
 import Language.LSP.VFS
 import Language.LSP.Diagnostics
@@ -38,9 +37,9 @@ import Pact.Core.Builtin
 import Pact.Core.Errors
 import Pact.Core.Serialise
 import Pact.Core.Pretty (renderText)
-
 import System.IO (stderr)
 import qualified Data.Text.IO as T
+import qualified Data.Text as T
 import System.Exit
 
 import Control.Monad.Reader (ReaderT, runReaderT, ask)
@@ -53,6 +52,7 @@ import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import Pact.Core.IR.Term
 import Pact.Core.LanguageServer.Utils
+import Pact.Core.LanguageServer.Renaming
 import Pact.Core.Repl.Runtime.ReplBuiltin
 import Pact.Core.Repl.BuiltinDocs
 import Pact.Core.Repl.UserDocs
@@ -131,6 +131,7 @@ startLSP = do
       -- request handler
       , documentHoverRequestHandler
       , documentDefinitionRequestHandler
+      , documentRenameRequestHandler
       ]
 
 debug :: MonadIO m => Text -> m ()
@@ -291,6 +292,7 @@ documentDefinitionRequestHandler = requestHandler SMethod_TextDocumentDefinition
       Just x -> resp (Right $ InL $ Definition (InL x))
       Nothing -> resp (Right $ InR $ InR Null)
 
+
 documentHoverRequestHandler :: Handlers LSM
 documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req resp ->
   getState >>= \st -> do
@@ -319,6 +321,30 @@ documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req re
         debug "documentHover: could not find term on position"
         resp (Right (InR Null))
 
+documentRenameRequestHandler :: Handlers LSM
+documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req resp ->
+  getState >>= \st -> do
+    let
+        uri' = req ^. params . textDocument . uri
+        nuri = req ^. params . textDocument . uri . to toNormalizedUri
+        pos = req ^. params . position
+        nName = req ^. params . newName
+        tls = fromMaybe [] $ view (lsTopLevel . at nuri) st
+        toTextEdit r = TextEdit r nName
+
+    case getRenameSpanInfo tls <$> getMatch pos tls of
+      Nothing -> do
+        debug "documentRenameRequestHandler: could not find term at position"
+        resp (Right (InR Null))
+      Just changePos -> do
+        debug $ "documentRenameRequestHandler: got " <> sshow (length changePos) <> " changes"
+        let changes = InL . toTextEdit . spanInfoToRange <$> changePos
+            te = TextDocumentEdit
+                 (OptionalVersionedTextDocumentIdentifier uri' $ InR Null)
+                 changes
+            we = WorkspaceEdit Nothing (Just [InL te]) Nothing
+        resp (Right (InL we))
+
 processFile
   :: BuiltinEnv CEKSmallStep ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
   -> SourceCode
@@ -337,3 +363,6 @@ processFile replEnv (SourceCode _ source) = do
       let act = [ds] <$ evalTopLevel replEnv tlFinal deps
       catchError act (const (pure []))
     _ -> pure []
+
+sshow :: Show a => a -> Text
+sshow = T.pack . show

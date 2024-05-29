@@ -566,10 +566,10 @@ benchComposeCapability pdb =
   [ C.bgroup "flat"
     [ runNativeBenchmarkPreparedStMod stMod [("c", theCapTok)] pdb title "(compose-capability c)"
     | (title, cnt) <- take 3 $ enumExpNum 1_000 10
-    , let sf = StackFrame mempty gmModuleName SFDefcap
+    , let sf = StackFrame (mkGasModelFqn "") [] SFDefcap ()
           theCapName = T.pack $ "theCap" <> show cnt
           theCapTok = PCapToken $ CapToken (mkGasModelFqn theCapName) []
-          theCapDef = DCap $ DefCap theCapName [] Nothing (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
+          theCapDef = DCap $ DefCap (Arg theCapName Nothing ()) [] (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
           capToksStack = [ CapToken (fqnToQualName $ mkGasModelFqn $ T.pack $ show n) [] | n <- [0..cnt] ]
           manageds = [ ManagedCap ct ct (AutoManaged False)
                      | n <- [0..cnt]
@@ -582,10 +582,10 @@ benchComposeCapability pdb =
     | (cntTitle, cnt) <- take 3 $ enumExpNum 10 10
     , (argTitle, pv) <- take 3 $ enumExpListDeep 2 5 3
     , let title = cntTitle <> "_" <> argTitle
-          sf = StackFrame mempty gmModuleName SFDefcap
+          sf = StackFrame (mkGasModelFqn "") [] SFDefcap ()
           theCapName = T.pack $ "theCap" <> show cnt
           theCapTok = PCapToken $ CapToken (mkGasModelFqn theCapName) [pv, PInteger (-1)]
-          theCapDef = DCap $ DefCap theCapName [Arg "a" Nothing, Arg "b" Nothing] Nothing (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
+          theCapDef = DCap $ DefCap (Arg theCapName Nothing ()) [Arg "a" Nothing (), Arg "b" Nothing ()] (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
           capToksStack = [ CapToken (fqnToQualName $ mkGasModelFqn theCapName) [pv, PInteger n] | n <- [0..cnt] ]
           manageds = [ ManagedCap ct ct (AutoManaged False)
                      | n <- [0..cnt]
@@ -600,7 +600,7 @@ benchInstallCapability pdb =
   [ C.bgroup "flat"
     [ runNativeBenchmarkPreparedStMod (stManaged manageds <> stAddDef "theCap" theCapDef) [("c", capTok)] pdb title "(install-capability c)"
     | let capTok = PCapToken $ CapToken (mkGasModelFqn "theCap") []
-          theCapDef = DCap $ DefCap "theCap" [] Nothing (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
+          theCapDef = DCap $ DefCap (Arg "theCap" Nothing ()) [] (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
     , (title, cnt) <- take 3 $ enumExpNum 1_000 100
     , let manageds = [ ManagedCap ct ct (AutoManaged False)
                      | n <- [0..cnt]
@@ -609,7 +609,7 @@ benchInstallCapability pdb =
     ]
   , C.bgroup "nested"
     [ runNativeBenchmarkPreparedStMod (stManaged manageds <> stAddDef "theCap" theCapDef) [("c", capTok)] pdb title "(install-capability c)"
-    | let theCapDef = DCap $ DefCap "theCap" [Arg "a1" Nothing, Arg "a2" Nothing] Nothing (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
+    | let theCapDef = DCap $ DefCap (Arg "theCap" Nothing ()) [Arg "a1" Nothing (), Arg "a2" Nothing ()] (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
           capFqn = mkGasModelFqn "theCap"
     , (cntTitle, cnt) <- take 3 $ enumExpNum 10 10
     , (argTitle, pv) <- take 3 $ enumExpListDeep 3 5 3
@@ -649,8 +649,8 @@ benchEmitEvent :: BuiltinBenches
 benchEmitEvent pdb = [ runNativeBenchmarkPreparedStMod stMod [("c", capTok)] pdb "novar" "(emit-event c)" ]
   where
   capTok = PCapToken $ CapToken (mkGasModelFqn "theCap") []
-  theCapDef = DCap $ DefCap "theCap" [] Nothing (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
-  sf = StackFrame mempty gmModuleName SFDefcap
+  theCapDef = DCap $ DefCap (Arg "theCap" Nothing ()) [] (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
+  sf = StackFrame (mkGasModelFqn "") [] SFDefcap ()
   stMod = stAddDef "theCap" theCapDef <> stStack [sf]
 
 benchCreatePrincipal :: BuiltinBenches

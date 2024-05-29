@@ -16,12 +16,10 @@ module Pact.Core.Errors
  , PactError(..)
  , ArgTypeError(..)
  , peInfo
- , liftDbFunction
+ , viewErrorStack
  ) where
 
 import Control.Lens hiding (ix)
-import Control.Monad.Except(MonadError(..))
-import Control.Monad.IO.Class(MonadIO(..))
 import Control.Exception
 import Data.Text(Text)
 import Data.Dynamic (Typeable)
@@ -39,6 +37,7 @@ import Pact.Core.Gas
 import Pact.Core.Pretty as Pretty
 import Pact.Core.Hash
 import Pact.Core.Persistence
+import Pact.Core.StackFrame
 import Pact.Core.DefPacts.Types
 
 
@@ -201,7 +200,18 @@ instance Pretty DesugarError where
       Pretty.hsep ["rollbacks aren't allowed on the last step in:", pretty mn]
     ExpectedFreeVariable t ->
       Pretty.hsep ["Expected free variable in expression, found locally bound: ", pretty t]
-    e -> pretty (show e)
+    -- Todo: pretty these
+    e@InvalidManagedArg{} -> pretty (show e)
+    e@NotImplemented{} -> pretty (show e)
+    e@InvalidImports{} -> pretty (show e)
+    e@InvalidImportModuleHash{} -> pretty (show e)
+    -- todo: maybe this is a syntaxError???
+    e@InvalidSyntax{} -> pretty (show e)
+    e@InvalidDefInSchemaPosition{} -> pretty (show e)
+    e@InvalidDynamicInvoke{} -> pretty (show e)
+    e@DuplicateDefinition{} -> pretty (show e)
+    e@InvalidBlessedHash{} -> pretty (show e)
+    -- e -> pretty (show e)
 
 -- | Argument type mismatch meant for errors
 --   that does not force you to show the whole PactValue
@@ -219,11 +229,11 @@ instance NFData ArgTypeError
 instance Pretty ArgTypeError where
   pretty = \case
     ATEPrim p -> Pretty.brackets $ pretty p
-    ATEList -> "[list]"
-    ATEObject -> "[object]"
-    ATETable -> "[table]"
-    ATEClosure -> "[closure]"
-    ATEModRef -> "[modref]"
+    ATEList -> "list"
+    ATEObject -> "object"
+    ATETable -> "table"
+    ATEClosure -> "closure"
+    ATEModRef -> "modref"
 
 
 -- | All fatal execution errors which should pause
@@ -325,16 +335,16 @@ data EvalError
   | NestedDefpactsNotAdvanced DefPactId
   | ExpectedPactValue
   | NotInDefPactExecution
-  | GuardEnforceError Text
   | NamespaceInstallError Text
   | DefineNamespaceError Text
   -- ^ Non-recoverable guard enforces.
-  | ConstIsNotAPactValue QualifiedName
   | PointNotOnCurve
   | YieldProvenanceDoesNotMatch Provenance [Provenance]
   | MismatchingKeysetNamespace NamespaceName
   | EnforcePactVersionFailure V.Version (Maybe V.Version)
   | EnforcePactVersionParseFailure Text
+  | RuntimeRecursionDetected QualifiedName
+  | SPVVerificationFailure Text
   deriving (Show, Generic)
 
 instance NFData EvalError
@@ -438,7 +448,42 @@ instance Pretty EvalError where
       [ "Enforce pact-version failed:"
       , "Could not parse " <> pretty str <> ", expect list of dot-separated integers"
       ]
-    e -> pretty (show e)
+    -- Todo: Fix each case
+    e@ModRefNotRefined{} -> pretty (show e)
+    e@InvalidDefKind{} -> pretty (show e)
+    e@NoSuchDef{} -> pretty (show e)
+    e@InvalidManagedCap{} -> pretty (show e)
+    e@CapNotInstalled{} -> pretty (show e)
+    e@CapAlreadyInstalled{} -> pretty (show e)
+    e@NameNotInScope{} -> pretty (show e)
+    e@DefIsNotClosure{} -> pretty (show e)
+    e@NoSuchKeySet{} -> pretty (show e)
+    e@CannotUpgradeInterface{} -> pretty (show e)
+    e@ModuleGovernanceFailure{} -> pretty (show e)
+    e@DbOpFailure{} -> pretty (show e)
+    e@DynNameIsNotModRef{} -> pretty (show e)
+    e@ModuleDoesNotExist{} -> pretty (show e)
+    e@ExpectedModule{} -> pretty (show e)
+    e@HashNotBlessed{} -> pretty (show e)
+    e@CannotApplyPartialClosure{} -> pretty (show e)
+    e@ClosureAppliedToTooManyArgs{} -> pretty (show e)
+    e@FormIllegalWithinDefcap{} -> pretty (show e)
+    e@RunTimeTypecheckFailure{} -> pretty (show e)
+    e@NativeIsTopLevelOnly{} -> pretty (show e)
+    e@EventDoesNotMatchModule{} -> pretty (show e)
+    e@InvalidEventCap{} -> pretty (show e)
+    e@NestedDefpactsNotAdvanced{} -> pretty (show e)
+    e@ExpectedPactValue{} -> pretty (show e)
+    e@NotInDefPactExecution{} -> pretty (show e)
+    e@NamespaceInstallError{} -> pretty (show e)
+    e@DefineNamespaceError{} -> pretty (show e)
+    e@PointNotOnCurve{} -> pretty (show e)
+    e@YieldProvenanceDoesNotMatch{} -> pretty (show e)
+    e@MismatchingKeysetNamespace{} -> pretty (show e)
+    e@RuntimeRecursionDetected{} -> pretty (show e)
+    e@SPVVerificationFailure{} -> pretty (show e)
+
+
 
 instance Exception EvalError
 
@@ -448,7 +493,7 @@ data PactError info
   | PEDesugarError DesugarError info
   -- | PETypecheckError TypecheckError info
   -- | PEOverloadError OverloadError info
-  | PEExecutionError EvalError info
+  | PEExecutionError EvalError [StackFrame info] info
   deriving (Show, Functor, Generic)
 
 instance NFData info => NFData (PactError info)
@@ -458,9 +503,10 @@ instance Pretty (PactError info) where
     PELexerError e _ -> pretty e
     PEParseError e _ -> pretty e
     PEDesugarError e _ -> pretty e
-    PEExecutionError e _ -> pretty e
+    PEExecutionError e _ _ ->
+      pretty e
 
-peInfo :: Lens (PactError info) (PactError info') info info'
+peInfo :: Lens (PactError info) (PactError info) info info
 peInfo f = \case
   PELexerError le info ->
     PELexerError le <$> f info
@@ -468,16 +514,13 @@ peInfo f = \case
     PEParseError pe <$> f info
   PEDesugarError de info ->
     PEDesugarError de <$> f info
-  PEExecutionError ee info ->
-    PEExecutionError ee <$> f info
+  PEExecutionError ee stack info ->
+    PEExecutionError ee stack <$> f info
+
+viewErrorStack :: PactError info -> [StackFrame info]
+viewErrorStack = \case
+  PEExecutionError _ stack _ -> stack
+  _ -> []
 
 instance (Show info, Typeable info) => Exception (PactError info)
 
-liftDbFunction
-  :: (MonadError (PactError i) m, MonadIO m)
-  => i
-  -> IO a
-  -> m a
-liftDbFunction info action = do
-  e <- liftIO $ catch (Right <$> action) (pure . Left . DbOpFailure)
-  either (throwError . (`PEExecutionError` info)) pure e

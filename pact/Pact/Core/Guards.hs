@@ -108,7 +108,7 @@ data KSPredicate
   = KeysAll
   | Keys2
   | KeysAny
-  | CustomPredicate ParsedTyName 
+  | CustomPredicate ParsedTyName
   deriving (Eq, Show, Ord, Generic)
 
 instance NFData KSPredicate

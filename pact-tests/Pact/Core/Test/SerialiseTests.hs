@@ -41,7 +41,7 @@ tests = testGroup "Serialise Roundtrip"
     , testProperty "Field" $ serialiseRoundtrip fieldGen
     , testProperty "Schema" $ serialiseRoundtrip schemaGen
     , testProperty "Types" $ serialiseRoundtrip typeGen
-    , testProperty "Arg" $ serialiseRoundtrip argGen
+    , testProperty "Arg" $ serialiseRoundtrip (argGen infoGen)
     , testProperty "Import" $ serialiseRoundtrip importGen
     , testProperty "SpanInfo" $ serialiseRoundtrip infoGen
     , testProperty "Builtin" $ serialiseRoundtrip builtinGen

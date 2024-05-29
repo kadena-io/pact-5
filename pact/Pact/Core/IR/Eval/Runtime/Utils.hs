@@ -50,7 +50,6 @@ module Pact.Core.IR.Eval.Runtime.Utils
 import Control.Lens
 import Control.Monad(when)
 import Control.Monad.IO.Class
-import Control.Monad.Except(MonadError(..))
 import Data.IORef
 import Data.Foldable(find, toList)
 import Data.Maybe(listToMaybe)
@@ -125,7 +124,7 @@ maybeTCType i pv = maybe (pure pv) (typecheckArgument i pv)
 findCallingModule :: (MonadEval b i m) => m (Maybe ModuleName)
 findCallingModule = do
   stack <- useEvalState esStack
-  pure $ listToMaybe $ fmap _sfModule stack
+  pure $ listToMaybe $ fmap (_fqModule . _sfName) stack
 
 calledByModule
   :: (MonadEval b i m)
@@ -133,14 +132,17 @@ calledByModule
   -> m Bool
 calledByModule mn = do
   stack <- useEvalState esStack
-  case find (\sf -> _sfModule sf == mn) stack of
+  case find (\sf -> (_fqModule . _sfName) sf == mn) stack of
     Just _ -> pure True
     Nothing -> pure False
 
+-- | Throw an invariant failure, that is
+-- an error which we do not expect to see during regular pact
+-- execution. If this case is ever hit, we have a problem with
+-- some invalid state in interpretation
 failInvariant :: MonadEval b i m => i -> Text -> m a
-failInvariant i b =
-  let e = PEExecutionError (InvariantFailure b) i
-  in throwError e
+failInvariant i reason =
+  throwExecutionError i (InvariantFailure reason)
 
 -- Todo: MaybeT cleans this up
 getCallingModule :: (MonadEval b i m) => i -> m (EvalModule b i)
@@ -160,13 +162,13 @@ safeTail [] = []
 isExecutionFlagSet :: (MonadEval b i m) => ExecutionFlag -> m Bool
 isExecutionFlagSet flag = viewsEvalEnv eeFlags (S.member flag)
 
-evalStateToErrorState :: EvalState b i -> ErrorState
+evalStateToErrorState :: EvalState b i -> ErrorState i
 evalStateToErrorState es =
-  ErrorState (_esCaps es) (_esStack es)
+  ErrorState (_esCaps es) (_esStack es) (_esCheckRecursion es)
 
-restoreFromErrorState :: ErrorState -> EvalState b i -> EvalState b i
-restoreFromErrorState (ErrorState caps stack) =
-  set esCaps caps . set esStack stack
+restoreFromErrorState :: ErrorState i -> EvalState b i -> EvalState b i
+restoreFromErrorState (ErrorState caps stack recur) =
+  set esCaps caps . set esStack stack . set esCheckRecursion recur
 
 checkNonLocalAllowed :: (MonadEval b i m) => i -> m ()
 checkNonLocalAllowed info = do

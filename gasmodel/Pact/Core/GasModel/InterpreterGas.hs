@@ -113,7 +113,7 @@ nullaryGas = simpleTermGas (Nullary unitConst ()) "Nullary Node"
 
 letGas :: CoreDb ->  C.Benchmark
 letGas =
-  let letBind = Let (Arg "_" Nothing) unitConst unitConst ()
+  let letBind = Let (Arg "_" Nothing ()) unitConst unitConst ()
   in simpleTermGas letBind "Let Node"
 
 constantExample :: CoreTerm -> CEKValue CEKSmallStep CoreBuiltin () Eval
@@ -158,7 +158,7 @@ constExpr pdb = do
                     , _ceInCap=False
                     , _ceDefPactStep=ps
                     , _ceBuiltins=benchmarkBigStepEnv }
-    let lamTerm = Lam (NE.fromList [Arg "_" Nothing, Arg "_" Nothing]) (Var (Name "boop" (NBound 1)) ()) ()
+    let lamTerm = Lam (NE.fromList [Arg "_" Nothing (), Arg "_" Nothing ()]) (Var (Name "boop" (NBound 1)) ()) ()
     let term = App lamTerm [Constant (LInteger 1) (), Constant (LInteger 2) ()] ()
     pure (term, es, ee, env)
 
@@ -192,7 +192,7 @@ gasLamNArgs n pdb =
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
     let es = defaultGasEvalState
-        mkArg i = Arg ("Arg#" <> T.pack (show i)) Nothing
+        mkArg i = Arg ("Arg#" <> T.pack (show i)) Nothing ()
         args = mkArg <$> [1..n]
         term = Lam (NE.fromList args) (Constant LUnit ()) ()
         ps = _eeDefPactStep ee
@@ -278,13 +278,13 @@ createUserGuardGasNArgs nArgs pdb =
   where
   title = "Create User Guard, " <> show nArgs <> " args"
   mkEnv = do
-    let args =  [ Arg ("_foo" <> T.pack (show i)) Nothing| i <- [2..nArgs] ]
+    let args =  [ Arg ("_foo" <> T.pack (show i)) Nothing () | i <- [2..nArgs] ]
     ee <- liftIO $ defaultGasEvalEnv pdb
     let mn = ModuleName "foomodule" Nothing
         mh = ModuleHash (pactHash "foo")
         fqn = FullyQualifiedName mn "foo" mh
-        dfun = Defun "foo" args Nothing unitConst ()
-        es = over (esLoaded . loAllLoaded) (M.insert fqn (Dfun dfun)) $ def
+        dfun = Defun (Arg "foo" Nothing ()) args unitConst ()
+        es = over (esLoaded . loAllLoaded) (M.insert fqn (Dfun dfun)) def
         name = Name "foo" (NTopLevel mn mh)
         term = CapabilityForm (CreateUserGuard name (replicate nArgs unitConst)) ()
         ps = _eeDefPactStep ee
@@ -355,7 +355,7 @@ gasMtWithHandlerValue pdb = do
                     , _ceInCap=False
                     , _ceDefPactStep=ps
                     , _ceBuiltins=benchmarkEnv }
-        handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
+        handler = CEKHandler env unitConst Mt (ErrorState def [] (pure def)) CEKNoHandler
     pure (ee, es, frame, handler, value)
 
 -- Gas for a lambda with N
@@ -375,7 +375,7 @@ gasMtWithHandlerError pdb =
                     , _ceInCap=False
                     , _ceDefPactStep=ps
                     , _ceBuiltins=benchmarkEnv }
-        handler = CEKHandler env unitConst Mt (ErrorState def []) CEKNoHandler
+        handler = CEKHandler env unitConst Mt (ErrorState def [] (pure def)) CEKNoHandler
     pure (ee, es, frame, handler, value)
 
 gasArgsWithRemainingArgs :: PactDb CoreBuiltin () -> C.Benchmark
@@ -1157,7 +1157,8 @@ gasCapBodyC pdb =
                     , _ceBuiltins=benchmarkEnv }
 
         value = VUnit
-        frame = CapBodyC PopCapInvoke env () Nothing Nothing unitConst Mt
+        cbState = CapBodyState PopCapInvoke Nothing Nothing unitConst
+        frame = CapBodyC env () cbState Mt
         handler = CEKNoHandler
     pure (ee, es, frame, handler, value)
 
@@ -1174,11 +1175,10 @@ gasCapPopCInvoke pdb =
                     , _ceInCap=False
                     , _ceDefPactStep=ps
                     , _ceBuiltins=benchmarkEnv }
-        -- capTokenFqn = CapToken (mkGasModelFqn gmDcapManagedName) [PInteger 1]
-        -- capTokenQnFiltered = CapToken (QualifiedName gmDcapManagedName gmModuleName) []
         capTokenQn = CapToken (QualifiedName gmDcapManagedName gmModuleName) [PInteger 1]
         es' = over (esCaps . csSlots) (CapSlot capTokenQn [] :) es
-        frame = CapBodyC PopCapInvoke env () Nothing Nothing unitConst Mt
+        cbState = CapBodyState PopCapInvoke Nothing Nothing unitConst
+        frame = CapBodyC env () cbState Mt
         handler = CEKNoHandler
         value = VUnit
     pure (ee, es', frame, handler, value)
@@ -1196,11 +1196,10 @@ gasCapPopCComposed pdb =
                     , _ceInCap=False
                     , _ceDefPactStep=ps
                     , _ceBuiltins=benchmarkEnv }
-        -- capTokenFqn = CapToken (mkGasModelFqn gmDcapManagedName) [PInteger 1]
-        -- capTokenQnFiltered = CapToken (QualifiedName gmDcapManagedName gmModuleName) []
         capTokenQn = CapToken (QualifiedName gmDcapManagedName gmModuleName) [PInteger 1]
         es' = over (esCaps . csSlots) (CapSlot capTokenQn [] :) es
-        frame = CapBodyC PopCapComposed env () Nothing Nothing unitConst Mt
+        cbState = CapBodyState PopCapInvoke Nothing Nothing unitConst
+        frame = CapBodyC env () cbState Mt
         handler = CEKNoHandler
         value = VUnit
     pure (ee, es', frame, handler, value)
@@ -1213,8 +1212,6 @@ gasIgnoreValueC pdb =
   mkEnv = do
     ee <- defaultGasEvalEnv pdb
     let es = defaultGasEvalState
-        -- capTokenFqn = CapToken (mkGasModelFqn gmDcapManagedName) [PInteger 1]
-        -- capTokenQnFiltered = CapToken (QualifiedName gmDcapManagedName gmModuleName) []
         frame = IgnoreValueC PUnit Mt
         handler = CEKNoHandler
         value = VUnit

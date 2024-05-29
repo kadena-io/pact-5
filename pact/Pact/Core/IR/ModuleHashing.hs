@@ -223,8 +223,7 @@ encodeApp operator operands =
   parens $ hsep (operator:operands)
 
 encodeSchema :: Schema -> Builder
-encodeSchema (Schema n _sc) =
-  encodeQualName n
+encodeSchema (Schema n _sc) = encodeQualName n
 
 encodePrim :: PrimType -> Builder
 encodePrim = \case
@@ -256,11 +255,11 @@ encodeImport (Import mname mmh mimps) = parens $
   <> maybe mempty (lpad . encodeModuleHash) mmh
   <> maybe mempty (lpad . list . fmap encodeText) mimps
 
-encodeArg :: Arg Type -> Builder
-encodeArg (Arg n mty) =
+encodeArg :: Arg Type i -> Builder
+encodeArg (Arg n mty _) =
   T.encodeUtf8Builder n <> maybe mempty ((":" <>) . encodeType) mty
 
-encodeArgList :: [Arg Type] -> Builder
+encodeArgList :: [Arg Type i] -> Builder
 encodeArgList li =
   parens $ hsep $ encodeArg <$> li
 
@@ -323,6 +322,7 @@ encodeTerm = \case
       "with-capability" <+> encodeTerm cap <+> encodeTerm body
     CreateUserGuard n args ->
       "with-capability" <+> encodeName n <+> hsep (encodeTerm <$> args)
+  InlineValue{} -> mempty
 
 encodeTyAnn :: Maybe Type -> Builder
 encodeTyAnn = maybe mempty ((":" <>) . encodeType)
@@ -337,18 +337,18 @@ encodeDef mn = \case
   DPact d -> encodeDefPact d
 
 encodeDefun :: IsBuiltin b => Defun Name Type b i -> Builder
-encodeDefun (Defun defnName args rty term _) = parens $
+encodeDefun (Defun (Arg defnName rty _) args term _) = parens $
   "defun" <+> encodeText defnName <> encodeTyAnn rty <+> encodeArgList args <+> encodeTerm term
 
 encodeDefConst :: IsBuiltin b => DefConst Name Type b i -> Builder
-encodeDefConst (DefConst dcn dcty cv _i) = parens $
+encodeDefConst (DefConst (Arg dcn dcty _) cv _i) = parens $
   "defconst" <+> encodeText dcn <> encodeTyAnn dcty <+> go cv
   where
   go (TermConst term) = encodeTerm term
   go (EvaledConst pv) = encodePactValue pv
 
 encodeDefPact :: IsBuiltin b => DefPact Name Type b i -> Builder
-encodeDefPact (DefPact dpn args rty steps _i) = parens $
+encodeDefPact (DefPact (Arg dpn rty _) args steps _i) = parens $
   "defpact" <+> encodeText dpn <> encodeTyAnn rty <+> encodeArgList args <+>
     hsep (encodeStep <$> NE.toList steps)
   where
@@ -358,7 +358,7 @@ encodeDefPact (DefPact dpn args rty steps _i) = parens $
 
 -- todo: defcap meta
 encodeDefCap :: IsBuiltin b => DefCap Name Type b i -> Builder
-encodeDefCap (DefCap dn args rty term _meta _info) = parens $
+encodeDefCap (DefCap (Arg dn rty _) args term _meta _info) = parens $
   "defcap" <+> encodeText dn <> encodeTyAnn rty <+> encodeArgList args <+> encodeTerm term
 
 encodeDefSchema :: ModuleName -> DefSchema Type info -> Builder
@@ -370,16 +370,16 @@ encodeDefTable (DefTable dtn (ResolvedTable sc) _i) = parens $
   "deftable" <+> encodeText dtn <> ":" <> braces (encodeSchema sc)
 
 encodeIfDefun :: IfDefun Type info -> Builder
-encodeIfDefun (IfDefun dn args rty _i) = parens $
+encodeIfDefun (IfDefun (Arg dn rty _) args _i) = parens $
   "defun" <+> encodeText dn <> encodeTyAnn rty <+> encodeArgList args
 
 -- todo: defcap meta
 encodeIfDefCap :: IfDefCap Name Type info -> Builder
-encodeIfDefCap (IfDefCap dn args rty _meta _i) = parens $
+encodeIfDefCap (IfDefCap (Arg dn rty _) args  _meta _i) = parens $
   "defcap" <+> encodeText dn <> encodeTyAnn rty <+> encodeArgList args
 
 encodeIfDefPact :: IfDefPact Type info -> Builder
-encodeIfDefPact (IfDefPact dn args rty _i) = parens $
+encodeIfDefPact (IfDefPact (Arg dn rty _) args _i) = parens $
   "defpact" <+> encodeText dn <> encodeTyAnn rty <+> encodeArgList args
 
 encodeIfDef :: IsBuiltin b => ModuleName -> IfDef Name Type b i -> Builder

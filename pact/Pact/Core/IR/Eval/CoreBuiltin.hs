@@ -68,6 +68,7 @@ import Pact.Core.Capabilities
 import Pact.Core.Namespace
 import Pact.Core.Gas
 import Pact.Core.Type
+import Pact.Core.Verifiers
 #ifndef WITHOUT_CRYPTO
 import Pact.Core.Crypto.Pairing
 import Pact.Core.Crypto.Hash.Poseidon
@@ -78,6 +79,7 @@ import Pact.Core.IR.Eval.Runtime
 import Pact.Core.StableEncoding
 import Pact.Core.IR.Eval.CEK
 import Pact.Core.SizeOf
+import Pact.Core.SPV
 
 import qualified Pact.Core.Pretty as Pretty
 import qualified Pact.Core.Principal as Pr
@@ -1183,15 +1185,26 @@ requireCapability info b cont handler _env = \case
     requireCap info cont handler ct
   args -> argsError info b args
 
+enforceStackTopIsDefcap
+  :: (MonadEval b i m)
+  => i
+  -> b
+  -> m ()
+enforceStackTopIsDefcap info b = do
+  let (NativeName n) = builtinName b
+  let errMsg = "native execution failed, native must be called within a defcap body: " <> n
+  useEvalState esStack >>= \case
+      sf:_ -> do
+        when (_sfFnType sf /= SFDefcap) $
+          throwExecutionError info (EvalError errMsg)
+      _ ->
+        throwExecutionError info (EvalError errMsg)
+
 composeCapability :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 composeCapability info b cont handler env = \case
-  [VCapToken ct] ->
-    useEvalState esStack >>= \case
-      sf:_ -> do
-        -- Todo: compose-capability called outside of capability needs a better error
-        when (_sfFnType sf /= SFDefcap) $ failInvariant info "compose-cap"
-        composeCap info cont handler env ct
-      _ -> failInvariant info "compose-cap at the top level"
+  [VCapToken ct] -> do
+    enforceStackTopIsDefcap info b
+    composeCap info cont handler env ct
   args -> argsError info b args
 
 installCapability :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -1717,9 +1730,9 @@ coreDefineNamespace info b cont handler env = \case
           chargeGasArgs info (GWrite (sizeOf SizeOfV0 ns))
           liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
           returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
-        SmartNamespacePolicy _ fun -> getModuleMember info pdb fun >>= \case
-          Dfun d -> do
-            clo <- mkDefunClosure d (_qnModName fun) env
+        SmartNamespacePolicy _ fun -> getModuleMemberWithHash info pdb fun >>= \case
+          (Dfun d, mh) -> do
+            clo <- mkDefunClosure d (qualNameToFqn fun mh) env
             let cont' = BuiltinC env info (DefineNamespaceC ns) cont
             applyLam (C clo) [VString n, VGuard adminG] cont' handler
           _ -> failInvariant info "Fatal error: namespace manager function is not a defun"
@@ -1920,6 +1933,45 @@ poseidonHash info _b _cont _handler _env _args = failInvariant info "crypto disa
 
 #endif
 
+-----------------------------------
+-- SPV
+-----------------------------------
+
+coreVerifySPV :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
+coreVerifySPV info b cont handler _env = \case
+  [VString proofType, VObject o] -> do
+    SPVSupport f _ <- viewEvalEnv eeSPVSupport
+    liftIO (f proofType (ObjectData o)) >>= \case
+      Left err -> throwExecutionError info (SPVVerificationFailure err)
+      Right (ObjectData o') -> returnCEKValue cont handler (VObject o')
+  args -> argsError info b args
+
+-----------------------------------
+-- Verifiers
+-----------------------------------
+coreEnforceVerifier :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
+coreEnforceVerifier info b cont handler _env = \case
+  [VString verName] -> do
+    enforceStackTopIsDefcap info b
+    viewsEvalEnv eeMsgVerifiers (M.lookup (VerifierName verName)) >>= \case
+      Just verCaps -> do
+        verifierInScope <- anyCapabilityBeingEvaluated verCaps
+        if verifierInScope then returnCEKValue cont handler (VBool True)
+        else returnCEK cont handler (VError (verifError verName "not in scope") info)
+      Nothing ->
+        returnCEK cont handler (VError (verifError verName "not in transaction") info)
+  args -> argsError info b args
+  where
+    verifError verName msg = "Verifier failure " <> verName <> ":" <> msg
+
+anyCapabilityBeingEvaluated
+  :: MonadEval b i m
+  => S.Set (CapToken QualifiedName PactValue)
+  -> m Bool
+anyCapabilityBeingEvaluated caps = do
+  capsBeingEvaluated <- useEvalState (esCaps . csCapsBeingEvaluated)
+  return $! any (`S.member` caps) capsBeingEvaluated
+
 
 -----------------------------------
 -- Builtin exports
@@ -2082,3 +2134,5 @@ coreBuiltinRuntime = \case
   CoreDec -> coreDec
   CoreCond -> coreCond
   CoreIdentity -> coreIdentity
+  CoreVerifySPV -> coreVerifySPV
+  CoreEnforceVerifier -> coreEnforceVerifier

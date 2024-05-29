@@ -27,7 +27,7 @@ $psymbol = [\%\#\+\-\_\&\$\@\<\>\=\^\?\*\!\|\/\~]
 @ident = [$alpha $psymbol][$alpha $digit $psymbol]*
 @integer = [\-]?[$digit]+
 @singletick = [\'][$alpha][$alpha $digit \- \_]*
-@comment = [\;][.]*[\n]
+@comment = [\;][.]*[\n]?
 @tc = expect\-typechecks
 @tcfail = expect\-typecheck\-failure
 @steprb = step\-with\-rollback
