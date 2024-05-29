@@ -1,0 +1,11 @@
+(module testmodule g
+  (defcap g () true)
+
+  (defcap ev ()
+    @event
+    1)
+
+    (defun test ()
+      (emit-event (ev))))
+
+(test)

@@ -1,0 +1,20 @@
+
+(module testmodule g
+  (defcap g () true)
+  (defcap testcap () true)
+
+  (defun test ()
+    (require-capability (testcap)))
+
+  (defun callee ()
+    (with-capability (testcap)
+      (test))))
+
+
+
+
+; capability in scope
+(callee)
+
+; failing due to missing capability in scope
+(expect-failure "" (test))

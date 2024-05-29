@@ -1,0 +1,5 @@
+(env-data {"jose": ["key1"]})
+
+(define-keyset 'jose)
+
+(keyset-ref-guard 'jose)

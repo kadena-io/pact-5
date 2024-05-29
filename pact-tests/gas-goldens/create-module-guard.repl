@@ -1,0 +1,8 @@
+
+(module testmod g
+  (defcap g () true)
+
+  (defun test ()
+    (create-module-guard "abc")))
+
+(test)

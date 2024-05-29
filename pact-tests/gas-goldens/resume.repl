@@ -1,0 +1,15 @@
+(module testmodule g
+  (defcap g () true)
+
+  (defschema schema result:string)
+
+  (defpact test ()
+    (step (let ((x:object{schema} {"result": "hi"})) (yield x)))
+    (step (resume {"result" := r} (+ r " Kadena")))))
+    
+
+;; execute first step
+(test)
+
+;; execute second step
+(continue-pact 1)

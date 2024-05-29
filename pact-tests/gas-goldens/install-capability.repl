@@ -1,0 +1,20 @@
+(module testmodule g
+  (defcap g () true)
+
+  (defcap testcap (n: integer)
+    @managed n testcap-mgr
+    true)
+
+  (defun testcap-mgr (curr: integer req: integer)
+    (enforce (>= curr req) "")
+    0)
+
+  (defun test ()
+    (require-capability (testcap 10)))
+
+  (defun callee ()
+    (with-capability (testcap 10)
+      (test))))
+
+(env-sigs [{'key: "pubkey", 'caps: [(testmodule.testcap 10)]}])
+(callee)

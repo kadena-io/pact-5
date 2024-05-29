@@ -1,0 +1,7 @@
+(module testmodule g
+  (defcap g () true)
+
+  (defun test ()
+    (create-capability-guard (g))))
+
+(test)

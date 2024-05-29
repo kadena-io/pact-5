@@ -1,0 +1,4 @@
+(env-data {"ks":{"keys":["jose"],"pred":"="}})
+(env-sigs [{"key":"jose", "caps":[]}])
+
+(enforce-guard (read-keyset "ks"))

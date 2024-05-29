@@ -1,0 +1,9 @@
+(module testmodule g
+  (defcap g () true)
+
+  (defschema schema result:string)
+
+  (defpact test ()
+    (step (pact-id))))
+
+(test)
