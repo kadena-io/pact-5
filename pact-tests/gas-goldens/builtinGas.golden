@@ -45,6 +45,7 @@ drop: 725
 emit-event: 60001070
 enforce-guard: 9725
 enforce-keyset: 9725
+enforce-verifier: 10250
 enumerate: 451
 exp: 10000
 filter: 1257
@@ -77,6 +78,7 @@ not: 139
 not?: 189
 or?: 189
 pact-id: 60000090
+pairing-check: 66999993
 parse-time: 2000
 point-add: 5425
 poseidon-hash-hack-a-chain: 6393700

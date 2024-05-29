@@ -1,4 +1,4 @@
--- | 
+-- |
 
 module Pact.Core.Test.GasGolden
   (tests
@@ -59,10 +59,7 @@ captureBuiltins b = let
   where
     -- todo: exluded as we need to work on the builtin
     excludedBuiltins = S.fromList
-      ["pairing-check"
-      ,"verify-spv"
-      ,"enforce-verifier"
-      ]
+      ["verify-spv"]
 
 lookupOp :: Text -> Text
 lookupOp n = fromMaybe n (M.lookup n fileNameToOp)
