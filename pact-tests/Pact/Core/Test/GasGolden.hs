@@ -27,6 +27,7 @@ import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
+import Data.List (sort)
 import Pact.Core.Gas.TableGasModel
 import Control.Lens
 
@@ -73,7 +74,8 @@ gasGoldenTests c = do
     case mGas of
       Nothing -> fail $ "Could not execute the gas tests for: " <> show fp
       Just (MilliGas consumed) -> pure $ BS.fromStrict $ T.encodeUtf8 (lookupOp fn <> ": " <> T.pack (show consumed))
-  pure (BS.intercalate "\n" gasOutputs)
+  let sortedGasOutputs = sort gasOutputs
+  pure (BS.intercalate "\n" sortedGasOutputs)
 
 
 
