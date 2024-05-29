@@ -61,6 +61,7 @@ captureBuiltins b = let
     excludedBuiltins = S.fromList
       ["pairing-check"
       ,"verify-spv"
+      ,"enforce-verifier"
       ]
 
 lookupOp :: Text -> Text
