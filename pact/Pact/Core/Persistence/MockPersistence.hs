@@ -150,7 +150,7 @@ mockPactDb serial = do
     -> IORef TxId
     -> TxLogQueue
     -> TableName
-    -> GasM (PactError i) ()
+    -> GasM (PactError i) b ()
   createUsrTable stackFrame info refUsrTbl _refTxId _refTxLog tbl = do
     let rd = RowData $ Map.singleton (Field "utModule")
           (PObject $ Map.fromList
@@ -204,7 +204,7 @@ mockPactDb serial = do
     -> Domain k v b i
     -> k
     -> v
-    -> GasM (PactError i) ()
+    -> GasM (PactError i) b ()
   write refKs refMod refNS refUsrTbl refTxId refTxLog refPacts stackFrame info wt domain k v = case domain of
     -- Todo : incrementally serialize other types
     DKeySets -> liftIO $ writeKS refKs refTxId refTxLog k v
@@ -229,7 +229,7 @@ mockPactDb serial = do
     -> WriteType
     -> RowKey
     -> RowData
-    -> GasM (PactError i) ()
+    -> GasM (PactError i) b ()
   writeRowData ref refTxId refTxLog tbl stackFrame info wt k v = checkTable tbl ref *> case wt of
     Write -> do
       encodedData <- _encodeRowData serial stackFrame info v

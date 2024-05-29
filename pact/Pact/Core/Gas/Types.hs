@@ -19,6 +19,7 @@ module Pact.Core.Gas.Types
 
   , GasModel(..)
   , GasArgs(..)
+  , SerializationCosts(..)
 
   , NodeType(..)
   , LinearGasArg(..)
@@ -32,7 +33,15 @@ module Pact.Core.Gas.Types
   , ComparisonType(..)
   , SearchType(..)
 
-  , gmRunModel, gmGasLimit, gmNatives, gmDesc, gmName
+  , gmRunModel
+  , gmGasLimit
+  , gmNatives
+  , gmDesc
+  , gmName
+  , gmSerialize
+
+  , gasMRef
+  , gasMModel
 
   , constantGasModel
   , freeGasModel
@@ -246,6 +255,30 @@ data ConcatType
   -- ^ Upper bound on max object size
   deriving (Show, Generic, NFData)
 
+data SerializationCosts = SerializationCosts
+  { objectKeyCostMilliGasOffset :: Word64
+  , objectKeyCostMilliGasPer1000Chars :: Word64
+  , boolMilliGasCost :: Word64
+  , unitMilliGasCost :: Word64
+  , integerCostMilliGasPerDigit :: Word64
+  , decimalCostMilliGasOffset :: Word64
+  , decimalCostMilliGasPerDigit :: Word64
+  , timeCostMilliGas :: Word64
+  }
+  deriving (Show, Generic, NFData)
+
+freeSerializationCosts :: SerializationCosts
+freeSerializationCosts = SerializationCosts
+  { objectKeyCostMilliGasOffset = 0
+  , objectKeyCostMilliGasPer1000Chars = 0
+  , boolMilliGasCost = 0
+  , unitMilliGasCost = 0
+  , integerCostMilliGasPerDigit = 0
+  , decimalCostMilliGasOffset = 0
+  , decimalCostMilliGasPerDigit = 0
+  , timeCostMilliGas = 0
+  }
+
 data GasModel b
   = GasModel
   { _gmName :: !Text
@@ -253,6 +286,7 @@ data GasModel b
   , _gmNatives :: !(b -> MilliGas)
   , _gmRunModel :: !(GasArgs -> MilliGas)
   , _gmGasLimit :: !MilliGasLimit
+  , _gmSerialize :: !SerializationCosts
   } deriving (Generic, NFData)
 makeLenses ''GasModel
 
@@ -264,23 +298,26 @@ constantGasModel unitPrice gl
   , _gmNatives = const unitPrice
   , _gmRunModel = const unitPrice
   , _gmGasLimit = gl
+  , _gmSerialize = freeSerializationCosts
   }
 
 freeGasModel :: GasModel b
-freeGasModel = constantGasModel mempty (MilliGasLimit (MilliGas maxBound)) -- TODO: some tests seem to charge gas even with freeGasModel.
+freeGasModel = constantGasModel mempty (MilliGasLimit (MilliGas 0))
 
-data GasMEnv
+data GasMEnv b
   = GasMEnv
   { _gasMRef :: IORef MilliGas
-  , _gasMLimit :: MilliGasLimit
-  }
+  , _gasMModel :: GasModel b
+  } deriving (Generic, NFData)
+makeLenses ''GasMEnv
 
-newtype GasM e a
-  = GasM (ReaderT GasMEnv (ExceptT e IO) a)
+newtype GasM e b a
+  = GasM (ReaderT (GasMEnv b) (ExceptT e IO) a)
   deriving
   ( Functor
   , Applicative
   , Monad
-  , MonadReader GasMEnv
+  , MonadReader (GasMEnv b)
   , MonadError e
-  , MonadIO) via (ReaderT GasMEnv (ExceptT e IO))
+  , MonadIO) via (ReaderT (GasMEnv b) (ExceptT e IO))
+

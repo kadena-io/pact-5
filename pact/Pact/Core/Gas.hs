@@ -4,7 +4,7 @@
 
 module Pact.Core.Gas
  ( module Pact.Core.Gas.Types
-  , runGasM
+ , runGasM
  , ignoreGas
  ) where
 
@@ -21,8 +21,8 @@ import Pact.Core.StackFrame
 runGasM
   :: [StackFrame i]
   -> i
-  -> GasMEnv
-  -> GasM (PactError i) a
+  -> GasMEnv b
+  -> GasM (PactError i) b a
   -> IO (Either (PactError i) a)
 runGasM stack info env (GasM m) = do
   res <- try $ runExceptT $ runReaderT m env
@@ -33,12 +33,11 @@ runGasM stack info env (GasM m) = do
 -- | Run a 'GasM' computation with an infinite gas limit.
 ignoreGas
   :: i
-  -> GasM (PactError i) a
+  -> GasM (PactError i) b a
   -> IO a
 ignoreGas info m = do
   gasRef <- newIORef (MilliGas 0)
-  let maxLimit = MilliGasLimit (MilliGas maxBound)
-  runGasM [] info (GasMEnv gasRef maxLimit) m >>=
+  runGasM [] info (GasMEnv gasRef freeGasModel) m >>=
     \case
       Left _ -> error "impossible case: ran out of gas with an infinite limit"
       Right a -> pure a

@@ -55,9 +55,9 @@ dbOpDisallowed :: MonadIO m => m a
 dbOpDisallowed = liftIO $ throwIO OpDisallowed
 
 -- | A utility function that lifts a `GasM` action into a `MonadEval` action.
-liftGasM :: MonadEval b i m => [StackFrame i] -> i -> GasM (PactError i) a -> m a
+liftGasM :: MonadEval b i m => [StackFrame i] -> i -> GasM (PactError i) b a -> m a
 liftGasM stack info action = do
   gasRef <- viewEvalEnv eeGasRef
-  gasLimit <- viewEvalEnv (eeGasModel . gmGasLimit)
+  gasModel <- viewEvalEnv eeGasModel
   either throwError pure =<<
-    liftIO (runGasM stack info (GasMEnv gasRef gasLimit) action)
+    liftIO (runGasM stack info (GasMEnv gasRef gasModel) action)

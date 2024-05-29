@@ -239,7 +239,7 @@ gmLoaded = Loaded
   , _loModules=M.singleton gmModuleName gmModuleData
   , _loAllLoaded=gmFqMap}
 
-prepopulateDb :: Default i => PactDb CoreBuiltin i -> GasM (PactError i) ()
+prepopulateDb :: Default i => PactDb CoreBuiltin i -> GasM (PactError i) CoreBuiltin ()
 prepopulateDb pdb = do
   _ <- liftIO $ _pdbBeginTx pdb Transactional
   _pdbCreateUserTable pdb [] def gasModelTable

@@ -19,6 +19,7 @@ module Pact.Core.Serialise.CBOR_V1
   , encodeModuleHash
   ) where
 
+import Control.Lens
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.Except
@@ -41,7 +42,6 @@ import Pact.Core.Capabilities
 import Pact.Core.ChainData
 import Pact.Core.DefPacts.Types
 import Pact.Core.Gas
-import Pact.Core.Gas.TableGasModel
 import Pact.Core.Guards
 import Pact.Core.Errors
 import Pact.Core.Hash
@@ -105,20 +105,21 @@ decodeNamespace bs =either (const Nothing) (Just . snd) (deserialiseFromBytes de
 
 -- TODO: Do we want a gas log entry here???
 -- most likely not, maybe just pre/post?
-chargeGasMSerialize :: [StackFrame i] -> i -> MilliGas -> GasM (PactError i) ()
+chargeGasMSerialize :: [StackFrame i] -> i -> MilliGas -> GasM (PactError i) b ()
 chargeGasMSerialize stackFrame info amount = do
-  (GasMEnv gasRef mgl@(MilliGasLimit gasLimit)) <- ask
+  GasMEnv gasRef gasModel <- ask
+  let mgl@(MilliGasLimit gasLimit) = _gmGasLimit gasModel
   !currGas <- liftIO $ readIORef gasRef
   let !used = currGas <> amount
   liftIO (writeIORef gasRef used)
   when (used > gasLimit) $ throwError (PEExecutionError (GasExceeded mgl used) stackFrame info)
 
-encodeRowData :: [StackFrame i] -> i -> RowData -> GasM (PactError i) ByteString
+encodeRowData :: [StackFrame i] -> i -> RowData -> GasM (PactError i) b ByteString
 encodeRowData stackFrame info rd = do
   gasSerializeRowData stackFrame info rd
   pure . toStrictByteString $ encode rd
 
-gasSerializeRowData :: forall i. [StackFrame i] -> i -> RowData -> GasM (PactError i) ()
+gasSerializeRowData :: forall i b. [StackFrame i] -> i -> RowData -> GasM (PactError i) b ()
 gasSerializeRowData stackFrame info (RowData fields) = do
 
   -- Charge for keys
@@ -129,7 +130,7 @@ gasSerializeRowData stackFrame info (RowData fields) = do
 
   where
 
-    gasSerializePactValue :: PactValue -> GasM (PactError i) ()
+    gasSerializePactValue :: PactValue -> GasM (PactError i) b ()
     gasSerializePactValue = \case
       PLiteral l -> gasSerializeLiteral l
       PList vs -> do
@@ -143,19 +144,28 @@ gasSerializeRowData stackFrame info (RowData fields) = do
       PCapToken (CapToken name args) -> do
         chargeGasMString (renderText name)
         traverse_ gasSerializePactValue args
-      PTime _ -> chargeGasMSerialize stackFrame info $ MilliGas timeCostMilliGas
+      PTime _ -> do
+        SerializationCosts { timeCostMilliGas } <- view (gasMModel . gmSerialize)
+        chargeGasMSerialize stackFrame info $ MilliGas timeCostMilliGas
 
-    gasSerializeLiteral = \case
-      LString s ->
-        -- See the analysis in `Bench.hs` - `pact-string-2` for details.
-        chargeGasMString s
-      LInteger i ->
-        -- See the analysis in `Bench.hs` - `pact-ineger-2` for details.
-        chargeGasMSerialize stackFrame info $ MilliGas $ integerCostMilliGasPerDigit * fromIntegral (I# (IntLog.integerLogBase# 10 (abs i)))
-      LDecimal d ->
-        chargeGasMSerialize stackFrame info $ MilliGas $ decimalCostMilliGasOffset + decimalCostMilliGasPerDigit * fromIntegral (I# (IntLog.integerLogBase# 10 (decimalMantissa d)))
-      LBool _ -> chargeGasMSerialize stackFrame info $ MilliGas boolMilliGasCost
-      LUnit -> chargeGasMSerialize stackFrame info $ MilliGas unitMilliGasCost
+    gasSerializeLiteral l = do
+      SerializationCosts {
+        boolMilliGasCost,
+        unitMilliGasCost,
+        integerCostMilliGasPerDigit,
+        decimalCostMilliGasOffset,
+        decimalCostMilliGasPerDigit} <- view (gasMModel . gmSerialize)
+      case l of
+        LString s ->
+          -- See the analysis in `Bench.hs` - `pact-string-2` for details.
+          chargeGasMString s
+        LInteger i ->
+          -- See the analysis in `Bench.hs` - `pact-ineger-2` for details.
+          chargeGasMSerialize stackFrame info $ MilliGas $ integerCostMilliGasPerDigit * fromIntegral (I# (IntLog.integerLogBase# 10 (abs i)))
+        LDecimal d ->
+          chargeGasMSerialize stackFrame info $ MilliGas $ decimalCostMilliGasOffset + decimalCostMilliGasPerDigit * fromIntegral (I# (IntLog.integerLogBase# 10 (decimalMantissa d)))
+        LBool _ -> chargeGasMSerialize stackFrame info $ MilliGas boolMilliGasCost
+        LUnit -> chargeGasMSerialize stackFrame info $ MilliGas unitMilliGasCost
 
     gasSerializeGuard = \case
 
@@ -175,32 +185,25 @@ gasSerializeRowData stackFrame info (RowData fields) = do
         chargeGasMString (renderText defpactId)
         chargeGasMString (renderText name)
     
-    gasSerializeKeySet :: KeySet -> GasM (PactError i) ()
+    gasSerializeKeySet :: KeySet -> GasM (PactError i) b ()
     gasSerializeKeySet (KeySet keys pred') = do
       -- See the analysis in `Bench.hs` - `pact-keyset-2` for details.
       chargeGasMString (renderText pred')
       traverse_ (chargeGasMString . renderText) keys
     
-    gasModRef :: ModRef -> GasM (PactError i) ()
+    gasModRef :: ModRef -> GasM (PactError i) b ()
     gasModRef (ModRef name implemented refined) = do
       chargeGasMString (renderText name)
       traverse_ (chargeGasMString . renderText) implemented
       (traverse_ . traverse_) (chargeGasMString . renderText) refined
     
-    chargeGasMString :: Text.Text -> GasM (PactError i) ()
-    chargeGasMString str =
+    chargeGasMString :: Text.Text -> GasM (PactError i) b ()
+    chargeGasMString str = do
+      SerializationCosts {
+        objectKeyCostMilliGasOffset,
+        objectKeyCostMilliGasPer1000Chars
+        } <- view (gasMModel . gmSerialize)
       chargeGasMSerialize stackFrame info $ MilliGas $ objectKeyCostMilliGasOffset + objectKeyCostMilliGasPer1000Chars * fromIntegral (Text.length str) `div` 1000
-
-    SerializationCosts
-          { objectKeyCostMilliGasOffset
-          , objectKeyCostMilliGasPer1000Chars
-          , boolMilliGasCost
-          , unitMilliGasCost
-          , integerCostMilliGasPerDigit
-          , decimalCostMilliGasOffset
-          , decimalCostMilliGasPerDigit
-          , timeCostMilliGas
-          } = serializationCosts
 
 
 decodeRowData :: ByteString -> Maybe RowData

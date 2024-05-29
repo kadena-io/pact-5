@@ -172,9 +172,9 @@ data PactDb b i
   = PactDb
   { _pdbPurity :: !Purity
   , _pdbRead :: forall k v. Domain k v b i -> k -> IO (Maybe v)
-  , _pdbWrite :: forall k v. [StackFrame i] -> i -> WriteType -> Domain k v b i -> k -> v -> GasM (PactError i) ()
+  , _pdbWrite :: forall k v. [StackFrame i] -> i -> WriteType -> Domain k v b i -> k -> v -> GasM (PactError i) b ()
   , _pdbKeys :: forall k v. Domain k v b i -> IO [k]
-  , _pdbCreateUserTable :: [StackFrame i] -> i -> TableName -> GasM (PactError i) ()
+  , _pdbCreateUserTable :: [StackFrame i] -> i -> TableName -> GasM (PactError i) b ()
   , _pdbBeginTx :: ExecutionMode -> IO (Maybe TxId)
   , _pdbCommitTx :: IO [TxLog ByteString]
   , _pdbRollbackTx :: IO ()

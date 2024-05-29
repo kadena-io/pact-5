@@ -178,7 +178,7 @@ rollbackTx db txLog = do
   SQL.exec db "ROLLBACK TRANSACTION"
   writeIORef txLog []
 
-createUserTable :: [StackFrame i] -> i -> PactSerialise b i -> SQL.Database -> IORef [TxLog ByteString] -> TableName -> GasM (PactError i) ()
+createUserTable :: [StackFrame i] -> i -> PactSerialise b i -> SQL.Database -> IORef [TxLog ByteString] -> TableName -> GasM (PactError i) b ()
 createUserTable stack info serial db txLog tbl = do
   let
     rd = RowData $ Map.singleton (Field "utModule")
@@ -210,7 +210,7 @@ write'
   -> Domain k v b i
   -> k
   -> v
-  -> GasM (PactError i) ()
+  -> GasM (PactError i) b ()
 write' serial db txId txLog stack info wt domain k v = do
   case domain of
     DUserTables tbl -> liftIO (checkInsertOk tbl k) >>= \case

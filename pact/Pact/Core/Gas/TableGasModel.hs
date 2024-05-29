@@ -9,7 +9,6 @@ module Pact.Core.Gas.TableGasModel
  , pointAddGas
  , scalarMulGas
  , pairingGas
- , SerializationCosts(..)
  , serializationCosts)
  where
 
@@ -31,7 +30,9 @@ tableGasModel gl =
   , _gmNatives = nativeGasTable
   , _gmName = "table"
   , _gmGasLimit = gl
-  , _gmDesc = "table-based cost model"}
+  , _gmDesc = "table-based cost model"
+  , _gmSerialize = serializationCosts
+  }
 
 replTableGasModel :: MilliGasLimit -> GasModel ReplCoreBuiltin
 replTableGasModel gl =
@@ -577,18 +578,6 @@ dbMetadataTxPenalty :: Word64
 dbMetadataTxPenalty = 100_000
 
 -- PactValue serialization costs
-
-data SerializationCosts = SerializationCosts
-  { objectKeyCostMilliGasOffset :: Word64
-  , objectKeyCostMilliGasPer1000Chars :: Word64
-  , boolMilliGasCost :: Word64
-  , unitMilliGasCost :: Word64
-  , integerCostMilliGasPerDigit :: Word64
-  , decimalCostMilliGasOffset :: Word64
-  , decimalCostMilliGasPerDigit :: Word64
-  , timeCostMilliGas :: Word64
-  }
-
 serializationCosts :: SerializationCosts
 serializationCosts = SerializationCosts
   { objectKeyCostMilliGasOffset = 1
