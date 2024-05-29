@@ -197,7 +197,8 @@ checkSigCaps
   => M.Map PublicKeyText (S.Set (CapToken QualifiedName PactValue))
   -> m (M.Map PublicKeyText (S.Set (CapToken QualifiedName PactValue)))
 checkSigCaps sigs = do
-  granted <- getAllStackCaps
+  capsBeingEvaluated <- useEvalState (esCaps . csCapsBeingEvaluated)
+  granted <- if S.null capsBeingEvaluated then getAllStackCaps else pure capsBeingEvaluated
   autos <- useEvalState (esCaps . csAutonomous)
   -- Pretty much, what this means is:
   -- if you installed a capability from code (using `install-capability`)

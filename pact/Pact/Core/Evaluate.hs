@@ -52,6 +52,7 @@ import Pact.Core.Guards
 import Pact.Core.Namespace
 import Pact.Core.IR.Desugar
 import Pact.Core.SPV
+import Pact.Core.Verifiers
 import qualified Pact.Core.IR.Eval.CEK as Eval
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
@@ -67,10 +68,11 @@ data MsgData = MsgData
   , mdStep :: !(Maybe DefPactStep)
   , mdHash :: !Hash
   , mdSigners :: [Signer QualifiedName PactValue]
+  , mdVerifiers :: [Verifier ()]
   }
 
 initMsgData :: Hash -> MsgData
-initMsgData h = MsgData (PObject mempty) def h mempty
+initMsgData h = MsgData (PObject mempty) def h mempty mempty
 
 builtinEnv :: EvalBuiltinEnv
 builtinEnv = coreBuiltinEnv @Eval.CEKBigStep
@@ -118,6 +120,7 @@ setupEvalEnv pdb mode msgData np spv pd efs = do
   gasRef <- newIORef mempty
   pure $ EvalEnv
     { _eeMsgSigs = mkMsgSigs $ mdSigners msgData
+    , _eeMsgVerifiers = mkMsgVerifiers $ mdVerifiers msgData
     , _eePactDb = pdb
     , _eeMsgBody = mdData msgData
     , _eeHash = mdHash msgData
@@ -133,9 +136,12 @@ setupEvalEnv pdb mode msgData np spv pd efs = do
     }
   where
   mkMsgSigs ss = M.fromList $ map toPair ss
-  toPair (Signer _scheme pubK addr capList) = (pk,S.fromList capList)
     where
-    pk = PublicKeyText $ fromMaybe pubK addr
+    toPair (Signer _scheme pubK addr capList) =
+      (PublicKeyText (fromMaybe pubK addr),S.fromList capList)
+  mkMsgVerifiers vs = M.fromListWith S.union $ map toPair vs
+    where
+    toPair (Verifier vfn _ caps) = (vfn, S.fromList caps)
 
 evalExec :: EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> RawCode -> IO (Either (PactError ()) (EvalResult [Lisp.TopLevel ()]))
 evalExec evalEnv evalSt rc = do

@@ -32,8 +32,6 @@ module Pact.Core.IR.Eval.Runtime.Types
  , CondCont(..)
  , Closure(..)
  , EvalResult(..)
---  , EvalTEnv(..)
---  , emGas, emGasLog, emRuntimeEnv
  , EvalState(..)
  , esStack
  , esCaps, esEvents
@@ -59,7 +57,7 @@ module Pact.Core.IR.Eval.Runtime.Types
  , pattern VTime
  , CapCont(..)
  , CapState(..)
- , csSlots, csManaged
+ , csSlots, csManaged, csCapsBeingEvaluated
  , ManagedCap(..)
  , mcCap, mcManaged, mcOriginalCap
  , ManagedCapType(..)
@@ -76,7 +74,6 @@ module Pact.Core.IR.Eval.Runtime.Types
  , ClosureType(..)
  , ErrorState(..)
  , BuiltinCont(..)
---  , CEKEval(..)
  , CEKReturn(..)
  , CEKEvalResult
  , CEKStepKind(..)
@@ -90,6 +87,9 @@ module Pact.Core.IR.Eval.Runtime.Types
  , CoreCEKValue
  , CoreEvalResult
  , EvalCapType(..)
+ , CapBodyState(..)
+ -- Todo: turn into individual lenses
+ -- this is purely a lazy export
  ) where
 
 import Control.Lens
@@ -100,6 +100,7 @@ import Control.Monad.Except
 import Data.List.NonEmpty(NonEmpty)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
+import Data.Set(Set)
 import Data.Decimal(Decimal)
 import Data.Vector(Vector)
 import Data.RAList(RAList)
@@ -139,9 +140,8 @@ instance (NFData b, NFData i) => NFData (CEKReturn b i m)
 -- | The top level env map
 type CEKTLEnv b i = Map FullyQualifiedName (EvalDef b i)
 
--- | Locally bound variables
--- type CEKEnv step b i m = RAList (CEKValue b i m)
-
+-- | Current interpreter state, including
+--   the runtime execution pact db
 data CEKEnv (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = CEKEnv
   { _ceLocal :: RAList (CEKValue step b i m)
@@ -471,9 +471,20 @@ data CapCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K
 data CapPopState
   = PopCapComposed
   | PopCapInvoke
+  | PopCurrCapEval (Set (CapToken QualifiedName PactValue))
   deriving (Eq, Show, Generic)
 
 instance NFData CapPopState
+
+data CapBodyState b i
+  = CapBodyState
+  { _cbPopState :: !CapPopState
+  , _cbBodyCap :: !(Maybe (CapToken QualifiedName PactValue))
+  , _cbEmittedEvent :: !(Maybe (PactEvent PactValue))
+  , _cbEvalBody :: !(EvalTerm b i)
+  } deriving (Show, Generic)
+
+instance (NFData b, NFData i) => NFData (CapBodyState b i)
 
 data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = Mt
@@ -499,7 +510,7 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
   | CapInvokeC (CEKEnv step b i m) i (CapCont step b i m) (Cont step b i m)
   -- ^ Frame for control flow around argument reduction to with-capability and create-user-guard
-  | CapBodyC CapPopState (CEKEnv step b i m) i (Maybe (CapToken QualifiedName PactValue)) (Maybe (PactEvent PactValue)) (EvalTerm b i) (Cont step b i m)
+  | CapBodyC (CEKEnv step b i m) i {-# UNPACK #-} !(CapBodyState b i) (Cont step b i m)
   -- ^ CapBodyC includes
   --  - what to do after the cap body (pop it, or compose it)
   --  - Is it a user managed cap? If so, include the body token
@@ -508,6 +519,7 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   --  - The rest of the continuation
   | CapPopC CapPopState (Cont step b i m)
   -- ^ What to do after returning from a defcap: do we compose the returned cap, or do we simply pop it from the stack
+  -- or alternatively: after cap evaluation finishes, pop the caps
   | DefPactStepC (CEKEnv step b i m) (Cont step b i m)
   -- ^ Cont frame after a defpact, ensuring we save the defpact to the database and whatnot
   | NestedDefPactStepC (CEKEnv step b i m) (Cont step b i m) DefPactExec
@@ -590,7 +602,9 @@ data ContType
 data EvalCapType
   = NormalCapEval
   | TestCapEval
-  deriving (Show, Eq, Enum, Bounded)
+  deriving (Show, Eq, Enum, Bounded, Generic)
+
+instance NFData EvalCapType
 
 -- | State to preserve in the error handler
 data ErrorState i
