@@ -257,7 +257,7 @@
   "gas supply must be a positive"
   (fund-tx 'emily 'doug (read-keyset 'doug) (- 1.0)))
 
-(env-sigs [{"key": "keys1", "caps": [(GAS)]}])
+(env-sigs [{"key": "keys1", "caps": [(GAS), (DEBIT "emily")]}])
 
 (expect-failure
   "fund-tx fails for insufficient funds"
@@ -275,7 +275,7 @@
 
 (pact-state true)
 
-(env-sigs [{"key": "keys1", "caps": [(GAS),(TRANSFER "emily" "doug" 1.0)]}])
+(env-sigs [{"key": "keys1", "caps": [(GAS),(TRANSFER "emily" "doug" 1.0), (DEBIT "emily")]}])
 
 (expect
   "fund-tx succeeds with gas cap and other cap"
@@ -918,6 +918,10 @@
   (map (remove 'module-hash) (env-events true)))
 
 (test-capability (coin.GAS))
+; note: DEBIT gets injected by chainweb.
+(env-sigs
+  [{ 'key: 'keys2,
+     'caps: [(coin.DEBIT "doug"),(coin.GAS)]}])
 (coin.fund-tx 'doug 'emily (read-keyset 'k) 0.0005)
 (env-data { 'fee: 0.0004 })
 (continue-pact 1)

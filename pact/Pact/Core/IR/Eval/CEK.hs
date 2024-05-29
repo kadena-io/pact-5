@@ -802,6 +802,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) popType ecType c
   if not capInStack then go else evalCEK currCont handler env contbody
   where
   go = do
+    capsBeingEvaluated <- useEvalState (esCaps.csCapsBeingEvaluated)
     d <- getDefCap info fqn
     when (length args /= length (_dcapArgs d)) $ failInvariant info "Dcap argument length mismatch"
     let newLocals = RAList.fromList $ fmap VPactValue (reverse args)
@@ -824,19 +825,25 @@ evalCap info currCont handler env origToken@(CapToken fqn args) popType ecType c
                   Just c -> do
                     let c' = set ctName fqn c
                         emittedEvent = fqctToPactEvent origToken <$ guard (ecType == NormalCapEval)
-                        cont' = CapBodyC popType env info (Just qualCapToken) emittedEvent contbody currCont
-                    installCap info env c' False >>= evalUserManagedCap cont' newLocals capBody
+                        cbState = CapBodyState popType (Just qualCapToken) emittedEvent contbody
+                        contWithCapBody = CapBodyC env info cbState currCont
+                        contWithPop = CapPopC (PopCurrCapEval capsBeingEvaluated) contWithCapBody
+                    installCap info env c' False >>= evalUserManagedCap contWithPop newLocals capBody
                   Nothing ->
                     throwExecutionError info (CapNotInstalled fqn)
               Just managedCap -> do
                 let emittedEvent = fqctToPactEvent origToken <$ guard (ecType == NormalCapEval)
-                let cont' = CapBodyC popType env info (Just qualCapToken) emittedEvent contbody currCont
-                evalUserManagedCap cont' newLocals capBody managedCap
+                let cbState = CapBodyState popType (Just qualCapToken) emittedEvent contbody
+                let contWithCapBody = CapBodyC env info cbState currCont
+                    contWithPop = CapPopC (PopCurrCapEval capsBeingEvaluated) contWithCapBody
+                evalUserManagedCap contWithPop newLocals capBody managedCap
           -- handle autonomous caps
           AutoManagedMeta -> do
             -- Find the capability post-filtering
             let emittedEvent = fqctToPactEvent origToken <$ guard (ecType == NormalCapEval)
-            let cont' = CapBodyC popType env info Nothing emittedEvent contbody currCont
+            let cbState = CapBodyState popType Nothing emittedEvent contbody
+            let contWithCapBody = CapBodyC env info cbState currCont
+                contWithPop = CapPopC (PopCurrCapEval capsBeingEvaluated) contWithCapBody
             mgdCaps <- useEvalState (esCaps . csManaged)
             case find ((==) qualCapToken . _mcCap) mgdCaps of
               Nothing -> do
@@ -844,25 +851,31 @@ evalCap info currCont handler env origToken@(CapToken fqn args) popType ecType c
                 case find (== qualCapToken) msgCaps of
                   Just c -> do
                     let c' = set ctName fqn c
-                    installCap info env c' False >>= evalAutomanagedCap cont' newLocals capBody
+                    installCap info env c' False >>= evalAutomanagedCap contWithPop newLocals capBody
                   Nothing ->
                     throwExecutionError info (CapNotInstalled fqn)
               Just managedCap ->
-                evalAutomanagedCap cont' newLocals capBody managedCap
+                evalAutomanagedCap contWithPop newLocals capBody managedCap
       DefEvent -> do
-        let cont' = CapBodyC popType env info Nothing (Just (fqctToPactEvent origToken)) contbody currCont
+        let cbState = CapBodyState popType Nothing (Just (fqctToPactEvent origToken)) contbody
+        let contWithCapBody = CapBodyC env info cbState currCont
+            contWithPop = CapPopC (PopCurrCapEval capsBeingEvaluated) contWithCapBody
         let inCapEnv = set ceInCap True $ set ceLocal newLocals env
         (esCaps . csSlots) %== (CapSlot qualCapToken []:)
-        sfCont <- pushStackFrame info cont' Nothing capStackFrame
+        (esCaps . csCapsBeingEvaluated) %== S.insert qualCapToken
+        sfCont <- pushStackFrame info contWithPop Nothing capStackFrame
         evalCEK sfCont handler inCapEnv capBody
       -- Not automanaged _nor_ user managed.
       -- Todo: a type that's basically `Maybe` here would save us a lot of grief.
       Unmanaged -> do
-        let cont' = if ecType == NormalCapEval then CapBodyC popType env info Nothing Nothing contbody currCont
+        let cbState = CapBodyState popType Nothing Nothing contbody
+        let contWithBody = if ecType == NormalCapEval then CapBodyC env info cbState currCont
                     else currCont
+            contWithPop = CapPopC (PopCurrCapEval capsBeingEvaluated) contWithBody
             inCapEnv = set ceInCap True $ set ceLocal newLocals env
+        (esCaps . csCapsBeingEvaluated) %== S.insert qualCapToken
         (esCaps . csSlots) %== (CapSlot qualCapToken []:)
-        evalWithStackFrame info cont' handler inCapEnv Nothing capStackFrame capBody
+        evalWithStackFrame info contWithPop handler inCapEnv Nothing capStackFrame capBody
   qualCapName = fqnToQualName fqn
   qualCapToken = CapToken qualCapName args
   capStackFrame = StackFrame fqn args SFDefcap info
@@ -888,6 +901,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) popType ecType c
       -- we pop the current cap stack, then replace the head with the original intended token.
       -- this is done in `CapBodyC` and this is the only way to do this.
       (esCaps . csSlots) %== (CapSlot inCapBodyToken []:)
+      (esCaps . csCapsBeingEvaluated) %== S.insert inCapBodyToken
       sfCont <- pushStackFrame info mgrFunCont Nothing capStackFrame
       evalCEK sfCont handler inCapEnv capBody
     _ -> failInvariant info "Invalid managed cap type"
@@ -898,6 +912,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) popType ecType c
         let newManaged = AutoManaged True
         esCaps . csManaged %== S.union (S.singleton (set mcManaged newManaged managedCap))
         esCaps . csSlots %== (CapSlot qualCapToken []:)
+        (esCaps . csCapsBeingEvaluated) %== S.insert qualCapToken
         let inCapEnv = set ceLocal env' $ set ceInCap True $ env
         sfCont <- pushStackFrame info cont' Nothing capStackFrame
         evalCEK sfCont handler inCapEnv capBody
@@ -1483,7 +1498,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
             let acc' = PObject . _objectData <$> reverse acc
             in returnCEKValue cont handler (VList (V.fromList acc'))
     _ -> returnCEK cont handler (VError "higher order apply did not return a pactvalue" info)
-applyContToValue (CapBodyC cappop env info mcap mevent capbody cont) handler _ = do
+applyContToValue (CapBodyC env info (CapBodyState cappop mcap mevent capbody) cont) handler _ = do
   -- Todo: I think this requires some administrative check?
   chargeGasArgs info (GAConstant unconsWorkNodeGas)
   maybe (pure ()) emitEventUnsafe mevent
@@ -1500,6 +1515,9 @@ applyContToValue (CapBodyC cappop env info mcap mevent capbody cont) handler _ =
       [] -> failInvariant def "In CapBodyC but with no caps in stack"
 
 applyContToValue (CapPopC st cont) handler v = case st of
+  PopCurrCapEval oldSet -> do
+    esCaps . csCapsBeingEvaluated .== oldSet
+    returnCEKValue cont handler v
   PopCapInvoke -> do
     esCaps . csSlots %== safeTail
     returnCEKValue cont handler v

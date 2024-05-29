@@ -10,6 +10,7 @@ import Control.Monad.Except
 import Control.DeepSeq
 import Data.Text (Text)
 import Data.Map.Strict(Map)
+import Data.Default(def)
 import qualified Criterion as C
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
@@ -77,7 +78,8 @@ defaultGasEvalState =
   , _esCheckRecursion = pure (RecursionCheck mempty)
   }
   where
-  capState = CapState [] mempty (S.singleton gmModuleName) mempty
+  capState =
+    def{_csModuleAdmin = S.singleton gmModuleName}
 
 gmModuleName :: ModuleName
 gmModuleName = ModuleName "gasModel" Nothing

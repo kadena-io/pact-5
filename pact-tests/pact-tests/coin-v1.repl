@@ -258,7 +258,7 @@
   "gas supply must be a positive quantity"
   (fund-tx 'emily 'doug (read-keyset 'doug) (- 1.0)))
 
-(env-sigs [{"key": "keys1", "caps": [(GAS)]}])
+(env-sigs [{"key": "keys1", "caps": [(GAS), (DEBIT "emily")]}])
 
 (expect-failure
   "fund-tx fails for insufficient funds"
@@ -276,7 +276,7 @@
 
 (pact-state true)
 
-(env-sigs [{"key": "keys1", "caps": [(GAS),(TRANSFER "emily" "doug" 1.0)]}])
+(env-sigs [{"key": "keys1", "caps": [(GAS),(TRANSFER "emily" "doug" 1.0), (DEBIT "emily")]}])
 
 (expect
   "fund-tx succeeds with gas cap and other cap"
