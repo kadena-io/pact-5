@@ -1,0 +1,40 @@
+#puts token to sale at price 2.0.
+#uses 0.0 option as timeout
+# assumes seller fungible account is the same as marmalade account
+code: |-
+  (marmalade-v2.ledger.sale
+    "{{token-id}}"
+    "{{seller-key}}"
+    1.0
+    0
+  )
+signers:
+  - public: {{seller-key}}
+    caps:
+      - name: marmalade-v2.ledger.OFFER
+        args: ["{{token-id}}", "{{seller-key}}", 1.0, {"int":0}]
+  - public: {{gas-payer-key}}
+    caps:
+      - name: coin.GAS
+        args: []
+data:
+    quote:
+      fungible:
+        refName:
+          namespace: null
+          name: coin
+        refSpec:
+          - namespace: null
+            name: fungible-v2
+      sale-price: 2.0
+      seller-fungible-account:
+        account: "{{seller-account}}"
+        guard: {"keys": ["{{seller-key}}"], "pred": "keys-all"}
+      sale-type: ""
+networkId: testnet04
+publicMeta:
+  chainId: "1"
+  sender: "{{gas-payer}}"
+  gasLimit: 10000
+  gasPrice: 0.0000001
+  ttl: 600

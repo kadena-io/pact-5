@@ -1,0 +1,158 @@
+
+;;load policy manager, ledger
+(load "../../../pact/marmalade.repl")
+
+
+(begin-tx "load fixed issuance policy")
+  (env-data {
+    "ns": "marmalade-examples"
+  , "fixed-issuance-policy": ["fixed-issuance-policy"]
+  , "upgrade": false}
+  )
+  (env-sigs [
+    { 'key: 'fixed-issuance-policy
+     ,'caps: []
+  }])
+
+  (ns.write-registry (read-msg 'ns) (read-keyset 'fixed-issuance-policy) true)
+  (define-namespace
+    (read-msg 'ns)
+    (read-keyset 'fixed-issuance-policy) (read-keyset 'fixed-issuance-policy)
+  )
+
+  (namespace (read-msg 'ns))
+
+  (define-keyset (+ (read-msg 'ns) ".fixed-issuance-policy") (read-keyset 'fixed-issuance-policy))
+  
+  (load "fixed-issuance-policy-v1.pact")
+  (typecheck "marmalade-examples.fixed-issuance-policy-v1")
+
+(commit-tx)
+
+(begin-tx "Create token with fixed issuance policy")
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.policy-manager)
+  (use marmalade-examples.fixed-issuance-policy-v1)
+  (use mini-guard-utils)
+  (env-data {
+          "token-id": (create-token-id { 'uri: "test-fixed-issuance-policy-v1-0", 'precision: 0, 'policies: [marmalade-examples.fixed-issuance-policy-v1] } ALWAYS-TRUE),
+          "token-id-wrong-precision": (create-token-id { 'uri: "test-fixed-issuance-policy-v1-0", 'precision: 1, 'policies: [marmalade-examples.fixed-issuance-policy-v1] } ALWAYS-TRUE ),
+          "fixed_issuance_spec": {
+              'max-supply:2.0,
+              'min-amount:1.0,
+              'precision:0}
+      }
+  )
+
+  (env-sigs [])
+
+  (expect "create a token with fixed-issuance-policy"
+      true
+      (create-token (read-msg 'token-id) 0 "test-fixed-issuance-policy-v1-0" [marmalade-examples.fixed-issuance-policy-v1] ALWAYS-TRUE))
+
+  (expect "create-token events"
+      [ {"name": "marmalade-v2.ledger.TOKEN","params": [(read-msg 'token-id) 0 [marmalade-examples.fixed-issuance-policy-v1] "test-fixed-issuance-policy-v1-0" ALWAYS-TRUE]} ]
+      (map (remove "module-hash")  (env-events true)))
+
+  (expect-failure "Precision is incorrect"
+      "Invalid Precision"
+      (create-token (read-msg 'token-id-wrong-precision) 1 "test-fixed-issuance-policy-v1-0" [marmalade-examples.fixed-issuance-policy-v1] ALWAYS-TRUE))
+
+  (env-data {
+          "token-id": (create-token-id { 'uri: "test-fixed-issuance-policy-v1-1", 'precision: 0, 'policies: [marmalade-examples.fixed-issuance-policy-v1] } ALWAYS-TRUE),
+          "fixed_issuance_spec": {
+              'max-supply:2.0,
+              'min-amount:0.0,
+              'precision:0
+          }
+      }
+  )
+
+  (expect-failure "min amount is not valid"
+      "Invalid min-amount"
+      (create-token (read-msg 'token-id) 0 "test-fixed-issuance-policy-v1-1" [marmalade-examples.fixed-issuance-policy-v1] ALWAYS-TRUE))
+
+  (env-data {
+          "token-id": (create-token-id { 'uri: "test-fixed-issuance-policy-v1-1", 'precision: 1, 'policies: [marmalade-examples.fixed-issuance-policy-v1] } ALWAYS-TRUE),
+          "fixed_issuance_spec": {
+              'max-supply:0.0,
+              'min-amount:1.0,
+              'precision:1
+          }
+      }
+  )
+
+  (expect "Create token succeeds with max-supply 0"
+      true
+      (create-token (read-msg 'token-id) 1 "test-fixed-issuance-policy-v1-1" [marmalade-examples.fixed-issuance-policy-v1] ALWAYS-TRUE))
+
+  (expect "create-token events"
+    [ {"name": "marmalade-v2.ledger.TOKEN","params": [(read-msg 'token-id) 1 [marmalade-examples.fixed-issuance-policy-v1] "test-fixed-issuance-policy-v1-1" ALWAYS-TRUE]} ]
+    (map (remove "module-hash")  (env-events true)))
+
+(commit-tx)
+
+(begin-tx "Mint token")
+
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.policy-manager)
+  (use marmalade-examples.fixed-issuance-policy-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test-fixed-issuance-policy-v1-2", 'precision: 1, 'policies: [marmalade-examples.fixed-issuance-policy-v1] } ALWAYS-TRUE),
+    "token-id-wrong-precision": (create-token-id { 'uri: "test-fixed-issuance-policy-v1-2", 'precision: 1, 'policies: [marmalade-examples.fixed-issuance-policy-v1] } ALWAYS-TRUE ),
+    "fixed_issuance_spec": {
+        'max-supply:1.0,
+        'min-amount:0.5,
+        'precision:1}
+    }
+  )
+
+  (env-sigs [])
+
+  (expect "create a token with fixed-issuance-policy"
+    true
+    (create-token (read-msg 'token-id) 1 "test-fixed-issuance-policy-v1-2" [marmalade-examples.fixed-issuance-policy-v1] ALWAYS-TRUE))
+
+  (expect "create-token events"
+    [ {"name": "marmalade-v2.ledger.TOKEN","params": [(read-msg 'token-id) 1 [marmalade-examples.fixed-issuance-policy-v1] "test-fixed-issuance-policy-v1-2" ALWAYS-TRUE]} ]
+    (map (remove "module-hash")  (env-events true)))
+
+  (env-data {
+          "token-id": (create-token-id { 'uri: "test-fixed-issuance-policy-v1-2", 'precision: 1, 'policies: [marmalade-examples.fixed-issuance-policy-v1] } ALWAYS-TRUE)
+          ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+          ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+      }
+  )
+
+  (env-sigs [
+    { 'key: 'account
+     ,'caps: [(marmalade-v2.ledger.MINT (read-msg 'token-id) (read-msg 'account) 2.0)]
+    }])
+  
+  (expect-failure "Fail if minting more than max-supply"
+    "Exceeds max supply"
+    (mint (read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard ) 2.0))
+
+  (env-sigs [
+    { 'key: 'account
+      ,'caps: [(marmalade-v2.ledger.MINT (read-msg 'token-id) (read-msg 'account) 1.0)]
+    }])
+
+  (expect-failure "Fail if minting less than min-amount"
+    "mint amount < min-amount"
+    (mint (read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard ) 0.2))
+
+
+  (expect "Minted successfully"
+    true
+    (mint (read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard ) 1.0))
+
+  (expect "mint events"
+    [ {"name": "marmalade-v2.ledger.MINT","params": [(read-msg 'token-id) (read-msg 'account) 1.0]}
+      {"name": "marmalade-v2.ledger.ACCOUNT_GUARD","params": [(read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard)]}
+      {"name": "marmalade-v2.ledger.RECONCILE","params": [(read-msg 'token-id) 1.0 {"account": "","current": 0.0,"previous": 0.0} {"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3","current": 1.0,"previous": 0.0}]} {"name": "marmalade-v2.ledger.SUPPLY","params": [(read-msg 'token-id) 1.0]}]
+    (map (remove "module-hash")  (env-events true)))
+
+(rollback-tx)

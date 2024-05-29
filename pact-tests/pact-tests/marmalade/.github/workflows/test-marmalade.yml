@@ -1,0 +1,62 @@
+name: Test Marmalade protocol
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  test-pact:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Pact
+        uses: ./.github/actions/setup-pact
+        with:
+          version: "4.10.0"
+
+      - name: Test pact/marmalade.repl
+        uses: ./.github/actions/repl
+        with:
+          target: pact/marmalade.repl
+
+      - name: Test pact/policy-manager/policy-manager.repl
+        uses: ./.github/actions/repl
+        with:
+          target: pact/policy-manager/policy-manager.repl
+
+      - name: Test concrete collection-policy
+        uses: ./.github/actions/repl
+        with:
+          target: pact/concrete-policies/collection-policy/collection-policy-v1.repl
+
+      - name: Test concrete non-fungible-policy
+        uses: ./.github/actions/repl
+        with:
+          target: pact/concrete-policies/non-fungible-policy/non-fungible-policy-v1.repl
+
+      - name: Test concrete royalty-policy
+        uses: ./.github/actions/repl
+        with:
+          target: pact/concrete-policies/royalty-policy/royalty-policy-v1.repl
+
+      - name: Test concrete guard-policy
+        uses: ./.github/actions/repl
+        with:
+          target: pact/concrete-policies/guard-policy/guard-policy-v1.repl
+
+      - name: Test conventional auction sale contract
+        uses: ./.github/actions/repl
+        with:
+          target: pact/sale-contracts/conventional-auction/conventional-auction.repl
+
+      - name: Test dutch auction sale contract
+        uses: ./.github/actions/repl
+        with:
+          target: pact/sale-contracts/dutch-auction/dutch-auction.repl

@@ -1,0 +1,678 @@
+(load "../../marmalade.repl")
+(begin-tx "Load modules")
+  (env-data
+    { 'ns: "marmalade-sale"
+    , 'upgrade: false })
+  (env-sigs [
+    { 'key: 'marmalade-user
+    ,'caps: []
+    }, {
+      'key: 'marmalade-contract-admin
+    ,'caps: []
+    }])
+  (load "conventional-auction.pact")
+  (marmalade-v2.policy-manager.add-sale-whitelist marmalade-sale.conventional-auction)
+(commit-tx)
+
+(typecheck "marmalade-sale.conventional-auction")
+
+(begin-tx "Create and mint a token")
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.policy-manager)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+  (env-hash (hash "create-tokens"))
+  (env-chain-data {"chain-id": "0"})
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "conventional-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+   ,"creator": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+   ,"creator-guard":  {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+   ,"buyer": "k:6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"
+   ,"buyer-guard":  {"keys": ["6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"], "pred": "keys-all"}
+   ,"next-buyer": "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"
+   ,"next-buyer-guard":  {"keys": ["ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"], "pred": "keys-all"}
+   ,"royalty_spec": {
+      "fungible": coin
+     ,"creator": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+     ,"creator-guard":  {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+     ,"royalty-rate": 0.1
+    }
+  })
+
+  (test-capability (coin.COINBASE))
+  (coin.coinbase (read-string 'creator) (read-keyset 'creator-guard) 250.0)
+  (coin.coinbase (read-string 'buyer) (read-keyset 'buyer-guard) 250.0)
+  (coin.coinbase (read-string 'next-buyer) (read-keyset 'next-buyer-guard) 250.0)
+
+  (expect "Create the token"
+    true
+    (create-token (read-string "token1-id") 0 "conventional-auction-uri-1" (create-policies DEFAULT_ROYALTY) ALWAYS-TRUE))
+
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+    ,'caps: [
+      (marmalade-v2.ledger.MINT (read-msg 'token1-id) (read-string 'creator) 1.0)
+    ]
+    }])
+
+  (expect "Mint the token"
+    true
+    (mint (read-string "token1-id" ) (read-string 'creator) (read-keyset 'creator-guard ) 1.0))
+(commit-tx)
+
+(begin-tx "Offer token for sale with the conventional auction sale type and a non-finalized price")
+  (env-hash (hash "offer-token-1"))
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.policy-manager)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "conventional-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+    ,"creator": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+    ,"quote":{
+      "fungible": coin
+      ,"sale-price": 0.0
+      ,"seller-fungible-account": {
+          "account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+        ,"guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+      }
+      ,"sale-type": "marmalade-sale.conventional-auction"
+     }
+    })
+
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+     ,'caps: [
+      (marmalade-v2.ledger.OFFER (read-msg 'token1-id) (read-string 'creator) 1.0 0)]
+     }])
+
+  (expect "Offer token up for sale"
+    "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+    (sale (read-msg 'token1-id) (read-string 'creator) 1.0 0))
+(commit-tx)
+
+(begin-tx "Create conventional auction")
+  (env-hash (hash "create-conventional-auction"))
+  (env-chain-data {"block-time": (time "2023-10-01T00:00:00Z")})
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+  (use marmalade-sale.conventional-auction)
+
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "conventional-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+   ,"sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+   ,"creator-guard":  {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+  })
+
+  (expect-failure "Creating a conventional auction in the past fails"
+    "Start date must be in the future"
+    (create-auction (read-string "sale-id") (read-string "token1-id") 1696104800 1696723200 50.0)
+  )
+
+  (expect-failure "Creating a conventional auction with end-date before startdate fails"
+    "End date must be after start date"
+    (create-auction (read-string "sale-id") (read-string "token1-id") 1696204800 1696204700 50.0)
+  )
+
+  (env-sigs [
+   { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+    ,'caps: [(MANAGE_AUCTION (read-msg 'sale-id) (read-msg 'token1-id))]
+    }])
+
+  (expect "Create a conventional auction"
+    true
+    (create-auction (read-string "sale-id") (read-string "token1-id") 1696204800 1696723200 50.0)
+  )
+
+  (expect "Auction info stored under sale-id"
+    { "token-id": (read-string "token1-id")
+      ,"start-date": 1696204800
+      ,"end-date": 1696723200
+      ,"highest-bid": 0.0
+      ,"highest-bid-id": ""
+      ,"reserve-price": 50.0
+    }
+    (retrieve-auction (read-string "sale-id"))
+  )
+
+  (expect "create-auction events"
+    [
+      {"name": "marmalade-sale.conventional-auction.AUCTION_CREATED","params": ["_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y" (read-msg "token1-id") "u:util.guards1.enforce-guard-any:8iBtcNCfjArejHvxJ0rde1DsWxuhHqOzd1w40jsDPV4"]}
+    ]
+    (map (remove "module-hash")  (env-events true))
+  )
+(commit-tx)
+
+(begin-tx "Update auction")
+  (env-hash (hash "update-auction"))
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+  (use marmalade-sale.conventional-auction)
+
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "conventional-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+   ,"sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+  })
+  (env-sigs [])
+  (expect-failure "Update auction without rights fails"
+    "Keyset failure"
+    (update-auction (read-string "sale-id") 1696809600 1697328000 50.0)
+  )
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+     ,'caps: [(MANAGE_AUCTION (read-msg 'sale-id) (read-msg 'token1-id))]
+     }
+  ])
+  (expect "Update auction succeeds"
+    "Write succeeded"
+    (update-auction (read-string "sale-id") 1696809600 1697328000 80.0)
+  )
+(rollback-tx)
+
+(begin-tx "Update auction failure")
+  (env-hash (hash "update-auction-failure"))
+  (env-chain-data {"block-time": (time "2023-10-03T00:00:00Z")})
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+  (use marmalade-sale.conventional-auction)
+
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "conventional-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+   ,"sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+  })
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+     ,'caps: [(MANAGE_AUCTION (read-msg 'sale-id) (read-msg 'token1-id))]
+     }
+  ])
+  (expect-failure "Update auction after it has started fails"
+    "Can't update auction after it has started"
+    (update-auction (read-string "sale-id") 1696809600 1697328000 80.0)
+  )
+(rollback-tx)
+
+(begin-tx "Withdrawal before auction start")
+  (env-hash (hash "bid-withdrawal-before-start"))
+  (env-chain-data {"block-time": (time "2023-10-01T00:00:00Z")})
+  (use marmalade-v2.ledger)
+
+  (env-data {
+    "sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+  })
+
+  (expect-failure "withdrawing before the auction has ended fails"
+    "Auction is still ongoing or hasn't started yet"
+    (continue-pact 0 true (read-msg 'sale-id))
+  )
+(rollback-tx)
+
+(begin-tx "Withdrawal after auction end")
+  (env-hash (hash "bid-withdrawal-after-end"))
+  (env-chain-data {"block-time": (time "2023-10-10T00:00:00Z")})
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "conventional-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+    ,"creator": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+    ,"sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+  })
+
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+     ,'caps: [(marmalade-v2.ledger.WITHDRAW (read-msg 'token1-id) (read-string 'creator) 1.0 0 (read-msg 'sale-id))]
+     }
+  ])
+
+  (expect "withdrawing after the auction has ended withoud bids succeed"
+    "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+    (continue-pact 0 true (read-msg 'sale-id))
+  )
+(rollback-tx)
+
+(begin-tx "Conventional auction bidding validations")
+  (env-hash (hash "bid-conventional-auction-validation"))
+  (env-chain-data {"block-time": (time "2023-10-01T00:00:00Z")})
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+  (use marmalade-sale.conventional-auction)
+
+   (env-data {
+     "buyer-guard":  {"keys": ["buyer"], "pred": "keys-all"}
+     ,"sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+   })
+
+  (expect-failure "Bid on non-existent auction fails"
+    "row not found"
+    (place-bid "bogus-sale-id" "k:buyer" (read-keyset 'buyer-guard) 100.0)
+  )
+  (expect-failure "Bid while auction is still closed"
+    "Auction has not started yet"
+    (place-bid (read-string "sale-id") "k:buyer" (read-keyset 'buyer-guard) 100.0)
+  )
+(rollback-tx)
+
+(begin-tx "Place bids")
+  (env-hash (hash "place-conventional-auction-bid"))
+  (env-chain-data {"block-time": (time "2023-10-03T00:00:00Z")})
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+  (use marmalade-sale.conventional-auction)
+
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "conventional-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+    ,"sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+    ,"buyer": "k:6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"
+    ,"buyer-guard":  {"keys": ["6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"], "pred": "keys-all"}
+  })
+  (expect-failure "Bid below reserve price"
+    "Bid is not higher than reserve price"
+    (place-bid (read-string "sale-id") (read-string 'buyer) (read-keyset 'buyer-guard) 40.0)
+  )
+
+  (expect-failure "Bid using a named account"
+    "Incorrect account guard, only principal accounts allowed"
+    (place-bid (read-string "sale-id") "buyer" (read-keyset 'buyer-guard) 100.0)
+  )
+
+  (env-sigs [
+    { 'key: "6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"
+     ,'caps: [
+      (PLACE_BID (read-keyset 'buyer-guard)),
+      (coin.TRANSFER (read-string 'buyer) "u:util.guards1.enforce-guard-any:8iBtcNCfjArejHvxJ0rde1DsWxuhHqOzd1w40jsDPV4" 75.0)
+    ]}])
+  (expect "Place bid succeeds"
+    true
+    (place-bid (read-string "sale-id") (read-string 'buyer) (read-keyset 'buyer-guard) 75.0)
+  )
+  (expect "Buyer balance has been deducted"
+    175.0
+    (coin.get-balance (read-string 'buyer))
+  )
+  (expect "The highest bid has been noted in the auction"
+    { "token-id": (read-string "token1-id")
+      ,"start-date": 1696204800
+      ,"end-date": 1696723200
+      ,"highest-bid": 75.0
+      ,"highest-bid-id": (create-bid-id (read-msg "sale-id") (read-string 'buyer))
+      ,"reserve-price": 50.0
+    }
+    (retrieve-auction (read-string "sale-id"))
+  )
+(commit-tx)
+
+(begin-tx "Overbid the previous bid")
+  (env-hash (hash "overbid-conventional-auction"))
+  (env-chain-data {"block-time": (time "2023-10-04T00:00:00Z")})
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+  (use marmalade-sale.conventional-auction)
+
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "conventional-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+    ,"sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+    ,"buyer": "k:6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"
+    ,"next-buyer": "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"
+    ,"next-buyer-guard":  {"keys": ["ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"], "pred": "keys-all"}
+  })
+  (expect-failure "Place a bid lower than the previous bid"
+    "Bid is not higher than previous highest bid"
+    (place-bid (read-string "sale-id") (read-string 'next-buyer) (read-keyset 'next-buyer-guard) 70.0)
+  )
+
+  (env-sigs [
+    { 'key: 'ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c
+     ,'caps: [
+      (PLACE_BID (read-keyset 'next-buyer-guard)),
+      (coin.TRANSFER (read-string 'next-buyer) "u:util.guards1.enforce-guard-any:8iBtcNCfjArejHvxJ0rde1DsWxuhHqOzd1w40jsDPV4" 125.0)
+    ]}])
+  (expect "Place bid succeeds"
+    true
+    (place-bid (read-string "sale-id") (read-string 'next-buyer) (read-keyset 'next-buyer-guard) 125.0)
+  )
+
+  (expect "Previous bidder has received his bid amount back"
+    250.0
+    (coin.get-balance (read-string 'buyer))
+  )
+  (expect "Next bidder's balance has been deducted"
+    125.0
+    (coin.get-balance (read-string 'next-buyer))
+  )
+
+  (expect "The highest bid has been noted in the auction"
+    { "token-id": (read-string "token1-id")
+      ,"start-date": 1696204800
+      ,"end-date": 1696723200
+      ,"highest-bid": 125.0
+      ,"highest-bid-id": (create-bid-id (read-msg "sale-id") (read-string 'next-buyer))
+      ,"reserve-price": 50.0
+    }
+    (retrieve-auction (read-string "sale-id"))
+  )
+(commit-tx)
+
+(begin-tx "Claiming the token fails before the sale has ended")
+  (env-hash (hash "conventional-auction-claim-failure"))
+  (env-chain-data {"block-time": (time "2023-10-04T00:00:00Z")})
+  (use marmalade-sale.conventional-auction)
+
+  (env-data {
+    'buyer: "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c",
+    'buyer-guard: {"keys": ["ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"], "pred": "keys-all"},
+    'buyer_fungible_account: (escrow-account "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y")
+    ,'updated_price: 125.0
+    })
+
+  (expect-failure "Try to claim the token before the sale has ended"
+    "Auction is still ongoing"
+    (continue-pact 1 false "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y")
+  )
+(rollback-tx)
+
+(begin-tx "Claiming the token with the wrong price fails")
+  (env-hash (hash "conventional-auction-price-failure"))
+  (env-chain-data {"block-time": (time "2023-10-09T00:00:00Z")})
+  (use marmalade-v2.ledger)
+  (use marmalade-sale.conventional-auction)
+
+  (env-data {
+    'buyer: "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c",
+    'buyer-guard: {"keys": ["ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"], "pred": "keys-all"},
+    'buyer_fungible_account: (escrow-account "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y")
+    ,'updated_price: 25.0
+    })
+
+  (expect-failure "Try to claim the token with the wrong price"
+    "Price does not match highest bid"
+    (continue-pact 1 false "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y")
+  )
+(rollback-tx)
+
+(begin-tx "Withdrawal when bids are placed")
+  (env-hash (hash "bid-withdrawal-bids-placed"))
+  (env-chain-data {"block-time": (time "2023-10-09T00:00:00Z")})
+  (use marmalade-v2.ledger)
+
+  (env-data {
+    "sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+  })
+
+  (expect-failure "withdrawing after the auction has ended fails when there are bids placed"
+    "Bid has been placed, can't withdraw"
+    (continue-pact 0 true (read-msg 'sale-id))
+  )
+(rollback-tx)
+
+(begin-tx "Claim the token")
+  (env-hash (hash "conventional-auction-claim-success"))
+  (env-chain-data {"block-time": (time "2023-10-09T00:00:00Z")})
+  (use marmalade-v2.ledger)
+  (use marmalade-sale.conventional-auction)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "conventional-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE),
+    'buyer: "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c",
+    'buyer-guard: {"keys": ["ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"], "pred": "keys-all"},
+    'buyer_fungible_account: (escrow-account "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y")
+    ,'updated_price: 125.0
+    })
+
+  (env-sigs [
+    { 'key: 'any
+     ,'caps: [(marmalade-v2.ledger.BUY (read-msg "token1-id") "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3" (read-string 'buyer) 1.0 "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y")]
+     }])
+
+  (expect "Claim the token succeeds"
+    "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+    (continue-pact 1 false "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"))
+
+  (expect "Escrow account balance has been deducted"
+    0.0
+    (coin.get-balance (escrow-account "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"))
+  )
+
+  (expect "Seller balance has increased"
+    375.0
+    (coin.get-balance "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3")
+  )
+(commit-tx)
+
+(begin-tx "Create another conventional auction to bid with marketplace fees")
+  (env-hash (hash "create-conventional-auction-mk-fee"))
+  (env-chain-data {"block-time": (time "2023-10-01T00:00:00Z")})
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+  (use marmalade-sale.conventional-auction)
+
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "conventional-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+    ,"seller": "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"
+    ,"quote":{
+      "fungible": coin
+      ,"sale-price": 0.0
+      ,"seller-fungible-account": {
+          "account": "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"
+        ,"guard": {"keys": ["ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"], "pred": "keys-all"}
+      }
+      ,"sale-type": "marmalade-sale.conventional-auction"
+     }
+    ,"marketplace-account": "k:cad725b9789b04dd1ee21e02287a0b65201c1c8b17275860e8e82aa68b12be2d"
+    ,"marketplace-guard": { "keys": ["cad725b9789b04dd1ee21e02287a0b65201c1c8b17275860e8e82aa68b12be2d"], "pred": "keys-all" }
+  })
+
+  (test-capability (coin.COINBASE))
+  (coin.coinbase (read-string 'marketplace-account) (read-keyset 'marketplace-guard) 250.0)
+
+  (env-sigs [
+    { 'key: 'ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c
+     ,'caps: [
+      (marmalade-v2.ledger.OFFER (read-msg 'token1-id) (read-string 'seller) 1.0 0)]
+     }])
+
+  (expect "Offer token up for sale"
+    "L8MyXGnK9uOtzMsi8JPGcdMrOybW862pHZHnnuYHVhs"
+    (sale (read-msg 'token1-id) (read-string 'seller) 1.0 0))
+
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "conventional-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+   ,"sale-id": "L8MyXGnK9uOtzMsi8JPGcdMrOybW862pHZHnnuYHVhs"
+  })
+
+  (env-sigs [
+   { 'key: 'ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c
+    ,'caps: [(MANAGE_AUCTION (read-msg 'sale-id) (read-msg 'token1-id))]
+    }])
+
+  (expect "Create a conventional auction"
+    true
+    (create-auction (read-string "sale-id") (read-string "token1-id") 1696204800 1696723200 50.0)
+  )
+(commit-tx)
+
+(begin-tx "Place bids with invalid marketplace fee spec fails")
+  (env-hash (hash "place-conventional-auction-bid-mk-fee"))
+  (env-chain-data {"block-time": (time "2023-10-03T00:00:00Z")})
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+  (use marmalade-sale.conventional-auction)
+
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "conventional-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+    ,"sale-id": "L8MyXGnK9uOtzMsi8JPGcdMrOybW862pHZHnnuYHVhs"
+    ,"buyer": "k:6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"
+    ,"buyer-guard": {"keys": ["6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"], "pred": "keys-all"}
+    ,"marketplace_fee": {
+      "mk-account": "k:bdd725b9789b04dd1ee21e02287a0b65201c1c8b17275860e8e82aa68b12be2d"
+      ,"mk-fee-percentage": 0.1
+    }
+  })
+
+  (env-sigs [
+    { 'key: "6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"
+     ,'caps: [
+      (PLACE_BID (read-keyset 'buyer-guard)),
+      (coin.TRANSFER (read-string 'buyer) "u:util.guards1.enforce-guard-any:pL1c4j8Ex_J4FE6nlpKwUhyyNuj2PCE2zvTb_2pmfV0" 110.0)
+    ]}])
+
+  (expect-failure "Place bid fails when marketplace account doesn't exist"
+    "row not found"
+    (place-bid (read-string "sale-id") (read-string 'buyer) (read-keyset 'buyer-guard) 100.0)
+  )
+
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "conventional-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+    ,"sale-id": "L8MyXGnK9uOtzMsi8JPGcdMrOybW862pHZHnnuYHVhs"
+    ,"buyer": "k:6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"
+    ,"buyer-guard": {"keys": ["6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"], "pred": "keys-all"}
+    ,"marketplace_fee": {
+      "mk-account": "k:cad725b9789b04dd1ee21e02287a0b65201c1c8b17275860e8e82aa68b12be2d"
+      ,"mk-fee-percentage": -0.99999999
+    }
+  })
+
+  (expect-failure
+    "Invalid market-fee percentage"
+    (place-bid (read-string "sale-id") (read-string 'buyer) (read-keyset 'buyer-guard ) 10000000000.0) )
+
+(rollback-tx)
+
+(begin-tx "Place bids with marketplace fees")
+  (env-hash (hash "place-conventional-auction-bid-mk-fee"))
+  (env-chain-data {"block-time": (time "2023-10-03T00:00:00Z")})
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+  (use marmalade-sale.conventional-auction)
+
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "conventional-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+    ,"sale-id": "L8MyXGnK9uOtzMsi8JPGcdMrOybW862pHZHnnuYHVhs"
+    ,"buyer": "k:6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"
+    ,"buyer-guard": {"keys": ["6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"], "pred": "keys-all"}
+    ,"marketplace_fee": {
+      "mk-account": "k:cad725b9789b04dd1ee21e02287a0b65201c1c8b17275860e8e82aa68b12be2d"
+      ,"mk-fee-percentage": 0.1
+    }
+  })
+
+  (env-sigs [
+    { 'key: "6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"
+     ,'caps: [
+      (PLACE_BID (read-keyset 'buyer-guard)),
+      (coin.TRANSFER (read-string 'buyer) "u:util.guards1.enforce-guard-any:pL1c4j8Ex_J4FE6nlpKwUhyyNuj2PCE2zvTb_2pmfV0" 110.0)
+    ]}])
+  (expect "Place bid succeeds"
+    true
+    (place-bid (read-string "sale-id") (read-string 'buyer) (read-keyset 'buyer-guard) 100.0)
+  )
+
+  (expect "Buyer balance has been deducted"
+    140.0
+    (coin.get-balance (read-string 'buyer))
+  )
+
+  (expect "Escrow account contains bid amount including marketplace fees"
+    110.0
+    (coin.get-balance "u:util.guards1.enforce-guard-any:pL1c4j8Ex_J4FE6nlpKwUhyyNuj2PCE2zvTb_2pmfV0"))
+
+  (expect "The highest bid has been noted in the auction"
+    { "token-id": (read-string "token1-id")
+      ,"start-date": 1696204800
+      ,"end-date": 1696723200
+      ,"highest-bid": 100.0
+      ,"highest-bid-id": (create-bid-id (read-msg "sale-id") (read-string 'buyer))
+      ,"reserve-price": 50.0
+    }
+    (retrieve-auction (read-string "sale-id"))
+  )
+(commit-tx)
+
+(begin-tx "Claim the token with marketplace fees")
+  (env-hash (hash "conventional-auction-claim-marketplace-success"))
+  (env-chain-data {"block-time": (time "2023-10-09T00:00:00Z")})
+  (use marmalade-v2.ledger)
+  (use marmalade-sale.conventional-auction)
+
+  (env-data {
+    'buyer: "k:6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3",
+    'buyer-guard: {"keys": ["6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"], "pred": "keys-all"},
+    'buyer_fungible_account: (escrow-account "L8MyXGnK9uOtzMsi8JPGcdMrOybW862pHZHnnuYHVhs"),
+    'updated_price: 100.0,
+    "marketplace_fee": {
+      "mk-account": "k:e14b9a83582b450a98220d10a52f7069901bc13ec4de189b03b2492ce29d86a7"
+      ,"mk-fee-percentage": 0.1
+    }
+  })
+
+  (expect-failure "Claim the token fails when the marketplace_fee account differs"
+    "Marketplace fee account does not match stored marketplace fee account"
+    (continue-pact 1 false "L8MyXGnK9uOtzMsi8JPGcdMrOybW862pHZHnnuYHVhs"))
+
+  (env-data {
+    'buyer: "k:6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3",
+    'buyer-guard: {"keys": ["6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"], "pred": "keys-all"},
+    'buyer_fungible_account: (escrow-account "L8MyXGnK9uOtzMsi8JPGcdMrOybW862pHZHnnuYHVhs"),
+    'updated_price: 100.0,
+    "marketplace_fee": {
+      "mk-account": "k:cad725b9789b04dd1ee21e02287a0b65201c1c8b17275860e8e82aa68b12be2d"
+      ,"mk-fee-percentage": 0.8
+    }
+  })
+
+  (expect-failure "Claim the token fails when the marketplace_fee percentage differs"
+    "Marketplace fee percentage does not match stored marketplace fee percentage"
+    (continue-pact 1 false "L8MyXGnK9uOtzMsi8JPGcdMrOybW862pHZHnnuYHVhs"))
+
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "conventional-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE),
+    'seller: "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c",
+    'buyer: "k:6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3",
+    'buyer-guard: {"keys": ["6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"], "pred": "keys-all"},
+    'buyer_fungible_account: (escrow-account "L8MyXGnK9uOtzMsi8JPGcdMrOybW862pHZHnnuYHVhs"),
+    'updated_price: 100.0,
+    "marketplace_fee": {
+      "mk-account": "k:cad725b9789b04dd1ee21e02287a0b65201c1c8b17275860e8e82aa68b12be2d"
+      ,"mk-fee-percentage": 0.1
+    }
+  })
+
+  (env-sigs [
+    { 'key: 'any
+     ,'caps: [(marmalade-v2.ledger.BUY (read-msg "token1-id") (read-string 'seller) (read-string 'buyer) 1.0 "L8MyXGnK9uOtzMsi8JPGcdMrOybW862pHZHnnuYHVhs")]
+    }])
+
+  (expect "Claim the token succeeds"
+    "L8MyXGnK9uOtzMsi8JPGcdMrOybW862pHZHnnuYHVhs"
+    (continue-pact 1 false "L8MyXGnK9uOtzMsi8JPGcdMrOybW862pHZHnnuYHVhs"))
+
+  (expect "Escrow account balance has been deducted"
+    0.0
+    (coin.get-balance (escrow-account "L8MyXGnK9uOtzMsi8JPGcdMrOybW862pHZHnnuYHVhs"))
+  )
+
+  (expect "Seller balance has increased with sell amount minus royalties"
+    215.0
+    (coin.get-balance (read-string 'seller))
+  )
+
+  (expect "Marketplace balance has been increased with marketplace fees"
+    260.0
+    (coin.get-balance "k:cad725b9789b04dd1ee21e02287a0b65201c1c8b17275860e8e82aa68b12be2d")
+  )
+(commit-tx)

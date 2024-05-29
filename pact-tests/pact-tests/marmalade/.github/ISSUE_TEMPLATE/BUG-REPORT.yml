@@ -1,0 +1,51 @@
+name: Bug
+description: File a bug report
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening a bug report, please search for the behaviour in the existing issues. 
+        
+        ---
+        
+        Thank you for taking the time to file a bug report. To address this bug as fast as possible, we need some information.
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected Behavior
+      description: "Tell us what should happen"
+      placeholder: "..."
+    validations:
+      required: true  
+  - type: textarea
+    id: current
+    attributes:
+      label: Current Behavior
+      description: "Tell us what happens instead of the expected behavior"
+      placeholder: "..."
+    validations:
+      required: true
+  - type: textarea
+    id: possible
+    attributes:
+      label: Possible Solution
+      description: "Not obligatory, but suggest a fix/reason for the bug"
+      placeholder: "..."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: "Provide a link to a live example, or an unambiguous set of steps to reproduce this bug. Include code to reproduce, if relevant"
+      placeholder: "1. 2. 3. 4."
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: If applicable, provide relevant log output. No need for backticks here.
+      render: shell

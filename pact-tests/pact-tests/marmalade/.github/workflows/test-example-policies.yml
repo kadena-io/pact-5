@@ -1,0 +1,49 @@
+name: Test example policies
+
+on:
+  push:
+    paths:
+      - "examples/**"
+  pull_request:
+    paths:
+      - "examples/**"
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  test-pact:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Pact
+        uses: ./.github/actions/setup-pact
+        with:
+          version: "4.10.0"
+
+      - name: Test fixed-issuance-policy-v1
+        uses: ./.github/actions/repl
+        with:
+          target: examples/policies/fixed-issuance-policy/fixed-issuance-policy-v1.pact
+
+      - name: Test onchain-manifest-policy-v1
+        uses: ./.github/actions/repl
+        with:
+          target: examples/policies/onchain-manifest-policy/onchain-manifest-policy-v1.repl
+
+      - name: Test timed-mint-policy-v1
+        uses: ./.github/actions/repl
+        with:
+          target: examples/policies/timed-mint-policy/timed-mint-policy-v1.repl
+
+      - name: Test private-token-policy-v1
+        uses: ./.github/actions/repl
+        with:
+          target: examples/policies/private-token-policy/private-token-policy-v1.repl
+
+      - name: Test multi-asset-policy-v1
+        uses: ./.github/actions/repl
+        with:
+          target: examples/policies/multi-asset-policy/multi-asset-policy.repl

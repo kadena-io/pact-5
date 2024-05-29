@@ -1,0 +1,138 @@
+;;load policy manager, ledger
+(load "../../../pact/marmalade.repl")
+
+(begin-tx "load policy")
+  (env-data {
+    "ns": "marmalade-examples"
+  , "private-token-policy": ["private-token-policy"]
+  , "upgrade": false}
+  )
+  (env-sigs [
+    { 'key: 'private-token-policy
+     ,'caps: []
+  }])
+
+  (ns.write-registry (read-msg 'ns) (read-keyset 'private-token-policy) true)
+  (define-namespace
+    (read-msg 'ns)
+    (read-keyset 'private-token-policy) (read-keyset 'private-token-policy)
+  )
+
+  (namespace (read-msg 'ns))
+
+  (define-keyset (+ (read-msg 'ns) ".private-token-policy") (read-keyset 'private-token-policy))
+  
+  (load "private-token-policy-v1.pact")
+  (typecheck "marmalade-examples.private-token-policy-v1")
+
+(commit-tx)
+
+(begin-tx "Require guard-policy")
+    (use marmalade-v2.ledger)
+    (use marmalade-examples.private-token-policy-v1)
+    (use mini-guard-utils)
+  
+  (env-data {
+    "token-id": (create-token-id { 'uri: (hash "ipfs://secret-uri"), 'precision: 0, 'policies: [marmalade-examples.private-token-policy-v1 marmalade-v2.guard-policy-v1] } ALWAYS-TRUE)
+    ,"token-id-without-guard-policy": (create-token-id { 'uri: (hash "ipfs://secret-uri"), 'precision: 0, 'policies: [marmalade-examples.private-token-policy-v1] } ALWAYS-TRUE)
+  })
+
+  (expect-failure "Failed to create a token without guard-policy"
+    "Guard policy is required for private tokens"
+    (create-token (read-msg 'token-id-without-guard-policy) 0 (hash "ipfs://secret-uri") [marmalade-examples.private-token-policy-v1] ALWAYS-TRUE))
+
+  (expect-failure "Failed to create a token without uri-guard"
+    "Failure: Tx Failed: No such key in message: uri_guard"
+    (create-token (read-msg 'token-id) 0 (hash "ipfs://secret-uri") [marmalade-examples.private-token-policy-v1 marmalade-v2.guard-policy-v1] ALWAYS-TRUE))
+
+(commit-tx)
+
+(begin-tx "Create private token")
+    (use marmalade-v2.ledger)
+    (use marmalade-examples.private-token-policy-v1)
+    (use marmalade-v2.guard-policy-v1 [GUARD_SUCCESS])
+    (use mini-guard-utils)
+    
+  (env-data {
+     "token-id": (create-token-id { 'uri: (hash "ipfs://secret-uri"), 'precision: 0, 'policies: [marmalade-examples.private-token-policy-v1 marmalade-v2.guard-policy-v1] } ALWAYS-TRUE)
+     ,"uri_guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+  })
+
+  (expect "Token created successfully"
+    true
+    (create-token (read-msg 'token-id) 0 (hash "ipfs://secret-uri") [marmalade-examples.private-token-policy-v1 marmalade-v2.guard-policy-v1] ALWAYS-TRUE))
+
+  (expect "create-token events"
+    [ {"name": "marmalade-v2.guard-policy-v1.GUARDS","params": [(read-msg 'token-id) {"burn-guard": GUARD_SUCCESS,"mint-guard": GUARD_SUCCESS,"sale-guard": GUARD_SUCCESS,"transfer-guard": GUARD_SUCCESS,"uri-guard":(read-keyset 'uri_guard)}] },
+      {"name": "marmalade-v2.ledger.TOKEN","params": [(read-msg 'token-id) 0 [marmalade-examples.private-token-policy-v1 marmalade-v2.guard-policy-v1] (hash "ipfs://secret-uri") ALWAYS-TRUE]}]
+    (map (remove "module-hash")  (env-events true)))
+
+(commit-tx)
+
+(begin-tx "Reveal private token URI")
+    (use marmalade-v2.ledger)
+    (use marmalade-examples.private-token-policy-v1)
+    (use mini-guard-utils)
+
+  (env-data {
+    "secret-uri": "ipfs://secret-uri"
+    ,"token-id": (create-token-id { 'uri: (hash "ipfs://secret-uri"), 'precision: 0, 'policies: [marmalade-examples.private-token-policy-v1 marmalade-v2.guard-policy-v1] } ALWAYS-TRUE)
+    ,"uri-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+  })
+
+  (expect "token has not been revealed"
+    false
+    (is-revealed (read-msg 'token-id))
+  )
+
+  (expect-failure "shoud not be able to update uri before revealing"
+    "Update disabled prior to revealing"
+    (marmalade-v2.ledger.update-uri (read-msg 'token-id) "")
+  )
+  
+  (expect-failure "fail if new URI is empty string"
+    "URI cannot be empty"
+    (reveal-uri (read-msg 'token-id) ""))
+  
+  (expect-failure "fail if new URI is wrong"
+    "URI does not match the hash"
+    (reveal-uri (read-msg 'token-id) "ipfs://wrong-uri"))
+
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+      ,'caps: [
+        (marmalade-v2.ledger.UPDATE-URI (read-msg 'token-id) (read-msg 'secret-uri))
+        ,(marmalade-v2.guard-policy-v1.UPDATE-URI (read-msg 'token-id) (read-msg 'secret-uri))]
+    }])
+  
+  (expect "successfully reveal the URI"
+    true
+    (reveal-uri (read-msg 'token-id) (read-msg 'secret-uri)))
+
+  (expect "reveal uri events"
+    [{"name": "marmalade-v2.ledger.UPDATE-URI","params": [(read-msg 'token-id) (read-msg 'secret-uri)]}
+    ,{"name": "marmalade-examples.private-token-policy-v1.TOKEN_REVEALED","params": [(read-msg 'token-id) (read-msg 'secret-uri)]} ]
+    (map (remove "module-hash")  (env-events true)))
+  
+  (expect "token has been revealed"
+    true
+    (is-revealed (read-msg 'token-id))
+  )
+    
+  (expect-failure "cannot reveal the URI again"
+    "Token URI already revealed"
+    (reveal-uri (read-msg 'token-id) "ipfs://something-new"))
+
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+      ,'caps: [
+        (marmalade-v2.ledger.UPDATE-URI (read-msg 'token-id) "ipfs://updated")
+        ,(marmalade-v2.guard-policy-v1.UPDATE-URI (read-msg 'token-id) "ipfs://updated")]
+    }])
+
+  (expect "shoud be able to update uri after revealing"
+    true
+    (marmalade-v2.ledger.update-uri (read-msg 'token-id) "ipfs://updated")
+  )
+      
+(commit-tx)

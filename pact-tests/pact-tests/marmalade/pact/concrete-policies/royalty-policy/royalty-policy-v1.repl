@@ -1,0 +1,495 @@
+;;load policy manager, ledger
+(load "../../policy-manager/policy-manager.repl")
+(typecheck "marmalade-v2.royalty-policy-v1")
+
+(begin-tx)
+  (use marmalade-v2.policy-manager [concrete-policy concrete-policy])
+  (use marmalade-v2.ledger)
+
+  (env-data {
+    "creator-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"},
+    "bad-actor-guard": {"keys": ["6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"], "pred": "keys-all"}
+  })
+
+  (marmalade-v2.abc.create-account "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3" (read-keyset 'creator-guard))
+  (marmalade-v2.abc.create-account "k:6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3" (read-keyset 'bad-actor-guard))
+
+  (coin.create-account "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3" (read-keyset 'creator-guard))
+  (coin.create-account "k:6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3" (read-keyset 'bad-actor-guard))
+
+(commit-tx)
+
+(begin-tx)
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test-royalty-uri", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+   ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+   ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+   ,"royalty_spec": {
+      "fungible": marmalade-v2.abc
+     ,"creator": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+     ,"creator-guard":  {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+     ,"royalty-rate": 0.000001
+    }
+  })
+
+
+  (expect-failure "create-token with royalty_spec with fungible other than coin fails"
+    "Royalty support is restricted to coin"
+    (create-token (read-msg 'token-id) 0 "test-royalty-uri" (create-policies DEFAULT_ROYALTY) ALWAYS-TRUE))
+
+(rollback-tx)
+
+(begin-tx)
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test-royalty-uri", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+   ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+   ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+   ,"royalty_spec": {
+      "fungible": coin
+     ,"creator": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+     ,"creator-guard":  {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+     ,"royalty-rate": -0.000001
+    }
+  })
+
+  (expect-failure "create-token with negative royalty rate fails"
+    "Invalid royalty rate"
+    (create-token (read-msg 'token-id) 0 "test-royalty-uri" (create-policies DEFAULT_ROYALTY) ALWAYS-TRUE))
+(rollback-tx)
+
+(begin-tx)
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.guard-policy-v1)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test-royalty-uri", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY) } ALWAYS-TRUE)
+   ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+   ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+   ,"royalty_spec": {
+      "fungible": coin
+     ,"creator": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+     ,"creator-guard":  {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+     ,"royalty-rate": 0.05
+    }
+  })
+
+  (expect "create a default token with quote-policy, non-fungible-policy"
+    true
+    (create-token (read-msg 'token-id) 0 "test-royalty-uri" (create-policies DEFAULT_ROYALTY) ALWAYS-TRUE))
+
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+    ,'caps: [(marmalade-v2.ledger.MINT (read-msg 'token-id) (read-string 'account) 1.0)]
+    }])
+
+  (expect "mint a default token with quote-policy, non-fungible-policy"
+    true
+    (mint (read-msg 'token-id )  (read-string 'account) (read-keyset 'account-guard ) 1.0))
+
+  (expect "create-token and mint events"
+     [{"name": "marmalade-v2.royalty-policy-v1.ROYALTY","params": [(read-msg 'token-id) {"creator": (read-string 'account),"creator-guard": (at 'creator-guard (read-msg 'royalty_spec)),"fungible": coin,"royalty-rate": 0.05}]}
+      {"name": "marmalade-v2.guard-policy-v1.GUARDS","params": [(read-msg 'token-id) {"burn-guard": GUARD_SUCCESS,"mint-guard": GUARD_SUCCESS,"sale-guard": GUARD_SUCCESS,"transfer-guard": GUARD_SUCCESS, "uri-guard": GUARD_SUCCESS}]}
+      {"name": "marmalade-v2.ledger.TOKEN","params": [(read-msg 'token-id) 0 [marmalade-v2.non-fungible-policy-v1 marmalade-v2.royalty-policy-v1 marmalade-v2.guard-policy-v1] "test-royalty-uri" ALWAYS-TRUE]}
+      {"name": "marmalade-v2.ledger.MINT","params": [(read-msg 'token-id) (read-string 'account) 1.0]}
+      {"name": "marmalade-v2.ledger.ACCOUNT_GUARD","params": [(read-msg 'token-id) (read-string 'account) (read-keyset 'account-guard)]}
+      {"name": "marmalade-v2.ledger.RECONCILE","params": [(read-msg 'token-id) 1.0 {"account":"", "current": 0.0,"previous": 0.0} {"account": (read-string 'account),"current": 1.0,"previous": 0.0}]} {"name": "marmalade-v2.ledger.SUPPLY","params": [(read-msg 'token-id) 1.0]}]
+    (map (remove "module-hash")  (env-events true)))
+(commit-tx)
+
+(begin-tx "Create token - test guards")
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test2-royalty-uri", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY) } ALWAYS-TRUE)
+   ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+   ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+   ,"royalty_spec": {
+      "fungible": coin
+     ,"creator": "k:6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"
+     ,"creator-guard":  {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+     ,"royalty-rate": 0.05
+    }
+  })
+
+  (expect-failure "Creator guard does not match creator"
+    "Creator guard does not match"
+    (create-token (read-msg 'token-id) 0 "test2-royalty-uri" (create-policies DEFAULT_ROYALTY) ALWAYS-TRUE))
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test2-royalty-uri", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY) } ALWAYS-TRUE)
+   ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+   ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+   ,"royalty_spec": {
+      "fungible": marmalade-v2.def
+     ,"creator": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+     ,"creator-guard":  {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+     ,"royalty-rate": 0.05
+    }
+  })
+
+  (expect-failure "Account does not exist on fungible"
+    "row not found: k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+    (create-token (read-msg 'token-id) 0 "test2-royalty-uri" (create-policies DEFAULT_ROYALTY) ALWAYS-TRUE))
+
+(commit-tx)
+
+(begin-tx "Royalty rates")
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test3-royalty-uri", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY) } ALWAYS-TRUE)
+   ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+   ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+   ,"royalty_spec": {
+      "fungible": coin
+     ,"creator": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+     ,"creator-guard":  {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+     ,"royalty-rate": 1
+    }
+  })
+
+
+  (expect-failure "Royalty rate should be decimal"
+    "expected decimal, found integer"
+    (create-token (read-msg 'token-id) 0 "test3-royalty-uri" (create-policies DEFAULT_ROYALTY) ALWAYS-TRUE))
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test3-royalty-uri", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY) } ALWAYS-TRUE)
+   ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+   ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+   ,"royalty_spec": {
+      "fungible": coin
+     ,"creator": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+     ,"creator-guard":  {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+     ,"royalty-rate": 2.0
+    }
+  })
+
+  (expect-failure "Royalty rate be between 0.0 and 1.0"
+    "Invalid royalty rate"
+    (create-token (read-msg 'token-id) 0 "test3-royalty-uri" (create-policies DEFAULT_ROYALTY) ALWAYS-TRUE))
+
+(commit-tx)
+
+(begin-tx "start an offer")
+
+  (env-hash (hash "offer-royalty-0"))
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "seller-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+  })
+
+  (marmalade-v2.def.create-account "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3" (read-keyset 'seller-guard))
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test-royalty-uri", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY) } ALWAYS-TRUE)
+    ,"quote":{
+         "fungible": marmalade-v2.def
+         ,"sale-price": 2.0
+         ,"seller-fungible-account": {
+             "account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+            ,"guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+           }
+         ,"sale-type": ""
+       }
+   })
+
+  (env-chain-data {"block-time": (time "2023-07-20T11:26:35Z")})
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+     ,'caps: [
+     (marmalade-v2.ledger.OFFER (read-msg 'token-id) "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3" 1.0 (to-timestamp (time "2023-07-22T11:26:35Z")) )]
+     }])
+
+  (expect-failure "Offer fails when quote uses a different fungible from registered fungible"
+    "(enforce (= fungible (at 'fung...: Failure: Tx Failed: Offer is restricted to sale using fungible: coin"
+    (sale (read-msg 'token-id) "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3" 1.0 (to-timestamp (time "2023-07-22T11:26:35Z"))))
+
+(rollback-tx)
+
+(begin-tx "Fund buyer fungible account")
+
+  (env-data {
+    "buyer": "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"
+   ,"buyer_fungible_account": "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"
+   ,"buyer-guard": {"keys": ["ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"], "pred": "keys-all"}
+   ,"buyer-guard-1": {"keys": ["c8493f58aaff5787a15c987cf35b41bbca164a41d8978913860805768ed66fe7"], "pred": "keys-all"}
+   })
+
+  (test-capability (coin.COINBASE))
+  (coin.coinbase "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c" (read-keyset 'buyer-guard) 2.0)
+  (coin.coinbase "k:c8493f58aaff5787a15c987cf35b41bbca164a41d8978913860805768ed66fe7" (read-keyset 'buyer-guard-1) 2.0)
+
+  (expect "coinbase events"
+   [{"name": "coin.TRANSFER","params": ["" "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c" 2.0]}
+    {"name": "coin.TRANSFER","params": ["" "k:c8493f58aaff5787a15c987cf35b41bbca164a41d8978913860805768ed66fe7" 2.0]}]
+   (map (remove "module-hash")  (env-events true)))
+
+(commit-tx)
+
+(begin-tx)
+
+  (env-hash (hash "offer-royalty-0"))
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test-royalty-uri", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY) } ALWAYS-TRUE)
+    ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+    ,"quote":{
+       "fungible": coin
+       ,"sale-price": 2.0
+       ,"seller-fungible-account": {
+           "account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+          ,"guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+         }
+       ,"sale-type": ""
+     }
+    })
+
+  (env-chain-data {"block-time": (time "2023-07-20T11:26:35Z")})
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+     ,'caps: [
+     (marmalade-v2.ledger.OFFER (read-msg 'token-id) "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3" 1.0 (to-timestamp (time "2023-07-22T11:26:35Z")) )]
+     }])
+
+  (expect "start offer by running step 0 of sale"
+    "0HZ-zWbio-_Q0whoIO_BU2_tjLVm9rvZbc2ZxkbhWeM"
+    (sale (read-msg 'token-id) "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3" 1.0 (to-timestamp (time "2023-07-22T11:26:35Z"))))
+
+  (expect "offer events"
+   [ {"name": "marmalade-v2.policy-manager.QUOTE","params": ["0HZ-zWbio-_Q0whoIO_BU2_tjLVm9rvZbc2ZxkbhWeM" (read-msg 'token-id) (read-msg 'quote) ]}
+     {"name": "marmalade-v2.ledger.OFFER","params": [(read-msg 'token-id) (read-string 'account) 1.0 1690025195]}
+     {"name": "marmalade-v2.ledger.SALE","params": [(read-msg 'token-id) (read-string 'account) 1.0 1690025195 "0HZ-zWbio-_Q0whoIO_BU2_tjLVm9rvZbc2ZxkbhWeM"]}
+     {"name": "marmalade-v2.ledger.ACCOUNT_GUARD","params": [(read-msg 'token-id) "c:0-3xXARaPTprNrOOHGoO8tEh-ADvWDHskO-2sXZ4eRg" (account-guard (read-msg 'token-id) "c:0-3xXARaPTprNrOOHGoO8tEh-ADvWDHskO-2sXZ4eRg")]}
+     {"name": "marmalade-v2.ledger.TRANSFER","params": [(read-msg 'token-id) (read-string 'account) "c:0-3xXARaPTprNrOOHGoO8tEh-ADvWDHskO-2sXZ4eRg" 1.0]}
+     {"name": "marmalade-v2.ledger.RECONCILE","params": [(read-msg 'token-id) 1.0 {"account": (read-string 'account),"current": 0.0,"previous": 1.0} {"account": "c:0-3xXARaPTprNrOOHGoO8tEh-ADvWDHskO-2sXZ4eRg","current": 1.0,"previous": 0.0}]}]
+   (map (remove "module-hash")  (env-events true)))
+
+  (env-data { "recipient-guard": {"keys": ["seller"], "pred": "keys-all"}})
+
+  (env-data {
+    "creator": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+   ,"buyer": "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"
+   ,"buyer_fungible_account": "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"
+   ,"buyer-guard": {"keys": ["ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"], "pred": "keys-all"}
+   ,"token-id": (create-token-id { 'uri: "test-royalty-uri", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY) } ALWAYS-TRUE)
+   })
+
+  (env-sigs
+   [{'key:'ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c
+    ,'caps: [
+      (marmalade-v2.ledger.BUY (create-token-id { 'uri: "test-royalty-uri", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY) } ALWAYS-TRUE) (read-string 'creator) (read-string 'buyer)  1.0 "0HZ-zWbio-_Q0whoIO_BU2_tjLVm9rvZbc2ZxkbhWeM")
+      (coin.TRANSFER (read-string 'buyer) "c:xx_lmWaqaLkqO3RzZnabF_tpKB11EeagaLUJwM0T_6c" 2.0)
+     ]}])
+
+   (expect
+     "Expect k:buyer balance to be correct"
+     2.0 (coin.get-balance (read-string 'buyer)))
+
+   (expect
+     "Expect vault creator balance to be correct"
+     0.0 (coin.get-balance (read-string 'creator)))
+
+  (env-hash (hash "offer-royalty-0"))
+
+  (expect "Buy succeeds"
+    "0HZ-zWbio-_Q0whoIO_BU2_tjLVm9rvZbc2ZxkbhWeM"
+    (continue-pact 1))
+
+  (expect
+    "Expect k:buyer balance to be correct"
+    0.0 (coin.get-balance (read-string 'buyer)))
+
+  (expect
+    "Expect creator balance to be correct"
+    2.0 (coin.get-balance (read-string 'creator)))
+
+(expect "buy events"
+  [{"name": "coin.TRANSFER","params": [(read-string 'buyer) "c:xx_lmWaqaLkqO3RzZnabF_tpKB11EeagaLUJwM0T_6c" 2.0]}
+   {"name": "marmalade-v2.royalty-policy-v1.ROYALTY-PAYOUT","params": ["0HZ-zWbio-_Q0whoIO_BU2_tjLVm9rvZbc2ZxkbhWeM" (read-msg 'token-id) 0.1 (read-string 'creator)]}
+   {"name": "coin.TRANSFER","params": ["c:xx_lmWaqaLkqO3RzZnabF_tpKB11EeagaLUJwM0T_6c" (read-string 'creator) 0.1]}
+   {"name": "coin.TRANSFER","params": ["c:xx_lmWaqaLkqO3RzZnabF_tpKB11EeagaLUJwM0T_6c" (read-string 'creator) 1.9]}
+   {"name": "marmalade-v2.ledger.BUY","params": [(read-msg 'token-id) (read-string 'creator) (read-string 'buyer) 1.0 "0HZ-zWbio-_Q0whoIO_BU2_tjLVm9rvZbc2ZxkbhWeM"]}
+   {"name": "marmalade-v2.ledger.ACCOUNT_GUARD","params": [(read-msg 'token-id) (read-string 'buyer) (read-keyset 'buyer-guard)]}
+   {"name": "marmalade-v2.ledger.TRANSFER","params": [(read-msg 'token-id) "c:0-3xXARaPTprNrOOHGoO8tEh-ADvWDHskO-2sXZ4eRg" (read-string 'buyer) 1.0]}
+   {"name": "marmalade-v2.ledger.RECONCILE","params": [(read-msg 'token-id) 1.0 {"account": "c:0-3xXARaPTprNrOOHGoO8tEh-ADvWDHskO-2sXZ4eRg","current": 0.0,"previous": 1.0} {"account": (read-string 'buyer),"current": 1.0,"previous": 0.0}]}]
+ (map (remove "module-hash")  (env-events true)))
+
+(commit-tx)
+
+(begin-tx)
+
+  (env-hash (hash "offer-royalty-1"))
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "seller-guard": {"keys": ["ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"], "pred": "keys-all"}
+  })
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test-royalty-uri", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY) } ALWAYS-TRUE)
+    ,"buyer": "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"
+    ,"quote":{
+       "fungible": coin
+       ,"sale-price": 2.0
+       ,"seller-fungible-account": {
+           "account": "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"
+          ,"guard": {"keys": ["ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"], "pred": "keys-all"}
+         }
+       ,"sale-type": ""
+     }
+  })
+
+  (env-chain-data {"block-time": (time "2023-07-20T11:26:35Z")})
+  (env-sigs [
+    { 'key: 'ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c
+     ,'caps: [
+     (marmalade-v2.ledger.OFFER (read-msg 'token-id) (read-string 'buyer) 1.0 (to-timestamp (time "2023-07-22T11:26:35Z")) )]
+     }])
+
+  (expect "start offer by running step 0 of sale"
+    "2L8Q_bSe63oTP32EVXFxNoNtR7BWcUMmmtMmOkI1GyU"
+    (sale (read-msg 'token-id) (read-string 'buyer) 1.0 (to-timestamp (time "2023-07-22T11:26:35Z"))))
+
+  (expect "offer events"
+    [ {"name": "marmalade-v2.policy-manager.QUOTE","params": ["2L8Q_bSe63oTP32EVXFxNoNtR7BWcUMmmtMmOkI1GyU" (read-msg 'token-id) (read-msg 'quote)]}
+      {"name": "marmalade-v2.ledger.OFFER","params": [(read-msg 'token-id) (read-string 'buyer) 1.0 1690025195]}
+      {"name": "marmalade-v2.ledger.SALE","params": [(read-msg 'token-id) (read-string 'buyer) 1.0 1690025195 "2L8Q_bSe63oTP32EVXFxNoNtR7BWcUMmmtMmOkI1GyU"]}
+      {"name": "marmalade-v2.ledger.ACCOUNT_GUARD","params": [(read-msg 'token-id) "c:WkjYGRQKZsGJEvaQovu3B6V1VC9LBTtMRVMXm9l9IiI" (account-guard (read-msg 'token-id) "c:WkjYGRQKZsGJEvaQovu3B6V1VC9LBTtMRVMXm9l9IiI")]}
+      {"name": "marmalade-v2.ledger.TRANSFER","params": [(read-msg 'token-id) (read-string 'buyer) "c:WkjYGRQKZsGJEvaQovu3B6V1VC9LBTtMRVMXm9l9IiI" 1.0]}
+      {"name": "marmalade-v2.ledger.RECONCILE","params": [(read-msg 'token-id) 1.0 {"account": (read-string 'buyer),"current": 0.0,"previous": 1.0} {"account": "c:WkjYGRQKZsGJEvaQovu3B6V1VC9LBTtMRVMXm9l9IiI","current": 1.0,"previous": 0.0}]}]
+     (map (remove "module-hash")  (env-events true)))
+
+(commit-tx)
+
+(begin-tx "buyer sells token to buyer1")
+  (env-hash (hash "offer-royalty-1-buy"))
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test-royalty-uri", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+   ,"prev-buyer": "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"
+   ,"creator": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+   ,"buyer": "k:c8493f58aaff5787a15c987cf35b41bbca164a41d8978913860805768ed66fe7"
+   ,"buyer_fungible_account": "k:c8493f58aaff5787a15c987cf35b41bbca164a41d8978913860805768ed66fe7"
+   ,"buyer-guard": {"keys": ["c8493f58aaff5787a15c987cf35b41bbca164a41d8978913860805768ed66fe7"], "pred": "keys-all"}
+   })
+
+  (env-sigs
+   [{'key:'c8493f58aaff5787a15c987cf35b41bbca164a41d8978913860805768ed66fe7
+    ,'caps: [
+      (marmalade-v2.ledger.BUY (create-token-id { 'uri: "test-royalty-uri", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY) } ALWAYS-TRUE) (read-string "prev-buyer") (read-string "buyer")  1.0 "2L8Q_bSe63oTP32EVXFxNoNtR7BWcUMmmtMmOkI1GyU")
+      (coin.TRANSFER (read-string "buyer") "c:gg1NCZfPFF1e-gLYCyM7sHg5_1PeUD2sN85HqaojHIQ" 2.0)
+     ]}])
+
+  (expect "Buy succeeds"
+    "2L8Q_bSe63oTP32EVXFxNoNtR7BWcUMmmtMmOkI1GyU"
+    (continue-pact 1 false "2L8Q_bSe63oTP32EVXFxNoNtR7BWcUMmmtMmOkI1GyU"))
+
+  (expect
+    "Expect previous buyer balance to be increased with sale amount"
+    1.9 (coin.get-balance (read-string "prev-buyer")))
+
+  (expect
+    "Expect creator balance to be increased with added royalties"
+    2.1 (coin.get-balance (read-string 'creator)))
+
+(expect "buy events"
+  [{"name": "coin.TRANSFER","params": [(read-string 'buyer) "c:gg1NCZfPFF1e-gLYCyM7sHg5_1PeUD2sN85HqaojHIQ" 2.0]}
+   {"name": "marmalade-v2.royalty-policy-v1.ROYALTY-PAYOUT","params": ["2L8Q_bSe63oTP32EVXFxNoNtR7BWcUMmmtMmOkI1GyU" (read-msg 'token-id) 0.100000000000 (read-string 'creator)]}
+   {"name": "coin.TRANSFER","params": ["c:gg1NCZfPFF1e-gLYCyM7sHg5_1PeUD2sN85HqaojHIQ" (read-string 'creator) 0.100000000000]}
+   {"name": "coin.TRANSFER","params": ["c:gg1NCZfPFF1e-gLYCyM7sHg5_1PeUD2sN85HqaojHIQ" (read-string 'prev-buyer) 1.9]}
+   {"name": "marmalade-v2.ledger.BUY","params": [(read-msg 'token-id) (read-string 'prev-buyer) (read-string 'buyer) 1.0 "2L8Q_bSe63oTP32EVXFxNoNtR7BWcUMmmtMmOkI1GyU"]}
+   {"name": "marmalade-v2.ledger.ACCOUNT_GUARD","params": [(read-msg 'token-id) (read-string 'buyer) (read-keyset 'buyer-guard)]}
+   {"name": "marmalade-v2.ledger.TRANSFER","params": [(read-msg 'token-id) "c:WkjYGRQKZsGJEvaQovu3B6V1VC9LBTtMRVMXm9l9IiI" (read-string 'buyer) 1.0]}
+   {"name": "marmalade-v2.ledger.RECONCILE","params": [(read-msg 'token-id) 1.0 {"account": "c:WkjYGRQKZsGJEvaQovu3B6V1VC9LBTtMRVMXm9l9IiI","current": 0.0,"previous": 1.0} {"account": (read-string 'buyer),"current": 1.0,"previous": 0.0}]}]
+ (map (remove "module-hash")  (env-events true))
+ )
+
+(rollback-tx)
+
+(begin-tx "Fund creator fungible account")
+
+  (env-data {
+   "creator": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+   ,"creator-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+   })
+
+  (test-capability (coin.COINBASE))
+  (coin.coinbase (read-string 'creator) (read-keyset 'creator-guard) 2.0)
+
+  (expect "coinbase events"
+   [{"name": "coin.TRANSFER","params": ["" (read-string 'creator) 2.0]}]
+   (map (remove "module-hash")  (env-events true)))
+
+(commit-tx)
+
+(begin-tx "creator re-buys the token from buyer")
+  (env-hash (hash "offer-royalty-1-buy-creator"))
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test-royalty-uri", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+   ,"buyer": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+   ,"buyer_fungible_account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+   ,"buyer-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+   ,"prev-buyer": "k:ae511ecee78c71793b7915bc51f2e2b9a0b274aefa0ece5cb76bfcb8e0e1151c"
+   })
+
+  (env-sigs
+   [{'key:'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+    ,'caps: [
+      (marmalade-v2.ledger.BUY (create-token-id { 'uri: "test-royalty-uri", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY) } ALWAYS-TRUE) (read-string 'prev-buyer) (read-string 'buyer)  1.0 "2L8Q_bSe63oTP32EVXFxNoNtR7BWcUMmmtMmOkI1GyU")
+      (coin.TRANSFER (read-string 'buyer) "c:gg1NCZfPFF1e-gLYCyM7sHg5_1PeUD2sN85HqaojHIQ" 2.0)
+     ]}])
+
+  (expect "Buy succeeds"
+    "2L8Q_bSe63oTP32EVXFxNoNtR7BWcUMmmtMmOkI1GyU"
+    (continue-pact 1 false "2L8Q_bSe63oTP32EVXFxNoNtR7BWcUMmmtMmOkI1GyU"))
+
+  (expect
+    "Expect previous buyer balance to be correct"
+    1.9 (coin.get-balance (read-string 'prev-buyer)))
+
+  (expect
+    "Expect creator balance to be correct"
+    2.1 (coin.get-balance (read-string 'buyer)))
+
+(expect "buy events"
+  [{"name": "coin.TRANSFER","params": [(read-string 'buyer) "c:gg1NCZfPFF1e-gLYCyM7sHg5_1PeUD2sN85HqaojHIQ" 2.0]}
+   {"name": "marmalade-v2.royalty-policy-v1.ROYALTY-PAYOUT","params": ["2L8Q_bSe63oTP32EVXFxNoNtR7BWcUMmmtMmOkI1GyU" (read-msg 'token-id) 0.1 (read-string 'buyer)]}
+   {"name": "coin.TRANSFER","params": ["c:gg1NCZfPFF1e-gLYCyM7sHg5_1PeUD2sN85HqaojHIQ" (read-string 'buyer) 0.1]}
+   {"name": "coin.TRANSFER","params": ["c:gg1NCZfPFF1e-gLYCyM7sHg5_1PeUD2sN85HqaojHIQ" (read-string 'prev-buyer) 1.9]}
+   {"name": "marmalade-v2.ledger.BUY","params": [(read-msg 'token-id) (read-string 'prev-buyer) (read-string 'buyer) 1.0 "2L8Q_bSe63oTP32EVXFxNoNtR7BWcUMmmtMmOkI1GyU"]}
+   {"name": "marmalade-v2.ledger.TRANSFER","params": [(read-msg 'token-id) "c:WkjYGRQKZsGJEvaQovu3B6V1VC9LBTtMRVMXm9l9IiI" (read-string 'buyer) 1.0]}
+   {"name": "marmalade-v2.ledger.RECONCILE","params": [(read-msg 'token-id) 1.0 {"account": "c:WkjYGRQKZsGJEvaQovu3B6V1VC9LBTtMRVMXm9l9IiI","current": 0.0,"previous": 1.0} {"account": (read-string 'buyer),"current": 1.0,"previous": 0.0}]}]
+ (map (remove "module-hash")  (env-events true))
+ )
+
+(rollback-tx)

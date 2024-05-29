@@ -1,0 +1,30 @@
+
+# Assumes same fungible and marmalade account buyer
+pactTxHash: X5jiX2U9_9ktNs3jutN52kXYQiywE1S_u3WPIxv3oGw #same as sale-id. Requestkey from offer
+type: "cont"
+step: 1
+rollback: false
+signers:
+  - public: {{buyer-key}}
+    caps:
+      - name: coin.TRANSFER
+        args: ["{{buyer-account}}", "c:Z_CRfp-YeiBhSk370DUeKn9PlzVdeqq406x5-jqGnJU", 2.0] ##  "c:Z_CRfp-YeiBhSk370DUeKn9PlzVdeqq406x5-jqGnJU" is the escrow account, can be read with `(marmalade-v2.policy-manager.get-escrow-account "X5jiX2U9_9ktNs3jutN52kXYQiywE1S_u3WPIxv3oGw")`
+      - name: marmalade-v2.ledger.BUY
+        args: ["{{token-id}}", "{{seller-account}}", "{{buyer-account}}", 1.0, "X5jiX2U9_9ktNs3jutN52kXYQiywE1S_u3WPIxv3oGw" ] # last param is sale-id
+  - public: {{gas-payer-key}}
+    caps:
+      - name: coin.GAS
+        args: []
+data:
+  buyer: "{{buyer-account}}"
+  buyer-guard:
+    keys: [{{"buyer-key"}}]
+    pred: "keys-all"
+  buyer_fungible_account: "{{buyer-account}}"
+networkId: testnet04
+publicMeta:
+  chainId: "1"
+  sender: "{{gas-payer}}"
+  gasLimit: 10000
+  gasPrice: 0.0000001
+  ttl: 600
