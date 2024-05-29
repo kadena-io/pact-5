@@ -9,6 +9,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE CPP #-}
 
 module Pact.Core.IR.Eval.CoreBuiltin
@@ -44,12 +45,13 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Char as Char
 import qualified Data.ByteString as BS
+import qualified GHC.Exts as Exts
+import qualified GHC.Integer.Logarithms as IntLog
 import qualified Pact.Time as PactTime
 
 #ifndef WITHOUT_CRYPTO
 import Data.Foldable(traverse_)
 import qualified Control.Lens as Lens
-import qualified GHC.Exts as Exts
 #endif
 
 import Pact.Core.Builtin
@@ -205,6 +207,7 @@ rawMul info b cont handler _env = \case
 rawPow :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawPow info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
+    chargeGasArgs info $ GIntegerOpCost PrimOpPow i i'
     when (i' < 0) $ throwExecutionError info (ArithmeticException "negative exponent in integer power")
     -- Todo: move to iterated pow
     returnCEKValue cont handler (VLiteral (LInteger (i ^ i')))
@@ -384,11 +387,16 @@ rawSqrt info b cont handler _env = \case
 -- Todo: fix all show instances
 rawShow :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawShow info b cont handler _env = \case
-  [VLiteral (LInteger i)] ->
+  [VLiteral (LInteger i)] -> do
+    let strLen = 1 + Exts.I# (IntLog.integerLog2# $ abs i)
+    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
     returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
-  [VLiteral (LDecimal i)] ->
+  [VLiteral (LDecimal i)] -> do
+    let strLen = 1 + Exts.I# (IntLog.integerLog2# $ abs $ decimalMantissa i)
+    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
     returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
-  [VLiteral (LString i)] ->
+  [VLiteral (LString i)] -> do
+    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ T.length i
     returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
   [VLiteral (LBool i)] ->
     returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
@@ -426,7 +434,9 @@ rawSort info b cont handler _env = \case
 
 coreRemove :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreRemove info b cont handler _env = \case
-  [VString s, VObject o] -> returnCEKValue cont handler (VObject (M.delete (Field s) o))
+  [VString s, VObject o] -> do
+    chargeGasArgs info $ GObjOp $ ObjOpRemove s (M.size o)
+    returnCEKValue cont handler (VObject (M.delete (Field s) o))
   args -> argsError info b args
 
 asObject
@@ -515,22 +525,27 @@ rawTake info b cont handler _env = \case
     | i >= 0 -> do
       -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ min i (fromIntegral (T.length t))
+      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength clamp
       returnCEKValue cont handler  (VLiteral (LString (T.take clamp t)))
     | otherwise -> do
       -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ max (fromIntegral (T.length t) + i) 0
+      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral $ negate i
       returnCEKValue cont handler  (VLiteral (LString (T.drop clamp t)))
   [VLiteral (LInteger i), VList li]
     | i >= 0 -> do
       -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ min i (fromIntegral (V.length li))
+      chargeGasArgs info $ GConcat $ ListConcat $ GasListLength clamp
       returnCEKValue cont handler  (VList (V.take clamp li))
     | otherwise -> do
       -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ max (fromIntegral (V.length li) + i) 0
+      chargeGasArgs info $ GConcat $ ListConcat $ GasListLength $ fromIntegral $ negate i
       returnCEKValue cont handler (VList (V.drop clamp li))
   [VList li, VObject o] -> do
     strings <- traverse (fmap Field . asString info b) (V.toList li)
+    chargeGasArgs info $ GConcat $ ObjConcat $ V.length li
     returnCEKValue cont handler $ VObject $ M.restrictKeys o (S.fromList strings)
   args -> argsError info b args
 
@@ -562,6 +577,7 @@ rawDrop info b cont handler _env = \case
 rawLength :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawLength info b cont handler _env = \case
   [VString t] -> do
+    chargeGasArgs info $ GStrOp $ StrOpLength $ T.length t
     returnCEKValue cont handler  (VLiteral (LInteger (fromIntegral (T.length t))))
   [VList li] -> returnCEKValue cont handler (VLiteral (LInteger (fromIntegral (V.length li))))
   [VObject o] ->
@@ -592,6 +608,7 @@ coreConcat info b cont handler _env = \case
 strToList :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 strToList info b cont handler _env = \case
   [VLiteral (LString s)] -> do
+    chargeGasArgs info $ GStrOp $ StrOpExplode $ T.length s
     let v = VList (V.fromList (PLiteral . LString . T.singleton <$> T.unpack s))
     returnCEKValue cont handler v
   args -> argsError info b args
@@ -694,7 +711,8 @@ coreAccess info b cont handler _env = \case
 
 coreIsCharset :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreIsCharset info b cont handler _env = \case
-  [VLiteral (LInteger i), VString s] ->
+  [VLiteral (LInteger i), VString s] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
     case i of
       0 -> returnCEKValue cont handler $ VBool $ T.all Char.isAscii s
       1 -> returnCEKValue cont handler $ VBool $ T.all Char.isLatin1 s
@@ -777,16 +795,19 @@ enforceTopLevelOnly info b = do
 
 coreB64Encode :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreB64Encode info b cont handler _env = \case
-  [VLiteral (LString l)] ->
+  [VLiteral (LString l)] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length l
     returnCEKValue cont handler $ VLiteral $ LString $ toB64UrlUnpaddedText $ T.encodeUtf8 l
   args -> argsError info b args
 
 
 coreB64Decode :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreB64Decode info b cont handler _env = \case
-  [VLiteral (LString s)] -> case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
-    Left{} -> throwExecutionError info (DecodeError "invalid b64 encoding")
-    Right txt -> returnCEKValue cont handler (VLiteral (LString txt))
+  [VLiteral (LString s)] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
+    case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
+      Left{} -> throwExecutionError info (DecodeError "invalid b64 encoding")
+      Right txt -> returnCEKValue cont handler (VLiteral (LString txt))
   args -> argsError info b args
 
 
@@ -794,20 +815,24 @@ coreB64Decode info b cont handler _env = \case
 coreEnforceGuard :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreEnforceGuard info b cont handler env = \case
   [VGuard g] -> enforceGuard info cont handler env g
-  [VString s] -> case parseAnyKeysetName s of
+  [VString s] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
+    case parseAnyKeysetName s of
       Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
       Right ksn -> isKeysetNameInSigs info cont handler env ksn
   args -> argsError info b args
 
 keysetRefGuard :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 keysetRefGuard info b cont handler env = \case
-  [VString g] -> case parseAnyKeysetName g of
-    Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
-    Right ksn -> do
-      let pdb = view cePactDb env
-      liftDbFunction info (readKeySet pdb ksn) >>= \case
-        Nothing -> returnCEK cont handler (VError ("no such keyset defined: " <> g) info)
-        Just _ -> returnCEKValue cont handler (VGuard (GKeySetRef ksn))
+  [VString g] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length g
+    case parseAnyKeysetName g of
+      Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
+      Right ksn -> do
+        let pdb = view cePactDb env
+        liftDbFunction info (readKeySet pdb ksn) >>= \case
+          Nothing -> returnCEK cont handler (VError ("no such keyset defined: " <> g) info)
+          Just _ -> returnCEKValue cont handler (VGuard (GKeySetRef ksn))
   args -> argsError info b args
 
 coreTypeOf :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -859,7 +884,8 @@ coreReadInteger :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step 
 coreReadInteger info b cont handler _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
-      PObject envData ->
+      PObject envData -> do
+        chargeGasArgs info $ GObjOp $ ObjOpLookup s $ M.size envData
         case M.lookup (Field s) envData of
           -- See [Note: Parsed Integer]
           Just (PDecimal p) ->
@@ -867,9 +893,11 @@ coreReadInteger info b cont handler _env = \case
           Just (PInteger p) ->
             returnCEKValue cont handler (VInteger p)
           -- See [Note: Parsed Integer]
-          Just (PString raw) -> case parseNumLiteral raw of
-            Just (LInteger i) -> returnCEKValue cont handler (VInteger i)
-            _ -> returnCEK cont handler (VError "read-integer failure" info)
+          Just (PString raw) -> do
+            chargeGasArgs info $ GStrOp $ StrOpConvToInt $ T.length raw
+            case parseNumLiteral raw of
+              Just (LInteger i) -> returnCEKValue cont handler (VInteger i)
+              _ -> returnCEK cont handler (VError "read-integer failure" info)
 
           _ -> returnCEK cont handler (VError "read-integer failure" info)
       _ -> returnCEK cont handler (VError "read-integer failure" info)
@@ -879,7 +907,8 @@ coreReadMsg :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i 
 coreReadMsg info b cont handler _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
-      PObject envData ->
+      PObject envData -> do
+        chargeGasArgs info $ GObjOp $ ObjOpLookup s $ M.size envData
         case M.lookup (Field s) envData of
           Just pv -> returnCEKValue cont handler (VPactValue pv)
           _ -> returnCEK cont handler (VError "read-msg failure" info)
@@ -909,15 +938,18 @@ coreReadDecimal :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step 
 coreReadDecimal info b cont handler _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
-      PObject envData ->
+      PObject envData -> do
+        chargeGasArgs info $ GObjOp $ ObjOpLookup s $ M.size envData
         case M.lookup (Field s) envData of
           Just (PDecimal p) -> returnCEKValue cont handler (VDecimal p)
           -- See [Note: Parsed Decimal]
           Just (PInteger i) -> returnCEKValue cont handler (VDecimal (Decimal 0 i))
-          Just (PString raw) -> case parseNumLiteral raw of
-            Just (LInteger i) -> returnCEKValue cont handler (VDecimal (Decimal 0 i))
-            Just (LDecimal l) -> returnCEKValue cont handler (VDecimal l)
-            _ -> returnCEK cont handler (VError "read-decimal failure" info)
+          Just (PString raw) -> do
+            chargeGasArgs info $ GStrOp $ StrOpConvToInt $ T.length raw
+            case parseNumLiteral raw of
+              Just (LInteger i) -> returnCEKValue cont handler (VDecimal (Decimal 0 i))
+              Just (LDecimal l) -> returnCEKValue cont handler (VDecimal l)
+              _ -> returnCEK cont handler (VError "read-decimal failure" info)
           _ -> returnCEK cont handler (VError "read-decimal failure" info)
       _ -> returnCEK cont handler (VError "read-decimal failure" info)
   args -> argsError info b args
@@ -926,29 +958,38 @@ coreReadString :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b
 coreReadString info b cont handler _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
-      PObject envData ->
+      PObject envData -> do
+        chargeGasArgs info $ GObjOp $ ObjOpLookup s $ M.size envData
         case M.lookup (Field s) envData of
           Just (PString p) -> returnCEKValue cont handler (VString p)
           _ -> returnCEK cont handler (VError "read-string failure" info)
       _ -> returnCEK cont handler (VError "read-string failure" info)
   args -> argsError info b args
 
-readKeyset' :: (MonadEval b i m) => T.Text -> m (Maybe KeySet)
-readKeyset' ksn = do
+readKeyset' :: (MonadEval b i m) => i -> T.Text -> m (Maybe KeySet)
+readKeyset' info ksn = do
   viewEvalEnv eeMsgBody >>= \case
-    PObject envData ->
+    PObject envData -> do
+      chargeGasArgs info $ GObjOp $ ObjOpLookup ksn $ M.size envData
       case M.lookup (Field ksn) envData of
         Just (PGuard (GKeyset ks)) -> pure (Just ks)
-        Just (PObject dat) -> parseObj dat
+        Just (PObject dat) -> do
+          chargeGasArgs info $ GObjOp $ ObjOpLookup "keys" objSize
+          chargeGasArgs info $ GObjOp $ ObjOpLookup "pred" objSize
+          case parseObj dat of
+            Nothing -> pure Nothing
+            Just (ks, p) -> do
+              chargeGasArgs info $ GStrOp $ StrOpParse $ T.length p
+              pure $ KeySet ks <$> readPredicate p
           where
-          parseObj d = pure $ do
+          objSize = M.size dat
+          parseObj d = do
             keys <- M.lookup (Field "keys") d
             keyText <- preview _PList keys >>= traverse (fmap PublicKeyText . preview (_PLiteral . _LString))
             predRaw <- M.lookup (Field "pred") d
             p <- preview (_PLiteral . _LString) predRaw
-            pred' <- readPredicate p
             let ks = S.fromList (V.toList keyText)
-            pure (KeySet ks pred')
+            pure (ks, p)
           readPredicate = \case
             "keys-any" -> pure KeysAny
             "keys-2" -> pure Keys2
@@ -969,7 +1010,7 @@ readKeyset' ksn = do
 coreReadKeyset :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreReadKeyset info b cont handler _env = \case
   [VString ksn] ->
-    readKeyset' ksn >>= \case
+    readKeyset' info ksn >>= \case
       Just ks -> do
         shouldEnforce <- isExecutionFlagSet FlagEnforceKeyFormats
         if shouldEnforce && isLeft (enforceKeyFormats (const ()) ks)
@@ -1125,7 +1166,7 @@ defineKeySet info b cont handler env = \case
     defineKeySet' info cont handler env ksname ks
   [VString ksname] -> do
     enforceTopLevelOnly info b
-    readKeyset' ksname >>= \case
+    readKeyset' info ksname >>= \case
       Just newKs ->
         defineKeySet' info cont handler env ksname newKs
       Nothing -> returnCEK cont handler (VError "read-keyset failure" info)
@@ -1137,7 +1178,11 @@ defineKeySet info b cont handler env = \case
 
 requireCapability :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 requireCapability info b cont handler _env = \case
-  [VCapToken ct] -> requireCap info cont handler ct
+  [VCapToken ct] -> do
+    slots <- useEvalState $ esCaps . csSlots
+    let cnt = sum [1 + length cs | CapSlot _ cs <- slots]
+    chargeGasArgs info $ GCapOp $ CapOpRequire cnt
+    requireCap info cont handler ct
   args -> argsError info b args
 
 enforceStackTopIsDefcap
@@ -1176,7 +1221,7 @@ coreEmitEvent info b cont handler env = \case
     let cont' = BuiltinC env info (EmitEventC ct) cont
     guardForModuleCall info cont' handler env (_fqModule fqn) $
       -- Todo: this code is repeated in the EmitEventFrame code
-      lookupFqName (_ctName ct) >>= \case
+      lookupFqName fqn >>= \case
         Just (DCap d) -> do
           enforceMeta (_dcapMeta d)
           emitCapability info ct
@@ -1231,9 +1276,14 @@ coreIntToStr info b cont handler _env = \case
     | v < 0 ->
       returnCEK cont handler (VError "int-to-str error: cannot show negative integer" info)
     | base >= 2 && base <= 16 -> do
+      let strLen = 1 + Exts.I# (IntLog.integerLogBase# base $ abs v)
+      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
       let v' = T.pack $ showIntAtBase base Char.intToDigit v ""
       returnCEKValue cont handler (VString v')
     | base == 64 && v >= 0 -> do
+      let bsLen = 1 + Exts.I# (IntLog.integerLogBase# 256 $ abs v)
+          strLen = (bsLen * 4) `div` 3
+      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
       let v' = toB64UrlUnpaddedText $ integerToBS v
       returnCEKValue cont handler (VString v')
     | base == 64 -> returnCEK cont handler (VError "only positive values allowed for base64URL conversion" info)
@@ -1242,17 +1292,25 @@ coreIntToStr info b cont handler _env = \case
 
 coreStrToInt :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreStrToInt info b cont handler _env = \case
-  [VString s] ->
-    checkLen info s *> doBase info cont handler 10 s
+  [VString s] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
+    checkLen info s
+    doBase info cont handler 10 s
   args -> argsError info b args
 
 coreStrToIntBase :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreStrToIntBase info b cont handler _env = \case
   [VInteger base, VString s]
-    | base == 64 -> checkLen info s *> case decodeBase64UrlUnpadded $ T.encodeUtf8 s of
-        Left{} -> throwExecutionError info (DecodeError "invalid b64 encoding")
-        Right bs -> returnCEKValue cont handler $ VInteger (bsToInteger bs)
-    | base >= 2 && base <= 16 -> checkLen info s *> doBase info cont handler base s
+    | base == 64 -> do
+        chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
+        checkLen info s
+        case decodeBase64UrlUnpadded $ T.encodeUtf8 s of
+          Left{} -> throwExecutionError info (DecodeError "invalid b64 encoding")
+          Right bs -> returnCEKValue cont handler $ VInteger (bsToInteger bs)
+    | base >= 2 && base <= 16 -> do
+        chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
+        checkLen info s
+        doBase info cont handler base s
     | otherwise -> returnCEK cont handler (VError "Base value must be >= 2 and <= 16, or 64" info)
   args -> argsError info b args
   where
@@ -1281,26 +1339,32 @@ coreDistinct info b cont handler _env = \case
 coreFormat  :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreFormat info b cont handler _env = \case
   [VString s, VList es] -> do
+    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ T.length s
     let parts = T.splitOn "{}" s
         plen = length parts
     if | plen == 1 -> returnCEKValue cont handler (VString s)
        | plen - length es > 1 -> returnCEK cont handler $ VError "format: not enough arguments for template" info
        | otherwise -> do
-          let args = formatArg <$> V.toList es
+          args <- mapM formatArgM $ V.toList es
           returnCEKValue cont handler $ VString $  T.concat $ alternate parts (take (plen - 1) args)
     where
     formatArg (PString ps) = ps
     formatArg a = renderPactValue a
+
+    formatArgM a = do
+      let a' = formatArg a
+      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ T.length a'
+      pure a'
+
     alternate (x:xs) ys = x : alternate ys xs
     alternate _ _ = []
-  args -> argsError info b args
 
--- Todo: This _Really_ needs gas
--- moreover this is kinda hacky
--- BIG TODO: REMOVE PRETTY FROM SEMANTICS.
--- THIS CANNOT MAKE IT TO PROD
-renderPactValue :: PactValue -> T.Text
-renderPactValue = T.pack . show . Pretty.pretty
+    -- Todo: this is kinda hacky
+    -- BIG TODO: REMOVE PRETTY FROM SEMANTICS.
+    -- THIS CANNOT MAKE IT TO PROD
+    renderPactValue :: PactValue -> T.Text
+    renderPactValue = T.pack . show . Pretty.pretty
+  args -> argsError info b args
 
 checkLen
   :: (MonadEval b i m)
@@ -1411,7 +1475,8 @@ coreContinue info b cont handler _env = \case
 
 parseTime :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 parseTime info b cont handler _env = \case
-  [VString fmt, VString s] ->
+  [VString fmt, VString s] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParseTime (T.length fmt) (T.length s)
     case PactTime.parseTime (T.unpack fmt) (T.unpack s) of
       Just t -> returnCEKValue cont handler $ VPactValue (PTime t)
       Nothing ->
@@ -1421,6 +1486,7 @@ parseTime info b cont handler _env = \case
 formatTime :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 formatTime info b cont handler _env = \case
   [VString fmt, VPactValue (PTime t)] -> do
+    chargeGasArgs info $ GStrOp $ StrOpFormatTime $ T.length fmt
     let timeString = PactTime.formatTime (T.unpack fmt) t
     returnCEKValue cont handler $ VString (T.pack timeString)
   args -> argsError info b args
@@ -1534,13 +1600,18 @@ coreCompose info b cont handler env = \case
     applyLam clo1 [v] cont' handler
   args -> argsError info b args
 
-createPrincipalForGuard :: (MonadEval b i m) => i -> Guard QualifiedName PactValue -> m (Pr.Principal)
+createPrincipalForGuard :: (MonadEval b i m) => i -> Guard QualifiedName PactValue -> m Pr.Principal
 createPrincipalForGuard info = \case
   GKeyset (KeySet ks pf) -> case (toList ks, pf) of
     ([k], KeysAll)
       | ed25519HexFormat k -> Pr.K k <$ chargeGas 1_000
     (l, _) -> do
       h <- mkHash $ map (T.encodeUtf8 . _pubKey) l
+      case pf of
+        CustomPredicate (TQN (QualifiedName n (ModuleName mn mns))) -> do
+          let totalLength = T.length n + T.length mn + maybe 0 (T.length . _namespaceName) mns
+          chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength totalLength
+        _ -> pure ()
       pure $ Pr.W (hashToText h) (predicateToText pf)
   GKeySetRef ksn ->
     Pr.R ksn <$ chargeGas 1_000
@@ -1577,12 +1648,15 @@ coreCreatePrincipal info b cont handler _env = \case
 
 coreIsPrincipal :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreIsPrincipal info b cont handler _env = \case
-  [VString p] -> returnCEKValue cont handler $ VBool $ isRight $ parseOnly Pr.principalParser p
+  [VString p] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length p
+    returnCEKValue cont handler $ VBool $ isRight $ parseOnly Pr.principalParser p
   args -> argsError info b args
 
 coreTypeOfPrincipal :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreTypeOfPrincipal info b cont handler _env = \case
   [VString p] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length p
     let prty = case parseOnly Pr.principalParser p of
           Left _ -> ""
           Right pr -> Pr.showPrincipalType pr
@@ -1593,6 +1667,7 @@ coreValidatePrincipal :: (CEKEval step b i m, MonadEval b i m) => NativeFunction
 coreValidatePrincipal info b cont handler _env = \case
   [VGuard g, VString s] -> do
     pr' <- createPrincipalForGuard info g
+    chargeGasArgs info $ GComparison $ TextComparison s
     returnCEKValue cont handler $ VBool $ Pr.mkPrincipalIdent pr' == s
   args -> argsError info b args
 
@@ -1620,9 +1695,11 @@ coreNamespace info b cont handler env = \case
     if T.null n then do
       (esLoaded . loNamespace) .== Nothing
       returnCEKValue cont handler (VString "Namespace reset to root")
-    else
+    else do
+      chargeGasArgs info $ GRead $ fromIntegral $ T.length n
       liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
         Just ns -> do
+          chargeGasArgs info $ GRead $ sizeOf SizeOfV0 ns
           (esLoaded . loNamespace) .== Just ns
           let msg = "Namespace set to " <> n
           returnCEKValue cont handler (VString msg)
@@ -1639,11 +1716,13 @@ coreDefineNamespace info b cont handler env = \case
     let pdb = view cePactDb env
     let nsn = NamespaceName n
         ns = Namespace nsn usrG adminG
+    chargeGasArgs info $ GRead $ fromIntegral $ T.length n
     liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
       -- G!
       -- https://static.wikia.nocookie.net/onepiece/images/5/52/Lao_G_Manga_Infobox.png/revision/latest?cb=20150405020446
       -- Enforce the old guard
-      Just (Namespace _ _ laoG) -> do
+      Just existing@(Namespace _ _ laoG) -> do
+        chargeGasArgs info $ GRead $ sizeOf SizeOfV0 existing
         let cont' = BuiltinC env info (DefineNamespaceC ns) cont
         enforceGuard info cont' handler env laoG
       Nothing -> viewEvalEnv eeNamespacePolicy >>= \case
@@ -1675,8 +1754,10 @@ coreDescribeNamespace :: (CEKEval step b i m, MonadEval b i m) => NativeFunction
 coreDescribeNamespace info b cont handler _env = \case
   [VString n] -> do
     pdb <- viewEvalEnv eePactDb
+    chargeGasArgs info $ GRead $ fromIntegral $ T.length n
     liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
-      Just (Namespace _ usrG laoG) -> do
+      Just existing@(Namespace _ usrG laoG) -> do
+        chargeGasArgs info $ GRead $ sizeOf SizeOfV0 existing
         let obj = M.fromList
                   [ (Field "user-guard", PGuard usrG)
                   , (Field "admin-guard", PGuard laoG)
@@ -1772,8 +1853,8 @@ zkPairingCheck info b cont handler _env = \case
     returnCEKValue cont handler $ VBool $ pairingCheck pairs
   args -> argsError info b args
 
-zkScalaMult :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
-zkScalaMult info b cont handler _env = \case
+zkScalarMult :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
+zkScalarMult info b cont handler _env = \case
   args@[VString ptTy, VObject p1, VInteger scalar] -> do
     let scalar' = scalar `mod` curveOrder
     case T.toLower ptTy of
@@ -1841,8 +1922,8 @@ poseidonHash info b cont handler _env = \case
 zkPairingCheck :: (MonadEval b i m) => NativeFunction step b i m
 zkPairingCheck info _b _cont _handler _env _args = failInvariant info "crypto disabled"
 
-zkScalaMult :: (MonadEval b i m) => NativeFunction step b i m
-zkScalaMult info _b _cont _handler _env _args = failInvariant info "crypto disabled"
+zkScalarMult :: (MonadEval b i m) => NativeFunction step b i m
+zkScalarMult info _b _cont _handler _env _args = failInvariant info "crypto disabled"
 
 zkPointAddition :: (MonadEval b i m) => NativeFunction step b i m
 zkPointAddition info _b _cont _handler _env _args = failInvariant info "crypto disabled"
@@ -2043,7 +2124,7 @@ coreBuiltinRuntime = \case
   CoreDefineNamespace -> coreDefineNamespace
   CoreDescribeNamespace -> coreDescribeNamespace
   CoreZkPairingCheck -> zkPairingCheck
-  CoreZKScalarMult -> zkScalaMult
+  CoreZKScalarMult -> zkScalarMult
   CoreZkPointAdd -> zkPointAddition
   CorePoseidonHashHackachain -> poseidonHash
   CoreChainData -> coreChainData

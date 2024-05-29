@@ -96,7 +96,8 @@ lookupFqName fqn =
 getDefCap :: (MonadEval b i m) => i -> FullyQualifiedName -> m (EvalDefCap b i)
 getDefCap info fqn = lookupFqName fqn >>= \case
   Just (DCap d) -> pure d
-  _ -> failInvariant info "Expected DefCap"
+  Just _ -> failInvariant info "Expected DefCap"
+  _ -> failInvariant info "Expected DefCap; got nothing"
 
 getDefun :: (MonadEval b i m) => i -> FullyQualifiedName -> m (EvalDefun b i)
 getDefun info fqn = lookupFqName fqn >>= \case

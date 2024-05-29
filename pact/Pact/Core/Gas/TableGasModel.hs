@@ -1,5 +1,4 @@
 {-# LANGUAGE PartialTypeSignatures #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE DataKinds #-}
 
@@ -17,7 +16,6 @@ import Data.Ratio((%))
 import GHC.Int(Int(..))
 import qualified Data.Text as T
 import GHC.Num.Integer
-import GHC.Num.WordArray
 import qualified GHC.Integer.Logarithms as IntLog
 import Pact.Core.Builtin
 import Pact.Core.Gas
@@ -101,8 +99,7 @@ intCostUpperBound = 664
 integerBits :: Integer -> Int
 integerBits = \case
   IS _ -> 64 -- note: Small ints are machine word sized
-  IP wa -> I# (wordArraySize# wa)
-  IN wa -> I# (wordArraySize# wa)
+  i -> I# (IntLog.integerLog2# (abs i))
 {-# INLINE integerBits #-}
 
 
@@ -134,7 +131,7 @@ intMultCost !lop !rop
     -- have the cost intMul(n) = 0.1523*n + 26.2 ~ 1.5n+26 ~ (3*n)/20+26
     -- after the bound,
     let !nbits = (I# (IntLog.integerLog2# (abs a)) + 1)
-    in if nbits <= intCostUpperBound then MilliGas $ fromIntegral $ ((3*nbits) `quot` 20 + 26)
+    in if nbits <= intCostUpperBound then MilliGas $ fromIntegral $ (3*nbits) `quot` 20 + 26
        else MilliGas $ fromIntegral (nbits * nbits `quot` 6400)
 {-# INLINE intMultCost #-}
 
@@ -148,7 +145,7 @@ intDivCost !lop !rop
     -- With a bit of squinting (okay maybe a lot), we can simply charge as much as multiplication
     -- below our threshold, benchmarks find integer and rational division to be quite fast
     let !nbits = (I# (IntLog.integerLog2# (abs a)) + 1)
-    in if nbits <= intCostUpperBound then MilliGas $ fromIntegral $ ((3*nbits) `quot` 20 + 26)
+    in if nbits <= intCostUpperBound then MilliGas $ fromIntegral $ (3*nbits) `quot` 20 + 26
        else MilliGas $ fromIntegral (nbits * nbits `quot` 6400)
 {-# INLINE intDivCost #-}
 
@@ -156,6 +153,31 @@ intShiftCost :: Integer -> Integer -> MilliGas
 intShiftCost _ !rop
   | rop > 0 = MilliGas $ fromIntegral $ rop `quot` 1000
   | otherwise = MilliGas 0
+
+intPowCost :: Integer -> Integer -> MilliGas
+intPowCost !base !power = MilliGas $ g (I# (IntLog.integerLogBase# 10 (abs base))) (I# (IntLog.integerLogBase# 10 (abs power)))
+  where
+  g x y = f ((x - 3) `div` 2) ((y - 3) `div` 2)
+  f x y = f00 * 2 ^ max x 0 * 300 ^ max y 0
+  f00 = 1000
+{- The benchmarks show the run time t, for x = log₁₀ base, y = log₁₀ power:
+           |  y = 3  | y = 5  | y = 7
+    x = 3  |  3 μs   | 1.2 ms | 302 ms
+    x = 5  |  7 μs   | 2.1 ms | 591 ms
+    x = 7  |  12 μs  | 4.3 ms | 988 ms
+
+    Let `g(x, y)` the function describing this dependency.
+    Note that `g(x + 2, y) = 2 g(x, y)`  and `g(x, y + 2) = 300 g(x, y)` with a good precision ε.
+    For simplicity, let also `f` be such that `g(x, y) = f((x - 3) / 2, (y - 3) / 2)`.
+    With a good precision ε, we thus need f such that
+    ```
+    f(0, 0) = 3 [μs]
+    f(x + 1, y) = 2 f(x, y)
+    f(x, y + 1) = 300 f(x, y)
+    ```
+    This means `f(x, y) = a^x • b^y • f₀₀`.
+    The first equation above means `f₀₀ = 3 [μs] ≈ 1000 [milligas]`, the second one means `a = 2`, and the third one means `b = 300`.
+ -}
 
 runTableModel :: GasArgs -> MilliGas
 runTableModel = \case
@@ -166,6 +188,7 @@ runTableModel = \case
     PrimOpMul -> intMultCost lop rop
     PrimOpDiv -> intDivCost lop rop
     PrimOpShift -> intShiftCost lop rop
+    PrimOpPow -> intPowCost lop rop
   -- Note: concat values are currently just constant
   -- Todo: get actual metrics on list cat / text cat
   GConcat c -> case c of
@@ -188,11 +211,15 @@ runTableModel = \case
     Pairing np -> pairingGas np
   -- Todo: Gwrite needs benchmarking
   GWrite bytes -> memoryCost bytes
+  GRead bytes ->
+    let mgPerByte = 1
+    in MilliGas $ fromIntegral $ bytes * mgPerByte
+    -- a string of 10⁶ chars (which is 2×10⁶ sizeof bytes) takes a little less than 2×10⁶ to write
   GMakeList len sz ->
     MilliGas $ fromIntegral len * sz
   GComparison cmpty -> case cmpty of
     TextComparison str ->
-      MilliGas $ fromIntegral (T.length str) + basicWorkGas
+      MilliGas $ textCompareCost str + basicWorkGas
     IntComparison l r ->
       MilliGas $ fromIntegral (max (integerBits l) (integerBits r)) + basicWorkGas
     -- See [Decimal comparisons]
@@ -215,6 +242,43 @@ runTableModel = \case
      quadraticGasFactor = 50_000
      linearGasFactor = 38_000
   GModuleMemory bytes -> moduleMemoryCost bytes
+  GStrOp op -> case op of
+    StrOpLength len ->
+      let charsPerMg = 100
+      in MilliGas $ fromIntegral $ len `quot` charsPerMg + 1
+    StrOpConvToInt len ->
+      let mgPerChar = 20
+      in MilliGas $ fromIntegral $ len * mgPerChar + 1
+    StrOpParse len ->
+      let mgPerChar = 5
+      in MilliGas $ fromIntegral $ len * mgPerChar + 1
+    StrOpExplode len ->
+      let mgPerChar = 100
+      in MilliGas $ fromIntegral $ len * mgPerChar + 1
+    StrOpParseTime fmtLen strLen ->
+      -- a test string of 1000 %Y's (hence 2000 chars) is processed in about 10³ [g] = 10⁶ [mg]
+      -- and there's also a cost of unpacking the strings
+      let fmtCharSqPerMg = 4
+          unpackMgPerChar = 10
+      in MilliGas $ fromIntegral $ (fmtLen * fmtLen) `div` fmtCharSqPerMg + unpackMgPerChar * strLen + 1
+    StrOpFormatTime fmtLen ->
+      let mgPerChar = 20
+      in MilliGas $ fromIntegral $ fmtLen * mgPerChar + 1
+  GObjOp op -> case op of
+    ObjOpLookup key objSize ->
+      let objSzLog = fromIntegral $ I# (IntLog.integerLog2# $ fromIntegral objSize) + 1
+      in MilliGas $ objSzLog * textCompareCost key
+    ObjOpRemove key objSize ->
+      -- an object with 10⁷ keys takes about 200 ms (≈10⁸ milligas) to remove a key of length 1,
+      -- and the execution time grows linearly, hence it's about 10 milligas per key/value pair in the object
+      let objSizeFactor = 10
+      in MilliGas $ fromIntegral $ objSize * textCompareCost key * objSizeFactor
+  GCapOp op -> case op of
+    CapOpRequire cnt ->
+      let mgPerCap = 100
+      in MilliGas $ fromIntegral $ cnt * mgPerCap
+  where
+  textCompareCost str = fromIntegral $ T.length str
 
 basicWorkGas :: Word64
 basicWorkGas = 25

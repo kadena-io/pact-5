@@ -29,6 +29,9 @@ module Pact.Core.Gas
  , ZKGroup(..)
  , ZKArg(..)
  , IntegerPrimOp(..)
+ , StrOp(..)
+ , ObjOp(..)
+ , CapOp(..)
  , ConcatType(..)
  , GasTextLength(..)
  , GasListLength(..)
@@ -138,7 +141,34 @@ data IntegerPrimOp
   | PrimOpMul
   | PrimOpDiv
   | PrimOpShift
+  | PrimOpPow
   deriving (Eq, Show, Enum, Ord, Generic, NFData)
+
+data StrOp
+  = StrOpLength !Int
+  -- ^ The cost of computing the length. In a sense, it's charged post-factum.
+  | StrOpConvToInt !Int
+  -- ^ The cost of converting a string of a given length to an integer.
+  | StrOpParse !Int
+  -- ^ The cost of a general scanning parse of a string of a given length.
+  | StrOpExplode !Int
+  -- ^ The cost of splitting a string into a list of chars.
+  | StrOpParseTime !Int !Int
+  -- ^ The cost of parsing time with the given format string and time string lengths.
+  | StrOpFormatTime !Int
+  -- ^ The cost of formatting time with the given format string length.
+  deriving (Eq, Show, Ord, Generic, NFData)
+
+data ObjOp
+  = ObjOpLookup !T.Text !Int
+  -- ^ The cost of looking up a key in an object with the given fields count.
+  | ObjOpRemove !T.Text !Int
+  -- ^ The cost of removing a key from an object with the given fields count.
+  deriving (Eq, Show, Ord, Generic, NFData)
+
+data CapOp
+  = CapOpRequire !Int
+  deriving (Eq, Show, Ord, Generic, NFData)
 
 data GasArgs
   = GAConstant !MilliGas
@@ -161,6 +191,8 @@ data GasArgs
   -- ^ Cost of ZK function
   | GWrite !Word64
   -- ^ Cost of writes, per bytes, roughly based on in-memory cost.
+  | GRead !Word64
+  -- ^ Cost of reads, per bytes, roughly based on in-memory cost.
   | GComparison !ComparisonType
   -- ^ Gas costs for comparisons
   | GSearch !SearchType
@@ -168,6 +200,12 @@ data GasArgs
   | GPoseidonHashHackAChain !Int
   -- ^ poseidon-hash-hack-a-chain costs
   | GModuleMemory !Word64
+  | GStrOp !StrOp
+  -- ^ Gas costs for string operations
+  | GObjOp !ObjOp
+  -- ^ Gas cost for object-specific operations
+  | GCapOp !CapOp
+  -- ^ Gas cost for capabilities ops
   deriving (Show, Generic, NFData)
 
 instance Pretty GasArgs where

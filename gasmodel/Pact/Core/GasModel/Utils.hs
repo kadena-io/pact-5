@@ -8,9 +8,10 @@ module Pact.Core.GasModel.Utils where
 import Control.Lens
 import Control.Monad.Except
 import Control.DeepSeq
+import Data.Default(def)
 import Data.Text (Text)
 import Data.Map.Strict(Map)
-import Data.Default(def)
+import Data.Monoid
 import qualified Criterion as C
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
@@ -310,8 +311,9 @@ runNativeBenchmark'
   -> Text
   -> C.Benchmark
 runNativeBenchmark' envMod stMod pdb title src = C.env mkEnv $ \ ~(term, es, ee) ->
-  C.bench title $ C.nfAppIO (runEvalM ee es . Eval.eval PImpure benchmarkBigStepEnv) term
+  C.bench title $ C.nfAppIO (fmap (ensureNonError . fst) . runEvalM ee es . Eval.eval PImpure benchmarkBigStepEnv) term
   where
+  ensureNonError = either (error . show) id
   mkEnv = do
     ee <- envMod =<< defaultGasEvalEnv pdb
     es <- stMod defaultGasEvalState
@@ -325,13 +327,8 @@ runNativeBenchmark
   -> C.Benchmark
 runNativeBenchmark = runNativeBenchmark' pure pure
 
-runNativeBenchmarkPrepared
-  :: [(Text, PactValue)]
-  -> PactDb CoreBuiltin ()
-  -> String
-  -> Text
-  -> C.Benchmark
-runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure stMod
+withLoaded :: [(Text, PactValue)] -> (BenchEvalState -> BenchEvalState)
+withLoaded envVars = esLoaded .~ synthLoaded
   where
   synthLoaded = Loaded
     { _loModules = mempty
@@ -339,7 +336,67 @@ runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure stMod
     , _loNamespace = Nothing
     , _loAllLoaded = M.fromList [ (mkGasModelFqn n, DConst $ DefConst (Arg n Nothing ()) (EvaledConst v) ()) | (n, v) <- envVars ]
     }
-  stMod = pure . (esLoaded .~ synthLoaded)
+
+runNativeBenchmarkPrepared
+  :: [(Text, PactValue)]
+  -> PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> C.Benchmark
+runNativeBenchmarkPrepared envVars = runNativeBenchmark' pure (pure . withLoaded envVars)
+
+type EnvMod = Endo BenchEvalEnv
+
+msgBody :: Map Field PactValue -> EnvMod
+msgBody body = Endo $ eeMsgBody .~ PObject body
+
+msgSigsNoCap :: [PublicKeyText] -> EnvMod
+msgSigsNoCap pkts = Endo $ eeMsgSigs .~ M.fromList ((, mempty) <$> pkts)
+
+runNativeBenchmarkPreparedEnvMod
+  :: EnvMod
+  -> [(Text, PactValue)]
+  -> PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> C.Benchmark
+runNativeBenchmarkPreparedEnvMod (Endo envMod) envVars = runNativeBenchmark' (pure . envMod) (pure . withLoaded envVars)
+
+type StMod = Endo BenchEvalState
+
+stCaps :: [CapToken QualifiedName PactValue] -> StMod
+stCaps capToks = Endo $ esCaps.csSlots .~ ((`CapSlot` []) <$> capToks)
+
+stManaged :: [ManagedCap QualifiedName PactValue] -> StMod
+stManaged manageds = Endo $ esCaps.csManaged .~ S.fromList manageds
+
+stAddDef :: Text -> Def Name Type CoreBuiltin () -> StMod
+stAddDef name dfn = Endo $ (esLoaded.loToplevel %~ M.insert name (fqn, defKind gmModuleName dfn))
+                         . (esLoaded.loAllLoaded %~ M.insert fqn dfn)
+  where
+  fqn = mkGasModelFqn name
+
+stStack :: [StackFrame ()] -> StMod
+stStack s = Endo $ esStack .~ s
+
+stModAdmin :: [ModuleName] -> StMod
+stModAdmin names = Endo $ esCaps.csModuleAdmin .~ S.fromList names
+
+runNativeBenchmarkPreparedStMod
+  :: StMod
+  -> [(Text, PactValue)]
+  -> PactDb CoreBuiltin ()
+  -> String
+  -> Text
+  -> C.Benchmark
+runNativeBenchmarkPreparedStMod (Endo stMod) envVars = runNativeBenchmark' pure (pure . stMod . withLoaded envVars)
+
+
+dummyTx :: PactDb b i -> IO () -> [C.Benchmark] -> [C.Benchmark]
+dummyTx pdb initDbState bs = C.envWithCleanup (_pdbBeginTx pdb Transactional >> initDbState) (const $ _pdbRollbackTx pdb) . const <$> bs
+
+ignoreWrites :: PactDb b i -> PactDb b i
+ignoreWrites pdb = pdb { _pdbWrite = \_ _ _ _ -> pure () }
 
 -- Closures
 unitClosureNullary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m
