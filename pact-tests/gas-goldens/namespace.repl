@@ -1,0 +1,4 @@
+(env-data { "admin-ks": ["a"] })
+
+(define-keyset 'admin-ks)
+(define-namespace 'my-namespace (read-keyset 'admin-ks) (read-keyset 'admin-ks))

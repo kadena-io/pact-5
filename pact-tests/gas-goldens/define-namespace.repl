@@ -1,0 +1,6 @@
+
+(env-data {"jose": ["key1"]})
+
+(define-keyset 'jose)
+
+(define-namespace 'robrob (read-keyset 'jose) (read-keyset 'jose))
