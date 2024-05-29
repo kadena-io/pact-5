@@ -80,6 +80,7 @@ defaultGasEvalState =
   , _esCaps=capState
   , _esGasLog=Nothing
   , _esCheckRecursion = pure (RecursionCheck mempty)
+  , _esTraceOutput = []
   }
   where
   capState =
