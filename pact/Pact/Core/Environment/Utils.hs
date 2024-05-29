@@ -167,7 +167,6 @@ getModuleMember info pdb (QualifiedName qn mn) = do
       let fqn = FullyQualifiedName mn qn (_mHash md)
       throwExecutionError info (NameNotInScope fqn)
 
-
 getModuleMemberWithHash :: (MonadEval b i m) => i -> PactDb b i -> QualifiedName -> m (EvalDef b i, ModuleHash)
 getModuleMemberWithHash info pdb (QualifiedName qn mn) = do
   md <- getModule info pdb mn

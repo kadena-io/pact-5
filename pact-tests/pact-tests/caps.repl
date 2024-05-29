@@ -525,7 +525,7 @@
 (install-capability (C "alice" 0 true))
 (expect-failure
  "Autonomous install on unscoped user sig cannot acquire"
- "Keyset enforce failure"
+ "Keyset failure"
  (go "alice" 0))
 
 ;; scenario: autonomous install, but fails anyway because call is not from module.
@@ -552,7 +552,7 @@
 (install-capability (C "bob" 1 true))
 (expect-failure
  "Attack with different parameters than signature cap fails"
- "Keyset enforce failure"
+ "Keyset failure"
  (go "bob" 1))
 
 (commit-tx)
@@ -584,7 +584,7 @@
 ;; scenario: alice signs caps, only works in non-managed cap
 (env-sigs [{ "key": "alice", "caps": [(GUARD "alice-keyset")]}])
 (expect "cap-scoped works with cap" true (enforce-cap "alice-keyset"))
-(expect-failure "cap-scoped does not work without cap" "Keyset enforce failure"
+(expect-failure "cap-scoped does not work without cap" "Keyset failure"
                 (enforce-wo-cap "alice-keyset"))
 
 

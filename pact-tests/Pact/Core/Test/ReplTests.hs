@@ -1,6 +1,9 @@
 {-# LANGUAGE GADTs #-}
 
-module Pact.Core.Test.ReplTests where
+module Pact.Core.Test.ReplTests
+ ( tests
+ , runReplTest
+ , ReplSourceDir(..))where
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -44,30 +47,40 @@ tests = do
     , testGroup "sqlite db:smallstep" (runFileReplTestSqlite interpretReplProgramSmallStep <$> files)
     ]
 
-replTestDir :: [Char]
-replTestDir = "pact-tests" </> "pact-tests"
+newtype ReplSourceDir
+  = ReplSourceDir FilePath
+
+defaultReplTestDir :: FilePath
+defaultReplTestDir = "pact-tests" </> "pact-tests"
+
 
 replTestFiles :: IO [FilePath]
-replTestFiles = filter (\f -> isExtensionOf "repl" f || isExtensionOf "pact" f) <$> getDirectoryContents replTestDir
+replTestFiles = filter (\f -> isExtensionOf "repl" f || isExtensionOf "pact" f) <$> getDirectoryContents defaultReplTestDir
 
 runFileReplTest :: Interpreter -> TestName -> TestTree
 runFileReplTest interp file = testCase file $ do
   pdb <- mockPactDb serialisePact_repl_spaninfo
-  src <- T.readFile (replTestDir </> file)
-  runReplTest pdb file src interp
+  src <- T.readFile (defaultReplTestDir </> file)
+  runReplTest (ReplSourceDir defaultReplTestDir) pdb file src interp
 
 
 runFileReplTestSqlite :: Interpreter -> TestName -> TestTree
 runFileReplTestSqlite interp file = testCase file $ do
-  ctnt <- T.readFile (replTestDir </> file)
+  ctnt <- T.readFile (defaultReplTestDir </> file)
   withSqlitePactDb serialisePact_repl_spaninfo ":memory:" $ \pdb -> do
-    runReplTest pdb file ctnt interp
+    runReplTest (ReplSourceDir defaultReplTestDir) pdb file ctnt interp
 
-runReplTest :: PactDb ReplCoreBuiltin SpanInfo -> FilePath -> T.Text -> Interpreter -> Assertion
-runReplTest pdb file src interp = do
+runReplTest
+  :: ReplSourceDir
+  -> PactDb ReplCoreBuiltin SpanInfo
+  -> FilePath
+  -> T.Text
+  -> Interpreter
+  -> Assertion
+runReplTest (ReplSourceDir path) pdb file src interp = do
   gasLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replCoreBuiltinMap
-  let source = SourceCode (replTestDir </> file) src
+  let source = SourceCode (path </> file) src
   let rstate = ReplState
             { _replFlags = mempty
             , _replEvalState = def

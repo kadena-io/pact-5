@@ -77,6 +77,9 @@ data Term name ty builtin info
   -- ^ an object literal
   | CapabilityForm (CapForm name (Term name ty builtin info)) info
   -- ^ Capability Natives
+  | InlineValue PactValue info
+  -- ^ Node for compatibility with production. this never shows up in our term language or the parser,
+  -- but unfortunately, It's possible that this shows up as a value from pact < 5
   deriving (Show, Functor, Eq, Generic)
 
 data ConstVal term
@@ -282,7 +285,7 @@ ifDefKind mn = \case
   IfDCap{} -> Nothing
   IfDConst{} -> Just DKDefConst
   IfDPact{} -> Nothing
-  IfDSchema ds -> Just $ DKDefSchema $ (Schema (QualifiedName (_dsName ds) mn) (_dsSchema ds))
+  IfDSchema ds -> Just $ DKDefSchema (Schema (QualifiedName (_dsName ds) mn) (_dsSchema ds))
 
 ifDefName :: IfDef name ty builtin i -> Text
 ifDefName = \case
@@ -343,7 +346,7 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
   pretty = \case
     Var name _ -> pretty name
     Lam ne te _ ->
-      parens ("lambda" <+> parens (fold (NE.intersperse ":" (prettyLamArg <$> ne))) <+> pretty te)
+      parens ("lambda" <+> parens (fold (NE.intersperse " " (prettyLamArg <$> ne))) <+> pretty te)
     Let n te te' _ ->
       parens $ "let" <+> parens (pretty n <+> pretty te) <+> pretty te'
     App te ne _ ->
@@ -365,6 +368,9 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
       parens ("try" <+> pretty te <+> pretty te')
     ObjectLit n _ ->
       braces (hsep $ punctuate "," $ fmap (\(f, t) -> pretty f <> ":" <> pretty t) n)
+    InlineValue pv _ ->
+      -- Note: This term is only used for back compat. with Pact < 5
+      pretty pv
     where
     prettyTyAnn = maybe mempty ((":" <>) . pretty)
     prettyLamArg (Arg n ty _) =
@@ -410,6 +416,12 @@ instance Pretty term => Pretty (ConstVal term) where
   pretty = \case
     TermConst t -> pretty t
     EvaledConst v -> pretty v
+
+instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Step name ty builtin info) where
+  pretty = \case
+    Step t -> parens ("step" <+> pretty t)
+    StepWithRollback t1 t2 -> parens ("step-with-rollback" <+> pretty t1 <+> pretty t2)
+
 
 instance (Pretty name, Pretty ty, Pretty b) => Pretty (DefConst name ty b i) where
   pretty (DefConst (Arg n mty _) term _) =
@@ -467,6 +479,8 @@ termType f  = \case
     CapabilityForm <$> traverse (termType f) cf <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (termType f) m <*> pure i
+  InlineValue v i ->
+    pure (InlineValue v i)
 
 termBuiltin :: Traversal (Term n t b i) (Term n t b' i) b b'
 termBuiltin f = \case
@@ -495,6 +509,7 @@ termBuiltin f = \case
     CapabilityForm <$> traverse (termBuiltin f) cf <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (termBuiltin f) m <*> pure i
+  InlineValue v i -> pure (InlineValue v i)
 
 termInfo :: Lens' (Term name ty builtin info) info
 termInfo f = \case
@@ -514,6 +529,7 @@ termInfo f = \case
     Nullary term <$> f i
   CapabilityForm cf i -> CapabilityForm cf <$> f i
   ObjectLit m i -> ObjectLit m <$> f i
+  InlineValue v i -> InlineValue v <$> f i
 
 -- TODO: add test cases for all traversal
 traverseTerm
@@ -544,6 +560,8 @@ traverseTerm f x= case x of
     CapabilityForm <$> traverse (traverseTerm f) cf <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (traverseTerm f) m <*> pure i
+  InlineValue v i ->
+    f (InlineValue v i)
 
 topLevelTerms :: Traversal' (TopLevel name ty builtin info) (Term name ty builtin info)
 topLevelTerms f = \case
@@ -590,9 +608,9 @@ traverseDefCapTerm f (DefCap spec args term meta i) =
 
 traverseDefPactStep
   :: Traversal (Step name ty builtin info)
-               (Step name ty builtin' info)
+               (Step name' ty' builtin' info')
                (Term name ty builtin info)
-               (Term name ty builtin' info)
+               (Term name' ty' builtin' info')
 traverseDefPactStep f = \case
   Step t -> Step <$> f t
   StepWithRollback a1 a2 ->
@@ -629,6 +647,18 @@ traverseModuleTerm f m =
   (mDefs . traversed) (traverseDefTerm f) m
 
 
+traverseIfDefTerm
+  :: Traversal (IfDef name ty builtin info)
+               (IfDef name ty builtin' info)
+               (Term name ty builtin info)
+               (Term name ty builtin' info)
+traverseIfDefTerm f = \case
+  IfDfun d -> pure (IfDfun d)
+  IfDConst d -> IfDConst <$> traverseDefConstTerm f d
+  IfDCap d -> pure (IfDCap d)
+  IfDPact d -> pure (IfDPact d)
+  IfDSchema d -> pure (IfDSchema d)
+
 instance Plated (Term name ty builtin info) where
   plate f = \case
     Var n i -> pure (Var n i)
@@ -649,6 +679,7 @@ instance Plated (Term name ty builtin info) where
       Try <$> f e1 <*> f e2 <*> pure i
     ObjectLit o i ->
       ObjectLit <$> (traverse._2) f o <*> pure i
+    InlineValue v i -> pure (InlineValue v i)
 
 
 -----------------------------------------
@@ -666,6 +697,7 @@ type EvalInterface b i = Interface Name Type b i
 type EvalIfDef b i = IfDef Name Type b i
 type EvalTable i = DefTable Name i
 type EvalSchema i = DefSchema Type i
+type EvalStep b i = Step Name Type b i
 
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Term name ty b info)
 instance (NFData name, NFData ty, NFData b, NFData info) => NFData (Def name ty b info)

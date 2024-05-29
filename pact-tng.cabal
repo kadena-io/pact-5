@@ -70,7 +70,6 @@ common pact-common
     , utf8-string
     , exceptions
     , array
-    , pact-json
     , scientific
     , serialise
     , cborg
@@ -78,9 +77,14 @@ common pact-common
     , groups
     , mod
     , neat-interpolation
+    , deriving-compat
     -- ^ is used by the `BuiltinDocs` module.
     , ghc-bignum
+    -- Legacy pact decoding
+    , bound
     , aeson
+    , trifecta
+    , hashable
 
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
@@ -210,6 +214,7 @@ library
     -- Serialization
     Pact.Core.Serialise
     Pact.Core.Serialise.LegacyPact
+    Pact.Core.Serialise.LegacyPact.Types
     Pact.Core.Serialise.CBOR_V1
 
     -- WebAuthn
@@ -338,3 +343,17 @@ test-suite core-tests
     , Pact.Core.Test.GasGolden
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
+
+
+-- tools
+executable legacyPactDbCheck
+  import: pact-common
+  hs-source-dirs: tools
+
+  main-is: LegacyPactDbCheck.hs
+
+  build-depends:
+    , pact-tng
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010

@@ -1,0 +1,451 @@
+(begin-tx)
+  (env-data
+    { 'ns-admin-keyset: []
+    , 'ns-genesis-keyset:[]
+    , 'ns-operate-keyset:[] })
+  ;; The following contracts are injected into the runtime for this test
+  ;  (load "../../pact-tests/marmalade/pact/root/fungible-v2.pact")
+  ;  (load "../../pact-tests/marmalade/pact/root/fungible-xchain-v1.pact")
+  ;  (load "./root/coin.pact")
+
+  ;  (load "../../pact-tests/marmalade/pact/root/gas-payer-v1.pact")
+
+  ;; (env-exec-config ["DisablePact44"])
+  (load "../../pact-tests/marmalade/pact/root/ns.pact")
+  (env-exec-config [])
+
+
+ (define-namespace 'kip (sig-keyset) (sig-keyset))
+
+  (load "../../pact-tests/marmalade/pact/kip/account-protocols-v1.pact")
+  (env-data
+  { 'ns: "kip"
+  , 'upgrade: false })
+
+  ; The following contracts are injected into the runtime for this test
+;  (load "../../pact-tests/marmalade/pact/kip/manifest.pact")
+;  (load "../../pact-tests/marmalade/pact/kip/token-policy-v2.pact")
+;  (load "../../pact-tests/marmalade/pact/kip/updatable-uri-policy-v1.pact")
+;  (load "../../pact-tests/marmalade/pact/kip/poly-fungible-v3.pact")
+
+  (define-namespace 'util (sig-keyset) (sig-keyset))
+  ; The following contracts are injected into the runtime for this test
+;  (load "../../pact-tests/marmalade/pact/util/fungible-util.pact")
+;  (load "../../pact-tests/marmalade/pact/util/guards1.pact")
+(commit-tx)
+
+(begin-tx "deploy marmalade-v2 namespace and admin keyset")
+  (env-data
+   { 'marmalade-admin: ["marmalade-admin"]
+   , 'marmalade-user: ["marmalade-user"]
+   , 'ns: "marmalade-v2"
+   , 'upgrade: false })
+   (env-sigs [
+     { 'key: 'marmalade-admin
+      ,'caps: []
+      }])
+  ; Note: this is just pact code,it does not to be json-injected.
+  (load "../../pact-tests/marmalade/pact/marmalade-ns/ns-marmalade.pact")
+
+  (env-data
+   { "marmalade-v2.marmalade-contract-admin": ["marmalade-contract-admin"]
+   , 'ns: "marmalade-v2"
+   , 'upgrade: false })
+   (env-sigs [
+     { 'key: 'marmalade-user
+      ,'caps: []
+     }, {
+       'key: 'marmalade-contract-admin
+      ,'caps: []
+      }])
+  (load "../../pact-tests/marmalade/pact/marmalade-ns/ns-contract-admin.pact")
+
+(commit-tx)
+
+(begin-tx "deploy marmalade-sale namespace and admin keyset")
+  (env-data
+   { 'marmalade-admin: ["marmalade-admin"]
+   , 'marmalade-user: ["marmalade-user"]
+   , 'ns: "marmalade-sale"
+   , 'upgrade: false })
+   (env-sigs [
+     { 'key: 'marmalade-admin
+      ,'caps: []
+      }])
+  ;; (load "./marmalade-ns/ns-marmalade.pact")
+  (load "../../pact-tests/marmalade/pact/marmalade-ns/ns-marmalade.pact")
+  (env-data
+   { "marmalade-sale.marmalade-contract-admin": ["marmalade-contract-admin"]
+   , 'ns: "marmalade-sale"
+   , 'upgrade: false })
+   (env-sigs [
+     { 'key: 'marmalade-user
+      ,'caps: []
+     }, {
+       'key: 'marmalade-contract-admin
+      ,'caps: []
+      }])
+  (load "../../pact-tests/marmalade/pact/marmalade-ns/ns-contract-admin.pact")
+
+(commit-tx)
+
+(env-data
+ { 'marmalade-admin: ["marmalade-admin"]
+ , 'marmalade-user: ["marmalade-user"]
+ , 'ns: "marmalade-v2"
+ , 'upgrade: false })
+
+(begin-tx)
+
+  (load "../../pact-tests/marmalade/pact/ledger/ledger-v2.interface.pact")
+  (load "../../pact-tests/marmalade/pact/policy-manager/sale.interface.pact") 
+  (load "../../pact-tests/marmalade/pact/policy-manager/policy-manager.pact")
+  (load "../../pact-tests/marmalade/pact/ledger/ledger.pact")
+(commit-tx)
+
+(begin-tx "load concrete-polices")
+; Injected
+;;   (load "./concrete-policies/non-fungible-policy/non-fungible-policy-v1.pact")
+
+(load "../../pact-tests/marmalade/pact/concrete-policies/royalty-policy/royalty-policy-v1.pact")
+
+(load "../../pact-tests/marmalade/pact/policy-manager/manager-init.pact")
+(commit-tx)
+
+(begin-tx)
+  (module mini-guard-utils G
+    (defcap G() true)
+    (defun always-true:bool () true)
+    (defconst ALWAYS-TRUE:guard (create-user-guard (always-true)))
+  )
+(commit-tx)
+
+
+(begin-tx "upgrade marmalade")
+  (env-sigs [
+    { 'key: 'marmalade-user
+     ,'caps: []
+    }, {
+      'key: 'marmalade-contract-admin
+     ,'caps: []
+     }])
+  (env-data
+   { 'marmalade-admin: ["marmalade-admin"]
+   , 'marmalade-user: ["marmalade-user"]
+   , 'ns: "marmalade-v2"
+   , 'upgrade: true
+   , 'upgrade_version_1: true })
+
+
+(use marmalade-v2.ledger)
+(create-table versions)
+
+(commit-tx)
+
+(begin-tx "create-token")
+
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.policy-manager)
+
+  (env-data {'c-ks: {"keys": ["creation-guard"], "pred": "keys-all"},
+             'bad-c-ks: {"keys": ["bad-creation-guard"], "pred": "keys-all"}
+            })
+
+  (env-chain-data {"chain-id": "0"})
+
+  (expect-failure "create a token without creation-guard signature"
+    "Keyset failure"
+    (create-token
+      (create-token-id { 'uri: "test-uri", 'precision: 0, 'policies: [] } (read-keyset 'c-ks))
+      0 "test-uri" [] (read-keyset 'c-ks)))
+
+  (env-sigs [{"key":"creation-guard", "caps":[]}])
+
+  (expect-failure "create a token with a bad creation-guard signature"
+    "Keyset failure"
+    (create-token
+      (create-token-id { 'uri: "test-uri", 'precision: 0, 'policies: [] } (read-keyset 'bad-c-ks))
+      0 "test-uri" [] (read-keyset 'bad-c-ks)))
+
+  (expect-failure "create a token with token-id with a protocol other than t:"
+    "Unrecognized reserved protocol"
+    (create-token "a:bc" 0 "test-uri" [] (read-keyset 'c-ks)))
+
+  (expect-failure "create a token with token-id not using a protocol"
+    "Unrecognized reserved protocol"
+    (create-token "abc" 0 "test-uri" [] (read-keyset 'c-ks)))
+
+  (expect-failure "create a token with token-id that doesn't satisfy t: protocol"
+    "Token protocol violation"
+    (create-token
+      (create-token-id { 'uri: "test-uri-wrong", 'precision: 0, 'policies: [] } (read-keyset 'c-ks))
+      0 "test-uri" [] (read-keyset 'c-ks)))
+
+  (expect-failure "create a token with uri starting with marmalade fails"
+    "Reserved protocol: marmalade:"
+    (create-token
+      (create-token-id { 'uri: "marmalade:uri", 'precision: 0, 'policies: [] } (read-keyset 'c-ks))
+       0 "marmalade:uri" [] (read-keyset 'c-ks)))
+
+  (expect "create a token with token-id that satisfies t: protocol"
+    true
+    (create-token
+      (create-token-id { 'uri: "test-uri", 'precision: 0, 'policies: [] } (read-keyset 'c-ks))
+       0 "test-uri" [] (read-keyset 'c-ks)))
+
+  (expect "Token info is inserted into table"
+    { "id": "t:_xAMunHwoHC8xdv5R9BfaJd-d3aUyOP8j6eDdHrBvTU"
+     ,"supply": 0.0
+     ,"precision": 0
+     ,"uri": "test-uri"
+     ,"policies": []
+    }
+    (get-token-info "t:_xAMunHwoHC8xdv5R9BfaJd-d3aUyOP8j6eDdHrBvTU")
+  )
+
+  (expect "create-token events"
+     (format "{}" [[
+     {"name": "marmalade-v2.ledger.TOKEN","params": ["t:_xAMunHwoHC8xdv5R9BfaJd-d3aUyOP8j6eDdHrBvTU" 0 [] "test-uri" (read-keyset 'c-ks)]}]])
+     (format "{}" [(map (remove "module-hash")  (env-events true))])
+  )
+
+(commit-tx)
+
+(begin-tx "mint")
+  (use marmalade-v2.ledger)
+
+  (env-data {
+     "token-id": "t:_xAMunHwoHC8xdv5R9BfaJd-d3aUyOP8j6eDdHrBvTU"
+    ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+    ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+    })
+
+  (expect-failure "mint fails without MINT capability in scope"
+    "Managed capability not installed: (marmalade-v2.ledger.MINT"
+    (mint (read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard) 1.0))
+
+  (env-sigs [
+    { 'key: 'any
+     ,'caps: [(MINT (read-msg "token-id") (read-string 'account) 1.0)]}
+   ])
+
+  (expect "mint succeeds"
+    true
+    (mint (read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard) 1.0))
+
+  (expect "Token supply is updated"
+    { "id": (read-string "token-id")
+     ,"supply": 1.0
+     ,"precision": 0
+     ,"uri": "test-uri"
+     ,"policies": []
+    }
+    (get-token-info (read-string "token-id"))
+  )
+
+  (expect "Account is credited"
+    1.0
+    (get-balance (read-string "token-id") (read-string "account"))
+  )
+
+  (expect "mint events"
+    [
+      {"name": "marmalade-v2.ledger.MINT","params": [(read-string "token-id") (read-string "account") 1.0]}
+      {"name": "marmalade-v2.ledger.ACCOUNT_GUARD","params": [(read-string "token-id") (read-string "account") (read-keyset "account-guard")]}
+      {"name": "marmalade-v2.ledger.RECONCILE","params": [(read-string "token-id") 1.0 {"account": "","current": 0.0,"previous": 0.0} {"account": (read-string "account"),"current": 1.0,"previous": 0.0}]}
+      {"name": "marmalade-v2.ledger.SUPPLY","params": [(read-string "token-id") 1.0]}
+    ]
+    (map (remove "module-hash")  (env-events true))
+  )
+
+(commit-tx)
+
+(begin-tx "offer, withdraw with timeout")
+  (env-hash (hash "offer-0"))
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (env-chain-data {"block-time": (time "2023-07-20T11:26:35Z")})
+
+  (env-data {
+     "token-id": "t:_xAMunHwoHC8xdv5R9BfaJd-d3aUyOP8j6eDdHrBvTU"
+    ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+    ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+    })
+
+  (expect-failure "offer fails when called directly"
+    "pact-id: not in pact execution"
+    (offer (read-string "token-id") (read-string "account") 1.0)
+  )
+
+  (expect-failure "offer fails without OFFER capability in scope"
+    "Managed capability not installed: (marmalade-v2.ledger.OFFER"
+    (sale (read-string "token-id") (read-string "account") 1.0 (to-timestamp (time "2023-07-22T11:26:35Z")))
+  )
+
+  (env-sigs [
+    { 'key: 'any
+     ,'caps: [(marmalade-v2.ledger.OFFER (read-string "token-id") (read-string "account") 1.0 (to-timestamp (time "2023-07-22T11:26:35Z")))]}
+  ])
+
+  (expect-failure "offer fails if OFFER capability is not signed by seller"
+    "Keyset failure (keys-all): [e4c6807d...]"
+    (sale (read-string "token-id") (read-string "account") 1.0 (to-timestamp (time "2023-07-22T11:26:35Z")))
+  )
+
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+     ,'caps: [(marmalade-v2.ledger.OFFER (read-string "token-id") (read-string "account") 1.0 (to-timestamp (time "2023-07-22T11:26:35Z")))]}
+  ])
+
+  (expect "offer succeeds"
+    (pact-id)
+    (sale (read-string "token-id") (read-string "account") 1.0 (to-timestamp (time "2023-07-22T11:26:35Z")))
+  )
+
+  (expect "Seller account is debited"
+    0.0
+    (get-balance (read-string "token-id") (read-string "account"))
+  )
+
+  (expect "Escrow account is credited"
+    1.0
+    (get-balance (read-string "token-id") "c:WT_MPlkws_-GywvQmomGZwGsCJAcIWqrMSA9ie82FRc")
+  )
+
+  (expect "offer events"
+     [ {"name": "marmalade-v2.ledger.OFFER","params": [(read-string "token-id") (read-string "account") 1.0 1690025195]}
+       {"name": "marmalade-v2.ledger.SALE","params": [(read-string "token-id") (read-string "account") 1.0 1690025195 "C1vw1eMf_DZV3oZjyinRIKrQV2rPMBMh3lydeduo8yg"]}
+       {"name": "marmalade-v2.ledger.ACCOUNT_GUARD","params": [(read-string "token-id") "c:WT_MPlkws_-GywvQmomGZwGsCJAcIWqrMSA9ie82FRc" (create-capability-pact-guard (SALE_PRIVATE "C1vw1eMf_DZV3oZjyinRIKrQV2rPMBMh3lydeduo8yg"))]}
+       {"name": "marmalade-v2.ledger.TRANSFER","params": [(read-string "token-id") (read-string "account") "c:WT_MPlkws_-GywvQmomGZwGsCJAcIWqrMSA9ie82FRc" 1.0]}
+       {"name": "marmalade-v2.ledger.RECONCILE","params": [(read-string "token-id") 1.0 {"account": (read-string "account"),"current": 0.0,"previous": 1.0} {"account": "c:WT_MPlkws_-GywvQmomGZwGsCJAcIWqrMSA9ie82FRc","current": 1.0,"previous": 0.0}]}]
+     (map (remove "module-hash")  (env-events true))
+   )
+
+
+
+
+   (env-sigs [
+     { 'key: 'any
+      ,'caps: [(marmalade-v2.ledger.WITHDRAW (read-string "token-id") (read-string "account") 1.0 (to-timestamp (time "2023-07-22T11:26:35Z")) (pact-id))]}
+   ])
+
+   (env-chain-data {"block-time": (time "2023-07-21T11:26:35Z")})
+
+   (expect-failure "withdraw fails before timeout has passed"
+     "WITHDRAW: still active"
+     (continue-pact 0 true)
+   )
+
+   (env-chain-data {"block-time": (time "2023-07-23T11:26:35Z")})
+
+   (env-sigs [])
+
+   (expect-failure "withdraw fails when called directly"
+     "require-capability: not granted: (marmalade-v2.ledger.SALE_PRIVATE"
+     (withdraw (read-string "token-id") (read-string "account") 1.0)
+   )
+
+   (expect-failure "withdraw fails without WITHDRAW capability in scope"
+     "Managed capability not installed: (marmalade-v2.ledger.WITHDRAW"
+     (continue-pact 0 true)
+   )
+
+   (env-sigs [
+     { 'key: 'any
+      ,'caps: [(marmalade-v2.ledger.WITHDRAW (read-string "token-id") (read-string "account") 1.0 (to-timestamp (time "2023-07-22T11:26:35Z")) (pact-id))]}
+   ])
+
+   (expect "withdraw succeeds when WITHDRAW capability in scope, regardless of signer"
+     (pact-id)
+     (continue-pact 0 true)
+   )
+
+   (expect "withdraw events"
+     [ {"name": "marmalade-v2.ledger.WITHDRAW","params": ["t:_xAMunHwoHC8xdv5R9BfaJd-d3aUyOP8j6eDdHrBvTU" (read-string "account") 1.0 1690025195 "C1vw1eMf_DZV3oZjyinRIKrQV2rPMBMh3lydeduo8yg"]}
+       {"name": "marmalade-v2.ledger.TRANSFER","params": ["t:_xAMunHwoHC8xdv5R9BfaJd-d3aUyOP8j6eDdHrBvTU" "c:WT_MPlkws_-GywvQmomGZwGsCJAcIWqrMSA9ie82FRc" (read-string "account") 1.0]}
+       {"name": "marmalade-v2.ledger.RECONCILE","params": ["t:_xAMunHwoHC8xdv5R9BfaJd-d3aUyOP8j6eDdHrBvTU" 1.0 {"account": "c:WT_MPlkws_-GywvQmomGZwGsCJAcIWqrMSA9ie82FRc","current": 0.0,"previous": 1.0} {"account": (read-string "account"),"current": 1.0,"previous": 0.0}]}]
+     (map (remove "module-hash")  (env-events true))
+   )
+
+ (rollback-tx)
+
+ (begin-tx "offer, withdraw without timeout")
+
+ (env-hash (hash "offer-1"))
+ (use marmalade-v2.ledger)
+ (env-chain-data {"block-time": (time "2023-07-20T11:26:35Z")})
+
+ (env-sigs [
+   { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+    ,'caps: [(marmalade-v2.ledger.OFFER (read-string "token-id") (read-string "account") 1.0 0)]}
+ ])
+
+ (expect "offer succeeds"
+   (pact-id)
+   (sale (read-string "token-id") (read-string "account") 1.0 0)
+ )
+
+ (expect "Seller account is debited"
+   0.0
+   (get-balance (read-string "token-id") (read-string "account"))
+ )
+
+ (expect "Escrow account is credited"
+   1.0
+   (get-balance (read-string "token-id") "c:TCxrhvg6e_NUVqelF7bnXTT7aabA5qtKdKUXCUXo2_Q")
+ )
+
+ (expect "offer events"
+   [ {"name": "marmalade-v2.ledger.OFFER","params": [(read-string "token-id") (read-string "account") 1.0 0]}
+     {"name": "marmalade-v2.ledger.SALE","params": [(read-string "token-id") (read-string "account") 1.0 0 (pact-id)]}
+     {"name": "marmalade-v2.ledger.ACCOUNT_GUARD","params": [(read-string "token-id") "c:TCxrhvg6e_NUVqelF7bnXTT7aabA5qtKdKUXCUXo2_Q" (create-capability-pact-guard (SALE_PRIVATE (pact-id)))]}
+     {"name": "marmalade-v2.ledger.TRANSFER","params": [(read-string "token-id") (read-string "account") "c:TCxrhvg6e_NUVqelF7bnXTT7aabA5qtKdKUXCUXo2_Q" 1.0]}
+     {"name": "marmalade-v2.ledger.RECONCILE","params": [(read-string "token-id") 1.0 {"account": (read-string "account"),"current": 0.0,"previous": 1.0} {"account": "c:TCxrhvg6e_NUVqelF7bnXTT7aabA5qtKdKUXCUXo2_Q","current": 1.0,"previous": 0.0}]}]
+   (map (remove "module-hash")  (env-events true))
+ )
+
+ (env-chain-data {"block-time": (time "2023-07-25T11:26:35Z")})
+
+ (expect-failure "withdraw fails when called directly"
+   "require-capability: not granted: (marmalade-v2.ledger.SALE_PRIVATE"
+   (withdraw (read-string "token-id") (read-string "account") 1.0)
+ )
+
+ (expect-failure "withdraw fails without WITHDRAW capability in scope"
+   "Managed capability not installed: (marmalade-v2.ledger.WITHDRAW"
+   (continue-pact 0 true)
+ )
+
+ (env-sigs [
+   { 'key: 'any
+    ,'caps: [(marmalade-v2.ledger.WITHDRAW (read-string "token-id") (read-string "account") 1.0 0 (pact-id))]}
+ ])
+
+ (expect-failure "withdraw fails when sig is not signed"
+   "Keyset failure (keys-all): "
+   (continue-pact 0 true)
+ )
+
+ (env-sigs [
+   { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+    ,'caps: [(marmalade-v2.ledger.WITHDRAW (read-string "token-id") (read-string "account") 1.0 0 (pact-id))]}
+ ])
+
+ (expect "withdraw succeeds"
+   (pact-id)
+   (continue-pact 0 true)
+ )
+
+ (expect "withdraw events"
+   [
+     {"name": "marmalade-v2.ledger.WITHDRAW","params": ["t:_xAMunHwoHC8xdv5R9BfaJd-d3aUyOP8j6eDdHrBvTU" (read-string "account") 1.0 0 "DKc5HEWcmP8iPWue2WvMcnjn_WnowmuHz5Ogukm2SWk"]}
+     {"name": "marmalade-v2.ledger.TRANSFER","params": ["t:_xAMunHwoHC8xdv5R9BfaJd-d3aUyOP8j6eDdHrBvTU" "c:TCxrhvg6e_NUVqelF7bnXTT7aabA5qtKdKUXCUXo2_Q" (read-string "account") 1.0]}
+     {"name": "marmalade-v2.ledger.RECONCILE","params": ["t:_xAMunHwoHC8xdv5R9BfaJd-d3aUyOP8j6eDdHrBvTU" 1.0 {"account": "c:TCxrhvg6e_NUVqelF7bnXTT7aabA5qtKdKUXCUXo2_Q","current": 0.0,"previous": 1.0} {"account": (read-string "account") ,"current": 1.0,"previous": 0.0}
+   ]}]
+   (map (remove "module-hash")  (env-events true))
+ )
+
+ (rollback-tx)
+
+ (begin-tx "test utility functions")
+ (commit-tx)
