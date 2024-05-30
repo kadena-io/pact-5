@@ -5,6 +5,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -45,7 +46,6 @@ import Data.Decimal(roundTo', Decimal, DecimalRaw(..))
 import Data.Vector(Vector)
 import Data.Maybe(maybeToList)
 import Data.Attoparsec.Text(parseOnly)
-import Data.Containers.ListUtils(nubOrd)
 import Numeric(showIntAtBase)
 import System.Clock
 import qualified Data.RAList as RAList
@@ -55,10 +55,11 @@ import qualified Data.Vector as V
 import qualified Data.Set as S
 import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
+import qualified GHC.Exts as Exts
+import qualified GHC.Integer.Logarithms as IntLog
 
 #ifndef WITHOUT_CRYPTO
 import qualified Control.Lens as Lens
-import qualified GHC.Exts as Exts
 #endif
 
 import qualified Data.Vector.Algorithms.Intro as V
@@ -258,23 +259,23 @@ evaluate env = \case
   Conditional c info -> case c of
     CAnd te te' -> do
       b <- evaluate env te >>= enforceBool info
-      chargeGasArgs info (GAConstant constantWorkNodeGas)
+      -- chargeGasArgs info (GAConstant constantWorkNodeGas)
       if b then evaluate env te' >>= enforceBoolValue info
       else pure (VBool False)
     COr te te' -> do
       b <- evaluate env te >>= enforceBool info
-      chargeGasArgs info (GAConstant constantWorkNodeGas)
+      -- chargeGasArgs info (GAConstant constantWorkNodeGas)
       if b then pure (VBool True)
       else evaluate env te' >>= enforceBoolValue info
     CIf bExpr ifExpr elseExpr -> do
       b <- enforceBool info =<< evaluate env bExpr
-      chargeGasArgs info (GAConstant constantWorkNodeGas)
+      -- chargeGasArgs info (GAConstant constantWorkNodeGas)
       if b then evaluate env ifExpr
       else evaluate env elseExpr
     CEnforce cond str -> do
       let env' = sysOnlyEnv env
       b <- enforceBool info =<< evaluate env' cond
-      chargeGasArgs info (GAConstant constantWorkNodeGas)
+      -- chargeGasArgs info (GAConstant constantWorkNodeGas)
       if b then return (VBool True)
       else do
         msg <- enforceString info =<< evaluate env str
@@ -284,7 +285,7 @@ evaluate env = \case
       where
       go (x:xs) = do
         cond <- catchRecoverable (enforceBool info =<< evaluate env x) (\_ _ -> pure False)
-        chargeGasArgs info (GAConstant constantWorkNodeGas)
+        chargeGasArgs info (GAConstant unconsWorkNodeGas)
         if cond then return (VBool True)
         else go xs
       go [] = do
@@ -1572,6 +1573,7 @@ rawMul info b _env = \case
 rawPow :: (MonadEval b i m) => NativeFunction b i m
 rawPow info b _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
+    chargeGasArgs info $ GIntegerOpCost PrimOpPow i i'
     when (i' < 0) $ throwExecutionError info (ArithmeticException "negative exponent in integer power")
     -- Todo: move to iterated pow
     return (VLiteral (LInteger (i ^ i')))
@@ -1759,11 +1761,16 @@ rawSqrt info b _env = \case
 -- Todo: fix all show instances
 rawShow :: (MonadEval b i m) => NativeFunction b i m
 rawShow info b _env = \case
-  [VLiteral (LInteger i)] ->
+  [VLiteral (LInteger i)] -> do
+    let strLen = 1 + Exts.I# (IntLog.integerLog2# $ abs i)
+    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
     return (VLiteral (LString (T.pack (show i))))
-  [VLiteral (LDecimal i)] ->
+  [VLiteral (LDecimal i)] -> do
+    let strLen = 1 + Exts.I# (IntLog.integerLog2# $ abs $ decimalMantissa i)
+    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
     return (VLiteral (LString (T.pack (show i))))
-  [VLiteral (LString i)] ->
+  [VLiteral (LString i)] -> do
+    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ T.length i
     return (VLiteral (LString (T.pack (show i))))
   [VLiteral (LBool i)] ->
     return (VLiteral (LString (T.pack (show i))))
@@ -1774,12 +1781,17 @@ rawShow info b _env = \case
 -- Todo: Gas here is complicated, greg worked on this previously
 rawContains :: (MonadEval b i m) => NativeFunction b i m
 rawContains info b _env = \case
-  [VString f, VObject o] ->
+  [VString f, VObject o] -> do
+    chargeGasArgs info $ GSearch $ FieldSearch (M.size o)
     return (VBool (M.member (Field f) o))
-  [VString s, VString s'] ->
-    return (VBool (s `T.isInfixOf` s'))
-  [VPactValue v, VList vli] ->
-    return (VBool (v `V.elem` vli))
+  [VString needle, VString hay] -> do
+    chargeGasArgs info $ GSearch $ SubstringSearch needle hay
+    return (VBool (needle `T.isInfixOf` hay))
+  [VPactValue v, VList vli] -> do
+    let search True _ = pure True
+        search _ el = valEqGassed info v el
+    res <- foldlM search False vli
+    return (VBool res)
   args -> argsError info b args
 
 rawSort :: (MonadEval b i m) => NativeFunction b i m
@@ -1796,7 +1808,9 @@ rawSort info b _env = \case
 
 coreRemove :: (MonadEval b i m) => NativeFunction b i m
 coreRemove info b _env = \case
-  [VString s, VObject o] -> return (VObject (M.delete (Field s) o))
+  [VString s, VObject o] -> do
+    chargeGasArgs info $ GObjOp $ ObjOpRemove s (M.size o)
+    return (VObject (M.delete (Field s) o))
   args -> argsError info b args
 
 asObject
@@ -1885,22 +1899,27 @@ rawTake info b _env = \case
     | i >= 0 -> do
       -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ min i (fromIntegral (T.length t))
+      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength clamp
       return  (VLiteral (LString (T.take clamp t)))
     | otherwise -> do
       -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ max (fromIntegral (T.length t) + i) 0
+      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral $ negate i
       return  (VLiteral (LString (T.drop clamp t)))
   [VLiteral (LInteger i), VList li]
     | i >= 0 -> do
       -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ min i (fromIntegral (V.length li))
+      chargeGasArgs info $ GConcat $ ListConcat $ GasListLength clamp
       return  (VList (V.take clamp li))
     | otherwise -> do
       -- See Note: [Take/Drop Clamping]
       let clamp = fromIntegral $ max (fromIntegral (V.length li) + i) 0
+      chargeGasArgs info $ GConcat $ ListConcat $ GasListLength $ fromIntegral $ negate i
       return (VList (V.drop clamp li))
   [VList li, VObject o] -> do
     strings <- traverse (fmap Field . asString info b) (V.toList li)
+    chargeGasArgs info $ GConcat $ ObjConcat $ V.length li
     return $ VObject $ M.restrictKeys o (S.fromList strings)
   args -> argsError info b args
 
@@ -1932,6 +1951,7 @@ rawDrop info b _env = \case
 rawLength :: (MonadEval b i m) => NativeFunction b i m
 rawLength info b _env = \case
   [VString t] -> do
+    chargeGasArgs info $ GStrOp $ StrOpLength $ T.length t
     return  (VLiteral (LInteger (fromIntegral (T.length t))))
   [VList li] -> return (VLiteral (LInteger (fromIntegral (V.length li))))
   [VObject o] ->
@@ -1962,6 +1982,7 @@ coreConcat info b _env = \case
 strToList :: (MonadEval b i m) => NativeFunction b i m
 strToList info b _env = \case
   [VLiteral (LString s)] -> do
+    chargeGasArgs info $ GStrOp $ StrOpExplode $ T.length s
     let v = VList (V.fromList (PLiteral . LString . T.singleton <$> T.unpack s))
     return v
   args -> argsError info b args
@@ -1993,6 +2014,7 @@ coreFilter info b _env = \case
     VList <$> V.filterM go li
     where
     go e = do
+      chargeGasArgs info (GAConstant unconsWorkNodeGas)
       applyLam clo [VPactValue e] >>= enforceBool info
   args -> argsError info b args
 
@@ -2065,7 +2087,8 @@ coreAccess info b _env = \case
 
 coreIsCharset :: (MonadEval b i m) => NativeFunction b i m
 coreIsCharset info b _env = \case
-  [VLiteral (LInteger i), VString s] ->
+  [VLiteral (LInteger i), VString s] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
     case i of
       0 -> return $ VBool $ T.all Char.isAscii s
       1 -> return $ VBool $ T.all Char.isLatin1 s
@@ -2148,16 +2171,19 @@ enforceTopLevelOnly info b = do
 
 coreB64Encode :: (MonadEval b i m) => NativeFunction b i m
 coreB64Encode info b _env = \case
-  [VLiteral (LString l)] ->
+  [VLiteral (LString l)] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length l
     return $ VLiteral $ LString $ toB64UrlUnpaddedText $ T.encodeUtf8 l
   args -> argsError info b args
 
 
 coreB64Decode :: (MonadEval b i m) => NativeFunction b i m
 coreB64Decode info b _env = \case
-  [VLiteral (LString s)] -> case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
-    Left{} -> throwExecutionError info (DecodeError "invalid b64 encoding")
-    Right txt -> return (VLiteral (LString txt))
+  [VLiteral (LString s)] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
+    case fromB64UrlUnpaddedText $ T.encodeUtf8 s of
+      Left{} -> throwExecutionError info (DecodeError "invalid b64 encoding")
+      Right txt -> return (VLiteral (LString txt))
   args -> argsError info b args
 
 
@@ -2165,7 +2191,9 @@ coreB64Decode info b _env = \case
 coreEnforceGuard :: (MonadEval b i m) => NativeFunction b i m
 coreEnforceGuard info b env = \case
   [VGuard g] -> VBool <$> enforceGuard info env g
-  [VString s] -> case parseAnyKeysetName s of
+  [VString s] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
+    case parseAnyKeysetName s of
       Left {} -> throwRecoverableError info "incorrect keyset name format"
       Right ksn ->
         VBool <$> isKeysetNameInSigs info env ksn
@@ -2173,13 +2201,15 @@ coreEnforceGuard info b env = \case
 
 keysetRefGuard :: (MonadEval b i m) => NativeFunction b i m
 keysetRefGuard info b env = \case
-  [VString g] -> case parseAnyKeysetName g of
-    Left {} -> throwRecoverableError info "incorrect keyset name format"
-    Right ksn -> do
-      let pdb = view cePactDb env
-      liftDbFunction info (readKeySet pdb ksn) >>= \case
-        Nothing -> throwRecoverableError info "no such keyset defined: "
-        Just _ -> return (VGuard (GKeySetRef ksn))
+  [VString g] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length g
+    case parseAnyKeysetName g of
+      Left {} -> throwRecoverableError info "incorrect keyset name format"
+      Right ksn -> do
+        let pdb = view cePactDb env
+        liftDbFunction info (readKeySet pdb ksn) >>= \case
+          Nothing -> throwRecoverableError info "no such keyset defined: "
+          Just _ -> return (VGuard (GKeySetRef ksn))
   args -> argsError info b args
 
 coreTypeOf :: (MonadEval b i m) => NativeFunction b i m
@@ -2231,7 +2261,8 @@ coreReadInteger :: (MonadEval b i m) => NativeFunction b i m
 coreReadInteger info b _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
-      PObject envData ->
+      PObject envData -> do
+        chargeGasArgs info $ GObjOp $ ObjOpLookup s $ M.size envData
         case M.lookup (Field s) envData of
           -- See [Note: Parsed Integer]
           Just (PDecimal p) ->
@@ -2239,9 +2270,11 @@ coreReadInteger info b _env = \case
           Just (PInteger p) ->
             return (VInteger p)
           -- See [Note: Parsed Integer]
-          Just (PString raw) -> case parseNumLiteral raw of
-            Just (LInteger i) -> return (VInteger i)
-            _ -> throwRecoverableError info "read-integer failure"
+          Just (PString raw) -> do
+            chargeGasArgs info $ GStrOp $ StrOpConvToInt $ T.length raw
+            case parseNumLiteral raw of
+              Just (LInteger i) -> return (VInteger i)
+              _ -> throwRecoverableError info "read-integer failure"
 
           _ -> throwRecoverableError info "read-integer failure"
       _ -> throwRecoverableError info "read-integer failure"
@@ -2251,7 +2284,8 @@ coreReadMsg :: (MonadEval b i m) => NativeFunction b i m
 coreReadMsg info b _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
-      PObject envData ->
+      PObject envData -> do
+        chargeGasArgs info $ GObjOp $ ObjOpLookup s $ M.size envData
         case M.lookup (Field s) envData of
           Just pv -> return (VPactValue pv)
           _ -> throwRecoverableError info "read-msg failure"
@@ -2281,15 +2315,18 @@ coreReadDecimal :: (MonadEval b i m) => NativeFunction b i m
 coreReadDecimal info b _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
-      PObject envData ->
+      PObject envData -> do
+        chargeGasArgs info $ GObjOp $ ObjOpLookup s $ M.size envData
         case M.lookup (Field s) envData of
           Just (PDecimal p) -> return (VDecimal p)
           -- See [Note: Parsed Decimal]
           Just (PInteger i) -> return (VDecimal (Decimal 0 i))
-          Just (PString raw) -> case parseNumLiteral raw of
-            Just (LInteger i) -> return (VDecimal (Decimal 0 i))
-            Just (LDecimal l) -> return (VDecimal l)
-            _ -> throwRecoverableError info "read-decimal failure"
+          Just (PString raw) ->  do
+            chargeGasArgs info $ GStrOp $ StrOpConvToInt $ T.length raw
+            case parseNumLiteral raw of
+              Just (LInteger i) -> return (VDecimal (Decimal 0 i))
+              Just (LDecimal l) -> return (VDecimal l)
+              _ -> throwRecoverableError info "read-decimal failure"
           _ -> throwRecoverableError info "read-decimal failure"
       _ -> throwRecoverableError info "read-decimal failure"
   args -> argsError info b args
@@ -2298,29 +2335,38 @@ coreReadString :: (MonadEval b i m) => NativeFunction b i m
 coreReadString info b _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
-      PObject envData ->
+      PObject envData -> do
+        chargeGasArgs info $ GObjOp $ ObjOpLookup s $ M.size envData
         case M.lookup (Field s) envData of
           Just (PString p) -> return (VString p)
           _ -> throwRecoverableError info "read-string failure"
       _ -> throwRecoverableError info "read-string failure"
   args -> argsError info b args
 
-readKeyset' :: (MonadEval b i m) => T.Text -> m (Maybe KeySet)
-readKeyset' ksn = do
+readKeyset' :: (MonadEval b i m) => i -> T.Text -> m (Maybe KeySet)
+readKeyset' info ksn = do
   viewEvalEnv eeMsgBody >>= \case
-    PObject envData ->
+    PObject envData -> do
+      chargeGasArgs info $ GObjOp $ ObjOpLookup ksn $ M.size envData
       case M.lookup (Field ksn) envData of
         Just (PGuard (GKeyset ks)) -> pure (Just ks)
-        Just (PObject dat) -> parseObj dat
+        Just (PObject dat) -> do
+          let objSize = M.size dat
+          chargeGasArgs info $ GObjOp $ ObjOpLookup "keys" objSize
+          chargeGasArgs info $ GObjOp $ ObjOpLookup "pred" objSize
+          case parseObj dat of
+            Nothing -> pure Nothing
+            Just (ks, p) -> do
+              chargeGasArgs info $ GStrOp $ StrOpParse $ T.length p
+              pure $ KeySet ks <$> readPredicate p
           where
-          parseObj d = pure $ do
+          parseObj d = do
             keys <- M.lookup (Field "keys") d
             keyText <- preview _PList keys >>= traverse (fmap PublicKeyText . preview (_PLiteral . _LString))
             predRaw <- M.lookup (Field "pred") d
             p <- preview (_PLiteral . _LString) predRaw
-            pred' <- readPredicate p
             let ks = S.fromList (V.toList keyText)
-            pure (KeySet ks pred')
+            pure (ks, p)
           readPredicate = \case
             "keys-any" -> pure KeysAny
             "keys-2" -> pure Keys2
@@ -2341,7 +2387,7 @@ readKeyset' ksn = do
 coreReadKeyset :: (MonadEval b i m) => NativeFunction b i m
 coreReadKeyset info b _env = \case
   [VString ksn] ->
-    readKeyset' ksn >>= \case
+    readKeyset' info ksn >>= \case
       Just ks -> do
         shouldEnforce <- isExecutionFlagSet FlagEnforceKeyFormats
         if shouldEnforce && isLeft (enforceKeyFormats (const ()) ks)
@@ -2595,7 +2641,7 @@ defineKeySet info b env = \case
     defineKeySet' info env ksname ks
   [VString ksname] -> do
     enforceTopLevelOnly info b
-    readKeyset' ksname >>= \case
+    readKeyset' info ksname >>= \case
       Just newKs ->
         defineKeySet' info env ksname newKs
       Nothing -> throwRecoverableError info "read-keyset failure"
@@ -2607,7 +2653,11 @@ defineKeySet info b env = \case
 
 requireCapability :: (MonadEval b i m) => NativeFunction b i m
 requireCapability info b _env = \case
-  [VCapToken ct] -> requireCap info ct
+  [VCapToken ct] -> do
+    slots <- useEvalState $ esCaps . csSlots
+    let cnt = sum [1 + length cs | CapSlot _ cs <- slots]
+    chargeGasArgs info $ GCapOp $ CapOpRequire cnt
+    requireCap info ct
   args -> argsError info b args
 
 composeCapability :: (MonadEval b i m) => NativeFunction b i m
@@ -2689,9 +2739,14 @@ coreIntToStr info b _env = \case
     | v < 0 ->
       throwRecoverableError info "int-to-str error: cannot show negative integer"
     | base >= 2 && base <= 16 -> do
+      let strLen = 1 + Exts.I# (IntLog.integerLogBase# base $ abs v)
+      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
       let v' = T.pack $ showIntAtBase base Char.intToDigit v ""
       return (VString v')
     | base == 64 && v >= 0 -> do
+      let bsLen = 1 + Exts.I# (IntLog.integerLogBase# 256 $ abs v)
+          strLen = (bsLen * 4) `div` 3
+      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
       let v' = toB64UrlUnpaddedText $ integerToBS v
       return (VString v')
     | base == 64 -> throwRecoverableError info "only positive values allowed for base64URL conversion"
@@ -2700,17 +2755,25 @@ coreIntToStr info b _env = \case
 
 coreStrToInt :: (MonadEval b i m) => NativeFunction b i m
 coreStrToInt info b _env = \case
-  [VString s] ->
-    checkLen info s *> doBase info 10 s
+  [VString s] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
+    checkLen info s
+    doBase info 10 s
   args -> argsError info b args
 
 coreStrToIntBase :: (MonadEval b i m) => NativeFunction b i m
 coreStrToIntBase info b _env = \case
   [VInteger base, VString s]
-    | base == 64 -> checkLen info s *> case decodeBase64UrlUnpadded $ T.encodeUtf8 s of
+    | base == 64 -> do
+      chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
+      checkLen info s
+      case decodeBase64UrlUnpadded $ T.encodeUtf8 s of
         Left{} -> throwExecutionError info (DecodeError "invalid b64 encoding")
         Right bs -> return $ VInteger (bsToInteger bs)
-    | base >= 2 && base <= 16 -> checkLen info s *> doBase info base s
+    | base >= 2 && base <= 16 -> do
+        chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
+        checkLen info s
+        doBase info base s
     | otherwise -> throwRecoverableError info "Base value must be >= 2 and <= 16, or 64"
   args -> argsError info b args
   where
@@ -2719,30 +2782,42 @@ coreStrToIntBase info b _env = \case
   bsToInteger bs = fst $ foldl' go (0,(BS.length bs - 1) * 8) $ BS.unpack bs
   go (i,p) w = (i .|. (shift (fromIntegral w) p),p - 8)
 
+nubByM :: Monad m => (a -> a -> m Bool) -> [a] -> m [a]
+nubByM eq = go
+  where
+  go [] = pure []
+  go (x:xs) = do
+    xs' <- filterM (fmap not . eq x) xs
+    (x :) <$> go xs'
+
 coreDistinct  :: (MonadEval b i m) => NativeFunction b i m
 coreDistinct info b _env = \case
-  [VList s] ->
+  [VList s] -> do
+    uniques <- nubByM (valEqGassed info) $ V.toList s
     return
       $ VList
-      $ V.fromList
-      $ nubOrd
-      $ V.toList s
+      $ V.fromList uniques
   args -> argsError info b args
 
 coreFormat  :: (MonadEval b i m) => NativeFunction b i m
 coreFormat info b _env = \case
   [VString s, VList es] -> do
+    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ T.length s
     let parts = T.splitOn "{}" s
         plen = length parts
     if | plen == 1 -> return (VString s)
        | plen - length es > 1 ->
         throwRecoverableError info "format: not enough arguments for template"
        | otherwise -> do
-          let args = formatArg <$> V.toList es
+          args <- traverse formatArgM $ V.toList es
           return $ VString $  T.concat $ alternate parts (take (plen - 1) args)
     where
     formatArg (PString ps) = ps
     formatArg a = renderPactValue a
+    formatArgM a = do
+      let a' = formatArg a
+      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ T.length a'
+      pure a'
     alternate (x:xs) ys = x : alternate ys xs
     alternate _ _ = []
   args -> argsError info b args
@@ -2862,7 +2937,8 @@ coreContinue info b _env = \case
 
 parseTime :: (MonadEval b i m) => NativeFunction b i m
 parseTime info b _env = \case
-  [VString fmt, VString s] ->
+  [VString fmt, VString s] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParseTime (T.length fmt) (T.length s)
     case PactTime.parseTime (T.unpack fmt) (T.unpack s) of
       Just t -> return $ VPactValue (PTime t)
       Nothing ->
@@ -2872,6 +2948,7 @@ parseTime info b _env = \case
 formatTime :: (MonadEval b i m) => NativeFunction b i m
 formatTime info b _env = \case
   [VString fmt, VPactValue (PTime t)] -> do
+    chargeGasArgs info $ GStrOp $ StrOpFormatTime $ T.length fmt
     let timeString = PactTime.formatTime (T.unpack fmt) t
     return $ VString (T.pack timeString)
   args -> argsError info b args
@@ -2994,6 +3071,11 @@ createPrincipalForGuard info = \case
       | ed25519HexFormat k -> Pr.K k <$ chargeGas 1_000
     (l, _) -> do
       h <- mkHash $ map (T.encodeUtf8 . _pubKey) l
+      case pf of
+        CustomPredicate (TQN (QualifiedName n (ModuleName mn mns))) -> do
+          let totalLength = T.length n + T.length mn + maybe 0 (T.length . _namespaceName) mns
+          chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength totalLength
+        _ -> pure ()
       pure $ Pr.W (hashToText h) (predicateToText pf)
   GKeySetRef ksn ->
     Pr.R ksn <$ chargeGas 1_000
@@ -3030,12 +3112,15 @@ coreCreatePrincipal info b _env = \case
 
 coreIsPrincipal :: (MonadEval b i m) => NativeFunction b i m
 coreIsPrincipal info b _env = \case
-  [VString p] -> return $ VBool $ isRight $ parseOnly Pr.principalParser p
+  [VString p] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length p
+    return $ VBool $ isRight $ parseOnly Pr.principalParser p
   args -> argsError info b args
 
 coreTypeOfPrincipal :: (MonadEval b i m) => NativeFunction b i m
 coreTypeOfPrincipal info b _env = \case
   [VString p] -> do
+    chargeGasArgs info $ GStrOp $ StrOpParse $ T.length p
     let prty = case parseOnly Pr.principalParser p of
           Left _ -> ""
           Right pr -> Pr.showPrincipalType pr
@@ -3046,6 +3131,7 @@ coreValidatePrincipal :: (MonadEval b i m) => NativeFunction b i m
 coreValidatePrincipal info b _env = \case
   [VGuard g, VString s] -> do
     pr' <- createPrincipalForGuard info g
+    chargeGasArgs info $ GComparison $ TextComparison s
     return $ VBool $ Pr.mkPrincipalIdent pr' == s
   args -> argsError info b args
 
@@ -3072,9 +3158,11 @@ coreNamespace info b env = \case
     if T.null n then do
       (esLoaded . loNamespace) .== Nothing
       return (VString "Namespace reset to root")
-    else
+    else do
+      chargeGasArgs info $ GRead $ fromIntegral $ T.length n
       liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
         Just ns -> do
+          chargeGasArgs info $ GRead $ sizeOf SizeOfV0 ns
           (esLoaded . loNamespace) .== Just ns
           let msg = "Namespace set to " <> n
           return (VString msg)
@@ -3090,11 +3178,13 @@ coreDefineNamespace info b env = \case
     unless (isValidNsFormat n) $ throwExecutionError info (DefineNamespaceError "invalid namespace format")
     let nsn = NamespaceName n
         ns = Namespace nsn usrG adminG
+    chargeGasArgs info $ GRead $ fromIntegral $ T.length n
     liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
       -- G!
       -- https://static.wikia.nocookie.net/onepiece/images/5/52/Lao_G_Manga_Infobox.png/revision/latest?cb=20150405020446
       -- Enforce the old guard
-      Just (Namespace _ _ laoG) -> do
+      Just existing@(Namespace _ _ laoG) -> do
+        chargeGasArgs info $ GRead $ sizeOf SizeOfV0 existing
         allow <- enforceGuard info env laoG
         writeNs allow nsn ns
       Nothing -> viewEvalEnv eeNamespacePolicy >>= \case
@@ -3132,8 +3222,10 @@ coreDescribeNamespace :: (MonadEval b i m) => NativeFunction b i m
 coreDescribeNamespace info b _env = \case
   [VString n] -> do
     pdb <- viewEvalEnv eePactDb
+    chargeGasArgs info $ GRead $ fromIntegral $ T.length n
     liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
-      Just (Namespace _ usrG laoG) -> do
+      Just existing@(Namespace _ usrG laoG) -> do
+        chargeGasArgs info $ GRead $ sizeOf SizeOfV0 existing
         let obj = M.fromList
                   [ (Field "user-guard", PGuard usrG)
                   , (Field "admin-guard", PGuard laoG)

@@ -1260,7 +1260,6 @@ applyContToValue (SeqC env e cont) handler _ =
 -- Note: we charge gas for this reduction here, as these are essentially natives
 -- that match and perform an uncons/match.
 applyContToValue (CondC env info frame cont) handler v = do
-  chargeGasArgs info (GAConstant constantWorkNodeGas)
   case v of
     VBool b -> case frame of
       AndC te ->
@@ -1281,6 +1280,7 @@ applyContToValue (CondC env info frame cont) handler v = do
         let acc' = if b then elem':acc else acc
         case rest of
           x:xs -> do
+            chargeGasArgs info (GAConstant unconsWorkNodeGas)
             let cont' = CondC env info (FilterC clo x xs acc') cont
             applyLam clo [VPactValue x] cont' handler
           [] -> returnCEKValue cont handler (VList (V.fromList (reverse acc')))

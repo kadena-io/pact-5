@@ -620,6 +620,7 @@ zipList info b cont handler _env = \case
   [VClosure clo, VList l, VList r] ->
     case (V.toList l, V.toList r) of
       (x:xs, y:ys) -> do
+        chargeGasArgs info (GAConstant unconsWorkNodeGas)
         let cont' = BuiltinC _env info (ZipC clo (xs, ys) []) cont
         applyLam clo [VPactValue x, VPactValue y] cont' handler
       (_, _) -> returnCEKValue cont handler (VList mempty)

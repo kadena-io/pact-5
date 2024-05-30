@@ -36,7 +36,9 @@ tests = do
   cases <- gasTestFiles
   pure $ testGroup "Gas Goldens"
     [ testCase "Capture all builtins" $ captureBuiltins (fst <$> cases)
-    , goldenVsStringDiff "Gas Goldens" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases)
+    , goldenVsStringDiff "Gas Goldens: CEK" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases interpretReplProgram)
+    , goldenVsStringDiff "Gas Goldens: CEK smallstep" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases interpretReplProgramSmallStep)
+    , goldenVsStringDiff "Gas Goldens: Direct" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases interpretReplProgramDirect)
     ]
   where
   runDiff = \ref new -> ["diff", "-u", ref, new]
@@ -70,10 +72,10 @@ lookupOp :: Text -> Text
 lookupOp n = fromMaybe n (M.lookup n fileNameToOp)
 
 
-gasGoldenTests :: [(Text, FilePath)] -> IO BS.ByteString
-gasGoldenTests c = do
+gasGoldenTests :: [(Text, FilePath)] -> _ -> IO BS.ByteString
+gasGoldenTests c interp = do
   gasOutputs <- forM c $ \(fn, fp) -> do
-    mGas <- runGasTest (gasTestDir </> fp) interpretReplProgram
+    mGas <- runGasTest (gasTestDir </> fp) interp
     case mGas of
       Nothing -> fail $ "Could not execute the gas tests for: " <> show fp
       Just (MilliGas consumed) -> pure $ BS.fromStrict $ T.encodeUtf8 (lookupOp fn <> ": " <> T.pack (show consumed))
