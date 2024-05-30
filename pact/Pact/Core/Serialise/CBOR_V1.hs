@@ -20,9 +20,7 @@ module Pact.Core.Serialise.CBOR_V1
   ) where
 
 import Control.Lens
-import Control.Monad
 import Control.Monad.Reader
-import Control.Monad.Except
 import Codec.CBOR.Read (deserialiseFromBytes)
 import Codec.CBOR.Write (toStrictByteString)
 import Codec.Serialise.Class
@@ -31,7 +29,6 @@ import Codec.CBOR.Decoding
 import Data.ByteString (ByteString, fromStrict)
 import Data.Decimal
 import Data.Foldable
-import Data.IORef
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import qualified GHC.Integer.Logarithms as IntLog
@@ -103,21 +100,16 @@ encodeNamespace = toStrictByteString . encode
 decodeNamespace :: ByteString -> Maybe Namespace
 decodeNamespace bs =either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
--- TODO: Do we want a gas log entry here???
--- most likely not, maybe just pre/post?
-chargeGasMSerialize :: [StackFrame i] -> i -> MilliGas -> GasM (PactError i) b ()
-chargeGasMSerialize stackFrame info amount = do
-  GasMEnv gasRef gasModel <- ask
-  let mgl@(MilliGasLimit gasLimit) = _gmGasLimit gasModel
-  !currGas <- liftIO $ readIORef gasRef
-  let !used = currGas <> amount
-  liftIO (writeIORef gasRef used)
-  when (used > gasLimit) $ throwError (PEExecutionError (GasExceeded mgl used) stackFrame info)
 
 encodeRowData :: [StackFrame i] -> i -> RowData -> GasM (PactError i) b ByteString
 encodeRowData stackFrame info rd = do
   gasSerializeRowData stackFrame info rd
   pure . toStrictByteString $ encode rd
+
+chargeGasMSerialize :: a -> c -> MilliGas -> GasM (PactError i) b ()
+chargeGasMSerialize _ _ amount = do
+  GasMEnv chargeGas _ <- ask
+  chargeGas amount
 
 gasSerializeRowData :: forall i b. [StackFrame i] -> i -> RowData -> GasM (PactError i) b ()
 gasSerializeRowData stackFrame info (RowData fields) = do

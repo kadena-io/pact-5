@@ -11,7 +11,6 @@ module Pact.Core.Gas
 import Control.Exception
 import Control.Monad.Reader
 import Control.Monad.Except
-import Data.IORef
 
 import Pact.Core.Errors
 import Pact.Core.Gas.Types
@@ -21,7 +20,7 @@ import Pact.Core.StackFrame
 runGasM
   :: [StackFrame i]
   -> i
-  -> GasMEnv b
+  -> GasMEnv (PactError i) b
   -> GasM (PactError i) b a
   -> IO (Either (PactError i) a)
 runGasM stack info env (GasM m) = do
@@ -36,8 +35,8 @@ ignoreGas
   -> GasM (PactError i) b a
   -> IO a
 ignoreGas info m = do
-  gasRef <- newIORef (MilliGas 0)
-  runGasM [] info (GasMEnv gasRef freeGasModel) m >>=
+  let chargeGas = const $ pure ()
+  runGasM [] info (GasMEnv chargeGas freeGasModel) m >>=
     \case
       Left _ -> error "impossible case: ran out of gas with an infinite limit"
       Right a -> pure a

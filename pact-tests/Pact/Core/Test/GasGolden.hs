@@ -36,8 +36,11 @@ tests = do
   cases <- gasTestFiles
   pure $ testGroup "Gas Goldens"
     [ testCase "Capture all builtins" $ captureBuiltins (fst <$> cases)
-    , goldenVsString "Gas Goldens" (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases)
+    , goldenVsStringDiff "Gas Goldens" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases)
     ]
+
+  where
+    runDiff = \ref new -> ["diff", "-u", ref, new]
 
 
 gasTestDir :: [Char]

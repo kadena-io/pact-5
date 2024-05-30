@@ -1,8 +1,10 @@
 module Pact.Core.Persistence.Utils where
 
 import Control.Exception(throwIO)
+import Control.Monad
+import Control.Monad.Reader
 import Control.Monad.Error.Class (throwError)
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Data.IORef
 
 import Pact.Core.Environment
 import Pact.Core.Errors
@@ -45,11 +47,6 @@ writeNamespace :: (MonadEval b i m) => [StackFrame i] -> i -> PactDb b i -> Writ
 writeNamespace stackFrame info pdb wt namespaceName namespace =
   liftGasM stackFrame info $ _pdbWrite pdb stackFrame info wt DNamespaces namespaceName namespace
 
--- | For several db operations, we expect not to use gas. This
---   function tests that assumption by failing if it is violated.
--- failIfUsesGas :: MilliGas -> m ()
--- failIfUsesGas _ = error "Expected no gas use (even charges of 0 gas)"
-
 
 dbOpDisallowed :: MonadIO m => m a
 dbOpDisallowed = liftIO $ throwIO OpDisallowed
@@ -58,6 +55,18 @@ dbOpDisallowed = liftIO $ throwIO OpDisallowed
 liftGasM :: MonadEval b i m => [StackFrame i] -> i -> GasM (PactError i) b a -> m a
 liftGasM stack info action = do
   gasRef <- viewEvalEnv eeGasRef
+  let chargeGas = gasMChargeGas' stack info gasRef
   gasModel <- viewEvalEnv eeGasModel
   either throwError pure =<<
-    liftIO (runGasM stack info (GasMEnv gasRef gasModel) action)
+    liftIO (runGasM stack info (GasMEnv chargeGas gasModel) action)
+
+
+
+gasMChargeGas' :: [StackFrame i] -> i -> IORef MilliGas -> MilliGas -> GasM (PactError i) b ()
+gasMChargeGas' stackFrame info gasRef amount = do
+  GasMEnv _chargeGas gasModel <- ask
+  let mgl@(MilliGasLimit gasLimit) = _gmGasLimit gasModel
+  !currGas <- liftIO $ readIORef gasRef
+  let !used = currGas <> _gmRunModel gasModel (GAConstant amount)
+  liftIO (writeIORef gasRef used)
+  when (used > gasLimit) $ throwError (PEExecutionError (GasExceeded mgl used) stackFrame info)

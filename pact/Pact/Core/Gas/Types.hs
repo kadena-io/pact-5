@@ -26,6 +26,9 @@ module Pact.Core.Gas.Types
   , ZKGroup(..)
   , ZKArg(..)
   , IntegerPrimOp(..)
+  , StrOp(..)
+  , ObjOp(..)
+  , CapOp(..)
   , ConcatType(..)
   , GasTextLength(..)
   , GasListLength(..)
@@ -40,7 +43,7 @@ module Pact.Core.Gas.Types
   , gmName
   , gmSerialize
 
-  , gasMRef
+  , gasMChargeGas
   , gasMModel
 
   , constantGasModel
@@ -54,7 +57,6 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Lens
 import Data.Decimal(Decimal)
-import Data.IORef
 import Data.Monoid
 import Data.Word (Word64)
 import Data.Semiring(Semiring)
@@ -71,14 +73,14 @@ newtype MilliGas
   deriving (Eq, Ord, Show)
   deriving newtype NFData
   deriving (Semigroup, Monoid) via (Sum Word64)
-  deriving (Semiring, Enum) via Word64
+  deriving (Bounded, Semiring, Enum) via Word64
 
 instance Pretty MilliGas where
   pretty (MilliGas g) = pretty g <> "mG"
 
 newtype MilliGasLimit
   = MilliGasLimit MilliGas
-  deriving (Eq, Ord, Show)
+  deriving (Bounded, Eq, Ord, Show)
   deriving newtype NFData
 
 -- | Gas in pact-core, represented as an unsigned
@@ -166,7 +168,34 @@ data IntegerPrimOp
   | PrimOpMul
   | PrimOpDiv
   | PrimOpShift
+  | PrimOpPow
   deriving (Eq, Show, Enum, Ord, Generic, NFData)
+
+data StrOp
+  = StrOpLength !Int
+  -- ^ The cost of computing the length. In a sense, it's charged post-factum.
+  | StrOpConvToInt !Int
+  -- ^ The cost of converting a string of a given length to an integer.
+  | StrOpParse !Int
+  -- ^ The cost of a general scanning parse of a string of a given length.
+  | StrOpExplode !Int
+  -- ^ The cost of splitting a string into a list of chars.
+  | StrOpParseTime !Int !Int
+  -- ^ The cost of parsing time with the given format string and time string lengths.
+  | StrOpFormatTime !Int
+  -- ^ The cost of formatting time with the given format string length.
+  deriving (Eq, Show, Ord, Generic, NFData)
+
+data ObjOp
+  = ObjOpLookup !T.Text !Int
+  -- ^ The cost of looking up a key in an object with the given fields count.
+  | ObjOpRemove !T.Text !Int
+  -- ^ The cost of removing a key from an object with the given fields count.
+  deriving (Eq, Show, Ord, Generic, NFData)
+
+data CapOp
+  = CapOpRequire !Int
+  deriving (Eq, Show, Ord, Generic, NFData)
 
 data GasArgs
   = GAConstant !MilliGas
@@ -189,6 +218,8 @@ data GasArgs
   -- ^ Cost of ZK function
   | GWrite !Word64
   -- ^ Cost of writes, per bytes, roughly based on in-memory cost.
+  | GRead !Word64
+  -- ^ Cost of reads, per bytes, roughly based on in-memory cost.
   | GComparison !ComparisonType
   -- ^ Gas costs for comparisons
   | GSearch !SearchType
@@ -196,6 +227,9 @@ data GasArgs
   | GPoseidonHashHackAChain !Int
   -- ^ poseidon-hash-hack-a-chain costs.
   | GModuleMemory !Word64
+  | GStrOp !StrOp
+  | GObjOp !ObjOp
+  | GCapOp !CapOp
   | GCountBytes
   -- ^ Cost of computing SizeOf for N bytes.
   deriving (Show, Generic, NFData)
@@ -304,20 +338,23 @@ constantGasModel unitPrice gl
 freeGasModel :: GasModel b
 freeGasModel = constantGasModel mempty (MilliGasLimit (MilliGas 0))
 
-data GasMEnv b
+data GasMEnv e b
   = GasMEnv
-  { _gasMRef :: IORef MilliGas
+  { _gasMChargeGas :: MilliGas -> GasM e b ()
   , _gasMModel :: GasModel b
   } deriving (Generic, NFData)
-makeLenses ''GasMEnv
+
+
 
 newtype GasM e b a
-  = GasM (ReaderT (GasMEnv b) (ExceptT e IO) a)
+  = GasM (ReaderT (GasMEnv e b) (ExceptT e IO) a)
   deriving
   ( Functor
   , Applicative
   , Monad
-  , MonadReader (GasMEnv b)
+  , MonadReader (GasMEnv e b)
   , MonadError e
-  , MonadIO) via (ReaderT (GasMEnv b) (ExceptT e IO))
+  , MonadIO) via (ReaderT (GasMEnv e b) (ExceptT e IO))
 
+
+makeLenses ''GasMEnv

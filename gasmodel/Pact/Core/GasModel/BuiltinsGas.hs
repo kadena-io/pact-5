@@ -13,12 +13,14 @@ import qualified Data.Vector as V
 import qualified Database.SQLite3 as SQL
 import Control.Monad
 import Data.Bifunctor
+import Data.Default
 import NeatInterpolation (text)
 
 import Pact.Core.IR.Term
 import Pact.Core.Builtin
 import Pact.Core.Capabilities
 import Pact.Core.Environment
+import Pact.Core.Gas
 import Pact.Core.Guards
 import Pact.Core.Literal
 import Pact.Core.Names
@@ -502,7 +504,8 @@ benchKeysetGuardOp op pdb = dummyTx pdb initDb
   keys = take 3 $ enumExpScopedIdent 10_000 10
   initDb = forM_ keys $ \(_title, ident) -> case ident of
     PString s
-      | Right ksn <- parseAnyKeysetName s -> writeKeySet pdb Insert ksn $ KeySet [pkt] KeysAny
+      | Right ksn <- parseAnyKeysetName s -> ignoreGas def $
+          _pdbWrite pdb [] def Write DKeySets ksn $ KeySet [pkt] KeysAny
     _ -> error "not a string"
 
 benchAt :: BuiltinBenches
@@ -711,7 +714,8 @@ benchNamespace pdb = dummyTx pdb initDb
   g = GKeySetRef $ KeySetName "ks" Nothing
   initDb = forM_ names $ \(_title, name) -> case name of
     PString n -> let nsn = NamespaceName n
-                 in writeNamespace pdb Insert nsn (Namespace nsn g g)
+                 in ignoreGas def $
+                      _pdbWrite pdb [] def Write DNamespaces nsn (Namespace nsn g g)
     _ -> error "not a string"
 
 benchDefineNamespace :: BuiltinBenches
@@ -732,7 +736,8 @@ benchDescribeNamespace pdb = dummyTx pdb initDb
   g = GKeySetRef $ KeySetName "ks" Nothing
   initDb = forM_ names $ \(_title, name) -> case name of
     PString n -> let nsn = NamespaceName n
-                 in writeNamespace pdb Insert nsn (Namespace nsn g g)
+                 in ignoreGas def $
+                      _pdbWrite pdb [] def Write DNamespaces nsn (Namespace nsn g g)
     _ -> error "not a string"
 
 benchChainData :: BuiltinBenches

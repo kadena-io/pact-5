@@ -1708,7 +1708,8 @@ coreNamespace info b cont handler env = \case
       chargeGasArgs info $ GRead $ fromIntegral $ T.length n
       liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
         Just ns -> do
-          chargeGasArgs info $ GRead $ sizeOf SizeOfV0 ns
+          size <- sizeOf SizeOfV0 ns
+          chargeGasArgs info $ GRead size
           (esLoaded . loNamespace) .== Just ns
           let msg = "Namespace set to " <> n
           returnCEKValue cont handler (VString msg)
@@ -1731,7 +1732,8 @@ coreDefineNamespace info b cont handler env = \case
       -- https://static.wikia.nocookie.net/onepiece/images/5/52/Lao_G_Manga_Infobox.png/revision/latest?cb=20150405020446
       -- Enforce the old guard
       Just existing@(Namespace _ _ laoG) -> do
-        chargeGasArgs info $ GRead $ sizeOf SizeOfV0 existing
+        size <- sizeOf SizeOfV0 existing
+        chargeGasArgs info $ GRead size
         let cont' = BuiltinC env info (DefineNamespaceC ns) cont
         enforceGuard info cont' handler env laoG
       Nothing -> viewEvalEnv eeNamespacePolicy >>= \case
@@ -1768,7 +1770,8 @@ coreDescribeNamespace info b cont handler _env = \case
     chargeGasArgs info $ GRead $ fromIntegral $ T.length n
     liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
       Just existing@(Namespace _ usrG laoG) -> do
-        chargeGasArgs info $ GRead $ sizeOf SizeOfV0 existing
+        size <- sizeOf SizeOfV0 existing
+        chargeGasArgs info $ GRead size
         let obj = M.fromList
                   [ (Field "user-guard", PGuard usrG)
                   , (Field "admin-guard", PGuard laoG)
