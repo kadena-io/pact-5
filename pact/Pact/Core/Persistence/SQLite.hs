@@ -31,7 +31,6 @@ import Pact.Core.PactValue
 import Pact.Core.Literal
 import Control.Exception (throwIO)
 import Pact.Core.Serialise
-import Pact.Core.StackFrame
 
 -- | Acquire a SQLite-backed `PactDB`.
 --
