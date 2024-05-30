@@ -68,17 +68,10 @@ mod: 1
 namespace: 99313
 negate: 50
 not: 139
-<<<<<<< HEAD
 not?: 189
 or?: 189
 pact-id: 60000268
 pairing-check: 67003144
-=======
-not?: 139
-or?: 139
-pact-id: 60000090
-pairing-check: 66999943
->>>>>>> d095e21a (rebase, fix gas costs to ensure both interpreters are consistent)
 parse-time: 2102
 point-add: 5425
 poseidon-hash-hack-a-chain: 6393700
@@ -89,13 +82,8 @@ read-msg: 128
 read-string: 128
 read: 60393431
 remove: 261
-<<<<<<< HEAD
 require-capability: 60002775
 resume: 60006674
-=======
-require-capability: 60002282
-resume: 60006189
->>>>>>> d095e21a (rebase, fix gas costs to ensure both interpreters are consistent)
 reverse: 601
 round: 50
 scalar-mult: 360225
@@ -115,17 +103,10 @@ typeof-principal: 647
 typeof: 25
 update: 60516638
 validate-principal: 4940
-<<<<<<< HEAD
 where: 979
 with-default-read: 60405981
 with-read: 60394506
 write: 60383431
-=======
-where: 1079
-with-default-read: 60406765
-with-read: 60395290
-write: 60384215
->>>>>>> d095e21a (rebase, fix gas costs to ensure both interpreters are consistent)
 xor: 2000
 yield: 60002446
 zip: 3822
