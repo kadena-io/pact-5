@@ -1,0 +1,6 @@
+(module T G
+  (defcap G () true)
+
+  (defun test () 1))
+
+(describe-module 'T)

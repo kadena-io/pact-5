@@ -1,0 +1,8 @@
+(module testmodule g
+  (defcap g () true)
+
+  (defpact test ()
+    (step (create-capability-pact-guard (g)))
+    ))
+
+(test)

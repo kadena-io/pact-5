@@ -1,0 +1,3 @@
+(env-data {"key": 1.5})
+
+(read-decimal 'key)

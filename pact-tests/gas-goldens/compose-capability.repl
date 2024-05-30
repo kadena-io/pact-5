@@ -1,0 +1,20 @@
+(module testmodule g
+  (defcap g () true)
+
+  (defcap testcap ()
+    (compose-capability (composedtestcap)))
+
+  (defcap composedtestcap () true)
+
+  (defun test ()
+    (require-capability (composedtestcap)))
+
+  (defun callee ()
+    (with-capability (testcap)
+      (test))))
+
+
+; capability in scope
+(callee)
+
+(expect-failure "" (test))

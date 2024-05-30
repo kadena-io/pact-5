@@ -40,10 +40,9 @@ import Pact.Core.Serialise
 runRepl :: IO ()
 runRepl = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
-  g <- newIORef mempty
   evalLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replCoreBuiltinMap
-  ref <- newIORef (ReplState mempty pdb def ee g evalLog defaultSrc mempty mempty Nothing False)
+  ref <- newIORef (ReplState mempty pdb def ee evalLog defaultSrc mempty mempty Nothing False)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"

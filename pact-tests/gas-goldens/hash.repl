@@ -1,0 +1,3 @@
+(hash "hello")
+
+(hash { 'foo: 1})

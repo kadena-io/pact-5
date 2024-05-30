@@ -1,0 +1,19 @@
+(module T G
+  (defcap G () true)
+
+  (defschema table-schema
+    "test schema"
+    col1: integer
+    col2: string)
+
+  (deftable test-table:{table-schema})
+)
+
+
+(create-table test-table)
+
+
+(write test-table "a" {"col1": 1, "col2": "a"})
+
+
+(select test-table (constantly true))

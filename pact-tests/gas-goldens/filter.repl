@@ -1,0 +1,1 @@
+(filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])

@@ -1,0 +1,5 @@
+; matching case
+(cond ((= "a" "a") "equal") "not equal")
+
+; fallthrough case
+(cond ((= "a" "b") "equal") "not equal")

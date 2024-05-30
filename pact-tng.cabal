@@ -341,6 +341,7 @@ test-suite core-tests
     , Pact.Core.Test.ZkTests
     , Pact.Core.Test.PoseidonTests
     , Pact.Core.Test.LanguageServer
+    , Pact.Core.Test.GasGolden
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
 

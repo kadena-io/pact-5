@@ -1,0 +1,7 @@
+(poseidon-hash-hack-a-chain 1)
+
+(poseidon-hash-hack-a-chain 1 2)
+
+(poseidon-hash-hack-a-chain 1 2 3 4 5 6)
+
+(poseidon-hash-hack-a-chain 1 2 3 4 5 6 7 8)

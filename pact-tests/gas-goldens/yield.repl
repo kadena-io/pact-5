@@ -1,0 +1,9 @@
+(module testmodule g
+  (defcap g () true)
+
+  (defschema schema result:string)
+
+  (defpact test ()
+    (step (let ((x:object{schema} {"result": "hi"})) (yield x)))))
+
+(test)

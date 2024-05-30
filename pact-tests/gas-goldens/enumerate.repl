@@ -1,0 +1,5 @@
+(enumerate 0 10 2)
+
+(enumerate 0 10)
+
+(enumerate 10 0)

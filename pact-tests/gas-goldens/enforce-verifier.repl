@@ -1,0 +1,18 @@
+(module m G
+  (defcap G () true)
+
+  (defcap VERIF-TEST (a:integer)
+    (enforce-verifier "VERIF-TEST")
+  )
+
+  (defun run (param:integer)
+    (with-capability (VERIF-TEST param)
+      420
+    )
+  )
+  )
+
+(env-verifiers [{"name":"VERIF-TEST", "caps":[(VERIF-TEST 100)]}])
+
+(env-gas 0)
+(run 100)

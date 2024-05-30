@@ -60,7 +60,7 @@ newtype MilliGas
   deriving (Eq, Ord, Show)
   deriving newtype NFData
   deriving (Semigroup, Monoid) via (Sum Word64)
-  deriving (Semiring, Enum) via Word64
+  deriving (Semiring, Enum, Bounded) via Word64
 
 instance Pretty MilliGas where
   pretty (MilliGas g) = pretty g <> "mG"
@@ -68,7 +68,7 @@ instance Pretty MilliGas where
 newtype MilliGasLimit
   = MilliGasLimit MilliGas
   deriving (Eq, Ord, Show)
-  deriving newtype NFData
+  deriving newtype (NFData, Bounded)
 
 -- | Gas in pact-core, represented as an unsigned
 -- integer, units will go in terms of 1e3 = 2ns

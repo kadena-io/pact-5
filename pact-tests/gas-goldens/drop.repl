@@ -1,0 +1,5 @@
+(drop ["key1"] {"key1": "A", "key2": "b"})
+
+(drop (- 2) [1 2 3])
+
+(drop 2 "abc")

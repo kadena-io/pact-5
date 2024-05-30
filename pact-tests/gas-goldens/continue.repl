@@ -1,0 +1,13 @@
+(module testmodule g
+  (defcap g () true)
+
+  (defpact nested ()
+    (step "nested-1")
+    (step "nested-2"))
+
+  (defpact test ()
+    (step (nested))
+    (step (continue (nested)))))
+
+(test)
+(continue-pact 1)

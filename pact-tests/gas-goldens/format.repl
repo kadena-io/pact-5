@@ -1,0 +1,1 @@
+(format "My {} has {}" ["dog" "fleas"])

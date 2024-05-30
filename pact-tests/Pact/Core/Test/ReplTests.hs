@@ -18,7 +18,6 @@ import System.FilePath
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
-import Pact.Core.Gas
 import Pact.Core.Literal
 import Pact.Core.Persistence.MockPersistence
 
@@ -56,8 +55,7 @@ defaultReplTestDir = "pact-tests" </> "pact-tests"
 
 
 replTestFiles :: IO [FilePath]
-replTestFiles = do
-  filter (\f -> isExtensionOf "repl" f || isExtensionOf "pact" f) <$> getDirectoryContents defaultReplTestDir
+replTestFiles = filter (\f -> isExtensionOf "repl" f || isExtensionOf "pact" f) <$> getDirectoryContents defaultReplTestDir
 
 runFileReplTest :: Interpreter -> TestName -> TestTree
 runFileReplTest interp file = testCase file $ do
@@ -80,7 +78,6 @@ runReplTest
   -> Interpreter
   -> Assertion
 runReplTest (ReplSourceDir path) pdb file src interp = do
-  gasRef <- newIORef (Gas 0)
   gasLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replCoreBuiltinMap
   let source = SourceCode (path </> file) src
@@ -88,7 +85,6 @@ runReplTest (ReplSourceDir path) pdb file src interp = do
             { _replFlags = mempty
             , _replEvalState = def
             , _replPactDb = pdb
-            , _replGas = gasRef
             , _replEvalLog = gasLog
             , _replCurrSource = source
             , _replEvalEnv = ee
