@@ -239,14 +239,14 @@ gmLoaded = Loaded
   , _loModules=M.singleton gmModuleName gmModuleData
   , _loAllLoaded=gmFqMap}
 
-prepopulateDb :: Default i => PactDb CoreBuiltin i -> GasM (PactError i) CoreBuiltin ()
+prepopulateDb :: PactDb CoreBuiltin i -> GasM (PactError i) CoreBuiltin ()
 prepopulateDb pdb = do
   _ <- liftIO $ _pdbBeginTx pdb Transactional
-  _pdbCreateUserTable pdb [] def gasModelTable
-  _pdbWrite pdb [] def Write (DUserTables gasModelTable) gmTableK1 gmTableV1
-  _pdbWrite pdb [] def Write (DUserTables gasModelTable) gmTableK1 gmTableV1
-  _pdbWrite pdb [] def Write DNamespaces gmNamespaceName gmNamespace
-  _pdbWrite pdb [] def Write DKeySets gmKeysetName gmKeyset
+  _pdbCreateUserTable pdb gasModelTable
+  _pdbWrite pdb Write (DUserTables gasModelTable) gmTableK1 gmTableV1
+  _pdbWrite pdb Write (DUserTables gasModelTable) gmTableK1 gmTableV1
+  _pdbWrite pdb Write DNamespaces gmNamespaceName gmNamespace
+  _pdbWrite pdb Write DKeySets gmKeysetName gmKeyset
   _ <- liftIO $ _pdbCommitTx pdb
   pure ()
 
@@ -398,7 +398,7 @@ dummyTx :: PactDb b i -> IO () -> [C.Benchmark] -> [C.Benchmark]
 dummyTx pdb initDbState bs = C.envWithCleanup (_pdbBeginTx pdb Transactional >> initDbState) (const $ _pdbRollbackTx pdb) . const <$> bs
 
 ignoreWrites :: PactDb b i -> PactDb b i
-ignoreWrites pdb = pdb { _pdbWrite = \_ _ _ _ _ _ -> pure () }
+ignoreWrites pdb = pdb { _pdbWrite = \_ _ _ _ -> pure () }
 
 -- Closures
 unitClosureNullary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m

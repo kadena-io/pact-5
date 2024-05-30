@@ -68,7 +68,7 @@ legacyTests = do
 
         -- write modules into the pactdb
         _ <- ignoreGas def $ forM_ ms' $ \m ->
-          _pdbWrite pdb [] def Write DModules (view mdModuleName m) (liftReplBuiltin m)
+          _pdbWrite pdb Write DModules (view mdModuleName m) (liftReplBuiltin m)
 
         modTests <- forM repl $ \r -> do
           let filePath = p </> r

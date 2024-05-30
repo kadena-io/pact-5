@@ -72,7 +72,6 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.Gas
 import Pact.Core.Guards
 import Pact.Core.Capabilities
-import Control.Monad.Error.Class
 
 mkBuiltinFn
   :: (IsBuiltin b)
@@ -251,10 +250,9 @@ readOnlyEnv e
               PactDb
              { _pdbPurity = PReadOnly
              , _pdbRead = _pdbRead pdb
-             , _pdbWrite = \stackFrame info _wt _d _k _v ->
-                throwError (PEExecutionError (DbOpFailure OpDisallowed) stackFrame info)
+             , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
              , _pdbKeys = const dbOpDisallowed
-             , _pdbCreateUserTable = \_ _ _ -> dbOpDisallowed
+             , _pdbCreateUserTable = \_ -> dbOpDisallowed
              , _pdbBeginTx = const dbOpDisallowed
              , _pdbCommitTx = dbOpDisallowed
              , _pdbRollbackTx = dbOpDisallowed
@@ -271,9 +269,9 @@ sysOnlyEnv e
           PactDb
          { _pdbPurity = PSysOnly
          , _pdbRead = read'
-         , _pdbWrite = \_ _ _ _ _ _ -> dbOpDisallowed
+         , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
          , _pdbKeys = const dbOpDisallowed
-         , _pdbCreateUserTable = \_ _ _ -> dbOpDisallowed
+         , _pdbCreateUserTable = \_ -> dbOpDisallowed
          , _pdbBeginTx = const dbOpDisallowed
          , _pdbCommitTx = dbOpDisallowed
          , _pdbRollbackTx = dbOpDisallowed

@@ -505,7 +505,7 @@ benchKeysetGuardOp op pdb = dummyTx pdb initDb
   initDb = forM_ keys $ \(_title, ident) -> case ident of
     PString s
       | Right ksn <- parseAnyKeysetName s -> ignoreGas def $
-          _pdbWrite pdb [] def Write DKeySets ksn $ KeySet [pkt] KeysAny
+          _pdbWrite pdb Write DKeySets ksn $ KeySet [pkt] KeysAny
     _ -> error "not a string"
 
 benchAt :: BuiltinBenches
@@ -715,7 +715,7 @@ benchNamespace pdb = dummyTx pdb initDb
   initDb = forM_ names $ \(_title, name) -> case name of
     PString n -> let nsn = NamespaceName n
                  in ignoreGas def $
-                      _pdbWrite pdb [] def Write DNamespaces nsn (Namespace nsn g g)
+                      _pdbWrite pdb Write DNamespaces nsn (Namespace nsn g g)
     _ -> error "not a string"
 
 benchDefineNamespace :: BuiltinBenches
@@ -737,7 +737,7 @@ benchDescribeNamespace pdb = dummyTx pdb initDb
   initDb = forM_ names $ \(_title, name) -> case name of
     PString n -> let nsn = NamespaceName n
                  in ignoreGas def $
-                      _pdbWrite pdb [] def Write DNamespaces nsn (Namespace nsn g g)
+                      _pdbWrite pdb Write DNamespaces nsn (Namespace nsn g g)
     _ -> error "not a string"
 
 benchChainData :: BuiltinBenches

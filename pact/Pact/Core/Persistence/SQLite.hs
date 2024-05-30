@@ -90,7 +90,7 @@ initializePactDb serial db = do
     , _pdbRead = read' serial db
     , _pdbWrite = write' serial db txId txLog
     , _pdbKeys = readKeys db
-    , _pdbCreateUserTable = \stack info tn -> createUserTable stack info serial db txLog tn
+    , _pdbCreateUserTable = \tn -> createUserTable serial db txLog tn
     , _pdbBeginTx = beginTx txId db txLog
     , _pdbCommitTx = commitTx txId db txLog
     , _pdbRollbackTx = rollbackTx db txLog
@@ -178,15 +178,15 @@ rollbackTx db txLog = do
   SQL.exec db "ROLLBACK TRANSACTION"
   writeIORef txLog []
 
-createUserTable :: [StackFrame i] -> i -> PactSerialise b i -> SQL.Database -> IORef [TxLog ByteString] -> TableName -> GasM (PactError i) b ()
-createUserTable stack info serial db txLog tbl = do
+createUserTable :: PactSerialise b i -> SQL.Database -> IORef [TxLog ByteString] -> TableName -> GasM (PactError i) b ()
+createUserTable serial db txLog tbl = do
   let
     rd = RowData $ Map.singleton (Field "utModule")
          (PObject $ Map.fromList
           [ (Field "namespace", maybe (PLiteral LUnit) (PString . _namespaceName) (_mnNamespace (_tableModuleName tbl)))
           , (Field "name", PString (_tableName tbl))
           ])
-  rdEnc <- _encodeRowData serial stack info rd
+  rdEnc <- _encodeRowData serial rd
   liftIO $ SQL.exec db stmt
   liftIO $ modifyIORef' txLog (TxLog "SYS:usertables" (_tableName tbl) rdEnc :)
 
@@ -204,18 +204,16 @@ write'
   -> SQL.Database
   -> IORef TxId
   -> IORef [TxLog ByteString]
-  -> [StackFrame i]
-  -> i
   -> WriteType
   -> Domain k v b i
   -> k
   -> v
   -> GasM (PactError i) b ()
-write' serial db txId txLog stack info wt domain k v = do
+write' serial db txId txLog wt domain k v = do
   case domain of
     DUserTables tbl -> liftIO (checkInsertOk tbl k) >>= \case
       Nothing -> do
-        encoded <- _encodeRowData serial stack info v
+        encoded <- _encodeRowData serial v
         liftIO $ withStmt db ("INSERT INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
           let
             RowKey k' = k
@@ -228,7 +226,7 @@ write' serial db txId txLog stack info wt domain k v = do
           RowData old' = old
           RowData v' = v
           new = RowData (Map.union v' old')
-        encoded <- _encodeRowData serial stack info new
+        encoded <- _encodeRowData serial new
         liftIO $ withStmt db ("INSERT OR REPLACE INTO \"" <> toUserTable tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)") $ \stmt -> do
           let
             RowKey k' = k
