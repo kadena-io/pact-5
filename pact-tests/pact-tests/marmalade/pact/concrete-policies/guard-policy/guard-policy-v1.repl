@@ -1,0 +1,147 @@
+;;load policy manager, ledger
+(load "../../policy-manager/policy-manager.repl")
+(typecheck "marmalade-v2.guard-policy-v1")
+
+(begin-tx "Create token without mint guard")
+    (use marmalade-v2.ledger)
+    (use marmalade-v2.guard-policy-v1)
+    (use marmalade-v2.util-v1)
+    (use mini-guard-utils)
+  (env-data {
+     "token-id": (create-token-id { 'uri: "test-default-guard", 'precision: 0, 'policies: (create-policies DEFAULT) } ALWAYS-TRUE)
+    ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+    ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+  })
+
+  (env-sigs [
+    { 'key: 'account
+     ,'caps: [(marmalade-v2.ledger.MINT (read-msg 'token-id) (read-string 'account) 1.0)]
+    }])
+
+  (expect "create token succeeds without mint-guard"
+    true
+    (create-token (read-msg 'token-id) 0 "test-default-guard" (create-policies DEFAULT) ALWAYS-TRUE))
+
+  (expect "Mint token succeeds without mint-guard"
+    true
+    (mint (read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard ) 1.0))
+
+  (expect "create-token, mint events"
+    [ {"name": "marmalade-v2.guard-policy-v1.GUARDS","params": [(read-msg 'token-id) {"burn-guard": GUARD_SUCCESS,"mint-guard": GUARD_SUCCESS,"sale-guard": GUARD_SUCCESS,"transfer-guard": GUARD_SUCCESS, "uri-guard": GUARD_SUCCESS}]}
+      {"name": "marmalade-v2.ledger.TOKEN","params": [(read-msg 'token-id) 0 [marmalade-v2.non-fungible-policy-v1 marmalade-v2.guard-policy-v1] "test-default-guard" ALWAYS-TRUE]}
+      {"name": "marmalade-v2.ledger.MINT","params": [(read-msg 'token-id) (read-string 'account) 1.0]}
+      {"name": "marmalade-v2.ledger.ACCOUNT_GUARD","params": [(read-msg 'token-id) (read-string 'account) (read-keyset 'account-guard)]}
+      {"name": "marmalade-v2.ledger.RECONCILE","params": [(read-msg 'token-id) 1.0 {"account": "","current": 0.0,"previous": 0.0} {"account": (read-string 'account),"current": 1.0,"previous": 0.0}]} {"name": "marmalade-v2.ledger.SUPPLY","params": [(read-msg 'token-id) 1.0]}]
+    (map (remove "module-hash")  (env-events true)))
+
+ (rollback-tx)
+
+(begin-tx "Create token without operator guard fails")
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.guard-policy-v1)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+  (env-data {
+     "token-id": (create-token-id { 'uri: "test-default-guard", 'precision: 0, 'policies: (create-policies DEFAULT) } ALWAYS-TRUE)
+    ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+    ,"mint_guard": {"keys": ["mint"], "pred": "keys-all"}
+    ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+  })
+
+  (expect "create token succeeds with mint-guard"
+   true
+   (create-token (read-msg 'token-id) 0 "test-default-guard" (create-policies DEFAULT) ALWAYS-TRUE))
+
+   (env-sigs [
+     { 'key: 'mint-false
+      ,'caps: [ (marmalade-v2.ledger.MINT (read-msg 'token-id) (read-string 'account) 1.0)
+                (marmalade-v2.guard-policy-v1.MINT (read-msg 'token-id) (read-string 'account) 1.0)]
+     }])
+
+  (expect-failure "Mint token fails without mint-guard"
+    "Keyset failure"
+    (mint (read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard ) 1.0))
+
+  (env-sigs [
+    { 'key: 'mint
+     ,'caps: [(marmalade-v2.ledger.MINT (read-msg 'token-id) (read-string 'account) 1.0)
+              (marmalade-v2.guard-policy-v1.MINT (read-msg 'token-id) (read-string 'account) 1.0)
+     ]
+    }])
+
+  (expect "Mint token succeeds with mint-guard"
+    true
+    (mint (read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard ) 1.0))
+
+  (env-sigs [
+    { 'key: 'any
+     ,'caps: [(marmalade-v2.ledger.UPDATE-URI (read-msg 'token-id) "updated-uri")]
+    }])
+
+  (expect "update uri succeeds without a signature when token is created with a guards policy without uri-guard attached"
+    true
+    (marmalade-v2.ledger.update-uri (read-msg 'token-id) "updated-uri")
+  )
+
+  (expect "create-token, mint events"
+    [ {"name": "marmalade-v2.guard-policy-v1.GUARDS","params": [(read-msg 'token-id) {"burn-guard": GUARD_SUCCESS,"mint-guard": (read-keyset 'mint_guard),"sale-guard": GUARD_SUCCESS,"transfer-guard": GUARD_SUCCESS, "uri-guard": GUARD_SUCCESS}]}
+      {"name": "marmalade-v2.ledger.TOKEN","params": [(read-msg 'token-id) 0 [marmalade-v2.non-fungible-policy-v1 marmalade-v2.guard-policy-v1] "test-default-guard" ALWAYS-TRUE]}
+      {"name": "marmalade-v2.ledger.MINT","params": [(read-msg 'token-id) (read-string 'account) 1.0]}
+      {"name": "marmalade-v2.ledger.ACCOUNT_GUARD","params": [(read-msg 'token-id) (read-string 'account) (read-keyset 'account-guard)]}
+      {"name": "marmalade-v2.ledger.RECONCILE","params": [(read-msg 'token-id) 1.0 {"account": "","current": 0.0,"previous": 0.0} {"account": (read-string 'account),"current": 1.0,"previous": 0.0}]}
+      {"name": "marmalade-v2.ledger.SUPPLY","params": [(read-msg 'token-id) 1.0]}
+      {"name": "marmalade-v2.ledger.UPDATE-URI","params": [(read-msg 'token-id) "updated-uri"]}]
+    (map (remove "module-hash")  (env-events true)))
+(commit-tx)
+
+(begin-tx "Create token without operator guard fails")
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.guard-policy-v1)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+  (env-data {
+     "token-id": (create-token-id { 'uri: "test-uri-guard", 'precision: 0, 'policies: (create-policies DEFAULT) } ALWAYS-TRUE)
+    ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+    ,"uri_guard": {"keys": ["uri"], "pred": "keys-all"}
+    ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+  })
+
+  (expect "create token succeeds with uri-guard"
+   true
+   (create-token (read-msg 'token-id) 0 "test-uri-guard" (create-policies DEFAULT) ALWAYS-TRUE))
+
+  (expect "create token succeeds with uri-guard"
+    (read-keyset 'uri_guard )
+    (get-uri-guard (read-msg 'token-id )))
+
+  (expect "get-guards returns all-guards object"
+    {'uri-guard: (read-keyset 'uri_guard )
+    ,'mint-guard: GUARD_SUCCESS
+    ,'burn-guard: GUARD_SUCCESS
+    ,'transfer-guard: GUARD_SUCCESS
+    ,'sale-guard: GUARD_SUCCESS
+    }
+    (get-guards (marmalade-v2.ledger.get-token-info (read-msg 'token-id ))))
+
+   (env-sigs [
+     { 'key: 'uri
+      ,'caps: [ (marmalade-v2.ledger.UPDATE-URI (read-msg 'token-id) "updated-uri")
+                (marmalade-v2.guard-policy-v1.UPDATE-URI (read-msg 'token-id) "updated-uri")]
+     }])
+
+  (expect "update uri succeeds regardless of token owner, or supply"
+    true
+    (marmalade-v2.ledger.update-uri (read-msg 'token-id) "updated-uri")
+  )
+
+  (expect "URI is updated on ledger"
+    "updated-uri"
+    (marmalade-v2.ledger.get-uri (read-msg 'token-id) )
+  )
+
+  (expect "create-token, mint events"
+    [{"name": "marmalade-v2.guard-policy-v1.GUARDS","params": [(read-msg 'token-id) {"burn-guard": GUARD_SUCCESS,"mint-guard": GUARD_SUCCESS,"sale-guard": GUARD_SUCCESS,"transfer-guard": GUARD_SUCCESS, "uri-guard": (read-keyset 'uri_guard)}]}
+     {"name": "marmalade-v2.ledger.TOKEN","params": [(read-msg 'token-id) 0 [marmalade-v2.non-fungible-policy-v1 marmalade-v2.guard-policy-v1] "test-uri-guard" mini-guard-utils.ALWAYS-TRUE]}
+     {"name": "marmalade-v2.ledger.UPDATE-URI","params": [(read-msg 'token-id) "updated-uri"]}]
+    (map (remove "module-hash")  (env-events true)))
+(commit-tx)

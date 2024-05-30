@@ -1,0 +1,36 @@
+name: Enhancement
+description: Enhancement Request
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening a enhancement request, please search for similar requests in the existing issues. 
+        
+        ---
+        
+        Thank you for taking the time to make a suggestion. To review this as fast as possible, we need some information.
+  - type: textarea
+    id: context
+    attributes:
+      label: Context (Environment)
+      description: "What are you trying to accomplish - Providing context helps us come up with a solution that is most useful"
+      placeholder: "..."
+    validations:
+      required: true  
+  - type: textarea
+    id: details
+    attributes:
+      label: Detailed Description
+      description: "Provide a detailed description of the change or addition you are proposing"
+      placeholder: "..."
+    validations:
+      required: true
+  - type: textarea
+    id: possible
+    attributes:
+      label: Possible Implementation
+      description: "Not obligatory, but suggest an idea for implementing addition or change"
+      placeholder: "..."
+    validations:
+      required: false
+  

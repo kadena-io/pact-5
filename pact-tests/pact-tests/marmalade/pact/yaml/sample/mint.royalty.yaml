@@ -1,0 +1,31 @@
+# Mints marmalade token to the creator account
+code: |-
+  (marmalade-v2.ledger.mint
+    "{{token-id}}"
+    "{{creator-account}}"
+    (read-keyset 'creator-guard)
+    1.0
+  )
+signers:
+  - public: {{creator-key}}
+    caps:
+      - name: marmalade-v2.ledger.MINT
+        args: [ "{{token-id}}", "{{creator-account}}", 1.0]
+      - name: marmalade-v2.guard-policy-v1.MINT
+        args: [ "{{token-id}}", "{{creator-account}}", 1.0]
+  - public: {{gas-payer-key}}
+    caps:
+      - name: coin.GAS
+        args: []
+data:
+    creator-guard:
+       keys:
+         - {{creator-key}}
+       pred: keys-all
+networkId: testnet04
+publicMeta:
+  chainId: "1"
+  sender: "{{gas-payer}}"
+  gasLimit: 10000
+  gasPrice: 0.0000001
+  ttl: 600

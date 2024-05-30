@@ -1,0 +1,52 @@
+#  assumes no creator account exists, creator guard is reused to register as mint guard
+
+code: |-
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+
+  (coin.create-account (at 'creator (read-msg 'royalty_spec)) (at 'creator-guard (read-msg 'royalty_spec)))
+
+  (create-token
+    (create-token-id
+      {'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY), 'uri: "test-uri-01"}
+      (at 'creator-guard (read-msg 'royalty_spec)) )
+    0
+    "test-uri-01"
+    (create-policies DEFAULT_ROYALTY)
+    (at 'creator-guard (read-msg 'royalty_spec))
+  )
+signers:
+  - public: {{creator-key}}
+    caps:
+      - name: marmalade-v2.ledger.CREATE-TOKEN
+        args: [ "{{token-id}}", {"pred":"keys-all","keys":["{{creator-key}}"]}]
+  - public: {{gas-payer-key}}
+    caps:
+      - name: coin.GAS
+        args: []
+data:
+  royalty_spec:
+    fungible:
+      refName:
+        namespace: null
+        name: coin
+      refSpec:
+        - namespace: null
+          name: fungible-v2
+    creator: "{{creator-account}}"
+    creator-guard:
+       keys:
+         - {{creator-key}}
+       pred: keys-all
+    royalty-rate: 0.05
+  mint_guard:
+     keys:
+       - {{creator-key}}
+     pred: keys-all
+networkId: testnet04
+publicMeta:
+  chainId: "1"
+  sender: "{{gas-payer}}"
+  gasLimit: 10000
+  gasPrice: 0.0000001
+  ttl: 600

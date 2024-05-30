@@ -1,3 +1,0 @@
-[submodule "pact-tests/pact-tests/marmalade"]
-	path = pact-tests/pact-tests/marmalade
-	url = https://github.com/kadena-io/marmalade.git

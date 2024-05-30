@@ -1,0 +1,304 @@
+;;load policy manager, ledger
+(load "../../../pact/marmalade.repl")
+
+(begin-tx "load timed mint policy")
+  (env-data {
+    "ns": "marmalade-examples"
+  , "soul-bound-policy": ["soul-bound-policy"]
+  , "upgrade": false}
+  )
+  (env-sigs [
+    { 'key: 'soul-bound-policy
+     ,'caps: []
+  }])
+
+  (ns.write-registry (read-msg 'ns) (read-keyset 'soul-bound-policy) true)
+  (define-namespace
+    (read-msg 'ns)
+    (read-keyset 'soul-bound-policy) (read-keyset 'soul-bound-policy)
+  )
+
+  (namespace (read-msg 'ns))
+
+  (define-keyset (+ (read-msg 'ns) ".soul-bound-policy") (read-keyset 'soul-bound-policy))
+  
+  (load "soul-bound-policy-v1.pact")
+  (typecheck "marmalade-examples.soul-bound-policy-v1")
+
+(commit-tx)
+
+(begin-tx "Require guard-policy for soul-bound tokens")
+    (use marmalade-v2.ledger)
+    (use marmalade-examples.soul-bound-policy-v1)
+    (use mini-guard-utils)
+  
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test-default-guard", 'precision: 0, 'policies: [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] } ALWAYS-TRUE)
+  })
+
+  (expect-failure "Failed to create a token without mint-guard"
+    "Failure: Tx Failed: No such key in message: mint_guard"
+    (create-token (read-msg 'token-id) 0 "test-default-guard" [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] ALWAYS-TRUE))
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test-default-guard", 'precision: 0, 'policies: [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] } ALWAYS-TRUE)
+    ,"mint_guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+  })
+
+  (expect-failure "Failed to create a token without burn-guard"
+    "Failure: Tx Failed: No such key in message: burn_guard"
+    (create-token (read-msg 'token-id) 0 "test-default-guard" [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] ALWAYS-TRUE))
+
+  (env-data {
+    "mint_guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+    ,"burn_guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+    ,"token-id-without-guard-policy": (create-token-id { 'uri: "test-default-guard", 'precision: 0, 'policies: [marmalade-examples.soul-bound-policy-v1] } ALWAYS-TRUE)
+  })
+
+  (expect-failure "Failed to create a token without guard-policy"
+    "Guard policy is required for soul-bound tokens"
+    (create-token (read-msg 'token-id-without-guard-policy) 0 "test-default-guard" [marmalade-examples.soul-bound-policy-v1] ALWAYS-TRUE))
+  
+(commit-tx)
+
+(begin-tx "Create soul bounded token")
+    (use marmalade-v2.ledger)
+    (use marmalade-examples.soul-bound-policy-v1)
+    (use marmalade-v2.guard-policy-v1 [GUARD_SUCCESS])
+    (use mini-guard-utils)
+  (env-data {
+     "token-id": (create-token-id { 'uri: "test-default-guard", 'precision: 0, 'policies: [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] } ALWAYS-TRUE)
+     ,"token-id-with-bad-precision": (create-token-id { 'uri: "test-default-guard", 'precision: 1, 'policies: [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] } ALWAYS-TRUE)
+     ,"mint_guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+     ,"burn_guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+  })
+
+  (expect-failure "failed to create token with precision bigger than 0"
+    "Precision must be 0 for soul-bound tokens"
+    (create-token (read-msg 'token-id-with-bad-precision) 1 "test-default-guard" [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] ALWAYS-TRUE))
+
+  (expect "Token created successfully"
+    true
+    (create-token (read-msg 'token-id) 0 "test-default-guard" [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] ALWAYS-TRUE))
+
+  (expect "create-token events"
+    [ {"name": "marmalade-v2.guard-policy-v1.GUARDS","params": [(read-msg 'token-id) {"burn-guard": (read-keyset 'burn_guard),"mint-guard": (read-keyset 'mint_guard),"sale-guard": GUARD_SUCCESS,"transfer-guard": GUARD_SUCCESS,"uri-guard": GUARD_SUCCESS}] },
+      {"name": "marmalade-v2.ledger.TOKEN","params": [(read-msg 'token-id) 0 [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] "test-default-guard" ALWAYS-TRUE]}]
+    (map (remove "module-hash")  (env-events true)))
+
+(commit-tx)
+
+(begin-tx "Mint soul bound token successfully")
+    (use marmalade-v2.ledger)
+    (use marmalade-examples.soul-bound-policy-v1)
+    (use mini-guard-utils)
+  (env-data {
+     "token-id": (create-token-id { 'uri: "test-default-guard", 'precision: 0, 'policies: [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] } ALWAYS-TRUE)
+    ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+    ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+  })
+
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+     ,'caps: [(marmalade-v2.ledger.MINT (read-msg 'token-id) (read-msg 'account) 1.0)
+            ,(marmalade-v2.guard-policy-v1.MINT (read-msg 'token-id) (read-string 'account) 1.0)]
+    }])
+  
+  (expect-failure "failed to mint amount bigger than 1"
+    "Amount must be 1.0 for soul-bound tokens"
+    (mint (read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard ) 2.0))
+      
+  (expect-failure "failed to mint amount lower than 1"
+    "Amount must be 1.0 for soul-bound tokens"
+    (mint (read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard ) 0.5))
+
+  (expect "Mint token succeeds"
+    true
+    (mint (read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard ) 1.0))
+
+  (expect "mint events"
+    [ {"name": "marmalade-v2.ledger.MINT","params": [(read-msg 'token-id) (read-msg 'account) 1.0]}
+      {"name": "marmalade-v2.ledger.ACCOUNT_GUARD","params": [(read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard)]}
+      {"name": "marmalade-v2.ledger.RECONCILE","params": [(read-msg 'token-id) 1.0 {"account": "","current": 0.0,"previous": 0.0} {"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3","current": 1.0,"previous": 0.0}]} {"name": "marmalade-v2.ledger.SUPPLY","params": [(read-msg 'token-id) 1.0]}]
+    (map (remove "module-hash")  (env-events true)))
+    
+  (expect-failure "Fail to mint the same token again"
+    "Token was already minted"
+    (mint (read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard ) 1.0))
+
+(commit-tx)
+
+(begin-tx "Mint, burn and mint again the same token")
+    (use marmalade-v2.ledger)
+    (use marmalade-examples.soul-bound-policy-v1)
+    (use marmalade-v2.guard-policy-v1 [GUARD_SUCCESS])
+    (use mini-guard-utils)
+  (env-data {
+     "token-id": (create-token-id { 'uri: "mint-burn-mint", 'precision: 0, 'policies: [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] } ALWAYS-TRUE)
+    ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+    ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+    ,"mint_guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+    ,"burn_guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+  })
+
+  (expect "Token created successfully"
+    true
+    (create-token (read-msg 'token-id) 0 "mint-burn-mint" [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] ALWAYS-TRUE))
+
+  (expect "create-token events"
+    [ {"name": "marmalade-v2.guard-policy-v1.GUARDS","params": [(read-msg 'token-id) {"burn-guard": (read-keyset 'burn_guard),"mint-guard": (read-keyset 'mint_guard),"sale-guard": GUARD_SUCCESS,"transfer-guard": GUARD_SUCCESS,"uri-guard": GUARD_SUCCESS}] },
+     {"name": "marmalade-v2.ledger.TOKEN","params": [(read-msg 'token-id) 0 [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] "mint-burn-mint" ALWAYS-TRUE]} ]
+    (map (remove "module-hash")  (env-events true)))
+
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+     ,'caps: [(marmalade-v2.ledger.MINT (read-msg 'token-id) (read-msg 'account) 1.0)
+            ,(marmalade-v2.guard-policy-v1.MINT (read-msg 'token-id) (read-string 'account) 1.0)]
+    }])
+  
+  (expect "Mint token succeeds"
+    true
+    (mint (read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard ) 1.0))
+
+  (expect "mint events"
+    [ {"name": "marmalade-v2.ledger.MINT","params": [(read-msg 'token-id) (read-msg 'account) 1.0]}
+      {"name": "marmalade-v2.ledger.ACCOUNT_GUARD","params": [(read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard)]}
+      {"name": "marmalade-v2.ledger.RECONCILE","params": [(read-msg 'token-id) 1.0 {"account": "","current": 0.0,"previous": 0.0} {"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3","current": 1.0,"previous": 0.0}]} {"name": "marmalade-v2.ledger.SUPPLY","params": [(read-msg 'token-id) 1.0]}]
+    (map (remove "module-hash")  (env-events true)))
+  
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+      ,'caps: [(marmalade-v2.ledger.BURN (read-msg 'token-id) (read-msg 'account) 1.0)
+            ,(marmalade-v2.guard-policy-v1.BURN (read-msg 'token-id) (read-string 'account) 1.0)]
+    }])
+
+  (expect "Burn token succeeds"
+    true
+    (burn (read-msg 'token-id) (read-msg 'account) 1.0))
+
+  (expect "burn events"
+    [ {"name": "marmalade-v2.ledger.BURN","params": [(read-msg 'token-id) (read-msg 'account) 1.0]}
+      {"name": "marmalade-v2.ledger.RECONCILE","params": [(read-msg 'token-id) 1.0 {"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3","current": 0.0,"previous": 1.0} {"account": "","current": 0.0,"previous": 0.0}]} {"name": "marmalade-v2.ledger.SUPPLY","params": [(read-msg 'token-id) 0.0]}]
+    (map (remove "module-hash")  (env-events true)))
+
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+     ,'caps: [(marmalade-v2.ledger.MINT (read-msg 'token-id) (read-msg 'account) 1.0)
+          ,(marmalade-v2.guard-policy-v1.MINT (read-msg 'token-id) (read-string 'account) 1.0)]
+    }])
+  
+  (expect-failure "Fail to mint the same token again"
+    "Token was already minted"
+    (mint (read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard ) 1.0))
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "mint-burn-mint", 'precision: 0, 'policies: [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] } ALWAYS-TRUE)
+    ,"account": "k:6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"
+    ,"account-guard": {"keys": ["other-account"], "pred": "keys-all"}
+  })
+
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+    ,'caps: [(marmalade-v2.ledger.MINT (read-msg 'token-id) (read-msg 'account) 1.0)
+          ,(marmalade-v2.guard-policy-v1.MINT (read-msg 'token-id) (read-string 'account) 1.0)]
+    }])
+  
+  (expect-failure "Fail to mint the same token to a different account"
+    "Token was already minted"
+    (mint (read-msg 'token-id) (read-msg 'account) (read-keyset 'account-guard ) 1.0))
+ 
+(rollback-tx)
+
+(begin-tx "Burn soul bound token successfully")
+    (use marmalade-v2.ledger)
+    (use marmalade-examples.soul-bound-policy-v1)
+    (use mini-guard-utils)
+  (env-data {
+     "token-id": (create-token-id { 'uri: "test-default-guard", 'precision: 0, 'policies: [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] } ALWAYS-TRUE)
+    ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+    ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+  })
+
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+     ,'caps: [(marmalade-v2.ledger.BURN (read-msg 'token-id) (read-msg 'account) 1.0)
+          ,(marmalade-v2.guard-policy-v1.BURN (read-msg 'token-id) (read-string 'account) 1.0)]
+    }])
+
+  (expect-failure "failed to burn amount bigger than 1"
+    "Amount must be 1.0 for soul-bound tokens"
+    (burn (read-msg 'token-id) (read-msg 'account) 2.0))
+
+  (expect-failure "failed to burn amount lower than 1"
+    "Amount must be 1.0 for soul-bound tokens"
+    (burn (read-msg 'token-id) (read-msg 'account) 0.5))
+
+  (expect "Burn token succeeds"
+    true
+    (burn (read-msg 'token-id) (read-msg 'account) 1.0))
+
+  (expect "burn events"
+    [ {"name": "marmalade-v2.ledger.BURN","params": [(read-msg 'token-id) (read-msg 'account) 1.0]}
+      {"name": "marmalade-v2.ledger.RECONCILE","params": [(read-msg 'token-id) 1.0 {"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3","current": 0.0,"previous": 1.0} {"account": "","current": 0.0,"previous": 0.0}]} {"name": "marmalade-v2.ledger.SUPPLY","params": [(read-msg 'token-id) 0.0]}]
+    (map (remove "module-hash")  (env-events true)))
+
+(rollback-tx)
+
+(begin-tx "Transfer fails on soul bound tokens")
+    (use marmalade-v2.ledger)
+    (use marmalade-examples.soul-bound-policy-v1)
+    (use mini-guard-utils)
+  (env-data {
+     "token-id": (create-token-id { 'uri: "test-default-guard", 'precision: 0, 'policies: [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] } ALWAYS-TRUE)
+    ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+    ,"receiver": "k:6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"
+  })
+
+  (expect-failure "transfer token fails"
+    "Transfer is not allowed!"
+    (transfer (read-msg 'token-id) (read-msg 'account) (read-msg 'receiver) 1.0 ))
+
+(rollback-tx)
+
+(begin-tx "Crosschain transfer fails on soul bound tokens")
+    (use marmalade-v2.ledger)
+    (use marmalade-examples.soul-bound-policy-v1)
+    (use mini-guard-utils)
+  (env-data {
+     "token-id": (create-token-id { 'uri: "test-default-guard", 'precision: 0, 'policies: [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] } ALWAYS-TRUE)
+    ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+    ,"receiver": "k:6778a9153dbfcfb787c9eb1700455a59af62b15008b71f805398d857bddb48f3"
+    ,"receiver-guard": {"keys": ["receiver"], "pred": "keys-all"}
+    ,"target-chain": "8"
+  })
+
+  (expect-failure "Fail to transfer"
+    "cross chain not supported"
+    (transfer-crosschain (read-msg 'token-id) (read-msg 'account) (read-msg 'receiver) (read-keyset 'receiver-guard ) (read-msg 'target-chain) 1.0))
+    
+(rollback-tx)
+
+(begin-tx "Sale fails on soul bound tokens")
+  (env-hash (hash "offer-0"))
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+  (env-chain-data {"block-time": (time "2023-07-20T11:26:35Z")})
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test-default-guard", 'precision: 0, 'policies: [marmalade-examples.soul-bound-policy-v1 marmalade-v2.guard-policy-v1] } ALWAYS-TRUE)
+    ,"account": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+    ,"account-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+    })
+
+  (env-sigs [
+    { 'key: 'e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3
+     ,'caps: [(marmalade-v2.ledger.OFFER (read-string "token-id") (read-string "account") 1.0 (to-timestamp (time "2023-07-08T11:26:35Z")))]}
+  ])
+
+  (expect-failure "offer fails"
+    "Sale is not allowed!"
+    (sale (read-string "token-id") (read-string "account") 1.0 (to-timestamp (time "2023-07-08T11:26:35Z")))
+  )
+  
+(rollback-tx)

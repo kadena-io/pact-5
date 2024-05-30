@@ -1,0 +1,144 @@
+
+;;load policy manager, ledger
+(load "../../../pact/marmalade.repl")
+
+(begin-tx "load onchain manifest policy")
+  (env-data {
+    "ns": "marmalade-examples"
+  , "onchain-manifest-policy": ["onchain-manifest-policy"]
+  , "upgrade": false}
+  )
+  (env-sigs [
+    { 'key: 'onchain-manifest-policy
+     ,'caps: []
+  }])
+
+  (ns.write-registry (read-msg 'ns) (read-keyset 'onchain-manifest-policy) true)
+  (define-namespace
+    (read-msg 'ns)
+    (read-keyset 'onchain-manifest-policy) (read-keyset 'onchain-manifest-policy)
+  )
+
+  (namespace (read-msg 'ns))
+
+  (define-keyset (+ (read-msg 'ns) ".onchain-manifest-policy") (read-keyset 'onchain-manifest-policy))
+  
+  (load "onchain-manifest-policy-v1.pact")
+  (typecheck "marmalade-examples.onchain-manifest-policy-v1")
+(commit-tx)
+
+(begin-tx "create token with onchain manifest policy")
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.policy-manager)
+  (use marmalade-examples.onchain-manifest-policy-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test-onchain-manifest-uri", 'precision: 0, 'policies: [marmalade-examples.onchain-manifest-policy-v1] } ALWAYS-TRUE)
+   ,"manifest_spec": {
+      "guard": {"keys": ["manifest"], "pred": "keys-all"}
+   }
+  })
+
+  (expect-failure "fail to create token with invalid manifest"
+    "Failure: Missing fields for {manifest-spec}"
+    (create-token (read-msg 'token-id) 0 "test-onchain-manifest-uri" [marmalade-examples.onchain-manifest-policy-v1] ALWAYS-TRUE))
+
+  (env-data {
+    "token-id": (create-token-id { 'uri: "test-onchain-manifest-uri", 'precision: 0, 'policies: [marmalade-examples.onchain-manifest-policy-v1] } ALWAYS-TRUE)
+   ,"manifest_spec": {
+      "manifest": (kip.token-manifest.create-manifest (kip.token-manifest.uri "text" "data") [])
+     ,"guard": {"keys": ["manifest"], "pred": "keys-all"}
+   }
+  })
+
+  (env-sigs [])
+
+  (expect "create a token with onchain manifest policy"
+    true
+    (create-token (read-msg 'token-id) 0 "test-onchain-manifest-uri" [marmalade-examples.onchain-manifest-policy-v1] ALWAYS-TRUE))
+
+  (expect "Manifest is added at create-token"
+    {"uri": {"scheme": "text","data": "data"},"hash": "QoE_VBnnOaZqxcBBbTXSQ7CVNWPXZ9iP6BbxTmPY-ag","data": []}
+    (get-manifest (read-msg 'token-id )))
+(commit-tx)
+
+(begin-tx "upgrade token manifest")
+  (use marmalade-v2.ledger)
+  (use marmalade-examples.onchain-manifest-policy-v1)
+  (use mini-guard-utils)
+
+   (env-data {
+     "token-id": (create-token-id { 'uri: "test-onchain-manifest-uri", 'precision: 0, 'policies: [marmalade-examples.onchain-manifest-policy-v1] } ALWAYS-TRUE)
+    ,"manifest1": (kip.token-manifest.create-manifest (kip.token-manifest.uri "text1" "data") [])
+   })
+
+  (env-sigs [
+    {"key": "malicious-user", "caps": [(marmalade-examples.onchain-manifest-policy-v1.UPGRADE (read-msg 'token-id))]}
+    ])
+ 
+  (expect-failure "fail to upgrade a onchain manifest with malicious user"
+    "Keyset failure (keys-all): [manifest...]"
+    (upgrade-manifest (read-msg 'token-id ) (read-msg 'manifest1 )))
+
+  (env-sigs [
+    {"key": "manifest", "caps": [(marmalade-examples.onchain-manifest-policy-v1.UPGRADE (read-msg 'token-id))]}
+    ])
+  
+  (expect "upgrade a onchain manifest"
+    "Write succeeded"
+    (upgrade-manifest (read-msg 'token-id ) (read-msg 'manifest1 )))
+
+  (expect "upgrade-manifest events"
+    [ { "name": "marmalade-examples.onchain-manifest-policy-v1.UPGRADE","params": [(read-msg 'token-id)]} ]
+    (map (remove "module-hash")  (env-events true)))
+
+  (expect "Manifest was upgraded"
+   {"uri": {"scheme": "text1","data": "data"},"hash": "dD_VD1vl5Qx25WYNhW6RWIuxo25LQfa49Fs55ckMwUE","data": []}
+   (get-manifest (read-msg 'token-id )))
+   
+(commit-tx)
+   
+(begin-tx "create token with onchain manifest and royalty policy")
+
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.policy-manager)
+  (use marmalade-v2.util-v1)
+  (use marmalade-examples.onchain-manifest-policy-v1)
+  (use mini-guard-utils)
+
+  (env-data {
+    "creator-guard": {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+  })
+  (coin.create-account "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3" (read-keyset 'creator-guard))
+
+  (env-data {
+    "policies": (+ (create-policies (create-concrete-policy [marmalade-v2.royalty-policy-v1])) [marmalade-examples.onchain-manifest-policy-v1])
+   ,"token-id": (create-token-id { 'uri: "onchain-manifest-with-royalty", 'precision: 0, 'policies: (+ (create-policies (create-concrete-policy [marmalade-v2.royalty-policy-v1])) [marmalade-examples.onchain-manifest-policy-v1]) } ALWAYS-TRUE)
+   ,"manifest_spec": {
+      "manifest": (kip.token-manifest.create-manifest (kip.token-manifest.uri "text" "data") [])
+     ,"guard": {"keys": ["manifest"], "pred": "keys-all"}
+   }
+   ,"royalty_spec": {
+      "fungible": coin
+     ,"creator": "k:e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"
+     ,"creator-guard":  {"keys": ["e4c6807d79d8bf4695e10e5678ebf72862f59b71f971d39dd3349f4beeacd6e3"], "pred": "keys-all"}
+     ,"royalty-rate": 0.05
+    }
+   ,"collection_id": "collection:aHZrcOD_nHHHiEQgIhdfjcWfUKcD1dvsdG00tE4fAC8"
+  })
+
+  (env-sigs [])
+
+  (expect "create a token with onchain manifest policy"
+    true
+    (create-token (read-msg 'token-id) 0 "onchain-manifest-with-royalty" (read-msg 'policies) ALWAYS-TRUE))
+
+  (expect "create-token events"
+    [ 
+      {"name": "marmalade-v2.royalty-policy-v1.ROYALTY","params": [(read-msg 'token-id) (read-msg 'royalty_spec) ]},
+      {"name": "marmalade-v2.ledger.TOKEN","params": [(read-msg 'token-id) 0 (read-msg 'policies) "onchain-manifest-with-royalty" ALWAYS-TRUE]} ]
+    (map (remove "module-hash")  (env-events true)))
+
+(rollback-tx)
+

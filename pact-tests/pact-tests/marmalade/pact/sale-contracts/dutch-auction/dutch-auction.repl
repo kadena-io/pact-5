@@ -1,0 +1,582 @@
+(load "../../marmalade.repl")
+(begin-tx "Load modules")
+  (env-data
+    { 'ns: "marmalade-sale"
+    , 'upgrade: false })
+  (env-sigs [
+    { 'key: 'marmalade-user
+    ,'caps: []
+    }, {
+      'key: 'marmalade-contract-admin
+    ,'caps: []
+    }])
+  (load "dutch-auction.pact")
+  (marmalade-v2.policy-manager.add-sale-whitelist marmalade-sale.dutch-auction)
+(commit-tx)
+
+(typecheck "marmalade-sale.dutch-auction")
+
+(begin-tx "Create and mint a token")
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.policy-manager)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+  (env-hash (hash "create-tokens"))
+  (env-chain-data {"chain-id": "0"})
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "dutch-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+   ,"creator-guard":  {"keys": ["05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e"], "pred": "keys-all"}
+   ,"buyer-guard":  {"keys": ["15071b931200c63c8d84870c387534216533810919b382924514003b2c90c0d7"], "pred": "keys-all"}
+   ,"royalty_spec": {
+      "fungible": coin
+     ,"creator": "k:05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e"
+     ,"creator-guard":  {"keys": ["05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e"], "pred": "keys-all"}
+     ,"royalty-rate": 0.1
+    }
+  })
+
+  (test-capability (coin.COINBASE))
+  (coin.coinbase "k:05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e" (read-keyset 'creator-guard) 250.0)
+  (coin.coinbase "k:15071b931200c63c8d84870c387534216533810919b382924514003b2c90c0d7" (read-keyset 'buyer-guard) 250.0)
+  ;  (coin.coinbase "k:next-buyer" (read-keyset 'next-buyer-guard) 250.0)
+
+  (expect "Create the token"
+    true
+    (create-token (read-string "token1-id") 0 "dutch-auction-uri-1" (create-policies DEFAULT_ROYALTY) ALWAYS-TRUE))
+
+  (env-sigs [
+    { 'key: "05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e"
+    ,'caps: [
+      (marmalade-v2.ledger.MINT (read-msg 'token1-id) "k:05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e" 1.0)
+    ]
+    }])
+
+  (expect "Mint the token"
+    true
+    (mint (read-string "token1-id" ) "k:05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e" (read-keyset 'creator-guard ) 1.0))
+(commit-tx)
+
+ (begin-tx "Offer token for sale with the dutch auction sale type and a non-finalized price")
+   (env-hash (hash "offer-token-1"))
+   (use marmalade-v2.ledger)
+   (use marmalade-v2.policy-manager)
+   (use marmalade-v2.util-v1)
+   (use mini-guard-utils)
+
+   (env-data {
+     "token1-id": (create-token-id { 'uri: "dutch-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+     ,"quote":{
+       "fungible": coin
+       ,"sale-price": 0.0
+       ,"seller-fungible-account": {
+           "account": "k:05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e"
+         ,"guard": {"keys": ["05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e"], "pred": "keys-all"}
+       }
+       ,"sale-type": "marmalade-sale.dutch-auction"
+      }
+     })
+
+   (env-sigs [
+     { 'key: "05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e"
+      ,'caps: [
+       (marmalade-v2.ledger.OFFER (read-msg 'token1-id) "k:05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e" 1.0 0)]
+      }])
+
+   (expect "Offer token up for sale"
+     "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+     (sale (read-msg 'token1-id) "k:05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e" 1.0 0))
+ (commit-tx)
+
+
+ (begin-tx "Create dutch auction")
+   (env-hash (hash "create-dutch-auction"))
+   (env-chain-data {"block-time": (time "2023-10-01T00:00:00Z")})
+   (use marmalade-v2.ledger)
+   (use marmalade-v2.util-v1)
+   (use mini-guard-utils)
+   (use marmalade-sale.dutch-auction)
+
+   (env-data {
+     "token1-id": (create-token-id { 'uri: "dutch-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+    ,"sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+    ,"creator-guard":  {"keys": ["05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e"], "pred": "keys-all"}
+   })
+
+   (expect-failure "Creating a ducth auction in the past fails"
+     "Start date must be in the future"
+     (create-auction (read-string "sale-id") (read-string "token1-id") 1696104800 1696723200 50.0 100.0 3600)
+   )
+
+   (expect-failure "Creating a dutch auction with end-date before startdate fails"
+     "End date must be after start date"
+     (create-auction (read-string "sale-id") (read-string "token1-id") 1696204800 1696204700 50.0 100.0 3600)
+   )
+
+   (expect-failure "Creating a dutch auction with reserve-price below start-price fails"
+     "Start price must be greater than reserve price"
+     (create-auction (read-string "sale-id") (read-string "token1-id") 1696204800 1696723200 100.0 50.0 3600)
+   )
+
+   (expect-failure "Auction must last atleast one interval"
+     "Auction duration must be greather than price interval"
+     (create-auction (read-string "sale-id") (read-string "token1-id") 1696204800 1696205000 50.0 100.0 1000)
+   )
+
+   (env-sigs [
+    { 'key: "05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e"
+     ,'caps: [(MANAGE_AUCTION (read-msg 'sale-id) (read-msg 'token1-id))]
+     }])
+
+   (expect "Create a dutch auction"
+     true
+     (create-auction (read-string "sale-id") (read-string "token1-id") 1696204800 1696723200 50.0 100.0 3600)
+   )
+
+   (expect "Auction info stored with identifier 1"
+     { "token-id": (read-string "token1-id")
+       ,"start-date": 1696204800
+       ,"end-date": 1696723200
+       ,"start-price": 100.0
+       ,"reserve-price": 50.0
+       ,"price-interval-seconds": 3600
+       ,"sell-price": 0.0
+       ,"buyer": ""
+       ,"buyer-guard": marmalade-sale.dutch-auction.DUMMY_GUARD
+     }
+     (retrieve-auction (read-string "sale-id"))
+   )
+
+   (expect "create-auction events"
+     [
+       {"name": "marmalade-sale.dutch-auction.AUCTION_CREATED","params": ["_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y" (read-msg "token1-id")]}
+     ]
+     (map (remove "module-hash")  (env-events true))
+   )
+ (commit-tx)
+
+ (begin-tx "Update auction")
+   (env-hash (hash "update-auction"))
+   (use marmalade-v2.ledger)
+   (use marmalade-v2.util-v1)
+   (use mini-guard-utils)
+   (use marmalade-sale.dutch-auction)
+
+   (env-data {
+     "token1-id": (create-token-id { 'uri: "dutch-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+    ,"sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+   })
+   (env-sigs [])
+   (expect-failure "Update auction without rights fails"
+     "Keyset failure"
+     (update-auction (read-string "sale-id") 1696809600 1697328000 100.0 50.0 3600)
+   )
+   (env-sigs [
+     { 'key: "05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e"
+      ,'caps: [(MANAGE_AUCTION (read-msg 'sale-id) (read-msg 'token1-id))]
+      }
+   ])
+   (expect "Update auction succeeds"
+     "Write succeeded"
+     (update-auction (read-string "sale-id") 1696809600 1697328000 110.0 50.0 3600)
+   )
+ (rollback-tx)
+
+ (begin-tx "Update auction failure")
+   (env-hash (hash "update-auction-failure"))
+   (env-chain-data {"block-time": (time "2023-10-03T00:00:00Z")})
+   (use marmalade-v2.ledger)
+   (use marmalade-v2.util-v1)
+   (use mini-guard-utils)
+   (use marmalade-sale.dutch-auction)
+
+   (env-data {
+     "token1-id": (create-token-id { 'uri: "dutch-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+    ,"sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+   })
+   (env-sigs [
+     { 'key: "05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e"
+      ,'caps: [(MANAGE_AUCTION (read-msg 'sale-id) (read-msg 'token1-id))]
+      }
+   ])
+   (expect-failure "Update auction after it has started fails"
+     "Can't update auction after it has started"
+     (update-auction (read-string "sale-id") 1696809600 1697328000 110.0 50.0 3600)
+   )
+ (rollback-tx)
+
+ (begin-tx "Withdrawal before auction start")
+   (env-hash (hash "bid-withdrawal-before-start"))
+   (env-chain-data {"block-time": (time "2023-10-01T00:00:00Z")})
+   (use marmalade-v2.ledger)
+
+   (env-data {
+     "sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+   })
+
+   (expect-failure "withdrawing before the auction has ended fails"
+     "Auction is still ongoing or hasn't started yet"
+     (continue-pact 0 true (read-msg 'sale-id))
+   )
+ (rollback-tx)
+
+ (begin-tx "Withdrawal after auction end")
+   (env-hash (hash "bid-withdrawal-after-end"))
+   (env-chain-data {"block-time": (time "2023-10-10T00:00:00Z")})
+   (use marmalade-v2.ledger)
+   (use marmalade-v2.util-v1)
+   (use mini-guard-utils)
+
+   (env-data {
+     "token1-id": (create-token-id { 'uri: "dutch-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+     ,"sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+   })
+
+   (env-sigs [
+     { 'key: "05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e"
+      ,'caps: [(marmalade-v2.ledger.WITHDRAW (read-msg 'token1-id) "k:05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e" 1.0 0 (read-msg 'sale-id))]
+      }
+   ])
+
+   (expect "withdrawing after the auction has ended withoud a price accepted succeeds"
+     "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+     (continue-pact 0 true (read-msg 'sale-id))
+   )
+ (rollback-tx)
+
+ (begin-tx "Auction price validations")
+  (env-hash (hash "auction-price-validations"))
+  (use marmalade-v2.ledger)
+  (use marmalade-v2.util-v1)
+  (use mini-guard-utils)
+  (use marmalade-sale.dutch-auction)
+
+  (env-data {
+    "token1-id": (create-token-id { 'uri: "dutch-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+    ,"sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+  })
+
+  (env-chain-data {"block-time": (time "2023-10-01T00:00:00Z")})
+  (expect "Dutch auction current price returns 0 before the auction has started"
+    0.0
+    (get-current-price (read-string 'sale-id))
+  )
+
+  (env-chain-data {"block-time": (time "2023-10-02T00:00:00Z")})
+  (expect "Current price returns opening price at start"
+    100.0
+    (get-current-price (read-string 'sale-id))
+  )
+
+  (env-chain-data {"block-time": (time "2023-10-02T00:59:00Z")})
+  (expect "Current price remains opening price during the first hour"
+    100.0
+    (get-current-price (read-string 'sale-id))
+  )
+
+  (env-chain-data {"block-time": (time "2023-10-02T01:10:00Z")})
+  (expect "Current price drops as time progresses"
+    99.65
+    (get-current-price (read-string 'sale-id))
+  )
+
+  (env-chain-data {"block-time": (time "2023-10-06T00:00:00Z")})
+  (expect "Current price drops as time progresses"
+    66.43
+    (get-current-price (read-string 'sale-id))
+  )
+
+  (env-chain-data {"block-time": (time "2023-10-07T23:00:00Z")})
+  (expect "In the last hour the price is at reserve price"
+    50.00
+    (get-current-price (read-string 'sale-id))
+  )
+
+  (env-chain-data {"block-time": (time "2023-10-07T23:45:00Z")})
+  (expect "Just before closing the price is at reserve price"
+    50.00
+    (get-current-price (read-string 'sale-id))
+  )
+
+  (env-chain-data {"block-time": (time "2023-10-08T00:00:00Z")})
+  (expect "At closing the price is at 0 again"
+    0.0
+    (get-current-price (read-string 'sale-id))
+  )
+(rollback-tx)
+
+(begin-tx "Auction price validations with 30-minute interval")
+ (env-hash (hash "auction-price-validations-30m"))
+ (use marmalade-v2.ledger)
+ (use marmalade-v2.util-v1)
+ (use mini-guard-utils)
+ (use marmalade-sale.dutch-auction)
+
+ (env-data {
+   "token1-id": (create-token-id { 'uri: "dutch-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+   ,"sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+ })
+
+ (env-sigs [
+   { 'key: "05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e"
+    ,'caps: [(MANAGE_AUCTION (read-msg 'sale-id) (read-msg 'token1-id))]
+    }
+ ])
+
+ (env-chain-data {"block-time": (time "2023-10-01T00:00:00Z")})
+ (expect "Update auction to 30-minute interval"
+   "Write succeeded"
+   (update-auction (read-string "sale-id") 1696809600 1697328000 100.0 50.0 1800)
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T00:00:00Z")})
+ (expect "Current price returns opening price at start"
+   100.0
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T00:25:01Z")})
+ (expect "Current price remains the same in the first interval"
+   100.0
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T00:44:01Z")})
+ (expect "Current price drops as time progresses"
+   99.83
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T00:59:00Z")})
+ (expect "15 minutes later the price remains the same"
+   99.83
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T01:15:00Z")})
+ (expect "16 minutes later the price drops again"
+   99.65
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T01:45:00Z")})
+ (expect "30 minutes later the price drops again"
+   99.48
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-14T23:35:00Z")})
+ (expect "Just before closing the price is at reserve price"
+   50.00
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-15T00:00:00Z")})
+ (expect "At closing the price is at 0 again"
+   0.0
+   (get-current-price (read-string 'sale-id))
+ )
+(rollback-tx)
+
+(begin-tx "Auction price validations with a broken interval")
+ (env-hash (hash "auction-price-validations-broken"))
+ (use marmalade-v2.ledger)
+ (use marmalade-v2.util-v1)
+ (use mini-guard-utils)
+ (use marmalade-sale.dutch-auction)
+
+ (env-data {
+   "token1-id": (create-token-id { 'uri: "dutch-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+   ,"sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+ })
+
+ (env-sigs [
+   { 'key: "05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e"
+    ,'caps: [(MANAGE_AUCTION (read-msg 'sale-id) (read-msg 'token1-id))]
+    }
+ ])
+
+ (env-chain-data {"block-time": (time "2023-10-01T00:00:00Z")})
+ (expect "Update auction to 30-minute interval"
+   "Write succeeded"
+   (update-auction (read-string "sale-id") 1696859100 1696874400 100.0 50.0 1800)
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T13:45:00Z")})
+ (expect "Current price returns opening price at start"
+   100.0
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T14:05:00Z")})
+ (expect "First price drop occurs after 15 minutes (broken interval slot)"
+   93.75
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T14:25:00Z")})
+ (expect "Price remains the same before next full interval"
+   93.75
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T14:35:00Z")})
+ (expect "Second price drop occurs after next full interval"
+   87.50
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T17:35:00Z")})
+ (expect "Just before closing the price is at reserve price"
+   50.00
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T18:00:00Z")})
+ (expect "At closing the price is at 0 again"
+   0.0
+   (get-current-price (read-string 'sale-id))
+ )
+(rollback-tx)
+
+(begin-tx "Auction price validations with a short interval")
+ (env-hash (hash "auction-price-validations-broken"))
+ (use marmalade-v2.ledger)
+ (use marmalade-v2.util-v1)
+ (use mini-guard-utils)
+ (use marmalade-sale.dutch-auction)
+
+ (env-data {
+   "token1-id": (create-token-id { 'uri: "dutch-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE)
+   ,"sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+ })
+
+ (env-sigs [
+   { 'key: "05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e"
+    ,'caps: [(MANAGE_AUCTION (read-msg 'sale-id) (read-msg 'token1-id))]
+    }
+ ])
+
+ (env-chain-data {"block-time": (time "2023-10-01T00:00:00Z")})
+ (expect "Update auction to 10-minute interval"
+   "Write succeeded"
+   (update-auction (read-string "sale-id") 1696866000 1696869900 100.0 50.0 600)
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T15:40:00Z")})
+ (expect "Current price returns opening price at start"
+   100.0
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T15:45:00Z")})
+ (expect "First price drop occurs after 5 minutes (broken interval slot)"
+   91.67
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T15:50:00Z")})
+ (expect "Price remains the same before next full interval"
+   91.67
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T15:55:00Z")})
+ (expect "Second price drop occurs after next full interval"
+   83.33
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T16:25:00Z")})
+ (expect "Current price drops as time progresses"
+   58.33
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T16:40:00Z")})
+ (expect "Just before closing the price is at reserve price"
+   50.00
+   (get-current-price (read-string 'sale-id))
+ )
+
+ (env-chain-data {"block-time": (time "2023-10-09T16:45:00Z")})
+ (expect "At closing the price is at 0 again"
+   0.0
+   (get-current-price (read-string 'sale-id))
+ )
+(rollback-tx)
+
+ (begin-tx "Buying the token with the wrong price fails")
+   (env-hash (hash "dutch-auction-price-failure"))
+   (env-chain-data {"block-time": (time "2023-10-07T00:00:00Z")})
+   (use marmalade-v2.ledger)
+   (use marmalade-sale.dutch-auction)
+
+   (env-data {
+     'buyer: "k:15071b931200c63c8d84870c387534216533810919b382924514003b2c90c0d7",
+     'buyer-guard: {"keys": ["15071b931200c63c8d84870c387534216533810919b382924514003b2c90c0d7"], "pred": "keys-all"},
+     'buyer_fungible_account: "k:15071b931200c63c8d84870c387534216533810919b382924514003b2c90c0d7"
+     ,'updated_price: 25.0
+     })
+
+   (expect-failure "Try to claim the token with the wrong price"
+     "Price does not match current price"
+     (continue-pact 1 false "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y")
+   )
+ (rollback-tx)
+
+ (begin-tx "Buying the token at current price succeeds")
+   (env-hash (hash "dutch-auction-claim-success"))
+   (env-chain-data {"block-time": (time "2023-10-06T00:00:00Z")})
+   (use marmalade-v2.ledger)
+   (use marmalade-v2.policy-manager)
+   (use marmalade-v2.util-v1)
+   (use mini-guard-utils)
+   (use marmalade-sale.dutch-auction)
+
+   (env-data {
+     "token1-id":(create-token-id { 'uri: "dutch-auction-uri-1", 'precision: 0, 'policies: (create-policies DEFAULT_ROYALTY)} ALWAYS-TRUE),
+     'buyer: "k:15071b931200c63c8d84870c387534216533810919b382924514003b2c90c0d7",
+     'buyer-guard: {"keys": ["15071b931200c63c8d84870c387534216533810919b382924514003b2c90c0d7"], "pred": "keys-all"},
+     'buyer_fungible_account: "k:15071b931200c63c8d84870c387534216533810919b382924514003b2c90c0d7",
+     'policy-manager-escrow: (at 'account (get-escrow-account "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y")),
+     'updated_price: 66.43,
+     "sale-id": "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+     })
+
+   (env-sigs [
+     { 'key: 'f0b8d36c97d77c782eec5facc3e235d1ac6b10247a36de52ea16908945d95ba9 ;; any key
+      ,'caps: [(marmalade-v2.ledger.BUY (read-msg "token1-id") "k:05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e" "k:15071b931200c63c8d84870c387534216533810919b382924514003b2c90c0d7" 1.0 "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y")]
+      },
+      { 'key: "15071b931200c63c8d84870c387534216533810919b382924514003b2c90c0d7"
+       ,'caps: [(coin.TRANSFER "k:15071b931200c63c8d84870c387534216533810919b382924514003b2c90c0d7" (read-string 'policy-manager-escrow) 66.43)]
+       }])
+
+   (expect "Claim the token succeeds"
+     "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"
+     (continue-pact 1 false "_vS1Y4nXQavtHxQAUCNDeRzG5Jc8Se22Ocg4RNP5B2Y"))
+
+   (expect "Buyer account balance has been deducted"
+     183.57
+     (coin.get-balance "k:15071b931200c63c8d84870c387534216533810919b382924514003b2c90c0d7")
+   )
+
+   (expect "Seller balance has increased"
+     316.43
+     (coin.get-balance "k:05df86b4fda15ac84cdd2ab4facb433db6098d10b6b09803eedbaea78d10723e")
+   )
+
+   (expect "auction table is updated with sell-price, buyer information"
+    { "token-id": (read-string 'token1-id )
+     ,"start-date": 1696204800
+     ,"end-date": 1696723200
+     ,"start-price": 100.0
+     ,"reserve-price": 50.0
+     ,"price-interval-seconds": 3600
+     ,"sell-price": 66.43
+     ,"buyer": (read-string 'buyer )
+     ,"buyer-guard": (read-keyset 'buyer-guard )
+    }
+    (retrieve-auction (read-string 'sale-id ))
+   )
+
+ (commit-tx)

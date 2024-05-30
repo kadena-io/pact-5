@@ -1,0 +1,24 @@
+codeFile: ../sale-contracts/sale-init.pact
+signers:
+  - public: {{sender_key}}
+  - public: {{marmalade_user_key_1}}
+    caps:
+    - name: marmalade-v2.policy-manager.SALE-WHITELIST
+      args: ["marmalade-sale.conventional-auction"]
+    - name: marmalade-v2.policy-manager.SALE-WHITELIST
+      args: ["marmalade-sale.dutch-auction"]
+  - public: {{marmalade_user_key_2}}
+    caps:
+    - name: marmalade-v2.policy-manager.SALE-WHITELIST
+      args: ["marmalade-sale.conventional-auction"]
+    - name: marmalade-v2.policy-manager.SALE-WHITELIST
+      args: ["marmalade-sale.dutch-auction"]
+data:
+  ns: {{marmalade_namespace}}
+networkId: {{network}}
+publicMeta:
+  chainId: "{{chain}}"
+  sender: {{sender}}
+  gasLimit: 5000
+  gasPrice: 0.0000001
+  ttl: 10000
