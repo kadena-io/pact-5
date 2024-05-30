@@ -1,4 +1,4 @@
--- |
+{-# LANGUAGE PartialTypeSignatures #-}
 
 module Pact.Core.Test.GasGolden
   (tests
@@ -38,6 +38,8 @@ tests = do
     [ testCase "Capture all builtins" $ captureBuiltins (fst <$> cases)
     , goldenVsStringDiff "Gas Goldens" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases)
     ]
+  where
+  runDiff = \ref new -> ["diff", "-u", ref, new]
 
   where
     runDiff = \ref new -> ["diff", "-u", ref, new]
@@ -71,7 +73,7 @@ lookupOp n = fromMaybe n (M.lookup n fileNameToOp)
 gasGoldenTests :: [(Text, FilePath)] -> IO BS.ByteString
 gasGoldenTests c = do
   gasOutputs <- forM c $ \(fn, fp) -> do
-    mGas <- runGasTest (gasTestDir </> fp)
+    mGas <- runGasTest (gasTestDir </> fp) interpretReplProgram
     case mGas of
       Nothing -> fail $ "Could not execute the gas tests for: " <> show fp
       Just (MilliGas consumed) -> pure $ BS.fromStrict $ T.encodeUtf8 (lookupOp fn <> ": " <> T.pack (show consumed))
@@ -104,8 +106,8 @@ opToFileName = M.fromList
 fileNameToOp :: M.Map Text Text
 fileNameToOp = M.fromList [(v,k) | (k, v) <- M.toList opToFileName]
 
-runGasTest :: FilePath -> IO (Maybe MilliGas)
-runGasTest file = do
+runGasTest :: FilePath -> _ -> IO (Maybe MilliGas)
+runGasTest file interpret = do
   src <- T.readFile file
   pdb <- mockPactDb serialisePact_repl_spaninfo
   gasLog <- newIORef Nothing
@@ -126,6 +128,6 @@ runGasTest file = do
             , _replNativesEnabled = False
             }
   stateRef <- newIORef rstate
-  runReplT stateRef (interpretReplProgram source (const (pure ()))) >>= \case
+  runReplT stateRef (interpret source (const (pure ()))) >>= \case
     Left _ -> pure Nothing
     Right _ -> Just <$> readIORef gasRef
