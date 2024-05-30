@@ -1,4 +1,4 @@
-!=: 1000
+!=: 1026
 &: 1000
 *: 52
 +: 55
@@ -6,7 +6,7 @@
 /: 52
 <: 114
 <=: 114
-=: 1000
+=: 1026
 >: 114
 >=: 114
 ^: 5000
@@ -22,7 +22,7 @@ chain-data: 500
 compose-capability: 60003640
 compose: 1261
 concat: 721
-cond: 2150
+cond: 2202
 contains: 231
 continue: 60000201
 create-capability-guard: 60000092
@@ -43,8 +43,8 @@ diff-time: 12164
 distinct: 1402
 drop: 725
 emit-event: 60001070
-enforce-guard: 9727
-enforce-keyset: 9727
+enforce-guard: 9816
+enforce-keyset: 9816
 enforce-verifier: 10250
 enumerate: 451
 exp: 10000
@@ -78,7 +78,7 @@ not: 139
 not?: 189
 or?: 189
 pact-id: 60000090
-pairing-check: 66999993
+pairing-check: 67000082
 parse-time: 2102
 point-add: 5425
 poseidon-hash-hack-a-chain: 6393700
