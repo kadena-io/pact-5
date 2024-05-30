@@ -8,7 +8,8 @@ module Pact.Core.Gas.TableGasModel
   --
  , pointAddGas
  , scalarMulGas
- , pairingGas)
+ , pairingGas
+ , serializationCosts)
  where
 
 import Data.Word(Word64)
@@ -29,7 +30,9 @@ tableGasModel gl =
   , _gmNatives = nativeGasTable
   , _gmName = "table"
   , _gmGasLimit = gl
-  , _gmDesc = "table-based cost model"}
+  , _gmDesc = "table-based cost model"
+  , _gmSerialize = serializationCosts
+  }
 
 replTableGasModel :: MilliGasLimit -> GasModel ReplCoreBuiltin
 replTableGasModel gl =
@@ -277,8 +280,10 @@ runTableModel = \case
     CapOpRequire cnt ->
       let mgPerCap = 100
       in MilliGas $ fromIntegral $ cnt * mgPerCap
+  GCountBytes -> MilliGas 1 
   where
   textCompareCost str = fromIntegral $ T.length str
+  -- Running CountBytes costs 0.9 MilliGas, according to the analysis in bench/Bench.hs
 
 basicWorkGas :: Word64
 basicWorkGas = 25
@@ -571,6 +576,20 @@ dbReadPenalty = 10_000
 
 dbMetadataTxPenalty :: Word64
 dbMetadataTxPenalty = 100_000
+
+-- PactValue serialization costs
+serializationCosts :: SerializationCosts
+serializationCosts = SerializationCosts
+  { objectKeyCostMilliGasOffset = 1
+  , objectKeyCostMilliGasPer1000Chars = 69
+  , boolMilliGasCost = 52
+  , unitMilliGasCost = 51
+  , integerCostMilliGasPerDigit = 2
+  , decimalCostMilliGasOffset = 59
+  , decimalCostMilliGasPerDigit = 2
+  , timeCostMilliGas = 184
+  }
+
 
 -- [Decimal Comparisons]
 -- The `Ord` instance, and by that measure and comparison on two decimals is done via

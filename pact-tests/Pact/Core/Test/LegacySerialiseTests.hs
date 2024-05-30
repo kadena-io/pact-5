@@ -21,10 +21,12 @@ import Pact.Core.Persistence
 import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Serialise
 import Pact.Core.Builtin
-import Data.Foldable (traverse_)
+import Data.Foldable (forM_)
 import Control.Lens
 import Pact.Core.Repl.Compile
 import Data.Default
+
+import Pact.Core.Gas
 import Pact.Core.IR.Term
 
 tests :: IO TestTree
@@ -65,7 +67,8 @@ legacyTests = do
         let ms' = (fmap.fmap) (const def) ms
 
         -- write modules into the pactdb
-        traverse_ (\m -> writeModule pdb Write (view mdModuleName m) (liftReplBuiltin m)) ms'
+        _ <- ignoreGas def $ forM_ ms' $ \m ->
+          _pdbWrite pdb Write DModules (view mdModuleName m) (liftReplBuiltin m)
 
         modTests <- forM repl $ \r -> do
           let filePath = p </> r

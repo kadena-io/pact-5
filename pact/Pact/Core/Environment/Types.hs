@@ -62,11 +62,12 @@ import Data.Default
 
 import Control.DeepSeq
 import GHC.Generics
+import Control.Monad.Catch as Exceptions
 
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
 
-import Pact.Core.Persistence
+import Pact.Core.Persistence.Types
 import Pact.Core.Capabilities
 import Pact.Core.Guards
 import Pact.Core.PactValue
@@ -77,7 +78,6 @@ import Pact.Core.ChainData
 import Pact.Core.Errors
 import Pact.Core.Gas
 import Pact.Core.Namespace
-import Pact.Core.SizeOf
 import Pact.Core.StackFrame
 import Pact.Core.Builtin (IsBuiltin)
 import Pact.Core.Verifiers
@@ -212,10 +212,9 @@ type MonadEval b i m =
   , MonadEvalState b i m
   , MonadError (PactError i) m
   , MonadIO m
+  , Exceptions.MonadCatch m
   , Default i
   , Show i
-  , SizeOf b
-  , SizeOf i
   , IsBuiltin b
   , Show b)
 

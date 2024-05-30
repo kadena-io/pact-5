@@ -7,8 +7,9 @@ module Pact.Core.GasModel.Utils where
 
 import Control.Lens
 import Control.Monad.Except
+import Control.Monad.IO.Class
 import Control.DeepSeq
-import Data.Default(def)
+import Data.Default
 import Data.Text (Text)
 import Data.Map.Strict(Map)
 import Data.Monoid
@@ -22,6 +23,7 @@ import qualified Database.SQLite3 as SQL
 import Pact.Core.Builtin
 import Pact.Core.Environment
 import Pact.Core.Errors
+import Pact.Core.Gas
 import Pact.Core.Names
 import Pact.Core.Literal
 import Pact.Core.Type
@@ -237,15 +239,15 @@ gmLoaded = Loaded
   , _loModules=M.singleton gmModuleName gmModuleData
   , _loAllLoaded=gmFqMap}
 
-prepopulateDb :: PactDb CoreBuiltin i -> IO ()
+prepopulateDb :: PactDb CoreBuiltin i -> GasM (PactError i) CoreBuiltin ()
 prepopulateDb pdb = do
-  _ <- _pdbBeginTx pdb Transactional
+  _ <- liftIO $ _pdbBeginTx pdb Transactional
   _pdbCreateUserTable pdb gasModelTable
   _pdbWrite pdb Write (DUserTables gasModelTable) gmTableK1 gmTableV1
   _pdbWrite pdb Write (DUserTables gasModelTable) gmTableK1 gmTableV1
   _pdbWrite pdb Write DNamespaces gmNamespaceName gmNamespace
   _pdbWrite pdb Write DKeySets gmKeysetName gmKeyset
-  _ <- _pdbCommitTx pdb
+  _ <- liftIO $ _pdbCommitTx pdb
   pure ()
 
 evaluateN
