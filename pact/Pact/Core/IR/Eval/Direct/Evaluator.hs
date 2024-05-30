@@ -87,6 +87,7 @@ import Pact.Core.IR.Eval.Direct.Types
 import Pact.Core.Gas
 import Pact.Core.StableEncoding
 import Pact.Core.SPV
+import Pact.Core.Verifiers
 
 import Pact.Core.Namespace
 #ifndef WITHOUT_CRYPTO
@@ -394,17 +395,23 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
               Just managedCap ->
                 evalAutomanagedCap emittedEvent newLocals capBody managedCap
       DefEvent -> do
+        oldCapsBeingEvaluated <- useEvalState (esCaps.csCapsBeingEvaluated)
         let event = Just (fqctToPactEvent origToken)
         let inCapEnv = set ceInCap True $ set ceLocal newLocals env
         (esCaps . csSlots) %== (CapSlot qualCapToken []:)
+        (esCaps . csCapsBeingEvaluated) %== S.insert qualCapToken
         _ <- evalWithStackFrame info capStackFrame Nothing (evaluate inCapEnv capBody)
+        (esCaps . csCapsBeingEvaluated) .== oldCapsBeingEvaluated
         evalWithCapBody info popType Nothing event env contbody
       -- Not automanaged _nor_ user managed.
       Unmanaged -> do
         let inCapEnv = set ceInCap True $ set ceLocal newLocals env
+        oldCapsBeingEvaluated <- useEvalState (esCaps.csCapsBeingEvaluated)
         (esCaps . csSlots) %== (CapSlot qualCapToken []:)
+        (esCaps . csCapsBeingEvaluated) %== S.insert qualCapToken
         -- we ignore the capbody here
         _ <- evalWithStackFrame info capStackFrame Nothing $ evaluate inCapEnv capBody
+        (esCaps . csCapsBeingEvaluated) .== oldCapsBeingEvaluated
         case ecType of
           NormalCapEval -> do
             evalWithCapBody info popType Nothing Nothing env contbody
@@ -426,6 +433,7 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
       -- pops it. It would be great to do without this, but a lot of our regressions rely on this.
       let inCapEnv = set ceInCap True $ set ceLocal env' $ env
       let inCapBodyToken = _mcOriginalCap managedCap
+      oldCapsBeingEvaluated <- useEvalState (esCaps.csCapsBeingEvaluated)
       -- BIG SEMANTICS NOTE HERE
       -- the cap slot here that we push should NOT be the qualified original token.
       -- Instead, it's the original token from the installed from the static cap. Otherwise, enforce checks
@@ -433,7 +441,9 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
       -- we pop the current cap stack, then replace the head with the original intended token.
       -- this is done in `CapBodyC` and this is the only way to do this.
       (esCaps . csSlots) %== (CapSlot inCapBodyToken []:)
+      (esCaps . csCapsBeingEvaluated) %== S.insert inCapBodyToken
       _ <- evalWithStackFrame info capStackFrame Nothing (evaluate inCapEnv capBody)
+      (esCaps . csCapsBeingEvaluated) .== oldCapsBeingEvaluated
       when (ecType == NormalCapEval) $ do
         updatedV <- enforcePactValue info =<< applyLam (C dfunClo) [VPactValue oldV, VPactValue newV]
         let mcap' = unsafeUpdateManagedParam updatedV managedCap
@@ -445,13 +455,14 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
       if b then throwRecoverableError info "Automanaged capability used more than once"
       else do
         let newManaged = AutoManaged True
+        oldCapsBeingEvaluated <- useEvalState (esCaps.csCapsBeingEvaluated)
         esCaps . csManaged %== S.union (S.singleton (set mcManaged newManaged managedCap))
         esCaps . csSlots %== (CapSlot qualCapToken []:)
+        (esCaps . csCapsBeingEvaluated) %== S.insert qualCapToken
         let inCapEnv = set ceLocal env' $ set ceInCap True $ env
-        -- sfCont <- pushStackFrame info cont' Nothing capStackFrame
-        -- evalCEK sfCont handler inCapEnv capBody
-
         _ <- evalWithStackFrame info capStackFrame Nothing (evaluate inCapEnv capBody)
+        (esCaps . csCapsBeingEvaluated) .== oldCapsBeingEvaluated
+
         evalWithCapBody info popType Nothing emittedEvent env contbody
     _ -> failInvariant info "Invalid managed cap type"
 
@@ -3311,6 +3322,25 @@ coreVerifySPV info b _env = \case
       Right (ObjectData o') -> return (VObject o')
   args -> argsError info b args
 
+-----------------------------------
+-- Verifiers
+-----------------------------------
+coreEnforceVerifier :: (MonadEval b i m) => NativeFunction b i m
+coreEnforceVerifier info b _env = \case
+  [VString verName] -> do
+    enforceStackTopIsDefcap info b
+    viewsEvalEnv eeMsgVerifiers (M.lookup (VerifierName verName)) >>= \case
+      Just verCaps -> do
+        verifierInScope <- anyCapabilityBeingEvaluated verCaps
+        if verifierInScope then return (VBool True)
+        else throwRecoverableError info $ verifError verName "not in scope"
+      Nothing ->
+        throwRecoverableError info $ (verifError verName "not in transaction")
+  args -> argsError info b args
+  where
+    verifError verName msg = "Verifier failure " <> verName <> ":" <> msg
+
+
 
 -----------------------------------
 -- Builtin exports
@@ -3485,3 +3515,4 @@ coreBuiltinRuntime =
     CoreCond -> coreCond
     CoreIdentity -> coreIdentity
     CoreVerifySPV -> coreVerifySPV
+    CoreEnforceVerifier -> coreEnforceVerifier

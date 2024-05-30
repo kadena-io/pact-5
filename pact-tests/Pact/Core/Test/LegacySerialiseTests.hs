@@ -21,7 +21,7 @@ import Pact.Core.Persistence
 import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Serialise
 import Pact.Core.Builtin
-import Data.Foldable (forM_)
+import Data.Foldable
 import Control.Lens
 import Pact.Core.Repl.Compile
 import Data.Default
@@ -61,20 +61,29 @@ legacyTests = do
     case lm' of
       Nothing -> error "Reading existing modules failed"
       Just ms -> do
-        pdb <- mockPactDb serialisePact_repl_spaninfo
+        modTests <- fmap concat $ forM repl $ \r -> do
+          sequence [runTest r interpretReplProgram "CEK", runTest r interpretReplProgramDirect "Direct"]
+        pure (testGroup p modTests)
+        where
+        runTest r interpreter interpName = do
+          pdb <- mockPactDb serialisePact_repl_spaninfo
 
-        -- add default spaninfo
-        let ms' = (fmap.fmap) (const def) ms
-
-        -- write modules into the pactdb
-        _ <- ignoreGas def $ forM_ ms' $ \m ->
-          _pdbWrite pdb Write DModules (view mdModuleName m) (liftReplBuiltin m)
-
-        modTests <- forM repl $ \r -> do
+          -- add default spaninfo
+          let ms' = (fmap.fmap) (const def) ms
           let filePath = p </> r
           src <- T.readFile (legacyTestDir </> filePath)
-          pure $ testCase r (runReplTest (ReplSourceDir legacyTestDir) pdb filePath src interpretReplProgram)
-        pure (testGroup p modTests)
+
+          -- write modules into the pactdb
+          -- traverse_ (\m -> writeModule pdb Write (view mdModuleName m) (liftReplBuiltin m)) ms'
+          _ <- ignoreGas def $ forM_ ms' $ \m ->
+            _pdbWrite pdb Write DModules (view mdModuleName m) (liftReplBuiltin m)
+
+
+        -- _ <- ignoreGas def $ forM_ ms' $ \m ->
+        --   _pdbWrite pdb Write DModules (view mdModuleName m) (liftReplBuiltin m)
+          pure $ testCase (r <> " with interpreter (" <> interpName <> ")")
+            $ runReplTest (ReplSourceDir legacyTestDir) pdb filePath src interpreter
+
   where
   toModuleData p fp =
     decodeModuleData <$> BS.readFile (legacyTestDir </> p </> fp)

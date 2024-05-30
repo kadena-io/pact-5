@@ -38,6 +38,7 @@ import Pact.Core.IR.Term
 import Pact.Core.Info
 import Pact.Core.Namespace
 import Pact.Core.ModRefs
+import Pact.Core.Verifiers
 import qualified Pact.Core.Legacy.LegacyPactValue as Legacy
 
 import qualified PackageInfo_pact_tng as PI
@@ -518,6 +519,27 @@ envModuleAdmin info b _env = \case
     return $ VString $ "Acquired module admin for: " <> renderModuleName modName
   args -> argsError info b args
 
+envVerifiers :: NativeFunction ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+envVerifiers info b _env = \case
+  [VList ks] ->
+    case traverse verifCapObj ks of
+      Just sigs -> do
+        (replEvalEnv . eeMsgVerifiers) .= M.fromList (V.toList sigs)
+        return $ VString "Setting transaction verifiers/caps"
+      Nothing ->
+        throwRecoverableError info ("env-verifiers: Expected object with 'name': string, 'caps': [capability]")
+    where
+    verifCapObj = \case
+      PObject o -> do
+        keyRaw <- M.lookup (Field "name") o
+        kt <- preview (_PLiteral . _LString) keyRaw
+        capsRaw <- M.lookup (Field "caps") o
+        capsListPV <- preview _PList capsRaw
+        caps <- traverse (preview _PCapToken) capsListPV
+        let cts = over ctName fqnToQualName <$> caps
+        pure (VerifierName kt, S.fromList (V.toList cts))
+      _ -> Nothing
+  args -> argsError info b args
 
 
 replBuiltinEnv
@@ -572,3 +594,4 @@ replCoreBuiltinRuntime = \case
     REnforcePactVersionRange -> coreEnforceVersion
     REnvEnableReplNatives -> envEnableReplNatives
     REnvModuleAdmin -> envModuleAdmin
+    REnvVerifiers -> envVerifiers

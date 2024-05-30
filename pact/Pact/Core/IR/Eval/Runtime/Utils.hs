@@ -39,6 +39,8 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , litCmpGassed
  , valEqGassed
  , enforceBlessedHashes
+ , enforceStackTopIsDefcap
+ , anyCapabilityBeingEvaluated
  ) where
 
 import Control.Lens
@@ -336,3 +338,27 @@ enforceBlessedHashes info md mh
   | _mHash md == mh = return ()
   | mh `S.member` _mBlessed md = return ()
   | otherwise = throwExecutionError info (HashNotBlessed (_mName md) mh)
+
+enforceStackTopIsDefcap
+  :: (MonadEval b i m)
+  => i
+  -> b
+  -> m ()
+enforceStackTopIsDefcap info b = do
+  let (NativeName n) = builtinName b
+  let errMsg = "native execution failed, native must be called within a defcap body: " <> n
+  useEvalState esStack >>= \case
+      sf:_ -> do
+        when (_sfFnType sf /= SFDefcap) $
+          throwExecutionError info (EvalError errMsg)
+      _ ->
+        throwExecutionError info (EvalError errMsg)
+
+
+anyCapabilityBeingEvaluated
+  :: MonadEval b i m
+  => S.Set (CapToken QualifiedName PactValue)
+  -> m Bool
+anyCapabilityBeingEvaluated caps = do
+  capsBeingEvaluated <- useEvalState (esCaps . csCapsBeingEvaluated)
+  return $! any (`S.member` caps) capsBeingEvaluated

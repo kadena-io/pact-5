@@ -1196,20 +1196,6 @@ requireCapability info b cont handler _env = \case
     requireCap info cont handler ct
   args -> argsError info b args
 
-enforceStackTopIsDefcap
-  :: (MonadEval b i m)
-  => i
-  -> b
-  -> m ()
-enforceStackTopIsDefcap info b = do
-  let (NativeName n) = builtinName b
-  let errMsg = "native execution failed, native must be called within a defcap body: " <> n
-  useEvalState esStack >>= \case
-      sf:_ -> do
-        when (_sfFnType sf /= SFDefcap) $
-          throwExecutionError info (EvalError errMsg)
-      _ ->
-        throwExecutionError info (EvalError errMsg)
 
 composeCapability :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 composeCapability info b cont handler env = \case
@@ -1978,14 +1964,6 @@ coreEnforceVerifier info b cont handler _env = \case
   args -> argsError info b args
   where
     verifError verName msg = "Verifier failure " <> verName <> ":" <> msg
-
-anyCapabilityBeingEvaluated
-  :: MonadEval b i m
-  => S.Set (CapToken QualifiedName PactValue)
-  -> m Bool
-anyCapabilityBeingEvaluated caps = do
-  capsBeingEvaluated <- useEvalState (esCaps . csCapsBeingEvaluated)
-  return $! any (`S.member` caps) capsBeingEvaluated
 
 
 -----------------------------------
