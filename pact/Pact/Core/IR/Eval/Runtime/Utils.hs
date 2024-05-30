@@ -251,9 +251,9 @@ readOnlyEnv e
              { _pdbPurity = PReadOnly
              , _pdbRead = _pdbRead pdb
              , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
-             , _pdbKeys = \_ -> dbOpDisallowed
+             , _pdbKeys = const dbOpDisallowed
              , _pdbCreateUserTable = \_ -> dbOpDisallowed
-             , _pdbBeginTx = \_ -> dbOpDisallowed
+             , _pdbBeginTx = const dbOpDisallowed
              , _pdbCommitTx = dbOpDisallowed
              , _pdbRollbackTx = dbOpDisallowed
              , _pdbTxIds = \_ _ -> dbOpDisallowed

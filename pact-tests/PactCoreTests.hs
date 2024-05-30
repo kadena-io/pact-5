@@ -13,6 +13,7 @@ import qualified Pact.Core.Test.ZkTests as ZkTests
 import qualified Pact.Core.Test.PoseidonTests as PoseidonTests
 import qualified Pact.Core.Test.LanguageServer as LanguageServer
 import qualified Pact.Core.Test.GasGolden as GasGolden
+import qualified Pact.Core.Test.SizeOfTests as SizeOfTests
 
 main :: IO ()
 main = do
@@ -31,4 +32,5 @@ main = do
     , PersistenceTests.tests
     , LanguageServer.tests
     , gasGolden
+    , SizeOfTests.tests
     ]
