@@ -60,6 +60,12 @@ import qualified Pact.JSON.Decode as JD
 import Pact.Core.IR.Term
 import qualified Pact.Core.Serialise.CBOR_V1 as CBOR
 import qualified Pact.Core.Serialise.LegacyPact.Types as Legacy
+import qualified Data.Text as T
+import Data.Vector(Vector)
+import Data.Map.Strict(Map)
+import Text.Read (readMaybe)
+import qualified Pact.JSON.Encode as J
+import Control.Monad
 
 
 

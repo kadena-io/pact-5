@@ -1,4 +1,5 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
@@ -20,6 +21,7 @@ module Pact.Core.Persistence.Types
  , HasLoaded(..)
  , HasPactDb(..)
  , Domain(..)
+ , SomeDomain(..)
  , WriteType(..)
  , Purity(..)
  , RowData(..)
@@ -152,6 +154,18 @@ data Domain k v b i where
 
   -- | DefPact state, `Nothing` implies DefPact with `DefPactId` is completed.
   DDefPacts :: Domain DefPactId (Maybe DefPactExec) b i
+
+deriving instance Show (Domain k v b i)
+
+data SomeDomain b i = forall k v. SomeDomain (Domain k v b i)
+instance Eq (SomeDomain b i) where
+  SomeDomain d1 == SomeDomain d2 = case (d1, d2) of
+    (DUserTables tn1, DUserTables tn2) -> tn1 == tn2
+    (DKeySets, DKeySets) -> True
+    (DModules, DModules) -> True
+    (DNamespaces, DNamespaces) -> True
+    (DDefPacts, DDefPacts) -> True
+    _ -> False
 
 data Purity
   -- | Read-only access to systables.
