@@ -75,6 +75,7 @@ import GHC.Generics
 import qualified Data.Char as Char
 import qualified Text.Megaparsec as MP
 import qualified Text.Megaparsec.Char as MP
+import qualified Data.Aeson as A
 
 import Pact.Core.Hash
 import Pact.Core.Pretty(Pretty(..))
@@ -182,7 +183,7 @@ instance Pretty ParsedName where
 -- So in Field "a" in {"a":v},
 newtype Field = Field { _field :: Text }
   deriving (Eq, Ord, Show, Generic)
-  deriving newtype NFData
+  deriving newtype (NFData, A.FromJSONKey, A.FromJSON)
 
 instance Pretty Field where
   pretty (Field f) = pretty f
@@ -393,7 +394,8 @@ makeLenses ''QualifiedName
 --   parent + the nested continuation
 newtype DefPactId
   = DefPactId { _defpactId :: Text }
-  deriving (Eq,Ord,Show, NFData)
+  deriving (Eq,Ord,Show)
+  deriving newtype (NFData, A.FromJSONKey)
 
 instance Pretty DefPactId where
   pretty (DefPactId p) = pretty p

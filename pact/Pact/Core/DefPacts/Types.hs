@@ -1,5 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 
 module Pact.Core.DefPacts.Types
  ( DefPactContinuation(..)

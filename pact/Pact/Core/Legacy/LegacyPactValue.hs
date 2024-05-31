@@ -1,11 +1,14 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE GADTs #-}
 module Pact.Core.Legacy.LegacyPactValue
-  (roundtripPactValue) where
+  (Legacy(..), roundtripPactValue) where
 
 import Control.Applicative
 import Data.Aeson
+import Data.Coerce
 import Data.String (IsString (..))
 
 import qualified Pact.JSON.Encode as J
@@ -14,15 +17,27 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Aeson as A
 import qualified Data.Aeson.KeyMap as A
+import qualified Data.Text.Encoding as T
 
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Literal
 import Pact.Core.ModRefs
+import Pact.Core.ChainData
 import Pact.Core.PactValue
 import Pact.Core.Legacy.LegacyCodec
 import Pact.Core.StableEncoding
 import Data.List
+import Pact.Core.Persistence.Types
+import Data.Text (Text)
+import Control.Monad
+import Pact.Core.Builtin (CoreBuiltin)
+import Pact.Core.Namespace
+import Pact.Core.DefPacts.Types
+import Pact.Core.Hash
+import qualified Pact.Core.Serialise.LegacyPact as LegacyPact
+import Data.ByteString.Short (toShort)
+import qualified Data.Text as T
 
 
 newtype Legacy a
@@ -92,7 +107,11 @@ instance FromJSON (Legacy ModuleName) where
         <$> (o .: "name")
         <*> (fmap NamespaceName <$> (o .: "namespace"))
 
-instance FromJSON (Legacy (UserGuard QualifiedName PactValue)) where
+instance FromJSON (Legacy NamespaceName) where
+  parseJSON =
+    fmap (Legacy . NamespaceName) . parseJSON
+
+instance FromJSON (Legacy v) => FromJSON (Legacy (UserGuard QualifiedName v)) where
   parseJSON = withObject "UserGuard" $ \o ->
       Legacy <$> (UserGuard
         <$> (_unLegacy <$> o .: "fun")
@@ -108,7 +127,7 @@ instance FromJSON (Legacy KeySetName) where
         <$> o .: "ksn"
         <*> (fmap NamespaceName <$> o .:? "ns")
 
-instance FromJSON (Legacy (Guard QualifiedName PactValue)) where
+instance FromJSON (Legacy v) => FromJSON (Legacy (Guard QualifiedName v)) where
   parseJSON v = case props v of
     [GuardKeys, GuardPred] -> Legacy . GKeyset . _unLegacy <$> parseJSON v
     [GuardKeysetref] -> flip (withObject "KeySetRef") v $ \o ->
@@ -171,7 +190,7 @@ instance FromJSON (Legacy PactValue) where
     (PList . fmap _unLegacy <$> parseJSON v) <|>
     (PGuard . _unLegacy <$> parseJSON v) <|>
     (PModRef . _unLegacy <$> parseJSON v) <|>
-    (PObject . M.mapKeys Field . fmap _unLegacy <$> parseJSON v)
+    (PObject . fmap _unLegacy <$> parseJSON v)
 
 instance FromJSON (Legacy ModuleGuard) where
   parseJSON = withObject "ModuleGuard" $ \o ->
@@ -186,7 +205,7 @@ instance FromJSON (Legacy DefPactGuard) where
         <$> (DefPactId <$> o .: "pactId")
         <*> o .: "name"
 
-instance FromJSON (Legacy (CapabilityGuard QualifiedName PactValue)) where
+instance FromJSON (Legacy v) => FromJSON (Legacy (CapabilityGuard QualifiedName v)) where
   parseJSON = withObject "CapabilityGuard" $ \o ->
     fmap Legacy $
       CapabilityGuard
@@ -197,3 +216,182 @@ instance FromJSON (Legacy (CapabilityGuard QualifiedName PactValue)) where
 roundtripPactValue :: PactValue -> Maybe PactValue
 roundtripPactValue pv =
   _unLegacy <$> A.decodeStrict' (encodeStable pv)
+
+instance J.Encode (Legacy WriteType) where
+  build (Legacy Insert) = J.text "Insert"
+  build (Legacy Update) = J.text "Update"
+  build (Legacy Write) = J.text "Write"
+instance FromJSON (Legacy WriteType) where
+  parseJSON = withText "WriteType" $ \case
+    "Insert" -> return $ Legacy Insert
+    "Update" -> return $ Legacy Update
+    "Write" -> return $ Legacy Write
+    _ -> fail "invalid, expected Insert, Update, or Write"
+
+instance J.Encode (Legacy RowKey) where
+  build (Legacy rk) = J.text (_rowKey rk)
+
+instance J.Encode (Legacy (SomeDomain b i)) where
+  build (Legacy (SomeDomain d)) = case d of
+    DUserTables tn
+      -> J.build $ J.Object
+          [ J.KeyValue "tag" $ J.text "UserTables"
+          -- this is specifically for prod compat
+          , J.KeyValue "tableName" $ J.build (Legacy tn)
+          ]
+    DKeySets -> J.text "KeySets"
+    DModules -> J.text "Modules"
+    DNamespaces -> J.text "Namespaces"
+    DDefPacts -> J.text "Pacts"
+
+instance FromJSON (Legacy DefPactId) where
+  parseJSON = withText "DefPactId" (pure . Legacy . DefPactId)
+
+instance FromJSON (Legacy (SomeDomain b i)) where
+  parseJSON v =
+    (withText "Domain" $ \case
+      "KeySets" -> return $ Legacy $ SomeDomain DKeySets
+      "Modules" -> return $ Legacy $ SomeDomain DModules
+      "Namespaces" -> return $ Legacy $ SomeDomain DNamespaces
+      "Pacts" -> return $ Legacy $ SomeDomain DDefPacts
+      _ -> fail "invalid Domain") v <|>
+    (withObject "Domain" $ \o -> do
+      tag :: Text <- o .: "tag"
+      unless (tag == "UserTables") $
+        fail "JSON object Domain must have UserTables tag"
+      -- this is specifically for prod compat
+      Legacy tn <- o .: "tableName"
+      return $ Legacy $ SomeDomain (DUserTables tn)
+    ) v
+
+instance J.Encode (Legacy TableName) where
+  build (Legacy tn)
+      | let moduleName = _tableModuleName tn
+      , let maybeNamespace = _mnNamespace moduleName
+      = J.text $
+        maybe mempty (\ns -> _namespaceName ns <> ".") maybeNamespace
+        <> _mnName moduleName <> "_" <> _tableName tn
+
+instance FromJSON (Legacy TableName) where
+  parseJSON = withText "Legacy TableName" $ \qualifiedTableNameText -> do
+      (ns, rest) <- (do
+        [ns, rest] <- return $ T.split (== '.') qualifiedTableNameText
+        return (Just ns, rest)
+        ) <|> return (Nothing, qualifiedTableNameText)
+      [moduleNameText, tableNameText] <- return $ T.split (== '_') rest
+      return $ Legacy TableName
+        { _tableName = tableNameText
+        , _tableModuleName = ModuleName
+          { _mnName = moduleNameText
+          , _mnNamespace = NamespaceName <$> ns
+          }
+        }
+
+instance FromJSON (Legacy RowKey) where
+  parseJSON =
+    fmap (Legacy . RowKey) . parseJSON
+
+instance FromJSON (Legacy Namespace) where
+  parseJSON = withObject "RowData" $ \o -> do
+    nsn <- NamespaceName <$> o .: "name"
+    usr <- _unLegacy <$> o .: "user"
+    admin <- _unLegacy <$> o .: "admin"
+    pure $ Legacy $ Namespace
+      { _nsName = nsn
+      , _nsUser = usr
+      , _nsAdmin = admin }
+
+instance FromJSON (Legacy v) => FromJSON (Legacy (ObjectData v)) where
+  parseJSON v =
+    Legacy . ObjectData . (coerce :: M.Map Field (Legacy v) -> M.Map Field v) <$> parseJSON v
+
+instance FromJSON (Legacy ModuleHash) where
+  parseJSON = withText "Hash" $ \t -> case decodeBase64UrlUnpadded (T.encodeUtf8 t) of
+    Left _ -> fail "cant decode"
+    Right t' -> pure $ Legacy $ ModuleHash $ Hash $ toShort t'
+
+
+instance FromJSON (Legacy Provenance) where
+  parseJSON = withObject "Provenance" $ \o -> do
+    targetCid <- o .: "targetChainId"
+    Legacy mh <- o .: "moduleHash"
+    pure $ Legacy $ Provenance (ChainId targetCid) mh
+
+
+instance FromJSON (Legacy Yield) where
+  parseJSON = withObject "Yield" $ \o -> do
+    ObjectData objData <- _unLegacy <$> o .: "data"
+    prov <- o .:? "provenance"
+    sourceChain <- fmap ChainId <$> o .:? "source"
+    pure $ Legacy $ Yield objData (_unLegacy <$> prov) sourceChain
+
+instance (FromJSON (Legacy name), FromJSON (Legacy v)) => FromJSON (Legacy (DefPactContinuation name v)) where
+  parseJSON = withObject "PactContinuation" $ \o -> do
+    Legacy qn <- o .: "def"
+    args <- fmap _unLegacy <$> o .: "args"
+    pure $ Legacy $ DefPactContinuation qn args
+
+instance FromJSON (Legacy v) => FromJSON (Legacy (Maybe v)) where
+  parseJSON = fmap c . parseJSON
+    where
+    c = coerce :: Maybe (Legacy v) -> Legacy (Maybe v)
+
+instance FromJSON (Legacy DefPactExec) where
+  parseJSON = withObject "PactExec" $ \o -> fmap Legacy $ do
+    stepCount <- o .: "stepCount"
+    yield <- fmap _unLegacy <$> o .:? "yield"
+    step <- o .: "step"
+    pid <- DefPactId <$> o .: "pactId"
+    cont <- _unLegacy <$> o .: "continuation"
+    stepHasRb <- o .: "stepHasRollback"
+    let c = coerce :: M.Map DefPactId (Legacy DefPactExec) -> M.Map DefPactId DefPactExec
+    nested <- maybe mempty c <$> o .:? "nested"
+    pure $ DefPactExec
+      { _peYield = yield
+      , _peStepHasRollback = stepHasRb
+      , _peStepCount = stepCount
+      , _peStep = step
+      , _peNestedDefPactExec = nested
+      , _peDefPactId = pid
+      , _peContinuation = cont}
+
+
+
+instance FromJSON (Legacy RowData) where
+  parseJSON v =
+    parseVersioned v <|>
+    -- note: Parsing into `OldPactValue` here defaults to the code used in
+    -- the old FromJSON instance for PactValue, prior to the fix of moving
+    -- the `PModRef` parsing before PObject
+    Legacy . RowData . M.mapKeys Field . fmap _unLegacy <$> parseJSON v
+    where
+      parseVersioned = withObject "RowData" $ \o -> Legacy . RowData
+          <$> (M.mapKeys Field . fmap (_unRowDataValue._unLegacy) <$> o .: "$d")
+
+newtype RowDataValue
+    = RowDataValue { _unRowDataValue :: PactValue }
+    deriving (Show, Eq)
+
+instance FromJSON (Legacy RowDataValue) where
+  parseJSON v1 =
+    (Legacy . RowDataValue . PLiteral . _unLegacy <$> parseJSON v1) <|>
+    (Legacy . RowDataValue . PList . fmap (_unRowDataValue . _unLegacy) <$> parseJSON v1) <|>
+    parseTagged v1
+    where
+      parseTagged = withObject "tagged RowData" $ \o -> do
+        (t :: Text) <- o .: "$t"
+        val <- o .: "$v"
+        case t of
+          "o" -> Legacy . RowDataValue . PObject . M.mapKeys Field . fmap (_unRowDataValue . _unLegacy) <$> parseJSON val
+          "g" -> Legacy . RowDataValue . PGuard . fmap (_unRowDataValue) . _unLegacy <$> parseJSON val
+          "m" -> Legacy . RowDataValue . PModRef <$> parseMR val
+          _ -> fail "tagged RowData"
+      parseMR = withObject "tagged ModRef" $ \o -> ModRef
+          <$> (fmap _unLegacy $ o .: "refName")
+          <*> (maybe [] (fmap _unLegacy) <$> o .: "refSpec")
+          <*> pure Nothing
+
+instance FromJSON (Legacy (ModuleData CoreBuiltin ())) where
+  parseJSON v = do
+    Just md <- return $ LegacyPact.decodeModuleData' v
+    return (Legacy md)
