@@ -24,16 +24,19 @@ import Pact.Core.Serialise (serialisePact_repl_spaninfo)
 import Pact.Core.Test.TestPrisms
 
 isParseError :: Prism' ParseError a -> PactErrorI -> Bool
-isParseError p s = isJust $ preview (_PEParseError . _1 . p) s
+isParseError p s = has (_PEParseError . _1 . p) s
 
 isDesugarError :: Prism' DesugarError a -> PactErrorI -> Bool
-isDesugarError p s = isJust $ preview (_PEDesugarError . _1 . p) s
+isDesugarError p s = has (_PEDesugarError . _1 . p) s
 
 isExecutionError :: Prism' EvalError a -> PactErrorI -> Bool
-isExecutionError p s = isJust $ preview (_PEExecutionError . _1 . p) s
+isExecutionError p s = has (_PEExecutionError . _1 . p) s
 
-runStaticTest :: String -> Text -> (PactErrorI -> Bool) -> Assertion
-runStaticTest label src predicate = do
+isUserRecoverableError :: Prism' UserRecoverableError a -> PactErrorI -> Bool
+isUserRecoverableError p s = has (_PEUserRecoverableError . _1 . p) s
+
+runStaticTest :: String -> Text -> ReplInterpreter -> (PactErrorI -> Bool) -> Assertion
+runStaticTest label src interp predicate = do
   gasLog <- newIORef Nothing
   pdb <- mockPactDb serialisePact_repl_spaninfo
   ee <- defaultEvalEnv pdb replCoreBuiltinMap
@@ -51,7 +54,7 @@ runStaticTest label src predicate = do
             , _replNativesEnabled = True
             }
   stateRef <- newIORef rstate
-  v <- runReplT stateRef (interpretReplProgram source (const (pure ())))
+  v <- runReplT stateRef (interpretReplProgram interp source (const (pure ())))
   case v of
     Left err ->
       assertBool ("Expected Error to match predicate, but got " <> show err <> " instead") (predicate err)
@@ -573,7 +576,7 @@ executionTests =
         (defun foo:string ())
         )
     |])
-  , ("enforce_ns_define_namespace", isExecutionError _DefineNamespaceError, [text|
+  , ("enforce_ns_define_namespace", isExecutionError _NativeExecutionError, [text|
       (module m g (defcap g () true)
         (defun manage (ns guard) false)
         )
@@ -627,7 +630,7 @@ executionTests =
   , ("get_module_unknown", isExecutionError _ModuleDoesNotExist, [text|
       (describe-module 'nonexistent)
       |])
-  , ("reexposed_module_missing_name", isExecutionError _NameNotInScope, [text|
+  , ("reexposed_module_missing_name", isExecutionError _ModuleMemberDoesNotExist, [text|
       (module m g
         (defcap g () true)
 
@@ -650,15 +653,15 @@ executionTests =
   , ("module_gov_keyset_nonexistent", isExecutionError _NoSuchKeySet, [text|
       (module m 'nonexistent (defun f () true))
       |])
-  , ("module_gov_keyset_different", isExecutionError _EvalError, [text|
+  , ("module_gov_keyset_different", isUserRecoverableError _KeysetPredicateFailure, [text|
       (env-data {"ks":["jose"]})
       (define-keyset 'somekeyset (read-keyset 'ks))
       (module m 'somekeyset (defun f () 1))
       |])
-  , ("module_gov_keyset_empty", isExecutionError _ModuleGovernanceFailure, [text|
+  , ("module_gov_keyset_empty", isExecutionError _InvalidKeysetNameFormat, [text|
       (module m "" (defun f () true))
       |])
-  , ("module_gov_keyset_not_in_sigs", isExecutionError _EvalError, [text|
+  , ("module_gov_keyset_not_in_sigs", isUserRecoverableError _KeysetPredicateFailure, [text|
       (env-data { "kall": ["a" "b" "c"], "kadmin": ["admin"] })
       (define-keyset 'kall)
       (define-keyset 'kadmin)
@@ -678,7 +681,7 @@ executionTests =
       |])
 
   -- CEK errors
-  , ("modref_no_ns", isExecutionError _ModRefNotRefined, [text|
+  , ("modref_no_ns", isExecutionError _ModRefImplementsNoInterfaces, [text|
       (module m g (defcap g () true))
       m
       |])
@@ -1080,8 +1083,8 @@ builtinTests =
   , ("at_oob_bound", isExecutionError _ArrayOutOfBoundsException, "(at 3 [1 2 3])")
   , ("at_oob_smaller", isExecutionError _ArrayOutOfBoundsException, "(at -1 [1 2 3])")
   , ("at_oob_empty", isExecutionError _ArrayOutOfBoundsException, "(at 0 [])")
-  , ("at_key_missing", isExecutionError _EvalError, "(at 'bar { 'foo: 1 })")
-  , ("yield_outside", isExecutionError _YieldOutsiteDefPact, "(yield {})")
+  , ("at_key_missing", isExecutionError _ObjectIsMissingField, "(at 'bar { 'foo: 1 })")
+  , ("yield_outside", isExecutionError _YieldOutsideDefPact, "(yield {})")
   , ("resume_no_defpact", isExecutionError _NoActiveDefPactExec, "(resume { 'field := binder } binder)")
   , ("resume_no_yield", isExecutionError _NoYieldInDefPactStep, [text|
       (module m g (defcap g () true)
@@ -1203,6 +1206,10 @@ builtinTests =
 
 tests :: TestTree
 tests =
-  testGroup "CoreStaticTests" (go <$> parseTests <> desugarTests <> executionTests <> builtinTests)
+  testGroup "CoreStaticTests"
+    [ testGroup "CoreStaticTests:CEK" (go interpretEvalBigStep <$> allTests)
+    , testGroup "CoreStaticTests:Direct" (go interpretEvalDirect <$> allTests)
+    ]
   where
-  go (label, p, srcText) = testCase label $ runStaticTest label srcText p
+  allTests = parseTests <> desugarTests <> executionTests <> builtinTests
+  go interp (label, p, srcText) = testCase label $ runStaticTest label srcText interp p

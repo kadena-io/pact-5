@@ -183,10 +183,9 @@ gasSerializeRowData (RowData fields) = do
       traverse_ (chargeGasMString . renderText) keys
 
     gasModRef :: ModRef -> GasM (PactError i) b ()
-    gasModRef (ModRef name implemented refined) = do
+    gasModRef (ModRef name implemented) = do
       chargeGasMString (renderText name)
       traverse_ (chargeGasMString . renderText) implemented
-      (traverse_ . traverse_) (chargeGasMString . renderText) refined
 
     chargeGasMString :: Text.Text -> GasM (PactError i) b ()
     chargeGasMString str = do
@@ -945,7 +944,7 @@ instance Serialise CoreBuiltin where
     _ -> fail "unexpected decoding"
 
 
-instance Serialise ReplBuiltins where
+instance Serialise ReplOnlyBuiltin where
   encode = encodeWord . fromIntegral . fromEnum
   decode = do
     vInd <- toEnum . fromIntegral <$> decodeWord
@@ -1004,8 +1003,8 @@ instance Serialise DefPactGuard where
   decode = DefPactGuard <$> decode <*> decode
 
 instance Serialise ModRef where
-  encode (ModRef mn imp ref) = encode mn <> encode imp <> encode ref
-  decode = ModRef <$> decode <*> decode <*> decode
+  encode (ModRef mn imp) = encode mn <> encode imp
+  decode = ModRef <$> decode <*> decode
 
 instance Serialise (CapToken FullyQualifiedName PactValue) where
   encode (CapToken n a) = encode n <> encode a

@@ -28,7 +28,8 @@ module Pact.Core.IR.Eval.Direct.Evaluator
  , applyLamUnsafe
  , evalCap
  , installCap
- , coreBuiltinRuntime) where
+ , coreBuiltinRuntime
+ , enforcePactValue) where
 
 import Control.Lens hiding (op, from, to, parts)
 import Control.Monad
@@ -37,7 +38,7 @@ import Control.Monad.IO.Class
 import Data.Text(Text)
 import Data.List (find)
 import Data.Foldable (foldl')
-import Data.Maybe(catMaybes, isJust)
+import Data.Maybe(catMaybes)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Bits
 import Data.Either(isLeft, isRight)
@@ -118,7 +119,7 @@ mkDefunClosure d fqn e = case _dfunTerm d of
   Nullary body i ->
     pure (Closure fqn NullaryClosure 0 body (_dfunRType d) e i)
   _ ->
-    failInvariant (_dfunInfo d) ("definition is not a closure: " <> T.pack (show d))
+    failInvariant (_dfunInfo d) (InvariantMalformedDefun fqn)
 
 
 mkDefPactClosure
@@ -191,7 +192,7 @@ evaluate env = \case
       NBound i -> do
         case RAList.lookup (_ceLocal env) i of
           Just v -> return v
-          Nothing -> failInvariant info ("unbound identifier" <> T.pack (show n))
+          Nothing -> failInvariant info (InvariantInvalidBoundVariable (_nName n))
       -- Top level names are not closures, so we wipe the env
       NTopLevel mname mh -> do
         let fqn = FullyQualifiedName mname (_nName n) mh
@@ -206,7 +207,7 @@ evaluate env = \case
             -- this can cause semantic divergences, due to things like provided data.
             -- moreover defcosts are always evaluated in `SysOnly` mode.
             TermConst _term ->
-              failInvariant info "Defconst not fully evaluated"
+              failInvariant info (InvariantDefConstNotEvaluated fqn)
             EvaledConst v ->
               return (VPactValue v)
           Just (DPact d) -> do
@@ -222,20 +223,19 @@ evaluate env = \case
                 clo = CapTokenClosure fqn args (length args) info
             return (VClosure (CT clo))
           Just d ->
-            throwExecutionError info (InvalidDefKind (defKind mname d) "in var position")
+            failInvariant info (InvariantInvalidDefKind (defKind mname d) "in var position")
           Nothing ->
-            throwExecutionError info (NameNotInScope (FullyQualifiedName mname (_nName n) mh))
+            failInvariant info (InvariantUnboundFreeVariable (FullyQualifiedName mname (_nName n) mh))
       NModRef m ifs -> case ifs of
-        [x] -> return (VModRef (ModRef m ifs (Just (S.singleton x))))
-        [] -> throwExecutionError info (ModRefNotRefined (_nName n))
-        _ -> return (VModRef (ModRef m ifs Nothing))
+        [] -> throwExecutionError info (ModRefImplementsNoInterfaces m)
+        _ -> return (VModRef (ModRef m (S.fromList ifs)))
       NDynRef (DynamicRef dArg i) -> case RAList.lookup (view ceLocal env) i of
         Just (VModRef mr) -> do
           modRefHash <- _mHash <$> getModule info (view cePactDb env) (_mrModule mr)
           let nk = NTopLevel (_mrModule mr) modRefHash
           evaluate env (Var (Name dArg nk) info)
-        Just _ -> throwRecoverableError info "dynamic name pointed to non-modref"
-        Nothing -> failInvariant info ("unbound identifier" <> T.pack (show n))
+        Just _ -> throwExecutionError info (DynNameIsNotModRef dArg)
+        Nothing -> failInvariant info (InvariantInvalidBoundVariable (_nName n))
   Constant l _info -> do
     return (VLiteral l)
   App ufn uargs info -> do
@@ -282,7 +282,7 @@ evaluate env = \case
       if b then return (VBool True)
       else do
         msg <- enforceString info =<< evaluate env str
-        throwRecoverableError info msg
+        throwUserRecoverableError info (UserEnforceError msg)
     CEnforceOne str conds ->
       go conds
       where
@@ -293,7 +293,7 @@ evaluate env = \case
         else go xs
       go [] = do
         msg <- enforceString info =<< evaluate env str
-        throwRecoverableError info msg
+        throwUserRecoverableError info (UserEnforceError msg)
 
   CapabilityForm cf info -> case cf of
     WithCapability cap body -> do
@@ -355,7 +355,8 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
   where
   go = do
     d <- getDefCap info fqn
-    when (length args /= length (_dcapArgs d)) $ failInvariant info "Dcap argument length mismatch"
+    when (length args /= length (_dcapArgs d)) $ failInvariant info $
+      (InvariantArgLengthMismatch fqn (length args) (length (_dcapArgs d)))
     let newLocals = RAList.fromList $ fmap VPactValue (reverse args)
         capBody = _dcapTerm d
     -- Todo: clean up the staircase of doom.
@@ -378,7 +379,7 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
                         emittedEvent = fqctToPactEvent origToken <$ guard (ecType == NormalCapEval)
                     installCap info env c' False >>= evalUserManagedCap newLocals capBody emittedEvent
                   Nothing ->
-                    throwExecutionError info (CapNotInstalled fqn)
+                    throwExecutionError info (CapNotInstalled qualCapToken)
               Just managedCap -> do
                 let emittedEvent = fqctToPactEvent origToken <$ guard (ecType == NormalCapEval)
                 evalUserManagedCap newLocals capBody emittedEvent managedCap
@@ -395,7 +396,7 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
                     let c' = set ctName fqn c
                     installCap info env c' False >>= evalAutomanagedCap emittedEvent newLocals capBody
                   Nothing ->
-                    throwExecutionError info (CapNotInstalled fqn)
+                    throwExecutionError info (CapNotInstalled qualCapToken)
               Just managedCap ->
                 evalAutomanagedCap emittedEvent newLocals capBody managedCap
       DefEvent -> do
@@ -431,7 +432,7 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
     ManagedParam mpfqn oldV managedIx -> do
       dfun <- getDefun info mpfqn
       dfunClo <- mkDefunClosure dfun mpfqn env
-      newV <- maybe (failInvariant info "Managed param does not exist at index") pure (args ^? ix managedIx)
+      newV <- maybe (failInvariant info (InvariantInvalidManagedCapIndex managedIx fqn)) pure (args ^? ix managedIx)
       -- Set the mgr fun to evaluate after we apply the capability body
       -- NOTE: test-capability doesn't actually run the manager function, it just runs the cap pop then
       -- pops it. It would be great to do without this, but a lot of our regressions rely on this.
@@ -453,10 +454,10 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
         let mcap' = unsafeUpdateManagedParam updatedV managedCap
         (esCaps . csManaged) %== S.insert mcap'
       evalWithCapBody info popType (Just qualCapToken) emitted env contbody
-    _ -> failInvariant info "Invalid managed cap type"
+    _ -> failInvariant info (InvariantInvalidManagedCapKind "expected user managed, received automanaged")
   evalAutomanagedCap emittedEvent env' capBody managedCap = case _mcManaged managedCap of
     AutoManaged b -> do
-      if b then throwRecoverableError info "Automanaged capability used more than once"
+      if b then throwUserRecoverableError info OneShotCapAlreadyUsed
       else do
         let newManaged = AutoManaged True
         oldCapsBeingEvaluated <- useEvalState (esCaps.csCapsBeingEvaluated)
@@ -468,7 +469,7 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
         (esCaps . csCapsBeingEvaluated) .== oldCapsBeingEvaluated
 
         evalWithCapBody info popType Nothing emittedEvent env contbody
-    _ -> failInvariant info "Invalid managed cap type"
+    _ -> failInvariant info (InvariantInvalidManagedCapKind "expected automanaged, received user managed")
 
 evalWithCapBody
   :: (MonadEval b i m)
@@ -490,7 +491,7 @@ evalWithCapBody info cappop mcap mevent env capbody = do
         setEvalState (esCaps . csSlots)  (CapSlot cap tl:rest)
         v <- evaluate env capbody
         popCap info cappop v
-      [] -> failInvariant info "In CapBodyC but with no caps in stack"
+      [] -> failInvariant info InvariantEmptyCapStackFailure
 
 popCap
   :: (MonadEval b i m)
@@ -507,7 +508,7 @@ popCap info cappop v = case cappop of
             caps' = over (_head . csComposed) (++ csList) cs
         setEvalState (esCaps . csSlots) caps'
         return v
-      [] -> failInvariant info "Invariant failure: composed cap with empty cap stack"
+      [] -> failInvariant info InvariantEmptyCapStackFailure
 
 
 
@@ -525,9 +526,9 @@ nameToFQN info env (Name n nk) = case nk of
     Just (VModRef mr) -> do
       md <- getModule info (view cePactDb env) (_mrModule mr)
       pure (FullyQualifiedName (_mrModule mr) dArg (_mHash md))
-    Just _ -> throwExecutionError info (DynNameIsNotModRef dArg)
-    Nothing -> failInvariant info ("unbound identifier " <> n)
-  _ -> failInvariant info ("invalid name in fq position " <> n)
+    Just _ -> throwExecutionError info (DynNameIsNotModRef n)
+    Nothing -> failInvariant info (InvariantInvalidBoundVariable n)
+  _ -> failInvariant info (InvariantInvalidBoundVariable n)
 
 guardTable
   :: (MonadEval b i m)
@@ -570,10 +571,14 @@ createUserGuard info fqn args =
   lookupFqName fqn >>= \case
     Just (Dfun _) ->
       return (VGuard (GUserGuard (UserGuard (fqnToQualName fqn) args)))
-    Just _ ->
-      throwRecoverableError  info "create-user-guard pointing to non-guard"
+    Just d ->
+      -- Note: this error is not recoverable in prod
+      -- <interactive>:0:26:Error: User guard closure must be defun, found: defcap
+      -- at <interactive>:0:7: (create-user-guard ((defcap m.g:<a> ())))
+      -- at <interactive>:0:0: (try 1 (native `create-user-guard`  Defines a custom guar...)
+      throwExecutionError info $ UserGuardMustBeADefun (fqnToQualName fqn) (defKind (_fqModule fqn) d)
     Nothing ->
-      failInvariant info "User guard pointing to no defn"
+      failInvariant info (InvariantUnboundFreeVariable fqn)
 
 enforceNotWithinDefcap
   :: (MonadEval b i m)
@@ -587,33 +592,33 @@ enforceNotWithinDefcap info env form =
 enforceBool :: (MonadEval b i m) => i -> EvalValue b i m -> m Bool
 enforceBool info = \case
   VBool b -> pure b
-  _ -> failInvariant info "Expected bool"
+  VPactValue v' -> throwExecutionError info (ExpectedBoolValue v')
+  _ -> throwExecutionError info ExpectedPactValue
 
 enforceBool' :: (MonadEval b i m) => i -> EvalValue b i m -> m (EvalValue b i m)
 enforceBool' info = \case
   v@VBool{} -> pure v
-  _ -> failInvariant info "Expected bool"
+  VPactValue v' -> throwExecutionError info (ExpectedBoolValue v')
+  _ -> throwExecutionError info ExpectedPactValue
 
 enforceString :: (MonadEval b i m) => i -> EvalValue b i m -> m Text
 enforceString info = \case
   VString b -> pure b
-  _ -> failInvariant info "Expected bool"
-
-enforceStringPV :: (MonadEval b i m) => i -> PactValue -> m Text
-enforceStringPV info = \case
-  PString b -> pure b
-  _ -> failInvariant info "Expected bool"
+  VPactValue v' -> throwExecutionError info $ ExpectedStringValue v'
+  _ -> throwExecutionError info $ ExpectedPactValue
 
 
 enforceCapToken :: (MonadEval b i m) => i -> EvalValue b i m -> m (CapToken FullyQualifiedName PactValue)
 enforceCapToken info = \case
   VCapToken b -> pure b
-  _ -> failInvariant info "Expected cap token"
+  VPactValue v' -> throwExecutionError info $ ExpectedCapToken v'
+  _ -> throwExecutionError info $ ExpectedPactValue
 
 enforceBoolValue :: (MonadEval b i m) => i -> EvalValue b i m -> m (EvalValue b i m)
 enforceBoolValue info = \case
   VBool b -> pure (VBool b)
-  _ -> failInvariant info "Expected bool"
+  VPactValue v' -> throwExecutionError info (ExpectedBoolValue v')
+  _ -> throwExecutionError info ExpectedPactValue
 
 enforceUserAppClosure :: (MonadEval b i m) => i -> EvalValue b i m -> m (CanApply b i m)
 enforceUserAppClosure info = \case
@@ -624,7 +629,7 @@ enforceUserAppClosure info = \case
     DPC clo -> pure (DPC clo)
     CT clo -> pure (CT clo)
     _ -> throwExecutionError info CannotApplyPartialClosure
-  _ -> failInvariant info "Cannot apply non-function to arguments"
+  _ -> throwExecutionError info CannotApplyValueToNonClosure
 
 
 enforcePactValue :: (MonadEval b i m) => i -> EvalValue b i m -> m PactValue
@@ -637,15 +642,15 @@ enforcePactValue' info = \case
   VPactValue pv -> pure (VPactValue pv)
   _ -> throwExecutionError info ExpectedPactValue
 
-catchRecoverable :: forall b i m a. (MonadEval b i m) => m a -> (i -> RecoverableError -> m a) -> m a
+catchRecoverable :: forall b i m a. (MonadEval b i m) => m a -> (i -> UserRecoverableError -> m a) -> m a
 catchRecoverable act catch = do
   eState <- evalStateToErrorState <$> getEvalState
   catchError act (handler eState)
   where
   handler :: ErrorState i -> PactError i -> m a
-  handler eState (PERecoverableError r i) = do
+  handler eState (PEUserRecoverableError err _ i) = do
     modifyEvalState (restoreFromErrorState eState)
-    catch i r
+    catch i err
   handler _ e = throwError e
 
 readOnlyEnv :: DirectEnv b i m -> DirectEnv b i m
@@ -703,12 +708,12 @@ evalWithStackFrame info sf mty act = do
   v <- act
   esStack %== safeTail
   pv <- enforcePactValue info v
-  pv' <- maybeTCType info pv mty
+  maybeTCType info mty pv
 #ifdef WITH_FUNCALL_TRACING
   timeExit <- liftIO $ getTime ProcessCPUTime
   esTraceOutput %== (TraceFunctionExit timeExit sf info:)
 #endif
-  return (VPactValue pv')
+  return (VPactValue pv)
 {-# INLINE evalWithStackFrame #-}
 
 applyLamUnsafe
@@ -728,9 +733,9 @@ applyLam vc@(C (Closure fqn ca arity term mty env cloi)) args
     ArgClosure cloargs -> do
       chargeGasArgs cloi (GAApplyLam (renderFullyQualName fqn) argLen)
       args' <- traverse (enforcePactValue cloi) args
-      tcArgs <- zipWithM (\arg (Arg _ ty _) -> VPactValue <$> maybeTCType cloi arg ty) args' (NE.toList cloargs)
+      zipWithM_ (\arg (Arg _ ty _) -> maybeTCType cloi ty arg) args' (NE.toList cloargs)
       let sf = StackFrame fqn args' SFDefun cloi
-          varEnv = RAList.fromList (reverse tcArgs)
+          varEnv = RAList.fromList (reverse args)
       evalWithStackFrame cloi sf mty (evaluate (set ceLocal varEnv env) term)
     NullaryClosure -> do
       evalWithStackFrame cloi (StackFrame fqn [] SFDefun cloi) mty $ evaluate (set ceLocal mempty env) term
@@ -747,7 +752,8 @@ applyLam vc@(C (Closure fqn ca arity term mty env cloi)) args
   argLen = length args
   -- Here we enforce an argument to a user fn is a
   apply' e (Arg _ ty _:tys) (x:xs) = do
-    x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue cloi x
+    x' <- enforcePactValue cloi x
+    maybeTCType cloi ty x'
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e (ty:tys) [] = do
     let env' = set ceLocal e env
@@ -776,7 +782,8 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args
   argLen = length args
   -- Todo: runtime TC here
   apply' e (Arg _ ty _:tys) (x:xs) = do
-    x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue cloi x
+    x' <- enforcePactValue cloi x
+    maybeTCType cloi ty x'
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e [] [] = do
     evaluate (set ceLocal e env) term
@@ -788,7 +795,8 @@ applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args = do
   apply' (view ceLocal env) (NE.toList argtys) args
   where
   apply' e (Arg _ ty _:tys) (x:xs) = do
-    x' <- (\pv -> maybeTCType cloi pv ty) =<< enforcePactValue cloi x
+    x' <- enforcePactValue cloi x
+    maybeTCType cloi ty x'
     apply' (RAList.cons (VPactValue x') e) tys xs
   apply' e [] [] = do
     case li of
@@ -828,8 +836,8 @@ applyLam (CT (CapTokenClosure fqn argtys arity i)) args
   | arity == argLen = do
     chargeGasArgs i (GAApplyLam (renderQualName (fqnToQualName fqn)) (fromIntegral argLen))
     args' <- traverse (enforcePactValue i) args
-    tcArgs <- zipWithM (\arg ty -> maybeTCType i arg ty) args' argtys
-    return (VPactValue (PCapToken (CapToken fqn tcArgs)))
+    zipWithM_ (\arg ty -> maybeTCType i ty arg) args' argtys
+    return (VPactValue (PCapToken (CapToken fqn args')))
   | otherwise = throwExecutionError i ClosureAppliedToTooManyArgs
   where
   argLen = length args
@@ -839,9 +847,9 @@ applyLam (DPC (DefPactClosure fqn argtys arity env i)) args
       -- Todo: defpact has much higher overhead, we must charge a bit more gas for this
       chargeGasArgs i (GAApplyLam (renderQualName (fqnToQualName fqn)) (fromIntegral argLen))
       args' <- traverse (enforcePactValue i) args
-      tcArgs <- zipWithM (\arg (Arg _ ty _) -> maybeTCType i arg ty) args' (NE.toList cloargs)
-      let pc = DefPactContinuation (fqnToQualName fqn) tcArgs
-          env' = set ceLocal (RAList.fromList (reverse (VPactValue <$> tcArgs))) env
+      zipWithM_ (\arg (Arg _ ty _) -> maybeTCType i ty arg) args' (NE.toList cloargs)
+      let pc = DefPactContinuation (fqnToQualName fqn) args'
+          env' = set ceLocal (RAList.fromList (reverse args)) env
       initPact i pc env'
     NullaryClosure -> do
       chargeGasArgs i (GAApplyLam (renderQualName (fqnToQualName fqn)) (fromIntegral argLen))
@@ -886,7 +894,8 @@ enforceGuard info env g = case g of
     curDpid <- getDefPactId info
     if curDpid == dpid
        then return True
-       else throwRecoverableError info "Capability pact guard failed: invalid pact id"
+       else throwUserRecoverableError info $
+         CapabilityPactGuardInvalidPactId curDpid dpid
 
 guardForModuleCall
   :: (MonadEval b i m)
@@ -948,26 +957,26 @@ runUserGuard info env (UserGuard qn args) =
       clo <- mkDefunClosure d (qualNameToFqn qn mh) env'
       -- Todo: sys only here
       True <$ (applyLam (C clo) (VPactValue <$> args) >>= enforcePactValue info)
-    (d, _) -> throwExecutionError info (InvalidDefKind (defKind (_qnModName qn) d) "run-user-guard")
+    (d, _) -> throwExecutionError info (UserGuardMustBeADefun qn (defKind (_qnModName qn) d))
 
 enforceCapGuard
   :: (MonadEval b i m)
   => i
   -> CapabilityGuard QualifiedName PactValue
   -> m Bool
-enforceCapGuard info (CapabilityGuard qn args mpid) = case mpid of
+enforceCapGuard info cg@(CapabilityGuard qn args mpid) = case mpid of
   Nothing -> enforceCap
   Just pid -> do
     currPid <- getDefPactId info
     if currPid == pid then enforceCap
-    else throwRecoverableError info "Capability pact guard failed: invalid pact id"
+    else throwUserRecoverableError info $
+      CapabilityPactGuardInvalidPactId currPid pid
   where
   enforceCap = do
     cond <- isCapInStack (CapToken qn args)
     if cond then return True
     else do
-      let errMsg = "Capability guard enforce failure cap not in scope: " <> renderQualName qn
-      throwRecoverableError info errMsg
+      throwUserRecoverableError info $ CapabilityGuardNotAcquired cg
 
 -- Keyset Code
 isKeysetInSigs
@@ -983,15 +992,11 @@ isKeysetInSigs info env (KeySet kskeys ksPred) = do
   where
   matchKey k _ = k `elem` kskeys
   atLeast t m = m >= t
-  elide pk = T.take 8 pk <> "..."
   count = S.size kskeys
   run p matched =
     if p count matched then pure True
-    else do
-      let
-       errMsg = "Keyset failure (" <> predicateToText ksPred <> "): "
-               <> Pretty.renderCompactText (map (elide . renderPublicKeyText) $ S.toList kskeys)
-      throwRecoverableError info errMsg
+    else
+      throwUserRecoverableError info $ KeysetPredicateFailure ksPred kskeys
   runPred matched =
     case ksPred of
       KeysAll -> run atLeast matched
@@ -1005,9 +1010,9 @@ isKeysetInSigs info env (KeySet kskeys ksPred) = do
         (Dfun d, mh) -> do
           clo <- mkDefunClosure d (qualNameToFqn qn mh) env
           p <- enforceBool info =<< applyLam (C clo) [VInteger (fromIntegral count), VInteger (fromIntegral matched)]
-          unless p $ throwRecoverableError info "Keyset enforce failure"
+          unless p $ throwUserRecoverableError info $ KeysetPredicateFailure ksPred kskeys
           pure p
-        _ -> failInvariant info "invalid def type for custom keyset predicate"
+        _ -> throwExecutionError info (InvalidCustomKeysetPredicate "expected defun")
     TBN (BareName bn) -> do
       m <- viewEvalEnv eeNatives
       case M.lookup bn m of
@@ -1015,10 +1020,10 @@ isKeysetInSigs info env (KeySet kskeys ksPred) = do
           let builtins = view ceBuiltins env
           let nativeclo = builtins info b env
           p <- enforceBool info =<< applyLam (N nativeclo) [VInteger (fromIntegral count), VInteger (fromIntegral matched)]
-          unless p $ throwRecoverableError info "keyset enforce failure"
+          unless p $ throwUserRecoverableError info $ KeysetPredicateFailure ksPred kskeys
           pure p
         Nothing ->
-          failInvariant info "could not find native definition for custom predicate"
+          throwExecutionError info (InvalidCustomKeysetPredicate "expected native")
 
 isKeysetNameInSigs
   :: (MonadEval b i m)
@@ -1044,10 +1049,10 @@ requireCap
   -> FQCapToken
   -> m (EvalValue b i m)
 requireCap info (CapToken fqn args) = do
-  capInStack <- isCapInStack (CapToken (fqnToQualName fqn) args)
+  let qualCapToken = CapToken (fqnToQualName fqn) args
+  capInStack <- isCapInStack qualCapToken
   if capInStack then return (VBool True)
-  else throwRecoverableError info
-      ("require-capability: not granted: (" <> renderQualName (fqnToQualName fqn) <> ")")
+  else throwUserRecoverableError info (CapabilityNotGranted qualCapToken)
 
 isCapInStack
   :: (MonadEval b i m)
@@ -1118,7 +1123,7 @@ installCap info _env (CapToken fqn args) autonomous = do
             ctFiltered = CapToken (fqnToQualName fqn) (filterIndex paramIx args)
             mcap = ManagedCap ctFiltered ct mcapType
         capAlreadyInstalled <- S.member mcap <$> useEvalState (esCaps . csManaged)
-        when capAlreadyInstalled $ throwExecutionError info (CapAlreadyInstalled fqn)
+        when capAlreadyInstalled $ throwExecutionError info (CapAlreadyInstalled ct)
         (esCaps . csManaged) %== S.insert mcap
         when autonomous $
           (esCaps . csAutonomous) %== S.insert ct
@@ -1127,7 +1132,7 @@ installCap info _env (CapToken fqn args) autonomous = do
         let mcapType = AutoManaged False
             mcap = ManagedCap ct ct mcapType
         capAlreadyInstalled <- S.member mcap <$> useEvalState (esCaps . csManaged)
-        when capAlreadyInstalled $ throwExecutionError info (CapAlreadyInstalled fqn)
+        when capAlreadyInstalled $ throwExecutionError info (CapAlreadyInstalled ct)
         (esCaps . csManaged) %== S.insert mcap
         when autonomous $
           (esCaps . csAutonomous) %== S.insert ct
@@ -1190,9 +1195,7 @@ applyPact i pc ps cenv nested = useEvalState esDefPactExec >>= \case
       -- `initPact` ensures that the step is 0,
       -- and there are guaranteed more than 0 steps due to how the parser is written.
       -- `resumePact` does a similar check before calling this function.
-      when (ps ^. psStep >= nSteps) $ failInvariant i "Step not found"
-
-      step <- maybe (failInvariant i "Step not found") pure
+      step <- maybe (throwExecutionError i (InvalidDefPactStepSupplied ps nSteps)) pure
         $ _dpSteps defPact ^? ix (ps ^. psStep)
 
       let pe = DefPactExec
@@ -1218,9 +1221,9 @@ applyPact i pc ps cenv nested = useEvalState esDefPactExec >>= \case
 
       -- After evaluation, check the result state
       useEvalState esDefPactExec >>= \case
-        Nothing -> failInvariant i "No PactExec found"
+        Nothing -> failInvariant i $ InvariantPactExecNotInEnv Nothing
         Just resultExec -> case cenv ^. ceDefPactStep of
-          Nothing -> failInvariant i "Expected a PactStep in the environment"
+          Nothing -> failInvariant i (InvariantPactStepNotInEnv Nothing)
           Just ps' -> do
             let
               pdb = view cePactDb cenv
@@ -1232,7 +1235,7 @@ applyPact i pc ps cenv nested = useEvalState esDefPactExec >>= \case
             emitXChainEvents (_psResume ps') resultExec
             return result
 
-    _otherwise -> failInvariant i "defpact continuation does not point to defun"
+    (_, mh) -> failInvariant i (InvariantExpectedDefPact (qualNameToFqn (pc ^. pcName) mh))
 {-# SPECIALIZE applyPact
    :: ()
    -> DefPactContinuation QualifiedName PactValue
@@ -1250,12 +1253,11 @@ applyNestedPact
   -> DirectEnv b i m
   -> m (EvalValue b i m)
 applyNestedPact i pc ps cenv = useEvalState esDefPactExec >>= \case
-  Nothing -> failInvariant i $
-    "applyNestedPact: Nested DefPact attempted but no pactExec found" <> T.pack (show pc)
+  Nothing -> failInvariant i $ InvariantPactExecNotInEnv Nothing
 
   Just pe -> getModuleMemberWithHash i (_cePactDb cenv) (pc ^. pcName) >>= \case
     (DPact defPact, mh) -> do
-      step <- maybe (failInvariant i "Step not found") pure
+      step <- maybe (throwExecutionError i (InvalidDefPactStepSupplied ps (_peStepCount pe))) pure
         $ _dpSteps defPact ^? ix (ps ^. psStep)
 
       let
@@ -1302,14 +1304,14 @@ applyNestedPact i pc ps cenv = useEvalState esDefPactExec >>= \case
         (True, Step{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
 
       useEvalState esDefPactExec >>= \case
-        Nothing -> failInvariant i "No DefPactExec found"
+        Nothing -> failInvariant i $ InvariantPactExecNotInEnv Nothing
         Just resultExec -> do
           when (nestedPactsNotAdvanced resultExec ps) $
             throwExecutionError i (NestedDefpactsNotAdvanced (_peDefPactId resultExec))
           let npe = pe & peNestedDefPactExec %~ M.insert (_psDefPactId ps) resultExec
           setEvalState esDefPactExec (Just npe)
           return result
-    _otherwise -> failInvariant i "applyNestedPact: Expected a DefPact bot got something else"
+    (_, mh) -> failInvariant i (InvariantExpectedDefPact (qualNameToFqn (pc ^. pcName) mh))
 {-# SPECIALIZE applyNestedPact
    :: ()
    -> DefPactContinuation QualifiedName PactValue
@@ -1357,7 +1359,7 @@ resumePact i env crossChainContinuation = viewEvalEnv eeDefPactStep >>= \case
             throwExecutionError i (DefPactIdMismatch (_psDefPactId ps) (_peDefPactId pe))
 
           when (_psStep ps < 0 || _psStep ps >= _peStepCount pe) $
-            throwExecutionError i (InvalidDefPactStepSupplied ps pe)
+            throwExecutionError i (InvalidDefPactStepSupplied ps (_peStepCount pe))
 
           if _psRollback ps
             then when (_psStep ps /= _peStep pe) $
@@ -1441,7 +1443,7 @@ emitEvent info pe = findCallingModule >>= \case
       if ctModule == mn then do
         esEvents %== (++ [pe])
       else throwExecutionError info (EventDoesNotMatchModule mn)
-    Nothing -> failInvariant info "emit-event called outside of module code"
+    Nothing -> throwExecutionError info (EventDoesNotMatchModule (_peModule pe))
 
 fqctToPactEvent :: CapToken FullyQualifiedName PactValue -> PactEvent PactValue
 fqctToPactEvent (CapToken fqn args) = PactEvent (_fqName fqn) args (_fqModule fqn) (_fqHash fqn)
@@ -2089,8 +2091,7 @@ coreAccess info b _env = \case
     case M.lookup (Field field) o of
       Just v -> return (VPactValue v)
       Nothing ->
-        let msg = "Object does not have field: " <> field
-        in throwRecoverableError info msg
+        throwExecutionError info (ObjectIsMissingField (Field field) (ObjectData o))
   args -> argsError info b args
 
 coreIsCharset :: (MonadEval b i m) => NativeFunction b i m
@@ -2100,7 +2101,7 @@ coreIsCharset info b _env = \case
     case i of
       0 -> return $ VBool $ T.all Char.isAscii s
       1 -> return $ VBool $ T.all Char.isLatin1 s
-      _ -> throwRecoverableError info "Unsupported character set"
+      _ -> throwNativeExecutionError info b "Unsupported character set"
   args -> argsError info b args
 
 coreYield :: (MonadEval b i m) => NativeFunction b i m
@@ -2112,7 +2113,7 @@ coreYield info b _env = \case
   go o mcid = do
     mpe <- useEvalState esDefPactExec
     case mpe of
-      Nothing -> throwExecutionError info YieldOutsiteDefPact
+      Nothing -> throwExecutionError info YieldOutsideDefPact
       Just pe -> case mcid of
         Nothing -> do
           esDefPactExec . _Just . peYield .== Just (Yield o Nothing Nothing)
@@ -2120,7 +2121,7 @@ coreYield info b _env = \case
         Just cid -> do
           sourceChain <- viewEvalEnv (eePublicData . pdPublicMeta . pmChainId)
           p <- provenanceOf cid
-          when (_peStepHasRollback pe) $ failInvariant info "Cross-chain yield not allowed in step with rollback"
+          when (_peStepHasRollback pe) $ throwExecutionError info $ EvalError "Cross-chain yield not allowed in step with rollback"
           esDefPactExec . _Just . peYield .== Just (Yield o (Just p) (Just sourceChain))
           return (VObject o)
   provenanceOf tid =
@@ -2130,7 +2131,7 @@ corePactId :: (MonadEval b i m) => NativeFunction b i m
 corePactId info b _env = \case
   [] -> useEvalState esDefPactExec >>= \case
     Just dpe -> return (VString (_defpactId (_peDefPactId dpe)))
-    Nothing -> throwRecoverableError info "pact-id: not in pact execution"
+    Nothing -> throwExecutionError info NotInDefPactExecution
   args -> argsError info b args
 
 enforceYield
@@ -2202,7 +2203,7 @@ coreEnforceGuard info b env = \case
   [VString s] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
     case parseAnyKeysetName s of
-      Left {} -> throwRecoverableError info "incorrect keyset name format"
+      Left {} -> throwNativeExecutionError info b "incorrect keyset name format"
       Right ksn ->
         VBool <$> isKeysetNameInSigs info env ksn
   args -> argsError info b args
@@ -2212,11 +2213,11 @@ keysetRefGuard info b env = \case
   [VString g] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length g
     case parseAnyKeysetName g of
-      Left {} -> throwRecoverableError info "incorrect keyset name format"
+      Left {} -> throwNativeExecutionError info b "incorrect keyset name format"
       Right ksn -> do
         let pdb = view cePactDb env
         liftDbFunction info (readKeySet pdb ksn) >>= \case
-          Nothing -> throwRecoverableError info "no such keyset defined: "
+          Nothing -> throwExecutionError info (NoSuchKeySet ksn)
           Just _ -> return (VGuard (GKeySetRef ksn))
   args -> argsError info b args
 
@@ -2233,6 +2234,15 @@ coreDec :: (MonadEval b i m) => NativeFunction b i m
 coreDec info b _env = \case
   [VInteger i] -> return $ VDecimal $ Decimal 0 i
   args -> argsError info b args
+
+--------------------------------------------------
+-- Env-read* functions
+--------------------------------------------------
+
+-- | Throw a recoverable error to be used in the read-* family of functions
+throwReadError :: (MonadError (PactError info) m, MonadEvalState b info m,  IsBuiltin b) => info -> b -> m a
+throwReadError info b =
+  throwUserRecoverableError info $ EnvReadFunctionFailure  (builtinName b)
 
 {-
 [Note: Parsed Integer]
@@ -2282,11 +2292,11 @@ coreReadInteger info b _env = \case
             chargeGasArgs info $ GStrOp $ StrOpConvToInt $ T.length raw
             case parseNumLiteral raw of
               Just (LInteger i) -> return (VInteger i)
-              _ -> throwRecoverableError info "read-integer failure"
-
-          _ -> throwRecoverableError info "read-integer failure"
-      _ -> throwRecoverableError info "read-integer failure"
+              _ -> throwReadError info b
+          _ -> throwReadError info b
+      _ -> throwReadError info b
   args -> argsError info b args
+
 
 coreReadMsg :: (MonadEval b i m) => NativeFunction b i m
 coreReadMsg info b _env = \case
@@ -2296,8 +2306,8 @@ coreReadMsg info b _env = \case
         chargeGasArgs info $ GObjOp $ ObjOpLookup s $ M.size envData
         case M.lookup (Field s) envData of
           Just pv -> return (VPactValue pv)
-          _ -> throwRecoverableError info "read-msg failure"
-      _ -> throwRecoverableError info "read-msg failure: data is not an object"
+          _ -> throwReadError info b
+      _ -> throwReadError info b
   [] -> do
     envData <- viewEvalEnv eeMsgBody
     return (VPactValue envData)
@@ -2334,9 +2344,9 @@ coreReadDecimal info b _env = \case
             case parseNumLiteral raw of
               Just (LInteger i) -> return (VDecimal (Decimal 0 i))
               Just (LDecimal l) -> return (VDecimal l)
-              _ -> throwRecoverableError info "read-decimal failure"
-          _ -> throwRecoverableError info "read-decimal failure"
-      _ -> throwRecoverableError info "read-decimal failure"
+              _ -> throwReadError info b
+          _ -> throwReadError info b
+      _ -> throwReadError info b
   args -> argsError info b args
 
 coreReadString :: (MonadEval b i m) => NativeFunction b i m
@@ -2347,8 +2357,8 @@ coreReadString info b _env = \case
         chargeGasArgs info $ GObjOp $ ObjOpLookup s $ M.size envData
         case M.lookup (Field s) envData of
           Just (PString p) -> return (VString p)
-          _ -> throwRecoverableError info "read-string failure"
-      _ -> throwRecoverableError info "read-string failure"
+          _ -> throwReadError info b
+      _ -> throwReadError info b
   args -> argsError info b args
 
 readKeyset' :: (MonadEval b i m) => i -> T.Text -> m (Maybe KeySet)
@@ -2399,9 +2409,9 @@ coreReadKeyset info b _env = \case
       Just ks -> do
         shouldEnforce <- isExecutionFlagSet FlagEnforceKeyFormats
         if shouldEnforce && isLeft (enforceKeyFormats (const ()) ks)
-           then throwRecoverableError info "Invalid keyset"
+           then throwExecutionError info (InvalidKeysetFormat ks)
            else return (VGuard (GKeyset ks))
-      Nothing -> throwRecoverableError info "read-keyset failure"
+      Nothing -> throwReadError info b
   args -> argsError info b args
 
 
@@ -2431,7 +2441,7 @@ dbSelect info b env = \case
   [VTable tv, VClosure clo] ->
     selectRead tv clo Nothing
   [VTable tv, VList li, VClosure clo] -> do
-    fields' <- traverse (fmap Field . enforceStringPV info) (V.toList li)
+    fields' <- traverse (fmap Field . asString info b) (V.toList li)
     selectRead tv clo (Just fields')
   args -> argsError info b args
   where
@@ -2449,7 +2459,7 @@ dbSelect info b env = \case
           cond <- enforceBool info =<< applyLam clo [VObject r]
           if cond then pure $ Just r
           else pure Nothing
-        Nothing -> failInvariant info "Select keys returned a key that did not exist"
+        Nothing -> failInvariant info (InvariantNoSuchKeyInTable (_tvName tv) k)
 
 
 
@@ -2471,7 +2481,7 @@ foldDb info b env = \case
             pure (Just v)
           else pure Nothing
         Nothing ->
-          failInvariant info "foldDB read a key that is not in the database"
+          failInvariant info (InvariantNoSuchKeyInTable (_tvName tv) rk)
     pdb = _cePactDb env
 
   args -> argsError info b args
@@ -2487,7 +2497,7 @@ readUserTable info env tv rk = do
   liftDbFunction info (_pdbRead (_cePactDb env) (tvToDomain tv) rk) >>= \case
     Just rd ->
       return rd
-    Nothing -> throwRecoverableError info "no such read object"
+    Nothing -> throwUserRecoverableError info $ NoSuchObjectInDb (_tvName tv) rk
 
 dbRead :: (MonadEval b i m) => NativeFunction b i m
 dbRead info b env = \case
@@ -2522,18 +2532,6 @@ dbWrite = write' Write
 dbInsert :: (MonadEval b i m) => NativeFunction b i m
 dbInsert = write' Insert
 
-checkSchema :: M.Map Field PactValue -> Schema -> Bool
-checkSchema o (Schema _ sc) = isJust $ do
-  let keys = M.keys o
-  when (keys /= M.keys sc) Nothing
-  traverse_ go (M.toList o)
-  where
-  go (k, v) = M.lookup k sc >>= (`checkPvType` v)
-
-checkPartialSchema :: M.Map Field PactValue -> Schema -> Bool
-checkPartialSchema o (Schema _ sc) =
-  M.isSubmapOfBy (\obj ty -> isJust (checkPvType ty obj)) o sc
-
 write' :: (MonadEval b i m) => WriteType -> NativeFunction b i m
 write' wt info b env = \case
   [VTable tv, VString key, VObject rv] -> do
@@ -2546,7 +2544,7 @@ write' wt info b env = \case
       chargeGasArgs info (GWrite rvSize)
       _ <- liftGasM info $ _pdbWrite pdb wt (tvToDomain tv) (RowKey key) rdata
       return (VString "Write succeeded")
-    else throwRecoverableError info "object does not match schema"
+    else throwExecutionError info (WriteValueDidNotMatchSchema (_tvSchema tv) (ObjectData rv))
   args -> argsError info b args
 
 dbUpdate :: (MonadEval b i m) => NativeFunction b i m
@@ -2567,7 +2565,7 @@ dbKeys info b env = \case
 dbTxIds :: (MonadEval b i m) => NativeFunction b i m
 dbTxIds info b env = \case
   [VTable tv, VInteger tid] -> do
-    checkNonLocalAllowed info
+    checkNonLocalAllowed info b
     guardTable info env tv GtTxIds
     let pdb = _cePactDb env
     ks <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) (TxId (fromIntegral tid)))
@@ -2579,7 +2577,7 @@ dbTxIds info b env = \case
 dbTxLog :: (MonadEval b i m) => NativeFunction b i m
 dbTxLog info b env = \case
   [VTable tv, VInteger tid] -> do
-    checkNonLocalAllowed info
+    checkNonLocalAllowed info b
     guardTable info env tv GtTxLog
     let txId = TxId (fromInteger tid)
         pdb = _cePactDb env
@@ -2597,7 +2595,7 @@ dbTxLog info b env = \case
 dbKeyLog :: (MonadEval b i m) => NativeFunction b i m
 dbKeyLog info b env = \case
   [VTable tv, VString key, VInteger tid] -> do
-    checkNonLocalAllowed info
+    checkNonLocalAllowed info b
     -- let cont' = BuiltinC env info (KeyLogC tv (RowKey key) tid) cont
     guardTable info env tv GtKeyLog
     let txId = TxId (fromInteger tid)
@@ -2625,7 +2623,7 @@ defineKeySet' info env ksname newKs  = do
   let pdb = view cePactDb env
   ignoreNamespaces <- not <$> isExecutionFlagSet FlagRequireKeysetNs
   case parseAnyKeysetName ksname of
-    Left {} -> throwRecoverableError info "incorrect keyset name format"
+    Left {} -> throwExecutionError info (InvalidKeysetNameFormat ksname)
     Right ksn -> do
       let writeKs = do
             newKsSize <- sizeOf SizeOfV0 newKs
@@ -2638,7 +2636,7 @@ defineKeySet' info env ksname newKs  = do
           writeKs
         Nothing | ignoreNamespaces -> writeKs
         Nothing | otherwise -> useEvalState (esLoaded . loNamespace) >>= \case
-          Nothing -> throwRecoverableError info "Cannot define a keyset outside of a namespace"
+          Nothing -> throwExecutionError info CannotDefineKeysetOutsideNamespace
           Just (Namespace ns uGuard _adminGuard) -> do
             when (Just ns /= _keysetNs ksn) $ throwExecutionError info (MismatchingKeysetNamespace ns)
             _ <- enforceGuard info env uGuard
@@ -2654,7 +2652,7 @@ defineKeySet info b env = \case
     readKeyset' info ksname >>= \case
       Just newKs ->
         defineKeySet' info env ksname newKs
-      Nothing -> throwRecoverableError info "read-keyset failure"
+      Nothing -> throwUserRecoverableError info $ EnvReadFunctionFailure  (builtinName b)
   args -> argsError info b args
 
 --------------------------------------------------
@@ -2672,13 +2670,9 @@ requireCapability info b _env = \case
 
 composeCapability :: (MonadEval b i m) => NativeFunction b i m
 composeCapability info b env = \case
-  [VCapToken ct] ->
-    useEvalState esStack >>= \case
-      sf:_ -> do
-        -- Todo: compose-capability called outside of capability needs a better error
-        when (_sfFnType sf /= SFDefcap) $ failInvariant info "compose-cap"
-        composeCap info env ct
-      _ -> failInvariant info "compose-cap at the top level"
+  [VCapToken ct] -> do
+    enforceStackTopIsDefcap info b
+    composeCap info env ct
   args -> argsError info b args
 
 installCapability :: (MonadEval b i m) => NativeFunction b i m
@@ -2694,14 +2688,10 @@ coreEmitEvent info b env = \case
   [VCapToken ct@(CapToken fqn _)] -> do
     -- let cont' = BuiltinC env info (EmitEventC ct) cont
     guardForModuleCall info env (_fqModule fqn) $ return ()
-    lookupFqName fqn >>= \case
-      Just (DCap d) -> do
-        enforceMeta (_dcapMeta d)
-        emitCapability info ct
-        return (VBool True)
-      Just _ ->
-        failInvariant info "CapToken does not point to defcap"
-      _ -> failInvariant info "No Capability found in emit-event"
+    d <- getDefCap info fqn
+    enforceMeta (_dcapMeta d)
+    emitCapability info ct
+    return (VBool True)
     where
     enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)
     enforceMeta _ = pure ()
@@ -2732,7 +2722,7 @@ createModuleGuard info b _env = \case
         let cg = GModuleGuard (ModuleGuard mn n)
         return (VGuard cg)
       Nothing ->
-        throwRecoverableError info "not-in-module"
+        throwNativeExecutionError info b "create-module-guard: must call within module"
   args -> argsError info b args
 
 createDefPactGuard :: (MonadEval b i m) => NativeFunction b i m
@@ -2747,7 +2737,7 @@ coreIntToStr :: (MonadEval b i m) => NativeFunction b i m
 coreIntToStr info b _env = \case
   [VInteger base, VInteger v]
     | v < 0 ->
-      throwRecoverableError info "int-to-str error: cannot show negative integer"
+      throwNativeExecutionError info b "int-to-str error: cannot show negative integer"
     | base >= 2 && base <= 16 -> do
       let strLen = 1 + Exts.I# (IntLog.integerLogBase# base $ abs v)
       chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
@@ -2759,8 +2749,8 @@ coreIntToStr info b _env = \case
       chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
       let v' = toB64UrlUnpaddedText $ integerToBS v
       return (VString v')
-    | base == 64 -> throwRecoverableError info "only positive values allowed for base64URL conversion"
-    | otherwise -> throwRecoverableError info "invalid base for base64URL conversion"
+    | base == 64 -> throwNativeExecutionError info b "only positive values allowed for base64URL conversion"
+    | otherwise -> throwNativeExecutionError info b "invalid base for base64URL conversion"
   args -> argsError info b args
 
 coreStrToInt :: (MonadEval b i m) => NativeFunction b i m
@@ -2784,7 +2774,7 @@ coreStrToIntBase info b _env = \case
         chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
         checkLen info s
         doBase info base s
-    | otherwise -> throwRecoverableError info "Base value must be >= 2 and <= 16, or 64"
+    | otherwise -> throwNativeExecutionError info b $ "Base value must be >= 2 and <= 16, or 64"
   args -> argsError info b args
   where
   -- Todo: DOS and gas analysis
@@ -2817,7 +2807,7 @@ coreFormat info b _env = \case
         plen = length parts
     if | plen == 1 -> return (VString s)
        | plen - length es > 1 ->
-        throwRecoverableError info "format: not enough arguments for template"
+        throwNativeExecutionError info b $ "not enough arguments for template"
        | otherwise -> do
           args <- traverse formatArgM $ V.toList es
           return $ VString $  T.concat $ alternate parts (take (plen - 1) args)
@@ -2919,7 +2909,8 @@ coreWhere info b _env = \case
     case M.lookup (Field field) o of
       Just v -> do
         applyLam app [VPactValue v] >>= enforceBool' info
-      Nothing -> throwRecoverableError info "no such field in object in where application"
+      Nothing ->
+        throwExecutionError info (ObjectIsMissingField (Field field) (ObjectData o))
   args -> argsError info b args
 
 coreHash :: (MonadEval b i m) => NativeFunction b i m
@@ -2952,7 +2943,7 @@ parseTime info b _env = \case
     case PactTime.parseTime (T.unpack fmt) (T.unpack s) of
       Just t -> return $ VPactValue (PTime t)
       Nothing ->
-        throwRecoverableError info "parse-time parse failure"
+        throwNativeExecutionError info b $ "parse-time parse failure"
   args -> argsError info b args
 
 formatTime :: (MonadEval b i m) => NativeFunction b i m
@@ -2969,7 +2960,7 @@ time info b _env = \case
     case PactTime.parseTime "%Y-%m-%dT%H:%M:%SZ" (T.unpack s) of
       Just t -> return $ VPactValue (PTime t)
       Nothing ->
-        throwRecoverableError info "time default format parse failure"
+        throwNativeExecutionError info b $ "time default format parse failure"
   args -> argsError info b args
 
 addTime :: (MonadEval b i m) => NativeFunction b i m
@@ -3024,7 +3015,7 @@ describeModule info b env = \case
   [VString s] -> case parseModuleName s of
     Just mname -> do
       enforceTopLevelOnly info b
-      checkNonLocalAllowed info
+      checkNonLocalAllowed info b
       getModuleData info (view cePactDb env) mname >>= \case
         ModuleData m _ -> return $
           VObject $ M.fromList $ fmap (over _1 Field)
@@ -3036,7 +3027,7 @@ describeModule info b env = \case
             [ ("name", PString (renderModuleName (_ifName iface)))
             , ("hash", PString (moduleHashToText (_ifHash iface)))
             ]
-    Nothing -> throwRecoverableError info "invalid module name"
+    Nothing -> throwNativeExecutionError info b $ "invalid module name format"
   args -> argsError info b args
 
 dbDescribeTable :: (MonadEval b i m) => NativeFunction b i m
@@ -3060,9 +3051,9 @@ dbDescribeKeySet info b env = \case
           Just ks ->
             return (VGuard (GKeyset ks))
           Nothing ->
-            throwRecoverableError info ("keyset not found" <> s)
+            throwExecutionError info (NoSuchKeySet ksn)
       Left{} ->
-        throwRecoverableError info "invalid keyset name"
+        throwNativeExecutionError info b  "incorrect keyset name format"
   args -> argsError info b args
 
 coreCompose :: (MonadEval b i m) => NativeFunction b i m
@@ -3178,7 +3169,7 @@ coreNamespace info b env = \case
           let msg = "Namespace set to " <> n
           return (VString msg)
         Nothing ->
-          throwRecoverableError info ("Namespace " <> n <> " not defined")
+          throwExecutionError info $ NamespaceNotFound (NamespaceName n)
   args -> argsError info b args
 
 
@@ -3186,7 +3177,7 @@ coreDefineNamespace :: (MonadEval b i m) => NativeFunction b i m
 coreDefineNamespace info b env = \case
   [VString n, VGuard usrG, VGuard adminG] -> do
     enforceTopLevelOnly info b
-    unless (isValidNsFormat n) $ throwExecutionError info (DefineNamespaceError "invalid namespace format")
+    unless (isValidNsFormat n) $ throwNativeExecutionError info b "invalid namespace format"
     let nsn = NamespaceName n
         ns = Namespace nsn usrG adminG
     chargeGasArgs info $ GRead $ fromIntegral $ T.length n
@@ -3210,12 +3201,12 @@ coreDefineNamespace info b env = \case
             clo <- mkDefunClosure d (qualNameToFqn fun mh) env
             allow <- enforceBool info =<< applyLam (C clo) [VString n, VGuard adminG]
             writeNs allow nsn ns
-          _ -> failInvariant info "Fatal error: namespace manager function is not a defun"
+          _ -> throwNativeExecutionError info b $ "Fatal error: namespace manager function is not a defun"
   args -> argsError info b args
   where
   pdb = _cePactDb env
   writeNs allow nsn ns = do
-    unless allow $ throwExecutionError info $ DefineNamespaceError "Namespace definition not permitted"
+    unless allow $ throwNativeExecutionError info b $ "Namespace definition not permitted"
     nsSize <- sizeOf SizeOfV0 ns
     chargeGasArgs info (GWrite nsSize)
     liftGasM info $ _pdbWrite pdb Write DNamespaces nsn ns
@@ -3247,7 +3238,7 @@ coreDescribeNamespace info b _env = \case
                   , (Field "namespace-name", PString n)]
         return (VObject obj)
       Nothing ->
-        throwRecoverableError info ("Namespace not defined " <> n)
+        throwExecutionError info $ NamespaceNotFound (NamespaceName n)
   args -> argsError info b args
 
 
@@ -3440,12 +3431,12 @@ coreEnforceVerifier info b _env = \case
       Just verCaps -> do
         verifierInScope <- anyCapabilityBeingEvaluated verCaps
         if verifierInScope then return (VBool True)
-        else throwRecoverableError info $ verifError verName "not in scope"
+        else throwUserRecoverableError info $ verifError verName "not in scope"
       Nothing ->
-        throwRecoverableError info $ (verifError verName "not in transaction")
+        throwUserRecoverableError info $ (verifError verName "not in transaction")
   args -> argsError info b args
   where
-    verifError verName msg = "Verifier failure " <> verName <> ":" <> msg
+    verifError verName msg = VerifierFailure (VerifierName verName) msg
 
 
 

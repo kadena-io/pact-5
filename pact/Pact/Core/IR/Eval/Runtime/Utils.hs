@@ -20,7 +20,6 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , asString
  , asBool
  , throwExecutionError
- , throwExecutionError'
  , findCallingModule
  , getCallingModule
  , calledByModule
@@ -41,12 +40,15 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , enforceBlessedHashes
  , enforceStackTopIsDefcap
  , anyCapabilityBeingEvaluated
+ , checkSchema
+ , checkPartialSchema
  ) where
 
 import Control.Lens
-import Control.Monad(when)
+import Control.Monad
 import Control.Monad.IO.Class
 import Data.IORef
+import Data.Monoid
 import Data.Foldable(find, toList)
 import Data.Maybe(listToMaybe)
 import Data.Text(Text)
@@ -57,7 +59,6 @@ import Pact.Core.Names
 import Pact.Core.PactValue
 import Pact.Core.Builtin
 import Pact.Core.IR.Term
-import Pact.Core.ModRefs
 import Pact.Core.Type
 import Pact.Core.Errors
 import Pact.Core.IR.Eval.Runtime.Types
@@ -78,30 +79,27 @@ lookupFqName fqn =
 getDefCap :: (MonadEval b i m) => i -> FullyQualifiedName -> m (EvalDefCap b i)
 getDefCap info fqn = lookupFqName fqn >>= \case
   Just (DCap d) -> pure d
-  Just _ -> failInvariant info "Expected DefCap"
-  _ -> failInvariant info "Expected DefCap; got nothing"
+  Just _ -> failInvariant info (InvariantExpectedDefCap fqn)
+  _ -> failInvariant info (InvariantUnboundFreeVariable fqn)
 
 getDefun :: (MonadEval b i m) => i -> FullyQualifiedName -> m (EvalDefun b i)
 getDefun info fqn = lookupFqName fqn >>= \case
   Just (Dfun d) -> pure d
-  _ -> failInvariant info "Expected Defun"
+  Just _ -> failInvariant info (InvariantExpectedDefun fqn)
+  _ -> failInvariant info (InvariantUnboundFreeVariable fqn)
 
 unsafeUpdateManagedParam :: v -> ManagedCap name v -> ManagedCap name v
 unsafeUpdateManagedParam newV (ManagedCap mc orig (ManagedParam fqn _oldV i)) =
   ManagedCap mc orig (ManagedParam fqn newV i)
 unsafeUpdateManagedParam _ a = a
 
-typecheckArgument :: (MonadEval b i m) => i -> PactValue -> Type -> m PactValue
-typecheckArgument info pv ty = case (pv, checkPvType ty pv) of
-  (PModRef mr, Just (TyModRef m))
-    | _mrRefined mr == Nothing -> pure (PModRef (mr & mrRefined ?~ m))
-    | otherwise -> pure (PModRef mr)
-  (_, Just _) -> pure pv
-  (_, Nothing) ->
-    throwExecutionError info (RunTimeTypecheckFailure (pvToArgTypeError pv) ty)
+typecheckArgument :: (MonadEval b i m) => i -> PactValue -> Type -> m ()
+typecheckArgument info pv ty =
+  unless (checkPvType ty pv) $ throwExecutionError info (RunTimeTypecheckFailure (pvToArgTypeError pv) ty)
 
-maybeTCType :: (MonadEval b i m) => i -> PactValue -> Maybe Type -> m PactValue
-maybeTCType i pv = maybe (pure pv) (typecheckArgument i pv)
+maybeTCType :: (MonadEval b i m) => i -> Maybe Type -> PactValue -> m ()
+maybeTCType i mty pv = maybe (pure ()) (typecheckArgument i pv) mty
+
 
 pvToArgTypeError :: PactValue -> ArgTypeError
 pvToArgTypeError = \case
@@ -132,20 +130,18 @@ calledByModule mn = do
 -- an error which we do not expect to see during regular pact
 -- execution. If this case is ever hit, we have a problem with
 -- some invalid state in interpretation
-failInvariant :: MonadEval b i m => i -> Text -> m a
+failInvariant :: MonadEval b i m => i -> InvariantError -> m a
 failInvariant i reason =
   throwExecutionError i (InvariantFailure reason)
 
 -- Todo: MaybeT cleans this up
 getCallingModule :: (MonadEval b i m) => i -> m (EvalModule b i)
 getCallingModule info = findCallingModule >>= \case
-  Just mn -> useEvalState (esLoaded . loModules . at mn) >>= \case
-    Just (ModuleData m _) -> pure m
-    Just (InterfaceData _m _) ->
-      failInvariant info "getCallingModule points to interface"
-    Nothing ->
-      failInvariant info "getCallingModule points to no loaded module"
-  Nothing -> failInvariant info "Error: No Module in stack"
+  Just mn -> do
+    pdb <- viewEvalEnv eePactDb
+    getModule info pdb mn
+  Nothing ->
+    throwExecutionError info (EvalError "no module call in stack")
 
 safeTail :: [a] -> [a]
 safeTail (_:xs) = xs
@@ -162,12 +158,12 @@ restoreFromErrorState :: ErrorState i -> EvalState b i -> EvalState b i
 restoreFromErrorState (ErrorState caps stack recur) =
   set esCaps caps . set esStack stack . set esCheckRecursion recur
 
-checkNonLocalAllowed :: (MonadEval b i m) => i -> m ()
-checkNonLocalAllowed info = do
+checkNonLocalAllowed :: (MonadEval b i m) => i -> b -> m ()
+checkNonLocalAllowed info b = do
   disabledInTx <- isExecutionFlagSet FlagDisableHistoryInTransactionalMode
   mode <- viewEvalEnv eeMode
-  when (mode == Transactional && disabledInTx) $ failInvariant info
-    "Operation only permitted in local execution mode"
+  when (mode == Transactional && disabledInTx) $ throwExecutionError info $
+    OperationIsLocalOnly (builtinName b)
 
 {-# SPECIALIZE asString
    :: ()
@@ -201,6 +197,14 @@ asBool _ _ (PLiteral (LBool b)) = pure b
 asBool info b pv =
   throwExecutionError info (NativeArgumentsError (builtinName b) [pvToArgTypeError pv])
 
+checkSchema :: M.Map Field PactValue -> Schema -> Bool
+checkSchema o (Schema _ sc) =
+  M.size o == M.size sc &&
+  getAll (M.foldMapWithKey (\k v -> All $ maybe False (`checkPvType` v) (M.lookup k sc)) o)
+
+checkPartialSchema :: M.Map Field PactValue -> Schema -> Bool
+checkPartialSchema o (Schema _ sc) =
+  M.isSubmapOfBy (\obj ty -> checkPvType ty obj) o sc
 
 
 getDefPactId :: (MonadEval b i m) => i -> m DefPactId
@@ -345,14 +349,13 @@ enforceStackTopIsDefcap
   -> b
   -> m ()
 enforceStackTopIsDefcap info b = do
-  let (NativeName n) = builtinName b
-  let errMsg = "native execution failed, native must be called within a defcap body: " <> n
+  let errMsg = "native must be called within a defcap body"
   useEvalState esStack >>= \case
       sf:_ -> do
         when (_sfFnType sf /= SFDefcap) $
-          throwExecutionError info (EvalError errMsg)
+          throwNativeExecutionError info b errMsg
       _ ->
-        throwExecutionError info (EvalError errMsg)
+        throwNativeExecutionError info b errMsg
 
 
 anyCapabilityBeingEvaluated

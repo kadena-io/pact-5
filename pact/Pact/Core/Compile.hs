@@ -89,7 +89,6 @@ enforceNamespaceInstall info interpreter =
   useEvalState (esLoaded . loNamespace) >>= \case
     Just ns ->
       void $ interpretGuard interpreter info (_nsUser ns)
-      -- Eval.interpretGuard info bEnv (_nsUser ns)
     Nothing ->
       enforceRootNamespacePolicy
     where

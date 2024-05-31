@@ -47,4 +47,4 @@ instance NFData i => NFData (StackFrame i)
 
 instance Pretty (StackFrame i) where
   pretty (StackFrame sfn args _ _) =
-    parens (pretty sfn <> if null args then mempty else space <> hsep (pretty <$> args))
+    pretty $ PrettyLispApp sfn args

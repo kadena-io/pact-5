@@ -80,12 +80,12 @@ coreExpect info b cont handler _env = \case
                     v2s = prettyShowValue (VPactValue v2)
                 returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
             else returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
-          _ -> returnCEK cont handler (VError "evaluation within expect did not return a pact value" info)
-      Right (VError errMsg _) -> do
+          _ -> returnCEKError info cont handler $ UserEnforceError "evaluation within expect did not return a pact value"
+      Right (VError _ errMsg _) -> do
         putEvalState es
-        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> " evaluation of actual failed with error message: " <> errMsg
+        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> " evaluation of actual failed with error message: " <> renderCompactText errMsg
       Right _v ->
-        returnCEK cont handler $ VError "FAILURE: expect expression did not return a pact value for comparison" info
+        returnCEKError info cont handler $ UserEnforceError "FAILURE: expect expression did not return a pact value for comparison"
       Left err -> do
         putEvalState es
         currSource <- use replCurrSource
@@ -100,8 +100,8 @@ coreExpectThat info b cont handler _env = \case
       EvalValue (VLiteral (LBool c)) ->
         if c then returnCEKValue cont handler (VLiteral (LString ("Expect-that: success " <> msg)))
         else returnCEKValue cont handler  (VLiteral (LString ("FAILURE: Expect-that: Did not satisfy condition: " <> msg)))
-      EvalValue _ -> returnCEK cont handler (VError "Expect-that: condition did not return a boolean" info)
-      VError ve i -> returnCEK cont handler (VError ve i)
+      EvalValue _ -> throwNativeExecutionError info b "Expect-that: condition did not return a boolean"
+      ve@VError{} -> returnCEK cont handler ve
   args -> argsError info b args
 
 coreExpectFailure :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -109,7 +109,7 @@ coreExpectFailure info b cont handler _env = \case
   [VString doc, VClosure vclo] -> do
     es <- getEvalState
     tryError (applyLamUnsafe vclo [] Mt CEKNoHandler) >>= \case
-      Right (VError _ _) -> do
+      Right (VError _ _ _) -> do
         putEvalState es
         returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> doc
       Left _err -> do
@@ -120,8 +120,9 @@ coreExpectFailure info b cont handler _env = \case
   [VString desc, VString toMatch, VClosure vclo] -> do
     es <- getEvalState
     tryError (applyLamUnsafe vclo [] Mt CEKNoHandler) >>= \case
-      Right (VError err _) -> do
+      Right (VError _ errMsg _) -> do
         putEvalState es
+        let err = renderCompactText errMsg
         if toMatch `T.isInfixOf` err
           then returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
           else returnCEKValue cont handler $ VLiteral $ LString $
@@ -185,7 +186,7 @@ pactState info b cont handler _env = \case
                  ,(Field "yield", yield')
                  ,(Field "step", PInteger (fromIntegral (_peStep pe)))]
         returnCEKValue cont handler (VObject (M.fromList ps))
-      Nothing -> returnCEK cont handler (VError "pact-state: no pact exec in context" info)
+      Nothing -> returnCEKError info cont handler $ UserEnforceError "pact-state: no pact exec in context"
 
 coreplEvalEnvStackFrame :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 coreplEvalEnvStackFrame info b cont handler _env = \case
@@ -214,7 +215,7 @@ envHash :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (Rep
 envHash info b cont handler _env = \case
   [VString s] -> do
     case decodeBase64UrlUnpadded (T.encodeUtf8 s) of
-      Left e -> returnCEK cont handler (VError (T.pack e) info)
+      Left e -> returnCEKError info cont handler $ UserEnforceError (T.pack e)
       Right hs -> do
         (replEvalEnv . eeHash) .= Hash (toShort hs)
         returnCEKValue cont handler $ VString $ "Set tx hash to " <> s
@@ -257,7 +258,7 @@ envChainData info b cont handler _env = \case
           go (set pdPrevBlockHash s pd) rest
       PTime time
         | k == cdBlockTime -> go (set pdBlockTime (PactTime.toPosixTimestampMicros time) pd) rest
-      _ -> returnCEK cont handler (VError ("envChainData: bad public metadata value for key: " <> _field k) info)
+      _ -> returnCEKError info cont handler $ UserEnforceError $ "envChainData: bad public metadata value for key: " <> _field k
   args -> argsError info b args
 
 envKeys :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -275,7 +276,7 @@ envSigs info b cont handler _env = \case
       Just sigs -> do
         (replEvalEnv . eeMsgSigs) .= M.fromList (V.toList sigs)
         returnCEKValue cont handler $ VString "Setting transaction signatures/caps"
-      Nothing -> returnCEK cont handler (VError ("env-sigs: Expected object with 'key': string, 'caps': [capability]") info)
+      Nothing -> returnCEKError info cont handler $ UserEnforceError ("env-sigs: Expected object with 'key': string, 'caps': [capability]")
     where
     keyCapObj = \case
       PObject o -> do
@@ -296,7 +297,8 @@ envVerifiers info b cont handler _env = \case
       Just sigs -> do
         (replEvalEnv . eeMsgVerifiers) .= M.fromList (V.toList sigs)
         returnCEKValue cont handler $ VString "Setting transaction verifiers/caps"
-      Nothing -> returnCEK cont handler (VError ("env-verifiers: Expected object with 'name': string, 'caps': [capability]") info)
+      Nothing ->
+        throwNativeExecutionError info b ("Expected object with 'name': string, 'caps': [capability]")
     where
     verifCapObj = \case
       PObject o -> do
@@ -319,7 +321,7 @@ beginTx info b cont handler _env = \case
 renderTx :: i -> Text -> Maybe (TxId, Maybe Text) -> EvalResult step b i m
 renderTx _info start (Just (TxId tid, mt)) =
   EvalValue $ VString $ start <> " " <> T.pack (show tid) <> maybe mempty (" " <>) mt
-renderTx info start Nothing = VError ("tx-function failure " <> start) info
+renderTx info start Nothing = VError [] (UserEnforceError ("tx-function failure " <> start)) info
 
 begin' :: SpanInfo -> Maybe Text -> ReplM b (Maybe (TxId, Maybe Text))
 begin' info mt = do
@@ -379,18 +381,16 @@ sigKeyset info b cont handler _env = \case
 testCapability :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 testCapability info b cont handler env = \case
   [VCapToken origToken] -> do
-    lookupFqName (_ctName origToken) >>= \case
-      Just (DCap d) -> do
-        let cBody = Constant LUnit info
-            cont' = SeqC env cBody cont
-        case _dcapMeta d of
-          Unmanaged ->
-            evalCap info cont' handler env origToken PopCapInvoke TestCapEval cBody
-          _ -> do
-            -- Installed caps emit and event
-            -- so we create a fake stack frame
-            installCap info env origToken False *> evalCap info cont' handler env origToken PopCapInvoke TestCapEval cBody
-      _ -> returnCEK cont handler (VError "no such capability" info)
+    d <- getDefCap info (_ctName origToken)
+    let cBody = Constant LUnit info
+        cont' = SeqC env cBody cont
+    case _dcapMeta d of
+      Unmanaged ->
+        evalCap info cont' handler env origToken PopCapInvoke TestCapEval cBody
+      _ -> do
+        -- Installed caps emit and event
+        -- so we create a fake stack frame
+        installCap info env origToken False *> evalCap info cont' handler env origToken PopCapInvoke TestCapEval cBody
   args -> argsError info b args
 
 envExecConfig :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -415,13 +415,13 @@ envNamespacePolicy info b cont handler _env = \case
   [VBool allowRoot, VClosure (C clo)] -> do
     pdb <- viewEvalEnv eePactDb
     let qn = fqnToQualName (_cloFqName clo)
-    when (_cloArity clo /= 2) $ failInvariant info "Namespace manager function has invalid argument length"
+    when (_cloArity clo /= 2) $ throwNativeExecutionError info b "Namespace manager function has invalid argument length"
     getModuleMember info pdb qn >>= \case
       Dfun _ -> do
         let nsp = SmartNamespacePolicy allowRoot qn
         replEvalEnv . eeNamespacePolicy .= nsp
         returnCEKValue cont handler (VString "Installed namespace policy")
-      _ -> returnCEK cont handler (VError "invalid namespace manager function type" info)
+      _ -> returnCEKError info cont handler $ UserEnforceError "invalid namespace manager function type"
   args -> argsError info b args
 
 envGas :: ReplCEKEval step => NativeFunction step ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)

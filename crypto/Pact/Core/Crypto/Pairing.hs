@@ -402,7 +402,6 @@ data CurvePoint a
   | CurveInf
   deriving (Eq, Show)
 
--- todo: sort of scuffed, num instance?
 double :: (Field a, Num a, Eq a) => CurvePoint a -> CurvePoint a
 double CurveInf = CurveInf
 double (Point x y)

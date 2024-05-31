@@ -162,8 +162,7 @@ instance FromJSON (Legacy ModRef) where
   parseJSON = withObject "ModRef" $ \o ->
     fmap Legacy $
       ModRef <$> (_unLegacy <$> o .: "refName")
-        <*> (fmap _unLegacy <$> o .: "refSpec")
-        <*> pure Nothing
+        <*> (S.fromList . fmap _unLegacy <$> o .: "refSpec")
 
 instance FromJSON (Legacy PactValue) where
   parseJSON v = fmap Legacy $

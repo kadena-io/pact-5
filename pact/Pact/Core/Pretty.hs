@@ -15,7 +15,7 @@ module Pact.Core.Pretty
 , bracketsSep
 , parensSep
 , bracesSep
--- , prettyList
+, PrettyLispApp(..)
 ) where
 
 import Data.Text(Text)
@@ -57,3 +57,13 @@ commaBrackets = encloseSep "[" "]" ","
 bracketsSep   = brackets . sep
 parensSep     = parens   . sep
 bracesSep     = braces   . sep
+
+data PrettyLispApp n arg
+  = PrettyLispApp
+  { _plOperator :: n
+  , _plOperands :: [arg]
+  } deriving (Show)
+
+instance (Pretty n, Pretty arg) => Pretty (PrettyLispApp n arg) where
+  pretty (PrettyLispApp n args) =
+    parens (pretty n <> if null args then mempty else space <> hsep (pretty <$> args))

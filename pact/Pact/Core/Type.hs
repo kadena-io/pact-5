@@ -227,6 +227,16 @@ data DefKind
 
 instance NFData DefKind
 
+instance Pretty DefKind where
+  pretty = \case
+    DKDefun -> "defun"
+    DKDefConst -> "defconst"
+    DKDefCap -> "defcap"
+    DKDefPact -> "defpact"
+    DKDefSchema _ -> "defscema"
+    DKDefTable -> "deftable"
+
+
 -- instance Pretty n => Pretty (Pred n) where
 --   pretty (Pred tc ty) = pretty tc <>  Pretty.angles (pretty ty)
 
