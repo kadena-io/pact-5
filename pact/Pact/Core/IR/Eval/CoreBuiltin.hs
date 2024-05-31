@@ -284,8 +284,9 @@ rawNegate info b cont handler _env = \case
 
 rawEq :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawEq info b cont handler _env = \case
-  [VPactValue pv, VPactValue pv'] ->
-    returnCEKValue cont handler (VBool (pv == pv'))
+  [VPactValue pv, VPactValue pv'] -> do
+    isEq <- valEqGassed info pv pv'
+    returnCEKValue cont handler (VBool isEq)
   args -> argsError info b args
 
 modInt :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -293,8 +294,9 @@ modInt = binaryIntFn mod
 
 rawNeq :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawNeq info b cont handler _env = \case
-  [VPactValue pv, VPactValue pv'] ->
-    returnCEKValue cont handler (VBool (pv /= pv'))
+  [VPactValue pv, VPactValue pv'] -> do
+    isEq <- valEqGassed info pv pv'
+    returnCEKValue cont handler (VBool $ not isEq)
   args -> argsError info b args
 
 rawGt :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
