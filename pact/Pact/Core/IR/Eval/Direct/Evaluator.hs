@@ -1225,9 +1225,7 @@ applyPact i pc ps cenv nested = useEvalState esDefPactExec >>= \case
               done = (not (_psRollback ps') && isLastStep) || _psRollback ps'
             when (nestedPactsNotAdvanced resultExec ps') $
               throwExecutionError i (NestedDefpactsNotAdvanced (_peDefPactId resultExec))
-            liftDbFunction i
-              (writeDefPacts pdb Write (_psDefPactId ps')
-                (if done then Nothing else Just resultExec))
+            writeDefPacts i pdb Write (_psDefPactId ps') (if done then Nothing else Just resultExec)
             emitXChainEvents (_psResume ps') resultExec
             return result
 
@@ -1650,8 +1648,9 @@ rawNegate info b _env = \case
 
 rawEq :: (MonadEval b i m) => NativeFunction b i m
 rawEq info b _env = \case
-  [VPactValue pv, VPactValue pv'] ->
-    return (VBool (pv == pv'))
+  [VPactValue pv, VPactValue pv'] -> do
+    isEq <- valEqGassed info pv pv'
+    return (VBool isEq)
   args -> argsError info b args
 
 modInt :: (MonadEval b i m) => NativeFunction b i m
@@ -1659,8 +1658,9 @@ modInt = binaryIntFn mod
 
 rawNeq :: (MonadEval b i m) => NativeFunction b i m
 rawNeq info b _env = \case
-  [VPactValue pv, VPactValue pv'] ->
-    return (VBool (pv /= pv'))
+  [VPactValue pv, VPactValue pv'] -> do
+    isEq <- valEqGassed info pv pv'
+    return (VBool $ not isEq)
   args -> argsError info b args
 
 rawGt :: (MonadEval b i m) => NativeFunction b i m
@@ -2046,7 +2046,10 @@ createEnumerateList
   -- ^ Step
   -> m (Vector Integer)
 createEnumerateList info from to inc
-  | from == to = chargeGasArgs info (GMakeList 1 (sizeOf SizeOfV0 from)) *>  pure (V.singleton from)
+  | from == to = do
+    fromSize <- sizeOf SizeOfV0 from
+    chargeGasArgs info (GMakeList 1 fromSize)
+    pure (V.singleton from)
   | inc == 0 = pure mempty -- note: covered by the flat cost
   | from < to, from + inc < from =
     throwExecutionError info (EnumerationError "enumerate: increment diverges below from interval bounds.")
@@ -2054,7 +2057,8 @@ createEnumerateList info from to inc
     throwExecutionError info (EnumerationError "enumerate: increment diverges above from interval bounds.")
   | otherwise = do
     let len = succ (abs (from - to) `div` abs inc)
-    chargeGasArgs info (GMakeList len (sizeOf SizeOfV0 (max (abs from) (abs to))))
+    listSize <- sizeOf SizeOfV0 (max (abs from) (abs to))
+    chargeGasArgs info (GMakeList len listSize)
     pure $ V.enumFromStepN from inc (fromIntegral len)
 
 coreEnumerateStepN :: (MonadEval b i m) => NativeFunction b i m
@@ -2067,7 +2071,8 @@ coreEnumerateStepN info b _env = \case
 makeList :: (MonadEval b i m) => NativeFunction b i m
 makeList info b _env = \case
   [VLiteral (LInteger i), VPactValue v] -> do
-    chargeGasArgs info (GMakeList (fromIntegral i) (sizeOf SizeOfV0 v))
+    vSize <- sizeOf SizeOfV0 v
+    chargeGasArgs info (GMakeList (fromIntegral i) vSize)
     return (VList (V.fromList (replicate (fromIntegral i) v)))
   args -> argsError info b args
 
@@ -2414,7 +2419,7 @@ createTable info b env = \case
     enforceTopLevelOnly info b
     let pdb = _cePactDb env
     guardTable info env tv GtCreateTable
-    liftDbFunction info (_pdbCreateUserTable pdb (_tvName tv))
+    liftGasM info (_pdbCreateUserTable pdb (_tvName tv))
     return (VString "TableCreated")
   args -> argsError info b args
 
@@ -2534,8 +2539,9 @@ write' wt info b env = \case
     let check' = if wt == Update then checkPartialSchema else checkSchema
     if check' rv (_tvSchema tv) then do
       let rdata = RowData rv
-      chargeGasArgs info (GWrite (sizeOf SizeOfV0 rv))
-      liftDbFunction info (_pdbWrite pdb wt (tvToDomain tv) (RowKey key) rdata)
+      rvSize <- sizeOf SizeOfV0 rv
+      chargeGasArgs info (GWrite rvSize)
+      _ <- liftGasM info $ _pdbWrite pdb wt (tvToDomain tv) (RowKey key) rdata
       return (VString "Write succeeded")
     else throwRecoverableError info "object does not match schema"
   args -> argsError info b args
@@ -2619,8 +2625,9 @@ defineKeySet' info env ksname newKs  = do
     Left {} -> throwRecoverableError info "incorrect keyset name format"
     Right ksn -> do
       let writeKs = do
-            chargeGasArgs info (GWrite (sizeOf SizeOfV0 newKs))
-            liftDbFunction info (writeKeySet pdb Write ksn newKs)
+            newKsSize <- sizeOf SizeOfV0 newKs
+            chargeGasArgs info (GWrite newKsSize)
+            writeKeySet info pdb Write ksn newKs
             return (VString "Keyset write success")
       liftDbFunction info (readKeySet pdb ksn) >>= \case
         Just oldKs -> do
@@ -3162,7 +3169,8 @@ coreNamespace info b env = \case
       chargeGasArgs info $ GRead $ fromIntegral $ T.length n
       liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
         Just ns -> do
-          chargeGasArgs info $ GRead $ sizeOf SizeOfV0 ns
+          size <- sizeOf SizeOfV0 ns
+          chargeGasArgs info $ GRead size
           (esLoaded . loNamespace) .== Just ns
           let msg = "Namespace set to " <> n
           return (VString msg)
@@ -3184,13 +3192,15 @@ coreDefineNamespace info b env = \case
       -- https://static.wikia.nocookie.net/onepiece/images/5/52/Lao_G_Manga_Infobox.png/revision/latest?cb=20150405020446
       -- Enforce the old guard
       Just existing@(Namespace _ _ laoG) -> do
-        chargeGasArgs info $ GRead $ sizeOf SizeOfV0 existing
+        size <- sizeOf SizeOfV0 existing
+        chargeGasArgs info $ GRead size
         allow <- enforceGuard info env laoG
         writeNs allow nsn ns
       Nothing -> viewEvalEnv eeNamespacePolicy >>= \case
         SimpleNamespacePolicy -> do
-          chargeGasArgs info (GWrite (sizeOf SizeOfV0 ns))
-          liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
+          nsSize <- sizeOf SizeOfV0 ns
+          chargeGasArgs info (GWrite nsSize)
+          liftGasM info $ _pdbWrite pdb Write DNamespaces nsn ns
           return $ VString $ "Namespace defined: " <> n
         SmartNamespacePolicy _ fun -> getModuleMemberWithHash info pdb fun >>= \case
           (Dfun d, mh) -> do
@@ -3203,8 +3213,9 @@ coreDefineNamespace info b env = \case
   pdb = _cePactDb env
   writeNs allow nsn ns = do
     unless allow $ throwExecutionError info $ DefineNamespaceError "Namespace definition not permitted"
-    chargeGasArgs info (GWrite (sizeOf SizeOfV0 ns))
-    liftDbFunction info (_pdbWrite pdb Write DNamespaces nsn ns)
+    nsSize <- sizeOf SizeOfV0 ns
+    chargeGasArgs info (GWrite nsSize)
+    liftGasM info $ _pdbWrite pdb Write DNamespaces nsn ns
     return $ VString $ "Namespace defined: " <> (_namespaceName nsn)
   isValidNsFormat nsn = case T.uncons nsn of
     Just (h, tl) ->
@@ -3225,7 +3236,8 @@ coreDescribeNamespace info b _env = \case
     chargeGasArgs info $ GRead $ fromIntegral $ T.length n
     liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
       Just existing@(Namespace _ usrG laoG) -> do
-        chargeGasArgs info $ GRead $ sizeOf SizeOfV0 existing
+        size <- sizeOf SizeOfV0 existing
+        chargeGasArgs info $ GRead size
         let obj = M.fromList
                   [ (Field "user-guard", PGuard usrG)
                   , (Field "admin-guard", PGuard laoG)

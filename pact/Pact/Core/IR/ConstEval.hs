@@ -13,7 +13,6 @@ import Pact.Core.Persistence
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Interpreter
--- import qualified Pact.Core.IR.Eval.CEK as Eval
 
 evalTLConsts
   :: (MonadEval b i m)

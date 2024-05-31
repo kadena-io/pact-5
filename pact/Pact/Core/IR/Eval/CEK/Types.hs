@@ -482,9 +482,9 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   --  - The rest of the continuation
   | CapPopC CapPopState (Cont step b i m)
   -- ^ What to do after returning from a defcap: do we compose the returned cap, or do we simply pop it from the stack
-  | DefPactStepC (CEKEnv step b i m) (Cont step b i m)
+  | DefPactStepC (CEKEnv step b i m) i (Cont step b i m)
   -- ^ Cont frame after a defpact, ensuring we save the defpact to the database and whatnot
-  | NestedDefPactStepC (CEKEnv step b i m) (Cont step b i m) DefPactExec
+  | NestedDefPactStepC (CEKEnv step b i m) i (Cont step b i m) DefPactExec
   -- ^ Frame for control flow around nested defpact execution
   | IgnoreValueC PactValue (Cont step b i m)
   -- ^ Frame to ignore value after user guard execution

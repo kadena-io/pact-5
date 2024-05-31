@@ -31,6 +31,8 @@ import Data.List (sort)
 import Pact.Core.Gas.TableGasModel
 import Control.Lens
 
+type InterpretPact = SourceCode -> (ReplCompileValue -> ReplM ReplCoreBuiltin ()) -> ReplM ReplCoreBuiltin [ReplCompileValue]
+
 tests :: IO TestTree
 tests = do
   cases <- gasTestFiles
@@ -42,9 +44,6 @@ tests = do
     ]
   where
   runDiff = \ref new -> ["diff", "-u", ref, new]
-
-  where
-    runDiff = \ref new -> ["diff", "-u", ref, new]
 
 
 gasTestDir :: [Char]
@@ -72,7 +71,7 @@ lookupOp :: Text -> Text
 lookupOp n = fromMaybe n (M.lookup n fileNameToOp)
 
 
-gasGoldenTests :: [(Text, FilePath)] -> _ -> IO BS.ByteString
+gasGoldenTests :: [(Text, FilePath)] -> InterpretPact -> IO BS.ByteString
 gasGoldenTests c interp = do
   gasOutputs <- forM c $ \(fn, fp) -> do
     mGas <- runGasTest (gasTestDir </> fp) interp
@@ -108,7 +107,7 @@ opToFileName = M.fromList
 fileNameToOp :: M.Map Text Text
 fileNameToOp = M.fromList [(v,k) | (k, v) <- M.toList opToFileName]
 
-runGasTest :: FilePath -> _ -> IO (Maybe MilliGas)
+runGasTest :: FilePath -> InterpretPact -> IO (Maybe MilliGas)
 runGasTest file interpret = do
   src <- T.readFile file
   pdb <- mockPactDb serialisePact_repl_spaninfo

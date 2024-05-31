@@ -1171,18 +1171,17 @@ defineKeySet' info cont handler env ksname newKs  = do
             enforceGuard info cont' handler env uGuard
 
 defineKeySet :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
-defineKeySet info b cont handler env args = do
-  case args of
-    [VString ksname, VGuard (GKeyset ks)] -> do
-      enforceTopLevelOnly info b
-      defineKeySet' info cont handler env ksname ks
-    [VString ksname] -> do
-      enforceTopLevelOnly info b
-      readKeyset' info ksname >>= \case
-        Just newKs ->
-          defineKeySet' info cont handler env ksname newKs
-        Nothing -> returnCEK cont handler (VError "read-keyset failure" info)
-    _ -> argsError info b args
+defineKeySet info b cont handler env = \case
+  [VString ksname, VGuard (GKeyset ks)] -> do
+    enforceTopLevelOnly info b
+    defineKeySet' info cont handler env ksname ks
+  [VString ksname] -> do
+    enforceTopLevelOnly info b
+    readKeyset' info ksname >>= \case
+      Just newKs ->
+        defineKeySet' info cont handler env ksname newKs
+      Nothing -> returnCEK cont handler (VError "read-keyset failure" info)
+  args -> argsError info b args
 
 --------------------------------------------------
 -- Capabilities
