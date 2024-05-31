@@ -1,12 +1,19 @@
 module Pact.Core.SPV
- ( ContProof(..)
- , SPVSupport(..)
- , noSPVSupport)where
+  ( -- * Types
+    ContProof(..)
+  , SPVSupport(..)
+    -- * Support
+  , noSPVSupport
+  ) where
 
-import Data.Text(Text)
-import Data.ByteString(ByteString)
+import Data.Aeson hiding (Object)
+import qualified Pact.JSON.Encode as J
+import Data.Text (Text)
+import Data.Text.Encoding
+import Data.ByteString (ByteString)
 import GHC.Generics
 import Control.DeepSeq
+import Control.Lens (Wrapped)
 
 import Pact.Core.DefPacts.Types
 import Pact.Core.PactValue
@@ -14,8 +21,16 @@ import Pact.Core.PactValue
 newtype ContProof = ContProof { _contProof :: ByteString }
   deriving (Eq, Ord, Show, Generic)
 
+instance Wrapped ContProof
 
 instance NFData ContProof
+
+instance J.Encode ContProof where
+  build (ContProof bs) = J.build $ decodeUtf8 bs
+  {-# INLINE build #-}
+
+instance FromJSON ContProof where
+  parseJSON = withText "ByteString" (return . ContProof . encodeUtf8)
 
 -- | Backend for SPV support
 data SPVSupport = SPVSupport
@@ -36,3 +51,6 @@ noSPVSupport = SPVSupport spv vcon
   where
     spv = \_ _ -> return $ Left "SPV verification not supported"
     vcon = \_ -> return $ Left "Cross-chain continuations not supported"
+
+
+

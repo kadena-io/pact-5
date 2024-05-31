@@ -61,13 +61,13 @@ import Pact.Core.Errors
 import Pact.Core.Gas
 import Pact.Core.Literal
 import Pact.Core.PactValue
+import Pact.Core.Pretty
 import Pact.Core.Capabilities
 import Pact.Core.Type
 import Pact.Core.Guards
 import Pact.Core.ModRefs
 import Pact.Core.Environment
 import Pact.Core.Persistence
-import Pact.Core.Pretty
 import Pact.Core.Hash
 import Pact.Core.StableEncoding
 
