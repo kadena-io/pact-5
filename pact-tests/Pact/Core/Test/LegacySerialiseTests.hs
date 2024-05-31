@@ -74,13 +74,9 @@ legacyTests = do
           src <- T.readFile (legacyTestDir </> filePath)
 
           -- write modules into the pactdb
-          -- traverse_ (\m -> writeModule pdb Write (view mdModuleName m) (liftReplBuiltin m)) ms'
           _ <- ignoreGas def $ forM_ ms' $ \m ->
             _pdbWrite pdb Write DModules (view mdModuleName m) (liftReplBuiltin m)
 
-
-        -- _ <- ignoreGas def $ forM_ ms' $ \m ->
-        --   _pdbWrite pdb Write DModules (view mdModuleName m) (liftReplBuiltin m)
           pure $ testCase (r <> " with interpreter (" <> interpName <> ")")
             $ runReplTest (ReplSourceDir legacyTestDir) pdb filePath src interpreter
 

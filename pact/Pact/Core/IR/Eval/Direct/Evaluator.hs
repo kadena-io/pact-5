@@ -47,7 +47,6 @@ import Data.Vector(Vector)
 import Data.Maybe(maybeToList)
 import Data.Attoparsec.Text(parseOnly)
 import Numeric(showIntAtBase)
-import System.Clock
 import qualified Data.RAList as RAList
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -57,6 +56,10 @@ import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
 import qualified GHC.Exts as Exts
 import qualified GHC.Integer.Logarithms as IntLog
+
+#ifdef WITH_TRACING
+import System.Clock
+#endif
 
 #ifndef WITHOUT_CRYPTO
 import qualified Control.Lens as Lens
@@ -693,7 +696,7 @@ sysOnlyEnv e
 evalWithStackFrame :: MonadEval b i m => i -> StackFrame i -> Maybe Type -> m (EvalValue b i m) -> m (EvalValue b i m)
 evalWithStackFrame info sf mty act = do
   esStack %== (sf:)
-#ifdef WITH_TRACING
+#ifdef WITH_FUNCALL_TRACING
   timeEnter <- liftIO $ getTime ProcessCPUTime
   esTraceOutput %== (TraceFunctionEnter timeEnter sf info:)
 #endif
@@ -701,7 +704,7 @@ evalWithStackFrame info sf mty act = do
   esStack %== safeTail
   pv <- enforcePactValue info v
   pv' <- maybeTCType info pv mty
-#ifdef WITH_TRACING
+#ifdef WITH_FUNCALL_TRACING
   timeExit <- liftIO $ getTime ProcessCPUTime
   esTraceOutput %== (TraceFunctionExit timeExit sf info:)
 #endif
@@ -3469,7 +3472,7 @@ coreBuiltinRuntime
   => CoreBuiltin
   -> NativeFunction b i m
 coreBuiltinRuntime =
-#ifdef WITH_TRACING
+#ifdef WITH_NATIVE_TRACING
   _traceNative . go
   where
   _traceNative

@@ -30,8 +30,13 @@ flag with-crypto
   manual: True
   default: True
 
-flag with-tracing
-  description: Enable Tracing primitives
+flag with-funcall-tracing
+  description: Enable Tracing on user function calls
+  manual: True
+  default: True
+
+flag with-native-tracing
+  description: Enable Tracing on pact primitives
   manual: True
   default: True
 
@@ -124,7 +129,13 @@ library
   import: pact-common
   hs-source-dirs: pact
 
-  if (flag(with-tracing))
+  if (flag(with-funcall-tracing))
+    cpp-options: -DWITH_FUNCALL_TRACING
+
+  if (flag(with-native-tracing))
+    cpp-options: -DWITH_NATIVE_TRACING
+
+  if (flag(with-native-tracing) || flag(with-funcall-tracing))
     cpp-options: -DWITH_TRACING
 
   if (flag(with-crypto))
