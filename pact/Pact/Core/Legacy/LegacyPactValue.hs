@@ -1,8 +1,10 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE GADTs #-}
 module Pact.Core.Legacy.LegacyPactValue
-  (roundtripPactValue) where
+  (Legacy(..), roundtripPactValue) where
 
 import Control.Applicative
 import Data.Aeson
@@ -23,6 +25,11 @@ import Pact.Core.PactValue
 import Pact.Core.Legacy.LegacyCodec
 import Pact.Core.StableEncoding
 import Data.List
+import Pact.Core.Persistence.Types
+import Data.Text (Text)
+import Control.Monad
+import Pact.Core.Builtin (CoreBuiltin)
+import qualified Pact.Core.Serialise.LegacyPact as LegacyPact
 
 
 newtype Legacy a
@@ -92,7 +99,11 @@ instance FromJSON (Legacy ModuleName) where
         <$> (o .: "name")
         <*> (fmap NamespaceName <$> (o .: "namespace"))
 
-instance FromJSON (Legacy (UserGuard QualifiedName PactValue)) where
+instance FromJSON (Legacy NamespaceName) where
+  parseJSON =
+    fmap (Legacy . NamespaceName) . parseJSON
+
+instance FromJSON (Legacy v) => FromJSON (Legacy (UserGuard QualifiedName v)) where
   parseJSON = withObject "UserGuard" $ \o ->
       Legacy <$> (UserGuard
         <$> (_unLegacy <$> o .: "fun")
@@ -108,7 +119,7 @@ instance FromJSON (Legacy KeySetName) where
         <$> o .: "ksn"
         <*> (fmap NamespaceName <$> o .:? "ns")
 
-instance FromJSON (Legacy (Guard QualifiedName PactValue)) where
+instance FromJSON (Legacy v) => FromJSON (Legacy (Guard QualifiedName v)) where
   parseJSON v = case props v of
     [GuardKeys, GuardPred] -> Legacy . GKeyset . _unLegacy <$> parseJSON v
     [GuardKeysetref] -> flip (withObject "KeySetRef") v $ \o ->
@@ -186,7 +197,7 @@ instance FromJSON (Legacy DefPactGuard) where
         <$> (DefPactId <$> o .: "pactId")
         <*> o .: "name"
 
-instance FromJSON (Legacy (CapabilityGuard QualifiedName PactValue)) where
+instance FromJSON (Legacy v) => FromJSON (Legacy (CapabilityGuard QualifiedName v)) where
   parseJSON = withObject "CapabilityGuard" $ \o ->
     fmap Legacy $
       CapabilityGuard
@@ -197,3 +208,99 @@ instance FromJSON (Legacy (CapabilityGuard QualifiedName PactValue)) where
 roundtripPactValue :: PactValue -> Maybe PactValue
 roundtripPactValue pv =
   _unLegacy <$> A.decodeStrict' (encodeStable pv)
+
+instance J.Encode (Legacy WriteType) where
+  build (Legacy Insert) = J.text "Insert"
+  build (Legacy Update) = J.text "Update"
+  build (Legacy Write) = J.text "Write"
+instance FromJSON (Legacy WriteType) where
+  parseJSON = withText "WriteType" $ \case
+    "Insert" -> return $ Legacy Insert
+    "Update" -> return $ Legacy Update
+    "Write" -> return $ Legacy Write
+    _ -> fail "invalid, expected Insert, Update, or Write"
+
+instance J.Encode (Legacy RowKey) where
+  build (Legacy rk) = J.text (_rowKey rk)
+
+instance J.Encode (Legacy (SomeDomain b i)) where
+  build (Legacy (SomeDomain d)) = case d of
+    DUserTables tn
+      -> J.build $ J.Object
+          [ J.KeyValue "tag" $ J.text "UserTables"
+          -- this is specifically for prod compat
+          , J.KeyValue "tableName" $ J.build (Legacy tn)
+          ]
+    DKeySets -> J.text "KeySets"
+    DModules -> J.text "Modules"
+    DNamespaces -> J.text "Namespaces"
+    DDefPacts -> J.text "Pacts"
+
+instance FromJSON (Legacy (SomeDomain b i)) where
+  parseJSON v =
+    (withText "Domain" $ \case
+      "KeySets" -> return $ Legacy $ SomeDomain DKeySets
+      "Modules" -> return $ Legacy $ SomeDomain DModules
+      "Namespaces" -> return $ Legacy $ SomeDomain DNamespaces
+      "Pacts" -> return $ Legacy $ SomeDomain DDefPacts
+      _ -> fail "invalid Domain") v <|>
+    (withObject "Domain" $ \o -> do
+      tag :: Text <- o .: "tag"
+      unless (tag == "UserTables") $
+        fail "JSON object Domain must have UserTables tag"
+      -- this is specifically for prod compat
+      Legacy tn <- o .: "tableName"
+      return $ Legacy $ SomeDomain (DUserTables tn)
+    ) v
+
+instance J.Encode (Legacy TableName) where
+  build (Legacy tn)
+      | let qn = QualifiedName (_tableName tn) (_tableModuleName tn)
+      = J.text $ renderQualName qn
+
+instance FromJSON (Legacy TableName) where
+  parseJSON = withText "Legacy TableName" $ \tn -> do
+      Just qualifiedTableName <- return (parseQualifiedName tn)
+      return $ Legacy TableName
+            { _tableName = _qnName qualifiedTableName
+            , _tableModuleName = _qnModName qualifiedTableName
+            }
+
+instance FromJSON (Legacy RowData) where
+  parseJSON v =
+    parseVersioned v <|>
+    -- note: Parsing into `OldPactValue` here defaults to the code used in
+    -- the old FromJSON instance for PactValue, prior to the fix of moving
+    -- the `PModRef` parsing before PObject
+    Legacy . RowData . M.mapKeys Field . fmap _unLegacy <$> parseJSON v
+    where
+      parseVersioned = withObject "RowData" $ \o -> Legacy . RowData
+          <$> (M.mapKeys Field . fmap (_unRowDataValue._unLegacy) <$> o .: "$d")
+
+newtype RowDataValue
+    = RowDataValue { _unRowDataValue :: PactValue }
+    deriving (Show, Eq)
+
+instance FromJSON (Legacy RowDataValue) where
+  parseJSON v1 =
+    (Legacy . RowDataValue . PLiteral . _unLegacy <$> parseJSON v1) <|>
+    (Legacy . RowDataValue . PList . fmap (_unRowDataValue . _unLegacy) <$> parseJSON v1) <|>
+    parseTagged v1
+    where
+      parseTagged = withObject "tagged RowData" $ \o -> do
+        (t :: Text) <- o .: "$t"
+        val <- o .: "$v"
+        case t of
+          "o" -> Legacy . RowDataValue . PObject . M.mapKeys Field . fmap (_unRowDataValue . _unLegacy) <$> parseJSON val
+          "g" -> Legacy . RowDataValue . PGuard . fmap (_unRowDataValue) . _unLegacy <$> parseJSON val
+          "m" -> Legacy . RowDataValue . PModRef <$> parseMR val
+          _ -> fail "tagged RowData"
+      parseMR = withObject "tagged ModRef" $ \o -> ModRef
+          <$> (fmap _unLegacy $ o .: "refName")
+          <*> (maybe [] (fmap _unLegacy) <$> o .: "refSpec")
+          <*> pure Nothing
+
+instance FromJSON (Legacy (ModuleData CoreBuiltin ())) where
+  parseJSON v = do
+    Just md <- return $ LegacyPact.decodeModuleData' v
+    return (Legacy md)
