@@ -410,6 +410,7 @@ fromLegacyPactValue = \case
           | bn == "keys-all" -> pure KeysAll
           | bn == "keys-any" -> pure KeysAny
           | bn == "keys-2"   -> pure Keys2
+        (Legacy.Name (Legacy.BareName bn)) -> pure (CustomPredicate (TBN $ BareName bn))
         (Legacy.QName qn) -> pure (CustomPredicate (TQN $ fromLegacyQualifiedName qn))
         o -> Left $ "fromLegacyPactValue: pred invariant: " <> show o
       in (PGuard . GKeyset . KeySet ks <$> p' pred')
