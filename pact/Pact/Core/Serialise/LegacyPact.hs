@@ -15,6 +15,7 @@ module Pact.Core.Serialise.LegacyPact
   , fromLegacyKeySet
   , fromLegacyNamespace
   , fromLegacyDefPactExec
+  , fromLegacyPactValue
   , runTranslateM
   ) where
 
