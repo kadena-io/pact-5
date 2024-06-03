@@ -1352,8 +1352,8 @@ coreFormat info b cont handler _env = \case
     if | plen == 1 -> returnCEKValue cont handler (VString s)
        | plen - length es > 1 -> returnCEK cont handler $ VError "format: not enough arguments for template" info
        | otherwise -> do
-          args <- mapM formatArgM $ V.toList es
-          returnCEKValue cont handler $ VString $  T.concat $ alternate parts (take (plen - 1) args)
+          args <- mapM formatArgM $ V.toList $ V.take (plen - 1) es
+          returnCEKValue cont handler $ VString $ T.concat $ alternate parts args
     where
     formatArg (PString ps) = ps
     formatArg a = renderPactValue a
