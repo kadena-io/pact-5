@@ -884,9 +884,11 @@ fromLegacyKeySet
 fromLegacyKeySet (Legacy.KeySet ks p) = do
   let ks' = S.map fromLegacyPublicKeyText ks
   pred' <- case p of
-    Legacy.Name (Legacy.BareName "keys-all") -> pure KeysAll
-    Legacy.Name (Legacy.BareName "keys-2") -> pure Keys2
-    Legacy.Name (Legacy.BareName "keys-any") -> pure KeysAny
+    Legacy.Name (Legacy.BareName n) -> case n of
+      "keys-all" -> pure KeysAll
+      "keys-2" -> pure Keys2
+      "keys-any" -> pure KeysAny
+      _ -> pure $ CustomPredicate $ TBN (BareName n)
     Legacy.QName qn -> pure (CustomPredicate (TQN $ fromLegacyQualifiedName qn))
     other -> Left $ "fromLegacyKeySet: pred invariant" <> show other
   pure (KeySet ks' pred')
