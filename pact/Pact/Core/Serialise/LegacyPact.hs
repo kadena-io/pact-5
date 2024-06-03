@@ -4,6 +4,7 @@
 
 module Pact.Core.Serialise.LegacyPact
   ( decodeModuleData
+  , decodeModuleDataSpanInfo
   , decodeKeySet
   , decodeDefPactExec
   , decodeNamespace
@@ -25,6 +26,7 @@ import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Monad
+import qualified Data.Default as Default
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.List (findIndex)
 import Data.ByteString (ByteString)
@@ -56,6 +58,7 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.Namespace
 import Pact.Core.PactValue
 import Pact.Core.Hash
+import Pact.Core.Info
 
 import qualified Pact.JSON.Decode as JD
 import Pact.Core.IR.Term
@@ -77,6 +80,9 @@ type TranslateM = ReaderT DeBruijn (StateT TranslateState (Except String))
 
 runTranslateM :: TranslateM a -> Either String a
 runTranslateM a = runExcept (evalStateT (runReaderT a 0) [])
+
+decodeModuleDataSpanInfo :: ByteString -> Maybe (ModuleData CoreBuiltin SpanInfo)
+decodeModuleDataSpanInfo = (fmap $ fmap Default.def) . decodeModuleData
 
 decodeModuleData :: ByteString -> Maybe (ModuleData CoreBuiltin ())
 decodeModuleData bs = do
@@ -597,6 +603,14 @@ fromLegacyTerm mh = \case
 
       Conditional CIf{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [cond, b1, b2] -> pure (Conditional (CIf cond b1 b2) ())
+        _ -> throwError "invariant failure"
+
+      Conditional CAnd{} _ -> traverse (fromLegacyTerm mh) args >>= \case
+        [b1, b2] -> pure (Conditional (CAnd b1 b2) ())
+        _ -> throwError "invariant failure"
+
+      Conditional COr{} _ -> traverse (fromLegacyTerm mh) args >>= \case
+        [b1, b2] -> pure (Conditional (COr b1 b2) ())
         _ -> throwError "invariant failure"
 
       CapabilityForm WithCapability{} _ -> traverse (fromLegacyTerm mh) args >>= \case

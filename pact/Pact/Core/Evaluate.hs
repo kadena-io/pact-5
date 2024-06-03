@@ -49,6 +49,7 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.Capabilities
 import Pact.Core.PactValue
 import Pact.Core.Gas
+import Pact.Core.Info
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.SPV
@@ -62,7 +63,7 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.IR.Eval.Runtime.Types as Eval
 
 -- Our Builtin environment for evaluation in Chainweb prod
-type EvalBuiltinEnv = CoreBuiltinEnv
+type EvalBuiltinEnv = BuiltinEnv CEKBigStep CoreBuiltin SpanInfo (EvalM CoreBuiltin SpanInfo)
 
 -- | Transaction-payload related environment data.
 data MsgData = MsgData
@@ -77,9 +78,9 @@ initMsgData :: Hash -> MsgData
 initMsgData h = MsgData (PObject mempty) def h mempty mempty
 
 builtinEnv :: EvalBuiltinEnv
-builtinEnv = coreBuiltinEnv @Eval.CEKBigStep
+builtinEnv = coreBuiltinEnv @Eval.CEKBigStep @SpanInfo
 
-type EvalInput = Either (Maybe DefPactExec) [Lisp.TopLevel ()]
+type EvalInput = Either (Maybe DefPactExec) [Lisp.TopLevel SpanInfo]
 
 newtype RawCode = RawCode { _rawCode :: Text }
   deriving (Eq, Show)
@@ -96,7 +97,7 @@ data ContMsg = ContMsg
 data EvalResult tv = EvalResult
   { _erInput :: !(Either (Maybe DefPactExec) tv)
     -- ^ compiled user input
-  , _erOutput :: ![CompileValue ()]
+  , _erOutput :: ![CompileValue SpanInfo]
     -- ^ Output values
   , _erLogs :: ![TxLog ByteString]
     -- ^ Transaction logs
@@ -104,7 +105,7 @@ data EvalResult tv = EvalResult
     -- ^ Result of defpact execution if any
   , _erGas :: Gas
     -- ^ Gas consumed/charged
-  , _erLoadedModules :: Map ModuleName (ModuleData CoreBuiltin ())
+  , _erLoadedModules :: Map ModuleName (ModuleData CoreBuiltin SpanInfo)
     -- ^ Modules loaded, with flag indicating "newly loaded"
   , _erTxId :: !(Maybe TxId)
     -- ^ Transaction id, if executed transactionally
@@ -117,7 +118,7 @@ data EvalResult tv = EvalResult
   } deriving (Show)
 
 setupEvalEnv
-  :: PactDb CoreBuiltin ()
+  :: PactDb CoreBuiltin SpanInfo
   -> ExecutionMode -- <- we have this
   -> MsgData -- <- create at type for this
   -> GasModel CoreBuiltin
@@ -125,7 +126,7 @@ setupEvalEnv
   -> SPVSupport
   -> PublicData
   -> S.Set ExecutionFlag
-  -> IO (EvalEnv CoreBuiltin ())
+  -> IO (EvalEnv CoreBuiltin SpanInfo)
 setupEvalEnv pdb mode msgData gasModel np spv pd efs = do
   gasRef <- newIORef mempty
   pure $ EvalEnv
@@ -153,20 +154,20 @@ setupEvalEnv pdb mode msgData gasModel np spv pd efs = do
     where
     toPair (Verifier vfn _ caps) = (vfn, S.fromList caps)
 
-evalExec :: EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> RawCode -> IO (Either (PactError ()) (EvalResult [Lisp.TopLevel ()]))
+evalExec :: EvalEnv CoreBuiltin SpanInfo -> EvalState CoreBuiltin SpanInfo -> RawCode -> IO (Either (PactError SpanInfo) (EvalResult [Lisp.TopLevel SpanInfo]))
 evalExec evalEnv evalSt rc = do
   terms <- either throwM return $ compileOnly rc
   either throwError return <$> interpret evalEnv evalSt (Right terms)
 
 evalTermExec
-  :: EvalEnv CoreBuiltin ()
-  -> EvalState CoreBuiltin ()
-  -> Lisp.Expr ()
-  -> IO (Either (PactError ()) (EvalResult (Lisp.Expr ())))
+  :: EvalEnv CoreBuiltin SpanInfo
+  -> EvalState CoreBuiltin SpanInfo
+  -> Lisp.Expr SpanInfo
+  -> IO (Either (PactError SpanInfo) (EvalResult (Lisp.Expr SpanInfo)))
 evalTermExec evalEnv evalSt term =
   either throwError return <$> interpretOnlyTerm evalEnv evalSt term
 
-evalContinuation :: EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> ContMsg -> IO (Either (PactError ()) (EvalResult [Lisp.TopLevel ()]))
+evalContinuation :: EvalEnv CoreBuiltin SpanInfo -> EvalState CoreBuiltin SpanInfo -> ContMsg -> IO (Either (PactError SpanInfo) (EvalResult [Lisp.TopLevel SpanInfo]))
 evalContinuation evalEnv evalSt cm = case _cmProof cm of
   Nothing ->
     interpret (setStep Nothing) evalSt (Left Nothing)
@@ -175,13 +176,13 @@ evalContinuation evalEnv evalSt cm = case _cmProof cm of
     pe <- either contError return etpe
     interpret (setStep (_peYield pe)) evalSt (Left $ Just pe)
   where
-    contError spvErr = throw $ PEExecutionError (ContinuationError spvErr) [] ()
+    contError spvErr = throw $ PEExecutionError (ContinuationError spvErr) [] (def :: SpanInfo)
     setStep y = set eeDefPactStep (Just $ DefPactStep (_cmStep cm) (_cmRollback cm) (_cmPactId cm) y) evalEnv
 
-evalExecDefaultState :: EvalEnv CoreBuiltin () -> RawCode -> IO (Either (PactError ()) (EvalResult [Lisp.TopLevel ()]))
+evalExecDefaultState :: EvalEnv CoreBuiltin SpanInfo -> RawCode -> IO (Either (PactError SpanInfo) (EvalResult [Lisp.TopLevel SpanInfo]))
 evalExecDefaultState evalEnv rc = evalExec evalEnv def rc
 
-interpret :: EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> EvalInput -> IO (Either (PactError ()) (EvalResult [Lisp.TopLevel ()]))
+interpret :: EvalEnv CoreBuiltin SpanInfo -> EvalState CoreBuiltin SpanInfo -> EvalInput -> IO (Either (PactError SpanInfo) (EvalResult [Lisp.TopLevel SpanInfo]))
 interpret evalEnv evalSt evalInput = do
   (result, state) <- runEvalM evalEnv evalSt $ evalWithinTx evalInput
   gas <- readIORef (_eeGasRef evalEnv)
@@ -202,10 +203,10 @@ interpret evalEnv evalSt evalInput = do
         }
 
 interpretOnlyTerm
-  :: EvalEnv CoreBuiltin ()
-  -> EvalState CoreBuiltin ()
-  -> Lisp.Expr ()
-  -> IO (Either (PactError ()) (EvalResult (Lisp.Expr ())))
+  :: EvalEnv CoreBuiltin SpanInfo
+  -> EvalState CoreBuiltin SpanInfo
+  -> Lisp.Expr SpanInfo
+  -> IO (Either (PactError SpanInfo) (EvalResult (Lisp.Expr SpanInfo)))
 interpretOnlyTerm evalEnv evalSt term = do
   (result, state) <- runEvalM evalEnv evalSt $ evalCompiledTermWithinTx term
   gas <- readIORef (_eeGasRef evalEnv)
@@ -228,7 +229,7 @@ interpretOnlyTerm evalEnv evalSt term = do
 -- Used to be `evalTerms`
 evalWithinTx
   :: EvalInput
-  -> EvalM CoreBuiltin () ([CompileValue ()], [TxLog ByteString], Maybe TxId)
+  -> EvalM CoreBuiltin SpanInfo ([CompileValue SpanInfo], [TxLog ByteString], Maybe TxId)
 evalWithinTx input = withRollback (start runInput >>= end)
 
   where
@@ -242,12 +243,12 @@ evalWithinTx input = withRollback (start runInput >>= end)
     start act = do
       pdb <- viewEvalEnv eePactDb
       mode <- viewEvalEnv eeMode
-      txid <- liftDbFunction () (_pdbBeginTx pdb mode)
+      txid <- liftDbFunction def (_pdbBeginTx pdb mode)
       (,txid) <$> act
 
     end (rs,txid) = do
       pdb <- viewEvalEnv eePactDb
-      logs <- liftDbFunction () (_pdbCommitTx pdb)
+      logs <- liftDbFunction def (_pdbCommitTx pdb)
       -- maybe might want to decode using serialisepact
       return (rs, logs, txid)
 
@@ -258,11 +259,11 @@ evalWithinTx input = withRollback (start runInput >>= end)
     evalRollbackTx = do
       esCaps .== def
       pdb <- viewEvalEnv eePactDb
-      liftDbFunction () (_pdbRollbackTx pdb)
+      liftDbFunction def (_pdbRollbackTx pdb)
 
 evalCompiledTermWithinTx
-  :: Lisp.Expr ()
-  -> EvalM CoreBuiltin () (PactValue, [TxLog ByteString], Maybe TxId)
+  :: Lisp.Expr SpanInfo
+  -> EvalM CoreBuiltin SpanInfo (PactValue, [TxLog ByteString], Maybe TxId)
 evalCompiledTermWithinTx input = withRollback (start runInput >>= end)
 
   where
@@ -276,12 +277,12 @@ evalCompiledTermWithinTx input = withRollback (start runInput >>= end)
     start act = do
       pdb <- viewEvalEnv eePactDb
       mode <- viewEvalEnv eeMode
-      txid <- liftDbFunction () (_pdbBeginTx pdb mode)
+      txid <- liftDbFunction def (_pdbBeginTx pdb mode)
       (,txid) <$> act
 
     end (rs,txid) = do
       pdb <- viewEvalEnv eePactDb
-      logs <- liftDbFunction () (_pdbCommitTx pdb)
+      logs <- liftDbFunction def (_pdbCommitTx pdb)
       -- maybe might want to decode using serialisepact
       return (rs, logs, txid)
 
@@ -292,30 +293,32 @@ evalCompiledTermWithinTx input = withRollback (start runInput >>= end)
     evalRollbackTx = do
       esCaps .== def
       pdb <- viewEvalEnv eePactDb
-      liftDbFunction () (_pdbRollbackTx pdb)
+      liftDbFunction def (_pdbRollbackTx pdb)
 
 -- | Runs only compilation pipeline
-compileOnly :: RawCode -> Either (PactError ()) [Lisp.TopLevel ()]
-compileOnly = bimap void (fmap void) . (Lisp.lexer >=> Lisp.parseProgram) . _rawCode
+compileOnly :: RawCode -> Either (PactError SpanInfo) [Lisp.TopLevel SpanInfo]
+compileOnly = -- bimap void (fmap void) .
+  (Lisp.lexer >=> Lisp.parseProgram) . _rawCode
 
 -- | Runs only compilation pipeline for a single term
-compileOnlyTerm :: RawCode -> Either (PactError ()) (Lisp.Expr ())
+compileOnlyTerm :: RawCode -> Either (PactError SpanInfo) (Lisp.Expr SpanInfo)
 compileOnlyTerm =
-  bimap void void . (Lisp.lexer >=> Lisp.parseExpr) . _rawCode
+  -- bimap void void .
+  (Lisp.lexer >=> Lisp.parseExpr) . _rawCode
 
 
 resumePact
   :: Maybe DefPactExec
-  -> Eval (CompileValue ())
+  -> EvalM CoreBuiltin SpanInfo (CompileValue SpanInfo)
 resumePact mdp =
-  (`InterpretValue` ()) <$> Eval.evalResumePact () builtinEnv mdp
+  (`InterpretValue` def) <$> Eval.evalResumePact def builtinEnv mdp
 
 -- | Compiles and evaluates the code
-evaluateDefaultState :: RawCode -> Eval [CompileValue ()]
+evaluateDefaultState :: RawCode -> EvalM CoreBuiltin SpanInfo [CompileValue SpanInfo]
 evaluateDefaultState = either throwError evaluateTerms . compileOnly
 
 evaluateTerms
-  :: [Lisp.TopLevel ()]
-  -> Eval [CompileValue ()]
+  :: [Lisp.TopLevel SpanInfo]
+  -> EvalM CoreBuiltin SpanInfo [CompileValue SpanInfo]
 evaluateTerms tls = do
   traverse (interpretTopLevel builtinEnv) tls

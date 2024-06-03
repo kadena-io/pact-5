@@ -116,10 +116,10 @@ serialisePact = PactSerialise
     docEncode :: (a -> ByteString) -> a -> ByteString
     docEncode enc o = toStrictByteString (encodeVersion V1_CBOR <> S.encodeBytes (enc o))
 
-    docDecode :: ByteString -> (DocumentVersion -> ByteString -> Maybe a) -> Maybe (Document a)
-    docDecode bs dec = case deserialiseFromBytes (liftA2 (,) decodeVersion S.decodeBytes) (fromStrict bs) of
-      Left _ -> Nothing
-      Right (_, (v,c)) ->  Document v <$> dec v c
+docDecode :: ByteString -> (DocumentVersion -> ByteString -> Maybe a) -> Maybe (Document a)
+docDecode bs dec = case deserialiseFromBytes (liftA2 (,) decodeVersion S.decodeBytes) (fromStrict bs) of
+  Left _ -> Nothing
+  Right (_, (v,c)) ->  Document v <$> dec v c
 
 gEncodeRowData :: RowData -> GasM (PactError i) b ByteString
 gEncodeRowData rd = do
@@ -137,5 +137,17 @@ serialisePact_raw_spaninfo :: PactSerialise CoreBuiltin SpanInfo
 serialisePact_raw_spaninfo = serialisePact
   { _encodeModuleData = V1.encodeModuleData_raw_spaninfo
   , _decodeModuleData = fmap LegacyDocument . V1.decodeModuleData_raw_spaninfo
+  , _encodeRowData = gEncodeRowData
+  }
+
+serialisePact_raw_spaninfo_better :: PactSerialise CoreBuiltin SpanInfo
+serialisePact_raw_spaninfo_better = serialisePact
+  { _encodeModuleData = V1.encodeModuleData_raw_spaninfo
+  , _decodeModuleData = \bs ->
+      LegacyDocument <$> LegacyPact.decodeModuleDataSpanInfo bs
+      <|> docDecode bs (\case
+                           V1_CBOR -> V1.decodeModuleData_raw_spaninfo
+                       )
+
   , _encodeRowData = gEncodeRowData
   }

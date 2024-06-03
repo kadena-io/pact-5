@@ -5,6 +5,7 @@ module Pact.Core.Info
 
 import Data.Default
 import GHC.Generics
+import Control.DeepSeq (NFData)
 
 data SpanInfo
   = SpanInfo
@@ -13,6 +14,9 @@ data SpanInfo
   , _liEndLine     :: !Int
   , _liEndColumn   :: !Int
   } deriving (Eq, Show, Generic)
+
+instance NFData SpanInfo
+
 
 instance Default SpanInfo where
   def = SpanInfo 0 0 0 0
