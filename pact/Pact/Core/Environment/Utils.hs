@@ -21,6 +21,7 @@ module Pact.Core.Environment.Utils
  , lookupModuleData
  , throwExecutionError
  , throwExecutionError'
+ , throwRecoverableError
  , toFqDep
  , mangleNamespace
  , getAllStackCaps
@@ -34,6 +35,7 @@ import Control.Applicative((<|>))
 import Control.Monad.Except
 import Control.Exception
 import Control.Monad.IO.Class(MonadIO(..))
+import Data.Text(Text)
 import Data.Default
 import Data.Maybe(mapMaybe)
 import qualified Data.Map.Strict as M
@@ -102,6 +104,9 @@ throwExecutionError :: (MonadEvalState b i m, MonadError (PactError i) m) => i -
 throwExecutionError i e = do
   st <- useEvalState esStack
   throwError (PEExecutionError e st i)
+
+throwRecoverableError :: MonadEval b i m => i -> Text -> m a
+throwRecoverableError i e = throwError (PERecoverableError (RecoverableError e) i)
 
 throwExecutionError' :: (MonadEvalState b i m, MonadError (PactError i) m, Default i) => EvalError -> m a
 throwExecutionError' = throwExecutionError def

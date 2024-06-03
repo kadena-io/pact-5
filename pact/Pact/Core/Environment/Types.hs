@@ -47,6 +47,7 @@ module Pact.Core.Environment.Types
  , defaultEvalEnv
  , GasLogEntry(..)
  , RecursionCheck(..)
+ , PactTrace(..)
  ) where
 
 
@@ -59,6 +60,7 @@ import Data.Map.Strict(Map)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.IORef
 import Data.Default
+import System.Clock
 
 import Control.DeepSeq
 import GHC.Generics
@@ -167,6 +169,24 @@ newtype RecursionCheck
 instance Default RecursionCheck where
   def = RecursionCheck mempty
 
+data PactTrace b i
+  = TraceFunctionEnter !TimeSpec (StackFrame i) i
+  | TraceNativeEnter !TimeSpec b i
+  | TraceFunctionExit !TimeSpec (StackFrame i) i
+  | TraceNativeExit !TimeSpec b i
+  deriving (Show, Generic)
+
+instance (NFData b, NFData i) => NFData (PactTrace b i) where
+  rnf = \case
+    TraceFunctionEnter (TimeSpec s ns) b i ->
+      rnf s `seq` rnf ns `seq` rnf b `seq` rnf i
+    TraceNativeEnter (TimeSpec s ns) b i ->
+      rnf s `seq` rnf ns `seq` rnf b `seq` rnf i
+    TraceFunctionExit (TimeSpec s ns) b i ->
+      rnf s `seq` rnf ns `seq` rnf b `seq` rnf i
+    TraceNativeExit (TimeSpec s ns) b i ->
+      rnf s `seq` rnf ns `seq` rnf b `seq` rnf i
+
 -- | Interpreter mutable state.
 data EvalState b i
   = EvalState
@@ -185,12 +205,13 @@ data EvalState b i
   -- ^ The current gas log
   , _esCheckRecursion :: NonEmpty RecursionCheck
     -- ^ Sequence of gas expendature events.
+  , _esTraceOutput :: [PactTrace b i]
   } deriving (Show, Generic)
 
 instance (NFData b, NFData i) => NFData (EvalState b i)
 
 instance Default (EvalState b i) where
-  def = EvalState def [] [] mempty Nothing Nothing (RecursionCheck mempty :| [])
+  def = EvalState def [] [] mempty Nothing Nothing (RecursionCheck mempty :| []) []
 
 makeClassy ''EvalState
 

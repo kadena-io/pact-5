@@ -13,6 +13,10 @@ module Pact.Core.Repl.Compile
  , interpretReplProgram
  , interpretReplProgramSmallStep
  , loadFile
+ , interpretReplProgramDirect
+ , interpretEvalBigStep
+ , interpretEvalSmallStep
+ , interpretEvalDirect
  ) where
 
 import Control.Lens
@@ -41,11 +45,11 @@ import Pact.Core.Environment
 import Pact.Core.Info
 import Pact.Core.PactValue
 import Pact.Core.Errors
+import Pact.Core.Interpreter
 import Pact.Core.Serialise (serialisePact_repl_spaninfo)
 
 
 import Pact.Core.IR.Eval.Runtime
-import Pact.Core.IR.Eval.CEK(CEKEval)
 import Pact.Core.Repl.Runtime.ReplBuiltin
 
 import Pact.Core.Repl.UserDocs
@@ -55,8 +59,11 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.IR.Eval.CEK as CEK
+import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
+import qualified Pact.Core.IR.Eval.Direct.ReplBuiltin as Direct
 
 type Repl = ReplM ReplCoreBuiltin
+type ReplInterpreter = Interpreter ReplCoreBuiltin SpanInfo Repl
 
 -- Small internal debugging function for playing with file loading within
 -- this module
@@ -71,9 +78,8 @@ data ReplCompileValue
 -- | Internal function for loading a file.
 --   Exported because it is used in the tests.
 loadFile
-  :: (CEKEval step ReplCoreBuiltin SpanInfo Repl)
-  => FilePath
-  -> BuiltinEnv step ReplCoreBuiltin SpanInfo Repl
+  :: FilePath
+  -> ReplInterpreter
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
 loadFile loc rEnv display = do
@@ -86,13 +92,19 @@ interpretReplProgram
   :: SourceCode
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
-interpretReplProgram = interpretReplProgram' (replBuiltinEnv @CEKBigStep)
+interpretReplProgram = interpretReplProgram' interpretEvalBigStep
 
 interpretReplProgramSmallStep
   :: SourceCode
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
-interpretReplProgramSmallStep = interpretReplProgram' (replBuiltinEnv @CEKSmallStep)
+interpretReplProgramSmallStep = interpretReplProgram' interpretEvalSmallStep
+
+interpretReplProgramDirect
+  :: SourceCode
+  -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
+  -> ReplM ReplCoreBuiltin [ReplCompileValue]
+interpretReplProgramDirect = interpretReplProgram' interpretEvalDirect
 
 checkReplNativesEnabled :: TopLevel n t (ReplBuiltin b) SpanInfo -> ReplM ReplCoreBuiltin ()
 checkReplNativesEnabled = \case
@@ -107,13 +119,40 @@ checkReplNativesEnabled = \case
       throwExecutionError i (EvalError "repl native disallowed in module code. If you want to use this, enable them with (env-enable-repl-natives true)")
     a ->  pure a
 
+interpretEvalSmallStep :: Interpreter ReplCoreBuiltin SpanInfo Repl
+interpretEvalSmallStep =
+  Interpreter { eval = evalSmallStep, interpretGuard = interpretGuardSmallStep}
+  where
+  evalSmallStep purity term =
+    CEK.eval purity (replBuiltinEnv @CEK.CEKSmallStep) term
+  interpretGuardSmallStep info g =
+    CEK.interpretGuard info (replBuiltinEnv @CEK.CEKSmallStep) g
+
+interpretEvalBigStep :: Interpreter ReplCoreBuiltin SpanInfo Repl
+interpretEvalBigStep =
+  Interpreter { eval = evalBigStep, interpretGuard = interpretGuardBigStep}
+  where
+  evalBigStep purity term =
+    CEK.eval purity (replBuiltinEnv @CEK.CEKBigStep) term
+  interpretGuardBigStep info g =
+    CEK.interpretGuard info (replBuiltinEnv @CEK.CEKBigStep) g
+
+interpretEvalDirect :: Interpreter ReplCoreBuiltin SpanInfo Repl
+interpretEvalDirect =
+  Interpreter { eval = evalDirect, interpretGuard = interpretGuardDirect}
+  where
+  evalDirect purity term =
+    Direct.eval purity Direct.replBuiltinEnv term
+  interpretGuardDirect info g =
+    PBool <$> Direct.interpretGuard info Direct.replBuiltinEnv g
+
+
 interpretReplProgram'
-  :: (CEKEval step ReplCoreBuiltin SpanInfo Repl)
-  => BuiltinEnv step ReplCoreBuiltin SpanInfo Repl
+  :: ReplInterpreter
   -> SourceCode
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
-interpretReplProgram' replEnv (SourceCode _ source) display = do
+interpretReplProgram' interpreter (SourceCode _ source) display = do
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ Lisp.parseReplProgram lexx
@@ -136,7 +175,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
           replEvalEnv .= ee
         fp <- mangleFilePath (T.unpack txt)
         when (isPactFile fp) $ esLoaded . loToplevel .= mempty
-        out <- loadFile fp replEnv display
+        out <- loadFile fp interpreter display
         replCurrSource .= oldSrc
         unless reset $ do
           replEvalEnv .= oldEE
@@ -153,7 +192,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
       Just doc -> displayValue $ RBuiltinDoc doc
       Nothing -> do
         functionDocs toplevel
-        (ds, deps) <- compileDesugarOnly replEnv toplevel
+        (ds, deps) <- compileDesugarOnly interpreter toplevel
         checkReplNativesEnabled ds
         case ds of
           TLTerm (Var (Name n (NTopLevel mn mh)) varI) -> do
@@ -166,7 +205,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
               Nothing ->
                 failInvariant varI "repl invariant violated: resolved to a top level free variable without a binder"
           _ -> do
-            v <- evalTopLevel replEnv ds deps
+            v <- evalTopLevel interpreter ds deps
             displayValue (RCompileValue v)
     _ ->  do
       ds <- runDesugarReplTopLevel tl
@@ -180,7 +219,7 @@ interpretReplProgram' replEnv (SourceCode _ source) display = do
         displayValue $ RLoadedDefun $ _argName $ _dfunSpec df
       RTLDefConst dc -> case _dcTerm dc of
         TermConst term -> do
-          pv <- CEK.eval PSysOnly replEnv term
+          pv <- eval interpreter PSysOnly term
           pv' <- maybeTCType (_dcInfo dc) pv (_argType $ _dcSpec dc)
           let dc' = set dcTerm (EvaledConst pv') dc
           let fqn = FullyQualifiedName replModuleName (_argName $ _dcSpec dc) replModuleHash

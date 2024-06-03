@@ -30,6 +30,16 @@ flag with-crypto
   manual: True
   default: True
 
+flag with-funcall-tracing
+  description: Enable Tracing on user function calls
+  manual: True
+  default: True
+
+flag with-native-tracing
+  description: Enable Tracing on pact primitives
+  manual: True
+  default: True
+
 common pact-common
   build-depends:
     , Decimal
@@ -73,6 +83,7 @@ common pact-common
     , scientific
     , serialise
     , cborg
+    , clock
     , unordered-containers
     , groups
     , mod
@@ -117,6 +128,15 @@ library pact-crypto
 library
   import: pact-common
   hs-source-dirs: pact
+
+  if (flag(with-funcall-tracing))
+    cpp-options: -DWITH_FUNCALL_TRACING
+
+  if (flag(with-native-tracing))
+    cpp-options: -DWITH_NATIVE_TRACING
+
+  if (flag(with-native-tracing) || flag(with-funcall-tracing))
+    cpp-options: -DWITH_TRACING
 
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
@@ -186,6 +206,7 @@ library
     Pact.Core.Legacy.LegacyPactValue
     Pact.Core.Legacy.LegacyCodec
     Pact.Core.Verifiers
+    Pact.Core.Interpreter
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
@@ -197,11 +218,17 @@ library
     Pact.Core.IR.Term
     Pact.Core.IR.Desugar
 
+    Pact.Core.IR.Eval.Direct.Evaluator
+    Pact.Core.IR.Eval.Direct.ReplBuiltin
+    Pact.Core.IR.Eval.Direct.Types
+
     -- Core IR Evaluator modules
     Pact.Core.IR.Eval.Runtime
     Pact.Core.IR.Eval.Runtime.Types
     Pact.Core.IR.Eval.Runtime.Utils
     Pact.Core.IR.Eval.CEK
+    Pact.Core.IR.Eval.CEK.Types
+    Pact.Core.IR.Eval.CEK.Utils
     Pact.Core.IR.Eval.CoreBuiltin
     Pact.Core.IR.ModuleHashing
     Pact.Core.IR.ConstEval
