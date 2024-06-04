@@ -1339,31 +1339,22 @@ coreDistinct info b cont handler _env = \case
 coreFormat  :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreFormat info b cont handler _env = \case
   [VString s, VList es] -> do
-    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ T.length s
     let parts = T.splitOn "{}" s
         plen = length parts
     if | plen == 1 -> returnCEKValue cont handler (VString s)
        | plen - length es > 1 -> returnCEK cont handler $ VError "format: not enough arguments for template" info
        | otherwise -> do
           args <- mapM formatArgM $ V.toList $ V.take (plen - 1) es
+          let totalLength = sum (T.length <$> parts) + sum (T.length <$> args)
+          chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength totalLength
           returnCEKValue cont handler $ VString $ T.concat $ alternate parts args
     where
-    formatArg (PString ps) = ps
-    formatArg a = renderPactValue a
-
-    formatArgM a = do
-      let a' = formatArg a
-      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ T.length a'
-      pure a'
-
     alternate (x:xs) ys = x : alternate ys xs
     alternate _ _ = []
 
-    -- Todo: this is kinda hacky
-    -- BIG TODO: REMOVE PRETTY FROM SEMANTICS.
-    -- THIS CANNOT MAKE IT TO PROD
-    renderPactValue :: PactValue -> T.Text
-    renderPactValue = T.pack . show . Pretty.pretty
+    formatArgM (PString ps) = pure ps
+    formatArgM a = showPactValue info a
+
   args -> argsError info b args
 
 checkLen
