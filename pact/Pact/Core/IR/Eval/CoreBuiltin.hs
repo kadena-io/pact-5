@@ -384,24 +384,17 @@ rawSqrt info b cont handler _env = \case
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
 
--- Todo: fix all show instances
+showPactValue :: MonadEval b i m => i -> PactValue -> m T.Text
+showPactValue info pv = do
+  sz <- sizeOf SizeOfV0 pv
+  chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral sz
+  pure $ T.pack $ show $ Pretty.pretty pv
+
 rawShow :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawShow info b cont handler _env = \case
-  [VLiteral (LInteger i)] -> do
-    let strLen = 1 + Exts.I# (IntLog.integerLog2# $ abs i)
-    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
-    returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
-  [VLiteral (LDecimal i)] -> do
-    let strLen = 1 + Exts.I# (IntLog.integerLog2# $ abs $ decimalMantissa i)
-    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
-    returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
-  [VLiteral (LString i)] -> do
-    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ T.length i
-    returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
-  [VLiteral (LBool i)] ->
-    returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
-  [VLiteral LUnit] ->
-    returnCEKValue cont handler (VLiteral (LString "()"))
+  [VPactValue pv] -> do
+    str <- showPactValue info pv
+    returnCEKValue cont handler $ VString str
   args -> argsError info b args
 
 -- Todo: Gas here is complicated, greg worked on this previously
