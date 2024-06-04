@@ -8,6 +8,7 @@ module Pact.Core.Legacy.LegacyPactValue
 
 import Control.Applicative
 import Data.Aeson
+import Data.Coerce
 import Data.String (IsString (..))
 
 import qualified Pact.JSON.Encode as J
@@ -16,11 +17,13 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Aeson as A
 import qualified Data.Aeson.KeyMap as A
+import qualified Data.Text.Encoding as T
 
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Literal
 import Pact.Core.ModRefs
+import Pact.Core.ChainData
 import Pact.Core.PactValue
 import Pact.Core.Legacy.LegacyCodec
 import Pact.Core.StableEncoding
@@ -29,7 +32,11 @@ import Pact.Core.Persistence.Types
 import Data.Text (Text)
 import Control.Monad
 import Pact.Core.Builtin (CoreBuiltin)
+import Pact.Core.Namespace
+import Pact.Core.DefPacts.Types
+import Pact.Core.Hash
 import qualified Pact.Core.Serialise.LegacyPact as LegacyPact
+import Data.ByteString.Short (toShort)
 
 
 newtype Legacy a
@@ -182,7 +189,7 @@ instance FromJSON (Legacy PactValue) where
     (PList . fmap _unLegacy <$> parseJSON v) <|>
     (PGuard . _unLegacy <$> parseJSON v) <|>
     (PModRef . _unLegacy <$> parseJSON v) <|>
-    (PObject . M.mapKeys Field . fmap _unLegacy <$> parseJSON v)
+    (PObject . fmap _unLegacy <$> parseJSON v)
 
 instance FromJSON (Legacy ModuleGuard) where
   parseJSON = withObject "ModuleGuard" $ \o ->
@@ -236,6 +243,9 @@ instance J.Encode (Legacy (SomeDomain b i)) where
     DNamespaces -> J.text "Namespaces"
     DDefPacts -> J.text "Pacts"
 
+instance FromJSON (Legacy DefPactId) where
+  parseJSON = withText "DefPactId" (pure . Legacy . DefPactId)
+
 instance FromJSON (Legacy (SomeDomain b i)) where
   parseJSON v =
     (withText "Domain" $ \case
@@ -265,6 +275,76 @@ instance FromJSON (Legacy TableName) where
             { _tableName = _qnName qualifiedTableName
             , _tableModuleName = _qnModName qualifiedTableName
             }
+
+instance FromJSON (Legacy RowKey) where
+  parseJSON =
+    fmap (Legacy . RowKey) . parseJSON
+
+instance FromJSON (Legacy Namespace) where
+  parseJSON = withObject "RowData" $ \o -> do
+    nsn <- NamespaceName <$> o .: "name"
+    usr <- _unLegacy <$> o .: "user"
+    admin <- _unLegacy <$> o .: "admin"
+    pure $ Legacy $ Namespace
+      { _nsName = nsn
+      , _nsUser = usr
+      , _nsAdmin = admin }
+
+instance FromJSON (Legacy v) => FromJSON (Legacy (ObjectData v)) where
+  parseJSON v =
+    Legacy . ObjectData . (coerce :: M.Map Field (Legacy v) -> M.Map Field v) <$> parseJSON v
+
+instance FromJSON (Legacy ModuleHash) where
+  parseJSON = withText "Hash" $ \t -> case decodeBase64UrlUnpadded (T.encodeUtf8 t) of
+    Left _ -> fail "cant decode"
+    Right t' -> pure $ Legacy $ ModuleHash $ Hash $ toShort t'
+
+
+instance FromJSON (Legacy Provenance) where
+  parseJSON = withObject "Provenance" $ \o -> do
+    targetCid <- o .: "targetChainId"
+    Legacy mh <- o .: "moduleHash"
+    pure $ Legacy $ Provenance (ChainId targetCid) mh
+
+
+instance FromJSON (Legacy Yield) where
+  parseJSON = withObject "Yield" $ \o -> do
+    ObjectData objData <- _unLegacy <$> o .: "data"
+    prov <- o .:? "provenance"
+    sourceChain <- fmap ChainId <$> o .:? "source"
+    pure $ Legacy $ Yield objData (_unLegacy <$> prov) sourceChain
+
+instance (FromJSON (Legacy name), FromJSON (Legacy v)) => FromJSON (Legacy (DefPactContinuation name v)) where
+  parseJSON = withObject "PactContinuation" $ \o -> do
+    Legacy qn <- o .: "def"
+    args <- fmap _unLegacy <$> o .: "args"
+    pure $ Legacy $ DefPactContinuation qn args
+
+instance FromJSON (Legacy v) => FromJSON (Legacy (Maybe v)) where
+  parseJSON = fmap c . parseJSON
+    where
+    c = coerce :: Maybe (Legacy v) -> Legacy (Maybe v)
+
+instance FromJSON (Legacy DefPactExec) where
+  parseJSON = withObject "PactExec" $ \o -> fmap Legacy $ do
+    stepCount <- o .: "stepCount"
+    yield <- fmap _unLegacy <$> o .:? "yield"
+    step <- o .: "step"
+    pid <- DefPactId <$> o .: "pactId"
+    cont <- _unLegacy <$> o .: "continuation"
+    stepHasRb <- o .: "stepHasRollback"
+    let c = coerce :: M.Map DefPactId (Legacy DefPactExec) -> M.Map DefPactId DefPactExec
+    nested <- maybe mempty c <$> o .:? "nested"
+    pure $ DefPactExec
+      { _peYield = yield
+      , _peStepHasRollback = stepHasRb
+      , _peStepCount = stepCount
+      , _peStep = step
+      , _peNestedDefPactExec = nested
+      , _peDefPactId = pid
+      , _peContinuation = cont}
+
+
 
 instance FromJSON (Legacy RowData) where
   parseJSON v =
