@@ -125,6 +125,14 @@ library pact-crypto
   if !(flag(with-crypto))
     buildable: False
 
+library pact-request-api
+  import: pact-common
+  hs-source-dirs: pact-request-api
+  build-depends:
+    , pact-tng:pact-crypto
+  exposed-modules:
+    Pact.Types.Command
+
 library
   import: pact-common
   hs-source-dirs: pact
@@ -428,6 +436,24 @@ executable legacyPactDbCheck
 
   build-depends:
     , pact-tng
+  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+  ghc-prof-options:    -fprof-auto -fprof-auto-calls
+  default-language:    Haskell2010
+
+-- tools
+executable pact-server
+  import: pact-common
+  hs-source-dirs: pact-server
+
+  main-is: Pact/Server.hs
+
+  build-depends:
+    , pact-tng
+    , async
+    , fast-logger
+    , filepath
+    , servant
+    , servant-server
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
