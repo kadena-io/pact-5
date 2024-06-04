@@ -457,6 +457,14 @@ benchShow pdb =
     [ runNativeBenchmarkPrepared [("x", str)] pdb title "(show x)"
     | (title, str) <- take 3 $ enumExpString "a" 1_000 100
     ]
+  , C.bgroup "list/flat"
+    [ runNativeBenchmarkPrepared [("x", lst)] pdb title "(show x)"
+    | (title, lst) <- take 3 $ enumExpList 1_000 10
+    ]
+  , C.bgroup "list/deep"
+    [ runNativeBenchmarkPrepared [("x", lst)] pdb title "(show x)"
+    | (title, lst) <- take 3 $ enumExpListDeep 3 6 2
+    ]
   ]
 
 benchDistinct :: BuiltinBenches
