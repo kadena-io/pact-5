@@ -32,7 +32,7 @@ import Control.Monad.IO.Class
 import Data.Attoparsec.Text(parseOnly)
 import Data.Bits
 import Data.Either(isLeft, isRight)
-import Data.Foldable(foldl', toList, foldlM)
+import Data.Foldable
 import Data.Decimal(roundTo', Decimal, DecimalRaw(..))
 import Data.Vector(Vector)
 import Data.Maybe(maybeToList)
@@ -50,7 +50,6 @@ import qualified GHC.Integer.Logarithms as IntLog
 import qualified Pact.Time as PactTime
 
 #ifndef WITHOUT_CRYPTO
-import Data.Foldable(traverse_)
 import qualified Control.Lens as Lens
 #endif
 
@@ -284,8 +283,9 @@ rawNegate info b cont handler _env = \case
 
 rawEq :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawEq info b cont handler _env = \case
-  [VPactValue pv, VPactValue pv'] ->
-    returnCEKValue cont handler (VBool (pv == pv'))
+  [VPactValue pv, VPactValue pv'] -> do
+    isEq <- valEqGassed info pv pv'
+    returnCEKValue cont handler (VBool isEq)
   args -> argsError info b args
 
 modInt :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -293,8 +293,9 @@ modInt = binaryIntFn mod
 
 rawNeq :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawNeq info b cont handler _env = \case
-  [VPactValue pv, VPactValue pv'] ->
-    returnCEKValue cont handler (VBool (pv /= pv'))
+  [VPactValue pv, VPactValue pv'] -> do
+    isEq <- valEqGassed info pv pv'
+    returnCEKValue cont handler (VBool $ not isEq)
   args -> argsError info b args
 
 rawGt :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -612,6 +613,7 @@ zipList info b cont handler _env = \case
   [VClosure clo, VList l, VList r] ->
     case (V.toList l, V.toList r) of
       (x:xs, y:ys) -> do
+        chargeGasArgs info (GAConstant unconsWorkNodeGas)
         let cont' = BuiltinC _env info (ZipC clo (xs, ys) []) cont
         applyLam clo [VPactValue x, VPactValue y] cont' handler
       (_, _) -> returnCEKValue cont handler (VList mempty)
@@ -622,6 +624,7 @@ coreMap info b cont handler env = \case
   [VClosure clo, VList li] -> case V.toList li of
     x:xs -> do
       let cont' = BuiltinC env info (MapC clo xs []) cont
+      chargeGasArgs info (GAConstant unconsWorkNodeGas)
       applyLam clo [VPactValue x] cont' handler
     [] -> returnCEKValue cont handler (VList mempty)
   args -> argsError info b args
@@ -630,6 +633,7 @@ coreFilter :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreFilter info b cont handler _env = \case
   [VClosure clo, VList li] -> case V.toList li of
     x:xs -> do
+      chargeGasArgs info (GAConstant unconsWorkNodeGas)
       let cont' = CondC _env info (FilterC clo x xs []) cont
       applyLam clo [VPactValue x] cont' handler
     [] -> returnCEKValue cont handler (VList mempty)
@@ -640,6 +644,7 @@ coreFold info b cont handler _env = \case
   [VClosure clo, VPactValue initElem, VList li] ->
     case V.toList li of
       x:xs -> do
+        chargeGasArgs info (GAConstant unconsWorkNodeGas)
         let cont' = BuiltinC _env info (FoldC clo xs) cont
         applyLam clo [VPactValue initElem, VPactValue x] cont' handler
       [] -> returnCEKValue cont handler (VPactValue initElem)
@@ -1159,18 +1164,17 @@ defineKeySet' info cont handler env ksname newKs  = do
             enforceGuard info cont' handler env uGuard
 
 defineKeySet :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
-defineKeySet info b cont handler env args = do
-  case args of
-    [VString ksname, VGuard (GKeyset ks)] -> do
-      enforceTopLevelOnly info b
-      defineKeySet' info cont handler env ksname ks
-    [VString ksname] -> do
-      enforceTopLevelOnly info b
-      readKeyset' info ksname >>= \case
-        Just newKs ->
-          defineKeySet' info cont handler env ksname newKs
-        Nothing -> returnCEK cont handler (VError "read-keyset failure" info)
-    _ -> argsError info b args
+defineKeySet info b cont handler env = \case
+  [VString ksname, VGuard (GKeyset ks)] -> do
+    enforceTopLevelOnly info b
+    defineKeySet' info cont handler env ksname ks
+  [VString ksname] -> do
+    enforceTopLevelOnly info b
+    readKeyset' info ksname >>= \case
+      Just newKs ->
+        defineKeySet' info cont handler env ksname newKs
+      Nothing -> returnCEK cont handler (VError "read-keyset failure" info)
+  args -> argsError info b args
 
 --------------------------------------------------
 -- Capabilities
@@ -1185,20 +1189,6 @@ requireCapability info b cont handler _env = \case
     requireCap info cont handler ct
   args -> argsError info b args
 
-enforceStackTopIsDefcap
-  :: (MonadEval b i m)
-  => i
-  -> b
-  -> m ()
-enforceStackTopIsDefcap info b = do
-  let (NativeName n) = builtinName b
-  let errMsg = "native execution failed, native must be called within a defcap body: " <> n
-  useEvalState esStack >>= \case
-      sf:_ -> do
-        when (_sfFnType sf /= SFDefcap) $
-          throwExecutionError info (EvalError errMsg)
-      _ ->
-        throwExecutionError info (EvalError errMsg)
 
 composeCapability :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 composeCapability info b cont handler env = \case
@@ -1958,14 +1948,6 @@ coreEnforceVerifier info b cont handler _env = \case
   args -> argsError info b args
   where
     verifError verName msg = "Verifier failure " <> verName <> ":" <> msg
-
-anyCapabilityBeingEvaluated
-  :: MonadEval b i m
-  => S.Set (CapToken QualifiedName PactValue)
-  -> m Bool
-anyCapabilityBeingEvaluated caps = do
-  capsBeingEvaluated <- useEvalState (esCaps . csCapsBeingEvaluated)
-  return $! any (`S.member` caps) capsBeingEvaluated
 
 
 -----------------------------------

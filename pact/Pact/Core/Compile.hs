@@ -43,8 +43,8 @@ import Pact.Core.Namespace
 import Pact.Core.PactValue
 import Pact.Core.Hash
 import Pact.Core.IR.Eval.Runtime
+import Pact.Core.Interpreter
 
-import qualified Pact.Core.IR.Eval.CEK as Eval
 import qualified Pact.Core.IR.ModuleHashing as MHash
 import qualified Pact.Core.IR.ConstEval as ConstEval
 import qualified Pact.Core.Syntax.Lexer as Lisp
@@ -53,7 +53,7 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 import Pact.Core.Gas
 import Pact.Core.SizeOf
 
-type HasCompileEnv step b i m
+type HasCompileEnv b i m
   = ( MonadEval b i m
     , DesugarBuiltin b
     , Pretty b
@@ -61,7 +61,7 @@ type HasCompileEnv step b i m
     , PhaseDebug b i m
     , SizeOf i
     , SizeOf b
-    , Eval.CEKEval step b i m)
+    )
 
 _parseOnly
   :: Text -> Either PactErrorI [Lisp.TopLevel SpanInfo]
@@ -81,14 +81,15 @@ data CompileValue i
 
 
 enforceNamespaceInstall
-  :: (HasCompileEnv step b i m)
+  :: (HasCompileEnv b i m)
   => i
-  -> BuiltinEnv step b i m
+  -> Interpreter b i m
   -> m ()
-enforceNamespaceInstall info bEnv =
+enforceNamespaceInstall info interpreter =
   useEvalState (esLoaded . loNamespace) >>= \case
     Just ns ->
-      void $ Eval.interpretGuard info bEnv (_nsUser ns)
+      void $ interpretGuard interpreter info (_nsUser ns)
+      -- Eval.interpretGuard info bEnv (_nsUser ns)
     Nothing ->
       enforceRootNamespacePolicy
     where
@@ -100,16 +101,16 @@ enforceNamespaceInstall info bEnv =
     allowRoot (SmartNamespacePolicy ar _) = ar
 {-# SPECIALIZE enforceNamespaceInstall
   :: ()
-  -> CoreBuiltinEnv
+  -> Interpreter CoreBuiltin () Eval
   -> Eval ()  #-}
 
 -- | Evaluate module governance
 evalModuleGovernance
-  :: (HasCompileEnv step b i m)
-  => BuiltinEnv step b i m
+  :: (HasCompileEnv b i m)
+  => Interpreter b i m
   -> Lisp.TopLevel i
   -> m ()
-evalModuleGovernance bEnv tl = do
+evalModuleGovernance interpreter tl = do
   lo <- useEvalState esLoaded
   pdb <- viewEvalEnv eePactDb
   case tl of
@@ -124,7 +125,7 @@ evalModuleGovernance bEnv tl = do
               let ksnTerm = Constant (LString (renderKeySetName ksn)) info
                   ksrg = App (Builtin (liftCoreBuiltin CoreKeysetRefGuard) info) (pure ksnTerm) info
                   term = App (Builtin (liftCoreBuiltin CoreEnforceGuard) info) (pure ksrg) info
-              void $ Eval.eval PImpure bEnv term
+              void $ eval interpreter PImpure term
             CapGov (FQName fqn) -> do
               hasModAdmin <- usesEvalState (esCaps . csModuleAdmin) (S.member mname)
               if hasModAdmin then pure ()
@@ -134,69 +135,69 @@ evalModuleGovernance bEnv tl = do
                 let cgBody = Constant LUnit info
                     withCapApp = App (Var (fqnToName fqn) info) [] info
                     term = CapabilityForm (WithCapability withCapApp cgBody) info
-                void $ Eval.eval PImpure bEnv term
+                void $ eval interpreter PImpure term
                 esCaps . csModuleAdmin %== S.insert mname
           -- | Restore the state to pre-module admin acquisition
           esLoaded .== lo
-        Nothing -> enforceNamespaceInstall info bEnv
+        Nothing -> enforceNamespaceInstall info interpreter
     Lisp.TLInterface iface -> do
       let info = Lisp._ifInfo iface
       let unmangled = Lisp._ifName iface
       ifn <- mangleNamespace unmangled
       lookupModuleData info pdb ifn >>= \case
-        Nothing -> enforceNamespaceInstall info bEnv
+        Nothing -> enforceNamespaceInstall info interpreter
         Just _ ->
           throwExecutionError info  (CannotUpgradeInterface ifn)
     _ -> pure ()
 {-# SPECIALIZE evalModuleGovernance
-  :: CoreBuiltinEnv
+  :: Interpreter CoreBuiltin () Eval
   -> Lisp.TopLevel ()
   -> Eval ()  #-}
 
 compileDesugarOnly
-  :: forall step b i m
-  .  (HasCompileEnv step b i m)
-  => BuiltinEnv step b i m
+  :: forall b i m
+  .  (HasCompileEnv b i m)
+  => Interpreter b i m
   -> Lisp.TopLevel i
   -> m (EvalTopLevel b i, S.Set ModuleName)
-compileDesugarOnly bEnv tl = do
-  evalModuleGovernance bEnv tl
+compileDesugarOnly interpreter tl = do
+  evalModuleGovernance interpreter tl
   -- Todo: pretty instance for modules and all of toplevel
   debugPrint (DPParser @b) tl
   (DesugarOutput ds deps) <- runDesugarTopLevel tl
-  constEvaled <- ConstEval.evalTLConsts bEnv ds
+  constEvaled <- ConstEval.evalTLConsts interpreter ds
   let tlFinal = MHash.hashTopLevel constEvaled
   debugPrint DPDesugar ds
   pure (tlFinal, deps)
 
 interpretTopLevel
-  :: forall step b i m
-  .  (HasCompileEnv step b i m)
-  => BuiltinEnv step b i m
+  :: forall b i m
+  .  (HasCompileEnv b i m)
+  => Interpreter b i m
   -> Lisp.TopLevel i
   -> m (CompileValue i)
-interpretTopLevel bEnv tl = do
-  evalModuleGovernance bEnv tl
+interpretTopLevel interpreter tl = do
+  evalModuleGovernance interpreter tl
   -- Todo: pretty instance for modules and all of toplevel
   debugPrint (DPParser @b) tl
   (DesugarOutput ds deps) <- runDesugarTopLevel tl
-  constEvaled <- ConstEval.evalTLConsts bEnv ds
+  constEvaled <- ConstEval.evalTLConsts interpreter ds
   let tlFinal = MHash.hashTopLevel constEvaled
   debugPrint DPDesugar ds
-  evalTopLevel bEnv tlFinal deps
+  evalTopLevel interpreter tlFinal deps
 {-# SPECIALIZE interpretTopLevel
-  :: CoreBuiltinEnv
+  :: Interpreter CoreBuiltin () Eval
   -> Lisp.TopLevel ()
   -> Eval (CompileValue ())  #-}
 
 evalTopLevel
-  :: forall step b i m
-  .  (HasCompileEnv step b i m)
-  => BuiltinEnv step b i m
+  :: forall b i m
+  .  (HasCompileEnv b i m)
+  => Interpreter b i m
   -> EvalTopLevel b i
   -> S.Set ModuleName
   -> m (CompileValue i)
-evalTopLevel bEnv tlFinal deps = do
+evalTopLevel interpreter tlFinal deps = do
   lo0 <- useEvalState esLoaded
   pdb <- viewEvalEnv eePactDb
   case tlFinal of
@@ -204,7 +205,7 @@ evalTopLevel bEnv tlFinal deps = do
       -- enforce new module keyset on install
       case _mGovernance m of
         KeyGov ksn ->
-          () <$ Eval.interpretGuard (_mInfo m) bEnv (GKeySetRef ksn)
+          () <$ interpretGuard interpreter (_mInfo m) (GKeySetRef ksn)
       -- governance is granted on install without testing the cap.
       -- rationale is governance might be some vote or something
       -- that doesn't exist yet, or something like non-upgradable governance.
@@ -245,12 +246,11 @@ evalTopLevel bEnv tlFinal deps = do
             over loToplevel (M.union newTopLevel)
       esLoaded %== loadNewModule
       pure (LoadedInterface (view ifName iface) (view ifHash iface))
-    TLTerm term -> (`InterpretValue` (view termInfo term)) <$> Eval.eval PImpure bEnv term
+    TLTerm term -> (`InterpretValue` (view termInfo term)) <$> eval interpreter PImpure term
     TLUse imp _ -> pure (LoadedImports imp)
 {-# SPECIALIZE evalTopLevel
-  :: CoreBuiltinEnv
+  :: Interpreter CoreBuiltin () Eval
   -> EvalTopLevel CoreBuiltin ()
   -> S.Set ModuleName
   -> Eval (CompileValue ())  #-}
 {-# INLINE evalTopLevel #-}
-

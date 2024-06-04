@@ -1,4 +1,4 @@
--- |
+{-# LANGUAGE PartialTypeSignatures #-}
 
 module Pact.Core.Test.GasGolden
   (tests
@@ -31,16 +31,19 @@ import Data.List (sort)
 import Pact.Core.Gas.TableGasModel
 import Control.Lens
 
+type InterpretPact = SourceCode -> (ReplCompileValue -> ReplM ReplCoreBuiltin ()) -> ReplM ReplCoreBuiltin [ReplCompileValue]
+
 tests :: IO TestTree
 tests = do
   cases <- gasTestFiles
   pure $ testGroup "Gas Goldens"
     [ testCase "Capture all builtins" $ captureBuiltins (fst <$> cases)
-    , goldenVsStringDiff "Gas Goldens" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases)
+    , goldenVsStringDiff "Gas Goldens: CEK" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases interpretReplProgram)
+    , goldenVsStringDiff "Gas Goldens: CEK smallstep" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases interpretReplProgramSmallStep)
+    , goldenVsStringDiff "Gas Goldens: Direct" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases interpretReplProgramDirect)
     ]
-
   where
-    runDiff = \ref new -> ["diff", "-u", ref, new]
+  runDiff = \ref new -> ["diff", "-u", ref, new]
 
 
 gasTestDir :: [Char]
@@ -68,10 +71,10 @@ lookupOp :: Text -> Text
 lookupOp n = fromMaybe n (M.lookup n fileNameToOp)
 
 
-gasGoldenTests :: [(Text, FilePath)] -> IO BS.ByteString
-gasGoldenTests c = do
+gasGoldenTests :: [(Text, FilePath)] -> InterpretPact -> IO BS.ByteString
+gasGoldenTests c interp = do
   gasOutputs <- forM c $ \(fn, fp) -> do
-    mGas <- runGasTest (gasTestDir </> fp)
+    mGas <- runGasTest (gasTestDir </> fp) interp
     case mGas of
       Nothing -> fail $ "Could not execute the gas tests for: " <> show fp
       Just (MilliGas consumed) -> pure $ BS.fromStrict $ T.encodeUtf8 (lookupOp fn <> ": " <> T.pack (show consumed))
@@ -104,8 +107,8 @@ opToFileName = M.fromList
 fileNameToOp :: M.Map Text Text
 fileNameToOp = M.fromList [(v,k) | (k, v) <- M.toList opToFileName]
 
-runGasTest :: FilePath -> IO (Maybe MilliGas)
-runGasTest file = do
+runGasTest :: FilePath -> InterpretPact -> IO (Maybe MilliGas)
+runGasTest file interpret = do
   src <- T.readFile file
   pdb <- mockPactDb serialisePact_repl_spaninfo
   gasLog <- newIORef Nothing
@@ -126,6 +129,6 @@ runGasTest file = do
             , _replNativesEnabled = False
             }
   stateRef <- newIORef rstate
-  runReplT stateRef (interpretReplProgram source (const (pure ()))) >>= \case
+  runReplT stateRef (interpret source (const (pure ()))) >>= \case
     Left _ -> pure Nothing
     Right _ -> Just <$> readIORef gasRef

@@ -45,6 +45,8 @@ tests = do
     , testGroup "sqlite db:bigstep" (runFileReplTestSqlite interpretReplProgram <$> files)
     , testGroup "in-memory db:smallstep" (runFileReplTest interpretReplProgramSmallStep <$> files)
     , testGroup "sqlite db:smallstep" (runFileReplTestSqlite interpretReplProgramSmallStep <$> files)
+    , testGroup "in-memory db:direct" (runFileReplTest interpretReplProgramDirect <$> files)
+    , testGroup "sqlite db:direct" (runFileReplTestSqlite interpretReplProgramDirect <$> files)
     ]
 
 newtype ReplSourceDir

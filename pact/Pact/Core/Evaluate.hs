@@ -6,9 +6,11 @@ module Pact.Core.Evaluate
   ( MsgData(..)
   , RawCode(..)
   , EvalResult(..)
+  , ContMsg(..)
   , initMsgData
   , evalExec
   , evalExecDefaultState
+  , evalContinuation
   , setupEvalEnv
   , interpret
   , compileOnly
@@ -41,7 +43,7 @@ import Pact.Core.Environment
 import Pact.Core.Errors
 import Pact.Core.Hash (Hash)
 import Pact.Core.IR.Eval.CoreBuiltin
-import Pact.Core.IR.Eval.Runtime hiding (EvalResult)
+import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Persistence
 import Pact.Core.DefPacts.Types
 import Pact.Core.Capabilities
@@ -49,18 +51,26 @@ import Pact.Core.PactValue
 import Pact.Core.Gas
 import Pact.Core.Names
 import Pact.Core.Guards
+import Pact.Core.SPV
 import Pact.Core.Namespace
 import Pact.Core.IR.Desugar
-import Pact.Core.SPV
 import Pact.Core.Verifiers
+import Pact.Core.Interpreter
 import qualified Pact.Core.IR.Eval.CEK as Eval
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
-import qualified Pact.Core.IR.Eval.Runtime.Types as Eval
 
 -- Our Builtin environment for evaluation in Chainweb prod
-type EvalBuiltinEnv = CoreBuiltinEnv
+type EvalBuiltinEnv = Eval.CoreBuiltinEnv
+
+evalInterpreter :: Interpreter CoreBuiltin () Eval
+evalInterpreter =
+  Interpreter runGuard runTerm
+  where
+  runTerm purity term = Eval.eval purity env term
+  runGuard info g = Eval.interpretGuard info env g
+  env = coreBuiltinEnv @Eval.CEKBigStep
 
 -- | Transaction-payload related environment data.
 data MsgData = MsgData
@@ -81,6 +91,14 @@ type EvalInput = Either (Maybe DefPactExec) [Lisp.TopLevel ()]
 
 newtype RawCode = RawCode { _rawCode :: Text }
   deriving (Eq, Show)
+
+data ContMsg = ContMsg
+  { _cmPactId :: !DefPactId
+  , _cmStep :: !Int
+  , _cmRollback :: !Bool
+  , _cmData :: !PactValue
+  , _cmProof :: !(Maybe ContProof)
+  } deriving (Eq,Show)
 
 -- | Results of evaluation.
 data EvalResult tv = EvalResult
@@ -110,13 +128,13 @@ setupEvalEnv
   :: PactDb CoreBuiltin ()
   -> ExecutionMode -- <- we have this
   -> MsgData -- <- create at type for this
-  -- -> GasEnv -- <- also have this, use constant gas model
+  -> GasModel CoreBuiltin
   -> NamespacePolicy
   -> SPVSupport
   -> PublicData
   -> S.Set ExecutionFlag
   -> IO (EvalEnv CoreBuiltin ())
-setupEvalEnv pdb mode msgData np spv pd efs = do
+setupEvalEnv pdb mode msgData gasModel np spv pd efs = do
   gasRef <- newIORef mempty
   pure $ EvalEnv
     { _eeMsgSigs = mkMsgSigs $ mdSigners msgData
@@ -131,8 +149,8 @@ setupEvalEnv pdb mode msgData np spv pd efs = do
     , _eeNatives = coreBuiltinMap
     , _eeNamespacePolicy = np
     , _eeGasRef = gasRef
-    , _eeGasModel = freeGasModel
-    ,_eeSPVSupport = spv
+    , _eeGasModel = gasModel
+    , _eeSPVSupport = spv
     }
   where
   mkMsgSigs ss = M.fromList $ map toPair ss
@@ -156,6 +174,17 @@ evalTermExec
 evalTermExec evalEnv evalSt term =
   either throwError return <$> interpretOnlyTerm evalEnv evalSt term
 
+evalContinuation :: EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> ContMsg -> IO (Either (PactError ()) (EvalResult [Lisp.TopLevel ()]))
+evalContinuation evalEnv evalSt cm = case _cmProof cm of
+  Nothing ->
+    interpret (setStep Nothing) evalSt (Left Nothing)
+  Just p -> do
+    etpe <- (_spvVerifyContinuation . _eeSPVSupport $ evalEnv) p
+    pe <- either contError return etpe
+    interpret (setStep (_peYield pe)) evalSt (Left $ Just pe)
+  where
+    contError spvErr = throw $ PEExecutionError (ContinuationError spvErr) [] ()
+    setStep y = set eeDefPactStep (Just $ DefPactStep (_cmStep cm) (_cmRollback cm) (_cmPactId cm) y) evalEnv
 
 evalExecDefaultState :: EvalEnv CoreBuiltin () -> RawCode -> IO (Either (PactError ()) (EvalResult [Lisp.TopLevel ()]))
 evalExecDefaultState evalEnv rc = evalExec evalEnv def rc
@@ -297,4 +326,4 @@ evaluateTerms
   :: [Lisp.TopLevel ()]
   -> Eval [CompileValue ()]
 evaluateTerms tls = do
-  traverse (interpretTopLevel builtinEnv) tls
+  traverse (interpretTopLevel evalInterpreter) tls

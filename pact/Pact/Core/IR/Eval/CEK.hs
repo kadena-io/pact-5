@@ -36,12 +36,14 @@ module Pact.Core.IR.Eval.CEK
   , applyContSmallStep
   , applyContToValueSmallStep
   , evaluateTermSmallStep
-  , CEKEval(..)) where
+  , CEKEval(..)
+  , module Pact.Core.IR.Eval.CEK.Types
+  , module Pact.Core.IR.Eval.CEK.Utils
+  ) where
 
 
 import Control.Lens
 import Control.Monad
-import Control.Monad.IO.Class
 import Data.Default
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Foldable(find, foldl', traverse_)
@@ -61,13 +63,13 @@ import Pact.Core.Errors
 import Pact.Core.Gas
 import Pact.Core.Literal
 import Pact.Core.PactValue
+import Pact.Core.Pretty
 import Pact.Core.Capabilities
 import Pact.Core.Type
 import Pact.Core.Guards
 import Pact.Core.ModRefs
 import Pact.Core.Environment
 import Pact.Core.Persistence
-import Pact.Core.Pretty
 import Pact.Core.Hash
 import Pact.Core.StableEncoding
 
@@ -76,6 +78,9 @@ import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Namespace
 import Pact.Core.DefPacts.Types
 import Pact.Core.SizeOf
+
+import Pact.Core.IR.Eval.CEK.Types
+import Pact.Core.IR.Eval.CEK.Utils
 
 
 class CEKEval (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type) | m -> b, m -> i where
@@ -126,7 +131,7 @@ evaluateTerm
 -- Handles free variable lookups as well as module reference dynamic invokes
 -- Todo: it may not be worthwhile if accessing local variables is fast to charge
 -- anything but a constant amount of gas, but it would be a worthwhile exercise.
-evaluateTerm cont handler env (Var n info)  = do
+evaluateTerm cont handler env (Var n info) = do
   case _nKind n of
     NBound i -> do
       case RAList.lookup (_ceLocal env) i of
@@ -242,12 +247,12 @@ evaluateTerm cont handler env (Conditional c info) = case c of
     -- chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env' info (EnforceC str) cont) handler env' cond
   CEnforceOne str conds -> do
-    chargeGasArgs info (GAConstant unconsWorkNodeGas)
     case conds of
       [] ->
         returnCEK cont handler (VError "enforce-one failure" info)
       x:xs -> do
         -- Todo: is this a bit too cheap??
+        chargeGasArgs info (GAConstant unconsWorkNodeGas)
         errState <- evalStateToErrorState <$> getEvalState
         let env' = readOnlyEnv env
         let handler' = CEKEnforceOne env' info str xs cont errState handler
@@ -672,12 +677,6 @@ guardTable i cont handler env (TableValue tn mh _) dbop = do
     #-}
 
 
-enforceBlessedHashes :: (MonadEval b i m) => i -> EvalModule b i -> ModuleHash -> m ()
-enforceBlessedHashes info md mh
-  | _mHash md == mh = return ()
-  | mh `S.member` _mBlessed md = return ()
-  | otherwise = throwExecutionError info (HashNotBlessed (_mName md) mh)
-
 guardForModuleCall
   :: (CEKEval step b i m, MonadEval b i m)
   => i
@@ -792,7 +791,6 @@ evalCap
   -> CEKErrorHandler step b i m
   -> CEKEnv step b i m
   -> FQCapToken
-  -- -> ModCapCont step b i m
   -> CapPopState
   -> EvalCapType
   -> EvalTerm b i
@@ -1262,7 +1260,6 @@ applyContToValue (SeqC env e cont) handler _ =
 -- Note: we charge gas for this reduction here, as these are essentially natives
 -- that match and perform an uncons/match.
 applyContToValue (CondC env info frame cont) handler v = do
-  chargeGasArgs info (GAConstant constantWorkNodeGas)
   case v of
     VBool b -> case frame of
       AndC te ->
@@ -1283,6 +1280,7 @@ applyContToValue (CondC env info frame cont) handler v = do
         let acc' = if b then elem':acc else acc
         case rest of
           x:xs -> do
+            chargeGasArgs info (GAConstant unconsWorkNodeGas)
             let cont' = CondC env info (FilterC clo x xs acc') cont
             applyLam clo [VPactValue x] cont' handler
           [] -> returnCEKValue cont handler (VList (V.fromList (reverse acc')))
@@ -1331,26 +1329,26 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
   case cv of
     VPactValue v -> case frame of
       MapC closure rest acc -> do
-        chargeGasArgs info (GAConstant unconsWorkNodeGas)
         case rest of
           x:xs -> do
             let cont' = BuiltinC env info (MapC closure xs (v:acc)) cont
+            chargeGasArgs info (GAConstant unconsWorkNodeGas)
             applyLam closure [VPactValue x] cont' handler
           [] ->
             returnCEKValue cont handler (VList (V.fromList (reverse (v:acc))))
       FoldC clo rest -> do
-        chargeGasArgs info (GAConstant unconsWorkNodeGas)
         case rest of
-          x:xs ->
+          x:xs -> do
             let cont' = BuiltinC env info (FoldC clo xs) cont
-            in applyLam clo [VPactValue v, VPactValue x] cont' handler
+            chargeGasArgs info (GAConstant unconsWorkNodeGas)
+            applyLam clo [VPactValue v, VPactValue x] cont' handler
           [] -> returnCEKValue cont handler cv
       ZipC clo (l, r) acc -> do
-        chargeGasArgs info (GAConstant unconsWorkNodeGas)
         case (l, r) of
-          (x:xs, y:ys) ->
+          (x:xs, y:ys) -> do
             let cont' = BuiltinC env info (ZipC clo (xs, ys) (v:acc)) cont
-            in applyLam clo [VPactValue x, VPactValue y] cont' handler
+            chargeGasArgs info (GAConstant unconsWorkNodeGas)
+            applyLam clo [VPactValue x, VPactValue y] cont' handler
           (_, _) ->
             returnCEKValue cont handler (VList (V.fromList (reverse (v:acc))))
       ---------------------------------------------------------
@@ -1499,9 +1497,8 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
             let acc' = PObject . _objectData <$> reverse acc
             in returnCEKValue cont handler (VList (V.fromList acc'))
     _ -> returnCEK cont handler (VError "higher order apply did not return a pactvalue" info)
-applyContToValue (CapBodyC env info (CapBodyState cappop mcap mevent capbody) cont) handler _ = do
+applyContToValue (CapBodyC env _info (CapBodyState cappop mcap mevent capbody) cont) handler _ = do
   -- Todo: I think this requires some administrative check?
-  chargeGasArgs info (GAConstant unconsWorkNodeGas)
   maybe (pure ()) emitEventUnsafe mevent
   case mcap of
     Nothing -> do
@@ -2088,19 +2085,8 @@ isKeysetNameInSigs
   -> m (CEKEvalResult step b i m)
 isKeysetNameInSigs info cont handler env ksn = do
   pdb <- viewEvalEnv eePactDb
-  liftIO (readKeySet pdb ksn) >>= \case
+  liftDbFunction info (readKeySet pdb ksn) >>= \case
     Just ks -> isKeysetInSigs info cont handler env ks
     Nothing ->
       throwExecutionError info (NoSuchKeySet ksn)
 
---------------------------
--- Gas-related code
---------------------------
-constantWorkNodeGas :: MilliGas
-constantWorkNodeGas = (MilliGas 50)
-
-unconsWorkNodeGas :: MilliGas
-unconsWorkNodeGas = (MilliGas 100)
-
-tryNodeGas :: MilliGas
-tryNodeGas = (MilliGas 100)

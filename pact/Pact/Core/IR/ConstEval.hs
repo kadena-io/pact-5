@@ -12,9 +12,13 @@ import Pact.Core.Environment
 import Pact.Core.Persistence
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
-import qualified Pact.Core.IR.Eval.CEK as Eval
+import Pact.Core.Interpreter
 
-evalTLConsts :: (MonadEval b i m, Eval.CEKEval step b i m) => BuiltinEnv step b i m -> TopLevel Name Type b i -> m (TopLevel Name Type b i)
+evalTLConsts
+  :: (MonadEval b i m)
+  => Interpreter b i m
+  -> TopLevel Name Type b i
+  -> m (TopLevel Name Type b i)
 evalTLConsts bEnv = \case
   TLTerm t -> pure $ TLTerm t
   TLInterface ti -> TLInterface <$> evalIfaceDefConsts bEnv ti
@@ -23,11 +27,11 @@ evalTLConsts bEnv = \case
 
 -- Todo: this may need a different IR for module, or at least a newtype wrapper over `Name`
 evalModuleDefConsts
-  :: (MonadEval b i m, Eval.CEKEval step b i m)
-  => BuiltinEnv step b i m
+  :: (MonadEval b i m)
+  => Interpreter b i m
   -> Module Name Type b i
   -> m (Module Name Type b i)
-evalModuleDefConsts bEnv (Module mname mgov defs blessed imports implements mhash info) = do
+evalModuleDefConsts interpreter (Module mname mgov defs blessed imports implements mhash info) = do
   lo <- useEvalState esLoaded
   defs' <- traverse go defs
   esLoaded .== lo
@@ -37,7 +41,7 @@ evalModuleDefConsts bEnv (Module mname mgov defs blessed imports implements mhas
     d' <- case defn of
       DConst dc -> case _dcTerm dc of
         TermConst term -> do
-          pv <- Eval.eval PSysOnly bEnv term
+          pv <- eval interpreter PSysOnly term
           pv' <- maybeTCType (_dcInfo dc) pv (_argType $ _dcSpec dc)
           pure (DConst (set dcTerm (EvaledConst pv') dc))
         EvaledConst _ -> pure defn
@@ -50,11 +54,11 @@ evalModuleDefConsts bEnv (Module mname mgov defs blessed imports implements mhas
 
 -- Todo: this may need a different IR for module, or at least a newtype wrapper over `Name`
 evalIfaceDefConsts
-  :: (MonadEval b i m, Eval.CEKEval step b i m)
-  => BuiltinEnv step b i m
+  :: (MonadEval b i m)
+  => Interpreter b i m
   -> Interface Name Type b i
   -> m (Interface Name Type b i)
-evalIfaceDefConsts bEnv (Interface ifname ifdefns imps ifh info) = do
+evalIfaceDefConsts interpreter (Interface ifname ifdefns imps ifh info) = do
   lo <- useEvalState esLoaded
   ifdefns' <- traverse go ifdefns
   esLoaded .== lo
@@ -63,7 +67,7 @@ evalIfaceDefConsts bEnv (Interface ifname ifdefns imps ifh info) = do
   go defn = case defn of
       IfDConst dc -> case _dcTerm dc of
         TermConst term -> do
-          pv <- Eval.eval PSysOnly bEnv term
+          pv <- eval interpreter PSysOnly term
           let dn = _argName $ _dcSpec dc
               fqn = FullyQualifiedName ifname dn ifh
           loAllLoaded %== M.insert fqn (DConst dc)
