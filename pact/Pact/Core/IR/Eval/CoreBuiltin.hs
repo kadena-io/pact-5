@@ -1331,7 +1331,9 @@ coreFormat info b cont handler _env = \case
   [VString s, VList es] -> do
     let parts = T.splitOn "{}" s
         plen = length parts
-    if | plen == 1 -> returnCEKValue cont handler (VString s)
+    if | plen == 1 -> do
+          chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
+          returnCEKValue cont handler (VString s)
        | plen - length es > 1 -> returnCEK cont handler $ VError "format: not enough arguments for template" info
        | otherwise -> do
           args <- mapM formatArgM $ V.toList $ V.take (plen - 1) es
