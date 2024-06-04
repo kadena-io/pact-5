@@ -1,12 +1,27 @@
 ## namespace
 
-Use `namespace` to set the current `namespace` to a specified value. All expressions that occur in the current transaction will be contained in the specified namespace. Once committed, they may be accessed via their fully qualified name, which will include the namespace. Subsequent namespace calls in the same transaction will set a new namespace for all declarations until either the next namespace declaration or the end of the transaction.
+Use `namespace` to set the current working environment to the specified namespace value. 
+After you declare the namespace you want to work with, all of the modules and functions you define are contained within that namespace. 
+
+You can access the modules and functions in a namespace by using their fully qualified name.
+The fully-qualified name includes the namespace string as a prefix before the module name. 
+For example, if you declare a principal namespace such as `n_14912521e87a6d387157d526b281bde8422371d1` for the module `my-calculator`, you can call functions in the module using a fully-qualified name similar to the following:
+
+`n_14912521e87a6d387157d526b281bde8422371d1.my-calculator.add`
+
+If you call the `namespace` function after the initial declaration, Pact creates a new namespace for all subsequent declarations until either the next `namespace` call or the end of the transaction.
+
+### Prerequisites
+
+You must define a namespace before you can set your working context to use the namespace. For information about defining a namespace, see [define-namespace](/reference/functions/general#define-namespace).
 
 ### Basic syntax
 
 To set the current `namespace` to a specified value, use the following syntax:
 
-`(namespace namespace)`
+```pact
+(namespace namespace)
+```
 
 ### Argument
 
@@ -14,7 +29,7 @@ Use the following argument to specify the namespace to be set using the `namespa
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `namespace` | `string` | Specifies the namespace to be set. |
+| `namespace` | string | Specifies the name of the namespace you want to use as your working context. |
 
 ### Return value
 

@@ -1,45 +1,72 @@
 ## at
-Use `at` to index a `list` at a specified `idx` or to get the value with key `idx` from an `object`.
+
+Use `at` to retrieve the value at the location specified by an `index` number or by a `key` string in a collection.
+If you specify an `index` number, the collection must be a list of values.
+If you specify a `key` string, the collection must be an object.
 
 ### Basic syntax
 
-To index a `list` at a specified `idx` or get the value with key `idx` from an `object`, use the following syntax:
+Because `at` is an overloaded function, there are two ways to use it.
+To get a value using the specified `index` location from a list of values, use the following syntax:
 
 ```pact
-(at idx list)
-(at idx object)
+(at index:integer [list])
+```
+
+To get a value using the specified `key` string from an object, use the following syntax:
+
+```pact
+(at key:string {object})
 ```
 
 ### Arguments
 
-Use the following arguments to specify the `idx` and `list` for indexing, or `idx` and `object` for key-based retrieval with the `at` Pact function.
+Use one of the following argument to define the value you want to retrieve using the `at` Pact function.
 
-| Argument | Type | Description |
-| --- | --- | --- |
-| `idx` | `integer` | Specifies the index for the `list` or the key for the `object`. |
-| `list` | `[<l>]` | Specifies the list from which to retrieve the value at `idx`. |
-| `object` | `object:<{o}>` | Specifies the object from which to retrieve the value with key `idx`. |
+| Argument | Type | Description
+| -------- | ---- | -----------
+| `index` | integer | Specifies the information you want to retrieve. If you specify an `index` number, the function returns the value from that location in a list of values.
+| `list` | arrary | Specifies the list of values to retrieve the value from using the specified `index`. 
+| `key` | string | Specifies the information you want to retrieve. If you specify a `key` string, the function returns the value corresponding to that key from an object.
+| object | object | Specifies the set of key and value pairs to retreive the value from using the specified `key`.
 
 ### Return values
 
-The `at` function returns the value at the specified `idx` in the `list` or the value with key `idx` from the `object`.
+The `at` function returns the value found at the specified *index* or using the specified *key*.
+The return value can be any data type.
 
 ### Examples
 
-The following example retrieves the value at index 1 from a list in the Pact REPL:
+The following example returns the value found at the *index* location—starting with 0—from a list of values:
 
 ```pact
-pact>(at 1 [1 2 3])
-2
+(at  3 [20 18 16 14 12 10])
+14
 ```
 
-In this example, `at` returns the value `2` from the list `[1 2 3]` at index 1.
-
-The following example retrieves the value with key "bar" from an object in the Pact REPL:
+You can use the `at` function to return any type of data from a list.
+For example:
 
 ```pact
-pact>(at "bar" { "foo": 1, "bar": 2 })
-2
+(at 1 ["blue","green","red","yellow"])
+"green"
 ```
 
-In this example, `at` returns the value `2` from the object `{ "foo": 1, "bar": 2 }` with the key "bar".
+The following example returns the value found at the specified *key* from an object:
+
+```pact
+(at "last-name" { "first-name": "maya", "last-name": "tea"})
+"tea"
+```
+
+You can use the `at` function to return any type of data using the specified *key* from an object.
+For example:
+
+```pact
+(at "chainId" { "networkId": "development", "chainId": 1, "auth": 0})
+1
+```
+
+### Property checking
+
+For property checking, you can use the `at` list operator when specifying an invariant or a property to test your code against.
