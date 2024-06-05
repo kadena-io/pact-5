@@ -129,9 +129,11 @@ library pact-request-api
   import: pact-common
   hs-source-dirs: pact-request-api
   build-depends:
+    , pact-tng
     , pact-tng:pact-crypto
   exposed-modules:
     Pact.Types.Command
+    Pact.Types.Crypto
 
 library
   import: pact-common
