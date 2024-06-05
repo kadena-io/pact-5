@@ -1,54 +1,60 @@
 ## take
-The `take` function retrieves a specified number of values from a list (or string), or entries with keys specified in `KEYS` from an object. If `COUNT` is negative, values are taken from the end of the list. If `COUNT` exceeds the interval (-2^63,2^63), it is truncated to that range.
+
+Use the `take` function to retrieve a specified number of values from a list (or string), or entries with keys specified in `keys` from an object. 
+If the `count` argument is negative, values are taken from the end of the list. 
+If the `count` exceeds the interval (-2^63,2^63), it is truncated to that range.
 
 ### Basic syntax
 
-To retrieve a specified number of values from a list or string, use the following syntax:
+Because `take` is an overloaded function, there are two ways to use it.
+To retrieve a specified number of values from a list or a string, use the following syntax:
 
-`(take COUNT LIST)`
+```pact
+(take count [list])
+```
 
 To retrieve entries with specified keys from an object, use the following syntax:
 
-`(take KEYS OBJECT)`
+```pact
+(take keys {object})
+```
 
 ### Arguments
 
-Use the following arguments to specify the count, list (or string), keys, or object for retrieval using the `take` Pact function.
+Use the following arguments to specify the conumber of values to retrieve and the list or object to retrieve them from using the `take` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `COUNT` | `integer` | Specifies the number of values to retrieve from the list (or string). If negative, values are taken from the end. |
-| `LIST` | `[<a[[<l>],string]>]` | Specifies the list or string from which to retrieve values. |
-| `KEYS` | `[string]` | Specifies the keys of entries to retrieve from the object. |
-| `OBJECT` | `object:<{o}>` | Specifies the object from which to retrieve entries. |
+| `count` | integer | Specifies the number of values to retrieve from the list or string. If negative, values are taken from the end. |
+| `list` | [list] or string | Specifies the list or string from which to retrieve values. |
+| `keys` | [string] | Specifies the keys for the information you want to retrieve from the specified object. |
+| `object` | object | Specifies the object from which to retrieve entries. |
 
 ### Return value
 
-The `take` function returns a sublist of values from the list (or string) or a subset of entries from the object based on the specified count or keys.
+The `take` function returns a subset of values retrieved from the list or from the object based on the specified count or number of keys.
 
 ### Examples
 
-The following examples demonstrate the usage of the `take` function within the Pact REPL.
+The following examples demonstrate how to use the `take` function in the Pact REPL.
 
-To retrieve the first 2 characters from the string "abcd":
+To retrieve the first two characters from the string "abcd":
 
 ```pact
-pact>(take 2 "abcd")
+pact> (take 2 "abcd")
 "ab"
 ```
 
-To retrieve the last 3 values from the list [1, 2, 3, 4, 5]:
+To retrieve the last three values from the list [1, 2, 3, 4, 5]:
 
 ```pact
-pact>(take (- 3) [1 2 3 4 5])
+pact> (take (- 3) [1 2 3 4 5])
 [3, 4, 5]
 ```
 
 To retrieve entries with the key `'name` from the object `{ 'name: "Vlad", 'active: false }`:
 
 ```pact
-(take ['name] { 'name: "Vlad", 'active: false })
-{"name":"Vlad"}
+(take ['name] { 'name: "Vlad", 'active: false, 'age: 34 })
+{"name": "Vlad"}
 ```
-
-These examples illustrate how to use the `take` function to retrieve specified values or entries from lists, strings, or objects in Pact.

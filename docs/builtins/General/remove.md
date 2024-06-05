@@ -1,32 +1,34 @@
 ## remove
-The `remove` function is used to remove an entry associated with a specified `KEY` from an `OBJECT`.
+
+Use `remove` to remove an entry associated with a specified `key` from a specified `object`.
 
 ### Basic syntax
 
-To remove an entry for a `KEY` from an `OBJECT`, use the following syntax:
+To remove an entry for a `key` from an `object`, use the following syntax:
 
-`(remove KEY OBJECT)`
+```pact
+(remove key object)
+```
 
 ### Arguments
 
-Use the following arguments to specify the `KEY` and `object` for removing an entry using the `remove` Pact function.
+Use the following arguments to specify the `key` and `object` for removing an entry using the `remove` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `KEY` | `string` | Specifies the key for the entry to be removed from the object. |
-| `OBJECT` | `object:<{o}>` | Specifies the object from which to remove the entry. |
+| `key` | string | Specifies the key for the entry to be removed from the object. |
+| `object` | {object} | Specifies the object from which to remove the entry. |
 
 ### Return value
 
-The `remove` function returns the modified object with the entry associated with the specified `KEY` removed.
+The `remove` function returns the modified object with the entry associated with the specified `key` removed.
 
 ### Example
 
-The following example demonstrates the usage of the `remove` function within the Pact repl. It removes the entry for the `bar` key from the given object:
+The following example demonstrates how to use the `remove` function in the Pact REPL. 
+This example removes the entry for the `bar` key from the given object:
 
 ```pact
-pact>(remove "bar" { "foo": 1, "bar": 2 })
+pact> (remove "bar" { "foo": 1, "bar": 2 })
 { "foo": 1 }
 ```
-
-This example illustrates how to use the `remove` function to remove a specific entry from an object in Pact.
