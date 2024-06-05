@@ -107,14 +107,9 @@ import Pact.Types.Util
 import qualified Pact.Core.Hash as PactHash
 import Pact.Core.Scheme as ST
 
-#ifdef CRYPTONITE_ED25519
 import qualified Crypto.Error as E
 import qualified Crypto.PubKey.Ed25519 as Ed25519
 import qualified Data.ByteArray as B
-#else
-import "crypto-api" Crypto.Random
-import qualified Crypto.Ed25519.Pure as Ed25519
-#endif
 import qualified Crypto.PubKey.ECDSA as ECDSA
 import qualified Crypto.ECC as ECC
 import qualified Crypto.PubKey.ECC.P256 as ECC hiding (scalarToInteger)
@@ -164,11 +159,7 @@ instance Arbitrary UserSig where
 
 -- ed25519
 
-#ifdef CRYPTONITE_ED25519
 type Ed25519PrivateKey = Ed25519.SecretKey
-#else
-type Ed25519PrivateKey = Ed25519.PrivateKey
-#endif
 
 verifyEd25519Sig :: PactHash.Hash -> Ed25519.PublicKey -> Ed25519.Signature -> Either String ()
 exportEd25519PubKey :: Ed25519.PublicKey -> ByteString
@@ -178,7 +169,6 @@ parseEd25519PubKey :: ByteString -> Either String Ed25519.PublicKey
 parseEd25519SecretKey :: ByteString -> Either String Ed25519PrivateKey
 parseEd25519Signature :: ByteString -> Either String Ed25519.Signature
 
-#ifdef CRYPTONITE_ED25519
 verifyEd25519Sig (PactHash.Hash msg) pubKey sig =
   unless (Ed25519.verify pubKey (fromShort msg) sig) $
     Left "invalid ed25519 signature"
@@ -200,23 +190,6 @@ parseEd25519Signature s = E.onCryptoFailure
   (const $ Left ("Invalid ED25519 Signature: " ++ show (toB16Text s)))
   Right
   (Ed25519.signature s)
-#else
-type Ed25519PrivateKey = Ed25519.PrivateKey
-verifyEd25519Sig (Hash msg) pubKey sig =
-  unless (Ed25519.valid (fromShort msg) pubKey sig) $
-    Left "invalid ed25519 signature"
-
-exportEd25519PubKey = Ed25519.exportPublic
-parseEd25519PubKey s = maybeToEither ("Invalid ED25519 Public Key: " ++ show (toB16Text s))
-           (Ed25519.importPublic s)
-
-exportEd25519SecretKey = Ed25519.exportPrivate
-parseEd25519SecretKey s = maybeToEither ("Invalid ED25519 Private Key: " ++ show (toB16Text s))
-           (Ed25519.importPrivate s)
-
-exportEd25519Signature (Ed25519.Sig bs) = bs
-parseEd25519Signature = Right . Ed25519.Sig
-#endif
 
 -- webauthn
 
@@ -428,11 +401,7 @@ instance Arbitrary SignatureBS where
 --------- SCHEME HELPER FUNCTIONS ---------
 
 signEd25519 :: Ed25519.PublicKey -> Ed25519PrivateKey -> PactHash.Hash -> Ed25519.Signature
-#ifdef CRYPTONITE_ED25519
 signEd25519 pub priv (PactHash.Hash msg) = Ed25519.sign priv pub (fromShort msg)
-#else
-signEd25519 pub priv (Hash msg) = Ed25519.sign (fromShort msg) priv pub
-#endif
 
 getPublic :: Ed25519KeyPair -> ByteString
 getPublic = exportEd25519PubKey . fst
@@ -470,7 +439,6 @@ importEd25519KeyPair maybePubBS (PrivBS privBS) = do
 
 --------- ED25519 FUNCTIONS AND ORPHANS ---------
 
-#ifdef CRYPTONITE_ED25519
 ed25519GenKeyPair :: IO (Ed25519.PublicKey, Ed25519.SecretKey)
 ed25519GenKeyPair = do
     secret <- Ed25519.generateSecretKey
@@ -503,41 +471,6 @@ instance Serialize Ed25519.Signature where
   put s = S.put (B.convert s :: ByteString)
   get = maybe (fail "Invalide ED25519 Signature") return =<<
         (E.maybeCryptoError . Ed25519.signature <$> (S.get >>= S.getByteString))
-#else
-ed25519GenKeyPair :: IO (Ed25519.PublicKey, Ed25519.PrivateKey)
-ed25519GenKeyPair = do
-    g :: SystemRandom <- newGenIO
-    case Ed25519.generateKeyPair g of
-      Left _ -> error "Something went wrong in genKeyPairs"
-      Right (s,p,_) -> return (p, s)
-
-ed25519GetPublicKey :: Ed25519.PrivateKey -> Ed25519.PublicKey
-ed25519GetPublicKey = Ed25519.generatePublic
-
-instance Eq Ed25519.PublicKey where
-  b == b' = (Ed25519.exportPublic b) == (Ed25519.exportPublic b')
-instance Ord Ed25519.PublicKey where
-  b <= b' = (Ed25519.exportPublic b) <= (Ed25519.exportPublic b')
-instance Serialize Ed25519.PublicKey where
-  put s = S.putByteString (Ed25519.exportPublic s)
-  get = maybe (fail "Invalid ED25519 Public Key") return =<<
-        (Ed25519.importPublic <$> S.getByteString 32)
-
-instance Eq Ed25519.PrivateKey where
-  b == b' = (Ed25519.exportPrivate b) == (Ed25519.exportPrivate b')
-instance Ord Ed25519.PrivateKey where
-  b <= b' = (Ed25519.exportPrivate b) <= (Ed25519.exportPrivate b')
-instance Serialize Ed25519.PrivateKey where
-  put s = S.putByteString (Ed25519.exportPrivate s)
-  get = maybe (fail "Invalid ED25519 Private Key") return =<<
-        (Ed25519.importPrivate <$> S.getByteString 32)
-
-deriving instance Eq Ed25519.Signature
-deriving instance Ord Ed25519.Signature
-instance Serialize Ed25519.Signature where
-  put (Ed25519.Sig s) = S.put s
-  get = Ed25519.Sig <$> (S.get >>= S.getByteString)
-#endif
 
 type WebAuthnPublicKey = WA.CosePublicKey
 
