@@ -1761,24 +1761,15 @@ rawSqrt info b _env = \case
     return (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
 
--- Todo: fix all show instances
+showPactValue :: MonadEval b i m => i -> PactValue -> m T.Text
+showPactValue info pv = do
+  sz <- sizeOf SizeOfV0 pv
+  chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral sz
+  pure $ T.pack $ show $ Pretty.pretty pv
+
 rawShow :: (MonadEval b i m) => NativeFunction b i m
 rawShow info b _env = \case
-  [VLiteral (LInteger i)] -> do
-    let strLen = 1 + Exts.I# (IntLog.integerLog2# $ abs i)
-    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
-    return (VLiteral (LString (T.pack (show i))))
-  [VLiteral (LDecimal i)] -> do
-    let strLen = 1 + Exts.I# (IntLog.integerLog2# $ abs $ decimalMantissa i)
-    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
-    return (VLiteral (LString (T.pack (show i))))
-  [VLiteral (LString i)] -> do
-    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ T.length i
-    return (VLiteral (LString (T.pack (show i))))
-  [VLiteral (LBool i)] ->
-    return (VLiteral (LString (T.pack (show i))))
-  [VLiteral LUnit] ->
-    return (VLiteral (LString "()"))
+  [VPactValue pv] -> VString <$> showPactValue info pv
   args -> argsError info b args
 
 -- Todo: Gas here is complicated, greg worked on this previously
@@ -2812,32 +2803,26 @@ coreDistinct info b _env = \case
 coreFormat  :: (MonadEval b i m) => NativeFunction b i m
 coreFormat info b _env = \case
   [VString s, VList es] -> do
-    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ T.length s
     let parts = T.splitOn "{}" s
         plen = length parts
-    if | plen == 1 -> return (VString s)
+    if | plen == 1 -> do
+          chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
+          return $ VString s
        | plen - length es > 1 ->
         throwRecoverableError info "format: not enough arguments for template"
        | otherwise -> do
-          args <- traverse formatArgM $ V.toList es
-          return $ VString $  T.concat $ alternate parts (take (plen - 1) args)
+          args <- mapM formatArgM $ V.toList $ V.take (plen - 1) es
+          let totalLength = sum (T.length <$> parts) + sum (T.length <$> args)
+          chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength totalLength
+          return $ VString $ T.concat $ alternate parts args
     where
-    formatArg (PString ps) = ps
-    formatArg a = renderPactValue a
-    formatArgM a = do
-      let a' = formatArg a
-      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ T.length a'
-      pure a'
     alternate (x:xs) ys = x : alternate ys xs
     alternate _ _ = []
-  args -> argsError info b args
 
--- Todo: This _Really_ needs gas
--- moreover this is kinda hacky
--- BIG TODO: REMOVE PRETTY FROM SEMANTICS.
--- THIS CANNOT MAKE IT TO PROD
-renderPactValue :: PactValue -> T.Text
-renderPactValue = T.pack . show . Pretty.pretty
+    formatArgM (PString ps) = pure ps
+    formatArgM a = showPactValue info a
+
+  args -> argsError info b args
 
 checkLen
   :: (MonadEval b i m)
