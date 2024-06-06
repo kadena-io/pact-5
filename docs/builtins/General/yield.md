@@ -40,3 +40,33 @@ For example, to set the target chain to chain 8:
 ```pact
 (yield { "amount": 100.0 } "8")
 ```
+
+The following example illustrates using `yield` and `resume` functions in `defpact` steps:
+
+```pact
+  (defpact copy-account:string(account:string target:string)
+    (step
+      (with-capability (COPY_ACCOUNT account)
+        (with-read guard-lookup-table account
+          { 'webauthn-guard-name := guard-name }
+          (webauthn-guard.copy-account guard-name target)
+
+          (let ((yield-data:object{copy-account-schema} { 'guard-name : guard-name }))
+            (yield yield-data target)
+          )
+        )
+      )
+    )
+
+    (step
+      (resume 
+        { 'guard-name := guard-name }
+        (continue (webauthn-guard.copy-account guard-name target))
+        (write guard-lookup-table target
+          { 'webauthn-guard-name : guard-name }
+        )
+        (coin.create-account (get-account-name guard-name) (get-account-guard guard-name))
+      )
+    )
+  )
+```

@@ -25,8 +25,8 @@ Use the following arguments to specify the default value and the action to be at
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `default` | `<a>` | Specifies the default value to be returned if the action fails. |
-| `action` | `<a>` | Specifies the action to be attempted. |
+| `default` | any | Specifies the default value to be returned if the action fails. |
+| `action` | any | Specifies the action to be attempted. |
 
 ### Return value
 

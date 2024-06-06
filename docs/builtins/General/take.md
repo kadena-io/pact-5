@@ -21,12 +21,12 @@ To retrieve entries with specified keys from an object, use the following syntax
 
 ### Arguments
 
-Use the following arguments to specify the conumber of values to retrieve and the list or object to retrieve them from using the `take` Pact function.
+Use the following arguments to specify the number of values to retrieve and the list or object to retrieve them from using the `take` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
 | `count` | integer | Specifies the number of values to retrieve from the list or string. If negative, values are taken from the end. |
-| `list` | [list] or string | Specifies the list or string from which to retrieve values. |
+| `list` | [integer, decimal, or string] or string | Specifies the list or string from which to retrieve values. |
 | `keys` | [string] | Specifies the keys for the information you want to retrieve from the specified object. |
 | `object` | object | Specifies the object from which to retrieve entries. |
 

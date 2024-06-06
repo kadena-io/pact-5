@@ -18,8 +18,8 @@ Use the following arguments to specify the function and the lists that you want 
 | Argument | Type | Description |
 | --- | --- | --- |
 | `func` | function | Specifies the function to combine elements from the two lists. |
-| `list1` | [list] | Specifies the first list to be combined. |
-| `list2` | [list] | Specifies the second list to be combined. |
+| `list1` | [any] | Specifies the first list to be combined. |
+| `list2` | [any] | Specifies the second list to be combined. |
 
 ### Return value
 

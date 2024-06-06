@@ -31,3 +31,40 @@ The following example demonstrates how to use the `resume` function in a Pact sc
 ```pact
 (resume sample)
 ```
+
+The following example illustrates using `yield` and `resume` functions in `defpact` steps:
+
+```pact
+(defpact deposit(sender:string receiver:string guard:guard amount:decimal)
+    @doc "Deposit KDA from L1 to L2"
+    @model [
+      (property (is-unit amount))
+      (property (is-principal sender))
+      (property (is-principal receiver))
+    ]
+    (step
+      (with-capability (LOCK_DEPOSIT sender)
+        (let ((deposit-details:object{deposit-schema}
+            { 'receiver : receiver
+            , 'amount   : amount
+            , 'guard    : guard
+            }
+          ))
+          (lock-deposit sender amount)
+          (enforce (validate-principal guard receiver) "Guard must be a principal")
+          (yield deposit-details "crossnet:L2.2")
+        )
+      )
+    )
+
+    (step
+      (resume
+        { 'receiver := receiver
+        , 'amount   := amount
+        , 'guard    := guard
+        }
+        (claim-deposit receiver guard amount)
+      )
+    )
+  )
+```  

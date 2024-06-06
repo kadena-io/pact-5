@@ -27,20 +27,20 @@ The `length` function returns an integer representing the length of the specifie
 The following example demonstrates calculating the length of the list `[1, 2, 3]` in the Pact REPL:
 
 ```pact
-pact>(length [1 2 3])
+pact> (length [1 2 3])
 3
 ```
 
 The following example calculates the length of the string `"abcdefgh"`, resulting in 8.
 
 ```pact
-pact>(length "abcdefgh")
+pact> (length "abcdefgh")
 8
 ```
 
 The following example calculates the length of the object `{ "a": 1, "b": 2 }`, resulting in 2.
 
 ```pact
-pact>(length { "a": 1, "b": 2 })
+pact> (length { "a": 1, "b": 2 })
 2
 ```

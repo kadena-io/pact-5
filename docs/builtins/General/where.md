@@ -9,7 +9,7 @@ This function is most often used in conjunction with `filter` and `select` opera
 To apply an application function to a `field` in a value, use the following syntax:
 
 ```pact
-(where FIELD APP)
+(where field app)
 ```
 
 ### Arguments

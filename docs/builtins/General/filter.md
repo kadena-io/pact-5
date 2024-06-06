@@ -1,6 +1,6 @@
 ## filter
 
-Use `filter` to filter a list of elements by applying the specified `apply` function to each element in the list.
+Use `filter` to filter a list of `elements` by applying the specified `apply` function to each element in the list.
 For each element in the list, the `apply` function should return true or flase to identify the elements that should be included in the filtered list.
 
 Each element that returns a result of `true` from the `apply` function is included in the resulting list with its original value. 
@@ -11,7 +11,7 @@ With the `filter` function, you can include elements in a list based on a specif
 To filter a list by applying a function to each element, use the following syntax:
 
 ```pact
-(filter apply [list])
+(filter apply [elements])
 ```
 
 ### Arguments
@@ -21,7 +21,7 @@ Use the following arguments to specify the function and list for the `filter` Pa
 | Argument | Type       | Description                                 |
 |----------|------------|---------------------------------------------|
 | `apply`    | function | Specifies the function to apply to each element of the list. The return value for the function must be a Boolean (`true` or `false`) to identify elements to be included in the resulting list. |
-| `list`   | list | Specifies the list of elements to filter. |
+| `elements` | [any] | Specifies the list of elements to filter. The elements in the list can be any data type. |
 
 ### Return values
 

@@ -9,7 +9,7 @@ Because `sort` is an overloaded function, there are two ways to use it.
 To sort a list of primitive values, use the following syntax:
 
 ```pact
-(sort [list])
+(sort [primatives])
 ```
 
 To sort a list of objects based on specific fields, use the following syntax:
@@ -24,9 +24,9 @@ Use the following arguments to specify the values or fields for sorting using th
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `list` | list | Specifies the list of primitive values to be sorted. |
-| `fields` | list | Specifies the list of fields within objects to be used for sorting. |
-| `object1` | object | Specifies more or more objects to be sorted using the `fields` parameter.
+| `primitives` | [integer, decimal, or string] | Specifies the list of primitive values to be sorted. |
+| `fields` | [list] | Specifies the list of fields within objects to be used for sorting. |
+| `object1` | {object} | Specifies more or more objects to be sorted using the `fields` parameter.
 
 ### Return value
 

@@ -26,18 +26,19 @@ Use one of the following argument to define the value you want to retrieve using
 | Argument | Type | Description
 | -------- | ---- | -----------
 | `index` | integer | Specifies the information you want to retrieve. If you specify an `index` number, the function returns the value from that location in a list of values.
-| `list` | arrary | Specifies the list of values to retrieve the value from using the specified `index`. 
+| `list` | [integer or decimal] | Specifies the list of values to retrieve the value from using the specified `index` location. 
 | `key` | string | Specifies the information you want to retrieve. If you specify a `key` string, the function returns the value corresponding to that key from an object.
-| object | object | Specifies the set of key and value pairs to retreive the value from using the specified `key`.
+| `object` | {object} | Specifies the set of key and value pairs to retrieve the value from using the specified `key`.
 
 ### Return values
 
-The `at` function returns the value found at the specified *index* or using the specified *key*.
+The `at` function returns the value found at the specified `index` or using the specified `key`.
 The return value can be any data type.
 
 ### Examples
 
-The following example returns the value found at the *index* location—starting with 0—from a list of values:
+The following example returns the value found at the `index` location—starting with 0—from a list of values.
+For example, the value at `index` location `3` is `14`:
 
 ```pact
 (at  3 [20 18 16 14 12 10])
@@ -66,7 +67,3 @@ For example:
 (at "chainId" { "networkId": "development", "chainId": 1, "auth": 0})
 1
 ```
-
-### Property checking
-
-For property checking, you can use the `at` list operator when specifying an invariant or a property to test your code against.

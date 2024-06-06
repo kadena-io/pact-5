@@ -1,22 +1,22 @@
 ## reverse
 
-Use `reverse` to reverse the order of elements in a specified `list`.
+Use `reverse` to reverse the order of specified `elements` in a list.
 
 ### Basic syntax
 
-To reverse a specified `list` of elements, use the following syntax:
+To reverse a specified list of `elements`, use the following syntax:
 
 ```pact
-(reverse [list])
+(reverse [elements])
 ```
 
 ### Arguments
 
-Use the following argument to specify the `list` to be reversed using the `reverse` Pact function.
+Use the following argument to specify the `elements` to be reversed using the `reverse` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `list` | [list] | Specifies the list to be reversed. |
+| `elements` | [any] | Specifies the elements in the list you want to be reversed. |
 
 ### Return value
 
