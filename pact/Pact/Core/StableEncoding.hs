@@ -6,7 +6,8 @@
 --
 
 module Pact.Core.StableEncoding
-  (encodeStable)
+  (encodeStable
+  ,StableEncoding(..))
 where
 
 import Data.Decimal (DecimalRaw(..))
@@ -18,14 +19,17 @@ import qualified Data.Text as T
 import qualified Data.Map.Strict as M
 import qualified Pact.JSON.Encode as J
 import qualified Data.Set as S
+import qualified Pact.JSON.Decode as JD
+import qualified Data.Set as Set
 
-import Pact.Core.PactValue
+import Pact.Core.Capabilities
 import Pact.Core.Literal
 import Pact.Core.Guards
 import Pact.Core.Names
 import Pact.Core.ModRefs
 import Pact.Core.Hash
 import Pact.Core.DefPacts.Types
+import Pact.Core.PactValue
 import Pact.Time
 import Pact.Core.Persistence.Types
 import Data.Coerce(coerce)
@@ -41,6 +45,10 @@ newtype StableEncoding a = StableEncoding { _stableEncoding :: a }
 instance J.Encode (StableEncoding DefPactId) where
   build (StableEncoding (DefPactId pid)) =
     J.build pid
+
+instance JD.FromJSON (StableEncoding DefPactId) where
+  parseJSON = JD.withText "DefPactId" $ \s ->
+    pure $ StableEncoding (DefPactId s)
 
 -- | Stable encoding of `Literal`
 --
@@ -208,6 +216,13 @@ instance J.Encode (StableEncoding PactValue) where
     PCapToken _ct -> error "not implemented"
     PTime pt -> J.build (StableEncoding pt)
   {-# INLINABLE build #-}
+
+instance J.Encode (StableEncoding name) => J.Encode (StableEncoding (CapToken name PactValue)) where
+  build (StableEncoding (CapToken name args)) = J.object
+    [ "name" J..= J.build (StableEncoding name)
+    , "args" J..= J.build (J.Array (StableEncoding <$> args))
+    ]
+
 
 -- | Stable encoding of `DefPactContinuation FullyQualifiedName PactValue`
 instance J.Encode (StableEncoding (DefPactContinuation QualifiedName PactValue)) where

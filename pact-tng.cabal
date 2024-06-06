@@ -118,6 +118,7 @@ library pact-crypto
   import: pact-common
   hs-source-dirs: crypto
   build-depends: poly
+
   exposed-modules:
     Pact.Core.Crypto.Hash.Poseidon
     Pact.Core.Crypto.Pairing
@@ -129,11 +130,23 @@ library pact-request-api
   import: pact-common
   hs-source-dirs: pact-request-api
   build-depends:
+      asn1-encoding
+    , asn1-types
+    , cereal
+    , QuickCheck
     , pact-tng
     , pact-tng:pact-crypto
   exposed-modules:
-    Pact.Types.Command
-    Pact.Types.Crypto
+    Pact.Core.Types.Command
+    Pact.Core.Types.Crypto
+    Pact.Core.Types.Orphans
+    Pact.Core.Types.RPC
+    Pact.Core.Types.Util
+    Pact.Core.Crypto.WebAuthn.Cose.PublicKey
+    Pact.Core.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
+    Pact.Core.Crypto.WebAuthn.Cose.Registry
+    Pact.Core.Crypto.WebAuthn.Cose.SignAlg
+    Pact.Core.Crypto.WebAuthn.Cose.Verify
 
 library
   import: pact-common
@@ -442,20 +455,20 @@ executable legacyPactDbCheck
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
 
--- tools
-executable pact-server
-  import: pact-common
-  hs-source-dirs: pact-server
+-- -- tools
+-- executable pact-server
+--   import: pact-common
+--   hs-source-dirs: pact-server
 
-  main-is: Pact/Server.hs
+--   main-is: Pact/Server.hs
 
-  build-depends:
-    , pact-tng
-    , async
-    , fast-logger
-    , filepath
-    , servant
-    , servant-server
-  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
-  ghc-prof-options:    -fprof-auto -fprof-auto-calls
-  default-language:    Haskell2010
+--   build-depends:
+--     , pact-tng
+--     , async
+--     , fast-logger
+--     , filepath
+--     , servant
+--     , servant-server
+--   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+--   ghc-prof-options:    -fprof-auto -fprof-auto-calls
+--   default-language:    Haskell2010

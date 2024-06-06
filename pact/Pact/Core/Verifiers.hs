@@ -25,9 +25,12 @@ import GHC.Generics
 
 import qualified Pact.JSON.Encode as J
 
+import Pact.Core.Legacy.LegacyPactValue
+
 import Pact.Core.Names
 import Pact.Core.Capabilities
 import Pact.Core.PactValue
+import Pact.Core.StableEncoding
 
 newtype VerifierName = VerifierName Text
   deriving newtype (J.Encode, NFData, Eq, Show, Ord, FromJSON)
@@ -47,3 +50,21 @@ instance NFData a => NFData (Verifier a)
 newtype ParsedVerifierProof = ParsedVerifierProof PactValue
   deriving newtype (NFData, Eq, Show, Ord)
   deriving stock Generic
+
+instance J.Encode a => J.Encode (Verifier a) where
+  build va = J.object
+    [ "name" J..= _verifierName va
+    , "proof" J..= _verifierProof va
+    , "clist" J..= J.build (J.Array  (StableEncoding <$>  _verifierCaps va))
+    ]
+
+instance FromJSON a => FromJSON (Verifier a) where
+  parseJSON = withObject "Verifier" $ \o -> do
+    name <- o .: "name"
+    proof <- o .: "proof"
+    legacyCaps <- o .: "clist"
+    return $ Verifier name proof (_unLegacy <$> legacyCaps)
+
+
+instance J.Encode ParsedVerifierProof where
+  build (ParsedVerifierProof as) = J.build (StableEncoding as)
