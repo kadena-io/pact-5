@@ -136,6 +136,9 @@ newtype ModuleHash = ModuleHash { _mhHash :: Hash }
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (NFData)
 
+instance Pretty ModuleHash where
+  pretty (ModuleHash h) = pretty h
+
 placeholderHash :: ModuleHash
 placeholderHash = ModuleHash (Hash "#placeholder")
 

@@ -10,4 +10,5 @@ makePrisms ''LexerError
 makePrisms ''ParseError
 makePrisms ''DesugarError
 makePrisms ''EvalError
+makePrisms ''UserRecoverableError
 makePrisms ''PactError

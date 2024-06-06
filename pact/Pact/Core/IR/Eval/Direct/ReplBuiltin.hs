@@ -71,17 +71,15 @@ coreExpect info b _env = \case
     es <- getEvalState
     tryError (applyLamUnsafe provided []) >>= \case
       Right (VPactValue v2) -> do
-        applyLamUnsafe expected [] >>= \case
-          VPactValue v1 -> do
+        applyLamUnsafe expected [] >>= enforcePactValue info >>= \case
+          v1 -> do
             if v1 /= v2 then do
                 let v1s = prettyShowValue (VPactValue v1)
                     v2s = prettyShowValue (VPactValue v2)
                 return $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
             else return (VLiteral (LString ("Expect: success " <> msg)))
-          _ ->
-            throwRecoverableError info "evaluation within expect did not return a pact value"
       Right _v ->
-        throwRecoverableError info "FAILURE: expect expression did not return a pact value for comparison"
+        throwUserRecoverableError info $ UserEnforceError "FAILURE: expect expression did not return a pact value for comparison"
       Left err -> do
         putEvalState es
         currSource <- use replCurrSource
@@ -95,8 +93,8 @@ coreExpectThat info b _env = \case
     applyLamUnsafe vclo [v] >>= \case
       VLiteral (LBool c) ->
         if c then return (VLiteral (LString ("Expect-that: success " <> msg)))
-        else return  (VLiteral (LString ("FAILURE: Expect-that: Did not satisfy condition: " <> msg)))
-      _ -> throwRecoverableError info "Expect-that: condition did not return a boolean"
+        else return (VLiteral (LString ("FAILURE: Expect-that: Did not satisfy condition: " <> msg)))
+      _ -> throwNativeExecutionError info b "Expect-that: condition did not return a boolean"
   args -> argsError info b args
 
 coreExpectFailure :: NativeFunction ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -104,7 +102,7 @@ coreExpectFailure info b _env = \case
   [VString doc, VClosure vclo] -> do
     es <- getEvalState
     tryError (applyLamUnsafe vclo []) >>= \case
-      Left (PERecoverableError _ _) -> do
+      Left (PEUserRecoverableError _ _ _) -> do
         putEvalState es
         return $ VLiteral $ LString $ "Expect failure: Success: " <> doc
       Left _err -> do
@@ -115,8 +113,9 @@ coreExpectFailure info b _env = \case
   [VString desc, VString toMatch, VClosure vclo] -> do
     es <- getEvalState
     tryError (applyLamUnsafe vclo []) >>= \case
-      Left (PERecoverableError (RecoverableError err) _) -> do
+      Left (PEUserRecoverableError userErr _ _) -> do
         putEvalState es
+        let err = renderCompactText userErr
         if toMatch `T.isInfixOf` err
           then return $ VLiteral $ LString $ "Expect failure: Success: " <> desc
           else return $ VLiteral $ LString $
@@ -179,7 +178,7 @@ pactState info b _env = \case
                  ,(Field "yield", yield')
                  ,(Field "step", PInteger (fromIntegral (_peStep pe)))]
         return (VObject (M.fromList ps))
-      Nothing -> throwRecoverableError info "pact-state: no pact exec in context"
+      Nothing -> throwUserRecoverableError info $ UserEnforceError "pact-state: no pact exec in context"
 
 coreplEvalEnvStackFrame :: NativeFunction ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 coreplEvalEnvStackFrame info b _env = \case
@@ -208,7 +207,7 @@ envHash :: NativeFunction ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 envHash info b _env = \case
   [VString s] -> do
     case decodeBase64UrlUnpadded (T.encodeUtf8 s) of
-      Left e -> throwRecoverableError info (T.pack e)
+      Left e -> throwUserRecoverableError info $ UserEnforceError (T.pack e)
       Right hs -> do
         (replEvalEnv . eeHash) .= Hash (toShort hs)
         return $ VString $ "Set tx hash to " <> s
@@ -252,7 +251,7 @@ envChainData info b _env = \case
       PTime time
         | k == cdBlockTime -> go (set pdBlockTime (PactTime.toPosixTimestampMicros time) pd) rest
       _ ->
-        throwRecoverableError info ("envChainData: bad public metadata value for key: " <> _field k)
+        throwUserRecoverableError info $ UserEnforceError $ "envChainData: bad public metadata value for key: " <> _field k
   args -> argsError info b args
 
 envKeys :: NativeFunction ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -270,7 +269,8 @@ envSigs info b _env = \case
       Just sigs -> do
         (replEvalEnv . eeMsgSigs) .= M.fromList (V.toList sigs)
         return $ VString "Setting transaction signatures/caps"
-      Nothing -> throwRecoverableError info ("env-sigs format is wrong")
+      Nothing -> throwUserRecoverableError info $
+        UserEnforceError ("env-sigs: Expected object with 'key': string, 'caps': [capability]")
     where
     keyCapObj = \case
       PObject o -> do
@@ -294,7 +294,7 @@ renderTx :: MonadEval b i m => i -> Text -> Maybe (TxId, Maybe Text) -> m (EvalV
 renderTx _info start (Just (TxId tid, mt)) =
   return $ VString $ start <> " " <> T.pack (show tid) <> maybe mempty (" " <>) mt
 renderTx info start Nothing =
-  throwRecoverableError info ("tx-function failure " <> start)
+  throwUserRecoverableError info $ UserEnforceError ("tx-function failure " <> start)
 
 begin' :: SpanInfo -> Maybe Text -> ReplM b (Maybe (TxId, Maybe Text))
 begin' info mt = do
@@ -354,18 +354,15 @@ sigKeyset info b _env = \case
 testCapability :: NativeFunction ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
 testCapability info b env = \case
   [VCapToken origToken] -> do
-    lookupFqName (_ctName origToken) >>= \case
-      Just (DCap d) -> do
-        let cBody = Constant LUnit info
-            -- cont' = SeqC env cBody cont
-        case _dcapMeta d of
-          Unmanaged -> do
-            evalCap info env origToken PopCapInvoke TestCapEval cBody
-          _ -> do
-            -- Installed caps emit and event
-            -- so we create a fake stack frame
-            installCap info env origToken False *> evalCap info env origToken PopCapInvoke TestCapEval cBody
-      _ -> throwRecoverableError info "no such capability"
+    d <- getDefCap info (_ctName origToken)
+    let cBody = Constant LUnit info
+    case _dcapMeta d of
+      Unmanaged -> do
+        evalCap info env origToken PopCapInvoke TestCapEval cBody
+      _ -> do
+        -- Installed caps emit and event
+        -- so we create a fake stack frame
+        installCap info env origToken False *> evalCap info env origToken PopCapInvoke TestCapEval cBody
   args -> argsError info b args
 
 envExecConfig :: NativeFunction ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -389,14 +386,15 @@ envNamespacePolicy info b _env = \case
   [VBool allowRoot, VClosure (C clo)] -> do
     pdb <- viewEvalEnv eePactDb
     let qn = fqnToQualName (_cloFqName clo)
-    when (_cloArity clo /= 2) $ failInvariant info "Namespace manager function has invalid argument length"
+    when (_cloArity clo /= 2) $
+      throwNativeExecutionError info b "Namespace manager function has invalid argument length"
     getModuleMember info pdb qn >>= \case
       Dfun _ -> do
         let nsp = SmartNamespacePolicy allowRoot qn
         replEvalEnv . eeNamespacePolicy .= nsp
         return (VString "Installed namespace policy")
       _ ->
-        throwRecoverableError info "invalid namespace manager function type"
+        throwUserRecoverableError info $ UserEnforceError "invalid namespace manager function type"
   args -> argsError info b args
 
 envGas :: NativeFunction ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
@@ -527,7 +525,7 @@ envVerifiers info b _env = \case
         (replEvalEnv . eeMsgVerifiers) .= M.fromList (V.toList sigs)
         return $ VString "Setting transaction verifiers/caps"
       Nothing ->
-        throwRecoverableError info ("env-verifiers: Expected object with 'name': string, 'caps': [capability]")
+        throwNativeExecutionError info b ("Expected object with 'name': string, 'caps': [capability]")
     where
     verifCapObj = \case
       PObject o -> do

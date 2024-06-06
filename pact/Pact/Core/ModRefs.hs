@@ -5,37 +5,33 @@ module Pact.Core.ModRefs
  ( ModRef(..)
  , mrModule
  , mrImplemented
- , mrRefined
  ) where
 
 import Control.Lens
 import Control.DeepSeq
 import Data.Set(Set)
 import GHC.Generics
+import qualified Data.Set as S
 
 import Pact.Core.Names
 import Pact.Core.Pretty
 
-import qualified Data.Set as S
 
 -- | Original module reference
 data ModRef
   = ModRef
   { _mrModule :: ModuleName
   -- ^ Original module
-  , _mrImplemented :: [ModuleName]
+  , _mrImplemented :: Set ModuleName
   -- ^ All implemented interfaces
-  , _mrRefined :: Maybe (Set ModuleName)
--- ^ The "Selected" interface from a type refinement
   }
   deriving (Show, Generic)
 
 instance NFData ModRef
 
 instance Pretty ModRef where
-  pretty (ModRef _mn _imp mref) = case mref of
-    Just ref -> "module" <> braces (pretty (S.toList ref))
-    Nothing -> "module<not refined>"
+  pretty (ModRef _mn imps) =
+    "module" <> braces (pretty (S.toList imps))
 
 instance Eq ModRef where
   m1 == m2 = _mrModule m1 == _mrModule m2

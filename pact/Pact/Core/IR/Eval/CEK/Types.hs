@@ -121,6 +121,7 @@ import Pact.Core.Environment
 import Pact.Core.DefPacts.Types
 import Pact.Core.Namespace
 import Pact.Core.Builtin
+import Pact.Core.Errors
 import Pact.Core.IR.Eval.Runtime.Types
 
 import qualified Pact.Core.Pretty as P
@@ -316,7 +317,7 @@ pattern VDefPactClosure clo = VClosure (DPC clo)
 -- | Result of an evaluation step, either a CEK value or an error.
 data EvalResult (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
   = EvalValue (CEKValue step b i m)
-  | VError Text i
+  | VError [StackFrame i] UserRecoverableError i
   deriving (Show, Generic)
 
 instance (NFData b, NFData i) => NFData (EvalResult step b i m)
@@ -415,7 +416,7 @@ data BuiltinCont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type 
   -- ^ <keyset to push to the db>
   | DefineNamespaceC Namespace
   -- ^ namespace to write to the db
-  | RunKeysetPredC
+  | RunKeysetPredC KeySet
   -- ^ check the keyset predicate
   deriving (Show, Generic)
 
@@ -480,7 +481,7 @@ data Cont (step :: CEKStepKind) (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Ty
   --  - the capability "user body" to evaluate, generally carrying a series of expressions
   --    or a simple return value in the case of `compose-capability`
   --  - The rest of the continuation
-  | CapPopC CapPopState (Cont step b i m)
+  | CapPopC CapPopState i (Cont step b i m)
   -- ^ What to do after returning from a defcap: do we compose the returned cap, or do we simply pop it from the stack
   | DefPactStepC (CEKEnv step b i m) i (Cont step b i m)
   -- ^ Cont frame after a defpact, ensuring we save the defpact to the database and whatnot

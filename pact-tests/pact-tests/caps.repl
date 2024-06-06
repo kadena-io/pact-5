@@ -814,7 +814,7 @@
 
 (expect-failure
  "cap guard fails on wrong cap"
- "Capability guard enforce failure cap not in scope"
+ "Capability not acquired"
  (test-cap-guard "A" "B"))
 
 (env-hash (hash 1))
@@ -831,7 +831,7 @@
 (cg-pact 'k2 'k2 "D" "E")
 (expect-failure
  "cap pact guard fails on wrong cap"
- "Capability guard enforce failure cap not in scope"
+ "Capability not acquired"
  (continue-pact 1))
 
 (pact-state true)
@@ -914,7 +914,7 @@
 
 (expect-failure
   "out-of-band call fails"
-  "Capability guard enforce failure cap not in scope"
+  "Capability not acquired"
   (call-op1 "hello" 2))
 (expect
    "normal case succeeds for both callees post-fork"

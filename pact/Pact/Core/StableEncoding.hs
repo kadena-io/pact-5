@@ -17,7 +17,7 @@ import Data.Ratio ((%), denominator)
 import Data.ByteString (ByteString)
 import qualified Data.Text as T
 import qualified Pact.JSON.Encode as J
-import qualified Data.Set as Set
+import qualified Data.Set as S
 
 import Pact.Core.PactValue
 import Pact.Core.Literal
@@ -131,7 +131,7 @@ instance J.Encode (StableEncoding KeySetName) where
 instance J.Encode (StableEncoding KeySet) where
   build (StableEncoding (KeySet keys predFun)) =J.object
     [ "pred" J..= StableEncoding predFun
-    , "keys" J..= J.Array (Set.map StableEncoding keys) -- TODO: is this valid?
+    , "keys" J..= J.Array (S.map StableEncoding keys) -- TODO: is this valid?
     ]
   {-# INLINABLE build #-}
 
@@ -169,8 +169,8 @@ instance J.Encode (StableEncoding ModuleName) where
 
 -- | Stable encoding of `ModRef`
 instance J.Encode (StableEncoding ModRef) where
-  build (StableEncoding (ModRef mn imp _ref)) = J.object
-    [ "refSpec" J..= Just (J.Array (StableEncoding <$> imp))
+  build (StableEncoding (ModRef mn imp)) = J.object
+    [ "refSpec" J..= Just (J.Array (StableEncoding <$> S.toList imp))
     , "refName" J..= StableEncoding mn
     ]
   {-# INLINABLE build #-}

@@ -401,8 +401,8 @@ instance Pretty ty => Pretty (DefCap name ty b i) where
 
 instance Pretty ty => Pretty (DefSchema ty info) where
   pretty (DefSchema n schema i) =
-    let argList = [pretty arg | (Field k, t) <- M.toList schema, let arg = Arg k (Just t) i]
-    in parens $ "defschema" <+> pretty n <> (if null argList then mempty else " " <> hsep argList)
+    let argList = [Arg k (Just t) i | (Field k, t) <- M.toList schema]
+    in pretty $ PrettyLispApp ("defschema " <> n) argList
 
 instance Pretty (TableSchema name) where
   pretty (DesugaredTable pn) = pretty pn

@@ -254,7 +254,7 @@ sendDiagnostics nuri mv content = liftIO runPact >>= \case
       PEParseError{} -> "Parse"
       PEDesugarError{} -> "Desugar"
       PEExecutionError{} -> "Execution"
-      PERecoverableError{} -> "Execution"
+      PEUserRecoverableError{} -> "Execution"
 
 spanInfoToRange :: SpanInfo -> Range
 spanInfoToRange (SpanInfo sl sc el ec) = mkRange
