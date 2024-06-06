@@ -144,6 +144,10 @@ data DynamicName
 
 instance NFData DynamicName
 
+instance Pretty DynamicName where
+  pretty (DynamicName dn call) =
+    pretty dn <> "::" <> pretty call
+
 data ParsedTyName
   = TQN QualifiedName
   | TBN BareName
@@ -311,6 +315,9 @@ makeLenses ''TypeName
 makeLenses ''NamedDeBruijn
 makeClassy ''NativeName
 
+instance Pretty NativeName where
+  pretty (NativeName n) = pretty n
+
 instance (Pretty b) => Pretty (OverloadedName b) where
   pretty (OverloadedName n nk) = case nk of
     OBound _ -> pretty n
@@ -362,6 +369,9 @@ newtype RowKey
   deriving (Eq, Ord, Show, NFData)
 
 makeLenses ''RowKey
+
+instance Pretty RowKey where
+  pretty (RowKey rk) = pretty rk
 
 -- | A Name reference which
 -- is always fully qualified after name resolution

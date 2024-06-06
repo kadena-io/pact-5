@@ -10,13 +10,15 @@
 
 module Pact.Core.Repl.Compile
  ( ReplCompileValue(..)
- , interpretReplProgram
+ , interpretReplProgramBigStep
  , interpretReplProgramSmallStep
  , loadFile
  , interpretReplProgramDirect
  , interpretEvalBigStep
  , interpretEvalSmallStep
  , interpretEvalDirect
+ , interpretReplProgram
+ , ReplInterpreter
  ) where
 
 import Control.Lens
@@ -85,26 +87,26 @@ loadFile
 loadFile loc rEnv display = do
   source <- SourceCode loc <$> liftIO (T.readFile loc)
   replCurrSource .= source
-  interpretReplProgram' rEnv source display
+  interpretReplProgram rEnv source display
 
 
-interpretReplProgram
+interpretReplProgramBigStep
   :: SourceCode
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
-interpretReplProgram = interpretReplProgram' interpretEvalBigStep
+interpretReplProgramBigStep = interpretReplProgram interpretEvalBigStep
 
 interpretReplProgramSmallStep
   :: SourceCode
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
-interpretReplProgramSmallStep = interpretReplProgram' interpretEvalSmallStep
+interpretReplProgramSmallStep = interpretReplProgram interpretEvalSmallStep
 
 interpretReplProgramDirect
   :: SourceCode
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
-interpretReplProgramDirect = interpretReplProgram' interpretEvalDirect
+interpretReplProgramDirect = interpretReplProgram interpretEvalDirect
 
 checkReplNativesEnabled :: TopLevel n t (ReplBuiltin b) SpanInfo -> ReplM ReplCoreBuiltin ()
 checkReplNativesEnabled = \case
@@ -147,12 +149,12 @@ interpretEvalDirect =
     PBool <$> Direct.interpretGuard info Direct.replBuiltinEnv g
 
 
-interpretReplProgram'
+interpretReplProgram
   :: ReplInterpreter
   -> SourceCode
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
-interpretReplProgram' interpreter (SourceCode _ source) display = do
+interpretReplProgram interpreter (SourceCode _ source) display = do
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ Lisp.parseReplProgram lexx
@@ -203,7 +205,7 @@ interpretReplProgram' interpreter (SourceCode _ source) display = do
                 docs <- uses replUserDocs (M.lookup qn)
                 displayValue (RUserDoc d docs)
               Nothing ->
-                failInvariant varI "repl invariant violated: resolved to a top level free variable without a binder"
+                throwExecutionError varI $ EvalError "repl invariant violated: resolved to a top level free variable without a binder"
           _ -> do
             v <- evalTopLevel interpreter ds deps
             displayValue (RCompileValue v)
@@ -220,8 +222,8 @@ interpretReplProgram' interpreter (SourceCode _ source) display = do
       RTLDefConst dc -> case _dcTerm dc of
         TermConst term -> do
           pv <- eval interpreter PSysOnly term
-          pv' <- maybeTCType (_dcInfo dc) pv (_argType $ _dcSpec dc)
-          let dc' = set dcTerm (EvaledConst pv') dc
+          maybeTCType (_dcInfo dc) (_argType $ _dcSpec dc) pv
+          let dc' = set dcTerm (EvaledConst pv) dc
           let fqn = FullyQualifiedName replModuleName (_argName $ _dcSpec dc) replModuleHash
           loaded . loAllLoaded %= M.insert fqn (DConst dc')
           displayValue $ RLoadedDefConst $ _argName $ _dcSpec dc'

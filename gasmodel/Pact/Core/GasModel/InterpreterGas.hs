@@ -370,7 +370,7 @@ gasMtWithHandlerError pdb =
     let es = defaultGasEvalState
         ps = _eeDefPactStep ee
         frame = Mt
-        value = VError "foo" ()
+        value = VError [] (UserEnforceError "foo") ()
         env = CEKEnv { _cePactDb=pdb
                     , _ceLocal=mempty
                     , _ceInCap=False

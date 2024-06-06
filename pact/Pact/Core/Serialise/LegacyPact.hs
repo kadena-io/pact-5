@@ -430,8 +430,8 @@ fromLegacyPactValue = \case
       pure (PGuard $ GCapabilityGuard (CapabilityGuard qn args (fromLegacyPactId <$> i)))
   Legacy.PModRef (Legacy.ModRef mn mmn) -> let
     mn' = fromLegacyModuleName mn
-    imp = fmap fromLegacyModuleName (fromMaybe [] mmn)
-    in pure (PModRef $ ModRef mn' imp Nothing)
+    imp = S.fromList $ fmap fromLegacyModuleName (fromMaybe [] mmn)
+    in pure (PModRef $ ModRef mn' imp)
 
 
 fromLegacyPersistDirect
@@ -708,8 +708,8 @@ fromLegacyTerm mh = \case
 
   Legacy.TModRef (Legacy.ModRef mn mmn) -> let
     mn' = fromLegacyModuleName mn
-    imp = fmap fromLegacyModuleName (fromMaybe [] mmn)
-    in pure (InlineValue (PModRef (ModRef mn' imp Nothing)) ())
+    imp = S.fromList $ fmap fromLegacyModuleName (fromMaybe [] mmn)
+    in pure (InlineValue (PModRef (ModRef mn' imp)) ())
 
   _ -> throwError "fromLegacyTerm: invariant"
 

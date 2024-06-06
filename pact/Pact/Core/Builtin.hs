@@ -19,7 +19,7 @@ module Pact.Core.Builtin
  , IsBuiltin(..)
  , ReplCoreBuiltin
  , BuiltinForm(..)
- , ReplBuiltins(..)
+ , ReplOnlyBuiltin(..)
  )where
 
 import Data.Text(Text)
@@ -697,9 +697,8 @@ coreBuiltinMap = M.fromList
   | b <- [minBound .. maxBound]
   , b `notElem` coreBuiltinOverloads]
 
--- Todo: rename
 -- | Our repl builtins.
-data ReplBuiltins
+data ReplOnlyBuiltin
   = RExpect
   | RExpectFailure
   | RExpectFailureMatch
@@ -747,7 +746,7 @@ data ReplBuiltins
   deriving (Show, Enum, Bounded, Eq, Generic)
 
 
-instance IsBuiltin ReplBuiltins where
+instance IsBuiltin ReplOnlyBuiltin where
   builtinName = NativeName . replBuiltinsToText
   builtinArity = \case
     RExpect -> 3
@@ -798,7 +797,7 @@ instance IsBuiltin ReplBuiltins where
 -- to be implemented later
 data ReplBuiltin b
   = RBuiltinWrap b
-  | RBuiltinRepl ReplBuiltins
+  | RBuiltinRepl ReplOnlyBuiltin
   deriving (Eq, Show, Generic)
 
 -- NOTE: Maybe `ReplBuiltin` is not a great abstraction, given
@@ -830,7 +829,7 @@ instance (Enum b, Bounded b) => Enum (ReplBuiltin b) where
       RBuiltinRepl rb -> maxContained + fromEnum rb
   {-# SPECIALIZE fromEnum :: ReplBuiltin CoreBuiltin -> Int #-}
 
-replBuiltinsToText :: ReplBuiltins -> Text
+replBuiltinsToText :: ReplOnlyBuiltin -> Text
 replBuiltinsToText = \case
   RExpect -> "expect"
   RExpectFailure -> "expect-failure"
@@ -904,8 +903,10 @@ replCoreBuiltinMap =
     , let !txtRepr = replCoreBuiltinToText b]
 
 
--- Todo: is not a great abstraction.
--- In particular: the arity could be gathered from the type.
+-- | A typeclass for general information about pact builtins, mostly
+--   useful for runtime native information and for error messages. Note that
+--   builtinArity only has 1 value per builtin, meaning overload resolution must
+--   happen before using `builtinArity` to check for app saturation.
 class Show b => IsBuiltin b where
   builtinArity :: b -> Int
   builtinName :: b -> NativeName

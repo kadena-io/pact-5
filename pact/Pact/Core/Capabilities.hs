@@ -107,8 +107,10 @@ data CapState name v
 instance (Ord name, Ord v) => Default (CapState name v) where
   def = CapState mempty mempty mempty mempty mempty
 
--- Todo: Is there a reason why module + name is
--- an unqualified
+-- | Our pact event type.
+--   Note: the name + module are isomorphic to a
+--   QualifiedName, but it is kept in this format currently for
+--   ease of legacy integration
 data PactEvent v
   = PactEvent
   { _peName :: Text
@@ -163,6 +165,9 @@ data Signer name v = Signer
  -- ^ clist for designating signature to specific caps
  } deriving (Eq, Ord, Show, Generic)
 
+instance (Pretty name, Pretty v) => Pretty (CapToken name v) where
+  pretty (CapToken qn args) =
+    pretty $ PrettyLispApp qn args
 
 instance (NFData name, NFData v) => NFData (Signer name v)
 instance (NFData name, NFData e) => NFData (CapForm name e)

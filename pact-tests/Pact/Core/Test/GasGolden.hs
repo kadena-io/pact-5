@@ -38,7 +38,7 @@ tests = do
   cases <- gasTestFiles
   pure $ testGroup "Gas Goldens"
     [ testCase "Capture all builtins" $ captureBuiltins (fst <$> cases)
-    , goldenVsStringDiff "Gas Goldens: CEK" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases interpretReplProgram)
+    , goldenVsStringDiff "Gas Goldens: CEK" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases interpretReplProgramBigStep)
     , goldenVsStringDiff "Gas Goldens: CEK smallstep" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases interpretReplProgramSmallStep)
     , goldenVsStringDiff "Gas Goldens: Direct" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases interpretReplProgramDirect)
     ]

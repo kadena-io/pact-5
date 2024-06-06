@@ -703,13 +703,14 @@ coreAccess info b cont handler _env = \case
   [VLiteral (LInteger i), VList vec] ->
     case vec V.!? fromIntegral i of
       Just v -> returnCEKValue cont handler (VPactValue v)
+      -- Note: this error is not recoverable in prod
       _ -> throwExecutionError info (ArrayOutOfBoundsException (V.length vec) (fromIntegral i))
   [VString field, VObject o] ->
     case M.lookup (Field field) o of
       Just v -> returnCEKValue cont handler (VPactValue v)
       Nothing ->
-        let msg = "Object does not have field: " <> field
-        in returnCEK cont handler (VError msg info)
+        -- Note: this error is not recoverable in prod
+        throwExecutionError info (ObjectIsMissingField (Field field) (ObjectData o))
   args -> argsError info b args
 
 coreIsCharset :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -719,7 +720,8 @@ coreIsCharset info b cont handler _env = \case
     case i of
       0 -> returnCEKValue cont handler $ VBool $ T.all Char.isAscii s
       1 -> returnCEKValue cont handler $ VBool $ T.all Char.isLatin1 s
-      _ -> returnCEK cont handler (VError "Unsupported character set" info)
+      _ ->
+        throwNativeExecutionError info b "Unsupported character set"
   args -> argsError info b args
 
 coreYield :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -731,7 +733,7 @@ coreYield info b cont handler _env = \case
   go o mcid = do
     mpe <- useEvalState esDefPactExec
     case mpe of
-      Nothing -> throwExecutionError info YieldOutsiteDefPact
+      Nothing -> throwExecutionError info YieldOutsideDefPact
       Just pe -> case mcid of
         Nothing -> do
           esDefPactExec . _Just . peYield .== Just (Yield o Nothing Nothing)
@@ -739,7 +741,7 @@ coreYield info b cont handler _env = \case
         Just cid -> do
           sourceChain <- viewEvalEnv (eePublicData . pdPublicMeta . pmChainId)
           p <- provenanceOf cid
-          when (_peStepHasRollback pe) $ failInvariant info "Cross-chain yield not allowed in step with rollback"
+          when (_peStepHasRollback pe) $ throwExecutionError info $ EvalError "Cross-chain yield not allowed in step with rollback"
           esDefPactExec . _Just . peYield .== Just (Yield o (Just p) (Just sourceChain))
           returnCEKValue cont handler (VObject o)
   provenanceOf tid =
@@ -749,7 +751,8 @@ corePactId :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 corePactId info b cont handler _env = \case
   [] -> useEvalState esDefPactExec >>= \case
     Just dpe -> returnCEKValue cont handler (VString (_defpactId (_peDefPactId dpe)))
-    Nothing -> returnCEK cont handler (VError "pact-id: not in pact execution" info)
+    Nothing ->
+      throwExecutionError info NotInDefPactExecution
   args -> argsError info b args
 
 enforceYield
@@ -821,7 +824,8 @@ coreEnforceGuard info b cont handler env = \case
   [VString s] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
     case parseAnyKeysetName s of
-      Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
+      Left {} ->
+        throwNativeExecutionError info b "incorrect keyset name format"
       Right ksn -> isKeysetNameInSigs info cont handler env ksn
   args -> argsError info b args
 
@@ -830,11 +834,12 @@ keysetRefGuard info b cont handler env = \case
   [VString g] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length g
     case parseAnyKeysetName g of
-      Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
+      Left {} -> throwNativeExecutionError info b "incorrect keyset name format"
       Right ksn -> do
         let pdb = view cePactDb env
         liftDbFunction info (readKeySet pdb ksn) >>= \case
-          Nothing -> returnCEK cont handler (VError ("no such keyset defined: " <> g) info)
+          Nothing ->
+            throwExecutionError info (NoSuchKeySet ksn)
           Just _ -> returnCEKValue cont handler (VGuard (GKeySetRef ksn))
   args -> argsError info b args
 
@@ -851,6 +856,16 @@ coreDec :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreDec info b cont handler _env = \case
   [VInteger i] -> returnCEKValue cont handler $ VDecimal $ Decimal 0 i
   args -> argsError info b args
+
+throwReadError
+  :: (CEKEval step b i m, MonadEval b i m)
+  => i
+  -> Cont step b i m
+  -> CEKErrorHandler step b i m
+  -> b
+  -> m (CEKEvalResult step b i m)
+throwReadError info cont handler b =
+  returnCEKError info cont handler $ EnvReadFunctionFailure (builtinName b)
 
 {-
 [Note: Parsed Integer]
@@ -900,10 +915,9 @@ coreReadInteger info b cont handler _env = \case
             chargeGasArgs info $ GStrOp $ StrOpConvToInt $ T.length raw
             case parseNumLiteral raw of
               Just (LInteger i) -> returnCEKValue cont handler (VInteger i)
-              _ -> returnCEK cont handler (VError "read-integer failure" info)
-
-          _ -> returnCEK cont handler (VError "read-integer failure" info)
-      _ -> returnCEK cont handler (VError "read-integer failure" info)
+              _ -> throwReadError info cont handler b
+          _ -> throwReadError info cont handler b
+      _ -> throwReadError info cont handler b
   args -> argsError info b args
 
 coreReadMsg :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -914,8 +928,8 @@ coreReadMsg info b cont handler _env = \case
         chargeGasArgs info $ GObjOp $ ObjOpLookup s $ M.size envData
         case M.lookup (Field s) envData of
           Just pv -> returnCEKValue cont handler (VPactValue pv)
-          _ -> returnCEK cont handler (VError "read-msg failure" info)
-      _ -> returnCEK cont handler (VError "read-msg failure: data is not an object" info)
+          _ -> throwReadError info cont handler b
+      _ -> throwReadError info cont handler b
   [] -> do
     envData <- viewEvalEnv eeMsgBody
     returnCEKValue cont handler (VPactValue envData)
@@ -952,10 +966,11 @@ coreReadDecimal info b cont handler _env = \case
             case parseNumLiteral raw of
               Just (LInteger i) -> returnCEKValue cont handler (VDecimal (Decimal 0 i))
               Just (LDecimal l) -> returnCEKValue cont handler (VDecimal l)
-              _ -> returnCEK cont handler (VError "read-decimal failure" info)
-          _ -> returnCEK cont handler (VError "read-decimal failure" info)
-      _ -> returnCEK cont handler (VError "read-decimal failure" info)
+              _ -> throwReadError info cont handler b
+          _ -> throwReadError info cont handler b
+      _ -> throwReadError info cont handler b
   args -> argsError info b args
+
 
 coreReadString :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreReadString info b cont handler _env = \case
@@ -965,8 +980,8 @@ coreReadString info b cont handler _env = \case
         chargeGasArgs info $ GObjOp $ ObjOpLookup s $ M.size envData
         case M.lookup (Field s) envData of
           Just (PString p) -> returnCEKValue cont handler (VString p)
-          _ -> returnCEK cont handler (VError "read-string failure" info)
-      _ -> returnCEK cont handler (VError "read-string failure" info)
+          _ -> throwReadError info cont handler b
+      _ -> throwReadError info cont handler b
   args -> argsError info b args
 
 readKeyset' :: (MonadEval b i m) => i -> T.Text -> m (Maybe KeySet)
@@ -1017,9 +1032,10 @@ coreReadKeyset info b cont handler _env = \case
       Just ks -> do
         shouldEnforce <- isExecutionFlagSet FlagEnforceKeyFormats
         if shouldEnforce && isLeft (enforceKeyFormats (const ()) ks)
-           then returnCEK cont handler (VError "Invalid keyset" info)
+           then
+            throwExecutionError info (InvalidKeysetFormat ks)
            else returnCEKValue cont handler (VGuard (GKeyset ks))
-      Nothing -> returnCEK cont handler (VError "read-keyset failure" info)
+      Nothing -> throwReadError info cont handler b
   args -> argsError info b args
 
 
@@ -1109,7 +1125,7 @@ dbKeys info b cont handler env = \case
 dbTxIds :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 dbTxIds info b cont handler env = \case
   [VTable tv, VInteger tid] -> do
-    checkNonLocalAllowed info
+    checkNonLocalAllowed info b
     let cont' = BuiltinC env info (TxIdsC tv tid) cont
     guardTable info cont' handler env tv GtTxIds
   args -> argsError info b args
@@ -1118,7 +1134,7 @@ dbTxIds info b cont handler env = \case
 dbTxLog :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 dbTxLog info b cont handler env = \case
   [VTable tv, VInteger tid] -> do
-    checkNonLocalAllowed info
+    checkNonLocalAllowed info b
     let cont' = BuiltinC env info (TxLogC tv tid) cont
     guardTable info cont' handler env tv GtTxLog
   args -> argsError info b args
@@ -1126,7 +1142,7 @@ dbTxLog info b cont handler env = \case
 dbKeyLog :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 dbKeyLog info b cont handler env = \case
   [VTable tv, VString key, VInteger tid] -> do
-    checkNonLocalAllowed info
+    checkNonLocalAllowed info b
     let cont' = BuiltinC env info (KeyLogC tv (RowKey key) tid) cont
     guardTable info cont' handler env tv GtKeyLog
   args -> argsError info b args
@@ -1144,7 +1160,8 @@ defineKeySet' info cont handler env ksname newKs  = do
   let pdb = view cePactDb env
   ignoreNamespaces <- not <$> isExecutionFlagSet FlagRequireKeysetNs
   case parseAnyKeysetName ksname of
-    Left {} -> returnCEK cont handler (VError "incorrect keyset name format" info)
+    Left {} ->
+      throwExecutionError info (InvalidKeysetNameFormat ksname)
     Right ksn -> do
       let writeKs = do
             newKsSize <- sizeOf SizeOfV0 newKs
@@ -1157,7 +1174,8 @@ defineKeySet' info cont handler env ksname newKs  = do
           isKeysetInSigs info cont' handler env oldKs
         Nothing | ignoreNamespaces -> writeKs
         Nothing | otherwise -> useEvalState (esLoaded . loNamespace) >>= \case
-          Nothing -> returnCEK cont handler (VError "Cannot define a keyset outside of a namespace" info)
+          Nothing ->
+            throwExecutionError info CannotDefineKeysetOutsideNamespace
           Just (Namespace ns uGuard _adminGuard) -> do
             when (Just ns /= _keysetNs ksn) $ throwExecutionError info (MismatchingKeysetNamespace ns)
             let cont' = BuiltinC env info (DefineKeysetC ksn newKs) cont
@@ -1173,7 +1191,7 @@ defineKeySet info b cont handler env = \case
     readKeyset' info ksname >>= \case
       Just newKs ->
         defineKeySet' info cont handler env ksname newKs
-      Nothing -> returnCEK cont handler (VError "read-keyset failure" info)
+      Nothing -> returnCEKError info cont handler $ EnvReadFunctionFailure  (builtinName b)
   args -> argsError info b args
 
 --------------------------------------------------
@@ -1209,16 +1227,12 @@ coreEmitEvent :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b 
 coreEmitEvent info b cont handler env = \case
   [VCapToken ct@(CapToken fqn _)] -> do
     let cont' = BuiltinC env info (EmitEventC ct) cont
-    guardForModuleCall info cont' handler env (_fqModule fqn) $
+    guardForModuleCall info cont' handler env (_fqModule fqn) $ do
       -- Todo: this code is repeated in the EmitEventFrame code
-      lookupFqName fqn >>= \case
-        Just (DCap d) -> do
-          enforceMeta (_dcapMeta d)
-          emitCapability info ct
-          returnCEKValue cont handler (VBool True)
-        Just _ ->
-          failInvariant info "CapToken does not point to defcap"
-        _ -> failInvariant info "No Capability found in emit-event"
+      d <- getDefCap info fqn
+      enforceMeta (_dcapMeta d)
+      emitCapability info ct
+      returnCEKValue cont handler (VBool True)
         where
         enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)
         enforceMeta _ = pure ()
@@ -1249,7 +1263,7 @@ createModuleGuard info b cont handler _env = \case
         let cg = GModuleGuard (ModuleGuard mn n)
         returnCEKValue cont handler (VGuard cg)
       Nothing ->
-        returnCEK cont handler (VError "not-in-module" info)
+        throwNativeExecutionError info b "create-module-guard: must call within module"
   args -> argsError info b args
 
 createDefPactGuard :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -1264,7 +1278,7 @@ coreIntToStr :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i
 coreIntToStr info b cont handler _env = \case
   [VInteger base, VInteger v]
     | v < 0 ->
-      returnCEK cont handler (VError "int-to-str error: cannot show negative integer" info)
+      throwNativeExecutionError info b "int-to-str error: cannot show negative integer"
     | base >= 2 && base <= 16 -> do
       let strLen = 1 + Exts.I# (IntLog.integerLogBase# base $ abs v)
       chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
@@ -1276,8 +1290,10 @@ coreIntToStr info b cont handler _env = \case
       chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
       let v' = toB64UrlUnpaddedText $ integerToBS v
       returnCEKValue cont handler (VString v')
-    | base == 64 -> returnCEK cont handler (VError "only positive values allowed for base64URL conversion" info)
-    | otherwise -> returnCEK cont handler (VError "invalid base for base64URL conversion" info)
+    | base == 64 ->
+      throwNativeExecutionError info b "only positive values allowed for base64URL conversion"
+    | otherwise ->
+      throwNativeExecutionError info b "invalid base for base64URL conversion"
   args -> argsError info b args
 
 coreStrToInt :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -1301,7 +1317,7 @@ coreStrToIntBase info b cont handler _env = \case
         chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
         checkLen info s
         doBase info cont handler base s
-    | otherwise -> returnCEK cont handler (VError "Base value must be >= 2 and <= 16, or 64" info)
+    | otherwise -> throwNativeExecutionError info b $ "Base value must be >= 2 and <= 16, or 64"
   args -> argsError info b args
   where
   -- Todo: DOS and gas analysis
@@ -1334,7 +1350,8 @@ coreFormat info b cont handler _env = \case
     if | plen == 1 -> do
           chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
           returnCEKValue cont handler (VString s)
-       | plen - length es > 1 -> returnCEK cont handler $ VError "format: not enough arguments for template" info
+       | plen - length es > 1 ->
+        throwNativeExecutionError info b $ "not enough arguments for template"
        | otherwise -> do
           args <- mapM formatArgM $ V.toList $ V.take (plen - 1) es
           let totalLength = sum (T.length <$> parts) + sum (T.length <$> args)
@@ -1430,7 +1447,8 @@ coreWhere info b cont handler _env = \case
       Just v -> do
         let cont' = EnforceBoolC info cont
         applyLam app [VPactValue v] cont' handler
-      Nothing -> returnCEK cont handler (VError "no such field in object in where application" info)
+      Nothing ->
+        throwExecutionError info (ObjectIsMissingField (Field field) (ObjectData o))
   args -> argsError info b args
 
 coreHash :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -1463,7 +1481,7 @@ parseTime info b cont handler _env = \case
     case PactTime.parseTime (T.unpack fmt) (T.unpack s) of
       Just t -> returnCEKValue cont handler $ VPactValue (PTime t)
       Nothing ->
-        returnCEK cont handler (VError "parse-time parse failure" info)
+        throwNativeExecutionError info b $ "parse-time parse failure"
   args -> argsError info b args
 
 formatTime :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -1480,7 +1498,7 @@ time info b cont handler _env = \case
     case PactTime.parseTime "%Y-%m-%dT%H:%M:%SZ" (T.unpack s) of
       Just t -> returnCEKValue cont handler $ VPactValue (PTime t)
       Nothing ->
-        returnCEK cont handler (VError "time default format parse failure" info)
+        throwNativeExecutionError info b $ "time default format parse failure"
   args -> argsError info b args
 
 addTime :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -1535,7 +1553,7 @@ describeModule info b cont handler env = \case
   [VString s] -> case parseModuleName s of
     Just mname -> do
       enforceTopLevelOnly info b
-      checkNonLocalAllowed info
+      checkNonLocalAllowed info b
       getModuleData info (view cePactDb env) mname >>= \case
         ModuleData m _ -> returnCEKValue cont handler $
           VObject $ M.fromList $ fmap (over _1 Field)
@@ -1547,7 +1565,8 @@ describeModule info b cont handler env = \case
             [ ("name", PString (renderModuleName (_ifName iface)))
             , ("hash", PString (moduleHashToText (_ifHash iface)))
             ]
-    Nothing -> returnCEK cont handler (VError "invalid module name" info)
+    Nothing ->
+      throwNativeExecutionError info b $ "invalid module name format"
   args -> argsError info b args
 
 dbDescribeTable :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -1571,9 +1590,9 @@ dbDescribeKeySet info b cont handler env = \case
           Just ks ->
             returnCEKValue cont handler (VGuard (GKeyset ks))
           Nothing ->
-            returnCEK cont handler (VError ("keyset not found" <> s) info)
+            throwExecutionError info (NoSuchKeySet ksn)
       Left{} ->
-        returnCEK cont handler (VError "invalid keyset name" info)
+        throwNativeExecutionError info b  "incorrect keyset name format"
   args -> argsError info b args
 
 coreCompose :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -1688,7 +1707,7 @@ coreNamespace info b cont handler env = \case
           let msg = "Namespace set to " <> n
           returnCEKValue cont handler (VString msg)
         Nothing ->
-          returnCEK cont handler $ VError ("Namespace " <> n <> " not defined") info
+          throwExecutionError info $ NamespaceNotFound (NamespaceName n)
   args -> argsError info b args
 
 
@@ -1696,7 +1715,7 @@ coreDefineNamespace :: (CEKEval step b i m, MonadEval b i m) => NativeFunction s
 coreDefineNamespace info b cont handler env = \case
   [VString n, VGuard usrG, VGuard adminG] -> do
     enforceTopLevelOnly info b
-    unless (isValidNsFormat n) $ throwExecutionError info (DefineNamespaceError "invalid namespace format")
+    unless (isValidNsFormat n) $ throwNativeExecutionError info b "invalid namespace format"
     let pdb = view cePactDb env
     let nsn = NamespaceName n
         ns = Namespace nsn usrG adminG
@@ -1721,7 +1740,7 @@ coreDefineNamespace info b cont handler env = \case
             clo <- mkDefunClosure d (qualNameToFqn fun mh) env
             let cont' = BuiltinC env info (DefineNamespaceC ns) cont
             applyLam (C clo) [VString n, VGuard adminG] cont' handler
-          _ -> failInvariant info "Fatal error: namespace manager function is not a defun"
+          _ -> throwNativeExecutionError info b $ "Fatal error: namespace manager function is not a defun"
   args -> argsError info b args
   where
   isValidNsFormat nsn = case T.uncons nsn of
@@ -1751,7 +1770,7 @@ coreDescribeNamespace info b cont handler _env = \case
                   , (Field "namespace-name", PString n)]
         returnCEKValue cont handler (VObject obj)
       Nothing ->
-        returnCEK cont handler (VError ("Namespace not defined " <> n) info)
+        throwExecutionError info $ NamespaceNotFound (NamespaceName n)
   args -> argsError info b args
 
 
@@ -1907,16 +1926,16 @@ poseidonHash info b cont handler _env = \case
 #else
 
 zkPairingCheck :: (MonadEval b i m) => NativeFunction step b i m
-zkPairingCheck info _b _cont _handler _env _args = failInvariant info "crypto disabled"
+zkPairingCheck info _b _cont _handler _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
 zkScalarMult :: (MonadEval b i m) => NativeFunction step b i m
-zkScalarMult info _b _cont _handler _env _args = failInvariant info "crypto disabled"
+zkScalarMult info _b _cont _handler _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
 zkPointAddition :: (MonadEval b i m) => NativeFunction step b i m
-zkPointAddition info _b _cont _handler _env _args = failInvariant info "crypto disabled"
+zkPointAddition info _b _cont _handler _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
 poseidonHash :: (MonadEval b i m) => NativeFunction step b i m
-poseidonHash info _b _cont _handler _env _args = failInvariant info "crypto disabled"
+poseidonHash info _b _cont _handler _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
 #endif
 
@@ -1944,12 +1963,12 @@ coreEnforceVerifier info b cont handler _env = \case
       Just verCaps -> do
         verifierInScope <- anyCapabilityBeingEvaluated verCaps
         if verifierInScope then returnCEKValue cont handler (VBool True)
-        else returnCEK cont handler (VError (verifError verName "not in scope") info)
+        else returnCEKError info cont handler $ verifError verName "not in scope"
       Nothing ->
-        returnCEK cont handler (VError (verifError verName "not in transaction") info)
+        returnCEKError info cont handler (verifError verName "not in transaction")
   args -> argsError info b args
   where
-    verifError verName msg = "Verifier failure " <> verName <> ":" <> msg
+    verifError verName msg = VerifierFailure (VerifierName verName) msg
 
 
 -----------------------------------
@@ -1965,8 +1984,6 @@ coreBuiltinEnv
 coreBuiltinEnv i b env = mkBuiltinFn i b env (coreBuiltinRuntime b)
 {-# INLINEABLE coreBuiltinEnv #-}
 
--- gassedCompare :: MonadEval b i m => PactValue -> PactValue -> m Ordering
--- gassedCompare (PLiteral l) (PLiteral r) =
 
 {-# SPECIALIZE coreBuiltinRuntime
    :: CoreBuiltin

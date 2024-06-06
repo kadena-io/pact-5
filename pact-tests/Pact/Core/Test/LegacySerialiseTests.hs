@@ -62,7 +62,7 @@ legacyTests = do
       Nothing -> error "Reading existing modules failed"
       Just ms -> do
         modTests <- fmap concat $ forM repl $ \r -> do
-          sequence [runTest r interpretReplProgram "CEK", runTest r interpretReplProgramDirect "Direct"]
+          sequence [runTest r interpretReplProgramBigStep "CEK", runTest r interpretReplProgramDirect "Direct"]
         pure (testGroup p modTests)
         where
         runTest r interpreter interpName = do

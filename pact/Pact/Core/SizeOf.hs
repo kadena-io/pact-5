@@ -27,7 +27,7 @@ module Pact.Core.SizeOf
   , wordSize
   , SizeOfVersion(..)
 
-  -- * SizeOf 
+  -- * SizeOf
   , countBytes
 
   ) where
@@ -386,7 +386,7 @@ instance SizeOf SpanInfo
 
 -- builtins
 instance SizeOf CoreBuiltin
-instance SizeOf ReplBuiltins
+instance SizeOf ReplOnlyBuiltin
 instance SizeOf b => SizeOf (ReplBuiltin b)
 
 

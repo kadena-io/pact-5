@@ -41,8 +41,8 @@ tests :: IO TestTree
 tests = do
   files <- replTestFiles
   pure $ testGroup "ReplTests"
-    [ testGroup "in-memory db:bigstep" (runFileReplTest interpretReplProgram <$> files)
-    , testGroup "sqlite db:bigstep" (runFileReplTestSqlite interpretReplProgram <$> files)
+    [ testGroup "in-memory db:bigstep" (runFileReplTest interpretReplProgramBigStep <$> files)
+    , testGroup "sqlite db:bigstep" (runFileReplTestSqlite interpretReplProgramBigStep <$> files)
     , testGroup "in-memory db:smallstep" (runFileReplTest interpretReplProgramSmallStep <$> files)
     , testGroup "sqlite db:smallstep" (runFileReplTestSqlite interpretReplProgramSmallStep <$> files)
     , testGroup "in-memory db:direct" (runFileReplTest interpretReplProgramDirect <$> files)

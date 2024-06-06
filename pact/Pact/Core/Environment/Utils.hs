@@ -20,14 +20,15 @@ module Pact.Core.Environment.Utils
  , lookupModule
  , lookupModuleData
  , throwExecutionError
- , throwExecutionError'
- , throwRecoverableError
  , toFqDep
  , mangleNamespace
  , getAllStackCaps
  , checkSigCaps
  , allModuleExports
  , liftDbFunction
+ , throwUserRecoverableError
+ , throwUserRecoverableError'
+ , throwNativeExecutionError
  ) where
 
 import Control.Lens
@@ -36,7 +37,6 @@ import Control.Monad.Except
 import Control.Exception
 import Control.Monad.IO.Class(MonadIO(..))
 import Data.Text(Text)
-import Data.Default
 import Data.Maybe(mapMaybe)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -51,6 +51,7 @@ import Pact.Core.Namespace
 import Pact.Core.Guards
 import Pact.Core.Capabilities
 import Pact.Core.PactValue
+import Pact.Core.Builtin
 
 viewEvalEnv :: (MonadEvalEnv b i m) => Lens' (EvalEnv b i) s -> m s
 viewEvalEnv l = view l <$> readEnv
@@ -100,16 +101,22 @@ liftDbFunction info action = do
     Left dbopErr -> throwExecutionError info (DbOpFailure dbopErr)
     Right e -> pure e
 
+throwUserRecoverableError :: (MonadError (PactError info) m, MonadEvalState b info m) => info -> UserRecoverableError -> m a
+throwUserRecoverableError i err = do
+  st <- useEvalState esStack
+  throwUserRecoverableError' i st err
+
+throwUserRecoverableError' :: MonadError (PactError info) m => info -> [StackFrame info] -> UserRecoverableError -> m a
+throwUserRecoverableError' info stack err = throwError (PEUserRecoverableError err stack info)
+
 throwExecutionError :: (MonadEvalState b i m, MonadError (PactError i) m) => i -> EvalError -> m a
 throwExecutionError i e = do
   st <- useEvalState esStack
   throwError (PEExecutionError e st i)
 
-throwRecoverableError :: MonadEval b i m => i -> Text -> m a
-throwRecoverableError i e = throwError (PERecoverableError (RecoverableError e) i)
-
-throwExecutionError' :: (MonadEvalState b i m, MonadError (PactError i) m, Default i) => EvalError -> m a
-throwExecutionError' = throwExecutionError def
+throwNativeExecutionError :: (MonadEvalState b i m, MonadError (PactError i) m, IsBuiltin b) => i -> b -> Text -> m a
+throwNativeExecutionError info b msg =
+  throwExecutionError info (NativeExecutionError (builtinName b) msg)
 
 -- | lookupModuleData for only modules
 lookupModule :: (MonadEval b i m) => i -> PactDb b i -> ModuleName -> m (Maybe (EvalModule b i))
@@ -170,7 +177,7 @@ getModuleMember info pdb (QualifiedName qn mn) = do
     Just d -> pure d
     Nothing -> do
       let fqn = FullyQualifiedName mn qn (_mHash md)
-      throwExecutionError info (NameNotInScope fqn)
+      throwExecutionError info (ModuleMemberDoesNotExist fqn)
 
 getModuleMemberWithHash :: (MonadEval b i m) => i -> PactDb b i -> QualifiedName -> m (EvalDef b i, ModuleHash)
 getModuleMemberWithHash info pdb (QualifiedName qn mn) = do
@@ -179,7 +186,7 @@ getModuleMemberWithHash info pdb (QualifiedName qn mn) = do
     Just d -> pure (d, _mHash md)
     Nothing -> do
       let fqn = FullyQualifiedName mn qn (_mHash md)
-      throwExecutionError info (NameNotInScope fqn)
+      throwExecutionError info (ModuleMemberDoesNotExist fqn)
 
 
 mangleNamespace :: (MonadEvalState b i m) => ModuleName -> m ModuleName

@@ -3,30 +3,36 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 
 module Pact.Core.Errors
  ( PactErrorI
  , LexerError(..)
  , ParseError(..)
  , DesugarError(..)
+ , InvariantError(..)
  , EvalError(..)
  , PactError(..)
  , ArgTypeError(..)
  , DbOpException(..)
- , RecoverableError(..)
  , peInfo
  , viewErrorStack
+ , UserRecoverableError(..)
  ) where
 
 import Control.Lens hiding (ix)
 import Control.Exception
 import Data.Text(Text)
 import Data.Dynamic (Typeable)
+import Data.Set(Set)
 import qualified Data.Version as V
 import qualified PackageInfo_pact_tng as PI
+import qualified Data.Set as S
+import qualified Data.Text as T
 
 import Control.DeepSeq
 import GHC.Generics
@@ -40,6 +46,9 @@ import Pact.Core.Pretty as Pretty
 import Pact.Core.Hash
 import Pact.Core.StackFrame
 import Pact.Core.DefPacts.Types
+import Pact.Core.PactValue
+import Pact.Core.Capabilities
+import Pact.Core.Verifiers
 
 
 type PactErrorI = PactError SpanInfo
@@ -137,21 +146,29 @@ data DesugarError
   | InvalidModuleReference ModuleName
   -- ^ Invalid: Interface used as module reference
   | EmptyBindingBody
-  --
+  -- ^ Binding form has no expressions to bind to
   | EmptyDefPact Text
   -- ^ Defpact without steps
   | LastStepWithRollback QualifiedName
   -- ^ Last Step has Rollback error
   | ExpectedFreeVariable Text
+  -- ^ Expected free variable for ident
   | InvalidManagedArg Text
-  | InvalidImports [Text]
+  -- ^ Invalid @managed argument, there is no named argument with name <name>
+  | InvalidImports ModuleName [Text]
+  -- ^ Imports for <module> do not exist <imports>
   | InvalidImportModuleHash ModuleName ModuleHash
   -- ^ Expected free variable
   | InvalidSyntax Text
+  -- ^ Desugaring failed on invalid syntactic transformation (e.g within `cond`)
   | InvalidDefInSchemaPosition Text
-  | InvalidDynamicInvoke Text
-  | DuplicateDefinition Text
+  -- ^ Found a non-defschema in a type name position
+  | InvalidDynamicInvoke DynamicName
+  -- ^ Dynamic invoke is invalid
+  | DuplicateDefinition QualifiedName
+  -- ^ Name was defined twice
   | InvalidBlessedHash Text
+  -- ^ Blessed hash has invalid format
   deriving (Show,  Generic)
 
 instance NFData DesugarError
@@ -202,17 +219,27 @@ instance Pretty DesugarError where
     ExpectedFreeVariable t ->
       Pretty.hsep ["Expected free variable in expression, found locally bound: ", pretty t]
     -- Todo: pretty these
-    e@InvalidManagedArg{} -> pretty (show e)
-    e@NotImplemented{} -> pretty (show e)
-    e@InvalidImports{} -> pretty (show e)
-    e@InvalidImportModuleHash{} -> pretty (show e)
-    -- todo: maybe this is a syntaxError???
-    e@InvalidSyntax{} -> pretty (show e)
-    e@InvalidDefInSchemaPosition{} -> pretty (show e)
-    e@InvalidDynamicInvoke{} -> pretty (show e)
-    e@DuplicateDefinition{} -> pretty (show e)
-    e@InvalidBlessedHash{} -> pretty (show e)
-    -- e -> pretty (show e)
+    InvalidManagedArg arg ->
+      "Invalid Managed arg: no such arg with name" <+> pretty arg
+    NotImplemented mn ifn ifdn ->
+      "Interface member not implemented, module" <+> pretty mn <+> "does not implement interface"
+      <+> pretty ifn <+> "member:" <+> pretty ifdn
+    InvalidImports mn imps ->
+      "Invalid imports, module or interface" <+> pretty mn <+> "does not implement the following members:"
+      <+> pretty imps
+    InvalidImportModuleHash mn mh ->
+      "Import error for module" <+> pretty mn <+> ", hash not blessed:"
+        <+> pretty mh
+    InvalidSyntax msg ->
+      "Desugar syntax failure:" <+> pretty msg
+    InvalidDefInSchemaPosition n ->
+      "Invalid def in defschema position:" <+> pretty n <+> "is not a valid schema"
+    InvalidDynamicInvoke dn ->
+      "Invalid dynamic call:" <+> pretty dn
+    DuplicateDefinition qn ->
+      "Duplicate definition:" <+> pretty qn
+    InvalidBlessedHash hs ->
+      "Invalid blessed hash, incorrect format:" <+> pretty hs
 
 -- | Argument type mismatch meant for errors
 --   that does not force you to show the whole PactValue
@@ -236,6 +263,80 @@ instance Pretty ArgTypeError where
     ATEClosure -> "closure"
     ATEModRef -> "modref"
 
+data InvariantError
+  = InvariantInvalidDefKind DefKind Text
+  -- ^ An illegal `def` form was found in a term variable position
+  -- | InvariantNameNotInScope FullyQualifiedName
+  -- ^ Unbound free
+  | InvariantDefConstNotEvaluated FullyQualifiedName
+  -- ^ Defconst found but was not evaluated
+  -- note this is an invariant failure because evaluating a defconst term during
+  -- regular runtime execution has different semantics to pre-evaluating it.
+  | InvariantExpectedDefCap FullyQualifiedName
+  -- ^ Expected a defcap in some position (e.g evalCAp)
+  | InvariantExpectedDefun FullyQualifiedName
+  -- ^ Expected a defun in some position (e.g user managed cap)
+  | InvariantExpectedDefPact FullyQualifiedName
+  -- ^ Expected a defcap in some position (e.g applyPact)
+  | InvariantInvalidBoundVariable Text
+  -- ^ Bound variable has no accompanying binder
+  | InvariantUnboundFreeVariable FullyQualifiedName
+  -- ^ Unbound free variable
+  | InvariantMalformedDefun FullyQualifiedName
+  -- ^ Defun term is malformed somehow (e.g no bound variables at all, not a nullary closure)
+  | InvariantPactExecNotInEnv (Maybe (DefPactContinuation QualifiedName PactValue))
+  -- ^ Defpact Exec expected to be in environment but not found
+  | InvariantPactStepNotInEnv (Maybe (DefPactContinuation QualifiedName PactValue))
+  -- ^ Defpact Exec expected to be in environment but not found
+  | InvariantInvalidManagedCapIndex Int FullyQualifiedName
+  -- ^ managed cap index outside of allowable range
+  | InvariantArgLengthMismatch FullyQualifiedName Int Int
+  -- ^ Argument length mismatch within some internal function
+  | InvariantInvalidManagedCapKind Text
+  -- ^ Invariant managed cap kind, expected, got <msg>
+  | InvariantNoSuchKeyInTable TableName RowKey
+  -- ^ Keys were pulled from the table (e.g select, fold-db) but
+  -- there was no corresponding entry
+  | InvariantEmptyCapStackFailure
+  -- ^ Attempted to pop or manipulate the capstack, but it was found to be empty
+  deriving (Eq, Show, Generic)
+
+instance NFData InvariantError
+
+instance Pretty InvariantError where
+  pretty = \case
+    InvariantInvalidDefKind dk t ->
+      "Invalid def kind, received" <+> pretty dk <+> pretty t
+    InvariantDefConstNotEvaluated fqn ->
+      "Defconst was not evaluated prior to execution:" <+> pretty fqn
+    InvariantExpectedDefCap fqn ->
+      "Expected a defcap for free variable" <+> pretty fqn
+    InvariantExpectedDefun fqn ->
+      "Expected a defun for free variable" <+> pretty fqn
+    InvariantExpectedDefPact fqn ->
+      "Expected a defpact for free variable" <+> pretty fqn
+    InvariantUnboundFreeVariable fqn ->
+      "Unbound free variable" <+> pretty fqn
+    InvariantInvalidBoundVariable v ->
+      "Invalid bound or free variable:" <+> pretty v
+    InvariantMalformedDefun dfn ->
+      "Malformed defun: Body is not a lambda" <+> pretty dfn
+    InvariantPactExecNotInEnv loc ->
+      "No pact exec found" <+> pretty loc
+    InvariantPactStepNotInEnv loc ->
+      "No pact stepfound" <+> pretty loc
+    InvariantInvalidManagedCapIndex i fqn ->
+      "Invalid managed cap argument index" <+> pretty i <+> "for function" <+> pretty fqn
+    InvariantArgLengthMismatch fqn expected got ->
+      "Argument length mismatch for" <+> pretty fqn <> ", expected" <+> pretty expected <> ", got"
+        <+> pretty got
+    InvariantInvalidManagedCapKind msg ->
+      "Invalid managed cap kind" <+> pretty msg
+    InvariantNoSuchKeyInTable tbl (RowKey rk) ->
+      "No such key" <+> pretty rk <+> "in table" <+> pretty tbl
+    InvariantEmptyCapStackFailure ->
+      "Attempted to pop or manipulate the capstack, but it was found to be empty"
+
 
 -- | All fatal execution errors which should pause
 --
@@ -254,38 +355,31 @@ data EvalError
   -- ^ Floating point operation exception
   | CapNotInScope Text
   -- ^ Capability not in scope
-  | InvariantFailure Text
+  | InvariantFailure InvariantError
   -- ^ Invariant violation in execution. This is a fatal Error.
   | EvalError Text
   -- ^ Error raised by the program that went unhandled
   | NativeArgumentsError NativeName [ArgTypeError]
   -- ^ Error raised: native called with the wrong arguments
-  | ModRefNotRefined Text
   -- ^ Module reference not refined to a value
-  | InvalidDefKind DefKind Text
-  -- ^ Def used in method has wrong type + reason
-  | NoSuchDef FullyQualifiedName
-  -- ^ Could not find a definition with the above name
   | InvalidManagedCap FullyQualifiedName
   -- ^ Name does not point to a managed capability
-  | CapNotInstalled FullyQualifiedName
+  | CapNotInstalled (CapToken QualifiedName PactValue)
   -- ^ Capability not installed
-  | CapAlreadyInstalled FullyQualifiedName
+  | CapAlreadyInstalled (CapToken QualifiedName PactValue)
   -- ^ Capability already installed
-  | NameNotInScope FullyQualifiedName
+  | ModuleMemberDoesNotExist FullyQualifiedName
   -- ^ Name not found in the top level environment
-  | DefIsNotClosure Text
-  -- ^ Def is not a closure
   | NoSuchKeySet KeySetName
     -- ^ No such keyset
-  | YieldOutsiteDefPact
+  | YieldOutsideDefPact
   -- ^ Yield a value outside a running DefPactExec
   | NoActiveDefPactExec
   -- ^ No Active DefPactExec in the environment
   | NoYieldInDefPactStep DefPactStep
   -- ^ No Yield available in DefPactStep
-  | InvalidDefPactStepSupplied DefPactStep DefPactExec
-  -- ^ Supplied DefPactStep requests an invalid step
+  | InvalidDefPactStepSupplied DefPactStep Int
+  -- ^ Supplied DefPactStep requests an invalid step, stepCount
   | DefPactIdMismatch DefPactId DefPactId
   -- ^ Requested PactId does not match context PactId
   | CCDefPactContinuationError DefPactStep DefPactExec DefPactExec
@@ -317,36 +411,95 @@ data EvalError
   -- ^ DefPact missmatch
   | CannotUpgradeInterface ModuleName
   -- ^ Interface cannot be upgrade
-  | ModuleGovernanceFailure ModuleName
-  -- ^ Failed to acquire module governance
   | DbOpFailure DbOpException
-  -- ^ DynName is not a module ref
+  -- ^ Db operation failure
   | DynNameIsNotModRef Text
+  -- ^ Dynamic name does not point to a module reference
   | ModuleDoesNotExist ModuleName
+  -- ^ Module was not found in the db nor in the environment
   | ExpectedModule ModuleName
-  -- ^ Module does not exist
+  -- ^ Expected Module, found interface
   | HashNotBlessed ModuleName ModuleHash
+  -- ^ Hash not blessed for <module> at <hash>
   | CannotApplyPartialClosure
+  -- ^ Intentional nerf to partially applied closures
+  -- outside of native code
   | ClosureAppliedToTooManyArgs
+  -- ^ Closure called with too many arguments
   | FormIllegalWithinDefcap Text
+  -- ^ Invalid function within a defcap
   | RunTimeTypecheckFailure ArgTypeError Type
+  -- ^ Runtime TC failure, note: ArgTypeError simply allows us to
+  --   abbreviate the type of the argument, instead of fully syntesizing it
   | NativeIsTopLevelOnly NativeName
+  -- ^ Native called within module scope
   | EventDoesNotMatchModule ModuleName
+  -- ^ Emitted event does not match the emitting module, or
+  -- is called outside of module
   | InvalidEventCap FullyQualifiedName
+  -- ^ Capability is not @event or @managed, thus it should not be able
+  --   to emit an event
   | NestedDefpactsNotAdvanced DefPactId
+  -- ^ Nested defpact not advanced. Note: All nested defpacts
+  -- semantically must be advanced in lockstep. That is, for some defpact execution at
+  -- step n, all nested defpacts prior to execution at step (n-1) should also be advanced to
+  -- step n at the end of execution
   | ExpectedPactValue
+  -- ^ Expected a pact value, received a closure or table reference
   | NotInDefPactExecution
+  -- ^  Expected function to be called within a defpact. E.g (pact-id)
   | NamespaceInstallError Text
-  | DefineNamespaceError Text
-  -- ^ Non-recoverable guard enforces.
+  -- ^ Error installing namespace
   | PointNotOnCurve
+  -- ^ Pairing-related: Point lies outside of elliptic curve
   | YieldProvenanceDoesNotMatch Provenance [Provenance]
+  -- ^ Yield provenance mismatch
   | MismatchingKeysetNamespace NamespaceName
+  -- ^ Keyset declared outside of relevant namespace
   | EnforcePactVersionFailure V.Version (Maybe V.Version)
+  -- ^ Pact version fails
   | EnforcePactVersionParseFailure Text
+  -- ^ Pact version parsing error
   | RuntimeRecursionDetected QualifiedName
+  -- ^ Attempted to call <function> recursively
   | SPVVerificationFailure Text
+  -- ^ Failure in SPV verification
   | ContinuationError Text
+  -- ^ Failure in evalContinuation (chainweb)
+  | ModRefImplementsNoInterfaces ModuleName
+  -- ^ Attempted to use a module as a modref, despite
+  -- implementing no interfaces
+  | UserGuardMustBeADefun QualifiedName DefKind
+  -- ^ User guard closure must refer to a defun
+  | ExpectedBoolValue PactValue
+  -- ^ Expected a boolean result in evaluation
+  -- (e.g if, or, and)
+  | ExpectedStringValue PactValue
+  -- ^ Expected a string value during evaluation
+  -- (e.g enforce)
+  | ExpectedCapToken PactValue
+  -- ^ Expected a string value during evaluation
+  -- (e.g enforce)
+  | WriteValueDidNotMatchSchema Schema (ObjectData PactValue)
+  -- ^ Attempted to write a value to the database that does not match
+  -- the database's schema
+  | ObjectIsMissingField Field (ObjectData PactValue)
+  -- ^ Object access is missing a field
+  | InvalidKeysetFormat KeySet
+  -- ^ Keyset format validation failure (e.g ED25519Hex or Webauthn)
+  | InvalidKeysetNameFormat Text
+  -- ^ define-keyset name invalid format
+  | CannotDefineKeysetOutsideNamespace
+  -- ^ User attempted define a keyset outside of a namespace
+  | NamespaceNotFound NamespaceName
+  -- ^ Namespace not found in pactdb
+  | NativeExecutionError NativeName Text
+  -- ^ Native execution error, with reason
+  | OperationIsLocalOnly NativeName
+  -- ^ Native function is local-only
+  | CannotApplyValueToNonClosure
+  -- ^ Attempted to apply a non-closure
+  | InvalidCustomKeysetPredicate Text
   deriving (Show, Generic)
 
 instance NFData EvalError
@@ -373,23 +526,23 @@ instance Pretty EvalError where
       Pretty.hsep ["Capability not in scope:", pretty txt]
     GasExceeded (MilliGasLimit (milliGasToGas -> Gas limit)) (milliGasToGas -> Gas amt) ->
       "Gas Limit:" <+> parens (pretty limit) <+> "exceeded:" <+> pretty amt
-    InvariantFailure txt ->
-      Pretty.hsep ["Fatal execution error, invariant violated:", pretty txt]
-    NativeArgumentsError (NativeName n) tys ->
+    InvariantFailure msg ->
+      Pretty.hsep ["Fatal execution error, invariant violated:", pretty msg]
+    NativeArgumentsError n tys ->
       Pretty.hsep ["Native evaluation error for native", pretty n <> ",", "received incorrect argument(s) of type(s)", Pretty.commaSep tys]
     EvalError txt ->
       Pretty.hsep ["Program encountered an unhandled raised error:", pretty txt]
-    YieldOutsiteDefPact ->
+    YieldOutsideDefPact ->
       "Try to yield a value outside a running DefPact execution"
     NoActiveDefPactExec ->
       "No active DefPact execution in the environment"
     NoYieldInDefPactStep (DefPactStep step _ i _) ->
       Pretty.hsep ["No yield in DefPactStep:", "Step: " <> pretty step, "DefPactId: " <> pretty i]
-    InvalidDefPactStepSupplied (DefPactStep step _ _ _) pe ->
+    InvalidDefPactStepSupplied (DefPactStep step _ _ _) stepCount ->
       Pretty.hsep
       [ "DefPactStep does not match DefPact properties:"
       , "requested: "<> pretty step
-      , "step count:" <> pretty (_peStepCount pe)]
+      , "step count:" <> pretty stepCount]
     DefPactIdMismatch reqId envId ->
       Pretty.hsep
       [ "Requested DefPactId:", pretty reqId
@@ -451,40 +604,93 @@ instance Pretty EvalError where
       , "Could not parse " <> pretty str <> ", expect list of dot-separated integers"
       ]
     -- Todo: Fix each case
-    e@ModRefNotRefined{} -> pretty (show e)
-    e@InvalidDefKind{} -> pretty (show e)
-    e@NoSuchDef{} -> pretty (show e)
-    e@InvalidManagedCap{} -> pretty (show e)
-    e@CapNotInstalled{} -> pretty (show e)
-    e@CapAlreadyInstalled{} -> pretty (show e)
-    e@NameNotInScope{} -> pretty (show e)
-    e@DefIsNotClosure{} -> pretty (show e)
-    e@NoSuchKeySet{} -> pretty (show e)
-    e@CannotUpgradeInterface{} -> pretty (show e)
-    e@ModuleGovernanceFailure{} -> pretty (show e)
-    e@DbOpFailure{} -> pretty (show e)
-    e@DynNameIsNotModRef{} -> pretty (show e)
-    e@ModuleDoesNotExist{} -> pretty (show e)
-    e@ExpectedModule{} -> pretty (show e)
-    e@HashNotBlessed{} -> pretty (show e)
-    e@CannotApplyPartialClosure{} -> pretty (show e)
-    e@ClosureAppliedToTooManyArgs{} -> pretty (show e)
-    e@FormIllegalWithinDefcap{} -> pretty (show e)
-    e@RunTimeTypecheckFailure{} -> pretty (show e)
-    e@NativeIsTopLevelOnly{} -> pretty (show e)
-    e@EventDoesNotMatchModule{} -> pretty (show e)
-    e@InvalidEventCap{} -> pretty (show e)
-    e@NestedDefpactsNotAdvanced{} -> pretty (show e)
-    e@ExpectedPactValue{} -> pretty (show e)
-    e@NotInDefPactExecution{} -> pretty (show e)
-    e@NamespaceInstallError{} -> pretty (show e)
-    e@DefineNamespaceError{} -> pretty (show e)
-    e@PointNotOnCurve{} -> pretty (show e)
-    e@YieldProvenanceDoesNotMatch{} -> pretty (show e)
-    e@MismatchingKeysetNamespace{} -> pretty (show e)
-    e@RuntimeRecursionDetected{} -> pretty (show e)
-    e@SPVVerificationFailure{} -> pretty (show e)
-    e@ContinuationError{} -> pretty (show e)
+    InvalidManagedCap fqn ->
+      "Install capability error: capability is not managed and cannot be installed:" <+> pretty (fqnToQualName fqn)
+    CapNotInstalled cap ->
+      "Capability not installed:" <+> pretty cap
+    CapAlreadyInstalled cap ->
+      "Capability already installed:" <+> pretty cap
+    ModuleMemberDoesNotExist fqn ->
+      "Module member does not exist" <+> pretty fqn
+    NoSuchKeySet ksn ->
+      "Cannot find keyset in database:" <+> pretty ksn
+    CannotUpgradeInterface ifn ->
+      "Interface cannot be upgraded:" <+> pretty ifn
+
+    DbOpFailure dbe ->
+      "Error during database operation:" <+> pretty dbe
+    DynNameIsNotModRef n ->
+      "Attempted to use" <+> pretty n <+> "as dynamic name, but it is not a modref"
+    ModuleDoesNotExist m ->
+      "Cannot find module:" <+> pretty m
+    ExpectedModule mn ->
+      "Expected module, found interface:" <+> pretty mn
+    HashNotBlessed mn hs  ->
+      "Execution aborted, hash not blessed for module" <+> pretty mn <> ":" <+> pretty hs
+    CannotApplyPartialClosure ->
+      "Attempted to apply a closure outside of native callsite"
+    ClosureAppliedToTooManyArgs ->
+      "Attempted to apply a closure to too many arguments"
+    FormIllegalWithinDefcap msg ->
+      "Form illegal within defcap" <+> pretty msg
+    RunTimeTypecheckFailure argErr ty ->
+      "Runtime typecheck failure, argument is" <+> pretty argErr <+> ", but expected type" <+> pretty ty
+    NativeIsTopLevelOnly b ->
+      "Top-level call used in module" <+> pretty b
+    EventDoesNotMatchModule mn ->
+      "Emitted event does not match module" <+> pretty mn
+    InvalidEventCap fqn ->
+      "Invalid event capability" <+> pretty fqn
+    NestedDefpactsNotAdvanced dpid ->
+      "Nested defpacts not advanced" <+> pretty dpid
+    ExpectedPactValue ->
+      "Expected Pact Value, got closure or table reference"
+    NotInDefPactExecution -> "not in pact execution"
+    NamespaceInstallError e ->
+      "Namespace installation error:" <+> pretty e
+    PointNotOnCurve ->
+      "Point lies outside of ellptic curve"
+    YieldProvenanceDoesNotMatch received expected ->
+      "Yield provenance does not match, received" <+> pretty received <> ", expected" <+> pretty expected
+    MismatchingKeysetNamespace ns ->
+      "Error defining keyset, namespace mismatch, expected " <> pretty ns
+    RuntimeRecursionDetected qn ->
+      "Runtime recursion detected in function:" <+> pretty qn
+    SPVVerificationFailure e ->
+      "SPV verification failure:" <+> pretty e
+    ExpectedBoolValue pv ->
+      "expected bool value, got" <+> pretty pv
+    UserGuardMustBeADefun qn dk ->
+      "User guard closure" <+> pretty qn <+> "must be defun, got" <> pretty dk
+    WriteValueDidNotMatchSchema (Schema _ sc) od ->
+      "Attempted insert failed due to schema mismatch. Expected:" <+> pretty (ObjectData sc)
+        <> ", received" <+> pretty od
+    ObjectIsMissingField f b ->
+      "Key" <+> dquotes (pretty f) <+> "not found in object:" <+> pretty b
+    NativeExecutionError n msg ->
+      "native execution failure," <+> pretty n <+> "failed with message:" <+> pretty msg
+    ExpectedStringValue pv ->
+      "expected string value, got:" <+> pretty pv
+    ExpectedCapToken pv ->
+      "expected capability token value, got:" <+> pretty pv
+    InvalidKeysetFormat ks ->
+      "Invalid keyset format:" <+> pretty ks
+    InvalidKeysetNameFormat ksn ->
+      "Invalid keyset name format:" <+> pretty ksn
+    CannotDefineKeysetOutsideNamespace ->
+      "Cannot define keyset outside of a namespace"
+    NamespaceNotFound nsn ->
+      "Module not found:" <+> pretty nsn
+    ModRefImplementsNoInterfaces mn ->
+      "Invalid modref, module" <+> pretty mn <+> "implements no interfaces"
+    ContinuationError msg ->
+      "Continuation Error:" <+> pretty msg
+    OperationIsLocalOnly n ->
+      "Operation only permitted in local execution mode:" <+> pretty n
+    CannotApplyValueToNonClosure ->
+      "Cannot apply value to non-closure"
+    InvalidCustomKeysetPredicate pn ->
+      "Invalid custom predicate for keyset" <+> pretty pn
 
 
 instance Exception EvalError
@@ -497,7 +703,6 @@ data DbOpException
   | TableAlreadyExists TableName
   | TxAlreadyBegun Text
   | NoTxToCommit
-  | NoTxLog TableName Text
   | OpDisallowed
   | MultipleRowsReturnedFromSingleWrite
   deriving (Show, Eq, Typeable, Generic)
@@ -506,17 +711,74 @@ instance NFData DbOpException
 
 instance Exception DbOpException
 
-data RecoverableError
-  = RecoverableError Text
-  deriving (Show, Typeable, Generic)
-
-instance Exception RecoverableError
-
-instance Pretty RecoverableError where
+instance Pretty DbOpException where
   pretty = \case
-    RecoverableError txt -> pretty txt
+    WriteException ->
+      "Error found while writing value"
+    RowFoundException tn rk ->
+      "Value already found while in Insert mode in table" <+> pretty tn <+> "at key" <+> dquotes (pretty rk)
+    NoRowFound tn rk ->
+      "No row found during update in table" <+> pretty tn <+> "at key" <+> pretty rk
+    NoSuchTable tn ->
+      "Table" <+> pretty tn <+> "not found"
+    TableAlreadyExists tn ->
+      "Table" <+> pretty tn <+> "already exists"
+    TxAlreadyBegun tx ->
+      "Attempted to begin tx" <+> dquotes (pretty tx) <> ", but a tx already has been initiated"
+    NoTxToCommit ->
+      "No Transaction to commit"
+    OpDisallowed ->
+      "Operation disallowed in read-only or sys-only mode"
+    MultipleRowsReturnedFromSingleWrite ->
+      "Multiple rows returned from single write"
 
-instance NFData RecoverableError
+
+
+data UserRecoverableError
+  = UserEnforceError Text
+  -- ^ Errors produced by `enforce` or `enforceOne`
+  | OneShotCapAlreadyUsed
+  -- ^ A one-shot capability has already been fired
+  | CapabilityNotGranted (CapToken QualifiedName PactValue)
+  -- ^ Capability not granted in require-cap
+  | NoSuchObjectInDb TableName RowKey
+  -- ^ Did not find an object in the specified table for some rowkey
+  | KeysetPredicateFailure KSPredicate (Set PublicKeyText)
+  -- ^ Keyset Predicate failed for some reason
+  | CapabilityPactGuardInvalidPactId DefPactId DefPactId
+  -- ^ Mismatching pact ID's in capability guard
+  | EnvReadFunctionFailure NativeName
+  -- ^ read-* function failure
+  | VerifierFailure VerifierName Text
+  -- ^ Verifier failure
+  | CapabilityGuardNotAcquired (CapabilityGuard QualifiedName PactValue)
+  deriving (Show, Eq, Generic, Typeable)
+
+instance NFData UserRecoverableError
+instance Exception UserRecoverableError
+
+instance Pretty UserRecoverableError where
+  pretty = \case
+    UserEnforceError t -> pretty t
+    OneShotCapAlreadyUsed -> "Automanaged capability used more than once"
+    CapabilityNotGranted ct ->
+      "require-capability: not granted:" <+> parens (pretty (_ctName ct))
+    NoSuchObjectInDb tn (RowKey rk) ->
+      "No value found in table" <+> pretty tn <+> "for key:" <+> pretty rk
+    KeysetPredicateFailure ksPred kskeys ->
+      "Keyset failure (" <> pretty ksPred <> "): "
+               <> pretty (map (elide . renderPublicKeyText) $ S.toList kskeys)
+      where
+      elide pk = T.take 8 pk <> "..."
+    CapabilityPactGuardInvalidPactId currPid pgId ->
+      "Capability pact guard failed: invalid pact id, expected" <+> pretty pgId <+> "got"
+        <+> pretty currPid
+    EnvReadFunctionFailure desc ->
+      pretty desc <+> "failure"
+    VerifierFailure (VerifierName verif) msg ->
+      "Verifier failure" <+> pretty verif <> ":" <+> pretty msg
+    CapabilityGuardNotAcquired cg ->
+      "Capability not acquired:" <+> pretty cg
 
 data PactError info
   = PELexerError LexerError info
@@ -525,7 +787,7 @@ data PactError info
   -- | PETypecheckError TypecheckError info
   -- | PEOverloadError OverloadError info
   | PEExecutionError EvalError [StackFrame info] info
-  | PERecoverableError RecoverableError info
+  | PEUserRecoverableError UserRecoverableError [StackFrame info] info
   deriving (Show, Functor, Generic)
 
 instance NFData info => NFData (PactError info)
@@ -537,7 +799,8 @@ instance Pretty (PactError info) where
     PEDesugarError e _ -> pretty e
     PEExecutionError e _ _ ->
       pretty e
-    PERecoverableError e _ -> pretty e
+    PEUserRecoverableError e _ _ ->
+      pretty e
 
 peInfo :: Lens (PactError info) (PactError info) info info
 peInfo f = \case
@@ -549,12 +812,13 @@ peInfo f = \case
     PEDesugarError de <$> f info
   PEExecutionError ee stack info ->
     PEExecutionError ee stack <$> f info
-  PERecoverableError ee info ->
-     PERecoverableError ee <$> f info
+  PEUserRecoverableError ee stack info ->
+    PEUserRecoverableError ee stack <$> f info
 
 viewErrorStack :: PactError info -> [StackFrame info]
 viewErrorStack = \case
   PEExecutionError _ stack _ -> stack
+  PEUserRecoverableError _ stack _ -> stack
   _ -> []
 
 instance (Show info, Typeable info) => Exception (PactError info)

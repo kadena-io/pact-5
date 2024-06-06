@@ -422,7 +422,7 @@
   (transfer 'emily 'doug 1.0))
 
 (expect-failure "No account for will"
-  "no such read object"
+  "No value found in table coin:coin-table for key: will"
   (get-balance 'will))
 
 (test-capability (TRANSFER 'doug 'will 1.0))
@@ -484,7 +484,7 @@
 (env-data { "miner2": ["miner2"] })
 
 (expect-failure "no account for miner2"
-  "no such read object"
+  "No value found in table coin:coin-table for key: miner2"
   (get-balance 'miner2))
 
 (coinbase 'miner2 (read-keyset 'miner2) 1.0)

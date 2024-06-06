@@ -26,11 +26,9 @@ module Pact.Core.PactValue
  ) where
 
 import Control.Lens
-import Control.Monad(zipWithM)
 import Data.Vector(Vector)
 import Data.Map.Strict(Map)
 import Data.Text(Text)
-import Data.Maybe(isJust)
 import Data.Decimal(Decimal)
 
 import Control.DeepSeq
@@ -89,13 +87,10 @@ instance Pretty PactValue where
     PLiteral lit -> pretty lit
     PList p -> Pretty.list (V.toList (pretty <$> p))
     PGuard g -> pretty g
-    PObject o ->
-      braces $ mconcat $ punctuate comma (objPair <$> M.toList o)
-      where
-      objPair (f, t) = dquotes (pretty f) <> ":" <+> pretty t
+    PObject o -> pretty (ObjectData o)
     PModRef md -> pretty md
     PCapToken (CapToken fqn args) ->
-      parens (pretty (fqnToQualName fqn)) <> if null args then mempty else hsep (pretty <$> args)
+      "CapToken" <> pretty (CapToken (fqnToQualName fqn) args)
     PTime t -> pretty (PactTime.formatTime "%Y-%m-%d %H:%M:%S%Q %Z" t)
 
 synthesizePvType :: PactValue -> Type
@@ -103,53 +98,43 @@ synthesizePvType = \case
   PLiteral l -> typeOfLit l
   PList _ -> TyAnyList
   PGuard _ -> TyGuard
-  PModRef mr -> TyModRef (S.fromList (_mrImplemented mr))
+  PModRef mr -> TyModRef (_mrImplemented mr)
   PObject _ -> TyAnyObject
   PCapToken {} -> TyCapToken
   PTime _ -> TyTime
 
 -- | Check that a `PactValue` has the provided `Type`, returning
 -- `Just ty` if so and `Nothing` otherwise.
-checkPvType :: Type -> PactValue -> Maybe Type
-checkPvType TyAny = const (Just TyAny)
+checkPvType :: Type -> PactValue -> Bool
+checkPvType TyAny = const True
 checkPvType ty = \case
-  PLiteral l
-    | typeOfLit l == ty -> Just ty
-    | otherwise -> Nothing
-  PGuard{}
-    | ty == TyGuard -> Just TyGuard
-    | otherwise -> Nothing
+  PLiteral l -> typeOfLit l == ty
+  PGuard{} -> ty == TyGuard
   PObject o -> case ty of
     -- Todo: gas
-    TyObject (Schema n sc) ->
+    TyObject (Schema _ sc) ->
       let tyList = M.toList sc
           oList = M.toList o
       in tcObj oList tyList
       where
       tcObj l1 l2
-        | length l1 == length l2 = TyObject . Schema n . M.fromList <$> zipWithM mcheck l1 l2
-        | otherwise = Nothing
+        | length l1 == length l2 = and $ zipWith mcheck l1 l2
+        | otherwise = False
       mcheck (f1, pv) (f2, t)
-        | f1 == f2 = (f1,) <$> checkPvType t pv
-        | otherwise = Nothing
-    TyAnyObject -> Just TyAnyObject
-    _ -> Nothing
+        | f1 == f2 = checkPvType t pv
+        | otherwise = False
+    TyAnyObject -> True
+    _ -> False
   -- Todo: gas
   PList l -> case ty of
-    TyList t' | all (isJust . checkPvType t') l -> Just (TyList t')
-    TyAnyList -> Just TyAnyList
-    _ -> Nothing
-  PModRef (ModRef _orig ifs refinedSet) -> case ty of
-    TyModRef mns
-      | Just rf <- refinedSet, mns `S.isSubsetOf` rf -> Just (TyModRef mns)
-      | isJust refinedSet -> Nothing
-      | mns `S.isSubsetOf` (S.fromList ifs) && refinedSet == Nothing -> Just (TyModRef mns)
-      | otherwise -> Nothing
-    _ -> Nothing
-  PCapToken _ -> Nothing
-  PTime _ -> case ty of
-    TyTime -> Just TyTime
-    _ -> Nothing
+    TyList t'  -> all (checkPvType t') l
+    TyAnyList -> True
+    _ -> False
+  PModRef (ModRef _orig ifs) -> case ty of
+    TyModRef mns -> mns `S.isSubsetOf` ifs
+    _ -> False
+  PCapToken _ -> False
+  PTime _ -> ty == TyTime
 
 
 
@@ -163,3 +148,11 @@ envMap
           (Map Field term)
           (Map Field term')
 envMap f (ObjectData m) = fmap ObjectData (f m)
+
+instance Pretty term => Pretty (ObjectData term) where
+  pretty (ObjectData o) =
+    braces $ mconcat $ punctuate comma (objPair <$> M.toList o)
+      where
+      -- SEMANTIC NOTE: this specific formatting matters, since it's what we use
+      -- to pretty print and thus makes it into hashes
+      objPair (f, t) = dquotes (pretty f) <> ":" <+> pretty t

@@ -865,21 +865,21 @@ loadTopLevelMembers i mimports mdata binds = case mdata of
         mhash = _mHash md
     let depMap = M.fromList $ toLocalDepMap modName mhash <$> _mDefs md
         loadedDeps = M.fromList $ toLoadedDepMap modName mhash <$> _mDefs md
-    loadWithImports depMap loadedDeps
+    loadWithImports modName depMap loadedDeps
   InterfaceData iface _ -> do
     let ifname = _ifName iface
     let ifhash = _ifHash iface
         dcDeps = mapMaybe ifDefToDef (_ifDefns iface)
         depMap = M.fromList $ toLocalDepMap ifname ifhash <$> dcDeps
         loadedDeps = M.fromList $ toLoadedDepMap ifname ifhash <$> dcDeps
-    loadWithImports depMap loadedDeps
+    loadWithImports ifname depMap loadedDeps
   where
   toLocalDepMap modName mhash defn = (defName defn, (NTopLevel modName mhash, Just (defKind modName defn)))
   toLoadedDepMap modName mhash defn = (defName defn, (FullyQualifiedName modName (defName defn) mhash, defKind modName defn))
-  loadWithImports depMap loadedDeps = case mimports of
+  loadWithImports mn depMap loadedDeps = case mimports of
       Just st -> do
         let depsKeys = M.keysSet depMap
-        unless (S.isSubsetOf st depsKeys) $ throwDesugarError (InvalidImports (S.toList (S.difference st depsKeys))) i
+        unless (S.isSubsetOf st depsKeys) $ throwDesugarError (InvalidImports mn (S.toList (S.difference st depsKeys))) i
         (esLoaded . loToplevel) %== (`M.union` (M.restrictKeys loadedDeps st))
         pure (M.union (M.restrictKeys depMap st) binds)
       Nothing -> do
@@ -1295,7 +1295,7 @@ resolveDynamic
   => i
   -> DynamicName
   -> RenamerT b i m Name
-resolveDynamic i (DynamicName dn dArg) = views reBinds (M.lookup dn) >>= \case
+resolveDynamic i dynName@(DynamicName dn dArg) = views reBinds (M.lookup dn) >>= \case
   Just tnk -> case tnk of
     (NBound d, _) -> do
       depth <- view reVarDepth
@@ -1303,7 +1303,7 @@ resolveDynamic i (DynamicName dn dArg) = views reBinds (M.lookup dn) >>= \case
           dr = NDynRef (DynamicRef dArg dbjIx)
       pure (Name dn dr)
     _ ->
-      throwDesugarError (InvalidDynamicInvoke dn) i
+      throwDesugarError (InvalidDynamicInvoke dynName) i
   Nothing ->
     throwDesugarError (UnboundTermVariable dn) i
 
@@ -1405,7 +1405,7 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash i) = d
   where
   -- Our deps are acyclic, so we resolve all names
   go mname (!defns, !s, !m, !mlocals) defn = do
-    when (S.member (defName defn) s) $ throwDesugarError (DuplicateDefinition (defName defn)) i
+    when (S.member (defName defn) s) $ throwDesugarError (DuplicateDefinition (QualifiedName (defName defn) mname)) i
     let dn = defName defn
     defn' <- local (set reCurrModule (Just $ CurrModule mname implements MTModule) . set reCurrModuleTmpBinds mlocals)
              $ local (set reBinds m) $ renameDef defn
@@ -1417,7 +1417,7 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash i) = d
 
   resolveGov mname = \case
     KeyGov rawKsn -> case parseAnyKeysetName (_keysetName rawKsn) of
-      Left {} -> lift $ throwExecutionError i (ModuleGovernanceFailure mname)
+      Left {} -> lift $ throwExecutionError i (InvalidKeysetNameFormat (_keysetName rawKsn))
       Right ksn ->
         pure (KeyGov ksn)
     CapGov (FQParsed govName) ->
@@ -1531,7 +1531,7 @@ renameInterface (Interface unmangled defs imports ih info) = do
   go ifn (ds, s, m, dfnSet) d = do
     let dn = ifDefName d
     when (S.member dn s) $
-      throwDesugarError (DuplicateDefinition dn) info
+      throwDesugarError (DuplicateDefinition (QualifiedName dn ifn)) info
     d' <- local (set reBinds m) $
           local (set reCurrModule (Just $ CurrModule ifn [] MTInterface)) $ renameIfDef ifn dfnSet d
     let m' = case ifDefToDef d' of

@@ -23,6 +23,7 @@ import Pact.Core.PactValue
 import Pact.Core.Names
 import Pact.Core.Hash
 import Pact.Core.ChainData
+import Pact.Core.Pretty
 
 data DefPactContinuation name v
   = DefPactContinuation
@@ -42,6 +43,10 @@ data Provenance = Provenance
     -- ^ a hash of current containing module
   } deriving (Eq, Show, Generic)
 
+instance Pretty Provenance where
+  pretty (Provenance (ChainId cid) mh) =
+    parens $
+      "Provenance" <+> pretty cid <+> pretty mh
 
 -- | `Yield` representing an object
 data Yield
@@ -79,3 +84,7 @@ instance NFData Yield
 instance NFData DefPactStep
 instance (NFData name, NFData v) => NFData (DefPactContinuation name v)
 instance NFData DefPactExec
+
+instance (Pretty name, Pretty v) => Pretty (DefPactContinuation name v) where
+  pretty (DefPactContinuation n v) =
+    pretty $ PrettyLispApp n v

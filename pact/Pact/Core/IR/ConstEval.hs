@@ -42,8 +42,8 @@ evalModuleDefConsts interpreter (Module mname mgov defs blessed imports implemen
       DConst dc -> case _dcTerm dc of
         TermConst term -> do
           pv <- eval interpreter PSysOnly term
-          pv' <- maybeTCType (_dcInfo dc) pv (_argType $ _dcSpec dc)
-          pure (DConst (set dcTerm (EvaledConst pv') dc))
+          maybeTCType (_dcInfo dc) (_argType $ _dcSpec dc) pv
+          pure (DConst (set dcTerm (EvaledConst pv) dc))
         EvaledConst _ -> pure defn
       _ -> pure defn
     let dn = defName defn
