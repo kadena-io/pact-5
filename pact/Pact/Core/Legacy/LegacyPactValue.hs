@@ -3,7 +3,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Pact.Core.Legacy.LegacyPactValue
-  (roundtripPactValue) where
+  (roundtripPactValue
+  , Legacy(..)
+  ) where
 
 import Control.Applicative
 import Data.Aeson
@@ -16,6 +18,7 @@ import qualified Data.Set as S
 import qualified Data.Aeson as A
 import qualified Data.Aeson.KeyMap as A
 
+import Pact.Core.Capabilities
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Literal
@@ -80,6 +83,12 @@ ungprop t = GuardUnknown (show t)
 
 keyNamef :: Key
 keyNamef = "keysetref"
+
+instance FromJSON (Legacy (CapToken QualifiedName PactValue)) where
+  parseJSON = withObject "UserToken" $ \o -> do
+    legacyName <- o .: "name"
+    legacyArgs <- o .: "args"
+    pure $ Legacy $ CapToken (_unLegacy legacyName) (_unLegacy <$> legacyArgs)
 
 instance FromJSON (Legacy QualifiedName) where
   parseJSON = withText "QualifiedName" $ \t -> case parseQualifiedName t of
