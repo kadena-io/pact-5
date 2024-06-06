@@ -389,7 +389,7 @@ showPactValue :: MonadEval b i m => i -> PactValue -> m T.Text
 showPactValue info pv = do
   sz <- sizeOf SizeOfV0 pv
   chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral sz
-  pure $ T.pack $ show $ Pretty.pretty pv
+  pure $ Pretty.renderCompactText pv
 
 rawShow :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawShow info b cont handler _env = \case
