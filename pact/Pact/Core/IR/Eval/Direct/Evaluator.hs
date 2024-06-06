@@ -1763,15 +1763,15 @@ rawSqrt info b _env = \case
     return (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
 
-showPactValue :: MonadEval b i m => i -> PactValue -> m T.Text
-showPactValue info pv = do
+renderPactValue :: MonadEval b i m => i -> PactValue -> m T.Text
+renderPactValue info pv = do
   sz <- sizeOf SizeOfV0 pv
   chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral sz
   pure $ Pretty.renderCompactText pv
 
 rawShow :: (MonadEval b i m) => NativeFunction b i m
 rawShow info b _env = \case
-  [VPactValue pv] -> VString <$> showPactValue info pv
+  [VPactValue pv] -> VString <$> renderPactValue info pv
   args -> argsError info b args
 
 -- Todo: Gas here is complicated, greg worked on this previously
@@ -2810,7 +2810,7 @@ coreFormat info b _env = \case
     alternate _ _ = []
 
     formatArgM (PString ps) = pure ps
-    formatArgM a = showPactValue info a
+    formatArgM a = renderPactValue info a
 
   args -> argsError info b args
 

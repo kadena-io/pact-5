@@ -385,8 +385,8 @@ rawSqrt info b cont handler _env = \case
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
 
-showPactValue :: MonadEval b i m => i -> PactValue -> m T.Text
-showPactValue info pv = do
+renderPactValue :: MonadEval b i m => i -> PactValue -> m T.Text
+renderPactValue info pv = do
   sz <- sizeOf SizeOfV0 pv
   chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral sz
   pure $ Pretty.renderCompactText pv
@@ -394,7 +394,7 @@ showPactValue info pv = do
 rawShow :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawShow info b cont handler _env = \case
   [VPactValue pv] -> do
-    str <- showPactValue info pv
+    str <- renderPactValue info pv
     returnCEKValue cont handler $ VString str
   args -> argsError info b args
 
@@ -1362,7 +1362,7 @@ coreFormat info b cont handler _env = \case
     alternate _ _ = []
 
     formatArgM (PString ps) = pure ps
-    formatArgM a = showPactValue info a
+    formatArgM a = renderPactValue info a
 
   args -> argsError info b args
 
