@@ -1,11 +1,14 @@
 ## concat
+
 Use `concat` to take a list of strings `str-list` and concatenate each of the strings in the list, returning the resulting string.
 
 ### Basic syntax
 
 To concatenate each string in a list, use the following syntax:
 
-`(concat str-list)`
+```pact
+(concat [str-list])
+```
 
 ### Arguments
 
@@ -13,7 +16,7 @@ Use the following argument to specify the list of strings `str-list` for the `co
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `str-list` | `[string]` | Specifies the list of strings to concatenate. |
+| `str-list` | [string] | Specifies the list of strings to concatenate. |
 
 ### Return values
 

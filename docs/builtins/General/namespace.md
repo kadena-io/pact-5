@@ -13,7 +13,7 @@ If you call the `namespace` function after the initial declaration, Pact creates
 
 ### Prerequisites
 
-You must define a namespace before you can set your working context to use the namespace. For information about defining a namespace, see [define-namespace](/reference/functions/general#define-namespace).
+You must define a namespace before you can set your working context to use the `namespace` function. For information about defining a namespace, see [define-namespace](/reference/functions/general#define-namespace).
 
 ### Basic syntax
 

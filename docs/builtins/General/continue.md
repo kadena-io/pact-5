@@ -1,11 +1,16 @@
 ## continue
-Use `continue` to continue a previously started nested `defpact`.
+
+Use `continue` to continue a previously-started multi-step transaction.
+Transactions that have multiple steps executed in a sequence are called pacts and are defined using the `defpact` keyword.
+Steps can be nested in `defpact` structures and the `continue` function enables you to continue execution with a specified value.
 
 ### Basic syntax
 
-To continue a previously started nested `defpact`, use the following syntax:
+To continue a previously-started `defpact` transaction, use the following syntax:
 
-`(continue value)`
+```pact
+(continue value)
+```
 
 ### Arguments
 
