@@ -10,13 +10,13 @@ Because `at` is an overloaded function, there are two ways to use it.
 To get a value using the specified `index` location from a list of values, use the following syntax:
 
 ```pact
-(at index:integer [list])
+(at index [list])
 ```
 
 To get a value using the specified `key` string from an object, use the following syntax:
 
 ```pact
-(at key:string {object})
+(at key {object})
 ```
 
 ### Arguments
@@ -33,6 +33,7 @@ Use one of the following argument to define the value you want to retrieve using
 ### Return values
 
 The `at` function returns the value found at the specified `index` or using the specified `key`.
+
 The return value can be any data type.
 
 ### Examples
