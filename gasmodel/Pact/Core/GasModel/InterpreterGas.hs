@@ -54,12 +54,12 @@ benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) -> do
   C.bgroup "pact-core-term-gas" [staticExecutionBenchmarks pdb, termGas pdb, interpReturnGas pdb]
   where
   mkPactDb = do
-    tup@(pdb, _) <- unsafeCreateSqlitePactDb serialisePact ":memory:"
+    (pdb, db) <- unsafeCreateSqlitePactDb serialisePact ":memory:"
     ignoreGas def $ prepopulateDb pdb
     _ <- _pdbBeginTx pdb Transactional
-    pure tup
+    pure (pdb, SqliteDbNF db)
 
-  cleanupPactDb (_, db) = SQL.close db
+  cleanupPactDb (_, SqliteDbNF db) = SQL.close db
 
 gasVarBound :: Int -> EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> C.Benchmark
 gasVarBound n ee es = do

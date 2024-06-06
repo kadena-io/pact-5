@@ -160,11 +160,11 @@ interpretGuard
   => i
   -> BuiltinEnv b i m
   -> Guard QualifiedName PactValue
-  -> m Bool
+  -> m PactValue
 interpretGuard info bEnv g = do
   ee <- readEnv
   let eEnv = DirectEnv mempty (_eePactDb ee) bEnv (_eeDefPactStep ee) False
-  enforceGuard info eEnv g
+  PBool <$> enforceGuard info eEnv g
 
 evalResumePact
   :: (MonadEval b i m)

@@ -34,7 +34,7 @@ module Pact.Core.Environment.Utils
 import Control.Lens
 import Control.Applicative((<|>))
 import Control.Monad.Except
-import Control.Exception
+import Control.Exception.Safe
 import Control.Monad.IO.Class(MonadIO(..))
 import Data.Text(Text)
 import Data.Maybe(mapMaybe)

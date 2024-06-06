@@ -56,9 +56,12 @@ benchmarkEnv = coreBuiltinEnv @CEKSmallStep
 benchmarkBigStepEnv :: BuiltinEnv CEKBigStep CoreBuiltin () Eval
 benchmarkBigStepEnv = coreBuiltinEnv @CEKBigStep
 
+newtype SqliteDbNF
+  = SqliteDbNF SQL.Database
+
 -- NOTE: NECESSARY ORPHAN, otherwise we cannot simply make and
 -- cleanup sqlite pact db instances.
-instance NFData SQL.Database where
+instance NFData SqliteDbNF where
   rnf _ = ()
 
 gmSigs :: Map PublicKeyText (S.Set (CapToken QualifiedName PactValue))

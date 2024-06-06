@@ -14,10 +14,10 @@ module Pact.Core.Compile
  , compileDesugarOnly
  , evalTopLevel
  , CompileValue(..)
+ , parseOnlyProgram
  ) where
 
 import Control.Lens
-import Control.Monad.Except
 import Control.Monad
 import Data.Maybe(mapMaybe)
 import Data.Text(Text)
@@ -63,14 +63,14 @@ type HasCompileEnv b i m
     , SizeOf b
     )
 
-_parseOnly
+parseOnlyProgram
   :: Text -> Either PactErrorI [Lisp.TopLevel SpanInfo]
-_parseOnly source = do
-  lexed <- liftEither (Lisp.lexer source)
-  liftEither (Lisp.parseProgram lexed)
+parseOnlyProgram =
+  Lisp.lexer >=> Lisp.parseProgram
 
 _parseOnlyFile :: FilePath -> IO (Either PactErrorI [Lisp.TopLevel SpanInfo])
-_parseOnlyFile fp = _parseOnly <$> T.readFile fp
+_parseOnlyFile fp = parseOnlyProgram <$> T.readFile fp
+
 
 data CompileValue i
   = LoadedModule ModuleName ModuleHash

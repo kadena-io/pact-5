@@ -282,6 +282,7 @@ executable gasmodel
   other-modules:
     Pact.Core.GasModel.BuiltinsGas
     Pact.Core.GasModel.InterpreterGas
+    Pact.Core.GasModel.ContractBench
     Pact.Core.GasModel.Utils
 
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
