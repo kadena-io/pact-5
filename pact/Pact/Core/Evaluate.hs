@@ -21,6 +21,8 @@ module Pact.Core.Evaluate
   , EvalBuiltinEnv
   , evalTermExec
   , allModuleExports
+  , evalDirectInterpreter
+  , evalInterpreter
   ) where
 
 import Control.Lens
@@ -57,6 +59,7 @@ import Pact.Core.IR.Desugar
 import Pact.Core.Verifiers
 import Pact.Core.Interpreter
 import qualified Pact.Core.IR.Eval.CEK as Eval
+import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
@@ -71,6 +74,14 @@ evalInterpreter =
   runTerm purity term = Eval.eval purity env term
   runGuard info g = Eval.interpretGuard info env g
   env = coreBuiltinEnv @Eval.CEKBigStep
+
+evalDirectInterpreter :: (Default i, Show i) => Interpreter CoreBuiltin i (EvalM CoreBuiltin i)
+evalDirectInterpreter =
+  Interpreter runGuard runTerm
+  where
+  runTerm purity term = Direct.eval purity env term
+  runGuard info g = Direct.interpretGuard info env g
+  env = Direct.coreBuiltinEnv
 
 -- | Transaction-payload related environment data.
 data MsgData = MsgData

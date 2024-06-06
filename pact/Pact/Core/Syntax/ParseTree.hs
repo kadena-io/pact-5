@@ -12,6 +12,7 @@ import Data.Foldable(fold)
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.List(intersperse)
+import GHC.Generics
 
 import qualified Data.List.NonEmpty as NE
 
@@ -20,6 +21,7 @@ import Pact.Core.Names
 import Pact.Core.Pretty
 import Pact.Core.Type(PrimType(..))
 import Pact.Core.Guards
+import Control.DeepSeq
 
 
 data Operator
@@ -27,7 +29,9 @@ data Operator
   | OrOp
   | EnforceOp
   | EnforceOneOp
-  deriving (Show, Eq, Enum, Bounded)
+  deriving (Show, Eq, Enum, Bounded, Generic)
+
+instance NFData Operator
 
 renderOp :: Operator -> Text
 renderOp = \case
@@ -55,7 +59,9 @@ data Type
   | TyTable ParsedTyName
   | TyPolyObject
   | TyAny
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic)
+
+instance NFData Type
 
 pattern TyInt :: Type
 pattern TyInt = TyPrim PrimInt
@@ -100,14 +106,16 @@ data Arg i
   { _argName :: Text
   , _argType :: Type
   , _argInfo :: i
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Generic)
 
 data MArg i
   = MArg
   { _margName :: Text
   , _margType :: Maybe Type
   , _margInfo :: i
-  } deriving (Eq, Show, Functor)
+  } deriving (Eq, Show, Functor, Generic)
+
+instance NFData i => NFData (MArg i)
 
 defName :: Def i -> Text
 defName = \case
@@ -146,7 +154,7 @@ data Defun i
   , _dfunDocs :: Maybe Text
   , _dfunModel :: [PropertyExpr i]
   , _dfunInfo :: i
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Generic)
 
 data DefConst i
   = DefConst
@@ -155,7 +163,7 @@ data DefConst i
   , _dcTerm :: Expr i
   , _dcDocs :: Maybe Text
   , _dcInfo :: i
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Generic)
 
 data DCapMeta
   = DefEvent
@@ -172,7 +180,7 @@ data DefCap i
   , _dcapModel :: [PropertyExpr i]
   , _dcapMeta :: Maybe DCapMeta
   , _dcapInfo :: i
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Generic)
 
 data DefSchema i
   = DefSchema
@@ -181,7 +189,7 @@ data DefSchema i
   , _dscDocs :: Maybe Text
   , _dscModel :: [PropertyExpr i]
   , _dscInfo :: i
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Generic)
 
 data DefTable i
   = DefTable
@@ -189,12 +197,12 @@ data DefTable i
   , _dtSchema :: ParsedName
   , _dtDocs :: Maybe Text
   , _dtInfo :: i
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Generic)
 
 data PactStep i
   = Step (Expr i) [PropertyExpr i]
   | StepWithRollback (Expr i) (Expr i) [PropertyExpr i]
-  deriving (Show, Functor)
+  deriving (Show, Functor, Generic)
 
 data DefPact i
   = DefPact
@@ -205,7 +213,7 @@ data DefPact i
   , _dpDocs :: Maybe Text
   , _dpModel :: [PropertyExpr i]
   , _dpInfo :: i
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Generic)
 
 data Managed
   = AutoManaged
@@ -219,7 +227,7 @@ data Def i
   | DSchema (DefSchema i)
   | DTable (DefTable i)
   | DPact (DefPact i)
-  deriving (Show, Functor)
+  deriving (Show, Functor, Generic)
 
 data Import
   = Import
@@ -243,14 +251,14 @@ data Module i
   , _mDoc :: Maybe Text
   , _mModel :: [PropertyExpr i]
   , _mInfo :: i
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Generic)
 
 data TopLevel i
   = TLModule (Module i)
   | TLInterface (Interface i)
   | TLTerm (Expr i)
   | TLUse Import i
-  deriving (Show, Functor)
+  deriving (Show, Functor, Generic)
 
 data Interface i
   = Interface
@@ -260,7 +268,7 @@ data Interface i
   , _ifDocs :: Maybe Text
   , _ifModel :: [PropertyExpr i]
   , _ifInfo :: i
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Generic)
 
 data IfDefun i
   = IfDefun
@@ -270,7 +278,7 @@ data IfDefun i
   , _ifdDocs :: Maybe Text
   , _ifdModel :: [PropertyExpr i]
   , _ifdInfo :: i
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Generic)
 
 data IfDefCap i
   = IfDefCap
@@ -281,7 +289,7 @@ data IfDefCap i
   , _ifdcModel :: [PropertyExpr i]
   , _ifdcMeta :: Maybe DCapMeta
   , _ifdcInfo :: i
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Generic)
 
 data IfDefPact i
   = IfDefPact
@@ -291,7 +299,7 @@ data IfDefPact i
   , _ifdpDocs :: Maybe Text
   , _ifdpModel :: [PropertyExpr i]
   , _ifdpInfo :: i
-  } deriving (Show, Functor)
+  } deriving (Show, Functor, Generic)
 
 data PropKeyword
   = KwLet
@@ -325,7 +333,7 @@ data PropertyExpr i
   | PropDelim PropDelim i
   | PropSequence [PropertyExpr i] i
   | PropConstant Literal i
-  deriving (Show, Functor)
+  deriving (Show, Functor, Generic)
 
 
 -- Interface definitions may be one of:
@@ -340,7 +348,7 @@ data IfDef i
   | IfDCap (IfDefCap i)
   | IfDSchema (DefSchema i)
   | IfDPact (IfDefPact i)
-  deriving (Show, Functor)
+  deriving (Show, Functor, Generic)
 
 instance Pretty (DefConst i) where
   pretty (DefConst (MArg dcn dcty _) term _ _) =
@@ -363,7 +371,9 @@ instance Pretty (Defun i) where
 
 data Binder i =
   Binder Text (Maybe Type) (Expr i)
-  deriving (Show, Eq, Functor)
+  deriving (Show, Eq, Functor, Generic)
+
+instance NFData i => NFData (Binder i)
 
 instance Pretty (Binder i) where
   pretty (Binder ident ty e) =
@@ -372,7 +382,9 @@ instance Pretty (Binder i) where
 data CapForm i
   = WithCapability (Expr i) (Expr i)
   | CreateUserGuard ParsedName [Expr i]
-  deriving (Show, Eq, Functor)
+  deriving (Show, Eq, Functor, Generic)
+
+instance NFData i => NFData (CapForm i)
 
 data Expr i
   = Var ParsedName i
@@ -389,7 +401,9 @@ data Expr i
   | Object [(Field, Expr i)] i
   | Binding [(Field, MArg i)] [Expr i] i
   | CapabilityForm (CapForm i) i
-  deriving (Show, Eq, Functor)
+  deriving (Show, Eq, Functor, Generic)
+
+instance (NFData i) => NFData (Expr i)
 
 data ReplSpecialForm i
   = ReplLoad Text Bool i

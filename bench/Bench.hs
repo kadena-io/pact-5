@@ -122,7 +122,7 @@ main = do
   --
   -- 1 milligas = 2.5 nanoseconds
 
-  let encode = ignoreGas () . encodeRowData def ()
+  let encode = ignoreGas () . encodeRowData
 
   print "Running..."
   defaultMain
@@ -170,37 +170,37 @@ main = do
 
     -- 1700 nanos ()/ 10 chars
     , bench "row-data 1b" $ nfIO $ encode rd1b
-    
+
     -- 1954 nanos () / 1000 characters
-    , bench "row-data 2b" $ nfIO $ (ignoreGas () . encodeRowData def ()) rd2b
+    , bench "row-data 2b" $ nfIO $ (ignoreGas () . encodeRowData) rd2b
 
     -- 337 micros () / 1_000_000 characters
-    , bench "row-data 3b" $ nfIO $ (ignoreGas () . encodeRowData def ()) rd3b
+    , bench "row-data 3b" $ nfIO $ (ignoreGas () . encodeRowData) rd3b
 
     -- 144 micros (57600 milligas) : 1000 small integers
-    , bench "pact-integer-1" $ nfIO $ (ignoreGas () . encodeRowData def ()) int1
+    , bench "pact-integer-1" $ nfIO $ (ignoreGas () . encodeRowData) int1
 
     -- 190 micros (76000 milligas) : 1000 large integers (1e12).
     -- (this - pact-integer-2) / 1000 = 46 nanos per integer, when we move
     -- from 1 digit to 12 digits. Each digit adds 4 nanos, or 2 milligas.
-    , bench "pact-integer-2" $ nfIO $ (ignoreGas () . encodeRowData def ()) int2
+    , bench "pact-integer-2" $ nfIO $ (ignoreGas () . encodeRowData) int2
 
     -- 381 micros (152400 milligas) : 2000 large integers (1e12).
     -- This bench differs from pact-integer-2 by having 2000 integers instead of 1000.
     -- It takes about twice as long as pact-integer-2, validating the linear
     -- effect of integer count on encoding time.
-    , bench "pact-integer-3" $ nfIO $ (ignoreGas () . encodeRowData def ()) int3
+    , bench "pact-integer-3" $ nfIO $ (ignoreGas () . encodeRowData) int3
 
     -- 154 micros (61600 milligas) : 1000 strings of length 1
-    , bench "pact-string-1" $ nfIO $ (ignoreGas () . encodeRowData def ()) str1
+    , bench "pact-string-1" $ nfIO $ (ignoreGas () . encodeRowData) str1
 
     -- 327 micros (130800 milligas) : 1000 strings of length 1000.
     -- This bench differs from pact-string-1 by using strings of length 1000
     -- instead of strings of length 1.
     -- It takes an extra 173 micros, 173 nanos (69 milligas) per element.
     -- So the gas cost of a string is 69 milligas per 1000 characters.
-    , bench "pact-string-2" $ nfIO $ (ignoreGas () . encodeRowData def ()) str2
-    
+    , bench "pact-string-2" $ nfIO $ (ignoreGas () . encodeRowData) str2
+
     -- 652 micros. This bench differs from pact-string-2 by having twice
     -- as many elements, and it takes twice as long, as expected.
     , bench "pact-string-3" $ nfIO $ encode str3

@@ -146,7 +146,7 @@ interpretEvalDirect =
   evalDirect purity term =
     Direct.eval purity Direct.replBuiltinEnv term
   interpretGuardDirect info g =
-    PBool <$> Direct.interpretGuard info Direct.replBuiltinEnv g
+    Direct.interpretGuard info Direct.replBuiltinEnv g
 
 
 interpretReplProgram

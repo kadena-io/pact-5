@@ -11,6 +11,7 @@ import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Database.SQLite3 as SQL
+import Control.Lens(over, _2)
 import Control.Monad
 import Data.Bifunctor
 import Data.Default
@@ -909,6 +910,7 @@ benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) -> do
     , not $ null benches
     ]
   where
-  mkPactDb = unsafeCreateSqlitePactDb serialisePact ":memory:"
+  mkPactDb =
+    over _2 SqliteDbNF <$> unsafeCreateSqlitePactDb serialisePact ":memory:"
 
-  cleanupPactDb (_, db) = SQL.close db
+  cleanupPactDb (_, SqliteDbNF db) = SQL.close db
