@@ -184,6 +184,7 @@ library
     Pact.Core.Persistence.Types
     Pact.Core.Persistence.Utils
     Pact.Core.Persistence.SQLite
+    Pact.Core.Persistence.Taped
     Pact.Core.Persistence.MockPersistence
     Pact.Core.PactValue
     Pact.Core.Debug

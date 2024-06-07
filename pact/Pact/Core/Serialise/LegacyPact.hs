@@ -4,6 +4,7 @@
 
 module Pact.Core.Serialise.LegacyPact
   ( decodeModuleData
+  , decodeModuleData'
   , decodeKeySet
   , decodeDefPactExec
   , decodeNamespace
@@ -57,6 +58,7 @@ import Pact.Core.PactValue
 import Pact.Core.Hash
 
 import qualified Pact.JSON.Decode as JD
+import qualified Data.Aeson as JD (fromJSON)
 import Pact.Core.IR.Term
 import qualified Pact.Core.Serialise.CBOR_V1 as CBOR
 import qualified Pact.Core.Serialise.LegacyPact.Types as Legacy
@@ -77,10 +79,14 @@ type TranslateM = ReaderT DeBruijn (StateT TranslateState (Except String))
 runTranslateM :: TranslateM a -> Either String a
 runTranslateM a = runExcept (evalStateT (runReaderT a 0) [])
 
-decodeModuleData :: ByteString -> Maybe (ModuleData CoreBuiltin ())
-decodeModuleData bs = do
-  obj <- JD.decodeStrict' bs
+decodeModuleData' :: JD.Value -> Maybe (ModuleData CoreBuiltin ())
+decodeModuleData' v = do
+  JD.Success obj <- Just (JD.fromJSON v)
   either (const Nothing) Just (runTranslateM (fromLegacyModuleData obj))
+
+decodeModuleData :: ByteString -> Maybe (ModuleData CoreBuiltin ())
+decodeModuleData bs =
+  decodeModuleData' =<< JD.decodeStrict' bs
 
 fromLegacyModuleData
   :: Legacy.ModuleData (Legacy.Ref' Legacy.PersistDirect)
