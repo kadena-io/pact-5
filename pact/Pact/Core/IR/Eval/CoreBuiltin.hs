@@ -459,6 +459,8 @@ rawSortObject info b cont handler _env = \case
     | V.null fields -> returnCEKValue cont handler (VList objs)
     | V.null objs -> returnCEKValue cont handler (VList objs)
     | otherwise -> do
+        sz <- sizeOf SizeOfV0 objs
+        chargeGasArgs info $ GListOp $ ListOpSort $ fromIntegral sz
         objs' <- traverse (asObject info b) objs
         fields' <- traverse (fmap Field . asString info b) fields
         v' <- liftIO $ do
