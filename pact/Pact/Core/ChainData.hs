@@ -56,6 +56,10 @@ newtype ChainId
   = ChainId { _chainId :: Text }
   deriving (Eq, Show, NFData)
 
+newtype NetworkId
+  = NetworkId { _networkId :: Text }
+  deriving (Eq, Show, NFData)
+
 -- | Allows user to specify execution parameters specific to public-chain
 -- execution, namely gas parameters, TTL, creation time, chain identifier.
 data PublicMeta
