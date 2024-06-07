@@ -25,6 +25,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , calledByModule
  , failInvariant
  , isExecutionFlagSet
+ , isValidNsFormat
  , checkNonLocalAllowed
  , evalStateToErrorState
  , restoreFromErrorState
@@ -47,11 +48,13 @@ module Pact.Core.IR.Eval.Runtime.Utils
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
+import qualified Data.Char as Char
 import Data.IORef
 import Data.Monoid
 import Data.Foldable(find, toList)
 import Data.Maybe(listToMaybe)
 import Data.Text(Text)
+import qualified Data.Text as T
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
@@ -149,6 +152,20 @@ safeTail [] = []
 
 isExecutionFlagSet :: (MonadEval b i m) => ExecutionFlag -> m Bool
 isExecutionFlagSet flag = viewsEvalEnv eeFlags (S.member flag)
+
+isValidNsFormat :: T.Text -> Bool
+isValidNsFormat nsn = case T.uncons nsn of
+  Just (h, tl) ->
+    isValidNsHead h && T.all isValidNsChar tl
+  Nothing -> False
+  where
+  isValidNsHead c =
+    Char.isLatin1 c && Char.isAlpha c
+  isValidNsChar c =
+    Char.isLatin1 c && (Char.isAlphaNum c || T.elem c validSpecialChars)
+  validSpecialChars :: T.Text
+  validSpecialChars =
+    "%#+-_&$@<>=^?*!|/~"
 
 evalStateToErrorState :: EvalState b i -> ErrorState i
 evalStateToErrorState es =

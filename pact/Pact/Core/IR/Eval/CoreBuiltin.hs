@@ -1742,18 +1742,6 @@ coreDefineNamespace info b cont handler env = \case
             applyLam (C clo) [VString n, VGuard adminG] cont' handler
           _ -> throwNativeExecutionError info b $ "Fatal error: namespace manager function is not a defun"
   args -> argsError info b args
-  where
-  isValidNsFormat nsn = case T.uncons nsn of
-    Just (h, tl) ->
-      isValidNsHead h && T.all isValidNsChar tl
-    Nothing -> False
-  isValidNsHead c =
-    Char.isLatin1 c && Char.isAlpha c
-  isValidNsChar c =
-    Char.isLatin1 c && (Char.isAlphaNum c || T.elem c validSpecialChars)
-  validSpecialChars :: T.Text
-  validSpecialChars =
-    "%#+-_&$@<>=^?*!|/~"
 
 coreDescribeNamespace :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreDescribeNamespace info b cont handler _env = \case
@@ -1981,6 +1969,7 @@ coreUseAlias info b cont handler env = \case
     origExists <- checkNsExists (NamespaceName orig)
     unless origExists $
       throwNativeExecutionError info b "Use-alias failure: origin namespace does not exist"
+    unless (isValidNsFormat alias) $ throwNativeExecutionError info b "invalid namespace format"
     (esLoaded . loAlias) %== M.insert (NamespaceAlias alias) (NamespaceName orig)
     returnCEKValue cont handler (VString "Set namespace qualifier alias")
   args -> argsError info b args

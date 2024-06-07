@@ -56,3 +56,5 @@
 (expect "alias-works: inside module, case 2" 123 (test-call-error))
 
 (commit-tx)
+
+(expect-failure "alias must be a valid namespace name" (use-alias (read-string "ns") "#invalid-alias"))
