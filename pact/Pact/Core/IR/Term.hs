@@ -346,11 +346,11 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
   pretty = \case
     Var name _ -> pretty name
     Lam ne te _ ->
-      parens ("lambda" <+> parens (fold (NE.intersperse " " (prettyLamArg <$> ne))) <+> pretty te)
+      parens ("lambda" <+> parens (fold (NE.intersperse " " (pretty <$> ne))) <+> pretty te)
     Let n te te' _ ->
       parens $ "let" <+> parens (pretty n <+> pretty te) <+> pretty te'
     App te ne _ ->
-      parens (pretty te <+> hsep (pretty <$> ne))
+      pretty (PrettyLispApp te ne)
     Sequence te te' _ ->
       parens ("seq" <+> pretty te <+> pretty te')
     Conditional o _ ->
@@ -367,14 +367,10 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
     Try te te' _ ->
       parens ("try" <+> pretty te <+> pretty te')
     ObjectLit n _ ->
-      braces (hsep $ punctuate "," $ fmap (\(f, t) -> pretty f <> ":" <> pretty t) n)
+      braces (hsep $ punctuate "," $ fmap (\(f, t) -> dquotes (pretty f) <> ":" <> pretty t) n)
     InlineValue pv _ ->
       -- Note: This term is only used for back compat. with Pact < 5
       pretty pv
-    where
-    prettyTyAnn = maybe mempty ((":" <>) . pretty)
-    prettyLamArg (Arg n ty _) =
-      pretty n <> prettyTyAnn ty
 
 instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (TopLevel name ty builtin info) where
   pretty = \case

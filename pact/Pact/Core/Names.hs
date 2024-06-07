@@ -63,6 +63,7 @@ module Pact.Core.Names
  , renderParsedTyName
  , parseParsedTyName
  , parseQualifiedName
+ , NamespaceAlias(..)
  ) where
 
 import Control.Lens
@@ -79,11 +80,14 @@ import qualified Text.Megaparsec.Char as MP
 import Pact.Core.Hash
 import Pact.Core.Pretty(Pretty(..))
 
+newtype NamespaceAlias
+  = NamespaceAlias { _unNsAlias :: Text }
+  deriving (Eq, Show, Ord, Generic, NFData)
+
 -- | Newtype wrapper over bare namespaces
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
-  deriving (Eq, Ord, Show, Generic)
+  deriving (Eq, Ord, Show, Generic, NFData)
 
-instance NFData NamespaceName
 
 instance Pretty NamespaceName where
   pretty (NamespaceName n) = pretty n

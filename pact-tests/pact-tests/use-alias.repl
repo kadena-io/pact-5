@@ -1,0 +1,58 @@
+(begin-tx)
+(module ns g
+  (defcap g () true)
+
+  (defun NOOP () 1)
+  )
+
+
+(define-namespace "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY" (create-user-guard (NOOP)) (create-user-guard (NOOP)))
+(commit-tx)
+
+(begin-tx)
+(env-data {"ns":"A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY"})
+
+(namespace (read-string "ns"))
+(module call-me g
+  (defcap g () true)
+
+  (defun call-me123 ()
+    456
+  )
+
+  (defun call-me-to-fail ()
+    (enforce false "boom")
+  )
+  )
+(commit-tx)
+
+(begin-tx)
+(env-data {"ns":"A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY"})
+;  (use-alias (read-string "ns") "boop")
+(expect
+  "use-alias works for an existing namespace"
+  "Set namespace qualifier alias"
+  (use-alias (read-string "ns") "boop"))
+(expect-failure "use-alias does not work for a non-existent namespace" (use-alias "lol" "hi"))
+
+(module caller2 g
+
+  (defcap g () true)
+
+  (defun test-call-ez:integer ()
+    (boop.call-me.call-me123)
+  )
+
+  (defun test-call-error:integer ()
+    (try 123 (boop.call-me.call-me-to-fail))
+  )
+  )
+
+
+(expect "alias works - case 1" 456 (boop.call-me.call-me123))
+(expect-failure "alias works - case 2" (boop.call-me.call-me-to-fail))
+
+(expect "alias-works: inside module, case 1" 456 (test-call-ez))
+(expect "alias-works: inside module, case 2" 123 (test-call-error))
+
+(commit-tx)

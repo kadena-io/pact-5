@@ -35,7 +35,7 @@ import Data.Either(isLeft, isRight)
 import Data.Foldable
 import Data.Decimal(roundTo', Decimal, DecimalRaw(..))
 import Data.Vector(Vector)
-import Data.Maybe(maybeToList)
+import Data.Maybe(maybeToList, isJust)
 import Numeric(showIntAtBase)
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
@@ -1972,6 +1972,24 @@ coreEnforceVerifier info b cont handler _env = \case
 
 
 -----------------------------------
+-- Aliasing
+-----------------------------------
+coreUseAlias :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
+coreUseAlias info b cont handler env = \case
+  [VString orig, VString alias] | not (T.null alias), not (T.null orig) -> do
+    enforceTopLevelOnly info b
+    origExists <- checkNsExists (NamespaceName orig)
+    unless origExists $
+      throwNativeExecutionError info b "Use-alias failure: origin namespace does not exist"
+    (esLoaded . loAlias) %== M.insert (NamespaceAlias alias) (NamespaceName orig)
+    returnCEKValue cont handler (VString "Set namespace qualifier alias")
+  args -> argsError info b args
+  where
+  checkNsExists ns = do
+    let pdb = _cePactDb env
+    isJust <$> liftDbFunction info (readNamespace pdb ns)
+
+-----------------------------------
 -- Builtin exports
 -----------------------------------
 
@@ -2132,3 +2150,4 @@ coreBuiltinRuntime = \case
   CoreIdentity -> coreIdentity
   CoreVerifySPV -> coreVerifySPV
   CoreEnforceVerifier -> coreEnforceVerifier
+  CoreUseAlias -> coreUseAlias
