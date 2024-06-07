@@ -330,7 +330,7 @@ benchSort pdb =
     ]
   , C.bgroup "nested"
     [ runNativeBenchmarkPrepared [("x", list)] pdb title "(sort x)"
-    | (title, list) <- take 3 $ enumExpListDeep 3 5 4
+    | (title, list) <- take 3 $ enumExpListDeep 3 6 2
     ]
   , C.bgroup "object-simple"
     [ runNativeBenchmarkPrepared [("x", objs), ("ks", keys)] pdb title "(sort ks x)"
