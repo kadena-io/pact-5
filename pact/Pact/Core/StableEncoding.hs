@@ -17,10 +17,10 @@ import Data.Ratio ((%), denominator)
 import Data.ByteString (ByteString)
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
-import qualified Pact.JSON.Encode as J
 import qualified Data.Set as S
 import qualified Pact.JSON.Decode as JD
-import qualified Data.Set as Set
+import qualified Pact.JSON.Encode as J
+import Pact.JSON.Legacy.Utils
 
 import Pact.Core.Capabilities
 import Pact.Core.Literal
@@ -31,7 +31,6 @@ import Pact.Core.Hash
 import Pact.Core.DefPacts.Types
 import Pact.Core.PactValue
 import Pact.Time
-import Pact.Core.Persistence.Types
 import Data.Coerce(coerce)
 
 
