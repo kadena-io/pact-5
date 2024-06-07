@@ -677,7 +677,7 @@ createEnumerateList
 createEnumerateList info from to inc
   | from == to = do
     fromSize <- sizeOf SizeOfV0 from
-    chargeGasArgs info (GMakeList 1 fromSize)
+    chargeGasArgs info (GListOp $ ListOpMake 1 fromSize)
     pure (V.singleton from)
   | inc == 0 = pure mempty -- note: covered by the flat cost
   | from < to, from + inc < from =
@@ -687,7 +687,7 @@ createEnumerateList info from to inc
   | otherwise = do
     let len = succ (abs (from - to) `div` abs inc)
     listSize <- sizeOf SizeOfV0 (max (abs from) (abs to))
-    chargeGasArgs info (GMakeList len listSize)
+    chargeGasArgs info (GListOp $ ListOpMake len listSize)
     pure $ V.enumFromStepN from inc (fromIntegral len)
 
 coreEnumerateStepN :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -701,7 +701,7 @@ makeList :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 makeList info b cont handler _env = \case
   [VLiteral (LInteger i), VPactValue v] -> do
     vSize <- sizeOf SizeOfV0 v
-    chargeGasArgs info (GMakeList (fromIntegral i) vSize)
+    chargeGasArgs info (GListOp $ ListOpMake (fromIntegral i) vSize)
     returnCEKValue cont handler (VList (V.fromList (replicate (fromIntegral i) v)))
   args -> argsError info b args
 

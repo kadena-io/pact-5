@@ -218,8 +218,6 @@ runTableModel = \case
     let mgPerByte = 1
     in MilliGas $ fromIntegral $ bytes * mgPerByte
     -- a string of 10⁶ chars (which is 2×10⁶ sizeof bytes) takes a little less than 2×10⁶ to write
-  GMakeList len sz ->
-    MilliGas $ fromIntegral len * sz
   GComparison cmpty -> case cmpty of
     TextComparison str ->
       MilliGas $ textCompareCost str + basicWorkGas
@@ -280,6 +278,8 @@ runTableModel = \case
     CapOpRequire cnt ->
       let mgPerCap = 100
       in MilliGas $ fromIntegral $ cnt * mgPerCap
+  GListOp op -> case op of
+    ListOpMake len sz -> MilliGas $ fromIntegral len * sz
   GCountBytes -> MilliGas 1 
   where
   textCompareCost str = fromIntegral $ T.length str
