@@ -1,52 +1,57 @@
 ## drop
-Use `drop` to remove `COUNT` values from a `LIST` (or string), or entries having keys in `KEYS` from an `OBJECT`.
+
+Use `drop` to remove a specified number of values from a list, string, or object.
 
 ### Basic syntax
 
-To remove `COUNT` values from a `LIST` (or string), use the following syntax:
+Because `drop` is an overloaded function, there are two ways to use it.
+To remove the specified `count` number of values from a `list` or string, use the following syntax:
 
-`(drop COUNT LIST)`
-`(drop KEYS OBJECT)`
+```pact
+(drop count [list])
+```
+
+To remove the specified `keys` and corresponding values from an `object` or string, use the following syntax:
+
+```pact
+(drop keys {object})
+```
 
 ### Arguments
 
-Use the following arguments to specify the `COUNT`, `LIST`, or `KEYS` for the `drop` Pact function:
+Use the following arguments to specify the `count` and  `list` or `keys` and `object` for the `drop` Pact function:
 
-| Argument | Type           | Description                                                          |
-|----------|----------------|----------------------------------------------------------------------|
-| `count`    | `integer`        | Specifies the number of values to drop from the list (or string).     |
-| `list`     | `[<a>], string` | Specifies the list (or string) from which to drop values.             |
-| `keys`     | `[string]`       | Specifies the keys to drop from the object.                          |
-| `object`   | `object:<{o}>`   | Specifies the object from which to drop entries with specified keys.  |
+| Argument | Type | Description                                                          |
+|----------|------|----------------------------------------------------------------------|
+| `count` | integer | Specifies the number of values to drop from the list or a string. |
+| `list`  | [any] or string | Specifies the list (or string) from which to drop values. |
+| `keys`  | [string] | Specifies the keys to drop from the object. |
+| `object` | object | Specifies the object from which to drop entries with specified keys.|
 
 ### Return values
 
-The `drop` function returns the modified list (or string) after dropping the specified number of values, or the object after dropping entries with specified keys.
+The `drop` function returns the modified list, string, or object after removing the specified number of values or specified keys.
 
 ### Examples
 
-The following examples demonstrate the `drop` function:
-
-1. Drop 2 values from the string "vwxyz":
+The following example demonstrates how to use the `drop` function to drop the first two characters from the specified string:
 
 ```pact
-pact>(drop 2 "vwxyz")
+pact> (drop 2 "vwxyz")
 "xyz"
 ```
 
-2. Drop 2 values from the end of the list [1 2 3 4 5]:
+The following example illustrates how to drop the last two values from the specified list:
 
 ```pact
-pact>(drop (- 2) [1 2 3 4 5])
+pact> (drop -2 [1 2 3 4 5])
 [1, 2, 3]
 
 ```
 
-3. Drop entries with the key 'name' from the object { 'name': "Vlad", 'active': false }:
+The following example drops the key `'name` and its corresponding value from the specified object:
 
 ```pact
-pact>(drop ['name] { 'name': "Vlad", 'active': false })
-{ 'active': false }
+pact> (drop ['name] { 'name: "Vlad", 'active: false })
+{'active: false}
 ```
-
-In these examples, the `drop` function is used to remove values or entries from the specified list, string, or object based on the given count or keys. The resulting list, string, or object will have the specified values or entries removed.

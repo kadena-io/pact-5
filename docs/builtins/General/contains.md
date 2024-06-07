@@ -32,7 +32,7 @@ Use the following arguments to specify the `value`, `list`, `key`, `object`, `st
 | `value` | any | Specifies the value to search for in a `list` or `string`. |
 | `list` | [any] | Specifies the list to search for the specified `value`. |
 | `key` | any | Specifies the key to check for in an `object`. |
-| `object` | {object} | Specifies the object to check for the specified `key`. |
+| `object` | object | Specifies the object to check for the specified `key`. |
 | `string` | string | Specifies the string to search for the specified `value`. |
 
 ### Return values

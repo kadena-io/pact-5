@@ -26,7 +26,7 @@ Use the following arguments to specify the values or fields for sorting using th
 | --- | --- | --- |
 | `primitives` | [integer, decimal, or string] | Specifies the list of primitive values to be sorted. |
 | `fields` | [list] | Specifies the list of fields within objects to be used for sorting. |
-| `object1` | {object} | Specifies more or more objects to be sorted using the `fields` parameter.
+| `object1` | object | Specifies more or more objects to be sorted using the `fields` parameter.
 
 ### Return value
 

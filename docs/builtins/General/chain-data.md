@@ -1,6 +1,6 @@
 ## chain-data
 
-Use `chain-data` to retrieve the public metadata for a transaction. 
+Use `chain-data` to retrieve the blockchain-specific public metadata for a transaction. 
 This function returns an object with the following fields:
 
 - `chain-id`: The chain identifier (0-19) for the blockchain where the transaction was executed.
@@ -41,7 +41,7 @@ The `chain-data` function returns the public metadata for a transaction as an ob
 
 ### Examples
 
-If you call the `chain-data` function in the Pact REPL without providing a transaction context in the surrounding code, the function returns the object with empty placeholder fields.
+If you call the `chain-data` function in the Pact REPL without providing a transaction context in the surrounding code, the function returns the object with placeholder fields.
 For example:
 
 ```pact

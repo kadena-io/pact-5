@@ -28,7 +28,7 @@ Use one of the following argument to define the value you want to retrieve using
 | `index` | integer | Specifies the information you want to retrieve. If you specify an `index` number, the function returns the value from that location in a list of values.
 | `list` | [integer or decimal] | Specifies the list of values to retrieve the value from using the specified `index` location. 
 | `key` | string | Specifies the information you want to retrieve. If you specify a `key` string, the function returns the value corresponding to that key from an object.
-| `object` | {object} | Specifies the set of key and value pairs to retrieve the value from using the specified `key`.
+| `object` | object | Specifies the set of key and value pairs to retrieve the value from using the specified `key`.
 
 ### Return values
 

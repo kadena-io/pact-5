@@ -7,7 +7,7 @@ Use `remove` to remove an entry associated with a specified `key` from a specifi
 To remove an entry for a `key` from an `object`, use the following syntax:
 
 ```pact
-(remove key object)
+(remove key {object})
 ```
 
 ### Arguments
@@ -17,7 +17,7 @@ Use the following arguments to specify the `key` and `object` for removing an en
 | Argument | Type | Description |
 | --- | --- | --- |
 | `key` | string | Specifies the key for the entry to be removed from the object. |
-| `object` | {object} | Specifies the object from which to remove the entry. |
+| `object` | object | Specifies the object from which to remove the entry. |
 
 ### Return value
 
