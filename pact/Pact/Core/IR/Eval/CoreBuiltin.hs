@@ -426,10 +426,13 @@ rawSort info b cont handler _env = \case
   [VList vli]
     | V.null vli -> returnCEKValue cont handler (VList mempty)
     | otherwise -> do
-    vli' <- liftIO $ do
-      v' <- V.thaw vli
-      V.sort v'
-      V.freeze v'
+    vli' <- do
+      sz <- sizeOf SizeOfV0 vli
+      chargeGasArgs info $ GListOp $ ListOpSort $ fromIntegral sz
+      liftIO $ do
+        v' <- V.thaw vli
+        V.sort v'
+        V.freeze v'
     returnCEKValue cont handler (VList vli')
   args -> argsError info b args
 

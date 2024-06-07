@@ -280,6 +280,14 @@ runTableModel = \case
       in MilliGas $ fromIntegral $ cnt * mgPerCap
   GListOp op -> case op of
     ListOpMake len sz -> MilliGas $ fromIntegral len * sz
+    ListOpSort bytes ->
+      -- For instance,
+      -- 8.7e6 bytes takes 1.8 ms = 7.2e5 mg
+      -- 2.0e9 bytes takes 700 ms = 2.8e8 mg
+      -- Assuming `k n log n` model fitting this with a few extra data points gives k = 0.007
+      let k = 0.007 :: Double
+          bytes' = fromIntegral bytes
+      in MilliGas $ ceiling $ k * bytes' * log bytes'
   GCountBytes -> MilliGas 1 
   where
   textCompareCost str = fromIntegral $ T.length str

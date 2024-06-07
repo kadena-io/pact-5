@@ -197,6 +197,8 @@ data ObjOp
 data ListOp
   = ListOpMake !Integer !Word64
   -- ^ Cost of creating a list of `n` elements + some memory overhead per elem
+  | ListOpSort !Integer
+  -- ^ Cost of sorting a list taking the given amount of bytes in memory
   deriving (Eq, Show, Ord, Generic, NFData)
 
 data CapOp
