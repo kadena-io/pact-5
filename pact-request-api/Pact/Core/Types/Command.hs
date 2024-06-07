@@ -85,8 +85,12 @@ import Test.QuickCheck
 
 import Pact.Core.Capabilities
 import Pact.Core.ChainData
+import Pact.Core.DefPacts.Types
+import Pact.Core.Errors
+import Pact.Core.Gas.Types
 import Pact.Core.Guards
 import qualified Pact.Core.Hash as PactHash
+import Pact.Core.Persistence.Types
 import Pact.Core.Types.Orphans ()
 import Pact.Core.PactValue (PactValue(..))
 import Pact.Core.Types.RPC
@@ -328,40 +332,6 @@ verifyUserSig msg sig Signer{..} = do
         ]
   where scheme = fromMaybe defPPKScheme _siScheme
 
--- | Signer combines PPKScheme, PublicKey, and the Address (aka the
---   formatted PublicKey).
-data Signer = Signer
- { _siScheme :: !(Maybe PPKScheme)
- -- ^ PPKScheme, which is defaulted to 'defPPKScheme' if not present
- , _siPubKey :: !Text
- -- ^ pub key value
- , _siAddress :: !(Maybe Text)
- -- ^ optional "address", for different pub key formats like ETH
- , _siCapList :: [SigCapability]
- -- ^ clist for designating signature to specific caps
- } deriving (Eq, Ord, Show, Generic)
-
-instance NFData Signer
-
-instance J.Encode Signer where
-  build o = J.object
-    [ "addr" J..?= _siAddress o
-    , "scheme" J..?= _siScheme o
-    , "pubKey" J..= _siPubKey o
-    , "clist" J..??= J.Array (_siCapList o)
-    ]
-
-instance FromJSON Signer where
-  parseJSON = withObject "Signer" $ \o -> Signer
-    <$> o .:? "scheme"
-    <*> o .: "pubKey"
-    <*> o .:? "addr"
-    <*> (listMay <$> (o .:? "clist"))
-    where
-      listMay = fromMaybe []
-
-instance Arbitrary Signer where
-  arbitrary = Signer <$> arbitrary <*> arbitrary <*> arbitrary <*> scale (min 5) arbitrary
 
 -- | Payload combines a 'PactRPC' with a nonce and platform-specific metadata.
 data Payload m c = Payload
@@ -397,7 +367,7 @@ instance (Arbitrary m, Arbitrary c) => Arbitrary (Payload m c) where
     <*> arbitrary
 
 newtype PactResult = PactResult
-  { _pactResult :: Either PactError PactValue
+  { _pactResult :: Either PactErrorI PactValue
   } deriving (Eq, Show, Generic,NFData)
 
 instance J.Encode PactResult where
@@ -435,7 +405,7 @@ data CommandResult l = CommandResult {
   -- | Level of logging (i.e. full TxLog vs hashed logs)
   , _crLogs :: !(Maybe l)
   -- | Output of a Continuation if one occurred in the command.
-  , _crContinuation :: !(Maybe PactExec)
+  , _crContinuation :: !(Maybe DefPactExec)
   -- | Platform-specific data
   , _crMetaData :: !(Maybe Value)
   -- | Events
@@ -497,9 +467,11 @@ requestKeyToB16Text :: RequestKey -> Text
 requestKeyToB16Text (RequestKey h) = hashToText h
 
 
-newtype RequestKey = RequestKey { unRequestKey :: Hash}
+newtype RequestKey = RequestKey { unRequestKey :: PactHash.Hash}
   deriving (Eq, Ord, Generic)
-  deriving newtype (Serialize, Hashable, ParseText, FromJSON, FromJSONKey, NFData, J.Encode, AsString)
+  deriving newtype (Serialize, Hashable, FromJSON, FromJSONKey, NFData, J.Encode
+    -- , AsString, ParseText
+    )
 
 instance Show RequestKey where
   show (RequestKey rk) = show rk
