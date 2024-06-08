@@ -1,0 +1,27 @@
+(begin-tx)
+(module ns g
+  (defcap g () true)
+
+  (defun NOOP () 1)
+  )
+
+
+(define-namespace "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY" (create-user-guard (NOOP)) (create-user-guard (NOOP)))
+(commit-tx)
+
+(begin-tx)
+(env-data {"ns":"A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY"})
+
+(namespace (read-string "ns"))
+(module call-me g
+  (defcap g () true)
+
+  (defun call-me () 2)
+  )
+(commit-tx)
+
+(begin-tx)
+(env-gas 0) ; reset gas
+(use-alias "A_fIcwIweiXXYXnKU59CNCAUoIXHXwQtB_D8xhEflLY" "Kadena")
+(Kadena.call-me.call-me)
+(commit-tx)
