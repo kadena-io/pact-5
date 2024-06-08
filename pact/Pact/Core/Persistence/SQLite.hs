@@ -11,6 +11,7 @@ module Pact.Core.Persistence.SQLite (
 ) where
 
 -- import Control.Monad.Trans.Control (MonadBaseControl)
+import Control.Monad
 import Control.Monad.Catch
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.IORef
@@ -61,8 +62,16 @@ unsafeCreateSqlitePactDb
   -> m (PactDb b i, SQL.Database)
 unsafeCreateSqlitePactDb serial connectionString  = do
   db <- liftIO $ SQL.open connectionString
+  _ <- forM_ fastNoJournalPragmas $ \p -> liftIO (SQL.exec db ("PRAGMA " <> p))
   (,db) <$> liftIO (initializePactDb serial db)
 
+fastNoJournalPragmas :: [Text]
+fastNoJournalPragmas = [
+  "synchronous = OFF",
+  "journal_mode = MEMORY",
+  "locking_mode = EXCLUSIVE",
+  "temp_store = MEMORY"
+  ]
 
 createSysTables :: SQL.Database -> IO ()
 createSysTables db = do

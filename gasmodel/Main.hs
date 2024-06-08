@@ -8,12 +8,13 @@ import qualified Criterion.Main as C
 import Pact.Core.GasModel.InterpreterGas as InterpreterGas
 import Pact.Core.GasModel.BuiltinsGas as BuiltinsGas
 import Pact.Core.GasModel.ContractBench as ContractBench
+import qualified System.Environment as Env
 
 main :: IO ()
 main = do
-  contractBenches <- ContractBench.allBenchmarks
+  v <- Env.lookupEnv "RESET_COIN_BENCH_DB"
   C.defaultMain
-    [ contractBenches
+    [ ContractBench.allBenchmarks (v == Just "1")
     , InterpreterGas.benchmarks
     , BuiltinsGas.benchmarks
     ]
