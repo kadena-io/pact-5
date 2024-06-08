@@ -234,9 +234,13 @@ data GasArgs
   -- ^ poseidon-hash-hack-a-chain costs.
   | GModuleMemory !Word64
   | GStrOp !StrOp
+  -- ^ An operation on strings.
   | GObjOp !ObjOp
+  -- ^ An operation on object.
   | GCapOp !CapOp
+  -- ^ An operation on capabilities.
   | GListOp !ListOp
+  -- ^ An operation on lists.
   | GCountBytes
   -- ^ Cost of computing SizeOf for N bytes.
   deriving (Show, Generic, NFData)
