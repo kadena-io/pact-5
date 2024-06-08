@@ -32,6 +32,7 @@ module Pact.Core.Persistence.Types
  , toUserTable
  , objectDataToRowData
  , rowDataToObjectData
+ , renderDomain
  ) where
 
 import Control.Applicative((<|>))
@@ -238,3 +239,11 @@ instance Default (Loaded b i) where
 --   to avoid conflicts with any system tables).
 toUserTable :: TableName -> Text
 toUserTable (TableName tbl mn) = "USER_" <> renderModuleName mn <> "_" <> tbl
+
+renderDomain :: Domain k v b i -> Text
+renderDomain = \case
+  DUserTables tbl -> toUserTable tbl
+  DKeySets -> "SYS:KeySets"
+  DModules -> "SYS:Modules"
+  DNamespaces -> "SYS:Namespaces"
+  DDefPacts -> "SYS:Pacts"

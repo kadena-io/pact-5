@@ -14,6 +14,7 @@ module Pact.Core.Serialise.CBOR_V1
   , encodeDefPactExec, decodeDefPactExec
   , encodeNamespace, decodeNamespace
   , encodeRowData, decodeRowData
+  , encodeRowDataNoGas
   -- only used for legacy translation
   , encodeModuleName
   , encodeModuleHash
@@ -55,6 +56,7 @@ import Pact.Core.Pretty
 import Pact.Core.Type
 import Pact.Time.Internal (UTCTime(..), NominalDiffTime(..))
 
+
 encodeModuleData :: ModuleData CoreBuiltin () -> ByteString
 encodeModuleData = toStrictByteString . encode
 
@@ -68,7 +70,10 @@ decodeModuleData :: ByteString -> Maybe (ModuleData CoreBuiltin ())
 decodeModuleData bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
 decodeModuleData_repl_spaninfo :: ByteString -> Maybe (ModuleData ReplCoreBuiltin SpanInfo)
-decodeModuleData_repl_spaninfo bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
+decodeModuleData_repl_spaninfo bs =
+  case deserialiseFromBytes decode (fromStrict bs) of
+    Right (_, v) -> Just v
+    Left _ -> Nothing
 
 decodeModuleData_raw_spaninfo :: ByteString -> Maybe (ModuleData CoreBuiltin SpanInfo)
 decodeModuleData_raw_spaninfo bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
@@ -104,6 +109,10 @@ encodeRowData :: RowData -> GasM (PactError i) b ByteString
 encodeRowData rd = do
   gasSerializeRowData rd
   pure . toStrictByteString $ encode rd
+
+encodeRowDataNoGas :: RowData -> ByteString
+encodeRowDataNoGas rd =
+  toStrictByteString $ encode rd
 
 chargeGasMSerialize :: MilliGas -> GasM (PactError i) b ()
 chargeGasMSerialize amount = do
@@ -591,6 +600,7 @@ instance Serialise Type where
     5 -> pure TyAnyObject
     6 -> TyTable <$> decode
     7 -> pure TyCapToken
+    8 -> pure TyAny
     _ -> fail "unexpected decoding"
 
 instance Serialise Import where

@@ -17,7 +17,6 @@ import qualified Criterion as C
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
-import qualified Database.SQLite3 as SQL
 
 
 import Pact.Core.Builtin
@@ -38,30 +37,31 @@ import Pact.Core.Hash
 import Pact.Core.Guards
 import Pact.Core.Evaluate
 import Pact.Core.Namespace
-import Pact.Core.IR.Eval.CEK.Types
+import Pact.Core.IR.Eval.CEK.Types hiding (Eval)
 import qualified Pact.Core.IR.Eval.CEK as Eval
 
 type CoreDb = PactDb CoreBuiltin ()
-type MachineResult = CEKReturn CoreBuiltin () Eval
+type MachineResult = CEKReturn ExecRuntime CoreBuiltin ()
 type ApplyContToVEnv =
   ( EvalEnv CoreBuiltin ()
   , EvalState CoreBuiltin ()
-  , Cont CEKSmallStep CoreBuiltin () Eval
-  , CEKErrorHandler CEKSmallStep CoreBuiltin () Eval
-  , CEKValue CEKSmallStep CoreBuiltin () Eval)
+  , Cont ExecRuntime CEKSmallStep CoreBuiltin ()
+  , CEKErrorHandler ExecRuntime CEKSmallStep CoreBuiltin ()
+  , CEKValue ExecRuntime CEKSmallStep CoreBuiltin ())
 
-benchmarkEnv :: BuiltinEnv CEKSmallStep CoreBuiltin () Eval
-benchmarkEnv = coreBuiltinEnv @CEKSmallStep
+benchmarkEnv :: BuiltinEnv ExecRuntime CEKSmallStep CoreBuiltin ()
+benchmarkEnv = coreBuiltinEnv @ExecRuntime @CEKSmallStep
 
-benchmarkBigStepEnv :: BuiltinEnv CEKBigStep CoreBuiltin () Eval
-benchmarkBigStepEnv = coreBuiltinEnv @CEKBigStep
+benchmarkBigStepEnv :: BuiltinEnv ExecRuntime CEKBigStep CoreBuiltin ()
+benchmarkBigStepEnv = coreBuiltinEnv @ExecRuntime @CEKBigStep
 
-newtype SqliteDbNF
-  = SqliteDbNF SQL.Database
+newtype NoNF a
+  = NoNf a
+  deriving (Eq, Show)
 
 -- NOTE: NECESSARY ORPHAN, otherwise we cannot simply make and
 -- cleanup sqlite pact db instances.
-instance NFData SqliteDbNF where
+instance NFData (NoNF a) where
   rnf _ = ()
 
 gmSigs :: Map PublicKeyText (S.Set (CapToken QualifiedName PactValue))
@@ -261,7 +261,7 @@ evaluateN
   -> Text
   -> Int
   -> IO (Either (PactError ()) MachineResult, EvalState CoreBuiltin ())
-evaluateN evalEnv es source nSteps = runEvalM evalEnv es $ do
+evaluateN evalEnv es source nSteps = runEvalM (ExecEnv evalEnv) es $ do
   term <- compileTerm source
   let pdb = _eePactDb evalEnv
       ps = _eeDefPactStep evalEnv
@@ -308,7 +308,7 @@ runCompileTerm
   -> BenchEvalState
   -> Text
   -> IO (Either (PactError ()) CoreTerm, EvalState CoreBuiltin ())
-runCompileTerm es ee = runEvalM es ee . compileTerm
+runCompileTerm ee es = runEvalM (ExecEnv ee) es . compileTerm
 
 runNativeBenchmark'
   :: (BenchEvalEnv -> IO BenchEvalEnv)
@@ -318,7 +318,7 @@ runNativeBenchmark'
   -> Text
   -> C.Benchmark
 runNativeBenchmark' envMod stMod pdb title src = C.env mkEnv $ \ ~(term, es, ee) ->
-  C.bench title $ C.nfAppIO (fmap (ensureNonError . fst) . runEvalM ee es . Eval.eval PImpure benchmarkBigStepEnv) term
+  C.bench title $ C.nfAppIO (fmap (ensureNonError . fst) . runEvalM (ExecEnv ee) es . Eval.eval PImpure benchmarkBigStepEnv) term
   where
   ensureNonError = either (error . show) id
   mkEnv = do
@@ -406,7 +406,7 @@ ignoreWrites :: PactDb b i -> PactDb b i
 ignoreWrites pdb = pdb { _pdbWrite = \_ _ _ _ -> pure () }
 
 -- Closures
-unitClosureNullary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m
+unitClosureNullary :: CEKEnv ExecRuntime step CoreBuiltin () -> Closure ExecRuntime step CoreBuiltin ()
 unitClosureNullary env
   = Closure
   { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
@@ -418,7 +418,7 @@ unitClosureNullary env
   , _cloInfo = ()}
 
 
-unitClosureUnary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m
+unitClosureUnary :: CEKEnv ExecRuntime step CoreBuiltin () -> Closure ExecRuntime step CoreBuiltin ()
 unitClosureUnary env
   = Closure
   { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
@@ -429,7 +429,7 @@ unitClosureUnary env
   , _cloEnv = env
   , _cloInfo = ()}
 
-unitClosureBinary :: CEKEnv step CoreBuiltin () m -> Closure step CoreBuiltin () m
+unitClosureBinary :: CEKEnv ExecRuntime step CoreBuiltin () -> Closure ExecRuntime step CoreBuiltin ()
 unitClosureBinary env
   = Closure
   { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
@@ -441,7 +441,7 @@ unitClosureBinary env
   , _cloInfo = ()}
 
 
-boolClosureUnary :: Bool -> CEKEnv step b () m -> Closure step b () m
+boolClosureUnary :: Bool -> CEKEnv e step b () -> Closure e step b ()
 boolClosureUnary b env
   = Closure
   { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
@@ -452,7 +452,7 @@ boolClosureUnary b env
   , _cloEnv = env
   , _cloInfo = ()}
 
-boolClosureBinary :: Bool -> CEKEnv step b () m -> Closure step b () m
+boolClosureBinary :: Bool -> CEKEnv e step b () -> Closure e step b ()
 boolClosureBinary b env
   = Closure
   { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
@@ -463,7 +463,7 @@ boolClosureBinary b env
   , _cloEnv = env
   , _cloInfo = ()}
 
-intClosureBinary :: Integer -> CEKEnv step b () m -> Closure step b () m
+intClosureBinary :: Integer -> CEKEnv e step b () -> Closure e step b ()
 intClosureBinary b env
   = Closure
   { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash

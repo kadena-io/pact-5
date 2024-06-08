@@ -7,20 +7,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE RankNTypes #-}
 
 
 module Pact.Core.Repl.Utils
  ( ReplDebugFlag(..)
  , printDebug
- , ReplM(..)
  , replFlagSet
  , runReplT
  , ReplState(..)
  , replFlags
- , replPactDb
  , replEvalLog
  , replEvalEnv
- , replEvalState
  , replUserDocs
  , replTLDefPos
  , replNativesEnabled
@@ -35,22 +33,21 @@ module Pact.Core.Repl.Utils
  , prettyReplFlag
  , replError
  , SourceCode(..)
+ , useReplState
+ , usesReplState
+ , (.==)
+ , (%==)
  ) where
 
 import Control.Lens
 import Control.Monad ( when, unless )
 import Control.Monad.Reader
-import Control.Monad.State.Strict(MonadState(..))
-import Control.Monad.Catch
-import Control.Monad.Except
 
 import Data.Void
 import Data.IORef
-import Data.Set(Set)
 import Data.Text(Text)
 import Data.List(isPrefixOf)
 import Data.Maybe(mapMaybe)
-import Data.Map.Strict(Map)
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
@@ -62,31 +59,13 @@ import Pact.Core.Info
 import Pact.Core.Names
 import Pact.Core.Persistence
 import Pact.Core.Pretty
-import Pact.Core.Gas
 import Pact.Core.Errors
-import Pact.Core.Debug
 import Pact.Core.Environment
 import Pact.Core.Type
 import qualified Pact.Core.IR.Term as Term
-import qualified Pact.Core.Syntax.ParseTree as Syntax
 
 import System.Console.Haskeline.Completion
-
-data SourceCode
-  = SourceCode
-  { _scFileName :: String
-  , _scPayload :: Text }
-  deriving Show
-
-data ReplDebugFlag
-  = ReplDebugLexer
-  | ReplDebugParser
-  | ReplDebugDesugar
-  | ReplDebugTypechecker
-  | ReplDebugTypecheckerType
-  | ReplDebugSpecializer
-  | ReplDebugUntyped
-  deriving (Show, Eq, Ord, Enum, Bounded)
+import Data.Default
 
 prettyReplFlag :: ReplDebugFlag -> String
 prettyReplFlag = \case
@@ -97,83 +76,6 @@ prettyReplFlag = \case
   ReplDebugTypecheckerType -> "tc-type"
   ReplDebugSpecializer -> "specializer"
   ReplDebugUntyped -> "untyped-core"
-
-newtype ReplM b a
-  = ReplT { unReplT :: ExceptT (PactError SpanInfo) (ReaderT (IORef (ReplState b)) IO) a }
-  deriving
-    ( Functor
-    , Applicative
-    , Monad
-    , MonadIO
-    , MonadReader (IORef (ReplState b))
-    , MonadThrow
-    , MonadError (PactError SpanInfo)
-    , MonadCatch
-    , MonadMask)
-  via (ExceptT (PactError SpanInfo) (ReaderT (IORef (ReplState b)) IO))
-
-instance MonadState (ReplState b) (ReplM b)  where
-  get = ReplT (ExceptT (Right <$> ReaderT readIORef))
-  put rs = ReplT (ExceptT (Right <$> ReaderT (`writeIORef` rs)))
-
-
--- | Passed in repl environment
-data ReplState b
-  = ReplState
-  { _replFlags :: Set ReplDebugFlag
-  , _replPactDb :: PactDb b SpanInfo
-  , _replEvalState :: EvalState b SpanInfo
-  , _replEvalEnv :: EvalEnv b SpanInfo
-  , _replEvalLog :: IORef (Maybe [(Text, Gas)])
-  , _replCurrSource :: SourceCode
-  , _replUserDocs :: Map QualifiedName Text
-  -- ^ Used by Repl and LSP Server, reflects the user
-  --   annotated @doc string.
-  , _replTLDefPos :: Map QualifiedName SpanInfo
-  -- ^ Used by LSP Server, reflects the span information
-  --   of the TL definitions for the qualified name.
-  , _replTx :: Maybe (TxId, Maybe Text)
-  , _replNativesEnabled :: Bool
-  }
-
-makeLenses ''ReplState
-
-instance MonadEvalEnv b SpanInfo (ReplM b) where
-  readEnv = use replEvalEnv
-
-instance MonadEvalState b SpanInfo (ReplM b) where
-  getEvalState = use replEvalState
-  putEvalState es =
-    replEvalState .= es
-  modifyEvalState f =
-    replEvalState %= f
-
-
-instance HasEvalState (ReplState b) b SpanInfo where
-  evalState = replEvalState
-
-instance (Pretty b) => PhaseDebug b SpanInfo (ReplM b) where
-  debugPrint dp term = do
-    case dp of
-      DPLexer -> whenReplFlagSet ReplDebugLexer $ liftIO $ do
-        putStrLn "----------- Lexer output -----------------"
-        print (pretty term)
-      DPParser -> whenReplFlagSet ReplDebugParser $ case term of
-        Syntax.TLTerm t ->
-          liftIO $ do
-            putStrLn "----------- Parser output ----------------"
-            print (pretty t)
-        _ -> pure ()
-      DPDesugar -> whenReplFlagSet ReplDebugDesugar $ case term of
-        Term.TLTerm t ->
-          liftIO $ do
-            putStrLn "----------- Desugar output ---------------"
-            print (pretty t)
-        _ -> pure ()
-
-
-instance HasLoaded (ReplState b) b SpanInfo where
-  loaded = evalState . esLoaded
 
 data ReplAction
   = RASetFlag ReplDebugFlag
@@ -239,7 +141,35 @@ replFlagSet
   :: ReplDebugFlag
   -> ReplM b Bool
 replFlagSet flag =
-  uses replFlags (Set.member flag)
+  usesReplState replFlags (Set.member flag)
+
+useReplState :: Lens' (ReplState b) s -> ReplM b s
+useReplState l = do
+  r <- ask
+  let (ReplEnv ref) = r
+  v <- liftIO $ readIORef ref
+  pure (view l v)
+
+usesReplState :: Lens' (ReplState b) s -> (s -> a) -> ReplM b a
+usesReplState l f = do
+  r <- ask
+  let (ReplEnv ref) = r
+  v <- liftIO $ readIORef ref
+  pure (views l f v)
+
+(.==) :: Lens' (ReplState b) s -> s -> ReplM b ()
+l .== s = do
+  r <- ask
+  let (ReplEnv ref) = r
+  liftIO (modifyIORef ref (set l s))
+
+(%==) :: Lens' (ReplState b) s -> (s -> s) -> ReplM b ()
+l %== f = do
+  r <- ask
+  let (ReplEnv ref) = r
+  liftIO (modifyIORef ref (over l f))
+
+infixr 4 .==, %==
 
 debugIfFlagSet :: Pretty a => ReplDebugFlag -> a -> ReplM b ()
 debugIfFlagSet flag a =
@@ -281,7 +211,8 @@ replCompletion natives =
     in fmap ((renderModuleName mn <> ".") <>) dns
 
 runReplT :: IORef (ReplState b) -> ReplM b a -> IO (Either (PactError SpanInfo) a)
-runReplT env (ReplT act) = runReaderT (runExceptT act) env
+runReplT env st = runEvalMResult (ReplEnv env) def st
+
 
 replError
   :: SourceCode

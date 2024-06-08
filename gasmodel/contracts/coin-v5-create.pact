@@ -858,7 +858,7 @@
 
 (create-table coin-table)
 (create-table allocation-table)
-(write coin-table "k:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {"balance":100000.0, "guard":(read-keyset "a")})
-(write coin-table "k:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab" {"balance":100000.0, "guard":(read-keyset "b")})
-(write coin-table "k:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac" {"balance":100000.0, "guard":(read-keyset "c")})
-(write coin-table "k:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaad" {"balance":100000.0, "guard":(read-keyset "d")})
+(write coin-table "k:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {"balance":100000000.0, "guard":(read-keyset "a")})
+(write coin-table "k:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab" {"balance":100000000.0, "guard":(read-keyset "b")})
+;  (write coin-table "k:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac" {"balance":100000.0, "guard":(read-keyset "c")})
+;  (write coin-table "k:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaad" {"balance":100000.0, "guard":(read-keyset "d")})

@@ -10,7 +10,6 @@ import qualified Data.Text as T
 import Control.Lens
 import Data.IORef
 import Data.Text (Text)
-import Data.Default
 import NeatInterpolation (text)
 
 import Pact.Core.Builtin
@@ -42,8 +41,6 @@ runStaticTest label src interp predicate = do
   let source = SourceCode label src
       rstate = ReplState
             { _replFlags = mempty
-            , _replEvalState = def
-            , _replPactDb = pdb
             , _replEvalLog = gasLog
             , _replCurrSource = source
             , _replEvalEnv = ee

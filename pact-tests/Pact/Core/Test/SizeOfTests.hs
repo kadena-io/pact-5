@@ -20,7 +20,6 @@ import Pact.Core.Errors
 import Pact.Core.Environment.Types
 import Pact.Core.PactValue
 import Pact.Core.Serialise
-import Pact.Core.IR.Eval.Runtime.Types (runEvalM)
 
 tests :: TestTree
 tests = testGroup "SizeOfTests" $
@@ -45,7 +44,7 @@ getSize version value = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
   ee <- defaultEvalEnv pdb replCoreBuiltinMap
   let es = def
-  (v, _state) <- liftIO $ runEvalM ee es (sizeOf version value)
+  (v, _state) <- liftIO $ runEvalM (ExecEnv ee) es (sizeOf def version value)
   return v
 
 sizeOfSmallObject :: SizeOfVersion -> Bytes -> TestTree

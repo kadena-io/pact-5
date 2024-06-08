@@ -24,7 +24,7 @@ module Pact.Core.Repl.Compile
 import Control.Lens
 import Control.Monad
 import Control.Monad.Except
-import Control.Monad.IO.Class(liftIO)
+import Control.Monad.State.Strict
 import Data.Text(Text)
 import Data.Default
 import System.FilePath.Posix
@@ -64,8 +64,7 @@ import qualified Pact.Core.IR.Eval.CEK as CEK
 import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import qualified Pact.Core.IR.Eval.Direct.ReplBuiltin as Direct
 
-type Repl = ReplM ReplCoreBuiltin
-type ReplInterpreter = Interpreter ReplCoreBuiltin SpanInfo Repl
+type ReplInterpreter = Interpreter ReplRuntime ReplCoreBuiltin SpanInfo
 
 -- Small internal debugging function for playing with file loading within
 -- this module
@@ -86,7 +85,7 @@ loadFile
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
 loadFile loc rEnv display = do
   source <- SourceCode loc <$> liftIO (T.readFile loc)
-  replCurrSource .= source
+  replCurrSource .== source
   interpretReplProgram rEnv source display
 
 
@@ -111,7 +110,7 @@ interpretReplProgramDirect = interpretReplProgram interpretEvalDirect
 checkReplNativesEnabled :: TopLevel n t (ReplBuiltin b) SpanInfo -> ReplM ReplCoreBuiltin ()
 checkReplNativesEnabled = \case
   TLModule m -> do
-    flag <- use replNativesEnabled
+    flag <- useReplState replNativesEnabled
     unless flag $
       () <$ traverseModuleTerm hasReplNatives m
   _ -> pure ()
@@ -121,7 +120,7 @@ checkReplNativesEnabled = \case
       throwExecutionError i (EvalError "repl native disallowed in module code. If you want to use this, enable them with (env-enable-repl-natives true)")
     a ->  pure a
 
-interpretEvalSmallStep :: Interpreter ReplCoreBuiltin SpanInfo Repl
+interpretEvalSmallStep :: ReplInterpreter
 interpretEvalSmallStep =
   Interpreter { eval = evalSmallStep, interpretGuard = interpretGuardSmallStep}
   where
@@ -130,7 +129,7 @@ interpretEvalSmallStep =
   interpretGuardSmallStep info g =
     CEK.interpretGuard info (replBuiltinEnv @CEK.CEKSmallStep) g
 
-interpretEvalBigStep :: Interpreter ReplCoreBuiltin SpanInfo Repl
+interpretEvalBigStep :: ReplInterpreter
 interpretEvalBigStep =
   Interpreter { eval = evalBigStep, interpretGuard = interpretGuardBigStep}
   where
@@ -139,7 +138,7 @@ interpretEvalBigStep =
   interpretGuardBigStep info g =
     CEK.interpretGuard info (replBuiltinEnv @CEK.CEKBigStep) g
 
-interpretEvalDirect :: Interpreter ReplCoreBuiltin SpanInfo Repl
+interpretEvalDirect :: ReplInterpreter
 interpretEvalDirect =
   Interpreter { eval = evalDirect, interpretGuard = interpretGuardDirect}
   where
@@ -168,22 +167,22 @@ interpretReplProgram interpreter (SourceCode _ source) display = do
       Lisp.ReplLoad txt reset i -> do
         let loading = RCompileValue (InterpretValue (PString ("Loading " <> txt <> "...")) i)
         display loading
-        oldSrc <- use replCurrSource
+        oldSrc <- useReplState replCurrSource
         pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
-        oldEE <- use replEvalEnv
+        oldEE <- useReplState replEvalEnv
         when reset $ do
           ee <- liftIO (defaultEvalEnv pactdb replCoreBuiltinMap)
-          evalState .= def
-          replEvalEnv .= ee
+          put def
+          replEvalEnv .== ee
         fp <- mangleFilePath (T.unpack txt)
         when (isPactFile fp) $ esLoaded . loToplevel .= mempty
         out <- loadFile fp interpreter display
-        replCurrSource .= oldSrc
+        replCurrSource .== oldSrc
         unless reset $ do
-          replEvalEnv .= oldEE
+          replEvalEnv .== oldEE
         pure out
   mangleFilePath fp = do
-    (SourceCode currFile _) <- use replCurrSource
+    (SourceCode currFile _) <- useReplState replCurrSource
     case currFile of
       "(interactive)" -> pure fp
       _ | isAbsolute fp -> pure fp
@@ -202,7 +201,7 @@ interpretReplProgram interpreter (SourceCode _ source) display = do
             lookupFqName fqn >>= \case
               Just d -> do
                 let qn = QualifiedName n mn
-                docs <- uses replUserDocs (M.lookup qn)
+                docs <- usesReplState replUserDocs (M.lookup qn)
                 displayValue (RUserDoc d docs)
               Nothing ->
                 throwExecutionError varI $ EvalError "repl invariant violated: resolved to a top level free variable without a binder"

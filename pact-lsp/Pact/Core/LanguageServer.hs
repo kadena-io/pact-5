@@ -23,7 +23,6 @@ import Control.Monad.IO.Class
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.IORef
-import Data.Default
 import System.FilePath
 
 import Pact.Core.Persistence.MockPersistence
@@ -54,7 +53,6 @@ import Pact.Core.LanguageServer.Renaming
 import Pact.Core.Repl.BuiltinDocs
 import Pact.Core.Repl.UserDocs
 import Pact.Core.Names
-import Pact.Core.Interpreter
 import qualified Pact.Core.IR.ModuleHashing as MHash
 import qualified Pact.Core.IR.ConstEval as ConstEval
 import qualified Pact.Core.Repl.Compile as Repl
@@ -215,8 +213,6 @@ sendDiagnostics nuri mv content = liftIO runPact >>= \case
         src = SourceCode (takeFileName file) content
         rstate = ReplState
           { _replFlags = mempty
-          , _replEvalState = def
-          , _replPactDb = pdb
           , _replEvalLog = gasLog
           , _replCurrSource = src
           , _replEvalEnv = ee
@@ -344,7 +340,7 @@ documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req 
         resp (Right (InL we))
 
 processFile
-  :: Interpreter ReplCoreBuiltin SpanInfo (ReplM ReplCoreBuiltin)
+  :: Repl.ReplInterpreter
   -> SourceCode
   -> ReplM ReplCoreBuiltin [EvalTopLevel ReplCoreBuiltin SpanInfo]
 processFile replEnv (SourceCode _ source) = do

@@ -12,6 +12,8 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DataKinds #-}
 
 module Pact.Core.Environment.Types
  ( EvalEnv(..)
@@ -35,25 +37,51 @@ module Pact.Core.Environment.Types
  , cdBlockTime, cdPrevBlockHash
  , cdSender, cdGasLimit, cdGasPrice
  , EvalState(..)
- , HasEvalState(..)
+--  , HasEvalState(..)
  , StackFrame(..)
  , StackFunctionType(..)
  , flagRep
  , flagReps
  , ExecutionFlag(..)
- , MonadEvalEnv(..)
- , MonadEvalState(..)
- , MonadEval
+--  , MonadEvalEnv(..)
+--  , MonadEvalState(..)
  , defaultEvalEnv
  , GasLogEntry(..)
  , RecursionCheck(..)
  , PactTrace(..)
+ , ReplState(..)
+ , esCaps
+ , esStack
+ , esEvents
+ , esLoaded
+ , esDefPactExec
+ , esGasLog
+ , esCheckRecursion
+ , esTraceOutput
+ , runEvalM
+ , runEvalMResult
+ , EvalMEnv(..)
+ , EvalM(..)
+ , RuntimeMode(..)
+ , replFlags
+ , replEvalLog
+ , replEvalEnv
+ , replUserDocs
+ , replTLDefPos
+ , replNativesEnabled
+ , replCurrSource
+ , replTx
+ , ReplM
+ , ReplDebugFlag(..)
+ , SourceCode(..)
  ) where
 
 
 import Control.Lens
+import Control.Monad.Catch
+import Control.Monad.Reader
+import Control.Monad.State.Strict
 import Control.Monad.Except
-import Control.Monad.IO.Class
 import Data.Set(Set)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
@@ -64,7 +92,6 @@ import System.Clock
 
 import Control.DeepSeq
 import GHC.Generics
-import Control.Monad.Catch as Exceptions
 
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
@@ -81,9 +108,28 @@ import Pact.Core.Errors
 import Pact.Core.Gas
 import Pact.Core.Namespace
 import Pact.Core.StackFrame
-import Pact.Core.Builtin (IsBuiltin)
 import Pact.Core.Verifiers
 import Pact.Core.SPV
+import Pact.Core.Info
+import Pact.Core.Debug
+
+data SourceCode
+  = SourceCode
+  { _scFileName :: String
+  , _scPayload :: Text }
+  deriving Show
+
+data ReplDebugFlag
+  = ReplDebugLexer
+  | ReplDebugParser
+  | ReplDebugDesugar
+  | ReplDebugTypechecker
+  | ReplDebugTypecheckerType
+  | ReplDebugSpecializer
+  | ReplDebugUntyped
+  deriving (Show, Eq, Ord, Enum, Bounded)
+
+
 
 -- | Execution flags specify behavior of the runtime environment,
 -- with an orientation towards some alteration of a default behavior.
@@ -213,31 +259,19 @@ instance (NFData b, NFData i) => NFData (EvalState b i)
 instance Default (EvalState b i) where
   def = EvalState def [] [] mempty Nothing Nothing (RecursionCheck mempty :| []) []
 
-makeClassy ''EvalState
+makeLenses ''EvalState
 
 instance HasLoaded (EvalState b i) b i where
   loaded = esLoaded
 
-class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
-  readEnv :: m (EvalEnv b i)
+-- class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
+--   readEnv :: m (EvalEnv b i)
 
--- | Our monad mirroring `EvalState` for our evaluation state
-class Monad m => MonadEvalState b i m | m -> b, m -> i where
-  getEvalState :: m (EvalState b i)
-  putEvalState :: EvalState b i -> m ()
-  modifyEvalState :: (EvalState b i -> EvalState b i) -> m ()
-
--- Our General constraint for evaluation and general analysis
-type MonadEval b i m =
-  ( MonadEvalEnv b i m
-  , MonadEvalState b i m
-  , MonadError (PactError i) m
-  , MonadIO m
-  , Exceptions.MonadCatch m
-  , Default i
-  , Show i
-  , IsBuiltin b
-  , Show b)
+-- -- | Our monad mirroring `EvalState` for our evaluation state
+-- class Monad m => MonadEvalState b i m | m -> b, m -> i where
+--   getEvalState :: m (EvalState b i)
+--   putEvalState :: EvalState b i -> m ()
+--   modifyEvalState :: (EvalState b i -> EvalState b i) -> m ()
 
 -- | A default evaluation environment meant for
 --   uses such as the repl
@@ -260,3 +294,72 @@ defaultEvalEnv pdb m = do
     , _eeGasModel = freeGasModel
     , _eeSPVSupport = noSPVSupport
     }
+
+-- | Passed in repl environment
+data ReplState b
+  = ReplState
+  { _replFlags :: Set ReplDebugFlag
+  -- , _replPactDb :: PactDb b SpanInfo
+  -- , _replEvalState :: EvalState b SpanInfo
+  , _replEvalEnv :: EvalEnv b SpanInfo
+  , _replEvalLog :: IORef (Maybe [(Text, Gas)])
+  , _replCurrSource :: SourceCode
+  , _replUserDocs :: Map QualifiedName Text
+  -- ^ Used by Repl and LSP Server, reflects the user
+  --   annotated @doc string.
+  , _replTLDefPos :: Map QualifiedName SpanInfo
+  -- ^ Used by LSP Server, reflects the span information
+  --   of the TL definitions for the qualified name.
+  , _replTx :: Maybe (TxId, Maybe Text)
+  , _replNativesEnabled :: Bool
+  }
+
+data RuntimeMode
+  = ExecRuntime
+  | ReplRuntime
+  deriving Show
+
+data EvalMEnv e b i where
+  ExecEnv :: EvalEnv b i -> EvalMEnv ExecRuntime b i
+  ReplEnv :: IORef (ReplState b) -> EvalMEnv ReplRuntime b SpanInfo
+
+
+-- Todo: are we going to inject state as the reader monad here?
+newtype EvalM e b i a =
+  EvalM (ReaderT (EvalMEnv e b i) (ExceptT (PactError i) (StateT (EvalState b i) IO)) a)
+  deriving
+    ( Functor, Applicative, Monad
+    , MonadIO
+    , MonadThrow
+    , MonadCatch
+    , MonadMask
+    , MonadReader (EvalMEnv e b i)
+    , MonadState (EvalState b i)
+    , MonadError (PactError i))
+  via (ReaderT (EvalMEnv e b i) (ExceptT (PactError i) (StateT (EvalState b i) IO)))
+
+instance PhaseDebug b i (EvalM e b i) where
+  debugPrint _ _ = pure ()
+
+type ReplM b = EvalM ReplRuntime b SpanInfo
+
+
+runEvalM
+  :: EvalMEnv e b i
+  -> EvalState b i
+  -> EvalM e b i a
+  -> IO (Either (PactError i) a, EvalState b i)
+runEvalM env st (EvalM action) =
+  runStateT (runExceptT (runReaderT action env)) st
+{-# INLINEABLE runEvalM #-}
+
+runEvalMResult
+  :: EvalMEnv e b i
+  -> EvalState b i
+  -> EvalM e b i a
+  -> IO (Either (PactError i) a)
+runEvalMResult env st (EvalM action) =
+  evalStateT (runExceptT (runReaderT action env)) st
+{-# INLINEABLE runEvalMResult #-}
+
+makeLenses ''ReplState

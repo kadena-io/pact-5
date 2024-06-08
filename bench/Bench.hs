@@ -25,7 +25,7 @@ import qualified Data.Map as M
 
 import Pact.Core.Builtin
 import Pact.Core.Environment.Types
-import Pact.Core.Environment.Utils ((.==), useEvalState, usesEvalState)
+import Pact.Core.Environment.Utils ((.==), use, usesEvalState)
 import Pact.Core.Guards
 import Pact.Core.IR.Eval.Runtime.Types
 import Pact.Core.Persistence.MockPersistence

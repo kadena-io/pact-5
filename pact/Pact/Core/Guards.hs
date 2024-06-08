@@ -82,6 +82,9 @@ renderKeySetName :: KeySetName -> Text
 renderKeySetName (KeySetName n Nothing) = n
 renderKeySetName (KeySetName n (Just ns)) = _namespaceName ns <> "." <> n
 
+-- | A parser for our keyset name format
+-- <namespace>.keyset
+-- as well as for our legacy format (any string)
 keysetNameParser :: Parser KeySetName
 keysetNameParser = qualified <|> withoutNs
   where
@@ -91,6 +94,8 @@ keysetNameParser = qualified <|> withoutNs
       pure $ KeySetName kn (Just ns)
     withoutNs = do
       t <- takeText
+      -- NOTE: this condition cannot be commented out for any reason
+      -- it will impact principal parsing by allowing parsing the empty string
       guard $ not $ T.null t
       pure $ KeySetName t Nothing
 

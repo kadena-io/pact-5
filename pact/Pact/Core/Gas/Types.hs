@@ -65,6 +65,7 @@ import Data.Text (Text)
 import GHC.Generics
 
 import Pact.Core.Pretty
+import Pact.Core.Names (FullyQualifiedName)
 
 -- | Gas in pact-core, represented as an unsigned
 -- integer, units will go in terms of 1e3 = 2ns
@@ -212,7 +213,7 @@ data GasArgs
   -- ^ Cost of integer operations
   | GMakeList !Integer !Word64
   -- ^ Cost of creating a list of `n` elements + some memory overhead per elem
-  | GAApplyLam Text !Int
+  | GAApplyLam (Maybe FullyQualifiedName) !Int
   -- ^ Cost of function application
   | GAZKArgs !ZKArg
   -- ^ Cost of ZK function

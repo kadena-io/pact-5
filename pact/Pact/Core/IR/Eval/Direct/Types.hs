@@ -91,59 +91,59 @@ data ClosureType i
 
 instance NFData i => NFData (ClosureType i)
 
-data Closure b i m
+data Closure e b i
   = Closure
   { _cloFqName :: !FullyQualifiedName
   , _cloTypes :: !(ClosureType i)
   , _cloArity :: !Int
   , _cloTerm :: !(EvalTerm b i)
   , _cloRType :: !(Maybe Type)
-  , _cloEnv :: !(DirectEnv b i m)
+  , _cloEnv :: !(DirectEnv e b i)
   , _cloInfo :: i
   } deriving (Show, Generic)
 
-instance (NFData b, NFData i) => NFData (Closure b i m)
+instance (NFData b, NFData i) => NFData (Closure e b i)
 
 -- | A closure coming from a lambda application with its accompanying environment capturing args,
 -- but is not partially applied
-data LamClosure (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
+data LamClosure (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
   = LamClosure
   { _lcloTypes :: !(ClosureType i)
   , _lcloArity :: !Int
   , _lcloTerm :: !(EvalTerm b i)
   , _lcloRType :: !(Maybe Type)
-  , _lcloEnv :: !(DirectEnv b i m)
+  , _lcloEnv :: !(DirectEnv e b i)
   , _lcloInfo :: i
   } deriving (Show, Generic)
 
-instance (NFData b, NFData i) => NFData (LamClosure b i m)
+instance (NFData b, NFData i) => NFData (LamClosure e b i)
 
 -- | A partially applied function because we don't allow
 -- them to be applied at the lhs of an app since pact historically hasn't had partial closures.
 -- This is a bit annoying to deal with but helps preserve semantics
-data PartialClosure (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
+data PartialClosure (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
   = PartialClosure
   { _pcloFrame :: !(Maybe (StackFrame i))
   , _pcloTypes :: !(NonEmpty (Arg Type i))
   , _pcloArity :: !Int
   , _pcloTerm :: !(EvalTerm b i)
   , _pcloRType :: !(Maybe Type)
-  , _pcloEnv :: !(DirectEnv b i m)
+  , _pcloEnv :: !(DirectEnv e b i)
   , _pcloInfo :: i
   } deriving (Show, Generic)
 
-instance (NFData b, NFData i) => NFData (PartialClosure b i m)
+instance (NFData b, NFData i) => NFData (PartialClosure e b i)
 
-data DefPactClosure (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
+data DefPactClosure (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
   = DefPactClosure
   { _pactcloFQN :: !FullyQualifiedName
   , _pactcloTypes :: !(ClosureType i)
   , _pactcloArity :: !Int
-  , _pactEnv :: !(DirectEnv b i m)
+  , _pactEnv :: !(DirectEnv e b i)
   , _pactcloInfo :: i
   } deriving (Show, Generic)
 
-instance (NFData b, NFData i) => NFData (DefPactClosure b i m)
+instance (NFData b, NFData i) => NFData (DefPactClosure e b i)
 
 data CapTokenClosure i
   = CapTokenClosure
@@ -158,28 +158,28 @@ instance NFData i => NFData (CapTokenClosure i)
 -- | A partially applied native because we don't allow
 -- them to be applied at the lhs of an app since pact historically hasn't had partial closures.
 -- This is a bit annoying to deal with but helps preserve semantics
-data PartialNativeFn b i m
+data PartialNativeFn e b i
   = PartialNativeFn
   { _pNative :: !b
-  , _pNativeEnv :: !(DirectEnv b i m)
-  , _pNativeFn :: !(NativeFunction b i m)
+  , _pNativeEnv :: !(DirectEnv e b i)
+  , _pNativeFn :: !(NativeFunction e b i)
   , _pNativeArity :: {-# UNPACK #-} !Int
-  , _pNativeAppliedArgs :: ![EvalValue b i m]
+  , _pNativeAppliedArgs :: ![EvalValue e b i]
   , _pNativeLoc :: i
   } deriving (Generic)
 
-data CanApply (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
-  = C {-# UNPACK #-} !(Closure b i m)
-  | LC {-# UNPACK #-} !(LamClosure b i m)
-  | PC {-# UNPACK #-} !(PartialClosure b i m)
-  | N {-# UNPACK #-} !(NativeFn b i m)
-  | PN {-# UNPACK #-} !(PartialNativeFn b i m)
-  | DPC {-# UNPACK #-} !(DefPactClosure b i m)
+data CanApply (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
+  = C {-# UNPACK #-} !(Closure e b i)
+  | LC {-# UNPACK #-} !(LamClosure e b i)
+  | PC {-# UNPACK #-} !(PartialClosure e b i)
+  | N {-# UNPACK #-} !(NativeFn e b i)
+  | PN {-# UNPACK #-} !(PartialNativeFn e b i)
+  | DPC {-# UNPACK #-} !(DefPactClosure e b i)
   | CT {-# UNPACK #-} !(CapTokenClosure i)
   deriving (Show, Generic)
 
 
-instance (Show i, Show b) => Show (NativeFn b i m) where
+instance (Show i, Show b) => Show (NativeFn e b i) where
   show (NativeFn b _ _ arity _) = unwords
     ["(NativeFn"
     , show b
@@ -188,7 +188,7 @@ instance (Show i, Show b) => Show (NativeFn b i m) where
     , ")"
     ]
 
-instance (Show i, Show b) => Show (PartialNativeFn b i m) where
+instance (Show i, Show b) => Show (PartialNativeFn e b i) where
   show (PartialNativeFn b _ _ arity _ _) = unwords
     ["(NativeFn"
     , show b
@@ -198,110 +198,110 @@ instance (Show i, Show b) => Show (PartialNativeFn b i m) where
     ]
 
 -- | The type of our semantic runtime values
-data EvalValue b i m
+data EvalValue e b i
   = VPactValue !PactValue
   -- ^ PactValue(s), which contain no terms
   | VTable !TableValue
   -- ^ Table references, which despite being a syntactic
   -- value with
-  | VClosure  !(CanApply b i m)
+  | VClosure  !(CanApply e b i)
   -- ^ Closures, which may contain terms
   deriving (Generic)
 
-instance (NFData b, NFData i) => NFData (EvalValue b i m)
+instance (NFData b, NFData i) => NFData (EvalValue e b i)
 
-instance Show (EvalValue b i m) where
+instance Show (EvalValue e b i) where
   show = \case
     VPactValue pv -> show pv
     VTable vt -> "table" <> show (_tvName vt)
     VClosure _ -> "closure<>"
 
 -- | Locally bound variables
--- type DirectEnv b i m = RAList (EvalValue b i m)
+-- type DirectEnv e b i = RAList (EvalValue e b i)
 
-data DirectEnv b i m
+data DirectEnv e b i
   = DirectEnv
-  { _ceLocal :: RAList (EvalValue b i m)
+  { _ceLocal :: RAList (EvalValue e b i)
   , _cePactDb :: PactDb b i
-  , _ceBuiltins :: BuiltinEnv b i m
+  , _ceBuiltins :: BuiltinEnv e b i
   , _ceDefPactStep :: Maybe DefPactStep
   , _ceInCap :: Bool }
   deriving (Generic)
 
-instance (NFData b, NFData i) => NFData (DirectEnv b i m)
+instance (NFData b, NFData i) => NFData (DirectEnv e b i)
 
 
-instance (Show i, Show b) => Show (DirectEnv b i m) where
+instance (Show i, Show b) => Show (DirectEnv e b i) where
   show (DirectEnv e _ _ _ _) = show e
 
-type NativeFunction (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
-  = i -> b -> DirectEnv b i m -> [EvalValue b i m] -> m (EvalValue b i m)
+type NativeFunction (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
+  = i -> b -> DirectEnv e b i -> [EvalValue e b i] -> EvalM e b i (EvalValue e b i)
 
 -- | List of builtins
-type BuiltinEnv b i m
-  = i -> b -> DirectEnv b i m -> NativeFn b i m
+type BuiltinEnv e b i
+  = i -> b -> DirectEnv e b i -> NativeFn e b i
 
-data NativeFn (b :: K.Type) (i :: K.Type) (m :: K.Type -> K.Type)
+data NativeFn (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
   = NativeFn
   { _native :: !b
-  , _nativeEnv :: !(DirectEnv b i m)
-  , _nativeFn :: !(NativeFunction b i m)
+  , _nativeEnv :: !(DirectEnv e b i)
+  , _nativeFn :: !(NativeFunction e b i)
   , _nativeArity :: {-# UNPACK #-} !Int
   , _nativeLoc :: i
   } deriving (Generic)
 
-pattern VLiteral :: Literal -> EvalValue b i m
+pattern VLiteral :: Literal -> EvalValue e b i
 pattern VLiteral lit = VPactValue (PLiteral lit)
 
-pattern VString :: Text -> EvalValue b i m
+pattern VString :: Text -> EvalValue e b i
 pattern VString txt = VLiteral (LString txt)
 
-pattern VInteger :: Integer -> EvalValue b i m
+pattern VInteger :: Integer -> EvalValue e b i
 pattern VInteger txt = VLiteral (LInteger txt)
 
-pattern VUnit :: EvalValue b i m
+pattern VUnit :: EvalValue e b i
 pattern VUnit = VLiteral LUnit
 
-pattern VBool :: Bool -> EvalValue b i m
+pattern VBool :: Bool -> EvalValue e b i
 pattern VBool b = VLiteral (LBool b)
 
-pattern VDecimal :: Decimal -> EvalValue b i m
+pattern VDecimal :: Decimal -> EvalValue e b i
 pattern VDecimal d = VLiteral (LDecimal d)
 
-pattern VGuard :: Guard QualifiedName PactValue -> EvalValue b i m
+pattern VGuard :: Guard QualifiedName PactValue -> EvalValue e b i
 pattern VGuard g = VPactValue (PGuard g)
 
-pattern VList :: Vector PactValue -> EvalValue b i m
+pattern VList :: Vector PactValue -> EvalValue e b i
 pattern VList p = VPactValue (PList p)
 
-pattern VTime :: UTCTime -> EvalValue b i m
+pattern VTime :: UTCTime -> EvalValue e b i
 pattern VTime p = VPactValue (PTime p)
 
-pattern VObject :: Map Field PactValue -> EvalValue b i m
+pattern VObject :: Map Field PactValue -> EvalValue e b i
 pattern VObject o = VPactValue (PObject o)
 
-pattern VModRef :: ModRef -> EvalValue b i m
+pattern VModRef :: ModRef -> EvalValue e b i
 pattern VModRef mn = VPactValue (PModRef mn)
 
-pattern VCapToken :: CapToken FullyQualifiedName PactValue -> EvalValue b i m
+pattern VCapToken :: CapToken FullyQualifiedName PactValue -> EvalValue e b i
 pattern VCapToken ct = VPactValue (PCapToken ct)
 
-pattern VNative :: NativeFn b i m -> EvalValue b i m
+pattern VNative :: NativeFn e b i -> EvalValue e b i
 pattern VNative clo = VClosure (N clo)
 
-pattern VPartialNative :: PartialNativeFn b i m -> EvalValue b i m
+pattern VPartialNative :: PartialNativeFn e b i -> EvalValue e b i
 pattern VPartialNative clo = VClosure (PN clo)
 
-pattern VDefClosure :: Closure b i m -> EvalValue b i m
+pattern VDefClosure :: Closure e b i -> EvalValue e b i
 pattern VDefClosure clo = VClosure (C clo)
 
-pattern VLamClosure :: LamClosure b i m -> EvalValue b i m
+pattern VLamClosure :: LamClosure e b i -> EvalValue e b i
 pattern VLamClosure clo = VClosure (LC clo)
 
-pattern VPartialClosure :: PartialClosure b i m -> EvalValue b i m
+pattern VPartialClosure :: PartialClosure e b i -> EvalValue e b i
 pattern VPartialClosure clo = VClosure (PC clo)
 
-pattern VDefPactClosure :: DefPactClosure b i m -> EvalValue b i m
+pattern VDefPactClosure :: DefPactClosure e b i -> EvalValue e b i
 pattern VDefPactClosure clo = VClosure (DPC clo)
 
 -- | What to do post-cap evaluation: do we pop the cap from the stack,
@@ -316,13 +316,13 @@ data EvalCapType
   | TestCapEval
   deriving (Show, Eq, Enum, Bounded)
 
-instance (NFData b, NFData i) => NFData (CanApply b i m)
-instance (NFData b, NFData i) => NFData (NativeFn b i m)
-instance (NFData b, NFData i) => NFData (PartialNativeFn b i m)
+instance (NFData b, NFData i) => NFData (CanApply e b i)
+instance (NFData b, NFData i) => NFData (NativeFn e b i)
+instance (NFData b, NFData i) => NFData (PartialNativeFn e b i)
 
 makeLenses ''DirectEnv
 
-toArgTypeError :: EvalValue b i m -> ArgTypeError
+toArgTypeError :: EvalValue e b i -> ArgTypeError
 toArgTypeError = \case
   VPactValue pv -> case pv of
     PLiteral l -> ATEPrim (literalPrim l)
@@ -336,11 +336,11 @@ toArgTypeError = \case
   VClosure{} -> ATEClosure
 
 argsError
-  :: (MonadEval b i m)
+  :: IsBuiltin b
   => i
   -> b
-  -> [EvalValue b i m]
-  -> m a
+  -> [EvalValue e b i]
+  -> EvalM e b i a
 argsError info b args =
   throwExecutionError info (NativeArgumentsError (builtinName b) (toArgTypeError <$> args))
 
@@ -348,9 +348,9 @@ mkDirectBuiltinFn
   :: (IsBuiltin b)
   => i
   -> b
-  -> DirectEnv b i m
-  -> NativeFunction b i m
-  -> NativeFn b i m
+  -> DirectEnv e b i
+  -> NativeFunction e b i
+  -> NativeFn e b i
 mkDirectBuiltinFn i b env fn =
   NativeFn b env fn (builtinArity b) i
 {-# INLINE mkDirectBuiltinFn #-}
