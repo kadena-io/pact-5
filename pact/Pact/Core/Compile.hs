@@ -53,6 +53,8 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 import Pact.Core.Gas
 import Pact.Core.SizeOf
 
+type Eval = EvalM CoreBuiltin SpanInfo
+
 type HasCompileEnv b i m
   = ( MonadEval b i m
     , DesugarBuiltin b
@@ -99,8 +101,8 @@ enforceNamespaceInstall info interpreter =
     allowRoot SimpleNamespacePolicy = True
     allowRoot (SmartNamespacePolicy ar _) = ar
 {-# SPECIALIZE enforceNamespaceInstall
-  :: ()
-  -> Interpreter CoreBuiltin () Eval
+  :: SpanInfo
+  -> Interpreter CoreBuiltin SpanInfo Eval
   -> Eval ()  #-}
 
 -- | Evaluate module governance
@@ -149,8 +151,8 @@ evalModuleGovernance interpreter tl = do
           throwExecutionError info  (CannotUpgradeInterface ifn)
     _ -> pure ()
 {-# SPECIALIZE evalModuleGovernance
-  :: Interpreter CoreBuiltin () Eval
-  -> Lisp.TopLevel ()
+  :: Interpreter CoreBuiltin SpanInfo Eval
+  -> Lisp.TopLevel SpanInfo
   -> Eval ()  #-}
 
 compileDesugarOnly
@@ -185,9 +187,9 @@ interpretTopLevel interpreter tl = do
   debugPrint DPDesugar ds
   evalTopLevel interpreter tlFinal deps
 {-# SPECIALIZE interpretTopLevel
-  :: Interpreter CoreBuiltin () Eval
-  -> Lisp.TopLevel ()
-  -> Eval (CompileValue ())  #-}
+  :: Interpreter CoreBuiltin SpanInfo Eval
+  -> Lisp.TopLevel SpanInfo
+  -> Eval (CompileValue SpanInfo)  #-}
 
 evalTopLevel
   :: forall b i m
@@ -248,8 +250,8 @@ evalTopLevel interpreter tlFinal deps = do
     TLTerm term -> (`InterpretValue` (view termInfo term)) <$> eval interpreter PImpure term
     TLUse imp _ -> pure (LoadedImports imp)
 {-# SPECIALIZE evalTopLevel
-  :: Interpreter CoreBuiltin () Eval
-  -> EvalTopLevel CoreBuiltin ()
+  :: Interpreter CoreBuiltin SpanInfo Eval
+  -> EvalTopLevel CoreBuiltin SpanInfo
   -> S.Set ModuleName
-  -> Eval (CompileValue ())  #-}
+  -> Eval (CompileValue SpanInfo)  #-}
 {-# INLINE evalTopLevel #-}

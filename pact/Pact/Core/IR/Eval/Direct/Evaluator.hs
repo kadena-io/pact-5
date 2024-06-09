@@ -106,6 +106,8 @@ import qualified Pact.Core.Pretty as Pretty
 import qualified Pact.Core.Principal as Pr
 import qualified Pact.Core.Trans.TOps as Musl
 
+type Eval = EvalM CoreBuiltin ()
+
 
 mkDefunClosure
   :: (MonadEval b i m)
@@ -3394,16 +3396,16 @@ poseidonHash info b _env = \case
 #else
 
 zkPairingCheck :: (MonadEval b i m) => NativeFunction b i m
-zkPairingCheck info _b _env _args = failInvariant info "crypto disabled"
+zkPairingCheck info _b _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
 zkScalarMult :: (MonadEval b i m) => NativeFunction b i m
-zkScalarMult info _b _env _args = failInvariant info "crypto disabled"
+zkScalarMult info _b _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
 zkPointAddition :: (MonadEval b i m) => NativeFunction b i m
-zkPointAddition info _b _env _args = failInvariant info "crypto disabled"
+zkPointAddition info _b _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
 poseidonHash :: (MonadEval b i m) => NativeFunction b i m
-poseidonHash info _b _env _args = failInvariant info "crypto disabled"
+poseidonHash info _b _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
 #endif
 

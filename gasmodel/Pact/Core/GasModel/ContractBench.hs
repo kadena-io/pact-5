@@ -44,6 +44,7 @@ import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.LexUtils as Lisp
 import qualified Pact.Core.IR.Eval.CEK as CEK
 import qualified Pact.Core.IR.Eval.CoreBuiltin as CEK
+import qualified Pact.Core.IR.Eval.CEKSpecialized as CEKSpec
 import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import Pact.Core.Gas.TableGasModel
 import Pact.Core.Gas
@@ -79,6 +80,13 @@ interpretBigStep =
   runTerm purity term = CEK.eval purity eEnv term
   runGuard info g = CEK.interpretGuard info eEnv g
   eEnv = CEK.coreBuiltinEnv @CEK.CEKBigStep
+
+interpretSpecialized :: Interpreter CoreBuiltin SpanInfo (EvalM CoreBuiltin SpanInfo)
+interpretSpecialized =
+  Interpreter runGuard runTerm
+  where
+  runTerm purity term = CEKSpec.eval purity term
+  runGuard info g = CEKSpec.interpretGuard info g
 
 interpretDirect :: Interpreter CoreBuiltin SpanInfo (EvalM CoreBuiltin SpanInfo)
 interpretDirect =
@@ -372,11 +380,13 @@ allBenchmarks resetDb = do
       [coinTransferBenches pdb]
   where
   coinTransferBenches pdb =
-    bgroup "transfer benchmarks"
-    [ runCoinTransferTx pdb CoinBenchSenderA CoinBenchSenderB interpretBigStep "CEK"
-    , runCoinTransferTx pdb CoinBenchSenderA CoinBenchSenderB interpretDirect "Direct"
-    , runCoinTransferTxDesugar pdb CoinBenchSenderA CoinBenchSenderB interpretBigStep "CEK"
-    , runCoinTransferTxDesugar pdb CoinBenchSenderA CoinBenchSenderB interpretDirect "Direct"
+    bgroup "transfer benchmarks" [
+    -- [ runCoinTransferTx pdb CoinBenchSenderA CoinBenchSenderB interpretBigStep "CEK"
+    -- , runCoinTransferTx pdb CoinBenchSenderA CoinBenchSenderB interpretDirect "Direct"
+    runCoinTransferTx pdb CoinBenchSenderA CoinBenchSenderB interpretSpecialized "CEKSpec"
+    -- , runCoinTransferTxDesugar pdb CoinBenchSenderA CoinBenchSenderB interpretBigStep "CEK"
+    -- , runCoinTransferTxDesugar pdb CoinBenchSenderA CoinBenchSenderB interpretDirect "Direct"
+    -- , runCoinTransferTxDesugar pdb CoinBenchSenderA CoinBenchSenderB interpretSpecialized "CEKSpec"
     -- transfer-create sender A to B
     -- , runCoinTransferCreateTx pdb CoinBenchSenderA CoinBenchSenderB interpretBigStep "CEK"
     -- , runCoinTransferCreateTx pdb CoinBenchSenderA CoinBenchSenderB interpretDirect "Direct"

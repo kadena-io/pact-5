@@ -28,7 +28,6 @@ module Pact.Core.IR.Eval.Runtime.Types
  , StackFrame(..)
  , TableValue(..)
  , ErrorState(..)
- , Eval
  ) where
 
 import Control.Monad.Catch
@@ -50,10 +49,9 @@ import Pact.Core.Environment
 import Pact.Core.Debug
 import Pact.Core.Errors
 import Pact.Core.Builtin
+import Pact.Core.Info
 
 
-
-type Eval = EvalM CoreBuiltin ()
 
 data TableValue
   = TableValue

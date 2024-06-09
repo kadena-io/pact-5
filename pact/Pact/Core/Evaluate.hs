@@ -64,6 +64,8 @@ import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 
+type Eval = EvalM CoreBuiltin ()
+
 -- Our Builtin environment for evaluation in Chainweb prod
 type EvalBuiltinEnv = Eval.CoreBuiltinEnv
 

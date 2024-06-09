@@ -70,6 +70,9 @@ import Pact.Core.Gas
 import Pact.Core.Guards
 import Pact.Core.Capabilities
 import Pact.Core.Hash
+import Pact.Core.Info
+
+type Eval = EvalM CoreBuiltin SpanInfo
 
 
 lookupFqName :: (MonadEval b i m) => FullyQualifiedName -> m (Maybe (EvalDef b i))
@@ -166,7 +169,7 @@ checkNonLocalAllowed info b = do
     OperationIsLocalOnly (builtinName b)
 
 {-# SPECIALIZE asString
-   :: ()
+   :: SpanInfo
    -> CoreBuiltin
    -> PactValue
    -> Eval Text
@@ -182,7 +185,7 @@ asString info b pv =
   throwExecutionError info (NativeArgumentsError (builtinName b) [pvToArgTypeError pv])
 
 {-# SPECIALIZE asBool
-   :: ()
+   :: SpanInfo
    -> CoreBuiltin
    -> PactValue
    -> Eval Bool
@@ -219,7 +222,7 @@ tvToDomain tv =
   DUserTables (_tvName tv)
 
 {-# SPECIALIZE chargeGasArgs
-   :: ()
+   :: SpanInfo
    -> GasArgs
    -> Eval ()
     #-}
@@ -236,7 +239,7 @@ chargeGasArgs info ga = do
     throwExecutionError info (GasExceeded limit gUsed)
 
 {-# SPECIALIZE chargeFlatNativeGas
-   :: ()
+   :: SpanInfo
    -> CoreBuiltin
    -> Eval ()
     #-}
@@ -286,7 +289,7 @@ litCmpGassed info = cmp
   cmp LUnit LUnit = pure $ Just EQ
   cmp _ _ = pure Nothing
 {-# SPECIALIZE litCmpGassed
-    :: () -> Literal -> Literal -> Eval (Maybe Ordering)
+    :: SpanInfo -> Literal -> Literal -> Eval (Maybe Ordering)
     #-}
 
 valEqGassed :: (MonadEval b i m) => i -> PactValue -> PactValue -> m Bool
@@ -334,7 +337,7 @@ valEqGassed info = go
   goGuard (GDefPactGuard g1) (GDefPactGuard g2) = pure $ g1 == g2
   goGuard _ _ = pure False
 {-# SPECIALIZE valEqGassed
-    :: () -> PactValue -> PactValue -> Eval Bool
+    :: SpanInfo -> PactValue -> PactValue -> Eval Bool
     #-}
 
 enforceBlessedHashes :: (MonadEval b i m) => i -> EvalModule b i -> ModuleHash -> m ()

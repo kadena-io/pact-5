@@ -232,6 +232,7 @@ library
     Pact.Core.IR.Eval.CoreBuiltin
     Pact.Core.IR.ModuleHashing
     Pact.Core.IR.ConstEval
+    Pact.Core.IR.Eval.CEKSpecialized
 
     Pact.Core.Trans.TOps
 

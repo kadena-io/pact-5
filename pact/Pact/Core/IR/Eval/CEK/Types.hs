@@ -614,6 +614,7 @@ instance (Show i, Show b, Pretty b) => Pretty (CEKValue step b i m) where
 
 makeLenses ''CEKEnv
 
+type Eval = EvalM CoreBuiltin ()
 type CoreTerm = EvalTerm CoreBuiltin ()
 type CoreCEKCont = Cont CEKBigStep CoreBuiltin () Eval
 type CoreCEKHandler = CEKErrorHandler CEKBigStep CoreBuiltin () Eval
