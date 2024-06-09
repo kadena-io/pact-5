@@ -40,7 +40,7 @@ describe-module: 60100161
 describe-namespace: 199710
 describe-table: 60350224
 diff-time: 12164
-distinct: 1402
+distinct: 623
 drop: 725
 emit-event: 60001323
 enforce-guard: 9816
@@ -97,7 +97,7 @@ scalar-mult: 360225
 select: 100383581
 shift: 4
 show: 101
-sort: 1002
+sort: 1061
 sqrt: 12000
 str-to-int: 111
 str-to-list: 1501
