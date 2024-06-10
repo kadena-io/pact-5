@@ -16,7 +16,7 @@
 -- Pact API RPC types.
 --
 
-module Pact.Core.Types.RPC
+module Pact.Core.Command.RPC
   ( -- * Types
     PactRPC(..)
   , ExecMsg(..)
@@ -33,7 +33,7 @@ import GHC.Generics
 
 import Test.QuickCheck
 
-import Pact.Core.Types.Orphans ()
+import Pact.Core.Command.Orphans ()
 import Pact.Core.SPV
 import Pact.Core.Names
 

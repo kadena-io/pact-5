@@ -17,7 +17,7 @@
 --
 -- Utility types and functions.
 --
-module Pact.Core.Types.Util
+module Pact.Core.Command.Util
   ( -- | Text parsing
     ParseText(..)
   , fromText, fromText'
