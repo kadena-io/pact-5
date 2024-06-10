@@ -53,7 +53,7 @@ floor: 50
 fold-db: 100383631
 fold: 790
 format-time: 6041
-format: 2201
+format: 1801
 hash: 150
 hours: 4000
 identity: 25
@@ -96,7 +96,7 @@ round: 50
 scalar-mult: 360225
 select: 100383581
 shift: 4
-show: 101
+show: 4002
 sort: 1061
 sqrt: 12000
 str-to-int: 111

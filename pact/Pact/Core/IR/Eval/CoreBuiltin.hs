@@ -386,24 +386,17 @@ rawSqrt info b cont handler _env = \case
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
 
--- Todo: fix all show instances
+renderPactValue :: MonadEval b i m => i -> PactValue -> m T.Text
+renderPactValue info pv = do
+  sz <- sizeOf SizeOfV0 pv
+  chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral sz
+  pure $ Pretty.renderCompactText pv
+
 rawShow :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 rawShow info b cont handler _env = \case
-  [VLiteral (LInteger i)] -> do
-    let strLen = 1 + Exts.I# (IntLog.integerLog2# $ abs i)
-    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
-    returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
-  [VLiteral (LDecimal i)] -> do
-    let strLen = 1 + Exts.I# (IntLog.integerLog2# $ abs $ decimalMantissa i)
-    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral strLen
-    returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
-  [VLiteral (LString i)] -> do
-    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ T.length i
-    returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
-  [VLiteral (LBool i)] ->
-    returnCEKValue cont handler (VLiteral (LString (T.pack (show i))))
-  [VLiteral LUnit] ->
-    returnCEKValue cont handler (VLiteral (LString "()"))
+  [VPactValue pv] -> do
+    str <- renderPactValue info pv
+    returnCEKValue cont handler $ VString str
   args -> argsError info b args
 
 -- Todo: Gas here is complicated, greg worked on this previously
@@ -1353,32 +1346,25 @@ coreDistinct info b cont handler _env = \case
 coreFormat  :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreFormat info b cont handler _env = \case
   [VString s, VList es] -> do
-    chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ T.length s
     let parts = T.splitOn "{}" s
         plen = length parts
-    if | plen == 1 -> returnCEKValue cont handler (VString s)
+    if | plen == 1 -> do
+          chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
+          returnCEKValue cont handler (VString s)
        | plen - length es > 1 ->
         throwNativeExecutionError info b $ "not enough arguments for template"
        | otherwise -> do
-          args <- mapM formatArgM $ V.toList es
-          returnCEKValue cont handler $ VString $  T.concat $ alternate parts (take (plen - 1) args)
+          args <- mapM formatArgM $ V.toList $ V.take (plen - 1) es
+          let totalLength = sum (T.length <$> parts) + sum (T.length <$> args)
+          chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength totalLength
+          returnCEKValue cont handler $ VString $ T.concat $ alternate parts args
     where
-    formatArg (PString ps) = ps
-    formatArg a = renderPactValue a
-
-    formatArgM a = do
-      let a' = formatArg a
-      chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ T.length a'
-      pure a'
-
     alternate (x:xs) ys = x : alternate ys xs
     alternate _ _ = []
 
-    -- Todo: this is kinda hacky
-    -- BIG TODO: REMOVE PRETTY FROM SEMANTICS.
-    -- THIS CANNOT MAKE IT TO PROD
-    renderPactValue :: PactValue -> T.Text
-    renderPactValue = T.pack . show . Pretty.pretty
+    formatArgM (PString ps) = pure ps
+    formatArgM a = renderPactValue info a
+
   args -> argsError info b args
 
 checkLen

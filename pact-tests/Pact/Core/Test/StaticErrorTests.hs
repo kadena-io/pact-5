@@ -11,7 +11,6 @@ import Control.Lens
 import Data.IORef
 import Data.Text (Text)
 import Data.Default
-import Data.Maybe(isJust)
 import NeatInterpolation (text)
 
 import Pact.Core.Builtin
