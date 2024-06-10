@@ -1,12 +1,13 @@
 ## define-keyset
-Use `define-keyset` to define a keyset as `NAME` with `KEYSET`, or if unspecified, read `NAME` from the message payload as a keyset, similarly to `read-keyset`. If the keyset `NAME` already exists, the keyset will be enforced before updating to the new value.
+
+Use `define-keyset` to define a keyset as `name` with `keyset`, or if unspecified, read `name` from the message payload as a keyset, similarly to `read-keyset`. If the keyset `name` already exists, the keyset will be enforced before updating to the new value.
 
 ### Basic syntax
 
-To define a keyset as `NAME` with `KEYSET`, or read `NAME` from the message payload, use the following syntax:
+To define a keyset as `name` with `keyset`, or read `name` from the message payload, use the following syntax:
 
-`(define-keyset NAME KEYSET)`
-`(define-keyset NAME)`
+`(define-keyset name keyset)`
+`(define-keyset name)`
 
 ### Arguments
 
@@ -15,7 +16,7 @@ Use the following arguments to specify the inputs for the `define-keyset` Pact f
 | Argument | Type   | Description                                                 |
 |----------|--------|-------------------------------------------------------------|
 | `name`     | `string` | Specifies the name of the keyset to define or read.         |
-| `keyset`   | `string` | Specifies the keyset to associate with the `NAME`.        |
+| `keyset`   | `string` | Specifies the keyset to associate with the `name`.        |
 
 ### Return values
 
@@ -31,12 +32,8 @@ The following examples demonstrate the `define-keyset` function:
 (define-keyset 'admin-keyset "my-keyset")
 ```
 
-In this example, `(define-keyset 'admin-keyset "my-keyset")` is used to define a keyset named 'admin-keyset' with the specified keyset "my-keyset".
-
 2. Read the keyset from the message payload and associate it with 'admin-keyset':
 
 ```pact
 (define-keyset 'admin-keyset)
 ```
-
-In this example, `(define-keyset 'admin-keyset)` is used to read the keyset from the message payload and associate it with 'admin-keyset'. This is similar to using `read-keyset` but associates the result with the specified name.
