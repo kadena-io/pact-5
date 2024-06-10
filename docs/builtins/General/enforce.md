@@ -1,11 +1,16 @@
 ## enforce
-Use `enforce` to fail a transaction with a specified error message `MSG` if a pure expression `TEST` evaluates to false. Otherwise, it returns true.
+
+Use `enforce` to test whether a pure `expression` evaluates to true or false.
+If the specified `expression` evaluates to true, the function returns true.
+If the specified `expression` evaluates to false, the function fails the transaction and displays the specified error `message`.
 
 ### Basic syntax
 
-To fail a transaction with a specified error message if a test expression evaluates to false, use the following syntax:
+To fail a transaction with a specified error message if an expression evaluates to false, use the following syntax:
 
-`(enforce TEST MSG)`
+```pact
+(enforce expression message)
+```
 
 ### Arguments
 
@@ -13,20 +18,30 @@ Use the following arguments to specify the test expression and error message for
 
 | Argument | Type   | Description                                    |
 |----------|--------|------------------------------------------------|
-| `TEST`   | `bool`   | Specifies the test expression to evaluate.     |
-| `MSG`    | `string` | Specifies the error message if the test fails. |
+| `expression` | bool | Specifies the expression to evaluate.     |
+| `message` | string | Specifies the error message to display if the `expression` evaluates as false. |
 
 ### Return values
 
-The `enforce` function returns true if the test expression is true. If the test expression is false, it fails the transaction with the specified error message.
+The `enforce` function returns `true` if the specified `expression` is true. If the `expression` is false, the function fails the transaction with the specified error message.
 
 ### Examples
 
-The following example demonstrates the `enforce` function inside the Pact REPL:
+The following example demonstrates how to use the `enforce` function to evaluate the expression `(+ 2 2) != 4`:
 
 ```pact
-pact>(enforce (!= (+ 2 2) 4) "Chaos reigns")
+pact> (enforce (= (+ 2 2) 4) "All is well")
+true
+```
+
+Because the specified expression when evaluated (`4 = 4`) is true, the `enforce` function returns true and the transaction continues. 
+
+If the expression were false, the transaction would fail with the error message "Chaos reigns".
+For example:
+
+```pact
+(enforce (!= (+ 2 2) 4) "Chaos reigns")
 <interactive>:0:0:Error: Chaos reigns
 ```
 
-In this example, `(enforce (!= (+ 2 2) 4) "Chaos reigns")` is used to evaluate the test expression `(+ 2 2) != 4`. Since this expression is true (`4 != 4` is false), the transaction continues. However, if the expression were false, the transaction would fail with the error message "Chaos reigns". The `enforce` function provides a way to ensure conditions are met within a transaction.
+The `enforce` function provides a way to ensure conditions are met within a transaction.

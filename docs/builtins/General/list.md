@@ -1,11 +1,16 @@
-## list
-Use `list` to create a list from the specified elements. Note that this function is deprecated in Pact 2.1.1 with support for literal lists.
+## list (deprecated)
+
+Use `list` to create a list from the specified `elements`. 
+This function has been deprecated (Pact 2.1.1).
+Use the `list` literal data type.
 
 ### Basic syntax
 
 To create a list from elements, use the following syntax:
 
-`(list elems)`
+```pact
+(list elements)
+```
 
 ### Argument
 
@@ -13,7 +18,7 @@ Use the following argument to specify the elements from which you want to create
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `elems` | `*` | Specifies the elements to be included in the list. |
+| `elements` | any | Specifies the elements to be included in the list. |
 
 ### Return value
 
@@ -21,11 +26,9 @@ The `list` function returns a list containing the specified elements.
 
 ### Examples
 
-The following example demonstrates the use of `list` in the Pact REPL:
+The following example demonstrates how to use the `list` function in the Pact REPL:
 
 ```pact
-pact>(list 1 2 3)
+pact> (list 1 2 3)
 [1 2 3]
 ```
-
-In this example, a list containing the elements 1, 2, and 3 is created using the `list` function.

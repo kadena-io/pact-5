@@ -1,12 +1,14 @@
 ## map
 
-Use `map` to apply an application function (`APP`) to each element in a list (`LIST`), returning a new list of results.
+Use `map` to apply an application function `app` to each element in a `list`, returning a new list of results.
 
 ### Basic syntax
 
 To apply an application function to each element in a list, use the following syntax:
 
-`(map APP LIST)`
+```pact
+(map app [list])
+```
 
 ### Arguments
 
@@ -14,8 +16,8 @@ Use the following arguments to specify the application function and the list of 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `APP` | `x:<b> -> <a>` | Specifies the application function to be applied to each element in the list. |
-| `LIST` | `[<b>]` | Specifies the list of elements to be mapped. |
+| `app` | function `x:<b> -> <a>` | Specifies the application function to be applied to each element in the list. |
+| `list` | [any] | Specifies the list of elements to be mapped. |
 
 ### Return value
 
@@ -23,11 +25,11 @@ The `map` function returns a new list containing the results of applying the app
 
 ### Examples
 
-The following example demonstrates the use of `map` in the Pact REPL:
+The following example demonstrates how to use the `map` function to apply `(+ 1)` to each element in the specified list in the Pact REPL:
 
 ```pact
-pact>(map (+ 1) [1 2 3])
+pact> (map (+ 1) [1 2 3])
 [2 3 4]
 ```
 
-In this example, the application function `(+ 1)` is applied to each element in the list `[1 2 3]`, resulting in a new list `[2 3 4]`.
+When the application function `(+ 1)` is applied to each element in the list, the function returns a new list with the values `[2 3 4]`.

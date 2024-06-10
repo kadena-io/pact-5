@@ -1,24 +1,26 @@
 ## list-module
-Use `list-modules` to list modules available for loading.
 
-**Basic syntax:**
+Use `list-modules` to list the Pact modules that are available for loading.
 
-To list available modules for loading, use the following syntax:
+### Basic syntax
 
-```
+To list the modules available for loading, use the following syntax:
+
+```pact
 list-modules
 ```
 
-**Return value:**
+### Return value
 
 The `list-modules` function returns a list of strings representing the available modules for loading.
 
-**Examples:**
+### Examples
 
-The following example demonstrates the use of `list-modules` in the Pact REPL:
+The following example demonstrates how to use the `list-modules` function in the Pact REPL:
 
 ```pact
-pact> list-modules
+pact> (list-modules)
+["ns"]
 ```
 
-In this example, the available modules for loading are listed.
+In this example, only the namespace module (`"ns"`) is available for loading.

@@ -1,20 +1,23 @@
 ## format
-Use `format` to interpolate variables `VARS` into a `TEMPLATE` string using `{}` placeholders.
+
+Use `format` to interpolate specifies `variables` into a `template` string using curly braces (`{}`) for template placeholders.
 
 ### Basic syntax
 
 To interpolate variables into a template string using `{}` placeholders, use the following syntax:
 
-`(format TEMPLATE VARS)`
+```pact
+(format template variables)
+```
 
 ### Arguments
 
 Use the following arguments to specify the template string and variables for the `format` Pact function:
 
-| Argument  | Type        | Description                                      |
-|-----------|-------------|--------------------------------------------------|
-| `TEMPLATE`  | `string`      | Specifies the template string with `{}` placeholders. |
-| `VARS`      | `[*]`         | Specifies the variables to interpolate into the template.    |
+| Argument | Type | Description |
+|----------|------|-------------|
+| `template` | string | Specifies the template string with `{}` placeholders. |
+| `variables` | [any] | Specifies the variables to interpolate into the template. |
 
 ### Return values
 
@@ -22,11 +25,13 @@ The `format` function returns a new string with the variables interpolated into 
 
 ### Examples
 
-The following example demonstrates the `format` function:
+The following example demonstrates how to use the `format` function with  `"My {} has {}"` as the template string with two `{}` placeholders:
 
 ```pact
-pact>(format "My {} has {}" ["dog" "fleas"])
+pact> (format "My {} has {}" ["dog" "fleas"])
 "My dog has fleas"
 ```
 
-In this example, `"My {} has {}"` is the template string with two `{}` placeholders. The `format` function is used to interpolate the variables `["dog", "fleas"]` into the template. The result of this interpolation is `"My dog has fleas"`. The `format` function provides a way to create dynamic strings with variables inserted into specific locations in Pact contracts.
+In this example, the `format` function replaces the placeholders in the template string with the specified variables `["dog", "fleas"]` to return the result `"My dog has fleas"`. 
+
+The `format` function is often used to create dynamic strings with variables inserted into specific locations in Pact contracts.
