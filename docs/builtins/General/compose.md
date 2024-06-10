@@ -1,33 +1,34 @@
 ## compose
-Use `compose` to compose functions `x` and `y` such that `x` operates on `value`, and `y` operates on the results of `x`.
+
+Use `compose` to compose functions where `oper1` performs an operation using the specified `value` and `oper2` takes the results from `oper1` as input to produce the result for the composed function.
 
 ### Basic syntax
 
-To compose functions `x` and `y` with `value`, use the following syntax:
+To compose a function using `oper1` and `oper2` with the specified `value`, use the following syntax:
 
-`(compose x y value)`
+```pact
+(compose oper1 oper2 value)
+```
 
 ### Arguments
 
-Use the following arguments to specify the functions `x` and `y` for composing with `value` using the `compose` Pact function.
+Use the following arguments to specify the functions `oper1` and `oper2` for composing with `value` using the `compose` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `x` | `x:<a> -> <b>` | Specifies the first function `x` to operate on `value`. |
-| `y` | `x:<b> -> <c>` | Specifies the second function `y` to operate on the results of `x`. |
-| `value` | `<a>` | Specifies the value on which `x` operates. |
+| `oper1` | function `oper1:<a> -> <b>` | Specifies the first function to operate on the specified `value` and return a result to provide input to the second function. |
+| `oper2` | function `oper2:<b> -> <c>` | Specifies the second function to operate on the results of `oper1`. |
+| `value` | any | Specifies the value on which `oper1` operates. |
 
 ### Return values
 
-The `compose` function returns the result of applying the composed functions `x` and `y` on the `value`.
+The `compose` function returns the result of applying `oper2` to the result returned by `oper1` for the specified `value`.
 
 ### Examples
 
-The following example demonstrates the `compose` function in the Pact REPL:
+In the following example, `compose` uses the `contains` function to evaluate the specified list for a string, then uses the `if` function to operate on the results of the `contains` function to display the final result:
 
 ```pact
-pact>(filter (compose (length) (< 2)) ["my" "dog" "has" "fleas"])
-["my" "has"]
+pact> (compose (contains "summer") (if true "Success!") ["spring" "summer" "fall" "winter"]) 
+"Success!"
 ```
-
-In this example, `compose` composes the function `(length)` with the predicate function `(< 2)`, such that `(length)` operates on each element of the list, and `(< 2)` operates on the results of `(length)`. The result is a filtered list containing elements with a length less than 2.

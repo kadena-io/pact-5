@@ -1,11 +1,13 @@
 ## typeof
-The `typeof` function returns the type of the provided value `X` as a string.
+
+Use `typeof` to return the data type of the specified `value`.
+The data type of the specified value is `returned` as a string.
 
 ### Basic syntax
 
-To determine the type of a value, use the following syntax:
+To determine the data type for a `value`, use the following syntax:
 
-`(typeof X)`
+`(typeof value)`
 
 ### Argument
 
@@ -13,19 +15,33 @@ Use the following argument to specify the value for which to determine the type 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `X` | `<a>` | Specifies the value for which to determine the type. |
+| `value` | any | Specifies the value for which to determine the type. |
 
 ### Return value
 
-The `typeof` function returns the type of the provided value `X` as a string.
+The `typeof` function returns the data type of the provided `value` as a string.
 
 ### Examples
 
-The following example demonstrates the usage of the `typeof` function within a Pact script. It determines the type of the string `"hello"`:
+The following example demonstrates how to use the `typeof` function in the Pact REPL. 
+This example returns the data type of the value `'hello`:
 
 ```pact
-(typeof "hello")
+pact> (typeof 'hello)
 "string"
 ```
 
-This example illustrates how to use the `typeof` function to determine the type of a value in Pact.
+The following example returns the data type of the value `8`:
+
+```pact
+pact> (typeof 8)
+"integer"
+```
+
+The following example returns the data type of the value `4.3`:
+
+```pact
+pact> (typeof 4.3)
+"decimal"
+```
+

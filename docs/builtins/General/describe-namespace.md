@@ -1,35 +1,41 @@
 ## describe-namespace
 
-Use `describe-namespace` to describe the namespace `NS`, returning a row object containing the user and admin guards of the namespace, as well as its name.
+Use `describe-namespace` to describe the specified `namespace`, returning a row object containing the user and admin guards of the namespace, as well as its name.
 
 ### Basic syntax
 
-To describe the namespace `NS`, use the following syntax:
+To describe the namespace `namespace`, use the following syntax:
 
-`(describe-namespace NS)`
+```pact
+(describe-namespace namespace)
+```
+### Prerequisites
+
+You must define a namespace with the define-namespace function before you can use the `describe-namespace` function.
+For information about defining a namespace, see [define-namespace](/reference/functions/general#define-namespace).
 
 ### Arguments
 
-Use the following argument to specify the `NS` for the `describe-namespace` Pact function.
+Use the following argument to specify the `namespace` for the `describe-namespace` Pact function.
 
 | Argument | Type   | Description                                 |
 |----------|--------|---------------------------------------------|
-| `ns`       | `string` | Specifies the name of the namespace to describe.|
+| `namespace` | string | Specifies the name of the namespace to describe.|
 
 ### Return values
 
-The `describe-namespace` function returns an object with detailed information about the specified `NS`.
+The `describe-namespace` function returns an object with detailed information about the specified `namespace`.
 
 ### Examples
 
 The following example demonstrates the `describe-namespace` function:
 
 ```pact
-pact>(env-data { "keyset": ["fake-key"]})
+pact> (env-data { "keyset": ["fake-key"]})
 "Setting transaction data"
-pact>(define-namespace 'my-namespace (read-keyset 'keyset) (read-keyset 'keyset))
+pact> (define-namespace 'my-namespace (read-keyset 'keyset) (read-keyset 'keyset))
 "Namespace defined: my-namespace"
-pact>(describe-namespace 'my-namespace)
+pact> (describe-namespace 'my-namespace)
 "admin-guard":KeySet {keys: [fake-key]
 ,pred: keys-all}, "namespace-name":"my-namespace", "user-guard":KeySet {keys: [ fake-key ]
 ,pred: keys-all}}

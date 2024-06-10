@@ -1,19 +1,22 @@
 ## reverse
-The `reverse` function reverses the order of elements in a given `LIST`.
+
+Use `reverse` to reverse the order of specified `elements` in a list.
 
 ### Basic syntax
 
-To reverse a `LIST`, use the following syntax:
+To reverse a specified list of `elements`, use the following syntax:
 
-`(reverse LIST)`
+```pact
+(reverse [elements])
+```
 
 ### Arguments
 
-Use the following argument to specify the `LIST` to be reversed using the `reverse` Pact function.
+Use the following argument to specify the `elements` to be reversed using the `reverse` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `LIST` | `[<a>]` | Specifies the list to be reversed. |
+| `elements` | [any] | Specifies the elements in the list you want to be reversed. |
 
 ### Return value
 
@@ -21,10 +24,27 @@ The `reverse` function returns a new list with the elements in reverse order.
 
 ### Example
 
-The following example demonstrates the usage of the `reverse` function within the Pact REPL. It reverses the order of elements in a given list:
+The following example demonstrates how to use the `reverse` function in the Pact REPL. 
+This example reverses the order of numbers in the list:
 
 ```pact
-pact>(reverse [1 2 3])
+pact> (reverse [1 2 3])
+[3 2 1]
 ```
 
+In the following example, the `reverse` function reverses the order of strings in a list:
+
+```pact
+pact> (reverse ["lastname" "firstname" "age" "occupation"])
+["occupation" "age" "firstname" "lastname"]
+```
+
+You can also reverse the order of objects in a list. 
+For example:
+
+```pact
+(reverse [{"lastname":"pistolas","firstname": "lola"} {"lastname":"smith","firstname": "tim"}])
+[{"lastname": "smith","firstname": "tim"}
+{"lastname": "pistolas","firstname": "lola"}]
+```
 This example illustrates how to use the `reverse` function to reverse the order of elements in a list in Pact.

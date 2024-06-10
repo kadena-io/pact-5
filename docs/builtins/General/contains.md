@@ -1,64 +1,69 @@
 ## contains
 
-Use `contains` to test whether a `LIST` contains a `VALUE`, an `OBJECT` has a `KEY` entry, or a `STRING` contains a substring `VALUE`.
+Use `contains` to test whether a `list` contains a `value`, an `object` has a `key` entry, or a `string` contains a substring `value`.
 
 ### Basic syntax
 
-To test whether a `LIST` contains a `VALUE`, use the following syntax:
+Because `contains` is an overloaded function, there are a few different ways to use it.
+To test whether a `list` contains a `value`, use the following syntax:
 
-`(contains value list)`
+```pact
+(contains value [list])
+```
 
-To test whether an `OBJECT` has a `KEY` entry, use the following syntax:
+To test whether an `object` has a `key` entry, use the following syntax:
 
-`(contains key object)`
+```pact
+(contains key {object})
+```
 
-To test whether a `STRING` contains a substring `VALUE`, use the following syntax:
+To test whether a `string` contains a substring `value`, use the following syntax:
 
-`(contains value string)`
+```pact
+(contains value string)
+```
 
 ### Arguments
 
-Use the following arguments to specify the `VALUE`, `LIST`, `KEY`, `OBJECT`, `STRING` for the `contains` Pact function.
+Use the following arguments to specify the `value`, `list`, `key`, `object`, `string` for the `contains` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `value` | `<a>` | Specifies the value to search for in a `LIST` or `STRING`. |
-| `list` | `[<a>]` | Specifies the list in which to search for the `VALUE`. |
-| `key` | `<a>` | Specifies the key to check for in an `OBJECT`. |
-| `object` | `object:<{o}>` | Specifies the object in which to check for the `KEY`. |
-| `string` | `string` | Specifies the string in which to search for the substring `VALUE`. |
+| `value` | any | Specifies the value to search for in a `list` or `string`. |
+| `list` | [any] | Specifies the list to search for the specified `value`. |
+| `key` | any | Specifies the key to check for in an `object`. |
+| `object` | object | Specifies the object to check for the specified `key`. |
+| `string` | string | Specifies the string to search for the specified `value`. |
 
 ### Return values
 
-The `contains` function returns a boolean value indicating whether the `LIST` contains the `VALUE`, the `OBJECT` has the `KEY` entry, or the `STRING` contains the substring `VALUE`.
+The `contains` function returns a boolean value indicating whether the specified `value` or the specified `key` was found.
 
 ### Examples
 
-The following examples demonstrate the `contains` function in the Pact REPL:
+The following examples demonstrate the `contains` function in the Pact REPL.
 
-1. Testing if a `LIST` contains a `VALUE`:
+To check whether a `list` contains a specified `value`:
 
 ```pact
-pact>(contains 2 [1 2 3])
+pact> (contains 2 [1 2 3])
 true
 ```
 
-In this example, `contains 2 [1 2 3]` checks if the list `[1 2 3]` contains the value `2`, which it does, so it returns `true`.
+In this example, the `contains` functions checks whether the value `2` is included in the `[1 2 3]` list. Because the list contains the specified value, the `contains` function returns `true`.
 
-2. Testing if an `OBJECT` has a `KEY` entry:
+To check whether a specified `object` has `'name` as a key field:
 
 ```pact
-pact>(contains 'name { 'name: "Ted", 'age: 72 })
+pact> (contains 'name { 'name: "Ted", 'age: 72 })
 true
 ```
 
-In this example, `contains 'name { 'name: "Ted", 'age: 72 }` checks if the object has the key `'name`, which it does, so it returns `true`.
-
-3. Testing if a `STRING` contains a substring `VALUE`:
+To check whether the string `"foobar"` contains the substring `"foo"`, 
 
 ```pact
-pact>(contains "foo" "foobar")
+pact> (contains "foo" "foobar")
 true
 ```
 
-In this example, `contains "foo" "foobar"` checks if the string `"foobar"` contains the substring `"foo"`, which it does, so it returns `true`.
+In this example, `contains "foo" "foobar"` checks which it does, so it returns `true`.

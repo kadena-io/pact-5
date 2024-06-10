@@ -1,20 +1,24 @@
 ## yield
-The `yield` function is used to yield an object for use with the 'resume' function in the subsequent Pact step. It optionally allows targeting the subsequent step to execute on a specific chain using automated SPV (Simplified Payment Verification) endorsement-based dispatch.
+
+Use `yield` to yield an object for use with the `resume` function in the subsequent Pact step. 
+Optionally, you can specify a target chain for executing the next step using automated a simplified payment verification (spv) endorsement-based dispatch.
 
 ### Basic syntax
 
-To yield an `OBJECT` for use with `resume`, use the following syntax:
+To yield an `object` for use with the `resume` function, use the following syntax:
 
-`(yield OBJECT [TARGET-CHAIN])`
+```pact
+(yield object [target-chain])
+```
 
 ### Arguments
 
-Use the following arguments to specify the object and, optionally, the target chain for the subsequent step using the `yield` Pact function.
+Use the following arguments to specify the object and, optionally, the target chain for executing the subsequent step using the `yield` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `OBJECT` | `object:<{y}>` | Specifies the object to be yielded for use with 'resume'. |
-| `TARGET-CHAIN` | `string` | (Optional) Specifies the chain ID on which the subsequent step should execute. |
+| `object` | object | Specifies the object to be yielded for use with 'resume'. |
+| `target-chain` | string | (Optional) Specifies the chain ID on which the subsequent step should execute. |
 
 ### Return value
 
@@ -22,13 +26,47 @@ The `yield` function returns the yielded object.
 
 ### Examples
 
-The following examples demonstrate the usage of the `yield` function within a Pact script. They yield an object for use with `resume`, optionally targeting the subsequent step to execute on a specific chain:
+The following examples demonstrate how to use the `yield` function in a Pact script. 
+
+In the following example, the `yield` function creates an object with one key and value that can be passed to the `resume` function,
 
 ```pact
 (yield { "amount": 100.0 })
 ```
+
+Optionally, you can specify a target chain for resuming the transaction.
+For example, to set the target chain to chain 8:
+
 ```pact
-(yield { "amount": 100.0 } "some-chain-id")
+(yield { "amount": 100.0 } "8")
 ```
 
-These examples illustrate how to use the `yield` function to pass data between Pact steps and, optionally, direct the subsequent step execution to a specific chain using automated SPV endorsement-based dispatch.
+The following example illustrates using `yield` and `resume` functions in `defpact` steps:
+
+```pact
+  (defpact copy-account:string(account:string target:string)
+    (step
+      (with-capability (COPY_ACCOUNT account)
+        (with-read guard-lookup-table account
+          { 'webauthn-guard-name := guard-name }
+          (webauthn-guard.copy-account guard-name target)
+
+          (let ((yield-data:object{copy-account-schema} { 'guard-name : guard-name }))
+            (yield yield-data target)
+          )
+        )
+      )
+    )
+
+    (step
+      (resume 
+        { 'guard-name := guard-name }
+        (continue (webauthn-guard.copy-account guard-name target))
+        (write guard-lookup-table target
+          { 'webauthn-guard-name : guard-name }
+        )
+        (coin.create-account (get-account-name guard-name) (get-account-guard guard-name))
+      )
+    )
+  )
+```

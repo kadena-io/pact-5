@@ -1,40 +1,46 @@
 ## enforce-guard
-Use `enforce-guard` to execute a specified `GUARD` or a defined keyset named `KEYSETNAME` to enforce the desired predicate logic.
+
+Use `enforce-guard` to execute a specified `guard` or a defined keyset named `keysetname` to enforce the predicate logic.
 
 ### Basic syntax
 
-To execute a `GUARD` or a defined keyset to enforce desired predicate logic, use the following syntax:
+To use a `guard` to enforce specific conditions defined in predicate logic, use the following syntax:
 
-`(enforce-guard GUARD)`
-`(enforce-guard KEYSETNAME)`
+```pact
+(enforce-guard guard)
+```
+
+To use a defined keyset as a `guard` to enforce specific conditions defined in predicate logic, use the following syntax:
+
+```pact
+(enforce-guard keysetname)
+```
 
 ### Arguments
 
-Use the following arguments to specify the `GUARD` or `KEYSETNAME` for the `enforce-guard` Pact function:
+Use the following arguments to specify the `guard` or `keysetname` for the `enforce-guard` Pact function:
 
 | Argument   | Type   | Description                                        |
 |------------|--------|----------------------------------------------------|
-| `GUARD`      | `guard`  | Specifies the guard to execute.                    |
-| `KEYSETNAME` | `string` | Specifies the name of the defined keyset to enforce.|
+| `guard` | guard | Specifies the name of the guard to execute. |
+| `keysetname` | string | Specifies the name of the defined keyset to enforce.|
 
 ### Return values
 
-The `enforce-guard` function returns a boolean value indicating whether the guard or keyset enforced the desired predicate logic.
+The `enforce-guard` function returns a boolean value indicating whether the conditions specified in the predicate logic that the guard or keyset is there to enforce were met.
 
 ### Examples
 
-The following examples demonstrate the `enforce-guard` function:
-
-1. Execute a guard named 'admin-keyset' to enforce desired logic:
+The following example demonstrates using the keyset guard named `admin-keyset` to enforce specific signing requirements defined in the keyset predicate function, for example with the `keys-all` or `keys-2`predicate:
 
 ```pact
 (enforce-guard 'admin-keyset)
 ```
 
-2. Execute a row guard named 'row-guard' to enforce desired logic:
+In most cases, you use `enforce-guard` in the context of contract logic to ensure a specific condition is `true` before allowing a specific operation to be executed. 
+For example, you might have logic to validate a sender account before allowing a transfer operation.
+You can then call the `enforce-guard` to ensure the sender meets the specified conditions—returning `true` as a result—before executing further logic:
 
 ```pact
-(enforce-guard row-guard)
+(enforce-guard sender-guard)
 ```
-
-In these examples, the `enforce-guard` function is used to execute the specified guard or keyset to enforce the desired predicate logic. The function returns a boolean value indicating whether the guard or keyset enforced the desired logic successfully.
