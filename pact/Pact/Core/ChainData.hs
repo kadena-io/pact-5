@@ -26,6 +26,7 @@ module Pact.Core.ChainData
   , cdChainId, cdBlockHeight
   , cdBlockTime, cdPrevBlockHash
   , cdSender, cdGasLimit, cdGasPrice
+  , NetworkId(..)
   ) where
 
 import Data.Int(Int64)

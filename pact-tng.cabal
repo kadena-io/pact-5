@@ -137,11 +137,12 @@ library pact-request-api
     , pact-tng
     , pact-tng:pact-crypto
   exposed-modules:
-    Pact.Core.Types.Command
-    Pact.Core.Types.Crypto
-    Pact.Core.Types.Orphans
-    Pact.Core.Types.RPC
-    Pact.Core.Types.Util
+    Pact.Core.Command.Types
+    Pact.Core.Command.Client
+    Pact.Core.Command.Crypto
+    Pact.Core.Command.Orphans
+    Pact.Core.Command.RPC
+    Pact.Core.Command.Util
     Pact.Core.Crypto.WebAuthn.Cose.PublicKey
     Pact.Core.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
     Pact.Core.Crypto.WebAuthn.Cose.Registry

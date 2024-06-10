@@ -25,7 +25,7 @@
 --
 -- Hashing types and Scheme class.
 --
-module Pact.Core.Types.Crypto
+module Pact.Core.Command.Crypto
   ( ST.PPKScheme(..)
   , ST.defPPKScheme
   , SPPKScheme(..)
@@ -97,7 +97,7 @@ import Control.DeepSeq (NFData)
 import Data.Hashable
 import Data.Serialize as SZ
 
-import Pact.Core.Types.Orphans ()
+import Pact.Core.Command.Orphans ()
 import qualified Pact.Core.Crypto.WebAuthn.Cose.PublicKey as WA
 import qualified Pact.Core.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as WA
 import qualified Pact.Core.Crypto.WebAuthn.Cose.SignAlg as WA
@@ -106,7 +106,7 @@ import qualified Pact.Core.Crypto.WebAuthn.Cose.Verify as WAVerify
 import Test.QuickCheck.Arbitrary
 import qualified Test.QuickCheck.Gen as Gen
 
-import Pact.Core.Types.Util
+import Pact.Core.Command.Util
 import qualified Pact.Core.Hash as PactHash
 import Pact.Core.Scheme as ST
 

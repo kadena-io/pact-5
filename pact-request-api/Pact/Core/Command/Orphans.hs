@@ -18,7 +18,7 @@
 --
 -- Various orphans.
 --
-module Pact.Core.Types.Orphans() where
+module Pact.Core.Command.Orphans() where
 
 import Control.Monad
 import qualified Data.ByteArray as BA
