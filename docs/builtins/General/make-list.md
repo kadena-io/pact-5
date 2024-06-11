@@ -6,7 +6,9 @@ Use `make-list` to create a list by repeating a specified value a certain number
 
 To create a list by repeating a `value` a specified number of `times`, use the following syntax:
 
-`(make-list times value)`
+```pact
+(make-list times value)
+```
 
 ### Arguments
 
@@ -14,8 +16,8 @@ Use the following arguments to specify the length of the list and the value to b
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `times` | `integer` | Specifies the length of the list to be created. |
-| `value` | `any` | Specifies the value to be repeated to create the list. |
+| `times` | integer | Specifies the length of the list to be created. |
+| `value` | any | Specifies the value to be repeated to create the list. |
 
 ### Return value
 
@@ -23,11 +25,9 @@ The `make-list` function returns a list containing the specified value repeated 
 
 ### Examples
 
-The following example demonstrates the use of `make-list` in the Pact REPL:
+The following example demonstrates how to use the `make-list` function to create a list containing the value `true` five times in the Pact REPL:
 
 ```pact
-pact>(make-list 5 true)
+pact> (make-list 5 true)
 [true true true true true]
 ```
-
-In this example, a list containing the value `true` repeated 5 times is created using the `make-list` function.

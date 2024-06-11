@@ -1,11 +1,14 @@
 ## identity
+
 Use `identity` to return the provided value.
 
 ### Basic syntax
 
 To return the provided value, use the following syntax:
 
-`(identity value)`
+```pact
+(identity value)
+```
 
 ### Arguments
 
@@ -13,7 +16,7 @@ Use the following argument to specify the value you want to return using the `id
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `value` | `*` | Specifies the value to be returned. |
+| `value` | any | Specifies the value to be returned. |
 
 ### Return value
 
@@ -21,11 +24,11 @@ The `identity` function returns the provided value.
 
 ### Examples
 
-The following example demonstrates the use of `identity` within a `map` function in the Pact REPL:
+The following example demonstrates how to use the `identity` function in a `map` function in the Pact REPL:
 
 ```pact
-pact>(map (identity) [1 2 3])
+pact> (map (identity) [1 2 3])
 [1 2 3]
 ```
 
-This example applies the `identity` function to each element in the list `[1, 2, 3]`, effectively returning the same list.
+This example applies the `identity` function to each element in the list `[1 2 3]`, effectively returning the same list.
