@@ -18,7 +18,7 @@ Use the following argument to specify the `value` to continue the nested `defpac
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `value` | `*` | Specifies the value to continue the nested `defpact`. |
+| `value` | `any` | Specifies the value to continue the nested `defpact`. |
 
 ### Return values
 

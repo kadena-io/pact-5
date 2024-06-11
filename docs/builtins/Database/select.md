@@ -35,7 +35,7 @@ To select the columns `'firstName` and `'lastName` from the `people` table where
 (select people ['firstName 'lastName] (where 'name (= "Fatima")))
 ```
 
-To select all columns from the `people` table where the `age` is greater than 30:
+To select all columns from the `people` table where the `age` is less than 30:
 
 ```pact
 (select people (where 'age (> 30)))

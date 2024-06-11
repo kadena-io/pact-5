@@ -18,7 +18,7 @@ The `pact-version` function is called without any arguments to obtain the curren
 
 ```pact
 pact>(pact-version)
-"4.11"
+"5.0"
 ```
 
 In this example, `(pact-version)` is called, which returns the current Pact build version as a string.

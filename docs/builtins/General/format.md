@@ -14,7 +14,7 @@ Use the following arguments to specify the template string and variables for the
 | Argument  | Type        | Description                                      |
 |-----------|-------------|--------------------------------------------------|
 | `TEMPLATE`  | `string`      | Specifies the template string with `{}` placeholders. |
-| `VARS`      | `[*]`         | Specifies the variables to interpolate into the template.    |
+| `VARS`      | `[any]`         | Specifies the variables to interpolate into the template.    |
 
 ### Return values
 

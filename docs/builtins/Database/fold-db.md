@@ -5,7 +5,7 @@ Use `fold-db` to select rows from a table `TABLE` using a predicate `QRY` with b
 
 To select rows from a table, apply a predicate, and accumulate the results using a consumer function, use the following syntax:
 
-`(fold-db TABLE QRT CONSUMER)`
+`(fold-db TABLE QRY CONSUMER)`
 
 ### Arguments
 

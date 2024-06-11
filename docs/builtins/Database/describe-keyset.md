@@ -18,7 +18,7 @@ Use the following argument to specify the keyset for which to retrieve metadata 
 
 ## Return values
 
-The `describe-keyset` function returns an object containing metadata about the specified keyset.
+The `describe-keyset` function returns a guard.
 
 The returned object includes the following properties:
 

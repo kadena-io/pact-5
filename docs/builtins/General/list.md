@@ -13,7 +13,7 @@ Use the following argument to specify the elements from which you want to create
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `elems` | `*` | Specifies the elements to be included in the list. |
+| `elems` | `any` | Specifies the elements to be included in the list. |
 
 ### Return value
 

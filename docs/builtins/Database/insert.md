@@ -21,7 +21,7 @@ Use the following arguments to specify the table, key, and object data you want 
 
 ### Return value
 
-The `insert` function returns a string indicating the success or failure of the operation.
+The `insert` function returns a string indicating the success or an exception on failure of the operation.
 
 ### Examples
 

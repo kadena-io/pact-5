@@ -16,8 +16,8 @@ Use the following arguments to specify the functions `oper1` and `oper2` for com
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `oper1` | function `oper1:<a> -> <b>` | Specifies the first function to operate on the specified `value` and return a result to provide input to the second function. |
-| `oper2` | function `oper2:<b> -> <c>` | Specifies the second function to operate on the results of `oper1`. |
+| `oper1` | `<a> -> <b>` | Specifies the first function to operate on the specified `value` and return a result to provide input to the second function. |
+| `oper2` | `<b> -> <c>` | Specifies the second function to operate on the results of `oper1`. |
 | `value` | any | Specifies the value on which `oper1` operates. |
 
 ### Return values
