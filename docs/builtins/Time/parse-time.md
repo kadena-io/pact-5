@@ -1,5 +1,5 @@
 ## parse-time
-Use `parse-time` to construct time from a UTC value using a specified format. See ["Time Formats" docs](pact-reference.html#time-formats) for supported formats.
+Use `parse-time` to construct time from a UTC value using a specified format. See ["Time Formats" docs](https://docs.kadena.io/reference/functions/time#time-formatsh-299815639) for supported formats.
 
 ### Basic syntax
 
@@ -13,8 +13,8 @@ Use the following arguments to specify the format and UTC value for constructing
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `format` | `string` | Specifies the format for parsing the UTC value. |
-| `utcval` | `string` | Specifies the UTC value to be parsed. |
+| `format` | string | Specifies the format for parsing the UTC value. |
+| `utcval` | string | Specifies the UTC value to be parsed. |
 
 ### Return value
 
