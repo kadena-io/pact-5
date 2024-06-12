@@ -51,7 +51,7 @@ runEvalDropState ee es = fmap fst . runEvalM ee es
 
 benchmarks :: C.Benchmark
 benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) -> do
-  C.bgroup "pact-core-term-gas" [staticExecutionBenchmarks pdb, termGas pdb, interpReturnGas pdb]
+  C.bgroup "TermEvalGasCEK" [staticExecutionBenchmarks pdb, termGas pdb, interpReturnGas pdb]
   where
   mkPactDb = do
     (pdb, db) <- unsafeCreateSqlitePactDb serialisePact ":memory:"

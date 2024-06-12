@@ -36,13 +36,11 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Class
 import Data.Text(Text)
-import Data.List (find)
-import Data.Foldable (foldl')
+import Data.Foldable
 import Data.Maybe(catMaybes)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Bits
 import Data.Either(isLeft, isRight)
-import Data.Foldable(foldlM, traverse_, toList)
 import Data.Decimal(roundTo', Decimal, DecimalRaw(..))
 import Data.Vector(Vector)
 import Data.Maybe(maybeToList)
@@ -2146,7 +2144,7 @@ enforceYield info y = case _yProvenance y of
   Just p -> do
     m <- getCallingModule info
     cid <- viewEvalEnv $ eePublicData . pdPublicMeta . pmChainId
-    let p' = Provenance cid (_mHash m):map (Provenance cid) (toList $ _mBlessed m)
+    let p' = Provenance cid (_mHash m):map (Provenance cid) (S.toList $ _mBlessed m)
     unless (p `elem` p') $ throwExecutionError info (YieldProvenanceDoesNotMatch p p')
 
 coreResume :: (MonadEval b i m) => NativeFunction b i m

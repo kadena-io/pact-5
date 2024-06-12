@@ -15,6 +15,7 @@
 module Pact.Core.IR.Eval.Runtime.Types
  ( EvalM(..)
  , runEvalM
+ , runEvalMResult
  , EvalState(..)
  , esStack
  , esCaps, esEvents
@@ -48,8 +49,6 @@ import Pact.Core.Capabilities
 import Pact.Core.Environment
 import Pact.Core.Debug
 import Pact.Core.Errors
-import Pact.Core.Builtin
-import Pact.Core.Info
 
 
 
@@ -101,3 +100,13 @@ runEvalM
   -> IO (Either (PactError i) a, EvalState b i)
 runEvalM env st (EvalT action) =
   runStateT (runExceptT (runReaderT action env)) st
+{-# INLINEABLE runEvalM #-}
+
+runEvalMResult
+  :: EvalEnv b i
+  -> EvalState b i
+  -> EvalM b i a
+  -> IO (Either (PactError i) a)
+runEvalMResult env st (EvalT action) =
+  evalStateT (runExceptT (runReaderT action env)) st
+{-# INLINEABLE runEvalMResult #-}

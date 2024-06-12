@@ -49,6 +49,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.IORef
 import Data.Monoid
+import Data.Default
 import Data.Foldable(find, toList)
 import Data.Maybe(listToMaybe)
 import Data.Text(Text)
@@ -74,10 +75,16 @@ import Pact.Core.Info
 
 type Eval = EvalM CoreBuiltin SpanInfo
 
-
 lookupFqName :: (MonadEval b i m) => FullyQualifiedName -> m (Maybe (EvalDef b i))
 lookupFqName fqn =
   views (esLoaded.loAllLoaded) (M.lookup fqn) <$> getEvalState
+{-# INLINABLE lookupFqName #-}
+{-# SPECIALISE
+  lookupFqName
+  :: (Default i, Show i)
+  => FullyQualifiedName
+  -> EvalM CoreBuiltin i (Maybe (EvalDef CoreBuiltin i))
+  #-}
 
 getDefCap :: (MonadEval b i m) => i -> FullyQualifiedName -> m (EvalDefCap b i)
 getDefCap info fqn = lookupFqName fqn >>= \case
@@ -199,6 +206,7 @@ asBool
 asBool _ _ (PLiteral (LBool b)) = pure b
 asBool info b pv =
   throwExecutionError info (NativeArgumentsError (builtinName b) [pvToArgTypeError pv])
+{-# INLINABLE asBool #-}
 
 checkSchema :: M.Map Field PactValue -> Schema -> Bool
 checkSchema o (Schema _ sc) =

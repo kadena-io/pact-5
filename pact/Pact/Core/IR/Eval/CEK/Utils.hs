@@ -18,7 +18,6 @@ import Pact.Core.PactValue
 import Pact.Core.Builtin
 import Pact.Core.Type
 import Pact.Core.Errors
-import Pact.Core.IR.Eval.Runtime.Types
 import Pact.Core.Persistence
 import Pact.Core.Environment
 import Pact.Core.Gas

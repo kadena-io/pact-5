@@ -15,8 +15,8 @@ main = do
   v <- Env.lookupEnv "RESET_COIN_BENCH_DB"
   C.defaultMain
     [ ContractBench.allBenchmarks (v == Just "1")
-    -- , InterpreterGas.benchmarks
-    -- , BuiltinsGas.benchmarks
+    , InterpreterGas.benchmarks
+    , BuiltinsGas.benchmarks
     ]
 
 

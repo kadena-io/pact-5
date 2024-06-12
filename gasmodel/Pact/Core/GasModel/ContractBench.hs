@@ -2,6 +2,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DataKinds #-}
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module Pact.Core.GasModel.ContractBench where
 
@@ -49,6 +50,7 @@ import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import Pact.Core.Gas.TableGasModel
 import Pact.Core.Gas
 import Pact.Core.Namespace
+import Pact.Core.IR.Term
 import Pact.Core.Serialise
 import Pact.Core.Persistence.MockPersistence
 
@@ -60,6 +62,7 @@ import Pact.Core.GasModel.Utils
 import Data.Decimal
 import Criterion.Main
 import Pact.Core.Pretty
+import Pact.Core.Literal
 import qualified Data.Text.Encoding as T
 
 parseOnlyExpr :: Text -> Either PactErrorI Lisp.ParsedExpr
@@ -224,6 +227,23 @@ coinTransferCreateTxRaw :: Text -> Text -> Text -> Text
 coinTransferCreateTxRaw sender receiver receiverKs =
   [text| (coin.transfer-create "$sender" "$receiver" (read-keyset "$receiverKs") 200.0) |]
 
+factorialNTXRaw :: Int -> Text
+factorialNTXRaw n =
+  [text| (fold (*) 1 (enumerate 1 ${n'})) |]
+  where
+  n' = T.pack (show n)
+
+deepLetTXRaw :: Int -> Text
+deepLetTXRaw n =
+  [text| (let* ($nestedLets) $lastVar) |]
+  where
+  initial = "(x1 1)"
+  nestedLets = T.concat $ initial :
+    [ [text| (x$ncurr (* $ncurr x${nprev})) |] | (prev, curr) <- zip [1..n] [2..n]
+    , let nprev = T.pack (show prev)
+    , let ncurr = T.pack (show curr)]
+  lastVar = "x" <> T.pack (show n)
+
 getRightIO :: Exception e => Either e a -> IO a
 getRightIO = either throwIO pure
 
@@ -241,7 +261,7 @@ runEvalTx
   -> Interpreter CoreBuiltin SpanInfo (EvalM CoreBuiltin SpanInfo) -> Benchmark
 runEvalTx title termToCompile pdb signers envdata interp =
   bench title $ perRunEnvWithCleanup mkTerm doRollback $ \ ~(term, ee, es) ->
-    fst <$> runEvalM ee es (eval interp PImpure term)
+    runEvalMResult ee es (eval interp PImpure term)
     where
     mkTerm = do
       () <$ _pdbBeginTx pdb Transactional
@@ -255,6 +275,50 @@ runEvalTx title termToCompile pdb signers envdata interp =
     doRollback _ = do
       _pdbRollbackTx pdb
 
+runEvalDesugarTx
+  :: String
+  -> Text
+  -> PactDb CoreBuiltin SpanInfo
+  -> Map PublicKeyText (Set (CapToken QualifiedName PactValue))
+  -> PactValue
+  -> Interpreter CoreBuiltin SpanInfo (EvalM CoreBuiltin SpanInfo)
+  -> Benchmark
+runEvalDesugarTx title termToCompile pdb signers envdata interp =
+  bench title $ perRunEnvWithCleanup mkTerm doRollback $ \ ~(pterm, ee) ->
+    runEvalMResult ee def $ do
+      DesugarOutput term _ <- runDesugarTerm pterm
+      eval interp PImpure term
+    where
+    mkTerm = do
+      () <$ _pdbBeginTx pdb Transactional
+      ee <- setupBenchEvalEnv pdb signers envdata
+      -- note, we will return this eval state, as it definitely contains the loaded coin contract here.
+      pterm <- getRightIO $ liftEither $ parseOnlyExpr termToCompile
+      pure (pterm, ee)
+    doRollback _ = do
+      _pdbRollbackTx pdb
+
+-- | Run A benchmark of pure code only, no db interactions.
+--   Generally good for
+runPureBench
+  :: String
+  -> Text
+  -> PactDb CoreBuiltin SpanInfo
+  -> Interpreter CoreBuiltin SpanInfo (EvalM CoreBuiltin SpanInfo)
+  -> Benchmark
+runPureBench title termToCompile pdb interp =
+  bench title $ perRunEnv mkTerm $ \ ~(term, ee) ->
+    runEvalMResult ee def (eval interp PImpure term)
+    where
+    mkTerm = do
+      ee <- setupBenchEvalEnv pdb mempty (PObject mempty)
+      -- note, we will return this eval state, as it definitely contains the loaded coin contract here.
+      eterm <- runEvalMResult ee def $ do
+        t <- liftEither $ parseOnlyExpr termToCompile
+        _dsOut <$> runDesugarTerm t
+      term <- getRightIO eterm
+      pure (term, ee)
+
 runCoinTransferTx
   :: PactDb CoreBuiltin SpanInfo
   -> CoinBenchSenders
@@ -264,12 +328,10 @@ runCoinTransferTx
   -> Benchmark
 runCoinTransferTx pdb sender receiver interp interpName =
   runEvalTx title termRaw pdb (transferSigners sender receiver) (PObject mempty) interp
-  -- bench title $ perRunEnvWithCleanup mkTerm doRollback $ \ ~(term, ee, es) ->
-  --   fst <$> runEvalM ee es (eval interp PImpure term)
     where
     termRaw = coinTransferTxRaw (kColonFromSender sender) (kColonFromSender receiver)
     title =
-      "Coin transfer from "
+      "EvalOnly(transfer) from "
       <> getSender sender
       <> " to "
       <> getSender receiver
@@ -284,29 +346,18 @@ runCoinTransferCreateTx
   -> String
   -> Benchmark
 runCoinTransferCreateTx pdb sender receiver interp interpName =
-  bench title $ perRunEnvWithCleanup mkTerm doRollback $ \ ~(term, ee, es) ->
-    fst <$> runEvalM ee es (eval interp PImpure term)
+  runEvalTx title termRaw pdb signers envData interp
     where
     title =
-      "Coin transfer-create from "
+      "EvalOnly(transfer-create) from "
       <> getSender sender
       <> " to "
       <> getSender receiver
       <> " using: "
       <> interpName
-    mkTerm = do
-      () <$ _pdbBeginTx pdb Transactional
-      let ks = M.fromList [(Field "ks", mkKs (pubKeyFromSender receiver))]
-      ee <- setupBenchEvalEnv pdb (transferSigners sender receiver) (PObject ks)
-      let termText = coinTransferCreateTxRaw (kColonFromSender sender) (kColonFromSender receiver) "ks"
-      -- note, we will return this eval state, as it definitely contains the loaded coin contract here.
-      (eterm, es) <- runEvalM ee def $ do
-        t <- liftEither $ parseOnlyExpr termText
-        _dsOut <$> runDesugarTerm t
-      term <- getRightIO eterm
-      pure (term, ee, es)
-    doRollback _ = do
-      _pdbRollbackTx pdb
+    termRaw = coinTransferCreateTxRaw (kColonFromSender sender) (kColonFromSender receiver) "ks"
+    signers = transferSigners sender receiver
+    envData = PObject $ M.fromList [(Field "ks", mkKs (pubKeyFromSender receiver))]
 
 runCoinTransferCreateTxDesugar
   :: PactDb CoreBuiltin SpanInfo
@@ -317,12 +368,12 @@ runCoinTransferCreateTxDesugar
   -> Benchmark
 runCoinTransferCreateTxDesugar pdb sender receiver interp interpName =
   bench title $ perRunEnvWithCleanup mkTerm doRollback $ \ ~(term, ee) ->
-    fmap fst $ runEvalM ee def $ do
+    runEvalMResult ee def $ do
       t <- runDesugarTerm term
       eval interp PImpure (_dsOut t)
     where
     title =
-      "Coin transfer-create from "
+      "DesugarEval(transfer-create) from "
       <> getSender sender
       <> " to "
       <> getSender receiver
@@ -347,27 +398,18 @@ runCoinTransferTxDesugar
   -> String
   -> Benchmark
 runCoinTransferTxDesugar pdb sender receiver interp interpName =
-  bench title $ perRunEnvWithCleanup mkTerm doRollback $ \ ~(term, ee) ->
-    fmap fst $ runEvalM ee def $ do
-      t <- runDesugarTerm term
-      eval interp PImpure (_dsOut t)
+  runEvalDesugarTx title termRaw pdb signers envData interp
     where
     title =
-      "Coin transfer from "
+      "DesugarEval(transfer) from "
       <> getSender sender
       <> " to "
       <> getSender receiver
       <> " including name resolution: "
       <> interpName
-    mkTerm = do
-      () <$ _pdbBeginTx pdb Transactional
-      ee <- setupBenchEvalEnv pdb (transferSigners sender receiver) (PObject mempty)
-      let termText = coinTransferTxRaw (kColonFromSender sender) (kColonFromSender receiver)
-      -- note, we will return this eval state, as it definitely contains the loaded coin contract here.
-      parsedTerm <- getRightIO $ parseOnlyExpr termText
-      pure (parsedTerm, ee)
-    doRollback _ = do
-      _pdbRollbackTx pdb
+    signers = transferSigners sender receiver
+    envData = PObject mempty
+    termRaw = coinTransferTxRaw (kColonFromSender sender) (kColonFromSender receiver)
 
 transferSigners :: CoinBenchSenders -> CoinBenchSenders -> Map PublicKeyText (Set (CapToken QualifiedName PactValue))
 transferSigners sender receiver =
@@ -376,27 +418,35 @@ transferSigners sender receiver =
 allBenchmarks :: Bool -> Benchmark
 allBenchmarks resetDb = do
   envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) ->
-    bgroup "Coin benches"
-      [coinTransferBenches pdb]
+    bgroup "PactBenchmarks"
+      [ pureBenchmarks pdb
+      , coinTransferBenches pdb]
   where
   coinTransferBenches pdb =
-    bgroup "transfer benchmarks" [
-    -- [ runCoinTransferTx pdb CoinBenchSenderA CoinBenchSenderB interpretBigStep "CEK"
-    -- , runCoinTransferTx pdb CoinBenchSenderA CoinBenchSenderB interpretDirect "Direct"
-    runCoinTransferTx pdb CoinBenchSenderA CoinBenchSenderB interpretSpecialized "CEKSpec"
-    -- , runCoinTransferTxDesugar pdb CoinBenchSenderA CoinBenchSenderB interpretBigStep "CEK"
-    -- , runCoinTransferTxDesugar pdb CoinBenchSenderA CoinBenchSenderB interpretDirect "Direct"
-    -- , runCoinTransferTxDesugar pdb CoinBenchSenderA CoinBenchSenderB interpretSpecialized "CEKSpec"
+    bgroup "CoinTransfer"
+    [ runCoinTransferTx pdb CoinBenchSenderA CoinBenchSenderB interpretBigStep "CEK"
+    , runCoinTransferTx pdb CoinBenchSenderA CoinBenchSenderB interpretDirect "Direct"
+    , runCoinTransferTx pdb CoinBenchSenderA CoinBenchSenderB interpretSpecialized "CEKSpec"
+    -- Transfer with desugar
+    , runCoinTransferTxDesugar pdb CoinBenchSenderA CoinBenchSenderB interpretBigStep "CEK"
+    , runCoinTransferTxDesugar pdb CoinBenchSenderA CoinBenchSenderB interpretDirect "Direct"
+    , runCoinTransferTxDesugar pdb CoinBenchSenderA CoinBenchSenderB interpretSpecialized "CEKSpec"
     -- transfer-create sender A to B
-    -- , runCoinTransferCreateTx pdb CoinBenchSenderA CoinBenchSenderB interpretBigStep "CEK"
-    -- , runCoinTransferCreateTx pdb CoinBenchSenderA CoinBenchSenderB interpretDirect "Direct"
-    -- , runCoinTransferCreateTxDesugar pdb CoinBenchSenderA CoinBenchSenderB interpretBigStep "CEK"
-    -- , runCoinTransferCreateTxDesugar pdb CoinBenchSenderA CoinBenchSenderB interpretDirect "Direct"
+    , runCoinTransferCreateTx pdb CoinBenchSenderA CoinBenchSenderB interpretBigStep "CEK"
+    , runCoinTransferCreateTx pdb CoinBenchSenderA CoinBenchSenderB interpretDirect "Direct"
+    , runCoinTransferCreateTxDesugar pdb CoinBenchSenderA CoinBenchSenderB interpretBigStep "CEK"
+    , runCoinTransferCreateTxDesugar pdb CoinBenchSenderA CoinBenchSenderB interpretDirect "Direct"
     -- transfer-create sender A to C
-    -- , runCoinTransferCreateTx pdb CoinBenchSenderA CoinBenchSenderC interpretBigStep "CEK"
-    -- , runCoinTransferCreateTx pdb CoinBenchSenderA CoinBenchSenderC interpretDirect "Direct"
-    -- , runCoinTransferCreateTxDesugar pdb CoinBenchSenderA CoinBenchSenderC interpretBigStep "CEK"
-    -- , runCoinTransferCreateTxDesugar pdb CoinBenchSenderA CoinBenchSenderC interpretDirect "Direct"
+    , runCoinTransferCreateTx pdb CoinBenchSenderA CoinBenchSenderC interpretBigStep "CEK"
+    , runCoinTransferCreateTx pdb CoinBenchSenderA CoinBenchSenderC interpretDirect "Direct"
+    , runCoinTransferCreateTxDesugar pdb CoinBenchSenderA CoinBenchSenderC interpretBigStep "CEK"
+    , runCoinTransferCreateTxDesugar pdb CoinBenchSenderA CoinBenchSenderC interpretDirect "Direct"
+    ]
+  pureBenchmarks pdb = bgroup "PureCode"
+    [ runPureBench "Factorial 1000" (factorialNTXRaw 1000) pdb interpretSpecialized
+    , runPureBench "Let 100" (deepLetTXRaw 100) pdb interpretSpecialized
+    , runPureBench "Let 1000" (deepLetTXRaw 1000) pdb interpretSpecialized
+    , runPureBench "Let 10000" (deepLetTXRaw 10000) pdb interpretSpecialized
     ]
   mkPactDb = do
     c <- doesFileExist benchmarkSqliteFile
@@ -432,3 +482,29 @@ _testCoinTransfer = withSqlitePactDb serialisePact_raw_spaninfo (T.pack benchmar
   term <- getRightIO eterm
   (out, _) <- runEvalM ee es (eval interpretDirect PImpure term)
   print out
+
+unsafeModuleHash :: Text -> Hash
+unsafeModuleHash e =
+  let (Just (ModuleHash e')) = parseModuleHash e
+  in e'
+
+_runCoinXferDirect :: IO ()
+_runCoinXferDirect = withSqlitePactDb serialisePact_raw_spaninfo (T.pack benchmarkSqliteFile) $ \pdb -> do
+  ee <- setupBenchEvalEnv pdb (transferSigners CoinBenchSenderA CoinBenchSenderB) (PObject mempty)
+  (m, es) <- runEvalM ee def $ getModule def pdb (ModuleName "coin" Nothing)
+  _ <- getRightIO m
+  let es' = def {_esLoaded=_esLoaded es}
+  forM_ [1 :: Integer .. 10000] $ \_ -> do
+    (out, _) <- runEvalM ee es' $ eval interpretSpecialized PImpure term
+    writeIORef (_eeGasRef ee) mempty
+    either throw print out
+  pure ()
+  where
+  term = App (Var (mkCoinIdent "transfer") def)
+    [ Constant (LString (kColonFromSender CoinBenchSenderA)) def
+    , Constant (LString (kColonFromSender CoinBenchSenderB)) def
+    , Constant (LDecimal 200) def] def
+
+
+mkCoinIdent :: Text -> Name
+mkCoinIdent n = Name n (NTopLevel (ModuleName "coin" Nothing) (ModuleHash {_mhHash = unsafeModuleHash "DFsR46Z3vJzwyd68i0MuxIF0JxZ_OJfIaMyFFgAyI4w"}))

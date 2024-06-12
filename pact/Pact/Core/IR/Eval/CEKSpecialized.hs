@@ -26,40 +26,28 @@ module Pact.Core.IR.Eval.CEKSpecialized
   ( eval
   , interpretGuard
   , coreBuiltinEnv
-  -- , applyLam
-  -- , mkDefPactClosure
+  , evalResumePact
   , resumePact
-  -- , evalCap
-  -- , nameToFQN
-  -- , guardTable
-  -- , isKeysetInSigs
-  -- , isKeysetNameInSigs
-  -- , requireCap
-  -- , installCap
-  -- , composeCap
-  -- , mkDefunClosure
-  -- , enforceNotWithinDefcap
-  -- , acquireModuleAdmin
-  -- , isCapInStack
-  -- , filterIndex
-  -- , findMsgSigCap
-  -- , evalWithStackFrame
-  -- , emitCapability
-  -- , guardForModuleCall
-  -- , enforceGuard
-  -- , evalResumePact
-  -- , applyContSmallStep
-  -- , returnCEKValueSmallStep
-  -- , evalCEKSmallStep
-  -- , CEKEval(..)
   , module Pact.Core.IR.Eval.CEK.Types
   , module Pact.Core.IR.Eval.CEK.Utils
-  -- , returnCEKError
   ) where
 
 
+#ifndef WITHOUT_CRYPTO
+import qualified Control.Lens as Lens
+#endif
 import Control.Lens hiding (from, to, op, parts)
 import Control.Monad
+import Control.Monad.IO.Class
+import Data.Attoparsec.Text(parseOnly)
+import Data.Bits
+import Data.Either(isLeft, isRight)
+import Data.Foldable
+import Data.Decimal(roundTo', Decimal, DecimalRaw(..))
+import Data.Vector(Vector)
+import Data.Maybe(maybeToList)
+import Numeric(showIntAtBase)
+
 import Data.List.NonEmpty(NonEmpty(..))
 import qualified Data.RAList as RAList
 import qualified Data.Text as T
@@ -68,6 +56,12 @@ import qualified Data.Vector as V
 import qualified Data.Set as S
 import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
+import qualified Data.Vector.Algorithms.Intro as V
+import qualified Data.Char as Char
+import qualified Data.ByteString as BS
+import qualified GHC.Exts as Exts
+import qualified GHC.Integer.Logarithms as IntLog
+import qualified Pact.Time as PactTime
 
 import Pact.Core.Builtin
 import Pact.Core.Names
@@ -90,61 +84,15 @@ import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Namespace
 import Pact.Core.DefPacts.Types
 import Pact.Core.SizeOf
-
-import Pact.Core.IR.Eval.CEK.Types hiding (Eval)
-import Pact.Core.IR.Eval.CEK.Utils
-
-import Control.Monad.IO.Class
-import Data.Attoparsec.Text(parseOnly)
-import Data.Bits
-import Data.Either(isLeft, isRight)
-import Data.Foldable
-import Data.Decimal(roundTo', Decimal, DecimalRaw(..))
-import Data.Vector(Vector)
-import Data.Maybe(maybeToList)
-import Numeric(showIntAtBase)
-import qualified Data.Vector as V
-import qualified Data.Vector.Algorithms.Intro as V
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
-import qualified Data.Map.Strict as M
-import qualified Data.Set as S
-import qualified Data.Char as Char
-import qualified Data.ByteString as BS
-import qualified GHC.Exts as Exts
-import qualified GHC.Integer.Logarithms as IntLog
-import qualified Pact.Time as PactTime
-
-#ifndef WITHOUT_CRYPTO
-import qualified Control.Lens as Lens
-#endif
-
-import Pact.Core.Builtin
-import Pact.Core.Literal
-import Pact.Core.Errors
-import Pact.Core.Hash
-import Pact.Core.Names
-import Pact.Core.Guards
-import Pact.Core.PactValue
-import Pact.Core.Persistence
-import Pact.Core.DefPacts.Types
-import Pact.Core.Environment
-import Pact.Core.Capabilities
-import Pact.Core.Namespace
-import Pact.Core.Gas
-import Pact.Core.Type
 import Pact.Core.Verifiers
 #ifndef WITHOUT_CRYPTO
 import Pact.Core.Crypto.Pairing
 import Pact.Core.Crypto.Hash.Poseidon
 #endif
-
-import Pact.Core.IR.Term
-import Pact.Core.IR.Eval.Runtime
-import Pact.Core.StableEncoding
-import Pact.Core.SizeOf
 import Pact.Core.SPV
 
+import Pact.Core.IR.Eval.CEK.Types hiding (Eval)
+import Pact.Core.IR.Eval.CEK.Utils
 import qualified Pact.Core.Pretty as Pretty
 import qualified Pact.Core.Principal as Pr
 import qualified Pact.Core.Trans.TOps as Musl
@@ -3805,279 +3753,279 @@ coreEnforceVerifier info b cont handler _env = \case
 
 coreBuiltinEnv
   :: BuiltinEnv CEKBigStep CoreBuiltin SpanInfo Eval
-coreBuiltinEnv i b env = mkBuiltinFn i b env (coreBuiltinRuntimeArray V.! (fromEnum b))
+coreBuiltinEnv i b env = mkBuiltinFn i b env (coreBuiltinRuntime b)
 {-# INLINEABLE coreBuiltinEnv #-}
 
-coreBuiltinRuntimeArray :: Vector (NativeFunction CEKBigStep CoreBuiltin SpanInfo Eval)
-coreBuiltinRuntimeArray =
-  V.fromList [
-  -- Addition/Concatenation
-  -- = CoreAdd
-  rawAdd
-  -- | CoreSub
-  , rawSub
-  -- | CoreMultiply
-  , rawMul
-  -- | CoreDivide
-  , rawDiv
-  -- | CoreNegate
-  , rawNegate
-  -- | CoreAbs
-  , rawAbs
-  -- | CorePow
-  , rawPow
-  -- | CoreNot
-  , notBool
-  -- | CoreEq
-  , rawEq
-  -- | CoreNeq
-  , rawNeq
-  -- | CoreGT
-  , rawGt
-  -- | CoreGEQ
-  , rawGeq
-  -- | CoreLT
-  , rawLt
-  -- | CoreLEQ
-  , rawLeq
-  -- | CoreBitwiseAnd
-  , bitAndInt
-  -- | CoreBitwiseOr
-  , bitOrInt
-  -- | CoreBitwiseXor
-  , bitXorInt
-  -- | CoreBitwiseFlip
-  , bitComplementInt
-  -- | CoreBitShift
-  , bitShiftInt
-  -- | CoreRound
-  , roundDec
-  -- | CoreCeiling
-  , ceilingDec
-  -- | CoreFloor
-  , floorDec
-  -- | CoreRoundPrec
-  , roundDec
-  -- | CoreCeilingPrec
-  ,  ceilingDec
-  -- | CoreFloorPrec
-  , floorDec
-  -- | CoreExp
-  , rawExp
-  -- | CoreLn
-  , rawLn
-  -- | CoreSqrt
-  , rawSqrt
-  -- | CoreLogBase
-  , rawLogBase
-  -- | CoreLength
-  ,  rawLength
-  -- | CoreTake
-  , rawTake
-  -- | CoreDrop
-  , rawDrop
-  -- | CoreConcat
-  , coreConcat
-  -- | CoreReverse
-  , rawReverse
-  -- | CoreContains
-  , rawContains
-  -- | CoreSort
-  , rawSort
-  -- | CoreSortObject
-  , rawSortObject
-  -- | CoreRemove
-  , coreRemove
-  -- | CoreMod
-  , modInt
-  -- | CoreMap
-  , coreMap
-  -- | CoreFilter
-  , coreFilter
-  -- | CoreZip
-  , zipList
-  -- | CoreIntToStr
-  , coreIntToStr
-  -- | CoreStrToInt
-  , coreStrToInt
-  -- | CoreStrToIntBase
-  , coreStrToIntBase
-  -- | CoreFold
-  , coreFold
-  -- | CoreDistinct
-  , coreDistinct
-  -- | CoreFormat
-  , coreFormat
-  -- | CoreEnumerate
-  , coreEnumerate
-  -- | CoreEnumerateStepN
-  , coreEnumerateStepN
-  -- -- Guards + read functions
-  -- | CoreShow
-  , rawShow
-  -- | CoreReadMsg
-  , coreReadMsg
-  -- | CoreReadMsgDefault
-  , coreReadMsg
-  -- | CoreReadInteger
-  , coreReadInteger
-  -- | CoreReadDecimal
-  , coreReadDecimal
-  -- | CoreReadString
-  , coreReadString
-  -- | CoreReadKeyset
-  , coreReadKeyset
-  -- | CoreEnforceGuard
-  , coreEnforceGuard
-  -- | CoreEnforceKeyset
-  , coreEnforceGuard
-  -- | CoreKeysetRefGuard
-  , keysetRefGuard
-  -- | CoreAt
-  , coreAccess
-  -- | CoreMakeList
-  , makeList
-  -- | CoreB64Encode
-  , coreB64Encode
-  -- | CoreB64Decode
-  , coreB64Decode
-  -- | CoreStrToList
-  , strToList
-  -- | CoreYield
-  , coreYield
-  -- | CoreYieldToChain
-  , coreYield
-  -- | CoreResume
-  , coreResume
-  -- | CoreBind
-  , coreBind
-  -- | CoreRequireCapability
-  , requireCapability
-  -- | CoreComposeCapability
-  , composeCapability
-  -- | CoreInstallCapability
-  , installCapability
-  -- | CoreEmitEvent
-  , coreEmitEvent
-  -- | CoreCreateCapabilityGuard
-  , createCapGuard
-  -- | CoreCreateCapabilityPactGuard
-  , createCapabilityPactGuard
-  -- | CoreCreateModuleGuard
-  , createModuleGuard
-  -- | CoreCreateDefPactGuard
-  , createDefPactGuard
-  -- | CoreCreateTable
-  , createTable
-  -- | CoreDescribeKeyset
-  , dbDescribeKeySet
-  -- | CoreDescribeModule
-  , describeModule
-  -- | CoreDescribeTable
-  , dbDescribeTable
-  -- | CoreDefineKeySet
-  , defineKeySet
-  -- | CoreDefineKeysetData
-  , defineKeySet
-  -- | CoreFoldDb
-  , foldDb
-  -- | CoreInsert
-  , dbInsert
-  -- | CoreKeyLog
-  , dbKeyLog
-  -- | CoreKeys
-  , dbKeys
-  -- | CoreRead
-  , dbRead
-  -- | CoreSelect
-  , dbSelect
-  -- | CoreSelectWithFields
-  , dbSelect
-  -- | CoreUpdate
-  , dbUpdate
-  -- | CoreWithDefaultRead
-  , dbWithDefaultRead
-  -- | CoreWithRead
-  , dbWithRead
-  -- | CoreWrite
-  , dbWrite
-  -- | CoreTxIds
-  , dbTxIds
-  -- | CoreTxLog
-  , dbTxLog
-  -- | CoreTxHash
-  , txHash
-  -- | CoreAndQ
-  , coreAndQ
-  -- | CoreOrQ
-  , coreOrQ
-  -- | CoreWhere
-  , coreWhere
-  -- | CoreNotQ
-  , coreNotQ
-  -- | CoreHash
-  , coreHash
-  -- | CoreContinue
-  , coreContinue
-  -- | CoreParseTime
-  , parseTime
-  -- | CoreFormatTime
-  , formatTime
-  -- | CoreTime
-  , time
-  -- | CoreAddTime
-  , addTime
-  -- | CoreDiffTime
-  , diffTime
-  -- | CoreHours
-  , hours
-  -- | CoreMinutes
-  , minutes
-  -- | CoreDays
-  , days
-  -- | CoreCompose
-  , coreCompose
-  -- | CoreCreatePrincipal
-  , coreCreatePrincipal
-  -- | CoreIsPrincipal
-  , coreIsPrincipal
-  -- | CoreTypeOfPrincipal
-  , coreTypeOfPrincipal
-  -- | CoreValidatePrincipal
-  , coreValidatePrincipal
-  -- | CoreNamespace
-  , coreNamespace
-  -- | CoreDefineNamespace
-  , coreDefineNamespace
-  -- | CoreDescribeNamespace
-  , coreDescribeNamespace
-  -- | CoreChainData
-  , coreChainData
-  -- | CoreIsCharset
-  , coreIsCharset
-  -- | CorePactId
-  , corePactId
-  -- | CoreZkPairingCheck
-  , zkPairingCheck
-  -- | CoreZKScalarMult
-  , zkScalarMult
-  -- | CoreZkPointAdd
-  , zkPointAddition
-  -- | CorePoseidonHashHackachain
-  , poseidonHash
-  -- | CoreTypeOf
-  , coreTypeOf
-  -- | CoreDec
-  , coreDec
-  -- | CoreCond
-  , coreCond
-  -- | CoreIdentity
-  , coreIdentity
-  -- | CoreVerifySPV
-  , coreVerifySPV
-  -- | CoreEnforceVerifier
-  , coreEnforceVerifier
-  ]
+-- coreBuiltinRuntimeArray :: Vector (NativeFunction CEKBigStep CoreBuiltin SpanInfo Eval)
+-- coreBuiltinRuntimeArray =
+--   V.fromList [
+--   -- Addition/Concatenation
+--   -- = CoreAdd
+--   rawAdd
+--   -- | CoreSub
+--   , rawSub
+--   -- | CoreMultiply
+--   , rawMul
+--   -- | CoreDivide
+--   , rawDiv
+--   -- | CoreNegate
+--   , rawNegate
+--   -- | CoreAbs
+--   , rawAbs
+--   -- | CorePow
+--   , rawPow
+--   -- | CoreNot
+--   , notBool
+--   -- | CoreEq
+--   , rawEq
+--   -- | CoreNeq
+--   , rawNeq
+--   -- | CoreGT
+--   , rawGt
+--   -- | CoreGEQ
+--   , rawGeq
+--   -- | CoreLT
+--   , rawLt
+--   -- | CoreLEQ
+--   , rawLeq
+--   -- | CoreBitwiseAnd
+--   , bitAndInt
+--   -- | CoreBitwiseOr
+--   , bitOrInt
+--   -- | CoreBitwiseXor
+--   , bitXorInt
+--   -- | CoreBitwiseFlip
+--   , bitComplementInt
+--   -- | CoreBitShift
+--   , bitShiftInt
+--   -- | CoreRound
+--   , roundDec
+--   -- | CoreCeiling
+--   , ceilingDec
+--   -- | CoreFloor
+--   , floorDec
+--   -- | CoreRoundPrec
+--   , roundDec
+--   -- | CoreCeilingPrec
+--   ,  ceilingDec
+--   -- | CoreFloorPrec
+--   , floorDec
+--   -- | CoreExp
+--   , rawExp
+--   -- | CoreLn
+--   , rawLn
+--   -- | CoreSqrt
+--   , rawSqrt
+--   -- | CoreLogBase
+--   , rawLogBase
+--   -- | CoreLength
+--   ,  rawLength
+--   -- | CoreTake
+--   , rawTake
+--   -- | CoreDrop
+--   , rawDrop
+--   -- | CoreConcat
+--   , coreConcat
+--   -- | CoreReverse
+--   , rawReverse
+--   -- | CoreContains
+--   , rawContains
+--   -- | CoreSort
+--   , rawSort
+--   -- | CoreSortObject
+--   , rawSortObject
+--   -- | CoreRemove
+--   , coreRemove
+--   -- | CoreMod
+--   , modInt
+--   -- | CoreMap
+--   , coreMap
+--   -- | CoreFilter
+--   , coreFilter
+--   -- | CoreZip
+--   , zipList
+--   -- | CoreIntToStr
+--   , coreIntToStr
+--   -- | CoreStrToInt
+--   , coreStrToInt
+--   -- | CoreStrToIntBase
+--   , coreStrToIntBase
+--   -- | CoreFold
+--   , coreFold
+--   -- | CoreDistinct
+--   , coreDistinct
+--   -- | CoreFormat
+--   , coreFormat
+--   -- | CoreEnumerate
+--   , coreEnumerate
+--   -- | CoreEnumerateStepN
+--   , coreEnumerateStepN
+--   -- -- Guards + read functions
+--   -- | CoreShow
+--   , rawShow
+--   -- | CoreReadMsg
+--   , coreReadMsg
+--   -- | CoreReadMsgDefault
+--   , coreReadMsg
+--   -- | CoreReadInteger
+--   , coreReadInteger
+--   -- | CoreReadDecimal
+--   , coreReadDecimal
+--   -- | CoreReadString
+--   , coreReadString
+--   -- | CoreReadKeyset
+--   , coreReadKeyset
+--   -- | CoreEnforceGuard
+--   , coreEnforceGuard
+--   -- | CoreEnforceKeyset
+--   , coreEnforceGuard
+--   -- | CoreKeysetRefGuard
+--   , keysetRefGuard
+--   -- | CoreAt
+--   , coreAccess
+--   -- | CoreMakeList
+--   , makeList
+--   -- | CoreB64Encode
+--   , coreB64Encode
+--   -- | CoreB64Decode
+--   , coreB64Decode
+--   -- | CoreStrToList
+--   , strToList
+--   -- | CoreYield
+--   , coreYield
+--   -- | CoreYieldToChain
+--   , coreYield
+--   -- | CoreResume
+--   , coreResume
+--   -- | CoreBind
+--   , coreBind
+--   -- | CoreRequireCapability
+--   , requireCapability
+--   -- | CoreComposeCapability
+--   , composeCapability
+--   -- | CoreInstallCapability
+--   , installCapability
+--   -- | CoreEmitEvent
+--   , coreEmitEvent
+--   -- | CoreCreateCapabilityGuard
+--   , createCapGuard
+--   -- | CoreCreateCapabilityPactGuard
+--   , createCapabilityPactGuard
+--   -- | CoreCreateModuleGuard
+--   , createModuleGuard
+--   -- | CoreCreateDefPactGuard
+--   , createDefPactGuard
+--   -- | CoreCreateTable
+--   , createTable
+--   -- | CoreDescribeKeyset
+--   , dbDescribeKeySet
+--   -- | CoreDescribeModule
+--   , describeModule
+--   -- | CoreDescribeTable
+--   , dbDescribeTable
+--   -- | CoreDefineKeySet
+--   , defineKeySet
+--   -- | CoreDefineKeysetData
+--   , defineKeySet
+--   -- | CoreFoldDb
+--   , foldDb
+--   -- | CoreInsert
+--   , dbInsert
+--   -- | CoreKeyLog
+--   , dbKeyLog
+--   -- | CoreKeys
+--   , dbKeys
+--   -- | CoreRead
+--   , dbRead
+--   -- | CoreSelect
+--   , dbSelect
+--   -- | CoreSelectWithFields
+--   , dbSelect
+--   -- | CoreUpdate
+--   , dbUpdate
+--   -- | CoreWithDefaultRead
+--   , dbWithDefaultRead
+--   -- | CoreWithRead
+--   , dbWithRead
+--   -- | CoreWrite
+--   , dbWrite
+--   -- | CoreTxIds
+--   , dbTxIds
+--   -- | CoreTxLog
+--   , dbTxLog
+--   -- | CoreTxHash
+--   , txHash
+--   -- | CoreAndQ
+--   , coreAndQ
+--   -- | CoreOrQ
+--   , coreOrQ
+--   -- | CoreWhere
+--   , coreWhere
+--   -- | CoreNotQ
+--   , coreNotQ
+--   -- | CoreHash
+--   , coreHash
+--   -- | CoreContinue
+--   , coreContinue
+--   -- | CoreParseTime
+--   , parseTime
+--   -- | CoreFormatTime
+--   , formatTime
+--   -- | CoreTime
+--   , time
+--   -- | CoreAddTime
+--   , addTime
+--   -- | CoreDiffTime
+--   , diffTime
+--   -- | CoreHours
+--   , hours
+--   -- | CoreMinutes
+--   , minutes
+--   -- | CoreDays
+--   , days
+--   -- | CoreCompose
+--   , coreCompose
+--   -- | CoreCreatePrincipal
+--   , coreCreatePrincipal
+--   -- | CoreIsPrincipal
+--   , coreIsPrincipal
+--   -- | CoreTypeOfPrincipal
+--   , coreTypeOfPrincipal
+--   -- | CoreValidatePrincipal
+--   , coreValidatePrincipal
+--   -- | CoreNamespace
+--   , coreNamespace
+--   -- | CoreDefineNamespace
+--   , coreDefineNamespace
+--   -- | CoreDescribeNamespace
+--   , coreDescribeNamespace
+--   -- | CoreChainData
+--   , coreChainData
+--   -- | CoreIsCharset
+--   , coreIsCharset
+--   -- | CorePactId
+--   , corePactId
+--   -- | CoreZkPairingCheck
+--   , zkPairingCheck
+--   -- | CoreZKScalarMult
+--   , zkScalarMult
+--   -- | CoreZkPointAdd
+--   , zkPointAddition
+--   -- | CorePoseidonHashHackachain
+--   , poseidonHash
+--   -- | CoreTypeOf
+--   , coreTypeOf
+--   -- | CoreDec
+--   , coreDec
+--   -- | CoreCond
+--   , coreCond
+--   -- | CoreIdentity
+--   , coreIdentity
+--   -- | CoreVerifySPV
+--   , coreVerifySPV
+--   -- | CoreEnforceVerifier
+--   , coreEnforceVerifier
+--   ]
 
 coreBuiltinRuntime
   :: CoreBuiltin
