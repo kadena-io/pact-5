@@ -138,9 +138,6 @@ instance J.Encode a => J.Encode (Command a) where
 
 instance NFData a => NFData (Command a)
 
-instance Arbitrary a => Arbitrary (Command a) where
-  arbitrary = Command <$> arbitrary <*> arbitrary <*> arbitrary
-
 -- | Strict Either thing for attempting to deserialize a Command.
 data ProcessedCommand m a =
   ProcSucc !(Command (Payload m a)) |
@@ -258,9 +255,6 @@ instance FromJSON (Signer QualifiedName PactValue) where
     where
       listMay = fromMaybe []
 
-instance Arbitrary (Signer QualifiedName PactValue) where
-  arbitrary = Signer <$> arbitrary <*> arbitrary <*> arbitrary <*> scale (min 5) arbitrary
-
 -- | Payload combines a 'PactRPC' with a nonce and platform-specific metadata.
 data Payload m c = Payload
   { _pPayload :: !(PactRPC c)
@@ -285,15 +279,6 @@ instance (J.Encode a, J.Encode m) => J.Encode (Payload m a) where
 
 instance (FromJSON a,FromJSON m) => FromJSON (Payload m a) where parseJSON = lensyParseJSON 2
 
--- instance (Arbitrary m, Arbitrary c) => Arbitrary (Payload m c) where
---   arbitrary = Payload
---     <$> arbitrary
---     <*> arbitrary
---     <*> arbitrary
---     <*> scale (min 10) arbitrary
---     <*> arbitrary
---     <*> arbitrary
-
 newtype PactResult = PactResult
   { _pactResult :: Either PactErrorI PactValue
   } deriving (Eq, Show, Generic, NFData)
@@ -313,12 +298,6 @@ instance FromJSON PactResult where
   parseJSON (A.Object o) =
     PactResult <$> ((Left . _getUxPactError <$> o .: "error") <|> (Right <$> o .: "data"))
   parseJSON p = fail $ "Invalid PactResult " ++ show p
-
-instance Arbitrary PactResult where
-  arbitrary = PactResult <$> oneof
-    [ Left . _getUxPactError <$> arbitrary
-    , Right <$> arbitrary
-    ]
 
 -- | API result of attempting to execute a pact command, parametrized over level of logging type
 data CommandResult l = CommandResult {
@@ -368,17 +347,6 @@ instance (FromJSON l) => FromJSON (CommandResult l) where
       events (Just es) = es
 instance NFData a => NFData (CommandResult a)
 
-instance Arbitrary l => Arbitrary (CommandResult l) where
-  arbitrary = CommandResult
-    <$> arbitrary
-    <*> arbitrary
-    <*> arbitrary
-    <*> arbitrary
-    <*> arbitrary
-    <*> arbitrary
-    <*> elements [Nothing, Just (String "JSON VALUE")]
-    <*> scale (min 10) arbitrary
-
 cmdToRequestKey :: Command a -> RequestKey
 cmdToRequestKey Command {..} = RequestKey _cmdHash
 
@@ -412,9 +380,6 @@ newtype RequestKey = RequestKey { unRequestKey :: PactHash.Hash}
 
 instance Show RequestKey where
   show (RequestKey rk) = show rk
-
-instance Arbitrary RequestKey where
-  arbitrary = RequestKey <$> arbitrary
 
 makeLenses ''UserSig
 makeLenses ''Signer
