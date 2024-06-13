@@ -41,7 +41,7 @@ data StackFrame i
   , _sfArgs :: ![PactValue]
   , _sfFnType :: !StackFunctionType
   , _sfInfo :: !i }
-  deriving (Show, Generic, Functor, Foldable, Traversable)
+  deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
 
 instance NFData i => NFData (StackFrame i)
 

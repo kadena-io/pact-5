@@ -1,8 +1,11 @@
+{-# LANGUAGE DeriveAnyClass #-}
+
 module Pact.Core.Info
  ( SpanInfo(..)
  , combineSpan
  ) where
 
+import Control.DeepSeq
 import Data.Default
 import GHC.Generics
 import Control.DeepSeq (NFData)
@@ -13,7 +16,7 @@ data SpanInfo
   , _liStartColumn :: !Int
   , _liEndLine     :: !Int
   , _liEndColumn   :: !Int
-  } deriving (Eq, Show, Generic)
+  } deriving (Eq, Show, Generic, NFData)
 
 instance Default SpanInfo where
   def = SpanInfo 0 0 0 0

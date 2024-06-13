@@ -27,6 +27,7 @@ module Pact.Core.Guards
 , allKeyFormats
 , ed25519HexFormat
 , webAuthnFormat
+, webAuthnPrefix
 , isValidKeyFormat
 , enforceKeyFormats
 )

@@ -31,14 +31,6 @@
 
 module Pact.Core.Command.Types
   ( Command(..),cmdPayload,cmdSigs,cmdHash
-  , mkCommand
-  , mkCommand'
-  , mkCommandWithDynKeys
-  , mkCommandWithDynKeys'
-  , mkUnsignedCommand
-  , signHash
-  , keyPairToSigner
-  , keyPairsToSigners
   , verifyUserSig
   , verifyUserSigs
   , verifyCommand
@@ -69,12 +61,16 @@ import Control.Monad.Except (runExceptT)
 import Control.DeepSeq
 
 import Data.Aeson as A
+import Data.Bifunctor (first, second)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Short as ShortByteString
 import qualified Data.ByteString.Base16 as B16
+import Data.Default
 import Data.Foldable
 import Data.Hashable (Hashable)
 import Data.Serialize as SZ
 import Data.Text (Text)
+import qualified Data.Text.Encoding as T
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Data.Maybe  (fromMaybe)
@@ -85,17 +81,24 @@ import Test.QuickCheck
 
 import Pact.Core.Capabilities
 import Pact.Core.ChainData
+import Pact.Core.Compile
 import Pact.Core.DefPacts.Types
 import Pact.Core.Errors
+import Pact.Core.Guards
+import Pact.Core.Evaluate
 import Pact.Core.Gas.Types
 import Pact.Core.Guards
 import Pact.Core.Names
 import qualified Pact.Core.Hash as PactHash
 import Pact.Core.Persistence.Types
+import Pact.Core.Info
 import Pact.Core.Command.Orphans ()
 import Pact.Core.PactValue (PactValue(..))
 import Pact.Core.Command.RPC
 import Pact.Core.IR.Eval.Runtime
+import qualified Pact.Core.Syntax.Lexer as Lisp
+import qualified Pact.Core.Syntax.Parser as Lisp
+import qualified Pact.Core.Syntax.ParseTree as Lisp
 import Pact.Core.Verifiers
 
 import Pact.JSON.Legacy.Value
@@ -103,6 +106,7 @@ import qualified Pact.JSON.Encode as J
 
 
 import Pact.Core.Command.Crypto              as Base
+import Pact.Core.Command.Util
 
 -- | Command is the signed, hashed envelope of a Pact execution instruction or command.
 -- In 'Command ByteString', the 'ByteString' payload is hashed and signed; the ByteString
@@ -153,6 +157,20 @@ type UserCapability = CapToken QualifiedName PactValue
 type SigCapability = CapToken QualifiedName PactValue
 
 
+-- | Pair parsed Pact expressions with the original text.
+data ParsedCode = ParsedCode
+  { _pcCode :: !Text
+  , _pcExps :: ![Lisp.TopLevel ()]
+  } deriving (Show,Generic)
+instance NFData ParsedCode
+
+parsePact :: Text -> Either String ParsedCode
+parsePact t =
+  ParsedCode t <$> first show (fmap stripInfo <$> _parseOnly t)
+  where
+    stripInfo :: Lisp.TopLevel SpanInfo -> Lisp.TopLevel ()
+    stripInfo = void
+
 -- VALIDATING TRANSACTIONS
 
 verifyCommand :: FromJSON m => Command ByteString -> ProcessedCommand m ParsedCode
@@ -168,17 +186,17 @@ verifyCommand orig@Command{..} =
     toProcSucc payload = ProcSucc $ orig { _cmdPayload = payload }
     toProcFail errStr = ProcFail $ "Invalid command: " ++ errStr
 
-    parsedPayload = traverse parsePact
-                    =<< A.eitherDecodeStrict' _cmdPayload
+    parsedPayload :: Either String (Payload m ParsedCode)
+    parsedPayload = traverse parsePact =<< A.eitherDecodeStrict' _cmdPayload
 
-    verifiedHash = verifyHash _cmdHash _cmdPayload
+    verifiedHash = PactHash.verifyHash _cmdHash _cmdPayload
 
-hasInvalidSigs :: PactHash.Hash -> [UserSig] -> [Signer] -> Maybe String
+hasInvalidSigs :: PactHash.Hash -> [UserSig] -> [Signer QualifiedName PactValue] -> Maybe String
 hasInvalidSigs hsh sigs signers
   | not (length sigs == length signers)  = Just "Number of sig(s) does not match number of signer(s)"
   | otherwise                            = verifyUserSigs hsh (zip sigs signers)
 
-verifyUserSigs :: PactHash.Hash -> [(UserSig, Signer)] -> Maybe String
+verifyUserSigs :: PactHash.Hash -> [(UserSig, Signer QualifiedName PactValue)] -> Maybe String
 verifyUserSigs hsh sigsAndSigners
   | null failedSigs = Nothing
   | otherwise = formatIssues
@@ -189,7 +207,7 @@ verifyUserSigs hsh sigsAndSigners
   failedSigs = concatMap getFailedVerify sigsAndSigners
   formatIssues = Just $ "Invalid sig(s) found: " ++ show (J.encode . J.Object $ failedSigs)
 
-verifyUserSig :: PactHash.Hash -> UserSig -> Signer -> Either String ()
+verifyUserSig :: PactHash.Hash -> UserSig -> Signer QualifiedName PactValue -> Either String ()
 verifyUserSig msg sig Signer{..} = do
   case (sig, scheme) of
     (ED25519Sig edSig, ED25519) -> do
@@ -199,7 +217,7 @@ verifyUserSig msg sig Signer{..} = do
         parseEd25519PubKey =<< B16.decode (Text.encodeUtf8 _siPubKey)
       edSigParsed <- over _Left ("failed to parse ed25519 signature: " <>) $
         parseEd25519Signature =<< B16.decode (Text.encodeUtf8 edSig)
-      verifyEd25519Sig (toUntypedHash msg) pk edSigParsed
+      verifyEd25519Sig msg pk edSigParsed
 
     (WebAuthnSig waSig, WebAuthn) -> do
       let
@@ -209,7 +227,7 @@ verifyUserSig msg sig Signer{..} = do
       -- signers list might be unprefixed due to old webauthn.
       pk <- over _Left ("failed to parse webauthn pubkey: " <>) $
         parseWebAuthnPublicKey =<< B16.decode (Text.encodeUtf8 strippedPrefix)
-      verifyWebAuthnSig (toUntypedHash msg) pk waSig
+      verifyWebAuthnSig msg pk waSig
 
     _ ->
       Left $ unwords
@@ -223,7 +241,7 @@ verifyUserSig msg sig Signer{..} = do
   where scheme = fromMaybe defPPKScheme _siScheme
 
 
-instance J.Encode Signer where
+instance J.Encode (Signer QualifiedName PactValue) where
   build o = J.object
     [ "addr" J..?= _siAddress o
     , "scheme" J..?= _siScheme o
@@ -231,7 +249,7 @@ instance J.Encode Signer where
     , "clist" J..??= J.Array (_siCapList o)
     ]
 
-instance FromJSON Signer where
+instance FromJSON (Signer QualifiedName PactValue) where
   parseJSON = withObject "Signer" $ \o -> Signer
     <$> o .:? "scheme"
     <*> o .: "pubKey"
@@ -240,7 +258,7 @@ instance FromJSON Signer where
     where
       listMay = fromMaybe []
 
-instance Arbitrary Signer where
+instance Arbitrary (Signer QualifiedName PactValue) where
   arbitrary = Signer <$> arbitrary <*> arbitrary <*> arbitrary <*> scale (min 5) arbitrary
 
 -- | Payload combines a 'PactRPC' with a nonce and platform-specific metadata.
@@ -248,7 +266,7 @@ data Payload m c = Payload
   { _pPayload :: !(PactRPC c)
   , _pNonce :: !Text
   , _pMeta :: !m
-  , _pSigners :: ![Signer]
+  , _pSigners :: ![Signer QualifiedName PactValue]
   , _pVerifiers :: !(Maybe [Verifier ParsedVerifierProof])
   , _pNetworkId :: !(Maybe NetworkId)
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
@@ -267,18 +285,18 @@ instance (J.Encode a, J.Encode m) => J.Encode (Payload m a) where
 
 instance (FromJSON a,FromJSON m) => FromJSON (Payload m a) where parseJSON = lensyParseJSON 2
 
-instance (Arbitrary m, Arbitrary c) => Arbitrary (Payload m c) where
-  arbitrary = Payload
-    <$> arbitrary
-    <*> arbitrary
-    <*> arbitrary
-    <*> scale (min 10) arbitrary
-    <*> arbitrary
-    <*> arbitrary
+-- instance (Arbitrary m, Arbitrary c) => Arbitrary (Payload m c) where
+--   arbitrary = Payload
+--     <$> arbitrary
+--     <*> arbitrary
+--     <*> arbitrary
+--     <*> scale (min 10) arbitrary
+--     <*> arbitrary
+--     <*> arbitrary
 
 newtype PactResult = PactResult
   { _pactResult :: Either PactErrorI PactValue
-  } deriving (Eq, Show, Generic,NFData)
+  } deriving (Eq, Show, Generic, NFData)
 
 instance J.Encode PactResult where
   build (PactResult (Right s)) = J.object
@@ -319,7 +337,7 @@ data CommandResult l = CommandResult {
   -- | Platform-specific data
   , _crMetaData :: !(Maybe Value)
   -- | Events
-  , _crEvents :: ![PactEvent]
+  , _crEvents :: ![PactEvent PactValue]
   } deriving (Eq,Show,Generic,Functor)
 
 instance J.Encode l => J.Encode (CommandResult l) where
@@ -362,7 +380,7 @@ instance Arbitrary l => Arbitrary (CommandResult l) where
     <*> scale (min 10) arbitrary
 
 cmdToRequestKey :: Command a -> RequestKey
-cmdToRequestKey Command {..} = RequestKey (toUntypedHash _cmdHash)
+cmdToRequestKey Command {..} = RequestKey _cmdHash
 
 type ApplyCmd l = ExecutionMode -> Command ByteString -> IO (CommandResult l)
 type ApplyPPCmd m a l = ExecutionMode -> Command ByteString -> ProcessedCommand m a -> IO (CommandResult l)
@@ -373,9 +391,18 @@ data CommandExecInterface m a l = CommandExecInterface
   }
 
 
-requestKeyToB16Text :: RequestKey -> Text
-requestKeyToB16Text (RequestKey h) = hashToText h
+data WebAuthnPubKeyPrefixed
+  = WebAuthnPubKeyPrefixed
+  | WebAuthnPubKeyBare
+  deriving (Eq, Show, Generic)
+data DynKeyPair
+  = DynEd25519KeyPair Ed25519KeyPair
+  | DynWebAuthnKeyPair WebAuthnPubKeyPrefixed WebAuthnPublicKey WebauthnPrivateKey
+  deriving (Eq, Show, Generic)
 
+requestKeyToB16Text :: RequestKey -> Text
+requestKeyToB16Text (RequestKey (PactHash.Hash h)) =
+  T.decodeUtf8 $ B16.encode (ShortByteString.fromShort h)
 
 newtype RequestKey = RequestKey { unRequestKey :: PactHash.Hash}
   deriving (Eq, Ord, Generic)
