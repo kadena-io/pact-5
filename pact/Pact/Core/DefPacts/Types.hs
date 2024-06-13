@@ -75,7 +75,7 @@ data DefPactStep = DefPactStep
   , _psRollback :: !Bool
   , _psDefPactId :: !DefPactId
   , _psResume :: !(Maybe Yield)
-  } deriving (Show, Generic)
+  } deriving (Eq, Show, Generic)
 
 makeLenses ''DefPactStep
 

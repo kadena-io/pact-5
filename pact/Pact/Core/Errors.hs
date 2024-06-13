@@ -63,7 +63,7 @@ data LexerError
   | StringLiteralError Text
   -- ^ Error lexing string literal
   | OutOfInputError Char
-  deriving (Show, Generic)
+  deriving (Eq, Show, Generic)
 
 instance NFData LexerError
 
@@ -95,7 +95,7 @@ data ParseError
   -- ^ Way too many decimal places for `Decimal` to deal with, max 255 precision.
   | InvalidBaseType Text
   -- ^ Invalid primitive type
-  deriving (Show, Generic)
+  deriving (Eq, Show, Generic)
 
 instance NFData ParseError
 
@@ -169,7 +169,7 @@ data DesugarError
   -- ^ Name was defined twice
   | InvalidBlessedHash Text
   -- ^ Blessed hash has invalid format
-  deriving (Show,  Generic)
+  deriving (Eq, Show,  Generic)
 
 instance NFData DesugarError
 
@@ -250,7 +250,7 @@ data ArgTypeError
   | ATETable
   | ATEClosure
   | ATEModRef
-  deriving (Show,  Generic)
+  deriving (Eq, Show,  Generic)
 
 instance NFData ArgTypeError
 
@@ -500,7 +500,7 @@ data EvalError
   | CannotApplyValueToNonClosure
   -- ^ Attempted to apply a non-closure
   | InvalidCustomKeysetPredicate Text
-  deriving (Show, Generic)
+  deriving (Eq, Show, Generic)
 
 instance NFData EvalError
 
@@ -791,7 +791,7 @@ data PactError info
   -- | PEOverloadError OverloadError info
   | PEExecutionError EvalError [StackFrame info] info
   | PEUserRecoverableError UserRecoverableError [StackFrame info] info
-  deriving (Show, Functor, Generic)
+  deriving (Eq, Show, Functor, Generic)
 
 instance NFData info => NFData (PactError info)
 

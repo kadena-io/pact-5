@@ -20,15 +20,6 @@ mkCommand creds vers meta nonce nid rpc = mkCommand' creds encodedPayload
     encodedPayload = J.encodeStrict $ toLegacyJsonViaEncode payload
     payload = Payload rpc nonce meta (keyPairsToSigners creds) (vers <$ guard (not (null vers))) nid
 
-data WebAuthnPubKeyPrefixed
-  = WebAuthnPubKeyPrefixed
-  | WebAuthnPubKeyBare
-  deriving (Eq, Show, Generic)
-data DynKeyPair
-  = DynEd25519KeyPair Ed25519KeyPair
-  | DynWebAuthnKeyPair WebAuthnPubKeyPrefixed WebAuthnPublicKey WebauthnPrivateKey
-  deriving (Eq, Show, Generic)
-
 
 keyPairToSigner :: Ed25519KeyPair -> [UserCapability] -> Signer
 keyPairToSigner cred caps = Signer scheme pub addr caps

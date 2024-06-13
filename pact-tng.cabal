@@ -48,6 +48,7 @@ common pact-common
     , base16-bytestring
     , base64-bytestring
     , bytestring
+    , cereal
     , containers
     , criterion
     , data-default
@@ -56,6 +57,7 @@ common pact-common
     , directory
     , exceptions
     , filepath
+    , hashable
     , lens
     , mtl
     , pact-json
