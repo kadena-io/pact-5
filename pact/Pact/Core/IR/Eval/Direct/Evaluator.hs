@@ -36,6 +36,7 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Class
 import Data.Text(Text)
+import Data.Containers.ListUtils
 import Data.List (find)
 import Data.Foldable (foldl')
 import Data.Maybe(catMaybes)
@@ -1795,10 +1796,13 @@ rawSort info b _env = \case
   [VList vli]
     | V.null vli -> return (VList mempty)
     | otherwise -> do
-    vli' <- liftIO $ do
-      v' <- V.thaw vli
-      V.sort v'
-      V.freeze v'
+    vli' <- do
+      sz <- sizeOf SizeOfV0 vli
+      chargeGasArgs info $ GListOp $ ListOpSort $ fromIntegral sz
+      liftIO $ do
+        v' <- V.thaw vli
+        V.sort v'
+        V.freeze v'
     return (VList vli')
   args -> argsError info b args
 
@@ -1825,6 +1829,8 @@ rawSortObject info b _env = \case
     | V.null fields -> return (VList objs)
     | V.null objs -> return (VList objs)
     | otherwise -> do
+        sz <- sizeOf SizeOfV0 objs
+        chargeGasArgs info $ GListOp $ ListOpSort $ fromIntegral sz
         objs' <- traverse (asObject info b) objs
         fields' <- traverse (fmap Field . asString info b) fields
         v' <- liftIO $ do
@@ -2044,7 +2050,7 @@ createEnumerateList
 createEnumerateList info from to inc
   | from == to = do
     fromSize <- sizeOf SizeOfV0 from
-    chargeGasArgs info (GMakeList 1 fromSize)
+    chargeGasArgs info (GListOp $ ListOpMake 1 fromSize)
     pure (V.singleton from)
   | inc == 0 = pure mempty -- note: covered by the flat cost
   | from < to, from + inc < from =
@@ -2054,7 +2060,7 @@ createEnumerateList info from to inc
   | otherwise = do
     let len = succ (abs (from - to) `div` abs inc)
     listSize <- sizeOf SizeOfV0 (max (abs from) (abs to))
-    chargeGasArgs info (GMakeList len listSize)
+    chargeGasArgs info (GListOp $ ListOpMake len listSize)
     pure $ V.enumFromStepN from inc (fromIntegral len)
 
 coreEnumerateStepN :: (MonadEval b i m) => NativeFunction b i m
@@ -2068,7 +2074,7 @@ makeList :: (MonadEval b i m) => NativeFunction b i m
 makeList info b _env = \case
   [VLiteral (LInteger i), VPactValue v] -> do
     vSize <- sizeOf SizeOfV0 v
-    chargeGasArgs info (GMakeList (fromIntegral i) vSize)
+    chargeGasArgs info (GListOp $ ListOpMake (fromIntegral i) vSize)
     return (VList (V.fromList (replicate (fromIntegral i) v)))
   args -> argsError info b args
 
@@ -2773,21 +2779,16 @@ coreStrToIntBase info b _env = \case
   bsToInteger bs = fst $ foldl' go (0,(BS.length bs - 1) * 8) $ BS.unpack bs
   go (i,p) w = (i .|. (shift (fromIntegral w) p),p - 8)
 
-nubByM :: Monad m => (a -> a -> m Bool) -> [a] -> m [a]
-nubByM eq = go
-  where
-  go [] = pure []
-  go (x:xs) = do
-    xs' <- filterM (fmap not . eq x) xs
-    (x :) <$> go xs'
-
 coreDistinct  :: (MonadEval b i m) => NativeFunction b i m
 coreDistinct info b _env = \case
   [VList s] -> do
-    uniques <- nubByM (valEqGassed info) $ V.toList s
+    sz <- sizeOf SizeOfV0 s
+    chargeGasArgs info $ GListOp $ ListOpSort $ fromIntegral sz
     return
       $ VList
-      $ V.fromList uniques
+      $ V.fromList
+      $ nubOrd
+      $ V.toList s
   args -> argsError info b args
 
 coreFormat  :: (MonadEval b i m) => NativeFunction b i m

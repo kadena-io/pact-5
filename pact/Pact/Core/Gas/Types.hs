@@ -29,6 +29,7 @@ module Pact.Core.Gas.Types
   , StrOp(..)
   , ObjOp(..)
   , CapOp(..)
+  , ListOp(..)
   , ConcatType(..)
   , GasTextLength(..)
   , GasListLength(..)
@@ -193,6 +194,13 @@ data ObjOp
   -- ^ The cost of removing a key from an object with the given fields count.
   deriving (Eq, Show, Ord, Generic, NFData)
 
+data ListOp
+  = ListOpMake !Integer !Word64
+  -- ^ Cost of creating a list of `n` elements + some memory overhead per elem
+  | ListOpSort !Integer
+  -- ^ Cost of sorting a list taking the given amount of bytes in memory
+  deriving (Eq, Show, Ord, Generic, NFData)
+
 data CapOp
   = CapOpRequire !Int
   deriving (Eq, Show, Ord, Generic, NFData)
@@ -210,8 +218,6 @@ data GasArgs
   -- ^ Cost of linear-based gas
   | GIntegerOpCost !IntegerPrimOp !Integer !Integer
   -- ^ Cost of integer operations
-  | GMakeList !Integer !Word64
-  -- ^ Cost of creating a list of `n` elements + some memory overhead per elem
   | GAApplyLam Text !Int
   -- ^ Cost of function application
   | GAZKArgs !ZKArg
@@ -228,8 +234,13 @@ data GasArgs
   -- ^ poseidon-hash-hack-a-chain costs.
   | GModuleMemory !Word64
   | GStrOp !StrOp
+  -- ^ An operation on strings.
   | GObjOp !ObjOp
+  -- ^ An operation on object.
   | GCapOp !CapOp
+  -- ^ An operation on capabilities.
+  | GListOp !ListOp
+  -- ^ An operation on lists.
   | GCountBytes
   -- ^ Cost of computing SizeOf for N bytes.
   deriving (Show, Generic, NFData)

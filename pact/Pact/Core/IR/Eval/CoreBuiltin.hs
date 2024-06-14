@@ -31,6 +31,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Attoparsec.Text(parseOnly)
 import Data.Bits
+import Data.Containers.ListUtils
 import Data.Either(isLeft, isRight)
 import Data.Foldable
 import Data.Decimal(roundTo', Decimal, DecimalRaw(..))
@@ -419,10 +420,13 @@ rawSort info b cont handler _env = \case
   [VList vli]
     | V.null vli -> returnCEKValue cont handler (VList mempty)
     | otherwise -> do
-    vli' <- liftIO $ do
-      v' <- V.thaw vli
-      V.sort v'
-      V.freeze v'
+    vli' <- do
+      sz <- sizeOf SizeOfV0 vli
+      chargeGasArgs info $ GListOp $ ListOpSort $ fromIntegral sz
+      liftIO $ do
+        v' <- V.thaw vli
+        V.sort v'
+        V.freeze v'
     returnCEKValue cont handler (VList vli')
   args -> argsError info b args
 
@@ -449,6 +453,8 @@ rawSortObject info b cont handler _env = \case
     | V.null fields -> returnCEKValue cont handler (VList objs)
     | V.null objs -> returnCEKValue cont handler (VList objs)
     | otherwise -> do
+        sz <- sizeOf SizeOfV0 objs
+        chargeGasArgs info $ GListOp $ ListOpSort $ fromIntegral sz
         objs' <- traverse (asObject info b) objs
         fields' <- traverse (fmap Field . asString info b) fields
         v' <- liftIO $ do
@@ -670,7 +676,7 @@ createEnumerateList
 createEnumerateList info from to inc
   | from == to = do
     fromSize <- sizeOf SizeOfV0 from
-    chargeGasArgs info (GMakeList 1 fromSize)
+    chargeGasArgs info (GListOp $ ListOpMake 1 fromSize)
     pure (V.singleton from)
   | inc == 0 = pure mempty -- note: covered by the flat cost
   | from < to, from + inc < from =
@@ -680,7 +686,7 @@ createEnumerateList info from to inc
   | otherwise = do
     let len = succ (abs (from - to) `div` abs inc)
     listSize <- sizeOf SizeOfV0 (max (abs from) (abs to))
-    chargeGasArgs info (GMakeList len listSize)
+    chargeGasArgs info (GListOp $ ListOpMake len listSize)
     pure $ V.enumFromStepN from inc (fromIntegral len)
 
 coreEnumerateStepN :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
@@ -694,7 +700,7 @@ makeList :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 makeList info b cont handler _env = \case
   [VLiteral (LInteger i), VPactValue v] -> do
     vSize <- sizeOf SizeOfV0 v
-    chargeGasArgs info (GMakeList (fromIntegral i) vSize)
+    chargeGasArgs info (GListOp $ ListOpMake (fromIntegral i) vSize)
     returnCEKValue cont handler (VList (V.fromList (replicate (fromIntegral i) v)))
   args -> argsError info b args
 
@@ -1325,21 +1331,16 @@ coreStrToIntBase info b cont handler _env = \case
   bsToInteger bs = fst $ foldl' go (0,(BS.length bs - 1) * 8) $ BS.unpack bs
   go (i,p) w = (i .|. (shift (fromIntegral w) p), p - 8)
 
-nubByM :: Monad m => (a -> a -> m Bool) -> [a] -> m [a]
-nubByM eq = go
-  where
-  go [] = pure []
-  go (x:xs) = do
-    xs' <- filterM (fmap not . eq x) xs
-    (x :) <$> go xs'
-
 coreDistinct  :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreDistinct info b cont handler _env = \case
   [VList s] -> do
-    uniques <- nubByM (valEqGassed info) $ V.toList s
+    sz <- sizeOf SizeOfV0 s
+    chargeGasArgs info $ GListOp $ ListOpSort $ fromIntegral sz
     returnCEKValue cont handler
       $ VList
-      $ V.fromList uniques
+      $ V.fromList
+      $ nubOrd
+      $ V.toList s
   args -> argsError info b args
 
 coreFormat  :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
