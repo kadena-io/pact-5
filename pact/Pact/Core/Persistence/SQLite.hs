@@ -8,7 +8,7 @@
 module Pact.Core.Persistence.SQLite (
   withSqlitePactDb,
   unsafeCreateSqlitePactDb
- ) where
+) where
 
 import Control.Monad
 import Control.Monad.Catch
@@ -32,7 +32,6 @@ import Pact.Core.Literal
 import Control.Exception (throwIO)
 import Pact.Core.Serialise
 
-import GHC.Stack
 -- | Acquire a SQLite-backed `PactDB`.
 --
 -- Pact entities (modules, keysets, namespaces, defpacts, and usertables) will be stored
@@ -41,7 +40,7 @@ import GHC.Stack
 -- and how they should be serialized. [`serializePact`] is a good default.
 --
 withSqlitePactDb
-  :: (MonadMask m, MonadIO m, HasCallStack)
+  :: (MonadMask m, MonadIO m)
   => PactSerialise b i
   -> Text
   -> (PactDb b i -> m a)
