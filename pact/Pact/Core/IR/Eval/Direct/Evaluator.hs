@@ -2055,8 +2055,8 @@ coreYield info b _env = \case
 
 corePactId :: (IsBuiltin b) => NativeFunction e b i
 corePactId info b _env = \case
-  [] -> use esDefPactExec >>= \case
-    Just dpe -> return (VString (_defpactId (_peDefPactId dpe)))
+  [] -> useEvalState esDefPactExec >>= \case
+    Just dpe -> return (VString (_defPactId (_peDefPactId dpe)))
     Nothing -> throwExecutionError info NotInDefPactExecution
   args -> argsError info b args
 
