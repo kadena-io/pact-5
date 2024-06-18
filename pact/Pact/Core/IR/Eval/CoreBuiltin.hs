@@ -749,8 +749,8 @@ coreYield info b cont handler _env = \case
 
 corePactId :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
 corePactId info b cont handler _env = \case
-  [] -> use esDefPactExec >>= \case
-    Just dpe -> returnCEKValue cont handler (VString (_defpactId (_peDefPactId dpe)))
+  [] -> useEvalState esDefPactExec >>= \case
+    Just dpe -> returnCEKValue cont handler (VString (_defPactId (_peDefPactId dpe)))
     Nothing ->
       throwExecutionError info NotInDefPactExecution
   args -> argsError info b args

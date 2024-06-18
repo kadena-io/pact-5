@@ -74,6 +74,7 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Data.Maybe  (fromMaybe)
+import Data.Word
 
 import GHC.Generics
 
@@ -96,6 +97,7 @@ import Pact.Core.Command.Orphans ()
 import Pact.Core.PactValue (PactValue(..))
 import Pact.Core.Command.RPC
 import Pact.Core.IR.Eval.Runtime
+import Pact.Core.StableEncoding
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
@@ -321,27 +323,27 @@ data CommandResult l = CommandResult {
 
 instance J.Encode l => J.Encode (CommandResult l) where
   build o = J.object
-    [ "gas" J..= _crGas o
+    [ "gas" J..= fromIntegral @Word64 @Int (_gas (_crGas o))
     , "result" J..= _crResult o
     , "reqKey" J..= _crReqKey o
     , "logs" J..= _crLogs o
     , "events" J..??= J.Array (_crEvents o)
     , "metaData" J..= fmap toLegacyJson (_crMetaData o)
     , "continuation" J..= _crContinuation o
-    , "txId" J..= _crTxId o
+    , "txId" J..= fmap (A.Number . fromIntegral . _txId) (_crTxId o)
     ]
   {-# INLINE build #-}
 
 instance (FromJSON l) => FromJSON (CommandResult l) where
   parseJSON = withObject "CommandResult" $ \o -> CommandResult
       <$> o .: "reqKey"
-      <*> o .: "txId"
+      <*> (fmap TxId <$> o .: "txId")
       <*> o .: "result"
-      <*> o .: "gas"
+      <*> (Gas <$> o .: "gas")
       <*> o .: "logs"
-      <*> o .: "continuation"
+      <*> (fmap _stableEncoding <$> o .: "continuation")
       <*> o .: "metaData"
-      <*> (events <$> o .:? "events")
+      <*> (events . (fmap . fmap) _stableEncoding <$> o .:? "events")
     where
       events Nothing = []
       events (Just es) = es
