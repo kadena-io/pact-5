@@ -1,33 +1,45 @@
 ## describe-table
-Use `describe-table` to get metadata for a specified `TABLE`. This function returns an object with fields including `module`, `name` and `type`.
+
+Use `describe-table` to get metadata for a specified `table`. 
+This function returns an object with fields including `module`, `name`, and `type`.
 
 ### Basic syntax
 
-To get metadata for a `TABLE`, use the following syntax:
+To get metadata for a specified `table`, use the following syntax:
 
-`(describe-table TABLE)`
+```pact
+(describe-table TABLE)
+```
 
 ### Arguments
 
-Use the following argument to specify the `TABLE` for the `describe-table` Pact function.
+Use the following argument to specify the `table` for the `describe-table` Pact function.
 
 | Argument | Type          | Description                                  |
 |----------|---------------|----------------------------------------------|
-| `table`    | `table:<{row}>` | Specifies the table to describe.             |
+| `table`    | table:<{row}> | Specifies the table to describe.             |
 
 ### Return values
 
-The `describe-table` function returns an object with metadata for the specified `TABLE`.
+The `describe-table` function returns an object with metadata for the specified `table`.
 
 ### Examples
 
-The following example demonstrates the `describe-table` function:
+The following example demonstrates use to use the `describe-table` function in the Pact REPL by loading a module that has a table definition:
 
 ```pact
-pact>(module m G (defcap G () true) (defschema s i:integer) (deftable t:{s}))
-Loaded module m, hash UAnq05ArrOYCFbeJDjCLpWecBq5bS5I0WA6Mj0O041o
-pact>(describe-table m.t)
-{"module":"m", "name":"t", "type":"table{m.s}"}
+pact> (module ledger GOVERNANCE (defcap GOVERNANCE () true) (defschema token-schema id:string uri:string precision:integer supply:decimal) (deftable tokens:{token-schema}))
 ```
 
-In this example, `(describe-table accounts)` is used to get metadata for the table named 't'. The function returns an object with fields such as `module`, `name` and `type`, providing detailed information about the table.
+The Pact REPL loads the module and displays the has with output similar to the following:
+
+```text
+Loaded module m, hash UAnq05ArrOYCFbeJDjCLpWecBq5bS5I0WA6Mj0O041o
+```
+
+```pact
+pact> (describe-table tokens)
+{"module": "ledger"
+,"name": "tokens"
+,"type": "(defschema token-schema  [id:string, uri:string, precision:integer, supply:decimal])"}
+```

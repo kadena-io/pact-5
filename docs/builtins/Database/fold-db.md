@@ -1,11 +1,15 @@
 ## fold-db
-Use `fold-db` to select rows from a table `TABLE` using a predicate `QRY` with both key and value, and then accumulate the results of the query using a `CONSUMER` function. The output is sorted by the ordering of keys.
+
+Use `fold-db` to select rows from a specified `table` using a predicate `query` with both a key and avalue, and then accumulate the results of the query using a `consumer` function. 
+The output is sorted by the ordering of keys.
 
 ### Basic syntax
 
 To select rows from a table, apply a predicate, and accumulate the results using a consumer function, use the following syntax:
 
-`(fold-db TABLE QRY CONSUMER)`
+```pact
+(fold-db table query consumer)
+```
 
 ### Arguments
 
@@ -13,24 +17,24 @@ Use the following arguments to specify the table, predicate, and consumer functi
 
 | Argument  | Type               | Description                                                      |
 |-----------|--------------------|------------------------------------------------------------------|
-| `TABLE`     | `table:<{row}>`      | Specifies the table from which to select rows.                   |
-| `QRY`       | `a:string b:object:<{row}> -> bool` | Specifies the predicate function to apply to each row.          |
-| `CONSUMER`  | `a:string b:object:<{row}> -> <b> -> [<b>]`  | Specifies the consumer function to accumulate results.          |
+| `table` | table:<{row}> | Specifies the table from which to select rows. |
+| `query` | a:string b:object:<{row}> | Specifies the predicate function to apply to each row and return a boolean value. |
+| `consumer` | function with key:string and value:object:<{row}> | Specifies the consumer function to accumulate results. |
 
 ### Return values
 
-The `fold-db` function returns a list of accumulated results based on the predicate `QRY` and the consumer function `CONSUMER`.
+The `fold-db` function returns a list of accumulated results based on the predicate `query` and the `consumer` function.
 
 ### Examples
 
-The following example demonstrates the `fold-db` function:
+The following example demonstrates how to use the `fold-db` function:
 
 ```pact
 (let
-  ((qry (lambda (k obj) true)) ;; Select all rows
-   (f (lambda (x) [(at 'firstName x), (at 'b x)])) ;; Example consumer function
+  ((query (lambda (k obj) true)) ;; Select all rows
+   (func (lambda (x) [(at 'firstName x), (at 'b x)])) ;; Example consumer function
   )
-  (fold-db people qry f)
+  (fold-db people query func)
 )
 ```
 
