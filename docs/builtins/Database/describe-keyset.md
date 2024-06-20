@@ -2,11 +2,15 @@
 
 Use `describe-keyset` to retrieve metadata for a specified keyset.
 
-**Note:** This function can only be used at the top level of your code. It will fail if used within module code.
+**Note:** You can only use this function at the top level of your code. The function fails if used within module code.
 
 ### Basic syntax
 
-`(describe-keyset keyset)`
+To get metadata for the specified `keyset` name, use the following syntax:
+
+```pact
+(describe-keyset keyset)
+```
 
 ## Arguments
 
@@ -14,7 +18,7 @@ Use the following argument to specify the keyset for which to retrieve metadata 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `keyset` | `string` | Specifies the name of the keyset for which to retrieve metadata. |
+| `keyset` | string | Specifies the name of the keyset that you want to retrieve metadata for. |
 
 ## Return values
 
