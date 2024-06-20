@@ -239,7 +239,8 @@ gmLoaded = Loaded
   {_loToplevel=mempty
   , _loNamespace=Nothing
   , _loModules=M.singleton gmModuleName gmModuleData
-  , _loAllLoaded=gmFqMap}
+  , _loAllLoaded=gmFqMap
+  , _loAlias=M.empty}
 
 prepopulateDb :: PactDb CoreBuiltin i -> GasM (PactError i) CoreBuiltin ()
 prepopulateDb pdb = do
@@ -339,6 +340,7 @@ withLoaded envVars = esLoaded .~ synthLoaded
     , _loToplevel = M.fromList [ (n, (mkGasModelFqn n, DKDefConst)) | n <- fst <$> envVars ]
     , _loNamespace = Nothing
     , _loAllLoaded = M.fromList [ (mkGasModelFqn n, DConst $ DefConst (Arg n Nothing ()) (EvaledConst v) ()) | (n, v) <- envVars ]
+    , _loAlias = M.empty
     }
 
 runNativeBenchmarkPrepared

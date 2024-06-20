@@ -215,6 +215,7 @@ data CoreBuiltin
   | CoreIdentity
   | CoreVerifySPV
   | CoreEnforceVerifier
+  | CoreUseAlias
   deriving (Eq, Show, Ord, Bounded, Enum, Generic)
 
 instance NFData CoreBuiltin
@@ -384,6 +385,7 @@ coreBuiltinToText = \case
   CoreIdentity -> "identity"
   CoreVerifySPV -> "verify-spv"
   CoreEnforceVerifier -> "enforce-verifier"
+  CoreUseAlias -> "use-alias"
 
 -- | Our `CoreBuiltin` user-facing representation.
 -- note: `coreBuiltinToUserText` is primarily for pretty printing
@@ -532,6 +534,7 @@ coreBuiltinToUserText = \case
   CoreIdentity -> "identity"
   CoreVerifySPV -> "verify-spv"
   CoreEnforceVerifier -> "enforce-verifier"
+  CoreUseAlias -> "use-alias"
 
 instance IsBuiltin CoreBuiltin where
   builtinName = NativeName . coreBuiltinToText
@@ -683,6 +686,7 @@ instance IsBuiltin CoreBuiltin where
     CoreIdentity -> 1
     CoreVerifySPV -> 2
     CoreEnforceVerifier -> 1
+    CoreUseAlias -> 2
 
 
 coreBuiltinNames :: [Text]

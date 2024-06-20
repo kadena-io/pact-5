@@ -45,7 +45,7 @@ import Data.Either(isLeft, isRight)
 import Data.Foldable(foldlM, traverse_, toList)
 import Data.Decimal(roundTo', Decimal, DecimalRaw(..))
 import Data.Vector(Vector)
-import Data.Maybe(maybeToList)
+import Data.Maybe(maybeToList, isJust)
 import Data.Attoparsec.Text(parseOnly)
 import Numeric(showIntAtBase)
 import qualified Data.RAList as RAList
@@ -3196,17 +3196,6 @@ coreDefineNamespace info b env = \case
     chargeGasArgs info (GWrite nsSize)
     liftGasM info $ _pdbWrite pdb Write DNamespaces nsn ns
     return $ VString $ "Namespace defined: " <> (_namespaceName nsn)
-  isValidNsFormat nsn = case T.uncons nsn of
-    Just (h, tl) ->
-      isValidNsHead h && T.all isValidNsChar tl
-    Nothing -> False
-  isValidNsHead c =
-    Char.isLatin1 c && Char.isAlpha c
-  isValidNsChar c =
-    Char.isLatin1 c && (Char.isAlphaNum c || T.elem c validSpecialChars)
-  validSpecialChars :: T.Text
-  validSpecialChars =
-    "%#+-_&$@<>=^?*!|/~"
 
 coreDescribeNamespace :: (MonadEval b i m) => NativeFunction b i m
 coreDescribeNamespace info b _env = \case
@@ -3424,6 +3413,24 @@ coreEnforceVerifier info b _env = \case
     verifError verName msg = VerifierFailure (VerifierName verName) msg
 
 
+-----------------------------------
+-- Aliasing
+-----------------------------------
+coreUseAlias :: (MonadEval b i m) => NativeFunction b i m
+coreUseAlias info b env = \case
+  [VString orig, VString alias] | not (T.null alias), not (T.null orig) -> do
+    enforceTopLevelOnly info b
+    origExists <- checkNsExists (NamespaceName orig)
+    unless origExists $
+      throwNativeExecutionError info b "Use-alias failure: origin namespace does not exist"
+    unless (isValidNsFormat alias) $ throwNativeExecutionError info b "invalid namespace format"
+    (esLoaded . loAlias) %== M.insert (NamespaceAlias alias) (NamespaceName orig)
+    return (VString "Set namespace qualifier alias")
+  args -> argsError info b args
+  where
+  checkNsExists ns = do
+    let pdb = _cePactDb env
+    isJust <$> liftDbFunction info (readNamespace pdb ns)
 
 -----------------------------------
 -- Builtin exports
@@ -3599,3 +3606,4 @@ coreBuiltinRuntime =
     CoreIdentity -> coreIdentity
     CoreVerifySPV -> coreVerifySPV
     CoreEnforceVerifier -> coreEnforceVerifier
+    CoreUseAlias -> coreUseAlias

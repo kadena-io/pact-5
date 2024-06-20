@@ -206,6 +206,7 @@ data EvalState b i
   , _esCheckRecursion :: NonEmpty RecursionCheck
     -- ^ Sequence of gas expendature events.
   , _esTraceOutput :: [PactTrace b i]
+  -- ^ The tracing output from
   } deriving (Show, Generic)
 
 instance (NFData b, NFData i) => NFData (EvalState b i)

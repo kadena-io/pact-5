@@ -217,6 +217,7 @@ data Loaded b i
   -- ^ The potentially loaded current namespace
   , _loAllLoaded :: Map FullyQualifiedName (Def Name Type b i)
   -- ^ All of our fully qualified dependencies
+  , _loAlias :: Map NamespaceAlias NamespaceName
   } deriving (Show, Generic)
 
 instance (NFData b, NFData i) => NFData (Loaded b i)
@@ -224,14 +225,14 @@ instance (NFData b, NFData i) => NFData (Loaded b i)
 makeClassy ''Loaded
 
 instance Semigroup (Loaded b i) where
-  (Loaded ms tl ns al) <> (Loaded ms' tl' ns' al') =
-    Loaded (ms <> ms') (tl <> tl') (ns <|> ns') (al <> al')
+  (Loaded ms tl ns al nsl) <> (Loaded ms' tl' ns' al' nsr) =
+    Loaded (ms <> ms') (tl <> tl') (ns <|> ns') (al <> al') (nsl <> nsr)
 
 instance Monoid (Loaded b i) where
-  mempty = Loaded mempty mempty Nothing mempty
+  mempty = Loaded mempty mempty Nothing mempty mempty
 
 instance Default (Loaded b i) where
-  def = Loaded mempty mempty Nothing mempty
+  def = Loaded mempty mempty Nothing mempty mempty
 
 -- | Map the user's table name into a set of names suitable for
 --   storage in the persistence backend (prefix USER_ and the module name

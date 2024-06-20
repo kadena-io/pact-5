@@ -411,11 +411,11 @@ desugarLispTerm = \case
 pattern MapV :: i -> Lisp.Expr i
 pattern MapV info = Lisp.Var (BN (BareName "map")) info
 pattern FilterV :: i -> Lisp.Expr i
-pattern FilterV info = Lisp.Var (BN (BareName "map")) info
+pattern FilterV info = Lisp.Var (BN (BareName "filter")) info
 pattern FoldV :: i -> Lisp.Expr i
-pattern FoldV info = Lisp.Var (BN (BareName "map")) info
+pattern FoldV info = Lisp.Var (BN (BareName "fold")) info
 pattern ZipV :: i -> Lisp.Expr i
-pattern ZipV info = Lisp.Var (BN (BareName "map")) info
+pattern ZipV info = Lisp.Var (BN (BareName "zip")) info
 
 pattern CondV :: i -> Lisp.Expr i
 pattern CondV info = Lisp.Var (BN (BareName "cond")) info
@@ -1330,6 +1330,25 @@ resolveBare (BareName bn) i = views reBinds (M.lookup bn) >>= \case
       (mn, imps) <- resolveModuleName i unmangled
       pure (Name bn (NModRef mn imps), Nothing)
 
+resolveQualified
+  :: (MonadEval b i m)
+  => QualifiedName
+  -> i
+  -> RenamerT b i m (Name, Maybe DefKind)
+resolveQualified (QualifiedName qn (ModuleName modName mns)) i = case mns of
+  Just (NamespaceName ns) -> do
+    aliased <- getAlias (NamespaceAlias ns)
+    resolveQualified' (QualifiedName qn (ModuleName modName (Just aliased))) i
+  Nothing -> do
+    NamespaceName aliased <- getAlias (NamespaceAlias modName)
+    resolveQualified' (QualifiedName qn (ModuleName aliased Nothing)) i
+  where
+  getAlias alias@(NamespaceAlias ns) =
+    usesEvalState (esLoaded . loAlias) (M.lookup alias) >>= \case
+      Just nsn -> pure nsn
+      Nothing -> pure (NamespaceName ns)
+
+
 -- | Resolve a qualified name `<qual>.<name>` with the following
 -- procedure:
 --  - <qual> has the form `<namespace>.<module>`:
@@ -1340,12 +1359,12 @@ resolveBare (BareName bn) i = views reBinds (M.lookup bn) >>= \case
 --      a namespaced identifier when a namespace is in scope (so m.f when `(namespace 'free)` has been called),
 --      or a module reference where `<name>` is actually the module name, and `<module>` was actually the namespace.
 --
-resolveQualified
+resolveQualified'
   :: (MonadEval b i m)
   => QualifiedName
   -> i
   -> RenamerT b i m (Name, Maybe DefKind)
-resolveQualified (QualifiedName qn qmn@(ModuleName modName mns)) i = do
+resolveQualified' (QualifiedName qn qmn@(ModuleName modName mns)) i = do
   pdb <- viewEvalEnv eePactDb
   runMaybeT (baseLookup pdb qn qmn <|> modRefLookup pdb <|> namespacedLookup pdb) >>= \case
     Just p -> pure p

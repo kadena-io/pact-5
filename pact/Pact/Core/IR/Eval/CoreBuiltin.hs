@@ -35,7 +35,7 @@ import Data.Either(isLeft, isRight)
 import Data.Foldable
 import Data.Decimal(roundTo', Decimal, DecimalRaw(..))
 import Data.Vector(Vector)
-import Data.Maybe(maybeToList)
+import Data.Maybe(maybeToList, isJust)
 import Numeric(showIntAtBase)
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
@@ -1742,18 +1742,6 @@ coreDefineNamespace info b cont handler env = \case
             applyLam (C clo) [VString n, VGuard adminG] cont' handler
           _ -> throwNativeExecutionError info b $ "Fatal error: namespace manager function is not a defun"
   args -> argsError info b args
-  where
-  isValidNsFormat nsn = case T.uncons nsn of
-    Just (h, tl) ->
-      isValidNsHead h && T.all isValidNsChar tl
-    Nothing -> False
-  isValidNsHead c =
-    Char.isLatin1 c && Char.isAlpha c
-  isValidNsChar c =
-    Char.isLatin1 c && (Char.isAlphaNum c || T.elem c validSpecialChars)
-  validSpecialChars :: T.Text
-  validSpecialChars =
-    "%#+-_&$@<>=^?*!|/~"
 
 coreDescribeNamespace :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
 coreDescribeNamespace info b cont handler _env = \case
@@ -1972,6 +1960,25 @@ coreEnforceVerifier info b cont handler _env = \case
 
 
 -----------------------------------
+-- Aliasing
+-----------------------------------
+coreUseAlias :: (CEKEval step b i m, MonadEval b i m) => NativeFunction step b i m
+coreUseAlias info b cont handler env = \case
+  [VString orig, VString alias] | not (T.null alias), not (T.null orig) -> do
+    enforceTopLevelOnly info b
+    origExists <- checkNsExists (NamespaceName orig)
+    unless origExists $
+      throwNativeExecutionError info b "Use-alias failure: origin namespace does not exist"
+    unless (isValidNsFormat alias) $ throwNativeExecutionError info b "invalid namespace format"
+    (esLoaded . loAlias) %== M.insert (NamespaceAlias alias) (NamespaceName orig)
+    returnCEKValue cont handler (VString "Set namespace qualifier alias")
+  args -> argsError info b args
+  where
+  checkNsExists ns = do
+    let pdb = _cePactDb env
+    isJust <$> liftDbFunction info (readNamespace pdb ns)
+
+-----------------------------------
 -- Builtin exports
 -----------------------------------
 
@@ -2132,3 +2139,4 @@ coreBuiltinRuntime = \case
   CoreIdentity -> coreIdentity
   CoreVerifySPV -> coreVerifySPV
   CoreEnforceVerifier -> coreEnforceVerifier
+  CoreUseAlias -> coreUseAlias
