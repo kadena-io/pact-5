@@ -32,6 +32,7 @@ import qualified Data.Text.Encoding as Text
 import GHC.Generics
 
 import Test.QuickCheck
+import  Pact.JSON.Legacy.Value
 
 import Pact.Core.Command.Orphans ()
 import Pact.Core.SPV
@@ -64,7 +65,7 @@ instance Arbitrary c => Arbitrary (PactRPC c) where
 
 data ExecMsg c = ExecMsg
   { _pmCode :: c
-  , _pmData :: Aeson.Value -- TODO: Greg: Is this the correct type?
+  , _pmData :: LegacyValue
   } deriving (Eq,Generic,Show,Functor,Foldable,Traversable)
 
 instance NFData c => NFData (ExecMsg c)
@@ -83,7 +84,7 @@ instance J.Encode c => J.Encode (ExecMsg c) where
   {-# INLINE build #-}
 
 instance Arbitrary c => Arbitrary (ExecMsg c) where
-  arbitrary = ExecMsg <$> arbitrary <*> pure (Aeson.String "JSON VALUE")
+  arbitrary = ExecMsg <$> arbitrary <*> pure (LegacyValue $ Aeson.String "JSON VALUE")
 
 data ContMsg = ContMsg
   { _cmPactId :: !DefPactId
