@@ -41,7 +41,6 @@ import Pact.Core.IR.Term
 import Pact.Core.Info
 import Pact.Core.Namespace
 import Pact.Core.ModRefs
-import Pact.Core.Verifiers
 import qualified Pact.Core.Legacy.LegacyPactValue as Legacy
 
 import qualified PackageInfo_pact_tng as PI

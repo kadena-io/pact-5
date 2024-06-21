@@ -7,10 +7,10 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Pact.Core.Verifiers
-  ( VerifierName(..)
-  , Verifier(..)
+  ( Verifier(..)
   , verifierName
   , verifierProof
   , verifierCaps
@@ -20,9 +20,9 @@ module Pact.Core.Verifiers
 import Control.DeepSeq
 import Control.Lens
 import Data.Aeson
-import Data.Text
 import GHC.Generics
 
+import qualified Pact.JSON.Decode as JD
 import qualified Pact.JSON.Encode as J
 
 import Pact.Core.Legacy.LegacyPactValue
@@ -31,10 +31,6 @@ import Pact.Core.Names
 import Pact.Core.Capabilities
 import Pact.Core.PactValue
 import Pact.Core.StableEncoding
-
-newtype VerifierName = VerifierName Text
-  deriving newtype (J.Encode, NFData, Eq, Show, Ord, FromJSON)
-  deriving stock Generic
 
 data Verifier prf = Verifier
   { _verifierName :: VerifierName
@@ -68,3 +64,7 @@ instance FromJSON a => FromJSON (Verifier a) where
 
 instance J.Encode ParsedVerifierProof where
   build (ParsedVerifierProof as) = J.build (StableEncoding as)
+
+instance JD.FromJSON ParsedVerifierProof where
+  parseJSON =
+    fmap (ParsedVerifierProof . _stableEncoding) . (parseJSON @(StableEncoding PactValue))

@@ -31,7 +31,6 @@ import Pact.Core.Names
 import Pact.Core.IR.Eval.CoreBuiltin
 import Pact.Core.Pretty
 import Pact.Core.Environment
-import Pact.Core.Verifiers
 import Pact.Core.PactValue
 import Pact.Core.Gas
 import Pact.Core.Guards

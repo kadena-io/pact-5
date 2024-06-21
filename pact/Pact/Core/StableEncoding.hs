@@ -33,7 +33,9 @@ import Pact.JSON.Legacy.Utils
 
 import Pact.Core.Capabilities
 import Pact.Core.ChainData
+import Pact.Core.Errors
 import Pact.Core.Legacy.LegacyCodec
+import Pact.Core.Info
 import Pact.Core.Literal
 import Pact.Core.Guards
 import Pact.Core.Names
@@ -42,6 +44,7 @@ import Pact.Core.Persistence.Types
 import Pact.Core.Hash
 import Pact.Core.DefPacts.Types
 import Pact.Core.PactValue
+import Pact.Core.Pretty
 import Pact.Time
 
 
@@ -185,9 +188,11 @@ instance J.Encode (StableEncoding DefPactExec) where
     , "defPactId" J..= StableEncoding defPactId
     , "continuation" J..= StableEncoding continuation
     , "stepHasRollback" J..= stepHasRollback
-    , "nestedDefPactExec" J..= (Map.fromList . fmap (bimap _defPactId StableEncoding) . Map.toList $ nestedDefPactExec)
+    , "nestedDefPactExec" J..= J.Object (convertMap nestedDefPactExec)
         -- fmap StableEncoding nestedDefPactExec
     ]
+    where convertMap :: Map DefPactId DefPactExec -> Map T.Text (StableEncoding DefPactExec)
+          convertMap = Map.fromList . fmap (bimap _defPactId StableEncoding) . Map.toList
 
 instance JD.FromJSON (StableEncoding DefPactExec) where
   parseJSON = JD.withObject "DefPactExec" $ \o -> do
@@ -386,8 +391,7 @@ instance J.Encode (StableEncoding PactValue) where
     PGuard g -> J.build (StableEncoding g)
     PObject o -> J.build (StableEncoding o)
     PModRef mr -> J.build (StableEncoding mr)
-    -- TODO: implement/figure this out
-    PCapToken _ct -> error "not implemented"
+    PCapToken ct -> J.build (StableEncoding ct)
     PTime pt -> J.build (StableEncoding pt)
   {-# INLINABLE build #-}
 
@@ -416,6 +420,12 @@ instance J.Encode (StableEncoding name) => J.Encode (StableEncoding (CapToken na
     [ "name" J..= J.build (StableEncoding name)
     , "args" J..= J.build (J.Array (StableEncoding <$> args))
     ]
+
+instance JD.FromJSON (StableEncoding name) => JD.FromJSON (StableEncoding (CapToken name PactValue)) where
+  parseJSON = JD.withObject "CapToken" $ \o -> do
+    name <- o JD..: "name"
+    args <- o JD..: "args"
+    pure $ StableEncoding (CapToken (_stableEncoding name) (_stableEncoding <$> args))
 
 
 -- | Stable encoding of `DefPactContinuation FullyQualifiedName PactValue`
@@ -451,3 +461,17 @@ instance JD.FromJSON (StableEncoding (PactEvent PactValue)) where
     modName <- o JD..: "module"
     modHash <- o JD..: "moduleHash"
     pure $ StableEncoding (PactEvent name (fmap _stableEncoding args) (_stableEncoding modName) (_stableEncoding modHash))
+
+instance JD.FromJSON (StableEncoding SpanInfo) where
+  parseJSON = JD.withObject "SpanInfo" $ \o -> do
+    startLine <- o JD..: "startLine"
+    startColumn <- o JD..: "startColumn"
+    endLine <- o JD..: "endLine"
+    endColumn <- o JD..: "endColumn"
+    pure $ StableEncoding (SpanInfo startLine startColumn endLine endColumn)
+
+instance J.Encode (StableEncoding PactErrorI) where
+  build (StableEncoding err) = J.build (renderText err)
+
+instance JD.FromJSON (StableEncoding PactErrorI) where
+  parseJSON = undefined -- TODO

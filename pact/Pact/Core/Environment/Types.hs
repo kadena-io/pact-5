@@ -106,6 +106,7 @@ import Pact.Core.Gas
 import Pact.Core.Namespace
 import Pact.Core.StackFrame
 import Pact.Core.Verifiers
+import Pact.Core.Builtin (IsBuiltin)
 import Pact.Core.SPV
 import Pact.Core.Info
 import Pact.Core.Debug
