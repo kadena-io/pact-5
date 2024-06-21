@@ -15,7 +15,6 @@ import qualified Pact.Core.Test.PoseidonTests as PoseidonTests
 import qualified Pact.Core.Test.LanguageServer as LanguageServer
 import qualified Pact.Core.Test.GasGolden as GasGolden
 import qualified Pact.Core.Test.SizeOfTests as SizeOfTests
-import Hedgehog (Command(Command))
 
 main :: IO ()
 main = do

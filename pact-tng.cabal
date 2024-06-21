@@ -411,6 +411,7 @@ test-suite core-tests
     , mtl
     , text
     , transformers
+    , pact-json
     , pact-tng
     , prettyprinter
     , vector
@@ -429,6 +430,7 @@ test-suite core-tests
     , lsp-types
   other-modules:
     , Pact.Core.Test.CommandTests
+    , Pact.Core.Test.ReplTests
     , Pact.Core.Test.LexerParserTests
     , Pact.Core.Test.LexerTests
     , Pact.Core.Test.PersistenceTests
