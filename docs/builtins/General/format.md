@@ -1,11 +1,14 @@
 ## format
-Use `format` to interpolate variables `VARS` into a `TEMPLATE` string using `{}` placeholders.
+
+Use `format` to input specified variables `vars` into a `template` string using `{}` placeholders.
 
 ### Basic syntax
 
-To interpolate variables into a template string using `{}` placeholders, use the following syntax:
+To input variables into a template string using `{}` placeholders, use the following syntax:
 
-`(format TEMPLATE VARS)`
+```pact
+(format template vars)
+```
 
 ### Arguments
 
@@ -13,12 +16,12 @@ Use the following arguments to specify the template string and variables for the
 
 | Argument  | Type        | Description                                      |
 |-----------|-------------|--------------------------------------------------|
-| `TEMPLATE`  | `string`      | Specifies the template string with `{}` placeholders. |
-| `VARS`      | `[any]`         | Specifies the variables to interpolate into the template.    |
+| `template` | string | Specifies the template string with `{}` placeholders. |
+| `vars` | any | Specifies the variables to interpolate into the template. |
 
 ### Return values
 
-The `format` function returns a new string with the variables interpolated into the template.
+The `format` function returns a new string with the values from the specified variables replacing the placeholder curly braces `{}` from the template string.
 
 ### Examples
 

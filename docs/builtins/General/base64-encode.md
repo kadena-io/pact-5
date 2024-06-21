@@ -30,5 +30,3 @@ The following example converts the "hello world!" into the unpadded base64-encod
 pact> (base64-encode "hello world!")
 "aGVsbG8gd29ybGQh"
 ```
-
-In this example, `base64-encode` encodes t
