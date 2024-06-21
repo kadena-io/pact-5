@@ -34,8 +34,8 @@ mkCommand
   -> IO (Command ByteString)
 mkCommand creds vers meta nonce nid rpc = mkCommand' creds encodedPayload
   where
-    encodedPayload = J.encodeStrict $ payload
     payload = Payload rpc nonce meta (keyPairsToSigners creds) (vers <$ guard (not (null vers))) nid
+    encodedPayload = J.encodeStrict payload
 
 
 keyPairToSigner :: Ed25519KeyPair -> [UserCapability] -> Signer QualifiedName PactValue

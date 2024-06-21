@@ -423,11 +423,12 @@ test-suite core-tests
     , groups
     , semirings
     , neat-interpolation
+    , pact-tng:pact-request-api
     , pact-tng:pact-lsp
     , lsp-test
     , lsp-types
   other-modules:
-    , Pact.Core.Test.ReplTests
+    , Pact.Core.Test.CommandTests
     , Pact.Core.Test.LexerParserTests
     , Pact.Core.Test.LexerTests
     , Pact.Core.Test.PersistenceTests
