@@ -91,7 +91,6 @@ import Pact.Core.IR.Eval.Direct.Types
 import Pact.Core.Gas
 import Pact.Core.StableEncoding
 import Pact.Core.SPV
-import Pact.Core.Verifiers
 
 import Pact.Core.Namespace
 #ifndef WITHOUT_CRYPTO

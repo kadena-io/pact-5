@@ -57,15 +57,13 @@ module Pact.Core.Command.Types
 import Control.Applicative
 import Control.Lens hiding ((.=), elements)
 import Control.Monad
-import Control.Monad.Except (runExceptT)
 import Control.DeepSeq
 
 import Data.Aeson as A
-import Data.Bifunctor (first, second)
+import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Short as ShortByteString
 import qualified Data.ByteString.Base16 as B16
-import Data.Default
 import Data.Foldable
 import Data.Hashable (Hashable)
 import Data.Serialize as SZ
@@ -74,11 +72,9 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Data.Maybe  (fromMaybe)
-import Data.Word
 
 import GHC.Generics
 
-import Test.QuickCheck
 
 import Pact.Core.Capabilities
 import Pact.Core.ChainData
@@ -86,9 +82,7 @@ import Pact.Core.Compile
 import Pact.Core.DefPacts.Types
 import Pact.Core.Errors
 import Pact.Core.Guards
-import Pact.Core.Evaluate
 import Pact.Core.Gas.Types
-import Pact.Core.Guards
 import Pact.Core.Names
 import qualified Pact.Core.Hash as PactHash
 import Pact.Core.Persistence.Types
@@ -96,19 +90,15 @@ import Pact.Core.Info
 import Pact.Core.Command.Orphans ()
 import Pact.Core.PactValue (PactValue(..))
 import Pact.Core.Command.RPC
-import Pact.Core.IR.Eval.Runtime
 import Pact.Core.StableEncoding
-import qualified Pact.Core.Syntax.Lexer as Lisp
-import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import Pact.Core.Verifiers
 
-import Pact.JSON.Legacy.Value
+import qualified Pact.JSON.Decode as JD
 import qualified Pact.JSON.Encode as J
 
 
 import Pact.Core.Command.Crypto              as Base
-import Pact.Core.Command.Util
 
 -- | Command is the signed, hashed envelope of a Pact execution instruction or command.
 -- In 'Command ByteString', the 'ByteString' payload is hashed and signed; the ByteString
@@ -152,7 +142,6 @@ type Ed25519KeyPairCaps = (Ed25519KeyPair ,[SigCapability])
 
 -- These two types in legacy pact had the same definition and
 -- JSON encoding. Can they be unified?
-type UserCapability = CapToken QualifiedName PactValue
 type SigCapability = CapToken QualifiedName PactValue
 
 
@@ -172,7 +161,7 @@ parsePact t =
 
 -- VALIDATING TRANSACTIONS
 
-verifyCommand :: FromJSON m => Command ByteString -> ProcessedCommand m ParsedCode
+verifyCommand :: forall m. FromJSON m => Command ByteString -> ProcessedCommand m ParsedCode
 verifyCommand orig@Command{..} =
   case parsedPayload of
     Right env' -> case verifiedHash of
@@ -186,7 +175,7 @@ verifyCommand orig@Command{..} =
     toProcFail errStr = ProcFail $ "Invalid command: " ++ errStr
 
     parsedPayload :: Either String (Payload m ParsedCode)
-    parsedPayload = traverse parsePact =<< A.eitherDecodeStrict' _cmdPayload
+    parsedPayload = traverse parsePact =<< A.eitherDecodeStrict' @(Payload m Text) _cmdPayload
 
     verifiedHash = PactHash.verifyHash _cmdHash _cmdPayload
 
@@ -245,15 +234,23 @@ instance J.Encode (Signer QualifiedName PactValue) where
     [ "addr" J..?= _siAddress o
     , "scheme" J..?= _siScheme o
     , "pubKey" J..= _siPubKey o
-    , "clist" J..??= J.Array (_siCapList o)
+    , "clist" J..??= J.Array (StableEncoding  <$> _siCapList o)
     ]
 
 instance FromJSON (Signer QualifiedName PactValue) where
-  parseJSON = withObject "Signer" $ \o -> Signer
-    <$> o .:? "scheme"
-    <*> o .: "pubKey"
-    <*> o .:? "addr"
-    <*> (listMay <$> (o .:? "clist"))
+  -- parseJSON = withObject "Signer" $ \o -> Signer
+  --   <$> o .:? "scheme"
+  --   <*> o .: "pubKey"
+  --   <*> o .:? "addr"
+  --   <*> (listMay <$> ((fmap.fmap) _stableEncoding <$>  (o .:? "clist")))
+  --   where
+  --     listMay = fromMaybe []
+  parseJSON = withObject "Signer" $ \o -> do
+    scheme <- o .:? "scheme"
+    pubKey <- o .: "pubKey"
+    addr <- o .:? "addr"
+    clist <- listMay <$> o .:? "clist"
+    pure $ Signer scheme pubKey addr (_stableEncoding <$> clist)
     where
       listMay = fromMaybe []
 
@@ -270,7 +267,7 @@ instance (NFData a,NFData m) => NFData (Payload m a)
 
 instance (J.Encode a, J.Encode m) => J.Encode (Payload m a) where
   build o = J.object
-    [ "networkId" J..= _pNetworkId o
+    [ "networkId" J..= fmap _networkId (_pNetworkId o)
     , "payload" J..= _pPayload o
     , "signers" J..= J.Array (_pSigners o)
     , "verifiers" J..?= fmap J.Array (_pVerifiers o)
@@ -279,7 +276,15 @@ instance (J.Encode a, J.Encode m) => J.Encode (Payload m a) where
     ]
   {-# INLINE build #-}
 
-instance (FromJSON a,FromJSON m) => FromJSON (Payload m a) where parseJSON = lensyParseJSON 2
+instance (FromJSON a,FromJSON m) => FromJSON (Payload m a) where
+  parseJSON = JD.withObject "Payload" $ \o -> do
+    payload <- o .: "payload"
+    nonce' <- o .: "nonce"
+    meta <- o .: "meta"
+    signers <- o .: "signers"
+    verifiers <- o .:? "verifiers"
+    networkId <- o .:? "networkId"
+    pure $ Payload payload nonce' meta signers verifiers (fmap NetworkId networkId)
 
 newtype PactResult = PactResult
   { _pactResult :: Either PactErrorI PactValue
@@ -288,18 +293,36 @@ newtype PactResult = PactResult
 instance J.Encode PactResult where
   build (PactResult (Right s)) = J.object
     [ "status" J..= J.text "success"
-    , "data" J..= s
+    , "data" J..= StableEncoding s
     ]
   build (PactResult (Left f)) = J.object
     [ "status" J..= J.text "failure"
-    , "error" J..= f
+    , "error" J..= StableEncoding f
     ]
   {-# INLINE build #-}
 
 instance FromJSON PactResult where
   parseJSON (A.Object o) =
-    PactResult <$> ((Left . _getUxPactError <$> o .: "error") <|> (Right <$> o .: "data"))
+    PactResult <$> ((Left . _stableEncoding . _getUxPactError <$> o JD..: "error") <|> (Right . _stableEncoding <$> o .: "data"))
   parseJSON p = fail $ "Invalid PactResult " ++ show p
+
+newtype UxPactError = UxPactError { _getUxPactError :: StableEncoding PactErrorI }
+  deriving (Eq)
+  deriving newtype (J.Encode, FromJSON)
+
+-- -- TODO: Do we ever need to parse UxPactError's?
+-- instance FromJSON UxPactError where
+--   parseJSON = withObject "PactError" $ \o -> do
+--     typ <- o .: "type"
+--     doc <- o .: "message"
+--     inf <- o .: "info"
+--     sf <- parseSFs <$> o .: "callStack"
+--     pure . UxPactError $ PactError typ (_stableEncoding inf) sf (prettyString doc)
+--     where
+--       parseSFs :: [Text] -> [StackFrame SpanInfo]
+--       parseSFs sfs = case mapM (parseOnly parseUxStackFrame) sfs of
+--         Left _e -> []
+--         Right ss -> _getUxStackFrame <$> ss
 
 -- | API result of attempting to execute a pact command, parametrized over level of logging type
 data CommandResult l = CommandResult {
@@ -323,13 +346,13 @@ data CommandResult l = CommandResult {
 
 instance J.Encode l => J.Encode (CommandResult l) where
   build o = J.object
-    [ "gas" J..= fromIntegral @Word64 @Int (_gas (_crGas o))
+    [ "gas" J..= A.Number (fromIntegral (_gas (_crGas o)) )
     , "result" J..= _crResult o
     , "reqKey" J..= _crReqKey o
     , "logs" J..= _crLogs o
-    , "events" J..??= J.Array (_crEvents o)
-    , "metaData" J..= fmap toLegacyJson (_crMetaData o)
-    , "continuation" J..= _crContinuation o
+    , "events" J..??= J.Array (StableEncoding <$> _crEvents o)
+    , "metaData" J..= _crMetaData o
+    , "continuation" J..=  fmap StableEncoding (_crContinuation o)
     , "txId" J..= fmap (A.Number . fromIntegral . _txId) (_crTxId o)
     ]
   {-# INLINE build #-}

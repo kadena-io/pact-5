@@ -1,14 +1,31 @@
 module Pact.Core.Command.Client where
 
+import Control.Monad
+import Control.Monad.Except
+import Data.ByteString (ByteString)
+import Data.Text (Text)
+import qualified Pact.JSON.Encode as J
+
+import Pact.Core.Capabilities
+import Pact.Core.ChainData
+import Pact.Core.Command.RPC
 import Pact.Core.Command.Types
+import Pact.Core.Command.Util
 import Pact.Core.Command.Crypto
+import Pact.Core.Guards
+import qualified Pact.Core.Hash as PactHash
+import Pact.Core.PactValue
+import Pact.Core.Names
+import Pact.Core.Verifiers
 
 -- CREATING AND SIGNING TRANSACTIONS
+
+type UserCapability = CapToken QualifiedName PactValue
 
 mkCommand
   :: J.Encode c
   => J.Encode m
-  => [(Ed25519KeyPair, [SigCapability])]
+  => [(Ed25519KeyPair, [UserCapability])]
   -> [Verifier ParsedVerifierProof]
   -> m
   -> Text
@@ -17,28 +34,28 @@ mkCommand
   -> IO (Command ByteString)
 mkCommand creds vers meta nonce nid rpc = mkCommand' creds encodedPayload
   where
-    encodedPayload = J.encodeStrict $ toLegacyJsonViaEncode payload
+    encodedPayload = J.encodeStrict $ payload
     payload = Payload rpc nonce meta (keyPairsToSigners creds) (vers <$ guard (not (null vers))) nid
 
 
-keyPairToSigner :: Ed25519KeyPair -> [UserCapability] -> Signer
+keyPairToSigner :: Ed25519KeyPair -> [UserCapability] -> Signer QualifiedName PactValue
 keyPairToSigner cred caps = Signer scheme pub addr caps
       where
         scheme = Nothing
         pub = toB16Text $ exportEd25519PubKey $ fst cred
         addr = Nothing
 
-keyPairsToSigners :: [Ed25519KeyPairCaps] -> [Signer]
+keyPairsToSigners :: [Ed25519KeyPairCaps] -> [Signer QualifiedName PactValue]
 keyPairsToSigners creds = map (uncurry keyPairToSigner) creds
 
-signHash :: TypedHash h -> Ed25519KeyPair -> Text
+signHash :: PactHash.Hash -> Ed25519KeyPair -> Text
 signHash hsh (pub,priv) =
-  toB16Text $ exportEd25519Signature $ signEd25519 pub priv (toUntypedHash hsh)
+  toB16Text $ exportEd25519Signature $ signEd25519 pub priv hsh
 
 mkUnsignedCommand
   :: J.Encode m
   => J.Encode c
-  => [Signer]
+  => [Signer QualifiedName PactValue]
   -> [Verifier ParsedVerifierProof]
   -> m
   -> Text
@@ -52,7 +69,7 @@ mkUnsignedCommand signers vers meta nonce nid rpc = mkCommand' [] encodedPayload
 
 mkCommand' :: [(Ed25519KeyPair ,a)] -> ByteString -> IO (Command ByteString)
 mkCommand' creds env = do
-  let hsh = hash env    -- hash associated with a Command, aka a Command's Request Key
+  let hsh = PactHash.hash env    -- hash associated with a Command, aka a Command's Request Key
       toUserSig (cred,_) = ED25519Sig $ signHash hsh cred
   let sigs = toUserSig <$> creds
   return $ Command env sigs hsh
@@ -64,7 +81,7 @@ mkCommand' creds env = do
 -- signature generation when constructing the `Command`.
 mkCommandWithDynKeys' :: [(DynKeyPair, a)] -> ByteString -> IO (Command ByteString)
 mkCommandWithDynKeys' creds env = do
-  let hsh = hash env    -- hash associated with a Command, aka a Command's Request Key
+  let hsh = PactHash.hash env    -- hash associated with a Command, aka a Command's Request Key
   sigs <- traverse (toUserSig hsh) creds
   return $ Command env sigs hsh
   where
@@ -73,7 +90,7 @@ mkCommandWithDynKeys' creds env = do
       (DynEd25519KeyPair (pub, priv), _) ->
         pure $ ED25519Sig $ signHash hsh (pub, priv)
       (DynWebAuthnKeyPair _ pubWebAuthn privWebAuthn, _) -> do
-        signResult <- runExceptT $ signWebauthn pubWebAuthn privWebAuthn "" (toUntypedHash hsh)
+        signResult <- runExceptT $ signWebauthn pubWebAuthn privWebAuthn "" hsh
         case signResult of
           Left e -> error $ "Failed to sign with mock WebAuthn keypair: " ++ e
           Right sig -> return $ WebAuthnSig sig
@@ -92,7 +109,7 @@ mkCommandWithDynKeys
   -> IO (Command ByteString)
 mkCommandWithDynKeys creds vers meta nonce nid rpc = mkCommandWithDynKeys' creds encodedPayload
   where
-    encodedPayload = J.encodeStrict $ toLegacyJsonViaEncode payload
+    encodedPayload = J.encodeStrict payload
     payload = Payload rpc nonce meta (map credToSigner creds) (vers <$ guard (not (null vers))) nid
     credToSigner cred =
       case cred of

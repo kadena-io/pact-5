@@ -64,9 +64,11 @@ module Pact.Core.Names
  , parseParsedTyName
  , parseQualifiedName
  , parseFullyQualifiedName
+ , VerifierName(..)
  ) where
 
 import Control.Lens
+import Data.Aeson
 import Data.Text(Text)
 import qualified Data.Text as T
 import Data.Word(Word64)
@@ -76,6 +78,8 @@ import GHC.Generics
 import qualified Data.Char as Char
 import qualified Text.Megaparsec as MP
 import qualified Text.Megaparsec.Char as MP
+
+import qualified Pact.JSON.Encode as J
 
 import Pact.Core.Hash
 import Pact.Core.Pretty(Pretty(..))
@@ -495,3 +499,7 @@ renderDefPactId (DefPactId t) = t
 renderParsedTyName :: ParsedTyName -> Text
 renderParsedTyName (TBN (BareName n)) = n
 renderParsedTyName (TQN qn) = renderQualName qn
+
+newtype VerifierName = VerifierName Text
+  deriving newtype (J.Encode, NFData, Eq, Show, Ord, FromJSON)
+  deriving stock Generic

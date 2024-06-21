@@ -48,7 +48,6 @@ import Pact.Core.StackFrame
 import Pact.Core.DefPacts.Types
 import Pact.Core.PactValue
 import Pact.Core.Capabilities
-import Pact.Core.Verifiers
 
 
 type PactErrorI = PactError SpanInfo
