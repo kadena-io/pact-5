@@ -214,7 +214,7 @@ coinTransferCreateTxRaw sender receiver receiverKs =
 
 factorialNTXRaw :: Int -> Text
 factorialNTXRaw n =
-  [text| (fold (*) 1 (enumerate 1 ${n'})) |]
+  [text| (fold * 1 (enumerate 1 ${n'})) |]
   where
   n' = T.pack (show n)
 
@@ -316,7 +316,7 @@ runCoinTransferTx pdb sender receiver interp interpName =
     where
     termRaw = coinTransferTxRaw (kColonFromSender sender) (kColonFromSender receiver)
     title =
-      "EvalOnly(transfer) from "
+      "InterpretOnly(transfer) from "
       <> getSender sender
       <> " to "
       <> getSender receiver
@@ -334,7 +334,7 @@ runCoinTransferCreateTx pdb sender receiver interp interpName =
   runEvalTx title termRaw pdb signers envData interp
     where
     title =
-      "EvalOnly(transfer-create) from "
+      "InterpretOnly(transfer-create) from "
       <> getSender sender
       <> " to "
       <> getSender receiver
@@ -358,11 +358,11 @@ runCoinTransferCreateTxDesugar pdb sender receiver interp interpName =
       eval interp PImpure (_dsOut t)
     where
     title =
-      "DesugarEval(transfer-create) from "
+      "Load+Link+Interpret(transfer-create) from "
       <> getSender sender
       <> " to "
       <> getSender receiver
-      <> " including name resolution: "
+      <> " using: "
       <> interpName
     mkTerm = do
       () <$ _pdbBeginTx pdb Transactional
@@ -386,11 +386,11 @@ runCoinTransferTxDesugar pdb sender receiver interp interpName =
   runEvalDesugarTx title termRaw pdb signers envData interp
     where
     title =
-      "DesugarEval(transfer) from "
+      "Load+Link+Interpret(transfer) from "
       <> getSender sender
       <> " to "
       <> getSender receiver
-      <> " including name resolution: "
+      <> " using: "
       <> interpName
     signers = transferSigners sender receiver
     envData = PObject mempty
@@ -403,12 +403,12 @@ transferSigners sender receiver =
 allBenchmarks :: Bool -> Benchmark
 allBenchmarks resetDb = do
   env mkPactDb $ \ ~(pdb) ->
-    bgroup "PactBenchmarks"
+    bgroup "Pact Core Benchmarks"
       [ pureBenchmarks pdb
       , coinTransferBenches pdb]
   where
   coinTransferBenches pdb =
-    bgroup "CoinTransfer"
+    bgroup "Coin Transfer"
     [ runCoinTransferTx pdb CoinBenchSenderA CoinBenchSenderB interpretBigStep "CEK"
     , runCoinTransferTx pdb CoinBenchSenderA CoinBenchSenderB interpretDirect "Direct"
     -- Transfer with desugar
@@ -423,15 +423,15 @@ allBenchmarks resetDb = do
     -- transfer-create sender A to C
     , runCoinTransferCreateTx pdb CoinBenchSenderA CoinBenchSenderC interpretBigStep "CEK"
     , runCoinTransferCreateTx pdb CoinBenchSenderA CoinBenchSenderC interpretDirect "Direct"
-  -- transfer-create sender A to C with desugare
+  -- transfer-create sender A to C with desugar
     , runCoinTransferCreateTxDesugar pdb CoinBenchSenderA CoinBenchSenderC interpretBigStep "CEK"
     , runCoinTransferCreateTxDesugar pdb CoinBenchSenderA CoinBenchSenderC interpretDirect "Direct"
     ]
-  pureBenchmarks pdb = bgroup "PureCode"
+  pureBenchmarks pdb = bgroup "Pure Code"
     [ runPureBench "Factorial 1000" (factorialNTXRaw 1000) pdb interpretBigStep
     , runPureBench "Let 100" (deepLetTXRaw 100) pdb interpretBigStep
     , runPureBench "Let 1000" (deepLetTXRaw 1000) pdb interpretBigStep
-    , runPureBench "Let 10000" (deepLetTXRaw 10000) pdb interpretBigStep
+    -- , runPureBench "Let 10000" (deepLetTXRaw 10000) pdb interpretBigStep
     ]
   mkPactDb = do
     c <- doesFileExist benchmarkSqliteFile
