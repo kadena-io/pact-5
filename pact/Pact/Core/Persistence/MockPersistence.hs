@@ -145,12 +145,12 @@ mockPactDb serial = do
     , _pdbRollbackTx = rollbackTx pactTables
     , _pdbTxIds = txIds (ptTxLogQueue pactTables)
     , _pdbGetTxLog = txLog (ptTxLogQueue pactTables)
-    } --   }
+    }
   where
   beginTx pts@PactTables{..} em = do
     readIORef ptRollbackState >>= \case
       -- A tx is already in progress, so we fail to get a
-      -- tx id
+      -- new tx id
       Just _ -> pure Nothing
       -- No tx in progress, get the state of the pure tables prior to rollback.
       Nothing -> do

@@ -37,14 +37,11 @@ module Pact.Core.Environment.Types
  , cdBlockTime, cdPrevBlockHash
  , cdSender, cdGasLimit, cdGasPrice
  , EvalState(..)
---  , HasEvalState(..)
  , StackFrame(..)
  , StackFunctionType(..)
  , flagRep
  , flagReps
  , ExecutionFlag(..)
---  , MonadEvalEnv(..)
---  , MonadEvalState(..)
  , defaultEvalEnv
  , GasLogEntry(..)
  , RecursionCheck(..)
@@ -264,15 +261,6 @@ makeLenses ''EvalState
 instance HasLoaded (EvalState b i) b i where
   loaded = esLoaded
 
--- class (Monad m) => MonadEvalEnv b i m | m -> b, m -> i where
---   readEnv :: m (EvalEnv b i)
-
--- -- | Our monad mirroring `EvalState` for our evaluation state
--- class Monad m => MonadEvalState b i m | m -> b, m -> i where
---   getEvalState :: m (EvalState b i)
---   putEvalState :: EvalState b i -> m ()
---   modifyEvalState :: (EvalState b i -> EvalState b i) -> m ()
-
 -- | A default evaluation environment meant for
 --   uses such as the repl
 defaultEvalEnv :: PactDb b i -> M.Map Text b -> IO (EvalEnv b i)
@@ -299,8 +287,6 @@ defaultEvalEnv pdb m = do
 data ReplState b
   = ReplState
   { _replFlags :: Set ReplDebugFlag
-  -- , _replPactDb :: PactDb b SpanInfo
-  -- , _replEvalState :: EvalState b SpanInfo
   , _replEvalEnv :: EvalEnv b SpanInfo
   , _replEvalLog :: IORef (Maybe [(Text, Gas)])
   , _replCurrSource :: SourceCode
