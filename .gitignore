@@ -37,4 +37,4 @@ commands.sqlite
 cabal.project.local*
 .direnv
 .envrc
-core-benches.sqlite
+*.sqlite

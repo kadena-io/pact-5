@@ -384,7 +384,7 @@ mockPactDb serial = do
             MockSysTable (M.insert (renderKey rowkey) encodedData msys)
       TFDUser _ ->
         -- noop, should not be used for user tables
-        pure ()
+        error "Invariant violated: writeSysTable used for user table"
 
 rightToMaybe :: Either e a -> Maybe a
 rightToMaybe = \case

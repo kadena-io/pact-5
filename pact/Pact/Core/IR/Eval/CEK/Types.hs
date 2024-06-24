@@ -333,7 +333,7 @@ data NativeFn (e :: RuntimeMode) (step :: CEKStepKind) (b :: K.Type) (i :: K.Typ
   { _native :: !b
   , _nativeEnv :: !(CEKEnv e step b i)
   , _nativeFn :: !(NativeFunction e step b i)
-  , _nativeArity :: {-# UNPACK #-} !Int
+  , _nativeArity :: !Int
   , _nativeLoc :: !i
   } deriving (Generic)
 
@@ -347,7 +347,7 @@ data PartialNativeFn (e :: RuntimeMode) (step :: CEKStepKind) (b :: K.Type) (i :
   { _pNative :: !b
   , _pNativeEnv :: !(CEKEnv e step b i)
   , _pNativeFn :: !(NativeFunction e step b i)
-  , _pNativeArity :: {-# UNPACK #-} !Int
+  , _pNativeArity :: !Int
   , _pNativeAppliedArgs :: ![CEKValue e step b i]
   , _pNativeLoc :: !i
   } deriving (Generic)
@@ -474,7 +474,7 @@ data Cont (e :: RuntimeMode) (step :: CEKStepKind) (b :: K.Type) (i :: K.Type)
   -- ^ Continuation for the current object field being evaluated, and the already evaluated pairs
   | CapInvokeC (CEKEnv e step b i) i (CapCont e step b i) (Cont e step b i)
   -- ^ Frame for control flow around argument reduction to with-capability and create-user-guard
-  | CapBodyC (CEKEnv e step b i) i {-# UNPACK #-} !(CapBodyState b i) (Cont e step b i)
+  | CapBodyC (CEKEnv e step b i) i !(CapBodyState b i) (Cont e step b i)
   -- ^ CapBodyC includes
   --  - what to do after the cap body (pop it, or compose it)
   --  - Is it a user managed cap? If so, include the body token

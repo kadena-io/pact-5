@@ -13,7 +13,6 @@ import Criterion
 import Control.Exception
 import Data.Text(Text)
 import Data.Default
-import System.Directory
 import System.FilePath
 import NeatInterpolation (text)
 import Control.Monad.Except
@@ -400,8 +399,8 @@ transferSigners :: CoinBenchSenders -> CoinBenchSenders -> Map PublicKeyText (Se
 transferSigners sender receiver =
   M.singleton (pubKeyFromSender sender) (S.singleton (transferCapFromSender sender receiver 200.0))
 
-allBenchmarks :: Bool -> Benchmark
-allBenchmarks resetDb = do
+allBenchmarks :: Benchmark
+allBenchmarks = do
   env mkPactDb $ \ ~(pdb) ->
     bgroup "Pact Core Benchmarks"
       [ pureBenchmarks pdb
@@ -434,14 +433,11 @@ allBenchmarks resetDb = do
     -- , runPureBench "Let 10000" (deepLetTXRaw 10000) pdb interpretBigStep
     ]
   mkPactDb = do
-    c <- doesFileExist benchmarkSqliteFile
-    when (c && resetDb) $ removeFile benchmarkSqliteFile
     pdb <- mockPactDb serialisePact_raw_spaninfo
     _ <- _pdbBeginTx pdb Transactional
     _ <- setupCoinTxs pdb
     _ <- _pdbCommitTx pdb
     _ <- _pdbBeginTx pdb Transactional
-    when resetDb $ prePopulateCoinEntries pdb
     _ <- _pdbCommitTx pdb
     pure pdb
 

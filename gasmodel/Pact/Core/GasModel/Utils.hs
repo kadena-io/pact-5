@@ -59,8 +59,6 @@ newtype NoNF a
   = NoNf a
   deriving (Eq, Show)
 
--- NOTE: NECESSARY ORPHAN, otherwise we cannot simply make and
--- cleanup sqlite pact db instances.
 instance NFData (NoNF a) where
   rnf _ = ()
 

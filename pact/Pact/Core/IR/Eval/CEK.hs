@@ -546,7 +546,6 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
 
         resumeDefPactExec ccExec
       where
-        --resumeDefPactExec :: CEKEval e step b i, MonadEval b i m => DefPactExec -> EvalM e b i (CEKEvalResult e step b i)
         resumeDefPactExec pe = do
           when (_psDefPactId ps /= _peDefPactId pe) $
             throwExecutionError i (DefPactIdMismatch (_psDefPactId ps) (_peDefPactId pe))    -- TODO check with multichain
@@ -1772,13 +1771,6 @@ eval purity benv term = do
         VPactValue pv -> pure pv
         _ ->
           throwExecutionError (view termInfo term) (EvalError "Evaluation did not reduce to a value")
--- {-# SPECIALIZE eval
---    :: (Default i, Show i)
---    => Purity
---    -> BuiltinEnv CEKBigStep CoreBuiltin i (EvalM CoreBuiltin i)
---    -> EvalTerm CoreBuiltin i
---    -> EvalM CoreBuiltin i PactValue
---     #-}
 
 interpretGuard
   :: forall e step b i
@@ -1798,12 +1790,6 @@ interpretGuard info bEnv g = do
         VPactValue pv -> pure pv
         _ ->
           throwExecutionError info (EvalError "Evaluation did not reduce to a value")
-{-# SPECIALIZE interpretGuard
-   :: ()
-   -> CoreBuiltinEnv
-   -> Guard QualifiedName PactValue
-   -> Eval PactValue
-    #-}
 
 evalResumePact
   :: forall e step b i
@@ -1824,12 +1810,6 @@ evalResumePact info bEnv mdpe = do
         VPactValue pv -> pure pv
         _ ->
           throwExecutionError info (EvalError "Evaluation did not reduce to a value")
-{-# SPECIALIZE evalResumePact
-   :: ()
-   -> CoreBuiltinEnv
-   -> Maybe DefPactExec
-   -> Eval PactValue
-    #-}
 
 
 evaluateTermSmallStep

@@ -25,7 +25,6 @@ module Pact.Core.IR.Desugar
  , runDesugarReplTopLevel
  , DesugarOutput(..)
  , DesugarBuiltin(..)
-
  , runDesugarModule
  ) where
 
@@ -127,16 +126,7 @@ instance MonadTrans (RenamerT b i) where
 type RenamerM e b i =
   RenamerT b i (EvalM e b i)
 
--- instance (MonadEvalEnv b i m) => MonadEvalEnv b i (RenamerT b i m) where
---   readEnv = RenamerT (lift (lift readEnv))
-
--- instance (MonadEvalState b i m) => MonadEvalState b i (RenamerT b i m) where
---   getEvalState = RenamerT (lift (lift getEvalState))
---   putEvalState e = RenamerT (lift (lift (putEvalState e)))
---   modifyEvalState f = RenamerT (lift (lift (modifyEvalState f)))
-
--- Todo: DesugarBuiltin
--- probably should just be a `data` definition we pass in.
+-- | A simple typeclass for resolving arity overloads
 class IsBuiltin b => DesugarBuiltin b where
   liftCoreBuiltin :: CoreBuiltin -> b
   desugarOperator :: i -> Lisp.Operator -> Term ParsedName DesugarType b i
@@ -170,9 +160,11 @@ instance DesugarBuiltin CoreBuiltin where
       arg2Name = "#enforceOneArg2"
       arg2 = Arg arg2Name (Just (Lisp.TyList (Lisp.TyPrim PrimBool))) info
       in Lam (arg1 :| [arg2]) (Conditional (CEnforceOne (Var (BN (BareName arg1Name)) info) [Var (BN (BareName arg2Name)) info]) info) info
-  desugarAppArity = desugarAppArityRaw id
+  desugarAppArity = desugarCoreBuiltinArity id
 
-desugarAppArityRaw
+-- | Our general function for resolving builtin overloads
+--   for a specified arity.
+desugarCoreBuiltinArity
   :: (CoreBuiltin -> builtin)
   -> info
   -> CoreBuiltin
@@ -195,34 +187,34 @@ desugarAppArityRaw
 -- this is because prod simply suspends the static term without figuring out the arity which is being used
 -- to apply, vs core which does not attempt to do this, and picks an overload eagerly and statically.
 -- in 99% of cases this is fine, but we overloaded `-` to be completely different functions.
-desugarAppArityRaw f i CoreSub [e1] =
+desugarCoreBuiltinArity f i CoreSub [e1] =
     App (Builtin (f CoreNegate) i) ([e1]) i
-desugarAppArityRaw f i CoreEnumerate [e1, e2, e3] =
+desugarCoreBuiltinArity f i CoreEnumerate [e1, e2, e3] =
     App (Builtin (f CoreEnumerateStepN) i) ([e1, e2, e3]) i
-desugarAppArityRaw f i CoreSelect [e1, e2, e3] =
+desugarCoreBuiltinArity f i CoreSelect [e1, e2, e3] =
     App (Builtin (f CoreSelectWithFields) i) ([e1, e2, e3]) i
-desugarAppArityRaw f i CoreSort [e1, e2] =
+desugarCoreBuiltinArity f i CoreSort [e1, e2] =
   App (Builtin (f CoreSortObject) i) [e1, e2] i
 -- Rounding functions
-desugarAppArityRaw f i CoreRound [e1, e2] =
+desugarCoreBuiltinArity f i CoreRound [e1, e2] =
   App (Builtin (f CoreRoundPrec) i) [e1, e2] i
-desugarAppArityRaw f i CoreCeiling [e1, e2] =
+desugarCoreBuiltinArity f i CoreCeiling [e1, e2] =
   App (Builtin (f CoreCeilingPrec) i) [e1, e2] i
-desugarAppArityRaw f i CoreFloor [e1, e2] =
+desugarCoreBuiltinArity f i CoreFloor [e1, e2] =
   App (Builtin (f CoreFloorPrec) i) [e1, e2] i
 
 
-desugarAppArityRaw f i CoreStrToInt [e1, e2] =
+desugarCoreBuiltinArity f i CoreStrToInt [e1, e2] =
   App (Builtin (f CoreStrToIntBase) i) [e1, e2] i
-desugarAppArityRaw f i CoreReadMsg [] =
+desugarCoreBuiltinArity f i CoreReadMsg [] =
   App (Builtin (f CoreReadMsgDefault) i) [] i
-desugarAppArityRaw f i CoreDefineKeySet [e1] =
+desugarCoreBuiltinArity f i CoreDefineKeySet [e1] =
   App (Builtin (f CoreDefineKeysetData) i) [e1] i
-desugarAppArityRaw f i CorePoseidonHashHackachain li =
+desugarCoreBuiltinArity f i CorePoseidonHashHackachain li =
   App (Builtin (f CorePoseidonHashHackachain) i )[(ListLit li i)] i
-desugarAppArityRaw f i CoreYield [e1, e2] =
+desugarCoreBuiltinArity f i CoreYield [e1, e2] =
   App (Builtin (f CoreYieldToChain) i) [e1, e2] i
-desugarAppArityRaw f i b args =
+desugarCoreBuiltinArity f i b args =
     App (Builtin (f b) i) args i
 
 instance DesugarBuiltin (ReplBuiltin CoreBuiltin) where
@@ -230,7 +222,7 @@ instance DesugarBuiltin (ReplBuiltin CoreBuiltin) where
   desugarOperator i dsg =
     over termBuiltin RBuiltinWrap $ desugarOperator i dsg
   desugarAppArity i (RBuiltinWrap b) ne =
-    desugarAppArityRaw RBuiltinWrap i b ne
+    desugarCoreBuiltinArity RBuiltinWrap i b ne
   -- (expect <description> <expected> <expression-to-eval>)
   desugarAppArity i (RBuiltinRepl RExpect) ([e1, e2, e3]) | isn't _Nullary e3 =
     App (Builtin (RBuiltinRepl RExpect) i) ([e1, suspendTerm e2, suspendTerm e3]) i
@@ -626,7 +618,7 @@ desugarUse i imp = do
 -- Renaming
 -----------------------------------------------------------
 
--- Strongly connected components in term
+-- | Get the set of strongly connected free variables for a particular term.
 termSCC
   :: ModuleName
   -- ^ The current module

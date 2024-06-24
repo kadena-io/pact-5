@@ -163,19 +163,19 @@ data PartialNativeFn e b i
   { _pNative :: !b
   , _pNativeEnv :: !(DirectEnv e b i)
   , _pNativeFn :: !(NativeFunction e b i)
-  , _pNativeArity :: {-# UNPACK #-} !Int
+  , _pNativeArity :: !Int
   , _pNativeAppliedArgs :: ![EvalValue e b i]
   , _pNativeLoc :: i
   } deriving (Generic)
 
 data CanApply (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
-  = C {-# UNPACK #-} !(Closure e b i)
-  | LC {-# UNPACK #-} !(LamClosure e b i)
-  | PC {-# UNPACK #-} !(PartialClosure e b i)
-  | N {-# UNPACK #-} !(NativeFn e b i)
-  | PN {-# UNPACK #-} !(PartialNativeFn e b i)
-  | DPC {-# UNPACK #-} !(DefPactClosure e b i)
-  | CT {-# UNPACK #-} !(CapTokenClosure i)
+  = C !(Closure e b i)
+  | N !(NativeFn e b i)
+  | CT !(CapTokenClosure i)
+  | LC !(LamClosure e b i)
+  | PC !(PartialClosure e b i)
+  | PN !(PartialNativeFn e b i)
+  | DPC !(DefPactClosure e b i)
   deriving (Show, Generic)
 
 
@@ -216,9 +216,8 @@ instance Show (EvalValue e b i) where
     VTable vt -> "table" <> show (_tvName vt)
     VClosure _ -> "closure<>"
 
--- | Locally bound variables
--- type DirectEnv e b i = RAList (EvalValue e b i)
-
+-- | Locally bound variables and
+--   our local read-only environment.
 data DirectEnv e b i
   = DirectEnv
   { _ceLocal :: RAList (EvalValue e b i)
@@ -246,7 +245,7 @@ data NativeFn (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
   { _native :: !b
   , _nativeEnv :: !(DirectEnv e b i)
   , _nativeFn :: !(NativeFunction e b i)
-  , _nativeArity :: {-# UNPACK #-} !Int
+  , _nativeArity :: !Int
   , _nativeLoc :: i
   } deriving (Generic)
 
