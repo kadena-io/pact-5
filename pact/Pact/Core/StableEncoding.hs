@@ -29,7 +29,6 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Pact.JSON.Decode as JD
 import qualified Pact.JSON.Encode as J
-import Pact.JSON.Legacy.Utils
 
 import Pact.Core.Capabilities
 import Pact.Core.ChainData

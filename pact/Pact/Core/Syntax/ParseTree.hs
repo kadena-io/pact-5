@@ -15,8 +15,6 @@ import Data.Foldable(fold)
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.List(intersperse)
-import GHC.Generics
-
 import qualified Data.List.NonEmpty as NE
 import GHC.Generics
 
@@ -25,7 +23,6 @@ import Pact.Core.Names
 import Pact.Core.Pretty
 import Pact.Core.Type(PrimType(..))
 import Pact.Core.Guards
-import Control.DeepSeq
 
 
 data Operator

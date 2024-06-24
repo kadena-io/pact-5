@@ -5,7 +5,6 @@ module Pact.Core.Info
  , combineSpan
  ) where
 
-import Control.DeepSeq
 import Data.Default
 import GHC.Generics
 import Control.DeepSeq (NFData)
@@ -20,8 +19,6 @@ data SpanInfo
 
 instance Default SpanInfo where
   def = SpanInfo 0 0 0 0
-
-instance NFData SpanInfo
 
 -- | Combine two Span infos
 -- and spit out how far down the expression spans.

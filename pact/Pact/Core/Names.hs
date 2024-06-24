@@ -83,7 +83,6 @@ import qualified Pact.JSON.Encode as J
 
 import Pact.Core.Hash
 import Pact.Core.Pretty(Pretty(..))
-import Data.Aeson (FromJSONKey)
 import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Short as SB
 

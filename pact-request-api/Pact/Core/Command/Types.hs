@@ -154,7 +154,7 @@ instance NFData ParsedCode
 
 parsePact :: Text -> Either String ParsedCode
 parsePact t =
-  ParsedCode t <$> first show (fmap stripInfo <$> _parseOnly t)
+  ParsedCode t <$> first show (fmap stripInfo <$> parseOnlyProgram t)
   where
     stripInfo :: Lisp.TopLevel SpanInfo -> Lisp.TopLevel ()
     stripInfo = void
