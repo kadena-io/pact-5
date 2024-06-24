@@ -87,7 +87,6 @@ import Pact.Core.Names
 import qualified Pact.Core.Hash as PactHash
 import Pact.Core.Persistence.Types
 import Pact.Core.Info
-import Pact.Core.Command.Orphans ()
 import Pact.Core.PactValue (PactValue(..))
 import Pact.Core.Command.RPC
 import Pact.Core.StableEncoding
@@ -111,7 +110,6 @@ data Command a = Command
   , _cmdSigs :: ![UserSig]
   , _cmdHash :: !PactHash.Hash
   } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
-instance (Serialize a) => Serialize (Command a)
 
 instance (FromJSON a) => FromJSON (Command a) where
     parseJSON = withObject "Command" $ \o ->
