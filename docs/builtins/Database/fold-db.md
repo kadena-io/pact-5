@@ -19,7 +19,7 @@ Use the following arguments to specify the table, predicate, and consumer functi
 |-----------|--------------------|------------------------------------------------------------------|
 | `table` | table:<{row}> | Specifies the table from which to select rows. |
 | `query` | a:string b:object:<{row}> | Specifies the predicate function to apply to each row and return a boolean value. |
-| `consumer` | function with key:string and value:object:<{row}> | Specifies the consumer function to accumulate results. |
+| `consumer` | function with key:string and value:object:<{row}> | Specifies the consumer function used to accumulate results from each row and return the final result from all accumulated results. |
 
 ### Return values
 

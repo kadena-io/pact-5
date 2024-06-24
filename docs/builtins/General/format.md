@@ -17,7 +17,7 @@ Use the following arguments to specify the template string and variables for the
 | Argument  | Type        | Description                                      |
 |-----------|-------------|--------------------------------------------------|
 | `template` | string | Specifies the template string with `{}` placeholders. |
-| `variables` | any | Specifies the variables to insert into the template placeholders. |
+| `variables` | [any] | Specifies the variables to insert into the template placeholders. |
 
 ### Return values
 
@@ -28,7 +28,7 @@ The `format` function returns a new string with the values from the specified va
 The following example demonstrates how to use the `format` function with  `"My {} has {}"` as the template string with two `{}` placeholders:
 
 ```pact
-pact>(format "My {} has {}" ["dog" "fleas"])
+pact> (format "My {} has {}" ["dog" "fleas"])
 "My dog has fleas"
 ```
 

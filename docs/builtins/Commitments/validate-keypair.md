@@ -4,7 +4,7 @@ Use `validate-keypair` to verify that the Curve25519 `public` key and `secret` k
 
 ### Basic syntax
 
-To validate a Curve25519public and secret key pair, use the following syntax:
+To validate a Curve25519 public and secret key pair, use the following syntax:
 
 ```pact
 (validate-keypair public secret)

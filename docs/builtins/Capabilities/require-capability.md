@@ -7,7 +7,7 @@ By convention, capabilities are defined using all uppercase letters.
 
 ### Basic syntax
 
-To require a specific `CAPABILITY` to be granted, use the following syntax:
+To test whether a specific `CAPABILITY` has been granted before executing a portion of code in a contract, use the following syntax:
 
 ```pact
 (require-capability CAPABILITY)
@@ -15,11 +15,11 @@ To require a specific `CAPABILITY` to be granted, use the following syntax:
 
 ### Arguments
 
-Use the following argument to specify the `CAPABILITY` to be tested for its existing grant using the `require-capability` Pact function.
+Use the following argument to specify the `CAPABILITY` to be tested for using the `require-capability` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `CAPABILITY` |  | Specifies the capability that must be granted. |
+| `CAPABILITY` |  | Specifies the capability that must be granted before executing a certain portion of code. |
 
 ### Return value
 

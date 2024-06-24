@@ -35,7 +35,7 @@ The `read` function returns an object representing the requested row or columns 
 
 ### Examples
 
-he following example demonstrates defining a table schema for an `accounts` table that stores information about bank accounts, including the balance, currecny, and owner of each account:
+he following example demonstrates defining a table schema for an `accounts` table that stores information about bank accounts, including the balance, currency, and owner of each account:
 
 ```pact
 (defschema account
