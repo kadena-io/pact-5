@@ -142,7 +142,6 @@ library pact-request-api
     Pact.Core.Command.Types
     Pact.Core.Command.Client
     Pact.Core.Command.Crypto
-    Pact.Core.Command.Orphans
     Pact.Core.Command.RPC
     Pact.Core.Command.Util
     Pact.Core.Crypto.WebAuthn.Cose.PublicKey

@@ -34,7 +34,6 @@ import GHC.Generics
 import Test.QuickCheck
 import  Pact.JSON.Legacy.Value
 
-import Pact.Core.Command.Orphans ()
 import Pact.Core.SPV
 import Pact.Core.Names
 

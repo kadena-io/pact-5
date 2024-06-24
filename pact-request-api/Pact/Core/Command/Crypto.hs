@@ -95,9 +95,7 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Aeson as A
 import Control.DeepSeq (NFData)
 import Data.Hashable
-import Data.Serialize as SZ
 
-import Pact.Core.Command.Orphans ()
 import qualified Pact.Core.Crypto.WebAuthn.Cose.PublicKey as WA
 import qualified Pact.Core.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as WA
 import qualified Pact.Core.Crypto.WebAuthn.Cose.SignAlg as WA
@@ -124,8 +122,6 @@ import qualified Pact.JSON.Encode as J
 data UserSig = ED25519Sig T.Text
              | WebAuthnSig WebAuthnSignature
   deriving (Eq, Ord, Show, Generic)
-
-instance Serialize UserSig
 
 instance NFData UserSig
 
@@ -461,7 +457,7 @@ data WebAuthnSignature = WebAuthnSignature
   , signature :: T.Text
   } deriving (Show, Generic, Eq, Ord)
 
-instance Serialize WebAuthnSignature
+-- instance Serialize WebAuthnSignature
 
 instance NFData WebAuthnSignature
 
