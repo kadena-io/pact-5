@@ -83,7 +83,6 @@ import qualified Data.ASN1.Encoding as ASN1
 import qualified Data.ASN1.Types as ASN1
 import Data.ByteString (ByteString)
 import Data.ByteString.Short (fromShort)
-import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.ByteString.Base64.URL as Base64URL
@@ -100,9 +99,6 @@ import qualified Pact.Core.Crypto.WebAuthn.Cose.PublicKey as WA
 import qualified Pact.Core.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as WA
 import qualified Pact.Core.Crypto.WebAuthn.Cose.SignAlg as WA
 import qualified Pact.Core.Crypto.WebAuthn.Cose.Verify as WAVerify
-
-import Test.QuickCheck.Arbitrary
-import qualified Test.QuickCheck.Gen as Gen
 
 import Pact.Core.Command.Util
 import qualified Pact.Core.Hash as PactHash
@@ -145,16 +141,6 @@ instance A.FromJSON UserSig where
       parseEd25519 = A.withObject "UserSig" $ \o -> do
         t <- o A..: "sig"
         return $ ED25519Sig t
-
-instance Arbitrary UserSig where
-  arbitrary = Gen.oneof
-    [ do
-      sig <- BS.pack <$> Gen.vectorOf 64 arbitrary
-      case parseEd25519Signature sig of
-        Right parsedSig -> return $ ED25519Sig $ toB16Text $ exportEd25519Signature parsedSig
-        Left _ -> error "invalid ed25519 signature"
-    , WebAuthnSig <$> (WebAuthnSignature <$> fmap T.pack arbitrary <*> fmap T.pack arbitrary <*> fmap T.pack arbitrary)
-    ]
 
 -- ed25519
 
@@ -361,9 +347,6 @@ instance Show PublicKeyBS where
 instance A.FromJSONKey PublicKeyBS where
     fromJSONKey = A.FromJSONKeyTextParser (either fail (return . PubBS) . parseB16TextOnly)
     {-# INLINE fromJSONKey #-}
-instance Arbitrary PublicKeyBS where
-  arbitrary = PubBS . BS.pack <$> vector 32
-
 
 newtype PrivateKeyBS = PrivBS { _pktSecret :: ByteString }
   deriving (Eq, Generic, Hashable)
@@ -381,8 +364,6 @@ instance IsString PrivateKeyBS where
     Right b -> PrivBS b
 instance Show PrivateKeyBS where
   show (PrivBS b) = T.unpack $ toB16Text b
-instance Arbitrary PrivateKeyBS where
-  arbitrary = PrivBS . BS.pack <$> vector 32
 
 newtype SignatureBS = SigBS ByteString
   deriving (Eq, Show, Generic, Hashable)
@@ -394,8 +375,6 @@ instance A.FromJSON SignatureBS where
 instance J.Encode SignatureBS where
   build (SigBS p) = J.text $ toB16Text p
   {-# INLINE build #-}
-instance Arbitrary SignatureBS where
-  arbitrary = SigBS . BS.pack <$> vector 64
 
 --------- SCHEME HELPER FUNCTIONS ---------
 

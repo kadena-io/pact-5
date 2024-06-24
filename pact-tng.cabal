@@ -135,7 +135,6 @@ library pact-request-api
       asn1-encoding
     , asn1-types
     , cereal
-    , QuickCheck
     , pact-tng
     , pact-tng:pact-crypto
   exposed-modules:

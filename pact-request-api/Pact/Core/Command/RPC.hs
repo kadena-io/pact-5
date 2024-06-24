@@ -26,12 +26,9 @@ module Pact.Core.Command.RPC
 import Control.Applicative
 import Control.DeepSeq
 import qualified Data.Aeson as Aeson
-import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Text
 
 import GHC.Generics
 
-import Test.QuickCheck
 import  Pact.JSON.Legacy.Value
 
 import Pact.Core.SPV
@@ -59,9 +56,6 @@ instance J.Encode c => J.Encode (PactRPC c) where
   build (Continuation p) = J.object ["cont" J..= p]
   {-# INLINE build #-}
 
-instance Arbitrary c => Arbitrary (PactRPC c) where
-  arbitrary = oneof [Exec <$> arbitrary, Continuation <$> arbitrary]
-
 data ExecMsg c = ExecMsg
   { _pmCode :: c
   , _pmData :: LegacyValue
@@ -81,9 +75,6 @@ instance J.Encode c => J.Encode (ExecMsg c) where
     , "code" J..= _pmCode o
     ]
   {-# INLINE build #-}
-
-instance Arbitrary c => Arbitrary (ExecMsg c) where
-  arbitrary = ExecMsg <$> arbitrary <*> pure (LegacyValue $ Aeson.String "JSON VALUE")
 
 data ContMsg = ContMsg
   { _cmPactId :: !DefPactId
@@ -107,7 +98,6 @@ instance FromJSON ContMsg where
           -- <*> o .: "proof"
   {-# INLINE parseJSON #-}
 
-
 instance J.Encode ContMsg where
   build o = J.object
     [ "proof" J..= _cmProof o
@@ -117,11 +107,3 @@ instance J.Encode ContMsg where
     , "step" J..= J.Aeson (_cmStep o)
     ]
   {-# INLINE build #-}
-
-instance Arbitrary ContMsg where
-  arbitrary = ContMsg
-    <$> fmap (DefPactId . Text.pack) arbitrary
-    <*> arbitrary
-    <*> arbitrary
-    <*> pure (Aeson.String "JSON VALUE")
-    <*> fmap (Just . ContProof . Text.encodeUtf8 . Text.pack) arbitrary -- TODO: Greg: This is an odd instance or arbitrary for ContProof.
