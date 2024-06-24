@@ -5,21 +5,14 @@
 module Pact.Core.GasModel.InterpreterGas(benchmarks) where
 
 import Control.Lens
--- import Control.Monad
 import Control.Monad.IO.Class
 import Data.Default
--- import Data.Functor(void)
--- import Data.Bifunctor(bimap)
--- import Criterion.Types(Report)
 import qualified Data.RAList as RA
 import qualified Data.List.NonEmpty as NE
 import qualified Criterion as C
--- import qualified Criterion.Report as C
--- import qualified Criterion.Analysis as C
 import qualified Data.Text as T
 import qualified Data.Set as S
 import qualified Data.Map.Strict as M
-import qualified Database.SQLite3 as SQL
 
 import Pact.Core.Builtin
 import Pact.Core.Environment
@@ -45,21 +38,22 @@ import Pact.Core.GasModel.Utils
 runEvalDropState
   :: EvalEnv b i
   -> EvalState b i
-  -> EvalM b i a
+  -> EvalM ExecRuntime b i a
   -> IO (Either (PactError i) a)
-runEvalDropState ee es = fmap fst . runEvalM ee es
+runEvalDropState ee es = fmap fst . runEvalM (ExecEnv ee) es
 
 benchmarks :: C.Benchmark
-benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) -> do
-  C.bgroup "pact-core-term-gas" [staticExecutionBenchmarks pdb, termGas pdb, interpReturnGas pdb]
+benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _, _) -> do
+  C.bgroup "TermEvalGasCEK" [staticExecutionBenchmarks pdb, termGas pdb, interpReturnGas pdb]
   where
   mkPactDb = do
-    tup@(pdb, _) <- unsafeCreateSqlitePactDb serialisePact ":memory:"
+    (pdb, db, cache) <- unsafeCreateSqlitePactDb serialisePact ":memory:"
     ignoreGas def $ prepopulateDb pdb
     _ <- _pdbBeginTx pdb Transactional
-    pure tup
+    pure (pdb, NoNf db, NoNf cache)
 
-  cleanupPactDb (_, db) = SQL.close db
+  cleanupPactDb (_, NoNf db, NoNf cache) =
+    unsafeCloseSqlitePactDb db cache
 
 gasVarBound :: Int -> EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> C.Benchmark
 gasVarBound n ee es = do
@@ -117,7 +111,7 @@ letGas =
   let letBind = Let (Arg "_" Nothing ()) unitConst unitConst ()
   in simpleTermGas letBind "Let Node"
 
-constantExample :: CoreTerm -> CEKValue CEKSmallStep CoreBuiltin () Eval
+constantExample :: CoreTerm -> CEKValue ExecRuntime CEKSmallStep CoreBuiltin ()
 constantExample (Constant LUnit ()) = VPactValue (PLiteral LUnit)
 constantExample _ = error "boom"
 

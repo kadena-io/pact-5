@@ -1,6 +1,5 @@
 module Pact.Core.Repl.UserDocs where
 
-import Control.Lens
 import qualified Data.Map.Strict as M
 import Pact.Core.Builtin
 import Pact.Core.Repl.Utils
@@ -22,5 +21,5 @@ functionDocs = \case
   where
   addModuleDoc mn d = do
     let qualName = QualifiedName (Lisp.defName d) mn
-    traverse_ (\docs -> replUserDocs  %= M.insert qualName docs) (Lisp.defDocs d)
-    replTLDefPos %= M.insert qualName (Lisp.defInfo d)
+    traverse_ (\docs -> replUserDocs %== M.insert qualName docs) (Lisp.defDocs d)
+    replTLDefPos %== M.insert qualName (Lisp.defInfo d)

@@ -18,7 +18,6 @@ import Pact.Core.PactValue
 import Pact.Core.Builtin
 import Pact.Core.Type
 import Pact.Core.Errors
-import Pact.Core.IR.Eval.Runtime.Types
 import Pact.Core.Persistence
 import Pact.Core.Environment
 import Pact.Core.Gas
@@ -28,29 +27,23 @@ mkBuiltinFn
   :: (IsBuiltin b)
   => i
   -> b
-  -> CEKEnv step b i m
-  -> NativeFunction step b i m
-  -> NativeFn step b i m
+  -> CEKEnv e step b i
+  -> NativeFunction e step b i
+  -> NativeFn e step b i
 mkBuiltinFn i b env fn =
   NativeFn b env fn (builtinArity b) i
 {-# INLINE mkBuiltinFn #-}
 
-{-# SPECIALIZE argsError
-   :: ()
-   -> CoreBuiltin
-   -> [CEKValue step CoreBuiltin () Eval]
-   -> Eval (EvalResult step CoreBuiltin () Eval)
-    #-}
 argsError
-  :: (MonadEval b i m)
+  :: IsBuiltin b
   => i
   -> b
-  -> [CEKValue step b i m]
-  -> m a
+  -> [CEKValue e step b i]
+  -> EvalM e b i a
 argsError info b args =
   throwExecutionError info (NativeArgumentsError (builtinName b) (toArgTypeError <$> args))
 
-toArgTypeError :: CEKValue step b i m -> ArgTypeError
+toArgTypeError :: CEKValue e step b i -> ArgTypeError
 toArgTypeError = \case
   VPactValue pv -> case pv of
     PLiteral l -> ATEPrim (literalPrim l)
@@ -76,7 +69,7 @@ tryNodeGas :: MilliGas
 tryNodeGas = (MilliGas 100)
 
 
-readOnlyEnv :: CEKEnv step b i m -> CEKEnv step b i m
+readOnlyEnv :: CEKEnv e step b i -> CEKEnv e step b i
 readOnlyEnv e
   | view (cePactDb . pdbPurity) e == PSysOnly = e
   | otherwise =
@@ -96,7 +89,7 @@ readOnlyEnv e
              }
       in set cePactDb newPactdb e
 
-sysOnlyEnv :: forall step b i m. CEKEnv step b i m -> CEKEnv step b i m
+sysOnlyEnv :: forall e step b i. CEKEnv e step b i -> CEKEnv e step b i
 sysOnlyEnv e
   | view (cePactDb . pdbPurity) e == PSysOnly = e
   | otherwise =
@@ -122,12 +115,12 @@ sysOnlyEnv e
     _ -> _pdbRead pdb dom k
 
 
-envFromPurity :: Purity -> CEKEnv step b i m -> CEKEnv step b i m
+envFromPurity :: Purity -> CEKEnv e step b i -> CEKEnv e step b i
 envFromPurity PImpure = id
 envFromPurity PReadOnly = readOnlyEnv
 envFromPurity PSysOnly = sysOnlyEnv
 
-enforcePactValue :: (MonadEval b i m) => i -> CEKValue step b i m -> m PactValue
+enforcePactValue :: i -> CEKValue e step b i -> EvalM e b i PactValue
 enforcePactValue info = \case
   VPactValue pv -> pure pv
   _ -> throwExecutionError info ExpectedPactValue

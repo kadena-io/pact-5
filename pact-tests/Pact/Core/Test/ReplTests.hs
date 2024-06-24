@@ -10,7 +10,6 @@ import Test.Tasty.HUnit
 
 import Control.Monad(when)
 import Data.IORef
-import Data.Default
 import Data.Foldable(traverse_)
 import System.Directory
 import System.FilePath
@@ -85,8 +84,6 @@ runReplTest (ReplSourceDir path) pdb file src interp = do
   let source = SourceCode (path </> file) src
   let rstate = ReplState
             { _replFlags = mempty
-            , _replEvalState = def
-            , _replPactDb = pdb
             , _replEvalLog = gasLog
             , _replCurrSource = source
             , _replEvalEnv = ee

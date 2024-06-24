@@ -14,10 +14,10 @@ module Pact.Core.Compile
  , compileDesugarOnly
  , evalTopLevel
  , CompileValue(..)
+ , parseOnlyProgram
  ) where
 
 import Control.Lens
-import Control.Monad.Except
 import Control.Monad
 import Data.Maybe(mapMaybe)
 import Data.Text(Text)
@@ -53,24 +53,22 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 import Pact.Core.Gas
 import Pact.Core.SizeOf
 
-type HasCompileEnv b i m
-  = ( MonadEval b i m
-    , DesugarBuiltin b
+type HasCompileEnv b i
+  = (DesugarBuiltin b
     , Pretty b
     , IsBuiltin b
-    , PhaseDebug b i m
     , SizeOf i
     , SizeOf b
     )
 
-_parseOnly
+parseOnlyProgram
   :: Text -> Either PactErrorI [Lisp.TopLevel SpanInfo]
-_parseOnly source = do
-  lexed <- liftEither (Lisp.lexer source)
-  liftEither (Lisp.parseProgram lexed)
+parseOnlyProgram =
+  Lisp.lexer >=> Lisp.parseProgram
 
 _parseOnlyFile :: FilePath -> IO (Either PactErrorI [Lisp.TopLevel SpanInfo])
-_parseOnlyFile fp = _parseOnly <$> T.readFile fp
+_parseOnlyFile fp = parseOnlyProgram <$> T.readFile fp
+
 
 data CompileValue i
   = LoadedModule ModuleName ModuleHash
@@ -81,12 +79,11 @@ data CompileValue i
 
 
 enforceNamespaceInstall
-  :: (HasCompileEnv b i m)
-  => i
-  -> Interpreter b i m
-  -> m ()
+  :: i
+  -> Interpreter e b i
+  -> EvalM e b i ()
 enforceNamespaceInstall info interpreter =
-  useEvalState (esLoaded . loNamespace) >>= \case
+  use (esLoaded . loNamespace) >>= \case
     Just ns ->
       void $ interpretGuard interpreter info (_nsUser ns)
     Nothing ->
@@ -98,19 +95,15 @@ enforceNamespaceInstall info interpreter =
         throwExecutionError info (NamespaceInstallError "cannot install in root namespace")
     allowRoot SimpleNamespacePolicy = True
     allowRoot (SmartNamespacePolicy ar _) = ar
-{-# SPECIALIZE enforceNamespaceInstall
-  :: ()
-  -> Interpreter CoreBuiltin () Eval
-  -> Eval ()  #-}
 
 -- | Evaluate module governance
 evalModuleGovernance
-  :: (HasCompileEnv b i m)
-  => Interpreter b i m
+  :: (HasCompileEnv b i)
+  => Interpreter e b i
   -> Lisp.TopLevel i
-  -> m ()
+  -> EvalM e b i ()
 evalModuleGovernance interpreter tl = do
-  lo <- useEvalState esLoaded
+  lo <- use esLoaded
   pdb <- viewEvalEnv eePactDb
   case tl of
     Lisp.TLModule m -> do
@@ -126,7 +119,7 @@ evalModuleGovernance interpreter tl = do
                   term = App (Builtin (liftCoreBuiltin CoreEnforceGuard) info) (pure ksrg) info
               void $ eval interpreter PImpure term
             CapGov (FQName fqn) -> do
-              hasModAdmin <- usesEvalState (esCaps . csModuleAdmin) (S.member mname)
+              hasModAdmin <- uses (esCaps . csModuleAdmin) (S.member mname)
               if hasModAdmin then pure ()
               else do
                 -- check whether we already have module admin.
@@ -135,9 +128,9 @@ evalModuleGovernance interpreter tl = do
                     withCapApp = App (Var (fqnToName fqn) info) [] info
                     term = CapabilityForm (WithCapability withCapApp cgBody) info
                 void $ eval interpreter PImpure term
-                esCaps . csModuleAdmin %== S.insert mname
+                esCaps . csModuleAdmin %= S.insert mname
           -- | Restore the state to pre-module admin acquisition
-          esLoaded .== lo
+          esLoaded .= lo
         Nothing -> enforceNamespaceInstall info interpreter
     Lisp.TLInterface iface -> do
       let info = Lisp._ifInfo iface
@@ -148,17 +141,14 @@ evalModuleGovernance interpreter tl = do
         Just _ ->
           throwExecutionError info  (CannotUpgradeInterface ifn)
     _ -> pure ()
-{-# SPECIALIZE evalModuleGovernance
-  :: Interpreter CoreBuiltin () Eval
-  -> Lisp.TopLevel ()
-  -> Eval ()  #-}
+
 
 compileDesugarOnly
-  :: forall b i m
-  .  (HasCompileEnv b i m)
-  => Interpreter b i m
+  :: forall e b i
+  .  (HasCompileEnv b i)
+  => Interpreter e b i
   -> Lisp.TopLevel i
-  -> m (EvalTopLevel b i, S.Set ModuleName)
+  -> EvalM e b i (EvalTopLevel b i, S.Set ModuleName)
 compileDesugarOnly interpreter tl = do
   evalModuleGovernance interpreter tl
   -- Todo: pretty instance for modules and all of toplevel
@@ -170,11 +160,11 @@ compileDesugarOnly interpreter tl = do
   pure (tlFinal, deps)
 
 interpretTopLevel
-  :: forall b i m
-  .  (HasCompileEnv b i m)
-  => Interpreter b i m
+  :: forall e b i
+  .  (HasCompileEnv b i)
+  => Interpreter e b i
   -> Lisp.TopLevel i
-  -> m (CompileValue i)
+  -> EvalM e b i (CompileValue i)
 interpretTopLevel interpreter tl = do
   evalModuleGovernance interpreter tl
   -- Todo: pretty instance for modules and all of toplevel
@@ -184,20 +174,16 @@ interpretTopLevel interpreter tl = do
   let tlFinal = MHash.hashTopLevel constEvaled
   debugPrint DPDesugar ds
   evalTopLevel interpreter tlFinal deps
-{-# SPECIALIZE interpretTopLevel
-  :: Interpreter CoreBuiltin () Eval
-  -> Lisp.TopLevel ()
-  -> Eval (CompileValue ())  #-}
 
 evalTopLevel
-  :: forall b i m
-  .  (HasCompileEnv b i m)
-  => Interpreter b i m
+  :: forall e b i
+  .  (HasCompileEnv b i)
+  => Interpreter e b i
   -> EvalTopLevel b i
   -> S.Set ModuleName
-  -> m (CompileValue i)
+  -> EvalM e b i (CompileValue i)
 evalTopLevel interpreter tlFinal deps = do
-  lo0 <- useEvalState esLoaded
+  lo0 <- use esLoaded
   pdb <- viewEvalEnv eePactDb
   case tlFinal of
     TLModule m -> do
@@ -214,7 +200,7 @@ evalTopLevel interpreter tlFinal deps = do
         CapGov _ -> pure ()
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = ModuleData m deps'
-      mSize <- sizeOf SizeOfV0 m
+      mSize <- sizeOf (_mInfo m) SizeOfV0 m
       chargeGasArgs (_mInfo m) (GModuleMemory mSize)
       writeModule (_mInfo m) pdb Write (view mName m) mdata
       let fqDeps = toFqDep (_mName m) (_mHash m) <$> _mDefs m
@@ -224,13 +210,13 @@ evalTopLevel interpreter tlFinal deps = do
             over loModules (M.insert (_mName m) mdata) .
             over loAllLoaded (M.union newLoaded) .
             over loToplevel (M.union newTopLevel)
-      esLoaded %== loadNewModule
-      esCaps . csModuleAdmin %== S.union (S.singleton (_mName m))
+      esLoaded %= loadNewModule
+      esCaps . csModuleAdmin %= S.union (S.singleton (_mName m))
       pure (LoadedModule (_mName m) (_mHash m))
     TLInterface iface -> do
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = InterfaceData iface deps'
-      ifaceSize <- sizeOf SizeOfV0 iface
+      ifaceSize <- sizeOf (_ifInfo iface) SizeOfV0 iface
       chargeGasArgs (_ifInfo iface) (GModuleMemory ifaceSize)
       writeModule (_ifInfo iface) pdb Write (view ifName iface) mdata
       let fqDeps = toFqDep (_ifName iface) (_ifHash iface)
@@ -243,13 +229,8 @@ evalTopLevel interpreter tlFinal deps = do
             over loModules (M.insert (_ifName iface) mdata) .
             over loAllLoaded (M.union newLoaded) .
             over loToplevel (M.union newTopLevel)
-      esLoaded %== loadNewModule
+      esLoaded %= loadNewModule
       pure (LoadedInterface (view ifName iface) (view ifHash iface))
     TLTerm term -> (`InterpretValue` (view termInfo term)) <$> eval interpreter PImpure term
     TLUse imp _ -> pure (LoadedImports imp)
-{-# SPECIALIZE evalTopLevel
-  :: Interpreter CoreBuiltin () Eval
-  -> EvalTopLevel CoreBuiltin ()
-  -> S.Set ModuleName
-  -> Eval (CompileValue ())  #-}
 {-# INLINE evalTopLevel #-}

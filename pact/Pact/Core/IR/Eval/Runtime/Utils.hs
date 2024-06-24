@@ -72,17 +72,18 @@ import Pact.Core.Capabilities
 import Pact.Core.Hash
 
 
-lookupFqName :: (MonadEval b i m) => FullyQualifiedName -> m (Maybe (EvalDef b i))
+lookupFqName :: FullyQualifiedName -> EvalM e b i (Maybe (EvalDef b i))
 lookupFqName fqn =
-  views (esLoaded.loAllLoaded) (M.lookup fqn) <$> getEvalState
+  uses (esLoaded.loAllLoaded) (M.lookup fqn)
+{-# INLINABLE lookupFqName #-}
 
-getDefCap :: (MonadEval b i m) => i -> FullyQualifiedName -> m (EvalDefCap b i)
+getDefCap :: i -> FullyQualifiedName -> EvalM e b i (EvalDefCap b i)
 getDefCap info fqn = lookupFqName fqn >>= \case
   Just (DCap d) -> pure d
   Just _ -> failInvariant info (InvariantExpectedDefCap fqn)
   _ -> failInvariant info (InvariantUnboundFreeVariable fqn)
 
-getDefun :: (MonadEval b i m) => i -> FullyQualifiedName -> m (EvalDefun b i)
+getDefun :: i -> FullyQualifiedName -> EvalM e b i (EvalDefun b i)
 getDefun info fqn = lookupFqName fqn >>= \case
   Just (Dfun d) -> pure d
   Just _ -> failInvariant info (InvariantExpectedDefun fqn)
@@ -93,11 +94,11 @@ unsafeUpdateManagedParam newV (ManagedCap mc orig (ManagedParam fqn _oldV i)) =
   ManagedCap mc orig (ManagedParam fqn newV i)
 unsafeUpdateManagedParam _ a = a
 
-typecheckArgument :: (MonadEval b i m) => i -> PactValue -> Type -> m ()
+typecheckArgument :: i -> PactValue -> Type -> EvalM e b i ()
 typecheckArgument info pv ty =
   unless (checkPvType ty pv) $ throwExecutionError info (RunTimeTypecheckFailure (pvToArgTypeError pv) ty)
 
-maybeTCType :: (MonadEval b i m) => i -> Maybe Type -> PactValue -> m ()
+maybeTCType :: i -> Maybe Type -> PactValue -> EvalM e b i ()
 maybeTCType i mty pv = maybe (pure ()) (typecheckArgument i pv) mty
 
 
@@ -111,17 +112,16 @@ pvToArgTypeError = \case
   PModRef _ -> ATEModRef
   PCapToken _ -> ATEClosure
 
-findCallingModule :: (MonadEval b i m) => m (Maybe ModuleName)
+findCallingModule :: EvalM e b i (Maybe ModuleName)
 findCallingModule = do
-  stack <- useEvalState esStack
+  stack <- use esStack
   pure $ listToMaybe $ fmap (_fqModule . _sfName) stack
 
 calledByModule
-  :: (MonadEval b i m)
-  => ModuleName
-  -> m Bool
+  :: ModuleName
+  -> EvalM e b i Bool
 calledByModule mn = do
-  stack <- useEvalState esStack
+  stack <- use esStack
   case find (\sf -> (_fqModule . _sfName) sf == mn) stack of
     Just _ -> pure True
     Nothing -> pure False
@@ -130,12 +130,12 @@ calledByModule mn = do
 -- an error which we do not expect to see during regular pact
 -- execution. If this case is ever hit, we have a problem with
 -- some invalid state in interpretation
-failInvariant :: MonadEval b i m => i -> InvariantError -> m a
+failInvariant :: i -> InvariantError -> EvalM e b i a
 failInvariant i reason =
   throwExecutionError i (InvariantFailure reason)
 
 -- Todo: MaybeT cleans this up
-getCallingModule :: (MonadEval b i m) => i -> m (EvalModule b i)
+getCallingModule :: i -> EvalM e b i (EvalModule b i)
 getCallingModule info = findCallingModule >>= \case
   Just mn -> do
     pdb <- viewEvalEnv eePactDb
@@ -147,7 +147,7 @@ safeTail :: [a] -> [a]
 safeTail (_:xs) = xs
 safeTail [] = []
 
-isExecutionFlagSet :: (MonadEval b i m) => ExecutionFlag -> m Bool
+isExecutionFlagSet :: ExecutionFlag -> EvalM e b i Bool
 isExecutionFlagSet flag = viewsEvalEnv eeFlags (S.member flag)
 
 evalStateToErrorState :: EvalState b i -> ErrorState i
@@ -158,44 +158,33 @@ restoreFromErrorState :: ErrorState i -> EvalState b i -> EvalState b i
 restoreFromErrorState (ErrorState caps stack recur) =
   set esCaps caps . set esStack stack . set esCheckRecursion recur
 
-checkNonLocalAllowed :: (MonadEval b i m) => i -> b -> m ()
+checkNonLocalAllowed :: IsBuiltin b => i -> b -> EvalM e b i ()
 checkNonLocalAllowed info b = do
   disabledInTx <- isExecutionFlagSet FlagDisableHistoryInTransactionalMode
   mode <- viewEvalEnv eeMode
   when (mode == Transactional && disabledInTx) $ throwExecutionError info $
     OperationIsLocalOnly (builtinName b)
 
-{-# SPECIALIZE asString
-   :: ()
-   -> CoreBuiltin
-   -> PactValue
-   -> Eval Text
-    #-}
 asString
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
   -> b
   -> PactValue
-  -> m Text
+  -> EvalM e b i Text
 asString _ _ (PLiteral (LString b)) = pure b
 asString info b pv =
   throwExecutionError info (NativeArgumentsError (builtinName b) [pvToArgTypeError pv])
 
-{-# SPECIALIZE asBool
-   :: ()
-   -> CoreBuiltin
-   -> PactValue
-   -> Eval Bool
-    #-}
 asBool
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
   -> b
   -> PactValue
-  -> m Bool
+  -> EvalM e b i Bool
 asBool _ _ (PLiteral (LBool b)) = pure b
 asBool info b pv =
   throwExecutionError info (NativeArgumentsError (builtinName b) [pvToArgTypeError pv])
+{-# INLINABLE asBool #-}
 
 checkSchema :: M.Map Field PactValue -> Schema -> Bool
 checkSchema o (Schema _ sc) =
@@ -207,9 +196,9 @@ checkPartialSchema o (Schema _ sc) =
   M.isSubmapOfBy (\obj ty -> checkPvType ty obj) o sc
 
 
-getDefPactId :: (MonadEval b i m) => i -> m DefPactId
+getDefPactId :: i -> EvalM e b i DefPactId
 getDefPactId info =
-  useEvalState esDefPactExec >>= \case
+  use esDefPactExec >>= \case
     Just pe -> pure (_peDefPactId pe)
     Nothing ->
       throwExecutionError info NotInDefPactExecution
@@ -218,59 +207,44 @@ tvToDomain :: TableValue -> Domain RowKey RowData b i
 tvToDomain tv =
   DUserTables (_tvName tv)
 
-{-# SPECIALIZE chargeGasArgs
-   :: ()
-   -> GasArgs
-   -> Eval ()
-    #-}
-chargeGasArgs :: (MonadEval b i m) => i -> GasArgs -> m ()
+chargeGasArgs :: i -> GasArgs -> EvalM e b i ()
 chargeGasArgs info ga = do
   model <- viewEvalEnv eeGasModel
   !currGas <- getGas
   let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
       !g1 = _gmRunModel model ga
       !gUsed = currGas <> g1
-  esGasLog %== fmap (GasLogEntry (Left ga) g1 gUsed :)
+  esGasLog %= fmap (GasLogEntry (Left ga) g1 gUsed :)
   putGas gUsed
   when (gUsed > gasLimit) $
     throwExecutionError info (GasExceeded limit gUsed)
 
-{-# SPECIALIZE chargeFlatNativeGas
-   :: ()
-   -> CoreBuiltin
-   -> Eval ()
-    #-}
-chargeFlatNativeGas :: (MonadEval b i m) => i -> b -> m ()
+chargeFlatNativeGas :: i -> b -> EvalM e b i ()
 chargeFlatNativeGas info nativeArg = do
   model <- viewEvalEnv eeGasModel
   !currGas <- getGas
   let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
       !g1 = _gmNatives model nativeArg
       !gUsed = currGas <> g1
-  esGasLog %== fmap (GasLogEntry (Right nativeArg) g1 gUsed :)
+  esGasLog %= fmap (GasLogEntry (Right nativeArg) g1 gUsed :)
   putGas gUsed
   when (gUsed > gasLimit && gasLimit >= currGas) $
     throwExecutionError info (GasExceeded limit gUsed)
 
 
-getGas :: (MonadEval b i m) => m MilliGas
+getGas :: EvalM e b i MilliGas
 getGas =
   viewEvalEnv eeGasRef >>= liftIO . readIORef
-{-# SPECIALIZE getGas
-    :: Eval MilliGas
-    #-}
 {-# INLINE getGas #-}
 
-putGas :: (MonadEval b i m) => MilliGas -> m ()
+putGas :: MilliGas -> EvalM e b i ()
 putGas !g = do
   gasRef <- viewEvalEnv eeGasRef
   liftIO (writeIORef gasRef g)
 {-# INLINE putGas #-}
-{-# SPECIALIZE putGas
-    :: MilliGas -> Eval ()
-    #-}
 
-litCmpGassed :: (MonadEval b i m) => i -> Literal -> Literal -> m (Maybe Ordering)
+
+litCmpGassed :: i -> Literal -> Literal -> EvalM e b i (Maybe Ordering)
 litCmpGassed info = cmp
   where
   cmp (LInteger l) (LInteger r) = do
@@ -285,11 +259,9 @@ litCmpGassed info = cmp
     pure $ Just $ compare l r
   cmp LUnit LUnit = pure $ Just EQ
   cmp _ _ = pure Nothing
-{-# SPECIALIZE litCmpGassed
-    :: () -> Literal -> Literal -> Eval (Maybe Ordering)
-    #-}
 
-valEqGassed :: (MonadEval b i m) => i -> PactValue -> PactValue -> m Bool
+
+valEqGassed :: i -> PactValue -> PactValue -> EvalM e b i Bool
 valEqGassed info = go
   where
   go (PLiteral l1) (PLiteral l2) = litCmpGassed info l1 l2 >>= \case
@@ -333,24 +305,21 @@ valEqGassed info = go
   goGuard (GModuleGuard g1) (GModuleGuard g2) = pure $ g1 == g2
   goGuard (GDefPactGuard g1) (GDefPactGuard g2) = pure $ g1 == g2
   goGuard _ _ = pure False
-{-# SPECIALIZE valEqGassed
-    :: () -> PactValue -> PactValue -> Eval Bool
-    #-}
 
-enforceBlessedHashes :: (MonadEval b i m) => i -> EvalModule b i -> ModuleHash -> m ()
+enforceBlessedHashes :: i -> EvalModule b i -> ModuleHash -> EvalM e b i ()
 enforceBlessedHashes info md mh
   | _mHash md == mh = return ()
   | mh `S.member` _mBlessed md = return ()
   | otherwise = throwExecutionError info (HashNotBlessed (_mName md) mh)
 
 enforceStackTopIsDefcap
-  :: (MonadEval b i m)
+  :: IsBuiltin b
   => i
   -> b
-  -> m ()
+  -> EvalM e b i ()
 enforceStackTopIsDefcap info b = do
   let errMsg = "native must be called within a defcap body"
-  useEvalState esStack >>= \case
+  use esStack >>= \case
       sf:_ -> do
         when (_sfFnType sf /= SFDefcap) $
           throwNativeExecutionError info b errMsg
@@ -359,9 +328,8 @@ enforceStackTopIsDefcap info b = do
 
 
 anyCapabilityBeingEvaluated
-  :: MonadEval b i m
-  => S.Set (CapToken QualifiedName PactValue)
-  -> m Bool
+  :: S.Set (CapToken QualifiedName PactValue)
+  -> EvalM e b i Bool
 anyCapabilityBeingEvaluated caps = do
-  capsBeingEvaluated <- useEvalState (esCaps . csCapsBeingEvaluated)
+  capsBeingEvaluated <- use (esCaps . csCapsBeingEvaluated)
   return $! any (`S.member` caps) capsBeingEvaluated

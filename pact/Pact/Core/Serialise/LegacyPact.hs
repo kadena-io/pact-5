@@ -80,7 +80,9 @@ runTranslateM a = runExcept (evalStateT (runReaderT a 0) [])
 decodeModuleData :: ByteString -> Maybe (ModuleData CoreBuiltin ())
 decodeModuleData bs = do
   obj <- JD.decodeStrict' bs
-  either (const Nothing) Just (runTranslateM (fromLegacyModuleData obj))
+  case runTranslateM (fromLegacyModuleData obj) of
+    Left _ -> Nothing
+    Right v -> Just v
 
 fromLegacyModuleData
   :: Legacy.ModuleData (Legacy.Ref' Legacy.PersistDirect)

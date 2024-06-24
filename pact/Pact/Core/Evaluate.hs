@@ -21,6 +21,8 @@ module Pact.Core.Evaluate
   , EvalBuiltinEnv
   , evalTermExec
   , allModuleExports
+  , evalDirectInterpreter
+  , evalInterpreter
   ) where
 
 import Control.Lens
@@ -43,7 +45,6 @@ import Pact.Core.Environment
 import Pact.Core.Errors
 import Pact.Core.Hash (Hash)
 import Pact.Core.IR.Eval.CoreBuiltin
-import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Persistence
 import Pact.Core.DefPacts.Types
 import Pact.Core.Capabilities
@@ -57,20 +58,31 @@ import Pact.Core.IR.Desugar
 import Pact.Core.Verifiers
 import Pact.Core.Interpreter
 import qualified Pact.Core.IR.Eval.CEK as Eval
+import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 
+type Eval = EvalM ExecRuntime CoreBuiltin ()
+
 -- Our Builtin environment for evaluation in Chainweb prod
 type EvalBuiltinEnv = Eval.CoreBuiltinEnv
 
-evalInterpreter :: Interpreter CoreBuiltin () Eval
+evalInterpreter :: Interpreter ExecRuntime CoreBuiltin ()
 evalInterpreter =
   Interpreter runGuard runTerm
   where
   runTerm purity term = Eval.eval purity env term
   runGuard info g = Eval.interpretGuard info env g
-  env = coreBuiltinEnv @Eval.CEKBigStep
+  env = coreBuiltinEnv @ExecRuntime @Eval.CEKBigStep
+
+evalDirectInterpreter :: Interpreter ExecRuntime CoreBuiltin i
+evalDirectInterpreter =
+  Interpreter runGuard runTerm
+  where
+  runTerm purity term = Direct.eval purity env term
+  runGuard info g = Direct.interpretGuard info env g
+  env = Direct.coreBuiltinEnv
 
 -- | Transaction-payload related environment data.
 data MsgData = MsgData
@@ -85,7 +97,7 @@ initMsgData :: Hash -> MsgData
 initMsgData h = MsgData (PObject mempty) def h mempty mempty
 
 builtinEnv :: EvalBuiltinEnv
-builtinEnv = coreBuiltinEnv @Eval.CEKBigStep
+builtinEnv = coreBuiltinEnv @ExecRuntime @Eval.CEKBigStep
 
 type EvalInput = Either (Maybe DefPactExec) [Lisp.TopLevel ()]
 
@@ -191,7 +203,7 @@ evalExecDefaultState evalEnv rc = evalExec evalEnv def rc
 
 interpret :: EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> EvalInput -> IO (Either (PactError ()) (EvalResult [Lisp.TopLevel ()]))
 interpret evalEnv evalSt evalInput = do
-  (result, state) <- runEvalM evalEnv evalSt $ evalWithinTx evalInput
+  (result, state) <- runEvalM (ExecEnv evalEnv) evalSt $ evalWithinTx evalInput
   gas <- readIORef (_eeGasRef evalEnv)
   case result of
     Left err -> return $ Left err
@@ -215,7 +227,7 @@ interpretOnlyTerm
   -> Lisp.Expr ()
   -> IO (Either (PactError ()) (EvalResult (Lisp.Expr ())))
 interpretOnlyTerm evalEnv evalSt term = do
-  (result, state) <- runEvalM evalEnv evalSt $ evalCompiledTermWithinTx term
+  (result, state) <- runEvalM (ExecEnv evalEnv) evalSt $ evalCompiledTermWithinTx term
   gas <- readIORef (_eeGasRef evalEnv)
   case result of
     Left err -> return $ Left err
@@ -236,7 +248,7 @@ interpretOnlyTerm evalEnv evalSt term = do
 -- Used to be `evalTerms`
 evalWithinTx
   :: EvalInput
-  -> EvalM CoreBuiltin () ([CompileValue ()], [TxLog ByteString], Maybe TxId)
+  -> Eval ([CompileValue ()], [TxLog ByteString], Maybe TxId)
 evalWithinTx input = withRollback (start runInput >>= end)
 
   where
@@ -264,13 +276,13 @@ evalWithinTx input = withRollback (start runInput >>= end)
       Left pe -> (:[]) <$> resumePact pe
 
     evalRollbackTx = do
-      esCaps .== def
+      esCaps .= def
       pdb <- viewEvalEnv eePactDb
       liftDbFunction () (_pdbRollbackTx pdb)
 
 evalCompiledTermWithinTx
   :: Lisp.Expr ()
-  -> EvalM CoreBuiltin () (PactValue, [TxLog ByteString], Maybe TxId)
+  -> Eval (PactValue, [TxLog ByteString], Maybe TxId)
 evalCompiledTermWithinTx input = withRollback (start runInput >>= end)
 
   where
@@ -298,7 +310,7 @@ evalCompiledTermWithinTx input = withRollback (start runInput >>= end)
       Eval.eval PImpure builtinEnv term'
 
     evalRollbackTx = do
-      esCaps .== def
+      esCaps .= def
       pdb <- viewEvalEnv eePactDb
       liftDbFunction () (_pdbRollbackTx pdb)
 

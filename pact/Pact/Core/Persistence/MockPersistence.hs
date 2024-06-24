@@ -1,4 +1,7 @@
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Pact.Core.Persistence.MockPersistence (
@@ -8,14 +11,15 @@ module Pact.Core.Persistence.MockPersistence (
 
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad (unless)
-import Control.Exception(throwIO)
+import Control.Exception.Safe
 import Control.Lens ((^?), (^.), ix, view)
-import Data.Maybe (isJust, fromMaybe)
+import Data.Maybe (isJust, fromMaybe, catMaybes)
 import Data.List (find)
 import Data.Map (Map)
 import Data.IORef
-import qualified Data.Map.Strict as Map
+import Data.Text(Text)
 import qualified Data.Map.Strict as M
+import qualified Data.Text as T
 import Data.ByteString (ByteString)
 
 
@@ -29,79 +33,179 @@ import Pact.Core.Gas
 import Pact.Core.Errors
 
 import qualified Pact.Core.Errors as Errors
-import qualified Pact.Core.Persistence as Persistence
 import Pact.Core.PactValue
 import Pact.Core.Literal
 
 
 type TxLogQueue = IORef (Map TxId [TxLog ByteString])
 
+-- | Small newtype to ensure we
+--   turn the table names into Text keys
+newtype Rendered v
+  = Rendered { _unRender :: Text }
+  deriving (Eq, Ord, Show)
+
+renderTableName :: TableName -> Rendered TableName
+renderTableName tn = Rendered (toUserTable tn)
+
+newtype MockUserTable =
+  MockUserTable (Map (Rendered TableName) (Map RowKey ByteString))
+  deriving (Eq, Show, Ord)
+  deriving (Semigroup, Monoid) via (Map (Rendered TableName) (Map RowKey ByteString))
+
+newtype MockSysTable k v =
+  MockSysTable (Map (Rendered k) ByteString)
+  deriving (Eq, Show, Ord)
+  deriving (Semigroup, Monoid) via (Map (Rendered k) ByteString)
+
+data TableFromDomain k v b i where
+  TFDUser :: IORef (MockUserTable) -> TableFromDomain RowKey RowData b i
+  TFDSys :: IORef (MockSysTable k v) -> TableFromDomain k v b i
+
+tableFromDomain :: Domain k v b i -> PactTables b i -> TableFromDomain k v b i
+tableFromDomain d PactTables{..} = case d of
+  DUserTables {} -> TFDUser ptUser
+  DKeySets -> TFDSys ptKeysets
+  DModules -> TFDSys ptModules
+  DNamespaces -> TFDSys ptNamespaces
+  DDefPacts -> TFDSys ptDefPact
+
+
+-- | A record collection of all of the mutable
+--   table references
+data PactTables b i
+  = PactTables
+  { ptTxId :: !(IORef TxId)
+  , ptUser :: !(IORef MockUserTable)
+  , ptModules :: !(IORef (MockSysTable ModuleName (ModuleData b i)))
+  , ptKeysets :: !(IORef (MockSysTable KeySetName KeySet))
+  , ptNamespaces :: !(IORef (MockSysTable NamespaceName Namespace))
+  , ptDefPact :: !(IORef (MockSysTable DefPactId (Maybe DefPactExec)))
+  , ptTxLogQueue :: TxLogQueue
+  , ptRollbackState :: IORef (Maybe (PactTablesState b i))
+  }
+
+-- | The state of the database at the beginning of a transaction
+data PactTablesState b i
+  = PactTablesState
+  { _ptsExecMode :: ExecutionMode
+  , _ptsUser :: !MockUserTable
+  , _ptsModules :: !(MockSysTable ModuleName (ModuleData b i))
+  , _ptsKeysets :: !(MockSysTable KeySetName KeySet)
+  , _ptsNamespaces :: !(MockSysTable NamespaceName Namespace)
+  , _ptsDefPact :: !(MockSysTable DefPactId (Maybe DefPactExec))
+  , _ptsTxLogQueue :: Map TxId [TxLog ByteString]
+  }
+
+
+-- | Create an empty table
+createPactTables :: IO (PactTables b i)
+createPactTables = do
+  refMod <- newIORef mempty
+  refKs <- newIORef mempty
+  refUsrTbl <- newIORef mempty
+  refPacts <- newIORef mempty
+  refNS <- newIORef mempty
+  refRb <- newIORef Nothing
+  refTxLog <- newIORef mempty
+  refTxId <- newIORef $ TxId 0
+  pure $ PactTables
+    { ptTxId = refTxId
+    , ptUser = refUsrTbl
+    , ptModules = refMod
+    , ptKeysets = refKs
+    , ptNamespaces = refNS
+    , ptDefPact = refPacts
+    , ptTxLogQueue = refTxLog
+    , ptRollbackState = refRb }
+
+getRollbackState :: ExecutionMode -> PactTables b i -> IO (PactTablesState b i)
+getRollbackState em PactTables{..} =
+  PactTablesState em
+    <$> readIORef ptUser
+    <*> readIORef ptModules
+    <*> readIORef ptKeysets
+    <*> readIORef ptNamespaces
+    <*> readIORef ptDefPact
+    <*> readIORef ptTxLogQueue
+
+
+
 mockPactDb :: forall b i. PactSerialise b i -> IO (PactDb b i)
 mockPactDb serial = do
-  refMod <- newIORef M.empty
-  refKs <- newIORef M.empty
-  refUsrTbl <- newIORef M.empty
-  refPacts <- newIORef M.empty
-  refNS <- newIORef M.empty
-  refRb <- newIORef Nothing
-  refTxLog :: TxLogQueue <- newIORef mempty
-  refTxId <- newIORef $ TxId 0
+  pactTables <- createPactTables
   pure $ PactDb
     { _pdbPurity = PImpure
-    , _pdbRead = read' refKs refMod refNS refUsrTbl refPacts
-    , _pdbWrite = write refKs refMod refNS refUsrTbl refTxId refTxLog refPacts
-    , _pdbKeys = keys refKs refMod refNS refUsrTbl refPacts
-    , _pdbCreateUserTable = \tn -> createUsrTable refUsrTbl refTxId refTxLog tn
-    , _pdbBeginTx = beginTx refRb refTxId refTxLog refMod refKs refUsrTbl
-    , _pdbCommitTx = commitTx refRb refTxId refTxLog refMod refKs refUsrTbl
-    , _pdbRollbackTx = rollbackTx refRb refTxLog refMod refKs refUsrTbl
-    , _pdbTxIds = txIds refTxLog
-    , _pdbGetTxLog = txLog refTxLog
+    , _pdbRead = read' pactTables
+    , _pdbWrite = write pactTables
+    , _pdbKeys = keys pactTables
+    , _pdbCreateUserTable = createUsrTable pactTables
+    , _pdbBeginTx = beginTx pactTables
+    , _pdbCommitTx = commitTx pactTables
+    , _pdbRollbackTx = rollbackTx pactTables
+    , _pdbTxIds = txIds (ptTxLogQueue pactTables)
+    , _pdbGetTxLog = txLog (ptTxLogQueue pactTables)
     }
   where
-  beginTx refRb refTxId refTxLog refMod refKs refUsrTbl em = do
-    readIORef refRb >>= \case
-      Just (_, _, _, _, _) -> pure Nothing
+  beginTx pts@PactTables{..} em = do
+    readIORef ptRollbackState >>= \case
+      -- A tx is already in progress, so we fail to get a
+      -- new tx id
+      Just _ -> pure Nothing
+      -- No tx in progress, get the state of the pure tables prior to rollback.
       Nothing -> do
-        mods <- readIORef refMod
-        ks <- readIORef refKs
-        usrTbl <- readIORef refUsrTbl
-        txl <- readIORef refTxLog
-        writeIORef refRb (Just (em, txl, mods, ks, usrTbl))
-        tid <- readIORef refTxId
+        rbs <- getRollbackState em pts
+
+        writeIORef ptRollbackState (Just rbs)
+        tid <- readIORef ptTxId
         pure (Just tid)
 
-  commitTx refRb refTxId refTxLog refMod refKs refUsrTbl = readIORef refRb >>= \case
-    Just (em, txl, mods, ks, usr) -> case em of
+  commitTx PactTables{..} = readIORef ptRollbackState >>= \case
+    -- We are successfully in a transaction
+    Just (PactTablesState em usr mods ks ns dp txl) -> case em of
       Transactional -> do
-        writeIORef refRb Nothing
-        txId <- atomicModifyIORef' refTxId (\(TxId i) -> (TxId (succ i), TxId i))
-        txLogQueue <- readIORef refTxLog
-        pure (Map.findWithDefault [] txId txLogQueue)
+        -- Reset the rollback state,
+        -- increment to the next tx id, and return the
+        -- tx logs for the transaction
+        writeIORef ptRollbackState Nothing
+        txId <- atomicModifyIORef' ptTxId (\(TxId i) -> (TxId (succ i), TxId i))
+        txLogQueue <- readIORef ptTxLogQueue
+        pure (M.findWithDefault [] txId txLogQueue)
       Local -> do
-        writeIORef refRb Nothing
-        writeIORef refMod mods
-        writeIORef refKs ks
-        writeIORef refUsrTbl usr
-        writeIORef refTxLog txl
-        txId <- readIORef refTxId
-        pure (Map.findWithDefault [] txId txl)
+        -- in local, we simply roll back all tables
+        -- then and return the logs, then roll back the logs table
+        writeIORef ptRollbackState Nothing
+        writeIORef ptModules mods
+        writeIORef ptKeysets ks
+        writeIORef ptUser usr
+        writeIORef ptTxLogQueue txl
+        writeIORef ptNamespaces ns
+        writeIORef ptDefPact dp
+
+        txId <- readIORef ptTxId
+        txl' <- readIORef ptTxLogQueue
+
+        let logs = M.findWithDefault [] txId txl'
+        writeIORef ptTxLogQueue txl
+        pure logs
     Nothing ->
       throwIO Errors.NoTxToCommit
 
-  rollbackTx refRb refTxLog refMod refKs refUsrTbl = readIORef refRb >>= \case
-    Just (_, txl, mods, ks, usr) -> do
-      writeIORef refRb Nothing
-      writeIORef refTxLog txl
-      writeIORef refMod mods
-      writeIORef refKs ks
-      writeIORef refUsrTbl usr
+  rollbackTx PactTables{..} = readIORef ptRollbackState >>= \case
+    Just (PactTablesState _ usr mods ks ns dp txl) -> do
+      writeIORef ptRollbackState Nothing
+      writeIORef ptModules mods
+      writeIORef ptKeysets ks
+      writeIORef ptUser usr
+      writeIORef ptTxLogQueue txl
+      writeIORef ptNamespaces ns
+      writeIORef ptDefPact dp
     Nothing -> throwIO Errors.NoTxToCommit
 
   txLog :: TxLogQueue -> TableName -> TxId -> IO [TxLog RowData]
   txLog refTxLog tn tid = do
     txl <- readIORef refTxLog
-    case Map.lookup tid txl of
+    case M.lookup tid txl of
       Just txl' -> pure $ fromMaybe [] (traverse (traverse (fmap (view document) . _decodeRowData serial)) (filter (\(TxLog dom _ _) -> dom == toUserTable tn) txl'))
       Nothing -> pure []
 
@@ -110,183 +214,184 @@ mockPactDb serial = do
     txl <- readIORef refTxLog
     let
       userTab = toUserTable tn
-      subTxs = Map.filterWithKey (\(TxId i) txs -> i >= txId && isJust (find (\(TxLog dom _ _) -> dom == userTab) txs)) txl
-    pure (Map.keys subTxs)
+      subTxs = M.filterWithKey (\(TxId i) txs -> i >= txId && isJust (find (\(TxLog dom _ _) -> dom == userTab) txs)) txl
+    pure (M.keys subTxs)
 
   keys
-    :: forall k v
-    .  IORef (Map KeySetName KeySet)
-    -> IORef (Map ModuleName (ModuleData b i))
-    -> IORef (Map NamespaceName Namespace)
-    -> IORef (Map TableName (Map RowKey RowData))
-    -> IORef (Map DefPactId (Maybe DefPactExec))
+    :: PactTables b i
     -> Domain k v b i
     -> IO [k]
-  keys refKs refMod refNS refUsrTbl refPacts d = case d of
+  keys PactTables{..} d = case d of
     DKeySets -> do
-      r <- readIORef refKs
-      return (M.keys r)
+      MockSysTable r <- readIORef ptKeysets
+      -- Note: the parser only fails on null input, so
+      -- if this ever fails, then somehow the null key got into the keysets.
+      -- this is benign.
+      let getKeysetName = fromMaybe (KeySetName "" Nothing) . rightToMaybe . parseAnyKeysetName
+      return $ getKeysetName . _unRender <$> M.keys r
     DModules -> do
-      r <- readIORef refMod
-      return (M.keys r)
+      MockSysTable r <- readIORef ptModules
+      let getModuleName = parseModuleName . _unRender
+      return $ catMaybes $ getModuleName <$> M.keys r
     DUserTables tbl -> do
-      r <- readIORef refUsrTbl
---      let tblName = toUserTable tbl
-      case M.lookup tbl r of
+      MockUserTable r <- readIORef ptUser
+      let tblName = renderTableName tbl
+      case M.lookup tblName r of
         Just t -> return (M.keys t)
         Nothing -> throwIO (Errors.NoSuchTable tbl)
     DDefPacts -> do
-      r <- readIORef refPacts
-      return (M.keys r)
+      MockSysTable r <- readIORef ptDefPact
+      return $ DefPactId . _unRender <$> M.keys r
     DNamespaces -> do
-      r <- readIORef refNS
-      pure (M.keys r)
+      MockSysTable r <- readIORef ptNamespaces
+      pure $ NamespaceName . _unRender <$> M.keys r
 
   createUsrTable
-    :: IORef (Map TableName (Map RowKey RowData))
-    -> IORef TxId
-    -> TxLogQueue
+    :: PactTables b i
     -> TableName
     -> GasM (PactError i) b ()
-  createUsrTable refUsrTbl _refTxId _refTxLog tbl = do
-    let rd = RowData $ Map.singleton (Field "utModule")
-          (PObject $ Map.fromList
+  createUsrTable PactTables{..} tbl = do
+    let rd = RowData $ M.singleton (Field "utModule")
+          (PObject $ M.fromList
             [ (Field "namespace", maybe (PLiteral LUnit) (PString . _namespaceName) (_mnNamespace (_tableModuleName tbl)))
             , (Field "name", PString (_tableName tbl))
             ])
     _rdEnc <- _encodeRowData serial rd
-    ref <- liftIO $ readIORef refUsrTbl
-    case M.lookup tbl ref of
+    MockUserTable ref <- liftIO $ readIORef ptUser
+    let tblName = renderTableName tbl
+    case M.lookup tblName ref of
       Nothing -> do
         -- TODO: Do we need a TxLog when a usertable is created?
-        liftIO $ modifyIORef refUsrTbl (M.insert tbl mempty)
+        liftIO $ modifyIORef ptUser (\(MockUserTable m) -> MockUserTable (M.insert tblName mempty m))
         pure ()
       Just _ -> liftIO $ throwIO (Errors.TableAlreadyExists tbl)
 
   read'
     :: forall k v
-    .  IORef (Map KeySetName KeySet)
-    -> IORef (Map ModuleName (ModuleData b i))
-    -> IORef (Map NamespaceName Namespace)
-    -> IORef (Map TableName (Map RowKey RowData))
-    -> IORef (Map DefPactId (Maybe DefPactExec))
+    .  PactTables b i
     -> Domain k v b i
     -> k
     -> IO (Maybe v)
-  read' refKs refMod refNS refUsrTbl refPacts domain k = case domain of
-    DKeySets -> readKS refKs k
-    DModules -> readMod refMod k
+  read' PactTables{..} domain k = case domain of
+    DKeySets -> readSysTable ptKeysets k (Rendered . renderKeySetName) _decodeKeySet
+    DModules -> readSysTable ptModules k (Rendered . renderModuleName) _decodeModuleData
     DUserTables tbl ->
-      readRowData refUsrTbl tbl k
-    DDefPacts -> readPacts' refPacts k
-    DNamespaces -> readNS refNS k
+      readRowData ptUser tbl k
+    DDefPacts -> readSysTable ptDefPact k (Rendered . _defpactId) _decodeDefPactExec
+    DNamespaces ->
+      readSysTable ptNamespaces k (Rendered . _namespaceName) _decodeNamespace
 
-  checkTable :: forall m. MonadIO m => TableName -> IORef (Map TableName (Map RowKey RowData)) -> m ()
-  checkTable tbl ref = liftIO $ do
-    r <- readIORef ref
-    unless (isJust (M.lookup tbl r)) $ throwIO (Errors.NoSuchTable tbl)
+  checkTable :: MonadIO m => Rendered TableName -> TableName -> MockUserTable -> m ()
+  checkTable tbl tn (MockUserTable r) = liftIO $ do
+    unless (isJust (M.lookup tbl r)) $ throwIO (Errors.NoSuchTable tn)
 
   write
     :: forall k v
-    .  IORef (Map KeySetName KeySet)
-    -> IORef (Map ModuleName (ModuleData b i))
-    -> IORef (Map NamespaceName Namespace)
-    -> IORef (Map TableName (Map RowKey RowData))
-    -> IORef TxId
-    -> TxLogQueue
-    -> IORef (Map DefPactId (Maybe DefPactExec))
+    .  PactTables b i
     -> WriteType
     -> Domain k v b i
     -> k
     -> v
     -> GasM (PactError i) b ()
-  write refKs refMod refNS refUsrTbl refTxId refTxLog refPacts wt domain k v = case domain of
+  write pt wt domain k v = case domain of
     -- Todo : incrementally serialize other types
-    DKeySets -> liftIO $ writeKS refKs refTxId refTxLog k v
-    DModules -> liftIO $ writeMod refMod refTxId refTxLog v
-    DUserTables tbl -> writeRowData refUsrTbl refTxId refTxLog tbl wt k v
-    DDefPacts -> liftIO $ writePacts' refPacts refTxId refTxLog k v
-    DNamespaces -> liftIO $ writeNS refNS refTxId refTxLog k v
+    DKeySets -> liftIO $ writeSysTable pt domain k v (Rendered . renderKeySetName) _encodeKeySet
+    DModules -> liftIO $ writeSysTable pt domain k v (Rendered . renderModuleName) _encodeModuleData
+    DUserTables tbl -> writeRowData pt tbl wt k v
+    DDefPacts -> liftIO $ liftIO $ writeSysTable pt domain k v (Rendered . _defpactId) _encodeDefPactExec
+    DNamespaces -> liftIO $ liftIO $ writeSysTable pt domain k v (Rendered . _namespaceName) _encodeNamespace
 
   readRowData ref tbl k = do
-    -- let tblName = toUserTable tbl
-    checkTable tbl ref
-    r <- readIORef ref
-    pure (r ^? ix tbl . ix k)
+    let tblName = renderTableName tbl
+    mt@(MockUserTable usrTables) <- readIORef ref
+    checkTable tblName tbl mt
+    case usrTables ^? ix tblName . ix k of
+      Just bs -> case _decodeRowData serial bs of
+        Just doc -> pure (Just (view document doc))
+        Nothing -> throwM $ Errors.RowReadDecodeFailure (_rowKey k)
+      Nothing -> pure Nothing
 
   writeRowData
-    :: IORef (Map TableName (Map RowKey RowData))
-    -> IORef TxId
-    -> TxLogQueue
+    :: PactTables b i
     -> TableName
     -> WriteType
     -> RowKey
     -> RowData
     -> GasM (PactError i) b ()
-  writeRowData ref refTxId refTxLog tbl wt k v = checkTable tbl ref *> case wt of
-    Write -> do
-      encodedData <- _encodeRowData serial v
-      liftIO $ record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
-      liftIO $ modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
-    Insert -> do
-      r <- liftIO $ readIORef ref
-      case M.lookup tbl r >>= M.lookup k of
-        Just _ -> liftIO $ throwIO Errors.WriteException
-        Nothing -> do
-          encodedData <- _encodeRowData serial v
-          liftIO $ record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
-          liftIO $ modifyIORef' ref (M.insertWith M.union tbl (M.singleton k v))
-    Update -> do
-      r <- liftIO $ readIORef ref
-      case M.lookup tbl r >>= M.lookup k of
-        Just (RowData m) -> do
-          let (RowData v') = v
-              nrd = RowData (M.union v' m)
-          encodedData <- _encodeRowData serial nrd
-          liftIO $ record refTxId refTxLog (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
-          liftIO $ modifyIORef' ref (M.insertWith M.union tbl (M.singleton k nrd))
-        Nothing -> liftIO $ throwIO Errors.WriteException
+  writeRowData pts@PactTables{..} tbl wt k v = do
+    let tblName = renderTableName tbl
+    mt@(MockUserTable usrTables) <- liftIO $ readIORef ptUser
+    checkTable tblName tbl mt
+    case wt of
+      Write -> do
+        encodedData <- _encodeRowData serial v
+        liftIO $ record pts (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
+        liftIO $ modifyIORef' ptUser
+          (\(MockUserTable m) -> (MockUserTable (M.adjust (M.insert k encodedData) tblName  m)))
+      Insert -> do
+        case M.lookup tblName usrTables >>= M.lookup k of
+          Just _ -> liftIO $ throwIO (Errors.RowFoundException tbl k)
+          Nothing -> do
+            encodedData <- _encodeRowData serial v
+            liftIO $ record pts (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
+            liftIO $ modifyIORef' ptUser
+              (\(MockUserTable m) -> (MockUserTable (M.adjust (M.insert k encodedData) tblName  m)))
+      Update -> do
+        case M.lookup tblName usrTables >>= M.lookup k of
+          Just bs -> case view document <$> _decodeRowData serial bs of
+            Just (RowData m) -> do
+              let (RowData v') = v
+                  nrd = RowData (M.union v' m)
+              encodedData <- _encodeRowData serial nrd
+              liftIO $ record pts (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
+              liftIO $ modifyIORef' ptUser $ \(MockUserTable mut) ->
+                MockUserTable (M.insertWith M.union tblName (M.singleton k encodedData) mut)
+            Nothing ->
+              liftIO $ throwIO (Errors.RowReadDecodeFailure (_rowKey k))
+          Nothing ->
+            liftIO $ throwIO (Errors.NoRowFound tbl k)
 
+  readSysTable
+    :: IORef (MockSysTable k v)
+    -> k
+    -> (k -> Rendered k)
+    -> (PactSerialise b i -> ByteString -> Maybe (Document v))
+    -> IO (Maybe v)
+  readSysTable ref rowkey renderKey decode = do
+    MockSysTable m <- readIORef ref
+    case M.lookup (renderKey rowkey) m of
+      Just bs -> case decode serial bs of
+        Just rd -> pure (Just (view document rd))
+        Nothing ->
+          throwM (Errors.RowReadDecodeFailure (_unRender (renderKey rowkey)))
+      Nothing -> pure Nothing
+  {-# INLINE readSysTable #-}
 
-  readKS ref ksn = do
-    m <- readIORef ref
-    pure (M.lookup ksn m)
+  writeSysTable
+    :: PactTables b i
+    -> Domain k v b i
+    -> k
+    -> v
+    -> (k -> Rendered k)
+    -> (PactSerialise b i -> v -> ByteString)
+    -> IO ()
+  writeSysTable pts domain rowkey value renderKey encode = do
+    case tableFromDomain domain pts of
+      TFDSys ref -> do
+        let encodedData = encode serial value
+        record pts (TxLog (T.toUpper (renderDomain domain)) (_unRender (renderKey rowkey)) encodedData)
+        modifyIORef' ref $ \(MockSysTable msys) ->
+            MockSysTable (M.insert (renderKey rowkey) encodedData msys)
+      TFDUser _ ->
+        -- noop, should not be used for user tables
+        error "Invariant violated: writeSysTable used for user table"
 
-  readNS ref ns = do
-    m <- readIORef ref
-    pure (M.lookup ns m)
+rightToMaybe :: Either e a -> Maybe a
+rightToMaybe = \case
+  Left{} -> Nothing
+  Right a -> Just a
 
-  writeKS :: IORef (Map KeySetName KeySet) -> IORef TxId -> TxLogQueue -> KeySetName -> KeySet -> IO ()
-  writeKS ref refTxId refTxLog ksn ks = do
-    modifyIORef' ref (M.insert ksn ks)
-    record refTxId refTxLog (TxLog "SYS:KEYSETS" (renderKeySetName ksn) (_encodeKeySet serial ks))
-
-  writeNS :: IORef (Map NamespaceName Namespace) -> IORef TxId -> TxLogQueue -> NamespaceName  -> Namespace -> IO ()
-  writeNS ref refTxId refTxLog nsn ns = do
-    modifyIORef' ref (M.insert nsn ns)
-    record refTxId refTxLog (TxLog "SYS:NAMESPACES" (_namespaceName nsn) (_encodeNamespace serial ns))
-
-  readMod ref mn = do
-    m <- readIORef ref
-    pure (M.lookup mn m)
-
-  writeMod :: IORef (Map ModuleName (ModuleData b i)) -> IORef TxId -> TxLogQueue -> ModuleData b i -> IO ()
-  writeMod ref refTxId refTxLog md = let
-    mname = view Persistence.mdModuleName md
-    in do
-         modifyIORef' ref (M.insert mname md)
-         record refTxId refTxLog (TxLog "SYS:MODULES" (renderModuleName mname) (_encodeModuleData serial md))
-
-  readPacts' ref pid = do
-    m <- readIORef ref
-    pure (M.lookup pid m)
-
-  writePacts' :: IORef (Map DefPactId (Maybe DefPactExec)) -> IORef TxId -> TxLogQueue -> DefPactId -> Maybe DefPactExec -> IO ()
-  writePacts' ref refTxId refTxLog pid pe = do
-    modifyIORef' ref (M.insert pid pe)
-    record refTxId refTxLog (TxLog "SYS:NAMESPACES" (renderDefPactId pid) (_encodeDefPactExec serial pe))
-
-record :: IORef TxId -> TxLogQueue -> TxLog ByteString -> IO ()
-record txId queue entry = do
-  txIdNow <- readIORef txId
-  modifyIORef queue $ \txMap -> Map.insertWith (<>) txIdNow [entry] txMap
+record :: PactTables b i -> TxLog ByteString -> IO ()
+record PactTables{..} entry = do
+  txIdNow <- readIORef ptTxId
+  modifyIORef ptTxLogQueue $ \txMap -> M.insertWith (<>) txIdNow [entry] txMap

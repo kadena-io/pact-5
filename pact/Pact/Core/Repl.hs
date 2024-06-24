@@ -16,12 +16,10 @@
 
 module Pact.Core.Repl(runRepl) where
 
-import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Monad.Trans(lift)
 import System.Console.Haskeline
-import Data.Default
 import Data.IORef
 import qualified Data.Text as T
 import qualified Data.Set as Set
@@ -42,13 +40,14 @@ runRepl = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
   evalLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replCoreBuiltinMap
-  ref <- newIORef (ReplState mempty pdb def ee evalLog defaultSrc mempty mempty Nothing False)
+  ref <- newIORef (ReplState mempty ee evalLog defaultSrc mempty mempty Nothing False)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
       putStrLn $ T.unpack $ replError (SourceCode "(interactive)" "") err
     _ -> pure ()
   where
+
   replSettings = Settings (replCompletion replCoreBuiltinNames) (Just ".pc-history") True
   displayOutput = \case
     RCompileValue cv -> case cv of
@@ -81,25 +80,25 @@ runRepl = do
           loop
         Just ra -> case ra of
           RASetFlag flag -> do
-            lift (replFlags %= Set.insert flag)
+            lift (replFlags %== Set.insert flag)
             outputStrLn $ unwords ["set debug flag for", prettyReplFlag flag]
             loop
           RADebugAll -> do
-            lift (replFlags .= Set.fromList [minBound .. maxBound])
+            lift (replFlags .== Set.fromList [minBound .. maxBound])
             outputStrLn $ unwords ["set all debug flags"]
             loop
           RADebugNone -> do
-            lift (replFlags .= Set.empty)
+            lift (replFlags .== Set.empty)
             outputStrLn $ unwords ["Remove all debug flags"]
             loop
           RAExecuteExpr src -> catch' $ do
             let display' rcv = runInputT replSettings (displayOutput rcv)
-            lift (replCurrSource .= defaultSrc{_scPayload=src})
+            lift (replCurrSource .== defaultSrc{_scPayload=src})
             eout <- lift (tryError (interpretReplProgramDirect (SourceCode "(interactive)" src) display'))
             case eout of
               Right _ -> pure ()
               Left err -> do
-                rs <- lift (use replCurrSource)
-                lift (replCurrSource .= defaultSrc)
+                rs <- lift (useReplState replCurrSource)
+                lift (replCurrSource .== defaultSrc)
                 outputStrLn (T.unpack (replError rs err))
             loop

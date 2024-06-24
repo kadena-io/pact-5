@@ -697,6 +697,7 @@ instance Exception EvalError
 
 data DbOpException
   = WriteException
+  | RowReadDecodeFailure Text
   | RowFoundException TableName RowKey
   | NoRowFound TableName RowKey
   | NoSuchTable TableName
@@ -715,6 +716,8 @@ instance Pretty DbOpException where
   pretty = \case
     WriteException ->
       "Error found while writing value"
+    RowReadDecodeFailure rk ->
+      "Failed to deserialize but found value at key:" <> pretty rk
     RowFoundException tn rk ->
       "Value already found while in Insert mode in table" <+> pretty tn <+> "at key" <+> dquotes (pretty rk)
     NoRowFound tn rk ->

@@ -7,12 +7,16 @@ import qualified Criterion.Main as C
 
 import Pact.Core.GasModel.InterpreterGas as InterpreterGas
 import Pact.Core.GasModel.BuiltinsGas as BuiltinsGas
+import Pact.Core.GasModel.ContractBench as ContractBench
+import Pact.Core.GasModel.Serialization as Serialization
 
 main :: IO ()
 main = do
   C.defaultMain
-    [ InterpreterGas.benchmarks
+    [ ContractBench.allBenchmarks
+    , InterpreterGas.benchmarks
     , BuiltinsGas.benchmarks
+    , Serialization.benchmarks
     ]
 
 

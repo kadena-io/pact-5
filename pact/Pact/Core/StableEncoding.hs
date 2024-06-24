@@ -12,10 +12,10 @@ where
 import Data.Decimal (DecimalRaw(..))
 import Data.Scientific (Scientific)
 import Data.Map.Strict (Map)
-import Pact.JSON.Legacy.Utils
 import Data.Ratio ((%), denominator)
 import Data.ByteString (ByteString)
 import qualified Data.Text as T
+import qualified Data.Map.Strict as M
 import qualified Pact.JSON.Encode as J
 import qualified Data.Set as S
 
@@ -27,6 +27,8 @@ import Pact.Core.ModRefs
 import Pact.Core.Hash
 import Pact.Core.DefPacts.Types
 import Pact.Time
+import Pact.Core.Persistence.Types
+import Data.Coerce(coerce)
 
 
 encodeStable :: J.Encode (StableEncoding a) => a -> ByteString
@@ -62,6 +64,9 @@ instance J.Encode (StableEncoding Literal) where
       isSafeInteger i = i >= -9007199254740991 && i <= 9007199254740991
   {-# INLINABLE build #-}
 
+instance J.Encode (StableEncoding RowData) where
+  build (StableEncoding (RowData o)) = J.object
+    [ "$d" J..= (StableEncoding o) ]
 
 -- | Stable encoding of `Guard FullyQualifiedName PactValue`
 instance J.Encode (StableEncoding (Guard QualifiedName PactValue)) where
@@ -136,8 +141,11 @@ instance J.Encode (StableEncoding KeySet) where
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `Map Field PactValue`
-instance J.Encode (StableEncoding (Map Field PactValue)) where
-  build (StableEncoding o) = J.build (legacyMap _field (StableEncoding <$> o))
+instance J.Encode (StableEncoding v) => J.Encode (StableEncoding (Map Field v)) where
+  build (StableEncoding o) = J.build $ J.Object $ c (M.toList o)
+    where
+    c :: [(Field, v)] -> [(T.Text, StableEncoding v)]
+    c = coerce
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `KSPredicate FullyQualifiedName`

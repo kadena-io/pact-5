@@ -34,15 +34,14 @@ module Pact.Core.IR.Eval.Direct.Evaluator
 import Control.Lens hiding (op, from, to, parts)
 import Control.Monad
 import Control.Monad.Except
-import Control.Monad.IO.Class
+import Control.Monad.Reader
+import Control.Monad.State.Strict
 import Data.Text(Text)
-import Data.List (find)
-import Data.Foldable (foldl')
+import Data.Foldable
 import Data.Maybe(catMaybes)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Bits
 import Data.Either(isLeft, isRight)
-import Data.Foldable(foldlM, traverse_, toList)
 import Data.Decimal(roundTo', Decimal, DecimalRaw(..))
 import Data.Vector(Vector)
 import Data.Maybe(maybeToList)
@@ -108,11 +107,10 @@ import qualified Pact.Core.Trans.TOps as Musl
 
 
 mkDefunClosure
-  :: (MonadEval b i m)
-  => EvalDefun b i
+  :: EvalDefun b i
   -> FullyQualifiedName
-  -> DirectEnv b i m
-  -> m (Closure b i m)
+  -> DirectEnv e b i
+  -> EvalM e b i (Closure e b i)
 mkDefunClosure d fqn e = case _dfunTerm d of
   Lam args body i ->
     pure (Closure fqn (ArgClosure args) (NE.length args) body (_dfunRType d) e i)
@@ -126,8 +124,8 @@ mkDefPactClosure
   :: i
   -> FullyQualifiedName
   -> DefPact Name Type b i
-  -> DirectEnv b i m
-  -> EvalValue b i m
+  -> DirectEnv e b i
+  -> EvalValue e b i
 mkDefPactClosure info fqn dpact env = case _dpArgs dpact of
   [] ->
     let dpc = DefPactClosure fqn NullaryClosure 0 env info
@@ -136,44 +134,44 @@ mkDefPactClosure info fqn dpact env = case _dpArgs dpact of
     let dpc = DefPactClosure fqn (ArgClosure (x :| xs)) (length (x:xs)) env info
     in VDefPactClosure dpc
 
-envFromPurity :: Purity -> DirectEnv b i m -> DirectEnv b i m
+envFromPurity :: Purity -> DirectEnv e b i -> DirectEnv e b i
 envFromPurity PImpure = id
 envFromPurity PReadOnly = readOnlyEnv
 envFromPurity PSysOnly = sysOnlyEnv
 
 eval
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => Purity
-  -> BuiltinEnv b i m
+  -> BuiltinEnv e b i
   -> EvalTerm b i
-  -> m PactValue
+  -> EvalM e b i PactValue
 eval purity benv term = do
-  ee <- readEnv
+  ee <- viewEvalEnv id
   let directEnv = envFromPurity purity (DirectEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) False)
   evaluate directEnv term >>= \case
     VPactValue pv -> pure pv
     _ -> throwExecutionError (view termInfo term) (EvalError "Evaluation did not reduce to a value")
 
 interpretGuard
-  :: forall b i m
-  .  (MonadEval b i m)
+  :: forall e b i
+  .  (IsBuiltin b)
   => i
-  -> BuiltinEnv b i m
+  -> BuiltinEnv e b i
   -> Guard QualifiedName PactValue
-  -> m Bool
+  -> EvalM e b i PactValue
 interpretGuard info bEnv g = do
-  ee <- readEnv
+  ee <- viewEvalEnv id
   let eEnv = DirectEnv mempty (_eePactDb ee) bEnv (_eeDefPactStep ee) False
-  enforceGuard info eEnv g
+  PBool <$> enforceGuard info eEnv g
 
 evalResumePact
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
-  -> BuiltinEnv b i m
+  -> BuiltinEnv e b i
   -> Maybe DefPactExec
-  -> m PactValue
+  -> EvalM e b i PactValue
 evalResumePact info bEnv mdpe = do
-  ee <- readEnv
+  ee <- viewEvalEnv id
   let pdb = _eePactDb ee
   let env = DirectEnv mempty pdb bEnv (_eeDefPactStep ee) False
   resumePact info env mdpe >>= \case
@@ -182,10 +180,10 @@ evalResumePact info bEnv mdpe = do
       throwExecutionError info (EvalError "Evaluation did not reduce to a value")
 
 evaluate
-  :: MonadEval b i m
-  => DirectEnv b i m
+  :: IsBuiltin b
+  => DirectEnv e b i
   -> EvalTerm b i
-  -> m (EvalValue b i m)
+  -> EvalM e b i (EvalValue e b i)
 evaluate env = \case
   Var n info -> do
     case _nKind n of
@@ -341,14 +339,14 @@ evaluate env = \case
 --   - If the cap is managed, install the cap (If possible) then evaluate the body, and if
 --     the cap is user managed, ensure that the manager function run after the cap body
 evalCap
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
-  -> DirectEnv b i m
+  -> DirectEnv e b i
   -> FQCapToken
   -> CapPopState
   -> EvalCapType
   -> EvalTerm b i
-  -> m (EvalValue b i m)
+  -> EvalM e b i (EvalValue e b i)
 evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
   capInStack <- isCapInStack' origToken
   if not capInStack then go else evaluate env contbody
@@ -369,7 +367,7 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
           DefManagedMeta (cix,_) _ -> do
             let filteredCap = CapToken qualCapName (filterIndex cix args)
             -- Find the capability post-filtering
-            mgdCaps <- useEvalState (esCaps . csManaged)
+            mgdCaps <- use (esCaps . csManaged)
             case find ((==) filteredCap . _mcCap) mgdCaps of
               Nothing -> do
                 msgCaps <- S.unions <$> viewEvalEnv eeMsgSigs
@@ -387,7 +385,7 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
           AutoManagedMeta -> do
             -- Find the capability post-filtering
             let emittedEvent = fqctToPactEvent origToken <$ guard (ecType == NormalCapEval)
-            mgdCaps <- useEvalState (esCaps . csManaged)
+            mgdCaps <- use (esCaps . csManaged)
             case find ((==) qualCapToken . _mcCap) mgdCaps of
               Nothing -> do
                 msgCaps <- S.unions <$> viewEvalEnv eeMsgSigs
@@ -400,23 +398,23 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
               Just managedCap ->
                 evalAutomanagedCap emittedEvent newLocals capBody managedCap
       DefEvent -> do
-        oldCapsBeingEvaluated <- useEvalState (esCaps.csCapsBeingEvaluated)
+        oldCapsBeingEvaluated <- use (esCaps.csCapsBeingEvaluated)
         let event = Just (fqctToPactEvent origToken)
         let inCapEnv = set ceInCap True $ set ceLocal newLocals env
-        (esCaps . csSlots) %== (CapSlot qualCapToken []:)
-        (esCaps . csCapsBeingEvaluated) %== S.insert qualCapToken
+        (esCaps . csSlots) %= (CapSlot qualCapToken []:)
+        (esCaps . csCapsBeingEvaluated) %= S.insert qualCapToken
         _ <- evalWithStackFrame info capStackFrame Nothing (evaluate inCapEnv capBody)
-        (esCaps . csCapsBeingEvaluated) .== oldCapsBeingEvaluated
+        (esCaps . csCapsBeingEvaluated) .= oldCapsBeingEvaluated
         evalWithCapBody info popType Nothing event env contbody
       -- Not automanaged _nor_ user managed.
       Unmanaged -> do
         let inCapEnv = set ceInCap True $ set ceLocal newLocals env
-        oldCapsBeingEvaluated <- useEvalState (esCaps.csCapsBeingEvaluated)
-        (esCaps . csSlots) %== (CapSlot qualCapToken []:)
-        (esCaps . csCapsBeingEvaluated) %== S.insert qualCapToken
+        oldCapsBeingEvaluated <- use (esCaps.csCapsBeingEvaluated)
+        (esCaps . csSlots) %= (CapSlot qualCapToken []:)
+        (esCaps . csCapsBeingEvaluated) %= S.insert qualCapToken
         -- we ignore the capbody here
         _ <- evalWithStackFrame info capStackFrame Nothing $ evaluate inCapEnv capBody
-        (esCaps . csCapsBeingEvaluated) .== oldCapsBeingEvaluated
+        (esCaps . csCapsBeingEvaluated) .= oldCapsBeingEvaluated
         case ecType of
           NormalCapEval -> do
             evalWithCapBody info popType Nothing Nothing env contbody
@@ -438,21 +436,21 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
       -- pops it. It would be great to do without this, but a lot of our regressions rely on this.
       let inCapEnv = set ceInCap True $ set ceLocal env' $ env
       let inCapBodyToken = _mcOriginalCap managedCap
-      oldCapsBeingEvaluated <- useEvalState (esCaps.csCapsBeingEvaluated)
+      oldCapsBeingEvaluated <- use (esCaps.csCapsBeingEvaluated)
       -- BIG SEMANTICS NOTE HERE
       -- the cap slot here that we push should NOT be the qualified original token.
       -- Instead, it's the original token from the installed from the static cap. Otherwise, enforce checks
       -- within the cap body will fail (That is, keyset enforcement). Instead, once we are evaluating the body,
       -- we pop the current cap stack, then replace the head with the original intended token.
       -- this is done in `CapBodyC` and this is the only way to do this.
-      (esCaps . csSlots) %== (CapSlot inCapBodyToken []:)
-      (esCaps . csCapsBeingEvaluated) %== S.insert inCapBodyToken
+      (esCaps . csSlots) %= (CapSlot inCapBodyToken []:)
+      (esCaps . csCapsBeingEvaluated) %= S.insert inCapBodyToken
       _ <- evalWithStackFrame info capStackFrame Nothing (evaluate inCapEnv capBody)
-      (esCaps . csCapsBeingEvaluated) .== oldCapsBeingEvaluated
+      (esCaps . csCapsBeingEvaluated) .= oldCapsBeingEvaluated
       when (ecType == NormalCapEval) $ do
         updatedV <- enforcePactValue info =<< applyLam (C dfunClo) [VPactValue oldV, VPactValue newV]
         let mcap' = unsafeUpdateManagedParam updatedV managedCap
-        (esCaps . csManaged) %== S.insert mcap'
+        (esCaps . csManaged) %= S.insert mcap'
       evalWithCapBody info popType (Just qualCapToken) emitted env contbody
     _ -> failInvariant info (InvariantInvalidManagedCapKind "expected user managed, received automanaged")
   evalAutomanagedCap emittedEvent env' capBody managedCap = case _mcManaged managedCap of
@@ -460,53 +458,52 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
       if b then throwUserRecoverableError info OneShotCapAlreadyUsed
       else do
         let newManaged = AutoManaged True
-        oldCapsBeingEvaluated <- useEvalState (esCaps.csCapsBeingEvaluated)
-        esCaps . csManaged %== S.union (S.singleton (set mcManaged newManaged managedCap))
-        esCaps . csSlots %== (CapSlot qualCapToken []:)
-        (esCaps . csCapsBeingEvaluated) %== S.insert qualCapToken
+        oldCapsBeingEvaluated <- use (esCaps.csCapsBeingEvaluated)
+        esCaps . csManaged %= S.union (S.singleton (set mcManaged newManaged managedCap))
+        esCaps . csSlots %= (CapSlot qualCapToken []:)
+        (esCaps . csCapsBeingEvaluated) %= S.insert qualCapToken
         let inCapEnv = set ceLocal env' $ set ceInCap True $ env
         _ <- evalWithStackFrame info capStackFrame Nothing (evaluate inCapEnv capBody)
-        (esCaps . csCapsBeingEvaluated) .== oldCapsBeingEvaluated
+        (esCaps . csCapsBeingEvaluated) .= oldCapsBeingEvaluated
 
         evalWithCapBody info popType Nothing emittedEvent env contbody
     _ -> failInvariant info (InvariantInvalidManagedCapKind "expected automanaged, received user managed")
 
 evalWithCapBody
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
   -> CapPopState
   -> Maybe (CapToken QualifiedName PactValue)
   -> Maybe (PactEvent PactValue)
-  -> DirectEnv b i m
+  -> DirectEnv e b i
   -> EvalTerm b i
-  -> m (EvalValue b i m)
+  -> EvalM e b i (EvalValue e b i)
 evalWithCapBody info cappop mcap mevent env capbody = do
   maybe (pure ()) emitEventUnsafe mevent
   case mcap of
     Nothing -> do
       v <- evaluate env capbody
       popCap info cappop v
-    Just cap -> useEvalState (esCaps . csSlots) >>= \case
+    Just cap -> use (esCaps . csSlots) >>= \case
       (CapSlot _ tl:rest) -> do
-        setEvalState (esCaps . csSlots)  (CapSlot cap tl:rest)
+        (esCaps . csSlots) .= (CapSlot cap tl:rest)
         v <- evaluate env capbody
         popCap info cappop v
       [] -> failInvariant info InvariantEmptyCapStackFailure
 
 popCap
-  :: (MonadEval b i m)
-  => i
+  :: i
   -> CapPopState
-  -> EvalValue b i m
-  -> m (EvalValue b i m)
+  -> EvalValue e b i
+  -> EvalM e b i (EvalValue e b i)
 popCap info cappop v = case cappop of
-  PopCapInvoke -> v <$ (esCaps . csSlots %== safeTail)
+  PopCapInvoke -> v <$ (esCaps . csSlots %= safeTail)
   PopCapComposed -> do
-    useEvalState (esCaps . csSlots) >>= \case
+    use (esCaps . csSlots) >>= \case
       cap:cs -> do
         let csList = _csCap cap : _csComposed cap
             caps' = over (_head . csComposed) (++ csList) cs
-        setEvalState (esCaps . csSlots) caps'
+        (esCaps . csSlots) .= caps'
         return v
       [] -> failInvariant info InvariantEmptyCapStackFailure
 
@@ -515,11 +512,10 @@ popCap info cappop v = case cappop of
 -- Todo: fail invariant
 -- Todo: is this enough checks for ndynref?
 nameToFQN
-  :: (MonadEval b i m)
-  => i
-  -> DirectEnv b i m
+  :: i
+  -> DirectEnv e b i
   -> Name
-  -> m FullyQualifiedName
+  -> EvalM e b i FullyQualifiedName
 nameToFQN info env (Name n nk) = case nk of
   NTopLevel mn mh -> pure (FullyQualifiedName mn n mh)
   NDynRef (DynamicRef dArg i) -> case RAList.lookup (view ceLocal env) i of
@@ -531,12 +527,12 @@ nameToFQN info env (Name n nk) = case nk of
   _ -> failInvariant info (InvariantInvalidBoundVariable n)
 
 guardTable
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
-  -> DirectEnv b i m
+  -> DirectEnv e b i
   -> TableValue
   -> GuardTableOp
-  -> m ()
+  -> EvalM e b i ()
 guardTable i env (TableValue tn mh _) dbop = do
   let mn = _tableModuleName tn
   checkLocalBypass $
@@ -551,22 +547,14 @@ guardTable i env (TableValue tn mh _) dbop = do
       GtCreateTable -> notBypassed
       _ | enabled -> return ()
         | otherwise -> notBypassed
-{-# SPECIALIZE guardTable
-   :: ()
-   -> DirectEnv CoreBuiltin () Eval
-   -> TableValue
-   -> GuardTableOp
-   -> Eval ()
-    #-}
 
 
 -- Todo: should we typecheck / arity check here?
 createUserGuard
-  :: (MonadEval b i m)
-  => i
+  :: i
   -> FullyQualifiedName
   -> [PactValue]
-  -> m (EvalValue b i m)
+  -> EvalM e b i (EvalValue e b i)
 createUserGuard info fqn args =
   lookupFqName fqn >>= \case
     Just (Dfun _) ->
@@ -581,46 +569,45 @@ createUserGuard info fqn args =
       failInvariant info (InvariantUnboundFreeVariable fqn)
 
 enforceNotWithinDefcap
-  :: (MonadEval b i m)
-  => i
-  -> DirectEnv b i m
+  :: i
+  -> DirectEnv e b i
   -> T.Text
-  -> m ()
+  -> EvalM e b i ()
 enforceNotWithinDefcap info env form =
   when (_ceInCap env) $ throwExecutionError info (FormIllegalWithinDefcap form)
 
-enforceBool :: (MonadEval b i m) => i -> EvalValue b i m -> m Bool
+enforceBool :: i -> EvalValue e b i -> EvalM e b i Bool
 enforceBool info = \case
   VBool b -> pure b
   VPactValue v' -> throwExecutionError info (ExpectedBoolValue v')
   _ -> throwExecutionError info ExpectedPactValue
 
-enforceBool' :: (MonadEval b i m) => i -> EvalValue b i m -> m (EvalValue b i m)
+enforceBool' :: i -> EvalValue e b i -> EvalM e b i (EvalValue e b i)
 enforceBool' info = \case
   v@VBool{} -> pure v
   VPactValue v' -> throwExecutionError info (ExpectedBoolValue v')
   _ -> throwExecutionError info ExpectedPactValue
 
-enforceString :: (MonadEval b i m) => i -> EvalValue b i m -> m Text
+enforceString ::i -> EvalValue e b i -> EvalM e b i Text
 enforceString info = \case
   VString b -> pure b
   VPactValue v' -> throwExecutionError info $ ExpectedStringValue v'
   _ -> throwExecutionError info $ ExpectedPactValue
 
 
-enforceCapToken :: (MonadEval b i m) => i -> EvalValue b i m -> m (CapToken FullyQualifiedName PactValue)
+enforceCapToken :: i -> EvalValue e b i -> EvalM e b i (CapToken FullyQualifiedName PactValue)
 enforceCapToken info = \case
   VCapToken b -> pure b
   VPactValue v' -> throwExecutionError info $ ExpectedCapToken v'
   _ -> throwExecutionError info $ ExpectedPactValue
 
-enforceBoolValue :: (MonadEval b i m) => i -> EvalValue b i m -> m (EvalValue b i m)
+enforceBoolValue :: i -> EvalValue e b i -> EvalM e b i (EvalValue e b i)
 enforceBoolValue info = \case
   VBool b -> pure (VBool b)
   VPactValue v' -> throwExecutionError info (ExpectedBoolValue v')
   _ -> throwExecutionError info ExpectedPactValue
 
-enforceUserAppClosure :: (MonadEval b i m) => i -> EvalValue b i m -> m (CanApply b i m)
+enforceUserAppClosure :: i -> EvalValue e b i -> EvalM e b i (CanApply e b i)
 enforceUserAppClosure info = \case
   VClosure c -> case c of
     C clo -> pure (C clo)
@@ -632,28 +619,28 @@ enforceUserAppClosure info = \case
   _ -> throwExecutionError info CannotApplyValueToNonClosure
 
 
-enforcePactValue :: (MonadEval b i m) => i -> EvalValue b i m -> m PactValue
+enforcePactValue :: i -> EvalValue e b i -> EvalM e b i PactValue
 enforcePactValue info = \case
   VPactValue pv -> pure pv
   _ -> throwExecutionError info ExpectedPactValue
 
-enforcePactValue' :: (MonadEval b i m) => i -> EvalValue b i m -> m (EvalValue b i m)
+enforcePactValue' :: i -> EvalValue e b i -> EvalM e b i (EvalValue e b i)
 enforcePactValue' info = \case
   VPactValue pv -> pure (VPactValue pv)
   _ -> throwExecutionError info ExpectedPactValue
 
-catchRecoverable :: forall b i m a. (MonadEval b i m) => m a -> (i -> UserRecoverableError -> m a) -> m a
+catchRecoverable :: forall e b i a. EvalM e b i a -> (i -> UserRecoverableError -> EvalM e b i a) -> EvalM e b i a
 catchRecoverable act catch = do
-  eState <- evalStateToErrorState <$> getEvalState
+  eState <- evalStateToErrorState <$> get
   catchError act (handler eState)
   where
-  handler :: ErrorState i -> PactError i -> m a
+  handler :: ErrorState i -> PactError i -> EvalM e b i a
   handler eState (PEUserRecoverableError err _ i) = do
-    modifyEvalState (restoreFromErrorState eState)
+    modify' (restoreFromErrorState eState)
     catch i err
   handler _ e = throwError e
 
-readOnlyEnv :: DirectEnv b i m -> DirectEnv b i m
+readOnlyEnv :: DirectEnv e b i -> DirectEnv e b i
 readOnlyEnv e
   | view (cePactDb . pdbPurity) e == PSysOnly = e
   | otherwise =
@@ -673,7 +660,7 @@ readOnlyEnv e
              }
       in set cePactDb newPactdb e
 
-sysOnlyEnv :: forall b i m. DirectEnv b i m -> DirectEnv b i m
+sysOnlyEnv :: forall e b i. DirectEnv e b i -> DirectEnv e b i
 sysOnlyEnv e
   | view (cePactDb . pdbPurity) e == PSysOnly = e
   | otherwise =
@@ -698,40 +685,62 @@ sysOnlyEnv e
     DUserTables _ -> dbOpDisallowed
     _ -> _pdbRead pdb dom k
 
-evalWithStackFrame :: MonadEval b i m => i -> StackFrame i -> Maybe Type -> m (EvalValue b i m) -> m (EvalValue b i m)
+evalWithStackFrame :: i -> StackFrame i -> Maybe Type -> EvalM e b i (EvalValue e b i) -> EvalM e b i (EvalValue e b i)
 evalWithStackFrame info sf mty act = do
-  esStack %== (sf:)
+  esStack %= (sf:)
 #ifdef WITH_FUNCALL_TRACING
   timeEnter <- liftIO $ getTime ProcessCPUTime
-  esTraceOutput %== (TraceFunctionEnter timeEnter sf info:)
+  esTraceOutput %= (TraceFunctionEnter timeEnter sf info:)
 #endif
   v <- act
-  esStack %== safeTail
+  esStack %= safeTail
   pv <- enforcePactValue info v
   maybeTCType info mty pv
 #ifdef WITH_FUNCALL_TRACING
   timeExit <- liftIO $ getTime ProcessCPUTime
-  esTraceOutput %== (TraceFunctionExit timeExit sf info:)
+  esTraceOutput %= (TraceFunctionExit timeExit sf info:)
 #endif
   return (VPactValue pv)
 {-# INLINE evalWithStackFrame #-}
 
 applyLamUnsafe
-  :: (MonadEval b i m)
-  => CanApply b i m
-  -> [EvalValue b i m]
-  -> m (EvalValue b i m)
+  :: (IsBuiltin b)
+  => CanApply e b i
+  -> [EvalValue e b i]
+  -> EvalM e b i (EvalValue e b i)
 applyLamUnsafe = applyLam
 
 applyLam
-  :: (MonadEval b i m)
-  => CanApply b i m
-  -> [EvalValue b i m]
-  -> m (EvalValue b i m)
+  :: (IsBuiltin b)
+  => CanApply e b i
+  -> [EvalValue e b i]
+  -> EvalM e b i (EvalValue e b i)
+applyLam nclo@(N (NativeFn b env fn arity i)) args
+  | arity == argLen = do
+    chargeFlatNativeGas i b
+    fn i b env args
+  | argLen > arity = throwExecutionError i ClosureAppliedToTooManyArgs
+  | null args = return (VClosure nclo)
+  | otherwise =
+    apply' arity [] args
+  where
+  argLen = length args
+  apply' !a pa (x:xs) = apply' (a - 1) (x:pa) xs
+  apply' !a pa [] =
+    return (VPartialNative (PartialNativeFn b env fn a pa i))
+applyLam (CT (CapTokenClosure fqn argtys arity i)) args
+  | arity == argLen = do
+    chargeGasArgs i (GAApplyLam (Just fqn) (fromIntegral argLen))
+    args' <- traverse (enforcePactValue i) args
+    zipWithM_ (\arg ty -> maybeTCType i ty arg) args' argtys
+    return (VPactValue (PCapToken (CapToken fqn args')))
+  | otherwise = throwExecutionError i ClosureAppliedToTooManyArgs
+  where
+  argLen = length args
 applyLam vc@(C (Closure fqn ca arity term mty env cloi)) args
   | arity == argLen = case ca of
     ArgClosure cloargs -> do
-      chargeGasArgs cloi (GAApplyLam (renderFullyQualName fqn) argLen)
+      chargeGasArgs cloi (GAApplyLam (Just fqn) argLen)
       args' <- traverse (enforcePactValue cloi) args
       zipWithM_ (\arg (Arg _ ty _) -> maybeTCType cloi ty arg) args' (NE.toList cloargs)
       let sf = StackFrame fqn args' SFDefun cloi
@@ -746,7 +755,7 @@ applyLam vc@(C (Closure fqn ca arity term mty env cloi)) args
       | null args ->
         return (VClosure vc)
       | otherwise -> do
-        chargeGasArgs cloi (GAApplyLam (renderFullyQualName fqn) argLen)
+        chargeGasArgs cloi (GAApplyLam (Just fqn) argLen)
         apply' mempty (NE.toList cloargs) args
   where
   argLen = length args
@@ -766,7 +775,7 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args
   | arity == argLen = case ca of
     ArgClosure _ -> do
       -- Todo: maybe lambda application should mangle some sort of name?
-      chargeGasArgs cloi (GAApplyLam "#lambda" argLen)
+      chargeGasArgs cloi (GAApplyLam Nothing argLen)
       let locals = view ceLocal env
           locals' = foldl' (flip RAList.cons) locals args
       evaluate (set ceLocal locals' env) term
@@ -776,7 +785,7 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args
   | otherwise = case ca of
       NullaryClosure -> throwExecutionError cloi ClosureAppliedToTooManyArgs
       ArgClosure cloargs -> do
-        chargeGasArgs cloi (GAApplyLam "#lambda" argLen)
+        chargeGasArgs cloi (GAApplyLam Nothing argLen)
         apply' (view ceLocal env) (NE.toList cloargs) args
   where
   argLen = length args
@@ -791,7 +800,7 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args
     return (VPartialClosure (PartialClosure Nothing (ty :| tys) (length tys + 1) term mty (set ceLocal e env) cloi))
   apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
 applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args = do
-  chargeGasArgs cloi (GAApplyLam (getSfName li) (length args))
+  chargeGasArgs cloi (GAApplyLam (_sfName <$> li) (length args))
   apply' (view ceLocal env) (NE.toList argtys) args
   where
   apply' e (Arg _ ty _:tys) (x:xs) = do
@@ -808,19 +817,7 @@ applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args = do
     let pclo = PartialClosure li (ty :| tys) (length tys + 1) term mty (set ceLocal e env) cloi
     return (VPartialClosure pclo)
   apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
-applyLam nclo@(N (NativeFn b env fn arity i)) args
-  | arity == argLen = do
-    chargeFlatNativeGas i b
-    fn i b env args
-  | argLen > arity = throwExecutionError i ClosureAppliedToTooManyArgs
-  | null args = return (VClosure nclo)
-  | otherwise =
-    apply' arity [] args
-  where
-  argLen = length args
-  apply' !a pa (x:xs) = apply' (a - 1) (x:pa) xs
-  apply' !a pa [] =
-    return (VPartialNative (PartialNativeFn b env fn a pa i))
+
 applyLam (PN (PartialNativeFn b env fn arity pArgs i)) args
   | arity == argLen = do
     chargeFlatNativeGas i b
@@ -832,27 +829,18 @@ applyLam (PN (PartialNativeFn b env fn arity pArgs i)) args
   apply' !a pa (x:xs) = apply' (a - 1) (x:pa) xs
   apply' !a pa [] =
     return (VPartialNative (PartialNativeFn b env fn a pa i))
-applyLam (CT (CapTokenClosure fqn argtys arity i)) args
-  | arity == argLen = do
-    chargeGasArgs i (GAApplyLam (renderQualName (fqnToQualName fqn)) (fromIntegral argLen))
-    args' <- traverse (enforcePactValue i) args
-    zipWithM_ (\arg ty -> maybeTCType i ty arg) args' argtys
-    return (VPactValue (PCapToken (CapToken fqn args')))
-  | otherwise = throwExecutionError i ClosureAppliedToTooManyArgs
-  where
-  argLen = length args
 applyLam (DPC (DefPactClosure fqn argtys arity env i)) args
   | arity == argLen = case argtys of
     ArgClosure cloargs -> do
       -- Todo: defpact has much higher overhead, we must charge a bit more gas for this
-      chargeGasArgs i (GAApplyLam (renderQualName (fqnToQualName fqn)) (fromIntegral argLen))
+      chargeGasArgs i (GAApplyLam (Just fqn) (fromIntegral argLen))
       args' <- traverse (enforcePactValue i) args
       zipWithM_ (\arg (Arg _ ty _) -> maybeTCType i ty arg) args' (NE.toList cloargs)
       let pc = DefPactContinuation (fqnToQualName fqn) args'
           env' = set ceLocal (RAList.fromList (reverse args)) env
       initPact i pc env'
     NullaryClosure -> do
-      chargeGasArgs i (GAApplyLam (renderQualName (fqnToQualName fqn)) (fromIntegral argLen))
+      chargeGasArgs i (GAApplyLam (Just fqn) (fromIntegral argLen))
       let pc = DefPactContinuation (fqnToQualName fqn) []
           env' = set ceLocal mempty env
       -- Todo: defpact has much higher overhead, we must charge a bit more gas for this
@@ -861,11 +849,6 @@ applyLam (DPC (DefPactClosure fqn argtys arity env i)) args
   where
   argLen = length args
 
-getSfName :: Maybe (StackFrame i) -> T.Text
-getSfName = \case
-  Just sf -> renderFullyQualName (_sfName sf)
-  Nothing -> "#lambda"
-
 
 
 ------------------------------------------------------
@@ -873,11 +856,11 @@ getSfName = \case
 ------------------------------------------------------
 
 enforceGuard
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
-  -> DirectEnv b i m
+  -> DirectEnv e b i
   -> Guard QualifiedName PactValue
-  -> m Bool
+  -> EvalM e b i Bool
 enforceGuard info env g = case g of
   GKeyset ks -> do
     isKeysetInSigs info env ks
@@ -898,17 +881,17 @@ enforceGuard info env g = case g of
          CapabilityPactGuardInvalidPactId curDpid dpid
 
 guardForModuleCall
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
-  -> DirectEnv b i m
+  -> DirectEnv e b i
   -> ModuleName
-  -> m ()
-  -> m ()
+  -> EvalM e b i ()
+  -> EvalM e b i ()
 guardForModuleCall i env currMod onFound =
   findCallingModule >>= \case
     Just mn | mn == currMod -> onFound
     _ -> do
-      mc <- useEvalState (esCaps . csModuleAdmin)
+      mc <- use (esCaps . csModuleAdmin)
       if S.member currMod mc then onFound
       else getModule i (view cePactDb env) currMod >>= acquireModuleAdmin i env
 
@@ -917,11 +900,11 @@ guardForModuleCall i env currMod onFound =
 -- checking whether `esCaps . csModuleAdmin` for the particular
 -- module is in scope
 acquireModuleAdmin
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
-  -> DirectEnv b i m
+  -> DirectEnv e b i
   -> EvalModule b i
-  -> m ()
+  -> EvalM e b i ()
 acquireModuleAdmin i env mdl = do
   case _mGovernance mdl of
     KeyGov ksn -> do
@@ -929,26 +912,26 @@ acquireModuleAdmin i env mdl = do
     CapGov (FQName fqn) -> do
       let wcapBody = Constant LUnit i
       () <$ evalCap i env (CapToken fqn []) PopCapInvoke NormalCapEval wcapBody
-  (esCaps . csModuleAdmin) %== S.insert (_mName mdl)
+  (esCaps . csModuleAdmin) %= S.insert (_mName mdl)
 
 
 acquireModuleAdminCapability
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
-  -> DirectEnv b i m
+  -> DirectEnv e b i
   -> ModuleName
-  -> m ()
+  -> EvalM e b i ()
 acquireModuleAdminCapability i env mname = do
-  sc <- S.member mname <$> useEvalState (esCaps . csModuleAdmin)
+  sc <- S.member mname <$> use (esCaps . csModuleAdmin)
   unless sc $ getModule i (_cePactDb env) mname >>= acquireModuleAdmin i env
 
 
 runUserGuard
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
-  -> DirectEnv b i m
+  -> DirectEnv e b i
   -> UserGuard QualifiedName PactValue
-  -> m Bool
+  -> EvalM e b i Bool
 runUserGuard info env (UserGuard qn args) =
   getModuleMemberWithHash info (_cePactDb env) qn >>= \case
     (Dfun d, mh) -> do
@@ -960,10 +943,9 @@ runUserGuard info env (UserGuard qn args) =
     (d, _) -> throwExecutionError info (UserGuardMustBeADefun qn (defKind (_qnModName qn) d))
 
 enforceCapGuard
-  :: (MonadEval b i m)
-  => i
+  :: i
   -> CapabilityGuard QualifiedName PactValue
-  -> m Bool
+  -> EvalM e b i Bool
 enforceCapGuard info cg@(CapabilityGuard qn args mpid) = case mpid of
   Nothing -> enforceCap
   Just pid -> do
@@ -980,11 +962,11 @@ enforceCapGuard info cg@(CapabilityGuard qn args mpid) = case mpid of
 
 -- Keyset Code
 isKeysetInSigs
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
-  -> DirectEnv b i m
+  -> DirectEnv e b i
   -> KeySet
-  -> m Bool
+  -> EvalM e b i Bool
 isKeysetInSigs info env (KeySet kskeys ksPred) = do
   matchedSigs <- M.filterWithKey matchKey <$> viewEvalEnv eeMsgSigs
   sigs <- checkSigCaps matchedSigs
@@ -1026,11 +1008,11 @@ isKeysetInSigs info env (KeySet kskeys ksPred) = do
           throwExecutionError info (InvalidCustomKeysetPredicate "expected native")
 
 isKeysetNameInSigs
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
-  -> DirectEnv b i m
+  -> DirectEnv e b i
   -> KeySetName
-  -> m Bool
+  -> EvalM e b i Bool
 isKeysetNameInSigs info env ksn = do
   pdb <- viewEvalEnv eePactDb
   liftDbFunction info (readKeySet pdb ksn) >>= \case
@@ -1044,10 +1026,9 @@ isKeysetNameInSigs info env ksn = do
 ------------------------------------------------------
 
 requireCap
-  :: (MonadEval b i m)
-  => i
+  :: i
   -> FQCapToken
-  -> m (EvalValue b i m)
+  -> EvalM e b i (EvalValue e b i)
 requireCap info (CapToken fqn args) = do
   let qualCapToken = CapToken (fqnToQualName fqn) args
   capInStack <- isCapInStack qualCapToken
@@ -1055,46 +1036,31 @@ requireCap info (CapToken fqn args) = do
   else throwUserRecoverableError info (CapabilityNotGranted qualCapToken)
 
 isCapInStack
-  :: (MonadEval b i m)
-  => CapToken QualifiedName PactValue
-  -> m Bool
+  :: CapToken QualifiedName PactValue
+  -> EvalM e b i Bool
 isCapInStack ct = do
   capSet <- getAllStackCaps
   pure $ S.member ct capSet
-{-# SPECIALIZE isCapInStack
-   :: CapToken QualifiedName PactValue
-   -> Eval Bool
-    #-}
+
 
 isCapInStack'
-  :: (MonadEval b i m)
-  => CapToken FullyQualifiedName PactValue
-  -> m Bool
+  :: CapToken FullyQualifiedName PactValue
+  -> EvalM e b i Bool
 isCapInStack' (CapToken fqn args) =
   isCapInStack (CapToken (fqnToQualName fqn) args)
-{-# SPECIALIZE isCapInStack'
-   :: FQCapToken
-   -> Eval Bool
-    #-}
 
 composeCap
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
-  -> DirectEnv b i m
+  -> DirectEnv e b i
   -> FQCapToken
-  -> m (EvalValue b i m)
+  -> EvalM e b i (EvalValue e b i)
 composeCap info env origToken =
   isCapInStack' origToken >>= \case
     False ->
       evalCap info env origToken PopCapComposed NormalCapEval (Constant (LBool True) info)
     True ->
       return (VBool True)
-{-# SPECIALIZE composeCap
-   :: ()
-   -> DirectEnv CoreBuiltin () Eval
-   -> FQCapToken
-   -> Eval (EvalValue CoreBuiltin () Eval)
-    #-}
 
 filterIndex :: Int -> [a] -> [a]
 filterIndex i xs = [x | (x, i') <- zip xs [0..], i /= i']
@@ -1106,12 +1072,11 @@ findMsgSigCap cix ct1 ct2 =
 -- Todo:
 -- `capAutonomous` are what we should use to match semantics accurately.
 installCap
-  :: (MonadEval b i m)
-  => i
-  -> DirectEnv b i m
+  :: i
+  -> DirectEnv e b i
   -> FQCapToken
   -> Bool
-  -> m (ManagedCap QualifiedName PactValue)
+  -> EvalM e b i (ManagedCap QualifiedName PactValue)
 installCap info _env (CapToken fqn args) autonomous = do
   let ct = CapToken (fqnToQualName fqn) args
   d <- getDefCap info fqn
@@ -1122,20 +1087,20 @@ installCap info _env (CapToken fqn args) autonomous = do
         let mcapType = ManagedParam fqnMgr managedParam paramIx
             ctFiltered = CapToken (fqnToQualName fqn) (filterIndex paramIx args)
             mcap = ManagedCap ctFiltered ct mcapType
-        capAlreadyInstalled <- S.member mcap <$> useEvalState (esCaps . csManaged)
+        capAlreadyInstalled <- S.member mcap <$> use (esCaps . csManaged)
         when capAlreadyInstalled $ throwExecutionError info (CapAlreadyInstalled ct)
-        (esCaps . csManaged) %== S.insert mcap
+        (esCaps . csManaged) %= S.insert mcap
         when autonomous $
-          (esCaps . csAutonomous) %== S.insert ct
+          (esCaps . csAutonomous) %= S.insert ct
         pure mcap
       AutoManagedMeta -> do
         let mcapType = AutoManaged False
             mcap = ManagedCap ct ct mcapType
-        capAlreadyInstalled <- S.member mcap <$> useEvalState (esCaps . csManaged)
+        capAlreadyInstalled <- S.member mcap <$> use (esCaps . csManaged)
         when capAlreadyInstalled $ throwExecutionError info (CapAlreadyInstalled ct)
-        (esCaps . csManaged) %== S.insert mcap
+        (esCaps . csManaged) %= S.insert mcap
         when autonomous $
-          (esCaps . csAutonomous) %== S.insert ct
+          (esCaps . csAutonomous) %= S.insert ct
         pure mcap
     DefEvent ->
       throwExecutionError info (InvalidManagedCap fqn)
@@ -1148,11 +1113,11 @@ installCap info _env (CapToken fqn args) autonomous = do
 -- DefPacts
 ------------------------------------------------------
 initPact
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
   -> DefPactContinuation QualifiedName PactValue
-  -> DirectEnv b i m
-  -> m (EvalValue b i m)
+  -> DirectEnv e b i
+  -> EvalM e b i (EvalValue e b i)
 initPact i pc cenv = do
   case view ceDefPactStep cenv of
     Nothing -> do
@@ -1178,14 +1143,14 @@ nestedPactsNotAdvanced resultState ps =
 {-# INLINE nestedPactsNotAdvanced #-}
 
 applyPact
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
   -> DefPactContinuation QualifiedName PactValue
   -> DefPactStep
-  -> DirectEnv b i m
+  -> DirectEnv e b i
   -> M.Map DefPactId DefPactExec
-  -> m (EvalValue b i m)
-applyPact i pc ps cenv nested = useEvalState esDefPactExec >>= \case
+  -> EvalM e b i (EvalValue e b i)
+applyPact i pc ps cenv nested = use esDefPactExec >>= \case
   Just pe -> throwExecutionError i (MultipleOrNestedDefPactExecFound pe)
   Nothing -> getModuleMemberWithHash i (_cePactDb cenv) (pc ^. pcName) >>= \case
     (DPact defPact, mh) -> do
@@ -1208,7 +1173,7 @@ applyPact i pc ps cenv nested = useEvalState esDefPactExec >>= \case
                , _peNestedDefPactExec = nested
                }
 
-      setEvalState esDefPactExec (Just pe)
+      esDefPactExec .= (Just pe)
       let sf = StackFrame (qualNameToFqn (pc ^. pcName) mh) (pc ^. pcArgs) SFDefPact i
 
       result <- case (ps ^. psRollback, step) of
@@ -1220,7 +1185,7 @@ applyPact i pc ps cenv nested = useEvalState esDefPactExec >>= \case
           throwExecutionError i (DefPactStepHasNoRollback ps)
 
       -- After evaluation, check the result state
-      useEvalState esDefPactExec >>= \case
+      use esDefPactExec >>= \case
         Nothing -> failInvariant i $ InvariantPactExecNotInEnv Nothing
         Just resultExec -> case cenv ^. ceDefPactStep of
           Nothing -> failInvariant i (InvariantPactStepNotInEnv Nothing)
@@ -1236,23 +1201,15 @@ applyPact i pc ps cenv nested = useEvalState esDefPactExec >>= \case
             return result
 
     (_, mh) -> failInvariant i (InvariantExpectedDefPact (qualNameToFqn (pc ^. pcName) mh))
-{-# SPECIALIZE applyPact
-   :: ()
-   -> DefPactContinuation QualifiedName PactValue
-   -> DefPactStep
-   -> DirectEnv CoreBuiltin () Eval
-   -> M.Map DefPactId DefPactExec
-   -> Eval (EvalValue CoreBuiltin () Eval)
-    #-}
 
 applyNestedPact
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
   -> DefPactContinuation QualifiedName PactValue
   -> DefPactStep
-  -> DirectEnv b i m
-  -> m (EvalValue b i m)
-applyNestedPact i pc ps cenv = useEvalState esDefPactExec >>= \case
+  -> DirectEnv e b i
+  -> EvalM e b i (EvalValue e b i)
+applyNestedPact i pc ps cenv = use esDefPactExec >>= \case
   Nothing -> failInvariant i $ InvariantPactExecNotInEnv Nothing
 
   Just pe -> getModuleMemberWithHash i (_cePactDb cenv) (pc ^. pcName) >>= \case
@@ -1291,7 +1248,7 @@ applyNestedPact i pc ps cenv = useEvalState esDefPactExec >>= \case
           | otherwise ->
             throwExecutionError i (NestedDefPactNeverStarted ps)
 
-      setEvalState esDefPactExec (Just exec)
+      esDefPactExec .= (Just exec)
       let
         cenv' = set ceDefPactStep (Just ps) cenv
       let contFqn = qualNameToFqn (pc ^. pcName) mh
@@ -1303,29 +1260,22 @@ applyNestedPact i pc ps cenv = useEvalState esDefPactExec >>= \case
           evalWithStackFrame i sf Nothing $ evaluate cenv' rollbackExpr
         (True, Step{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
 
-      useEvalState esDefPactExec >>= \case
+      use esDefPactExec >>= \case
         Nothing -> failInvariant i $ InvariantPactExecNotInEnv Nothing
         Just resultExec -> do
           when (nestedPactsNotAdvanced resultExec ps) $
             throwExecutionError i (NestedDefpactsNotAdvanced (_peDefPactId resultExec))
           let npe = pe & peNestedDefPactExec %~ M.insert (_psDefPactId ps) resultExec
-          setEvalState esDefPactExec (Just npe)
+          esDefPactExec .= (Just npe)
           return result
     (_, mh) -> failInvariant i (InvariantExpectedDefPact (qualNameToFqn (pc ^. pcName) mh))
-{-# SPECIALIZE applyNestedPact
-   :: ()
-   -> DefPactContinuation QualifiedName PactValue
-   -> DefPactStep
-   -> DirectEnv CoreBuiltin () Eval
-   -> Eval (EvalValue CoreBuiltin () Eval)
-    #-}
 
 resumePact
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
-  -> DirectEnv b i m
+  -> DirectEnv e b i
   -> Maybe DefPactExec
-  -> m (EvalValue b i m)
+  -> EvalM e b i (EvalValue e b i)
 resumePact i env crossChainContinuation = viewEvalEnv eeDefPactStep >>= \case
   Nothing -> throwExecutionError i DefPactStepNotInEnvironment
   Just ps -> do
@@ -1353,7 +1303,7 @@ resumePact i env crossChainContinuation = viewEvalEnv eeDefPactStep >>= \case
 
         resumeDefPactExec ccExec
       where
-        --resumeDefPactExec :: CEKEval step b i m, MonadEval b i m => DefPactExec -> m (CEKEvalResult step b i m)
+        --resumeDefPactExec :: CEKEval step e b i, IsBuiltin b => DefPactExec -> m (CEKEvalResult step e b i)
         resumeDefPactExec pe = do
           when (_psDefPactId ps /= _peDefPactId pe) $
             throwExecutionError i (DefPactIdMismatch (_psDefPactId ps) (_peDefPactId pe))
@@ -1374,20 +1324,13 @@ resumePact i env crossChainContinuation = viewEvalEnv eeDefPactStep >>= \case
                          Nothing -> _peYield pe
               env' = set ceLocal (RAList.fromList (reverse args)) $ set ceDefPactStep (Just $ set psResume resume ps) env
           applyPact i pc ps env' (_peNestedDefPactExec pe)
-{-# SPECIALIZE resumePact
-   :: ()
-   -> DirectEnv CoreBuiltin () Eval
-   -> Maybe DefPactExec
-   -> Eval (EvalValue CoreBuiltin () Eval)
-    #-}
 
 emitXChainEvents
-  :: (MonadEval b i m)
-  => Maybe Yield
+  :: Maybe Yield
   -- ^ from '_psResume', indicating a cross-chain resume.
   -> DefPactExec
    -- ^ tested for yield provenance to indicate a cross-chain yield.
-  -> m ()
+  -> EvalM e b i ()
 emitXChainEvents mResume dpe = do
   forM_ mResume $ \r -> case r of
     (Yield _ (Just (Provenance _ mh)) (Just sc)) ->
@@ -1404,36 +1347,28 @@ emitXChainEvents mResume dpe = do
       , PList (V.fromList (view (peContinuation . pcArgs) dpe)) ]
       mh
 
-emitReservedEvent :: MonadEval b i m => T.Text -> [PactValue] -> ModuleHash -> m ()
+emitReservedEvent :: T.Text -> [PactValue] -> ModuleHash -> EvalM e b i ()
 emitReservedEvent name params mhash = do
   let pactModule = ModuleName "pact" Nothing
   let pe = PactEvent name params pactModule mhash
   emitEventUnsafe pe
 
 emitEventUnsafe
-  :: (MonadEval b i m)
-  => PactEvent PactValue
-  -> m ()
-emitEventUnsafe pe = esEvents %== (++ [pe])
+  :: PactEvent PactValue
+  -> EvalM e b i ()
+emitEventUnsafe pe = esEvents %= (++ [pe])
 
 emitCapability
-  :: (MonadEval b i m)
-  => i
+  :: i
   -> CapToken FullyQualifiedName PactValue
-  -> m ()
+  -> EvalM e b i ()
 emitCapability info tkn =
   emitEvent info (fqctToPactEvent tkn)
-{-# SPECIALIZE emitCapability
-   :: ()
-   -> CapToken FullyQualifiedName PactValue
-   -> Eval ()
-    #-}
 
 emitEvent
-  :: (MonadEval b i m)
-  => i
+  :: i
   -> PactEvent PactValue
-  -> m ()
+  -> EvalM e b i ()
 emitEvent info pe = findCallingModule >>= \case
     Just mn -> do
       -- Todo: ++ definitely feels suboptimal, especially for gas.
@@ -1441,7 +1376,7 @@ emitEvent info pe = findCallingModule >>= \case
       -- well as after final emission.
       let ctModule = _peModule pe
       if ctModule == mn then do
-        esEvents %== (++ [pe])
+        esEvents %= (++ [pe])
       else throwExecutionError info (EventDoesNotMatchModule mn)
     Nothing -> throwExecutionError info (EventDoesNotMatchModule (_peModule pe))
 
@@ -1463,7 +1398,7 @@ tryNodeGas = (MilliGas 100)
 ----------------------------------------------------------------------
 -- Our builtin definitions start here
 ----------------------------------------------------------------------
-unaryIntFn :: (MonadEval b i m) => (Integer -> Integer) -> NativeFunction b i m
+unaryIntFn :: (IsBuiltin b) => (Integer -> Integer) -> NativeFunction e b i
 unaryIntFn op info b _env = \case
   [VLiteral (LInteger i)] ->
     return (VLiteral (LInteger (op i)))
@@ -1471,9 +1406,9 @@ unaryIntFn op info b _env = \case
 {-# INLINE unaryIntFn #-}
 
 binaryIntFn
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => (Integer -> Integer -> Integer)
-  -> NativeFunction b i m
+  -> NativeFunction e b i
 binaryIntFn op info b _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> return (VLiteral (LInteger (op i i')))
   args -> argsError info b args
@@ -1493,7 +1428,7 @@ binaryIntFn op info b _env = \case
 --          GT -> toRational n * multiplier
 -- `roundTo'` thus has the same asymptotic complexity as multiplication/division. Thus, worst case, we can upperbound it via
 -- division
-roundingFn :: (MonadEval b i m) => (Rational -> Integer) -> NativeFunction b i m
+roundingFn :: (IsBuiltin b) => (Rational -> Integer) -> NativeFunction e b i
 roundingFn op info b _env = \case
   [VLiteral (LDecimal d)] ->
     return (VLiteral (LInteger (truncate (roundTo' op 0 d))))
@@ -1505,7 +1440,7 @@ roundingFn op info b _env = \case
 ---------------------------------
 -- Arithmetic Ops
 ------------------------------
-rawAdd :: (MonadEval b i m) => NativeFunction b i m
+rawAdd :: (IsBuiltin b) => NativeFunction e b i
 rawAdd info b _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
     chargeGasArgs info (GIntegerOpCost PrimOpAdd i i')
@@ -1534,7 +1469,7 @@ rawAdd info b _env = \case
     chargeGasArgs info (GIntegerOpCost PrimOpAdd (decimalMantissa i) (decimalMantissa i'))
     return (VLiteral (LDecimal (i + i')))
 
-rawSub :: (MonadEval b i m) => NativeFunction b i m
+rawSub :: (IsBuiltin b) => NativeFunction e b i
 rawSub info b _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
     chargeGasArgs info (GIntegerOpCost PrimOpSub i i')
@@ -1554,7 +1489,7 @@ rawSub info b _env = \case
 
 
 
-rawMul :: (MonadEval b i m) => NativeFunction b i m
+rawMul :: (IsBuiltin b) => NativeFunction e b i
 rawMul info b _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
     chargeGasArgs info (GIntegerOpCost PrimOpMul i i')
@@ -1573,7 +1508,7 @@ rawMul info b _env = \case
     chargeGasArgs info (GIntegerOpCost PrimOpMul (decimalMantissa i) (decimalMantissa i'))
     return (VLiteral (LDecimal (i * i')))
 
-rawPow :: (MonadEval b i m) => NativeFunction b i m
+rawPow :: (IsBuiltin b) => NativeFunction e b i
 rawPow info b _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
     chargeGasArgs info $ GIntegerOpCost PrimOpPow i i'
@@ -1593,7 +1528,7 @@ rawPow info b _env = \case
     guardNanOrInf info result
     return (VLiteral (LDecimal (f2Dec result)))
 
-rawLogBase :: forall b i m. (MonadEval b i m) => NativeFunction b i m
+rawLogBase :: forall e b i. (IsBuiltin b) => NativeFunction e b i
 rawLogBase info b _env = \case
   [VLiteral (LInteger base), VLiteral (LInteger n)] -> do
     checkArgs base n
@@ -1615,13 +1550,13 @@ rawLogBase info b _env = \case
     let result = Musl.trans_logBase (dec2F base) (dec2F arg)
     guardNanOrInf info result
     return (VLiteral (LDecimal (f2Dec result)))
-  checkArgs :: (Num a, Ord a) => a -> a -> m ()
+  checkArgs :: (Num a, Ord a) => a -> a -> EvalM e b i ()
   checkArgs base arg = do
     when (base < 0) $ throwExecutionError info (ArithmeticException "Negative log base")
     when (arg <= 0) $ throwExecutionError info (ArithmeticException "Non-positive log argument")
 
 
-rawDiv :: (MonadEval b i m) => NativeFunction b i m
+rawDiv :: (IsBuiltin b) => NativeFunction e b i
 rawDiv info b _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
     when (i' == 0) $ throwExecutionError info (ArithmeticException "div by zero")
@@ -1643,7 +1578,7 @@ rawDiv info b _env = \case
     return (VLiteral (LDecimal (i / i')))
 
 
-rawNegate :: (MonadEval b i m) => NativeFunction b i m
+rawNegate :: (IsBuiltin b) => NativeFunction e b i
 rawNegate info b _env = \case
   [VLiteral (LInteger i)] ->
     return (VLiteral (LInteger (negate i)))
@@ -1651,36 +1586,36 @@ rawNegate info b _env = \case
     return (VLiteral (LDecimal (negate i)))
   args -> argsError info b args
 
-rawEq :: (MonadEval b i m) => NativeFunction b i m
+rawEq :: (IsBuiltin b) => NativeFunction e b i
 rawEq info b _env = \case
   [VPactValue pv, VPactValue pv'] -> do
     isEq <- valEqGassed info pv pv'
     return (VBool isEq)
   args -> argsError info b args
 
-modInt :: (MonadEval b i m) => NativeFunction b i m
+modInt :: (IsBuiltin b) => NativeFunction e b i
 modInt = binaryIntFn mod
 
-rawNeq :: (MonadEval b i m) => NativeFunction b i m
+rawNeq :: (IsBuiltin b) => NativeFunction e b i
 rawNeq info b _env = \case
   [VPactValue pv, VPactValue pv'] -> do
     isEq <- valEqGassed info pv pv'
     return (VBool $ not isEq)
   args -> argsError info b args
 
-rawGt :: (MonadEval b i m) => NativeFunction b i m
+rawGt :: (IsBuiltin b) => NativeFunction e b i
 rawGt = defCmp (== GT)
 
-rawLt :: (MonadEval b i m) => NativeFunction b i m
+rawLt :: (IsBuiltin b) => NativeFunction e b i
 rawLt = defCmp (== LT)
 
-rawGeq :: (MonadEval b i m) => NativeFunction b i m
+rawGeq :: (IsBuiltin b) => NativeFunction e b i
 rawGeq = defCmp (`elem` [GT, EQ])
 
-rawLeq :: (MonadEval b i m) => NativeFunction b i m
+rawLeq :: (IsBuiltin b) => NativeFunction e b i
 rawLeq = defCmp (`elem` [LT, EQ])
 
-defCmp :: (MonadEval b i m) => (Ordering -> Bool) -> NativeFunction b i m
+defCmp :: (IsBuiltin b) => (Ordering -> Bool) -> NativeFunction e b i
 defCmp predicate info b _env = \case
   args@[VLiteral lit1, VLiteral lit2] -> litCmpGassed info lit1 lit2 >>= \case
     Just ordering -> return $ VBool $ predicate ordering
@@ -1702,22 +1637,22 @@ defCmp predicate info b _env = \case
   args -> argsError info b args
 {-# INLINE defCmp #-}
 
-bitAndInt :: (MonadEval b i m) => NativeFunction b i m
+bitAndInt :: (IsBuiltin b) => NativeFunction e b i
 bitAndInt = binaryIntFn (.&.)
 
-bitOrInt :: (MonadEval b i m) => NativeFunction b i m
+bitOrInt :: (IsBuiltin b) => NativeFunction e b i
 bitOrInt = binaryIntFn (.|.)
 
-bitComplementInt :: (MonadEval b i m) => NativeFunction b i m
+bitComplementInt :: (IsBuiltin b) => NativeFunction e b i
 bitComplementInt = unaryIntFn complement
 
-bitXorInt :: (MonadEval b i m) => NativeFunction b i m
+bitXorInt :: (IsBuiltin b) => NativeFunction e b i
 bitXorInt = binaryIntFn xor
 
-bitShiftInt :: (MonadEval b i m) => NativeFunction b i m
+bitShiftInt :: (IsBuiltin b) => NativeFunction e b i
 bitShiftInt =  binaryIntFn (\i s -> shift i (fromIntegral s))
 
-rawAbs :: (MonadEval b i m) => NativeFunction b i m
+rawAbs :: (IsBuiltin b) => NativeFunction e b i
 rawAbs info b _env = \case
   [VLiteral (LInteger i)] -> do
     return (VLiteral (LInteger (abs i)))
@@ -1725,7 +1660,7 @@ rawAbs info b _env = \case
     return (VLiteral (LDecimal (abs e)))
   args -> argsError info b args
 
-rawExp :: (MonadEval b i m) => NativeFunction b i m
+rawExp :: (IsBuiltin b) => NativeFunction e b i
 rawExp info b _env = \case
   [VLiteral (LInteger i)] -> do
     let result = Musl.trans_exp (fromIntegral i)
@@ -1737,7 +1672,7 @@ rawExp info b _env = \case
     return (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
 
-rawLn :: (MonadEval b i m) => NativeFunction b i m
+rawLn :: (IsBuiltin b) => NativeFunction e b i
 rawLn info b _env = \case
   [VLiteral (LInteger i)] -> do
     let result = Musl.trans_ln (fromIntegral i)
@@ -1749,7 +1684,7 @@ rawLn info b _env = \case
     return (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
 
-rawSqrt :: (MonadEval b i m) => NativeFunction b i m
+rawSqrt :: (IsBuiltin b) => NativeFunction e b i
 rawSqrt info b _env = \case
   [VLiteral (LInteger i)] -> do
     when (i < 0) $ throwExecutionError info (ArithmeticException "Square root must be non-negative")
@@ -1763,19 +1698,20 @@ rawSqrt info b _env = \case
     return (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
 
-renderPactValue :: MonadEval b i m => i -> PactValue -> m T.Text
+renderPactValue :: i -> PactValue -> EvalM e b i T.Text
 renderPactValue info pv = do
-  sz <- sizeOf SizeOfV0 pv
+  sz <- sizeOf info SizeOfV0 pv
   chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral sz
   pure $ Pretty.renderCompactText pv
 
-rawShow :: (MonadEval b i m) => NativeFunction b i m
+-- Todo: fix all show instances
+rawShow :: (IsBuiltin b) => NativeFunction e b i
 rawShow info b _env = \case
   [VPactValue pv] -> VString <$> renderPactValue info pv
   args -> argsError info b args
 
 -- Todo: Gas here is complicated, greg worked on this previously
-rawContains :: (MonadEval b i m) => NativeFunction b i m
+rawContains :: (IsBuiltin b) => NativeFunction e b i
 rawContains info b _env = \case
   [VString f, VObject o] -> do
     chargeGasArgs info $ GSearch $ FieldSearch (M.size o)
@@ -1790,7 +1726,7 @@ rawContains info b _env = \case
     return (VBool res)
   args -> argsError info b args
 
-rawSort :: (MonadEval b i m) => NativeFunction b i m
+rawSort :: (IsBuiltin b) => NativeFunction e b i
 rawSort info b _env = \case
   [VList vli]
     | V.null vli -> return (VList mempty)
@@ -1802,7 +1738,7 @@ rawSort info b _env = \case
     return (VList vli')
   args -> argsError info b args
 
-coreRemove :: (MonadEval b i m) => NativeFunction b i m
+coreRemove :: (IsBuiltin b) => NativeFunction e b i
 coreRemove info b _env = \case
   [VString s, VObject o] -> do
     chargeGasArgs info $ GObjOp $ ObjOpRemove s (M.size o)
@@ -1810,16 +1746,16 @@ coreRemove info b _env = \case
   args -> argsError info b args
 
 asObject
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
   -> b
   -> PactValue
-  -> m (M.Map Field PactValue)
+  -> EvalM e b i (M.Map Field PactValue)
 asObject info b = \case
   PObject o -> pure o
   arg -> argsError info b [VPactValue arg]
 
-rawSortObject :: (MonadEval b i m) => NativeFunction b i m
+rawSortObject :: (IsBuiltin b) => NativeFunction e b i
 rawSortObject info b _env = \case
   [VList fields, VList objs]
     | V.null fields -> return (VList objs)
@@ -1847,7 +1783,7 @@ rawSortObject info b _env = \case
 -- double ops
 -- -------------------------
 
-guardNanOrInf :: MonadEval b i m => i -> Double -> m ()
+guardNanOrInf :: i -> Double -> EvalM e b i ()
 guardNanOrInf info a =
   when (isNaN a || isInfinite a) $ throwExecutionError info (FloatingPointError "Floating operation resulted in Infinity or NaN")
 
@@ -1857,19 +1793,19 @@ dec2F = fromRational . toRational
 f2Dec :: Double -> Decimal
 f2Dec = fromRational . toRational
 
-roundDec :: (MonadEval b i m) => NativeFunction b i m
+roundDec :: (IsBuiltin b) => NativeFunction e b i
 roundDec = roundingFn round
 
-floorDec :: (MonadEval b i m) => NativeFunction b i m
+floorDec :: (IsBuiltin b) => NativeFunction e b i
 floorDec = roundingFn floor
 
-ceilingDec :: (MonadEval b i m) => NativeFunction b i m
+ceilingDec :: (IsBuiltin b) => NativeFunction e b i
 ceilingDec = roundingFn ceiling
 
 ---------------------------
 -- bool ops
 ---------------------------
-notBool :: (MonadEval b i m) => NativeFunction b i m
+notBool :: (IsBuiltin b) => NativeFunction e b i
 notBool info b _env = \case
   [VLiteral (LBool i)] -> return  (VLiteral (LBool (not i)))
   args -> argsError info b args
@@ -1889,7 +1825,7 @@ notBool info b _env = \case
 -- That's because `i` may contain values larger than `Int`, which is the type `length` typically returns.
 -- The sum `i + length t` may overflow `Int`, so it's converted to `Integer`, and the result of the `clamp` is always
 -- below `maxBound :: Int`, so it can be safely casted back without overflow.
-rawTake :: (MonadEval b i m) => NativeFunction b i m
+rawTake :: (IsBuiltin b) => NativeFunction e b i
 rawTake info b _env = \case
   [VLiteral (LInteger i), VLiteral (LString t)]
     | i >= 0 -> do
@@ -1919,7 +1855,7 @@ rawTake info b _env = \case
     return $ VObject $ M.restrictKeys o (S.fromList strings)
   args -> argsError info b args
 
-rawDrop :: (MonadEval b i m) => NativeFunction b i m
+rawDrop :: (IsBuiltin b) => NativeFunction e b i
 rawDrop info b _env = \case
   [VLiteral (LInteger i), VLiteral (LString t)]
     | i >= 0 -> do
@@ -1944,7 +1880,7 @@ rawDrop info b _env = \case
     return $ VObject $ M.withoutKeys o (S.fromList strings)
   args -> argsError info b args
 
-rawLength :: (MonadEval b i m) => NativeFunction b i m
+rawLength :: (IsBuiltin b) => NativeFunction e b i
 rawLength info b _env = \case
   [VString t] -> do
     chargeGasArgs info $ GStrOp $ StrOpLength $ T.length t
@@ -1954,7 +1890,7 @@ rawLength info b _env = \case
     return $ VInteger $ fromIntegral (M.size o)
   args -> argsError info b args
 
-rawReverse :: (MonadEval b i m) => NativeFunction b i m
+rawReverse :: (IsBuiltin b) => NativeFunction e b i
 rawReverse info b _env = \case
   [VList li] -> do
     chargeGasArgs info (GConcat (ListConcat (GasListLength (V.length li))))
@@ -1964,7 +1900,7 @@ rawReverse info b _env = \case
     return  (VLiteral (LString (T.reverse t)))
   args -> argsError info b args
 
-coreConcat :: (MonadEval b i m) => NativeFunction b i m
+coreConcat :: (IsBuiltin b) => NativeFunction e b i
 coreConcat info b _env = \case
   [VList li]
     | V.null li -> return (VString mempty)
@@ -1975,7 +1911,7 @@ coreConcat info b _env = \case
     return (VString (T.concat (V.toList li')))
   args -> argsError info b args
 
-strToList :: (MonadEval b i m) => NativeFunction b i m
+strToList :: (IsBuiltin b) => NativeFunction e b i
 strToList info b _env = \case
   [VLiteral (LString s)] -> do
     chargeGasArgs info $ GStrOp $ StrOpExplode $ T.length s
@@ -1984,7 +1920,7 @@ strToList info b _env = \case
   args -> argsError info b args
 
 
-zipList :: (MonadEval b i m) => NativeFunction b i m
+zipList :: (IsBuiltin b) => NativeFunction e b i
 zipList info b _env = \case
   [VClosure clo, VList l, VList r] ->
     VList <$> V.zipWithM go l r
@@ -1994,7 +1930,7 @@ zipList info b _env = \case
       enforcePactValue info =<< applyLam clo [VPactValue x, VPactValue y]
   args -> argsError info b args
 
-coreMap :: (MonadEval b i m) => NativeFunction b i m
+coreMap :: (IsBuiltin b) => NativeFunction e b i
 coreMap info b _env = \case
   [VClosure clo, VList li] ->
     VList <$> traverse go li
@@ -2004,7 +1940,7 @@ coreMap info b _env = \case
       applyLam clo [VPactValue x] >>= enforcePactValue info
   args -> argsError info b args
 
-coreFilter :: (MonadEval b i m) => NativeFunction b i m
+coreFilter :: (IsBuiltin b) => NativeFunction e b i
 coreFilter info b _env = \case
   [VClosure clo, VList li] ->
     VList <$> V.filterM go li
@@ -2014,7 +1950,7 @@ coreFilter info b _env = \case
       applyLam clo [VPactValue e] >>= enforceBool info
   args -> argsError info b args
 
-coreFold :: (MonadEval b i m) => NativeFunction b i m
+coreFold :: (IsBuiltin b) => NativeFunction e b i
 coreFold info b _env = \case
   [VClosure clo, VPactValue initElem, VList li] ->
     VPactValue <$> foldlM go initElem li
@@ -2024,7 +1960,7 @@ coreFold info b _env = \case
       applyLam clo [VPactValue e, VPactValue inc] >>= enforcePactValue info
   args -> argsError info b args
 
-coreEnumerate :: (MonadEval b i m) => NativeFunction b i m
+coreEnumerate :: (IsBuiltin b) => NativeFunction e b i
 coreEnumerate info b _env = \case
   [VLiteral (LInteger from), VLiteral (LInteger to)] -> do
     v <- createEnumerateList info from to (if from > to then -1 else 1)
@@ -2032,18 +1968,17 @@ coreEnumerate info b _env = \case
   args -> argsError info b args
 
 createEnumerateList
-  :: (MonadEval b i m)
-  => i
+  :: i
   -> Integer
   -- ^ from
   -> Integer
   -- ^ to
   -> Integer
   -- ^ Step
-  -> m (Vector Integer)
+  -> EvalM e b i (Vector Integer)
 createEnumerateList info from to inc
   | from == to = do
-    fromSize <- sizeOf SizeOfV0 from
+    fromSize <- sizeOf info SizeOfV0 from
     chargeGasArgs info (GMakeList 1 fromSize)
     pure (V.singleton from)
   | inc == 0 = pure mempty -- note: covered by the flat cost
@@ -2053,26 +1988,26 @@ createEnumerateList info from to inc
     throwExecutionError info (EnumerationError "enumerate: increment diverges above from interval bounds.")
   | otherwise = do
     let len = succ (abs (from - to) `div` abs inc)
-    listSize <- sizeOf SizeOfV0 (max (abs from) (abs to))
+    listSize <- sizeOf info SizeOfV0 (max (abs from) (abs to))
     chargeGasArgs info (GMakeList len listSize)
     pure $ V.enumFromStepN from inc (fromIntegral len)
 
-coreEnumerateStepN :: (MonadEval b i m) => NativeFunction b i m
+coreEnumerateStepN :: (IsBuiltin b) => NativeFunction e b i
 coreEnumerateStepN info b _env = \case
   [VLiteral (LInteger from), VLiteral (LInteger to), VLiteral (LInteger inc)] -> do
     v <- createEnumerateList info from to inc
     return (VList (PLiteral . LInteger <$> v))
   args -> argsError info b args
 
-makeList :: (MonadEval b i m) => NativeFunction b i m
+makeList :: (IsBuiltin b) => NativeFunction e b i
 makeList info b _env = \case
   [VLiteral (LInteger i), VPactValue v] -> do
-    vSize <- sizeOf SizeOfV0 v
+    vSize <- sizeOf info SizeOfV0 v
     chargeGasArgs info (GMakeList (fromIntegral i) vSize)
     return (VList (V.fromList (replicate (fromIntegral i) v)))
   args -> argsError info b args
 
-coreAccess :: (MonadEval b i m) => NativeFunction b i m
+coreAccess :: (IsBuiltin b) => NativeFunction e b i
 coreAccess info b _env = \case
   [VLiteral (LInteger i), VList vec] ->
     case vec V.!? fromIntegral i of
@@ -2085,7 +2020,7 @@ coreAccess info b _env = \case
         throwExecutionError info (ObjectIsMissingField (Field field) (ObjectData o))
   args -> argsError info b args
 
-coreIsCharset :: (MonadEval b i m) => NativeFunction b i m
+coreIsCharset :: (IsBuiltin b) => NativeFunction e b i
 coreIsCharset info b _env = \case
   [VLiteral (LInteger i), VString s] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
@@ -2095,50 +2030,49 @@ coreIsCharset info b _env = \case
       _ -> throwNativeExecutionError info b "Unsupported character set"
   args -> argsError info b args
 
-coreYield :: (MonadEval b i m) => NativeFunction b i m
+coreYield :: (IsBuiltin b) => NativeFunction e b i
 coreYield info b _env = \case
   [VObject o] -> go o Nothing
   [VObject o, VString cid] -> go o (Just (ChainId cid))
   args -> argsError info b args
   where
   go o mcid = do
-    mpe <- useEvalState esDefPactExec
+    mpe <- use esDefPactExec
     case mpe of
       Nothing -> throwExecutionError info YieldOutsideDefPact
       Just pe -> case mcid of
         Nothing -> do
-          esDefPactExec . _Just . peYield .== Just (Yield o Nothing Nothing)
+          esDefPactExec . _Just . peYield .= Just (Yield o Nothing Nothing)
           return (VObject o)
         Just cid -> do
           sourceChain <- viewEvalEnv (eePublicData . pdPublicMeta . pmChainId)
           p <- provenanceOf cid
           when (_peStepHasRollback pe) $ throwExecutionError info $ EvalError "Cross-chain yield not allowed in step with rollback"
-          esDefPactExec . _Just . peYield .== Just (Yield o (Just p) (Just sourceChain))
+          esDefPactExec . _Just . peYield .= Just (Yield o (Just p) (Just sourceChain))
           return (VObject o)
   provenanceOf tid =
     Provenance tid . _mHash <$> getCallingModule info
 
-corePactId :: (MonadEval b i m) => NativeFunction b i m
+corePactId :: (IsBuiltin b) => NativeFunction e b i
 corePactId info b _env = \case
-  [] -> useEvalState esDefPactExec >>= \case
+  [] -> use esDefPactExec >>= \case
     Just dpe -> return (VString (_defpactId (_peDefPactId dpe)))
     Nothing -> throwExecutionError info NotInDefPactExecution
   args -> argsError info b args
 
 enforceYield
-  :: (MonadEval b i m)
-  => i
+  :: i
   -> Yield
-  -> m ()
+  -> EvalM e b i ()
 enforceYield info y = case _yProvenance y of
   Nothing -> pure ()
   Just p -> do
     m <- getCallingModule info
     cid <- viewEvalEnv $ eePublicData . pdPublicMeta . pmChainId
-    let p' = Provenance cid (_mHash m):map (Provenance cid) (toList $ _mBlessed m)
+    let p' = Provenance cid (_mHash m):map (Provenance cid) (S.toList $ _mBlessed m)
     unless (p `elem` p') $ throwExecutionError info (YieldProvenanceDoesNotMatch p p')
 
-coreResume :: (MonadEval b i m) => NativeFunction b i m
+coreResume :: (IsBuiltin b) => NativeFunction e b i
 coreResume info b _env = \case
   [VClosure clo] -> do
     mps <- viewEvalEnv eeDefPactStep
@@ -2155,9 +2089,9 @@ coreResume info b _env = \case
 -- try-related ops
 -----------------------------------
 
-enforceTopLevelOnly :: (MonadEval b i m) => i -> b -> m ()
+enforceTopLevelOnly :: (IsBuiltin b) => i -> b -> EvalM e b i ()
 enforceTopLevelOnly info b = do
-  s <- useEvalState esStack
+  s <- use esStack
   unless (null s) $ throwExecutionError info (NativeIsTopLevelOnly (builtinName b))
 
 -----------------------------------
@@ -2169,7 +2103,7 @@ enforceTopLevelOnly info b = do
 -- Other Core forms
 -----------------------------------
 
-coreB64Encode :: (MonadEval b i m) => NativeFunction b i m
+coreB64Encode :: (IsBuiltin b) => NativeFunction e b i
 coreB64Encode info b _env = \case
   [VLiteral (LString l)] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length l
@@ -2177,7 +2111,7 @@ coreB64Encode info b _env = \case
   args -> argsError info b args
 
 
-coreB64Decode :: (MonadEval b i m) => NativeFunction b i m
+coreB64Decode :: (IsBuiltin b) => NativeFunction e b i
 coreB64Decode info b _env = \case
   [VLiteral (LString s)] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
@@ -2188,7 +2122,7 @@ coreB64Decode info b _env = \case
 
 
 -- | The implementation of `enforce-guard` native.
-coreEnforceGuard :: (MonadEval b i m) => NativeFunction b i m
+coreEnforceGuard :: (IsBuiltin b) => NativeFunction e b i
 coreEnforceGuard info b env = \case
   [VGuard g] -> VBool <$> enforceGuard info env g
   [VString s] -> do
@@ -2199,7 +2133,7 @@ coreEnforceGuard info b env = \case
         VBool <$> isKeysetNameInSigs info env ksn
   args -> argsError info b args
 
-keysetRefGuard :: (MonadEval b i m) => NativeFunction b i m
+keysetRefGuard :: (IsBuiltin b) => NativeFunction e b i
 keysetRefGuard info b env = \case
   [VString g] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length g
@@ -2212,7 +2146,7 @@ keysetRefGuard info b env = \case
           Just _ -> return (VGuard (GKeySetRef ksn))
   args -> argsError info b args
 
-coreTypeOf :: (MonadEval b i m) => NativeFunction b i m
+coreTypeOf :: (IsBuiltin b) => NativeFunction e b i
 coreTypeOf info b _env = \case
   [v] -> case v of
     VPactValue pv ->
@@ -2221,7 +2155,7 @@ coreTypeOf info b _env = \case
     VTable tv -> return $ VString (renderType (TyTable (_tvSchema tv)))
   args -> argsError info b args
 
-coreDec :: (MonadEval b i m) => NativeFunction b i m
+coreDec :: (IsBuiltin b) => NativeFunction e b i
 coreDec info b _env = \case
   [VInteger i] -> return $ VDecimal $ Decimal 0 i
   args -> argsError info b args
@@ -2231,7 +2165,8 @@ coreDec info b _env = \case
 --------------------------------------------------
 
 -- | Throw a recoverable error to be used in the read-* family of functions
-throwReadError :: (MonadError (PactError info) m, MonadEvalState b info m,  IsBuiltin b) => info -> b -> m a
+throwReadError
+  :: (IsBuiltin b) => i -> b -> EvalM e b i a
 throwReadError info b =
   throwUserRecoverableError info $ EnvReadFunctionFailure  (builtinName b)
 
@@ -2266,7 +2201,7 @@ can happen:
   - We may see a PDecimal, in which case we round
   - We may see a PInteger, which we read as-is.
 -}
-coreReadInteger :: (MonadEval b i m) => NativeFunction b i m
+coreReadInteger :: (IsBuiltin b) => NativeFunction e b i
 coreReadInteger info b _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
@@ -2289,7 +2224,7 @@ coreReadInteger info b _env = \case
   args -> argsError info b args
 
 
-coreReadMsg :: (MonadEval b i m) => NativeFunction b i m
+coreReadMsg :: (IsBuiltin b) => NativeFunction e b i
 coreReadMsg info b _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
@@ -2320,7 +2255,7 @@ instance A.FromJSON ParsedDecimal where
 
 So the string parsing case accepts both the integer, and decimal output
 -}
-coreReadDecimal :: (MonadEval b i m) => NativeFunction b i m
+coreReadDecimal :: (IsBuiltin b) => NativeFunction e b i
 coreReadDecimal info b _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
@@ -2340,7 +2275,7 @@ coreReadDecimal info b _env = \case
       _ -> throwReadError info b
   args -> argsError info b args
 
-coreReadString :: (MonadEval b i m) => NativeFunction b i m
+coreReadString :: (IsBuiltin b) => NativeFunction e b i
 coreReadString info b _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
@@ -2352,7 +2287,7 @@ coreReadString info b _env = \case
       _ -> throwReadError info b
   args -> argsError info b args
 
-readKeyset' :: (MonadEval b i m) => i -> T.Text -> m (Maybe KeySet)
+readKeyset' :: i -> T.Text -> EvalM e b i (Maybe KeySet)
 readKeyset' info ksn = do
   viewEvalEnv eeMsgBody >>= \case
     PObject envData -> do
@@ -2393,7 +2328,7 @@ readKeyset' info ksn = do
     _ -> pure Nothing
 
 
-coreReadKeyset :: (MonadEval b i m) => NativeFunction b i m
+coreReadKeyset :: (IsBuiltin b) => NativeFunction e b i
 coreReadKeyset info b _env = \case
   [VString ksn] ->
     readKeyset' info ksn >>= \case
@@ -2406,7 +2341,7 @@ coreReadKeyset info b _env = \case
   args -> argsError info b args
 
 
-coreBind :: (MonadEval b i m) => NativeFunction b i m
+coreBind :: (IsBuiltin b) => NativeFunction e b i
 coreBind info b _env = \case
   [v@VObject{}, VClosure clo] ->
     applyLam clo [v] >>= enforcePactValue' info
@@ -2417,7 +2352,7 @@ coreBind info b _env = \case
 -- Db functions
 --------------------------------------------------
 
-createTable :: (MonadEval b i m) => NativeFunction b i m
+createTable :: (IsBuiltin b) => NativeFunction e b i
 createTable info b env = \case
   [VTable tv] -> do
     enforceTopLevelOnly info b
@@ -2427,7 +2362,7 @@ createTable info b env = \case
     return (VString "TableCreated")
   args -> argsError info b args
 
-dbSelect :: (MonadEval b i m) => NativeFunction b i m
+dbSelect :: (IsBuiltin b) => NativeFunction e b i
 dbSelect info b env = \case
   [VTable tv, VClosure clo] ->
     selectRead tv clo Nothing
@@ -2454,7 +2389,7 @@ dbSelect info b env = \case
 
 
 
-foldDb :: (MonadEval b i m) => NativeFunction b i m
+foldDb :: (IsBuiltin b) => NativeFunction e b i
 foldDb info b env = \case
   [VTable tv, VClosure queryClo, VClosure consumer] -> do
     -- let cont' = BuiltinC env info (PreFoldDbC tv queryClo consumer) cont
@@ -2478,26 +2413,25 @@ foldDb info b env = \case
   args -> argsError info b args
 
 readUserTable
-  :: MonadEval b i m
-  => i
-  -> DirectEnv b i m
+  :: i
+  -> DirectEnv e b i
   -> TableValue
   -> RowKey
-  -> m RowData
+  -> EvalM e b i RowData
 readUserTable info env tv rk = do
   liftDbFunction info (_pdbRead (_cePactDb env) (tvToDomain tv) rk) >>= \case
     Just rd ->
       return rd
     Nothing -> throwUserRecoverableError info $ NoSuchObjectInDb (_tvName tv) rk
 
-dbRead :: (MonadEval b i m) => NativeFunction b i m
+dbRead :: (IsBuiltin b) => NativeFunction e b i
 dbRead info b env = \case
   [VTable tv, VString rk] -> do
     guardTable info env tv GtRead
     VObject . _unRowData <$> readUserTable info env tv (RowKey rk)
   args -> argsError info b args
 
-dbWithRead :: (MonadEval b i m) => NativeFunction b i m
+dbWithRead :: (IsBuiltin b) => NativeFunction e b i
 dbWithRead info b env = \case
   [VTable tv, VString rk, VClosure clo] -> do
     guardTable info env tv GtRead
@@ -2505,7 +2439,7 @@ dbWithRead info b env = \case
     applyLam clo [VObject o] >>= enforcePactValue' info
   args -> argsError info b args
 
-dbWithDefaultRead :: (MonadEval b i m) => NativeFunction b i m
+dbWithDefaultRead :: (IsBuiltin b) => NativeFunction e b i
 dbWithDefaultRead info b env = \case
   [VTable tv, VString rk, VObject defaultObj, VClosure clo] -> do
     guardTable info env tv GtWithDefaultRead
@@ -2517,13 +2451,13 @@ dbWithDefaultRead info b env = \case
   args -> argsError info b args
 
 -- | Todo: schema checking here? Or only on writes?
-dbWrite :: (MonadEval b i m) => NativeFunction b i m
+dbWrite :: (IsBuiltin b) => NativeFunction e b i
 dbWrite = write' Write
 
-dbInsert :: (MonadEval b i m) => NativeFunction b i m
+dbInsert :: (IsBuiltin b) => NativeFunction e b i
 dbInsert = write' Insert
 
-write' :: (MonadEval b i m) => WriteType -> NativeFunction b i m
+write' :: (IsBuiltin b) => WriteType -> NativeFunction e b i
 write' wt info b env = \case
   [VTable tv, VString key, VObject rv] -> do
     guardTable info env tv GtWrite
@@ -2531,17 +2465,17 @@ write' wt info b env = \case
     let check' = if wt == Update then checkPartialSchema else checkSchema
     if check' rv (_tvSchema tv) then do
       let rdata = RowData rv
-      rvSize <- sizeOf SizeOfV0 rv
+      rvSize <- sizeOf info SizeOfV0 rv
       chargeGasArgs info (GWrite rvSize)
       _ <- liftGasM info $ _pdbWrite pdb wt (tvToDomain tv) (RowKey key) rdata
       return (VString "Write succeeded")
     else throwExecutionError info (WriteValueDidNotMatchSchema (_tvSchema tv) (ObjectData rv))
   args -> argsError info b args
 
-dbUpdate :: (MonadEval b i m) => NativeFunction b i m
+dbUpdate :: (IsBuiltin b) => NativeFunction e b i
 dbUpdate = write' Update
 
-dbKeys :: (MonadEval b i m) => NativeFunction b i m
+dbKeys :: (IsBuiltin b) => NativeFunction e b i
 dbKeys info b env = \case
   [VTable tv] -> do
     guardTable info env tv GtKeys
@@ -2553,7 +2487,7 @@ dbKeys info b env = \case
     -- guardTable info cont' handler env tv GtKeys
   args -> argsError info b args
 
-dbTxIds :: (MonadEval b i m) => NativeFunction b i m
+dbTxIds :: (IsBuiltin b) => NativeFunction e b i
 dbTxIds info b env = \case
   [VTable tv, VInteger tid] -> do
     checkNonLocalAllowed info b
@@ -2565,7 +2499,7 @@ dbTxIds info b env = \case
   args -> argsError info b args
 
 
-dbTxLog :: (MonadEval b i m) => NativeFunction b i m
+dbTxLog :: (IsBuiltin b) => NativeFunction e b i
 dbTxLog info b env = \case
   [VTable tv, VInteger tid] -> do
     checkNonLocalAllowed info b
@@ -2583,7 +2517,7 @@ dbTxLog info b env = \case
         , (Field "value", PObject rdata)]
   args -> argsError info b args
 
-dbKeyLog :: (MonadEval b i m) => NativeFunction b i m
+dbKeyLog :: (IsBuiltin b) => NativeFunction e b i
 dbKeyLog info b env = \case
   [VTable tv, VString key, VInteger tid] -> do
     checkNonLocalAllowed info b
@@ -2604,12 +2538,12 @@ dbKeyLog info b env = \case
   args -> argsError info b args
 
 defineKeySet'
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => i
-  -> DirectEnv b i m
+  -> DirectEnv e b i
   -> T.Text
   -> KeySet
-  -> m (EvalValue b i m)
+  -> EvalM e b i (EvalValue e b i)
 defineKeySet' info env ksname newKs  = do
   let pdb = view cePactDb env
   ignoreNamespaces <- not <$> isExecutionFlagSet FlagRequireKeysetNs
@@ -2617,7 +2551,7 @@ defineKeySet' info env ksname newKs  = do
     Left {} -> throwExecutionError info (InvalidKeysetNameFormat ksname)
     Right ksn -> do
       let writeKs = do
-            newKsSize <- sizeOf SizeOfV0 newKs
+            newKsSize <- sizeOf info SizeOfV0 newKs
             chargeGasArgs info (GWrite newKsSize)
             writeKeySet info pdb Write ksn newKs
             return (VString "Keyset write success")
@@ -2626,14 +2560,14 @@ defineKeySet' info env ksname newKs  = do
           _ <- isKeysetInSigs info env oldKs
           writeKs
         Nothing | ignoreNamespaces -> writeKs
-        Nothing | otherwise -> useEvalState (esLoaded . loNamespace) >>= \case
+        Nothing | otherwise -> use (esLoaded . loNamespace) >>= \case
           Nothing -> throwExecutionError info CannotDefineKeysetOutsideNamespace
           Just (Namespace ns uGuard _adminGuard) -> do
             when (Just ns /= _keysetNs ksn) $ throwExecutionError info (MismatchingKeysetNamespace ns)
             _ <- enforceGuard info env uGuard
             writeKs
 
-defineKeySet :: (MonadEval b i m) => NativeFunction b i m
+defineKeySet :: (IsBuiltin b) => NativeFunction e b i
 defineKeySet info b env = \case
   [VString ksname, VGuard (GKeyset ks)] -> do
     enforceTopLevelOnly info b
@@ -2650,23 +2584,23 @@ defineKeySet info b env = \case
 -- Capabilities
 --------------------------------------------------
 
-requireCapability :: (MonadEval b i m) => NativeFunction b i m
+requireCapability :: (IsBuiltin b) => NativeFunction e b i
 requireCapability info b _env = \case
   [VCapToken ct] -> do
-    slots <- useEvalState $ esCaps . csSlots
+    slots <- use $ esCaps . csSlots
     let cnt = sum [1 + length cs | CapSlot _ cs <- slots]
     chargeGasArgs info $ GCapOp $ CapOpRequire cnt
     requireCap info ct
   args -> argsError info b args
 
-composeCapability :: (MonadEval b i m) => NativeFunction b i m
+composeCapability :: (IsBuiltin b) => NativeFunction e b i
 composeCapability info b env = \case
   [VCapToken ct] -> do
     enforceStackTopIsDefcap info b
     composeCap info env ct
   args -> argsError info b args
 
-installCapability :: (MonadEval b i m) => NativeFunction b i m
+installCapability :: (IsBuiltin b) => NativeFunction e b i
 installCapability info b env = \case
   [VCapToken ct] -> do
     enforceNotWithinDefcap info env "install-capability"
@@ -2674,7 +2608,7 @@ installCapability info b env = \case
     return (VString "Installed capability")
   args -> argsError info b args
 
-coreEmitEvent :: (MonadEval b i m) => NativeFunction b i m
+coreEmitEvent :: (IsBuiltin b) => NativeFunction e b i
 coreEmitEvent info b env = \case
   [VCapToken ct@(CapToken fqn _)] -> do
     -- let cont' = BuiltinC env info (EmitEventC ct) cont
@@ -2688,7 +2622,7 @@ coreEmitEvent info b env = \case
     enforceMeta _ = pure ()
   args -> argsError info b args
 
-createCapGuard :: (MonadEval b i m) => NativeFunction b i m
+createCapGuard :: (IsBuiltin b) => NativeFunction e b i
 createCapGuard info b _env = \case
   [VCapToken ct] -> do
     let qn = fqnToQualName (_ctName ct)
@@ -2696,7 +2630,7 @@ createCapGuard info b _env = \case
     return (VGuard (GCapabilityGuard cg))
   args -> argsError info b args
 
-createCapabilityPactGuard :: (MonadEval b i m) => NativeFunction b i m
+createCapabilityPactGuard :: (IsBuiltin b) => NativeFunction e b i
 createCapabilityPactGuard info b _env = \case
   [VCapToken ct] -> do
     pid <- getDefPactId info
@@ -2705,7 +2639,7 @@ createCapabilityPactGuard info b _env = \case
     return (VGuard (GCapabilityGuard cg))
   args -> argsError info b args
 
-createModuleGuard :: (MonadEval b i m) => NativeFunction b i m
+createModuleGuard :: (IsBuiltin b) => NativeFunction e b i
 createModuleGuard info b _env = \case
   [VString n] ->
     findCallingModule >>= \case
@@ -2716,7 +2650,7 @@ createModuleGuard info b _env = \case
         throwNativeExecutionError info b "create-module-guard: must call within module"
   args -> argsError info b args
 
-createDefPactGuard :: (MonadEval b i m) => NativeFunction b i m
+createDefPactGuard :: (IsBuiltin b) => NativeFunction e b i
 createDefPactGuard info b _env = \case
   [VString name] -> do
     dpid <- getDefPactId info
@@ -2724,7 +2658,7 @@ createDefPactGuard info b _env = \case
   args -> argsError info b args
 
 
-coreIntToStr :: (MonadEval b i m) => NativeFunction b i m
+coreIntToStr :: (IsBuiltin b) => NativeFunction e b i
 coreIntToStr info b _env = \case
   [VInteger base, VInteger v]
     | v < 0 ->
@@ -2744,7 +2678,7 @@ coreIntToStr info b _env = \case
     | otherwise -> throwNativeExecutionError info b "invalid base for base64URL conversion"
   args -> argsError info b args
 
-coreStrToInt :: (MonadEval b i m) => NativeFunction b i m
+coreStrToInt :: (IsBuiltin b) => NativeFunction e b i
 coreStrToInt info b _env = \case
   [VString s] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
@@ -2752,7 +2686,7 @@ coreStrToInt info b _env = \case
     doBase info 10 s
   args -> argsError info b args
 
-coreStrToIntBase :: (MonadEval b i m) => NativeFunction b i m
+coreStrToIntBase :: (IsBuiltin b) => NativeFunction e b i
 coreStrToIntBase info b _env = \case
   [VInteger base, VString s]
     | base == 64 -> do
@@ -2781,7 +2715,7 @@ nubByM eq = go
     xs' <- filterM (fmap not . eq x) xs
     (x :) <$> go xs'
 
-coreDistinct  :: (MonadEval b i m) => NativeFunction b i m
+coreDistinct  :: (IsBuiltin b) => NativeFunction e b i
 coreDistinct info b _env = \case
   [VList s] -> do
     uniques <- nubByM (valEqGassed info) $ V.toList s
@@ -2790,7 +2724,7 @@ coreDistinct info b _env = \case
       $ V.fromList uniques
   args -> argsError info b args
 
-coreFormat  :: (MonadEval b i m) => NativeFunction b i m
+coreFormat  :: (IsBuiltin b) => NativeFunction e b i
 coreFormat info b _env = \case
   [VString s, VList es] -> do
     let parts = T.splitOn "{}" s
@@ -2815,20 +2749,18 @@ coreFormat info b _env = \case
   args -> argsError info b args
 
 checkLen
-  :: (MonadEval b i m)
-  => i
+  :: i
   -> T.Text
-  -> m ()
+  -> EvalM e b i ()
 checkLen info txt =
   unless (T.length txt <= 512) $
       throwExecutionError info $ DecodeError "Invalid input, only up to 512 length supported"
 
 doBase
-  :: (MonadEval b i m)
-  => i
+  :: i
   -> Integer
   -> T.Text
-  -> m (EvalValue b i m)
+  -> EvalM e b i (EvalValue e b i)
 doBase info base txt = case baseStrToInt base txt of
   Left e -> throwExecutionError info (DecodeError e)
   Right n -> return (VInteger n)
@@ -2865,7 +2797,7 @@ integerToBS v = BS.pack $ reverse $ go v
          | otherwise = fromIntegral (i .&. 0xff):go (shift i (-8))
 
 
-coreAndQ :: (MonadEval b i m) => NativeFunction b i m
+coreAndQ :: (IsBuiltin b) => NativeFunction e b i
 coreAndQ info b _env = \case
   [VClosure l, VClosure r, VPactValue v] -> do
     c1 <- enforceBool info =<< applyLam l [VPactValue v]
@@ -2873,7 +2805,7 @@ coreAndQ info b _env = \case
     else return (VBool False)
   args -> argsError info b args
 
-coreOrQ :: (MonadEval b i m) => NativeFunction b i m
+coreOrQ :: (IsBuiltin b) => NativeFunction e b i
 coreOrQ info b _env = \case
   [VClosure l, VClosure r, VPactValue v] -> do
     c1 <- enforceBool info =<< applyLam l [VPactValue v]
@@ -2881,14 +2813,14 @@ coreOrQ info b _env = \case
     else applyLam r [VPactValue v] >>= enforceBool' info
   args -> argsError info b args
 
-coreNotQ :: (MonadEval b i m) => NativeFunction b i m
+coreNotQ :: (IsBuiltin b) => NativeFunction e b i
 coreNotQ info b _env = \case
   [VClosure clo, VPactValue v] -> do
     c <- enforceBool info =<< applyLam clo [VPactValue v]
     return (VBool (not c))
   args -> argsError info b args
 
-coreWhere :: (MonadEval b i m) => NativeFunction b i m
+coreWhere :: (IsBuiltin b) => NativeFunction e b i
 coreWhere info b _env = \case
   [VString field, VClosure app, VObject o] -> do
     case M.lookup (Field field) o of
@@ -2898,7 +2830,7 @@ coreWhere info b _env = \case
         throwExecutionError info (ObjectIsMissingField (Field field) (ObjectData o))
   args -> argsError info b args
 
-coreHash :: (MonadEval b i m) => NativeFunction b i m
+coreHash :: (IsBuiltin b) => NativeFunction e b i
 coreHash = \info b _env -> \case
   [VString s] ->
     return (go (T.encodeUtf8 s))
@@ -2908,20 +2840,20 @@ coreHash = \info b _env -> \case
   where
   go =  VString . hashToText . pactHash
 
-txHash :: (MonadEval b i m) => NativeFunction b i m
+txHash :: (IsBuiltin b) => NativeFunction e b i
 txHash info b _env = \case
   [] -> do
     h <- viewEvalEnv eeHash
     return (VString (hashToText h))
   args -> argsError info b args
 
-coreContinue :: (MonadEval b i m) => NativeFunction b i m
+coreContinue :: (IsBuiltin b) => NativeFunction e b i
 coreContinue info b _env = \case
   [v] -> do
     return v
   args -> argsError info b args
 
-parseTime :: (MonadEval b i m) => NativeFunction b i m
+parseTime :: (IsBuiltin b) => NativeFunction e b i
 parseTime info b _env = \case
   [VString fmt, VString s] -> do
     chargeGasArgs info $ GStrOp $ StrOpParseTime (T.length fmt) (T.length s)
@@ -2931,7 +2863,7 @@ parseTime info b _env = \case
         throwNativeExecutionError info b $ "parse-time parse failure"
   args -> argsError info b args
 
-formatTime :: (MonadEval b i m) => NativeFunction b i m
+formatTime :: (IsBuiltin b) => NativeFunction e b i
 formatTime info b _env = \case
   [VString fmt, VPactValue (PTime t)] -> do
     chargeGasArgs info $ GStrOp $ StrOpFormatTime $ T.length fmt
@@ -2939,7 +2871,7 @@ formatTime info b _env = \case
     return $ VString (T.pack timeString)
   args -> argsError info b args
 
-time :: (MonadEval b i m) => NativeFunction b i m
+time :: (IsBuiltin b) => NativeFunction e b i
 time info b _env = \case
   [VString s] -> do
     case PactTime.parseTime "%Y-%m-%dT%H:%M:%SZ" (T.unpack s) of
@@ -2948,7 +2880,7 @@ time info b _env = \case
         throwNativeExecutionError info b $ "time default format parse failure"
   args -> argsError info b args
 
-addTime :: (MonadEval b i m) => NativeFunction b i m
+addTime :: (IsBuiltin b) => NativeFunction e b i
 addTime info b _env = \case
   [VPactValue (PTime t), VPactValue (PDecimal seconds)] -> do
       let newTime = t PactTime..+^ PactTime.fromSeconds seconds
@@ -2958,14 +2890,14 @@ addTime info b _env = \case
       return $ VPactValue (PTime newTime)
   args -> argsError info b args
 
-diffTime :: (MonadEval b i m) => NativeFunction b i m
+diffTime :: (IsBuiltin b) => NativeFunction e b i
 diffTime info b _env = \case
   [VPactValue (PTime x), VPactValue (PTime y)] -> do
     let secondsDifference = PactTime.toSeconds $ x PactTime..-. y
     return $ VPactValue $ PDecimal secondsDifference
   args -> argsError info b args
 
-minutes :: (MonadEval b i m) => NativeFunction b i m
+minutes :: (IsBuiltin b) => NativeFunction e b i
 minutes info b _env = \case
   [VDecimal x] -> do
     let seconds = x * 60
@@ -2975,7 +2907,7 @@ minutes info b _env = \case
     return $ VDecimal seconds
   args -> argsError info b args
 
-hours :: (MonadEval b i m) => NativeFunction b i m
+hours :: (IsBuiltin b) => NativeFunction e b i
 hours info b _env = \case
   [VDecimal x] -> do
     let seconds = x * 60 * 60
@@ -2985,7 +2917,7 @@ hours info b _env = \case
     return $ VDecimal seconds
   args -> argsError info b args
 
-days :: (MonadEval b i m) => NativeFunction b i m
+days :: (IsBuiltin b) => NativeFunction e b i
 days info b _env = \case
   [VDecimal x] -> do
     let seconds = x * 60 * 60 * 24
@@ -2995,7 +2927,7 @@ days info b _env = \case
     return $ VDecimal seconds
   args -> argsError info b args
 
-describeModule :: (MonadEval b i m) => NativeFunction b i m
+describeModule :: (IsBuiltin b) => NativeFunction e b i
 describeModule info b env = \case
   [VString s] -> case parseModuleName s of
     Just mname -> do
@@ -3015,7 +2947,7 @@ describeModule info b env = \case
     Nothing -> throwNativeExecutionError info b $ "invalid module name format"
   args -> argsError info b args
 
-dbDescribeTable :: (MonadEval b i m) => NativeFunction b i m
+dbDescribeTable :: (IsBuiltin b) => NativeFunction e b i
 dbDescribeTable info b _env = \case
   [VTable (TableValue name _ schema)] -> do
     enforceTopLevelOnly info b
@@ -3025,7 +2957,7 @@ dbDescribeTable info b _env = \case
       ,("type", PString (renderType (TyTable schema)))]
   args -> argsError info b args
 
-dbDescribeKeySet :: (MonadEval b i m) => NativeFunction b i m
+dbDescribeKeySet :: (IsBuiltin b) => NativeFunction e b i
 dbDescribeKeySet info b env = \case
   [VString s] -> do
     let pdb = _cePactDb env
@@ -3041,7 +2973,7 @@ dbDescribeKeySet info b env = \case
         throwNativeExecutionError info b  "incorrect keyset name format"
   args -> argsError info b args
 
-coreCompose :: (MonadEval b i m) => NativeFunction b i m
+coreCompose :: (IsBuiltin b) => NativeFunction e b i
 coreCompose info b _env = \case
   [VClosure clo1, VClosure clo2, v] -> do
     v' <- enforcePactValue info =<< applyLam clo1 [v]
@@ -3050,7 +2982,7 @@ coreCompose info b _env = \case
     -- applyLam clo1 [v] cont' handler
   args -> argsError info b args
 
-createPrincipalForGuard :: (MonadEval b i m) => i -> Guard QualifiedName PactValue -> m (Pr.Principal)
+createPrincipalForGuard :: i -> Guard QualifiedName PactValue -> EvalM e b i (Pr.Principal)
 createPrincipalForGuard info = \case
   GKeyset (KeySet ks pf) -> case (toList ks, pf) of
     ([k], KeysAll)
@@ -3089,21 +3021,21 @@ createPrincipalForGuard info = \case
       pure $ pactHash bs
 
 
-coreCreatePrincipal :: (MonadEval b i m) => NativeFunction b i m
+coreCreatePrincipal :: (IsBuiltin b) => NativeFunction e b i
 coreCreatePrincipal info b _env = \case
   [VGuard g] -> do
     pr <- createPrincipalForGuard info g
     return $ VString $ Pr.mkPrincipalIdent pr
   args -> argsError info b args
 
-coreIsPrincipal :: (MonadEval b i m) => NativeFunction b i m
+coreIsPrincipal :: (IsBuiltin b) => NativeFunction e b i
 coreIsPrincipal info b _env = \case
   [VString p] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length p
     return $ VBool $ isRight $ parseOnly Pr.principalParser p
   args -> argsError info b args
 
-coreTypeOfPrincipal :: (MonadEval b i m) => NativeFunction b i m
+coreTypeOfPrincipal :: (IsBuiltin b) => NativeFunction e b i
 coreTypeOfPrincipal info b _env = \case
   [VString p] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length p
@@ -3113,7 +3045,7 @@ coreTypeOfPrincipal info b _env = \case
     return $ VString prty
   args -> argsError info b args
 
-coreValidatePrincipal :: (MonadEval b i m) => NativeFunction b i m
+coreValidatePrincipal :: (IsBuiltin b) => NativeFunction e b i
 coreValidatePrincipal info b _env = \case
   [VGuard g, VString s] -> do
     pr' <- createPrincipalForGuard info g
@@ -3122,13 +3054,13 @@ coreValidatePrincipal info b _env = \case
   args -> argsError info b args
 
 
-coreCond :: (MonadEval b i m) => NativeFunction b i m
+coreCond :: (IsBuiltin b) => NativeFunction e b i
 coreCond info b _env = \case
   [VClosure clo] ->
     applyLam clo [] >>= enforcePactValue' info
   args -> argsError info b args
 
-coreIdentity :: (MonadEval b i m) => NativeFunction b i m
+coreIdentity :: (IsBuiltin b) => NativeFunction e b i
 coreIdentity info b _env = \case
   [VPactValue pv] -> return $ VPactValue pv
   args -> argsError info b args
@@ -3136,21 +3068,21 @@ coreIdentity info b _env = \case
 --------------------------------------------------
 -- Namespace functions
 --------------------------------------------------
-coreNamespace :: (MonadEval b i m) => NativeFunction b i m
+coreNamespace :: (IsBuiltin b) => NativeFunction e b i
 coreNamespace info b env = \case
   [VString n] -> do
     enforceTopLevelOnly info b
     let pdb = view cePactDb env
     if T.null n then do
-      (esLoaded . loNamespace) .== Nothing
+      (esLoaded . loNamespace) .= Nothing
       return (VString "Namespace reset to root")
     else do
       chargeGasArgs info $ GRead $ fromIntegral $ T.length n
       liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
         Just ns -> do
-          size <- sizeOf SizeOfV0 ns
+          size <- sizeOf info SizeOfV0 ns
           chargeGasArgs info $ GRead size
-          (esLoaded . loNamespace) .== Just ns
+          (esLoaded . loNamespace) .= Just ns
           let msg = "Namespace set to " <> n
           return (VString msg)
         Nothing ->
@@ -3158,7 +3090,7 @@ coreNamespace info b env = \case
   args -> argsError info b args
 
 
-coreDefineNamespace :: (MonadEval b i m) => NativeFunction b i m
+coreDefineNamespace :: (IsBuiltin b) => NativeFunction e b i
 coreDefineNamespace info b env = \case
   [VString n, VGuard usrG, VGuard adminG] -> do
     enforceTopLevelOnly info b
@@ -3171,13 +3103,13 @@ coreDefineNamespace info b env = \case
       -- https://static.wikia.nocookie.net/onepiece/images/5/52/Lao_G_Manga_Infobox.png/revision/latest?cb=20150405020446
       -- Enforce the old guard
       Just existing@(Namespace _ _ laoG) -> do
-        size <- sizeOf SizeOfV0 existing
+        size <- sizeOf info SizeOfV0 existing
         chargeGasArgs info $ GRead size
         allow <- enforceGuard info env laoG
         writeNs allow nsn ns
       Nothing -> viewEvalEnv eeNamespacePolicy >>= \case
         SimpleNamespacePolicy -> do
-          nsSize <- sizeOf SizeOfV0 ns
+          nsSize <- sizeOf info SizeOfV0 ns
           chargeGasArgs info (GWrite nsSize)
           liftGasM info $ _pdbWrite pdb Write DNamespaces nsn ns
           return $ VString $ "Namespace defined: " <> n
@@ -3192,7 +3124,7 @@ coreDefineNamespace info b env = \case
   pdb = _cePactDb env
   writeNs allow nsn ns = do
     unless allow $ throwNativeExecutionError info b $ "Namespace definition not permitted"
-    nsSize <- sizeOf SizeOfV0 ns
+    nsSize <- sizeOf info SizeOfV0 ns
     chargeGasArgs info (GWrite nsSize)
     liftGasM info $ _pdbWrite pdb Write DNamespaces nsn ns
     return $ VString $ "Namespace defined: " <> (_namespaceName nsn)
@@ -3208,14 +3140,14 @@ coreDefineNamespace info b env = \case
   validSpecialChars =
     "%#+-_&$@<>=^?*!|/~"
 
-coreDescribeNamespace :: (MonadEval b i m) => NativeFunction b i m
+coreDescribeNamespace :: (IsBuiltin b) => NativeFunction e b i
 coreDescribeNamespace info b _env = \case
   [VString n] -> do
     pdb <- viewEvalEnv eePactDb
     chargeGasArgs info $ GRead $ fromIntegral $ T.length n
     liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
       Just existing@(Namespace _ usrG laoG) -> do
-        size <- sizeOf SizeOfV0 existing
+        size <- sizeOf info SizeOfV0 existing
         chargeGasArgs info $ GRead size
         let obj = M.fromList
                   [ (Field "user-guard", PGuard usrG)
@@ -3227,7 +3159,7 @@ coreDescribeNamespace info b _env = \case
   args -> argsError info b args
 
 
-coreChainData :: (MonadEval b i m) => NativeFunction b i m
+coreChainData :: (IsBuiltin b) => NativeFunction e b i
 coreChainData info b _env = \case
   [] -> do
     PublicData publicMeta blockHeight blockTime prevBh <- viewEvalEnv eePublicData
@@ -3248,7 +3180,7 @@ coreChainData info b _env = \case
 -- -------------------------
 
 #ifndef WITHOUT_CRYPTO
-ensureOnCurve :: (Num p, Eq p, MonadEval b i m) => i -> CurvePoint p -> p -> m ()
+ensureOnCurve :: (Num p, Eq p) => i -> CurvePoint p -> p -> EvalM e b i ()
 ensureOnCurve info p bp = unless (isOnCurve p bp) $ throwExecutionError info PointNotOnCurve
 
 toG1 :: ObjectData PactValue -> Maybe G1
@@ -3300,7 +3232,7 @@ fromG2 (Point x y) = ObjectData pts
     , (Field "y", y')]
 
 
-zkPairingCheck :: (MonadEval b i m) => NativeFunction b i m
+zkPairingCheck :: (IsBuiltin b) => NativeFunction e b i
 zkPairingCheck info b _env = \case
   args@[VList p1s, VList p2s] -> do
     chargeGasArgs info (GAZKArgs (Pairing (max (V.length p1s) (V.length p2s))))
@@ -3312,7 +3244,7 @@ zkPairingCheck info b _env = \case
     return $ VBool $ pairingCheck pairs
   args -> argsError info b args
 
-zkScalarMult :: (MonadEval b i m) => NativeFunction b i m
+zkScalarMult :: (IsBuiltin b) => NativeFunction e b i
 zkScalarMult info b _env = \case
   args@[VString ptTy, VObject p1, VInteger scalar] -> do
     let scalar' = scalar `mod` curveOrder
@@ -3337,7 +3269,7 @@ zkScalarMult info b _env = \case
   curveOrder :: Integer
   curveOrder = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 
-zkPointAddition :: (MonadEval b i m) => NativeFunction b i m
+zkPointAddition :: (IsBuiltin b) => NativeFunction e b i
 zkPointAddition info b _env = \case
   args@[VString ptTy, VObject p1, VObject p2] -> do
     case T.toLower ptTy of
@@ -3367,7 +3299,7 @@ zkPointAddition info b _env = \case
 -- Poseidon
 -----------------------------------
 
-poseidonHash :: (MonadEval b i m) => NativeFunction b i m
+poseidonHash :: (IsBuiltin b) => NativeFunction e b i
 poseidonHash info b _env = \case
   [VList as]
     | not (V.null as) && length as <= 8,
@@ -3378,17 +3310,17 @@ poseidonHash info b _env = \case
 
 #else
 
-zkPairingCheck :: (MonadEval b i m) => NativeFunction b i m
-zkPairingCheck info _b _env _args = failInvariant info "crypto disabled"
+zkPairingCheck :: (IsBuiltin b) => NativeFunction e b i
+zkPairingCheck info _b _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
-zkScalarMult :: (MonadEval b i m) => NativeFunction b i m
-zkScalarMult info _b _env _args = failInvariant info "crypto disabled"
+zkScalarMult :: (IsBuiltin b) => NativeFunction e b i
+zkScalarMult info _b _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
-zkPointAddition :: (MonadEval b i m) => NativeFunction b i m
-zkPointAddition info _b _env _args = failInvariant info "crypto disabled"
+zkPointAddition :: (IsBuiltin b) => NativeFunction e b i
+zkPointAddition info _b _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
-poseidonHash :: (MonadEval b i m) => NativeFunction b i m
-poseidonHash info _b _env _args = failInvariant info "crypto disabled"
+poseidonHash :: (IsBuiltin b) => NativeFunction e b i
+poseidonHash info _b _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
 #endif
 
@@ -3396,7 +3328,7 @@ poseidonHash info _b _env _args = failInvariant info "crypto disabled"
 -- SPV
 -----------------------------------
 
-coreVerifySPV :: (MonadEval b i m) => NativeFunction b i m
+coreVerifySPV :: (IsBuiltin b) => NativeFunction e b i
 coreVerifySPV info b _env = \case
   [VString proofType, VObject o] -> do
     SPVSupport f _ <- viewEvalEnv eeSPVSupport
@@ -3408,7 +3340,7 @@ coreVerifySPV info b _env = \case
 -----------------------------------
 -- Verifiers
 -----------------------------------
-coreEnforceVerifier :: (MonadEval b i m) => NativeFunction b i m
+coreEnforceVerifier :: (IsBuiltin b) => NativeFunction e b i
 coreEnforceVerifier info b _env = \case
   [VString verName] -> do
     enforceStackTopIsDefcap info b
@@ -3431,36 +3363,27 @@ coreEnforceVerifier info b _env = \case
 
 
 coreBuiltinEnv
-  :: forall i m. (MonadEval CoreBuiltin i m)
-  => BuiltinEnv CoreBuiltin i m
+  :: forall e i
+  . BuiltinEnv e CoreBuiltin i
 coreBuiltinEnv i b env = mkDirectBuiltinFn i b env (coreBuiltinRuntime b)
 
-{-# SPECIALIZE coreBuiltinRuntime
-   :: CoreBuiltin
-   -> NativeFunction CoreBuiltin () Eval
-    #-}
-{-# SPECIALIZE coreBuiltinRuntime
-   :: CoreBuiltin
-   -> NativeFunction CoreBuiltin () Eval
-    #-}
 coreBuiltinRuntime
-  :: (MonadEval b i m)
+  :: (IsBuiltin b)
   => CoreBuiltin
-  -> NativeFunction b i m
+  -> NativeFunction e b i
 coreBuiltinRuntime =
 #ifdef WITH_NATIVE_TRACING
   _traceNative . go
   where
   _traceNative
-    :: (MonadEval b i m)
-    => NativeFunction b i m
-    -> NativeFunction b i m
+    :: NativeFunction e b i
+    -> NativeFunction e b i
   _traceNative f info b env args = do
     timeEnter <- liftIO $ getTime ProcessCPUTime
-    esTraceOutput %== (TraceNativeEnter timeEnter b info:)
+    esTraceOutput %= (TraceNativeEnter timeEnter b info:)
     output <- f info b env args
     timeExit <- liftIO $ getTime ProcessCPUTime
-    esTraceOutput %== (TraceNativeExit timeExit b info:)
+    esTraceOutput %= (TraceNativeExit timeExit b info:)
     pure output
 #else
   go

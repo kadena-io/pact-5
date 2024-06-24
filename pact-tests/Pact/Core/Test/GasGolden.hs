@@ -5,7 +5,6 @@ module Pact.Core.Test.GasGolden
   ) where
 
 import Control.Monad
-import Data.Default
 import Data.IORef
 import Data.Maybe
 import Data.Text (Text)
@@ -118,8 +117,6 @@ runGasTest file interpret = do
   let source = SourceCode file src
   let rstate = ReplState
             { _replFlags = mempty
-            , _replEvalState = def
-            , _replPactDb = pdb
             , _replEvalLog = gasLog
             , _replCurrSource = source
             , _replEvalEnv = ee'

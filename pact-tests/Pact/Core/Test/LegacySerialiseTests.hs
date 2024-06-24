@@ -20,14 +20,12 @@ import Pact.Core.Test.ReplTests
 import Pact.Core.Persistence
 import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Serialise
-import Pact.Core.Builtin
 import Data.Foldable
 import Control.Lens
 import Pact.Core.Repl.Compile
 import Data.Default
 
 import Pact.Core.Gas
-import Pact.Core.IR.Term
 
 tests :: IO TestTree
 tests = testGroup "Legacy Repl Tests" <$> legacyTests
@@ -84,16 +82,4 @@ legacyTests = do
   toModuleData p fp =
     decodeModuleData <$> BS.readFile (legacyTestDir </> p </> fp)
 
-  -- Boilerplate for lifting `CoreBuiltin` into `ReplCoreBuiltin`
-  -- Note: this is only used in this test.
-  liftReplBuiltin :: ModuleData CoreBuiltin a -> ModuleData ReplCoreBuiltin a
-  liftReplBuiltin = \case
-    ModuleData em ed -> let
-      defs' = over (traverseDefTerm . termBuiltin) RBuiltinWrap <$> _mDefs em
-      ed' = over (traverseDefTerm . termBuiltin) RBuiltinWrap <$> ed
-      in ModuleData (em{_mDefs = defs'}) ed'
-    InterfaceData im ed -> let
-      ifdefs = over (traverseIfDefTerm . termBuiltin) RBuiltinWrap <$> _ifDefns im
-      ed' = over (traverseDefTerm . termBuiltin) RBuiltinWrap <$> ed
-      in InterfaceData (im{_ifDefns = ifdefs}) ed'
 

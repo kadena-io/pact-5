@@ -63,6 +63,7 @@ module Pact.Core.Names
  , renderParsedTyName
  , parseParsedTyName
  , parseQualifiedName
+ , parseFullyQualifiedName
  ) where
 
 import Control.Lens
@@ -78,6 +79,9 @@ import qualified Text.Megaparsec.Char as MP
 
 import Pact.Core.Hash
 import Pact.Core.Pretty(Pretty(..))
+import Data.Aeson (FromJSONKey)
+import qualified Data.Text.Encoding as T
+import qualified Data.ByteString.Short as SB
 
 -- | Newtype wrapper over bare namespaces
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
@@ -185,7 +189,7 @@ instance Pretty ParsedName where
 -- | Object and Schema row labels.
 -- So in Field "a" in {"a":v},
 newtype Field = Field { _field :: Text }
-  deriving (Eq, Ord, Show, Generic)
+  deriving (Eq, Ord, Show, Generic, FromJSONKey)
   deriving newtype NFData
 
 instance Pretty Field where
@@ -443,6 +447,16 @@ qualNameParser = do
     let qual = QualifiedName p1 (ModuleName n (Just nsn))
     pure qual
 
+fullyQualNameParser :: Parser FullyQualifiedName
+fullyQualNameParser = do
+  QualifiedName n mn <- qualNameParser
+  h <- MP.char '.' *> (MP.between (MP.char '{') (MP.char '}') $
+    MP.takeWhile1P Nothing (\s -> Char.isAlphaNum s || s `elem` ['-', '_']))
+  hash' <- case decodeBase64UrlUnpadded (T.encodeUtf8 h) of
+    Right hash' -> pure $ ModuleHash $ Hash $ SB.toShort hash'
+    Left _ -> fail "invalid hash encoding"
+  pure (FullyQualifiedName mn n hash')
+
 -- Here we are parsing either a qualified name, or a bare name
 -- bare names are just the atom `n`, and qualified names are of the form
 -- <n>.<n>(.<n>)?
@@ -471,6 +485,9 @@ parseParsedTyName = MP.parseMaybe parsedTyNameParser
 
 parseQualifiedName :: Text -> Maybe QualifiedName
 parseQualifiedName = MP.parseMaybe qualNameParser
+
+parseFullyQualifiedName :: Text -> Maybe FullyQualifiedName
+parseFullyQualifiedName = MP.parseMaybe fullyQualNameParser
 
 renderDefPactId :: DefPactId -> Text
 renderDefPactId (DefPactId t) = t

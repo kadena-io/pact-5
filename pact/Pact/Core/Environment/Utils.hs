@@ -8,10 +8,7 @@
 
 
 module Pact.Core.Environment.Utils
- ( setEvalState
- , (%==), useEvalState, usesEvalState
- , (.==)
- , viewEvalEnv
+ ( viewEvalEnv
  , viewsEvalEnv
  , getModuleData
  , getModule
@@ -32,9 +29,11 @@ module Pact.Core.Environment.Utils
  ) where
 
 import Control.Lens
+import Data.IORef
 import Control.Applicative((<|>))
 import Control.Monad.Except
-import Control.Exception
+import Control.Exception.Safe
+import Control.Monad.Reader hiding (MonadIO(..))
 import Control.Monad.IO.Class(MonadIO(..))
 import Data.Text(Text)
 import Data.Maybe(mapMaybe)
@@ -53,28 +52,18 @@ import Pact.Core.Capabilities
 import Pact.Core.PactValue
 import Pact.Core.Builtin
 
-viewEvalEnv :: (MonadEvalEnv b i m) => Lens' (EvalEnv b i) s -> m s
-viewEvalEnv l = view l <$> readEnv
 
-viewsEvalEnv :: (MonadEvalEnv b i m) => Lens' (EvalEnv b i) s -> (s -> a) -> m a
-viewsEvalEnv f l = views f l <$> readEnv
+viewEvalEnv :: Lens' (EvalEnv b i) s -> EvalM e b i s
+viewEvalEnv l = ask >>= \case
+  ExecEnv e -> pure (view l e)
+  ReplEnv r ->
+     view (replEvalEnv . l) <$> liftIO (readIORef r)
 
-setEvalState :: (MonadEvalState b i m) => Traversal' (EvalState b i) s -> s -> m ()
-setEvalState l s = modifyEvalState (set l s)
-
-(.==) :: (MonadEvalState b i m) => Traversal' (EvalState b i) s -> s -> m ()
-l .== s = modifyEvalState (set l s)
-
-(%==) :: (MonadEvalState b i m) => Traversal' (EvalState b i) s -> (s -> s) -> m ()
-l %== f = modifyEvalState (over l f)
-
-infix 4 %==, .==
-
-useEvalState :: (MonadEvalState b i m) => Lens' (EvalState b i) s -> m s
-useEvalState l = view l <$> getEvalState
-
-usesEvalState :: (MonadEvalState b i m) => Lens' (EvalState b i) s -> (s -> s') -> m s'
-usesEvalState l f = views l f <$> getEvalState
+viewsEvalEnv :: Lens' (EvalEnv b i) s -> (s -> a) -> EvalM e b i a
+viewsEvalEnv l f = ask >>= \case
+  ExecEnv e -> pure (views l f e)
+  ReplEnv r ->
+     views (replEvalEnv . l) f <$> liftIO (readIORef r)
 
 toFqDep :: ModuleName -> ModuleHash -> Def name t b i -> (FullyQualifiedName, Def name t b i)
 toFqDep modName mhash defn =
@@ -92,36 +81,36 @@ allModuleExports = \case
     in allNewDeps <> deps
 
 liftDbFunction
-  :: (MonadEvalState b i m, MonadError (PactError i) m, MonadIO m)
-  => i
+  :: i
   -> IO a
-  -> m a
+  -> EvalM e b i a
 liftDbFunction info action = do
   liftIO (try action) >>= \case
     Left dbopErr -> throwExecutionError info (DbOpFailure dbopErr)
     Right e -> pure e
 
-throwUserRecoverableError :: (MonadError (PactError info) m, MonadEvalState b info m) => info -> UserRecoverableError -> m a
+throwUserRecoverableError :: i -> UserRecoverableError -> EvalM e b i a
 throwUserRecoverableError i err = do
-  st <- useEvalState esStack
+  st <- use esStack
   throwUserRecoverableError' i st err
 
-throwUserRecoverableError' :: MonadError (PactError info) m => info -> [StackFrame info] -> UserRecoverableError -> m a
+throwUserRecoverableError' :: i -> [StackFrame i] -> UserRecoverableError -> EvalM e b i a
 throwUserRecoverableError' info stack err = throwError (PEUserRecoverableError err stack info)
 
-throwExecutionError :: (MonadEvalState b i m, MonadError (PactError i) m) => i -> EvalError -> m a
+throwExecutionError :: i -> EvalError -> EvalM e b i a
 throwExecutionError i e = do
-  st <- useEvalState esStack
+  st <- use esStack
   throwError (PEExecutionError e st i)
 
-throwNativeExecutionError :: (MonadEvalState b i m, MonadError (PactError i) m, IsBuiltin b) => i -> b -> Text -> m a
+throwNativeExecutionError :: IsBuiltin b => i -> b -> Text -> EvalM e b i a
 throwNativeExecutionError info b msg =
   throwExecutionError info (NativeExecutionError (builtinName b) msg)
 
+
 -- | lookupModuleData for only modules
-lookupModule :: (MonadEval b i m) => i -> PactDb b i -> ModuleName -> m (Maybe (EvalModule b i))
+lookupModule :: i -> PactDb b i -> ModuleName -> EvalM e b i (Maybe (EvalModule b i))
 lookupModule info pdb mn =
- useEvalState (esLoaded . loModules . at mn) >>= \case
+ use (esLoaded . loModules . at mn) >>= \case
    Just (ModuleData md _) -> pure (Just md)
    Just (InterfaceData _ _) ->
     throwExecutionError info (ExpectedModule mn)
@@ -129,48 +118,48 @@ lookupModule info pdb mn =
     liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
       Just mdata@(ModuleData md deps) -> do
         let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> _mDefs md
-        (esLoaded . loAllLoaded) %== M.union newLoaded . M.union deps
-        (esLoaded . loModules) %== M.insert mn mdata
+        (esLoaded . loAllLoaded) %= M.union newLoaded . M.union deps
+        (esLoaded . loModules) %= M.insert mn mdata
         pure (Just md)
       Just (InterfaceData _ _) ->
         throwExecutionError info (ExpectedModule mn)
       Nothing -> pure Nothing
 
 -- | lookupModuleData modules and interfaces
-lookupModuleData :: (MonadEval b i m) => i -> PactDb b i -> ModuleName -> m (Maybe (ModuleData b i))
+lookupModuleData :: i -> PactDb b i -> ModuleName -> EvalM e b i (Maybe (ModuleData b i))
 lookupModuleData info pdb mn =
- useEvalState (esLoaded . loModules . at mn) >>= \case
+ use (esLoaded . loModules . at mn) >>= \case
    Just md -> pure (Just md)
    Nothing -> do
     liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
       Just mdata@(ModuleData md deps) -> do
         let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> _mDefs md
-        (esLoaded . loAllLoaded) %== M.union newLoaded . M.union deps
-        (esLoaded . loModules) %== M.insert mn mdata
+        (esLoaded . loAllLoaded) %= M.union newLoaded . M.union deps
+        (esLoaded . loModules) %= M.insert mn mdata
         pure (Just mdata)
       Just mdata@(InterfaceData iface deps) -> do
         let ifDefs = mapMaybe ifDefToDef (_ifDefns iface)
         let newLoaded = M.fromList $ toFqDep mn (_ifHash iface) <$> ifDefs
-        (esLoaded . loAllLoaded) %== M.union newLoaded . M.union deps
-        (esLoaded . loModules) %== M.insert mn mdata
+        (esLoaded . loAllLoaded) %= M.union newLoaded . M.union deps
+        (esLoaded . loModules) %= M.insert mn mdata
         pure (Just mdata)
       Nothing -> pure Nothing
 
 
 -- | getModuleData, but only for modules, no interfaces
-getModule :: (MonadEval b i m) => i -> PactDb b i -> ModuleName -> m (EvalModule b i)
+getModule :: i -> PactDb b i -> ModuleName -> EvalM e b i (EvalModule b i)
 getModule info pdb mn = lookupModule info pdb mn >>= \case
   Just md -> pure md
   Nothing -> throwExecutionError info (ModuleDoesNotExist mn)
 
 -- | Get or load a module or interface based on the module name
-getModuleData :: (MonadEval b i m) => i -> PactDb b i -> ModuleName -> m (ModuleData b i)
+getModuleData :: i -> PactDb b i -> ModuleName -> EvalM e b i (ModuleData b i)
 getModuleData info pdb mn = lookupModuleData info pdb mn >>= \case
   Just md -> pure md
   Nothing -> throwExecutionError info (ModuleDoesNotExist mn)
 
 -- | Returns a module member, but only for modules, no interfaces
-getModuleMember :: (MonadEval b i m) => i -> PactDb b i -> QualifiedName -> m (EvalDef b i)
+getModuleMember :: i -> PactDb b i -> QualifiedName -> EvalM e b i (EvalDef b i)
 getModuleMember info pdb (QualifiedName qn mn) = do
   md <- getModule info pdb mn
   case findDefInModule qn md of
@@ -179,7 +168,7 @@ getModuleMember info pdb (QualifiedName qn mn) = do
       let fqn = FullyQualifiedName mn qn (_mHash md)
       throwExecutionError info (ModuleMemberDoesNotExist fqn)
 
-getModuleMemberWithHash :: (MonadEval b i m) => i -> PactDb b i -> QualifiedName -> m (EvalDef b i, ModuleHash)
+getModuleMemberWithHash :: i -> PactDb b i -> QualifiedName -> EvalM e b i (EvalDef b i, ModuleHash)
 getModuleMemberWithHash info pdb (QualifiedName qn mn) = do
   md <- getModule info pdb mn
   case findDefInModule qn md of
@@ -189,29 +178,27 @@ getModuleMemberWithHash info pdb (QualifiedName qn mn) = do
       throwExecutionError info (ModuleMemberDoesNotExist fqn)
 
 
-mangleNamespace :: (MonadEvalState b i m) => ModuleName -> m ModuleName
+mangleNamespace :: ModuleName -> EvalM e b i ModuleName
 mangleNamespace mn@(ModuleName mnraw ns) =
-  useEvalState (esLoaded . loNamespace) >>= \case
+  use (esLoaded . loNamespace) >>= \case
     Nothing -> pure mn
     Just (Namespace currNs _ _) -> pure (ModuleName mnraw (ns <|> Just currNs))
 
 getAllStackCaps
-  :: (MonadEval b i m)
-  => m (S.Set (CapToken QualifiedName PactValue))
+  :: EvalM e b i (S.Set (CapToken QualifiedName PactValue))
 getAllStackCaps = do
-  S.fromList . concatMap capToList <$> useEvalState (esCaps . csSlots)
+  S.fromList . concatMap capToList <$> use (esCaps . csSlots)
   where
   capToList (CapSlot c cs) = c:cs
 
 -- Todo: capautonomous
 checkSigCaps
-  :: (MonadEval b i m)
-  => M.Map PublicKeyText (S.Set (CapToken QualifiedName PactValue))
-  -> m (M.Map PublicKeyText (S.Set (CapToken QualifiedName PactValue)))
+  :: M.Map PublicKeyText (S.Set (CapToken QualifiedName PactValue))
+  -> EvalM e b i (M.Map PublicKeyText (S.Set (CapToken QualifiedName PactValue)))
 checkSigCaps sigs = do
-  capsBeingEvaluated <- useEvalState (esCaps . csCapsBeingEvaluated)
+  capsBeingEvaluated <- use (esCaps . csCapsBeingEvaluated)
   granted <- if S.null capsBeingEvaluated then getAllStackCaps else pure capsBeingEvaluated
-  autos <- useEvalState (esCaps . csAutonomous)
+  autos <- use (esCaps . csAutonomous)
   -- Pretty much, what this means is:
   -- if you installed a capability from code (using `install-capability`)
   -- then we disable unscoped sigs. Why?

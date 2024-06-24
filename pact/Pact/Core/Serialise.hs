@@ -1,4 +1,5 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 -- | The canonical way of encoding and decoding Pact entities into bytestrings.
 --   There are two places where in Pact where serialization is needed:
@@ -8,7 +9,18 @@
 --  Normal usage of this module involes the `serializeModuleForHash` function,
 --  and `defaultSerializeForDatabase`.
 
-module Pact.Core.Serialise where
+module Pact.Core.Serialise
+  ( DocumentVersion(..)
+  , Document(..)
+  , PactSerialise(..)
+  , document
+  , serialisePact
+  , serialisePact_raw_spaninfo
+  , serialisePact_repl_spaninfo
+  , decodeVersion
+  , encodeVersion
+  , liftReplBuiltin
+  , ) where
 
 import Data.ByteString (ByteString, fromStrict)
 
@@ -18,6 +30,7 @@ import Pact.Core.Persistence
 import Pact.Core.Guards
 import Pact.Core.Namespace
 import Pact.Core.DefPacts.Types
+import Pact.Core.IR.Term
 import Control.Lens
 
 import qualified Codec.CBOR.Encoding as S
@@ -31,6 +44,7 @@ import qualified Pact.Core.Serialise.CBOR_V1 as V1
 import Pact.Core.Gas
 import Pact.Core.Info (SpanInfo)
 import Pact.Core.Errors
+import Data.Default
 
 data DocumentVersion
   = V1_CBOR
@@ -39,7 +53,7 @@ data DocumentVersion
 data Document a
   = Document DocumentVersion a
   | LegacyDocument a
-   deriving (Show, Eq)
+   deriving (Show, Eq, Functor)
 
 document :: Lens' (Document a) a
 document = lens getDoc setDoc
@@ -112,30 +126,54 @@ serialisePact = PactSerialise
                            V1_CBOR -> V1.decodeRowData
                        )
   }
-  where
-    docEncode :: (a -> ByteString) -> a -> ByteString
-    docEncode enc o = toStrictByteString (encodeVersion V1_CBOR <> S.encodeBytes (enc o))
-
-    docDecode :: ByteString -> (DocumentVersion -> ByteString -> Maybe a) -> Maybe (Document a)
-    docDecode bs dec = case deserialiseFromBytes (liftA2 (,) decodeVersion S.decodeBytes) (fromStrict bs) of
-      Left _ -> Nothing
-      Right (_, (v,c)) ->  Document v <$> dec v c
 
 gEncodeRowData :: RowData -> GasM (PactError i) b ByteString
 gEncodeRowData rd = do
   encodedRow <- V1.encodeRowData rd
   pure $ toStrictByteString $ encodeVersion V1_CBOR <> S.encodeBytes encodedRow
 
+liftReplBuiltin :: ModuleData CoreBuiltin a -> ModuleData ReplCoreBuiltin a
+liftReplBuiltin = \case
+  ModuleData em ed -> let
+    defs' = over (traverseDefTerm . termBuiltin) RBuiltinWrap <$> _mDefs em
+    ed' = over (traverseDefTerm . termBuiltin) RBuiltinWrap <$> ed
+    in ModuleData (em{_mDefs = defs'}) ed'
+  InterfaceData im ed -> let
+    ifdefs = over (traverseIfDefTerm . termBuiltin) RBuiltinWrap <$> _ifDefns im
+    ed' = over (traverseDefTerm . termBuiltin) RBuiltinWrap <$> ed
+    in InterfaceData (im{_ifDefns = ifdefs}) ed'
+
+
 serialisePact_repl_spaninfo :: PactSerialise ReplCoreBuiltin SpanInfo
 serialisePact_repl_spaninfo = serialisePact
-  { _encodeModuleData = V1.encodeModuleData_repl_spaninfo
-  , _decodeModuleData = fmap LegacyDocument . V1.decodeModuleData_repl_spaninfo
+  { _encodeModuleData = docEncode V1.encodeModuleData_repl_spaninfo
+  , _decodeModuleData =
+      \bs ->
+        (LegacyDocument . fmap def . liftReplBuiltin <$> LegacyPact.decodeModuleData bs)
+        <|> docDecode bs (\case
+                            V1_CBOR -> V1.decodeModuleData_repl_spaninfo
+                        )
   , _encodeRowData = gEncodeRowData
   }
 
+docEncode :: (a -> ByteString) -> a -> ByteString
+docEncode enc o = toStrictByteString (encodeVersion V1_CBOR <> S.encodeBytes (enc o))
+{-# INLINE docEncode #-}
+
+docDecode :: ByteString -> (DocumentVersion -> ByteString -> Maybe a) -> Maybe (Document a)
+docDecode bs dec = case deserialiseFromBytes (liftA2 (,) decodeVersion S.decodeBytes) (fromStrict bs) of
+  Right (_, (v,c)) ->  Document v <$> dec v c
+  Left _ -> Nothing
+{-# INLINE docDecode #-}
+
 serialisePact_raw_spaninfo :: PactSerialise CoreBuiltin SpanInfo
 serialisePact_raw_spaninfo = serialisePact
-  { _encodeModuleData = V1.encodeModuleData_raw_spaninfo
-  , _decodeModuleData = fmap LegacyDocument . V1.decodeModuleData_raw_spaninfo
+  { _encodeModuleData = docEncode V1.encodeModuleData_raw_spaninfo
+  , _decodeModuleData =
+      \bs ->
+        (LegacyDocument . fmap def <$> LegacyPact.decodeModuleData bs)
+        <|> docDecode bs (\case
+                            V1_CBOR -> V1.decodeModuleData_raw_spaninfo
+                        )
   , _encodeRowData = gEncodeRowData
   }

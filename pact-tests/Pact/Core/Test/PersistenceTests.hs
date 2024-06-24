@@ -15,10 +15,10 @@ import Test.Tasty.HUnit (assertEqual, testCase)
 import qualified Hedgehog.Gen as Gen
 
 import Pact.Core.Builtin
-import Pact.Core.Environment (EvalEnv, defaultEvalEnv)
+import Pact.Core.Environment
 import Pact.Core.Guards
 import Pact.Core.Gen.Serialise
-import Pact.Core.Literal (Literal(LUnit))
+import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.PactValue
 import qualified Pact.Core.PactValue as PactValue
@@ -28,7 +28,6 @@ import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
 import Pact.Core.Serialise
-import Pact.Core.IR.Eval.Runtime.Types (runEvalM)
 
 -- | Top-level TestTree for Persistence Tests.
 tests :: TestTree
@@ -60,13 +59,13 @@ testsWithSerial serial builtins b i =
  , testProperty "Namespace" $ namespaceRoundtrip serial builtins
  ]
 
-keysetPersistRoundtrip :: (Default i, Show i, IsBuiltin b) => PactSerialise b i -> Map.Map Text b -> Gen KeySet -> Property
+keysetPersistRoundtrip :: (Default i) => PactSerialise b i -> Map.Map Text b -> Gen KeySet -> Property
 keysetPersistRoundtrip serial builtins keysetGen =
   property $ do
     keysetName <- forAll keySetNameGen
     keyset <- forAll keysetGen
     evalEnv <- liftIO $ getEvalEnv serial builtins
-    writtenKeySetResult <- liftIO $ runEvalM evalEnv def  $ withSqlitePactDb serial ":memory:" $ \db -> do
+    writtenKeySetResult <- liftIO $ runEvalM (ExecEnv evalEnv) def  $ withSqlitePactDb serial ":memory:" $ \db -> do
       () <- writeKeySet def db Insert keysetName keyset
       liftIO $ readKeySet db keysetName
     case writtenKeySetResult of
@@ -78,7 +77,7 @@ moduleDataRoundtrip serial builtins b i = property $ do
   moduleData <- forAll (moduleDataGen b i)
   moduleName <- forAll moduleNameGen
   evalEnv <- liftIO $ getEvalEnv serial builtins
-  readResult <- liftIO $ runEvalM evalEnv def $ withSqlitePactDb serial ":memory:" $ \db -> do
+  readResult <- liftIO $ runEvalM (ExecEnv evalEnv) def $ withSqlitePactDb serial ":memory:" $ \db -> do
     () <- writeModule def db Insert moduleName moduleData
     liftIO $ readModule db moduleName
   case readResult of
@@ -86,12 +85,12 @@ moduleDataRoundtrip serial builtins b i = property $ do
     (Right writtenModuleData, _) ->
       Just moduleData === writtenModuleData
 
-defPactExecRoundtrip :: (Default i, IsBuiltin b, Show i) => PactSerialise b i -> Map.Map Text b -> Gen b -> Gen i -> Property
+defPactExecRoundtrip :: (Default i) => PactSerialise b i -> Map.Map Text b -> Gen b -> Gen i -> Property
 defPactExecRoundtrip serial builtins _b _i = property $ do
   defPactId <- forAll defPactIdGen
   defPactExec <- forAll (Gen.maybe defPactExecGen)
   evalEnv <- liftIO $ getEvalEnv serial builtins
-  writeResult <- liftIO $ runEvalM evalEnv def $ withSqlitePactDb serial ":memory:" $ \db -> do
+  writeResult <- liftIO $ runEvalM (ExecEnv evalEnv) def $ withSqlitePactDb serial ":memory:" $ \db -> do
     () <- writeDefPacts def db Insert defPactId defPactExec
     liftIO $ readDefPacts db defPactId
   case writeResult of
@@ -99,12 +98,12 @@ defPactExecRoundtrip serial builtins _b _i = property $ do
     (Right writtenDefPactExec, _) ->
       Just defPactExec === writtenDefPactExec
 
-namespaceRoundtrip :: (Default i, IsBuiltin b, Show i) => PactSerialise b i -> Map.Map Text b -> Property
+namespaceRoundtrip :: (Default i) => PactSerialise b i -> Map.Map Text b -> Property
 namespaceRoundtrip serial builtins = property $ do
   ns <- forAll namespaceNameGen
   namespace <- forAll namespaceGen
   evalEnv <- liftIO $ getEvalEnv serial builtins
-  writeResult <- liftIO $ runEvalM evalEnv def $ withSqlitePactDb serial ":memory:" $ \db -> do
+  writeResult <- liftIO $ runEvalM (ExecEnv evalEnv) def $ withSqlitePactDb serial ":memory:" $ \db -> do
     () <- writeNamespace def db Insert ns namespace
     liftIO $ readNamespace db ns
   case writeResult of
@@ -121,7 +120,7 @@ sqliteRegression =
   testCase "sqlite persistence backend produces expected values/txlogs" $ do
 
     evalEnv <- liftIO $ getEvalEnv serialisePact_repl_spaninfo replCoreBuiltinMap
-    res <- liftIO $ runEvalM evalEnv def $ withSqlitePactDb serialisePact_repl_spaninfo ":memory:" $ \pdb -> do
+    res <- liftIO $ runEvalM (ExecEnv evalEnv) def $ withSqlitePactDb serialisePact_repl_spaninfo ":memory:" $ \pdb -> do
       let
         user1 = "user1"
         usert = TableName user1 (ModuleName "someModule" Nothing)
@@ -233,7 +232,7 @@ sqliteRegression =
         pdb <- mockPactDb serialisePact_repl_spaninfo
         evalLog <- newIORef Nothing
         ee <- defaultEvalEnv pdb replCoreBuiltinMap
-        ref <- newIORef (ReplState mempty pdb def ee evalLog (SourceCode "" "") mempty mempty Nothing False)
+        ref <- newIORef (ReplState mempty ee evalLog (SourceCode "" "") mempty mempty Nothing False)
         Right _ <- runReplT ref (interpretReplProgramBigStep (SourceCode "test" src) (const (pure ())))
         Just md <- readModule pdb (ModuleName "test" Nothing)
         pure md

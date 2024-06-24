@@ -161,6 +161,10 @@ typeGen :: Gen Type
 typeGen = Gen.recursive Gen.choice
  [ TyPrim <$> tyPrimGen
  , TyModRef <$> Gen.set (Range.linear 0 10) moduleNameGen
+ , pure TyAny
+ , pure TyCapToken
+ , pure TyAnyList
+ , pure TyAnyObject
  ]
  [ TyList <$> typeGen
  , TyObject <$> schemaGen

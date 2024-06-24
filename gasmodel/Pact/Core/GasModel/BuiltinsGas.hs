@@ -10,7 +10,6 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Vector as V
-import qualified Database.SQLite3 as SQL
 import Control.Monad
 import Data.Bifunctor
 import Data.Default
@@ -901,7 +900,7 @@ benchmarkName = \case
   b -> T.unpack $ coreBuiltinToText b
 
 benchmarks :: C.Benchmark
-benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) -> do
+benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _, _) -> do
   C.bgroup "pact-core-builtin-gas"
     [ C.bgroup (benchmarkName coreBuiltin) benches
     | coreBuiltin <- [minBound .. maxBound]
@@ -909,6 +908,8 @@ benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _db) -> do
     , not $ null benches
     ]
   where
-  mkPactDb = unsafeCreateSqlitePactDb serialisePact ":memory:"
+  mkPactDb = do
+    (pdb, db, cache) <- unsafeCreateSqlitePactDb serialisePact ":memory:"
+    pure (pdb, NoNf db, NoNf cache)
 
-  cleanupPactDb (_, db) = SQL.close db
+  cleanupPactDb (_, NoNf db, NoNf cache) = unsafeCloseSqlitePactDb db cache
