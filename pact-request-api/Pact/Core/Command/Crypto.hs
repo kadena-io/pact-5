@@ -363,6 +363,7 @@ instance IsString PrivateKeyBS where
   fromString s = case parseB16TextOnly (T.pack s) of
     Left e -> PrivBS $ "Bad private key: " <> T.encodeUtf8 (T.pack e)
     Right b -> PrivBS b
+
 instance Show PrivateKeyBS where
   show (PrivBS b) = T.unpack $ toB16Text b
 
