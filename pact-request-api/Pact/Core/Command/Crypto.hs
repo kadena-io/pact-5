@@ -142,41 +142,38 @@ instance A.FromJSON UserSig where
         t <- o A..: "sig"
         return $ ED25519Sig t
 
--- ed25519
-
-type Ed25519PrivateKey = Ed25519.SecretKey
 
 verifyEd25519Sig :: PactHash.Hash -> Ed25519.PublicKey -> Ed25519.Signature -> Either String ()
-exportEd25519PubKey :: Ed25519.PublicKey -> ByteString
-exportEd25519SecretKey :: Ed25519PrivateKey -> ByteString
-exportEd25519Signature :: Ed25519.Signature -> ByteString
-parseEd25519PubKey :: ByteString -> Either String Ed25519.PublicKey
-parseEd25519SecretKey :: ByteString -> Either String Ed25519PrivateKey
-parseEd25519Signature :: ByteString -> Either String Ed25519.Signature
-
 verifyEd25519Sig (PactHash.Hash msg) pubKey sig =
   unless (Ed25519.verify pubKey (fromShort msg) sig) $
     Left "invalid ed25519 signature"
 
+exportEd25519PubKey :: Ed25519.PublicKey -> ByteString
 exportEd25519PubKey = B.convert
+
+parseEd25519PubKey :: ByteString -> Either String Ed25519.PublicKey
 parseEd25519PubKey s = E.onCryptoFailure
   (const $ Left ("Invalid ED25519 Public Key: " ++ show (toB16Text s)))
   Right
   (Ed25519.publicKey s)
 
+exportEd25519SecretKey :: Ed25519.SecretKey -> ByteString
 exportEd25519SecretKey = B.convert
+
+parseEd25519SecretKey :: ByteString -> Either String Ed25519.SecretKey
 parseEd25519SecretKey s = E.onCryptoFailure
   (const $ Left ("Invalid ED25519 Private Key: " ++ show (toB16Text s)))
   Right
   (Ed25519.secretKey s)
 
+exportEd25519Signature :: Ed25519.Signature -> ByteString
 exportEd25519Signature = B.convert
+
+parseEd25519Signature :: ByteString -> Either String Ed25519.Signature
 parseEd25519Signature s = E.onCryptoFailure
   (const $ Left ("Invalid ED25519 Signature: " ++ show (toB16Text s)))
   Right
   (Ed25519.signature s)
-
--- webauthn
 
 exportWebAuthnPrivateKey :: WebauthnPrivateKey -> ByteString
 exportWebAuthnPrivateKey = \case
@@ -325,7 +322,7 @@ generateWebAuthnP256KeyPair = do
 
 --------- SCHEME HELPER DATA TYPES ---------
 
-type Ed25519KeyPair = (Ed25519.PublicKey, Ed25519PrivateKey)
+type Ed25519KeyPair = (Ed25519.PublicKey, Ed25519.SecretKey)
 
 newtype PublicKeyBS = PubBS { _pktPublic :: ByteString }
   deriving (Eq, Generic, Hashable)
@@ -378,7 +375,7 @@ instance J.Encode SignatureBS where
 
 --------- SCHEME HELPER FUNCTIONS ---------
 
-signEd25519 :: Ed25519.PublicKey -> Ed25519PrivateKey -> PactHash.Hash -> Ed25519.Signature
+signEd25519 :: Ed25519.PublicKey -> Ed25519.SecretKey -> PactHash.Hash -> Ed25519.Signature
 signEd25519 pub priv (PactHash.Hash msg) = Ed25519.sign priv pub (fromShort msg)
 
 getPublic :: Ed25519KeyPair -> ByteString
@@ -389,7 +386,7 @@ getPrivate = exportEd25519SecretKey . snd
 
 -- Key Pair setter functions
 
-genKeyPair :: IO (Ed25519.PublicKey, Ed25519PrivateKey)
+genKeyPair :: IO (Ed25519.PublicKey, Ed25519.SecretKey)
 genKeyPair = ed25519GenKeyPair
 
 -- | Parse a pair of keys (where the public key is optional) into an Ed25519 keypair.
