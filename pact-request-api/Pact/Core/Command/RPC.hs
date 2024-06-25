@@ -79,7 +79,7 @@ data ContMsg = ContMsg
   { _cmPactId :: !DefPactId
   , _cmStep :: !Int
   , _cmRollback :: !Bool
-  , _cmData :: !Aeson.Value -- TODO: Greg: Is this the correct type?
+  , _cmData :: !Aeson.Value
   , _cmProof :: !(Maybe ContProof)
   } deriving (Eq,Show,Generic)
 
