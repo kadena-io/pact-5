@@ -1,4 +1,15 @@
-module Pact.Core.Command.Client where
+module Pact.Core.Command.Client (
+  -- * Creating Commands
+    mkCommand
+  , mkCommand'
+
+  -- * Creating Commands with keys other than Ed25519 (e.g. WebAuthn), for testing.
+  , mkCommandWithDynKeys
+  , mkCommandWithDynKeys'
+
+  , mkUnsignedCommand
+  , keyPairsToSigners
+) where
 
 import Control.Monad
 import Control.Monad.Except
@@ -18,7 +29,6 @@ import Pact.Core.PactValue
 import Pact.Core.Names
 import Pact.Core.Verifiers
 
--- CREATING AND SIGNING TRANSACTIONS
 
 type UserCapability = CapToken QualifiedName PactValue
 
@@ -94,7 +104,6 @@ mkCommandWithDynKeys' creds env = do
         case signResult of
           Left e -> error $ "Failed to sign with mock WebAuthn keypair: " ++ e
           Right sig -> return $ WebAuthnSig sig
-
 
 
 mkCommandWithDynKeys
