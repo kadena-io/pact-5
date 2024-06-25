@@ -282,20 +282,6 @@ newtype UxPactError = UxPactError { _getUxPactError :: StableEncoding PactErrorI
   deriving (Eq)
   deriving newtype (J.Encode, FromJSON)
 
--- -- TODO: Do we ever need to parse UxPactError's?
--- instance FromJSON UxPactError where
---   parseJSON = withObject "PactError" $ \o -> do
---     typ <- o .: "type"
---     doc <- o .: "message"
---     inf <- o .: "info"
---     sf <- parseSFs <$> o .: "callStack"
---     pure . UxPactError $ PactError typ (_stableEncoding inf) sf (prettyString doc)
---     where
---       parseSFs :: [Text] -> [StackFrame SpanInfo]
---       parseSFs sfs = case mapM (parseOnly parseUxStackFrame) sfs of
---         Left _e -> []
---         Right ss -> _getUxStackFrame <$> ss
-
 -- | API result of attempting to execute a pact command, parametrized over level of logging type
 data CommandResult l = CommandResult {
   -- | Request Key of command (the hash of the command payload)
