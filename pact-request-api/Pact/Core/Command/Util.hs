@@ -31,8 +31,6 @@ module Pact.Core.Command.Util
   , parseB64UrlUnpaddedText, parseB64UrlUnpaddedText'
   , toB64UrlUnpaddedText, fromB64UrlUnpaddedText
   , B64JsonBytes(..)
-  -- | Miscellany
-  , maybeToEither
   ) where
 
 import Data.Aeson
@@ -102,11 +100,6 @@ parseB16TextOnly t = resultToEither $ parse parseB16Text t
 
 toB16Text :: ByteString -> Text
 toB16Text s = decodeUtf8 $ B16.encode s
-
-maybeToEither :: String -> Maybe a -> Either String a
-maybeToEither err Nothing = Left err
-maybeToEither _ (Just a)  = Right a
-
 
 -- | Utility for GHCI output of JSON
 outputJSON :: J.Encode a => a -> IO ()
