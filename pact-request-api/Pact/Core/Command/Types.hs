@@ -74,7 +74,6 @@ import Data.Maybe  (fromMaybe)
 
 import GHC.Generics
 
-
 import Pact.Core.Capabilities
 import Pact.Core.ChainData
 import Pact.Core.Compile
