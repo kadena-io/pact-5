@@ -354,6 +354,7 @@ instance A.FromJSON PrivateKeyBS where
   parseJSON = A.withText "PrivateKeyBS" $ \s -> do
     s' <- parseB16Text s
     return $ PrivBS s'
+    
 instance J.Encode PrivateKeyBS where
   build (PrivBS p) = J.text $ toB16Text p
   {-# INLINE build #-}
