@@ -64,7 +64,6 @@ import Data.Hashable (Hashable)
 import Data.Word
 import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
--- import Control.Applicative ((<|>))
 import Control.Concurrent
 import Control.Lens hiding (Empty, elements, (.=))
 
