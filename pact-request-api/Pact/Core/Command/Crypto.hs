@@ -438,7 +438,6 @@ data WebAuthnSignature = WebAuthnSignature
   , signature :: T.Text
   } deriving (Show, Generic, Eq, Ord)
 
--- instance Serialize WebAuthnSignature
 
 instance NFData WebAuthnSignature
 
