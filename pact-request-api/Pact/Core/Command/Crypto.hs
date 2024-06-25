@@ -358,6 +358,7 @@ instance A.FromJSON PrivateKeyBS where
 instance J.Encode PrivateKeyBS where
   build (PrivBS p) = J.text $ toB16Text p
   {-# INLINE build #-}
+
 instance IsString PrivateKeyBS where
   fromString s = case parseB16TextOnly (T.pack s) of
     Left e -> PrivBS $ "Bad private key: " <> T.encodeUtf8 (T.pack e)
