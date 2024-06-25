@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Pact.Core.Info
  ( SpanInfo(..)
@@ -9,6 +10,7 @@ module Pact.Core.Info
 import Data.Default
 import GHC.Generics
 import Control.DeepSeq (NFData)
+import Pact.Core.Pretty
 
 -- | A simple data type that signals we intentionally
 --   have emptied out node annotations
@@ -29,6 +31,11 @@ data SpanInfo
 
 instance Default SpanInfo where
   def = SpanInfo 0 0 0 0
+
+instance Pretty SpanInfo where
+  pretty SpanInfo{..} =
+    pretty _liStartLine <> ":" <> pretty _liStartColumn
+    <> "-" <> pretty _liEndLine <> ":" <> pretty _liEndColumn
 
 -- | Combine two Span infos
 --   and spit out how far down the expression spans.

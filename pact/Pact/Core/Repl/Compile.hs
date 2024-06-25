@@ -122,8 +122,10 @@ checkReplNativesEnabled = \case
 
 interpretEvalSmallStep :: ReplInterpreter
 interpretEvalSmallStep =
-  Interpreter { eval = evalSmallStep, interpretGuard = interpretGuardSmallStep}
+  Interpreter { eval = evalSmallStep, resumePact = evalResumePact, interpretGuard = interpretGuardSmallStep}
   where
+  evalResumePact info pactExec =
+    CEK.evalResumePact info (replBuiltinEnv @CEK.CEKSmallStep) pactExec
   evalSmallStep purity term =
     CEK.eval purity (replBuiltinEnv @CEK.CEKSmallStep) term
   interpretGuardSmallStep info g =
@@ -131,19 +133,23 @@ interpretEvalSmallStep =
 
 interpretEvalBigStep :: ReplInterpreter
 interpretEvalBigStep =
-  Interpreter { eval = evalBigStep, interpretGuard = interpretGuardBigStep}
+  Interpreter { eval = evalBigStep, resumePact = evalResumePact, interpretGuard = interpretGuardBigStep}
   where
   evalBigStep purity term =
     CEK.eval purity (replBuiltinEnv @CEK.CEKBigStep) term
+  evalResumePact info pactExec =
+    CEK.evalResumePact info (replBuiltinEnv @CEK.CEKBigStep) pactExec
   interpretGuardBigStep info g =
     CEK.interpretGuard info (replBuiltinEnv @CEK.CEKBigStep) g
 
 interpretEvalDirect :: ReplInterpreter
 interpretEvalDirect =
-  Interpreter { eval = evalDirect, interpretGuard = interpretGuardDirect}
+  Interpreter { eval = evalDirect, resumePact = evalResumePact, interpretGuard = interpretGuardDirect}
   where
   evalDirect purity term =
     Direct.eval purity Direct.replBuiltinEnv term
+  evalResumePact info pactExec =
+    Direct.evalResumePact info Direct.replBuiltinEnv pactExec
   interpretGuardDirect info g =
     Direct.interpretGuard info Direct.replBuiltinEnv g
 
