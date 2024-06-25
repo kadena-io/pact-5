@@ -517,6 +517,9 @@ data EvalError
   | CannotApplyValueToNonClosure
   -- ^ Attempted to apply a non-closure
   | InvalidCustomKeysetPredicate Text
+  -- ^ Invalid keyset predicate
+  | UnknownException
+  -- ^ Used by chainweb for unknown exceptions
   deriving (Eq, Show, Generic)
 
 instance NFData EvalError
@@ -708,6 +711,8 @@ instance Pretty EvalError where
       "Cannot apply value to non-closure"
     InvalidCustomKeysetPredicate pn ->
       "Invalid custom predicate for keyset" <+> pretty pn
+    UnknownException ->
+      "Unknown exception"
 
 
 instance Exception EvalError
