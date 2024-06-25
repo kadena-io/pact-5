@@ -67,7 +67,6 @@ import Data.Text.Encoding
 import Control.Concurrent
 import Control.Lens hiding (Empty, elements, (.=))
 
--- import Pact.Types.Parser (style, symbols)
 
 import GHC.Stack (HasCallStack)
 
