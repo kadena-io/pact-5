@@ -234,13 +234,6 @@ instance J.Encode (Signer QualifiedName PactValue) where
     ]
 
 instance FromJSON (Signer QualifiedName PactValue) where
-  -- parseJSON = withObject "Signer" $ \o -> Signer
-  --   <$> o .:? "scheme"
-  --   <*> o .: "pubKey"
-  --   <*> o .:? "addr"
-  --   <*> (listMay <$> ((fmap.fmap) _stableEncoding <$>  (o .:? "clist")))
-  --   where
-  --     listMay = fromMaybe []
   parseJSON = withObject "Signer" $ \o -> do
     scheme <- o .:? "scheme"
     pubKey <- o .: "pubKey"
