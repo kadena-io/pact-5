@@ -17,7 +17,7 @@ import qualified Hedgehog.Gen as Gen
 import Pact.Core.Builtin
 import Pact.Core.Environment
 import Pact.Core.Guards
-import Pact.Core.Gen.Serialise
+import Pact.Core.Gen
 import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.PactValue

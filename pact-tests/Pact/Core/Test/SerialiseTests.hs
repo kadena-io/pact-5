@@ -4,7 +4,7 @@
 module Pact.Core.Test.SerialiseTests where
 
 import Pact.Core.Serialise
-import Pact.Core.Gen.Serialise
+import Pact.Core.Gen
 import Pact.Core.Serialise.CBOR_V1 ()
 import qualified Codec.Serialise as S
 import Test.Tasty (TestTree, testGroup)

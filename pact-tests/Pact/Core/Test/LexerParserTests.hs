@@ -3,12 +3,12 @@ module Pact.Core.Test.LexerParserTests where
 import Test.Tasty
 import Test.Tasty.Hedgehog
 import Hedgehog
-import Control.Applicative ((<|>))
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import qualified Data.Text as T
 import Data.Decimal(DecimalRaw(..))
 
+import Pact.Core.Gen(identGen)
 import Pact.Core.Names
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.LexUtils as Lisp
@@ -27,12 +27,6 @@ tokenToSrc = \case
   TokenIdent n  -> n
   TokenNumber n -> n
   tok           -> showPretty tok
-
-identGen :: Gen T.Text
-identGen = do
-  pref <- Gen.alpha
-  suff <- Gen.string (Range.constant 0 16) (Gen.constant '-' <|> Gen.alphaNum)
-  pure $ T.pack (pref : suff)
 
 tokenGen :: Gen Token
 tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
