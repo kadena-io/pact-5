@@ -25,8 +25,6 @@ import Control.Lens
 import Pact.Core.Repl.Compile
 import Data.Default
 
-import Pact.Core.Gas
-
 tests :: IO TestTree
 tests = testGroup "Legacy Repl Tests" <$> legacyTests
 
@@ -81,5 +79,3 @@ legacyTests = do
   where
   toModuleData p fp =
     decodeModuleData <$> BS.readFile (legacyTestDir </> p </> fp)
-
-

@@ -29,8 +29,6 @@ import Pact.Core.Names
 import Pact.Core.DefPacts.Types (DefPactExec)
 import Pact.Core.Persistence
 import Pact.Core.Serialise
-import Pact.Core.Gas
-import Pact.Core.Errors
 
 import qualified Pact.Core.Errors as Errors
 import Pact.Core.PactValue
@@ -249,7 +247,7 @@ mockPactDb serial = do
   createUsrTable
     :: PactTables b i
     -> TableName
-    -> GasM (PactError i) b ()
+    -> GasM b i ()
   createUsrTable PactTables{..} tbl = do
     let rd = RowData $ M.singleton (Field "utModule")
           (PObject $ M.fromList
@@ -292,7 +290,7 @@ mockPactDb serial = do
     -> Domain k v b i
     -> k
     -> v
-    -> GasM (PactError i) b ()
+    -> GasM b i ()
   write pt wt domain k v = case domain of
     -- Todo : incrementally serialize other types
     DKeySets -> liftIO $ writeSysTable pt domain k v (Rendered . renderKeySetName) _encodeKeySet
@@ -317,7 +315,7 @@ mockPactDb serial = do
     -> WriteType
     -> RowKey
     -> RowData
-    -> GasM (PactError i) b ()
+    -> GasM b i ()
   writeRowData pts@PactTables{..} tbl wt k v = do
     let tblName = renderTableName tbl
     mt@(MockUserTable usrTables) <- liftIO $ readIORef ptUser

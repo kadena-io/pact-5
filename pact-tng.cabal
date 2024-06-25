@@ -204,6 +204,7 @@ library
     Pact.Core.Gas
     Pact.Core.Gas.Types
     Pact.Core.Gas.TableGasModel
+    Pact.Core.Gas.Utils
     Pact.Core.Info
     Pact.Core.Errors
     Pact.Core.Persistence

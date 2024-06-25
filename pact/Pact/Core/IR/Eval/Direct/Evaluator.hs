@@ -1014,7 +1014,7 @@ isKeysetNameInSigs
   -> EvalM e b i Bool
 isKeysetNameInSigs info env ksn = do
   pdb <- viewEvalEnv eePactDb
-  liftDbFunction info (readKeySet pdb ksn) >>= \case
+  liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
     Just ks -> isKeysetInSigs info env ks
     Nothing ->
       throwExecutionError info (NoSuchKeySet ksn)
@@ -1195,7 +1195,7 @@ applyPact i pc ps cenv nested = use esDefPactExec >>= \case
               done = (not (_psRollback ps') && isLastStep) || _psRollback ps'
             when (nestedPactsNotAdvanced resultExec ps') $
               throwExecutionError i (NestedDefpactsNotAdvanced (_peDefPactId resultExec))
-            writeDefPacts i pdb Write (_psDefPactId ps') (if done then Nothing else Just resultExec)
+            evalWrite i pdb Write DDefPacts (_psDefPactId ps') (if done then Nothing else Just resultExec)
             emitXChainEvents (_psResume ps') resultExec
             return result
 
@@ -1279,7 +1279,7 @@ resumePact i env crossChainContinuation = viewEvalEnv eeDefPactStep >>= \case
   Nothing -> throwExecutionError i DefPactStepNotInEnvironment
   Just ps -> do
     pdb <- viewEvalEnv eePactDb
-    dbState <- liftDbFunction i (readDefPacts pdb (_psDefPactId ps))
+    dbState <- liftDbFunction i (_pdbRead pdb DDefPacts (_psDefPactId ps))
     case (dbState, crossChainContinuation) of
       (Just Nothing, _) -> throwExecutionError i (DefPactAlreadyCompleted ps)
       (Nothing, Nothing) -> throwExecutionError i (NoPreviousDefPactExecutionFound ps)
@@ -2140,7 +2140,7 @@ keysetRefGuard info b env = \case
       Left {} -> throwNativeExecutionError info b "incorrect keyset name format"
       Right ksn -> do
         let pdb = view cePactDb env
-        liftDbFunction info (readKeySet pdb ksn) >>= \case
+        liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
           Nothing -> throwExecutionError info (NoSuchKeySet ksn)
           Just _ -> return (VGuard (GKeySetRef ksn))
   args -> argsError info b args
@@ -2357,7 +2357,7 @@ createTable info b env = \case
     enforceTopLevelOnly info b
     let pdb = _cePactDb env
     guardTable info env tv GtCreateTable
-    liftGasM info (_pdbCreateUserTable pdb (_tvName tv))
+    evalCreateUserTable info pdb (_tvName tv)
     return (VString "TableCreated")
   args -> argsError info b args
 
@@ -2466,7 +2466,7 @@ write' wt info b env = \case
       let rdata = RowData rv
       rvSize <- sizeOf info SizeOfV0 rv
       chargeGasArgs info (GWrite rvSize)
-      _ <- liftGasM info $ _pdbWrite pdb wt (tvToDomain tv) (RowKey key) rdata
+      evalWrite info pdb wt (tvToDomain tv) (RowKey key) rdata
       return (VString "Write succeeded")
     else throwExecutionError info (WriteValueDidNotMatchSchema (_tvSchema tv) (ObjectData rv))
   args -> argsError info b args
@@ -2552,9 +2552,9 @@ defineKeySet' info env ksname newKs  = do
       let writeKs = do
             newKsSize <- sizeOf info SizeOfV0 newKs
             chargeGasArgs info (GWrite newKsSize)
-            writeKeySet info pdb Write ksn newKs
+            evalWrite info pdb Write DKeySets ksn newKs
             return (VString "Keyset write success")
-      liftDbFunction info (readKeySet pdb ksn) >>= \case
+      liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
         Just oldKs -> do
           _ <- isKeysetInSigs info env oldKs
           writeKs
@@ -3110,7 +3110,7 @@ coreDefineNamespace info b env = \case
         SimpleNamespacePolicy -> do
           nsSize <- sizeOf info SizeOfV0 ns
           chargeGasArgs info (GWrite nsSize)
-          liftGasM info $ _pdbWrite pdb Write DNamespaces nsn ns
+          evalWrite info pdb Write DNamespaces nsn ns
           return $ VString $ "Namespace defined: " <> n
         SmartNamespacePolicy _ fun -> getModuleMemberWithHash info pdb fun >>= \case
           (Dfun d, mh) -> do
@@ -3125,7 +3125,7 @@ coreDefineNamespace info b env = \case
     unless allow $ throwNativeExecutionError info b $ "Namespace definition not permitted"
     nsSize <- sizeOf info SizeOfV0 ns
     chargeGasArgs info (GWrite nsSize)
-    liftGasM info $ _pdbWrite pdb Write DNamespaces nsn ns
+    evalWrite info pdb Write DNamespaces nsn ns
     return $ VString $ "Namespace defined: " <> (_namespaceName nsn)
   isValidNsFormat nsn = case T.uncons nsn of
     Just (h, tl) ->

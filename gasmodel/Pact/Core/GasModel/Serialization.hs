@@ -13,8 +13,8 @@ import Pact.Core.Guards
 import Pact.Core.StableEncoding
 
 import Pact.Core.Persistence.Types
+import Pact.Core.Persistence.Utils (ignoreGas)
 import Pact.Core.Serialise.CBOR_V1 (encodeRowDataNoGas, encodeRowData)
-import Pact.Core.Gas (ignoreGas)
 
 benchmarks :: Benchmark
 benchmarks = C.bgroup "Encode/Decode benchmarks"

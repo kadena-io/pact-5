@@ -21,7 +21,6 @@ module Pact.Core.Serialise.CBOR_V1
   ) where
 
 import Control.Lens
-import Control.Monad.Reader
 import Codec.CBOR.Read (deserialiseFromBytes)
 import Codec.CBOR.Write (toStrictByteString)
 import Codec.Serialise.Class
@@ -41,7 +40,6 @@ import Pact.Core.ChainData
 import Pact.Core.DefPacts.Types
 import Pact.Core.Gas
 import Pact.Core.Guards
-import Pact.Core.Errors
 import Pact.Core.Hash
 import Pact.Core.Imports
 import Pact.Core.Info
@@ -105,7 +103,7 @@ decodeNamespace :: ByteString -> Maybe Namespace
 decodeNamespace bs =either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
 
 
-encodeRowData :: RowData -> GasM (PactError i) b ByteString
+encodeRowData :: RowData -> GasM b i ByteString
 encodeRowData rd = do
   gasSerializeRowData rd
   pure . toStrictByteString $ encode rd
@@ -114,12 +112,11 @@ encodeRowDataNoGas :: RowData -> ByteString
 encodeRowDataNoGas rd =
   toStrictByteString $ encode rd
 
-chargeGasMSerialize :: MilliGas -> GasM (PactError i) b ()
+chargeGasMSerialize :: MilliGas -> GasM b i ()
 chargeGasMSerialize amount = do
-  GasMEnv chargeGas _ <- ask
-  chargeGas amount
+  chargeGasM (GAConstant amount)
 
-gasSerializeRowData :: forall i b. RowData -> GasM (PactError i) b ()
+gasSerializeRowData :: forall i b. RowData -> GasM b i ()
 gasSerializeRowData (RowData fields) = do
 
   -- Charge for keys
@@ -130,7 +127,7 @@ gasSerializeRowData (RowData fields) = do
 
   where
 
-    gasSerializePactValue :: PactValue -> GasM (PactError i) b ()
+    gasSerializePactValue :: PactValue -> GasM b i ()
     gasSerializePactValue = \case
       PLiteral l -> gasSerializeLiteral l
       PList vs -> do
@@ -145,7 +142,7 @@ gasSerializeRowData (RowData fields) = do
         chargeGasMString (renderText name)
         traverse_ gasSerializePactValue args
       PTime _ -> do
-        SerializationCosts { timeCostMilliGas } <- view (gasMModel . gmSerialize)
+        SerializationCosts { timeCostMilliGas } <- view (_1 . geGasModel . gmSerialize)
         chargeGasMSerialize $ MilliGas timeCostMilliGas
 
     gasSerializeLiteral l = do
@@ -154,7 +151,7 @@ gasSerializeRowData (RowData fields) = do
         unitMilliGasCost,
         integerCostMilliGasPerDigit,
         decimalCostMilliGasOffset,
-        decimalCostMilliGasPerDigit} <- view (gasMModel . gmSerialize)
+        decimalCostMilliGasPerDigit} <- view (_1 . geGasModel . gmSerialize)
       case l of
         LString s ->
           -- See the analysis in `Bench.hs` - `pact-string-2` for details.
@@ -185,23 +182,23 @@ gasSerializeRowData (RowData fields) = do
         chargeGasMString (renderText defpactId)
         chargeGasMString (renderText name)
 
-    gasSerializeKeySet :: KeySet -> GasM (PactError i) b ()
+    gasSerializeKeySet :: KeySet -> GasM b i ()
     gasSerializeKeySet (KeySet keys pred') = do
       -- See the analysis in `Bench.hs` - `pact-keyset-2` for details.
       chargeGasMString (renderText pred')
       traverse_ (chargeGasMString . renderText) keys
 
-    gasModRef :: ModRef -> GasM (PactError i) b ()
+    gasModRef :: ModRef -> GasM b i ()
     gasModRef (ModRef name implemented) = do
       chargeGasMString (renderText name)
       traverse_ (chargeGasMString . renderText) implemented
 
-    chargeGasMString :: Text.Text -> GasM (PactError i) b ()
+    chargeGasMString :: Text.Text -> GasM b i ()
     chargeGasMString str = do
       SerializationCosts {
         objectKeyCostMilliGasOffset,
         objectKeyCostMilliGasPer1000Chars
-        } <- view (gasMModel . gmSerialize)
+        } <- view (_1 . geGasModel . gmSerialize)
       chargeGasMSerialize $ MilliGas $ objectKeyCostMilliGasOffset + objectKeyCostMilliGasPer1000Chars * fromIntegral (Text.length str) `div` 1000
 
 

@@ -23,12 +23,10 @@ import qualified Database.SQLite3.Direct as Direct
 import Data.ByteString (ByteString)
 import qualified Data.Map.Strict as Map
 
-import Pact.Core.Errors
 import qualified Pact.Core.Errors as E
 import Pact.Core.Persistence
 import Pact.Core.Guards (renderKeySetName, parseAnyKeysetName)
 import Pact.Core.Names
-import Pact.Core.Gas
 import Pact.Core.PactValue
 import Pact.Core.Literal
 import Control.Exception (throwIO)
@@ -275,7 +273,7 @@ createUserTable
   -> IORef [TxLog ByteString]
   -> IORef StmtCache
   -> TableName
-  -> GasM (PactError i) b ()
+  -> GasM b i ()
 createUserTable serial db txLog stmtCache tbl = do
   let
     rd = RowData $ Map.singleton (Field "utModule")
@@ -314,7 +312,7 @@ write'
   -> Domain k v b i
   -> k
   -> v
-  -> GasM (PactError i) b ()
+  -> GasM b i ()
 write' serial db txId txLog stmtCache wt domain k v =
   case domain of
     DUserTables tbl -> liftIO (checkInsertOk tbl k) >>= \case
