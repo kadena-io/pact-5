@@ -95,7 +95,7 @@ import qualified Pact.JSON.Decode as JD
 import qualified Pact.JSON.Encode as J
 
 
-import Pact.Core.Command.Crypto              as Base
+import Pact.Core.Command.Crypto  as Base
 
 -- | Command is the signed, hashed envelope of a Pact execution instruction or command.
 -- In 'Command ByteString', the 'ByteString' payload is hashed and signed; the ByteString
