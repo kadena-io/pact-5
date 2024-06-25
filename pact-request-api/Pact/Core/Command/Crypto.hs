@@ -465,7 +465,7 @@ newtype ClientDataJSON = ClientDataJSON {
 instance A.FromJSON ClientDataJSON where
   parseJSON = A.withObject "ClientDataJSON" $ \o -> do
     challenge <- o A..: "challenge"
-    pure $ ClientDataJSON { challenge }
+    pure $ ClientDataJSON challenge
 
 instance J.Encode ClientDataJSON where
   build ClientDataJSON { challenge } =
