@@ -22,6 +22,7 @@ import Data.Decimal (DecimalRaw(..))
 import Data.Scientific (Scientific)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
+import Data.Maybe (fromMaybe)
 import Data.Ratio ((%), denominator)
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -473,3 +474,21 @@ instance J.Encode (StableEncoding PactErrorI) where
 
 instance JD.FromJSON (StableEncoding PactErrorI) where
   parseJSON = undefined -- TODO
+
+instance J.Encode (StableEncoding (Signer QualifiedName PactValue)) where
+  build (StableEncoding o) = J.object
+    [ "addr" J..?= _siAddress o
+    , "scheme" J..?= _siScheme o
+    , "pubKey" J..= _siPubKey o
+    , "clist" J..??= J.Array (StableEncoding  <$> _siCapList o)
+    ]
+
+instance JD.FromJSON (StableEncoding (Signer QualifiedName PactValue)) where
+  parseJSON = JD.withObject "Signer" $ \o -> do
+    scheme <- o JD..:? "scheme"
+    pubKey <- o JD..: "pubKey"
+    addr <- o JD..:? "addr"
+    clist <- listMay <$> o JD..:? "clist"
+    pure $ StableEncoding $ Signer scheme pubKey addr (_stableEncoding <$> clist)
+    where
+      listMay = fromMaybe []
