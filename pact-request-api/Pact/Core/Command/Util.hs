@@ -23,7 +23,6 @@ module Pact.Core.Command.Util
   , fromText, fromText'
   -- | JSON helpers
   , satisfiesRoundtripJSON, roundtripJSONToEither
-  , lensyToJSON, lensyParseJSON, lensyOptions, lensyConstructorToNiceJson
   , unsafeFromJSON, outputJSON
   , fromJSON'
   , enableToJSON
@@ -59,15 +58,12 @@ import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Base64.URL as B64URL
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.ByteString.Short as SB
-import Data.Char
 import Data.Hashable (Hashable)
 import Data.Word
 import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
 import Control.Concurrent
 import Control.Lens hiding (Empty, elements, (.=))
-
-
 import GHC.Stack (HasCallStack)
 
 import qualified Pact.JSON.Encode as J
@@ -98,23 +94,6 @@ roundtripJSONToEither = eitherDecode . J.encode
 
 fromJSON' :: FromJSON a => Value -> Either String a
 fromJSON' = resultToEither . fromJSON
-
-lensyToJSON
-  :: (Generic a, GToJSON Zero (Rep a)) => Int -> a -> Value
-lensyToJSON n = genericToJSON (lensyOptions n)
-
-lensyParseJSON
-  :: (Generic a, GFromJSON Zero (Rep a)) => Int -> Value -> Parser a
-lensyParseJSON n = genericParseJSON (lensyOptions n)
-
-lensyOptions :: Int -> Options
-lensyOptions n = defaultOptions { fieldLabelModifier = lensyConstructorToNiceJson n }
-
-lensyConstructorToNiceJson :: HasCallStack => Int -> String -> String
-lensyConstructorToNiceJson n fieldName = firstToLower $ drop n fieldName
-  where
-    firstToLower (c:cs) = toLower c : cs
-    firstToLower _ = error $ "lensyConstructorToNiceJson: bad arguments: " ++ show (n,fieldName)
 
 encodeBase64UrlUnpadded :: ByteString -> ByteString
 encodeBase64UrlUnpadded = fst . B.spanEnd (== equalWord8) . B64URL.encode
