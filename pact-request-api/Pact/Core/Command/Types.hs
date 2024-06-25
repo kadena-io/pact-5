@@ -225,23 +225,6 @@ verifyUserSig msg sig Signer{..} = do
   where scheme = fromMaybe defPPKScheme _siScheme
 
 
-instance J.Encode (Signer QualifiedName PactValue) where
-  build o = J.object
-    [ "addr" J..?= _siAddress o
-    , "scheme" J..?= _siScheme o
-    , "pubKey" J..= _siPubKey o
-    , "clist" J..??= J.Array (StableEncoding  <$> _siCapList o)
-    ]
-
-instance FromJSON (Signer QualifiedName PactValue) where
-  parseJSON = withObject "Signer" $ \o -> do
-    scheme <- o .:? "scheme"
-    pubKey <- o .: "pubKey"
-    addr <- o .:? "addr"
-    clist <- listMay <$> o .:? "clist"
-    pure $ Signer scheme pubKey addr (_stableEncoding <$> clist)
-    where
-      listMay = fromMaybe []
 
 -- | Payload combines a 'PactRPC' with a nonce and platform-specific metadata.
 data Payload m c = Payload
@@ -258,7 +241,7 @@ instance (J.Encode a, J.Encode m) => J.Encode (Payload m a) where
   build o = J.object
     [ "networkId" J..= fmap _networkId (_pNetworkId o)
     , "payload" J..= _pPayload o
-    , "signers" J..= J.Array (_pSigners o)
+    , "signers" J..= J.Array (StableEncoding <$> _pSigners o)
     , "verifiers" J..?= fmap J.Array (_pVerifiers o)
     , "meta" J..= _pMeta o
     , "nonce" J..= _pNonce o
@@ -273,7 +256,7 @@ instance (FromJSON a,FromJSON m) => FromJSON (Payload m a) where
     signers <- o .: "signers"
     verifiers <- o .:? "verifiers"
     networkId <- o .:? "networkId"
-    pure $ Payload payload nonce' meta signers verifiers (fmap NetworkId networkId)
+    pure $ Payload payload nonce' meta (_stableEncoding <$> signers) verifiers (fmap NetworkId networkId)
 
 newtype PactResult = PactResult
   { _pactResult :: Either PactErrorI PactValue
