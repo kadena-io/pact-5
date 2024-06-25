@@ -17,6 +17,7 @@
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 
 
 module Pact.Core.IR.Desugar
@@ -111,14 +112,13 @@ makeLenses ''RenamerState
 
 newtype RenamerT b i m a =
   RenamerT (StateT RenamerState (ReaderT (RenamerEnv b i) m) a)
-  deriving
+  deriving newtype
     ( Functor
     , Applicative
     , Monad
     , MonadReader (RenamerEnv b i)
     , MonadState RenamerState
     , MonadIO)
-  via (StateT RenamerState (ReaderT (RenamerEnv b i) m))
 
 instance MonadTrans (RenamerT b i) where
   lift = RenamerT . lift . lift
