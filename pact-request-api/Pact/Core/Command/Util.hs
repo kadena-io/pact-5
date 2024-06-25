@@ -61,7 +61,6 @@ import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.ByteString.Short as SB
 -- import qualified Text.Trifecta as Trifecta
 import Data.Char
--- import Data.Either (isRight)
 import Data.Hashable (Hashable)
 import Data.Word
 import Data.Text (Text,pack,unpack)
