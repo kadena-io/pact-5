@@ -18,14 +18,10 @@
 -- Utility types and functions.
 --
 module Pact.Core.Command.Util
-  ( -- | Text parsing
-    ParseText(..)
-  , fromText, fromText'
+  (
   -- | JSON helpers
-  , satisfiesRoundtripJSON, roundtripJSONToEither
-  , unsafeFromJSON, outputJSON
+    outputJSON
   , fromJSON'
-  , enableToJSON
   -- | Base 16 helpers
   , parseB16JSON, parseB16Text, parseB16TextOnly
   , toB16Text
@@ -35,17 +31,8 @@ module Pact.Core.Command.Util
   , parseB64UrlUnpaddedText, parseB64UrlUnpaddedText'
   , toB64UrlUnpaddedText, fromB64UrlUnpaddedText
   , B64JsonBytes(..)
-  -- | AsString
-  , AsString(..), asString'
-  -- | MVar-as-state utils
-  , modifyMVar', modifyingMVar, useMVar
   -- | Miscellany
-  , tShow, maybeDelim
   , maybeToEither
-  -- | Wrapping utilities
-  , rewrap, rewrapping, wrap, unwrap
-  -- | Arbitrary generator utils
-  -- , genBareText
   ) where
 
 import Data.Aeson
@@ -57,40 +44,16 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Base64.URL as B64URL
 import qualified Data.ByteString.Lazy.Char8 as BSL8
-import qualified Data.ByteString.Short as SB
 import Data.Hashable (Hashable)
+import Data.Text (Text)
 import Data.Word
-import Data.Text (Text,pack,unpack)
 import Data.Text.Encoding
-import Control.Concurrent
-import Control.Lens hiding (Empty, elements, (.=))
-import GHC.Stack (HasCallStack)
 
 import qualified Pact.JSON.Encode as J
-
-class ParseText a where
-  parseText :: Text -> Parser a
-
-
-
-fromText :: ParseText a => Text -> Result a
-fromText = parse parseText
-{-# INLINE fromText #-}
 
 resultToEither :: Result a -> Either String a
 resultToEither (Success s) = Right s
 resultToEither (Error s) = Left s
-
-fromText' :: ParseText a => Text -> Either String a
-fromText' = resultToEither . fromText
-
-satisfiesRoundtripJSON :: (Eq a, FromJSON a, J.Encode a) => a -> Bool
-satisfiesRoundtripJSON i = case roundtripJSONToEither i of
-  Left _ -> False
-  Right j -> i == j
-
-roundtripJSONToEither :: (FromJSON a, J.Encode a) => a -> Either String a
-roundtripJSONToEither = eitherDecode . J.encode
 
 fromJSON' :: FromJSON a => Value -> Either String a
 fromJSON' = resultToEither . fromJSON
@@ -145,29 +108,6 @@ maybeToEither err Nothing = Left err
 maybeToEither _ (Just a)  = Right a
 
 
--- | Support for 'toJSON' is required for YAML encodings, which is required by
--- most Pact data types.
---
--- From verison 1.4 of the hashable package onward, 'toJSON' will result in
--- encodings that are not backward compatible. Similarly, for aeson >= 2
--- encodings will change.
---
--- The only option to keep the ordering of properties stable with aeson-2 would
--- be to define a custom type for property names, which would allow to define
--- backward compatile 'Ord' instances.
---
-enableToJSON
-    :: HasCallStack
-    => String
-    -> Value
-    -> Value
-enableToJSON t _ = error $ t <> ": encoding to Data.Aeson.Value is unstable and therefore not supported"
-{-# INLINE enableToJSON #-}
-
--- | Utility for unsafe parse of JSON
-unsafeFromJSON :: HasCallStack => FromJSON a => Value -> a
-unsafeFromJSON v = case fromJSON v of Success a -> a; Error e -> error ("JSON parse failed: " ++ show e)
-
 -- | Utility for GHCI output of JSON
 outputJSON :: J.Encode a => a -> IO ()
 outputJSON a = BSL8.putStrLn $ J.encode a
@@ -183,9 +123,6 @@ instance FromJSON B16JsonBytes where
 instance FromJSONKey B16JsonBytes where
     fromJSONKey = FromJSONKeyTextParser (fmap B16JsonBytes . parseB16Text)
     {-# INLINE fromJSONKey #-}
-instance AsString B16JsonBytes where
-    asString = toB16Text . _b16JsonBytes
-    {-# INLINE asString #-}
 
 -- | Tagging ByteStrings (and isomorphic types) that are JSON encoded as
 -- Base64Url (without padding) strings
@@ -198,61 +135,3 @@ instance FromJSON B64JsonBytes where
 instance FromJSONKey B64JsonBytes where
     fromJSONKey = FromJSONKeyTextParser (fmap B64JsonBytes . parseB64UrlUnpaddedText)
     {-# INLINE fromJSONKey #-}
-instance AsString B64JsonBytes where
-    asString = toB64UrlUnpaddedText . _b64JsonBytes
-    {-# INLINE asString #-}
-
--- | Provide unquoted string representation.
-class AsString a where asString :: a -> Text
-
-instance AsString String where asString = pack
-instance AsString Text where asString = id
-instance AsString B.ByteString where asString = asString . decodeUtf8
-instance AsString SB.ShortByteString where asString = asString . decodeUtf8 . SB.fromShort
-instance AsString BSL8.ByteString where asString = asString . BSL8.toStrict
-instance AsString Integer where asString = pack . show
-instance AsString a => AsString (Maybe a) where asString = maybe "" asString
-
-asString' :: AsString a => a -> String
-asString' = unpack . asString
-
--- | Pure version of 'modifyMVar_'
-modifyMVar' :: MVar a -> (a -> a) -> IO ()
-modifyMVar' mv f = modifyMVar_ mv (pure . f)
-{-# INLINE modifyMVar' #-}
-
--- | Modify the target of a lens.
-modifyingMVar :: MVar s -> Lens' s a -> (a -> IO a) -> IO ()
-modifyingMVar mv l f = modifyMVar_ mv $ \ps -> (\b -> set l b ps) <$> f (view l ps)
-{-# INLINE modifyingMVar #-}
-
--- | Lens view into mvar.
-useMVar :: MVar s -> Getting a s a -> IO a
-useMVar e l = view l <$> readMVar e
-{-# INLINE useMVar #-}
-
--- | Text-y show
-tShow :: Show a => a -> Text
-tShow = pack . show
-
--- | Show with prepended delimter if not 'Nothing'
-maybeDelim :: AsString a => Text -> Maybe a -> Text
-maybeDelim d t = maybe "" ((d <>) . asString) t
-
--- | Re-wrapping lens.
-rewrapping :: (Profunctor p, Functor f, Wrapped b, Wrapped a,
-               Unwrapped a ~ Unwrapped b) =>
-              p a (f a) -> p b (f b)
-rewrapping = _Wrapped' . _Unwrapped'
-
--- | Rewrap utility between isomorphic wrappings.
-rewrap :: (Wrapped a, Wrapped b, Unwrapped b ~ Unwrapped a) => a -> b
-rewrap = view rewrapping
-
--- | Utility to construct a 'Wrapped a'
-wrap :: Wrapped a => Unwrapped a -> a
-wrap = view _Unwrapped'
-
--- | Utility to destruct a 'Wrapped a'
-unwrap :: Wrapped a => a -> Unwrapped a
-unwrap = view _Wrapped'
