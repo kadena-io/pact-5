@@ -188,7 +188,6 @@ instance J.Encode (StableEncoding DefPactExec) where
     , "continuation" J..= StableEncoding continuation
     , "stepHasRollback" J..= stepHasRollback
     , "nestedDefPactExec" J..= J.Object (convertMap nestedDefPactExec)
-        -- fmap StableEncoding nestedDefPactExec
     ]
     where convertMap :: Map DefPactId DefPactExec -> Map T.Text (StableEncoding DefPactExec)
           convertMap = Map.fromList . fmap (bimap _defPactId StableEncoding) . Map.toList
