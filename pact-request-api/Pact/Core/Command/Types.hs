@@ -396,7 +396,6 @@ requestKeyToB16Text (RequestKey (PactHash.Hash h)) =
 newtype RequestKey = RequestKey { unRequestKey :: PactHash.Hash}
   deriving (Eq, Ord, Generic)
   deriving newtype (Serialize, Hashable, FromJSON, FromJSONKey, NFData, J.Encode
-    -- , AsString, ParseText
     )
 
 instance Show RequestKey where
