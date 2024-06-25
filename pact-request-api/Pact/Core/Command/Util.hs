@@ -59,7 +59,6 @@ import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Base64.URL as B64URL
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified Data.ByteString.Short as SB
--- import qualified Text.Trifecta as Trifecta
 import Data.Char
 import Data.Hashable (Hashable)
 import Data.Word
