@@ -8,7 +8,7 @@ This function returns an object with fields including `module`, `name`, and `typ
 To get metadata for a specified `table`, use the following syntax:
 
 ```pact
-(describe-table TABLE)
+(describe-table table)
 ```
 
 ### Arguments
