@@ -1,14 +1,13 @@
 module Pact.Core.Command.Client (
-  -- * Creating Commands
-    mkCommand
-  , mkCommand'
 
-  -- * Creating Commands with keys other than Ed25519 (e.g. WebAuthn), for testing.
-  , mkCommandWithDynKeys
-  , mkCommandWithDynKeys'
+  -- * Command construction
+  mkCommand,
+  mkCommand',
+  mkUnsignedCommand,
 
-  , mkUnsignedCommand
-  , keyPairsToSigners
+  -- * Command construction with dynamic keys (Ed25519 and WebAuthn)
+  mkCommandWithDynKeys,
+  mkCommandWithDynKeys',
 ) where
 
 import Control.Monad.Except
@@ -29,8 +28,8 @@ import Pact.Core.Names
 import Pact.Core.Verifiers
 
 
-type UserCapability = CapToken QualifiedName PactValue
-
+-- | Construct a `Command` from a `PactRPC` request, a nonce, and a set of credentials.
+-- This is the main entry point for constructing commands.
 mkCommand
   :: J.Encode c
   => J.Encode m
@@ -61,6 +60,7 @@ signHash :: PactHash.Hash -> Ed25519KeyPair -> Text
 signHash hsh (pub,priv) =
   toB16Text $ exportEd25519Signature $ signEd25519 pub priv hsh
 
+-- | Make a Command without signing it. This is used in Chainweb's Rosetta Utils.
 mkUnsignedCommand
   :: J.Encode m
   => J.Encode c
@@ -75,7 +75,8 @@ mkUnsignedCommand signers vers meta nonce nid rpc = mkCommand' [] encodedPayload
   where encodedPayload = J.encodeStrict payload
         payload = Payload rpc nonce meta signers (nonemptyVerifiers vers) nid
 
-
+-- | Given an already-serialized payload, construct a `Command` by signing it with the
+-- provided credentials.
 mkCommand' :: [(Ed25519KeyPair ,a)] -> ByteString -> IO (Command ByteString)
 mkCommand' creds env = do
   let hsh = PactHash.hash env    -- hash associated with a Command, aka a Command's Request Key
@@ -105,6 +106,13 @@ mkCommandWithDynKeys' creds env = do
           Right sig -> return $ WebAuthnSig sig
 
 
+-- | Construct a `Command` from a `PactRPC` request, a nonce, and a set of credentials.
+-- This function is mainy useful for testing, because DynKeyPairs are either
+-- Ed25519 or WebAuthn keys. If you have Ed25519 keys, use `mkCommand`. You will
+-- only have access to WebAuthn keys in test (because they are normally managed on
+-- the client's and never exposed to the client or the server).
+--
+-- During testing, you can create fake WebAuthn credentials.
 mkCommandWithDynKeys
   :: J.Encode c
   => J.Encode m
@@ -139,6 +147,8 @@ mkCommandWithDynKeys creds vers meta nonce nid rpc = mkCommandWithDynKeys' creds
             , _siAddress = Nothing
             , _siCapList = caps
             }
+
+type UserCapability = CapToken QualifiedName PactValue
 
 -- | A utility function for handling the common case of commands
 -- with no verifiers. `None` is distinguished from `Just []` in
