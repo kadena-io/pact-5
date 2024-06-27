@@ -347,12 +347,13 @@ instance J.Encode (StableEncoding ModuleName) where
     ]
   {-# INLINABLE build #-}
 
--- TODO: Need to validate with `parseModuleName`?
 instance JD.FromJSON (StableEncoding ModuleName) where
   parseJSON = JD.withObject "ModuleName" $ \o -> do
     ns <- o JD..:? "namespace"
     mn <- o JD..: "name"
-    pure $ StableEncoding (ModuleName mn (fmap _stableEncoding ns))
+    case parseModuleName mn of
+      Nothing -> fail "Invalid module name"
+      Just _ -> pure $ StableEncoding (ModuleName mn (fmap _stableEncoding ns))
 
 -- | Stable encoding of `ModRef`
 instance J.Encode (StableEncoding ModRef) where
