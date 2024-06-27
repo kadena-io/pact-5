@@ -1,15 +1,13 @@
-## +
-The `+` function performs addition for numbers, concatenation for strings/lists, or merging for objects.
+## add (+)
+Use `+` to add numbers, concatenate strings and lists, or merge objects.
 
 ### Basic syntax
 
-To perform addition for numbers, use the following syntax:
+To add numbers, concatenate strings and lists, or merge objects, use the following syntax:
 
-`(+ x y)`
-
-To concatenate strings/lists or merge objects, use the following syntax:
-
-`(+ x y)`
+```pact
+(+ oper1 oper2)
+```
 
 ### Arguments
 
@@ -17,40 +15,40 @@ Use the following arguments to specify the values for addition, concatenation, o
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `x` | `<a[integer,decimal,string,[<l>],object:<{o}>]>` | Specifies the first operand. |
-| `y` | `<a[integer,decimal,string,[<l>],object:<{o}>]>` | Specifies the second operand. |
+| `oper1` | integer, decimal, string, [list], or object | Specifies the first operand for addition, concatenation, or merging. |
+| `oper2` | integer, decimal, string, [list], or object | Specifies the second operand for addition, concatenation, or merging. |
 
 ### Return value
 
-The `+` function returns the result of addition for numbers, concatenation for strings/lists, or merging for objects.
+The `+` function returns the result of addition for numbers, the concatenated string or list for strings and lists, or the resulting of merging for objects.
 
 ### Examples
 
-The following examples demonstrate the usage of the `+` function within a Pact REPL. They perform addition, concatenation, or merging:
+The following examples demonstrate how to use the `+` function to add two numbers in the Pact REPL:
 
 ```pact
-pact>(+ 1 2)
+pact> (+ 1 2)
 3
+
+pact> (+ 5.0 20.5)
+25.5
 ```
 
-```pact
-pact>(+ 5.0 0.5)
-5.5
-```
+The following examples demonstrate how to use the `+` function to concatenate strings and lists in the Pact REPL:
 
 ```pact
-pact>(+ "every" "body")
+pact> (+ "every" "body")
 "everybody"
-```
 
-```pact
-pact>(+ [1 2] [3 4])
+pact> (+ [1 2] [3 4])
 [1 2 3 4]
 ```
 
+The following example demonstrates how to use the `+` function to merge objects in the Pact REPL:
+
 ```pact
-pact>(+ { "foo": 100 } { "foo": 1, "bar": 2 })
+pact> (+ { "foo": 100 } { "foo": 1, "bar": 2 })
 {"bar": 2,"foo": 100}
 ```
 
-These examples illustrate how to use the `+` function to perform addition for numbers, concatenation for strings/lists, or merging for objects in Pact, facilitating various types of operations.
+In this example, merging the object fields using the `+` function results in the first operand value replacing the corresponding field in the second operand.

@@ -1,30 +1,49 @@
 ## create-table
-Use `create-table` to create a table identified by the specified `TABLE`.
+
+Use `create-table` to create a table identified by the specified `table` name.
 
 ### Basic syntax
 
-To create a table identified by `TABLE`, use the following syntax:
+To create a table identified by the specified `table` name, use the following syntax:
 
-`(create-table TABLE)`
+```pact
+(create-table table)
+```
+
+### Prerequisites
+
+Before using this function in a Pact module, you must define the table fields using the `defschema` declaration and the table identifier using the `deftable` declaration. 
+Creating the table is a separate step that is outside of the Pact module where the schema and identifier are defined.
 
 ### Arguments
 
-Use the following argument to specify the `TABLE` for the `create-table` Pact function.
+Use the following argument to specify the `table` name you want to create using the `create-table` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `TABLE` | `table:<{row}>` | Specifies the table to create. |
+| `table` | table:<{row}> | Specifies the table to create. |
 
 ### Return values
 
-The `create-table` function returns a string representing the identifier of the created `TABLE`.
+The `create-table` function returns a string representing the identifier of the created `table`.
 
 ### Example
 
-The following example demonstrates the `create-table` function:
+The following example demonstrates how to use the `create-table` function to create a table identified by `accounts` that can be used for storing account information:
 
 ```pact
 (create-table accounts)
 ```
 
-In this example, `(create-table accounts)` is used to create a table identified by `accounts`. This creates a new table in Pact that can be used for storing data, and the function returns a string representing the identifier of the created table.
+The following example illustrates using the `create-table` function after defining the table schema and table identifier:
+
+```pact
+(defschema wallet-schema
+	name : string
+)
+(deftable wallet-table:{wallet-schema})
+
+...
+
+(create-table wallet-table)
+```

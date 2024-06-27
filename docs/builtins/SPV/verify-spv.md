@@ -1,11 +1,17 @@
 ## verify-spv
-The `verify-spv` function performs a platform-specific SPV (Simplified Payment Verification) proof of a specified type on a given payload. The format of the payload object depends on the type of proof (TYPE), as does the format of the return object. Specific payload types and return values are documented for platforms such as Chainweb.
+
+Use `verify-spv` to perform a platform-specific simplified payment verification (SPV) proof of a specified type for the specified payload. 
+The format of the payload object and the returned object depends on the type of proof you specify. 
+For information about payload types and return values, see platform-specific documentation. 
+For Chainweb nodes, see the [Chainweb API](/reference/chainweb-ref) specification.
 
 ### Basic syntax
 
-To perform an SPV proof of a specified `TYPE` on a `PAYLOAD`, use the following syntax:
+To perform an SPV proof of a specified `type` on a specified `payload`, use the following syntax:
 
-`(verify-spv TYPE PAYLOAD)`
+```pact
+(verify-spv type payload)
+```
 
 ### Arguments
 
@@ -13,8 +19,8 @@ Use the following arguments to specify the type of SPV proof and the payload for
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `TYPE` | `string` | Specifies the type of SPV proof to be performed. |
-| `PAYLOAD` | `object:<in>` | Specifies the payload object to be used for verification. |
+| `type` | string | Specifies the type of SPV proof to be performed. |
+| `payload` | object | Specifies the payload object to be used for verification. |
 
 ### Return value
 
@@ -22,10 +28,8 @@ The `verify-spv` function returns an object whose format depends on the specific
 
 ### Examples
 
-The following example demonstrates the usage of the `verify-spv` function within a Pact script. It verifies an SPV proof of type `"TXOUT"` using the payload obtained from reading a message:
+The following example demonstrates how to use the `verify-spv` function to verify an SPV proof of type `"txout"` using the payload obtained from reading a message:
 
 ```pact
-(verify-spv "TXOUT" (read-msg "proof"))
+(verify-spv "txout" (read-msg "proof"))
 ```
-
-This example illustrates how to use the `verify-spv` function to perform SPV proof verification in Pact, leveraging platform-specific functionality to ensure the validity of transactions or other data.

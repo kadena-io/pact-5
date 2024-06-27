@@ -1,33 +1,35 @@
 ## scalar-mult
-The `scalar-mult` function multiplies a point that lies on the curve BN254 by an `integer` value.
+
+Use `scalar-mult` to multiply a point that lies on the BN254 by a specified `scalar` integer value.
 
 ### Basic syntax
 
-To multiply a point by an `integer` value, use the following syntax:
+To multiply a point by a specified `scalar` integer value, use the following syntax:
 
-`(scalar-mult TYPE POINT1 SCALAR)`
+```pact
+(scalar-mult type point1 scalar)
+```
 
 ### Arguments
 
-Use the following arguments to specify the `TYPE`, `POINT`, and `SCALAR` value for multiplication using the `scalar-mult` Pact function.
+Use the following arguments to specify the `type`, `point`, and `scalar` value for multiplication using the `scalar-mult` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `TYPE` | `string` | Specifies the type of point (e.g., `'g1`). |
-| `POINT1` | `<a>` | Specifies the point on the curve BN254 to be multiplied. |
-| `SCALAR` | `integer` | Specifies the `integer` value to multiply the point by. |
+| `type` | string | Specifies the type of point to multiply. The valid values are  "g1" and "g2". |
+| `point1` | point | Specifies the point on the BN254 curve to be multiplied. |
+| `scalar` | integer | Specifies the integer value to multiply the point by. |
 
 ### Return value
 
-The `scalar-mult` function returns the result of multiplying the specified point by the `integer` scalar value.
+The `scalar-mult` function returns the result of multiplying the specified point by the `scalar` value.
 
 ### Examples
 
-The following example demonstrates the usage of the `scalar-mult` function within a Pact script. It multiplies the point `{ 'x: 1, 'y: 2 }` on curve `'g1` by the scalar value `2`:
+The following example demonstrates how to use the `scalar-mult` function to multiply the point `{ 'x: 1, 'y: 2 }` on curve `'g1` by the scalar value `3`:
 
 ```pact
-pact>(scalar-mult 'g1 {'x: 1, 'y: 2} 2)
-{"x":1368015179489954701390400359078579693043519447331113978918064868415326638035, "y":9918110051302171585080402603319702774565515993150576347155970296011118125764}
+pact> (scalar-mult 'g1 {'x: 1, 'y: 2} 3)
+{"x": 3353031288059533942658390886683067124040920775575537747144343083137631628272
+,"y": 19321533766552368860946552437480515441416830039777911637913418824951667761761}
 ```
-
-This example illustrates how to use the `scalar-mult` function to perform scalar multiplication on points lying on the curve BN254 in Pact.

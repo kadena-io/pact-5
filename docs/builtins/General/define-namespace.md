@@ -6,7 +6,11 @@ Use `define-namespace` to create a new namespace or update the guards of an exis
 
 ### Basic syntax
 
-`(define-namespace namespace user-guard admin-guard)`
+To define the namespace `namespace`, use the following syntax:
+
+```pact
+(define-namespace namespace user-guard admin-guard)
+```
 
 ### Arguments
 
@@ -14,9 +18,9 @@ Use the following arguments to specify the namespace and guards when using the `
 
 | Argument    | Type   | Description                                                                         |
 |-------------|--------|------------------------------------------------------------------------------------|
-| `namespace`   | `string` | Specifies the name of the namespace to create or update.                           |
-| `user-guard`  | `guard`  | Specifies the guard controlling the use of the namespace.                          |
-| `admin-guard` | `guard`  | Specifies the guard controlling the ownership and administrative tasks in the namespace. |
+| `namespace` | string | Specifies the name of the namespace to create or update. |
+| `user-guard`  | guard | Specifies the guard that controls who can use the namespace. |
+| `admin-guard` | guard | Specifies the guard that controls the ownership and administrative tasks in the namespace. |
 
 ### Return value
 

@@ -1,11 +1,14 @@
 ## pairing-check
-Use `pairing-check` to perform pairing and final exponentiation on points in G1 and G2 in BN254, and check if the result is 1.
+
+Use `pairing-check` to perform pairing and final exponentiation on points in `points-g1` and `points-g2` in the Barreto-Naehrig (BN254) elliptic curve, and check if the result is 1.
 
 ### Basic syntax
 
-To perform pairing and final exponentiation on points in G1 and G2, and check if the result is 1, use the following syntax:
+To perform pairing and final exponentiation on points in `points-g1` and `points-g2`, and check if the result is 1, use the following syntax:
 
-`(pairing-check points-g1 points-g2)`
+```pact
+(pairing-check points-g1 points-g2)
+```
 
 ### Arguments
 
@@ -13,8 +16,8 @@ Use the following arguments to specify the lists of points in G1 and G2 for whic
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `points-g1` | `[<a>]` | Specifies the list of points in G1. |
-| `points-g2` | `[<b>]` | Specifies the list of points in G2. |
+| `points-g1` | [any] | Specifies the list of points in G1. |
+| `points-g2` | [any] | Specifies the list of points in G2. |
 
 ### Return value
 
@@ -22,10 +25,8 @@ The `pairing-check` function returns a boolean value indicating whether the resu
 
 ### Examples
 
-The following example demonstrates the use of `pairing-check` in the Pact REPL:
+The following example demonstrates how to use the `pairing-check` function in the Pact REPL:
 
 ```pact
-pact>(pairing-check [point1_g1 point2_g1] [point1_g2 point2_g2])
+pact> (pairing-check [point1_g1 point2_g1] [point1_g2 point2_g2])
 ```
-
-In this example, `pairing-check` is used to perform pairing and final exponentiation on the specified points in G1 and G2. The function returns a boolean value indicating whether the result is 1.
