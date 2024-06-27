@@ -11,7 +11,6 @@ module Pact.Core.Command.Client (
   , keyPairsToSigners
 ) where
 
-import Control.Monad
 import Control.Monad.Except
 import Data.ByteString (ByteString)
 import Data.Text (Text)
@@ -44,7 +43,7 @@ mkCommand
   -> IO (Command ByteString)
 mkCommand creds vers meta nonce nid rpc = mkCommand' creds encodedPayload
   where
-    payload = Payload rpc nonce meta (keyPairsToSigners creds) (vers <$ guard (not (null vers))) nid
+    payload = Payload rpc nonce meta (keyPairsToSigners creds) (nonemptyVerifiers vers) nid
     encodedPayload = J.encodeStrict payload
 
 
@@ -74,7 +73,7 @@ mkUnsignedCommand
   -> IO (Command ByteString)
 mkUnsignedCommand signers vers meta nonce nid rpc = mkCommand' [] encodedPayload
   where encodedPayload = J.encodeStrict payload
-        payload = Payload rpc nonce meta signers (vers <$ guard (not (null vers))) nid
+        payload = Payload rpc nonce meta signers (nonemptyVerifiers vers) nid
 
 
 mkCommand' :: [(Ed25519KeyPair ,a)] -> ByteString -> IO (Command ByteString)
@@ -119,7 +118,7 @@ mkCommandWithDynKeys
 mkCommandWithDynKeys creds vers meta nonce nid rpc = mkCommandWithDynKeys' creds encodedPayload
   where
     encodedPayload = J.encodeStrict payload
-    payload = Payload rpc nonce meta (map credToSigner creds) (vers <$ guard (not (null vers))) nid
+    payload = Payload rpc nonce meta (map credToSigner creds) (nonemptyVerifiers vers) nid
     credToSigner cred =
       case cred of
         (DynEd25519KeyPair (pubEd25519, _), caps) ->
@@ -140,3 +139,12 @@ mkCommandWithDynKeys creds vers meta nonce nid rpc = mkCommandWithDynKeys' creds
             , _siAddress = Nothing
             , _siCapList = caps
             }
+
+-- | A utility function for handling the common case of commands
+-- with no verifiers. `None` is distinguished from `Just []` in
+-- our JSON encodings, which is important for maintaining forward
+-- compatibility - old version of the interpreter did non include
+-- a `verifiers` field.
+nonemptyVerifiers :: [Verifier ParsedVerifierProof] -> Maybe [Verifier ParsedVerifierProof]
+nonemptyVerifiers [] = Nothing
+nonemptyVerifiers vs = Just vs
