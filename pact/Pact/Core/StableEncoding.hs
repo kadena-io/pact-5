@@ -19,7 +19,7 @@ import Data.Bifunctor
 import Data.ByteString (ByteString)
 import Data.Coerce(coerce)
 import Data.Decimal (DecimalRaw(..))
-import Data.Scientific (Scientific)
+import Data.Scientific (Scientific, floatingOrInteger)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import Data.Maybe (fromMaybe)
@@ -34,6 +34,7 @@ import qualified Pact.JSON.Encode as J
 import Pact.Core.Capabilities
 import Pact.Core.ChainData
 import Pact.Core.Errors
+import Pact.Core.Gas.Types
 import Pact.Core.Legacy.LegacyCodec
 import Pact.Core.Info
 import Pact.Core.Literal
@@ -493,3 +494,22 @@ instance JD.FromJSON (StableEncoding (Signer QualifiedName PactValue)) where
     pure $ StableEncoding $ Signer scheme pubKey addr (_stableEncoding <$> clist)
     where
       listMay = fromMaybe []
+
+instance JD.FromJSON (StableEncoding GasPrice) where
+  parseJSON = JD.withScientific "GasPrice" $ \s ->
+    let decimal =
+          case floatingOrInteger s of
+            Left floating -> realToFrac @Double floating -- TODO: Is this safe?
+            Right integer -> fromIntegral @Integer integer
+    in pure $ StableEncoding decimal
+
+instance JD.FromJSON (StableEncoding PublicMeta) where
+  parseJSON = JD.withObject "PublicMeta" $ \o -> do
+    chainId <- o JD..: "chainId"
+    sender <- o JD..: "sender"
+    gasLimit <- o JD..: "gasLimit"
+    gasPrice <- o JD..: "gasPrice"
+    ttl <- o JD..: "ttl"
+    creationTime <- o JD..: "creationTime"
+    pure $ StableEncoding $ PublicMeta (ChainId chainId) sender (Gas gasLimit) (_stableEncoding gasPrice) (TTLSeconds ttl) (TxCreationTime creationTime)
+
