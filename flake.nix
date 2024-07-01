@@ -2,7 +2,16 @@
   description = "Kadena's Pact smart contract language";
 
   inputs = {
-    hs-nix-infra.url = "github:kadena-io/hs-nix-infra";
+    hackage = {
+      url = "github:input-output-hk/hackage.nix";
+      flake = false;
+    };
+
+    hs-nix-infra = {
+      url = "github:kadena-io/hs-nix-infra";
+      inputs.hackage.follows = "hackage";
+    };
+
     flake-utils.url = "github:numtide/flake-utils";
     nix-bundle-exe = { url = "github:3noch/nix-bundle-exe"; flake = false; };
   };
