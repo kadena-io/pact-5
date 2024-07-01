@@ -1,0 +1,3 @@
+(load "syntax-ok.repl")
+
+(+ 1.0 1)

@@ -40,6 +40,7 @@ tests = testGroup "Pact LSP"
       ]
   , testGroup "Definition" definitionRequestTests
   , renameTests
+  , testGroup "Multi-file dependency" dependencyTests
   ]
 
 diagnosticTests :: [TestTree]
@@ -156,6 +157,19 @@ renameTest2 = goldenVsString "Renaming defun" p $
   pure $ LBS.fromStrict (encodeUtf8 cnt)
   where
   p = "pact-tests/pact-tests-lsp/rename-test1.golden"
+
+dependencyTests :: [TestTree]
+dependencyTests = [ useTest, jumpToTest ]
+  where
+    useTest = testCase "use of load" $ runPactLSP $ do
+      _ <- openDoc "dependency-load.repl" "pact"
+      diags <- waitForDiagnostics
+      liftIO $ assertEqual "Should have no diagnostics" diags []
+
+    jumpToTest = testCase "jump to different file" $ runPactLSP $ do
+      doc <- openDoc "jump-to-definition-other-file.repl" "pact"
+      g <- toEither <$> getDefinitions doc (Position 3 7)
+      liftIO $ assertBool "should find definiton" (isLeft g)
 
 cfg :: SessionConfig
 cfg = defaultConfig
