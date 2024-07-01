@@ -28,7 +28,7 @@ To continue a pact with the specified step, rollback option, pact ID, and yielde
 (continue-pact step rollback pact-id yielded)
 ```
 
-## Arguments
+### Arguments
 
 Use the following arguments to customize the behavior of the `continue-pact` Pact function.
 
@@ -39,11 +39,11 @@ Use the following arguments to customize the behavior of the `continue-pact` Pac
 | `pact-id` | `string` | (Optional) Specifies the ID of the pact to continue. Defaults to the pact initiated in the current transaction, if one is present. |
 | `yielded` | `object` | (Optional) Specifies the yielded value to be read with 'resume'. If not specified, uses the yield from the most recent pact execution, if any. The schema of the yielded object is `object:<{y}>`. |
 
-## Return value
+### Return value
 
 The `continue-pact` function returns a string indicating the result of continuing the pact.
 
-## Examples
+### Examples
 
 The following examples demonstrate the usage of the `continue-pact` function:
 

@@ -16,7 +16,7 @@ To begin a transaction with a specific name, use the following syntax:
 (begin-tx name)
 ```
 
-## Arguments
+### Arguments
 
 Use the following argument to specify an optional name for the transaction when using the `begin-tx` Pact function.
 
@@ -24,11 +24,11 @@ Use the following argument to specify an optional name for the transaction when 
 |----------|--------|--------------------------------------------------|
 | `name`     | `string` | (Optional) Specifies the name of the transaction. |
 
-## Return value
+### Return value
 
 The `begin-tx` function returns a string indicating the transaction identifier and the optional name (if provided).
 
-## Examples
+### Examples
 
 The following examples demonstrate the usage of the `begin-tx` function within a Pact REPL:
 

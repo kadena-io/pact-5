@@ -16,11 +16,11 @@ Use the following argument when using the `env-hash` Pact function.
 |----------|--------|---------------|
 | `hash`   | `string` | Specifies the hash value to set as the current transaction hash. The hash must be an unpadded base64-url encoded BLAKE2b 256-bit hash. |
 
-## Return value
+### Return value
 
 The `env-hash` function returns a string indicating that the transaction hash has been set to the specified value.
 
-## Example
+### Example
 
 The following example demonstrates setting the transaction hash within a Pact REPL:
 
