@@ -14,7 +14,7 @@ Use the following argument to specify whether to clear the event state after ret
 | --- | --- | --- |
 | `clear` | `bool` | Specifies whether to clear the event state after retrieving the events. Set to `true` to clear the event state, or `false` to keep the event state. |
 
-###XS Return value
+### Return value
 
 The `env-events` function returns an array of objects representing the accumulated events. Each object in the array has the following fields:
 
