@@ -29,6 +29,7 @@ module Pact.Core.Hash
 , placeholderHash
 , moduleHashToText
 , parseModuleHash
+  , encodeBase64UrlUnpadded
   -- unsafe creating of a 'ModuleHash', only used in the
   -- legacy translation process.
 , unsafeBsToModuleHash

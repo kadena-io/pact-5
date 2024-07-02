@@ -815,6 +815,9 @@ instance Serialise CoreBuiltin where
     CoreIdentity -> encodeWord 129
     CoreVerifySPV -> encodeWord 130
     CoreEnforceVerifier -> encodeWord 131
+    CoreHyperlaneMessageId -> encodeWord 132
+    CoreHyperlaneDecodeMessage -> encodeWord 133
+    CoreHyperlaneEncodeMessage -> encodeWord 134
 
   decode = decodeWord >>= \case
     0 -> pure CoreAdd
@@ -951,6 +954,9 @@ instance Serialise CoreBuiltin where
     129 -> pure CoreIdentity
     130 -> pure CoreVerifySPV
     131 -> pure CoreEnforceVerifier
+    132 -> pure CoreHyperlaneMessageId
+    133 -> pure CoreHyperlaneDecodeMessage
+    134 -> pure CoreHyperlaneEncodeMessage
     _ -> fail "unexpected decoding"
 
 

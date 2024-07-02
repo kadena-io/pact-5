@@ -215,6 +215,10 @@ data CoreBuiltin
   | CoreIdentity
   | CoreVerifySPV
   | CoreEnforceVerifier
+  -- Hyperlane
+  | CoreHyperlaneMessageId
+  | CoreHyperlaneDecodeMessage
+  | CoreHyperlaneEncodeMessage
   deriving (Eq, Show, Ord, Bounded, Enum, Generic)
 
 instance NFData CoreBuiltin
@@ -384,6 +388,9 @@ coreBuiltinToText = \case
   CoreIdentity -> "identity"
   CoreVerifySPV -> "verify-spv"
   CoreEnforceVerifier -> "enforce-verifier"
+  CoreHyperlaneMessageId -> "hyperlane-message-id"
+  CoreHyperlaneDecodeMessage -> "hyperlane-decode-token-message"
+  CoreHyperlaneEncodeMessage -> "hyperlane-encode-token-message"
 
 -- | Our `CoreBuiltin` user-facing representation.
 -- note: `coreBuiltinToUserText` is primarily for pretty printing
@@ -532,6 +539,9 @@ coreBuiltinToUserText = \case
   CoreIdentity -> "identity"
   CoreVerifySPV -> "verify-spv"
   CoreEnforceVerifier -> "enforce-verifier"
+  CoreHyperlaneMessageId -> "hyperlane-message-id"
+  CoreHyperlaneDecodeMessage -> "hyperlane-decode-token-message"
+  CoreHyperlaneEncodeMessage -> "hyperlane-encode-token-message"
 
 instance IsBuiltin CoreBuiltin where
   builtinName = NativeName . coreBuiltinToText
@@ -683,7 +693,9 @@ instance IsBuiltin CoreBuiltin where
     CoreIdentity -> 1
     CoreVerifySPV -> 2
     CoreEnforceVerifier -> 1
-
+    CoreHyperlaneMessageId -> 1
+    CoreHyperlaneDecodeMessage -> 1
+    CoreHyperlaneEncodeMessage -> 1
 
 coreBuiltinNames :: [Text]
 coreBuiltinNames =
