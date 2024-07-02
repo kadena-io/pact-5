@@ -1,0 +1,4 @@
+
+(load "definition-request.repl")
+
+(test.my-fun-1 1)

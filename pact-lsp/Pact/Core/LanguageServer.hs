@@ -44,6 +44,7 @@ import Control.Monad.Reader (ReaderT, runReaderT, ask)
 import Control.Monad.Trans (lift)
 import Control.Concurrent.MVar
 import qualified Data.Map.Strict as M
+import qualified Control.Exception as E
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
@@ -56,6 +57,7 @@ import Pact.Core.Names
 import qualified Pact.Core.IR.ModuleHashing as MHash
 import qualified Pact.Core.IR.ConstEval as ConstEval
 import qualified Pact.Core.Repl.Compile as Repl
+import Pact.Core.Interpreter
 
 data LSState =
   LSState
@@ -188,46 +190,16 @@ documentDidSaveHandler = notificationHandler SMethod_TextDocumentDidSave $ \msg 
 
 -- Working horse for producing document diagnostics.
 sendDiagnostics :: NormalizedUri -> Maybe Int32 -> Text -> LSM ()
-sendDiagnostics nuri mv content = liftIO runPact >>= \case
+sendDiagnostics nuri mv content = liftIO (setupAndProcessFile nuri content) >>= \case
   Left err -> do
     -- We only publish a single diagnostic
     publishDiagnostics 1  nuri mv $ partitionBySource [pactErrorToDiagnostic err]
-  Right (stRef, r) -> do
-    st <- liftIO (readIORef stRef)
-    modifyState ((lsReplState %~ M.insert nuri st) . (lsTopLevel %~ M.insert nuri r))
+  Right (st, tl) -> do
+    modifyState ((lsReplState %~ M.insert nuri st) . (lsTopLevel %~ M.unionWith (<>) tl))
 
     -- We emit an empty set of diagnostics
     publishDiagnostics 0  nuri mv $ partitionBySource []
   where
-    runPact = do
-      let file = fromMaybe "<local>" $ uriToFilePath (fromNormalizedUri nuri)
-      pdb <- mockPactDb serialisePact_repl_spaninfo
-      gasLog <- newIORef Nothing
-      let
-        builtinMap = if isReplScript nuri
-                     then replCoreBuiltinMap
-                     else RBuiltinWrap <$> coreBuiltinMap
-
-      ee <- defaultEvalEnv pdb builtinMap
-      let
-        src = SourceCode (takeFileName file) content
-        rstate = ReplState
-          { _replFlags = mempty
-          , _replEvalLog = gasLog
-          , _replCurrSource = src
-          , _replEvalEnv = ee
-          , _replTx = Nothing
-          , _replUserDocs = mempty
-          , _replTLDefPos = mempty
-          -- Note: for the lsp, we don't want it to fail on repl natives not enabled,
-          -- since there may be no way for us to set it for the LSP from pact directly.
-          -- Once this is possible, we can set it to `False` as is the default
-          , _replNativesEnabled = True
-          }
-      stateRef <- newIORef rstate
-      res <- runReplT stateRef (processFile Repl.interpretEvalSmallStep src)
-      pure ((stateRef,) <$> res)
-
     pactErrorToDiagnostic :: PactError SpanInfo -> Diagnostic
     pactErrorToDiagnostic err = Diagnostic
       { _range = err ^. peInfo .to spanInfoToRange
@@ -241,9 +213,6 @@ sendDiagnostics nuri mv content = liftIO runPact >>= \case
       , _data_ = Nothing
       }
 
-    isReplScript :: NormalizedUri -> Bool
-    isReplScript = maybe False ((==) ".repl" . takeExtension) . uriToFilePath . fromNormalizedUri
-
     pactErrorSource :: PactError i -> Text
     pactErrorSource = \case
       PELexerError{} -> "Lexer"
@@ -251,6 +220,45 @@ sendDiagnostics nuri mv content = liftIO runPact >>= \case
       PEDesugarError{} -> "Desugar"
       PEExecutionError{} -> "Execution"
       PEUserRecoverableError{} -> "Execution"
+
+setupAndProcessFile
+  :: NormalizedUri
+  -> Text
+  -> IO (Either (PactError SpanInfo)
+          (ReplState ReplCoreBuiltin
+          ,M.Map NormalizedUri  [EvalTopLevel ReplCoreBuiltin SpanInfo]))
+setupAndProcessFile nuri content = do
+  pdb <- mockPactDb serialisePact_repl_spaninfo
+  gasLog <- newIORef Nothing
+  let
+    builtinMap = if isReplScript fp
+                 then replCoreBuiltinMap
+                 else RBuiltinWrap <$> coreBuiltinMap
+
+  ee <- defaultEvalEnv pdb builtinMap
+  let
+      src = SourceCode (takeFileName fp) content
+      rstate = ReplState
+          { _replFlags = mempty
+          , _replEvalLog = gasLog
+          , _replCurrSource = src
+          , _replEvalEnv = ee
+          , _replTx = Nothing
+          , _replUserDocs = mempty
+          , _replTLDefPos = mempty
+          -- Note: for the lsp, we don't want it to fail on repl natives not enabled,
+          -- since there may be no way for us to set it for the LSP from pact directly.
+          -- Once this is possible, we can set it to `False` as is the default
+          , _replNativesEnabled = True
+          }
+  stateRef <- newIORef rstate
+  res <- runReplT stateRef (processFile Repl.interpretEvalSmallStep nuri content)
+  st <- readIORef stateRef
+  pure $ (st,) <$> res
+  where
+    fp = fromMaybe "<local>" $ uriToFilePath (fromNormalizedUri nuri)
+    isReplScript :: FilePath -> Bool
+    isReplScript = (==) ".repl" . takeExtension
 
 spanInfoToRange :: SpanInfo -> Range
 spanInfoToRange (SpanInfo sl sc el ec) = mkRange
@@ -340,23 +348,40 @@ documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req 
         resp (Right (InL we))
 
 processFile
-  :: Repl.ReplInterpreter
-  -> SourceCode
-  -> ReplM ReplCoreBuiltin [EvalTopLevel ReplCoreBuiltin SpanInfo]
-processFile replEnv (SourceCode _ source) = do
+  :: Interpreter ReplRuntime ReplCoreBuiltin SpanInfo
+  -> NormalizedUri
+  -> Text
+  -> ReplM ReplCoreBuiltin (M.Map NormalizedUri [EvalTopLevel ReplCoreBuiltin SpanInfo])
+processFile replEnv nuri source = do
   lexx <- liftEither (Lisp.lexer source)
   parsed <- liftEither $ Lisp.parseReplProgram lexx
-  concat <$> traverse pipe parsed
+  M.unionsWith (<>) <$> traverse pipe parsed
   where
-  pipe = \case
-    Lisp.RTL (Lisp.RTLTopLevel tl) -> do
-      functionDocs tl
-      (ds, deps) <- compileDesugarOnly replEnv tl
-      constEvaled <- ConstEval.evalTLConsts replEnv ds
-      let tlFinal = MHash.hashTopLevel constEvaled
-      let act = [ds] <$ evalTopLevel replEnv tlFinal deps
-      catchError act (const (pure []))
-    _ -> pure []
+    currFile = maybe "<local>" fromNormalizedFilePath (uriToNormalizedFilePath nuri)
+    mangleFilePath fp = case currFile of
+        "<local>" -> pure fp
+        _ | isAbsolute fp -> pure fp
+          | takeFileName currFile == currFile -> pure fp
+          | otherwise -> pure $ combine (takeDirectory currFile) fp
+    pipe = \case
+      Lisp.RTL (Lisp.RTLTopLevel tl) -> do
+        functionDocs tl
+        (ds, deps) <- compileDesugarOnly replEnv tl
+        constEvaled <- ConstEval.evalTLConsts replEnv ds
+        let tlFinal = MHash.hashTopLevel constEvaled
+        let act = M.singleton nuri [ds] <$ evalTopLevel replEnv tlFinal deps
+        catchError act (const (pure mempty))
+      Lisp.RTLReplSpecial rtl -> case rtl of
+        Lisp.ReplLoad fp _ i -> do
+          fp' <- mangleFilePath (T.unpack fp)
+          res <- liftIO $ E.try (T.readFile fp')
+          case res of
+             Left (_e:: E.IOException) ->
+               throwExecutionError i $ EvalError $ "File not found: " <> fp
+             Right txt -> do
+               let nfp = normalizedFilePathToUri (toNormalizedFilePath fp')
+               processFile replEnv nfp txt
+      _ ->  pure mempty
 
 sshow :: Show a => a -> Text
 sshow = T.pack . show
