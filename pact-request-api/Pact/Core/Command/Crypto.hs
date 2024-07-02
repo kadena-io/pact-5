@@ -1,9 +1,6 @@
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -17,41 +14,53 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- |
--- Module      :  Pact.Types.Crypto
--- Copyright   :  (C) 2016 Stuart Popejoy, William Martino
--- License     :  BSD-style (see the file LICENSE)
--- Maintainer  :  Stuart Popejoy <stuart@kadena.io>, William Martino <will@kadena.io>
---
 -- Hashing types and Scheme class.
 --
 module Pact.Core.Command.Crypto
-  ( ST.PPKScheme(..)
+  (
+    -- * Public/Private Key scheme types.
+    ST.PPKScheme(..)
   , ST.defPPKScheme
-  , SPPKScheme(..)
+
+  -- * Wrappers for raw public and private key bytes.
   , PublicKeyBS(..)
   , PrivateKeyBS(..)
   , SignatureBS(..)
-  , signEd25519
+
+  -- * Generate random keys.
   , generateEd25519KeyPair
-  , verifyWebAuthnSig
-  , verifyEd25519Sig
+  , genKeyPair
+
+  -- * Introduce an Ed25519 or WebAuthn key from raw bytes.
   , parseEd25519PubKey
   , parseEd25519SecretKey
   , parseEd25519Signature
-  , exportEd25519PubKey
-  , exportEd25519SecretKey
-  , exportEd25519Signature
   , parseWebAuthnPublicKey
   , parseWebAuthnPrivateKey
-  , exportWebAuthnPublicKey
   , parseWebAuthnSignature
+
+  -- * Use an Ed25519 key to sign a payload.
+  , signEd25519
+
+  -- * Verify a payload and signature against an Ed25519 or WebAuthn
+  --   public key
+  , verifyWebAuthnSig
+  , verifyEd25519Sig
+
+  -- * Convert an Ed25519 or WebAuthn key into raw bytes.
+  , exportEd25519PubKey
+  , exportEd25519SecretKey
+  , exportWebAuthnPublicKey
+
+  -- * Convert an Ed25519 or WebAuthn signature into raw bytes.
+  , exportEd25519Signature
   , exportWebAuthnSignature
+
+
   , validCoseSignAlgorithms
   , webAuthnPubKeyHasValidAlg
   , getPublic
   , getPrivate
-  , genKeyPair
   , importEd25519KeyPair
 
   , Ed25519KeyPair
@@ -417,7 +426,7 @@ importEd25519KeyPair maybePubBS (PrivBS privBS) = do
                 ++ show (toB16Text $ exportEd25519PubKey derivedPub)
 
 
---------- ED25519 FUNCTIONS AND ORPHANS ---------
+--------- ED25519 FUNCTIONS ---------
 
 ed25519GenKeyPair :: IO (Ed25519.PublicKey, Ed25519.SecretKey)
 ed25519GenKeyPair = do
