@@ -16,7 +16,7 @@ To expect a failure with a specific error message, use the following syntax:
 (expect-failure doc err exp)
 ```
 
-## Arguments
+### Arguments
 
 Use the following arguments when using the `expect-failure` Pact function.
 
@@ -26,14 +26,14 @@ Use the following arguments when using the `expect-failure` Pact function.
 | `err`      | `string` | (Optional) Specifies the expected error message.                           |
 | `exp`      | `<a>`  | Specifies the expression to evaluate. The expression can be of any Pact type.|
 
-## Return value
+### Return value
 
 The `expect-failure` function returns a string indicating the success or failure of the expected failure.
 
 - If the expression `exp` throws an error, the function returns a string indicating the success of the expected failure, e.g., `"Expect failure: success: Enforce fails on false"`.
 - If the expression `exp` does not throw an error, the function itself throws an error, indicating that the expected failure did not occur.
 
-## Examples
+### Examples
 
 The following examples demonstrate the usage of `expect-failure` within a Pact REPL:
 
