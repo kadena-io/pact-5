@@ -49,7 +49,7 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.PactValue
 import Pact.Core.Capabilities
 import Pact.Core.Verifiers
-
+import qualified Pact.Crypto.Hyperlane as Hyperlane
 
 type PactErrorI = PactError SpanInfo
 
@@ -500,6 +500,8 @@ data EvalError
   | CannotApplyValueToNonClosure
   -- ^ Attempted to apply a non-closure
   | InvalidCustomKeysetPredicate Text
+  | HyperlaneError Hyperlane.HyperlaneError
+  | HyperlaneDecodeError Hyperlane.HyperlaneDecodeError
   deriving (Show, Generic)
 
 instance NFData EvalError
@@ -691,7 +693,8 @@ instance Pretty EvalError where
       "Cannot apply value to non-closure"
     InvalidCustomKeysetPredicate pn ->
       "Invalid custom predicate for keyset" <+> pretty pn
-
+    HyperlaneError he -> Hyperlane.displayHyperlaneError he
+    HyperlaneDecodeError he -> Hyperlane.displayHyperlaneDecodeError he
 
 instance Exception EvalError
 

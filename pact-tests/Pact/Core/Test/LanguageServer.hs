@@ -186,4 +186,4 @@ runPactLSP f = do
     Just p -> pure (p <> " --lsp")
     Nothing -> pure "cabal exec pact -- --lsp"
 
-  runSessionWithConfig cfg cmd fullCaps "pact-tests/pact-tests-lsp" f
+  runSessionWithConfig cfg cmd fullLatestClientCaps "pact-tests/pact-tests-lsp" f

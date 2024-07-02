@@ -96,6 +96,10 @@ common pact-common
     , aeson
     , trifecta
     , hashable
+    -- hyperlane deps
+    , binary
+    , wide-word
+    , ethereum
 
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
@@ -253,6 +257,9 @@ library
     Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
     Pact.Crypto.WebAuthn.Cose.Registry
     Pact.Crypto.WebAuthn.Cose.SignAlg
+
+    -- Hyperlane
+    Pact.Crypto.Hyperlane
 
 library pact-lsp
   import: pact-common
