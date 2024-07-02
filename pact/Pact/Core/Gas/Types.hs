@@ -87,7 +87,7 @@ newtype MilliGasLimit
 -- | Gas in pact-core, represented as an unsigned
 -- integer, units will go in terms of 1e3 = 2ns
 newtype Gas
-  = Gas Word64
+  = Gas { _gas :: Word64 }
   deriving (Eq, Ord, Show)
   deriving (Semigroup, Monoid) via (Sum Word64)
   deriving (Semiring, Enum) via Word64

@@ -91,7 +91,6 @@ import Pact.Core.IR.Eval.Direct.Types
 import Pact.Core.Gas
 import Pact.Core.StableEncoding
 import Pact.Core.SPV
-import Pact.Core.Verifiers
 
 import Pact.Core.Namespace
 #ifndef WITHOUT_CRYPTO
@@ -2056,7 +2055,7 @@ coreYield info b _env = \case
 corePactId :: (IsBuiltin b) => NativeFunction e b i
 corePactId info b _env = \case
   [] -> use esDefPactExec >>= \case
-    Just dpe -> return (VString (_defpactId (_peDefPactId dpe)))
+    Just dpe -> return (VString (_defPactId (_peDefPactId dpe)))
     Nothing -> throwExecutionError info NotInDefPactExecution
   args -> argsError info b args
 

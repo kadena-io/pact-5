@@ -67,7 +67,6 @@ import Pact.Core.Capabilities
 import Pact.Core.Namespace
 import Pact.Core.Gas
 import Pact.Core.Type
-import Pact.Core.Verifiers
 #ifndef WITHOUT_CRYPTO
 import Pact.Core.Crypto.Pairing
 import Pact.Core.Crypto.Hash.Poseidon
@@ -750,7 +749,7 @@ coreYield info b cont handler _env = \case
 corePactId :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
 corePactId info b cont handler _env = \case
   [] -> use esDefPactExec >>= \case
-    Just dpe -> returnCEKValue cont handler (VString (_defpactId (_peDefPactId dpe)))
+    Just dpe -> returnCEKValue cont handler (VString (_defPactId (_peDefPactId dpe)))
     Nothing ->
       throwExecutionError info NotInDefPactExecution
   args -> argsError info b args

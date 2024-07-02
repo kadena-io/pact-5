@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveAnyClass #-}
+
 module Pact.Core.Info
  ( SpanInfo(..)
  , combineSpan
@@ -13,12 +15,10 @@ data SpanInfo
   , _liStartColumn :: !Int
   , _liEndLine     :: !Int
   , _liEndColumn   :: !Int
-  } deriving (Eq, Show, Generic)
+  } deriving (Eq, Show, Generic, NFData)
 
 instance Default SpanInfo where
   def = SpanInfo 0 0 0 0
-
-instance NFData SpanInfo
 
 -- | Combine two Span infos
 -- and spit out how far down the expression spans.

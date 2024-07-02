@@ -2,6 +2,7 @@ module Main where
 
 import Test.Tasty
 
+import qualified Pact.Core.Test.CommandTests as CommandTests
 import qualified Pact.Core.Test.ReplTests as ReplTests
 import qualified Pact.Core.Test.LexerParserTests as LexerParserTests
 import qualified Pact.Core.Test.LexerTests as LexerTests
@@ -20,6 +21,7 @@ main = do
   replTests <- ReplTests.tests
   gasGolden <- GasGolden.tests
   legacyTests <- LegacySerialiseTests.tests
+  commandTests <- CommandTests.tests
   defaultMain $ testGroup "pactTests"
     [ replTests
     , LexerTests.tests
@@ -33,4 +35,6 @@ main = do
     , LanguageServer.tests
     , gasGolden
     , SizeOfTests.tests
+    , commandTests
     ]
+

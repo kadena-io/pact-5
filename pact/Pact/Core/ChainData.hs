@@ -26,6 +26,7 @@ module Pact.Core.ChainData
   , cdChainId, cdBlockHeight
   , cdBlockTime, cdPrevBlockHash
   , cdSender, cdGasLimit, cdGasPrice
+  , NetworkId(..)
   ) where
 
 import Data.Int(Int64)
@@ -54,6 +55,10 @@ newtype TxCreationTime
 
 newtype ChainId
   = ChainId { _chainId :: Text }
+  deriving (Eq, Show, NFData)
+
+newtype NetworkId
+  = NetworkId { _networkId :: Text }
   deriving (Eq, Show, NFData)
 
 -- | Allows user to specify execution parameters specific to public-chain
