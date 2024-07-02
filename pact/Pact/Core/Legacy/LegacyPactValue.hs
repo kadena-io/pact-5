@@ -3,7 +3,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Pact.Core.Legacy.LegacyPactValue
-  (roundtripPactValue) where
+  (roundtripPactValue, Legacy(..)) where
 
 import Control.Applicative
 import Data.Aeson

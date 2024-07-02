@@ -55,16 +55,14 @@ import Data.Word (Word8, Word16, Word32)
 import Ethereum.Misc (keccak256, _getKeccak256Hash, _getBytesN)
 import Pact.JSON.Decode qualified as J
 
-import Pact.Core.Pretty
+import Pact.Core.Errors
 import Pact.Core.PactValue
 import Pact.Core.Names
 import Pact.Core.Literal
-import Pact.Core.ChainData
+-- import Pact.Core.ChainData
 import Pact.Core.Hash
+import Pact.Core.Legacy.LegacyPactValue
 import qualified Data.Map as M
-
-import Control.DeepSeq
-import GHC.Generics
 
 ----------------------------------------------
 --               Primitives                 --
@@ -72,13 +70,13 @@ import GHC.Generics
 
 -- hyperlaneMessageId :: Map Field PactValue -> Either Doc Text
 -- hyperlaneMessageId o = do
---   hm <- first displayHyperlaneError $ decodeHyperlaneMessageObject o
+--   hm <- first pretty $ decodeHyperlaneMessageObject o
 --   pure $ getHyperlaneMessageId hm
 
 -- -- | Decode a hyperlane 'TokenMessageERC20'
 -- hyperlaneDecodeTokenMessage :: Text -> Either Doc PactValue
 -- hyperlaneDecodeTokenMessage i = do
---   tm <- first displayHyperlaneDecodeError $ do
+--   tm <- first pretty $ do
 --     -- We do not need to handle historical b64 error message shimming
 --     -- or decoding from non-canonical strings in this base-64 decoder,
 --     -- because this native is added in a Pact version that later than when
@@ -97,65 +95,13 @@ import GHC.Generics
 
 -- hyperlaneEncodeTokenMessage :: Map Field PactValue -> Either Doc Text
 -- hyperlaneEncodeTokenMessage o = do
---   tm <- first displayHyperlaneError $ decodeHyperlaneTokenMessageObject o
+--   tm <- first pretty $ decodeHyperlaneTokenMessageObject o
 --   let encoded = Text.decodeUtf8 $ encodeBase64UrlUnpadded $ BL.toStrict $ Bin.runPut $ Bin.putBuilder $ packTokenMessageERC20 tm
 --   return encoded
 
 ----------------------------------------------
 --              Error Types                 --
 ----------------------------------------------
-
-data HyperlaneError
-  = HyperlaneErrorFailedToFindKey Field
-    -- ^ An expected key was not found.
-  | HyperlaneErrorNumberOutOfBounds Field
-    -- ^ The number at this field was outside of the expected bounds of its
-    -- type.
-  | HyperlaneErrorBadHexPrefix Field
-    -- ^ Hex textual fields (usually ETH addresses) must be prefixed with "0x"
-  | HyperlaneErrorInvalidBase64 Field
-    -- ^ Invalid base64 text field.
-  | HyperlaneErrorIncorrectSize Field Int Int
-    -- ^ Invalid Hex. We discard error messages from base16-bytestring to
-  | HyperlaneErrorInvalidChainId Text
-    -- ^ Invalid chain id.
-    deriving (Show, Generic)
-
-instance NFData HyperlaneError
-
-displayHyperlaneError :: HyperlaneError -> Doc a
-displayHyperlaneError = \case
-  HyperlaneErrorFailedToFindKey key -> "Failed to find key in object: " <> pretty key
-  HyperlaneErrorNumberOutOfBounds key -> "Object key " <> pretty key <> " was out of bounds"
-  HyperlaneErrorBadHexPrefix key -> "Missing 0x prefix on field " <> pretty key
-  HyperlaneErrorInvalidBase64 key -> "Invalid base64 encoding on field " <> pretty key
-  HyperlaneErrorIncorrectSize key expected actual ->
-    "Incorrect binary data size " <> pretty key <> ". Expected: " <> pretty expected <> ", but got " <> pretty actual
-  HyperlaneErrorInvalidChainId msg -> "Failed to decode chainId: " <> pretty msg
-
-data HyperlaneDecodeError
-  = HyperlaneDecodeErrorBase64
-    -- ^ We discard the error message in this case to maintain error message
-    --   equality with the original implementation - otherwise this would have a
-    --   string in it
-  | HyperlaneDecodeErrorInternal String
-    -- ^ Decoding error that our own code threw, not `binary`
-  | HyperlaneDecodeErrorBinary
-    -- ^ We encountered an error not thrown by us but by `binary`. We discard
-    --   the error message to avoid potentially forking behaviour introduced
-    --   by a library update.
-  | HyperlaneDecodeErrorParseRecipient
-    -- ^ Failed to parse the Recipient into a Guard
-  deriving (Show, Generic)
-
-instance NFData HyperlaneDecodeError
-
-displayHyperlaneDecodeError :: HyperlaneDecodeError -> Doc a
-displayHyperlaneDecodeError = \case
-  HyperlaneDecodeErrorBase64 -> "Failed to base64-decode token message"
-  HyperlaneDecodeErrorInternal errmsg -> "Decoding error: " <> pretty errmsg
-  HyperlaneDecodeErrorBinary -> "Decoding error: binary decoding failed"
-  HyperlaneDecodeErrorParseRecipient -> "Could not parse recipient into a guard"
 
 ----------------------------------------------
 --         Hyperlane Message Types          --
@@ -338,12 +284,13 @@ getWord256BE = do
 
 tokenMessageToTerm :: TokenMessageERC20 -> Either HyperlaneDecodeError PactValue
 tokenMessageToTerm tm =  do
-  -- g <- first (const HyperlaneDecodeErrorParseRecipient)
-  --        $ fmap PGuard
-  --        $ J.eitherDecode (BL.fromStrict (tmRecipient tm))
+  g <- first (const HyperlaneDecodeErrorParseRecipient)
+         $ fmap PGuard
+         $ fmap _unLegacy
+         $ J.eitherDecode (BL.fromStrict (tmRecipient tm))
   let chainId = Text.pack (show (toInteger (tmChainId tm)))
   pure $ PObject $ M.fromList
-    [ --("recipient", fromPactValue g)
-      (Field "amount", PDecimal (wordToDecimal (tmAmount tm)))
+    [ (Field "recipient", g)
+    , (Field "amount", PDecimal (wordToDecimal (tmAmount tm)))
     , (Field "chainId", PString chainId)
     ]
