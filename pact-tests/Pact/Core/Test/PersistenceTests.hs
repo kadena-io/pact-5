@@ -118,6 +118,7 @@ sqliteRegression = withResource
   testCase "Sqlite Db regression"
     (runPactDbRegression =<< fmap (view _1) db)
 
+
 pureDbRegression :: TestTree
 pureDbRegression = testCase "PureDb regression"
   (runPactDbRegression =<< mockPactDb serialisePact_raw_spaninfo)

@@ -195,7 +195,6 @@ instance J.Encode ApiPublicMeta where
     , "gasPrice" J..?= (StableEncoding <$> _apmGasPrice o)
     , "sender" J..?= _apmSender o
     ]
-  -- Todo: revisit all inlinable pragmas
   {-# INLINABLE build #-}
 
 -- -------------------------------------------------------------------------- --
