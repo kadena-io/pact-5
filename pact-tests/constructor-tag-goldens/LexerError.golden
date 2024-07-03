@@ -1,6 +1,1 @@
-{"conName":"LexicalError","conIndex":"0"}
-{"conName":"InvalidIndentation","conIndex":"1"}
-{"conName":"InvalidInitialIndent","conIndex":"2"}
-{"conName":"StringLiteralError","conIndex":"3"}
-{"conName":"OutOfInputError","conIndex":"4"}
-
+[{"conName":"LexicalError","conIndex":"0"},{"conName":"StringLiteralError","conIndex":"1"},{"conName":"OutOfInputError","conIndex":"2"}]

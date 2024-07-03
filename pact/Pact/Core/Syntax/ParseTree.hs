@@ -466,7 +466,7 @@ instance Pretty (Expr i) where
       parens (pretty e1 <+> hsep (pretty <$> nel))
     Operator b _ -> pretty b
     Block nel _ ->
-      parens ("progn" <+> hsep (pretty <$> NE.toList nel))
+      parens ("do" <+> hsep (pretty <$> NE.toList nel))
     Constant l _ ->
       pretty l
     List nel _ ->

@@ -1,0 +1,38 @@
+
+(module m g
+  (defcap g () true)
+
+  (defschema entry
+    counter:integer)
+
+  (deftable ref:{entry})
+
+  (defconst COUNTER_REF:string "K")
+
+  (defun increment-counter ()
+    (with-read ref COUNTER_REF {"counter" := e}
+      (write ref COUNTER_REF {"counter":(+ e 1)})
+      )
+  )
+
+  (defun decrement-counter ()
+    (with-read ref COUNTER_REF {"counter" := e}
+      (write ref COUNTER_REF {"counter":(- e 1)})
+      )
+  )
+
+  (defun get-counter:integer ()
+    (at "counter" (read ref COUNTER_REF))
+  )
+
+  (defun init-counter ()
+    (write ref COUNTER_REF {"counter":0})
+  )
+
+  )
+(create-table ref)
+(init-counter)
+
+(expect "counter is zero" 0 (get-counter))
+(expect "counter increments twice" 2 (do (increment-counter) (increment-counter) (get-counter)))
+(expect "counter decrements twice" 0 (do (decrement-counter) (decrement-counter) (get-counter)))

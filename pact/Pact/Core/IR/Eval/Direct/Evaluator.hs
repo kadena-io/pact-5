@@ -699,7 +699,8 @@ evalWithStackFrame info sf mty act = do
   v <- act
   esStack %= safeTail
   pv <- enforcePactValue info v
-  maybeTCType info mty pv
+  rtcEnabled <- isExecutionFlagSet FlagDisableRuntimeRTC
+  unless rtcEnabled $ maybeTCType info mty pv
 #ifdef WITH_FUNCALL_TRACING
   timeExit <- liftIO $ getTime ProcessCPUTime
   esTraceOutput %= (TraceFunctionExit timeExit sf info:)
@@ -1351,41 +1352,8 @@ emitXChainEvents mResume dpe = do
       , PList (V.fromList (view (peContinuation . pcArgs) dpe)) ]
       mh
 
-emitReservedEvent :: T.Text -> [PactValue] -> ModuleHash -> EvalM e b i ()
-emitReservedEvent name params mhash = do
-  let pactModule = ModuleName "pact" Nothing
-  let pe = PactEvent name params pactModule mhash
-  emitEventUnsafe pe
 
-emitEventUnsafe
-  :: PactEvent PactValue
-  -> EvalM e b i ()
-emitEventUnsafe pe = esEvents %= (++ [pe])
 
-emitCapability
-  :: i
-  -> CapToken FullyQualifiedName PactValue
-  -> EvalM e b i ()
-emitCapability info tkn =
-  emitEvent info (fqctToPactEvent tkn)
-
-emitEvent
-  :: i
-  -> PactEvent PactValue
-  -> EvalM e b i ()
-emitEvent info pe = findCallingModule >>= \case
-    Just mn -> do
-      -- Todo: ++ definitely feels suboptimal, especially for gas.
-      -- That said: we can simply reverse the events in `env-events` as
-      -- well as after final emission.
-      let ctModule = _peModule pe
-      if ctModule == mn then do
-        esEvents %= (++ [pe])
-      else throwExecutionError info (EventDoesNotMatchModule mn)
-    Nothing -> throwExecutionError info (EventDoesNotMatchModule (_peModule pe))
-
-fqctToPactEvent :: CapToken FullyQualifiedName PactValue -> PactEvent PactValue
-fqctToPactEvent (CapToken fqn args) = PactEvent (_fqName fqn) args (_fqModule fqn) (_fqHash fqn)
 
 --------------------------
 -- Gas-related code

@@ -74,7 +74,7 @@ tokens :-
     @withcap     { token TokenWithCapability }
     @cruserguard { token TokenCreateUserGuard }
     try          { token TokenTry }
-    progn        { token TokenBlockIntro }
+    do           { token TokenBlockIntro }
     suspend      { token TokenSuspend }
 
     @integer     { emit TokenNumber }

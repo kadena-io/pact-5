@@ -145,7 +145,7 @@ data ExecutionFlag
   -- | Require keysets to be defined in namespaces
   | FlagRequireKeysetNs
   -- | Flag disabling return type checking
-  | FlagDisableRTC
+  | FlagDisableRuntimeRTC
   deriving (Eq,Ord,Show,Enum,Bounded, Generic)
 
 instance NFData ExecutionFlag

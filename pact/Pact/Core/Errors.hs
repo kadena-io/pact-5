@@ -73,10 +73,6 @@ type PactErrorI = PactError SpanInfo
 data LexerError
   = LexicalError Char Char
   -- ^ Lexical error: encountered character, last seen character
-  | InvalidIndentation Int Int
-  -- ^ Invalid indentation: ^ current indentation, expected indentation
-  | InvalidInitialIndent Int
-  -- ^ Invalid initial indentation: got ^, expected 2 or 4
   | StringLiteralError Text
   -- ^ Error lexing string literal
   | OutOfInputError Char
@@ -90,12 +86,8 @@ instance Pretty LexerError where
   pretty = ("Lexical Error: " <>) . \case
     LexicalError c1 c2 ->
       Pretty.hsep ["Encountered character",  Pretty.parens (pretty c1) <> ",", "Last seen", Pretty.parens (pretty c2)]
-    InvalidIndentation curr expected ->
-      Pretty.hsep ["Invalid indentation. Encountered", Pretty.parens (pretty curr) <> ",", "Expected", Pretty.parens (pretty expected)]
     StringLiteralError te ->
       Pretty.hsep ["String literal parsing error: ", pretty te]
-    InvalidInitialIndent i ->
-      Pretty.hsep ["Invalid initial ident. Valid indentation are 2 or 4 spaces. Found: ", Pretty.parens (pretty i)]
     OutOfInputError c ->
       Pretty.hsep ["Ran out of input before finding a lexeme. Last Character seen: ", Pretty.parens (pretty c)]
 
