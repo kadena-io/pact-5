@@ -49,11 +49,12 @@ normalizeBuiltinName = \case
   "not?" -> "not-q"
   "or?"  -> "or-q"
   "|"    -> "bitwise-or"
-  "~"    -> "binary-inverse"
+  "~"    -> "bitwise-reverse"
   "begin-named-tx" -> "begin-tx"
   "continue-pact-rollback-yield" -> "continue-pact"
   "continue-pact-rollback-yield-object" -> "continue-pact"
   "continue-pact-with-rollback" -> "continue-pact"
   "enforce-pact-version-range" -> "enforce-pact-version"
   "env-set-gas" -> "env-gas"
+  "expect-failure-match" -> "expect-failure"
   other  -> other
