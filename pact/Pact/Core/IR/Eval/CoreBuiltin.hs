@@ -87,6 +87,7 @@ import qualified Pact.Core.Trans.TOps as Musl
 
 import qualified Data.Binary.Get as Bin
 import qualified Data.Binary.Put as Bin
+
 ----------------------------------------------------------------------
 -- Our builtin definitions start here
 ----------------------------------------------------------------------

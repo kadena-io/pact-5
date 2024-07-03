@@ -52,49 +52,9 @@ import Pact.Core.Errors
 import Pact.Core.PactValue
 import Pact.Core.Names
 import Pact.Core.Literal
--- import Pact.Core.ChainData
 import Pact.Core.Hash
 import Pact.Core.Legacy.LegacyPactValue
 import qualified Data.Map as M
-
-----------------------------------------------
---               Primitives                 --
-----------------------------------------------
-
--- hyperlaneMessageId :: Map Field PactValue -> Either Doc Text
--- hyperlaneMessageId o = do
---   hm <- first pretty $ decodeHyperlaneMessageObject o
---   pure $ getHyperlaneMessageId hm
-
--- -- | Decode a hyperlane 'TokenMessageERC20'
--- hyperlaneDecodeTokenMessage :: Text -> Either Doc PactValue
--- hyperlaneDecodeTokenMessage i = do
---   tm <- first pretty $ do
---     -- We do not need to handle historical b64 error message shimming
---     -- or decoding from non-canonical strings in this base-64 decoder,
---     -- because this native is added in a Pact version that later than when
---     -- we moved to base64-bytestring >= 1.0, which behaves succeeds and
---     -- fails in exactly the cases we expect.
---     -- (The only change we make to its output is to strip error messages).
---     bytes <- first (const HyperlaneDecodeErrorBase64) $ decodeBase64UrlUnpadded (Text.encodeUtf8 i)
---     case Bin.runGetOrFail (unpackTokenMessageERC20 <* eof) (BL.fromStrict bytes) of
---       Left (_, _, e) | "TokenMessage" `List.isPrefixOf` e -> do
---         throwError $ HyperlaneDecodeErrorInternal e
---       Left _ -> do
---         throwError HyperlaneDecodeErrorBinary
---       Right (_, _, tm) -> do
---         pure tm
---   tokenMessageToTerm tm
-
--- hyperlaneEncodeTokenMessage :: Map Field PactValue -> Either Doc Text
--- hyperlaneEncodeTokenMessage o = do
---   tm <- first pretty $ decodeHyperlaneTokenMessageObject o
---   let encoded = Text.decodeUtf8 $ encodeBase64UrlUnpadded $ BL.toStrict $ Bin.runPut $ Bin.putBuilder $ packTokenMessageERC20 tm
---   return encoded
-
-----------------------------------------------
---              Error Types                 --
-----------------------------------------------
 
 ----------------------------------------------
 --         Hyperlane Message Types          --
