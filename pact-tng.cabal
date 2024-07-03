@@ -98,6 +98,7 @@ common pact-common
     , aeson
     , trifecta
     , hashable
+    , template-haskell
 
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
@@ -231,6 +232,7 @@ library
     Pact.Core.Legacy.LegacyCodec
     Pact.Core.Verifiers
     Pact.Core.Interpreter
+    Pact.Core.DeriveConTag
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
@@ -442,6 +444,7 @@ test-suite core-tests
     , Pact.Core.Test.PoseidonTests
     , Pact.Core.Test.LanguageServer
     , Pact.Core.Test.GasGolden
+    , Pact.Core.Test.ConTagGolden
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
 

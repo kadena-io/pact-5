@@ -343,12 +343,12 @@ instance A.FromJSON PublicKeyBS where
 instance J.Encode PublicKeyBS where
   build (PubBS p) = J.text $ toB16Text p
   {-# INLINE build #-}
-  
+
 instance IsString PublicKeyBS where
   fromString s = case parseB16TextOnly (T.pack s) of
     Left e -> PubBS $ "Bad public key: " <> T.encodeUtf8 (T.pack e)
     Right b -> PubBS b
-    
+
 instance Show PublicKeyBS where
   show (PubBS b) = T.unpack $ toB16Text b
 
@@ -363,7 +363,7 @@ instance A.FromJSON PrivateKeyBS where
   parseJSON = A.withText "PrivateKeyBS" $ \s -> do
     s' <- parseB16Text s
     return $ PrivBS s'
-    
+
 instance J.Encode PrivateKeyBS where
   build (PrivBS p) = J.text $ toB16Text p
   {-# INLINE build #-}

@@ -43,8 +43,6 @@ module Pact.Core.Command.Types
   , PactResult(..)
   , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crEvents
   , crContinuation,crMetaData
-  , CommandExecInterface(..),ceiApplyCmd,ceiApplyPPCmd
-  , ApplyCmd, ApplyPPCmd
   , RequestKey(..)
   , cmdToRequestKey
   , requestKeyToB16Text
@@ -78,7 +76,6 @@ import Pact.Core.Capabilities
 import Pact.Core.ChainData
 import Pact.Core.Compile
 import Pact.Core.DefPacts.Types
-import Pact.Core.Errors
 import Pact.Core.Guards
 import Pact.Core.Gas.Types
 import Pact.Core.Names
@@ -156,7 +153,6 @@ parsePact t =
     stripInfo = void
 
 -- VALIDATING TRANSACTIONS
-
 verifyCommand :: forall m. FromJSON m => Command ByteString -> ProcessedCommand m ParsedCode
 verifyCommand orig@Command{..} =
   case parsedPayload of
@@ -258,51 +254,51 @@ instance (FromJSON a,FromJSON m) => FromJSON (Payload m a) where
     networkId <- o .:? "networkId"
     pure $ Payload payload nonce' meta (_stableEncoding <$> signers) verifiers (fmap NetworkId networkId)
 
-newtype PactResult = PactResult
-  { _pactResult :: Either PactErrorI PactValue
-  } deriving (Eq, Show, Generic, NFData)
+data PactResult err
+  = PactResultOk PactValue
+  | PactResultErr err
+  deriving (Eq, Show, Generic, Functor, Traversable, Foldable)
 
-instance J.Encode PactResult where
-  build (PactResult (Right s)) = J.object
+instance NFData err => NFData (PactResult err)
+
+instance J.Encode err => J.Encode (PactResult err) where
+  build (PactResultOk s) = J.object
     [ "status" J..= J.text "success"
     , "data" J..= StableEncoding s
     ]
-  build (PactResult (Left f)) = J.object
+  build (PactResultErr err) = J.object
     [ "status" J..= J.text "failure"
-    , "error" J..= StableEncoding f
+    , "error" J..= err
     ]
   {-# INLINE build #-}
 
-instance FromJSON PactResult where
+instance FromJSON err => FromJSON (PactResult err) where
   parseJSON (A.Object o) =
-    PactResult <$> ((Left . _stableEncoding . _getUxPactError <$> o JD..: "error") <|> (Right . _stableEncoding <$> o .: "data"))
+    (PactResultErr <$> o JD..: "error")
+    <|> (PactResultOk . _stableEncoding <$> o JD..: "data")
   parseJSON p = fail $ "Invalid PactResult " ++ show p
 
-newtype UxPactError = UxPactError { _getUxPactError :: StableEncoding PactErrorI }
-  deriving (Eq)
-  deriving newtype (J.Encode, FromJSON)
-
 -- | API result of attempting to execute a pact command, parametrized over level of logging type
-data CommandResult l = CommandResult {
+data CommandResult log err = CommandResult {
   -- | Request Key of command (the hash of the command payload)
     _crReqKey :: !RequestKey
   -- | Transaction id of this CommandResult
   , _crTxId :: !(Maybe TxId)
   -- | Pact execution result, either a PactError or the last pact expression output as a PactValue
-  , _crResult :: !PactResult
+  , _crResult :: !(PactResult err)
   -- | Gas consummed by command
   , _crGas :: !Gas
   -- | Level of logging (i.e. full TxLog vs hashed logs)
-  , _crLogs :: !(Maybe l)
+  , _crLogs :: !(Maybe log)
   -- | Output of a Continuation if one occurred in the command.
   , _crContinuation :: !(Maybe DefPactExec)
   -- | Platform-specific data
   , _crMetaData :: !(Maybe Value)
   -- | Events
   , _crEvents :: ![PactEvent PactValue]
-  } deriving (Eq,Show,Generic,Functor)
+  } deriving (Eq,Show,Generic,Functor, Traversable, Foldable)
 
-instance J.Encode l => J.Encode (CommandResult l) where
+instance (J.Encode l, J.Encode err) => J.Encode (CommandResult l err) where
   build o = J.object
     [ "gas" J..= A.Number (fromIntegral (_gas (_crGas o)) )
     , "result" J..= _crResult o
@@ -315,7 +311,7 @@ instance J.Encode l => J.Encode (CommandResult l) where
     ]
   {-# INLINE build #-}
 
-instance (FromJSON l) => FromJSON (CommandResult l) where
+instance (FromJSON l, FromJSON err) => FromJSON (CommandResult l err) where
   parseJSON = withObject "CommandResult" $ \o -> CommandResult
       <$> o .: "reqKey"
       <*> (fmap TxId <$> o .: "txId")
@@ -328,24 +324,16 @@ instance (FromJSON l) => FromJSON (CommandResult l) where
     where
       events Nothing = []
       events (Just es) = es
-instance NFData a => NFData (CommandResult a)
+instance (NFData a, NFData err) => NFData (CommandResult a err)
 
 cmdToRequestKey :: Command a -> RequestKey
 cmdToRequestKey Command {..} = RequestKey _cmdHash
-
-type ApplyCmd l = ExecutionMode -> Command ByteString -> IO (CommandResult l)
-type ApplyPPCmd m a l = ExecutionMode -> Command ByteString -> ProcessedCommand m a -> IO (CommandResult l)
-
-data CommandExecInterface m a l = CommandExecInterface
-  { _ceiApplyCmd :: ApplyCmd l
-  , _ceiApplyPPCmd :: ApplyPPCmd m a l
-  }
-
 
 data WebAuthnPubKeyPrefixed
   = WebAuthnPubKeyPrefixed
   | WebAuthnPubKeyBare
   deriving (Eq, Show, Generic)
+
 data DynKeyPair
   = DynEd25519KeyPair Ed25519KeyPair
   | DynWebAuthnKeyPair WebAuthnPubKeyPrefixed WebAuthnPublicKey WebauthnPrivateKey
@@ -365,7 +353,6 @@ instance Show RequestKey where
 
 makeLenses ''UserSig
 makeLenses ''Signer
-makeLenses ''CommandExecInterface
 makeLenses ''ExecutionMode
 makeLenses ''Command
 makeLenses ''ParsedCode

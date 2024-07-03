@@ -13,7 +13,6 @@ import Data.String (IsString (..))
 
 import qualified Pact.JSON.Encode as J
 
-import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Aeson as A
 import qualified Data.Aeson.KeyMap as A
@@ -180,7 +179,8 @@ instance FromJSON (Legacy PactValue) where
     (PList . fmap _unLegacy <$> parseJSON v) <|>
     (PGuard . _unLegacy <$> parseJSON v) <|>
     (PModRef . _unLegacy <$> parseJSON v) <|>
-    (PObject . M.mapKeys Field . fmap _unLegacy <$> parseJSON v)
+    (PTime <$> decoder timeCodec v) <|>
+    (PObject . fmap _unLegacy <$> parseJSON v)
 
 instance FromJSON (Legacy ModuleGuard) where
   parseJSON = withObject "ModuleGuard" $ \o ->

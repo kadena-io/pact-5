@@ -7,8 +7,9 @@
 --
 
 module Pact.Core.StableEncoding
-  (encodeStable
-  ,StableEncoding(..))
+  ( encodeStable
+  , decodeStable
+  , StableEncoding(..))
 where
 
 import Control.Applicative
@@ -19,7 +20,7 @@ import Data.Bifunctor
 import Data.ByteString (ByteString)
 import Data.Coerce(coerce)
 import Data.Decimal (DecimalRaw(..))
-import Data.Scientific (Scientific, floatingOrInteger)
+import Data.Scientific (Scientific)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import Data.Maybe (fromMaybe)
@@ -33,7 +34,6 @@ import qualified Pact.JSON.Encode as J
 
 import Pact.Core.Capabilities
 import Pact.Core.ChainData
-import Pact.Core.Errors
 import Pact.Core.Gas.Types
 import Pact.Core.Legacy.LegacyCodec
 import Pact.Core.Info
@@ -45,16 +45,41 @@ import Pact.Core.Persistence.Types
 import Pact.Core.Hash
 import Pact.Core.DefPacts.Types
 import Pact.Core.PactValue
-import Pact.Core.Pretty
 import Pact.Time
+
+-- | JSON serialization for 'readInteger' and public meta info;
+-- accepts both a String version (parsed as a Pact integer),
+-- a Number, or a PactValue { "int": ... } integer
+newtype ParsedInteger = ParsedInteger Integer
+  deriving (Eq,Show,Ord)
+
+instance JD.FromJSON ParsedInteger where
+  parseJSON (JD.String s) =
+    ParsedInteger <$> case parseNumLiteral s of
+                        Just (LInteger i) -> return i
+                        _ -> fail $ "Failure parsing integer string: " ++ show s
+  parseJSON (JD.Number n) = return $ ParsedInteger (round n)
+  parseJSON v@JD.Object{} = JD.parseJSON v >>= \i -> case i of
+    StableEncoding (PLiteral (LInteger li)) -> return $ ParsedInteger li
+    StableEncoding pv -> fail $ "Failure parsing integer PactValue object: " ++ show pv
+  parseJSON v = fail $ "Failure parsing integer: " ++ show v
+
 
 
 encodeStable :: J.Encode (StableEncoding a) => a -> ByteString
 encodeStable = J.encodeStrict . StableEncoding
 
+decodeStable :: JD.FromJSON (StableEncoding a) => ByteString -> Maybe a
+decodeStable = fmap _stableEncoding . JD.decodeStrict'
 
 newtype StableEncoding a = StableEncoding { _stableEncoding :: a }
-  deriving (Ord, Eq)
+  deriving (Ord, Eq, Show)
+
+instance J.Encode (StableEncoding ()) where
+  build (StableEncoding _) = J.null
+
+instance JD.FromJSON (StableEncoding ()) where
+  parseJSON = fmap StableEncoding . JD.parseJSON
 
 instance J.Encode (StableEncoding DefPactId) where
   build (StableEncoding (DefPactId pid)) =
@@ -385,7 +410,6 @@ instance J.Encode (StableEncoding UTCTime) where
 
 -- | Stable encoding of `PactValue`
 instance J.Encode (StableEncoding PactValue) where
-  build :: StableEncoding PactValue -> J.Builder
   build (StableEncoding pv) = case pv of
     PLiteral lit  -> J.build (StableEncoding lit)
     PList l -> J.build (J.Array (StableEncoding <$> l))
@@ -397,17 +421,17 @@ instance J.Encode (StableEncoding PactValue) where
   {-# INLINABLE build #-}
 
 instance JD.FromJSON (StableEncoding PactValue) where
-  parseJSON = JD.withObject "PactValue" $ \o ->
-    fmap StableEncoding (
-      PLiteral . _stableEncoding <$> (o JD..: "literal") <|>
-      PList . fmap _stableEncoding <$> (o JD..: "list") <|>
-      PGuard . _stableEncoding <$> (o JD..: "guard") <|>
-      PModRef . _stableEncoding <$> (o JD..: "modRef") <|>
-      PObject . _stableEncoding <$> (o JD..: "object"))
+  parseJSON  v = fmap StableEncoding $
+    (PLiteral . _stableEncoding <$> JD.parseJSON v) <|>
+    (PList . fmap _stableEncoding <$> JD.parseJSON v) <|>
+    (PGuard . _stableEncoding <$> JD.parseJSON v) <|>
+    (PModRef . _stableEncoding <$> JD.parseJSON v) <|>
+    (PTime <$> decoder timeCodec v) <|>
+    (PObject . fmap _stableEncoding <$> JD.parseJSON v)
   {-# INLINABLE parseJSON #-}
 
 instance JD.FromJSON (StableEncoding Literal) where
-  parseJSON n@JD.Number{} =  StableEncoding . LDecimal <$> decoder decimalCodec n
+  parseJSON n@JD.Number{} = StableEncoding . LDecimal <$> decoder decimalCodec n
   parseJSON (JD.String s) = pure $ StableEncoding $ LString s
   parseJSON (JD.Bool b) = pure $ StableEncoding $ LBool b
   parseJSON o@JD.Object {} =
@@ -471,11 +495,6 @@ instance JD.FromJSON (StableEncoding SpanInfo) where
     endColumn <- o JD..: "endColumn"
     pure $ StableEncoding (SpanInfo startLine startColumn endLine endColumn)
 
-instance J.Encode (StableEncoding PactErrorI) where
-  build (StableEncoding err) = J.build (renderText err)
-
-instance JD.FromJSON (StableEncoding PactErrorI) where
-  parseJSON = undefined -- TODO
 
 instance J.Encode (StableEncoding (Signer QualifiedName PactValue)) where
   build (StableEncoding o) = J.object
@@ -496,20 +515,33 @@ instance JD.FromJSON (StableEncoding (Signer QualifiedName PactValue)) where
       listMay = fromMaybe []
 
 instance JD.FromJSON (StableEncoding GasPrice) where
-  parseJSON = JD.withScientific "GasPrice" $ \s ->
-    let decimal =
-          case floatingOrInteger s of
-            Left floating -> realToFrac @Double floating -- TODO: Is this safe?
-            Right integer -> fromIntegral @Integer integer
-    in pure $ StableEncoding decimal
+  parseJSON (JD.String s) =
+    fmap StableEncoding $ case parseNumLiteral s of
+      Just (LDecimal d) -> return $ GasPrice d
+      Just (LInteger r) -> return $ GasPrice $ fromIntegral r
+      _ -> fail $ "Failure parsing decimal string: " ++ show s
+  parseJSON (JD.Number n) =
+    return $ StableEncoding $ GasPrice (fromRational $ toRational n)
+  parseJSON v = fail $ "Failure parsing decimal: " ++ show v
+
+
+instance JD.FromJSON (StableEncoding GasLimit) where
+  parseJSON (JD.String s) =
+    fmap StableEncoding $ case parseNumLiteral s of
+      Just (LInteger r) -> return $ GasLimit (Gas (fromIntegral r))
+      _ -> fail $ "Failure parsing decimal string: " ++ show s
+  parseJSON (JD.Number n) =
+    return $ StableEncoding $ GasLimit $ Gas (round n)
+  parseJSON v = fail $ "Failure parsing decimal: " ++ show v
+
 
 instance JD.FromJSON (StableEncoding PublicMeta) where
   parseJSON = JD.withObject "PublicMeta" $ \o -> do
     chainId <- o JD..: "chainId"
     sender <- o JD..: "sender"
-    gasLimit <- o JD..: "gasLimit"
-    gasPrice <- o JD..: "gasPrice"
-    ttl <- o JD..: "ttl"
-    creationTime <- o JD..: "creationTime"
-    pure $ StableEncoding $ PublicMeta (ChainId chainId) sender (Gas gasLimit) (_stableEncoding gasPrice) (TTLSeconds ttl) (TxCreationTime creationTime)
+    StableEncoding gasLimit <- o JD..: "gasLimit"
+    StableEncoding gasPrice <- o JD..: "gasPrice"
+    ParsedInteger ttl <- o JD..: "ttl"
+    ParsedInteger creationTime <- o JD..: "creationTime"
+    pure $ StableEncoding $ PublicMeta (ChainId chainId) sender gasLimit gasPrice (TTLSeconds ttl) (TxCreationTime creationTime)
 

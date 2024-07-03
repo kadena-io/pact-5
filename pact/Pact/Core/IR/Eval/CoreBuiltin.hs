@@ -1775,7 +1775,7 @@ coreChainData :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
 coreChainData info b cont handler _env = \case
   [] -> do
     PublicData publicMeta blockHeight blockTime prevBh <- viewEvalEnv eePublicData
-    let (PublicMeta cid sender (Gas gasLimit) gasPrice _ttl _creationTime) = publicMeta
+    let (PublicMeta cid sender (GasLimit (Gas gasLimit)) (GasPrice gasPrice) _ttl _creationTime) = publicMeta
     let fields = M.fromList [ (cdChainId, PString (_chainId cid))
                  , (cdBlockHeight, PInteger (fromIntegral blockHeight))
                  , (cdBlockTime, PTime (PactTime.fromPosixTimestampMicros blockTime))

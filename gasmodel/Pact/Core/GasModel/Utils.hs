@@ -1,7 +1,6 @@
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DataKinds #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Pact.Core.GasModel.Utils where
 

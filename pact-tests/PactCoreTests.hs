@@ -15,6 +15,7 @@ import qualified Pact.Core.Test.PoseidonTests as PoseidonTests
 import qualified Pact.Core.Test.LanguageServer as LanguageServer
 import qualified Pact.Core.Test.GasGolden as GasGolden
 import qualified Pact.Core.Test.SizeOfTests as SizeOfTests
+import qualified Pact.Core.Test.ConTagGolden as ConTagGoldenTests
 
 main :: IO ()
 main = do
@@ -36,5 +37,6 @@ main = do
     , gasGolden
     , SizeOfTests.tests
     , commandTests
+    , ConTagGoldenTests.tests
     ]
 

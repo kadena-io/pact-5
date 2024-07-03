@@ -8,8 +8,8 @@ module Pact.Core.Gas.Types
   ( MilliGas(..)
   , MilliGasLimit(..)
   , Gas(..)
-  , GasLimit
-  , GasPrice
+  , GasLimit(..)
+  , GasPrice(..)
   , gasToMilliGas
   , milliGasToGas
   , millisPerGas
@@ -93,8 +93,15 @@ newtype Gas
   deriving (Semiring, Enum) via Word64
   deriving newtype NFData
 
-type GasLimit = Gas
-type GasPrice = Decimal
+newtype GasLimit =
+  GasLimit Gas
+  deriving (Eq, Show, Ord)
+  deriving newtype NFData
+
+newtype GasPrice
+  = GasPrice Decimal
+  deriving (Eq, Show, Ord)
+  deriving newtype NFData
 
 millisPerGas :: Word64
 millisPerGas = 1000

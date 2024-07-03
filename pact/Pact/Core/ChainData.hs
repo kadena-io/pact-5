@@ -37,6 +37,9 @@ import GHC.Generics
 import Data.Text(Text)
 import Data.Default
 
+import qualified Pact.JSON.Encode as J
+import qualified Pact.JSON.Decode as JD
+
 
 import Pact.Core.Gas.Types
 import Pact.Core.Names
@@ -60,6 +63,7 @@ newtype ChainId
 newtype NetworkId
   = NetworkId { _networkId :: Text }
   deriving (Eq, Show, NFData)
+  deriving newtype (J.Encode, JD.FromJSON)
 
 -- | Allows user to specify execution parameters specific to public-chain
 -- execution, namely gas parameters, TTL, creation time, chain identifier.
@@ -85,8 +89,8 @@ instance Default PublicMeta where
     PublicMeta
     { _pmChainId = ChainId ""
     , _pmSender = ""
-    , _pmGasLimit = Gas 0
-    , _pmGasPrice = 0
+    , _pmGasLimit = GasLimit (Gas 0)
+    , _pmGasPrice = GasPrice 0
     , _pmTTL = TTLSeconds 0
     , _pmCreationTime = TxCreationTime 0
     }
