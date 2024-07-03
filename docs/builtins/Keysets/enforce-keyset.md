@@ -1,40 +1,48 @@
 ## enforce-keyset
-Use `enforce-keyset` to execute a specified `GUARD` or a defined keyset named `KEYSETNAME` to enforce the desired predicate logic.
+
+Use `enforce-keyset` to execute a specified `guard` or a defined keyset named `keysetname` to enforce the desired predicate logic.
 
 ### Basic syntax
 
-To execute a `GUARD` or a defined keyset to enforce desired predicate logic, use the following syntax:
+To execute a `guard` to enforce desired predicate logic, use the following syntax:
 
-`(enforce-keyset GUARD)`
-`(enforce-keyset KEYSETNAME)`
+```pact
+(enforce-keyset guard)
+```
+
+To require a specified keyset to enforce desired predicate logic, use the following syntax:
+
+```pact
+(enforce-keyset keysetname)
+```
 
 ### Arguments
 
-Use the following arguments to specify the `GUARD` or `KEYSETNAME` for the `enforce-keyset` Pact function:
+Use the following arguments to specify the `guard` or `keysetname` for the `enforce-keyset` Pact function:
 
-| Argument   | Type   | Description                                        |
-|------------|--------|----------------------------------------------------|
-| `GUARD`    | `guard`  | Specifies the guard to execute.                    |
-| `KEYSETNAME` | `string` | Specifies the name of the defined keyset to enforce.|
+| Argument | Type | Description |
+|----------|------|------------ |
+| `guard` | guard | Specifies the guard to execute. |
+| `keysetname` | string | Specifies the name of the defined keyset to enforce. |
 
 ### Return values
 
-The `enforce-keyset` function returns a boolean value indicating whether the guard or keyset enforced the desired predicate logic.
+The `enforce-keyset` function returns a boolean value indicating whether the specified guard or keyset predicate logic was enforced.
 
 ### Examples
 
-The following examples demonstrate the `enforce-keyset` function:
-
-1. Execute a guard named 'admin-keyset' to enforce desired logic:
+The following example demonstrates how to use the `enforce-keyset` function to enforce logic defined in the 'admin-keyset' predicate function:
 
 ```pact
 (enforce-keyset 'admin-keyset)
 ```
 
-2. Execute a row guard named 'row-guard' to enforce desired logic:
+If the condition specified by the `admin-keyset` predicate function is satisfied, the `enforce-keyset` function returns a boolean value of true.
+
+The following example enforces the logic defined in the 'row-guard' predicate logic:
 
 ```pact
 (enforce-keyset row-guard)
 ```
 
-In these examples, the `enforce-keyset` function is used to execute the specified guard or keyset to enforce the desired predicate logic. The function returns a boolean value indicating whether the guard or keyset enforced the desired logic successfully.
+If the condition specified by the `row-guard` predicate function is satisfied, the `enforce-keyset` function returns a boolean value of true.

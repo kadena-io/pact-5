@@ -6,7 +6,9 @@ Use `keys` to return all keys present in a specified table.
 
 To retrieve all keys present in a `table`, use the following syntax:
 
-`(keys table)`
+```pact
+(keys table)
+```
 
 ### Arguments
 
@@ -14,7 +16,7 @@ Use the following argument to specify the table from which you want to retrieve 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `table` | `table<{row}>` | Specifies the table from which keys will be retrieved. |
+| `table` | table<{row}>`| Specifies the table from which keys will be retrieved. |
 
 ### Return value
 
@@ -22,7 +24,7 @@ The `keys` function returns a list of strings containing all keys present in the
 
 ### Examples
 
-The following example demonstrates the use of `keys` in the Pact REPL to retrieve all keys present in the "accounts" table:
+The following example demonstrates how to use the `keys` function to retrieve all of the keys present in the "accounts" table:
 
 ```pact
 (keys accounts)

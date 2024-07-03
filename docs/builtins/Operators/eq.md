@@ -1,12 +1,12 @@
-## =
+## equal (=)
 
-The `=` function returns true if the first argument `x` is equal to the second argument `y`.
+Use `=` to return true if the first argument `oper1` is equal to the second argument `oper2`.
 
 ### Basic syntax
 
-To check if `x` is equal to `y`, use the following syntax:
+To check if `oper1` is equal to `oper2`, use the following syntax:
 
-`(= x y)`
+`(= oper1 oper2)`
 
 ### Arguments
 
@@ -14,48 +14,60 @@ Use the following arguments to specify the values for comparison using the `=` P
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `x` | `<a[integer,decimal,string,time,bool,object,list,table]>` | Specifies the first value for comparison. |
-| `y` | `<a[integer,decimal,string,time,bool,object,list,table]>` | Specifies the second value for comparison. |
+| `oper1` | integer, decimal, string, time, bool, object, list, or table | Specifies the first value for comparison. |
+| `oper2` | integer, decimal, string, time, bool, object, list, table | Specifies the second value for comparison. |
 
 ### Return value
 
-The `=` function returns a boolean value indicating whether `x` is equal to `y`.
+The `=` function returns a boolean value indicating whether `oper1` is equal to `oper2`.
 
 ### Examples
 
-The following examples demonstrate the usage of the `=` function within a Pact REPL. They compare two values to check if the first value is equal to the second value:
+The following example demonstrates how to use the `=` function to compare two integer values to check if the first value is equal to the second value:
 
 ```pact
-pact>(= 5 5)
+pact> (= 5 5)
 true
 ```
 
+The following example demonstrates how to use the `=` function to compare two decimal values to check if the first value is equal to the second value:
+
 ```pact
-pact>(= 3.14 2.71)
+pact> (= 3.14 2.71)
 false
 ```
 
+The following example demonstrates how to use the `=` function to compare two string values to check if the first string is equal to the second string:
+
 ```pact
-pact>(= "hello" "hello")
+pact> (= "hello" "hello")
 true
 ```
 
+The following example demonstrates how to use the `=` function to compare two time values to check if the first time is equal to the second time:
+
 ```pact
-pact>(= (time "2023-06-05T10:00:00Z") (time "2023-06-05T10:00:00Z"))
+pact> (= (time "2023-06-05T10:00:00Z") (time "2023-06-05T10:00:00Z"))
 true
 ```
 
+The following example demonstrates how to use the `=` function to compare two object values to check if the first object is equal to the second object:
+
 ```pact
-pact>(= true false)
+pact> (= { "name": "Alice", "age": 30 } { "name": "Alice", "age": 26 })
 false
 ```
 
+The following example demonstrates how to use the `=` function to compare two list values to check if the first list is equal to the second list:
+
 ```pact
-pact>(= { "name": "Alice", "age": 30 } { "name": "Alice", "age": 30 })
+pact> (= [1, 2, 3] [1, 2, 3])
 true
 ```
 
+You can also the `=` function to evaluate variables and expressions.
+For example:
+
 ```pact
-pact>(= [1, 2, 3] [1, 2, 3])
-true
+(enforce (= amount 1.0) "Mint can only be 1")
 ```

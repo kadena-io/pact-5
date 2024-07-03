@@ -1,11 +1,16 @@
-## /
-The `/` function divides the first argument `x` by the second argument `y`.
+## divide (/)
+
+Use `/` to divide the first argument `oper1` by the second argument `oper2`.
+Note that you can use this function to divide interger values or decimal values.
+However, you should use the same type for both `oper1` and `oper2` values.
 
 ### Basic syntax
 
-To divide `x` by `y`, use the following syntax:
+To divide `oper1` by `oper2`, use the following syntax:
 
-`(/ x y)`
+```pact
+(/ oper1 oper2)
+```
 
 ### Arguments
 
@@ -13,25 +18,21 @@ Use the following arguments to specify the values for division using the `/` Pac
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `x` | `integer` or `decimal` | Specifies the dividend. |
-| `y` | `integer` or `decimal` | Specifies the divisor. |
+| `oper1` | integer or decimal | Specifies the value of the dividend. |
+| `oper2` | integer or decimal | Specifies the divisor. |
 
 ### Return value
 
-The `/` function returns the result of dividing `x` by `y`.
+The `/` function returns the result of dividing `oper1` by `oper2`.
 
 ### Examples
 
-The following examples demonstrate the usage of the `/` function within a Pact REPL. They divide two values:
+The following examples demonstrate how to use the `/` function to divide two values in a Pact REPL:
 
 ```pact
-pact>(/ 10.0 2.0)
+pact> (/ 10.0 2.0)
 5.0
-```
 
-```pact
-pact>(/ 8 3)
+pact> (/ 8 3)
 2
 ```
-
-These examples illustrate how to use the `/` function to perform division operations in Pact, facilitating arithmetic calculations with both integer and decimal values.
