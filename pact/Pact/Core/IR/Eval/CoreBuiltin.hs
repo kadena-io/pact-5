@@ -49,7 +49,6 @@ import qualified Data.ByteString as BS
 import qualified GHC.Exts as Exts
 import qualified GHC.Integer.Logarithms as IntLog
 import qualified Pact.Time as PactTime
-
 #ifndef WITHOUT_CRYPTO
 import qualified Control.Lens as Lens
 #endif
@@ -1984,9 +1983,9 @@ coreHyperlaneDecodeTokenMessage info b cont handler _env = \case
          throwExecutionError info $ HyperlaneDecodeError $ HyperlaneDecodeErrorInternal e
       Left _ -> do
          throwExecutionError info $ HyperlaneDecodeError $ HyperlaneDecodeErrorBinary
-      Right (_, _, _tm) -> do
-        let o = undefined
-        returnCEKValue cont handler (VObject o)
+      Right (_, _, tm) -> case tokenMessageToTerm tm of
+        Left e -> throwExecutionError info $ HyperlaneDecodeError e
+        Right pv -> returnCEKValue cont handler (VPactValue pv)
   args -> argsError info b args
 
 coreHyperlaneMessageId :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i

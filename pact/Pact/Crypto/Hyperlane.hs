@@ -19,22 +19,17 @@ module Pact.Crypto.Hyperlane
   , packTokenMessageERC20
   , unpackTokenMessageERC20
   , tokenMessageToTerm
-  , HyperlaneError(..)
-  , HyperlaneDecodeError(..)
-  , displayHyperlaneError
-  , displayHyperlaneDecodeError
   , decodeHyperlaneTokenMessageObject
   , getHyperlaneMessageId
   , eof
   ) where
 
-import Control.Lens ((^?), at, _Just, Prism', _1)
+import Control.Lens ((^?), at, _Just, Prism')
 import Control.Monad (unless)
 import Control.Monad.Except (throwError)
 import Data.Bifunctor (first)
 import Data.Binary.Get (Get)
 import Data.Binary.Get qualified as Bin
-import Data.Binary.Put qualified as Bin
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Builder (Builder)
@@ -42,8 +37,6 @@ import Data.ByteString.Builder qualified as BB
 import Data.ByteString.Lazy qualified as BL
 import Data.ByteString.Short qualified as BSS
 import Data.Decimal (Decimal)
-import Data.Default (def)
-import Data.List qualified as List
 import Data.Map (Map)
 import Data.Ratio ((%))
 import Data.Text (Text)
@@ -285,8 +278,7 @@ getWord256BE = do
 tokenMessageToTerm :: TokenMessageERC20 -> Either HyperlaneDecodeError PactValue
 tokenMessageToTerm tm =  do
   g <- first (const HyperlaneDecodeErrorParseRecipient)
-         $ fmap PGuard
-         $ fmap _unLegacy
+         $ fmap (PGuard . _unLegacy)
          $ J.eitherDecode (BL.fromStrict (tmRecipient tm))
   let chainId = Text.pack (show (toInteger (tmChainId tm)))
   pure $ PObject $ M.fromList

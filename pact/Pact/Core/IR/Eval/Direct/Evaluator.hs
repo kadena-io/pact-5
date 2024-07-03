@@ -56,6 +56,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
 import qualified GHC.Exts as Exts
 import qualified GHC.Integer.Logarithms as IntLog
+import qualified Data.List as L
 
 #ifdef WITH_TRACING
 import System.Clock
@@ -92,6 +93,9 @@ import Pact.Core.Gas
 import Pact.Core.StableEncoding
 import Pact.Core.SPV
 import Pact.Core.Verifiers
+import Pact.Crypto.Hyperlane
+import qualified Data.Binary.Get as Bin
+import qualified Data.Binary.Put as Bin
 
 import Pact.Core.Namespace
 #ifndef WITHOUT_CRYPTO
@@ -3355,6 +3359,42 @@ coreEnforceVerifier info b _env = \case
   where
     verifError verName msg = VerifierFailure (VerifierName verName) msg
 
+-----------------------------------
+-- Hyperlane
+-----------------------------------
+
+
+coreHyperlaneDecodeTokenMessage :: (IsBuiltin b) => NativeFunction e b i
+coreHyperlaneDecodeTokenMessage info b _env = \case
+  [VString s] -> case decodeBase64UrlUnpadded (T.encodeUtf8 s) of
+    Left _e -> throwExecutionError info $ HyperlaneDecodeError HyperlaneDecodeErrorBase64 
+    Right bytes -> case Bin.runGetOrFail (unpackTokenMessageERC20 <* eof) (BS.fromStrict bytes) of
+      Left (_, _, e) | "TokenMessage" `L.isPrefixOf` e -> do
+         throwExecutionError info $ HyperlaneDecodeError $ HyperlaneDecodeErrorInternal e
+      Left _ -> do
+         throwExecutionError info $ HyperlaneDecodeError $ HyperlaneDecodeErrorBinary
+      Right (_, _, tm) -> case tokenMessageToTerm tm of
+        Left e -> throwExecutionError info $ HyperlaneDecodeError e
+        Right pv -> return (VPactValue pv)
+  args -> argsError info b args
+
+coreHyperlaneMessageId :: (IsBuiltin b) => NativeFunction e b i
+coreHyperlaneMessageId info b _env = \case
+  [VObject o] ->  case decodeHyperlaneMessageObject o of
+    Left e -> throwExecutionError info $ HyperlaneError e
+    Right r -> do
+      let msgId =  getHyperlaneMessageId r
+      return (VString msgId)
+  args -> argsError info b args
+
+coreHyperlaneEncodeTokenMessage :: (IsBuiltin b) => NativeFunction e b i
+coreHyperlaneEncodeTokenMessage info b _env = \case
+  [VObject o] ->  case decodeHyperlaneTokenMessageObject o of
+    Left e -> throwExecutionError info $ HyperlaneError e
+    Right r -> do
+      let encoded = T.decodeUtf8 $ encodeBase64UrlUnpadded $ BS.toStrict $ Bin.runPut $ Bin.putBuilder $ packTokenMessageERC20 r
+      return (VString encoded)
+  args -> argsError info b args
 
 
 -----------------------------------
@@ -3522,3 +3562,6 @@ coreBuiltinRuntime =
     CoreIdentity -> coreIdentity
     CoreVerifySPV -> coreVerifySPV
     CoreEnforceVerifier -> coreEnforceVerifier
+    CoreHyperlaneMessageId -> coreHyperlaneMessageId
+    CoreHyperlaneDecodeMessage -> coreHyperlaneDecodeTokenMessage
+    CoreHyperlaneEncodeMessage -> coreHyperlaneEncodeTokenMessage

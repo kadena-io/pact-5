@@ -554,6 +554,9 @@ nativeGasTable = MilliGas . \case
   CoreIdentity -> basicWorkGas
   CoreVerifySPV -> 100_000
   CoreEnforceVerifier -> 10_000
+  CoreHyperlaneMessageId -> basicWorkGas
+  CoreHyperlaneDecodeMessage -> basicWorkGas
+  CoreHyperlaneEncodeMessage -> basicWorkGas
 
 replNativeGasTable :: ReplBuiltin CoreBuiltin -> MilliGas
 replNativeGasTable = \case
