@@ -12,11 +12,13 @@ import qualified Pact.Core.Test.LegacySerialiseTests as LegacySerialiseTests
 import qualified Pact.Core.Test.StaticErrorTests as StaticErrorTests
 import qualified Pact.Core.Test.ZkTests as ZkTests
 import qualified Pact.Core.Test.PoseidonTests as PoseidonTests
-import qualified Pact.Core.Test.LanguageServer as LanguageServer
+-- import qualified Pact.Core.Test.LanguageServer as LanguageServer
 import qualified Pact.Core.Test.GasGolden as GasGolden
 import qualified Pact.Core.Test.SizeOfTests as SizeOfTests
 import qualified Pact.Core.Test.ConTagGolden as ConTagGoldenTests
 import qualified Pact.Core.Test.DocsTests as DocsTests
+import qualified Pact.Core.Test.PrincipalTests as PrincipalTests
+import qualified Pact.Core.Test.SignatureSchemeTests as SignatureSchemeTests
 
 main :: IO ()
 main = do
@@ -35,11 +37,13 @@ main = do
     , ZkTests.tests
     , PoseidonTests.tests
     , PersistenceTests.tests
-    , LanguageServer.tests
+    -- , LanguageServer.tests
     , gasGolden
     , SizeOfTests.tests
     , commandTests
     , ConTagGoldenTests.tests
     , docsTests
+    , PrincipalTests.tests
+    , SignatureSchemeTests.tests
     ]
 

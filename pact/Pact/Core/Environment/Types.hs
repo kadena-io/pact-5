@@ -107,7 +107,6 @@ import Pact.Core.Namespace
 import Pact.Core.StackFrame
 import Pact.Core.SPV
 import Pact.Core.Info
-import Pact.Core.Debug
 
 data SourceCode
   = SourceCode
@@ -292,6 +291,7 @@ data ReplState b
   --   of the TL definitions for the qualified name.
   , _replTx :: Maybe (TxId, Maybe Text)
   , _replNativesEnabled :: Bool
+  -- ^
   }
 
 data RuntimeMode
@@ -316,9 +316,6 @@ newtype EvalM e b i a =
     , MonadReader (EvalMEnv e b i)
     , MonadState (EvalState b i)
     , MonadError (PactError i))
-
-instance PhaseDebug b i (EvalM e b i) where
-  debugPrint _ _ = pure ()
 
 type ReplM b = EvalM ReplRuntime b SpanInfo
 

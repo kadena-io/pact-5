@@ -80,7 +80,7 @@ runReplTest
   -> Assertion
 runReplTest (ReplSourceDir path) pdb file src interp = do
   gasLog <- newIORef Nothing
-  ee <- defaultEvalEnv pdb replCoreBuiltinMap
+  ee <- defaultEvalEnv pdb replBuiltinMap
   let source = SourceCode (path </> file) src
   let rstate = ReplState
             { _replFlags = mempty

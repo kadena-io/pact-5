@@ -13,7 +13,8 @@ module Pact.Core.Builtin
  , coreBuiltinNames
  , ReplBuiltin(..)
  , replCoreBuiltinNames
- , replCoreBuiltinMap
+ , replBuiltinMap
+ , replCoreBuiltinOnlyMap
  , coreBuiltinToUserText
  , coreBuiltinToText
  , replCoreBuiltinToUserText
@@ -908,14 +909,28 @@ replCoreBuiltinNames =
   , b `notElem` (RBuiltinWrap <$> coreBuiltinOverloads)
   , let !txtRepr = replCoreBuiltinToText b]
 
-replCoreBuiltinMap :: Map Text (ReplBuiltin CoreBuiltin)
-replCoreBuiltinMap =
+-- | A map from raw text name of a builtin
+--   to a `ReplBuiltin CoreBuiltin`
+replBuiltinMap :: Map Text (ReplBuiltin CoreBuiltin)
+replBuiltinMap =
   M.fromList $
     [ (txtRepr, b)
     | b <- [minBound .. maxBound]
     , b `notElem` (RBuiltinWrap <$> coreBuiltinOverloads)
     , let !txtRepr = replCoreBuiltinToText b]
 
+-- | A map from raw text name of a builtin
+--   to a `ReplBuiltin CoreBuiltin`, but
+--   we do not resolve repl natives.
+--   This is so the repl resolves `.pact` files and
+--   `.repl` files differently
+replCoreBuiltinOnlyMap :: Map Text (ReplBuiltin CoreBuiltin)
+replCoreBuiltinOnlyMap =
+  M.fromList $
+    [ (txtRepr, RBuiltinWrap b)
+    | b <- [minBound .. maxBound]
+    , b `notElem` coreBuiltinOverloads
+    , let !txtRepr = coreBuiltinToText b]
 
 -- | A typeclass for general information about pact builtins, mostly
 --   useful for runtime native information and for error messages. Note that

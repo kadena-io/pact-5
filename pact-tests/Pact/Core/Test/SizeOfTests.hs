@@ -42,7 +42,7 @@ tests = testGroup "SizeOfTests" $
 getSize :: SizeOf a => SizeOfVersion -> a -> IO (Either PactErrorI Bytes)
 getSize version value = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
-  ee <- defaultEvalEnv pdb replCoreBuiltinMap
+  ee <- defaultEvalEnv pdb replBuiltinMap
   let es = def
   (v, _state) <- liftIO $ runEvalM (ExecEnv ee) es (sizeOf def version value)
   return v

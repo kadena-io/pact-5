@@ -19,6 +19,7 @@ module Pact.Core.Repl.Compile
  , interpretEvalDirect
  , interpretReplProgram
  , ReplInterpreter
+ , isPactFile
  ) where
 
 import Control.Lens
@@ -48,6 +49,7 @@ import Pact.Core.Info
 import Pact.Core.PactValue
 import Pact.Core.Errors
 import Pact.Core.Interpreter
+import Pact.Core.Pretty hiding (pipe)
 import Pact.Core.Serialise (serialisePact_repl_spaninfo)
 
 
@@ -75,6 +77,18 @@ data ReplCompileValue
   | RBuiltinDoc Text
   | RUserDoc (EvalDef ReplCoreBuiltin SpanInfo) (Maybe Text)
   deriving Show
+
+instance Pretty ReplCompileValue where
+  pretty = \case
+    RCompileValue cv -> pretty cv
+    RLoadedDefun mn ->
+      "Loaded repl defun" <+> pretty mn
+    RLoadedDefConst mn ->
+      "Loaded repl defconst" <+> pretty mn
+    RBuiltinDoc doc -> pretty doc
+    RUserDoc qn doc ->
+      vsep [pretty qn, "Docs:", maybe mempty pretty doc]
+
 
 -- | Internal function for loading a file.
 --   Exported because it is used in the tests.
@@ -153,23 +167,36 @@ interpretEvalDirect =
   interpretGuardDirect info g =
     Direct.interpretGuard info Direct.replBuiltinEnv g
 
+isPactFile :: FilePath -> Bool
+isPactFile f = takeExtension f == ".pact"
 
 interpretReplProgram
   :: ReplInterpreter
   -> SourceCode
   -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
-interpretReplProgram interpreter (SourceCode _ source) display = do
+interpretReplProgram interpreter (SourceCode sourceFp source) display = do
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
-  parsed <- liftEither $ Lisp.parseReplProgram lexx
+  parsed <- parseSource lexx
+  setBuiltinResolution
   concat <$> traverse pipe parsed
   where
+  sourceIsPactFile = isPactFile sourceFp
+  parseSource lexerOutput
+    | sourceIsPactFile = (fmap.fmap) (Lisp.RTL . Lisp.RTLTopLevel) $ liftEither $ Lisp.parseProgram lexerOutput
+    | otherwise = liftEither $ Lisp.parseReplProgram lexerOutput
+  setBuiltinResolution
+    | sourceIsPactFile =
+      replEvalEnv . eeNatives .== replCoreBuiltinOnlyMap
+    | otherwise =
+      replEvalEnv . eeNatives .== replBuiltinMap
   displayValue p = p <$ display p
   pipe = \case
     Lisp.RTL rtl ->
       pure <$> pipe' rtl
     Lisp.RTLReplSpecial rsf -> case rsf of
+      -- Load is a bit special
       Lisp.ReplLoad txt reset i -> do
         let loading = RCompileValue (InterpretValue (PString ("Loading " <> txt <> "...")) i)
         display loading
@@ -177,7 +204,7 @@ interpretReplProgram interpreter (SourceCode _ source) display = do
         pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
         oldEE <- useReplState replEvalEnv
         when reset $ do
-          ee <- liftIO (defaultEvalEnv pactdb replCoreBuiltinMap)
+          ee <- liftIO (defaultEvalEnv pactdb replBuiltinMap)
           put def
           replEvalEnv .== ee
         fp <- mangleFilePath (T.unpack txt)
@@ -186,6 +213,7 @@ interpretReplProgram interpreter (SourceCode _ source) display = do
         replCurrSource .== oldSrc
         unless reset $ do
           replEvalEnv .== oldEE
+        setBuiltinResolution
         pure out
   mangleFilePath fp = do
     (SourceCode currFile _) <- useReplState replCurrSource
@@ -217,7 +245,6 @@ interpretReplProgram interpreter (SourceCode _ source) display = do
     _ ->  do
       ds <- runDesugarReplTopLevel tl
       interpret ds
-  isPactFile f = takeExtension f == ".pact"
   interpret (DesugarOutput tl _deps) = do
     case tl of
       RTLDefun df -> do
