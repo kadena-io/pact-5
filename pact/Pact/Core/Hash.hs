@@ -35,8 +35,11 @@ module Pact.Core.Hash
 ) where
 
 import Control.DeepSeq
+import Data.Aeson
 import Data.ByteString.Short (ShortByteString, fromShort, toShort)
 import Data.ByteString (ByteString)
+import Data.Hashable (Hashable)
+import Data.Serialize (Serialize)
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Word
@@ -50,15 +53,22 @@ import qualified Data.ByteArray as ByteArray
 import qualified Crypto.Hash as Crypto
 
 import Pact.Core.Pretty ( renderCompactString, Pretty(pretty) )
+import qualified Pact.JSON.Encode as J
 
 -- | Untyped hash value, encoded with unpadded base64url.
 -- Within Pact these are blake2b_256 but unvalidated as such,
 -- so other hash values are kosher (such as an ETH sha256, etc).
 newtype Hash = Hash { unHash :: ShortByteString }
-  deriving (Eq, Ord, NFData, Generic)
+  deriving (Eq, Ord, NFData, Generic, Serialize, Hashable)
 
 instance Show Hash where
   show (Hash h) = show $ encodeBase64UrlUnpadded $ fromShort h
+
+instance FromJSONKey Hash where
+  fromJSONKey = FromJSONKeyTextParser $ \t -> case decodeBase64UrlUnpadded (T.encodeUtf8 t) of
+    Left e -> fail e
+    Right bs | B.length bs == pactHashLength -> pure (unsafeBsToPactHash bs)
+             | otherwise -> fail "Invalid hash length"
 
 instance Pretty Hash where
   pretty (Hash h) =
@@ -66,6 +76,16 @@ instance Pretty Hash where
 
 hashToText :: Hash -> Text
 hashToText (Hash h) = toB64UrlUnpaddedText (fromShort h)
+
+instance FromJSON Hash where
+  parseJSON = withText "Hash" $ \t -> case decodeBase64UrlUnpadded (T.encodeUtf8 t) of
+    Left e -> fail e
+    Right bs | B.length bs == pactHashLength -> pure (unsafeBsToPactHash bs)
+             | otherwise -> fail "Invalid hash length"
+
+instance J.Encode Hash where
+  build = J.build . hashToText
+
 
 moduleHashToText :: ModuleHash -> Text
 moduleHashToText (ModuleHash h) = hashToText h

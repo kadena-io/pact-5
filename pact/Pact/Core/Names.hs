@@ -64,9 +64,11 @@ module Pact.Core.Names
  , parseParsedTyName
  , parseQualifiedName
  , parseFullyQualifiedName
+ , VerifierName(..)
  ) where
 
 import Control.Lens
+import Data.Aeson
 import Data.Text(Text)
 import qualified Data.Text as T
 import Data.Word(Word64)
@@ -77,9 +79,10 @@ import qualified Data.Char as Char
 import qualified Text.Megaparsec as MP
 import qualified Text.Megaparsec.Char as MP
 
+import qualified Pact.JSON.Encode as J
+
 import Pact.Core.Hash
 import Pact.Core.Pretty(Pretty(..))
-import Data.Aeson (FromJSONKey)
 import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Short as SB
 
@@ -406,7 +409,7 @@ makeLenses ''QualifiedName
 --   in the case of nested defpacts, the hash of the
 --   parent + the nested continuation
 newtype DefPactId
-  = DefPactId { _defpactId :: Text }
+  = DefPactId { _defPactId :: Text }
   deriving (Eq,Ord,Show, NFData)
 
 instance Pretty DefPactId where
@@ -495,3 +498,7 @@ renderDefPactId (DefPactId t) = t
 renderParsedTyName :: ParsedTyName -> Text
 renderParsedTyName (TBN (BareName n)) = n
 renderParsedTyName (TQN qn) = renderQualName qn
+
+newtype VerifierName = VerifierName Text
+  deriving newtype (J.Encode, NFData, Eq, Show, Ord, FromJSON)
+  deriving stock Generic

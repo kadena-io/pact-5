@@ -277,7 +277,7 @@ mockPactDb serial = do
     DModules -> readSysTable ptModules k (Rendered . renderModuleName) _decodeModuleData
     DUserTables tbl ->
       readRowData ptUser tbl k
-    DDefPacts -> readSysTable ptDefPact k (Rendered . _defpactId) _decodeDefPactExec
+    DDefPacts -> readSysTable ptDefPact k (Rendered . _defPactId) _decodeDefPactExec
     DNamespaces ->
       readSysTable ptNamespaces k (Rendered . _namespaceName) _decodeNamespace
 
@@ -298,7 +298,7 @@ mockPactDb serial = do
     DKeySets -> liftIO $ writeSysTable pt domain k v (Rendered . renderKeySetName) _encodeKeySet
     DModules -> liftIO $ writeSysTable pt domain k v (Rendered . renderModuleName) _encodeModuleData
     DUserTables tbl -> writeRowData pt tbl wt k v
-    DDefPacts -> liftIO $ liftIO $ writeSysTable pt domain k v (Rendered . _defpactId) _encodeDefPactExec
+    DDefPacts -> liftIO $ liftIO $ writeSysTable pt domain k v (Rendered . _defPactId) _encodeDefPactExec
     DNamespaces -> liftIO $ liftIO $ writeSysTable pt domain k v (Rendered . _namespaceName) _encodeNamespace
 
   readRowData ref tbl k = do

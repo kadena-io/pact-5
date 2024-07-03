@@ -48,6 +48,7 @@ common pact-common
     , base16-bytestring
     , base64-bytestring
     , bytestring
+    , cereal
     , containers
     , criterion
     , data-default
@@ -56,6 +57,7 @@ common pact-common
     , directory
     , exceptions
     , filepath
+    , hashable
     , lens
     , mtl
     , pact-json
@@ -96,6 +98,7 @@ common pact-common
     , aeson
     , trifecta
     , hashable
+    , template-haskell
 
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
@@ -118,12 +121,34 @@ library pact-crypto
   import: pact-common
   hs-source-dirs: crypto
   build-depends: poly
+
   exposed-modules:
     Pact.Core.Crypto.Hash.Poseidon
     Pact.Core.Crypto.Pairing
     Pact.Core.Crypto.Pairing.Fields
   if !(flag(with-crypto))
     buildable: False
+
+library pact-request-api
+  import: pact-common
+  hs-source-dirs: pact-request-api
+  build-depends:
+      asn1-encoding
+    , asn1-types
+    , cereal
+    , pact-tng
+    , pact-tng:pact-crypto
+  exposed-modules:
+    Pact.Core.Command.Types
+    Pact.Core.Command.Client
+    Pact.Core.Command.Crypto
+    Pact.Core.Command.RPC
+    Pact.Core.Command.Util
+    Pact.Core.Crypto.WebAuthn.Cose.PublicKey
+    Pact.Core.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
+    Pact.Core.Crypto.WebAuthn.Cose.Registry
+    Pact.Core.Crypto.WebAuthn.Cose.SignAlg
+    Pact.Core.Crypto.WebAuthn.Cose.Verify
 
 library
   import: pact-common
@@ -207,6 +232,7 @@ library
     Pact.Core.Legacy.LegacyCodec
     Pact.Core.Verifiers
     Pact.Core.Interpreter
+    Pact.Core.DeriveConTag
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
@@ -385,6 +411,7 @@ test-suite core-tests
     , mtl
     , text
     , transformers
+    , pact-json
     , pact-tng
     , prettyprinter
     , vector
@@ -397,10 +424,12 @@ test-suite core-tests
     , groups
     , semirings
     , neat-interpolation
+    , pact-tng:pact-request-api
     , pact-tng:pact-lsp
     , lsp-test
     , lsp-types
   other-modules:
+    , Pact.Core.Test.CommandTests
     , Pact.Core.Test.ReplTests
     , Pact.Core.Test.LexerParserTests
     , Pact.Core.Test.LexerTests
@@ -415,6 +444,7 @@ test-suite core-tests
     , Pact.Core.Test.PoseidonTests
     , Pact.Core.Test.LanguageServer
     , Pact.Core.Test.GasGolden
+    , Pact.Core.Test.ConTagGolden
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
 
@@ -431,3 +461,21 @@ executable legacyPactDbCheck
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
+
+-- -- tools
+-- executable pact-server
+--   import: pact-common
+--   hs-source-dirs: pact-server
+
+--   main-is: Pact/Server.hs
+
+--   build-depends:
+--     , pact-tng
+--     , async
+--     , fast-logger
+--     , filepath
+--     , servant
+--     , servant-server
+--   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+--   ghc-prof-options:    -fprof-auto -fprof-auto-calls
+--   default-language:    Haskell2010

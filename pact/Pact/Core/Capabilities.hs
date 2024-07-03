@@ -81,7 +81,7 @@ data CapToken name v
   = CapToken
   { _ctName :: name
   , _ctArgs :: [v]
-  } deriving (Show, Eq, Ord, Generic)
+  } deriving (Show, Eq, Ord, Functor, Generic)
 
 
 --
