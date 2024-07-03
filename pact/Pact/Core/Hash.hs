@@ -13,27 +13,27 @@
 
 
 module Pact.Core.Hash
-( Hash(..)
-, ModuleHash(..)
-, hash
-, hashToText
-, verifyHash
-, initialHash
-, pactHash
-, pactInitialHash
-, pactHashLength
-, decodeBase64UrlUnpadded
-, toB64UrlUnpaddedText
-, fromB64UrlUnpaddedText
-, defaultPactHash
-, placeholderHash
-, moduleHashToText
-, parseModuleHash
+  ( Hash(..)
+  , ModuleHash(..)
+  , hash
+  , hashToText
+  , verifyHash
+  , initialHash
+  , pactHash
+  , pactInitialHash
+  , pactHashLength
+  , decodeBase64UrlUnpadded
+  , toB64UrlUnpaddedText
+  , fromB64UrlUnpaddedText
+  , defaultPactHash
+  , placeholderHash
+  , moduleHashToText
+  , parseModuleHash
   , encodeBase64UrlUnpadded
-  -- unsafe creating of a 'ModuleHash', only used in the
-  -- legacy translation process.
-, unsafeBsToModuleHash
-) where
+    -- unsafe creating of a 'ModuleHash', only used in the
+    -- legacy translation process.
+  , unsafeBsToModuleHash
+  ) where
 
 import Control.DeepSeq
 import Data.ByteString.Short (ShortByteString, fromShort, toShort)
