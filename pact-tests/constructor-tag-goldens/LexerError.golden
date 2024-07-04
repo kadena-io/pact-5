@@ -1,1 +1,4 @@
-[{"conName":"LexicalError","conIndex":"0"},{"conName":"StringLiteralError","conIndex":"1"},{"conName":"OutOfInputError","conIndex":"2"}]
+{"conName":"LexicalError","conIndex":"0"}
+{"conName":"StringLiteralError","conIndex":"1"}
+{"conName":"OutOfInputError","conIndex":"2"}
+

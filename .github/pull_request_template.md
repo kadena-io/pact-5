@@ -2,10 +2,11 @@ PR checklist:
 
 * [ ] Test coverage for the proposed changes
 * [ ] PR description contains example output from repl interaction or a snippet from unit test output
-* [ ] Any changes that could be relevant to users [have been recorded in the changelog](https://github.com/kadena-io/pact-core/blob/master/CHANGELOG.md)
+* [ ] (If Relevant) New builtins have a FV translation
+* [ ] (If Relevant) Documentation has been (manually) updated at https://docs.kadena.io/pact
 
 Additionally, please justify why you should or should not do the following:
 
-* [ ] Confirm replay/back compat
 * [ ] Benchmark regressions
-* [ ] (For Kadena engineers) Run integration-tests against a Chainweb built with this version of Pact
+* [x] Confirm replay/back compat (Ignore until core release)
+* [x] (For Kadena engineers) Run integration-tests against a Chainweb built with this version of Pact (Ignore until core release)
