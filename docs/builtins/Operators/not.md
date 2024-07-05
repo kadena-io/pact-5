@@ -1,12 +1,14 @@
 ## not
 
-Use `not` to compute the boolean negation of a value.
+Use `not` to compute the boolean negation of a specified `value`.
 
 ### Basic syntax
 
-To compute the boolean negation of `X`, use the following syntax:
+To compute the boolean negation of `value`, use the following syntax:
 
-`(not X)`
+```pact
+(not value)
+```
 
 ### Argument
 
@@ -14,7 +16,7 @@ Use the following argument to specify the boolean value for which you want to co
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `X` | `bool` | Specifies the boolean value to be negated. |
+| `value` | bool | Specifies the expression to evaluate that returns the boolean value to be negated. |
 
 ### Return value
 
@@ -22,11 +24,11 @@ The `not` function returns the boolean negation of the input value.
 
 ### Examples
 
-The following example demonstrates the use of `not` in the Pact REPL:
+The following example demonstrates how to use of the `not` function in the Pact REPL:
 
 ```pact
-pact>(not (> 1 2))
+pact> (not (> 1 2))
 true
 ```
 
-In this example, the expression `>(1, 2)` evaluates to `false`, and `not` negates this value, resulting in `true`.
+In this example, the expression `(> 1 2)` evaluates to `false`, and the `not` function negates this value, resulting in `true`.

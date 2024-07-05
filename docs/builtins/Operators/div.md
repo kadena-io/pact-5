@@ -1,7 +1,7 @@
 ## divide (/)
 
 Use `/` to divide the first argument `oper1` by the second argument `oper2`.
-Note that you can use this function to divide interger values or decimal values.
+Note that you can use this function to divide integer values or decimal values.
 However, you should use the same type for both `oper1` and `oper2` values.
 
 ### Basic syntax

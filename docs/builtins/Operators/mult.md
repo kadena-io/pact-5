@@ -1,12 +1,16 @@
-## *
+## multiply (*)
 
-The `*` function multiplies the first argument `x` by the second argument `y`.
+Use `*` to multiply the first `oper1` argument by the second `oper12` argument.
+Note that you can use this function to multiply integer values or decimal values.
+However, you should use the same type for both `oper1` and `oper2` values.
 
 ### Basic syntax
 
-To multiply `x` by `y`, use the following syntax:
+To multiply `oper1` by `oper2`, use the following syntax:
 
-`(* x y)`
+```pact
+(* oper1 oper2)
+```
 
 ### Arguments
 
@@ -14,24 +18,26 @@ Use the following arguments to specify the values for multiplication using the `
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `x` | `<a[integer,decimal]>` | Specifies the first multiplier. |
-| `y` | `<a[integer,decimal]>` | Specifies the second multiplier. |
+| `oper1` | integer or decimal | Specifies the first multiplier. |
+| `oper2` | integer or decimal | Specifies the second multiplier. |
 
 ### Return value
 
-The `*` function returns the result of multiplying `x` by `y`.
+The `*` function returns the result of multiplying `oper1` by `oper2`.
 
 ### Examples
 
-The following examples demonstrate the usage of the `*` function within a Pact script. They perform multiplication:
+The following example demonstrates how to use the `*` function to multiply two decimal values:
 
 ```pact
-pact>(* 0.5 10.0)
+pact> (* 0.5 10.0)
 5.0
 ```
 
+The following example demonstrates how to use the `*` function to multiply two integer values:
+
 ```pact
-pact>(* 3 5)
+pact> (* 3 5)
 15
 ```
 

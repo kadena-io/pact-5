@@ -32,18 +32,16 @@ pact> (> 1 3)
 false
 ```
 
-
-The following example demonstrates how to use the `>=` function to compare two decimal values to check if the first value (`5.24`) is greater than the second value (`2.52`):
+The following example demonstrates how to use the `>` function to compare two decimal values to check if the first value (`5.24`) is greater than the second value (`2.52`):
 
 ```pact
-pact>(> 5.24 2.52)
+pact> (> 5.24 2.52)
 true
 ```
 
-The following example demonstrates how to use the `>=` function to compare two string values to check if the first value (`abc`) is greater than the second value (`def`):
+The following example demonstrates how to use the `>` function to compare two string values to check if the first value (`abc`) is greater than the second value (`def`):
 
 ```pact
-pact>(> "abc" "def")
+pact> (> "abc" "def")
 false
 ```
-

@@ -1,10 +1,10 @@
 ## and?
 
-Use `and?` to apply a logical AND operation to the results of applying a `value` to functions `oper1` and `oper2`, with short-circuiting.
+Use `and?` to apply a logical AND operation to the results of applying a specified `value` to application functions `oper1` and `oper2`, with short-circuit evaluation.
 
 ### Basic syntax
 
-To apply a logical 'and' to the results of applying `value` to functions `oper1` and `oper2`, use the following syntax:
+To apply a logical AND operation to the results of applying a specified `value` to the functions `oper1` and `oper2`, use the following syntax:
 
 ```pact
 (and? oper1 oper2 value)
@@ -26,7 +26,7 @@ The `and?` function returns a boolean value based on the result of applying `val
 
 ### Examples
 
-The following example demonstrates the `and?` operation in the Pact REPL:
+The following example demonstrates how to use the `and?` function in the Pact REPL:
 
 ```pact
 pact> (and? (> 20) (> 10) 15)
