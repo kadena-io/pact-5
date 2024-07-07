@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Pact.Core.Command.Client (
 
@@ -56,7 +57,6 @@ import Data.List.NonEmpty (NonEmpty(..))
 
 import Pact.Time
 import Pact.JSON.Yaml
-import Pact.JSON.Legacy.Value
 import System.FilePath
 import qualified Pact.JSON.Encode as J
 import qualified Pact.JSON.Decode as JD
@@ -76,6 +76,7 @@ import Pact.Core.Command.RPC
 import Pact.Core.Command.Types
 import Pact.Core.Command.Util
 import Pact.Core.Command.Crypto
+import Pact.Core.Evaluate
 import Pact.Core.Guards
 import Pact.Core.PactValue
 import Pact.Core.Names
@@ -473,7 +474,7 @@ uapiReq' fp p = do
 
 -- | parts read/rationalized from a processed ApiReq:
 -- the ApiReq, code, msg data, PublicMeta
-type ApiReqParts = (ApiReq,Text,A.Value,PublicMeta)
+type ApiReqParts = (ApiReq,Text,PactValue,PublicMeta)
 
 -- | Assemble a command and parts from a ApiReq YAML file.
 mkApiReq :: FilePath -> IO (ApiReqParts,Command Text)
@@ -549,13 +550,16 @@ mkApiReqExec unsignedReq ar@ApiReq{..} fp = do
       (Nothing,Just c) -> return c
       (Just f,Nothing) -> T.decodeUtf8 <$> BS.readFile (dir </> f)
       _ -> dieAR "Expected either a 'code' or 'codeFile' entry"
-    cdata <- case (_ylDataFile,_ylData) of
+    cdataJson <- case (_ylDataFile,_ylData) of
       (Nothing,Just v) -> return v -- either (\e -> dieAR $ "Data decode failed: " ++ show e) return $ eitherDecode (BSL.pack v)
       (Just f,Nothing) -> (BSL.readFile (dir </> f)) >>=
                           either (\e -> dieAR $ "Data file load failed: " ++ show e) return .
                           JD.eitherDecode
       (Nothing,Nothing) -> return A.Null
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
+    cdata <- case A.fromJSON @(StableEncoding PactValue) cdataJson of
+      A.Error e -> dieAR $ "Data decode failed: " ++ e
+      A.Success (StableEncoding v) -> return v
     return (code,cdata)
   pubMeta <- mkPubMeta _ylPublicMeta
   cmd <- withKeypairsOrSigner unsignedReq ar
@@ -599,7 +603,7 @@ mkNonce = maybe (T.pack . show <$> getCurrentTime) return
 mkExec
   :: Text
     -- ^ code
-  -> A.Value
+  -> PactValue
     -- ^ optional environment data
   -> PublicMeta
     -- ^ public metadata
@@ -620,7 +624,7 @@ mkExec code mdata pubMeta kps ves nid ridm = do
          (StableEncoding pubMeta)
          rid
          nid
-         (Exec (ExecMsg code (toLegacyJson mdata)))
+         (Exec (ExecMsg code mdata))
   return $ T.decodeUtf8 <$> cmd
 
 -- | Construct an Exec request message
@@ -628,7 +632,7 @@ mkExec code mdata pubMeta kps ves nid ridm = do
 mkUnsignedExec
   :: Text
     -- ^ code
-  -> A.Value
+  -> PactValue
     -- ^ optional environment data
   -> PublicMeta
     -- ^ public metadata
@@ -649,7 +653,7 @@ mkUnsignedExec code mdata pubMeta kps ves nid ridm = do
          (StableEncoding pubMeta)
          rid
          nid
-         (Exec (ExecMsg code (toLegacyJson mdata)))
+         (Exec (ExecMsg code mdata))
   return $ T.decodeUtf8 <$> cmd
 
 
@@ -667,7 +671,7 @@ mkApiReqCont unsignedReq ar@ApiReq{..} fp = do
     Just r -> return r
     Nothing -> dieAR "Expected a 'rollback' entry"
 
-  cdata <- do
+  cdataJson <- do
     let dir = takeDirectory fp
     case (_ylDataFile,_ylData) of
       (Nothing,Just v) -> return v -- either (\e -> dieAR $ "Data decode failed: " ++ show e) return $ eitherDecode (BSL.pack v)
@@ -676,6 +680,9 @@ mkApiReqCont unsignedReq ar@ApiReq{..} fp = do
                           JD.eitherDecode
       (Nothing,Nothing) -> return A.Null
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
+  cdata <- case A.fromJSON @(StableEncoding PactValue) cdataJson of
+    A.Error e -> dieAR $ "Data decode failed: " ++ e
+    A.Success (StableEncoding v) -> return v
   let pactId = (DefPactId . hashToText) apiPactId
   pubMeta <- mkPubMeta _ylPublicMeta
   cmd <- withKeypairsOrSigner unsignedReq ar
@@ -692,7 +699,7 @@ mkCont
     -- ^ cont step
   -> Bool
     -- ^ has rollback?
-  -> A.Value
+  -> PactValue
     -- ^ environment data
   -> PublicMeta
     -- ^ command public metadata
@@ -715,7 +722,7 @@ mkCont txid step rollback mdata pubMeta kps ves ridm proof nid = do
          (StableEncoding pubMeta)
          rid
          nid
-         (Continuation (ContMsg txid step rollback (toLegacyJson mdata) proof) :: (PactRPC ContMsg))
+         (Continuation (ContMsg txid step rollback mdata proof) :: (PactRPC ContMsg))
   return $ T.decodeUtf8 <$> cmd
 
 
@@ -728,7 +735,7 @@ mkUnsignedCont
     -- ^ cont step
   -> Bool
     -- ^ has rollback?
-  -> A.Value
+  -> PactValue
     -- ^ environment data
   -> PublicMeta
     -- ^ command public metadata
@@ -751,7 +758,7 @@ mkUnsignedCont txid step rollback mdata pubMeta kps ves ridm proof nid = do
          (StableEncoding pubMeta)
          (T.pack $ show rid)
          nid
-         (Continuation (ContMsg txid step rollback (toLegacyJson mdata) proof) :: (PactRPC ContMsg))
+         (Continuation (ContMsg txid step rollback mdata proof) :: (PactRPC ContMsg))
   return $ T.decodeUtf8 <$> cmd
 
 -- | Construct a `Command` from a `PactRPC` request, a nonce, and a set of credentials.

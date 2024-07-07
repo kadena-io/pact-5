@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DataKinds #-}
@@ -5,6 +6,7 @@
 module Pact.Core.Evaluate
   ( MsgData(..)
   , RawCode(..)
+  , EvalInput
   , EvalResult(..)
   , ContMsg(..)
   , Info
@@ -14,6 +16,7 @@ module Pact.Core.Evaluate
   , evalContinuation
   , setupEvalEnv
   , interpret
+  , interpretReturningState
   , compileOnly
   , compileOnlyTerm
   , evaluateDefaultState
@@ -35,9 +38,9 @@ import Data.Default
 import Data.Text (Text)
 import Data.Map.Strict(Map)
 import Data.IORef
-
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
+import GHC.Generics
 
 import Pact.Core.Builtin
 import Pact.Core.Compile
@@ -110,7 +113,7 @@ data ContMsg = ContMsg
   , _cmRollback :: !Bool
   , _cmData :: !PactValue
   , _cmProof :: !(Maybe ContProof)
-  } deriving (Eq,Show)
+  } deriving (Eq,Show,Generic)
 
 -- | Results of evaluation.
 data EvalResult tv = EvalResult
@@ -213,23 +216,29 @@ interpret
   -> EvalInput
   -> IO (Either (PactError Info) (EvalResult [Lisp.TopLevel Info]))
 interpret evalEnv evalSt evalInput = do
+  (_state, result) <- interpretReturningState evalEnv evalSt evalInput
+  return result
+
+interpretReturningState :: EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> EvalInput -> IO (EvalState CoreBuiltin (), Either (PactError ()) (EvalResult [Lisp.TopLevel ()]))
+interpretReturningState evalEnv evalSt evalInput = do
   (result, state) <- runEvalM (ExecEnv evalEnv) evalSt $ evalWithinTx evalInput
   gas <- readIORef (_geGasRef $ _eeGasEnv evalEnv)
   case result of
-    Left err -> return $ Left err
+    Left err -> return $ (state, Left err)
     Right (rs, logs, txid) ->
-      return $! Right $! EvalResult
-        { _erInput = evalInput
-        , _erOutput = rs
-        , _erLogs = logs
-        , _erExec = _esDefPactExec state
-        -- Todo: quotrem
-        , _erGas = milliGasToGas gas
-        , _erLoadedModules = _loModules $ _esLoaded state
-        , _erTxId = txid
-        , _erLogGas = Nothing
-        , _erEvents = _esEvents state
-        }
+      let success = Right $! EvalResult
+            { _erInput = evalInput
+            , _erOutput = rs
+            , _erLogs = logs
+            , _erExec = _esDefPactExec state
+            -- Todo: quotrem
+            , _erGas = milliGasToGas gas
+            , _erLoadedModules = _loModules $ _esLoaded state
+            , _erTxId = txid
+            , _erLogGas = Nothing
+            , _erEvents = _esEvents state
+            }
+      in return $! (state, success)
 
 interpretOnlyTerm
   :: EvalEnv CoreBuiltin Info

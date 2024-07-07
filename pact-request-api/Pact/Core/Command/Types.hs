@@ -45,6 +45,7 @@ module Pact.Core.Command.Types
   , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crEvents
   , crContinuation,crMetaData
   , RequestKey(..)
+  , RequestKeys(..)
   , cmdToRequestKey
   , requestKeyToB16Text
   , parsePact
@@ -65,6 +66,7 @@ import qualified Data.ByteString.Short as ShortByteString
 import qualified Data.ByteString.Base16 as B16
 import Data.Foldable
 import Data.Hashable (Hashable)
+import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.Serialize as SZ
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
@@ -355,6 +357,21 @@ newtype RequestKey = RequestKey { unRequestKey :: PactHash.Hash}
 
 instance Show RequestKey where
   show (RequestKey rk) = show rk
+
+newtype RequestKeys = RequestKeys { _rkRequestKeys :: NonEmpty RequestKey }
+  deriving (Show, Eq, Ord, Generic, NFData)
+
+instance J.Encode RequestKeys where
+  build (RequestKeys rks) = J.object [
+      "requestKeys" J..= J.Array rks
+    ]
+
+instance JD.FromJSON RequestKeys where
+  parseJSON = JD.withObject "RequestKeys" $ \o -> do
+    rks <- o JD..: "requestKeys"
+    case rks of
+      [] -> fail "Empty requestKeys"
+      (rk:rks') -> pure $ RequestKeys (rk :| rks')
 
 makeLenses ''UserSig
 makeLenses ''Signer

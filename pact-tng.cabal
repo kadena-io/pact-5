@@ -380,6 +380,21 @@ executable pact
     -- PackageInfo_pact_tng
     Paths_pact_tng
 
+executable pact-server
+  import: pact-common
+  main-is: pact-request-api/Pact/Core/Command/Server.hs
+  build-depends: base
+               , bytestring
+               , containers
+               , lrucaching
+               , optparse-applicative
+               , pact-tng
+               , pact-tng:pact-request-api
+               , servant
+               , servant-server
+               , stm
+               , text
+
 benchmark bench
   type: exitcode-stdio-1.0
   main-is: Bench.hs

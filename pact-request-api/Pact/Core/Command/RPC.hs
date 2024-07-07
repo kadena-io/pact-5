@@ -5,6 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- |
 -- Module      :  Pact.Types.RPC
@@ -19,20 +20,16 @@ module Pact.Core.Command.RPC
   ( -- * Types
     PactRPC(..)
   , ExecMsg(..)
-  , ContMsg(..)
   ) where
 
 import Control.Applicative
 import Control.DeepSeq
-
 import GHC.Generics
 
-import  Pact.JSON.Legacy.Value
-
-import Pact.Core.SPV
-import Pact.Core.Names
-
 import Pact.JSON.Decode
+
+import Pact.Core.Evaluate
+import Pact.Core.PactValue
 import Pact.Core.StableEncoding
 import qualified Pact.JSON.Encode as J
 
@@ -56,31 +53,23 @@ instance J.Encode c => J.Encode (PactRPC c) where
 
 data ExecMsg c = ExecMsg
   { _pmCode :: c
-  , _pmData :: LegacyValue
+  , _pmData :: PactValue
   } deriving (Eq,Generic,Show,Functor,Foldable,Traversable)
 
 instance NFData c => NFData (ExecMsg c)
 instance FromJSON c => FromJSON (ExecMsg c) where
   parseJSON =
       withObject "PactMsg" $ \o ->
-          ExecMsg <$> o .: "code" <*> o .: "data"
+          ExecMsg <$> o .: "code" <*> fmap _stableEncoding (o .: "data")
   {-# INLINE parseJSON #-}
 
 
 instance J.Encode c => J.Encode (ExecMsg c) where
   build o = J.object
-    [ "data" J..= _pmData o
+    [ "data" J..= StableEncoding (_pmData o)
     , "code" J..= _pmCode o
     ]
   {-# INLINE build #-}
-
-data ContMsg = ContMsg
-  { _cmPactId :: !DefPactId
-  , _cmStep :: !Int
-  , _cmRollback :: !Bool
-  , _cmData :: !LegacyValue
-  , _cmProof :: !(Maybe ContProof)
-  } deriving (Eq,Show,Generic)
 
 instance NFData ContMsg
 instance FromJSON ContMsg where
@@ -91,7 +80,7 @@ instance FromJSON ContMsg where
           rollback <- o .: "rollback"
           msgData <- o .: "data"
           maybeProof <- o .:? "proof"
-          pure $ ContMsg defPactId step rollback msgData maybeProof
+          pure $ ContMsg defPactId step rollback (_stableEncoding msgData) maybeProof
           -- ContMsg <$> o .: "pactId" <*> o .: "step" <*> o .: "rollback" <*> o .: "data"
           -- <*> o .: "proof"
   {-# INLINE parseJSON #-}
@@ -99,7 +88,7 @@ instance FromJSON ContMsg where
 instance J.Encode ContMsg where
   build o = J.object
     [ "proof" J..= _cmProof o
-    , "data" J..= _cmData o
+    , "data" J..= StableEncoding (_cmData o)
     , "pactId" J..= StableEncoding (_cmPactId o)
     , "rollback" J..= _cmRollback o
     , "step" J..= J.Aeson (_cmStep o)
