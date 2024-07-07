@@ -54,6 +54,8 @@ library unsafe
 common pact-common
   build-depends:
     , Decimal
+    , asn1-encoding
+    , asn1-types
     , attoparsec
     , base
     , base16-bytestring
@@ -79,7 +81,7 @@ common pact-common
     , vector
     , vector-algorithms
     , megaparsec
-    , cryptonite
+    , crypton
     , memory
     , safe-exceptions
     , ralist >= 0.4.0.0
@@ -151,9 +153,10 @@ library pact-request-api
   visibility: public
   hs-source-dirs: pact-request-api
   build-depends:
-      asn1-encoding
-    , asn1-types
     , cereal
+    , crypton
+    , lrucaching
+    , merkle-log
     , pact-tng
     , pact-tng:pact-crypto
     , yaml
@@ -164,11 +167,6 @@ library pact-request-api
     Pact.Core.Command.RPC
     Pact.Core.Command.Util
     Pact.Core.Command.SigData
-    Pact.Core.Crypto.WebAuthn.Cose.PublicKey
-    Pact.Core.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
-    Pact.Core.Crypto.WebAuthn.Cose.Registry
-    Pact.Core.Crypto.WebAuthn.Cose.SignAlg
-    Pact.Core.Crypto.WebAuthn.Cose.Verify
 
 library
   import: pact-common
@@ -307,6 +305,7 @@ library
     Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
     Pact.Crypto.WebAuthn.Cose.Registry
     Pact.Crypto.WebAuthn.Cose.SignAlg
+    Pact.Crypto.WebAuthn.Cose.Verify
 
     -- Hyperlane
     Pact.Crypto.Hyperlane

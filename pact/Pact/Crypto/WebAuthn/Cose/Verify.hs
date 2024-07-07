@@ -21,7 +21,7 @@
 -- * A 'Cose.PublicKey' can be created from an X.509 public key with 'fromX509'
 -- * A 'Cose.CoseSignAlg' and a 'Cose.PublicKey' can be used to verify a signature
 --   with 'verify'
-module Pact.Core.Crypto.WebAuthn.Cose.Verify
+module Pact.Crypto.WebAuthn.Cose.Verify
   (
     -- * Signature verification
     verify
@@ -36,16 +36,15 @@ import qualified Crypto.PubKey.ECC.Types as ECC
 import qualified Crypto.PubKey.Ed25519 as Ed25519
 import qualified Crypto.PubKey.RSA as RSA
 import qualified Crypto.PubKey.RSA.PKCS15 as RSA
+import qualified Pact.Crypto.WebAuthn.Cose.PublicKey as Cose
+import qualified Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
+import qualified Pact.Crypto.WebAuthn.Cose.SignAlg as Cose
 import qualified Data.ASN1.BinaryEncoding as ASN1
 import qualified Data.ASN1.Encoding as ASN1
 import qualified Data.ASN1.Types as ASN1
 import qualified Data.ByteString as BS
 import Data.Text (Text)
 import qualified Data.Text as Text
-
-import qualified Pact.Core.Crypto.WebAuthn.Cose.PublicKey as Cose
-import qualified Pact.Core.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as Cose
-import qualified Pact.Core.Crypto.WebAuthn.Cose.SignAlg as Cose
 
 -- | Verifies an asymmetric signature for a message using a
 -- 'Cose.PublicKeyWithSignAlg' Returns an error if the signature algorithm

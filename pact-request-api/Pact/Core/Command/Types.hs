@@ -47,6 +47,7 @@ module Pact.Core.Command.Types
   , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crEvents
   , crContinuation,crMetaData
   , RequestKey(..)
+  , RequestKeys(..)
   , cmdToRequestKey
   , requestKeyToB16Text
   , parsePact
@@ -67,6 +68,8 @@ import qualified Data.ByteString.Short as ShortByteString
 import qualified Data.ByteString.Base16 as B16
 import Data.Foldable
 import Data.Hashable (Hashable)
+import Data.List.NonEmpty (NonEmpty((:|)))
+import qualified Data.MerkleLog as ML
 import Data.Serialize as SZ
 import Data.Text (Text)
 import qualified Data.Text.Encoding as T
@@ -82,6 +85,7 @@ import Pact.Core.Compile
 import Pact.Core.DefPacts.Types
 import Pact.Core.Guards
 import Pact.Core.Gas.Types
+import Pact.Core.Names
 import qualified Pact.Core.Hash as PactHash
 import Pact.Core.Persistence.Types
 import Pact.Core.PactValue (PactValue(..))
@@ -97,6 +101,7 @@ import qualified Pact.JSON.Encode as J
 
 import Pact.Core.Command.Crypto  as Base
 import Pact.Core.Evaluate (Info)
+import Pact.Core.Command.Crypto
 
 -- | Command is the signed, hashed envelope of a Pact execution instruction or command.
 -- In 'Command ByteString', the 'ByteString' payload is hashed and signed; the ByteString
@@ -108,7 +113,7 @@ data Command a = Command
   { _cmdPayload :: !a
   , _cmdSigs :: ![UserSig]
   , _cmdHash :: !PactHash.Hash
-  } deriving (Eq,Show,Ord,Generic,Functor,Foldable,Traversable)
+  } deriving (Eq,Show,Generic,Functor,Foldable,Traversable)
 
 instance (FromJSON a) => FromJSON (Command a) where
     parseJSON = withObject "Command" $ \o ->
@@ -188,7 +193,7 @@ verifyUserSigs hsh sigsAndSigners
   formatIssues = Just $ "Invalid sig(s) found: " ++ show (J.encode . J.Object $ failedSigs)
 
 verifyUserSig :: PactHash.Hash -> UserSig -> Signer -> Either String ()
-verifyUserSig msg sig Signer{..} = do
+verifyUserSig msg@(PactHash.Hash msgBytes) sig Signer{..} = do
   case (sig, scheme) of
     (ED25519Sig edSig, ED25519) -> do
       for_ _siAddress $ \addr -> do
@@ -209,6 +214,21 @@ verifyUserSig msg sig Signer{..} = do
         parseWebAuthnPublicKey =<< B16.decode (Text.encodeUtf8 strippedPrefix)
       verifyWebAuthnSig msg pk waSig
 
+    (WebAuthnBatchToken batchSig, WebAuthn) -> do
+      pk <- maybe (Left "Could not parse public key") Right (parseWebAuthnPublicKeyText (PublicKeyText _siPubKey))
+      let BatchToken {
+        _btWebAuthnSignature,
+        _btMerkleProofObject
+      } = batchSig
+
+      let
+        proofObject = _btMerkleProofObject
+        proofSubject = ML.MerkleProofSubject (ML.InputNode (ShortByteString.fromShort msgBytes))
+        merkleProof = ML.MerkleProof proofSubject proofObject
+        inferredMerkleRoot = ML.runMerkleProof merkleProof
+        inferredRootHash = PactHash.unsafeBsToPactHash (ML.encodeMerkleRoot inferredMerkleRoot)
+      verifyWebAuthnSig inferredRootHash pk _btWebAuthnSignature
+
     _ ->
       Left $ unwords
         [ "scheme of"
@@ -217,6 +237,7 @@ verifyUserSig msg sig Signer{..} = do
         , case sig of
           ED25519Sig _ -> "ED25519"
           WebAuthnSig _ -> "WebAuthn"
+          WebAuthnBatchToken _ -> "WebAuthnBatch"
         ]
   where scheme = fromMaybe defPPKScheme _siScheme
 
@@ -352,6 +373,21 @@ newtype RequestKey = RequestKey { unRequestKey :: PactHash.Hash}
 
 instance Show RequestKey where
   show (RequestKey rk) = show rk
+
+newtype RequestKeys = RequestKeys { _rkRequestKeys :: NonEmpty RequestKey }
+  deriving (Show, Eq, Ord, Generic, NFData)
+
+instance J.Encode RequestKeys where
+  build (RequestKeys rks) = J.object [
+      "requestKeys" J..= J.Array rks
+    ]
+
+instance JD.FromJSON RequestKeys where
+  parseJSON = JD.withObject "RequestKeys" $ \o -> do
+    rks <- o JD..: "requestKeys"
+    case rks of
+      [] -> fail "Empty requestKeys"
+      (rk:rks') -> pure $ RequestKeys (rk :| rks')
 
 makeLenses ''UserSig
 makeLenses ''Signer

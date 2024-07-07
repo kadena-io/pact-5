@@ -74,6 +74,8 @@ module Pact.Core.Command.Crypto
   , exportWebAuthnPrivateKey
   , WebauthnPrivateKey(..)
   , signWebauthn
+
+  , BatchToken(..)
   ) where
 
 
@@ -87,6 +89,7 @@ import Control.Monad (unless)
 import Control.Monad.Except
 import Control.Monad.IO.Class
 import qualified Crypto.Hash as H
+import qualified Crypto.Hash.Algorithms as Crypto
 import qualified Data.ASN1.BinaryEncoding as ASN1
 import qualified Data.ASN1.Encoding as ASN1
 import qualified Data.ASN1.Types as ASN1
@@ -95,6 +98,7 @@ import Data.ByteString.Short (fromShort)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.ByteString.Base64.URL as Base64URL
+import qualified Data.MerkleLog as ML
 import Data.Proxy
 import Data.String (IsString(..))
 import qualified Data.Text as T
@@ -104,10 +108,10 @@ import qualified Data.Aeson as A
 import Control.DeepSeq (NFData)
 import Data.Hashable
 
-import qualified Pact.Core.Crypto.WebAuthn.Cose.PublicKey as WA
-import qualified Pact.Core.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as WA
-import qualified Pact.Core.Crypto.WebAuthn.Cose.SignAlg as WA
-import qualified Pact.Core.Crypto.WebAuthn.Cose.Verify as WAVerify
+import qualified Pact.Crypto.WebAuthn.Cose.PublicKey as WA
+import qualified Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as WA
+import qualified Pact.Crypto.WebAuthn.Cose.SignAlg as WA
+import qualified Pact.Crypto.WebAuthn.Cose.Verify as WAVerify
 
 import Pact.Core.Command.Util
 import qualified Pact.Core.Hash as PactHash
@@ -122,11 +126,13 @@ import qualified Crypto.PubKey.ECC.P256 as ECC hiding (scalarToInteger)
 import Crypto.Random.Types
 
 import qualified Pact.JSON.Encode as J
+import qualified Pact.JSON.Decode as JD
 
 -- | The type of parsed signatures
 data UserSig = ED25519Sig T.Text
              | WebAuthnSig WebAuthnSignature
-  deriving (Eq, Ord, Show, Generic)
+             | WebAuthnBatchToken BatchToken
+  deriving (Eq, Show, Generic)
 
 instance NFData UserSig
 
@@ -135,13 +141,18 @@ instance J.Encode UserSig where
     J.object [ "sig" J..= s ]
   build (WebAuthnSig sig) = J.object
     [ "sig" J..= T.decodeUtf8 (BSL.toStrict $ J.encode sig) ]
+  build (WebAuthnBatchToken sig) = J.object ["sig" J..= sig ]
   {-# INLINE build #-}
 
 instance A.FromJSON UserSig where
   parseJSON x =
+    parseWebAuthnBatchSig x <|>
     parseWebAuthnStringified x <|>
     parseEd25519 x
     where
+      parseWebAuthnBatchSig = A.withObject "UserSig" $ \o -> do
+        batchSig <- o A..: "sig"
+        pure (WebAuthnBatchToken batchSig)
       parseWebAuthnStringified = A.withObject "UserSig" $ \o -> do
         t <- o A..: "sig"
         case A.decode (BSL.fromStrict $ T.encodeUtf8 t) of
@@ -464,6 +475,7 @@ instance J.Encode WebAuthnSignature where
     , "signature" J..= signature
     ]
 
+
 -- | This type represents a challenge that was used during
 -- a WebAuthn "assertion" flow. For signing Pact payloads, this
 -- is the PactHash of a transaction.
@@ -479,3 +491,54 @@ instance A.FromJSON ClientDataJSON where
 instance J.Encode ClientDataJSON where
   build ClientDataJSON { challenge } =
     J.object ["challenge" J..= challenge]
+
+-- | This type specifies the format of a WebAuthn signature when the signature
+-- is shared across mulitple transactions.
+--
+-- When a client signs a batch of transactions, they must produce a Merkle Tree
+-- of those transactions, and sign the Merkle Root.
+--
+-- This packet is valid for a single transaction in the batch. The `clientDataJSON`,
+-- `authenticatorData` and `signature` fields will be identical for all transactions
+-- in the batch. The `merkleProof` will be unique for each transaction.
+--
+-- The wire format for these signature packets is given in `encodeWebAuthnBatchSignaturePacket`.
+-- It is the base64url representation of a binary encoding of each of the fields.
+--
+-- We specialize batch transaction signing to the WebAuthn case, because this is the
+-- main case in which is is difficult to produce large numbers of signatures
+-- programatically. In WebAuthn, the client does not have direct access to their
+-- private key; each use of the key to sign a payload requires a separate user
+-- interaction.
+--
+-- Examples of how to produce and serialize such a proof packet are given in the test
+-- suite TODO.
+data BatchToken = BatchToken
+  { _btWebAuthnSignature :: WebAuthnSignature
+  , _btMerkleProofObject :: ML.MerkleProofObject Crypto.Blake2b_256
+    -- ^ A Merkle Proof that the transaction is part of the signed batch.
+  } deriving (Show, Generic, Eq)
+
+instance NFData BatchToken where
+
+instance J.Encode BatchToken where
+  build p =  J.object
+        [ "webAuthnSignature" J..= _btWebAuthnSignature p
+        , "merkleProof" J..= toB64UrlUnpaddedText (ML.encodeMerkleProofObject (_btMerkleProofObject p))
+        ]
+  {-# INLINE build #-}
+
+instance JD.FromJSON BatchToken where
+  parseJSON = JD.withObject "WebAuthnBatchSignaturePacket" $ \o -> do
+    webAuthnSignature <- o JD..: "webAuthnSignature"
+    merkleProofObject <- do
+        proofBytesBase64 <- o JD..: "merkleProof"
+        proofBytes <- parseB64UrlUnpaddedText proofBytesBase64
+        case ML.decodeMerkleProofObject proofBytes of
+            Just proof -> return proof
+            Nothing -> fail "Could not decode Merkle Proof"
+    return $ BatchToken
+      { _btWebAuthnSignature = webAuthnSignature
+      , _btMerkleProofObject = merkleProofObject
+      }
+  {-# INLINE parseJSON #-}
