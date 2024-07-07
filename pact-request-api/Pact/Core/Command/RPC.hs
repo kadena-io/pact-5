@@ -5,6 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- |
 -- Module      :  Pact.Types.RPC
@@ -31,9 +32,10 @@ import Pact.Core.SPV
 import Pact.Core.Names
 
 import Pact.JSON.Decode
+
+import Pact.Core.PactValue
 import Pact.Core.StableEncoding
 import qualified Pact.JSON.Encode as J
-import Pact.Core.PactValue
 
 
 data PactRPC c =
@@ -88,9 +90,9 @@ instance FromJSON ContMsg where
           StableEncoding defPactId <- o .: "pactId"
           step <- o .: "step"
           rollback <- o .: "rollback"
-          StableEncoding msgData <- o .: "data"
+          msgData <- o .: "data"
           maybeProof <- o .:? "proof"
-          pure $ ContMsg defPactId step rollback msgData maybeProof
+          pure $ ContMsg defPactId step rollback (_stableEncoding msgData) maybeProof
           -- ContMsg <$> o .: "pactId" <*> o .: "step" <*> o .: "rollback" <*> o .: "data"
           -- <*> o .: "proof"
   {-# INLINE parseJSON #-}

@@ -33,6 +33,7 @@ module Pact.Core.Hash
 , parseModuleHash
   -- unsafe creating of a 'ModuleHash', only used in the
   -- legacy translation process.
+, unsafeBsToPactHash
 , unsafeBsToModuleHash
 ) where
 

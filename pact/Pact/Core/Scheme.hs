@@ -21,6 +21,7 @@ import qualified Pact.JSON.Encode as J
 
 --------- PPKSCHEME DATA TYPE ---------
 
+-- | 
 data PPKScheme = ED25519 | WebAuthn
   deriving (Show, Eq, Ord, Generic, Bounded, Enum)
 
