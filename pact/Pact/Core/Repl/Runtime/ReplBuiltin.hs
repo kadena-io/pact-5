@@ -31,7 +31,6 @@ import Pact.Core.Names
 import Pact.Core.IR.Eval.CoreBuiltin
 import Pact.Core.Pretty
 import Pact.Core.Environment
-import Pact.Core.Verifiers
 import Pact.Core.PactValue
 import Pact.Core.Gas
 import Pact.Core.Guards
@@ -244,12 +243,12 @@ envChainData info b cont handler _env = \case
     go pd ((k,v):rest) = case v of
       PInteger i
         | k == cdGasLimit ->
-          go (set (pdPublicMeta . pmGasLimit) (Gas (fromIntegral i)) pd) rest
+          go (set (pdPublicMeta . pmGasLimit) (GasLimit (Gas (fromIntegral i))) pd) rest
         | k == cdBlockHeight ->
           go (set pdBlockHeight (fromInteger i) pd) rest
       PDecimal i
         | k == cdGasPrice ->
-          go (set (pdPublicMeta . pmGasPrice) i pd) rest
+          go (set (pdPublicMeta . pmGasPrice) (GasPrice i) pd) rest
       PString s
         | k == cdChainId ->
           go (set (pdPublicMeta . pmChainId) (ChainId s) pd) rest

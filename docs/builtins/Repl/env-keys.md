@@ -10,7 +10,7 @@ Use `env-keys` to set the transaction signer keys.
 (env-keys keys)
 ```
 
-## Arguments
+### Arguments
 
 Use the following argument when using the `env-keys` Pact function.
 

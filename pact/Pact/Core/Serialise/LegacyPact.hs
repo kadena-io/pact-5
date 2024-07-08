@@ -1,6 +1,5 @@
 -- |
 {-# LANGUAGE ScopedTypeVariables  #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Pact.Core.Serialise.LegacyPact
   ( decodeModuleData
@@ -743,7 +742,7 @@ fromLegacyGuard mh = \case
       pure (GUserGuard (UserGuard qn args))
     _ -> error "invariant"
  where
-   extract = \case
+  extract = \case
      InlineValue p _ -> pure p
      _ -> throwError "fromLegacyGuard: extract invariant"
 

@@ -40,14 +40,14 @@ jobs:
     - name: Build and cache artifacts
       run: |
         echo Building the project and its devShell
-        nix build .#check --log-lines 500 --show-trace
+        nix build .#check --log-lines 500 --show-trace --accept-flake-config
 
         echo Build the bundle
-        nix build .#pact-binary-bundle --log-lines 500 --show-trace --out-link pact-binary-bundle
+        nix build .#pact-binary-bundle --log-lines 500 --show-trace --out-link pact-binary-bundle --accept-flake-config
         tar -zcvf pact-binary-bundle.${{ matrix.os }}.tar.gz $(readlink pact-binary-bundle)
 
         echo Build the recursive output
-        nix build .#recursive.allDerivations --log-lines 500 --show-trace
+        nix build .#recursive.allDerivations --log-lines 500 --show-trace --accept-flake-config
 
     - name: Publish the bundle
       uses: actions/upload-artifact@v4

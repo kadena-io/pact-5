@@ -41,7 +41,6 @@ import Pact.Core.IR.Term
 import Pact.Core.Info
 import Pact.Core.Namespace
 import Pact.Core.ModRefs
-import Pact.Core.Verifiers
 import qualified Pact.Core.Legacy.LegacyPactValue as Legacy
 
 import qualified PackageInfo_pact_tng as PI
@@ -238,12 +237,12 @@ envChainData info b _env = \case
     go pd ((k,v):rest) = case v of
       PInteger i
         | k == cdGasLimit ->
-          go (set (pdPublicMeta . pmGasLimit) (Gas (fromIntegral i)) pd) rest
+          go (set (pdPublicMeta . pmGasLimit) (GasLimit (Gas (fromIntegral i))) pd) rest
         | k == cdBlockHeight ->
           go (set pdBlockHeight (fromInteger i) pd) rest
       PDecimal i
         | k == cdGasPrice ->
-          go (set (pdPublicMeta . pmGasPrice) i pd) rest
+          go (set (pdPublicMeta . pmGasPrice) (GasPrice i) pd) rest
       PString s
         | k == cdChainId ->
           go (set (pdPublicMeta . pmChainId) (ChainId s) pd) rest

@@ -7,6 +7,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 
 module Pact.Core.Errors
@@ -24,17 +26,32 @@ module Pact.Core.Errors
  , peInfo
  , viewErrorStack
  , UserRecoverableError(..)
+ , ErrorCode(..)
+ , PactErrorCode(..)
+ , PrettyErrorCode(..)
+ , pactErrorToErrorCode
+ , prettyErrorCode
  ) where
 
 import Control.Lens hiding (ix)
+import Control.Monad
 import Control.Exception
+import Data.Bits
+import Data.Foldable(find)
+import Data.Proxy
 import Data.Text(Text)
-import Data.Dynamic (Typeable)
+import Data.Typeable(Typeable)
 import Data.Set(Set)
+import Data.Word
+import Numeric (showHex)
 import qualified Data.Version as V
 import qualified PackageInfo_pact_tng as PI
 import qualified Data.Set as S
 import qualified Data.Text as T
+import qualified Data.Text.Read as T
+import qualified Data.Char as C
+import qualified Pact.JSON.Decode as JD
+import qualified Pact.JSON.Encode as J
 
 import Control.DeepSeq
 import GHC.Generics
@@ -50,7 +67,7 @@ import Pact.Core.StackFrame
 import Pact.Core.DefPacts.Types
 import Pact.Core.PactValue
 import Pact.Core.Capabilities
-import Pact.Core.Verifiers
+import Pact.Core.DeriveConTag
 
 type PactErrorI = PactError SpanInfo
 
@@ -64,7 +81,7 @@ data LexerError
   | StringLiteralError Text
   -- ^ Error lexing string literal
   | OutOfInputError Char
-  deriving (Show, Generic)
+  deriving (Eq, Show, Generic)
 
 instance NFData LexerError
 
@@ -96,7 +113,7 @@ data ParseError
   -- ^ Way too many decimal places for `Decimal` to deal with, max 255 precision.
   | InvalidBaseType Text
   -- ^ Invalid primitive type
-  deriving (Show, Generic)
+  deriving (Eq, Show, Generic)
 
 instance NFData ParseError
 
@@ -170,7 +187,7 @@ data DesugarError
   -- ^ Name was defined twice
   | InvalidBlessedHash Text
   -- ^ Blessed hash has invalid format
-  deriving (Show,  Generic)
+  deriving (Eq, Show,  Generic)
 
 instance NFData DesugarError
 
@@ -251,7 +268,7 @@ data ArgTypeError
   | ATETable
   | ATEClosure
   | ATEModRef
-  deriving (Show,  Generic)
+  deriving (Eq, Show,  Generic)
 
 instance NFData ArgTypeError
 
@@ -503,7 +520,7 @@ data EvalError
   | InvalidCustomKeysetPredicate Text
   | HyperlaneError HyperlaneError
   | HyperlaneDecodeError HyperlaneDecodeError
-  deriving (Show, Generic)
+  deriving (Eq, Show, Generic)
 
 instance NFData EvalError
 
@@ -847,7 +864,7 @@ data PactError info
   -- | PEOverloadError OverloadError info
   | PEExecutionError EvalError [StackFrame info] info
   | PEUserRecoverableError UserRecoverableError [StackFrame info] info
-  deriving (Show, Functor, Generic)
+  deriving (Eq, Show, Functor, Generic)
 
 instance NFData info => NFData (PactError info)
 
@@ -881,3 +898,129 @@ viewErrorStack = \case
   _ -> []
 
 instance (Show info, Typeable info) => Exception (PactError info)
+
+deriveConstrInfo ''LexerError
+deriveConstrInfo ''ParseError
+deriveConstrInfo ''DesugarError
+deriveConstrInfo ''EvalError
+deriveConstrInfo ''UserRecoverableError
+deriveConstrInfo ''PactError
+
+-- | A Pact error code is a 64 bit integer with the following format:
+--   0x FF    FF    FF    FF FFFF FFFF
+--     |---| |---| |---| |------------|
+--       ^     ^     ^          ^ Free bits
+--       |     |     |
+--       |     |     ----- Inner error cause (e.g No such object in db)
+--       |     |
+--       |     ------------- Outer error cause (Execution, Name reso, etc)
+--       ------------------- Version
+-- Note [As of Jul 2 2024]: There are no error versions other than 0,
+--      so we don't have a versioning data type yet.
+newtype ErrorCode
+  = ErrorCode Word64
+  deriving (Eq, Ord)
+
+-- | Note: This Show actually defined the error code's serialization.
+--   TODO: is this kosher? Or should we expose an `errorCodeToHexString` function?
+instance Show ErrorCode where
+  show (ErrorCode e) =
+    let h = showHex e ""
+        len = length h
+    in "0x" <> if len < 16 then replicate (16 - len) '0' <> h else h
+
+-- | Our data type for presenting error codes alongside
+--   a span info
+data PactErrorCode info
+  = PactErrorCode
+  { _peCode :: ErrorCode
+  , _peInfo :: info
+  } deriving (Eq, Show, Functor)
+
+instance {-# OVERLAPPING #-} J.Encode (PactErrorCode NoInfo) where
+  build (PactErrorCode ec _) = J.object
+    [ "errorCode" J..= T.pack (show ec) ]
+
+
+instance {-# OVERLAPPING #-} JD.FromJSON (PactErrorCode NoInfo) where
+  parseJSON = JD.withObject "PactErrorCode" $ \o -> do
+    t <- o JD..: "errorCode"
+    guard (T.length t == 18 && T.all C.isHexDigit (T.drop 2 t))
+    case T.hexadecimal t of
+      Right (a, remaining) | T.null remaining -> do
+        pure $ PactErrorCode (ErrorCode a) NoInfo
+      _ -> fail "failed to parse pact error code"
+
+instance J.Encode info => J.Encode (PactErrorCode info) where
+  build (PactErrorCode ec info) = J.object
+    [ "errorCode" J..= T.pack (show ec)
+    , "info" J..= info ]
+
+instance JD.FromJSON info => JD.FromJSON (PactErrorCode info) where
+  parseJSON = JD.withObject "PactErrorCode" $ \o -> do
+    t <- o JD..: "errorCode"
+    guard (T.length t == 18 && T.all C.isHexDigit (T.drop 2 t))
+    case T.hexadecimal t of
+      Right (a, remaining) | T.null remaining -> do
+        info <- o JD..: "info"
+        pure $ PactErrorCode (ErrorCode a) info
+      _ -> fail "failed to parse pact error code"
+
+pactErrorToErrorCode :: PactError info -> PactErrorCode info
+pactErrorToErrorCode pe = let
+  info = view peInfo pe
+  -- Inner tag is
+  innerTag = shiftL (fromIntegral (innerConstrTag pe)) innerErrorShiftBits
+  outerTag = shiftL (fromIntegral (constrIndex pe)) outerErrorShiftBits
+  code = ErrorCode (innerTag .|. outerTag)
+  in PactErrorCode code info
+  where
+  innerConstrTag = \case
+    PELexerError e _ -> constrIndex e
+    PEParseError e _ -> constrIndex e
+    PEDesugarError e _ -> constrIndex e
+    PEExecutionError e _ _ -> constrIndex e
+    PEUserRecoverableError e _ _ -> constrIndex e
+
+
+data PrettyErrorCode info
+  = PrettyErrorCode
+  { _pecFailurePhase :: Text
+  , _pecFailureCause :: Text
+  , _pecInfo :: info
+  } deriving Show
+
+_versionMask, outerErrorMask, innerErrorMask :: Word64
+_versionMask   = 0xFF_00_00_00_00_00_00_00
+outerErrorMask = 0x00_FF_00_00_00_00_00_00
+innerErrorMask = 0x00_00_FF_00_00_00_00_00
+
+_versionShiftBits, outerErrorShiftBits, innerErrorShiftBits :: Int
+_versionShiftBits = 56
+outerErrorShiftBits = 48
+innerErrorShiftBits = 40
+
+-- | Get the inner and outer cause from an error code
+prettyErrorCode :: PactErrorCode info -> PrettyErrorCode info
+prettyErrorCode (PactErrorCode (ErrorCode ec) i) =
+  PrettyErrorCode phase cause i
+  where
+  getCtorName ctorIx p =
+    case find ((== ctorIx) . _ciIndex) (allConstrInfos p) of
+      Just c -> _ciName c
+      Nothing -> "UNKNOWN_CODE"
+  phase =
+    let tagIx = (ec .&. outerErrorMask) `shiftR` outerErrorShiftBits
+    in getCtorName (fromIntegral tagIx) (Proxy :: Proxy (PactError ()))
+  causeTag :: Word8
+  causeTag =
+    fromIntegral ((ec .&. innerErrorMask) `shiftR` innerErrorShiftBits)
+  cause = case phase of
+    "PELexerError" -> getCtorName causeTag (Proxy :: Proxy LexerError)
+    "PEParseError" -> getCtorName causeTag (Proxy :: Proxy ParseError)
+    "PEDesugarError" -> getCtorName causeTag (Proxy :: Proxy DesugarError)
+    "PEExecutionError" -> getCtorName causeTag (Proxy :: Proxy EvalError)
+    "PEUserRecoverableError" -> getCtorName causeTag (Proxy :: Proxy UserRecoverableError)
+    _ -> "UNKNOWN_CODE"
+
+

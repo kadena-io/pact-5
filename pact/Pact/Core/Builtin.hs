@@ -5,6 +5,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Pact.Core.Builtin
  ( CoreBuiltin(..)
@@ -31,6 +32,7 @@ import qualified Data.Map.Strict as M
 
 import Pact.Core.Names(NativeName(..))
 import Pact.Core.Pretty
+import Pact.Core.DeriveConTag
 
 -- | Our type alias for the majority of our repl builtins wrap
 type ReplCoreBuiltin = ReplBuiltin CoreBuiltin
@@ -931,3 +933,5 @@ instance (Pretty b) => Pretty (ReplBuiltin b) where
   pretty = \case
     RBuiltinWrap b -> pretty b
     RBuiltinRepl t -> pretty (replBuiltinsToText t)
+
+deriveConstrInfo ''CoreBuiltin

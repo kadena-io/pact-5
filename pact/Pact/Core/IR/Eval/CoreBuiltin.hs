@@ -67,7 +67,6 @@ import Pact.Core.Capabilities
 import Pact.Core.Namespace
 import Pact.Core.Gas
 import Pact.Core.Type
-import Pact.Core.Verifiers
 #ifndef WITHOUT_CRYPTO
 import Pact.Core.Crypto.Pairing
 import Pact.Core.Crypto.Hash.Poseidon
@@ -754,7 +753,7 @@ coreYield info b cont handler _env = \case
 corePactId :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
 corePactId info b cont handler _env = \case
   [] -> use esDefPactExec >>= \case
-    Just dpe -> returnCEKValue cont handler (VString (_defpactId (_peDefPactId dpe)))
+    Just dpe -> returnCEKValue cont handler (VString (_defPactId (_peDefPactId dpe)))
     Nothing ->
       throwExecutionError info NotInDefPactExecution
   args -> argsError info b args
@@ -1780,7 +1779,7 @@ coreChainData :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
 coreChainData info b cont handler _env = \case
   [] -> do
     PublicData publicMeta blockHeight blockTime prevBh <- viewEvalEnv eePublicData
-    let (PublicMeta cid sender (Gas gasLimit) gasPrice _ttl _creationTime) = publicMeta
+    let (PublicMeta cid sender (GasLimit (Gas gasLimit)) (GasPrice gasPrice) _ttl _creationTime) = publicMeta
     let fields = M.fromList [ (cdChainId, PString (_chainId cid))
                  , (cdBlockHeight, PInteger (fromIntegral blockHeight))
                  , (cdBlockTime, PTime (PactTime.fromPosixTimestampMicros blockTime))
