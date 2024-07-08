@@ -4,7 +4,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -206,7 +207,8 @@ data GasLogEntry b = GasLogEntry
 
 newtype RecursionCheck
   = RecursionCheck (Set QualifiedName)
-  deriving (Show, Generic, NFData)
+  deriving newtype (Show, NFData)
+  deriving stock Generic
 
 instance Default RecursionCheck where
   def = RecursionCheck mempty
@@ -248,7 +250,7 @@ data EvalState b i
   , _esCheckRecursion :: NonEmpty RecursionCheck
     -- ^ Sequence of gas expendature events.
   , _esTraceOutput :: [PactTrace b i]
-  } deriving (Show, Generic)
+  } deriving (Generic)
 
 instance (NFData b, NFData i) => NFData (EvalState b i)
 
@@ -312,7 +314,7 @@ data EvalMEnv e b i where
 -- Todo: are we going to inject state as the reader monad here?
 newtype EvalM e b i a =
   EvalM (ReaderT (EvalMEnv e b i) (ExceptT (PactError i) (StateT (EvalState b i) IO)) a)
-  deriving
+  deriving newtype
     ( Functor, Applicative, Monad
     , MonadIO
     , MonadThrow
@@ -321,7 +323,6 @@ newtype EvalM e b i a =
     , MonadReader (EvalMEnv e b i)
     , MonadState (EvalState b i)
     , MonadError (PactError i))
-  via (ReaderT (EvalMEnv e b i) (ExceptT (PactError i) (StateT (EvalState b i) IO)))
 
 instance PhaseDebug b i (EvalM e b i) where
   debugPrint _ _ = pure ()
