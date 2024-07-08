@@ -131,6 +131,7 @@ library pact-crypto
 
 library pact-request-api
   import: pact-common
+  visibility: public
   hs-source-dirs: pact-request-api
   build-depends:
       asn1-encoding
