@@ -56,6 +56,9 @@ format-time: 6041
 format: 1801
 hash: 150
 hours: 4000
+hyperlane-decode-token-message: 2175
+hyperlane-encode-token-message: 2475
+hyperlane-message-id: 2743
 identity: 25
 insert: 60383431
 install-capability: 60002693

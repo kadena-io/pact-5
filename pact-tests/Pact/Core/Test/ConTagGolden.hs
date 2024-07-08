@@ -23,6 +23,7 @@ import Pact.Core.DeriveConTag
 import Pact.JSON.Encode
 import Pact.Core.Errors
 import Pact.Core.Builtin
+import Data.List
 
 tests :: TestTree
 tests = testGroup "ConTag Goldens"
@@ -45,5 +46,5 @@ conTagGolden p =
   in goldenVsStringDiff (tyn <> " Golden") runDiff fp mkGolden
   where
   mkGolden =
-    pure $ encode $ Array (allConstrInfos p)
+    pure $ mconcat $ intersperse "\n" $ fmap encode (allConstrInfos p) ++ ["\n"]
   runDiff = \ref new -> ["diff", "-u", ref, new]

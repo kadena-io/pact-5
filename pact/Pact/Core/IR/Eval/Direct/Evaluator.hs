@@ -3366,24 +3366,27 @@ coreEnforceVerifier info b _env = \case
 
 coreHyperlaneDecodeTokenMessage :: (IsBuiltin b) => NativeFunction e b i
 coreHyperlaneDecodeTokenMessage info b _env = \case
-  [VString s] -> case decodeBase64UrlUnpadded (T.encodeUtf8 s) of
-    Left _e -> throwExecutionError info $ HyperlaneDecodeError HyperlaneDecodeErrorBase64 
-    Right bytes -> case Bin.runGetOrFail (unpackTokenMessageERC20 <* eof) (BS.fromStrict bytes) of
-      Left (_, _, e) | "TokenMessage" `L.isPrefixOf` e -> do
-         throwExecutionError info $ HyperlaneDecodeError $ HyperlaneDecodeErrorInternal e
-      Left _ -> do
-         throwExecutionError info $ HyperlaneDecodeError $ HyperlaneDecodeErrorBinary
-      Right (_, _, tm) -> case tokenMessageToTerm tm of
-        Left e -> throwExecutionError info $ HyperlaneDecodeError e
-        Right pv -> return (VPactValue pv)
+  [VString s] -> do
+    chargeGasArgs info $ GHyperlaneEncodeDecodeTokenMessage (T.length s)
+    case decodeBase64UrlUnpadded (T.encodeUtf8 s) of
+      Left _e -> throwExecutionError info $ HyperlaneDecodeError HyperlaneDecodeErrorBase64 
+      Right bytes -> case Bin.runGetOrFail (unpackTokenMessageERC20 <* eof) (BS.fromStrict bytes) of
+        Left (_, _, e) | "TokenMessage" `L.isPrefixOf` e -> do
+          throwExecutionError info $ HyperlaneDecodeError $ HyperlaneDecodeErrorInternal e
+        Left _ -> do
+          throwExecutionError info $ HyperlaneDecodeError $ HyperlaneDecodeErrorBinary
+        Right (_, _, tm) -> case tokenMessageToTerm tm of
+          Left e -> throwExecutionError info $ HyperlaneDecodeError e
+          Right pv -> return (VPactValue pv)
   args -> argsError info b args
 
 coreHyperlaneMessageId :: (IsBuiltin b) => NativeFunction e b i
 coreHyperlaneMessageId info b _env = \case
-  [VObject o] ->  case decodeHyperlaneMessageObject o of
+  [VObject o] -> case decodeHyperlaneMessageObject o of
     Left e -> throwExecutionError info $ HyperlaneError e
     Right r -> do
       let msgId =  getHyperlaneMessageId r
+      chargeGasArgs info $ GHyperlaneMessageId (T.length msgId)
       return (VString msgId)
   args -> argsError info b args
 
@@ -3393,6 +3396,7 @@ coreHyperlaneEncodeTokenMessage info b _env = \case
     Left e -> throwExecutionError info $ HyperlaneError e
     Right r -> do
       let encoded = T.decodeUtf8 $ encodeBase64UrlUnpadded $ BS.toStrict $ Bin.runPut $ Bin.putBuilder $ packTokenMessageERC20 r
+      chargeGasArgs info $ GHyperlaneEncodeDecodeTokenMessage (T.length encoded)
       return (VString encoded)
   args -> argsError info b args
 

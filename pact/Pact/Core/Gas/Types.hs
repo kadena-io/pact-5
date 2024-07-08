@@ -234,6 +234,13 @@ data GasArgs
   -- ^ Gas costs for searches
   | GPoseidonHashHackAChain !Int
   -- ^ poseidon-hash-hack-a-chain costs.
+  | GHyperlaneMessageId !Int
+  -- ^ ^ Cost of the hyperlane-message-id on this size (in bytes) of the
+  --   hyperlane Message Body, which is the only variable-length
+  --   part of a HyperlaneMessage
+  | GHyperlaneEncodeDecodeTokenMessage !Int
+  -- ^ Cost of hyperlane-encode-token-message and hyperlane-decode-token-message
+  --   on this size (in bytes) of the hyperlane TokenMessage base64-encoded string.
   | GModuleMemory !Word64
   | GStrOp !StrOp
   | GObjOp !ObjOp
