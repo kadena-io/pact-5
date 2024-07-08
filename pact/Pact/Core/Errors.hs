@@ -818,7 +818,7 @@ data HyperlaneError
     -- ^ Invalid Hex. We discard error messages from base16-bytestring to
   | HyperlaneErrorInvalidChainId Text
     -- ^ Invalid chain id.
-    deriving (Show, Generic)
+  deriving (Eq, Show, Generic)
 
 instance NFData HyperlaneError
 
@@ -845,7 +845,7 @@ data HyperlaneDecodeError
     --   by a library update.
   | HyperlaneDecodeErrorParseRecipient
     -- ^ Failed to parse the Recipient into a Guard
-  deriving (Show, Generic)
+  deriving (Eq, Show, Generic)
 
 instance NFData HyperlaneDecodeError
 

@@ -92,7 +92,6 @@ import Pact.Core.IR.Eval.Direct.Types
 import Pact.Core.Gas
 import Pact.Core.StableEncoding
 import Pact.Core.SPV
-import Pact.Core.Verifiers
 import Pact.Crypto.Hyperlane
 import qualified Data.Binary.Get as Bin
 import qualified Data.Binary.Put as Bin
