@@ -3,8 +3,9 @@
 
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Pact.Core.Gen.Serialise where
+module Pact.Core.Gen where
 
+import Control.Applicative
 import qualified Data.ByteString.Short as BSS
 import Data.Decimal
 import Data.Default (def)
@@ -12,6 +13,7 @@ import Data.Map.Strict (fromList)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.Vector as Vec
 import Hedgehog hiding (Var)
@@ -32,7 +34,6 @@ import Pact.Core.PactValue
 import Pact.Core.DefPacts.Types
 import Pact.Core.ChainData (ChainId(..))
 import Pact.Core.Namespace (Namespace(..))
-import Pact.Core.Test.LexerParserTests (identGen)
 
 namespaceNameGen :: Gen NamespaceName
 namespaceNameGen = NamespaceName <$> identGen
@@ -455,3 +456,9 @@ defPactExecGen' depth = do
       dpid <- defPactIdGen
       pexec <- defPactExecGen' (depth - 1)
       pure (dpid, pexec)
+
+identGen :: Gen Text
+identGen = do
+  pref <- Gen.alpha
+  suff <- Gen.string (Range.constant 0 16) (Gen.constant '-' <|> Gen.alphaNum)
+  pure $ T.pack (pref : suff)
