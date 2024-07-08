@@ -19,7 +19,6 @@ import Pact.Core.IR.Term
 import Pact.Core.Builtin
 import Pact.Core.Capabilities
 import Pact.Core.Environment
-import Pact.Core.Gas
 import Pact.Core.Guards
 import Pact.Core.Literal
 import Pact.Core.Names
@@ -27,11 +26,12 @@ import Pact.Core.Namespace
 import Pact.Core.PactValue
 import Pact.Core.Persistence
 import Pact.Core.Persistence.SQLite
-import Pact.Core.Serialise (serialisePact)
+import Pact.Core.Serialise (serialisePact_raw_spaninfo)
 import Pact.Core.Type
 import Pact.Time
 
 import Pact.Core.GasModel.Utils
+import Pact.Core.Info
 
 enumExpNum :: Integer -> Integer -> [(String, Integer)]
 enumExpNum base mult = [ (show val, val) | val <- iterate (* mult) base ]
@@ -87,7 +87,7 @@ enumExpScopedIdent base mult =
   | (title, PString str) <- enumExpString "a" base mult
   ]
 
-type BuiltinBenches = PactDb CoreBuiltin () -> [C.Benchmark]
+type BuiltinBenches = PactDb CoreBuiltin SpanInfo -> [C.Benchmark]
 
 benchArithBinOp :: T.Text -> BuiltinBenches
 benchArithBinOp op pdb =
@@ -576,10 +576,10 @@ benchComposeCapability pdb =
   [ C.bgroup "flat"
     [ runNativeBenchmarkPreparedStMod stMod [("c", theCapTok)] pdb title "(compose-capability c)"
     | (title, cnt) <- take 3 $ enumExpNum 1_000 10
-    , let sf = StackFrame (mkGasModelFqn "") [] SFDefcap ()
+    , let sf = StackFrame (mkGasModelFqn "") [] SFDefcap def
           theCapName = T.pack $ "theCap" <> show cnt
           theCapTok = PCapToken $ CapToken (mkGasModelFqn theCapName) []
-          theCapDef = DCap $ DefCap (Arg theCapName Nothing ()) [] (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
+          theCapDef = DCap $ DefCap (Arg theCapName Nothing def) [] (Constant (LBool True) def) (DefManaged AutoManagedMeta) def
           capToksStack = [ CapToken (fqnToQualName $ mkGasModelFqn $ T.pack $ show n) [] | n <- [0..cnt] ]
           manageds = [ ManagedCap ct ct (AutoManaged False)
                      | n <- [0..cnt]
@@ -592,10 +592,10 @@ benchComposeCapability pdb =
     | (cntTitle, cnt) <- take 3 $ enumExpNum 10 10
     , (argTitle, pv) <- take 3 $ enumExpListDeep 2 5 3
     , let title = cntTitle <> "_" <> argTitle
-          sf = StackFrame (mkGasModelFqn "") [] SFDefcap ()
+          sf = StackFrame (mkGasModelFqn "") [] SFDefcap def
           theCapName = T.pack $ "theCap" <> show cnt
           theCapTok = PCapToken $ CapToken (mkGasModelFqn theCapName) [pv, PInteger (-1)]
-          theCapDef = DCap $ DefCap (Arg theCapName Nothing ()) [Arg "a" Nothing (), Arg "b" Nothing ()] (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
+          theCapDef = DCap $ DefCap (Arg theCapName Nothing def) [Arg "a" Nothing def, Arg "b" Nothing def] (Constant (LBool True) def) (DefManaged AutoManagedMeta) def
           capToksStack = [ CapToken (fqnToQualName $ mkGasModelFqn theCapName) [pv, PInteger n] | n <- [0..cnt] ]
           manageds = [ ManagedCap ct ct (AutoManaged False)
                      | n <- [0..cnt]
@@ -610,7 +610,7 @@ benchInstallCapability pdb =
   [ C.bgroup "flat"
     [ runNativeBenchmarkPreparedStMod (stManaged manageds <> stAddDef "theCap" theCapDef) [("c", capTok)] pdb title "(install-capability c)"
     | let capTok = PCapToken $ CapToken (mkGasModelFqn "theCap") []
-          theCapDef = DCap $ DefCap (Arg "theCap" Nothing ()) [] (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
+          theCapDef = DCap $ DefCap (Arg "theCap" Nothing def) [] (Constant (LBool True) def) (DefManaged AutoManagedMeta) def
     , (title, cnt) <- take 3 $ enumExpNum 1_000 100
     , let manageds = [ ManagedCap ct ct (AutoManaged False)
                      | n <- [0..cnt]
@@ -619,7 +619,7 @@ benchInstallCapability pdb =
     ]
   , C.bgroup "nested"
     [ runNativeBenchmarkPreparedStMod (stManaged manageds <> stAddDef "theCap" theCapDef) [("c", capTok)] pdb title "(install-capability c)"
-    | let theCapDef = DCap $ DefCap (Arg "theCap" Nothing ()) [Arg "a1" Nothing (), Arg "a2" Nothing ()] (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
+    | let theCapDef = DCap $ DefCap (Arg "theCap" Nothing def) [Arg "a1" Nothing def, Arg "a2" Nothing def] (Constant (LBool True) def) (DefManaged AutoManagedMeta) def
           capFqn = mkGasModelFqn "theCap"
     , (cntTitle, cnt) <- take 3 $ enumExpNum 10 10
     , (argTitle, pv) <- take 3 $ enumExpListDeep 3 5 3
@@ -659,8 +659,8 @@ benchEmitEvent :: BuiltinBenches
 benchEmitEvent pdb = [ runNativeBenchmarkPreparedStMod stMod [("c", capTok)] pdb "novar" "(emit-event c)" ]
   where
   capTok = PCapToken $ CapToken (mkGasModelFqn "theCap") []
-  theCapDef = DCap $ DefCap (Arg "theCap" Nothing ()) [] (Constant (LBool True) ()) (DefManaged AutoManagedMeta) ()
-  sf = StackFrame (mkGasModelFqn "") [] SFDefcap ()
+  theCapDef = DCap $ DefCap (Arg "theCap" Nothing def) [] (Constant (LBool True) def) (DefManaged AutoManagedMeta) def
+  sf = StackFrame (mkGasModelFqn "") [] SFDefcap def
   stMod = stAddDef "theCap" theCapDef <> stStack [sf]
 
 benchCreatePrincipal :: BuiltinBenches
@@ -909,7 +909,7 @@ benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _, _) -> do
     ]
   where
   mkPactDb = do
-    (pdb, db, cache) <- unsafeCreateSqlitePactDb serialisePact ":memory:"
+    (pdb, db, cache) <- unsafeCreateSqlitePactDb serialisePact_raw_spaninfo ":memory:"
     pure (pdb, NoNf db, NoNf cache)
 
   cleanupPactDb (_, NoNf db, NoNf cache) = unsafeCloseSqlitePactDb db cache

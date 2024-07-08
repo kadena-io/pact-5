@@ -66,8 +66,8 @@ keysetPersistRoundtrip serial builtins keysetGen =
     keyset <- forAll keysetGen
     evalEnv <- liftIO $ getEvalEnv serial builtins
     writtenKeySetResult <- liftIO $ runEvalM (ExecEnv evalEnv) def  $ withSqlitePactDb serial ":memory:" $ \db -> do
-      () <- writeKeySet def db Insert keysetName keyset
-      liftIO $ readKeySet db keysetName
+      evalWrite def db Insert DKeySets keysetName keyset
+      liftIO $ _pdbRead db DKeySets keysetName
     case writtenKeySetResult of
       (Left _, _) -> fail "Unexpected EvalM error"
       (Right writtenKeySet, _) -> Just keyset === writtenKeySet
@@ -78,8 +78,8 @@ moduleDataRoundtrip serial builtins b i = property $ do
   moduleName <- forAll moduleNameGen
   evalEnv <- liftIO $ getEvalEnv serial builtins
   readResult <- liftIO $ runEvalM (ExecEnv evalEnv) def $ withSqlitePactDb serial ":memory:" $ \db -> do
-    () <- writeModule def db Insert moduleName moduleData
-    liftIO $ readModule db moduleName
+    () <- evalWrite def db Insert DModules moduleName moduleData
+    liftIO $ _pdbRead db DModules moduleName
   case readResult of
     (Left _, _) -> fail "Unexpected EvalM error"
     (Right writtenModuleData, _) ->
@@ -91,8 +91,8 @@ defPactExecRoundtrip serial builtins _b _i = property $ do
   defPactExec <- forAll (Gen.maybe defPactExecGen)
   evalEnv <- liftIO $ getEvalEnv serial builtins
   writeResult <- liftIO $ runEvalM (ExecEnv evalEnv) def $ withSqlitePactDb serial ":memory:" $ \db -> do
-    () <- writeDefPacts def db Insert defPactId defPactExec
-    liftIO $ readDefPacts db defPactId
+    () <- evalWrite def db Insert DDefPacts defPactId defPactExec
+    liftIO $ _pdbRead db DDefPacts defPactId
   case writeResult of
     (Left _, _) -> fail "Unexpected EvalM error"
     (Right writtenDefPactExec, _) ->
@@ -104,8 +104,8 @@ namespaceRoundtrip serial builtins = property $ do
   namespace <- forAll namespaceGen
   evalEnv <- liftIO $ getEvalEnv serial builtins
   writeResult <- liftIO $ runEvalM (ExecEnv evalEnv) def $ withSqlitePactDb serial ":memory:" $ \db -> do
-    () <- writeNamespace def db Insert ns namespace
-    liftIO $ readNamespace db ns
+    () <- evalWrite def db Insert DNamespaces ns namespace
+    liftIO $ _pdbRead db DNamespaces ns
   case writeResult of
     (Left _, _) -> fail "Unexpected EvalM error"
     (Right writtenNamespace, _) ->
@@ -125,7 +125,7 @@ sqliteRegression =
         user1 = "user1"
         usert = TableName user1 (ModuleName "someModule" Nothing)
       _txId1 <- liftIO $ _pdbBeginTx pdb Transactional
-      liftGasM def $ _pdbCreateUserTable pdb usert
+      evalCreateUserTable def pdb usert
 
       txs1 <- liftIO $ _pdbCommitTx pdb
       let
@@ -234,6 +234,5 @@ sqliteRegression =
         ee <- defaultEvalEnv pdb replCoreBuiltinMap
         ref <- newIORef (ReplState mempty ee evalLog (SourceCode "" "") mempty mempty Nothing False)
         Right _ <- runReplT ref (interpretReplProgramBigStep (SourceCode "test" src) (const (pure ())))
-        Just md <- readModule pdb (ModuleName "test" Nothing)
+        Just md <- _pdbRead pdb DModules (ModuleName "test" Nothing)
         pure md
-

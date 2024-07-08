@@ -26,17 +26,15 @@ import Data.Decimal
 tableGasModel :: MilliGasLimit -> GasModel CoreBuiltin
 tableGasModel gl =
   GasModel
-  { _gmRunModel = runTableModel
-  , _gmNatives = nativeGasTable
+  { _gmRunModel = runTableModel nativeGasTable
   , _gmName = "table"
-  , _gmGasLimit = gl
+  , _gmGasLimit = Just gl
   , _gmDesc = "table-based cost model"
   , _gmSerialize = serializationCosts
   }
 
 replTableGasModel :: MilliGasLimit -> GasModel ReplCoreBuiltin
-replTableGasModel gl =
-  (tableGasModel gl) { _gmNatives = replNativeGasTable }
+replTableGasModel gl = (tableGasModel gl) { _gmRunModel = runTableModel replNativeGasTable }
 
 ------------------------------------------------
 -- ZK Costs
@@ -182,8 +180,8 @@ intPowCost !base !power = MilliGas $ g (I# (IntLog.integerLogBase# 10 (abs base)
     The first equation above means `f₀₀ = 3 [μs] ≈ 1000 [milligas]`, the second one means `a = 2`, and the third one means `b = 300`.
  -}
 
-runTableModel :: GasArgs -> MilliGas
-runTableModel = \case
+runTableModel :: (b -> MilliGas) -> GasArgs b -> MilliGas
+runTableModel nativeTable = \case
   GAConstant !c -> c
   GIntegerOpCost !primOp lop rop -> case primOp of
     PrimOpAdd -> intAdditionCost lop rop
@@ -280,7 +278,8 @@ runTableModel = \case
     CapOpRequire cnt ->
       let mgPerCap = 100
       in MilliGas $ fromIntegral $ cnt * mgPerCap
-  GCountBytes -> MilliGas 1 
+  GCountBytes -> MilliGas 1
+  GNative b -> nativeTable b
   where
   textCompareCost str = fromIntegral $ T.length str
   -- Running CountBytes costs 0.9 MilliGas, according to the analysis in bench/Bench.hs

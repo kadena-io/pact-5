@@ -21,7 +21,6 @@ import qualified Data.Set as S
 import Pact.Core.Builtin
 import Pact.Core.Environment
 import Pact.Core.Errors
-import Pact.Core.Gas
 import Pact.Core.Names
 import Pact.Core.Literal
 import Pact.Core.Type
@@ -39,19 +38,19 @@ import Pact.Core.Namespace
 import Pact.Core.IR.Eval.CEK.Types hiding (Eval)
 import qualified Pact.Core.IR.Eval.CEK as Eval
 
-type CoreDb = PactDb CoreBuiltin ()
-type MachineResult = CEKReturn ExecRuntime CoreBuiltin ()
+type CoreDb = PactDb CoreBuiltin Info
+type MachineResult = CEKReturn ExecRuntime CoreBuiltin Info
 type ApplyContToVEnv =
-  ( EvalEnv CoreBuiltin ()
-  , EvalState CoreBuiltin ()
-  , Cont ExecRuntime CEKSmallStep CoreBuiltin ()
-  , CEKErrorHandler ExecRuntime CEKSmallStep CoreBuiltin ()
-  , CEKValue ExecRuntime CEKSmallStep CoreBuiltin ())
+  ( EvalEnv CoreBuiltin Info
+  , EvalState CoreBuiltin Info
+  , Cont ExecRuntime CEKSmallStep CoreBuiltin Info
+  , CEKErrorHandler ExecRuntime CEKSmallStep CoreBuiltin Info
+  , CEKValue ExecRuntime CEKSmallStep CoreBuiltin Info)
 
-benchmarkEnv :: BuiltinEnv ExecRuntime CEKSmallStep CoreBuiltin ()
+benchmarkEnv :: BuiltinEnv ExecRuntime CEKSmallStep CoreBuiltin Info
 benchmarkEnv = coreBuiltinEnv @ExecRuntime @CEKSmallStep
 
-benchmarkBigStepEnv :: BuiltinEnv ExecRuntime CEKBigStep CoreBuiltin ()
+benchmarkBigStepEnv :: BuiltinEnv ExecRuntime CEKBigStep CoreBuiltin Info
 benchmarkBigStepEnv = coreBuiltinEnv @ExecRuntime @CEKBigStep
 
 newtype NoNF a
@@ -70,7 +69,7 @@ defaultGasEvalEnv pdb = do
   ee <- defaultEvalEnv pdb coreBuiltinMap
   pure $ set eeMsgSigs gmSigs $ ee
 
-defaultGasEvalState :: EvalState CoreBuiltin ()
+defaultGasEvalState :: EvalState CoreBuiltin Info
 defaultGasEvalState =
   EvalState
   {_esStack=[]
@@ -78,7 +77,6 @@ defaultGasEvalState =
   , _esEvents=[]
   , _esDefPactExec=Nothing
   , _esCaps=capState
-  , _esGasLog=Nothing
   , _esCheckRecursion = pure (RecursionCheck mempty)
   , _esTraceOutput = []
   }
@@ -174,42 +172,42 @@ gmManagerDfunName = "gasModelDfunManager"
 gmDcapEventName :: Text
 gmDcapEventName = "gasModelDCapEvent"
 
-gmDcapUnmanaged :: EvalDefCap CoreBuiltin ()
+gmDcapUnmanaged :: EvalDefCap CoreBuiltin Info
 gmDcapUnmanaged = DefCap
   { _dcapTerm = boolConst True
-  , _dcapSpec = Arg gmDcapUnmanagedName Nothing ()
+  , _dcapSpec = Arg gmDcapUnmanagedName Nothing def
   , _dcapMeta=DefEvent
-  , _dcapInfo=()
+  , _dcapInfo= def
   , _dcapArgs=[]
   }
 
-gmDcapAutomanaged :: EvalDefCap CoreBuiltin ()
+gmDcapAutomanaged :: EvalDefCap CoreBuiltin Info
 gmDcapAutomanaged = DefCap
   { _dcapTerm = boolConst True
-  , _dcapSpec = Arg gmDcapAutoManagedName Nothing ()
+  , _dcapSpec = Arg gmDcapAutoManagedName Nothing def
   , _dcapMeta= DefManaged AutoManagedMeta
-  , _dcapInfo=()
+  , _dcapInfo= def
   , _dcapArgs=[]}
 
-gmManagerDfun :: EvalDefun CoreBuiltin ()
+gmManagerDfun :: EvalDefun CoreBuiltin Info
 gmManagerDfun =
   Defun
   { _dfunTerm = intConst 1
-  , _dfunSpec = Arg gmManagerDfunName Nothing ()
-  , _dfunInfo=()
-  , _dfunArgs=[Arg "arg1" Nothing (), Arg "arg2" Nothing ()]
+  , _dfunSpec = Arg gmManagerDfunName Nothing def
+  , _dfunInfo=def
+  , _dfunArgs=[Arg "arg1" Nothing def, Arg "arg2" Nothing def]
   }
 
-gmDcapManaged :: EvalDefCap CoreBuiltin ()
+gmDcapManaged :: EvalDefCap CoreBuiltin Info
 gmDcapManaged = DefCap
   { _dcapTerm = boolConst True
-  , _dcapSpec = Arg gmDcapAutoManagedName Nothing ()
+  , _dcapSpec = Arg gmDcapAutoManagedName Nothing def
   , _dcapMeta= DefManaged (DefManagedMeta (0, "arg1") (FQName (mkGasModelFqn gmManagerDfunName)))
-  , _dcapInfo=()
-  , _dcapArgs=[Arg "arg1" Nothing ()]
+  , _dcapInfo=def
+  , _dcapArgs=[Arg "arg1" Nothing def]
   }
 
-gmModuleDefns :: [EvalDef CoreBuiltin ()]
+gmModuleDefns :: [EvalDef CoreBuiltin Info]
 gmModuleDefns =
   [ DCap gmDcapManaged
   , DCap gmDcapAutomanaged
@@ -217,10 +215,10 @@ gmModuleDefns =
   , Dfun gmManagerDfun]
 
 
-gmModule :: EvalModule CoreBuiltin ()
+gmModule :: EvalModule CoreBuiltin Info
 gmModule = Module
   { _mName= gmModuleName
-  , _mInfo=()
+  , _mInfo=def
   , _mImports=[]
   , _mImplements=[]
   , _mHash=gmModuleHash
@@ -228,20 +226,20 @@ gmModule = Module
   , _mDefs=gmModuleDefns
   , _mBlessed=mempty}
 
-gmModuleData :: ModuleData CoreBuiltin ()
+gmModuleData :: ModuleData CoreBuiltin Info
 gmModuleData = ModuleData gmModule mempty
 
-gmFqMap :: Map FullyQualifiedName (EvalDef CoreBuiltin ())
+gmFqMap :: Map FullyQualifiedName (EvalDef CoreBuiltin Info)
 gmFqMap = M.fromList $ toFqDep gmModuleName gmModuleHash <$> gmModuleDefns
 
-gmLoaded :: Loaded CoreBuiltin ()
+gmLoaded :: Loaded CoreBuiltin Info
 gmLoaded = Loaded
   {_loToplevel=mempty
   , _loNamespace=Nothing
   , _loModules=M.singleton gmModuleName gmModuleData
   , _loAllLoaded=gmFqMap}
 
-prepopulateDb :: PactDb CoreBuiltin i -> GasM (PactError i) CoreBuiltin ()
+prepopulateDb :: PactDb CoreBuiltin Info -> GasM CoreBuiltin Info ()
 prepopulateDb pdb = do
   _ <- liftIO $ _pdbBeginTx pdb Transactional
   _pdbCreateUserTable pdb gasModelTable
@@ -253,11 +251,11 @@ prepopulateDb pdb = do
   pure ()
 
 evaluateN
-  :: EvalEnv CoreBuiltin ()
-  -> EvalState CoreBuiltin ()
+  :: EvalEnv CoreBuiltin Info
+  -> EvalState CoreBuiltin Info
   -> Text
   -> Int
-  -> IO (Either (PactError ()) MachineResult, EvalState CoreBuiltin ())
+  -> IO (Either (PactError Info) MachineResult, EvalState CoreBuiltin Info)
 evaluateN evalEnv es source nSteps = runEvalM (ExecEnv evalEnv) es $ do
   term <- compileTerm source
   let pdb = _eePactDb evalEnv
@@ -266,7 +264,7 @@ evaluateN evalEnv es source nSteps = runEvalM (ExecEnv evalEnv) es $ do
                    , _ceLocal=mempty
                    , _ceInCap=False
                    , _ceDefPactStep=ps
-                   , _ceBuiltins= benchmarkEnv }
+                   , _ceBuiltins = benchmarkEnv }
   step1 <- Eval.evaluateTermSmallStep Mt CEKNoHandler env term
   evalNSteps (nSteps - 1) step1
 
@@ -291,26 +289,26 @@ evalNSteps i c
 
 compileTerm
   :: Text
-  -> Eval CoreTerm
+  -> Eval (CoreTerm Info)
 compileTerm source = do
   parsed <- liftEither $ compileOnlyTerm (RawCode source)
   DesugarOutput term _  <- runDesugarTerm parsed
   pure term
 
-type BenchEvalEnv = EvalEnv CoreBuiltin ()
-type BenchEvalState = EvalState CoreBuiltin ()
+type BenchEvalEnv = EvalEnv CoreBuiltin Info
+type BenchEvalState = EvalState CoreBuiltin Info
 
 runCompileTerm
   :: BenchEvalEnv
   -> BenchEvalState
   -> Text
-  -> IO (Either (PactError ()) CoreTerm, EvalState CoreBuiltin ())
+  -> IO (Either (PactError Info) (CoreTerm Info), EvalState CoreBuiltin Info)
 runCompileTerm ee es = runEvalM (ExecEnv ee) es . compileTerm
 
 runNativeBenchmark'
   :: (BenchEvalEnv -> IO BenchEvalEnv)
   -> (BenchEvalState -> IO BenchEvalState)
-  -> PactDb CoreBuiltin ()
+  -> PactDb CoreBuiltin Info
   -> String
   -> Text
   -> C.Benchmark
@@ -325,7 +323,7 @@ runNativeBenchmark' envMod stMod pdb title src = C.env mkEnv $ \ ~(term, es, ee)
     pure (term, es', ee)
 
 runNativeBenchmark
-  :: PactDb CoreBuiltin ()
+  :: PactDb CoreBuiltin Info
   -> String
   -> Text
   -> C.Benchmark
@@ -338,12 +336,12 @@ withLoaded envVars = esLoaded .~ synthLoaded
     { _loModules = mempty
     , _loToplevel = M.fromList [ (n, (mkGasModelFqn n, DKDefConst)) | n <- fst <$> envVars ]
     , _loNamespace = Nothing
-    , _loAllLoaded = M.fromList [ (mkGasModelFqn n, DConst $ DefConst (Arg n Nothing ()) (EvaledConst v) ()) | (n, v) <- envVars ]
+    , _loAllLoaded = M.fromList [ (mkGasModelFqn n, DConst $ DefConst (Arg n Nothing def) (EvaledConst v) def) | (n, v) <- envVars ]
     }
 
 runNativeBenchmarkPrepared
   :: [(Text, PactValue)]
-  -> PactDb CoreBuiltin ()
+  -> PactDb CoreBuiltin Info
   -> String
   -> Text
   -> C.Benchmark
@@ -360,7 +358,7 @@ msgSigsNoCap pkts = Endo $ eeMsgSigs .~ M.fromList ((, mempty) <$> pkts)
 runNativeBenchmarkPreparedEnvMod
   :: EnvMod
   -> [(Text, PactValue)]
-  -> PactDb CoreBuiltin ()
+  -> PactDb CoreBuiltin Info
   -> String
   -> Text
   -> C.Benchmark
@@ -374,13 +372,13 @@ stCaps capToks = Endo $ esCaps.csSlots .~ ((`CapSlot` []) <$> capToks)
 stManaged :: [ManagedCap QualifiedName PactValue] -> StMod
 stManaged manageds = Endo $ esCaps.csManaged .~ S.fromList manageds
 
-stAddDef :: Text -> Def Name Type CoreBuiltin () -> StMod
+stAddDef :: Text -> Def Name Type CoreBuiltin Info -> StMod
 stAddDef name dfn = Endo $ (esLoaded.loToplevel %~ M.insert name (fqn, defKind gmModuleName dfn))
                          . (esLoaded.loAllLoaded %~ M.insert fqn dfn)
   where
   fqn = mkGasModelFqn name
 
-stStack :: [StackFrame ()] -> StMod
+stStack :: [StackFrame Info] -> StMod
 stStack s = Endo $ esStack .~ s
 
 stModAdmin :: [ModuleName] -> StMod
@@ -389,7 +387,7 @@ stModAdmin names = Endo $ esCaps.csModuleAdmin .~ S.fromList names
 runNativeBenchmarkPreparedStMod
   :: StMod
   -> [(Text, PactValue)]
-  -> PactDb CoreBuiltin ()
+  -> PactDb CoreBuiltin Info
   -> String
   -> Text
   -> C.Benchmark
@@ -403,7 +401,7 @@ ignoreWrites :: PactDb b i -> PactDb b i
 ignoreWrites pdb = pdb { _pdbWrite = \_ _ _ _ -> pure () }
 
 -- Closures
-unitClosureNullary :: CEKEnv ExecRuntime step CoreBuiltin () -> Closure ExecRuntime step CoreBuiltin ()
+unitClosureNullary :: CEKEnv ExecRuntime step CoreBuiltin Info -> Closure ExecRuntime step CoreBuiltin Info
 unitClosureNullary env
   = Closure
   { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
@@ -412,74 +410,74 @@ unitClosureNullary env
   , _cloTerm = unitConst
   , _cloRType = Nothing
   , _cloEnv = env
-  , _cloInfo = ()}
+  , _cloInfo = def}
 
 
-unitClosureUnary :: CEKEnv ExecRuntime step CoreBuiltin () -> Closure ExecRuntime step CoreBuiltin ()
+unitClosureUnary :: CEKEnv ExecRuntime step CoreBuiltin Info -> Closure ExecRuntime step CoreBuiltin Info
 unitClosureUnary env
   = Closure
   { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg" Nothing ()])
+  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg" Nothing def])
   , _cloArity = 1
   , _cloTerm = unitConst
   , _cloRType = Nothing
   , _cloEnv = env
-  , _cloInfo = ()}
+  , _cloInfo = def}
 
-unitClosureBinary :: CEKEnv ExecRuntime step CoreBuiltin () -> Closure ExecRuntime step CoreBuiltin ()
+unitClosureBinary :: CEKEnv ExecRuntime step CoreBuiltin Info -> Closure ExecRuntime step CoreBuiltin Info
 unitClosureBinary env
   = Closure
   { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing (), Arg "fooCloArg2" Nothing ()])
+  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing def, Arg "fooCloArg2" Nothing def])
   , _cloArity = 2
   , _cloTerm = unitConst
   , _cloRType = Nothing
   , _cloEnv = env
-  , _cloInfo = ()}
+  , _cloInfo = def}
 
 
-boolClosureUnary :: Bool -> CEKEnv e step b () -> Closure e step b ()
+boolClosureUnary :: Bool -> CEKEnv e step b Info -> Closure e step b Info
 boolClosureUnary b env
   = Closure
   { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing ()])
+  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing def])
   , _cloArity = 1
   , _cloTerm = boolConst b
   , _cloRType = Nothing
   , _cloEnv = env
-  , _cloInfo = ()}
+  , _cloInfo = def}
 
-boolClosureBinary :: Bool -> CEKEnv e step b () -> Closure e step b ()
+boolClosureBinary :: Bool -> CEKEnv e step b Info -> Closure e step b Info
 boolClosureBinary b env
   = Closure
   { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing (), Arg "fooCloArg2" Nothing ()])
+  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing def, Arg "fooCloArg2" Nothing def])
   , _cloArity = 2
   , _cloTerm = boolConst b
   , _cloRType = Nothing
   , _cloEnv = env
-  , _cloInfo = ()}
+  , _cloInfo = def}
 
-intClosureBinary :: Integer -> CEKEnv e step b () -> Closure e step b ()
+intClosureBinary :: Integer -> CEKEnv e step b Info -> Closure e step b Info
 intClosureBinary b env
   = Closure
   { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing (), Arg "fooCloArg2" Nothing ()])
+  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing def, Arg "fooCloArg2" Nothing def])
   , _cloArity = 2
   , _cloTerm = intConst b
   , _cloRType = Nothing
   , _cloEnv = env
-  , _cloInfo = ()}
+  , _cloInfo = def}
 
 
-unitConst :: CoreTerm
-unitConst = Constant LUnit ()
+unitConst :: CoreTerm Info
+unitConst = Constant LUnit def
 
-boolConst :: Bool -> Term name ty builtin ()
-boolConst b = Constant (LBool b) ()
+boolConst :: Bool -> Term name ty builtin Info
+boolConst b = Constant (LBool b) def
 
-strConst :: Text -> Term name ty builtin ()
-strConst b = Constant (LString b) ()
+strConst :: Text -> Term name ty builtin Info
+strConst b = Constant (LString b) def
 
-intConst :: Integer -> Term name ty builtin ()
-intConst b = Constant (LInteger b) ()
+intConst :: Integer -> Term name ty builtin Info
+intConst b = Constant (LInteger b) def

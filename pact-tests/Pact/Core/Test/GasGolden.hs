@@ -112,8 +112,8 @@ runGasTest file interpret = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
   gasLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replCoreBuiltinMap
-  let ee' = ee & eeGasModel .~ replTableGasModel (maxBound :: MilliGasLimit)
-      gasRef = ee' ^. eeGasRef
+  let ee' = ee & eeGasEnv . geGasModel .~ replTableGasModel (maxBound :: MilliGasLimit)
+      gasRef = ee' ^. eeGasEnv . geGasRef
   let source = SourceCode file src
   let rstate = ReplState
             { _replFlags = mempty

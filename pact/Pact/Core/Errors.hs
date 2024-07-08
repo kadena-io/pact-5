@@ -58,7 +58,6 @@ import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Info
-import Pact.Core.Gas.Types
 import Pact.Core.Pretty as Pretty
 import Pact.Core.Hash
 import Pact.Core.StackFrame
@@ -366,7 +365,7 @@ data EvalError
   -- ^ Enumeration error (e.g incorrect bounds with step
   | DecodeError Text
   -- ^ Some form of decoding error
-  | GasExceeded MilliGasLimit MilliGas
+  | GasExceeded
   -- ^ Gas went past the gas limit
   | FloatingPointError Text
   -- ^ Floating point operation exception
@@ -544,8 +543,8 @@ instance Pretty EvalError where
     -- Todo: probably enhance this data type
     CapNotInScope txt ->
       Pretty.hsep ["Capability not in scope:", pretty txt]
-    GasExceeded (MilliGasLimit (milliGasToGas -> Gas limit)) (milliGasToGas -> Gas amt) ->
-      "Gas Limit:" <+> parens (pretty limit) <+> "exceeded:" <+> pretty amt
+    GasExceeded ->
+      "Gas limit exceeded"
     InvariantFailure msg ->
       Pretty.hsep ["Fatal execution error, invariant violated:", pretty msg]
     NativeArgumentsError n tys ->

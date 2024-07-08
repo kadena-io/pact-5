@@ -147,9 +147,15 @@ setupEvalEnv
   -> SPVSupport
   -> PublicData
   -> S.Set ExecutionFlag
-  -> IO (EvalEnv CoreBuiltin ())
-setupEvalEnv pdb mode msgData gasModel np spv pd efs = do
+  -> IO (EvalEnv CoreBuiltin a)
+setupEvalEnv pdb mode msgData gasModel' np spv pd efs = do
   gasRef <- newIORef mempty
+  gasLogRef <- newIORef Nothing
+  let gasEnv = GasEnv
+        { _geGasRef = gasRef
+        , _geGasLogRef = gasLogRef
+        , _geGasModel = gasModel'
+        }
   pure $ EvalEnv
     { _eeMsgSigs = mkMsgSigs $ mdSigners msgData
     , _eeMsgVerifiers = mkMsgVerifiers $ mdVerifiers msgData
@@ -162,8 +168,7 @@ setupEvalEnv pdb mode msgData gasModel np spv pd efs = do
     , _eeFlags = efs
     , _eeNatives = coreBuiltinMap
     , _eeNamespacePolicy = np
-    , _eeGasRef = gasRef
-    , _eeGasModel = gasModel
+    , _eeGasEnv = gasEnv
     , _eeSPVSupport = spv
     }
   where

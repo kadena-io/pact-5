@@ -3,6 +3,10 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE BlockArguments #-}
 
 module Pact.Core.Gas.Types
   ( MilliGas(..)
@@ -12,10 +16,13 @@ module Pact.Core.Gas.Types
   , GasPrice(..)
   , gasToMilliGas
   , milliGasToGas
-  , millisPerGas
+  , milliGasPerGas
 
-  , GasM(..)
-  , GasMEnv(..)
+  , GasLogEntry(..)
+  , GasEnv(..)
+  , geGasRef
+  , geGasLogRef
+  , geGasModel
 
   , GasModel(..)
   , GasArgs(..)
@@ -38,13 +45,9 @@ module Pact.Core.Gas.Types
 
   , gmRunModel
   , gmGasLimit
-  , gmNatives
   , gmDesc
   , gmName
   , gmSerialize
-
-  , gasMChargeGas
-  , gasMModel
 
   , constantGasModel
   , freeGasModel
@@ -53,8 +56,6 @@ module Pact.Core.Gas.Types
 
 
 import Control.DeepSeq
-import Control.Monad.Except
-import Control.Monad.Reader
 import Control.Lens
 import Data.Decimal(Decimal)
 import Data.Monoid
@@ -66,6 +67,7 @@ import GHC.Generics
 
 import Pact.Core.Pretty
 import Pact.Core.Names (FullyQualifiedName)
+import Data.IORef
 
 -- | Gas in pact-core, represented as an unsigned
 -- integer, units will go in terms of 1e3 = 2ns
@@ -103,15 +105,15 @@ newtype GasPrice
   deriving (Eq, Show, Ord)
   deriving newtype NFData
 
-millisPerGas :: Word64
-millisPerGas = 1000
+milliGasPerGas :: Word64
+milliGasPerGas = 1000
 
 gasToMilliGas :: Gas -> MilliGas
-gasToMilliGas (Gas n) = MilliGas (n * millisPerGas)
+gasToMilliGas (Gas n) = MilliGas (n * milliGasPerGas)
 {-# INLINE gasToMilliGas #-}
 
 milliGasToGas :: MilliGas -> Gas
-milliGasToGas (MilliGas n) = Gas (n `quot` millisPerGas)
+milliGasToGas (MilliGas n) = Gas (n `quot` milliGasPerGas)
 {-# INLINE milliGasToGas #-}
 
 
@@ -205,8 +207,9 @@ data CapOp
   = CapOpRequire !Int
   deriving (Eq, Show, Ord, Generic, NFData)
 
-data GasArgs
+data GasArgs b
   = GAConstant !MilliGas
+  | GNative b
   -- Todo: integerOpCost seems like a case of `GALinear`
   -- Maybe we can investigate generalizing the operational costs in terms of a more general structure
   -- instead of the current `GasArgs` model?
@@ -242,7 +245,7 @@ data GasArgs
   -- ^ Cost of computing SizeOf for N bytes.
   deriving (Show, Generic, NFData)
 
-instance Pretty GasArgs where
+instance Show b => Pretty (GasArgs b) where
   pretty = pretty . show
 
 newtype GasTextLength
@@ -325,9 +328,8 @@ data GasModel b
   = GasModel
   { _gmName :: !Text
   , _gmDesc :: !Text
-  , _gmNatives :: !(b -> MilliGas)
-  , _gmRunModel :: !(GasArgs -> MilliGas)
-  , _gmGasLimit :: !MilliGasLimit
+  , _gmRunModel :: !(GasArgs b -> MilliGas)
+  , _gmGasLimit :: !(Maybe MilliGasLimit)
   , _gmSerialize :: !SerializationCosts
   } deriving (Generic, NFData)
 makeLenses ''GasModel
@@ -337,32 +339,31 @@ constantGasModel unitPrice gl
   = GasModel
   { _gmName = "unitGasModel"
   , _gmDesc = "GasModel with constant cost " <> T.pack (show unitPrice)
-  , _gmNatives = const unitPrice
   , _gmRunModel = const unitPrice
-  , _gmGasLimit = gl
+  , _gmGasLimit = Just gl
   , _gmSerialize = freeSerializationCosts
   }
 
 freeGasModel :: GasModel b
-freeGasModel = constantGasModel mempty (MilliGasLimit (MilliGas 0))
+freeGasModel = GasModel
+  { _gmName = "freeGasModel"
+  , _gmDesc = "free gas model"
+  , _gmRunModel = const mempty
+  , _gmGasLimit = Nothing
+  , _gmSerialize = freeSerializationCosts
+  }
 
-data GasMEnv e b
-  = GasMEnv
-  { _gasMChargeGas :: MilliGas -> GasM e b ()
-  , _gasMModel :: GasModel b
+data GasLogEntry b i = GasLogEntry
+  { _gleArgs :: GasArgs b
+  , _gleInfo :: i
+  , _gleInfoStack :: [i]
+  , _gleThisUsed :: !MilliGas
+  } deriving (Show, Generic, NFData)
+
+data GasEnv b i
+  = GasEnv
+  { _geGasRef :: !(IORef MilliGas)
+  , _geGasLogRef :: !(IORef (Maybe [GasLogEntry b i]))
+  , _geGasModel :: !(GasModel b)
   } deriving (Generic, NFData)
-
-
-
-newtype GasM e b a
-  = GasM (ReaderT (GasMEnv e b) (ExceptT e IO) a)
-  deriving
-  ( Functor
-  , Applicative
-  , Monad
-  , MonadReader (GasMEnv e b)
-  , MonadError e
-  , MonadIO) via (ReaderT (GasMEnv e b) (ExceptT e IO))
-
-
-makeLenses ''GasMEnv
+makeLenses ''GasEnv

@@ -72,20 +72,22 @@ mkKs a = PGuard $ GKeyset $ KeySet (S.singleton a) KeysAll
 
 interpretBigStep :: Interpreter ExecRuntime CoreBuiltin SpanInfo
 interpretBigStep =
-  Interpreter runGuard runTerm
+  Interpreter runGuard runTerm evalResumePact
   where
   runTerm purity term = CEK.eval purity eEnv term
   runGuard info g = CEK.interpretGuard info eEnv g
   eEnv = CEK.coreBuiltinEnv @ExecRuntime @CEK.CEKBigStep
+  evalResumePact info pactExec = CEK.evalResumePact info eEnv pactExec
 
 
 interpretDirect :: Interpreter ExecRuntime CoreBuiltin SpanInfo
 interpretDirect =
-  Interpreter runGuard runTerm
+  Interpreter runGuard runTerm evalResumePact
   where
   runTerm purity term = Direct.eval purity eEnv term
   runGuard info g = Direct.interpretGuard info eEnv g
   eEnv = Direct.coreBuiltinEnv
+  evalResumePact info pactExec = Direct.evalResumePact info eEnv pactExec
 
 
 data CoinBenchSenders
@@ -176,6 +178,13 @@ setupBenchEvalEnv
   -> PactValue -> IO (EvalEnv CoreBuiltin i)
 setupBenchEvalEnv pdb signers mBody = do
   gasRef <- newIORef mempty
+  gasLogRef <- newIORef Nothing
+  let
+    gasEnv = GasEnv
+      { _geGasRef = gasRef
+      , _geGasLogRef = gasLogRef
+      , _geGasModel = tableGasModel (MilliGasLimit (MilliGas 200_000_000))
+      }
   pure $ EvalEnv
     { _eeMsgSigs = signers
     , _eeMsgVerifiers = mempty
@@ -188,8 +197,7 @@ setupBenchEvalEnv pdb signers mBody = do
     , _eeFlags = S.fromList [FlagEnforceKeyFormats, FlagRequireKeysetNs]
     , _eeNatives = coreBuiltinMap
     , _eeNamespacePolicy = SimpleNamespacePolicy
-    , _eeGasRef = gasRef
-    , _eeGasModel = tableGasModel (MilliGasLimit (MilliGas 200_000_000))
+    , _eeGasEnv = gasEnv
     , _eeSPVSupport = noSPVSupport
     }
 
@@ -237,7 +245,7 @@ getRightIO = either throwIO pure
 
 resetEEGas :: EvalEnv b i -> IO ()
 resetEEGas ee =
-  writeIORef (_eeGasRef ee) mempty
+  writeIORef (_geGasRef $ _eeGasEnv ee) mempty
 
 
 transferSigners :: CoinBenchSenders -> CoinBenchSenders -> Map PublicKeyText (Set (CapToken QualifiedName PactValue))
@@ -282,7 +290,7 @@ runCoinXferDirect pdb =  do
   let es' = def {_esLoaded=_esLoaded es}
   forM_ [1 :: Integer .. 1000] $ \_ -> withTx pdb $ do
     (out, _) <- runEvalM (ExecEnv ee) es' $ eval interpretBigStep PImpure term
-    writeIORef (_eeGasRef ee) mempty
+    writeIORef (_geGasRef $ _eeGasEnv ee) mempty
     either throw print out
   pure ()
   where

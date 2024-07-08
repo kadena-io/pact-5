@@ -66,10 +66,12 @@ import Pact.Core.Literal
 import Pact.Core.Persistence
 import Pact.Core.Environment
 import Pact.Core.DefPacts.Types
-import Pact.Core.Gas
+import Pact.Core.Gas.Types
+import qualified Pact.Core.Gas.Utils as Gas.Utils
 import Pact.Core.Guards
 import Pact.Core.Capabilities
 import Pact.Core.Hash
+import Control.Monad.Except
 
 
 lookupFqName :: FullyQualifiedName -> EvalM e b i (Maybe (EvalDef b i))
@@ -207,39 +209,25 @@ tvToDomain :: TableValue -> Domain RowKey RowData b i
 tvToDomain tv =
   DUserTables (_tvName tv)
 
-chargeGasArgs :: i -> GasArgs -> EvalM e b i ()
+chargeGasArgs :: i -> GasArgs b -> EvalM e b i ()
 chargeGasArgs info ga = do
-  model <- viewEvalEnv eeGasModel
-  !currGas <- getGas
-  let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
-      !g1 = _gmRunModel model ga
-      !gUsed = currGas <> g1
-  esGasLog %= fmap (GasLogEntry (Left ga) g1 gUsed :)
-  putGas gUsed
-  when (gUsed > gasLimit) $
-    throwExecutionError info (GasExceeded limit gUsed)
+  stack <- use esStack
+  gasEnv <- viewEvalEnv eeGasEnv
+  either throwError return =<<
+    liftIO (Gas.Utils.chargeGasArgsM gasEnv info stack ga)
 
 chargeFlatNativeGas :: i -> b -> EvalM e b i ()
-chargeFlatNativeGas info nativeArg = do
-  model <- viewEvalEnv eeGasModel
-  !currGas <- getGas
-  let limit@(MilliGasLimit gasLimit) = _gmGasLimit model
-      !g1 = _gmNatives model nativeArg
-      !gUsed = currGas <> g1
-  esGasLog %= fmap (GasLogEntry (Right nativeArg) g1 gUsed :)
-  putGas gUsed
-  when (gUsed > gasLimit && gasLimit >= currGas) $
-    throwExecutionError info (GasExceeded limit gUsed)
-
+chargeFlatNativeGas info nativeArg =
+  chargeGasArgs info (GNative nativeArg)
 
 getGas :: EvalM e b i MilliGas
 getGas =
-  viewEvalEnv eeGasRef >>= liftIO . readIORef
+  viewEvalEnv (eeGasEnv . geGasRef) >>= liftIO . readIORef
 {-# INLINE getGas #-}
 
 putGas :: MilliGas -> EvalM e b i ()
 putGas !g = do
-  gasRef <- viewEvalEnv eeGasRef
+  gasRef <- viewEvalEnv (eeGasEnv . geGasRef)
   liftIO (writeIORef gasRef g)
 {-# INLINE putGas #-}
 
