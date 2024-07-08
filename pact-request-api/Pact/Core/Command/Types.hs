@@ -33,6 +33,7 @@ module Pact.Core.Command.Types
   , verifyUserSig
   , verifyUserSigs
   , verifyCommand
+  , unsafeParseCommand
   , PPKScheme(..)
   , Ed25519KeyPairCaps
   , ProcessedCommand(..),_ProcSucc,_ProcFail
@@ -151,6 +152,9 @@ parsePact t =
   where
     stripInfo :: Lisp.TopLevel SpanInfo -> Lisp.TopLevel ()
     stripInfo = void
+
+unsafeParseCommand :: forall m. FromJSON m => Command ByteString -> Either String (Command (Payload m ParsedCode))
+unsafeParseCommand = traverse (traverse parsePact <=< A.eitherDecodeStrict' @(Payload m Text))
 
 -- VALIDATING TRANSACTIONS
 verifyCommand :: forall m. FromJSON m => Command ByteString -> ProcessedCommand m ParsedCode
