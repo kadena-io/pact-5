@@ -1813,27 +1813,27 @@ evalResumePact info bEnv mdpe = do
 
 
 evaluateTermSmallStep
-  :: Cont e CEKSmallStep CoreBuiltin ()
-  -> CEKErrorHandler e CEKSmallStep CoreBuiltin ()
-  -> CEKEnv e CEKSmallStep CoreBuiltin ()
-  -> CoreTerm
-  -> EvalM e CoreBuiltin () (CEKReturn e CoreBuiltin ())
+  :: Cont e CEKSmallStep CoreBuiltin a
+  -> CEKErrorHandler e CEKSmallStep CoreBuiltin a
+  -> CEKEnv e CEKSmallStep CoreBuiltin a
+  -> CoreTerm a
+  -> EvalM e CoreBuiltin a (CEKReturn e CoreBuiltin a)
 evaluateTermSmallStep = evaluateTerm
 
 
 applyContToValueSmallStep
-  :: Cont e CEKSmallStep CoreBuiltin ()
-  -> CEKErrorHandler e CEKSmallStep CoreBuiltin ()
-  -> CEKValue e CEKSmallStep CoreBuiltin ()
-  -> EvalM e CoreBuiltin () (CEKReturn e CoreBuiltin ())
+  :: Cont e CEKSmallStep CoreBuiltin a
+  -> CEKErrorHandler e CEKSmallStep CoreBuiltin a
+  -> CEKValue e CEKSmallStep CoreBuiltin a
+  -> EvalM e CoreBuiltin a (CEKReturn e CoreBuiltin a)
 applyContToValueSmallStep = applyContToValue
 
 
 applyContSmallStep
-  :: Cont e CEKSmallStep CoreBuiltin ()
-  -> CEKErrorHandler e CEKSmallStep CoreBuiltin ()
-  -> EvalResult e CEKSmallStep CoreBuiltin ()
-  -> EvalM e CoreBuiltin () (CEKReturn e CoreBuiltin ())
+  :: Cont e CEKSmallStep CoreBuiltin a
+  -> CEKErrorHandler e CEKSmallStep CoreBuiltin a
+  -> EvalResult e CEKSmallStep CoreBuiltin a
+  -> EvalM e CoreBuiltin a (CEKReturn e CoreBuiltin a)
 applyContSmallStep = applyCont
 
 -- Keyset Code
@@ -1898,4 +1898,3 @@ isKeysetNameInSigs info cont handler env ksn = do
     Just ks -> isKeysetInSigs info cont handler env ks
     Nothing ->
       throwExecutionError info (NoSuchKeySet ksn)
-

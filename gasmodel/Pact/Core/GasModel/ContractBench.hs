@@ -69,7 +69,7 @@ mkKs a = PGuard $ GKeyset $ KeySet (S.singleton a) KeysAll
 
 interpretBigStep :: Interpreter ExecRuntime CoreBuiltin SpanInfo
 interpretBigStep =
-  Interpreter runGuard runTerm
+  Interpreter runGuard runTerm (\_ _ -> error "unimplemented")
   where
   runTerm purity term = CEK.eval purity eEnv term
   runGuard info g = CEK.interpretGuard info eEnv g
@@ -77,7 +77,7 @@ interpretBigStep =
 
 interpretDirect :: Interpreter ExecRuntime CoreBuiltin SpanInfo
 interpretDirect =
-  Interpreter runGuard runTerm
+  Interpreter runGuard runTerm (\_ _ -> error "unimplemented")
   where
   runTerm purity term = Direct.eval purity eEnv term
   runGuard info g = Direct.interpretGuard info eEnv g

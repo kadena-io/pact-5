@@ -209,5 +209,3 @@ checkSigCaps sigs = do
   match allowEmpty granted sigCaps =
     (S.null sigCaps && allowEmpty) ||
     not (S.null (S.intersection granted sigCaps))
-
-

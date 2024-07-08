@@ -614,11 +614,11 @@ instance (Show i, Show b, Pretty b) => Pretty (CEKValue e step b i) where
 
 makeLenses ''CEKEnv
 
-type Eval = EvalM ExecRuntime CoreBuiltin ()
-type CoreTerm = EvalTerm CoreBuiltin ()
-type CoreCEKCont = Cont ExecRuntime CEKBigStep CoreBuiltin ()
-type CoreCEKHandler = CEKErrorHandler ExecRuntime CEKBigStep CoreBuiltin ()
-type CoreCEKEnv = CEKEnv ExecRuntime CEKBigStep CoreBuiltin ()
-type CoreBuiltinEnv = BuiltinEnv ExecRuntime CEKBigStep CoreBuiltin ()
-type CoreCEKValue = CEKValue ExecRuntime CEKBigStep CoreBuiltin ()
-type CoreEvalResult = EvalResult ExecRuntime CEKBigStep CoreBuiltin ()
+type Eval = EvalM ExecRuntime CoreBuiltin
+type CoreTerm a = EvalTerm CoreBuiltin a
+type CoreCEKCont = Cont ExecRuntime CEKBigStep CoreBuiltin
+type CoreCEKHandler = CEKErrorHandler ExecRuntime CEKBigStep CoreBuiltin
+type CoreCEKEnv = CEKEnv ExecRuntime CEKBigStep CoreBuiltin
+type CoreBuiltinEnv a = BuiltinEnv ExecRuntime CEKBigStep CoreBuiltin a
+type CoreCEKValue = CEKValue ExecRuntime CEKBigStep CoreBuiltin
+type CoreEvalResult = EvalResult ExecRuntime CEKBigStep CoreBuiltin

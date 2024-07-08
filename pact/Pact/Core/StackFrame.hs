@@ -26,7 +26,6 @@ import Pact.Core.Names
 import Pact.Core.PactValue
 import Pact.Core.Pretty
 
-
 data StackFunctionType
   = SFDefun
   | SFDefcap
