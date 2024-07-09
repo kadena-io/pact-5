@@ -22,7 +22,7 @@ The `commit-tx` function does not take any arguments.
 
 The `commit-tx` function returns a string indicating the transaction identifier that has been committed.
 
-### Example
+### Examples
 
 The following example demonstrates how to use the `commit-tx` function within a Pact REPL:
 
