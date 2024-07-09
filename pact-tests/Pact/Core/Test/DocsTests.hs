@@ -13,7 +13,7 @@ import Test.Tasty.HUnit
 
 tests :: IO TestTree
 tests = do
-  baseDir <- (</> "docs/builtins") <$> getDataDir
+  let baseDir = "docs/builtins"
   cats <- listDirectory baseDir
   builtinWithDocs <- join <$> traverse (\cat -> map (T.pack . takeBaseName) <$> listDirectory (baseDir </> cat)) cats
   pure $
