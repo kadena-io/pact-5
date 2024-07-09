@@ -11,10 +11,14 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE RecordWildCards #-}
 
 
 module Pact.Core.Persistence.Types
  ( ModuleData(..)
+ , GasM(..)
+ , chargeGasM
  , PactDb(..)
  , Loaded(..)
  , HasLoaded(..)
@@ -40,6 +44,7 @@ import Control.Lens
 import Data.Default
 import Data.Map.Strict(Map)
 import Control.DeepSeq
+import Control.Exception.Safe(MonadThrow)
 import GHC.Generics
 import Data.Text(Text)
 import Data.Word(Word64)
@@ -56,6 +61,9 @@ import Pact.Core.Namespace
 import Data.ByteString (ByteString)
 
 import Pact.Core.Errors
+import Pact.Core.StackFrame
+import Control.Monad.Except
+import Control.Monad.Reader
 
 -- | Modules as they are stored in our backend.
 data ModuleData b i
@@ -165,6 +173,23 @@ data Purity
 
 instance NFData Purity
 
+newtype GasM b i a
+  = GasM { runGasM :: ReaderT (GasEnv b i, i, [StackFrame i]) (ExceptT (PactError i) IO) a }
+  deriving newtype
+  ( Functor
+  , Applicative
+  , Monad
+  , MonadReader (GasEnv b i, i, [StackFrame i])
+  , MonadError (PactError i)
+  , MonadThrow
+  , MonadIO
+  )
+
+chargeGasM :: GasArgs b -> GasM b i ()
+chargeGasM gasArgs = do
+  (gasEnv, info, stack) <- ask
+  either throwError return =<< liftIO (chargeGasArgsM gasEnv info stack gasArgs)
+
 -- | Fun-record type for Pact back-ends.
 -- b: The type of builtin functions.
 -- i: The type of Info (usually SpanInfo or ()).
@@ -172,9 +197,9 @@ data PactDb b i
   = PactDb
   { _pdbPurity :: !Purity
   , _pdbRead :: forall k v. Domain k v b i -> k -> IO (Maybe v)
-  , _pdbWrite :: forall k v. WriteType -> Domain k v b i -> k -> v -> GasM (PactError i) b ()
+  , _pdbWrite :: forall k v. WriteType -> Domain k v b i -> k -> v -> GasM b i ()
   , _pdbKeys :: forall k v. Domain k v b i -> IO [k]
-  , _pdbCreateUserTable :: TableName -> GasM (PactError i) b ()
+  , _pdbCreateUserTable :: TableName -> GasM b i ()
   , _pdbBeginTx :: ExecutionMode -> IO (Maybe TxId)
   , _pdbCommitTx :: IO [TxLog ByteString]
   , _pdbRollbackTx :: IO ()

@@ -135,6 +135,7 @@ library pact-crypto
 
 library pact-request-api
   import: pact-common
+  visibility: public
   hs-source-dirs: pact-request-api
   build-depends:
       asn1-encoding
@@ -207,6 +208,7 @@ library
     Pact.Core.Gas
     Pact.Core.Gas.Types
     Pact.Core.Gas.TableGasModel
+    Pact.Core.Gas.Utils
     Pact.Core.Info
     Pact.Core.Errors
     Pact.Core.Persistence
@@ -381,6 +383,63 @@ benchmark bench
   hs-source-dirs: bench
   default-language: Haskell2010
 
+library test-utils
+  visibility: public
+  hs-source-dirs: test-utils
+  default-language: Haskell2010
+  ghc-options:      -Wall -threaded -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+
+  default-extensions:
+    OverloadedStrings
+    ViewPatterns
+    LambdaCase
+    TupleSections
+    BangPatterns
+    ScopedTypeVariables
+    FlexibleContexts
+    FlexibleInstances
+
+  build-depends:
+    , aeson
+    , attoparsec
+    , base
+    , bound
+    , bytestring
+    , containers
+    , data-default
+    , Decimal
+    , QuickCheck
+    , deepseq
+    , directory
+    , exceptions
+    , hedgehog
+    , base16-bytestring
+    , filepath
+    , lens
+    , mtl
+    , text
+    , transformers
+    , pact-json
+    , pact-tng
+    , prettyprinter
+    , vector
+    , tasty
+    , tasty-hunit
+    , tasty-hedgehog
+    , tasty-golden
+    , serialise
+    , cborg
+    , groups
+    , semirings
+    , neat-interpolation
+    , pact-tng:pact-request-api
+    , pact-tng:pact-lsp
+    , lsp-test
+    , lsp-types
+
+  exposed-modules:
+    , Pact.Core.Gen
+
 test-suite core-tests
   main-is:          PactCoreTests.hs
   type:             exitcode-stdio-1.0
@@ -433,6 +492,7 @@ test-suite core-tests
     , neat-interpolation
     , pact-tng:pact-request-api
     , pact-tng:pact-lsp
+    , pact-tng:test-utils
     , lsp-test
     , lsp-types
   other-modules:
@@ -443,7 +503,6 @@ test-suite core-tests
     , Pact.Core.Test.PersistenceTests
     , Pact.Core.Test.SerialiseTests
     , Pact.Core.Test.LegacySerialiseTests
-    , Pact.Core.Gen.Serialise
     , Pact.Core.Test.SizeOfTests
     , Pact.Core.Test.StaticErrorTests
     , Pact.Core.Test.TestPrisms

@@ -41,9 +41,7 @@ import Codec.CBOR.Read (deserialiseFromBytes)
 
 import qualified Pact.Core.Serialise.LegacyPact as LegacyPact
 import qualified Pact.Core.Serialise.CBOR_V1 as V1
-import Pact.Core.Gas
 import Pact.Core.Info (SpanInfo)
-import Pact.Core.Errors
 import Data.Default
 
 data DocumentVersion
@@ -85,7 +83,7 @@ data PactSerialise b i
   , _decodeDefPactExec :: ByteString -> Maybe (Document (Maybe DefPactExec))
   , _encodeNamespace :: Namespace -> ByteString
   , _decodeNamespace :: ByteString -> Maybe (Document Namespace)
-  , _encodeRowData :: RowData -> GasM (PactError i) b ByteString
+  , _encodeRowData :: RowData -> GasM b i ByteString
   , _decodeRowData :: ByteString -> Maybe (Document RowData)
   }
 
@@ -127,7 +125,7 @@ serialisePact = PactSerialise
                        )
   }
 
-gEncodeRowData :: RowData -> GasM (PactError i) b ByteString
+gEncodeRowData :: RowData -> GasM b i ByteString
 gEncodeRowData rd = do
   encodedRow <- V1.encodeRowData rd
   pure $ toStrictByteString $ encodeVersion V1_CBOR <> S.encodeBytes encodedRow

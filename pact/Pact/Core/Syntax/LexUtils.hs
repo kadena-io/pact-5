@@ -4,7 +4,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
+{-# LANGUAGE DerivingStrategies #-}
 
 
 module Pact.Core.Syntax.LexUtils where
@@ -171,12 +172,11 @@ newtype Layout
 
 newtype LexerM a =
   LexerM (StateT AlexInput (Either PactErrorI) a)
-  deriving
+  deriving newtype
     ( Functor, Applicative
     , Monad
     , MonadState AlexInput
     , MonadError PactErrorI)
-  via (StateT AlexInput (Either PactErrorI))
 
 
 initState :: Text -> AlexInput

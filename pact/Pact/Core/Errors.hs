@@ -60,7 +60,6 @@ import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Info
-import Pact.Core.Gas.Types
 import Pact.Core.Pretty as Pretty
 import Pact.Core.Hash
 import Pact.Core.StackFrame
@@ -367,7 +366,7 @@ data EvalError
   -- ^ Enumeration error (e.g incorrect bounds with step
   | DecodeError Text
   -- ^ Some form of decoding error
-  | GasExceeded MilliGasLimit MilliGas
+  | GasExceeded
   -- ^ Gas went past the gas limit
   | FloatingPointError Text
   -- ^ Floating point operation exception
@@ -518,8 +517,13 @@ data EvalError
   | CannotApplyValueToNonClosure
   -- ^ Attempted to apply a non-closure
   | InvalidCustomKeysetPredicate Text
+  -- ^ Invalid keyset predicate
   | HyperlaneError HyperlaneError
+  -- ^ Hyperlane error
   | HyperlaneDecodeError HyperlaneDecodeError
+  -- ^ Hyperlane decoding error
+  | UnknownException
+  -- ^ Used by chainweb for unknown exceptions
   deriving (Eq, Show, Generic)
 
 instance NFData EvalError
@@ -544,8 +548,8 @@ instance Pretty EvalError where
     -- Todo: probably enhance this data type
     CapNotInScope txt ->
       Pretty.hsep ["Capability not in scope:", pretty txt]
-    GasExceeded (MilliGasLimit (milliGasToGas -> Gas limit)) (milliGasToGas -> Gas amt) ->
-      "Gas Limit:" <+> parens (pretty limit) <+> "exceeded:" <+> pretty amt
+    GasExceeded ->
+      "Gas limit exceeded"
     InvariantFailure msg ->
       Pretty.hsep ["Fatal execution error, invariant violated:", pretty msg]
     NativeArgumentsError n tys ->
@@ -713,6 +717,8 @@ instance Pretty EvalError where
       "Invalid custom predicate for keyset" <+> pretty pn
     HyperlaneError he -> "Hyperlane native error:" <+> pretty he
     HyperlaneDecodeError he -> "Hyperlane decode error:" <+> pretty he
+    UnknownException ->
+      "Unknown exception"
 
 instance Exception EvalError
 

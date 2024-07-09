@@ -508,7 +508,7 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
   Nothing -> throwExecutionError i DefPactStepNotInEnvironment -- TODO check with multichain
   Just ps -> do
     pdb <- viewEvalEnv eePactDb
-    dbState <- liftDbFunction i (readDefPacts pdb (_psDefPactId ps))
+    dbState <- liftDbFunction i (_pdbRead pdb DDefPacts (_psDefPactId ps))
     case (dbState, crossChainContinuation) of
 
       -- Terminate defpact in db: always fail
@@ -520,7 +520,7 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
       -- Nothing in db, Just cross-chain continuation: proceed with cross-chain
       (Nothing, Just ccExec) -> resumeDefPactExec ccExec
 
-      -- Active db record, Nothing chross-chain continuation: proceed with db
+      -- Active db record, Nothing cross-chain continuation: proceed with db
       (Just (Just dbExec), Nothing) -> resumeDefPactExec dbExec
 
       -- Active db record and cross-chain continuation:
@@ -1249,7 +1249,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
           let rdata = RowData rv
           rvSize <- sizeOf info SizeOfV0 rv
           chargeGasArgs info (GWrite rvSize)
-          _ <- liftGasM info $ _pdbWrite pdb wt (tvToDomain tv) rk rdata
+          evalWrite info pdb wt (tvToDomain tv) rk rdata
           returnCEKValue cont handler (VString "Write succeeded")
         else
           throwExecutionError info (WriteValueDidNotMatchSchema (_tvSchema tv) (ObjectData rv))
@@ -1298,7 +1298,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
             , (Field "key", PString key)
             , (Field "value", PObject rdata)]
       CreateTableC (TableValue tn _ _) -> do
-        liftGasM info (_pdbCreateUserTable pdb tn)
+        evalCreateUserTable info pdb tn
         returnCEKValue cont handler (VString "TableCreated")
       EmitEventC ct@(CapToken fqn _) -> do
         d <- getDefCap info fqn
@@ -1311,7 +1311,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
       DefineKeysetC ksn newKs -> do
         newKsSize <- sizeOf info SizeOfV0 newKs
         chargeGasArgs info (GWrite newKsSize)
-        _ <- writeKeySet info pdb Write ksn newKs
+        evalWrite info pdb Write DKeySets ksn newKs
         returnCEKValue cont handler (VString "Keyset write success")
       DefineNamespaceC ns -> case v of
         PBool allow ->
@@ -1319,7 +1319,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
             let nsn = _nsName ns
             nsSize <- sizeOf info SizeOfV0 ns
             chargeGasArgs info (GWrite nsSize)
-            liftGasM info $ _pdbWrite pdb Write DNamespaces nsn ns
+            evalWrite info pdb Write DNamespaces nsn ns
             returnCEKValue cont handler $ VString $ "Namespace defined: " <> (_namespaceName nsn)
           -- injecting the NativeName directly here as to not have to unnecessarily thread `b` around in the
           -- cont
@@ -1447,7 +1447,7 @@ applyContToValue (DefPactStepC env info cont) handler v =
           done = (not (_psRollback ps) && isLastStep) || _psRollback ps
         when (nestedPactsNotAdvanced pe ps) $
           throwExecutionError info (NestedDefpactsNotAdvanced (_peDefPactId pe))
-        writeDefPacts info pdb Write (_psDefPactId ps)
+        evalWrite info pdb Write DDefPacts (_psDefPactId ps)
             (if done then Nothing else Just pe)
         emitXChainEvents (_psResume ps) pe
         returnCEKValue cont handler v
@@ -1813,27 +1813,27 @@ evalResumePact info bEnv mdpe = do
 
 
 evaluateTermSmallStep
-  :: Cont e CEKSmallStep CoreBuiltin ()
-  -> CEKErrorHandler e CEKSmallStep CoreBuiltin ()
-  -> CEKEnv e CEKSmallStep CoreBuiltin ()
-  -> CoreTerm
-  -> EvalM e CoreBuiltin () (CEKReturn e CoreBuiltin ())
+  :: Cont e CEKSmallStep CoreBuiltin a
+  -> CEKErrorHandler e CEKSmallStep CoreBuiltin a
+  -> CEKEnv e CEKSmallStep CoreBuiltin a
+  -> CoreTerm a
+  -> EvalM e CoreBuiltin a (CEKReturn e CoreBuiltin a)
 evaluateTermSmallStep = evaluateTerm
 
 
 applyContToValueSmallStep
-  :: Cont e CEKSmallStep CoreBuiltin ()
-  -> CEKErrorHandler e CEKSmallStep CoreBuiltin ()
-  -> CEKValue e CEKSmallStep CoreBuiltin ()
-  -> EvalM e CoreBuiltin () (CEKReturn e CoreBuiltin ())
+  :: Cont e CEKSmallStep CoreBuiltin a
+  -> CEKErrorHandler e CEKSmallStep CoreBuiltin a
+  -> CEKValue e CEKSmallStep CoreBuiltin a
+  -> EvalM e CoreBuiltin a (CEKReturn e CoreBuiltin a)
 applyContToValueSmallStep = applyContToValue
 
 
 applyContSmallStep
-  :: Cont e CEKSmallStep CoreBuiltin ()
-  -> CEKErrorHandler e CEKSmallStep CoreBuiltin ()
-  -> EvalResult e CEKSmallStep CoreBuiltin ()
-  -> EvalM e CoreBuiltin () (CEKReturn e CoreBuiltin ())
+  :: Cont e CEKSmallStep CoreBuiltin a
+  -> CEKErrorHandler e CEKSmallStep CoreBuiltin a
+  -> EvalResult e CEKSmallStep CoreBuiltin a
+  -> EvalM e CoreBuiltin a (CEKReturn e CoreBuiltin a)
 applyContSmallStep = applyCont
 
 -- Keyset Code
@@ -1894,8 +1894,7 @@ isKeysetNameInSigs
   -> EvalM e b i (CEKEvalResult e step b i)
 isKeysetNameInSigs info cont handler env ksn = do
   pdb <- viewEvalEnv eePactDb
-  liftDbFunction info (readKeySet pdb ksn) >>= \case
+  liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
     Just ks -> isKeysetInSigs info cont handler env ks
     Nothing ->
       throwExecutionError info (NoSuchKeySet ksn)
-

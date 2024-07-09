@@ -202,7 +202,7 @@ evalTopLevel interpreter tlFinal deps = do
           mdata = ModuleData m deps'
       mSize <- sizeOf (_mInfo m) SizeOfV0 m
       chargeGasArgs (_mInfo m) (GModuleMemory mSize)
-      writeModule (_mInfo m) pdb Write (view mName m) mdata
+      evalWrite (_mInfo m) pdb Write DModules (view mName m) mdata
       let fqDeps = toFqDep (_mName m) (_mHash m) <$> _mDefs m
           newLoaded = M.fromList fqDeps
           newTopLevel = M.fromList $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind (_mName m) d))) <$> fqDeps
@@ -218,7 +218,7 @@ evalTopLevel interpreter tlFinal deps = do
           mdata = InterfaceData iface deps'
       ifaceSize <- sizeOf (_ifInfo iface) SizeOfV0 iface
       chargeGasArgs (_ifInfo iface) (GModuleMemory ifaceSize)
-      writeModule (_ifInfo iface) pdb Write (view ifName iface) mdata
+      evalWrite (_ifInfo iface) pdb Write DModules (view ifName iface) mdata
       let fqDeps = toFqDep (_ifName iface) (_ifHash iface)
                   <$> mapMaybe ifDefToDef (_ifDefns iface)
           newLoaded = M.fromList fqDeps

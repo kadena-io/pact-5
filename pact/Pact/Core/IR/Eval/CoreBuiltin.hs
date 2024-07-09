@@ -839,7 +839,7 @@ keysetRefGuard info b cont handler env = \case
       Left {} -> throwNativeExecutionError info b "incorrect keyset name format"
       Right ksn -> do
         let pdb = view cePactDb env
-        liftDbFunction info (readKeySet pdb ksn) >>= \case
+        liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
           Nothing ->
             throwExecutionError info (NoSuchKeySet ksn)
           Just _ -> returnCEKValue cont handler (VGuard (GKeySetRef ksn))
@@ -1168,9 +1168,9 @@ defineKeySet' info cont handler env ksname newKs  = do
       let writeKs = do
             newKsSize <- sizeOf info SizeOfV0 newKs
             chargeGasArgs info (GWrite newKsSize)
-            writeKeySet info pdb Write ksn newKs
+            evalWrite info pdb Write DKeySets ksn newKs
             returnCEKValue cont handler (VString "Keyset write success")
-      liftDbFunction info (readKeySet pdb ksn) >>= \case
+      liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
         Just oldKs -> do
           let cont' = BuiltinC env info (DefineKeysetC ksn newKs) cont
           isKeysetInSigs info cont' handler env oldKs
@@ -1734,7 +1734,7 @@ coreDefineNamespace info b cont handler env = \case
         SimpleNamespacePolicy -> do
           nsSize <- sizeOf info SizeOfV0 ns
           chargeGasArgs info (GWrite nsSize)
-          liftGasM info $ _pdbWrite pdb Write DNamespaces nsn ns
+          evalWrite info pdb Write DNamespaces nsn ns
           returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
         SmartNamespacePolicy _ fun -> getModuleMemberWithHash info pdb fun >>= \case
           (Dfun d, mh) -> do

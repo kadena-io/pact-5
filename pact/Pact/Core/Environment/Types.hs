@@ -4,7 +4,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -21,8 +22,8 @@ module Pact.Core.Environment.Types
  , eeHash, eeMsgBody
  , eeDefPactStep, eeSPVSupport
  , eePublicData, eeMode, eeFlags
- , eeNatives, eeGasModel
- , eeNamespacePolicy, eeGasRef
+ , eeNatives, eeGasEnv
+ , eeNamespacePolicy
  , eeMsgVerifiers
  , TxCreationTime(..)
  , PublicData(..)
@@ -52,7 +53,6 @@ module Pact.Core.Environment.Types
  , esEvents
  , esLoaded
  , esDefPactExec
- , esGasLog
  , esCheckRecursion
  , esTraceOutput
  , runEvalM
@@ -185,10 +185,8 @@ data EvalEnv b i
   -- ^ The native resolution map
   , _eeNamespacePolicy :: NamespacePolicy
   -- ^ The implemented namespace policy
-  , _eeGasRef :: IORef MilliGas
-  -- ^ The gas ref
-  , _eeGasModel :: GasModel b
-  -- ^ The current gas model
+  , _eeGasEnv :: !(GasEnv b i)
+  -- ^ The gas environment
   , _eeSPVSupport :: SPVSupport
   -- ^ The SPV backend
   } deriving (Generic)
@@ -198,15 +196,10 @@ instance (NFData b, NFData i) => NFData (EvalEnv b i)
 makeLenses ''EvalEnv
 
 
-data GasLogEntry b = GasLogEntry
-  { _gleCause :: Either GasArgs b
-  , _gleThisUsed :: MilliGas
-  , _gleTotalUsed :: MilliGas
-  } deriving (Show, Generic, NFData)
-
 newtype RecursionCheck
   = RecursionCheck (Set QualifiedName)
-  deriving (Show, Generic, NFData)
+  deriving newtype (Show, NFData)
+  deriving stock Generic
 
 instance Default RecursionCheck where
   def = RecursionCheck mempty
@@ -243,17 +236,15 @@ data EvalState b i
   -- ^ The runtime symbol table and module environment
   , _esDefPactExec :: !(Maybe DefPactExec)
   -- ^ The current defpact execution state, if any
-  , _esGasLog :: !(Maybe [GasLogEntry b])
-  -- ^ The current gas log
   , _esCheckRecursion :: NonEmpty RecursionCheck
     -- ^ Sequence of gas expendature events.
   , _esTraceOutput :: [PactTrace b i]
-  } deriving (Show, Generic)
+  } deriving (Generic)
 
 instance (NFData b, NFData i) => NFData (EvalState b i)
 
 instance Default (EvalState b i) where
-  def = EvalState def [] [] mempty Nothing Nothing (RecursionCheck mempty :| []) []
+  def = EvalState def [] [] mempty Nothing (RecursionCheck mempty :| []) []
 
 makeLenses ''EvalState
 
@@ -265,6 +256,7 @@ instance HasLoaded (EvalState b i) b i where
 defaultEvalEnv :: PactDb b i -> M.Map Text b -> IO (EvalEnv b i)
 defaultEvalEnv pdb m = do
   gasRef <- newIORef mempty
+  gasLogRef <- newIORef Nothing
   pure $ EvalEnv
     { _eeMsgSigs = mempty
     , _eeMsgVerifiers = mempty
@@ -277,9 +269,12 @@ defaultEvalEnv pdb m = do
     , _eeFlags = mempty
     , _eeNatives = m
     , _eeNamespacePolicy = SimpleNamespacePolicy
-    , _eeGasRef = gasRef
-    , _eeGasModel = freeGasModel
     , _eeSPVSupport = noSPVSupport
+    , _eeGasEnv = GasEnv
+      { _geGasRef = gasRef
+      , _geGasLogRef = gasLogRef
+      , _geGasModel = freeGasModel
+      }
     }
 
 -- | Passed in repl environment
@@ -312,7 +307,7 @@ data EvalMEnv e b i where
 -- Todo: are we going to inject state as the reader monad here?
 newtype EvalM e b i a =
   EvalM (ReaderT (EvalMEnv e b i) (ExceptT (PactError i) (StateT (EvalState b i) IO)) a)
-  deriving
+  deriving newtype
     ( Functor, Applicative, Monad
     , MonadIO
     , MonadThrow
@@ -321,7 +316,6 @@ newtype EvalM e b i a =
     , MonadReader (EvalMEnv e b i)
     , MonadState (EvalState b i)
     , MonadError (PactError i))
-  via (ReaderT (EvalMEnv e b i) (ExceptT (PactError i) (StateT (EvalState b i) IO)))
 
 instance PhaseDebug b i (EvalM e b i) where
   debugPrint _ _ = pure ()
