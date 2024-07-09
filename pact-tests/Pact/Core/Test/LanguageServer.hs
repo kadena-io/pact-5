@@ -26,6 +26,7 @@ import Pact.Core.Builtin
 import Data.Maybe (isJust)
 import qualified Data.Map.Strict as M
 import Pact.Core.Repl.BuiltinDocs
+import Pact.Core.Repl.BuiltinDocs.Internal
 import Data.Either (isLeft)
 import Data.Text.Encoding
 import qualified Data.ByteString.Lazy as LBS
@@ -66,7 +67,7 @@ userDocHoverTests = [hoverTest "defun my-fun" 11 "This is my-fun documentation"]
       liftIO $ do
         assertBool "Return hover information" (isJust h)
         let Just hov' = h
-        assertEqual "Match builtin docs" (view contents hov') (InL $ MarkupContent MarkupKind_PlainText expected)
+        assertEqual "Match builtin docs" (view contents hov') (InL $ MarkupContent MarkupKind_Markdown expected)
 
 
 definitionRequestTests :: [TestTree]
@@ -106,8 +107,8 @@ builtinHoverTests
         assertBool "Return hover information" (isJust h)
         let
           Just hov' = h
-          Just expectedDocs =  M.lookup (replCoreBuiltinToUserText b) builtinDocs
-        assertEqual "Match builtin docs" (view contents hov') (InL $ MarkupContent MarkupKind_PlainText expectedDocs)
+          Just (MarkdownDoc expectedDocs) =  M.lookup (replCoreBuiltinToUserText b) builtinDocs
+        assertEqual "Match builtin docs" (view contents hov') (InL $ MarkupContent MarkupKind_Markdown expectedDocs)
 
 overloadBuiltinHoverTests :: [TestTree]
 overloadBuiltinHoverTests

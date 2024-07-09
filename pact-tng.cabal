@@ -24,9 +24,7 @@ extra-source-files:
     cbits/musl/log_data.h
     cbits/musl/pow_data.h
     cbits/musl/sqrt_data.h
-
-data-files:
-        docs/builtins/**/*.md
+    docs/builtins/**/*.md
 
 flag with-crypto
   description: Enable crypto primitives
@@ -273,6 +271,7 @@ library
     Pact.Core.Repl.Runtime.ReplBuiltin
     Pact.Core.Repl.Compile
     Pact.Core.Repl.BuiltinDocs
+    Pact.Core.Repl.BuiltinDocs.Internal
     Pact.Core.Repl.UserDocs
 
     -- Serialization
