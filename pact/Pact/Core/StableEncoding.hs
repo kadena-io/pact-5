@@ -581,5 +581,3 @@ instance JD.FromJSON (StableEncoding PublicMeta) where
 instance J.Encode (StableEncoding a) => J.Encode (StableEncoding (Maybe a)) where
   build (StableEncoding a) = J.build (StableEncoding <$> a)
 
--- instance J.Encode (StableEncoding a) => J.Encode (StableEncoding [a]) where
---   build (StableEncoding a) = J.build (J.Array (fmap StableEncoding a))
