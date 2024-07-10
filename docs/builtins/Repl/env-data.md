@@ -16,7 +16,7 @@ Use the following argument to specify the JSON data when using the `env-data` Pa
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `json` | integer, string, time, decimal, bool, list, object, or  keyset | Specifies the JSON data to be set for the transaction. The data can be provided as an encoded string or as Pact types that will be coerced to JSON. |
+| `json` | object | Specifies the JSON data to be set for the transaction. The data can be provided as an encoded string or as Pact types that will be coerced to JSON. |
 
 ### Return value
 
