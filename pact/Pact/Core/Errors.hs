@@ -21,6 +21,8 @@ module Pact.Core.Errors
  , PactError(..)
  , ArgTypeError(..)
  , DbOpException(..)
+ , HyperlaneError(..)
+ , HyperlaneDecodeError(..)
  , peInfo
  , viewErrorStack
  , UserRecoverableError(..)
@@ -65,7 +67,6 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.PactValue
 import Pact.Core.Capabilities
 import Pact.Core.DeriveConTag
-
 
 type PactErrorI = PactError SpanInfo
 
@@ -517,6 +518,10 @@ data EvalError
   -- ^ Attempted to apply a non-closure
   | InvalidCustomKeysetPredicate Text
   -- ^ Invalid keyset predicate
+  | HyperlaneError HyperlaneError
+  -- ^ Hyperlane error
+  | HyperlaneDecodeError HyperlaneDecodeError
+  -- ^ Hyperlane decoding error
   | UnknownException
   -- ^ Used by chainweb for unknown exceptions
   deriving (Eq, Show, Generic)
@@ -710,9 +715,10 @@ instance Pretty EvalError where
       "Cannot apply value to non-closure"
     InvalidCustomKeysetPredicate pn ->
       "Invalid custom predicate for keyset" <+> pretty pn
+    HyperlaneError he -> "Hyperlane native error:" <+> pretty he
+    HyperlaneDecodeError he -> "Hyperlane decode error:" <+> pretty he
     UnknownException ->
       "Unknown exception"
-
 
 instance Exception EvalError
 
@@ -803,6 +809,58 @@ instance Pretty UserRecoverableError where
       "Verifier failure" <+> pretty verif <> ":" <+> pretty msg
     CapabilityGuardNotAcquired cg ->
       "Capability not acquired:" <+> pretty cg
+
+data HyperlaneError
+  = HyperlaneErrorFailedToFindKey Field
+    -- ^ An expected key was not found.
+  | HyperlaneErrorNumberOutOfBounds Field
+    -- ^ The number at this field was outside of the expected bounds of its
+    -- type.
+  | HyperlaneErrorBadHexPrefix Field
+    -- ^ Hex textual fields (usually ETH addresses) must be prefixed with "0x"
+  | HyperlaneErrorInvalidBase64 Field
+    -- ^ Invalid base64 text field.
+  | HyperlaneErrorIncorrectSize Field Int Int
+    -- ^ Invalid Hex. We discard error messages from base16-bytestring to
+  | HyperlaneErrorInvalidChainId Text
+    -- ^ Invalid chain id.
+  deriving (Eq, Show, Generic)
+
+instance NFData HyperlaneError
+
+instance Pretty HyperlaneError where
+  pretty = \case
+    HyperlaneErrorFailedToFindKey key -> "Failed to find key in object: " <> pretty key
+    HyperlaneErrorNumberOutOfBounds key -> "Object key " <> pretty key <> " was out of bounds"
+    HyperlaneErrorBadHexPrefix key -> "Missing 0x prefix on field " <> pretty key
+    HyperlaneErrorInvalidBase64 key -> "Invalid base64 encoding on field " <> pretty key
+    HyperlaneErrorIncorrectSize key expected actual ->
+      "Incorrect binary data size " <> pretty key <> ". Expected: " <> pretty expected <> ", but got " <> pretty actual
+    HyperlaneErrorInvalidChainId msg -> "Failed to decode chainId: " <> pretty msg
+
+data HyperlaneDecodeError
+  = HyperlaneDecodeErrorBase64
+    -- ^ We discard the error message in this case to maintain error message
+    --   equality with the original implementation - otherwise this would have a
+    --   string in it
+  | HyperlaneDecodeErrorInternal String
+    -- ^ Decoding error that our own code threw, not `binary`
+  | HyperlaneDecodeErrorBinary
+    -- ^ We encountered an error not thrown by us but by `binary`. We discard
+    --   the error message to avoid potentially forking behaviour introduced
+    --   by a library update.
+  | HyperlaneDecodeErrorParseRecipient
+    -- ^ Failed to parse the Recipient into a Guard
+  deriving (Eq, Show, Generic)
+
+instance NFData HyperlaneDecodeError
+
+instance Pretty HyperlaneDecodeError where
+  pretty = \case
+    HyperlaneDecodeErrorBase64 -> "Failed to base64-decode token message"
+    HyperlaneDecodeErrorInternal errmsg -> "Decoding error: " <> pretty errmsg
+    HyperlaneDecodeErrorBinary -> "Decoding error: binary decoding failed"
+    HyperlaneDecodeErrorParseRecipient -> "Could not parse recipient into a guard"
 
 data PactError info
   = PELexerError LexerError info

@@ -41,6 +41,7 @@ import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Intro as V
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import qualified Data.List as L
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Char as Char
@@ -48,7 +49,6 @@ import qualified Data.ByteString as BS
 import qualified GHC.Exts as Exts
 import qualified GHC.Integer.Logarithms as IntLog
 import qualified Pact.Time as PactTime
-
 #ifndef WITHOUT_CRYPTO
 import qualified Control.Lens as Lens
 #endif
@@ -71,6 +71,7 @@ import Pact.Core.Type
 import Pact.Core.Crypto.Pairing
 import Pact.Core.Crypto.Hash.Poseidon
 #endif
+import Pact.Crypto.Hyperlane
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
@@ -82,6 +83,9 @@ import Pact.Core.SPV
 import qualified Pact.Core.Pretty as Pretty
 import qualified Pact.Core.Principal as Pr
 import qualified Pact.Core.Trans.TOps as Musl
+
+import qualified Data.Binary.Get as Bin
+import qualified Data.Binary.Put as Bin
 
 ----------------------------------------------------------------------
 -- Our builtin definitions start here
@@ -1969,6 +1973,43 @@ coreEnforceVerifier info b cont handler _env = \case
     verifError verName msg = VerifierFailure (VerifierName verName) msg
 
 
+
+coreHyperlaneDecodeTokenMessage :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreHyperlaneDecodeTokenMessage info b cont handler _env = \case
+  [VString s] -> do
+    chargeGasArgs info $ GHyperlaneEncodeDecodeTokenMessage (T.length s)
+    case decodeBase64UrlUnpadded (T.encodeUtf8 s) of
+      Left _e -> throwExecutionError info $ HyperlaneDecodeError HyperlaneDecodeErrorBase64 
+      Right bytes -> case Bin.runGetOrFail (unpackTokenMessageERC20 <* eof) (BS.fromStrict bytes) of
+        Left (_, _, e) | "TokenMessage" `L.isPrefixOf` e -> do
+                           throwExecutionError info $ HyperlaneDecodeError $ HyperlaneDecodeErrorInternal e
+        Left _ -> do
+          throwExecutionError info $ HyperlaneDecodeError $ HyperlaneDecodeErrorBinary
+        Right (_, _, tm) -> case tokenMessageToTerm tm of
+          Left e -> throwExecutionError info $ HyperlaneDecodeError e
+          Right pv -> returnCEKValue cont handler (VPactValue pv)
+  args -> argsError info b args
+
+coreHyperlaneMessageId :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreHyperlaneMessageId info b cont handler _env = \case
+  [VObject o] -> case decodeHyperlaneMessageObject o of
+      Left e -> throwExecutionError info $ HyperlaneError e
+      Right r -> do
+        let msgId =  getHyperlaneMessageId r
+        chargeGasArgs info $ GHyperlaneMessageId (T.length msgId)
+        returnCEKValue cont handler (VString msgId)
+  args -> argsError info b args
+
+coreHyperlaneEncodeTokenMessage :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreHyperlaneEncodeTokenMessage info b cont handler _env = \case
+  [VObject o] -> case decodeHyperlaneTokenMessageObject o of
+      Left e -> throwExecutionError info $ HyperlaneError e
+      Right r -> do
+        let encoded = T.decodeUtf8 $ encodeBase64UrlUnpadded $ BS.toStrict $ Bin.runPut $ Bin.putBuilder $ packTokenMessageERC20 r
+        chargeGasArgs info $ GHyperlaneEncodeDecodeTokenMessage (T.length encoded)
+        returnCEKValue cont handler (VString encoded)
+  args -> argsError info b args
+
 -----------------------------------
 -- Builtin exports
 -----------------------------------
@@ -2130,3 +2171,6 @@ coreBuiltinRuntime = \case
   CoreIdentity -> coreIdentity
   CoreVerifySPV -> coreVerifySPV
   CoreEnforceVerifier -> coreEnforceVerifier
+  CoreHyperlaneMessageId -> coreHyperlaneMessageId
+  CoreHyperlaneDecodeMessage -> coreHyperlaneDecodeTokenMessage
+  CoreHyperlaneEncodeMessage -> coreHyperlaneEncodeTokenMessage

@@ -279,6 +279,8 @@ runTableModel nativeTable = \case
       let mgPerCap = 100
       in MilliGas $ fromIntegral $ cnt * mgPerCap
   GCountBytes -> MilliGas 1
+  GHyperlaneMessageId m -> MilliGas $ fromIntegral m
+  GHyperlaneEncodeDecodeTokenMessage m -> MilliGas $ fromIntegral m
   GNative b -> nativeTable b
   where
   textCompareCost str = fromIntegral $ T.length str
@@ -553,6 +555,9 @@ nativeGasTable = MilliGas . \case
   CoreIdentity -> basicWorkGas
   CoreVerifySPV -> 100_000
   CoreEnforceVerifier -> 10_000
+  CoreHyperlaneMessageId -> 2_000
+  CoreHyperlaneDecodeMessage -> 2_000
+  CoreHyperlaneEncodeMessage -> 2_000
 
 replNativeGasTable :: ReplBuiltin CoreBuiltin -> MilliGas
 replNativeGasTable = \case
