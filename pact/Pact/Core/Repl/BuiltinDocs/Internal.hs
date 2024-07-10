@@ -49,7 +49,7 @@ mkBuiltinDocs = embedIO action
 builtinToNormalizedName :: T.Text -> T.Text
 builtinToNormalizedName = \case
   "!=" -> "neq"
-  "&" -> "and"
+  "&" -> "bitwise-and"
   "*" -> "mult"
   "+" -> "add"
   "-" -> "sub"
@@ -77,7 +77,7 @@ builtinToNormalizedName = \case
 normalizedNameToBuiltin :: T.Text -> T.Text
 normalizedNameToBuiltin = \case
   "neq" -> "!="
-  "and" -> "&"
+  "bitwise-and" -> "&"
   "mult" -> "*"
   "add" -> "+"
   "sub" -> "-"
