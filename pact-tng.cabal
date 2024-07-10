@@ -24,6 +24,7 @@ extra-source-files:
     cbits/musl/log_data.h
     cbits/musl/pow_data.h
     cbits/musl/sqrt_data.h
+    docs/builtins/**/*.md
 
 flag with-crypto
   description: Enable crypto primitives
@@ -192,7 +193,9 @@ library
     cbits/musl/sqrt.c
     cbits/musl/sqrt_data.c
 
-  other-modules: PackageInfo_pact_tng
+  other-modules:
+    PackageInfo_pact_tng
+    Paths_pact_tng
 
   exposed-modules:
     Pact.Core.Compile
@@ -272,6 +275,7 @@ library
     Pact.Core.Repl.Runtime.ReplBuiltin
     Pact.Core.Repl.Compile
     Pact.Core.Repl.BuiltinDocs
+    Pact.Core.Repl.BuiltinDocs.Internal
     Pact.Core.Repl.UserDocs
 
     -- Serialization
@@ -362,7 +366,9 @@ executable pact
   default-language:    Haskell2010
 
   -- beware of the autogen modules. Remember to `cabal clean`!
-  other-modules: PackageInfo_pact_tng
+  other-modules:
+    PackageInfo_pact_tng
+    Paths_pact_tng
 
 benchmark bench
   type: exitcode-stdio-1.0
@@ -495,6 +501,7 @@ test-suite core-tests
     , pact-tng:test-utils
     , lsp-test
     , lsp-types
+
   other-modules:
     , Pact.Core.Test.CommandTests
     , Pact.Core.Test.ReplTests
@@ -511,6 +518,8 @@ test-suite core-tests
     , Pact.Core.Test.LanguageServer
     , Pact.Core.Test.GasGolden
     , Pact.Core.Test.ConTagGolden
+    , Pact.Core.Test.DocsTests
+    , Paths_pact_tng
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
 

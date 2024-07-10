@@ -52,6 +52,7 @@ import Pact.Core.IR.Term
 import Pact.Core.LanguageServer.Utils
 import Pact.Core.LanguageServer.Renaming
 import Pact.Core.Repl.BuiltinDocs
+import Pact.Core.Repl.BuiltinDocs.Internal
 import Pact.Core.Repl.UserDocs
 import Pact.Core.Names
 import qualified Pact.Core.IR.ModuleHashing as MHash
@@ -304,10 +305,10 @@ documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req re
     case getMatch pos =<< view (lsTopLevel . at nuri) st of
       Just tlm -> case tlm of
         TermMatch (Builtin builtin i) -> let
-                docs = fromMaybe "No docs available"
+                docs = fromMaybe (MarkdownDoc "*No docs available*")
                   (M.lookup (replCoreBuiltinToUserText builtin) builtinDocs)
 
-                mc = MarkupContent MarkupKind_PlainText docs
+                mc = MarkupContent MarkupKind_Markdown (_markdownDoc docs)
                 range = spanInfoToRange i
                 hover = Hover (InL mc) (Just range)
                 in resp (Right (InL hover))
@@ -315,8 +316,8 @@ documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req re
         TermMatch (Var (Name n (NTopLevel mn _)) _) ->
           -- Access user-annotated documentation using the @doc command.
           let qn = QualifiedName n mn
-              toHover d = Hover (InL $ MarkupContent MarkupKind_PlainText d) Nothing
-              doc = preview (lsReplState . at nuri . _Just . replUserDocs . ix qn) st
+              toHover d = Hover (InL $ MarkupContent MarkupKind_Markdown (_markdownDoc d)) Nothing
+              doc = MarkdownDoc <$> preview (lsReplState . at nuri . _Just . replUserDocs . ix qn) st
           in resp (Right (maybeToNull (toHover <$> doc)))
         _ ->  resp (Right (InR Null))
       Nothing -> do

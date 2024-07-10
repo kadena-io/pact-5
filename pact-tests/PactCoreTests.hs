@@ -16,6 +16,7 @@ import qualified Pact.Core.Test.LanguageServer as LanguageServer
 import qualified Pact.Core.Test.GasGolden as GasGolden
 import qualified Pact.Core.Test.SizeOfTests as SizeOfTests
 import qualified Pact.Core.Test.ConTagGolden as ConTagGoldenTests
+import qualified Pact.Core.Test.DocsTests as DocsTests
 
 main :: IO ()
 main = do
@@ -23,6 +24,7 @@ main = do
   gasGolden <- GasGolden.tests
   legacyTests <- LegacySerialiseTests.tests
   commandTests <- CommandTests.tests
+  docsTests <- DocsTests.tests
   defaultMain $ testGroup "pactTests"
     [ replTests
     , LexerTests.tests
@@ -38,5 +40,6 @@ main = do
     , SizeOfTests.tests
     , commandTests
     , ConTagGoldenTests.tests
+    , docsTests
     ]
 
