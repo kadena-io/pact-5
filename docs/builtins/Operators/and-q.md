@@ -1,17 +1,19 @@
 ## and?
 
-Use `and?` to apply a logical AND operation to the results of applying a specified `value` to application functions `oper1` and `oper2`, with short-circuit evaluation.
+Use `and?` to apply a logical AND operation to the results of applying a specified `value` to application functions `func1` and `func2`, with short-circuit evaluation.
 
-In practice, the data type of the `value` you specify is used to evaluate the expression in each function and to return the resulting boolean value for the logical AND operation performed by the `and?` function:
+You can use any data type for the `value` argument as long as the two functions take that same data type and return the resulting boolean value for the logical AND operation performed by the `and?` function.
 
-(defun <a> and?:bool (oper1:(<a> -> bool) oper2:(<a> -> bool) value:<a>))
+By convention, the data type <a> is used if an argument represents a type-bound parameter like the `value` argument in this function: 
+
+(defun <a> and?:bool (func1:(<a> -> bool) func2:(<a> -> bool) value:<a>))
 
 ### Basic syntax
 
-To apply a logical AND operation to the results of applying a specified `value` to the functions `oper1` and `oper2`, use the following syntax:
+To apply a logical AND operation to the results of applying a specified `value` to the functions `func1` and `func2`, use the following syntax:
 
 ```pact
-(and? oper1 oper2 value)
+(and? func1 func2 value)
 ```
 
 ### Arguments
@@ -20,13 +22,13 @@ Use the following arguments to specify the functions and `value` for the `and?` 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `oper1` | function x:<r> -> bool | Specifies the first function to apply the specified `value` to. The result of applying the specified value of type `<r>` returns a boolean value. |
-| `oper2` | function x:<r> -> bool | Specifies the second function to apply the specified `value` to. The result of applying the specified value of type `<r>` returns a boolean value.|
-| `value` | <r> | Specifies the value to apply to both `oper1` and `oper2` functions. |
+| `func1` | function x:<a> -> bool | Specifies the first function to apply the specified `value` to. The result of applying the specified value of type `<a>` returns a boolean value. |
+| `func2` | function x:<a> -> bool | Specifies the second function to apply the specified `value` to. The result of applying the specified value of type `<a>` returns a boolean value.|
+| `value` | <a> | Specifies the value to apply to both `func1` and `func2` functions. |
 
 ### Return values
 
-The `and?` function returns a boolean value based on the result of applying `value` to `oper1` and `oper2` with the logical AND operation.
+The `and?` function returns a boolean value based on the result of applying `value` to `func1` and `func2` with the logical AND operation.
 
 ### Examples
 
