@@ -10,7 +10,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import Control.Applicative ((<|>))
 
-import qualified PackageInfo_pact_tng as PI
+import qualified Pact.Core.Version as PI
 import Data.Version (showVersion)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T

@@ -195,7 +195,9 @@ library
     cbits/musl/sqrt_data.c
 
   other-modules:
-    PackageInfo_pact_tng
+    -- TODO: Uncomment once this is finally fixed
+    -- and stops crapping out both LSP and our CI:
+    -- PackageInfo_pact_tng
     Paths_pact_tng
 
   exposed-modules:
@@ -270,6 +272,7 @@ library
     Pact.Core.IR.ConstEval
 
     Pact.Core.Trans.TOps
+    Pact.Core.Version
 
     -- Repl
     Pact.Core.Repl.Utils
@@ -371,7 +374,9 @@ executable pact
 
   -- beware of the autogen modules. Remember to `cabal clean`!
   other-modules:
-    PackageInfo_pact_tng
+    -- TODO: Uncomment once this is finally fixed
+    -- and stops crapping out both LSP and our CI,
+    -- PackageInfo_pact_tng
     Paths_pact_tng
 
 benchmark bench
