@@ -37,6 +37,7 @@ module Pact.Core.Repl.Utils
  , usesReplState
  , (.==)
  , (%==)
+ , gasLogEntrytoPactValue
  ) where
 
 import Control.Lens
@@ -62,6 +63,8 @@ import Pact.Core.Pretty
 import Pact.Core.Errors
 import Pact.Core.Environment
 import Pact.Core.Type
+import Pact.Core.Builtin
+import Pact.Core.PactValue
 import qualified Pact.Core.IR.Term as Term
 
 import System.Console.Haskeline.Completion
@@ -242,3 +245,8 @@ replError (SourceCode srcFile src) pe =
   padLeft t pad = T.replicate (pad - (T.length t)) " " <> t <> " "
   -- Zip the line number with the source text, and apply the number padding correctly
   withLine st pad lns = zipWith (\i e -> padLeft (T.pack (show i)) pad <> "| " <> e) [st+1..] lns
+
+gasLogEntrytoPactValue :: GasLogEntry (ReplBuiltin CoreBuiltin) SpanInfo -> PactValue
+gasLogEntrytoPactValue entry = PString $ renderCompactText' $ n <> ": " <> pretty (_gleThisUsed entry)
+  where
+    n = pretty (_gleArgs entry) <+> pretty (_gleInfo entry)

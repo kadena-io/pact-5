@@ -85,6 +85,7 @@ common pact-common
     , unordered-containers
     , deriving-compat
     , ghc-bignum
+    , primitive
     -- Legacy pact decoding
     , bound
     , aeson

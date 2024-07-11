@@ -50,7 +50,6 @@ import qualified Data.Attoparsec.Text as A
 
 import Pact.Core.Repl.Utils
 import qualified Pact.Time as PactTime
-import Pact.Core.Gas.TableGasModel
 import Data.IORef
 
 
@@ -427,27 +426,25 @@ envGasLimit info b _env = \case
     return $ VString $ "Set gas limit to " <> T.pack (show g)
   args -> argsError info b args
 
-envGasLog :: NativeFunction ReplRuntime ReplCoreBuiltin SpanInfo
+envGasLog :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
 envGasLog info b _env = \case
   [] -> do
-    gasLogRef <- viewEvalEnv (eeGasEnv . geGasLogRef)
-    gasLog <- liftIO $ readIORef gasLogRef
-    liftIO $ writeIORef gasLogRef (Just [])
-    case gasLog of
-      Nothing ->
-        return (VString "Enabled gas log")
-      Just logs -> let
+    (gasLogRef, logsJustEnabled) <- viewEvalEnv (eeGasEnv . geGasLog) >>= \case
+      Just ref -> pure (ref, False)
+      Nothing -> do
+        ref' <- liftIO $ newIORef []
+        replEvalEnv . eeGasEnv . geGasLog .== Just ref'
+        pure (ref', True)
+    logs <- liftIO $ readIORef gasLogRef
+    liftIO $ writeIORef gasLogRef []
+    if logsJustEnabled then return (VList (V.fromList [PString "Enabled gas log"]))
+    else let
         total = MilliGas $ sum [g | MilliGas g <- _gleThisUsed <$> logs]
         totalLine = PString . ("TOTAL: " <> ) $ renderCompactText total
-        logLines = renderLine <$> reverse logs
+        logLines = gasLogEntrytoPactValue <$> reverse logs
         in
           return (VList $ V.fromList (totalLine:logLines))
   args -> argsError info b args
-  where
-  renderLine :: GasLogEntry (ReplBuiltin CoreBuiltin) SpanInfo -> PactValue
-  renderLine entry = PString $ renderCompactText' $ n <> ": " <> pretty (_gleThisUsed entry)
-    where
-      n = pretty (_gleArgs entry) <+> pretty (_gleInfo entry)
 
 envEnableReplNatives :: NativeFunction ReplRuntime ReplCoreBuiltin SpanInfo
 envEnableReplNatives info b _env = \case
@@ -466,14 +463,8 @@ envGasModel info b _env = \case
   args@[VString model] -> do
     gm <- viewEvalEnv (eeGasEnv . geGasModel)
     newmodel' <- case model of
-      "table" -> pure $ replTableGasModel (fromMaybe (MilliGasLimit mempty) $ _gmGasLimit gm)
-      "fixed" -> pure (constantGasModel mempty (fromMaybe (MilliGasLimit mempty) $ _gmGasLimit gm))
+      "table" -> pure $ replTableGasModel (_gmGasLimit gm)
       _ -> argsError info b args
-    replEvalEnv . eeGasEnv . geGasModel .== newmodel'
-    return $ VString $ "Set gas model to " <> _gmDesc newmodel'
-  [VString "fixed", VInteger arg] -> do
-    gm <- viewEvalEnv (eeGasEnv . geGasModel)
-    let newmodel' = constantGasModel (gasToMilliGas (Gas (fromIntegral arg))) (fromMaybe (MilliGasLimit mempty) $ _gmGasLimit gm)
     replEvalEnv . eeGasEnv . geGasModel .== newmodel'
     return $ VString $ "Set gas model to " <> _gmDesc newmodel'
   args -> argsError info b args

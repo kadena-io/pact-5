@@ -18,7 +18,6 @@
 module Pact.Core.Persistence.Types
  ( ModuleData(..)
  , GasM(..)
- , chargeGasM
  , PactDb(..)
  , Loaded(..)
  , HasLoaded(..)
@@ -49,7 +48,7 @@ import GHC.Generics
 import Data.Text(Text)
 import Data.Word(Word64)
 
-import Pact.Core.Gas
+import Pact.Core.Gas.Types
 import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.IR.Term
@@ -185,10 +184,7 @@ newtype GasM b i a
   , MonadIO
   )
 
-chargeGasM :: GasArgs b -> GasM b i ()
-chargeGasM gasArgs = do
-  (gasEnv, info, stack) <- ask
-  either throwError return =<< liftIO (chargeGasArgsM gasEnv info stack gasArgs)
+
 
 -- | Fun-record type for Pact back-ends.
 -- b: The type of builtin functions.

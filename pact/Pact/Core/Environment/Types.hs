@@ -102,7 +102,7 @@ import Pact.Core.Names
 import Pact.Core.DefPacts.Types
 import Pact.Core.ChainData
 import Pact.Core.Errors
-import Pact.Core.Gas
+import Pact.Core.Gas.Types
 import Pact.Core.Namespace
 import Pact.Core.StackFrame
 import Pact.Core.SPV
@@ -252,10 +252,12 @@ instance HasLoaded (EvalState b i) b i where
 
 -- | A default evaluation environment meant for
 --   uses such as the repl
-defaultEvalEnv :: PactDb b i -> M.Map Text b -> IO (EvalEnv b i)
+defaultEvalEnv
+  :: PactDb b i
+  -> M.Map Text b
+  -> IO (EvalEnv b i)
 defaultEvalEnv pdb m = do
   gasRef <- newIORef mempty
-  gasLogRef <- newIORef Nothing
   pure $ EvalEnv
     { _eeMsgSigs = mempty
     , _eeMsgVerifiers = mempty
@@ -271,7 +273,7 @@ defaultEvalEnv pdb m = do
     , _eeSPVSupport = noSPVSupport
     , _eeGasEnv = GasEnv
       { _geGasRef = gasRef
-      , _geGasLogRef = gasLogRef
+      , _geGasLog = Nothing
       , _geGasModel = freeGasModel
       }
     }

@@ -23,7 +23,7 @@ module Pact.Core.SizeOf
   ( SizeOf(..)
   , SizeOf1(..)
   , constructorCost
-  , Bytes
+, Bytes
   , wordSize
   , SizeOfVersion(..)
 
@@ -70,8 +70,7 @@ import Pact.Core.Imports
 import Pact.Core.Info
 import Pact.Core.ModRefs
 import Pact.Core.Namespace (Namespace)
-import Pact.Core.IR.Eval.Runtime.Utils (chargeGasArgs)
-import Pact.Core.Gas (GasArgs(GCountBytes))
+import Pact.Core.Gas
 
 
 -- |  Estimate of number of bytes needed to represent data type

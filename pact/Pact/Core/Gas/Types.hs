@@ -21,7 +21,7 @@ module Pact.Core.Gas.Types
   , GasLogEntry(..)
   , GasEnv(..)
   , geGasRef
-  , geGasLogRef
+  , geGasLog
   , geGasModel
 
   , GasModel(..)
@@ -29,7 +29,6 @@ module Pact.Core.Gas.Types
   , SerializationCosts(..)
 
   , NodeType(..)
-  , LinearGasArg(..)
   , ZKGroup(..)
   , ZKArg(..)
   , IntegerPrimOp(..)
@@ -43,13 +42,12 @@ module Pact.Core.Gas.Types
   , ComparisonType(..)
   , SearchType(..)
 
-  , gmRunModel
   , gmGasLimit
   , gmDesc
   , gmName
   , gmSerialize
+  , gmNativeTable
 
-  , constantGasModel
   , freeGasModel
 
   ) where
@@ -61,6 +59,7 @@ import Data.Decimal(Decimal)
 import Data.Monoid
 import Data.Word (Word64)
 import Data.Semiring(Semiring)
+import Data.Primitive hiding (sizeOf)
 import qualified Data.Text as T
 import Data.Text (Text)
 import GHC.Generics
@@ -73,10 +72,9 @@ import Data.IORef
 -- integer, units will go in terms of 1e3 = 2ns
 newtype MilliGas
   = MilliGas Word64
-  deriving (Eq, Ord, Show)
-  deriving newtype NFData
+  deriving Show
+  deriving newtype (Eq, Ord, NFData, Prim, Bounded, Semiring, Enum)
   deriving (Semigroup, Monoid) via (Sum Word64)
-  deriving (Bounded, Semiring, Enum) via Word64
 
 instance Pretty MilliGas where
   pretty (MilliGas g) = pretty g <> "mG"
@@ -142,15 +140,6 @@ data NodeType
   | CapFormCreateUGNode
   deriving (Eq, Show, Enum, Bounded)
 
--- | Data type representing generally linear computations of the form
--- f(x) = (slopeNum*x)/slopeDenom + intercept
--- Todo: `Ratio`? Unfortunately ratio is not strict though
-data LinearGasArg
-  = LinearGasArg
-  { _loaSlopeNum :: !Word64
-  , _loaSlopeDenom :: !Word64
-  , _loaIntercept :: !Word64
-  } deriving (Eq, Show)
 
 -- | The elliptic curve pairing group we are
 -- handling
@@ -209,22 +198,19 @@ data CapOp
 
 data GasArgs b
   = GAConstant !MilliGas
-  | GNative b
-  -- Todo: integerOpCost seems like a case of `GALinear`
-  -- Maybe we can investigate generalizing the operational costs in terms of a more general structure
-  -- instead of the current `GasArgs` model?
+  -- ^ Constant gas costs
+  | GNative !b
+  -- ^ Indexing into our native flat gas cost table
+  | GIntegerOpCost !IntegerPrimOp !Integer !Integer
+  -- ^ Cost of integer operations
+  | GAApplyLam (Maybe FullyQualifiedName) !Int
+  -- ^ Cost of function application
   | GConcat !ConcatType
   -- ^ The cost of concatenating two elements
   -- TODO: We actually reuse this cost for construction as well for objects/lists. Should we
   -- instead consider renaming the objcat and listcat constructors to be ListCatOrConstruction
-  -- | GALinear !Word64 {-# UNPACK #-} !LinearGasArg
-  -- ^ Cost of linear-based gas
-  | GIntegerOpCost !IntegerPrimOp !Integer !Integer
-  -- ^ Cost of integer operations
   | GMakeList !Integer !Word64
   -- ^ Cost of creating a list of `n` elements + some memory overhead per elem
-  | GAApplyLam (Maybe FullyQualifiedName) !Int
-  -- ^ Cost of function application
   | GAZKArgs !ZKArg
   -- ^ Cost of ZK function
   | GWrite !Word64
@@ -308,14 +294,14 @@ data ConcatType
   deriving (Show, Generic, NFData)
 
 data SerializationCosts = SerializationCosts
-  { objectKeyCostMilliGasOffset :: Word64
-  , objectKeyCostMilliGasPer1000Chars :: Word64
-  , boolMilliGasCost :: Word64
-  , unitMilliGasCost :: Word64
-  , integerCostMilliGasPerDigit :: Word64
-  , decimalCostMilliGasOffset :: Word64
-  , decimalCostMilliGasPerDigit :: Word64
-  , timeCostMilliGas :: Word64
+  { objectKeyCostMilliGasOffset :: !Word64
+  , objectKeyCostMilliGasPer1000Chars :: !Word64
+  , boolMilliGasCost :: !Word64
+  , unitMilliGasCost :: !Word64
+  , integerCostMilliGasPerDigit :: !Word64
+  , decimalCostMilliGasOffset :: !Word64
+  , decimalCostMilliGasPerDigit :: !Word64
+  , timeCostMilliGas :: !Word64
   }
   deriving (Show, Generic, NFData)
 
@@ -331,31 +317,24 @@ freeSerializationCosts = SerializationCosts
   , timeCostMilliGas = 0
   }
 
+
+
 data GasModel b
   = GasModel
   { _gmName :: !Text
   , _gmDesc :: !Text
-  , _gmRunModel :: !(GasArgs b -> MilliGas)
+  , _gmNativeTable :: !(b -> MilliGas)
   , _gmGasLimit :: !(Maybe MilliGasLimit)
   , _gmSerialize :: !SerializationCosts
   } deriving (Generic, NFData)
 makeLenses ''GasModel
 
-constantGasModel :: MilliGas -> MilliGasLimit -> GasModel b
-constantGasModel unitPrice gl
-  = GasModel
-  { _gmName = "unitGasModel"
-  , _gmDesc = "GasModel with constant cost " <> T.pack (show unitPrice)
-  , _gmRunModel = const unitPrice
-  , _gmGasLimit = Just gl
-  , _gmSerialize = freeSerializationCosts
-  }
 
 freeGasModel :: GasModel b
 freeGasModel = GasModel
   { _gmName = "freeGasModel"
   , _gmDesc = "free gas model"
-  , _gmRunModel = const mempty
+  , _gmNativeTable = \_ -> mempty
   , _gmGasLimit = Nothing
   , _gmSerialize = freeSerializationCosts
   }
@@ -370,7 +349,7 @@ data GasLogEntry b i = GasLogEntry
 data GasEnv b i
   = GasEnv
   { _geGasRef :: !(IORef MilliGas)
-  , _geGasLogRef :: !(IORef (Maybe [GasLogEntry b i]))
+  , _geGasLog :: !(Maybe (IORef [GasLogEntry b i]))
   , _geGasModel :: !(GasModel b)
   } deriving (Generic, NFData)
 makeLenses ''GasEnv

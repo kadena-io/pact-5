@@ -5,6 +5,7 @@
 module Pact.Core.Gas.TableGasModel
  ( tableGasModel
  , replTableGasModel
+ , runTableModel
   --
  , pointAddGas
  , scalarMulGas
@@ -19,22 +20,28 @@ import qualified Data.Text as T
 import GHC.Num.Integer
 import qualified GHC.Integer.Logarithms as IntLog
 import Pact.Core.Builtin
-import Pact.Core.Gas
-import Pact.Core.SizeOf
+import Pact.Core.Gas.Types
 import Data.Decimal
 
 tableGasModel :: MilliGasLimit -> GasModel CoreBuiltin
 tableGasModel gl =
   GasModel
-  { _gmRunModel = runTableModel nativeGasTable
-  , _gmName = "table"
+  { _gmName = "table"
   , _gmGasLimit = Just gl
   , _gmDesc = "table-based cost model"
+  , _gmNativeTable = coreBuiltinGasCost
   , _gmSerialize = serializationCosts
   }
 
-replTableGasModel :: MilliGasLimit -> GasModel ReplCoreBuiltin
-replTableGasModel gl = (tableGasModel gl) { _gmRunModel = runTableModel replNativeGasTable }
+replTableGasModel :: Maybe MilliGasLimit -> GasModel ReplCoreBuiltin
+replTableGasModel gl =
+  GasModel
+  { _gmName = "table"
+  , _gmGasLimit = gl
+  , _gmDesc = "table-based cost model"
+  , _gmNativeTable = replNativeGasTable
+  , _gmSerialize = serializationCosts
+  }
 
 ------------------------------------------------
 -- ZK Costs
@@ -182,6 +189,7 @@ intPowCost !base !power = MilliGas $ g (I# (IntLog.integerLogBase# 10 (abs base)
 
 runTableModel :: (b -> MilliGas) -> GasArgs b -> MilliGas
 runTableModel nativeTable = \case
+  GNative b -> nativeTable b
   GAConstant !c -> c
   GIntegerOpCost !primOp lop rop -> case primOp of
     PrimOpAdd -> intAdditionCost lop rop
@@ -281,7 +289,6 @@ runTableModel nativeTable = \case
   GCountBytes -> MilliGas 1
   GHyperlaneMessageId m -> MilliGas $ fromIntegral m
   GHyperlaneEncodeDecodeTokenMessage m -> MilliGas $ fromIntegral m
-  GNative b -> nativeTable b
   where
   textCompareCost str = fromIntegral $ T.length str
   -- Running CountBytes costs 0.9 MilliGas, according to the analysis in bench/Bench.hs
@@ -295,7 +302,7 @@ moduleMemFeePerByte :: Rational
 moduleMemFeePerByte = 0.006
 
 -- 0.01x+50000 linear costing funciton
-moduleMemoryCost :: Bytes -> MilliGas
+moduleMemoryCost :: Word64 -> MilliGas
 moduleMemoryCost sz = MilliGas $ ceiling (moduleMemFeePerByte * fromIntegral sz) + 60_000_000
 {-# INLINE moduleMemoryCost #-}
 
@@ -306,16 +313,17 @@ perByteFactor = 1%10
 applyLamCostPerArg :: Word64
 applyLamCostPerArg = 25
 
-memoryCost :: Bytes -> MilliGas
+memoryCost :: Word64 -> MilliGas
 memoryCost !bytes = gasToMilliGas (Gas totalCost)
   where
   !sizeFrac = realToFrac bytes
   !totalCost = ceiling (perByteFactor * sizeFrac)
 {-# INLINE memoryCost #-}
 
+
 -- | Our internal gas table for constant costs on natives
-nativeGasTable :: CoreBuiltin -> MilliGas
-nativeGasTable = MilliGas . \case
+coreBuiltinGasCost :: CoreBuiltin -> MilliGas
+coreBuiltinGasCost = MilliGas . \case
   -- Basic arithmetic
   -- note: add, sub, mul, div are special and are covered by
   -- special functions
@@ -558,10 +566,12 @@ nativeGasTable = MilliGas . \case
   CoreHyperlaneMessageId -> 2_000
   CoreHyperlaneDecodeMessage -> 2_000
   CoreHyperlaneEncodeMessage -> 2_000
+{-# INLINABLE runTableModel #-}
+
 
 replNativeGasTable :: ReplBuiltin CoreBuiltin -> MilliGas
 replNativeGasTable = \case
-  RBuiltinWrap bwrap -> nativeGasTable bwrap
+  RBuiltinWrap bwrap -> coreBuiltinGasCost bwrap
   _ -> mempty
 
 
@@ -593,6 +603,7 @@ serializationCosts = SerializationCosts
   , decimalCostMilliGasPerDigit = 2
   , timeCostMilliGas = 184
   }
+
 
 
 -- [Decimal Comparisons]
