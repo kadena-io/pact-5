@@ -24,7 +24,7 @@ Use the following arguments to specify the table, key, and optional columns when
 | --- | --- | --- |
 | `table` | table<{row}> | Specifies the table from which to read the row. In the table schema, a `row` represents the structure of each row in the table. |
 | `key` | string | Specifies the key of the row to read from the table. |
-| `columns` | [string] | (Optional) Specifies one or more column names to return from the row. If not provided, the entire row is returned. |
+| `columns` | [string] | Specifies one or more column names to return from the row. If not provided, the entire row is returned (optional). |
 
 ### Return values
 

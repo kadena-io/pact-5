@@ -17,7 +17,7 @@ Use the following arguments to specify the `value` to return and the `ignore` ar
 | Argument | Type | Description |
 | --- | --- | --- |
 | `value` | any | Specifies the value to return. |
-| `ignore1, ignore2, ...` | any | (Optional) Specifies the arguments to ignore. You can have multiple ignore arguments. |
+| `ignore1, ignore2, ...` | any | Specifies the arguments to ignore. You can have multiple ignore arguments (optional). |
 
 ### Return values
 

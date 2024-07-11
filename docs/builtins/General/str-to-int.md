@@ -26,7 +26,7 @@ Use the following arguments to specify the string value and, optionally, the bas
 | Argument | Type | Description |
 | --- | --- | --- |
 | `str` | string | Specifies the string value to be converted to an integer. |
-| `base` | integer | (Optional) Specifies the base in which to interpret the string value. Must be between 2 and 16, or 64 for base64url encoding without padding. |
+| `base` | integer | Specifies the base in which to interpret the string value (optional). Must be between 2 and 16, or 64 for base64url encoding without padding. |
 
 ### Return value
 

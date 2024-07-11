@@ -16,7 +16,7 @@ Use the following argument to specify the table from which you want to retrieve 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `table` | table<{row}>`| Specifies the table from which keys will be retrieved. |
+| `table` | table<{row}>| Specifies the table from which keys will be retrieved. |
 
 ### Return value
 

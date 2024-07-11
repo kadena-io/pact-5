@@ -23,7 +23,7 @@ Use the following argument to specify the `key` to be read from the top level of
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `key` | string | (Optional) Specifies the key to be read from the message data body. If you don't provide this argument, the function reads the entire data body. |
+| `key` | string | Specifies the key to be read from the message data body (optional). If you don't provide this argument, the function reads the entire data body. |
 
 ### Return value
 

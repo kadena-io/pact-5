@@ -25,7 +25,7 @@ Use the following arguments to specify the value to be rounded and, optionally, 
 | Argument | Type | Description |
 | --- | --- | --- |
 | `number` | decimal | Specifies the decimal value to be rounded. |
-| `precision` | integer | (Optional) Specifies the precision to round to, if applicable. |
+| `precision` | integer | Specifies the precision to round to, if applicable (optional). |
 
 ### Return value
 
