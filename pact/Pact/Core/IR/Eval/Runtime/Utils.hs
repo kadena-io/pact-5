@@ -92,9 +92,6 @@ emitEvent
   -> EvalM e b i ()
 emitEvent info pe = findCallingModule >>= \case
     Just mn -> do
-      -- Todo: ++ definitely feels suboptimal, especially for gas.
-      -- That said: we can simply reverse the events in `env-events` as
-      -- well as after final emission.
       let ctModule = _peModule pe
       if ctModule == mn then emitEventUnsafe pe
       else throwExecutionError info (EventDoesNotMatchModule mn)
@@ -105,7 +102,7 @@ emitEventUnsafe
   -> EvalM e b i ()
 emitEventUnsafe pe =
   unlessExecutionFlagSet FlagDisablePactEvents $
-    esEvents %= (++ [pe])
+    esEvents %= (pe:)
 
 emitCapability
   :: i
@@ -179,7 +176,6 @@ failInvariant :: i -> InvariantError -> EvalM e b i a
 failInvariant i reason =
   throwExecutionError i (InvariantFailure reason)
 
--- Todo: MaybeT cleans this up
 getCallingModule :: i -> EvalM e b i (EvalModule b i)
 getCallingModule info = findCallingModule >>= \case
   Just mn -> do

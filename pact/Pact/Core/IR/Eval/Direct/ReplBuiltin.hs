@@ -193,7 +193,7 @@ coreplEvalEnvStackFrame info b _env = \case
 envEvents :: NativeFunction ReplRuntime ReplCoreBuiltin SpanInfo
 envEvents info b _env = \case
   [VBool clear] -> do
-    events <- fmap envToObj <$> use esEvents
+    events <- reverse . fmap envToObj <$> use esEvents
     when clear $ esEvents .= []
     return (VList (V.fromList events))
     where

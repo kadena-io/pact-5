@@ -12,7 +12,7 @@
 
 -- |
 -- Module      :  Pact.Core.IR.Term
--- Copyright   :  (C) 2016 Stuart Popejoy
+-- Copyright   :  (C) 2022 Kadena
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Jose Cardona <jose@kadena.io>
 --
@@ -20,7 +20,115 @@
 -- The core IR manages to
 --
 
-module Pact.Core.IR.Term where
+module Pact.Core.IR.Term
+  ( Term(..)
+  -- ^ Our Primary Term representation
+  , _Var, _Lam, _Let
+  , _App, _Conditional, _Builtin
+  , _Constant, _Sequence, _Nullary
+  , _ListLit, _Try, _ObjectLit
+  , _CapabilityForm, _InlineValue
+  -- ^ Term prisms
+  , termType, termInfo
+  -- ^ term related lenses
+  , ConstVal(..)
+  -- ^ Defconst holder type.
+  , TopLevel(..)
+  , Module(..)
+  -- ^ Our module representation
+  , mName, mGovernance, mDefs
+  , mBlessed, mImports, mImplements
+  , mHash, mInfo
+  -- ^ Module lenses
+  , Defun(..)
+  -- ^ Our repr for user defuns
+  , dfunSpec, dfunArgs, dfunTerm
+  , dfunInfo
+  -- ^ Defun lenses
+  , DefCap(..)
+  -- ^ Our defcap repr
+  , dcapSpec, dcapArgs, dcapTerm
+  , dcapMeta, dcapInfo
+  -- ^ Defcap lenses
+  , DefSchema(..)
+  , DefPact(..)
+  -- ^ Our depact repr
+  , dpSpec, dpArgs, dpSteps, dpInfo
+  -- ^ defpact lenses
+  , Step(..)
+  , DefTable(..)
+  , TableSchema(..)
+  , DefConst(..)
+  -- ^ Defconst
+  , dcSpec, dcTerm, dcInfo
+  -- ^ Defconst lenses
+  , Def(..)
+  -- ^ Our structure containing all different kind of definitions
+  , _Dfun, _DConst, _DCap
+  , _DSchema, _DTable, _DPact
+  -- ^ def prisms
+  , IfDefun(..)
+  -- ^ Interface Defun signatures
+  , ifdSpec, ifdArgs, ifdInfo
+  -- ^ Interface Defun sig lenses
+  , IfDefCap(..)
+  -- ^ Interface defcap signature
+  , ifdcSpec, ifdcArgs, ifdcMeta, ifdcInfo
+  -- ^ Interface defcap signature lenses
+  , IfDefPact(..)
+  -- ^ Interface defpact signature lenses
+  , ifdpSpec, ifdpArgs, ifdpInfo
+  -- ^ Interface defpact signature lenses
+  , IfDef(..)
+  -- ^our interface definitions
+  , _IfDfun, _IfDConst, _IfDCap
+  , _IfDPact, _IfDSchema
+  , Interface(..)
+  , ReplTopLevel(..)
+  -- ^ Interface repr
+  , ifName, ifDefns, ifImports
+  , ifHash, ifInfo
+  -- ^ Interface lenses
+  , hasRollback
+  , ordinaryDefPactStepExec
+  , defName
+  , findDefInModule
+  , defKind
+  , ifDefKind
+  , ifDefName
+  , defInfo
+  , defNameInfo
+  , ifDefToDef
+  , findDefInInterface
+  , ifDefInfo
+  , ifDefNameInfo
+  -- ^ Misc utility functions
+  , EvalTerm
+  , EvalTopLevel
+  , EvalDef
+  , EvalDefun
+  , EvalDefConst
+  , EvalDefCap
+  , EvalDefPact
+  , EvalModule
+  , EvalInterface
+  , EvalIfDef
+  , EvalTable
+  , EvalSchema
+  , EvalStep
+  -- ^ Useful type aliases for evaluation
+  , topLevelTerms
+  , traverseDefunTerm
+  , traverseTerm
+  , termBuiltin
+  , traverseModuleTerm
+  , traverseIfDefTerm
+  , traverseDefPactStep
+  , traverseDefTerm
+  , _dfunRType
+  -- ^ Misc traversals
+  )
+  where
 
 import Control.Lens
 import Data.Foldable(fold, find)
@@ -44,7 +152,7 @@ import Pact.Core.Capabilities
 import Pact.Core.PactValue
 import Pact.Core.Pretty
 
--- | Core's IR term
+-- | Core's main term representation
 -- Todo: a few nodes could be merged into one representation, that is:
 -- Nullary = Lam []
 -- CapabilityForm and Conditional could be merged into one
@@ -106,6 +214,8 @@ data Defun name ty builtin info
 _dfunRType :: Defun name ty builtin info -> Maybe ty
 _dfunRType (Defun (Arg _ mty _) _ _ _) = mty
 
+-- | (step <expr>)
+-- or (step-with-rollback <expr1> <expr2>)
 data Step name ty builtin info
   = Step (Term name ty builtin info)
   | StepWithRollback
@@ -113,6 +223,7 @@ data Step name ty builtin info
     (Term name ty builtin info)
   deriving (Show, Functor, Eq, Generic)
 
+-- | (defpact <name>:<ret_ty> (arglist*) <steps>)
 data DefPact name ty builtin info
   = DefPact
   { _dpSpec :: Arg ty info
@@ -482,6 +593,7 @@ termType f  = \case
   InlineValue v i ->
     pure (InlineValue v i)
 
+-- | Traverse all terms
 termBuiltin :: Traversal (Term n t b i) (Term n t b' i) b b'
 termBuiltin f = \case
   Var n i -> pure (Var n i)
@@ -565,21 +677,11 @@ traverseTerm f x= case x of
 
 topLevelTerms :: Traversal' (TopLevel name ty builtin info) (Term name ty builtin info)
 topLevelTerms f = \case
-  TLModule md -> TLModule <$> traverseModuleTerms f md
+  TLModule md -> TLModule <$> traverseModuleTerm f md
   TLInterface iface -> pure (TLInterface iface)
   TLTerm t -> TLTerm <$> f t
   TLUse u i -> pure (TLUse u i)
 
-
-traverseModuleTerms :: Traversal' (Module name ty builtin info) (Term name ty builtin info)
-traverseModuleTerms f (Module n g defs b imp impl h i) =
-  Module n g
-    <$> traverse (traverseDefTerm f) defs
-    <*> pure b
-    <*> pure imp
-    <*> pure impl
-    <*> pure h
-    <*> pure i
 
 traverseDefunTerm
   :: Traversal (Defun name ty builtin info)

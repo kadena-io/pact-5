@@ -2,7 +2,6 @@ PR checklist:
 
 * [ ] Test coverage for the proposed changes
 * [ ] PR description contains example output from repl interaction or a snippet from unit test output
-* [ ] (If Relevant) New builtins have a FV translation
 * [ ] (If Relevant) Documentation has been (manually) updated at https://docs.kadena.io/pact
 
 Additionally, please justify why you should or should not do the following:
