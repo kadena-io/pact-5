@@ -843,41 +843,6 @@ returnCEKError info cont handler err = do
   stack <- use esStack
   returnCEK cont handler (VError stack err info)
 
-emitEvent
-  :: i
-  -> PactEvent PactValue
-  -> EvalM e b i ()
-emitEvent info pe = findCallingModule >>= \case
-    Just mn -> do
-      -- Todo: ++ definitely feels suboptimal, especially for gas.
-      -- That said: we can simply reverse the events in `env-events` as
-      -- well as after final emission.
-      let ctModule = _peModule pe
-      if ctModule == mn then do
-        esEvents %= (++ [pe])
-      else throwExecutionError info (EventDoesNotMatchModule mn)
-    Nothing -> throwExecutionError info (EventDoesNotMatchModule (_peModule pe))
-
-emitEventUnsafe
-  :: PactEvent PactValue
-  -> EvalM e b i ()
-emitEventUnsafe pe = esEvents %= (++ [pe])
-
-emitReservedEvent :: T.Text -> [PactValue] -> ModuleHash -> EvalM e b i ()
-emitReservedEvent name params mhash = do
-  let pactModule = ModuleName "pact" Nothing
-  let pe = PactEvent name params pactModule mhash
-  emitEventUnsafe pe
-
-emitCapability
-  :: i
-  -> CapToken FullyQualifiedName PactValue
-  -> EvalM e b i ()
-emitCapability info tkn =
-  emitEvent info (fqctToPactEvent tkn)
-
-fqctToPactEvent :: CapToken FullyQualifiedName PactValue -> PactEvent PactValue
-fqctToPactEvent (CapToken fqn args) = PactEvent (_fqName fqn) args (_fqModule fqn) (_fqHash fqn)
 
 enforceNotWithinDefcap
   :: i
@@ -1426,7 +1391,8 @@ applyContToValue (IgnoreValueC v cont) handler _v =
 
 applyContToValue (StackPopC i mty cont) handler v = do
   v' <- enforcePactValue i v
-  maybeTCType i mty v'
+  rtcEnabled <- isExecutionFlagSet FlagDisableRuntimeRTC
+  unless rtcEnabled $ maybeTCType i mty v'
   esStack %= safeTail
   esCheckRecursion %= getPrevRecCheck
   returnCEKValue cont handler (VPactValue v')

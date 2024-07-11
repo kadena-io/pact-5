@@ -25,6 +25,8 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , calledByModule
  , failInvariant
  , isExecutionFlagSet
+ , whenExecutionFlagSet
+ , unlessExecutionFlagSet
  , checkNonLocalAllowed
  , evalStateToErrorState
  , restoreFromErrorState
@@ -42,6 +44,11 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , anyCapabilityBeingEvaluated
  , checkSchema
  , checkPartialSchema
+ , emitEvent
+ , emitReservedEvent
+ , emitCapability
+ , fqctToPactEvent
+ , emitEventUnsafe
  ) where
 
 import Control.Lens
@@ -73,6 +80,39 @@ import Pact.Core.Capabilities
 import Pact.Core.Hash
 import Control.Monad.Except
 
+emitReservedEvent :: Text -> [PactValue] -> ModuleHash -> EvalM e b i ()
+emitReservedEvent name params mhash = do
+  let pactModule = ModuleName "pact" Nothing
+  let pe = PactEvent name params pactModule mhash
+  emitEventUnsafe pe
+
+emitEvent
+  :: i
+  -> PactEvent PactValue
+  -> EvalM e b i ()
+emitEvent info pe = findCallingModule >>= \case
+    Just mn -> do
+      let ctModule = _peModule pe
+      if ctModule == mn then emitEventUnsafe pe
+      else throwExecutionError info (EventDoesNotMatchModule mn)
+    Nothing -> throwExecutionError info (EventDoesNotMatchModule (_peModule pe))
+
+emitEventUnsafe
+  :: PactEvent PactValue
+  -> EvalM e b i ()
+emitEventUnsafe pe =
+  unlessExecutionFlagSet FlagDisablePactEvents $
+    esEvents %= (pe:)
+
+emitCapability
+  :: i
+  -> CapToken FullyQualifiedName PactValue
+  -> EvalM e b i ()
+emitCapability info tkn =
+  emitEvent info (fqctToPactEvent tkn)
+
+fqctToPactEvent :: CapToken FullyQualifiedName PactValue -> PactEvent PactValue
+fqctToPactEvent (CapToken fqn args) = PactEvent (_fqName fqn) args (_fqModule fqn) (_fqHash fqn)
 
 lookupFqName :: FullyQualifiedName -> EvalM e b i (Maybe (EvalDef b i))
 lookupFqName fqn =
@@ -136,7 +176,6 @@ failInvariant :: i -> InvariantError -> EvalM e b i a
 failInvariant i reason =
   throwExecutionError i (InvariantFailure reason)
 
--- Todo: MaybeT cleans this up
 getCallingModule :: i -> EvalM e b i (EvalModule b i)
 getCallingModule info = findCallingModule >>= \case
   Just mn -> do
@@ -152,6 +191,15 @@ safeTail [] = []
 isExecutionFlagSet :: ExecutionFlag -> EvalM e b i Bool
 isExecutionFlagSet flag = viewsEvalEnv eeFlags (S.member flag)
 
+whenExecutionFlagSet :: ExecutionFlag -> EvalM e b i () -> EvalM e b i ()
+whenExecutionFlagSet flag act =
+  isExecutionFlagSet flag >>= (`when` act)
+
+
+unlessExecutionFlagSet :: ExecutionFlag -> EvalM e b i () -> EvalM e b i ()
+unlessExecutionFlagSet flag act =
+  isExecutionFlagSet flag >>= (`unless` act)
+
 evalStateToErrorState :: EvalState b i -> ErrorState i
 evalStateToErrorState es =
   ErrorState (_esCaps es) (_esStack es) (_esCheckRecursion es)
@@ -166,6 +214,7 @@ checkNonLocalAllowed info b = do
   mode <- viewEvalEnv eeMode
   when (mode == Transactional && disabledInTx) $ throwExecutionError info $
     OperationIsLocalOnly (builtinName b)
+{-# INLINABLE checkNonLocalAllowed #-}
 
 asString
   :: (IsBuiltin b)
@@ -176,6 +225,7 @@ asString
 asString _ _ (PLiteral (LString b)) = pure b
 asString info b pv =
   throwExecutionError info (NativeArgumentsError (builtinName b) [pvToArgTypeError pv])
+{-# INLINABLE asString #-}
 
 asBool
   :: (IsBuiltin b)
@@ -188,11 +238,13 @@ asBool info b pv =
   throwExecutionError info (NativeArgumentsError (builtinName b) [pvToArgTypeError pv])
 {-# INLINABLE asBool #-}
 
+-- | Todo: revisit
 checkSchema :: M.Map Field PactValue -> Schema -> Bool
 checkSchema o (Schema _ sc) =
   M.size o == M.size sc &&
   getAll (M.foldMapWithKey (\k v -> All $ maybe False (`checkPvType` v) (M.lookup k sc)) o)
 
+-- | Todo: revisit
 checkPartialSchema :: M.Map Field PactValue -> Schema -> Bool
 checkPartialSchema o (Schema _ sc) =
   M.isSubmapOfBy (\obj ty -> checkPvType ty obj) o sc

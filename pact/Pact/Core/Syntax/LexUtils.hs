@@ -289,7 +289,7 @@ renderTokenText = \case
   TokenDot -> "."
   TokenBindAssign -> ":="
   TokenDynAcc -> "::"
-  TokenBlockIntro -> "progn"
+  TokenBlockIntro -> "do"
   TokenAnd -> "and"
   TokenOr -> "or"
   TokenEnforce -> "enforce"

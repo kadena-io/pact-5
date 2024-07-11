@@ -1,0 +1,16 @@
+
+(module m g
+  (defcap g () true)
+
+  (defun f:string (a:integer)
+    (+ a 1)
+  )
+  )
+
+(env-exec-config ["DisableRuntimeRTC"])
+
+(expect "F succeeds: does not typecheck" 2 (f 1))
+
+(env-exec-config [])
+
+(expect-failure "F fails: does not typecheck" (f 1))

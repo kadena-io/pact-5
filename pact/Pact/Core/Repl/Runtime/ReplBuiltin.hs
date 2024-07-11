@@ -199,7 +199,7 @@ coreplEvalEnvStackFrame info b cont handler _env = \case
 envEvents :: ReplCEKEval step => NativeFunction 'ReplRuntime step ReplCoreBuiltin SpanInfo
 envEvents info b cont handler _env = \case
   [VBool clear] -> do
-    events <- fmap envToObj <$> use esEvents
+    events <- reverse . fmap envToObj <$> use esEvents
     when clear $ esEvents .= []
     returnCEKValue cont handler (VList (V.fromList events))
     where
