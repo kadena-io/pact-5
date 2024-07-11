@@ -51,7 +51,6 @@ common pact-common
     , bytestring
     , cereal
     , containers
-    , criterion
     , data-default
     , deepseq
     , direct-sqlite
@@ -65,9 +64,7 @@ common pact-common
     , pact-time
     , parsers
     , prettyprinter
-    , prettyprinter-ansi-terminal
     , transformers
-    , transformers-base
     , text
     , vector
     , vector-algorithms
@@ -75,9 +72,7 @@ common pact-common
     , cryptonite
     , memory
     , safe-exceptions
-    , statistics
     , ralist >= 0.4.0.0
-    , primitive
     , haskeline
     , semirings
     , utf8-string
@@ -88,11 +83,7 @@ common pact-common
     , cborg
     , clock
     , unordered-containers
-    , groups
-    , mod
-    , neat-interpolation
     , deriving-compat
-    -- ^ is used by the `BuiltinDocs` module.
     , ghc-bignum
     -- Legacy pact decoding
     , bound
@@ -107,7 +98,7 @@ common pact-common
 
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
-  default-language:    Haskell2010
+  default-language: Haskell2010
   default-extensions:
     OverloadedStrings
     DeriveGeneric
@@ -123,9 +114,17 @@ common pact-common
 
 -- internal crypto lirbary
 library pact-crypto
-  import: pact-common
+  default-language: Haskell2010
   hs-source-dirs: crypto
-  build-depends: poly
+  build-depends:
+      poly
+    , mod
+    , primitive
+    , groups
+    , base
+    , semirings
+    , deepseq
+    , vector
 
   exposed-modules:
     Pact.Core.Crypto.Hash.Poseidon
@@ -318,6 +317,7 @@ executable gasmodel
     , pact-tng
     , criterion
     , terminal-progress-bar
+    , neat-interpolation
 
   other-modules:
     Pact.Core.GasModel.BuiltinsGas
@@ -340,6 +340,7 @@ executable profile-tx
     , pact-tng
     , criterion
     , terminal-progress-bar
+    , neat-interpolation
 
   other-modules:
     -- Pact.Core.GasModel.BuiltinsGas
