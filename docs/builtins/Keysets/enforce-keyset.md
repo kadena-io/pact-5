@@ -31,7 +31,7 @@ The `enforce-keyset` function returns a boolean value indicating whether the spe
 
 ### Examples
 
-The following example demonstrates how to use the `enforce-keyset` function to enforce logic defined in the 'admin-keyset' predicate function:
+The following example demonstrates how to use the `enforce-keyset` function to enforce logic defined in the "admin-keyset" predicate function:
 
 ```pact
 (enforce-keyset 'admin-keyset)
@@ -39,7 +39,7 @@ The following example demonstrates how to use the `enforce-keyset` function to e
 
 If the condition specified by the `admin-keyset` predicate function is satisfied, the `enforce-keyset` function returns a boolean value of true.
 
-The following example enforces the logic defined in the 'row-guard' predicate logic:
+The following example enforces the logic defined in the `row-guard` predicate logic:
 
 ```pact
 (enforce-keyset row-guard)

@@ -1,7 +1,7 @@
 ## define-keyset
 
 Use `define-keyset` to define a keyset with the specified `name` and `keyset` guard.
-I you don't specify a keyset guard, the functions reads the specified keyset `name` from the message payload to define its keyset guard, which  is similar to using the`read-keyset` function. 
+I you don't specify a keyset guard, the functions reads the specified keyset `name` from the message payload to define its keyset guard, which  is similar to using the `read-keyset` function. 
 If the keyset `name` already exists, the existing keyset is enforced before updating to the new value.
 
 ### Basic syntax
@@ -39,13 +39,13 @@ The following example demonstrates how to use the `define-keyset` function to de
 (define-keyset 'admin-keyset "my-keyset")
 ```
 
-The following example demonstrates how to read the keyset from the message payload and associate it with 'admin-keyset':
+The following example demonstrates how to read the keyset from the message payload and associate it with `admin-keyset`:
 
 ```pact
 (define-keyset 'admin-keyset)
 ```
 
-The following example illustrates define a keyset by reading an exisitng keyset:
+The following example illustrates how to define a keyset by reading an existing keyset:
 
 ```pact
 (define-keyset "admin-keyset" (read-keyset 'admin-keyset))
