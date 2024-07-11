@@ -21,16 +21,15 @@ import Control.Lens
 import qualified Database.SQLite3 as SQL
 import qualified Database.SQLite3.Direct as Direct
 import Data.ByteString (ByteString)
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict as M
 
 import qualified Pact.Core.Errors as E
 import Pact.Core.Persistence
 import Pact.Core.Guards (renderKeySetName, parseAnyKeysetName)
 import Pact.Core.Names
-import Pact.Core.PactValue
-import Pact.Core.Literal
 import Control.Exception (throwIO)
 import Pact.Core.Serialise
+import Pact.Core.StableEncoding (encodeStable)
 
 -- | Acquire a SQLite-backed `PactDB`.
 --
@@ -116,7 +115,7 @@ createSysTables db = do
     , _stmtKeyset = ks
     , _stmtModules = mods
     , _stmtDefPact = pacts
-    , _stmtUserTbl = Map.empty
+    , _stmtUserTbl = M.empty
     }
 
   where
@@ -152,7 +151,7 @@ data StmtCache
   , _stmtKeyset    :: TblStatements
   , _stmtModules   :: TblStatements
   , _stmtDefPact   :: TblStatements
-  , _stmtUserTbl   :: Map.Map TableName TblStatements
+  , _stmtUserTbl   :: M.Map TableName TblStatements
   }
 
 -- | Create all tables that should exist in a fresh pact db,
@@ -167,7 +166,7 @@ initializePactDb serial db = do
     , _pdbRead = read' serial db stmtsCache
     , _pdbWrite = write' serial db txId txLog stmtsCache
     , _pdbKeys = readKeys db stmtsCache
-    , _pdbCreateUserTable = createUserTable serial db txLog stmtsCache
+    , _pdbCreateUserTable = createUserTable db txLog stmtsCache
     , _pdbBeginTx = beginTx txId db txLog
     , _pdbCommitTx = commitTx txId db txLog
     , _pdbRollbackTx = rollbackTx db txLog
@@ -182,7 +181,7 @@ getTxLog serial db currTxId txLog tab txId = do
     then do
     txLog' <- readIORef txLog
     let
-      userTabLogs = filter (\tl -> _tableName tab == _txDomain tl) txLog'
+      userTabLogs = filter (\tl -> toUserTable tab == _txDomain tl) txLog'
       env :: Maybe [TxLog RowData] = traverse (traverse (fmap (view document) . _decodeRowData serial)) userTabLogs
     case env of
       Nothing -> fail "undexpected decoding error"
@@ -224,7 +223,7 @@ readKeys _db stmtCache = \case
 
   DUserTables tbl -> do
      tblCache <- _stmtUserTbl <$> readIORef stmtCache
-     case Map.lookup tbl tblCache of
+     case M.lookup tbl tblCache of
        Nothing -> fail "invariant failure: table unknown"
        Just stmt -> withStmt (pure $ _tblReadKeys stmt) $ \s -> fmap RowKey <$> collect s []
   where
@@ -268,27 +267,20 @@ rollbackTx db txLog = do
   writeIORef txLog []
 
 createUserTable
-  :: PactSerialise b i
-  -> SQL.Database
+  :: SQL.Database
   -> IORef [TxLog ByteString]
   -> IORef StmtCache
   -> TableName
   -> GasM b i ()
-createUserTable serial db txLog stmtCache tbl = do
-  let
-    rd = RowData $ Map.singleton (Field "utModule")
-         (PObject $ Map.fromList
-          [ (Field "namespace", maybe (PLiteral LUnit) (PString . _namespaceName) (_mnNamespace (_tableModuleName tbl)))
-          , (Field "name", PString (_tableName tbl))
-          ])
-  rdEnc <- _encodeRowData serial rd
+createUserTable db txLog stmtCache tbl = do
+  let uti = UserTableInfo (_tableModuleName tbl)
   liftIO $ do
     SQL.exec db stmt
-    modifyIORef' txLog (TxLog "SYS:usertables" (_tableName tbl) rdEnc :)
+    modifyIORef' txLog (TxLog "SYS:usertables" (_tableName tbl) (encodeStable uti) :)
     stmts <- mkTblStatement db tblName
     cache <- readIORef stmtCache
-    let insert = modifyIORef' stmtCache (\c -> c{_stmtUserTbl = Map.insert tbl stmts (_stmtUserTbl c)})
-    case Map.lookup tbl (_stmtUserTbl cache) of
+    let insert = modifyIORef' stmtCache (\c -> c{_stmtUserTbl = M.insert tbl stmts (_stmtUserTbl c)})
+    case M.lookup tbl (_stmtUserTbl cache) of
       Nothing -> insert
       Just old -> do
         finalizeStmt old
@@ -300,6 +292,8 @@ createUserTable serial db txLog stmtCache tbl = do
            \  rowdata BLOB, \
            \  UNIQUE (txid, rowkey))"
     tblName = toUserTable tbl
+
+
 
 write'
   :: forall k v b i
@@ -320,29 +314,29 @@ write' serial db txId txLog stmtCache wt domain k v =
         encoded <- _encodeRowData serial v
         liftIO $ do
           tblCache <-_stmtUserTbl <$> readIORef stmtCache
-          case Map.lookup tbl tblCache of
+          case M.lookup tbl tblCache of
             Nothing -> fail "invariant failure: table unknown"
             Just tblStmts -> withStmt (pure $ _tblInsert tblStmts) $ \stmt -> do
               let RowKey k' = k
               TxId i <- readIORef txId
               SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-              doWrite stmt (TxLog (_tableName tbl) k' encoded:)
+              doWrite stmt (TxLog (toUserTable tbl) k' encoded:)
 
       Just old -> do
         let
           RowData old' = old
           RowData v' = v
-          new = RowData (Map.union v' old')
+          new = RowData (M.union v' old')
         encoded <- _encodeRowData serial new
         liftIO $ do
           tblCache <-_stmtUserTbl <$> readIORef stmtCache
-          case Map.lookup tbl tblCache of
+          case M.lookup tbl tblCache of
             Nothing -> fail "invariant failure: table unknown"
             Just tblStmts -> withStmt (pure $ _tblInsertOrUpdate tblStmts) $ \stmt -> do
               let RowKey k' = k
               TxId i <- readIORef txId
               SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-              doWrite stmt (TxLog (_tableName tbl) k' encoded:)
+              doWrite stmt (TxLog (toUserTable tbl) k' encoded:)
 
     DKeySets -> liftIO $ withStmt (_tblInsertOrUpdate . _stmtKeyset <$> readIORef stmtCache) $ \stmt -> do
       let encoded = _encodeKeySet serial v
@@ -401,7 +395,7 @@ read' serial _db stmtCache domain k = case domain of
 
   DUserTables tbl -> do
     tblCache <- _stmtUserTbl <$> readIORef stmtCache
-    case Map.lookup tbl tblCache of
+    case M.lookup tbl tblCache of
       Nothing -> fail "invariant failure: table unknown"
       Just stmt -> withStmt (pure $ _tblReadValue stmt) $ doRead (_rowKey k) (\v -> pure (view document <$> _decodeRowData serial v))
 

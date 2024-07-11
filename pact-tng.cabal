@@ -454,6 +454,7 @@ library test-utils
 
   exposed-modules:
     , Pact.Core.Gen
+    , Pact.Core.PactDbRegression
 
 test-suite core-tests
   main-is:          PactCoreTests.hs

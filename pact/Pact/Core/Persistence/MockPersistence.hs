@@ -29,10 +29,10 @@ import Pact.Core.Names
 import Pact.Core.DefPacts.Types (DefPactExec)
 import Pact.Core.Persistence
 import Pact.Core.Serialise
+import Pact.Core.StableEncoding
 
 import qualified Pact.Core.Errors as Errors
-import Pact.Core.PactValue
-import Pact.Core.Literal
+
 
 
 type TxLogQueue = IORef (Map TxId [TxLog ByteString])
@@ -248,21 +248,17 @@ mockPactDb serial = do
     :: PactTables b i
     -> TableName
     -> GasM b i ()
-  createUsrTable PactTables{..} tbl = do
-    let rd = RowData $ M.singleton (Field "utModule")
-          (PObject $ M.fromList
-            [ (Field "namespace", maybe (PLiteral LUnit) (PString . _namespaceName) (_mnNamespace (_tableModuleName tbl)))
-            , (Field "name", PString (_tableName tbl))
-            ])
-    _rdEnc <- _encodeRowData serial rd
+  createUsrTable tbls@PactTables{..} tbl = do
+    let uti = UserTableInfo (_tableModuleName tbl)
     MockUserTable ref <- liftIO $ readIORef ptUser
     let tblName = renderTableName tbl
     case M.lookup tblName ref of
       Nothing -> do
-        -- TODO: Do we need a TxLog when a usertable is created?
+        liftIO $ record tbls (TxLog "SYS:usertables" (_tableName tbl) (encodeStable uti))
         liftIO $ modifyIORef ptUser (\(MockUserTable m) -> MockUserTable (M.insert tblName mempty m))
         pure ()
       Just _ -> liftIO $ throwIO (Errors.TableAlreadyExists tbl)
+
 
   read'
     :: forall k v

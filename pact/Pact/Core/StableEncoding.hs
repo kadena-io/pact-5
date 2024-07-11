@@ -378,6 +378,10 @@ instance J.Encode (StableEncoding ModuleName) where
     ]
   {-# INLINABLE build #-}
 
+instance J.Encode (StableEncoding UserTableInfo) where
+  build (StableEncoding (UserTableInfo mn)) =
+    J.object [ "utModule" J..= StableEncoding mn]
+
 instance JD.FromJSON (StableEncoding ModuleName) where
   parseJSON = JD.withObject "ModuleName" $ \o -> do
     ns <- o JD..:? "namespace"
