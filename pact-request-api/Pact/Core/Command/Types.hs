@@ -47,6 +47,7 @@ module Pact.Core.Command.Types
   , RequestKey(..)
   , cmdToRequestKey
   , requestKeyToB16Text
+  , parsePact
 
   , DynKeyPair (DynEd25519KeyPair, DynWebAuthnKeyPair)
   , WebAuthnPubKeyPrefixed(..)

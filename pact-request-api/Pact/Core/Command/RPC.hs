@@ -24,7 +24,6 @@ module Pact.Core.Command.RPC
 
 import Control.Applicative
 import Control.DeepSeq
-import qualified Data.Aeson as Aeson
 
 import GHC.Generics
 
@@ -79,7 +78,7 @@ data ContMsg = ContMsg
   { _cmPactId :: !DefPactId
   , _cmStep :: !Int
   , _cmRollback :: !Bool
-  , _cmData :: !Aeson.Value
+  , _cmData :: !LegacyValue
   , _cmProof :: !(Maybe ContProof)
   } deriving (Eq,Show,Generic)
 

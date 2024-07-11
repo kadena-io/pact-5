@@ -55,7 +55,7 @@ main :: IO ()
 main = do
 
   pdb <- mockPactDb serialisePact_repl_spaninfo
-  ee <- defaultEvalEnv pdb replCoreBuiltinMap
+  ee <- defaultEvalEnv pdb replBuiltinMap
   let es = def
   !module1 <- expectEval ee es $ getModule exampleModule1
 

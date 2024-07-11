@@ -233,7 +233,7 @@ setupAndProcessFile nuri content = do
   gasLog <- newIORef Nothing
   let
     builtinMap = if isReplScript fp
-                 then replCoreBuiltinMap
+                 then replBuiltinMap
                  else RBuiltinWrap <$> coreBuiltinMap
 
   ee <- defaultEvalEnv pdb builtinMap

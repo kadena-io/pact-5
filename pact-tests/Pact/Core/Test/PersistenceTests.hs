@@ -119,7 +119,7 @@ sqliteRegression :: TestTree
 sqliteRegression =
   testCase "sqlite persistence backend produces expected values/txlogs" $ do
 
-    evalEnv <- liftIO $ getEvalEnv serialisePact_repl_spaninfo replCoreBuiltinMap
+    evalEnv <- liftIO $ getEvalEnv serialisePact_repl_spaninfo replBuiltinMap
     res <- liftIO $ runEvalM (ExecEnv evalEnv) def $ withSqlitePactDb serialisePact_repl_spaninfo ":memory:" $ \pdb -> do
       let
         user1 = "user1"
@@ -231,7 +231,7 @@ sqliteRegression =
         let src = "(module test G (defcap G () true) (defun f (a: integer) 1))"
         pdb <- mockPactDb serialisePact_repl_spaninfo
         evalLog <- newIORef Nothing
-        ee <- defaultEvalEnv pdb replCoreBuiltinMap
+        ee <- defaultEvalEnv pdb replBuiltinMap
         ref <- newIORef (ReplState mempty ee evalLog (SourceCode "" "") mempty mempty Nothing False)
         Right _ <- runReplT ref (interpretReplProgramBigStep (SourceCode "test" src) (const (pure ())))
         Just md <- _pdbRead pdb DModules (ModuleName "test" Nothing)

@@ -37,7 +37,7 @@ runStaticTest :: String -> Text -> ReplInterpreter -> (PactErrorI -> Bool) -> As
 runStaticTest label src interp predicate = do
   gasLog <- newIORef Nothing
   pdb <- mockPactDb serialisePact_repl_spaninfo
-  ee <- defaultEvalEnv pdb replCoreBuiltinMap
+  ee <- defaultEvalEnv pdb replBuiltinMap
   let source = SourceCode label src
       rstate = ReplState
             { _replFlags = mempty

@@ -14,8 +14,9 @@
 --
 
 
-module Pact.Core.Repl(runRepl) where
+module Pact.Core.Repl(runRepl, execScript) where
 
+import Control.Monad.IO.Class
 import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Monad.Trans(lift)
@@ -25,21 +26,33 @@ import qualified Data.Text as T
 import qualified Data.Set as Set
 
 import Pact.Core.Builtin
-import Pact.Core.Compile
 import Pact.Core.Environment
-import Pact.Core.Hash
-import Pact.Core.Imports
 import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Pretty
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
 import Pact.Core.Serialise
+import Pact.Core.Info
+import Pact.Core.Errors
+
+execScript :: Bool -> FilePath -> IO (Either (PactError SpanInfo) [ReplCompileValue])
+execScript dolog f = do
+  pdb <- mockPactDb serialisePact_repl_spaninfo
+  evalLog <- newIORef Nothing
+  ee <- defaultEvalEnv pdb replBuiltinMap
+  ref <- newIORef (ReplState mempty ee evalLog defaultSrc mempty mempty Nothing False)
+  runReplT ref $ loadFile f interpretEvalDirect logger
+  where
+  defaultSrc = SourceCode "(interactive)" mempty
+  logger
+    | dolog = liftIO . print . pretty
+    | otherwise = const (pure ())
 
 runRepl :: IO ()
 runRepl = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
   evalLog <- newIORef Nothing
-  ee <- defaultEvalEnv pdb replCoreBuiltinMap
+  ee <- defaultEvalEnv pdb replBuiltinMap
   ref <- newIORef (ReplState mempty ee evalLog defaultSrc mempty mempty Nothing False)
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
@@ -49,24 +62,7 @@ runRepl = do
   where
 
   replSettings = Settings (replCompletion replCoreBuiltinNames) (Just ".pc-history") True
-  displayOutput = \case
-    RCompileValue cv -> case cv of
-      LoadedModule mn mh -> outputStrLn $ show $
-        "Loaded module" <+> pretty mn <> ", hash" <+> pretty (moduleHashToText mh)
-      LoadedInterface mn mh -> outputStrLn $ show $
-        "Loaded interface" <+> pretty mn <> ", hash" <+> pretty (moduleHashToText mh)
-      InterpretValue v _ -> outputStrLn (show (pretty v))
-      LoadedImports i ->
-        outputStrLn $ "Loaded imports from" <> show (pretty (_impModuleName i))
-    RLoadedDefun mn ->
-      outputStrLn $ show $
-        "Loaded defun" <+> pretty mn
-    RLoadedDefConst mn ->
-      outputStrLn $ show $
-        "Loaded defconst" <+> pretty mn
-    RBuiltinDoc doc -> outputStrLn (show $ pretty doc)
-    RUserDoc qn doc -> outputStrLn $ show $
-      vsep [pretty qn, "Docs:", maybe mempty pretty doc]
+  displayOutput = outputStrLn . show . pretty
   catch' ma = catchAll ma (\e -> outputStrLn (show e) *> loop)
   defaultSrc = SourceCode "(interactive)" mempty
   loop = do

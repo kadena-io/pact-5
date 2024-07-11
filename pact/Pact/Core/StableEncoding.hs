@@ -53,6 +53,11 @@ import Pact.Time
 newtype ParsedInteger = ParsedInteger Integer
   deriving (Eq,Show,Ord)
 
+
+instance J.Encode ParsedInteger where
+  build (ParsedInteger i) = J.build $ J.Aeson i
+  {-# INLINE build #-}
+
 instance JD.FromJSON ParsedInteger where
   parseJSON (JD.String s) =
     ParsedInteger <$> case parseNumLiteral s of
@@ -514,6 +519,9 @@ instance JD.FromJSON (StableEncoding (Signer QualifiedName PactValue)) where
     where
       listMay = fromMaybe []
 
+instance J.Encode (StableEncoding GasPrice) where
+  build (StableEncoding (GasPrice d)) = J.build $ J.Aeson @Scientific $ fromRational $ toRational d
+
 instance JD.FromJSON (StableEncoding GasPrice) where
   parseJSON (JD.String s) =
     fmap StableEncoding $ case parseNumLiteral s of
@@ -524,16 +532,41 @@ instance JD.FromJSON (StableEncoding GasPrice) where
     return $ StableEncoding $ GasPrice (fromRational $ toRational n)
   parseJSON v = fail $ "Failure parsing decimal: " ++ show v
 
+instance J.Encode (StableEncoding GasLimit) where
+  build (StableEncoding (GasLimit (Gas l))) = J.build (ParsedInteger (fromIntegral l))
 
 instance JD.FromJSON (StableEncoding GasLimit) where
-  parseJSON (JD.String s) =
-    fmap StableEncoding $ case parseNumLiteral s of
-      Just (LInteger r) -> return $ GasLimit (Gas (fromIntegral r))
-      _ -> fail $ "Failure parsing decimal string: " ++ show s
-  parseJSON (JD.Number n) =
-    return $ StableEncoding $ GasLimit $ Gas (round n)
-  parseJSON v = fail $ "Failure parsing decimal: " ++ show v
+  parseJSON v = do
+    ParsedInteger s <- JD.parseJSON v
+    pure (StableEncoding (GasLimit (Gas (fromIntegral s))))
 
+instance J.Encode (StableEncoding TTLSeconds) where
+  build (StableEncoding (TTLSeconds b)) = J.build (ParsedInteger b)
+
+instance J.Encode (StableEncoding TxCreationTime) where
+  build (StableEncoding (TxCreationTime b)) = J.build (ParsedInteger b)
+
+
+instance JD.FromJSON (StableEncoding TTLSeconds) where
+  parseJSON v = do
+    ParsedInteger ttl <- JD.parseJSON v
+    pure $ StableEncoding $ TTLSeconds ttl
+
+instance JD.FromJSON (StableEncoding TxCreationTime) where
+  parseJSON v = do
+    ParsedInteger ttl <- JD.parseJSON v
+    pure $ StableEncoding $ TxCreationTime ttl
+
+instance J.Encode (StableEncoding PublicMeta) where
+  build (StableEncoding o) = J.object
+    [ "creationTime" J..= StableEncoding (_pmCreationTime o)
+    , "ttl" J..= StableEncoding (_pmTTL o)
+    , "gasLimit" J..= StableEncoding (_pmGasLimit o)
+    , "chainId" J..= StableEncoding (_pmChainId o)
+    , "gasPrice" J..= StableEncoding (_pmGasPrice o)
+    , "sender" J..= _pmSender o
+    ]
+  {-# INLINABLE build #-}
 
 instance JD.FromJSON (StableEncoding PublicMeta) where
   parseJSON = JD.withObject "PublicMeta" $ \o -> do
@@ -541,7 +574,10 @@ instance JD.FromJSON (StableEncoding PublicMeta) where
     sender <- o JD..: "sender"
     StableEncoding gasLimit <- o JD..: "gasLimit"
     StableEncoding gasPrice <- o JD..: "gasPrice"
-    ParsedInteger ttl <- o JD..: "ttl"
-    ParsedInteger creationTime <- o JD..: "creationTime"
-    pure $ StableEncoding $ PublicMeta (ChainId chainId) sender gasLimit gasPrice (TTLSeconds ttl) (TxCreationTime creationTime)
+    StableEncoding ttl <- o JD..: "ttl"
+    StableEncoding creationTime <- o JD..: "creationTime"
+    pure $ StableEncoding $ PublicMeta (ChainId chainId) sender gasLimit gasPrice ttl creationTime
+
+instance J.Encode (StableEncoding a) => J.Encode (StableEncoding (Maybe a)) where
+  build (StableEncoding a) = J.build (StableEncoding <$> a)
 

@@ -13,27 +13,28 @@
 
 
 module Pact.Core.Hash
-  ( Hash(..)
-  , ModuleHash(..)
-  , hash
-  , hashToText
-  , verifyHash
-  , initialHash
-  , pactHash
-  , pactInitialHash
-  , pactHashLength
-  , decodeBase64UrlUnpadded
-  , toB64UrlUnpaddedText
-  , fromB64UrlUnpaddedText
-  , defaultPactHash
-  , placeholderHash
-  , moduleHashToText
-  , parseModuleHash
-  , encodeBase64UrlUnpadded
-    -- unsafe creating of a 'ModuleHash', only used in the
-    -- legacy translation process.
-  , unsafeBsToModuleHash
-  ) where
+( Hash(..)
+, ModuleHash(..)
+, hash
+, hashToText
+, verifyHash
+, initialHash
+, pactHash
+, pactInitialHash
+, pactHashLength
+, encodeBase64UrlUnpadded
+, decodeBase64UrlUnpadded
+, toB64UrlUnpaddedText
+, fromB64UrlUnpaddedText
+, defaultPactHash
+, placeholderHash
+, moduleHashToText
+, parseHash
+, parseModuleHash
+  -- unsafe creating of a 'ModuleHash', only used in the
+  -- legacy translation process.
+, unsafeBsToModuleHash
+) where
 
 import Control.DeepSeq
 import Data.Aeson
@@ -113,11 +114,14 @@ unsafeBsToPactHash = Hash . toShort
 unsafeBsToModuleHash :: ByteString -> ModuleHash
 unsafeBsToModuleHash = ModuleHash . unsafeBsToPactHash
 
-parseModuleHash :: Text -> Maybe ModuleHash
-parseModuleHash t = case decodeBase64UrlUnpadded (T.encodeUtf8 t) of
+parseHash :: Text -> Maybe Hash
+parseHash t = case decodeBase64UrlUnpadded (T.encodeUtf8 t) of
   Left{} -> Nothing
-  Right bs | B.length bs == pactHashLength -> Just (unsafeBsToModuleHash bs)
+  Right bs | B.length bs == pactHashLength -> Just (unsafeBsToPactHash bs)
            | otherwise -> Nothing
+
+parseModuleHash :: Text -> Maybe ModuleHash
+parseModuleHash = fmap ModuleHash . parseHash
 
 hash :: ByteString -> Hash
 hash = unsafeBsToPactHash . ByteArray.convert . Crypto.hashWith Crypto.Blake2b_256

@@ -77,6 +77,16 @@ data CompileValue i
   | InterpretValue PactValue i
   deriving Show
 
+instance Pretty (CompileValue i) where
+  pretty = \case
+    LoadedModule mn mh ->
+      "Loaded module" <+> pretty mn <> ", hash" <+> pretty (moduleHashToText mh)
+    LoadedInterface mn mh ->
+      "Loaded interface" <+> pretty mn <> ", hash" <+> pretty (moduleHashToText mh)
+    InterpretValue v _ -> pretty v
+    LoadedImports i ->
+      "Loaded imports from" <> pretty (_impModuleName i)
+
 
 enforceNamespaceInstall
   :: i

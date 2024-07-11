@@ -1,0 +1,4 @@
+hash: i1S2rUgEyfBl393oWEwts3DzuyCvraemXA9A1Bno6sg
+sigs:
+  7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804: null
+cmd: '{"networkId":null,"payload":{"exec":{"data":null,"code":"(test.run-escrow \"Alice\" \"Bob\")"}},"signers":[{"pubKey":"7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804","clist":[{"args":["Alice"],"name":"accounts.USER_GUARD"}]}],"meta":{"creationTime":0,"ttl":0,"gasLimit":0,"chainId":"","gasPrice":0,"sender":""},"nonce":"just-sign-exec"}'

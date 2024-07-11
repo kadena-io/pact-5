@@ -144,12 +144,14 @@ library pact-request-api
     , cereal
     , pact-tng
     , pact-tng:pact-crypto
+    , yaml
   exposed-modules:
     Pact.Core.Command.Types
     Pact.Core.Command.Client
     Pact.Core.Command.Crypto
     Pact.Core.Command.RPC
     Pact.Core.Command.Util
+    Pact.Core.Command.SigData
     Pact.Core.Crypto.WebAuthn.Cose.PublicKey
     Pact.Core.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
     Pact.Core.Crypto.WebAuthn.Cose.Registry
@@ -353,13 +355,14 @@ executable profile-tx
   default-language:    Haskell2010
 
 executable pact
+  import: pact-common
   main-is: repl/Main.hs
 
   build-depends: base
                , pact-tng
                , pact-tng:pact-lsp
                , optparse-applicative
-               , text
+               , pact-tng:pact-request-api
 
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
@@ -501,7 +504,7 @@ test-suite core-tests
     , pact-tng:test-utils
     , lsp-test
     , lsp-types
-
+    , safe-exceptions
   other-modules:
     , Pact.Core.Test.CommandTests
     , Pact.Core.Test.ReplTests
@@ -517,9 +520,11 @@ test-suite core-tests
     , Pact.Core.Test.PoseidonTests
     , Pact.Core.Test.LanguageServer
     , Pact.Core.Test.GasGolden
+    , Pact.Core.Test.PrincipalTests
     , Pact.Core.Test.ConTagGolden
     , Pact.Core.Test.DocsTests
     , Paths_pact_tng
+    , Pact.Core.Test.SignatureSchemeTests
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
 
