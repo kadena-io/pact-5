@@ -2,7 +2,7 @@
 
 Use `and?` to apply a logical AND operation to the results of applying a specified `value` to application functions `oper1` and `oper2`, with short-circuit evaluation.
 
-In practice, the data type of the `value` you specify is used to evaluate the expression in each function and to return a boolean value for the logical AND operation performed by the `and?` function:
+In practice, the data type of the `value` you specify is used to evaluate the expression in each function and to return the resulting boolean value for the logical AND operation performed by the `and?` function:
 
 (defun <a> and?:bool (oper1:(<a> -> bool) oper2:(<a> -> bool) value:<a>))
 

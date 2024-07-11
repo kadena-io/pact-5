@@ -16,9 +16,9 @@ Use the following arguments to specify the functions and the `value` to be appli
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `oper1` | function | Specifies the first function to apply the specified `value` to. The result of applying the specified value returns a boolean value. |
-| `oper2` | function | Specifies the second function to apply the specified `value` to. The result of applying the specified value returns a boolean value.|
-| `value` | any | Specifies the value to apply to both `oper1` and `oper2` functions. |
+| `oper1` | function x:<r> -> bool | Specifies the first function to apply the specified `value` to. The result of applying the specified value returns a boolean value. |
+| `oper2` | function x:<r> -> bool | Specifies the second function to apply the specified `value` to. The result of applying the specified value returns a boolean value.|
+| `value` | <r> | Specifies the value to apply to both `oper1` and `oper2` functions. |
 
 ### Return value
 

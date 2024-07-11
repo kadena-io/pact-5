@@ -16,8 +16,8 @@ Use the following arguments to specify the application function and the value to
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `app` | function | Specifies the application function to apply the specified `value` to. The result of applying the specified value returns a boolean value. |
-| `value` | any | Specifies the value to be applied to the application function. |
+| `app` | function x:<r> -> bool | Specifies the application function to apply the specified `value` to. The result of applying the specified value returns a boolean value. |
+| `value` | <r> | Specifies the value to be applied to the application function. |
 
 ### Return value
 
@@ -32,4 +32,4 @@ pact> (not? (> 20) 15)
 false
 ```
 
-In this example, the application function is `(> 20)` and the value is `15`. Becase the expression `20 > 15` evaluates to `true`, and `not?` negates this value, the not? function returns in `false`.
+In this example, the application function is `(> 20)` and the value is `15`. Because the expression `20 > 15` evaluates to `true`, and `not?` negates this value, the `not?` function returns `false`.

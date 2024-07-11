@@ -4,7 +4,7 @@ Use `not` to compute the boolean negation of a specified `value`.
 
 ### Basic syntax
 
-To compute the boolean negation of `value`, use the following syntax:
+To compute the boolean negation of the specified `value`, use the following syntax:
 
 ```pact
 (not value)
