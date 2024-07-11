@@ -71,7 +71,7 @@ common pact-common
     , lens
     , mtl
     , pact-json
-    , pact-time
+    , pact-time >= 0.3
     , parsers
     , prettyprinter
     , transformers
@@ -405,7 +405,7 @@ benchmark bench
     , pact-tng
     , text
     , deepseq
-    , pact-time
+    , pact-time >= 0.3
   ghc-options: -Wall -threaded -rtsopts "-with-rtsopts=-N"
   hs-source-dirs: bench
   default-language: Haskell2010
