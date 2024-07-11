@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE CPP #-}
 
 module Pact.Core.Literal
  ( _LString
@@ -13,7 +14,6 @@ module Pact.Core.Literal
 
 import Control.Applicative
 import Control.Lens(makePrisms)
-import Data.Foldable(foldl')
 import Data.Text(Text)
 import Data.Void(Void)
 import Data.Decimal
@@ -25,6 +25,10 @@ import Pact.Core.Pretty
 import qualified Text.Megaparsec as MP
 import qualified Text.Megaparsec.Char as MP
 import Data.Char (digitToInt)
+
+#if !MIN_VERSION_base(4,20,0)
+import Data.List(foldl')
+#endif
 
 data Literal
   = LString !Text

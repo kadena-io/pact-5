@@ -22,6 +22,7 @@ import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Serialise
 import Pact.Core.PactDbRegression
 import Test.Tasty.HUnit (testCase)
+import Data.List.Unsafe
 
 -- | Top-level TestTree for Persistence Tests.
 tests :: TestTree

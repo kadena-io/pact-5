@@ -1,4 +1,4 @@
-cabal-version:       3.8
+cabal-version:       3.12
 name:                pact-tng
 version:             5.0
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
@@ -40,6 +40,16 @@ flag with-native-tracing
   description: Enable Tracing on pact primitives
   manual: True
   default: True
+
+library unsafe
+  visibility: public
+  hs-source-dirs: unsafe/src
+  default-language: Haskell2010
+  exposed-modules:
+    Data.Foldable.Unsafe
+    Data.List.Unsafe
+  build-depends:
+    , base >= 4.5 && < 5
 
 common pact-common
   build-depends:
@@ -96,6 +106,7 @@ common pact-common
     , wide-word
     , ethereum
     , template-haskell
+    , pact-tng:unsafe
 
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
@@ -450,6 +461,7 @@ library test-utils
     , neat-interpolation
     , pact-tng:pact-request-api
     , pact-tng:pact-lsp
+    , pact-tng:unsafe
     , lsp-test
     , lsp-types
 
@@ -510,6 +522,7 @@ test-suite core-tests
     , pact-tng:pact-request-api
     , pact-tng:pact-lsp
     , pact-tng:test-utils
+    , pact-tng:unsafe
     , lsp-test
     , lsp-types
     , safe-exceptions

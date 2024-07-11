@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE CPP #-}
 
 -- |
 -- Module      :  Pact.Core.DeriveConTag
@@ -16,9 +17,12 @@ module Pact.Core.DeriveConTag
   , ConstrInfo(..)
   ) where
 
+#if !MIN_VERSION_base(4,20,0)
+import Data.List(foldl')
+#endif
+
 import Data.Word(Word8)
 import Data.Text(Text)
-import Data.Foldable
 import Control.Monad
 import Language.Haskell.TH
 import qualified Data.Text.Read as T

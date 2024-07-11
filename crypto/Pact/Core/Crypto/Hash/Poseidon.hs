@@ -4,12 +4,16 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE CPP #-}
 
 module Pact.Core.Crypto.Hash.Poseidon (poseidon) where
 
-import Data.List(foldl')
 import qualified Data.Primitive.Array as Array
 import qualified Data.Primitive.SmallArray as SmallArray
+
+#if !MIN_VERSION_base(4,20,0)
+import Data.List(foldl')
+#endif
 
 modulus :: Integer
 modulus = 21888242871839275222246405745257275088548364400416034343698204186575808495617

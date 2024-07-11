@@ -11,6 +11,7 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DataKinds #-}
 
 -- |
 -- Module      :  Pact.Types.SizeOf

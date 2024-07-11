@@ -18,7 +18,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
-
+{-# LANGUAGE CPP #-}
 
 module Pact.Core.IR.Desugar
  ( runDesugarTerm
@@ -40,13 +40,17 @@ import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Data.Maybe(mapMaybe)
 import Data.List(findIndex)
+#if !MIN_VERSION_base(4,20,0)
+import Data.List(foldl')
+#endif
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Set(Set)
 import Data.Graph(stronglyConnComp, SCC(..))
-import Data.Foldable(find, traverse_, foldrM, foldl', foldlM)
+import Data.Foldable(find, traverse_, foldrM, foldlM)
 import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as S
+import Data.List.Unsafe
 
 import Pact.Core.Builtin
 import Pact.Core.Names
@@ -1391,7 +1395,7 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash i) = d
     CyclicSCC d ->
       -- todo: just in case, match on `d` because it makes no sense for there to be an empty cycle
       -- but all uses of `head` are still scary
-      throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (head d))
+      throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (unsafeHead d))
   binds <- view reBinds
   bindsWithImports <- foldlM (handleImport i) binds imports
   (defs'', _, _, _) <- over _1 reverse <$> foldlM (go mname) ([], S.empty, bindsWithImports, M.empty) defs'
@@ -1514,7 +1518,7 @@ renameInterface (Interface unmangled defs imports ih info) = do
     CyclicSCC d ->
       -- todo: just in case, match on `d` because it makes no sense for there to be an empty cycle
       -- but all uses of `head` are still scary
-      throwDesugarError (RecursionDetected ifn (ifDefName <$> d)) (ifDefInfo (head d))
+      throwDesugarError (RecursionDetected ifn (ifDefName <$> d)) (ifDefInfo (unsafeHead d))
   binds <- view reBinds
   bindsWithImports <- foldlM (handleImport info) binds imports
   (defs'', _, _, _) <- over _1 reverse <$> foldlM (go ifn) ([], S.empty, bindsWithImports, S.empty) defs'

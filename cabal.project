@@ -36,4 +36,11 @@ source-repository-package
   tag: a32d901e4a79be62af9c27c01152c9a4c3912a62
   --sha256: sha256-xdawv/tdjh61MbJKcBqm9Fje36+gVljuZsAxOTX1gP0=
 
+-- fork with added support for ghc 9.10
+source-repository-package
+  type: git
+  location: https://github.com/rsoeldner/vector-space.git
+  tag: abcece3e7eacaf7ea861257e95f4ec8191c991e4
+  --sha256: sha256-xdawv/tdjh61MbJKcBqm9Fje36+gVljuZsAxOTX1gP0=
+
 tests: True
