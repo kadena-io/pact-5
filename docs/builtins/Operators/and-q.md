@@ -6,7 +6,7 @@ You can use any data type for the `value` argument as long as the two functions 
 
 By convention, the data type <a> is used if an argument represents a type-bound parameter like the `value` argument in this function: 
 
-(defun <a> and?:bool (func1:(<a> -> bool) func2:(<a> -> bool) value:<a>))
+(defun logicalAnd and?:bool (func1:(<a> -> bool) func2:(<a> -> bool) value:<a>))
 
 ### Basic syntax
 
