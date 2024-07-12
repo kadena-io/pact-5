@@ -1,5 +1,5 @@
 -- |
--- Module      :  Pact.Core.IR.Typecheck
+-- Module      :  Pact.Core.Version
 -- Copyright   :  (C) 2022 Kadena
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Jose Cardona <jose@kadena.io>
