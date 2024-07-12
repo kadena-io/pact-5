@@ -45,7 +45,7 @@ import Data.Set(Set)
 import Data.Word
 import Numeric (showHex)
 import qualified Data.Version as V
-import qualified PackageInfo_pact_tng as PI
+import qualified Pact.Core.Version as PI
 import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Text.Read as T
