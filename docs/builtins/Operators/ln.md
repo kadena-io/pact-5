@@ -1,12 +1,14 @@
 ## ln
 
-Use `ln` to compute the natural logarithm of `X`.
+Use `ln` to compute the natural logarithm of a specified `value`.
 
 ### Basic syntax
 
 To compute the natural logarithm of a value, use the following syntax:
 
-`(ln X)`
+```pact
+(ln value)
+```
 
 ### Argument
 
@@ -14,7 +16,7 @@ Use the following argument to specify the value for which you want to compute th
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `X` | `integer` or `decimal` | Specifies the value for which you want to compute the natural logarithm. |
+| `value` | integer or decimal | Specifies the value for which you want to compute the natural logarithm. |
 
 ### Return value
 
@@ -22,11 +24,9 @@ The `ln` function returns the natural logarithm of the specified value.
 
 ### Examples
 
-The following example demonstrates the use of `ln` in the Pact REPL:
+The following example demonstrates how to use the `ln` function to computer the natural logarithm for the value of 60 and round the result to 6 decimal places:
 
 ```pact
-pact>(round (ln 60) 6)
+pact> (round (ln 60) 6)
 4.094345
 ```
-
-In this example, the natural logarithm of 60 is computed and rounded to 6 decimal places, resulting in approximately 4.094345.

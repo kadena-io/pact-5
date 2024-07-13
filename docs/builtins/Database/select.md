@@ -23,7 +23,7 @@ Use the following arguments to specify the table, columns, and `where` clause fo
 | Argument | Type | Description |
 | --- | --- | --- |
 | `table` | table:<{row}> | Specifies the table from which to select rows matching the where clause. |
-| `columns` | [string] | (Optional) Specifies the list of columns to select from the table matching the where clause. |
+| `columns` | [string] | Specifies the list of columns to select from the table matching the where clause (optional). |
 | `where` | row:object:<{row}> | Specifies the `where` clause to apply to each row to determine inclusion. |
 
 ### Return value

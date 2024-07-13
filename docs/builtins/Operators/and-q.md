@@ -1,11 +1,20 @@
 ## and?
-Use `and?` to apply a logical AND operation to the results of applying a `value` to `a` and `b`, with short-circuiting.
+
+Use `and?` to apply a logical AND operation to the results of applying a specified `value` to application functions `func1` and `func2`, with short-circuit evaluation.
+
+You can use any data type for the `value` argument as long as the two functions take that same data type and return the resulting boolean value for the logical AND operation performed by the `and?` function.
+
+By convention, the data type <a> is used if an argument represents a type-bound parameter like the `value` argument in this function: 
+
+(defun logicalAnd and?:bool (func1:(<a> -> bool) func2:(<a> -> bool) value:<a>))
 
 ### Basic syntax
 
-To apply logical 'and' to the results of applying `value` to `a` and `b`, use the following syntax:
+To apply a logical AND operation to the results of applying a specified `value` to the functions `func1` and `func2`, use the following syntax:
 
-`(and? a b value)`
+```pact
+(and? func1 func2 value)
+```
 
 ### Arguments
 
@@ -13,21 +22,23 @@ Use the following arguments to specify the functions and `value` for the `and?` 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `a` | `x:<r> -> bool` | Specifies the first function to apply `value` to. |
-| `b` | `x:<r> -> bool` | Specifies the second function to apply `value` to. |
-| `value` | `<r>` | Specifies the value to apply to both `a` and `b` functions. |
+| `func1` | function x:<a> -> bool | Specifies the first function to apply the specified `value` to. The result of applying the specified value of type `<a>` returns a boolean value. |
+| `func2` | function x:<a> -> bool | Specifies the second function to apply the specified `value` to. The result of applying the specified value of type `<a>` returns a boolean value.|
+| `value` | <a> | Specifies the value to apply to both `func1` and `func2` functions. |
 
 ### Return values
 
-The `and?` function returns a boolean value based on the result of applying `value` to `a` and `b` with the logical AND operation.
+The `and?` function returns a boolean value based on the result of applying `value` to `func1` and `func2` with the logical AND operation.
 
 ### Examples
 
-The following example demonstrates the `and?` operation in the Pact REPL:
+The following example demonstrates how to use the `and?` function in the Pact REPL:
 
 ```pact
-pact>(and? (> 20) (> 10) 15)
-true
+pact> (and? (> 20) (> 10) 15)
+false
 ```
 
-In this example, the `and?` function applies the functions `> 20` and `> 10` to the value `15`, resulting in `false` because the second conditions `10 > 15` is false.
+In this example, the `and?` function applies the value 15 to the function `(> 20)`, with the result being `true` because `20 > 15` is true.
+The function then applies the value of 15 to the `(> 10)` function, with the result being false because `10 > 15` is false.
+The result from the `and?` function, therefore, is `false` because the second condition is false.

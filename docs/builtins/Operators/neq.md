@@ -1,12 +1,15 @@
-## !=
+## not-equal (!=)
 
-The `!=` function returns true if the first argument `x` does not equal the second argument `y`.
+Use `!=` to return true if the first `oper1` argument does not equal the second `oper2` argument.
+This function allows you to write conditional logic based on whether two values are not equal.
 
 ### Basic syntax
 
-To check if `x` does not equal `y`, use the following syntax:
+To check if `oper1` does not equal `oper2`, use the following syntax:
 
-`(!= x y)`
+```pact
+(!= oper1 oper2)
+```
 
 ### Arguments
 
@@ -14,20 +17,24 @@ Use the following arguments to specify the values for comparison using the `!=` 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `x` | `<a[integer, string, time, decimal, bool, [<l>], object:<{o}>, keyset, guard, module{}]>` | Specifies the first value for comparison. |
-| `y` | `<a[integer, string, time, decimal, bool, [<l>], object:<{o}>, keyset, guard, module{}]>` | Specifies the second value for comparison. |
+| `oper1` | integer, string, time, decimal, bool, list, object, keyset, guard, or module | Specifies the first value for comparison. |
+| `oper2` | integer, string, time, decimal, bool, list, object, keyset, guard, or module | Specifies the second value for comparison. |
 
 ### Return value
 
-The `!=` function returns true if `x` does not equal `y`, otherwise false.
+The `!=` function returns true if `oper1` does not equal `oper2`, otherwise false.
 
 ### Examples
 
-The following example demonstrates the usage of the `!=` function within the Pact REPL. It checks if two strings are not equal:
+The following example demonstrates how to use the `!=` function to check whether two strings are not equal:
 
 ```pact
-pact>(!= "hello" "goodbye")
+pact> (!= "hello" "goodbye")
 true
 ```
 
-This example illustrates how to use the `!=` function to compare values for inequality in Pact, allowing for conditional logic based on whether two values are not equal.
+In the following example, the `!=` function ensures that the `sender` and `receiver` accounts are not equal to prevent the sender initiating a transfer from also being the receiver of the transfer:
+
+```pact
+(enforce (!= sender receiver) "sender cannot be the receiver of a transfer")
+```

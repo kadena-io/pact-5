@@ -1,4 +1,5 @@
 ## add (+)
+
 Use `+` to add numbers, concatenate strings and lists, or merge objects.
 
 ### Basic syntax

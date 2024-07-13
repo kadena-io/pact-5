@@ -1,33 +1,33 @@
 ## log
 
-Use `log` to compute the logarithm of `Y` with base `X`.
+Use `log` to compute the logarithm of the speified `value` with the specified `base`.
 
 ### Basic syntax
 
-To compute the logarithm of `Y` with base `X`, use the following syntax:
+To compute the logarithm of a specified `value` with the specified `base`, use the following syntax:
 
-`(log X Y)`
+```pact
+(log base value)
+```
 
 ### Arguments
 
-Use the following arguments to specify the base (`X`) and value (`Y`) for which you want to compute the logarithm using the `log` Pact function.
+Use the following arguments to specify the `base` and `value` for which you want to compute the logarithm using the `log` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `X` | `integer` or `decimal` | Specifies the base of the logarithm. |
-| `Y` | `integer` or `decimal` | Specifies the value for which you want to compute the logarithm. |
+| `base` | integer or decimal | Specifies the base of the logarithm. |
+| `value` | integer or decimal | Specifies the value for which you want to compute the logarithm. |
 
 ### Return value
 
-The `log` function returns the logarithm of `Y` with base `X`.
+The `log` function returns the logarithm of `value` with base `base`.
 
 ### Examples
 
-The following example demonstrates the use of `log` in the Pact REPL:
+The following example demonstrates how to use the `log` function to computer the logarithm of 256 with base 2:
 
 ```pact
-pact>(log 2 256)
+pact> (log 2 256)
 8
 ```
-
-In this example, the logarithm of 256 with base 2 is computed, resulting in 8.
