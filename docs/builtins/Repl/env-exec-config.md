@@ -1,4 +1,4 @@
-## env-exec-config
+## env-exec-config (DEPRECATED)
 
 Use `env-exec-config` to query or set execution configuration information for executing transactions in your testing environment.
 You can use this function to set one or more of the following configuration flags:
