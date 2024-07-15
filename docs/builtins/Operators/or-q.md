@@ -1,33 +1,41 @@
 ## or?
-Use `or?` to apply logical 'or' with short-circuit evaluation to the results of applying a value to two application functions.
+
+Use `or?` to apply a logical OR operation to the results of applying a specified `value` to application functions `func1` and `func2`, with short-circuit evaluation.
+
+You can use any data type for the `value` argument as long as the two functions take that same data type and return the resulting boolean value for the logical OR operation performed by the `or?` function.
+
+By convention, the data type <a> is used if an argument represents a type-bound parameter like the `value` argument in this function. 
 
 ### Basic syntax
 
-To apply logical 'or' with short-circuit evaluation to the results of applying a value to two application functions, use the following syntax:
+To apply a logical OR operation to the results of applying a value to two application functions, use the following syntax:
 
-`(or? a b value)`
+```pact
+(or? func1 func2 value)
+```
 
 ### Arguments
 
-Use the following arguments to specify the application functions and the value to be applied using the `or?` Pact function.
+Use the following arguments to specify the functions and the `value` to be applied using the `or?` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `a` | `x:<r> -> bool` | Specifies the first application function. |
-| `b` | `x:<r> -> bool` | Specifies the second application function. |
-| `value` | `<r>` | Specifies the value to be applied to both application functions. |
+| `func1` | function x:<a> -> bool | Specifies the first function to apply the specified `value` to. The result of applying the specified value returns a boolean value. |
+| `func2` | function x:<a> -> bool | Specifies the second function to apply the specified `value` to. The result of applying the specified value returns a boolean value.|
+| `value` | <a> | Specifies the value to apply to both `func1` and `func2` functions. |
 
 ### Return value
 
-The `or?` function returns a boolean value representing the logical 'or' operation with short-circuit evaluation applied to the results of applying the value to the two application functions.
+The `or?` function returns a boolean value representing the logical OR operation after evaluating the results from applying the specified value to the two application functions.
 
 ### Examples
 
-The following example demonstrates the use of `or?` in the Pact REPL:
+The following example demonstrates how to use the `or?` function in the Pact REPL:
 
 ```pact
-pact>(or? (> 20) (> 10) 15)
+pact> (or? (> 20) (> 10) 15)
 true
 ```
 
-In this example, the value `15` is applied to the application functions `>(20)` and `>(10)`. The logical 'or' operation with short-circuit evaluation is performed on the results, resulting in `true`.
+In this example, the `or?` function applies the value 15 to the function `(> 20)`, with the result being `true` because `20 > 15` is true.
+Because the function performs short-circuit evaluation on the results, the `or?` function returns `true` because the first condition is true.

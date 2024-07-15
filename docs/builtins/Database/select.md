@@ -1,44 +1,45 @@
 ## select
-The `select` function retrieves full rows or specified columns from a table by applying a `WHERE` clause to each row to determine inclusion.
+
+Use `select` to retrieve full rows or specified columns from a table by applying a `where` clause to each row to determine whether to include the row or column in the selection.
 
 ### Basic syntax
 
-To select full rows from a table based on a `WHERE` clause, use the following syntax:
+To select full rows from a table based on a `where` clause, use the following syntax:
 
-`(select TABLE WHERE)`
+```pact
+(select table where)
+```
 
-To select specific columns from a table based on a `WHERE` clause, use the following syntax:
+To select specific columns from a table based on a `where` clause, use the following syntax:
 
-`(select TABLE COLUMNS WHERE)`
+```pact
+(select table columns where)
+```
 
 ### Arguments
 
-Use the following arguments to specify the table, columns, and `WHERE` clause for selecting rows using the `select` Pact function.
+Use the following arguments to specify the table, columns, and `where` clause for selecting rows using the `select` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `TABLE` | `table:<{row}>` | Specifies the table from which to select rows. |
-| `COLUMNS` | `[string]` | (Optional) Specifies the list of columns to select from the table. |
-| `WHERE` | `row:object:<{row}>` | Specifies the `WHERE` clause to apply to each row to determine inclusion. |
+| `table` | table:<{row}> | Specifies the table from which to select rows matching the where clause. |
+| `columns` | [string] | Specifies the list of columns to select from the table matching the where clause (optional). |
+| `where` | row:object:<{row}> | Specifies the `where` clause to apply to each row to determine inclusion. |
 
 ### Return value
 
-The `select` function returns a list of objects representing the selected rows from the table that satisfy the `WHERE` condition.
+The `select` function returns a list of objects representing the selected rows from the table that satisfy the `where` condition.
 
 ### Examples
 
-The following examples demonstrate the usage of the `select` function within a Pact script.
-
-To select the columns `'firstName` and `'lastName` from the `people` table where the `name` is equal to "Fatima":
+The following example demonstrates how to use the `select` function  to select the columns `'firstName` and `'lastName` from the `people` table where the `name` is equal to "Fatima":
 
 ```pact
 (select people ['firstName 'lastName] (where 'name (= "Fatima")))
 ```
 
-To select all columns from the `people` table where the `age` is less than 30:
+The following example demonstrates how to select all columns from the `people` table where the `age` is less than 30:
 
 ```pact
 (select people (where 'age (> 30)))
 ```
-
-These examples illustrate how to use the `select` function to retrieve rows or columns from a table based on specified conditions using a `WHERE` clause in Pact.
