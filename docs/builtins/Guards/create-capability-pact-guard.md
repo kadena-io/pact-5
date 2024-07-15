@@ -1,11 +1,16 @@
 ## create-capability-pact-guard
-Use `create-capability-pact-guard` to create a guard that enforces that a specified `CAPABILITY` is acquired and that the currently-executing `defpact` is operational.
+
+Use `create-capability-pact-guard` to create a predicate function that ensures that specific conditions are true and can be enforced to grant the specified `CAPABILITY` for steps defined in a `defpact` multi-step transaction.
+
+By convention, capabilities are defined using all uppercase letters.
 
 ### Basic syntax
 
-To create a guard that enforces the acquisition of a `CAPABILITY` and checks for an operational `defpact`, use the following syntax:
+To create a predicate function that guards the specified `CAPABILITY` in a `defpact` multi-step transaction, use the following syntax:
 
-`(create-capability-pact-guard CAPABILITY)`
+```pact
+(create-capability-pact-guard CAPABILITY)
+```
 
 ### Arguments
 
@@ -13,18 +18,42 @@ Use the following argument to specify the `CAPABILITY` for the `create-capabilit
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `CAPABILITY` | `capability` | Specifies the capability that the guard will enforce acquisition for. |
+| `CAPABILITY` | capability | Specifies the capability that the predicate function guards. |
 
 ### Return values
 
-The `create-capability-pact-guard` function returns a guard that enforces the acquisition of the specified `CAPABILITY` and checks for an operational `defpact`.
+The `create-capability-pact-guard` function returns a guard that enables the code associated with the specified `CAPABILITY` to be executed in the context of a `defpact` multi-step transaction.
 
 ### Examples
 
-The following example demonstrates the `create-capability-pact-guard` function:
+The following example demonstrates how to use the `create-capability-pact-guard` function to create a guard for the `ESCROW owner` capability in a`defpact` step:
 
 ```pact
 (create-capability-pact-guard (ESCROW owner))
 ```
 
-In this example, `(create-capability-pact-guard (ESCROW owner))` is used to create a guard that enforces the acquisition of the `ESCROW owner` capability and checks for an operational `defpact`. This guard ensures that the `ESCROW owner` capability is acquired and that the current `defpact` is operational before proceeding with Pact code execution.
+The following example creates a guard for the `SALE_PRIVATE` capability associated with the `pact-id` for the sales contract being executed:
+
+```pact
+  (defun offer:bool
+    ( id:string
+      seller:string
+      amount:decimal
+    )
+    @doc "Initiate sale with by SELLER by escrowing AMOUNT of TOKEN until TIMEOUT."
+    @model
+      [ (property (!= id ""))
+        (property (!= seller ""))
+        (property (>= amount 0.0))
+      ]
+    (require-capability (SALE_PRIVATE (pact-id)))
+    (let
+      (
+        (sender (debit id seller amount))
+        (receiver (credit id (sale-account) (create-capability-pact-guard (SALE_PRIVATE (pact-id))) amount))
+      )
+      (emit-event (TRANSFER id seller (sale-account) amount))
+      (emit-event (RECONCILE id amount sender receiver)))
+  )
+
+```
