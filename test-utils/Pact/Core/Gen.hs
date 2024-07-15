@@ -2,6 +2,7 @@
 --   and TxLogs.
 
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE ApplicativeDo #-}
 
 module Pact.Core.Gen where
 
@@ -10,7 +11,6 @@ import qualified Data.ByteString.Short as BSS
 import Data.Decimal
 import Data.Default (def)
 import Data.Map.Strict (fromList)
-import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -41,8 +41,8 @@ namespaceNameGen = NamespaceName <$> identGen
 namespaceGen :: Gen Namespace
 namespaceGen = do
   name <- namespaceNameGen
-  user <- guardGen 3 qualifiedNameGen
-  Namespace name user <$> guardGen 3 qualifiedNameGen
+  user <- guardGen qualifiedNameGen
+  Namespace name user <$> guardGen qualifiedNameGen
 
 moduleNameGen :: Gen ModuleName
 moduleNameGen =  do
@@ -394,25 +394,20 @@ userGuardGen depth = do
   ident <- fullyQualifiedNameGen
   UserGuard ident <$> Gen.list (Range.linear 0 depth) pactValueGen
 
-guardGen :: Int -> Gen n -> Gen (Guard n PactValue)
-guardGen depth n
-  | depth <= 0 = Gen.choice [gKeySetGen, gKeySetRefGen]
-  | otherwise  = Gen.choice [gKeySetGen, gKeySetRefGen]
+guardGen :: Gen n -> Gen (Guard n PactValue)
+guardGen n = Gen.choice [gKeySetGen, gKeySetRefGen]
   where
     gKeySetGen = GKeyset <$> keySetGen n
     gKeySetRefGen = GKeySetRef <$> keySetNameGen
 --    gUserGuardGen = GUserGuard <$> userGuardGen (depth - 1)
 
 pactValueGen :: Gen PactValue
-pactValueGen = do
-  i <- Gen.int (Range.linear 0 8)
-  pactValueGen' i
-
-pactValueGen' :: Int ->Gen PactValue
-pactValueGen' depth = Gen.choice
+pactValueGen = Gen.recursive Gen.choice
   [ PLiteral <$> literalGen
-  , PList . Vec.fromList <$> Gen.list (Range.linear 0 depth) (pactValueGen' (depth - 1))
-  , PGuard <$> guardGen (depth - 1) qualifiedNameGen
+  , PGuard <$> guardGen qualifiedNameGen
+  ]
+  [ PList . Vec.fromList <$> Gen.list (Range.linear 0 5) pactValueGen
+  , PObject <$> (Gen.map (Range.linear 0 5) ((,) <$> fieldGen <*> pactValueGen))
   ]
 
 chainIdGen :: Gen ChainId
@@ -436,29 +431,25 @@ defPactContinuationGen = do
 
 defPactExecGen :: Gen DefPactExec
 defPactExecGen = do
-  i <- Gen.int (Range.linear 0 3)
-  defPactExecGen' i
-
-defPactExecGen' :: Int -> Gen DefPactExec
-defPactExecGen' depth = do
   sc <- Gen.int (Range.linear 1 16)
   yield <- Gen.maybe yieldGen
   step <- Gen.int (Range.linear 1 sc)
   dpid <- defPactIdGen
   cont <- defPactContinuationGen
-  nested <- if depth <= 0
-            then pure Map.empty
-            else Gen.map (Range.linear 0 3) genNested
+  nested <- Gen.map (Range.linear 0 3) genNested
   rb <- Gen.bool
   pure (DefPactExec sc yield step dpid cont rb nested)
   where
-    genNested = do
+    genNested = Gen.scale (`div` 2) $ do
       dpid <- defPactIdGen
-      pexec <- defPactExecGen' (depth - 1)
+      pexec <- defPactExecGen
       pure (dpid, pexec)
 
 identGen :: Gen Text
 identGen = do
   pref <- Gen.alpha
-  suff <- Gen.string (Range.constant 0 16) (Gen.constant '-' <|> Gen.alphaNum)
+  suff <- Gen.string (Range.constant 0 6) (Gen.constant '-' <|> Gen.alphaNum)
   pure $ T.pack (pref : suff)
+
+rowDataGen :: Gen RowData
+rowDataGen = RowData <$> Gen.map (Range.linear 0 4) ((,) <$> fieldGen <*> pactValueGen)
