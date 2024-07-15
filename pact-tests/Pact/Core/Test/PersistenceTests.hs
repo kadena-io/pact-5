@@ -21,6 +21,7 @@ import Pact.Core.Persistence
 import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Serialise
 import Pact.Core.PactDbRegression
+import Test.Tasty.HUnit (testCase)
 
 -- | Top-level TestTree for Persistence Tests.
 tests :: TestTree
@@ -110,12 +111,13 @@ namespaceRoundtrip serial builtins = property $ do
 --   user data, within transactions. It ensures that TxLogs for transactions
 --   contain the expected metadata.
 sqliteRegression :: TestTree
-sqliteRegression =
-  testGroup "Sqlite Db regression"
-  [withResource (unsafeCreateSqlitePactDb serialisePact_raw_spaninfo ":memory:")
-    (\(_, db, stmtcache) -> unsafeCloseSqlitePactDb db stmtcache)
-    (runPactDbRegression . fmap (view _1))]
+sqliteRegression = withResource
+  (unsafeCreateSqlitePactDb serialisePact_raw_spaninfo ":memory:")
+  (\(_, db, stmtcache) -> unsafeCloseSqlitePactDb db stmtcache)
+  $ \db ->
+  testCase "Sqlite Db regression"
+    (runPactDbRegression =<< fmap (view _1) db)
 
 pureDbRegression :: TestTree
-pureDbRegression =
-  testGroup "PureDb regression" [runPactDbRegression (mockPactDb serialisePact_raw_spaninfo)]
+pureDbRegression = testCase "PureDb regression"
+  (runPactDbRegression =<< mockPactDb serialisePact_raw_spaninfo)

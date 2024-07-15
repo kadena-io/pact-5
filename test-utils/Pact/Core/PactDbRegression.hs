@@ -4,8 +4,8 @@ import Control.Monad.Except
 import Data.Default
 import qualified Data.Map as M
 import qualified Data.Set as S
-import Test.Tasty (TestTree)
-import Test.Tasty.HUnit (assertEqual, testCase)
+-- import Test.Tasty (TestTree)
+import Test.Tasty.HUnit (assertEqual)
 
 import Pact.Core.Builtin
 import Pact.Core.Environment
@@ -23,9 +23,8 @@ import Pact.Core.StableEncoding
 -- | Run our pact db regression suite
 --   It takes an `IO (PactDb ..)` due to tasty's weird signature in
 --   withResource.
-runPactDbRegression :: IO (PactDb CoreBuiltin SpanInfo) -> TestTree
-runPactDbRegression pdbAction = testCase "PactDb persistence backend produces expected values/txlogs" $ do
-  pdb <- pdbAction
+runPactDbRegression :: PactDb CoreBuiltin SpanInfo -> IO ()
+runPactDbRegression pdb = do
   let
     user1 = "user1"
     usert = TableName user1 (ModuleName "someModule" Nothing)
@@ -127,13 +126,14 @@ runPactDbRegression pdbAction = testCase "PactDb persistence backend produces ex
     rkeys2 <- _pdbKeys pdb (DUserTables usert)
     assertEqual "keys post-rollback [key1]" [RowKey "key1"] rkeys2
 
-  where
-    loadModule = do
-      let src = "(module test G (defcap G () true) (defun f (a: integer) 1))"
-      pdb <- mockPactDb serialisePact_raw_spaninfo
-      ee <- defaultEvalEnv pdb coreBuiltinMap
-      Right _ <- runEvalMResult (ExecEnv ee) def $ do
-        p <- liftEither (parseOnlyProgram src)
-        traverse (interpretTopLevel evalInterpreter) p
-      Just md <- _pdbRead pdb DModules (ModuleName "test" Nothing)
-      pure md
+
+loadModule :: IO (ModuleData CoreBuiltin SpanInfo)
+loadModule = do
+  let src = "(module test G (defcap G () true) (defun f (a: integer) 1))"
+  pdb <- mockPactDb serialisePact_raw_spaninfo
+  ee <- defaultEvalEnv pdb coreBuiltinMap
+  Right _ <- runEvalMResult (ExecEnv ee) def $ do
+    p <- liftEither (parseOnlyProgram src)
+    traverse (interpretTopLevel evalInterpreter) p
+  Just md <- _pdbRead pdb DModules (ModuleName "test" Nothing)
+  pure md
