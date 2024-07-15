@@ -1,4 +1,3 @@
-{-# LANGUAGE TypeApplications #-}
 module Pact.Core.GasModel.Serialization
   (benchmarks) where
 

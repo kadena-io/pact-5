@@ -23,7 +23,7 @@ module Pact.Core.SizeOf
   ( SizeOf(..)
   , SizeOf1(..)
   , constructorCost
-, Bytes
+  , Bytes
   , wordSize
   , SizeOfVersion(..)
 
