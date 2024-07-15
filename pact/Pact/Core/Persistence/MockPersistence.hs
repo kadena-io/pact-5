@@ -19,7 +19,6 @@ import Data.Map (Map)
 import Data.IORef
 import Data.Text(Text)
 import qualified Data.Map.Strict as M
-import qualified Data.Text as T
 import Data.ByteString (ByteString)
 
 

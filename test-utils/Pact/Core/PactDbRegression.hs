@@ -1,6 +1,5 @@
 module Pact.Core.PactDbRegression(runPactDbRegression) where
 
-import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Except
 import Data.Default
 import qualified Data.Map as M
@@ -30,27 +29,27 @@ runPactDbRegression pdbAction = testCase "PactDb persistence backend produces ex
   let
     user1 = "user1"
     usert = TableName user1 (ModuleName "someModule" Nothing)
-  _txId1 <- liftIO $ _pdbBeginTx pdb Transactional
+  _txId1 <- _pdbBeginTx pdb Transactional
   ignoreGas def $ _pdbCreateUserTable pdb usert
 
-  txs1 <- liftIO $ _pdbCommitTx pdb
+  txs1 <- _pdbCommitTx pdb
   let rdEnc = encodeStable (UserTableInfo (_tableModuleName usert))
-  liftIO $ assertEqual "output of commit" txs1 [ TxLog "SYS:usertables" "user1" rdEnc ]
+  assertEqual "output of commit" txs1 [ TxLog "SYS:usertables" "user1" rdEnc ]
 
 
   --  Begin tx
-  t1 <- liftIO $ _pdbBeginTx pdb Transactional >>= \case
+  t1 <- _pdbBeginTx pdb Transactional >>= \case
     Nothing -> error "expected txid"
     Just t -> pure t
   let
     row = RowData $ M.fromList [(Field "gah", PDecimal 123.454345)]
   rowEnc <- ignoreGas def $ _encodeRowData serialisePact_raw_spaninfo row
   ignoreGas def $ _pdbWrite pdb Insert (DUserTables usert) (RowKey "key1") row
-  row' <- liftIO $ do
+  row' <- do
       _pdbRead pdb (DUserTables usert) (RowKey "key1") >>= \case
         Nothing -> error "expected row"
         Just r -> pure r
-  liftIO $ assertEqual "row should be identical to its saved/recalled value" row row'
+  assertEqual "row should be identical to its saved/recalled value" row row'
 
   let
     row2 = RowData $ M.fromList
@@ -60,42 +59,42 @@ runPactDbRegression pdbAction = testCase "PactDb persistence backend produces ex
   row2Enc <- ignoreGas def $ _encodeRowData serialisePact_raw_spaninfo row2
 
   ignoreGas def $ _pdbWrite pdb Update (DUserTables usert) (RowKey "key1") row2
-  row2' <- liftIO $ _pdbRead pdb (DUserTables usert) (RowKey "key1") >>= \case
+  row2' <- _pdbRead pdb (DUserTables usert) (RowKey "key1") >>= \case
     Nothing -> error "expected row"
     Just r -> pure r
-  liftIO $ assertEqual "user update should overwrite with new value" row2 row2'
+  assertEqual "user update should overwrite with new value" row2 row2'
 
   let
     ks = KeySet (S.fromList [PublicKeyText "skdjhfskj"]) KeysAll
     ksEnc = _encodeKeySet serialisePact_raw_spaninfo ks
   _ <- ignoreGas def $ _pdbWrite pdb Write DKeySets (KeySetName "ks1" Nothing) ks
-  ks' <- liftIO $ _pdbRead pdb DKeySets (KeySetName "ks1" Nothing) >>= \case
+  ks' <- _pdbRead pdb DKeySets (KeySetName "ks1" Nothing) >>= \case
     Nothing -> error "expected keyset"
     Just r -> pure r
-  liftIO $ assertEqual "keyset should be equal after storage/retrieval" ks ks'
+  assertEqual "keyset should be equal after storage/retrieval" ks ks'
 
 
   -- module
   let mn = ModuleName "test" Nothing
-  md <- liftIO loadModule
+  md <- loadModule
   let mdEnc = _encodeModuleData serialisePact_raw_spaninfo md
   ignoreGas def $ _pdbWrite pdb Write DModules mn md
 
-  md' <- liftIO $ _pdbRead pdb DModules mn >>= \case
+  md' <- _pdbRead pdb DModules mn >>= \case
     Nothing -> error "Expected module"
     Just r -> pure r
-  liftIO $ assertEqual "module should be identical to its saved/recalled value" md md'
+  assertEqual "module should be identical to its saved/recalled value" md md'
 
-  txs2 <- liftIO $ _pdbCommitTx pdb
-  liftIO $ flip (assertEqual "output of commit") txs2
-    [ TxLog (renderDomain DModules) "test" mdEnc
-    , TxLog (renderDomain DKeySets) "ks1" ksEnc
+  txs2 <- _pdbCommitTx pdb
+  flip (assertEqual "output of commit") txs2
+    [ TxLog "SYS:Modules" "test" mdEnc
+    , TxLog "SYS:KeySets" "ks1" ksEnc
     , TxLog "USER_someModule_user1" "key1" row2Enc
     , TxLog "USER_someModule_user1" "key1" rowEnc
     ]
 
   -- begin tx
-  _ <- liftIO $ do
+  _ <- do
     _ <- _pdbBeginTx pdb Transactional
     tids <- _pdbTxIds pdb usert t1
     assertEqual "user txids" [TxId 1] tids
@@ -112,14 +111,14 @@ runPactDbRegression pdbAction = testCase "PactDb persistence backend produces ex
     --   ]
 
   ignoreGas def $ _pdbWrite pdb Insert (DUserTables usert) (RowKey "key2") row
-  r1 <- liftIO $ _pdbRead pdb (DUserTables usert) (RowKey "key2") >>= \case
+  r1 <- _pdbRead pdb (DUserTables usert) (RowKey "key2") >>= \case
     Nothing -> error "expected row"
     Just r -> pure r
-  liftIO $ assertEqual "user insert key2 pre-rollback" row r1
+  assertEqual "user insert key2 pre-rollback" row r1
 
-  liftIO $ do
+  do
     rkeys <- _pdbKeys pdb (DUserTables usert)
-    liftIO $ assertEqual "keys pre-rollback [key1, key2]" [RowKey "key1", RowKey "key2"] rkeys
+    assertEqual "keys pre-rollback [key1, key2]" [RowKey "key1", RowKey "key2"] rkeys
 
     _pdbRollbackTx pdb
     r2 <- _pdbRead pdb (DUserTables usert) (RowKey "key2")
