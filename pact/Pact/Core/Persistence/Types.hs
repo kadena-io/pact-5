@@ -38,6 +38,7 @@ module Pact.Core.Persistence.Types
  , objectDataToRowData
  , rowDataToObjectData
  , renderDomain
+ , UserTableInfo(..)
  ) where
 
 import Control.Applicative((<|>))
@@ -261,6 +262,12 @@ instance Monoid (Loaded b i) where
 
 instance Default (Loaded b i) where
   def = Loaded mempty mempty Nothing mempty
+
+newtype UserTableInfo
+  = UserTableInfo ModuleName
+  deriving (Eq, Show)
+
+
 
 -- | Map the user's table name into a set of names suitable for
 --   storage in the persistence backend (prefix USER_ and the module name
