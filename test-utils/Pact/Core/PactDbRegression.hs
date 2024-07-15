@@ -88,8 +88,8 @@ runPactDbRegression pdbAction = testCase "PactDb persistence backend produces ex
 
   txs2 <- liftIO $ _pdbCommitTx pdb
   liftIO $ flip (assertEqual "output of commit") txs2
-    [ TxLog "SYS:MODULES" "test" mdEnc
-    , TxLog "SYS:KEYSETS" "ks1" ksEnc
+    [ TxLog (renderDomain DModules) "test" mdEnc
+    , TxLog (renderDomain DKeySets) "ks1" ksEnc
     , TxLog "USER_someModule_user1" "key1" row2Enc
     , TxLog "USER_someModule_user1" "key1" rowEnc
     ]

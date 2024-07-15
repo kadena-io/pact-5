@@ -373,7 +373,7 @@ mockPactDb serial = do
     case tableFromDomain domain pts of
       TFDSys ref -> do
         let encodedData = encode serial value
-        record pts (TxLog (T.toUpper (renderDomain domain)) (_unRender (renderKey rowkey)) encodedData)
+        record pts (TxLog (renderDomain domain) (_unRender (renderKey rowkey)) encodedData)
         modifyIORef' ref $ \(MockSysTable msys) ->
             MockSysTable (M.insert (renderKey rowkey) encodedData msys)
       TFDUser _ ->

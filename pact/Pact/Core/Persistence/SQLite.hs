@@ -106,10 +106,10 @@ fastNoJournalPragmas = [
 
 createSysTables :: SQL.Database -> IO StmtCache
 createSysTables db = do
-  ks <- mkTbl "SYS:KEYSETS"
-  mods <- mkTbl "SYS:MODULES"
-  pacts <- mkTbl "SYS:PACTS"
-  ns <- mkTbl "SYS:NAMESPACES"
+  ks <- mkTbl (renderDomain DKeySets)
+  mods <- mkTbl (renderDomain DModules)
+  pacts <- mkTbl (renderDomain DDefPacts)
+  ns <- mkTbl (renderDomain DNamespaces)
   pure $ StmtCache
     { _stmtNamespace = ns
     , _stmtKeyset = ks
@@ -320,7 +320,7 @@ write' serial db txId txLog stmtCache wt domain k v =
               let RowKey k' = k
               TxId i <- readIORef txId
               SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-              doWrite stmt (TxLog (toUserTable tbl) k' encoded:)
+              doWrite stmt (TxLog (renderDomain domain) k' encoded:)
 
       Just old -> do
         let
@@ -336,27 +336,27 @@ write' serial db txId txLog stmtCache wt domain k v =
               let RowKey k' = k
               TxId i <- readIORef txId
               SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-              doWrite stmt (TxLog (toUserTable tbl) k' encoded:)
+              doWrite stmt (TxLog (renderDomain domain) k' encoded:)
 
     DKeySets -> liftIO $ withStmt (_tblInsertOrUpdate . _stmtKeyset <$> readIORef stmtCache) $ \stmt -> do
       let encoded = _encodeKeySet serial v
       TxId i <- readIORef txId
       SQL.clearBindings stmt
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderKeySetName k), SQL.SQLBlob encoded]
-      doWrite stmt (TxLog "SYS:KEYSETS" (renderKeySetName k) encoded:)
+      doWrite stmt (TxLog (renderDomain domain) (renderKeySetName k) encoded:)
 
     DModules -> liftIO $ withStmt (_tblInsertOrUpdate . _stmtModules <$> readIORef stmtCache) $ \stmt -> do
       let encoded = _encodeModuleData serial v
       TxId i <- readIORef txId
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderModuleName k), SQL.SQLBlob encoded]
-      doWrite stmt (TxLog "SYS:MODULES" (renderModuleName k) encoded:)
+      doWrite stmt (TxLog (renderDomain domain) (renderModuleName k) encoded:)
 
     DDefPacts -> liftIO $ withStmt (_tblInsertOrUpdate . _stmtDefPact <$> readIORef stmtCache) $ \stmt -> do
        let encoded = _encodeDefPactExec serial v
            DefPactId k' = k
        TxId i <- readIORef txId
        SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-       doWrite stmt (TxLog "SYS:PACTS" k' encoded:)
+       doWrite stmt (TxLog (renderDomain domain) k' encoded:)
 
     DNamespaces ->
       liftIO $ withStmt (_tblInsertOrUpdate . _stmtNamespace <$> readIORef stmtCache) $ \stmt -> do
@@ -364,7 +364,7 @@ write' serial db txId txLog stmtCache wt domain k v =
           NamespaceName k' = k
       TxId i <- readIORef txId
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-      doWrite stmt  (TxLog "SYS:NAMESPACES" k' encoded:)
+      doWrite stmt  (TxLog (renderDomain domain) k' encoded:)
   where
     checkInsertOk ::  TableName -> RowKey -> IO (Maybe RowData)
     checkInsertOk tbl rk = do
