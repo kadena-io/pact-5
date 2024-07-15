@@ -18,10 +18,15 @@ module Pact.Core.PactValue
  , envMap
  , FQCapToken
  , pattern PInteger
+ , _PInteger
  , pattern PDecimal
+ , _PDecimal
  , pattern PString
+ , _PString
  , pattern PBool
+ , _PBool
  , pattern PUnit
+ , _PUnit
  , synthesizePvType
  ) where
 
@@ -67,18 +72,28 @@ makePrisms ''PactValue
 
 pattern PInteger :: Integer -> PactValue
 pattern PInteger i = PLiteral (LInteger i)
+_PInteger :: Prism' PactValue Integer
+_PInteger = _PLiteral . _LInteger
 
 pattern PDecimal :: Decimal -> PactValue
 pattern PDecimal d = PLiteral (LDecimal d)
+_PDecimal :: Prism' PactValue Decimal
+_PDecimal = _PLiteral . _LDecimal
 
 pattern PString :: Text -> PactValue
 pattern PString s = PLiteral (LString s)
+_PString :: Prism' PactValue Text
+_PString = _PLiteral . _LString
 
 pattern PBool :: Bool -> PactValue
 pattern PBool b = PLiteral (LBool b)
+_PBool :: Prism' PactValue Bool
+_PBool = _PLiteral . _LBool
 
 pattern PUnit :: PactValue
 pattern PUnit = PLiteral LUnit
+_PUnit :: Prism' PactValue ()
+_PUnit = _PLiteral . _LUnit
 
 type FQCapToken = CapToken FullyQualifiedName PactValue
 

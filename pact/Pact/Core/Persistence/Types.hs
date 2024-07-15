@@ -27,6 +27,7 @@ module Pact.Core.Persistence.Types
  , WriteType(..)
  , Purity(..)
  , RowData(..)
+ , _RowData
  , ExecutionMode(..)
  , mdModuleName
  , mdModuleHash
@@ -93,6 +94,15 @@ mdModuleHash f = \case
 newtype RowData
   = RowData { _unRowData :: Map Field PactValue }
   deriving (Eq, Show, NFData)
+
+makePrisms ''RowData
+
+type instance Index RowData = Field
+type instance IxValue RowData = PactValue
+instance Ixed RowData where
+  ix k = _RowData . ix k
+instance At RowData where
+  at k = _RowData . at k
 
 objectDataToRowData :: ObjectData PactValue -> RowData
 objectDataToRowData (ObjectData obj) = RowData obj
