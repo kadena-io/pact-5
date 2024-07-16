@@ -1,8 +1,9 @@
 ## define-keyset
 
 Use `define-keyset` to define a keyset with the specified `name` and `keyset` guard.
-I you don't specify a keyset guard, the functions reads the specified keyset `name` from the message payload to define its keyset guard, which  is similar to using the `read-keyset` function. 
-If the keyset `name` already exists, the existing keyset is enforced before updating to the new value.
+
+If you don't specify a keyset guard, the functions reads the specified keyset `name` from the message payload to define its keyset guard, which  is similar to using the `read-keyset` function. 
+If the keyset `name` already exists, the existing keyset guard is enforced before updating to the new value.
 
 ### Basic syntax
 
