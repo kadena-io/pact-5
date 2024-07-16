@@ -40,7 +40,7 @@
           pact-tng =
             final.haskell-nix.project' {
               src = ./.;
-              compiler-nix-name = "ghc964";
+              compiler-nix-name = "ghc910";
               shell.tools = {
                 cabal = {};
                 haskell-language-server = {};
