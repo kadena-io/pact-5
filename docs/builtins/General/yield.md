@@ -18,7 +18,7 @@ Use the following arguments to specify the object and, optionally, the target ch
 | Argument | Type | Description |
 | --- | --- | --- |
 | `object` | object | Specifies the object to be yielded for use with 'resume'. |
-| `target-chain` | string | (Optional) Specifies the chain ID on which the subsequent step should execute. |
+| `target-chain` | string | Specifies the chain ID on which the subsequent step should execute (optional). |
 
 ### Return value
 

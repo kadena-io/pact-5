@@ -1,30 +1,49 @@
 ## create-user-guard
-Use `create-user-guard` to define a custom guard `CLOSURE` whose arguments are strictly evaluated at definition time and supplied to the indicated function at enforcement time.
+
+Use `create-user-guard` to define a custom guard `closure` whose arguments are strictly evaluated at definition time and supplied to the indicated function at enforcement time.
 
 ### Basic syntax
 
-To define a custom guard `CLOSURE` for use in Pact, use the following syntax:
+To define a custom guard `closure` for use in Pact, use the following syntax:
 
-`(create-user-guard CLOSURE)`
+```pact
+(create-user-guard closure)
+```
 
 ### Arguments
 
-Use the following argument to specify the `CLOSURE` for the `create-user-guard` Pact function.
+Use the following argument to specify the `closure` for the `create-user-guard` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `CLOSURE` | `closure` | Specifies the custom guard closure to define. The closure is a function that takes no arguments and returns a boolean value. |
+| `closure` | closure | Specifies the custom guard closure to define. The closure is a function that takes no arguments and returns a boolean value. |
 
 ### Return values
 
-The `create-user-guard` function returns a guard that utilizes the specified custom `CLOSURE`.
+The `create-user-guard` function returns a guard that uses the specified custom `closure` function that returns a boolean value.
 
 ### Example
 
-The following example demonstrates the `create-user-guard` function:
+The following example demonstrates how to use the `create-user-guard` function to obtain a keyset, then use the keyset as a custom guard closure function:
 
 ```pact
 (create-user-guard (read-keyset 'my-keyset))
 ```
 
-In this example, `(read-keyset 'my-keyset)` is used to obtain a keyset, and this keyset is then used as a custom guard closure in `create-user-guard`. The closure captures the keyset at definition time, and it will be supplied to the indicated function at enforcement time. This allows for custom user-defined guards based on specific keysets or conditions.
+In this example, `(read-keyset 'my-keyset)` is used as the closure function to capture a keyset to use when the user guard is enforced. 
+This code allows you to define custom user guards based on specific keysets or conditions.
+
+The following example defines a user guard for the `enforce-fungible-transfer` function that must evaluate to true to allow a fungible transfer:
+
+```pact
+(defun escrow-guard(sale-id:string)
+   (util.guards1.guard-any [
+      (create-capability-guard (REFUND_CAP sale-id))
+      (create-user-guard (enforce-fungible-transfer sale-id))
+   ])
+)
+
+(defun enforce-fungible-transfer:bool (sale-id:string)
+   (require-capability (FUNGIBLE-TRANSFER-CALL sale-id) )
+)
+```

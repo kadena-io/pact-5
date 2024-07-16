@@ -1,31 +1,32 @@
 ## txids
-The `txids` function returns all transaction IDs (txids) greater than or equal to a specified txid in a given table.
+
+Ue `txids` to return all of the transaction identifiers greater than or equal to a specified `txid` in a given table.
 
 ### Basic syntax
 
-To retrieve all txid values greater than or equal to a specified txid in a table, use the following syntax:
+To retrieve all transaction identifier values greater than or equal to a specified `txid` in a table, use the following syntax:
 
-`(txids TABLE TXID)`
+```pact
+(txids table txid)
+```
 
 ### Arguments
 
-Use the following arguments to specify the table and txid for retrieval using the `txids` Pact function.
+Use the following arguments to specify the table and transaction identifier for retrieval using the `txids` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `TABLE` | `table:<{row}>` | Specifies the table from which to retrieve txids. |
-| `TXID` | `integer` | Specifies the txid value to compare against. |
+| `table` | table:<{row}> | Specifies the table from which to retrieve transaction identifiers. |
+| `txid` | integer | Specifies the transaction identifier value to compare against. |
 
 ### Return value
 
-The `txids` function returns a list of transaction IDs (txids) greater than or equal to the specified txid in the table.
+The `txids` function returns a list of transaction identifiers greater than or equal to the specified `txid` in the specified table.
 
 ### Examples
 
-The following example demonstrates the usage of the `txids` function within a Pact script. It retrieves all txid values greater than or equal to `123849535` in the `accounts` table:
+The following example demonstrates how to use the `txids` function to retrieve all transaction identifier values greater than or equal to `123849535` in the `accounts` table:
 
 ```pact
 (txids accounts 123849535)
 ```
-
-This example illustrates how to use the `txids` function to retrieve transaction IDs (txids) from a table in Pact based on a specified txid.

@@ -1,11 +1,17 @@
 ## fold
-Use `fold` to iteratively reduce a list by applying a function `APP` to the last result and each element, starting with an initial value `INIT`.
+
+Use `fold` to iteratively reduce a list by applying the `app` function to the last result for each element in the list, starting with the specified `init` initial value.
+
+You can use any data type for the `value` argument as long as the first `oper1` functions can take that same data type.
+By convention, data type notation like <a> and <b> are used to represent  type-bound parameters like the `init` and `list` arguments in this function.
 
 ### Basic syntax
 
 To iteratively reduce a list by applying a function to each element, starting with an initial value, use the following syntax:
 
-`(fold APP INIT LIST)`
+```pact
+(fold app init [list])
+```
 
 ### Arguments
 
@@ -13,9 +19,9 @@ Use the following arguments to specify the function, initial value, and list for
 
 | Argument | Type       | Description                                       |
 |----------|------------|---------------------------------------------------|
-| `APP`      | `x:<a> y:<b> -> <a>` | Specifies the function to apply to each element and the last result. |
-| `INIT`     | `<a>`       | Specifies the initial value for the reduction.    |
-| `LIST`     | `[<b>]`     | Specifies the list to iterate over.               |
+| `app` | function x:<a> y:<b> -> <a>` | Specifies the function to apply to each element and the last result. |
+| `init` | <a> | Specifies the initial value for the reduction. |
+| `list` | [<b>] | Specifies the list to iterate over.               |
 
 ### Return values
 
@@ -30,7 +36,8 @@ pact>(fold (+) 0 [100 10 5])
 115
 ```
 
-In this example, `(+)` is used as the function to apply, which is addition in this case. The `fold` function starts with an initial value of `0` and iteratively adds each element of the list `[100 10 5]` to the previous result. Here's the breakdown:
+In this example, `(+)` is used as the function to apply, which is addition in this case. 
+The `fold` function starts with an initial value of `0` and iteratively adds each element of the list `[100 10 5]` to the previous result. Here's the breakdown:
 
 - Initial value: `0`
 - First iteration: `0 + 100 = 100`

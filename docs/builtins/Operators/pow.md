@@ -1,11 +1,14 @@
-## ^
-The `^` function raises the first argument `x` to the power of the second argument `y`.
+## power-of (^)
+
+Use `^` to raises the `oper1` argument to the power of the `oper2` argument.
 
 ### Basic syntax
 
-To raise `x` to the power of `y`, use the following syntax:
+To raise `oper1` to the power of `oper2`, use the following syntax:
 
-`(^ x y)`
+```pact
+(^ oper1 oper2)
+```
 
 ### Arguments
 
@@ -13,20 +16,18 @@ Use the following arguments to specify the base and exponent for raising to a po
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `x` | `<a[integer,decimal]>` | Specifies the base value. |
-| `y` | `<a[integer,decimal]>` | Specifies the exponent value. |
+| `oper1` | integer or decimal | Specifies the base value. |
+| `oper2` | integer or decimal | Specifies the exponent value. |
 
 ### Return value
 
-The `^` function returns the result of raising `x` to the power of `y`.
+The `^` function returns the result of raising `oper1` to the power of `oper2`.
 
 ### Examples
 
-The following example demonstrates the usage of the `^` function within a Pact REPL. It raises `2` to the power of `3`:
+The following example demonstrates how to use the `^` function to raise `2` to the power of `3` in a Pact REPL: 
 
 ```pact
-pact>(^ 2 3)
+pact> (^ 2 3)
 8
 ```
-
-This example illustrates how to use the `^` function to perform exponentiation in Pact, enabling mathematical operations involving powers.

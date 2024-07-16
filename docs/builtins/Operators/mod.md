@@ -1,12 +1,14 @@
 ## mod
 
-Use `mod` to compute the remainder of `X` divided by `Y`.
+Use `mod` to compute the remainder of `oper1` divided by `oper2`.
 
 ### Basic syntax
 
-To compute the remainder of `X` divided by `Y`, use the following syntax:
+To compute the remainder of `oper1` divided by `oper2`, use the following syntax:
 
-`(mod X Y)`
+```
+(mod oper1 oper2)
+```
 
 ### Arguments
 
@@ -14,20 +16,18 @@ Use the following arguments to specify the integers for which you want to comput
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `X` | `integer` | Specifies the dividend. |
-| `Y` | `integer` | Specifies the divisor. |
+| `oper1` | integer | Specifies the dividend. |
+| `oper2` | integer | Specifies the divisor. |
 
 ### Return value
 
-The `mod` function returns the remainder of the division of `X` by `Y`.
+The `mod` function returns the remainder of the division of `oper1` by `oper2`.
 
 ### Examples
 
-The following example demonstrates the use of `mod` in the Pact REPL:
+The following example demonstrates how to use the `mod` function to compute the remainder when 13 is divided by 8:
 
 ```pact
 pact>(mod 13 8)
 5
 ```
-
-In this example, the remainder of 13 divided by 8 is computed, resulting in 5.

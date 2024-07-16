@@ -9,7 +9,7 @@ Because `sort` is an overloaded function, there are two ways to use it.
 To sort a list of primitive values, use the following syntax:
 
 ```pact
-(sort [primatives])
+(sort [primitives])
 ```
 
 To sort a list of objects based on specific fields, use the following syntax:

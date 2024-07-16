@@ -4,7 +4,11 @@ Use `keys` to retrieve all the keys in a specified table.
 
 ### Basic syntax
 
-`(keys table)`
+To retrieve all of the keys for a specified `table`, use the following syntax:
+
+```pact
+(keys table)
+```
 
 ### Arguments
 
@@ -12,7 +16,7 @@ Use the following argument to specify the table from which to retrieve keys usin
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `table` | `table<{row}>` | Specifies the table from which to retrieve keys. The table schema is `table:<{row}>`, where `row` represents the structure of each row in the table. |
+| `table` | table:<{row}> | Specifies the table from which to retrieve keys. In the table schema, a `row` represents the structure of each row in the table. |
 
 ### Return values
 
@@ -20,7 +24,7 @@ The `keys` function returns an array of strings, where each string represents a 
 
 ### Examples
 
-Suppose we have a table named `accounts` with the following schema:
+The following example demonstrates defining a table schema for an `accounts` table that stores information about bank accounts, including the balance and owner of each account:
 
 ```pact
 (defschema account
@@ -30,11 +34,9 @@ Suppose we have a table named `accounts` with the following schema:
 (deftable accounts:{account})
 ```
 
-The `accounts` table stores information about bank accounts, including the balance and owner of each account.
-
-The following example retrieves all the keys from the `accounts` table:
+You can then retrieve all of the the keys from the `accounts` table using the `keys` function:
 
 ```pact
-pact>(keys accounts)
+pact> (keys accounts)
 []
 ```

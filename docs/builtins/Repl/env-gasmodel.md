@@ -1,8 +1,14 @@
 ## env-gasmodel
 
-Use `env-gasmodel` to update or query the current gas model.
+Use `env-gasmodel` to query or update the current gas model.
 
 ### Basic syntax
+
+To query the current gas model, use the following syntax:
+
+```pact
+(env-gasmodel)
+```
 
 To update the gas model to a table-based cost model, use the following syntax:
 
@@ -16,19 +22,15 @@ To update the gas model to a fixed-rate model with a specific rate, use the foll
 (env-gasmodel model rate)
 ```
 
-To query the current gas model, use the following syntax:
-
-```pact
-(env-gasmodel)
-```
 
 ### Arguments
 
 Use the following arguments when using the `env-gasmodel` Pact function.
 
-| Argument | Type    | Description                                                                  |
-|----------|---------|------------------------------------------------------------------------------|
-| `model`    | `string`  | Specifies the gas model to set. Supported values are "table" and "fixed".    |
+| Argument | Type | Description |
+| -------- |----- |------------ |
+| `model` | string | Specifies the gas model to set. The supported gas models are `table` to use a table-based gas model and `fixed` to use a fixed rate gas model.|
+| `rate` | integer | Specifies the fixed rate or every operation. This argument is required if you set the `model` argument to use the `fixed` gas model.
 
 ### Return value
 
@@ -38,16 +40,23 @@ When called without arguments, `env-gasmodel` returns a string describing the cu
 
 ### Examples
 
-The following examples demonstrate updating and querying the gas model within a Pact REPL:
+The following example demonstrates how to use the `env-gasmodel` function to query the current gas model:
 
-1. Querying the current gas model:
-```bash
+```pact
 pact> (env-gasmodel)
-"Current gas model is 'unitGasModel': GasModel with constant cost MilliGas 0"
+"Current gas model is 'fixed 1': constant rate gas model with fixed rate 1"
 ```
 
-2. Updating the gas model to a table-based cost model:
-```bash
-pact> (env-gasmodel 'table)
+The following example demonstrates how to use the `env-gasmodel` function to update the current gas model to use a table-based cost model:
+
+```pact
+pact> (env-gasmodel "table")
 "Set gas model to table-based cost model"
+```
+
+In the following example, the env-gasmodel function updates the gas model to use a fixed rate of two:
+
+```pact
+pact> (env-gasmodel "fixed" 2)
+"Set gas model to constant rate gas model with fixed rate 2"
 ```

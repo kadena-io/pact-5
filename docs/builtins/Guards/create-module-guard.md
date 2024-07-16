@@ -1,30 +1,35 @@
 ## create-module-guard
-Use `create-module-guard` to define a guard by `NAME` that enforces the current module admin predicate.
+
+Use `create-module-guard` to create a predicate function with the specified `name` that ensures that specific conditions are true for the current module.
+
+Module guards are typically used to enable a module to perform administrative operations independently outside of the module itself, for example, to own coins in an external ledger, or to perform administrative operations internally on its database, for example, to own and manage certain assets.
 
 ### Basic syntax
 
-To define a guard by `NAME` that enforces the current module admin predicate, use the following syntax:
+To define a predicate function `name` that guards administrative activity for the current module, use the following syntax:
 
-`(create-module-guard NAME)`
+```pact
+(create-module-guard name)
+```
 
 ### Arguments
 
-Use the following argument to specify the `NAME` for the `create-module-guard` Pact function.
+Use the following argument to specify the `name` for the `create-module-guard` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `NAME` | `string` | Specifies the name of the guard to create, enforcing the current module admin predicate. |
+| `name` | string | Specifies the name of the predicate function that guards administrative activity for the current module. |
 
 ### Return values
 
-The `create-module-guard` function returns a guard that enforces the current module admin predicate, identified by the specified `NAME`.
+The `create-module-guard` function returns a guard with the specified `name`that enables the current module to perform administrative operations.
 
 ### Example
 
-The following example demonstrates the `create-module-guard` function:
+The following example demonstrates how to use the `create-module-guard` function to define a guard named `"module-admin-guard"` for the current module:
 
 ```pact
 (create-module-guard "module-admin-guard")
 ```
 
-In this example, `(create-module-guard "module-admin-guard")` is used to define a guard named `"module-admin-guard"` that enforces the current module admin predicate. This guard can then be used to enforce module admin privileges in Pact code.
+If the evaluation of the `module-admin-guard` returns true, the current module is granted administrative privileges.
