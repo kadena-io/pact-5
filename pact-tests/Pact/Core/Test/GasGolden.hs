@@ -27,7 +27,6 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 import Data.List (sort)
-import Pact.Core.Gas.TableGasModel
 import Control.Lens
 
 type InterpretPact = SourceCode -> (ReplCompileValue -> ReplM ReplCoreBuiltin ()) -> ReplM ReplCoreBuiltin [ReplCompileValue]
@@ -112,7 +111,7 @@ runGasTest file interpret = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
   gasLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replBuiltinMap
-  let ee' = ee & eeGasEnv . geGasModel .~ replTableGasModel (maxBound :: MilliGasLimit)
+  let ee' = ee & eeGasEnv . geGasModel .~ replTableGasModel (Just (maxBound :: MilliGasLimit))
       gasRef = ee' ^. eeGasEnv . geGasRef
   let source = SourceCode file src
   let rstate = ReplState

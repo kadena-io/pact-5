@@ -33,8 +33,6 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , getDefPactId
  , tvToDomain
  , unsafeUpdateManagedParam
- , chargeFlatNativeGas
- , chargeGasArgs
  , getGas
  , putGas
  , litCmpGassed
@@ -49,18 +47,27 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , emitCapability
  , fqctToPactEvent
  , emitEventUnsafe
+ , readKeyset'
+ , renderPactValue
+ , createPrincipalForGuard
+ , createEnumerateList
  ) where
 
-import Control.Lens
+import Control.Lens hiding (from, to)
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.IORef
 import Data.Monoid
+import Data.Vector(Vector)
 import Data.Foldable(find, toList)
-import Data.Maybe(listToMaybe)
+import Data.Maybe(listToMaybe, maybeToList)
 import Data.Text(Text)
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified Data.Map.Strict as M
+import qualified Data.Vector as V
 import qualified Data.Set as S
+import qualified Data.ByteString as BS
 
 import Pact.Core.Names
 import Pact.Core.PactValue
@@ -73,12 +80,15 @@ import Pact.Core.Literal
 import Pact.Core.Persistence
 import Pact.Core.Environment
 import Pact.Core.DefPacts.Types
-import Pact.Core.Gas.Types
-import qualified Pact.Core.Gas.Utils as Gas.Utils
+import Pact.Core.Gas
+
 import Pact.Core.Guards
 import Pact.Core.Capabilities
 import Pact.Core.Hash
-import Control.Monad.Except
+import Pact.Core.SizeOf
+import Pact.Core.StableEncoding
+import qualified Pact.Core.Pretty as Pretty
+import qualified Pact.Core.Principal as Pr
 
 emitReservedEvent :: Text -> [PactValue] -> ModuleHash -> EvalM e b i ()
 emitReservedEvent name params mhash = do
@@ -261,16 +271,7 @@ tvToDomain :: TableValue -> Domain RowKey RowData b i
 tvToDomain tv =
   DUserTables (_tvName tv)
 
-chargeGasArgs :: i -> GasArgs b -> EvalM e b i ()
-chargeGasArgs info ga = do
-  stack <- use esStack
-  gasEnv <- viewEvalEnv eeGasEnv
-  either throwError return =<<
-    liftIO (Gas.Utils.chargeGasArgsM gasEnv info stack ga)
 
-chargeFlatNativeGas :: i -> b -> EvalM e b i ()
-chargeFlatNativeGas info nativeArg =
-  chargeGasArgs info (GNative nativeArg)
 
 getGas :: EvalM e b i MilliGas
 getGas =
@@ -373,3 +374,117 @@ anyCapabilityBeingEvaluated
 anyCapabilityBeingEvaluated caps = do
   capsBeingEvaluated <- use (esCaps . csCapsBeingEvaluated)
   return $! any (`S.member` caps) capsBeingEvaluated
+
+readKeyset' :: i -> Text -> EvalM e b i (Maybe KeySet)
+readKeyset' info ksn = do
+  viewEvalEnv eeMsgBody >>= \case
+    PObject envData -> do
+      chargeGasArgs info $ GObjOp $ ObjOpLookup ksn $ M.size envData
+      case M.lookup (Field ksn) envData of
+        Just (PGuard (GKeyset ks)) -> pure (Just ks)
+        Just (PObject dat) -> do
+          chargeGasArgs info $ GObjOp $ ObjOpLookup "keys" objSize
+          chargeGasArgs info $ GObjOp $ ObjOpLookup "pred" objSize
+          case parseObj dat of
+            Nothing -> pure Nothing
+            Just (ks, p) -> do
+              chargeGasArgs info $ GStrOp $ StrOpParse $ T.length p
+              pure $ KeySet ks <$> readPredicate p
+          where
+          objSize = M.size dat
+          parseObj d = do
+            keys <- M.lookup (Field "keys") d
+            keyText <- preview _PList keys >>= traverse (fmap PublicKeyText . preview (_PLiteral . _LString))
+            predRaw <- M.lookup (Field "pred") d
+            p <- preview (_PLiteral . _LString) predRaw
+            let ks = S.fromList (V.toList keyText)
+            pure (ks, p)
+          readPredicate = \case
+            "keys-any" -> pure KeysAny
+            "keys-2" -> pure Keys2
+            "keys-all" -> pure KeysAll
+            n | Just pn <- parseParsedTyName n -> pure (CustomPredicate pn)
+            _ -> Nothing
+        Just (PList li) ->
+          case parseKeyList li of
+            Just ks -> pure (Just (KeySet ks KeysAll))
+            Nothing -> pure Nothing
+          where
+          parseKeyList d =
+            S.fromList . V.toList . fmap PublicKeyText <$> traverse (preview (_PLiteral . _LString)) d
+        _ -> pure Nothing
+    _ -> pure Nothing
+
+renderPactValue :: i -> PactValue -> EvalM e b i Text
+renderPactValue info pv = do
+  sz <- sizeOf info SizeOfV0 pv
+  chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral sz
+  pure $ Pretty.renderCompactText pv
+
+
+createPrincipalForGuard
+  :: i
+  -> Guard QualifiedName PactValue
+  -> EvalM e b i Pr.Principal
+createPrincipalForGuard info = \case
+  GKeyset (KeySet ks pf) -> case (toList ks, pf) of
+    ([k], KeysAll)
+      | ed25519HexFormat k -> Pr.K k <$ chargeGas 1_000
+    (l, _) -> do
+      h <- mkHash $ map (T.encodeUtf8 . _pubKey) l
+      case pf of
+        CustomPredicate (TQN (QualifiedName n (ModuleName mn mns))) -> do
+          let totalLength = T.length n + T.length mn + maybe 0 (T.length . _namespaceName) mns
+          chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength totalLength
+        _ -> pure ()
+      pure $ Pr.W (hashToText h) (predicateToText pf)
+  GKeySetRef ksn ->
+    Pr.R ksn <$ chargeGas 1_000
+  GModuleGuard (ModuleGuard mn n) ->
+    Pr.M mn n <$ chargeGas 1_000
+  GUserGuard (UserGuard f args) -> do
+    h <- mkHash $ map encodeStable args
+    pure $ Pr.U (renderQualName f) (hashToText h)
+    -- TODO orig pact gets here ^^^^ a Name
+    -- which can be any of QualifiedName/BareName/DynamicName/FQN,
+    -- and uses the rendered string here. Need to double-check equivalence.
+  GCapabilityGuard (CapabilityGuard f args pid) -> do
+    let args' = map encodeStable args
+        f' = T.encodeUtf8 $ renderQualName f
+        pid' = T.encodeUtf8 . renderDefPactId <$> pid
+    h <- mkHash $ f' : args' ++ maybeToList pid'
+    pure $ Pr.C $ hashToText h
+  GDefPactGuard (DefPactGuard dpid name) -> Pr.P dpid name <$ chargeGas 1_000
+  where
+    chargeGas mg = chargeGasArgs info (GAConstant (MilliGas mg))
+    mkHash bss = do
+      let bs = mconcat bss
+          gasChargeAmt = 1_000 + fromIntegral (BS.length bs `quot` 64) * 1_000
+      chargeGas gasChargeAmt
+      pure $ pactHash bs
+
+createEnumerateList
+  :: i
+  -- ^ info
+  -> Integer
+  -- ^ from
+  -> Integer
+  -- ^ to
+  -> Integer
+  -- ^ Step
+  -> EvalM e b i (Vector Integer)
+createEnumerateList info from to inc
+  | from == to = do
+    fromSize <- sizeOf info SizeOfV0 from
+    chargeGasArgs info (GMakeList 1 fromSize)
+    pure (V.singleton from)
+  | inc == 0 = pure mempty -- note: covered by the flat cost
+  | from < to, from + inc < from =
+    throwExecutionError info (EnumerationError "enumerate: increment diverges below from interval bounds.")
+  | from > to, from + inc > from =
+    throwExecutionError info (EnumerationError "enumerate: increment diverges above from interval bounds.")
+  | otherwise = do
+    let len = succ (abs (from - to) `div` abs inc)
+    listSize <- sizeOf info SizeOfV0 (max (abs from) (abs to))
+    chargeGasArgs info (GMakeList len listSize)
+    pure $ V.enumFromStepN from inc (fromIntegral len)

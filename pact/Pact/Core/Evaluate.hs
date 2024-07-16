@@ -150,10 +150,9 @@ setupEvalEnv
   -> IO (EvalEnv CoreBuiltin a)
 setupEvalEnv pdb mode msgData gasModel' np spv pd efs = do
   gasRef <- newIORef mempty
-  gasLogRef <- newIORef Nothing
   let gasEnv = GasEnv
         { _geGasRef = gasRef
-        , _geGasLogRef = gasLogRef
+        , _geGasLog = Nothing
         , _geGasModel = gasModel'
         }
   pure $ EvalEnv

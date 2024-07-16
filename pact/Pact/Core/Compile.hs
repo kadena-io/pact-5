@@ -42,7 +42,6 @@ import Pact.Core.Imports
 import Pact.Core.Namespace
 import Pact.Core.PactValue
 import Pact.Core.Hash
-import Pact.Core.IR.Eval.Runtime
 import Pact.Core.Interpreter
 
 import qualified Pact.Core.IR.ModuleHashing as MHash

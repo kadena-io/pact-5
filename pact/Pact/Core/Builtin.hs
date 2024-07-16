@@ -950,3 +950,4 @@ instance (Pretty b) => Pretty (ReplBuiltin b) where
     RBuiltinRepl t -> pretty (replBuiltinsToText t)
 
 deriveConstrInfo ''CoreBuiltin
+deriveConstrInfo ''ReplOnlyBuiltin

@@ -43,8 +43,6 @@ import Data.List.NonEmpty(NonEmpty(..))
 import Data.Bits
 import Data.Either(isLeft, isRight)
 import Data.Decimal(roundTo', Decimal, DecimalRaw(..))
-import Data.Vector(Vector)
-import Data.Maybe(maybeToList)
 import Data.Attoparsec.Text(parseOnly)
 import Numeric(showIntAtBase)
 import qualified Data.RAList as RAList
@@ -105,7 +103,6 @@ import Pact.Core.Crypto.Hash.Poseidon
 import Pact.Core.SizeOf
 
 
-import qualified Pact.Core.Pretty as Pretty
 import qualified Pact.Core.Principal as Pr
 import qualified Pact.Core.Trans.TOps as Musl
 
@@ -1670,11 +1667,6 @@ rawSqrt info b _env = \case
     return (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
 
-renderPactValue :: i -> PactValue -> EvalM e b i T.Text
-renderPactValue info pv = do
-  sz <- sizeOf info SizeOfV0 pv
-  chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral sz
-  pure $ Pretty.renderCompactText pv
 
 -- Todo: fix all show instances
 rawShow :: (IsBuiltin b) => NativeFunction e b i
@@ -1939,30 +1931,6 @@ coreEnumerate info b _env = \case
     return (VList (PLiteral . LInteger <$> v))
   args -> argsError info b args
 
-createEnumerateList
-  :: i
-  -> Integer
-  -- ^ from
-  -> Integer
-  -- ^ to
-  -> Integer
-  -- ^ Step
-  -> EvalM e b i (Vector Integer)
-createEnumerateList info from to inc
-  | from == to = do
-    fromSize <- sizeOf info SizeOfV0 from
-    chargeGasArgs info (GMakeList 1 fromSize)
-    pure (V.singleton from)
-  | inc == 0 = pure mempty -- note: covered by the flat cost
-  | from < to, from + inc < from =
-    throwExecutionError info (EnumerationError "enumerate: increment diverges below from interval bounds.")
-  | from > to, from + inc > from =
-    throwExecutionError info (EnumerationError "enumerate: increment diverges above from interval bounds.")
-  | otherwise = do
-    let len = succ (abs (from - to) `div` abs inc)
-    listSize <- sizeOf info SizeOfV0 (max (abs from) (abs to))
-    chargeGasArgs info (GMakeList len listSize)
-    pure $ V.enumFromStepN from inc (fromIntegral len)
 
 coreEnumerateStepN :: (IsBuiltin b) => NativeFunction e b i
 coreEnumerateStepN info b _env = \case
@@ -2259,45 +2227,6 @@ coreReadString info b _env = \case
       _ -> throwReadError info b
   args -> argsError info b args
 
-readKeyset' :: i -> T.Text -> EvalM e b i (Maybe KeySet)
-readKeyset' info ksn = do
-  viewEvalEnv eeMsgBody >>= \case
-    PObject envData -> do
-      chargeGasArgs info $ GObjOp $ ObjOpLookup ksn $ M.size envData
-      case M.lookup (Field ksn) envData of
-        Just (PGuard (GKeyset ks)) -> pure (Just ks)
-        Just (PObject dat) -> do
-          let objSize = M.size dat
-          chargeGasArgs info $ GObjOp $ ObjOpLookup "keys" objSize
-          chargeGasArgs info $ GObjOp $ ObjOpLookup "pred" objSize
-          case parseObj dat of
-            Nothing -> pure Nothing
-            Just (ks, p) -> do
-              chargeGasArgs info $ GStrOp $ StrOpParse $ T.length p
-              pure $ KeySet ks <$> readPredicate p
-          where
-          parseObj d = do
-            keys <- M.lookup (Field "keys") d
-            keyText <- preview _PList keys >>= traverse (fmap PublicKeyText . preview (_PLiteral . _LString))
-            predRaw <- M.lookup (Field "pred") d
-            p <- preview (_PLiteral . _LString) predRaw
-            let ks = S.fromList (V.toList keyText)
-            pure (ks, p)
-          readPredicate = \case
-            "keys-any" -> pure KeysAny
-            "keys-2" -> pure Keys2
-            "keys-all" -> pure KeysAll
-            n | Just pn <- parseParsedTyName n -> pure (CustomPredicate pn)
-            _ -> Nothing
-        Just (PList li) ->
-          case parseKeyList li of
-            Just ks -> pure (Just (KeySet ks KeysAll))
-            Nothing -> pure Nothing
-          where
-          parseKeyList d =
-            S.fromList . V.toList . fmap PublicKeyText <$> traverse (preview (_PLiteral . _LString)) d
-        _ -> pure Nothing
-    _ -> pure Nothing
 
 
 coreReadKeyset :: (IsBuiltin b) => NativeFunction e b i
@@ -2954,45 +2883,6 @@ coreCompose info b _env = \case
     -- applyLam clo1 [v] cont' handler
   args -> argsError info b args
 
-createPrincipalForGuard :: i -> Guard QualifiedName PactValue -> EvalM e b i (Pr.Principal)
-createPrincipalForGuard info = \case
-  GKeyset (KeySet ks pf) -> case (toList ks, pf) of
-    ([k], KeysAll)
-      | ed25519HexFormat k -> Pr.K k <$ chargeGas 1_000
-    (l, _) -> do
-      h <- mkHash $ map (T.encodeUtf8 . _pubKey) l
-      case pf of
-        CustomPredicate (TQN (QualifiedName n (ModuleName mn mns))) -> do
-          let totalLength = T.length n + T.length mn + maybe 0 (T.length . _namespaceName) mns
-          chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength totalLength
-        _ -> pure ()
-      pure $ Pr.W (hashToText h) (predicateToText pf)
-  GKeySetRef ksn ->
-    Pr.R ksn <$ chargeGas 1_000
-  GModuleGuard (ModuleGuard mn n) ->
-    Pr.M mn n <$ chargeGas 1_000
-  GUserGuard (UserGuard f args) -> do
-    h <- mkHash $ map encodeStable args
-    pure $ Pr.U (renderQualName f) (hashToText h)
-    -- TODO orig pact gets here ^^^^ a Name
-    -- which can be any of QualifiedName/BareName/DynamicName/FQN,
-    -- and uses the rendered string here. Need to double-check equivalence.
-  GCapabilityGuard (CapabilityGuard f args pid) -> do
-    let args' = map encodeStable args
-        f' = T.encodeUtf8 $ renderQualName f
-        pid' = T.encodeUtf8 . renderDefPactId <$> pid
-    h <- mkHash $ f' : args' ++ maybeToList pid'
-    pure $ Pr.C $ hashToText h
-  GDefPactGuard (DefPactGuard dpid name) -> Pr.P dpid name <$ chargeGas 1_000
-  where
-    chargeGas mg = chargeGasArgs info (GAConstant (MilliGas mg))
-    mkHash bss = do
-      let bs = mconcat bss
-          gasChargeAmt = 1_000 + fromIntegral (BS.length bs `quot` 64) * 1_000
-      chargeGas gasChargeAmt
-      pure $ pactHash bs
-
-
 coreCreatePrincipal :: (IsBuiltin b) => NativeFunction e b i
 coreCreatePrincipal info b _env = \case
   [VGuard g] -> do
@@ -3337,7 +3227,7 @@ coreHyperlaneDecodeTokenMessage info b _env = \case
   [VString s] -> do
     chargeGasArgs info $ GHyperlaneEncodeDecodeTokenMessage (T.length s)
     case decodeBase64UrlUnpadded (T.encodeUtf8 s) of
-      Left _e -> throwExecutionError info $ HyperlaneDecodeError HyperlaneDecodeErrorBase64 
+      Left _e -> throwExecutionError info $ HyperlaneDecodeError HyperlaneDecodeErrorBase64
       Right bytes -> case Bin.runGetOrFail (unpackTokenMessageERC20 <* eof) (BS.fromStrict bytes) of
         Left (_, _, e) | "TokenMessage" `L.isPrefixOf` e -> do
           throwExecutionError info $ HyperlaneDecodeError $ HyperlaneDecodeErrorInternal e

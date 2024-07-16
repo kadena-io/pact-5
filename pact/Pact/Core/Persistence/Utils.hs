@@ -1,10 +1,12 @@
 {-# LANGUAGE TypeApplications #-}
+
 module Pact.Core.Persistence.Utils
   ( evalWrite
   , evalCreateUserTable
   , dbOpDisallowed
   , liftGasM
   , ignoreGas
+  , chargeGasM
   ) where
 
 import Control.Lens
@@ -16,7 +18,7 @@ import Pact.Core.Environment
 import Pact.Core.Errors
 import Pact.Core.Names
 import Pact.Core.Persistence.Types
-import Pact.Core.Gas.Types
+import Pact.Core.Gas
 import Control.Monad.Except
 
 
@@ -28,6 +30,11 @@ evalCreateUserTable info pdb tn = liftGasM info $ _pdbCreateUserTable pdb tn
 
 dbOpDisallowed :: MonadIO m => m a
 dbOpDisallowed = liftIO $ throwIO OpDisallowed
+
+chargeGasM :: GasArgs b -> GasM b i ()
+chargeGasM gasArgs = do
+  (gasEnv, info, stack) <- ask
+  either throwError return =<< liftIO (chargeGasArgsM gasEnv info stack gasArgs)
 
 -- | A utility function that lifts a `GasM` action into a `MonadEval` action.
 liftGasM :: i -> GasM b i a -> EvalM e b i a
@@ -47,11 +54,10 @@ ignoreGas
   -> IO a
 ignoreGas info m = do
   gasRef <- newIORef (MilliGas 0)
-  gasLogRef <- newIORef Nothing
   r <- runExceptT $ runReaderT (runGasM m)
     ( GasEnv
       { _geGasRef = gasRef
-      , _geGasLogRef = gasLogRef
+      , _geGasLog = Nothing
       , _geGasModel = freeGasModel
       }
     , info

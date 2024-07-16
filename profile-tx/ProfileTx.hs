@@ -116,7 +116,7 @@ pubKeyFromSender = PublicKeyText . pubKeyFromSenderRaw
 coinTableName :: TableName
 coinTableName = TableName "coin-table" (ModuleName "coin" Nothing)
 
-prePopulateCoinEntries :: Default i => PactDb b i -> IO ()
+prePopulateCoinEntries :: Default i => PactDb CoreBuiltin i -> IO ()
 prePopulateCoinEntries pdb = do
   let style = defStyle {stylePrefix = msg "Pre-filling the coin table"}
   putStrLn "Setting up the coin table"
@@ -178,11 +178,10 @@ setupBenchEvalEnv
   -> PactValue -> IO (EvalEnv CoreBuiltin i)
 setupBenchEvalEnv pdb signers mBody = do
   gasRef <- newIORef mempty
-  gasLogRef <- newIORef Nothing
   let
     gasEnv = GasEnv
       { _geGasRef = gasRef
-      , _geGasLogRef = gasLogRef
+      , _geGasLog = Nothing
       , _geGasModel = tableGasModel (MilliGasLimit (MilliGas 200_000_000))
       }
   pure $ EvalEnv
