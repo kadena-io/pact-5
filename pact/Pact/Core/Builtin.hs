@@ -22,6 +22,8 @@ module Pact.Core.Builtin
  , ReplCoreBuiltin
  , BuiltinForm(..)
  , ReplOnlyBuiltin(..)
+ , AsCoreBuiltin(..)
+ , AsReplBuiltin(..)
  )where
 
 import Data.Text(Text)
@@ -746,6 +748,10 @@ data ReplOnlyBuiltin
   | REnvEnableReplNatives
   | REnvModuleAdmin
   | REnvVerifiers
+  | REnvEnableTypechecking
+  | REnvEnableTypecheckingFatal
+  | RTypecheckTerm
+  | RTypecheck
   deriving (Show, Enum, Bounded, Eq, Generic)
 
 
@@ -793,6 +799,10 @@ instance IsBuiltin ReplOnlyBuiltin where
     REnvEnableReplNatives -> 1
     REnvModuleAdmin -> 1
     REnvVerifiers -> 1
+    REnvEnableTypechecking -> 1
+    REnvEnableTypecheckingFatal -> 2
+    RTypecheckTerm -> 1
+    RTypecheck -> 1
 
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
@@ -875,6 +885,10 @@ replBuiltinsToText = \case
   REnvEnableReplNatives -> "env-enable-repl-natives"
   REnvModuleAdmin -> "env-module-admin"
   REnvVerifiers -> "env-verifiers"
+  REnvEnableTypechecking -> "env-enable-typechecking"
+  REnvEnableTypecheckingFatal -> "env-enable-typecheck-fatal"
+  RTypecheckTerm -> "typecheck-term"
+  RTypecheck -> "typecheck"
 
 replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
 replBuiltinToText f = \case
@@ -939,3 +953,9 @@ instance (Pretty b) => Pretty (ReplBuiltin b) where
 
 deriveConstrInfo ''CoreBuiltin
 deriveConstrInfo ''ReplOnlyBuiltin
+
+makeClassyPrisms ''CoreBuiltin
+makeClassyPrisms ''ReplBuiltin
+
+instance AsCoreBuiltin b => AsCoreBuiltin (ReplBuiltin b) where
+  _CoreBuiltin = (_RBuiltinWrap . _CoreBuiltin)

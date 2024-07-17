@@ -258,6 +258,10 @@ instance DesugarBuiltin (ReplBuiltin CoreBuiltin) where
       App (Builtin (RBuiltinRepl RBeginNamedTx) i) [e1] i
   desugarAppArity i (RBuiltinRepl REnforcePactVersionMin) [e1, e2] =
       App (Builtin (RBuiltinRepl REnforcePactVersionRange) i) [e1, e2] i
+  desugarAppArity i (RBuiltinRepl RTypecheckTerm) [e1] =
+      App (Builtin (RBuiltinRepl RTypecheckTerm) i) [suspendTerm e1] i
+  desugarAppArity i (RBuiltinRepl REnvEnableTypechecking) [e1, e2] =
+      App (Builtin (RBuiltinRepl REnvEnableTypecheckingFatal) i) [e1, e2] i
   desugarAppArity i b ne =
     App (Builtin b i) ne i
 
