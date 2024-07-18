@@ -15,6 +15,7 @@ module Pact.Core.Compile
  , evalTopLevel
  , CompileValue(..)
  , parseOnlyProgram
+ , compileValueToPactValue
  ) where
 
 import Control.Lens
@@ -75,6 +76,11 @@ data CompileValue i
   | LoadedImports Import
   | InterpretValue PactValue i
   deriving Show
+
+compileValueToPactValue :: CompileValue i -> PactValue
+compileValueToPactValue = \case
+  InterpretValue v _ -> v
+  cv -> PString (renderCompactText cv)
 
 instance Pretty (CompileValue i) where
   pretty = \case

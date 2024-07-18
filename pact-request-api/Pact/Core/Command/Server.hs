@@ -15,6 +15,7 @@ import Data.Text
 import qualified Data.Text.Encoding as E
 import Data.Traversable
 import Data.Word
+import Data.Default
 import GHC.Generics
 import Servant.API
 import Servant.Server
@@ -34,6 +35,9 @@ import Pact.Core.Persistence.Types
 import Pact.Core.StableEncoding
 import Pact.Core.Syntax.ParseTree
 import Pact.Core.Command.Client
+import Pact.Core.SPV
+import Data.Set (Set)
+import Pact.Core.Gas
 
 -- | Commandline configuration for running a Pact server.
 data Config = Config {
@@ -59,15 +63,15 @@ type Log = ()
 data CommandEnv = CommandEnv {
     --   _ceEntity :: Maybe EntityName
       _ceMode :: ExecutionMode
-    , _ceDbEnv :: PactDb CoreBuiltin ()
+    , _ceDbEnv :: PactDb CoreBuiltin Info
     -- , _ceLogger :: Logger
-    -- , _ceGasEnv :: GasEnv
+    , _ceGasEnv :: GasEnv CoreBuiltin Info
     , _cePublicData :: PublicData
-    -- , _ceSPVSupport :: SPVSupport
+    , _ceSPVSupport :: SPVSupport
     , _ceNetworkId :: Maybe NetworkId
-    -- , _ceExecutionConfig :: ExecutionConfig
-    , _ceEvalEnv :: EvalEnv CoreBuiltin ()
-    , _ceEvalState :: MVar (EvalState CoreBuiltin ())
+    , _ceExecutionConfig :: Set ExecutionFlag
+    , _ceEvalEnv :: EvalEnv CoreBuiltin Info
+    , _ceEvalState :: MVar (EvalState CoreBuiltin Info)
     , _ceRequestCache :: LruHandle RequestKey (CommandResult Log PactErrorI)
     }
 
@@ -92,7 +96,7 @@ sendHandler env submitBatch = do
     pure $ RequestKeys requestKeys
 
     where
-        computeResultAndUpdateState :: RequestKey -> Command Text -> IO (CommandResult Log PactErrorI)
+        computeResultAndUpdateState :: RequestKey -> Command Text -> IO (CommandResult Log (PactError Info))
         computeResultAndUpdateState requestKey cmd = do
             modifyMVar (_ceEvalState env) $ \evalState -> do
                 case verifyCommand @(StableEncoding PublicMeta) (fmap E.encodeUtf8 cmd) of
@@ -109,9 +113,9 @@ sendHandler env submitBatch = do
                         case result of
                             Right goodRes -> pure (evalState', evalResultToCommandResult requestKey goodRes)
                             Left _ -> error "TODO"
-        
-        evalResultToCommandResult :: RequestKey -> EvalResult [TopLevel ()] -> CommandResult Log PactErrorI
-        evalResultToCommandResult requestKey EvalResult {_erOutput, _erLogs, _erExec, _erGas, _erTxId, _erEvents} = 
+
+        evalResultToCommandResult :: RequestKey -> EvalResult [TopLevel Info] -> CommandResult Log (PactErrorCode Info)
+        evalResultToCommandResult requestKey EvalResult {_erOutput, _erLogs, _erExec, _erGas, _erTxId, _erEvents} =
             CommandResult {
                 _crReqKey = requestKey,
                 _crTxId = _erTxId,
@@ -122,11 +126,13 @@ sendHandler env submitBatch = do
                 _crContinuation = Nothing,
                 _crMetaData = Nothing -- TODO
             }
-        
-        evalOutputToCommandResult :: [CompileValue ()] -> PactResult PactErrorI
-        evalOutputToCommandResult = \case
-            [InterpretValue v _info] -> PactResultOk v
-            other -> error ("Wanted single InterpretValue. Got\n" ++ show other)
+
+        evalOutputToCommandResult :: Default i => [CompileValue i] -> PactResult (PactErrorCode i)
+        evalOutputToCommandResult li = case unsnoc li of
+            Just (_, v) -> PactResultOk (compileValueToPactValue v)
+            Nothing -> PactResult $ PactError (PEExecutionError (EvalError "empty input") [] def)
+            -- [InterpretValue v _info] -> PactResultOk v
+            -- other -> error ("Wanted single InterpretValue. Got\n" ++ show other)
 
         contMsgToEvalInput :: ContMsg -> EvalInput
         contMsgToEvalInput = undefined

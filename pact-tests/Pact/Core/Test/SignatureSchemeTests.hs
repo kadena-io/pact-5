@@ -87,7 +87,7 @@ toSigners kps = return $ map makeSigner kps
 toExecPayload :: [Signer QualifiedName PactValue] -> Text -> ByteString
 toExecPayload signers t = J.encodeStrict payload
   where
-    payload = Payload (Exec (ExecMsg t $ toLegacyJson Null)) "nonce" (J.Aeson ()) signers Nothing Nothing
+    payload = Payload (Exec (ExecMsg t $ PUnit)) "nonce" (J.Aeson ()) signers Nothing Nothing
 
 
 shouldBeProcFail ::  ProcessedCommand () ParsedCode -> Assertion

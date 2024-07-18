@@ -217,9 +217,13 @@ interpret
   -> IO (Either (PactError Info) (EvalResult [Lisp.TopLevel Info]))
 interpret evalEnv evalSt evalInput = do
   (_state, result) <- interpretReturningState evalEnv evalSt evalInput
-  return result
+  return $! result
 
-interpretReturningState :: EvalEnv CoreBuiltin () -> EvalState CoreBuiltin () -> EvalInput -> IO (EvalState CoreBuiltin (), Either (PactError ()) (EvalResult [Lisp.TopLevel ()]))
+interpretReturningState
+  :: EvalEnv CoreBuiltin Info
+  -> EvalState CoreBuiltin Info
+  -> EvalInput
+  -> IO (EvalState CoreBuiltin Info, Either (PactError Info) (EvalResult [Lisp.TopLevel Info]))
 interpretReturningState evalEnv evalSt evalInput = do
   (result, state) <- runEvalM (ExecEnv evalEnv) evalSt $ evalWithinTx evalInput
   gas <- readIORef (_geGasRef $ _eeGasEnv evalEnv)
@@ -238,7 +242,7 @@ interpretReturningState evalEnv evalSt evalInput = do
             , _erLogGas = Nothing
             , _erEvents = _esEvents state
             }
-      in return $! (state, success)
+      in return (state, success)
 
 interpretOnlyTerm
   :: EvalEnv CoreBuiltin Info
