@@ -85,6 +85,7 @@ import Pact.Core.Hash
 import Pact.Core.Pretty(Pretty(..))
 import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Short as SB
+import Data.String (IsString)
 
 -- | Newtype wrapper over bare namespaces
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
@@ -193,10 +194,11 @@ instance Pretty ParsedName where
 -- So in Field "a" in {"a":v},
 newtype Field = Field { _field :: Text }
   deriving (Eq, Ord, Show, Generic, FromJSONKey)
-  deriving newtype NFData
+  deriving newtype (IsString, NFData)
 
 instance Pretty Field where
   pretty (Field f) = pretty f
+
 
 -- Uniques
 type Unique = Int
