@@ -229,7 +229,7 @@ interpret evalEnv evalSt evalInput = do
         , _erLoadedModules = _loModules $ _esLoaded state
         , _erTxId = txid
         , _erLogGas = Nothing
-        , _erEvents = _esEvents state
+        , _erEvents = reverse $ _esEvents state
         }
 
 interpretOnlyTerm
@@ -253,7 +253,7 @@ interpretOnlyTerm evalEnv evalSt term = do
         , _erLoadedModules = _loModules $ _esLoaded state
         , _erTxId = txid
         , _erLogGas = Nothing
-        , _erEvents = _esEvents state
+        , _erEvents = reverse $ _esEvents state
         }
 
 -- Used to be `evalTerms`
