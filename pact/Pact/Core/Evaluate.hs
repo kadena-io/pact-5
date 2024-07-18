@@ -11,7 +11,6 @@ module Pact.Core.Evaluate
   , Info
   , initMsgData
   , evalExec
-  , evalExecDefaultState
   , evalContinuation
   , setupEvalEnv
   , interpret
@@ -64,6 +63,7 @@ import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import Pact.Core.Info
+import Data.Set (Set)
 
 type Eval = EvalM ExecRuntime CoreBuiltin Info
 
@@ -179,10 +179,15 @@ setupEvalEnv pdb mode msgData gasModel' np spv pd efs = do
     where
     toPair (Verifier vfn _ caps) = (vfn, S.fromList caps)
 
-evalExec :: EvalEnv CoreBuiltin Info -> EvalState CoreBuiltin Info -> RawCode -> IO (Either (PactError Info) (EvalResult [Lisp.TopLevel Info]))
-evalExec evalEnv evalSt rc = do
-  terms <- either throwM return $ compileOnly rc
-  either throwError return <$> interpret evalEnv evalSt (Right terms)
+evalExec
+  :: PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
+  -> PublicData -> MsgData
+  -> CapState QualifiedName PactValue
+  -> [Lisp.TopLevel Info] -> IO (Either (PactError Info) (EvalResult [Lisp.TopLevel Info]))
+evalExec db spv gasModel flags nsp publicData msgData capState terms = do
+  evalEnv <- setupEvalEnv db Transactional msgData gasModel nsp spv publicData flags
+  let evalState = def & esCaps .~ capState
+  interpret evalEnv evalState (Right terms)
 
 evalTermExec
   :: EvalEnv CoreBuiltin Info
@@ -192,20 +197,29 @@ evalTermExec
 evalTermExec evalEnv evalSt term =
   either throwError return <$> interpretOnlyTerm evalEnv evalSt term
 
-evalContinuation :: EvalEnv CoreBuiltin Info -> EvalState CoreBuiltin Info -> ContMsg -> IO (Either (PactError Info) (EvalResult [Lisp.TopLevel Info]))
-evalContinuation evalEnv evalSt cm = case _cmProof cm of
-  Nothing ->
-    interpret (setStep Nothing) evalSt (Left Nothing)
-  Just p -> do
-    etpe <- (_spvVerifyContinuation . _eeSPVSupport $ evalEnv) p
-    pe <- either contError return etpe
-    interpret (setStep (_peYield pe)) evalSt (Left $ Just pe)
-  where
+evalContinuation
+  :: PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
+  -> PublicData -> MsgData
+  -> CapState QualifiedName PactValue
+  -> ContMsg -> IO (Either (PactError Info) (EvalResult [Lisp.TopLevel Info]))
+evalContinuation db spv gasModel flags nsp publicData msgData capState cm = do
+  evalEnv <- setupEvalEnv db Transactional msgData gasModel nsp spv publicData flags
+  let evalState = def & esCaps .~ capState
+  case _cmProof cm of
+    Nothing ->
+      interpret
+        (evalEnv & eeDefPactStep .~ step Nothing)
+        evalState
+        (Left Nothing)
+    Just p -> do
+      pe <- either contError return =<< _spvVerifyContinuation spv p
+      interpret
+        (evalEnv & eeDefPactStep .~ step (_peYield pe))
+        evalState
+        (Left $ Just pe)
+    where
     contError spvErr = throw $ PEExecutionError (ContinuationError spvErr) [] ()
-    setStep y = set eeDefPactStep (Just $ DefPactStep (_cmStep cm) (_cmRollback cm) (_cmPactId cm) y) evalEnv
-
-evalExecDefaultState :: EvalEnv CoreBuiltin Info -> RawCode -> IO (Either (PactError Info) (EvalResult [Lisp.TopLevel Info]))
-evalExecDefaultState evalEnv rc = evalExec evalEnv def rc
+    step y = Just $ DefPactStep (_cmStep cm) (_cmRollback cm) (_cmPactId cm) y
 
 interpret
   :: EvalEnv CoreBuiltin Info
