@@ -13,7 +13,6 @@ import qualified Data.Text.Encoding as T
 import Data.Text.Encoding
 import Data.ByteString (ByteString)
 import qualified Data.ByteString          as BS
-import Data.Aeson as A
 import qualified Control.Lens             as Lens
 import qualified Data.ByteString.Base16   as B16
 
@@ -21,7 +20,6 @@ import Pact.Core.Capabilities
 import Pact.Core.Command.Types
 import Pact.Core.Command.Crypto
 import Pact.Core.Command.Client
-import Pact.JSON.Legacy.Value
 import qualified Pact.JSON.Encode as J
 import Pact.Core.Names
 import Pact.Core.PactValue
@@ -87,7 +85,7 @@ toSigners kps = return $ map makeSigner kps
 toExecPayload :: [Signer QualifiedName PactValue] -> Text -> ByteString
 toExecPayload signers t = J.encodeStrict payload
   where
-    payload = Payload (Exec (ExecMsg t $ toLegacyJson Null)) "nonce" (J.Aeson ()) signers Nothing Nothing
+    payload = Payload (Exec (ExecMsg t $ PUnit)) "nonce" (J.Aeson ()) signers Nothing Nothing
 
 
 shouldBeProcFail ::  ProcessedCommand () ParsedCode -> Assertion

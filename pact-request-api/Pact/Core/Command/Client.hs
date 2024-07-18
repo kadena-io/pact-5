@@ -56,7 +56,6 @@ import Data.List.NonEmpty (NonEmpty(..))
 
 import Pact.Time
 import Pact.JSON.Yaml
-import Pact.JSON.Legacy.Value
 import System.FilePath
 import qualified Pact.JSON.Encode as J
 import qualified Pact.JSON.Decode as JD
@@ -206,7 +205,7 @@ data ApiReq = ApiReq {
   _ylPactTxHash :: Maybe Hash,
   _ylStep :: Maybe Int,
   _ylRollback :: Maybe Bool,
-  _ylData :: Maybe JD.Value,
+  _ylData :: Maybe PactValue,
   _ylProof :: Maybe ContProof,
   _ylDataFile :: Maybe FilePath,
   _ylCode :: Maybe Text,
@@ -223,7 +222,7 @@ instance JD.FromJSON ApiReq where
   parseJSON = JD.withObject "ApiReq" $ \o -> do
     publicMeta <- o JD..:? "publicMeta"
     proof <- o JD..:? "proof"
-    data_ <- o JD..:? "data"
+    data_ <- (fmap . fmap) _stableEncoding (o JD..:? "data")
     networkId <- o JD..:? "networkId"
     rollback <- o JD..:? "rollback"
     signers <- o JD..:? "signers"
@@ -258,7 +257,7 @@ instance J.Encode ApiReq where
   build o = J.object
     [ "publicMeta" J..= _ylPublicMeta o
     , "proof" J..= _ylProof o
-    , "data" J..= _ylData o
+    , "data" J..= StableEncoding (_ylData o)
     , "networkId" J..= _ylNetworkId o
     , "rollback" J..= _ylRollback o
     , "signers" J..= fmap J.Array (_ylSigners o)
@@ -420,7 +419,8 @@ returnSigDataOrCommand  outputLocal sd
 returnCommandIfDone :: Bool -> SigData Text -> IO ByteString
 returnCommandIfDone outputLocal sd =
   case sigDataToCommand sd of
-    Left _ -> return $ encodeYamlWith yamlOptions sd
+    Left _ -> do
+      return $ encodeYamlWith yamlOptions sd
     Right c -> do
       let res = verifyCommand $ fmap T.encodeUtf8 c
           out = if outputLocal then J.encode c else J.encode (SubmitBatch (c :| []))
@@ -480,7 +480,7 @@ uapiReq' fp p = do
 
 -- | parts read/rationalized from a processed ApiReq:
 -- the ApiReq, code, msg data, PublicMeta
-type ApiReqParts = (ApiReq,Text,A.Value,PublicMeta)
+type ApiReqParts = (ApiReq,Text,PactValue,PublicMeta)
 
 -- | Assemble a command and parts from a ApiReq YAML file.
 mkApiReq :: FilePath -> IO (ApiReqParts,Command Text)
@@ -559,9 +559,9 @@ mkApiReqExec unsignedReq ar@ApiReq{..} fp = do
     cdata <- case (_ylDataFile,_ylData) of
       (Nothing,Just v) -> return v -- either (\e -> dieAR $ "Data decode failed: " ++ show e) return $ eitherDecode (BSL.pack v)
       (Just f,Nothing) -> (BSL.readFile (dir </> f)) >>=
-                          either (\e -> dieAR $ "Data file load failed: " ++ show e) return .
+                          either (\e -> dieAR $ "Data file load failed: " ++ show e) (return . _stableEncoding) .
                           JD.eitherDecode
-      (Nothing,Nothing) -> return A.Null
+      (Nothing,Nothing) -> return PUnit
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
     return (code,cdata)
   pubMeta <- mkPubMeta _ylPublicMeta
@@ -606,7 +606,7 @@ mkNonce = maybe (T.pack . show <$> getCurrentTime) return
 mkExec
   :: Text
     -- ^ code
-  -> A.Value
+  -> PactValue
     -- ^ optional environment data
   -> PublicMeta
     -- ^ public metadata
@@ -627,7 +627,7 @@ mkExec code mdata pubMeta kps ves nid ridm = do
          (StableEncoding pubMeta)
          rid
          nid
-         (Exec (ExecMsg code (toLegacyJson mdata)))
+         (Exec (ExecMsg code mdata))
   return $ T.decodeUtf8 <$> cmd
 
 -- | Construct an Exec request message
@@ -635,7 +635,7 @@ mkExec code mdata pubMeta kps ves nid ridm = do
 mkUnsignedExec
   :: Text
     -- ^ code
-  -> A.Value
+  -> PactValue
     -- ^ optional environment data
   -> PublicMeta
     -- ^ public metadata
@@ -656,7 +656,7 @@ mkUnsignedExec code mdata pubMeta kps ves nid ridm = do
          (StableEncoding pubMeta)
          rid
          nid
-         (Exec (ExecMsg code (toLegacyJson mdata)))
+         (Exec (ExecMsg code mdata))
   return $ T.decodeUtf8 <$> cmd
 
 
@@ -679,9 +679,9 @@ mkApiReqCont unsignedReq ar@ApiReq{..} fp = do
     case (_ylDataFile,_ylData) of
       (Nothing,Just v) -> return v -- either (\e -> dieAR $ "Data decode failed: " ++ show e) return $ eitherDecode (BSL.pack v)
       (Just f,Nothing) -> BSL.readFile (dir </> f) >>=
-                          either (\e -> dieAR $ "Data file load failed: " ++ show e) return .
+                          either (\e -> dieAR $ "Data file load failed: " ++ show e) (return . _stableEncoding) .
                           JD.eitherDecode
-      (Nothing,Nothing) -> return A.Null
+      (Nothing,Nothing) -> return PUnit
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
   let pactId = (DefPactId . hashToText) apiPactId
   pubMeta <- mkPubMeta _ylPublicMeta
@@ -699,7 +699,7 @@ mkCont
     -- ^ cont step
   -> Bool
     -- ^ has rollback?
-  -> A.Value
+  -> PactValue
     -- ^ environment data
   -> PublicMeta
     -- ^ command public metadata
@@ -722,7 +722,7 @@ mkCont txid step rollback mdata pubMeta kps ves ridm proof nid = do
          (StableEncoding pubMeta)
          rid
          nid
-         (Continuation (ContMsg txid step rollback (toLegacyJson mdata) proof) :: (PactRPC ContMsg))
+         (Continuation (ContMsg txid step rollback mdata proof) :: (PactRPC ContMsg))
   return $ T.decodeUtf8 <$> cmd
 
 
@@ -735,7 +735,7 @@ mkUnsignedCont
     -- ^ cont step
   -> Bool
     -- ^ has rollback?
-  -> A.Value
+  -> PactValue
     -- ^ environment data
   -> PublicMeta
     -- ^ command public metadata
@@ -758,7 +758,7 @@ mkUnsignedCont txid step rollback mdata pubMeta kps ves ridm proof nid = do
          (StableEncoding pubMeta)
          (T.pack $ show rid)
          nid
-         (Continuation (ContMsg txid step rollback (toLegacyJson mdata) proof) :: (PactRPC ContMsg))
+         (Continuation (ContMsg txid step rollback mdata proof) :: (PactRPC ContMsg))
   return $ T.decodeUtf8 <$> cmd
 
 -- | Construct a `Command` from a `PactRPC` request, a nonce, and a set of credentials.
