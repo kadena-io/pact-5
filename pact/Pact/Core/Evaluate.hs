@@ -10,6 +10,7 @@ module Pact.Core.Evaluate
   , ContMsg(..)
   , Info
   , evalExec
+  , evalExecTerm
   , evalContinuation
   , evalGasPayerCap
   , setupEvalEnv
@@ -111,10 +112,8 @@ data ContMsg = ContMsg
   } deriving (Eq,Show)
 
 -- | Results of evaluation.
-data EvalResult tv = EvalResult
-  { _erInput :: !(Either (Maybe DefPactExec) tv)
-    -- ^ compiled user input
-  , _erOutput :: ![CompileValue Info]
+data EvalResult = EvalResult
+  { _erOutput :: ![CompileValue Info]
     -- ^ Output values
   , _erLogs :: ![TxLog ByteString]
     -- ^ Transaction logs
@@ -132,7 +131,7 @@ data EvalResult tv = EvalResult
     -- ^ emitted events
   -- , _erWarnings :: S.Set PactWarning
     -- ^ emitted warning
-  } deriving (Functor, Show)
+  } deriving stock (Eq, Show)
 
 type Info = SpanInfo
 
@@ -181,12 +180,21 @@ evalExec
   :: PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
   -> PublicData -> MsgData
   -> CapState QualifiedName PactValue
-  -> [Lisp.TopLevel Info] -> IO (Either (PactError Info) (EvalResult [Lisp.TopLevel Info]))
+  -> [Lisp.TopLevel Info] -> IO (Either (PactError Info) EvalResult)
 evalExec db spv gasModel flags nsp publicData msgData capState terms = do
   evalEnv <- setupEvalEnv db Transactional msgData gasModel nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   interpret evalEnv evalState (Right terms)
 
+evalExecTerm
+  :: PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
+  -> PublicData -> MsgData
+  -> CapState QualifiedName PactValue
+  -> Lisp.Expr Info -> IO (Either (PactError Info) EvalResult)
+evalExecTerm db spv gasModel flags nsp publicData msgData capState term = do
+  evalEnv <- setupEvalEnv db Transactional msgData gasModel nsp spv publicData flags
+  let evalState = def & esCaps .~ capState
+  interpret evalEnv evalState (Right [Lisp.TLTerm term])
 
 evalContinuation
   :: PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
@@ -213,12 +221,12 @@ evalContinuation db spv gasModel flags nsp publicData msgData capState cm = do
     step y = Just $ DefPactStep (_cmStep cm) (_cmRollback cm) (_cmPactId cm) y
 
 evalGasPayerCap
-  :: PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
+  :: CapToken QualifiedName PactValue
+  -> PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
   -> PublicData -> MsgData
   -> CapState QualifiedName PactValue
-  -> CapToken QualifiedName PactValue
-  -> Lisp.Expr Info -> IO (Either (PactError Info) (EvalResult (Lisp.Expr Info)))
-evalGasPayerCap db spv gasModel flags nsp publicData msgData capState capToken body = do
+  -> Lisp.Expr Info -> IO (Either (PactError Info) EvalResult)
+evalGasPayerCap capToken db spv gasModel flags nsp publicData msgData capState body = do
   evalEnv <- setupEvalEnv db Transactional msgData gasModel nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   interpretGasPayerTerm evalEnv evalState capToken body
@@ -228,7 +236,7 @@ interpret
   :: EvalEnv CoreBuiltin Info
   -> EvalState CoreBuiltin Info
   -> EvalInput
-  -> IO (Either (PactError Info) (EvalResult [Lisp.TopLevel Info]))
+  -> IO (Either (PactError Info) EvalResult)
 interpret evalEnv evalSt evalInput = do
   (result, state) <- runEvalM (ExecEnv evalEnv) evalSt $ evalWithinTx evalInput
   gas <- readIORef (_geGasRef $ _eeGasEnv evalEnv)
@@ -236,8 +244,7 @@ interpret evalEnv evalSt evalInput = do
     Left err -> return $ Left err
     Right (rs, logs, txid) ->
       return $! Right $! EvalResult
-        { _erInput = evalInput
-        , _erOutput = rs
+        { _erOutput = rs
         , _erLogs = logs
         , _erExec = _esDefPactExec state
         -- Todo: quotrem
@@ -253,7 +260,7 @@ interpretGasPayerTerm
   -> EvalState CoreBuiltin Info
   -> CapToken QualifiedName PactValue
   -> Lisp.Expr Info
-  -> IO (Either (PactError Info) (EvalResult (Lisp.Expr Info)))
+  -> IO (Either (PactError Info) EvalResult)
 interpretGasPayerTerm evalEnv evalSt ct term = do
   (result, state) <- runEvalM (ExecEnv evalEnv) evalSt $ evalWithinCap ct term
   gas <- readIORef (_geGasRef $ _eeGasEnv evalEnv)
@@ -261,8 +268,7 @@ interpretGasPayerTerm evalEnv evalSt ct term = do
     Left err -> return $ Left err
     Right (_, logs, txid) ->
       return $! Right $! EvalResult
-        { _erInput = Right term
-        , _erOutput = []
+        { _erOutput = []
         , _erLogs = logs
         , _erExec = _esDefPactExec state
         -- todo: quotrem
