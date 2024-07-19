@@ -1,6 +1,7 @@
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 module Pact.Core.Evaluate
   ( MsgData(..)
@@ -108,7 +109,6 @@ data ContMsg = ContMsg
   { _cmPactId :: !DefPactId
   , _cmStep :: !Int
   , _cmRollback :: !Bool
-  , _cmData :: !PactValue
   , _cmProof :: !(Maybe ContProof)
   } deriving (Eq,Show)
 
@@ -134,7 +134,7 @@ data EvalResult tv = EvalResult
     -- ^ emitted events
   -- , _erWarnings :: S.Set PactWarning
     -- ^ emitted warning
-  } deriving (Show)
+  } deriving (Functor, Show)
 
 type Info = SpanInfo
 
