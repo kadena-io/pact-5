@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE DerivingStrategies #-}
 
 
 module Pact.Core.Guards
@@ -44,6 +45,7 @@ import Data.Maybe (isJust)
 import Data.Text(Text)
 import GHC.Generics
 import Text.Parser.Token as P
+import Codec.Serialise.Class (Serialise)
 
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -60,7 +62,8 @@ import qualified Pact.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg as WA
 import qualified Pact.Crypto.WebAuthn.Cose.SignAlg as WA
 
 newtype PublicKeyText = PublicKeyText { _pubKey :: Text }
-  deriving (Eq,Ord,Show, NFData)
+  deriving (Eq,Ord,Show)
+  deriving newtype (NFData, Serialise)
 
 instance Pretty PublicKeyText where
   pretty (PublicKeyText t) = pretty t

@@ -3,8 +3,12 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE TypeApplications #-}
 
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Pact.Core.Serialise.CBOR_V1
   ( encodeModuleData, decodeModuleData
@@ -18,17 +22,19 @@ module Pact.Core.Serialise.CBOR_V1
   -- only used for legacy translation
   , encodeModuleName
   , encodeModuleHash
+  , SerialiseV1(..)
   ) where
 
 import Control.Lens
 import Codec.CBOR.Read (deserialiseFromBytes)
 import Codec.CBOR.Write (toStrictByteString)
-import Codec.Serialise.Class
+import Codec.Serialise
 import Codec.CBOR.Encoding
 import Codec.CBOR.Decoding
 import Data.ByteString (ByteString, fromStrict)
 import Data.Decimal
 import Data.Foldable
+import Data.Coerce
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import qualified GHC.Integer.Logarithms as IntLog
@@ -53,64 +59,71 @@ import Pact.Core.Persistence
 import Pact.Core.Pretty
 import Pact.Core.Type
 import Pact.Time.Internal (UTCTime(..), NominalDiffTime(..))
+import qualified Data.Set as S
+import qualified Data.Map.Strict as M
+import Unsafe.Coerce (unsafeCoerce)
+
+newtype SerialiseV1 a
+  = SerialiseV1 { _getSV1 :: a }
+  deriving newtype (Eq, Show, Ord)
 
 
 encodeModuleData :: ModuleData CoreBuiltin () -> ByteString
-encodeModuleData = toStrictByteString . encode
+encodeModuleData = toStrictByteString . encodeS
 
 encodeModuleData_repl_spaninfo :: ModuleData ReplCoreBuiltin SpanInfo -> ByteString
-encodeModuleData_repl_spaninfo = toStrictByteString . encode
+encodeModuleData_repl_spaninfo = toStrictByteString . encodeS
 
 encodeModuleData_raw_spaninfo :: ModuleData CoreBuiltin SpanInfo -> ByteString
-encodeModuleData_raw_spaninfo = toStrictByteString . encode
+encodeModuleData_raw_spaninfo = toStrictByteString . encodeS
 
 decodeModuleData :: ByteString -> Maybe (ModuleData CoreBuiltin ())
-decodeModuleData bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
+decodeModuleData bs = either (const Nothing) (Just . _getSV1) (deserialiseOrFail (fromStrict bs))
 
 decodeModuleData_repl_spaninfo :: ByteString -> Maybe (ModuleData ReplCoreBuiltin SpanInfo)
 decodeModuleData_repl_spaninfo bs =
-  case deserialiseFromBytes decode (fromStrict bs) of
-    Right (_, v) -> Just v
+  case deserialiseOrFail (fromStrict bs) of
+    Right (SerialiseV1 v) -> Just v
     Left _ -> Nothing
 
 decodeModuleData_raw_spaninfo :: ByteString -> Maybe (ModuleData CoreBuiltin SpanInfo)
-decodeModuleData_raw_spaninfo bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
+decodeModuleData_raw_spaninfo bs = either (const Nothing) (Just . _getSV1) (deserialiseOrFail (fromStrict bs))
 
 
 encodeModuleName :: ModuleName -> ByteString
-encodeModuleName = toStrictByteString . encode
+encodeModuleName = toStrictByteString . encodeS
 
 encodeModuleHash :: ModuleHash -> ByteString
-encodeModuleHash = toStrictByteString . encode
+encodeModuleHash = toStrictByteString . encodeS
 
 encodeKeySet :: KeySet -> ByteString
-encodeKeySet = toStrictByteString . encode
+encodeKeySet = toStrictByteString . encodeS
 
 decodeKeySet :: ByteString -> Maybe KeySet
-decodeKeySet bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
+decodeKeySet bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decodeS (fromStrict bs))
 
 
 encodeDefPactExec :: Maybe DefPactExec -> ByteString
-encodeDefPactExec =  toStrictByteString . encode
+encodeDefPactExec =  toStrictByteString . encodeS
 
 decodeDefPactExec :: ByteString -> Maybe (Maybe DefPactExec)
-decodeDefPactExec bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
+decodeDefPactExec bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decodeS (fromStrict bs))
 
 encodeNamespace :: Namespace -> ByteString
-encodeNamespace = toStrictByteString . encode
+encodeNamespace = toStrictByteString . encodeS
 
 decodeNamespace :: ByteString -> Maybe Namespace
-decodeNamespace bs =either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
+decodeNamespace bs =either (const Nothing) (Just . snd) (deserialiseFromBytes decodeS (fromStrict bs))
 
 
 encodeRowData :: RowData -> GasM b i ByteString
 encodeRowData rd = do
   gasSerializeRowData rd
-  pure . toStrictByteString $ encode rd
+  pure . toStrictByteString $ encodeS rd
 
 encodeRowDataNoGas :: RowData -> ByteString
 encodeRowDataNoGas rd =
-  toStrictByteString $ encode rd
+  toStrictByteString $ encodeS rd
 
 chargeGasMSerialize :: MilliGas -> GasM b i ()
 chargeGasMSerialize amount = do
@@ -203,357 +216,442 @@ gasSerializeRowData (RowData fields) = do
 
 
 decodeRowData :: ByteString -> Maybe RowData
-decodeRowData bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decode (fromStrict bs))
+decodeRowData bs = either (const Nothing) (Just . snd) (deserialiseFromBytes decodeS (fromStrict bs))
 
-instance Serialise Namespace where
-  encode (Namespace n user admin) = encode n <> encode user <> encode admin
-  decode = Namespace <$> decode <*> decode <*> decode
+encodeS :: Serialise (SerialiseV1 a) => a -> Encoding
+encodeS a = encode (SerialiseV1 a)
+{-# INLINE encodeS #-}
 
-instance Serialise RowData where
-  encode (RowData m) = encode m
-  decode = RowData <$> decode
+decodeS :: Serialise (SerialiseV1 a) => Decoder s a
+decodeS = c decode
+  where
+  c :: Decoder s (SerialiseV1 a) -> Decoder s a
+  c = coerce
+{-# INLINE decodeS #-}
 
-instance Serialise NamespaceName where
-  encode (NamespaceName ns) = encode ns
-  decode = NamespaceName <$> decode
+instance Serialise (SerialiseV1 ()) where
+  encode _ = encode ()
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> decode
+  {-# INLINE decode #-}
 
-instance Serialise ModuleName where
-  encode (ModuleName mn mns) = encode mn <> encode mns
-  decode = ModuleName <$> decode <*> decode
+instance {-# OVERLAPPABLE #-}
+  (Serialise (SerialiseV1 a), Functor f, (forall b. (Serialise b) => Serialise (f b))) => Serialise (SerialiseV1 (f a)) where
+  encode (SerialiseV1 m) = encode (SerialiseV1 <$> m)
+  {-# INLINE encode #-}
+  decode = SerialiseV1 . fmap _getSV1 <$> decode
+  {-# INLINE decode #-}
 
-instance Serialise KeySetName where
-  encode (KeySetName ksn ns) = encode ksn <> encode ns
-  decode = KeySetName <$> decode <*> decode
+instance Serialise (SerialiseV1 Namespace) where
+  encode (SerialiseV1 (Namespace n user admin)) = encodeS n <> encodeS user <> encodeS admin
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (Namespace <$> decodeS <*> decodeS <*> decodeS)
+  {-# INLINE decode #-}
 
-instance Serialise PublicKeyText where
-  encode (PublicKeyText t) = encode t
-  decode = PublicKeyText <$> decode
+instance Serialise (SerialiseV1 RowData) where
+  encode (SerialiseV1 (RowData m)) = encode (SerialiseV1 <$> m)
+  {-# INLINE encode #-}
+  decode = SerialiseV1 . RowData . fmap _getSV1 <$> decode
+  {-# INLINE decode #-}
 
-instance Serialise KeySet where
-  encode (KeySet ks p) = encode ks <> encode p
-  decode = KeySet <$> decode <*> decode
+instance Serialise (SerialiseV1 NamespaceName) where
+  encode (SerialiseV1 (NamespaceName ns)) = encode ns
+  {-# INLINE encode #-}
+  decode  = SerialiseV1 . NamespaceName <$> decode
+  {-# INLINE decode #-}
 
-instance Serialise KSPredicate where
-  encode = \case
+instance Serialise (SerialiseV1 ModuleName) where
+  encode (SerialiseV1 (ModuleName mn mns)) = encode mn <> encode (SerialiseV1 <$> mns)
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (ModuleName <$> decode <*> decodeS)
+  {-# INLINE decode #-}
+
+instance Serialise (SerialiseV1 KeySetName) where
+  encode (SerialiseV1 (KeySetName ksn ns)) = encode ksn <> encodeS ns
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (KeySetName <$> decode <*> decodeS)
+  {-# INLINE decode #-}
+
+instance Serialise (SerialiseV1 PublicKeyText) where
+  encode (SerialiseV1 (PublicKeyText t)) = encode t
+  {-# INLINE encode #-}
+  decode = SerialiseV1 . PublicKeyText <$> decode
+  {-# INLINE decode #-}
+
+instance Serialise (SerialiseV1 KeySet) where
+  encode (SerialiseV1 (KeySet ks p)) = encode ks <> encodeS p
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (KeySet <$> decode <*> decodeS)
+  {-# INLINE decode #-}
+
+instance Serialise (SerialiseV1 KSPredicate) where
+  encode (SerialiseV1 k) = case k of
     KeysAll -> encodeWord 0
     Keys2 -> encodeWord 1
     KeysAny -> encodeWord 2
-    CustomPredicate pn -> encodeWord 3 <> encode pn
+    CustomPredicate pn -> encodeWord 3 <> encodeS pn
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
+  decode = decodeWord >>= fmap SerialiseV1 . \case
     0 -> pure KeysAll
     1 -> pure Keys2
     2 -> pure KeysAny
-    3 -> CustomPredicate <$> decode
+    3 -> CustomPredicate <$> decodeS
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
-instance Serialise QualifiedName where
-  encode (QualifiedName qn mn) = encode qn <> encode mn
-  decode = QualifiedName <$> decode <*> decode
+instance Serialise (SerialiseV1 QualifiedName) where
+  encode (SerialiseV1 (QualifiedName qn mn)) = encode qn <> encodeS mn
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (QualifiedName <$> decode <*> decodeS)
+  {-# INLINE decode #-}
 
-instance Serialise BareName where
-  encode (BareName bn) = encode bn
-  decode = BareName <$> decode
+instance Serialise (SerialiseV1 BareName) where
+  encode (SerialiseV1 (BareName bn)) = encode bn
+  {-# INLINE encode #-}
+  decode = SerialiseV1 . BareName <$> decode
+  {-# INLINE decode #-}
 
-instance Serialise DynamicName where
-  encode (DynamicName dn dcall) = encode dn <> encode dcall
-  decode = DynamicName <$> decode <*> decode
+instance Serialise (SerialiseV1 DynamicName) where
+  encode (SerialiseV1 (DynamicName dn dcall)) = encode dn <> encode dcall
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (DynamicName <$> decode <*> decode)
+  {-# INLINE decode #-}
 
-instance Serialise ParsedName where
-  encode (QN qn) = encodeWord 0 <> encode qn
-  encode (BN bn) = encodeWord 1 <> encode bn
-  encode (DN dn) = encodeWord 2 <> encode dn
+instance Serialise (SerialiseV1 ParsedName) where
+  encode (SerialiseV1 n) = case n of
+    QN qn -> encodeWord 0 <> encodeS qn
+    BN bn -> encodeWord 1 <> encodeS bn
+    DN dn -> encodeWord 2 <> encodeS dn
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
-    0 -> QN <$> decode
-    1 -> BN <$> decode
-    2 -> DN <$> decode
+  decode = decodeWord >>= fmap SerialiseV1 . \case
+    0 -> QN <$> decodeS
+    1 -> BN <$> decodeS
+    2 -> DN <$> decodeS
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
-instance Serialise ParsedTyName where
-  encode (TQN qn) = encodeWord 0 <> encode qn
-  encode (TBN bn) = encodeWord 1 <> encode bn
+instance Serialise (SerialiseV1 ParsedTyName) where
+  encode (SerialiseV1 n) = case n of
+    TQN qn -> encodeWord 0 <> encodeS qn
+    TBN bn -> encodeWord 1 <> encodeS bn
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
-    0 -> TQN <$> decode
-    1 -> TBN <$> decode
+  decode = decodeWord >>= fmap SerialiseV1 . \case
+    0 -> TQN <$> decodeS
+    1 -> TBN <$> decodeS
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
 
-instance Serialise Hash where
-  encode (Hash h) = encode h
-  decode = Hash <$> decode
+instance Serialise (SerialiseV1 Hash) where
+  encode (SerialiseV1 (Hash h)) = encode h
+  {-# INLINE encode #-}
+  decode = SerialiseV1 . Hash <$> decode
+  {-# INLINE decode #-}
 
-instance Serialise ModuleHash where
-  encode (ModuleHash mh) = encode mh
-  decode = ModuleHash <$> decode
+instance Serialise (SerialiseV1 ModuleHash) where
+  encode (SerialiseV1 (ModuleHash mh)) = encodeS mh
+  {-# INLINE encode #-}
+  decode = SerialiseV1 . ModuleHash <$> decodeS
+  {-# INLINE decode #-}
 
-instance Serialise FullyQualifiedName where
-  encode (FullyQualifiedName mn fqn h) = encode mn <> encode fqn <> encode h
-  decode = FullyQualifiedName <$> decode <*> decode <*> decode
+instance Serialise (SerialiseV1 FullyQualifiedName) where
+  encode (SerialiseV1 (FullyQualifiedName mn fqn h)) = encodeS mn <> encode fqn <> encodeS h
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (FullyQualifiedName <$> decodeS <*> decode <*> decodeS)
+  {-# INLINE decode #-}
 
-instance Serialise (Governance Name) where
-  encode = \case
-    KeyGov ksn -> encodeWord 0 <> encode ksn
-    CapGov cgn -> encodeWord 1 <> encode cgn
+instance Serialise (SerialiseV1 (Governance Name)) where
+  encode (SerialiseV1 g) = case g of
+    KeyGov ksn -> encodeWord 0 <> encodeS ksn
+    CapGov cgn -> encodeWord 1 <> encodeS cgn
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
-    0 -> KeyGov <$> decode
-    1 -> CapGov <$> decode
+  decode = decodeWord >>= fmap SerialiseV1 . \case
+    0 -> KeyGov <$> decodeS
+    1 -> CapGov <$> decodeS
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
-instance (Serialise ty, Serialise i) => Serialise (Arg ty i) where
-  encode (Arg n ty i) = encode n <> encode ty <> encode i
-  decode = Arg <$> decode <*> decode <*> decode
+instance (Serialise (SerialiseV1 ty), Serialise (SerialiseV1 i)) => Serialise (SerialiseV1 (Arg ty i)) where
+  encode (SerialiseV1 (Arg n ty i)) = encode n <> encodeS ty <> encodeS i
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (Arg <$> decode <*> decodeS <*> decodeS)
+  {-# INLINE decode #-}
 
 
-instance Serialise Decimal where
-  encode (Decimal places mantissa) = encode places <> encode mantissa
-  decode = Decimal <$> decode <*> decode
+instance Serialise (SerialiseV1 Decimal) where
+  encode (SerialiseV1 (Decimal places mantissa)) = encode places <> encode mantissa
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (Decimal <$> decode <*> decode)
+  {-# INLINE decode #-}
 
-instance Serialise Literal where
-  encode (LString s) = encodeWord 0 <> encode s
-  encode (LInteger i) = encodeWord 1 <> encode i
-  encode (LDecimal d) = encodeWord 2 <> encode d
-  encode LUnit = encodeWord 3
-  encode (LBool b) = encodeWord 4 <> encode b
+instance Serialise (SerialiseV1 Literal) where
+  encode (SerialiseV1 l) = case l of
+    LString s -> encodeWord 0 <> encode s
+    LInteger i -> encodeWord 1 <> encode i
+    LDecimal d -> encodeWord 2 <> encodeS d
+    LUnit -> encodeWord 3
+    LBool b -> encodeWord 4 <> encode b
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
+  decode = decodeWord >>= fmap SerialiseV1 . \case
     0 -> LString <$> decode
     1 -> LInteger <$> decode
-    2 -> LDecimal <$> decode
+    2 -> LDecimal <$> decodeS
     3 -> pure LUnit
     4 -> LBool <$> decode
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
-instance Serialise Field where
-  encode (Field f) = encode f
-  decode = Field <$> decode
+instance Serialise (SerialiseV1 Field) where
+  encode (SerialiseV1 (Field f)) = encode f
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (Field <$> decode)
+  {-# INLINE decode #-}
 
-instance (Serialise name, Serialise e) => Serialise (CapForm name e) where
-  encode (WithCapability e1 e2) = encodeWord 0 <> encode e1 <> encode e2
-  encode (CreateUserGuard name es) = encodeWord 1 <> encode name <> encode es
+instance (Serialise (SerialiseV1 name), Serialise (SerialiseV1 e)) => Serialise (SerialiseV1 (CapForm name e)) where
+  encode (SerialiseV1 cf) = case cf of
+    WithCapability e1 e2 -> encodeWord 0 <> encodeS e1 <> encodeS e2
+    CreateUserGuard name es -> encodeWord 1 <> encodeS name <> encodeS es
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
-    0 -> WithCapability <$> decode <*> decode
-    1 -> CreateUserGuard <$> decode <*> decode
+  decode = decodeWord >>= fmap SerialiseV1 . \case
+    0 -> WithCapability <$> decodeS <*> decodeS
+    1 -> CreateUserGuard <$> decodeS <*> decodeS
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
+
+instance (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
+  => Serialise (SerialiseV1 (BuiltinForm (Term Name Type b i))) where
+  encode (SerialiseV1 bf) = case bf of
+      CAnd t1 t2 -> encodeWord 0 <> encodeS t1 <> encodeS t2
+      COr t1 t2 -> encodeWord 1 <> encodeS t1 <> encodeS t2
+      CIf t1 t2 t3 -> encodeWord 2 <> encodeS t1 <> encodeS t2 <> encodeS t3
+      CEnforceOne t1 t2 -> encodeWord 3 <> encodeS t1 <> encodeS t2
+      CEnforce t1 t2 -> encodeWord 4 <> encodeS t1 <> encodeS t2
+  {-# INLINE encode #-}
+
+  decode = decodeWord >>= fmap SerialiseV1 . \case
+    0 -> CAnd <$> decodeS <*> decodeS
+    1 -> COr <$> decodeS <*> decodeS
+    2 -> CIf <$> decodeS <*> decodeS <*> decodeS
+    3 -> CEnforceOne <$> decodeS <*> decodeS
+    4 -> CEnforce <$> decodeS <*> decodeS
+    _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
 instance
-  (Serialise b, Serialise i)
-  => Serialise (BuiltinForm (Term Name Type b i)) where
-  encode (CAnd t1 t2) = encodeWord 0 <> encode t1 <> encode t2
-  encode (COr t1 t2) = encodeWord 1 <> encode t1 <> encode t2
-  encode (CIf t1 t2 t3) = encodeWord 2 <> encode t1 <> encode t2 <> encode t3
-  encode (CEnforceOne t1 t2) = encodeWord 3 <> encode t1 <> encode t2
-  encode (CEnforce t1 t2) = encodeWord 4 <> encode t1 <> encode t2
+  (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
+  => Serialise (SerialiseV1 (Term Name Type b i)) where
+  encode (SerialiseV1 term) = case term of
+    Var n i -> encodeWord 0 <> encodeS n <> encodeS i
+    Lam args body i -> encodeWord 1 <> encodeS args <> encodeS body <> encodeS i
+    Let arg t1 t2 i -> encodeWord 2 <> encodeS arg <> encodeS t1 <> encodeS t2 <> encodeS i
+    App t1 t2 i -> encodeWord 3 <> encodeS t1 <> encodeS t2 <> encodeS i
+    Sequence t1 t2 i -> encodeWord 4 <> encodeS t1 <> encodeS t2 <> encodeS i
+    Nullary t i -> encodeWord 5 <> encodeS t <> encodeS i
+    Conditional bi i -> encodeWord 6 <> encodeS bi <> encodeS i
+    Builtin bi i -> encodeWord 7 <> encodeS bi <> encodeS i
+    Constant lit i -> encodeWord 8 <> encodeS lit <> encodeS i
+    ListLit t i -> encodeWord 9 <> encodeS t <> encodeS i
+    Try t1 t2 i -> encodeWord 10 <> encodeS t1 <> encodeS t2 <> encodeS i
+    ObjectLit o i -> encodeWord 11 <> encodeS o <> encodeS i
+    CapabilityForm cf i -> encodeWord 12 <> encodeS cf <> encodeS i
+    InlineValue pv i -> encodeWord 13 <> encodeS pv <> encodeS i
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
-    0 -> CAnd <$> decode <*> decode
-    1 -> COr <$> decode <*> decode
-    2 -> CIf <$> decode <*> decode <*> decode
-    3 -> CEnforceOne <$> decode <*> decode
-    4 -> CEnforce <$> decode <*> decode
-    _ -> fail "unexpected decoding"
-
-instance
-  (Serialise b, Serialise i)
-  => Serialise (Term Name Type b i) where
-  encode (Var n i) = encodeWord 0 <> encode n <> encode i
-  encode (Lam args term i) = encodeWord 1 <> encode args <> encode term <> encode i
-  encode (Let arg t1 t2 i) = encodeWord 2 <> encode arg <> encode t1 <> encode t2 <> encode i
-  encode (App t1 t2 i) = encodeWord 3 <> encode t1 <> encode t2 <> encode i
-  encode (Sequence t1 t2 i) = encodeWord 4 <> encode t1 <> encode t2 <> encode i
-  encode (Nullary t i) = encodeWord 5 <> encode t <> encode i
-  encode (Conditional bi i) = encodeWord 6 <> encode bi <> encode i
-  encode (Builtin bi i) = encodeWord 7 <> encode bi <> encode i
-  encode (Constant lit i) = encodeWord 8 <> encode lit <> encode i
-  encode (ListLit t i) = encodeWord 9 <> encode t <> encode i
-  encode (Try t1 t2 i) = encodeWord 10 <> encode t1 <> encode t2 <> encode i
-  encode (ObjectLit o i) = encodeWord 11 <> encode o <> encode i
-  encode (CapabilityForm cf i) = encodeWord 12 <> encode cf <> encode i
-  encode (InlineValue pv i) = encodeWord 13 <> encode pv <> encode i
-
-  decode = decodeWord >>= \case
-    0 -> Var <$> decode <*> decode
-    1 -> Lam <$> decode <*> decode <*> decode
-    2 -> Let <$> decode <*> decode <*> decode <*> decode
-    3 -> App <$> decode <*> decode <*> decode
-    4 -> Sequence <$> decode <*> decode <*> decode
-    5 -> Nullary <$> decode <*> decode
-    6 -> Conditional <$> decode <*> decode
-    7 -> Builtin <$> decode <*> decode
-    8 -> Constant <$> decode <*> decode
-    9 -> ListLit <$> decode <*> decode
-    10 -> Try <$> decode <*> decode <*> decode
-    11 -> ObjectLit <$> decode <*> decode
-    12 -> CapabilityForm <$> decode <*> decode
+  decode = decodeWord >>= fmap SerialiseV1 . \case
+    0 -> Var <$> decodeS <*> decodeS
+    1 -> Lam <$> decodeS <*> decodeS <*> decodeS
+    2 -> Let <$> decodeS <*> decodeS <*> decodeS <*> decodeS
+    3 -> App <$> decodeS <*> decodeS <*> decodeS
+    4 -> Sequence <$> decodeS <*> decodeS <*> decodeS
+    5 -> Nullary <$> decodeS <*> decodeS
+    6 -> Conditional <$> decodeS <*> decodeS
+    7 -> Builtin <$> decodeS <*> decodeS
+    8 -> Constant <$> decodeS <*> decodeS
+    9 -> ListLit <$> decodeS <*> decodeS
+    10 -> Try <$> decodeS <*> decodeS <*> decodeS
+    11 -> ObjectLit <$> decodeS <*> decodeS
+    12 -> CapabilityForm <$> decodeS <*> decodeS
     -- Internal term used for back. compat pact < 5
-    13 -> InlineValue <$> decode <*> decode
+    13 -> InlineValue <$> decodeS <*> decodeS
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
 instance
-  (Serialise b, Serialise i)
-  =>Serialise (Defun Name Type b i) where
-  encode (Defun spec args term i) = encode spec <> encode args <> encode term <> encode i
+  (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
+  => Serialise (SerialiseV1 (Defun Name Type b i)) where
+  encode (SerialiseV1 (Defun spec args term i)) = encodeS spec <> encodeS args <> encodeS term <> encodeS i
+  {-# INLINE encode #-}
 
-  decode = Defun <$> decode <*> decode <*> decode <*> decode
+  decode = SerialiseV1 <$> (Defun <$> decodeS <*> decodeS <*> decodeS <*> decodeS)
+  {-# INLINE decode #-}
 
 instance
-  (Serialise b, Serialise i)
-  => Serialise (DefConst Name Type b i) where
-  encode (DefConst spec term i) = encode spec <> encode term <> encode i
+  (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
+  => Serialise (SerialiseV1 (DefConst Name Type b i)) where
+  encode (SerialiseV1 (DefConst spec term i)) = encodeS spec <> encodeS term <> encodeS i
+  {-# INLINE encode #-}
 
-  decode = DefConst <$> decode <*> decode <*> decode
+  decode = SerialiseV1 <$> (DefConst <$> decodeS <*> decodeS <*> decodeS)
+  {-# INLINE decode #-}
 
-instance (Serialise b, Serialise i) => Serialise (ConstVal (Term Name Type b i)) where
-  encode = \case
-    TermConst t -> encodeWord 0 <> encode t
-    EvaledConst pv -> encodeWord 1 <> encode pv
+instance (Serialise (SerialiseV1 term)) => Serialise (SerialiseV1 (ConstVal term)) where
+  encode (SerialiseV1 c) = case c of
+    TermConst t -> encodeWord 0 <> encodeS t
+    EvaledConst pv -> encodeWord 1 <> encodeS pv
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
-    0 -> TermConst <$> decode
-    1 -> EvaledConst <$> decode
+  decode = decodeWord >>= fmap SerialiseV1 . \case
+    0 -> TermConst <$> decodeS
+    1 -> EvaledConst <$> decodeS
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
-instance Serialise (FQNameRef Name) where
-  encode (FQName fqn) = encode fqn
-  decode = FQName <$> decode
+instance Serialise (SerialiseV1 (FQNameRef Name)) where
+  encode (SerialiseV1 (FQName fqn)) = encodeS fqn
+  {-# INLINE encode #-}
+  decode = SerialiseV1 . FQName <$> decodeS
+  {-# INLINE decode #-}
 
-instance Serialise (DefManagedMeta Name) where
-  encode (DefManagedMeta i ref) = encodeWord 0 <> encode i <> encode ref
-  encode AutoManagedMeta = encodeWord 1
+instance (Serialise (SerialiseV1 name)) => Serialise (SerialiseV1 (DefManagedMeta name)) where
+  encode (SerialiseV1 dmm) = case dmm of
+    DefManagedMeta i ref -> encodeWord 0 <> encode i <> encodeS ref
+    AutoManagedMeta -> encodeWord 1
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
-    0 -> DefManagedMeta <$> decode <*> decode
+  decode = decodeWord >>= fmap SerialiseV1 . \case
+    0 -> DefManagedMeta <$> decode <*> decodeS
     1 -> pure AutoManagedMeta
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
-instance Serialise (DefManagedMeta BareName) where
-  encode (DefManagedMeta i ref) = encodeWord 0 <> encode i <> encode ref
-  encode AutoManagedMeta = encodeWord 1
+instance Serialise (SerialiseV1 name) => Serialise (SerialiseV1 (DefCapMeta name)) where
+  encode (SerialiseV1 dcm) = case dcm of
+    DefEvent -> encodeWord 0
+    DefManaged meta -> encodeWord 1 <> encodeS meta
+    Unmanaged -> encodeWord 2
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
-    0 -> DefManagedMeta <$> decode <*> decode
-    1 -> pure AutoManagedMeta
-    _ -> fail "unexpected decoding"
-
-instance Serialise (DefManagedMeta (FQNameRef Name)) where
-  encode (DefManagedMeta i ref) = encodeWord 0 <> encode i <> encode ref
-  encode AutoManagedMeta = encodeWord 1
-
-  decode = decodeWord >>= \case
-    0 -> DefManagedMeta <$> decode <*> decode
-    1 -> pure AutoManagedMeta
-    _ -> fail "unexpected decoding"
-
-instance Serialise (DefCapMeta BareName) where
-  encode DefEvent = encodeWord 0
-  encode (DefManaged meta) = encodeWord 1 <> encode meta
-  encode Unmanaged = encodeWord 2
-
-  decode = decodeWord >>= \case
+  decode = decodeWord >>= fmap SerialiseV1 . \case
     0 -> pure DefEvent
-    1 -> DefManaged <$> decode
+    1 -> DefManaged <$> decodeS
     2 -> pure Unmanaged
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
-instance Serialise (DefCapMeta (FQNameRef Name)) where
-  encode DefEvent = encodeWord 0
-  encode (DefManaged meta) = encodeWord 1 <> encode meta
-  encode Unmanaged = encodeWord 2
+instance (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i)) => Serialise (SerialiseV1 (DefCap Name Type b i)) where
+  encode (SerialiseV1 (DefCap spec args term meta i)) =
+    encodeS spec
+    <> encodeS args
+    <> encodeS term
+    <> encodeS meta
+    <> encodeS i
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
-    0 -> pure DefEvent
-    1 -> DefManaged <$> decode
-    2 -> pure Unmanaged
-    _ -> fail "unexpected decoding"
-
-instance (Serialise b, Serialise i) => Serialise (DefCap Name Type b i) where
-  encode (DefCap spec args term meta i) =
-    encode spec
-    <> encode args
-    <> encode term
-    <> encode meta
-    <> encode i
-
-  decode = DefCap <$> decode <*> decode
-           <*> decode <*> decode <*> decode
+  decode =
+    SerialiseV1 <$> (DefCap <$> decodeS <*> decodeS <*> decodeS <*> decodeS <*> decodeS)
+  {-# INLINE decode #-}
 
 
-instance Serialise i => Serialise (DefSchema Type i) where
-  encode (DefSchema n schema i) = encode n <> encode schema <> encode i
-  decode = DefSchema <$> decode <*> decode <*> decode
+instance (Serialise (SerialiseV1 ty), Serialise (SerialiseV1 i)) => Serialise (SerialiseV1 (DefSchema ty i)) where
+  encode (SerialiseV1 (DefSchema n schema i)) = encode n <> encodeS schema <> encodeS i
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (DefSchema <$> decode <*> decodeS <*> decodeS)
+  {-# INLINE decode #-}
 
-instance Serialise (TableSchema Name) where
-  encode (ResolvedTable n) = encode n
-  decode = ResolvedTable <$> decode
+instance Serialise (SerialiseV1 (TableSchema Name)) where
+  encode (SerialiseV1 (ResolvedTable n)) = encodeS n
+  {-# INLINE encode #-}
+  decode = SerialiseV1 . ResolvedTable <$> decodeS
+  {-# INLINE decode #-}
 
-instance Serialise i => Serialise (DefTable Name i) where
-  encode (DefTable n schema i) = encode n <> encode schema <> encode i
-  decode = DefTable <$> decode <*> decode <*> decode
+instance Serialise (SerialiseV1 i) => Serialise (SerialiseV1 (DefTable Name i)) where
+  encode (SerialiseV1 (DefTable n schema i)) = encode n <> encodeS schema <> encodeS i
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (DefTable <$> decode <*> decodeS <*> decodeS)
+  {-# INLINE decode #-}
 
 instance
-  (Serialise b, Serialise i)
-  => Serialise (Step Name Type b i) where
-  encode (Step t) = encodeWord 0 <> encode t
-  encode (StepWithRollback t rb) = encodeWord 1 <> encode t <> encode rb
+  (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
+  => Serialise (SerialiseV1 (Step Name Type b i)) where
+  encode (SerialiseV1 step) = case step of
+    Step t -> encodeWord 0 <> encodeS t
+    StepWithRollback t rb -> encodeWord 1 <> encodeS t <> encodeS rb
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
-    0 -> Step <$> decode
-    1 -> StepWithRollback <$> decode <*> decode
+  decode = decodeWord >>= fmap SerialiseV1 . \case
+    0 -> Step <$> decodeS
+    1 -> StepWithRollback <$> decodeS <*> decodeS
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
 instance
-  (Serialise b, Serialise i)
-  => Serialise (DefPact Name Type b i) where
-  encode (DefPact spec args steps i) = encode spec <> encode args
-    <> encode steps <> encode i
+  (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
+  => Serialise (SerialiseV1 (DefPact Name Type b i)) where
+  encode (SerialiseV1 (DefPact spec args steps i)) =
+    encodeS spec <> encodeS args <> encodeS steps <> encodeS i
+  {-# INLINE encode #-}
 
-  decode = DefPact <$> decode <*> decode <*> decode <*> decode
+  decode = SerialiseV1 <$> (DefPact <$> decodeS <*> decodeS <*> decodeS <*> decodeS)
+  {-# INLINE decode #-}
 
 instance
-  (Serialise b, Serialise i)
-  => Serialise (Def Name Type b i) where
-  encode (Dfun df) = encodeWord 0 <> encode df
-  encode (DConst dc) = encodeWord 1 <> encode dc
-  encode (DCap cap) = encodeWord 2 <> encode cap
-  encode (DSchema schema) = encodeWord 3 <> encode schema
-  encode (DTable table) = encodeWord 4 <> encode table
-  encode (DPact dp) = encodeWord 5 <> encode dp
+  (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
+  => Serialise (SerialiseV1 (Def Name Type b i)) where
+  encode (SerialiseV1 defn) = case defn of
+    Dfun df -> encodeWord 0 <> encodeS df
+    DConst dc -> encodeWord 1 <> encodeS dc
+    DCap cap -> encodeWord 2 <> encodeS cap
+    DSchema schema -> encodeWord 3 <> encodeS schema
+    DTable table -> encodeWord 4 <> encodeS table
+    DPact dp -> encodeWord 5 <> encodeS dp
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
-    0 -> Dfun <$> decode
-    1 -> DConst <$> decode
-    2 -> DCap <$> decode
-    3 -> DSchema <$> decode
-    4 -> DTable <$> decode
-    5 -> DPact <$> decode
+  decode = decodeWord >>= fmap SerialiseV1 . \case
+    0 -> Dfun <$> decodeS
+    1 -> DConst <$> decodeS
+    2 -> DCap <$> decodeS
+    3 -> DSchema <$> decodeS
+    4 -> DTable <$> decodeS
+    5 -> DPact <$> decodeS
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
-instance Serialise DynamicRef where
-  encode (DynamicRef n b) = encode n <> encode b
-  decode = DynamicRef <$> decode <*> decode
+instance Serialise (SerialiseV1 DynamicRef) where
+  encode (SerialiseV1 (DynamicRef n b)) = encode n <> encode b
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (DynamicRef <$> decode <*> decode)
+  {-# INLINE decode #-}
 
-instance Serialise NameKind where
-  encode (NBound d) = encodeWord 0 <> encode d
-  encode (NTopLevel mn mh) = encodeWord 1 <> encode mn <> encode mh
-  encode (NModRef mn ms) = encodeWord 2 <> encode mn <> encode ms
-  encode (NDynRef dref) = encodeWord 3 <> encode dref
+instance Serialise (SerialiseV1 NameKind) where
+  encode (SerialiseV1 nk) = case nk of
+    NBound d -> encodeWord 0 <> encode d
+    NTopLevel mn mh -> encodeWord 1 <> encodeS mn <> encodeS mh
+    NModRef mn ms -> encodeWord 2 <> encodeS mn <> encodeS ms
+    NDynRef dref -> encodeWord 3 <> encodeS dref
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
+  decode = decodeWord >>= fmap SerialiseV1 . \case
     0 -> NBound <$> decode
-    1 -> NTopLevel <$> decode <*> decode
-    2 -> NModRef <$> decode <*> decode
-    3 -> NDynRef <$> decode
+    1 -> NTopLevel <$> decodeS <*> decodeS
+    2 -> NModRef <$> decodeS <*> decodeS
+    3 -> NDynRef <$> decodeS
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
-instance Serialise Name where
-  encode (Name n k) = encode n <> encode k
-  decode = Name <$> decode <*> decode
+instance Serialise (SerialiseV1 Name) where
+  encode (SerialiseV1 (Name n k)) = encode n <> encodeS k
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (Name <$> decode <*> decodeS)
+  {-# INLINE decode #-}
 
-instance Serialise PrimType where
-  encode = \case
+instance Serialise (SerialiseV1 PrimType) where
+  encode (SerialiseV1 pt) = case pt of
     PrimInt -> encodeWord 0
     PrimDecimal -> encodeWord 1
     PrimBool -> encodeWord 2
@@ -561,8 +659,9 @@ instance Serialise PrimType where
     PrimGuard -> encodeWord 4
     PrimTime -> encodeWord 5
     PrimUnit -> encodeWord 6
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
+  decode = decodeWord >>= fmap SerialiseV1 . \case
     0 -> pure PrimInt
     1 -> pure PrimDecimal
     2 -> pure PrimBool
@@ -571,115 +670,155 @@ instance Serialise PrimType where
     5 -> pure PrimTime
     6 -> pure PrimUnit
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
-instance Serialise Schema where
-  encode (Schema sc m) =
-    encode sc <> encode m
-  decode = Schema <$> decode <*> decode
+instance Serialise (SerialiseV1 Schema) where
+  encode (SerialiseV1 (Schema sc m)) =
+    encodeS sc <> encodeS m
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (Schema <$> decodeS <*> decodeS)
+  {-# INLINE decode #-}
 
-instance Serialise Type where
-  encode (TyPrim pt) = encodeWord 0 <> encode pt
-  encode (TyList ty) = encodeWord 1 <> encode ty
-  encode TyAnyList = encodeWord 2
-  encode (TyModRef mr) = encodeWord 3 <> encode mr
-  encode (TyObject s) = encodeWord 4 <> encode s
-  encode TyAnyObject = encodeWord 5
-  encode (TyTable s) = encodeWord 6 <> encode s
-  encode TyCapToken = encodeWord 7
-  encode TyAny = encodeWord 8
+instance Serialise (SerialiseV1 Type) where
+  encode (SerialiseV1 ty) = case ty of
+    TyPrim pt -> encodeWord 0 <> encodeS pt
+    TyList t -> encodeWord 1 <> encodeS t
+    TyAnyList -> encodeWord 2
+    TyModRef mr -> encodeWord 3 <> encode (coerceSetToSerialize mr)
+    TyObject s -> encodeWord 4 <> encodeS s
+    TyAnyObject -> encodeWord 5
+    TyTable s -> encodeWord 6 <> encodeS s
+    TyCapToken -> encodeWord 7
+    TyAny -> encodeWord 8
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
-    0 -> TyPrim <$> decode
-    1 -> TyList <$> decode
+  decode = decodeWord >>= fmap SerialiseV1 . \case
+    0 -> TyPrim <$> decodeS
+    1 -> TyList <$> decodeS
     2 -> pure TyAnyList
-    3 -> TyModRef <$> decode
-    4 -> TyObject <$> decode
+    3 -> TyModRef . coerceSetFromSerialize <$> decode
+    4 -> TyObject <$> decodeS
     5 -> pure TyAnyObject
-    6 -> TyTable <$> decode
+    6 -> TyTable <$> decodeS
     7 -> pure TyCapToken
     8 -> pure TyAny
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
-instance Serialise Import where
-  encode (Import mn mh mimp) = encode mn <> encode mh <> encode mimp
-  decode = Import <$> decode <*> decode <*> decode
-
-instance
-  (Serialise b, Serialise i)
-  => Serialise (EvalModule b i) where
-  encode (Module mn mg mdef mbless mimports mimpl mhash minfo) =
-    encode mn <> encode mg <> encode mdef
-    <> encode mbless <> encode mimports <> encode mimpl
-    <> encode mhash <> encode minfo
-
-  decode = Module <$> decode <*> decode <*> decode <*> decode <*> decode
-           <*> decode <*> decode <*> decode
-
+instance Serialise (SerialiseV1 Import) where
+  encode (SerialiseV1 (Import mn mh mimp)) = encodeS mn <> encodeS mh <> encode mimp
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (Import <$> decodeS <*> decodeS <*> decode)
+  {-# INLINE decode #-}
 
 instance
-  Serialise i
-  => Serialise (IfDefun Type i) where
-  encode (IfDefun spec args i) = encode spec <> encode args <> encode i
+  (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
+  => Serialise (SerialiseV1 (EvalModule b i)) where
+  encode (SerialiseV1 (Module mn mg mdef mbless mimports mimpl mhash minfo)) =
+    encodeS mn <> encodeS mg <> encodeS mdef
+    <> encode (coerceSetToSerialize mbless) <> encodeS mimports <> encodeS mimpl
+    <> encodeS mhash <> encodeS minfo
+  {-# INLINE encode #-}
 
-  decode = IfDefun <$> decode <*> decode <*> decode
+  decode = fmap SerialiseV1 $
+    Module <$> decodeS <*> decodeS <*> decodeS <*> (coerceSetFromSerialize <$> decode) <*> decodeS
+           <*> decodeS <*> decodeS <*> decodeS
+  {-# INLINE decode #-}
 
-instance
-  Serialise i
-  => Serialise (IfDefCap name Type i) where
-  encode (IfDefCap spec args meta i) = encode spec <> encode args
-                                   <> encode meta <> encode i
-
-  decode = IfDefCap <$> decode <*> decode <*> decode <*> decode
-
-instance
-  Serialise i
-  => Serialise (IfDefPact Type i) where
-  encode (IfDefPact spec args i) = encode spec <> encode args <> encode i
-
-  decode = IfDefPact <$> decode <*> decode <*> decode
 
 instance
-  (Serialise b, Serialise i)
-  => Serialise (IfDef Name Type b i) where
-  encode (IfDfun df) = encodeWord 0 <> encode df
-  encode (IfDConst dc) = encodeWord 1 <> encode dc
-  encode (IfDCap cap) = encodeWord 2 <> encode cap
-  encode (IfDSchema schema) = encodeWord 3 <> encode schema
-  encode (IfDPact dp) =  encodeWord 4 <> encode dp
+  Serialise (SerialiseV1 i)
+  => Serialise (SerialiseV1 (IfDefun Type i)) where
+  encode (SerialiseV1 (IfDefun spec args i)) = encodeS spec <> encodeS args <> encodeS i
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
-    0 -> IfDfun <$> decode
-    1 -> IfDConst <$> decode
-    2 -> IfDCap <$> decode
-    3 -> IfDSchema <$> decode
-    4 -> IfDPact <$> decode
+  decode = SerialiseV1 <$> (IfDefun <$> decodeS <*> decodeS <*> decodeS)
+  {-# INLINE decode #-}
+
+instance
+  Serialise (SerialiseV1 i)
+  => Serialise (SerialiseV1 (IfDefCap name Type i)) where
+  encode (SerialiseV1 (IfDefCap spec args meta i)) =
+    encodeS spec <> encodeS args <> encodeS meta <> encodeS i
+  {-# INLINE encode #-}
+
+  decode = SerialiseV1 <$> (IfDefCap <$> decodeS <*> decodeS <*> decodeS <*> decodeS)
+  {-# INLINE decode #-}
+
+instance
+  Serialise (SerialiseV1 i)
+  => Serialise (SerialiseV1 (IfDefPact Type i)) where
+  encode (SerialiseV1 (IfDefPact spec args i)) = encodeS spec <> encodeS args <> encodeS i
+  {-# INLINE encode #-}
+
+  decode = SerialiseV1 <$> (IfDefPact <$> decodeS <*> decodeS <*> decodeS)
+  {-# INLINE decode #-}
+
+instance
+  (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
+  => Serialise (SerialiseV1 (IfDef Name Type b i)) where
+  encode (SerialiseV1 ifdef) = case ifdef of
+    IfDfun df -> encodeWord 0 <> encodeS df
+    IfDConst dc -> encodeWord 1 <> encodeS dc
+    IfDCap cap -> encodeWord 2 <> encodeS cap
+    IfDSchema schema -> encodeWord 3 <> encodeS schema
+    IfDPact dp ->  encodeWord 4 <> encodeS dp
+  {-# INLINE encode #-}
+
+  decode = decodeWord >>= fmap SerialiseV1 . \case
+    0 -> IfDfun <$> decodeS
+    1 -> IfDConst <$> decodeS
+    2 -> IfDCap <$> decodeS
+    3 -> IfDSchema <$> decodeS
+    4 -> IfDPact <$> decodeS
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
 instance
-  (Serialise b, Serialise i)
-  => Serialise (EvalInterface b i) where
-  encode (Interface n defs imp h i) = encode n <> encode defs <> encode imp <> encode h <> encode i
+  (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
+  => Serialise (SerialiseV1 (EvalInterface b i)) where
+  encode (SerialiseV1 (Interface n defs imp h i)) =
+    encodeS n <> encodeS defs <> encodeS imp <> encodeS h <> encodeS i
+  {-# INLINE encode #-}
 
-  decode = Interface <$> decode <*> decode <*> decode <*> decode <*> decode
+  decode = SerialiseV1 <$> (Interface <$> decodeS <*> decodeS <*> decodeS <*> decodeS <*> decodeS)
+  {-# INLINE decode #-}
+
+coerceMapFromSerialise :: M.Map (SerialiseV1 k) (SerialiseV1 v) -> M.Map k v
+coerceMapFromSerialise = unsafeCoerce
+
+coerceMapToSerialise :: M.Map k v -> M.Map (SerialiseV1 k) (SerialiseV1 v)
+coerceMapToSerialise = unsafeCoerce
+
+coerceSetToSerialize :: S.Set k -> S.Set (SerialiseV1 k)
+coerceSetToSerialize = unsafeCoerce
+
+coerceSetFromSerialize :: S.Set (SerialiseV1 k) -> S.Set k
+coerceSetFromSerialize = unsafeCoerce
 
 instance
-  (Serialise b, Serialise i)
-  => Serialise (ModuleData b i) where
-  encode = \case
-    ModuleData em m -> encodeWord 0 <> encode em <> encode m
-    InterfaceData ei m -> encodeWord 1 <> encode ei <> encode m
+  (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
+  => Serialise (SerialiseV1 (ModuleData b i)) where
+  encode (SerialiseV1 md) = case md of
+    ModuleData em m -> encodeWord 0 <> encodeS em <> encode (coerceMapToSerialise m)
+    InterfaceData ei m -> encodeWord 1 <> encodeS ei <> encode (coerceMapToSerialise m)
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
-    0 -> ModuleData <$> decode <*> decode
-    1 -> InterfaceData <$> decode <*> decode
+  decode = decodeWord >>= fmap SerialiseV1 . \case
+    0 -> ModuleData <$> decodeS <*> (coerceMapFromSerialise <$> decode)
+    1 -> InterfaceData <$> decodeS <*> (coerceMapFromSerialise <$> decode)
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
-instance Serialise SpanInfo where
-  encode (SpanInfo sl sc el ec) = encode sl <> encode sc <> encode el <> encode ec
-  decode = SpanInfo <$> decode <*> decode <*> decode <*> decode
 
-instance Serialise CoreBuiltin where
-  encode = \case
+instance Serialise (SerialiseV1 SpanInfo) where
+  encode (SerialiseV1 (SpanInfo sl sc el ec)) = encode sl <> encode sc <> encode el <> encode ec
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (SpanInfo <$> decode <*> decode <*> decode <*> decode)
+  {-# INLINE decode #-}
+
+instance Serialise (SerialiseV1 CoreBuiltin) where
+  encode (SerialiseV1 cb) = case cb of
     CoreAdd -> encodeWord 0
     CoreSub-> encodeWord 1
     CoreMultiply -> encodeWord 2
@@ -815,8 +954,9 @@ instance Serialise CoreBuiltin where
     CoreHyperlaneMessageId -> encodeWord 132
     CoreHyperlaneDecodeMessage -> encodeWord 133
     CoreHyperlaneEncodeMessage -> encodeWord 134
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
+  decode = decodeWord >>= fmap SerialiseV1 . \case
     0 -> pure CoreAdd
     1 -> pure CoreSub
     2 -> pure CoreMultiply
@@ -932,7 +1072,6 @@ instance Serialise CoreBuiltin where
     112 -> pure CoreTypeOfPrincipal
     113 -> pure CoreValidatePrincipal
     114 -> pure CoreCreateDefPactGuard
-
     115 -> pure CoreYieldToChain
     116 -> pure CoreChainData
     117 -> pure CoreIsCharset
@@ -955,110 +1094,145 @@ instance Serialise CoreBuiltin where
     133 -> pure CoreHyperlaneDecodeMessage
     134 -> pure CoreHyperlaneEncodeMessage
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
 
-instance Serialise ReplOnlyBuiltin where
-  encode = encodeWord . fromIntegral . fromEnum
+instance Serialise (SerialiseV1 ReplOnlyBuiltin) where
+  encode = encodeWord . fromIntegral . fromEnum . _getSV1
+  {-# INLINE encode #-}
   decode = do
     vInd <- toEnum . fromIntegral <$> decodeWord
     if vInd >= minBound && vInd <= maxBound
-      then pure $ toEnum vInd
+      then pure $ SerialiseV1 (toEnum vInd)
       else fail "unexpected encoding"
+  {-# INLINE decode #-}
 
-instance Serialise ReplCoreBuiltin where
-  encode (RBuiltinWrap b) = encodeWord 0 <> encode b
-  encode (RBuiltinRepl r) = encodeWord 1 <> encode r
+instance Serialise (SerialiseV1 ReplCoreBuiltin) where
+  encode (SerialiseV1 rb) = case rb of
+    RBuiltinWrap b -> encodeWord 0 <> encodeS b
+    RBuiltinRepl r -> encodeWord 1 <> encodeS r
+  {-# INLINE encode #-}
 
-  decode = decodeWord >>= \case
-    0 -> RBuiltinWrap <$> decode
-    1 -> RBuiltinRepl <$> decode
+  decode = decodeWord >>= fmap SerialiseV1 . \case
+    0 -> RBuiltinWrap <$> decodeS
+    1 -> RBuiltinRepl <$> decodeS
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
 
 
 -- DefPacts
 
-instance Serialise (UserGuard QualifiedName PactValue) where
-  encode (UserGuard f a) = encode f <> encode a
-  decode = UserGuard <$> decode <*> decode
+instance Serialise (SerialiseV1 (UserGuard QualifiedName PactValue)) where
+  encode (SerialiseV1 (UserGuard f a)) = encodeS f <> encodeS a
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (UserGuard <$> decodeS <*> decodeS)
+  {-# INLINE decode #-}
 
-instance Serialise DefPactId where
-  encode (DefPactId pid) = encode pid
-  decode = DefPactId <$> decode
+instance Serialise (SerialiseV1 DefPactId) where
+  encode (SerialiseV1 (DefPactId pid)) = encode pid
+  {-# INLINE encode #-}
+  decode = SerialiseV1 . DefPactId <$> decode
+  {-# INLINE decode #-}
 
-instance Serialise (CapabilityGuard QualifiedName PactValue) where
-  encode (CapabilityGuard n a pid) = encode n <> encode a <> encode pid
-  decode = CapabilityGuard <$> decode <*> decode <*> decode
+instance Serialise (SerialiseV1 (CapabilityGuard QualifiedName PactValue)) where
+  encode (SerialiseV1 (CapabilityGuard n a pid)) = encodeS n <> encodeS a <> encodeS pid
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (CapabilityGuard <$> decodeS <*> decodeS <*> decodeS)
+  {-# INLINE decode #-}
 
-instance Serialise ModuleGuard where
-  encode (ModuleGuard mn n) = encode mn <> encode n
-  decode = ModuleGuard <$> decode <*> decode
+instance Serialise (SerialiseV1 ModuleGuard) where
+  encode (SerialiseV1 (ModuleGuard mn n)) = encodeS mn <> encode n
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (ModuleGuard <$> decodeS <*> decode)
+  {-# INLINE decode #-}
 
-instance Serialise (Guard QualifiedName PactValue) where
-  encode = \case
-    GKeyset ks -> encodeWord 0 <> encode ks
-    GKeySetRef ksn -> encodeWord 1 <> encode ksn
-    GUserGuard ug -> encodeWord 2 <> encode ug
-    GCapabilityGuard cg -> encodeWord 3 <> encode cg
-    GModuleGuard mg -> encodeWord 4 <> encode mg
-    GDefPactGuard dpg -> encodeWord 5 <> encode dpg
-  decode = decodeWord >>= \case
-    0 -> GKeyset <$> decode
-    1 -> GKeySetRef <$> decode
-    2 -> GUserGuard <$> decode
-    3 -> GCapabilityGuard <$> decode
-    4 -> GModuleGuard <$> decode
-    5 -> GDefPactGuard <$> decode
+instance Serialise (SerialiseV1 (Guard QualifiedName PactValue)) where
+  encode (SerialiseV1 g) = case g of
+    GKeyset ks -> encodeWord 0 <> encodeS ks
+    GKeySetRef ksn -> encodeWord 1 <> encodeS ksn
+    GUserGuard ug -> encodeWord 2 <> encodeS ug
+    GCapabilityGuard cg -> encodeWord 3 <> encodeS cg
+    GModuleGuard mg -> encodeWord 4 <> encodeS mg
+    GDefPactGuard dpg -> encodeWord 5 <> encodeS dpg
+  {-# INLINE encode #-}
+  decode = decodeWord >>= fmap SerialiseV1 . \case
+    0 -> GKeyset <$> decodeS
+    1 -> GKeySetRef <$> decodeS
+    2 -> GUserGuard <$> decodeS
+    3 -> GCapabilityGuard <$> decodeS
+    4 -> GModuleGuard <$> decodeS
+    5 -> GDefPactGuard <$> decodeS
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
-instance Serialise DefPactGuard where
-  encode (DefPactGuard i name )= encode i <> encode name
-  decode = DefPactGuard <$> decode <*> decode
+instance Serialise (SerialiseV1 DefPactGuard) where
+  encode (SerialiseV1 (DefPactGuard i name)) = encodeS i <> encode name
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (DefPactGuard <$> decodeS <*> decode)
+  {-# INLINE decode #-}
 
-instance Serialise ModRef where
-  encode (ModRef mn imp) = encode mn <> encode imp
-  decode = ModRef <$> decode <*> decode
+instance Serialise (SerialiseV1 ModRef) where
+  encode (SerialiseV1 (ModRef mn imp)) = encodeS mn <> encode (coerceSetToSerialize imp)
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (ModRef <$> decodeS <*> (coerceSetFromSerialize <$> decode))
+  {-# INLINE decode #-}
 
-instance Serialise (CapToken FullyQualifiedName PactValue) where
-  encode (CapToken n a) = encode n <> encode a
-  decode = CapToken <$> decode <*> decode
+instance Serialise (SerialiseV1 name) => Serialise (SerialiseV1 (CapToken name PactValue)) where
+  encode (SerialiseV1 (CapToken n a)) = encodeS n <> encodeS a
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (CapToken <$> decodeS <*> decodeS)
+  {-# INLINE decode #-}
 
-instance Serialise PactValue where
-  encode = \case
-    PLiteral l -> encodeWord 0 <> encode l
-    PList l -> encodeWord 1 <> encode l
-    PGuard g -> encodeWord 2 <> encode g
-    PObject o -> encodeWord 3 <> encode o
-    PModRef mr -> encodeWord 4 <> encode mr
-    PCapToken ct -> encodeWord 5 <> encode ct
+instance Serialise (SerialiseV1 PactValue) where
+  encode (SerialiseV1 pv) = case pv of
+    PLiteral l -> encodeWord 0 <> encodeS l
+    PList l -> encodeWord 1 <> encodeS l
+    PGuard g -> encodeWord 2 <> encodeS g
+    PObject o -> encodeWord 3 <> encodeS o
+    PModRef mr -> encodeWord 4 <> encodeS mr
+    PCapToken ct -> encodeWord 5 <> encodeS ct
     PTime (UTCTime (NominalDiffTime pt)) -> encodeWord 6 <> encode pt
-  decode = decodeWord >>= \case
-    0 -> PLiteral <$> decode
-    1 -> PList <$> decode
-    2 -> PGuard <$> decode
-    3 -> PObject <$> decode
-    4 -> PModRef <$> decode
-    5 -> PCapToken <$> decode
+  {-# INLINE encode #-}
+  decode = decodeWord >>= fmap SerialiseV1 . \case
+    0 -> PLiteral <$> decodeS
+    1 -> PList <$> decodeS
+    2 -> PGuard <$> decodeS
+    3 -> PObject <$> decodeS
+    4 -> PModRef <$> decodeS
+    5 -> PCapToken <$> decodeS
     6 -> PTime . UTCTime . NominalDiffTime <$> decode
     _ -> fail "unexpected decoding"
+  {-# INLINE decode #-}
 
-instance Serialise ChainId where
-  encode (ChainId cid) = encode cid
-  decode = ChainId <$> decode
+instance Serialise (SerialiseV1 ChainId) where
+  encode (SerialiseV1 (ChainId cid)) = encode cid
+  {-# INLINE encode #-}
+  decode = SerialiseV1 . ChainId <$> decode
+  {-# INLINE decode #-}
 
-instance Serialise Provenance where
-  encode (Provenance tcid mh) = encode tcid <> encode mh
-  decode = Provenance <$> decode <*> decode
+instance Serialise (SerialiseV1 Provenance) where
+  encode (SerialiseV1 (Provenance tcid mh)) = encodeS tcid <> encodeS mh
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (Provenance <$> decodeS <*> decodeS)
+  {-# INLINE decode #-}
 
-instance Serialise Yield where
-  encode (Yield d p s) = encode d <> encode p <> encode s
-  decode = Yield <$> decode <*> decode <*> decode
+instance Serialise (SerialiseV1 Yield) where
+  encode (SerialiseV1 (Yield d p s)) = encodeS d <> encodeS p <> encodeS s
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (Yield <$> decodeS <*> decodeS <*> decodeS)
+  {-# INLINE decode #-}
 
-instance Serialise (DefPactContinuation QualifiedName PactValue) where
-  encode (DefPactContinuation n a) = encode n <> encode a
-  decode = DefPactContinuation <$> decode <*> decode
+instance Serialise (SerialiseV1 (DefPactContinuation QualifiedName PactValue)) where
+  encode (SerialiseV1 (DefPactContinuation n a)) = encodeS n <> encodeS a
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (DefPactContinuation <$> decodeS <*> decodeS)
+  {-# INLINE decode #-}
 
-instance Serialise DefPactExec where
-  encode (DefPactExec sc y s dpid cont rb ndp)
-    = encode sc <> encode y <> encode s <> encode dpid <> encode cont <> encode rb <> encode ndp
-  decode = DefPactExec <$> decode <*> decode <*> decode <*> decode <*> decode <*> decode <*> decode
+instance Serialise (SerialiseV1 DefPactExec) where
+  encode (SerialiseV1 (DefPactExec sc y s dpid cont rb ndp)) =
+    encode sc <> encodeS y <> encode s <> encodeS dpid <> encodeS cont <> encode rb <> encode (coerceMapToSerialise ndp)
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (DefPactExec <$> decode <*> decodeS <*> decode <*> decodeS <*> decodeS <*> decode <*> (coerceMapFromSerialise <$> decode))
+  {-# INLINE decode #-}
+

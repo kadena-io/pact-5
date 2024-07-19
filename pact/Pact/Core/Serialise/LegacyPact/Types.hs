@@ -9,8 +9,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 
-{-# OPTIONS_GHC -fno-warn-orphans #-}
-
 module Pact.Core.Serialise.LegacyPact.Types where
 
 import Data.Text (Text)
@@ -270,19 +268,27 @@ instance JD.FromJSON n => JD.FromJSON (Def n) where
       <*> o JD..: "module"
       <*> o JD..: "defType"
       <*> o JD..: "funType"
-      <*> o JD..: "defBody"
+      <*> (_getNScope <$> o JD..: "defBody")
       <*> o JD..: "defMeta"
 
+newtype NScope b f a
+ = NScope { _getNScope :: Scope b f a }
+ deriving newtype (Eq, Show)
+
+newtype NVar b a
+ = NVar { _getNVar :: Var b a }
+ deriving newtype (Eq, Show)
+
 instance (JD.FromJSON b, Traversable f, JD.FromJSON (f JD.Value), JD.FromJSON (f a)) =>
-  JD.FromJSON (Scope b f a) where
+  JD.FromJSON (NScope b f a) where
   parseJSON = JD.withObject "Scope" $ \o -> do
     f <- o JD..: "scope"
-    Scope <$> traverse JD.parseJSON f
+    NScope . Scope . fmap _getNVar <$> traverse JD.parseJSON f
 
 instance (A.FromJSON a, A.FromJSON b) =>
-  JD.FromJSON (Var b a) where
+  JD.FromJSON (NVar b a) where
   parseJSON = JD.withObject "Var" $ \v ->
-    (B <$> v A..: "b") <|> (F <$> v A..: "f")
+    NVar <$> ((B <$> v A..: "b") <|> (F <$> v A..: "f"))
 
 instance JD.FromJSON n => JD.FromJSON (DefcapMeta n) where
   parseJSON v = parseUser v <|> parseAuto v <|> parseEvent v
@@ -588,7 +594,7 @@ instance JD.FromJSON n => JD.FromJSON (Lam n) where
     Lam
       <$> o JD..: "amArg"
       <*> o JD..: "amTy"
-      <*> o JD..: "amBindBody"
+      <*> (_getNScope <$> o JD..: "amBindBody")
 
 newtype TypeName = TypeName Text
   deriving (Show,Eq,Ord,Generic)
@@ -1431,7 +1437,7 @@ instance JD.FromJSON n => JD.FromJSON (Term n) where
   parseJSON v = flip (A.<?>) (A.Key "Term") $ case propsWithoutOptionals of
     [TermBody, TermModule] ->  wo "Module" $ \o -> TModule
       <$> o JD..: p TermModule
-      <*> o JD..: p TermBody
+      <*> (_getNScope <$> o JD..: p TermBody)
     [TermList, TermType] -> wo "List" $ \o -> TList
       <$> o JD..: p TermList
       <*> o JD..: p TermType
@@ -1445,7 +1451,7 @@ instance JD.FromJSON n => JD.FromJSON (Term n) where
         <$>  o JD..: p TermVar
     [TermBody, TermPairs, TermType] -> wo "Binding" $ \o -> TBinding
       <$> o JD..: p TermPairs
-      <*> o JD..: p TermBody
+      <*> (_getNScope <$> o JD..: p TermBody)
       <*> o JD..: p TermType
     [TermObjectObj, TermType] -> parseWithInfo TObject -- FIXME keyorder is optional
     [TermLiteral] -> wo "Literal" $ \o -> TLiteral
