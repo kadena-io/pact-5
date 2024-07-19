@@ -9,7 +9,6 @@ module Pact.Core.Evaluate
   , EvalResult(..)
   , ContMsg(..)
   , Info
-  , initMsgData
   , evalExec
   , evalContinuation
   , evalGasPayerCap
@@ -94,14 +93,10 @@ evalDirectInterpreter =
 -- | Transaction-payload related environment data.
 data MsgData = MsgData
   { mdData :: !PactValue
-  , mdStep :: !(Maybe DefPactStep)
   , mdHash :: !Hash
   , mdSigners :: [Signer QualifiedName PactValue]
   , mdVerifiers :: [Verifier ()]
   }
-
-initMsgData :: Hash -> MsgData
-initMsgData h = MsgData (PObject mempty) def h mempty mempty
 
 type EvalInput = Either (Maybe DefPactExec) [Lisp.TopLevel Info]
 
@@ -165,7 +160,7 @@ setupEvalEnv pdb mode msgData gasModel' np spv pd efs = do
     , _eeMsgBody = mdData msgData
     , _eeHash = mdHash msgData
     , _eePublicData = pd
-    , _eeDefPactStep = mdStep msgData
+    , _eeDefPactStep = Nothing
     , _eeMode = mode
     , _eeFlags = efs
     , _eeNatives = coreBuiltinMap
