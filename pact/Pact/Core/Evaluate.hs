@@ -35,6 +35,7 @@ import Data.Default
 import Data.Text (Text)
 import Data.Map.Strict(Map)
 import Data.IORef
+import Data.Set (Set)
 
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -57,13 +58,14 @@ import Pact.Core.Namespace
 import Pact.Core.IR.Desugar
 import Pact.Core.Verifiers
 import Pact.Core.Interpreter
+import Pact.Core.Info
+import Pact.Core.IR.Term (EvalTerm)
+import Pact.Core.IR.Eval.Runtime.Utils
 import qualified Pact.Core.IR.Eval.CEK as Eval
 import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
-import Pact.Core.Info
-import Data.Set (Set)
 
 type Eval = EvalM ExecRuntime CoreBuiltin Info
 
@@ -78,6 +80,8 @@ evalInterpreter =
   runGuard info g = Eval.interpretGuard info env g
   resume info defPact = Eval.evalResumePact info env defPact
   env = coreBuiltinEnv @ExecRuntime @Eval.CEKBigStep
+
+cekEnv = coreBuiltinEnv @ExecRuntime @Eval.CEKBigStep
 
 evalDirectInterpreter :: Interpreter ExecRuntime CoreBuiltin i
 evalDirectInterpreter =
@@ -273,44 +277,43 @@ interpretOnlyTerm evalEnv evalSt term = do
 evalWithinTx
   :: EvalInput
   -> Eval ([CompileValue Info], [TxLog ByteString], Maybe TxId)
-evalWithinTx input = withRollback (start runInput >>= end)
-
+evalWithinTx input = evalWithinTx' runInput
   where
-
-    withRollback act =
-      act `onException` safeRollback
-
-    safeRollback =
-      void (tryAny evalRollbackTx)
-
-    start act = do
-      pdb <- viewEvalEnv eePactDb
-      mode <- viewEvalEnv eeMode
-      txid <- liftDbFunction def (_pdbBeginTx pdb mode)
-      (,txid) <$> act
-
-    end (rs,txid) = do
-      pdb <- viewEvalEnv eePactDb
-      logs <- liftDbFunction def (_pdbCommitTx pdb)
-      -- maybe might want to decode using serialisepact
-      return (rs, logs, txid)
-
-    runInput = case input of
-      Right ts -> evaluateTerms ts
-      Left pe -> (:[]) <$> evalResumePact pe
-
-    evalRollbackTx = do
-      esCaps .= def
-      pdb <- viewEvalEnv eePactDb
-      liftDbFunction def (_pdbRollbackTx pdb)
+  runInput = case input of
+    Right ts -> evaluateTerms ts
+    Left pe -> (:[]) <$> evalResumePact pe
 
 evalCompiledTermWithinTx
   :: Lisp.Expr Info
   -> Eval (PactValue, [TxLog ByteString], Maybe TxId)
-evalCompiledTermWithinTx input = withRollback (start runInput >>= end)
-
+evalCompiledTermWithinTx expr =
+  evalWithinTx' runInput
   where
+    runInput = do
+      DesugarOutput term' _ <- runDesugarTerm expr
+      eval evalInterpreter PImpure term'
 
+evalWithinCap
+  :: CapToken QualifiedName PactValue
+  -> Lisp.Expr Info
+  -> Eval ((), [TxLog ByteString], Maybe TxId)
+evalWithinCap (CapToken qualName pvs) body =
+  evalWithinTx' runInput
+  where
+  runInput = do
+    let info = view Lisp.termInfo body
+    (DesugarOutput term' _) <- runDesugarTerm body
+    (_, mh) <- getDefCapQN info qualName
+    let fqCt = CapToken (qualNameToFqn qualName mh) pvs
+    () <$ Eval.evalWithinCap PImpure cekEnv fqCt term'
+
+
+-- | Evaluate some input action within a tx context
+evalWithinTx'
+  :: Eval a
+  -> Eval (a, [TxLog ByteString], Maybe TxId)
+evalWithinTx' action = withRollback (start action >>= end)
+  where
     withRollback act =
       act `onException` safeRollback
 
@@ -328,10 +331,6 @@ evalCompiledTermWithinTx input = withRollback (start runInput >>= end)
       logs <- liftDbFunction def (_pdbCommitTx pdb)
       -- maybe might want to decode using serialisepact
       return (rs, logs, txid)
-
-    runInput = do
-      DesugarOutput term' _ <- runDesugarTerm input
-      eval evalInterpreter PImpure term'
 
     evalRollbackTx = do
       esCaps .= def
@@ -357,6 +356,8 @@ evalResumePact mdp =
 -- | Compiles and evaluates the code
 evaluateDefaultState :: RawCode -> Eval [CompileValue Info]
 evaluateDefaultState = either throwError evaluateTerms . compileOnly
+
+
 
 evaluateTerms
   :: [Lisp.TopLevel Info]
