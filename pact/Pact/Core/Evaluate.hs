@@ -12,6 +12,7 @@ module Pact.Core.Evaluate
   , initMsgData
   , evalExec
   , evalContinuation
+  , evalGasPayerCap
   , setupEvalEnv
   , interpret
   , compileOnly
@@ -19,7 +20,6 @@ module Pact.Core.Evaluate
   , evaluateDefaultState
   , Eval
   , EvalBuiltinEnv
-  , evalTermExec
   , allModuleExports
   , evalDirectInterpreter
   , evalInterpreter
@@ -59,7 +59,6 @@ import Pact.Core.IR.Desugar
 import Pact.Core.Verifiers
 import Pact.Core.Interpreter
 import Pact.Core.Info
-import Pact.Core.IR.Term (EvalTerm)
 import Pact.Core.IR.Eval.Runtime.Utils
 import qualified Pact.Core.IR.Eval.CEK as Eval
 import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
@@ -76,11 +75,11 @@ evalInterpreter :: Interpreter ExecRuntime CoreBuiltin i
 evalInterpreter =
   Interpreter runGuard runTerm resume
   where
-  runTerm purity term = Eval.eval purity env term
-  runGuard info g = Eval.interpretGuard info env g
-  resume info defPact = Eval.evalResumePact info env defPact
-  env = coreBuiltinEnv @ExecRuntime @Eval.CEKBigStep
+  runTerm purity term = Eval.eval purity cekEnv term
+  runGuard info g = Eval.interpretGuard info cekEnv g
+  resume info defPact = Eval.evalResumePact info cekEnv defPact
 
+cekEnv :: Eval.BuiltinEnv ExecRuntime Eval.CEKBigStep CoreBuiltin i
 cekEnv = coreBuiltinEnv @ExecRuntime @Eval.CEKBigStep
 
 evalDirectInterpreter :: Interpreter ExecRuntime CoreBuiltin i
@@ -193,13 +192,6 @@ evalExec db spv gasModel flags nsp publicData msgData capState terms = do
   let evalState = def & esCaps .~ capState
   interpret evalEnv evalState (Right terms)
 
-evalTermExec
-  :: EvalEnv CoreBuiltin Info
-  -> EvalState CoreBuiltin Info
-  -> Lisp.Expr Info
-  -> IO (Either (PactError Info) (EvalResult (Lisp.Expr Info)))
-evalTermExec evalEnv evalSt term =
-  either throwError return <$> interpretOnlyTerm evalEnv evalSt term
 
 evalContinuation
   :: PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
@@ -225,6 +217,18 @@ evalContinuation db spv gasModel flags nsp publicData msgData capState cm = do
     contError spvErr = throw $ PEExecutionError (ContinuationError spvErr) [] ()
     step y = Just $ DefPactStep (_cmStep cm) (_cmRollback cm) (_cmPactId cm) y
 
+evalGasPayerCap
+  :: PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
+  -> PublicData -> MsgData
+  -> CapState QualifiedName PactValue
+  -> CapToken QualifiedName PactValue
+  -> Lisp.Expr Info -> IO (Either (PactError Info) (EvalResult (Lisp.Expr Info)))
+evalGasPayerCap db spv gasModel flags nsp publicData msgData capState capToken body = do
+  evalEnv <- setupEvalEnv db Transactional msgData gasModel nsp spv publicData flags
+  let evalState = def & esCaps .~ capState
+  interpretGasPayerTerm evalEnv evalState capToken body
+
+
 interpret
   :: EvalEnv CoreBuiltin Info
   -> EvalState CoreBuiltin Info
@@ -249,20 +253,21 @@ interpret evalEnv evalSt evalInput = do
         , _erEvents = reverse $ _esEvents state
         }
 
-interpretOnlyTerm
+interpretGasPayerTerm
   :: EvalEnv CoreBuiltin Info
   -> EvalState CoreBuiltin Info
+  -> CapToken QualifiedName PactValue
   -> Lisp.Expr Info
   -> IO (Either (PactError Info) (EvalResult (Lisp.Expr Info)))
-interpretOnlyTerm evalEnv evalSt term = do
-  (result, state) <- runEvalM (ExecEnv evalEnv) evalSt $ evalCompiledTermWithinTx term
+interpretGasPayerTerm evalEnv evalSt ct term = do
+  (result, state) <- runEvalM (ExecEnv evalEnv) evalSt $ evalWithinCap ct term
   gas <- readIORef (_geGasRef $ _eeGasEnv evalEnv)
   case result of
     Left err -> return $ Left err
-    Right (rs, logs, txid) ->
+    Right (_, logs, txid) ->
       return $! Right $! EvalResult
         { _erInput = Right term
-        , _erOutput = [InterpretValue rs (view Lisp.termInfo term)]
+        , _erOutput = []
         , _erLogs = logs
         , _erExec = _esDefPactExec state
         -- todo: quotrem
@@ -282,16 +287,6 @@ evalWithinTx input = evalWithinTx' runInput
   runInput = case input of
     Right ts -> evaluateTerms ts
     Left pe -> (:[]) <$> evalResumePact pe
-
-evalCompiledTermWithinTx
-  :: Lisp.Expr Info
-  -> Eval (PactValue, [TxLog ByteString], Maybe TxId)
-evalCompiledTermWithinTx expr =
-  evalWithinTx' runInput
-  where
-    runInput = do
-      DesugarOutput term' _ <- runDesugarTerm expr
-      eval evalInterpreter PImpure term'
 
 evalWithinCap
   :: CapToken QualifiedName PactValue
