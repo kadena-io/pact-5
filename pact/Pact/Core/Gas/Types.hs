@@ -13,7 +13,9 @@ module Pact.Core.Gas.Types
   , MilliGasLimit(..)
   , Gas(..)
   , GasLimit(..)
+  , _GasLimit
   , GasPrice(..)
+  , _GasPrice
   , gasToMilliGas
   , milliGasToGas
   , milliGasPerGas
@@ -98,10 +100,14 @@ newtype GasLimit =
   deriving (Eq, Show, Ord)
   deriving newtype NFData
 
+makePrisms ''GasLimit
+
 newtype GasPrice
   = GasPrice Decimal
   deriving (Eq, Show, Ord)
   deriving newtype NFData
+
+makePrisms ''GasPrice
 
 milliGasPerGas :: Word64
 milliGasPerGas = 1000
