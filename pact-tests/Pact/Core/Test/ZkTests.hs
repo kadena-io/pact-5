@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP #-}
 
 module Pact.Core.Test.ZkTests (tests) where
 
 import Data.Group (pow)
 import Data.Field(Field)
-import Data.Foldable(foldl')
 import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
@@ -15,7 +15,10 @@ import Pact.Core.Crypto.Pairing
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.Hedgehog
-
+import Data.List.Unsafe
+#if !MIN_VERSION_base(4,20,0)
+import Data.List(foldl')
+#endif
 p1 :: CurvePoint Fq
 p1 = multiply g1 2
 
@@ -321,7 +324,7 @@ verify :: [Integer] -> Proof -> Bool
 verify inp p = let
   initial = CurveInf
   vk_x = foldl' (\pt (i, kpt) -> add pt (multiply kpt i)) initial (zip inp (drop 1 (_ic solVerifyingKey)))
-  vk_x' = add vk_x (head (_ic solVerifyingKey))
+  vk_x' = add vk_x (unsafeHead (_ic solVerifyingKey))
   in pairingCheck
     [ (negatePt (_proofA p), _proofB p)
     , (_alfa1 solVerifyingKey, _beta2 solVerifyingKey)

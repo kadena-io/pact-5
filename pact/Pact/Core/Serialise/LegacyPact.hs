@@ -1,5 +1,6 @@
 -- |
 {-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE CPP #-}
 
 module Pact.Core.Serialise.LegacyPact
   ( decodeModuleData
@@ -25,10 +26,13 @@ import Control.Monad.Except
 import Control.Monad
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.List (findIndex)
+#if !MIN_VERSION_base(4,20,0)
+import Data.List(foldl')
+#endif
 import Data.ByteString (ByteString)
 import Data.Maybe (fromMaybe)
 import Data.Map.Strict(Map)
-import Data.Foldable (foldl', foldrM)
+import Data.Foldable (foldrM)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.HashMap.Strict as HM

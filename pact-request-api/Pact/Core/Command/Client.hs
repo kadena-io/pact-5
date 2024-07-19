@@ -47,7 +47,7 @@ import qualified Data.Aeson.Types as A
 import qualified Data.Aeson.Key as AK
 import qualified Data.Aeson.KeyMap as AKM
 import Data.List (intercalate)
-import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Maybe (fromMaybe, mapMaybe, listToMaybe)
 import Data.Bifunctor (first)
 import Data.Either (partitionEithers)
 import System.IO
@@ -322,12 +322,18 @@ combineSigs fs outputLocal = do
 combineSigDatas :: [SigData Text] -> Bool -> IO ByteString
 combineSigDatas [] _ = error "Nothing to combine"
 combineSigDatas sds outputLocal = do
-  let hashes = S.fromList $ map _sigDataHash sds
-      cmds = S.fromList $ mapMaybe _sigDataCmd sds
-  when (S.size hashes /= 1 || S.size cmds /= 1) $ do
-    error "SigData files must contain exactly one unique hash and command.  Aborting..."
+  (hsh, cmd) <- do
+    let hashAndCmd :: Maybe (Hash, Text)
+        hashAndCmd = (,)
+          <$> listToMaybe (S.toList $ S.fromList $ map _sigDataHash sds)
+          <*> listToMaybe (S.toList $ S.fromList $ mapMaybe _sigDataCmd sds)
+    case hashAndCmd of
+      Nothing -> do
+        error "SigData files must contain exactly one unique hash and command.  Aborting..."
+      Just x -> do
+        pure x
   let sigs = foldl1 f $ map _sigDataSigs sds
-  returnCommandIfDone outputLocal $ SigData (head $ S.toList hashes) sigs (Just $ head $ S.toList cmds)
+  returnCommandIfDone outputLocal $ SigData hsh sigs (Just cmd)
   where
     f accum sigs
       | length accum /= length sigs = error "Sig lists have different lengths"

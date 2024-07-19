@@ -18,7 +18,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns #-}
-
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Pact.Core.Crypto.Pairing
@@ -53,14 +53,16 @@ module Pact.Core.Crypto.Pairing
 import Prelude
 import qualified Prelude as P
 
--- import Control.Lens
+#if !MIN_VERSION_base(4,20,0)
+import Data.List(foldl')
+#endif
 import Control.Monad(join)
 import Data.Bits(shiftR)
 import Data.Group(Group(..))
 import Data.Euclidean (Euclidean, GcdDomain)
 import Data.Semiring (Semiring, Ring)
 import Data.Field (Field)
-import Data.Foldable (forM_, foldl')
+import Data.Foldable (forM_)
 import qualified Data.Vector as G
 import qualified Data.Vector.Mutable as MG
 import qualified Data.Semiring as SR

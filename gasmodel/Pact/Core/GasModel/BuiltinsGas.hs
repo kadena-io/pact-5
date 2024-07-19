@@ -33,6 +33,8 @@ import Pact.Time
 import Pact.Core.GasModel.Utils
 import Pact.Core.Info
 
+import Data.List.Unsafe
+
 enumExpNum :: Integer -> Integer -> [(String, Integer)]
 enumExpNum base mult = [ (show val, val) | val <- iterate (* mult) base ]
 
@@ -289,7 +291,7 @@ benchContains pdb =
   [ C.bgroup "object-first"
     [ runNativeBenchmarkPrepared [("x", obj), ("key", key)] pdb title "(contains key x)"
     | (title, obj@(PObject m)) <- take 3 $ enumExpObject 1_000 100
-    , let key = fieldToValue $ head $ M.keys m
+    , let key = fieldToValue $ unsafeHead $ M.keys m
     ]
   , C.bgroup "object-last"
     [ runNativeBenchmarkPrepared [("x", obj), ("key", key)] pdb title "(contains key x)"
@@ -333,7 +335,7 @@ benchSort pdb =
     ]
   , C.bgroup "object-simple"
     [ runNativeBenchmarkPrepared [("x", objs), ("ks", keys)] pdb title "(sort ks x)"
-    | (_, obj@(PObject m)) <- [head $ enumExpObject 1_000 1]
+    | (_, obj@(PObject m)) <- [unsafeHead $ enumExpObject 1_000 1]
     , (repTitle, reps) <- take 3 $ enumExpNum 1_000 4
     , (keysTitle, keysLen) <- take 3 $ enumExpNum 10 2
     , let title = repTitle <> "_" <> keysTitle
@@ -342,7 +344,7 @@ benchSort pdb =
     ]
   , C.bgroup "object-complex"
     [ runNativeBenchmarkPrepared [("x", objs), ("ks", keys)] pdb title "(sort ks x)"
-    | (_, obj@(PObject m)) <- [head $ enumExpObjectComplex 1_000 1]
+    | (_, obj@(PObject m)) <- [unsafeHead $ enumExpObjectComplex 1_000 1]
     , (repTitle, reps) <- take 3 $ enumExpNum 100 4
     , (keysTitle, keysLen) <- take 3 $ enumExpNum 10 2
     , let title = repTitle <> "_" <> keysTitle
@@ -495,7 +497,7 @@ benchReadString pdb =
 benchReadKeyset :: BuiltinBenches
 benchReadKeyset pdb =
   [ runNativeBenchmarkPreparedEnvMod (msgBody obj) [] pdb title "(read-keyset 'thekeyset)"
-  | (_, PObject objBase) <- [head $ enumExpObjectWithStrings 10 1_000 1]
+  | (_, PObject objBase) <- [unsafeHead $ enumExpObjectWithStrings 10 1_000 1]
   , (title, str) <- take 3 $ enumExpScopedIdent 1_000 100
   , let ksn = PObject [(Field "keys", PList [PString "publickeytext"]), (Field "pred", str)]
   , let obj = M.insert (Field "thekeyset") ksn objBase

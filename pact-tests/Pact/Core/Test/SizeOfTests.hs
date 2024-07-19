@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
+{-# LANGUAGE DataKinds #-}
 -- | Tests for the sizes of various values.
 
 module Pact.Core.Test.SizeOfTests where

@@ -41,6 +41,16 @@ flag with-native-tracing
   manual: True
   default: True
 
+library unsafe
+  visibility: public
+  hs-source-dirs: unsafe/src
+  default-language: Haskell2010
+  exposed-modules:
+    Data.Foldable.Unsafe
+    Data.List.Unsafe
+  build-depends:
+    , base >= 4.5 && < 5
+
 common pact-common
   build-depends:
     , Decimal
@@ -61,7 +71,7 @@ common pact-common
     , lens
     , mtl
     , pact-json
-    , pact-time
+    , pact-time >= 0.3
     , parsers
     , prettyprinter
     , transformers
@@ -96,6 +106,7 @@ common pact-common
     , wide-word
     , ethereum
     , template-haskell
+    , pact-tng:unsafe
 
   ghc-options: -Wall -Werror -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options: -fprof-auto -fprof-auto-calls
@@ -394,7 +405,7 @@ benchmark bench
     , pact-tng
     , text
     , deepseq
-    , pact-time
+    , pact-time >= 0.3
   ghc-options: -Wall -threaded -rtsopts "-with-rtsopts=-N"
   hs-source-dirs: bench
   default-language: Haskell2010
@@ -450,6 +461,7 @@ library test-utils
     , neat-interpolation
     , pact-tng:pact-request-api
     , pact-tng:pact-lsp
+    , pact-tng:unsafe
     , lsp-test
     , lsp-types
 
@@ -510,6 +522,7 @@ test-suite core-tests
     , pact-tng:pact-request-api
     , pact-tng:pact-lsp
     , pact-tng:test-utils
+    , pact-tng:unsafe
     , lsp-test
     , lsp-types
     , safe-exceptions

@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE CPP #-}
 
 module Pact.Core.IR.Eval.CEK
   ( eval
@@ -48,7 +49,7 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.State.Strict
 import Data.List.NonEmpty(NonEmpty(..))
-import Data.Foldable(find, foldl')
+import Data.Foldable(find)
 import qualified Data.RAList as RAList
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -57,7 +58,9 @@ import qualified Data.Set as S
 import qualified Data.Map.Strict as M
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Kind as K
-
+#if !MIN_VERSION_base(4,20,0)
+import Data.List(foldl')
+#endif
 import Pact.Core.Builtin
 import Pact.Core.Names
 import Pact.Core.Errors
