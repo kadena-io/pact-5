@@ -5,7 +5,7 @@ module Pact.Core.Test.SerialiseTests where
 
 import Pact.Core.Serialise
 import Pact.Core.Gen
-import Pact.Core.Serialise.CBOR_V1 ()
+import Pact.Core.Serialise.CBOR_V1
 import qualified Codec.Serialise as S
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.Hedgehog
@@ -72,10 +72,10 @@ tests = testGroup "Serialise Roundtrip"
 
 -- | For any CBOR-Serialisable and `Gen` type, assert that serialization
 --   roundtrips.
-serialiseRoundtrip :: forall a. (S.Serialise a, Show a, Eq a) => Gen a -> Property
+serialiseRoundtrip :: forall a. (S.Serialise (SerialiseV1 a), Show a, Eq a) => Gen a -> Property
 serialiseRoundtrip g = property $ do
   expr <- forAll g
-  S.deserialise (S.serialise expr) === expr
+  _getSV1 (S.deserialise (S.serialise (SerialiseV1 expr))) === expr
 
 documentVersionGen :: Gen DocumentVersion
 documentVersionGen = Gen.element [minBound .. maxBound]

@@ -75,6 +75,7 @@ import Data.Word(Word64)
 import Control.Applicative((<|>))
 import Control.DeepSeq
 import GHC.Generics
+import Codec.Serialise.Class(Serialise)
 import qualified Data.Char as Char
 import qualified Text.Megaparsec as MP
 import qualified Text.Megaparsec.Char as MP
@@ -194,7 +195,7 @@ instance Pretty ParsedName where
 -- So in Field "a" in {"a":v},
 newtype Field = Field { _field :: Text }
   deriving (Eq, Ord, Show, Generic, FromJSONKey)
-  deriving newtype (IsString, NFData)
+  deriving newtype (IsString, NFData, Serialise)
 
 instance Pretty Field where
   pretty (Field f) = pretty f
