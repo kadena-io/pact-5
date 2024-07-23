@@ -67,6 +67,7 @@ import Pact.Core.Errors
 import Pact.Core.StackFrame
 import Control.Monad.Except
 import Control.Monad.Reader
+import qualified Data.Text.Encoding as T
 
 -- | Modules as they are stored in our backend.
 data ModuleData b i
