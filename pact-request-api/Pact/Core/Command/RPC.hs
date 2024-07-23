@@ -27,14 +27,13 @@ import Control.DeepSeq
 
 import GHC.Generics
 
-import  Pact.JSON.Legacy.Value
-
 import Pact.Core.SPV
 import Pact.Core.Names
 
 import Pact.JSON.Decode
 import Pact.Core.StableEncoding
 import qualified Pact.JSON.Encode as J
+import Pact.Core.PactValue
 
 
 data PactRPC c =
@@ -56,20 +55,20 @@ instance J.Encode c => J.Encode (PactRPC c) where
 
 data ExecMsg c = ExecMsg
   { _pmCode :: c
-  , _pmData :: LegacyValue
+  , _pmData :: PactValue
   } deriving (Eq,Generic,Show,Functor,Foldable,Traversable)
 
 instance NFData c => NFData (ExecMsg c)
 instance FromJSON c => FromJSON (ExecMsg c) where
   parseJSON =
       withObject "PactMsg" $ \o ->
-          ExecMsg <$> o .: "code" <*> o .: "data"
+          ExecMsg <$> o .: "code" <*> (maybe PUnit _stableEncoding <$> o .:? "data")
   {-# INLINE parseJSON #-}
 
 
 instance J.Encode c => J.Encode (ExecMsg c) where
   build o = J.object
-    [ "data" J..= _pmData o
+    [ "data" J..= StableEncoding (_pmData o)
     , "code" J..= _pmCode o
     ]
   {-# INLINE build #-}
@@ -78,7 +77,7 @@ data ContMsg = ContMsg
   { _cmPactId :: !DefPactId
   , _cmStep :: !Int
   , _cmRollback :: !Bool
-  , _cmData :: !LegacyValue
+  , _cmData :: !PactValue
   , _cmProof :: !(Maybe ContProof)
   } deriving (Eq,Show,Generic)
 
@@ -89,7 +88,7 @@ instance FromJSON ContMsg where
           StableEncoding defPactId <- o .: "pactId"
           step <- o .: "step"
           rollback <- o .: "rollback"
-          msgData <- o .: "data"
+          StableEncoding msgData <- o .: "data"
           maybeProof <- o .:? "proof"
           pure $ ContMsg defPactId step rollback msgData maybeProof
           -- ContMsg <$> o .: "pactId" <*> o .: "step" <*> o .: "rollback" <*> o .: "data"
@@ -99,7 +98,7 @@ instance FromJSON ContMsg where
 instance J.Encode ContMsg where
   build o = J.object
     [ "proof" J..= _cmProof o
-    , "data" J..= _cmData o
+    , "data" J..= StableEncoding (_cmData o)
     , "pactId" J..= StableEncoding (_cmPactId o)
     , "rollback" J..= _cmRollback o
     , "step" J..= J.Aeson (_cmStep o)
