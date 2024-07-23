@@ -33,7 +33,7 @@ import Pact.Core.IR.Term
 import Pact.Core.Persistence
 import Pact.Core.Hash
 import Pact.Core.Guards
-import Pact.Core.Evaluate
+import Pact.Core.Evaluate hiding (Cont(..))
 import Pact.Core.Namespace
 import Pact.Core.IR.Eval.CEK.Types hiding (Eval)
 import qualified Pact.Core.IR.Eval.CEK as Eval

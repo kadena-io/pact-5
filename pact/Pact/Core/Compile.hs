@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE DerivingStrategies #-}
 
 module Pact.Core.Compile
  ( interpretTopLevel
@@ -74,7 +75,7 @@ data CompileValue i
   | LoadedInterface ModuleName ModuleHash
   | LoadedImports Import
   | InterpretValue PactValue i
-  deriving Show
+  deriving stock (Eq, Show)
 
 instance Pretty (CompileValue i) where
   pretty = \case

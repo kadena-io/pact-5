@@ -42,6 +42,8 @@ module Pact.Core.Command.Types
   , Signer(..),siScheme, siPubKey, siAddress, siCapList
   , UserSig(..)
   , PactResult(..)
+  , _PactResultOk
+  , _PactResultErr
   , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crEvents
   , crContinuation,crMetaData
   , RequestKey(..)
@@ -263,6 +265,8 @@ data PactResult err
   = PactResultOk PactValue
   | PactResultErr err
   deriving (Eq, Show, Generic, Functor, Traversable, Foldable)
+
+makePrisms ''PactResult
 
 instance NFData err => NFData (PactResult err)
 
