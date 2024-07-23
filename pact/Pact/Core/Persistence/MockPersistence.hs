@@ -183,7 +183,7 @@ mockPactDb serial = do
         writeIORef ptTxLogQueue txl
         pure logs
     Nothing ->
-      throwIO Errors.NoTxToCommit
+      throwIO (Errors.NotInTx "commit")
 
   rollbackTx PactTables{..} = readIORef ptRollbackState >>= \case
     Just (PactTablesState _ usr mods ks ns dp txl) -> do
@@ -194,7 +194,7 @@ mockPactDb serial = do
       writeIORef ptTxLogQueue txl
       writeIORef ptNamespaces ns
       writeIORef ptDefPact dp
-    Nothing -> throwIO Errors.NoTxToCommit
+    Nothing -> throwIO (Errors.NotInTx "commit")
 
 
   keys

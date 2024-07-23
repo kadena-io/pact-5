@@ -723,7 +723,7 @@ data DbOpException
   | NoSuchTable TableName
   | TableAlreadyExists TableName
   | TxAlreadyBegun Text
-  | NoTxToCommit
+  | NotInTx Text
   | OpDisallowed
   | MultipleRowsReturnedFromSingleWrite
   deriving (Show, Eq, Typeable, Generic)
@@ -748,8 +748,8 @@ instance Pretty DbOpException where
       "Table" <+> pretty tn <+> "already exists"
     TxAlreadyBegun tx ->
       "Attempted to begin tx" <+> dquotes (pretty tx) <> ", but a tx already has been initiated"
-    NoTxToCommit ->
-      "No Transaction to commit"
+    NotInTx cmd ->
+      "No Transaction currently in progress, cannot execute " <> dquotes (pretty cmd)
     OpDisallowed ->
       "Operation disallowed in read-only or sys-only mode"
     MultipleRowsReturnedFromSingleWrite ->
@@ -1026,5 +1026,3 @@ prettyErrorCode (PactErrorCode (ErrorCode ec) i) =
     "PEExecutionError" -> getCtorName causeTag (Proxy :: Proxy EvalError)
     "PEUserRecoverableError" -> getCtorName causeTag (Proxy :: Proxy UserRecoverableError)
     _ -> "UNKNOWN_CODE"
-
-
