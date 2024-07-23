@@ -178,32 +178,32 @@ setupEvalEnv pdb mode msgData gasModel' np spv pd efs = do
     toPair (Verifier vfn _ caps) = (vfn, S.fromList caps)
 
 evalExec
-  :: PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
+  :: ExecutionMode -> PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
   -> PublicData -> MsgData
   -> CapState QualifiedName PactValue
   -> [Lisp.TopLevel Info] -> IO (Either (PactError Info) EvalResult)
-evalExec db spv gasModel flags nsp publicData msgData capState terms = do
-  evalEnv <- setupEvalEnv db Transactional msgData gasModel nsp spv publicData flags
+evalExec execMode db spv gasModel flags nsp publicData msgData capState terms = do
+  evalEnv <- setupEvalEnv db execMode msgData gasModel nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   interpret evalEnv evalState (Right terms)
 
 evalExecTerm
-  :: PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
+  :: ExecutionMode -> PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
   -> PublicData -> MsgData
   -> CapState QualifiedName PactValue
   -> Lisp.Expr Info -> IO (Either (PactError Info) EvalResult)
-evalExecTerm db spv gasModel flags nsp publicData msgData capState term = do
-  evalEnv <- setupEvalEnv db Transactional msgData gasModel nsp spv publicData flags
+evalExecTerm execMode db spv gasModel flags nsp publicData msgData capState term = do
+  evalEnv <- setupEvalEnv db execMode msgData gasModel nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   interpret evalEnv evalState (Right [Lisp.TLTerm term])
 
 evalContinuation
-  :: PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
+  :: ExecutionMode -> PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
   -> PublicData -> MsgData
   -> CapState QualifiedName PactValue
   -> Cont -> IO (Either (PactError Info) EvalResult)
-evalContinuation db spv gasModel flags nsp publicData msgData capState cont = do
-  evalEnv <- setupEvalEnv db Transactional msgData gasModel nsp spv publicData flags
+evalContinuation execMode db spv gasModel flags nsp publicData msgData capState cont = do
+  evalEnv <- setupEvalEnv db execMode msgData gasModel nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   case _cProof cont of
     Nothing ->
