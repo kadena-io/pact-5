@@ -42,6 +42,7 @@ module Pact.Core.IR.Eval.CEK
   , module Pact.Core.IR.Eval.CEK.Types
   , module Pact.Core.IR.Eval.CEK.Utils
   , returnCEKError
+  , evalWithinCap
   ) where
 
 
@@ -1733,6 +1734,28 @@ eval purity benv term = do
   ee <- viewEvalEnv id
   let cekEnv = envFromPurity purity (CEKEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) False)
   evalNormalForm cekEnv term >>= \case
+    VError stack err i ->
+      throwUserRecoverableError' i stack err
+    EvalValue v -> do
+      case v of
+        VPactValue pv -> pure pv
+        _ ->
+          throwExecutionError (view termInfo term) (EvalError "Evaluation did not reduce to a value")
+
+evalWithinCap
+  :: forall e step b i
+  .  (CEKEval e step b i)
+  => Purity
+  -> BuiltinEnv e step b i
+  -> CapToken FullyQualifiedName PactValue
+  -> EvalTerm b i
+  -> EvalM e b i PactValue
+evalWithinCap purity benv ct term = do
+  ee <- viewEvalEnv id
+  let cekEnv = envFromPurity purity (CEKEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) False)
+  evalCap (view termInfo term) Mt CEKNoHandler cekEnv ct PopCapInvoke NormalCapEval term
+    >>= evalUnsafe @e @step
+    >>= \case
     VError stack err i ->
       throwUserRecoverableError' i stack err
     EvalValue v -> do

@@ -13,6 +13,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  ( checkSigCaps
  , lookupFqName
  , getDefCap
+ , getDefCapQN
  , getDefun
  , typecheckArgument
  , maybeTCType
@@ -134,6 +135,13 @@ getDefCap info fqn = lookupFqName fqn >>= \case
   Just (DCap d) -> pure d
   Just _ -> failInvariant info (InvariantExpectedDefCap fqn)
   _ -> failInvariant info (InvariantUnboundFreeVariable fqn)
+
+getDefCapQN :: i -> QualifiedName -> EvalM e b i (EvalDefCap b i, ModuleHash)
+getDefCapQN info qn = do
+  pdb <- viewEvalEnv eePactDb
+  getModuleMemberWithHash info pdb qn >>= \case
+    (DCap d, mh) -> pure (d, mh)
+    (_, mh) -> failInvariant info (InvariantUnboundFreeVariable (qualNameToFqn qn mh))
 
 getDefun :: i -> FullyQualifiedName -> EvalM e b i (EvalDefun b i)
 getDefun info fqn = lookupFqName fqn >>= \case
