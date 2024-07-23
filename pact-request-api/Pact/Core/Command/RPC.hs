@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 
@@ -18,12 +19,22 @@
 module Pact.Core.Command.RPC
   ( -- * Types
     PactRPC(..)
+  , _Exec
+  , _Continuation
   , ExecMsg(..)
+  , pmCode
+  , pmData
   , ContMsg(..)
+  , cmPactId
+  , cmStep
+  , cmRollback
+  , cmData
+  , cmProof
   ) where
 
 import Control.Applicative
 import Control.DeepSeq
+import Control.Lens
 
 import GHC.Generics
 
@@ -104,3 +115,7 @@ instance J.Encode ContMsg where
     , "step" J..= J.Aeson (_cmStep o)
     ]
   {-# INLINE build #-}
+
+makePrisms ''PactRPC
+makeLenses ''ExecMsg
+makeLenses ''ContMsg
