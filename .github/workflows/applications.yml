@@ -178,13 +178,13 @@ jobs:
       if: "!contains(matrix.flags, '-build-tool')"
       shell: bash
       run: |
-        export VER=$(grep '^version' pact.cabal | sed -e 's/.*: *//')
+        export VER=$(grep '^version' pact-tng.cabal | sed -e 's/.*: *//')
         mkdir -p artifacts/pact
         cp $(cabal list-bin pact) artifacts/pact
         cp CHANGELOG.md artifacts/pact
         cp README.md artifacts/pact
         cp LICENSE artifacts/pact
-        cp pact.cabal artifacts/pact
+        cp pact-tng.cabal artifacts/pact
         cp cabal.project artifacts/pact
         cp cabal.project.local artifacts/pact
         cp cabal.project.freeze artifacts/pact
@@ -243,7 +243,7 @@ jobs:
         COPY pact/LICENSE .
         COPY pact/README.md .
         COPY pact/CHANGELOG.md .
-        COPY pact/pact.cabal .
+        COPY pact/pact-tng.cabal .
         COPY pact/cabal.project .
         COPY pact/cabal.project.local .
         COPY pact/cabal.project.freeze .
