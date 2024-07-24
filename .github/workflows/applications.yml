@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['9.6.6', '9.8.2', '9.10.1']
+        ghc: ['9.8.2', '9.10.1']
         cabal: ['3.12']
         os: ['ubuntu-20.04', 'ubuntu-22.04', 'macos-14']
         cabalcache: ['true']
@@ -164,10 +164,10 @@ jobs:
       if: "startsWith(matrix.os, 'macos-')"
       shell: bash
       run: cabal run tests -- --skip "/PactTestsSpec/pact tests/tests/pact/ops.repl/"
-    - name: Benchmark
-      shell: bash
-      if: "!contains(matrix.flags, '-build-tool')"
-      run: cabal bench
+    # - name: Benchmark
+    #   shell: bash
+    #   if: "!contains(matrix.flags, '-build-tool')"
+    #   run: cabal bench
     - name: Verify Binary Linking
       shell: bash
       if: "!contains(matrix.flags, '-build-tool')"
