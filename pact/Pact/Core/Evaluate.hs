@@ -211,14 +211,14 @@ evalContinuation execMode db spv gasModel flags nsp publicData msgData capState 
         (evalEnv & eeDefPactStep .~ step Nothing)
         evalState
         (Left Nothing)
-    Just p -> do
-      pe <- either contError return =<< _spvVerifyContinuation spv p
-      interpret
-        (evalEnv & eeDefPactStep .~ step (_peYield pe))
-        evalState
-        (Left $ Just pe)
+    Just p -> _spvVerifyContinuation spv p >>= \case
+      Left spvErr -> pure $ Left $ PEExecutionError (ContinuationError spvErr) [] def
+      Right pe -> do
+        interpret
+          (evalEnv & eeDefPactStep .~ step (_peYield pe))
+          evalState
+          (Left $ Just pe)
     where
-    contError spvErr = throw $ PEExecutionError (ContinuationError spvErr) [] ()
     step y = Just $ DefPactStep (_cStep cont) (_cRollback cont) (_cPactId cont) y
 
 evalGasPayerCap
