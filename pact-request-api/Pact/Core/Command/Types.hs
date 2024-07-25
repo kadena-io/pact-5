@@ -97,6 +97,7 @@ import qualified Pact.JSON.Encode as J
 
 
 import Pact.Core.Command.Crypto  as Base
+import Pact.Core.Evaluate (Info)
 
 -- | Command is the signed, hashed envelope of a Pact execution instruction or command.
 -- In 'Command ByteString', the 'ByteString' payload is hashed and signed; the ByteString
@@ -145,16 +146,13 @@ type SigCapability = CapToken QualifiedName PactValue
 -- | Pair parsed Pact expressions with the original text.
 data ParsedCode = ParsedCode
   { _pcCode :: !Text
-  , _pcExps :: ![Lisp.TopLevel ()]
+  , _pcExps :: ![Lisp.TopLevel Info]
   } deriving (Show,Generic)
 instance NFData ParsedCode
 
 parsePact :: Text -> Either String ParsedCode
 parsePact t =
-  ParsedCode t <$> first show (fmap stripInfo <$> parseOnlyProgram t)
-  where
-    stripInfo :: Lisp.TopLevel SpanInfo -> Lisp.TopLevel ()
-    stripInfo = void
+  ParsedCode t <$> first show (parseOnlyProgram t)
 
 unsafeParseCommand :: forall m. FromJSON m => Command ByteString -> Either String (Command (Payload m ParsedCode))
 unsafeParseCommand = traverse (traverse parsePact <=< A.eitherDecodeStrict' @(Payload m Text))
