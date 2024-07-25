@@ -85,7 +85,6 @@ import Pact.Core.Gas.Types
 import Pact.Core.Names
 import qualified Pact.Core.Hash as PactHash
 import Pact.Core.Persistence.Types
-import Pact.Core.Info
 import Pact.Core.PactValue (PactValue(..))
 import Pact.Core.Command.RPC
 import Pact.Core.StableEncoding
