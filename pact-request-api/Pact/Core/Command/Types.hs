@@ -85,7 +85,6 @@ import Pact.Core.Compile
 import Pact.Core.DefPacts.Types
 import Pact.Core.Guards
 import Pact.Core.Gas.Types
-import Pact.Core.Names
 import qualified Pact.Core.Hash as PactHash
 import Pact.Core.Persistence.Types
 import Pact.Core.PactValue (PactValue(..))
@@ -101,7 +100,6 @@ import qualified Pact.JSON.Encode as J
 
 import Pact.Core.Command.Crypto  as Base
 import Pact.Core.Evaluate (Info)
-import Pact.Core.Command.Crypto
 
 -- | Command is the signed, hashed envelope of a Pact execution instruction or command.
 -- In 'Command ByteString', the 'ByteString' payload is hashed and signed; the ByteString

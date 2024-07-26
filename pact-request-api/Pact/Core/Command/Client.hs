@@ -37,16 +37,19 @@ module Pact.Core.Command.Client (
   SubmitBatch(..),
 ) where
 
+import Control.Applicative
 import Control.Lens
-import Control.Applicative((<|>))
 import Control.Monad.Except
 import Control.Exception.Safe
 import Control.Monad
 import qualified Crypto.Hash.Algorithms as Crypto
 import Data.Default(def)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as BSL
+import qualified Data.ByteString.Short as SBS
+import qualified Data.Map.Strict as M
+import qualified Data.Set as S
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -71,28 +74,22 @@ import System.FilePath
 
 import qualified Pact.JSON.Decode as JD
 import qualified Pact.JSON.Encode as J
-import qualified Data.Set as S
-import qualified Data.Map.Strict as M
-import qualified Data.ByteString.Lazy.Char8 as BSL
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Short as SBS
 
 import Pact.Core.ChainData
+import Pact.Core.Command.Crypto
+import Pact.Core.Gas.Types
+import Pact.Core.Guards
 import Pact.Core.Command.RPC
+import Pact.Core.Command.SigData
 import Pact.Core.Command.Types
 import Pact.Core.Command.Util
-import Pact.Core.Command.Crypto
-import Pact.Core.Gas
-import Pact.Core.Guards
-import Pact.Core.Hash
+import Pact.Core.Hash as PactHash
 import Pact.Core.PactValue
 import Pact.Core.Names
 import Pact.Core.SPV
 import Pact.Core.Signer
 import Pact.Core.StableEncoding
 import Pact.Core.Verifiers
-import qualified Pact.Core.Hash as PactHash
-import Pact.Core.Command.SigData
 
 
 -- -------------------------------------------------------------------------- --
@@ -208,7 +205,7 @@ instance J.Encode ApiPublicMeta where
 
 data ApiReq = ApiReq {
   _ylType :: Maybe Text,
-  _ylPactTxHash :: Maybe Hash,
+  _ylPactTxHash :: Maybe PactHash.Hash,
   _ylStep :: Maybe Int,
   _ylRollback :: Maybe Bool,
   _ylData :: Maybe PactValue,
@@ -405,7 +402,7 @@ returnSigDataOrCommand  outputLocal sd
       Left "Number of signers in the payload does not match number of signers in the sigData"
     usrSigs <- traverse (toSignerPair sigMap) (_pSigners payload)
     traverse_ Left $ verifyUserSigs h [ (signer, sig) | (sig, Just signer) <- usrSigs ]
-    _ <- verifyHash h (T.encodeUtf8 cmd)
+    _ <- PactHash.verifyHash h (T.encodeUtf8 cmd)
     pure ()
     where
     toSignerPair sigMap signer =
@@ -533,7 +530,7 @@ signCmd keyFiles bs = do
     Right h -> do
       kps <- mapM importKeyFile keyFiles
       fmap (encodeYaml . J.Object) $ forM kps $ \kp -> do
-            let sig = signHash (Hash $ SBS.toShort h) kp
+            let sig = signHash (PactHash.Hash $ SBS.toShort h) kp
             return ((toB16Text . _b16JsonBytes) (B16JsonBytes (getPublic kp)), sig)
 
 withKeypairsOrSigner
@@ -689,7 +686,7 @@ mkApiReqCont unsignedReq ar@ApiReq{..} fp = do
                           JD.eitherDecode
       (Nothing,Nothing) -> return PUnit
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
-  let pactId = (DefPactId . hashToText) apiPactId
+  let pactId = (DefPactId . PactHash.hashToText) apiPactId
   pubMeta <- mkPubMeta _ylPublicMeta
   cmd <- withKeypairsOrSigner unsignedReq ar
     (\ks -> mkCont pactId step rollback cdata pubMeta ks (fromMaybe [] _ylVerifiers) _ylNonce _ylProof _ylNetworkId)

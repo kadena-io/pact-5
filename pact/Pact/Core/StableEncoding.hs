@@ -695,3 +695,5 @@ instance JD.FromJSON (StableEncoding RowDataValue) where
           <$> (fmap _stableEncoding $ o JD..: "refName")
           <*> (maybe mempty (S.fromList . fmap _stableEncoding) <$> o JD..: "refSpec")
   {-# INLINE parseJSON #-}
+-- instance J.Encode (StableEncoding a) => J.Encode (StableEncoding [a]) where
+--   build (StableEncoding a) = J.build (J.Array (fmap StableEncoding a))

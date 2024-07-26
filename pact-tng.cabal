@@ -380,11 +380,7 @@ executable pact
   default-language:    Haskell2010
 
   -- beware of the autogen modules. Remember to `cabal clean`!
-  other-modules:
-    -- TODO: Uncomment once this is finally fixed
-    -- and stops crapping out both LSP and our CI,
-    -- PackageInfo_pact_tng
-    Paths_pact_tng
+  -- other-modules: PackageInfo_pact_tng
 
 benchmark bench
   type: exitcode-stdio-1.0
