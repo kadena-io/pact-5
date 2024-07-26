@@ -254,7 +254,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v4
       with:
-        images: ghcr.io/kadena-io/pact
+        images: ghcr.io/kadena-io/pact-5
         tags: |
           type=sha
           type=ref,event=branch
