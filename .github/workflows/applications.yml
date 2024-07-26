@@ -163,7 +163,7 @@ jobs:
     - name: Test - ARM
       if: "startsWith(matrix.os, 'macos-')"
       shell: bash
-      run: cabal run tests -- "/PactTestsSpec/pact tests/tests/pact/ops.repl/"
+      run: cabal run tests -- --skip "/PactTestsSpec/pact tests/pact-tests/ops.repl/"
     # - name: Benchmark
     #   shell: bash
     #   if: "!contains(matrix.flags, '-build-tool')"
