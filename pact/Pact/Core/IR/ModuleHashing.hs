@@ -42,9 +42,9 @@ hashTopLevel = \case
   TLUse u i -> TLUse u i
 
 hashModuleAndReplace :: IsBuiltin b => Module Name Type b i -> Module Name Type b i
-hashModuleAndReplace m@(Module mname mgov defs mblessed imports mimps _mh info) =
+hashModuleAndReplace m@(Module mname mgov defs mblessed imports mimps _mh txh info) =
   let defs' = updateDefHashes mname newMhash <$> defs
-  in Module mname gov' defs' mblessed imports mimps newMhash info
+  in Module mname gov' defs' mblessed imports mimps newMhash txh info
   where
   newMhash = ModuleHash $ hash $ B.toStrict $ B.toLazyByteString (encodeModule m)
   gov' = case mgov of
@@ -52,8 +52,8 @@ hashModuleAndReplace m@(Module mname mgov defs mblessed imports mimps _mh info) 
     CapGov (FQName fqn) -> CapGov $ FQName $ set fqHash newMhash fqn
 
 hashInterfaceAndReplace :: IsBuiltin b => Interface Name Type b i -> Interface Name Type b i
-hashInterfaceAndReplace iface@(Interface ifn defs imps _mh info) =
-  Interface ifn defs imps newMhash info
+hashInterfaceAndReplace iface@(Interface ifn defs imps _mh txh info) =
+  Interface ifn defs imps newMhash txh info
   where
   newMhash = ModuleHash $ hash $ B.toStrict $ B.toLazyByteString (encodeInterface iface)
 
@@ -103,7 +103,7 @@ updatePactValueHash mname mhash = \case
   PTime t -> PTime t
 
 encodeModule :: (IsBuiltin b) => Module Name Type b i -> Builder
-encodeModule (Module mname mgov defs mblessed imports mimps _mh _mi) = parens $
+encodeModule (Module mname mgov defs mblessed imports mimps _mh _txh _mi) = parens $
   "module"
   <+> encodeModuleName mname
   <+> encodeGov mgov
@@ -122,7 +122,7 @@ encodeMNamespace Nothing = mempty
 encodeMNamespace (Just (NamespaceName ns)) = encodeText ns <> "."
 
 encodeInterface :: (IsBuiltin b) => Interface Name Type b i -> Builder
-encodeInterface (Interface ifn idefs imports _h _i) = parens $
+encodeInterface (Interface ifn idefs imports _h _txh _i) = parens $
   "interface"
   <+> encodeModuleName ifn
   <> (if null imports then mempty else hsep (encodeImport <$> imports) )

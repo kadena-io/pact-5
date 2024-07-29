@@ -276,7 +276,7 @@ throwDesugarError :: MonadError (PactError i) m => DesugarError -> i -> RenamerT
 throwDesugarError de = RenamerT . lift . throwError . PEDesugarError de
 
 viewEvalEnv' :: Lens' (EvalEnv b i) s -> RenamerM e b i s
-viewEvalEnv' l = RenamerT (lift (lift (viewEvalEnv l)))
+viewEvalEnv' l = lift (viewEvalEnv l)
 
 useEvalState :: Lens' (EvalState b i) s -> RenamerM e b i s
 useEvalState l = RenamerT (lift (lift (use l)))
@@ -579,7 +579,8 @@ desugarModule (Lisp.Module mname mgov extdecls defs _ _ i) = do
   (imports, blessed, implemented) <- splitExts extdecls
   defs' <- locally reCurrModule (const (Just $ CurrModule mname [] MTModule))
           $ traverse (desugarDef mname) (NE.toList defs)
-  pure $ Module mname mgov defs' blessed imports implemented placeholderHash i
+  txHash <- viewEvalEnv' eeHash
+  pure $ Module mname mgov defs' blessed imports implemented placeholderHash txHash i
   where
   splitExts = split ([], S.empty, [])
   split (accI, accB, accImp) (h:hs) = case h of
@@ -608,7 +609,8 @@ desugarInterface (Lisp.Interface ifn ifdefns imps _ _ info) = do
   defs' <- traverse (desugarIfDef ifn) ifdefns
   let mhash = ModuleHash (Hash "placeholder")
   imps' <- traverse (desugarImport info) imps
-  pure $ Interface ifn defs' imps' mhash info
+  txh <- viewEvalEnv' eeHash
+  pure $ Interface ifn defs' imps' mhash txh info
 
 desugarUse
   :: i
@@ -1384,7 +1386,7 @@ renameModule
   :: (DesugarBuiltin b)
   => Module ParsedName DesugarType b i
   -> RenamerM e b i (Module Name Type b i)
-renameModule (Module unmangled mgov defs blessed imports implements mhash i) = do
+renameModule (Module unmangled mgov defs blessed imports implements mhash txh i) = do
   rsDependencies .= mempty
   mname <- lift $ mangleNamespace unmangled
   mgov' <- resolveGov mname mgov
@@ -1400,7 +1402,7 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash i) = d
   bindsWithImports <- foldlM (handleImport i) binds imports
   (defs'', _, _, _) <- over _1 reverse <$> foldlM (go mname) ([], S.empty, bindsWithImports, M.empty) defs'
   traverse_ (checkImplements i defs'' mname) implements
-  pure (Module mname mgov' defs'' blessed imports implements mhash i)
+  pure (Module mname mgov' defs'' blessed imports implements mhash txh i)
   where
   -- Our deps are acyclic, so we resolve all names
   go mname (!defns, !s, !m, !mlocals) defn = do
@@ -1509,7 +1511,7 @@ renameInterface
   :: (DesugarBuiltin b)
   => Interface ParsedName DesugarType b i
   -> RenamerM e b i (Interface Name Type b i)
-renameInterface (Interface unmangled defs imports ih info) = do
+renameInterface (Interface unmangled defs imports ih txHash info) = do
   ifn <- lift $ mangleNamespace unmangled
   let defNames = ifDefName <$> defs
   let scc = mkScc ifn (S.fromList defNames) <$> defs
@@ -1522,7 +1524,7 @@ renameInterface (Interface unmangled defs imports ih info) = do
   binds <- view reBinds
   bindsWithImports <- foldlM (handleImport info) binds imports
   (defs'', _, _, _) <- over _1 reverse <$> foldlM (go ifn) ([], S.empty, bindsWithImports, S.empty) defs'
-  pure (Interface ifn defs'' imports ih info)
+  pure (Interface ifn defs'' imports ih txHash info)
   where
   mkScc ifn dns def = (def, ifDefName def, S.toList (ifDefSCC ifn dns def))
   go ifn (ds, s, m, dfnSet) d = do
