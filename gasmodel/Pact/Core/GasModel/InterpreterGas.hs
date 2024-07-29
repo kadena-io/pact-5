@@ -847,63 +847,6 @@ gasKeysC pdb =
         handler = CEKNoHandler
     pure (ee, es, frame, handler, value)
 
-gasTxIdsC :: PactDb CoreBuiltin SpanInfo -> C.Benchmark
-gasTxIdsC pdb =
-  benchApplyContToValue mkEnv "TxIdsC"
-  where
-  mkEnv = do
-    ee <- defaultGasEvalEnv pdb
-    let es = defaultGasEvalState
-        ps = _eeDefPactStep ee
-        env = CEKEnv { _cePactDb=pdb
-                    , _ceLocal=mempty
-                    , _ceInCap=False
-                    , _ceDefPactStep=ps
-                    , _ceBuiltins=benchmarkEnv }
-        bframe = TxIdsC gasModelTableValue 0
-        frame = BuiltinC env def bframe Mt
-        value = VUnit
-        handler = CEKNoHandler
-    pure (ee, es, frame, handler, value)
-
-gasTxLogC :: PactDb CoreBuiltin SpanInfo -> C.Benchmark
-gasTxLogC pdb =
-  benchApplyContToValue mkEnv "TxLogC"
-  where
-  mkEnv = do
-    ee <- defaultGasEvalEnv pdb
-    let es = defaultGasEvalState
-        ps = _eeDefPactStep ee
-        env = CEKEnv { _cePactDb=pdb
-                    , _ceLocal=mempty
-                    , _ceInCap=False
-                    , _ceDefPactStep=ps
-                    , _ceBuiltins=benchmarkEnv }
-        bframe = TxLogC gasModelTableValue 0
-        frame = BuiltinC env def bframe Mt
-        value = VUnit
-        handler = CEKNoHandler
-    pure (ee, es, frame, handler, value)
-
-gasKeyLogC :: PactDb CoreBuiltin SpanInfo -> C.Benchmark
-gasKeyLogC pdb =
-  benchApplyContToValue mkEnv "KeyLogC"
-  where
-  mkEnv = do
-    ee <- defaultGasEvalEnv pdb
-    let es = defaultGasEvalState
-        ps = _eeDefPactStep ee
-        env = CEKEnv { _cePactDb=pdb
-                    , _ceLocal=mempty
-                    , _ceInCap=False
-                    , _ceDefPactStep=ps
-                    , _ceBuiltins=benchmarkEnv }
-        bframe = KeyLogC gasModelTableValue gmTableK1 0
-        frame = BuiltinC env def bframe Mt
-        value = VUnit
-        handler = CEKNoHandler
-    pure (ee, es, frame, handler, value)
-
 gasCreateTableC :: PactDb CoreBuiltin SpanInfo -> C.Benchmark
 gasCreateTableC pdb =
   benchApplyContWithRollback mkEnv "SelectC"
@@ -1353,12 +1296,6 @@ gasContType pdb = \case
     gasWithDefaultReadC pdb
   CTKeysC ->
     gasKeysC pdb
-  CTTxIdsC ->
-    gasTxIdsC pdb
-  CTTxLogC ->
-    gasTxLogC pdb
-  CTKeyLogC ->
-    gasKeyLogC pdb
   CTCreateTableC ->
     gasCreateTableC pdb
   CTEmitEventC ->

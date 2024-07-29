@@ -1054,31 +1054,6 @@ dbKeys info b cont handler env = \case
     guardTable info cont' handler env tv GtKeys
   args -> argsError info b args
 
-dbTxIds :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
-dbTxIds info b cont handler env = \case
-  [VTable tv, VInteger tid] -> do
-    checkNonLocalAllowed info b
-    let cont' = BuiltinC env info (TxIdsC tv tid) cont
-    guardTable info cont' handler env tv GtTxIds
-  args -> argsError info b args
-
-
-dbTxLog :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
-dbTxLog info b cont handler env = \case
-  [VTable tv, VInteger tid] -> do
-    checkNonLocalAllowed info b
-    let cont' = BuiltinC env info (TxLogC tv tid) cont
-    guardTable info cont' handler env tv GtTxLog
-  args -> argsError info b args
-
-dbKeyLog :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
-dbKeyLog info b cont handler env = \case
-  [VTable tv, VString key, VInteger tid] -> do
-    checkNonLocalAllowed info b
-    let cont' = BuiltinC env info (KeyLogC tv (RowKey key) tid) cont
-    guardTable info cont' handler env tv GtKeyLog
-  args -> argsError info b args
-
 defineKeySet'
   :: (CEKEval e step b i)
   => i
@@ -2016,15 +1991,12 @@ coreBuiltinRuntime = \case
   CoreFoldDb -> foldDb
   CoreInsert -> dbInsert
   CoreWrite -> dbWrite
-  CoreKeyLog -> dbKeyLog
   CoreKeys -> dbKeys
   CoreRead -> dbRead
   CoreSelect -> dbSelect
   CoreUpdate -> dbUpdate
   CoreWithDefaultRead -> dbWithDefaultRead
   CoreWithRead -> dbWithRead
-  CoreTxLog -> dbTxLog
-  CoreTxIds -> dbTxIds
   CoreAndQ -> coreAndQ
   CoreOrQ -> coreOrQ
   CoreWhere -> coreWhere

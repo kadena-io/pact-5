@@ -402,12 +402,12 @@ data BuiltinCont (e :: RuntimeMode) (step :: CEKStepKind) (b :: K.Type) (i :: K.
   -- ^ <table> <key to read> <default value> <closure to apply afterwards>
   | KeysC TableValue
   -- ^ Table to apply `keys` to
-  | TxIdsC TableValue Integer
-  -- ^ <table> <key to read> <default value> <closure to apply afterwards>
-  | TxLogC TableValue Integer
-  -- ^ <table> <txid>
-  | KeyLogC TableValue RowKey Integer
-  -- ^ <table> <key> <txid>
+  -- | TxIdsC TableValue Integer
+  -- -- ^ <table> <key to read> <default value> <closure to apply afterwards>
+  -- | TxLogC TableValue Integer
+  -- -- ^ <table> <txid>
+  -- | KeyLogC TableValue RowKey Integer
+  -- -- ^ <table> <key> <txid>
   | CreateTableC TableValue
   -- ^ <create-table>
   | EmitEventC (CapToken FullyQualifiedName PactValue)
@@ -537,9 +537,6 @@ data ContType
   | CTWriteC
   | CTWithDefaultReadC
   | CTKeysC
-  | CTTxIdsC
-  | CTTxLogC
-  | CTKeyLogC
   | CTCreateTableC
   | CTEmitEventC
   | CTDefineNamespaceC

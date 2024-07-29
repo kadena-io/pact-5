@@ -37,7 +37,7 @@ runPactDbRegression pdb = do
 
 
   --  Begin tx
-  t1 <- _pdbBeginTx pdb Transactional >>= \case
+  _ <- _pdbBeginTx pdb Transactional >>= \case
     Nothing -> error "expected txid"
     Just t -> pure t
   let
@@ -93,21 +93,7 @@ runPactDbRegression pdb = do
     ]
 
   -- begin tx
-  _ <- do
-    _ <- _pdbBeginTx pdb Transactional
-    tids <- _pdbTxIds pdb usert t1
-    assertEqual "user txids" [TxId 1] tids
-
-    -- Note on _pdbGetTxLog
-    -- This test is commented on purpose, because it used to be part of the spec,
-    -- but in the presence of compaction, this test is a bit strange.
-    -- We are currently unsure whether to keep this as part of the spec.
-
-    -- txlog <- _pdbGetTxLog pdb usert (head tids)
-    -- flip (assertEqual "user txlog") txlog
-    --   [ TxLog "USER_someModule_user1" "key1" row2
-    --   , TxLog "USER_someModule_user1" "key1" row
-    --   ]
+  _ <- _pdbBeginTx pdb Transactional
 
   ignoreGas def $ _pdbWrite pdb Insert (DUserTables usert) (RowKey "key2") row
   r1 <- _pdbRead pdb (DUserTables usert) (RowKey "key2") >>= \case

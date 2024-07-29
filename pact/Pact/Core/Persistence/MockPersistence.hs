@@ -14,7 +14,6 @@ import Control.Monad (unless)
 import Control.Exception.Safe
 import Control.Lens ((^?), (^.), ix, view)
 import Data.Maybe (isJust, fromMaybe, catMaybes)
-import Data.List (find)
 import Data.Map (Map)
 import Data.IORef
 import Data.Text(Text)
@@ -140,8 +139,6 @@ mockPactDb serial = do
     , _pdbBeginTx = beginTx pactTables
     , _pdbCommitTx = commitTx pactTables
     , _pdbRollbackTx = rollbackTx pactTables
-    , _pdbTxIds = txIds (ptTxLogQueue pactTables)
-    , _pdbGetTxLog = txLog (ptTxLogQueue pactTables)
     }
   where
   beginTx pts@PactTables{..} em = do
@@ -199,20 +196,6 @@ mockPactDb serial = do
       writeIORef ptDefPact dp
     Nothing -> throwIO Errors.NoTxToCommit
 
-  txLog :: TxLogQueue -> TableName -> TxId -> IO [TxLog RowData]
-  txLog refTxLog tn tid = do
-    txl <- readIORef refTxLog
-    case M.lookup tid txl of
-      Just txl' -> pure $ fromMaybe [] (traverse (traverse (fmap (view document) . _decodeRowData serial)) (filter (\(TxLog dom _ _) -> dom == toUserTable tn) txl'))
-      Nothing -> pure []
-
-  txIds :: TxLogQueue -> TableName -> TxId -> IO [TxId]
-  txIds refTxLog tn (TxId txId) = do
-    txl <- readIORef refTxLog
-    let
-      userTab = toUserTable tn
-      subTxs = M.filterWithKey (\(TxId i) txs -> i >= txId && isJust (find (\(TxLog dom _ _) -> dom == userTab) txs)) txl
-    pure (M.keys subTxs)
 
   keys
     :: PactTables b i

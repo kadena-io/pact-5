@@ -62,6 +62,7 @@ import Pact.Time.Internal (UTCTime(..), NominalDiffTime(..))
 import qualified Data.Set as S
 import qualified Data.Map.Strict as M
 import Unsafe.Coerce (unsafeCoerce)
+import Data.Word (Word16)
 
 newtype SerialiseV1 a
   = SerialiseV1 { _getSV1 :: a }
@@ -817,283 +818,22 @@ instance Serialise (SerialiseV1 SpanInfo) where
   decode = SerialiseV1 <$> (SpanInfo <$> decode <*> decode <*> decode <*> decode)
   {-# INLINE decode #-}
 
+-- Note: this encoder/decoder relies on the derived `Enum` instance
+-- for `CoreBuiltin`. That said: we _do_ have a golden test in
+-- ConTagGolden.hs for ensuring that any constructor ordering changes
+-- are caught.
 instance Serialise (SerialiseV1 CoreBuiltin) where
-  encode (SerialiseV1 cb) = case cb of
-    CoreAdd -> encodeWord 0
-    CoreSub-> encodeWord 1
-    CoreMultiply -> encodeWord 2
-    CoreDivide -> encodeWord 3
-    CoreNegate -> encodeWord 4
-    CoreAbs -> encodeWord 5
-    CorePow -> encodeWord 6
-    CoreNot -> encodeWord 7
-    CoreEq -> encodeWord 8
-    CoreNeq -> encodeWord 9
-    CoreGT -> encodeWord 10
-    CoreGEQ -> encodeWord 11
-    CoreLT -> encodeWord 12
-    CoreLEQ -> encodeWord 13
-    CoreBitwiseAnd -> encodeWord 14
-    CoreBitwiseOr -> encodeWord 15
-    CoreBitwiseXor -> encodeWord 16
-    CoreBitwiseFlip -> encodeWord 17
-    CoreBitShift -> encodeWord 18
-    CoreRound -> encodeWord 19
-    CoreCeiling -> encodeWord 20
-    CoreFloor -> encodeWord 21
-    CoreExp -> encodeWord 22
-    CoreLn -> encodeWord 23
-    CoreSqrt -> encodeWord 24
-    CoreLogBase -> encodeWord 25
-    CoreLength -> encodeWord 26
-    CoreTake -> encodeWord 27
-    CoreDrop -> encodeWord 28
-    CoreConcat -> encodeWord 29
-    CoreReverse -> encodeWord 30
-    CoreContains -> encodeWord 31
-    CoreSort -> encodeWord 32
-    CoreSortObject -> encodeWord 33
-    CoreRemove -> encodeWord 34
-    CoreMod -> encodeWord 35
-    CoreMap -> encodeWord 36
-    CoreFilter -> encodeWord 37
-    CoreZip -> encodeWord 38
-    CoreIntToStr -> encodeWord 39
-    CoreStrToInt -> encodeWord 40
-    CoreStrToIntBase -> encodeWord 41
-    CoreFold -> encodeWord 42
-    CoreDistinct -> encodeWord 43
-    CoreFormat -> encodeWord 44
-    CoreEnumerate -> encodeWord 45
-    CoreEnumerateStepN -> encodeWord 46
-    CoreShow -> encodeWord 47
-    CoreReadMsg -> encodeWord 48
-    CoreReadMsgDefault -> encodeWord 49
-    CoreReadInteger -> encodeWord 50
-    CoreReadDecimal -> encodeWord 51
-    CoreReadString -> encodeWord 52
-    CoreReadKeyset -> encodeWord 53
-    CoreEnforceGuard -> encodeWord 54
-    CoreEnforceKeyset -> encodeWord 55
-    CoreKeysetRefGuard -> encodeWord 56
-    CoreAt -> encodeWord 57
-    CoreMakeList -> encodeWord 58
-    CoreB64Encode -> encodeWord 59
-    CoreB64Decode -> encodeWord 60
-    CoreStrToList -> encodeWord 61
-    CoreYield -> encodeWord 62
-    CoreResume -> encodeWord 63
-    CoreBind -> encodeWord 64
-    CoreRequireCapability -> encodeWord 65
-    CoreComposeCapability -> encodeWord 66
-    CoreInstallCapability -> encodeWord 67
-    CoreEmitEvent -> encodeWord 68
-    CoreCreateCapabilityGuard -> encodeWord 69
-    CoreCreateCapabilityPactGuard -> encodeWord 70
-    CoreCreateModuleGuard -> encodeWord 71
-    CoreCreateTable -> encodeWord 72
-    CoreDescribeKeyset -> encodeWord 73
-    CoreDescribeModule -> encodeWord 74
-    CoreDescribeTable -> encodeWord 75
-    CoreDefineKeySet -> encodeWord 76
-    CoreDefineKeysetData -> encodeWord 77
-    CoreFoldDb -> encodeWord 78
-    CoreInsert -> encodeWord 79
-    CoreKeyLog -> encodeWord 80
-    CoreKeys -> encodeWord 81
-    CoreRead -> encodeWord 82
-    CoreSelect -> encodeWord 83
-    CoreSelectWithFields -> encodeWord 84
-    CoreUpdate -> encodeWord 85
-    CoreWithDefaultRead -> encodeWord 86
-    CoreWithRead -> encodeWord 87
-    CoreWrite -> encodeWord 88
-    CoreTxIds -> encodeWord 89
-    CoreTxLog -> encodeWord 90
-    CoreTxHash -> encodeWord 91
-    CoreAndQ -> encodeWord 92
-    CoreOrQ -> encodeWord 93
-    CoreWhere -> encodeWord 94
-    CoreNotQ -> encodeWord 95
-    CoreHash -> encodeWord 96
-    CoreContinue -> encodeWord 97
-    CoreParseTime -> encodeWord 98
-    CoreFormatTime -> encodeWord 99
-    CoreTime -> encodeWord 100
-    CoreAddTime -> encodeWord 101
-    CoreDiffTime -> encodeWord 102
-    CoreHours -> encodeWord 103
-    CoreMinutes -> encodeWord 104
-    CoreDays -> encodeWord 105
-    CoreCompose -> encodeWord 106
-    CoreNamespace -> encodeWord 107
-    CoreDefineNamespace -> encodeWord 108
-    CoreDescribeNamespace -> encodeWord 109
-    CoreCreatePrincipal -> encodeWord 110
-    CoreIsPrincipal -> encodeWord 111
-    CoreTypeOfPrincipal -> encodeWord 112
-    CoreValidatePrincipal -> encodeWord 113
-    CoreCreateDefPactGuard -> encodeWord 114
-    CoreYieldToChain -> encodeWord 115
-    CoreChainData -> encodeWord 116
-    CoreIsCharset -> encodeWord 117
-    CorePactId -> encodeWord 118
-    CoreZkPairingCheck -> encodeWord 119
-    CoreZKScalarMult -> encodeWord 120
-    CoreZkPointAdd -> encodeWord 121
-    CorePoseidonHashHackachain -> encodeWord 122
-    CoreTypeOf -> encodeWord 123
-    CoreDec -> encodeWord 124
-    CoreRoundPrec -> encodeWord 125
-    CoreCeilingPrec -> encodeWord 126
-    CoreFloorPrec -> encodeWord 127
-    CoreCond -> encodeWord 128
-    CoreIdentity -> encodeWord 129
-    CoreVerifySPV -> encodeWord 130
-    CoreEnforceVerifier -> encodeWord 131
-    CoreHyperlaneMessageId -> encodeWord 132
-    CoreHyperlaneDecodeMessage -> encodeWord 133
-    CoreHyperlaneEncodeMessage -> encodeWord 134
+  encode (SerialiseV1 cb) =
+    encodeWord16 $ fromIntegral (fromEnum cb)
   {-# INLINE encode #-}
 
-  decode = decodeWord >>= fmap SerialiseV1 . \case
-    0 -> pure CoreAdd
-    1 -> pure CoreSub
-    2 -> pure CoreMultiply
-    3 -> pure CoreDivide
-    4 -> pure CoreNegate
-    5 -> pure CoreAbs
-    6 -> pure CorePow
-    7 -> pure CoreNot
-    8 -> pure CoreEq
-    9 -> pure CoreNeq
-    10 -> pure CoreGT
-    11 -> pure CoreGEQ
-    12 -> pure CoreLT
-    13 -> pure CoreLEQ
-    14 -> pure CoreBitwiseAnd
-    15 -> pure CoreBitwiseOr
-    16 -> pure CoreBitwiseXor
-    17 -> pure CoreBitwiseFlip
-    18 -> pure CoreBitShift
-    19 -> pure CoreRound
-    20 -> pure CoreCeiling
-    21 -> pure CoreFloor
-    22 -> pure CoreExp
-    23 -> pure CoreLn
-    24 -> pure CoreSqrt
-    25 -> pure CoreLogBase
-    26 -> pure CoreLength
-    27 -> pure CoreTake
-    28 -> pure CoreDrop
-    29 -> pure CoreConcat
-    30 -> pure CoreReverse
-    31 -> pure CoreContains
-    32 -> pure CoreSort
-    33 -> pure CoreSortObject
-    34 -> pure CoreRemove
-    35 -> pure CoreMod
-    36 -> pure CoreMap
-    37 -> pure CoreFilter
-    38 -> pure CoreZip
-    39 -> pure CoreIntToStr
-    40 -> pure CoreStrToInt
-    41 -> pure CoreStrToIntBase
-    42 -> pure CoreFold
-    43 -> pure CoreDistinct
-    44 -> pure CoreFormat
-    45 -> pure CoreEnumerate
-    46 -> pure CoreEnumerateStepN
-    47 -> pure CoreShow
-    48 -> pure CoreReadMsg
-    49 -> pure CoreReadMsgDefault
-    50 -> pure CoreReadInteger
-    51 -> pure CoreReadDecimal
-    52 -> pure CoreReadString
-    53 -> pure CoreReadKeyset
-    54 -> pure CoreEnforceGuard
-    55 -> pure CoreEnforceKeyset
-    56 -> pure CoreKeysetRefGuard
-    57 -> pure CoreAt
-    58 -> pure CoreMakeList
-    59 -> pure CoreB64Encode
-    60 -> pure CoreB64Decode
-    61 -> pure CoreStrToList
-    62 -> pure CoreYield
-    63 -> pure CoreResume
-    64 -> pure CoreBind
-    65 -> pure CoreRequireCapability
-    66 -> pure CoreComposeCapability
-    67 -> pure CoreInstallCapability
-    68 -> pure CoreEmitEvent
-    69 -> pure CoreCreateCapabilityGuard
-    70 -> pure CoreCreateCapabilityPactGuard
-    71 -> pure CoreCreateModuleGuard
-    72 -> pure CoreCreateTable
-    73 -> pure CoreDescribeKeyset
-    74 -> pure CoreDescribeModule
-    75 -> pure CoreDescribeTable
-    76 -> pure CoreDefineKeySet
-    77 -> pure CoreDefineKeysetData
-    78 -> pure CoreFoldDb
-    79 -> pure CoreInsert
-    80 -> pure CoreKeyLog
-    81 -> pure CoreKeys
-    82 -> pure CoreRead
-    83 -> pure CoreSelect
-    84 -> pure CoreSelectWithFields
-    85 -> pure CoreUpdate
-    86 -> pure CoreWithDefaultRead
-    87 -> pure CoreWithRead
-    88 -> pure CoreWrite
-    89 -> pure CoreTxIds
-    90 -> pure CoreTxLog
-    91 -> pure CoreTxHash
-    92 -> pure CoreAndQ
-    93 -> pure CoreOrQ
-    94 -> pure CoreWhere
-    95 -> pure CoreNotQ
-    96 -> pure CoreHash
-    97 -> pure CoreContinue
-    98 -> pure CoreParseTime
-    99 -> pure CoreFormatTime
-    100 -> pure CoreTime
-    101 -> pure CoreAddTime
-    102 -> pure CoreDiffTime
-    103 -> pure CoreHours
-    104 -> pure CoreMinutes
-    105 -> pure CoreDays
-    106 -> pure CoreCompose
-    107 -> pure CoreNamespace
-    108 -> pure CoreDefineNamespace
-    109 -> pure CoreDescribeNamespace
-    110 -> pure CoreCreatePrincipal
-    111 -> pure CoreIsPrincipal
-    112 -> pure CoreTypeOfPrincipal
-    113 -> pure CoreValidatePrincipal
-    114 -> pure CoreCreateDefPactGuard
-    115 -> pure CoreYieldToChain
-    116 -> pure CoreChainData
-    117 -> pure CoreIsCharset
-    118 -> pure CorePactId
-    119 -> pure CoreZkPairingCheck
-    120 -> pure CoreZKScalarMult
-    121 -> pure CoreZkPointAdd
-    122 -> pure CorePoseidonHashHackachain
-    123 -> pure CoreTypeOf
-    124 -> pure CoreDec
-
-    125 -> pure CoreRoundPrec
-    126 -> pure CoreCeilingPrec
-    127 -> pure CoreFloorPrec
-    128 -> pure CoreCond
-    129 -> pure CoreIdentity
-    130 -> pure CoreVerifySPV
-    131 -> pure CoreEnforceVerifier
-    132 -> pure CoreHyperlaneMessageId
-    133 -> pure CoreHyperlaneDecodeMessage
-    134 -> pure CoreHyperlaneEncodeMessage
-    _ -> fail "unexpected decoding"
+  decode = do
+    d <- decodeWord16
+    if d <= cbMax then pure (SerialiseV1 (toEnum (fromIntegral d)))
+    else fail "unexpected decoding: CoreBuiltin"
+    where
+    cbMax :: Word16
+    cbMax = fromIntegral $ fromEnum $ (maxBound :: CoreBuiltin)
   {-# INLINE decode #-}
 
 
@@ -1102,9 +842,7 @@ instance Serialise (SerialiseV1 ReplOnlyBuiltin) where
   {-# INLINE encode #-}
   decode = do
     vInd <- toEnum . fromIntegral <$> decodeWord
-    if vInd >= minBound && vInd <= maxBound
-      then pure $ SerialiseV1 (toEnum vInd)
-      else fail "unexpected encoding"
+    pure $ SerialiseV1 (toEnum vInd)
   {-# INLINE decode #-}
 
 instance Serialise (SerialiseV1 ReplCoreBuiltin) where

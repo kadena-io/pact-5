@@ -213,15 +213,13 @@ data PactDb b i
   , _pdbBeginTx :: ExecutionMode -> IO (Maybe TxId)
   , _pdbCommitTx :: IO [TxLog ByteString]
   , _pdbRollbackTx :: IO ()
-  , _pdbTxIds :: TableName -> TxId -> IO [TxId]
-  , _pdbGetTxLog :: TableName -> TxId -> IO [TxLog RowData]
   }
 
 instance NFData (PactDb b i) where
   -- Note: CommitTX and RollbackTx cannot be rnf'd
-  rnf (PactDb purity r _ k cut btx ctx rtx tids txl) =
+  rnf (PactDb purity r _ k cut btx ctx rtx) =
     rnf purity `seq` rnf r `seq` rnf k `seq` rnf cut
-       `seq` rnf btx `seq` ctx `seq` rtx `seq` rnf tids `seq` rnf txl
+       `seq` rnf btx `seq` ctx `seq` rtx `seq` ()
 
 makeClassy ''PactDb
 

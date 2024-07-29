@@ -65,7 +65,6 @@ install-capability: 60002693
 int-to-str: 602
 is-charset: 1788
 is-principal: 447
-keylog: 160383377
 keys: 100383377
 keyset-ref-guard: 44231
 length: 576
@@ -107,8 +106,6 @@ str-to-list: 1501
 take: 1525
 time: 2000
 tx-hash: 25
-txids: 160383377
-txlog: 160383377
 typeof-principal: 647
 typeof: 25
 update: 60516584
