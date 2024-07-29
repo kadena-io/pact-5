@@ -224,6 +224,7 @@ gmModule = Module
   , _mHash=gmModuleHash
   , _mGovernance=KeyGov gmKeysetName
   , _mDefs=gmModuleDefns
+  , _mTxHash = Hash mempty
   , _mBlessed=mempty}
 
 gmModuleData :: ModuleData CoreBuiltin Info

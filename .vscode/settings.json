@@ -1,0 +1,8 @@
+{
+  "coverage-gutters.showLineCoverage": false,
+  "coverage-gutters.showRulerCoverage": false,
+  "coverage-gutters.showGutterCoverage": false,
+  // "pact.server": "pact",
+  "pact.enableLsp": true,
+  // "pact.executable": "pact"
+}
