@@ -170,36 +170,7 @@ initializePactDb serial db = do
     , _pdbBeginTx = beginTx txId db txLog
     , _pdbCommitTx = commitTx txId db txLog
     , _pdbRollbackTx = rollbackTx db txLog
-    , _pdbTxIds = listTxIds db
-    , _pdbGetTxLog = getTxLog serial db txId txLog
     }, stmtsCache)
-
-getTxLog :: PactSerialise b i -> SQL.Database -> IORef TxId -> IORef [TxLog ByteString] -> TableName -> TxId -> IO [TxLog RowData]
-getTxLog serial db currTxId txLog tab txId = do
-  currTxId' <- readIORef currTxId
-  if currTxId' == txId
-    then do
-    txLog' <- readIORef txLog
-    let
-      userTabLogs = filter (\tl -> toUserTable tab == _txDomain tl) txLog'
-      env :: Maybe [TxLog RowData] = traverse (traverse (fmap (view document) . _decodeRowData serial)) userTabLogs
-    case env of
-      Nothing -> fail "undexpected decoding error"
-      Just xs -> pure xs
-    else withStmtClear (SQL.prepare db $ "SELECT rowkey,rowdata FROM \"" <> toUserTable tab <> "\" WHERE txid = ?") $ \stmt -> do
-       let TxId i = txId
-       SQL.clearBindings stmt
-       SQL.bind stmt [SQL.SQLInteger $ fromIntegral i]
-       txLogBS <- collect stmt []
-       case traverse (traverse (fmap (view document) . _decodeRowData serial)) txLogBS of
-         Nothing -> fail "unexpected decoding error"
-         Just txl -> pure txl
-   where
-    collect stmt acc = SQL.step stmt >>= \case
-        SQL.Done -> SQL.reset stmt >> pure acc
-        SQL.Row -> do
-          [SQL.SQLText key, SQL.SQLBlob value] <- SQL.columns stmt
-          collect stmt (TxLog (toUserTable tab) key value:acc)
 
 readKeys :: forall k v b i. SQL.Database -> IORef StmtCache -> Domain k v b i -> IO [k]
 readKeys _db stmtCache = \case
@@ -233,19 +204,7 @@ readKeys _db stmtCache = \case
           [SQL.SQLText value] <- SQL.columns stmt
           collect stmt (value:acc)
 
-listTxIds :: SQL.Database -> TableName -> TxId -> IO [TxId]
-listTxIds db tbl (TxId minTxId) = withStmtClear (SQL.prepare db $ "SELECT txid FROM \"" <> toUserTable tbl <> "\" WHERE txid >= ? ORDER BY txid ASC") $ \stmt -> do
-    SQL.bind stmt [SQL.SQLInteger $ fromIntegral minTxId]
-    collect stmt []
-  where
-    collect stmt acc = SQL.step stmt >>= \case
-        SQL.Done -> SQL.reset stmt >>pure acc
-        SQL.Row -> do
-          [SQL.SQLInteger value] <- SQL.columns stmt
-          -- Here we convert the Int64 received from SQLite into Word64
-          -- using `fromIntegral`. It is assumed that recorded txids
-          -- in the database will never be negative integers.
-          collect stmt (TxId (fromIntegral value):acc)
+
 
 commitTx :: IORef TxId -> SQL.Database -> IORef [TxLog ByteString] -> IO [TxLog ByteString]
 commitTx txid db txLog = do
@@ -424,6 +383,3 @@ read' serial _db stmtCache domain k = case domain of
 -- -- Utility functions
 withStmt :: IO SQL.Statement -> (SQL.Statement -> IO a) -> IO a
 withStmt stmt = bracket stmt SQL.clearBindings
-
-withStmtClear :: IO SQL.Statement -> (SQL.Statement -> IO a) -> IO a
-withStmtClear stmt = bracket stmt SQL.finalize

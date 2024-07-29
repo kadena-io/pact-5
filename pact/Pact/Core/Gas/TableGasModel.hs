@@ -481,9 +481,6 @@ coreBuiltinGasCost = MilliGas . \case
   -- Insert db overhead
   CoreInsert ->
     100_000
-  -- History, massive tx penalty
-  CoreKeyLog ->
-    historyPenalty
   -- Todo: keys gas needs to be revisited. We leave in the current penalty
   CoreKeys ->
     dbSelectPenalty
@@ -503,9 +500,6 @@ coreBuiltinGasCost = MilliGas . \case
   CoreWithRead -> dbReadPenalty
   -- Write penalty as well
   CoreWrite -> dbWritePenalty
-  CoreTxIds ->
-    historyPenalty
-  CoreTxLog -> historyPenalty
   -- Tx-hash should be constant-time
   -- Todo: benchmark. b64 url conversion is constant time since tx hashes
   -- are of fixed size
@@ -575,9 +569,6 @@ replNativeGasTable = \case
   _ -> mempty
 
 
--- Penalty for tx history operations on chain
-historyPenalty :: Word64
-historyPenalty = 100_000_000
 
 dbSelectPenalty :: Word64
 dbSelectPenalty = 40_000_000

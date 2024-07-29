@@ -84,8 +84,6 @@ readOnlyEnv e
              , _pdbBeginTx = \_ -> dbOpDisallowed
              , _pdbCommitTx = dbOpDisallowed
              , _pdbRollbackTx = dbOpDisallowed
-             , _pdbTxIds = \_ _ -> dbOpDisallowed
-             , _pdbGetTxLog = \_ _ -> dbOpDisallowed
              }
       in set cePactDb newPactdb e
 
@@ -103,8 +101,6 @@ sysOnlyEnv e
          , _pdbBeginTx = const dbOpDisallowed
          , _pdbCommitTx = dbOpDisallowed
          , _pdbRollbackTx = dbOpDisallowed
-         , _pdbTxIds = \_ _ -> dbOpDisallowed
-         , _pdbGetTxLog = \_ _ -> dbOpDisallowed
          }
   in set cePactDb newPactdb e
   where

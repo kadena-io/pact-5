@@ -165,7 +165,6 @@ data CoreBuiltin
   | CoreDefineKeysetData
   | CoreFoldDb
   | CoreInsert
-  | CoreKeyLog
   | CoreKeys
   | CoreRead
   | CoreSelect
@@ -174,8 +173,6 @@ data CoreBuiltin
   | CoreWithDefaultRead
   | CoreWithRead
   | CoreWrite
-  | CoreTxIds
-  | CoreTxLog
   | CoreTxHash
   -- Db QueryFunctions
   | CoreAndQ
@@ -344,7 +341,6 @@ coreBuiltinToText = \case
   CoreDefineKeysetData -> "define-read-keyset"
   CoreFoldDb -> "fold-db"
   CoreInsert -> "insert"
-  CoreKeyLog -> "keylog"
   CoreKeys -> "keys"
   CoreRead -> "read"
   CoreSelect -> "select"
@@ -353,8 +349,6 @@ coreBuiltinToText = \case
   CoreWithDefaultRead -> "with-default-read"
   CoreWithRead -> "with-read"
   CoreWrite -> "write"
-  CoreTxIds -> "txids"
-  CoreTxLog -> "txlog"
   CoreTxHash -> "tx-hash"
   CoreAndQ -> "and?"
   CoreOrQ -> "or?"
@@ -495,7 +489,6 @@ coreBuiltinToUserText = \case
   CoreDefineKeysetData -> "define-keyset"
   CoreFoldDb -> "fold-db"
   CoreInsert -> "insert"
-  CoreKeyLog -> "keylog"
   CoreKeys -> "keys"
   CoreRead -> "read"
   CoreSelect -> "select"
@@ -504,8 +497,6 @@ coreBuiltinToUserText = \case
   CoreWithDefaultRead -> "with-default-read"
   CoreWithRead -> "with-read"
   CoreWrite -> "write"
-  CoreTxIds -> "txids"
-  CoreTxLog -> "txlog"
   CoreTxHash -> "tx-hash"
   CoreAndQ -> "and?"
   CoreOrQ -> "or?"
@@ -649,7 +640,6 @@ instance IsBuiltin CoreBuiltin where
     CoreDefineKeysetData -> 1
     CoreFoldDb -> 3
     CoreInsert -> 3
-    CoreKeyLog -> 3
     CoreKeys -> 1
     CoreRead -> 2
     CoreSelect -> 2
@@ -658,8 +648,6 @@ instance IsBuiltin CoreBuiltin where
     CoreWithDefaultRead -> 4
     CoreWithRead -> 3
     CoreWrite -> 3
-    CoreTxIds -> 2
-    CoreTxLog -> 2
     CoreTxHash -> 0
     CoreAndQ -> 3
     CoreOrQ -> 3

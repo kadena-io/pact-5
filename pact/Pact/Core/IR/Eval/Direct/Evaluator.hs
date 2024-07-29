@@ -656,8 +656,6 @@ readOnlyEnv e
              , _pdbBeginTx = \_ -> dbOpDisallowed
              , _pdbCommitTx = dbOpDisallowed
              , _pdbRollbackTx = dbOpDisallowed
-             , _pdbTxIds = \_ _ -> dbOpDisallowed
-             , _pdbGetTxLog = \_ _ -> dbOpDisallowed
              }
       in set cePactDb newPactdb e
 
@@ -675,8 +673,6 @@ sysOnlyEnv e
          , _pdbBeginTx = const dbOpDisallowed
          , _pdbCommitTx = dbOpDisallowed
          , _pdbRollbackTx = dbOpDisallowed
-         , _pdbTxIds = \_ _ -> dbOpDisallowed
-         , _pdbGetTxLog = \_ _ -> dbOpDisallowed
          }
   in set cePactDb newPactdb e
   where
@@ -2388,56 +2384,6 @@ dbKeys info b env = \case
     -- guardTable info cont' handler env tv GtKeys
   args -> argsError info b args
 
-dbTxIds :: (IsBuiltin b) => NativeFunction e b i
-dbTxIds info b env = \case
-  [VTable tv, VInteger tid] -> do
-    checkNonLocalAllowed info b
-    guardTable info env tv GtTxIds
-    let pdb = _cePactDb env
-    ks <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) (TxId (fromIntegral tid)))
-    let li = V.fromList (PInteger . fromIntegral . _txId <$> ks)
-    return (VList li)
-  args -> argsError info b args
-
-
-dbTxLog :: (IsBuiltin b) => NativeFunction e b i
-dbTxLog info b env = \case
-  [VTable tv, VInteger tid] -> do
-    checkNonLocalAllowed info b
-    guardTable info env tv GtTxLog
-    let txId = TxId (fromInteger tid)
-        pdb = _cePactDb env
-    ks <- liftDbFunction info (_pdbGetTxLog pdb (_tvName tv) txId)
-    let li = V.fromList (txLogToObj <$> ks)
-    return (VList li)
-    where
-    txLogToObj (TxLog domain key (RowData rdata)) = do
-      PObject $ M.fromList
-        [ (Field "table", PString domain)
-        , (Field "key", PString key)
-        , (Field "value", PObject rdata)]
-  args -> argsError info b args
-
-dbKeyLog :: (IsBuiltin b) => NativeFunction e b i
-dbKeyLog info b env = \case
-  [VTable tv, VString key, VInteger tid] -> do
-    checkNonLocalAllowed info b
-    -- let cont' = BuiltinC env info (KeyLogC tv (RowKey key) tid) cont
-    guardTable info env tv GtKeyLog
-    let txId = TxId (fromInteger tid)
-        pdb = _cePactDb env
-    ids <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) txId)
-    ks <- concat <$> traverse (\t -> fmap (t,) <$> liftDbFunction info (_pdbGetTxLog pdb (_tvName tv) t)) ids
-    let ks' = filter (\(_, txl) -> _txKey txl == key) ks
-    let li = V.fromList (txLogToObj <$> ks')
-    return (VList li)
-    where
-    txLogToObj (TxId txid, TxLog _domain _key (RowData rdata)) = do
-      PObject $ M.fromList
-        [ (Field "txid", PInteger (fromIntegral txid))
-        , (Field "value", PObject rdata)]
-  args -> argsError info b args
-
 defineKeySet'
   :: (IsBuiltin b)
   => i
@@ -3378,15 +3324,12 @@ coreBuiltinRuntime =
     CoreFoldDb -> foldDb
     CoreInsert -> dbInsert
     CoreWrite -> dbWrite
-    CoreKeyLog -> dbKeyLog
     CoreKeys -> dbKeys
     CoreRead -> dbRead
     CoreSelect -> dbSelect
     CoreUpdate -> dbUpdate
     CoreWithDefaultRead -> dbWithDefaultRead
     CoreWithRead -> dbWithRead
-    CoreTxLog -> dbTxLog
-    CoreTxIds -> dbTxIds
     CoreAndQ -> coreAndQ
     CoreOrQ -> coreOrQ
     CoreWhere -> coreWhere
