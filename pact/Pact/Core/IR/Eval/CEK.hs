@@ -1227,22 +1227,6 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         -- Todo: keys gas
         keys <- liftDbFunction info (_pdbKeys pdb tblDomain)
         foldDBRead tv queryClo appClo keys []
-      TxIdsC tv tid -> do
-        ks <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) (TxId (fromIntegral tid)))
-        let li = V.fromList (PInteger . fromIntegral . _txId <$> ks)
-        returnCEKValue cont handler (VList li)
-      KeyLogC tv (RowKey key) tid -> do
-        let txId = TxId (fromInteger tid)
-        ids <- liftDbFunction info (_pdbTxIds pdb (_tvName tv) txId)
-        ks <- concat <$> traverse (\t -> fmap (t,) <$> liftDbFunction info (_pdbGetTxLog pdb (_tvName tv) t)) ids
-        let ks' = filter (\(_, txl) -> _txKey txl == key) ks
-        let li = V.fromList (txLogToObj <$> ks')
-        returnCEKValue cont handler (VList li)
-        where
-        txLogToObj (TxId txid, TxLog _domain _key (RowData rdata)) = do
-          PObject $ M.fromList
-            [ (Field "txid", PInteger (fromIntegral txid))
-            , (Field "value", PObject rdata)]
       FoldDbFilterC tv queryClo appClo (rk, ObjectData om) remaining accum -> case v of
         PBool b -> do
           let accum' = if b then (rk, PObject om):accum else accum
@@ -1255,17 +1239,6 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
               cont' = BuiltinC env info rdf cont
           applyLam appClo [VString rk, VPactValue pv] cont' handler
         [] -> returnCEKValue cont handler (VList (V.fromList (v:acc)))
-      TxLogC tv tid -> do
-        let txId = TxId (fromInteger tid)
-        ks <- liftDbFunction info (_pdbGetTxLog pdb (_tvName tv) txId)
-        let li = V.fromList (txLogToObj <$> ks)
-        returnCEKValue cont handler (VList li)
-        where
-        txLogToObj (TxLog domain key (RowData rdata)) = do
-          PObject $ M.fromList
-            [ (Field "table", PString domain)
-            , (Field "key", PString key)
-            , (Field "value", PObject rdata)]
       CreateTableC (TableValue tn _ _) -> do
         evalCreateUserTable info pdb tn
         returnCEKValue cont handler (VString "TableCreated")

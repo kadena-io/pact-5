@@ -588,6 +588,24 @@ instance JD.FromJSON (StableEncoding PublicMeta) where
     StableEncoding creationTime <- o JD..: "creationTime"
     pure $ StableEncoding $ PublicMeta (ChainId chainId) sender gasLimit gasPrice ttl creationTime
 
+instance J.Encode (StableEncoding PublicData) where
+  build (StableEncoding pd) = J.object
+    [ "publicMeta" J..= StableEncoding (_pdPublicMeta pd)
+    , "blockTime" J..= J.Aeson (_pdBlockTime pd)
+    , "prevBlockHash" J..= _pdPrevBlockHash pd
+    , "blockHeight" J..= J.Aeson (_pdBlockHeight pd)
+    ]
+
+instance JD.FromJSON (StableEncoding PublicData) where
+  parseJSON = JD.withObject "PublicData" $ \o -> do
+    StableEncoding pm <- o JD..: "publicMeta"
+    bh <- o JD..: "blockHeight"
+    bt <- o JD..: "blockTime"
+    pbh <- o JD..: "prevBlockHash"
+    pure (StableEncoding (PublicData pm bh bt pbh))
+
+
+
 instance J.Encode (StableEncoding a) => J.Encode (StableEncoding (Maybe a)) where
   build (StableEncoding a) = J.build (StableEncoding <$> a)
 
