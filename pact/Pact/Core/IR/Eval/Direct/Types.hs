@@ -28,6 +28,7 @@ module Pact.Core.IR.Eval.Direct.Types
  , ceLocal, ceDefPactStep
  , ceBuiltins, cePactDb
  , ceInCap
+ , canApplyInfo
  , pattern VLiteral
  , pattern VString
  , pattern VInteger
@@ -320,6 +321,16 @@ instance (NFData b, NFData i) => NFData (NativeFn e b i)
 instance (NFData b, NFData i) => NFData (PartialNativeFn e b i)
 
 makeLenses ''DirectEnv
+
+canApplyInfo :: Lens' (CanApply e b i) i
+canApplyInfo f = \case
+  C clo -> (\i' -> C clo{_cloInfo = i'}) <$> f (_cloInfo clo)
+  N clo -> (\i' -> N clo{_nativeLoc = i'}) <$> f (_nativeLoc clo)
+  CT clo -> (\i' -> CT clo{_ctcInfo = i'}) <$> f (_ctcInfo clo)
+  LC clo -> (\i' -> LC clo{_lcloInfo = i'}) <$> f (_lcloInfo clo)
+  PC clo -> (\i' -> PC clo{_pcloInfo = i'}) <$> f (_pcloInfo clo)
+  PN clo -> (\i' -> PN clo{_pNativeLoc = i'}) <$> f (_pNativeLoc clo)
+  DPC clo -> (\i' -> DPC clo{_pactcloInfo = i'}) <$> f (_pactcloInfo clo)
 
 toArgTypeError :: EvalValue e b i -> ArgTypeError
 toArgTypeError = \case

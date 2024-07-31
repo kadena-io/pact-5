@@ -1039,7 +1039,7 @@ applyContToValue (Args env i args cont) handler fn = do
   c <- canApply fn
   -- Argument evaluation
   case args of
-    [] -> applyLam c [] cont handler
+    [] -> applyLam (set canApplyInfo i c) [] cont handler
     (x:xs) -> do
       let cont' = Fn c env xs [] cont
       evalCEK cont' handler env x

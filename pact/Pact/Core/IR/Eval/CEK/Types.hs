@@ -12,6 +12,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE CPP #-}
 
 module Pact.Core.IR.Eval.CEK.Types
  ( CEKTLEnv
@@ -21,6 +22,7 @@ module Pact.Core.IR.Eval.CEK.Types
  , ceBuiltins
  , ceDefPactStep
  , ceInCap
+ , canApplyInfo
  , EvalEnv(..)
  , NativeFunction
  , BuiltinEnv
@@ -240,6 +242,18 @@ data CanApply (e :: RuntimeMode) (step :: CEKStepKind) (b :: K.Type) (i :: K.Typ
 
 instance (NFData b, NFData i) => NFData (CanApply e step b i)
 
+
+canApplyInfo :: Lens' (CanApply e step b i) i
+canApplyInfo f = \case
+  C clo -> (\i' -> C clo{_cloInfo = i'}) <$> f (_cloInfo clo)
+  N clo -> (\i' -> N clo{_nativeLoc = i'}) <$> f (_nativeLoc clo)
+  CT clo -> (\i' -> CT clo{_ctcInfo = i'}) <$> f (_ctcInfo clo)
+  LC clo -> (\i' -> LC clo{_lcloInfo = i'}) <$> f (_lcloInfo clo)
+  PC clo -> (\i' -> PC clo{_pcloInfo = i'}) <$> f (_pcloInfo clo)
+  PN clo -> (\i' -> PN clo{_pNativeLoc = i'}) <$> f (_pNativeLoc clo)
+  DPC clo -> (\i' -> DPC clo{_pactcloInfo = i'}) <$> f (_pactcloInfo clo)
+
+#undef SET_CLO_INFO
 
 -- | The type of our semantic runtime values
 data CEKValue (e :: RuntimeMode) (step :: CEKStepKind) (b :: K.Type) (i :: K.Type)

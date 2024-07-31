@@ -240,7 +240,7 @@ evaluate env = \case
   App ufn uargs info -> do
     fn <- enforceUserAppClosure info =<< evaluate env ufn
     args <- traverse (evaluate env) uargs
-    applyLam fn args
+    applyLam (set canApplyInfo info fn) args
   Sequence e1 e2 _ -> do
     _ <- evaluate env e1
     evaluate env e2
