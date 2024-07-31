@@ -157,6 +157,10 @@ library pact-request-api
     , pact-tng
     , pact-tng:pact-crypto
     , yaml
+    , lrucaching
+    , servant-server
+    , servant
+    , warp
   exposed-modules:
     Pact.Core.Command.Types
     Pact.Core.Command.Client
@@ -164,6 +168,7 @@ library pact-request-api
     Pact.Core.Command.RPC
     Pact.Core.Command.Util
     Pact.Core.Command.SigData
+    Pact.Core.Command.Server
     Pact.Core.Crypto.WebAuthn.Cose.PublicKey
     Pact.Core.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
     Pact.Core.Crypto.WebAuthn.Cose.Registry

@@ -13,6 +13,7 @@
 module Pact.Core.Compile
  ( interpretTopLevel
  , compileDesugarOnly
+ , compileValueToPactValue
  , evalTopLevel
  , CompileValue(..)
  , parseOnlyProgram
@@ -79,6 +80,12 @@ data CompileValue i
   | LoadedImports Import
   | InterpretValue PactValue i
   deriving stock (Eq, Show)
+
+
+compileValueToPactValue :: CompileValue i -> PactValue
+compileValueToPactValue = \case
+  InterpretValue v _ -> v
+  cv -> PString (renderCompactText cv)
 
 instance Pretty (CompileValue i) where
   pretty = \case

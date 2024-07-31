@@ -21,6 +21,7 @@ import Data.Foldable
 import Pact.Core.Command.Client
 import Pact.Core.Command.Crypto
 import Pact.Core.Command.Util
+import Pact.Core.Command.Server
 import Pact.Core.Repl.Compile
 import System.IO
 import Pact.Core.Errors
