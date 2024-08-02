@@ -161,6 +161,7 @@ library pact-request-api
     , servant-server
     , servant
     , warp
+    , wai-cors
   exposed-modules:
     Pact.Core.Command.Types
     Pact.Core.Command.Client
@@ -169,6 +170,7 @@ library pact-request-api
     Pact.Core.Command.Util
     Pact.Core.Command.SigData
     Pact.Core.Command.Server
+    Pact.Core.Command.Server.Servant
     Pact.Core.Crypto.WebAuthn.Cose.PublicKey
     Pact.Core.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
     Pact.Core.Crypto.WebAuthn.Cose.Registry

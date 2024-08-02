@@ -331,7 +331,7 @@ instance (FromJSON l, FromJSON err) => FromJSON (CommandResult l err) where
 instance (NFData a, NFData err) => NFData (CommandResult a err)
 
 cmdToRequestKey :: Command a -> RequestKey
-cmdToRequestKey Command {..} = RequestKey _cmdHash
+cmdToRequestKey (Command _ _ h) = RequestKey h
 
 data WebAuthnPubKeyPrefixed
   = WebAuthnPubKeyPrefixed
