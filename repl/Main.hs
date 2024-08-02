@@ -47,6 +47,7 @@ data ReplOpts
   | OUnsignedReq { _oReqYaml :: FilePath }
   -- Crypto
   | OGenKey
+  | OServer
   deriving (Eq, Show)
 
 replOpts :: O.Parser (Maybe ReplOpts)
@@ -57,6 +58,7 @@ replOpts = O.optional $
   <|> apiReqFlag
   <|> unsignedReqFlag
   <|> loadFlag
+  <|> O.flag' OServer (O.short 's' <> O.long "server" <> O.help "Run Pact-Server")
 
 -- Todo: trace output and coverage?
 loadFlag :: O.Parser ReplOpts
@@ -114,6 +116,10 @@ main = O.execParser argParser >>= \case
           Just s -> runScript s dbg
           Nothing -> runScript fp dbg
       | otherwise -> runScript fp dbg
+    OServer -> do
+      let commandEnv = undefined
+      let port = undefined
+      runServer commandEnv port
   where
     exitEither _ Left {} = die "Load failed"
     exitEither m (Right t) = m t >> exitSuccess
