@@ -1,0 +1,120 @@
+name: Release - manual - pact
+
+## Release automation for chainweb-node
+# Designed to run systems in chainweb/binary-release 
+
+## Currently has manual version setting and creates draft releases;
+# when we are confident in this process, it can auto-increment and publish non-drafts
+# tbd: connect k8s firing mechanism, create and connect chainweb-node-docker update workflow
+
+run-name: "Release pact-5 ${{ inputs.release_sha }} from ${{ github.sha}}"
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: "hash of chainweb-node release, default to branch running this job"
+        type: string
+        required: false
+      release_version:
+        description: "The X.Y.Z tag for the new version"
+        type: string
+        required: true
+      ghc_version:
+        description: "used to pull binary"
+        type: string
+        required: true
+        default: "9.10.1"
+      draft:
+        description: "set the new release as a draft instead of published"
+        type: boolean
+        required: false
+        default: true
+      prerelease:
+        description: "set to true for nightly builds"
+        type: boolean
+        required: false
+        default: false
+  workflow_call:
+    inputs:
+      release_sha:
+        description: "hash of chainweb-node release, default to branch running this job"
+        type: string
+        required: false
+      release_version:
+        description: "The X.Y.Z tag for the new version"
+        type: string
+        required: false
+        default: "nightly"
+      ghc_version:
+        description: "used to pull binary"
+        type: string
+        required: false
+        default: "9.10.1"
+      draft:
+        description: "set the new release as a draft instead of published"
+        type: boolean
+        required: false
+        default: false
+      prerelease:
+        description: "set to true for nightly builds"
+        type: boolean
+        required: false
+        default: true
+
+jobs:
+  Github-release:
+    runs-on: ubuntu-latest
+    steps:
+    # if this plugin is bad we just override it
+#       - name: Bump version and push tag
+#         id: tag_version
+#         uses: mathieudutour/github-tag-action@v6.1
+#         with:
+#           github_token: ${{ secrets.GITHUB_TOKEN }}
+#           default_bump: ${{ inputs.tag_default_bump }}
+#           tag_prefix: ""
+#           commit_sha: ${{ inputs.release_sha }}
+    
+      - name: Set environment variables for release
+        run: |
+          RELEASE_SHA=${{ github.sha }}
+          if [[ ! -z ${{ inputs.release_sha }} ]]; then
+            RELEASE_SHA=${{ inputs.release_sha }}
+          fi
+          echo "RELEASE_SHA=$RELEASE_SHA" >> $GITHUB_ENV
+          SHORT_REVISION=$(echo $RELEASE_SHA | cut -c 1-7)
+          echo "SHORT_REVISION=$SHORT_REVISION" >> $GITHUB_ENV
+          echo "RELEASE_VERSION=${{ inputs.release_version }}" >> $GITHUB_ENV
+          echo "IMAGE=ghcr.io/kadena-io/pact-5:sha-$SHORT_REVISION" >> $GITHUB_ENV
+
+          # we might autoextract this at some point
+          echo "GHC_VERSION=${{ inputs.ghc_version }}" >> $GITHUB_ENV
+          
+          echo $GITHUB_ENV
+      - name: Get release artifacts
+        run: |
+          UBUNTU_TAR=pact.${{ env.GHC_VERSION }}.ubuntu-22.04.${{ env.SHORT_REVISION }}.tar.gz
+          MACOS_TAR=pact.${{ env.GHC_VERSION }}.macos-14.${{ env.SHORT_REVISION }}.tar.gz
+          
+          UBUNTU_RELEASE_FILE=pact-binary-bundle.ubuntu-22.04.${{ env.RELEASE_VERSION }}.tar.gz
+          MACOS_RELEASE_FILE=pact-binary-bundle.macos-14.${{ env.RELEASE_VERSION }}.tar.gz
+          
+          curl "s3.us-east-1.amazonaws.com/kadena-cabal-cache/pact/$UBUNTU_TAR" -o "./$UBUNTU_RELEASE_FILE"
+          curl "s3.us-east-1.amazonaws.com/kadena-cabal-cache/pact/$MACOS_TAR" -o "./$UBUNTU_RELEASE_FILE"
+
+          echo "UBUNTU_RELEASE_FILE=$UBUNTU_RELEASE_FILE"
+          echo "MACOS_RELEASE_FILE=$MACOS_RELEASE_FILE"
+
+      - name: Generate release
+        uses: ncipollo/release-action@v1
+        #if: startsWith(github.ref, 'refs/tags/')
+        with:
+          bodyFile: CHANGELOG.md
+          artifacts: "${{ env.UBUNTU_RELEASE_FILE }},${{ env.MACOS_RELEASE_FILE }}"
+          commit: ${{ env.RELEASE_SHA }}
+          name: ${{ env.RELEASE_VERSION }}
+          omitBodyDuringUpdate: true
+          skipIfReleaseExists: false
+          draft: ${{ inputs.draft }}
+          prerelease: ${{ inputs.prerelease }}
+          generateReleaseNotes: true
