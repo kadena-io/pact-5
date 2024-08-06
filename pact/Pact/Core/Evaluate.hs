@@ -80,8 +80,8 @@ evalInterpreter =
   runGuard info g = Eval.interpretGuard info cekEnv g
   resume info defPact = Eval.evalResumePact info cekEnv defPact
 
-cekEnv :: Eval.BuiltinEnv ExecRuntime Eval.CEKBigStep CoreBuiltin i
-cekEnv = coreBuiltinEnv @ExecRuntime @Eval.CEKBigStep
+cekEnv :: Eval.BuiltinEnv ExecRuntime CoreBuiltin i
+cekEnv = coreBuiltinEnv @ExecRuntime
 
 evalDirectInterpreter :: Interpreter ExecRuntime CoreBuiltin i
 evalDirectInterpreter =

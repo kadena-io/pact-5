@@ -11,11 +11,9 @@
 module Pact.Core.Repl.Compile
  ( ReplCompileValue(..)
  , interpretReplProgramBigStep
- , interpretReplProgramSmallStep
  , loadFile
  , interpretReplProgramDirect
  , interpretEvalBigStep
- , interpretEvalSmallStep
  , interpretEvalDirect
  , interpretReplProgram
  , ReplInterpreter
@@ -109,11 +107,6 @@ interpretReplProgramBigStep
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
 interpretReplProgramBigStep = interpretReplProgram interpretEvalBigStep
 
-interpretReplProgramSmallStep
-  :: SourceCode
-  -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
-  -> ReplM ReplCoreBuiltin [ReplCompileValue]
-interpretReplProgramSmallStep = interpretReplProgram interpretEvalSmallStep
 
 interpretReplProgramDirect
   :: SourceCode
@@ -134,27 +127,16 @@ checkReplNativesEnabled = \case
       throwExecutionError i (EvalError "repl native disallowed in module code. If you want to use this, enable them with (env-enable-repl-natives true)")
     a ->  pure a
 
-interpretEvalSmallStep :: ReplInterpreter
-interpretEvalSmallStep =
-  Interpreter { eval = evalSmallStep, resumePact = evalResumePact, interpretGuard = interpretGuardSmallStep}
-  where
-  evalResumePact info pactExec =
-    CEK.evalResumePact info (replBuiltinEnv @CEK.CEKSmallStep) pactExec
-  evalSmallStep purity term =
-    CEK.eval purity (replBuiltinEnv @CEK.CEKSmallStep) term
-  interpretGuardSmallStep info g =
-    CEK.interpretGuard info (replBuiltinEnv @CEK.CEKSmallStep) g
-
 interpretEvalBigStep :: ReplInterpreter
 interpretEvalBigStep =
   Interpreter { eval = evalBigStep, resumePact = evalResumePact, interpretGuard = interpretGuardBigStep}
   where
   evalBigStep purity term =
-    CEK.eval purity (replBuiltinEnv @CEK.CEKBigStep) term
+    CEK.eval purity replBuiltinEnv term
   evalResumePact info pactExec =
-    CEK.evalResumePact info (replBuiltinEnv @CEK.CEKBigStep) pactExec
+    CEK.evalResumePact info replBuiltinEnv pactExec
   interpretGuardBigStep info g =
-    CEK.interpretGuard info (replBuiltinEnv @CEK.CEKBigStep) g
+    CEK.interpretGuard info replBuiltinEnv g
 
 interpretEvalDirect :: ReplInterpreter
 interpretEvalDirect =

@@ -87,7 +87,7 @@ import qualified Data.Binary.Put as Bin
 ----------------------------------------------------------------------
 -- Our builtin definitions start here
 ----------------------------------------------------------------------
-unaryIntFn :: (CEKEval e step b i, IsBuiltin b) => (Integer -> Integer) -> NativeFunction e step b i
+unaryIntFn :: (IsBuiltin b) => (Integer -> Integer) -> NativeFunction e b i
 unaryIntFn op info b cont handler _env = \case
   [VLiteral (LInteger i)] ->
     returnCEKValue cont handler (VLiteral (LInteger (op i)))
@@ -95,9 +95,9 @@ unaryIntFn op info b cont handler _env = \case
 {-# INLINE unaryIntFn #-}
 
 binaryIntFn
-  :: (CEKEval e step b i, IsBuiltin b)
+  :: (IsBuiltin b)
   => (Integer -> Integer -> Integer)
-  -> NativeFunction e step b i
+  -> NativeFunction e b i
 binaryIntFn op info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> returnCEKValue cont handler (VLiteral (LInteger (op i i')))
   args -> argsError info b args
@@ -117,7 +117,7 @@ binaryIntFn op info b cont handler _env = \case
 --          GT -> toRational n * multiplier
 -- `roundTo'` thus has the same asymptotic complexity as multiplication/division. Thus, worst case, we can upperbound it via
 -- division
-roundingFn :: (CEKEval e step b i, IsBuiltin b) => (Rational -> Integer) -> NativeFunction e step b i
+roundingFn :: (IsBuiltin b) => (Rational -> Integer) -> NativeFunction e b i
 roundingFn op info b cont handler _env = \case
   [VLiteral (LDecimal d)] ->
     returnCEKValue cont handler (VLiteral (LInteger (truncate (roundTo' op 0 d))))
@@ -130,12 +130,9 @@ roundingFn op info b cont handler _env = \case
 -- Arithmetic Ops
 ------------------------------
 {-# SPECIALIZE rawAdd
-   :: NativeFunction ExecRuntime CEKBigStep CoreBuiltin i
+   :: NativeFunction ExecRuntime CoreBuiltin i
     #-}
-{-# SPECIALIZE rawAdd
-   :: NativeFunction ExecRuntime CEKSmallStep CoreBuiltin i
-    #-}
-rawAdd :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawAdd :: (IsBuiltin b) => NativeFunction e b i
 rawAdd info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
     chargeGasArgs info (GIntegerOpCost PrimOpAdd i i')
@@ -164,7 +161,7 @@ rawAdd info b cont handler _env = \case
     chargeGasArgs info (GIntegerOpCost PrimOpAdd (decimalMantissa i) (decimalMantissa i'))
     returnCEKValue cont handler (VLiteral (LDecimal (i + i')))
 
-rawSub :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawSub :: (IsBuiltin b) => NativeFunction e b i
 rawSub info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
     chargeGasArgs info (GIntegerOpCost PrimOpSub i i')
@@ -184,7 +181,7 @@ rawSub info b cont handler _env = \case
 
 
 
-rawMul :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawMul :: (IsBuiltin b) => NativeFunction e b i
 rawMul info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
     chargeGasArgs info (GIntegerOpCost PrimOpMul i i')
@@ -203,7 +200,7 @@ rawMul info b cont handler _env = \case
     chargeGasArgs info (GIntegerOpCost PrimOpMul (decimalMantissa i) (decimalMantissa i'))
     returnCEKValue cont handler (VLiteral (LDecimal (i * i')))
 
-rawPow :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawPow :: (IsBuiltin b) => NativeFunction e b i
 rawPow info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
     chargeGasArgs info $ GIntegerOpCost PrimOpPow i i'
@@ -223,7 +220,7 @@ rawPow info b cont handler _env = \case
     guardNanOrInf info result
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
 
-rawLogBase :: forall e step b i. (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawLogBase :: forall e b i. (IsBuiltin b) => NativeFunction e b i
 rawLogBase info b cont handler _env = \case
   [VLiteral (LInteger base), VLiteral (LInteger n)] -> do
     checkArgs base n
@@ -251,7 +248,7 @@ rawLogBase info b cont handler _env = \case
     when (arg <= 0) $ throwExecutionError info (ArithmeticException "Non-positive log argument")
 
 
-rawDiv :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawDiv :: (IsBuiltin b) => NativeFunction e b i
 rawDiv info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
     when (i' == 0) $ throwExecutionError info (ArithmeticException "div by zero")
@@ -273,7 +270,7 @@ rawDiv info b cont handler _env = \case
     returnCEKValue cont handler (VLiteral (LDecimal (i / i')))
 
 
-rawNegate :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawNegate :: (IsBuiltin b) => NativeFunction e b i
 rawNegate info b cont handler _env = \case
   [VLiteral (LInteger i)] ->
     returnCEKValue cont handler (VLiteral (LInteger (negate i)))
@@ -281,36 +278,36 @@ rawNegate info b cont handler _env = \case
     returnCEKValue cont handler (VLiteral (LDecimal (negate i)))
   args -> argsError info b args
 
-rawEq :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawEq :: (IsBuiltin b) => NativeFunction e b i
 rawEq info b cont handler _env = \case
   [VPactValue pv, VPactValue pv'] -> do
     isEq <- valEqGassed info pv pv'
     returnCEKValue cont handler (VBool isEq)
   args -> argsError info b args
 
-modInt :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+modInt :: (IsBuiltin b) => NativeFunction e b i
 modInt = binaryIntFn mod
 
-rawNeq :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawNeq :: (IsBuiltin b) => NativeFunction e b i
 rawNeq info b cont handler _env = \case
   [VPactValue pv, VPactValue pv'] -> do
     isEq <- valEqGassed info pv pv'
     returnCEKValue cont handler (VBool $ not isEq)
   args -> argsError info b args
 
-rawGt :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawGt :: (IsBuiltin b) => NativeFunction e b i
 rawGt = defCmp (== GT)
 
-rawLt :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawLt :: (IsBuiltin b) => NativeFunction e b i
 rawLt = defCmp (== LT)
 
-rawGeq :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawGeq :: (IsBuiltin b) => NativeFunction e b i
 rawGeq = defCmp (`elem` [GT, EQ])
 
-rawLeq :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawLeq :: (IsBuiltin b) => NativeFunction e b i
 rawLeq = defCmp (`elem` [LT, EQ])
 
-defCmp :: (CEKEval e step b i, IsBuiltin b) => (Ordering -> Bool) -> NativeFunction e step b i
+defCmp :: (IsBuiltin b) => (Ordering -> Bool) -> NativeFunction e b i
 defCmp predicate info b cont handler _env = \case
   args@[VLiteral lit1, VLiteral lit2] -> litCmpGassed info lit1 lit2 >>= \case
     Just ordering -> returnCEKValue cont handler $ VBool $ predicate ordering
@@ -320,26 +317,26 @@ defCmp predicate info b cont handler _env = \case
   args -> argsError info b args
 {-# INLINE defCmp #-}
 
-bitAndInt :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+bitAndInt :: (IsBuiltin b) => NativeFunction e b i
 bitAndInt = binaryIntFn (.&.)
 
-bitOrInt :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+bitOrInt :: (IsBuiltin b) => NativeFunction e b i
 bitOrInt = binaryIntFn (.|.)
 
-bitComplementInt :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+bitComplementInt :: (IsBuiltin b) => NativeFunction e b i
 bitComplementInt = unaryIntFn complement
 
-bitXorInt :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+bitXorInt :: (IsBuiltin b) => NativeFunction e b i
 bitXorInt = binaryIntFn xor
 
-bitShiftInt :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+bitShiftInt :: (IsBuiltin b) => NativeFunction e b i
 bitShiftInt info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
     chargeGasArgs info $ GIntegerOpCost PrimOpShift i i'
     returnCEKValue cont handler (VLiteral (LInteger (i `shift` fromIntegral i')))
   args -> argsError info b args
 
-rawAbs :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawAbs :: (IsBuiltin b) => NativeFunction e b i
 rawAbs info b cont handler _env = \case
   [VLiteral (LInteger i)] -> do
     returnCEKValue cont handler (VLiteral (LInteger (abs i)))
@@ -347,7 +344,7 @@ rawAbs info b cont handler _env = \case
     returnCEKValue cont handler (VLiteral (LDecimal (abs e)))
   args -> argsError info b args
 
-rawExp :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawExp :: (IsBuiltin b) => NativeFunction e b i
 rawExp info b cont handler _env = \case
   [VLiteral (LInteger i)] -> do
     let result = Musl.trans_exp (fromIntegral i)
@@ -359,7 +356,7 @@ rawExp info b cont handler _env = \case
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
 
-rawLn :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawLn :: (IsBuiltin b) => NativeFunction e b i
 rawLn info b cont handler _env = \case
   [VLiteral (LInteger i)] -> do
     let result = Musl.trans_ln (fromIntegral i)
@@ -371,7 +368,7 @@ rawLn info b cont handler _env = \case
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
   args -> argsError info b args
 
-rawSqrt :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawSqrt :: (IsBuiltin b) => NativeFunction e b i
 rawSqrt info b cont handler _env = \case
   [VLiteral (LInteger i)] -> do
     when (i < 0) $ throwExecutionError info (ArithmeticException "Square root must be non-negative")
@@ -387,7 +384,7 @@ rawSqrt info b cont handler _env = \case
 
 
 
-rawShow :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawShow :: (IsBuiltin b) => NativeFunction e b i
 rawShow info b cont handler _env = \case
   [VPactValue pv] -> do
     str <- renderPactValue info pv
@@ -395,7 +392,7 @@ rawShow info b cont handler _env = \case
   args -> argsError info b args
 
 -- Todo: Gas here is complicated, greg worked on this previously
-rawContains :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawContains :: (IsBuiltin b) => NativeFunction e b i
 rawContains info b cont handler _env = \case
   [VString f, VObject o] -> do
     chargeGasArgs info $ GSearch $ FieldSearch (M.size o)
@@ -410,7 +407,7 @@ rawContains info b cont handler _env = \case
     returnCEKValue cont handler (VBool res)
   args -> argsError info b args
 
-rawSort :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawSort :: (IsBuiltin b) => NativeFunction e b i
 rawSort info b cont handler _env = \case
   [VList vli]
     | V.null vli -> returnCEKValue cont handler (VList mempty)
@@ -422,7 +419,7 @@ rawSort info b cont handler _env = \case
     returnCEKValue cont handler (VList vli')
   args -> argsError info b args
 
-coreRemove :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreRemove :: (IsBuiltin b) => NativeFunction e b i
 coreRemove info b cont handler _env = \case
   [VString s, VObject o] -> do
     chargeGasArgs info $ GObjOp $ ObjOpRemove s (M.size o)
@@ -439,7 +436,7 @@ asObject info b = \case
   PObject o -> pure o
   arg -> argsError info b [VPactValue arg]
 
-rawSortObject :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawSortObject :: (IsBuiltin b) => NativeFunction e b i
 rawSortObject info b cont handler _env = \case
   [VList fields, VList objs]
     | V.null fields -> returnCEKValue cont handler (VList objs)
@@ -477,19 +474,19 @@ dec2F = fromRational . toRational
 f2Dec :: Double -> Decimal
 f2Dec = fromRational . toRational
 
-roundDec :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+roundDec :: (IsBuiltin b) => NativeFunction e b i
 roundDec = roundingFn round
 
-floorDec :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+floorDec :: (IsBuiltin b) => NativeFunction e b i
 floorDec = roundingFn floor
 
-ceilingDec :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+ceilingDec :: (IsBuiltin b) => NativeFunction e b i
 ceilingDec = roundingFn ceiling
 
 ---------------------------
 -- bool ops
 ---------------------------
-notBool :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+notBool :: (IsBuiltin b) => NativeFunction e b i
 notBool info b cont handler _env = \case
   [VLiteral (LBool i)] -> returnCEKValue cont handler  (VLiteral (LBool (not i)))
   args -> argsError info b args
@@ -509,7 +506,7 @@ notBool info b cont handler _env = \case
 -- That's because `i` may contain values larger than `Int`, which is the type `length` typically returns.
 -- The sum `i + length t` may overflow `Int`, so it's converted to `Integer`, and the result of the `clamp` is always
 -- below `maxBound :: Int`, so it can be safely casted back without overflow.
-rawTake :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawTake :: (IsBuiltin b) => NativeFunction e b i
 rawTake info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LString t)]
     | i >= 0 -> do
@@ -539,7 +536,7 @@ rawTake info b cont handler _env = \case
     returnCEKValue cont handler $ VObject $ M.restrictKeys o (S.fromList strings)
   args -> argsError info b args
 
-rawDrop :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawDrop :: (IsBuiltin b) => NativeFunction e b i
 rawDrop info b cont handler _env = \case
   [VLiteral (LInteger i), VLiteral (LString t)]
     | i >= 0 -> do
@@ -564,7 +561,7 @@ rawDrop info b cont handler _env = \case
     returnCEKValue cont handler $ VObject $ M.withoutKeys o (S.fromList strings)
   args -> argsError info b args
 
-rawLength :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawLength :: (IsBuiltin b) => NativeFunction e b i
 rawLength info b cont handler _env = \case
   [VString t] -> do
     chargeGasArgs info $ GStrOp $ StrOpLength $ T.length t
@@ -574,7 +571,7 @@ rawLength info b cont handler _env = \case
     returnCEKValue cont handler $ VInteger $ fromIntegral (M.size o)
   args -> argsError info b args
 
-rawReverse :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+rawReverse :: (IsBuiltin b) => NativeFunction e b i
 rawReverse info b cont handler _env = \case
   [VList li] -> do
     chargeGasArgs info (GConcat (ListConcat (GasListLength (V.length li))))
@@ -584,7 +581,7 @@ rawReverse info b cont handler _env = \case
     returnCEKValue cont handler  (VLiteral (LString (T.reverse t)))
   args -> argsError info b args
 
-coreConcat :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreConcat :: (IsBuiltin b) => NativeFunction e b i
 coreConcat info b cont handler _env = \case
   [VList li]
     | V.null li -> returnCEKValue cont handler (VString mempty)
@@ -595,7 +592,7 @@ coreConcat info b cont handler _env = \case
     returnCEKValue cont handler (VString (T.concat (V.toList li')))
   args -> argsError info b args
 
-strToList :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+strToList :: (IsBuiltin b) => NativeFunction e b i
 strToList info b cont handler _env = \case
   [VLiteral (LString s)] -> do
     chargeGasArgs info $ GStrOp $ StrOpExplode $ T.length s
@@ -604,7 +601,7 @@ strToList info b cont handler _env = \case
   args -> argsError info b args
 
 
-zipList :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+zipList :: (IsBuiltin b) => NativeFunction e b i
 zipList info b cont handler _env = \case
   [VClosure clo, VList l, VList r] ->
     case (V.toList l, V.toList r) of
@@ -615,7 +612,7 @@ zipList info b cont handler _env = \case
       (_, _) -> returnCEKValue cont handler (VList mempty)
   args -> argsError info b args
 
-coreMap :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreMap :: (IsBuiltin b) => NativeFunction e b i
 coreMap info b cont handler env = \case
   [VClosure clo, VList li] -> case V.toList li of
     x:xs -> do
@@ -625,7 +622,7 @@ coreMap info b cont handler env = \case
     [] -> returnCEKValue cont handler (VList mempty)
   args -> argsError info b args
 
-coreFilter :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreFilter :: (IsBuiltin b) => NativeFunction e b i
 coreFilter info b cont handler _env = \case
   [VClosure clo, VList li] -> case V.toList li of
     x:xs -> do
@@ -635,7 +632,7 @@ coreFilter info b cont handler _env = \case
     [] -> returnCEKValue cont handler (VList mempty)
   args -> argsError info b args
 
-coreFold :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreFold :: (IsBuiltin b) => NativeFunction e b i
 coreFold info b cont handler _env = \case
   [VClosure clo, VPactValue initElem, VList li] ->
     case V.toList li of
@@ -646,7 +643,7 @@ coreFold info b cont handler _env = \case
       [] -> returnCEKValue cont handler (VPactValue initElem)
   args -> argsError info b args
 
-coreEnumerate :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreEnumerate :: (IsBuiltin b) => NativeFunction e b i
 coreEnumerate info b cont handler _env = \case
   [VLiteral (LInteger from), VLiteral (LInteger to)] -> do
     v <- createEnumerateList info from to (if from > to then -1 else 1)
@@ -654,14 +651,14 @@ coreEnumerate info b cont handler _env = \case
   args -> argsError info b args
 
 
-coreEnumerateStepN :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreEnumerateStepN :: (IsBuiltin b) => NativeFunction e b i
 coreEnumerateStepN info b cont handler _env = \case
   [VLiteral (LInteger from), VLiteral (LInteger to), VLiteral (LInteger inc)] -> do
     v <- createEnumerateList info from to inc
     returnCEKValue cont handler (VList (PLiteral . LInteger <$> v))
   args -> argsError info b args
 
-makeList :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+makeList :: (IsBuiltin b) => NativeFunction e b i
 makeList info b cont handler _env = \case
   [VLiteral (LInteger i), VPactValue v] -> do
     vSize <- sizeOf info SizeOfV0 v
@@ -669,7 +666,7 @@ makeList info b cont handler _env = \case
     returnCEKValue cont handler (VList (V.fromList (replicate (fromIntegral i) v)))
   args -> argsError info b args
 
-coreAccess :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreAccess :: (IsBuiltin b) => NativeFunction e b i
 coreAccess info b cont handler _env = \case
   [VLiteral (LInteger i), VList vec] ->
     case vec V.!? fromIntegral i of
@@ -684,7 +681,7 @@ coreAccess info b cont handler _env = \case
         throwExecutionError info (ObjectIsMissingField (Field field) (ObjectData o))
   args -> argsError info b args
 
-coreIsCharset :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreIsCharset :: (IsBuiltin b) => NativeFunction e b i
 coreIsCharset info b cont handler _env = \case
   [VLiteral (LInteger i), VString s] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
@@ -695,7 +692,7 @@ coreIsCharset info b cont handler _env = \case
         throwNativeExecutionError info b "Unsupported character set"
   args -> argsError info b args
 
-coreYield :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreYield :: (IsBuiltin b) => NativeFunction e b i
 coreYield info b cont handler _env = \case
   [VObject o] -> go o Nothing
   [VObject o, VString cid] -> go o (Just (ChainId cid))
@@ -718,7 +715,7 @@ coreYield info b cont handler _env = \case
   provenanceOf tid =
     Provenance tid . _mHash <$> getCallingModule info
 
-corePactId :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+corePactId :: (IsBuiltin b) => NativeFunction e b i
 corePactId info b cont handler _env = \case
   [] -> use esDefPactExec >>= \case
     Just dpe -> returnCEKValue cont handler (VString (_defPactId (_peDefPactId dpe)))
@@ -738,7 +735,7 @@ enforceYield info y = case _yProvenance y of
     let p' = Provenance cid (_mHash m):map (Provenance cid) (toList $ _mBlessed m)
     unless (p `elem` p') $ throwExecutionError info (YieldProvenanceDoesNotMatch p p')
 
-coreResume :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreResume :: (IsBuiltin b) => NativeFunction e b i
 coreResume info b cont handler _env = \case
   [VClosure clo] -> do
     mps <- viewEvalEnv eeDefPactStep
@@ -769,7 +766,7 @@ enforceTopLevelOnly info b = do
 -- Other Core forms
 -----------------------------------
 
-coreB64Encode :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreB64Encode :: (IsBuiltin b) => NativeFunction e b i
 coreB64Encode info b cont handler _env = \case
   [VLiteral (LString l)] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length l
@@ -777,7 +774,7 @@ coreB64Encode info b cont handler _env = \case
   args -> argsError info b args
 
 
-coreB64Decode :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreB64Decode :: (IsBuiltin b) => NativeFunction e b i
 coreB64Decode info b cont handler _env = \case
   [VLiteral (LString s)] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
@@ -788,7 +785,7 @@ coreB64Decode info b cont handler _env = \case
 
 
 -- | The implementation of `enforce-guard` native.
-coreEnforceGuard :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreEnforceGuard :: (IsBuiltin b) => NativeFunction e b i
 coreEnforceGuard info b cont handler env = \case
   [VGuard g] -> enforceGuard info cont handler env g
   [VString s] -> do
@@ -799,7 +796,7 @@ coreEnforceGuard info b cont handler env = \case
       Right ksn -> isKeysetNameInSigs info cont handler env ksn
   args -> argsError info b args
 
-keysetRefGuard :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+keysetRefGuard :: (IsBuiltin b) => NativeFunction e b i
 keysetRefGuard info b cont handler env = \case
   [VString g] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length g
@@ -813,7 +810,7 @@ keysetRefGuard info b cont handler env = \case
           Just _ -> returnCEKValue cont handler (VGuard (GKeySetRef ksn))
   args -> argsError info b args
 
-coreTypeOf :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreTypeOf :: (IsBuiltin b) => NativeFunction e b i
 coreTypeOf info b cont handler _env = \case
   [v] -> case v of
     VPactValue pv ->
@@ -822,18 +819,18 @@ coreTypeOf info b cont handler _env = \case
     VTable tv -> returnCEKValue cont handler $ VString (renderType (TyTable (_tvSchema tv)))
   args -> argsError info b args
 
-coreDec :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreDec :: (IsBuiltin b) => NativeFunction e b i
 coreDec info b cont handler _env = \case
   [VInteger i] -> returnCEKValue cont handler $ VDecimal $ Decimal 0 i
   args -> argsError info b args
 
 throwReadError
-  :: (CEKEval e step b i, IsBuiltin b)
+  :: (IsBuiltin b)
   => i
-  -> Cont e step b i
-  -> CEKErrorHandler e step b i
+  -> Cont e b i
+  -> CEKErrorHandler e b i
   -> b
-  -> EvalM e b i (CEKEvalResult e step b i)
+  -> EvalM e b i (EvalResult e b i)
 throwReadError info cont handler b =
   returnCEKError info cont handler $ EnvReadFunctionFailure (builtinName b)
 
@@ -868,7 +865,7 @@ can happen:
   - We may see a PDecimal, in which case we round
   - We may see a PInteger, which we read as-is.
 -}
-coreReadInteger :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreReadInteger :: (IsBuiltin b) => NativeFunction e b i
 coreReadInteger info b cont handler _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
@@ -890,7 +887,7 @@ coreReadInteger info b cont handler _env = \case
       _ -> throwReadError info cont handler b
   args -> argsError info b args
 
-coreReadMsg :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreReadMsg :: (IsBuiltin b) => NativeFunction e b i
 coreReadMsg info b cont handler _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
@@ -921,7 +918,7 @@ instance A.FromJSON ParsedDecimal where
 
 So the string parsing case accepts both the integer, and decimal output
 -}
-coreReadDecimal :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreReadDecimal :: (IsBuiltin b) => NativeFunction e b i
 coreReadDecimal info b cont handler _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
@@ -942,7 +939,7 @@ coreReadDecimal info b cont handler _env = \case
   args -> argsError info b args
 
 
-coreReadString :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreReadString :: (IsBuiltin b) => NativeFunction e b i
 coreReadString info b cont handler _env = \case
   [VString s] -> do
     viewEvalEnv eeMsgBody >>= \case
@@ -957,7 +954,7 @@ coreReadString info b cont handler _env = \case
 
 
 
-coreReadKeyset :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreReadKeyset :: (IsBuiltin b) => NativeFunction e b i
 coreReadKeyset info b cont handler _env = \case
   [VString ksn] ->
     readKeyset' info ksn >>= \case
@@ -971,7 +968,7 @@ coreReadKeyset info b cont handler _env = \case
   args -> argsError info b args
 
 
-coreBind :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreBind :: (IsBuiltin b) => NativeFunction e b i
 coreBind info b cont handler _env = \case
   [v@VObject{}, VClosure clo] ->
     applyLam clo [v] cont handler
@@ -982,7 +979,7 @@ coreBind info b cont handler _env = \case
 -- Db functions
 --------------------------------------------------
 
-createTable :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+createTable :: (IsBuiltin b) => NativeFunction e b i
 createTable info b cont handler env = \case
   [VTable tv] -> do
     enforceTopLevelOnly info b
@@ -990,7 +987,7 @@ createTable info b cont handler env = \case
     guardTable info cont' handler env tv GtCreateTable
   args -> argsError info b args
 
-dbSelect :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+dbSelect :: (IsBuiltin b) => NativeFunction e b i
 dbSelect info b cont handler env = \case
   [VTable tv, VClosure clo] -> do
     let cont' = BuiltinC env info (PreSelectC tv clo Nothing) cont
@@ -1001,21 +998,21 @@ dbSelect info b cont handler env = \case
     guardTable info cont' handler env tv GtSelect
   args -> argsError info b args
 
-foldDb :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+foldDb :: (IsBuiltin b) => NativeFunction e b i
 foldDb info b cont handler env = \case
   [VTable tv, VClosure queryClo, VClosure consumer] -> do
     let cont' = BuiltinC env info (PreFoldDbC tv queryClo consumer) cont
     guardTable info cont' handler env tv GtSelect
   args -> argsError info b args
 
-dbRead :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+dbRead :: (IsBuiltin b) => NativeFunction e b i
 dbRead info b cont handler env = \case
   [VTable tv, VString k] -> do
     let cont' = BuiltinC env info (ReadC tv (RowKey k)) cont
     guardTable info cont' handler env tv GtRead
   args -> argsError info b args
 
-dbWithRead :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+dbWithRead :: (IsBuiltin b) => NativeFunction e b i
 dbWithRead info b cont handler env = \case
   [VTable tv, VString k, VClosure clo] -> do
     let cont1 = Fn clo env [] [] cont
@@ -1023,7 +1020,7 @@ dbWithRead info b cont handler env = \case
     guardTable info cont2 handler env tv GtWithRead
   args -> argsError info b args
 
-dbWithDefaultRead :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+dbWithDefaultRead :: (IsBuiltin b) => NativeFunction e b i
 dbWithDefaultRead info b cont handler env = \case
   [VTable tv, VString k, VObject defaultObj, VClosure clo] -> do
     let cont' = BuiltinC env info (WithDefaultReadC tv (RowKey k) (ObjectData defaultObj) clo) cont
@@ -1031,23 +1028,23 @@ dbWithDefaultRead info b cont handler env = \case
   args -> argsError info b args
 
 -- | Todo: schema checking here? Or only on writes?
-dbWrite :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+dbWrite :: (IsBuiltin b) => NativeFunction e b i
 dbWrite = write' Write
 
-dbInsert :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+dbInsert :: (IsBuiltin b) => NativeFunction e b i
 dbInsert = write' Insert
 
-write' :: (CEKEval e step b i, IsBuiltin b) => WriteType -> NativeFunction e step b i
+write' :: (IsBuiltin b) => WriteType -> NativeFunction e b i
 write' wt info b cont handler env = \case
   [VTable tv, VString key, VObject o] -> do
     let cont' = BuiltinC env info (WriteC tv wt (RowKey key) (ObjectData o)) cont
     guardTable info cont' handler env tv GtWrite
   args -> argsError info b args
 
-dbUpdate :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+dbUpdate :: (IsBuiltin b) => NativeFunction e b i
 dbUpdate = write' Update
 
-dbKeys :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+dbKeys :: (IsBuiltin b) => NativeFunction e b i
 dbKeys info b cont handler env = \case
   [VTable tv] -> do
     let cont' = BuiltinC env info (KeysC tv) cont
@@ -1055,14 +1052,14 @@ dbKeys info b cont handler env = \case
   args -> argsError info b args
 
 defineKeySet'
-  :: (CEKEval e step b i)
+  :: ()
   => i
-  -> Cont e step b i
-  -> CEKErrorHandler e step b i
-  -> CEKEnv e step b i
+  -> Cont e b i
+  -> CEKErrorHandler e b i
+  -> CEKEnv e b i
   -> T.Text
   -> KeySet
-  -> EvalM e b i (CEKEvalResult e step b i)
+  -> EvalM e b i (EvalResult e b i)
 defineKeySet' info cont handler env ksname newKs  = do
   let pdb = view cePactDb env
   ignoreNamespaces <- not <$> isExecutionFlagSet FlagRequireKeysetNs
@@ -1088,7 +1085,7 @@ defineKeySet' info cont handler env ksname newKs  = do
             let cont' = BuiltinC env info (DefineKeysetC ksn newKs) cont
             enforceGuard info cont' handler env uGuard
 
-defineKeySet :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+defineKeySet :: (IsBuiltin b) => NativeFunction e b i
 defineKeySet info b cont handler env = \case
   [VString ksname, VGuard (GKeyset ks)] -> do
     enforceTopLevelOnly info b
@@ -1105,7 +1102,7 @@ defineKeySet info b cont handler env = \case
 -- Capabilities
 --------------------------------------------------
 
-requireCapability :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+requireCapability :: (IsBuiltin b) => NativeFunction e b i
 requireCapability info b cont handler _env = \case
   [VCapToken ct] -> do
     slots <- use $ esCaps . csSlots
@@ -1115,14 +1112,14 @@ requireCapability info b cont handler _env = \case
   args -> argsError info b args
 
 
-composeCapability :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+composeCapability :: (IsBuiltin b) => NativeFunction e b i
 composeCapability info b cont handler env = \case
   [VCapToken ct] -> do
     enforceStackTopIsDefcap info b
     composeCap info cont handler env ct
   args -> argsError info b args
 
-installCapability :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+installCapability :: (IsBuiltin b) => NativeFunction e b i
 installCapability info b cont handler env = \case
   [VCapToken ct] -> do
     enforceNotWithinDefcap info env "install-capability"
@@ -1130,7 +1127,7 @@ installCapability info b cont handler env = \case
     returnCEKValue cont handler (VString "Installed capability")
   args -> argsError info b args
 
-coreEmitEvent :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreEmitEvent :: (IsBuiltin b) => NativeFunction e b i
 coreEmitEvent info b cont handler env = \case
   [VCapToken ct@(CapToken fqn _)] -> do
     let cont' = BuiltinC env info (EmitEventC ct) cont
@@ -1145,7 +1142,7 @@ coreEmitEvent info b cont handler env = \case
         enforceMeta _ = pure ()
   args -> argsError info b args
 
-createCapGuard :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+createCapGuard :: (IsBuiltin b) => NativeFunction e b i
 createCapGuard info b cont handler _env = \case
   [VCapToken ct] -> do
     let qn = fqnToQualName (_ctName ct)
@@ -1153,7 +1150,7 @@ createCapGuard info b cont handler _env = \case
     returnCEKValue cont handler (VGuard (GCapabilityGuard cg))
   args -> argsError info b args
 
-createCapabilityPactGuard :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+createCapabilityPactGuard :: (IsBuiltin b) => NativeFunction e b i
 createCapabilityPactGuard info b cont handler _env = \case
   [VCapToken ct] -> do
     pid <- getDefPactId info
@@ -1162,7 +1159,7 @@ createCapabilityPactGuard info b cont handler _env = \case
     returnCEKValue cont handler (VGuard (GCapabilityGuard cg))
   args -> argsError info b args
 
-createModuleGuard :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+createModuleGuard :: (IsBuiltin b) => NativeFunction e b i
 createModuleGuard info b cont handler _env = \case
   [VString n] ->
     findCallingModule >>= \case
@@ -1173,7 +1170,7 @@ createModuleGuard info b cont handler _env = \case
         throwNativeExecutionError info b "create-module-guard: must call within module"
   args -> argsError info b args
 
-createDefPactGuard :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+createDefPactGuard :: (IsBuiltin b) => NativeFunction e b i
 createDefPactGuard info b cont handler _env = \case
   [VString name] -> do
     dpid <- getDefPactId info
@@ -1181,7 +1178,7 @@ createDefPactGuard info b cont handler _env = \case
   args -> argsError info b args
 
 
-coreIntToStr :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreIntToStr :: (IsBuiltin b) => NativeFunction e b i
 coreIntToStr info b cont handler _env = \case
   [VInteger base, VInteger v]
     | v < 0 ->
@@ -1203,7 +1200,7 @@ coreIntToStr info b cont handler _env = \case
       throwNativeExecutionError info b "invalid base for base64URL conversion"
   args -> argsError info b args
 
-coreStrToInt :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreStrToInt :: (IsBuiltin b) => NativeFunction e b i
 coreStrToInt info b cont handler _env = \case
   [VString s] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
@@ -1211,7 +1208,7 @@ coreStrToInt info b cont handler _env = \case
     doBase info cont handler 10 s
   args -> argsError info b args
 
-coreStrToIntBase :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreStrToIntBase :: (IsBuiltin b) => NativeFunction e b i
 coreStrToIntBase info b cont handler _env = \case
   [VInteger base, VString s]
     | base == 64 -> do
@@ -1240,7 +1237,7 @@ nubByM eq = go
     xs' <- filterM (fmap not . eq x) xs
     (x :) <$> go xs'
 
-coreDistinct  :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreDistinct  :: (IsBuiltin b) => NativeFunction e b i
 coreDistinct info b cont handler _env = \case
   [VList s] -> do
     uniques <- nubByM (valEqGassed info) $ V.toList s
@@ -1249,7 +1246,7 @@ coreDistinct info b cont handler _env = \case
       $ V.fromList uniques
   args -> argsError info b args
 
-coreFormat  :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreFormat  :: (IsBuiltin b) => NativeFunction e b i
 coreFormat info b cont handler _env = \case
   [VString s, VList es] -> do
     let parts = T.splitOn "{}" s
@@ -1282,13 +1279,13 @@ checkLen info txt =
       throwExecutionError info $ DecodeError "Invalid input, only up to 512 length supported"
 
 doBase
-  :: (CEKEval e step b i)
+  :: ()
   => i
-  -> Cont e step b i
-  -> CEKErrorHandler e step b i
+  -> Cont e b i
+  -> CEKErrorHandler e b i
   -> Integer
   -> T.Text
-  -> EvalM e b i (CEKEvalResult e step b i)
+  -> EvalM e b i (EvalResult e b i)
 doBase info cont handler base txt = case baseStrToInt base txt of
   Left e -> throwExecutionError info (DecodeError e)
   Right n -> returnCEKValue cont handler (VInteger n)
@@ -1325,28 +1322,28 @@ integerToBS v = BS.pack $ reverse $ go v
          | otherwise = fromIntegral (i .&. 0xff):go (shift i (-8))
 
 
-coreAndQ :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreAndQ :: (IsBuiltin b) => NativeFunction e b i
 coreAndQ info b cont handler env = \case
   [VClosure l, VClosure r, VPactValue v] -> do
     let cont' =  CondC env info (AndQC r v) cont
     applyLam l [VPactValue v] cont' handler
   args -> argsError info b args
 
-coreOrQ :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreOrQ :: (IsBuiltin b) => NativeFunction e b i
 coreOrQ info b cont handler env = \case
   [VClosure l, VClosure r, VPactValue v] -> do
     let cont' =  CondC env info (OrQC r v) cont
     applyLam l [VPactValue v] cont' handler
   args -> argsError info b args
 
-coreNotQ :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreNotQ :: (IsBuiltin b) => NativeFunction e b i
 coreNotQ info b cont handler env = \case
   [VClosure clo, VPactValue v] -> do
     let cont' = CondC env info NotQC cont
     applyLam clo [VPactValue v] cont' handler
   args -> argsError info b args
 
-coreWhere :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreWhere :: (IsBuiltin b) => NativeFunction e b i
 coreWhere info b cont handler _env = \case
   [VString field, VClosure app, VObject o] -> do
     case M.lookup (Field field) o of
@@ -1357,7 +1354,7 @@ coreWhere info b cont handler _env = \case
         throwExecutionError info (ObjectIsMissingField (Field field) (ObjectData o))
   args -> argsError info b args
 
-coreHash :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreHash :: (IsBuiltin b) => NativeFunction e b i
 coreHash = \info b cont handler _env -> \case
   [VString s] ->
     returnCEKValue cont handler (go (T.encodeUtf8 s))
@@ -1367,20 +1364,20 @@ coreHash = \info b cont handler _env -> \case
   where
   go =  VString . hashToText . pactHash
 
-txHash :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+txHash :: (IsBuiltin b) => NativeFunction e b i
 txHash info b cont handler _env = \case
   [] -> do
     h <- viewEvalEnv eeHash
     returnCEKValue cont handler (VString (hashToText h))
   args -> argsError info b args
 
-coreContinue :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreContinue :: (IsBuiltin b) => NativeFunction e b i
 coreContinue info b cont handler _env = \case
   [v] -> do
     returnCEKValue cont handler v
   args -> argsError info b args
 
-parseTime :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+parseTime :: (IsBuiltin b) => NativeFunction e b i
 parseTime info b cont handler _env = \case
   [VString fmt, VString s] -> do
     chargeGasArgs info $ GStrOp $ StrOpParseTime (T.length fmt) (T.length s)
@@ -1390,7 +1387,7 @@ parseTime info b cont handler _env = \case
         throwNativeExecutionError info b $ "parse-time parse failure"
   args -> argsError info b args
 
-formatTime :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+formatTime :: (IsBuiltin b) => NativeFunction e b i
 formatTime info b cont handler _env = \case
   [VString fmt, VPactValue (PTime t)] -> do
     chargeGasArgs info $ GStrOp $ StrOpFormatTime $ T.length fmt
@@ -1398,7 +1395,7 @@ formatTime info b cont handler _env = \case
     returnCEKValue cont handler $ VString (T.pack timeString)
   args -> argsError info b args
 
-time :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+time :: (IsBuiltin b) => NativeFunction e b i
 time info b cont handler _env = \case
   [VString s] -> do
     case PactTime.parseTime "%Y-%m-%dT%H:%M:%SZ" (T.unpack s) of
@@ -1407,7 +1404,7 @@ time info b cont handler _env = \case
         throwNativeExecutionError info b $ "time default format parse failure"
   args -> argsError info b args
 
-addTime :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+addTime :: (IsBuiltin b) => NativeFunction e b i
 addTime info b cont handler _env = \case
   [VPactValue (PTime t), VPactValue (PDecimal seconds)] -> do
       let newTime = t PactTime..+^ PactTime.fromSeconds seconds
@@ -1417,14 +1414,14 @@ addTime info b cont handler _env = \case
       returnCEKValue cont handler $ VPactValue (PTime newTime)
   args -> argsError info b args
 
-diffTime :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+diffTime :: (IsBuiltin b) => NativeFunction e b i
 diffTime info b cont handler _env = \case
   [VPactValue (PTime x), VPactValue (PTime y)] -> do
     let secondsDifference = PactTime.toSeconds $ x PactTime..-. y
     returnCEKValue cont handler $ VPactValue $ PDecimal secondsDifference
   args -> argsError info b args
 
-minutes :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+minutes :: (IsBuiltin b) => NativeFunction e b i
 minutes info b cont handler _env = \case
   [VDecimal x] -> do
     let seconds = x * 60
@@ -1434,7 +1431,7 @@ minutes info b cont handler _env = \case
     returnCEKValue cont handler $ VDecimal seconds
   args -> argsError info b args
 
-hours :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+hours :: (IsBuiltin b) => NativeFunction e b i
 hours info b cont handler _env = \case
   [VDecimal x] -> do
     let seconds = x * 60 * 60
@@ -1444,7 +1441,7 @@ hours info b cont handler _env = \case
     returnCEKValue cont handler $ VDecimal seconds
   args -> argsError info b args
 
-days :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+days :: (IsBuiltin b) => NativeFunction e b i
 days info b cont handler _env = \case
   [VDecimal x] -> do
     let seconds = x * 60 * 60 * 24
@@ -1454,7 +1451,7 @@ days info b cont handler _env = \case
     returnCEKValue cont handler $ VDecimal seconds
   args -> argsError info b args
 
-describeModule :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+describeModule :: (IsBuiltin b) => NativeFunction e b i
 describeModule info b cont handler env = \case
   [VString s] -> case parseModuleName s of
     Just mname -> do
@@ -1475,7 +1472,7 @@ describeModule info b cont handler env = \case
       throwNativeExecutionError info b $ "invalid module name format"
   args -> argsError info b args
 
-dbDescribeTable :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+dbDescribeTable :: (IsBuiltin b) => NativeFunction e b i
 dbDescribeTable info b cont handler _env = \case
   [VTable (TableValue name _ schema)] -> do
     enforceTopLevelOnly info b
@@ -1485,7 +1482,7 @@ dbDescribeTable info b cont handler _env = \case
       ,("type", PString (renderType (TyTable schema)))]
   args -> argsError info b args
 
-dbDescribeKeySet :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+dbDescribeKeySet :: (IsBuiltin b) => NativeFunction e b i
 dbDescribeKeySet info b cont handler env = \case
   [VString s] -> do
     let pdb = _cePactDb env
@@ -1501,28 +1498,28 @@ dbDescribeKeySet info b cont handler env = \case
         throwNativeExecutionError info b  "incorrect keyset name format"
   args -> argsError info b args
 
-coreCompose :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreCompose :: (IsBuiltin b) => NativeFunction e b i
 coreCompose info b cont handler env = \case
   [VClosure clo1, VClosure clo2, v] -> do
     let cont' = Fn clo2 env [] [] cont
     applyLam clo1 [v] cont' handler
   args -> argsError info b args
 
-coreCreatePrincipal :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreCreatePrincipal :: (IsBuiltin b) => NativeFunction e b i
 coreCreatePrincipal info b cont handler _env = \case
   [VGuard g] -> do
     pr <- createPrincipalForGuard info g
     returnCEKValue cont handler $ VString $ Pr.mkPrincipalIdent pr
   args -> argsError info b args
 
-coreIsPrincipal :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreIsPrincipal :: (IsBuiltin b) => NativeFunction e b i
 coreIsPrincipal info b cont handler _env = \case
   [VString p] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length p
     returnCEKValue cont handler $ VBool $ isRight $ parseOnly Pr.principalParser p
   args -> argsError info b args
 
-coreTypeOfPrincipal :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreTypeOfPrincipal :: (IsBuiltin b) => NativeFunction e b i
 coreTypeOfPrincipal info b cont handler _env = \case
   [VString p] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length p
@@ -1532,7 +1529,7 @@ coreTypeOfPrincipal info b cont handler _env = \case
     returnCEKValue cont handler $ VString prty
   args -> argsError info b args
 
-coreValidatePrincipal :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreValidatePrincipal :: (IsBuiltin b) => NativeFunction e b i
 coreValidatePrincipal info b cont handler _env = \case
   [VGuard g, VString s] -> do
     pr' <- createPrincipalForGuard info g
@@ -1541,13 +1538,13 @@ coreValidatePrincipal info b cont handler _env = \case
   args -> argsError info b args
 
 
-coreCond :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreCond :: (IsBuiltin b) => NativeFunction e b i
 coreCond info b cont handler _env = \case
   [VClosure clo] -> applyLam clo [] cont handler
   args -> argsError info b args
 
 
-coreIdentity :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreIdentity :: (IsBuiltin b) => NativeFunction e b i
 coreIdentity info b cont handler _env = \case
   [VPactValue pv] -> returnCEKValue cont handler $ VPactValue pv
   args -> argsError info b args
@@ -1556,7 +1553,7 @@ coreIdentity info b cont handler _env = \case
 --------------------------------------------------
 -- Namespace functions
 --------------------------------------------------
-coreNamespace :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreNamespace :: (IsBuiltin b) => NativeFunction e b i
 coreNamespace info b cont handler env = \case
   [VString n] -> do
     enforceTopLevelOnly info b
@@ -1578,7 +1575,7 @@ coreNamespace info b cont handler env = \case
   args -> argsError info b args
 
 
-coreDefineNamespace :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreDefineNamespace :: (IsBuiltin b) => NativeFunction e b i
 coreDefineNamespace info b cont handler env = \case
   [VString n, VGuard usrG, VGuard adminG] -> do
     enforceTopLevelOnly info b
@@ -1622,7 +1619,7 @@ coreDefineNamespace info b cont handler env = \case
   validSpecialChars =
     "%#+-_&$@<>=^?*!|/~"
 
-coreDescribeNamespace :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreDescribeNamespace :: (IsBuiltin b) => NativeFunction e b i
 coreDescribeNamespace info b cont handler _env = \case
   [VString n] -> do
     pdb <- viewEvalEnv eePactDb
@@ -1641,7 +1638,7 @@ coreDescribeNamespace info b cont handler _env = \case
   args -> argsError info b args
 
 
-coreChainData :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreChainData :: (IsBuiltin b) => NativeFunction e b i
 coreChainData info b cont handler _env = \case
   [] -> do
     PublicData publicMeta blockHeight blockTime prevBh <- viewEvalEnv eePublicData
@@ -1714,8 +1711,8 @@ fromG2 (Point x y) = ObjectData pts
     , (Field "y", y')]
 
 
-zkPairingCheck :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
--- zkPairingCheck :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+zkPairingCheck :: (IsBuiltin b) => NativeFunction e b i
+-- zkPairingCheck :: (IsBuiltin b) => NativeFunction e b i
 zkPairingCheck info b cont handler _env = \case
   args@[VList p1s, VList p2s] -> do
     chargeGasArgs info (GAZKArgs (Pairing (max (V.length p1s) (V.length p2s))))
@@ -1727,7 +1724,7 @@ zkPairingCheck info b cont handler _env = \case
     returnCEKValue cont handler $ VBool $ pairingCheck pairs
   args -> argsError info b args
 
-zkScalarMult :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+zkScalarMult :: (IsBuiltin b) => NativeFunction e b i
 zkScalarMult info b cont handler _env = \case
   args@[VString ptTy, VObject p1, VInteger scalar] -> do
     let scalar' = scalar `mod` curveOrder
@@ -1752,7 +1749,7 @@ zkScalarMult info b cont handler _env = \case
   curveOrder :: Integer
   curveOrder = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 
-zkPointAddition :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+zkPointAddition :: (IsBuiltin b) => NativeFunction e b i
 zkPointAddition info b cont handler _env = \case
   args@[VString ptTy, VObject p1, VObject p2] -> do
     case T.toLower ptTy of
@@ -1782,7 +1779,7 @@ zkPointAddition info b cont handler _env = \case
 -- Poseidon
 -----------------------------------
 
-poseidonHash :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+poseidonHash :: (IsBuiltin b) => NativeFunction e b i
 poseidonHash info b cont handler _env = \case
   [VList as]
     | not (V.null as) && length as <= 8,
@@ -1793,16 +1790,16 @@ poseidonHash info b cont handler _env = \case
 
 #else
 
-zkPairingCheck :: NativeFunction e step b i
+zkPairingCheck :: NativeFunction e b i
 zkPairingCheck info _b _cont _handler _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
-zkScalarMult :: NativeFunction e step b i
+zkScalarMult :: NativeFunction e b i
 zkScalarMult info _b _cont _handler _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
-zkPointAddition :: NativeFunction e step b i
+zkPointAddition :: NativeFunction e b i
 zkPointAddition info _b _cont _handler _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
-poseidonHash :: NativeFunction e step b i
+poseidonHash :: NativeFunction e b i
 poseidonHash info _b _cont _handler _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
 #endif
@@ -1811,7 +1808,7 @@ poseidonHash info _b _cont _handler _env _args = throwExecutionError info $ Eval
 -- SPV
 -----------------------------------
 
-coreVerifySPV :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreVerifySPV :: (IsBuiltin b) => NativeFunction e b i
 coreVerifySPV info b cont handler _env = \case
   [VString proofType, VObject o] -> do
     SPVSupport f _ <- viewEvalEnv eeSPVSupport
@@ -1823,7 +1820,7 @@ coreVerifySPV info b cont handler _env = \case
 -----------------------------------
 -- Verifiers
 -----------------------------------
-coreEnforceVerifier :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreEnforceVerifier :: (IsBuiltin b) => NativeFunction e b i
 coreEnforceVerifier info b cont handler _env = \case
   [VString verName] -> do
     enforceStackTopIsDefcap info b
@@ -1840,7 +1837,7 @@ coreEnforceVerifier info b cont handler _env = \case
 
 
 
-coreHyperlaneDecodeTokenMessage :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreHyperlaneDecodeTokenMessage :: (IsBuiltin b) => NativeFunction e b i
 coreHyperlaneDecodeTokenMessage info b cont handler _env = \case
   [VString s] -> do
     chargeGasArgs info $ GHyperlaneEncodeDecodeTokenMessage (T.length s)
@@ -1856,7 +1853,7 @@ coreHyperlaneDecodeTokenMessage info b cont handler _env = \case
           Right pv -> returnCEKValue cont handler (VPactValue pv)
   args -> argsError info b args
 
-coreHyperlaneMessageId :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreHyperlaneMessageId :: (IsBuiltin b) => NativeFunction e b i
 coreHyperlaneMessageId info b cont handler _env = \case
   [VObject o] -> case decodeHyperlaneMessageObject o of
       Left e -> throwExecutionError info $ HyperlaneError e
@@ -1866,7 +1863,7 @@ coreHyperlaneMessageId info b cont handler _env = \case
         returnCEKValue cont handler (VString msgId)
   args -> argsError info b args
 
-coreHyperlaneEncodeTokenMessage :: (CEKEval e step b i, IsBuiltin b) => NativeFunction e step b i
+coreHyperlaneEncodeTokenMessage :: (IsBuiltin b) => NativeFunction e b i
 coreHyperlaneEncodeTokenMessage info b cont handler _env = \case
   [VObject o] -> case decodeHyperlaneTokenMessageObject o of
       Left e -> throwExecutionError info $ HyperlaneError e
@@ -1881,27 +1878,20 @@ coreHyperlaneEncodeTokenMessage info b cont handler _env = \case
 -----------------------------------
 
 
-{-# SPECIALIZE coreBuiltinEnv :: BuiltinEnv ExecRuntime CEKBigStep CoreBuiltin i #-}
-{-# SPECIALIZE coreBuiltinEnv :: BuiltinEnv ExecRuntime CEKSmallStep CoreBuiltin i #-}
 coreBuiltinEnv
-  :: forall e step i. (CEKEval e step CoreBuiltin i)
-  => BuiltinEnv e step CoreBuiltin i
+  :: BuiltinEnv e CoreBuiltin i
 coreBuiltinEnv i b env = mkBuiltinFn i b env (coreBuiltinRuntime b)
 {-# INLINEABLE coreBuiltinEnv #-}
 
 
 {-# SPECIALIZE coreBuiltinRuntime
    :: CoreBuiltin
-   -> NativeFunction ExecRuntime CEKBigStep CoreBuiltin ()
-    #-}
-{-# SPECIALIZE coreBuiltinRuntime
-   :: CoreBuiltin
-   -> NativeFunction ExecRuntime CEKSmallStep CoreBuiltin i
+   -> NativeFunction ExecRuntime CoreBuiltin i
     #-}
 coreBuiltinRuntime
-  :: (CEKEval e step b i, IsBuiltin b)
+  :: (IsBuiltin b)
   => CoreBuiltin
-  -> NativeFunction e step b i
+  -> NativeFunction e b i
 coreBuiltinRuntime = \case
   CoreAdd -> rawAdd
   CoreSub -> rawSub
