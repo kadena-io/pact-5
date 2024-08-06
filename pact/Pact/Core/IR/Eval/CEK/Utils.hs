@@ -27,9 +27,9 @@ mkBuiltinFn
   :: (IsBuiltin b)
   => i
   -> b
-  -> CEKEnv e step b i
-  -> NativeFunction e step b i
-  -> NativeFn e step b i
+  -> CEKEnv e b i
+  -> NativeFunction e b i
+  -> NativeFn e b i
 mkBuiltinFn i b env fn =
   NativeFn b env fn (builtinArity b) i
 {-# INLINE mkBuiltinFn #-}
@@ -38,12 +38,12 @@ argsError
   :: IsBuiltin b
   => i
   -> b
-  -> [CEKValue e step b i]
+  -> [CEKValue e b i]
   -> EvalM e b i a
 argsError info b args =
   throwExecutionError info (NativeArgumentsError (builtinName b) (toArgTypeError <$> args))
 
-toArgTypeError :: CEKValue e step b i -> ArgTypeError
+toArgTypeError :: CEKValue e b i -> ArgTypeError
 toArgTypeError = \case
   VPactValue pv -> case pv of
     PLiteral l -> ATEPrim (literalPrim l)
@@ -69,7 +69,7 @@ tryNodeGas :: MilliGas
 tryNodeGas = (MilliGas 100)
 
 
-readOnlyEnv :: CEKEnv e step b i -> CEKEnv e step b i
+readOnlyEnv :: CEKEnv e b i -> CEKEnv e b i
 readOnlyEnv e
   | view (cePactDb . pdbPurity) e == PSysOnly = e
   | otherwise =
@@ -87,7 +87,7 @@ readOnlyEnv e
              }
       in set cePactDb newPactdb e
 
-sysOnlyEnv :: forall e step b i. CEKEnv e step b i -> CEKEnv e step b i
+sysOnlyEnv :: forall e b i. CEKEnv e b i -> CEKEnv e b i
 sysOnlyEnv e
   | view (cePactDb . pdbPurity) e == PSysOnly = e
   | otherwise =
@@ -111,12 +111,12 @@ sysOnlyEnv e
     _ -> _pdbRead pdb dom k
 
 
-envFromPurity :: Purity -> CEKEnv e step b i -> CEKEnv e step b i
+envFromPurity :: Purity -> CEKEnv e b i -> CEKEnv e b i
 envFromPurity PImpure = id
 envFromPurity PReadOnly = readOnlyEnv
 envFromPurity PSysOnly = sysOnlyEnv
 
-enforcePactValue :: i -> CEKValue e step b i -> EvalM e b i PactValue
+enforcePactValue :: i -> CEKValue e b i -> EvalM e b i PactValue
 enforcePactValue info = \case
   VPactValue pv -> pure pv
   _ -> throwExecutionError info ExpectedPactValue
