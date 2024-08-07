@@ -18,6 +18,7 @@ import qualified Pact.Core.Test.SizeOfTests as SizeOfTests
 import qualified Pact.Core.Test.ConTagGolden as ConTagGoldenTests
 import qualified Pact.Core.Test.DocsTests as DocsTests
 import qualified Pact.Core.Test.PrincipalTests as PrincipalTests
+import qualified Pact.Core.Test.PactServerTests as PactServerTests
 import qualified Pact.Core.Test.SignatureSchemeTests as SignatureSchemeTests
 
 main :: IO ()
@@ -27,6 +28,7 @@ main = do
   legacyTests <- LegacySerialiseTests.tests
   commandTests <- CommandTests.tests
   docsTests <- DocsTests.tests
+  pactServerTests <- PactServerTests.tests
   defaultMain $ testGroup "pactTests"
     [ replTests
     , LexerTests.tests
@@ -45,5 +47,6 @@ main = do
     , docsTests
     , PrincipalTests.tests
     , SignatureSchemeTests.tests
+    , pactServerTests
     ]
 
