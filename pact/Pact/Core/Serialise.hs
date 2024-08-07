@@ -127,7 +127,7 @@ serialisePact = PactSerialise
 
 gEncodeRowData :: RowData -> GasM b i ByteString
 gEncodeRowData rd = do
-  encodedRow <- V1.encodeRowData rd
+  let encodedRow = V1.encodeRowDataNoGas rd
   pure $ toStrictByteString $ encodeVersion V1_CBOR <> S.encodeBytes encodedRow
 
 liftReplBuiltin :: ModuleData CoreBuiltin a -> ModuleData ReplCoreBuiltin a
