@@ -48,7 +48,7 @@ data ReplOpts
   | OUnsignedReq { _oReqYaml :: FilePath }
   -- Crypto
   | OGenKey
-  | OExplain String
+  | OExplainErrorCode String
   deriving (Eq, Show)
 
 replOpts :: O.Parser (Maybe ReplOpts)
@@ -59,7 +59,7 @@ replOpts = O.optional $
   <|> apiReqFlag
   <|> unsignedReqFlag
   <|> loadFlag
-  <|> explainFlag
+  <|> explainErrorCodeFlag
 
 -- Todo: trace output and coverage?
 loadFlag :: O.Parser ReplOpts
@@ -86,10 +86,10 @@ apiReqFlag =
                   O.help "Format API request JSON using REQ_YAML file")
   <*> localFlag
 
-explainFlag :: O.Parser ReplOpts
-explainFlag =
-  OExplain <$> O.strOption (O.long "explain" <> O.metavar "ERROR_CODE" <>
-                           O.help "Describe the error code")
+explainErrorCodeFlag :: O.Parser ReplOpts
+explainErrorCodeFlag =
+  OExplainErrorCode <$> O.strOption (O.long "explain-error-code" <> O.metavar "ERROR_CODE" <>
+                                     O.help "Describe the error code")
 
 unsignedReqFlag :: O.Parser ReplOpts
 unsignedReqFlag = OUnsignedReq
@@ -122,7 +122,7 @@ main = O.execParser argParser >>= \case
           Just s -> runScript s dbg
           Nothing -> runScript fp dbg
       | otherwise -> runScript fp dbg
-    OExplain errCodeStr -> case errorCodeFromText $ T.pack errCodeStr of
+    OExplainErrorCode errCodeStr -> case errorCodeFromText $ T.pack errCodeStr of
       Nothing -> putStrLn $ "Invalid error code format" -- todo enhance error
       Just errCode -> let (PrettyErrorCode phase cause _) = prettyErrorCode $ PactErrorCode errCode NoInfo
         in T.putStrLn ("Encountered failure in: " <> phase <> ", caused by: " <> cause)
