@@ -13,7 +13,7 @@ module Pact.Core.Persistence.SQLite (
 ) where
 
 import Control.Monad
-import Control.Monad.Catch
+import Control.Exception.Safe
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.IORef
 import Data.Text (Text)
@@ -27,7 +27,6 @@ import qualified Pact.Core.Errors as E
 import Pact.Core.Persistence
 import Pact.Core.Guards (renderKeySetName, parseAnyKeysetName)
 import Pact.Core.Names
-import Control.Exception (throwIO)
 import Pact.Core.Serialise
 import Pact.Core.StableEncoding (encodeStable)
 
