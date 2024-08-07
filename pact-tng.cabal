@@ -519,6 +519,9 @@ test-suite core-tests
     , tasty-hunit
     , tasty-hedgehog
     , tasty-golden
+    , tasty-wai
+    , http-types
+    , wai-extra
     , serialise
     , cborg
     , groups
@@ -533,6 +536,9 @@ test-suite core-tests
     , safe-exceptions
     , http-conduit
     , direct-sqlite
+    , servant
+    , servant-server
+    , servant-client
   other-modules:
     , Pact.Core.Test.CommandTests
     , Pact.Core.Test.ReplTests
@@ -554,6 +560,7 @@ test-suite core-tests
     , Pact.Core.Test.LegacyDBRegression
     , Paths_pact_tng
     , Pact.Core.Test.SignatureSchemeTests
+    , Pact.Core.Test.PactServerTests
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
 

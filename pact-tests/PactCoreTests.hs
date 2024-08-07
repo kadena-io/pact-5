@@ -19,6 +19,7 @@ import qualified Pact.Core.Test.SizeOfTests as SizeOfTests
 import qualified Pact.Core.Test.ConTagGolden as ConTagGoldenTests
 import qualified Pact.Core.Test.DocsTests as DocsTests
 import qualified Pact.Core.Test.PrincipalTests as PrincipalTests
+import qualified Pact.Core.Test.PactServerTests as PactServerTests
 import qualified Pact.Core.Test.SignatureSchemeTests as SignatureSchemeTests
 import qualified Pact.Core.Test.JSONRoundtripTests as JSONRoundtripTests
 import qualified Pact.Core.Test.LegacyDBRegression as LegacyDbRegression
@@ -31,6 +32,7 @@ main = do
   commandTests <- CommandTests.tests
   docsTests <- DocsTests.tests
   legacyDbRegression <- LegacyDbRegression.tests
+  pactServerTests <- PactServerTests.tests
   defaultMain $ testGroup "pactTests"
     [ replTests
     , LexerTests.tests
@@ -51,5 +53,6 @@ main = do
     , SignatureSchemeTests.tests
     , JSONRoundtripTests.tests
     , legacyDbRegression
+    , pactServerTests
     ]
 
