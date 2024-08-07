@@ -75,10 +75,10 @@ module Pact.Core.Environment.Types
 
 
 import Control.Lens
-import Control.Monad.Catch
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Control.Monad.Except
+import Control.Exception.Safe
 import Data.Set(Set)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
