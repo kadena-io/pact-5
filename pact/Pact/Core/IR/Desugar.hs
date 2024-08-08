@@ -1441,7 +1441,7 @@ handleImport info binds (Import mn mh imported) = do
   let imported' = S.fromList <$> imported
       mdhash = view mdModuleHash mdata
   case mh of
-    Just modHash -> when (modHash /= mdhash) $ throwDesugarError (InvalidImportModuleHash mn modHash) info
+    Just modHash -> when (modHash /= mdhash) $ throwDesugarError (InvalidImportModuleHash mn mdhash) info
     Nothing -> pure ()
   loadTopLevelMembers info imported' mdata binds
 
