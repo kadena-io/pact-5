@@ -31,6 +31,7 @@ module Pact.Core.Errors
  , PrettyErrorCode(..)
  , pactErrorToErrorCode
  , prettyErrorCode
+ , errorCodeFromText
  ) where
 
 import Control.Lens hiding (ix)
@@ -935,6 +936,13 @@ data PactErrorCode info
   , _peInfo :: info
   } deriving (Eq, Show, Functor)
 
+errorCodeFromText :: Text -> Maybe ErrorCode
+errorCodeFromText t = do
+  guard (T.length t == 18 && T.all C.isHexDigit (T.drop 2 t))
+  case T.hexadecimal t of
+    Right (a, remaining) | T.null remaining -> pure $ ErrorCode a
+    _ -> Nothing
+
 instance {-# OVERLAPPING #-} J.Encode (PactErrorCode NoInfo) where
   build (PactErrorCode ec _) = J.object
     [ "errorCode" J..= T.pack (show ec) ]
@@ -943,10 +951,8 @@ instance {-# OVERLAPPING #-} J.Encode (PactErrorCode NoInfo) where
 instance {-# OVERLAPPING #-} JD.FromJSON (PactErrorCode NoInfo) where
   parseJSON = JD.withObject "PactErrorCode" $ \o -> do
     t <- o JD..: "errorCode"
-    guard (T.length t == 18 && T.all C.isHexDigit (T.drop 2 t))
-    case T.hexadecimal t of
-      Right (a, remaining) | T.null remaining -> do
-        pure $ PactErrorCode (ErrorCode a) NoInfo
+    case errorCodeFromText t of
+      Just a -> pure $ PactErrorCode a NoInfo
       _ -> fail "failed to parse pact error code"
 
 instance J.Encode info => J.Encode (PactErrorCode info) where
