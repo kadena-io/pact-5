@@ -22,6 +22,7 @@ import Control.Lens
 import Control.Monad
 import Data.Maybe(mapMaybe)
 import Data.Text(Text)
+import Codec.Serialise(Serialise)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Data.Text.IO as T
@@ -44,6 +45,7 @@ import Pact.Core.Namespace
 import Pact.Core.PactValue
 import Pact.Core.Hash
 import Pact.Core.Interpreter
+import Pact.Core.Serialise.CBOR_V1(SerialiseV1)
 
 import qualified Pact.Core.IR.ModuleHashing as MHash
 import qualified Pact.Core.IR.ConstEval as ConstEval
@@ -54,11 +56,12 @@ import Pact.Core.Gas
 import Pact.Core.SizeOf
 
 type HasCompileEnv b i
-  = (DesugarBuiltin b
+  = ( DesugarBuiltin b
     , Pretty b
     , IsBuiltin b
     , SizeOf i
     , SizeOf b
+    , Serialise (SerialiseV1 b)
     )
 
 parseOnlyProgram

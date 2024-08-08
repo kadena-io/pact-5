@@ -112,7 +112,7 @@ fromLegacyInterface mh (Legacy.Interface n imp) mref = do
   let n' = fromLegacyModuleName n
       use' = fmap fromLegacyUse imp
   defs <- traverse (fromLegacyInterfaceDefRef mh) $ HM.elems mref
-  pure (Interface n' defs use' mh ())
+  pure (Interface n' defs use' mh (Hash mempty) ())
 
 fromLegacyDeps
   :: ModuleHash
@@ -337,7 +337,7 @@ fromLegacyModule mh lm depMap = do
       gov = fromLegacyGovernance mh (Legacy._mGovernance lm)
 
   defs <- traverse (fromLegacyDefRef mh) $ HM.elems depMap
-  pure (Module mn gov defs (S.fromList blessed) imps impl mhash ())
+  pure (Module mn gov defs (S.fromList blessed) imps impl mhash (Hash mempty) ())
 
 fromLegacyBodyForm'
   :: ModuleHash -- parent module hash

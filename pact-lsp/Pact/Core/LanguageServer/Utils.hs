@@ -69,7 +69,7 @@ topLevelTermAt p = \case
     | p `inside` i -> Just (UseMatch imp i)
     | otherwise -> Nothing
   where
-    goInterface iface@(Interface _ _idefs _ _ i)
+    goInterface iface@(Interface _ _idefs _ _ _ i)
       | p `inside` i = Just (InterfaceMatch iface) -- TODO add interace defs
       | otherwise = Nothing
     goDefs = \case
@@ -101,7 +101,7 @@ topLevelTermAt p = \case
       DPact dp@(DefPact _ _ steps i)
         | p `inside` i -> getAlt (foldMap (Alt . goStep) steps) <|> Just (DefPactMatch dp)
         | otherwise -> Nothing
-    goModule m@(Module _ _ defs _ _ _ _ i)
+    goModule m@(Module _ _ defs _ _ _ _ _ i)
       | p `inside` i = getAlt (foldMap (Alt . goDefs) defs) <|> Just (ModuleMatch m)
       | otherwise = Nothing
 
