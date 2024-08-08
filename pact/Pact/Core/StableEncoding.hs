@@ -510,6 +510,13 @@ instance JD.FromJSON (StableEncoding SpanInfo) where
     endColumn <- o JD..: "endColumn"
     pure $ StableEncoding (SpanInfo startLine startColumn endLine endColumn)
 
+instance J.Encode (StableEncoding SpanInfo) where
+  build (StableEncoding (SpanInfo ls cs le ce)) = J.object
+    [ "startLine" J..= J.Aeson ls
+    , "startColumn" J..= J.Aeson cs
+    , "endLine" J..= J.Aeson le
+    , "endColumn" J..= J.Aeson ce
+    ]
 
 instance J.Encode (StableEncoding (Signer QualifiedName PactValue)) where
   build (StableEncoding o) = J.object
