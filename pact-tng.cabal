@@ -338,7 +338,6 @@ executable gasmodel
 
   other-modules:
     Pact.Core.GasModel.BuiltinsGas
-    Pact.Core.GasModel.InterpreterGas
     Pact.Core.GasModel.ContractBench
     Pact.Core.GasModel.Serialization
     Pact.Core.GasModel.Utils

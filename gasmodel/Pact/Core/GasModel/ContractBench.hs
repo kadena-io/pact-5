@@ -73,7 +73,7 @@ interpretBigStep =
   where
   runTerm purity term = CEK.eval purity eEnv term
   runGuard info g = CEK.interpretGuard info eEnv g
-  eEnv = CEK.coreBuiltinEnv @ExecRuntime @CEK.CEKBigStep
+  eEnv = CEK.coreBuiltinEnv @ExecRuntime
 
 interpretDirect :: Interpreter ExecRuntime CoreBuiltin SpanInfo
 interpretDirect =

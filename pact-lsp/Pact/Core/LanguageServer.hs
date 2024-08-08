@@ -253,7 +253,7 @@ setupAndProcessFile nuri content = do
           , _replNativesEnabled = True
           }
   stateRef <- newIORef rstate
-  res <- runReplT stateRef (processFile Repl.interpretEvalSmallStep nuri content)
+  res <- runReplT stateRef (processFile Repl.interpretEvalBigStep nuri content)
   st <- readIORef stateRef
   pure $ (st,) <$> res
   where

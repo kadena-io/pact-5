@@ -13,7 +13,6 @@ import Data.Text (Text)
 import Data.Map.Strict(Map)
 import Data.Monoid
 import qualified Criterion as C
-import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
@@ -39,19 +38,10 @@ import Pact.Core.IR.Eval.CEK.Types hiding (Eval)
 import qualified Pact.Core.IR.Eval.CEK as Eval
 
 type CoreDb = PactDb CoreBuiltin Info
-type MachineResult = CEKReturn ExecRuntime CoreBuiltin Info
-type ApplyContToVEnv =
-  ( EvalEnv CoreBuiltin Info
-  , EvalState CoreBuiltin Info
-  , Cont ExecRuntime CEKSmallStep CoreBuiltin Info
-  , CEKErrorHandler ExecRuntime CEKSmallStep CoreBuiltin Info
-  , CEKValue ExecRuntime CEKSmallStep CoreBuiltin Info)
 
-benchmarkEnv :: BuiltinEnv ExecRuntime CEKSmallStep CoreBuiltin Info
-benchmarkEnv = coreBuiltinEnv @ExecRuntime @CEKSmallStep
 
-benchmarkBigStepEnv :: BuiltinEnv ExecRuntime CEKBigStep CoreBuiltin Info
-benchmarkBigStepEnv = coreBuiltinEnv @ExecRuntime @CEKBigStep
+benchmarkBigStepEnv :: BuiltinEnv ExecRuntime CoreBuiltin Info
+benchmarkBigStepEnv = coreBuiltinEnv @ExecRuntime
 
 newtype NoNF a
   = NoNf a
@@ -250,43 +240,6 @@ prepopulateDb pdb = do
   _ <- liftIO $ _pdbCommitTx pdb
   pure ()
 
-evaluateN
-  :: EvalEnv CoreBuiltin Info
-  -> EvalState CoreBuiltin Info
-  -> Text
-  -> Int
-  -> IO (Either (PactError Info) MachineResult, EvalState CoreBuiltin Info)
-evaluateN evalEnv es source nSteps = runEvalM (ExecEnv evalEnv) es $ do
-  term <- compileTerm source
-  let pdb = _eePactDb evalEnv
-      ps = _eeDefPactStep evalEnv
-      env = CEKEnv { _cePactDb=pdb
-                   , _ceLocal=mempty
-                   , _ceInCap=False
-                   , _ceDefPactStep=ps
-                   , _ceBuiltins = benchmarkEnv }
-  step1 <- Eval.evaluateTermSmallStep Mt CEKNoHandler env term
-  evalNSteps (nSteps - 1) step1
-
-isFinal :: MachineResult -> Bool
-isFinal (CEKReturn Mt CEKNoHandler _) = True
-isFinal _ = False
-
-evalStep :: MachineResult -> Eval MachineResult
-evalStep c@(CEKReturn cont handler result)
-  | isFinal c = return c
-  | otherwise = Eval.returnCEK cont handler result
-evalStep (CEKEvaluateTerm cont handler cekEnv term) = Eval.evaluateTermSmallStep cont handler cekEnv term
-
-unsafeEvalStep :: MachineResult -> Eval MachineResult
-unsafeEvalStep (CEKReturn cont handler result) = Eval.returnCEK cont handler result
-unsafeEvalStep (CEKEvaluateTerm cont handler cekEnv term) = Eval.evaluateTermSmallStep cont handler cekEnv term
-
-evalNSteps :: Int -> MachineResult -> Eval MachineResult
-evalNSteps i c
-  | i <= 0 = return c
-  | otherwise = evalStep c >>= evalNSteps (i - 1)
-
 compileTerm
   :: Text
   -> Eval (CoreTerm Info)
@@ -399,76 +352,6 @@ dummyTx pdb initDbState bs = C.envWithCleanup (_pdbBeginTx pdb Transactional >> 
 
 ignoreWrites :: PactDb b i -> PactDb b i
 ignoreWrites pdb = pdb { _pdbWrite = \_ _ _ _ -> pure () }
-
--- Closures
-unitClosureNullary :: CEKEnv ExecRuntime step CoreBuiltin Info -> Closure ExecRuntime step CoreBuiltin Info
-unitClosureNullary env
-  = Closure
-  { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
-  , _cloTypes = NullaryClosure
-  , _cloArity = 0
-  , _cloTerm = unitConst
-  , _cloRType = Nothing
-  , _cloEnv = env
-  , _cloInfo = def}
-
-
-unitClosureUnary :: CEKEnv ExecRuntime step CoreBuiltin Info -> Closure ExecRuntime step CoreBuiltin Info
-unitClosureUnary env
-  = Closure
-  { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg" Nothing def])
-  , _cloArity = 1
-  , _cloTerm = unitConst
-  , _cloRType = Nothing
-  , _cloEnv = env
-  , _cloInfo = def}
-
-unitClosureBinary :: CEKEnv ExecRuntime step CoreBuiltin Info -> Closure ExecRuntime step CoreBuiltin Info
-unitClosureBinary env
-  = Closure
-  { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing def, Arg "fooCloArg2" Nothing def])
-  , _cloArity = 2
-  , _cloTerm = unitConst
-  , _cloRType = Nothing
-  , _cloEnv = env
-  , _cloInfo = def}
-
-
-boolClosureUnary :: Bool -> CEKEnv e step b Info -> Closure e step b Info
-boolClosureUnary b env
-  = Closure
-  { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing def])
-  , _cloArity = 1
-  , _cloTerm = boolConst b
-  , _cloRType = Nothing
-  , _cloEnv = env
-  , _cloInfo = def}
-
-boolClosureBinary :: Bool -> CEKEnv e step b Info -> Closure e step b Info
-boolClosureBinary b env
-  = Closure
-  { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing def, Arg "fooCloArg2" Nothing def])
-  , _cloArity = 2
-  , _cloTerm = boolConst b
-  , _cloRType = Nothing
-  , _cloEnv = env
-  , _cloInfo = def}
-
-intClosureBinary :: Integer -> CEKEnv e step b Info -> Closure e step b Info
-intClosureBinary b env
-  = Closure
-  { _cloFqName = FullyQualifiedName (ModuleName "foomodule" Nothing) "foo" placeholderHash
-  , _cloTypes = ArgClosure (NE.fromList [Arg "fooCloArg1" Nothing def, Arg "fooCloArg2" Nothing def])
-  , _cloArity = 2
-  , _cloTerm = intConst b
-  , _cloRType = Nothing
-  , _cloEnv = env
-  , _cloInfo = def}
-
 
 unitConst :: CoreTerm Info
 unitConst = Constant LUnit def

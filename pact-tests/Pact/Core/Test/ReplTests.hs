@@ -42,8 +42,6 @@ tests = do
   pure $ testGroup "ReplTests"
     [ testGroup "in-memory db:bigstep" (runFileReplTest interpretReplProgramBigStep <$> files)
     , testGroup "sqlite db:bigstep" (runFileReplTestSqlite interpretReplProgramBigStep <$> files)
-    , testGroup "in-memory db:smallstep" (runFileReplTest interpretReplProgramSmallStep <$> files)
-    , testGroup "sqlite db:smallstep" (runFileReplTestSqlite interpretReplProgramSmallStep <$> files)
     , testGroup "in-memory db:direct" (runFileReplTest interpretReplProgramDirect <$> files)
     , testGroup "sqlite db:direct" (runFileReplTestSqlite interpretReplProgramDirect <$> files)
     ]
