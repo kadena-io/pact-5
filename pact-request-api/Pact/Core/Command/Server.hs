@@ -31,7 +31,7 @@ import Data.LruCache.IO
 import qualified Data.LruCache.IO as LRU
 import Data.Proxy
 import Data.Set (Set)
-import Data.Text
+import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 import Data.Traversable
@@ -219,8 +219,10 @@ sendHandler env submitBatch = do
                       let parsedCode = Right $ _pcExps (_pmCode execMsg)
                       (evalState', result) <- interpretReturningState (_ceEvalEnv env) evalState parsedCode
                       case result of
-                        Right goodRes -> pure (evalState', evalResultToCommandResult requestKey goodRes)
-                        Left err -> pure (evalState', pactErrorToCommandResult requestKey err)
+                        Right goodRes ->
+                          pure (evalState', evalResultToCommandResult requestKey goodRes)
+                        Left err ->
+                          pure (evalState', pactErrorToCommandResult requestKey err)
                     ProcSucc (Command (Payload (Continuation contMsg) _ _ _ _ _) _ _) -> do
                       let evalInput = contMsgToEvalInput contMsg
                       (evalState', result) <- interpretReturningState (_ceEvalEnv env) evalState evalInput
@@ -262,7 +264,12 @@ sendHandler env submitBatch = do
         contMsgToEvalInput = undefined
 
 localHandler :: CommandEnv -> Command Text -> Handler (CommandResult Log (PactErrorCode Info))
-localHandler = undefined
+localHandler env cmd = do
+  RequestKeys rks  <- sendHandler env (SubmitBatch $ cmd NE.:| [])
+  PollResponses pr <- pollHandler env (PollRequest rks)
+  case HM.toList pr of
+    (_, cmdResult): _ -> pure cmdResult
+    [] -> throwError err404
 
 listenHandler :: CommandEnv -> ListenRequest -> Handler ListenResponse
 listenHandler env (ListenRequest key) = do

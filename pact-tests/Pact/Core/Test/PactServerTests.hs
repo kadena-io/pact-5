@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeApplications #-}
 
--- | 
+-- |
 
 module Pact.Core.Test.PactServerTests where
 
@@ -37,7 +37,9 @@ import Test.Tasty
 import Test.Tasty.Wai
 import qualified Test.Tasty.HUnit as HUnit
 import qualified Data.ByteString.Lazy as LBS
-
+import Pact.Core.StableEncoding
+import Data.Default
+import Pact.Core.ChainData
 
 
 sendClient :: SubmitBatch -> ClientM RequestKeys
@@ -91,22 +93,29 @@ tests =  do
         cmd <- liftIO mkSubmitBatch
         res@(SResponse _ _ reqResp) <- postWithHeaders "/api/v1/send" cmd [(HTTP.hContentType, "application/json")]
         assertStatus 200 res
+
         let (Just (RequestKeys rks)) :: Maybe RequestKeys = A.decodeStrict $ LBS.toStrict reqResp
         assertBool "Response contains one request key" (NE.length rks == 1)
 
         let req = J.encode $ J.build $ ListenRequest (NE.head rks)
-        res' <- postWithHeaders "/api/v1/listen" req  [(HTTP.hContentType, "application/json")]
+
+        res'@(SResponse _ _ reqResp') <- postWithHeaders "/api/v1/listen" req  [(HTTP.hContentType, "application/json")]
         assertStatus 200 res'
-        assertBody "" res'
+
+        let (Just cmdResult) :: Maybe (CommandResult Log (PactErrorCode Info)) = A.decodeStrict $ LBS.toStrict reqResp'
+        assertEqual "Result match expected output" (PactResultOk $ PInteger 3) (_crResult cmdResult)
     ]
 
 assertBool :: String -> Bool -> Session ()
 assertBool msg c = liftIO (HUnit.assertBool msg c)
 
+assertEqual :: (Eq a , Show a)=> String -> a -> a -> Session ()
+assertEqual msg a b = liftIO (HUnit.assertEqual msg a b)
+
 mkSubmitBatch :: IO LBS.ByteString
 mkSubmitBatch = do
   ks <- generateEd25519KeyPair
   let rpc :: PactRPC Text = Exec (ExecMsg "(+ 1 2)" PUnit)
-      metaData = A.Number 1 :: A.Value
+      metaData = J.build $ StableEncoding (def :: PublicMeta)
   cmd <- mkCommand [(ks, [])] [] metaData "nonce" Nothing rpc
   pure $ J.encode $ J.build $ SubmitBatch $ fmap decodeUtf8 cmd NE.:| []
