@@ -66,11 +66,14 @@ import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
+import Control.Monad.IO.Class
 
 type Eval = EvalM ExecRuntime CoreBuiltin Info
 
 -- Our Builtin environment for evaluation in Chainweb prod
 type EvalBuiltinEnv = Eval.CoreBuiltinEnv Info
+type PactTxResult a =
+  (Either (PactError Info) (a, [TxLog ByteString], Maybe TxId), EvalState CoreBuiltin Info)
 
 evalInterpreter :: Interpreter ExecRuntime CoreBuiltin i
 evalInterpreter =
@@ -239,7 +242,7 @@ interpret
   -> EvalInput
   -> IO (Either (PactError Info) EvalResult)
 interpret evalEnv evalSt evalInput = do
-  (result, state) <- runEvalM (ExecEnv evalEnv) evalSt $ evalWithinTx evalInput
+  (result, state) <- evalWithinTx evalInput evalEnv evalSt
   gas <- readIORef (_geGasRef $ _eeGasEnv evalEnv)
   case result of
     Left err -> return $ Left err
@@ -263,7 +266,7 @@ interpretGasPayerTerm
   -> Lisp.Expr Info
   -> IO (Either (PactError Info) EvalResult)
 interpretGasPayerTerm evalEnv evalSt ct term = do
-  (result, state) <- runEvalM (ExecEnv evalEnv) evalSt $ evalWithinCap ct term
+  (result, state) <- evalWithinCap ct term evalEnv evalSt
   gas <- readIORef (_geGasRef $ _eeGasEnv evalEnv)
   case result of
     Left err -> return $ Left err
@@ -283,8 +286,10 @@ interpretGasPayerTerm evalEnv evalSt ct term = do
 -- Used to be `evalTerms`
 evalWithinTx
   :: EvalInput
-  -> Eval ([CompileValue Info], [TxLog ByteString], Maybe TxId)
-evalWithinTx input = evalWithinTx' runInput
+  -> EvalEnv CoreBuiltin Info
+  -> EvalState CoreBuiltin Info
+  -> IO (PactTxResult [CompileValue Info])
+evalWithinTx input ee es = evalWithinTx' ee es runInput
   where
   runInput = case input of
     Right ts -> evaluateTerms ts
@@ -293,9 +298,11 @@ evalWithinTx input = evalWithinTx' runInput
 evalWithinCap
   :: CapToken QualifiedName PactValue
   -> Lisp.Expr Info
-  -> Eval ((), [TxLog ByteString], Maybe TxId)
-evalWithinCap (CapToken qualName pvs) body =
-  evalWithinTx' runInput
+  -> EvalEnv CoreBuiltin Info
+  -> EvalState CoreBuiltin Info
+  -> IO (PactTxResult ())
+evalWithinCap (CapToken qualName pvs) body ee es =
+  evalWithinTx' ee es runInput
   where
   runInput = do
     let info = view Lisp.termInfo body
@@ -307,32 +314,28 @@ evalWithinCap (CapToken qualName pvs) body =
 
 -- | Evaluate some input action within a tx context
 evalWithinTx'
-  :: Eval a
-  -> Eval (a, [TxLog ByteString], Maybe TxId)
-evalWithinTx' action = withRollback (start action >>= end)
-  where
-    withRollback act =
-      act `onException` safeRollback
-
-    safeRollback =
-      void (tryAny evalRollbackTx)
-
-    start act = do
-      pdb <- viewEvalEnv eePactDb
-      mode <- viewEvalEnv eeMode
-      txid <- liftDbFunction def (_pdbBeginTx pdb mode)
-      (,txid) <$> act
-
-    end (rs,txid) = do
-      pdb <- viewEvalEnv eePactDb
-      logs <- liftDbFunction def (_pdbCommitTx pdb)
+  :: EvalEnv CoreBuiltin Info
+  -> EvalState CoreBuiltin Info
+  -> Eval a
+  -> IO (Either (PactError Info) (a, [TxLog ByteString], Maybe TxId), EvalState CoreBuiltin Info)
+evalWithinTx' ee es action = do
+      txid <-_pdbBeginTx pdb mode
+      (result, newState) <- runEvalM (ExecEnv ee) es runAction
       -- maybe might want to decode using serialisepact
-      return (rs, logs, txid)
-
-    evalRollbackTx = do
-      esCaps .= def
-      pdb <- viewEvalEnv eePactDb
-      liftDbFunction def (_pdbRollbackTx pdb)
+      return ((\(res, logs) -> (res, logs, txid)) <$> result, newState)
+    where
+    pdb = view eePactDb ee
+    mode = view eeMode ee
+    -- Note: runAction catches all synchronous exceptions as well as
+    -- thrown PactErrors, and runs rollback in the case of an exception
+    -- or error.
+    runAction =
+      let act = tryAny action >>= \case
+            Left _ -> throwError $ PEExecutionError UnknownException [] def
+            Right v -> pure v
+      in tryError act >>= \case
+        Left err -> liftIO (_pdbRollbackTx pdb) *> throwError err
+        Right v -> (v,) <$> liftIO (_pdbCommitTx pdb)
 
 -- | Runs only compilation pipeline
 compileOnly :: RawCode -> Either (PactError Info) [Lisp.TopLevel Info]

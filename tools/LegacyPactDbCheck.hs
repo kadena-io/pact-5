@@ -4,7 +4,7 @@
 
 module Main where
 
-import Control.Monad.Catch
+import Control.Exception.Safe
 import qualified Database.SQLite3 as SQL
 import Data.Text (Text)
 import qualified Data.Text as T

@@ -17,7 +17,7 @@
 module Pact.Core.Repl(runRepl, execScript) where
 
 import Control.Monad.IO.Class
-import Control.Monad.Catch
+import Control.Exception.Safe
 import Control.Monad.Except
 import Control.Monad.Trans(lift)
 import System.Console.Haskeline
@@ -63,7 +63,7 @@ runRepl = do
 
   replSettings = Settings (replCompletion replCoreBuiltinNames) (Just ".pc-history") True
   displayOutput = outputStrLn . show . pretty
-  catch' ma = catchAll ma (\e -> outputStrLn (show e) *> loop)
+  catch' ma = catchAny ma (\e -> outputStrLn (show e) *> loop)
   defaultSrc = SourceCode "(interactive)" mempty
   loop = do
     minput <- fmap T.pack <$> getInputLine "pact>"
