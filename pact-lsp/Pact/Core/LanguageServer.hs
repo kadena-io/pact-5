@@ -196,7 +196,7 @@ sendDiagnostics nuri mv content = liftIO (setupAndProcessFile nuri content) >>= 
     -- We only publish a single diagnostic
     publishDiagnostics 1  nuri mv $ partitionBySource [pactErrorToDiagnostic err]
   Right (st, tl) -> do
-    modifyState ((lsReplState %~ M.insert nuri st) . (lsTopLevel %~ M.unionWith (<>) tl))
+    modifyState ((lsReplState %~ M.insert nuri st) . (lsTopLevel %~ M.unionWith (\_ a -> a) tl))
 
     -- We emit an empty set of diagnostics
     publishDiagnostics 0  nuri mv $ partitionBySource []
@@ -340,7 +340,7 @@ documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req 
         debug "documentRenameRequestHandler: could not find term at position"
         resp (Right (InR Null))
       Just changePos -> do
-        debug $ "documentRenameRequestHandler: got " <> sshow (length changePos) <> " changes"
+        debug $ "documentRenameRequestHandler: got " <> sshow (length changePos) <> " changes: " <> sshow changePos
         let changes = InL . toTextEdit . spanInfoToRange <$> changePos
             te = TextDocumentEdit
                  (OptionalVersionedTextDocumentIdentifier uri' $ InR Null)

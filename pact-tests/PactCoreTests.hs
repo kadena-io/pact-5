@@ -12,7 +12,7 @@ import qualified Pact.Core.Test.LegacySerialiseTests as LegacySerialiseTests
 import qualified Pact.Core.Test.StaticErrorTests as StaticErrorTests
 import qualified Pact.Core.Test.ZkTests as ZkTests
 import qualified Pact.Core.Test.PoseidonTests as PoseidonTests
--- import qualified Pact.Core.Test.LanguageServer as LanguageServer
+import qualified Pact.Core.Test.LanguageServer as LanguageServer
 import qualified Pact.Core.Test.GasGolden as GasGolden
 import qualified Pact.Core.Test.SizeOfTests as SizeOfTests
 import qualified Pact.Core.Test.ConTagGolden as ConTagGoldenTests
@@ -37,7 +37,7 @@ main = do
     , ZkTests.tests
     , PoseidonTests.tests
     , PersistenceTests.tests
-    -- , LanguageServer.tests
+    , LanguageServer.tests
     , gasGolden
     , SizeOfTests.tests
     , commandTests
