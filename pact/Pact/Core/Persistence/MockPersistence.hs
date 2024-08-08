@@ -194,7 +194,7 @@ mockPactDb serial = do
       writeIORef ptTxLogQueue txl
       writeIORef ptNamespaces ns
       writeIORef ptDefPact dp
-    Nothing -> throwIO (Errors.NotInTx "commit")
+    Nothing -> throwIO (Errors.NotInTx "rollback")
 
 
   keys
