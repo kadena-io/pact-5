@@ -1465,11 +1465,13 @@ describeModule info b cont handler env = \case
           VObject $ M.fromList $ fmap (over _1 Field)
             [ ("name", PString (renderModuleName (_mName m)))
             , ("hash", PString (moduleHashToText (_mHash m)))
+            , ("tx_hash", PString (hashToText (_mTxHash m)))
             , ("interfaces", PList (PString . renderModuleName <$> V.fromList (_mImplements m)))]
         InterfaceData iface _ -> returnCEKValue cont handler $
           VObject $ M.fromList $ fmap (over _1 Field)
             [ ("name", PString (renderModuleName (_ifName iface)))
             , ("hash", PString (moduleHashToText (_ifHash iface)))
+            , ("tx_hash", PString (hashToText (_ifTxHash iface)))
             ]
     Nothing ->
       throwNativeExecutionError info b $ "invalid module name format"

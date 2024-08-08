@@ -19,13 +19,13 @@ base64-encode: 1061
 bind: 1300
 ceiling: 50
 chain-data: 500
-compose-capability: 60003940
+compose-capability: 60003939
 compose: 1461
 concat: 721
 cond: 2102
 contains: 231
 continue: 60000508
-create-capability-guard: 60000301
+create-capability-guard: 60000300
 create-capability-pact-guard: 60000342
 create-module-guard: 60000245
 create-pact-guard: 60000287
