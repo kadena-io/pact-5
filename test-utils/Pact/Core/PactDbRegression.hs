@@ -106,11 +106,15 @@ runPactDbRegression pdb = do
     assertEqual "keys pre-rollback [key1, key2]" [RowKey "key1", RowKey "key2"] rkeys
 
     _pdbRollbackTx pdb
+    _ <- _pdbBeginTx pdb Transactional
     r2 <- _pdbRead pdb (DUserTables usert) (RowKey "key2")
     assertEqual "rollback erases key2" Nothing r2
 
     rkeys2 <- _pdbKeys pdb (DUserTables usert)
     assertEqual "keys post-rollback [key1]" [RowKey "key1"] rkeys2
+
+  _ <- _pdbCommitTx pdb
+  return ()
 
 
 loadModule :: IO (ModuleData CoreBuiltin SpanInfo)
