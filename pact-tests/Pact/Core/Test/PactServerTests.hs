@@ -6,46 +6,35 @@ module Pact.Core.Test.PactServerTests where
 
 import Control.Monad.IO.Class
 import qualified Data.Aeson as A
+import qualified Data.ByteString.Lazy as LBS
+import Data.Default
 import qualified Data.List.NonEmpty as NE
 import Data.Proxy
 import Data.Text
 import Data.Text.Encoding
 import qualified Network.HTTP.Types   as HTTP
---import Pact.Core.Builtin
---import Pact.Core.ChainData
+import Pact.Core.ChainData
 import Pact.Core.Command.Client
 import Pact.Core.Command.Crypto
 import Pact.Core.Command.RPC
 import Pact.Core.Command.Server
---import Pact.Core.Command.Server.Servant
 import Pact.Core.Command.Types
---import Pact.Core.Compile
---import Pact.Core.Environment.Types
-import Pact.Core.Errors
-import Pact.Core.Evaluate
---import Pact.Core.Gas
 import Pact.Core.Hash
---import Pact.Core.Info
 import Pact.Core.PactValue
---import Pact.Core.Persistence.Types
---import Pact.Core.SPV
+import Pact.Core.StableEncoding
 import qualified Pact.JSON.Encode as J
 import Servant.API
 import Servant.Client
 import Servant.Server
 import Test.Tasty
-import Test.Tasty.Wai
 import qualified Test.Tasty.HUnit as HUnit
-import qualified Data.ByteString.Lazy as LBS
-import Pact.Core.StableEncoding
-import Data.Default
-import Pact.Core.ChainData
+import Test.Tasty.Wai
 
 
-sendClient :: SubmitBatch -> ClientM RequestKeys
-pollClient :: PollRequest -> ClientM PollResponses
+sendClient :: SendRequest -> ClientM SendResponse
+pollClient :: PollRequest -> ClientM PollResponse
 listenClient :: ListenRequest -> ClientM ListenResponse
-localClient :: Command Text -> ClientM (CommandResult Log (PactErrorCode Info))
+localClient :: LocalRequest -> ClientM LocalResponse
 sendClient :<|> pollClient :<|> listenClient :<|> localClient = client (Proxy @API)
 
 tests :: IO TestTree
@@ -56,6 +45,7 @@ tests =  do
     , sendTests env
     , listenTests env
     , integrationTests env
+    , localTests env
     ]
   where
   testCase env = testWai (serve (Proxy @API) (server env))
@@ -88,13 +78,21 @@ tests =  do
         res <- postWithHeaders "/api/v1/listen" req  [(HTTP.hContentType, "application/json")]
         assertStatus 400 res
     ]
+  localTests env = testGroup "local endpoint"
+    [ testCase env "return correct result" $ do
+        cmd <- liftIO  mkLocalRequest
+        res@(SResponse _ _ reqResp) <- postWithHeaders "/api/v1/local" cmd [(HTTP.hContentType, "application/json")]
+        assertStatus 200 res
+        let (Just (LocalResponse cmdResult)) :: Maybe LocalResponse = A.decodeStrict $ LBS.toStrict reqResp
+        assertEqual "Result match expected output" (PactResultOk $ PInteger 3) (_crResult cmdResult)
+    ]
   integrationTests env = testGroup "integration test"
     [ testCase env "send and listen request" $ do
         cmd <- liftIO mkSubmitBatch
         res@(SResponse _ _ reqResp) <- postWithHeaders "/api/v1/send" cmd [(HTTP.hContentType, "application/json")]
         assertStatus 200 res
 
-        let (Just (RequestKeys rks)) :: Maybe RequestKeys = A.decodeStrict $ LBS.toStrict reqResp
+        let (Just (SendResponse (RequestKeys rks))) :: Maybe SendResponse = A.decodeStrict $ LBS.toStrict reqResp
         assertBool "Response contains one request key" (NE.length rks == 1)
 
         let req = J.encode $ J.build $ ListenRequest (NE.head rks)
@@ -102,7 +100,7 @@ tests =  do
         res'@(SResponse _ _ reqResp') <- postWithHeaders "/api/v1/listen" req  [(HTTP.hContentType, "application/json")]
         assertStatus 200 res'
 
-        let (Just cmdResult) :: Maybe (CommandResult Log (PactErrorCode Info)) = A.decodeStrict $ LBS.toStrict reqResp'
+        let (Just (ListenResponse cmdResult)) :: Maybe ListenResponse = A.decodeStrict $ LBS.toStrict reqResp'
         assertEqual "Result match expected output" (PactResultOk $ PInteger 3) (_crResult cmdResult)
     ]
 
@@ -119,3 +117,11 @@ mkSubmitBatch = do
       metaData = J.build $ StableEncoding (def :: PublicMeta)
   cmd <- mkCommand [(ks, [])] [] metaData "nonce" Nothing rpc
   pure $ J.encode $ J.build $ SubmitBatch $ fmap decodeUtf8 cmd NE.:| []
+
+mkLocalRequest :: IO LBS.ByteString
+mkLocalRequest = do
+  ks <- generateEd25519KeyPair
+  let rpc :: PactRPC Text = Exec (ExecMsg "(+ 1 2)" PUnit)
+      metaData = J.build $ StableEncoding (def :: PublicMeta)
+  cmd <- mkCommand [(ks, [])] [] metaData "nonce" Nothing rpc
+  pure $ J.encode $ J.build $ LocalRequest $ fmap decodeUtf8 cmd
