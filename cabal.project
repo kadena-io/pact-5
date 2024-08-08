@@ -47,4 +47,10 @@ source-repository-package
   tag: 8df1cff7f279750490fea8ff580294f3e5a3fcaf
   --sha256: sha256-HyWTEtw/dKQduXl5avRckS0oNc9Z5yxeUxvX09wDkDY=
 
+allow-newer: servant-server:*
+allow-newer: servant-client-core:*
+allow-newer: servant-client:*
+allow-newer: servant:*
+allow-newer: tasty-wai:*
+
 tests: True
