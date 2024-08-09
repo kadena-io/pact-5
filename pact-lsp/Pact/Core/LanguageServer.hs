@@ -340,6 +340,7 @@ documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req 
         nName = req ^. params . newName
         tls = fromMaybe [] $ view (lsTopLevel . at nuri) st
         toTextEdit r = TextEdit r nName
+    debug $ "documentRenameRequestHandler: " <> sshow nName <> "  ::  " <> sshow tls
     case getRenameSpanInfo tls <$> getMatch pos tls of
       Nothing -> do
         debug "documentRenameRequestHandler: could not find term at position"
