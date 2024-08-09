@@ -30,13 +30,16 @@ import Servant.Server
 import Test.Tasty
 import qualified Test.Tasty.HUnit as HUnit
 import Test.Tasty.Wai
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 
 
 sendClient :: SendRequest -> ClientM SendResponse
 pollClient :: PollRequest -> ClientM PollResponse
 listenClient :: ListenRequest -> ClientM ListenResponse
 localClient :: LocalRequest -> ClientM LocalResponse
-sendClient :<|> pollClient :<|> listenClient :<|> localClient = client (Proxy @API)
+versionClient :: ClientM Text
+(sendClient :<|> pollClient :<|> listenClient :<|> localClient) :<|> versionClient = client (Proxy @API)
 
 tests :: IO TestTree
 tests =  do
@@ -45,6 +48,7 @@ tests =  do
     [ t404 env
     , sendTests env
     , listenTests env
+    , versionTest env
     , integrationTests env
     , localTests env
     ]
@@ -87,7 +91,7 @@ tests =  do
         let (Just (LocalResponse cmdResult)) :: Maybe LocalResponse = A.decodeStrict $ LBS.toStrict reqResp
         assertEqual "Result match expected output" (PactResultOk $ PInteger 3) (_crResult cmdResult)
     ]
-  integrationTests env = testGroup "integration test"
+  integrationTests env = testGroup "integration test (combined send and listen)"
     [ testCase env "send and listen request" $ do
         cmd <- liftIO mkSubmitBatch
         res@(SResponse _ _ reqResp) <- postWithHeaders "/api/v1/send" cmd [(HTTP.hContentType, "application/json")]
@@ -104,6 +108,11 @@ tests =  do
         let (Just (ListenResponse cmdResult)) :: Maybe ListenResponse = A.decodeStrict $ LBS.toStrict reqResp'
         assertEqual "Result match expected output" (PactResultOk $ PInteger 3) (_crResult cmdResult)
     ]
+  versionTest env = testCase env "version endpoint" $ do
+    res@(SResponse _ _ cnt) <- get "/version"
+    assertStatus 200 res
+    let cnt' = T.decodeUtf8 $ LBS.toStrict cnt
+    assertBool "should contain 'pact version' string" (T.isPrefixOf "pact version" cnt')
 
 assertBool :: String -> Bool -> Session ()
 assertBool msg c = liftIO (HUnit.assertBool msg c)

@@ -22,11 +22,13 @@ import Pact.Core.Command.Client
 import Pact.Core.Command.Crypto
 import Pact.Core.Command.Util
 import Pact.Core.Command.Server
+import Pact.Core.Command.Server.Config
 import Pact.Core.Repl.Compile
 import System.IO
 import Pact.Core.Errors
 import Pact.Core.Info
 import System.Exit(exitFailure, exitSuccess)
+import qualified Data.Yaml as Y
 
 data OReplLoadFile
   = OReplLoadFile
@@ -47,6 +49,7 @@ data ReplOpts
   -- Apireq-related
   | OApiReq { _oReqYaml :: FilePath, _oReqLocal :: Bool }
   | OUnsignedReq { _oReqYaml :: FilePath }
+  | OServer FilePath
   -- Crypto
   | OGenKey
   | OExplainErrorCode String
@@ -62,7 +65,7 @@ replOpts = O.optional $
   <|> unsignedReqFlag
   <|> loadFlag
   <|> explainErrorCodeFlag
-  <|> O.flag' OServer (O.short 's' <> O.long "server" <> O.help "Run Pact-Server")
+  <|> OServer <$> O.strOption (O.metavar "CONFIG" <> O.short 's' <> O.long "server" <> O.help "Run Pact-Server")
 
 -- Todo: trace output and coverage?
 loadFlag :: O.Parser ReplOpts
@@ -129,10 +132,19 @@ main = O.execParser argParser >>= \case
       Nothing -> putStrLn $ "Invalid error code format" -- todo enhance error
       Just errCode -> let (PrettyErrorCode phase cause _) = prettyErrorCode $ PactErrorCode errCode NoInfo
         in T.putStrLn ("Encountered failure in: " <> phase <> ", caused by: " <> cause)
-    OServer -> do
-      let commandEnv = undefined
-      let port = undefined
-      runServer commandEnv port
+    OServer configPath -> Y.decodeFileEither configPath >>= \case
+      Left perr -> putStrLn $ Y.prettyPrintParseException perr
+      Right config -> do
+        let commandEnv
+              = CommandEnv
+              { _ceMode = Transactional
+              , _ceDbEnv = dbEnv
+              , _ceGasEnv = undefined
+              , _cePublicData def
+              , _ceSPVSupport = noSPVSupport
+              ,
+              }
+        runServer commandEnv (fromIntegral $ _port config)
   where
     exitEither _ Left {} = die "Load failed"
     exitEither m (Right t) = m t >> exitSuccess

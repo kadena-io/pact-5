@@ -38,7 +38,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 import Data.Traversable
-import Data.Word
+
 import GHC.Generics
 import Network.Wai.Handler.Warp
 import Network.Wai.Middleware.Cors
@@ -63,21 +63,10 @@ import qualified Pact.JSON.Encode as JE
 import qualified Pact.JSON.Legacy.Utils as JL
 import Servant.API
 import Servant.Server
+import qualified Pact.Core.Version as PI
+import Data.Version
+import Pact.Core.Command.Server.Config
 
--- | Commandline configuration for running a Pact server.
-data Config = Config
-  { _port :: Word16
-  , _persistDir :: Maybe FilePath
-  , _logDir :: FilePath
-  , _pragmas :: [Pragma]
-  , _verbose :: Bool
-  , _gasLimit :: Maybe Int
-  , _gasRate :: Maybe Int
-  } deriving (Eq,Show,Generic)
-
--- | Pragma for configuring a SQLite database.
-newtype Pragma = Pragma Text
-  deriving (Eq, Show, Generic)
 
 -- | Temporarily pretend our Log type in CommandResult is unit.
 type Log = ()
@@ -214,12 +203,12 @@ instance JE.Encode SendResponse where
 instance JD.FromJSON SendResponse where
   parseJSON v = SendResponse <$> JD.parseJSON v
 
-type API = "api" :> "v1" :>
+type API = ("api" :> "v1" :>
            (("send" :> ReqBody '[PactJson] SendRequest :> Post '[PactJson] SendResponse)
        :<|> ("poll" :> ReqBody '[PactJson] PollRequest :> Post '[PactJson] PollResponse)
        :<|> ("listen" :> ReqBody '[PactJson] ListenRequest :> Post '[PactJson] ListenResponse)
-       :<|> ("local" :> ReqBody '[PactJson] LocalRequest :> Post '[PactJson] LocalResponse))
-
+       :<|> ("local" :> ReqBody '[PactJson] LocalRequest :> Post '[PactJson] LocalResponse)))
+           :<|> "version" :> Get '[PlainText] Text
 
 runServer :: CommandEnv -> Port -> IO ()
 runServer env port = runSettings settings $ cors (const corsPolicy) app
@@ -241,10 +230,14 @@ runServer env port = runSettings settings $ cors (const corsPolicy) app
 
 server :: CommandEnv -> Server API
 server env =
-  sendHandler env
+  (sendHandler env
   :<|> pollHandler env
   :<|> listenHandler env
-  :<|> localHandler env
+  :<|> localHandler env)
+  :<|> versionHandler
+
+versionHandler :: Handler Text
+versionHandler = pure $ T.pack $ "pact version " <> showVersion PI.version
 
 pollHandler :: CommandEnv -> PollRequest -> Handler PollResponse
 pollHandler cenv (PollRequest rks) = do

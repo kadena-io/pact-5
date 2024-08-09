@@ -170,6 +170,7 @@ library pact-request-api
     Pact.Core.Command.Util
     Pact.Core.Command.SigData
     Pact.Core.Command.Server
+    Pact.Core.Command.Server.Config
     Pact.Core.Command.Server.Servant
     Pact.Core.Crypto.WebAuthn.Cose.PublicKey
     Pact.Core.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
@@ -382,6 +383,7 @@ executable pact
                , pact-tng:pact-lsp
                , optparse-applicative
                , pact-tng:pact-request-api
+               , yaml
 
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
