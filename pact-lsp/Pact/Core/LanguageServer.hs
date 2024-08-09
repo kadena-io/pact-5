@@ -14,7 +14,7 @@ import Control.Lens hiding (Iso)
 import Control.Monad.Except
 import Language.LSP.Server
 import Language.LSP.Protocol.Message
-import Language.LSP.Protocol.Lens (uri, textDocument, params, text, position, newName)
+import Language.LSP.Protocol.Lens (uri, textDocument, params, text, position, newName, version)
 import Language.LSP.Protocol.Types
 import Language.LSP.VFS
 import Language.LSP.Diagnostics
@@ -110,7 +110,7 @@ startLSP = do
     -- the server is being informed.
     syncOptions = TextDocumentSyncOptions
                   (Just True) -- send open/close notification
-                  (Just TextDocumentSyncKind_Incremental)
+                  (Just TextDocumentSyncKind_Full)
                   -- Documents are synce by sending the full content once
                   -- a file is being opened. Later updates are send
                   -- incrementally to the server.
@@ -155,14 +155,18 @@ documentDidOpenHandler = notificationHandler SMethod_TextDocumentDidOpen $ \msg 
 
 documentDidChangeHandler :: Handlers LSM
 documentDidChangeHandler = notificationHandler SMethod_TextDocumentDidChange $ \msg -> do
-  let nuri = msg ^. params . textDocument . uri . to toNormalizedUri
+  let
+    nuri = msg ^. params . textDocument . uri . to toNormalizedUri
+    vers = msg ^. params . textDocument . version
 
   debug $ "didChangeHandler notification: " <> renderText nuri
 
   mdoc <- getVirtualFile nuri
   case mdoc of
     Nothing -> debug $ "No virtual file found for: " <> renderText nuri
-    Just vf -> sendDiagnostics nuri (Just $ virtualFileVersion vf) (virtualFileText vf)
+    Just vf -> do
+      debug $ "---> " <> sshow (virtualFileVersion vf) <> " / " <> sshow vers
+      sendDiagnostics nuri (Just $ virtualFileVersion vf) (virtualFileText vf)
 
 
 documentDidCloseHandler :: Handlers LSM
@@ -194,6 +198,8 @@ sendDiagnostics :: NormalizedUri -> Maybe Int32 -> Text -> LSM ()
 sendDiagnostics nuri mv content = liftIO (setupAndProcessFile nuri content) >>= \case
   Left err -> do
     -- We only publish a single diagnostic
+    debug $ "sendDiagnostics: error in " <> sshow nuri <> ", removing from cache"
+    modifyState ((lsReplState %~ M.delete nuri) . (lsTopLevel %~ M.delete nuri))
     publishDiagnostics 1  nuri mv $ partitionBySource [pactErrorToDiagnostic err]
   Right (st, tl) -> do
     modifyState ((lsReplState %~ M.insert nuri st) . (lsTopLevel %~ M.unionWith (\_ a -> a) tl))
@@ -334,7 +340,6 @@ documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req 
         nName = req ^. params . newName
         tls = fromMaybe [] $ view (lsTopLevel . at nuri) st
         toTextEdit r = TextEdit r nName
-
     case getRenameSpanInfo tls <$> getMatch pos tls of
       Nothing -> do
         debug "documentRenameRequestHandler: could not find term at position"
