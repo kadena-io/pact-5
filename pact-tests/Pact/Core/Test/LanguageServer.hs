@@ -13,7 +13,7 @@ import Language.LSP.Test
 import Language.LSP.Protocol.Types
 import Language.LSP.Protocol.Lens hiding (length, title, rename)
 
-import Control.Lens
+import Control.Lens hiding (inside)
 
 import System.Environment
 import Test.Tasty
@@ -30,6 +30,8 @@ import Pact.Core.Repl.BuiltinDocs.Internal
 import Data.Either (isLeft)
 import Data.Text.Encoding
 import qualified Data.ByteString.Lazy as LBS
+import Pact.Core.Info
+import Pact.Core.LanguageServer.Utils
 
 tests :: TestTree
 tests = testGroup "Pact LSP"
@@ -42,8 +44,18 @@ tests = testGroup "Pact LSP"
   , testGroup "Definition" definitionRequestTests
   , renameTests
   , testGroup "Multi-file dependency" dependencyTests
+  , testGroup "Inside position tests" positionTests
   ]
 
+positionTests :: [TestTree]
+positionTests =
+  [ testCase "a should be inside" $
+      liftIO $ assertBool "should be inside" (Position 0 0 `inside` SpanInfo 0 0 0 1)
+  , testCase "a should be inside" $
+      liftIO $ assertBool "should be inside" (not $ Position 0 1 `inside` SpanInfo 0 0 0 1)
+  , testCase "(a) on position inside a" $
+    liftIO $ assertBool "should be inside" (Position 0 1 `inside` SpanInfo 0 0 0 3)
+  ]
 diagnosticTests :: [TestTree]
 diagnosticTests
   = [ testCase "Failure Diagnostic" $ runPactLSP $ do

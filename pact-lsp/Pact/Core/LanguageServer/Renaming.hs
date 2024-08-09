@@ -60,6 +60,7 @@ getRenameSpanInfo
   -> PositionMatch ReplCoreBuiltin SpanInfo
   -> [SpanInfo]
 getRenameSpanInfo tls = \case
+   TermMatch (App var@(Var _ _) _ _) -> getRenameSpanInfo tls (TermMatch var)
    TermMatch (Var (Name n vt) _) -> case vt of
      NBound _db -> mempty
      NTopLevel mn _mh -> do

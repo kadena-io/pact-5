@@ -10,7 +10,16 @@ import Pact.Core.Info (SpanInfo(..))
 
 tests :: TestTree
 tests = testGroup "Lexer spans"
-  [ testCase "single line expression" $ let
+  [ testCase "single token ident" $ let
+      expected = [PosToken (TokenIdent "a") (SpanInfo 0 0 0 1)]
+    in either (const (assertFailure "")) (@?= expected) (lexer "a")
+  , testCase "app with single token ident" $ let
+      expected = [PosToken TokenOpenParens (SpanInfo 0 0 0 1)
+                 ,PosToken (TokenIdent "a") (SpanInfo 0 1 0 2)
+                 ,PosToken TokenCloseParens (SpanInfo 0 2 0 3)
+                 ]
+    in either (const (assertFailure "")) (@?= expected) (lexer "(a)")
+  , testCase "single line expression" $ let
       expected =
         [PosToken TokenOpenParens (SpanInfo 0 0 0 1)
         ,PosToken (TokenIdent "test") (SpanInfo 0 1 0 5)
