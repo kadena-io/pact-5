@@ -129,6 +129,7 @@ startLSP = do
       , documentDidSaveHandler
       , workspaceDidChangeConfigurationHandler
       -- request handler
+      , initializeHandler
       , documentHoverRequestHandler
       , documentDefinitionRequestHandler
       , documentRenameRequestHandler
@@ -136,6 +137,52 @@ startLSP = do
 
 debug :: MonadIO m => Text -> m ()
 debug msg = liftIO $ T.hPutStrLn stderr $ "[pact-lsp] " <> msg
+
+initializeHandler :: Handlers LSM
+initializeHandler = requestHandler SMethod_Initialize $ \_req resp -> do
+
+  let serverCaps = ServerCapabilities
+        { _positionEncoding = Just PositionEncodingKind_UTF8
+        , _textDocumentSync = Nothing
+        , _notebookDocumentSync = Nothing
+        , _completionProvider = Nothing
+        , _hoverProvider = Just $ InL True
+        , _signatureHelpProvider = Nothing
+        , _declarationProvider = Nothing
+        , _definitionProvider = Nothing
+        , _typeDefinitionProvider = Nothing
+        , _implementationProvider = Nothing
+        , _referencesProvider = Nothing
+        , _documentHighlightProvider = Nothing
+        , _documentSymbolProvider = Nothing
+        , _codeActionProvider = Nothing
+        , _codeLensProvider = Nothing
+        , _documentLinkProvider = Nothing
+        , _colorProvider = Nothing
+        , _workspaceSymbolProvider = Nothing
+        , _documentFormattingProvider = Nothing
+        , _documentRangeFormattingProvider = Nothing
+        , _documentOnTypeFormattingProvider = Nothing
+        , _renameProvider = Nothing
+        , _foldingRangeProvider = Nothing
+        , _selectionRangeProvider = Nothing
+        , _executeCommandProvider = Nothing
+        , _callHierarchyProvider = Nothing
+        , _linkedEditingRangeProvider = Nothing
+        , _semanticTokensProvider = Nothing
+        , _monikerProvider = Nothing
+        , _typeHierarchyProvider = Nothing
+        , _inlineValueProvider = Nothing
+        , _inlayHintProvider = Nothing
+        , _diagnosticProvider = Nothing
+        , _workspace = Nothing
+        , _experimental = Nothing
+        }
+      initResult = InitializeResult
+        { _capabilities = serverCaps
+        , _serverInfo = Nothing
+        }
+  resp (Right initResult)
 
 -- Handler executed after the LSP client initiates a connection to our server.
 initializedHandler :: Handlers LSM
@@ -190,7 +237,7 @@ documentDidSaveHandler = notificationHandler SMethod_TextDocumentDidSave $ \msg 
         Nothing -> debug $ "No virtual file found for: " <> renderText nuri
         Just vf -> sendDiagnostics nuri (Just $ virtualFileVersion vf) (virtualFileText vf)
     Just t -> do
-      debug "didSaveHandler: content from request"
+      debug $ "didSaveHandler: content from request: " <> sshow t
       sendDiagnostics nuri Nothing t
 
 -- Working horse for producing document diagnostics.
@@ -200,9 +247,10 @@ sendDiagnostics nuri mv content = liftIO (setupAndProcessFile nuri content) >>= 
     -- We only publish a single diagnostic
     debug $ "sendDiagnostics: error in " <> sshow nuri <> ", removing from cache"
     modifyState ((lsReplState %~ M.delete nuri) . (lsTopLevel %~ M.delete nuri))
-    publishDiagnostics 1  nuri mv $ partitionBySource [pactErrorToDiagnostic err]
+    publishDiagnostics 1 nuri mv $ partitionBySource [pactErrorToDiagnostic err]
   Right (st, tl) -> do
-    modifyState ((lsReplState %~ M.insert nuri st) . (lsTopLevel %~ M.unionWith (\_ a -> a) tl))
+    -- M.union is left biased
+    modifyState ((lsReplState %~ M.insert nuri st) . (lsTopLevel %~ M.union tl))
 
     -- We emit an empty set of diagnostics
     publishDiagnostics 0  nuri mv $ partitionBySource []
@@ -341,6 +389,8 @@ documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req 
         tls = fromMaybe [] $ view (lsTopLevel . at nuri) st
         toTextEdit r = TextEdit r nName
     debug $ "documentRenameRequestHandler: " <> sshow nName <> "  ::  " <> sshow tls
+    let matchContent = getMatch pos tls
+    debug $ "\tmatchContent:   " <> sshow matchContent
     case getRenameSpanInfo tls <$> getMatch pos tls of
       Nothing -> do
         debug "documentRenameRequestHandler: could not find term at position"
