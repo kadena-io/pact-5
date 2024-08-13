@@ -38,3 +38,4 @@ cabal.project.local*
 .direnv
 .envrc
 *.sqlite
+.vscode

@@ -38,7 +38,7 @@ module Pact.Core.IR.Term
   -- ^ Our module representation
   , mName, mGovernance, mDefs
   , mBlessed, mImports, mImplements
-  , mHash, mInfo
+  , mHash, mInfo, mTxHash
   -- ^ Module lenses
   , Defun(..)
   -- ^ Our repr for user defuns
@@ -87,7 +87,7 @@ module Pact.Core.IR.Term
   , ReplTopLevel(..)
   -- ^ Interface repr
   , ifName, ifDefns, ifImports
-  , ifHash, ifInfo
+  , ifHash, ifTxHash, ifInfo
   -- ^ Interface lenses
   , hasRollback
   , ordinaryDefPactStepExec
@@ -315,6 +315,7 @@ data Module name ty builtin info
   , _mImports :: [Import]
   , _mImplements :: [ModuleName]
   , _mHash :: ModuleHash
+  , _mTxHash :: Hash
   , _mInfo :: info
   } deriving (Show, Functor, Eq, Generic)
 
@@ -324,6 +325,7 @@ data Interface name ty builtin info
   , _ifDefns :: [IfDef name ty builtin info]
   , _ifImports :: [Import]
   , _ifHash :: ModuleHash
+  , _ifTxHash :: Hash
   , _ifInfo :: info
   } deriving (Show, Eq, Functor, Generic)
 

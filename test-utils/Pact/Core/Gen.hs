@@ -358,7 +358,7 @@ evalModuleGen b i= do
   imps <- Gen.list (Range.linear 0 100) importGen
   impl <- Gen.list (Range.linear 0 100) moduleNameGen
   h <- moduleHashGen
-  Module name gov defs blessed imps impl h <$> i
+  Module name gov defs blessed imps impl h (Hash mempty) <$> i
 
 ifDefGen :: Gen b -> Gen i -> Gen (IfDef Name Type b i)
 ifDefGen b i = Gen.choice
@@ -375,7 +375,7 @@ evalInterfaceGen b i = do
   defs <- Gen.list (Range.linear 0 100) (ifDefGen b i)
   imports <- Gen.list (Range.linear 0 100) (importGen )
   h <- moduleHashGen
-  Interface name defs imports h <$> i
+  Interface name defs imports h (Hash mempty) <$> i
 
 moduleDataGen :: Gen b -> Gen i -> Gen (ModuleData b i)
 moduleDataGen b i = Gen.choice

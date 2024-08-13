@@ -9,7 +9,7 @@
 ;; Show that empty imports work when hashes are
 ;; supplied. For a negative test, see: ./bad/bad-import-emptylist.pact
 (module n H
-  (use m "AE_iUXehlMxeBhTp9E3w-lS1OXsp4ryqhG4iPJtlmGc"
+  (use m "EYFyJ3RG9J3Dqwjt9wcLHUUXhchrkKeSsPcc0a4BXBs"
     [])
 
   (defcap H () true)
@@ -24,7 +24,7 @@
 )
 
 (module p J
-  (use m "AE_iUXehlMxeBhTp9E3w-lS1OXsp4ryqhG4iPJtlmGc"
+  (use m "EYFyJ3RG9J3Dqwjt9wcLHUUXhchrkKeSsPcc0a4BXBs"
     [f])
 
   (defcap J () true)

@@ -7,20 +7,10 @@ module Pact.Core.IR.ModuleHashing
  ) where
 
 import Control.Lens
-import Data.Decimal(DecimalRaw(..))
-import Data.List(intersperse)
-import Data.Foldable(fold)
-import Data.ByteString.Builder (Builder)
+
+import Codec.Serialise(serialise, Serialise)
 
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Builder as B
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
-import qualified Data.Map.Strict as M
-import qualified Data.Set as S
-import qualified Data.List.NonEmpty as NE
-import qualified Data.Vector as V
-import qualified Pact.Time as PactTime
 
 import Pact.Core.Capabilities
 import Pact.Core.Builtin
@@ -29,33 +19,32 @@ import Pact.Core.Guards
 import Pact.Core.IR.Term
 import Pact.Core.Hash
 import Pact.Core.Names
-import Pact.Core.Literal
 import Pact.Core.PactValue
-import Pact.Core.ModRefs
-import Pact.Core.Imports
+import Pact.Core.Serialise.CBOR_V1
+import Data.Functor (void)
 
-hashTopLevel :: IsBuiltin b => TopLevel Name Type b i -> TopLevel Name Type b i
+hashTopLevel :: (Serialise (SerialiseV1 b)) => TopLevel Name Type b i -> TopLevel Name Type b i
 hashTopLevel = \case
   TLTerm t -> TLTerm t
   TLModule m -> TLModule $ hashModuleAndReplace m
   TLInterface iface -> TLInterface $ hashInterfaceAndReplace iface
   TLUse u i -> TLUse u i
 
-hashModuleAndReplace :: IsBuiltin b => Module Name Type b i -> Module Name Type b i
-hashModuleAndReplace m@(Module mname mgov defs mblessed imports mimps _mh info) =
+hashModuleAndReplace :: (Serialise (SerialiseV1 b)) => Module Name Type b i -> Module Name Type b i
+hashModuleAndReplace m@(Module mname mgov defs mblessed imports mimps _mh txh info) =
   let defs' = updateDefHashes mname newMhash <$> defs
-  in Module mname gov' defs' mblessed imports mimps newMhash info
+  in Module mname gov' defs' mblessed imports mimps newMhash txh info
   where
-  newMhash = ModuleHash $ hash $ B.toStrict $ B.toLazyByteString (encodeModule m)
+  newMhash = ModuleHash $ hash $ encodeModule m
   gov' = case mgov of
     KeyGov n -> KeyGov n
     CapGov (FQName fqn) -> CapGov $ FQName $ set fqHash newMhash fqn
 
-hashInterfaceAndReplace :: IsBuiltin b => Interface Name Type b i -> Interface Name Type b i
-hashInterfaceAndReplace iface@(Interface ifn defs imps _mh info) =
-  Interface ifn defs imps newMhash info
+hashInterfaceAndReplace :: (Serialise (SerialiseV1 b)) => Interface Name Type b i -> Interface Name Type b i
+hashInterfaceAndReplace iface@(Interface ifn defs imps _mh txh info) =
+  Interface ifn defs imps newMhash txh info
   where
-  newMhash = ModuleHash $ hash $ B.toStrict $ B.toLazyByteString (encodeInterface iface)
+  newMhash = ModuleHash $ hash $ encodeInterface iface
 
 updateDefHashes :: ModuleName -> ModuleHash -> Def Name Type b i -> Def Name Type b i
 updateDefHashes mname mhash = \case
@@ -102,290 +91,13 @@ updatePactValueHash mname mhash = \case
     PCapToken $ CapToken (updateFqNameHash mname mhash ct) (updatePactValueHash mname mhash <$> pvs)
   PTime t -> PTime t
 
-encodeModule :: (IsBuiltin b) => Module Name Type b i -> Builder
-encodeModule (Module mname mgov defs mblessed imports mimps _mh _mi) = parens $
-  "module"
-  <+> encodeModuleName mname
-  <+> encodeGov mgov
-  <> (if null mblessed then mempty else hsep (encodeBless <$> S.toList mblessed))
-  <> (if null imports then mempty else hsep (encodeImport <$> imports) )
-  <> (if null mimps then mempty else hsep (encodeModuleName <$> mimps))
-  <> hsep (encodeDef mname <$> defs)
-  where
-  encodeGov :: Governance Name -> Builder
-  encodeGov (KeyGov (KeySetName name mNs)) = encodeMNamespace mNs <> encodeText name
-  encodeGov (CapGov (FQName fqn)) = encodeFqnAsQual fqn
-  encodeBless (ModuleHash (Hash s)) = parens ("bless" <+> B.shortByteString s)
+encodeModule :: (Serialise (SerialiseV1 b)) => Module Name Type b i -> B.ByteString
+encodeModule (void -> Module mname mgov defs mblessed imports mimps _mh _txh _i) =
+  B.toStrict $ serialise (SerialiseV1 (Module mname mgov defs mblessed imports mimps (ModuleHash (Hash mempty)) (Hash mempty) ()))
+{-# SPECIALISE encodeModule :: Module Name Type CoreBuiltin i -> B.ByteString #-}
 
-encodeMNamespace :: Maybe NamespaceName -> Builder
-encodeMNamespace Nothing = mempty
-encodeMNamespace (Just (NamespaceName ns)) = encodeText ns <> "."
+encodeInterface :: (Serialise (SerialiseV1 b)) => Interface Name Type b i -> B.ByteString
+encodeInterface (void -> Interface ifn defns imports _mh _txh _i) =
+  B.toStrict $ serialise (SerialiseV1 (Interface ifn defns imports (ModuleHash (Hash mempty)) (Hash mempty) ()))
+{-# SPECIALISE encodeInterface :: Interface Name Type CoreBuiltin i -> B.ByteString #-}
 
-encodeInterface :: (IsBuiltin b) => Interface Name Type b i -> Builder
-encodeInterface (Interface ifn idefs imports _h _i) = parens $
-  "interface"
-  <+> encodeModuleName ifn
-  <> (if null imports then mempty else hsep (encodeImport <$> imports) )
-  <> hsep (encodeIfDef ifn <$> idefs)
-
-encodeText :: T.Text -> Builder
-encodeText = T.encodeUtf8Builder
-
-encodeName :: Name -> Builder
-encodeName (Name n nk) = case nk of
-  NTopLevel mn (ModuleHash (Hash sbs)) ->
-    encodeText (renderModuleName mn)
-      <> "."
-      <> encodeText n
-      <> braces (B.shortByteString sbs)
-  NBound _ -> encodeText n
-  NDynRef (DynamicRef arg _) -> encodeText n <> "::" <> encodeText arg
-  NModRef mn _ -> encodeText (renderModuleName mn)
-
-list :: [Builder] -> Builder
-list = brackets . fold . intersperse " "
-
-hsep :: [Builder] -> Builder
-hsep = fold . intersperse " "
-
-commaSep :: [Builder] -> Builder
-commaSep = fold . intersperse ", "
-
-parens :: Builder -> Builder
-parens b = "(" <> b <> ")"
-
-braces :: Builder -> Builder
-braces b = "{" <> b <> "}"
-
-brackets :: Builder -> Builder
-brackets b = "[" <> b <> "]"
-
-lpad :: Builder -> Builder
-lpad a = " " <> a
-
--- rpad :: Builder -> Builder
--- rpad a = a <> " "
-
-(<+>) :: Builder -> Builder -> Builder
-l <+> r = l <> " " <> r
-infixr 6 <+> -- Same as <>
-
-encodePactValue :: PactValue -> Builder
-encodePactValue = \case
-  PLiteral l -> encodeLiteral l
-  PList l -> list $ encodePactValue <$> V.toList l
-  PObject o ->
-    braces $ hsep $ go <$> M.toList o
-    where
-    go (Field f, v) = "'" <> encodeText f <> ":" <> encodePactValue v
-  PModRef mr ->
-    encodeText (renderModuleName (_mrModule mr))
-  PCapToken (CapToken n args) -> parens $
-    encodeText (renderQualName (fqnToQualName n)) <+> hsep (encodePactValue <$> args)
-  PGuard g -> encodeGuard g
-  PTime time ->
-    B.int64HexFixed (PactTime.toPosixTimestampMicros time)
-
-encodeGuard :: Guard QualifiedName PactValue -> Builder
-encodeGuard = \case
-  GKeyset (KeySet ks pf) ->
-    brackets $ commaSep
-      [ "'keys:" <> list (encodeText . _pubKey <$> S.toList ks)
-      , "'pred" <> encodePred pf]
-    where
-    encodePred = \case
-      KeysAll -> "keys-all"
-      Keys2 -> "keys-2"
-      KeysAny -> "keys-any"
-      CustomPredicate pn -> case pn of
-        TBN (BareName bn) -> encodeText bn
-        TQN qn -> encodeQualName qn
-  GKeySetRef (KeySetName name mNs) -> "KeySetName" <> parens (encodeMNamespace mNs <> encodeText name)
-  GUserGuard (UserGuard fn args) ->
-    "UG" <> encodeApp (encodeQualName fn) (encodePactValue <$> args)
-  GCapabilityGuard (CapabilityGuard ct args _) ->
-    "CapGuard" <> encodeApp (encodeQualName ct) (encodePactValue <$> args)
-  GModuleGuard (ModuleGuard mg n) ->
-    "ModuleGuard" <> parens (encodeModuleName mg <+> encodeText n)
-  GDefPactGuard (DefPactGuard (DefPactId dpid) name) -> "DefPactGuard" <> parens (encodeText dpid <+> encodeText name)
-
-encodeModuleName :: ModuleName -> Builder
-encodeModuleName = encodeText . renderModuleName
-
-encodeQualName :: QualifiedName -> Builder
-encodeQualName = encodeText . renderQualName
-
-encodeFqnAsQual :: FullyQualifiedName -> Builder
-encodeFqnAsQual = encodeQualName . fqnToQualName
-
-encodeApp :: Builder -> [Builder] -> Builder
-encodeApp operator operands =
-  parens $ hsep (operator:operands)
-
-encodeSchema :: Schema -> Builder
-encodeSchema (Schema n _sc) = encodeQualName n
-
-encodePrim :: PrimType -> Builder
-encodePrim = \case
-  PrimInt -> "integer"
-  PrimDecimal -> "decimal"
-  PrimBool -> "bool"
-  PrimString -> "string"
-  PrimGuard -> "guard"
-  PrimUnit -> "unit"
-  PrimTime -> "time"
-
-encodeType :: Type -> Builder
-encodeType = \case
-  TyPrim p -> encodePrim p
-  TyList l -> brackets (encodeType l)
-  TyModRef m -> "module" <> braces (commaSep (T.encodeUtf8Builder . renderModuleName <$> S.toList m))
-  -- Todo: this seems potentially inefficient?
-  -- Maybe we preserve schema names instead
-  TyObject sc -> "object" <> braces (encodeSchema sc)
-  TyTable tbl -> "table" <> braces (encodeSchema tbl)
-  TyCapToken -> "captoken"
-  TyAnyList -> "list"
-  TyAnyObject -> "object"
-  TyAny -> "*"
-
-encodeImport :: Import -> Builder
-encodeImport (Import mname mmh mimps) = parens $
-  "use" <+> encodeModuleName mname
-  <> maybe mempty (lpad . encodeModuleHash) mmh
-  <> maybe mempty (lpad . list . fmap encodeText) mimps
-
-encodeArg :: Arg Type i -> Builder
-encodeArg (Arg n mty _) =
-  T.encodeUtf8Builder n <> maybe mempty ((":" <>) . encodeType) mty
-
-encodeArgList :: [Arg Type i] -> Builder
-encodeArgList li =
-  parens $ hsep $ encodeArg <$> li
-
-encodeModuleHash :: ModuleHash -> Builder
-encodeModuleHash (ModuleHash (Hash s)) = B.shortByteString s
-
--- Note this isn't a prettyprinter.
-encodeString :: T.Text -> Builder
-encodeString t = "\"" <+> encodeText t <> "\""
-
-encodeLiteral :: Literal -> Builder
-encodeLiteral = \case
-  LString t -> encodeString t
-  LInteger i -> B.integerDec i
-  LDecimal (Decimal places mantissa) ->
-    B.integerDec mantissa <> "/10^" <> B.word8Dec places
-  LUnit -> "()"
-  LBool b -> if b then "true" else "false"
-
-
-encodeTerm ::  (IsBuiltin b) => Term Name Type b i -> Builder
-encodeTerm = \case
-  Var n _ -> encodeName n
-  Lam args e _ -> parens $
-    "lambda" <> encodeArgList (NE.toList args) <+> encodeTerm e
-  -- Todo: collect let args
-  Let arg e1 e2 _ -> parens $
-    "let" <+> parens (encodeArg arg <+> encodeTerm e1) <> encodeTerm e2
-  App e1 args _ ->
-    parens (encodeTerm e1 <+> hsep (encodeTerm <$> args))
-  Sequence e1 e2 _ ->
-    parens ("seq" <+> encodeTerm e1 <+> encodeTerm e2)
-  Nullary e _ ->
-    parens ("suspend" <+> encodeTerm e)
-  Conditional cb _ -> parens $ case cb of
-    CAnd e1 e2 ->
-      "and" <+> encodeTerm e1 <+> encodeTerm e2
-    COr e1 e2 ->
-      "or" <+> encodeTerm e1 <+> encodeTerm e2
-    CIf e1 e2 e3 ->
-      "if" <+> encodeTerm e1 <+> encodeTerm e2 <+> encodeTerm e3
-    CEnforce e1 e2 ->
-      "enforce" <+> encodeTerm e1 <+> encodeTerm e2
-    CEnforceOne e1 args ->
-      "enforce-one" <+> encodeTerm e1 <+> list (encodeTerm <$> args)
-  Builtin b _ ->
-    encodeText (_natName (builtinName b))
-  Constant l _ -> encodeLiteral l
-  ListLit terms _ ->
-    list (encodeTerm <$> terms)
-  Try e1 e2 _ ->
-    parens ("try" <+> encodeTerm e1 <+> encodeTerm e2)
-  ObjectLit pairs _ ->
-    braces (fold (intersperse ", " (encodePair <$> pairs)))
-    where
-    encodePair (Field f, term) =
-      "'" <> T.encodeUtf8Builder f <> ":" <> encodeTerm term
-  CapabilityForm cf _ -> parens $ case cf of
-    WithCapability cap body ->
-      "with-capability" <+> encodeTerm cap <+> encodeTerm body
-    CreateUserGuard n args ->
-      "with-capability" <+> encodeName n <+> hsep (encodeTerm <$> args)
-  InlineValue{} -> mempty
-
-encodeTyAnn :: Maybe Type -> Builder
-encodeTyAnn = maybe mempty ((":" <>) . encodeType)
-
-encodeDef :: IsBuiltin b => ModuleName -> Def Name Type b i -> Builder
-encodeDef mn = \case
-  Dfun d -> encodeDefun d
-  DConst d -> encodeDefConst d
-  DCap d -> encodeDefCap d
-  DSchema s -> encodeDefSchema mn s
-  DTable d -> encodeDefTable d
-  DPact d -> encodeDefPact d
-
-encodeDefun :: IsBuiltin b => Defun Name Type b i -> Builder
-encodeDefun (Defun (Arg defnName rty _) args term _) = parens $
-  "defun" <+> encodeText defnName <> encodeTyAnn rty <+> encodeArgList args <+> encodeTerm term
-
-encodeDefConst :: IsBuiltin b => DefConst Name Type b i -> Builder
-encodeDefConst (DefConst (Arg dcn dcty _) cv _i) = parens $
-  "defconst" <+> encodeText dcn <> encodeTyAnn dcty <+> go cv
-  where
-  go (TermConst term) = encodeTerm term
-  go (EvaledConst pv) = encodePactValue pv
-
-encodeDefPact :: IsBuiltin b => DefPact Name Type b i -> Builder
-encodeDefPact (DefPact (Arg dpn rty _) args steps _i) = parens $
-  "defpact" <+> encodeText dpn <> encodeTyAnn rty <+> encodeArgList args <+>
-    hsep (encodeStep <$> NE.toList steps)
-  where
-  encodeStep (Step t1) = parens ("step" <+> encodeTerm t1)
-  encodeStep (StepWithRollback t1 t2) =
-    parens ("step-with-rollback" <+> encodeTerm t1 <+> encodeTerm t2)
-
--- todo: defcap meta
-encodeDefCap :: IsBuiltin b => DefCap Name Type b i -> Builder
-encodeDefCap (DefCap (Arg dn rty _) args term _meta _info) = parens $
-  "defcap" <+> encodeText dn <> encodeTyAnn rty <+> encodeArgList args <+> encodeTerm term
-
-encodeDefSchema :: ModuleName -> DefSchema Type info -> Builder
-encodeDefSchema mn (DefSchema dcn sch _i) =
-  parens $ "defschema" <+> encodeText dcn <+> encodeSchema (Schema (QualifiedName dcn mn) sch)
-
-encodeDefTable :: DefTable Name info -> Builder
-encodeDefTable (DefTable dtn (ResolvedTable sc) _i) = parens $
-  "deftable" <+> encodeText dtn <> ":" <> braces (encodeSchema sc)
-
-encodeIfDefun :: IfDefun Type info -> Builder
-encodeIfDefun (IfDefun (Arg dn rty _) args _i) = parens $
-  "defun" <+> encodeText dn <> encodeTyAnn rty <+> encodeArgList args
-
--- todo: defcap meta
-encodeIfDefCap :: IfDefCap Name Type info -> Builder
-encodeIfDefCap (IfDefCap (Arg dn rty _) args  _meta _i) = parens $
-  "defcap" <+> encodeText dn <> encodeTyAnn rty <+> encodeArgList args
-
-encodeIfDefPact :: IfDefPact Type info -> Builder
-encodeIfDefPact (IfDefPact (Arg dn rty _) args _i) = parens $
-  "defpact" <+> encodeText dn <> encodeTyAnn rty <+> encodeArgList args
-
-encodeIfDef :: IsBuiltin b => ModuleName -> IfDef Name Type b i -> Builder
-encodeIfDef mn = \case
-  IfDfun df -> encodeIfDefun df
-  IfDCap dc -> encodeIfDefCap dc
-  IfDPact dp -> encodeIfDefPact dp
-  IfDConst dc -> encodeDefConst dc
-  IfDSchema dc -> encodeDefSchema mn dc
