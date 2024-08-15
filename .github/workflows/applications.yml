@@ -18,17 +18,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['9.8.2', '9.10.1']
-        cabal: ['3.12']
-        os: ['ubuntu-20.04', 'ubuntu-22.04', 'macos-14']
-        cabalcache: ['true']
-        flags: ['+build-tool']
-        include:
-        - os: 'ubuntu-22.04'
-          ghc: '9.8.2'
-          cabal: '3.12'
-          cabalcache: 'true'
-          flags: '-build-tool'
+        ghc: ["9.8.2", "9.10.1"]
+        cabal: ["3.12"]
+        os: ["ubuntu-20.04", "ubuntu-22.04", "macos-14"]
+        cabalcache: ["true"]
+
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.kadena_cabal_cache_aws_access_key_id }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.kadena_cabal_cache_aws_secret_access_key }}
