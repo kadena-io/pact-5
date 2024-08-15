@@ -19,11 +19,6 @@ on:
         description: "The X.Y.Z tag for the new version"
         type: string
         required: true
-      ghc_version:
-        description: "used to pull binary"
-        type: string
-        required: true
-        default: "9.10.1"
       draft:
         description: "set the new release as a draft instead of published"
         type: boolean
@@ -45,11 +40,6 @@ on:
         type: string
         required: false
         default: "nightly"
-      ghc_version:
-        description: "used to pull binary"
-        type: string
-        required: false
-        default: "9.10.1"
       draft:
         description: "set the new release as a draft instead of published"
         type: boolean
@@ -62,8 +52,15 @@ on:
         default: true
 
 jobs:
-  Github-release:
+  release_vars:
     runs-on: ubuntu-latest
+    outputs:
+      RELEASE_SHA: ${{ steps.set-vars.outputs.RELEASE_SHA }}
+      SHORT_REVISION: ${{ steps.set-vars.outputs.SHORT_REVISION }}
+      VERSION_NEW: ${{ steps.set-vars.outputs.VERSION_NEW }}
+      VERSION_OLD: ${{ steps.set-vars.outputs.VERSION_OLD }}
+      IMAGE: ${{ steps.set-vars.outputs.IMAGE }}
+      GHC_VERSION: ${{ steps.set-ghc-version.outputs.GHC_VERSION }}
     steps:
     # if this plugin is bad we just override it
 #       - name: Bump version and push tag
@@ -74,23 +71,49 @@ jobs:
 #           default_bump: ${{ inputs.tag_default_bump }}
 #           tag_prefix: ""
 #           commit_sha: ${{ inputs.release_sha }}
-    
-      - name: Set environment variables for release
+
+          
+      - name: Set variables for release
+        id: set-vars
         run: |
           RELEASE_SHA=${{ github.sha }}
           if [[ ! -z ${{ inputs.release_sha }} ]]; then
             RELEASE_SHA=${{ inputs.release_sha }}
           fi
-          echo "RELEASE_SHA=$RELEASE_SHA" >> $GITHUB_ENV
+          echo "RELEASE_SHA=$RELEASE_SHA" >> $GITHUB_OUTPUT
           SHORT_REVISION=$(echo $RELEASE_SHA | cut -c 1-7)
-          echo "SHORT_REVISION=$SHORT_REVISION" >> $GITHUB_ENV
-          echo "RELEASE_VERSION=${{ inputs.release_version }}" >> $GITHUB_ENV
-          echo "IMAGE=ghcr.io/kadena-io/pact-5:sha-$SHORT_REVISION" >> $GITHUB_ENV
-
-          # we might autoextract this at some point
-          echo "GHC_VERSION=${{ inputs.ghc_version }}" >> $GITHUB_ENV
+          echo "SHORT_REVISION=$SHORT_REVISION" >> $GITHUB_OUTPUT
+          # echo "VERSION_NEW=${{ steps.tag_version.outputs.new_tag }}" >> $GITHUB_OUTPUT
+          # echo "VERSION_OLD=${{ steps.tag_version.outputs.old_tag }}" >> $GITHUB_OUTPUT
+          echo "RELEASE_VERSION=${{ inputs.release_version }}" >> $GITHUB_OUTPUT
+          echo "IMAGE=ghcr.io/kadena-io/pact-5:sha-$SHORT_REVISION" >> $GITHUB_OUTPUT
           
-          echo $GITHUB_ENV
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.set-vars.outputs.RELEASE_SHA }}
+          sparse-checkout: |
+            .github/workflows/applications.yml
+        
+      - name: Get ghc version
+        id: set-ghc-version
+        run: |
+          VERSION=$(grep -Po '(?<="ghc": \[")(\d\.\d\.\d)' .github/workflows/applications.yml | head -1)
+            if [[ -z $VERSION ]]; then
+              echo "Unable to get version from chainweb node build"
+              exit 1
+            fi
+          echo "GHC_VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+  release_to_github:
+    runs-on: ubuntu-latest
+    needs: release_vars
+    env:
+      SHORT_REVISION: ${{ needs.release_vars.outputs.SHORT_REVISION }}
+      RELEASE_VERSION: ${{ needs.release_vars.outputs.RELEASE_VERSION }}
+      GHC_VERSION: ${{ needs.release_vars.outputs.GHC_VERSION }}
+      IMAGE: ${{ needs.release_vars.outputs.IMAGE }}
+    steps:
+    
       - name: Get release artifacts
         run: |
           UBUNTU_TAR=pact.${{ env.GHC_VERSION }}.ubuntu-22.04.${{ env.SHORT_REVISION }}.tar.gz
@@ -102,9 +125,27 @@ jobs:
           curl "s3.us-east-1.amazonaws.com/kadena-cabal-cache/pact/$UBUNTU_TAR" -o "./$UBUNTU_RELEASE_FILE"
           curl "s3.us-east-1.amazonaws.com/kadena-cabal-cache/pact/$MACOS_TAR" -o "./$UBUNTU_RELEASE_FILE"
 
-          echo "UBUNTU_RELEASE_FILE=$UBUNTU_RELEASE_FILE"
-          echo "MACOS_RELEASE_FILE=$MACOS_RELEASE_FILE"
+          echo "UBUNTU_RELEASE_FILE=$UBUNTU_RELEASE_FILE" >> $GITHUB_ENV
+          echo "MACOS_RELEASE_FILE=$MACOS_RELEASE_FILE" >> $GITHUB_ENV
 
+      - name: Login to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: retag ghcr docker images
+        continue-on-error: false
+        run: |
+          docker pull $IMAGE
+          docker run --rm $IMAGE --version
+          docker tag $IMAGE ghcr.io/kadena-io/pact-5:$VERSION_NEW
+          docker tag $IMAGE ghcr.io/kadena-io/pact-5:latest
+          docker tag $IMAGE ghcr.io/kadena-io/pact-5:latest
+
+          docker image push --all-tags ghcr.io/kadena-io/pact-5
+          
       - name: Generate release
         uses: ncipollo/release-action@v1
         #if: startsWith(github.ref, 'refs/tags/')
@@ -118,3 +159,53 @@ jobs:
           draft: ${{ inputs.draft }}
           prerelease: ${{ inputs.prerelease }}
           generateReleaseNotes: true
+
+  release_to_brew:
+    runs-on: macos-latest
+    needs: release_vars
+    steps:
+      - name: Homebrew Releaser
+      # You may pin to the exact commit or the version.
+      # uses: Justintime50/homebrew-releaser@392a2426758dfdcc91f302d55cf5061346af2219
+        uses: Justintime50/homebrew-releaser@v0.18.1
+        with:
+          # The name of the homebrew tap owner to publish your formula to as it appears on GitHub.
+          homebrew_owner: kadena-io
+          # The name of the homebrew tap to publish your formula to as it appears on GitHub.
+          homebrew_tap: pact
+          # The name of the folder in your homebrew tap where formula will be committed to.
+          formula_folder: # default is formula
+          # The GitHub Token (saved as a repo secret) that has `repo` permissions for the homebrew tap you want to release to.
+          github_token: 
+          # Git author info used to commit to the homebrew tap.
+          commit_owner: # optional, default is homebrew-releaser@example.com
+          # Git author info used to commit to the homebrew tap.
+          commit_email: # optional, default is homebrew-releaser@example.com
+          # Custom dependencies in case other formulas are needed to build the current one (can be multiline).
+          depends_on: # optional
+          # Custom install command for your formula.
+          install: 
+          # Custom test command for your formula so you can run `brew test`.
+          test: # optional
+          # The Homebrew download strategy to use for formulas.
+          download_strategy: # optional
+          # Allows you to add a custom require_relative at the top of the formula template.
+          custom_require: # optional
+          # Override the automatically detected version of a formula with an explicit value.
+          version: # optional
+          # Add a custom URL/checksum target for AMD64 Darwin builds.
+          target_darwin_amd64: # optional
+          # Add a custom URL/checksum target for ARM64 Darwin builds.
+          target_darwin_arm64: # optional
+          # Add a custom URL/checksum target for AMD64 Linux builds.
+          target_linux_amd64: # optional
+          # Add a custom URL/checksum target for ARM64 Linux builds.
+          target_linux_arm64: # optional
+          # Update your homebrew tap's README with a table of all projects in the tap.
+          update_readme_table: # optional
+          # Skips committing the generated formula to a homebrew tap (useful for local testing).
+          skip_commit: # optional
+          # Logs debugging info to console.
+          debug: # optional
+              
+        
