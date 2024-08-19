@@ -303,13 +303,15 @@ sendHandler env (SendRequest submitBatch) = do
                           pure (evalState', pactErrorToCommandResult requestKey err (milliGasToGas gas))
 
                     ProcSucc (Command (Payload (Continuation contMsg) _ _ _ _ _) _ _) -> do
-                      let evalInput = contMsgToEvalInput contMsg
-                      (evalState', result) <- interpretReturningState (_ceEvalEnv env) evalState evalInput
-                      case result of
-                        Right goodRes -> pure (evalState', evalResultToCommandResult requestKey goodRes)
-                        Left err -> do
-                          gas <- readIORef $ _geGasRef (_ceGasEnv env)
-                          pure (evalState', pactErrorToCommandResult requestKey err (milliGasToGas gas))
+                      gas <- readIORef $ _geGasRef (_ceGasEnv env)
+                      contMsgToEvalInput requestKey contMsg (milliGasToGas gas) >>= \case
+                        Left err -> pure (evalState, err)
+                        Right evalInput -> do
+                          (evalState', result) <- interpretReturningState (_ceEvalEnv env) evalState evalInput
+                          case result of
+                            Right goodRes -> pure (evalState', evalResultToCommandResult requestKey goodRes)
+                            Left err ->
+                              pure (evalState', pactErrorToCommandResult requestKey err (milliGasToGas gas))
 
         evalResultToCommandResult :: RequestKey -> EvalResult -> CommandResult Log (PactErrorCode Info)
         evalResultToCommandResult requestKey (EvalResult out _log _exec gas _lm txid _lgas ev) =
@@ -341,8 +343,21 @@ sendHandler env (SendRequest submitBatch) = do
             Just (v, _) -> PactResultOk (compileValueToPactValue v)
             Nothing -> PactResultErr $ pactErrorToErrorCode $ PEExecutionError (EvalError "empty input") [] def
 
-        contMsgToEvalInput :: ContMsg -> EvalInput
-        contMsgToEvalInput  = undefined
+        contMsgToEvalInput :: RequestKey -> ContMsg -> Gas -> IO (Either (CommandResult Log (PactErrorCode Info)) EvalInput)
+        contMsgToEvalInput rk c gas = _pdbRead (_ceDbEnv env) DDefPacts (_cmPactId c) >>= \case
+          Nothing -> let
+            err = NoPreviousDefPactExecutionFound $ DefPactStep (_cmStep c) (_cmRollback c) (_cmPactId c) Nothing
+            cr = CommandResult
+              { _crReqKey = rk
+              , _crTxId = Nothing
+              , _crResult =  PactResultErr $ pactErrorToErrorCode $ PEExecutionError err [] def
+              , _crGas = gas
+              , _crLogs = Nothing
+              , _crEvents = [] -- todo
+              , _crContinuation = Nothing
+              , _crMetaData = Nothing
+              } in pure $ Left cr
+          Just pexec -> pure $ Right $ Left pexec
 
 localHandler :: CommandEnv -> LocalRequest -> Handler LocalResponse
 localHandler env (LocalRequest cmd) = do
