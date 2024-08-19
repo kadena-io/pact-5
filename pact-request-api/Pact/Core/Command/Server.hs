@@ -38,34 +38,34 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 import Data.Traversable
-
-import GHC.Generics
+import Data.Version
 import Network.Wai.Handler.Warp
 import Network.Wai.Middleware.Cors
 import Pact.Core.Builtin
 import Pact.Core.ChainData
 import Pact.Core.Command.Client
 import Pact.Core.Command.RPC
+import Pact.Core.Command.Server.Config
 import Pact.Core.Command.Server.Servant
 import Pact.Core.Command.Types
 import Pact.Core.Compile
+import Pact.Core.DefPacts.Types
 import Pact.Core.Environment.Types
 import Pact.Core.Errors
 import Pact.Core.Evaluate
 import Pact.Core.Gas
 import Pact.Core.Persistence.MockPersistence
+import Pact.Core.Persistence.SQLite
 import Pact.Core.Persistence.Types
 import Pact.Core.SPV
 import Pact.Core.Serialise
 import Pact.Core.StableEncoding
+import qualified Pact.Core.Version as PI
 import qualified Pact.JSON.Decode as JD
 import qualified Pact.JSON.Encode as JE
 import qualified Pact.JSON.Legacy.Utils as JL
 import Servant.API
 import Servant.Server
-import qualified Pact.Core.Version as PI
-import Data.Version
-import Pact.Core.Command.Server.Config
 
 
 -- | Temporarily pretend our Log type in CommandResult is unit.
@@ -96,7 +96,7 @@ defaultEnv = do
   let gasEnv = GasEnv
         { _geGasRef = gasRef
         , _geGasLog = Nothing
-        , _geGasModel = freeGasModel -- tableGasModel $ MilliGasLimit $ MilliGas 10000000000
+        , _geGasModel = freeGasModel
         }
   pure $ CommandEnv Transactional pdb gasEnv def noSPVSupport Nothing mempty ee es emptyCache
 
@@ -210,8 +210,35 @@ type API = ("api" :> "v1" :>
        :<|> ("local" :> ReqBody '[PactJson] LocalRequest :> Post '[PactJson] LocalResponse)))
            :<|> "version" :> Get '[PlainText] Text
 
-runServer :: CommandEnv -> Port -> IO ()
-runServer env port = runSettings settings $ cors (const corsPolicy) app
+runServer :: Config -> IO ()
+runServer (Config port persistDir _logDir) = do
+  es <- newMVar def
+  emptyCache <- newLruHandle 100
+  gasRef <- newIORef mempty
+  let
+    gasEnv = GasEnv gasRef Nothing freeGasModel
+    mkCmdEnv pdb ee = CommandEnv
+      { _ceMode = Transactional
+        , _ceDbEnv = pdb
+        , _ceGasEnv = gasEnv
+        , _cePublicData = def
+        , _ceSPVSupport = noSPVSupport
+        , _ceNetworkId = Nothing
+        , _ceExecutionConfig = mempty
+        , _ceEvalEnv = ee
+        , _ceEvalState = es
+        , _ceRequestCache = emptyCache
+        }
+  case persistDir of
+    Nothing -> withSqlitePactDb serialisePact_raw_spaninfo ":memory:" $ \pdb -> do
+      ee <- defaultEvalEnv pdb coreBuiltinMap
+      runServer_ (mkCmdEnv pdb ee) port
+    Just pdir -> withSqlitePactDb serialisePact_raw_spaninfo (T.pack pdir) $ \pdb -> do
+      ee <- defaultEvalEnv pdb coreBuiltinMap
+      runServer_ (mkCmdEnv pdb ee) port
+
+runServer_ :: CommandEnv -> Port -> IO ()
+runServer_ env port = runSettings settings $ cors (const corsPolicy) app
   where
   app = serve (Proxy @API) (server env)
   settings = defaultSettings
@@ -315,7 +342,7 @@ sendHandler env (SendRequest submitBatch) = do
             Nothing -> PactResultErr $ pactErrorToErrorCode $ PEExecutionError (EvalError "empty input") [] def
 
         contMsgToEvalInput :: ContMsg -> EvalInput
-        contMsgToEvalInput = undefined
+        contMsgToEvalInput  = undefined
 
 localHandler :: CommandEnv -> LocalRequest -> Handler LocalResponse
 localHandler env (LocalRequest cmd) = do

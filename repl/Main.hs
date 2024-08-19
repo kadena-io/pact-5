@@ -10,25 +10,28 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
 import Control.Applicative ((<|>))
 
-import qualified Pact.Core.Version as PI
-import Data.Version (showVersion)
-import qualified Data.Text as T
-import qualified Data.Text.IO as T
-import qualified Data.Text.Encoding as T
-import System.Directory
-import System.FilePath
 import Data.Foldable
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+import qualified Data.Text.IO as T
+import Data.Version (showVersion)
+import qualified Data.Yaml as Y
 import Pact.Core.Command.Client
 import Pact.Core.Command.Crypto
-import Pact.Core.Command.Util
 import Pact.Core.Command.Server
-import Pact.Core.Command.Server.Config
+import Pact.Core.Command.Util
 import Pact.Core.Repl.Compile
+<<<<<<< HEAD
 import System.IO
 import Pact.Core.Errors
 import Pact.Core.Info
+=======
+import qualified Pact.Core.Version as PI
+import System.Directory
+>>>>>>> 3caaf998 (cleanup)
 import System.Exit(exitFailure, exitSuccess)
-import qualified Data.Yaml as Y
+import System.FilePath
+import System.IO
 
 data OReplLoadFile
   = OReplLoadFile
@@ -134,17 +137,19 @@ main = O.execParser argParser >>= \case
         in T.putStrLn ("Encountered failure in: " <> phase <> ", caused by: " <> cause)
     OServer configPath -> Y.decodeFileEither configPath >>= \case
       Left perr -> putStrLn $ Y.prettyPrintParseException perr
-      Right config -> do
-        let commandEnv
-              = CommandEnv
-              { _ceMode = Transactional
-              , _ceDbEnv = dbEnv
-              , _ceGasEnv = undefined
-              , _cePublicData def
-              , _ceSPVSupport = noSPVSupport
-              ,
-              }
-        runServer commandEnv (fromIntegral $ _port config)
+      Right config -> runServer config
+      --do
+        -- let commandEnv
+        --       = CommandEnv
+        --       { _ceMode = Transactional
+        --       , _ceDbEnv = dbEnv
+        --       , _ceGasEnv = undefined
+        --       , _cePublicData def
+        --       , _ceSPVSupport = noSPVSupport
+        --       ,
+        --       }
+        -- let commandEnv = undefined
+        -- runServer commandEnv (fromIntegral $ _port config)
   where
     exitEither _ Left {} = die "Load failed"
     exitEither m (Right t) = m t >> exitSuccess
