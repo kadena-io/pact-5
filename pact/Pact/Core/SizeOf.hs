@@ -12,6 +12,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 -- |
 -- Module      :  Pact.Types.SizeOf
@@ -111,7 +112,7 @@ countBytes i bytes = do
 
 class SizeOf t where
   sizeOf :: forall e b i. i -> SizeOfVersion -> t -> EvalM e b i Bytes
-  default sizeOf :: forall e b i.(Generic t, GSizeOf (Rep t)) => i -> SizeOfVersion -> t -> EvalM e b i Bytes
+  default sizeOf :: forall e b i. (Generic t, GSizeOf (Rep t)) => i -> SizeOfVersion -> t -> EvalM e b i Bytes
   sizeOf i v a = gsizeOf i v (from a)
 
 -- | "word" is 8 bytes on 64-bit
@@ -381,7 +382,8 @@ instance SizeOf Yield
 instance SizeOf DefPactExec
 
 -- spaninfo
-instance SizeOf SpanInfo
+instance SizeOf SpanInfo where
+  sizeOf _ _ _ = pure 0
 
 -- builtins
 instance SizeOf CoreBuiltin
@@ -436,13 +438,44 @@ instance (SizeOf t, SizeOf i) => SizeOf (DefSchema t i)
 instance (SizeOf n, SizeOf i) => SizeOf (DefTable n i)
 instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Def n t b i)
 
-instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Module n t b i)
+instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Module n t b i) where
+  sizeOf i ver m = fmap (constructorCost 1 +) $ case m of
+    Module
+      { _mName
+      , _mGovernance
+      , _mDefs
+      , _mBlessed
+      , _mImports
+      , _mImplements
+      , _mHash
+      , _mTxHash
+      , _mInfo
+      } -> sum <$> sequence
+        [ sizeOf i ver _mName
+        , sizeOf i ver _mGovernance
+        , sizeOf i ver _mDefs
+        , sizeOf i ver _mBlessed
+        , sizeOf i ver _mImports
+        , sizeOf i ver _mImplements
+        ]
 
 instance (SizeOf t, SizeOf i) => SizeOf (IfDefun t i)
 instance (SizeOf t, SizeOf i) => SizeOf (IfDefPact t i)
 instance (SizeOf n, SizeOf t, SizeOf i) => SizeOf (IfDefCap n t i)
 instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (IfDef n t b i)
-instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Interface n t b i)
+instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Interface n t b i) where
+  sizeOf i ver m = fmap (constructorCost 1 +) $ case m of
+    Interface
+      { _ifName
+      , _ifDefns
+      , _ifImports
+      , _ifHash
+      , _ifTxHash
+      , _ifInfo
+      } -> sum <$> sequence
+        [ sizeOf i ver _ifName
+        , sizeOf i ver _ifDefns
+        , sizeOf i ver _ifImports
+        ]
 
 instance SizeOf Namespace
-
