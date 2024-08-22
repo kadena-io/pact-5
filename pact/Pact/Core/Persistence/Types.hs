@@ -39,6 +39,7 @@ module Pact.Core.Persistence.Types
  , rowDataToObjectData
  , renderDomain
  , UserTableInfo(..)
+ , hashTxLogs
  ) where
 
 import Control.Applicative((<|>))
@@ -138,6 +139,12 @@ data TxLog v
   , _txValue :: !v
   }
   deriving (Eq,Show,Functor, Foldable, Traversable)
+
+hashTxLogs :: [TxLog ByteString] -> Hash
+hashTxLogs logs = pactHash $ mconcat
+  [ "D" <> T.encodeUtf8 _txDomain <> "K" <> T.encodeUtf8 _txKey <> "V" <> _txValue
+  | TxLog{..} <- logs
+  ]
 
 -- -------------------------------------------------------------------------- --
 -- WriteType
