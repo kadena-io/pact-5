@@ -19,7 +19,6 @@ import Pact.Core.Persistence.MockPersistence (mockPactDb)
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
 import Pact.Core.Serialise (serialisePact_repl_spaninfo)
-import Pact.Core.Test.TestPrisms
 
 isParseError :: Prism' ParseError a -> PactErrorI -> Bool
 isParseError p s = has (_PEParseError . _1 . p) s

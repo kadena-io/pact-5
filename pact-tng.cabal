@@ -536,7 +536,6 @@ test-suite core-tests
     , Pact.Core.Test.LegacySerialiseTests
     , Pact.Core.Test.SizeOfTests
     , Pact.Core.Test.StaticErrorTests
-    , Pact.Core.Test.TestPrisms
     , Pact.Core.Test.ZkTests
     , Pact.Core.Test.PoseidonTests
     , Pact.Core.Test.LanguageServer
