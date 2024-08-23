@@ -32,6 +32,155 @@ module Pact.Core.Errors
  , pactErrorToErrorCode
  , prettyErrorCode
  , errorCodeFromText
+ , _PELexerError
+ , _PEParseError
+ , _PEDesugarError
+ , _PEExecutionError
+ , _PEUserRecoverableError
+ , _InvariantInvalidDefKind
+ , _InvariantDefConstNotEvaluated
+ , _InvariantExpectedDefCap
+ , _InvariantExpectedDefun
+ , _InvariantExpectedDefPact
+ , _InvariantInvalidBoundVariable
+ , _InvariantUnboundFreeVariable
+ , _InvariantMalformedDefun
+ , _InvariantPactExecNotInEnv
+ , _InvariantPactStepNotInEnv
+ , _InvariantInvalidManagedCapIndex
+ , _InvariantArgLengthMismatch
+ , _InvariantInvalidManagedCapKind
+ , _InvariantNoSuchKeyInTable
+ , _InvariantEmptyCapStackFailure
+ , _ParsingError
+ , _TooManyCloseParens
+ , _UnexpectedInput
+ , _PrecisionOverflowError
+ , _InvalidBaseType
+ , _LexicalError
+ , _StringLiteralError
+ , _OutOfInputError
+ , _UnboundTermVariable
+ , _UnboundTypeVariable
+ , _InvalidCapabilityReference
+ , _NoSuchModuleMember
+ , _NoSuchModule
+ , _NoSuchInterface
+ , _ImplementationError
+ , _NotImplemented
+ , _RecursionDetected
+ , _NotAllowedWithinDefcap
+ , _NotAllowedOutsideModule
+ , _InvalidGovernanceRef
+ , _InvalidDefInTermVariable
+ , _InvalidModuleReference
+ , _EmptyBindingBody
+ , _EmptyDefPact
+ , _LastStepWithRollback
+ , _ExpectedFreeVariable
+ , _InvalidManagedArg
+ , _InvalidImports
+ , _InvalidImportModuleHash
+ , _InvalidSyntax
+ , _InvalidDefInSchemaPosition
+ , _InvalidDynamicInvoke
+ , _DuplicateDefinition
+ , _InvalidBlessedHash
+ , _ArrayOutOfBoundsException
+ , _ArithmeticException
+ , _EnumerationError
+ , _DecodeError
+ , _GasExceeded
+ , _FloatingPointError
+ , _CapNotInScope
+ , _InvariantFailure
+ , _EvalError
+ , _NativeArgumentsError
+ , _InvalidManagedCap
+ , _CapNotInstalled
+ , _CapAlreadyInstalled
+ , _ModuleMemberDoesNotExist
+ , _NoSuchKeySet
+ , _YieldOutsideDefPact
+ , _NoActiveDefPactExec
+ , _NoYieldInDefPactStep
+ , _InvalidDefPactStepSupplied
+ , _DefPactIdMismatch
+ , _CCDefPactContinuationError
+ , _NoPreviousDefPactExecutionFound
+ , _DefPactAlreadyCompleted
+ , _NestedDefPactParentStepCountMismatch
+ , _NestedDefPactParentRollbackMismatch
+ , _NestedDefPactNeverStarted
+ , _NestedDefPactDoubleExecution
+ , _MultipleOrNestedDefPactExecFound
+ , _DefPactStepHasNoRollback
+ , _DefPactStepNotInEnvironment
+ , _NoDefPactIdAndExecEnvSupplied
+ , _DefPactRollbackMismatch
+ , _DefPactStepMismatch
+ , _CannotUpgradeInterface
+ , _DbOpFailure
+ , _DynNameIsNotModRef
+ , _ModuleDoesNotExist
+ , _ExpectedModule
+ , _HashNotBlessed
+ , _CannotApplyPartialClosure
+ , _ClosureAppliedToTooManyArgs
+ , _FormIllegalWithinDefcap
+ , _RunTimeTypecheckFailure
+ , _NativeIsTopLevelOnly
+ , _EventDoesNotMatchModule
+ , _InvalidEventCap
+ , _NestedDefpactsNotAdvanced
+ , _ExpectedPactValue
+ , _NotInDefPactExecution
+ , _NamespaceInstallError
+ , _PointNotOnCurve
+ , _YieldProvenanceDoesNotMatch
+ , _MismatchingKeysetNamespace
+ , _EnforcePactVersionFailure
+ , _EnforcePactVersionParseFailure
+ , _RuntimeRecursionDetected
+ , _SPVVerificationFailure
+ , _ContinuationError
+ , _ModRefImplementsNoInterfaces
+ , _UserGuardMustBeADefun
+ , _ExpectedBoolValue
+ , _ExpectedStringValue
+ , _ExpectedCapToken
+ , _WriteValueDidNotMatchSchema
+ , _ObjectIsMissingField
+ , _InvalidKeysetFormat
+ , _InvalidKeysetNameFormat
+ , _CannotDefineKeysetOutsideNamespace
+ , _NamespaceNotFound
+ , _NativeExecutionError
+ , _OperationIsLocalOnly
+ , _CannotApplyValueToNonClosure
+ , _InvalidCustomKeysetPredicate
+ , _HyperlaneError
+ , _HyperlaneDecodeError
+ , _UnknownException
+ , _UserEnforceError
+ , _OneShotCapAlreadyUsed
+ , _CapabilityNotGranted
+ , _NoSuchObjectInDb
+ , _KeysetPredicateFailure
+ , _CapabilityPactGuardInvalidPactId
+ , _EnvReadFunctionFailure
+ , _VerifierFailure
+ , _CapabilityGuardNotAcquired
+ , _HyperlaneErrorFailedToFindKey
+ , _HyperlaneErrorNumberOutOfBounds
+ , _HyperlaneErrorBadHexPrefix
+ , _HyperlaneErrorInvalidBase64
+ , _HyperlaneErrorIncorrectSize
+ , _HyperlaneErrorInvalidChainId
+ , _HyperlaneDecodeErrorBase64
+ , _HyperlaneDecodeErrorInternal
+ , _HyperlaneDecodeErrorBinary
+ , _HyperlaneDecodeErrorParseRecipient
  ) where
 
 import Control.Lens hiding (ix)
@@ -1026,3 +1175,13 @@ prettyErrorCode (PactErrorCode (ErrorCode ec) i) =
     "PEExecutionError" -> getCtorName causeTag (Proxy :: Proxy EvalError)
     "PEUserRecoverableError" -> getCtorName causeTag (Proxy :: Proxy UserRecoverableError)
     _ -> "UNKNOWN_CODE"
+
+makePrisms ''PactError
+makePrisms ''InvariantError
+makePrisms ''LexerError
+makePrisms ''ParseError
+makePrisms ''DesugarError
+makePrisms ''EvalError
+makePrisms ''UserRecoverableError
+makePrisms ''HyperlaneError
+makePrisms ''HyperlaneDecodeError
