@@ -462,7 +462,7 @@ library test-utils
     , pact-tng:pact-request-api
     , pact-tng:pact-lsp
     , pact-tng:unsafe
-    , lsp-test
+    , lsp-test >= 0.17
     , lsp-types
 
   exposed-modules:
@@ -523,7 +523,7 @@ test-suite core-tests
     , pact-tng:pact-lsp
     , pact-tng:test-utils
     , pact-tng:unsafe
-    , lsp-test
+    , lsp-test >= 0.17
     , lsp-types
     , safe-exceptions
   other-modules:
