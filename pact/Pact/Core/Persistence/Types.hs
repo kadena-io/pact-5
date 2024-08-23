@@ -1,19 +1,20 @@
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE GeneralisedNewtypeDeriving #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE StrictData #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE StrictData #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE StandaloneDeriving #-}
 
 
 module Pact.Core.Persistence.Types
@@ -67,6 +68,7 @@ import Pact.Core.Errors
 import Pact.Core.StackFrame
 import Control.Monad.Except
 import Control.Monad.Reader
+import qualified Data.Text.Encoding as T
 
 -- | Modules as they are stored in our backend.
 data ModuleData b i
@@ -94,7 +96,8 @@ mdModuleHash f = \case
 -- | Data reflecting Key/Value storage in user-tables.
 newtype RowData
   = RowData { _unRowData :: Map Field PactValue }
-  deriving (Eq, Show, NFData)
+  deriving stock (Eq, Show, Generic)
+  deriving newtype NFData
 
 makePrisms ''RowData
 
@@ -128,7 +131,8 @@ instance NFData ExecutionMode
 
 -- | Identifier for transactions
 newtype TxId = TxId { _txId :: Word64 }
-    deriving (Eq,Ord, Show, NFData)
+    deriving stock (Eq, Ord, Show)
+    deriving newtype NFData
 
 -- | Transaction record.
 --
@@ -138,7 +142,8 @@ data TxLog v
   , _txKey :: !Text
   , _txValue :: !v
   }
-  deriving (Eq,Show,Functor, Foldable, Traversable)
+  deriving stock (Eq, Show, Generic, Functor, Foldable, Traversable)
+  deriving anyclass NFData
 
 hashTxLogs :: [TxLog ByteString] -> Hash
 hashTxLogs logs = pactHash $ mconcat
