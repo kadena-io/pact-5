@@ -1496,12 +1496,14 @@ enforceGuard info cont handler env g = case g of
     isKeysetNameInSigs info cont handler env ksn
   GUserGuard ug -> runUserGuard info cont handler env ug
   GCapabilityGuard cg -> enforceCapGuard info cont handler cg
-  GModuleGuard (ModuleGuard mn _) -> calledByModule mn >>= \case
-    True -> returnCEKValue cont handler (VBool True)
-    False -> do
-      md <- getModule info mn
-      let cont' = IgnoreValueC (PBool True) cont
-      acquireModuleAdmin info cont' handler env md
+  GModuleGuard (ModuleGuard mn _) -> do
+    emitPactWarning info ModuleGuardEnforceDetected
+    calledByModule mn >>= \case
+      True -> returnCEKValue cont handler (VBool True)
+      False -> do
+        md <- getModule info mn
+        let cont' = IgnoreValueC (PBool True) cont
+        acquireModuleAdmin info cont' handler env md
   GDefPactGuard (DefPactGuard dpid _) -> do
     curDpid <- getDefPactId info
     if curDpid == dpid

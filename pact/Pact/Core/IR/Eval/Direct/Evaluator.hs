@@ -851,11 +851,13 @@ enforceGuard info env g = case g of
     isKeysetNameInSigs info  env ksn
   GUserGuard ug -> runUserGuard info env ug
   GCapabilityGuard cg -> enforceCapGuard info cg
-  GModuleGuard (ModuleGuard mn _) -> calledByModule mn >>= \case
-    True -> return True
-    False -> do
-      acquireModuleAdminCapability info env mn
-      return True
+  GModuleGuard (ModuleGuard mn _) -> do
+    emitPactWarning info ModuleGuardEnforceDetected
+    calledByModule mn >>= \case
+      True -> return True
+      False -> do
+        acquireModuleAdminCapability info env mn
+        return True
   GDefPactGuard (DefPactGuard dpid _) -> do
     curDpid <- getDefPactId info
     if curDpid == dpid
@@ -2459,7 +2461,9 @@ createCapabilityPactGuard info b _env = \case
 
 createModuleGuard :: (IsBuiltin b) => NativeFunction e b i
 createModuleGuard info b _env = \case
-  [VString n] ->
+  [VString n] -> do
+    emitPactWarning info $ DeprecatedNative (builtinName b)
+      "Module guards have been deprecated and will be removed in a future release, please switch to capability guards"
     findCallingModule >>= \case
       Just mn ->  do
         let cg = GModuleGuard (ModuleGuard mn n)
@@ -2471,6 +2475,8 @@ createModuleGuard info b _env = \case
 createDefPactGuard :: (IsBuiltin b) => NativeFunction e b i
 createDefPactGuard info b _env = \case
   [VString name] -> do
+    emitPactWarning info $ DeprecatedNative (builtinName b)
+      "Pact guards have been deprecated and will be removed in a future release, please switch to capability guards"
     dpid <- getDefPactId info
     return $ VGuard $ GDefPactGuard $ DefPactGuard dpid name
   args -> argsError info b args

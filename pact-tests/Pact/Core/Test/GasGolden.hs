@@ -29,7 +29,7 @@ import qualified Data.Text.IO as T
 import Data.List (sort)
 import Control.Lens
 
-type InterpretPact = SourceCode -> (ReplCompileValue -> ReplM ReplCoreBuiltin ()) -> ReplM ReplCoreBuiltin [ReplCompileValue]
+type InterpretPact = SourceCode -> ReplM ReplCoreBuiltin [ReplCompileValue]
 
 tests :: IO TestTree
 tests = do
@@ -122,8 +122,9 @@ runGasTest file interpret = do
             , _replTLDefPos = mempty
             , _replTx = Nothing
             , _replNativesEnabled = False
+            , _replOutputLine = const (pure ())
             }
   stateRef <- newIORef rstate
-  runReplT stateRef (interpret source (const (pure ()))) >>= \case
+  runReplT stateRef (interpret source) >>= \case
     Left _ -> pure Nothing
     Right _ -> Just <$> readIORef gasRef

@@ -1207,7 +1207,9 @@ createCapabilityPactGuard info b cont handler _env = \case
 
 createModuleGuard :: (IsBuiltin b) => NativeFunction e b i
 createModuleGuard info b cont handler _env = \case
-  [VString n] ->
+  [VString n] -> do
+    emitPactWarning info $ DeprecatedNative (builtinName b)
+      "Module guards have been deprecate and will be removed in a future release, please switch to capability guards"
     findCallingModule >>= \case
       Just mn ->  do
         let cg = GModuleGuard (ModuleGuard mn n)
@@ -1219,6 +1221,8 @@ createModuleGuard info b cont handler _env = \case
 createDefPactGuard :: (IsBuiltin b) => NativeFunction e b i
 createDefPactGuard info b cont handler _env = \case
   [VString name] -> do
+    emitPactWarning info $ DeprecatedNative (builtinName b)
+      "Pact guards have been deprecated and will be removed in a future release, please switch to capability guards"
     dpid <- getDefPactId info
     returnCEKValue cont handler $ VGuard $ GDefPactGuard $ DefPactGuard dpid name
   args -> argsError info b args

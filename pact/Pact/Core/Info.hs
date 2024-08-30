@@ -1,10 +1,12 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DeriveTraversable #-}
 
 module Pact.Core.Info
  ( SpanInfo(..)
  , combineSpan
  , NoInfo(..)
+ , Located(..)
  ) where
 
 import Data.Default
@@ -42,3 +44,15 @@ instance Pretty SpanInfo where
 combineSpan :: SpanInfo -> SpanInfo -> SpanInfo
 combineSpan (SpanInfo l1 c1 _ _) (SpanInfo _ _ l2 c2) =
   SpanInfo l1 c1 l2 c2
+
+data Located i a
+  = Located
+  { _locLocation :: i
+  , _locElem :: a }
+  deriving (Show, Functor, Foldable, Traversable)
+
+instance (Eq a) => Eq (Located i a) where
+  (Located _ a) == (Located _ a') = a == a'
+
+instance (Ord a) => Ord (Located i a) where
+  compare (Located _ a) (Located _ a') = compare a a'

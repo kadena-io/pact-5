@@ -18,7 +18,6 @@ module Pact.Core.IR.Eval.Runtime.Types
   , EvalCapType(..)) where
 
 
-
 import Data.List.NonEmpty(NonEmpty)
 import GHC.Generics
 import Control.DeepSeq

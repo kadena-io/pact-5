@@ -176,6 +176,7 @@ setupBenchEvalEnv pdb signers mBody = do
     , _eeNamespacePolicy = SimpleNamespacePolicy
     , _eeGasEnv = gasEnv
     , _eeSPVSupport = noSPVSupport
+    , _eeWarnings = Nothing
     }
 
 

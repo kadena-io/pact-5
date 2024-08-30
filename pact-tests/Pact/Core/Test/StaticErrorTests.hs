@@ -47,9 +47,10 @@ runStaticTest label src interp predicate = do
             , _replTLDefPos = mempty
             , _replTx = Nothing
             , _replNativesEnabled = True
+            , _replOutputLine = const (pure ())
             }
   stateRef <- newIORef rstate
-  v <- runReplT stateRef (interpretReplProgram interp source (const (pure ())))
+  v <- runReplT stateRef (interpretReplProgram interp source)
   case v of
     Left err ->
       assertBool ("Expected Error to match predicate, but got " <> show err <> " instead") (predicate err)
