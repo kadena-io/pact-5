@@ -69,7 +69,6 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Short as SBS
 import GHC.Generics
 
-import Pact.Core.Capabilities
 import Pact.Core.ChainData
 import Pact.Core.Command.RPC
 import Pact.Core.Command.Types
@@ -83,6 +82,7 @@ import Pact.Core.StableEncoding
 import Pact.Core.Gas
 import Pact.Core.Hash
 import Pact.Core.SPV
+import Pact.Core.Signer
 import qualified Pact.Core.Hash as PactHash
 import Pact.Core.Command.SigData
 
@@ -97,7 +97,7 @@ data ApiKeyPair = ApiKeyPair {
   _akpPublic :: Maybe PublicKeyBS,
   _akpAddress :: Maybe Text,
   _akpScheme :: Maybe PPKScheme,
-  _akpCaps :: Maybe [CapToken QualifiedName PactValue]
+  _akpCaps :: Maybe [SigCapability]
   } deriving (Eq, Show, Generic)
 
 instance JD.FromJSON ApiKeyPair where
@@ -106,7 +106,7 @@ instance JD.FromJSON ApiKeyPair where
     pub <- o JD..:? "public"
     addr <- o JD..: "address"
     scheme <- o JD..:? "scheme"
-    caps <- ((fmap.fmap) _stableEncoding <$> o JD..:? "caps")
+    caps <- o JD..:? "caps"
     pure $ ApiKeyPair
       {_akpSecret = secret
       , _akpPublic = pub
@@ -120,7 +120,7 @@ instance J.Encode ApiKeyPair where
     [ "address" J..= _akpAddress o
     , "secret" J..= _akpSecret o
     , "scheme" J..= _akpScheme o
-    , "caps" J..= fmap (J.Array . fmap StableEncoding) (_akpCaps o)
+    , "caps" J..= fmap J.Array (_akpCaps o)
     , "public" J..= _akpPublic o
     ]
   {-# INLINE build #-}
@@ -133,7 +133,7 @@ data ApiSigner = ApiSigner {
   _asPublic :: Text,
   _asAddress :: Maybe Text,
   _asScheme :: Maybe PPKScheme,
-  _asCaps :: Maybe [CapToken QualifiedName PactValue]
+  _asCaps :: Maybe [SigCapability]
   } deriving (Eq, Show, Generic)
 
 instance JD.FromJSON ApiSigner where
@@ -141,7 +141,7 @@ instance JD.FromJSON ApiSigner where
     pub <- o JD..: "public"
     addr <- o JD..:? "address"
     scheme <- o JD..:? "scheme"
-    caps <- ((fmap.fmap) _stableEncoding <$> o JD..:? "caps")
+    caps <- o JD..:? "caps"
     pure $ ApiSigner
       { _asPublic = pub
       , _asAddress = addr
@@ -153,7 +153,7 @@ instance J.Encode ApiSigner where
   build o = J.object
     [ "address" J..= _asAddress o
     , "scheme" J..= _asScheme o
-    , "caps" J..= fmap (J.Array . fmap StableEncoding) (_asCaps o)
+    , "caps" J..= fmap J.Array (_asCaps o)
     , "public" J..= _asPublic o
     ]
   {-# INLINE build #-}
@@ -533,8 +533,8 @@ signCmd keyFiles bs = do
 withKeypairsOrSigner
   :: Bool
   -> ApiReq
-  -> ([(DynKeyPair, [CapToken QualifiedName PactValue])] -> IO a)
-  -> ([Signer QualifiedName PactValue] -> IO a)
+  -> ([(DynKeyPair, [SigCapability])] -> IO a)
+  -> ([Signer] -> IO a)
   -> IO a
 withKeypairsOrSigner unsignedReq ApiReq{..} keypairAction signerAction =
   case (_ylSigners,_ylKeyPairs,unsignedReq) of
@@ -610,7 +610,7 @@ mkExec
     -- ^ optional environment data
   -> PublicMeta
     -- ^ public metadata
-  -> [(DynKeyPair, [CapToken QualifiedName PactValue])]
+  -> [(DynKeyPair, [SigCapability])]
     -- ^ signing keypairs + caplists
   -> [Verifier ParsedVerifierProof]
     -- ^ verifiers
@@ -639,7 +639,7 @@ mkUnsignedExec
     -- ^ optional environment data
   -> PublicMeta
     -- ^ public metadata
-  -> [Signer QualifiedName PactValue]
+  -> [Signer]
     -- ^ payload signers
   -> [Verifier ParsedVerifierProof]
     -- ^ payload verifiers
@@ -703,7 +703,7 @@ mkCont
     -- ^ environment data
   -> PublicMeta
     -- ^ command public metadata
-  -> [(DynKeyPair, [CapToken QualifiedName PactValue])]
+  -> [(DynKeyPair, [SigCapability])]
     -- ^ signing keypairs
   -> [Verifier ParsedVerifierProof]
     -- ^ verifiers
@@ -739,7 +739,7 @@ mkUnsignedCont
     -- ^ environment data
   -> PublicMeta
     -- ^ command public metadata
-  -> [Signer QualifiedName PactValue]
+  -> [Signer]
     -- ^ payload signers
   -> [Verifier ParsedVerifierProof]
     -- ^ verifiers
@@ -779,14 +779,14 @@ mkCommand creds vers meta nonce nid rpc = mkCommand' creds encodedPayload
     encodedPayload = J.encodeStrict payload
 
 
-keyPairToSigner :: Ed25519KeyPair -> [UserCapability] -> Signer QualifiedName PactValue
+keyPairToSigner :: Ed25519KeyPair -> [UserCapability] -> Signer
 keyPairToSigner cred caps = Signer scheme pub addr caps
       where
         scheme = Nothing
         pub = toB16Text $ exportEd25519PubKey $ fst cred
         addr = Nothing
 
-keyPairsToSigners :: [Ed25519KeyPairCaps] -> [Signer QualifiedName PactValue]
+keyPairsToSigners :: [Ed25519KeyPairCaps] -> [Signer]
 keyPairsToSigners creds = map (uncurry keyPairToSigner) creds
 
 signHash :: PactHash.Hash -> Ed25519KeyPair -> Text
@@ -797,7 +797,7 @@ signHash hsh (pub,priv) =
 mkUnsignedCommand
   :: J.Encode m
   => J.Encode c
-  => [Signer QualifiedName PactValue]
+  => [Signer]
   -> [Verifier ParsedVerifierProof]
   -> m
   -> Text
@@ -849,7 +849,7 @@ mkCommandWithDynKeys' creds env = do
 mkCommandWithDynKeys
   :: J.Encode c
   => J.Encode m
-  => [(DynKeyPair, [UserCapability])]
+  => [(DynKeyPair, [SigCapability])]
   -> [Verifier ParsedVerifierProof]
   -> m
   -> Text
@@ -881,7 +881,7 @@ mkCommandWithDynKeys creds vers meta nonce nid rpc = mkCommandWithDynKeys' creds
             , _siCapList = caps
             }
 
-type UserCapability = CapToken QualifiedName PactValue
+type UserCapability = SigCapability
 
 -- | A utility function for handling the common case of commands
 -- with no verifiers. `None` is distinguished from `Just []` in
@@ -895,15 +895,15 @@ nonemptyVerifiers vs = Just vs
 -- Parse `APIKeyPair`s into Ed25519 keypairs and WebAuthn keypairs.
 -- The keypairs must not be prefixed with "WEBAUTHN-", it accepts
 -- only the raw (unprefixed) keys.
-mkKeyPairs :: [ApiKeyPair] -> IO [(DynKeyPair, [CapToken QualifiedName PactValue])]
+mkKeyPairs :: [ApiKeyPair] -> IO [(DynKeyPair, [SigCapability])]
 mkKeyPairs keyPairs = traverse mkPair keyPairs
   where
 
         importValidKeyPair
           :: Maybe PublicKeyBS
           -> PrivateKeyBS
-          -> Maybe [CapToken QualifiedName PactValue]
-          -> Either String (Ed25519KeyPair, [CapToken QualifiedName PactValue])
+          -> Maybe [SigCapability]
+          -> Either String (Ed25519KeyPair, [SigCapability])
         importValidKeyPair pubEd25519 privEd25519 caps = fmap (,maybe [] id caps) $
           importEd25519KeyPair pubEd25519 privEd25519
 
@@ -913,7 +913,7 @@ mkKeyPairs keyPairs = traverse mkPair keyPairs
           Just ED25519 -> True
           _ -> False
 
-        mkPair :: ApiKeyPair -> IO (DynKeyPair, [CapToken QualifiedName PactValue])
+        mkPair :: ApiKeyPair -> IO (DynKeyPair, [SigCapability])
         mkPair akp = case (_akpScheme akp, _akpPublic akp, _akpSecret akp, _akpAddress akp) of
           (scheme, pub, priv, Nothing) | isEd25519 scheme ->
             either dieAR (return . first DynEd25519KeyPair) (importValidKeyPair pub priv (_akpCaps akp))

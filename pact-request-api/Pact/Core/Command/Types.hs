@@ -82,12 +82,12 @@ import Pact.Core.Compile
 import Pact.Core.DefPacts.Types
 import Pact.Core.Guards
 import Pact.Core.Gas.Types
-import Pact.Core.Names
 import qualified Pact.Core.Hash as PactHash
 import Pact.Core.Persistence.Types
 import Pact.Core.PactValue (PactValue(..))
 import Pact.Core.Command.RPC
 import Pact.Core.StableEncoding
+import Pact.Core.Signer
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import Pact.Core.Verifiers
 
@@ -137,10 +137,6 @@ instance (NFData a,NFData m) => NFData (ProcessedCommand m a)
 
 type Ed25519KeyPairCaps = (Ed25519KeyPair ,[SigCapability])
 
--- These two types in legacy pact had the same definition and
--- JSON encoding. Can they be unified?
-type SigCapability = CapToken QualifiedName PactValue
-
 
 -- | Pair parsed Pact expressions with the original text.
 data ParsedCode = ParsedCode
@@ -175,12 +171,12 @@ verifyCommand orig@Command{..} =
 
     verifiedHash = PactHash.verifyHash _cmdHash _cmdPayload
 
-hasInvalidSigs :: PactHash.Hash -> [UserSig] -> [Signer QualifiedName PactValue] -> Maybe String
+hasInvalidSigs :: PactHash.Hash -> [UserSig] -> [Signer] -> Maybe String
 hasInvalidSigs hsh sigs signers
   | not (length sigs == length signers)  = Just "Number of sig(s) does not match number of signer(s)"
   | otherwise                            = verifyUserSigs hsh (zip sigs signers)
 
-verifyUserSigs :: PactHash.Hash -> [(UserSig, Signer QualifiedName PactValue)] -> Maybe String
+verifyUserSigs :: PactHash.Hash -> [(UserSig, Signer)] -> Maybe String
 verifyUserSigs hsh sigsAndSigners
   | null failedSigs = Nothing
   | otherwise = formatIssues
@@ -191,7 +187,7 @@ verifyUserSigs hsh sigsAndSigners
   failedSigs = concatMap getFailedVerify sigsAndSigners
   formatIssues = Just $ "Invalid sig(s) found: " ++ show (J.encode . J.Object $ failedSigs)
 
-verifyUserSig :: PactHash.Hash -> UserSig -> Signer QualifiedName PactValue -> Either String ()
+verifyUserSig :: PactHash.Hash -> UserSig -> Signer -> Either String ()
 verifyUserSig msg sig Signer{..} = do
   case (sig, scheme) of
     (ED25519Sig edSig, ED25519) -> do
@@ -231,7 +227,7 @@ data Payload m c = Payload
   { _pPayload :: !(PactRPC c)
   , _pNonce :: !Text
   , _pMeta :: !m
-  , _pSigners :: ![Signer QualifiedName PactValue]
+  , _pSigners :: ![Signer]
   , _pVerifiers :: !(Maybe [Verifier ParsedVerifierProof])
   , _pNetworkId :: !(Maybe NetworkId)
   } deriving (Show, Eq, Generic, Functor, Foldable, Traversable)
@@ -241,7 +237,7 @@ instance (J.Encode a, J.Encode m) => J.Encode (Payload m a) where
   build o = J.object
     [ "networkId" J..= fmap _networkId (_pNetworkId o)
     , "payload" J..= _pPayload o
-    , "signers" J..= J.Array (StableEncoding <$> _pSigners o)
+    , "signers" J..= J.Array (_pSigners o)
     , "verifiers" J..?= fmap J.Array (_pVerifiers o)
     , "meta" J..= _pMeta o
     , "nonce" J..= _pNonce o
@@ -256,7 +252,7 @@ instance (FromJSON a,FromJSON m) => FromJSON (Payload m a) where
     signers <- o .: "signers"
     verifiers <- o .:? "verifiers"
     networkId <- o .:? "networkId"
-    pure $ Payload payload nonce' meta (_stableEncoding <$> signers) verifiers (fmap NetworkId networkId)
+    pure $ Payload payload nonce' meta signers verifiers (fmap NetworkId networkId)
 
 data PactResult err
   = PactResultOk PactValue

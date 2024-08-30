@@ -114,6 +114,7 @@ common pact-common
   default-extensions:
     OverloadedStrings
     DeriveGeneric
+    DerivingStrategies
     ViewPatterns
     LambdaCase
     TupleSections
@@ -257,6 +258,7 @@ library
     Pact.Core.Verifiers
     Pact.Core.Interpreter
     Pact.Core.DeriveConTag
+    Pact.Core.Signer
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
