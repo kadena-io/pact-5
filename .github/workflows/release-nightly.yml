@@ -16,7 +16,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
-      - name: update github release
-        uses: release-manual.yml@master
+  update_github_release:
+    uses: kadena-io/pact-5/.github/workflows/release-manual.yml@master
+    secrets: inherit
+        
         
         
