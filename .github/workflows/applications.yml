@@ -20,7 +20,7 @@ jobs:
       matrix:
         ghc: ["9.8.2", "9.10.1", '9.6.6']
         cabal: ["3.12"]
-        os: ["ubuntu-20.04", "ubuntu-22.04", "macos-14", "macos-13"]
+        os: ["ubuntu-20.04", "ubuntu-22.04", "macos-14"]
         cabalcache: ["true"]
 
     env:
