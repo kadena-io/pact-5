@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       release_sha:
-        description: "hash of chainweb-node release, default to branch running this job"
+        description: "hash of pact release, default to branch running this job"
         type: string
         required: false
       release_version:
@@ -32,7 +32,7 @@ on:
   workflow_call:
     inputs:
       release_sha:
-        description: "hash of chainweb-node release, default to branch running this job"
+        description: "hash of pact release, default to branch running this job"
         type: string
         required: false
       release_version:
@@ -57,8 +57,7 @@ jobs:
     outputs:
       RELEASE_SHA: ${{ steps.set-vars.outputs.RELEASE_SHA }}
       SHORT_REVISION: ${{ steps.set-vars.outputs.SHORT_REVISION }}
-      VERSION_NEW: ${{ steps.set-vars.outputs.VERSION_NEW }}
-      VERSION_OLD: ${{ steps.set-vars.outputs.VERSION_OLD }}
+      RELEASE_VERSION: ${{ steps.set-vars.outputs.RELEASE_VERSION }}
       IMAGE: ${{ steps.set-vars.outputs.IMAGE }}
       GHC_VERSION: ${{ steps.set-ghc-version.outputs.GHC_VERSION }}
     steps:
@@ -83,8 +82,6 @@ jobs:
           echo "RELEASE_SHA=$RELEASE_SHA" >> $GITHUB_OUTPUT
           SHORT_REVISION=$(echo $RELEASE_SHA | cut -c 1-7)
           echo "SHORT_REVISION=$SHORT_REVISION" >> $GITHUB_OUTPUT
-          # echo "VERSION_NEW=${{ steps.tag_version.outputs.new_tag }}" >> $GITHUB_OUTPUT
-          # echo "VERSION_OLD=${{ steps.tag_version.outputs.old_tag }}" >> $GITHUB_OUTPUT
           echo "RELEASE_VERSION=${{ inputs.release_version }}" >> $GITHUB_OUTPUT
           echo "IMAGE=ghcr.io/kadena-io/pact-5:sha-$SHORT_REVISION" >> $GITHUB_OUTPUT
           
@@ -99,7 +96,7 @@ jobs:
         run: |
           VERSION=$(grep -Po '(?<="ghc": \[")(\d\.\d\.\d)' .github/workflows/applications.yml | head -1)
             if [[ -z $VERSION ]]; then
-              echo "Unable to get version from chainweb node build"
+              echo "Unable to get version from pact build"
               exit 1
             fi
           echo "GHC_VERSION=$VERSION" >> $GITHUB_OUTPUT
@@ -120,7 +117,7 @@ jobs:
           MACOS_TAR=pact.${{ env.GHC_VERSION }}.macos-14.${{ env.SHORT_REVISION }}.tar.gz
           
           UBUNTU_RELEASE_FILE=pact-binary-bundle.ubuntu-22.04.${{ env.RELEASE_VERSION }}.tar.gz
-          MACOS_RELEASE_FILE=pact-binary-bundle.macos-14.${{ env.RELEASE_VERSION }}.tar.gz
+          MACOS_RELEASE_FILE=pact-binary-bundle.macos-latest.tar.gz
           
           curl "s3.us-east-1.amazonaws.com/kadena-cabal-cache/pact/$UBUNTU_TAR" -o "./$UBUNTU_RELEASE_FILE"
           curl "s3.us-east-1.amazonaws.com/kadena-cabal-cache/pact/$MACOS_TAR" -o "./$UBUNTU_RELEASE_FILE"
@@ -141,8 +138,9 @@ jobs:
           docker pull $IMAGE
           docker run --rm $IMAGE --version
           docker tag $IMAGE ghcr.io/kadena-io/pact-5:$VERSION_NEW
-          docker tag $IMAGE ghcr.io/kadena-io/pact-5:latest
-          docker tag $IMAGE ghcr.io/kadena-io/pact-5:latest
+          if [[ "$VERSION_NEW" != "nightly" ]]; then
+            docker tag $IMAGE ghcr.io/kadena-io/pact-5:latest
+          fi
 
           docker image push --all-tags ghcr.io/kadena-io/pact-5
           
@@ -161,51 +159,11 @@ jobs:
           generateReleaseNotes: true
 
   release_to_brew:
-    runs-on: macos-latest
+    uses: kadena-io/homebrew-pact/.github/workflows/release-bump.yml@master
     needs: release_vars
-    steps:
-      - name: Homebrew Releaser
-      # You may pin to the exact commit or the version.
-      # uses: Justintime50/homebrew-releaser@392a2426758dfdcc91f302d55cf5061346af2219
-        uses: Justintime50/homebrew-releaser@v0.18.1
-        with:
-          # The name of the homebrew tap owner to publish your formula to as it appears on GitHub.
-          homebrew_owner: kadena-io
-          # The name of the homebrew tap to publish your formula to as it appears on GitHub.
-          homebrew_tap: pact
-          # The name of the folder in your homebrew tap where formula will be committed to.
-          formula_folder: # default is formula
-          # The GitHub Token (saved as a repo secret) that has `repo` permissions for the homebrew tap you want to release to.
-          github_token: 
-          # Git author info used to commit to the homebrew tap.
-          commit_owner: # optional, default is homebrew-releaser@example.com
-          # Git author info used to commit to the homebrew tap.
-          commit_email: # optional, default is homebrew-releaser@example.com
-          # Custom dependencies in case other formulas are needed to build the current one (can be multiline).
-          depends_on: # optional
-          # Custom install command for your formula.
-          install: 
-          # Custom test command for your formula so you can run `brew test`.
-          test: # optional
-          # The Homebrew download strategy to use for formulas.
-          download_strategy: # optional
-          # Allows you to add a custom require_relative at the top of the formula template.
-          custom_require: # optional
-          # Override the automatically detected version of a formula with an explicit value.
-          version: # optional
-          # Add a custom URL/checksum target for AMD64 Darwin builds.
-          target_darwin_amd64: # optional
-          # Add a custom URL/checksum target for ARM64 Darwin builds.
-          target_darwin_arm64: # optional
-          # Add a custom URL/checksum target for AMD64 Linux builds.
-          target_linux_amd64: # optional
-          # Add a custom URL/checksum target for ARM64 Linux builds.
-          target_linux_arm64: # optional
-          # Update your homebrew tap's README with a table of all projects in the tap.
-          update_readme_table: # optional
-          # Skips committing the generated formula to a homebrew tap (useful for local testing).
-          skip_commit: # optional
-          # Logs debugging info to console.
-          debug: # optional
+    with:
+      pact_arm: https://github.com/kadena-io/pact-5/releases/latest/download/pact-binary-bundle.macos-latest.tar.gz
+      pact_head: https://github.com/kadena-io/pact-5/releases/download/nightly/pact-binary-bundle.macos-m1.tar.gz
+    secrets: inherit
               
         
