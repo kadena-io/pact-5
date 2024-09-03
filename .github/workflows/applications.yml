@@ -50,6 +50,52 @@ jobs:
         ghc --version
         cabal --version
 
+    # Project Setup
+    - name: Create cabal.project.local
+      shell: bash
+      run: |
+        cat > cabal.project.local <<EOF
+        documentation: False
+        package pact
+          tests: True
+          benchmarks: True
+          documentation: False
+          optimization: 1
+          flags: ${{ matrix.flags }} +cryptonite-ed25519
+        extra-include-dirs:
+          /opt/local/include
+          /usr/local/opt/openssl/include
+        extra-lib-dirs:
+          /opt/local/lib
+          /usr/local/opt/openssl/lib/
+        EOF
+    - name: Extend cabal.project.local for GHC-9.0.2
+      if: "startsWith(matrix.ghc, '9')"
+      shell: bash
+      run: |
+        cat >> cabal.project.local <<EOF
+        package pact
+          ghc-options: -Wwarn -Wunused-packages
+        EOF
+    - name: Add check for unused packages
+      shell: bash
+      run: |
+        cat >> cabal.project.local <<EOF
+        package pact
+          ghc-options: -Wunused-packages
+        EOF
+    - name: Print cabal.project.local
+      shell: bash
+      run: cat cabal.project.local
+    - uses: actions/cache@v3
+      name: Cache dist-newstyle
+      with:
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: ${{ matrix.os }}-${{ matrix.ghc }}-4-cabal
+
     # Build
     - name: Update package database
       shell: bash
