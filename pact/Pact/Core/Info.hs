@@ -49,10 +49,4 @@ data Located i a
   = Located
   { _locLocation :: i
   , _locElem :: a }
-  deriving (Show, Functor, Foldable, Traversable)
-
-instance (Eq a) => Eq (Located i a) where
-  (Located _ a) == (Located _ a') = a == a'
-
-instance (Ord a) => Ord (Located i a) where
-  compare (Located _ a) (Located _ a') = compare a a'
+  deriving (Show, Eq, Ord, Functor, Foldable, Traversable)

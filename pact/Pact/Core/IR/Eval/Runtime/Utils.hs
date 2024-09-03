@@ -540,4 +540,4 @@ emitPactWarning i pw =
   viewEvalEnv eeWarnings >>= \case
     Nothing -> pure ()
     Just warnRef ->
-      liftIO $ modifyIORef' warnRef (S.insert (Located i pw))
+      liftIO $ modifyIORef' warnRef (pushWarning (Located i pw))

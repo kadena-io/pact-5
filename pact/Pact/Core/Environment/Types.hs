@@ -76,6 +76,11 @@ module Pact.Core.Environment.Types
  , ReplDebugFlag(..)
  , SourceCode(..)
  , PactWarning(..)
+ , PactWarningStack
+ , newWarningStack
+ , newDefaultWarningStack
+ , pushWarning
+ , getWarningStack
  ) where
 
 
@@ -177,7 +182,37 @@ instance Pretty PactWarning where
     ModuleGuardEnforceDetected ->
       "Module guard enforce detected. Module guards are known to be unsafe, and will be removed in a future version of pact"
 
-type LocatedPactWarning i = Located i PactWarning
+-- | A simple stack of pact warnings,
+--   which appends up until a limit.
+data PactWarningStack i
+  = PactWarningStack
+  { _pwLimit :: !Int
+  -- ^ The max allowed warnings
+  , _pwCurrentSize :: !Int
+  -- ^ The current number of warnings
+  , _pwWarnings :: [Located i PactWarning]
+  -- ^ The actual warnings, including a loc info param
+  } deriving (Show)
+
+-- | Create a new warning stack, with a set limit
+newWarningStack :: Int -> PactWarningStack i
+newWarningStack lim =
+  PactWarningStack
+  { _pwLimit = lim
+  , _pwCurrentSize = 0
+  , _pwWarnings = []
+  }
+
+newDefaultWarningStack :: PactWarningStack i
+newDefaultWarningStack = newWarningStack 100
+
+pushWarning :: Located i PactWarning -> PactWarningStack i -> PactWarningStack i
+pushWarning w p@(PactWarningStack lim curr warnings)
+  | curr < lim = PactWarningStack lim (curr + 1) (w:warnings)
+  | otherwise = p
+
+getWarningStack :: PactWarningStack i -> [Located i PactWarning]
+getWarningStack = _pwWarnings
 
 -- From pact
 -- | All of the types included in our evaluation environment.
@@ -209,7 +244,7 @@ data EvalEnv b i
   -- ^ The gas environment
   , _eeSPVSupport :: SPVSupport
   -- ^ The SPV backend
-  , _eeWarnings :: !(Maybe (IORef (Set (LocatedPactWarning i))))
+  , _eeWarnings :: !(Maybe (IORef (PactWarningStack i)))
   } deriving (Generic)
 
 instance (NFData b, NFData i) => NFData (EvalEnv b i)
@@ -280,7 +315,7 @@ defaultEvalEnv
   -> IO (EvalEnv b i)
 defaultEvalEnv pdb m = do
   gasRef <- newIORef mempty
-  warningRef <- newIORef mempty
+  warningRef <- newIORef newDefaultWarningStack
   pure $ EvalEnv
     { _eeMsgSigs = mempty
     , _eeMsgVerifiers = mempty

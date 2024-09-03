@@ -29,6 +29,7 @@ import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.Text(Text)
 import Data.Default
+import Data.IORef
 import Data.Foldable
 import System.FilePath.Posix
 
@@ -36,7 +37,6 @@ import System.FilePath.Posix
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import qualified Data.Set as S
 
 import Pact.Core.Persistence
 import Pact.Core.Persistence.MockPersistence (mockPactDb)
@@ -52,6 +52,7 @@ import Pact.Core.Info
 import Pact.Core.PactValue
 import Pact.Core.Errors
 import Pact.Core.Interpreter
+import Pact.Core.Literal
 import Pact.Core.Pretty hiding (pipe)
 import Pact.Core.Serialise (serialisePact_repl_spaninfo)
 
@@ -68,8 +69,6 @@ import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.IR.Eval.CEK as CEK
 import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import qualified Pact.Core.IR.Eval.Direct.ReplBuiltin as Direct
-import Pact.Core.Literal
-import Data.IORef (writeIORef, readIORef)
 
 type ReplInterpreter = Interpreter ReplRuntime ReplCoreBuiltin SpanInfo
 
@@ -275,9 +274,11 @@ interpretReplProgram interpreter (SourceCode sourceFp source) = do
     viewEvalEnv eeWarnings >>= \case
       Nothing -> pure ()
       Just ref -> do
-        warnings <- liftIO (readIORef ref <* writeIORef ref mempty)
+        warnings <- liftIO $
+          atomicModifyIORef' ref (\old -> (newDefaultWarningStack, getWarningStack old))
         -- Todo: print located line
-        traverse_ (replPrintLn . _locElem) (S.toList warnings)
+        -- Note: warnings are pushed FIFO, so we reverse to get the right order
+        traverse_ (replPrintLn . _locElem) (reverse warnings)
   interpret (DesugarOutput tl _deps) = do
     case tl of
       RTLDefun df -> do
