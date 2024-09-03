@@ -215,6 +215,7 @@ data CoreBuiltin
   | CoreIdentity
   | CoreVerifySPV
   | CoreEnforceVerifier
+  | CoreAcquireModuleAdmin
   -- Hyperlane
   | CoreHyperlaneMessageId
   | CoreHyperlaneDecodeMessage
@@ -350,6 +351,7 @@ coreBuiltinToText = \case
   CoreWithRead -> "with-read"
   CoreWrite -> "write"
   CoreTxHash -> "tx-hash"
+  CoreAcquireModuleAdmin -> "acquire-module-admin"
   CoreAndQ -> "and?"
   CoreOrQ -> "or?"
   CoreWhere -> "where"
@@ -536,6 +538,7 @@ coreBuiltinToUserText = \case
   CoreHyperlaneMessageId -> "hyperlane-message-id"
   CoreHyperlaneDecodeMessage -> "hyperlane-decode-token-message"
   CoreHyperlaneEncodeMessage -> "hyperlane-encode-token-message"
+  CoreAcquireModuleAdmin -> "acquire-module-admin"
 
 instance IsBuiltin CoreBuiltin where
   builtinName = NativeName . coreBuiltinToText
@@ -682,6 +685,7 @@ instance IsBuiltin CoreBuiltin where
     CoreDec -> 1
     CoreCond -> 1
     CoreIdentity -> 1
+    CoreAcquireModuleAdmin -> 1
     CoreVerifySPV -> 2
     CoreEnforceVerifier -> 1
     CoreHyperlaneMessageId -> 1

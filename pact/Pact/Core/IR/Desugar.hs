@@ -915,8 +915,7 @@ resolveModuleName i mn@(ModuleName name mNs) =
     Just (CurrModule currMod imps MTModule)
       | currMod == mn -> pure (currMod, imps)
       | otherwise -> do
-        pdb <- viewEvalEnv' eePactDb
-        lift (lookupModuleData i pdb mn) >>= \case
+        lift (lookupModuleData i mn) >>= \case
           Just md -> getModName md
           Nothing -> case mNs of
             Just _ -> throwDesugarError (NoSuchModule mn) i
@@ -927,7 +926,7 @@ resolveModuleName i mn@(ModuleName name mNs) =
               Just (Namespace ns _ _)
                 | ModuleName name (Just ns) == currMod -> pure (currMod, imps)
                 | otherwise ->
-                  lift (getModuleData i pdb (ModuleName name (Just ns))) >>= getModName
+                  lift (getModuleData i (ModuleName name (Just ns))) >>= getModName
     _ -> resolveModuleData mn i >>= getModName
     where
     getModName = \case
@@ -950,8 +949,7 @@ resolveInterfaceName i mn@(ModuleName name mNs) =
     Just (CurrModule currMod _ MTInterface)
       | currMod == mn -> pure mn
       | otherwise -> do
-          pdb <- viewEvalEnv' eePactDb
-          lift (lookupModuleData i pdb mn) >>= \case
+          lift (lookupModuleData i mn) >>= \case
             Just (InterfaceData _ _) -> pure mn
             Just _ -> throwDesugarError (InvalidModuleReference mn) i
             Nothing -> case mNs of
@@ -963,7 +961,7 @@ resolveInterfaceName i mn@(ModuleName name mNs) =
                 Just (Namespace ns _ _)
                   | ModuleName name (Just ns) == currMod -> pure currMod
                   | otherwise ->
-                    lift (getModuleData i pdb (ModuleName name (Just ns))) >>= getModName
+                    lift (getModuleData i (ModuleName name (Just ns))) >>= getModName
     _ -> resolveModuleData mn i >>= getModName
     where
     getModName = \case
@@ -978,15 +976,14 @@ resolveModuleData
   -> i
   -> RenamerM e b i (ModuleData b i)
 resolveModuleData mn@(ModuleName name mNs) i = do
-  pdb <- viewEvalEnv' eePactDb
-  lift (lookupModuleData i pdb mn) >>= \case
+  lift (lookupModuleData i mn) >>= \case
     Just md -> pure md
     Nothing -> case mNs of
       Just _ -> throwDesugarError (NoSuchModule mn) i
       Nothing -> useEvalState (esLoaded . loNamespace) >>= \case
         Nothing -> throwDesugarError (NoSuchModule mn) i
         Just (Namespace ns _ _) ->
-          lift (getModuleData i pdb (ModuleName name (Just ns)))
+          lift (getModuleData i (ModuleName name (Just ns)))
 
 renameType
   :: (DesugarBuiltin b)
@@ -1347,8 +1344,7 @@ resolveQualified
   -> i
   -> RenamerM e b i (Name, Maybe DefKind)
 resolveQualified (QualifiedName qn qmn@(ModuleName modName mns)) i = do
-  pdb <- viewEvalEnv' eePactDb
-  runMaybeT (baseLookup pdb qn qmn <|> modRefLookup pdb <|> namespacedLookup pdb) >>= \case
+  runMaybeT (baseLookup qn qmn <|> modRefLookup <|> namespacedLookup) >>= \case
     Just p -> pure p
     Nothing -> throwDesugarError (NoSuchModuleMember qmn qn) i
   where
@@ -1357,8 +1353,8 @@ resolveQualified (QualifiedName qn qmn@(ModuleName modName mns)) i = do
     guard (currMod == moduleName)
     (nk, dk) <- MaybeT $ view (reCurrModuleTmpBinds . at defnName)
     pure (Name defnName nk, Just dk)
-  baseLookup pdb defnName moduleName = lookupLocalQual defnName moduleName <|> do
-    MaybeT (lift (lookupModuleData i pdb moduleName)) >>= \case
+  baseLookup defnName moduleName = lookupLocalQual defnName moduleName <|> do
+    MaybeT (lift (lookupModuleData i moduleName)) >>= \case
       ModuleData module' _ -> do
         d <- hoistMaybe (findDefInModule defnName module' )
         lift $ rsDependencies %= S.insert moduleName
@@ -1368,18 +1364,18 @@ resolveQualified (QualifiedName qn qmn@(ModuleName modName mns)) i = do
         d <- hoistMaybe (findDefInInterface defnName iface)
         lift $ rsDependencies %= S.insert moduleName
         pure (Name qn (NTopLevel moduleName (_ifHash iface)), Just (defKind ifn d))
-  modRefLookup pdb = case mns of
+  modRefLookup = case mns of
     -- Fail eagerly: the previous lookup was fully qualified
     Just _ -> MaybeT (throwDesugarError (NoSuchModuleMember qmn qn) i)
     Nothing -> do
       let mn' = ModuleName qn (Just (NamespaceName modName))
-      m <- MaybeT $ lift $ lookupModule i pdb mn'
+      m <- MaybeT $ lift $ lookupModule i mn'
       let nk = NModRef mn' (_mImplements m)
       pure (Name qn nk, Nothing)
-  namespacedLookup pdb = do
+  namespacedLookup = do
     Namespace ns _ _ <- MaybeT (useEvalState (esLoaded . loNamespace))
     let mn' = ModuleName modName (Just ns)
-    baseLookup pdb qn mn'
+    baseLookup qn mn'
 
 -- | Handle all name resolution for modules
 renameModule
@@ -1425,6 +1421,8 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash txh i)
       case find (\d -> BN (BareName (defName d)) == govName) defs of
         Just (DCap d) -> do
           let fqn = FullyQualifiedName mname (_argName $ _dcapSpec d) mhash
+          let dcName = (_argName . _dcapSpec) d
+          unless (null (_dcapArgs d)) $ throwDesugarError (InvalidGovernanceRef (QualifiedName dcName mname)) i
           pure (CapGov (FQName fqn))
         Just d -> throwDesugarError (InvalidGovernanceRef (QualifiedName (defName d) mname)) i
         Nothing -> throwDesugarError (InvalidGovernanceRef (QualifiedName (rawParsedName govName) mname)) i

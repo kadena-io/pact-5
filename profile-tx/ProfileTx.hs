@@ -40,9 +40,6 @@ import Pact.Core.SPV
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.LexUtils as Lisp
-import qualified Pact.Core.IR.Eval.CEK as CEK
-import qualified Pact.Core.IR.Eval.CoreBuiltin as CEK
-import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import Pact.Core.Gas.TableGasModel
 import Pact.Core.Gas
 import Pact.Core.Namespace
@@ -69,25 +66,6 @@ contractsPath = "gasmodel" </> "contracts"
 -- | Create a single-key keyset
 mkKs :: PublicKeyText -> PactValue
 mkKs a = PGuard $ GKeyset $ KeySet (S.singleton a) KeysAll
-
-interpretBigStep :: Interpreter ExecRuntime CoreBuiltin SpanInfo
-interpretBigStep =
-  Interpreter runGuard runTerm evalResumePact
-  where
-  runTerm purity term = CEK.eval purity eEnv term
-  runGuard info g = CEK.interpretGuard info eEnv g
-  eEnv = CEK.coreBuiltinEnv @ExecRuntime
-  evalResumePact info pactExec = CEK.evalResumePact info eEnv pactExec
-
-
-interpretDirect :: Interpreter ExecRuntime CoreBuiltin SpanInfo
-interpretDirect =
-  Interpreter runGuard runTerm evalResumePact
-  where
-  runTerm purity term = Direct.eval purity eEnv term
-  runGuard info g = Direct.interpretGuard info eEnv g
-  eEnv = Direct.coreBuiltinEnv
-  evalResumePact info pactExec = Direct.evalResumePact info eEnv pactExec
 
 
 data CoinBenchSenders
@@ -265,7 +243,7 @@ _testCoinTransfer = withSqlitePactDb serialisePact_raw_spaninfo (T.pack benchmar
     t <- liftEither $ parseOnlyExpr termText
     _dsOut <$> runDesugarTerm t
   term <- getRightIO eterm
-  (out, _) <- runEvalM (ExecEnv ee) es (eval interpretDirect PImpure term)
+  (out, _) <- runEvalM (ExecEnv ee) es (eval evalDirectInterpreter PImpure term)
   print out
 
 unsafeModuleHash :: Text -> Hash
@@ -284,11 +262,11 @@ withTx pdb act = do
 runCoinXferDirect :: PactDb CoreBuiltin SpanInfo -> IO ()
 runCoinXferDirect pdb =  do
   ee <- setupBenchEvalEnv pdb (transferSigners CoinBenchSenderA CoinBenchSenderB) (PObject mempty)
-  (m, es) <- runEvalM (ExecEnv ee) def $ getModule def pdb (ModuleName "coin" Nothing)
+  (m, es) <- runEvalM (ExecEnv ee) def $ getModule def (ModuleName "coin" Nothing)
   _ <- getRightIO m
   let es' = def {_esLoaded=_esLoaded es}
   forM_ [1 :: Integer .. 1000] $ \_ -> withTx pdb $ do
-    (out, _) <- runEvalM (ExecEnv ee) es' $ eval interpretBigStep PImpure term
+    (out, _) <- runEvalM (ExecEnv ee) es' $ eval evalInterpreter PImpure term
     writeIORef (_geGasRef $ _eeGasEnv ee) mempty
     either throw print out
   pure ()

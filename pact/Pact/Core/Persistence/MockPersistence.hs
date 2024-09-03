@@ -200,30 +200,30 @@ mockPactDb serial = do
   keys
     :: PactTables b i
     -> Domain k v b i
-    -> IO [k]
+    -> GasM b i [k]
   keys PactTables{..} d = case d of
     DKeySets -> do
-      MockSysTable r <- readIORef ptKeysets
+      MockSysTable r <- liftIO $ readIORef ptKeysets
       -- Note: the parser only fails on null input, so
       -- if this ever fails, then somehow the null key got into the keysets.
       -- this is benign.
       let getKeysetName = fromMaybe (KeySetName "" Nothing) . rightToMaybe . parseAnyKeysetName
       return $ getKeysetName . _unRender <$> M.keys r
     DModules -> do
-      MockSysTable r <- readIORef ptModules
+      MockSysTable r <- liftIO $ readIORef ptModules
       let getModuleName = parseModuleName . _unRender
       return $ catMaybes $ getModuleName <$> M.keys r
     DUserTables tbl -> do
-      MockUserTable r <- readIORef ptUser
+      MockUserTable r <- liftIO $ readIORef ptUser
       let tblName = renderTableName tbl
       case M.lookup tblName r of
         Just t -> return (M.keys t)
         Nothing -> throwIO (Errors.NoSuchTable tbl)
     DDefPacts -> do
-      MockSysTable r <- readIORef ptDefPact
+      MockSysTable r <- liftIO $ readIORef ptDefPact
       return $ DefPactId . _unRender <$> M.keys r
     DNamespaces -> do
-      MockSysTable r <- readIORef ptNamespaces
+      MockSysTable r <- liftIO $ readIORef ptNamespaces
       pure $ NamespaceName . _unRender <$> M.keys r
 
   createUsrTable
@@ -247,7 +247,7 @@ mockPactDb serial = do
     .  PactTables b i
     -> Domain k v b i
     -> k
-    -> IO (Maybe v)
+    -> GasM b i (Maybe v)
   read' PactTables{..} domain k = case domain of
     DKeySets -> readSysTable ptKeysets k (Rendered . renderKeySetName) _decodeKeySet
     DModules -> readSysTable ptModules k (Rendered . renderModuleName) _decodeModuleData
@@ -277,9 +277,14 @@ mockPactDb serial = do
     DDefPacts -> liftIO $ liftIO $ writeSysTable pt domain k v (Rendered . _defPactId) _encodeDefPactExec
     DNamespaces -> liftIO $ liftIO $ writeSysTable pt domain k v (Rendered . _namespaceName) _encodeNamespace
 
+  readRowData
+    :: IORef MockUserTable
+    -> TableName
+    -> RowKey
+    -> GasM b i (Maybe RowData)
   readRowData ref tbl k = do
     let tblName = renderTableName tbl
-    mt@(MockUserTable usrTables) <- readIORef ref
+    mt@(MockUserTable usrTables) <- liftIO $ readIORef ref
     checkTable tblName tbl mt
     case usrTables ^? ix tblName . ix k of
       Just bs -> case _decodeRowData serial bs of
@@ -332,9 +337,9 @@ mockPactDb serial = do
     -> k
     -> (k -> Rendered k)
     -> (PactSerialise b i -> ByteString -> Maybe (Document v))
-    -> IO (Maybe v)
+    -> GasM b i (Maybe v)
   readSysTable ref rowkey renderKey decode = do
-    MockSysTable m <- readIORef ref
+    MockSysTable m <- liftIO $ readIORef ref
     case M.lookup (renderKey rowkey) m of
       Just bs -> case decode serial bs of
         Just rd -> pure (Just (view document rd))

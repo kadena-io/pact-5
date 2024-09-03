@@ -18,7 +18,6 @@ module Pact.Core.IR.Eval.CEK
   , resumePact
   , evalCap
   , nameToFQN
-  , guardTable
   , isKeysetInSigs
   , isKeysetNameInSigs
   , requireCap
@@ -157,13 +156,11 @@ evaluateTerm cont handler env (Var n info) = do
           failInvariant info (InvariantInvalidDefKind (defKind mname d) "in var position")
         Nothing ->
           failInvariant info (InvariantInvalidBoundVariable (_nName n))
-    NModRef m ifs -> case ifs of
-      [] -> throwExecutionError info (ModRefImplementsNoInterfaces m)
-      _ ->
+    NModRef m ifs ->
         returnCEKValue cont handler (VModRef (ModRef m (S.fromList ifs)))
     NDynRef (DynamicRef dArg i) -> case RAList.lookup (view ceLocal env) i of
       Just (VModRef mr) -> do
-        modRefHash <- _mHash <$> getModule info (view cePactDb env) (_mrModule mr)
+        modRefHash <- _mHash <$> getModule info (_mrModule mr)
         let nk = NTopLevel (_mrModule mr) modRefHash
         evalCEK cont handler env (Var (Name dArg nk) info)
       Just _ ->
@@ -363,7 +360,7 @@ applyPact
   -> EvalM e b i (EvalResult e b i)
 applyPact i pc ps cont handler cenv nested = use esDefPactExec >>= \case
   Just pe -> throwExecutionError i (MultipleOrNestedDefPactExecFound pe)
-  Nothing -> getModuleMemberWithHash i (_cePactDb cenv) (pc ^. pcName) >>= \case
+  Nothing -> getModuleMemberWithHash i (pc ^. pcName) >>= \case
     (DPact defPact, mh) -> do
       let nSteps = NE.length (_dpSteps defPact)
 
@@ -430,7 +427,7 @@ applyNestedPact
 applyNestedPact i pc ps cont handler cenv = use esDefPactExec >>= \case
   Nothing -> failInvariant i $ InvariantPactExecNotInEnv (Just pc)
 
-  Just pe -> getModuleMemberWithHash i (_cePactDb cenv) (pc ^. pcName) >>= \case
+  Just pe -> getModuleMemberWithHash i (pc ^. pcName) >>= \case
     (DPact defPact, mh) -> do
       step <- maybe (throwExecutionError i (InvalidDefPactStepSupplied ps (_peStepCount pe))) pure
         $ _dpSteps defPact ^? ix (ps ^. psStep)
@@ -494,7 +491,7 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
   Nothing -> throwExecutionError i DefPactStepNotInEnvironment -- TODO check with multichain
   Just ps -> do
     pdb <- viewEvalEnv eePactDb
-    dbState <- liftDbFunction i (_pdbRead pdb DDefPacts (_psDefPactId ps))
+    dbState <- liftGasM i (_pdbRead pdb DDefPacts (_psDefPactId ps))
     case (dbState, crossChainContinuation) of
 
       -- Terminate defpact in db: always fail
@@ -565,53 +562,12 @@ nameToFQN info env (Name n nk) = case nk of
   NTopLevel mn mh -> pure (FullyQualifiedName mn n mh)
   NDynRef (DynamicRef dArg i) -> case RAList.lookup (view ceLocal env) i of
     Just (VModRef mr) -> do
-      md <- getModule info (view cePactDb env) (_mrModule mr)
+      md <- getModule info (_mrModule mr)
       pure (FullyQualifiedName (_mrModule mr) dArg (_mHash md))
     Just _ -> throwExecutionError info (DynNameIsNotModRef n)
     Nothing -> failInvariant info (InvariantInvalidBoundVariable n)
   _ -> failInvariant info (InvariantInvalidBoundVariable n)
 
-guardTable
-  :: ()
-  => i
-  -> Cont e b i
-  -> CEKErrorHandler e b i
-  -> CEKEnv e b i
-  -> TableValue
-  -> GuardTableOp
-  -> EvalM e b i (EvalResult e b i)
-guardTable i cont handler env (TableValue tn mh _) dbop = do
-  let mn = _tableModuleName tn
-  checkLocalBypass $
-    guardForModuleCall i cont handler env mn $ do
-      mdl <- getModule i (view cePactDb env) mn
-      enforceBlessedHashes i mdl mh
-      returnCEKValue cont handler VUnit
-  where
-  checkLocalBypass notBypassed = do
-    enabled <- isExecutionFlagSet FlagAllowReadInLocal
-    case dbop of
-      GtWrite -> notBypassed
-      GtCreateTable -> notBypassed
-      _ | enabled -> returnCEKValue cont handler VUnit
-        | otherwise -> notBypassed
-
-guardForModuleCall
-  :: ()
-  => i
-  -> Cont e b i
-  -> CEKErrorHandler e b i
-  -> CEKEnv e b i
-  -> ModuleName
-  -> EvalM e b i (EvalResult e b i)
-  -> EvalM e b i (EvalResult e b i)
-guardForModuleCall i cont handler env currMod onFound =
-  findCallingModule >>= \case
-    Just mn | mn == currMod -> onFound
-    _ -> do
-      mc <- use (esCaps . csModuleAdmin)
-      if S.member currMod mc then onFound
-      else getModule i (view cePactDb env) currMod >>= acquireModuleAdmin i cont handler env
 
 -- | Acquires module admin for a known module
 -- NOTE: This function should only be called _after_
@@ -626,7 +582,10 @@ acquireModuleAdmin
   -> EvalModule b i
   -> EvalM e b i (EvalResult e b i)
 acquireModuleAdmin i cont handler env mdl = do
-  case _mGovernance mdl of
+  let mname = _mName mdl
+  moduleAdminAcquired <- S.member mname <$> use (esCaps . csModuleAdmin)
+  if moduleAdminAcquired then returnCEKValue cont handler VUnit
+  else case _mGovernance mdl of
     KeyGov ksn -> do
       let cont' = ModuleAdminC (_mName mdl) cont
       isKeysetNameInSigs i cont' handler env ksn
@@ -667,7 +626,6 @@ pushStackFrame info cont mty sf = do
     let qn = fqnToQualName (_sfName sf)
     when (S.member qn currentCalled) $ throwExecutionError info (RuntimeRecursionDetected qn)
     esCheckRecursion %= NE.cons (RecursionCheck (S.insert qn currentCalled))
-
 
 
 -- | Our main workhorse for "Evaluate a capability, then do something else"
@@ -1110,12 +1068,10 @@ applyContToValue (CondC env info frame cont) handler v = do
     _ ->
       -- Note: a non-boolean value in these functions is non recoverable
       throwExecutionError info ExpectedPactValue
-applyContToValue currCont@(CapInvokeC env info cf cont) handler v = case cf of
+applyContToValue (CapInvokeC env info cf cont) handler v = case cf of
   WithCapC body -> case v of
     VCapToken ct@(CapToken fqn _) -> do
-      -- Todo: CEK-style this
-      let cont' = IgnoreValueC (PCapToken ct) currCont
-      guardForModuleCall info cont' handler env (_fqModule fqn) $
+      guardForModuleCall info (_fqModule fqn) $
         evalCap info cont handler env ct PopCapInvoke NormalCapEval body
     -- Todo: this is actually more like "expected cap token"
     VPactValue v' -> throwExecutionError info $ ExpectedCapToken v'
@@ -1170,45 +1126,11 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
       -- Db frames
       -- Todo: gas costs if post-read actions
       ---------------------------------------------------------
-      PreSelectC tv clo mf -> do
-        keys <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
-        selectRead tv clo keys [] mf
       SelectC tv clo rdata remaining acc mf -> case v of
         PBool b -> do
           let acc' = if b then rdata:acc else acc
           selectRead tv clo remaining acc' mf
         _ -> throwExecutionError info $ ExpectedBoolValue v
-      ReadC tv rowkey -> do
-        liftDbFunction info (_pdbRead pdb (tvToDomain tv) rowkey) >>= \case
-          Just (RowData rdata) ->
-            returnCEKValue cont handler (VObject rdata)
-          Nothing ->
-            returnCEKError info cont handler $
-              NoSuchObjectInDb (_tvName tv) rowkey
-      WithDefaultReadC tv rowkey (ObjectData defaultObj) clo -> do
-        liftDbFunction info (_pdbRead pdb (tvToDomain tv) rowkey) >>= \case
-          Just (RowData rdata) ->
-            applyLam clo [VObject rdata] cont handler
-          Nothing -> applyLam clo [VObject defaultObj] cont handler
-      KeysC tv -> do
-        ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
-        let li = V.fromList (PString . _rowKey <$> ks)
-        returnCEKValue cont handler (VList li)
-      WriteC tv wt rk (ObjectData rv) -> do
-        let check' = if wt == Update then checkPartialSchema else checkSchema
-        if check' rv (_tvSchema tv) then do
-          let rdata = RowData rv
-          rvSize <- sizeOf info SizeOfV0 rv
-          chargeGasArgs info (GWrite rvSize)
-          evalWrite info pdb wt (tvToDomain tv) rk rdata
-          returnCEKValue cont handler (VString "Write succeeded")
-        else
-          throwExecutionError info (WriteValueDidNotMatchSchema (_tvSchema tv) (ObjectData rv))
-      PreFoldDbC tv queryClo appClo -> do
-        let tblDomain = DUserTables (_tvName tv)
-        -- Todo: keys gas
-        keys <- liftDbFunction info (_pdbKeys pdb tblDomain)
-        foldDBRead tv queryClo appClo keys []
       FoldDbFilterC tv queryClo appClo (rk, ObjectData om) remaining accum -> case v of
         PBool b -> do
           let accum' = if b then (rk, PObject om):accum else accum
@@ -1221,17 +1143,6 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
               cont' = BuiltinC env info rdf cont
           applyLam appClo [VString rk, VPactValue pv] cont' handler
         [] -> returnCEKValue cont handler (VList (V.fromList (v:acc)))
-      CreateTableC (TableValue tn _ _) -> do
-        evalCreateUserTable info pdb tn
-        returnCEKValue cont handler (VString "TableCreated")
-      EmitEventC ct@(CapToken fqn _) -> do
-        d <- getDefCap info fqn
-        enforceMeta (_dcapMeta d)
-        emitCapability info ct
-        returnCEKValue cont handler (VBool True)
-        where
-        enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)
-        enforceMeta _ = pure ()
       DefineKeysetC ksn newKs -> do
         newKsSize <- sizeOf info SizeOfV0 newKs
         chargeGasArgs info (GWrite newKsSize)
@@ -1260,7 +1171,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
       where
       foldDBRead tv queryClo appClo remaining acc =
         case remaining of
-          rk@(RowKey raw):remaining' -> liftDbFunction info (_pdbRead pdb (tvToDomain tv) rk) >>= \case
+          rk@(RowKey raw):remaining' -> liftGasM info (_pdbRead pdb (tvToDomain tv) rk) >>= \case
             Just (RowData row) -> do
               let rdf = FoldDbFilterC tv queryClo appClo (rk, ObjectData row) remaining' acc
                   cont' = BuiltinC env info rdf cont
@@ -1274,7 +1185,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
               applyLam appClo [VString rk, VPactValue pv] cont' handler
             [] -> returnCEKValue cont handler (VList mempty)
       selectRead tv clo keys acc mf = case keys of
-        k:ks -> liftDbFunction info (_pdbRead pdb (tvToDomain tv) k) >>= \case
+        k:ks -> liftGasM info (_pdbRead pdb (tvToDomain tv) k) >>= \case
           Just (RowData r) -> do
             let bf = SelectC tv clo (ObjectData r) ks acc mf
                 cont' = BuiltinC env info bf cont
@@ -1629,7 +1540,7 @@ enforceGuard info cont handler env g = case g of
   GModuleGuard (ModuleGuard mn _) -> calledByModule mn >>= \case
     True -> returnCEKValue cont handler (VBool True)
     False -> do
-      md <- getModule info (view cePactDb env) mn
+      md <- getModule info mn
       let cont' = IgnoreValueC (PBool True) cont
       acquireModuleAdmin info cont' handler env md
       -- returnCEKValue cont handler (VBool True)guard
@@ -1671,7 +1582,7 @@ runUserGuard
   -> UserGuard QualifiedName PactValue
   -> EvalM e b i (EvalResult e b i)
 runUserGuard info cont handler env (UserGuard qn args) =
-  getModuleMemberWithHash info (_cePactDb env) qn >>= \case
+  getModuleMemberWithHash info qn >>= \case
     (Dfun d, mh) -> do
       when (length (_dfunArgs d) /= length args) $ throwExecutionError info CannotApplyPartialClosure
       let env' = sysOnlyEnv env
@@ -1703,13 +1614,16 @@ eval purity benv term = do
 evalWithinCap
   :: forall e b i
   .  ()
-  => Purity
+  => i
+  -> Purity
   -> BuiltinEnv e b i
-  -> CapToken FullyQualifiedName PactValue
+  -> CapToken QualifiedName PactValue
   -> EvalTerm b i
   -> EvalM e b i PactValue
-evalWithinCap purity benv ct term = do
+evalWithinCap info purity benv (CapToken qualName vs) term = do
   ee <- viewEvalEnv id
+  (_, mh) <- getDefCapQN info qualName
+  let ct = CapToken (qualNameToFqn qualName mh) vs
   let cekEnv = envFromPurity purity (CEKEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) False)
   evalCap (view termInfo term) Mt CEKNoHandler cekEnv ct PopCapInvoke NormalCapEval term
     >>= \case
@@ -1790,8 +1704,7 @@ isKeysetInSigs info cont handler env ks@(KeySet kskeys ksPred) = do
       CustomPredicate n -> runCustomPred matched n
   runCustomPred matched = \case
     TQN qn -> do
-      pdb <- viewEvalEnv eePactDb
-      getModuleMemberWithHash info pdb qn >>= \case
+      getModuleMemberWithHash info qn >>= \case
         (Dfun d, mh) -> do
           clo <- mkDefunClosure d (qualNameToFqn qn mh) env
           let cont' = BuiltinC env info (RunKeysetPredC ks) cont
@@ -1819,7 +1732,7 @@ isKeysetNameInSigs
   -> EvalM e b i (EvalResult e b i)
 isKeysetNameInSigs info cont handler env ksn = do
   pdb <- viewEvalEnv eePactDb
-  liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
+  liftGasM info (_pdbRead pdb DKeySets ksn) >>= \case
     Just ks -> isKeysetInSigs info cont handler env ks
     Nothing ->
       throwExecutionError info (NoSuchKeySet ksn)

@@ -40,9 +40,6 @@ import Pact.Core.SPV
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.LexUtils as Lisp
-import qualified Pact.Core.IR.Eval.CEK as CEK
-import qualified Pact.Core.IR.Eval.CoreBuiltin as CEK
-import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import Pact.Core.Gas.TableGasModel
 import Pact.Core.Gas
 import Pact.Core.Namespace
@@ -68,20 +65,10 @@ mkKs :: PublicKeyText -> PactValue
 mkKs a = PGuard $ GKeyset $ KeySet (S.singleton a) KeysAll
 
 interpretBigStep :: Interpreter ExecRuntime CoreBuiltin SpanInfo
-interpretBigStep =
-  Interpreter runGuard runTerm (\_ _ -> error "unimplemented")
-  where
-  runTerm purity term = CEK.eval purity eEnv term
-  runGuard info g = CEK.interpretGuard info eEnv g
-  eEnv = CEK.coreBuiltinEnv @ExecRuntime
+interpretBigStep = evalInterpreter
 
 interpretDirect :: Interpreter ExecRuntime CoreBuiltin SpanInfo
-interpretDirect =
-  Interpreter runGuard runTerm (\_ _ -> error "unimplemented")
-  where
-  runTerm purity term = Direct.eval purity eEnv term
-  runGuard info g = Direct.interpretGuard info eEnv g
-  eEnv = Direct.coreBuiltinEnv
+interpretDirect = evalDirectInterpreter
 
 
 data CoinBenchSenders

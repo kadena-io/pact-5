@@ -45,7 +45,7 @@ runPactDbRegression pdb = do
   rowEnc <- ignoreGas def $ _encodeRowData serialisePact_raw_spaninfo row
   ignoreGas def $ _pdbWrite pdb Insert (DUserTables usert) (RowKey "key1") row
   row' <- do
-      _pdbRead pdb (DUserTables usert) (RowKey "key1") >>= \case
+      ignoreGas def (_pdbRead pdb (DUserTables usert) (RowKey "key1")) >>= \case
         Nothing -> error "expected row"
         Just r -> pure r
   assertEqual "row should be identical to its saved/recalled value" row row'
@@ -58,7 +58,7 @@ runPactDbRegression pdb = do
   row2Enc <- ignoreGas def $ _encodeRowData serialisePact_raw_spaninfo row2
 
   ignoreGas def $ _pdbWrite pdb Update (DUserTables usert) (RowKey "key1") row2
-  row2' <- _pdbRead pdb (DUserTables usert) (RowKey "key1") >>= \case
+  row2' <- ignoreGas def $ _pdbRead pdb (DUserTables usert) (RowKey "key1") >>= \case
     Nothing -> error "expected row"
     Just r -> pure r
   assertEqual "user update should overwrite with new value" row2 row2'
@@ -67,7 +67,7 @@ runPactDbRegression pdb = do
     ks = KeySet (S.fromList [PublicKeyText "skdjhfskj"]) KeysAll
     ksEnc = _encodeKeySet serialisePact_raw_spaninfo ks
   _ <- ignoreGas def $ _pdbWrite pdb Write DKeySets (KeySetName "ks1" Nothing) ks
-  ks' <- _pdbRead pdb DKeySets (KeySetName "ks1" Nothing) >>= \case
+  ks' <- ignoreGas def $ _pdbRead pdb DKeySets (KeySetName "ks1" Nothing) >>= \case
     Nothing -> error "expected keyset"
     Just r -> pure r
   assertEqual "keyset should be equal after storage/retrieval" ks ks'
@@ -79,7 +79,7 @@ runPactDbRegression pdb = do
   let mdEnc = _encodeModuleData serialisePact_raw_spaninfo md
   ignoreGas def $ _pdbWrite pdb Write DModules mn md
 
-  md' <- _pdbRead pdb DModules mn >>= \case
+  md' <- ignoreGas def $ _pdbRead pdb DModules mn >>= \case
     Nothing -> error "Expected module"
     Just r -> pure r
   assertEqual "module should be identical to its saved/recalled value" md md'
@@ -96,21 +96,21 @@ runPactDbRegression pdb = do
   _ <- _pdbBeginTx pdb Transactional
 
   ignoreGas def $ _pdbWrite pdb Insert (DUserTables usert) (RowKey "key2") row
-  r1 <- _pdbRead pdb (DUserTables usert) (RowKey "key2") >>= \case
+  r1 <- ignoreGas def $ _pdbRead pdb (DUserTables usert) (RowKey "key2") >>= \case
     Nothing -> error "expected row"
     Just r -> pure r
   assertEqual "user insert key2 pre-rollback" row r1
 
   do
-    rkeys <- _pdbKeys pdb (DUserTables usert)
+    rkeys <- ignoreGas def $ _pdbKeys pdb (DUserTables usert)
     assertEqual "keys pre-rollback [key1, key2]" [RowKey "key1", RowKey "key2"] rkeys
 
     _pdbRollbackTx pdb
     _ <- _pdbBeginTx pdb Transactional
-    r2 <- _pdbRead pdb (DUserTables usert) (RowKey "key2")
+    r2 <- ignoreGas def $ _pdbRead pdb (DUserTables usert) (RowKey "key2")
     assertEqual "rollback erases key2" Nothing r2
 
-    rkeys2 <- _pdbKeys pdb (DUserTables usert)
+    rkeys2 <- ignoreGas def $ _pdbKeys pdb (DUserTables usert)
     assertEqual "keys post-rollback [key1]" [RowKey "key1"] rkeys2
 
   _ <- _pdbCommitTx pdb
@@ -125,5 +125,5 @@ loadModule = do
   Right _ <- runEvalMResult (ExecEnv ee) def $ do
     p <- liftEither (parseOnlyProgram src)
     traverse (interpretTopLevel evalInterpreter) p
-  Just md <- _pdbRead pdb DModules (ModuleName "test" Nothing)
+  Just md <- ignoreGas def $ _pdbRead pdb DModules (ModuleName "test" Nothing)
   pure md

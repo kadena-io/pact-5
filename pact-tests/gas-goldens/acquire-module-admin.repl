@@ -1,0 +1,10 @@
+(begin-tx)
+(module m g
+  (defcap g ()
+  (map (+ 1) (enumerate 0 20))))
+(commit-tx)
+
+(begin-tx)
+(acquire-module-admin m)
+(acquire-module-admin m)
+(commit-tx)

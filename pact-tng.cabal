@@ -335,6 +335,8 @@ executable gasmodel
     , criterion
     , terminal-progress-bar
     , neat-interpolation
+    , hedgehog
+    , pact-tng:test-utils
 
   other-modules:
     Pact.Core.GasModel.BuiltinsGas
@@ -463,6 +465,7 @@ library test-utils
     , pact-tng:unsafe
     , lsp-test >= 0.17
     , lsp-types
+    , pact-time
 
   exposed-modules:
     , Pact.Core.Gen

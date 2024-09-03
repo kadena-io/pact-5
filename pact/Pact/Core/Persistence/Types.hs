@@ -214,9 +214,9 @@ newtype GasM b i a
 data PactDb b i
   = PactDb
   { _pdbPurity :: !Purity
-  , _pdbRead :: forall k v. Domain k v b i -> k -> IO (Maybe v)
+  , _pdbRead :: forall k v. Domain k v b i -> k -> GasM b i (Maybe v)
   , _pdbWrite :: forall k v. WriteType -> Domain k v b i -> k -> v -> GasM b i ()
-  , _pdbKeys :: forall k v. Domain k v b i -> IO [k]
+  , _pdbKeys :: forall k v. Domain k v b i -> GasM b i [k]
   , _pdbCreateUserTable :: TableName -> GasM b i ()
   , _pdbBeginTx :: ExecutionMode -> IO (Maybe TxId)
   , _pdbCommitTx :: IO [TxLog ByteString]
@@ -237,12 +237,7 @@ makeClassy ''PactDb
 data GuardTableOp
   = GtRead
   | GtSelect
-  | GtWithRead
-  | GtWithDefaultRead
   | GtKeys
-  | GtTxIds
-  | GtTxLog
-  | GtKeyLog
   | GtWrite
   | GtCreateTable
   deriving Show

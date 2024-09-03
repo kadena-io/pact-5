@@ -664,6 +664,8 @@ data EvalError
   -- ^ Hyperlane error
   | HyperlaneDecodeError HyperlaneDecodeError
   -- ^ Hyperlane decoding error
+  | ModuleAdminNotAcquired ModuleName
+  -- ^ Module admin was needed for a particular operation, but has not been acquired.
   | UnknownException
   -- ^ Used by chainweb for unknown exceptions
   deriving (Eq, Show, Generic)
@@ -859,6 +861,8 @@ instance Pretty EvalError where
       "Invalid custom predicate for keyset" <+> pretty pn
     HyperlaneError he -> "Hyperlane native error:" <+> pretty he
     HyperlaneDecodeError he -> "Hyperlane decode error:" <+> pretty he
+    ModuleAdminNotAcquired mn ->
+      "Module admin necessary for operation but has not been acquired:" <> pretty mn
     UnknownException ->
       "Unknown exception"
 

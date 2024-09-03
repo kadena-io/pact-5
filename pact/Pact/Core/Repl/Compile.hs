@@ -129,7 +129,11 @@ checkReplNativesEnabled = \case
 
 interpretEvalBigStep :: ReplInterpreter
 interpretEvalBigStep =
-  Interpreter { eval = evalBigStep, resumePact = evalResumePact, interpretGuard = interpretGuardBigStep}
+  Interpreter
+  { eval = evalBigStep
+  , resumePact = evalResumePact
+  , interpretGuard = interpretGuardBigStep
+  , evalWithCapability = evalWithCap}
   where
   evalBigStep purity term =
     CEK.eval purity replBuiltinEnv term
@@ -137,10 +141,15 @@ interpretEvalBigStep =
     CEK.evalResumePact info replBuiltinEnv pactExec
   interpretGuardBigStep info g =
     CEK.interpretGuard info replBuiltinEnv g
+  evalWithCap info purity ct term =
+    CEK.evalWithinCap info purity replBuiltinEnv ct term
 
 interpretEvalDirect :: ReplInterpreter
 interpretEvalDirect =
-  Interpreter { eval = evalDirect, resumePact = evalResumePact, interpretGuard = interpretGuardDirect}
+  Interpreter { eval = evalDirect
+  , resumePact = evalResumePact
+  , interpretGuard = interpretGuardDirect
+  , evalWithCapability = evalWithCap}
   where
   evalDirect purity term =
     Direct.eval purity Direct.replBuiltinEnv term
@@ -148,6 +157,8 @@ interpretEvalDirect =
     Direct.evalResumePact info Direct.replBuiltinEnv pactExec
   interpretGuardDirect info g =
     Direct.interpretGuard info Direct.replBuiltinEnv g
+  evalWithCap info purity ct term =
+    Direct.evalWithinCap info purity Direct.replBuiltinEnv ct term
 
 isPactFile :: FilePath -> Bool
 isPactFile f = takeExtension f == ".pact"

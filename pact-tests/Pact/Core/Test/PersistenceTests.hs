@@ -62,7 +62,7 @@ keysetPersistRoundtrip serial builtins keysetGen =
     evalEnv <- liftIO $ getEvalEnv serial builtins
     writtenKeySetResult <- liftIO $ runEvalM (ExecEnv evalEnv) def  $ withSqlitePactDb serial ":memory:" $ \db -> do
       evalWrite def db Insert DKeySets keysetName keyset
-      liftIO $ _pdbRead db DKeySets keysetName
+      liftGasM def $ _pdbRead db DKeySets keysetName
     case writtenKeySetResult of
       (Left _, _) -> fail "Unexpected EvalM error"
       (Right writtenKeySet, _) -> Just keyset === writtenKeySet
@@ -74,7 +74,7 @@ moduleDataRoundtrip serial builtins b i = property $ do
   evalEnv <- liftIO $ getEvalEnv serial builtins
   readResult <- liftIO $ runEvalM (ExecEnv evalEnv) def $ withSqlitePactDb serial ":memory:" $ \db -> do
     () <- evalWrite def db Insert DModules moduleName moduleData
-    liftIO $ _pdbRead db DModules moduleName
+    liftGasM def $ _pdbRead db DModules moduleName
   case readResult of
     (Left _, _) -> fail "Unexpected EvalM error"
     (Right writtenModuleData, _) ->
@@ -87,7 +87,7 @@ defPactExecRoundtrip serial builtins _b _i = property $ do
   evalEnv <- liftIO $ getEvalEnv serial builtins
   writeResult <- liftIO $ runEvalM (ExecEnv evalEnv) def $ withSqlitePactDb serial ":memory:" $ \db -> do
     () <- evalWrite def db Insert DDefPacts defPactId defPactExec
-    liftIO $ _pdbRead db DDefPacts defPactId
+    liftGasM def $ _pdbRead db DDefPacts defPactId
   case writeResult of
     (Left _, _) -> fail "Unexpected EvalM error"
     (Right writtenDefPactExec, _) ->
@@ -100,7 +100,7 @@ namespaceRoundtrip serial builtins = property $ do
   evalEnv <- liftIO $ getEvalEnv serial builtins
   writeResult <- liftIO $ runEvalM (ExecEnv evalEnv) def $ withSqlitePactDb serial ":memory:" $ \db -> do
     () <- evalWrite def db Insert DNamespaces ns namespace
-    liftIO $ _pdbRead db DNamespaces ns
+    liftGasM def $ _pdbRead db DNamespaces ns
   case writeResult of
     (Left _, _) -> fail "Unexpected EvalM error"
     (Right writtenNamespace, _) ->

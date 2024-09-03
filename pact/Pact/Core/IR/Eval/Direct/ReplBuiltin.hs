@@ -386,11 +386,10 @@ envExecConfig info b _env = \case
 envNamespacePolicy :: NativeFunction ReplRuntime ReplCoreBuiltin SpanInfo
 envNamespacePolicy info b _env = \case
   [VBool allowRoot, VClosure (C clo)] -> do
-    pdb <- viewEvalEnv eePactDb
     let qn = fqnToQualName (_cloFqName clo)
     when (_cloArity clo /= 2) $
       throwNativeExecutionError info b "Namespace manager function has invalid argument length"
-    getModuleMember info pdb qn >>= \case
+    getModuleMember info qn >>= \case
       Dfun _ -> do
         let nsp = SmartNamespacePolicy allowRoot qn
         replEvalEnv . eeNamespacePolicy .== nsp

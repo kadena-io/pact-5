@@ -65,6 +65,7 @@ import Pact.Core.Capabilities
 import Pact.Core.Namespace
 import Pact.Core.Gas
 import Pact.Core.Type
+import Pact.Core.ModRefs
 #ifndef WITHOUT_CRYPTO
 import Pact.Core.Crypto.Pairing
 import Pact.Core.Crypto.Hash.Poseidon
@@ -804,7 +805,7 @@ keysetRefGuard info b cont handler env = \case
       Left {} -> throwNativeExecutionError info b "incorrect keyset name format"
       Right ksn -> do
         let pdb = view cePactDb env
-        liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
+        liftGasM info (_pdbRead pdb DKeySets ksn) >>= \case
           Nothing ->
             throwExecutionError info (NoSuchKeySet ksn)
           Just _ -> returnCEKValue cont handler (VGuard (GKeySetRef ksn))
@@ -980,51 +981,87 @@ coreBind info b cont handler _env = \case
 --------------------------------------------------
 
 createTable :: (IsBuiltin b) => NativeFunction e b i
-createTable info b cont handler env = \case
-  [VTable tv] -> do
+createTable info b cont handler (_cePactDb -> pdb) = \case
+  [VTable tv@(TableValue tn _ _)] -> do
     enforceTopLevelOnly info b
-    let cont' = BuiltinC env info (CreateTableC tv) cont
-    guardTable info cont' handler env tv GtCreateTable
+    guardTable info tv GtCreateTable
+    evalCreateUserTable info pdb tn
+    returnCEKValue cont handler (VString "TableCreated")
   args -> argsError info b args
 
 dbSelect :: (IsBuiltin b) => NativeFunction e b i
 dbSelect info b cont handler env = \case
   [VTable tv, VClosure clo] -> do
-    let cont' = BuiltinC env info (PreSelectC tv clo Nothing) cont
-    guardTable info cont' handler env tv GtSelect
+    preSelect tv clo Nothing
   [VTable tv, VList li, VClosure clo] -> do
     li' <- traverse (fmap Field . asString info b) (V.toList li)
-    let cont' = BuiltinC env info (PreSelectC tv clo (Just li')) cont
-    guardTable info cont' handler env tv GtSelect
+    preSelect tv clo (Just li')
   args -> argsError info b args
+  where
+  pdb = _cePactDb env
+  preSelect tv clo mfields = do
+    guardTable info tv GtSelect
+    liftGasM info (_pdbKeys pdb (tvToDomain tv)) >>= \case
+      k:ks -> liftGasM info (_pdbRead pdb (tvToDomain tv) k) >>= \case
+          Just (RowData r) -> do
+            let bf = SelectC tv clo (ObjectData r) ks [] mfields
+                cont' = BuiltinC env info bf cont
+            applyLam clo [VObject r] cont' handler
+          Nothing ->
+            failInvariant info (InvariantNoSuchKeyInTable (_tvName tv) k)
+      [] -> returnCEKValue cont handler (VList mempty)
 
 foldDb :: (IsBuiltin b) => NativeFunction e b i
 foldDb info b cont handler env = \case
-  [VTable tv, VClosure queryClo, VClosure consumer] -> do
-    let cont' = BuiltinC env info (PreFoldDbC tv queryClo consumer) cont
-    guardTable info cont' handler env tv GtSelect
+  [VTable tv, VClosure queryClo, VClosure consumerClo] -> do
+    -- let cont' = BuiltinC env info (PreFoldDbC tv queryClo consumer) cont
+    guardTable info tv GtSelect
+    let tblDomain = DUserTables (_tvName tv)
+    let pdb = _cePactDb env
+    -- Todo: keys gas
+    liftGasM info (_pdbKeys pdb tblDomain) >>= \case
+      rk@(RowKey raw):remaining' -> liftGasM info (_pdbRead pdb (tvToDomain tv) rk) >>= \case
+        Just (RowData row) -> do
+          let rdf = FoldDbFilterC tv queryClo consumerClo (rk, ObjectData row) remaining' []
+              cont' = BuiltinC env info rdf cont
+          applyLam queryClo [VString raw, VObject row] cont' handler
+        Nothing ->
+          failInvariant info (InvariantNoSuchKeyInTable (_tvName tv) rk)
+      [] -> returnCEKValue cont handler (VList mempty)
   args -> argsError info b args
 
 dbRead :: (IsBuiltin b) => NativeFunction e b i
 dbRead info b cont handler env = \case
   [VTable tv, VString k] -> do
-    let cont' = BuiltinC env info (ReadC tv (RowKey k)) cont
-    guardTable info cont' handler env tv GtRead
+    guardTable info tv GtRead
+    let rowkey = RowKey k
+    liftGasM info (_pdbRead (_cePactDb env) (tvToDomain tv) rowkey) >>= \case
+      Just (RowData rdata) -> do
+        bytes <- sizeOf info SizeOfV0 rdata
+        chargeGasArgs info (GRead bytes)
+        returnCEKValue cont handler (VObject rdata)
+      Nothing ->
+        returnCEKError info cont handler $
+          NoSuchObjectInDb (_tvName tv) rowkey
   args -> argsError info b args
 
 dbWithRead :: (IsBuiltin b) => NativeFunction e b i
 dbWithRead info b cont handler env = \case
   [VTable tv, VString k, VClosure clo] -> do
-    let cont1 = Fn clo env [] [] cont
-    let cont2 = BuiltinC env info (ReadC tv (RowKey k)) cont1
-    guardTable info cont2 handler env tv GtWithRead
+    let cont' = Fn clo env [] [] cont
+    dbRead info b cont' handler env [VTable tv, VString k]
   args -> argsError info b args
 
 dbWithDefaultRead :: (IsBuiltin b) => NativeFunction e b i
 dbWithDefaultRead info b cont handler env = \case
   [VTable tv, VString k, VObject defaultObj, VClosure clo] -> do
-    let cont' = BuiltinC env info (WithDefaultReadC tv (RowKey k) (ObjectData defaultObj) clo) cont
-    guardTable info cont' handler env tv GtWithDefaultRead
+    guardTable info tv GtRead
+    liftGasM info (_pdbRead (_cePactDb env) (tvToDomain tv) (RowKey k)) >>= \case
+      Just (RowData rdata) -> do
+        bytes <- sizeOf info SizeOfV0 rdata
+        chargeGasArgs info (GRead bytes)
+        applyLam clo [VObject rdata] cont handler
+      Nothing -> applyLam clo [VObject defaultObj] cont handler
   args -> argsError info b args
 
 -- | Todo: schema checking here? Or only on writes?
@@ -1036,9 +1073,17 @@ dbInsert = write' Insert
 
 write' :: (IsBuiltin b) => WriteType -> NativeFunction e b i
 write' wt info b cont handler env = \case
-  [VTable tv, VString key, VObject o] -> do
-    let cont' = BuiltinC env info (WriteC tv wt (RowKey key) (ObjectData o)) cont
-    guardTable info cont' handler env tv GtWrite
+  [VTable tv, VString key, VObject rv] -> do
+    guardTable info tv GtWrite
+    let check' = if wt == Update then checkPartialSchema else checkSchema
+    if check' rv (_tvSchema tv) then do
+      let rdata = RowData rv
+      rvSize <- sizeOf info SizeOfV0 rv
+      chargeGasArgs info (GWrite rvSize)
+      evalWrite info (_cePactDb env) wt (tvToDomain tv) (RowKey key) rdata
+      returnCEKValue cont handler (VString "Write succeeded")
+    else
+      throwExecutionError info (WriteValueDidNotMatchSchema (_tvSchema tv) (ObjectData rv))
   args -> argsError info b args
 
 dbUpdate :: (IsBuiltin b) => NativeFunction e b i
@@ -1047,8 +1092,10 @@ dbUpdate = write' Update
 dbKeys :: (IsBuiltin b) => NativeFunction e b i
 dbKeys info b cont handler env = \case
   [VTable tv] -> do
-    let cont' = BuiltinC env info (KeysC tv) cont
-    guardTable info cont' handler env tv GtKeys
+    guardTable info tv GtKeys
+    ks <- liftGasM info (_pdbKeys (_cePactDb env) (tvToDomain tv))
+    let li = V.fromList (PString . _rowKey <$> ks)
+    returnCEKValue cont handler (VList li)
   args -> argsError info b args
 
 defineKeySet'
@@ -1072,7 +1119,7 @@ defineKeySet' info cont handler env ksname newKs  = do
             chargeGasArgs info (GWrite newKsSize)
             evalWrite info pdb Write DKeySets ksn newKs
             returnCEKValue cont handler (VString "Keyset write success")
-      liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
+      liftGasM info (_pdbRead pdb DKeySets ksn) >>= \case
         Just oldKs -> do
           let cont' = BuiltinC env info (DefineKeysetC ksn newKs) cont
           isKeysetInSigs info cont' handler env oldKs
@@ -1128,10 +1175,9 @@ installCapability info b cont handler env = \case
   args -> argsError info b args
 
 coreEmitEvent :: (IsBuiltin b) => NativeFunction e b i
-coreEmitEvent info b cont handler env = \case
+coreEmitEvent info b cont handler _env = \case
   [VCapToken ct@(CapToken fqn _)] -> do
-    let cont' = BuiltinC env info (EmitEventC ct) cont
-    guardForModuleCall info cont' handler env (_fqModule fqn) $ do
+    guardForModuleCall info (_fqModule fqn) $ do
       -- Todo: this code is repeated in the EmitEventFrame code
       d <- getDefCap info fqn
       enforceMeta (_dcapMeta d)
@@ -1452,12 +1498,12 @@ days info b cont handler _env = \case
   args -> argsError info b args
 
 describeModule :: (IsBuiltin b) => NativeFunction e b i
-describeModule info b cont handler env = \case
+describeModule info b cont handler _env = \case
   [VString s] -> case parseModuleName s of
     Just mname -> do
       enforceTopLevelOnly info b
       checkNonLocalAllowed info b
-      getModuleData info (view cePactDb env) mname >>= \case
+      getModuleData info mname >>= \case
         ModuleData m _ -> returnCEKValue cont handler $
           VObject $ M.fromList $ fmap (over _1 Field)
             [ ("name", PString (renderModuleName (_mName m)))
@@ -1491,7 +1537,7 @@ dbDescribeKeySet info b cont handler env = \case
     enforceTopLevelOnly info b
     case parseAnyKeysetName s of
       Right ksn -> do
-        liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
+        liftGasM info (_pdbRead pdb DKeySets ksn) >>= \case
           Just ks ->
             returnCEKValue cont handler (VGuard (GKeyset ks))
           Nothing ->
@@ -1565,7 +1611,7 @@ coreNamespace info b cont handler env = \case
       returnCEKValue cont handler (VString "Namespace reset to root")
     else do
       chargeGasArgs info $ GRead $ fromIntegral $ T.length n
-      liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
+      liftGasM info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
         Just ns -> do
           size <- sizeOf info SizeOfV0 ns
           chargeGasArgs info $ GRead size
@@ -1586,7 +1632,7 @@ coreDefineNamespace info b cont handler env = \case
     let nsn = NamespaceName n
         ns = Namespace nsn usrG adminG
     chargeGasArgs info $ GRead $ fromIntegral $ T.length n
-    liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
+    liftGasM info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
       -- G!
       -- https://static.wikia.nocookie.net/onepiece/images/5/52/Lao_G_Manga_Infobox.png/revision/latest?cb=20150405020446
       -- Enforce the old guard
@@ -1601,7 +1647,7 @@ coreDefineNamespace info b cont handler env = \case
           chargeGasArgs info (GWrite nsSize)
           evalWrite info pdb Write DNamespaces nsn ns
           returnCEKValue cont handler $ VString $ "Namespace defined: " <> n
-        SmartNamespacePolicy _ fun -> getModuleMemberWithHash info pdb fun >>= \case
+        SmartNamespacePolicy _ fun -> getModuleMemberWithHash info fun >>= \case
           (Dfun d, mh) -> do
             clo <- mkDefunClosure d (qualNameToFqn fun mh) env
             let cont' = BuiltinC env info (DefineNamespaceC ns) cont
@@ -1626,7 +1672,7 @@ coreDescribeNamespace info b cont handler _env = \case
   [VString n] -> do
     pdb <- viewEvalEnv eePactDb
     chargeGasArgs info $ GRead $ fromIntegral $ T.length n
-    liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
+    liftGasM info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
       Just existing@(Namespace _ usrG laoG) -> do
         size <- sizeOf info SizeOfV0 existing
         chargeGasArgs info $ GRead size
@@ -1875,6 +1921,14 @@ coreHyperlaneEncodeTokenMessage info b cont handler _env = \case
         returnCEKValue cont handler (VString encoded)
   args -> argsError info b args
 
+coreAcquireModuleAdmin :: (IsBuiltin b) => NativeFunction e b i
+coreAcquireModuleAdmin info b cont handler env = \case
+  [VModRef m] -> do
+    let cont' = IgnoreValueC (PString ("Module admin for module " <> renderModuleName (_mrModule m)  <> " acquired")) cont
+    mdl <- getModule info (_mrModule m)
+    acquireModuleAdmin info cont' handler env mdl
+  args -> argsError info b args
+
 -----------------------------------
 -- Builtin exports
 -----------------------------------
@@ -2029,3 +2083,4 @@ coreBuiltinRuntime = \case
   CoreHyperlaneMessageId -> coreHyperlaneMessageId
   CoreHyperlaneDecodeMessage -> coreHyperlaneDecodeTokenMessage
   CoreHyperlaneEncodeMessage -> coreHyperlaneEncodeTokenMessage
+  CoreAcquireModuleAdmin -> coreAcquireModuleAdmin

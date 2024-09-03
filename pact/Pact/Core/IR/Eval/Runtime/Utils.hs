@@ -52,6 +52,8 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , renderPactValue
  , createPrincipalForGuard
  , createEnumerateList
+ , guardForModuleCall
+ , guardTable
  ) where
 
 import Control.Lens hiding (from, to)
@@ -61,7 +63,7 @@ import Data.IORef
 import Data.Monoid
 import Data.Vector(Vector)
 import Data.Foldable(find, toList)
-import Data.Maybe(listToMaybe, maybeToList)
+import Data.Maybe(maybeToList)
 import Data.Text(Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -136,10 +138,30 @@ getDefCap info fqn = lookupFqName fqn >>= \case
   Just _ -> failInvariant info (InvariantExpectedDefCap fqn)
   _ -> failInvariant info (InvariantUnboundFreeVariable fqn)
 
+guardTable
+  :: ()
+  => i
+  -> TableValue
+  -> GuardTableOp
+  -> EvalM e b i ()
+guardTable i (TableValue tn mh _) dbop = do
+  let mn = _tableModuleName tn
+  checkLocalBypass $
+    guardForModuleCall i mn $ do
+      mdl <- getModule i mn
+      enforceBlessedHashes i mdl mh
+  where
+  checkLocalBypass notBypassed = do
+    enabled <- isExecutionFlagSet FlagAllowReadInLocal
+    case dbop of
+      GtWrite -> notBypassed
+      GtCreateTable -> notBypassed
+      _ | enabled -> pure ()
+        | otherwise -> notBypassed
+
 getDefCapQN :: i -> QualifiedName -> EvalM e b i (EvalDefCap b i, ModuleHash)
 getDefCapQN info qn = do
-  pdb <- viewEvalEnv eePactDb
-  getModuleMemberWithHash info pdb qn >>= \case
+  getModuleMemberWithHash info qn >>= \case
     (DCap d, mh) -> pure (d, mh)
     (_, mh) -> failInvariant info (InvariantUnboundFreeVariable (qualNameToFqn qn mh))
 
@@ -174,8 +196,9 @@ pvToArgTypeError = \case
 
 findCallingModule :: EvalM e b i (Maybe ModuleName)
 findCallingModule = do
-  stack <- use esStack
-  pure $ listToMaybe $ fmap (_fqModule . _sfName) stack
+  use esStack >>= \case
+    (StackFrame fqn _ _ _) : _ -> pure (Just (_fqModule fqn))
+    _ -> pure Nothing
 
 calledByModule
   :: ModuleName
@@ -196,9 +219,7 @@ failInvariant i reason =
 
 getCallingModule :: i -> EvalM e b i (EvalModule b i)
 getCallingModule info = findCallingModule >>= \case
-  Just mn -> do
-    pdb <- viewEvalEnv eePactDb
-    getModule info pdb mn
+  Just mn -> getModule info mn
   Nothing ->
     throwExecutionError info (EvalError "no module call in stack")
 
@@ -360,6 +381,21 @@ enforceBlessedHashes info md mh
   | _mHash md == mh = return ()
   | mh `S.member` _mBlessed md = return ()
   | otherwise = throwExecutionError info (HashNotBlessed (_mName md) mh)
+
+guardForModuleCall
+  :: ()
+  => i
+  -> ModuleName
+  -> EvalM e b i a
+  -> EvalM e b i a
+guardForModuleCall i currMod onFound =
+  findCallingModule >>= \case
+    Just mn | mn == currMod -> onFound
+    _ -> do
+      mc <- use (esCaps . csModuleAdmin)
+      if S.member currMod mc then onFound
+      else
+        throwExecutionError i (ModuleAdminNotAcquired currMod)
 
 enforceStackTopIsDefcap
   :: IsBuiltin b

@@ -81,9 +81,9 @@ readOnlyEnv e
              , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
              , _pdbKeys = \_ -> dbOpDisallowed
              , _pdbCreateUserTable = \_ -> dbOpDisallowed
-             , _pdbBeginTx = \_ -> dbOpDisallowed
-             , _pdbCommitTx = dbOpDisallowed
-             , _pdbRollbackTx = dbOpDisallowed
+             , _pdbBeginTx = \_ -> dbOpDisallowedIO
+             , _pdbCommitTx = dbOpDisallowedIO
+             , _pdbRollbackTx = dbOpDisallowedIO
              }
       in set cePactDb newPactdb e
 
@@ -98,14 +98,14 @@ sysOnlyEnv e
          , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
          , _pdbKeys = const dbOpDisallowed
          , _pdbCreateUserTable = \_ -> dbOpDisallowed
-         , _pdbBeginTx = const dbOpDisallowed
-         , _pdbCommitTx = dbOpDisallowed
-         , _pdbRollbackTx = dbOpDisallowed
+         , _pdbBeginTx = const dbOpDisallowedIO
+         , _pdbCommitTx = dbOpDisallowedIO
+         , _pdbRollbackTx = dbOpDisallowedIO
          }
   in set cePactDb newPactdb e
   where
   pdb = view cePactDb e
-  read' :: Domain k v b i -> k -> IO (Maybe v)
+  read' :: Domain k v b i -> k -> GasM b i (Maybe v)
   read' dom k = case dom of
     DUserTables _ -> dbOpDisallowed
     _ -> _pdbRead pdb dom k

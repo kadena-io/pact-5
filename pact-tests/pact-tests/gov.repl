@@ -41,14 +41,14 @@
 
 ;; direct read will attempt to grant admin
 (env-hash (hash "tx1"))
-(expect-failure "admin grant fails for tx1" (read votes "bob"))
+(expect-failure "admin grant fails for tx1" (acquire-module-admin govtest))
 
 (env-hash (hash "tx3"))
-(expect-failure "admin grant fails for tx3" (read votes "bob"))
+(expect-failure "admin grant fails for tx3" (acquire-module-admin govtest))
 
 (env-hash (hash "tx2"))
 
-(expect "admin grant succeeds for tx2" { "vote-hash": (hash "tx2") } (read votes "bob"))
+(expect "admin grant succeeds for tx2" "Module admin for module govtest acquired" (acquire-module-admin govtest))
 
 ;; prove that admin is granted for rest of tx by resetting tx-hash to non-winning value
 

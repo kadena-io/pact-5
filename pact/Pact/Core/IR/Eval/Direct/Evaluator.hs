@@ -29,7 +29,8 @@ module Pact.Core.IR.Eval.Direct.Evaluator
  , evalCap
  , installCap
  , coreBuiltinRuntime
- , enforcePactValue) where
+ , enforcePactValue
+ , evalWithinCap) where
 
 import Control.Lens hiding (op, from, to, parts)
 import Control.Monad
@@ -153,6 +154,26 @@ eval purity benv term = do
     VPactValue pv -> pure pv
     _ -> throwExecutionError (view termInfo term) (EvalError "Evaluation did not reduce to a value")
 
+
+evalWithinCap
+  :: forall e b i
+  .  (IsBuiltin b)
+  => i
+  -> Purity
+  -> BuiltinEnv e b i
+  -> CapToken QualifiedName PactValue
+  -> EvalTerm b i
+  -> EvalM e b i PactValue
+evalWithinCap info purity benv (CapToken qualName vs) term = do
+  ee <- viewEvalEnv id
+  (_, mh) <- getDefCapQN info qualName
+  let ct = CapToken (qualNameToFqn qualName mh) vs
+  let cekEnv = envFromPurity purity (DirectEnv mempty (_eePactDb ee) benv (_eeDefPactStep ee) False)
+  evalCap (view termInfo term) cekEnv ct PopCapInvoke NormalCapEval term >>= \case
+    VPactValue pv -> pure pv
+    _ ->
+      throwExecutionError (view termInfo term) (EvalError "Evaluation did not reduce to a value")
+
 interpretGuard
   :: forall e b i
   .  (IsBuiltin b)
@@ -225,12 +246,11 @@ evaluate env = \case
             failInvariant info (InvariantInvalidDefKind (defKind mname d) "in var position")
           Nothing ->
             failInvariant info (InvariantUnboundFreeVariable (FullyQualifiedName mname (_nName n) mh))
-      NModRef m ifs -> case ifs of
-        [] -> throwExecutionError info (ModRefImplementsNoInterfaces m)
-        _ -> return (VModRef (ModRef m (S.fromList ifs)))
+      NModRef m ifs ->
+        return (VModRef (ModRef m (S.fromList ifs)))
       NDynRef (DynamicRef dArg i) -> case RAList.lookup (view ceLocal env) i of
         Just (VModRef mr) -> do
-          modRefHash <- _mHash <$> getModule info (view cePactDb env) (_mrModule mr)
+          modRefHash <- _mHash <$> getModule info (_mrModule mr)
           let nk = NTopLevel (_mrModule mr) modRefHash
           evaluate env (Var (Name dArg nk) info)
         Just _ -> throwExecutionError info (DynNameIsNotModRef dArg)
@@ -299,7 +319,7 @@ evaluate env = \case
       enforceNotWithinDefcap info env "with-capability"
       rawCap <- enforceCapToken info =<< evaluate env cap
       let capModule = view (ctName . fqModule) rawCap
-      guardForModuleCall info env capModule $ pure ()
+      guardForModuleCall info capModule $ pure ()
       evalCap info env rawCap PopCapInvoke NormalCapEval body
     CreateUserGuard n uargs -> do
       fqn <- nameToFQN info env n
@@ -521,33 +541,11 @@ nameToFQN info env (Name n nk) = case nk of
   NTopLevel mn mh -> pure (FullyQualifiedName mn n mh)
   NDynRef (DynamicRef dArg i) -> case RAList.lookup (view ceLocal env) i of
     Just (VModRef mr) -> do
-      md <- getModule info (view cePactDb env) (_mrModule mr)
+      md <- getModule info (_mrModule mr)
       pure (FullyQualifiedName (_mrModule mr) dArg (_mHash md))
     Just _ -> throwExecutionError info (DynNameIsNotModRef n)
     Nothing -> failInvariant info (InvariantInvalidBoundVariable n)
   _ -> failInvariant info (InvariantInvalidBoundVariable n)
-
-guardTable
-  :: (IsBuiltin b)
-  => i
-  -> DirectEnv e b i
-  -> TableValue
-  -> GuardTableOp
-  -> EvalM e b i ()
-guardTable i env (TableValue tn mh _) dbop = do
-  let mn = _tableModuleName tn
-  checkLocalBypass $
-    guardForModuleCall i env mn $ do
-      mdl <- getModule i (view cePactDb env) mn
-      enforceBlessedHashes i mdl mh
-  where
-  checkLocalBypass notBypassed = do
-    enabled <- isExecutionFlagSet FlagAllowReadInLocal
-    case dbop of
-      GtWrite -> notBypassed
-      GtCreateTable -> notBypassed
-      _ | enabled -> return ()
-        | otherwise -> notBypassed
 
 
 -- Todo: should we typecheck / arity check here?
@@ -653,9 +651,9 @@ readOnlyEnv e
              , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
              , _pdbKeys = \_ -> dbOpDisallowed
              , _pdbCreateUserTable = \_ -> dbOpDisallowed
-             , _pdbBeginTx = \_ -> dbOpDisallowed
-             , _pdbCommitTx = dbOpDisallowed
-             , _pdbRollbackTx = dbOpDisallowed
+             , _pdbBeginTx = \_ -> dbOpDisallowedIO
+             , _pdbCommitTx = dbOpDisallowedIO
+             , _pdbRollbackTx = dbOpDisallowedIO
              }
       in set cePactDb newPactdb e
 
@@ -670,14 +668,14 @@ sysOnlyEnv e
          , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
          , _pdbKeys = const dbOpDisallowed
          , _pdbCreateUserTable = \_ -> dbOpDisallowed
-         , _pdbBeginTx = const dbOpDisallowed
-         , _pdbCommitTx = dbOpDisallowed
-         , _pdbRollbackTx = dbOpDisallowed
+         , _pdbBeginTx = const dbOpDisallowedIO
+         , _pdbCommitTx = dbOpDisallowedIO
+         , _pdbRollbackTx = dbOpDisallowedIO
          }
   in set cePactDb newPactdb e
   where
   pdb = view cePactDb e
-  read' :: Domain k v b i -> k -> IO (Maybe v)
+  read' :: Domain k v b i -> k -> GasM b i (Maybe v)
   read' dom k = case dom of
     DUserTables _ -> dbOpDisallowed
     _ -> _pdbRead pdb dom k
@@ -878,21 +876,6 @@ enforceGuard info env g = case g of
        else throwUserRecoverableError info $
          CapabilityPactGuardInvalidPactId curDpid dpid
 
-guardForModuleCall
-  :: (IsBuiltin b)
-  => i
-  -> DirectEnv e b i
-  -> ModuleName
-  -> EvalM e b i ()
-  -> EvalM e b i ()
-guardForModuleCall i env currMod onFound =
-  findCallingModule >>= \case
-    Just mn | mn == currMod -> onFound
-    _ -> do
-      mc <- use (esCaps . csModuleAdmin)
-      if S.member currMod mc then onFound
-      else getModule i (view cePactDb env) currMod >>= acquireModuleAdmin i env
-
 -- | Acquires module admin for a known module
 -- NOTE: This function should only be called _after_
 -- checking whether `esCaps . csModuleAdmin` for the particular
@@ -921,7 +904,7 @@ acquireModuleAdminCapability
   -> EvalM e b i ()
 acquireModuleAdminCapability i env mname = do
   sc <- S.member mname <$> use (esCaps . csModuleAdmin)
-  unless sc $ getModule i (_cePactDb env) mname >>= acquireModuleAdmin i env
+  unless sc $ getModule i mname >>= acquireModuleAdmin i env
 
 
 runUserGuard
@@ -931,7 +914,7 @@ runUserGuard
   -> UserGuard QualifiedName PactValue
   -> EvalM e b i Bool
 runUserGuard info env (UserGuard qn args) =
-  getModuleMemberWithHash info (_cePactDb env) qn >>= \case
+  getModuleMemberWithHash info qn >>= \case
     (Dfun d, mh) -> do
       when (length (_dfunArgs d) /= length args) $ throwExecutionError info CannotApplyPartialClosure
       let env' = sysOnlyEnv env
@@ -985,8 +968,7 @@ isKeysetInSigs info env (KeySet kskeys ksPred) = do
       CustomPredicate n -> runCustomPred matched n
   runCustomPred matched = \case
     TQN qn -> do
-      pdb <- viewEvalEnv eePactDb
-      getModuleMemberWithHash info pdb qn >>= \case
+      getModuleMemberWithHash info qn >>= \case
         (Dfun d, mh) -> do
           clo <- mkDefunClosure d (qualNameToFqn qn mh) env
           p <- enforceBool info =<< applyLam (C clo) [VInteger (fromIntegral count), VInteger (fromIntegral matched)]
@@ -1013,7 +995,7 @@ isKeysetNameInSigs
   -> EvalM e b i Bool
 isKeysetNameInSigs info env ksn = do
   pdb <- viewEvalEnv eePactDb
-  liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
+  liftGasM info (_pdbRead pdb DKeySets ksn) >>= \case
     Just ks -> isKeysetInSigs info env ks
     Nothing ->
       throwExecutionError info (NoSuchKeySet ksn)
@@ -1150,7 +1132,7 @@ applyPact
   -> EvalM e b i (EvalValue e b i)
 applyPact i pc ps cenv nested = use esDefPactExec >>= \case
   Just pe -> throwExecutionError i (MultipleOrNestedDefPactExecFound pe)
-  Nothing -> getModuleMemberWithHash i (_cePactDb cenv) (pc ^. pcName) >>= \case
+  Nothing -> getModuleMemberWithHash i (pc ^. pcName) >>= \case
     (DPact defPact, mh) -> do
       let nSteps = NE.length (_dpSteps defPact)
 
@@ -1210,7 +1192,7 @@ applyNestedPact
 applyNestedPact i pc ps cenv = use esDefPactExec >>= \case
   Nothing -> failInvariant i $ InvariantPactExecNotInEnv Nothing
 
-  Just pe -> getModuleMemberWithHash i (_cePactDb cenv) (pc ^. pcName) >>= \case
+  Just pe -> getModuleMemberWithHash i (pc ^. pcName) >>= \case
     (DPact defPact, mh) -> do
       step <- maybe (throwExecutionError i (InvalidDefPactStepSupplied ps (_peStepCount pe))) pure
         $ _dpSteps defPact ^? ix (ps ^. psStep)
@@ -1278,7 +1260,7 @@ resumePact i env crossChainContinuation = viewEvalEnv eeDefPactStep >>= \case
   Nothing -> throwExecutionError i DefPactStepNotInEnvironment
   Just ps -> do
     pdb <- viewEvalEnv eePactDb
-    dbState <- liftDbFunction i (_pdbRead pdb DDefPacts (_psDefPactId ps))
+    dbState <- liftGasM i (_pdbRead pdb DDefPacts (_psDefPactId ps))
     case (dbState, crossChainContinuation) of
       (Just Nothing, _) -> throwExecutionError i (DefPactAlreadyCompleted ps)
       (Nothing, Nothing) -> throwExecutionError i (NoPreviousDefPactExecutionFound ps)
@@ -2077,7 +2059,7 @@ keysetRefGuard info b env = \case
       Left {} -> throwNativeExecutionError info b "incorrect keyset name format"
       Right ksn -> do
         let pdb = view cePactDb env
-        liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
+        liftGasM info (_pdbRead pdb DKeySets ksn) >>= \case
           Nothing -> throwExecutionError info (NoSuchKeySet ksn)
           Just _ -> return (VGuard (GKeySetRef ksn))
   args -> argsError info b args
@@ -2254,7 +2236,7 @@ createTable info b env = \case
   [VTable tv] -> do
     enforceTopLevelOnly info b
     let pdb = _cePactDb env
-    guardTable info env tv GtCreateTable
+    guardTable info tv GtCreateTable
     evalCreateUserTable info pdb (_tvName tv)
     return (VString "TableCreated")
   args -> argsError info b args
@@ -2270,14 +2252,14 @@ dbSelect info b env = \case
   where
   pdb = _cePactDb env
   selectRead tv clo mf = do
-    guardTable info env tv GtSelect
-    ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
+    guardTable info tv GtSelect
+    ks <- liftGasM info (_pdbKeys pdb (tvToDomain tv))
     VList . V.fromList . fmap (PObject . mRestrictFields mf) . catMaybes <$> traverse go ks
     where
     mRestrictFields =
       maybe id (\fields -> flip M.restrictKeys (S.fromList fields))
     go k =
-      liftDbFunction info (_pdbRead pdb (tvToDomain tv) k) >>= \case
+      liftGasM info (_pdbRead pdb (tvToDomain tv) k) >>= \case
         Just (RowData r) -> do
           cond <- enforceBool info =<< applyLam clo [VObject r]
           if cond then pure $ Just r
@@ -2289,14 +2271,12 @@ dbSelect info b env = \case
 foldDb :: (IsBuiltin b) => NativeFunction e b i
 foldDb info b env = \case
   [VTable tv, VClosure queryClo, VClosure consumer] -> do
-    -- let cont' = BuiltinC env info (PreFoldDbC tv queryClo consumer) cont
-    -- guardTable info cont' handler env tv GtSelect
-    guardTable info env tv GtSelect
-    keys <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
+    guardTable info tv GtSelect
+    keys <- liftGasM info (_pdbKeys pdb (tvToDomain tv))
     VList . V.fromList . catMaybes <$> traverse go keys
     where
     go rk@(RowKey raw) = do
-      liftDbFunction info (_pdbRead pdb (tvToDomain tv) rk) >>= \case
+      liftGasM info (_pdbRead pdb (tvToDomain tv) rk) >>= \case
         Just (RowData row) -> do
           qryCond <- enforceBool info =<< applyLam queryClo [VString raw, VObject row]
           if qryCond then do
@@ -2316,7 +2296,7 @@ readUserTable
   -> RowKey
   -> EvalM e b i RowData
 readUserTable info env tv rk = do
-  liftDbFunction info (_pdbRead (_cePactDb env) (tvToDomain tv) rk) >>= \case
+  liftGasM info (_pdbRead (_cePactDb env) (tvToDomain tv) rk) >>= \case
     Just rd ->
       return rd
     Nothing -> throwUserRecoverableError info $ NoSuchObjectInDb (_tvName tv) rk
@@ -2324,24 +2304,28 @@ readUserTable info env tv rk = do
 dbRead :: (IsBuiltin b) => NativeFunction e b i
 dbRead info b env = \case
   [VTable tv, VString rk] -> do
-    guardTable info env tv GtRead
-    VObject . _unRowData <$> readUserTable info env tv (RowKey rk)
+    guardTable info tv GtRead
+    RowData rdata <- readUserTable info env tv (RowKey rk)
+    bytes <- sizeOf info SizeOfV0 rdata
+    chargeGasArgs info (GRead bytes)
+    return (VObject rdata)
   args -> argsError info b args
 
 dbWithRead :: (IsBuiltin b) => NativeFunction e b i
 dbWithRead info b env = \case
   [VTable tv, VString rk, VClosure clo] -> do
-    guardTable info env tv GtRead
-    RowData o <- readUserTable info env tv (RowKey rk)
-    applyLam clo [VObject o] >>= enforcePactValue' info
+    v <- dbRead info b env [VTable tv, VString rk]
+    applyLam clo [v] >>= enforcePactValue' info
   args -> argsError info b args
 
 dbWithDefaultRead :: (IsBuiltin b) => NativeFunction e b i
 dbWithDefaultRead info b env = \case
   [VTable tv, VString rk, VObject defaultObj, VClosure clo] -> do
-    guardTable info env tv GtWithDefaultRead
-    liftDbFunction info (_pdbRead (_cePactDb env) (tvToDomain tv) (RowKey rk)) >>= \case
-      Just (RowData o) ->
+    guardTable info tv GtRead
+    liftGasM info (_pdbRead (_cePactDb env) (tvToDomain tv) (RowKey rk)) >>= \case
+      Just (RowData o) -> do
+        bytes <- sizeOf info SizeOfV0 o
+        chargeGasArgs info (GRead bytes)
         applyLam clo [VObject o] >>= enforcePactValue' info
       Nothing ->
          applyLam clo [VObject defaultObj] >>= enforcePactValue' info
@@ -2357,7 +2341,7 @@ dbInsert = write' Insert
 write' :: (IsBuiltin b) => WriteType -> NativeFunction e b i
 write' wt info b env = \case
   [VTable tv, VString key, VObject rv] -> do
-    guardTable info env tv GtWrite
+    guardTable info tv GtWrite
     let pdb = _cePactDb env
     let check' = if wt == Update then checkPartialSchema else checkSchema
     if check' rv (_tvSchema tv) then do
@@ -2375,9 +2359,9 @@ dbUpdate = write' Update
 dbKeys :: (IsBuiltin b) => NativeFunction e b i
 dbKeys info b env = \case
   [VTable tv] -> do
-    guardTable info env tv GtKeys
+    guardTable info tv GtKeys
     let pdb = _cePactDb env
-    ks <- liftDbFunction info (_pdbKeys pdb (tvToDomain tv))
+    ks <- liftGasM info (_pdbKeys pdb (tvToDomain tv))
     let li = V.fromList (PString . _rowKey <$> ks)
     return (VList li)
     -- let cont' = BuiltinC env info (KeysC tv) cont
@@ -2402,7 +2386,7 @@ defineKeySet' info env ksname newKs  = do
             chargeGasArgs info (GWrite newKsSize)
             evalWrite info pdb Write DKeySets ksn newKs
             return (VString "Keyset write success")
-      liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
+      liftGasM info (_pdbRead pdb DKeySets ksn) >>= \case
         Just oldKs -> do
           _ <- isKeysetInSigs info env oldKs
           writeKs
@@ -2456,10 +2440,10 @@ installCapability info b env = \case
   args -> argsError info b args
 
 coreEmitEvent :: (IsBuiltin b) => NativeFunction e b i
-coreEmitEvent info b env = \case
+coreEmitEvent info b _env = \case
   [VCapToken ct@(CapToken fqn _)] -> do
     -- let cont' = BuiltinC env info (EmitEventC ct) cont
-    guardForModuleCall info env (_fqModule fqn) $ return ()
+    guardForModuleCall info (_fqModule fqn) $ return ()
     d <- getDefCap info fqn
     enforceMeta (_dcapMeta d)
     emitCapability info ct
@@ -2775,12 +2759,12 @@ days info b _env = \case
   args -> argsError info b args
 
 describeModule :: (IsBuiltin b) => NativeFunction e b i
-describeModule info b env = \case
+describeModule info b _env = \case
   [VString s] -> case parseModuleName s of
     Just mname -> do
       enforceTopLevelOnly info b
       checkNonLocalAllowed info b
-      getModuleData info (view cePactDb env) mname >>= \case
+      getModuleData info mname >>= \case
         ModuleData m _ -> return $
           VObject $ M.fromList $ fmap (over _1 Field)
             [ ("name", PString (renderModuleName (_mName m)))
@@ -2813,7 +2797,7 @@ dbDescribeKeySet info b env = \case
     enforceTopLevelOnly info b
     case parseAnyKeysetName s of
       Right ksn -> do
-        liftDbFunction info (_pdbRead pdb DKeySets ksn) >>= \case
+        liftGasM info (_pdbRead pdb DKeySets ksn) >>= \case
           Just ks ->
             return (VGuard (GKeyset ks))
           Nothing ->
@@ -2888,7 +2872,7 @@ coreNamespace info b env = \case
       return (VString "Namespace reset to root")
     else do
       chargeGasArgs info $ GRead $ fromIntegral $ T.length n
-      liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
+      liftGasM info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
         Just ns -> do
           size <- sizeOf info SizeOfV0 ns
           chargeGasArgs info $ GRead size
@@ -2908,7 +2892,7 @@ coreDefineNamespace info b env = \case
     let nsn = NamespaceName n
         ns = Namespace nsn usrG adminG
     chargeGasArgs info $ GRead $ fromIntegral $ T.length n
-    liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
+    liftGasM info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
       -- G!
       -- https://static.wikia.nocookie.net/onepiece/images/5/52/Lao_G_Manga_Infobox.png/revision/latest?cb=20150405020446
       -- Enforce the old guard
@@ -2923,7 +2907,7 @@ coreDefineNamespace info b env = \case
           chargeGasArgs info (GWrite nsSize)
           evalWrite info pdb Write DNamespaces nsn ns
           return $ VString $ "Namespace defined: " <> n
-        SmartNamespacePolicy _ fun -> getModuleMemberWithHash info pdb fun >>= \case
+        SmartNamespacePolicy _ fun -> getModuleMemberWithHash info fun >>= \case
           (Dfun d, mh) -> do
             clo <- mkDefunClosure d (qualNameToFqn fun mh) env
             allow <- enforceBool info =<< applyLam (C clo) [VString n, VGuard adminG]
@@ -2955,7 +2939,7 @@ coreDescribeNamespace info b _env = \case
   [VString n] -> do
     pdb <- viewEvalEnv eePactDb
     chargeGasArgs info $ GRead $ fromIntegral $ T.length n
-    liftDbFunction info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
+    liftGasM info (_pdbRead pdb DNamespaces (NamespaceName n)) >>= \case
       Just existing@(Namespace _ usrG laoG) -> do
         size <- sizeOf info SizeOfV0 existing
         chargeGasArgs info $ GRead size
@@ -3206,6 +3190,14 @@ coreHyperlaneEncodeTokenMessage info b _env = \case
       return (VString encoded)
   args -> argsError info b args
 
+coreAcquireModuleAdmin :: (IsBuiltin b) => NativeFunction e b i
+coreAcquireModuleAdmin info b env = \case
+  [VModRef m] -> do
+    let msg = VString ("Module admin for module " <> renderModuleName (_mrModule m)  <> " acquired")
+    acquireModuleAdminCapability info env (_mrModule m)
+    return msg
+  args -> argsError info b args
+
 
 -----------------------------------
 -- Builtin exports
@@ -3372,3 +3364,4 @@ coreBuiltinRuntime =
     CoreHyperlaneMessageId -> coreHyperlaneMessageId
     CoreHyperlaneDecodeMessage -> coreHyperlaneDecodeTokenMessage
     CoreHyperlaneEncodeMessage -> coreHyperlaneEncodeTokenMessage
+    CoreAcquireModuleAdmin -> coreAcquireModuleAdmin

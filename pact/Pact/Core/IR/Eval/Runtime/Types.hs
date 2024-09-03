@@ -14,7 +14,8 @@
 
 module Pact.Core.IR.Eval.Runtime.Types
   ( TableValue(..)
-  , ErrorState(..)) where
+  , ErrorState(..)
+  , EvalCapType(..)) where
 
 
 
@@ -47,3 +48,8 @@ data ErrorState i
   deriving (Show, Generic)
 
 instance NFData i => NFData (ErrorState i)
+
+data EvalCapType
+  = NormalCapEval
+  | TestCapEval
+  deriving (Show, Eq, Enum, Bounded)

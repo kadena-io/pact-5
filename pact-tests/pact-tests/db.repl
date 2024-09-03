@@ -36,11 +36,15 @@
 (use dbtest)
 (begin-tx)
 (use dbtest)
+; Acquire module admin, should pass because admin key is in scope
+(expect "Module admin acquired successfully" "Module admin for module dbtest acquired" (acquire-module-admin dbtest))
 (insert persons ID_A ROW_A)
 (expect-failure "dupe key should fail" (insert persons ID_A ROW_A))
 (commit-tx)
 (begin-tx)
 (use dbtest)
+; acquire admin from db test
+(acquire-module-admin dbtest)
 (expect "keys works" [ID_A] (keys persons))
 
 ;  (insert stuff "k" { "stuff": { "dec": 1.2, "bool": true, "int": -3, "time": (parse-time "%F" "1970-01-01") } })

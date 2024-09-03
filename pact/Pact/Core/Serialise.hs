@@ -41,6 +41,7 @@ import Codec.CBOR.Read (deserialiseFromBytes)
 
 import qualified Pact.Core.Serialise.LegacyPact as LegacyPact
 import qualified Pact.Core.Serialise.CBOR_V1 as V1
+import qualified Pact.Core.Legacy.LegacyPactValue as LegacyPact
 import Pact.Core.Info (SpanInfo)
 import Data.Default
 
@@ -119,7 +120,7 @@ serialisePact = PactSerialise
 
   , _encodeRowData = gEncodeRowData
   , _decodeRowData = \bs ->
-      LegacyDocument <$> LegacyPact.decodeRowData bs
+      LegacyDocument <$> LegacyPact.decodeLegacy bs
       <|> docDecode bs (\case
                            V1_CBOR -> V1.decodeRowData
                        )

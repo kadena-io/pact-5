@@ -127,7 +127,8 @@
 {"conName":"CoreIdentity","conIndex":"7e"}
 {"conName":"CoreVerifySPV","conIndex":"7f"}
 {"conName":"CoreEnforceVerifier","conIndex":"80"}
-{"conName":"CoreHyperlaneMessageId","conIndex":"81"}
-{"conName":"CoreHyperlaneDecodeMessage","conIndex":"82"}
-{"conName":"CoreHyperlaneEncodeMessage","conIndex":"83"}
+{"conName":"CoreAcquireModuleAdmin","conIndex":"81"}
+{"conName":"CoreHyperlaneMessageId","conIndex":"82"}
+{"conName":"CoreHyperlaneDecodeMessage","conIndex":"83"}
+{"conName":"CoreHyperlaneEncodeMessage","conIndex":"84"}
 
