@@ -60,7 +60,6 @@ import Pact.Core.IR.Desugar
 import Pact.Core.Verifiers
 import Pact.Core.Interpreter
 import Pact.Core.Info
-import Pact.Core.IR.Eval.Runtime.Utils
 import qualified Pact.Core.IR.Eval.CEK as Eval
 import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import qualified Pact.Core.Syntax.Lexer as Lisp
@@ -77,22 +76,26 @@ type PactTxResult a =
 
 evalInterpreter :: Interpreter ExecRuntime CoreBuiltin i
 evalInterpreter =
-  Interpreter runGuard runTerm resume
+  Interpreter runGuard runTerm resume evalWithCap
   where
   runTerm purity term = Eval.eval purity cekEnv term
   runGuard info g = Eval.interpretGuard info cekEnv g
   resume info defPact = Eval.evalResumePact info cekEnv defPact
+  evalWithCap info purity ct term =
+    Eval.evalWithinCap info purity cekEnv ct term
 
 cekEnv :: Eval.BuiltinEnv ExecRuntime CoreBuiltin i
 cekEnv = coreBuiltinEnv @ExecRuntime
 
 evalDirectInterpreter :: Interpreter ExecRuntime CoreBuiltin i
 evalDirectInterpreter =
-  Interpreter runGuard runTerm resume
+  Interpreter runGuard runTerm resume evalWithCap
   where
   runTerm purity term = Direct.eval purity env term
   runGuard info g = Direct.interpretGuard info env g
   resume info defPact = Direct.evalResumePact info env defPact
+  evalWithCap info purity ct term =
+    Direct.evalWithinCap info purity env ct term
   env = Direct.coreBuiltinEnv
 
 -- | Transaction-payload related environment data.
@@ -301,15 +304,13 @@ evalWithinCap
   -> EvalEnv CoreBuiltin Info
   -> EvalState CoreBuiltin Info
   -> IO (PactTxResult ())
-evalWithinCap (CapToken qualName pvs) body ee es =
+evalWithinCap ct body ee es =
   evalWithinTx' ee es runInput
   where
   runInput = do
     let info = view Lisp.termInfo body
     (DesugarOutput term' _) <- runDesugarTerm body
-    (_, mh) <- getDefCapQN info qualName
-    let fqCt = CapToken (qualNameToFqn qualName mh) pvs
-    () <$ Eval.evalWithinCap PImpure cekEnv fqCt term'
+    () <$ Eval.evalWithinCap info PImpure cekEnv ct term'
 
 
 -- | Evaluate some input action within a tx context

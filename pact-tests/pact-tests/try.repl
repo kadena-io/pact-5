@@ -60,6 +60,7 @@
 (expect-failure "failure on attempting to write to the db" (failed-write))
 
 ;; failure case for reads in pure context
+(acquire-module-admin try-module)
 (insert test-table "emily" { "test" : true })
 (expect "failure when on attempting to reads from the db" true (successful-read))
 

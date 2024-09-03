@@ -1,4 +1,4 @@
-
+(begin-tx)
 (module m g
   (defcap g () true)
 
@@ -36,3 +36,28 @@
 (expect "counter is zero" 0 (get-counter))
 (expect "counter increments twice" 2 (do (increment-counter) (increment-counter) (get-counter)))
 (expect "counter decrements twice" 0 (do (decrement-counter) (decrement-counter) (get-counter)))
+
+(commit-tx)
+
+; redeploy m
+(begin-tx)
+
+(module m g
+  (defcap g ()
+  (map (+ 1) (enumerate 0 100))
+  ))
+(commit-tx)
+
+(begin-tx)
+(env-gasmodel "table")
+(env-gaslimit 100000)
+(env-gas 0)
+(acquire-module-admin m)
+(expect "Acquiring module admin gas cost evaluates enumerate" 44 (env-gas))
+(acquire-module-admin m)
+; Note: The gas cost here is: the flat cost of acquire-module-admin
+; as a native + the gas from the previous test. In other words:
+; this is testing that the only gas consumed is from the flat native cost, which means
+; we didn't evaluate the cap twice
+(expect "Acquiring module admin twice does not evaluate the cap twice" (+ 20 44) (env-gas))
+(commit-tx)

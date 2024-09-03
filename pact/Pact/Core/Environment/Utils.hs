@@ -10,12 +10,6 @@
 module Pact.Core.Environment.Utils
  ( viewEvalEnv
  , viewsEvalEnv
- , getModuleData
- , getModule
- , getModuleMember
- , getModuleMemberWithHash
- , lookupModule
- , lookupModuleData
  , throwExecutionError
  , toFqDep
  , mangleNamespace
@@ -106,76 +100,6 @@ throwNativeExecutionError :: IsBuiltin b => i -> b -> Text -> EvalM e b i a
 throwNativeExecutionError info b msg =
   throwExecutionError info (NativeExecutionError (builtinName b) msg)
 
-
--- | lookupModuleData for only modules
-lookupModule :: i -> PactDb b i -> ModuleName -> EvalM e b i (Maybe (EvalModule b i))
-lookupModule info pdb mn =
- use (esLoaded . loModules . at mn) >>= \case
-   Just (ModuleData md _) -> pure (Just md)
-   Just (InterfaceData _ _) ->
-    throwExecutionError info (ExpectedModule mn)
-   Nothing -> do
-    liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
-      Just mdata@(ModuleData md deps) -> do
-        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> _mDefs md
-        (esLoaded . loAllLoaded) %= M.union newLoaded . M.union deps
-        (esLoaded . loModules) %= M.insert mn mdata
-        pure (Just md)
-      Just (InterfaceData _ _) ->
-        throwExecutionError info (ExpectedModule mn)
-      Nothing -> pure Nothing
-
--- | lookupModuleData modules and interfaces
-lookupModuleData :: i -> PactDb b i -> ModuleName -> EvalM e b i (Maybe (ModuleData b i))
-lookupModuleData info pdb mn =
- use (esLoaded . loModules . at mn) >>= \case
-   Just md -> pure (Just md)
-   Nothing -> do
-    liftDbFunction info (_pdbRead pdb DModules mn) >>= \case
-      Just mdata@(ModuleData md deps) -> do
-        let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> _mDefs md
-        (esLoaded . loAllLoaded) %= M.union newLoaded . M.union deps
-        (esLoaded . loModules) %= M.insert mn mdata
-        pure (Just mdata)
-      Just mdata@(InterfaceData iface deps) -> do
-        let ifDefs = mapMaybe ifDefToDef (_ifDefns iface)
-        let newLoaded = M.fromList $ toFqDep mn (_ifHash iface) <$> ifDefs
-        (esLoaded . loAllLoaded) %= M.union newLoaded . M.union deps
-        (esLoaded . loModules) %= M.insert mn mdata
-        pure (Just mdata)
-      Nothing -> pure Nothing
-
-
--- | getModuleData, but only for modules, no interfaces
-getModule :: i -> PactDb b i -> ModuleName -> EvalM e b i (EvalModule b i)
-getModule info pdb mn = lookupModule info pdb mn >>= \case
-  Just md -> pure md
-  Nothing -> throwExecutionError info (ModuleDoesNotExist mn)
-
--- | Get or load a module or interface based on the module name
-getModuleData :: i -> PactDb b i -> ModuleName -> EvalM e b i (ModuleData b i)
-getModuleData info pdb mn = lookupModuleData info pdb mn >>= \case
-  Just md -> pure md
-  Nothing -> throwExecutionError info (ModuleDoesNotExist mn)
-
--- | Returns a module member, but only for modules, no interfaces
-getModuleMember :: i -> PactDb b i -> QualifiedName -> EvalM e b i (EvalDef b i)
-getModuleMember info pdb (QualifiedName qn mn) = do
-  md <- getModule info pdb mn
-  case findDefInModule qn md of
-    Just d -> pure d
-    Nothing -> do
-      let fqn = FullyQualifiedName mn qn (_mHash md)
-      throwExecutionError info (ModuleMemberDoesNotExist fqn)
-
-getModuleMemberWithHash :: i -> PactDb b i -> QualifiedName -> EvalM e b i (EvalDef b i, ModuleHash)
-getModuleMemberWithHash info pdb (QualifiedName qn mn) = do
-  md <- getModule info pdb mn
-  case findDefInModule qn md of
-    Just d -> pure (d, _mHash md)
-    Nothing -> do
-      let fqn = FullyQualifiedName mn qn (_mHash md)
-      throwExecutionError info (ModuleMemberDoesNotExist fqn)
 
 
 mangleNamespace :: ModuleName -> EvalM e b i ModuleName

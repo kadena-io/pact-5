@@ -171,8 +171,8 @@ initializePactDb serial db = do
     , _pdbRollbackTx = rollbackTx db txLog
     }, stmtsCache)
 
-readKeys :: forall k v b i. SQL.Database -> IORef StmtCache -> Domain k v b i -> IO [k]
-readKeys _db stmtCache = \case
+readKeys :: forall k v b i. SQL.Database -> IORef StmtCache -> Domain k v b i -> GasM b i [k]
+readKeys _db stmtCache = liftIO . \case
   DKeySets -> withStmt (_tblReadKeys . _stmtKeyset <$> readIORef stmtCache) $ \stmt -> do
     parsedKS <- fmap parseAnyKeysetName <$> collect stmt []
     case sequence parsedKS of
@@ -267,7 +267,7 @@ write'
   -> GasM b i ()
 write' serial db txId txLog stmtCache wt domain k v =
   case domain of
-    DUserTables tbl -> liftIO (checkInsertOk tbl k) >>= \case
+    DUserTables tbl -> checkInsertOk tbl k >>= \case
       Nothing -> do
         encoded <- _encodeRowData serial v
         liftIO $ do
@@ -324,16 +324,15 @@ write' serial db txId txLog stmtCache wt domain k v =
       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
       doWrite stmt  (TxLog (renderDomain domain) k' encoded:)
   where
-    checkInsertOk ::  TableName -> RowKey -> IO (Maybe RowData)
     checkInsertOk tbl rk = do
       curr <- read' serial db stmtCache (DUserTables tbl) rk
       case (curr, wt) of
         (Nothing, Insert) -> return Nothing
-        (Just _, Insert) -> throwIO (E.RowFoundException tbl rk)
+        (Just _, Insert) -> throwM (E.RowFoundException tbl rk)
         (Nothing, Write) -> return Nothing
         (Just old, Write) -> return $ Just old
         (Just old, Update) -> return $ Just old
-        (Nothing, Update) -> throwIO (E.NoRowFound tbl rk)
+        (Nothing, Update) -> throwM (E.NoRowFound tbl rk)
 
     doWrite stmt txlog = Direct.stepNoCB stmt >>= \case
           Left _ ->  throwIO E.WriteException
@@ -343,26 +342,26 @@ write' serial db txId txLog stmtCache wt domain k v =
                 modifyIORef' txLog txlog
             | otherwise -> throwIO E.MultipleRowsReturnedFromSingleWrite
 
-read' :: forall k v b i. PactSerialise b i -> SQL.Database -> IORef StmtCache -> Domain k v b i -> k -> IO (Maybe v)
+read' :: forall k v b i. PactSerialise b i -> SQL.Database -> IORef StmtCache -> Domain k v b i -> k -> GasM b i (Maybe v)
 read' serial _db stmtCache domain k = case domain of
-  DKeySets -> withStmt (_tblReadValue . _stmtKeyset <$> readIORef stmtCache) $
+  DKeySets -> liftIO $ withStmt (_tblReadValue . _stmtKeyset <$> readIORef stmtCache) $
     doRead (renderKeySetName k) (\v -> pure (view document <$> _decodeKeySet serial v))
 
-  DModules -> withStmt (_tblReadValue . _stmtModules <$> readIORef stmtCache) $
+  DModules -> liftIO $ withStmt (_tblReadValue . _stmtModules <$> readIORef stmtCache) $
     doRead (renderModuleName k) (\v -> pure (view document <$> _decodeModuleData serial v))
 
   DUserTables tbl -> do
-    tblCache <- _stmtUserTbl <$> readIORef stmtCache
+    tblCache <- _stmtUserTbl <$> liftIO (readIORef stmtCache)
     case M.lookup tbl tblCache of
-      Nothing -> fail "invariant failure: table unknown"
-      Just stmt -> withStmt (pure $ _tblReadValue stmt) $ doRead (_rowKey k) (\v -> pure (view document <$> _decodeRowData serial v))
+      Nothing -> error "invariant failure: table unknown"
+      Just stmt -> liftIO $ withStmt (pure $ _tblReadValue stmt) $ doRead (_rowKey k) (\v -> pure (view document <$> _decodeRowData serial v))
 
   DDefPacts -> do
-    withStmt (_tblReadValue . _stmtDefPact <$> readIORef stmtCache) $
+    liftIO $ withStmt (_tblReadValue . _stmtDefPact <$> readIORef stmtCache) $
       doRead (renderDefPactId k) (\v -> pure (view document <$> _decodeDefPactExec serial v))
 
   DNamespaces ->
-    withStmt (_tblReadValue . _stmtNamespace <$> readIORef stmtCache)
+    liftIO $ withStmt (_tblReadValue . _stmtNamespace <$> readIORef stmtCache)
     (doRead (_namespaceName k) (\v -> pure (view document <$> _decodeNamespace serial v)))
 
   where

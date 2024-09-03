@@ -14,8 +14,8 @@ Use the following arguments to specify the values for comparison using the `=` P
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `oper1` | integer, decimal, string, time, bool, object, list, or table | Specifies the first value for comparison. |
-| `oper2` | integer, decimal, string, time, bool, object, list, table | Specifies the second value for comparison. |
+| `oper1` | integer, decimal, string, time, bool, object, list, modref, guard | Specifies the first value for comparison. |
+| `oper2` | integer, decimal, string, time, bool, object, list, modref, guard | Specifies the second value for comparison. |
 
 ### Return value
 

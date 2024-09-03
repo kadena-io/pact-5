@@ -19,6 +19,9 @@ import qualified Data.Vector as Vec
 import Hedgehog hiding (Var)
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
+
+import Pact.Time
+import Pact.Time.Internal(UTCTime(..))
 import Pact.Core.Names
 import Pact.Core.Guards
 import Pact.Core.Hash (Hash(..), ModuleHash(..))
@@ -34,6 +37,7 @@ import Pact.Core.PactValue
 import Pact.Core.DefPacts.Types
 import Pact.Core.ChainData (ChainId(..))
 import Pact.Core.Namespace (Namespace(..))
+import Data.Coerce
 
 namespaceNameGen :: Gen NamespaceName
 namespaceNameGen = NamespaceName <$> identGen
@@ -160,17 +164,17 @@ schemaGen = do
 
 typeGen :: Gen Type
 typeGen = Gen.recursive Gen.choice
- [ TyPrim <$> tyPrimGen
- , TyModRef <$> Gen.set (Range.linear 0 10) moduleNameGen
- , pure TyAny
- , pure TyCapToken
- , pure TyAnyList
- , pure TyAnyObject
- ]
- [ TyList <$> typeGen
- , TyObject <$> schemaGen
- , TyTable <$> schemaGen
- ]
+  [ TyPrim <$> tyPrimGen
+  , TyModRef <$> Gen.set (Range.linear 0 10) moduleNameGen
+  , pure TyAny
+  , pure TyCapToken
+  , pure TyAnyList
+  , pure TyAnyObject
+  ]
+  [ TyList <$> typeGen
+  , TyObject <$> schemaGen
+  , TyTable <$> schemaGen
+  ]
 
 argGen :: Gen i -> Gen (Arg Type i)
 argGen i = do
@@ -401,13 +405,20 @@ guardGen n = Gen.choice [gKeySetGen, gKeySetRefGen]
     gKeySetRefGen = GKeySetRef <$> keySetNameGen
 --    gUserGuardGen = GUserGuard <$> userGuardGen (depth - 1)
 
+timeGen :: Gen UTCTime
+timeGen =
+  coerce <$> Gen.int64 Range.constantBounded
+
 pactValueGen :: Gen PactValue
 pactValueGen = Gen.recursive Gen.choice
   [ PLiteral <$> literalGen
   , PGuard <$> guardGen qualifiedNameGen
+  , PTime <$> timeGen
   ]
-  [ PList . Vec.fromList <$> Gen.list (Range.linear 0 5) pactValueGen
-  , PObject <$> (Gen.map (Range.linear 0 5) ((,) <$> fieldGen <*> pactValueGen))
+  [ PList . Vec.fromList <$> Gen.list (Range.linear 1 5) pactValueGen
+  , PObject <$> (Gen.map (Range.linear 1 5) ((,) <$> fieldGen <*> pactValueGen))
+  , PCapToken <$>
+    (CapToken <$> fullyQualifiedNameGen <*> (Gen.list (Range.linear 0 10) pactValueGen))
   ]
 
 chainIdGen :: Gen ChainId

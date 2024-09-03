@@ -73,5 +73,6 @@
 {"conName":"InvalidCustomKeysetPredicate","conIndex":"48"}
 {"conName":"HyperlaneError","conIndex":"49"}
 {"conName":"HyperlaneDecodeError","conIndex":"4a"}
-{"conName":"UnknownException","conIndex":"4b"}
+{"conName":"ModuleAdminNotAcquired","conIndex":"4b"}
+{"conName":"UnknownException","conIndex":"4c"}
 

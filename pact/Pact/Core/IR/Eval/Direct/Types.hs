@@ -47,7 +47,6 @@ module Pact.Core.IR.Eval.Direct.Types
  , pattern VPartialClosure
  , pattern VDefPactClosure
  , CapPopState(..)
- , EvalCapType(..)
  , NativeFunction
  , BuiltinEnv
  , toArgTypeError
@@ -310,10 +309,6 @@ data CapPopState
   | PopCapInvoke
   deriving (Eq, Show, Generic)
 
-data EvalCapType
-  = NormalCapEval
-  | TestCapEval
-  deriving (Show, Eq, Enum, Bounded)
 
 instance (NFData b, NFData i) => NFData (CanApply e b i)
 instance (NFData b, NFData i) => NFData (NativeFn e b i)

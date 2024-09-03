@@ -31,6 +31,7 @@
 
 (expect "leftpad works" "   hello" (dep.dep-leftpad))
 (dep.dep-impure "a" 1)
+(acquire-module-admin impure)
 (expect "impure works" { "value": 1 } (read impure.foo "a"))
 
 (rollback-tx)
@@ -71,4 +72,5 @@
 (commit-tx)
 
 (dep.dep-impure "b" 1)
+(acquire-module-admin impure)
 (expect "impure works with blessed hash" { "value": 1 } (read impure.foo "b"))

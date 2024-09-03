@@ -676,13 +676,7 @@ executionTests =
         )
       |])
 
-  -- CEK errors
-  , ("modref_no_ns", isExecutionError _ModRefImplementsNoInterfaces, [text|
-      (module m g (defcap g () true))
-      m
-      |])
-
-  , ("defpact_not_init", isExecutionError _NoDefPactIdAndExecEnvSupplied, [text|
+    , ("defpact_not_init", isExecutionError _NoDefPactIdAndExecEnvSupplied, [text|
       (module m g (defcap g () true))
       (continue-pact 1)
       |])

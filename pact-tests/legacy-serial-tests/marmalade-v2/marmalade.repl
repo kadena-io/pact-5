@@ -98,7 +98,7 @@
 (begin-tx)
 
   (load "../../pact-tests/marmalade/pact/ledger/ledger-v2.interface.pact")
-  (load "../../pact-tests/marmalade/pact/policy-manager/sale.interface.pact") 
+  (load "../../pact-tests/marmalade/pact/policy-manager/sale.interface.pact")
   (load "../../pact-tests/marmalade/pact/policy-manager/policy-manager.pact")
   (load "../../pact-tests/marmalade/pact/ledger/ledger.pact")
 (commit-tx)
@@ -138,6 +138,7 @@
 
 
 (use marmalade-v2.ledger)
+(acquire-module-admin marmalade-v2.ledger)
 (create-table versions)
 
 (commit-tx)

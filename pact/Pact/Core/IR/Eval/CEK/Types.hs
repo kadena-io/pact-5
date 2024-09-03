@@ -86,7 +86,6 @@ module Pact.Core.IR.Eval.CEK.Types
  , CoreBuiltinEnv
  , CoreCEKValue
  , CoreEvalResult
- , EvalCapType(..)
  , CapBodyState(..)
  ) where
 
@@ -380,35 +379,12 @@ data BuiltinCont (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
   -- ^ {closure} {accum} {rest}
   | ZipC (CanApply e b i) ([PactValue],[PactValue]) [PactValue]
   -- ^ <zip closure> <lists to zip> <accumulator>
-  | PreSelectC TableValue (CanApply e b i) (Maybe [Field])
-  -- ^ <table> <select filter closure> <filter fields>*
-  | PreFoldDbC TableValue (CanApply e b i) (CanApply e b i)
-  -- ^ <table> <select filter closure> <accumulator closure>
   | SelectC TableValue (CanApply e b i) (ObjectData PactValue) [RowKey] [ObjectData PactValue] (Maybe [Field])
   -- ^ <table> <filter closure> <current value> <remaining keys> <accumulator> <fields>
   | FoldDbFilterC TableValue (CanApply e b i) (CanApply e b i) (RowKey, ObjectData PactValue) [RowKey] [(RowKey, PactValue)]
   -- ^ <table> <filter closure> <accum closure> <current k/v pair in focus> <remaining keys> <accumulator>
   | FoldDbMapC TableValue (CanApply e b i) [(RowKey, PactValue)] [PactValue]
   -- ^ <table> <accum closure> <remaining pairs> <accumulator>
-  | ReadC TableValue RowKey
-  -- ^ <table> <key to read>
-  | WriteC TableValue WriteType RowKey (ObjectData PactValue)
-  -- ^ <table> <write type> <key to write> <value to write>
-   -- ^ <table> <key to read> <closure to apply afterwards>
-  | WithDefaultReadC TableValue RowKey (ObjectData PactValue) (CanApply e b i)
-  -- ^ <table> <key to read> <default value> <closure to apply afterwards>
-  | KeysC TableValue
-  -- ^ Table to apply `keys` to
-  -- | TxIdsC TableValue Integer
-  -- -- ^ <table> <key to read> <default value> <closure to apply afterwards>
-  -- | TxLogC TableValue Integer
-  -- -- ^ <table> <txid>
-  -- | KeyLogC TableValue RowKey Integer
-  -- -- ^ <table> <key> <txid>
-  | CreateTableC TableValue
-  -- ^ <create-table>
-  | EmitEventC (CapToken FullyQualifiedName PactValue)
-  -- ^ <event token to emit>
   | DefineKeysetC KeySetName KeySet
   -- ^ <keyset to push to the db>
   | DefineNamespaceC Namespace
@@ -556,10 +532,6 @@ data ContType
   | CTMt
   deriving (Show, Eq, Enum, Bounded)
 
-data EvalCapType
-  = NormalCapEval
-  | TestCapEval
-  deriving (Show, Eq, Enum, Bounded)
 
 data CEKErrorHandler (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
   = CEKNoHandler

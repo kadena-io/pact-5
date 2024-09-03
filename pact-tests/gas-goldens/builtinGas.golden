@@ -11,6 +11,7 @@
 >=: 114
 ^: 5000
 abs: 50
+acquire-module-admin: 60045303
 add-time: 5000
 and?: 253
 at: 2500
@@ -89,7 +90,7 @@ read-integer: 128
 read-keyset: 37239
 read-msg: 128
 read-string: 128
-read: 60393378
+read: 60393713
 remove: 261
 require-capability: 60002677
 resume: 60006677
@@ -111,8 +112,8 @@ typeof: 25
 update: 60516583
 validate-principal: 4940
 where: 1079
-with-default-read: 60405928
-with-read: 60394453
+with-default-read: 60406263
+with-read: 60394788
 write: 60383378
 xor: 2000
 yield: 60002449

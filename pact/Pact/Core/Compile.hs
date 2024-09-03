@@ -117,13 +117,12 @@ evalModuleGovernance
   -> EvalM e b i ()
 evalModuleGovernance interpreter tl = do
   lo <- use esLoaded
-  pdb <- viewEvalEnv eePactDb
   case tl of
     Lisp.TLModule m -> do
       let info = Lisp._mInfo m
       let unmangled = Lisp._mName m
       mname <- mangleNamespace unmangled
-      lookupModule (Lisp._mInfo m) pdb mname >>= \case
+      lookupModule (Lisp._mInfo m) mname >>= \case
         Just targetModule -> do
           case _mGovernance targetModule of
             KeyGov ksn -> do
@@ -133,14 +132,13 @@ evalModuleGovernance interpreter tl = do
               void $ eval interpreter PImpure term
             CapGov (FQName fqn) -> do
               hasModAdmin <- uses (esCaps . csModuleAdmin) (S.member mname)
+              -- check whether we already have module admin.
+              -- if we do, we don't need to run governance
               if hasModAdmin then pure ()
               else do
-                -- check whether we already have module admin.
-                -- if we do, we don't need to run this.
-                let cgBody = Constant LUnit info
-                    withCapApp = App (Var (fqnToName fqn) info) [] info
-                    term = CapabilityForm (WithCapability withCapApp cgBody) info
-                void $ eval interpreter PImpure term
+                let unitBody = Constant LUnit info
+                let ct = CapToken (fqnToQualName fqn) []
+                void $ evalWithCapability interpreter info PImpure ct unitBody
                 esCaps . csModuleAdmin %= S.insert mname
           -- | Restore the state to pre-module admin acquisition
           esLoaded .= lo
@@ -149,7 +147,7 @@ evalModuleGovernance interpreter tl = do
       let info = Lisp._ifInfo iface
       let unmangled = Lisp._ifName iface
       ifn <- mangleNamespace unmangled
-      lookupModuleData info pdb ifn >>= \case
+      lookupModuleData info ifn >>= \case
         Nothing -> enforceNamespaceInstall info interpreter
         Just _ ->
           throwExecutionError info  (CannotUpgradeInterface ifn)
