@@ -1,11 +1,6 @@
 name: Release - manual - pact
 
-## Release automation for chainweb-node
-# Designed to run systems in chainweb/binary-release 
-
-## Currently has manual version setting and creates draft releases;
-# when we are confident in this process, it can auto-increment and publish non-drafts
-# tbd: connect k8s firing mechanism, create and connect chainweb-node-docker update workflow
+## Release automation for pact 
 
 run-name: "Release pact-5 ${{ inputs.release_sha }} from ${{ github.sha}}"
 on:
