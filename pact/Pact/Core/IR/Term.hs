@@ -179,8 +179,6 @@ data Term name ty builtin info
   -- ^ "Lazy terms of arity zero"
   | ListLit [Term name ty builtin info] info
   -- ^ List Literals
-  -- | Try (Term name ty builtin info) (Term name ty builtin info) info
-  -- ^ try (catch expr) (try-expr)
   | ObjectLit [(Field, Term name ty builtin info)] info
   -- ^ Capability Natives
   | InlineValue PactValue info
@@ -473,8 +471,6 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
       parens ("suspend" <+> pretty term)
     ListLit tes _ ->
       pretty tes
-    -- Try te te' _ ->
-    --   parens ("try" <+> pretty te <+> pretty te')
     ObjectLit n _ ->
       braces (hsep $ punctuate "," $ fmap (\(f, t) -> pretty f <> ":" <> pretty t) n)
     InlineValue pv _ ->
@@ -582,8 +578,6 @@ termType f  = \case
     pure (Constant lit i)
   ListLit tes i ->
     ListLit <$> traverse (termType f) tes <*> pure i
-  -- Try te te' i ->
-  --   Try <$> termType f te <*> termType f te' <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (termType f) m <*> pure i
   InlineValue v i ->
@@ -611,8 +605,6 @@ termBuiltin f = \case
     pure (Constant lit i)
   ListLit tes i ->
     ListLit <$> traverse (termBuiltin f) tes <*> pure i
-  -- Try te te' i ->
-  --   Try <$> termBuiltin f te <*> termBuiltin f te' <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (termBuiltin f) m <*> pure i
   InlineValue v i -> pure (InlineValue v i)
@@ -630,10 +622,8 @@ termInfo f = \case
   BuiltinForm o i ->
     BuiltinForm o <$> f i
   ListLit l i  -> ListLit l <$> f i
-  -- Try e1 e2 i -> Try e1 e2 <$> f i
   Nullary term i ->
     Nullary term <$> f i
-  -- CapabilityForm cf i -> CapabilityForm cf <$> f i
   ObjectLit m i -> ObjectLit m <$> f i
   InlineValue v i -> InlineValue v <$> f i
 
@@ -660,8 +650,6 @@ traverseTerm f x= case x of
     f (Constant lit i)
   ListLit tes i ->
     ListLit <$> traverse (traverseTerm f) tes <*> pure i
-  -- Try te te' i ->
-  --   Try <$> traverseTerm f te <*> traverseTerm f te' <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (traverseTerm f) m <*> pure i
   InlineValue v i ->
@@ -767,8 +755,6 @@ instance Plated (Term name ty builtin info) where
     ListLit m i -> ListLit <$> traverse f m <*> pure i
     Nullary term i ->
       Nullary <$> f term <*> pure i
-    -- Try e1 e2 i ->
-    --   Try <$> f e1 <*> f e2 <*> pure i
     ObjectLit o i ->
       ObjectLit <$> (traverse._2) f o <*> pure i
     InlineValue v i -> pure (InlineValue v i)

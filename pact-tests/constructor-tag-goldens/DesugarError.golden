@@ -13,15 +13,14 @@
 {"conName":"InvalidDefInTermVariable","conIndex":"c"}
 {"conName":"InvalidModuleReference","conIndex":"d"}
 {"conName":"EmptyBindingBody","conIndex":"e"}
-{"conName":"EmptyDefPact","conIndex":"f"}
-{"conName":"LastStepWithRollback","conIndex":"10"}
-{"conName":"ExpectedFreeVariable","conIndex":"11"}
-{"conName":"InvalidManagedArg","conIndex":"12"}
-{"conName":"InvalidImports","conIndex":"13"}
-{"conName":"InvalidImportModuleHash","conIndex":"14"}
-{"conName":"InvalidSyntax","conIndex":"15"}
-{"conName":"InvalidDefInSchemaPosition","conIndex":"16"}
-{"conName":"InvalidDynamicInvoke","conIndex":"17"}
-{"conName":"DuplicateDefinition","conIndex":"18"}
-{"conName":"InvalidBlessedHash","conIndex":"19"}
+{"conName":"LastStepWithRollback","conIndex":"f"}
+{"conName":"ExpectedFreeVariable","conIndex":"10"}
+{"conName":"InvalidManagedArg","conIndex":"11"}
+{"conName":"InvalidImports","conIndex":"12"}
+{"conName":"InvalidImportModuleHash","conIndex":"13"}
+{"conName":"InvalidSyntax","conIndex":"14"}
+{"conName":"InvalidDefInSchemaPosition","conIndex":"15"}
+{"conName":"InvalidDynamicInvoke","conIndex":"16"}
+{"conName":"DuplicateDefinition","conIndex":"17"}
+{"conName":"InvalidBlessedHash","conIndex":"18"}
 

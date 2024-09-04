@@ -413,18 +413,6 @@ instance Serialise (SerialiseV1 Field) where
   decode = SerialiseV1 <$> (Field <$> decode)
   {-# INLINE decode #-}
 
--- instance (Serialise (SerialiseV1 name), Serialise (SerialiseV1 e)) => Serialise (SerialiseV1 (CapForm name e)) where
---   encode (SerialiseV1 cf) = case cf of
---     WithCapability e1 e2 -> encodeWord 0 <> encodeS e1 <> encodeS e2
---     CreateUserGuard name es -> encodeWord 1 <> encodeS name <> encodeS es
---   {-# INLINE encode #-}
-
---   decode = decodeWord >>= fmap SerialiseV1 . \case
---     0 -> WithCapability <$> decodeS <*> decodeS
---     1 -> CreateUserGuard <$> decodeS <*> decodeS
---     _ -> fail "unexpected decoding"
---   {-# INLINE decode #-}
-
 instance (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
   => Serialise (SerialiseV1 (BuiltinForm (Term Name Type b i))) where
   encode (SerialiseV1 bf) = case bf of

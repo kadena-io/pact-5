@@ -83,13 +83,66 @@ desugarTests =
           )
         )
       |])
-  , ("enforce-one_no_list", isDesugarError _InvalidSyntax, [text|
-      (module m g (defcap g () true)
-        (defun enforce-cap ()
-          (enforce-one "foo" 1)
-          )
-        )
+  , ("empty_if", isDesugarError _InvalidSyntax, [text|
+      (if)
       |])
+
+  , ("if_invalid_args", isDesugarError _InvalidSyntax, [text|
+      (if 1)
+      |])
+
+  , ("empty_do", isDesugarError _InvalidSyntax, [text|
+      (do)
+      |])
+
+  , ("empty_with_cap", isDesugarError _InvalidSyntax, [text|
+      (with-capability)
+      |])
+
+  , ("one_arg_with_cap", isDesugarError _InvalidSyntax, [text|
+      (with-capability 1)
+      |])
+
+  , ("empty_enforce_one", isDesugarError _InvalidSyntax, [text|
+      (enforce-one)
+      |])
+
+  , ("one_arg_enforce_one", isDesugarError _InvalidSyntax, [text|
+      (enforce-one 1)
+      |])
+
+  , ("empty_suspend", isDesugarError _InvalidSyntax, [text|
+      (suspend)
+      |])
+
+  , ("n-ary_suspend", isDesugarError _InvalidSyntax, [text|
+      (suspend 2 3 4 5 6)
+      |])
+
+  , ("empty_cond", isDesugarError _InvalidSyntax, [text|
+      (cond)
+      |])
+
+  , ("invalid_cond", isDesugarError _InvalidSyntax, [text|
+      (cond 1 2 3)
+      |])
+
+  , ("empty_create-user-guard", isDesugarError _InvalidSyntax, [text|
+      (create-user-guard)
+      |])
+
+  , ("n-ary_create-user-guard", isDesugarError _InvalidSyntax, [text|
+      (create-user-guard 2 3 4 5 6)
+      |])
+
+  , ("empty_try", isDesugarError _InvalidSyntax, [text|
+      (try)
+      |])
+
+  , ("n-ary_try", isDesugarError _InvalidSyntax, [text|
+      (try 2 3 4 5 6)
+      |])
+
   , ("managed_invalid", isDesugarError _InvalidManagedArg, [text|
       (module mgd-mod G
         (defcap G () true)
@@ -561,6 +614,14 @@ executionTests =
 
       (module another ag (defcap ag () true))
     |])
+  , ("enforce-one_no_list", isExecutionError _NativeExecutionError, [text|
+      (enforce-one "asdf" 1)
+      |])
+
+  , ("user_guard_no_app", isExecutionError _NativeExecutionError, [text|
+      (create-user-guard 1)
+      |])
+
   , ("enforce_ns_install_interface", isExecutionError _NamespaceInstallError, [text|
       (module m g (defcap g () true)
         (defun manage (ns guard) true)

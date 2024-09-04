@@ -135,10 +135,9 @@ exprGen = Gen.recursive Gen.choice
   [ Gen.subtermM exprGen $ \x -> do
       xs <- Gen.list (Range.linear 0 8) exprGen
       pure $ Lisp.App x xs ()
-  , (`Lisp.Block` ()) <$> Gen.nonEmpty (Range.linear 1 8) (Gen.subterm exprGen id)
   , (`Lisp.List` ()) <$> Gen.list (Range.linear 1 8) (Gen.subterm exprGen id)
   , lamGen
-  , Gen.subtermM exprGen letGen
+  , letGen
   ]
   where
     lamGen = do
@@ -146,11 +145,11 @@ exprGen = Gen.recursive Gen.choice
         i <- identGen
         ty <- Gen.maybe typeGen
         pure (Lisp.MArg i ty ())
-      expr <- Gen.subterm exprGen id
-      pure $ Lisp.Lam par expr ()
+      Lisp.Lam par <$> Gen.nonEmpty (Range.linear 1 8) exprGen <*> pure ()
 
-    letGen inner = do
+    letGen = do
       binders <- Gen.nonEmpty (Range.constant 1 8) binderGen
+      inner <- Gen.nonEmpty (Range.linear 1 8) exprGen
       pure $ Lisp.Let LFLetNormal binders inner ()
 
     typeGen :: Gen Lisp.Type

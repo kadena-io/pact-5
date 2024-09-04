@@ -333,26 +333,10 @@ evaluate env = \case
     CEnforceOne _ _ ->
       throwExecutionError info $ NativeExecutionError (NativeName "enforce-one") $
             "enforce-one: expected a list of conditions"
-
-  -- CapabilityForm cf info -> case cf of
-  --   WithCapability cap body -> do
-  --     enforceNotWithinDefcap info env "with-capability"
-  --     rawCap <- enforceCapToken info =<< evaluate env cap
-  --     let capModule = view (ctName . fqModule) rawCap
-  --     guardForModuleCall info capModule $ pure ()
-  --     evalCap info env rawCap PopCapInvoke NormalCapEval body
-  --   CreateUserGuard n uargs -> do
-  --     fqn <- nameToFQN info env n
-  --     args <- traverse (evaluate env >=> enforcePactValue info) uargs
-  --     createUserGuard info fqn args
   ListLit ts info -> do
     chargeGasArgs info (GConcat (ListConcat (GasListLength (length ts))))
     args <- traverse (evaluate env >=> enforcePactValue info) ts
     return (VList (V.fromList args))
-  -- Try catchExpr tryExpr info -> do
-  --   chargeGasArgs info (GAConstant tryNodeGas)
-  --   let env' = readOnlyEnv env
-  --   catchRecoverable (evaluate env' tryExpr) (\_ _ -> evaluate env catchExpr)
   ObjectLit o info -> do
     chargeGasArgs info (GConcat (ObjConcat (length o)))
     args <- traverse go o

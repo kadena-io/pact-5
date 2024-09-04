@@ -145,7 +145,7 @@ data Defun i
   { _dfunSpec :: MArg i  -- ^ 'MArg' contains the name ('_margName') and
                          -- optional return type ('_margType'). The 'i' reflects the name info.
   , _dfunArgs :: [MArg i]
-  , _dfunTerm :: Expr i
+  , _dfunTerm :: NonEmpty (Expr i)
   , _dfunDocs :: Maybe Text
   , _dfunModel :: [PropertyExpr i]
   , _dfunInfo :: i
@@ -170,7 +170,7 @@ data DefCap i
   { _dcapSpec :: MArg i  -- ^ 'MArg' contains the name ('_margName') and
                          -- optional return type ('_margType'). The 'i' reflects the name info.
   , _dcapArgs :: ![MArg i]
-  , _dcapTerm :: Expr i
+  , _dcapTerm :: NonEmpty (Expr i)
   , _dcapDocs :: Maybe Text
   , _dcapModel :: [PropertyExpr i]
   , _dcapMeta :: Maybe DCapMeta
@@ -204,7 +204,7 @@ data DefPact i
   { _dpSpec :: MArg i -- ^ 'MArg' contains the name ('_margName') and
                       -- optional return type ('_margType'). The 'i' reflects the name info.
   , _dpArgs :: [MArg i]
-  , _dpSteps :: [PactStep i]
+  , _dpSteps :: NonEmpty (PactStep i)
   , _dpDocs :: Maybe Text
   , _dpModel :: [PropertyExpr i]
   , _dpInfo :: i
@@ -300,16 +300,6 @@ data PropKeyword
   = KwLet
   | KwLambda
   | KwDefProperty
-  | KwDo
-  -- | KwIf
-  -- | KwSuspend
-  -- | KwTry
-  -- | KwCreateUserGuard
-  -- | KwWithCapability
-  -- | KwEnforce
-  -- | KwEnforceOne
-  -- | KwAnd
-  -- | KwOr
   deriving (Eq, Show, Generic, NFData)
 
 data PropDelim
@@ -390,13 +380,12 @@ instance NFData LetForm
 
 data Expr i
   = Var ParsedName i
-  | Let LetForm (NonEmpty (Binder i)) (Expr i) i
-  | Lam [MArg i] (Expr i) i
+  | Let LetForm (NonEmpty (Binder i)) (NonEmpty (Expr i)) i
+  | Lam [MArg i] (NonEmpty (Expr i)) i
   | App (Expr i) [Expr i] i
   | List [Expr i] i
   | Constant Literal i
   | Object [(Field, Expr i)] i
-  | Block (NonEmpty (Expr i)) i
   | Binding [(Field, MArg i)] [Expr i] i
   deriving (Show, Eq, Functor, Generic, NFData)
 
@@ -426,25 +415,13 @@ termInfo f = \case
     Let lf bnds e1 <$> f i
   Lam nel e i ->
     Lam nel e <$> f i
-  -- If e1 e2 e3 i ->
-  --   If e1 e2 e3 <$> f i
   App e1 args i ->
     App e1 args <$> f i
-  Block nel i ->
-    Block nel <$> f i
   Object m i -> Object m <$> f i
-  -- Operator op i ->
-  --   Operator op <$> f i
   List nel i ->
     List nel <$> f i
-  -- Suspend e i ->
-  --   Suspend e <$> f i
   Constant l i ->
     Constant l <$> f i
-  -- Try e1 e2 i ->
-  --   Try e1 e2 <$> f i
-  -- CapabilityForm e i ->
-  --   CapabilityForm e <$> f i
   Binding t e i ->
     Binding t e <$> f i
 
@@ -452,44 +429,28 @@ instance Pretty (Expr i) where
   pretty = \case
     Var n _ -> pretty n
     Let lf bnds e _ ->
-      parens ("let" <> lf' <+> parens (hsep (NE.toList (pretty <$> bnds))) <+> pretty e)
+      parens ("let" <> lf' <+> parens (prettyNEL bnds) <+> prettyNEL e)
       where
       lf' = case lf of
         LFLetNormal -> mempty
         LFLetStar -> "*"
     Lam nel e _ ->
-      parens ("lambda" <+> parens (renderLamTypes nel) <+> pretty e)
-    -- If cond e1 e2 _ ->
-    --   parens ("if" <+> pretty cond <+> pretty e1 <+> pretty e2)
+      parens ("lambda" <+> parens (renderLamTypes nel) <+> prettyNEL e)
     App e1 [] _ ->
       parens (pretty e1)
     App e1 nel _ ->
       parens (pretty e1 <+> hsep (pretty <$> nel))
-    -- Operator b _ -> pretty b
-    Block nel _ ->
-      parens ("do" <+> hsep (pretty <$> NE.toList nel))
     Constant l _ ->
       pretty l
     List nel _ ->
       "[" <> commaSep nel <> "]"
-    -- Try e1 e2 _ ->
-    --   parens ("try" <+> pretty e1 <+> pretty e2)
-    -- Suspend e _ ->
-    --   parens ("suspend" <+> pretty e)
-    -- CapabilityForm c _ -> case c of
-    --   WithCapability cap body ->
-    --     parens ("with-capability" <+> pretty cap <+> pretty body)
-    --   CreateUserGuard pn exs ->
-    --     parens ("create-user-guard" <> capApp pn exs)
-    --   where
-    --   capApp pn exns =
-    --     parens (pretty pn <+> hsep (pretty <$> exns))
     Object m _ ->
       braces (hsep (punctuate "," (prettyObj m)))
     Binding binds body _ ->
       braces (hsep $ punctuate "," $ fmap prettyBind binds) <+>
         hsep (pretty <$> body)
     where
+    prettyNEL nel = hsep (NE.toList (pretty <$> nel))
     prettyBind (f, e) = pretty f <+> ":=" <+> pretty e
     prettyObj = fmap (\(n, k) -> dquotes (pretty n) <> ":" <> pretty k)
     renderLamPair (MArg n mt _) = case mt of

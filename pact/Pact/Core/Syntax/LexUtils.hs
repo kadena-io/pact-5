@@ -49,9 +49,7 @@ data Token
   -- Keywords
   = TokenLet
   | TokenLetStar
-  -- | TokenIf
   | TokenLambda
-  -- | TokenTry
   | TokenModule
   | TokenInterface
   | TokenImport
@@ -81,27 +79,14 @@ data Token
   | TokenComma
   | TokenColon
   | TokenDot
-    -- Capabilities
-  | TokenWithCapability
-  | TokenCreateUserGuard
-  -- Operators with lazy semantics
-  -- | TokenAnd
-  -- | TokenOr
-  -- | TokenEnforce
-  -- | TokenEnforceOne
   | TokenSingleTick !Text
   | TokenIdent !Text
   | TokenNumber !Text
   | TokenString !Text
   | TokenTrue
   | TokenFalse
-  | TokenBlockIntro
-  -- | TokenSuspend
   | TokenDynAcc
   | TokenBindAssign
-  -- Repl-specific tokens
-  -- | TokenLoad
-
   -- Layout
   | TokenEOF
   deriving (Eq, Show)
@@ -260,9 +245,7 @@ renderTokenText :: Token -> Text
 renderTokenText = \case
   TokenLet -> "let"
   TokenLetStar -> "let*"
-  -- TokenIf -> "if"
   TokenLambda -> "lambda"
-  -- TokenTry -> "try"
   TokenModule -> "module"
   TokenInterface -> "interface"
   TokenImport -> "use"
@@ -291,11 +274,6 @@ renderTokenText = \case
   TokenDot -> "."
   TokenBindAssign -> ":="
   TokenDynAcc -> "::"
-  TokenBlockIntro -> "do"
-  -- TokenAnd -> "and"
-  -- TokenOr -> "or"
-  -- TokenEnforce -> "enforce"
-  -- TokenEnforceOne -> "enforce-one"
   TokenIdent t -> "ident<" <> t <> ">"
   TokenNumber n -> "number<" <> n <> ">"
   TokenSingleTick s -> "\'" <> s
@@ -303,10 +281,6 @@ renderTokenText = \case
   TokenTrue -> "true"
   TokenFalse -> "false"
   TokenEOF -> "EOF"
-  -- TokenSuspend -> "suspend"
-  -- TokenLoad -> "load"
-  TokenWithCapability -> "with-capability"
-  TokenCreateUserGuard -> "create-user-guard"
 
 
 instance Pretty Token where

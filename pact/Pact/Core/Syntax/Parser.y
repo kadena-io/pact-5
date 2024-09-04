@@ -47,7 +47,6 @@ import Pact.Core.Syntax.LexUtils
 %token
   let        { PosToken TokenLet _ }
   letstar    { PosToken TokenLetStar _ }
-  -- if         { PosToken TokenIf _ }
   lam        { PosToken TokenLambda _ }
   module     { PosToken TokenModule _ }
   interface  { PosToken TokenInterface _ }
@@ -62,16 +61,10 @@ import Pact.Core.Syntax.LexUtils
   implements { PosToken TokenImplements _ }
   true       { PosToken TokenTrue _ }
   false      { PosToken TokenFalse _ }
-  progn      { PosToken TokenBlockIntro _ }
-  -- try        { PosToken TokenTry _ }
-  -- suspend    { PosToken TokenSuspend _ }
-  -- load       { PosToken TokenLoad _ }
   docAnn     { PosToken TokenDocAnn _ }
   modelAnn   { PosToken TokenModelAnn _ }
   eventAnn   { PosToken TokenEventAnn _ }
   managedAnn { PosToken TokenManagedAnn _ }
-  -- withcap    { PosToken TokenWithCapability _ }
-  -- c_usr_grd  { PosToken TokenCreateUserGuard _}
   step       { PosToken TokenStep _ }
   steprb     { PosToken TokenStepWithRollback _ }
   '{'        { PosToken TokenOpenBrace _ }
@@ -85,10 +78,6 @@ import Pact.Core.Syntax.LexUtils
   ':'        { PosToken TokenColon _ }
   ':='       { PosToken TokenBindAssign _ }
   '.'        { PosToken TokenDot _ }
-  -- and        { PosToken TokenAnd _ }
-  -- or         { PosToken TokenOr _ }
-  -- enforce    { PosToken TokenEnforce _}
-  -- enforceOne { PosToken TokenEnforceOne _ }
   IDENT      { PosToken (TokenIdent _) _ }
   NUM        { PosToken (TokenNumber _) _ }
   STR        { PosToken (TokenString _) _ }
@@ -122,11 +111,6 @@ ReplTopLevel :: { ReplTopLevel SpanInfo }
   : TopLevel { RTLTopLevel $1 }
   | '(' Defun ')' { RTLDefun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefConst ')' { RTLDefConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
-
-
--- ReplSpecial :: { SpanInfo -> ReplSpecialForm SpanInfo }
---   : load STR BOOLEAN { ReplLoad (getStr $2) $3 }
---   | load STR { ReplLoad (getStr $2) False }
 
 Governance :: { Governance ParsedName }
   : StringRaw { KeyGov (KeySetName $1 Nothing) }
@@ -224,8 +208,11 @@ Defcap :: { SpanInfo -> DefCap SpanInfo }
     { DefCap (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $9 (fst $7) (snd $7) $8 }
 
 DefPact :: { SpanInfo -> DefPact SpanInfo }
-  : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel Steps
-  { DefPact (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) (reverse $8) (fst $7) (snd $7) }
+  : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel DefPactSteps
+  { DefPact (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $8 (fst $7) (snd $7) }
+
+DefPactSteps :: { NE.NonEmpty (PactStep SpanInfo) }
+  : Steps { NE.fromList (reverse $1) }
 
 Steps :: { [PactStep SpanInfo] }
   : Steps Step { $2:$1 }
@@ -316,8 +303,8 @@ MTypeAnn :: { Maybe Type }
   : ':' Type { Just $2 }
   | {- empty -} { Nothing }
 
-Block :: { ParsedExpr }
-  : BlockBody { mkBlock (reverse $1)  }
+Block :: { NE.NonEmpty ParsedExpr }
+  : BlockBody { NE.fromList (reverse $1)  }
 
 BlockBody :: { [ParsedExpr] }
   : BlockBody Expr { $2:$1 }
@@ -330,7 +317,6 @@ Expr :: { ParsedExpr }
 SExpr :: { SpanInfo -> ParsedExpr }
   : LamExpr { $1 }
   | LetExpr { $1 }
-  | ProgNExpr { $1 }
   | GenAppExpr { $1 }
 
 List :: { ParsedExpr }
@@ -347,26 +333,9 @@ MCommaExpr :: { [ParsedExpr] }
 ExprCommaSep :: { [ParsedExpr] }
   : ExprCommaSep ',' Expr { $3:$1 }
   | Expr { [$1] }
-  -- | {- empty -} { [] }
 
 LamExpr :: { SpanInfo -> ParsedExpr }
   : lam '(' LamArgs ')' Block { Lam (reverse $3) $5 }
-
--- IfExpr :: { SpanInfo -> ParsedExpr }
---   : if Expr Expr Expr { If $2 $3 $4 }
-
--- TryExpr :: { SpanInfo -> ParsedExpr }
---   : try Expr Expr { Try $2 $3 }
-
--- SuspendExpr :: { SpanInfo -> ParsedExpr }
---   : suspend Expr { Suspend $2 }
-
--- CapExpr :: { SpanInfo -> ParsedExpr }
---   : CapForm { CapabilityForm $1 }
-
--- CapForm :: { CapForm SpanInfo }
---   : withcap Expr Block { WithCapability $2 $3 }
---   | c_usr_grd '(' ParsedName AppList ')' { CreateUserGuard $3 (reverse $4)}
 
 LamArgs :: { [MArg SpanInfo] }
   : LamArgs IDENT ':' Type { (MArg (getIdent $2) (Just $4) (_ptInfo $2)):$1 }
@@ -383,9 +352,6 @@ Binders :: { [Binder SpanInfo] }
 
 GenAppExpr :: { SpanInfo -> ParsedExpr }
   : Expr AppBindList { \i -> App $1 (toAppExprList i (reverse $2)) i }
-
-ProgNExpr :: { SpanInfo -> ParsedExpr }
-  : progn BlockBody { Block (NE.fromList (reverse $2)) }
 
 AppList :: { [ParsedExpr] }
   : AppList Expr { $2:$1 }
@@ -414,15 +380,9 @@ Atom :: { ParsedExpr }
   | String { $1 }
   | List { $1 }
   | Bool { $1 }
-  -- | Operator { $1 }
   | Object { $1 }
   | '(' ')' { Constant LUnit (_ptInfo $1) }
 
--- Operator :: { ParsedExpr }
---   : and { Operator AndOp (_ptInfo $1) }
---   | or { Operator OrOp (_ptInfo $1) }
---   | enforce { Operator EnforceOp (_ptInfo $1)}
---   | enforceOne { Operator EnforceOneOp (_ptInfo $1)}
 
 Bool :: { ParsedExpr }
   : true { Constant (LBool True) (_ptInfo $1) }
@@ -497,16 +457,6 @@ PropAtom :: { PropertyExpr SpanInfo }
 FVKeyword :: { PropertyExpr SpanInfo }
   : let { PropKeyword KwLet (_ptInfo $1) }
   | lam { PropKeyword KwLambda (_ptInfo $1) }
-  | progn { PropKeyword KwDo (_ptInfo $1) }
-  -- | if { PropKeyword KwIf (_ptInfo $1) }
-  -- | suspend { PropKeyword KwSuspend (_ptInfo $1) }
-  -- | try { PropKeyword KwTry (_ptInfo $1) }
-  -- | enforce { PropKeyword KwEnforce (_ptInfo $1) }
-  -- | enforceOne { PropKeyword KwEnforceOne (_ptInfo $1) }
-  -- | and { PropKeyword KwAnd (_ptInfo $1) }
-  -- | or { PropKeyword KwOr (_ptInfo $1) }
-  -- | c_usr_grd { PropKeyword KwCreateUserGuard (_ptInfo $1) }
-  -- | withcap { PropKeyword KwWithCapability (_ptInfo $1) }
 
 FVDelim :: { PropertyExpr SpanInfo }
   : '{' { PropDelim DelimLBrace (_ptInfo $1) }
@@ -580,13 +530,6 @@ propExprList tokLBracket li tokRBracket =
       rbracket = PropDelim DelimRBracket (_ptInfo tokRBracket)
       finfo = combineSpan (_ptInfo tokLBracket) (_ptInfo tokRBracket)
   in PropSequence ((lbracket:li)++[rbracket]) finfo
-
-mkBlock = \case
-  [x] -> x
-  li -> let
-    nel = NE.fromList li
-    i = combineSpans (NE.head nel) (NE.last nel)
-    in Block nel i
 
 mkBarename tx = BareName tx
 
