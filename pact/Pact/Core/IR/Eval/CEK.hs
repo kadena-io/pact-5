@@ -17,7 +17,6 @@ module Pact.Core.IR.Eval.CEK
   , mkDefPactClosure
   , resumePact
   , evalCap
-  , nameToFQN
   , isKeysetInSigs
   , isKeysetNameInSigs
   , requireCap
@@ -217,7 +216,7 @@ evaluateTerm cont handler env (Sequence e1 e2 _info) = do
 --   <COr e1 e2, E, K, H>          <e1, E, CondC(E, OrFrame(e2),K),H>
 --   <CIf cond ifc elc, E, K, H>   <cond, E, CondC(E, IfFrame(ifc,elc),K), H>
 --  Todo: enforce and enforce-one
-evaluateTerm cont handler env (Conditional c info) = case c of
+evaluateTerm cont handler env (BuiltinForm c info) = case c of
   CAnd te te' -> do
     -- chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env info (AndC te') cont) handler env te
@@ -231,7 +230,29 @@ evaluateTerm cont handler env (Conditional c info) = case c of
     let env' = sysOnlyEnv env
     -- chargeGasArgs info (GAConstant constantWorkNodeGas)
     evalCEK (CondC env' info (EnforceC str) cont) handler env' cond
-  CEnforceOne str conds -> do
+  CWithCapability rawCap body -> do
+      enforceNotWithinDefcap info env "with-capability"
+      let capFrame = WithCapC body
+          cont' = CapInvokeC env info capFrame cont
+      evalCEK cont' handler env rawCap
+  CCreateUserGuard term -> case term of
+    App (Var (Name n (NTopLevel mn mh)) _) args _ -> do
+      let fqn = FullyQualifiedName mn n mh
+      case args of
+        [] -> createUserGuard info cont handler fqn []
+        x : xs -> do
+          let usrGuardFrame = CreateUserGuardC fqn xs []
+          let cont' = CapInvokeC env info usrGuardFrame cont
+          evalCEK cont' handler env x
+    _ -> throwExecutionError info $ NativeExecutionError (NativeName "create-user-guard") $
+          "create-user-guard: expected function application of a top-level function"
+  CTry catchExpr rest -> do
+    chargeGasArgs info (GAConstant tryNodeGas)
+    errState <- evalStateToErrorState <$> get
+    let handler' = CEKHandler env catchExpr cont errState handler
+    let env' = readOnlyEnv env
+    evalCEK Mt handler' env' rest
+  CEnforceOne str (ListLit conds _) -> do
     case conds of
       [] ->
         -- Note: this will simply be re-thrown within EnforceErrorC, so we don't need anything fancy here
@@ -244,26 +265,29 @@ evaluateTerm cont handler env (Conditional c info) = case c of
         let handler' = CEKEnforceOne env' info str xs cont errState handler
         let cont' = CondC env' info EnforceOneC Mt
         evalCEK cont' handler' env' x
+  CEnforceOne _ _ ->
+    throwExecutionError info $ NativeExecutionError (NativeName "enforce-one") $
+          "enforce-one: expected a list of conditions"
 -- | ------ From --------------- | ------ To ------------------------ |
 --   <WithCap cap body, E, K, H>         <cap, E, CapInvokeC(E,WithCapC(body), K),H>
 --   <CreateUG n [], E, K, H>            <UGuard n [], E, K,H>
 --   <CreateUG n (x:xs), E, K,H>         <x, E, CapInvokeC(E,CrUGC(n, xs),K), H>
-evaluateTerm cont handler env (CapabilityForm cf info) = do
-  -- chargeGasArgs info (GAConstant constantWorkNodeGas)
-  case cf of
-    WithCapability rawCap body -> do
-      enforceNotWithinDefcap info env "with-capability"
-      let capFrame = WithCapC body
-          cont' = CapInvokeC env info capFrame cont
-      evalCEK cont' handler env rawCap
-    CreateUserGuard name args -> do
-      fqn <- nameToFQN info env name
-      case args of
-        [] -> createUserGuard info cont handler fqn []
-        x : xs -> do
-          let usrGuardFrame = CreateUserGuardC fqn xs []
-          let cont' = CapInvokeC env info usrGuardFrame cont
-          evalCEK cont' handler env x
+-- evaluateTerm cont handler env (CapabilityForm cf info) = do
+--   -- chargeGasArgs info (GAConstant constantWorkNodeGas)
+--   case cf of
+--     WithCapability rawCap body -> do
+--       enforceNotWithinDefcap info env "with-capability"
+--       let capFrame = WithCapC body
+--           cont' = CapInvokeC env info capFrame cont
+--       evalCEK cont' handler env rawCap
+--     CreateUserGuard name args -> do
+--       fqn <- nameToFQN info env name
+--       case args of
+--         [] -> createUserGuard info cont handler fqn []
+--         x : xs -> do
+--           let usrGuardFrame = CreateUserGuardC fqn xs []
+--           let cont' = CapInvokeC env info usrGuardFrame cont
+--           evalCEK cont' handler env x
 -- | ------ From --------------- | ------ To ------------------------ |
 --   <ListLit [], E, K, H>         <VList [], E, K, H>
 ---  <ListLit (x:xs), E, K, H>         <x, E, ListC(E,xs,K), H>
@@ -275,12 +299,12 @@ evaluateTerm cont handler env (ListLit ts info) = do
 -- | ------ From --------------- | ------ To ------------------------ |
 --   <Try c body, E, K, H>         <body, E, Mt, CEKHandler(E,c,K,_errState,H)>
 --   _errState - callstack,granted caps,events,gas
-evaluateTerm cont handler env (Try catchExpr rest info) = do
-  chargeGasArgs info (GAConstant tryNodeGas)
-  errState <- evalStateToErrorState <$> get
-  let handler' = CEKHandler env catchExpr cont errState handler
-  let env' = readOnlyEnv env
-  evalCEK Mt handler' env' rest
+-- evaluateTerm cont handler env (Try catchExpr rest info) = do
+--   chargeGasArgs info (GAConstant tryNodeGas)
+--   errState <- evalStateToErrorState <$> get
+--   let handler' = CEKHandler env catchExpr cont errState handler
+--   let env' = readOnlyEnv env
+--   evalCEK Mt handler' env' rest
 -- | ------ From --------------- | ------ To ------------------------ |
 --   <Try c body, E, K, H>         <body, E, Mt, CEKHandler(E,c,K,_errState,H)>
 --   _errState - callstack,granted caps,events,gas
@@ -549,24 +573,6 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
                          Nothing -> _peYield pe
               env' = set ceLocal (RAList.fromList (reverse args)) $ set ceDefPactStep (Just $ set psResume resume ps) env
           applyPact i pc ps cont handler env' (_peNestedDefPactExec pe)
-
-
--- Todo: fail invariant
--- Todo: is this enough checks for ndynref?
-nameToFQN
-  :: i
-  -> CEKEnv e b i
-  -> Name
-  -> EvalM e b i FullyQualifiedName
-nameToFQN info env (Name n nk) = case nk of
-  NTopLevel mn mh -> pure (FullyQualifiedName mn n mh)
-  NDynRef (DynamicRef dArg i) -> case RAList.lookup (view ceLocal env) i of
-    Just (VModRef mr) -> do
-      md <- getModule info (_mrModule mr)
-      pure (FullyQualifiedName (_mrModule mr) dArg (_mHash md))
-    Just _ -> throwExecutionError info (DynNameIsNotModRef n)
-    Nothing -> failInvariant info (InvariantInvalidBoundVariable n)
-  _ -> failInvariant info (InvariantInvalidBoundVariable n)
 
 
 -- | Acquires module admin for a known module

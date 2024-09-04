@@ -133,37 +133,37 @@ type RenamerM e b i =
 -- | A simple typeclass for resolving arity overloads
 class IsBuiltin b => DesugarBuiltin b where
   liftCoreBuiltin :: CoreBuiltin -> b
-  desugarOperator :: i -> Lisp.Operator -> Term ParsedName DesugarType b i
+  -- desugarOperator :: i -> Lisp.Operator -> Term ParsedName DesugarType b i
   desugarAppArity :: i -> b -> [Term n dt b i] -> Term n dt b i
 
 instance DesugarBuiltin CoreBuiltin where
   liftCoreBuiltin = id
-  desugarOperator info = \case
-    -- Manual eta expansion for and as well as Or
-    Lisp.AndOp -> let
-      arg1Name = "#andArg1"
-      arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool)) info
-      arg2Name = "#andArg2"
-      arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool)) info
-      in Lam (arg1 :| [arg2]) (Conditional (CAnd (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
-    Lisp.OrOp -> let
-      arg1Name = "#orArg1"
-      arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool)) info
-      arg2Name = "#orArg2"
-      arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool)) info
-      in Lam (arg1 :| [arg2]) (Conditional (COr (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
-    Lisp.EnforceOp -> let
-      arg1Name = "#enforceArg1"
-      arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool)) info
-      arg2Name = "#enforceArg2"
-      arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimString)) info
-      in Lam (arg1 :| [arg2]) (Conditional (CEnforce (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
-    Lisp.EnforceOneOp -> let
-      arg1Name = "#enforceOneArg1"
-      arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimString)) info
-      arg2Name = "#enforceOneArg2"
-      arg2 = Arg arg2Name (Just (Lisp.TyList (Lisp.TyPrim PrimBool))) info
-      in Lam (arg1 :| [arg2]) (Conditional (CEnforceOne (Var (BN (BareName arg1Name)) info) [Var (BN (BareName arg2Name)) info]) info) info
+  -- desugarOperator info = \case
+  --   -- Manual eta expansion for and as well as Or
+  --   Lisp.AndOp -> let
+  --     arg1Name = "#andArg1"
+  --     arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool)) info
+  --     arg2Name = "#andArg2"
+  --     arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool)) info
+  --     in Lam (arg1 :| [arg2]) (BuiltinForm (CAnd (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
+  --   Lisp.OrOp -> let
+  --     arg1Name = "#orArg1"
+  --     arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool)) info
+  --     arg2Name = "#orArg2"
+  --     arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool)) info
+  --     in Lam (arg1 :| [arg2]) (BuiltinForm (COr (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
+  --   Lisp.EnforceOp -> let
+  --     arg1Name = "#enforceArg1"
+  --     arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool)) info
+  --     arg2Name = "#enforceArg2"
+  --     arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimString)) info
+  --     in Lam (arg1 :| [arg2]) (BuiltinForm (CEnforce (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
+  --   Lisp.EnforceOneOp -> let
+  --     arg1Name = "#enforceOneArg1"
+  --     arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimString)) info
+  --     arg2Name = "#enforceOneArg2"
+  --     arg2 = Arg arg2Name (Just (Lisp.TyList (Lisp.TyPrim PrimBool))) info
+  --     in Lam (arg1 :| [arg2]) (BuiltinForm (CEnforceOne (Var (BN (BareName arg1Name)) info) [Var (BN (BareName arg2Name)) info]) info) info
   desugarAppArity = desugarCoreBuiltinArity id
 
 -- | Our general function for resolving builtin overloads
@@ -223,8 +223,8 @@ desugarCoreBuiltinArity f i b args =
 
 instance DesugarBuiltin (ReplBuiltin CoreBuiltin) where
   liftCoreBuiltin = RBuiltinWrap
-  desugarOperator i dsg =
-    over termBuiltin RBuiltinWrap $ desugarOperator i dsg
+  -- desugarOperator i dsg =
+  --   over termBuiltin RBuiltinWrap $ desugarOperator i dsg
   desugarAppArity i (RBuiltinWrap b) ne =
     desugarCoreBuiltinArity RBuiltinWrap i b ne
   -- (expect <description> <expected> <expression-to-eval>)
@@ -290,6 +290,150 @@ l %== f =
 
 infixr 4 %==
 
+data SpecialForm
+  = SFAnd
+  | SFOr
+  | SFIf
+  | SFEnforce
+  | SFWithCapability
+  | SFSuspend
+  -- | SFDo
+  | SFEnforceOne
+  | SFTry
+  | SFMap
+  | SFFilter
+  | SFFold
+  | SFZip
+  | SFCond
+  | SFCreateUserGuard
+  deriving (Eq, Show, Enum, Bounded)
+
+toSpecialForm :: Text -> Maybe SpecialForm
+toSpecialForm = \case
+  "and" -> Just SFAnd
+  "or" -> Just SFOr
+  "if" -> Just SFIf
+  "enforce" -> Just SFEnforce
+  "with-capability" -> Just SFWithCapability
+  "suspend" -> Just SFSuspend
+  "enforce-one" -> Just SFEnforceOne
+  -- "do" -> Just SFDo
+  "try" -> Just SFTry
+  "map" -> Just SFMap
+  -- "fold" -> Just SFFold
+  -- "filter" -> Just SFFilter
+  -- "zip" -> Just SFZip
+  "cond" -> Just SFCond
+  "create-user-guard" -> Just SFCreateUserGuard
+  _ -> Nothing
+
+-- sfToLam :: SpecialForm -> info -> Term _ _ _ _
+-- sfToLam = \case
+--   SFAnd -> conditionalLam2Arg CAnd
+--   SFOr -> conditionalLam2Arg COr
+--   SFEnforce -> conditionalLam2Arg CEnforce
+--   SFWithCapability -> undefined
+
+conditionalLam2Arg :: (Term ParsedName ty1 builtin1 info  -> Term ParsedName ty2 builtin2 info  -> BuiltinForm (Term name Lisp.Type builtin3 info)) -> info -> Term name Lisp.Type builtin3 info
+conditionalLam2Arg c info = let
+  arg1Name = "#condArg1"
+  arg1 = Arg arg1Name (Just (Lisp.TyPrim PrimBool)) info
+  arg2Name = "#condArg2"
+  arg2 = Arg arg2Name (Just (Lisp.TyPrim PrimBool)) info
+  in Lam (arg1 :| [arg2]) (BuiltinForm (c (Var (BN (BareName arg1Name)) info) (Var (BN (BareName arg2Name)) info)) info) info
+
+desugarSpecial
+  :: (DesugarBuiltin b)
+  => (BareName, i)
+  -> [Lisp.Expr i]
+  -> i
+  -> RenamerM e b i (Term ParsedName Lisp.Type b i)
+desugarSpecial (bn@(BareName t), varInfo) dsArgs appInfo = case toSpecialForm t of
+    Just sf -> goSpecial dsArgs sf
+    Nothing -> desugarFn (Lisp.Var (BN bn) varInfo) dsArgs
+  where
+  injectedArg1 = ":ijHO1"
+  injectedArg1Name = BN (BareName injectedArg1)
+  injectedArg2 = ":ijHO2"
+  injectedArg2Name =  BN (BareName injectedArg2)
+  desugarFn fn a = do
+    fn' <- desugarLispTerm fn
+    desugarArgs fn' a
+  desugarArgs e a = do
+    args' <- traverse desugarLispTerm a
+    case e of
+      Builtin b _ -> pure (desugarAppArity appInfo b args')
+      _ -> pure (App e args' appInfo)
+  -- Desugar 1 argument higher order functions to eta-expand for the sake of
+  -- arity resolution
+  desugar1ArgHOF f args = case args of
+    Lisp.App operand appArgs appI:xs -> do
+      let v = Lisp.Var injectedArg1Name appInfo
+          newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing appI] (Lisp.App operand (appArgs++ [v]) appI) appI
+      desugarFn (f varInfo) (newArg:xs)
+    _ -> desugarFn (f varInfo) args
+  desugar2ArgHOF f args = case args of
+    Lisp.App operand appArgs appI:xs -> do
+      let v1 = Lisp.Var injectedArg1Name appInfo
+          v2 = Lisp.Var injectedArg2Name appInfo
+          newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing appInfo, Lisp.MArg injectedArg2 Nothing appInfo]
+                (Lisp.App operand (appArgs ++ [v1, v2]) appI) appI
+      desugarFn (f varInfo) (newArg:xs)
+    _ -> desugarFn (f varInfo) args
+  goSpecial args = \case
+    SFAnd -> case args of
+      [e1, e2] ->
+        BuiltinForm <$> (CAnd <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure appInfo
+      _ -> desugarArgs (conditionalLam2Arg CAnd varInfo) args
+    SFOr -> case args of
+      [e1, e2] ->
+        BuiltinForm <$> (COr <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure appInfo
+      _ -> desugarArgs (conditionalLam2Arg COr varInfo) args
+    SFIf -> case args of
+      [e1, e2, e3] ->
+        BuiltinForm <$> (CIf <$> desugarLispTerm e1 <*> desugarLispTerm e2 <*> desugarLispTerm e3) <*> pure appInfo
+      _ -> throwDesugarError (InvalidSyntax "if must take three arguments") appInfo
+    SFEnforce -> case args of
+      [e1, e2] ->
+        BuiltinForm <$> (CEnforce <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure appInfo
+      _ -> desugarArgs (conditionalLam2Arg CEnforce varInfo) args
+    SFWithCapability -> case args of
+      e1:e2:xs ->
+        BuiltinForm <$> (CWithCapability <$> desugarLispTerm e1 <*> desugarLispTerm (Lisp.Block (e2 :| xs) appInfo)) <*> pure appInfo
+      _ -> throwDesugarError (InvalidSyntax "with-capability must take at least 2 expressions") appInfo
+    SFSuspend -> case args of
+      [e1] ->
+        Nullary <$> desugarLispTerm e1 <*> pure appInfo
+      _ -> throwDesugarError (InvalidSyntax "suspend must take only 1 argument") appInfo
+    SFEnforceOne -> case args of
+      [e1, e2] ->
+        BuiltinForm <$> (CEnforceOne <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure appInfo
+      _ -> throwDesugarError (InvalidSyntax "enforce-one must take two arguments") appInfo
+    SFTry -> case args of
+      [e1, e2] ->
+        BuiltinForm <$> (CTry <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure appInfo
+      _ -> throwDesugarError (InvalidSyntax "try must take two arguments") appInfo
+    SFCreateUserGuard -> case args of
+      [e] -> BuiltinForm <$> (CCreateUserGuard <$> desugarLispTerm e) <*> pure appInfo
+      _ -> throwDesugarError (InvalidSyntax "create-user-guard must take one argument, which must be an application") appInfo
+    SFMap -> desugar1ArgHOF MapV args
+    SFFilter -> desugar1ArgHOF FilterV args
+    SFZip -> desugar2ArgHOF ZipV args
+    SFFold -> desugar2ArgHOF FoldV args
+    SFCond -> case reverse args of
+      defCase:xs -> do
+        defCase' <- desugarLispTerm defCase
+        body <- foldlM toNestedIf defCase' xs
+        pure $ App (Builtin (liftCoreBuiltin CoreCond) appInfo) [Nullary body appInfo] appInfo
+      _ -> throwDesugarError (InvalidSyntax "cond: expected list of conditions with a default case") appInfo
+      where
+      toNestedIf b (Lisp.App cond [body] i') = do
+        cond' <- desugarLispTerm cond
+        body' <- desugarLispTerm body
+        pure $ BuiltinForm (CIf cond' body' b) i'
+      toNestedIf _ _ =
+        throwDesugarError (InvalidSyntax "cond: expected application of conditions") appInfo
+
 desugarLispTerm
   :: (DesugarBuiltin b)
   => Lisp.Expr i
@@ -315,7 +459,7 @@ desugarLispTerm = \case
   Lisp.Block nel i -> do
     nel' <- traverse desugarLispTerm nel
     pure $ foldr (\a b -> Sequence a b i) (NE.last nel') (NE.init nel')
-  Lisp.LetIn binders expr i -> do
+  Lisp.Let _ binders expr i -> do
     expr' <- desugarLispTerm expr
     foldrM (binderToLet i) expr' binders
   Lisp.Lam [] body i ->
@@ -325,7 +469,7 @@ desugarLispTerm = \case
         args = (\(Lisp.MArg n t ai) -> Arg n t ai) <$> nsts
     body' <- desugarLispTerm body
     pure (Lam args body' i)
-  Lisp.Suspend body i -> desugarLispTerm (Lisp.Lam [] body i)
+  -- Lisp.Suspend body i -> desugarLispTerm (Lisp.Lam [] body i)
   Lisp.Binding fs hs i -> do
     hs' <- traverse desugarLispTerm hs
     body <- bindingBody hs'
@@ -342,81 +486,90 @@ desugarLispTerm = \case
             fieldLit = Constant (LString field) i
             access = App (Builtin (liftCoreBuiltin CoreAt) i) [fieldLit, objFreshVar] i
         in Let arg access body i
-  Lisp.If e1 e2 e3 i -> Conditional <$>
-     (CIf <$> desugarLispTerm e1 <*> desugarLispTerm e2 <*> desugarLispTerm e3) <*> pure i
-  Lisp.App (Lisp.Operator o _oi) [e1, e2] i -> case o of
-    Lisp.AndOp ->
-      Conditional <$> (CAnd <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure i
-    Lisp.OrOp ->
-      Conditional <$> (COr <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure i
-    Lisp.EnforceOp ->
-      Conditional <$> (CEnforce <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure i
-    Lisp.EnforceOneOp -> case e2 of
-      Lisp.List e _ ->
-        Conditional <$> (CEnforceOne <$> desugarLispTerm e1 <*> traverse desugarLispTerm e) <*> pure i
-      _ ->
-        throwDesugarError (InvalidSyntax "enforce-one: expected argument list") i
-  Lisp.App e hs i -> do
-    case (e, hs) of
-      (MapV mapI, Lisp.App operand args appI:xs) -> do
-        let v = Lisp.Var injectedArg1Name i
-            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing i] (Lisp.App operand (args ++ [v]) appI) appI
-        commonDesugar (MapV mapI) (newArg:xs)
-      (FilterV filterI, Lisp.App operand args appI:xs) -> do
-        let v = Lisp.Var injectedArg1Name i
-            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing i] (Lisp.App operand (args ++ [v]) appI) appI
-        commonDesugar (FilterV filterI) (newArg:xs)
-      (FoldV foldI, Lisp.App operand args appI:xs) -> do
-        let v1 = Lisp.Var injectedArg1Name i
-            v2 = Lisp.Var injectedArg2Name i
-            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing i, Lisp.MArg injectedArg2 Nothing i] (Lisp.App operand (args ++ [v1, v2]) appI) appI
-        commonDesugar (FoldV foldI) (newArg:xs)
-      (ZipV zipI, Lisp.App operand args appI:xs) -> do
-        let v1 = Lisp.Var injectedArg1Name i
-            v2 = Lisp.Var injectedArg2Name i
-            newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing i, Lisp.MArg injectedArg2 Nothing i] (Lisp.App operand (args ++ [v1, v2]) appI) appI
-        commonDesugar (ZipV zipI) (newArg:xs)
-      (CondV condI, l) -> case reverse l of
-        defCase:xs -> do
-          defCase' <- desugarLispTerm defCase
-          body <- foldlM toNestedIf defCase' xs
-          pure $ App (Builtin (liftCoreBuiltin CoreCond) i) [Nullary body condI] condI
-        _ -> throwDesugarError (InvalidSyntax "cond: expected list of conditions with a default case") i
-        where
-        toNestedIf b (Lisp.App cond [body] i') = do
-          cond' <- desugarLispTerm cond
-          body' <- desugarLispTerm body
-          pure $ Conditional (CIf cond' body' b) i'
-        toNestedIf _ _ =
-          throwDesugarError (InvalidSyntax "cond: expected application of conditions") i
-      _ -> commonDesugar e hs
-    where
-    commonDesugar operator operands = do
-      e' <- desugarLispTerm operator
-      hs' <- traverse desugarLispTerm operands
-      case e' of
-        Builtin b _ -> pure (desugarAppArity i b hs')
-        _ -> pure (App e' hs' i)
+  -- Lisp.If e1 e2 e3 i -> BuiltinForm <$>
+  --    (CIf <$> desugarLispTerm e1 <*> desugarLispTerm e2 <*> desugarLispTerm e3) <*> pure i
+  -- Lisp.App (Lisp.Operator o _oi) [e1, e2] i -> case o of
+  --   Lisp.AndOp ->
+  --     BuiltinForm <$> (CAnd <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure i
+  --   Lisp.OrOp ->
+  --     BuiltinForm <$> (COr <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure i
+  --   Lisp.EnforceOp ->
+  --     BuiltinForm <$> (CEnforce <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure i
+  --   Lisp.EnforceOneOp -> case e2 of
+  --     Lisp.List e _ ->
+  --       BuiltinForm <$> (CEnforceOne <$> desugarLispTerm e1 <*> traverse desugarLispTerm e) <*> pure i
+  --     _ ->
+  --       throwDesugarError (InvalidSyntax "enforce-one: expected argument list") i
+  Lisp.App (Lisp.Var (BN n) varInfo) hs appInfo ->
+    desugarSpecial (n, varInfo) hs appInfo
+  Lisp.App operator operands i -> do
+    e' <- desugarLispTerm operator
+    hs' <- traverse desugarLispTerm operands
+    case e' of
+      Builtin b _ -> pure (desugarAppArity i b hs')
+      _ -> pure (App e' hs' i)
+    -- hs' <- traverse desugarLispTerm hs
+    -- pure (App e' hs' i)
+    -- case (e, hs) of
+    --   (MapV mapI, Lisp.App operand args appI:xs) -> do
+    --     let v = Lisp.Var injectedArg1Name i
+    --         newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing i] (Lisp.App operand (args ++ [v]) appI) appI
+    --     commonDesugar (MapV mapI) (newArg:xs)
+    --   (FilterV filterI, Lisp.App operand args appI:xs) -> do
+    --     let v = Lisp.Var injectedArg1Name i
+    --         newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing i] (Lisp.App operand (args ++ [v]) appI) appI
+    --     commonDesugar (FilterV filterI) (newArg:xs)
+    --   (FoldV foldI, Lisp.App operand args appI:xs) -> do
+    --     let v1 = Lisp.Var injectedArg1Name i
+    --         v2 = Lisp.Var injectedArg2Name i
+    --         newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing i, Lisp.MArg injectedArg2 Nothing i] (Lisp.App operand (args ++ [v1, v2]) appI) appI
+    --     commonDesugar (FoldV foldI) (newArg:xs)
+    --   (ZipV zipI, Lisp.App operand args appI:xs) -> do
+    --     let v1 = Lisp.Var injectedArg1Name i
+    --         v2 = Lisp.Var injectedArg2Name i
+    --         newArg = Lisp.Lam [Lisp.MArg injectedArg1 Nothing i, Lisp.MArg injectedArg2 Nothing i] (Lisp.App operand (args ++ [v1, v2]) appI) appI
+    --     commonDesugar (ZipV zipI) (newArg:xs)
+    --   (CondV condI, l) -> case reverse l of
+    --     defCase:xs -> do
+    --       defCase' <- desugarLispTerm defCase
+    --       body <- foldlM toNestedIf defCase' xs
+    --       pure $ App (Builtin (liftCoreBuiltin CoreCond) i) [Nullary body condI] condI
+    --     _ -> throwDesugarError (InvalidSyntax "cond: expected list of conditions with a default case") i
+    --     where
+    --     toNestedIf b (Lisp.App cond [body] i') = do
+    --       cond' <- desugarLispTerm cond
+    --       body' <- desugarLispTerm body
+    --       pure $ BuiltinForm (CIf cond' body' b) i'
+    --     toNestedIf _ _ =
+    --       throwDesugarError (InvalidSyntax "cond: expected application of conditions") i
+    --   _ -> commonDesugar e hs
+    -- where
+    -- commonDesugar operator operands = do
+    --   e' <- desugarLispTerm operator
+    --   hs' <- traverse desugarLispTerm operands
+    --   case e' of
+    --     Builtin b _ -> pure (desugarAppArity i b hs')
+    --     _ -> pure (App e' hs' i)
     --  stands for "injected Higher order 1". The name is unimportant,
     --  injected names are not meant to be very readable
-    injectedArg1 = ":ijHO1"
-    injectedArg1Name = BN (BareName injectedArg1)
-    injectedArg2 = ":ijHO2"
-    injectedArg2Name =  BN (BareName injectedArg2)
-  Lisp.Operator bop i -> pure (desugarOperator i bop)
+    -- injectedArg1 = ":ijHO1"
+    -- injectedArg1Name = BN (BareName injectedArg1)
+    -- injectedArg2 = ":ijHO2"
+    -- injectedArg2Name =  BN (BareName injectedArg2)
+  -- Lisp.Operator bop i -> pure (desugarOperator i bop)
   Lisp.List e1 i ->
     ListLit <$> traverse desugarLispTerm e1 <*> pure i
   Lisp.Constant l i ->
     pure (Constant l i)
-  Lisp.Try e1 e2 i ->
-    Try <$> desugarLispTerm e1 <*> desugarLispTerm e2 <*> pure i
+  -- Lisp.Try e1 e2 i ->
+  --   Try <$> desugarLispTerm e1 <*> desugarLispTerm e2 <*> pure i
   Lisp.Object fields i ->
     ObjectLit <$> (traverse._2) desugarLispTerm fields <*> pure i
-  Lisp.CapabilityForm cf i -> (`CapabilityForm` i) <$> case cf of
-    Lisp.WithCapability cap body ->
-      WithCapability <$> desugarLispTerm cap <*> desugarLispTerm body
-    Lisp.CreateUserGuard pn exs ->
-      CreateUserGuard pn <$> traverse desugarLispTerm exs
+  -- Lisp.CapabilityForm cf i -> (`CapabilityForm` i) <$> case cf of
+  --   Lisp.WithCapability cap body ->
+  --     WithCapability <$> desugarLispTerm cap <*> desugarLispTerm body
+  --   Lisp.CreateUserGuard pn exs ->
+  --     CreateUserGuard pn <$> traverse desugarLispTerm exs
   where
   binderToLet i (Lisp.Binder n mty expr) term = do
     expr' <- desugarLispTerm expr
@@ -425,14 +578,13 @@ desugarLispTerm = \case
 pattern MapV :: i -> Lisp.Expr i
 pattern MapV info = Lisp.Var (BN (BareName "map")) info
 pattern FilterV :: i -> Lisp.Expr i
-pattern FilterV info = Lisp.Var (BN (BareName "map")) info
+pattern FilterV info = Lisp.Var (BN (BareName "filter")) info
 pattern FoldV :: i -> Lisp.Expr i
-pattern FoldV info = Lisp.Var (BN (BareName "map")) info
+pattern FoldV info = Lisp.Var (BN (BareName "fold")) info
 pattern ZipV :: i -> Lisp.Expr i
-pattern ZipV info = Lisp.Var (BN (BareName "map")) info
-
-pattern CondV :: i -> Lisp.Expr i
-pattern CondV info = Lisp.Var (BN (BareName "cond")) info
+pattern ZipV info = Lisp.Var (BN (BareName "zip")) info
+-- pattern CondV :: i -> Lisp.Expr i
+-- pattern CondV info = Lisp.Var (BN (BareName "cond")) info
 
 suspendTerm
   :: Term n dt builtin info
@@ -653,16 +805,12 @@ termSCC currM currDefns = \case
   App fn apps _ ->
     S.union (termSCC currM currDefns fn) (foldMap (termSCC currM currDefns) apps)
   Sequence e1 e2 _ -> S.union (termSCC currM currDefns e1) (termSCC currM currDefns e2)
-  Conditional c _ ->
+  BuiltinForm c _ ->
     foldMap (termSCC currM currDefns) c
   Builtin{} -> S.empty
   Constant{} -> S.empty
   ListLit v _ -> foldMap (termSCC currM currDefns) v
-  Try e1 e2 _ -> S.union (termSCC currM currDefns e1) (termSCC currM currDefns e2)
   Nullary e _ -> termSCC currM currDefns e
-  CapabilityForm cf _ -> foldMap (termSCC currM currDefns) cf <> case cf of
-    CreateUserGuard nameParam _ -> parsedNameSCC currM currDefns nameParam
-    WithCapability _ _ -> mempty
   ObjectLit m _ ->
     foldMap (termSCC currM currDefns . view _2) m
   InlineValue{} -> mempty
@@ -1066,27 +1214,15 @@ renameTerm (Nullary term i) =
   Nullary <$> renameTerm term <*> pure i
 renameTerm (Sequence e1 e2 i) = do
   Sequence <$> renameTerm e1 <*> renameTerm e2 <*> pure i
-renameTerm (Conditional c i) =
-  Conditional <$> traverse renameTerm c <*> pure i
+renameTerm (BuiltinForm c i) = do
+  when (has _CWithCapability c) $ enforceNotWithinDefcap i "with-capability"
+  BuiltinForm <$> traverse renameTerm c <*> pure i
 renameTerm (Builtin b i) =
   pure (Builtin b i)
 renameTerm (Constant l i) =
   pure (Constant l i)
 renameTerm (ListLit v i) = do
   ListLit <$> traverse renameTerm v <*> pure i
-renameTerm (Try e1 e2 i) = do
-  Try <$> renameTerm e1 <*> renameTerm e2 <*> pure i
-renameTerm (CapabilityForm cf i) = case cf of
-  CreateUserGuard parsedName args -> do
-      (name', _dkind) <- resolveName i parsedName
-      -- Ensure user guards have a valid reference
-      -- Todo: we currently cover this in caps.repl, do we want
-      -- to make this a static error?
-      -- when (dkind /= Just DKDefun) $ throwDesugarError (InvalidUserGuard (rawParsedName parsedName)) i
-      CapabilityForm <$> (CreateUserGuard name' <$> traverse renameTerm args) <*> pure i
-  WithCapability cap body -> do
-    enforceNotWithinDefcap i "with-capability"
-    CapabilityForm <$> (WithCapability <$> renameTerm cap <*> renameTerm body) <*> pure i
 renameTerm (ObjectLit o i) =
   ObjectLit <$> (traverse._2) renameTerm o <*> pure i
 renameTerm (InlineValue pb i) = pure (InlineValue pb i)

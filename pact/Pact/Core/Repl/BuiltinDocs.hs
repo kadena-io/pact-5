@@ -16,7 +16,7 @@ import Pact.Core.Repl.BuiltinDocs.Internal
 topLevelHasDocs :: TopLevel i -> Maybe Text
 topLevelHasDocs (TLTerm term) = case term of
   Var (BN (BareName bn)) _ -> _markdownDoc <$> M.lookup bn builtinDocs
-  Operator op _ -> _markdownDoc <$> M.lookup (renderOp op) builtinDocs
+  -- Operator op _ -> _markdownDoc <$> M.lookup (renderOp op) builtinDocs
   _ -> mempty
 topLevelHasDocs _ = Nothing
 

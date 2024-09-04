@@ -48,9 +48,10 @@ data PosToken =
 data Token
   -- Keywords
   = TokenLet
-  | TokenIf
+  | TokenLetStar
+  -- | TokenIf
   | TokenLambda
-  | TokenTry
+  -- | TokenTry
   | TokenModule
   | TokenInterface
   | TokenImport
@@ -84,10 +85,10 @@ data Token
   | TokenWithCapability
   | TokenCreateUserGuard
   -- Operators with lazy semantics
-  | TokenAnd
-  | TokenOr
-  | TokenEnforce
-  | TokenEnforceOne
+  -- | TokenAnd
+  -- | TokenOr
+  -- | TokenEnforce
+  -- | TokenEnforceOne
   | TokenSingleTick !Text
   | TokenIdent !Text
   | TokenNumber !Text
@@ -95,11 +96,11 @@ data Token
   | TokenTrue
   | TokenFalse
   | TokenBlockIntro
-  | TokenSuspend
+  -- | TokenSuspend
   | TokenDynAcc
   | TokenBindAssign
   -- Repl-specific tokens
-  | TokenLoad
+  -- | TokenLoad
 
   -- Layout
   | TokenEOF
@@ -258,9 +259,10 @@ runLexerT (LexerM act) s = evalStateT act (initState s)
 renderTokenText :: Token -> Text
 renderTokenText = \case
   TokenLet -> "let"
-  TokenIf -> "if"
+  TokenLetStar -> "let*"
+  -- TokenIf -> "if"
   TokenLambda -> "lambda"
-  TokenTry -> "try"
+  -- TokenTry -> "try"
   TokenModule -> "module"
   TokenInterface -> "interface"
   TokenImport -> "use"
@@ -290,10 +292,10 @@ renderTokenText = \case
   TokenBindAssign -> ":="
   TokenDynAcc -> "::"
   TokenBlockIntro -> "do"
-  TokenAnd -> "and"
-  TokenOr -> "or"
-  TokenEnforce -> "enforce"
-  TokenEnforceOne -> "enforce-one"
+  -- TokenAnd -> "and"
+  -- TokenOr -> "or"
+  -- TokenEnforce -> "enforce"
+  -- TokenEnforceOne -> "enforce-one"
   TokenIdent t -> "ident<" <> t <> ">"
   TokenNumber n -> "number<" <> n <> ">"
   TokenSingleTick s -> "\'" <> s
@@ -301,8 +303,8 @@ renderTokenText = \case
   TokenTrue -> "true"
   TokenFalse -> "false"
   TokenEOF -> "EOF"
-  TokenSuspend -> "suspend"
-  TokenLoad -> "load"
+  -- TokenSuspend -> "suspend"
+  -- TokenLoad -> "load"
   TokenWithCapability -> "with-capability"
   TokenCreateUserGuard -> "create-user-guard"
 

@@ -413,17 +413,17 @@ instance Serialise (SerialiseV1 Field) where
   decode = SerialiseV1 <$> (Field <$> decode)
   {-# INLINE decode #-}
 
-instance (Serialise (SerialiseV1 name), Serialise (SerialiseV1 e)) => Serialise (SerialiseV1 (CapForm name e)) where
-  encode (SerialiseV1 cf) = case cf of
-    WithCapability e1 e2 -> encodeWord 0 <> encodeS e1 <> encodeS e2
-    CreateUserGuard name es -> encodeWord 1 <> encodeS name <> encodeS es
-  {-# INLINE encode #-}
+-- instance (Serialise (SerialiseV1 name), Serialise (SerialiseV1 e)) => Serialise (SerialiseV1 (CapForm name e)) where
+--   encode (SerialiseV1 cf) = case cf of
+--     WithCapability e1 e2 -> encodeWord 0 <> encodeS e1 <> encodeS e2
+--     CreateUserGuard name es -> encodeWord 1 <> encodeS name <> encodeS es
+--   {-# INLINE encode #-}
 
-  decode = decodeWord >>= fmap SerialiseV1 . \case
-    0 -> WithCapability <$> decodeS <*> decodeS
-    1 -> CreateUserGuard <$> decodeS <*> decodeS
-    _ -> fail "unexpected decoding"
-  {-# INLINE decode #-}
+--   decode = decodeWord >>= fmap SerialiseV1 . \case
+--     0 -> WithCapability <$> decodeS <*> decodeS
+--     1 -> CreateUserGuard <$> decodeS <*> decodeS
+--     _ -> fail "unexpected decoding"
+--   {-# INLINE decode #-}
 
 instance (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
   => Serialise (SerialiseV1 (BuiltinForm (Term Name Type b i))) where
@@ -433,6 +433,9 @@ instance (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
       CIf t1 t2 t3 -> encodeWord 2 <> encodeS t1 <> encodeS t2 <> encodeS t3
       CEnforceOne t1 t2 -> encodeWord 3 <> encodeS t1 <> encodeS t2
       CEnforce t1 t2 -> encodeWord 4 <> encodeS t1 <> encodeS t2
+      CWithCapability t1 t2 -> encodeWord 5 <> encodeS t1 <> encodeS t2
+      CTry t1 t2 -> encodeWord 6 <> encodeS t1 <> encodeS t2
+      CCreateUserGuard t1 -> encodeWord 7 <> encodeS t1
   {-# INLINE encode #-}
 
   decode = decodeWord >>= fmap SerialiseV1 . \case
@@ -441,6 +444,9 @@ instance (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
     2 -> CIf <$> decodeS <*> decodeS <*> decodeS
     3 -> CEnforceOne <$> decodeS <*> decodeS
     4 -> CEnforce <$> decodeS <*> decodeS
+    5 -> CWithCapability <$> decodeS <*> decodeS
+    6 -> CTry <$> decodeS <*> decodeS
+    7 -> CCreateUserGuard <$> decodeS
     _ -> fail "unexpected decoding"
   {-# INLINE decode #-}
 
@@ -454,14 +460,12 @@ instance
     App t1 t2 i -> encodeWord 3 <> encodeS t1 <> encodeS t2 <> encodeS i
     Sequence t1 t2 i -> encodeWord 4 <> encodeS t1 <> encodeS t2 <> encodeS i
     Nullary t i -> encodeWord 5 <> encodeS t <> encodeS i
-    Conditional bi i -> encodeWord 6 <> encodeS bi <> encodeS i
+    BuiltinForm bi i -> encodeWord 6 <> encodeS bi <> encodeS i
     Builtin bi i -> encodeWord 7 <> encodeS bi <> encodeS i
     Constant lit i -> encodeWord 8 <> encodeS lit <> encodeS i
     ListLit t i -> encodeWord 9 <> encodeS t <> encodeS i
-    Try t1 t2 i -> encodeWord 10 <> encodeS t1 <> encodeS t2 <> encodeS i
-    ObjectLit o i -> encodeWord 11 <> encodeS o <> encodeS i
-    CapabilityForm cf i -> encodeWord 12 <> encodeS cf <> encodeS i
-    InlineValue pv i -> encodeWord 13 <> encodeS pv <> encodeS i
+    ObjectLit o i -> encodeWord 10 <> encodeS o <> encodeS i
+    InlineValue pv i -> encodeWord 11 <> encodeS pv <> encodeS i
   {-# INLINE encode #-}
 
   decode = decodeWord >>= fmap SerialiseV1 . \case
@@ -471,15 +475,13 @@ instance
     3 -> App <$> decodeS <*> decodeS <*> decodeS
     4 -> Sequence <$> decodeS <*> decodeS <*> decodeS
     5 -> Nullary <$> decodeS <*> decodeS
-    6 -> Conditional <$> decodeS <*> decodeS
+    6 -> BuiltinForm <$> decodeS <*> decodeS
     7 -> Builtin <$> decodeS <*> decodeS
     8 -> Constant <$> decodeS <*> decodeS
     9 -> ListLit <$> decodeS <*> decodeS
-    10 -> Try <$> decodeS <*> decodeS <*> decodeS
-    11 -> ObjectLit <$> decodeS <*> decodeS
-    12 -> CapabilityForm <$> decodeS <*> decodeS
+    10 -> ObjectLit <$> decodeS <*> decodeS
     -- Internal term used for back. compat pact < 5
-    13 -> InlineValue <$> decodeS <*> decodeS
+    11 -> InlineValue <$> decodeS <*> decodeS
     _ -> fail "unexpected decoding"
   {-# INLINE decode #-}
 

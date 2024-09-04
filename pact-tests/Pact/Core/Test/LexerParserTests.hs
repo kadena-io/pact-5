@@ -17,6 +17,7 @@ import qualified Pact.Core.Syntax.Parser as Lisp
 import Pact.Core.Syntax.LexUtils (Token(..))
 import Pact.Core.Literal
 import Pact.Core.Pretty
+import Pact.Core.Syntax.ParseTree (LetForm(LFLetNormal))
 
 showPretty :: Pretty a => a -> T.Text
 showPretty = T.pack . show . pretty
@@ -39,9 +40,8 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
     -- and num and turn this into an enum bounded call
     unary = Gen.constant
       <$> [ TokenLet
-          , TokenIf
+          , TokenLetStar
           , TokenLambda
-          , TokenTry
           , TokenModule
           , TokenInterface
           , TokenImport
@@ -64,14 +64,8 @@ tokenGen = Gen.choice $ unary ++ [ TokenIdent <$> identGen, number, string]
           , TokenColon
           , TokenDot
           -- Operators
-          , TokenAnd
-          , TokenOr
           , TokenTrue
           , TokenFalse
-          , TokenBlockIntro
-          , TokenSuspend
-          -- Repl-specific tokens
-          , TokenLoad
           ]
 
 lexerRoundtrip :: Property
@@ -132,26 +126,19 @@ constantGen = (`Lisp.Constant` ()) <$> Gen.choice
       pure $ LDecimal (Decimal i m)
 
 
-operatorGen :: ParserGen
-operatorGen = Gen.choice $ (\x -> pure (Lisp.Operator x ())) <$> [minBound .. ]
-
 exprGen :: ParserGen
 exprGen = Gen.recursive Gen.choice
   [ varGen
   , constantGen
-  , operatorGen
   ]
   -- recursive ones
-  [ Gen.subterm exprGen (`Lisp.Suspend` ())
-  , Gen.subterm2 exprGen exprGen (\x y -> Lisp.Try x y ())
-  , Gen.subtermM exprGen $ \x -> do
+  [ Gen.subtermM exprGen $ \x -> do
       xs <- Gen.list (Range.linear 0 8) exprGen
       pure $ Lisp.App x xs ()
   , (`Lisp.Block` ()) <$> Gen.nonEmpty (Range.linear 1 8) (Gen.subterm exprGen id)
   , (`Lisp.List` ()) <$> Gen.list (Range.linear 1 8) (Gen.subterm exprGen id)
   , lamGen
   , Gen.subtermM exprGen letGen
-  , Gen.subterm3 exprGen exprGen exprGen (\a b c -> Lisp.If a b c ())
   ]
   where
     lamGen = do
@@ -164,7 +151,7 @@ exprGen = Gen.recursive Gen.choice
 
     letGen inner = do
       binders <- Gen.nonEmpty (Range.constant 1 8) binderGen
-      pure $ Lisp.LetIn binders inner ()
+      pure $ Lisp.Let LFLetNormal binders inner ()
 
     typeGen :: Gen Lisp.Type
     typeGen = Gen.recursive Gen.choice

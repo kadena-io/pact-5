@@ -446,16 +446,14 @@ fromLegacyPersistDirect = \case
   Legacy.PDValue v ->
     liftEither $ (`InlineValue` ()) <$> fromLegacyPactValue v
   Legacy.PDNative (Legacy.NativeDefName n)
-    | n == "enforce" -> pure (Conditional (CEnforce unitValue unitValue) ())
-    | n == "enforce-one" -> pure (Conditional (CEnforceOne unitValue [unitValue]) ())
-    | n == "if" -> pure (Conditional (CIf unitValue unitValue unitValue) ())
-    | n == "and" -> pure (Conditional (CAnd unitValue unitValue) ())
-    | n == "or" -> pure (Conditional (COr unitValue unitValue) ())
-    | n == "with-capability" -> pure (CapabilityForm (WithCapability unitValue unitValue) ())
-    | n == "create-capability" -> pure (CapabilityForm (CreateUserGuard unitName [unitValue]) ())
-    | n == "create-user-guard" -> pure (CapabilityForm (CreateUserGuard unitName [unitValue]) ())
-    | n == "try" -> pure (Try unitValue unitValue ())
-
+    | n == "enforce" -> pure (BuiltinForm (CEnforce unitValue unitValue) ())
+    | n == "enforce-one" -> pure (BuiltinForm (CEnforceOne unitValue unitValue) ())
+    | n == "if" -> pure (BuiltinForm (CIf unitValue unitValue unitValue) ())
+    | n == "and" -> pure (BuiltinForm (CAnd unitValue unitValue) ())
+    | n == "or" -> pure (BuiltinForm (COr unitValue unitValue) ())
+    | n == "with-capability" -> pure (BuiltinForm (CWithCapability unitValue unitValue) ())
+    | n == "create-user-guard" -> pure (BuiltinForm (CCreateUserGuard unitValue) ())
+    | n == "try" -> pure (BuiltinForm (CTry unitValue unitValue) ())
     | n == "CHARSET_ASCII" -> pure (Constant (LInteger 0) ()) -- see Desugar.hs
     | n == "CHARSET_LATIN1" -> pure (Constant (LInteger 1) ())
     | n == "constantly" -> do
@@ -473,7 +471,6 @@ fromLegacyPersistDirect = \case
   where
     -- Note: unit* is used as placeholder, which gets replaced in `fromLegacyTerm`
     unitValue = InlineValue PUnit ()
-    unitName = (Name "unitName" (NBound 0), 0)
 
 objBindingToLet
   :: ModuleHash
@@ -590,35 +587,34 @@ fromLegacyTerm mh = \case
           args' <- traverse (fromLegacyTerm mh) args
           pure (desugarAppArity () b args')
 
-      Conditional CEnforce{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [t1,t2] -> pure (Conditional (CEnforce t1 t2) ())
+      BuiltinForm CEnforce{} _ -> traverse (fromLegacyTerm mh) args >>= \case
+        [t1,t2] -> pure (BuiltinForm (CEnforce t1 t2) ())
         _ -> throwError "invariant failure"
 
-      Conditional CEnforceOne{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [t1, ListLit t2 _] -> pure (Conditional (CEnforceOne t1 t2) ())
+      BuiltinForm CEnforceOne{} _ -> traverse (fromLegacyTerm mh) args >>= \case
+        [t1, t2] -> pure (BuiltinForm (CEnforceOne t1 t2) ())
         _ -> throwError "invariant failure"
 
-      Conditional CIf{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [cond, b1, b2] -> pure (Conditional (CIf cond b1 b2) ())
+      BuiltinForm CIf{} _ -> traverse (fromLegacyTerm mh) args >>= \case
+        [cond, b1, b2] -> pure (BuiltinForm (CIf cond b1 b2) ())
         _ -> throwError "invariant failure"
 
-      CapabilityForm WithCapability{} _ -> traverse (fromLegacyTerm mh) args >>= \case
+      BuiltinForm CWithCapability{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [t1, ListLit t2 _] -> case reverse t2 of
           [] -> error "invariant failure: with-cap empty body"
           x:xs -> do
             let body' = foldl' (\r l -> Sequence l r ()) x xs
-            pure (CapabilityForm (WithCapability t1 body') ())
+            pure (BuiltinForm (CWithCapability t1 body') ())
         _ -> throwError "invariant failure"
 
-      CapabilityForm CreateUserGuard{} _ ->
+      BuiltinForm CCreateUserGuard{} _ ->
         traverse (fromLegacyTerm mh) args >>= \case
-        -- TODO case is wrong
-        [App (Var n _) cugargs _] ->
-          pure (CapabilityForm (CreateUserGuard n cugargs) ())
-        t -> error $ "createuserguard case TODO: JOSE" <> show t
+        [x] ->
+          pure (BuiltinForm (CCreateUserGuard x) ())
+        _ -> throwError "invariant failure"
 
-      Try{} -> traverse (fromLegacyTerm mh) args >>= \case
-        [t1, t2] -> pure (Try t1 t2 ())
+      BuiltinForm CTry{} _ -> traverse (fromLegacyTerm mh) args >>= \case
+        [t1, t2] -> pure (BuiltinForm (CTry t1 t2) ())
         _ -> throwError "invariant failure"
 
       _ -> do
@@ -1057,8 +1053,8 @@ fixTreeIndices = \case
     pure $ Let arg e1' e2' i
   App fn args i ->
     App <$> fixTreeIndices fn <*> traverse fixTreeIndices args <*> pure i
-  Conditional bfn i ->
-    Conditional <$> traverse fixTreeIndices bfn <*> pure i
+  BuiltinForm bfn i ->
+    BuiltinForm <$> traverse fixTreeIndices bfn <*> pure i
   Builtin b i ->
     pure $ Builtin b i
   Constant l i ->
@@ -1068,14 +1064,7 @@ fixTreeIndices = \case
   Nullary t i -> Nullary <$> fixTreeIndices t <*> pure i
   ListLit args i ->
     ListLit <$> traverse fixTreeIndices args <*> pure i
-  Try c e i ->
-    Try <$> fixTreeIndices c <*> fixTreeIndices e <*> pure i
   ObjectLit fields i ->
     ObjectLit <$> (traversed._2) fixTreeIndices fields <*> pure i
-  CapabilityForm cf i -> fmap (`CapabilityForm` i) $ case cf of
-    CreateUserGuard (n, _) e ->
-      CreateUserGuard n <$> traverse fixTreeIndices e
-    WithCapability cap body ->
-      WithCapability <$> fixTreeIndices cap <*> fixTreeIndices body
   InlineValue p i ->
     pure $ InlineValue p i

@@ -364,16 +364,8 @@ processFile replEnv nuri source = do
         _ | isAbsolute fp -> pure fp
           | takeFileName currFile == currFile -> pure fp
           | otherwise -> pure $ combine (takeDirectory currFile) fp
-    pipe = \case
-      Lisp.RTL (Lisp.RTLTopLevel tl) -> do
-        functionDocs tl
-        (ds, deps) <- compileDesugarOnly replEnv tl
-        constEvaled <- ConstEval.evalTLConsts replEnv ds
-        let tlFinal = MHash.hashTopLevel constEvaled
-        let act = M.singleton nuri [ds] <$ evalTopLevel replEnv tlFinal deps
-        catchError act (const (pure mempty))
-      Lisp.RTLReplSpecial rtl -> case rtl of
-        Lisp.ReplLoad fp _ i -> do
+    pipe rtl = case Repl.topLevelIsReplLoad rtl of
+      Right (Repl.ReplLoadFile fp _ i) -> do
           fp' <- mangleFilePath (T.unpack fp)
           res <- liftIO $ E.try (T.readFile fp')
           case res of
@@ -382,6 +374,13 @@ processFile replEnv nuri source = do
              Right txt -> do
                let nfp = normalizedFilePathToUri (toNormalizedFilePath fp')
                processFile replEnv nfp txt
+      Left (Lisp.RTLTopLevel tl) -> do
+        functionDocs tl
+        (ds, deps) <- compileDesugarOnly replEnv tl
+        constEvaled <- ConstEval.evalTLConsts replEnv ds
+        let tlFinal = MHash.hashTopLevel constEvaled
+        let act = M.singleton nuri [ds] <$ evalTopLevel replEnv tlFinal deps
+        catchError act (const (pure mempty))
       _ ->  pure mempty
 
 sshow :: Show a => a -> Text

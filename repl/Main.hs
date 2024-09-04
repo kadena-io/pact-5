@@ -27,8 +27,8 @@ import Pact.Core.Errors
 import Pact.Core.Info
 import System.Exit(exitFailure, exitSuccess)
 
-data ReplLoadFile
-  = ReplLoadFile
+data OReplLoadFile
+  = OReplLoadFile
   { _oFindScript :: Bool
   , _oDebug :: Bool
   , _oFile :: String
@@ -38,7 +38,7 @@ data ReplOpts
   = OVersion
   | OBuiltins
   | OLanguageServer
-  | OLoad ReplLoadFile
+  | OLoad OReplLoadFile
   -- Sig-related options
   | OAddSigsReq { _oKeyFiles :: [FilePath], _oReqLocal :: Bool }
   | OCombineSigs { _oSigFiles :: [FilePath], _oReqLocal :: Bool }
@@ -64,7 +64,7 @@ replOpts = O.optional $
 -- Todo: trace output and coverage?
 loadFlag :: O.Parser ReplOpts
 loadFlag = fmap OLoad $
-  ReplLoadFile
+  OReplLoadFile
     <$> O.flag False True
         (O.short 'r' <> O.long "findscript" <>
         O.help "For .pact files, attempts to locate a .repl file to execute.")
@@ -115,7 +115,7 @@ main = O.execParser argParser >>= \case
     OApiReq cf l -> apiReq cf l
     OSignCmd kfs -> BS8.putStrLn =<< signCmd kfs =<< fmap (T.encodeUtf8 . T.strip) T.getContents
     OGenKey -> genKeys
-    OLoad (ReplLoadFile findScript dbg fp)
+    OLoad (OReplLoadFile findScript dbg fp)
       | isPactFile fp -> do
         script <- if findScript then locatePactReplScript fp else return Nothing
         case script of

@@ -65,8 +65,6 @@ updateDefHashes mname mhash = \case
 updateTermHashes :: ModuleName -> ModuleHash -> Term Name Type b i -> Term Name Type b i
 updateTermHashes mname mhash = transform $ \case
   Var n i -> Var (updateNameHash mname mhash n) i
-  CapabilityForm cf i ->
-    CapabilityForm (over capFormName (updateNameHash mname mhash) cf) i
   a -> a
 
 updateNameHash :: ModuleName -> ModuleHash -> Name -> Name

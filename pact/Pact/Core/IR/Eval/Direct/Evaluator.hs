@@ -278,7 +278,7 @@ evaluate env = \case
   Lam args body info -> do
       let clo = VLamClosure (LamClosure (ArgClosure args) (NE.length args) body Nothing env info)
       return clo
-  Conditional c info -> case c of
+  BuiltinForm c info -> case c of
     CAnd te te' -> do
       b <- evaluate env te >>= enforceBool info
       -- chargeGasArgs info (GAConstant constantWorkNodeGas)
@@ -302,7 +302,24 @@ evaluate env = \case
       else do
         msg <- enforceString info =<< evaluate env str
         throwUserRecoverableError info (UserEnforceError msg)
-    CEnforceOne str conds ->
+    CWithCapability cap body -> do
+      enforceNotWithinDefcap info env "with-capability"
+      rawCap <- enforceCapToken info =<< evaluate env cap
+      let capModule = view (ctName . fqModule) rawCap
+      guardForModuleCall info capModule $ pure ()
+      evalCap info env rawCap PopCapInvoke NormalCapEval body
+    CCreateUserGuard term -> case term of
+      App (Var (Name n (NTopLevel mn mh)) _) uargs _ -> do
+        let fqn = FullyQualifiedName mn n mh
+        args <- traverse (evaluate env >=> enforcePactValue info) uargs
+        createUserGuard info fqn args
+      _ -> throwExecutionError info $ NativeExecutionError (NativeName "create-user-guard") $
+          "create-user-guard: expected function application of a top-level function"
+    CTry catchExpr tryExpr -> do
+      chargeGasArgs info (GAConstant tryNodeGas)
+      let env' = readOnlyEnv env
+      catchRecoverable (evaluate env' tryExpr) (\_ _ -> evaluate env catchExpr)
+    CEnforceOne str (ListLit conds _) ->
       go conds
       where
       go (x:xs) = do
@@ -313,26 +330,29 @@ evaluate env = \case
       go [] = do
         msg <- enforceString info =<< evaluate env str
         throwUserRecoverableError info (UserEnforceError msg)
+    CEnforceOne _ _ ->
+      throwExecutionError info $ NativeExecutionError (NativeName "enforce-one") $
+            "enforce-one: expected a list of conditions"
 
-  CapabilityForm cf info -> case cf of
-    WithCapability cap body -> do
-      enforceNotWithinDefcap info env "with-capability"
-      rawCap <- enforceCapToken info =<< evaluate env cap
-      let capModule = view (ctName . fqModule) rawCap
-      guardForModuleCall info capModule $ pure ()
-      evalCap info env rawCap PopCapInvoke NormalCapEval body
-    CreateUserGuard n uargs -> do
-      fqn <- nameToFQN info env n
-      args <- traverse (evaluate env >=> enforcePactValue info) uargs
-      createUserGuard info fqn args
+  -- CapabilityForm cf info -> case cf of
+  --   WithCapability cap body -> do
+  --     enforceNotWithinDefcap info env "with-capability"
+  --     rawCap <- enforceCapToken info =<< evaluate env cap
+  --     let capModule = view (ctName . fqModule) rawCap
+  --     guardForModuleCall info capModule $ pure ()
+  --     evalCap info env rawCap PopCapInvoke NormalCapEval body
+  --   CreateUserGuard n uargs -> do
+  --     fqn <- nameToFQN info env n
+  --     args <- traverse (evaluate env >=> enforcePactValue info) uargs
+  --     createUserGuard info fqn args
   ListLit ts info -> do
     chargeGasArgs info (GConcat (ListConcat (GasListLength (length ts))))
     args <- traverse (evaluate env >=> enforcePactValue info) ts
     return (VList (V.fromList args))
-  Try catchExpr tryExpr info -> do
-    chargeGasArgs info (GAConstant tryNodeGas)
-    let env' = readOnlyEnv env
-    catchRecoverable (evaluate env' tryExpr) (\_ _ -> evaluate env catchExpr)
+  -- Try catchExpr tryExpr info -> do
+  --   chargeGasArgs info (GAConstant tryNodeGas)
+  --   let env' = readOnlyEnv env
+  --   catchRecoverable (evaluate env' tryExpr) (\_ _ -> evaluate env catchExpr)
   ObjectLit o info -> do
     chargeGasArgs info (GConcat (ObjConcat (length o)))
     args <- traverse go o
@@ -529,23 +549,6 @@ popCap info cappop v = case cappop of
       [] -> failInvariant info InvariantEmptyCapStackFailure
 
 
-
--- Todo: fail invariant
--- Todo: is this enough checks for ndynref?
-nameToFQN
-  :: i
-  -> DirectEnv e b i
-  -> Name
-  -> EvalM e b i FullyQualifiedName
-nameToFQN info env (Name n nk) = case nk of
-  NTopLevel mn mh -> pure (FullyQualifiedName mn n mh)
-  NDynRef (DynamicRef dArg i) -> case RAList.lookup (view ceLocal env) i of
-    Just (VModRef mr) -> do
-      md <- getModule info (_mrModule mr)
-      pure (FullyQualifiedName (_mrModule mr) dArg (_mHash md))
-    Just _ -> throwExecutionError info (DynNameIsNotModRef n)
-    Nothing -> failInvariant info (InvariantInvalidBoundVariable n)
-  _ -> failInvariant info (InvariantInvalidBoundVariable n)
 
 
 -- Todo: should we typecheck / arity check here?

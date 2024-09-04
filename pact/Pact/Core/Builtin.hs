@@ -22,8 +22,12 @@ module Pact.Core.Builtin
  , ReplCoreBuiltin
  , BuiltinForm(..)
  , ReplOnlyBuiltin(..)
+ , _CAnd, _COr, _CIf
+ , _CEnforceOne, _CEnforce
+ , _CWithCapability, _CCreateUserGuard
  )where
 
+import Control.Lens
 import Data.Text(Text)
 import Data.Map.Strict(Map)
 import Control.DeepSeq
@@ -44,8 +48,11 @@ data BuiltinForm o
   = CAnd o o
   | COr o o
   | CIf o o o
-  | CEnforceOne o [o]
   | CEnforce o o
+  | CWithCapability o o
+  | CCreateUserGuard o
+  | CEnforceOne o o
+  | CTry o o
   deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
 
 instance NFData o => NFData (BuiltinForm o)
@@ -58,10 +65,16 @@ instance Pretty o => Pretty (BuiltinForm o) where
       parens ("or" <+> pretty o <+> pretty o')
     CIf o o' o3 ->
       parens ("if" <+> pretty o <+> pretty o' <+> pretty o3)
-    CEnforceOne o li ->
-      parens ("enforce-one" <+> pretty o <+> brackets (hsep (punctuate comma (pretty <$> li))))
+    CEnforceOne o o' ->
+      parens ("enforce-one" <+> pretty o <+> pretty o')
     CEnforce o o' ->
       parens ("enforce" <+> pretty o <+> pretty o')
+    CWithCapability o o' ->
+      parens ("with-capability" <+> pretty o <+> pretty o')
+    CCreateUserGuard o ->
+      parens ("create-user-guard" <+> pretty o)
+    CTry o o' ->
+      parens ("try" <+> pretty o <+> pretty o')
 
 -- | Our list of base-builtins to pact.
 data CoreBuiltin
@@ -943,3 +956,4 @@ instance (Pretty b) => Pretty (ReplBuiltin b) where
 
 deriveConstrInfo ''CoreBuiltin
 deriveConstrInfo ''ReplOnlyBuiltin
+makePrisms ''BuiltinForm

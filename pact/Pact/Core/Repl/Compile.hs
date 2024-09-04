@@ -5,6 +5,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 
 
@@ -18,6 +19,8 @@ module Pact.Core.Repl.Compile
  , interpretReplProgram
  , ReplInterpreter
  , isPactFile
+ , ReplLoadFile(..)
+ , topLevelIsReplLoad
  ) where
 
 import Control.Lens
@@ -63,6 +66,7 @@ import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.IR.Eval.CEK as CEK
 import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import qualified Pact.Core.IR.Eval.Direct.ReplBuiltin as Direct
+import Pact.Core.Literal
 
 type ReplInterpreter = Interpreter ReplRuntime ReplCoreBuiltin SpanInfo
 
@@ -163,6 +167,36 @@ interpretEvalDirect =
 isPactFile :: FilePath -> Bool
 isPactFile f = takeExtension f == ".pact"
 
+pattern PReplLoadWithClear :: Text -> Bool -> i -> Lisp.ReplTopLevel i
+pattern PReplLoadWithClear file reset info <-
+  Lisp.RTLTopLevel (
+    Lisp.TLTerm (Lisp.App (Lisp.Var (BN (BareName "load")) _)
+    [ Lisp.Constant (LString file) _
+    , Lisp.Constant (LBool reset) _]
+    info)
+  )
+
+pattern PReplLoad :: Text -> i -> Lisp.ReplTopLevel i
+pattern PReplLoad file info <-
+  Lisp.RTLTopLevel (
+    Lisp.TLTerm (Lisp.App (Lisp.Var (BN (BareName "load")) _)
+    [ Lisp.Constant (LString file) _]
+    info)
+  )
+
+data ReplLoadFile i
+  = ReplLoadFile
+  { _rlFile :: Text
+  , _rlReset :: Bool
+  , _rlInfo :: i
+  } deriving (Show)
+
+topLevelIsReplLoad :: Lisp.ReplTopLevel i -> Either (Lisp.ReplTopLevel i) (ReplLoadFile i)
+topLevelIsReplLoad = \case
+  PReplLoad file i -> Right (ReplLoadFile file False i)
+  PReplLoadWithClear file reset i -> Right (ReplLoadFile file reset i)
+  t -> Left t
+
 interpretReplProgram
   :: ReplInterpreter
   -> SourceCode
@@ -177,37 +211,35 @@ interpretReplProgram interpreter (SourceCode sourceFp source) display = do
   where
   sourceIsPactFile = isPactFile sourceFp
   parseSource lexerOutput
-    | sourceIsPactFile = (fmap.fmap) (Lisp.RTL . Lisp.RTLTopLevel) $ liftEither $ Lisp.parseProgram lexerOutput
+    | sourceIsPactFile = (fmap.fmap) (Lisp.RTLTopLevel) $ liftEither $ Lisp.parseProgram lexerOutput
     | otherwise = liftEither $ Lisp.parseReplProgram lexerOutput
   setBuiltinResolution
     | sourceIsPactFile =
       replEvalEnv . eeNatives .== replCoreBuiltinOnlyMap
     | otherwise =
       replEvalEnv . eeNatives .== replBuiltinMap
+  pipe t = case topLevelIsReplLoad t of
+    Left tl -> pure <$> pipe' tl
+    Right (ReplLoadFile file reset info) -> doLoadFile file reset info
   displayValue p = p <$ display p
-  pipe = \case
-    Lisp.RTL rtl ->
-      pure <$> pipe' rtl
-    Lisp.RTLReplSpecial rsf -> case rsf of
-      -- Load is a bit special
-      Lisp.ReplLoad txt reset i -> do
-        let loading = RCompileValue (InterpretValue (PString ("Loading " <> txt <> "...")) i)
-        display loading
-        oldSrc <- useReplState replCurrSource
-        pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
-        oldEE <- useReplState replEvalEnv
-        when reset $ do
-          ee <- liftIO (defaultEvalEnv pactdb replBuiltinMap)
-          put def
-          replEvalEnv .== ee
-        fp <- mangleFilePath (T.unpack txt)
-        when (isPactFile fp) $ esLoaded . loToplevel .= mempty
-        out <- loadFile fp interpreter display
-        replCurrSource .== oldSrc
-        unless reset $ do
-          replEvalEnv .== oldEE
-        setBuiltinResolution
-        pure out
+  doLoadFile txt reset i = do
+    let loading = RCompileValue (InterpretValue (PString ("Loading " <> txt <> "...")) i)
+    display loading
+    oldSrc <- useReplState replCurrSource
+    pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
+    oldEE <- useReplState replEvalEnv
+    when reset $ do
+      ee <- liftIO (defaultEvalEnv pactdb replBuiltinMap)
+      put def
+      replEvalEnv .== ee
+    fp <- mangleFilePath (T.unpack txt)
+    when (isPactFile fp) $ esLoaded . loToplevel .= mempty
+    out <- loadFile fp interpreter display
+    replCurrSource .== oldSrc
+    unless reset $ do
+      replEvalEnv .== oldEE
+    setBuiltinResolution
+    pure out
   mangleFilePath fp = do
     (SourceCode currFile _) <- useReplState replCurrSource
     case currFile of

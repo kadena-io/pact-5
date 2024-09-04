@@ -423,7 +423,6 @@ instance SizeOf PactValue where
 
 -- Modules and interfaces
 instance (SizeOf ty, SizeOf i) => SizeOf (Arg ty i)
-instance (SizeOf name, SizeOf e) => SizeOf (CapForm name e)
 instance (SizeOf e) => SizeOf (BuiltinForm e)
 instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Term n t b i)
 instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Defun n t b i)

@@ -46,7 +46,8 @@ import Pact.Core.Syntax.LexUtils
 
 %token
   let        { PosToken TokenLet _ }
-  if         { PosToken TokenIf _ }
+  letstar    { PosToken TokenLetStar _ }
+  -- if         { PosToken TokenIf _ }
   lam        { PosToken TokenLambda _ }
   module     { PosToken TokenModule _ }
   interface  { PosToken TokenInterface _ }
@@ -62,15 +63,15 @@ import Pact.Core.Syntax.LexUtils
   true       { PosToken TokenTrue _ }
   false      { PosToken TokenFalse _ }
   progn      { PosToken TokenBlockIntro _ }
-  try        { PosToken TokenTry _ }
-  suspend    { PosToken TokenSuspend _ }
-  load       { PosToken TokenLoad _ }
+  -- try        { PosToken TokenTry _ }
+  -- suspend    { PosToken TokenSuspend _ }
+  -- load       { PosToken TokenLoad _ }
   docAnn     { PosToken TokenDocAnn _ }
   modelAnn   { PosToken TokenModelAnn _ }
   eventAnn   { PosToken TokenEventAnn _ }
   managedAnn { PosToken TokenManagedAnn _ }
-  withcap    { PosToken TokenWithCapability _ }
-  c_usr_grd  { PosToken TokenCreateUserGuard _}
+  -- withcap    { PosToken TokenWithCapability _ }
+  -- c_usr_grd  { PosToken TokenCreateUserGuard _}
   step       { PosToken TokenStep _ }
   steprb     { PosToken TokenStepWithRollback _ }
   '{'        { PosToken TokenOpenBrace _ }
@@ -84,10 +85,10 @@ import Pact.Core.Syntax.LexUtils
   ':'        { PosToken TokenColon _ }
   ':='       { PosToken TokenBindAssign _ }
   '.'        { PosToken TokenDot _ }
-  and        { PosToken TokenAnd _ }
-  or         { PosToken TokenOr _ }
-  enforce    { PosToken TokenEnforce _}
-  enforceOne { PosToken TokenEnforceOne _ }
+  -- and        { PosToken TokenAnd _ }
+  -- or         { PosToken TokenOr _ }
+  -- enforce    { PosToken TokenEnforce _}
+  -- enforceOne { PosToken TokenEnforceOne _ }
   IDENT      { PosToken (TokenIdent _) _ }
   NUM        { PosToken (TokenNumber _) _ }
   STR        { PosToken (TokenString _) _ }
@@ -104,11 +105,11 @@ ProgramList :: { [ParsedTopLevel] }
   : ProgramList TopLevel { $2:$1 }
   | {- empty -} { [] }
 
-ReplProgram :: { [ReplSpecialTL SpanInfo] }
+ReplProgram :: { [ReplTopLevel SpanInfo] }
   : ReplProgramList { reverse $1 }
 
-ReplProgramList :: { [ReplSpecialTL SpanInfo] }
-  : ReplProgramList RTL { $2:$1 }
+ReplProgramList :: { [ReplTopLevel SpanInfo] }
+  : ReplProgramList ReplTopLevel { $2:$1 }
   | {- empty -} { [] }
 
 TopLevel :: { ParsedTopLevel }
@@ -117,19 +118,15 @@ TopLevel :: { ParsedTopLevel }
   | Expr { TLTerm $1 }
   | Use { uncurry TLUse $1 }
 
-RTL :: { ReplSpecialTL SpanInfo }
-  : ReplTopLevel { RTL $1 }
-  | '(' ReplSpecial ')' { RTLReplSpecial  ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
-
-ReplTopLevel :: { ParsedReplTopLevel }
+ReplTopLevel :: { ReplTopLevel SpanInfo }
   : TopLevel { RTLTopLevel $1 }
   | '(' Defun ')' { RTLDefun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefConst ')' { RTLDefConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
 
-ReplSpecial :: { SpanInfo -> ReplSpecialForm SpanInfo }
-  : load STR BOOLEAN { ReplLoad (getStr $2) $3 }
-  | load STR { ReplLoad (getStr $2) False }
+-- ReplSpecial :: { SpanInfo -> ReplSpecialForm SpanInfo }
+--   : load STR BOOLEAN { ReplLoad (getStr $2) $3 }
+--   | load STR { ReplLoad (getStr $2) False }
 
 Governance :: { Governance ParsedName }
   : StringRaw { KeyGov (KeySetName $1 Nothing) }
@@ -333,12 +330,8 @@ Expr :: { ParsedExpr }
 SExpr :: { SpanInfo -> ParsedExpr }
   : LamExpr { $1 }
   | LetExpr { $1 }
-  | IfExpr { $1 }
-  | TryExpr { $1 }
   | ProgNExpr { $1 }
   | GenAppExpr { $1 }
-  | SuspendExpr { $1 }
-  | CapExpr { $1 }
 
 List :: { ParsedExpr }
   : '[' ListExprs ']' { List $2 (combineSpan (_ptInfo $1) (_ptInfo $3)) }
@@ -359,21 +352,21 @@ ExprCommaSep :: { [ParsedExpr] }
 LamExpr :: { SpanInfo -> ParsedExpr }
   : lam '(' LamArgs ')' Block { Lam (reverse $3) $5 }
 
-IfExpr :: { SpanInfo -> ParsedExpr }
-  : if Expr Expr Expr { If $2 $3 $4 }
+-- IfExpr :: { SpanInfo -> ParsedExpr }
+--   : if Expr Expr Expr { If $2 $3 $4 }
 
-TryExpr :: { SpanInfo -> ParsedExpr }
-  : try Expr Expr { Try $2 $3 }
+-- TryExpr :: { SpanInfo -> ParsedExpr }
+--   : try Expr Expr { Try $2 $3 }
 
-SuspendExpr :: { SpanInfo -> ParsedExpr }
-  : suspend Expr { Suspend $2 }
+-- SuspendExpr :: { SpanInfo -> ParsedExpr }
+--   : suspend Expr { Suspend $2 }
 
-CapExpr :: { SpanInfo -> ParsedExpr }
-  : CapForm { CapabilityForm $1 }
+-- CapExpr :: { SpanInfo -> ParsedExpr }
+--   : CapForm { CapabilityForm $1 }
 
-CapForm :: { CapForm SpanInfo }
-  : withcap Expr Block { WithCapability $2 $3 }
-  | c_usr_grd '(' ParsedName AppList ')' { CreateUserGuard $3 (reverse $4)}
+-- CapForm :: { CapForm SpanInfo }
+--   : withcap Expr Block { WithCapability $2 $3 }
+--   | c_usr_grd '(' ParsedName AppList ')' { CreateUserGuard $3 (reverse $4)}
 
 LamArgs :: { [MArg SpanInfo] }
   : LamArgs IDENT ':' Type { (MArg (getIdent $2) (Just $4) (_ptInfo $2)):$1 }
@@ -381,7 +374,8 @@ LamArgs :: { [MArg SpanInfo] }
   | {- empty -} { [] }
 
 LetExpr :: { SpanInfo -> ParsedExpr }
-  : let '(' Binders ')' Block { LetIn (NE.fromList (reverse $3)) $5 }
+  : let '(' Binders ')' Block { Let LFLetNormal (NE.fromList (reverse $3)) $5 }
+  | letstar '(' Binders ')' Block { Let LFLetStar (NE.fromList (reverse $3)) $5 }
 
 Binders :: { [Binder SpanInfo] }
   : Binders '(' IDENT MTypeAnn Expr ')' { (Binder (getIdent $3) $4 $5):$1 }
@@ -420,15 +414,15 @@ Atom :: { ParsedExpr }
   | String { $1 }
   | List { $1 }
   | Bool { $1 }
-  | Operator { $1 }
+  -- | Operator { $1 }
   | Object { $1 }
   | '(' ')' { Constant LUnit (_ptInfo $1) }
 
-Operator :: { ParsedExpr }
-  : and { Operator AndOp (_ptInfo $1) }
-  | or { Operator OrOp (_ptInfo $1) }
-  | enforce { Operator EnforceOp (_ptInfo $1)}
-  | enforceOne { Operator EnforceOneOp (_ptInfo $1)}
+-- Operator :: { ParsedExpr }
+--   : and { Operator AndOp (_ptInfo $1) }
+--   | or { Operator OrOp (_ptInfo $1) }
+--   | enforce { Operator EnforceOp (_ptInfo $1)}
+--   | enforceOne { Operator EnforceOneOp (_ptInfo $1)}
 
 Bool :: { ParsedExpr }
   : true { Constant (LBool True) (_ptInfo $1) }
@@ -503,16 +497,16 @@ PropAtom :: { PropertyExpr SpanInfo }
 FVKeyword :: { PropertyExpr SpanInfo }
   : let { PropKeyword KwLet (_ptInfo $1) }
   | lam { PropKeyword KwLambda (_ptInfo $1) }
-  | if { PropKeyword KwIf (_ptInfo $1) }
-  | progn { PropKeyword KwProgn (_ptInfo $1) }
-  | suspend { PropKeyword KwSuspend (_ptInfo $1) }
-  | try { PropKeyword KwTry (_ptInfo $1) }
-  | enforce { PropKeyword KwEnforce (_ptInfo $1) }
-  | enforceOne { PropKeyword KwEnforceOne (_ptInfo $1) }
-  | and { PropKeyword KwAnd (_ptInfo $1) }
-  | or { PropKeyword KwOr (_ptInfo $1) }
-  | c_usr_grd { PropKeyword KwCreateUserGuard (_ptInfo $1) }
-  | withcap { PropKeyword KwWithCapability (_ptInfo $1) }
+  | progn { PropKeyword KwDo (_ptInfo $1) }
+  -- | if { PropKeyword KwIf (_ptInfo $1) }
+  -- | suspend { PropKeyword KwSuspend (_ptInfo $1) }
+  -- | try { PropKeyword KwTry (_ptInfo $1) }
+  -- | enforce { PropKeyword KwEnforce (_ptInfo $1) }
+  -- | enforceOne { PropKeyword KwEnforceOne (_ptInfo $1) }
+  -- | and { PropKeyword KwAnd (_ptInfo $1) }
+  -- | or { PropKeyword KwOr (_ptInfo $1) }
+  -- | c_usr_grd { PropKeyword KwCreateUserGuard (_ptInfo $1) }
+  -- | withcap { PropKeyword KwWithCapability (_ptInfo $1) }
 
 FVDelim :: { PropertyExpr SpanInfo }
   : '{' { PropDelim DelimLBrace (_ptInfo $1) }

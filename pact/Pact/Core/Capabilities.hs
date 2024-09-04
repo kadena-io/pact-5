@@ -8,8 +8,6 @@
 module Pact.Core.Capabilities
  ( DefCapMeta(..)
  , DefManagedMeta(..)
- , CapForm(..)
- , capFormName
  , CapToken(..)
  , ctName, ctArgs
  , CapSlot(..)
@@ -57,23 +55,23 @@ dcMetaFqName f = \case
     DefManaged . DefManagedMeta i . FQName <$> f fqn
   p -> pure p
 
-data CapForm name e
-  = WithCapability e e
-  | CreateUserGuard name [e]
-  deriving (Show, Functor, Foldable, Traversable, Eq, Generic)
+-- data CapForm name e
+--   = WithCapability e e
+--   | CreateUserGuard name [e]
+--   deriving (Show, Functor, Foldable, Traversable, Eq, Generic)
 
 
-capFormName :: Traversal (CapForm name e) (CapForm name' e) name name'
-capFormName f = \case
-  WithCapability e e' -> pure (WithCapability e e')
-  CreateUserGuard name es -> (`CreateUserGuard` es) <$> f name
+-- capFormName :: Traversal (CapForm name e) (CapForm name' e) name name'
+-- capFormName f = \case
+--   WithCapability e e' -> pure (WithCapability e e')
+--   CreateUserGuard name es -> (`CreateUserGuard` es) <$> f name
 
-instance (Pretty name, Pretty e) => Pretty (CapForm name e) where
-  pretty = \case
-    WithCapability cap body ->
-      parens ("with-capability" <+> parens (pretty cap <+> pretty body))
-    CreateUserGuard name es ->
-      parens ("create-user-guard" <+> parens (pretty name <+> hsep (pretty <$> es)))
+-- instance (Pretty name, Pretty e) => Pretty (CapForm name e) where
+--   pretty = \case
+--     WithCapability cap body ->
+--       parens ("with-capability" <+> parens (pretty cap <+> pretty body))
+--     CreateUserGuard name es ->
+--       parens ("create-user-guard" <+> parens (pretty name <+> hsep (pretty <$> es)))
 
 -- | An acquired capability token
 -- with the reference
@@ -170,7 +168,7 @@ instance (Pretty name, Pretty v) => Pretty (CapToken name v) where
     pretty $ PrettyLispApp qn args
 
 instance (NFData name, NFData v) => NFData (Signer name v)
-instance (NFData name, NFData e) => NFData (CapForm name e)
+-- instance (NFData name, NFData e) => NFData (CapForm name e)
 instance (NFData name, NFData v) => NFData (ManagedCap name v)
 instance NFData v => NFData (ManagedCapType v)
 instance NFData v => NFData (PactEvent v)
