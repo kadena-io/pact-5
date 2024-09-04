@@ -104,22 +104,26 @@ jobs:
       RELEASE_VERSION: ${{ needs.release_vars.outputs.RELEASE_VERSION }}
       GHC_VERSION: ${{ needs.release_vars.outputs.GHC_VERSION }}
       IMAGE: ${{ needs.release_vars.outputs.IMAGE }}
+    outputs:
+      OSX_RELEASE_FILE: ${{ steps.release-artifact-download.outputs.MACOS_RELEASE_FILE }}
     steps:
     
       - name: Get release artifacts
+        id: release-artifact-download
         run: |
           UBUNTU_TAR=pact.${{ env.GHC_VERSION }}.ubuntu-22.04.${{ env.SHORT_REVISION }}.tar.gz
           MACOS_TAR=pact.${{ env.GHC_VERSION }}.macos-14.${{ env.SHORT_REVISION }}.tar.gz
           
-          UBUNTU_RELEASE_FILE=pact-binary-bundle.ubuntu-22.04.${{ env.RELEASE_VERSION }}.tar.gz
-          MACOS_RELEASE_FILE=pact-binary-bundle.macos-latest.tar.gz
+          UBUNTU_RELEASE_FILE=pact-${{ env.RELEASE_VERSION }}-linux-22.04.tar.gz
+          MACOS_RELEASE_FILE=pact-${{ env.RELEASE_VERSION }}-aarch64-osx.tar.gz
           
           curl "s3.us-east-1.amazonaws.com/kadena-cabal-cache/pact/$UBUNTU_TAR" -o "./$UBUNTU_RELEASE_FILE"
           curl "s3.us-east-1.amazonaws.com/kadena-cabal-cache/pact/$MACOS_TAR" -o "./$UBUNTU_RELEASE_FILE"
 
           echo "UBUNTU_RELEASE_FILE=$UBUNTU_RELEASE_FILE" >> $GITHUB_ENV
           echo "MACOS_RELEASE_FILE=$MACOS_RELEASE_FILE" >> $GITHUB_ENV
-
+          echo "MACOS_RELEASE_FILE=$MACOS_RELEASE_FILE" >> $GITHUB_OUTPUT
+          
       - name: Login to GHCR
         uses: docker/login-action@v2
         with:
@@ -155,10 +159,10 @@ jobs:
 
   release_to_brew:
     uses: kadena-io/homebrew-pact/.github/workflows/release-bump.yml@master
-    needs: release_vars
+    needs: release_to_github
     with:
-      pact_arm: https://github.com/kadena-io/pact-5/releases/latest/download/pact-binary-bundle.macos-latest.tar.gz
-      pact_head: https://github.com/kadena-io/pact-5/releases/download/nightly/pact-binary-bundle.macos-m1.tar.gz
+      pact_arm: https://github.com/kadena-io/pact-5/releases/latest/download/${{ needs.release_vars.outputs.OSX_RELEASE_FILE }}
+      pact_head: https://github.com/kadena-io/pact-5/releases/download/nightly/pact-nightly-aarch64-osx.tar.gz
     secrets: inherit
               
         
