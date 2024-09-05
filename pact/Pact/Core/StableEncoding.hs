@@ -24,7 +24,6 @@ import Data.Decimal (DecimalRaw(..))
 import Data.Scientific (Scientific)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
-import Data.Maybe (fromMaybe)
 import Data.Ratio ((%), denominator)
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -187,7 +186,7 @@ instance J.Encode (StableEncoding FullyQualifiedName) where
 -- | Stable encoding of `ModuleGuard`
 instance J.Encode (StableEncoding ModuleGuard) where
   build (StableEncoding (ModuleGuard m name)) = J.object
-    [ "moduleName" J..= _mnName m
+    [ "moduleName" J..= StableEncoding m
     , "name" J..= name
     ]
   {-# INLINABLE build #-}
@@ -457,14 +456,14 @@ instance JD.FromJSON (StableEncoding Literal) where
 
 instance J.Encode (StableEncoding name) => J.Encode (StableEncoding (CapToken name PactValue)) where
   build (StableEncoding (CapToken name args)) = J.object
-    [ "name" J..= J.build (StableEncoding name)
-    , "args" J..= J.build (J.Array (StableEncoding <$> args))
+    [ "ctName" J..= J.build (StableEncoding name)
+    , "ctArgs" J..= J.build (J.Array (StableEncoding <$> args))
     ]
 
 instance JD.FromJSON (StableEncoding name) => JD.FromJSON (StableEncoding (CapToken name PactValue)) where
   parseJSON = JD.withObject "CapToken" $ \o -> do
-    name <- o JD..: "name"
-    args <- o JD..: "args"
+    name <- o JD..: "ctName"
+    args <- o JD..: "ctArgs"
     pure $ StableEncoding (CapToken (_stableEncoding name) (_stableEncoding <$> args))
 
 
@@ -511,23 +510,6 @@ instance JD.FromJSON (StableEncoding SpanInfo) where
     pure $ StableEncoding (SpanInfo startLine startColumn endLine endColumn)
 
 
-instance J.Encode (StableEncoding (Signer QualifiedName PactValue)) where
-  build (StableEncoding o) = J.object
-    [ "addr" J..?= _siAddress o
-    , "scheme" J..?= _siScheme o
-    , "pubKey" J..= _siPubKey o
-    , "clist" J..??= J.Array (StableEncoding  <$> _siCapList o)
-    ]
-
-instance JD.FromJSON (StableEncoding (Signer QualifiedName PactValue)) where
-  parseJSON = JD.withObject "Signer" $ \o -> do
-    scheme <- o JD..:? "scheme"
-    pubKey <- o JD..: "pubKey"
-    addr <- o JD..:? "addr"
-    clist <- listMay <$> o JD..:? "clist"
-    pure $ StableEncoding $ Signer scheme pubKey addr (_stableEncoding <$> clist)
-    where
-      listMay = fromMaybe []
 
 instance J.Encode (StableEncoding GasPrice) where
   build (StableEncoding (GasPrice d)) = J.build $ J.Aeson @Scientific $ fromRational $ toRational d

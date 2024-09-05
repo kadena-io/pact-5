@@ -60,6 +60,7 @@ import Pact.Core.IR.Desugar
 import Pact.Core.Verifiers
 import Pact.Core.Interpreter
 import Pact.Core.Info
+import Pact.Core.Signer
 import qualified Pact.Core.IR.Eval.CEK as Eval
 import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import qualified Pact.Core.Syntax.Lexer as Lisp
@@ -102,7 +103,7 @@ evalDirectInterpreter =
 data MsgData = MsgData
   { mdData :: !PactValue
   , mdHash :: !Hash
-  , mdSigners :: [Signer QualifiedName PactValue]
+  , mdSigners :: [Signer]
   , mdVerifiers :: [Verifier ()]
   }
 
@@ -178,7 +179,7 @@ setupEvalEnv pdb mode msgData gasModel' np spv pd efs = do
   mkMsgSigs ss = M.fromList $ map toPair ss
     where
     toPair (Signer _scheme pubK addr capList) =
-      (PublicKeyText (fromMaybe pubK addr),S.fromList capList)
+      (PublicKeyText (fromMaybe pubK addr),S.fromList (_sigCapability <$> capList))
   mkMsgVerifiers vs = M.fromListWith S.union $ map toPair vs
     where
     toPair (Verifier vfn _ caps) = (vfn, S.fromList caps)

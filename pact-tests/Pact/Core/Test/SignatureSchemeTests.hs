@@ -16,16 +16,15 @@ import qualified Data.ByteString          as BS
 import qualified Control.Lens             as Lens
 import qualified Data.ByteString.Base16   as B16
 
-import Pact.Core.Capabilities
 import Pact.Core.Command.Types
 import Pact.Core.Command.Crypto
 import Pact.Core.Command.Client
 import qualified Pact.JSON.Encode as J
-import Pact.Core.Names
 import Pact.Core.PactValue
 import Pact.Core.Hash
 import Pact.Core.Command.RPC
 import Pact.Core.Command.Util
+import Pact.Core.Signer
 
 
 ---- HELPER DATA TYPES AND FUNCTIONS ----
@@ -72,17 +71,17 @@ toApiKeyPairs kps = map makeAKP kps
           ApiKeyPair priv (Just pub) add (Just scheme) Nothing
 
 
-mkCommandTest :: [(DynKeyPair, [CapToken QualifiedName PactValue])] -> [Signer QualifiedName PactValue] -> Text -> IO (Command ByteString)
+mkCommandTest :: [(DynKeyPair, [SigCapability])] -> [Signer] -> Text -> IO (Command ByteString)
 mkCommandTest kps signers code = mkCommandWithDynKeys' kps $ toExecPayload signers code
 
 
-toSigners :: [(PublicKeyBS, PrivateKeyBS, Address, PPKScheme)] -> IO [Signer QualifiedName PactValue ]
+toSigners :: [(PublicKeyBS, PrivateKeyBS, Address, PPKScheme)] -> IO [Signer]
 toSigners kps = return $ map makeSigner kps
   where makeSigner (PubBS pub, _, add, scheme) =
           Signer (Just scheme) (toB16Text pub) add []
 
 
-toExecPayload :: [Signer QualifiedName PactValue] -> Text -> ByteString
+toExecPayload :: [Signer] -> Text -> ByteString
 toExecPayload signers t = J.encodeStrict payload
   where
     payload = Payload (Exec (ExecMsg t $ PUnit)) "nonce" (J.Aeson ()) signers Nothing Nothing

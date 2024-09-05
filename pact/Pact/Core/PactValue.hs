@@ -4,6 +4,7 @@
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE DerivingStrategies #-}
 
 
 module Pact.Core.PactValue
@@ -150,7 +151,6 @@ checkPvType ty = \case
     _ -> False
   PCapToken _ -> False
   PTime _ -> ty == TyTime
-
 
 
 newtype ObjectData term
