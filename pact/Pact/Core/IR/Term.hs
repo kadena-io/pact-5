@@ -24,10 +24,10 @@ module Pact.Core.IR.Term
   ( Term(..)
   -- ^ Our Primary Term representation
   , _Var, _Lam, _Let
-  , _App, _Conditional, _Builtin
+  , _App, _BuiltinForm, _Builtin
   , _Constant, _Sequence, _Nullary
-  , _ListLit, _Try, _ObjectLit
-  , _CapabilityForm, _InlineValue
+  , _ListLit, _ObjectLit
+  , _InlineValue
   -- ^ Term prisms
   , termType, termInfo
   -- ^ term related lenses
@@ -155,7 +155,7 @@ import Pact.Core.Pretty
 -- | Core's main term representation
 -- Todo: a few nodes could be merged into one representation, that is:
 -- Nullary = Lam []
--- CapabilityForm and Conditional could be merged into one
+-- CapabilityForm and BuiltinForm could be merged into one
 data Term name ty builtin info
   = Var name info
   -- ^ single variables e.g x
@@ -166,8 +166,8 @@ data Term name ty builtin info
   -- ^ let x = e1 in e2
   | App (Term name ty builtin info) [Term name ty builtin info] info
   -- ^ (e1 e2)
-  | Conditional (BuiltinForm (Term name ty builtin info)) info
-  -- ^ Conditional terms
+  | BuiltinForm (BuiltinForm (Term name ty builtin info)) info
+  -- ^ BuiltinForm terms
   | Builtin builtin info
   -- ^ Built-in ops, e.g (+)
   | Constant Literal info
@@ -179,11 +179,7 @@ data Term name ty builtin info
   -- ^ "Lazy terms of arity zero"
   | ListLit [Term name ty builtin info] info
   -- ^ List Literals
-  | Try (Term name ty builtin info) (Term name ty builtin info) info
-  -- ^ try (catch expr) (try-expr)
   | ObjectLit [(Field, Term name ty builtin info)] info
-  -- ^ an object literal
-  | CapabilityForm (CapForm name (Term name ty builtin info)) info
   -- ^ Capability Natives
   | InlineValue PactValue info
   -- ^ Node for compatibility with production. this never shows up in our term language or the parser,
@@ -466,7 +462,7 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
       parens (pretty te <+> hsep (pretty <$> ne))
     Sequence te te' _ ->
       parens ("seq" <+> pretty te <+> pretty te')
-    Conditional o _ ->
+    BuiltinForm o _ ->
       pretty o
     Builtin builtin _ -> pretty builtin
     Constant lit _ ->
@@ -475,10 +471,6 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
       parens ("suspend" <+> pretty term)
     ListLit tes _ ->
       pretty tes
-    CapabilityForm cf _ ->
-      pretty cf
-    Try te te' _ ->
-      parens ("try" <+> pretty te <+> pretty te')
     ObjectLit n _ ->
       braces (hsep $ punctuate "," $ fmap (\(f, t) -> pretty f <> ":" <> pretty t) n)
     InlineValue pv _ ->
@@ -577,8 +569,8 @@ termType f  = \case
     App <$> termType f te <*> traverse (termType f) ne <*> pure i
   Sequence te te' i ->
     Sequence <$> termType f te <*> termType f te' <*> pure i
-  Conditional bf i ->
-    Conditional <$> traverse (termType f) bf <*> pure i
+  BuiltinForm bf i ->
+    BuiltinForm <$> traverse (termType f) bf <*> pure i
   Builtin b i -> pure (Builtin b i)
   Nullary term i ->
     Nullary <$> termType f term <*> pure i
@@ -586,10 +578,6 @@ termType f  = \case
     pure (Constant lit i)
   ListLit tes i ->
     ListLit <$> traverse (termType f) tes <*> pure i
-  Try te te' i ->
-    Try <$> termType f te <*> termType f te' <*> pure i
-  CapabilityForm cf i ->
-    CapabilityForm <$> traverse (termType f) cf <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (termType f) m <*> pure i
   InlineValue v i ->
@@ -607,8 +595,8 @@ termBuiltin f = \case
     App <$> termBuiltin f te <*> traverse (termBuiltin f) ne <*> pure i
   Sequence te te' i ->
     Sequence <$> termBuiltin f te <*> termBuiltin f te' <*> pure i
-  Conditional bf i ->
-    Conditional <$> traverse (termBuiltin f) bf <*> pure i
+  BuiltinForm bf i ->
+    BuiltinForm <$> traverse (termBuiltin f) bf <*> pure i
   Builtin b i ->
     Builtin <$> f b <*> pure i
   Nullary term i ->
@@ -617,10 +605,6 @@ termBuiltin f = \case
     pure (Constant lit i)
   ListLit tes i ->
     ListLit <$> traverse (termBuiltin f) tes <*> pure i
-  Try te te' i ->
-    Try <$> termBuiltin f te <*> termBuiltin f te' <*> pure i
-  CapabilityForm cf i ->
-    CapabilityForm <$> traverse (termBuiltin f) cf <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (termBuiltin f) m <*> pure i
   InlineValue v i -> pure (InlineValue v i)
@@ -635,13 +619,11 @@ termInfo f = \case
   Builtin b i -> Builtin b <$> f i
   Constant l i -> Constant l <$> f i
   Sequence e1 e2 i -> Sequence e1 e2 <$> f i
-  Conditional o i ->
-    Conditional o <$> f i
+  BuiltinForm o i ->
+    BuiltinForm o <$> f i
   ListLit l i  -> ListLit l <$> f i
-  Try e1 e2 i -> Try e1 e2 <$> f i
   Nullary term i ->
     Nullary term <$> f i
-  CapabilityForm cf i -> CapabilityForm cf <$> f i
   ObjectLit m i -> ObjectLit m <$> f i
   InlineValue v i -> InlineValue v <$> f i
 
@@ -659,8 +641,8 @@ traverseTerm f x= case x of
     App <$> traverseTerm f te <*> traverse (traverseTerm f) ne <*> pure i
   Sequence te te' i ->
     Sequence <$> traverseTerm f te <*> traverseTerm f te' <*> pure i
-  Conditional bf i ->
-    Conditional <$> traverse (traverseTerm f) bf <*> pure i
+  BuiltinForm bf i ->
+    BuiltinForm <$> traverse (traverseTerm f) bf <*> pure i
   Builtin b i -> f (Builtin b i)
   Nullary term i ->
     Nullary <$> traverseTerm f term <*> pure i
@@ -668,10 +650,6 @@ traverseTerm f x= case x of
     f (Constant lit i)
   ListLit tes i ->
     ListLit <$> traverse (traverseTerm f) tes <*> pure i
-  Try te te' i ->
-    Try <$> traverseTerm f te <*> traverseTerm f te' <*> pure i
-  CapabilityForm cf i ->
-    CapabilityForm <$> traverse (traverseTerm f) cf <*> pure i
   ObjectLit m i ->
     ObjectLit <$> (traverse._2) (traverseTerm f) m <*> pure i
   InlineValue v i ->
@@ -772,15 +750,11 @@ instance Plated (Term name ty builtin info) where
     Builtin b i -> pure (Builtin b i)
     Constant l i -> pure (Constant l i)
     Sequence e1 e2 i -> Sequence <$> f e1 <*> f e2 <*> pure i
-    Conditional o i ->
-      Conditional <$> traverse f o <*> pure i
+    BuiltinForm o i ->
+      BuiltinForm <$> traverse f o <*> pure i
     ListLit m i -> ListLit <$> traverse f m <*> pure i
     Nullary term i ->
       Nullary <$> f term <*> pure i
-    CapabilityForm cf i ->
-      CapabilityForm <$> traverse f cf <*> pure i
-    Try e1 e2 i ->
-      Try <$> f e1 <*> f e2 <*> pure i
     ObjectLit o i ->
       ObjectLit <$> (traverse._2) f o <*> pure i
     InlineValue v i -> pure (InlineValue v i)

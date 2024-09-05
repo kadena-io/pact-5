@@ -75,7 +75,6 @@ module Pact.Core.Errors
  , _InvalidDefInTermVariable
  , _InvalidModuleReference
  , _EmptyBindingBody
- , _EmptyDefPact
  , _LastStepWithRollback
  , _ExpectedFreeVariable
  , _InvalidManagedArg
@@ -306,8 +305,6 @@ data DesugarError
   -- ^ Invalid: Interface used as module reference
   | EmptyBindingBody
   -- ^ Binding form has no expressions to bind to
-  | EmptyDefPact Text
-  -- ^ Defpact without steps
   | LastStepWithRollback QualifiedName
   -- ^ Last Step has Rollback error
   | ExpectedFreeVariable Text
@@ -372,7 +369,6 @@ instance Pretty DesugarError where
     InvalidModuleReference mn ->
       Pretty.hsep ["Invalid Interface attempted to be used as module reference:", pretty mn]
     EmptyBindingBody -> "Bind expression lacks an accompanying body"
-    EmptyDefPact dp -> Pretty.hsep ["Defpact has no steps:", pretty dp]
     LastStepWithRollback mn ->
       Pretty.hsep ["rollbacks aren't allowed on the last step in:", pretty mn]
     ExpectedFreeVariable t ->

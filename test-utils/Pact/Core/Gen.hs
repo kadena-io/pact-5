@@ -219,8 +219,11 @@ builtinFormGen b i = Gen.choice
   [ CAnd <$> termGen b i <*> termGen b i
   , COr <$> termGen b i <*> termGen b i
   , CIf <$> termGen b i <*> termGen b i <*> termGen b i
-  , CEnforceOne <$> termGen b i <*> Gen.list (Range.linear 0 16) (termGen b i)
+  , CEnforceOne <$> termGen b i <*> (ListLit <$> Gen.list (Range.linear 0 16) (termGen b i) <*> i)
   , CEnforce <$> termGen b i <*> termGen b i
+  , CWithCapability <$> termGen b i <*> termGen b i
+  , CTry <$> termGen b i <*> termGen b i
+  , CCreateUserGuard <$> termGen b i
   ]
 
 termGen :: Gen b -> Gen i -> Gen (Term Name Type b i)
@@ -234,9 +237,8 @@ termGen b i = Gen.recursive Gen.choice
   , App <$> termGen b i <*> Gen.list (Range.linear 0 16) (termGen b i) <*> i
   , Sequence <$> termGen b i <*> termGen b i <*> i
   , Nullary <$> termGen b i <*> i
-  , Conditional <$> builtinFormGen b i <*> i
+  , BuiltinForm <$> builtinFormGen b i <*> i
   , ListLit <$> Gen.list (Range.linear 0 16) (termGen b i)<*> i
-  , Try <$> termGen b i <*> termGen b i <*> i
   , ObjectLit <$> Gen.list (Range.linear 1 16) ((,) <$> fieldGen <*> termGen b i) <*> i
   ]
 

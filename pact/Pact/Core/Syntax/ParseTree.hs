@@ -145,7 +145,7 @@ data Defun i
   { _dfunSpec :: MArg i  -- ^ 'MArg' contains the name ('_margName') and
                          -- optional return type ('_margType'). The 'i' reflects the name info.
   , _dfunArgs :: [MArg i]
-  , _dfunTerm :: Expr i
+  , _dfunTerm :: NonEmpty (Expr i)
   , _dfunDocs :: Maybe Text
   , _dfunModel :: [PropertyExpr i]
   , _dfunInfo :: i
@@ -170,7 +170,7 @@ data DefCap i
   { _dcapSpec :: MArg i  -- ^ 'MArg' contains the name ('_margName') and
                          -- optional return type ('_margType'). The 'i' reflects the name info.
   , _dcapArgs :: ![MArg i]
-  , _dcapTerm :: Expr i
+  , _dcapTerm :: NonEmpty (Expr i)
   , _dcapDocs :: Maybe Text
   , _dcapModel :: [PropertyExpr i]
   , _dcapMeta :: Maybe DCapMeta
@@ -204,7 +204,7 @@ data DefPact i
   { _dpSpec :: MArg i -- ^ 'MArg' contains the name ('_margName') and
                       -- optional return type ('_margType'). The 'i' reflects the name info.
   , _dpArgs :: [MArg i]
-  , _dpSteps :: [PactStep i]
+  , _dpSteps :: NonEmpty (PactStep i)
   , _dpDocs :: Maybe Text
   , _dpModel :: [PropertyExpr i]
   , _dpInfo :: i
@@ -299,16 +299,6 @@ data IfDefPact i
 data PropKeyword
   = KwLet
   | KwLambda
-  | KwIf
-  | KwProgn
-  | KwSuspend
-  | KwTry
-  | KwCreateUserGuard
-  | KwWithCapability
-  | KwEnforce
-  | KwEnforceOne
-  | KwAnd
-  | KwOr
   | KwDefProperty
   deriving (Eq, Show, Generic, NFData)
 
@@ -377,31 +367,27 @@ data CapForm i
   | CreateUserGuard ParsedName [Expr i]
   deriving (Show, Eq, Functor, Generic, NFData)
 
+-- | LetForm is only to differentiate between
+-- let and let*
+-- Their semantics are exactly the same in pact-5 but this lets us pretty print
+-- more accurately
+data LetForm
+  = LFLetNormal
+  | LFLetStar
+  deriving (Eq, Show, Generic)
+
+instance NFData LetForm
+
 data Expr i
   = Var ParsedName i
-  | LetIn (NonEmpty (Binder i)) (Expr i) i
-  | Lam [MArg i] (Expr i) i
-  | If (Expr i) (Expr i) (Expr i) i
+  | Let LetForm (NonEmpty (Binder i)) (NonEmpty (Expr i)) i
+  | Lam [MArg i] (NonEmpty (Expr i)) i
   | App (Expr i) [Expr i] i
-  | Block (NonEmpty (Expr i)) i
-  | Operator Operator i
   | List [Expr i] i
   | Constant Literal i
-  | Try (Expr i) (Expr i) i
-  | Suspend (Expr i) i
   | Object [(Field, Expr i)] i
   | Binding [(Field, MArg i)] [Expr i] i
-  | CapabilityForm (CapForm i) i
   deriving (Show, Eq, Functor, Generic, NFData)
-
-data ReplSpecialForm i
-  = ReplLoad Text Bool i
-  deriving (Show, Generic, NFData)
-
-data ReplSpecialTL i
-  = RTL (ReplTopLevel i)
-  | RTLReplSpecial (ReplSpecialForm i)
-  deriving (Show, Generic, NFData)
 
 data ReplTopLevel i
   = RTLTopLevel (TopLevel i)
@@ -425,70 +411,46 @@ pattern RTLUse imp i = RTLTopLevel (TLUse imp i)
 termInfo :: Lens' (Expr i) i
 termInfo f = \case
   Var n i -> Var n <$> f i
-  LetIn bnds e1 i ->
-    LetIn bnds e1 <$> f i
+  Let lf bnds e1 i ->
+    Let lf bnds e1 <$> f i
   Lam nel e i ->
     Lam nel e <$> f i
-  If e1 e2 e3 i ->
-    If e1 e2 e3 <$> f i
   App e1 args i ->
     App e1 args <$> f i
-  Block nel i ->
-    Block nel <$> f i
   Object m i -> Object m <$> f i
-  Operator op i ->
-    Operator op <$> f i
   List nel i ->
     List nel <$> f i
-  Suspend e i ->
-    Suspend e <$> f i
   Constant l i ->
     Constant l <$> f i
-  Try e1 e2 i ->
-    Try e1 e2 <$> f i
-  CapabilityForm e i ->
-    CapabilityForm e <$> f i
   Binding t e i ->
     Binding t e <$> f i
 
 instance Pretty (Expr i) where
   pretty = \case
     Var n _ -> pretty n
-    LetIn bnds e _ ->
-      parens ("let" <+> parens (hsep (NE.toList (pretty <$> bnds))) <+> pretty e)
+    Let lf bnds e _ ->
+      parens ("let" <> lf' <+> parens (prettyNEL bnds) <+> prettyNEL e)
+      where
+      lf' = case lf of
+        LFLetNormal -> mempty
+        LFLetStar -> "*"
     Lam nel e _ ->
-      parens ("lambda" <+> parens (renderLamTypes nel) <+> pretty e)
-    If cond e1 e2 _ ->
-      parens ("if" <+> pretty cond <+> pretty e1 <+> pretty e2)
+      parens ("lambda" <+> parens (renderLamTypes nel) <+> prettyNEL e)
     App e1 [] _ ->
       parens (pretty e1)
     App e1 nel _ ->
       parens (pretty e1 <+> hsep (pretty <$> nel))
-    Operator b _ -> pretty b
-    Block nel _ ->
-      parens ("do" <+> hsep (pretty <$> NE.toList nel))
     Constant l _ ->
       pretty l
     List nel _ ->
       "[" <> commaSep nel <> "]"
-    Try e1 e2 _ ->
-      parens ("try" <+> pretty e1 <+> pretty e2)
-    Suspend e _ ->
-      parens ("suspend" <+> pretty e)
-    CapabilityForm c _ -> case c of
-      WithCapability cap body ->
-        parens ("with-capability" <+> pretty cap <+> pretty body)
-      CreateUserGuard pn exs ->
-        parens ("create-user-guard" <> capApp pn exs)
-      where
-      capApp pn exns =
-        parens (pretty pn <+> hsep (pretty <$> exns))
     Object m _ ->
       braces (hsep (punctuate "," (prettyObj m)))
     Binding binds body _ ->
       braces (hsep $ punctuate "," $ fmap prettyBind binds) <+>
         hsep (pretty <$> body)
     where
+    prettyNEL nel = hsep (NE.toList (pretty <$> nel))
     prettyBind (f, e) = pretty f <+> ":=" <+> pretty e
     prettyObj = fmap (\(n, k) -> dquotes (pretty n) <> ":" <> pretty k)
     renderLamPair (MArg n mt _) = case mt of

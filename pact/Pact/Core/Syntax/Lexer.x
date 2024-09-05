@@ -42,9 +42,8 @@ tokens :-
     @comment;
     $white+;
     -- Keywords
-    let\*        { token TokenLet }
+    let\*        { token TokenLetStar }
     let          { token TokenLet }
-    if           { token TokenIf }
     defun        { token TokenDefun }
     defcap       { token TokenDefCap }
     defconst     { token TokenDefConst }
@@ -60,22 +59,12 @@ tokens :-
     false        { token TokenFalse }
     lambda       { token TokenLambda }
 
-    and          { token TokenAnd }
-    or           { token TokenOr }
-    load         { token TokenLoad }
     \@doc        { token TokenDocAnn }
     \@model      { token TokenModelAnn}
     \@event      { token TokenEventAnn }
     \@managed    { token TokenManagedAnn}
     @steprb      { token TokenStepWithRollback}
-    @enforce     { token TokenEnforce }
-    @enforceOne  { token TokenEnforceOne }
     step         { token TokenStep }
-    @withcap     { token TokenWithCapability }
-    @cruserguard { token TokenCreateUserGuard }
-    try          { token TokenTry }
-    do           { token TokenBlockIntro }
-    suspend      { token TokenSuspend }
 
     @integer     { emit TokenNumber }
 
