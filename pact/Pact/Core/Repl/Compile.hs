@@ -29,6 +29,8 @@ import Control.Monad.Except
 import Control.Monad.State.Strict
 import Data.Text(Text)
 import Data.Default
+import Data.IORef
+import Data.Foldable
 import System.FilePath.Posix
 
 
@@ -50,6 +52,7 @@ import Pact.Core.Info
 import Pact.Core.PactValue
 import Pact.Core.Errors
 import Pact.Core.Interpreter
+import Pact.Core.Literal
 import Pact.Core.Pretty hiding (pipe)
 import Pact.Core.Serialise (serialisePact_repl_spaninfo)
 
@@ -66,7 +69,6 @@ import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.IR.Eval.CEK as CEK
 import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import qualified Pact.Core.IR.Eval.Direct.ReplBuiltin as Direct
-import Pact.Core.Literal
 
 type ReplInterpreter = Interpreter ReplRuntime ReplCoreBuiltin SpanInfo
 
@@ -97,24 +99,21 @@ instance Pretty ReplCompileValue where
 loadFile
   :: FilePath
   -> ReplInterpreter
-  -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
-loadFile loc rEnv display = do
+loadFile loc rEnv = do
   source <- SourceCode loc <$> liftIO (T.readFile loc)
   replCurrSource .== source
-  interpretReplProgram rEnv source display
+  interpretReplProgram rEnv source
 
 
 interpretReplProgramBigStep
   :: SourceCode
-  -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
 interpretReplProgramBigStep = interpretReplProgram interpretEvalBigStep
 
 
 interpretReplProgramDirect
   :: SourceCode
-  -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
 interpretReplProgramDirect = interpretReplProgram interpretEvalDirect
 
@@ -200,9 +199,8 @@ topLevelIsReplLoad = \case
 interpretReplProgram
   :: ReplInterpreter
   -> SourceCode
-  -> (ReplCompileValue -> ReplM ReplCoreBuiltin ())
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
-interpretReplProgram interpreter (SourceCode sourceFp source) display = do
+interpretReplProgram interpreter (SourceCode sourceFp source) = do
   lexx <- liftEither (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
   parsed <- parseSource lexx
@@ -221,10 +219,10 @@ interpretReplProgram interpreter (SourceCode sourceFp source) display = do
   pipe t = case topLevelIsReplLoad t of
     Left tl -> pure <$> pipe' tl
     Right (ReplLoadFile file reset info) -> doLoadFile file reset info
-  displayValue p = p <$ display p
+  displayValue p = p <$ replPrintLn p
   doLoadFile txt reset i = do
     let loading = RCompileValue (InterpretValue (PString ("Loading " <> txt <> "...")) i)
-    display loading
+    replPrintLn loading
     oldSrc <- useReplState replCurrSource
     pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
     oldEE <- useReplState replEvalEnv
@@ -234,7 +232,7 @@ interpretReplProgram interpreter (SourceCode sourceFp source) display = do
       replEvalEnv .== ee
     fp <- mangleFilePath (T.unpack txt)
     when (isPactFile fp) $ esLoaded . loToplevel .= mempty
-    out <- loadFile fp interpreter display
+    out <- loadFile fp interpreter
     replCurrSource .== oldSrc
     unless reset $ do
       replEvalEnv .== oldEE
@@ -266,10 +264,21 @@ interpretReplProgram interpreter (SourceCode sourceFp source) display = do
                 throwExecutionError varI $ EvalError "repl invariant violated: resolved to a top level free variable without a binder"
           _ -> do
             v <- evalTopLevel interpreter ds deps
-            displayValue (RCompileValue v)
+            emitWarnings
+            replPrintLn v
+            pure (RCompileValue v)
     _ ->  do
       ds <- runDesugarReplTopLevel tl
       interpret ds
+  emitWarnings =
+    viewEvalEnv eeWarnings >>= \case
+      Nothing -> pure ()
+      Just ref -> do
+        warnings <- liftIO $
+          atomicModifyIORef' ref (\old -> (newDefaultWarningStack, getWarningStack old))
+        -- Todo: print located line
+        -- Note: warnings are pushed FIFO, so we reverse to get the right order
+        traverse_ (replPrintLn . _locElem) (reverse warnings)
   interpret (DesugarOutput tl _deps) = do
     case tl of
       RTLDefun df -> do
@@ -279,6 +288,7 @@ interpretReplProgram interpreter (SourceCode sourceFp source) display = do
       RTLDefConst dc -> case _dcTerm dc of
         TermConst term -> do
           pv <- eval interpreter PSysOnly term
+          emitWarnings
           maybeTCType (_dcInfo dc) (_argType $ _dcSpec dc) pv
           let dc' = set dcTerm (EvaledConst pv) dc
           let fqn = FullyQualifiedName replModuleName (_argName $ _dcSpec dc) replModuleHash

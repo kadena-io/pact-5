@@ -40,10 +40,11 @@ execScript dolog f = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
   evalLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replBuiltinMap
-  ref <- newIORef (ReplState mempty ee evalLog defaultSrc mempty mempty Nothing False)
-  runReplT ref $ loadFile f interpretEvalDirect logger
+  ref <- newIORef (ReplState mempty ee evalLog defaultSrc mempty mempty Nothing False logger)
+  runReplT ref $ loadFile f interpretEvalDirect
   where
   defaultSrc = SourceCode "(interactive)" mempty
+  logger :: Pretty a => a -> EvalM e b i ()
   logger
     | dolog = liftIO . print . pretty
     | otherwise = const (pure ())
@@ -53,7 +54,8 @@ runRepl = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
   evalLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replBuiltinMap
-  ref <- newIORef (ReplState mempty ee evalLog defaultSrc mempty mempty Nothing False)
+  let display' rcv = runInputT replSettings (displayOutput rcv)
+  ref <- newIORef (ReplState mempty ee evalLog defaultSrc mempty mempty Nothing False display')
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
@@ -62,6 +64,7 @@ runRepl = do
   where
 
   replSettings = Settings (replCompletion replCoreBuiltinNames) (Just ".pc-history") True
+  displayOutput :: (Pretty a, MonadIO m) => a -> InputT m ()
   displayOutput = outputStrLn . show . pretty
   catch' ma = catchAny ma (\e -> outputStrLn (show e) *> loop)
   defaultSrc = SourceCode "(interactive)" mempty
@@ -88,9 +91,8 @@ runRepl = do
             outputStrLn $ unwords ["Remove all debug flags"]
             loop
           RAExecuteExpr src -> catch' $ do
-            let display' rcv = runInputT replSettings (displayOutput rcv)
             lift (replCurrSource .== defaultSrc{_scPayload=src})
-            eout <- lift (tryError (interpretReplProgramDirect (SourceCode "(interactive)" src) display'))
+            eout <- lift (tryError (interpretReplProgramDirect (SourceCode "(interactive)" src)))
             case eout of
               Right _ -> pure ()
               Left err -> do

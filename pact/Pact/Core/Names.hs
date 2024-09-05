@@ -90,9 +90,8 @@ import Data.String (IsString)
 
 -- | Newtype wrapper over bare namespaces
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
-  deriving (Eq, Ord, Show, Generic)
-
-instance NFData NamespaceName
+  deriving (Generic)
+  deriving newtype (Eq, Ord, Show, NFData)
 
 instance Pretty NamespaceName where
   pretty (NamespaceName n) = pretty n
@@ -113,7 +112,7 @@ instance Pretty ModuleName where
 newtype BareName
   = BareName
   { _bnName :: Text }
-  deriving (Show, Eq, Ord, NFData)
+  deriving newtype (Show, Eq, Ord, NFData)
 
 instance Pretty BareName where
   pretty (BareName b) = pretty b
@@ -318,7 +317,7 @@ data TypeName
 newtype NativeName
   = NativeName
   { _natName :: Text }
-  deriving (Show, Eq, NFData)
+  deriving newtype (Show, Eq, Ord, NFData)
 
 makeLenses ''TypeVar
 makeLenses ''TypeName
@@ -376,7 +375,7 @@ renderFullyQualName (FullyQualifiedName mn n mh) =
 -- | Newtype over text user keys
 newtype RowKey
   = RowKey { _rowKey :: Text }
-  deriving (Eq, Ord, Show, NFData)
+  deriving newtype (Eq, Ord, Show, NFData)
 
 makeLenses ''RowKey
 
@@ -413,7 +412,7 @@ makeLenses ''QualifiedName
 --   parent + the nested continuation
 newtype DefPactId
   = DefPactId { _defPactId :: Text }
-  deriving (Eq,Ord,Show, NFData)
+  deriving newtype (Eq,Ord,Show, NFData)
 
 instance Pretty DefPactId where
   pretty (DefPactId p) = pretty p

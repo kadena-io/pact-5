@@ -34,7 +34,7 @@ import Pact.Core.Errors
 import Pact.Core.Serialise
 
 
-type Interpreter = SourceCode -> (ReplCompileValue -> ReplM ReplCoreBuiltin ()) -> ReplM ReplCoreBuiltin [ReplCompileValue]
+type Interpreter = SourceCode -> ReplM ReplCoreBuiltin [ReplCompileValue]
 
 tests :: IO TestTree
 tests = do
@@ -89,9 +89,10 @@ runReplTest (ReplSourceDir path) pdb file src interp = do
             , _replTLDefPos = mempty
             , _replTx = Nothing
             , _replNativesEnabled = False
+            , _replOutputLine = const (pure ())
             }
   stateRef <- newIORef rstate
-  runReplT stateRef (interp source (const (pure ()))) >>= \case
+  runReplT stateRef (interp source) >>= \case
     Left e -> let
       rendered = replError (SourceCode file src) e
       in assertFailure (T.unpack rendered)

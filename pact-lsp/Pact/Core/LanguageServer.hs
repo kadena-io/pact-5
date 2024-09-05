@@ -251,6 +251,7 @@ setupAndProcessFile nuri content = do
           -- since there may be no way for us to set it for the LSP from pact directly.
           -- Once this is possible, we can set it to `False` as is the default
           , _replNativesEnabled = True
+          , _replOutputLine = const (pure ())
           }
   stateRef <- newIORef rstate
   res <- runReplT stateRef (processFile Repl.interpretEvalBigStep nuri content)

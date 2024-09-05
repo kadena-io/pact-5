@@ -174,6 +174,7 @@ setupEvalEnv pdb mode msgData gasModel' np spv pd efs = do
     , _eeNamespacePolicy = np
     , _eeGasEnv = gasEnv
     , _eeSPVSupport = spv
+    , _eeWarnings = Nothing
     }
   where
   mkMsgSigs ss = M.fromList $ map toPair ss

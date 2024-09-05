@@ -8,6 +8,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE DataKinds #-}
 
 
 module Pact.Core.Repl.Utils
@@ -38,6 +39,7 @@ module Pact.Core.Repl.Utils
  , (.==)
  , (%==)
  , gasLogEntrytoPactValue
+ , replPrintLn
  ) where
 
 import Control.Lens
@@ -146,6 +148,12 @@ replFlagSet
 replFlagSet flag =
   usesReplState replFlags (Set.member flag)
 
+getReplState :: ReplM b (ReplState b)
+getReplState = do
+  r <- ask
+  let (ReplEnv ref) = r
+  liftIO $ readIORef ref
+
 useReplState :: Lens' (ReplState b) s -> ReplM b s
 useReplState l = do
   r <- ask
@@ -250,3 +258,8 @@ gasLogEntrytoPactValue :: GasLogEntry (ReplBuiltin CoreBuiltin) SpanInfo -> Pact
 gasLogEntrytoPactValue entry = PString $ renderCompactText' $ n <> ": " <> pretty (_gleThisUsed entry)
   where
     n = pretty (_gleArgs entry) <+> pretty (_gleInfo entry)
+
+replPrintLn :: Pretty a => a -> EvalM 'ReplRuntime b SpanInfo ()
+replPrintLn p = do
+  r <- getReplState
+  _replOutputLine r p

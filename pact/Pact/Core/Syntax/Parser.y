@@ -388,9 +388,6 @@ Bool :: { ParsedExpr }
   : true { Constant (LBool True) (_ptInfo $1) }
   | false { Constant (LBool False) (_ptInfo $1) }
 
-BOOLEAN :: { Bool }
-  : true { True }
-  | false { False }
 
 Var :: { ParsedExpr }
   : IDENT '.' ModQual  { Var (QN (mkQualName (getIdent $1) $3)) (combineSpan (_ptInfo $1) (view _3 $3))  }

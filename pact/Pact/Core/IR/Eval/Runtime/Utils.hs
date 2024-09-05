@@ -54,6 +54,7 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , createEnumerateList
  , guardForModuleCall
  , guardTable
+ , emitPactWarning
  ) where
 
 import Control.Lens hiding (from, to)
@@ -84,6 +85,7 @@ import Pact.Core.Persistence
 import Pact.Core.Environment
 import Pact.Core.DefPacts.Types
 import Pact.Core.Gas
+import Pact.Core.Info
 
 import Pact.Core.Guards
 import Pact.Core.Capabilities
@@ -532,3 +534,10 @@ createEnumerateList info from to inc
     listSize <- sizeOf info SizeOfV0 (max (abs from) (abs to))
     chargeGasArgs info (GMakeList len listSize)
     pure $ V.enumFromStepN from inc (fromIntegral len)
+
+emitPactWarning :: i -> PactWarning -> EvalM e b i ()
+emitPactWarning i pw =
+  viewEvalEnv eeWarnings >>= \case
+    Nothing -> pure ()
+    Just warnRef ->
+      liftIO $ modifyIORef' warnRef (pushWarning (Located i pw))
