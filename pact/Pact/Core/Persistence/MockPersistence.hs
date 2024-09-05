@@ -164,7 +164,7 @@ mockPactDb serial = do
         writeIORef ptRollbackState Nothing
         txId <- atomicModifyIORef' ptTxId (\(TxId i) -> (TxId (succ i), TxId i))
         txLogQueue <- readIORef ptTxLogQueue
-        pure (M.findWithDefault [] txId txLogQueue)
+        pure $ reverse $ M.findWithDefault [] txId txLogQueue
       Local -> do
         -- in local, we simply roll back all tables
         -- then and return the logs, then roll back the logs table
@@ -375,4 +375,4 @@ rightToMaybe = \case
 record :: PactTables b i -> TxLog ByteString -> IO ()
 record PactTables{..} entry = do
   txIdNow <- readIORef ptTxId
-  modifyIORef ptTxLogQueue $ \txMap -> M.insertWith (<>) txIdNow [entry] txMap
+  modifyIORef ptTxLogQueue (M.insertWith (<>) txIdNow [entry])

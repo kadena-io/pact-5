@@ -209,7 +209,8 @@ commitTx :: IORef TxId -> SQL.Database -> IORef [TxLog ByteString] -> IO [TxLog 
 commitTx txid db txLog = do
   _ <- atomicModifyIORef' txid (\old@(TxId n) -> (TxId (succ n), old))
   SQL.exec db "COMMIT TRANSACTION"
-  readIORef txLog
+  txls <- atomicModifyIORef' txLog ([],)
+  pure $ reverse txls
 
 beginTx :: IORef TxId -> SQL.Database -> IORef [TxLog ByteString] -> ExecutionMode -> IO (Maybe TxId)
 beginTx txid db txLog em = do
