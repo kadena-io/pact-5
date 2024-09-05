@@ -68,6 +68,7 @@ import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import Control.Monad.IO.Class
+import qualified Data.Text as T
 
 type Eval = EvalM ExecRuntime CoreBuiltin Info
 
@@ -335,7 +336,8 @@ evalWithinTx' ee es action = do
     -- or error.
     runAction =
       let act = tryAny action >>= \case
-            Left _ -> throwError $ PEExecutionError UnknownException [] def
+            Left ex -> throwError $
+              PEExecutionError (UnknownException (T.pack $ displayException ex)) [] def
             Right v -> pure v
       in tryError act >>= \case
         Left err -> liftIO (_pdbRollbackTx pdb) *> throwError err
