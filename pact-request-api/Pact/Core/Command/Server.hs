@@ -277,6 +277,8 @@ sendHandler :: CommandEnv -> SendRequest -> Handler SendResponse
 sendHandler env (SendRequest submitBatch) = do
     requestKeys <- forM (_sbCmds submitBatch) $ \cmd -> do
       let requestKey = cmdToRequestKey cmd
+      -- setupEvalEnv
+      -- caching only of pactdb
       _ <- liftIO $ cached (_ceRequestCache env) requestKey (computeResultAndUpdateState requestKey cmd)
       pure requestKey
     pure $ SendResponse $ RequestKeys requestKeys

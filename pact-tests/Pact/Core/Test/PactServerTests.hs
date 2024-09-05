@@ -1,4 +1,6 @@
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE QuasiQuotes #-}
+
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 -- |
@@ -8,6 +10,8 @@ module Pact.Core.Test.PactServerTests where
 import Control.Monad.IO.Class
 import qualified Data.Aeson as A
 import qualified Data.ByteString.Lazy as LBS
+import Pact.Core.Command.Util
+import Data.ByteString (ByteString)
 import Data.Default
 import qualified Data.List.NonEmpty as NE
 import Data.Proxy
@@ -32,6 +36,11 @@ import qualified Test.Tasty.HUnit as HUnit
 import Test.Tasty.Wai
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import Pact.Core.Names
+import NeatInterpolation (text)
+import Pact.Core.Guards
+import qualified Data.Vector as V
+import qualified Data.Map.Strict as M
 
 
 sendClient :: SendRequest -> ClientM SendResponse
@@ -51,6 +60,7 @@ tests =  do
     , versionTest env
     , integrationTests env
     , localTests env
+    , testPactContinuation env
     ]
   where
   testCase env = testWai (serve (Proxy @API) (server env))
@@ -114,6 +124,25 @@ tests =  do
     let cnt' = T.decodeUtf8 $ LBS.toStrict cnt
     assertBool "should contain 'pact version' string" (T.isPrefixOf "pact version" cnt')
 
+  testPactContinuation env = testGroup "pact continuation" [
+    testCase env "executes the next step and updates pact's state" $ do
+        ks <- liftIO generateEd25519KeyPair
+        modCmd <- liftIO $ mkCmd ks (threeStepPactCode "testCorrectNextStep")
+        -- testCmd <- liftIO $ mkCmd ks "(testCorrectNextStep.tester)"
+        -- contCmd <- liftIO $ mkCont (DefPactId $ hashToText (_cmdHash testCmd)) 1 False PUnit (def :: PublicMeta) [(DynEd25519KeyPair ks, [])] [] (Just "nonce") Nothing Nothing
+        let cmds = J.encode $ J.build $ SubmitBatch $ modCmd NE.:| [] --[testCmd, contCmd]
+        resp@(SResponse _ _ reqResp) <- postWithHeaders "/api/v1/send" cmds [(HTTP.hContentType, "application/json; charset=utf-8")]
+        assertStatus 200 resp
+
+        let (Just (SendResponse (RequestKeys h@(modDeploy NE.:| _ )))) :: Maybe SendResponse = A.decodeStrict $ LBS.toStrict reqResp
+
+        -- check module deployment
+        let req = J.encode $ J.build $ ListenRequest (cmdToRequestKey modCmd)
+        res <- postWithHeaders "/api/v1/listen" req  [(HTTP.hContentType, "application/json")]
+
+        
+        liftIO $ print res
+    ]
 assertBool :: String -> Bool -> Session ()
 assertBool msg c = liftIO (HUnit.assertBool msg c)
 
@@ -135,3 +164,23 @@ mkLocalRequest = do
       metaData = J.build $ StableEncoding (def :: PublicMeta)
   cmd <- mkCommand [(ks, [])] [] metaData "nonce" Nothing rpc
   pure $ J.encode $ J.build $ LocalRequest $ fmap decodeUtf8 cmd
+
+mkCmd :: Ed25519KeyPair -> Text -> IO (Command Text)
+mkCmd ks code = do
+  let mguard = toB16Text $ getPublic ks
+      md = PObject $ M.fromList [("admin-keyset", PList (V.fromList [PString mguard]))]
+      rpc :: PactRPC Text = Exec (ExecMsg code md)
+      metaData = J.build $ StableEncoding (def :: PublicMeta)
+  cmd <- mkCommand [(ks, [])] [] metaData "nonce" Nothing rpc
+  liftIO $ print cmd
+  pure $ fmap decodeUtf8 cmd
+
+threeStepPactCode :: T.Text -> T.Text
+threeStepPactCode moduleName =
+  [text|
+    (define-keyset 'k (read-keyset "admin-keyset"))
+      (module $moduleName 'k
+        (defpact tester ()
+          (step "step 0")
+          (step "step 1")
+          (step "step 2"))) |]
