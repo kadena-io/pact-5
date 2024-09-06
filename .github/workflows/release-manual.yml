@@ -142,7 +142,12 @@ jobs:
           fi
 
           docker image push --all-tags ghcr.io/kadena-io/pact-5
-          
+             
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.set-vars.outputs.RELEASE_SHA }}
+          sparse-checkout: |
+            CHANGELOG.md
       - name: Generate release
         uses: ncipollo/release-action@v1
         #if: startsWith(github.ref, 'refs/tags/')
