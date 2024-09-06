@@ -151,6 +151,7 @@ jobs:
           artifacts: "${{ env.UBUNTU_RELEASE_FILE }},${{ env.MACOS_RELEASE_FILE }}"
           commit: ${{ env.RELEASE_SHA }}
           name: ${{ env.RELEASE_VERSION }}
+          tag: ${{ env.RELEASE_VERSION }}
           omitBodyDuringUpdate: true
           skipIfReleaseExists: false
           draft: ${{ inputs.draft }}
