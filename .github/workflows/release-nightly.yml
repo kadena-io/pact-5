@@ -2,6 +2,8 @@ name: Release - nightly - pact
 
 run-name: "Release pact-5 from ${{ github.sha}}"
 on:
+  workflow_dispatch:
+    
   schedule:
     - cron: '3 0 * * *'  # Daily at 00:03 UTC because midnight gets hectic
 
