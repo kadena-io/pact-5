@@ -71,7 +71,7 @@ jobs:
         id: set-vars
         run: |
           RELEASE_SHA=${{ github.sha }}
-          if [[ ! -z ${{ inputs.release_sha }} ]]; then
+          if [[ ! -z "${{ inputs.release_sha }}" ]]; then
             RELEASE_SHA=${{ inputs.release_sha }}
           fi
           echo "RELEASE_SHA=$RELEASE_SHA" >> $GITHUB_OUTPUT
