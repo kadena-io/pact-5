@@ -89,10 +89,9 @@ jobs:
       - name: Get ghc version
         id: set-ghc-version
         run: |
-          ls -haltrR
-          VERSION=$(grep -Po '(?<="ghc": \[")(\d\.\d\.\d)' .github/workflows/applications.yml | head -1)
+          VERSION=$(grep -Po '(?<=ghc: \[")(\d\.\d)(\.\d)+' .github/workflows/applications.yml | head -1)
             if [[ -z $VERSION ]]; then
-              echo "Unable to get version from pact build"
+              echo "Unable to get pact version from applications.yml"
               exit 1
             fi
           echo "GHC_VERSION=$VERSION" >> $GITHUB_OUTPUT
