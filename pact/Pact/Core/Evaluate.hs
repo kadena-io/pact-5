@@ -183,7 +183,7 @@ setupEvalEnv pdb mode msgData gasModel' np spv pd efs = do
       (PublicKeyText (fromMaybe pubK addr),S.fromList (_sigCapability <$> capList))
   mkMsgVerifiers vs = M.fromListWith S.union $ map toPair vs
     where
-    toPair (Verifier vfn _ caps) = (vfn, S.fromList caps)
+    toPair (Verifier vfn _ caps) = (vfn, S.fromList (_sigCapability <$> caps))
 
 evalExec
   :: ExecutionMode -> PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
