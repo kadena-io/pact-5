@@ -136,8 +136,8 @@ jobs:
         run: |
           docker pull $IMAGE
           docker run --rm $IMAGE --version
-          docker tag $IMAGE ghcr.io/kadena-io/pact-5:$VERSION_NEW
-          if [[ "$VERSION_NEW" != "nightly" ]]; then
+          docker tag $IMAGE ghcr.io/kadena-io/pact-5:$RELEASE_VERSION
+          if [[ "$RELEASE_VERSION" != "nightly" ]]; then
             docker tag $IMAGE ghcr.io/kadena-io/pact-5:latest
           fi
 
