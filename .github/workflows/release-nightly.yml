@@ -19,7 +19,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
   update_github_release:
-    uses: kadena-io/pact-5/.github/workflows/release-manual.yml@master
+    uses: kadena-io/pact-5/.github/workflows/release-manual.yml@DevopsGoth/release_updates
     secrets: inherit
         
         
