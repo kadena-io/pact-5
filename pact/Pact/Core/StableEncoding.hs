@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
 
 -- |
@@ -9,28 +10,27 @@
 module Pact.Core.StableEncoding
   ( encodeStable
   , decodeStable
+  , roundtripStable
   , StableEncoding(..))
 where
 
 import Control.Applicative
 import Control.Monad (guard)
-import qualified Data.Aeson.KeyMap as Aeson
-import qualified Data.Aeson.Key as AesonKey
-import Data.Aeson.Types (Value(Number), Parser)
 import Data.Bifunctor
+import Data.Text(Text)
 import Data.ByteString (ByteString)
 import Data.Coerce(coerce)
 import Data.Decimal (DecimalRaw(..))
 import Data.Scientific (Scientific)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
-import Data.Ratio ((%), denominator)
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Pact.JSON.Decode as JD
 import qualified Pact.JSON.Encode as J
+import Unsafe.Coerce (unsafeCoerce)
 
 import Pact.Core.Capabilities
 import Pact.Core.ChainData
@@ -46,6 +46,7 @@ import Pact.Core.Hash
 import Pact.Core.DefPacts.Types
 import Pact.Core.PactValue
 import Pact.Time
+import Data.Maybe (fromMaybe)
 
 -- | JSON serialization for 'readInteger' and public meta info;
 -- accepts both a String version (parsed as a Pact integer),
@@ -53,6 +54,16 @@ import Pact.Time
 newtype ParsedInteger = ParsedInteger Integer
   deriving (Eq,Show,Ord)
 
+encodeStable :: J.Encode (StableEncoding a) => a -> ByteString
+encodeStable = J.encodeStrict . StableEncoding
+{-# INLINE encodeStable #-}
+
+decodeStable :: JD.FromJSON (StableEncoding a) => ByteString -> Maybe a
+decodeStable = fmap _stableEncoding . JD.decodeStrict'
+{-# INLINE decodeStable #-}
+
+roundtripStable :: (JD.FromJSON (StableEncoding a), J.Encode (StableEncoding a)) => a -> Maybe a
+roundtripStable a = _stableEncoding <$> JD.decodeStrict (J.encodeStrict (StableEncoding a))
 
 instance J.Encode ParsedInteger where
   build (ParsedInteger i) = J.build $ J.Aeson i
@@ -68,14 +79,6 @@ instance JD.FromJSON ParsedInteger where
     StableEncoding (PLiteral (LInteger li)) -> return $ ParsedInteger li
     StableEncoding pv -> fail $ "Failure parsing integer PactValue object: " ++ show pv
   parseJSON v = fail $ "Failure parsing integer: " ++ show v
-
-
-
-encodeStable :: J.Encode (StableEncoding a) => a -> ByteString
-encodeStable = J.encodeStrict . StableEncoding
-
-decodeStable :: JD.FromJSON (StableEncoding a) => ByteString -> Maybe a
-decodeStable = fmap _stableEncoding . JD.decodeStrict'
 
 newtype StableEncoding a = StableEncoding { _stableEncoding :: a }
   deriving (Ord, Eq, Show)
@@ -110,14 +113,11 @@ instance J.Encode (StableEncoding Literal) where
         | otherwise = J.object [ "decimal" J..= T.pack (show d) ]
       encodeUnit = J.object ["##unit" J..= T.empty] -- TODO: Discuss?
       isSafeInteger i = i >= -9007199254740991 && i <= 9007199254740991
-  {-# INLINABLE build #-}
-
-instance J.Encode (StableEncoding RowData) where
-  build (StableEncoding (RowData o)) = J.object
-    [ "$d" J..= (StableEncoding o) ]
+  {-# INLINE build #-}
 
 -- | Stable encoding of `Guard FullyQualifiedName PactValue`
-instance J.Encode (StableEncoding (Guard QualifiedName PactValue)) where
+instance (J.Encode (StableEncoding name), J.Encode (StableEncoding v))
+  => J.Encode (StableEncoding (Guard name v)) where
   build (StableEncoding g) = case g of
     GKeyset ks -> J.build (StableEncoding ks)
     GKeySetRef ksn -> J.object ["keysetref" J..= StableEncoding ksn]
@@ -125,17 +125,20 @@ instance J.Encode (StableEncoding (Guard QualifiedName PactValue)) where
     GCapabilityGuard cg -> J.build (StableEncoding cg)
     GModuleGuard mg -> J.build (StableEncoding mg)
     GDefPactGuard dpg -> J.build (StableEncoding dpg)
-  {-# INLINABLE build #-}
+  {-# INLINE build #-}
 
-instance JD.FromJSON (StableEncoding (Guard QualifiedName PactValue)) where
+instance (JD.FromJSON (StableEncoding name), JD.FromJSON (StableEncoding v))
+  => JD.FromJSON (StableEncoding (Guard name v)) where
   parseJSON v =
     fmap StableEncoding (
     (GKeyset . _stableEncoding) <$> JD.parseJSON v <|>
-    (GKeySetRef . _stableEncoding) <$> JD.parseJSON v <|>
+    (GKeySetRef . _stableEncoding) <$> ksr v <|>
     (GUserGuard . _stableEncoding) <$> JD.parseJSON v <|>
     (GCapabilityGuard . _stableEncoding) <$> JD.parseJSON v <|>
     (GModuleGuard . _stableEncoding) <$> JD.parseJSON v <|>
     (GDefPactGuard . _stableEncoding) <$> JD.parseJSON v)
+    where
+    ksr = JD.withObject "KeySetRef" $ \o -> o JD..: "keysetref"
 
 instance JD.FromJSON (StableEncoding KeySet) where
   parseJSON = JD.withObject "KeySet" $ \o -> do
@@ -144,14 +147,19 @@ instance JD.FromJSON (StableEncoding KeySet) where
     pure $ StableEncoding (KeySet (S.fromList (fmap PublicKeyText keys)) (_stableEncoding pred'))
 
 instance JD.FromJSON (StableEncoding KeySetName) where
-  parseJSON = JD.withObject "KeySetName" $ \o -> do
-    ns <- o JD..:? "ns"
-    ksn <- o JD..: "ksn"
-    pure $ StableEncoding (KeySetName ksn (NamespaceName <$> ns))
+  parseJSON v = oldKs v <|> newKs v
+    where
+    oldKs = JD.withText "KeySetName" (pure . StableEncoding . (`KeySetName` Nothing))
+    newKs =
+      JD.withObject "KeySetName" $ \o -> do
+        ns <- o JD..:? "ns"
+        ksn <- o JD..: "ksn"
+        pure $ StableEncoding (KeySetName ksn (NamespaceName <$> ns))
 
 
 -- | Stable encoding of `CapabilityGuard FullyQualifiedName PactValue`
-instance J.Encode (StableEncoding (CapabilityGuard QualifiedName PactValue)) where
+instance (J.Encode (StableEncoding name), J.Encode (StableEncoding v))
+  => J.Encode (StableEncoding (CapabilityGuard name v)) where
   build (StableEncoding (CapabilityGuard name args mpid)) = J.object
     [ "cgPactId" J..= fmap StableEncoding mpid
     , "cgArgs" J..= J.Array (StableEncoding <$> args)
@@ -159,13 +167,15 @@ instance J.Encode (StableEncoding (CapabilityGuard QualifiedName PactValue)) whe
     ]
   {-# INLINABLE build #-}
 
-instance JD.FromJSON (StableEncoding (CapabilityGuard QualifiedName PactValue)) where
+instance (JD.FromJSON (StableEncoding name), JD.FromJSON (StableEncoding v))
+  => JD.FromJSON (StableEncoding (CapabilityGuard name v)) where
   parseJSON = JD.withObject "CapabilityGuard" $ \o -> do
     name <- o JD..: "cgName"
     args <- o JD..: "cgArgs"
     mpid <- o JD..:? "cgPactId"
     pure $ StableEncoding
         (CapabilityGuard (_stableEncoding name) (fmap _stableEncoding args) (fmap _stableEncoding mpid))
+  {-# INLINE parseJSON #-}
 
 instance J.Encode (StableEncoding QualifiedName) where
   build (StableEncoding qn) = J.build (renderQualName qn)
@@ -183,6 +193,12 @@ instance J.Encode (StableEncoding FullyQualifiedName) where
       t = maybe "" ((<> ".") . _namespaceName) mns <> mn <> "." <> n <> ".{" <> hashToText mh <> "}"
   {-# INLINABLE build #-}
 
+instance JD.FromJSON (StableEncoding FullyQualifiedName) where
+  parseJSON = JD.withText "FullyQualifiedName" $ \t ->
+    case parseFullyQualifiedName t of
+      Just fqn -> pure (StableEncoding fqn)
+      Nothing -> fail "could not parse FullyQualifiedName"
+
 -- | Stable encoding of `ModuleGuard`
 instance J.Encode (StableEncoding ModuleGuard) where
   build (StableEncoding (ModuleGuard m name)) = J.object
@@ -195,7 +211,7 @@ instance JD.FromJSON (StableEncoding ModuleGuard) where
   parseJSON = JD.withObject "ModuleGuard" $ \o -> do
     m <- o JD..: "moduleName"
     name <- o JD..: "name"
-    pure $ StableEncoding (ModuleGuard (ModuleName m Nothing) name)
+    pure $ StableEncoding (ModuleGuard (_stableEncoding m) name)
 
 -- | Stalbe encoding of `DefPactGuard`
 instance J.Encode (StableEncoding DefPactGuard) where
@@ -213,26 +229,28 @@ instance JD.FromJSON (StableEncoding DefPactGuard) where
 
 instance J.Encode (StableEncoding DefPactExec) where
   build (StableEncoding (DefPactExec sc yield step defPactId continuation stepHasRollback nestedDefPactExec)) = J.object
-    [ "stepCount" J..= Number (fromIntegral sc)
-    , "yield" J..= fmap StableEncoding yield
-    , "step" J..= Number (fromIntegral step)
-    , "defPactId" J..= StableEncoding defPactId
-    , "continuation" J..= StableEncoding continuation
+    [ "nested" J..?= if M.null nestedDefPactExec then Nothing else Just (J.Object (convertMap nestedDefPactExec))
+    , "executed" J..= (Nothing :: Maybe Bool) -- compat field for prod
+    , "pactId" J..= StableEncoding defPactId
     , "stepHasRollback" J..= stepHasRollback
-    , "nestedDefPactExec" J..= J.Object (convertMap nestedDefPactExec)
+    , "step" J..= J.Aeson step
+    , "yield" J..= fmap StableEncoding yield
+    , "continuation" J..= StableEncoding continuation
+    , "stepCount" J..= J.Aeson sc
     ]
     where convertMap :: Map DefPactId DefPactExec -> Map T.Text (StableEncoding DefPactExec)
-          convertMap = Map.fromList . fmap (bimap _defPactId StableEncoding) . Map.toList
+          convertMap = unsafeCoerce
 
 instance JD.FromJSON (StableEncoding DefPactExec) where
   parseJSON = JD.withObject "DefPactExec" $ \o -> do
     stepCount <- o JD..: "stepCount"
+    (_ :: Maybe Bool) <- o JD..: "executed"
     yield <- o JD..:? "yield"
     step <- o JD..: "step"
-    defPactId <- o JD..: "defPactId"
+    defPactId <- o JD..: "pactId"
     continuation <- o JD..: "continuation"
     stepHasRollback <- o JD..: "stepHasRollback"
-    nestedDefPactExec <- o JD..: "nestedDefPactExec"
+    nestedDefPactExec <- fromMaybe mempty <$> (o JD..:? "nested")
     pure $ StableEncoding
       (DefPactExec
         stepCount
@@ -248,7 +266,7 @@ instance JD.FromJSON (StableEncoding DefPactExec) where
 
 instance JD.FromJSON (StableEncoding (DefPactContinuation QualifiedName PactValue)) where
   parseJSON = JD.withObject "DefPactContinuation" $ \o -> do
-    name <- o JD..: "name"
+    name <- o JD..: "def"
     args <- o JD..: "args"
     pure $ StableEncoding (DefPactContinuation (_stableEncoding name) (_stableEncoding <$> args))
 
@@ -258,7 +276,7 @@ instance JD.FromJSON (StableEncoding DefPactId) where
 
 instance J.Encode (StableEncoding Yield) where
   build (StableEncoding (Yield data' provenance sourceChain)) = J.object
-    [ "data" J..= StableEncoding data'
+    [ "data" J..= (StableEncoding data')
     , "provenance" J..= fmap StableEncoding provenance
     , "sourceChain" J..= fmap StableEncoding sourceChain
     ]
@@ -266,10 +284,10 @@ instance J.Encode (StableEncoding Yield) where
 
 instance JD.FromJSON (StableEncoding Yield) where
   parseJSON = JD.withObject "Yield" $ \o -> do
-    data' <- o JD..: "data"
+    data' <- fmap _stableEncoding <$> o JD..: "data"
     provenance <- o JD..:? "provenance"
     sourceChain <- o JD..:? "sourceChain"
-    pure $ StableEncoding (Yield (_stableEncoding data') (fmap _stableEncoding provenance) (_stableEncoding <$> sourceChain))
+    pure $ StableEncoding (Yield data' (fmap _stableEncoding provenance) (_stableEncoding <$> sourceChain))
 
 instance J.Encode (StableEncoding Provenance) where
   build (StableEncoding (Provenance chainId moduleHash)) = J.object
@@ -292,14 +310,16 @@ instance JD.FromJSON (StableEncoding ChainId) where
   parseJSON = JD.withText "ChainId" $ \t -> pure $ StableEncoding (ChainId t)
 
 -- | Stable encoding of `UserGuard FullyQualifiedName PactValue`
-instance J.Encode (StableEncoding (UserGuard QualifiedName PactValue)) where
+instance (J.Encode (StableEncoding name), J.Encode (StableEncoding v))
+  => J.Encode (StableEncoding (UserGuard name v)) where
   build (StableEncoding (UserGuard fun args)) = J.object
     [ "args" J..= J.array (StableEncoding <$> args)
     , "fun" J..= StableEncoding fun
     ]
   {-# INLINABLE build #-}
 
-instance JD.FromJSON (StableEncoding (UserGuard QualifiedName PactValue)) where
+instance (JD.FromJSON (StableEncoding name), JD.FromJSON (StableEncoding v))
+  => JD.FromJSON (StableEncoding (UserGuard name v)) where
   parseJSON = JD.withObject "UserGuard" $ \o -> do
     fun <- o JD..: "fun"
     args <- o JD..: "args"
@@ -318,7 +338,7 @@ instance J.Encode (StableEncoding KeySetName) where
 instance J.Encode (StableEncoding KeySet) where
   build (StableEncoding (KeySet keys predFun)) =J.object
     [ "pred" J..= StableEncoding predFun
-    , "keys" J..= J.Array (S.map StableEncoding keys) -- TODO: is this valid?
+    , "keys" J..= J.Array (S.mapMonotonic StableEncoding keys) -- TODO: is this valid?
     ]
   {-# INLINABLE build #-}
 
@@ -329,12 +349,6 @@ instance J.Encode (StableEncoding v) => J.Encode (StableEncoding (Map Field v)) 
     c :: [(Field, v)] -> [(T.Text, StableEncoding v)]
     c = coerce
   {-# INLINABLE build #-}
-
-instance JD.FromJSON (StableEncoding (Map Field PactValue)) where
-  parseJSON = JD.withObject "Map Field PactValue" $ \o -> do
-    let keyToField k = Field (AesonKey.toText k)
-    kvs :: Aeson.KeyMap (StableEncoding PactValue) <- traverse JD.parseJSON o
-    pure $ StableEncoding (Map.mapKeys keyToField $ _stableEncoding <$> Aeson.toMap kvs)
 
 -- | Stable encoding of `KSPredicate FullyQualifiedName`
 instance J.Encode (StableEncoding KSPredicate) where
@@ -348,14 +362,13 @@ instance J.Encode (StableEncoding KSPredicate) where
 instance JD.FromJSON (StableEncoding KSPredicate) where
   parseJSON = JD.withText "KSPredicate" parsePredName
     where
-      parsePredName :: T.Text -> Parser (StableEncoding KSPredicate)
       parsePredName txt = case txt of
         "keys-all" -> pure $ StableEncoding KeysAll
         "keys-any" -> pure $ StableEncoding KeysAny
         "keys-2" -> pure $ StableEncoding Keys2
         _ -> case parseParsedTyName txt of
-          Nothing -> fail "invalid keyset predicate"
           Just parsedName -> pure $ StableEncoding (CustomPredicate parsedName)
+          Nothing -> fail "invalid keyset predicate"
 
 -- | Stable encoding of `PublicKeyText`
 instance J.Encode (StableEncoding PublicKeyText) where
@@ -404,17 +417,8 @@ instance JD.FromJSON (StableEncoding ModRef) where
     refSpec :: Maybe [StableEncoding ModuleName] <- o JD..:? "refSpec"
     pure $ StableEncoding (ModRef (_stableEncoding refName) (maybe Set.empty (S.fromList . fmap _stableEncoding) refSpec))
 
--- | Stable encoding of `UTCTime`
---
--- See https://github.com/kadena-io/pact/blob/e72d86749f5d65ac8d6e07a7652dd2ffb468607b/src/Pact/Types/Codec.hs#L150
--- for further details
 instance J.Encode (StableEncoding UTCTime) where
-  build (StableEncoding utc)
-    | denom utc == 1 = J.object [ "time" J..= T.pack (formatTime "%Y-%m-%dT%H:%M:%SZ" utc) ]
-    | otherwise = J.object [ "timep" J..= T.pack (formatTime "%Y-%m-%dT%H:%M:%S.%vZ" utc) ]
-    where
-      denom :: UTCTime -> Integer
-      denom = denominator . (% 1000) . fromIntegral . toPosixTimestampMicros
+  build (StableEncoding utc) = encoder timeCodec utc
   {-# INLINABLE build #-}
 
 -- | Stable encoding of `PactValue`
@@ -436,6 +440,7 @@ instance JD.FromJSON (StableEncoding PactValue) where
     (PGuard . _stableEncoding <$> JD.parseJSON v) <|>
     (PModRef . _stableEncoding <$> JD.parseJSON v) <|>
     (PTime <$> decoder timeCodec v) <|>
+    (PCapToken . _stableEncoding <$> JD.parseJSON v) <|>
     (PObject . fmap _stableEncoding <$> JD.parseJSON v)
   {-# INLINABLE parseJSON #-}
 
@@ -454,17 +459,21 @@ instance JD.FromJSON (StableEncoding Literal) where
       pure LUnit
   parseJSON _t = fail "Literal parse failed"
 
-instance J.Encode (StableEncoding name) => J.Encode (StableEncoding (CapToken name PactValue)) where
+instance (J.Encode (StableEncoding name), J.Encode (StableEncoding v))
+  => J.Encode (StableEncoding (CapToken name v)) where
   build (StableEncoding (CapToken name args)) = J.object
-    [ "ctName" J..= J.build (StableEncoding name)
-    , "ctArgs" J..= J.build (J.Array (StableEncoding <$> args))
+    [ "#ctName" J..= J.build (StableEncoding name)
+    , "#ctArgs" J..= J.build (J.Array (StableEncoding <$> args))
     ]
+  {-# INLINE build #-}
 
-instance JD.FromJSON (StableEncoding name) => JD.FromJSON (StableEncoding (CapToken name PactValue)) where
+instance (JD.FromJSON (StableEncoding name), JD.FromJSON (StableEncoding v))
+  => JD.FromJSON (StableEncoding (CapToken name v)) where
   parseJSON = JD.withObject "CapToken" $ \o -> do
-    name <- o JD..: "ctName"
-    args <- o JD..: "ctArgs"
+    name <- o JD..: "#ctName"
+    args <- o JD..: "#ctArgs"
     pure $ StableEncoding (CapToken (_stableEncoding name) (_stableEncoding <$> args))
+  {-# INLINE parseJSON #-}
 
 
 -- | Stable encoding of `DefPactContinuation FullyQualifiedName PactValue`
@@ -591,3 +600,60 @@ instance JD.FromJSON (StableEncoding PublicData) where
 instance J.Encode (StableEncoding a) => J.Encode (StableEncoding (Maybe a)) where
   build (StableEncoding a) = J.build (StableEncoding <$> a)
 
+instance J.Encode (StableEncoding RowData) where
+  build (StableEncoding (RowData o)) = J.object
+    [ "$d" J..= (StableEncoding (RowDataValue <$> o)) ]
+
+-- Legacy instance
+instance JD.FromJSON (StableEncoding RowData) where
+  parseJSON v =
+    parseVersioned v <|>
+    StableEncoding . RowData . fmap _stableEncoding <$> JD.parseJSON v
+    where
+      -- Note: This is called `parsedVersioned` as a legacy port, but
+      -- there isn't really any need to parse the row data version here.
+      -- We are moving to CBOR, so there won't be any versions other than row data
+      -- v1
+      parseVersioned = JD.withObject "RowData" $ \o -> StableEncoding . RowData
+          <$> (fmap (_unRowDataValue._stableEncoding) <$> o JD..: "$d")
+  {-# INLINE parseJSON #-}
+
+instance J.Encode (StableEncoding RowDataValue) where
+  build (StableEncoding (RowDataValue v)) = case v of
+    PLiteral t -> J.build (StableEncoding t)
+    PTime t -> encoder timeCodec t
+    PList v' -> J.build $ J.Array (StableEncoding . RowDataValue <$> v')
+    PGuard g -> buildTagged "g" $ J.build (StableEncoding (RowDataValue <$> g))
+    PModRef mr -> buildTagged "m" $ J.build (StableEncoding mr)
+    PCapToken ct -> buildTagged "ct" $ J.build (StableEncoding (RowDataValue <$> ct))
+    PObject o -> buildTagged "o" $ J.build (StableEncoding (RowDataValue <$> o))
+    where
+    buildTagged :: Text -> J.Builder -> J.Builder
+    buildTagged tag o = J.object
+      [ "$t" J..= tag
+      , "$v" J..= o ]
+
+newtype RowDataValue
+    = RowDataValue { _unRowDataValue :: PactValue }
+    deriving newtype (Show, Eq)
+
+instance JD.FromJSON (StableEncoding RowDataValue) where
+  parseJSON v1 =
+    (StableEncoding . RowDataValue . PLiteral . _stableEncoding <$> JD.parseJSON v1) <|>
+    (StableEncoding . RowDataValue . PTime <$> decoder timeCodec v1) <|>
+    (StableEncoding . RowDataValue . PList . fmap (_unRowDataValue . _stableEncoding) <$> JD.parseJSON v1) <|>
+    parseTagged v1
+    where
+      parseTagged = JD.withObject "tagged RowData" $ \o -> do
+        (t :: Text) <- o JD..: "$t"
+        val <- o JD..: "$v"
+        case t of
+          "o" -> StableEncoding . RowDataValue . PObject . fmap (_unRowDataValue . _stableEncoding) <$> JD.parseJSON val
+          "g" -> StableEncoding . RowDataValue . PGuard . fmap (_unRowDataValue) . _stableEncoding <$> JD.parseJSON val
+          "ct" -> StableEncoding . RowDataValue . PCapToken . fmap (_unRowDataValue) . _stableEncoding <$> JD.parseJSON val
+          "m" -> StableEncoding . RowDataValue . PModRef <$> parseMR val
+          _ -> fail "tagged RowData"
+      parseMR = JD.withObject "tagged ModRef" $ \o -> ModRef
+          <$> (fmap _stableEncoding $ o JD..: "refName")
+          <*> (maybe mempty (S.fromList . fmap _stableEncoding) <$> o JD..: "refSpec")
+  {-# INLINE parseJSON #-}

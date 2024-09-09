@@ -143,6 +143,12 @@ mkTblStatement db tbl = do
       readKeysStmt <-  SQL.prepare db ("SELECT rowkey FROM \""<> tbl <> "\" ORDER BY txid DESC")
       pure $ TblStatements insertStmt insertOrUpdateStmt readValueStmt readKeysStmt
 
+addUserTable :: SQL.Database -> IORef StmtCache -> TableName -> IO TblStatements
+addUserTable db stmtCache tn = do
+  stmts <- mkTblStatement db (toUserTable tn)
+  modifyIORef' stmtCache $ \cache ->
+    cache { _stmtUserTbl = M.insert tn stmts (_stmtUserTbl cache) }
+  pure stmts
 
 data StmtCache
   = StmtCache
@@ -172,7 +178,7 @@ initializePactDb serial db = do
     }, stmtsCache)
 
 readKeys :: forall k v b i. SQL.Database -> IORef StmtCache -> Domain k v b i -> GasM b i [k]
-readKeys _db stmtCache = liftIO . \case
+readKeys db stmtCache = liftIO . \case
   DKeySets -> withStmt (_tblReadKeys . _stmtKeyset <$> readIORef stmtCache) $ \stmt -> do
     parsedKS <- fmap parseAnyKeysetName <$> collect stmt []
     case sequence parsedKS of
@@ -180,28 +186,29 @@ readKeys _db stmtCache = liftIO . \case
       Right v -> pure v
 
   DModules -> withStmt (_tblReadKeys . _stmtModules <$> readIORef stmtCache) $ \stmt ->
-     fmap parseModuleName <$> collect stmt [] >>= \mns -> case sequence mns of
+    fmap parseModuleName <$> collect stmt [] >>= \mns -> case sequence mns of
       Nothing -> fail "unexpected decoding"
       Just mns' -> pure mns'
 
   DDefPacts -> withStmt (_tblReadKeys . _stmtDefPact <$> readIORef stmtCache) $ \stmt ->
-     fmap DefPactId <$> collect stmt []
+    fmap DefPactId <$> collect stmt []
 
   DNamespaces -> withStmt (_tblReadKeys . _stmtNamespace <$> readIORef stmtCache) $ \stmt ->
-     fmap NamespaceName <$> collect stmt []
+    fmap NamespaceName <$> collect stmt []
 
 
   DUserTables tbl -> do
-     tblCache <- _stmtUserTbl <$> readIORef stmtCache
-     case M.lookup tbl tblCache of
-       Nothing -> fail "invariant failure: table unknown"
-       Just stmt -> withStmt (pure $ _tblReadKeys stmt) $ \s -> fmap RowKey <$> collect s []
+    tblCache <- _stmtUserTbl <$> readIORef stmtCache
+    stmt <- case M.lookup tbl tblCache of
+      Nothing -> addUserTable db stmtCache tbl
+      Just s -> pure s
+    withStmt (pure $ _tblReadKeys stmt) $ \s -> fmap RowKey <$> collect s []
   where
     collect stmt acc = SQL.step stmt >>= \case
-       SQL.Done -> SQL.reset stmt >> pure acc
-       SQL.Row -> do
-          [SQL.SQLText value] <- SQL.columns stmt
-          collect stmt (value:acc)
+      SQL.Done -> SQL.reset stmt >> pure acc
+      SQL.Row -> do
+        [SQL.SQLText value] <- SQL.columns stmt
+        collect stmt (value:acc)
 
 
 
@@ -273,9 +280,10 @@ write' serial db txId txLog stmtCache wt domain k v =
         encoded <- _encodeRowData serial v
         liftIO $ do
           tblCache <-_stmtUserTbl <$> readIORef stmtCache
-          case M.lookup tbl tblCache of
-            Nothing -> fail "invariant failure: table unknown"
-            Just tblStmts -> withStmt (pure $ _tblInsert tblStmts) $ \stmt -> do
+          tblStmts <- case M.lookup tbl tblCache of
+            Nothing -> addUserTable db stmtCache tbl
+            Just c -> pure c
+          withStmt (pure $ _tblInsert tblStmts) $ \stmt -> do
               let RowKey k' = k
               TxId i <- readIORef txId
               SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
@@ -289,13 +297,14 @@ write' serial db txId txLog stmtCache wt domain k v =
         encoded <- _encodeRowData serial new
         liftIO $ do
           tblCache <-_stmtUserTbl <$> readIORef stmtCache
-          case M.lookup tbl tblCache of
-            Nothing -> fail "invariant failure: table unknown"
-            Just tblStmts -> withStmt (pure $ _tblInsertOrUpdate tblStmts) $ \stmt -> do
-              let RowKey k' = k
-              TxId i <- readIORef txId
-              SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-              doWrite stmt (TxLog (renderDomain domain) k' encoded:)
+          tblStmts <- case M.lookup tbl tblCache of
+            Nothing -> addUserTable db stmtCache tbl
+            Just c -> pure c
+          withStmt (pure $ _tblInsertOrUpdate tblStmts) $ \stmt -> do
+            let RowKey k' = k
+            TxId i <- readIORef txId
+            SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
+            doWrite stmt (TxLog (renderDomain domain) k' encoded:)
 
     DKeySets -> liftIO $ withStmt (_tblInsertOrUpdate . _stmtKeyset <$> readIORef stmtCache) $ \stmt -> do
       let encoded = _encodeKeySet serial v
@@ -344,7 +353,7 @@ write' serial db txId txLog stmtCache wt domain k v =
             | otherwise -> throwIO E.MultipleRowsReturnedFromSingleWrite
 
 read' :: forall k v b i. PactSerialise b i -> SQL.Database -> IORef StmtCache -> Domain k v b i -> k -> GasM b i (Maybe v)
-read' serial _db stmtCache domain k = case domain of
+read' serial db stmtCache domain k = case domain of
   DKeySets -> liftIO $ withStmt (_tblReadValue . _stmtKeyset <$> readIORef stmtCache) $
     doRead (renderKeySetName k) (\v -> pure (view document <$> _decodeKeySet serial v))
 
@@ -353,9 +362,10 @@ read' serial _db stmtCache domain k = case domain of
 
   DUserTables tbl -> do
     tblCache <- _stmtUserTbl <$> liftIO (readIORef stmtCache)
-    case M.lookup tbl tblCache of
-      Nothing -> error "invariant failure: table unknown"
-      Just stmt -> liftIO $ withStmt (pure $ _tblReadValue stmt) $ doRead (_rowKey k) (\v -> pure (view document <$> _decodeRowData serial v))
+    stmt <- case M.lookup tbl tblCache of
+      Nothing -> liftIO (addUserTable db stmtCache tbl)
+      Just s -> pure s
+    liftIO $ withStmt (pure $ _tblReadValue stmt) $ doRead (_rowKey k) (\v -> pure (view document <$> _decodeRowData serial v))
 
   DDefPacts -> do
     liftIO $ withStmt (_tblReadValue . _stmtDefPact <$> readIORef stmtCache) $

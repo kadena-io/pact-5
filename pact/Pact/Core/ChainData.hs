@@ -107,7 +107,7 @@ data PublicData = PublicData
   , _pdPrevBlockHash :: !Text
     -- ^ block hash of preceding block
   }
-  deriving (Show, Generic)
+  deriving (Show, Eq, Generic)
 makeLenses ''PublicData
 
 instance Default PublicData where

@@ -19,6 +19,8 @@ import qualified Pact.Core.Test.ConTagGolden as ConTagGoldenTests
 import qualified Pact.Core.Test.DocsTests as DocsTests
 import qualified Pact.Core.Test.PrincipalTests as PrincipalTests
 import qualified Pact.Core.Test.SignatureSchemeTests as SignatureSchemeTests
+import qualified Pact.Core.Test.JSONRoundtripTests as JSONRoundtripTests
+import qualified Pact.Core.Test.LegacyDbRegression as LegacyDbRegression
 
 main :: IO ()
 main = do
@@ -45,5 +47,7 @@ main = do
     , docsTests
     , PrincipalTests.tests
     , SignatureSchemeTests.tests
+    , JSONRoundtripTests.tests
+    , LegacyDbRegression.tests
     ]
 

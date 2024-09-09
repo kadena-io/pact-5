@@ -280,7 +280,7 @@ newtype UserTableInfo
 --   storage in the persistence backend (prefix USER_ and the module name
 --   to avoid conflicts with any system tables).
 toUserTable :: TableName -> Text
-toUserTable (TableName tbl mn) = "USER_" <> renderModuleName mn <> "_" <> tbl
+toUserTable (TableName tbl mn) = renderModuleName mn <> "_" <> tbl
 
 renderDomain :: Domain k v b i -> Text
 renderDomain = \case
