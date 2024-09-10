@@ -1,7 +1,10 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE ExistentialQuantification #-}
 
-module Pact.Core.Test.LegacyDbRegression where
+module Pact.Core.Test.LegacyDBRegression
+  ( tests
+  , downloadRegressionDb )
+  where
 
 import Control.Lens
 import Control.Applicative
@@ -11,6 +14,9 @@ import Data.Text(Text)
 import Test.Tasty
 import Test.Tasty.HUnit
 import System.FilePath
+import System.Directory
+import qualified Network.HTTP.Simple as Http
+import qualified Data.ByteString as B
 import qualified Data.Text as T
 
 import Pact.Core.Persistence
@@ -25,10 +31,15 @@ import qualified Data.Char as Char
 import qualified Text.Megaparsec as MP
 import qualified Text.Megaparsec.Char as MP
 
-import Debug.Trace
 
-dbPath :: FilePath
-dbPath = "pact-tests" </> "legacy-db-regression" </> "pact-v1-chain-9.sqlite"
+dbFolder :: FilePath
+dbFolder = "pact-tests" </> "legacy-db-regression"
+
+dbFile :: FilePath
+dbFile = "pact-v1-chain-9.sqlite"
+
+dbFilePath :: FilePath
+dbFilePath = dbFolder </> dbFile
 
 data SomeDomain
   = forall k v. Show k => SomeDomain (Domain k v CoreBuiltin SpanInfo)
@@ -62,6 +73,7 @@ newtype UnsafeTableName
   = UnsafeTableName { _getUnsafeTable ::  TableName }
   deriving (Eq, Show)
 
+-- | Hacky way of being able to provide a table name to our regression
 instance IsString UnsafeTableName where
   fromString s =
     case reverse (T.splitOn "_" (T.pack s)) of
@@ -72,18 +84,6 @@ instance IsString UnsafeTableName where
           _ -> error "BOOM2"
       _ -> error "BOOM"
 
-    -- case MP.parseMaybe parseTableName (T.pack s) of
-    -- Just s' -> UnsafeTableName s'
-    -- Nothing -> error "BOOM"
-
-
-parseTableName :: Parser TableName
-parseTableName = do
-  mn <- moduleNameParser
-  traceM "heheeee"
-  _ <- MP.char '_'
-  ident <- identParser
-  pure (TableName ident mn)
 
 -- Note: It's an IO PactDb because `withResource` from tasty has a really
 -- annoying signature
@@ -234,7 +234,26 @@ allTables =
 
 
 tests :: TestTree
-tests = withResource (unsafeCreateSqlitePactDb serialisePact_raw_spaninfo (T.pack dbPath))
+tests = withResource (unsafeCreateSqlitePactDb serialisePact_raw_spaninfo (T.pack dbFilePath))
   (\(_, db, cache) -> unsafeCloseSqlitePactDb db cache) $ \pdbio ->
     testGroup "Legacy PactDb Regression" $
       runTableDecodeRegression (view _1 <$> pdbio) <$> allTables
+
+
+
+-- Function to download a file as a ByteString and save it to a file
+downloadFile :: String -> FilePath -> IO ()
+downloadFile url destination = do
+    let request = Http.parseRequest_ url
+    response <- Http.httpBS request
+    let body = Http.getResponseBody response  -- Get the response as a ByteString
+    B.writeFile destination body         -- Write the ByteString to a file
+
+downloadRegressionDb :: IO ()
+downloadRegressionDb = do
+  fileExists <- doesFileExist dbFilePath
+  unless fileExists $ do
+    createDirectoryIfMissing True dbFolder
+    downloadFile "https://chainweb-chain-db.s3.amazonaws.com/test-objects/pact-v1-chain-9.sqlite" dbFilePath
+
+

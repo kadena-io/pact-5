@@ -361,13 +361,6 @@ executable profile-tx
     , terminal-progress-bar
     , neat-interpolation
 
-  other-modules:
-    -- Pact.Core.GasModel.BuiltinsGas
-    -- Pact.Core.GasModel.InterpreterGas
-    -- Pact.Core.GasModel.ContractBench
-    -- Pact.Core.GasModel.Serialization
-    -- Pact.Core.GasModel.Utils
-
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
   default-language:    Haskell2010
@@ -530,6 +523,7 @@ test-suite core-tests
     , lsp-test >= 0.17
     , lsp-types
     , safe-exceptions
+    , http-conduit
   other-modules:
     , Pact.Core.Test.CommandTests
     , Pact.Core.Test.ReplTests
@@ -548,7 +542,7 @@ test-suite core-tests
     , Pact.Core.Test.ConTagGolden
     , Pact.Core.Test.DocsTests
     , Pact.Core.Test.JSONRoundtripTests
-    , Pact.Core.Test.LegacyDbRegression
+    , Pact.Core.Test.LegacyDBRegression
     , Paths_pact_tng
     , Pact.Core.Test.SignatureSchemeTests
   if (flag(with-crypto))
