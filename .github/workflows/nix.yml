@@ -36,6 +36,14 @@ jobs:
 
     - name: Give root user AWS credentials
       uses: kadena-io/setup-nix-with-cache/copy-root-aws-credentials@v3.1
+    
+    # Needed for a certain test
+    - name: Download chain9 test file
+      run: |
+        mkdir -p pact-tests/legacy-db-regression
+        curl \
+          -L https://chainweb-chain-db.s3.amazonaws.com/test-objects/pact-v1-chain-9.sqlite \
+          -o pact-tests/legacy-db-regression/pact-v1-chain-9.sqlite
 
     - name: Build and cache artifacts
       run: |
