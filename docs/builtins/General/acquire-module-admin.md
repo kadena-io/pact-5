@@ -16,7 +16,7 @@ Assume you have some module
 To grant module admin, use
 
 ```pact
-(acquire-module some-module)
+(acquire-module-admin some-module)
 ```
 
 It will attempt to acquire the governance cap and if successful, it will grant module admin for the rest of the transaction.
