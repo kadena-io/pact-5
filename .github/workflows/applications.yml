@@ -36,6 +36,12 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    # Needed for a certain test
+    - name: Download chain9 test file
+      run: |
+        curl -L https://chainweb-chain-db.s3.amazonaws.com/test-objects/pact-v1-chain-9.sqlite \
+        -o pact-5/pact-tests/legacy-db-regression/pact-v1-chain-9.sqlite
+
     # Haskell Setup
     - name: Set permissions for .ghcup (ubuntu)
       if: startsWith(matrix.os, 'ubuntu-')
@@ -95,11 +101,6 @@ jobs:
           ~/.cabal/store
           dist-newstyle
         key: ${{ matrix.os }}-${{ matrix.ghc }}-4-cabal
-    # Needed for a certain test
-    - name: Download chain9 test file
-      run: |
-        curl -L https://chainweb-chain-db.s3.amazonaws.com/test-objects/pact-v1-chain-9.sqlite \\
-        -o pact-5/pact-tests/legacy-db-regression/pact-v1-chain-9.sqlite
 
     # Build
     - name: Update package database
