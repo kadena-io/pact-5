@@ -247,6 +247,6 @@ jobs:
 
   nightly:
     if: github.ref == 'refs/heads/master'
-    needs: build
+    needs: [docker-image]
     uses: kadena-io/pact-5/.github/workflows/release-manual.yml@master
     secrets: inherit
