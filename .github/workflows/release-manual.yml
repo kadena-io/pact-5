@@ -126,7 +126,7 @@ jobs:
           MACOS_RELEASE_FILE=pact-${{ env.RELEASE_VERSION }}-aarch64-osx.tar.gz
           
           curl "s3.us-east-1.amazonaws.com/kadena-cabal-cache/pact/$UBUNTU_TAR" -o "./$UBUNTU_RELEASE_FILE"
-          curl "s3.us-east-1.amazonaws.com/kadena-cabal-cache/pact/$MACOS_TAR" -o "./$UBUNTU_RELEASE_FILE"
+          curl "s3.us-east-1.amazonaws.com/kadena-cabal-cache/pact/$MACOS_TAR" -o "./$MACOS_RELEASE_FILE"
 
           echo "UBUNTU_RELEASE_FILE=$UBUNTU_RELEASE_FILE" >> $GITHUB_ENV
           echo "MACOS_RELEASE_FILE=$MACOS_RELEASE_FILE" >> $GITHUB_ENV
