@@ -244,3 +244,8 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=local,src=/tmp/.buildx-cache
         cache-to: type=local,dest=/tmp/.buildx-cache
+
+  nightly:
+    if: github.ref == 'refs/heads/master'
+    uses: kadena-io/pact-5/.github/workflows/release-manual.yml@master
+    secrets: inherit

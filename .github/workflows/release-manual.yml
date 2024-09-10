@@ -89,9 +89,9 @@ jobs:
       - name: Get ghc version
         id: set-ghc-version
         run: |
-          VERSION=$(grep -Po '(?<="ghc": \[")(\d\.\d\.\d)' .github/workflows/applications.yml | head -1)
+          VERSION=$(grep -Po '(?<=ghc: \[")(\d\.\d)(\.\d)+' .github/workflows/applications.yml | head -1)
             if [[ -z $VERSION ]]; then
-              echo "Unable to get version from pact build"
+              echo "Unable to get pact version from applications.yml"
               exit 1
             fi
           echo "GHC_VERSION=$VERSION" >> $GITHUB_OUTPUT
@@ -105,12 +105,20 @@ jobs:
       GHC_VERSION: ${{ needs.release_vars.outputs.GHC_VERSION }}
       IMAGE: ${{ needs.release_vars.outputs.IMAGE }}
     outputs:
-      OSX_RELEASE_FILE: ${{ steps.release-artifact-download.outputs.MACOS_RELEASE_FILE }}
+      OSX_RELEASE_URL: ${{ steps.release-artifact-download.outputs.MACOS_RELEASE_URL }}
     steps:
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.set-vars.outputs.RELEASE_SHA }}
+          sparse-checkout: |
+            CHANGELOG.md
     
       - name: Get release artifacts
         id: release-artifact-download
         run: |
+          pwd
+          
           UBUNTU_TAR=pact.${{ env.GHC_VERSION }}.ubuntu-22.04.${{ env.SHORT_REVISION }}.tar.gz
           MACOS_TAR=pact.${{ env.GHC_VERSION }}.macos-14.${{ env.SHORT_REVISION }}.tar.gz
           
@@ -118,11 +126,16 @@ jobs:
           MACOS_RELEASE_FILE=pact-${{ env.RELEASE_VERSION }}-aarch64-osx.tar.gz
           
           curl "s3.us-east-1.amazonaws.com/kadena-cabal-cache/pact/$UBUNTU_TAR" -o "./$UBUNTU_RELEASE_FILE"
-          curl "s3.us-east-1.amazonaws.com/kadena-cabal-cache/pact/$MACOS_TAR" -o "./$UBUNTU_RELEASE_FILE"
+          curl "s3.us-east-1.amazonaws.com/kadena-cabal-cache/pact/$MACOS_TAR" -o "./$MACOS_RELEASE_FILE"
 
           echo "UBUNTU_RELEASE_FILE=$UBUNTU_RELEASE_FILE" >> $GITHUB_ENV
           echo "MACOS_RELEASE_FILE=$MACOS_RELEASE_FILE" >> $GITHUB_ENV
-          echo "MACOS_RELEASE_FILE=$MACOS_RELEASE_FILE" >> $GITHUB_OUTPUT
+          
+          if [[ "$RELEASE_VERSION" != "nightly" ]]; then
+            echo "MACOS_RELEASE_URL=https://github.com/kadena-io/pact-5/releases/download/${{ env.RELEASE_VERSION }}/$MACOS_RELEASE_FILE" >> $GITHUB_OUTPUT
+          else
+            echo "MACOS_RELEASE_URL='' >> $GITHUB_OUTPUT"
+          fi
           
       - name: Login to GHCR
         uses: docker/login-action@v2
@@ -136,13 +149,15 @@ jobs:
         run: |
           docker pull $IMAGE
           docker run --rm $IMAGE --version
-          docker tag $IMAGE ghcr.io/kadena-io/pact-5:$VERSION_NEW
-          if [[ "$VERSION_NEW" != "nightly" ]]; then
+          docker tag $IMAGE ghcr.io/kadena-io/pact-5:$RELEASE_VERSION
+          if [[ "$RELEASE_VERSION" != "nightly" ]]; then
             docker tag $IMAGE ghcr.io/kadena-io/pact-5:latest
+          else
+            docker tag $IMAGE ghcr.io/kadena-io/pact-5:nightly
           fi
 
           docker image push --all-tags ghcr.io/kadena-io/pact-5
-          
+             
       - name: Generate release
         uses: ncipollo/release-action@v1
         #if: startsWith(github.ref, 'refs/tags/')
@@ -151,17 +166,21 @@ jobs:
           artifacts: "${{ env.UBUNTU_RELEASE_FILE }},${{ env.MACOS_RELEASE_FILE }}"
           commit: ${{ env.RELEASE_SHA }}
           name: ${{ env.RELEASE_VERSION }}
+          tag: ${{ env.RELEASE_VERSION }}
           omitBodyDuringUpdate: true
           skipIfReleaseExists: false
           draft: ${{ inputs.draft }}
           prerelease: ${{ inputs.prerelease }}
           generateReleaseNotes: true
+          allowUpdates: true
+          replacesArtifacts: true
+          updateOnlyUnreleased: true
 
   release_to_brew:
     uses: kadena-io/homebrew-pact/.github/workflows/release-bump.yml@master
     needs: release_to_github
     with:
-      pact_arm: https://github.com/kadena-io/pact-5/releases/latest/download/${{ needs.release_vars.outputs.OSX_RELEASE_FILE }}
+      pact_arm: "${{ needs.release_to_github.outputs.OSX_RELEASE_URL }}"
       pact_head: https://github.com/kadena-io/pact-5/releases/download/nightly/pact-nightly-aarch64-osx.tar.gz
     secrets: inherit
               
