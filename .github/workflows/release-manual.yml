@@ -162,6 +162,9 @@ jobs:
           draft: ${{ inputs.draft }}
           prerelease: ${{ inputs.prerelease }}
           generateReleaseNotes: true
+          allowUpdates: true
+          replacesArtifacts: true
+          updateOnlyUnreleased: true
 
   release_to_brew:
     uses: kadena-io/homebrew-pact/.github/workflows/release-bump.yml@master
