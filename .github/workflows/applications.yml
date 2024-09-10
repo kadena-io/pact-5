@@ -42,7 +42,6 @@ jobs:
         mkdir -p pact-tests/legacy-db-regression
         curl -L https://chainweb-chain-db.s3.amazonaws.com/test-objects/pact-v1-chain-9.sqlite \
         -o pact-tests/legacy-db-regression/pact-v1-chain-9.sqlite
-        ls -haltrR pact-tests
     # Haskell Setup
     - name: Set permissions for .ghcup (ubuntu)
       if: startsWith(matrix.os, 'ubuntu-')
