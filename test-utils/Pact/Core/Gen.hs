@@ -293,11 +293,6 @@ constValGen t = Gen.choice
 fqNameRefGen :: Gen (FQNameRef Name)
 fqNameRefGen = FQName <$> fullyQualifiedNameGen
 
--- defManagedMetaGen :: Gen name -> Gen (DefManagedMeta name)
--- defManagedMetaGen genName = Gen.choice
---   [ DefManagedMeta <$> liftA2 (,) (Gen.int (Range.linear 0 100)) genText <*> genName
---   , pure AutoManagedMeta
---   ]
 
 defManagedMetaGen :: Gen name -> Gen (DefManagedMeta name)
 defManagedMetaGen genName = Gen.choice

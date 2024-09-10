@@ -524,6 +524,7 @@ test-suite core-tests
     , lsp-types
     , safe-exceptions
     , http-conduit
+    , direct-sqlite
   other-modules:
     , Pact.Core.Test.CommandTests
     , Pact.Core.Test.ReplTests
@@ -548,19 +549,6 @@ test-suite core-tests
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
 
-
--- tools
-executable legacyPactDbCheck
-  import: pact-common
-  hs-source-dirs: tools
-
-  main-is: LegacyPactDbCheck.hs
-
-  build-depends:
-    , pact-tng
-  ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
-  ghc-prof-options:    -fprof-auto -fprof-auto-calls
-  default-language:    Haskell2010
 
 -- -- tools
 -- executable pact-server

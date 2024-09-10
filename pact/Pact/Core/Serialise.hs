@@ -99,21 +99,21 @@ serialisePact = PactSerialise
 
   , _encodeKeySet = docEncode V1.encodeKeySet
   , _decodeKeySet = \bs ->
-      LegacyDocument <$> LegacyPact.decodeKeySet bs
+      LegacyDocument <$> decodeStable bs
       <|> docDecode bs (\case
                            V1_CBOR -> V1.decodeKeySet
                        )
 
   , _encodeDefPactExec = docEncode V1.encodeDefPactExec
   , _decodeDefPactExec = \bs ->
-      LegacyDocument <$> LegacyPact.decodeDefPactExec bs
+      LegacyDocument <$> decodeStable bs
       <|> docDecode bs (\case
                            V1_CBOR -> V1.decodeDefPactExec
                        )
 
   , _encodeNamespace = docEncode V1.encodeNamespace
   , _decodeNamespace = \bs ->
-      LegacyDocument <$> LegacyPact.decodeNamespace bs
+      LegacyDocument <$> decodeStable bs
       <|> docDecode bs (\case
                            V1_CBOR -> V1.decodeNamespace
                        )

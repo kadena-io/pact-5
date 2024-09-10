@@ -47,6 +47,7 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.PactValue
 import Pact.Time
 import Data.Maybe (fromMaybe)
+import Pact.Core.Namespace
 
 -- | JSON serialization for 'readInteger' and public meta info;
 -- accepts both a String version (parsed as a Pact integer),
@@ -141,10 +142,17 @@ instance (JD.FromJSON (StableEncoding name), JD.FromJSON (StableEncoding v))
     ksr = JD.withObject "KeySetRef" $ \o -> o JD..: "keysetref"
 
 instance JD.FromJSON (StableEncoding KeySet) where
-  parseJSON = JD.withObject "KeySet" $ \o -> do
-    keys <- o JD..: "keys"
-    pred' <- o JD..: "pred"
-    pure $ StableEncoding (KeySet (S.fromList (fmap PublicKeyText keys)) (_stableEncoding pred'))
+  parseJSON v = objKs v <|> keyListOnly v
+    where
+    keyListOnly v' = fmap StableEncoding $
+      KeySet
+        <$> fmap (S.mapMonotonic _stableEncoding) (JD.parseJSON v')
+        <*> pure KeysAll
+    objKs =
+      JD.withObject "KeySet" $ \o -> do
+        keys <- o JD..: "keys"
+        pred' <- fromMaybe (StableEncoding KeysAll) <$> o JD..:? "pred"
+        pure $ StableEncoding (KeySet (S.fromList (fmap PublicKeyText keys)) (_stableEncoding pred'))
 
 instance JD.FromJSON (StableEncoding KeySetName) where
   parseJSON v = oldKs v <|> newKs v
@@ -375,6 +383,11 @@ instance J.Encode (StableEncoding PublicKeyText) where
   build (StableEncoding (PublicKeyText pkt)) = J.build pkt
   {-# INLINABLE build #-}
 
+-- | Stable encoding of `PublicKeyText`
+instance JD.FromJSON (StableEncoding PublicKeyText) where
+  parseJSON = JD.withText "PublicKey" (pure . StableEncoding . PublicKeyText)
+  {-# INLINABLE parseJSON #-}
+
 -- | Stable encoding of `NamespaceName`
 instance J.Encode (StableEncoding NamespaceName) where
   build (StableEncoding (NamespaceName ns)) = J.build ns
@@ -382,6 +395,20 @@ instance J.Encode (StableEncoding NamespaceName) where
 
 instance JD.FromJSON (StableEncoding NamespaceName) where
   parseJSON = JD.withText "NamespaceName" $ \t -> pure $ StableEncoding (NamespaceName t)
+
+instance J.Encode (StableEncoding Namespace) where
+  build (StableEncoding (Namespace nsn user admin)) = J.object
+    [ "admin" J..= StableEncoding admin
+    , "user" J..= StableEncoding user
+    , "name" J..= StableEncoding nsn
+    ]
+
+instance JD.FromJSON (StableEncoding Namespace) where
+  parseJSON = JD.withObject "Namespace" $ \o -> do
+    StableEncoding admin <- o JD..: "admin"
+    StableEncoding user <- o JD..: "user"
+    StableEncoding nsn <- o JD..: "name"
+    pure (StableEncoding (Namespace nsn user admin))
 
 -- | Stable encoding of `ModuleName`
 instance J.Encode (StableEncoding ModuleName) where
@@ -599,6 +626,9 @@ instance JD.FromJSON (StableEncoding PublicData) where
 
 instance J.Encode (StableEncoding a) => J.Encode (StableEncoding (Maybe a)) where
   build (StableEncoding a) = J.build (StableEncoding <$> a)
+
+instance JD.FromJSON (StableEncoding a) => JD.FromJSON (StableEncoding (Maybe a)) where
+    parseJSON v = StableEncoding . fmap _stableEncoding <$> JD.parseJSON v
 
 instance J.Encode (StableEncoding RowData) where
   build (StableEncoding (RowData o)) = J.object

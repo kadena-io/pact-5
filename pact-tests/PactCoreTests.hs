@@ -30,7 +30,7 @@ main = do
   legacyTests <- LegacySerialiseTests.tests
   commandTests <- CommandTests.tests
   docsTests <- DocsTests.tests
-  LegacyDbRegression.downloadRegressionDb
+  legacyDbRegression <- LegacyDbRegression.tests
   defaultMain $ testGroup "pactTests"
     [ replTests
     , LexerTests.tests
@@ -50,6 +50,6 @@ main = do
     , PrincipalTests.tests
     , SignatureSchemeTests.tests
     , JSONRoundtripTests.tests
-    , LegacyDbRegression.tests
+    , legacyDbRegression
     ]
 

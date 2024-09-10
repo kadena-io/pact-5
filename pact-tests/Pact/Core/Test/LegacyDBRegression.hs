@@ -2,10 +2,10 @@
 {-# LANGUAGE ExistentialQuantification #-}
 
 module Pact.Core.Test.LegacyDBRegression
-  ( tests
-  , downloadRegressionDb )
+  ( tests )
   where
 
+import Control.Exception.Safe
 import Control.Lens
 import Control.Applicative
 import Control.Monad
@@ -15,6 +15,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import System.FilePath
 import System.Directory
+import qualified Database.SQLite3 as SQL
 import qualified Network.HTTP.Simple as Http
 import qualified Data.ByteString as B
 import qualified Data.Text as T
@@ -25,11 +26,11 @@ import Pact.Core.Info
 import Pact.Core.Names
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Serialise
-import Data.String (IsString(..))
 
 import qualified Data.Char as Char
 import qualified Text.Megaparsec as MP
 import qualified Text.Megaparsec.Char as MP
+import Data.IORef
 
 
 dbFolder :: FilePath
@@ -69,21 +70,16 @@ moduleNameParser = do
 
 type Parser = MP.Parsec () Text
 
-newtype UnsafeTableName
-  = UnsafeTableName { _getUnsafeTable ::  TableName }
-  deriving (Eq, Show)
-
--- | Hacky way of being able to provide a table name to our regression
-instance IsString UnsafeTableName where
-  fromString s =
-    case reverse (T.splitOn "_" (T.pack s)) of
-      identRaw:tbl ->
-        let tbl' = T.intercalate "_" (reverse tbl)
-        in case (,) <$> MP.parseMaybe moduleNameParser tbl' <*> MP.parseMaybe identParser identRaw of
-          Just (mn, ident) -> UnsafeTableName (TableName ident mn)
-          _ -> error "BOOM2"
-      _ -> error "BOOM"
-
+-- | Hacky way of parsing a user table
+parseUserTable :: Text -> Maybe TableName
+parseUserTable s =
+  case reverse (T.splitOn "_" s) of
+    identRaw:tbl ->
+      let tbl' = T.intercalate "_" (reverse tbl)
+      in case (,) <$> MP.parseMaybe moduleNameParser tbl' <*> MP.parseMaybe identParser identRaw of
+        Just (mn, ident) -> Just (TableName ident mn)
+        _ -> Nothing
+    _ -> Nothing
 
 -- Note: It's an IO PactDb because `withResource` from tasty has a really
 -- annoying signature
@@ -98,147 +94,56 @@ runTableDecodeRegression pdbIO (SomeDomain domain) = testCase testName $ do
   where
   testName = "Running regression for table: " <> T.unpack (renderDomain domain)
 
-allTables :: [SomeDomain]
-allTables =
-  [ SomeDomain DKeySets
-  , SomeDomain DDefPacts
-  , SomeDomain DModules
-  , SomeDomain DNamespaces
-  ] ++ (SomeDomain <$> userTables)
+data DBHarness
+  = DBHarness
+  { _dbhDB :: SQL.Database
+  , _dbhPactDb :: PactDb CoreBuiltin SpanInfo
+  , _dbhStmtCache :: IORef StmtCache
+  }
+
+withStmt :: SQL.Database -> Text -> (SQL.Statement -> IO a) -> IO a
+withStmt conn sql = bracket (SQL.prepare conn sql) SQL.finalize
+
+withDb :: (SQL.Database -> IO c) -> IO c
+withDb act =
+  bracket (unsafeCreateSqlitePactDb serialisePact_raw_spaninfo (T.pack dbFilePath))
+    (\(_, db, c) -> unsafeCloseSqlitePactDb db c)
+    (\(_, db, _) -> act db)
+
+tests :: IO TestTree
+tests = do
+  downloadRegressionDb
+  userTables <- withDb getUserTables
+  let allTables =
+        [ SomeDomain DKeySets
+        , SomeDomain DDefPacts
+        , SomeDomain DModules
+        , SomeDomain DNamespaces
+        ] ++ [SomeDomain (DUserTables t) | u <- userTables, Just t <- [parseUserTable u]]
+  pure $ withResource acquireDbHarness releaseDbHarness $ \pdbio ->
+      testGroup "Legacy PactDb Regression" $
+        runTableDecodeRegression (_dbhPactDb <$> pdbio) <$> allTables
   where
-  userTables =
-    DUserTables . _getUnsafeTable <$>
-    [ "arkade.token_token-table"
-    , "coin_allocation-table"
-    , "coin_coin-table"
-    , "free.KDAG_cumulative-kda-table"
-    , "free.KDAG_last-id-table"
-    , "free.KDAG_lock-kda-table"
-    , "free.KDAG_multiplier-kda-table"
-    , "free.KDAG_supply-table"
-    , "free.KDAG_token-table"
-    , "free.KDG_cumulative-kda-table"
-    , "free.KDG_last-id-table"
-    , "free.KDG_lock-kda-table"
-    , "free.KDG_multiplier-kda-table"
-    , "free.KDG_supply-table"
-    , "free.KDG_token-table"
-    , "free.KGOLD_cumulative-kda-table"
-    , "free.KGOLD_last-id-table"
-    , "free.KGOLD_lock-kda-table"
-    , "free.KGOLD_multiplier-kda-table"
-    , "free.KGOLD_supply-table"
-    , "free.KGOLD_token-table"
-    , "free.SHIB_token-table"
-    , "free.anedak_token-table"
-    , "free.babena_cumulative-babe-table"
-    , "free.babena_cumulative-kda-table"
-    , "free.babena_emergency-babe-table"
-    , "free.babena_emergency-kda-table"
-    , "free.babena_last-id-table"
-    , "free.babena_lock-babe-table"
-    , "free.babena_lock-kda-table"
-    , "free.babena_multiplier-babe-table"
-    , "free.babena_multiplier-kda-table"
-    , "free.babena_supply-table"
-    , "free.babena_token-table"
-    , "free.backalley-token_allocation-table"
-    , "free.backalley-token_token-table"
-    , "free.backalley_allocation-table"
-    , "free.backalley_token-table"
-    , "free.bana_token-table"
-    , "free.corona-inu_token-table"
-    , "free.corona-token_token-table"
-    , "free.crankk01_crankk01-token-table"
-    , "free.dbc-token_token-table"
-    , "free.docu_token-table"
-    , "free.elon_token-table"
-    , "free.fin-us_token-initialization-table"
-    , "free.fin-us_token-table"
-    , "free.hyperhub_token-table"
-    , "free.inu-crew_counts"
-    , "free.inu-crew_mint"
-    , "free.inu-crew_nfts"
-    , "free.inu-crew_price"
-    , "free.inu-crew_values"
-    , "free.jodie-inu_token-table"
-    , "free.jodie-token_token-table"
-    , "free.kadoge_token-table"
-    , "free.kapepe-coin_token-table"
-    , "free.kapybara-token_token-table"
-    , "free.kimki_token-table"
-    , "free.kishu-ken_token-table"
-    , "free.kmp_token-table"
-    , "free.kpepe_token-table"
-    , "free.memory-wall_memories"
-    , "free.phiga-inu_token-table"
-    , "free.quality-ledger_lots-table"
-    , "free.quality-ledger_products-table"
-    , "free.real-kdoge_token-table"
-    , "free.shatter_token-table"
-    , "free.sway_token-table"
-    , "free.timpi_token-table"
-    , "free.util-random_state-table"
-    , "free.wiza_base-multiplier-table"
-    , "free.wiza_mined-wiza-table"
-    , "free.wiza_staked-table"
-    , "free.wiza_token-table"
-    , "free.yeettoken_token-table"
-    , "hypercent.prod-hype-coin_ledger"
-    , "kaddex.kdx_contract-lock"
-    , "kaddex.kdx_mint-cap-table"
-    , "kaddex.kdx_privileges"
-    , "kaddex.kdx_special-accounts"
-    , "kaddex.kdx_supply-table"
-    , "kaddex.kdx_token-table"
-    , "kdlaunch.kdswap-token_token-table"
-    , "kdlaunch.token_token-table"
-    , "lago.USD2_token-table"
-    , "lago.kwBTC_token-table"
-    , "lago.kwUSDC_token-table"
-    , "mok.token_token-table"
-    , "n_5a7ccd559b245b7dcbd5259e1ee43d04fbf93eab.kapepe_token-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.bubblegum_endtime-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.bubblegum_ledger"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.bubblegum_marketplace"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.bubblegum_metadata-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.bubblegum_mint-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.bubblegum_nft-chains-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.bubblegum_supplies"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.bubblegum_vault-count-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.bubblegum_vault-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.bubblegum_whitelist-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_dao-accounts-count-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_dao-accounts-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_dao-actions-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_dao-charters-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_dao-links-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_dao-membership-ids-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_dao-messages-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_dao-pools-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_dao-proposals-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_dao-role-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_dao-thresholds-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_dao-total-count-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_dao-updates-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_dao-votes-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_daos-table"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_user-proposition-records"
-    , "n_7763cd0330f59f3c66e431dcd63a2c5c5e2e0b70.dao-hive-factory_user-vote-records"
-    , "n_a2fceb4ebd41f3bb808da95d1ca0af9b15cb068c.kadenai-donate_donate"
-    , "n_a2fceb4ebd41f3bb808da95d1ca0af9b15cb068c.kadenai-donate_values"
-    , "n_c5a4b8c52f0866d66bc55864998a37cc089db47c.KEKW_token-table"
-    , "n_df83905bd42ed92e559616bb707f74979a4010e0.bana_token-table"
-    , "runonflux.flux_ledger"
-    , "runonflux.testflux_ledger" ]
+  acquireDbHarness :: IO DBHarness
+  acquireDbHarness = do
+    (pdb, db, cache) <- unsafeCreateSqlitePactDb serialisePact_raw_spaninfo (T.pack dbFilePath)
+    pure (DBHarness db pdb cache )
+
+  releaseDbHarness :: DBHarness -> IO ()
+  releaseDbHarness harness =
+    unsafeCloseSqlitePactDb (_dbhDB harness) (_dbhStmtCache harness)
 
 
-tests :: TestTree
-tests = withResource (unsafeCreateSqlitePactDb serialisePact_raw_spaninfo (T.pack dbFilePath))
-  (\(_, db, cache) -> unsafeCloseSqlitePactDb db cache) $ \pdbio ->
-    testGroup "Legacy PactDb Regression" $
-      runTableDecodeRegression (view _1 <$> pdbio) <$> allTables
-
+getUserTables :: SQL.Database -> IO [Text]
+getUserTables con = do
+  withStmt con qry (go [])
+  where
+  qry = "select name from sqlite_master where type='table'"
+  go acc stmt = SQL.step stmt >>= \case
+    SQL.Done -> pure acc
+    SQL.Row -> do
+      [SQL.SQLText tbl] <- SQL.columns stmt
+      go (tbl: acc) stmt
 
 
 -- Function to download a file as a ByteString and save it to a file
