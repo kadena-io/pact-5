@@ -434,7 +434,7 @@ moduleNameParser = do
   MP.try (go p <|> pure (ModuleName p Nothing))
   where
   go ns = do
-    _ <- MP.single '.'
+    _ <- dot
     p1 <- identParser
     pure (ModuleName p1 (Just (NamespaceName ns)))
 
@@ -444,23 +444,38 @@ qualNameParser = do
   case ns of
     Just nsn@(NamespaceName nsRaw) ->
       go n nsn <|> pure (QualifiedName n (ModuleName nsRaw Nothing))
-    Nothing -> fail "invalid qualified name"
+    Nothing ->
+      fail "invalid qualified name"
   where
   go n nsn = do
-    _ <- MP.single '.'
+    _ <- dot
     p1 <- identParser
     let qual = QualifiedName p1 (ModuleName n (Just nsn))
     pure qual
 
+dot :: Parser Char
+dot = MP.char '.'
+
 fullyQualNameParser :: Parser FullyQualifiedName
 fullyQualNameParser = do
-  QualifiedName n mn <- qualNameParser
-  h <- MP.char '.' *> (MP.between (MP.char '{') (MP.char '}') $
-    MP.takeWhile1P Nothing (\s -> Char.isAlphaNum s || s `elem` ['-', '_']))
-  hash' <- case decodeBase64UrlUnpadded (T.encodeUtf8 h) of
-    Right hash' -> pure $ ModuleHash $ Hash $ SB.toShort hash'
-    Left _ -> fail "invalid hash encoding"
-  pure (FullyQualifiedName mn n hash')
+  qualifier <- identParser
+  mname <- dot *> identParser
+  dot *> (withIdent qualifier mname <|> withHash qualifier mname Nothing)
+  where
+  withIdent qualifier mname = do
+    i <- MP.try identParser
+    dot *> withHash qualifier mname (Just i)
+  withHash qualifier mname oname = do
+    h <- MP.between (MP.char '{') (MP.char '}') $
+      MP.takeWhile1P Nothing (\s -> Char.isAlphaNum s || s `elem` ['-', '_'])
+    hash' <- case decodeBase64UrlUnpadded (T.encodeUtf8 h) of
+      Right hash' -> pure $ ModuleHash $ Hash $ SB.toShort hash'
+      Left _ -> fail "invalid hash encoding"
+    case oname of
+      Just nn ->
+        pure (FullyQualifiedName (ModuleName mname (Just (NamespaceName qualifier))) nn hash')
+      Nothing ->
+        pure (FullyQualifiedName (ModuleName qualifier Nothing) mname hash')
 
 -- Here we are parsing either a qualified name, or a bare name
 -- bare names are just the atom `n`, and qualified names are of the form
@@ -477,22 +492,22 @@ parsedTyNameParser = do
     Nothing -> pure (TBN (BareName n))
   where
   go n nsn = do
-    _ <- MP.single '.'
+    _ <- dot
     p1 <- identParser
     let qual = QualifiedName p1 (ModuleName n (Just nsn))
     pure (TQN qual)
 
 parseModuleName :: Text -> Maybe ModuleName
-parseModuleName = MP.parseMaybe moduleNameParser
+parseModuleName = MP.parseMaybe (moduleNameParser <* MP.eof)
 
 parseParsedTyName :: Text -> Maybe ParsedTyName
-parseParsedTyName = MP.parseMaybe parsedTyNameParser
+parseParsedTyName = MP.parseMaybe (parsedTyNameParser <* MP.eof)
 
 parseQualifiedName :: Text -> Maybe QualifiedName
-parseQualifiedName = MP.parseMaybe qualNameParser
+parseQualifiedName = MP.parseMaybe (qualNameParser <* MP.eof)
 
 parseFullyQualifiedName :: Text -> Maybe FullyQualifiedName
-parseFullyQualifiedName = MP.parseMaybe fullyQualNameParser
+parseFullyQualifiedName = MP.parseMaybe (fullyQualNameParser <* MP.eof)
 
 renderDefPactId :: DefPactId -> Text
 renderDefPactId (DefPactId t) = t

@@ -2,6 +2,7 @@ module Main where
 
 import Test.Tasty
 
+
 import qualified Pact.Core.Test.CommandTests as CommandTests
 import qualified Pact.Core.Test.ReplTests as ReplTests
 import qualified Pact.Core.Test.LexerParserTests as LexerParserTests
@@ -19,6 +20,8 @@ import qualified Pact.Core.Test.ConTagGolden as ConTagGoldenTests
 import qualified Pact.Core.Test.DocsTests as DocsTests
 import qualified Pact.Core.Test.PrincipalTests as PrincipalTests
 import qualified Pact.Core.Test.SignatureSchemeTests as SignatureSchemeTests
+import qualified Pact.Core.Test.JSONRoundtripTests as JSONRoundtripTests
+import qualified Pact.Core.Test.LegacyDBRegression as LegacyDbRegression
 
 main :: IO ()
 main = do
@@ -27,6 +30,7 @@ main = do
   legacyTests <- LegacySerialiseTests.tests
   commandTests <- CommandTests.tests
   docsTests <- DocsTests.tests
+  legacyDbRegression <- LegacyDbRegression.tests
   defaultMain $ testGroup "pactTests"
     [ replTests
     , LexerTests.tests
@@ -45,5 +49,7 @@ main = do
     , docsTests
     , PrincipalTests.tests
     , SignatureSchemeTests.tests
+    , JSONRoundtripTests.tests
+    , legacyDbRegression
     ]
 

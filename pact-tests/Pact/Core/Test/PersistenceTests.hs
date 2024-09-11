@@ -46,7 +46,7 @@ testsWithSerial :: (Show i, Eq b, Eq i, Default i, IsBuiltin b)
   -> Gen i
   -> [TestTree]
 testsWithSerial serial builtins b i =
- [ testProperty "KeySet" $ keysetPersistRoundtrip serial builtins (keySetGen undefined)
+ [ testProperty "KeySet" $ keysetPersistRoundtrip serial builtins keySetGen
    -- ^ keySetGen does not use its first argument now. We will pass a real argument
    --   once custom keyset predicate functions are supported.
  , testProperty "ModuleData" $ moduleDataRoundtrip serial builtins b i

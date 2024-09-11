@@ -31,6 +31,7 @@ import Pact.Core.Guards
 import Pact.Core.Namespace
 import Pact.Core.DefPacts.Types
 import Pact.Core.IR.Term
+import Pact.Core.StableEncoding
 import Control.Lens
 
 import qualified Codec.CBOR.Encoding as S
@@ -41,7 +42,6 @@ import Codec.CBOR.Read (deserialiseFromBytes)
 
 import qualified Pact.Core.Serialise.LegacyPact as LegacyPact
 import qualified Pact.Core.Serialise.CBOR_V1 as V1
-import qualified Pact.Core.Legacy.LegacyPactValue as LegacyPact
 import Pact.Core.Info (SpanInfo)
 import Data.Default
 
@@ -99,28 +99,28 @@ serialisePact = PactSerialise
 
   , _encodeKeySet = docEncode V1.encodeKeySet
   , _decodeKeySet = \bs ->
-      LegacyDocument <$> LegacyPact.decodeKeySet bs
+      LegacyDocument <$> decodeStable bs
       <|> docDecode bs (\case
                            V1_CBOR -> V1.decodeKeySet
                        )
 
   , _encodeDefPactExec = docEncode V1.encodeDefPactExec
   , _decodeDefPactExec = \bs ->
-      LegacyDocument <$> LegacyPact.decodeDefPactExec bs
+      LegacyDocument <$> decodeStable bs
       <|> docDecode bs (\case
                            V1_CBOR -> V1.decodeDefPactExec
                        )
 
   , _encodeNamespace = docEncode V1.encodeNamespace
   , _decodeNamespace = \bs ->
-      LegacyDocument <$> LegacyPact.decodeNamespace bs
+      LegacyDocument <$> decodeStable bs
       <|> docDecode bs (\case
                            V1_CBOR -> V1.decodeNamespace
                        )
 
   , _encodeRowData = gEncodeRowData
   , _decodeRowData = \bs ->
-      LegacyDocument <$> LegacyPact.decodeLegacy bs
+      LegacyDocument <$> decodeStable bs
       <|> docDecode bs (\case
                            V1_CBOR -> V1.decodeRowData
                        )

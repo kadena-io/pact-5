@@ -2,12 +2,12 @@
 --   and TxLogs.
 
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ApplicativeDo #-}
 
 module Pact.Core.Gen where
 
 import Control.Applicative
-import qualified Data.ByteString.Short as BSS
 import Data.Decimal
 import Data.Default (def)
 import Data.Map.Strict (fromList)
@@ -21,10 +21,8 @@ import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 
 import Pact.Time
-import Pact.Time.Internal(UTCTime(..))
 import Pact.Core.Names
 import Pact.Core.Guards
-import Pact.Core.Hash (Hash(..), ModuleHash(..))
 import Pact.Core.Type
 import Pact.Core.Imports (Import(..))
 import Pact.Core.IR.Term
@@ -34,10 +32,15 @@ import Pact.Core.Literal
 import Pact.Core.Capabilities
 import Pact.Core.Persistence
 import Pact.Core.PactValue
+import Pact.Core.Signer
+import Pact.Core.Scheme
 import Pact.Core.DefPacts.Types
-import Pact.Core.ChainData (ChainId(..))
-import Pact.Core.Namespace (Namespace(..))
-import Data.Coerce
+import Pact.Core.ChainData
+import Pact.Core.Namespace
+import Pact.Core.Gas
+import Pact.Core.ModRefs
+import Pact.Core.Hash
+import Data.Ratio ((%), denominator)
 
 namespaceNameGen :: Gen NamespaceName
 namespaceNameGen = NamespaceName <$> identGen
@@ -56,8 +59,26 @@ moduleNameGen =  do
 publicKeyTextGen :: Gen PublicKeyText
 publicKeyTextGen = PublicKeyText <$> identGen
 
--- ksPredicateGen :: Gen (KSPredicate n)
--- ksPredicateGen = Gen.element [minBound .. maxBound]
+ppkSchemeGen :: Gen PPKScheme
+ppkSchemeGen = Gen.choice [pure ED25519, pure WebAuthn]
+
+sigCapabilityGen :: Gen SigCapability
+sigCapabilityGen =
+  SigCapability <$>
+  (CapToken <$> qualifiedNameGen <*> (Gen.list (Range.linear 0 10) pactValueGen))
+
+signerGen :: Gen Signer
+signerGen =
+  Signer <$> Gen.maybe (ppkSchemeGen)
+    <*> addrGen
+    <*> Gen.maybe addrGen
+    <*> Gen.list (Range.linear 0 10) sigCapabilityGen
+  where
+  addrGen = Gen.text (Range.singleton 64) Gen.alphaNum
+
+capTokenGen :: Gen name -> Gen v -> Gen (CapToken name v)
+capTokenGen n v =
+  CapToken <$> n <*> Gen.list (Range.linear 0 10) v
 
 keySetNameGen :: Gen KeySetName
 keySetNameGen = KeySetName <$> identGen <*> Gen.maybe namespaceNameGen
@@ -89,13 +110,14 @@ parsedTyNameGen = Gen.choice
   ]
 
 hashGen :: Gen Hash
-hashGen = Hash . BSS.toShort . encodeUtf8 <$> identGen
+hashGen = pactHash . encodeUtf8 <$> identGen
+
 
 -- | Generate a keyset, polymorphic over the custom
 -- predicate function `a`. This particular variant is
 -- not supported yet, so the argument is unused.
-keySetGen :: Gen a -> Gen KeySet
-keySetGen _genA = do
+keySetGen :: Gen KeySet
+keySetGen = do
   ksKeysList <- Gen.list (Range.linear 1 10) publicKeyTextGen
   let _ksKeys = Set.fromList ksKeysList
   _ksPredFun <- Gen.choice
@@ -271,11 +293,6 @@ constValGen t = Gen.choice
 fqNameRefGen :: Gen (FQNameRef Name)
 fqNameRefGen = FQName <$> fullyQualifiedNameGen
 
--- defManagedMetaGen :: Gen name -> Gen (DefManagedMeta name)
--- defManagedMetaGen genName = Gen.choice
---   [ DefManagedMeta <$> liftA2 (,) (Gen.int (Range.linear 0 100)) genText <*> genName
---   , pure AutoManagedMeta
---   ]
 
 defManagedMetaGen :: Gen name -> Gen (DefManagedMeta name)
 defManagedMetaGen genName = Gen.choice
@@ -395,33 +412,115 @@ moduleDataGen b i = Gen.choice
 defPactIdGen :: Gen DefPactId
 defPactIdGen = DefPactId <$> identGen
 
-userGuardGen :: Int -> Gen (UserGuard FullyQualifiedName PactValue)
-userGuardGen depth = do
-  ident <- fullyQualifiedNameGen
-  UserGuard ident <$> Gen.list (Range.linear 0 depth) pactValueGen
+userGuardGen :: Gen n -> Gen (UserGuard n PactValue)
+userGuardGen namegen = do
+  ident <- namegen
+  UserGuard ident <$> Gen.list (Range.linear 0 10) pactValueGen
+
+capGuardGen :: Gen n -> Gen (CapabilityGuard n PactValue)
+capGuardGen n =
+  CapabilityGuard
+    <$> n
+    <*> Gen.list (Range.linear 0 10) pactValueGen
+    <*> Gen.maybe defPactIdGen
+
+moduleGuardGen :: Gen ModuleGuard
+moduleGuardGen =
+  ModuleGuard
+    <$> moduleNameGen
+    <*> identGen
+
+defpactGuardGen :: Gen DefPactGuard
+defpactGuardGen =
+  DefPactGuard
+    <$> defPactIdGen
+    <*> identGen
 
 guardGen :: Gen n -> Gen (Guard n PactValue)
-guardGen n = Gen.choice [gKeySetGen, gKeySetRefGen]
+guardGen n = Gen.recursive Gen.choice
+  [ gKeySetGen
+  , gKeySetRefGen
+  , GModuleGuard <$> moduleGuardGen
+  , GDefPactGuard <$> defpactGuardGen]
+  [ GUserGuard <$> userGuardGen n
+  , GCapabilityGuard <$> capGuardGen n
+  ]
   where
-    gKeySetGen = GKeyset <$> keySetGen n
+    gKeySetGen = GKeyset <$> keySetGen
     gKeySetRefGen = GKeySetRef <$> keySetNameGen
---    gUserGuardGen = GUserGuard <$> userGuardGen (depth - 1)
 
+
+-- | Note: the extra machinery here is because
+--   we want the generated UTCTime to be roundtrippable
 timeGen :: Gen UTCTime
-timeGen =
-  coerce <$> Gen.int64 Range.constantBounded
+timeGen = genRoundtripableTimeUTCTime
+
+-- | Custom generator of arbitrary UTCTime from
+-- years 1000-01-1 to 2100-12-31
+genArbitraryUTCTime :: Gen UTCTime
+genArbitraryUTCTime = fromPosixTimestampMicros
+    <$> Gen.int64 (Range.constant (-30610224000000000) 4133894400000000)
+
+-- | Generate a an arbitrary UTCTime value that can roundtrip via 'Pact.Types.Codec.timeCodec'.
+--
+-- See the documentation of 'Pact.Types.Codec.timeCodec' for details.
+--
+genRoundtripableTimeUTCTime :: Gen UTCTime
+genRoundtripableTimeUTCTime = do
+  t <- genArbitraryUTCTime
+  if denom1000 t == 1 && denom t /= 1
+    then genRoundtripableTimeUTCTime
+    else return t
+ where
+  -- This works around a bug in the time codec
+  denom1000 = denominator @Integer . (% 1000) . fromIntegral . toPosixTimestampMicros
+  denom = denominator @Integer . (% 1000000) . fromIntegral . toPosixTimestampMicros
+
+modRefGen :: Gen ModRef
+modRefGen =
+  ModRef
+    <$> moduleNameGen
+    <*> (Set.fromList <$> Gen.list (Range.constant 0 5) moduleNameGen)
+
 
 pactValueGen :: Gen PactValue
 pactValueGen = Gen.recursive Gen.choice
   [ PLiteral <$> literalGen
-  , PGuard <$> guardGen qualifiedNameGen
   , PTime <$> timeGen
   ]
   [ PList . Vec.fromList <$> Gen.list (Range.linear 1 5) pactValueGen
   , PObject <$> (Gen.map (Range.linear 1 5) ((,) <$> fieldGen <*> pactValueGen))
+  , PGuard <$> guardGen qualifiedNameGen
   , PCapToken <$>
     (CapToken <$> fullyQualifiedNameGen <*> (Gen.list (Range.linear 0 10) pactValueGen))
+  , PModRef <$> modRefGen
   ]
+
+gasLimitGen :: Gen GasLimit
+gasLimitGen =
+  GasLimit . Gas <$>
+    Gen.word64 Range.constantBounded
+
+gasPriceGen :: Gen GasPrice
+gasPriceGen = GasPrice <$> decimalGen
+
+publicMetaGen :: Gen PublicMeta
+publicMetaGen =
+  PublicMeta
+    <$> chainIdGen
+    <*> identGen
+    <*> gasLimitGen
+    <*> gasPriceGen
+    <*> (TTLSeconds . fromIntegral <$> Gen.word64 (Range.linear 1 100))
+    <*> (TxCreationTime . fromIntegral <$> Gen.word64 (Range.linear 1 100))
+
+publicDataGen :: Gen PublicData
+publicDataGen =
+  PublicData
+    <$> publicMetaGen
+    <*> Gen.word64 (Range.linear 1 100)
+    <*> Gen.int64 (Range.linear 1 100)
+    <*> identGen -- todo: is this kosher?
 
 chainIdGen :: Gen ChainId
 chainIdGen = ChainId <$> identGen

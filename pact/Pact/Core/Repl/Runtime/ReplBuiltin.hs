@@ -41,7 +41,7 @@ import Pact.Core.Persistence
 import Pact.Core.IR.Term
 import Pact.Core.Info
 import Pact.Core.Namespace
-import qualified Pact.Core.Legacy.LegacyPactValue as Legacy
+import Pact.Core.StableEncoding
 
 import qualified Pact.Core.Version as PI
 import qualified Data.Version as V
@@ -224,7 +224,7 @@ envData info b cont handler _env = \case
   [VPactValue pv] -> do
     -- to mimic prod, we must roundtrip here
     -- if it fails silently, this is fine.
-    let pv' = fromMaybe pv (Legacy.roundtripPactValue pv)
+    let pv' = fromMaybe pv (roundtripStable pv)
     (replEvalEnv . eeMsgBody) .== pv'
     returnCEKValue cont handler (VString "Setting transaction data")
   args -> argsError info b args

@@ -87,8 +87,8 @@ runPactDbRegression pdb = do
   txs2 <- _pdbCommitTx pdb
   -- Tx logs should be emitted in order
   flip (assertEqual "output of commit") txs2
-    [ TxLog "USER_someModule_user1" "key1" rowEnc
-    , TxLog "USER_someModule_user1" "key1" row2Enc
+    [ TxLog "someModule_user1" "key1" rowEnc
+    , TxLog "someModule_user1" "key1" row2Enc
     , TxLog "SYS:KeySets" "ks1" ksEnc
     , TxLog "SYS:Modules" "test" mdEnc
     ]

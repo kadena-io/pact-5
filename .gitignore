@@ -39,3 +39,4 @@ cabal.project.local*
 .envrc
 *.sqlite
 .vscode
+*.DS_Store
