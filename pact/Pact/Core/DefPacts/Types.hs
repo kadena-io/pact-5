@@ -10,6 +10,7 @@ module Pact.Core.DefPacts.Types
  , peStepCount, peYield, peStep, peContinuation, peStepHasRollback, peDefPactId
  , peNestedDefPactExec
  , Yield(..)
+ , yData, yProvenance, ySourceChain
  , Provenance(..)
  ) where
 
@@ -55,6 +56,8 @@ data Yield
   , _yProvenance :: Maybe Provenance
   , _ySourceChain :: Maybe ChainId
   } deriving (Show, Eq, Generic)
+
+makeLenses ''Yield
 
 -- | Internal representation of pacts
 data DefPactExec

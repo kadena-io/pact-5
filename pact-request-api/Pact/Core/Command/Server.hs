@@ -5,8 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Pact.Core.Command.Server
-  ( CommandEnv(..)
-  , API
+  ( API
   , PollRequest(..)
   , PollResponse(..)
   , ListenRequest(..)
@@ -16,12 +15,12 @@ module Pact.Core.Command.Server
   , LocalRequest(..)
   , LocalResponse(..)
   , Log
+  , ServerRuntime(..)
   , runServer
-  , server
-  , defaultEnv) where
+  , server ) where
 
-import Control.Concurrent.MVar
 import Control.Lens
+import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Class
 import Data.Default
@@ -33,11 +32,9 @@ import qualified Data.LruCache as LRU
 import Data.LruCache.IO
 import qualified Data.LruCache.IO as LRU
 import Data.Proxy
-import Data.Set (Set)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
-import Data.Traversable
 import Data.Version
 import Network.Wai.Handler.Warp
 import Network.Wai.Middleware.Cors
@@ -54,7 +51,7 @@ import Pact.Core.Environment.Types
 import Pact.Core.Errors
 import Pact.Core.Evaluate
 import Pact.Core.Gas
-import Pact.Core.Persistence.MockPersistence
+import Pact.Core.Namespace
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Persistence.Types
 import Pact.Core.SPV
@@ -72,33 +69,11 @@ import Servant.Server
 type Log = ()
 
 -- | Runtime environment for a Pact server.
-data CommandEnv
-  = CommandEnv
-  { _ceMode :: ExecutionMode
-  , _ceDbEnv :: PactDb CoreBuiltin Info
-  , _ceGasEnv :: GasEnv CoreBuiltin Info
-  , _cePublicData :: PublicData
-  , _ceSPVSupport :: SPVSupport
-  , _ceNetworkId :: Maybe NetworkId
-  , _ceExecutionConfig :: Set ExecutionFlag
-  , _ceEvalEnv :: EvalEnv CoreBuiltin Info
-  , _ceEvalState :: MVar (EvalState CoreBuiltin Info)
-  , _ceRequestCache :: LruHandle RequestKey (CommandResult Log (PactErrorCode Info))
+data ServerRuntime
+  = ServerRuntime
+  { _srDbEnv :: PactDb CoreBuiltin Info
+  , _srRequestCache :: LruHandle RequestKey (CommandResult Log (PactErrorCode Info))
   }
-
-defaultEnv :: IO CommandEnv
-defaultEnv = do
-  pdb <- mockPactDb serialisePact_raw_spaninfo
-  ee <- defaultEvalEnv pdb coreBuiltinMap
-  es <- newMVar def
-  emptyCache <- newLruHandle 100
-  gasRef <- newIORef mempty
-  let gasEnv = GasEnv
-        { _geGasRef = gasRef
-        , _geGasLog = Nothing
-        , _geGasModel = freeGasModel
-        }
-  pure $ CommandEnv Transactional pdb gasEnv def noSPVSupport Nothing mempty ee es emptyCache
 
 newtype PollRequest
   = PollRequest (NE.NonEmpty RequestKey)
@@ -212,32 +187,14 @@ type API = ("api" :> "v1" :>
 
 runServer :: Config -> IO ()
 runServer (Config port persistDir _logDir) = do
-  es <- newMVar def
   emptyCache <- newLruHandle 100
-  gasRef <- newIORef mempty
-  let
-    gasEnv = GasEnv gasRef Nothing freeGasModel
-    mkCmdEnv pdb ee = CommandEnv
-      { _ceMode = Transactional
-        , _ceDbEnv = pdb
-        , _ceGasEnv = gasEnv
-        , _cePublicData = def
-        , _ceSPVSupport = noSPVSupport
-        , _ceNetworkId = Nothing
-        , _ceExecutionConfig = mempty
-        , _ceEvalEnv = ee
-        , _ceEvalState = es
-        , _ceRequestCache = emptyCache
-        }
   case persistDir of
     Nothing -> withSqlitePactDb serialisePact_raw_spaninfo ":memory:" $ \pdb -> do
-      ee <- defaultEvalEnv pdb coreBuiltinMap
-      runServer_ (mkCmdEnv pdb ee) port
+      runServer_ (ServerRuntime pdb emptyCache) port
     Just pdir -> withSqlitePactDb serialisePact_raw_spaninfo (T.pack pdir) $ \pdb -> do
-      ee <- defaultEvalEnv pdb coreBuiltinMap
-      runServer_ (mkCmdEnv pdb ee) port
+      runServer_ (ServerRuntime pdb emptyCache) port
 
-runServer_ :: CommandEnv -> Port -> IO ()
+runServer_ :: ServerRuntime -> Port -> IO ()
 runServer_ env port = runSettings settings $ cors (const corsPolicy) app
   where
   app = serve (Proxy @API) (server env)
@@ -255,7 +212,7 @@ runServer_ env port = runSettings settings $ cors (const corsPolicy) app
     , corsIgnoreFailures = False
     }
 
-server :: CommandEnv -> Server API
+server :: ServerRuntime -> Server API
 server env =
   (sendHandler env
   :<|> pollHandler env
@@ -266,54 +223,56 @@ server env =
 versionHandler :: Handler Text
 versionHandler = pure $ T.pack $ "pact version " <> showVersion PI.version
 
-pollHandler :: CommandEnv -> PollRequest -> Handler PollResponse
+pollHandler :: ServerRuntime -> PollRequest -> Handler PollResponse
 pollHandler cenv (PollRequest rks) = do
   h <- traverse (listenHandler cenv . ListenRequest) rks
   let hr = NE.map (\(ListenResponse r) -> r) h
       hres = HM.fromList $ NE.toList (NE.zip rks hr)
   pure $ PollResponse hres
 
-sendHandler :: CommandEnv -> SendRequest -> Handler SendResponse
-sendHandler env (SendRequest submitBatch) = do
+sendHandler :: ServerRuntime -> SendRequest -> Handler SendResponse
+sendHandler runtime (SendRequest submitBatch) = do
     requestKeys <- forM (_sbCmds submitBatch) $ \cmd -> do
       let requestKey = cmdToRequestKey cmd
-      -- setupEvalEnv
-      -- caching only of pactdb
-      _ <- liftIO $ cached (_ceRequestCache env) requestKey (computeResultAndUpdateState requestKey cmd)
+      _ <- liftIO $ cached (_srRequestCache runtime) requestKey (computeResultAndUpdateState requestKey cmd)
       pure requestKey
     pure $ SendResponse $ RequestKeys requestKeys
    where
         computeResultAndUpdateState :: RequestKey -> Command Text -> IO (CommandResult Log (PactErrorCode Info))
-        computeResultAndUpdateState requestKey cmd = do
-            modifyMVar (_ceEvalState env) $ \evalState -> do
-                case verifyCommand @(StableEncoding PublicMeta) (fmap E.encodeUtf8 cmd) of
-                    ProcFail errStr -> do
-                      gas <- readIORef $ _geGasRef (_ceGasEnv env)
-                      pure (evalState
-                           ,pactErrorToCommandResult requestKey
-                             (PEExecutionError (EvalError (T.pack errStr)) [] def)
-                             (milliGasToGas gas))
+        computeResultAndUpdateState requestKey cmd =
+          case verifyCommand @(StableEncoding PublicMeta) (fmap E.encodeUtf8 cmd) of
+            ProcFail errStr -> do
+              let pe = PEExecutionError (EvalError (T.pack errStr)) [] def
+              pure $ pactErrorToCommandResult requestKey pe (Gas 0)
 
-                    ProcSucc (Command (Payload (Exec execMsg) _ _ _ _ _) _ _) -> do
-                      let parsedCode = Right $ _pcExps (_pmCode execMsg)
-                      (evalState', result) <- interpretReturningState (_ceEvalEnv env) evalState parsedCode
-                      case result of
-                        Right goodRes ->
-                          pure (evalState', evalResultToCommandResult requestKey goodRes)
-                        Left err -> do
-                          gas <- readIORef $ _geGasRef (_ceGasEnv env)
-                          pure (evalState', pactErrorToCommandResult requestKey err (milliGasToGas gas))
+            ProcSucc (Command (Payload (Exec (ExecMsg code d)) _ _ signer mverif _) _ h) -> do
+              let parsedCode = Right $ _pcExps code
+                  msgData = MsgData
+                    { mdData = d
+                    , mdHash = h
+                    , mdSigners = signer
+                    , mdVerifiers = maybe [] (fmap void) mverif
+                    }
+              ee <- setupEvalEnv (_srDbEnv runtime) Transactional msgData freeGasModel SimpleNamespacePolicy noSPVSupport def mempty
+              interpret ee def parsedCode >>= \case
+                Left pe ->
+                  pure $ pactErrorToCommandResult requestKey pe (Gas 0)
+                Right evalResult ->
+                  pure $ evalResultToCommandResult requestKey evalResult
 
-                    ProcSucc (Command (Payload (Continuation contMsg) _ _ _ _ _) _ _) -> do
-                      gas <- readIORef $ _geGasRef (_ceGasEnv env)
-                      contMsgToEvalInput requestKey contMsg (milliGasToGas gas) >>= \case
-                        Left err -> pure (evalState, err)
-                        Right evalInput -> do
-                          (evalState', result) <- interpretReturningState (_ceEvalEnv env) evalState evalInput
-                          case result of
-                            Right goodRes -> pure (evalState', evalResultToCommandResult requestKey goodRes)
-                            Left err ->
-                              pure (evalState', pactErrorToCommandResult requestKey err (milliGasToGas gas))
+            ProcSucc (Command (Payload (Continuation contMsg) _ _ signer mverif _) _ h) -> do
+                  let msgData = MsgData
+                        { mdData = _cmData contMsg
+                        , mdHash = h
+                        , mdSigners = signer
+                        , mdVerifiers = maybe [] (fmap void) mverif
+                        }
+                  ee <- setupEvalEnv (_srDbEnv runtime) Transactional msgData freeGasModel SimpleNamespacePolicy noSPVSupport def mempty
+                  let ee' = ee & eeDefPactStep ?~ DefPactStep (_cmStep contMsg) (_cmRollback contMsg) (_cmPactId contMsg) Nothing
+                  interpret ee' def (Left Nothing) >>= \case
+                    Left pe ->
+                      pure $ pactErrorToCommandResult requestKey pe (Gas 0)
+                    Right evalResult -> pure $ evalResultToCommandResult requestKey evalResult
 
         evalResultToCommandResult :: RequestKey -> EvalResult -> CommandResult Log (PactErrorCode Info)
         evalResultToCommandResult requestKey (EvalResult out _log _exec gas _lm txid _lgas ev) =
@@ -345,23 +304,7 @@ sendHandler env (SendRequest submitBatch) = do
             Just (v, _) -> PactResultOk (compileValueToPactValue v)
             Nothing -> PactResultErr $ pactErrorToErrorCode $ PEExecutionError (EvalError "empty input") [] def
 
-        contMsgToEvalInput :: RequestKey -> ContMsg -> Gas -> IO (Either (CommandResult Log (PactErrorCode Info)) EvalInput)
-        contMsgToEvalInput rk c gas = _pdbRead (_ceDbEnv env) DDefPacts (_cmPactId c) >>= \case
-          Nothing -> let
-            err = NoPreviousDefPactExecutionFound $ DefPactStep (_cmStep c) (_cmRollback c) (_cmPactId c) Nothing
-            cr = CommandResult
-              { _crReqKey = rk
-              , _crTxId = Nothing
-              , _crResult =  PactResultErr $ pactErrorToErrorCode $ PEExecutionError err [] def
-              , _crGas = gas
-              , _crLogs = Nothing
-              , _crEvents = [] -- todo
-              , _crContinuation = Nothing
-              , _crMetaData = Nothing
-              } in pure $ Left cr
-          Just pexec -> pure $ Right $ Left pexec
-
-localHandler :: CommandEnv -> LocalRequest -> Handler LocalResponse
+localHandler :: ServerRuntime -> LocalRequest -> Handler LocalResponse
 localHandler env (LocalRequest cmd) = do
   (SendResponse (RequestKeys rks))  <- sendHandler env (SendRequest (SubmitBatch $ cmd NE.:| []))
   PollResponse pr <- pollHandler env (PollRequest rks)
@@ -369,9 +312,9 @@ localHandler env (LocalRequest cmd) = do
     (_, cmdResult): _ -> pure (LocalResponse cmdResult)
     [] -> throwError err404
 
-listenHandler :: CommandEnv -> ListenRequest -> Handler ListenResponse
+listenHandler :: ServerRuntime -> ListenRequest -> Handler ListenResponse
 listenHandler env (ListenRequest key) = do
-    let (LRU.LruHandle cacheRef) = _ceRequestCache env
+    let (LRU.LruHandle cacheRef) = _srRequestCache env
     cache <- liftIO $ readIORef cacheRef
 
     -- Since the response is calculated synchronously in the send handler,

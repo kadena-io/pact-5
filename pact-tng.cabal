@@ -541,6 +541,10 @@ test-suite core-tests
     , servant
     , servant-server
     , servant-client
+    , lrucaching
+    , http-client
+    , warp
+    , unordered-containers
   other-modules:
     , Pact.Core.Test.CommandTests
     , Pact.Core.Test.ReplTests
@@ -563,6 +567,7 @@ test-suite core-tests
     , Paths_pact_tng
     , Pact.Core.Test.SignatureSchemeTests
     , Pact.Core.Test.PactServerTests
+    , Pact.Core.Test.PactContinuationTest
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
 

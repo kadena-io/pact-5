@@ -32,7 +32,6 @@ main = do
   commandTests <- CommandTests.tests
   docsTests <- DocsTests.tests
   legacyDbRegression <- LegacyDbRegression.tests
-  pactServerTests <- PactServerTests.tests
   defaultMain $ testGroup "pactTests"
     [ replTests
     , LexerTests.tests
@@ -53,6 +52,6 @@ main = do
     , SignatureSchemeTests.tests
     , JSONRoundtripTests.tests
     , legacyDbRegression
-    , pactServerTests
+    , PactServerTests.tests
     ]
 
