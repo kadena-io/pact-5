@@ -65,8 +65,8 @@ instance J.Encode c => J.Encode (PactRPC c) where
   {-# INLINE build #-}
 
 data ExecMsg c = ExecMsg
-  { _pmCode :: c
-  , _pmData :: PactValue
+  { _pmCode :: !c
+  , _pmData :: !PactValue
   } deriving (Eq,Generic,Show,Functor,Foldable,Traversable)
 
 instance NFData c => NFData (ExecMsg c)
