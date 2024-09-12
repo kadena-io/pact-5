@@ -10,7 +10,7 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE CPP #-}
 
-module Pact.Core.IR.Eval.CEK
+module Pact.Core.IR.Eval.CEK.Evaluator
   ( eval
   , interpretGuard
   , applyLam

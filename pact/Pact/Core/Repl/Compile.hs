@@ -66,7 +66,7 @@ import Pact.Core.Repl.BuiltinDocs
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
-import qualified Pact.Core.IR.Eval.CEK as CEK
+import qualified Pact.Core.IR.Eval.CEK.Evaluator as CEK
 import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import qualified Pact.Core.IR.Eval.Direct.ReplBuiltin as Direct
 
