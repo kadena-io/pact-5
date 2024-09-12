@@ -537,6 +537,14 @@ instance JD.FromJSON (StableEncoding (PactEvent PactValue)) where
     modHash <- o JD..: "moduleHash"
     pure $ StableEncoding (PactEvent name (fmap _stableEncoding args) (_stableEncoding modName) (_stableEncoding modHash))
 
+instance J.Encode (StableEncoding SpanInfo) where
+  build (StableEncoding si) = J.object
+    [ "startLine" J..= J.Aeson (_liStartLine si)
+    , "endLine" J..= J.Aeson (_liEndLine si)
+    , "startColumn" J..= J.Aeson (_liStartColumn si)
+    , "endColumn" J..= J.Aeson (_liEndColumn si)
+    ]
+
 instance JD.FromJSON (StableEncoding SpanInfo) where
   parseJSON = JD.withObject "SpanInfo" $ \o -> do
     startLine <- o JD..: "startLine"

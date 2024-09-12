@@ -26,7 +26,7 @@ import Pact.Core.Guards
 import Pact.Core.Type
 import Pact.Core.Imports (Import(..))
 import Pact.Core.IR.Term
-import Pact.Core.Info (SpanInfo)
+import Pact.Core.Info
 import Pact.Core.Builtin
 import Pact.Core.Literal
 import Pact.Core.Capabilities
@@ -75,6 +75,14 @@ signerGen =
     <*> Gen.list (Range.linear 0 10) sigCapabilityGen
   where
   addrGen = Gen.text (Range.singleton 64) Gen.alphaNum
+
+spanInfoGen :: Gen SpanInfo
+spanInfoGen =
+  SpanInfo
+    <$> Gen.integral Range.constantBounded
+    <*> Gen.integral Range.constantBounded
+    <*> Gen.integral Range.constantBounded
+    <*> Gen.integral Range.constantBounded
 
 capTokenGen :: Gen name -> Gen v -> Gen (CapToken name v)
 capTokenGen n v =
