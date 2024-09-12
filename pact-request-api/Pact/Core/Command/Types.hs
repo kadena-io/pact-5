@@ -302,13 +302,13 @@ data CommandResult log err = CommandResult {
 
 instance (J.Encode l, J.Encode err) => J.Encode (CommandResult l err) where
   build o = J.object
-    [ "gas" J..= A.Number (fromIntegral (_gas (_crGas o)) )
+    [ "gas" J..= J.Aeson (_gas (_crGas o))
     , "result" J..= _crResult o
     , "reqKey" J..= _crReqKey o
     , "logs" J..= _crLogs o
     , "events" J..??= J.Array (StableEncoding <$> _crEvents o)
     , "metaData" J..= _crMetaData o
-    , "continuation" J..=  fmap StableEncoding (_crContinuation o)
+    , "continuation" J..= fmap StableEncoding (_crContinuation o)
     , "txId" J..= fmap (A.Number . fromIntegral . _txId) (_crTxId o)
     ]
   {-# INLINE build #-}

@@ -61,6 +61,7 @@ tests = testGroup "JSON Roundtrips" $ stableEncodings ++ jsonRoundtrips
     , StableEncodingCase rowDataGen
     , StableEncodingCase defPactExecGen
     , StableEncodingCase namespaceGen
+    , StableEncodingCase pactEventGen
     ]
   jsonRoundtrips = fmap testJSONRoundtrip $
     [ EncodingCase signerGen

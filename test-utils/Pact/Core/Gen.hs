@@ -396,7 +396,7 @@ evalInterfaceGen :: Gen b -> Gen i -> Gen (EvalInterface b i)
 evalInterfaceGen b i = do
   name <- moduleNameGen
   defs <- Gen.list (Range.linear 0 100) (ifDefGen b i)
-  imports <- Gen.list (Range.linear 0 100) (importGen )
+  imports <- Gen.list (Range.linear 0 100) importGen
   h <- moduleHashGen
   Interface name defs imports h (Hash mempty) <$> i
 
@@ -565,3 +565,11 @@ identGen = do
 
 rowDataGen :: Gen RowData
 rowDataGen = RowData <$> Gen.map (Range.linear 0 4) ((,) <$> fieldGen <*> pactValueGen)
+
+pactEventGen :: Gen (PactEvent PactValue)
+pactEventGen =
+  PactEvent
+    <$> identGen
+    <*> Gen.list (Range.constant 0 5) pactValueGen
+    <*> moduleNameGen
+    <*> moduleHashGen
