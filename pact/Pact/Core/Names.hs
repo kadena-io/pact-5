@@ -65,6 +65,8 @@ module Pact.Core.Names
  , parseQualifiedName
  , parseFullyQualifiedName
  , VerifierName(..)
+ , LegacyDefPactId(..)
+ , renderLegacyDefpactId
  ) where
 
 import Control.Lens
@@ -419,6 +421,10 @@ instance Pretty DefPactId where
 
 type Parser = MP.Parsec () Text
 
+newtype LegacyDefPactId
+  = LegacyDefPactId { _unLegacyDefpactId :: DefPactId }
+  deriving (Eq, Ord, Show, NFData)
+
 identParser :: Parser Text
 identParser = do
   c1 <- MP.letterChar <|> MP.oneOf specials
@@ -515,6 +521,15 @@ renderDefPactId (DefPactId t) = t
 renderParsedTyName :: ParsedTyName -> Text
 renderParsedTyName (TBN (BareName n)) = n
 renderParsedTyName (TQN qn) = renderQualName qn
+
+-- | Legacy hack.
+--   Turns out many years ago, we used the `show` instance,
+--   for pact Ids. Turns out, this actually resulted in all pact ID's having
+--   db entries such as `PactId "<hash>"`. This makes it explicit.
+--   It was clobbered.
+renderLegacyDefpactId :: LegacyDefPactId -> Text
+renderLegacyDefpactId (LegacyDefPactId t) =
+  "PactId \"" <> renderDefPactId t <> "\""
 
 newtype VerifierName = VerifierName Text
   deriving newtype (J.Encode, NFData, Eq, Show, Ord, FromJSON)
