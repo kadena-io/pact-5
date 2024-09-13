@@ -32,6 +32,9 @@ module Pact.Core.Errors
  , pactErrorToErrorCode
  , prettyErrorCode
  , errorCodeFromText
+ , LegacyPactError(..)
+ , LegacyPactErrorType(..)
+ , PactErrorCompat(..)
  , _PELexerError
  , _PEParseError
  , _PEDesugarError
@@ -185,6 +188,7 @@ module Pact.Core.Errors
 import Control.Lens hiding (ix)
 import Control.Monad
 import Control.Exception
+import Control.Applicative
 import Data.Bits
 import Data.Foldable(find)
 import Data.Proxy
@@ -1185,3 +1189,79 @@ makePrisms ''EvalError
 makePrisms ''UserRecoverableError
 makePrisms ''HyperlaneError
 makePrisms ''HyperlaneDecodeError
+
+-- | Legacy error type enums
+data LegacyPactErrorType
+  = LegacyEvalError
+  | LegacyArgsError
+  | LegacyDbError
+  | LegacyTxFailure
+  | LegacySyntaxError
+  | LegacyGasError
+  | LegacyContinuationError
+  deriving (Show,Eq, Bounded, Enum)
+
+instance JD.FromJSON LegacyPactErrorType where
+  parseJSON = JD.withText "PactErrorType" $ \case
+    "EvalError" -> pure LegacyEvalError
+    "ArgsError" -> pure LegacyArgsError
+    "DbError" -> pure LegacyDbError
+    "TxFailure" -> pure LegacyTxFailure
+    "SyntaxError" -> pure LegacySyntaxError
+    "GasError" -> pure LegacyGasError
+    "ContinuationError" -> pure LegacyContinuationError
+    _ -> fail "Invalid legacy pact error type"
+
+instance J.Encode LegacyPactErrorType where
+  build LegacyEvalError = J.text "EvalError"
+  build LegacyArgsError = J.text "ArgsError"
+  build LegacyDbError = J.text "DbError"
+  build LegacyTxFailure = J.text "TxFailure"
+  build LegacySyntaxError = J.text "SyntaxError"
+  build LegacyGasError = J.text "GasError"
+  build LegacyContinuationError = J.text "ContinuationError"
+  {-# INLINABLE build #-}
+
+-- | LegacyError represents
+data LegacyPactError
+  = LegacyPactError
+  { _leType :: LegacyPactErrorType
+  , _leInfo :: Text
+  , _leCallStack :: [Text]
+  , _leMessage :: Text
+  } deriving (Eq, Show)
+
+instance J.Encode LegacyPactError where
+  build o = J.object
+    [ "callStack" J..= J.Array (_leCallStack o)
+    , "type" J..= _leType o
+    , "message" J..= _leMessage o
+    , "info" J..= _leInfo o
+    ]
+  {-# INLINE build #-}
+
+instance JD.FromJSON LegacyPactError where
+  parseJSON = JD.withObject "LegacyPactError" $ \o -> do
+    cs <- o JD..: "callStack"
+    ty <- o JD..: "type"
+    msg <- o JD..: "message"
+    info <- o JD..: "info"
+    pure (LegacyPactError ty info cs msg)
+
+
+-- | PactErrorCompat exists to provide a
+--   codec that can understand both pact 4 and pact 5 errors
+data PactErrorCompat info
+  = PEPact5Error (PactErrorCode info)
+  | PELegacyError LegacyPactError
+  deriving Show
+
+instance J.Encode info => J.Encode (PactErrorCompat info) where
+  build = \case
+    PEPact5Error err -> J.build err
+    PELegacyError err -> J.build err
+
+instance JD.FromJSON info => JD.FromJSON (PactErrorCompat info) where
+  parseJSON v =
+    (PEPact5Error <$> JD.parseJSON v) <|>
+    (PELegacyError <$> JD.parseJSON v)

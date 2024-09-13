@@ -50,12 +50,13 @@ import GHC.Generics
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base64.URL as B64URL
 import qualified Data.Text.Encoding as T
+import qualified Pact.JSON.Encode as J
+import qualified Pact.JSON.Decode as JD
 
 import qualified Data.ByteArray as ByteArray
 import qualified Crypto.Hash as Crypto
 
 import Pact.Core.Pretty ( renderCompactString, Pretty(pretty) )
-import qualified Pact.JSON.Encode as J
 
 -- | Untyped hash value, encoded with unpadded base64url.
 -- Within Pact these are blake2b_256 but unvalidated as such,
@@ -159,7 +160,7 @@ fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
 
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }
   deriving (Eq, Ord, Show, Generic)
-  deriving newtype (NFData)
+  deriving newtype (NFData, J.Encode, JD.FromJSON)
 
 instance Pretty ModuleHash where
   pretty (ModuleHash h) = pretty h

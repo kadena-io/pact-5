@@ -513,10 +513,10 @@ instance J.Encode (StableEncoding (DefPactContinuation QualifiedName PactValue))
 
 instance J.Encode (StableEncoding (PactEvent PactValue)) where
   build (StableEncoding (PactEvent name args modName (ModuleHash modHash))) = J.object
-    [ "name" J..= name
-    , "args" J..= J.Array (StableEncoding <$> args)
+    [ "params" J..= J.Array (StableEncoding <$> args)
+    , "name" J..= name
     , "module" J..= StableEncoding modName
-    , "moduleHash" J..= hashToText modHash
+    , "moduleHash" J..= modHash
     ]
   {-# INLINABLE build #-}
 
@@ -532,10 +532,18 @@ instance JD.FromJSON (StableEncoding ModuleHash) where
 instance JD.FromJSON (StableEncoding (PactEvent PactValue)) where
   parseJSON = JD.withObject "PactEvent" $ \o -> do
     name <- o JD..: "name"
-    args <- o JD..: "args"
+    args <- o JD..: "params"
     modName <- o JD..: "module"
     modHash <- o JD..: "moduleHash"
     pure $ StableEncoding (PactEvent name (fmap _stableEncoding args) (_stableEncoding modName) (_stableEncoding modHash))
+
+instance J.Encode (StableEncoding SpanInfo) where
+  build (StableEncoding si) = J.object
+    [ "startLine" J..= J.Aeson (_liStartLine si)
+    , "endLine" J..= J.Aeson (_liEndLine si)
+    , "startColumn" J..= J.Aeson (_liStartColumn si)
+    , "endColumn" J..= J.Aeson (_liEndColumn si)
+    ]
 
 instance JD.FromJSON (StableEncoding SpanInfo) where
   parseJSON = JD.withObject "SpanInfo" $ \o -> do

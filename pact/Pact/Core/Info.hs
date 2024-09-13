@@ -39,6 +39,8 @@ instance Pretty SpanInfo where
     pretty _liStartLine <> ":" <> pretty _liStartColumn
     <> "-" <> pretty _liEndLine <> ":" <> pretty _liEndColumn
 
+    
+
 -- | Combine two Span infos
 --   and spit out how far down the expression spans.
 combineSpan :: SpanInfo -> SpanInfo -> SpanInfo
