@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DataKinds #-}
@@ -7,6 +8,7 @@
 module Pact.Core.Evaluate
   ( MsgData(..)
   , RawCode(..)
+  , EvalInput
   , EvalResult(..)
   , Cont(..)
   , Info
@@ -16,6 +18,7 @@ module Pact.Core.Evaluate
   , evalGasPayerCap
   , setupEvalEnv
   , interpret
+  , interpretReturningState
   , compileOnly
   , compileOnlyTerm
   , evaluateDefaultState
@@ -248,12 +251,21 @@ interpret
   -> EvalInput
   -> IO (Either (PactError Info) EvalResult)
 interpret evalEnv evalSt evalInput = do
-  (result, state) <- evalWithinTx evalInput evalEnv evalSt
+  (_state, result) <- interpretReturningState evalEnv evalSt evalInput
+  return result
+
+interpretReturningState
+  :: EvalEnv CoreBuiltin Info
+  -> EvalState CoreBuiltin Info
+  -> EvalInput
+  -> IO (EvalState CoreBuiltin Info, Either (PactError Info) EvalResult)
+interpretReturningState evalEnv evalSt evalInput = do
+  (result, state) <-evalWithinTx evalInput evalEnv evalSt
   gas <- readIORef (_geGasRef $ _eeGasEnv evalEnv)
   case result of
-    Left err -> return $ Left err
+    Left err -> return $ (state, Left err)
     Right (rs, logs, txid) ->
-      return $! Right $! EvalResult
+      return $! (state, Right $! EvalResult
         { _erOutput = rs
         , _erLogs = logs
         , _erExec = _esDefPactExec state
@@ -263,7 +275,7 @@ interpret evalEnv evalSt evalInput = do
         , _erTxId = txid
         , _erLogGas = Nothing
         , _erEvents = reverse $ _esEvents state
-        }
+        })
 
 interpretGasPayerTerm
   :: EvalEnv CoreBuiltin Info

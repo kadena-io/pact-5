@@ -13,6 +13,7 @@ module Pact.Core.Guards
 , renderKeySetName
 , keysetNameParser
 , parseAnyKeysetName
+, parseWebAuthnPublicKeyText
 , Governance(..)
 , KeySet(..)
 , Guard(..)
@@ -163,7 +164,7 @@ parseWebAuthnPublicKeyText (PublicKeyText k)
   where
   parseWebAuthnPublicKey :: ByteString -> Either String WA.CosePublicKey
   parseWebAuthnPublicKey rawPk = do
-    pk <- over _Left (\e -> "WebAuthn public key parsing error: " <> show e) $
+    pk <- over _Left (\_ -> "WebAuthn public key parsing error") $
       Serialise.deserialiseOrFail @WA.CosePublicKey (BSL.fromStrict rawPk)
     webAuthnPubKeyHasValidAlg pk
     return pk

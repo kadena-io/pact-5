@@ -1,4 +1,6 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Pact.Core.Command.Client (
 
@@ -10,6 +12,7 @@ module Pact.Core.Command.Client (
   -- * Command construction with dynamic keys (Ed25519 and WebAuthn)
   mkCommandWithDynKeys,
   mkCommandWithDynKeys',
+  mkCommandsWithBatchSignatures,
   ApiKeyPair(..),
   ApiSigner(..),
   ApiPublicMeta(..),
@@ -34,14 +37,22 @@ module Pact.Core.Command.Client (
   SubmitBatch(..),
 ) where
 
+import Control.Applicative
 import Control.Lens
-import Control.Applicative((<|>))
 import Control.Monad.Except
 import Control.Exception.Safe
 import Control.Monad
+import qualified Crypto.Hash.Algorithms as Crypto
 import Data.Default(def)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as BSL
+import qualified Data.ByteString.Short as SBS
+import qualified Data.Map.Strict as M
+import qualified Data.Set as S
 import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import Data.Foldable(traverse_, foldrM)
 import qualified Data.Aeson.Types as A
 import qualified Data.Aeson.Key as AK
@@ -50,6 +61,9 @@ import Data.List (intercalate)
 import Data.Maybe (fromMaybe, mapMaybe, listToMaybe)
 import Data.Bifunctor (first)
 import Data.Either (partitionEithers)
+import qualified Data.MerkleLog as ML
+import qualified Data.Yaml as Y
+import GHC.Generics
 import System.IO
 import System.Exit hiding (die)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -57,35 +71,25 @@ import Data.List.NonEmpty (NonEmpty(..))
 import Pact.Time
 import Pact.JSON.Yaml
 import System.FilePath
-import qualified Pact.JSON.Encode as J
+
 import qualified Pact.JSON.Decode as JD
-import qualified Data.Yaml as Y
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
-import qualified Data.Set as S
-import qualified Data.Map.Strict as M
-import qualified Data.ByteString.Lazy.Char8 as BSL
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Short as SBS
-import GHC.Generics
+import qualified Pact.JSON.Encode as J
 
 import Pact.Core.ChainData
+import Pact.Core.Command.Crypto
+import Pact.Core.Gas.Types
+import Pact.Core.Guards
 import Pact.Core.Command.RPC
+import Pact.Core.Command.SigData
 import Pact.Core.Command.Types
 import Pact.Core.Command.Util
-import Pact.Core.Command.Crypto
-import Pact.Core.Guards
+import Pact.Core.Hash as PactHash
 import Pact.Core.PactValue
 import Pact.Core.Names
-import Pact.Core.Verifiers
-import Pact.Core.StableEncoding
-import Pact.Core.Gas
-import Pact.Core.Hash
 import Pact.Core.SPV
 import Pact.Core.Signer
-import qualified Pact.Core.Hash as PactHash
-import Pact.Core.Command.SigData
-
+import Pact.Core.StableEncoding
+import Pact.Core.Verifiers
 
 
 -- -------------------------------------------------------------------------- --
@@ -194,7 +198,6 @@ instance J.Encode ApiPublicMeta where
     , "gasPrice" J..?= (StableEncoding <$> _apmGasPrice o)
     , "sender" J..?= _apmSender o
     ]
-  -- Todo: revisit all inlinable pragmas
   {-# INLINABLE build #-}
 
 -- -------------------------------------------------------------------------- --
@@ -202,7 +205,7 @@ instance J.Encode ApiPublicMeta where
 
 data ApiReq = ApiReq {
   _ylType :: Maybe Text,
-  _ylPactTxHash :: Maybe Hash,
+  _ylPactTxHash :: Maybe PactHash.Hash,
   _ylStep :: Maybe Int,
   _ylRollback :: Maybe Bool,
   _ylData :: Maybe PactValue,
@@ -399,7 +402,7 @@ returnSigDataOrCommand  outputLocal sd
       Left "Number of signers in the payload does not match number of signers in the sigData"
     usrSigs <- traverse (toSignerPair sigMap) (_pSigners payload)
     traverse_ Left $ verifyUserSigs h [ (signer, sig) | (sig, Just signer) <- usrSigs ]
-    _ <- verifyHash h (T.encodeUtf8 cmd)
+    _ <- PactHash.verifyHash h (T.encodeUtf8 cmd)
     pure ()
     where
     toSignerPair sigMap signer =
@@ -527,7 +530,7 @@ signCmd keyFiles bs = do
     Right h -> do
       kps <- mapM importKeyFile keyFiles
       fmap (encodeYaml . J.Object) $ forM kps $ \kp -> do
-            let sig = signHash (Hash $ SBS.toShort h) kp
+            let sig = signHash (PactHash.Hash $ SBS.toShort h) kp
             return ((toB16Text . _b16JsonBytes) (B16JsonBytes (getPublic kp)), sig)
 
 withKeypairsOrSigner
@@ -683,7 +686,7 @@ mkApiReqCont unsignedReq ar@ApiReq{..} fp = do
                           JD.eitherDecode
       (Nothing,Nothing) -> return PUnit
       _ -> dieAR "Expected either a 'data' or 'dataFile' entry, or neither"
-  let pactId = (DefPactId . hashToText) apiPactId
+  let pactId = (DefPactId . PactHash.hashToText) apiPactId
   pubMeta <- mkPubMeta _ylPublicMeta
   cmd <- withKeypairsOrSigner unsignedReq ar
     (\ks -> mkCont pactId step rollback cdata pubMeta ks (fromMaybe [] _ylVerifiers) _ylNonce _ylProof _ylNetworkId)
@@ -766,7 +769,7 @@ mkUnsignedCont txid step rollback mdata pubMeta kps ves ridm proof nid = do
 mkCommand
   :: J.Encode c
   => J.Encode m
-  => [(Ed25519KeyPair, [UserCapability])]
+  => [(Ed25519KeyPair, [SigCapability])]
   -> [Verifier ParsedVerifierProof]
   -> m
   -> Text
@@ -779,7 +782,7 @@ mkCommand creds vers meta nonce nid rpc = mkCommand' creds encodedPayload
     encodedPayload = J.encodeStrict payload
 
 
-keyPairToSigner :: Ed25519KeyPair -> [UserCapability] -> Signer
+keyPairToSigner :: Ed25519KeyPair -> [SigCapability] -> Signer
 keyPairToSigner cred caps = Signer scheme pub addr caps
       where
         scheme = Nothing
@@ -881,7 +884,84 @@ mkCommandWithDynKeys creds vers meta nonce nid rpc = mkCommandWithDynKeys' creds
             , _siCapList = caps
             }
 
-type UserCapability = SigCapability
+-- | Construct a batch of commands all signed with the WebAuthn batch signing
+-- protocol.
+--
+-- This function is used both for testing the batch signature verification scheme,
+-- and as a reference implementation of the client-side batch signing protocol,
+-- which Wallets should replicate. Because it's a reference implementation, we
+-- provide more comments in the implementation than usual.
+mkCommandsWithBatchSignatures
+  :: J.Encode c
+  => J.Encode m
+  => ((WebAuthnPublicKey, WebauthnPrivateKey), [SigCapability])
+  -> [([Verifier ParsedVerifierProof],
+       m,
+       Text,
+       Maybe NetworkId,
+       PactRPC c)]
+  -> IO [Command ByteString]
+mkCommandsWithBatchSignatures ((pubKey, privKey), caps) cmdParts = do
+
+  -- Construct Commands from the command components.
+  -- They will have a "Signer" field derived from the provided
+  -- WebAuthn keypair, but no signatures. (We will sign and attach
+  -- the signatures to the commands later.
+  let commandsAwaitingSignature = map commandAwaitingSignature cmdParts
+
+  -- Construct a merkle tree from the pact hashes of all the commands.
+  let merkleLeafs = map mkCommandMerkleNode commandsAwaitingSignature
+  let batchMerkleTree =
+        ML.merkleTree (map mkCommandMerkleNode commandsAwaitingSignature)
+
+
+  let commandProofsResult =
+        traverse
+        (\(i, node) -> ML.merkleProof node i batchMerkleTree)
+        (zip [0..] merkleLeafs)
+  commandProofs <- case commandProofsResult of
+    Nothing -> error "TODO"
+    Just proofs -> pure proofs
+
+  let batchRoot = PactHash.unsafeBsToPactHash (ML.encodeMerkleRoot (ML.merkleRoot batchMerkleTree))
+  sigResult <- runExceptT $ signWebauthn pubKey privKey "test-authdata" batchRoot
+  webAuthnSig <- case sigResult of
+    Left _e -> error "TODO"
+    Right webAuthnSig -> pure webAuthnSig
+
+  -- For every command in the batch `cmdParts`, run the `handleCommand`.
+  zipWithM (attachSignature webAuthnSig) commandsAwaitingSignature commandProofs
+
+  where
+
+    signer = Signer {
+      _siScheme = Just WebAuthn,
+      _siPubKey = webAuthnPrefix <> toB16Text (exportWebAuthnPublicKey pubKey),
+      _siAddress = Nothing,
+      _siCapList = caps
+    }
+
+    mkCommandMerkleNode :: Command ByteString -> ML.MerkleNodeType Crypto.Blake2b_256 ByteString
+    mkCommandMerkleNode (Command {_cmdHash = PactHash.Hash hashBytes}) = ML.InputNode (SBS.fromShort hashBytes)
+
+    -- Determine the PactHash of each transaction.
+    commandAwaitingSignature (verifiers, metadata, nonce, netId, rpc) =
+      let
+        payload = Payload rpc nonce metadata [signer] (nonemptyVerifiers verifiers) netId
+        encodedPayload = J.encodeStrict payload
+      in
+        Command encodedPayload [] (PactHash.hash encodedPayload)
+
+    attachSignature :: WebAuthnSignature -> Command ByteString -> ML.MerkleProof Crypto.Blake2b_256 -> IO (Command ByteString)
+    attachSignature webAuthnSig cmd (ML.MerkleProof _subj obj) = do
+
+      let userSig =
+            WebAuthnBatchToken (BatchToken {
+               _btWebAuthnSignature = webAuthnSig,
+               _btMerkleProofObject = obj
+            })
+      pure (cmd { _cmdSigs = [userSig] })
+
 
 -- | A utility function for handling the common case of commands
 -- with no verifiers. `None` is distinguished from `Just []` in
