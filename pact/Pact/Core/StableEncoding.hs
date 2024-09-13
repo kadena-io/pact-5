@@ -10,6 +10,7 @@
 module Pact.Core.StableEncoding
   ( encodeStable
   , decodeStable
+  , eitherDecodeStable
   , roundtripStable
   , StableEncoding(..))
 where
@@ -61,6 +62,10 @@ encodeStable = J.encodeStrict . StableEncoding
 decodeStable :: JD.FromJSON (StableEncoding a) => ByteString -> Maybe a
 decodeStable = fmap _stableEncoding . JD.decodeStrict'
 {-# INLINE decodeStable #-}
+
+eitherDecodeStable :: JD.FromJSON (StableEncoding a) => ByteString -> Either String a
+eitherDecodeStable = fmap _stableEncoding . JD.eitherDecodeStrict'
+{-# INLINE eitherDecodeStable #-}
 
 roundtripStable :: (JD.FromJSON (StableEncoding a), J.Encode (StableEncoding a)) => a -> Maybe a
 roundtripStable a = _stableEncoding <$> JD.decodeStrict (J.encodeStrict (StableEncoding a))
