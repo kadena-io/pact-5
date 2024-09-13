@@ -24,6 +24,7 @@ module Pact.Core.Evaluate
   , allModuleExports
   , evalDirectInterpreter
   , evalInterpreter
+  , desugarTerms_
   ) where
 
 import Control.Lens
@@ -69,6 +70,7 @@ import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import Control.Monad.IO.Class
 import qualified Data.Text as T
+import qualified Pact.Core.Hash as Hash
 
 type Eval = EvalM ExecRuntime CoreBuiltin Info
 
@@ -316,7 +318,6 @@ evalWithinCap ct body ee es =
     (DesugarOutput term' _) <- runDesugarTerm body
     () <$ CEK.evalWithinCap info PImpure cekEnv ct term'
 
-
 -- | Evaluate some input action within a tx context
 evalWithinTx'
   :: EvalEnv CoreBuiltin Info
@@ -363,10 +364,30 @@ evalResumePact mdp =
 evaluateDefaultState :: RawCode -> Eval [CompileValue Info]
 evaluateDefaultState = either throwError evaluateTerms . compileOnly
 
-
-
 evaluateTerms
   :: [Lisp.TopLevel Info]
   -> Eval [CompileValue Info]
 evaluateTerms tls = do
   traverse (interpretTopLevel evalInterpreter) tls
+
+desugarTerms_
+  :: PactDb CoreBuiltin Info
+  -> [Lisp.TopLevel Info]
+  -> IO (Either (PactError Info) ())
+desugarTerms_ db terms = do
+  -- TODO: Jose agrees that maybe we want to disconnect desugaring from EvalM,
+  -- it should only really need a PactDb.
+  ee <- setupEvalEnv db Transactional
+    MsgData
+      { mdData = PUnit
+      , mdHash = Hash.initialHash
+      , mdSigners = []
+      , mdVerifiers = []
+      }
+    freeGasModel
+    SimpleNamespacePolicy
+    noSPVSupport
+    def
+    mempty
+  (r, _s') <- evalWithinTx' ee def (traverse runDesugarTopLevel terms)
+  return (void r)
