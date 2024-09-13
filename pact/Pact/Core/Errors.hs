@@ -666,8 +666,8 @@ data EvalError
   -- ^ Hyperlane decoding error
   | ModuleAdminNotAcquired ModuleName
   -- ^ Module admin was needed for a particular operation, but has not been acquired.
-  | UnknownException
-  -- ^ Used by chainweb for unknown exceptions
+  | UnknownException Text
+  -- ^ An unknown exception was thrown and converted to text. Intentionally and crucially lazy.
   deriving (Eq, Show, Generic)
 
 instance NFData EvalError
@@ -863,8 +863,8 @@ instance Pretty EvalError where
     HyperlaneDecodeError he -> "Hyperlane decode error:" <+> pretty he
     ModuleAdminNotAcquired mn ->
       "Module admin necessary for operation but has not been acquired:" <> pretty mn
-    UnknownException ->
-      "Unknown exception"
+    UnknownException msg ->
+      "Unknown exception: " <> pretty msg
 
 instance Exception EvalError
 
