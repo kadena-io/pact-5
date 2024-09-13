@@ -15,7 +15,6 @@ module Pact.Core.StableEncoding
 where
 
 import Control.Applicative
-import Control.Monad (guard)
 import Data.Bifunctor
 import Data.Text(Text)
 import Data.ByteString (ByteString)
@@ -103,7 +102,7 @@ instance J.Encode (StableEncoding Literal) where
     LString t -> J.build t
     LInteger i -> encodeInteger i
     LDecimal d -> encodeDecimal d
-    LUnit -> encodeUnit
+    LUnit -> J.null
     LBool b -> J.build b
     where
       encodeInteger i
@@ -112,7 +111,6 @@ instance J.Encode (StableEncoding Literal) where
       encodeDecimal d@(Decimal _ mantissa)
         | isSafeInteger mantissa = J.build $ J.Aeson @Scientific $ fromRational $ toRational d
         | otherwise = J.object [ "decimal" J..= T.pack (show d) ]
-      encodeUnit = J.object ["##unit" J..= T.empty] -- TODO: Discuss?
       isSafeInteger i = i >= -9007199254740991 && i <= 9007199254740991
   {-# INLINE build #-}
 
@@ -475,15 +473,10 @@ instance JD.FromJSON (StableEncoding Literal) where
   parseJSON n@JD.Number{} = StableEncoding . LDecimal <$> decoder decimalCodec n
   parseJSON (JD.String s) = pure $ StableEncoding $ LString s
   parseJSON (JD.Bool b) = pure $ StableEncoding $ LBool b
-  parseJSON o@(JD.Object o') =
+  parseJSON o@(JD.Object _) =
     (StableEncoding . LInteger <$> decoder integerCodec o) <|>
-    (StableEncoding . LDecimal <$> decoder decimalCodec o) <|>
-    (StableEncoding <$> decodeUnit)
-    where
-    decodeUnit = do
-      v <- o' JD..: "##unit"
-      guard (T.null v)
-      pure LUnit
+    (StableEncoding . LDecimal <$> decoder decimalCodec o)
+  parseJSON JD.Null = pure (StableEncoding LUnit)
   parseJSON _t = fail "Literal parse failed"
 
 instance (J.Encode (StableEncoding name), J.Encode (StableEncoding v))
