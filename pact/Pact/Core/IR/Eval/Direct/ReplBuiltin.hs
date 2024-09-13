@@ -27,6 +27,7 @@ import Pact.Core.Hash
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.DefPacts.Types
 import Pact.Core.IR.Eval.Direct.Evaluator
+import Pact.Core.IR.Eval.Direct.CoreBuiltin
 import Pact.Core.IR.Eval.Direct.Types
 import Pact.Core.Names
 import Pact.Core.Pretty

@@ -26,9 +26,9 @@ import Pact.Core.Literal
 import Pact.Core.Hash
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.DefPacts.Types
-import Pact.Core.IR.Eval.CEK
+import Pact.Core.IR.Eval.CEK.CoreBuiltin
+import Pact.Core.IR.Eval.CEK.Evaluator
 import Pact.Core.Names
-import Pact.Core.IR.Eval.CoreBuiltin
 import Pact.Core.Pretty
 import Pact.Core.Environment
 import Pact.Core.PactValue

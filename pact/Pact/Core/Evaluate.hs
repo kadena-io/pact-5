@@ -46,7 +46,6 @@ import Pact.Core.Compile
 import Pact.Core.Environment
 import Pact.Core.Errors
 import Pact.Core.Hash (Hash)
-import Pact.Core.IR.Eval.CoreBuiltin
 import Pact.Core.Persistence
 import Pact.Core.DefPacts.Types
 import Pact.Core.Capabilities
@@ -61,8 +60,10 @@ import Pact.Core.Verifiers
 import Pact.Core.Interpreter
 import Pact.Core.Info
 import Pact.Core.Signer
-import qualified Pact.Core.IR.Eval.CEK as Eval
+import Pact.Core.IR.Eval.CEK.CoreBuiltin
+import qualified Pact.Core.IR.Eval.CEK.Evaluator as CEK
 import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
+import qualified Pact.Core.IR.Eval.Direct.CoreBuiltin as Direct
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
@@ -71,7 +72,7 @@ import Control.Monad.IO.Class
 type Eval = EvalM ExecRuntime CoreBuiltin Info
 
 -- Our Builtin environment for evaluation in Chainweb prod
-type EvalBuiltinEnv = Eval.CoreBuiltinEnv Info
+type EvalBuiltinEnv = CEK.CoreBuiltinEnv Info
 type PactTxResult a =
   (Either (PactError Info) (a, [TxLog ByteString], Maybe TxId), EvalState CoreBuiltin Info)
 
@@ -79,13 +80,13 @@ evalInterpreter :: Interpreter ExecRuntime CoreBuiltin i
 evalInterpreter =
   Interpreter runGuard runTerm resume evalWithCap
   where
-  runTerm purity term = Eval.eval purity cekEnv term
-  runGuard info g = Eval.interpretGuard info cekEnv g
-  resume info defPact = Eval.evalResumePact info cekEnv defPact
+  runTerm purity term = CEK.eval purity cekEnv term
+  runGuard info g = CEK.interpretGuard info cekEnv g
+  resume info defPact = CEK.evalResumePact info cekEnv defPact
   evalWithCap info purity ct term =
-    Eval.evalWithinCap info purity cekEnv ct term
+    CEK.evalWithinCap info purity cekEnv ct term
 
-cekEnv :: Eval.BuiltinEnv ExecRuntime CoreBuiltin i
+cekEnv :: CEK.BuiltinEnv ExecRuntime CoreBuiltin i
 cekEnv = coreBuiltinEnv @ExecRuntime
 
 evalDirectInterpreter :: Interpreter ExecRuntime CoreBuiltin i
@@ -312,7 +313,7 @@ evalWithinCap ct body ee es =
   runInput = do
     let info = view Lisp.termInfo body
     (DesugarOutput term' _) <- runDesugarTerm body
-    () <$ Eval.evalWithinCap info PImpure cekEnv ct term'
+    () <$ CEK.evalWithinCap info PImpure cekEnv ct term'
 
 
 -- | Evaluate some input action within a tx context

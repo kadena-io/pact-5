@@ -26,7 +26,7 @@ import Pact.Core.Type
 import Pact.Core.Capabilities
 import Pact.Core.IR.Desugar
 import Pact.Core.IR.Eval.Runtime
-import Pact.Core.IR.Eval.CoreBuiltin
+import Pact.Core.IR.Eval.CEK.CoreBuiltin
 import Pact.Core.PactValue
 import Pact.Core.IR.Term
 import Pact.Core.Persistence
@@ -35,7 +35,7 @@ import Pact.Core.Guards
 import Pact.Core.Evaluate hiding (Cont(..))
 import Pact.Core.Namespace
 import Pact.Core.IR.Eval.CEK.Types hiding (Eval)
-import qualified Pact.Core.IR.Eval.CEK as Eval
+import qualified Pact.Core.IR.Eval.CEK.Evaluator as Eval
 
 type CoreDb = PactDb CoreBuiltin Info
 

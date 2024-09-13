@@ -12,13 +12,13 @@
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE CPP #-}
 
-module Pact.Core.IR.Eval.CoreBuiltin
+module Pact.Core.IR.Eval.CEK.CoreBuiltin
  ( coreBuiltinRuntime
  , coreBuiltinEnv
  , coreEnforceGuard) where
 
 -- |
--- Module      :  Pact.Core.Eval.CoreBuiltin
+-- Module      :  Pact.Core.Eval.CEK.CoreBuiltin
 -- Copyright   :  (C) 2022 Kadena
 -- License     :  BSD-style (see the file LICENSE)
 -- Maintainer  :  Jose Cardona <jose@kadena.io>
@@ -75,7 +75,7 @@ import Pact.Crypto.Hyperlane
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
 import Pact.Core.StableEncoding
-import Pact.Core.IR.Eval.CEK
+import Pact.Core.IR.Eval.CEK.Evaluator
 import Pact.Core.SizeOf
 import Pact.Core.SPV
 
