@@ -3,6 +3,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveTraversable #-}
 
 module Pact.Core.Command.Server
   ( API
@@ -24,6 +25,7 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Class
 import Data.Default
+import Data.Foldable
 import qualified Data.HashMap.Strict as HM
 import Data.IORef
 import qualified Data.List as L
@@ -38,6 +40,8 @@ import qualified Data.Text.Encoding as E
 import Data.Version
 import Network.Wai.Handler.Warp
 import Network.Wai.Middleware.Cors
+import Network.Wai.Logger
+import System.Log.FastLogger.Date
 import Pact.Core.Builtin
 import Pact.Core.ChainData
 import Pact.Core.Command.Client
@@ -63,6 +67,8 @@ import qualified Pact.JSON.Encode as JE
 import qualified Pact.JSON.Legacy.Utils as JL
 import Servant.API
 import Servant.Server
+import System.Directory
+import Control.Exception.Safe hiding (Handler)
 
 
 -- | Temporarily pretend our Log type in CommandResult is unit.
@@ -73,6 +79,7 @@ data ServerRuntime
   = ServerRuntime
   { _srDbEnv :: PactDb CoreBuiltin Info
   , _srRequestCache :: LruHandle RequestKey (CommandResult Log (PactErrorCode Info))
+  , _srSPVSupport :: SPVSupport
   }
 
 newtype PollRequest
@@ -88,7 +95,7 @@ newtype PollResponse
   = PollResponse (HM.HashMap RequestKey (CommandResult Log (PactErrorCode Info)))
 
 instance JE.Encode PollResponse where
-  build (PollResponse pr) = JE.build $ JL.legacyHashMap requestKeyToB16Text (commandToStableEncoding <$> pr)
+  build (PollResponse pr) = JE.build $ JL.legacyHashMap requestKeyToB64Text (commandToStableEncoding <$> pr)
 
 instance JD.FromJSON PollResponse where
   parseJSON v = do
@@ -185,22 +192,35 @@ type API = ("api" :> "v1" :>
        :<|> ("local" :> ReqBody '[PactJson] LocalRequest :> Post '[PactJson] LocalResponse)))
            :<|> "version" :> Get '[PlainText] Text
 
-runServer :: Config -> IO ()
-runServer (Config port persistDir _logDir) = do
+runServer :: Config -> SPVSupport -> IO ()
+runServer (Config port persistDir logDir _verbose _gl) spv = do
+  (traverse_.traverse_) (createDirectoryIfMissing True) [persistDir, logDir]
   emptyCache <- newLruHandle 100
   case persistDir of
     Nothing -> withSqlitePactDb serialisePact_raw_spaninfo ":memory:" $ \pdb -> do
-      runServer_ (ServerRuntime pdb emptyCache) port
-    Just pdir -> withSqlitePactDb serialisePact_raw_spaninfo (T.pack pdir) $ \pdb -> do
-      runServer_ (ServerRuntime pdb emptyCache) port
+      runServer_ (ServerRuntime pdb emptyCache spv) port logDir
+    Just pdir -> withSqlitePactDb serialisePact_raw_spaninfo (T.pack pdir <> "pactdb.sqlite") $ \pdb -> do
+      runServer_ (ServerRuntime pdb emptyCache spv) port logDir
 
-runServer_ :: ServerRuntime -> Port -> IO ()
-runServer_ env port = runSettings settings $ cors (const corsPolicy) app
+runServer_ :: ServerRuntime -> Port -> Maybe FilePath -> IO ()
+runServer_ env port logDir = bracket setupLogger teardownLogger runServer'
+
   where
+  runServer' (logger, _) =
+    runSettings (settings logger) $ cors (const corsPolicy) app
+  teardownLogger (_, remover) = void remover
+  setupLogger = do
+    lt <- case logDir of
+      Just ld -> pure (LogFileNoRotate ld 4096)
+      Nothing -> pure (LogStdout 4096)
+    apf <- initLogger FromFallback lt =<< newTimeCache simpleTimeFormat
+    let remover = logRemover apf
+    pure (apacheLogger apf, remover)
   app = serve (Proxy @API) (server env)
-  settings = defaultSettings
+  settings logger = defaultSettings
     & setPort port
     & setHost "127.0.0.1"
+    & setLogger logger
   corsPolicy = Just CorsResourcePolicy
     { corsOrigins = Nothing
     , corsMethods = ["GET", "POST"]

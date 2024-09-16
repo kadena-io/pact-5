@@ -162,6 +162,8 @@ library pact-request-api
     , servant
     , warp
     , wai-cors
+    , wai-logger
+    , fast-logger
   exposed-modules:
     Pact.Core.Command.Types
     Pact.Core.Command.Client
@@ -545,6 +547,9 @@ test-suite core-tests
     , http-client
     , warp
     , unordered-containers
+    , temporary
+    , wai-logger
+    , fast-logger
   other-modules:
     , Pact.Core.Test.CommandTests
     , Pact.Core.Test.ReplTests
@@ -568,6 +573,7 @@ test-suite core-tests
     , Pact.Core.Test.SignatureSchemeTests
     , Pact.Core.Test.PactServerTests
     , Pact.Core.Test.PactContinuationTest
+    , Pact.Core.Test.ServerUtils
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
 

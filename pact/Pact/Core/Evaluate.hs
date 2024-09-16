@@ -31,6 +31,7 @@ module Pact.Core.Evaluate
 import Control.Lens
 import Control.Monad
 import Control.Monad.Except
+import Control.Monad.IO.Class
 import Control.Exception.Safe
 import Data.ByteString (ByteString)
 import Data.Maybe (fromMaybe)
@@ -349,10 +350,8 @@ evalWithinTx'
   -> EvalState CoreBuiltin Info
   -> Eval a
   -> IO (Either (PactError Info) (a, [TxLog ByteString], Maybe TxId), EvalState CoreBuiltin Info)
-evalWithinTx' ee es action = do
-      (result, newState) <- runEvalM (ExecEnv ee) es runAction
-      -- maybe might want to decode using serialisepact
-      return (result, newState)
+evalWithinTx' ee es action = 
+    runEvalM (ExecEnv ee) es runAction
     where
     pdb = view eePactDb ee
     mode = view eeMode ee

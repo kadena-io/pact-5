@@ -49,7 +49,7 @@ module Pact.Core.Command.Types
   , RequestKey(..)
   , RequestKeys(..)
   , cmdToRequestKey
-  , requestKeyToB16Text
+  , requestKeyToB64Text
   , parsePact
 
   , DynKeyPair (DynEd25519KeyPair, DynWebAuthnKeyPair)
@@ -343,9 +343,8 @@ data DynKeyPair
   | DynWebAuthnKeyPair WebAuthnPubKeyPrefixed WebAuthnPublicKey WebauthnPrivateKey
   deriving (Eq, Show, Generic)
 
-requestKeyToB16Text :: RequestKey -> Text
-requestKeyToB16Text (RequestKey (PactHash.Hash h)) =
-  T.decodeUtf8 $ B16.encode (ShortByteString.fromShort h)
+requestKeyToB64Text :: RequestKey -> Text
+requestKeyToB64Text (RequestKey h) = PactHash.hashToText h
 
 newtype RequestKey = RequestKey { unRequestKey :: PactHash.Hash}
   deriving (Eq, Ord, Generic)

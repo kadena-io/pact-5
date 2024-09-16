@@ -23,6 +23,7 @@ import qualified Pact.Core.Test.PactServerTests as PactServerTests
 import qualified Pact.Core.Test.SignatureSchemeTests as SignatureSchemeTests
 import qualified Pact.Core.Test.JSONRoundtripTests as JSONRoundtripTests
 import qualified Pact.Core.Test.LegacyDBRegression as LegacyDbRegression
+import qualified Pact.Core.Test.PactContinuationTest as PactContinuationTests
 
 main :: IO ()
 main = do
@@ -53,5 +54,6 @@ main = do
     , JSONRoundtripTests.tests
     , legacyDbRegression
     , PactServerTests.tests
+    , PactContinuationTests.tests
     ]
 

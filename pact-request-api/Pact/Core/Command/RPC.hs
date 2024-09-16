@@ -102,8 +102,6 @@ instance FromJSON ContMsg where
           StableEncoding msgData <- o .: "data"
           maybeProof <- o .:? "proof"
           pure $ ContMsg defPactId step rollback msgData maybeProof
-          -- ContMsg <$> o .: "pactId" <*> o .: "step" <*> o .: "rollback" <*> o .: "data"
-          -- <*> o .: "proof"
   {-# INLINE parseJSON #-}
 
 instance J.Encode ContMsg where

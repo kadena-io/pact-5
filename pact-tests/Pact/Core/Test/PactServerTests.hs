@@ -46,6 +46,7 @@ import Control.Monad
 import Pact.Core.Names
 import Data.Maybe (isJust)
 import Control.Lens
+import Pact.Core.SPV (noSPVSupport)
 
 sendClient :: SendRequest -> ClientM SendResponse
 pollClient :: PollRequest -> ClientM PollResponse
@@ -73,7 +74,7 @@ tests =  withResource
     (pdb,db,stmt) <- unsafeCreateSqlitePactDb serialisePact_raw_spaninfo ":memory:"
     cache <- newLruHandle 100
     let
-      runtime = ServerRuntime pdb cache
+      runtime = ServerRuntime pdb cache noSPVSupport
       app = serve (Proxy @API) (server runtime)
     pure (app, db, stmt)
   rmEnv (_, db, stmt) =
