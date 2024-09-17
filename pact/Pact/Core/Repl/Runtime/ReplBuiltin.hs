@@ -325,7 +325,7 @@ begin' :: SpanInfo -> Maybe Text -> ReplM b (Maybe (TxId, Maybe Text))
 begin' info mt = do
   pdb <- useReplState (replEvalEnv . eePactDb)
   mode <- viewEvalEnv eeMode
-  mTxId <- liftDbFunction info (_pdbBeginTx pdb mode)
+  mTxId <- liftGasM info (_pdbBeginTx pdb mode)
   replTx .== ((,mt) <$> mTxId)
   return ((,mt) <$> mTxId)
 
@@ -345,7 +345,7 @@ commitTx :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
 commitTx info b cont handler _env = \case
   [] -> do
     pdb <- useReplState (replEvalEnv . eePactDb)
-    _txLog <- liftDbFunction info (_pdbCommitTx pdb)
+    _txLog <- liftGasM info (_pdbCommitTx pdb)
     emptyTxState
     useReplState replTx >>= \case
       Just tx -> do
@@ -359,7 +359,7 @@ rollbackTx :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
 rollbackTx info b cont handler _env = \case
   [] -> do
     pdb <- useReplState (replEvalEnv . eePactDb)
-    liftDbFunction info (_pdbRollbackTx pdb)
+    liftGasM info (_pdbRollbackTx pdb)
     emptyTxState
     useReplState replTx >>= \case
       Just tx -> do

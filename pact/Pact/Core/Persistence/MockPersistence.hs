@@ -9,9 +9,8 @@ module Pact.Core.Persistence.MockPersistence (
   )where
 
 
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad (unless)
-import Control.Exception.Safe
 import Control.Lens ((^?), (^.), ix, view)
 import Data.Maybe (isJust, fromMaybe, catMaybes)
 import Data.Map (Map)
@@ -28,8 +27,7 @@ import Pact.Core.DefPacts.Types (DefPactExec)
 import Pact.Core.Persistence
 import Pact.Core.Serialise
 import Pact.Core.StableEncoding
-
-import qualified Pact.Core.Errors as Errors
+import Pact.Core.Errors as Errors
 
 
 
@@ -136,7 +134,7 @@ mockPactDb serial = do
     , _pdbWrite = write pactTables
     , _pdbKeys = keys pactTables
     , _pdbCreateUserTable = createUsrTable pactTables
-    , _pdbBeginTx = beginTx pactTables
+    , _pdbBeginTx = liftIO . beginTx pactTables
     , _pdbCommitTx = commitTx pactTables
     , _pdbRollbackTx = rollbackTx pactTables
     }
@@ -154,10 +152,10 @@ mockPactDb serial = do
         tid <- readIORef ptTxId
         pure (Just tid)
 
-  commitTx PactTables{..} = readIORef ptRollbackState >>= \case
+  commitTx PactTables{..} = liftIO (readIORef ptRollbackState) >>= \case
     -- We are successfully in a transaction
     Just (PactTablesState em usr mods ks ns dp txl) -> case em of
-      Transactional -> do
+      Transactional -> liftIO $ do
         -- Reset the rollback state,
         -- increment to the next tx id, and return the
         -- tx logs for the transaction
@@ -165,7 +163,7 @@ mockPactDb serial = do
         txId <- atomicModifyIORef' ptTxId (\(TxId i) -> (TxId (succ i), TxId i))
         txLogQueue <- readIORef ptTxLogQueue
         pure $ reverse $ M.findWithDefault [] txId txLogQueue
-      Local -> do
+      Local -> liftIO $ do
         -- in local, we simply roll back all tables
         -- then and return the logs, then roll back the logs table
         writeIORef ptRollbackState Nothing
@@ -183,10 +181,10 @@ mockPactDb serial = do
         writeIORef ptTxLogQueue txl
         pure logs
     Nothing ->
-      throwIO (Errors.NotInTx "commit")
+      throwDbOpErrorGasM (Errors.NotInTx "commit")
 
-  rollbackTx PactTables{..} = readIORef ptRollbackState >>= \case
-    Just (PactTablesState _ usr mods ks ns dp txl) -> do
+  rollbackTx PactTables{..} = liftIO (readIORef ptRollbackState) >>= \case
+    Just (PactTablesState _ usr mods ks ns dp txl) -> liftIO $ do
       writeIORef ptRollbackState Nothing
       writeIORef ptModules mods
       writeIORef ptKeysets ks
@@ -194,7 +192,7 @@ mockPactDb serial = do
       writeIORef ptTxLogQueue txl
       writeIORef ptNamespaces ns
       writeIORef ptDefPact dp
-    Nothing -> throwIO (Errors.NotInTx "rollback")
+    Nothing -> throwDbOpErrorGasM (Errors.NotInTx "rollback")
 
 
   keys
@@ -218,7 +216,7 @@ mockPactDb serial = do
       let tblName = renderTableName tbl
       case M.lookup tblName r of
         Just t -> return (M.keys t)
-        Nothing -> throwIO (Errors.NoSuchTable tbl)
+        Nothing -> throwDbOpErrorGasM (Errors.NoSuchTable tbl)
     DDefPacts -> do
       MockSysTable r <- liftIO $ readIORef ptDefPact
       return $ DefPactId . _unRender <$> M.keys r
@@ -239,7 +237,7 @@ mockPactDb serial = do
         liftIO $ record tbls (TxLog "SYS:usertables" (_tableName tbl) (encodeStable uti))
         liftIO $ modifyIORef ptUser (\(MockUserTable m) -> MockUserTable (M.insert tblName mempty m))
         pure ()
-      Just _ -> liftIO $ throwIO (Errors.TableAlreadyExists tbl)
+      Just _ -> throwDbOpErrorGasM (TableAlreadyExists tbl)
 
 
   read'
@@ -257,9 +255,9 @@ mockPactDb serial = do
     DNamespaces ->
       readSysTable ptNamespaces k (Rendered . _namespaceName) _decodeNamespace
 
-  checkTable :: MonadIO m => Rendered TableName -> TableName -> MockUserTable -> m ()
-  checkTable tbl tn (MockUserTable r) = liftIO $ do
-    unless (isJust (M.lookup tbl r)) $ throwIO (Errors.NoSuchTable tn)
+  -- checkTable :: MonadIO m => Rendered TableName -> TableName -> MockUserTable -> m ()
+  checkTable tbl tn (MockUserTable r) = do
+    unless (isJust (M.lookup tbl r)) $ throwDbOpErrorGasM (Errors.NoSuchTable tn)
 
   write
     :: forall k v
@@ -289,7 +287,7 @@ mockPactDb serial = do
     case usrTables ^? ix tblName . ix k of
       Just bs -> case _decodeRowData serial bs of
         Just doc -> pure (Just (view document doc))
-        Nothing -> throwM $ Errors.RowReadDecodeFailure (_rowKey k)
+        Nothing -> throwDbOpErrorGasM $ RowReadDecodeFailure (_rowKey k)
       Nothing -> pure Nothing
 
   writeRowData
@@ -311,7 +309,7 @@ mockPactDb serial = do
           (\(MockUserTable m) -> (MockUserTable (M.adjust (M.insert k encodedData) tblName  m)))
       Insert -> do
         case M.lookup tblName usrTables >>= M.lookup k of
-          Just _ -> liftIO $ throwIO (Errors.RowFoundException tbl k)
+          Just _ -> throwDbOpErrorGasM (Errors.RowFoundError tbl k)
           Nothing -> do
             encodedData <- _encodeRowData serial v
             liftIO $ record pts (TxLog (toUserTable tbl) (k ^. rowKey) encodedData)
@@ -328,9 +326,9 @@ mockPactDb serial = do
               liftIO $ modifyIORef' ptUser $ \(MockUserTable mut) ->
                 MockUserTable (M.insertWith M.union tblName (M.singleton k encodedData) mut)
             Nothing ->
-              liftIO $ throwIO (Errors.RowReadDecodeFailure (_rowKey k))
+              throwDbOpErrorGasM (RowReadDecodeFailure (_rowKey k))
           Nothing ->
-            liftIO $ throwIO (Errors.NoRowFound tbl k)
+            throwDbOpErrorGasM (NoRowFound tbl k)
 
   readSysTable
     :: IORef (MockSysTable k v)
@@ -344,7 +342,7 @@ mockPactDb serial = do
       Just bs -> case decode serial bs of
         Just rd -> pure (Just (view document rd))
         Nothing ->
-          throwM (Errors.RowReadDecodeFailure (_unRender (renderKey rowkey)))
+          throwDbOpErrorGasM (RowReadDecodeFailure (_unRender (renderKey rowkey)))
       Nothing -> pure Nothing
   {-# INLINE readSysTable #-}
 

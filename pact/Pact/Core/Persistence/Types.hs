@@ -47,7 +47,7 @@ import Control.Lens
 import Data.Default
 import Data.Map.Strict(Map)
 import Control.DeepSeq
-import Control.Exception.Safe(MonadThrow)
+import Control.Exception.Safe
 import GHC.Generics
 import Data.Text(Text)
 import Data.Word(Word64)
@@ -203,7 +203,10 @@ newtype GasM b i a
   , MonadReader (GasEnv b i, i, [StackFrame i])
   , MonadError (PactError i)
   , MonadThrow
+  , MonadCatch
+  , MonadMask
   , MonadIO
+  , MonadFail
   )
 
 
@@ -218,9 +221,9 @@ data PactDb b i
   , _pdbWrite :: forall k v. WriteType -> Domain k v b i -> k -> v -> GasM b i ()
   , _pdbKeys :: forall k v. Domain k v b i -> GasM b i [k]
   , _pdbCreateUserTable :: TableName -> GasM b i ()
-  , _pdbBeginTx :: ExecutionMode -> IO (Maybe TxId)
-  , _pdbCommitTx :: IO [TxLog ByteString]
-  , _pdbRollbackTx :: IO ()
+  , _pdbBeginTx :: ExecutionMode -> GasM b i (Maybe TxId)
+  , _pdbCommitTx :: GasM b i [TxLog ByteString]
+  , _pdbRollbackTx :: GasM b i ()
   }
 
 instance NFData (PactDb b i) where

@@ -4,6 +4,7 @@
 
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 
 module Pact.Core.Persistence.SQLite (
   withSqlitePactDb,
@@ -172,42 +173,42 @@ initializePactDb serial db = do
     , _pdbWrite = write' serial db txId txLog stmtsCache
     , _pdbKeys = readKeys db stmtsCache
     , _pdbCreateUserTable = createUserTable db txLog stmtsCache
-    , _pdbBeginTx = beginTx txId db txLog
-    , _pdbCommitTx = commitTx txId db txLog
-    , _pdbRollbackTx = rollbackTx db txLog
+    , _pdbBeginTx = liftIO . beginTx txId db txLog
+    , _pdbCommitTx = liftIO $ commitTx txId db txLog
+    , _pdbRollbackTx = liftIO $ rollbackTx db txLog
     }, stmtsCache)
 
 readKeys :: forall k v b i. SQL.Database -> IORef StmtCache -> Domain k v b i -> GasM b i [k]
-readKeys db stmtCache = liftIO . \case
-  DKeySets -> withStmt (_tblReadKeys . _stmtKeyset <$> readIORef stmtCache) $ \stmt -> do
+readKeys db stmtCache = \case
+  DKeySets -> withStmt (_tblReadKeys . _stmtKeyset <$> liftIO (readIORef stmtCache)) $ \stmt -> do
     parsedKS <- fmap parseAnyKeysetName <$> collect stmt []
     case sequence parsedKS of
       Left _ -> fail "unexpected decoding"
       Right v -> pure v
 
-  DModules -> withStmt (_tblReadKeys . _stmtModules <$> readIORef stmtCache) $ \stmt ->
+  DModules -> withStmt (_tblReadKeys . _stmtModules <$> liftIO (readIORef stmtCache)) $ \stmt ->
     fmap parseModuleName <$> collect stmt [] >>= \mns -> case sequence mns of
       Nothing -> fail "unexpected decoding"
       Just mns' -> pure mns'
 
-  DDefPacts -> withStmt (_tblReadKeys . _stmtDefPact <$> readIORef stmtCache) $ \stmt ->
+  DDefPacts -> withStmt (_tblReadKeys . _stmtDefPact <$> liftIO (readIORef stmtCache)) $ \stmt ->
     fmap DefPactId <$> collect stmt []
 
-  DNamespaces -> withStmt (_tblReadKeys . _stmtNamespace <$> readIORef stmtCache) $ \stmt ->
+  DNamespaces -> withStmt (_tblReadKeys . _stmtNamespace <$> liftIO (readIORef stmtCache)) $ \stmt ->
     fmap NamespaceName <$> collect stmt []
 
 
   DUserTables tbl -> do
-    tblCache <- _stmtUserTbl <$> readIORef stmtCache
+    tblCache <- _stmtUserTbl <$> liftIO (readIORef stmtCache)
     stmt <- case M.lookup tbl tblCache of
-      Nothing -> addUserTable db stmtCache tbl
+      Nothing -> liftIO $ addUserTable db stmtCache tbl
       Just s -> pure s
     withStmt (pure $ _tblReadKeys stmt) $ \s -> fmap RowKey <$> collect s []
   where
-    collect stmt acc = SQL.step stmt >>= \case
-      SQL.Done -> SQL.reset stmt >> pure acc
+    collect stmt acc = liftIO (SQL.step stmt) >>= \case
+      SQL.Done -> liftIO (SQL.reset stmt) >> pure acc
       SQL.Row -> do
-        [SQL.SQLText value] <- SQL.columns stmt
+        [SQL.SQLText value] <- liftIO $ SQL.columns stmt
         collect stmt (value:acc)
 
 
@@ -278,16 +279,15 @@ write' serial db txId txLog stmtCache wt domain k v =
     DUserTables tbl -> checkInsertOk tbl k >>= \case
       Nothing -> do
         encoded <- _encodeRowData serial v
-        liftIO $ do
-          tblCache <-_stmtUserTbl <$> readIORef stmtCache
-          tblStmts <- case M.lookup tbl tblCache of
-            Nothing -> addUserTable db stmtCache tbl
-            Just c -> pure c
-          withStmt (pure $ _tblInsert tblStmts) $ \stmt -> do
-              let RowKey k' = k
-              TxId i <- readIORef txId
-              SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-              doWrite stmt (TxLog (renderDomain domain) k' encoded:)
+        tblCache <-_stmtUserTbl <$> liftIO (readIORef stmtCache)
+        tblStmts <- case M.lookup tbl tblCache of
+          Nothing -> liftIO $ addUserTable db stmtCache tbl
+          Just c -> pure c
+        withStmt (pure $ _tblInsert tblStmts) $ \stmt -> do
+            let RowKey k' = k
+            TxId i <- liftIO (readIORef txId)
+            liftIO $ SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
+            doWrite stmt (TxLog (renderDomain domain) k' encoded:)
 
       Just old -> do
         let
@@ -295,69 +295,69 @@ write' serial db txId txLog stmtCache wt domain k v =
           RowData v' = v
           new = RowData (M.union v' old')
         encoded <- _encodeRowData serial new
-        liftIO $ do
-          tblCache <-_stmtUserTbl <$> readIORef stmtCache
-          tblStmts <- case M.lookup tbl tblCache of
-            Nothing -> addUserTable db stmtCache tbl
-            Just c -> pure c
-          withStmt (pure $ _tblInsertOrUpdate tblStmts) $ \stmt -> do
-            let RowKey k' = k
-            TxId i <- readIORef txId
-            SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-            doWrite stmt (TxLog (renderDomain domain) k' encoded:)
+        tblCache <-_stmtUserTbl <$> liftIO (readIORef stmtCache)
+        tblStmts <- case M.lookup tbl tblCache of
+          Nothing -> liftIO $ addUserTable db stmtCache tbl
+          Just c -> pure c
+        withStmt (pure $ _tblInsertOrUpdate tblStmts) $ \stmt -> do
+          let RowKey k' = k
+          TxId i <- liftIO $ readIORef txId
+          liftIO $ SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
+          doWrite stmt (TxLog (renderDomain domain) k' encoded:)
 
-    DKeySets -> liftIO $ withStmt (_tblInsertOrUpdate . _stmtKeyset <$> readIORef stmtCache) $ \stmt -> do
+    DKeySets -> withStmt (_tblInsertOrUpdate . _stmtKeyset <$> liftIO (readIORef stmtCache)) $ \stmt -> do
       let encoded = _encodeKeySet serial v
-      TxId i <- readIORef txId
-      SQL.clearBindings stmt
-      SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderKeySetName k), SQL.SQLBlob encoded]
+      TxId i <- liftIO $ readIORef txId
+      liftIO $ SQL.clearBindings stmt
+      liftIO $ SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderKeySetName k), SQL.SQLBlob encoded]
       doWrite stmt (TxLog (renderDomain domain) (renderKeySetName k) encoded:)
 
-    DModules -> liftIO $ withStmt (_tblInsertOrUpdate . _stmtModules <$> readIORef stmtCache) $ \stmt -> do
+    DModules -> withStmt (_tblInsertOrUpdate . _stmtModules <$> liftIO (readIORef stmtCache)) $ \stmt -> do
       let encoded = _encodeModuleData serial v
-      TxId i <- readIORef txId
-      SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderModuleName k), SQL.SQLBlob encoded]
+      TxId i <- liftIO $ readIORef txId
+      liftIO $ SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderModuleName k), SQL.SQLBlob encoded]
       doWrite stmt (TxLog (renderDomain domain) (renderModuleName k) encoded:)
 
-    DDefPacts -> liftIO $ withStmt (_tblInsertOrUpdate . _stmtDefPact <$> readIORef stmtCache) $ \stmt -> do
+    DDefPacts -> withStmt (_tblInsertOrUpdate . _stmtDefPact <$> liftIO (readIORef stmtCache)) $ \stmt -> do
        let encoded = _encodeDefPactExec serial v
            DefPactId k' = k
-       TxId i <- readIORef txId
-       SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
+       TxId i <- liftIO (readIORef txId)
+       liftIO $ SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
        doWrite stmt (TxLog (renderDomain domain) k' encoded:)
 
     DNamespaces ->
-      liftIO $ withStmt (_tblInsertOrUpdate . _stmtNamespace <$> readIORef stmtCache) $ \stmt -> do
+      withStmt (_tblInsertOrUpdate . _stmtNamespace <$> liftIO (readIORef stmtCache)) $ \stmt -> do
       let encoded = _encodeNamespace serial v
           NamespaceName k' = k
-      TxId i <- readIORef txId
-      SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
-      doWrite stmt  (TxLog (renderDomain domain) k' encoded:)
+      TxId i <- liftIO (readIORef txId)
+      liftIO $ SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText k', SQL.SQLBlob encoded]
+      doWrite stmt (TxLog (renderDomain domain) k' encoded:)
   where
     checkInsertOk tbl rk = do
       curr <- read' serial db stmtCache (DUserTables tbl) rk
       case (curr, wt) of
         (Nothing, Insert) -> return Nothing
-        (Just _, Insert) -> throwM (E.RowFoundException tbl rk)
+        (Just _, Insert) -> throwDbOpErrorGasM (E.RowFoundError tbl rk)
         (Nothing, Write) -> return Nothing
         (Just old, Write) -> return $ Just old
         (Just old, Update) -> return $ Just old
-        (Nothing, Update) -> throwM (E.NoRowFound tbl rk)
+        (Nothing, Update) -> throwDbOpErrorGasM (E.NoRowFound tbl rk)
 
-    doWrite stmt txlog = Direct.stepNoCB stmt >>= \case
-          Left _ ->  throwIO E.WriteException
+    doWrite :: Direct.Statement -> ([TxLog ByteString] -> [TxLog ByteString]) -> GasM b i ()
+    doWrite stmt txlog = liftIO (Direct.stepNoCB stmt) >>= \case
+          Left _ -> throwDbOpErrorGasM E.WriteError
           Right res
-            | res == SQL.Done -> do
+            | res == SQL.Done -> liftIO $ do
                 SQL.reset stmt
                 modifyIORef' txLog txlog
-            | otherwise -> throwIO E.MultipleRowsReturnedFromSingleWrite
+            | otherwise -> throwDbOpErrorGasM E.MultipleRowsReturnedFromSingleWrite
 
 read' :: forall k v b i. PactSerialise b i -> SQL.Database -> IORef StmtCache -> Domain k v b i -> k -> GasM b i (Maybe v)
 read' serial db stmtCache domain k = case domain of
-  DKeySets -> liftIO $ withStmt (_tblReadValue . _stmtKeyset <$> readIORef stmtCache) $
+  DKeySets -> withStmt (_tblReadValue . _stmtKeyset <$> liftIO (readIORef stmtCache)) $
     doRead (renderKeySetName k) (\v -> pure (view document <$> _decodeKeySet serial v))
 
-  DModules -> liftIO $ withStmt (_tblReadValue . _stmtModules <$> readIORef stmtCache) $
+  DModules -> withStmt (_tblReadValue . _stmtModules <$> liftIO (readIORef stmtCache)) $
     doRead (renderModuleName k) (\v -> pure (view document <$> _decodeModuleData serial v))
 
   DUserTables tbl -> do
@@ -365,19 +365,19 @@ read' serial db stmtCache domain k = case domain of
     stmt <- case M.lookup tbl tblCache of
       Nothing -> liftIO (addUserTable db stmtCache tbl)
       Just s -> pure s
-    liftIO $ withStmt (pure $ _tblReadValue stmt) $ doRead (_rowKey k) (\v -> pure (view document <$> _decodeRowData serial v))
+    withStmt (pure $ _tblReadValue stmt) $ doRead (_rowKey k) (\v -> pure (view document <$> _decodeRowData serial v))
 
   DDefPacts -> do
-    liftIO $ withStmt (_tblReadValue . _stmtDefPact <$> readIORef stmtCache) $
+    withStmt (_tblReadValue . _stmtDefPact <$> liftIO (readIORef stmtCache)) $
       doRead (renderDefPactId k) (\v -> pure (view document <$> _decodeDefPactExec serial v))
 
   DNamespaces ->
-    liftIO $ withStmt (_tblReadValue . _stmtNamespace <$> readIORef stmtCache)
+    withStmt (_tblReadValue . _stmtNamespace <$> liftIO (readIORef stmtCache))
     (doRead (_namespaceName k) (\v -> pure (view document <$> _decodeNamespace serial v)))
 
   where
-    doRead :: forall a. Text -> (ByteString -> IO (Maybe a)) -> SQL.Statement -> IO (Maybe a)
-    doRead k' f stmt = do
+    doRead :: forall a. Text -> (ByteString -> IO (Maybe a)) -> SQL.Statement -> GasM b i (Maybe a)
+    doRead k' f stmt = liftIO $ do
        SQL.bind stmt [SQL.SQLText k']
        SQL.step stmt >>= \case
          SQL.Done -> do
@@ -390,5 +390,5 @@ read' serial db stmtCache domain k = case domain of
            f value
 
 -- -- Utility functions
-withStmt :: IO SQL.Statement -> (SQL.Statement -> IO a) -> IO a
-withStmt stmt = bracket stmt SQL.clearBindings
+withStmt :: GasM b i SQL.Statement -> (SQL.Statement -> GasM b i a) -> GasM b i a
+withStmt stmt = bracket stmt (liftIO . SQL.clearBindings)

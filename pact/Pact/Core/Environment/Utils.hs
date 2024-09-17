@@ -26,7 +26,6 @@ import Control.Lens
 import Data.IORef
 import Control.Applicative((<|>))
 import Control.Monad.Except
-import Control.Exception.Safe
 import Control.Monad.Reader hiding (MonadIO(..))
 import Control.Monad.IO.Class(MonadIO(..))
 import Data.Text(Text)
@@ -78,10 +77,8 @@ liftDbFunction
   :: i
   -> IO a
   -> EvalM e b i a
-liftDbFunction info action = do
-  liftIO (try action) >>= \case
-    Left dbopErr -> throwExecutionError info (DbOpFailure dbopErr)
-    Right e -> pure e
+liftDbFunction _ action = liftIO action
+
 
 throwUserRecoverableError :: i -> UserRecoverableError -> EvalM e b i a
 throwUserRecoverableError i err = do

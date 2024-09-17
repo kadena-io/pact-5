@@ -5,7 +5,7 @@
 {-# LANGUAGE ViewPatterns #-}
 
 
-module Pact.Core.Syntax.Lexer(lexer, runLexerIO) where
+module Pact.Core.Syntax.Lexer(lexer) where
 
 import Control.Monad.State.Strict
 import Control.Exception(throwIO)
@@ -157,6 +157,4 @@ scanTokens = scan' []
 lexer :: Text -> Either PactErrorI [PosToken]
 lexer bs = runLexerT scanTokens bs
 
-runLexerIO :: Text -> IO [PosToken]
-runLexerIO bs = either throwIO pure (lexer bs)
 }

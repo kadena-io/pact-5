@@ -93,10 +93,17 @@ deriveConstrInfo ty = reify ty >>= \case
   mkConstrEntry ix (NormalC n _) =
     let nraw = nameBase n
     in pure $ mkConstrInfoExp nraw ix
+  mkConstrEntry ix (RecC n _) =
+    let nraw = nameBase n
+    in pure $ mkConstrInfoExp nraw ix
   mkConstrEntry _ _ = fail "Cannot create constrInfo from non-simple constructor"
 
   mkConstrFun :: Integer -> Con -> Q Clause
   mkConstrFun ix (NormalC n bangTy) =
+    let nraw = nameBase n
+        body = NormalB (mkConstrInfoExp nraw ix)
+    in pure $ Clause [ConP n [] (const WildP <$> bangTy)] body []
+  mkConstrFun ix (RecC n bangTy) =
     let nraw = nameBase n
         body = NormalB (mkConstrInfoExp nraw ix)
     in pure $ Clause [ConP n [] (const WildP <$> bangTy)] body []

@@ -3,4 +3,5 @@
 {"conName":"PEDesugarError","conIndex":"2"}
 {"conName":"PEExecutionError","conIndex":"3"}
 {"conName":"PEUserRecoverableError","conIndex":"4"}
+{"conName":"PEVerifierError","conIndex":"5"}
 

@@ -614,9 +614,9 @@ readOnlyEnv e
              , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
              , _pdbKeys = \_ -> dbOpDisallowed
              , _pdbCreateUserTable = \_ -> dbOpDisallowed
-             , _pdbBeginTx = \_ -> dbOpDisallowedIO
-             , _pdbCommitTx = dbOpDisallowedIO
-             , _pdbRollbackTx = dbOpDisallowedIO
+             , _pdbBeginTx = \_ -> dbOpDisallowed
+             , _pdbCommitTx = dbOpDisallowed
+             , _pdbRollbackTx = dbOpDisallowed
              }
       in set cePactDb newPactdb e
 
@@ -631,9 +631,9 @@ sysOnlyEnv e
          , _pdbWrite = \_ _ _ _ -> dbOpDisallowed
          , _pdbKeys = const dbOpDisallowed
          , _pdbCreateUserTable = \_ -> dbOpDisallowed
-         , _pdbBeginTx = const dbOpDisallowedIO
-         , _pdbCommitTx = dbOpDisallowedIO
-         , _pdbRollbackTx = dbOpDisallowedIO
+         , _pdbBeginTx = const dbOpDisallowed
+         , _pdbCommitTx = dbOpDisallowed
+         , _pdbRollbackTx = dbOpDisallowed
          }
   in set cePactDb newPactdb e
   where
