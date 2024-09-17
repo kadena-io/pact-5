@@ -233,7 +233,6 @@ data LexerError
 
 instance NFData LexerError
 
--- instance Exception LexerError
 
 instance Pretty LexerError where
   pretty = ("Lexical Error: " <>) . \case
@@ -261,7 +260,6 @@ data ParseError
 
 instance NFData ParseError
 
--- instance Exception ParseError
 
 instance Pretty ParseError where
   pretty = \case
@@ -333,7 +331,6 @@ data DesugarError
 
 instance NFData DesugarError
 
--- instance Exception DesugarError
 
 instance Pretty DesugarError where
   pretty = \case
@@ -866,8 +863,6 @@ instance Pretty EvalError where
     UnknownException msg ->
       "Unknown exception: " <> pretty msg
 
--- instance Exception EvalError
-
 data DbOpError
   = WriteError
   | RowReadDecodeFailure Text
@@ -882,8 +877,6 @@ data DbOpError
   deriving (Show, Eq, Typeable, Generic)
 
 instance NFData DbOpError
-
--- instance Exception DbOpError
 
 instance Pretty DbOpError where
   pretty = \case
@@ -931,7 +924,6 @@ data UserRecoverableError
   deriving (Show, Eq, Generic, Typeable)
 
 instance NFData UserRecoverableError
--- instance Exception UserRecoverableError
 
 instance Pretty UserRecoverableError where
   pretty = \case
@@ -1009,7 +1001,7 @@ instance Pretty HyperlaneDecodeError where
     HyperlaneDecodeErrorParseRecipient -> "Could not parse recipient into a guard"
 
 data VerifierError
-  = VerifierError { _veriferError :: Text }
+  = VerifierError { _verifierError :: Text }
   deriving (Eq, Ord, Show, Generic)
 
 instance NFData VerifierError
@@ -1060,8 +1052,6 @@ viewErrorStack = \case
   PEExecutionError _ stack _ -> stack
   PEUserRecoverableError _ stack _ -> stack
   _ -> []
-
--- instance (Show info, Typeable info) => Exception (PactError info)
 
 deriveConstrInfo ''VerifierError
 deriveConstrInfo ''LexerError
