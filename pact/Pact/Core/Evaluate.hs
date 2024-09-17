@@ -67,7 +67,6 @@ import qualified Pact.Core.IR.Eval.Direct.CoreBuiltin as Direct
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
-import Control.Monad.IO.Class
 import qualified Data.Text as T
 
 type Eval = EvalM ExecRuntime CoreBuiltin Info
@@ -324,10 +323,9 @@ evalWithinTx'
   -> Eval a
   -> IO (Either (PactError Info) (a, [TxLog ByteString], Maybe TxId), EvalState CoreBuiltin Info)
 evalWithinTx' ee es action = do
-      txid <-_pdbBeginTx pdb mode
       (result, newState) <- runEvalM (ExecEnv ee) es runAction
       -- maybe might want to decode using serialisepact
-      return ((\(res, logs) -> (res, logs, txid)) <$> result, newState)
+      return (result, newState)
     where
     pdb = view eePactDb ee
     mode = view eeMode ee
@@ -335,13 +333,15 @@ evalWithinTx' ee es action = do
     -- thrown PactErrors, and runs rollback in the case of an exception
     -- or error.
     runAction =
-      let act = tryAny action >>= \case
+      let act = tryAny ((,) <$> liftGasM def (_pdbBeginTx pdb mode) <*> action) >>= \case
             Left ex -> throwError $
               PEExecutionError (UnknownException (T.pack $ displayException ex)) [] def
             Right v -> pure v
       in tryError act >>= \case
-        Left err -> liftIO (_pdbRollbackTx pdb) *> throwError err
-        Right v -> (v,) <$> liftIO (_pdbCommitTx pdb)
+        Left err -> liftGasM def (_pdbRollbackTx pdb) *> throwError err
+        Right (txid, res) -> do
+          logs <- liftGasM def (_pdbCommitTx pdb)
+          pure (res, logs, txid)
 
 -- | Runs only compilation pipeline
 compileOnly :: RawCode -> Either (PactError Info) [Lisp.TopLevel Info]

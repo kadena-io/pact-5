@@ -221,6 +221,7 @@ sendDiagnostics nuri mv content = liftIO (setupAndProcessFile nuri content) >>= 
       PEDesugarError{} -> "Desugar"
       PEExecutionError{} -> "Execution"
       PEUserRecoverableError{} -> "Execution"
+      PEVerifierError{} -> "Verifier"
 
 setupAndProcessFile
   :: NormalizedUri

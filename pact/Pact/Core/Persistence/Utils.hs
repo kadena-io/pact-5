@@ -4,7 +4,6 @@ module Pact.Core.Persistence.Utils
   ( evalWrite
   , evalCreateUserTable
   , dbOpDisallowed
-  , dbOpDisallowedIO
   , liftGasM
   , ignoreGas
   , chargeGasM
@@ -14,10 +13,10 @@ module Pact.Core.Persistence.Utils
   , getModule
   , getModuleMember
   , getModuleMemberWithHash
+  , throwDbOpErrorGasM
   ) where
 
 import Control.Lens
-import Control.Exception.Safe
 import Control.Monad.Reader
 import Data.IORef
 import qualified Data.Map.Strict as M
@@ -44,9 +43,10 @@ dbOpDisallowed = do
   (_, info, stack) <- ask
   throwError $ PEExecutionError (DbOpFailure OpDisallowed) stack info
 
-dbOpDisallowedIO :: IO a
-dbOpDisallowedIO = do
-  throwIO OpDisallowed
+throwDbOpErrorGasM :: DbOpError -> GasM b i a
+throwDbOpErrorGasM opex = do
+  (_, i, stack) <- ask
+  throwError (PEExecutionError (DbOpFailure opex) stack i)
 
 chargeGasM :: GasArgs b -> GasM b i ()
 chargeGasM gasArgs = do
@@ -129,11 +129,10 @@ liftGasM :: i -> GasM b i a -> EvalM e b i a
 liftGasM info action = do
   gasEnv <- viewEvalEnv eeGasEnv
   stack <- use esStack
-  caught <- liftIO $ try @IO @DbOpException (runExceptT (runReaderT (runGasM action) (gasEnv, info, stack)))
+  caught <- liftIO $ runExceptT (runReaderT (runGasM action) (gasEnv, info, stack))
   case caught of
-    Right (Right r) -> pure r
-    Right (Left gasErr) -> throwError gasErr
-    Left err -> throwExecutionError info (DbOpFailure err)
+    Right r -> pure r
+    Left gasErr -> throwError gasErr
 
 -- | Run a 'GasM' computation with an infinite gas limit.
 ignoreGas

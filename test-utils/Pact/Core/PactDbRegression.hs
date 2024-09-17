@@ -28,16 +28,16 @@ runPactDbRegression pdb = do
   let
     user1 = "user1"
     usert = TableName user1 (ModuleName "someModule" Nothing)
-  _txId1 <- _pdbBeginTx pdb Transactional
+  _txId1 <- ignoreGas def $ _pdbBeginTx pdb Transactional
   ignoreGas def $ _pdbCreateUserTable pdb usert
 
-  txs1 <- _pdbCommitTx pdb
+  txs1 <- ignoreGas def $ _pdbCommitTx pdb
   let rdEnc = encodeStable (UserTableInfo (_tableModuleName usert))
   assertEqual "output of commit" txs1 [ TxLog "SYS:usertables" "user1" rdEnc ]
 
 
   --  Begin tx
-  _ <- _pdbBeginTx pdb Transactional >>= \case
+  _ <- ignoreGas def $ _pdbBeginTx pdb Transactional >>= \case
     Nothing -> error "expected txid"
     Just t -> pure t
   let
@@ -84,7 +84,7 @@ runPactDbRegression pdb = do
     Just r -> pure r
   assertEqual "module should be identical to its saved/recalled value" md md'
 
-  txs2 <- _pdbCommitTx pdb
+  txs2 <- ignoreGas def $ _pdbCommitTx pdb
   -- Tx logs should be emitted in order
   flip (assertEqual "output of commit") txs2
     [ TxLog "someModule_user1" "key1" rowEnc
@@ -94,7 +94,7 @@ runPactDbRegression pdb = do
     ]
 
   -- begin tx
-  _ <- _pdbBeginTx pdb Transactional
+  _ <- ignoreGas def $ _pdbBeginTx pdb Transactional
 
   ignoreGas def $ _pdbWrite pdb Insert (DUserTables usert) (RowKey "key2") row
   r1 <- ignoreGas def $ _pdbRead pdb (DUserTables usert) (RowKey "key2") >>= \case
@@ -106,15 +106,15 @@ runPactDbRegression pdb = do
   assertEqual "keys pre-rollback [key1, key2]" [RowKey "key1", RowKey "key2"] rkeys
 
   -- Roll back tx2
-  _pdbRollbackTx pdb
+  ignoreGas def $ _pdbRollbackTx pdb
 
-  _ <- _pdbBeginTx pdb Transactional
+  _ <- ignoreGas def $ _pdbBeginTx pdb Transactional
   r2 <- ignoreGas def $ _pdbRead pdb (DUserTables usert) (RowKey "key2")
   assertEqual "rollback erases key2" Nothing r2
 
   rkeys2 <- ignoreGas def $ _pdbKeys pdb (DUserTables usert)
   assertEqual "keys post-rollback [key1]" [RowKey "key1"] rkeys2
-  _ <- _pdbCommitTx pdb
+  _ <- ignoreGas def $ _pdbCommitTx pdb
 
   return ()
 

@@ -20,7 +20,7 @@ module Pact.Core.Errors
  , EvalError(..)
  , PactError(..)
  , ArgTypeError(..)
- , DbOpException(..)
+ , DbOpError(..)
  , HyperlaneError(..)
  , HyperlaneDecodeError(..)
  , peInfo
@@ -35,6 +35,7 @@ module Pact.Core.Errors
  , LegacyPactError(..)
  , LegacyPactErrorType(..)
  , PactErrorCompat(..)
+ , VerifierError(..)
  , _PELexerError
  , _PEParseError
  , _PEDesugarError
@@ -187,7 +188,6 @@ module Pact.Core.Errors
 
 import Control.Lens hiding (ix)
 import Control.Monad
-import Control.Exception
 import Control.Applicative
 import Data.Bits
 import Data.Foldable(find)
@@ -233,7 +233,7 @@ data LexerError
 
 instance NFData LexerError
 
-instance Exception LexerError
+-- instance Exception LexerError
 
 instance Pretty LexerError where
   pretty = ("Lexical Error: " <>) . \case
@@ -261,7 +261,7 @@ data ParseError
 
 instance NFData ParseError
 
-instance Exception ParseError
+-- instance Exception ParseError
 
 instance Pretty ParseError where
   pretty = \case
@@ -333,7 +333,7 @@ data DesugarError
 
 instance NFData DesugarError
 
-instance Exception DesugarError
+-- instance Exception DesugarError
 
 instance Pretty DesugarError where
   pretty = \case
@@ -570,7 +570,7 @@ data EvalError
   -- ^ DefPact missmatch
   | CannotUpgradeInterface ModuleName
   -- ^ Interface cannot be upgrade
-  | DbOpFailure DbOpException
+  | DbOpFailure DbOpError
   -- ^ Db operation failure
   | DynNameIsNotModRef Text
   -- ^ Dynamic name does not point to a module reference
@@ -866,12 +866,12 @@ instance Pretty EvalError where
     UnknownException msg ->
       "Unknown exception: " <> pretty msg
 
-instance Exception EvalError
+-- instance Exception EvalError
 
-data DbOpException
-  = WriteException
+data DbOpError
+  = WriteError
   | RowReadDecodeFailure Text
-  | RowFoundException TableName RowKey
+  | RowFoundError TableName RowKey
   | NoRowFound TableName RowKey
   | NoSuchTable TableName
   | TableAlreadyExists TableName
@@ -881,17 +881,17 @@ data DbOpException
   | MultipleRowsReturnedFromSingleWrite
   deriving (Show, Eq, Typeable, Generic)
 
-instance NFData DbOpException
+instance NFData DbOpError
 
-instance Exception DbOpException
+-- instance Exception DbOpError
 
-instance Pretty DbOpException where
+instance Pretty DbOpError where
   pretty = \case
-    WriteException ->
+    WriteError ->
       "Error found while writing value"
     RowReadDecodeFailure rk ->
       "Failed to deserialize but found value at key:" <> pretty rk
-    RowFoundException tn rk ->
+    RowFoundError tn rk ->
       "Value already found while in Insert mode in table" <+> pretty tn <+> "at key" <+> dquotes (pretty rk)
     NoRowFound tn rk ->
       "No row found during update in table" <+> pretty tn <+> "at key" <+> pretty rk
@@ -931,7 +931,7 @@ data UserRecoverableError
   deriving (Show, Eq, Generic, Typeable)
 
 instance NFData UserRecoverableError
-instance Exception UserRecoverableError
+-- instance Exception UserRecoverableError
 
 instance Pretty UserRecoverableError where
   pretty = \case
@@ -1008,14 +1008,23 @@ instance Pretty HyperlaneDecodeError where
     HyperlaneDecodeErrorBinary -> "Decoding error: binary decoding failed"
     HyperlaneDecodeErrorParseRecipient -> "Could not parse recipient into a guard"
 
+data VerifierError
+  = VerifierError { _veriferError :: Text }
+  deriving (Eq, Ord, Show, Generic)
+
+instance NFData VerifierError
+
+instance Pretty VerifierError where
+  pretty (VerifierError v) =
+    "Error during verifier execution: " <> pretty v
+
 data PactError info
   = PELexerError LexerError info
   | PEParseError ParseError info
   | PEDesugarError DesugarError info
-  -- | PETypecheckError TypecheckError info
-  -- | PEOverloadError OverloadError info
   | PEExecutionError EvalError [StackFrame info] info
   | PEUserRecoverableError UserRecoverableError [StackFrame info] info
+  | PEVerifierError VerifierError info
   deriving (Eq, Show, Functor, Generic)
 
 instance NFData info => NFData (PactError info)
@@ -1029,6 +1038,7 @@ instance Pretty (PactError info) where
       pretty e
     PEUserRecoverableError e _ _ ->
       pretty e
+    PEVerifierError e _ -> pretty e
 
 peInfo :: Lens (PactError info) (PactError info) info info
 peInfo f = \case
@@ -1042,6 +1052,8 @@ peInfo f = \case
     PEExecutionError ee stack <$> f info
   PEUserRecoverableError ee stack info ->
     PEUserRecoverableError ee stack <$> f info
+  PEVerifierError err info ->
+    PEVerifierError err <$> f info
 
 viewErrorStack :: PactError info -> [StackFrame info]
 viewErrorStack = \case
@@ -1049,8 +1061,9 @@ viewErrorStack = \case
   PEUserRecoverableError _ stack _ -> stack
   _ -> []
 
-instance (Show info, Typeable info) => Exception (PactError info)
+-- instance (Show info, Typeable info) => Exception (PactError info)
 
+deriveConstrInfo ''VerifierError
 deriveConstrInfo ''LexerError
 deriveConstrInfo ''ParseError
 deriveConstrInfo ''DesugarError
@@ -1138,6 +1151,7 @@ pactErrorToErrorCode pe = let
     PEDesugarError e _ -> constrIndex e
     PEExecutionError e _ _ -> constrIndex e
     PEUserRecoverableError e _ _ -> constrIndex e
+    PEVerifierError e _ -> constrIndex e
 
 
 data PrettyErrorCode info
@@ -1178,6 +1192,7 @@ prettyErrorCode (PactErrorCode (ErrorCode ec) i) =
     "PEDesugarError" -> getCtorName causeTag (Proxy :: Proxy DesugarError)
     "PEExecutionError" -> getCtorName causeTag (Proxy :: Proxy EvalError)
     "PEUserRecoverableError" -> getCtorName causeTag (Proxy :: Proxy UserRecoverableError)
+    "PEVerifierError" -> getCtorName causeTag (Proxy :: Proxy VerifierError)
     _ -> "UNKNOWN_CODE"
 
 makePrisms ''PactError

@@ -10,7 +10,6 @@ module Pact.Core.GasModel.ContractBench where
 import Control.Lens
 import Control.Monad
 import Criterion
-import Control.Exception
 import Data.Text(Text)
 import Data.Default
 import System.FilePath
@@ -221,8 +220,8 @@ deepLetTXRaw n =
     , let ncurr = T.pack (show curr)]
   lastVar = "x" <> T.pack (show n)
 
-getRightIO :: Exception e => Either e a -> IO a
-getRightIO = either throwIO pure
+getRightIO :: Show e => Either e a -> IO a
+getRightIO = either (error . show) pure
 
 resetEEGas :: EvalEnv b i -> IO ()
 resetEEGas ee =
@@ -241,7 +240,7 @@ runEvalTx title termToCompile pdb signers envdata interp =
     (getRightIO =<<) $ runEvalMResult (ExecEnv ee) es (eval interp PImpure term)
     where
     mkTerm = do
-      () <$ _pdbBeginTx pdb Transactional
+      _ <- ignoreGas def $ _pdbBeginTx pdb Transactional
       ee <- setupBenchEvalEnv pdb signers envdata
       -- note, we will return this eval state, as it definitely contains the loaded coin contract here.
       (eterm, es) <- runEvalM (ExecEnv ee) def $ do
@@ -250,7 +249,7 @@ runEvalTx title termToCompile pdb signers envdata interp =
       term <- getRightIO eterm
       pure (term, ee, def {_esLoaded = _esLoaded es})
     doRollback _ = do
-      _pdbRollbackTx pdb
+      ignoreGas def $ _pdbRollbackTx pdb
 
 runEvalDesugarTx
   :: String
@@ -267,13 +266,13 @@ runEvalDesugarTx title termToCompile pdb signers envdata interp =
       eval interp PImpure term
     where
     mkTerm = do
-      () <$ _pdbBeginTx pdb Transactional
+      _ <- ignoreGas def $ _pdbBeginTx pdb Transactional
       ee <- setupBenchEvalEnv pdb signers envdata
       -- note, we will return this eval state, as it definitely contains the loaded coin contract here.
       pterm <- getRightIO $ liftEither $ parseOnlyExpr termToCompile
       pure (pterm, ee)
     doRollback _ = do
-      _pdbRollbackTx pdb
+      ignoreGas def $ _pdbRollbackTx pdb
 
 -- | Run A benchmark of pure code only, no db interactions.
 --   Generally good for
@@ -357,7 +356,7 @@ runCoinTransferCreateTxDesugar pdb sender receiver interp interpName =
       <> " using: "
       <> interpName
     mkTerm = do
-      () <$ _pdbBeginTx pdb Transactional
+      _ <- ignoreGas def $ _pdbBeginTx pdb Transactional
       let ks = M.fromList [(Field "ks", mkKs (pubKeyFromSender receiver))]
       ee <- setupBenchEvalEnv pdb (transferSigners sender receiver) (PObject ks)
       let termText = coinTransferCreateTxRaw (kColonFromSender sender) (kColonFromSender receiver) "ks"
@@ -365,7 +364,7 @@ runCoinTransferCreateTxDesugar pdb sender receiver interp interpName =
       eterm <- getRightIO $ parseOnlyExpr termText
       pure (eterm, ee)
     doRollback _ = do
-      _pdbRollbackTx pdb
+      ignoreGas def $ _pdbRollbackTx pdb
 
 runCoinTransferTxDesugar
   :: PactDb CoreBuiltin SpanInfo
@@ -427,11 +426,11 @@ allBenchmarks = do
     ]
   mkPactDb = do
     pdb <- mockPactDb serialisePact_raw_spaninfo
-    _ <- _pdbBeginTx pdb Transactional
+    _ <- ignoreGas def $ _pdbBeginTx pdb Transactional
     _ <- setupCoinTxs pdb
-    _ <- _pdbCommitTx pdb
-    _ <- _pdbBeginTx pdb Transactional
-    _ <- _pdbCommitTx pdb
+    _ <- ignoreGas def $ _pdbCommitTx pdb
+    _ <- ignoreGas def $ _pdbBeginTx pdb Transactional
+    _ <- ignoreGas def $ _pdbCommitTx pdb
     pure pdb
 
 unsafeModuleHash :: Text -> Hash

@@ -10,7 +10,6 @@ module Main where
 
 import Control.Lens
 import Control.Monad
-import Control.Exception
 import Data.Text(Text)
 import Data.Default
 import System.FilePath
@@ -218,8 +217,8 @@ deepLetTXRaw n =
     , let ncurr = T.pack (show curr)]
   lastVar = "x" <> T.pack (show n)
 
-getRightIO :: Exception e => Either e a -> IO a
-getRightIO = either throwIO pure
+getRightIO :: Either (PactError SpanInfo) b -> IO b
+getRightIO = either (error . show) pure
 
 resetEEGas :: EvalEnv b i -> IO ()
 resetEEGas ee =
@@ -232,10 +231,10 @@ transferSigners sender receiver =
 
 _testCoinTransfer :: IO ()
 _testCoinTransfer = withSqlitePactDb serialisePact_raw_spaninfo (T.pack benchmarkSqliteFile) $ \pdb -> do
-  _ <- _pdbBeginTx pdb Transactional
+  _ <- ignoreGas def $ _pdbBeginTx pdb Transactional
   p <- setupCoinTxs pdb
   print p
-  _ <- _pdbCommitTx pdb *> _pdbBeginTx pdb Transactional
+  _ <- ignoreGas def $ _pdbCommitTx pdb *> _pdbBeginTx pdb Transactional
   ee <- setupBenchEvalEnv pdb (transferSigners CoinBenchSenderA CoinBenchSenderB) (PObject mempty)
   let termText = coinTransferTxRaw (kColonFromSender CoinBenchSenderA) (kColonFromSender CoinBenchSenderB)
   print termText
@@ -252,11 +251,11 @@ unsafeModuleHash e =
   let (Just (ModuleHash e')) = parseModuleHash e
   in e'
 
-withTx :: PactDb b i -> IO a -> IO a
+withTx :: Default i => PactDb b i -> IO a -> IO a
 withTx pdb act = do
-  () <$ _pdbBeginTx pdb Transactional
+  _ <- ignoreGas def (_pdbBeginTx pdb Transactional)
   v <- act
-  _ <- _pdbCommitTx pdb
+  _ <- ignoreGas def $ _pdbCommitTx pdb
   pure v
 
 
@@ -269,7 +268,7 @@ runCoinXferDirect pdb =  do
   forM_ [1 :: Integer .. 1000] $ \_ -> withTx pdb $ do
     (out, _) <- runEvalM (ExecEnv ee) es' $ eval evalInterpreter PImpure term
     writeIORef (_geGasRef $ _eeGasEnv ee) mempty
-    either throw print out
+    either (error . show) print out
   pure ()
   where
   term = App (Var (mkCoinIdent "transfer") def)

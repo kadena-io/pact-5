@@ -6,7 +6,6 @@ module Pact.Core.GasModel.Utils where
 
 import Control.Lens
 import Control.Monad.Except
-import Control.Monad.IO.Class
 import Control.DeepSeq
 import Data.Default
 import Data.Text (Text)
@@ -232,13 +231,13 @@ gmLoaded = Loaded
 
 prepopulateDb :: PactDb CoreBuiltin Info -> GasM CoreBuiltin Info ()
 prepopulateDb pdb = do
-  _ <- liftIO $ _pdbBeginTx pdb Transactional
+  _ <- _pdbBeginTx pdb Transactional
   _pdbCreateUserTable pdb gasModelTable
   _pdbWrite pdb Write (DUserTables gasModelTable) gmTableK1 gmTableV1
   _pdbWrite pdb Write (DUserTables gasModelTable) gmTableK1 gmTableV1
   _pdbWrite pdb Write DNamespaces gmNamespaceName gmNamespace
   _pdbWrite pdb Write DKeySets gmKeysetName gmKeyset
-  _ <- liftIO $ _pdbCommitTx pdb
+  _ <- _pdbCommitTx pdb
   pure ()
 
 compileTerm
@@ -348,8 +347,8 @@ runNativeBenchmarkPreparedStMod
 runNativeBenchmarkPreparedStMod (Endo stMod) envVars = runNativeBenchmark' pure (pure . stMod . withLoaded envVars)
 
 
-dummyTx :: PactDb b i -> IO () -> [C.Benchmark] -> [C.Benchmark]
-dummyTx pdb initDbState bs = C.envWithCleanup (_pdbBeginTx pdb Transactional >> initDbState) (const $ _pdbRollbackTx pdb) . const <$> bs
+dummyTx :: Default i => PactDb b i -> IO () -> [C.Benchmark] -> [C.Benchmark]
+dummyTx pdb initDbState bs = C.envWithCleanup (ignoreGas def (_pdbBeginTx pdb Transactional) >> initDbState) (const $ ignoreGas def (_pdbRollbackTx pdb)) . const <$> bs
 
 ignoreWrites :: PactDb b i -> PactDb b i
 ignoreWrites pdb = pdb { _pdbWrite = \_ _ _ _ -> pure () }
