@@ -157,6 +157,13 @@ library pact-request-api
     , pact-tng
     , pact-tng:pact-crypto
     , yaml
+    , lrucaching
+    , servant-server
+    , servant
+    , warp
+    , wai-cors
+    , wai-logger
+    , fast-logger
   exposed-modules:
     Pact.Core.Command.Types
     Pact.Core.Command.Client
@@ -164,6 +171,9 @@ library pact-request-api
     Pact.Core.Command.RPC
     Pact.Core.Command.Util
     Pact.Core.Command.SigData
+    Pact.Core.Command.Server
+    Pact.Core.Command.Server.Config
+    Pact.Core.Command.Server.Servant
     Pact.Core.Crypto.WebAuthn.Cose.PublicKey
     Pact.Core.Crypto.WebAuthn.Cose.PublicKeyWithSignAlg
     Pact.Core.Crypto.WebAuthn.Cose.Registry
@@ -375,6 +385,7 @@ executable pact
                , pact-tng:pact-lsp
                , optparse-applicative
                , pact-tng:pact-request-api
+               , yaml
 
   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   ghc-prof-options:    -fprof-auto -fprof-auto-calls
@@ -512,6 +523,9 @@ test-suite core-tests
     , tasty-hunit
     , tasty-hedgehog
     , tasty-golden
+    , tasty-wai
+    , http-types
+    , wai-extra
     , serialise
     , cborg
     , groups
@@ -526,6 +540,16 @@ test-suite core-tests
     , safe-exceptions
     , http-conduit
     , direct-sqlite
+    , servant
+    , servant-server
+    , servant-client
+    , lrucaching
+    , http-client
+    , warp
+    , unordered-containers
+    , temporary
+    , wai-logger
+    , fast-logger
   other-modules:
     , Pact.Core.Test.CommandTests
     , Pact.Core.Test.ReplTests
@@ -547,6 +571,10 @@ test-suite core-tests
     , Pact.Core.Test.LegacyDBRegression
     , Paths_pact_tng
     , Pact.Core.Test.SignatureSchemeTests
+    , Pact.Core.Test.PactServerTests
+    , Pact.Core.Test.PactContinuationTest
+    , Pact.Core.Test.ClientTests
+    , Pact.Core.Test.ServerUtils
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
 

@@ -38,7 +38,7 @@ import Control.Monad.Except
 import Control.Lens hiding (List)
 import Data.Text(Text)
 import Data.Map.Strict(Map)
-import Data.Maybe(mapMaybe)
+import Data.Maybe(mapMaybe, isJust)
 import Data.List(findIndex)
 #if !MIN_VERSION_base(4,20,0)
 import Data.List(foldl')
@@ -174,6 +174,8 @@ desugarCoreBuiltinArity f i CorePoseidonHashHackachain li =
   App (Builtin (f CorePoseidonHashHackachain) i )[(ListLit li i)] i
 desugarCoreBuiltinArity f i CoreYield [e1, e2] =
   App (Builtin (f CoreYieldToChain) i) [e1, e2] i
+desugarCoreBuiltinArity f i CoreRead [e1, e2, e3] =
+  App (Builtin (f CoreReadWithFields) i) [e1, e2, e3] i
 desugarCoreBuiltinArity f i b args =
     App (Builtin (f b) i) args i
 
@@ -1313,9 +1315,16 @@ resolveBare (BareName bn) i = views reBinds (M.lookup bn) >>= \case
     (NBound d, _) -> do
       depth <- view reVarDepth
       pure (Name bn (NBound (depth - d - 1)), Nothing)
-    (nk, dk) -> pure (Name bn nk, dk)
+    (nk@(NTopLevel mn _), dk) -> do
+      currMod <- currModuleName
+      when (isJust currMod && currMod /= Just mn) $ rsDependencies %= S.insert mn
+      pure (Name bn nk, dk)
+    (nk, dk) -> do
+      pure (Name bn nk, dk)
   Nothing -> usesEvalState (esLoaded . loToplevel) (M.lookup bn) >>= \case
-    Just (fqn, dk) -> pure (Name bn (NTopLevel (_fqModule fqn) (_fqHash fqn)), Just dk)
+    Just (fqn, dk) -> do
+      rsDependencies %= S.insert (_fqModule fqn)
+      pure (Name bn (NTopLevel (_fqModule fqn) (_fqHash fqn)), Just dk)
     Nothing -> do
       let unmangled = ModuleName bn Nothing
       (mn, imps) <- resolveModuleName i unmangled

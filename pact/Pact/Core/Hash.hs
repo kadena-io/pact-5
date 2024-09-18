@@ -49,6 +49,7 @@ import GHC.Generics
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base64.URL as B64URL
+import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Pact.JSON.Encode as J
 import qualified Pact.JSON.Decode as JD
@@ -71,7 +72,7 @@ instance FromJSONKey Hash where
   fromJSONKey = FromJSONKeyTextParser $ \t -> case decodeBase64UrlUnpadded (T.encodeUtf8 t) of
     Left e -> fail e
     Right bs | B.length bs == pactHashLength -> pure (unsafeBsToPactHash bs)
-             | otherwise -> fail "Invalid hash length"
+             | otherwise -> fail ("Invalid hash length " <> show (T.length t))
 
 instance Pretty Hash where
   pretty (Hash h) =
@@ -84,7 +85,7 @@ instance FromJSON Hash where
   parseJSON = withText "Hash" $ \t -> case decodeBase64UrlUnpadded (T.encodeUtf8 t) of
     Left e -> fail e
     Right bs | B.length bs == pactHashLength -> pure (unsafeBsToPactHash bs)
-             | otherwise -> fail "Invalid hash length"
+             | otherwise -> fail ("Invalid hash length " <> show (T.length t))
 
 instance J.Encode Hash where
   build = J.build . hashToText

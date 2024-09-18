@@ -131,4 +131,5 @@
 {"conName":"CoreHyperlaneMessageId","conIndex":"82"}
 {"conName":"CoreHyperlaneDecodeMessage","conIndex":"83"}
 {"conName":"CoreHyperlaneEncodeMessage","conIndex":"84"}
+{"conName":"CoreReadWithFields","conIndex":"85"}
 

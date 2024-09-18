@@ -24,6 +24,7 @@ module Pact.Core.Evaluate
   , allModuleExports
   , evalDirectInterpreter
   , evalInterpreter
+  , EvalInput
   ) where
 
 import Control.Lens
@@ -148,13 +149,14 @@ setupEvalEnv
   :: PactDb CoreBuiltin a
   -> ExecutionMode -- <- we have this
   -> MsgData -- <- create at type for this
+  -> Maybe Cont
   -> GasModel CoreBuiltin
   -> NamespacePolicy
   -> SPVSupport
   -> PublicData
   -> S.Set ExecutionFlag
   -> IO (EvalEnv CoreBuiltin a)
-setupEvalEnv pdb mode msgData gasModel' np spv pd efs = do
+setupEvalEnv pdb mode msgData mCont gasModel' np spv pd efs = do
   gasRef <- newIORef mempty
   let gasEnv = GasEnv
         { _geGasRef = gasRef
@@ -168,7 +170,7 @@ setupEvalEnv pdb mode msgData gasModel' np spv pd efs = do
     , _eeMsgBody = mdData msgData
     , _eeHash = mdHash msgData
     , _eePublicData = pd
-    , _eeDefPactStep = Nothing
+    , _eeDefPactStep = contToPactStep <$> mCont
     , _eeMode = mode
     , _eeFlags = efs
     , _eeNatives = coreBuiltinMap
@@ -178,6 +180,7 @@ setupEvalEnv pdb mode msgData gasModel' np spv pd efs = do
     , _eeWarnings = Nothing
     }
   where
+  contToPactStep (Cont pid step rb _) = DefPactStep step rb pid Nothing
   mkMsgSigs ss = M.fromList $ map toPair ss
     where
     toPair (Signer _scheme pubK addr capList) =
@@ -192,7 +195,7 @@ evalExec
   -> CapState QualifiedName PactValue
   -> [Lisp.TopLevel Info] -> IO (Either (PactError Info) EvalResult)
 evalExec execMode db spv gasModel flags nsp publicData msgData capState terms = do
-  evalEnv <- setupEvalEnv db execMode msgData gasModel nsp spv publicData flags
+  evalEnv <- setupEvalEnv db execMode msgData Nothing gasModel nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   interpret evalEnv evalState (Right terms)
 
@@ -202,7 +205,7 @@ evalExecTerm
   -> CapState QualifiedName PactValue
   -> Lisp.Expr Info -> IO (Either (PactError Info) EvalResult)
 evalExecTerm execMode db spv gasModel flags nsp publicData msgData capState term = do
-  evalEnv <- setupEvalEnv db execMode msgData gasModel nsp spv publicData flags
+  evalEnv <- setupEvalEnv db execMode msgData Nothing gasModel nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   interpret evalEnv evalState (Right [Lisp.TLTerm term])
 
@@ -212,7 +215,7 @@ evalContinuation
   -> CapState QualifiedName PactValue
   -> Cont -> IO (Either (PactError Info) EvalResult)
 evalContinuation execMode db spv gasModel flags nsp publicData msgData capState cont = do
-  evalEnv <- setupEvalEnv db execMode msgData gasModel nsp spv publicData flags
+  evalEnv <- setupEvalEnv db execMode msgData (Just cont) gasModel nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   case _cProof cont of
     Nothing ->
@@ -237,7 +240,7 @@ evalGasPayerCap
   -> CapState QualifiedName PactValue
   -> Lisp.Expr Info -> IO (Either (PactError Info) EvalResult)
 evalGasPayerCap capToken db spv gasModel flags nsp publicData msgData capState body = do
-  evalEnv <- setupEvalEnv db Transactional msgData gasModel nsp spv publicData flags
+  evalEnv <- setupEvalEnv db Transactional msgData Nothing gasModel nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   interpretGasPayerTerm evalEnv evalState capToken body
 
@@ -289,6 +292,7 @@ interpretGasPayerTerm evalEnv evalSt ct term = do
         , _erEvents = reverse $ _esEvents state
         }
 
+
 -- Used to be `evalTerms`
 evalWithinTx
   :: EvalInput
@@ -322,10 +326,8 @@ evalWithinTx'
   -> EvalState CoreBuiltin Info
   -> Eval a
   -> IO (Either (PactError Info) (a, [TxLog ByteString], Maybe TxId), EvalState CoreBuiltin Info)
-evalWithinTx' ee es action = do
-      (result, newState) <- runEvalM (ExecEnv ee) es runAction
-      -- maybe might want to decode using serialisepact
-      return (result, newState)
+evalWithinTx' ee es action =
+    runEvalM (ExecEnv ee) es runAction
     where
     pdb = view eePactDb ee
     mode = view eeMode ee

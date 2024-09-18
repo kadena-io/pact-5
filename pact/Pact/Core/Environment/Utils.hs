@@ -58,6 +58,7 @@ viewsEvalEnv l f = ask >>= \case
   ReplEnv r ->
      views (replEvalEnv . l) f <$> liftIO (readIORef r)
 
+
 toFqDep :: ModuleName -> ModuleHash -> Def name t b i -> (FullyQualifiedName, Def name t b i)
 toFqDep modName mhash defn =
   let fqn = FullyQualifiedName modName (defName defn) mhash

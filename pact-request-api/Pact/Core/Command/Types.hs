@@ -47,8 +47,9 @@ module Pact.Core.Command.Types
   , CommandResult(..),crReqKey,crTxId,crResult,crGas,crLogs,crEvents
   , crContinuation,crMetaData
   , RequestKey(..)
+  , RequestKeys(..)
   , cmdToRequestKey
-  , requestKeyToB16Text
+  , requestKeyToB64Text
   , parsePact
 
   , DynKeyPair (DynEd25519KeyPair, DynWebAuthnKeyPair)
@@ -63,13 +64,11 @@ import Control.DeepSeq
 import Data.Aeson as A
 import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Short as ShortByteString
 import qualified Data.ByteString.Base16 as B16
 import Data.Foldable
 import Data.Hashable (Hashable)
 import Data.Serialize as SZ
 import Data.Text (Text)
-import qualified Data.Text.Encoding as T
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Data.Maybe  (fromMaybe)
@@ -90,13 +89,13 @@ import Pact.Core.StableEncoding
 import Pact.Core.Signer
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import Pact.Core.Verifiers
+import Pact.Core.Command.Crypto  as Base
+import Pact.Core.Evaluate (Info)
 
 import qualified Pact.JSON.Decode as JD
 import qualified Pact.JSON.Encode as J
+import qualified Data.List.NonEmpty as NE
 
-
-import Pact.Core.Command.Crypto  as Base
-import Pact.Core.Evaluate (Info)
 
 -- | Command is the signed, hashed envelope of a Pact execution instruction or command.
 -- In 'Command ByteString', the 'ByteString' payload is hashed and signed; the ByteString
@@ -329,7 +328,7 @@ instance (FromJSON l, FromJSON err) => FromJSON (CommandResult l err) where
 instance (NFData a, NFData err) => NFData (CommandResult a err)
 
 cmdToRequestKey :: Command a -> RequestKey
-cmdToRequestKey Command {..} = RequestKey _cmdHash
+cmdToRequestKey (Command _ _ h) = RequestKey h
 
 data WebAuthnPubKeyPrefixed
   = WebAuthnPubKeyPrefixed
@@ -341,17 +340,32 @@ data DynKeyPair
   | DynWebAuthnKeyPair WebAuthnPubKeyPrefixed WebAuthnPublicKey WebauthnPrivateKey
   deriving (Eq, Show, Generic)
 
-requestKeyToB16Text :: RequestKey -> Text
-requestKeyToB16Text (RequestKey (PactHash.Hash h)) =
-  T.decodeUtf8 $ B16.encode (ShortByteString.fromShort h)
+requestKeyToB64Text :: RequestKey -> Text
+requestKeyToB64Text (RequestKey h) = PactHash.hashToText h
 
 newtype RequestKey = RequestKey { unRequestKey :: PactHash.Hash}
   deriving (Eq, Ord, Generic)
   deriving newtype (Serialize, Hashable, FromJSON, FromJSONKey, NFData, J.Encode
     )
 
+
 instance Show RequestKey where
   show (RequestKey rk) = show rk
+
+newtype RequestKeys = RequestKeys { _rkRequestKeys :: NE.NonEmpty RequestKey }
+  deriving (Show, Eq, Ord, Generic, NFData)
+
+instance J.Encode RequestKeys where
+  build (RequestKeys rks) = J.object [
+      "requestKeys" J..= J.Array rks
+    ]
+
+instance JD.FromJSON RequestKeys where
+  parseJSON = JD.withObject "RequestKeys" $ \o -> do
+    rks <- o JD..: "requestKeys"
+    case rks of
+      [] -> fail "Empty requestKeys"
+      (rk:rks') -> pure $ RequestKeys (rk NE.:| rks')
 
 makeLenses ''UserSig
 makeLenses ''Signer

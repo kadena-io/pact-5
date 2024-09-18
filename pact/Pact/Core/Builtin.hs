@@ -233,6 +233,8 @@ data CoreBuiltin
   | CoreHyperlaneMessageId
   | CoreHyperlaneDecodeMessage
   | CoreHyperlaneEncodeMessage
+  -- | BackCompat: read with filtering columns
+  | CoreReadWithFields
   deriving (Eq, Show, Ord, Bounded, Enum, Generic)
 
 instance NFData CoreBuiltin
@@ -249,7 +251,8 @@ coreBuiltinOverloads =
   , CoreStrToIntBase
   , CoreReadMsgDefault
   , CoreDefineKeysetData
-  , CoreYieldToChain]
+  , CoreYieldToChain
+  , CoreReadWithFields]
 
 -- | NOTE: this function spits out fully resolved overload name of a native.
 --   This is used for both errors and hashes. DO NOT CHANGE unless you know what you are doing,
@@ -403,6 +406,7 @@ coreBuiltinToText = \case
   CoreHyperlaneMessageId -> "hyperlane-message-id"
   CoreHyperlaneDecodeMessage -> "hyperlane-decode-token-message"
   CoreHyperlaneEncodeMessage -> "hyperlane-encode-token-message"
+  CoreReadWithFields -> "read-with-fields"
 
 -- | Our `CoreBuiltin` user-facing representation.
 -- note: `coreBuiltinToUserText` is primarily for pretty printing
@@ -552,6 +556,7 @@ coreBuiltinToUserText = \case
   CoreHyperlaneDecodeMessage -> "hyperlane-decode-token-message"
   CoreHyperlaneEncodeMessage -> "hyperlane-encode-token-message"
   CoreAcquireModuleAdmin -> "acquire-module-admin"
+  CoreReadWithFields -> "read"
 
 instance IsBuiltin CoreBuiltin where
   builtinName = NativeName . coreBuiltinToText
@@ -704,6 +709,7 @@ instance IsBuiltin CoreBuiltin where
     CoreHyperlaneMessageId -> 1
     CoreHyperlaneDecodeMessage -> 1
     CoreHyperlaneEncodeMessage -> 1
+    CoreReadWithFields -> 3
 
 coreBuiltinNames :: [Text]
 coreBuiltinNames =

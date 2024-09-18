@@ -561,6 +561,7 @@ coreBuiltinGasCost = MilliGas . \case
   CoreHyperlaneDecodeMessage -> 2_000
   CoreHyperlaneEncodeMessage -> 2_000
   CoreAcquireModuleAdmin -> 20_000
+  CoreReadWithFields -> 10_000
 {-# INLINABLE runTableModel #-}
 
 

@@ -152,7 +152,7 @@ evaluateTerm cont handler env (Var n info) = do
         Just d ->
           failInvariant info (InvariantInvalidDefKind (defKind mname d) "in var position")
         Nothing ->
-          failInvariant info (InvariantInvalidBoundVariable (_nName n))
+          failInvariant info (InvariantUnboundFreeVariable fqn)
     NModRef m ifs ->
         returnCEKValue cont handler (VModRef (ModRef m (S.fromList ifs)))
     NDynRef (DynamicRef dArg i) -> case RAList.lookup (view ceLocal env) i of
@@ -466,7 +466,8 @@ applyNestedPact i pc ps cont handler cenv = use esDefPactExec >>= \case
 
       esDefPactExec .= (Just exec)
       let
-        cenv' = set ceDefPactStep (Just ps) cenv
+        psWithYield = set psResume (_peYield exec) ps
+        cenv' = set ceDefPactStep (Just psWithYield) cenv
         cont' = NestedDefPactStepC cenv' i cont pe
         contFqn = FullyQualifiedName (pc ^. pcName . qnModName) (pc ^. pcName . qnName) mh
         sf = StackFrame contFqn (pc ^. pcArgs) SFDefPact i
@@ -548,7 +549,8 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
               resume = case _psResume ps of
                          r@Just{} -> r
                          Nothing -> _peYield pe
-              env' = set ceLocal (RAList.fromList (reverse args)) $ set ceDefPactStep (Just $ set psResume resume ps) env
+              newPactStep = set psResume resume ps
+              env' = set ceLocal (RAList.fromList (reverse args)) $ set ceDefPactStep (Just newPactStep) env
           applyPact i pc ps cont handler env' (_peNestedDefPactExec pe)
 
 
@@ -1212,7 +1214,7 @@ applyContToValue (CapPopC st info cont) handler v = case st of
         let csList = _csCap cap : _csComposed cap
             caps' = over (_head . csComposed) (++ csList) cs
         (esCaps . csSlots) .= caps'
-        returnCEKValue cont handler VUnit
+        returnCEKValue cont handler v
       [] -> failInvariant info InvariantEmptyCapStackFailure
 
 applyContToValue (ListC env info args vals cont) handler v = do
@@ -1266,6 +1268,8 @@ applyContToValue (DefPactStepC env info cont) handler v =
           done = (not (_psRollback ps) && isLastStep) || _psRollback ps
         when (nestedPactsNotAdvanced pe ps) $
           throwExecutionError info (NestedDefpactsNotAdvanced (_peDefPactId pe))
+        sz <- sizeOf info SizeOfV0 pe
+        chargeGasArgs info (GWrite sz)
         evalWrite info pdb Write DDefPacts (_psDefPactId ps)
             (if done then Nothing else Just pe)
         emitXChainEvents (_psResume ps) pe
