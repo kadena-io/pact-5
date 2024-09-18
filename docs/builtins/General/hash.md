@@ -4,7 +4,7 @@ Use `hash` to compute the BLAKE2b 256-bit hash of a specified `value`. The resul
 Strings values are converted directly.
 Other data type values are converted using their JSON representation. Non-value-level arguments are not allowed.
 
-By convention, the data type <a> is used to represent a type-bound parameter like the `value` argument in this function.
+By convention, the data type `<a>` is used to represent a type-bound parameter like the `value` argument in this function.
 
 ### Basic syntax
 
@@ -20,7 +20,7 @@ Use the following argument to specify the value for the `hash` Pact function:
 
 | Argument  | Type   | Description |
 |-----------|--------|-------------|
-| `value` | <a> | Specifies the value to be hashed. |
+| `value` | `<a>` | Specifies the value to be hashed. |
 
 ### Return values
 

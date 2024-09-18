@@ -3,7 +3,7 @@
 Use `fold` to iteratively reduce a list by applying the `app` function to the last result for each element in the list, starting with the specified `init` initial value.
 
 You can use any data type for the `value` argument as long as the first `oper1` functions can take that same data type.
-By convention, data type notation like <a> and <b> are used to represent  type-bound parameters like the `init` and `list` arguments in this function.
+By convention, data type notation like `<a>` and `<b>` are used to represent  type-bound parameters like the `init` and `list` arguments in this function.
 
 ### Basic syntax
 
@@ -19,9 +19,9 @@ Use the following arguments to specify the function, initial value, and list for
 
 | Argument | Type       | Description                                       |
 |----------|------------|---------------------------------------------------|
-| `app` | function x:<a> y:<b> -> <a>` | Specifies the function to apply to each element and the last result. |
-| `init` | <a> | Specifies the initial value for the reduction. |
-| `list` | [<b>] | Specifies the list to iterate over.               |
+| `app` | function x:`<a>` y:`<b>` -> `<a>`` | Specifies the function to apply to each element and the last result. |
+| `init` | `<a>` | Specifies the initial value for the reduction. |
+| `list` | [`<b>`] | Specifies the list to iterate over.               |
 
 ### Return values
 
