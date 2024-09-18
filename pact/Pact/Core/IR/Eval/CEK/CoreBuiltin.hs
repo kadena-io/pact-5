@@ -739,7 +739,6 @@ enforceYield info y = case _yProvenance y of
 coreResume :: (IsBuiltin b) => NativeFunction e b i
 coreResume info b cont handler env = \case
   [VClosure clo] -> do
-    -- mps <- viewEvalEnv eeDefPactStep
     -- Note: we must look in the env here, since this is where we set it in applyPact
     case _ceDefPactStep env of
       Nothing -> throwExecutionError info NoActiveDefPactExec

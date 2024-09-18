@@ -135,18 +135,6 @@ main = O.execParser argParser >>= \case
     OServer configPath -> Y.decodeFileEither configPath >>= \case
       Left perr -> putStrLn $ Y.prettyPrintParseException perr
       Right config -> runServer config noSPVSupport
-      --do
-        -- let commandEnv
-        --       = CommandEnv
-        --       { _ceMode = Transactional
-        --       , _ceDbEnv = dbEnv
-        --       , _ceGasEnv = undefined
-        --       , _cePublicData def
-        --       , _ceSPVSupport = noSPVSupport
-        --       ,
-        --       }
-        -- let commandEnv = undefined
-        -- runServer commandEnv (fromIntegral $ _port config)
   where
     exitEither _ Left {} = die "Load failed"
     exitEither m (Right t) = m t >> exitSuccess

@@ -392,3 +392,49 @@
 (begin-tx)
 (expect "Case 6: step 0" ["hello1-nested" "hello1-nested" "hello1"] (parent.bad4))
 (expect-failure "Case 6: step 1" "Attempting to continue a pact that was not nested" (continue-pact 1))
+(commit-tx)
+
+; Nested yields
+(begin-tx)
+(module child g
+
+  (defcap g () true)
+
+  (defpact withyield(name:string)
+    (step
+      (let
+        ((cn (+ name "_child")))
+        (yield {"n":cn})
+        )
+      )
+    (step
+      (resume {"n" := name}
+        (+ "in_step_1_child->" name)
+      )
+      )
+  )
+  )
+
+
+(module parent g
+  (defcap g () true)
+
+  (defpact withyield (name:string)
+    (step
+      (let
+        ((c (child.withyield name)))
+        (yield {"pn": (+ (at "n" c)  "_parent")})
+        )
+      )
+
+    (step
+      (resume {"pn" := pn}
+        (+ "in_step_1_parent->" (child.withyield name))
+        )
+      )
+  )
+  )
+
+(expect "Nested yield returns correctly without continue" {"pn":"jose_child_parent"} (parent.withyield "jose"))
+(expect "Nested resume works correctly without continue" "in_step_1_parent->in_step_1_child->jose_child" (continue-pact 1))
+(commit-tx)

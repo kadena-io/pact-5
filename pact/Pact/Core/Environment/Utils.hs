@@ -10,7 +10,6 @@
 module Pact.Core.Environment.Utils
  ( viewEvalEnv
  , viewsEvalEnv
- , localEvalEnv
  , throwExecutionError
  , toFqDep
  , mangleNamespace
@@ -59,16 +58,6 @@ viewsEvalEnv l f = ask >>= \case
   ReplEnv r ->
      views (replEvalEnv . l) f <$> liftIO (readIORef r)
 
-localEvalEnv :: (EvalEnv b i -> EvalEnv b i) -> EvalM e b i a -> EvalM e b i a
-localEvalEnv f act = do
-  e <- go =<< ask
-  local (const e) act
-  where
-  go = \case
-    ExecEnv e -> pure $ ExecEnv (f e)
-    ReplEnv r -> do
-      liftIO (modifyIORef' r (over replEvalEnv f))
-      pure (ReplEnv r)
 
 toFqDep :: ModuleName -> ModuleHash -> Def name t b i -> (FullyQualifiedName, Def name t b i)
 toFqDep modName mhash defn =

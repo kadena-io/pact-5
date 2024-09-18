@@ -223,7 +223,7 @@ evaluate env = \case
           Just d ->
             failInvariant info (InvariantInvalidDefKind (defKind mname d) "in var position")
           Nothing ->
-            failInvariant info (InvariantUnboundFreeVariable (FullyQualifiedName mname (_nName n) mh))
+            failInvariant info (InvariantUnboundFreeVariable fqn)
       NModRef m ifs ->
         return (VModRef (ModRef m (S.fromList ifs)))
       NDynRef (DynamicRef dArg i) -> case RAList.lookup (view ceLocal env) i of

@@ -37,8 +37,6 @@ usage = unlines
   , "persistDir - Directory for database files."
   , "             If omitted, runs in-memory only."
   , "logDir     - Directory for HTTP logs, defaults to no log dir"
-  , "pragmas    - SQLite pragmas to use with persistence DBs"
-  , "entity     - Entity name for simulating privacy, defaults to \"entity\""
   , "gasLimit   - Gas limit for each transaction, defaults to 0"
   , "gasRate    - Gas price per action, defaults to 0"
   , "execConfig - Pact runtime execution flags"
