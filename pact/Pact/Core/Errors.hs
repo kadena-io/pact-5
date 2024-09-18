@@ -184,6 +184,7 @@ module Pact.Core.Errors
  , _HyperlaneDecodeErrorInternal
  , _HyperlaneDecodeErrorBinary
  , _HyperlaneDecodeErrorParseRecipient
+ , toPrettyLegacyError
  ) where
 
 import Control.Lens hiding (ix)
@@ -1235,6 +1236,31 @@ data LegacyPactError
   , _leCallStack :: [Text]
   , _leMessage :: Text
   } deriving (Eq, Show)
+
+pactErrorToLegacyErrorType :: PactError i -> LegacyPactErrorType
+pactErrorToLegacyErrorType = \case
+  PEExecutionError NativeArgumentsError{} _ _ -> LegacyArgsError
+  PEExecutionError GasExceeded{} _ _ -> LegacyGasError
+  PEExecutionError DbOpFailure{} _ _ -> LegacyDbError
+  PEExecutionError ContinuationError{} _ _ -> LegacyContinuationError
+  PEUserRecoverableError{} -> LegacyTxFailure
+  PEExecutionError{} -> LegacyEvalError
+  PEParseError{} -> LegacySyntaxError
+  PELexerError{} -> LegacySyntaxError
+  PEDesugarError{} -> LegacySyntaxError
+  PEVerifierError{} -> LegacyEvalError
+
+-- | Pretty-printed pact error for use in `local` only.
+-- Note: DO NOT USE THIS FOR APPLYCMD.
+-- I REPEAT: DO NOT USE THIS FOR APPLYCMD.
+-- This sort of serialization should _not_ be used to store errors on chain.
+-- This pretty prints the error, but it does not care at all about time to serialize
+-- For on-chain use, use `pactErrorToErrorCode`
+toPrettyLegacyError :: Pretty i => PactError i -> LegacyPactError
+toPrettyLegacyError pe =
+  let stack = renderText <$> viewErrorStack pe
+      info = renderText (view peInfo pe)
+  in LegacyPactError (pactErrorToLegacyErrorType pe) info stack (renderText pe)
 
 instance J.Encode LegacyPactError where
   build o = J.object

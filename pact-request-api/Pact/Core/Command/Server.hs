@@ -84,6 +84,7 @@ data ServerRuntime
 
 newtype PollRequest
   = PollRequest (NE.NonEmpty RequestKey)
+  deriving newtype (Eq, Show)
 
 instance JD.FromJSON PollRequest where
   parseJSON = JD.withObject "Poll" $ \o -> PollRequest <$> o JD..: "requestKeys"
@@ -93,6 +94,7 @@ instance JE.Encode PollRequest where
 
 newtype PollResponse
   = PollResponse (HM.HashMap RequestKey (CommandResult Hash (PactErrorCompat Info)))
+  deriving newtype (Eq, Show)
 
 instance JE.Encode PollResponse where
   build (PollResponse pr) = JE.build $ JL.legacyHashMap requestKeyToB64Text (commandToStableEncoding <$> pr)
@@ -104,6 +106,7 @@ instance JD.FromJSON PollResponse where
 
 newtype ListenRequest
   = ListenRequest RequestKey
+  deriving newtype (Eq, Show)
 
 instance JE.Encode ListenRequest where
   build (ListenRequest rk) = JE.object [ "listen" JE..= rk ]
@@ -114,6 +117,7 @@ instance JD.FromJSON ListenRequest where
 
 newtype ListenResponse
   = ListenResponse (CommandResult Hash (PactErrorCompat Info))
+  deriving newtype (Eq, Show)
 
 instance JD.FromJSON ListenResponse where
   parseJSON v = ListenResponse . commandFromStableEncoding <$> JD.parseJSON v
@@ -169,6 +173,8 @@ instance JE.Encode LocalResponse where
 
 newtype SendRequest
   = SendRequest { _sendRequest :: SubmitBatch }
+  deriving newtype (Eq, Show)
+
 
 instance JE.Encode SendRequest where
   build (SendRequest sr) = JE.build sr
@@ -178,7 +184,7 @@ instance JD.FromJSON SendRequest where
 
 newtype SendResponse
   = SendResponse RequestKeys
-  deriving (Eq, Show)
+  deriving newtype (Eq, Show)
 
 instance JE.Encode SendResponse where
   build (SendResponse sr) = JE.build sr
