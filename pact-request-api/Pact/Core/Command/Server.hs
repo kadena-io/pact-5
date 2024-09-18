@@ -52,7 +52,6 @@ import Pact.Core.Command.Server.Servant
 import Pact.Core.Command.Types
 import Pact.Core.Hash
 import Pact.Core.Compile
-import Pact.Core.DefPacts.Types
 import Pact.Core.Errors
 import Pact.Core.Evaluate
 import Pact.Core.Gas
@@ -272,7 +271,6 @@ sendHandler runtime (SendRequest submitBatch) = do
                   msgData = MsgData
                     { mdData = d
                     , mdHash = h
-                    , mdStep = Nothing
                     , mdSigners = signer
                     , mdVerifiers = maybe [] (fmap void) mverif
                     }
@@ -287,7 +285,6 @@ sendHandler runtime (SendRequest submitBatch) = do
                   let msgData = MsgData
                         { mdData = _cmData contMsg
                         , mdHash = h
-                        , mdStep = Just $ DefPactStep (_cmStep contMsg) (_cmRollback contMsg) (_cmPactId contMsg) Nothing
                         , mdSigners = signer
                         , mdVerifiers = maybe [] (fmap void) mverif
                         }
@@ -297,7 +294,7 @@ sendHandler runtime (SendRequest submitBatch) = do
                         , _cRollback = _cmRollback contMsg
                         , _cProof = _cmProof contMsg
                         }
-                  evalContinuation Transactional  (_srDbEnv runtime) (_srSPVSupport runtime) freeGasModel mempty
+                  evalContinuation Transactional (_srDbEnv runtime) (_srSPVSupport runtime) freeGasModel mempty
                     SimpleNamespacePolicy def msgData def cont >>= \case
                     Left pe ->
                       pure $ pactErrorToCommandResult requestKey pe (Gas 0)
