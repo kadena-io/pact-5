@@ -104,7 +104,7 @@ instance JD.FromJSON ApiKeyPair where
   parseJSON = JD.withObject "ApiKeyPair" $ \o -> do
     secret <- o JD..: "secret"
     pub <- o JD..:? "public"
-    addr <- o JD..: "address"
+    addr <- o JD..:? "address"
     scheme <- o JD..:? "scheme"
     caps <- o JD..:? "caps"
     pure $ ApiKeyPair

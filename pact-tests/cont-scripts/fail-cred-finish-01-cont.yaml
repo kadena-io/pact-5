@@ -1,6 +1,6 @@
 # Creditor (Bob) cannot finish alone
 type: "cont"
-pactTxHash: "L2N2SgjdQAHNEu6WY82VAa4LyxmqfrAuaR6sB41DUMQ"
+pactTxHash: "wQFlSdtBBbgqypCbb7ArY-XFZzGT903d6VZd1QgUVu4"
 step: 1
 rollback: False
 keyPairs:

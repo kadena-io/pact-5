@@ -47,6 +47,7 @@ module Pact.Core.IR.Eval.Direct.Evaluator
 import Control.Lens hiding (op, from, to, parts)
 import Control.Monad
 import Control.Monad.Except
+import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Text(Text)
 import Data.Foldable
@@ -83,6 +84,7 @@ import Pact.Core.Builtin
 import Pact.Core.IR.Eval.Direct.Types
 import Pact.Core.Gas
 import Pact.Core.StableEncoding
+import Pact.Core.SizeOf
 
 mkDefunClosure
   :: EvalDefun b i
@@ -1141,6 +1143,8 @@ applyPact i pc ps cenv nested = use esDefPactExec >>= \case
               done = (not (_psRollback ps') && isLastStep) || _psRollback ps'
             when (nestedPactsNotAdvanced resultExec ps') $
               throwExecutionError i (NestedDefpactsNotAdvanced (_peDefPactId resultExec))
+            sz <- sizeOf i SizeOfV0 pe
+            chargeGasArgs i (GWrite sz)
             evalWrite i pdb Write DDefPacts (_psDefPactId ps') (if done then Nothing else Just resultExec)
             emitXChainEvents (_psResume ps') resultExec
             return result
@@ -1195,7 +1199,8 @@ applyNestedPact i pc ps cenv = use esDefPactExec >>= \case
 
       esDefPactExec .= (Just exec)
       let
-        cenv' = set ceDefPactStep (Just ps) cenv
+        psWithYield = set psResume (_peYield exec) ps
+        cenv' = set ceDefPactStep (Just psWithYield) cenv
       let contFqn = qualNameToFqn (pc ^. pcName) mh
           sf = StackFrame contFqn (pc ^. pcArgs) SFDefPact i
       result <- case (ps ^. psRollback, step) of
@@ -1267,7 +1272,8 @@ resumePact i env crossChainContinuation = viewEvalEnv eeDefPactStep >>= \case
               resume = case _psResume ps of
                          r@Just{} -> r
                          Nothing -> _peYield pe
-              env' = set ceLocal (RAList.fromList (reverse args)) $ set ceDefPactStep (Just $ set psResume resume ps) env
+              newPactStep = set psResume resume ps
+              env' = set ceLocal (RAList.fromList (reverse args)) $ set ceDefPactStep (Just newPactStep) env
           applyPact i pc ps env' (_peNestedDefPactExec pe)
 
 emitXChainEvents

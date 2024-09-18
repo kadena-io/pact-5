@@ -64,13 +64,11 @@ import Control.DeepSeq
 import Data.Aeson as A
 import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Short as ShortByteString
 import qualified Data.ByteString.Base16 as B16
 import Data.Foldable
 import Data.Hashable (Hashable)
 import Data.Serialize as SZ
 import Data.Text (Text)
-import qualified Data.Text.Encoding as T
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Data.Maybe  (fromMaybe)
@@ -91,14 +89,13 @@ import Pact.Core.StableEncoding
 import Pact.Core.Signer
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import Pact.Core.Verifiers
+import Pact.Core.Command.Crypto  as Base
+import Pact.Core.Evaluate (Info)
 
 import qualified Pact.JSON.Decode as JD
 import qualified Pact.JSON.Encode as J
 import qualified Data.List.NonEmpty as NE
 
-
-import Pact.Core.Command.Crypto  as Base
-import Pact.Core.Evaluate (Info)
 
 -- | Command is the signed, hashed envelope of a Pact execution instruction or command.
 -- In 'Command ByteString', the 'ByteString' payload is hashed and signed; the ByteString

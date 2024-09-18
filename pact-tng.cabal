@@ -573,6 +573,7 @@ test-suite core-tests
     , Pact.Core.Test.SignatureSchemeTests
     , Pact.Core.Test.PactServerTests
     , Pact.Core.Test.PactContinuationTest
+    , Pact.Core.Test.ClientTests
     , Pact.Core.Test.ServerUtils
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto

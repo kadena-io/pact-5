@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
@@ -1090,7 +1090,7 @@ data PactErrorCode info
   = PactErrorCode
   { _peCode :: ErrorCode
   , _peInfo :: info
-  } deriving (Eq, Show, Functor)
+  } deriving (Eq, Show, Functor, Foldable, Traversable)
 
 errorCodeFromText :: Text -> Maybe ErrorCode
 errorCodeFromText t = do
@@ -1259,7 +1259,7 @@ instance JD.FromJSON LegacyPactError where
 data PactErrorCompat info
   = PEPact5Error (PactErrorCode info)
   | PELegacyError LegacyPactError
-  deriving Show
+  deriving (Eq, Show, Functor, Foldable, Traversable)
 
 instance J.Encode info => J.Encode (PactErrorCompat info) where
   build = \case

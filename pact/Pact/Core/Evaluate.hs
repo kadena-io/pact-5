@@ -16,7 +16,6 @@ module Pact.Core.Evaluate
   , evalGasPayerCap
   , setupEvalEnv
   , interpret
-  , interpretReturningState
   , compileOnly
   , compileOnlyTerm
   , evaluateDefaultState
@@ -31,7 +30,6 @@ module Pact.Core.Evaluate
 import Control.Lens
 import Control.Monad
 import Control.Monad.Except
-import Control.Monad.IO.Class
 import Control.Exception.Safe
 import Data.ByteString (ByteString)
 import Data.Maybe (fromMaybe)
@@ -107,6 +105,7 @@ evalDirectInterpreter =
 data MsgData = MsgData
   { mdData :: !PactValue
   , mdHash :: !Hash
+  , mdStep :: !(Maybe DefPactStep)
   , mdSigners :: [Signer]
   , mdVerifiers :: [Verifier ()]
   }
@@ -171,7 +170,7 @@ setupEvalEnv pdb mode msgData gasModel' np spv pd efs = do
     , _eeMsgBody = mdData msgData
     , _eeHash = mdHash msgData
     , _eePublicData = pd
-    , _eeDefPactStep = Nothing
+    , _eeDefPactStep = mdStep msgData
     , _eeMode = mode
     , _eeFlags = efs
     , _eeNatives = coreBuiltinMap
@@ -292,30 +291,6 @@ interpretGasPayerTerm evalEnv evalSt ct term = do
         , _erEvents = reverse $ _esEvents state
         }
 
-interpretReturningState
-  :: EvalEnv CoreBuiltin Info
-  -> EvalState CoreBuiltin Info
-  -> EvalInput
-  -> IO (EvalState CoreBuiltin Info, Either (PactError Info) EvalResult)
-interpretReturningState evalEnv evalSt evalInput = do
-  (result, state) <- runEvalM (ExecEnv evalEnv) evalSt $ evalWithinTx evalInput
-  gas <- readIORef (_geGasRef $ _eeGasEnv evalEnv)
-  case result of
-    Left err -> return $ (state, Left err)
-    Right (rs, logs, txid) ->
-      let success = Right $! EvalResult
-            { -- _erInput = evalInput
-             _erOutput = rs
-            , _erLogs = logs
-            , _erExec = _esDefPactExec state
-            -- Todo: quotrem
-            , _erGas = milliGasToGas gas
-            , _erLoadedModules = _loModules $ _esLoaded state
-            , _erTxId = txid
-            , _erLogGas = Nothing
-            , _erEvents = _esEvents state
-            }
-      in return (state, success)
 
 -- Used to be `evalTerms`
 evalWithinTx
@@ -350,7 +325,7 @@ evalWithinTx'
   -> EvalState CoreBuiltin Info
   -> Eval a
   -> IO (Either (PactError Info) (a, [TxLog ByteString], Maybe TxId), EvalState CoreBuiltin Info)
-evalWithinTx' ee es action = 
+evalWithinTx' ee es action =
     runEvalM (ExecEnv ee) es runAction
     where
     pdb = view eePactDb ee

@@ -25,11 +25,11 @@ compose: 1461
 concat: 721
 cond: 2102
 contains: 231
-continue: 60000508
+continue: 60157590
 create-capability-guard: 60000300
-create-capability-pact-guard: 60000342
+create-capability-pact-guard: 60046369
 create-module-guard: 60000245
-create-pact-guard: 60000287
+create-pact-guard: 60046314
 create-principal: 1752
 create-table: 60250173
 days: 4000
@@ -80,7 +80,7 @@ negate: 50
 not: 139
 not?: 139
 or?: 139
-pact-id: 60000271
+pact-id: 60046298
 pairing-check: 67003097
 parse-time: 2102
 point-add: 5425
@@ -93,7 +93,7 @@ read-string: 128
 read: 60393713
 remove: 261
 require-capability: 60002677
-resume: 60006677
+resume: 60098731
 reverse: 601
 round: 50
 scalar-mult: 360225
@@ -116,7 +116,7 @@ with-default-read: 60406263
 with-read: 60394788
 write: 60383378
 xor: 2000
-yield: 60002449
+yield: 60048476
 zip: 3822
 |: 2000
 ~: 1000

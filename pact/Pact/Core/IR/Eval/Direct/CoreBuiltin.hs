@@ -740,10 +740,10 @@ enforceYield info y = case _yProvenance y of
     unless (p `elem` p') $ throwExecutionError info (YieldProvenanceDoesNotMatch p p')
 
 coreResume :: (IsBuiltin b) => NativeFunction e b i
-coreResume info b _env = \case
+coreResume info b env = \case
   [VClosure clo] -> do
-    mps <- viewEvalEnv eeDefPactStep
-    case mps of
+    -- Check the env, this is where we set it
+    case _ceDefPactStep env of
       Nothing -> throwExecutionError info NoActiveDefPactExec
       Just pactStep -> case _psResume pactStep of
         Nothing -> throwExecutionError info (NoYieldInDefPactStep pactStep)
@@ -1058,6 +1058,13 @@ dbRead info b env = \case
     bytes <- sizeOf info SizeOfV0 rdata
     chargeGasArgs info (GRead bytes)
     return (VObject rdata)
+  [VTable tv, VString rk, VList li] -> do
+    guardTable info tv GtRead
+    li' <- traverse (fmap Field . asString info b) (V.toList li)
+    RowData rdata <- readUserTable info env tv (RowKey rk)
+    bytes <- sizeOf info SizeOfV0 rdata
+    chargeGasArgs info (GRead bytes)
+    return (VObject $ M.restrictKeys rdata (S.fromList li'))
   args -> argsError info b args
 
 dbWithRead :: (IsBuiltin b) => NativeFunction e b i
@@ -2118,3 +2125,4 @@ coreBuiltinRuntime =
     CoreHyperlaneDecodeMessage -> coreHyperlaneDecodeTokenMessage
     CoreHyperlaneEncodeMessage -> coreHyperlaneEncodeTokenMessage
     CoreAcquireModuleAdmin -> coreAcquireModuleAdmin
+    CoreReadWithFields -> dbRead

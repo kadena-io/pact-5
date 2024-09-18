@@ -4,22 +4,9 @@
 
 module Pact.Core.Test.ServerUtils where
 
-
--- module Utils
--- ( testMgr
--- , withTestPactServer
--- , withTestPactServerWithSpv
--- , testFlags
--- , backCompatFlags
--- , nestedDefPactFlags
--- , testDir
--- ) where
-
 import Control.Concurrent (threadDelay)
 import Control.Exception
 import Data.Text(Text)
-import Data.Maybe
-import Data.Default
 
 import qualified Data.Text as T
 
@@ -29,14 +16,12 @@ import qualified Pact.JSON.Encode as J
 
 import Servant
 import Servant.Client
-import Servant.API
 
 import System.IO.Temp
 import System.IO.Unsafe
 import Network.Wai.Handler.Warp
-import Network.Wai.Logger
-import System.Log.FastLogger.Date
 import Data.LruCache.IO
+import Test.Tasty.HUnit
 
 import Pact.Core.Environment
 import Pact.Core.SPV
@@ -44,13 +29,6 @@ import Pact.Core.Serialise
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Command.Server
 import Pact.Core.Command.Server.Config
--- internal modules
-
--- import Pact.Server.API
--- import Pact.Server.Server
--- import Pact.Types.Runtime
--- import Pact.Types.SPV
-
 -- -------------------------------------------------------------------------- --
 -- Global Test Manager
 
@@ -75,12 +53,6 @@ listenClient :: ListenRequest -> ClientM ListenResponse
 localClient :: LocalRequest -> ClientM LocalResponse
 versionClient :: ClientM Text
 (sendClient :<|> pollClient :<|> listenClient :<|> localClient) :<|> versionClient = client (Proxy @API)
-
--- initFastLogger :: IO (String -> IO ())
--- initFastLogger = do
---   tc <- newTimeCache "%Y/%m/%d-%H:%M:%S"
---   (tfl,_) <- newTimedFastLogger tc (LogStdout 1000)
---   return $ \m -> tfl $ \t -> toLogStr t <> " " <> toLogStr (B8.pack m) <> "\n"
 
 withTestServe :: FilePath -> SPVSupport -> (Port -> IO a) -> IO a
 withTestServe configFile spv app = do
@@ -168,3 +140,8 @@ withTestPactServerWithSpv label flags spv action =
       clientEnv <- mkClientEnv testMgr <$> parseBaseUrl (serverRoot port)
       action clientEnv
 
+shouldSatisfy :: HasCallStack => a -> (a -> Bool) -> Assertion
+shouldSatisfy actual p = assertBool "pred failed" (p actual)
+
+shouldBe :: HasCallStack => (Eq a, Show a) => a -> a -> Assertion
+shouldBe = flip (assertEqual "should be equal")

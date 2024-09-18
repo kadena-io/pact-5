@@ -347,7 +347,7 @@ returnCEKValue (CapPopC st cont) handler v = case st of
         csList = _csCap cs : _csComposed cs
         caps' = over (_head . csComposed) (++ csList) (tail caps)
     setCekState (esCaps . csSlots) caps'
-    returnCEKValue cont handler VUnit
+    returnCEKValue cont handler (PBool True)
 returnCEKValue (ListC env args vals cont) handler v = do
   case args of
     [] ->

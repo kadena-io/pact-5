@@ -21,17 +21,14 @@ import Pact.Core.Command.Crypto
 import Pact.Core.Command.Server
 import Pact.Core.Command.Util
 import Pact.Core.Repl.Compile
-<<<<<<< HEAD
 import System.IO
 import Pact.Core.Errors
 import Pact.Core.Info
-=======
 import qualified Pact.Core.Version as PI
 import System.Directory
->>>>>>> 3caaf998 (cleanup)
 import System.Exit(exitFailure, exitSuccess)
 import System.FilePath
-import System.IO
+import Pact.Core.SPV (noSPVSupport)
 
 data OReplLoadFile
   = OReplLoadFile
@@ -56,7 +53,7 @@ data ReplOpts
   -- Crypto
   | OGenKey
   | OExplainErrorCode String
-  | OServer
+  -- | OServer
   deriving (Eq, Show)
 
 replOpts :: O.Parser (Maybe ReplOpts)
@@ -137,7 +134,7 @@ main = O.execParser argParser >>= \case
         in T.putStrLn ("Encountered failure in: " <> phase <> ", caused by: " <> cause)
     OServer configPath -> Y.decodeFileEither configPath >>= \case
       Left perr -> putStrLn $ Y.prettyPrintParseException perr
-      Right config -> runServer config
+      Right config -> runServer config noSPVSupport
       --do
         -- let commandEnv
         --       = CommandEnv
