@@ -1,9 +1,9 @@
 ## install-capabiliy
 Use `install-capability` to specify and provision the installation of a managed CAPABILITY. Managed capabilities are defined within a 'defcap' block, where a '@managed' tag designates a single parameter to be managed by a specified function. After installation, the CAPABILITY must still be brought into scope using 'with-capability', at which time the 'manager function' is invoked to validate the request.
 
-The manager function is of type 'managed:<p> requested:<p> -> <p>', where '<p>' indicates the type of the managed parameter. For example, if you have '(defcap FOO (bar:string baz:integer) @managed baz FOO-mgr ...)', the manager function would be '(defun FOO-mgr:integer (managed:integer requested:integer) ...)'. 
+The manager function is of type `managed:<p> requested:<p> -> <p>`, where `<p>` indicates the type of the managed parameter. For example, if you have `(defcap FOO (bar:string baz:integer) @managed baz FOO-mgr ...)`, the manager function would be `(defun FOO-mgr:integer (managed:integer requested:integer) ...)`. 
 
-Any capability matching the 'static' (non-managed) parameters will cause this function to be invoked with the current managed value and that of the requested capability. The function should perform whatever logic, presumably linear, to validate the request, and return the new managed value representing the 'balance' of the request.
+Any capability matching the `static` (non-managed) parameters will cause this function to be invoked with the current managed value and that of the requested capability. The function should perform whatever logic, presumably linear, to validate the request, and return the new managed value representing the 'balance' of the request.
 
 Note that signatures scoped to a managed capability cause the capability to be automatically provisioned for installation similarly to one installed with this function.
 

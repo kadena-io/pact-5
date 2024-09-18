@@ -17,7 +17,7 @@ Use the following argument to specify the `table` for the `describe-table` Pact 
 
 | Argument | Type          | Description                                  |
 |----------|---------------|----------------------------------------------|
-| `table`    | table:<{row}> | Specifies the table to describe.             |
+| `table` | table:<{row}> | Specifies the table to describe.             |
 
 ### Return values
 
