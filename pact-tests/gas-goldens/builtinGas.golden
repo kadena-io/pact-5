@@ -25,7 +25,7 @@ compose: 1461
 concat: 721
 cond: 2102
 contains: 231
-continue: 60157590
+continue: 60222618
 create-capability-guard: 60000300
 create-capability-pact-guard: 60046369
 create-module-guard: 60000245
@@ -93,7 +93,7 @@ read-string: 128
 read: 60393713
 remove: 261
 require-capability: 60002677
-resume: 60098731
+resume: 60123740
 reverse: 601
 round: 50
 scalar-mult: 360225
@@ -116,7 +116,7 @@ with-default-read: 60406263
 with-read: 60394788
 write: 60383378
 xor: 2000
-yield: 60048476
+yield: 60073485
 zip: 3822
 |: 2000
 ~: 1000

@@ -1143,7 +1143,7 @@ applyPact i pc ps cenv nested = use esDefPactExec >>= \case
               done = (not (_psRollback ps') && isLastStep) || _psRollback ps'
             when (nestedPactsNotAdvanced resultExec ps') $
               throwExecutionError i (NestedDefpactsNotAdvanced (_peDefPactId resultExec))
-            sz <- sizeOf i SizeOfV0 pe
+            sz <- sizeOf i SizeOfV0 resultExec
             chargeGasArgs i (GWrite sz)
             evalWrite i pdb Write DDefPacts (_psDefPactId ps') (if done then Nothing else Just resultExec)
             emitXChainEvents (_psResume ps') resultExec

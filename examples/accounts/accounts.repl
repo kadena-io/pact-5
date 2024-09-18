@@ -1,0 +1,160 @@
+(begin-tx)
+(env-exec-config [])
+(define-keyset 'k (sig-keyset))
+(module system 'k
+  (defschema sysdata curtime:time)
+  (deftable systbl:{sysdata})
+  (defconst KEY "sys")
+  (defun set-system-time (curtime) (write systbl KEY { 'curtime: curtime }))
+  (defun get-system-time () (at 'curtime (read systbl KEY)))
+)
+(create-table systbl)
+(commit-tx)
+(env-keys ["accountadmin" "user123" "user456"])
+(env-data { "accounts-admin-keyset": ["accountadmin"] })
+(begin-tx)
+(load "accounts.pact")
+(commit-tx)
+(verify 'accounts)
+
+(env-data { "123-keyset": { "keys" : ["user123"], "pred": "keys-all" },
+             "456-keyset": { "keys": ["user456"], "pred": "keys-any" } })
+(begin-tx)
+(use accounts)
+(create-account "123" (read-keyset "123-keyset") "USD" (time "2016-07-22T11:26:35Z"))
+(create-account "456" (read-keyset "456-keyset") "USD" (time "2016-07-22T11:26:35Z"))
+(fund-account "123" 234.0 (time "2016-07-22T11:26:35Z"))
+(commit-tx)
+(begin-tx)
+(use accounts)
+(transfer "123" "456" 5.0 (time "2016-07-22T11:26:35Z"))
+(commit-tx)
+(begin-tx)
+(use accounts)
+;;admin reads
+(expect "balance of 123 after transfer" 229.0 (with-read accounts "123" { "balance" := b } b))
+(expect "balance of 456 after transfer" 5.0 (with-read accounts "456" { "balance" := b } b))
+(commit-tx)
+(begin-tx)
+(use accounts)
+(env-keys ["user123" "user456"])
+(expect-failure "should not allow read" (with-read accounts "123" { "balance" := b } b))
+
+;; test private pact 'payment'
+
+(env-keys ["user123" "accountadmin"])
+(env-entity "us")
+
+; initiate pact with normal execution
+(env-hash (hash "payment123-pact-id")) ;; equivalent to setting pact-id hash
+(payment "123" "us" "456" "them" 12.0 (time "2016-07-22T11:26:35Z"))
+(expect "balance of 123 after debit step" 217.0 (with-read accounts "123" { "balance" := b } b))
+
+; test rollback
+(continue-pact 0 true)
+(expect "balance of 123 after rollback" 229.0 (with-read accounts "123" { "balance" := b } b))
+
+; test success step 1
+(pact-state true)
+(payment "123" "us" "456" "them" 12.0 (time "2016-07-22T11:26:35Z"))
+(continue-pact 1)
+(expect "balance of 456 unchanged" 5.0 (with-read accounts "456" { "balance" := b } b))
+(rollback-tx)
+
+(begin-tx)
+(use accounts)
+(payment "123" "us" "456" "them" 12.0 (time "2016-07-22T11:26:35Z"))
+(env-entity "them")
+(continue-pact 1)
+(expect "balance of 456 after credit step" 17.0 (with-read accounts "456" { "balance" := b } b))
+(rollback-tx)
+
+;; test public pact escrow
+(begin-tx)
+(module test 'k
+   (defconst TIMEOUT (time "2017-01-01T13:00:00Z"))
+   (defun run-escrow () (accounts.two-party-escrow "123" "456" 2.00 TIMEOUT))
+   (defun reset-time () (system.set-system-time (time "2017-01-01T12:00:00Z")))
+   (defun get-balance (acct) (at "balance" (accounts.read-account-user acct)))
+   )
+(commit-tx)
+
+(env-keys ["user123"])
+
+(begin-tx)
+(test.reset-time)
+(env-hash (hash "run-escrow-pact-id"))
+(test.run-escrow)
+
+(expect "2.0 escrowed" 227.0 (test.get-balance "123"))
+(commit-tx)
+
+
+;;test cancel
+(begin-tx)
+;; debtor cannot cancel
+(expect-failure "creditor cancel pre-timeout" (continue-pact 0 true (hash "run-escrow-pact-id")))
+(expect "still escrowed" 227.0 (test.get-balance "123"))
+
+(system.set-system-time test.TIMEOUT)
+;; debtor can cancel
+(continue-pact 0 true (hash "run-escrow-pact-id"))
+(expect "escrow canceled" 229.0 (test.get-balance "123"))
+
+(rollback-tx) ; back to first step
+(expect "still escrowed" 227.0 (test.get-balance "123"))
+(begin-tx)
+;; creditor can cancel immediately
+(test.reset-time)
+(env-keys ["user456"])
+(continue-pact 0 true (hash "run-escrow-pact-id"))
+(expect "no money paid to 456" 5.0 (test.get-balance "456"))
+(env-keys ["user123"]) ; for balance check
+(expect "escrow canceled" 229.0 (test.get-balance "123"))
+
+(rollback-tx) ; back to first step
+
+(begin-tx)
+;; creditor cannot finish alone
+(env-keys ["user456"])
+(expect-failure "creditor cannot finish alone" (continue-pact 1 false (hash "run-escrow-pact-id")))
+
+;; debtor cannot finish alone
+(env-keys ["user123"])
+(expect-failure "debtor cannot finish alone" (continue-pact 1 false (hash "run-escrow-pact-id")))
+
+;; both can, but price cannot be nego'd up
+(env-keys ["user123" "user456"])
+(env-data { "final-price": 2.75 })
+(expect-failure "price cannot nego up" (continue-pact 1 false (hash "run-escrow-pact-id")))
+
+(env-data { "final-price": 1.75 })
+(continue-pact 1 false (hash "run-escrow-pact-id"))
+(expect "seller paid 1.75" 6.75 (test.get-balance "456"))
+(expect "buyer refunded .25" 227.25 (test.get-balance "123"))
+
+(commit-tx)
+
+;;exercise PAY
+(begin-tx)
+
+(env-sigs
+ [{ 'key: "user123", "caps": [(accounts.PAY "123" "456" 1.0)]},
+  { 'key: "accountadmin", "caps": [] }])
+(install-capability (accounts.PAY "123" "456" 1.0))
+(expect
+ "Payment for 0.9 on 1.0 installed cap succeeds"
+ "Transfer succeeded"
+ (accounts.pay "123" "456" 0.9 (time "2016-07-22T11:26:35Z")))
+
+(commit-tx)
+
+(begin-tx)
+;;test that PAY cannot be used without install
+(env-keys ["user123"])
+
+(expect-failure
+ "PAY cannot be acquired without install"
+ (accounts.pay "123" "456" 0.9 (time "2016-07-22T11:26:35Z")))
+
+;

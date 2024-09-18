@@ -171,13 +171,10 @@ tests =  withResource
         SResponse _ _ reqResp' <- postWithHeaders "/api/v1/listen" req'  [(HTTP.hContentType, "application/json")]
         let (Just (ListenResponse cres')) :: Maybe ListenResponse = A.decodeStrict $ LBS.toStrict reqResp'
         liftIO $ assertEqual "Should match step 0" "step 0" (view (crResult . _PactResultOk . _PString) cres')
-        liftIO $ print cres'
         -- check first cont msg
         let req'' = J.encode $ J.build $ ListenRequest (cmdToRequestKey contCmd)
         SResponse _ _ reqResp'' <- postWithHeaders "/api/v1/listen" req''  [(HTTP.hContentType, "application/json")]
         let (Just (ListenResponse cres'')) :: Maybe ListenResponse = A.decodeStrict $ LBS.toStrict reqResp''
-        liftIO $ print cres''
-        liftIO $ print contCmd
         liftIO $ assertEqual "Should match step 1" "step 1" (view (crResult . _PactResultOk . _PString) cres'')
 
     ]
