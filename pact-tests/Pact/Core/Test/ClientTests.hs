@@ -75,7 +75,7 @@ tests = testGroup "Servant API client tests" [
           ListenResponse lr -> Right (_crResult lr) `shouldSatisfy` failWith (ErrorCode 0)
   ]
 
-failWith :: ErrorCode -> Either ClientError (PactResult (PactErrorCompat Info)) -> Bool
+failWith :: ErrorCode -> Either ClientError (PactResult (PactErrorCompat (LocatedErrorInfo Info))) -> Bool
 failWith errType res = case res of
   Left _ -> False
   Right r -> case r of

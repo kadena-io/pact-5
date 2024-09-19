@@ -40,6 +40,8 @@ import qualified Pact.JSON.Legacy.HashMap as LHM
 import Pact.Core.Hash
 import Data.Maybe (catMaybes)
 import Pact.Core.Command.Util
+import Data.Bifunctor (first)
+import Pact.Core.Pretty (renderCompactString)
 
 newtype PublicKeyHex = PublicKeyHex { unPublicKeyHex :: Text }
   deriving (Eq,Ord,Show,Generic)
@@ -101,7 +103,7 @@ instance J.Encode a => J.Encode (SigData a) where
 
 commandToSigData :: Command Text -> Either String (SigData Text)
 commandToSigData c = do
-  let ep = traverse parsePact =<< eitherDecodeStrict' (encodeUtf8 $ _cmdPayload c)
+  let ep = traverse (first renderCompactString <$> parsePact) =<< eitherDecodeStrict' (encodeUtf8 $ _cmdPayload c)
   case ep :: Either String (Payload Value ParsedCode) of
     Left e -> Left $ "Error decoding payload: " <> e
     Right p -> do
@@ -111,7 +113,7 @@ commandToSigData c = do
 sigDataToCommand :: SigData Text -> Either String (Command Text)
 sigDataToCommand (SigData _ _ Nothing) = Left "Can't reconstruct command"
 sigDataToCommand (SigData h sigList (Just c)) = do
-  payload :: Payload Value ParsedCode <- traverse parsePact =<< eitherDecodeStrict' (encodeUtf8 c)
+  payload :: Payload Value ParsedCode <- traverse (first renderCompactString <$> parsePact) =<< eitherDecodeStrict' (encodeUtf8 c)
   let sigMap = M.fromList sigList
   -- It is ok to use a map here because we're iterating over the signers list and only using the map for lookup.
   let sigs = catMaybes

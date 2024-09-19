@@ -85,6 +85,7 @@ import Pact.Core.SPV
 import Pact.Core.Signer
 import qualified Pact.Core.Hash as PactHash
 import Pact.Core.Command.SigData
+import Pact.Core.Pretty (renderCompactString)
 
 
 
@@ -393,7 +394,7 @@ returnSigDataOrCommand  outputLocal sd
   where
   isPartialSigData = any (isn't _Just . snd) (_sigDataSigs sd)
   verifyPartialSigData (SigData h sigs (Just cmd)) = do
-    payload :: Payload A.Value ParsedCode <- traverse parsePact =<< JD.eitherDecodeStrict' (T.encodeUtf8 cmd)
+    payload :: Payload A.Value ParsedCode <- traverse (first renderCompactString <$> parsePact) =<< JD.eitherDecodeStrict' (T.encodeUtf8 cmd)
     let sigMap = M.fromList sigs
     when (length (_pSigners payload) /= length sigs) $
       Left "Number of signers in the payload does not match number of signers in the sigData"

@@ -188,6 +188,9 @@ module Pact.Core.Errors
  , BoundedText
  , _boundedText
  , mkBoundedText
+ , PactErrorOrigin(..)
+ , LocatedErrorInfo(..)
+ , pactErrorToLocatedErrorCode
  ) where
 
 import Control.Lens hiding (ix)
@@ -201,6 +204,7 @@ import Data.Typeable(Typeable)
 import Data.Set(Set)
 import Data.Word
 import Data.List(intersperse)
+import Data.Default
 import Numeric (showHex)
 import GHC.TypeLits
 import qualified Data.Version as V
@@ -230,8 +234,11 @@ import Pact.Core.ChainData (ChainId(_chainId))
 import Data.String (IsString(..))
 import Pact.Core.Gas.Types
 
+-- A common type alias, as `PactErrorI`s come straight from running
+-- the lexer + parser
 type PactErrorI = PactError SpanInfo
 
+-- | Errors that occur during lexing
 data LexerError
   = LexicalError Char Char
   -- ^ Lexical error: encountered character, last seen character
@@ -252,6 +259,7 @@ instance Pretty LexerError where
     OutOfInputError c ->
       Pretty.hsep ["Ran out of input before finding a lexeme. Last Character seen: ", Pretty.parens (pretty c)]
 
+-- | Errors that occur during parsing
 data ParseError
   = ParsingError Text
   -- ^ Parsing error: [expected]
@@ -283,6 +291,9 @@ instance Pretty ParseError where
     InvalidBaseType txt ->
       Pretty.hsep ["No such type:", pretty txt]
 
+-- | Desugar errors are raised from our name resolution + desugaring pass.
+--   they mostly encompass things like unbound variables, modules that don't exist,
+--   and invalid use of special syntactic forms (Extensions to lisp that are pact-specific)
 data DesugarError
   = UnboundTermVariable Text
   -- ^ Encountered a variable with no binding <varname>
@@ -464,6 +475,12 @@ instance Pretty ArgTypeError where
     ATEModRef -> "modref"
     ATECapToken -> "cap-token"
 
+-- | Invariant errors are _not_ meant to happen, ever, during pact execution.
+--   They handle cases like expecting a value on the stack that is not there,
+--   a malformed definition and other such invariants.
+--
+--   Any time an `InvariantError` occurs after a particular piece of source code
+--   has gone through our interpretation pipeline, it is a bug and should be raised as an issue.
 data InvariantError
   = InvariantInvalidDefKind DefKind Text
   -- ^ An illegal `def` form was found in a term variable position
@@ -539,8 +556,7 @@ instance Pretty InvariantError where
       "Attempted to pop or manipulate the capstack, but it was found to be empty"
 
 
--- | All fatal execution errors which should pause
---
+-- | All fatal execution errors that can be raised during pact execution
 data EvalError
   = ArrayOutOfBoundsException Int Int
   -- ^ Array index out of bounds <length> <index>
@@ -899,6 +915,8 @@ instance Pretty EvalError where
     UnknownException msg ->
       "Unknown exception: " <> pretty msg
 
+-- | Errors meant to be raised
+--   internally by a PactDb implementation
 data DbOpError
   = WriteError
   | RowReadDecodeFailure Text
@@ -1046,6 +1064,14 @@ instance Pretty VerifierError where
   pretty (VerifierError v) =
     "Error during verifier execution: " <> pretty v
 
+-- | Our main ADT for errors.
+--   Our erros on chain (and in the repl) are separated into:
+--   - Errors from lexing
+--   - Errors from parsing
+--   - Errors from desugaring + renaming
+--   - Unrecoverable errors resulting from pact execution
+--   - Recoverable, but unhandled errors emitted by user code during pact execution
+--   - Errors from running a verifier plugin (Chainweb)
 data PactError info
   = PELexerError LexerError info
   | PEParseError ParseError info
@@ -1054,6 +1080,56 @@ data PactError info
   | PEUserRecoverableError UserRecoverableError [StackFrame info] info
   | PEVerifierError VerifierError info
   deriving (Eq, Show, Functor, Generic)
+
+-- | A pact error origin is either:
+--   - A function call where it occurred
+--   - A top level statement
+data PactErrorOrigin
+  = TopLevelErrorOrigin
+  | FunctionErrorOrigin FullyQualifiedName
+  deriving (Eq, Show)
+
+instance J.Encode PactErrorOrigin where
+  build = \case
+    TopLevelErrorOrigin -> J.text "<toplevel>"
+    FunctionErrorOrigin fqn -> J.build (renderFullyQualName fqn)
+
+instance JD.FromJSON PactErrorOrigin where
+  parseJSON = JD.withText "PactErrorOrigin" $ \case
+    "<toplevel>" -> pure TopLevelErrorOrigin
+    t -> case parseFullyQualifiedName t of
+      Just fqn -> pure (FunctionErrorOrigin fqn)
+      Nothing -> fail "failure parsing pact error origins"
+
+-- | A `LocatedErrorInfo` is a pair of
+--   an error origin (so a function call or a top level statement)
+--   as well as the line or span info from the source text
+data LocatedErrorInfo info
+  = LocatedErrorInfo
+  { _leiOrigin :: PactErrorOrigin
+  , _leiInfo :: info
+  } deriving (Eq, Show, Functor, Foldable, Traversable)
+
+instance Default info => Default (LocatedErrorInfo info) where
+  def = LocatedErrorInfo TopLevelErrorOrigin def
+
+locatePactErrorInfo :: PactError info -> PactError (LocatedErrorInfo info)
+locatePactErrorInfo pe =
+  case viewErrorStack pe of
+    sf:_ -> fmap (LocatedErrorInfo (FunctionErrorOrigin (_sfName sf))) pe
+    [] -> fmap (LocatedErrorInfo TopLevelErrorOrigin) pe
+
+instance J.Encode info => J.Encode (LocatedErrorInfo info) where
+  build loc = J.object
+    [ "errorOrigin" J..= _leiOrigin loc
+    , "errorInfo" J..= _leiInfo loc
+    ]
+
+instance JD.FromJSON info => JD.FromJSON (LocatedErrorInfo info) where
+  parseJSON = JD.withObject "LocatedErrorInfo" $ \o ->
+    LocatedErrorInfo
+      <$> o JD..: "errorOrigin"
+      <*> o JD..: "errorInfo"
 
 instance NFData info => NFData (PactError info)
 
@@ -1776,6 +1852,8 @@ pactErrorToErrorCode pe = let
     PEUserRecoverableError e _ _ -> constrIndex e
     PEVerifierError e _ -> constrIndex e
 
+pactErrorToLocatedErrorCode :: PactError info -> PactErrorCode (LocatedErrorInfo info)
+pactErrorToLocatedErrorCode = pactErrorToErrorCode . locatePactErrorInfo
 
 data PrettyErrorCode info
   = PrettyErrorCode

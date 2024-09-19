@@ -352,6 +352,9 @@ instance SizeOf Literal where
     LBool _b -> pure 0
     LUnit -> pure 0
 
+instance SizeOf LineInfo where
+  sizeOf i ver (LineInfo li) = sizeOf i ver li
+
 deriving newtype instance SizeOf Hash
 deriving newtype instance SizeOf Field
 deriving newtype instance SizeOf NamespaceName

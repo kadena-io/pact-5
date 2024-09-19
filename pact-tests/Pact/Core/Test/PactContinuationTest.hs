@@ -203,7 +203,7 @@ testNestedPactContinuation = testGroup "test nested pact continuation" $ [
       testErrStep (errorStepNestedPactCode mname4) ("(" <> mname4 <> "-nested.nestedTester)") nestedDefPactFlags
   ]
 
-testSimpleServerCmd :: IO (Maybe (CommandResult Hash (PactErrorCompat Info)))
+testSimpleServerCmd :: IO (Maybe (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))))
 testSimpleServerCmd = do
   simpleKeys <- DynEd25519KeyPair <$> generateEd25519KeyPair
   cmd <- mkExec  "(+ 1 2)" PUnit def [(simpleKeys,[])] [] Nothing (Just "test1")
@@ -959,7 +959,7 @@ mkFakeSPV pe =
         return $ Left "Invalid proof"
   }
 
-testCrossChainYield :: T.Text -> Maybe (PactErrorCode Info -> Assertion) -> (DefPactExec -> SPVSupport) -> [ExecutionFlag] -> Assertion
+testCrossChainYield :: T.Text -> Maybe (PactErrorCode (LocatedErrorInfo Info) -> Assertion) -> (DefPactExec -> SPVSupport) -> [ExecutionFlag] -> Assertion
 testCrossChainYield blessCode expectFailure mkSpvSupport spvFlags = step0
   where
 
@@ -1131,7 +1131,7 @@ testTwoPartyEscrow = testGroup "two party escrow" $ [
 
 twoPartyEscrow
   :: [Command Text]
-  -> (Hash -> ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat Info))) IO ())
+  -> (Hash -> ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ())
   -> Assertion
 twoPartyEscrow testCmds act = do
   let setupPath = testDir ++ "cont-scripts/setup-"
@@ -1163,9 +1163,9 @@ decValue = PDecimal
 checkContHash
   :: HasCallStack
   => [ApiReqParts]
-  -> ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat Info))) IO ()
+  -> ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
   -> Hash
-  -> ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat Info))) IO ()
+  -> ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
 checkContHash reqs act hsh = forM_ reqs $ \req ->
   let desc = show $ view (_1 . to _ylNonce) req
   in case preview (_1 . to _ylPactTxHash . _Just) req of
@@ -1303,10 +1303,10 @@ shouldMatch
     :: HasCallStack
     => Command Text
     -> ExpectResult
-    -> ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat Info))) IO ()
+    -> ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
 shouldMatch cmd er = ask >>= liftIO . shouldMatch' (makeCheck cmd er)
 
-shouldMatch' :: HasCallStack => CommandResultCheck -> M.Map RequestKey (CommandResult Hash (PactErrorCompat Info)) -> Assertion
+shouldMatch' :: HasCallStack => CommandResultCheck -> M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))) -> Assertion
 shouldMatch' CommandResultCheck{..} results = checkResult _crcExpect apiRes
   where
     apiRes = M.lookup _crcReqKey results
@@ -1315,34 +1315,34 @@ shouldMatch' CommandResultCheck{..} results = checkResult _crcExpect apiRes
       Just cr -> crTest cr
 
 succeeds :: HasCallStack => Command Text ->
-                ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat Info))) IO ()
+                ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
 succeeds cmd = cmd `succeedsWith` (\_ -> pure ())
 
 succeedsWith :: HasCallStack => Command Text -> (PactValue -> Assertion) ->
-                ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat Info))) IO ()
+                ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
 succeedsWith cmd r = succeedsWith' cmd (\(pv,es) -> (es `shouldBe` []) *> r pv)
 
 succeedsWith' :: HasCallStack => Command Text -> ((PactValue,[PactEvent PactValue]) -> Assertion) ->
-                ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat Info))) IO ()
+                ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
 succeedsWith' cmd r = shouldMatch cmd (resultShouldBe $ Right r)
 
 fails :: HasCallStack => Command Text ->
-         ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat Info))) IO ()
+         ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
 fails cmd = cmd `failsWith` (\_ -> pure ())
 
-failsWith :: HasCallStack => Command Text -> (PactErrorCode Info -> Assertion) ->
-             ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat Info))) IO ()
+failsWith :: HasCallStack => Command Text -> (PactErrorCode (LocatedErrorInfo Info) -> Assertion) ->
+             ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
 failsWith cmd r = failsWith' cmd (\e -> r e)
 
 failsWithCode :: HasCallStack => Command Text -> ErrorCode ->
-             ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat Info))) IO ()
+             ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
 failsWithCode cmd r = failsWith' cmd ((`shouldBe` r) . _peCode)
 
 shouldBeErrorCode :: HasCallStack => PactErrorCode info -> ErrorCode -> Assertion
 shouldBeErrorCode pe code = _peCode pe `shouldBe` code
 
-failsWith' :: HasCallStack => Command Text -> (PactErrorCode Info -> Assertion) ->
-             ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat Info))) IO ()
+failsWith' :: HasCallStack => Command Text -> (PactErrorCode (LocatedErrorInfo Info) -> Assertion) ->
+             ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
 failsWith' cmd r = shouldMatch cmd (resultShouldBe $ Left r)
 
 
@@ -1401,7 +1401,7 @@ getDefPactId :: Command Text -> DefPactId
 getDefPactId cmd = DefPactId $ hashToText hsh
   where hsh = _cmdHash cmd
 
-newtype ExpectResult = ExpectResult (CommandResult Hash (PactErrorCompat Info) -> Assertion)
+newtype ExpectResult = ExpectResult (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)) -> Assertion)
     deriving (Semigroup)
 
 data CommandResultCheck = CommandResultCheck
@@ -1413,21 +1413,21 @@ data CommandResultCheck = CommandResultCheck
 makeCheck :: Command T.Text -> ExpectResult -> CommandResultCheck
 makeCheck c@Command{} expect = CommandResultCheck (cmdToRequestKey c) expect
 
-runAll :: [Command T.Text] -> IO (M.Map RequestKey (CommandResult Hash (PactErrorCompat Info)))
+runAll :: [Command T.Text] -> IO (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))))
 runAll cmds = runAll' cmds noSPVSupport []
 
 runAll'
   :: [Command T.Text]
   -> SPVSupport
   -> [ExecutionFlag]
-  -> IO (M.Map RequestKey (CommandResult Hash (PactErrorCompat Info)))
+  -> IO (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))))
 runAll' cmds spv flags =
   withTestPactServerWithSpv "continuationspec" flags spv $ \clientEnv ->
     run clientEnv cmds
 
 
 
-run :: ClientEnv -> [Command T.Text] -> IO (M.Map RequestKey (CommandResult Hash (PactErrorCompat Info)))
+run :: ClientEnv -> [Command T.Text] -> IO (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))))
 run clientEnv cmds = do
   sendResp <- doSend clientEnv . SendRequest . SubmitBatch $ NEL.fromList cmds
   case sendResp of
@@ -1455,7 +1455,7 @@ doPoll clientEnv req = runClientM (pollClient req) clientEnv
 
 resultShouldBe
     :: HasCallStack
-    => Either (PactErrorCode Info -> Assertion) ((PactValue,[PactEvent PactValue]) -> Assertion)
+    => Either (PactErrorCode (LocatedErrorInfo Info) -> Assertion) ((PactValue,[PactEvent PactValue]) -> Assertion)
     -> ExpectResult
 resultShouldBe expect = ExpectResult $ \cr ->
   case (expect, _crResult cr) of

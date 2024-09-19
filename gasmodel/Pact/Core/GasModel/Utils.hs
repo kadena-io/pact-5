@@ -244,7 +244,7 @@ compileTerm
   :: Text
   -> Eval (CoreTerm Info)
 compileTerm source = do
-  parsed <- liftEither $ compileOnlyTerm (RawCode source)
+  parsed <- liftEither $ compileOnlyTermLineInfo (RawCode source)
   DesugarOutput term _  <- runDesugarTerm parsed
   pure term
 

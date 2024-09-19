@@ -21,9 +21,9 @@
 
 -- |
 -- Module      :  Pact.Types.Command
--- Copyright   :  (C) 2016 Stuart Popejoy, Will Martino
+-- Copyright   :  (C) 2024 KAdena
 -- License     :  BSD-style (see the file LICENSE)
--- Maintainer  :  Stuart Popejoy <stuart@kadena.io>, Will Martino <will@kadena.io>
+-- Maintainer  :  Jose Cardona <jose @kadena.io>
 --
 -- Specifies types for commands in a consensus/DL setting.
 --
@@ -77,7 +77,6 @@ import GHC.Generics
 
 import Pact.Core.Capabilities
 import Pact.Core.ChainData
-import Pact.Core.Compile
 import Pact.Core.DefPacts.Types
 import Pact.Core.Guards
 import Pact.Core.Gas.Types
@@ -90,11 +89,15 @@ import Pact.Core.Signer
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import Pact.Core.Verifiers
 import Pact.Core.Command.Crypto  as Base
-import Pact.Core.Evaluate (Info)
+import Pact.Core.Evaluate
+import Pact.Core.Info
+import Pact.Core.Errors
 
 import qualified Pact.JSON.Decode as JD
 import qualified Pact.JSON.Encode as J
 import qualified Data.List.NonEmpty as NE
+import Data.Default
+import Pact.Core.Pretty (renderCompactString)
 
 
 -- | Command is the signed, hashed envelope of a Pact execution instruction or command.
@@ -140,16 +143,18 @@ type Ed25519KeyPairCaps = (Ed25519KeyPair ,[SigCapability])
 -- | Pair parsed Pact expressions with the original text.
 data ParsedCode = ParsedCode
   { _pcCode :: !Text
-  , _pcExps :: ![Lisp.TopLevel Info]
+  , _pcExps :: ![Lisp.TopLevel SpanInfo]
   } deriving (Show,Generic)
 instance NFData ParsedCode
 
-parsePact :: Text -> Either String ParsedCode
+parsePact :: Text -> Either (PactError SpanInfo) ParsedCode
 parsePact t =
-  ParsedCode t <$> first show (parseOnlyProgram t)
+  ParsedCode t <$> (compileOnly (RawCode t))
 
-unsafeParseCommand :: forall m. FromJSON m => Command ByteString -> Either String (Command (Payload m ParsedCode))
-unsafeParseCommand = traverse (traverse parsePact <=< A.eitherDecodeStrict' @(Payload m Text))
+unsafeParseCommand :: forall m. FromJSON m => Command ByteString -> Either PactErrorI (Command (Payload m ParsedCode))
+unsafeParseCommand = traverse $ \a -> do
+  s <- first (\e -> PEParseError (ParsingError (Text.pack e)) def) $ A.eitherDecodeStrict' @(Payload m Text) a
+  traverse parsePact s
 
 -- VALIDATING TRANSACTIONS
 verifyCommand :: forall m. FromJSON m => Command ByteString -> ProcessedCommand m ParsedCode
@@ -166,7 +171,7 @@ verifyCommand orig@Command{..} =
     toProcFail errStr = ProcFail $ "Invalid command: " ++ errStr
 
     parsedPayload :: Either String (Payload m ParsedCode)
-    parsedPayload = traverse parsePact =<< A.eitherDecodeStrict' @(Payload m Text) _cmdPayload
+    parsedPayload = traverse (first renderCompactString <$> parsePact) =<< A.eitherDecodeStrict' @(Payload m Text) _cmdPayload
 
     verifiedHash = PactHash.verifyHash _cmdHash _cmdPayload
 

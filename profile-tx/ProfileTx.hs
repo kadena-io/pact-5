@@ -46,7 +46,6 @@ import Pact.Core.IR.Term
 import Pact.Core.Serialise
 import Pact.Core.Persistence.MockPersistence
 
-import Pact.Core.Info
 import Pact.Core.Errors
 import Pact.Core.Interpreter
 import Pact.Core.Persistence.SQLite
@@ -141,12 +140,12 @@ transferCapFromSender sender receiver amount =
     , PDecimal amount]
 
 runPactTxFromSource
-  :: EvalEnv CoreBuiltin SpanInfo
+  :: EvalEnv CoreBuiltin Info
   -> Text
-  -> Interpreter ExecRuntime CoreBuiltin SpanInfo
-  -> IO (Either (PactError SpanInfo) [CompileValue SpanInfo],EvalState CoreBuiltin SpanInfo)
+  -> Interpreter ExecRuntime CoreBuiltin Info
+  -> IO (Either (PactError Info) [CompileValue Info],EvalState CoreBuiltin Info)
 runPactTxFromSource ee source interpreter = runEvalM (ExecEnv ee) def $ do
-  program <- liftEither $ parseOnlyProgram source
+  program <- liftEither $ compileOnlyLineInfo (RawCode source)
   traverse (interpretTopLevel interpreter) program
 
 setupBenchEvalEnv
@@ -179,7 +178,7 @@ setupBenchEvalEnv pdb signers mBody = do
     }
 
 
-setupCoinTxs :: PactDb CoreBuiltin SpanInfo -> IO ()
+setupCoinTxs :: PactDb CoreBuiltin Info -> IO ()
 setupCoinTxs pdb = do
   putStrLn "Setting up the coin contract and the default funds"
   source <- T.readFile (contractsPath </> "coin-v5-create.pact")
@@ -189,7 +188,7 @@ setupCoinTxs pdb = do
 
 _run :: IO ()
 _run = do
-  pdb <- mockPactDb serialisePact_raw_spaninfo
+  pdb <- mockPactDb serialisePact_lineinfo
   setupCoinTxs pdb >>= print
 
 coinTransferTxRaw :: Text -> Text -> Text
@@ -217,7 +216,7 @@ deepLetTXRaw n =
     , let ncurr = T.pack (show curr)]
   lastVar = "x" <> T.pack (show n)
 
-getRightIO :: Either (PactError SpanInfo) b -> IO b
+getRightIO :: Either (PactError Info) b -> IO b
 getRightIO = either (error . show) pure
 
 resetEEGas :: EvalEnv b i -> IO ()
@@ -230,7 +229,7 @@ transferSigners sender receiver =
   M.singleton (pubKeyFromSender sender) (S.singleton (transferCapFromSender sender receiver 200.0))
 
 _testCoinTransfer :: IO ()
-_testCoinTransfer = withSqlitePactDb serialisePact_raw_spaninfo (T.pack benchmarkSqliteFile) $ \pdb -> do
+_testCoinTransfer = withSqlitePactDb serialisePact_lineinfo (T.pack benchmarkSqliteFile) $ \pdb -> do
   _ <- ignoreGas def $ _pdbBeginTx pdb Transactional
   p <- setupCoinTxs pdb
   print p
@@ -240,7 +239,7 @@ _testCoinTransfer = withSqlitePactDb serialisePact_raw_spaninfo (T.pack benchmar
   print termText
   -- note, we will return this eval state, as it definitely contains the loaded coin contract here.
   (eterm, es) <- runEvalM (ExecEnv ee) def $ do
-    t <- liftEither $ parseOnlyExpr termText
+    t <- liftEither $ compileOnlyTermLineInfo (RawCode termText)
     _dsOut <$> runDesugarTerm t
   term <- getRightIO eterm
   (out, _) <- runEvalM (ExecEnv ee) es (eval evalDirectInterpreter PImpure term)
@@ -259,7 +258,7 @@ withTx pdb act = do
   pure v
 
 
-runCoinXferDirect :: PactDb CoreBuiltin SpanInfo -> IO ()
+runCoinXferDirect :: PactDb CoreBuiltin Info -> IO ()
 runCoinXferDirect pdb =  do
   ee <- setupBenchEvalEnv pdb (transferSigners CoinBenchSenderA CoinBenchSenderB) (PObject mempty)
   (m, es) <- runEvalM (ExecEnv ee) def $ getModule def (ModuleName "coin" Nothing)
@@ -281,7 +280,7 @@ mkCoinIdent :: Text -> Name
 mkCoinIdent n = Name n (NTopLevel (ModuleName "coin" Nothing) (ModuleHash {_mhHash = unsafeModuleHash "DFsR46Z3vJzwyd68i0MuxIF0JxZ_OJfIaMyFFgAyI4w"}))
 
 main :: IO ()
-main = withSqlitePactDb serialisePact_raw_spaninfo (T.pack benchmarkSqliteFile) $ \pdb -> do
+main = withSqlitePactDb serialisePact_lineinfo (T.pack benchmarkSqliteFile) $ \pdb -> do
   withTx pdb $ setupCoinTxs pdb
   withTx pdb $ prePopulateCoinEntries pdb
   runCoinXferDirect pdb

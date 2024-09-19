@@ -66,4 +66,5 @@ tests = testGroup "JSON Roundtrips" $ stableEncodings ++ jsonRoundtrips
     ]
   jsonRoundtrips = fmap testJSONRoundtrip $
     [ EncodingCase signerGen
+    , EncodingCase lineInfoGen
     ]
