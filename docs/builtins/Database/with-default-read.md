@@ -17,7 +17,7 @@ Use the following arguments to specify the table, key, defaults, bindings, and b
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `table` | table:<{row}> | Specifies the table from which to read the row. |
+| `table` | `table: <{row}>` | Specifies the table from which to read the row. |
 | `key` | string | Specifies the key for which to read the row. |
 | `default` | object | Specifies a default object containing values for missing columns. |
 | `bindings` | binding:<{row}> | Specifies the bindings for columns to be bound. |

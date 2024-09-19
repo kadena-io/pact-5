@@ -20,7 +20,7 @@ Use the following arguments when using the `expect-that` Pact function.
 | Argument | Type | Description |
 |----------|------|-------------|
 | `doc` | string | Specifies the documentation string describing the expectation. |
-| `pred` | value:`<a>` -> bool | Specifies the predicate function that takes the result of `exp` and returns a boolean. |
+| `pred` | value: `<a> -> bool` | Specifies the predicate function that takes the result of `exp` and returns a boolean. |
 | `exp` | `<a>` | Specifies the expression to evaluate. The expression can be of any Pact type.          |
 
 ### Return value

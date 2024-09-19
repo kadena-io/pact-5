@@ -19,7 +19,7 @@ Use the following arguments to specify the function, initial value, and list for
 
 | Argument | Type       | Description                                       |
 |----------|------------|---------------------------------------------------|
-| `app` | function x:`<a>` y:`<b>` -> `<a>`` | Specifies the function to apply to each element and the last result. |
+| `app` | function x: `<a>` y: `<b> -> <a>` | Specifies the function to apply to each element and the last result. |
 | `init` | `<a>` | Specifies the initial value for the reduction. |
 | `list` | [`<b>`] | Specifies the list to iterate over.               |
 

@@ -16,7 +16,7 @@ Use the following arguments to specify the table, key, and object data for writi
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `table` | table:<{row}> | Specifies the table in which to write the entry. |
+| `table` | `table: <{row}>` | Specifies the table in which to write the entry. |
 | `key` | string | Specifies the key for the entry to be written. |
 | `object` | object | Specifies the object column data to be written for the key. |
 

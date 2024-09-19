@@ -19,8 +19,8 @@ Use the following arguments to specify the application function and the list of 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `app` | function x:`<b>` -> `<a>` | Specifies the application function to be applied to each element in the list. |
-| `list` | [`<b>`] | Specifies the list of elements to be mapped. |
+| `app` | function x:`<b> -> <a>` | Specifies the application function to be applied to each element in the list. |
+| `list` | `[<b>]` | Specifies the list of elements to be mapped. |
 
 ### Return value
 

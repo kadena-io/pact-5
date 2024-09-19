@@ -20,7 +20,7 @@ Use the following arguments to specify the application function and the value to
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `app` | function x:`<a>` -> bool | Specifies the application function to apply the specified `value` to. The result of applying the specified value returns a boolean value. |
+| `app` | function x: `<a> -> bool` | Specifies the application function to apply the specified `value` to. The result of applying the specified value returns a boolean value. |
 | `value` | `<a>` | Specifies the value to be applied to the application function. |
 
 ### Return value
