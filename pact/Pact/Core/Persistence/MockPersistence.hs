@@ -22,7 +22,7 @@ import Data.ByteString (ByteString)
 
 import Pact.Core.Guards
 import Pact.Core.Namespace
-import Pact.Core.Names
+import Pact.Core.Names hiding (renderTableName)
 import Pact.Core.DefPacts.Types (DefPactExec)
 import Pact.Core.Persistence
 import Pact.Core.Serialise

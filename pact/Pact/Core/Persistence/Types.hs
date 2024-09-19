@@ -280,8 +280,9 @@ newtype UserTableInfo
 
 
 -- | Map the user's table name into a set of names suitable for
---   storage in the persistence backend (prefix USER_ and the module name
---   to avoid conflicts with any system tables).
+--   storage in the persistence backend.
+--   Note: we don't use the USER_ prefix from production pact
+--   since this is how chainweb table names are made.
 toUserTable :: TableName -> Text
 toUserTable (TableName tbl mn) = renderModuleName mn <> "_" <> tbl
 

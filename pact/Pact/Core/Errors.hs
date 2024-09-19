@@ -6,9 +6,11 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 
 module Pact.Core.Errors
@@ -95,7 +97,6 @@ module Pact.Core.Errors
  , _DecodeError
  , _GasExceeded
  , _FloatingPointError
- , _CapNotInScope
  , _InvariantFailure
  , _EvalError
  , _NativeArgumentsError
@@ -147,7 +148,6 @@ module Pact.Core.Errors
  , _RuntimeRecursionDetected
  , _SPVVerificationFailure
  , _ContinuationError
- , _ModRefImplementsNoInterfaces
  , _UserGuardMustBeADefun
  , _ExpectedBoolValue
  , _ExpectedStringValue
@@ -185,6 +185,9 @@ module Pact.Core.Errors
  , _HyperlaneDecodeErrorBinary
  , _HyperlaneDecodeErrorParseRecipient
  , toPrettyLegacyError
+ , BoundedText
+ , _boundedText
+ , mkBoundedText
  ) where
 
 import Control.Lens hiding (ix)
@@ -197,7 +200,9 @@ import Data.Text(Text)
 import Data.Typeable(Typeable)
 import Data.Set(Set)
 import Data.Word
+import Data.List(intersperse)
 import Numeric (showHex)
+import GHC.TypeLits
 import qualified Data.Version as V
 import qualified Pact.Core.Version as PI
 import qualified Data.Set as S
@@ -221,6 +226,8 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.PactValue
 import Pact.Core.Capabilities
 import Pact.Core.DeriveConTag
+import Pact.Core.ChainData (ChainId(_chainId))
+import Data.String (IsString(..))
 
 type PactErrorI = PactError SpanInfo
 
@@ -238,7 +245,7 @@ instance NFData LexerError
 instance Pretty LexerError where
   pretty = ("Lexical Error: " <>) . \case
     LexicalError c1 c2 ->
-      Pretty.hsep ["Encountered character",  Pretty.parens (pretty c1) <> ",", "Last seen", Pretty.parens (pretty c2)]
+      Pretty.hsep ["Encountered unexpected character",  Pretty.dquotes (pretty c1) <> ",", "Last seen", Pretty.dquotes (pretty c2)]
     StringLiteralError te ->
       Pretty.hsep ["String literal parsing error: ", pretty te]
     OutOfInputError c ->
@@ -365,7 +372,7 @@ instance Pretty DesugarError where
       , "in the following functions:"
       , pretty txts]
     InvalidGovernanceRef gov ->
-      Pretty.hsep ["Invalid governance:", pretty gov]
+      Pretty.hsep ["Invalid governance. Must be a 0-argument defcap or a keyset. Found", pretty gov]
     InvalidDefInTermVariable n ->
       Pretty.hsep ["Invalid definition in term variable position:", pretty n]
     InvalidModuleReference mn ->
@@ -407,18 +414,54 @@ data ArgTypeError
   | ATETable
   | ATEClosure
   | ATEModRef
+  | ATECapToken
   deriving (Eq, Show,  Generic)
 
 instance NFData ArgTypeError
 
+pactValueToArgTypeError :: PactValue -> ArgTypeError
+pactValueToArgTypeError = \case
+  PLiteral l -> ATEPrim (literalPrim l)
+  PTime _ -> ATEPrim PrimTime
+  PList _ -> ATEList
+  PObject _ -> ATEObject
+  PGuard _ -> ATEPrim PrimGuard
+  PModRef _ -> ATEModRef
+  PCapToken _ -> ATEClosure
+
+typeToArgTypeError :: Type -> ArgTypeError
+typeToArgTypeError = \case
+  TyPrim p -> ATEPrim p
+  TyList _ -> ATEList
+  TyObject _ -> ATEObject
+  TyAnyObject -> ATEObject
+  TyAnyList -> ATEList
+  TyCapToken -> ATECapToken
+  -- This case should never happen
+  TyAny -> ATEObject
+  TyModRef _ -> ATEModRef
+  TyTable _ -> ATETable
+
+
+renderArgTypeError :: ArgTypeError -> Text
+renderArgTypeError = \case
+  ATEPrim p -> renderPrimType p
+  ATEList -> "list"
+  ATEObject -> "object"
+  ATETable -> "table"
+  ATEClosure -> "closure"
+  ATEModRef -> "modref"
+  ATECapToken -> "cap-token"
+
 instance Pretty ArgTypeError where
   pretty = \case
-    ATEPrim p -> Pretty.brackets $ pretty p
+    ATEPrim p -> pretty p
     ATEList -> "list"
     ATEObject -> "object"
     ATETable -> "table"
     ATEClosure -> "closure"
     ATEModRef -> "modref"
+    ATECapToken -> "cap-token"
 
 data InvariantError
   = InvariantInvalidDefKind DefKind Text
@@ -463,7 +506,7 @@ instance NFData InvariantError
 instance Pretty InvariantError where
   pretty = \case
     InvariantInvalidDefKind dk t ->
-      "Invalid def kind, received" <+> pretty dk <+> pretty t
+      "Invalid def kind, received" <+> pretty dk <+> "got" <+> pretty t
     InvariantDefConstNotEvaluated fqn ->
       "Defconst was not evaluated prior to execution:" <+> pretty fqn
     InvariantExpectedDefCap fqn ->
@@ -510,8 +553,6 @@ data EvalError
   -- ^ Gas went past the gas limit
   | FloatingPointError Text
   -- ^ Floating point operation exception
-  | CapNotInScope Text
-  -- ^ Capability not in scope
   | InvariantFailure InvariantError
   -- ^ Invariant violation in execution. This is a fatal Error.
   | EvalError Text
@@ -605,7 +646,7 @@ data EvalError
   -- ^ Expected a pact value, received a closure or table reference
   | NotInDefPactExecution
   -- ^  Expected function to be called within a defpact. E.g (pact-id)
-  | NamespaceInstallError Text
+  | NamespaceInstallError
   -- ^ Error installing namespace
   | PointNotOnCurve
   -- ^ Pairing-related: Point lies outside of elliptic curve
@@ -623,9 +664,6 @@ data EvalError
   -- ^ Failure in SPV verification
   | ContinuationError Text
   -- ^ Failure in evalContinuation (chainweb)
-  | ModRefImplementsNoInterfaces ModuleName
-  -- ^ Attempted to use a module as a modref, despite
-  -- implementing no interfaces
   | UserGuardMustBeADefun QualifiedName DefKind
   -- ^ User guard closure must refer to a defun
   | ExpectedBoolValue PactValue
@@ -687,9 +725,6 @@ instance Pretty EvalError where
       Pretty.hsep ["Decoding error:", pretty txt]
     FloatingPointError txt ->
       Pretty.hsep ["Floating point error:", pretty txt]
-    -- Todo: probably enhance this data type
-    CapNotInScope txt ->
-      Pretty.hsep ["Capability not in scope:", pretty txt]
     GasExceeded ->
       "Gas limit exceeded"
     InvariantFailure msg ->
@@ -734,7 +769,7 @@ instance Pretty EvalError where
       , "Parent step count: " <> pretty parentStepCount
       ]
     NoPreviousDefPactExecutionFound ps ->
-      Pretty.hsep ["No previous DefPact exeuction found for DefPactId: ", pretty (_psDefPactId ps)]
+      Pretty.hsep ["No previous DefPact execution found for DefPactId: ", pretty (_psDefPactId ps)]
     DefPactAlreadyCompleted ps -> Pretty.hsep
       [ "Requested DefPact already completed: ", "DefPactId:" <> pretty (_psDefPactId ps)]
     NestedDefPactNeverStarted ps -> Pretty.hsep
@@ -748,13 +783,13 @@ instance Pretty EvalError where
     DefPactStepNotInEnvironment -> "No DefPactStep in the environment"
     NoDefPactIdAndExecEnvSupplied -> "No DefPactId or execution environment supplied"
     DefPactRollbackMismatch ps pe -> Pretty.hsep
-      [ "Rollback missmatch in DefPactStep and DefPact exeuction environment:"
+      [ "Rollback missmatch in DefPactStep and DefPact execution environment:"
       , "DefPactId: " <> pretty (_psDefPactId ps)
       , "step rollback: " <> pretty (_psRollback ps)
       , "DefPactExec rollback: " <> pretty (_peStepHasRollback pe)
       ]
     DefPactStepMismatch ps pe -> Pretty.hsep
-      [ "Step missmatch in DefPactStep and DefPact exeuction environment:"
+      [ "Step missmatch in DefPactStep and DefPact execution environment:"
       , "DefPactId: " <> pretty (_psDefPactId ps)
       , "step: " <> pretty (_psStep ps)
       , "DefPactExec step: " <> pretty (_peStep pe + 1)
@@ -812,10 +847,10 @@ instance Pretty EvalError where
     ExpectedPactValue ->
       "Expected Pact Value, got closure or table reference"
     NotInDefPactExecution -> "not in pact execution"
-    NamespaceInstallError e ->
-      "Namespace installation error:" <+> pretty e
+    NamespaceInstallError ->
+      "Namespace installation error: cannot install in root namespace"
     PointNotOnCurve ->
-      "Point lies outside of ellptic curve"
+      "Point lies outside of elliptic curve"
     YieldProvenanceDoesNotMatch received expected ->
       "Yield provenance does not match, received" <+> pretty received <> ", expected" <+> pretty expected
     MismatchingKeysetNamespace ns ->
@@ -846,9 +881,7 @@ instance Pretty EvalError where
     CannotDefineKeysetOutsideNamespace ->
       "Cannot define keyset outside of a namespace"
     NamespaceNotFound nsn ->
-      "Module not found:" <+> pretty nsn
-    ModRefImplementsNoInterfaces mn ->
-      "Invalid modref, module" <+> pretty mn <+> "implements no interfaces"
+      "Namespace not found:" <+> pretty nsn
     ContinuationError msg ->
       "Continuation Error:" <+> pretty msg
     OperationIsLocalOnly n ->
@@ -1062,6 +1095,561 @@ deriveConstrInfo ''EvalError
 deriveConstrInfo ''UserRecoverableError
 deriveConstrInfo ''PactError
 
+
+---------------------------------------------------------------------------------------
+-- Error code functions start here
+---------------------------------------------------------------------------------------
+
+newtype BoundedText (k :: Nat)
+  = BoundedText {_boundedText ::  Text }
+  deriving newtype (Eq, Show, JD.FromJSON, J.Encode)
+
+instance KnownNat k => IsString (BoundedText k) where
+  fromString = ensureBound . BoundedText . T.pack
+
+type PactErrorMsgSize = 256
+
+{-
+  Note [Bounded Text Errors]
+
+  In pact-5 we have error codes, but it would be too much of a service downgrade
+  to no longer have any sort of error message, so we have returned them to pact 5, on the
+  condition that they are bounded. We HAVE TO ENSURE we don't spend too much time computing
+  the actual texts themselves (which the functions tagged with this note do).
+
+  Any function tagged with this note needs to be _extremely_ careful
+  about how it generates error messages.
+
+  The following a set of safe rules to ensure that we can still give
+  good enough errors to users, while avoiding issues with potentially
+  spending too much time serializing errors:
+  - _always_ use `thsep` to concatenate sets of texts when in doubt. It ensures that
+    the `PactErrorMsgSize` bound is maintained
+  - No uses of `show` inside of the functions. Make a helper if necessary that calls `show`
+    when it is safe to do so
+  - Do _not_ even attempt to pretty print a pact value, unless absolutely necessary,
+    and even then, side eye it many times. PactValue inputs are generally user-controlled.
+  - Do not use `renderCompactText` or any functions that come from the `Pretty` module.
+    this is extremely unsafe, because `Pretty` should not care at all about this very specific
+    constraint
+  - Any user controlled text, if it comes from a `RowKey` or any other input, should be
+    `abbrevText`'d (how much to abbrev at your discretion).
+  - Strings that come from inputs which we control (double check to be safe) are fine to not
+    abbrev. They're usually small enough for us not to care.
+-}
+
+ensureBound :: forall k. KnownNat k => BoundedText k -> BoundedText k
+ensureBound (BoundedText msg)
+  | n <- fromIntegral (natVal (Proxy @k)),
+    T.length msg > fromIntegral (natVal (Proxy @k)) = BoundedText (T.take n msg)
+  | otherwise = (BoundedText msg)
+
+-- | NOTE: Do _not_ change this function post mainnet release just to improve an error.
+--  This will fork the chain, these messages will make it into outputs.
+--  See [Bounded Text Errors]
+dbOpErrorToBoundedText' :: DbOpError -> Text
+dbOpErrorToBoundedText' = \case
+    WriteError ->
+      "Error found while writing value"
+    RowReadDecodeFailure rk ->
+      thsep ["Failed to deserialize but found value at key:", abbrevText 10 rk]
+    RowFoundError tn rk ->
+      thsep
+        ["Value already found while in Insert mode in table"
+        , renderTableName tn, "at key"
+        , tdquotes $ abbrevRowKey rk]
+    NoRowFound tn rk ->
+      thsep
+        ["No row found during update in table"
+        , renderTableName tn
+        , "at key"
+        , tdquotes $ abbrevRowKey rk ]
+    NoSuchTable tn ->
+      thsep ["Table", renderTableName tn, "not found"]
+    TableAlreadyExists tn ->
+      thsep ["Table", renderTableName tn, "already exists"]
+    TxAlreadyBegun _ ->
+      "Attempted to begin tx, but a tx already has been initiated"
+    NotInTx cmd ->
+      thsep ["No Transaction currently in progress, cannot execute", cmd]
+    OpDisallowed ->
+      "Operation disallowed in read-only or sys-only mode"
+    MultipleRowsReturnedFromSingleWrite ->
+      "Multiple rows returned from single write"
+
+-- | NOTE: Do _not_ change this function post mainnet release just to improve an error.
+--  This will fork the chain, these messages will make it into outputs.
+--  See [Bounded Text Errors]
+invariantErrorToBoundedText' :: InvariantError -> Text
+invariantErrorToBoundedText' = \case
+  InvariantInvalidDefKind dk t ->
+    thsep ["Invalid def kind, received", renderDefKind dk <> ",", "got", t]
+  -- Note: the following 5 cases use `renderFullyQualName` and not
+  -- tFqn because we actually care to see the full module hash of the function
+  -- in question.
+  -- These errors should never happen on chain, when they do, there's a problem in the
+  -- compiler and it's better we see it
+  InvariantDefConstNotEvaluated fqn ->
+    thsep ["Defconst was not evaluated prior to execution:", renderFullyQualName fqn]
+  InvariantExpectedDefCap fqn ->
+    thsep ["Expected a defcap for free variable", renderFullyQualName fqn]
+  InvariantExpectedDefun fqn ->
+    thsep ["Expected a defun for free variable", renderFullyQualName fqn]
+  InvariantExpectedDefPact fqn ->
+    thsep ["Expected a defpact for free variable", renderFullyQualName fqn]
+  InvariantUnboundFreeVariable fqn ->
+    thsep ["Unbound free variable", renderFullyQualName fqn]
+  InvariantInvalidBoundVariable v ->
+    thsep ["Invalid bound or free variable:", v]
+  InvariantMalformedDefun dfn ->
+    thsep ["Malformed defun: Body is not a lambda", renderFullyQualName dfn]
+  InvariantPactExecNotInEnv _ ->
+    "No pact exec found in env"
+  InvariantPactStepNotInEnv _ ->
+    "No pact step found in env"
+  InvariantInvalidManagedCapIndex i fqn ->
+    thsep ["Invalid managed cap argument index", tInt i, "for function", tFqn fqn]
+  InvariantArgLengthMismatch fqn expected got ->
+    thsep
+      ["Argument length mismatch for", renderFullyQualName fqn, ", expected"
+      , tInt expected <> ","
+      , "got"
+      , tInt got]
+  InvariantInvalidManagedCapKind msg ->
+    thsep ["Invalid managed cap kind", msg]
+  InvariantNoSuchKeyInTable tbl (RowKey rk) ->
+    thsep
+      ["No such key"
+      , rk
+      , "in table"
+      , renderTableName tbl]
+  InvariantEmptyCapStackFailure ->
+    "Attempted to pop or manipulate the capstack, but it was found to be empty"
+
+-- | NOTE: Do _not_ change this function post mainnet release just to improve an error.
+--  This will fork the chain, these messages will make it into outputs.
+--  See [Bounded Text Errors]
+evalErrorToBoundedText :: EvalError -> BoundedText PactErrorMsgSize
+evalErrorToBoundedText = mkBoundedText . \case
+  ArrayOutOfBoundsException len ix ->
+    thsep
+    [ "Array index out of bounds. Length"
+    , tInt len <> ","
+    , "Index"
+    , tInt ix]
+  ArithmeticException txt ->
+    thsep ["Arithmetic exception:", txt]
+  EnumerationError txt ->
+    thsep ["Enumeration error:", txt]
+  DecodeError txt ->
+    thsep ["Decoding error:", txt]
+  FloatingPointError txt ->
+    thsep ["Floating point error:", txt]
+  -- Todo: probably enhance this data type
+  GasExceeded ->
+    "Gas limit exceeded"
+  InvariantFailure msg ->
+    thsep
+      ["Execution Invariant error, please report this to the pact team @kadena:", invariantErrorToBoundedText' msg]
+  NativeArgumentsError (NativeName n) tys ->
+    thsep (["Native evaluation error for native", n <> ",", "received incorrect argument(s) of type(s)"] ++ (renderArgTypeError <$> tys))
+  EvalError txt ->
+    thsep ["Program encountered an unhandled raised error:", txt]
+  YieldOutsideDefPact ->
+    "Try to yield a value outside a running DefPact execution"
+  NoActiveDefPactExec ->
+    "No active DefPact execution in the environment"
+  NoYieldInDefPactStep (DefPactStep step _ (DefPactId dpid) _) ->
+    thsep ["No yield in DefPactStep.", "Step:", tInt step, "DefPactId:", dpid]
+  InvalidDefPactStepSupplied (DefPactStep step _ _ _) stepCount ->
+    thsep
+    [ "DefPactStep does not match DefPact properties:"
+    , "requested:", tInt step
+    , "step count:", tInt stepCount]
+  DefPactIdMismatch (DefPactId reqId) (DefPactId envId) ->
+    thsep
+    [ "Requested DefPactId:", reqId
+    , "does not match context DefPactId:", envId
+    ]
+  CCDefPactContinuationError pactStep _ccExec _dbExec ->
+    thsep
+    [ "Crosschain DefPact continuation error:"
+    , "DefPactId:", (tDpId (_psDefPactId pactStep))
+    ]
+  NestedDefPactParentRollbackMismatch pid rollback parentRollback ->
+    thsep
+    [ "Nested DefPact execution failed, parameter missmatch:"
+    , "DefPactId:", tDpId pid
+    , "Rollback:", tBool rollback
+    , "Parent rollback:", tBool parentRollback
+    ]
+  NestedDefPactParentStepCountMismatch pid stepCount parentStepCount ->
+    thsep
+    [ "Nested DefPact execution failed, parameter missmatch:"
+    , "PactId:", tDpId pid
+    , "step count:", T.pack (show stepCount)
+    , "Parent step count:", T.pack (show parentStepCount)
+    ]
+  NoPreviousDefPactExecutionFound ps ->
+    thsep ["No previous DefPact execution found for DefPactId: ", tDpId (_psDefPactId ps)]
+  DefPactAlreadyCompleted ps -> thsep
+    [ "Requested DefPact already completed:", "DefPactId:", tDpId (_psDefPactId ps)]
+  NestedDefPactNeverStarted ps -> thsep
+    ["Requested nested DefPact never started:", "DefPactId:", tDpId(_psDefPactId ps)]
+  NestedDefPactDoubleExecution ps -> thsep
+    ["Requested nested DefPact double execution:", "DefPactId:" , tDpId (_psDefPactId ps)]
+  MultipleOrNestedDefPactExecFound pe -> thsep
+    ["DefPact execution context already in the environment: DefPactId:", tDpId (_peDefPactId pe)]
+  DefPactStepHasNoRollback ps -> thsep
+    ["Step has no rollback:", "DefPactId:", tDpId (_psDefPactId ps)]
+  DefPactStepNotInEnvironment -> "No DefPactStep in the environment"
+  NoDefPactIdAndExecEnvSupplied -> "No DefPactId or execution environment supplied"
+  DefPactRollbackMismatch ps pe -> thsep
+    [ "Rollback missmatch in DefPactStep and DefPact execution environment:"
+    , "DefPactId:", tDpId (_psDefPactId ps)
+    , "step rollback:", tBool (_psRollback ps)
+    , "DefPactExec rollback:", tBool (_peStepHasRollback pe)
+    ]
+  DefPactStepMismatch ps pe -> thsep
+    [ "Step missmatch in DefPactStep and DefPact execution environment:"
+    , "DefPactId:", tDpId (_psDefPactId ps)
+    , "step:", tInt (_psStep ps)
+    , "DefPactExec step:", tInt (_peStep pe + 1)
+    ]
+  EnforcePactVersionFailure min' max' -> thsep
+    [ "Enforce pact-version failed:"
+    , "Current Version:", T.pack (V.showVersion PI.version)
+    , "Minimum Version:", T.pack (V.showVersion min')
+    , maybe mempty (\v -> "Maximum Version: " <> T.pack (V.showVersion v)) max'
+    ]
+  EnforcePactVersionParseFailure str -> thsep
+    [ "Enforce pact-version failed:"
+    , "Could not parse", str, ", expect list of dot-separated integers"
+    ]
+  InvalidManagedCap fqn ->
+    thsep ["Install capability error: capability is not managed and cannot be installed:", tFqn fqn]
+  CapNotInstalled cap ->
+    thsep
+      [ "Capability not installed:", renderQualName (_ctName cap)
+      , ". Check that the capabilty is in the sigs or the arguments are correct"]
+  CapAlreadyInstalled cap ->
+    thsep ["Capability already installed:", renderQualName (_ctName cap)]
+  ModuleMemberDoesNotExist fqn ->
+    thsep ["Module member does not exist", tFqn fqn]
+  NoSuchKeySet ksn ->
+    thsep ["Cannot find keyset in database:", renderKeySetName ksn]
+  CannotUpgradeInterface ifn ->
+    thsep ["Interface cannot be upgraded:", renderModuleName ifn]
+  DbOpFailure dbe ->
+    thsep ["Error during database operation:", dbOpErrorToBoundedText' dbe]
+  DynNameIsNotModRef n ->
+    thsep ["Attempted to use", abbrevText 25 n, "as dynamic name, but it is not a modref"]
+  ModuleDoesNotExist m ->
+    thsep ["Cannot find module:", renderModuleName m]
+  ExpectedModule mn ->
+    thsep ["Expected module, found interface:", renderModuleName mn]
+  HashNotBlessed mn hs  ->
+    thsep
+      ["Execution aborted, hash not blessed for module"
+      , renderModuleName mn
+      , "with hash"
+      , moduleHashToText hs]
+  CannotApplyPartialClosure ->
+    "Attempted to apply a partially applied closure outside of native callsite"
+  ClosureAppliedToTooManyArgs ->
+    "Attempted to apply a function or closure to too many arguments"
+  FormIllegalWithinDefcap msg ->
+    thsep ["Form illegal within defcap", msg]
+  RunTimeTypecheckFailure argErr ty ->
+    thsep
+      ["Runtime typecheck failure, argument is"
+      , renderArgTypeError argErr
+      , "but expected type"
+      , renderArgTypeError (typeToArgTypeError ty)]
+  NativeIsTopLevelOnly b ->
+    thsep ["Top-level call used in module", _natName b]
+  EventDoesNotMatchModule mn ->
+    thsep ["Emitted event does not match module", renderModuleName mn]
+  InvalidEventCap fqn ->
+    thsep ["Invalid event capability", tFqn fqn]
+  NestedDefpactsNotAdvanced dpid ->
+    thsep ["Nested defpacts not advanced", tDpId dpid]
+  ExpectedPactValue ->
+    "Expected Pact Value, got closure or table reference"
+  NotInDefPactExecution ->
+    "not in pact execution"
+  NamespaceInstallError ->
+    "Namespace installation error: cannot install in root namespace"
+  PointNotOnCurve ->
+    "Point lies outside of elliptic curve"
+  YieldProvenanceDoesNotMatch received expected ->
+    thsep
+      (["Yield provenance does not match, received"
+      , renderProvenance received
+      , ", expected"
+      ] ++ (renderProvenance <$> expected))
+  MismatchingKeysetNamespace ns ->
+    thsep
+    ["Error defining keyset, namespace mismatch, expected ", abbrevText 10 (_namespaceName ns)]
+  RuntimeRecursionDetected qn ->
+    thsep ["Runtime recursion detected in function:", renderQualName qn]
+  SPVVerificationFailure e ->
+    thsep ["SPV verification failure:", e]
+  ExpectedBoolValue pv ->
+    thsep
+      [ "expected bool value, got"
+      , renderPvAsArgType pv]
+  UserGuardMustBeADefun qn dk ->
+    thsep
+      [ "User guard closure"
+      , renderQualName qn
+      , "must be defun, got"
+      , renderDefKind dk]
+  WriteValueDidNotMatchSchema (Schema qn _) _ ->
+    thsep
+      ["Attempted insert failed due to schema mismatch with", renderQualName qn]
+  ObjectIsMissingField f _ ->
+    thsep
+      [ "Key"
+      , abbrevText 10 (_field f)
+      , "not found in object"]
+  NativeExecutionError n msg ->
+    thsep
+      [ "native execution failure,", _natName n
+      , "failed with message:"
+      , msg] -- Note: these strings are controlled by us.
+  ExpectedStringValue pv ->
+    thsep
+    ["expected string value, got:", renderPvAsArgType pv]
+  ExpectedCapToken pv ->
+    thsep ["expected capability token value, got:", renderPvAsArgType pv]
+  InvalidKeysetFormat _ ->
+    "Invalid keyset format"
+  InvalidKeysetNameFormat ksn ->
+    thsep ["Invalid keyset name format:", abbrevText 20 ksn]
+  CannotDefineKeysetOutsideNamespace ->
+    "Cannot define keyset outside of a namespace"
+  NamespaceNotFound nsn ->
+    thsep ["Namespace not found:", abbrevText 10 (_namespaceName nsn)]
+  ContinuationError msg ->
+    thsep ["Continuation Error:", msg]
+  OperationIsLocalOnly n ->
+    thsep ["Operation only permitted in local execution mode:", _natName n]
+  CannotApplyValueToNonClosure ->
+    "Cannot apply value to non-closure"
+  InvalidCustomKeysetPredicate pn ->
+    thsep ["Invalid custom predicate for keyset", abbrevText 20 pn]
+  HyperlaneError he ->
+    -- NOTE: This is safe to use. All `Pretty` instances
+    -- of hyperlane errors contain fields controlled exclusively by us.
+    -- IF THIS EVER CHANGES, FIX THIS
+    thsep ["Hyperlane native error:", renderText he]
+  HyperlaneDecodeError he ->
+    thsep ["Hyperlane decode error:", renderText he]
+  ModuleAdminNotAcquired mn ->
+    thsep
+      ["Module admin necessary for operation but has not been acquired:", renderModuleName mn]
+  UnknownException msg ->
+    thsep ["Unknown exception:", msg]
+
+-- | NOTE: Do _not_ change this function post mainnet release just to improve an error.
+--  This will fork the chain, these messages will make it into outputs.
+--  See [Bounded Text Errors]
+userRecoverableErrorToBoundedText :: UserRecoverableError -> BoundedText PactErrorMsgSize
+userRecoverableErrorToBoundedText = mkBoundedText . \case
+  UserEnforceError t -> t
+  OneShotCapAlreadyUsed -> "Automanaged capability used more than once"
+  CapabilityNotGranted ct ->
+    thsep
+      ["require-capability: not granted:", renderQualName(_ctName ct)]
+  NoSuchObjectInDb tn rk ->
+    thsep
+      ["No value found in table"
+      , renderTableName tn
+      , "for key:"
+      , abbrevRowKey rk]
+  KeysetPredicateFailure ksPred kskeys ->
+    thsep
+      (["Keyset failure ("
+      , predicateToText ksPred
+      , "): "] ++ intersperse ", " (fmap (elide . renderPublicKeyText) $ S.toList kskeys))
+    where
+    elide pk = T.take 8 pk <> "..."
+  CapabilityPactGuardInvalidPactId currPid pgId ->
+    thsep
+      ["Capability pact guard failed: invalid pact id, expected"
+      , tDpId pgId
+      , "got"
+      , tDpId currPid]
+  EnvReadFunctionFailure desc ->
+    thsep [_natName desc, "failed. Invalid format or missing key"]
+  VerifierFailure (VerifierName verif) msg ->
+    thsep ["Verifier failure", verif <> ":", msg]
+  CapabilityGuardNotAcquired cg ->
+    thsep ["Capability not acquired:", renderQualName (_cgName cg)]
+
+-- | NOTE: Do _not_ change this function post mainnet release just to improve an error.
+--  This will fork the chain, these messages will make it into outputs.
+--  See [Bounded Text Errors]
+desugarErrorToBoundedText :: DesugarError -> BoundedText PactErrorMsgSize
+desugarErrorToBoundedText = mkBoundedText . \case
+    UnboundTermVariable t ->
+      thsep ["Unbound variable", t]
+    UnboundTypeVariable t ->
+      thsep ["Unbound type variable", t]
+    InvalidCapabilityReference t ->
+      thsep ["Variable or function used in special form is not a capability", t]
+    NoSuchModuleMember mn txt ->
+      thsep ["Module", renderModuleName mn, "has no such member:", txt]
+    NoSuchModule mn ->
+      thsep ["Cannot find module: ", renderModuleName mn]
+    NoSuchInterface mn ->
+      thsep ["Cannot find interface: ", renderModuleName mn]
+    NotAllowedWithinDefcap dc ->
+      thsep [dc, "form not allowed within defcap"]
+    NotAllowedOutsideModule txt ->
+      thsep [txt, "not allowed outside of a module"]
+    ImplementationError mn1 mn2 defn ->
+      thsep [ "Module"
+            , renderModuleName mn1
+            , "does not correctly implement the function"
+            , defn
+            , "from Interface"
+            , renderModuleName mn2]
+    RecursionDetected mn txts ->
+      thsep $
+      ["Recursive cycle detected in Module"
+      , renderModuleName mn
+      , "in the following functions:"] ++ intersperse ", " txts
+    InvalidGovernanceRef gov ->
+      thsep ["Invalid governance. Must be a 0-argument defcap or a keyset. Found:", renderQualName gov]
+    InvalidDefInTermVariable n ->
+      thsep ["Invalid definition in term variable position:", n]
+    InvalidModuleReference mn ->
+      thsep ["Invalid Interface attempted to be used as module reference:", renderModuleName mn]
+    EmptyBindingBody -> "Bind expression lacks an accompanying body"
+    LastStepWithRollback mn ->
+      thsep ["rollbacks aren't allowed on the last step in:", renderQualName mn]
+    ExpectedFreeVariable t ->
+      thsep ["Expected free variable in expression, found locally bound: ", t]
+    -- Todo: pretty these
+    InvalidManagedArg arg ->
+      thsep ["Invalid Managed arg: no such arg with name:", arg]
+    NotImplemented mn ifn ifdn ->
+      thsep
+        ["Interface member not implemented, module"
+        , renderModuleName mn
+        , "does not implement interface"
+        , renderModuleName ifn
+        , "member:"
+        , ifdn]
+    InvalidImports mn imps ->
+      thsep $
+        ["Invalid imports, module or interface"
+        , renderModuleName mn
+        , "does not implement the following members:"] ++ intersperse ", " imps
+    InvalidImportModuleHash mn mh ->
+      thsep
+        ["Import error for module"
+        , renderModuleName mn
+        , ", hash not blessed:"
+        , moduleHashToText mh]
+    InvalidSyntax msg ->
+      thsep ["Desugar syntax failure:", msg]
+    InvalidDefInSchemaPosition n ->
+      thsep ["Invalid def in defschema position:", n, "is not a valid schema"]
+    InvalidDynamicInvoke (DynamicName dnName dnCall) ->
+      thsep ["Invalid dynamic call:", dnName <> "::" <> dnCall]
+    DuplicateDefinition qn ->
+      thsep ["Duplicate definition:", renderQualName qn]
+    InvalidBlessedHash hs ->
+      thsep ["Invalid blessed hash, incorrect format:", hs]
+
+-- | NOTE: Do _not_ change this function post mainnet release just to improve an error.
+--  This will fork the chain, these messages will make it into outputs.
+--  See [Bounded Text Errors]
+parseErrorToBoundedText :: ParseError -> BoundedText PactErrorMsgSize
+parseErrorToBoundedText = mkBoundedText . \case
+  ParsingError e ->
+    thsep [pErr, "Expected:", e]
+  TooManyCloseParens e ->
+    thsep [pErr, "Too many closing parens, remaining tokens:", e]
+  UnexpectedInput e ->
+    thsep [pErr, "Unexpected input after expr, remaining tokens:", e]
+  PrecisionOverflowError i ->
+    thsep [pErr, "Precision overflow (>=255 decimal places): ", tInt i, "decimals"]
+  InvalidBaseType txt ->
+    thsep [pErr, "No such type:", txt]
+  where
+  pErr = "ParseError:"
+
+lexerErrorToBoundedText :: LexerError -> BoundedText PactErrorMsgSize
+lexerErrorToBoundedText = mkBoundedText . \case
+  LexicalError c1 c2 ->
+    thsep ["Encountered unexpected character", tdquotes (T.singleton c1) <> ",", "Last seen", tdquotes (T.singleton c2)]
+  StringLiteralError te ->
+    thsep ["String literal parsing error: ", te]
+  OutOfInputError c ->
+    thsep ["Ran out of input before finding a lexeme. Last Character seen: ", tdquotes (T.singleton c)]
+
+
+-------------------------------------------------------------------------------------------
+-- Utility functions for text conversion
+-------------------------------------------------------------------------------------------
+thsep :: [Text] -> Text
+thsep = concatBounded (fromIntegral (natVal (Proxy @PactErrorMsgSize))). intersperse " "
+-- tparens :: Text -> Text
+-- tparens x = T.concat ["(", x, ")"]
+tdquotes :: Text -> Text
+tdquotes x = T.concat ["\"", x, "\""]
+tInt :: Int -> Text
+tInt = T.pack . show
+tBool :: Bool -> Text
+tBool = T.pack . show
+tFqn :: FullyQualifiedName -> Text
+tFqn = renderQualName . fqnToQualName
+tDpId :: DefPactId -> Text
+tDpId = abbrevText 20 . _defPactId
+
+abbrevText :: Int -> Text -> Text
+abbrevText lim k
+  | T.length k <= lim = k
+  | otherwise = T.concat [T.take 10 k, "..."]
+
+abbrevRowKey :: RowKey -> Text
+abbrevRowKey = abbrevText 10 . _rowKey
+
+mkBoundedText :: KnownNat k => Text -> BoundedText k
+mkBoundedText = ensureBound . BoundedText
+
+concatBounded :: Int -> [Text] -> Text
+concatBounded bound ts =
+  T.concat (go 0 ts)
+  where
+  go !acc = \case
+    x:xs ->
+      let acc' = T.length x + acc
+      in if acc' > bound then [T.take (bound - acc) x]
+      else x : go acc' xs
+    [] -> []
+
+renderProvenance :: Provenance -> Text
+renderProvenance (Provenance cid mh) =
+  -- Note: chainIDs could be user computed
+  thsep ["Provenance", abbrevText 10 (_chainId cid), abbrevText 20 (moduleHashToText mh) ]
+
+renderPvAsArgType :: PactValue -> Text
+renderPvAsArgType = renderArgTypeError . pactValueToArgTypeError
+
+pactErrorToBoundedText :: PactError info -> BoundedText PactErrorMsgSize
+pactErrorToBoundedText = \case
+  PELexerError le _ -> lexerErrorToBoundedText le
+  PEParseError pe _ -> parseErrorToBoundedText pe
+  PEDesugarError de _ -> desugarErrorToBoundedText de
+  PEExecutionError ee _ _ -> evalErrorToBoundedText ee
+  PEUserRecoverableError ue _ _ -> userRecoverableErrorToBoundedText ue
+  PEVerifierError (VerifierError e) _ -> mkBoundedText e
+
 -- | A Pact error code is a 64 bit integer with the following format:
 --   0x FF    FF    FF    FF FFFF FFFF
 --     |---| |---| |---| |------------|
@@ -1090,6 +1678,7 @@ instance Show ErrorCode where
 data PactErrorCode info
   = PactErrorCode
   { _peCode :: ErrorCode
+  , _peMsg :: BoundedText PactErrorMsgSize
   , _peInfo :: info
   } deriving (Eq, Show, Functor, Foldable, Traversable)
 
@@ -1101,30 +1690,36 @@ errorCodeFromText t = do
     _ -> Nothing
 
 instance {-# OVERLAPPING #-} J.Encode (PactErrorCode NoInfo) where
-  build (PactErrorCode ec _) = J.object
-    [ "errorCode" J..= T.pack (show ec) ]
+  build (PactErrorCode ec msg _) = J.object
+    [ "errorCode" J..= T.pack (show ec)
+    , "errorMsg" J..= msg
+    ]
 
 
 instance {-# OVERLAPPING #-} JD.FromJSON (PactErrorCode NoInfo) where
   parseJSON = JD.withObject "PactErrorCode" $ \o -> do
     t <- o JD..: "errorCode"
     case errorCodeFromText t of
-      Just a -> pure $ PactErrorCode a NoInfo
+      Just a -> do
+        msg <- o JD..: "errorMsg"
+        pure $ PactErrorCode a msg NoInfo
       _ -> fail "failed to parse pact error code"
 
 instance J.Encode info => J.Encode (PactErrorCode info) where
-  build (PactErrorCode ec info) = J.object
+  build (PactErrorCode ec msg info) = J.object
+    -- Note: this is safe, the `Show` instance converts it to hex
     [ "errorCode" J..= T.pack (show ec)
+    , "errorMsg" J..= msg
     , "info" J..= info ]
 
 instance JD.FromJSON info => JD.FromJSON (PactErrorCode info) where
   parseJSON = JD.withObject "PactErrorCode" $ \o -> do
     t <- o JD..: "errorCode"
-    guard (T.length t == 18 && T.all C.isHexDigit (T.drop 2 t))
-    case T.hexadecimal t of
-      Right (a, remaining) | T.null remaining -> do
+    case errorCodeFromText t of
+      Just a -> do
         info <- o JD..: "info"
-        pure $ PactErrorCode (ErrorCode a) info
+        msg <- o JD..: "errorMsg"
+        pure $ PactErrorCode a msg info
       _ -> fail "failed to parse pact error code"
 
 pactErrorToErrorCode :: PactError info -> PactErrorCode info
@@ -1134,7 +1729,7 @@ pactErrorToErrorCode pe = let
   innerTag = shiftL (fromIntegral (innerConstrTag pe)) innerErrorShiftBits
   outerTag = shiftL (fromIntegral (constrIndex pe)) outerErrorShiftBits
   code = ErrorCode (innerTag .|. outerTag)
-  in PactErrorCode code info
+  in PactErrorCode code (pactErrorToBoundedText pe) info
   where
   innerConstrTag = \case
     PELexerError e _ -> constrIndex e
@@ -1149,6 +1744,7 @@ data PrettyErrorCode info
   = PrettyErrorCode
   { _pecFailurePhase :: Text
   , _pecFailureCause :: Text
+  , _pecMsg :: Text
   , _pecInfo :: info
   } deriving Show
 
@@ -1164,8 +1760,8 @@ innerErrorShiftBits = 40
 
 -- | Get the inner and outer cause from an error code
 prettyErrorCode :: PactErrorCode info -> PrettyErrorCode info
-prettyErrorCode (PactErrorCode (ErrorCode ec) i) =
-  PrettyErrorCode phase cause i
+prettyErrorCode (PactErrorCode (ErrorCode ec) msg i) =
+  PrettyErrorCode phase cause (_boundedText msg) i
   where
   getCtorName ctorIx p =
     case find ((== ctorIx) . _ciIndex) (allConstrInfos p) of
@@ -1271,6 +1867,7 @@ instance J.Encode LegacyPactError where
     ]
   {-# INLINE build #-}
 
+
 instance JD.FromJSON LegacyPactError where
   parseJSON = JD.withObject "LegacyPactError" $ \o -> do
     cs <- o JD..: "callStack"
@@ -1278,7 +1875,6 @@ instance JD.FromJSON LegacyPactError where
     msg <- o JD..: "message"
     info <- o JD..: "info"
     pure (LegacyPactError ty info cs msg)
-
 
 -- | PactErrorCompat exists to provide a
 --   codec that can understand both pact 4 and pact 5 errors
@@ -1296,3 +1892,4 @@ instance JD.FromJSON info => JD.FromJSON (PactErrorCompat info) where
   parseJSON v =
     (PEPact5Error <$> JD.parseJSON v) <|>
     (PELegacyError <$> JD.parseJSON v)
+
