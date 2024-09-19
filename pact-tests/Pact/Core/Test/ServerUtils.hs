@@ -53,9 +53,9 @@ withTestServe configFile spv app = do
   Config{..} <- validateConfigFile configFile
   store <- newIORef mempty
   case _persistDir of
-    Nothing -> withSqlitePactDb serialisePact_raw_spaninfo ":memory:" $ \pdb -> do
+    Nothing -> withSqlitePactDb serialisePact_lineinfo ":memory:" $ \pdb -> do
       withTestApiServer (ServerRuntime pdb store spv) app
-    Just pdir -> withSqlitePactDb serialisePact_raw_spaninfo (T.pack pdir <> "pactdb.sqlite") $ \pdb -> do
+    Just pdir -> withSqlitePactDb serialisePact_lineinfo (T.pack pdir <> "pactdb.sqlite") $ \pdb -> do
       withTestApiServer (ServerRuntime pdb store spv) app
 
 -- | Runs an API server for testing.

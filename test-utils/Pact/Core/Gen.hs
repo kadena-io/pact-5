@@ -41,7 +41,6 @@ import Pact.Core.Gas
 import Pact.Core.ModRefs
 import Pact.Core.Hash
 import Data.Ratio ((%), denominator)
-import Pact.Core.Guards (KeySetName(KeySetName))
 
 namespaceNameGen :: Gen NamespaceName
 namespaceNameGen = NamespaceName <$> identGen
@@ -84,6 +83,11 @@ spanInfoGen =
     <*> Gen.integral Range.constantBounded
     <*> Gen.integral Range.constantBounded
     <*> Gen.integral Range.constantBounded
+
+lineInfoGen :: Gen LineInfo
+lineInfoGen =
+  LineInfo
+    <$> Gen.integral Range.constantBounded
 
 capTokenGen :: Gen name -> Gen v -> Gen (CapToken name v)
 capTokenGen n v =

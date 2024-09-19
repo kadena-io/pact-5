@@ -14,6 +14,7 @@ module Pact.Core.Serialise.CBOR_V1
   ( encodeModuleData, decodeModuleData
   , encodeModuleData_repl_spaninfo, decodeModuleData_repl_spaninfo
   , encodeModuleData_raw_spaninfo, decodeModuleData_raw_spaninfo
+  , encodeModuleData_lineinfo, decodeModuleData_lineinfo
   , encodeKeySet, decodeKeySet
   , encodeDefPactExec, decodeDefPactExec
   , encodeNamespace, decodeNamespace
@@ -78,6 +79,9 @@ encodeModuleData_repl_spaninfo = toStrictByteString . encodeS
 encodeModuleData_raw_spaninfo :: ModuleData CoreBuiltin SpanInfo -> ByteString
 encodeModuleData_raw_spaninfo = toStrictByteString . encodeS
 
+encodeModuleData_lineinfo :: ModuleData CoreBuiltin LineInfo -> ByteString
+encodeModuleData_lineinfo = toStrictByteString . encodeS
+
 decodeModuleData :: ByteString -> Maybe (ModuleData CoreBuiltin ())
 decodeModuleData bs = either (const Nothing) (Just . _getSV1) (deserialiseOrFail (fromStrict bs))
 
@@ -90,6 +94,8 @@ decodeModuleData_repl_spaninfo bs =
 decodeModuleData_raw_spaninfo :: ByteString -> Maybe (ModuleData CoreBuiltin SpanInfo)
 decodeModuleData_raw_spaninfo bs = either (const Nothing) (Just . _getSV1) (deserialiseOrFail (fromStrict bs))
 
+decodeModuleData_lineinfo :: ByteString -> Maybe (ModuleData CoreBuiltin LineInfo)
+decodeModuleData_lineinfo bs = either (const Nothing) (Just . _getSV1) (deserialiseOrFail (fromStrict bs))
 
 encodeModuleName :: ModuleName -> ByteString
 encodeModuleName = toStrictByteString . encodeS
@@ -806,6 +812,12 @@ instance Serialise (SerialiseV1 SpanInfo) where
   encode (SerialiseV1 (SpanInfo sl sc el ec)) = encode sl <> encode sc <> encode el <> encode ec
   {-# INLINE encode #-}
   decode = SerialiseV1 <$> (SpanInfo <$> decode <*> decode <*> decode <*> decode)
+  {-# INLINE decode #-}
+
+instance Serialise (SerialiseV1 LineInfo) where
+  encode (SerialiseV1 (LineInfo li)) = encode li
+  {-# INLINE encode #-}
+  decode = SerialiseV1 <$> (LineInfo <$> decode)
   {-# INLINE decode #-}
 
 -- Note: this encoder/decoder relies on the derived `Enum` instance

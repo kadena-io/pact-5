@@ -15,7 +15,6 @@ import Pact.Core.PactValue
 import Pact.Core.Persistence
 import Pact.Core.Persistence.MockPersistence
 import Pact.Core.Serialise
-import Pact.Core.Info
 import Pact.Core.Evaluate
 import Pact.Core.Compile
 import Pact.Core.StableEncoding
@@ -23,7 +22,7 @@ import Pact.Core.StableEncoding
 -- | Run our pact db regression suite
 --   It takes an `IO (PactDb ..)` due to tasty's weird signature in
 --   withResource.
-runPactDbRegression :: PactDb CoreBuiltin SpanInfo -> IO ()
+runPactDbRegression :: PactDb CoreBuiltin Info -> IO ()
 runPactDbRegression pdb = do
   let
     user1 = "user1"
@@ -42,7 +41,7 @@ runPactDbRegression pdb = do
     Just t -> pure t
   let
     row = RowData $ M.fromList [(Field "gah", PDecimal 123.454345)]
-  rowEnc <- ignoreGas def $ _encodeRowData serialisePact_raw_spaninfo row
+  rowEnc <- ignoreGas def $ _encodeRowData serialisePact_lineinfo row
   ignoreGas def $ _pdbWrite pdb Insert (DUserTables usert) (RowKey "key1") row
   row' <- do
       ignoreGas def (_pdbRead pdb (DUserTables usert) (RowKey "key1")) >>= \case
@@ -55,7 +54,7 @@ runPactDbRegression pdb = do
           [ (Field "gah", PBool False)
           , (Field "fh", PInteger 1)
           ]
-  row2Enc <- ignoreGas def $ _encodeRowData serialisePact_raw_spaninfo row2
+  row2Enc <- ignoreGas def $ _encodeRowData serialisePact_lineinfo row2
 
   ignoreGas def $ _pdbWrite pdb Update (DUserTables usert) (RowKey "key1") row2
   row2' <- ignoreGas def $ _pdbRead pdb (DUserTables usert) (RowKey "key1") >>= \case
@@ -65,7 +64,7 @@ runPactDbRegression pdb = do
 
   let
     ks = KeySet (S.fromList [PublicKeyText "skdjhfskj"]) KeysAll
-    ksEnc = _encodeKeySet serialisePact_raw_spaninfo ks
+    ksEnc = _encodeKeySet serialisePact_lineinfo ks
   _ <- ignoreGas def $ _pdbWrite pdb Write DKeySets (KeySetName "ks1" Nothing) ks
   ks' <- ignoreGas def $ _pdbRead pdb DKeySets (KeySetName "ks1" Nothing) >>= \case
     Nothing -> error "expected keyset"
@@ -76,7 +75,7 @@ runPactDbRegression pdb = do
   -- module
   let mn = ModuleName "test" Nothing
   md <- loadModule
-  let mdEnc = _encodeModuleData serialisePact_raw_spaninfo md
+  let mdEnc = _encodeModuleData serialisePact_lineinfo md
   ignoreGas def $ _pdbWrite pdb Write DModules mn md
 
   md' <- ignoreGas def $ _pdbRead pdb DModules mn >>= \case
@@ -119,13 +118,13 @@ runPactDbRegression pdb = do
   return ()
 
 
-loadModule :: IO (ModuleData CoreBuiltin SpanInfo)
+loadModule :: IO (ModuleData CoreBuiltin Info)
 loadModule = do
-  let src = "(module test G (defcap G () true) (defun f (a: integer) 1))"
-  pdb <- mockPactDb serialisePact_raw_spaninfo
+  let src = RawCode "(module test G (defcap G () true) (defun f (a: integer) 1))"
+  pdb <- mockPactDb serialisePact_lineinfo
   ee <- defaultEvalEnv pdb coreBuiltinMap
   Right _ <- runEvalMResult (ExecEnv ee) def $ do
-    p <- liftEither (parseOnlyProgram src)
+    p <- liftEither (compileOnlyLineInfo src)
     traverse (interpretTopLevel evalInterpreter) p
   Just md <- ignoreGas def $ _pdbRead pdb DModules (ModuleName "test" Nothing)
   pure md

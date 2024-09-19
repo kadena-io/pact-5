@@ -16,6 +16,7 @@ module Pact.Core.Serialise
   , document
   , serialisePact
   , serialisePact_raw_spaninfo
+  , serialisePact_lineinfo
   , serialisePact_repl_spaninfo
   , decodeVersion
   , encodeVersion
@@ -42,7 +43,7 @@ import Codec.CBOR.Read (deserialiseFromBytes)
 
 import qualified Pact.Core.Serialise.LegacyPact as LegacyPact
 import qualified Pact.Core.Serialise.CBOR_V1 as V1
-import Pact.Core.Info (SpanInfo)
+import Pact.Core.Info
 import Data.Default
 
 data DocumentVersion
@@ -173,6 +174,18 @@ serialisePact_raw_spaninfo = serialisePact
         (LegacyDocument . fmap def <$> LegacyPact.decodeModuleData bs)
         <|> docDecode bs (\case
                             V1_CBOR -> V1.decodeModuleData_raw_spaninfo
+                        )
+  , _encodeRowData = gEncodeRowData
+  }
+
+serialisePact_lineinfo :: PactSerialise CoreBuiltin LineInfo
+serialisePact_lineinfo = serialisePact
+  { _encodeModuleData = docEncode V1.encodeModuleData_lineinfo
+  , _decodeModuleData =
+      \bs ->
+        (LegacyDocument . fmap def <$> LegacyPact.decodeModuleData bs)
+        <|> docDecode bs (\case
+                            V1_CBOR -> V1.decodeModuleData_lineinfo
                         )
   , _encodeRowData = gEncodeRowData
   }

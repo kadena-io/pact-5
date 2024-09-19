@@ -18,7 +18,8 @@ module Pact.Core.Evaluate
   , interpret
   , compileOnly
   , compileOnlyTerm
-  , evaluateDefaultState
+  , compileOnlyLineInfo
+  , compileOnlyTermLineInfo
   , Eval
   , EvalBuiltinEnv
   , allModuleExports
@@ -143,7 +144,7 @@ data EvalResult = EvalResult
     -- ^ emitted warning
   } deriving stock (Eq, Show)
 
-type Info = SpanInfo
+type Info = LineInfo
 
 setupEvalEnv
   :: PactDb CoreBuiltin a
@@ -344,26 +345,28 @@ evalWithinTx' ee es action =
           pure (res, logs, txid)
 
 -- | Runs only compilation pipeline
-compileOnly :: RawCode -> Either (PactError Info) [Lisp.TopLevel Info]
+compileOnly :: RawCode -> Either (PactError SpanInfo) [Lisp.TopLevel SpanInfo]
 compileOnly = (Lisp.lexer >=> Lisp.parseProgram) . _rawCode
 
+-- | Runs only compilation pipeline
+compileOnlyLineInfo :: RawCode -> Either (PactError LineInfo) [Lisp.TopLevel LineInfo]
+compileOnlyLineInfo = bimap (fmap spanInfoToLineInfo) ((fmap.fmap) spanInfoToLineInfo) . compileOnly
+
 -- | Runs only compilation pipeline for a single term
-compileOnlyTerm :: RawCode -> Either (PactError Info) (Lisp.Expr Info)
+compileOnlyTerm :: RawCode -> Either (PactError SpanInfo) (Lisp.Expr SpanInfo)
 compileOnlyTerm =
   (Lisp.lexer >=> Lisp.parseExpr) . _rawCode
 
+-- | Runs only compilation pipeline for a single term
+compileOnlyTermLineInfo :: RawCode -> Either (PactError LineInfo) (Lisp.Expr LineInfo)
+compileOnlyTermLineInfo =
+  bimap (fmap spanInfoToLineInfo) (fmap spanInfoToLineInfo) . compileOnlyTerm
 
 evalResumePact
   :: Maybe DefPactExec
   -> Eval (CompileValue Info)
 evalResumePact mdp =
   (`InterpretValue` def) <$> resumePact evalInterpreter def mdp
-
--- | Compiles and evaluates the code
-evaluateDefaultState :: RawCode -> Eval [CompileValue Info]
-evaluateDefaultState = either throwError evaluateTerms . compileOnly
-
-
 
 evaluateTerms
   :: [Lisp.TopLevel Info]

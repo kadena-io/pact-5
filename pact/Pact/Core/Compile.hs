@@ -16,21 +16,17 @@ module Pact.Core.Compile
  , compileValueToPactValue
  , evalTopLevel
  , CompileValue(..)
- , parseOnlyProgram
  ) where
 
 import Control.Lens
 import Control.Monad
 import Data.Maybe(mapMaybe)
-import Data.Text(Text)
 import Codec.Serialise(Serialise)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
-import qualified Data.Text.IO as T
 
 import Pact.Core.Debug
 import Pact.Core.Builtin
-import Pact.Core.Info
 import Pact.Core.Persistence
 import Pact.Core.Names
 import Pact.Core.IR.Desugar
@@ -50,8 +46,6 @@ import Pact.Core.Serialise.CBOR_V1(SerialiseV1)
 
 import qualified Pact.Core.IR.ModuleHashing as MHash
 import qualified Pact.Core.IR.ConstEval as ConstEval
-import qualified Pact.Core.Syntax.Lexer as Lisp
-import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import Pact.Core.Gas
 import Pact.Core.SizeOf
@@ -65,13 +59,6 @@ type HasCompileEnv b i
     , Serialise (SerialiseV1 b)
     )
 
-parseOnlyProgram
-  :: Text -> Either PactErrorI [Lisp.TopLevel SpanInfo]
-parseOnlyProgram =
-  Lisp.lexer >=> Lisp.parseProgram
-
-_parseOnlyFile :: FilePath -> IO (Either PactErrorI [Lisp.TopLevel SpanInfo])
-_parseOnlyFile fp = parseOnlyProgram <$> T.readFile fp
 
 
 data CompileValue i

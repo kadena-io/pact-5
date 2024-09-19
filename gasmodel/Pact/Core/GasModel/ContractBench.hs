@@ -36,25 +36,17 @@ import Pact.Core.Hash
 import Pact.Core.Persistence
 import Pact.Core.Builtin
 import Pact.Core.SPV
-import qualified Pact.Core.Syntax.Parser as Lisp
-import qualified Pact.Core.Syntax.Lexer as Lisp
-import qualified Pact.Core.Syntax.LexUtils as Lisp
 import Pact.Core.Gas.TableGasModel
 import Pact.Core.Gas
 import Pact.Core.Namespace
 import Pact.Core.Serialise
 import Pact.Core.Persistence.MockPersistence
 
-import Pact.Core.Info
 import Pact.Core.Errors
 import Pact.Core.Interpreter
 import Data.Decimal
 import Pact.Core.Pretty
 import qualified Data.Text.Encoding as T
-
-parseOnlyExpr :: Text -> Either PactErrorI Lisp.ParsedExpr
-parseOnlyExpr =
-  Lisp.lexer >=> Lisp.parseExpr
 
 contractsPath :: FilePath
 contractsPath = "gasmodel" </> "contracts"
@@ -63,10 +55,10 @@ contractsPath = "gasmodel" </> "contracts"
 mkKs :: PublicKeyText -> PactValue
 mkKs a = PGuard $ GKeyset $ KeySet (S.singleton a) KeysAll
 
-interpretBigStep :: Interpreter ExecRuntime CoreBuiltin SpanInfo
+interpretBigStep :: Interpreter ExecRuntime CoreBuiltin Info
 interpretBigStep = evalInterpreter
 
-interpretDirect :: Interpreter ExecRuntime CoreBuiltin SpanInfo
+interpretDirect :: Interpreter ExecRuntime CoreBuiltin Info
 interpretDirect = evalDirectInterpreter
 
 
@@ -144,12 +136,12 @@ transferCapFromSender sender receiver amount =
     , PDecimal amount]
 
 runPactTxFromSource
-  :: EvalEnv CoreBuiltin SpanInfo
+  :: EvalEnv CoreBuiltin Info
   -> Text
-  -> Interpreter ExecRuntime CoreBuiltin SpanInfo
-  -> IO (Either (PactError SpanInfo) [CompileValue SpanInfo],EvalState CoreBuiltin SpanInfo)
+  -> Interpreter ExecRuntime CoreBuiltin Info
+  -> IO (Either (PactError Info) [CompileValue Info],EvalState CoreBuiltin Info)
 runPactTxFromSource ee source interpreter = runEvalM (ExecEnv ee) def $ do
-  program <- liftEither $ parseOnlyProgram source
+  program <- liftEither $ compileOnlyLineInfo (RawCode source)
   traverse (interpretTopLevel interpreter) program
 
 setupBenchEvalEnv
@@ -182,7 +174,7 @@ setupBenchEvalEnv pdb signers mBody = do
     }
 
 
-setupCoinTxs :: PactDb CoreBuiltin SpanInfo -> IO ()
+setupCoinTxs :: PactDb CoreBuiltin Info -> IO ()
 setupCoinTxs pdb = do
   putStrLn "Setting up the coin contract and the default funds"
   source <- T.readFile (contractsPath </> "coin-v5-create.pact")
@@ -192,7 +184,7 @@ setupCoinTxs pdb = do
 
 _run :: IO ()
 _run = do
-  pdb <- mockPactDb serialisePact_raw_spaninfo
+  pdb <- mockPactDb serialisePact_lineinfo
   setupCoinTxs pdb >>= print
 
 coinTransferTxRaw :: Text -> Text -> Text
@@ -231,10 +223,10 @@ resetEEGas ee =
 runEvalTx
   :: String
   -> Text
-  -> PactDb CoreBuiltin SpanInfo
+  -> PactDb CoreBuiltin Info
   -> Map PublicKeyText (Set (CapToken QualifiedName PactValue))
   -> PactValue
-  -> Interpreter ExecRuntime CoreBuiltin SpanInfo -> Benchmark
+  -> Interpreter ExecRuntime CoreBuiltin Info -> Benchmark
 runEvalTx title termToCompile pdb signers envdata interp =
   bench title $ perRunEnvWithCleanup mkTerm doRollback $ \ ~(term, ee, es) ->
     (getRightIO =<<) $ runEvalMResult (ExecEnv ee) es (eval interp PImpure term)
@@ -244,7 +236,7 @@ runEvalTx title termToCompile pdb signers envdata interp =
       ee <- setupBenchEvalEnv pdb signers envdata
       -- note, we will return this eval state, as it definitely contains the loaded coin contract here.
       (eterm, es) <- runEvalM (ExecEnv ee) def $ do
-        t <- liftEither $ parseOnlyExpr termToCompile
+        t <- liftEither $ compileOnlyTermLineInfo (RawCode termToCompile)
         _dsOut <$> runDesugarTerm t
       term <- getRightIO eterm
       pure (term, ee, def {_esLoaded = _esLoaded es})
@@ -254,10 +246,10 @@ runEvalTx title termToCompile pdb signers envdata interp =
 runEvalDesugarTx
   :: String
   -> Text
-  -> PactDb CoreBuiltin SpanInfo
+  -> PactDb CoreBuiltin Info
   -> Map PublicKeyText (Set (CapToken QualifiedName PactValue))
   -> PactValue
-  -> Interpreter ExecRuntime CoreBuiltin SpanInfo
+  -> Interpreter ExecRuntime CoreBuiltin Info
   -> Benchmark
 runEvalDesugarTx title termToCompile pdb signers envdata interp =
   bench title $ perRunEnvWithCleanup mkTerm doRollback $ \ ~(pterm, ee) ->
@@ -269,7 +261,7 @@ runEvalDesugarTx title termToCompile pdb signers envdata interp =
       _ <- ignoreGas def $ _pdbBeginTx pdb Transactional
       ee <- setupBenchEvalEnv pdb signers envdata
       -- note, we will return this eval state, as it definitely contains the loaded coin contract here.
-      pterm <- getRightIO $ liftEither $ parseOnlyExpr termToCompile
+      pterm <- getRightIO $ liftEither $ compileOnlyTermLineInfo (RawCode termToCompile)
       pure (pterm, ee)
     doRollback _ = do
       ignoreGas def $ _pdbRollbackTx pdb
@@ -279,8 +271,8 @@ runEvalDesugarTx title termToCompile pdb signers envdata interp =
 runPureBench
   :: String
   -> Text
-  -> PactDb CoreBuiltin SpanInfo
-  -> Interpreter ExecRuntime CoreBuiltin SpanInfo
+  -> PactDb CoreBuiltin Info
+  -> Interpreter ExecRuntime CoreBuiltin Info
   -> Benchmark
 runPureBench title termToCompile pdb interp =
   bench title $ perRunEnv mkTerm $ \ ~(term, ee) ->
@@ -290,16 +282,16 @@ runPureBench title termToCompile pdb interp =
       ee <- setupBenchEvalEnv pdb mempty (PObject mempty)
       -- note, we will return this eval state, as it definitely contains the loaded coin contract here.
       eterm <- runEvalMResult (ExecEnv ee) def $ do
-        t <- liftEither $ parseOnlyExpr termToCompile
+        t <- liftEither $ compileOnlyTermLineInfo (RawCode termToCompile)
         _dsOut <$> runDesugarTerm t
       term <- getRightIO eterm
       pure (term, ee)
 
 runCoinTransferTx
-  :: PactDb CoreBuiltin SpanInfo
+  :: PactDb CoreBuiltin Info
   -> CoinBenchSenders
   -> CoinBenchSenders
-  -> Interpreter ExecRuntime CoreBuiltin SpanInfo
+  -> Interpreter ExecRuntime CoreBuiltin Info
   -> String
   -> Benchmark
 runCoinTransferTx pdb sender receiver interp interpName =
@@ -315,10 +307,10 @@ runCoinTransferTx pdb sender receiver interp interpName =
       <> interpName
 
 runCoinTransferCreateTx
-  :: PactDb CoreBuiltin SpanInfo
+  :: PactDb CoreBuiltin Info
   -> CoinBenchSenders
   -> CoinBenchSenders
-  -> Interpreter ExecRuntime CoreBuiltin SpanInfo
+  -> Interpreter ExecRuntime CoreBuiltin Info
   -> String
   -> Benchmark
 runCoinTransferCreateTx pdb sender receiver interp interpName =
@@ -336,10 +328,10 @@ runCoinTransferCreateTx pdb sender receiver interp interpName =
     envData = PObject $ M.fromList [(Field "ks", mkKs (pubKeyFromSender receiver))]
 
 runCoinTransferCreateTxDesugar
-  :: PactDb CoreBuiltin SpanInfo
+  :: PactDb CoreBuiltin Info
   -> CoinBenchSenders
   -> CoinBenchSenders
-  -> Interpreter ExecRuntime CoreBuiltin SpanInfo
+  -> Interpreter ExecRuntime CoreBuiltin Info
   -> String
   -> Benchmark
 runCoinTransferCreateTxDesugar pdb sender receiver interp interpName =
@@ -361,16 +353,16 @@ runCoinTransferCreateTxDesugar pdb sender receiver interp interpName =
       ee <- setupBenchEvalEnv pdb (transferSigners sender receiver) (PObject ks)
       let termText = coinTransferCreateTxRaw (kColonFromSender sender) (kColonFromSender receiver) "ks"
       -- note, we will return this eval state, as it definitely contains the loaded coin contract here.
-      eterm <- getRightIO $ parseOnlyExpr termText
+      eterm <- getRightIO $ compileOnlyTermLineInfo (RawCode termText)
       pure (eterm, ee)
     doRollback _ = do
       ignoreGas def $ _pdbRollbackTx pdb
 
 runCoinTransferTxDesugar
-  :: PactDb CoreBuiltin SpanInfo
+  :: PactDb CoreBuiltin Info
   -> CoinBenchSenders
   -> CoinBenchSenders
-  -> Interpreter ExecRuntime CoreBuiltin SpanInfo
+  -> Interpreter ExecRuntime CoreBuiltin Info
   -> String
   -> Benchmark
 runCoinTransferTxDesugar pdb sender receiver interp interpName =
@@ -425,7 +417,7 @@ allBenchmarks = do
     -- , runPureBench "Let 10000" (deepLetTXRaw 10000) pdb interpretBigStep
     ]
   mkPactDb = do
-    pdb <- mockPactDb serialisePact_raw_spaninfo
+    pdb <- mockPactDb serialisePact_lineinfo
     _ <- ignoreGas def $ _pdbBeginTx pdb Transactional
     _ <- setupCoinTxs pdb
     _ <- ignoreGas def $ _pdbCommitTx pdb

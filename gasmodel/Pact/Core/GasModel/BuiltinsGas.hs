@@ -26,7 +26,7 @@ import Pact.Core.Namespace
 import Pact.Core.PactValue
 import Pact.Core.Persistence
 import Pact.Core.Persistence.SQLite
-import Pact.Core.Serialise (serialisePact_raw_spaninfo)
+import Pact.Core.Serialise 
 import Pact.Core.Type
 import Pact.Time
 
@@ -89,7 +89,7 @@ enumExpScopedIdent base mult =
   | (title, PString str) <- enumExpString "a" base mult
   ]
 
-type BuiltinBenches = PactDb CoreBuiltin SpanInfo -> [C.Benchmark]
+type BuiltinBenches = PactDb CoreBuiltin LineInfo -> [C.Benchmark]
 
 benchArithBinOp :: T.Text -> BuiltinBenches
 benchArithBinOp op pdb =
@@ -911,7 +911,7 @@ benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _, _) -> do
     ]
   where
   mkPactDb = do
-    (pdb, db, cache) <- unsafeCreateSqlitePactDb serialisePact_raw_spaninfo ":memory:"
+    (pdb, db, cache) <- unsafeCreateSqlitePactDb serialisePact_lineinfo ":memory:"
     pure (pdb, NoNf db, NoNf cache)
 
   cleanupPactDb (_, NoNf db, NoNf cache) = unsafeCloseSqlitePactDb db cache
