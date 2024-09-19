@@ -1226,6 +1226,35 @@ invariantErrorToBoundedText' = \case
   InvariantEmptyCapStackFailure ->
     "Attempted to pop or manipulate the capstack, but it was found to be empty"
 
+hyperlaneErrorToBoundedText' :: HyperlaneError -> Text
+hyperlaneErrorToBoundedText' = \case
+  HyperlaneErrorFailedToFindKey key ->
+    thsep ["Failed to find key in object:", _field key]
+  HyperlaneErrorNumberOutOfBounds key ->
+    thsep ["Object key", _field key, "was out of bounds"]
+  HyperlaneErrorBadHexPrefix key ->
+    thsep ["Missing 0x prefix on field", _field key]
+  HyperlaneErrorInvalidBase64 key ->
+    thsep ["Invalid base64 encoding on field", _field key]
+  HyperlaneErrorIncorrectSize key expected actual ->
+    thsep
+      ["Incorrect binary data size"
+      , _field key <> ". Expected:"
+      , tInt expected <> ", but got"
+      , tInt actual]
+  -- Library decoding error: do not serialise
+  HyperlaneErrorInvalidChainId _ ->
+    thsep ["Failed to decode chainId"]
+
+hyperlaneDecodeErrorToBoundedText' :: HyperlaneDecodeError -> Text
+hyperlaneDecodeErrorToBoundedText' = \case
+  HyperlaneDecodeErrorBase64 -> "Failed to base64-decode token message"
+  -- Library error, do not serialise
+  HyperlaneDecodeErrorInternal _ ->
+    "Hyperlane Native Internal Decoding error"
+  HyperlaneDecodeErrorBinary -> "Decoding error: binary decoding failed"
+  HyperlaneDecodeErrorParseRecipient -> "Could not parse recipient into a guard"
+
 -- | NOTE: Do _not_ change this function post mainnet release just to improve an error.
 --  This will fork the chain, these messages will make it into outputs.
 --  See [Bounded Text Errors]
@@ -1424,7 +1453,7 @@ evalErrorToBoundedText = mkBoundedText . \case
   ExpectedCapToken pv ->
     thsep ["expected capability token value, got:", renderPvAsArgType pv]
   InvalidKeysetFormat _ ->
-    "Invalid keyset format"
+    "Invalid keyset format. Check the submitted key data is of the right length or format"
   InvalidKeysetNameFormat ksn ->
     thsep ["Invalid keyset name format:", abbrevText 20 ksn]
   CannotDefineKeysetOutsideNamespace ->
@@ -1440,17 +1469,15 @@ evalErrorToBoundedText = mkBoundedText . \case
   InvalidCustomKeysetPredicate pn ->
     thsep ["Invalid custom predicate for keyset", abbrevText 20 pn]
   HyperlaneError he ->
-    -- NOTE: This is safe to use. All `Pretty` instances
-    -- of hyperlane errors contain fields controlled exclusively by us.
-    -- IF THIS EVER CHANGES, FIX THIS
-    thsep ["Hyperlane native error:", renderText he]
+    thsep ["Hyperlane native error:", hyperlaneErrorToBoundedText' he]
   HyperlaneDecodeError he ->
-    thsep ["Hyperlane decode error:", renderText he]
+    thsep ["Hyperlane decode error:", hyperlaneDecodeErrorToBoundedText' he]
   ModuleAdminNotAcquired mn ->
     thsep
       ["Module admin necessary for operation but has not been acquired:", renderModuleName mn]
-  UnknownException msg ->
-    thsep ["Unknown exception:", msg]
+  -- Maybe library dependent, do not serialise
+  UnknownException _ ->
+    thsep ["Unknown exception"]
 
 -- | NOTE: Do _not_ change this function post mainnet release just to improve an error.
 --  This will fork the chain, these messages will make it into outputs.
@@ -1598,8 +1625,6 @@ lexerErrorToBoundedText = mkBoundedText . \case
 -------------------------------------------------------------------------------------------
 thsep :: [Text] -> Text
 thsep = concatBounded (fromIntegral (natVal (Proxy @PactErrorMsgSize))). intersperse " "
--- tparens :: Text -> Text
--- tparens x = T.concat ["(", x, ")"]
 tdquotes :: Text -> Text
 tdquotes x = T.concat ["\"", x, "\""]
 tInt :: Int -> Text
