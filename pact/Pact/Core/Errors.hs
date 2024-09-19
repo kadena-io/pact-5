@@ -506,7 +506,7 @@ instance NFData InvariantError
 instance Pretty InvariantError where
   pretty = \case
     InvariantInvalidDefKind dk t ->
-      "Invalid def kind, received" <+> pretty dk <+> "got" <+> pretty t
+      "Invalid def kind, received" <+> pretty dk <+> pretty t
     InvariantDefConstNotEvaluated fqn ->
       "Defconst was not evaluated prior to execution:" <+> pretty fqn
     InvariantExpectedDefCap fqn ->
@@ -1183,7 +1183,7 @@ dbOpErrorToBoundedText' = \case
 invariantErrorToBoundedText' :: InvariantError -> Text
 invariantErrorToBoundedText' = \case
   InvariantInvalidDefKind dk t ->
-    thsep ["Invalid def kind, received", renderDefKind dk <> ",", "got", t]
+    thsep ["Invalid def kind, received", renderDefKind dk, t]
   -- Note: the following 5 cases use `renderFullyQualName` and not
   -- tFqn because we actually care to see the full module hash of the function
   -- in question.
