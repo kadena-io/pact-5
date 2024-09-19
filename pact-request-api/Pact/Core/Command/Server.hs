@@ -21,6 +21,7 @@ module Pact.Core.Command.Server
   , runServer
   , server ) where
 
+import Control.Exception.Safe hiding (Handler)
 import Control.Lens
 import Control.Monad
 import Control.Monad.Except
@@ -40,9 +41,8 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 import Data.Version
 import Network.Wai.Handler.Warp
-import Network.Wai.Middleware.Cors
 import Network.Wai.Logger
-import System.Log.FastLogger.Date
+import Network.Wai.Middleware.Cors
 import Pact.Core.Builtin
 import Pact.Core.ChainData
 import Pact.Core.Command.Client
@@ -50,11 +50,11 @@ import Pact.Core.Command.RPC
 import Pact.Core.Command.Server.Config
 import Pact.Core.Command.Server.Servant
 import Pact.Core.Command.Types
-import Pact.Core.Hash
 import Pact.Core.Compile
 import Pact.Core.Errors
 import Pact.Core.Evaluate
 import Pact.Core.Gas
+import Pact.Core.Hash
 import Pact.Core.Namespace
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Persistence.Types
@@ -68,7 +68,8 @@ import qualified Pact.JSON.Legacy.Utils as JL
 import Servant.API
 import Servant.Server
 import System.Directory
-import Control.Exception.Safe hiding (Handler)
+import System.FilePath
+import System.Log.FastLogger.Date
 
 
 -- | Temporarily pretend our Log type in CommandResult is unit.
@@ -200,7 +201,9 @@ runServer (Config port persistDir logDir _verbose _gl) spv = do
   case persistDir of
     Nothing -> withSqlitePactDb serialisePact_raw_spaninfo ":memory:" $ \pdb -> do
       runServer_ (ServerRuntime pdb emptyCache spv) port logDir
-    Just pdir -> withSqlitePactDb serialisePact_raw_spaninfo (T.pack pdir <> "pactdb.sqlite") $ \pdb -> do
+    Just pdir -> let
+      pdir' = T.pack $ pdir </> "pactdb.sqlite"
+      in withSqlitePactDb serialisePact_raw_spaninfo pdir' $ \pdb -> do
       runServer_ (ServerRuntime pdb emptyCache spv) port logDir
 
 runServer_ :: ServerRuntime -> Port -> Maybe FilePath -> IO ()
@@ -212,7 +215,9 @@ runServer_ env port logDir = bracket setupLogger teardownLogger runServer'
   teardownLogger (_, remover) = void remover
   setupLogger = do
     lt <- case logDir of
-      Just ld -> pure (LogFileNoRotate ld 4096)
+      Just ld -> do
+        let ld' = ld </> "pact-server.log"
+        pure (LogFileNoRotate ld' 4096)
       Nothing -> pure (LogStdout 4096)
     apf <- initLogger FromFallback lt =<< newTimeCache simpleTimeFormat
     let remover = logRemover apf
