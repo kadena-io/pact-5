@@ -112,7 +112,7 @@ enforceNamespaceInstall info interpreter =
     enforceRootNamespacePolicy = do
       policy <- viewEvalEnv eeNamespacePolicy
       unless (allowRoot policy) $
-        throwExecutionError info NamespaceInstallError
+        throwExecutionError info RootNamespaceInstallError
     allowRoot SimpleNamespacePolicy = True
     allowRoot (SmartNamespacePolicy ar _) = ar
 

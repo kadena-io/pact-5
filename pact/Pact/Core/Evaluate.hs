@@ -260,7 +260,6 @@ interpret evalEnv evalSt evalInput = do
         { _erOutput = rs
         , _erLogs = logs
         , _erExec = _esDefPactExec state
-        -- Todo: quotrem
         , _erGas = milliGasToGas gas
         , _erLoadedModules = _loModules $ _esLoaded state
         , _erTxId = txid
@@ -284,7 +283,6 @@ interpretGasPayerTerm evalEnv evalSt ct term = do
         { _erOutput = []
         , _erLogs = logs
         , _erExec = _esDefPactExec state
-        -- todo: quotrem
         , _erGas = milliGasToGas gas
         , _erLoadedModules = _loModules $ _esLoaded state
         , _erTxId = txid

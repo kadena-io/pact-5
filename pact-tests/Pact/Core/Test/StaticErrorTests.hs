@@ -607,7 +607,7 @@ desugarTests =
 
 executionTests :: [(String, PactErrorI -> Bool, Text)]
 executionTests =
-  [ ("enforce_ns_install_module", isExecutionError _NamespaceInstallError, [text|
+  [ ("enforce_ns_install_module", isExecutionError _RootNamespaceInstallError, [text|
       (module m g (defcap g () true)
         (defun manage (ns guard) true)
         )
@@ -623,7 +623,7 @@ executionTests =
       (create-user-guard 1)
       |])
 
-  , ("enforce_ns_install_interface", isExecutionError _NamespaceInstallError, [text|
+  , ("enforce_ns_install_interface", isExecutionError _RootNamespaceInstallError, [text|
       (module m g (defcap g () true)
         (defun manage (ns guard) true)
         )
