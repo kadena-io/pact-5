@@ -65,6 +65,7 @@ module Pact.Core.Names
  , parseQualifiedName
  , parseFullyQualifiedName
  , VerifierName(..)
+ , renderTableName
  ) where
 
 import Control.Lens
@@ -519,3 +520,8 @@ renderParsedTyName (TQN qn) = renderQualName qn
 newtype VerifierName = VerifierName Text
   deriving newtype (J.Encode, NFData, Eq, Show, Ord, FromJSON)
   deriving stock Generic
+
+-- | Map the user's table name into a set of names suitable for
+--   storage in the persistence backend.
+renderTableName :: TableName -> Text
+renderTableName (TableName tbl mn) = renderModuleName mn <> "_" <> tbl

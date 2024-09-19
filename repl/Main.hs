@@ -130,7 +130,7 @@ main = O.execParser argParser >>= \case
       | otherwise -> runScript fp dbg
     OExplainErrorCode errCodeStr -> case errorCodeFromText $ T.pack errCodeStr of
       Nothing -> putStrLn $ "Invalid error code format" -- todo enhance error
-      Just errCode -> let (PrettyErrorCode phase cause _) = prettyErrorCode $ PactErrorCode errCode NoInfo
+      Just errCode -> let (PrettyErrorCode phase cause _ _) = prettyErrorCode $ PactErrorCode errCode "" NoInfo
         in T.putStrLn ("Encountered failure in: " <> phase <> ", caused by: " <> cause)
     OServer configPath -> Y.decodeFileEither configPath >>= \case
       Left perr -> putStrLn $ Y.prettyPrintParseException perr

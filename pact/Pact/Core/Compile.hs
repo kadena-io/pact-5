@@ -112,7 +112,7 @@ enforceNamespaceInstall info interpreter =
     enforceRootNamespacePolicy = do
       policy <- viewEvalEnv eeNamespacePolicy
       unless (allowRoot policy) $
-        throwExecutionError info (NamespaceInstallError "cannot install in root namespace")
+        throwExecutionError info NamespaceInstallError
     allowRoot SimpleNamespacePolicy = True
     allowRoot (SmartNamespacePolicy ar _) = ar
 

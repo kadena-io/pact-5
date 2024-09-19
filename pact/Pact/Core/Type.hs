@@ -31,6 +31,8 @@ module Pact.Core.Type
  , Schema(..)
  , DefKind(..)
  , renderType
+ , renderPrimType
+ , renderDefKind
  ) where
 
 import Control.Lens
@@ -46,7 +48,7 @@ import qualified Data.Set as S
 
 import Pact.Core.Literal
 import Pact.Core.Names
-import Pact.Core.Pretty(Pretty(..), (<+>))
+import Pact.Core.Pretty(Pretty(..), (<+>), renderCompactText)
 
 import qualified Pact.Core.Pretty as Pretty
 
@@ -236,9 +238,8 @@ instance Pretty DefKind where
     DKDefSchema _ -> "defscema"
     DKDefTable -> "deftable"
 
-
--- instance Pretty n => Pretty (Pred n) where
---   pretty (Pred tc ty) = pretty tc <>  Pretty.angles (pretty ty)
+renderDefKind :: DefKind -> Text
+renderDefKind = renderCompactText
 
 instance Pretty Type where
   pretty = \case

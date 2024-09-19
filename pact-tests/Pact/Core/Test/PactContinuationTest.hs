@@ -54,7 +54,7 @@ import Pact.Core.Test.ServerUtils
 -- ---- TESTS -----
 
 tests :: TestTree
-tests = testGroup "pacts in dev server"
+tests = testGroup "PactContinuationTests"
   [ testGroup "testPactContinuation" [testPactContinuation]
   , testGroup "testPactRollback" [testPactRollback]
   , testGroup "testPactYield" [testPactYield]
@@ -148,9 +148,9 @@ testOldNestedPacts = do
 
     runResults allResults $ do
       succeeds moduleCmd
-      -- pact-5 --explain-error-code 0x00031b0000000000
+      -- pact-5 --explain-error-code 0x00031a0000000000
       -- Encountered failure in: PEExecutionError, caused by: MultipleOrNestedDefPactExecFound
-      nestedExecPactCmd `failsWithCode` (ErrorCode 0x00031b0000000000)
+      nestedExecPactCmd `failsWithCode` (ErrorCode 0x00031a0000000000)
 
 
 -- CONTINUATIONS TESTS
@@ -227,10 +227,10 @@ testCorrectNextStep code command flags = do
     succeeds moduleCmd
     executePactCmd `succeedsWith` (`shouldBe` textVal "step 0")
     contNextStepCmd `succeedsWith` (`shouldBe` textVal "step 1")
-    -- pact-5 --explain-error-code 0x0003200000000000
+    -- pact-5 --explain-error-code 0x00031f0000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactStepMismatch
     -- Fails with a `DefpactStepMismatch`, which is what we want.
-    checkStateCmd `failsWithCode` (ErrorCode 0x0003200000000000)
+    checkStateCmd `failsWithCode` (ErrorCode 0x00031f0000000000)
 
 
 threeStepPactCode :: T.Text -> T.Text
@@ -322,9 +322,9 @@ testIncorrectNextStep code command flags = do
     succeeds moduleCmd
     executePactCmd `succeedsWith` (`shouldBe` textVal "step 0")
     -- We expect a step mismatch
-    -- pact-5 --explain-error-code 0x0003200000000000
+    -- pact-5 --explain-error-code 0x00031f0000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactStepMismatch
-    incorrectStepCmd `failsWithCode` (ErrorCode 0x0003200000000000)
+    incorrectStepCmd `failsWithCode` (ErrorCode 0x00031f0000000000)
     checkStateCmd `succeedsWith` (`shouldBe` textVal "step 1")
 
 
@@ -349,9 +349,9 @@ testLastStep code command flags = do
     contNextStep1Cmd `succeedsWith` (`shouldBe` textVal "step 1")
     contNextStep2Cmd `succeedsWith` (`shouldBe` textVal "step 2")
     -- We are expecting the pact was already completed here.
-    -- pact-5 --explain-error-code 0x0003160000000000
+    -- pact-5 --explain-error-code 0x0003150000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactAlreadyCompleted
-    checkStateCmd `failsWithCode` (ErrorCode 0x0003160000000000)
+    checkStateCmd `failsWithCode` (ErrorCode 0x0003150000000000)
 
 
 
@@ -373,9 +373,9 @@ testErrStep code command flags = do
     executePactCmd `succeedsWith` (`shouldBe` textVal "step 0")
     fails contErrStepCmd
     -- We expect a step mismatch
-    -- pact-5 --explain-error-code 0x0003200000000000
+    -- pact-5 --explain-error-code 0x00031f0000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactStepMismatch
-    checkStateCmd `failsWithCode` (ErrorCode 0x0003200000000000)
+    checkStateCmd `failsWithCode` (ErrorCode 0x00031f0000000000)
 
 
 errorStepPactCode :: T.Text -> T.Text
@@ -463,9 +463,9 @@ testCorrectRollbackStep = do
     contNextStepCmd `succeedsWith` (`shouldBe` textVal "step 1")
     rollbackStepCmd `succeedsWith` (`shouldBe` textVal "rollback 1")
     -- We are expecting the pact was already completed here.
-    -- pact-5 --explain-error-code 0x0003160000000000
+    -- pact-5 --explain-error-code 0x0003150000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactAlreadyCompleted
-    checkStateCmd `failsWithCode` (ErrorCode 0x0003160000000000)
+    checkStateCmd `failsWithCode` (ErrorCode 0x0003150000000000)
 
 
 
@@ -502,9 +502,9 @@ testIncorrectRollbackStep = do
     succeeds moduleCmd
     executePactCmd `succeedsWith` (`shouldBe` textVal "step 0")
     contNextStepCmd `succeedsWith` (`shouldBe` textVal "step 1")
-    -- pact-5 --explain-error-code 0x00031f0000000000
+    -- pact-5 --explain-error-code 0x00031e0000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactRollbackMismatch
-    incorrectRbCmd `failsWithCode` (ErrorCode 0x00031f0000000000)
+    incorrectRbCmd `failsWithCode` (ErrorCode 0x00031e0000000000)
     checkStateCmd `succeedsWith` (`shouldBe` textVal "step 2")
 
 
@@ -566,9 +566,9 @@ testNoRollbackFunc = do
     succeeds moduleCmd
     executePactCmd `succeedsWith` (`shouldBe` textVal "step 0")
     contNextStepCmd `succeedsWith` (`shouldBe` textVal "step 1")
-    -- ✗ pact-5 --explain-error-code 0x00031c0000000000
+    -- ✗ pact-5 --explain-error-code 0x00031b0000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactStepHasNoRollback
-    noRollbackCmd `failsWithCode` (ErrorCode 0x00031c0000000000)
+    noRollbackCmd `failsWithCode` (ErrorCode 0x00031b0000000000)
     checkStateCmd `succeedsWith` (`shouldBe` textVal "step 2")
 
 
@@ -591,14 +591,14 @@ testPactYield = testGroup "pact yield"$ [
 
   , testCase "testCrossChainYield:succeeds with same module" $
       testCrossChainYield "" Nothing mkFakeSPV testFlags
-  -- pact-5 --explain-error-code 0x0003330000000000
+  -- pact-5 --explain-error-code 0x0003320000000000
   -- Encountered failure in: PEExecutionError, caused by: YieldProvenanceDoesNotMatch
   -- Note: when porting over from prod, this used to be ;;1 for the bless code, but
   -- simply changing a comment on an identical module does _not_ change the hash.
   -- the hash depends on the cbor encoding, so we bless some dummy hash
   ,testCase "testCrossChainYield:fails with different module" $
       testCrossChainYield "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1AA\")"
-        (Just (`shouldBeErrorCode` (ErrorCode 0x0003330000000000)))
+        (Just (`shouldBeErrorCode` (ErrorCode 0x0003320000000000)))
         mkFakeSPV testFlags
 
   ,testCase "testCrossChainYield:succeeds with blessed module" $
@@ -608,7 +608,7 @@ testPactYield = testGroup "pact yield"$ [
       testCrossChainYield "(bless \"8vxjBWBZuWlMJTKfnsq2W6g89TpB2uoW9S1WLky_55Q\")"
         -- pact-5 --explain-error-code 0x0003390000000000
         -- Encountered failure in: PEExecutionError, caused by: ContinuationError
-        (Just $ (`shouldBeErrorCode` ErrorCode 0x0003390000000000))
+        (Just $ (`shouldBeErrorCode` ErrorCode 0x0003380000000000))
         (const noSPVSupport) testFlags
   ]
 testNestedPactYield :: TestTree
@@ -707,9 +707,9 @@ testNestedPactYield = testGroup "nested pact yield" $ [
                     (ModuleName "pact" Nothing)
                     mhash]))
         -- we expect the defpact to already be completed here
-        -- pact-5 --explain-error-code 0x0003160000000000
+        -- pact-5 --explain-error-code 0x0003150000000000
         -- Encountered failure in: PEExecutionError, caused by: DefPactAlreadyCompleted
-        chain1ContDupe `failsWithCode` (ErrorCode 0x0003160000000000)
+        chain1ContDupe `failsWithCode` (ErrorCode 0x0003150000000000)
 
 
 testValidYield :: Text -> (Text -> Text) -> [ExecutionFlag] -> Assertion
@@ -733,7 +733,7 @@ testValidYield moduleName mkCode flags = do
     executePactCmd `succeedsWith` (`shouldBe` textVal "testing->Step0")
     resumeAndYieldCmd `succeedsWith` (`shouldBe` textVal "testing->Step0->Step1")
     resumeOnlyCmd `succeedsWith` (`shouldBe` textVal "testing->Step0->Step1->Step2")
-    checkStateCmd `failsWithCode` (ErrorCode 0x0003160000000000)
+    checkStateCmd `failsWithCode` (ErrorCode 0x0003150000000000)
 
 
 pactWithYield :: T.Text -> T.Text
@@ -816,7 +816,7 @@ testNoYield moduleName mkCode flags = do
     executePactCmd `succeedsWith` (`shouldBe` textVal "testing->Step0")
     noYieldStepCmd `succeedsWith` (`shouldBe` textVal "step 1 has no yield")
     fails resumeErrCmd
-    checkStateCmd `failsWithCode` (ErrorCode 0x0003200000000000)
+    checkStateCmd `failsWithCode` (ErrorCode 0x00031f0000000000)
 
 
 pactWithYieldErr :: T.Text -> T.Text
@@ -887,7 +887,7 @@ testResetYield moduleName mkCode flags = do
     executePactCmd `succeedsWith` (`shouldBe` textVal "step 0")
     yieldSameKeyCmd `succeedsWith` (`shouldBe` textVal "step 1")
     resumeStepCmd `succeedsWith` (`shouldBe` textVal "step 1")
-    checkStateCmd `failsWithCode` (ErrorCode 0x0003160000000000)
+    checkStateCmd `failsWithCode` (ErrorCode 0x0003150000000000)
 
 
 
@@ -1036,7 +1036,7 @@ testCrossChainYield blessCode expectFailure mkSpvSupport spvFlags = step0
                    , PList $ V.fromList [ textVal "emily" ]]
                    (ModuleName "pact" Nothing)
                    mhash]))
-            chain1ContDupe `failsWithCode` (ErrorCode 0x0003160000000000)
+            chain1ContDupe `failsWithCode` (ErrorCode 0x0003150000000000)
           Just expected ->
             chain1ContDupe `failsWith'` expected
 
@@ -1338,7 +1338,7 @@ failsWithCode :: HasCallStack => Command Text -> ErrorCode ->
              ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat Info))) IO ()
 failsWithCode cmd r = failsWith' cmd ((`shouldBe` r) . _peCode)
 
-shouldBeErrorCode :: PactErrorCode info -> ErrorCode -> Assertion
+shouldBeErrorCode :: HasCallStack => PactErrorCode info -> ErrorCode -> Assertion
 shouldBeErrorCode pe code = _peCode pe `shouldBe` code
 
 failsWith' :: HasCallStack => Command Text -> (PactErrorCode Info -> Assertion) ->
