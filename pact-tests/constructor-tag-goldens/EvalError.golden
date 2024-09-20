@@ -46,7 +46,7 @@
 {"conName":"NestedDefpactsNotAdvanced","conIndex":"2d"}
 {"conName":"ExpectedPactValue","conIndex":"2e"}
 {"conName":"NotInDefPactExecution","conIndex":"2f"}
-{"conName":"NamespaceInstallError","conIndex":"30"}
+{"conName":"RootNamespaceInstallError","conIndex":"30"}
 {"conName":"PointNotOnCurve","conIndex":"31"}
 {"conName":"YieldProvenanceDoesNotMatch","conIndex":"32"}
 {"conName":"MismatchingKeysetNamespace","conIndex":"33"}

@@ -22,7 +22,7 @@ chargeGasArgsM
 chargeGasArgsM GasEnv{..} info stack gasArgs = do
   let !milliGasCost = runTableModel (_gmNativeTable _geGasModel) gasArgs
   case _gmGasLimit _geGasModel of
-    Just (MilliGasLimit milliGasLimit) -> do
+    Just mgl@(MilliGasLimit milliGasLimit) -> do
       newGasTotal <- do
         !currGasTotal <- readIORef _geGasRef
         -- calculate new gas total
@@ -36,7 +36,7 @@ chargeGasArgsM GasEnv{..} info stack gasArgs = do
         writeIORef _geGasRef newGasTotal
         return newGasTotal
       if milliGasLimit >= newGasTotal then pure (Right ())
-      else return $ Left $ PEExecutionError GasExceeded stack info
+      else return $ Left $ PEExecutionError (GasExceeded (milliGasToGasLimit mgl) (milliGasToGas newGasTotal)) stack info
     _ -> return $ Right ()
 {-# INLINE chargeGasArgsM #-}
 

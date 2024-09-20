@@ -19,6 +19,7 @@ module Pact.Core.Gas.Types
   , gasToMilliGas
   , milliGasToGas
   , milliGasPerGas
+  , milliGasToGasLimit
 
   , GasLogEntry(..)
   , GasEnv(..)
@@ -95,10 +96,16 @@ newtype Gas
   deriving (Semiring, Enum) via Word64
   deriving newtype NFData
 
+instance Pretty Gas where
+  pretty (Gas g) = pretty g
+
 newtype GasLimit =
   GasLimit Gas
   deriving (Eq, Show, Ord)
   deriving newtype NFData
+
+instance Pretty GasLimit where
+  pretty (GasLimit g) = pretty g
 
 makePrisms ''GasLimit
 
@@ -117,9 +124,15 @@ gasToMilliGas (Gas n) = MilliGas (n * milliGasPerGas)
 {-# INLINE gasToMilliGas #-}
 
 milliGasToGas :: MilliGas -> Gas
-milliGasToGas (MilliGas n) = Gas (n `quot` milliGasPerGas)
+milliGasToGas (MilliGas n) =
+  let (n', r) = n `quotRem` milliGasPerGas
+      gas = if r == 0 then n' else n' + 1
+  in (Gas gas)
 {-# INLINE milliGasToGas #-}
 
+milliGasToGasLimit :: MilliGasLimit -> GasLimit
+milliGasToGasLimit (MilliGasLimit mg) =
+  GasLimit (milliGasToGas mg)
 
 -- | Flat structure of all types of nodes used in evaluation that have an evaluator
 -- type case

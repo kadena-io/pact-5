@@ -139,7 +139,7 @@ module Pact.Core.Errors
  , _NestedDefpactsNotAdvanced
  , _ExpectedPactValue
  , _NotInDefPactExecution
- , _NamespaceInstallError
+ , _RootNamespaceInstallError
  , _PointNotOnCurve
  , _YieldProvenanceDoesNotMatch
  , _MismatchingKeysetNamespace
@@ -228,6 +228,7 @@ import Pact.Core.Capabilities
 import Pact.Core.DeriveConTag
 import Pact.Core.ChainData (ChainId(_chainId))
 import Data.String (IsString(..))
+import Pact.Core.Gas.Types
 
 type PactErrorI = PactError SpanInfo
 
@@ -549,7 +550,7 @@ data EvalError
   -- ^ Enumeration error (e.g incorrect bounds with step
   | DecodeError Text
   -- ^ Some form of decoding error
-  | GasExceeded
+  | GasExceeded GasLimit Gas
   -- ^ Gas went past the gas limit
   | FloatingPointError Text
   -- ^ Floating point operation exception
@@ -581,20 +582,20 @@ data EvalError
   | DefPactIdMismatch DefPactId DefPactId
   -- ^ Requested PactId does not match context PactId
   | CCDefPactContinuationError DefPactStep DefPactExec DefPactExec
-  -- ^ Crosschain DefPact contunation must be at least 2 steps before CC continuation step
+  -- ^ Crosschain defpact contunation must be at least 2 steps before CC continuation step
   --   with <ccExec> <dbExec>
   | NoPreviousDefPactExecutionFound DefPactStep
-  -- ^ No previouse DefPact execution could be found in the environment or database
+  -- ^ No previouse defpact execution could be found in the environment or database
   | DefPactAlreadyCompleted DefPactStep
-  -- ^ DefPact already completed
+  -- ^ defpact already completed
   | NestedDefPactParentStepCountMismatch DefPactId Int Int
-  -- ^ Nested DefPact <stepcount> does not match <parent step count>
+  -- ^ Nested defpact <stepcount> does not match <parent step count>
   | NestedDefPactParentRollbackMismatch DefPactId Bool Bool
-  -- ^ Nested DefPact <rollback> does not match <parent rollback>
+  -- ^ Nested defpact <rollback> does not match <parent rollback>
   | NestedDefPactNeverStarted DefPactStep
-  -- ^ Nested DefPact never started at prior step
+  -- ^ Nested defpact never started at prior step
   | NestedDefPactDoubleExecution DefPactStep
-  -- ^ Nested DefPact is executed twice
+  -- ^ Nested defpact is executed twice
   | MultipleOrNestedDefPactExecFound DefPactExec
   -- ^ Unexpected DefPactExec found in the environment
   | DefPactStepHasNoRollback DefPactStep
@@ -604,9 +605,9 @@ data EvalError
   | NoDefPactIdAndExecEnvSupplied
   -- ^ No DefPactId supplied and no DefPactExec found in the environment
   | DefPactRollbackMismatch DefPactStep DefPactExec
-  -- ^ DefPact rollback missmatch
+  -- ^ defpact rollback mismatch
   | DefPactStepMismatch DefPactStep DefPactExec
-  -- ^ DefPact missmatch
+  -- ^ defpact mismatch
   | CannotUpgradeInterface ModuleName
   -- ^ Interface cannot be upgrade
   | DbOpFailure DbOpError
@@ -646,7 +647,7 @@ data EvalError
   -- ^ Expected a pact value, received a closure or table reference
   | NotInDefPactExecution
   -- ^  Expected function to be called within a defpact. E.g (pact-id)
-  | NamespaceInstallError
+  | RootNamespaceInstallError
   -- ^ Error installing namespace
   | PointNotOnCurve
   -- ^ Pairing-related: Point lies outside of elliptic curve
@@ -725,72 +726,72 @@ instance Pretty EvalError where
       Pretty.hsep ["Decoding error:", pretty txt]
     FloatingPointError txt ->
       Pretty.hsep ["Floating point error:", pretty txt]
-    GasExceeded ->
-      "Gas limit exceeded"
+    GasExceeded lim amt ->
+      Pretty.hsep ["Gas limit", Pretty.dquotes (pretty lim) <> "exceeded:", pretty amt]
     InvariantFailure msg ->
       Pretty.hsep ["Fatal execution error, invariant violated:", pretty msg]
     NativeArgumentsError n tys ->
-      Pretty.hsep ["Native evaluation error for native", pretty n <> ",", "received incorrect argument(s) of type(s)", Pretty.commaSep tys]
+      Pretty.hsep ["Type error: failed to call native function", pretty n, "with argument(s) of type(s):", Pretty.commaSep tys]
     EvalError txt ->
       Pretty.hsep ["Program encountered an unhandled raised error:", pretty txt]
     YieldOutsideDefPact ->
-      "Try to yield a value outside a running DefPact execution"
+      "Try to yield a value outside a running defpact execution"
     NoActiveDefPactExec ->
-      "No active DefPact execution in the environment"
+      "No active defpact execution in the environment"
     NoYieldInDefPactStep (DefPactStep step _ i _) ->
-      Pretty.hsep ["No yield in DefPactStep:", "Step: " <> pretty step, "DefPactId: " <> pretty i]
+      Pretty.hsep ["No yield value found from previous pact step.", "Current step: " <> pretty step, "defpact Id: " <> pretty i]
     InvalidDefPactStepSupplied (DefPactStep step _ _ _) stepCount ->
       Pretty.hsep
-      [ "DefPactStep does not match DefPact properties:"
+      [ "DefPactStep does not match defpact properties:"
       , "requested: "<> pretty step
       , "step count:" <> pretty stepCount]
     DefPactIdMismatch reqId envId ->
       Pretty.hsep
-      [ "Requested DefPactId:", pretty reqId
-      , "does not match context DefPactId:", pretty envId
+      [ "Requested defpact id:", pretty reqId
+      , "does not match context defpact id:", pretty envId
       ]
     CCDefPactContinuationError pactStep _ccExec _dbExec ->
       Pretty.hsep
-      [ "Crosschain DefPact continuation error:"
-      , "DefPactId:" <> pretty (_psStep pactStep)
+      [ "Crosschain defpact continuation error:"
+      , "defpact id:" <> pretty (_psStep pactStep)
       ]
     NestedDefPactParentRollbackMismatch pid rollback parentRollback ->
       Pretty.hsep
-      [ "Nested DefPact execution failed, parameter missmatch:"
-      , "DefPactId: " <> pretty pid
+      [ "Nested defpact execution failed, parameter mismatch:"
+      , "defpact id: " <> pretty pid
       , "Rollback: " <> pretty rollback
       , "Parent rollback:" <> pretty parentRollback
       ]
     NestedDefPactParentStepCountMismatch pid stepCount parentStepCount ->
       Pretty.hsep
-      [ "Nested DefPact execution failed, parameter missmatch:"
+      [ "Nested defpact execution failed, parameter mismatch:"
       , "PacId: " <> pretty pid
       , "step count: " <> pretty stepCount
       , "Parent step count: " <> pretty parentStepCount
       ]
     NoPreviousDefPactExecutionFound ps ->
-      Pretty.hsep ["No previous DefPact execution found for DefPactId: ", pretty (_psDefPactId ps)]
+      Pretty.hsep ["No previous defpact execution found for defpact id: ", pretty (_psDefPactId ps)]
     DefPactAlreadyCompleted ps -> Pretty.hsep
-      [ "Requested DefPact already completed: ", "DefPactId:" <> pretty (_psDefPactId ps)]
+      [ "Requested defpact already completed: ", "defpact id:" <> pretty (_psDefPactId ps)]
     NestedDefPactNeverStarted ps -> Pretty.hsep
-      ["Requested nested DefPact never started:", "DefPactId: " <> pretty (_psDefPactId ps)]
+      ["Requested nested defpact never started:", "defpact id: " <> pretty (_psDefPactId ps)]
     NestedDefPactDoubleExecution ps -> Pretty.hsep
-      ["Requested nested DefPact double execution:", "DefPactId: " <> pretty (_psDefPactId ps)]
+      ["Requested nested defpact double execution:", "defpact id: " <> pretty (_psDefPactId ps)]
     MultipleOrNestedDefPactExecFound pe -> Pretty.hsep
-      ["DefPact execution context already in the environment: ", "DefPactId: " <> pretty (_peDefPactId pe)]
+      ["defpact execution context already in the environment: ", "defpact id: " <> pretty (_peDefPactId pe)]
     DefPactStepHasNoRollback ps -> Pretty.hsep
-      ["Step has no rollback:", "DefPactId: " <> pretty (_psDefPactId ps)]
+      ["Step has no rollback:", "defpact id: " <> pretty (_psDefPactId ps)]
     DefPactStepNotInEnvironment -> "No DefPactStep in the environment"
-    NoDefPactIdAndExecEnvSupplied -> "No DefPactId or execution environment supplied"
+    NoDefPactIdAndExecEnvSupplied -> "No defpact id or execution environment supplied"
     DefPactRollbackMismatch ps pe -> Pretty.hsep
-      [ "Rollback missmatch in DefPactStep and DefPact execution environment:"
-      , "DefPactId: " <> pretty (_psDefPactId ps)
+      [ "Rollback mismatch in DefPactStep and defpact execution environment:"
+      , "defpact id: " <> pretty (_psDefPactId ps)
       , "step rollback: " <> pretty (_psRollback ps)
       , "DefPactExec rollback: " <> pretty (_peStepHasRollback pe)
       ]
     DefPactStepMismatch ps pe -> Pretty.hsep
-      [ "Step missmatch in DefPactStep and DefPact execution environment:"
-      , "DefPactId: " <> pretty (_psDefPactId ps)
+      [ "Step mismatch in DefPactStep and defpact execution environment:"
+      , "defpact id: " <> pretty (_psDefPactId ps)
       , "step: " <> pretty (_psStep ps)
       , "DefPactExec step: " <> pretty (_peStep pe + 1)
       ]
@@ -843,11 +844,12 @@ instance Pretty EvalError where
     InvalidEventCap fqn ->
       "Invalid event capability" <+> pretty fqn
     NestedDefpactsNotAdvanced dpid ->
-      "Nested defpacts not advanced" <+> pretty dpid
+      "Nested defpact not advanced" <+> pretty dpid
     ExpectedPactValue ->
       "Expected Pact Value, got closure or table reference"
-    NotInDefPactExecution -> "not in pact execution"
-    NamespaceInstallError ->
+    NotInDefPactExecution ->
+      "Attempted to fetch defpact data, but currently not within defpact execution"
+    RootNamespaceInstallError ->
       "Namespace installation error: cannot install in root namespace"
     PointNotOnCurve ->
       "Point lies outside of elliptic curve"
@@ -856,7 +858,7 @@ instance Pretty EvalError where
     MismatchingKeysetNamespace ns ->
       "Error defining keyset, namespace mismatch, expected " <> pretty ns
     RuntimeRecursionDetected qn ->
-      "Runtime recursion detected in function:" <+> pretty qn
+      "Recursion detected by the runtime. Recursing in function:" <+> pretty qn
     SPVVerificationFailure e ->
       "SPV verification failure:" <+> pretty e
     ExpectedBoolValue pv ->
@@ -1105,7 +1107,7 @@ newtype BoundedText (k :: Nat)
   deriving newtype (Eq, Show, JD.FromJSON, J.Encode)
 
 instance KnownNat k => IsString (BoundedText k) where
-  fromString = ensureBound . BoundedText . T.pack
+  fromString = ensureBound . T.pack
 
 type PactErrorMsgSize = 256
 
@@ -1138,11 +1140,8 @@ type PactErrorMsgSize = 256
     abbrev. They're usually small enough for us not to care.
 -}
 
-ensureBound :: forall k. KnownNat k => BoundedText k -> BoundedText k
-ensureBound (BoundedText msg)
-  | n <- fromIntegral (natVal (Proxy @k)),
-    T.length msg > fromIntegral (natVal (Proxy @k)) = BoundedText (T.take n msg)
-  | otherwise = (BoundedText msg)
+ensureBound :: forall k. KnownNat k => Text -> BoundedText k
+ensureBound msg = BoundedText (T.take (fromIntegral (natVal (Proxy @k))) msg)
 
 -- | NOTE: Do _not_ change this function post mainnet release just to improve an error.
 --  This will fork the chain, these messages will make it into outputs.
@@ -1274,74 +1273,76 @@ evalErrorToBoundedText = mkBoundedText . \case
     thsep ["Decoding error:", txt]
   FloatingPointError txt ->
     thsep ["Floating point error:", txt]
-  -- Todo: probably enhance this data type
-  GasExceeded ->
-    "Gas limit exceeded"
+  GasExceeded lim gas ->
+    thsep ["Gas limit", tdquotes (tGasLimit lim) <> "exceeded:", tGas gas]
   InvariantFailure msg ->
     thsep
-      ["Execution Invariant error, please report this to the pact team @kadena:", invariantErrorToBoundedText' msg]
+      [ "Execution Invariant error, please report this to the pact team @kadena:"
+      , invariantErrorToBoundedText' msg]
   NativeArgumentsError (NativeName n) tys ->
-    thsep (["Native evaluation error for native", n <> ",", "received incorrect argument(s) of type(s)"] ++ (renderArgTypeError <$> tys))
+    thsep $
+      ["Type error: failed to call native function", n <> ",", "with argument(s) of type(s):"]
+      ++ tCommaSep (renderArgTypeError <$> tys)
   EvalError txt ->
     thsep ["Program encountered an unhandled raised error:", txt]
   YieldOutsideDefPact ->
-    "Try to yield a value outside a running DefPact execution"
+    "Try to yield a value outside a running defpact execution"
   NoActiveDefPactExec ->
-    "No active DefPact execution in the environment"
+    "No active defpact execution in the environment"
   NoYieldInDefPactStep (DefPactStep step _ (DefPactId dpid) _) ->
-    thsep ["No yield in DefPactStep.", "Step:", tInt step, "DefPactId:", dpid]
+    thsep ["No yield value found from previous pact step.", "Current step:", tInt step, "defpact id:", dpid]
   InvalidDefPactStepSupplied (DefPactStep step _ _ _) stepCount ->
     thsep
-    [ "DefPactStep does not match DefPact properties:"
+    [ "DefPactStep does not match defpact properties:"
     , "requested:", tInt step
     , "step count:", tInt stepCount]
-  DefPactIdMismatch (DefPactId reqId) (DefPactId envId) ->
+  DefPactIdMismatch reqId envId ->
     thsep
-    [ "Requested DefPactId:", reqId
-    , "does not match context DefPactId:", envId
+    [ "Requested defpact id:", tDpId reqId
+    , "does not match context defpact id:", tDpId envId
     ]
   CCDefPactContinuationError pactStep _ccExec _dbExec ->
     thsep
-    [ "Crosschain DefPact continuation error:"
-    , "DefPactId:", (tDpId (_psDefPactId pactStep))
+    [ "Crosschain defpact continuation error:"
+    , "defpact id:", (tDpId (_psDefPactId pactStep))
     ]
   NestedDefPactParentRollbackMismatch pid rollback parentRollback ->
     thsep
-    [ "Nested DefPact execution failed, parameter missmatch:"
-    , "DefPactId:", tDpId pid
+    [ "Nested defpact execution failed, parameter mismatch:"
+    , "defpact id:", tDpId pid
     , "Rollback:", tBool rollback
     , "Parent rollback:", tBool parentRollback
     ]
   NestedDefPactParentStepCountMismatch pid stepCount parentStepCount ->
     thsep
-    [ "Nested DefPact execution failed, parameter missmatch:"
+    [ "Nested defpact execution failed, parameter mismatch:"
     , "PactId:", tDpId pid
     , "step count:", T.pack (show stepCount)
     , "Parent step count:", T.pack (show parentStepCount)
     ]
   NoPreviousDefPactExecutionFound ps ->
-    thsep ["No previous DefPact execution found for DefPactId: ", tDpId (_psDefPactId ps)]
+    thsep ["No previous defpact execution found for defpact id: ", tDpId (_psDefPactId ps)]
   DefPactAlreadyCompleted ps -> thsep
-    [ "Requested DefPact already completed:", "DefPactId:", tDpId (_psDefPactId ps)]
+    [ "Requested defpact already completed:", "defpact id:", tDpId (_psDefPactId ps)]
   NestedDefPactNeverStarted ps -> thsep
-    ["Requested nested DefPact never started:", "DefPactId:", tDpId(_psDefPactId ps)]
+    ["Requested nested defpact never started:", "defpact id:", tDpId(_psDefPactId ps)]
   NestedDefPactDoubleExecution ps -> thsep
-    ["Requested nested DefPact double execution:", "DefPactId:" , tDpId (_psDefPactId ps)]
+    ["Requested nested defpact double execution:", "defpact id:" , tDpId (_psDefPactId ps)]
   MultipleOrNestedDefPactExecFound pe -> thsep
-    ["DefPact execution context already in the environment: DefPactId:", tDpId (_peDefPactId pe)]
+    ["defpact execution context already in the environment: defpact id:", tDpId (_peDefPactId pe)]
   DefPactStepHasNoRollback ps -> thsep
-    ["Step has no rollback:", "DefPactId:", tDpId (_psDefPactId ps)]
+    ["Step has no rollback:", "defpact id:", tDpId (_psDefPactId ps)]
   DefPactStepNotInEnvironment -> "No DefPactStep in the environment"
-  NoDefPactIdAndExecEnvSupplied -> "No DefPactId or execution environment supplied"
+  NoDefPactIdAndExecEnvSupplied -> "No defpact id or execution environment supplied"
   DefPactRollbackMismatch ps pe -> thsep
-    [ "Rollback missmatch in DefPactStep and DefPact execution environment:"
-    , "DefPactId:", tDpId (_psDefPactId ps)
+    [ "Rollback mismatch in DefPactStep and defpact execution environment:"
+    , "defpact id:", tDpId (_psDefPactId ps)
     , "step rollback:", tBool (_psRollback ps)
     , "DefPactExec rollback:", tBool (_peStepHasRollback pe)
     ]
   DefPactStepMismatch ps pe -> thsep
-    [ "Step missmatch in DefPactStep and DefPact execution environment:"
-    , "DefPactId:", tDpId (_psDefPactId ps)
+    [ "Step mismatch in DefPactStep and defpact execution environment:"
+    , "defpact id:", tDpId (_psDefPactId ps)
     , "step:", tInt (_psStep ps)
     , "DefPactExec step:", tInt (_peStep pe + 1)
     ]
@@ -1402,12 +1403,12 @@ evalErrorToBoundedText = mkBoundedText . \case
   InvalidEventCap fqn ->
     thsep ["Invalid event capability", tFqn fqn]
   NestedDefpactsNotAdvanced dpid ->
-    thsep ["Nested defpacts not advanced", tDpId dpid]
+    thsep ["Nested defpact not advanced", tDpId dpid]
   ExpectedPactValue ->
     "Expected Pact Value, got closure or table reference"
   NotInDefPactExecution ->
-    "not in pact execution"
-  NamespaceInstallError ->
+    "Attempted to fetch defpact data, but currently not within defpact execution"
+  RootNamespaceInstallError ->
     "Namespace installation error: cannot install in root namespace"
   PointNotOnCurve ->
     "Point lies outside of elliptic curve"
@@ -1421,7 +1422,7 @@ evalErrorToBoundedText = mkBoundedText . \case
     thsep
     ["Error defining keyset, namespace mismatch, expected ", abbrevText 10 (_namespaceName ns)]
   RuntimeRecursionDetected qn ->
-    thsep ["Runtime recursion detected in function:", renderQualName qn]
+    thsep ["Recursion detected by the runtime. Recursing in function:", renderQualName qn]
   SPVVerificationFailure e ->
     thsep ["SPV verification failure:", e]
   ExpectedBoolValue pv ->
@@ -1499,9 +1500,7 @@ userRecoverableErrorToBoundedText = mkBoundedText . \case
     thsep
       (["Keyset failure ("
       , predicateToText ksPred
-      , "): "] ++ intersperse ", " (fmap (elide . renderPublicKeyText) $ S.toList kskeys))
-    where
-    elide pk = T.take 8 pk <> "..."
+      , "): "] ++ tCommaSep (fmap (abbrevText 10 . renderPublicKeyText) $ S.toList kskeys))
   CapabilityPactGuardInvalidPactId currPid pgId ->
     thsep
       ["Capability pact guard failed: invalid pact id, expected"
@@ -1547,7 +1546,7 @@ desugarErrorToBoundedText = mkBoundedText . \case
       thsep $
       ["Recursive cycle detected in Module"
       , renderModuleName mn
-      , "in the following functions:"] ++ intersperse ", " txts
+      , "in the following functions:"] ++ tCommaSep txts
     InvalidGovernanceRef gov ->
       thsep ["Invalid governance. Must be a 0-argument defcap or a keyset. Found:", renderQualName gov]
     InvalidDefInTermVariable n ->
@@ -1574,7 +1573,7 @@ desugarErrorToBoundedText = mkBoundedText . \case
       thsep $
         ["Invalid imports, module or interface"
         , renderModuleName mn
-        , "does not implement the following members:"] ++ intersperse ", " imps
+        , "does not implement the following members:"] ++ tCommaSep imps
     InvalidImportModuleHash mn mh ->
       thsep
         ["Import error for module"
@@ -1624,7 +1623,7 @@ lexerErrorToBoundedText = mkBoundedText . \case
 -- Utility functions for text conversion
 -------------------------------------------------------------------------------------------
 thsep :: [Text] -> Text
-thsep = concatBounded (fromIntegral (natVal (Proxy @PactErrorMsgSize))). intersperse " "
+thsep = concatBounded (fromIntegral (natVal (Proxy @PactErrorMsgSize))) . intersperse " "
 tdquotes :: Text -> Text
 tdquotes x = T.concat ["\"", x, "\""]
 tInt :: Int -> Text
@@ -1635,17 +1634,30 @@ tFqn :: FullyQualifiedName -> Text
 tFqn = renderQualName . fqnToQualName
 tDpId :: DefPactId -> Text
 tDpId = abbrevText 20 . _defPactId
+tGas :: Gas -> Text
+tGas (Gas w) = T.pack (show w)
+tGasLimit :: GasLimit -> Text
+tGasLimit (GasLimit g) = tGas g
+tPunctuate :: Text -> [Text] -> [Text]
+tPunctuate p = go
+  where
+  go [] = []
+  go [t] = [t]
+  go (t:ts) = (t <> p) : go ts
+
+tCommaSep :: [Text] -> [Text]
+tCommaSep = tPunctuate ","
 
 abbrevText :: Int -> Text -> Text
 abbrevText lim k
   | T.length k <= lim = k
-  | otherwise = T.concat [T.take 10 k, "..."]
+  | otherwise = T.concat [T.take lim k, "..."]
 
 abbrevRowKey :: RowKey -> Text
 abbrevRowKey = abbrevText 10 . _rowKey
 
 mkBoundedText :: KnownNat k => Text -> BoundedText k
-mkBoundedText = ensureBound . BoundedText
+mkBoundedText = ensureBound
 
 concatBounded :: Int -> [Text] -> Text
 concatBounded bound ts =
