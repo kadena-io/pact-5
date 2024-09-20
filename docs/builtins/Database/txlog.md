@@ -16,7 +16,7 @@ Use the following arguments to specify the table and transaction identifier for 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `table` | table:<{row}> | Specifies the table from which to retrieve updates. |
+| `table` | `table: <{row}>` | Specifies the table from which to retrieve updates. |
 | `txid` | integer | Specifies the transaction ID (TXID) for which updates are to be retrieved. |
 
 ### Return value

@@ -27,7 +27,7 @@ Use one of the following argument to define the value you want to retrieve using
 
 | Argument | Type | Description
 | -------- | ---- | -----------
-| `ref` | modref | Specifies the module to acquire administrative capabilities for
+| `ref` | modref | Specifies the module to acquire administrative capabilities for.
 
 ### Return values
 

@@ -16,9 +16,9 @@ Use the following arguments to specify the table, key, bindings, and body for ex
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `table` | table:<{row}> | Specifies the table from which to read the row. |
+| `table` | `table: <{row}>` | Specifies the table from which to read the row. |
 | `key` | string | Specifies the key for which to read the row. |
-| `bindings` | binding:<{row}> | Specifies the bindings for columns to be bound. |
+| `bindings` | `binding: <{row}>` | Specifies the bindings for columns to be bound. |
 | `body` | any | Specifies the subsequent body statements to be executed. |
 
 ### Return value

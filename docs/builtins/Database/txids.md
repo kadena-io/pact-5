@@ -16,7 +16,7 @@ Use the following arguments to specify the table and transaction identifier for 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `table` | table:<{row}> | Specifies the table from which to retrieve transaction identifiers. |
+| `table` | `table: <{row}>` | Specifies the table from which to retrieve transaction identifiers. |
 | `txid` | integer | Specifies the transaction identifier value to compare against. |
 
 ### Return value

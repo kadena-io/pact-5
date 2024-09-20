@@ -17,7 +17,7 @@ Use the following arguments to specify the table, key, and object data you want 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `table` | table<{row}> | Specifies the table where the entry will be written. |
+| `table` | `table: <{row}>` | Specifies the table where the entry will be written. |
 | `key` | string | Specifies the key for which the data will be inserted. |
 | `object` | object | Specifies the object data to be inserted for the specified key. |
 

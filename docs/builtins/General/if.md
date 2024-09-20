@@ -2,7 +2,7 @@
 
 Use `if` to test a condition. If the condition `cond` is true, evaluate the `then` expression; otherwise, evaluate the `else` expression.
 
-By convention, the data type <a> is used to represent type-bound parameters that serve as input for functions and expressions or for generic arguments.
+By convention, the data type `<a>` is used to represent type-bound parameters that serve as input for functions and expressions or for generic arguments.
 
 ### Basic syntax
 
@@ -19,8 +19,8 @@ Use the following arguments to define the condition and expressions to be evalua
 | Argument | Type | Description |
 | --- | --- | --- |
 | `cond` | boolean | Specifies the condition to be tested. |
-| `then` | <a> | Specifies the expression to be evaluated if the condition is true. |
-| `else` | <a> | Specifies the expression to be evaluated if the condition is false. |
+| `then` | `<a>` | Specifies the expression to be evaluated if the condition is true. |
+| `else` | `<a>` | Specifies the expression to be evaluated if the condition is false. |
 
 ### Return value
 

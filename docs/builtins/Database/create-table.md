@@ -21,7 +21,7 @@ Use the following argument to specify the `table` name you want to create using 
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `table` | table:<{row}> | Specifies the table to create. |
+| `table` | `table: <{row}>` | Specifies the table to create. |
 
 ### Return values
 

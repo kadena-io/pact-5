@@ -4,7 +4,7 @@ Use `or?` to apply a logical OR operation to the results of applying a specified
 
 You can use any data type for the `value` argument as long as the two functions take that same data type and return the resulting boolean value for the logical OR operation performed by the `or?` function.
 
-By convention, the data type <a> is used if an argument represents a type-bound parameter like the `value` argument in this function. 
+By convention, the data type `<a>` is used if an argument represents a type-bound parameter like the `value` argument in this function. 
 
 ### Basic syntax
 
@@ -20,9 +20,9 @@ Use the following arguments to specify the functions and the `value` to be appli
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `func1` | function x:<a> -> bool | Specifies the first function to apply the specified `value` to. The result of applying the specified value returns a boolean value. |
-| `func2` | function x:<a> -> bool | Specifies the second function to apply the specified `value` to. The result of applying the specified value returns a boolean value.|
-| `value` | <a> | Specifies the value to apply to both `func1` and `func2` functions. |
+| `func1` | function x: `<a> -> bool` | Specifies the first function to apply the specified `value` to. The result of applying the specified value returns a boolean value. |
+| `func2` | function x: `<a> -> bool` | Specifies the second function to apply the specified `value` to. The result of applying the specified value returns a boolean value.|
+| `value` | `<a>` | Specifies the value to apply to both `func1` and `func2` functions. |
 
 ### Return value
 
