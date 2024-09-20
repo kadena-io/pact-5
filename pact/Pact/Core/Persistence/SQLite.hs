@@ -141,7 +141,7 @@ mkTblStatement db tbl = do
     insertStmt <- SQL.prepare db ("INSERT INTO \"" <> tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)")
     insertOrUpdateStmt <- SQL.prepare db ("INSERT OR REPLACE INTO \"" <> tbl <> "\" (txid, rowkey, rowdata) VALUES (?,?,?)")
     readValueStmt <- SQL.prepare db ("SELECT rowdata FROM \""<> tbl <> "\" WHERE rowkey = ? ORDER BY txid DESC LIMIT 1")
-    readKeysStmt <-  SQL.prepare db ("SELECT rowkey FROM \""<> tbl <> "\" ORDER BY txid DESC")
+    readKeysStmt <-  SQL.prepare db ("SELECT DISTINCT rowkey FROM \""<> tbl <> "\" ORDER BY rowkey DESC")
     pure $ TblStatements insertStmt insertOrUpdateStmt readValueStmt readKeysStmt
 
 addUserTable :: SQL.Database -> IORef StmtCache -> TableName -> IO TblStatements
