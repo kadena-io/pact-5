@@ -234,3 +234,45 @@
   [["a" 1] ["b" 2]]
   (fold-db fdb-tbl (lambda (k o)  (< k "c")) (lambda (k o) [k (at 'a o)]))
   )
+
+; Ensure keys is distinct
+; Due to the increasing nature of TXIDs and table entries, what we need to actually check is that
+; if we update keys in different transactions, keys returns only distinct keys in
+; TXIDs
+(begin-tx)
+(module m g (defcap g () true)
+(defschema sc a:integer b:integer)
+(deftable tbl:{sc})
+
+(defun add-elem(a:integer k:string)
+  (write tbl k {"a":a, "b":a})
+)
+
+(defun update-elem(a:integer k:string)
+  (update tbl k {"a":a})
+)
+
+(defun all-elems()
+  (fold-db tbl (lambda (x y) true) (lambda (k o) {"key":k, "value":o}))
+)
+)
+(create-table tbl)
+(commit-tx)
+
+; Add two entries
+(begin-tx)
+(m.add-elem 1 "jose")
+(m.add-elem 1 "robert")
+(commit-tx)
+
+(begin-tx)
+(m.update-elem 2 "jose")
+(m.update-elem 3 "robert")
+(commit-tx)
+
+(begin-tx)
+(expect "All-elems return distinct objects"
+  [ {"key": "jose","value": {"a": 2,"b": 1}}
+  , {"key": "robert","value": {"a": 3,"b": 1}} ]
+  (m.all-elems))
+(commit-tx)
