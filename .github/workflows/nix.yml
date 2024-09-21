@@ -44,10 +44,25 @@ jobs:
 
         echo Build the bundle
         nix build .#pact-binary-bundle --log-lines 500 --show-trace --out-link pact-binary-bundle --accept-flake-config
-        tar -zcvf pact-binary-bundle.${{ matrix.os }}.tar.gz $(readlink pact-binary-bundle)
 
         #echo Build the recursive output
         #nix build .#recursive.allDerivations --log-lines 500 --show-trace --accept-flake-config
+    - name: Prepare artifacts with adjusted permissions
+      run: |
+        # Resolve the actual path of the output
+        BUNDLE_PATH=$(readlink pact-binary-bundle)
+        
+        # Create a temporary directory for copying
+        mkdir bundle_copy
+        
+        # Copy the contents to the temporary directory
+        cp -r "$BUNDLE_PATH"/* bundle_copy/
+        
+        # Change permissions to make all files writable by the user and group
+        chmod -R ug+w bundle_copy/
+        
+        echo "Creating tarball with adjusted permissions..."
+        tar -zcvf pact-binary-bundle.${{ matrix.os }}.tar.gz -C bundle_copy/ .
 
     - name: Publish the bundle
       uses: actions/upload-artifact@v4
