@@ -12,7 +12,7 @@ To get metadata for the specified `keyset` name, use the following syntax:
 (describe-keyset keyset)
 ```
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the keyset for which to retrieve metadata using the `describe-keyset` Pact function.
 
@@ -20,7 +20,7 @@ Use the following argument to specify the keyset for which to retrieve metadata 
 | --- | --- | --- |
 | `keyset` | string | Specifies the name of the keyset that you want to retrieve metadata for. |
 
-## Return values
+### Return values
 
 The `describe-keyset` function returns a guard.
 
@@ -29,7 +29,7 @@ The returned object includes the following properties:
 - `pred`: The predicate function associated with the keyset.
 - `keys`: An array of public keys associated with the keyset.
 
-## Examples
+### Examples
 
 The following example retrieves metadata for a keyset named `'admin-keyset'` in the Pact REPL:
 
