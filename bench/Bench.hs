@@ -4,52 +4,40 @@
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DataKinds #-}
 
 module Main where
 
-import Control.Monad.Error.Class
-import Control.Monad.IO.Class
-import Control.Monad.State
+import Control.DeepSeq
 import Criterion.Main hiding (env)
-import Data.Default (Default, def)
 import Data.Decimal
-import Data.List qualified as List
-import Data.Either (fromRight)
-import Data.Text qualified as Text
-import Data.IORef
+import Data.Default (Default, def)
 import Data.Int (Int64)
-import qualified Data.Set as S
+import Data.List qualified as List
+import Data.Map qualified as M
+import Data.Set qualified as S
+import Data.Text qualified as Text
 import Data.Word (Word64)
-import System.FilePath
-import qualified Data.Map as M
-
 import Pact.Core.Builtin
 import Pact.Core.Environment.Types
-import Pact.Core.Environment.Utils ((.==), use, usesEvalState)
 import Pact.Core.Guards
-import Pact.Core.IR.Eval.Runtime.Types
-import Pact.Core.Persistence.MockPersistence
-import Pact.Core.Serialise
-import Pact.Core.Info
-import Pact.Core.Persistence.Types
-import Pact.Core.Type
 import Pact.Core.IR.Desugar
 import Pact.Core.IR.Term
-import Pact.Core.Gas
-import Pact.Core.Names
+import Pact.Core.Info
 import Pact.Core.Literal
+import Pact.Core.Names
 import Pact.Core.PactValue
+import Pact.Core.Persistence.MockPersistence
+import Pact.Core.Persistence.Types
+import Pact.Core.Persistence.Utils hiding (getModule)
+import Pact.Core.Serialise
 import Pact.Core.Serialise.CBOR_V1
-import Pact.Core.Syntax.LexUtils qualified as Lisp
-import Pact.Core.Syntax.ParseTree qualified as Lisp
-import Pact.Core.Syntax.Parser
 import Pact.Core.SizeOf
-import qualified Pact.Time as PactTime
+import Pact.Core.Syntax.Lexer qualified as Lisp
+import Pact.Core.Syntax.ParseTree qualified as Lisp
 import Pact.Core.Syntax.Parser qualified as Lisp
-import qualified Pact.Core.Syntax.Lexer as Lisp
-import Pact.Core.Errors (PactErrorI)
-import Control.DeepSeq
-import qualified Data.Type.Bool as Bool
+import Pact.Core.Type
+import Pact.Time qualified as PactTime
 
 main :: IO ()
 main = do
@@ -110,7 +98,7 @@ main = do
       -- this slowness does not appear in benchmark results.
       slowString =
         let fib n = if n < 2 then n else fib (n-1) + fib (n-2)
-        in Text.pack $ show (fib 40)
+        in Text.pack $ show (fib (40:: Integer))
       rdSlow = RowData $ M.fromList [(Field "foo", PLiteral (LString slowString))]
 
   -- The comments list the time that each action takes, and the
@@ -124,7 +112,7 @@ main = do
 
   let encode = ignoreGas () . encodeRowData
 
-  print "Running..."
+  print ("Running..." :: String)
   defaultMain
     [
       -- 0.003 ms / 0 calls
@@ -146,7 +134,7 @@ main = do
     , bench "long-nested-bool-list" $ nfIO $ getSize ee es SizeOfV0 longNestedBoolList
 
       -- 214 ms (85600 milligas) / 101000 calls => 0.9 milligas per call
-    , bench "long-nested-bool-list-2" $ nfIO $ getSize ee es SizeOfV0 longNestedBoolList
+    , bench "long-nested-bool-list-2" $ nfIO $ getSize ee es SizeOfV0 longNestedBoolList2
 
       -- 0.2 ms (80 miligas) / 1646 bytes / 125 calls => 0.6 milligas per call
     , bench "module-1" $ nfIO $ getSize ee es SizeOfV0 module1
@@ -164,6 +152,8 @@ main = do
 
       -- 5987 ns (1090 milligas)
     , bench "row-data 3" $ nfIO $ encode rd3
+
+    , bench "row-data 4" $ nfIO $ encode rd4
 
       -- 5.9 micros (8500000 milligas)
     , bench "row-data 5" $ nfIO $ encode rd5
@@ -281,7 +271,6 @@ rowInteger :: Int -> Int -> RowData
 rowInteger nElems intValue =
   RowData (M.fromList $ map (\i -> (fieldName i, PLiteral (LInteger (fromIntegral intValue)))) [0..nElems] )
   where
-    fieldNameLength = 10
     fieldName i = padName $ Field $ Text.pack (show i)
     padName (Field f) = Field $ Text.replicate (20 - Text.length f) "0" <> f
 
@@ -289,7 +278,6 @@ rowString :: Int -> Int -> RowData
 rowString nElems elemLength =
   RowData (M.fromList $ map (\i -> (fieldName i, PString (Text.replicate elemLength "."))) [0..nElems] )
   where
-    fieldNameLength = 10
     fieldName i = padName $ Field $ Text.pack (show i)
     padName (Field f) = Field $ Text.replicate (20 - Text.length f) "0" <> f
 
@@ -297,7 +285,6 @@ rowDecimal :: Int -> Decimal -> RowData
 rowDecimal nElems decimalValue =
   RowData (M.fromList $ map (\i -> (fieldName i, PDecimal decimalValue)) [0..nElems] )
   where
-    fieldNameLength = 10
     fieldName i = padName $ Field $ Text.pack (show i)
     padName (Field f) = Field $ Text.replicate (20 - Text.length f) "0" <> f
 
@@ -305,7 +292,6 @@ rowBool :: Int -> RowData
 rowBool nElems =
   RowData (M.fromList $ map (\i -> (fieldName i, PBool False)) [0..nElems] )
   where
-    fieldNameLength = 10
     fieldName i = padName $ Field $ Text.pack (show i)
     padName (Field f) = Field $ Text.replicate (20 - Text.length f) "0" <> f
 
@@ -313,7 +299,6 @@ rowUnit :: Int -> RowData
 rowUnit nElems =
   RowData (M.fromList $ map (\i -> (fieldName i, PUnit)) [0..nElems] )
   where
-    fieldNameLength = 10
     fieldName i = padName $ Field $ Text.pack (show i)
     padName (Field f) = Field $ Text.replicate (4 - Text.length f) "0" <> f
 
@@ -325,11 +310,11 @@ rowTime extraMicros =
 -- predicate. Each key will be the string representation of its index, padded to the
 -- desired length.
 fakeKeySet :: Int -> Int -> KSPredicate -> KeySet
-fakeKeySet nKeys keyLength pred =
+fakeKeySet nKeys keyLength pred' =
   let key i = PublicKeyText $ Text.replicate (keyLength - length (show i)) "-" <>  Text.pack (show i)
-  in KeySet (S.fromList $ map key [0..nKeys]) pred
+  in KeySet (S.fromList $ map key [0..nKeys]) pred'
 
-getModule :: String -> EvalM ReplCoreBuiltin SpanInfo (Module Name Type ReplCoreBuiltin SpanInfo)
+getModule :: String -> EvalM 'ExecRuntime ReplCoreBuiltin SpanInfo (Module Name Type ReplCoreBuiltin SpanInfo)
 getModule code = do
   let moduleSyntax = parseMod code
   desugarOutput <- runDesugarModule @ReplCoreBuiltin @SpanInfo moduleSyntax
@@ -352,12 +337,12 @@ exampleModule1 = "\
 
 getSize :: (Default i, SizeOf a, IsBuiltin b, Show i) => EvalEnv b i -> EvalState b i -> SizeOfVersion -> a -> IO Word64
 getSize env state version value = do
-  (Right v, _state) <- runEvalM env state $ sizeOf version value
+  (Right v, _state) <- runEvalM (ExecEnv env) state $ sizeOf def version value
   return v
 
-expectEval :: Show i => EvalEnv b i -> EvalState b i -> EvalM b i a -> IO a
+expectEval :: Show i => EvalEnv b i -> EvalState b i -> EvalM 'ExecRuntime b i a -> IO a
 expectEval env state action = do
-    (result, _state) <- runEvalM env state action
+    (result, _state) <- runEvalM (ExecEnv env) state action
     case result of
         Left e -> error $ "Unexpected failure: " ++ show e
         Right a -> pure a
