@@ -38,12 +38,10 @@ debugPrint dp term =
         DPLexer -> whenReplFlagSet ReplDebugLexer $ liftIO $ do
           putStrLn "----------- Lexer output -----------------"
           print (pretty term)
-        DPParser -> whenReplFlagSet ReplDebugParser $ case term of
-          Syntax.TLTerm t ->
+        DPParser -> whenReplFlagSet ReplDebugParser $
             liftIO $ do
               putStrLn "----------- Parser output ----------------"
-              print (pretty t)
-          _ -> pure ()
+              print (pretty term)
         DPDesugar -> whenReplFlagSet ReplDebugDesugar $ case term of
           Term.TLTerm t ->
             liftIO $ do

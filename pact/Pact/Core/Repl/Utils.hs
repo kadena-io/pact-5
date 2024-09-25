@@ -31,7 +31,7 @@ module Pact.Core.Repl.Utils
  , replTx
  , ReplAction(..)
  , parseReplAction
- , prettyReplFlag
+ , renderReplFlag
  , replError
  , SourceCode(..)
  , useReplState
@@ -40,6 +40,7 @@ module Pact.Core.Repl.Utils
  , (%==)
  , gasLogEntrytoPactValue
  , replPrintLn
+ , replPrintLn'
  ) where
 
 import Control.Lens
@@ -72,15 +73,11 @@ import qualified Pact.Core.IR.Term as Term
 import System.Console.Haskeline.Completion
 import Data.Default
 
-prettyReplFlag :: ReplDebugFlag -> String
-prettyReplFlag = \case
+renderReplFlag :: ReplDebugFlag -> String
+renderReplFlag = \case
   ReplDebugLexer -> "lexer"
   ReplDebugParser -> "parser"
   ReplDebugDesugar -> "desugar"
-  ReplDebugTypechecker -> "tc-term"
-  ReplDebugTypecheckerType -> "tc-type"
-  ReplDebugSpecializer -> "specializer"
-  ReplDebugUntyped -> "untyped-core"
 
 data ReplAction
   = RASetFlag ReplDebugFlag
@@ -95,11 +92,7 @@ replFlag :: ReplParser ReplDebugFlag
 replFlag =
   (ReplDebugLexer <$ MP.chunk "lexer") <|>
   (ReplDebugParser <$ MP.chunk "parser") <|>
-  (ReplDebugDesugar <$ MP.chunk "desugar") <|>
-  (ReplDebugTypechecker <$ MP.chunk "tc-term") <|>
-  (ReplDebugTypecheckerType <$ MP.chunk "tc-type") <|>
-  (ReplDebugSpecializer <$ MP.chunk "specializer") <|>
-  (ReplDebugUntyped <$ MP.chunk "untyped-core")
+  (ReplDebugDesugar <$ MP.chunk "desugar")
 
 replAction :: ReplParser ReplAction
 replAction =
@@ -128,18 +121,6 @@ printDebug a = \case
     print (pretty a)
   ReplDebugDesugar -> do
     putStrLn "----------- Desugar output ---------------"
-    print (pretty a)
-  ReplDebugTypechecker -> do
-    putStrLn "----------- Typechecker output -----------"
-    print (pretty a)
-  ReplDebugTypecheckerType -> do
-    putStrLn "----------- Inferred type output ---------"
-    print (pretty a)
-  ReplDebugSpecializer -> do
-    putStrLn "----------- Specializer output -----------"
-    print (pretty a)
-  ReplDebugUntyped -> do
-    putStrLn "----------- Untyped core output ----------"
     print (pretty a)
 
 replFlagSet
@@ -205,9 +186,8 @@ replCompletion natives =
     moduleNames <- uses (loaded . loModules) (fmap renderModuleName . M.keys)
     prefixedNames <- uses (loaded . loModules) toPrefixed
     let
-      cmds = [":load", ":type", ":syntax", ":debug"]
       allNames = Set.fromList $ T.unpack <$> concat
-        [tlns, moduleNames, prefixedNames, natives, cmds]
+        [tlns, moduleNames, prefixedNames, natives]
     pure $ simpleCompletion <$> Set.toList (Set.filter (str `isPrefixOf`) allNames)
   where
   defNames = \case
@@ -260,6 +240,9 @@ gasLogEntrytoPactValue entry = PString $ renderCompactText' $ n <> ": " <> prett
     n = pretty (_gleArgs entry) <+> pretty (_gleInfo entry)
 
 replPrintLn :: Pretty a => a -> EvalM 'ReplRuntime b SpanInfo ()
-replPrintLn p = do
+replPrintLn p = replPrintLn' (renderCompactText p)
+
+replPrintLn' :: Text -> EvalM 'ReplRuntime b SpanInfo ()
+replPrintLn' p = do
   r <- getReplState
   _replOutputLine r p

@@ -462,12 +462,12 @@ desugarDefun
   => ModuleName             -- ^ proves this function is called within Pact module scope
   -> Lisp.Defun i
   -> RenamerM e b i (Defun ParsedName DesugarType b i)
-desugarDefun _modWitness (Lisp.Defun spec [] body _ _ i) = do
+desugarDefun _modWitness (Lisp.Defun spec [] body _anns i) = do
   body' <- nelToSequence i <$> traverse desugarLispTerm body
   let bodyLam = Nullary body' i
       spec' = toArg spec
   pure $ Defun spec' [] bodyLam i
-desugarDefun _modWitness (Lisp.Defun spec (arg:args) body _ _ i) = do
+desugarDefun _modWitness (Lisp.Defun spec (arg:args) body _anns i) = do
   let args' = toArg <$> (arg :| args)
   body' <- nelToSequence i <$> traverse desugarLispTerm body
   let bodyLam = Lam args' body' i
@@ -479,7 +479,7 @@ desugarDefPact
   => ModuleName
   -> Lisp.DefPact i
   -> RenamerM e b i (DefPact ParsedName DesugarType b i)
-desugarDefPact mn (Lisp.DefPact spec@(Lisp.MArg dpname _ _) margs (step :| steps) _ _ i) = do
+desugarDefPact mn (Lisp.DefPact spec@(Lisp.MArg dpname _ _) margs (step :| steps) _anns i) = do
   let args' = toArg <$> margs
       spec' = toArg spec
   steps' <- forM (step :| steps) \case
@@ -528,7 +528,7 @@ desugarDefCap
   => ModuleName             -- ^ proves this function is called within Pact module scope
   -> Lisp.DefCap i
   -> RenamerM e b i (DefCap ParsedName DesugarType b i)
-desugarDefCap _modWitness (Lisp.DefCap spec arglist term _docs _model meta i) = do
+desugarDefCap _modWitness (Lisp.DefCap spec arglist term _anns meta i) = do
   let arglist' = toArg <$> arglist
       spec' = toArg spec
   term' <- nelToSequence i <$> traverse desugarLispTerm term
@@ -539,7 +539,7 @@ desugarDefSchema
   :: ModuleName             -- ^ proves this function is called within Pact module scope
   -> Lisp.DefSchema i
   -> RenamerM e b i (DefSchema DesugarType i)
-desugarDefSchema _modWitness (Lisp.DefSchema dsn args _docs _model i) = do
+desugarDefSchema _modWitness (Lisp.DefSchema dsn args _anns i) = do
   let args' = (\(Lisp.Arg n ty _) -> (Field n, ty)) <$> args
       scd = M.fromList args'
   pure $ DefSchema dsn scd i
@@ -557,15 +557,15 @@ desugarIfDef
   -> Lisp.IfDef i
   -> RenamerM e b i (IfDef ParsedName DesugarType b i)
 desugarIfDef ifn = \case
-  Lisp.IfDfun (Lisp.IfDefun spec margs _ _ i) -> pure $ IfDfun $ IfDefun (toArg spec) (toArg <$> margs) i
+  Lisp.IfDfun (Lisp.IfDefun spec margs _anns i) -> pure $ IfDfun $ IfDefun (toArg spec) (toArg <$> margs) i
   -- Todo: check managed impl
-  Lisp.IfDCap (Lisp.IfDefCap spec margs _ _ meta i) -> IfDCap <$> do
+  Lisp.IfDCap (Lisp.IfDefCap spec margs _anns meta i) -> IfDCap <$> do
     let args = toArg <$> margs
         spec' = toArg spec
     meta' <- fmap (BareName . rawParsedName) <$> maybe (pure Unmanaged) (desugarDefMeta i args) meta
     pure $ IfDefCap spec' args meta' i
   Lisp.IfDConst dc -> IfDConst <$> desugarDefConst ifn dc
-  Lisp.IfDPact (Lisp.IfDefPact spec margs _ _ i) -> pure $ IfDPact $ IfDefPact (toArg spec) (toArg <$> margs) i
+  Lisp.IfDPact (Lisp.IfDefPact spec margs _anns i) -> pure $ IfDPact $ IfDefPact (toArg spec) (toArg <$> margs) i
   Lisp.IfDSchema ds -> IfDSchema <$> desugarDefSchema ifn ds
 
 desugarDef
@@ -585,7 +585,7 @@ desugarModule
   :: (DesugarBuiltin b)
   => Lisp.Module i
   -> RenamerM e b i (Module ParsedName DesugarType b i)
-desugarModule (Lisp.Module mname mgov extdecls defs _ _ i) = do
+desugarModule (Lisp.Module mname mgov extdecls defs _anns i) = do
   (imports, blessed, implemented) <- splitExts extdecls
   defs' <- locally reCurrModule (const (Just $ CurrModule mname [] MTModule))
           $ traverse (desugarDef mname) (NE.toList defs)
@@ -615,7 +615,7 @@ desugarInterface
   :: (DesugarBuiltin b)
   => Lisp.Interface i
   -> RenamerM e b i (Interface ParsedName DesugarType b i)
-desugarInterface (Lisp.Interface ifn ifdefns imps _ _ info) = do
+desugarInterface (Lisp.Interface ifn ifdefns imps _anns info) = do
   defs' <- traverse (desugarIfDef ifn) ifdefns
   let mhash = ModuleHash (Hash "placeholder")
   imps' <- traverse (desugarImport info) imps

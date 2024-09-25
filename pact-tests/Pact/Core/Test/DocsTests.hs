@@ -33,4 +33,4 @@ docsExistsTest b = testCase "Builtins should have docs" $ do
       ,"env-gaslog", "env-gasmodel-fixed", "env-milligas", "env-module-admin"
       ,"env-set-milligas", "env-stackframe", "env-verifiers", "negate"
       ,"pact-state", "print", "reset-pact-state", "rollback-tx", "show"
-      ,"sig-keyset", "test-capability"]
+      ,"sig-keyset", "test-capability", "env-set-debug-flag"]

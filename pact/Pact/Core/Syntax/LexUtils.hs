@@ -166,7 +166,7 @@ newtype LexerM a =
 
 
 initState :: Text -> AlexInput
-initState = AlexInput 0 0 '\n'
+initState = AlexInput 0 0 '\0'
 
 getSpanInfo :: LexerM SpanInfo
 getSpanInfo = do

@@ -111,6 +111,11 @@ data Governance name
   | CapGov (FQNameRef name)
   deriving (Eq, Show, Generic)
 
+instance Pretty (Governance name) where
+  pretty = \case
+    KeyGov kn -> dquotes (pretty (renderKeySetName kn))
+    CapGov fqnref -> pretty fqnref
+
 instance NFData name => NFData (Governance name)
 
 data KSPredicate

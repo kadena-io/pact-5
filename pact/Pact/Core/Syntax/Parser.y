@@ -14,6 +14,7 @@ import Data.Char(digitToInt)
 import Data.Text(Text)
 import Data.List.NonEmpty(NonEmpty(..))
 import Data.Either(lefts, rights)
+import Data.Maybe(catMaybes)
 
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
@@ -122,12 +123,12 @@ StringRaw :: { Text }
 
 Module :: { ParsedModule }
   : '(' module IDENT Governance MDocOrModel ExtOrDefs ')'
-    { Module (ModuleName (getIdent $3) Nothing) $4 (reverse (rights $6)) (NE.fromList (reverse (lefts $6))) (fst $5) (snd $5)
+    { Module (ModuleName (getIdent $3) Nothing) $4 (reverse (rights $6)) (NE.fromList (reverse (lefts $6))) $5
       (combineSpan (_ptInfo $1) (_ptInfo $7)) }
 
 Interface :: { ParsedInterface }
   : '(' interface IDENT MDocOrModel ImportOrIfDef ')'
-    { Interface (ModuleName (getIdent $3) Nothing) (reverse (lefts $5)) (reverse (rights $5)) (fst $4) (snd $4)
+    { Interface (ModuleName (getIdent $3) Nothing) (reverse (lefts $5)) (reverse (rights $5)) $4
       (combineSpan (_ptInfo $1) (_ptInfo $2)) }
 
 Ext :: { ExtDecl }
@@ -170,15 +171,15 @@ IfDef :: { ParsedIfDef }
 -- ident = $2,
 IfDefun :: { SpanInfo -> IfDefun SpanInfo }
   : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel
-    { IfDefun (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) (fst $7) (snd $7) }
+    { IfDefun (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $7 }
 
 IfDefCap :: { SpanInfo -> IfDefCap SpanInfo }
   : defcap IDENT MTypeAnn'(' MArgs ')' MDocOrModel MDCapMeta
-    { IfDefCap (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) (fst $7) (snd $7) $8 }
+    { IfDefCap (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $7 $8 }
 
 IfDefPact :: { SpanInfo -> IfDefPact SpanInfo }
   : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel
-    { IfDefPact (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) (fst $7) (snd $7) }
+    { IfDefPact (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $7 }
 
 ImportList :: { Maybe [Text] }
   : '[' ImportNames ']' { Just (reverse $2) }
@@ -194,22 +195,22 @@ DefConst :: { SpanInfo -> ParsedDefConst }
 -- All defs
 Defun :: { SpanInfo -> ParsedDefun }
   : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel Block
-    { Defun (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $8 (fst $7) (snd $7) }
+    { Defun (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $8 $7 }
 
 Defschema :: { SpanInfo -> DefSchema SpanInfo }
   : defschema IDENT MDocOrModel SchemaArgList
-    { DefSchema (getIdent $2) (reverse $4) (fst $3) (snd $3) }
+    { DefSchema (getIdent $2) (reverse $4) $3 }
 
 Deftable :: { SpanInfo -> DefTable SpanInfo }
   : deftable IDENT ':' '{' ParsedName '}' MDoc { DefTable (getIdent $2) $5 $7 }
 
 Defcap :: { SpanInfo -> DefCap SpanInfo }
   : defcap IDENT MTypeAnn '(' MArgs ')' MDocOrModel MDCapMeta Block
-    { DefCap (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $9 (fst $7) (snd $7) $8 }
+    { DefCap (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $9 $7 $8 }
 
 DefPact :: { SpanInfo -> DefPact SpanInfo }
   : defpact IDENT MTypeAnn '(' MArgs ')' MDocOrModel DefPactSteps
-  { DefPact (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $8 (fst $7) (snd $7) }
+  { DefPact (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $8 $7 }
 
 DefPactSteps :: { NE.NonEmpty (PactStep SpanInfo) }
   : Steps { NE.fromList (reverse $1) }
@@ -275,28 +276,28 @@ DocAnn :: { Text }
 DocStr :: { Text }
   : STR { getStr $1 }
 
-MModel :: { [PropertyExpr SpanInfo] }
-  : ModelAnn { $1 }
-  | {- empty -}  { [] }
+MModel :: { Maybe [PropertyExpr SpanInfo] }
+  : ModelAnn { Just $1 }
+  | {- empty -}  { Nothing }
 
 ModelAnn :: { [PropertyExpr SpanInfo] }
   : modelAnn '[' PactFVModels ']' { $3 }
 
-MDocOrModel :: { (Maybe Text, [PropertyExpr SpanInfo])}
-  : DocAnn ModelAnn { (Just $1, $2)}
-  | ModelAnn DocAnn { (Just $2, $1) }
-  | DocAnn { (Just $1, [])}
-  | ModelAnn { (Nothing, $1)}
-  | DocStr { (Just $1, []) }
-  | {- empty -} { (Nothing, []) }
+MDocOrModel :: { [PactAnn SpanInfo] }
+  : DocAnn ModelAnn { [PactDoc PactDocAnn $1, PactModel $2] }
+  | ModelAnn DocAnn { [PactModel $1, PactDoc PactDocAnn $2] }
+  | DocAnn { [PactDoc PactDocAnn $1] }
+  | ModelAnn { [PactModel $1] }
+  | DocStr { [PactDoc PactDocString $1] }
+  | {- empty -} { [] }
 
 -- This production causes parser ambugity in two productions: defun and defcap
 -- (defun f () "a")
 -- (defcap f () "a")
 -- it isn't clear whether "a" is a docstring or a string literal.
-MDoc :: { Maybe Text }
-  : DocAnn { Just $1 }
-  | DocStr { Just $1 }
+MDoc :: { Maybe (Text, PactDocType) }
+  : DocAnn { Just ($1, PactDocAnn) }
+  | DocStr { Just ($1, PactDocString) }
   | {- empty -} { Nothing }
 
 MTypeAnn :: { Maybe Type }
