@@ -773,6 +773,7 @@ data ReplOnlyBuiltin
   | REnvEnableReplNatives
   | REnvModuleAdmin
   | REnvVerifiers
+  | REnvSetDebugFlag
   deriving (Show, Enum, Bounded, Eq, Generic)
 
 
@@ -820,6 +821,7 @@ instance IsBuiltin ReplOnlyBuiltin where
     REnvEnableReplNatives -> 1
     REnvModuleAdmin -> 1
     REnvVerifiers -> 1
+    REnvSetDebugFlag -> 1
 
     -- RLoad -> 1
     -- RLoadWithEnv -> 2
@@ -902,6 +904,7 @@ replBuiltinsToText = \case
   REnvEnableReplNatives -> "env-enable-repl-natives"
   REnvModuleAdmin -> "env-module-admin"
   REnvVerifiers -> "env-verifiers"
+  REnvSetDebugFlag -> "env-set-debug-flag"
 
 replBuiltinToText :: (t -> Text) -> ReplBuiltin t -> Text
 replBuiltinToText f = \case

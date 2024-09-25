@@ -7,9 +7,14 @@ module Pact.Core.Info
  , combineSpan
  , NoInfo(..)
  , Located(..)
+ , sliceFromSource
+ , sliceFromSourceLines
  ) where
 
+import Control.Lens
 import Data.Default
+import Data.Text(Text)
+import qualified Data.Text as T
 import GHC.Generics
 import Control.DeepSeq (NFData)
 import Pact.Core.Pretty
@@ -39,13 +44,26 @@ instance Pretty SpanInfo where
     pretty _liStartLine <> ":" <> pretty _liStartColumn
     <> "-" <> pretty _liEndLine <> ":" <> pretty _liEndColumn
 
-    
+
 
 -- | Combine two Span infos
 --   and spit out how far down the expression spans.
 combineSpan :: SpanInfo -> SpanInfo -> SpanInfo
 combineSpan (SpanInfo l1 c1 _ _) (SpanInfo _ _ l2 c2) =
   SpanInfo l1 c1 l2 c2
+
+sliceFromSourceLines :: [Text] -> SpanInfo -> Text
+sliceFromSourceLines codeLines (SpanInfo startLine startCol endLine endCol) =
+    -- Drop until the start line, and take (endLine - startLine). Note:
+    -- Span info locations are absolute, so `endLine` is not relative to start line, but
+    -- relative to the whole file.
+    --
+    -- Note: we take `end - start + 1` since end is inclusive.
+    let lineSpan = take (max 1 (endLine - startLine + 1)) $ drop startLine codeLines
+    in T.concat (over _head (T.drop startCol) . over _last (T.take (endCol + 1)) $ lineSpan)
+
+sliceFromSource :: Text -> SpanInfo -> Text
+sliceFromSource t si = sliceFromSourceLines (T.lines t) si
 
 data Located i a
   = Located

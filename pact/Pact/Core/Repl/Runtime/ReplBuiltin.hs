@@ -513,6 +513,31 @@ coreVersion info b  cont handler _env = \case
     in returnCEKValue cont handler (VString v)
   args -> argsError info b args
 
+envSetDebug :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envSetDebug info b cont handler _env = \case
+  [VString flag] -> do
+    flags <- case T.strip flag of
+        "lexer" -> pure $ S.singleton ReplDebugLexer
+        "parser" -> pure $ S.singleton ReplDebugParser
+        "desugar" -> pure $ S.singleton ReplDebugDesugar
+        "all" -> pure $ S.fromList [minBound .. maxBound]
+        "none" -> pure $ mempty
+        f -> throwExecutionError info $
+          NativeExecutionError (builtinName b) $
+          "unrecognized flag in env-set-debug: " <> f
+    currFlags <- useReplState replFlags
+    flagsSet <-
+      if S.null flags then do
+        replFlags .== mempty
+        pure mempty
+      else do
+        let flagsToSet = S.difference (S.union currFlags flags) (S.intersection currFlags flags)
+        replFlags .== flagsToSet
+        pure flagsToSet
+    replPrintLn' $ renderCompactText' $ "set debug flags to " <> pretty (S.toList flagsSet)
+    returnCEKValue cont handler $ VUnit
+  args -> argsError info b args
+
 
 coreEnforceVersion :: (IsBuiltin b) => NativeFunction e b i
 coreEnforceVersion info b cont handler _env = \case
@@ -589,3 +614,4 @@ replCoreBuiltinRuntime = \case
     REnvEnableReplNatives -> envEnableReplNatives
     REnvModuleAdmin -> envModuleAdmin
     REnvVerifiers -> envVerifiers
+    REnvSetDebugFlag -> envSetDebug

@@ -22,8 +22,9 @@ import Control.Monad.Except
 import Control.Monad.Trans(lift)
 import System.Console.Haskeline
 import Data.IORef
+import Data.Text(Text)
 import qualified Data.Text as T
-import qualified Data.Set as Set
+import qualified Data.Text.IO as T
 
 import Pact.Core.Builtin
 import Pact.Core.Environment
@@ -44,9 +45,9 @@ execScript dolog f = do
   runReplT ref $ loadFile f interpretEvalDirect
   where
   defaultSrc = SourceCode "(interactive)" mempty
-  logger :: Pretty a => a -> EvalM e b i ()
+  logger :: Text -> EvalM e b i ()
   logger
-    | dolog = liftIO . print . pretty
+    | dolog = liftIO . T.putStrLn
     | otherwise = const (pure ())
 
 runRepl :: IO ()
@@ -73,30 +74,13 @@ runRepl = do
     case minput of
       Nothing -> outputStrLn "goodbye"
       Just input | T.null input -> loop
-      Just input -> case parseReplAction (T.strip input) of
-        Nothing -> do
-          outputStrLn "Error: Expected command [:load, :type, :syntax, :debug] or expression"
-          loop
-        Just ra -> case ra of
-          RASetFlag flag -> do
-            lift (replFlags %== Set.insert flag)
-            outputStrLn $ unwords ["set debug flag for", prettyReplFlag flag]
-            loop
-          RADebugAll -> do
-            lift (replFlags .== Set.fromList [minBound .. maxBound])
-            outputStrLn $ unwords ["set all debug flags"]
-            loop
-          RADebugNone -> do
-            lift (replFlags .== Set.empty)
-            outputStrLn $ unwords ["Remove all debug flags"]
-            loop
-          RAExecuteExpr src -> catch' $ do
-            lift (replCurrSource .== defaultSrc{_scPayload=src})
-            eout <- lift (tryError (interpretReplProgramDirect (SourceCode "(interactive)" src)))
-            case eout of
-              Right _ -> pure ()
-              Left err -> do
-                rs <- lift (useReplState replCurrSource)
-                lift (replCurrSource .== defaultSrc)
-                outputStrLn (T.unpack (replError rs err))
-            loop
+      Just src -> catch' $ do
+        lift (replCurrSource .== defaultSrc{_scPayload=src})
+        eout <- lift (tryError (interpretReplProgramDirect (SourceCode "(interactive)" src)))
+        case eout of
+          Right _ -> pure ()
+          Left err -> do
+            rs <- lift (useReplState replCurrSource)
+            lift (replCurrSource .== defaultSrc)
+            outputStrLn (T.unpack (replError rs err))
+        loop

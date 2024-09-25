@@ -129,12 +129,13 @@ data ReplDebugFlag
   = ReplDebugLexer
   | ReplDebugParser
   | ReplDebugDesugar
-  | ReplDebugTypechecker
-  | ReplDebugTypecheckerType
-  | ReplDebugSpecializer
-  | ReplDebugUntyped
   deriving (Show, Eq, Ord, Enum, Bounded)
 
+instance Pretty ReplDebugFlag where
+  pretty = \case
+    ReplDebugLexer -> "lexer"
+    ReplDebugParser -> "parser"
+    ReplDebugDesugar -> "desugar"
 
 
 -- | Execution flags specify behavior of the runtime environment,
@@ -353,7 +354,7 @@ data ReplState b
   , _replTx :: Maybe (TxId, Maybe Text)
   , _replNativesEnabled :: Bool
   -- ^
-  , _replOutputLine :: !(forall a. Pretty a => a -> EvalM 'ReplRuntime b SpanInfo ())
+  , _replOutputLine :: !(Text -> EvalM 'ReplRuntime b SpanInfo ())
   }
 
 data RuntimeMode

@@ -402,6 +402,11 @@ instance Eq (FQNameRef name) where
   (FQParsed pn) == (FQParsed pn') = pn == pn'
   (FQName fqn) == (FQName fqn') = fqn == fqn'
 
+instance Pretty (FQNameRef name) where
+  pretty = \case
+    FQParsed pn -> pretty pn
+    FQName fqn -> pretty (_fqName fqn)
+
 
 
 makeLenses ''FullyQualifiedName

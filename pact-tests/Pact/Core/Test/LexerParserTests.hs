@@ -177,8 +177,16 @@ parserRoundtrip = property $ do
   res <- evalEither $ Lisp.parseExpr =<< Lisp.lexer (parsedExprToSrc ptok)
   ptok === toUnitExpr res
 
+-- sliceRoundtrip :: Property
+-- sliceRoundtrip = property $ do
+--   ptok <- forAll exprGen
+--   let sourceLoc = parsedExprToSrc ptok
+--   res <- evalEither $ Lisp.parseExpr =<< Lisp.lexer exprGen
+--   ptok === toUnitExpr res
+
 tests :: TestTree
 tests = testGroup "Lexer and Parser Tests"
   [ testProperty "lexer roundtrip" lexerRoundtrip
   , testProperty "parser roundtrip" $ withTests (1000 :: TestLimit) parserRoundtrip
+  -- , testProperty "slices roundtrip" $ withTests (1000 :: TestLimit) parserRoundtrip
   ]
