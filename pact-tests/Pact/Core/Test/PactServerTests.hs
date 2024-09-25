@@ -7,46 +7,46 @@
 
 module Pact.Core.Test.PactServerTests where
 
+import Control.Lens
+import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.Aeson as A
 import qualified Data.ByteString.Lazy as LBS
-import Pact.Core.Command.Util
 import Data.Default
+import Data.IORef
 import qualified Data.List.NonEmpty as NE
+import qualified Data.Map.Strict as M
+import Data.Maybe (isJust)
 import Data.Proxy
 import Data.Text
+import qualified Data.Text as T
 import Data.Text.Encoding
+import qualified Data.Text.Encoding as T
+import qualified Data.Vector as V
+import NeatInterpolation (text)
 import qualified Network.HTTP.Types   as HTTP
+import Network.Wai.Test.Internal
 import Pact.Core.ChainData
 import Pact.Core.Command.Client
 import Pact.Core.Command.Crypto
 import Pact.Core.Command.RPC
-import Pact.Core.Persistence.SQLite
-import Pact.Core.Serialise
-import Data.LruCache.IO
 import Pact.Core.Command.Server
 import Pact.Core.Command.Types
+import Pact.Core.Command.Util
 import Pact.Core.Hash
+import Pact.Core.Names
 import Pact.Core.PactValue
+import Pact.Core.Persistence.SQLite
+import Pact.Core.SPV (noSPVSupport)
+import Pact.Core.Serialise
 import Pact.Core.StableEncoding
 import qualified Pact.JSON.Encode as J
 import Servant.API
 import Servant.Client
 import Servant.Server
 import Test.Tasty
-import Test.Tasty.Wai
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
-import NeatInterpolation (text)
-import qualified Data.Vector as V
-import qualified Data.Map.Strict as M
 import Test.Tasty.HUnit
-import Network.Wai.Test.Internal
-import Control.Monad
-import Pact.Core.Names
-import Data.Maybe (isJust)
-import Control.Lens
-import Pact.Core.SPV (noSPVSupport)
+import Test.Tasty.Wai
 
 sendClient :: SendRequest -> ClientM SendResponse
 pollClient :: PollRequest -> ClientM PollResponse
@@ -72,9 +72,9 @@ tests =  withResource
   where
   mkEnv = do
     (pdb,db,stmt) <- unsafeCreateSqlitePactDb serialisePact_raw_spaninfo ":memory:"
-    cache <- newLruHandle 100
+    store <- newIORef mempty
     let
-      runtime = ServerRuntime pdb cache noSPVSupport
+      runtime = ServerRuntime pdb store noSPVSupport
       app = serve (Proxy @API) (server runtime)
     pure (app, db, stmt)
   rmEnv (_, db, stmt) =

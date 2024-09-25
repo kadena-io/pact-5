@@ -4,31 +4,25 @@
 
 module Pact.Core.Test.ServerUtils where
 
-import Control.Concurrent (threadDelay)
 import Control.Exception
-import Data.Text(Text)
-
+import Control.Concurrent
+import Data.IORef
 import qualified Data.Text as T
-
+import Data.Text(Text)
 import qualified Network.HTTP.Client as HTTP
-
-import qualified Pact.JSON.Encode as J
-
-import Servant
-import Servant.Client
-
-import System.IO.Temp
-import System.IO.Unsafe
 import Network.Wai.Handler.Warp
-import Data.LruCache.IO
-import Test.Tasty.HUnit
-
-import Pact.Core.Environment
-import Pact.Core.SPV
-import Pact.Core.Serialise
-import Pact.Core.Persistence.SQLite
 import Pact.Core.Command.Server
 import Pact.Core.Command.Server.Config
+import Pact.Core.Environment
+import Pact.Core.Persistence.SQLite
+import Pact.Core.SPV
+import Pact.Core.Serialise
+import qualified Pact.JSON.Encode as J
+import Servant
+import Servant.Client
+import System.IO.Temp
+import System.IO.Unsafe
+import Test.Tasty.HUnit
 -- -------------------------------------------------------------------------- --
 -- Global Test Manager
 
@@ -57,12 +51,12 @@ versionClient :: ClientM Text
 withTestServe :: FilePath -> SPVSupport -> (Port -> IO a) -> IO a
 withTestServe configFile spv app = do
   Config{..} <- validateConfigFile configFile
-  emptyCache <- newLruHandle 100
+  store <- newIORef mempty
   case _persistDir of
     Nothing -> withSqlitePactDb serialisePact_raw_spaninfo ":memory:" $ \pdb -> do
-      withTestApiServer (ServerRuntime pdb emptyCache spv) app
+      withTestApiServer (ServerRuntime pdb store spv) app
     Just pdir -> withSqlitePactDb serialisePact_raw_spaninfo (T.pack pdir <> "pactdb.sqlite") $ \pdb -> do
-      withTestApiServer (ServerRuntime pdb emptyCache spv) app
+      withTestApiServer (ServerRuntime pdb store spv) app
 
 -- | Runs an API server for testing.
 --
