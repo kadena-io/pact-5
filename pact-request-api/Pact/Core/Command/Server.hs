@@ -30,12 +30,10 @@ import Control.Monad.IO.Class
 import Data.Default
 import Data.Foldable
 import qualified Data.HashMap.Strict as HM
+import qualified Data.Map.Strict as M
 import Data.IORef
 import qualified Data.List as L
 import qualified Data.List.NonEmpty as NE
-import qualified Data.LruCache as LRU
-import Data.LruCache.IO
-import qualified Data.LruCache.IO as LRU
 import Data.Proxy
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -76,11 +74,14 @@ import System.Log.FastLogger.Date
 -- | Temporarily pretend our Log type in CommandResult is unit.
 type Log = ()
 
+
+type ResultStore = M.Map RequestKey (CommandResult Hash (PactErrorCompat Info))
+
 -- | Runtime environment for a Pact server.
 data ServerRuntime
   = ServerRuntime
   { _srDbEnv :: PactDb CoreBuiltin Info
-  , _srRequestCache :: LruHandle RequestKey (CommandResult Hash (PactErrorCompat Info))
+  , _srResultStore :: IORef ResultStore
   , _srSPVSupport :: SPVSupport
   }
 
@@ -204,14 +205,14 @@ type API = ("api" :> "v1" :>
 runServer :: Config -> SPVSupport -> IO ()
 runServer (Config port persistDir logDir _verbose _gl) spv = do
   (traverse_.traverse_) (createDirectoryIfMissing True) [persistDir, logDir]
-  emptyCache <- newLruHandle 100
+  emptyStore <- newIORef M.empty
   case persistDir of
     Nothing -> withSqlitePactDb serialisePact_raw_spaninfo ":memory:" $ \pdb -> do
-      runServer_ (ServerRuntime pdb emptyCache spv) port logDir
+      runServer_ (ServerRuntime pdb emptyStore spv) port logDir
     Just pdir -> let
       pdir' = T.pack $ pdir </> "pactdb.sqlite"
       in withSqlitePactDb serialisePact_raw_spaninfo pdir' $ \pdb -> do
-      runServer_ (ServerRuntime pdb emptyCache spv) port logDir
+      runServer_ (ServerRuntime pdb emptyStore spv) port logDir
 
 runServer_ :: ServerRuntime -> Port -> Maybe FilePath -> IO ()
 runServer_ env port logDir = bracket setupLogger teardownLogger runServer'
@@ -267,97 +268,97 @@ sendHandler :: ServerRuntime -> SendRequest -> Handler SendResponse
 sendHandler runtime (SendRequest submitBatch) = do
     requestKeys <- forM (_sbCmds submitBatch) $ \cmd -> do
       let requestKey = cmdToRequestKey cmd
-      _ <- liftIO $ cached (_srRequestCache runtime) requestKey (computeResultAndUpdateState requestKey cmd)
+      liftIO $ do
+        result <- computeResultAndUpdateState runtime requestKey cmd
+        modifyIORef' (_srResultStore runtime) (M.insert requestKey result)
       pure requestKey
     pure $ SendResponse $ RequestKeys requestKeys
-   where
-        computeResultAndUpdateState :: RequestKey -> Command Text -> IO (CommandResult Hash (PactErrorCompat Info))
-        computeResultAndUpdateState requestKey cmd =
-          case verifyCommand @(StableEncoding PublicMeta) (fmap E.encodeUtf8 cmd) of
-            ProcFail errStr -> do
-              let pe = PEExecutionError (EvalError (T.pack errStr)) [] def
-              pure $ pactErrorToCommandResult requestKey pe (Gas 0)
 
-            ProcSucc (Command (Payload (Exec (ExecMsg code d)) _ _ signer mverif _) _ h) -> do
-              let parsedCode = _pcExps code
-                  msgData = MsgData
-                    { mdData = d
-                    , mdHash = h
-                    , mdSigners = signer
-                    , mdVerifiers = maybe [] (fmap void) mverif
-                    }
-              evalExec Transactional (_srDbEnv runtime) (_srSPVSupport runtime) freeGasModel mempty SimpleNamespacePolicy
-                def msgData def parsedCode >>= \case
-                Left pe ->
-                  pure $ pactErrorToCommandResult requestKey pe (Gas 0)
-                Right evalResult ->
-                  pure $ evalResultToCommandResult requestKey evalResult
+computeResultAndUpdateState :: ServerRuntime -> RequestKey -> Command Text -> IO (CommandResult Hash (PactErrorCompat Info))
+computeResultAndUpdateState runtime requestKey cmd =
+  case verifyCommand @(StableEncoding PublicMeta) (fmap E.encodeUtf8 cmd) of
+    ProcFail errStr -> do
+      let pe = PEExecutionError (EvalError (T.pack errStr)) [] def
+      pure $ pactErrorToCommandResult requestKey pe (Gas 0)
 
-            ProcSucc (Command (Payload (Continuation contMsg) _ _ signer mverif _) _ h) -> do
-                  let msgData = MsgData
-                        { mdData = _cmData contMsg
-                        , mdHash = h
-                        , mdSigners = signer
-                        , mdVerifiers = maybe [] (fmap void) mverif
-                        }
-                      cont = Cont
-                        { _cPactId = _cmPactId contMsg
-                        , _cStep = _cmStep contMsg
-                        , _cRollback = _cmRollback contMsg
-                        , _cProof = _cmProof contMsg
-                        }
-                  evalContinuation Transactional (_srDbEnv runtime) (_srSPVSupport runtime) freeGasModel mempty
-                    SimpleNamespacePolicy def msgData def cont >>= \case
-                    Left pe ->
-                      pure $ pactErrorToCommandResult requestKey pe (Gas 0)
-                    Right evalResult -> pure $ evalResultToCommandResult requestKey evalResult
+    ProcSucc (Command (Payload (Exec (ExecMsg code d)) _ _ signer mverif _) _ h) -> do
+      let parsedCode = _pcExps code
+          msgData = MsgData
+            { mdData = d
+            , mdHash = h
+            , mdSigners = signer
+            , mdVerifiers = maybe [] (fmap void) mverif
+            }
+      evalExec Transactional (_srDbEnv runtime) (_srSPVSupport runtime) freeGasModel mempty SimpleNamespacePolicy
+        def msgData def parsedCode >>= \case
+        Left pe ->
+          pure $ pactErrorToCommandResult requestKey pe (Gas 0)
+        Right evalResult ->
+          pure $ evalResultToCommandResult requestKey evalResult
 
-        evalResultToCommandResult :: RequestKey -> EvalResult -> CommandResult Hash (PactErrorCompat Info)
-        evalResultToCommandResult requestKey (EvalResult out logs exec gas _lm txid _lgas ev) =
-          CommandResult
-          { _crReqKey = requestKey
-          , _crTxId = txid
-          , _crResult = evalOutputToCommandResult out
-          , _crGas = gas
-          , _crLogs = Just (hashTxLogs logs)
-          , _crEvents = ev
-          , _crContinuation = exec
-          , _crMetaData = Nothing
-          }
-        pactErrorToCommandResult :: RequestKey -> PactError Info -> Gas -> CommandResult Hash (PactErrorCompat Info)
-        pactErrorToCommandResult rk pe gas = CommandResult
-          { _crReqKey = rk
-          , _crTxId = Nothing
-          , _crResult = PactResultErr $ PEPact5Error $ pactErrorToErrorCode pe
-          , _crGas = gas
-          , _crLogs = Nothing
-          , _crEvents = [] -- todo
-          , _crContinuation = Nothing
-          , _crMetaData = Nothing
-          }
+    ProcSucc (Command (Payload (Continuation contMsg) _ _ signer mverif _) _ h) -> do
+      let msgData = MsgData
+            { mdData = _cmData contMsg
+            , mdHash = h
+            , mdSigners = signer
+            , mdVerifiers = maybe [] (fmap void) mverif
+            }
+          cont = Cont
+            { _cPactId = _cmPactId contMsg
+            , _cStep = _cmStep contMsg
+            , _cRollback = _cmRollback contMsg
+            , _cProof = _cmProof contMsg
+            }
+      evalContinuation Transactional (_srDbEnv runtime) (_srSPVSupport runtime) freeGasModel mempty
+        SimpleNamespacePolicy def msgData def cont >>= \case
+          Left pe ->
+            pure $ pactErrorToCommandResult requestKey pe (Gas 0)
+          Right evalResult -> pure $ evalResultToCommandResult requestKey evalResult
 
-  -- TODO: once base-4.19 switch to L.unsnoc
-        evalOutputToCommandResult :: [CompileValue Info] -> PactResult (PactErrorCompat Info)
-        evalOutputToCommandResult li = case L.uncons $ L.reverse li of
-            Just (v, _) -> PactResultOk (compileValueToPactValue v)
-            Nothing -> PactResultErr $ PEPact5Error $ pactErrorToErrorCode $ PEExecutionError (EvalError "empty input") [] def
+evalResultToCommandResult :: RequestKey -> EvalResult -> CommandResult Hash (PactErrorCompat Info)
+evalResultToCommandResult requestKey (EvalResult out logs exec gas _lm txid _lgas ev) =
+  CommandResult
+  { _crReqKey = requestKey
+  , _crTxId = txid
+  , _crResult = evalOutputToCommandResult out
+  , _crGas = gas
+  , _crLogs = Just (hashTxLogs logs)
+  , _crEvents = ev
+  , _crContinuation = exec
+  , _crMetaData = Nothing
+  }
+
+pactErrorToCommandResult :: RequestKey -> PactError Info -> Gas -> CommandResult Hash (PactErrorCompat Info)
+pactErrorToCommandResult rk pe gas = CommandResult
+  { _crReqKey = rk
+  , _crTxId = Nothing
+  , _crResult = PactResultErr $ PEPact5Error $ pactErrorToErrorCode pe
+  , _crGas = gas
+  , _crLogs = Nothing
+  , _crEvents = [] -- todo
+  , _crContinuation = Nothing
+  , _crMetaData = Nothing
+  }
+
+ -- TODO: once base-4.19 switch to L.unsnoc
+evalOutputToCommandResult :: [CompileValue Info] -> PactResult (PactErrorCompat Info)
+evalOutputToCommandResult li = case L.uncons $ L.reverse li of
+  Just (v, _) -> PactResultOk (compileValueToPactValue v)
+  Nothing -> PactResultErr $ PEPact5Error $ pactErrorToErrorCode $ PEExecutionError (EvalError "empty input") [] def
 
 localHandler :: ServerRuntime -> LocalRequest -> Handler LocalResponse
 localHandler env (LocalRequest cmd) = do
-  (SendResponse (RequestKeys rks))  <- sendHandler env (SendRequest (SubmitBatch $ cmd NE.:| []))
-  PollResponse pr <- pollHandler env (PollRequest rks)
-  case HM.toList pr of
-    (_, cmdResult): _ -> pure (LocalResponse cmdResult)
-    [] -> throwError err404
+  let requestKey = cmdToRequestKey cmd
+  result <- liftIO $ computeResultAndUpdateState env requestKey cmd
+  pure (LocalResponse result)
 
 listenHandler :: ServerRuntime -> ListenRequest -> Handler ListenResponse
 listenHandler env (ListenRequest key) = do
-    let (LRU.LruHandle cacheRef) = _srRequestCache env
-    cache <- liftIO $ readIORef cacheRef
+  mResult <- liftIO $ atomicModifyIORef' (_srResultStore env) $ \st ->
+    case M.lookup key st of
+    Just result -> (M.delete key st, Just $ ListenResponse result)
+    Nothing -> (st, Nothing)
+  case mResult of
+    Nothing -> throwError err404
+    Just r -> pure r
 
-    -- Since the response is calculated synchronously in the send handler,
-    -- we can immediately look up the key. If the key is not found,
-    -- it indicates that the request key is invalid.
-    case LRU.lookup key cache of
-        Just (result, _) -> pure (ListenResponse result)
-        Nothing -> throwError err404
