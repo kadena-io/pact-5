@@ -56,10 +56,10 @@ jobs:
         path: pact-binary-bundle
         retention-days: 5
 
-    - name: Release latest build
-      uses: ncipollo/release-action@v1.14.0
-      with:
-        artifacts: pact-binary-bundle.${{ matrix.os }}.tar.gz
-        tag: development-latest
-        replacesArtifacts: true
-        allowUpdates: true
+    # - name: Release latest build
+    #   uses: ncipollo/release-action@v1.14.0
+    #   with:
+    #     artifacts: pact-binary-bundle.${{ matrix.os }}.tar.gz
+    #     tag: development-latest
+    #     replacesArtifacts: true
+    #     allowUpdates: true
