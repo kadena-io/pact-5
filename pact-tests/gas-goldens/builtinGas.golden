@@ -69,6 +69,7 @@ is-principal: 447
 keys: 100383378
 keyset-ref-guard: 44231
 length: 576
+list-modules: 100000
 ln: 12000
 log: 6000
 make-list: 161
