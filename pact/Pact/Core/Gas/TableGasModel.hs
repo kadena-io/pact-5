@@ -562,6 +562,7 @@ coreBuiltinGasCost = MilliGas . \case
   CoreHyperlaneEncodeMessage -> 2_000
   CoreAcquireModuleAdmin -> 20_000
   CoreReadWithFields -> 10_000
+  CoreListModules -> dbMetadataTxPenalty
 {-# INLINABLE runTableModel #-}
 
 

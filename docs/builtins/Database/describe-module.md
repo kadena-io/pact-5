@@ -1,7 +1,9 @@
 ## describe-module
 
-Use `describe-module` to get metadata for a specified `module`. 
+Use `describe-module` to get metadata for a specified `module`.
 This function returns an object with fields including `name`, `hash`, `blessed`, `code`, and `keyset`.
+
+Note: This function is only allowed in `/local` in chainweb.
 
 ### Basic syntax
 

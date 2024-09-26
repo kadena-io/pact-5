@@ -1945,6 +1945,14 @@ coreAcquireModuleAdmin info b cont handler env = \case
     acquireModuleAdmin info cont' handler env mdl
   args -> argsError info b args
 
+coreListModules :: (IsBuiltin b) => NativeFunction e b i
+coreListModules info b cont handler env = \case
+  [] -> do
+    checkNonLocalAllowed info b
+    mns <- liftGasM info (_pdbKeys (_cePactDb env) DModules)
+    returnCEKValue cont handler $ VList $ V.fromList (PString . renderModuleName <$> mns)
+  args -> argsError info b args
+
 -----------------------------------
 -- Builtin exports
 -----------------------------------
@@ -2101,3 +2109,4 @@ coreBuiltinRuntime = \case
   CoreHyperlaneEncodeMessage -> coreHyperlaneEncodeTokenMessage
   CoreAcquireModuleAdmin -> coreAcquireModuleAdmin
   CoreReadWithFields -> dbRead
+  CoreListModules -> coreListModules
