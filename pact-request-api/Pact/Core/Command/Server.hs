@@ -30,9 +30,8 @@ import Control.Monad.IO.Class
 import Data.Default
 import Data.Foldable
 import qualified Data.HashMap.Strict as HM
-import qualified Data.Map.Strict as M
-import Data.IORef
 import qualified Data.List as L
+import Data.Maybe
 import qualified Data.List.NonEmpty as NE
 import Data.Proxy
 import Data.Text (Text)
@@ -48,6 +47,7 @@ import Pact.Core.Command.Client
 import Pact.Core.Command.RPC
 import Pact.Core.Command.Server.Config
 import Pact.Core.Command.Server.Servant
+import Pact.Core.Command.Server.History
 import Pact.Core.Command.Types
 import Pact.Core.Compile
 import Pact.Core.Errors
@@ -76,13 +76,11 @@ import Pact.Core.Info (spanInfoToLineInfo)
 type Log = ()
 
 
-type ResultStore = M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))
-
 -- | Runtime environment for a Pact server.
 data ServerRuntime
   = ServerRuntime
   { _srDbEnv :: PactDb CoreBuiltin Info
-  , _srResultStore :: IORef ResultStore
+  , _srHistoryDb :: HistoryDb
   , _srSPVSupport :: SPVSupport
   }
 
@@ -125,7 +123,6 @@ newtype ListenResponse
 
 instance JD.FromJSON ListenResponse where
   parseJSON v = ListenResponse <$> JD.parseJSON v
-
 
 instance JE.Encode ListenResponse where
   build (ListenResponse m) = JE.build m
@@ -179,14 +176,16 @@ type API = ("api" :> "v1" :>
 runServer :: Config -> SPVSupport -> IO ()
 runServer (Config port persistDir logDir _verbose _gl) spv = do
   (traverse_.traverse_) (createDirectoryIfMissing True) [persistDir, logDir]
-  emptyStore <- newIORef M.empty
   case persistDir of
-    Nothing -> withSqlitePactDb serialisePact_lineinfo ":memory:" $ \pdb -> do
-      runServer_ (ServerRuntime pdb emptyStore spv) port logDir
+    Nothing -> withSqlitePactDb serialisePact_raw_spaninfo ":memory:" $ \pdb ->
+      withHistoryDb ":memory" $ \histDb ->
+        runServer_ (ServerRuntime pdb histDb spv) port logDir
     Just pdir -> let
       pdir' = T.pack $ pdir </> "pactdb.sqlite"
-      in withSqlitePactDb serialisePact_lineinfo pdir' $ \pdb -> do
-      runServer_ (ServerRuntime pdb emptyStore spv) port logDir
+      histPath = T.pack $ pdir </> "hist.sqlite"
+      in withSqlitePactDb serialisePact_raw_spaninfo pdir' $ \pdb ->
+        withHistoryDb histPath  $ \histDb -> do
+      runServer_ (ServerRuntime pdb histDb spv) port logDir
 
 runServer_ :: ServerRuntime -> Port -> Maybe FilePath -> IO ()
 runServer_ env port logDir = bracket setupLogger teardownLogger runServer'
@@ -242,10 +241,17 @@ sendHandler :: ServerRuntime -> SendRequest -> Handler SendResponse
 sendHandler runtime (SendRequest submitBatch) = do
     requestKeys <- forM (_sbCmds submitBatch) $ \cmd -> do
       let requestKey = cmdToRequestKey cmd
-      liftIO $ do
+      res <- liftIO $ do
         result <- computeResultAndUpdateState runtime requestKey cmd
-        modifyIORef' (_srResultStore runtime) (M.insert requestKey result)
-      pure requestKey
+        _histDbInsert (_srHistoryDb runtime) requestKey result
+      case res of
+        Left _e -> do
+          rk <- liftIO $ _histDbRead (_srHistoryDb runtime) requestKey
+          let msg = if isJust rk
+                    then "request key already known."
+                    else mempty
+          throwError err400{errBody = msg}
+        Right _ -> pure requestKey
     pure $ SendResponse $ RequestKeys requestKeys
 
 computeResultAndUpdateState :: ServerRuntime -> RequestKey -> Command Text -> IO (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))
@@ -324,15 +330,19 @@ localHandler :: ServerRuntime -> LocalRequest -> Handler LocalResponse
 localHandler env (LocalRequest cmd) = do
   let requestKey = cmdToRequestKey cmd
   result <- liftIO $ computeResultAndUpdateState env requestKey cmd
-  pure (LocalResponse result)
+  res <- liftIO $ _histDbInsert (_srHistoryDb env) requestKey result
+  case res of
+    Left _e -> do
+      rk <- liftIO $ _histDbRead (_srHistoryDb env) requestKey
+      let msg = if isJust rk
+                then "request key already known."
+                else mempty
+      throwError err400{errBody = msg}
+    Right _ -> pure $ LocalResponse result
 
 listenHandler :: ServerRuntime -> ListenRequest -> Handler ListenResponse
 listenHandler env (ListenRequest key) = do
-  mResult <- liftIO $ atomicModifyIORef' (_srResultStore env) $ \st ->
-    case M.lookup key st of
-    Just result -> (M.delete key st, Just $ ListenResponse result)
-    Nothing -> (st, Nothing)
+  mResult <- liftIO $ _histDbRead (_srHistoryDb env) key
   case mResult of
+    Just result -> pure (ListenResponse result)
     Nothing -> throwError err404
-    Just r -> pure r
-
