@@ -127,7 +127,7 @@ evalModuleGovernance interpreter tl = do
   case tl of
     Lisp.TLModule m -> do
       let info = Lisp._mInfo m
-      let unmangled = Lisp._mName m
+      let unmangled = ModuleName (Lisp._mName m) Nothing
       mname <- mangleNamespace unmangled
       lookupModule (Lisp._mInfo m) mname >>= \case
         Just targetModule -> do
@@ -152,7 +152,7 @@ evalModuleGovernance interpreter tl = do
         Nothing -> enforceNamespaceInstall info interpreter
     Lisp.TLInterface iface -> do
       let info = Lisp._ifInfo iface
-      let unmangled = Lisp._ifName iface
+      let unmangled = ModuleName (Lisp._ifName iface) Nothing
       ifn <- mangleNamespace unmangled
       lookupModuleData info ifn >>= \case
         Nothing -> enforceNamespaceInstall info interpreter

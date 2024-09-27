@@ -111,7 +111,8 @@ stringLiteral :: Text -> SpanInfo -> LexerM PosToken
 stringLiteral _ info = do
   inp <- get
   body <- loop [] inp
-  pure (PosToken (TokenString (T.pack body)) info)
+  info' <- getSpanInfo
+  pure (PosToken (TokenString (T.pack body)) (combineSpan info info'))
   where
   loop acc inp =
     case lexerGetChar inp of

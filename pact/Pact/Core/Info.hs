@@ -14,6 +14,7 @@ module Pact.Core.Info
 import Control.Lens
 import Data.Default
 import Data.Text(Text)
+import Data.List(intersperse)
 import qualified Data.Text as T
 import GHC.Generics
 import Control.DeepSeq (NFData)
@@ -60,7 +61,8 @@ sliceFromSourceLines codeLines (SpanInfo startLine startCol endLine endCol) =
     --
     -- Note: we take `end - start + 1` since end is inclusive.
     let lineSpan = take (max 1 (endLine - startLine + 1)) $ drop startLine codeLines
-    in T.concat (over _head (T.drop startCol) . over _last (T.take (endCol + 1)) $ lineSpan)
+    -- Note: we can't use `unlines` here. it adds an extra terminating newline
+    in T.concat $ intersperse "\n" (over _head (T.drop startCol) . over _last (T.take endCol) $ lineSpan)
 
 sliceFromSource :: Text -> SpanInfo -> Text
 sliceFromSource t si = sliceFromSourceLines (T.lines t) si

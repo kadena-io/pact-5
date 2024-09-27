@@ -585,29 +585,33 @@ desugarModule
   :: (DesugarBuiltin b)
   => Lisp.Module i
   -> RenamerM e b i (Module ParsedName DesugarType b i)
-desugarModule (Lisp.Module mname mgov extdecls defs _anns i) = do
+desugarModule (Lisp.Module n mgov extdecls defs _anns i) = do
+  let mname = ModuleName n Nothing
   (imports, blessed, implemented) <- splitExts extdecls
   defs' <- locally reCurrModule (const (Just $ CurrModule mname [] MTModule))
           $ traverse (desugarDef mname) (NE.toList defs)
   txHash <- viewEvalEnv' eeHash
-  pure $ Module mname mgov defs' blessed imports implemented placeholderHash txHash i
+  pure $ Module mname (toModuleGov mgov) defs' blessed imports implemented placeholderHash txHash i
   where
+  toModuleGov = \case
+    Lisp.KeyGov t -> KeyGov (KeySetName t Nothing)
+    Lisp.CapGov cg -> CapGov (FQParsed (BN (BareName cg)))
   splitExts = split ([], S.empty, [])
   split (accI, accB, accImp) (h:hs) = case h of
-    Lisp.ExtBless b -> case parseModuleHash b of
-      Nothing -> throwDesugarError (InvalidBlessedHash b) i
+    Lisp.ExtBless b eInfo -> case parseModuleHash b of
+      Nothing -> throwDesugarError (InvalidBlessedHash b) eInfo
       Just mh -> split (accI, S.insert mh accB, accImp) hs
     Lisp.ExtImport imp -> do
-      imp' <- desugarImport i imp
+      imp' <- desugarImport imp
       split (imp':accI, accB, accImp) hs
-    Lisp.ExtImplements mn -> split (accI, accB, mn:accImp) hs
+    Lisp.ExtImplements mn _ -> split (accI, accB, mn:accImp) hs
   split (a, b, c) [] = pure (reverse a, b, reverse c)
 
-desugarImport :: i -> Lisp.Import -> RenamerM e b i Import
-desugarImport info (Lisp.Import mn (Just blessed) imported) = case parseModuleHash blessed of
+desugarImport :: Lisp.Import i -> RenamerM e b i Import
+desugarImport (Lisp.Import mn (Just blessed) imported info) = case parseModuleHash blessed of
   Just mbh' -> pure (Import mn (Just mbh') imported)
   Nothing -> throwDesugarError (InvalidBlessedHash blessed) info
-desugarImport _ (Lisp.Import mn Nothing imported) = pure (Import mn Nothing imported)
+desugarImport (Lisp.Import mn Nothing imported _) = pure (Import mn Nothing imported)
 
 -- Todo: Interface hashing, either on source or
 -- the contents
@@ -615,20 +619,20 @@ desugarInterface
   :: (DesugarBuiltin b)
   => Lisp.Interface i
   -> RenamerM e b i (Interface ParsedName DesugarType b i)
-desugarInterface (Lisp.Interface ifn ifdefns imps _anns info) = do
+desugarInterface (Lisp.Interface iname_ ifdefns imps _anns info) = do
+  let ifn = ModuleName iname_ Nothing
+  imps' <- traverse desugarImport imps
   defs' <- traverse (desugarIfDef ifn) ifdefns
   let mhash = ModuleHash (Hash "placeholder")
-  imps' <- traverse (desugarImport info) imps
   txh <- viewEvalEnv' eeHash
   pure $ Interface ifn defs' imps' mhash txh info
 
 desugarUse
-  :: i
-  -> Lisp.Import
+  :: Lisp.Import i
   -> RenamerM e b i Import
-desugarUse i imp = do
-  imp' <- desugarImport i imp
-  imp' <$ handleImport i mempty imp'
+desugarUse imp = do
+  imp' <- desugarImport imp
+  imp' <$ handleImport (view Lisp.importInfo imp) mempty imp'
 
 -----------------------------------------------------------
 -- Renaming
@@ -1604,7 +1608,7 @@ runDesugarTopLevel = \case
   Lisp.TLModule m -> over dsOut TLModule <$> runDesugarModule m
   Lisp.TLTerm e -> over dsOut TLTerm <$> runDesugarTerm e
   Lisp.TLInterface i -> over dsOut TLInterface <$> runDesugarInterface i
-  Lisp.TLUse imp info -> runDesugar $ (`TLUse` info) <$> desugarUse info imp
+  Lisp.TLUse imp -> runDesugar $ (`TLUse` (view Lisp.importInfo imp)) <$> desugarUse imp
 
 
 
