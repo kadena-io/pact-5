@@ -6,13 +6,13 @@ module Pact.Core.Test.ServerUtils where
 
 import Control.Exception
 import Control.Concurrent
-import Data.IORef
 import qualified Data.Text as T
 import Data.Text(Text)
 import qualified Network.HTTP.Client as HTTP
 import Network.Wai.Handler.Warp
 import Pact.Core.Command.Server
 import Pact.Core.Command.Server.Config
+import Pact.Core.Command.Server.History
 import Pact.Core.Environment
 import Pact.Core.Persistence.SQLite
 import Pact.Core.SPV
@@ -51,12 +51,12 @@ versionClient :: ClientM Text
 withTestServe :: FilePath -> SPVSupport -> (Port -> IO a) -> IO a
 withTestServe configFile spv app = do
   Config{..} <- validateConfigFile configFile
-  store <- newIORef mempty
   case _persistDir of
-    Nothing -> withSqlitePactDb serialisePact_lineinfo ":memory:" $ \pdb -> do
-      withTestApiServer (ServerRuntime pdb store spv) app
-    Just pdir -> withSqlitePactDb serialisePact_lineinfo (T.pack pdir <> "pactdb.sqlite") $ \pdb -> do
-      withTestApiServer (ServerRuntime pdb store spv) app
+    Nothing -> withSqlitePactDb serialisePact_raw_spaninfo ":memory:" $ \pdb ->
+      withHistoryDb ":memory:" $ \histDb -> withTestApiServer (ServerRuntime pdb histDb spv) app
+    Just pdir -> withSqlitePactDb serialisePact_raw_spaninfo (T.pack pdir <> "pactdb.sqlite") $ \pdb ->
+      withHistoryDb (T.pack pdir <> "pact-server-history.sqlite") $ \histDb ->
+        withTestApiServer (ServerRuntime pdb histDb spv) app
 
 -- | Runs an API server for testing.
 --

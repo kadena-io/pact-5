@@ -13,7 +13,6 @@ import Control.Monad.IO.Class
 import qualified Data.Aeson as A
 import qualified Data.ByteString.Lazy as LBS
 import Data.Default
-import Data.IORef
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
 import Data.Maybe (isJust)
@@ -33,6 +32,7 @@ import Pact.Core.Command.RPC
 import Pact.Core.Command.Server
 import Pact.Core.Command.Types
 import Pact.Core.Command.Util
+import Pact.Core.Command.Server.History
 import Pact.Core.Hash
 import Pact.Core.Names
 import Pact.Core.PactValue
@@ -47,6 +47,7 @@ import Servant.Server
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.Wai
+
 
 sendClient :: SendRequest -> ClientM SendResponse
 pollClient :: PollRequest -> ClientM PollResponse
@@ -71,17 +72,18 @@ tests =  withResource
     ]
   where
   mkEnv = do
-    (pdb,db,stmt) <- unsafeCreateSqlitePactDb serialisePact_lineinfo ":memory:"
-    store <- newIORef mempty
+    (pdb,db,stmt) <- unsafeCreateSqlitePactDb serialisePact_raw_spaninfo ":memory:"
+    (histDb, db') <- unsafeCreateHistoryDb ":memory:"
     let
-      runtime = ServerRuntime pdb store noSPVSupport
+      runtime = ServerRuntime pdb histDb noSPVSupport
       app = serve (Proxy @API) (server runtime)
-    pure (app, db, stmt)
-  rmEnv (_, db, stmt) =
+    pure (app, db, db', stmt)
+  rmEnv (_, db, db', stmt) = do
     unsafeCloseSqlitePactDb db stmt
+    unsafeCloseHistoryDb db'
 
   mkTestCase env name session = testCase name $ do
-    (app, _, _) <- env
+    (app, _,_, _) <- env
     void (runSessionWith initState session app)
 
   t404 env = mkTestCase env "non-existing endpoint gives 404" $ do
@@ -98,6 +100,14 @@ tests =  withResource
         serializedCmd <- liftIO mkSubmitBatch
         res <- postWithHeaders "/api/v1/send" serializedCmd [(HTTP.hContentType, "application/json")]
         assertStatus 200 res
+    , mkTestCase mkEnv "reject already known request key" $ do
+        serializedCmd <- liftIO mkSubmitBatch
+        res <- postWithHeaders "/api/v1/send" serializedCmd [(HTTP.hContentType, "application/json")]
+        assertStatus 200 res
+
+        res'@(SResponse _ _ rb') <- postWithHeaders "/api/v1/send" serializedCmd [(HTTP.hContentType, "application/json")]
+        assertStatus 400 res'
+        liftIO $ assertEqual "Should inform about existing requestKey" "request key already known." rb'
     ]
   listenTests env = testGroup "listen endpoint"
     [ mkTestCase env "non existing request key results in 404" $ do
