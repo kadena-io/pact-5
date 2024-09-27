@@ -585,13 +585,17 @@ desugarModule
   :: (DesugarBuiltin b)
   => Lisp.Module i
   -> RenamerM e b i (Module ParsedName DesugarType b i)
-desugarModule (Lisp.Module mname mgov extdecls defs _anns i) = do
+desugarModule (Lisp.Module n mgov extdecls defs _anns i) = do
+  let mname = ModuleName n Nothing
   (imports, blessed, implemented) <- splitExts extdecls
   defs' <- locally reCurrModule (const (Just $ CurrModule mname [] MTModule))
           $ traverse (desugarDef mname) (NE.toList defs)
   txHash <- viewEvalEnv' eeHash
-  pure $ Module mname mgov defs' blessed imports implemented placeholderHash txHash i
+  pure $ Module mname (toModuleGov mgov) defs' blessed imports implemented placeholderHash txHash i
   where
+  toModuleGov = \case
+    Lisp.KeyGov t -> KeyGov (KeySetName t Nothing)
+    Lisp.CapGov cg -> CapGov (FQParsed (BN (BareName cg)))
   splitExts = split ([], S.empty, [])
   split (accI, accB, accImp) (h:hs) = case h of
     Lisp.ExtBless b -> case parseModuleHash b of
@@ -615,7 +619,8 @@ desugarInterface
   :: (DesugarBuiltin b)
   => Lisp.Interface i
   -> RenamerM e b i (Interface ParsedName DesugarType b i)
-desugarInterface (Lisp.Interface ifn ifdefns imps _anns info) = do
+desugarInterface (Lisp.Interface iname_ ifdefns imps _anns info) = do
+  let ifn = ModuleName iname_ Nothing
   defs' <- traverse (desugarIfDef ifn) ifdefns
   let mhash = ModuleHash (Hash "placeholder")
   imps' <- traverse (desugarImport info) imps

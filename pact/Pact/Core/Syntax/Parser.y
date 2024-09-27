@@ -26,7 +26,6 @@ import Pact.Core.Info
 import Pact.Core.Literal
 import Pact.Core.Builtin
 import Pact.Core.Type(PrimType(..))
-import Pact.Core.Guards
 import Pact.Core.Errors
 import Pact.Core.Syntax.ParseTree
 import Pact.Core.Syntax.LexUtils
@@ -113,9 +112,9 @@ ReplTopLevel :: { ReplTopLevel SpanInfo }
   | '(' Defun ')' { RTLDefun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefConst ')' { RTLDefConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
-Governance :: { Governance ParsedName }
-  : StringRaw { KeyGov (KeySetName $1 Nothing) }
-  | IDENT { CapGov (FQParsed (BN (BareName (getIdent $1)))) }
+Governance :: { Governance }
+  : StringRaw { KeyGov $1 }
+  | IDENT { CapGov (getIdent $1) }
 
 StringRaw :: { Text }
  : STR  { getStr $1 }
@@ -123,13 +122,13 @@ StringRaw :: { Text }
 
 Module :: { ParsedModule }
   : '(' module IDENT Governance MDocOrModel ExtOrDefs ')'
-    { Module (ModuleName (getIdent $3) Nothing) $4 (reverse (rights $6)) (NE.fromList (reverse (lefts $6))) $5
+    { Module (getIdent $3) $4 (reverse (rights $6)) (NE.fromList (reverse (lefts $6))) $5
       (combineSpan (_ptInfo $1) (_ptInfo $7)) }
 
 Interface :: { ParsedInterface }
   : '(' interface IDENT MDocOrModel ImportOrIfDef ')'
-    { Interface (ModuleName (getIdent $3) Nothing) (reverse (lefts $5)) (reverse (rights $5)) $4
-      (combineSpan (_ptInfo $1) (_ptInfo $2)) }
+    { Interface (getIdent $3) (reverse (lefts $5)) (reverse (rights $5)) $4
+      (combineSpan (_ptInfo $1) (_ptInfo $6)) }
 
 Ext :: { ExtDecl }
   : Use { ExtImport (fst $1)  }
@@ -168,7 +167,6 @@ IfDef :: { ParsedIfDef }
   | '(' Defschema ')' { IfDSchema ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' IfDefPact ')' { IfDPact ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
--- ident = $2,
 IfDefun :: { SpanInfo -> IfDefun SpanInfo }
   : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel
     { IfDefun (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $7 }
@@ -192,7 +190,8 @@ ImportNames :: { [Text] }
 DefConst :: { SpanInfo -> ParsedDefConst }
   : defconst IDENT MTypeAnn Expr MDoc { DefConst (MArg (getIdent $2) $3 (_ptInfo $2)) $4 $5 }
 
--- All defs
+-- Note: this production has some ambiguity due to
+-- `MDoc`. See [Docstring ambiguity]
 Defun :: { SpanInfo -> ParsedDefun }
   : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel Block
     { Defun (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $8 $7 }
@@ -204,6 +203,8 @@ Defschema :: { SpanInfo -> DefSchema SpanInfo }
 Deftable :: { SpanInfo -> DefTable SpanInfo }
   : deftable IDENT ':' '{' ParsedName '}' MDoc { DefTable (getIdent $2) $5 $7 }
 
+-- Note: this production has some ambiguity due to
+-- `MDoc`. See [Docstring ambiguity]
 Defcap :: { SpanInfo -> DefCap SpanInfo }
   : defcap IDENT MTypeAnn '(' MArgs ')' MDocOrModel MDCapMeta Block
     { DefCap (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $9 $7 $8 }
@@ -291,10 +292,14 @@ MDocOrModel :: { [PactAnn SpanInfo] }
   | DocStr { [PactDoc PactDocString $1] }
   | {- empty -} { [] }
 
--- This production causes parser ambugity in two productions: defun and defcap
+-- Note: [Docstring ambiguity]
+-- This ambiguity is kept due to legacy pact-4.
+-- This production causes parser ambiguity in two productions: defun and defcap
 -- (defun f () "a")
 -- (defcap f () "a")
--- it isn't clear whether "a" is a docstring or a string literal.
+-- it isn't clear whether "a" is a docstring or a string literal expression
+-- The fix will be to drop docstrings later on and allow only
+-- @doc annotation
 MDoc :: { Maybe (Text, PactDocType) }
   : DocAnn { Just ($1, PactDocAnn) }
   | DocStr { Just ($1, PactDocString) }
@@ -382,7 +387,7 @@ Atom :: { ParsedExpr }
   | List { $1 }
   | Bool { $1 }
   | Object { $1 }
-  | '(' ')' { Constant LUnit (_ptInfo $1) }
+  | '(' ')' { Constant LUnit (combineSpan (_ptInfo $1) (_ptInfo $2)) }
 
 
 Bool :: { ParsedExpr }
@@ -409,7 +414,7 @@ ModQual :: { (Text, Maybe Text, SpanInfo) }
   | IDENT { (getIdent $1, Nothing, _ptInfo $1) }
 
 Number :: { ParsedExpr }
-  : NUM '.' NUM {% mkDecimal Constant (getNumber $1) (getNumber $3) (_ptInfo $1) }
+  : NUM '.' NUM {% mkDecimal Constant (getNumber $1) (getNumber $3) (combineSpan (_ptInfo $1) (_ptInfo $3)) }
   | NUM { mkIntegerConstant Constant (getNumber $1) (_ptInfo $1) }
 
 String :: { ParsedExpr }

@@ -20,8 +20,6 @@ import Pact.Core.Literal
 import Pact.Core.Names
 import Pact.Core.Pretty
 import Pact.Core.Type(PrimType(..))
-import Pact.Core.Guards
-
 
 data Operator
   = AndOp
@@ -101,7 +99,7 @@ data Arg i
   { _argName :: Text
   , _argType :: Type
   , _argInfo :: i
-  } deriving (Show, Functor, Generic, NFData)
+  } deriving (Eq, Show, Functor, Generic, NFData)
 
 data MArg i
   = MArg
@@ -175,7 +173,7 @@ data Defun i
   , _dfunTerm :: NonEmpty (Expr i)
   , _dfunAnns :: [PactAnn i]
   , _dfunInfo :: i
-  } deriving (Show, Functor, Generic, NFData)
+  } deriving (Eq, Show, Functor, Generic, NFData)
 
 instance Pretty (Defun i) where
   pretty (Defun da args term anns _) =
@@ -197,7 +195,7 @@ data DefConst i
   , _dcTerm :: Expr i
   , _dcDocs :: Maybe (Text, PactDocType)
   , _dcInfo :: i
-  } deriving (Show, Functor, Generic, NFData)
+  } deriving (Eq, Show, Functor, Generic, NFData)
 
 instance Pretty (DefConst i) where
   pretty (DefConst marg term doc _) =
@@ -206,14 +204,14 @@ instance Pretty (DefConst i) where
       pretty marg <+>
       (nest 2 $
         line <>
-        maybe mempty (\(d, ann) -> pretty (PactDoc ann d) <> line) doc
-        <> pretty term
+        pretty term  <>
+        maybe mempty (\(d, ann) -> line <> pretty (PactDoc ann d)) doc
         )
 
 data DCapMeta
   = DefEvent
   | DefManaged (Maybe (Text, ParsedName))
-  deriving (Show, Generic, NFData)
+  deriving (Eq, Show, Generic, NFData)
 
 instance Pretty DCapMeta where
   pretty = \case
@@ -231,7 +229,7 @@ data DefCap i
   , _dcapAnns :: [PactAnn i]
   , _dcapMeta :: Maybe DCapMeta
   , _dcapInfo :: i
-  } deriving (Show, Functor, Generic, NFData)
+  } deriving (Eq, Show, Functor, Generic, NFData)
 
 instance Pretty (DefCap i) where
   pretty (DefCap n args term anns meta _) =
@@ -252,7 +250,7 @@ data DefSchema i
   , _dscArgs :: [Arg i]
   , _dscAnns :: [PactAnn i]
   , _dscInfo :: i
-  } deriving (Show, Functor, Generic, NFData)
+  } deriving (Eq, Show, Functor, Generic, NFData)
 
 instance Pretty (DefSchema i) where
   pretty (DefSchema n args anns _) =
@@ -274,7 +272,7 @@ data DefTable i
   , _dtSchema :: ParsedName
   , _dtDocs :: Maybe (Text, PactDocType)
   , _dtInfo :: i
-  } deriving (Show, Functor, Generic, NFData)
+  } deriving (Eq, Show, Functor, Generic, NFData)
 
 instance Pretty (DefTable i) where
   pretty (DefTable n schema docs _) =
@@ -282,13 +280,13 @@ instance Pretty (DefTable i) where
       "deftable"
       <+> pretty n
       <> ":"
-      <> brackets (pretty schema)
+      <> braces (pretty schema)
       <> maybe mempty (\d -> line <> pretty (uncurry (flip PactDoc) d)) docs
 
 data PactStep i
   = Step (Expr i) (Maybe [PropertyExpr i])
   | StepWithRollback (Expr i) (Expr i) (Maybe [PropertyExpr i])
-  deriving (Show, Functor, Generic, NFData)
+  deriving (Eq, Show, Functor, Generic, NFData)
 
 instance Pretty (PactStep i) where
   pretty = \case
@@ -309,7 +307,7 @@ data DefPact i
   , _dpSteps :: NonEmpty (PactStep i)
   , _dpAnns :: [PactAnn i]
   , _dpInfo :: i
-  } deriving (Show, Functor, Generic, NFData)
+  } deriving (Eq, Show, Functor, Generic, NFData)
 
 instance Pretty (DefPact i) where
   pretty (DefPact n args steps anns _) =
@@ -327,7 +325,7 @@ instance Pretty (DefPact i) where
 data Managed
   = AutoManaged
   | Managed Text ParsedName
-  deriving (Show)
+  deriving (Eq, Show)
 
 data Def i
   = Dfun (Defun i)
@@ -336,7 +334,7 @@ data Def i
   | DSchema (DefSchema i)
   | DTable (DefTable i)
   | DPact (DefPact i)
-  deriving (Show, Functor, Generic, NFData)
+  deriving (Eq, Show, Functor, Generic, NFData)
 
 instance Pretty (Def i) where
   pretty = \case
@@ -352,7 +350,7 @@ data Import
   { _impModuleName  :: ModuleName
   , _impModuleHash :: Maybe Text
   , _impImported :: Maybe [Text] }
-  deriving (Show, Generic, NFData)
+  deriving (Eq, Show, Generic, NFData)
 
 instance Pretty Import where
   pretty (Import mn mh imp) =
@@ -360,13 +358,13 @@ instance Pretty Import where
       "use" <+> pretty mn <> prettyMh mh <> prettyImp imp
     where
     prettyMh = maybe mempty (\h -> space <> dquotes (pretty h))
-    prettyImp = maybe mempty (\imps -> space <> commaBrackets (dquotes . pretty <$> imps))
+    prettyImp = maybe mempty (\imps -> space <> brackets (hsep (pretty <$> imps)))
 
 data ExtDecl
   = ExtBless Text
   | ExtImport Import
   | ExtImplements ModuleName
-  deriving (Show, Generic, NFData)
+  deriving (Eq, Show, Generic, NFData)
 
 instance Pretty ExtDecl where
   pretty = \case
@@ -376,20 +374,32 @@ instance Pretty ExtDecl where
     ExtImplements m ->
       parens $ "implements" <+> pretty m
 
+data Governance
+  = KeyGov Text
+  | CapGov Text
+  deriving (Eq, Show, Generic)
+
+instance NFData Governance
+
+instance Pretty Governance where
+  pretty = \case
+    KeyGov t -> dquotes (pretty t)
+    CapGov t -> pretty t
+
 data Module i
   = Module
-  { _mName :: ModuleName
-  , _mGovernance :: Governance ParsedName
+  { _mName :: Text
+  , _mGovernance :: Governance
   , _mExternal :: [ExtDecl]
   , _mDefs :: NonEmpty (Def i)
   , _mAnns :: [PactAnn i]
   , _mInfo :: i
-  } deriving (Show, Functor, Generic, NFData)
+  } deriving (Eq, Show, Functor, Generic, NFData)
 
 instance Pretty (Module i) where
   pretty (Module mname mgov mexts defs anns _) =
     parens $
-      "module" <+> pretty (_mnName mname) <+> pretty mgov <>
+      "module" <+> pretty mname <+> pretty mgov <>
         nest 2
         ( line <>
           prettyAnnListWithNewline anns <>
@@ -402,7 +412,7 @@ data TopLevel i
   | TLInterface (Interface i)
   | TLTerm (Expr i)
   | TLUse Import i
-  deriving (Show, Functor, Generic, NFData)
+  deriving (Eq, Show, Functor, Generic, NFData)
 
 instance Pretty (TopLevel i) where
   pretty = \case
@@ -413,12 +423,12 @@ instance Pretty (TopLevel i) where
 
 data Interface i
   = Interface
-  { _ifName :: ModuleName
+  { _ifName :: Text
   , _ifDefns :: [IfDef i]
   , _ifImports :: [Import]
   , _ifAnns :: [PactAnn i]
   , _ifInfo :: i
-  } deriving (Show, Functor, Generic, NFData)
+  } deriving (Eq, Show, Functor, Generic, NFData)
 
 instance Pretty (Interface i) where
   pretty (Interface ifn defs imports anns _) =
@@ -439,7 +449,7 @@ data IfDefun i
   , _ifdArgs :: [MArg i]
   , _ifdAnns :: [PactAnn i]
   , _ifdInfo :: i
-  } deriving (Show, Functor, Generic, NFData)
+  } deriving (Eq, Show, Functor, Generic, NFData)
 
 instance Pretty (IfDefun i) where
   pretty (IfDefun n args anns _) =
@@ -456,7 +466,7 @@ data IfDefCap i
   , _ifdcAnns :: [PactAnn i]
   , _ifdcMeta :: Maybe DCapMeta
   , _ifdcInfo :: i
-  } deriving (Show, Functor, Generic, NFData)
+  } deriving (Eq, Show, Functor, Generic, NFData)
 
 instance Pretty (IfDefCap i) where
   pretty (IfDefCap n args anns meta _) =
@@ -477,7 +487,7 @@ data IfDefPact i
   , _ifdpArgs :: [MArg i]
   , _ifdpAnns :: [PactAnn i]
   , _ifdpInfo :: i
-  } deriving (Show, Functor, Generic, NFData)
+  } deriving (Eq, Show, Functor, Generic, NFData)
 
 instance Pretty (IfDefPact i) where
   pretty (IfDefPact n args anns _) =
@@ -551,7 +561,7 @@ data IfDef i
   | IfDCap (IfDefCap i)
   | IfDSchema (DefSchema i)
   | IfDPact (IfDefPact i)
-  deriving (Show, Functor, Generic, NFData)
+  deriving (Eq, Show, Functor, Generic, NFData)
 
 instance Pretty (IfDef i) where
   pretty = \case

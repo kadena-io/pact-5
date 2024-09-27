@@ -15,7 +15,7 @@ functionDocs
   -> ReplM ReplCoreBuiltin ()
 functionDocs = \case
   Lisp.TLModule md -> do
-    mn <- mangleNamespace (Lisp._mName md)
+    mn <- mangleNamespace (ModuleName (Lisp._mName md) Nothing)
     traverse_ (addModuleDoc mn) (Lisp._mDefs md)
   _ -> pure ()
   where
