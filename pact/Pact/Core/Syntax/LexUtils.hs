@@ -20,12 +20,14 @@ import Data.Default
 
 import qualified Data.Text as T
 import qualified Data.Char as C
+import qualified Data.List.NonEmpty as NE
 
 import Pact.Core.Info
 import Pact.Core.Errors
 import Pact.Core.Names
 import Pact.Core.Pretty (Pretty(..))
 import Pact.Core.Syntax.ParseTree
+import Data.Either (partitionEithers)
 
 type ParserT = Either PactErrorI
 type ParsedExpr = Expr SpanInfo
@@ -187,6 +189,16 @@ throwLexerError' le = getSpanInfo >>= throwLexerError le
 
 throwParseError :: ParseError -> SpanInfo -> ParserT a
 throwParseError pe = throwError . PEParseError pe
+
+ensureAtLeastOneDef :: [Either (Def SpanInfo) (ExtDecl SpanInfo)] -> ParserT (NE.NonEmpty (Def SpanInfo), [ExtDecl SpanInfo])
+ensureAtLeastOneDef l =
+  case partitionEithers (reverse l) of
+    (d:ds, exts) -> pure (d NE.:| ds, exts)
+    (_, e:_) ->
+      throwParseError (ParsingError "at least one of [defun, defcap, defschema, deftable, defpact, defconst]") (view extDeclInfo e)
+    -- Case is impossible due to the parser production guaranteeing a non empty
+    -- amount of defs
+    ([], []) -> throwParseError (ParsingError "impossible") def
 
 toAppExprList :: SpanInfo -> [Either ParsedExpr [(Field, MArg SpanInfo)]] -> [ParsedExpr]
 toAppExprList i  (h:hs) = case h of

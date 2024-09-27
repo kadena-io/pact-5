@@ -41,6 +41,7 @@ import Pact.Core.Gas
 import Pact.Core.ModRefs
 import Pact.Core.Hash
 import Data.Ratio ((%), denominator)
+import Pact.Core.Guards (KeySetName(KeySetName))
 
 namespaceNameGen :: Gen NamespaceName
 namespaceNameGen = NamespaceName <$> identGen
@@ -172,16 +173,15 @@ governanceGen = Gen.choice
   , CapGov <$> resolvedGovGen
   ]
 
-tyPrimGen :: Gen PrimType
-tyPrimGen = Gen.choice
-  [ pure PrimInt
-  , pure PrimDecimal
-  , pure PrimBool
-  , pure PrimString
-  , pure PrimGuard
-  , pure PrimTime
-  , pure PrimUnit
+parsedNameGovernanceGen :: Gen (Governance ParsedName)
+parsedNameGovernanceGen =
+  Gen.choice
+  [ KeyGov <$> (KeySetName <$> identGen <*> pure Nothing)
+  , CapGov . FQParsed <$> parsedNameGen
   ]
+
+tyPrimGen :: Gen PrimType
+tyPrimGen = Gen.enumBounded
 
 fieldGen :: Gen Field
 fieldGen = Field <$> identGen

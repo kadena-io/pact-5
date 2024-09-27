@@ -26,7 +26,6 @@ import Pact.Core.Info
 import Pact.Core.Literal
 import Pact.Core.Builtin
 import Pact.Core.Type(PrimType(..))
-import Pact.Core.Guards
 import Pact.Core.Errors
 import Pact.Core.Syntax.ParseTree
 import Pact.Core.Syntax.LexUtils
@@ -106,44 +105,47 @@ TopLevel :: { ParsedTopLevel }
   : Module { TLModule $1 }
   | Interface { TLInterface $1 }
   | Expr { TLTerm $1 }
-  | Use { uncurry TLUse $1 }
+  | Use { TLUse $1 }
 
 ReplTopLevel :: { ReplTopLevel SpanInfo }
   : TopLevel { RTLTopLevel $1 }
   | '(' Defun ')' { RTLDefun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefConst ')' { RTLDefConst ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
-Governance :: { Governance ParsedName }
-  : StringRaw { KeyGov (KeySetName $1 Nothing) }
-  | IDENT { CapGov (FQParsed (BN (BareName (getIdent $1)))) }
+Governance :: { Governance }
+  : StringRaw { KeyGov $1 }
+  | IDENT { CapGov (getIdent $1) }
 
 StringRaw :: { Text }
  : STR  { getStr $1 }
  | TICK { getTick $1 }
 
+-- Note: `ExtOrDefs` promises non-empty lefts
 Module :: { ParsedModule }
   : '(' module IDENT Governance MDocOrModel ExtOrDefs ')'
-    { Module (ModuleName (getIdent $3) Nothing) $4 (reverse (rights $6)) (NE.fromList (reverse (lefts $6))) $5
+    { Module (getIdent $3) $4 (snd $6) (fst $6) $5
       (combineSpan (_ptInfo $1) (_ptInfo $7)) }
 
 Interface :: { ParsedInterface }
   : '(' interface IDENT MDocOrModel ImportOrIfDef ')'
-    { Interface (ModuleName (getIdent $3) Nothing) (reverse (lefts $5)) (reverse (rights $5)) $4
-      (combineSpan (_ptInfo $1) (_ptInfo $2)) }
+    { Interface (getIdent $3) (reverse (lefts $5)) (reverse (rights $5)) $4
+      (combineSpan (_ptInfo $1) (_ptInfo $6)) }
 
-Ext :: { ExtDecl }
-  : Use { ExtImport (fst $1)  }
-  | '(' implements ModQual ')' { ExtImplements (mkModName $3) }
-  | '(' bless StringRaw ')' { ExtBless $3 }
+Ext :: { ExtDecl SpanInfo }
+  : Use { ExtImport $1  }
+  | '(' implements ModQual ')' { ExtImplements (mkModName $3) (combineSpan (_ptInfo $1) (_ptInfo $4)) }
+  | '(' bless StringRaw ')' { ExtBless $3 (combineSpan (_ptInfo $1) (_ptInfo $4)) }
 
-Use :: { (Import, SpanInfo) }
-  : '(' import ModQual ImportList ')' {  (Import (mkModName $3) Nothing $4, combineSpan (_ptInfo $1) (_ptInfo $5))  }
-  | '(' import ModQual STR ImportList ')' {  (Import (mkModName $3) (Just (getStr $4)) $5, combineSpan (_ptInfo $1) (_ptInfo $6))  }
+Use :: { Import SpanInfo }
+  : '(' import ModQual ImportList ')' {  Import (mkModName $3) Nothing $4 (combineSpan (_ptInfo $1) (_ptInfo $5))  }
+  | '(' import ModQual STR ImportList ')' {  Import (mkModName $3) (Just (getStr $4)) $5 (combineSpan (_ptInfo $1) (_ptInfo $6))  }
 
+ExtOrDefs :: { (NonEmpty (Def SpanInfo), [ExtDecl SpanInfo]) }
+  : ExtOrDefList {% ensureAtLeastOneDef $1 }
 
-ExtOrDefs :: { [Either (Def SpanInfo) ExtDecl] }
-  : ExtOrDefs Def { (Left $2):$1 }
-  | ExtOrDefs Ext { (Right $2) : $1 }
+ExtOrDefList :: { [Either (Def SpanInfo) (ExtDecl SpanInfo)] }
+  : ExtOrDefList Def { (Left $2):$1 }
+  | ExtOrDefList Ext { (Right $2) : $1 }
   | Def { [Left $1] }
   | Ext { [Right $1] }
 
@@ -155,11 +157,11 @@ Def :: { ParsedDef }
   | '(' Deftable ')' { DTable ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' DefPact ')' { DPact ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
-ImportOrIfDef :: { [Either ParsedIfDef Import] }
+ImportOrIfDef :: { [Either ParsedIfDef (Import SpanInfo)] }
   : ImportOrIfDef IfDef { (Left $2):$1 }
-  | ImportOrIfDef Use { (Right (fst $2)) : $1 }
+  | ImportOrIfDef Use { (Right $2) : $1 }
   | IfDef { [Left $1] }
-  | Use { [Right (fst $1)] }
+  | Use { [Right $1] }
 
 IfDef :: { ParsedIfDef }
   : '(' IfDefun ')' { IfDfun ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
@@ -168,7 +170,6 @@ IfDef :: { ParsedIfDef }
   | '(' Defschema ')' { IfDSchema ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
   | '(' IfDefPact ')' { IfDPact ($2 (combineSpan (_ptInfo $1) (_ptInfo $3))) }
 
--- ident = $2,
 IfDefun :: { SpanInfo -> IfDefun SpanInfo }
   : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel
     { IfDefun (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $7 }
@@ -192,7 +193,8 @@ ImportNames :: { [Text] }
 DefConst :: { SpanInfo -> ParsedDefConst }
   : defconst IDENT MTypeAnn Expr MDoc { DefConst (MArg (getIdent $2) $3 (_ptInfo $2)) $4 $5 }
 
--- All defs
+-- Note: this production has some ambiguity due to
+-- `MDoc`. See [Docstring ambiguity]
 Defun :: { SpanInfo -> ParsedDefun }
   : defun IDENT MTypeAnn '(' MArgs ')' MDocOrModel Block
     { Defun (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $8 $7 }
@@ -204,6 +206,8 @@ Defschema :: { SpanInfo -> DefSchema SpanInfo }
 Deftable :: { SpanInfo -> DefTable SpanInfo }
   : deftable IDENT ':' '{' ParsedName '}' MDoc { DefTable (getIdent $2) $5 $7 }
 
+-- Note: this production has some ambiguity due to
+-- `MDoc`. See [Docstring ambiguity]
 Defcap :: { SpanInfo -> DefCap SpanInfo }
   : defcap IDENT MTypeAnn '(' MArgs ')' MDocOrModel MDCapMeta Block
     { DefCap (MArg (getIdent $2) $3 (_ptInfo $2)) (reverse $5) $9 $7 $8 }
@@ -215,6 +219,7 @@ DefPact :: { SpanInfo -> DefPact SpanInfo }
 DefPactSteps :: { NE.NonEmpty (PactStep SpanInfo) }
   : Steps { NE.fromList (reverse $1) }
 
+-- Non empty production, `fromList` is safe here
 Steps :: { [PactStep SpanInfo] }
   : Steps Step { $2:$1 }
   | Step { [$1] }
@@ -291,10 +296,14 @@ MDocOrModel :: { [PactAnn SpanInfo] }
   | DocStr { [PactDoc PactDocString $1] }
   | {- empty -} { [] }
 
--- This production causes parser ambugity in two productions: defun and defcap
+-- Note: [Docstring ambiguity]
+-- This ambiguity is kept due to legacy pact-4.
+-- This production causes parser ambiguity in two productions: defun and defcap
 -- (defun f () "a")
 -- (defcap f () "a")
--- it isn't clear whether "a" is a docstring or a string literal.
+-- it isn't clear whether "a" is a docstring or a string literal expression
+-- The fix will be to drop docstrings later on and allow only
+-- @doc annotation
 MDoc :: { Maybe (Text, PactDocType) }
   : DocAnn { Just ($1, PactDocAnn) }
   | DocStr { Just ($1, PactDocString) }
@@ -304,9 +313,12 @@ MTypeAnn :: { Maybe Type }
   : ':' Type { Just $2 }
   | {- empty -} { Nothing }
 
+-- BlockBody is non empty
 Block :: { NE.NonEmpty ParsedExpr }
   : BlockBody { NE.fromList (reverse $1)  }
 
+-- Non empty production, `fromList` is safe to use from
+-- this production
 BlockBody :: { [ParsedExpr] }
   : BlockBody Expr { $2:$1 }
   | Expr { [$1] }
@@ -343,10 +355,12 @@ LamArgs :: { [MArg SpanInfo] }
   | LamArgs IDENT { (MArg (getIdent $2) Nothing (_ptInfo $2)):$1 }
   | {- empty -} { [] }
 
+-- Block is NonEmpty
 LetExpr :: { SpanInfo -> ParsedExpr }
   : let '(' Binders ')' Block { Let LFLetNormal (NE.fromList (reverse $3)) $5 }
   | letstar '(' Binders ')' Block { Let LFLetStar (NE.fromList (reverse $3)) $5 }
 
+-- Binders are non-empty, this is safe
 Binders :: { [Binder SpanInfo] }
   : Binders '(' IDENT MTypeAnn Expr ')' { (Binder (getIdent $3) $4 $5):$1 }
   | '(' IDENT MTypeAnn Expr ')' { [Binder (getIdent $2) $3 $4] }
@@ -382,7 +396,7 @@ Atom :: { ParsedExpr }
   | List { $1 }
   | Bool { $1 }
   | Object { $1 }
-  | '(' ')' { Constant LUnit (_ptInfo $1) }
+  | '(' ')' { Constant LUnit (combineSpan (_ptInfo $1) (_ptInfo $2)) }
 
 
 Bool :: { ParsedExpr }
@@ -409,7 +423,7 @@ ModQual :: { (Text, Maybe Text, SpanInfo) }
   | IDENT { (getIdent $1, Nothing, _ptInfo $1) }
 
 Number :: { ParsedExpr }
-  : NUM '.' NUM {% mkDecimal Constant (getNumber $1) (getNumber $3) (_ptInfo $1) }
+  : NUM '.' NUM {% mkDecimal Constant (getNumber $1) (getNumber $3) (combineSpan (_ptInfo $1) (_ptInfo $3)) }
   | NUM { mkIntegerConstant Constant (getNumber $1) (_ptInfo $1) }
 
 String :: { ParsedExpr }
