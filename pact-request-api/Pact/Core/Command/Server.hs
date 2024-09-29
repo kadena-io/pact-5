@@ -178,7 +178,7 @@ runServer (Config port persistDir logDir _verbose _gl) spv = do
   (traverse_.traverse_) (createDirectoryIfMissing True) [persistDir, logDir]
   case persistDir of
     Nothing -> withSqlitePactDb serialisePact_raw_spaninfo ":memory:" $ \pdb ->
-      withHistoryDb ":memory" $ \histDb ->
+      withHistoryDb ":memory:" $ \histDb ->
         runServer_ (ServerRuntime pdb histDb spv) port logDir
     Just pdir -> let
       pdir' = T.pack $ pdir </> "pactdb.sqlite"
