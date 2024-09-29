@@ -20,7 +20,8 @@ module Pact.Core.Command.Server
   , Log
   , ServerRuntime(..)
   , runServer
-  , server ) where
+  , server
+  , requestKeyError) where
 
 import Control.Exception.Safe hiding (Handler)
 import Control.Lens
@@ -34,6 +35,7 @@ import qualified Data.List as L
 import Data.Maybe
 import qualified Data.List.NonEmpty as NE
 import Data.Proxy
+import qualified Data.ByteString.Lazy as LBS
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
@@ -248,7 +250,7 @@ sendHandler runtime (SendRequest submitBatch) = do
         Left _e -> do
           rk <- liftIO $ _histDbRead (_srHistoryDb runtime) requestKey
           let msg = if isJust rk
-                    then "request key already known."
+                    then requestKeyError requestKey
                     else mempty
           throwError err400{errBody = msg}
         Right _ -> pure requestKey
@@ -335,7 +337,7 @@ localHandler env (LocalRequest cmd) = do
     Left _e -> do
       rk <- liftIO $ _histDbRead (_srHistoryDb env) requestKey
       let msg = if isJust rk
-                then "request key already known."
+                then requestKeyError requestKey
                 else mempty
       throwError err400{errBody = msg}
     Right _ -> pure $ LocalResponse result
@@ -346,3 +348,10 @@ listenHandler env (ListenRequest key) = do
   case mResult of
     Just result -> pure (ListenResponse result)
     Nothing -> throwError err404
+
+
+requestKeyError :: RequestKey -> LBS.ByteString
+requestKeyError (RequestKey h) = "Request key: "
+                                 <> LBS.fromStrict (E.encodeUtf8 (hashToText h))
+                                 <> " has already been submitted."
+                                 <> " If you are resubmitting a valid transaction, try changing the nonce in the payload"

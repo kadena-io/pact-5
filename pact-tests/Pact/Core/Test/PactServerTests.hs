@@ -102,12 +102,14 @@ tests =  withResource
         assertStatus 200 res
     , mkTestCase mkEnv "reject already known request key" $ do
         serializedCmd <- liftIO mkSubmitBatch
-        res <- postWithHeaders "/api/v1/send" serializedCmd [(HTTP.hContentType, "application/json")]
+
+        res@(SResponse _ _ reqResp) <- postWithHeaders "/api/v1/send" serializedCmd [(HTTP.hContentType, "application/json")]
         assertStatus 200 res
 
+        let (Just (SendResponse (RequestKeys (rks NE.:| _)))) :: Maybe SendResponse = A.decodeStrict $ LBS.toStrict reqResp
         res'@(SResponse _ _ rb') <- postWithHeaders "/api/v1/send" serializedCmd [(HTTP.hContentType, "application/json")]
         assertStatus 400 res'
-        liftIO $ assertEqual "Should inform about existing requestKey" "request key already known." rb'
+        liftIO $ assertEqual "Should inform about existing requestKey" (requestKeyError rks) rb'
     ]
   listenTests env = testGroup "listen endpoint"
     [ mkTestCase env "non existing request key results in 404" $ do
