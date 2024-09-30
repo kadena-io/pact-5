@@ -54,15 +54,13 @@ withTestServe configFile spv app = do
   Config{..} <- validateConfigFile configFile
   chan <- newChan
   case _persistDir of
-    Nothing -> withSqlitePactDb serialisePact_raw_spaninfo ":memory:" $ \pdb ->
-      withHistoryDb ":memory:" $ \histDb -> do
+    Nothing -> withSqliteAndHistoryDb ":memory:" $ \pdb histDb -> do
       let rt = ServerRuntime pdb histDb spv chan
       tid <- forkIO $ forever (processMsg rt)
       res <- withTestApiServer rt app
       killThread tid
       pure res
-    Just pdir -> withSqlitePactDb serialisePact_raw_spaninfo (T.pack pdir <> "pactdb.sqlite") $ \pdb ->
-      withHistoryDb (T.pack pdir <> "pact-server-history.sqlite") $ \histDb -> do
+    Just pdir -> withSqliteAndHistoryDb (T.pack pdir <> "pactdb.sqlite") $ \pdb histDb -> do
         let rt = ServerRuntime pdb histDb spv chan
         tid <- forkIO $ forever (processMsg rt)
         res <- withTestApiServer (ServerRuntime pdb histDb spv chan) app
