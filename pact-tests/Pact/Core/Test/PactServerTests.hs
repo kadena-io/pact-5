@@ -24,6 +24,7 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Vector as V
 import NeatInterpolation (text)
 import qualified Network.HTTP.Types   as HTTP
+import Control.Concurrent
 import Network.Wai.Test.Internal
 import Pact.Core.ChainData
 import Pact.Core.Command.Client
@@ -74,16 +75,19 @@ tests =  withResource
   mkEnv = do
     (pdb,db,stmt) <- unsafeCreateSqlitePactDb serialisePact_raw_spaninfo ":memory:"
     (histDb, db') <- unsafeCreateHistoryDb ":memory:"
+    chan <- newChan
     let
-      runtime = ServerRuntime pdb histDb noSPVSupport
+      runtime = ServerRuntime pdb histDb noSPVSupport chan
       app = serve (Proxy @API) (server runtime)
-    pure (app, db, db', stmt)
-  rmEnv (_, db, db', stmt) = do
+    tid <- forkIO $ forever (processMsg runtime)
+    pure (app, db, db', stmt, tid)
+  rmEnv (_, db, db', stmt, tid) = do
+    killThread tid
     unsafeCloseSqlitePactDb db stmt
     unsafeCloseHistoryDb db'
 
   mkTestCase env name session = testCase name $ do
-    (app, _,_, _) <- env
+    (app, _,_, _, _) <- env
     void (runSessionWith initState session app)
 
   t404 env = mkTestCase env "non-existing endpoint gives 404" $ do

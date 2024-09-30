@@ -21,21 +21,25 @@ module Pact.Core.Command.Server
   , ServerRuntime(..)
   , runServer
   , server
-  , requestKeyError) where
+  , requestKeyError
+  , ProcessResult(..)
+  , ProcessMsg(..)
+  , processMsg
+  ) where
 
+import Control.Concurrent
 import Control.Exception.Safe hiding (Handler)
 import Control.Lens
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Class
+import qualified Data.ByteString.Lazy as LBS
 import Data.Default
 import Data.Foldable
 import qualified Data.HashMap.Strict as HM
 import qualified Data.List as L
-import Data.Maybe
 import qualified Data.List.NonEmpty as NE
 import Data.Proxy
-import qualified Data.ByteString.Lazy as LBS
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
@@ -48,8 +52,8 @@ import Pact.Core.ChainData
 import Pact.Core.Command.Client
 import Pact.Core.Command.RPC
 import Pact.Core.Command.Server.Config
-import Pact.Core.Command.Server.Servant
 import Pact.Core.Command.Server.History
+import Pact.Core.Command.Server.Servant
 import Pact.Core.Command.Types
 import Pact.Core.Compile
 import Pact.Core.Errors
@@ -73,10 +77,29 @@ import System.FilePath
 import System.Log.FastLogger.Date
 import Pact.Core.Info (spanInfoToLineInfo)
 
-
 -- | Temporarily pretend our Log type in CommandResult is unit.
 type Log = ()
 
+
+--type ResultStore = M.Map RequestKey (CommandResult Hash (PactErrorCompat Info))
+
+data ProcessResult
+  = PESuccess
+  | PEExistingRequestKey
+  | PEUnknownException SomeException
+
+instance Show ProcessResult where
+  show = \case
+    PESuccess -> "Success"
+    PEExistingRequestKey -> "ExistingRequestKey"
+    PEUnknownException _ -> "UnkownException"
+
+data ProcessMsg
+  = StoreMsg RequestKey (CommandResult Hash (PactErrorCompat Info)) (MVar ProcessResult)
+
+instance Show ProcessMsg where
+  show = \case
+    StoreMsg rk _ _ -> show rk
 
 -- | Runtime environment for a Pact server.
 data ServerRuntime
@@ -84,6 +107,7 @@ data ServerRuntime
   { _srDbEnv :: PactDb CoreBuiltin Info
   , _srHistoryDb :: HistoryDb
   , _srSPVSupport :: SPVSupport
+  , _srvChan :: Chan ProcessMsg
   }
 
 newtype PollRequest
@@ -178,25 +202,41 @@ type API = ("api" :> "v1" :>
 runServer :: Config -> SPVSupport -> IO ()
 runServer (Config port persistDir logDir _verbose _gl) spv = do
   (traverse_.traverse_) (createDirectoryIfMissing True) [persistDir, logDir]
+
+  chan <- newChan
+
   case persistDir of
     Nothing -> withSqlitePactDb serialisePact_raw_spaninfo ":memory:" $ \pdb ->
       withHistoryDb ":memory:" $ \histDb ->
-        runServer_ (ServerRuntime pdb histDb spv) port logDir
+        runServer_ (ServerRuntime pdb histDb spv chan) port logDir
     Just pdir -> let
       pdir' = T.pack $ pdir </> "pactdb.sqlite"
       histPath = T.pack $ pdir </> "hist.sqlite"
       in withSqlitePactDb serialisePact_raw_spaninfo pdir' $ \pdb ->
         withHistoryDb histPath  $ \histDb -> do
-      runServer_ (ServerRuntime pdb histDb spv) port logDir
+      runServer_ (ServerRuntime pdb histDb spv chan) port logDir
+
+processMsg :: ServerRuntime -> IO ()
+processMsg env = do
+  el <- readChan (_srvChan env)
+  case el of
+    StoreMsg rk cmd result -> _histDbRead (_srHistoryDb env) rk >>= \case
+      Nothing -> _histDbInsert (_srHistoryDb env) rk cmd >>= \case
+        Right _ -> putMVar result PESuccess
+        Left e -> putMVar result (PEUnknownException e)
+      Just _ -> putMVar result PEExistingRequestKey
+
 
 runServer_ :: ServerRuntime -> Port -> Maybe FilePath -> IO ()
 runServer_ env port logDir = bracket setupLogger teardownLogger runServer'
-
   where
-  runServer' (logger, _) =
+  runServer' (logger, _,_) = do
     runSettings (settings logger) $ cors (const corsPolicy) app
-  teardownLogger (_, remover) = void remover
+  teardownLogger (_, remover, tid) = do
+    killThread tid
+    void remover
   setupLogger = do
+    tid <- forkIO $ forever (processMsg env)
     lt <- case logDir of
       Just ld -> do
         let ld' = ld </> "pact-server.log"
@@ -204,7 +244,7 @@ runServer_ env port logDir = bracket setupLogger teardownLogger runServer'
       Nothing -> pure (LogStdout 4096)
     apf <- initLogger FromFallback lt =<< newTimeCache simpleTimeFormat
     let remover = logRemover apf
-    pure (apacheLogger apf, remover)
+    pure (apacheLogger apf, remover, tid)
   app = serve (Proxy @API) (server env)
   settings logger = defaultSettings
     & setPort port
@@ -220,6 +260,7 @@ runServer_ env port logDir = bracket setupLogger teardownLogger runServer'
     , corsRequireOrigin = False
     , corsIgnoreFailures = False
     }
+
 
 server :: ServerRuntime -> Server API
 server env =
@@ -243,17 +284,16 @@ sendHandler :: ServerRuntime -> SendRequest -> Handler SendResponse
 sendHandler runtime (SendRequest submitBatch) = do
     requestKeys <- forM (_sbCmds submitBatch) $ \cmd -> do
       let requestKey = cmdToRequestKey cmd
-      res <- liftIO $ do
+      res <- liftIO $ try $! do
         result <- computeResultAndUpdateState runtime requestKey cmd
-        _histDbInsert (_srHistoryDb runtime) requestKey result
+        storeResult <- newEmptyMVar
+        writeChan (_srvChan runtime) (StoreMsg requestKey result storeResult)
+        readMVar storeResult
       case res of
-        Left _e -> do
-          rk <- liftIO $ _histDbRead (_srHistoryDb runtime) requestKey
-          let msg = if isJust rk
-                    then requestKeyError requestKey
-                    else mempty
-          throwError err400{errBody = msg}
-        Right _ -> pure requestKey
+        Right PESuccess -> pure requestKey
+        Right PEExistingRequestKey -> throwError err400{errBody = requestKeyError requestKey}
+        Right (PEUnknownException _) -> throwError err500
+        Left (_::SomeException)-> throwError err500
     pure $ SendResponse $ RequestKeys requestKeys
 
 computeResultAndUpdateState :: ServerRuntime -> RequestKey -> Command Text -> IO (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))
@@ -331,16 +371,16 @@ evalOutputToCommandResult li = case L.uncons $ L.reverse li of
 localHandler :: ServerRuntime -> LocalRequest -> Handler LocalResponse
 localHandler env (LocalRequest cmd) = do
   let requestKey = cmdToRequestKey cmd
-  result <- liftIO $ computeResultAndUpdateState env requestKey cmd
-  res <- liftIO $ _histDbInsert (_srHistoryDb env) requestKey result
+  res <- liftIO $ try $! do
+    result <- computeResultAndUpdateState env requestKey cmd
+    storeResult <- newEmptyMVar
+    writeChan (_srvChan env) (StoreMsg requestKey result storeResult)
+    (result,) <$> readMVar storeResult
   case res of
-    Left _e -> do
-      rk <- liftIO $ _histDbRead (_srHistoryDb env) requestKey
-      let msg = if isJust rk
-                then requestKeyError requestKey
-                else mempty
-      throwError err400{errBody = msg}
-    Right _ -> pure $ LocalResponse result
+    Right (result, PESuccess) -> pure $ LocalResponse result
+    Right (_,PEExistingRequestKey) -> throwError err400{errBody = requestKeyError requestKey}
+    Right (_, PEUnknownException _) -> throwError err500
+    Left (_::SomeException)-> throwError err500
 
 listenHandler :: ServerRuntime -> ListenRequest -> Handler ListenResponse
 listenHandler env (ListenRequest key) = do
