@@ -1,9 +1,9 @@
 {-# LANGUAGE ImportQualifiedPost #-}
--- | 
+-- |
 
 module Pact.Core.Command.Server.History
   ( HistoryDb(..)
-  , withHistoryDb
+  , withSqliteAndHistoryDb
   , unsafeCreateHistoryDb
   , unsafeCloseHistoryDb
   , commandFromStableEncoding
@@ -20,11 +20,15 @@ import Pact.Core.Command.Types
 import Pact.Core.Hash
 import Pact.Core.Errors
 import Pact.Core.Evaluate
+import Pact.Core.Builtin
+import Pact.Core.Persistence
 
 import qualified Pact.JSON.Encode as J
 import qualified Pact.JSON.Decode as J
 
 import Pact.Core.StableEncoding
+import Pact.Core.Persistence.SQLite
+import Pact.Core.Serialise (serialisePact_raw_spaninfo)
 
 
 commandToStableEncoding
@@ -64,18 +68,21 @@ data HistoryDb
   , _histDbRead   :: RequestKey -> IO (Maybe Cmd)
   }
 
-withHistoryDb
+withSqliteAndHistoryDb
   :: (MonadMask m, MonadIO m)
   => T.Text
-  -> (HistoryDb -> m a)
+  -> (PactDb CoreBuiltin Info -> HistoryDb -> m a)
   -> m a
-withHistoryDb conStr act = bracket open close (act . dbToHistDb)
+withSqliteAndHistoryDb path act =
+  bracket open close f
   where
-    open = liftIO $ do
-      db <- SQL.open conStr
-      SQL.exec db createHistoryTblStmt
-      pure db
-    close = liftIO . SQL.close
+  f (pdb, hdb, _, _) = act pdb hdb
+  close (_, _, db, stmt) =
+    liftIO $ unsafeCloseSqlitePactDb db stmt
+  open = do
+    (pdb, db, stmt) <- unsafeCreateSqlitePactDb serialisePact_raw_spaninfo path
+    liftIO $ SQL.exec db createHistoryTblStmt
+    pure (pdb, dbToHistDb db, db, stmt)
 
 unsafeCreateHistoryDb :: T.Text -> IO (HistoryDb, Direct.Database)
 unsafeCreateHistoryDb  conStr = do

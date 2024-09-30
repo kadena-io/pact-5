@@ -61,10 +61,8 @@ import Pact.Core.Evaluate
 import Pact.Core.Gas
 import Pact.Core.Hash
 import Pact.Core.Namespace
-import Pact.Core.Persistence.SQLite
 import Pact.Core.Persistence.Types
 import Pact.Core.SPV
-import Pact.Core.Serialise
 import Pact.Core.StableEncoding
 import qualified Pact.Core.Version as PI
 import qualified Pact.JSON.Decode as JD
@@ -206,15 +204,13 @@ runServer (Config port persistDir logDir _verbose _gl) spv = do
   chan <- newChan
 
   case persistDir of
-    Nothing -> withSqlitePactDb serialisePact_raw_spaninfo ":memory:" $ \pdb ->
-      withHistoryDb ":memory:" $ \histDb ->
+    Nothing -> withSqliteAndHistoryDb ":memory:" $
+      \pdb histDb ->
         runServer_ (ServerRuntime pdb histDb spv chan) port logDir
-    Just pdir -> let
-      pdir' = T.pack $ pdir </> "pactdb.sqlite"
-      histPath = T.pack $ pdir </> "hist.sqlite"
-      in withSqlitePactDb serialisePact_raw_spaninfo pdir' $ \pdb ->
-        withHistoryDb histPath  $ \histDb -> do
-      runServer_ (ServerRuntime pdb histDb spv chan) port logDir
+    Just pdir -> do
+      let pdir' = T.pack $ pdir </> "pactdb.sqlite"
+      withSqliteAndHistoryDb pdir' $ \pdb histDb ->
+        runServer_ (ServerRuntime pdb histDb spv chan) port logDir
 
 processMsg :: ServerRuntime -> IO ()
 processMsg env = do
