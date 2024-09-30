@@ -6,6 +6,7 @@ module Pact.Core.Test.ServerUtils where
 
 import Control.Exception
 import Control.Concurrent
+import Control.Monad
 import qualified Data.Text as T
 import Data.Text(Text)
 import qualified Network.HTTP.Client as HTTP
@@ -51,13 +52,22 @@ versionClient :: ClientM Text
 withTestServe :: FilePath -> SPVSupport -> (Port -> IO a) -> IO a
 withTestServe configFile spv app = do
   Config{..} <- validateConfigFile configFile
+  chan <- newChan
   case _persistDir of
     Nothing -> withSqlitePactDb serialisePact_raw_spaninfo ":memory:" $ \pdb ->
-      withHistoryDb ":memory:" $ \histDb -> withTestApiServer (ServerRuntime pdb histDb spv) app
+      withHistoryDb ":memory:" $ \histDb -> do
+      let rt = ServerRuntime pdb histDb spv chan
+      tid <- forkIO $ forever (processMsg rt)
+      res <- withTestApiServer rt app
+      killThread tid
+      pure res
     Just pdir -> withSqlitePactDb serialisePact_raw_spaninfo (T.pack pdir <> "pactdb.sqlite") $ \pdb ->
-      withHistoryDb (T.pack pdir <> "pact-server-history.sqlite") $ \histDb ->
-        withTestApiServer (ServerRuntime pdb histDb spv) app
-
+      withHistoryDb (T.pack pdir <> "pact-server-history.sqlite") $ \histDb -> do
+        let rt = ServerRuntime pdb histDb spv chan
+        tid <- forkIO $ forever (processMsg rt)
+        res <- withTestApiServer (ServerRuntime pdb histDb spv chan) app
+        killThread tid
+        pure res
 -- | Runs an API server for testing.
 --
 -- A free port is randomly chosen by the operating system and given to the inner
