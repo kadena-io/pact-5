@@ -6,8 +6,7 @@ module Pact.Core.Command.Server.History
   , withSqliteAndHistoryDb
   , unsafeCreateHistoryDb
   , unsafeCloseHistoryDb
-  , commandFromStableEncoding
-  , commandToStableEncoding )
+  )
 where
 
 import Data.Text qualified as T
@@ -26,41 +25,10 @@ import Pact.Core.Persistence
 import qualified Pact.JSON.Encode as J
 import qualified Pact.JSON.Decode as J
 
-import Pact.Core.StableEncoding
 import Pact.Core.Persistence.SQLite
-import Pact.Core.Serialise (serialisePact_raw_spaninfo)
+import Pact.Core.Serialise
 
-
-commandToStableEncoding
-  :: CommandResult Hash (PactErrorCompat Info)
-  -> CommandResult Hash (PactErrorCompat (StableEncoding Info))
-commandToStableEncoding m = CommandResult
-      { _crReqKey = _crReqKey m
-      , _crTxId = _crTxId m
-      , _crResult = (fmap.fmap) StableEncoding (_crResult m)
-      , _crGas = _crGas m
-      , _crLogs = _crLogs m
-      , _crContinuation = _crContinuation m
-      , _crMetaData = _crMetaData m
-      , _crEvents = _crEvents m
-      }
-
-commandFromStableEncoding
-  :: CommandResult Hash (PactErrorCompat (StableEncoding Info))
-  -> CommandResult Hash (PactErrorCompat Info)
-commandFromStableEncoding m = CommandResult
-      { _crReqKey = _crReqKey m
-      , _crTxId = _crTxId m
-      , _crResult = (fmap.fmap) _stableEncoding (_crResult m)
-      , _crGas = _crGas m
-      , _crLogs = _crLogs m
-      , _crContinuation = _crContinuation m
-      , _crMetaData = _crMetaData m
-      , _crEvents = _crEvents m
-      }
-
-
-type Cmd = CommandResult Hash (PactErrorCompat Info)
+type Cmd = CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))
 
 data HistoryDb
   = HistoryDb
@@ -80,7 +48,7 @@ withSqliteAndHistoryDb path act =
   close (_, _, db, stmt) =
     liftIO $ unsafeCloseSqlitePactDb db stmt
   open = do
-    (pdb, db, stmt) <- unsafeCreateSqlitePactDb serialisePact_raw_spaninfo path
+    (pdb, db, stmt) <- unsafeCreateSqlitePactDb serialisePact_lineinfo path
     liftIO $ SQL.exec db createHistoryTblStmt
     pure (pdb, dbToHistDb db, db, stmt)
 
@@ -97,7 +65,7 @@ dbToHistDb :: Direct.Database -> HistoryDb
 dbToHistDb db = HistoryDb
   { _histDbInsert = \(RequestKey h) cmd -> try $! SQL.withStatement db "INSERT INTO \"SYS:PactServiceHistory\" (reqkey, cmddata) values (?,?)" $ \stmt -> do
       SQL.bind stmt [ SQL.SQLText $ hashToText h
-                    , SQL.SQLBlob $ J.encodeStrict $ commandToStableEncoding cmd]
+                    , SQL.SQLBlob $ J.encodeStrict cmd]
       SQL.stepNoCB stmt >> pure ()
   , _histDbRead = \(RequestKey h) -> SQL.withStatement db "SELECT cmddata from \"SYS:PactServiceHistory\" where reqkey = ? LIMIT 1" $ \stmt -> do
       SQL.bind stmt [SQL.SQLText $ hashToText h]
@@ -105,7 +73,7 @@ dbToHistDb db = HistoryDb
         SQL.Done -> pure Nothing
         SQL.Row -> do
           [SQL.SQLBlob value] <- SQL.columns stmt
-          pure $ commandFromStableEncoding <$> J.decodeStrict value
+          pure $ J.decodeStrict value
   }
 
 

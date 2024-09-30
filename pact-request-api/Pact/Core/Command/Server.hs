@@ -78,9 +78,6 @@ import Pact.Core.Info (spanInfoToLineInfo)
 -- | Temporarily pretend our Log type in CommandResult is unit.
 type Log = ()
 
-
---type ResultStore = M.Map RequestKey (CommandResult Hash (PactErrorCompat Info))
-
 data ProcessResult
   = PESuccess
   | PEExistingRequestKey
@@ -93,7 +90,7 @@ instance Show ProcessResult where
     PEUnknownException _ -> "UnkownException"
 
 data ProcessMsg
-  = StoreMsg RequestKey (CommandResult Hash (PactErrorCompat Info)) (MVar ProcessResult)
+  = StoreMsg RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))) (MVar ProcessResult)
 
 instance Show ProcessMsg where
   show = \case
