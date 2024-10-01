@@ -48,6 +48,9 @@ instance JD.FromJSON LineInfo where
 instance J.Encode LineInfo where
   build (LineInfo i) = J.object [ "sourceLine" J..= J.Aeson i]
 
+instance Pretty LineInfo where
+  pretty (LineInfo i) = "line:" <+> pretty i
+
 -- | An info span that contains line location data
 data SpanInfo
   = SpanInfo

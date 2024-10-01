@@ -94,7 +94,7 @@ data PactEvent v
   , _peArgs :: [v]
   , _peModule :: ModuleName
   , _peModuleHash :: ModuleHash
-  } deriving (Show, Eq, Generic)
+  } deriving (Show, Eq, Ord, Generic)
 
 
 data ManagedCapType v
