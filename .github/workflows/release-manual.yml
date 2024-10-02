@@ -122,8 +122,8 @@ jobs:
           UBUNTU_TAR=pact.${{ env.GHC_VERSION }}.ubuntu-22.04.${{ env.RELEASE_SHA }}.tar.gz
           MACOS_TAR=pact.${{ env.GHC_VERSION }}.macos-14.${{ env.RELEASE_SHA }}.tar.gz
           
-          UBUNTU_RELEASE_FILE=pact-${{ env.RELEASE_VERSION }}-linux-22.04.tar.gz
-          MACOS_RELEASE_FILE=pact-${{ env.RELEASE_VERSION }}-aarch64-osx.tar.gz
+          UBUNTU_RELEASE_FILE=pact-${{ env.RELEASE_VERSION }}-linux-x64.tar.gz
+          MACOS_RELEASE_FILE=pact-${{ env.RELEASE_VERSION }}-darwin-aarch64.tar.gz
           
           curl "s3.us-east-1.amazonaws.com/kadena-cabal-cache/pact/$UBUNTU_TAR" -o "./$UBUNTU_RELEASE_FILE"
           curl "s3.us-east-1.amazonaws.com/kadena-cabal-cache/pact/$MACOS_TAR" -o "./$MACOS_RELEASE_FILE"
@@ -181,7 +181,7 @@ jobs:
     needs: release_to_github
     with:
       pact_arm: "${{ needs.release_to_github.outputs.OSX_RELEASE_URL }}"
-      pact_head: https://github.com/kadena-io/pact-5/releases/download/nightly/pact-nightly-aarch64-osx.tar.gz
+      pact_head: https://github.com/kadena-io/pact-5/releases/download/nightly/pact-nightly-darwin-aarch64.tar.gz
     secrets: inherit
               
         
