@@ -25,7 +25,7 @@ matchingDefs tls mn n = (interfaceDef, moduleDef)
   where
     interfaceDef = do
       let p = \case
-            TLInterface (Interface mn' _ _ _ _ _) -> mn == mn'
+            TLInterface (Interface mn' _ _ _ _ _ _) -> mn == mn'
             _ -> False
 
       TLInterface interf <- find p tls
@@ -33,7 +33,7 @@ matchingDefs tls mn n = (interfaceDef, moduleDef)
 
     moduleDef = do
       let p = \case
-            TLModule (Module mn' _ _ _ _ _ _ _ _) -> mn == mn'
+            TLModule (Module mn' _ _ _ _ _ _ _ _ _) -> mn == mn'
             _ -> False
 
       TLModule module' <- find p tls

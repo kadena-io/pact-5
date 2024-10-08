@@ -66,6 +66,9 @@ module Pact.Core.Names
  , parseFullyQualifiedName
  , VerifierName(..)
  , renderTableName
+ , HashedModuleName(..)
+ , renderHashedModuleName
+ , parseHashedModuleName
  ) where
 
 import Control.Lens
@@ -105,6 +108,12 @@ data ModuleName = ModuleName
   } deriving (Eq, Ord, Show, Generic)
 
 instance NFData ModuleName
+
+data HashedModuleName
+  = HashedModuleName
+  { _hmName :: ModuleName
+  , _hmHash :: ModuleHash
+  } deriving (Eq, Ord, Show, Generic)
 
 instance Pretty ModuleName where
   pretty (ModuleName m mn) =
@@ -444,6 +453,16 @@ moduleNameParser = do
     p1 <- identParser
     pure (ModuleName p1 (Just (NamespaceName ns)))
 
+hashedModuleNameParser :: Parser HashedModuleName
+hashedModuleNameParser = do
+  mn <- moduleNameParser
+  h <- MP.between (MP.char '{') (MP.char '}') $
+      MP.takeWhile1P Nothing (\s -> Char.isAlphaNum s || s `elem` ['-', '_'])
+  hash' <- case decodeBase64UrlUnpadded (T.encodeUtf8 h) of
+    Right hash' -> pure $ ModuleHash $ Hash $ SB.toShort hash'
+    Left _ -> fail "invalid hash encoding"
+  pure (HashedModuleName mn hash')
+
 qualNameParser :: Parser QualifiedName
 qualNameParser = do
   ModuleName n ns <- moduleNameParser
@@ -506,6 +525,9 @@ parsedTyNameParser = do
 parseModuleName :: Text -> Maybe ModuleName
 parseModuleName = MP.parseMaybe (moduleNameParser <* MP.eof)
 
+parseHashedModuleName :: Text -> Maybe HashedModuleName
+parseHashedModuleName =  MP.parseMaybe (hashedModuleNameParser <* MP.eof)
+
 parseParsedTyName :: Text -> Maybe ParsedTyName
 parseParsedTyName = MP.parseMaybe (parsedTyNameParser <* MP.eof)
 
@@ -530,3 +552,7 @@ newtype VerifierName = VerifierName Text
 --   storage in the persistence backend.
 renderTableName :: TableName -> Text
 renderTableName (TableName tbl mn) = renderModuleName mn <> "_" <> tbl
+
+renderHashedModuleName :: HashedModuleName -> Text
+renderHashedModuleName (HashedModuleName mn mh) =
+  renderModuleName mn <> "{" <> moduleHashToText mh <> "}"

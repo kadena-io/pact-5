@@ -108,11 +108,11 @@ fromLegacyInterface
   -> Legacy.Interface
   -> HM.HashMap T.Text LegacyRef
   -> TranslateM (EvalInterface CoreBuiltin ())
-fromLegacyInterface mh (Legacy.Interface n imp) mref = do
+fromLegacyInterface mh (Legacy.Interface n code imp) mref = do
   let n' = fromLegacyModuleName n
       use' = fmap fromLegacyUse imp
   defs <- traverse (fromLegacyInterfaceDefRef mh) $ HM.elems mref
-  pure (Interface n' defs use' mh (Hash mempty) ())
+  pure (Interface n' defs use' mh (Hash mempty) (ModuleCode code) ())
 
 fromLegacyDeps
   :: ModuleHash
@@ -335,9 +335,9 @@ fromLegacyModule mh lm depMap = do
       blessed = fmap fromLegacyModuleHash (HS.toList (Legacy._mBlessed lm))
       imps = fmap fromLegacyUse (Legacy._mImports lm)
       gov = fromLegacyGovernance mh (Legacy._mGovernance lm)
-
+      code = ModuleCode (Legacy._mCode lm)
   defs <- traverse (fromLegacyDefRef mh) $ HM.elems depMap
-  pure (Module mn gov defs (S.fromList blessed) imps impl mhash (Hash mempty) ())
+  pure (Module mn gov defs (S.fromList blessed) imps impl mhash (Hash mempty) code ())
 
 fromLegacyBodyForm'
   :: ModuleHash -- parent module hash

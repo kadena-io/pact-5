@@ -142,7 +142,7 @@ runPactTxFromSource
   -> IO (Either (PactError Info) [CompileValue Info],EvalState CoreBuiltin Info)
 runPactTxFromSource ee source interpreter = runEvalM (ExecEnv ee) def $ do
   program <- liftEither $ compileOnlyLineInfo (RawCode source)
-  traverse (interpretTopLevel interpreter) program
+  traverse (interpretTopLevel interpreter (RawCode mempty)) program
 
 setupBenchEvalEnv
   :: PactDb CoreBuiltin i

@@ -29,11 +29,11 @@ evalModuleDefConsts
   :: Interpreter e b i
   -> Module Name Type b i
   -> EvalM e b i (Module Name Type b i)
-evalModuleDefConsts interpreter (Module mname mgov defs blessed imports implements mhash txh info) = do
+evalModuleDefConsts interpreter (Module mname mgov defs blessed imports implements mhash txh mcode info) = do
   lo <- use esLoaded
   defs' <- traverse go defs
   esLoaded .= lo
-  pure (Module mname mgov defs' blessed imports implements mhash txh info)
+  pure (Module mname mgov defs' blessed imports implements mhash txh mcode info)
   where
   go defn = do
     d' <- case defn of
@@ -55,11 +55,11 @@ evalIfaceDefConsts
   :: Interpreter e b i
   -> Interface Name Type b i
   -> EvalM e b i (Interface Name Type b i)
-evalIfaceDefConsts interpreter (Interface ifname ifdefns imps ifh txh info) = do
+evalIfaceDefConsts interpreter (Interface ifname ifdefns imps ifh txh code info) = do
   lo <- use esLoaded
   ifdefns' <- traverse go ifdefns
   esLoaded .= lo
-  pure (Interface ifname ifdefns' imps ifh txh info)
+  pure (Interface ifname ifdefns' imps ifh txh code info)
   where
   go defn = case defn of
       IfDConst dc -> case _dcTerm dc of

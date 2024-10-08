@@ -355,6 +355,12 @@ instance SizeOf Literal where
 instance SizeOf LineInfo where
   sizeOf i ver (LineInfo li) = sizeOf i ver li
 
+-- | Note: we will _not_ charge for the size of the module
+instance SizeOf ModuleCode where
+  sizeOf i ver (ModuleCode m)
+    | T.null m = pure 0
+    | otherwise = sizeOf i ver m
+
 deriving newtype instance SizeOf Hash
 deriving newtype instance SizeOf Field
 deriving newtype instance SizeOf NamespaceName

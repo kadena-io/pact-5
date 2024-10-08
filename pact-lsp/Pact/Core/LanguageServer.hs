@@ -381,7 +381,7 @@ processFile replEnv nuri source = do
         (ds, deps) <- compileDesugarOnly replEnv tl
         constEvaled <- ConstEval.evalTLConsts replEnv ds
         let tlFinal = MHash.hashTopLevel constEvaled
-        let act = M.singleton nuri [ds] <$ evalTopLevel replEnv tlFinal deps
+        let act = M.singleton nuri [ds] <$ evalTopLevel replEnv (RawCode mempty) tlFinal deps
         catchError act (const (pure mempty))
       _ ->  pure mempty
 

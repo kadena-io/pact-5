@@ -31,9 +31,9 @@ hashTopLevel = \case
   TLUse u i -> TLUse u i
 
 hashModuleAndReplace :: (Serialise (SerialiseV1 b)) => Module Name Type b i -> Module Name Type b i
-hashModuleAndReplace m@(Module mname mgov defs mblessed imports mimps _mh txh info) =
+hashModuleAndReplace m@(Module mname mgov defs mblessed imports mimps _mh txh mcode info) =
   let defs' = updateDefHashes mname newMhash <$> defs
-  in Module mname gov' defs' mblessed imports mimps newMhash txh info
+  in Module mname gov' defs' mblessed imports mimps newMhash txh mcode info
   where
   newMhash = ModuleHash $ hash $ encodeModule m
   gov' = case mgov of
@@ -41,8 +41,8 @@ hashModuleAndReplace m@(Module mname mgov defs mblessed imports mimps _mh txh in
     CapGov (FQName fqn) -> CapGov $ FQName $ set fqHash newMhash fqn
 
 hashInterfaceAndReplace :: (Serialise (SerialiseV1 b)) => Interface Name Type b i -> Interface Name Type b i
-hashInterfaceAndReplace iface@(Interface ifn defs imps _mh txh info) =
-  Interface ifn defs imps newMhash txh info
+hashInterfaceAndReplace iface@(Interface ifn defs imps _mh txh mcode info) =
+  Interface ifn defs imps newMhash txh mcode info
   where
   newMhash = ModuleHash $ hash $ encodeInterface iface
 
@@ -90,12 +90,12 @@ updatePactValueHash mname mhash = \case
   PTime t -> PTime t
 
 encodeModule :: (Serialise (SerialiseV1 b)) => Module Name Type b i -> B.ByteString
-encodeModule (void -> Module mname mgov defs mblessed imports mimps _mh _txh _i) =
-  B.toStrict $ serialise (SerialiseV1 (Module mname mgov defs mblessed imports mimps (ModuleHash (Hash mempty)) (Hash mempty) ()))
+encodeModule (void -> Module mname mgov defs mblessed imports mimps _mh _txh _mcode _i) =
+  B.toStrict $ serialise (SerialiseV1 (Module mname mgov defs mblessed imports mimps (ModuleHash (Hash mempty)) (Hash mempty) _mcode ()))
 {-# SPECIALISE encodeModule :: Module Name Type CoreBuiltin i -> B.ByteString #-}
 
 encodeInterface :: (Serialise (SerialiseV1 b)) => Interface Name Type b i -> B.ByteString
-encodeInterface (void -> Interface ifn defns imports _mh _txh _i) =
-  B.toStrict $ serialise (SerialiseV1 (Interface ifn defns imports (ModuleHash (Hash mempty)) (Hash mempty) ()))
+encodeInterface (void -> Interface ifn defns imports _mh _txh mcode _i) =
+  B.toStrict $ serialise (SerialiseV1 (Interface ifn defns imports (ModuleHash (Hash mempty)) (Hash mempty) mcode ()))
 {-# SPECIALISE encodeInterface :: Interface Name Type CoreBuiltin i -> B.ByteString #-}
 

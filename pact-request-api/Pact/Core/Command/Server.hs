@@ -73,7 +73,6 @@ import Servant.Server
 import System.Directory
 import System.FilePath
 import System.Log.FastLogger.Date
-import Pact.Core.Info (spanInfoToLineInfo)
 
 -- | Temporarily pretend our Log type in CommandResult is unit.
 type Log = ()
@@ -297,14 +296,14 @@ computeResultAndUpdateState runtime requestKey cmd =
       pure $ pactErrorToCommandResult requestKey pe (Gas 0)
 
     ProcSucc (Command (Payload (Exec (ExecMsg code d)) _ _ signer mverif _) _ h) -> do
-      let parsedCode = fmap spanInfoToLineInfo <$> _pcExps code
+      let parsedCode = _pcExps code
           msgData = MsgData
             { mdData = d
             , mdHash = h
             , mdSigners = signer
             , mdVerifiers = maybe [] (fmap void) mverif
             }
-      evalExec Transactional (_srDbEnv runtime) (_srSPVSupport runtime) freeGasModel mempty SimpleNamespacePolicy
+      evalExec (RawCode (_pcCode code)) Transactional (_srDbEnv runtime) (_srSPVSupport runtime) freeGasModel mempty SimpleNamespacePolicy
         def msgData def parsedCode >>= \case
         Left pe ->
           pure $ pactErrorToCommandResult requestKey pe (Gas 0)

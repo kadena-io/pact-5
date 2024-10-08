@@ -7,6 +7,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StrictData #-}
 
 
@@ -38,7 +39,8 @@ module Pact.Core.IR.Term
   -- ^ Our module representation
   , mName, mGovernance, mDefs
   , mBlessed, mImports, mImplements
-  , mHash, mInfo, mTxHash
+  , mHash, mInfo, mTxHash, mCode
+  , ModuleCode(..)
   -- ^ Module lenses
   , Defun(..)
   -- ^ Our repr for user defuns
@@ -88,6 +90,7 @@ module Pact.Core.IR.Term
   -- ^ Interface repr
   , ifName, ifDefns, ifImports
   , ifHash, ifTxHash, ifInfo
+  , ifCode
   -- ^ Interface lenses
   , hasRollback
   , ordinaryDefPactStepExec
@@ -127,6 +130,8 @@ module Pact.Core.IR.Term
   , traverseDefTerm
   , _dfunRType
   -- ^ Misc traversals
+  , getHashedModuleName
+  , getHashedModuleNameIface
   )
   where
 
@@ -302,27 +307,52 @@ data Def name ty builtin info
   | DPact (DefPact name ty builtin info)
   deriving (Show, Functor, Eq, Generic)
 
+newtype ModuleCode
+  = ModuleCode { _moduleCode :: Text }
+  deriving newtype (Show, Eq, NFData)
+
 data Module name ty builtin info
   = Module
   { _mName :: ModuleName
+  -- ^ The module's name + namespace
   , _mGovernance :: Governance name
+  -- ^ Module's governance type
   , _mDefs :: [Def name ty builtin info]
+  -- ^ The module's definitions
   , _mBlessed :: !(Set.Set ModuleHash)
+  -- ^ The blessed module hashes
   , _mImports :: [Import]
+  -- ^ All imports from the modules
   , _mImplements :: [ModuleName]
+  -- ^ Interfaces implemented by the module
   , _mHash :: ModuleHash
+  -- ^ Module's hash
   , _mTxHash :: Hash
+  -- ^ The tx where the module was deployed
+  , _mCode :: ModuleCode
+  -- ^ The module's code. This is a legacy compat field. This is only
+  -- populated in legacy deployed module
   , _mInfo :: info
+  -- ^ The module's location info
   } deriving (Show, Functor, Eq, Generic)
 
 data Interface name ty builtin info
   = Interface
   { _ifName :: ModuleName
+  -- ^ The interface's name + namespace
   , _ifDefns :: [IfDef name ty builtin info]
+  -- ^ The interface's abstract definitions + constants
   , _ifImports :: [Import]
+  -- ^ The imports the interface depends on
   , _ifHash :: ModuleHash
+  -- ^ The interface's hash
   , _ifTxHash :: Hash
+  -- ^ The tx where the interface was declared
+  , _ifCode :: ModuleCode
+  -- ^ The interface's source code. Note: this is a legacy compat field This is only
+  -- populated in legacy deployed module
   , _ifInfo :: info
+  -- ^ The interface's location info
   } deriving (Show, Eq, Functor, Generic)
 
 data IfDefPact ty info
@@ -662,6 +692,13 @@ topLevelTerms f = \case
   TLTerm t -> TLTerm <$> f t
   TLUse u i -> pure (TLUse u i)
 
+getHashedModuleName :: Module name ty b i -> HashedModuleName
+getHashedModuleName m =
+  HashedModuleName (_mName m) (_mHash m)
+
+getHashedModuleNameIface :: Interface name ty b i -> HashedModuleName
+getHashedModuleNameIface m =
+  HashedModuleName (_ifName m) (_ifHash m)
 
 traverseDefunTerm
   :: Traversal (Defun name ty builtin info)

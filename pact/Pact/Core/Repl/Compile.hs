@@ -220,6 +220,11 @@ interpretReplProgram interpreter (SourceCode sourceFp source) = do
     Left tl -> pure <$> pipe' tl
     Right (ReplLoadFile file reset info) -> doLoadFile file reset info
   displayValue p = p <$ replPrintLn p
+  sliceCode = \case
+    Lisp.TLModule{} -> sliceFromSource
+    Lisp.TLInterface{} -> sliceFromSource
+    Lisp.TLTerm{} -> \_ _ -> mempty
+    Lisp.TLUse{} -> \_ _ -> mempty
   doLoadFile txt reset i = do
     let loading = RCompileValue (InterpretValue (PString ("Loading " <> txt <> "...")) i)
     replPrintLn loading
@@ -263,7 +268,8 @@ interpretReplProgram interpreter (SourceCode sourceFp source) = do
               Nothing ->
                 throwExecutionError varI $ EvalError "repl invariant violated: resolved to a top level free variable without a binder"
           _ -> do
-            v <- evalTopLevel interpreter ds deps
+            let sliced = sliceCode toplevel source (view Lisp.topLevelInfo toplevel)
+            v <- evalTopLevel interpreter (RawCode sliced) ds deps
             emitWarnings
             replPrintLn v
             pure (RCompileValue v)

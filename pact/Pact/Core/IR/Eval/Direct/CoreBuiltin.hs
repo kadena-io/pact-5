@@ -1519,24 +1519,38 @@ days info b _env = \case
   args -> argsError info b args
 
 describeModule :: (IsBuiltin b) => NativeFunction e b i
-describeModule info b _env = \case
+describeModule info b env = \case
   [VString s] -> case parseModuleName s of
     Just mname -> do
       enforceTopLevelOnly info b
       checkNonLocalAllowed info b
       getModuleData info mname >>= \case
-        ModuleData m _ -> return $
-          VObject $ M.fromList $ fmap (over _1 Field)
-            [ ("name", PString (renderModuleName (_mName m)))
-            , ("hash", PString (moduleHashToText (_mHash m)))
-            , ("tx_hash", PString (hashToText (_mTxHash m)))
-            , ("interfaces", PList (PString . renderModuleName <$> V.fromList (_mImplements m)))]
-        InterfaceData iface _ -> return $
-          VObject $ M.fromList $ fmap (over _1 Field)
-            [ ("name", PString (renderModuleName (_ifName iface)))
-            , ("hash", PString (moduleHashToText (_ifHash iface)))
-            , ("tx_hash", PString (hashToText (_ifTxHash iface)))
-            ]
+        ModuleData m _ -> do
+          let hmn = getHashedModuleName m
+          -- Conditionally read the module code.
+          -- If this is not in the pactdb, then it's in the legacy fallback field
+          mcode <- liftGasM info (_pdbRead (_cePactDb env) DModuleSource hmn)
+          let ModuleCode code = maybe (_mCode m) id mcode
+          return $
+            VObject $ M.fromList $ fmap (over _1 Field)
+              [ ("name", PString (renderModuleName (_mName m)))
+              , ("hash", PString (moduleHashToText (_mHash m)))
+              , ("tx_hash", PString (hashToText (_mTxHash m)))
+              , ("code", PString code)
+              , ("interfaces", PList (PString . renderModuleName <$> V.fromList (_mImplements m)))]
+        InterfaceData iface _ -> do
+          let hmn = getHashedModuleNameIface iface
+          -- Conditionally read the module code.
+          -- If this is not in the pactdb, then it's in the legacy fallback field
+          mcode <- liftGasM info (_pdbRead (_cePactDb env) DModuleSource hmn)
+          let ModuleCode code = maybe (_ifCode iface) id mcode
+          return $
+            VObject $ M.fromList $ fmap (over _1 Field)
+              [ ("name", PString (renderModuleName (_ifName iface)))
+              , ("hash", PString (moduleHashToText (_ifHash iface)))
+              , ("tx_hash", PString (hashToText (_ifTxHash iface)))
+              , ("code", PString code)
+              ]
     Nothing -> throwNativeExecutionError info b $ "invalid module name format"
   args -> argsError info b args
 
