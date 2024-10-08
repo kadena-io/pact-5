@@ -5,6 +5,7 @@
 #include <float.h>
 #include <math.h>
 #include "endian.h"
+#include "../softfloat/softfloat.h"
 /*#include "fp_arch.h"*/
 
 #if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
@@ -258,6 +259,10 @@ double __kadena_math_uflow(uint32_t);
 double __kadena_math_oflow(uint32_t);
 double __kadena_math_divzero(uint32_t);
 double __kadena_math_invalid(double);
+// Softfloat versions
+float64_t __kadena_math_uflow_sf(uint32_t);
+float64_t __kadena_math_oflow_sf(uint32_t);
+float64_t __kadena_math_invalid_sf(float64_t);
 #if LDBL_MANT_DIG != DBL_MANT_DIG
 long double __math_invalidl(long double);
 #endif

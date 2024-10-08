@@ -11,16 +11,12 @@
 
 const struct exp_data __kadena_exp_data = {
 // N/ln2
-.invln2N = 0x1.71547652b82fep0 * N,
+.invln2N = {0x40671547652b82fe},
 // -ln2/N
-.negln2hiN = -0x1.62e42fefa0000p-8,
-.negln2loN = -0x1.cf79abc9e3b3ap-47,
+.negln2hiN = {0xbf762e42fefa0000},
+.negln2loN = {0xbd0cf79abc9e3b3a},
 // Used for rounding when !TOINT_INTRINSICS
-#if EXP_USE_TOINT_NARROW
-.shift = 0x1800000000.8p0,
-#else
-.shift = 0x1.8p52,
-#endif
+.shift = {0x4338000000000000},
 // exp polynomial coefficients.
 .poly = {
 // abs error: 1.555*2^-66
@@ -28,23 +24,23 @@ const struct exp_data __kadena_exp_data = {
 // if |x| < ln2/256+eps
 // abs error if |x| < ln2/256+0x1p-15: 1.09*2^-65
 // abs error if |x| < ln2/128: 1.7145*2^-56
-0x1.ffffffffffdbdp-2,
-0x1.555555555543cp-3,
-0x1.55555cf172b91p-5,
-0x1.1111167a4d017p-7,
+{0x3fdffffffffffdbd},
+{0x3fc555555555543c},
+{0x3fa55555cf172b91},
+{0x3f81111167a4d017},
 },
-.exp2_shift = 0x1.8p52 / N,
+.exp2_shift = {0x42c8000000000000},
 // exp2 polynomial coefficients.
 .exp2_poly = {
 // abs error: 1.2195*2^-65
 // ulp error: 0.507 (0.511 without fma)
 // if |x| < 1/256
 // abs error if |x| < 1/128: 1.9941*2^-56
-0x1.62e42fefa39efp-1,
-0x1.ebfbdff82c424p-3,
-0x1.c6b08d70cf4b5p-5,
-0x1.3b2abd24650ccp-7,
-0x1.5d7e09b4e3a84p-10,
+{0x3fe62e42fefa39ef},
+{0x3fcebfbdff82c424},
+{0x3fac6b08d70cf4b5},
+{0x3f83b2abd24650cc},
+{0x3f55d7e09b4e3a84},
 },
 // 2^(k/N) ~= H[k]*(1 + T[k]) for int k in [0,N)
 // tab[2*k] = asuint64(T[k])
