@@ -110,10 +110,7 @@ data MsgData = MsgData
   , mdVerifiers :: [Verifier ()]
   }
 
-type EvalInput = Either (Maybe DefPactExec) [Lisp.TopLevel Info]
-
-newtype RawCode = RawCode { _rawCode :: Text }
-  deriving (Eq, Show)
+type EvalInput = Either (Maybe DefPactExec) [Lisp.TopLevel SpanInfo]
 
 data Cont = Cont
   { _cPactId :: !DefPactId
@@ -191,24 +188,27 @@ setupEvalEnv pdb mode msgData mCont gasModel' np spv pd efs = do
     toPair (Verifier vfn _ caps) = (vfn, S.fromList (_sigCapability <$> caps))
 
 evalExec
-  :: ExecutionMode -> PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
+  :: RawCode -> ExecutionMode -> PactDb CoreBuiltin Info
+  -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
   -> PublicData -> MsgData
   -> CapState QualifiedName PactValue
-  -> [Lisp.TopLevel Info] -> IO (Either (PactError Info) EvalResult)
-evalExec execMode db spv gasModel flags nsp publicData msgData capState terms = do
+  -> [Lisp.TopLevel SpanInfo] -> IO (Either (PactError Info) EvalResult)
+evalExec code execMode db spv gasModel flags nsp publicData msgData capState terms = do
   evalEnv <- setupEvalEnv db execMode msgData Nothing gasModel nsp spv publicData flags
   let evalState = def & esCaps .~ capState
-  interpret evalEnv evalState (Right terms)
+  interpret code evalEnv evalState (Right terms)
 
 evalExecTerm
-  :: ExecutionMode -> PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
+  :: ExecutionMode
+  -> PactDb CoreBuiltin Info
+  -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
   -> PublicData -> MsgData
   -> CapState QualifiedName PactValue
-  -> Lisp.Expr Info -> IO (Either (PactError Info) EvalResult)
+  -> Lisp.Expr SpanInfo -> IO (Either (PactError Info) EvalResult)
 evalExecTerm execMode db spv gasModel flags nsp publicData msgData capState term = do
   evalEnv <- setupEvalEnv db execMode msgData Nothing gasModel nsp spv publicData flags
   let evalState = def & esCaps .~ capState
-  interpret evalEnv evalState (Right [Lisp.TLTerm term])
+  interpret (RawCode mempty) evalEnv evalState (Right [Lisp.TLTerm term])
 
 evalContinuation
   :: ExecutionMode -> PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
@@ -220,14 +220,14 @@ evalContinuation execMode db spv gasModel flags nsp publicData msgData capState 
   let evalState = def & esCaps .~ capState
   case _cProof cont of
     Nothing ->
-      interpret
+      interpret (RawCode mempty)
         (evalEnv & eeDefPactStep .~ step Nothing)
         evalState
         (Left Nothing)
     Just p -> _spvVerifyContinuation spv p >>= \case
       Left spvErr -> pure $ Left $ PEExecutionError (ContinuationError spvErr) [] def
       Right pe -> do
-        interpret
+        interpret (RawCode mempty)
           (evalEnv & eeDefPactStep .~ step (_peYield pe))
           evalState
           (Left $ Just pe)
@@ -247,12 +247,13 @@ evalGasPayerCap capToken db spv gasModel flags nsp publicData msgData capState b
 
 
 interpret
-  :: EvalEnv CoreBuiltin Info
+  :: RawCode
+  -> EvalEnv CoreBuiltin Info
   -> EvalState CoreBuiltin Info
   -> EvalInput
   -> IO (Either (PactError Info) EvalResult)
-interpret evalEnv evalSt evalInput = do
-  (result, state) <- evalWithinTx evalInput evalEnv evalSt
+interpret code evalEnv evalSt evalInput = do
+  (result, state) <- evalWithinTx code evalInput evalEnv evalSt
   gas <- readIORef (_geGasRef $ _eeGasEnv evalEnv)
   case result of
     Left err -> return $ Left err
@@ -294,14 +295,23 @@ interpretGasPayerTerm evalEnv evalSt ct term = do
 
 -- Used to be `evalTerms`
 evalWithinTx
-  :: EvalInput
+  :: RawCode
+  -> EvalInput
   -> EvalEnv CoreBuiltin Info
   -> EvalState CoreBuiltin Info
   -> IO (PactTxResult [CompileValue Info])
-evalWithinTx input ee es = evalWithinTx' ee es runInput
+evalWithinTx (RawCode code) input ee es = evalWithinTx' ee es runInput
   where
+  sliceCode = \case
+    Lisp.TLModule{} -> sliceFromSource
+    Lisp.TLInterface{} -> sliceFromSource
+    Lisp.TLTerm{} -> \_ _ -> mempty
+    Lisp.TLUse{} -> \_ _ -> mempty
+  evaluateTopLevel tl = do
+    let sliced = sliceCode tl code (view Lisp.topLevelInfo tl)
+    interpretTopLevel evalInterpreter (RawCode sliced) (fmap spanInfoToLineInfo tl)
   runInput = case input of
-    Right ts -> evaluateTerms ts
+    Right ts -> traverse evaluateTopLevel ts
     Left pe -> (:[]) <$> evalResumePact pe
 
 evalWithinCap
@@ -367,9 +377,3 @@ evalResumePact
   -> Eval (CompileValue Info)
 evalResumePact mdp =
   (`InterpretValue` def) <$> resumePact evalInterpreter def mdp
-
-evaluateTerms
-  :: [Lisp.TopLevel Info]
-  -> Eval [CompileValue Info]
-evaluateTerms tls = do
-  traverse (interpretTopLevel evalInterpreter) tls

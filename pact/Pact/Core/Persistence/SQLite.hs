@@ -29,6 +29,7 @@ import Pact.Core.Persistence
 import Pact.Core.Guards (renderKeySetName, parseAnyKeysetName)
 import Pact.Core.Names
 import Pact.Core.Serialise
+import Pact.Core.Errors
 import Pact.Core.StableEncoding (encodeStable)
 
 -- | Acquire a SQLite-backed `PactDB`.
@@ -60,6 +61,7 @@ withSqlitePactDb serial connectionString act =
       finalizeStmt (_stmtNamespace cache')
       finalizeStmt (_stmtKeyset cache')
       finalizeStmt (_stmtModules cache')
+      finalizeStmt (_stmtModuleCode cache')
       finalizeStmt (_stmtDefPact cache')
       SQL.close db
 
@@ -92,6 +94,7 @@ unsafeCloseSqlitePactDb db cache = liftIO $ do
     finalizeStmt (_stmtNamespace cache')
     finalizeStmt (_stmtKeyset cache')
     finalizeStmt (_stmtModules cache')
+    finalizeStmt (_stmtModuleCode cache')
     finalizeStmt (_stmtDefPact cache')
     SQL.close db
 
@@ -110,10 +113,12 @@ createSysTables db = do
   mods <- mkTbl (renderDomain DModules)
   pacts <- mkTbl (renderDomain DDefPacts)
   ns <- mkTbl (renderDomain DNamespaces)
+  mcode <- mkTbl (renderDomain DModuleSource)
   pure $ StmtCache
     { _stmtNamespace = ns
     , _stmtKeyset = ks
     , _stmtModules = mods
+    , _stmtModuleCode = mcode
     , _stmtDefPact = pacts
     , _stmtUserTbl = M.empty
     }
@@ -156,6 +161,7 @@ data StmtCache
   { _stmtNamespace :: TblStatements
   , _stmtKeyset    :: TblStatements
   , _stmtModules   :: TblStatements
+  , _stmtModuleCode :: TblStatements
   , _stmtDefPact   :: TblStatements
   , _stmtUserTbl   :: M.Map TableName TblStatements
   }
@@ -189,6 +195,11 @@ readKeys db stmtCache = \case
   DModules -> withStmt (_tblReadKeys . _stmtModules <$> liftIO (readIORef stmtCache)) $ \stmt ->
     fmap parseModuleName <$> collect stmt [] >>= \mns -> case sequence mns of
       Nothing -> fail "unexpected decoding"
+      Just mns' -> pure mns'
+
+  DModuleSource -> withStmt (_tblReadKeys . _stmtModuleCode <$> liftIO (readIORef stmtCache)) $ \stmt ->
+    fmap parseHashedModuleName <$> collect stmt [] >>= \mns -> case sequence mns of
+      Nothing -> throwDbOpErrorGasM $ RowReadDecodeFailure "Invalid module source key format"
       Just mns' -> pure mns'
 
   DDefPacts -> withStmt (_tblReadKeys . _stmtDefPact <$> liftIO (readIORef stmtCache)) $ \stmt ->
@@ -318,6 +329,12 @@ write' serial db txId txLog stmtCache wt domain k v =
       liftIO $ SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderModuleName k), SQL.SQLBlob encoded]
       doWrite stmt (TxLog (renderDomain domain) (renderModuleName k) encoded:)
 
+    DModuleSource -> withStmt (_tblInsertOrUpdate . _stmtModuleCode <$> liftIO (readIORef stmtCache)) $ \stmt -> do
+      let encoded = _encodeModuleCode serial v
+      TxId i <- liftIO $ readIORef txId
+      liftIO $ SQL.bind stmt [SQL.SQLInteger (fromIntegral i), SQL.SQLText (renderHashedModuleName k), SQL.SQLBlob encoded]
+      doWrite stmt (TxLog (renderDomain domain) (renderHashedModuleName k) encoded:)
+
     DDefPacts -> withStmt (_tblInsertOrUpdate . _stmtDefPact <$> liftIO (readIORef stmtCache)) $ \stmt -> do
        let encoded = _encodeDefPactExec serial v
            DefPactId k' = k
@@ -359,6 +376,9 @@ read' serial db stmtCache domain k = case domain of
 
   DModules -> withStmt (_tblReadValue . _stmtModules <$> liftIO (readIORef stmtCache)) $
     doRead (renderModuleName k) (\v -> pure (view document <$> _decodeModuleData serial v))
+
+  DModuleSource -> withStmt (_tblReadValue . _stmtModules <$> liftIO (readIORef stmtCache)) $
+    doRead (renderHashedModuleName k) (\v -> pure (view document <$> _decodeModuleCode serial v))
 
   DUserTables tbl -> do
     tblCache <- _stmtUserTbl <$> liftIO (readIORef stmtCache)

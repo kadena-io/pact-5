@@ -177,9 +177,10 @@ data Domain k v b i where
   DNamespaces :: Domain NamespaceName Namespace b i
   -- | Pacts map to 'Maybe PactExec' where Nothing indicates
   -- a terminated pact.
-
   -- | DefPact state, `Nothing` implies DefPact with `DefPactId` is completed.
   DDefPacts :: Domain DefPactId (Maybe DefPactExec) b i
+  -- | Module source
+  DModuleSource :: Domain HashedModuleName ModuleCode b i
 
 deriving stock instance Show (Domain k v b i)
 
@@ -293,3 +294,4 @@ renderDomain = \case
   DModules -> "SYS:Modules"
   DNamespaces -> "SYS:Namespaces"
   DDefPacts -> "SYS:Pacts"
+  DModuleSource -> "SYS:ModuleSource"

@@ -16,10 +16,12 @@ module Pact.Core.Compile
  , compileValueToPactValue
  , evalTopLevel
  , CompileValue(..)
+ , RawCode(..)
  ) where
 
 import Control.Lens
 import Control.Monad
+import Data.Text(Text)
 import Data.Maybe(mapMaybe)
 import Codec.Serialise(Serialise)
 import qualified Data.Map.Strict as M
@@ -59,7 +61,8 @@ type HasCompileEnv b i
     , Serialise (SerialiseV1 b)
     )
 
-
+newtype RawCode = RawCode { _rawCode :: Text }
+  deriving (Eq, Show)
 
 data CompileValue i
   = LoadedModule ModuleName ModuleHash
@@ -168,9 +171,10 @@ interpretTopLevel
   :: forall e b i
   .  (HasCompileEnv b i)
   => Interpreter e b i
+  -> RawCode
   -> Lisp.TopLevel i
   -> EvalM e b i (CompileValue i)
-interpretTopLevel interpreter tl = do
+interpretTopLevel interpreter code tl = do
   evalModuleGovernance interpreter tl
   -- Todo: pretty instance for modules and all of toplevel
   debugPrint (DPParser @b) tl
@@ -178,16 +182,17 @@ interpretTopLevel interpreter tl = do
   constEvaled <- ConstEval.evalTLConsts interpreter ds
   let tlFinal = MHash.hashTopLevel constEvaled
   debugPrint DPDesugar ds
-  evalTopLevel interpreter tlFinal deps
+  evalTopLevel interpreter code tlFinal deps
 
 evalTopLevel
   :: forall e b i
   .  (HasCompileEnv b i)
   => Interpreter e b i
+  -> RawCode
   -> EvalTopLevel b i
   -> S.Set ModuleName
   -> EvalM e b i (CompileValue i)
-evalTopLevel interpreter tlFinal deps = do
+evalTopLevel interpreter (RawCode code) tlFinal deps = do
   lo0 <- use esLoaded
   pdb <- viewEvalEnv eePactDb
   case tlFinal of
@@ -208,6 +213,8 @@ evalTopLevel interpreter tlFinal deps = do
       mSize <- sizeOf (_mInfo m) SizeOfV0 m
       chargeGasArgs (_mInfo m) (GModuleMemory mSize)
       evalWrite (_mInfo m) pdb Write DModules (view mName m) mdata
+      -- Write sliced modules to the pact db
+      evalWrite (_mInfo m) pdb Write DModuleSource (getHashedModuleName m) (ModuleCode code)
       let fqDeps = toFqDep (_mName m) (_mHash m) <$> _mDefs m
           newLoaded = M.fromList fqDeps
           newTopLevel = M.fromList $ (\(fqn, d) -> (_fqName fqn, (fqn, defKind (_mName m) d))) <$> fqDeps
@@ -224,6 +231,8 @@ evalTopLevel interpreter tlFinal deps = do
       ifaceSize <- sizeOf (_ifInfo iface) SizeOfV0 iface
       chargeGasArgs (_ifInfo iface) (GModuleMemory ifaceSize)
       evalWrite (_ifInfo iface) pdb Write DModules (view ifName iface) mdata
+     -- Write sliced interface code to the pact db
+      evalWrite (_ifInfo iface) pdb Write DModuleSource (getHashedModuleNameIface iface) (ModuleCode code)
       let fqDeps = toFqDep (_ifName iface) (_ifHash iface)
                   <$> mapMaybe ifDefToDef (_ifDefns iface)
           newLoaded = M.fromList fqDeps

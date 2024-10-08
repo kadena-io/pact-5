@@ -711,7 +711,9 @@ instance Serialise (SerialiseV1 Import) where
 instance
   (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
   => Serialise (SerialiseV1 (EvalModule b i)) where
-  encode (SerialiseV1 (Module mn mg mdef mbless mimports mimpl mhash txhash minfo)) =
+  -- Note: we _do not_ store module code in our CBOR representation. This is _purely_
+  -- a backcompat thing
+  encode (SerialiseV1 (Module mn mg mdef mbless mimports mimpl mhash txhash _ minfo)) =
     encodeS mn <> encodeS mg <> encodeS mdef
     <> encode (coerceSetToSerialize mbless) <> encodeS mimports <> encodeS mimpl
     <> encodeS mhash <> encodeS txhash <> encodeS minfo
@@ -719,7 +721,7 @@ instance
 
   decode = fmap SerialiseV1 $
     Module <$> decodeS <*> decodeS <*> decodeS <*> (coerceSetFromSerialize <$> decode) <*> decodeS
-           <*> decodeS <*> decodeS <*> decodeS <*> decodeS
+           <*> decodeS <*> decodeS <*> decodeS <*> pure (ModuleCode mempty) <*> decodeS
   {-# INLINE decode #-}
 
 
@@ -774,11 +776,11 @@ instance
 instance
   (Serialise (SerialiseV1 b), Serialise (SerialiseV1 i))
   => Serialise (SerialiseV1 (EvalInterface b i)) where
-  encode (SerialiseV1 (Interface n defs imp h txh i)) =
+  encode (SerialiseV1 (Interface n defs imp h txh _ i)) =
     encodeS n <> encodeS defs <> encodeS imp <> encodeS h <> encodeS txh <> encodeS i
   {-# INLINE encode #-}
 
-  decode = SerialiseV1 <$> (Interface <$> decodeS <*> decodeS <*> decodeS <*> decodeS <*> decodeS <*> decodeS)
+  decode = SerialiseV1 <$> (Interface <$> decodeS <*> decodeS <*> decodeS <*> decodeS <*> decodeS <*> pure (ModuleCode mempty) <*> decodeS)
   {-# INLINE decode #-}
 
 coerceMapFromSerialise :: M.Map (SerialiseV1 k) (SerialiseV1 v) -> M.Map k v

@@ -24,6 +24,7 @@ import Pact.Core.Guards
 import Pact.Core.Namespace
 import Pact.Core.Names hiding (renderTableName)
 import Pact.Core.DefPacts.Types (DefPactExec)
+import Pact.Core.IR.Term
 import Pact.Core.Persistence
 import Pact.Core.Serialise
 import Pact.Core.StableEncoding
@@ -63,6 +64,7 @@ tableFromDomain d PactTables{..} = case d of
   DModules -> TFDSys ptModules
   DNamespaces -> TFDSys ptNamespaces
   DDefPacts -> TFDSys ptDefPact
+  DModuleSource -> TFDSys ptModuleCode
 
 
 -- | A record collection of all of the mutable
@@ -72,6 +74,7 @@ data PactTables b i
   { ptTxId :: !(IORef TxId)
   , ptUser :: !(IORef MockUserTable)
   , ptModules :: !(IORef (MockSysTable ModuleName (ModuleData b i)))
+  , ptModuleCode :: !(IORef (MockSysTable HashedModuleName ModuleCode))
   , ptKeysets :: !(IORef (MockSysTable KeySetName KeySet))
   , ptNamespaces :: !(IORef (MockSysTable NamespaceName Namespace))
   , ptDefPact :: !(IORef (MockSysTable DefPactId (Maybe DefPactExec)))
@@ -96,6 +99,7 @@ data PactTablesState b i
 createPactTables :: IO (PactTables b i)
 createPactTables = do
   refMod <- newIORef mempty
+  refMCode <- newIORef mempty
   refKs <- newIORef mempty
   refUsrTbl <- newIORef mempty
   refPacts <- newIORef mempty
@@ -107,6 +111,7 @@ createPactTables = do
     { ptTxId = refTxId
     , ptUser = refUsrTbl
     , ptModules = refMod
+    , ptModuleCode = refMCode
     , ptKeysets = refKs
     , ptNamespaces = refNS
     , ptDefPact = refPacts
@@ -223,6 +228,11 @@ mockPactDb serial = do
     DNamespaces -> do
       MockSysTable r <- liftIO $ readIORef ptNamespaces
       pure $ NamespaceName . _unRender <$> M.keys r
+    DModuleSource -> do
+      MockSysTable r <- liftIO $ readIORef ptModuleCode
+      let ks = M.keys r
+      traverse (maybe (throwDbOpErrorGasM (RowReadDecodeFailure "Invalid module source key format")) pure . parseHashedModuleName . _unRender) ks
+
 
   createUsrTable
     :: PactTables b i
@@ -249,6 +259,7 @@ mockPactDb serial = do
   read' PactTables{..} domain k = case domain of
     DKeySets -> readSysTable ptKeysets k (Rendered . renderKeySetName) _decodeKeySet
     DModules -> readSysTable ptModules k (Rendered . renderModuleName) _decodeModuleData
+    DModuleSource -> readSysTable ptModuleCode k (Rendered . renderHashedModuleName)  _decodeModuleCode
     DUserTables tbl ->
       readRowData ptUser tbl k
     DDefPacts -> readSysTable ptDefPact k (Rendered . _defPactId) _decodeDefPactExec
@@ -272,8 +283,9 @@ mockPactDb serial = do
     DKeySets -> liftIO $ writeSysTable pt domain k v (Rendered . renderKeySetName) _encodeKeySet
     DModules -> liftIO $ writeSysTable pt domain k v (Rendered . renderModuleName) _encodeModuleData
     DUserTables tbl -> writeRowData pt tbl wt k v
-    DDefPacts -> liftIO $ liftIO $ writeSysTable pt domain k v (Rendered . _defPactId) _encodeDefPactExec
-    DNamespaces -> liftIO $ liftIO $ writeSysTable pt domain k v (Rendered . _namespaceName) _encodeNamespace
+    DDefPacts -> liftIO $ writeSysTable pt domain k v (Rendered . _defPactId) _encodeDefPactExec
+    DNamespaces -> liftIO $ writeSysTable pt domain k v (Rendered . _namespaceName) _encodeNamespace
+    DModuleSource -> liftIO $ writeSysTable pt domain k v (Rendered . renderHashedModuleName) _encodeModuleCode
 
   readRowData
     :: IORef MockUserTable

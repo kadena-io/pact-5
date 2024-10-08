@@ -125,6 +125,6 @@ loadModule = do
   ee <- defaultEvalEnv pdb coreBuiltinMap
   Right _ <- runEvalMResult (ExecEnv ee) def $ do
     p <- liftEither (compileOnlyLineInfo src)
-    traverse (interpretTopLevel evalInterpreter) p
+    traverse (interpretTopLevel evalInterpreter (RawCode mempty)) p
   Just md <- ignoreGas def $ _pdbRead pdb DModules (ModuleName "test" Nothing)
   pure md

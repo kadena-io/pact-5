@@ -87,6 +87,7 @@ instance JD.FromJSON g => JD.FromJSON (ModuleDef g) where
 
 data Interface = Interface
   { _interfaceName :: !ModuleName
+  , _interfaceCode :: Text
   , _interfaceImports :: ![Use]
   }
   deriving (Eq,Show,Generic)
@@ -95,12 +96,14 @@ instance JD.FromJSON Interface where
   parseJSON = JD.withObject "Interface" $ \o ->
     Interface
       <$> o JD..: "name"
+      <*> o JD..: "code"
       <*> o JD..: "imports"
 
 data Module g = Module
   { _mName :: !ModuleName
   , _mGovernance :: !(Governance g)
   , _mHash :: !ModuleHash
+  , _mCode :: Text
   , _mBlessed :: !(HS.HashSet ModuleHash)
   , _mInterfaces :: ![ModuleName]
   , _mImports :: ![Use]
@@ -113,6 +116,7 @@ instance JD.FromJSON g => JD.FromJSON (Module g) where
       <$> o JD..: "name"
       <*> o JD..: "governance"
       <*> o JD..: "hash"
+      <*> o JD..: "code"
       <*> o JD..: "blessed"
       <*> o JD..: "interfaces"
       <*> o JD..: "imports"

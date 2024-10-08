@@ -45,6 +45,7 @@ import qualified Pact.Core.Serialise.LegacyPact as LegacyPact
 import qualified Pact.Core.Serialise.CBOR_V1 as V1
 import Pact.Core.Info
 import Data.Default
+import qualified Data.Text.Encoding as T
 
 data DocumentVersion
   = V1_CBOR
@@ -73,12 +74,19 @@ encodeVersion :: DocumentVersion -> S.Encoding
 encodeVersion = \case
   V1_CBOR -> S.encodeWord 0
 
+encodeModuleCode :: ModuleCode -> ByteString
+encodeModuleCode (ModuleCode m) = T.encodeUtf8 m
+
+decodeModuleCode :: ByteString -> Maybe ModuleCode
+decodeModuleCode = either (const Nothing) Just . fmap ModuleCode . T.decodeUtf8'
 
 -- | The main serialization API for Pact entities.
 data PactSerialise b i
   = PactSerialise
   { _encodeModuleData :: ModuleData b i -> ByteString
   , _decodeModuleData :: ByteString -> Maybe (Document (ModuleData b i))
+  , _encodeModuleCode :: ModuleCode -> ByteString
+  , _decodeModuleCode :: ByteString -> Maybe (Document ModuleCode)
   , _encodeKeySet :: KeySet -> ByteString
   , _decodeKeySet :: ByteString -> Maybe (Document KeySet)
   , _encodeDefPactExec :: Maybe DefPactExec -> ByteString
@@ -97,6 +105,8 @@ serialisePact = PactSerialise
       <|> docDecode bs (\case
                            V1_CBOR -> V1.decodeModuleData
                        )
+  , _encodeModuleCode = docEncode encodeModuleCode
+  , _decodeModuleCode = \bs -> docDecode bs (\_ -> decodeModuleCode)
 
   , _encodeKeySet = docEncode V1.encodeKeySet
   , _decodeKeySet = \bs ->
