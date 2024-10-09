@@ -306,7 +306,7 @@ data CommandResult log err = CommandResult {
 
 instance (J.Encode l, J.Encode err) => J.Encode (CommandResult l err) where
   build o = J.object
-    [ "gas" J..= J.Aeson (_gas (_crGas o))
+    [ "gas" J..= J.Aeson (unSatWord (_gas (_crGas o)))
     , "result" J..= _crResult o
     , "reqKey" J..= _crReqKey o
     , "logs" J..= _crLogs o

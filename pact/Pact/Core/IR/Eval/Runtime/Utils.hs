@@ -61,7 +61,6 @@ import Control.Lens hiding (from, to)
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.IORef
-import Data.Monoid
 import Data.Vector(Vector)
 import Data.Foldable(find, toList)
 import Data.Maybe(maybeToList)
@@ -86,6 +85,7 @@ import Pact.Core.Environment
 import Pact.Core.DefPacts.Types
 import Pact.Core.Gas
 import Pact.Core.Info
+import Pact.Core.ModRefs
 
 import Pact.Core.Guards
 import Pact.Core.Capabilities
@@ -179,8 +179,60 @@ unsafeUpdateManagedParam newV (ManagedCap mc orig (ManagedParam fqn _oldV i)) =
 unsafeUpdateManagedParam _ a = a
 
 typecheckArgument :: i -> PactValue -> Type -> EvalM e b i ()
-typecheckArgument info pv ty =
-  unless (checkPvType ty pv) $ throwExecutionError info (RunTimeTypecheckFailure (pvToArgTypeError pv) ty)
+typecheckArgument info pv ty = do
+  c <- gassedRuntimeTypecheck info ty pv
+  unless c $ throwExecutionError info (RunTimeTypecheckFailure (pvToArgTypeError pv) ty)
+
+-- | Runtime typechecking. For "simple" non-recursive types,
+--   this is free. Otherwise, we will charge a small amount of gas per
+--   "layer" of typechecking
+gassedRuntimeTypecheck :: i -> Type -> PactValue -> EvalM e b i Bool
+gassedRuntimeTypecheck _ TyAny = const (pure True)
+gassedRuntimeTypecheck i ty = \case
+  PLiteral l -> pure (typeOfLit l == ty)
+  PGuard{} -> pure $ ty == TyGuard
+  PTime _ -> pure $ ty == TyTime
+  PCapToken _ -> pure $ ty == TyCapToken
+  PModRef (ModRef _orig ifs) -> case ty of
+    TyModRef mns
+      -- Note: size is O(1)
+      | S.size ifs < 10 ->
+        pure (mns `S.isSubsetOf` ifs)
+      | otherwise -> do
+        chargeGasArgs i (GAConstant (scalarMulMilliGas constantWorkNodeGas (S.size ifs)))
+        pure  (mns `S.isSubsetOf` ifs)
+    _ -> pure False
+  PList pli -> case ty of
+    TyAnyList -> pure True
+    TyList t -> do
+      -- Note: length is O(1)
+      chargeGasArgs i (GAConstant (scalarMulMilliGas constantWorkNodeGas (V.length pli)))
+      vs <- traverse (gassedRuntimeTypecheck i t) pli
+      pure (and vs)
+    _ -> pure False
+  PObject o -> case ty of
+    TyAnyObject -> pure True
+    TyObject sc -> gassedTypecheckObj i o sc
+    _ -> pure False
+
+-- | Typecheck an object against a schema, charge gas
+gassedTypecheckObj :: i -> M.Map Field PactValue -> Schema -> EvalM e b i Bool
+gassedTypecheckObj i o (Schema _ sc)
+  | M.size o == M.size sc = do
+    chargeGasArgs i (GAConstant (scalarMulMilliGas constantWorkNodeGas (M.size o)))
+    go (M.toList o) (M.toList sc)
+  | otherwise = pure False
+  where
+  -- We rely on field ordering here.
+  -- If the object and the schema have different fields, then at some point they'll differ
+  go ((f, pv):xs)  ((f', ty):ys)
+    | f == f' = do
+      c <- gassedRuntimeTypecheck i ty pv
+      if c then go xs ys
+      else pure c
+    | otherwise = pure False
+  -- xs and ys are guaranteed to be of the same size
+  go _ _ = pure True
 
 maybeTCType :: i -> Maybe Type -> PactValue -> EvalM e b i ()
 maybeTCType i mty pv = maybe (pure ()) (typecheckArgument i pv) mty
@@ -280,16 +332,17 @@ asBool info b pv =
 {-# INLINABLE asBool #-}
 
 -- | Todo: revisit
-checkSchema :: M.Map Field PactValue -> Schema -> Bool
-checkSchema o (Schema _ sc) =
-  M.size o == M.size sc &&
-  getAll (M.foldMapWithKey (\k v -> All $ maybe False (`checkPvType` v) (M.lookup k sc)) o)
+checkSchema :: i -> M.Map Field PactValue -> Schema -> EvalM e b i Bool
+checkSchema = gassedTypecheckObj
 
 -- | Todo: revisit
-checkPartialSchema :: M.Map Field PactValue -> Schema -> Bool
-checkPartialSchema o (Schema _ sc) =
-  M.isSubmapOfBy (\obj ty -> checkPvType ty obj) o sc
-
+checkPartialSchema :: i -> M.Map Field PactValue -> Schema -> EvalM e b i Bool
+checkPartialSchema  info o (Schema q sc) = do
+  chargeGasArgs info (GAConstant (scalarMulMilliGas constantWorkNodeGas (M.size o)))
+  let keys = M.keys o
+  if all (`M.member` sc) keys then
+    gassedTypecheckObj info o (Schema q (M.restrictKeys sc (S.fromList keys)))
+  else pure False
 
 getDefPactId :: i -> EvalM e b i DefPactId
 getDefPactId info =

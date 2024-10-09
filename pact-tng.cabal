@@ -269,6 +269,7 @@ library
     Pact.Core.Interpreter
     Pact.Core.DeriveConTag
     Pact.Core.Signer
+    Pact.Core.SatWord
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree
