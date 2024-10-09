@@ -203,21 +203,6 @@ library
     , alex:alex
     , happy:happy
 
-  c-sources:
-    cbits/musl/__math_invalid.c
-    cbits/musl/__math_divzero.c
-    cbits/musl/__math_oflow.c
-    cbits/musl/__math_uflow.c
-    cbits/musl/__math_xflow.c
-    cbits/musl/exp.c
-    cbits/musl/exp_data.c
-    cbits/musl/log.c
-    cbits/musl/log_data.c
-    cbits/musl/pow.c
-    cbits/musl/pow_data.c
-    cbits/musl/sqrt.c
-    cbits/musl/sqrt_data.c
-
   other-modules:
     -- TODO: Uncomment once this is finally fixed
     -- and stops crapping out both LSP and our CI:
@@ -298,7 +283,7 @@ library
     Pact.Core.IR.ModuleHashing
     Pact.Core.IR.ConstEval
 
-    Pact.Core.Trans.TOps
+    Pact.Core.Trans.MPFR
     Pact.Core.Version
 
     -- Repl
@@ -323,6 +308,8 @@ library
 
     -- Hyperlane
     Pact.Crypto.Hyperlane
+
+  extra-libraries: mpfr
 
 library pact-lsp
   import: pact-common
