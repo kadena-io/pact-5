@@ -216,12 +216,12 @@ rawPow info b cont handler _env = \case
     decPow i (Decimal 0 i')
   args -> argsError info b args
   where
-  decPow l r = do
-    when (l == 0 && r < 0) $
+  decPow base pow = do
+    when (base == 0 && pow < 0) $
       throwExecutionError info (FloatingPointError "zero to a negative power is undefined")
     let integralPart = floor pow
     chargeGasArgs info $ GIntegerOpCost PrimOpPow (decimalMantissa base) integralPart
-    result <- guardNanOrInf info $ MPFR.mpfr_pow l r
+    result <- guardNanOrInf info $ MPFR.mpfr_pow base pow
     returnCEKValue cont handler (VLiteral (LDecimal result))
 
 rawLogBase :: forall e b i. (IsBuiltin b) => NativeFunction e b i
