@@ -47,6 +47,7 @@ import qualified Data.ByteString as BS
 import qualified GHC.Exts as Exts
 import qualified GHC.Integer.Logarithms as IntLog
 import qualified Pact.Time as PactTime
+import qualified Pact.Core.Trans.MPFR as MPFR
 #ifndef WITHOUT_CRYPTO
 import qualified Control.Lens as Lens
 #endif
@@ -80,7 +81,6 @@ import Pact.Core.SizeOf
 import Pact.Core.SPV
 
 import qualified Pact.Core.Principal as Pr
-import qualified Pact.Core.Trans.TOps as Musl
 
 import qualified Data.Binary.Get as Bin
 import qualified Data.Binary.Put as Bin
@@ -216,21 +216,21 @@ rawPow info b cont handler _env = \case
     decPow i (Decimal 0 i')
   args -> argsError info b args
   where
-  decPow base pow = do
+  decPow l r = do
+    when (l == 0 && r < 0) $
+      throwExecutionError info (FloatingPointError "zero to a negative power is undefined")
     let integralPart = floor pow
     chargeGasArgs info $ GIntegerOpCost PrimOpPow (decimalMantissa base) integralPart
-    let result = Musl.trans_pow (dec2F base) (dec2F pow)
-    guardNanOrInf info result
-    returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
+    result <- guardNanOrInf info $ MPFR.mpfr_pow l r
+    returnCEKValue cont handler (VLiteral (LDecimal result))
 
 rawLogBase :: forall e b i. (IsBuiltin b) => NativeFunction e b i
 rawLogBase info b cont handler _env = \case
   [VLiteral (LInteger base), VLiteral (LInteger n)] -> do
     checkArgs base n
-    let base' = fromIntegral base :: Double
-        n' = fromIntegral n
-        result = Musl.trans_logBase base' n'
-    guardNanOrInf info result
+    let base' = Decimal 0 base
+        n' = Decimal 0 n
+    result <- guardNanOrInf info $  MPFR.mpfr_log base' n'
     returnCEKValue cont handler (VLiteral (LInteger (round result)))
   [VLiteral (LDecimal base), VLiteral (LDecimal arg)] -> do
      decLogBase base arg
@@ -242,11 +242,12 @@ rawLogBase info b cont handler _env = \case
   where
   decLogBase base arg = do
     checkArgs base arg
-    let result = Musl.trans_logBase (dec2F base) (dec2F arg)
-    guardNanOrInf info result
-    returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
+    result <- guardNanOrInf info $ MPFR.mpfr_log base arg
+    returnCEKValue cont handler (VLiteral (LDecimal result))
+
   checkArgs :: (Num a, Ord a) => a -> a -> EvalM e b i ()
   checkArgs base arg = do
+    when (base == 1) $ throwExecutionError info (ArithmeticException "Base 1 not supported")
     when (base < 0) $ throwExecutionError info (ArithmeticException "Negative log base")
     when (arg <= 0) $ throwExecutionError info (ArithmeticException "Non-positive log argument")
 
@@ -350,39 +351,40 @@ rawAbs info b cont handler _env = \case
 rawExp :: (IsBuiltin b) => NativeFunction e b i
 rawExp info b cont handler _env = \case
   [VLiteral (LInteger i)] -> do
-    let result = Musl.trans_exp (fromIntegral i)
-    guardNanOrInf info result
-    returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
+    let i' = Decimal 0 i
+    result <- guardNanOrInf info $ MPFR.mpfr_exp i'
+    returnCEKValue cont handler (VLiteral (LDecimal result))
   [VLiteral (LDecimal e)] -> do
-    let result = Musl.trans_exp (dec2F e)
-    guardNanOrInf info result
-    returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
+    result <- guardNanOrInf info $ MPFR.mpfr_exp e
+    returnCEKValue cont handler (VLiteral (LDecimal result))
   args -> argsError info b args
 
 rawLn :: (IsBuiltin b) => NativeFunction e b i
 rawLn info b cont handler _env = \case
   [VLiteral (LInteger i)] -> do
-    let result = Musl.trans_ln (fromIntegral i)
-    guardNanOrInf info result
-    returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
+    let i' = Decimal 0 i
+    result <- checkArgAndCompute i'
+    returnCEKValue cont handler (VLiteral (LDecimal result))
   [VLiteral (LDecimal e)] -> do
-    let result = Musl.trans_ln (dec2F e)
-    guardNanOrInf info result
-    returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
+    result <- checkArgAndCompute e
+    returnCEKValue cont handler (VLiteral (LDecimal result))
   args -> argsError info b args
+  where
+    checkArgAndCompute n = do
+      when (n <= 0) $ throwExecutionError info (ArithmeticException "Natural logarithm must be greater then 0")
+      guardNanOrInf info $ MPFR.mpfr_ln n
 
 rawSqrt :: (IsBuiltin b) => NativeFunction e b i
 rawSqrt info b cont handler _env = \case
   [VLiteral (LInteger i)] -> do
     when (i < 0) $ throwExecutionError info (ArithmeticException "Square root must be non-negative")
-    let result = Musl.trans_sqrt (fromIntegral i)
-    guardNanOrInf info result
-    returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
+    let i' = Decimal 0 i
+    result <- guardNanOrInf info $ MPFR.mpfr_sqrt i'
+    returnCEKValue cont handler (VLiteral (LDecimal result))
   [VLiteral (LDecimal e)] -> do
     when (e < 0) $ throwExecutionError info (ArithmeticException "Square root must be non-negative")
-    let result = Musl.trans_sqrt (dec2F e)
-    guardNanOrInf info result
-    returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
+    result <- guardNanOrInf info $ MPFR.mpfr_sqrt e
+    returnCEKValue cont handler (VLiteral (LDecimal result))
   args -> argsError info b args
 
 
@@ -469,15 +471,10 @@ rawSortObject info b cont handler _env = \case
 -- double ops
 -- -------------------------
 
-guardNanOrInf :: i -> Double -> EvalM e b i ()
-guardNanOrInf info a =
-  when (isNaN a || isInfinite a) $ throwExecutionError info (FloatingPointError "Floating operation resulted in Infinity or NaN")
-
-dec2F :: Decimal -> Double
-dec2F = fromRational . toRational
-
-f2Dec :: Double -> Decimal
-f2Dec = fromRational . toRational
+guardNanOrInf :: i -> MPFR.TransResult Decimal -> EvalM e b i Decimal
+guardNanOrInf info = \case
+  MPFR.TransNumber a -> pure a
+  _ -> throwExecutionError info (FloatingPointError "Floating operation resulted in Infinity or NaN")
 
 roundDec :: (IsBuiltin b) => NativeFunction e b i
 roundDec = roundingFn round
