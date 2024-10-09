@@ -219,8 +219,10 @@ rawPow info b _env = \case
     decPow i (Decimal 0 i')
   args -> argsError info b args
   where
-  decPow l r = do
-    let result = Musl.trans_pow (dec2F l) (dec2F r)
+  decPow base pow = do
+    let integralPart = floor pow
+    chargeGasArgs info $ GIntegerOpCost PrimOpPow (decimalMantissa base) integralPart
+    let result = Musl.trans_pow (dec2F base) (dec2F pow)
     guardNanOrInf info result
     return (VLiteral (LDecimal (f2Dec result)))
 
@@ -316,19 +318,6 @@ defCmp predicate info b _env = \case
   args@[VLiteral lit1, VLiteral lit2] -> litCmpGassed info lit1 lit2 >>= \case
     Just ordering -> return $ VBool $ predicate ordering
     Nothing -> argsError info b args
-    -- cmp (LInteger l) (LInteger r) = do
-    --   chargeGasArgs info (GComparison (IntComparison l r))
-    --   return $ VBool $ predicate (compare l r)
-    -- cmp (LBool l) (LBool r) = return $ VBool $ predicate (compare l r)
-    -- cmp (LDecimal l) (LDecimal r) = do
-    --   chargeGasArgs info (GComparison (DecimalComparison l r))
-    --   return $ VBool $ predicate (compare l r)
-    -- cmp (LString l) (LString r) = do
-    --   chargeGasArgs info (GComparison (TextComparison l r))
-    --   return $ VBool $ predicate (compare l r)
-    -- cmp LUnit LUnit = return $ VBool (predicate EQ)
-    -- cmp _ _ = argsError info b args
-  -- Todo: time comparisons
   [VTime l, VTime r] -> return $ VBool $ predicate (compare l r)
   args -> argsError info b args
 {-# INLINE defCmp #-}
@@ -346,7 +335,11 @@ bitXorInt :: (IsBuiltin b) => NativeFunction e b i
 bitXorInt = binaryIntFn xor
 
 bitShiftInt :: (IsBuiltin b) => NativeFunction e b i
-bitShiftInt =  binaryIntFn (\i s -> shift i (fromIntegral s))
+bitShiftInt info b _env  = \case
+  [VLiteral (LInteger i), VLiteral (LInteger i')] -> do
+    chargeGasArgs info $ GIntegerOpCost PrimOpShift i i'
+    return (VLiteral (LInteger (i `shift` fromIntegral i')))
+  args -> argsError info b args
 
 rawAbs :: (IsBuiltin b) => NativeFunction e b i
 rawAbs info b _env = \case
@@ -422,6 +415,9 @@ rawSort info b _env = \case
   [VList vli]
     | V.null vli -> return (VList mempty)
     | otherwise -> do
+    sizes <- traverse (sizeOf info SizeOfV0) vli
+    let maxSize = maximum sizes
+    chargeGasArgs info (GComparison (SortComparisons maxSize (V.length vli)))
     vli' <- liftIO $ do
       v' <- V.thaw vli
       V.sort v'
@@ -1100,7 +1096,8 @@ write' wt info b env = \case
     guardTable info tv GtWrite
     let pdb = _cePactDb env
     let check' = if wt == Update then checkPartialSchema else checkSchema
-    if check' rv (_tvSchema tv) then do
+    cond <- check' info rv (_tvSchema tv)
+    if cond then do
       let rdata = RowData rv
       rvSize <- sizeOf info SizeOfV0 rv
       chargeGasArgs info (GWrite rvSize)
@@ -1414,6 +1411,7 @@ coreNotQ info b _env = \case
 coreWhere :: (IsBuiltin b) => NativeFunction e b i
 coreWhere info b _env = \case
   [VString field, VClosure app, VObject o] -> do
+    chargeGasArgs info (GObjOp (ObjOpLookup field (M.size o)))
     case M.lookup (Field field) o of
       Just v -> do
         applyLam app [VPactValue v] >>= enforceBool' info

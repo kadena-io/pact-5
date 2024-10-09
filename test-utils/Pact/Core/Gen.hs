@@ -510,7 +510,7 @@ pactValueGen = Gen.recursive Gen.choice
 
 gasLimitGen :: Gen GasLimit
 gasLimitGen =
-  GasLimit . Gas <$>
+  GasLimit . Gas . fromIntegral <$>
     Gen.word64 Range.constantBounded
 
 gasPriceGen :: Gen GasPrice

@@ -14,7 +14,6 @@ module Pact.Core.PactValue
  , _PGuard
  , _PCapToken
  , _PObject
- , checkPvType
  , ObjectData(..)
  , envMap
  , FQCapToken
@@ -43,7 +42,6 @@ import GHC.Generics
 import qualified Data.Vector as V
 import qualified Data.Map.Strict as M
 import qualified Pact.Time as PactTime
-import qualified Data.Set as S
 
 import Pact.Core.Type
 import Pact.Core.Names
@@ -63,8 +61,8 @@ data PactValue
   | PModRef !ModRef
   | PCapToken !(CapToken FullyQualifiedName PactValue)
   | PTime !PactTime.UTCTime
-  -- BIG TODO:
-  -- This ord instance is dangerous. Consider removing in favor of newtyping over it.
+  -- Note:
+  -- This ord instance is dangerous. Be careful of comparisons with it
   deriving (Eq, Show, Ord, Generic)
 
 instance NFData PactValue
@@ -119,38 +117,6 @@ synthesizePvType = \case
   PCapToken {} -> TyCapToken
   PTime _ -> TyTime
 
--- | Check that a `PactValue` has the provided `Type`, returning
--- `Just ty` if so and `Nothing` otherwise.
-checkPvType :: Type -> PactValue -> Bool
-checkPvType TyAny = const True
-checkPvType ty = \case
-  PLiteral l -> typeOfLit l == ty
-  PGuard{} -> ty == TyGuard
-  PObject o -> case ty of
-    -- Todo: gas
-    TyObject (Schema _ sc) ->
-      let tyList = M.toList sc
-          oList = M.toList o
-      in tcObj oList tyList
-      where
-      tcObj l1 l2
-        | length l1 == length l2 = and $ zipWith mcheck l1 l2
-        | otherwise = False
-      mcheck (f1, pv) (f2, t)
-        | f1 == f2 = checkPvType t pv
-        | otherwise = False
-    TyAnyObject -> True
-    _ -> False
-  -- Todo: gas
-  PList l -> case ty of
-    TyList t'  -> all (checkPvType t') l
-    TyAnyList -> True
-    _ -> False
-  PModRef (ModRef _orig ifs) -> case ty of
-    TyModRef mns -> mns `S.isSubsetOf` ifs
-    _ -> False
-  PCapToken _ -> False
-  PTime _ -> ty == TyTime
 
 
 newtype ObjectData term

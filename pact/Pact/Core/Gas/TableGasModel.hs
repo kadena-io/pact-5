@@ -10,18 +10,22 @@ module Pact.Core.Gas.TableGasModel
  , pointAddGas
  , scalarMulGas
  , pairingGas
- , serializationCosts)
+ , serializationCosts
+ , constantWorkNodeGas
+ , tryNodeGas
+ , unconsWorkNodeGas
+ )
  where
 
 import Data.Word(Word64)
 import Data.Ratio((%))
-import GHC.Int(Int(..))
 import qualified Data.Text as T
 import GHC.Num.Integer
 import qualified GHC.Integer.Logarithms as IntLog
 import Pact.Core.Builtin
 import Pact.Core.Gas.Types
 import Data.Decimal
+import GHC.Base
 
 tableGasModel :: MilliGasLimit -> GasModel CoreBuiltin
 tableGasModel gl =
@@ -100,15 +104,16 @@ pairingGas npairs
 -- 664
 intCostUpperBound :: Int
 intCostUpperBound = 664
--- TODO Note: 10^80 seems a bit restrictive given benchmarks show this is just hilariously fast.
--- up to 10^300, so 10^200 seems like a decent upper bound
--- intAdditionUpperBound =  265
 
 integerBits :: Integer -> Int
 integerBits = \case
   IS _ -> 64 -- note: Small ints are machine word sized
-  i -> I# (IntLog.integerLog2# (abs i))
+  i -> I# (IntLog.integerLog2# (abs i) +# 1#)
 {-# INLINE integerBits #-}
+
+numberOfBits :: Integer -> Int
+numberOfBits i = I# (IntLog.integerLog2# (abs i) +# 1#)
+{-# INLINE numberOfBits #-}
 
 
 -- | Costing function for binary integer ops
@@ -119,7 +124,7 @@ intAdditionCost !lop !rop
   | otherwise = go rop
   where
   go !a =
-    let !nbits = (I# (IntLog.integerLog2# (abs a)) + 1)
+    let !nbits = numberOfBits a
     -- Note: benchmarks tell us the integer cost model for addition is roughly
     -- addGasCost(x) = 20 + 0.008*(Log2(x)) in ns, so we can set it to ~25 or so milligas while
     -- we calibrate further, but this seems like a good upper bound on the gas,
@@ -138,12 +143,12 @@ intMultCost !lop !rop
     -- Note: some simple benchmarks up to 10^300 has the function of integer multiplication
     -- have the cost intMul(n) = 0.1523*n + 26.2 ~ 1.5n+26 ~ (3*n)/20+26
     -- after the bound,
-    let !nbits = (I# (IntLog.integerLog2# (abs a)) + 1)
+    let !nbits = numberOfBits a
     in if nbits <= intCostUpperBound then MilliGas $ fromIntegral $ (3*nbits) `quot` 20 + 26
        else MilliGas $ fromIntegral (nbits * nbits `quot` 6400)
 {-# INLINE intMultCost #-}
 
-intDivCost :: Integer -> Integer ->  MilliGas
+intDivCost :: Integer -> Integer -> MilliGas
 intDivCost !lop !rop
   | lop > rop = go lop
   | otherwise = go rop
@@ -152,40 +157,93 @@ intDivCost !lop !rop
     -- Note: The division algorithm basically has complexity O(M(n)log(n))
     -- With a bit of squinting (okay maybe a lot), we can simply charge as much as multiplication
     -- below our threshold, benchmarks find integer and rational division to be quite fast
-    let !nbits = (I# (IntLog.integerLog2# (abs a)) + 1)
+    let !nbits = numberOfBits a
     in if nbits <= intCostUpperBound then MilliGas $ fromIntegral $ (3*nbits) `quot` 20 + 26
        else MilliGas $ fromIntegral (nbits * nbits `quot` 6400)
 {-# INLINE intDivCost #-}
 
+-- | Int shifting needs a bit of an adjustment.
+-- It's hilariously fast, but it can also create numbers of hilariously large sizes
+--
+-- Shifting is essentially k * 2^p, so we can simply charge 2*p and the multiplication by `k` separately
 intShiftCost :: Integer -> Integer -> MilliGas
-intShiftCost _ !rop
-  | rop > 0 = MilliGas $ fromIntegral $ rop `quot` 1000
+intShiftCost lop !rop
+  | rop > 0 =
+    intPowCost 2 rop <> MilliGas ((3* (max (fromIntegral (numberOfBits lop)) (fromIntegral rop))) `quot` 20 + 26)
   | otherwise = MilliGas 0
 
+-- | Estimates the total computational cost of exponentiation by squaring
+-- using the average operand size (geometric mean).
+--
+-- Parameters:
+-- k     : Base integer
+-- p     : Exponent integer
+-- K     : Scaling constant (cost per bit operation), in our case 1 milligas
+-- alpha : Exponent from multiplication algorithm (e.g., 1.585 for Karatsuba)
+--
+-- The formula for total cost is:
+--
+--   C_total = T_m * K * (n_0 ^ alpha) * p^alpha
+--   After simplification
+--   C_total = T_m * K * (n_avg)^alpha
+--
+-- Where:
+--   - T_m    : Total number of multiplications (squarings and multiplications by k)
+--              For the worst-case scenario (exponent with all bits '1'):
+--              T_m = 2L - 2
+--   - n_avg  : Average operand size in bits (geometric mean of operand sizes)
+--              n_avg = n0 * 2^((L - 1) / 2)
+--   - n0     : Number of bits in the base k
+--   - L      : Number of bits in the exponent p
+--   - alpha  : Exponent from the multiplication algorithm complexity
+--              (alpha = log_2 3 ≈ 1.585 for Karatsuba algorithm)
+--
+-- Explanation:
+-- The operand size doubles with each squaring operation.
+-- The geometric mean is used to estimate the average operand size over all steps.
+-- Exponential growth due to squaring is captured in n_avg.
+-- Multiplying n_avg by K and raising to the power of alpha estimates the cost per multiplication.
+-- Total cost is then the cost per multiplication times the total number of multiplications.
 intPowCost :: Integer -> Integer -> MilliGas
-intPowCost !base !power = MilliGas $ g (I# (IntLog.integerLogBase# 10 (abs base))) (I# (IntLog.integerLogBase# 10 (abs power)))
+intPowCost !base !power = MilliGas total
   where
-  g x y = f ((x - 3) `div` 2) ((y - 3) `div` 2)
-  f x y = f00 * 2 ^ max x 0 * 300 ^ max y 0
-  f00 = 1000
-{- The benchmarks show the run time t, for x = log₁₀ base, y = log₁₀ power:
-           |  y = 3  | y = 5  | y = 7
-    x = 3  |  3 μs   | 1.2 ms | 302 ms
-    x = 5  |  7 μs   | 2.1 ms | 591 ms
-    x = 7  |  12 μs  | 4.3 ms | 988 ms
-
-    Let `g(x, y)` the function describing this dependency.
-    Note that `g(x + 2, y) = 2 g(x, y)`  and `g(x, y + 2) = 300 g(x, y)` with a good precision ε.
-    For simplicity, let also `f` be such that `g(x, y) = f((x - 3) / 2, (y - 3) / 2)`.
-    With a good precision ε, we thus need f such that
-    ```
-    f(0, 0) = 3 [μs]
-    f(x + 1, y) = 2 f(x, y)
-    f(x, y + 1) = 300 f(x, y)
-    ```
-    This means `f(x, y) = a^x • b^y • f₀₀`.
-    The first equation above means `f₀₀ = 3 [μs] ≈ 1000 [milligas]`, the second one means `a = 2`, and the third one means `b = 300`.
- -}
+  nDigitsBase, nDigitsPower, totalMults, k_const, operandSizeAverage :: SatWord
+  -- totalMults: Total number of multiplications (worst-case scenario)
+  -- For exponentiation by squaring, total multiplications T_m = 2L - 2
+  !totalMults = 2 * nDigitsPower - 2
+  -- n0: Number of bits in the base k
+  !nDigitsBase = fromIntegral (numberOfBits base)
+  !nDigitsPower = fromIntegral (numberOfBits power)
+  !k_const = 1 -- Our constant for karasuba mult per mul in terms of milligas
+  -- Constant for karasuba algorithm
+  alpha :: Double
+  alpha = 1.585
+  -- operandSizeAvg: Average operand size in bits (geometric mean)
+  -- operandSizeAvg = n0 * 2^((L - 1) / 2)
+  --
+  -- This calculation accounts for the exponential growth of operand sizes due to squaring.
+  -- The exponent (L - 1) / 2 represents the average number of squarings,
+  -- since operand size doubles with each squaring.
+  !operandSizeAverage =
+    nDigitsBase * (ceiling ((2 :: Double) ** (fromIntegral (nDigitsPower - 1) / 2)))
+  -- Note:
+  -- The exponential growth factor p^(alpha / 2) is already included in (operandSizeAvg ** alpha)
+  -- due to the properties of exponents:
+  --
+  --   (operandSizeAvg) ** alpha
+  -- = [n0 * 2^((L - 1) / 2)] ** alpha
+  -- = n0^alpha * 2^((L - 1) * alpha / 2)
+  --
+  -- Since 2^((L - 1) * alpha / 2) = [2^(L - 1)]^(alpha / 2)
+  -- and 2^(L - 1) ≈ p (when p is a power of 2),
+  -- we have:
+  --
+  --   2^((L - 1) * alpha / 2) = p^(alpha / 2)
+  --
+  -- Therefore, (operandSizeAvg ** alpha) includes the p^(alpha / 2) term,
+  -- and we do not need to multiply by it separately.
+  !total =
+    totalMults * k_const * ceiling (fromIntegral operandSizeAverage ** alpha)
 
 runTableModel :: (b -> MilliGas) -> GasArgs b -> MilliGas
 runTableModel nativeTable = \case
@@ -206,7 +264,7 @@ runTableModel nativeTable = \case
     TextListConcat (GasTextLength totalCharSize) (GasListLength nElems) -> MilliGas $
       fromIntegral totalCharSize * stringLenCost + fromIntegral nElems * listLenCost
       where
-      stringLenCost,listLenCost :: Word64
+      stringLenCost,listLenCost :: SatWord
       stringLenCost = 100
       listLenCost = 40
     ListConcat (GasListLength totalLen) ->
@@ -225,7 +283,7 @@ runTableModel nativeTable = \case
     in MilliGas $ fromIntegral $ bytes * mgPerByte
     -- a string of 10⁶ chars (which is 2×10⁶ sizeof bytes) takes a little less than 2×10⁶ to write
   GMakeList len sz ->
-    MilliGas $ fromIntegral len * sz
+    MilliGas $ fromIntegral len * fromIntegral sz
   GComparison cmpty -> case cmpty of
     TextComparison str ->
       MilliGas $ textCompareCost str + basicWorkGas
@@ -241,13 +299,22 @@ runTableModel nativeTable = \case
       MilliGas $ fromIntegral maxSz * basicWorkGas
     ObjComparison i ->
       MilliGas $ fromIntegral i * basicWorkGas
+    -- For sorting, what we do is essentially take the `sizeOf` number of bytes that we are comparing.
+    -- Take that, have a cost of comparison proportional to the number of bytes,
+    -- and charge for the _worst case_ O(n^2) number of comparisons.
+    SortComparisons size len ->
+      let !lenW = fromIntegral len
+          !bytePenaltyReduction = 1000
+      -- Comparisons is 1 mg per byte, so we simply take the length^2 * size
+      in MilliGas $ (fromIntegral size * lenW * lenW) `div` bytePenaltyReduction
+
   GSearch sty -> case sty of
     SubstringSearch needle hay -> MilliGas $ fromIntegral (T.length needle + T.length hay) + basicWorkGas
     FieldSearch cnt -> MilliGas $ fromIntegral cnt + basicWorkGas
   GPoseidonHashHackAChain len ->
     MilliGas $ fromIntegral (len * len) * quadraticGasFactor + fromIntegral len * linearGasFactor
      where
-     quadraticGasFactor, linearGasFactor :: Word64
+     quadraticGasFactor, linearGasFactor :: SatWord
      quadraticGasFactor = 50_000
      linearGasFactor = 38_000
   GModuleMemory bytes -> moduleMemoryCost bytes
@@ -293,7 +360,7 @@ runTableModel nativeTable = \case
   textCompareCost str = fromIntegral $ T.length str
   -- Running CountBytes costs 0.9 MilliGas, according to the analysis in bench/Bench.hs
 
-basicWorkGas :: Word64
+basicWorkGas :: SatWord
 basicWorkGas = 25
 
 -- Slope to costing function,
@@ -309,14 +376,13 @@ moduleMemoryCost sz = MilliGas $ ceiling (moduleMemFeePerByte * fromIntegral sz)
 perByteFactor :: Rational
 perByteFactor = 1%10
 
-
-applyLamCostPerArg :: Word64
+applyLamCostPerArg :: SatWord
 applyLamCostPerArg = 25
 
 memoryCost :: Word64 -> MilliGas
 memoryCost !bytes = gasToMilliGas (Gas totalCost)
   where
-  !sizeFrac = realToFrac bytes
+  !sizeFrac = toRational bytes
   !totalCost = ceiling (perByteFactor * sizeFrac)
 {-# INLINE memoryCost #-}
 
@@ -573,17 +639,28 @@ replNativeGasTable = \case
 
 
 
-dbSelectPenalty :: Word64
+dbSelectPenalty :: SatWord
 dbSelectPenalty = 40_000_000
 
-dbWritePenalty :: Word64
+dbWritePenalty :: SatWord
 dbWritePenalty = 100_000
 
-dbReadPenalty :: Word64
+dbReadPenalty :: SatWord
 dbReadPenalty = 10_000
 
-dbMetadataTxPenalty :: Word64
+dbMetadataTxPenalty :: SatWord
 dbMetadataTxPenalty = 100_000
+
+-- | The gas amount for a small constant amount of work
+constantWorkNodeGas :: MilliGas
+constantWorkNodeGas = (MilliGas 50)
+
+unconsWorkNodeGas :: MilliGas
+unconsWorkNodeGas = (MilliGas 100)
+
+tryNodeGas :: MilliGas
+tryNodeGas = (MilliGas 100)
+
 
 -- PactValue serialization costs
 serializationCosts :: SerializationCosts
@@ -596,7 +673,7 @@ serializationCosts = SerializationCosts
   , decimalCostMilliGasOffset = 59
   , decimalCostMilliGasPerDigit = 2
   , timeCostMilliGas = 184
-  }
+}
 
 
 

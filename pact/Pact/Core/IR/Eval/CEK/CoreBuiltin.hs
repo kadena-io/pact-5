@@ -216,8 +216,10 @@ rawPow info b cont handler _env = \case
     decPow i (Decimal 0 i')
   args -> argsError info b args
   where
-  decPow l r = do
-    let result = Musl.trans_pow (dec2F l) (dec2F r)
+  decPow base pow = do
+    let integralPart = floor pow
+    chargeGasArgs info $ GIntegerOpCost PrimOpPow (decimalMantissa base) integralPart
+    let result = Musl.trans_pow (dec2F base) (dec2F pow)
     guardNanOrInf info result
     returnCEKValue cont handler (VLiteral (LDecimal (f2Dec result)))
 
@@ -313,7 +315,7 @@ defCmp predicate info b cont handler _env = \case
   args@[VLiteral lit1, VLiteral lit2] -> litCmpGassed info lit1 lit2 >>= \case
     Just ordering -> returnCEKValue cont handler $ VBool $ predicate ordering
     Nothing -> argsError info b args
-  -- Todo: time comparisons
+  -- Time is constant time
   [VTime l, VTime r] -> returnCEKValue cont handler $ VBool $ predicate (compare l r)
   args -> argsError info b args
 {-# INLINE defCmp #-}
@@ -392,7 +394,6 @@ rawShow info b cont handler _env = \case
     returnCEKValue cont handler $ VString str
   args -> argsError info b args
 
--- Todo: Gas here is complicated, greg worked on this previously
 rawContains :: (IsBuiltin b) => NativeFunction e b i
 rawContains info b cont handler _env = \case
   [VString f, VObject o] -> do
@@ -413,6 +414,9 @@ rawSort info b cont handler _env = \case
   [VList vli]
     | V.null vli -> returnCEKValue cont handler (VList mempty)
     | otherwise -> do
+    sizes <- traverse (sizeOf info SizeOfV0) vli
+    let maxSize = maximum sizes
+    chargeGasArgs info (GComparison (SortComparisons maxSize (V.length vli)))
     vli' <- liftIO $ do
       v' <- V.thaw vli
       V.sort v'
@@ -1088,7 +1092,8 @@ write' wt info b cont handler env = \case
   [VTable tv, VString key, VObject rv] -> do
     guardTable info tv GtWrite
     let check' = if wt == Update then checkPartialSchema else checkSchema
-    if check' rv (_tvSchema tv) then do
+    cond <- check' info rv (_tvSchema tv)
+    if cond then do
       let rdata = RowData rv
       rvSize <- sizeOf info SizeOfV0 rv
       chargeGasArgs info (GWrite rvSize)
@@ -1408,6 +1413,7 @@ coreNotQ info b cont handler env = \case
 coreWhere :: (IsBuiltin b) => NativeFunction e b i
 coreWhere info b cont handler _env = \case
   [VString field, VClosure app, VObject o] -> do
+    chargeGasArgs info (GObjOp (ObjOpLookup field (M.size o)))
     case M.lookup (Field field) o of
       Just v -> do
         let cont' = EnforceBoolC info cont
