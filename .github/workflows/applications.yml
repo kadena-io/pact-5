@@ -53,7 +53,8 @@ jobs:
         ghc --version
         cabal --version
 
-    - name: Setting up MPFR
+    - name: Setting up MPFR (Ubuntu)
+      if: startsWith(matrix.os, 'ubuntu-')
       shell: bash
       run: sudo apt-get update && sudo apt-get install -y libmpfr-dev
 
