@@ -15,9 +15,7 @@ import Pact.Core.Command.Server
 import Pact.Core.Command.Server.Config
 import Pact.Core.Command.Server.History
 import Pact.Core.Environment
-import Pact.Core.Persistence.SQLite
 import Pact.Core.SPV
-import Pact.Core.Serialise
 import qualified Pact.JSON.Encode as J
 import Servant
 import Servant.Client
