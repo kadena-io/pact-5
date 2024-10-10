@@ -1337,9 +1337,9 @@ evalErrorToBoundedText :: EvalError -> BoundedText PactErrorMsgSize
 evalErrorToBoundedText = mkBoundedText . \case
   ArrayOutOfBoundsException len ix ->
     thsep
-    [ "Array index out of bounds. Length"
+    [ "Array index out of bounds. Length:"
     , tInt len <> ","
-    , "Index"
+    , "Index:"
     , tInt ix]
   ArithmeticException txt ->
     thsep ["Arithmetic exception:", txt]
@@ -1353,25 +1353,25 @@ evalErrorToBoundedText = mkBoundedText . \case
     thsep ["Gas limit", tdquotes (tGasLimit lim) <> "exceeded:", tGas gas]
   InvariantFailure msg ->
     thsep
-      [ "Execution Invariant error, please report this to the pact team @kadena:"
+      [ "Execution Invariant error, please report this to the Pact team @kadena:"
       , invariantErrorToBoundedText' msg]
   NativeArgumentsError (NativeName n) tys ->
     thsep $
       ["Type error: failed to call native function", n <> ",", "with argument(s) of type(s):"]
       ++ tCommaSep (renderArgTypeError <$> tys)
   EvalError txt ->
-    thsep ["Program encountered an unhandled raised error:", txt]
+    thsep ["Program encountered an unhandled error:", txt]
   YieldOutsideDefPact ->
-    "Try to yield a value outside a running defpact execution"
+    "Failed to yield a value outside of a running defpact execution."
   NoActiveDefPactExec ->
-    "No active defpact execution in the environment"
+    "No active defpact execution found in the environment."
   NoYieldInDefPactStep (DefPactStep step _ (DefPactId dpid) _) ->
-    thsep ["No yield value found from previous pact step.", "Current step:", tInt step, "defpact id:", dpid]
+    thsep ["No yield value found from the previous defpact step.", "Current step:", tInt step, "defpact id:", dpid]
   InvalidDefPactStepSupplied (DefPactStep step _ _ _) stepCount ->
     thsep
-    [ "DefPactStep does not match defpact properties:"
-    , "requested:", tInt step
-    , "step count:", tInt stepCount]
+    [ "Step does not match defpact properties:"
+    , "Requested:", tInt step
+    , "Step count:", tInt stepCount]
   DefPactIdMismatch reqId envId ->
     thsep
     [ "Requested defpact id:", tDpId reqId
@@ -1379,179 +1379,177 @@ evalErrorToBoundedText = mkBoundedText . \case
     ]
   CCDefPactContinuationError pactStep _ccExec _dbExec ->
     thsep
-    [ "Crosschain defpact continuation error:"
+    [ "Cross-chain defpact continuation error:"
     , "defpact id:", (tDpId (_psDefPactId pactStep))
     ]
   NestedDefPactParentRollbackMismatch pid rollback parentRollback ->
     thsep
-    [ "Nested defpact execution failed, parameter mismatch:"
-    , "defpact id:", tDpId pid
+    [ "Nested defpact execution failed for defpact id:", tDpId pid
+    , "Parameter mismatch."
     , "Rollback:", tBool rollback
     , "Parent rollback:", tBool parentRollback
     ]
   NestedDefPactParentStepCountMismatch pid stepCount parentStepCount ->
     thsep
-    [ "Nested defpact execution failed, parameter mismatch:"
-    , "PactId:", tDpId pid
-    , "step count:", T.pack (show stepCount)
+    [ "Nested defpact execution failed for defpact id:", tDpId pid
+    , "Parameter mismatch."
+    , "Step count:", T.pack (show stepCount)
     , "Parent step count:", T.pack (show parentStepCount)
     ]
   NoPreviousDefPactExecutionFound ps ->
     thsep ["No previous defpact execution found for defpact id: ", tDpId (_psDefPactId ps)]
   DefPactAlreadyCompleted ps -> thsep
-    [ "Requested defpact already completed:", "defpact id:", tDpId (_psDefPactId ps)]
+    ["Requested defpact execution already completed for defpact id:", tDpId (_psDefPactId ps)]
   NestedDefPactNeverStarted ps -> thsep
-    ["Requested nested defpact never started:", "defpact id:", tDpId(_psDefPactId ps)]
+    ["Requested nested defpact execution never started for defpact id:", tDpId(_psDefPactId ps)]
   NestedDefPactDoubleExecution ps -> thsep
-    ["Requested nested defpact double execution:", "defpact id:" , tDpId (_psDefPactId ps)]
+    ["Requested nested defpact double execution failed for defpact id:" , tDpId (_psDefPactId ps)]
   MultipleOrNestedDefPactExecFound pe -> thsep
-    ["defpact execution context already in the environment: defpact id:", tDpId (_peDefPactId pe)]
+    ["Another defpact execution context is already running in the environment for defpact id:", tDpId (_peDefPactId pe)]
   DefPactStepHasNoRollback ps -> thsep
-    ["Step has no rollback:", "defpact id:", tDpId (_psDefPactId ps)]
-  DefPactStepNotInEnvironment -> "No DefPactStep in the environment"
-  NoDefPactIdAndExecEnvSupplied -> "No defpact id or execution environment supplied"
+    ["Step has no rollback in defpact id:", tDpId (_psDefPactId ps)]
+  DefPactStepNotInEnvironment -> "No defpact step found in the environment."
+  NoDefPactIdAndExecEnvSupplied -> "No defpact id or execution environment supplied."
   DefPactRollbackMismatch ps pe -> thsep
-    [ "Rollback mismatch in DefPactStep and defpact execution environment:"
-    , "defpact id:", tDpId (_psDefPactId ps)
-    , "step rollback:", tBool (_psRollback ps)
-    , "DefPactExec rollback:", tBool (_peStepHasRollback pe)
+    [ "Rollback mismatch in defpact step and defpact execution environment for defpact id:", tDpId (_psDefPactId ps)
+    , "Step rollback:", tBool (_psRollback ps)
+    , "Execution environment rollback:", tBool (_peStepHasRollback pe)
     ]
   DefPactStepMismatch ps pe -> thsep
-    [ "Step mismatch in DefPactStep and defpact execution environment:"
-    , "defpact id:", tDpId (_psDefPactId ps)
-    , "step:", tInt (_psStep ps)
-    , "DefPactExec step:", tInt (_peStep pe + 1)
+    [ "Step mismatch in DefPactStep and defpact execution environment for defpact id:", tDpId (_psDefPactId ps)
+    , "Step:", tInt (_psStep ps)
+    , "Execution environment step:", tInt (_peStep pe + 1)
     ]
   EnforcePactVersionFailure min' max' -> thsep
-    [ "Enforce pact-version failed:"
-    , "Current Version:", T.pack (V.showVersion PI.version)
-    , "Minimum Version:", T.pack (V.showVersion min')
-    , maybe mempty (\v -> "Maximum Version: " <> T.pack (V.showVersion v)) max'
+    [ "Enforcement of Pact version failed."
+    , "Current version:", T.pack (V.showVersion PI.version)
+    , "Minimum version:", T.pack (V.showVersion min')
+    , maybe mempty (\v -> "Maximum version: " <> T.pack (V.showVersion v)) max'
     ]
   EnforcePactVersionParseFailure str -> thsep
-    [ "Enforce pact-version failed:"
-    , "Could not parse", str, ", expect list of dot-separated integers"
+    [ "Enforcement of Pact version failed:"
+    , "Could not parse", str, ", expect a list of dot-separated integers."
     ]
   InvalidManagedCap fqn ->
-    thsep ["Install capability error: capability is not managed and cannot be installed:", tFqn fqn]
+    thsep ["Install capability failed. Capability is not declared as a managed capability and cannot be installed.", tFqn fqn]
   CapNotInstalled cap ->
     thsep
-      [ "Capability not installed:", renderQualName (_ctName cap)
-      , ". Check that the capabilty is in the sigs or the arguments are correct"]
+      ["Capability " renderQualName (_ctName cap) was not installed. "
+      , "Check the sigs field or the arguments to verify that the capability is specified correctly."]
   CapAlreadyInstalled cap ->
-    thsep ["Capability already installed:", renderQualName (_ctName cap)]
+    thsep ["Capability " renderQualName (_ctName cap) " already installed."]
   ModuleMemberDoesNotExist fqn ->
-    thsep ["Module member does not exist", tFqn fqn]
+    thsep ["Module member does not exist:", tFqn fqn]
   NoSuchKeySet ksn ->
-    thsep ["Cannot find keyset in database:", renderKeySetName ksn]
+    thsep ["Cannot find keyset in the database:", renderKeySetName ksn]
   CannotUpgradeInterface ifn ->
     thsep ["Interface cannot be upgraded:", renderModuleName ifn]
   DbOpFailure dbe ->
     thsep ["Error during database operation:", dbOpErrorToBoundedText' dbe]
   DynNameIsNotModRef n ->
-    thsep ["Attempted to use", abbrevText 25 n, "as dynamic name, but it is not a modref"]
+    thsep ["Attempt to use", abbrevText 25 n, "as a dynamic name failed because it is not a valid modref."]
   ModuleDoesNotExist m ->
     thsep ["Cannot find module:", renderModuleName m]
   ExpectedModule mn ->
     thsep ["Expected module, found interface:", renderModuleName mn]
   HashNotBlessed mn hs  ->
     thsep
-      ["Execution aborted, hash not blessed for module"
+      ["Execution aborted, hash not blessed for module:"
       , renderModuleName mn
       , "with hash"
       , moduleHashToText hs]
   CannotApplyPartialClosure ->
-    "Attempted to apply a partially applied closure outside of native callsite"
+    "Failed to apply a partial closure outside of the native callsite."
   ClosureAppliedToTooManyArgs ->
-    "Attempted to apply a function or closure to too many arguments"
+    "Failed to apply a function or closure because there were too many arguments."
   FormIllegalWithinDefcap msg ->
-    thsep ["Form illegal within defcap", msg]
+    thsep ["Form not allowed within a defcap declaration.", msg]
   RunTimeTypecheckFailure argErr ty ->
     thsep
-      ["Runtime typecheck failure, argument is"
+      ["Type check failed. The argument is "
       , renderArgTypeError argErr
-      , "but expected type"
+      , "but the expected type is "
       , renderArgTypeError (typeToArgTypeError ty)]
   NativeIsTopLevelOnly b ->
-    thsep ["Top-level call used in module", _natName b]
+    thsep ["Top-level call used in module:", _natName b]
   EventDoesNotMatchModule mn ->
-    thsep ["Emitted event does not match module", renderModuleName mn]
+    thsep ["Emitted event does not match module:", renderModuleName mn]
   InvalidEventCap fqn ->
-    thsep ["Invalid event capability", tFqn fqn]
+    thsep ["Invalid event capability:", tFqn fqn]
   NestedDefpactsNotAdvanced dpid ->
-    thsep ["Nested defpact not advanced", tDpId dpid]
+    thsep ["Nested defpact execution failed to advanced for defpact id:", tDpId dpid]
   ExpectedPactValue ->
-    "Expected Pact Value, got closure or table reference"
+    "Expected a Pact value, but got a closure or table reference."
   NotInDefPactExecution ->
-    "Attempted to fetch defpact data, but currently not within defpact execution"
+    "Attempt to fetch defpact data failed because there's no defpact execution currently being executed."
   RootNamespaceInstallError ->
-    "Namespace installation error: cannot install in root namespace"
+    "Namespace installation failed. Cannot install modules in the root namespace."
   PointNotOnCurve ->
-    "Point lies outside of elliptic curve"
+    "Point lies outside of the elliptic curve."
   YieldProvenanceDoesNotMatch received expected ->
     thsep
-      (["Yield provenance does not match, received"
+      (["Yield provenance does not match, received:"
       , renderProvenance received
-      , ", expected"
+      , ", expected:"
       ] ++ (renderProvenance <$> expected))
   MismatchingKeysetNamespace ns ->
     thsep
-    ["Error defining keyset, namespace mismatch, expected ", abbrevText 10 (_namespaceName ns)]
+    ["Defining keyset failed because of a namespace mismatch. Expected namespace:", abbrevText 10 (_namespaceName ns)]
   RuntimeRecursionDetected qn ->
-    thsep ["Recursion detected by the runtime. Recursing in function:", renderQualName qn]
+    thsep ["Recursion detected by the runtime in function:", renderQualName qn]
   SPVVerificationFailure e ->
     thsep ["SPV verification failure:", e]
   ExpectedBoolValue pv ->
     thsep
-      [ "expected bool value, got"
+      [ "Expected Boolean value, but got:"
       , renderPvAsArgType pv]
   UserGuardMustBeADefun qn dk ->
     thsep
       [ "User guard closure"
       , renderQualName qn
-      , "must be defun, got"
+      , "must be in a defun declaration, but got:"
       , renderDefKind dk]
   WriteValueDidNotMatchSchema (Schema qn _) _ ->
     thsep
-      ["Attempted insert failed due to schema mismatch with", renderQualName qn]
+      ["Insert failed because of a schema mismatch with", renderQualName qn]
   ObjectIsMissingField f _ ->
     thsep
       [ "Key"
       , abbrevText 10 (_field f)
-      , "not found in object"]
+      , "not found in object."]
   NativeExecutionError n msg ->
     thsep
-      [ "native execution failure,", _natName n
-      , "failed with message:"
+      [ "Native execution failed for", _natName n
+      , "with the message:"
       , msg] -- Note: these strings are controlled by us.
   ExpectedStringValue pv ->
     thsep
-    ["expected string value, got:", renderPvAsArgType pv]
+    ["Expected string value, but got:", renderPvAsArgType pv]
   ExpectedCapToken pv ->
-    thsep ["expected capability token value, got:", renderPvAsArgType pv]
+    thsep ["Expected capability token value, but got:", renderPvAsArgType pv]
   InvalidKeysetFormat _ ->
-    "Invalid keyset format. Check the submitted key data is of the right length or format"
+    "Invalid keyset format. Check that keys have the right length and signature scheme."
   InvalidKeysetNameFormat ksn ->
     thsep ["Invalid keyset name format:", abbrevText 20 ksn]
   CannotDefineKeysetOutsideNamespace ->
-    "Cannot define keyset outside of a namespace"
+    "Cannot define keyset outside of a namespace."
   NamespaceNotFound nsn ->
     thsep ["Namespace not found:", abbrevText 10 (_namespaceName nsn)]
   ContinuationError msg ->
-    thsep ["Continuation Error:", msg]
+    thsep ["Continuation error:", msg]
   OperationIsLocalOnly n ->
     thsep ["Operation only permitted in local execution mode:", _natName n]
   CannotApplyValueToNonClosure ->
-    "Cannot apply value to non-closure"
+    "Cannot apply value to a non-closure."
   InvalidCustomKeysetPredicate pn ->
-    thsep ["Invalid custom predicate for keyset", abbrevText 20 pn]
+    thsep ["Invalid custom predicate for keyset:", abbrevText 20 pn]
   HyperlaneError he ->
     thsep ["Hyperlane native error:", hyperlaneErrorToBoundedText' he]
   HyperlaneDecodeError he ->
     thsep ["Hyperlane decode error:", hyperlaneDecodeErrorToBoundedText' he]
   ModuleAdminNotAcquired mn ->
     thsep
-      ["Module admin necessary for operation but has not been acquired:", renderModuleName mn]
+      ["Module admin is necessary for operation but has not been acquired:", renderModuleName mn]
   -- Maybe library dependent, do not serialise
   UnknownException _ ->
     thsep ["Unknown exception"]
