@@ -5,6 +5,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE InstanceSigs #-}
 
 
 module Pact.Core.PactValue
@@ -54,7 +55,6 @@ import Pact.Core.Pretty
 import Pact.Core.ModRefs
 import Pact.Core.Capabilities
 
-import qualified Pact.Core.Pretty as Pretty
 
 data PactValue
   = PLiteral !Literal
@@ -110,7 +110,7 @@ formatLTime = T.pack . PactTime.formatTime simpleISO8601
 instance Pretty PactValue where
   pretty = \case
     PLiteral lit -> pretty lit
-    PList p -> Pretty.list (V.toList (pretty <$> p))
+    PList p -> brackets $ hsep $ (V.toList (pretty <$> p))
     PGuard g -> pretty g
     PObject o -> pretty (ObjectData o)
     PModRef md -> pretty md
@@ -171,6 +171,21 @@ pactValueToText = \case
     tcurly n l = let
       l' = fmap (\(k, v) -> T.concat [k, ": ", v]) l
       in T.concat [n, " {", T.intercalate "," l', "}"]
+
+instance Pretty (AbbrevPretty PactValue) where
+  pretty (AbbrevPretty plit) = case plit of
+    PLiteral lit -> pretty (AbbrevPretty lit)
+    PGuard g -> pretty (AbbrevPretty <$> g)
+    PObject o ->
+      braces $ prettyAbbrevText' 15 $ mconcat $ punctuate comma (objPair <$> M.toList o)
+        where
+        objPair (f, t) = dquotes (pretty f) <> ":" <+> pretty t
+    PModRef md -> pretty md
+    PCapToken (CapToken fqn args) ->
+      pretty (CapToken fqn (AbbrevPretty <$> args))
+    PTime t -> pretty (PactTime.formatTime "%Y-%m-%d %H:%M:%S%Q %Z" t)
+    PList l ->
+      brackets (prettyAbbrevText' 15 (hsep (pretty . AbbrevPretty <$> V.toList l)))
 
 synthesizePvType :: PactValue -> Type
 synthesizePvType = \case
