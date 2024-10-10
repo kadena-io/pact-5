@@ -45,6 +45,7 @@ module Pact.Core.Gas.Types
   , GasObjectSize(..)
   , ComparisonType(..)
   , SearchType(..)
+  , ModuleOp(..)
 
   , gmGasLimit
   , gmDesc
@@ -216,6 +217,8 @@ data CapOp
   = CapOpRequire !Int
   deriving (Eq, Show, Ord, Generic, NFData)
 
+
+
 data GasArgs b
   = GAConstant !MilliGas
   -- ^ Constant gas costs
@@ -250,12 +253,23 @@ data GasArgs b
   | GHyperlaneEncodeDecodeTokenMessage !Int
   -- ^ Cost of hyperlane-encode-token-message and hyperlane-decode-token-message
   --   on this size (in bytes) of the hyperlane TokenMessage base64-encoded string.
-  | GModuleMemory !Word64
+  | GModuleLoad !Int
+  -- ^ The cost of loading a module, with its argument in its byte size
+  | GModuleDeps !Int !Int
+  -- ^ The cost of integrating module deps, which is essentially a map union
+  -- Map union is O(m*log(n/m+1)) where 0 < m <= n
   | GStrOp !StrOp
   | GObjOp !ObjOp
   | GCapOp !CapOp
   | GCountBytes
   -- ^ Cost of computing SizeOf for N bytes.
+  deriving (Show, Generic, NFData)
+
+data ModuleOp
+  = MOpLoadModule !Int
+  | MOpLoadModuleDeps !Int !Int
+  | MOpDesugarModule !Int -- Size of tree
+  | MOp
   deriving (Show, Generic, NFData)
 
 instance Show b => Pretty (GasArgs b) where
