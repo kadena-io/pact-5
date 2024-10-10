@@ -1564,10 +1564,10 @@ evalErrorToBoundedText = mkBoundedText . \case
 userRecoverableErrorToBoundedText :: UserRecoverableError -> BoundedText PactErrorMsgSize
 userRecoverableErrorToBoundedText = mkBoundedText . \case
   UserEnforceError t -> t
-  OneShotCapAlreadyUsed -> "Automanaged capability used more than once"
+  OneShotCapAlreadyUsed -> "Managed capabilities can only be used once."
   CapabilityNotGranted ct ->
     thsep
-      ["require-capability: not granted:", renderQualName(_ctName ct)]
+      ["The required capability has not been granted:", renderQualName(_ctName ct)]
   NoSuchObjectInDb tn rk ->
     thsep
       ["No value found in table"
@@ -1581,14 +1581,14 @@ userRecoverableErrorToBoundedText = mkBoundedText . \case
       , "): "] ++ tCommaSep (fmap (abbrevText 10 . renderPublicKeyText) $ S.toList kskeys))
   CapabilityPactGuardInvalidPactId currPid pgId ->
     thsep
-      ["Capability pact guard failed: invalid pact id, expected"
+      ["Pact guard failed because of an invalid pact id. Expected:"
       , tDpId pgId
-      , "got"
+      , ", but got:"
       , tDpId currPid]
   EnvReadFunctionFailure desc ->
-    thsep [_natName desc, "failed. Invalid format or missing key"]
+    thsep [_natName desc, "failed. Invalid format or missing key."]
   VerifierFailure (VerifierName verif) msg ->
-    thsep ["Verifier failure", verif <> ":", msg]
+    thsep ["Verifier" verif <> "failed with the message:", msg]
   CapabilityGuardNotAcquired cg ->
     thsep ["Capability not acquired:", renderQualName (_cgName cg)]
 
@@ -1598,11 +1598,11 @@ userRecoverableErrorToBoundedText = mkBoundedText . \case
 desugarErrorToBoundedText :: DesugarError -> BoundedText PactErrorMsgSize
 desugarErrorToBoundedText = mkBoundedText . \case
     UnboundTermVariable t ->
-      thsep ["Unbound variable", t]
+      thsep ["Unbound variable:", t]
     UnboundTypeVariable t ->
-      thsep ["Unbound type variable", t]
+      thsep ["Unbound type variable:", t]
     InvalidCapabilityReference t ->
-      thsep ["Variable or function used in special form is not a capability", t]
+      thsep ["Variable or function used in special form is not a capability:", t]
     NoSuchModuleMember mn txt ->
       thsep ["Module", renderModuleName mn, "has no such member:", txt]
     NoSuchModule mn ->
@@ -1610,38 +1610,38 @@ desugarErrorToBoundedText = mkBoundedText . \case
     NoSuchInterface mn ->
       thsep ["Cannot find interface: ", renderModuleName mn]
     NotAllowedWithinDefcap dc ->
-      thsep [dc, "form not allowed within defcap"]
+      thsep [dc, "form not allowed within a defcap declaration."]
     NotAllowedOutsideModule txt ->
-      thsep [txt, "not allowed outside of a module"]
+      thsep [txt, "not allowed outside of a module."]
     ImplementationError mn1 mn2 defn ->
       thsep [ "Module"
             , renderModuleName mn1
             , "does not correctly implement the function"
             , defn
-            , "from Interface"
+            , "from the interface:"
             , renderModuleName mn2]
     RecursionDetected mn txts ->
       thsep $
-      ["Recursive cycle detected in Module"
+      ["Recursive cycle detected in module"
       , renderModuleName mn
       , "in the following functions:"] ++ tCommaSep txts
     InvalidGovernanceRef gov ->
       thsep ["Invalid governance. Must be a 0-argument defcap or a keyset. Found:", renderQualName gov]
     InvalidDefInTermVariable n ->
-      thsep ["Invalid definition in term variable position:", n]
+      thsep ["Invalid definition in variable position:", n]
     InvalidModuleReference mn ->
-      thsep ["Invalid Interface attempted to be used as module reference:", renderModuleName mn]
-    EmptyBindingBody -> "Bind expression lacks an accompanying body"
+      thsep ["Attempt to use an interface as a module reference failed:", renderModuleName mn]
+    EmptyBindingBody -> "Bind expression lacks an accompanying body."
     LastStepWithRollback mn ->
-      thsep ["rollbacks aren't allowed on the last step in:", renderQualName mn]
+      thsep ["Rollbacks aren't allowed on the last step in:", renderQualName mn]
     ExpectedFreeVariable t ->
-      thsep ["Expected free variable in expression, found locally bound: ", t]
+      thsep ["Expected free variable in expression, found locally bound variable: ", t]
     -- Todo: pretty these
     InvalidManagedArg arg ->
-      thsep ["Invalid Managed arg: no such arg with name:", arg]
+      thsep ["Invalid managed argument. No argument with the name:", arg]
     NotImplemented mn ifn ifdn ->
       thsep
-        ["Interface member not implemented, module"
+        ["Interface member not implemented. Module"
         , renderModuleName mn
         , "does not implement interface"
         , renderModuleName ifn
@@ -1649,19 +1649,19 @@ desugarErrorToBoundedText = mkBoundedText . \case
         , ifdn]
     InvalidImports mn imps ->
       thsep $
-        ["Invalid imports, module or interface"
+        ["Invalid imports. Module or interface"
         , renderModuleName mn
         , "does not implement the following members:"] ++ tCommaSep imps
     InvalidImportModuleHash mn mh ->
       thsep
         ["Import error for module"
         , renderModuleName mn
-        , ", hash not blessed:"
+        , ". The module hash has not been blessed:"
         , moduleHashToText mh]
     InvalidSyntax msg ->
       thsep ["Desugar syntax failure:", msg]
     InvalidDefInSchemaPosition n ->
-      thsep ["Invalid def in defschema position:", n, "is not a valid schema"]
+      thsep ["definition in defschema position:", n, "is not a valid schema."]
     InvalidDynamicInvoke (DynamicName dnName dnCall) ->
       thsep ["Invalid dynamic call:", dnName <> "::" <> dnCall]
     DuplicateDefinition qn ->
@@ -1677,9 +1677,9 @@ parseErrorToBoundedText = mkBoundedText . \case
   ParsingError e ->
     thsep [pErr, "Expected:", e]
   TooManyCloseParens e ->
-    thsep [pErr, "Too many closing parens, remaining tokens:", e]
+    thsep [pErr, "Too many closing parentheses. Remaining tokens:", e]
   UnexpectedInput e ->
-    thsep [pErr, "Unexpected input after expr, remaining tokens:", e]
+    thsep [pErr, "Unexpected input after expression. Remaining tokens:"", e]
   PrecisionOverflowError i ->
     thsep [pErr, "Precision overflow (>=255 decimal places): ", tInt i, "decimals"]
   InvalidBaseType txt ->
@@ -1690,11 +1690,11 @@ parseErrorToBoundedText = mkBoundedText . \case
 lexerErrorToBoundedText :: LexerError -> BoundedText PactErrorMsgSize
 lexerErrorToBoundedText = mkBoundedText . \case
   LexicalError c1 c2 ->
-    thsep ["Encountered unexpected character", tdquotes (T.singleton c1) <> ",", "Last seen", tdquotes (T.singleton c2)]
+    thsep ["Encountered an unexpected character", tdquotes (T.singleton c1) <> ".", "Last seen", tdquotes (T.singleton c2)]
   StringLiteralError te ->
     thsep ["String literal parsing error: ", te]
   OutOfInputError c ->
-    thsep ["Ran out of input before finding a lexeme. Last Character seen: ", tdquotes (T.singleton c)]
+    thsep ["Ran out of input before finding a lexeme. Last character seen: ", tdquotes (T.singleton c)]
 
 
 -------------------------------------------------------------------------------------------
