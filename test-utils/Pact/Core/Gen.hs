@@ -388,7 +388,7 @@ evalModuleGen :: Gen b -> Gen i -> Gen (EvalModule b i)
 evalModuleGen b i= do
   name <- moduleNameGen
   gov <- governanceGen
-  defs <- Gen.list (Range.linear 0 100) (defGen b i)
+  defs <- Gen.list (Range.linear 1 100) (defGen b i)
   blessed <- Set.fromList <$> Gen.list (Range.linear 0 100) moduleHashGen
   imps <- Gen.list (Range.linear 0 100) importGen
   impl <- Gen.list (Range.linear 0 100) moduleNameGen
@@ -420,6 +420,12 @@ moduleDataGen b i = Gen.choice
   where
     m = Gen.map (Range.linear 0 8) $ (,) <$> fullyQualifiedNameGen <*> defGen b i
 
+moduleDataOnlyGen :: Gen b -> Gen i -> Gen (ModuleData b i)
+moduleDataOnlyGen b i = Gen.choice
+  [ ModuleData <$> evalModuleGen b i<*> m
+  ]
+  where
+    m = Gen.map (Range.linear 0 8) $ (,) <$> fullyQualifiedNameGen <*> defGen b i
 
 defPactIdGen :: Gen DefPactId
 defPactIdGen = DefPactId <$> identGen

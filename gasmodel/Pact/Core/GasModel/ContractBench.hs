@@ -41,6 +41,7 @@ import Pact.Core.Gas
 import Pact.Core.Namespace
 import Pact.Core.Serialise
 import Pact.Core.Persistence.MockPersistence
+import Pact.Core.Gen
 
 import Pact.Core.Errors
 import Pact.Core.Interpreter
