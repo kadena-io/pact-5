@@ -4,6 +4,7 @@ module Pact.Core.Gas.Utils
   ( chargeGasArgsM
   , chargeGasArgs
   , chargeFlatNativeGas
+  , scalarMulMilliGas
   ) where
 
 import Control.Lens
@@ -16,6 +17,12 @@ import Pact.Core.Errors
 import Pact.Core.Gas.Types
 import Pact.Core.Gas.TableGasModel
 import Pact.Core.Environment
+
+-- | Multiply Milligas by a scalar
+scalarMulMilliGas :: Integral a => MilliGas -> a -> MilliGas
+scalarMulMilliGas (MilliGas mg) i =
+  MilliGas (mg * fromIntegral i)
+{-# INLINE scalarMulMilliGas #-}
 
 chargeGasArgsM
   :: GasEnv b i -> i -> [StackFrame i] -> GasArgs b -> IO (Either (PactError i) ())

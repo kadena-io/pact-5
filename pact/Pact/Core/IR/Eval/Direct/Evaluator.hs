@@ -1297,18 +1297,3 @@ emitXChainEvents mResume dpe = do
       , PString (renderQualName (view (peContinuation . pcName) dpe))
       , PList (V.fromList (view (peContinuation . pcArgs) dpe)) ]
       mh
-
-
-
-
---------------------------
--- Gas-related code
---------------------------
-constantWorkNodeGas :: MilliGas
-constantWorkNodeGas = (MilliGas 50)
-
-unconsWorkNodeGas :: MilliGas
-unconsWorkNodeGas = (MilliGas 100)
-
-tryNodeGas :: MilliGas
-tryNodeGas = (MilliGas 100)

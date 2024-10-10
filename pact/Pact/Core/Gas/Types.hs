@@ -7,6 +7,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module Pact.Core.Gas.Types
   ( MilliGas(..)
@@ -52,7 +53,7 @@ module Pact.Core.Gas.Types
   , gmNativeTable
 
   , freeGasModel
-
+  , module Pact.Core.SatWord
   ) where
 
 
@@ -61,7 +62,6 @@ import Control.Lens
 import Data.Decimal(Decimal)
 import Data.Monoid
 import Data.Word (Word64)
-import Data.Semiring(Semiring)
 import Data.Primitive hiding (sizeOf)
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -70,14 +70,15 @@ import GHC.Generics
 import Pact.Core.Pretty
 import Pact.Core.Names (FullyQualifiedName)
 import Data.IORef
+import Pact.Core.SatWord
 
 -- | Gas in pact-core, represented as an unsigned
 -- integer, units will go in terms of 1e3 = 2ns
 newtype MilliGas
-  = MilliGas Word64
+  = MilliGas SatWord
   deriving Show
-  deriving newtype (Eq, Ord, NFData, Prim, Bounded, Semiring, Enum)
-  deriving (Semigroup, Monoid) via (Sum Word64)
+  deriving newtype (Eq, Ord, NFData, Prim, Bounded, Enum)
+  deriving (Semigroup, Monoid) via (Sum SatWord)
 
 instance Pretty MilliGas where
   pretty (MilliGas g) = pretty g <> "mG"
@@ -90,10 +91,10 @@ newtype MilliGasLimit
 -- | Gas in pact-core, represented as an unsigned
 -- integer, units will go in terms of 1e3 = 2ns
 newtype Gas
-  = Gas { _gas :: Word64 }
+  = Gas { _gas :: SatWord }
   deriving (Eq, Ord, Show)
-  deriving (Semigroup, Monoid) via (Sum Word64)
-  deriving (Semiring, Enum) via Word64
+  deriving (Semigroup, Monoid) via (Sum SatWord)
+  deriving (Enum) via SatWord
   deriving newtype NFData
 
 instance Pretty Gas where
@@ -116,7 +117,7 @@ newtype GasPrice
 
 makePrisms ''GasPrice
 
-milliGasPerGas :: Word64
+milliGasPerGas :: SatWord
 milliGasPerGas = 1000
 
 gasToMilliGas :: Gas -> MilliGas
@@ -127,7 +128,7 @@ milliGasToGas :: MilliGas -> Gas
 milliGasToGas (MilliGas n) =
   let (n', r) = n `quotRem` milliGasPerGas
       gas = if r == 0 then n' else n' + 1
-  in (Gas gas)
+  in (Gas (fromIntegral gas))
 {-# INLINE milliGasToGas #-}
 
 milliGasToGasLimit :: MilliGasLimit -> GasLimit
@@ -299,6 +300,7 @@ data ComparisonType
   -- ^ N comparisons constant time overhead
   | ObjComparison !Int
   -- ^ Compare objects of at most size `N`
+  | SortComparisons !Word64 !Int
   deriving (Show, Generic, NFData)
 
 data ConcatType
@@ -313,14 +315,14 @@ data ConcatType
   deriving (Show, Generic, NFData)
 
 data SerializationCosts = SerializationCosts
-  { objectKeyCostMilliGasOffset :: !Word64
-  , objectKeyCostMilliGasPer1000Chars :: !Word64
-  , boolMilliGasCost :: !Word64
-  , unitMilliGasCost :: !Word64
-  , integerCostMilliGasPerDigit :: !Word64
-  , decimalCostMilliGasOffset :: !Word64
-  , decimalCostMilliGasPerDigit :: !Word64
-  , timeCostMilliGas :: !Word64
+  { objectKeyCostMilliGasOffset :: !SatWord
+  , objectKeyCostMilliGasPer1000Chars :: !SatWord
+  , boolMilliGasCost :: !SatWord
+  , unitMilliGasCost :: !SatWord
+  , integerCostMilliGasPerDigit :: !SatWord
+  , decimalCostMilliGasOffset :: !SatWord
+  , decimalCostMilliGasPerDigit :: !SatWord
+  , timeCostMilliGas :: !SatWord
   }
   deriving (Show, Generic, NFData)
 

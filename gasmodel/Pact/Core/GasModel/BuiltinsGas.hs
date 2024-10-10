@@ -26,7 +26,7 @@ import Pact.Core.Namespace
 import Pact.Core.PactValue
 import Pact.Core.Persistence
 import Pact.Core.Persistence.SQLite
-import Pact.Core.Serialise 
+import Pact.Core.Serialise
 import Pact.Core.Type
 import Pact.Time
 
@@ -876,7 +876,50 @@ benchesForBuiltin bn = case bn of
   CoreTypeOf -> omittedDeliberately
   CoreDec -> omittedDeliberately
   CoreCond -> omittedDeliberately
-  _ -> const []
+  -- Metadata native. Don't need to gas
+  CoreDescribeKeyset -> omittedDeliberately
+  -- Metadata native. Don't need to gas
+  CoreDescribeModule -> omittedDeliberately
+  -- Metadata native. Don't need to gas
+  CoreDescribeTable -> omittedDeliberately
+  -- Db natives
+  CoreCreateTable -> todo
+  CoreInsert -> todo
+  CoreKeys -> todo
+  CoreRead -> todo
+  CoreFoldDb -> todo
+  CoreSelect -> todo
+  CoreUpdate -> todo
+  CoreDefineKeysetData -> todo
+  CoreWrite -> todo
+  CoreWithRead -> todo
+  CoreReadWithFields -> todo
+  CoreDefineKeySet -> todo
+  -- Note: should be same as as with-read
+  CoreWithDefaultRead -> todo
+  CoreSelectWithFields -> todo
+  -- This is purely just application + lookup
+  CoreWhere -> omittedDeliberately
+  CoreHash -> todo
+  -- Constant time
+  CoreTxHash -> omittedDeliberately
+  CoreAndQ -> omittedDeliberately
+  CoreOrQ -> omittedDeliberately
+  CoreNotQ -> omittedDeliberately
+  -- note: continue == identity
+  CoreIdentity -> omittedDeliberately
+  CoreContinue -> omittedDeliberately
+  -- This depends on the SPV implementation
+  CoreVerifySPV -> omittedDeliberately
+  -- Acquiring module admin => Gassed via term gas
+  CoreAcquireModuleAdmin -> omittedDeliberately
+  CoreEnforceVerifier -> omittedDeliberately
+  -- Local only
+  CoreListModules -> omittedDeliberately
+  -- Hyperlane natives
+  CoreHyperlaneDecodeMessage -> todo
+  CoreHyperlaneEncodeMessage -> todo
+  CoreHyperlaneMessageId -> todo
   where
   omittedDeliberately = const []
   alreadyCovered = const []

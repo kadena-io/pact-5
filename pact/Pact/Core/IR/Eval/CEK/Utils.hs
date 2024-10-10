@@ -59,14 +59,6 @@ toArgTypeError = \case
 --------------------------
 -- Gas-related code
 --------------------------
-constantWorkNodeGas :: MilliGas
-constantWorkNodeGas = (MilliGas 50)
-
-unconsWorkNodeGas :: MilliGas
-unconsWorkNodeGas = (MilliGas 100)
-
-tryNodeGas :: MilliGas
-tryNodeGas = (MilliGas 100)
 
 
 readOnlyEnv :: CEKEnv e b i -> CEKEnv e b i
