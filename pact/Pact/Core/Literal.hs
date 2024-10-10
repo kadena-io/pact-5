@@ -23,6 +23,7 @@ import GHC.Generics
 
 import Pact.Core.Pretty
 import qualified Text.Megaparsec as MP
+import qualified Data.Text as T
 import qualified Text.Megaparsec.Char as MP
 import Data.Char (digitToInt)
 
@@ -50,6 +51,19 @@ instance Pretty Literal where
       if roundTo 0 d == d then
         pretty (show (roundTo 0 d)) <> ".0"
       else pretty (show d)
+    LUnit -> "()"
+    LBool b -> if b then "true" else "false"
+
+instance Pretty (AbbrevPretty Literal) where
+  pretty (AbbrevPretty lit) = case lit of
+    LString t
+      | T.length t < 15 -> dquotes (pretty t)
+      | otherwise -> dquotes (pretty (T.take 12 t <> "..."))
+    LInteger i -> prettyAbbrevText 15 i
+    LDecimal d ->
+      if roundTo 0 d == d then
+        pretty (show (roundTo 0 d)) <> ".0"
+      else prettyAbbrevText 15 (show d)
     LUnit -> "()"
     LBool b -> if b then "true" else "false"
 
