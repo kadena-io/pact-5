@@ -1225,32 +1225,32 @@ ensureBound msg = BoundedText (T.take (fromIntegral (natVal (Proxy @k))) msg)
 dbOpErrorToBoundedText' :: DbOpError -> Text
 dbOpErrorToBoundedText' = \case
     WriteError ->
-      "Error found while writing value"
+      "Database error: Writing " rk "in" tn " failed because of an error."
     RowReadDecodeFailure rk ->
-      thsep ["Failed to deserialize but found value at key:", abbrevText 10 rk]
+      thsep ["Deserialization failed for the value at key:", abbrevText 10 rk]
     RowFoundError tn rk ->
       thsep
-        ["Value already found while in Insert mode in table"
+        ["Insert failed because the value already exists in the table:" "
         , renderTableName tn, "at key"
         , tdquotes $ abbrevRowKey rk]
     NoRowFound tn rk ->
       thsep
-        ["No row found during update in table"
+        ["Update failed because no row was found in table:"
         , renderTableName tn
         , "at key"
         , tdquotes $ abbrevRowKey rk ]
     NoSuchTable tn ->
-      thsep ["Table", renderTableName tn, "not found"]
+      thsep ["Insert/Update failed because table ", renderTableName tn, "was not found."]
     TableAlreadyExists tn ->
-      thsep ["Table", renderTableName tn, "already exists"]
+      thsep [""Insert/Update failed because table", renderTableName tn, "already exists.""]
     TxAlreadyBegun _ ->
-      "Attempted to begin tx, but a tx already has been initiated"
+      "Starting a new transaction failed because a transaction has already been initiated."
     NotInTx cmd ->
-      thsep ["No Transaction currently in progress, cannot execute", cmd]
+      thsep ["Cannot execute " cmd "because no transaction is currently in progress."]
     OpDisallowed ->
-      "Operation disallowed in read-only or sys-only mode"
+      "Operation is not allowed in read-only or system-only mode."
     MultipleRowsReturnedFromSingleWrite ->
-      "Multiple rows returned from single write"
+      "Multiple rows were returned from a single write."
 
 -- | NOTE: Do _not_ change this function post mainnet release just to improve an error.
 --  This will fork the chain, these messages will make it into outputs.
