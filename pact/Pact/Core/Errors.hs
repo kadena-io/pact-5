@@ -1306,28 +1306,28 @@ hyperlaneErrorToBoundedText' = \case
   HyperlaneErrorFailedToFindKey key ->
     thsep ["Failed to find key in object:", _field key]
   HyperlaneErrorNumberOutOfBounds key ->
-    thsep ["Object key", _field key, "was out of bounds"]
+    thsep ["Object key", _field key, "was out of bounds."]
   HyperlaneErrorBadHexPrefix key ->
-    thsep ["Missing 0x prefix on field", _field key]
+    thsep ["Missing 0x prefix on field:", _field key]
   HyperlaneErrorInvalidBase64 key ->
-    thsep ["Invalid base64 encoding on field", _field key]
+    thsep ["Invalid base64 encoding on field:", _field key]
   HyperlaneErrorIncorrectSize key expected actual ->
     thsep
-      ["Incorrect binary data size"
+      ["Incorrect binary data size."
       , _field key <> ". Expected:"
-      , tInt expected <> ", but got"
+      , tInt expected <> ", but got:"
       , tInt actual]
   -- Library decoding error: do not serialise
   HyperlaneErrorInvalidChainId _ ->
-    thsep ["Failed to decode chainId"]
+    thsep ["Failed to decode chainId."]
 
 hyperlaneDecodeErrorToBoundedText' :: HyperlaneDecodeError -> Text
 hyperlaneDecodeErrorToBoundedText' = \case
-  HyperlaneDecodeErrorBase64 -> "Failed to base64-decode token message"
+  HyperlaneDecodeErrorBase64 -> "Failed to base64-decode token message."
   -- Library error, do not serialise
   HyperlaneDecodeErrorInternal _ ->
     "Hyperlane Native Internal Decoding error"
-  HyperlaneDecodeErrorBinary -> "Decoding error: binary decoding failed"
+  HyperlaneDecodeErrorBinary -> "Decoding error: binary decoding failed."
   HyperlaneDecodeErrorParseRecipient -> "Could not parse recipient into a guard"
 
 -- | NOTE: Do _not_ change this function post mainnet release just to improve an error.
