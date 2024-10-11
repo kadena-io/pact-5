@@ -1588,7 +1588,7 @@ userRecoverableErrorToBoundedText = mkBoundedText . \case
   EnvReadFunctionFailure desc ->
     thsep [_natName desc, "failed. Invalid format or missing key."]
   VerifierFailure (VerifierName verif) msg ->
-    thsep ["Verifier" verif <> "failed with the message:", msg]
+    thsep ["Verifier", verif, "failed with the message:", msg]
   CapabilityGuardNotAcquired cg ->
     thsep ["Capability not acquired:", renderQualName (_cgName cg)]
 
@@ -1679,7 +1679,7 @@ parseErrorToBoundedText = mkBoundedText . \case
   TooManyCloseParens e ->
     thsep [pErr, "Too many closing parentheses. Remaining tokens:", e]
   UnexpectedInput e ->
-    thsep [pErr, "Unexpected input after expression. Remaining tokens:"", e]
+    thsep [pErr, "Unexpected input after expression. Remaining tokens:", e]
   PrecisionOverflowError i ->
     thsep [pErr, "Precision overflow (>=255 decimal places): ", tInt i, "decimals"]
   InvalidBaseType txt ->
