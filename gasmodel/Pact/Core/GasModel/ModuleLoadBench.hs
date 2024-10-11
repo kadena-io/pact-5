@@ -42,10 +42,41 @@ import qualified Hedgehog.Internal.Seed as Seed
 import qualified Hedgehog.Internal.Tree as Tree
 import Hedgehog.Internal.Gen(evalGen)
 
+import qualified Hedgehog.Gen as G
+import qualified Hedgehog.Range as R
+import Control.Monad (forM)
+import Pact.Core.SizeOf
+
 genModule :: Word64 -> ModuleData CoreBuiltin Info
 genModule w =
   sampleWithSeed (Seed.from w)
     (moduleDataOnlyGen builtinGen lineInfoGen)
+
+genModules :: Word64 -> [ModuleData CoreBuiltin Info]
+genModules w =
+  sampleWithSeed (Seed.from w)
+    (G.list (R.constant 100 100) (moduleDataOnlyGen builtinGen lineInfoGen))
+
+sizeOfVsSize :: IO [(Int, Int)]
+sizeOfVsSize = do
+  let modules = genModules 42020
+  pdb <- mockPactDb serialisePact_lineinfo
+  ee <- setupBenchEvalEnv pdb mempty PUnit
+  out <- runEvalMResult (ExecEnv ee) def $ forM modules $ \m -> do
+    sz <- sizeOfInternal m
+    let bs = _encodeModuleData serialisePact_lineinfo m
+    pure (fromIntegral sz, B.length bs)
+  either (error . show) pure out
+  where
+  sizeOfInternal = \case
+    ModuleData m deps ->
+      -- sizeOf def SizeOfV0 m
+      (+) <$> sizeOf def SizeOfV0 m <*> sizeOf def SizeOfV0 deps
+    InterfaceData m deps ->
+      -- sizeOf def SizeOfV0 m
+      (+) <$> sizeOf def SizeOfV0 m <*> sizeOf def SizeOfV0 deps
+
+
 
 mixSeed :: Seed -> Seed
 mixSeed (Seed v g) =

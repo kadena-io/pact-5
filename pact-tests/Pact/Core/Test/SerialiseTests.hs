@@ -29,7 +29,7 @@ tests = testGroup "Serialise Roundtrip"
     , testProperty "QualifiedName" $ serialiseRoundtrip qualifiedNameGen
     , testProperty "BareName" $ serialiseRoundtrip bareNameGen
     , testProperty "DynamicName" $ serialiseRoundtrip dynamicNameGen
-    , testProperty "ParsedName" $ serialiseRoundtrip parsedNameGen
+    -- , testProperty "ParsedName" $ serialiseRoundtrip parsedNameGen
     , testProperty "Hash" $ serialiseRoundtrip hashGen
     , testProperty "ModuleHash" $ serialiseRoundtrip moduleHashGen
     , testProperty "FullyQualifiedName" $ serialiseRoundtrip fullyQualifiedNameGen

@@ -82,12 +82,16 @@ lookupModuleData info mn = do
     liftGasM info (_pdbRead pdb DModules mn) >>= \case
       Just mdata@(ModuleData md deps) -> do
         let newLoaded = M.fromList $ toFqDep mn (_mHash md) <$> _mDefs md
+        loadedSize <- uses loAllLoaded M.size
+        chargeGasArgs info (GModuleOp (MOpMergeDeps loadedSize (M.size newLoaded + M.size deps)))
         (esLoaded . loAllLoaded) %= M.union newLoaded . M.union deps
         (esLoaded . loModules) %= M.insert mn mdata
         pure (Just mdata)
       Just mdata@(InterfaceData iface deps) -> do
         let ifDefs = mapMaybe ifDefToDef (_ifDefns iface)
         let newLoaded = M.fromList $ toFqDep mn (_ifHash iface) <$> ifDefs
+        loadedSize <- uses loAllLoaded M.size
+        chargeGasArgs info (GModuleOp (MOpMergeDeps loadedSize (M.size newLoaded + M.size deps)))
         (esLoaded . loAllLoaded) %= M.union newLoaded . M.union deps
         (esLoaded . loModules) %= M.insert mn mdata
         pure (Just mdata)
