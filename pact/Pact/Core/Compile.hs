@@ -211,7 +211,7 @@ evalTopLevel interpreter (RawCode code) tlFinal deps = do
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = ModuleData m deps'
       mSize <- sizeOf (_mInfo m) SizeOfV0 m
-      chargeGasArgs (_mInfo m) (GModuleMemory mSize)
+      chargeGasArgs (_mInfo m) (GWrite mSize)
       evalWrite (_mInfo m) pdb Write DModules (view mName m) mdata
       -- Write sliced modules to the pact db
       evalWrite (_mInfo m) pdb Write DModuleSource (getHashedModuleName m) (ModuleCode code)
@@ -229,7 +229,7 @@ evalTopLevel interpreter (RawCode code) tlFinal deps = do
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = InterfaceData iface deps'
       ifaceSize <- sizeOf (_ifInfo iface) SizeOfV0 iface
-      chargeGasArgs (_ifInfo iface) (GModuleMemory ifaceSize)
+      chargeGasArgs (_ifInfo iface) (GWrite ifaceSize)
       evalWrite (_ifInfo iface) pdb Write DModules (view ifName iface) mdata
      -- Write sliced interface code to the pact db
       evalWrite (_ifInfo iface) pdb Write DModuleSource (getHashedModuleNameIface iface) (ModuleCode code)

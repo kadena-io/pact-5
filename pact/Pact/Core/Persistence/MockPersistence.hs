@@ -18,6 +18,7 @@ import Data.IORef
 import Data.Text(Text)
 import qualified Data.Map.Strict as M
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
 
 
 import Pact.Core.Guards
@@ -29,6 +30,7 @@ import Pact.Core.Persistence
 import Pact.Core.Serialise
 import Pact.Core.StableEncoding
 import Pact.Core.Errors as Errors
+import Pact.Core.Gas
 
 
 
@@ -258,7 +260,17 @@ mockPactDb serial = do
     -> GasM b i (Maybe v)
   read' PactTables{..} domain k = case domain of
     DKeySets -> readSysTable ptKeysets k (Rendered . renderKeySetName) _decodeKeySet
-    DModules -> readSysTable ptModules k (Rendered . renderModuleName) _decodeModuleData
+    -- We inline this here so we can charge on the module size directly from the db
+    DModules -> do
+      MockSysTable m <- liftIO $ readIORef ptModules
+      case M.lookup (Rendered $ renderModuleName k) m of
+        Just bs -> do
+          chargeGasM (GModuleOp (MOpLoadModule (B.length bs)))
+          case _decodeModuleData serial bs of
+            Just rd -> pure (Just (view document rd))
+            Nothing ->
+              throwDbOpErrorGasM (RowReadDecodeFailure (renderModuleName k))
+        Nothing -> pure Nothing
     DModuleSource -> readSysTable ptModuleCode k (Rendered . renderHashedModuleName)  _decodeModuleCode
     DUserTables tbl ->
       readRowData ptUser tbl k

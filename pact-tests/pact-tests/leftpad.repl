@@ -64,7 +64,7 @@
 
 (module impure 'k
   (defconst VERSION 3)
-  (bless "wVYK_AGHgcoJPtUf2NOj5jYdGCQWVsmvFYqltVbobYU")
+  (bless "ldFH268L3RM2qTN2eEi4_p7hQNM-O92e7qaqqO6fhhg")
   (defschema foo-schema value:integer)
   (deftable foo:{foo-schema})
   (defun ins (k v) (insert foo k v)))

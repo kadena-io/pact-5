@@ -8,7 +8,7 @@
 (env-gaslog)
 (expect
   "Gas cost of loading fungible contract"
-  60001 (env-gas))
+  747 (env-gas))
 (commit-tx)
 
 (env-gasmodel "table")
@@ -18,7 +18,7 @@
 (env-gaslog)
 (expect
   "Gas cost of loading fungible-xchain contract"
-  60001 (env-gas))
+  305 (env-gas))
 (commit-tx)
 (begin-tx)
 (env-gas 0)
@@ -26,7 +26,7 @@
 (env-gaslog)
 (expect
   "Gas cost of loading coin contract"
-  60030
+  14976
   (env-gas))
 
 (create-table coin.coin-table)
@@ -50,7 +50,7 @@
 (env-gaslog)
 (expect
   "Gas cost of using the coin contract"
-  0 (env-gas))
+  24 (env-gas))
 
 ;; account balance for emily does not exist, because account does not exist yet
 (expect-failure
@@ -63,7 +63,7 @@
 (env-gaslog)
 (expect
   "Gas cost of coin contract account creation"
-  65 (env-gas))
+  59 (env-gas))
 
 (create-account 'doug (read-keyset 'doug))
 
@@ -103,7 +103,7 @@
 (env-gaslog)
 (expect
   "Gas cost of querying an account's balance"
-  8 (env-gas))
+  5 (env-gas))
 
 ; account information checks out for new accounts
 (env-gas 0) (env-gaslog)
@@ -114,7 +114,7 @@
 (env-gaslog)
 (expect
   "Gas cost of querying the details of an account"
-  9 (env-gas))
+  5 (env-gas))
 (commit-tx)
 
 ;; credits + debits should succeed. Both should reflect the correct balance
@@ -139,7 +139,7 @@
 (env-gaslog)
 (expect
   "Gas cost of testing the DEBIT capability"
-  10 (env-gas))
+  7 (env-gas))
 
 ; debit tests
 (expect-failure
@@ -407,7 +407,7 @@
 (env-gaslog)
 (expect
   "Gas cost of transfer"
-  207 (env-gas))
+  187 (env-gas))
 
 (expect-failure "emily->doug capability used up"
   "TRANSFER exceeded"
@@ -444,7 +444,7 @@
   (transfer-create 'doug 'will (read-keyset 'will) 1.0))
 (env-gaslog)
 (expect
-  "Gas cost of transfer-create" 197 (env-gas))
+  "Gas cost of transfer-create" 184 (env-gas))
 
 (expect
   "doug now has 0.4 coins"

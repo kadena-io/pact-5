@@ -31,6 +31,8 @@ import Pact.Core.Names
 import Pact.Core.Serialise
 import Pact.Core.Errors
 import Pact.Core.StableEncoding (encodeStable)
+import Pact.Core.Gas.Types
+import qualified Data.ByteString as B
 
 -- | Acquire a SQLite-backed `PactDB`.
 --
@@ -372,42 +374,52 @@ write' serial db txId txLog stmtCache wt domain k v =
 read' :: forall k v b i. PactSerialise b i -> SQL.Database -> IORef StmtCache -> Domain k v b i -> k -> GasM b i (Maybe v)
 read' serial db stmtCache domain k = case domain of
   DKeySets -> withStmt (_tblReadValue . _stmtKeyset <$> liftIO (readIORef stmtCache)) $
-    doRead (renderKeySetName k) (\v -> pure (view document <$> _decodeKeySet serial v))
+    doRead (renderKeySetName k) (\v -> view document <$> _decodeKeySet serial v)
 
-  DModules -> withStmt (_tblReadValue . _stmtModules <$> liftIO (readIORef stmtCache)) $
-    doRead (renderModuleName k) (\v -> pure (view document <$> _decodeModuleData serial v))
+  DModules -> withStmt (_tblReadValue . _stmtModules <$> liftIO (readIORef stmtCache)) $ do
+    doRead (renderModuleName k) pure >=> \case
+      Nothing -> pure Nothing
+      Just bs -> do
+        chargeGasM (GModuleOp (MOpLoadModule (B.length bs)))
+        case _decodeModuleData serial bs of
+          Just rd -> pure (Just (view document rd))
+          Nothing ->
+            throwDbOpErrorGasM (RowReadDecodeFailure (renderModuleName k))
 
   DModuleSource -> withStmt (_tblReadValue . _stmtModules <$> liftIO (readIORef stmtCache)) $
-    doRead (renderHashedModuleName k) (\v -> pure (view document <$> _decodeModuleCode serial v))
+    doRead (renderHashedModuleName k) (\v -> view document <$> _decodeModuleCode serial v)
 
   DUserTables tbl -> do
     tblCache <- _stmtUserTbl <$> liftIO (readIORef stmtCache)
     stmt <- case M.lookup tbl tblCache of
       Nothing -> liftIO (addUserTable db stmtCache tbl)
       Just s -> pure s
-    withStmt (pure $ _tblReadValue stmt) $ doRead (_rowKey k) (\v -> pure (view document <$> _decodeRowData serial v))
+    withStmt (pure $ _tblReadValue stmt) $ doRead (_rowKey k) (\v -> view document <$> _decodeRowData serial v)
 
   DDefPacts -> do
     withStmt (_tblReadValue . _stmtDefPact <$> liftIO (readIORef stmtCache)) $
-      doRead (renderDefPactId k) (\v -> pure (view document <$> _decodeDefPactExec serial v))
+      doRead (renderDefPactId k) (\v -> view document <$> _decodeDefPactExec serial v)
 
   DNamespaces ->
     withStmt (_tblReadValue . _stmtNamespace <$> liftIO (readIORef stmtCache))
-    (doRead (_namespaceName k) (\v -> pure (view document <$> _decodeNamespace serial v)))
+    (doRead (_namespaceName k) (\v -> view document <$> _decodeNamespace serial v))
 
   where
-    doRead :: forall a. Text -> (ByteString -> IO (Maybe a)) -> SQL.Statement -> GasM b i (Maybe a)
-    doRead k' f stmt = liftIO $ do
-       SQL.bind stmt [SQL.SQLText k']
-       SQL.step stmt >>= \case
+    doRead :: forall a. Text -> (ByteString -> Maybe a) -> SQL.Statement -> GasM b i (Maybe a)
+    doRead k' decoder stmt = do
+       liftIO $ SQL.bind stmt [SQL.SQLText k']
+       liftIO (SQL.step stmt) >>= \case
          SQL.Done -> do
-           SQL.reset stmt
+           liftIO $ SQL.reset stmt
            pure Nothing
          SQL.Row -> do
-           [SQL.SQLBlob value] <- SQL.columns stmt
-           SQL.Done <- SQL.step stmt
-           SQL.reset stmt
-           f value
+           [SQL.SQLBlob value] <- liftIO $ SQL.columns stmt
+           SQL.Done <- liftIO $ SQL.step stmt
+           liftIO $ SQL.reset stmt
+           case decoder value of
+            Just rd -> pure (Just rd)
+            Nothing ->
+              throwDbOpErrorGasM (RowReadDecodeFailure k')
 
 -- -- Utility functions
 withStmt :: GasM b i SQL.Statement -> (SQL.Statement -> GasM b i a) -> GasM b i a

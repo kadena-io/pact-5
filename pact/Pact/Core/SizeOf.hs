@@ -12,6 +12,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE InstanceSigs #-}
 
 -- |
 -- Module      :  Pact.Types.SizeOf
@@ -23,7 +24,6 @@
 module Pact.Core.SizeOf
   ( SizeOf(..)
   , SizeOf1(..)
-  , constructorCost
   , Bytes
   , wordSize
   , SizeOfVersion(..)
@@ -40,19 +40,15 @@ import Data.Text (Text)
 import Pact.Time
 import Data.Vector (Vector)
 import Data.Word (Word8, Word64)
-import GHC.Generics
 import GHC.Int(Int(..))
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
-import qualified Data.List as L
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.UTF8 as UTF8
 import qualified Data.ByteString.Short as SBS
-import qualified Data.Vector as V
 import qualified Data.Text as T
-import qualified Data.Set as S
+import qualified Data.Text.Unsafe as TU
 import qualified GHC.Integer.Logarithms as IntLog
 
 import Pact.Core.Names
@@ -70,11 +66,16 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.Imports
 import Pact.Core.Info
 import Pact.Core.ModRefs
-import Pact.Core.Namespace (Namespace)
+import Pact.Core.Namespace
 import Pact.Core.Gas
+import Control.Monad
 
 
 -- |  Estimate of number of bytes needed to represent data type
+--
+-- NOTE:
+-- We do not charge 1 word per field for estimating the in-memory size anymore. This is because this ends up
+-- Costing the user a factor of 10 larger than the actual bytes needed to represent the structure in
 --
 -- Assumptions: GHC, 64-bit machine
 -- General approach:
@@ -111,246 +112,155 @@ countBytes i bytes = do
 
 class SizeOf t where
   sizeOf :: forall e b i. i -> SizeOfVersion -> t -> EvalM e b i Bytes
-  default sizeOf :: forall e b i.(Generic t, GSizeOf (Rep t)) => i -> SizeOfVersion -> t -> EvalM e b i Bytes
-  sizeOf i v a = gsizeOf i v (from a)
 
 -- | "word" is 8 bytes on 64-bit
 wordSize64, wordSize :: Bytes
 wordSize64 = 8
 wordSize = wordSize64
 
--- | Constructor header is 1 word
-headerCost :: Bytes
-headerCost = 1 * wordSize
+-- A cbor tag is 1 byte
+tagOverhead :: Bytes
+tagOverhead = 1
 
--- | In general, each constructor field costs 1 word
-constructorFieldCost :: Word64 -> Bytes
-constructorFieldCost numFields = numFields * wordSize
 
--- | Total cost for constructor
-constructorCost :: Word64 -> Bytes
-constructorCost numFields = headerCost + (constructorFieldCost numFields)
-
+cborArraySize :: (Foldable f, SizeOf a) => i -> SizeOfVersion -> f a -> EvalM e b i Bytes
+cborArraySize i ver v = do
+  -- CBOR size overhead for arrays:
+  -- 1 byte for type tag (3 bits major type array, 5 bits for variable length)
+  -- 4 bytes for length (this is actually a MAJOR overshoot, but this is fine)
+  let arrayOverhead = 5
+  _ <- countBytes i arrayOverhead
+  !elementSizes <- foldM (\count e -> (+ count) <$> sizeOf i ver e) 0 v
+  pure $ arrayOverhead + elementSizes
+{-# INLINE cborArraySize #-}
 
 instance (SizeOf v) => SizeOf (Vector v) where
-  sizeOf i ver v = do
-    let rawVecSize = (7 + vectorLength) * wordSize
-    spineSize <- countBytes i rawVecSize
-    elementSizes <- traverse (sizeOf i ver) v
-    pure $ spineSize + sum elementSizes
-    where
-      vectorLength = fromIntegral (V.length v)
+  sizeOf i ver v = cborArraySize i ver v
 
 instance (SizeOf a) => SizeOf (Set a) where
-  sizeOf i ver s = do
-    let !setSizeOverhead = (1 + 3 * setLength) * wordSize
-    spineSize <- countBytes i setSizeOverhead
-    elementSizes <- traverse (sizeOf i ver) (S.toList s)
-    pure $ spineSize + sum elementSizes
-    where
-      setLength = fromIntegral (S.size s)
+  sizeOf i ver s = cborArraySize i ver s
 
 instance (SizeOf k, SizeOf v) => SizeOf (M.Map k v) where
-  sizeOf i ver m = do
-    let !mapSizeOverhead = 6 * mapLength * wordSize
-    spineSize <- countBytes i mapSizeOverhead
-    elementSizes <- traverse (\(k,v) -> liftA2 (+) (sizeOf i ver k) (sizeOf i ver v)) (M.toList m)
-    pure $ spineSize + sum elementSizes
-    where
-      mapLength = fromIntegral (M.size m)
+  sizeOf i ver m = cborArraySize i ver (M.toList m)
 
 instance (SizeOf a, SizeOf b) => SizeOf (a,b) where
   sizeOf i ver (a,b) = do
-    headBytes <- countBytes i (constructorCost 3)
+    -- A tuple is essentially an array but with a fixed length of 2
     aBytes <- sizeOf i ver a
     bBytes <- sizeOf i ver b
-    pure $ headBytes + aBytes + bBytes
+    pure $ tagOverhead + aBytes + bBytes
 
 instance (SizeOf a) => SizeOf (Maybe a) where
-  sizeOf i ver (Just e) =
-    liftA2 (+) (countBytes i (constructorCost 1)) (sizeOf i ver e)
-  sizeOf i _ver Nothing =
-    countBytes i (constructorCost 0)
+  sizeOf i ver e = cborArraySize i ver e
 
 instance (SizeOf a) => SizeOf [a] where
-  sizeOf i ver arr = do
-    let listSzOverhead = (1 + (3 * listLength)) * wordSize
-    spineSize <- countBytes i listSzOverhead
-    elementSizes <- traverse (sizeOf i ver) arr
-    pure $ spineSize + sum elementSizes
-    where
-      listLength = fromIntegral (L.length arr)
+  sizeOf i ver arr = cborArraySize i ver arr
 
 instance SizeOf BS.ByteString where
   sizeOf i _ver bs =
-    countBytes i byteStringSize
-    where
-      byteStringSize = (9 * wordSize) + byteStringLength
-
-      -- 'UTF8.length' returns different values than 'BS.length'. Moreoever,
-      -- 'BS.length' is \(O(1)\) but 'UTF8.length' is \(O(n)\), with a pretty
-      -- bad constant factor.
-      --
-      byteStringLength = fromIntegral (UTF8.length bs)
+    countBytes i (fromIntegral (BS.length bs) + 4) -- We're going to use an array size overhead of 4 here
 
 instance SizeOf SBS.ShortByteString where
   sizeOf i ver = sizeOf i ver . SBS.fromShort
 
 instance SizeOf Text where
   sizeOf i _ver t =
-    countBytes i $ (6 * wordSize) + (2 * (fromIntegral (T.length t)))
+    -- We will
+    countBytes i $ fromIntegral (TU.lengthWord8 t + 4)
 
 instance SizeOf Integer where
-  sizeOf i ver e = countBytes i $ case ver of
-    SizeOfV0 ->
+  sizeOf i _ e = countBytes i $
       fromIntegral (max 64 (I# (IntLog.integerLog2# (abs e)) + 1)) `quot` 8
 
+-- And int fits in 4 bytes
 instance SizeOf Int where
-  sizeOf i _ver _ = countBytes i $ 2 * wordSize
+  sizeOf i _ver _ = countBytes i (tagOverhead + 4)
 
+-- Word 8 = 1 byte, so the tag overhead is enough
 instance SizeOf Word8 where
-  sizeOf i _ver _ = countBytes i $ 2 * wordSize
+  sizeOf i _ver _ = countBytes i tagOverhead
 
 instance (SizeOf i) => SizeOf (DecimalRaw i) where
   sizeOf i ver (Decimal p m) = do
-    constructorSize <- countBytes i (constructorCost 2)
     pSize <- sizeOf i ver p
     mSize <- sizeOf i ver m
-    pure $ constructorSize + pSize + mSize
+    pure $ pSize + mSize
 
 instance SizeOf Int64 where
-  -- Assumes 64-bit machine
-  sizeOf i _ver _ = countBytes i $ 2 * wordSize
+  sizeOf i _ver _ = countBytes i (tagOverhead + wordSize)
 
 
 instance SizeOf Word64 where
-  -- Assumes 64-bit machine
-  sizeOf i _ver _ = countBytes i $ 2 * wordSize
+  sizeOf i _ver _ = countBytes i (tagOverhead + wordSize)
 
 
 instance SizeOf UTCTime where
   -- newtype is free
-  -- Internally 'UTCTime' is just a 64-bit count of 'microseconds'
-  sizeOf i ver ti =
-    liftA2 (+) (countBytes i (constructorCost 1)) (sizeOf i ver (toPosixTimestampMicros ti))
+  -- Internally 'UTCTime' is just a 64-bit integer
+  sizeOf i _ver _ =
+    countBytes i wordSize
 
+-- Note: a bool takes up 1 byte of space, so the tagoverhead is enough
 instance SizeOf Bool where
-  sizeOf i _ver _ = countBytes i wordSize
+  -- Note: this probably overestimates
+  sizeOf i _ver _ = countBytes i tagOverhead
 
 instance SizeOf () where
+  sizeOf :: i -> SizeOfVersion -> () -> EvalM e b i Bytes
   sizeOf _ _ _ = pure 0
 
--- See ghc memory note above
--- as well as https://blog.johantibell.com/2011/06/memory-footprints-of-some-common-data.html
--- for both hash sets and hashmaps.
+-- We can assume the amount it takes to represent this in memory
+-- is something along the lines of
+--  - 1 word per the number of elements
+--  -
 instance (SizeOf k, SizeOf v) => SizeOf (HM.HashMap k v) where
-  sizeOf i ver m = do
-    spineSize <- countBytes i hmOverhead
-    elementSizes <- traverse (\(k,v) -> liftA2 (+) (sizeOf i ver k) (sizeOf i ver v)) (HM.toList m)
-    pure $ spineSize + sum elementSizes
-    where
-      !hmOverhead = (5 * hmLength + 4 * (hmLength - 1)) * wordSize
-      hmLength = fromIntegral (HM.size m)
+  sizeOf i ver m = cborArraySize i ver (HM.toList m)
 
 -- Note: Atm hashset is only a newtype wrapper over hashmap with unit as the element
 -- member of every entry. This means you don't pay at all for the cost of (),
 -- but you do pay for the extra constructor field of holding it, hence the `hsSize` bit
 -- stays roughly the same.
 instance (SizeOf k) => SizeOf (HS.HashSet k) where
-  sizeOf i ver hs = do
-    spineSize <- countBytes i hsSizeOverhead
-    elementSizes <- traverse (sizeOf i ver) (HS.toList hs)
-    pure $ spineSize + sum elementSizes
-    where
-      hsSizeOverhead = (5 + hsLength + 4 * (hsLength - 1)) * wordSize
-      hsLength = fromIntegral (HS.size hs)
+  sizeOf i ver hs = cborArraySize i ver (HS.toList hs)
 
-instance (SizeOf a, SizeOf b) => SizeOf (Either a b)
+instance (SizeOf a, SizeOf b) => SizeOf (Either a b) where
+  sizeOf i ver = fmap (+ tagOverhead) . \case
+    Left e -> sizeOf i ver e
+    Right r -> sizeOf i ver r
+  {-# INLINE sizeOf #-}
 
 instance  (SizeOf a) => SizeOf (NE.NonEmpty a) where
-  sizeOf i ver (a NE.:| rest) = do
-    constructorSize <- countBytes i (constructorCost 2)
-    aSize <- sizeOf i ver a
-    restSize <- sizeOf i ver rest
-    pure $ constructorSize + aSize + restSize
+  sizeOf i ver e = cborArraySize i ver e
 
 
 class SizeOf1 f where
   sizeOf1 :: SizeOf a => SizeOfVersion -> f a -> Bytes
 
--- Generic deriving
-class GSizeOf f where
-  gsizeOf :: forall e b i a. i -> SizeOfVersion -> f a -> EvalM e b i Bytes
-
--- For sizes of products, we'll calculate the size at the leaves,
--- and simply add 1 extra word for every leaf.
-instance (GSizeOf f, GSizeOf g) => GSizeOf (f :*: g) where
-  gsizeOf i ver (a :*: b) = liftA2 (+) (gsizeOf i ver a) (gsizeOf i ver b)
-
--- Sums we can just branch recursively as usual
--- Ctor information is one level lower.
-instance (GSizeOf a, GSizeOf b) => GSizeOf (a :+: b) where
-  gsizeOf i ver = \case
-    L1 a -> gsizeOf i ver a
-    R1 b -> gsizeOf i ver b
-
-
--- No fields ctors are shared.
--- We are ok charging a bit extra here.
-instance {-# OVERLAPS #-} GSizeOf (C1 c U1) where
-  gsizeOf i _ver (M1 _) = countBytes i wordSize
-
--- Regular constructors pay the header cost
--- and 1 word for each field, which is added @ the leaves.
-instance (GSizeOf f) => GSizeOf (C1 c f) where
-  gsizeOf i ver (M1 p) = liftA2 (+) (countBytes i headerCost) (gsizeOf i ver p)
-
--- Metainfo about selectors
-instance (GSizeOf f) => GSizeOf (S1 c f) where
-  gsizeOf i ver (M1 p) = gsizeOf i ver p
-
--- Metainfo about the whole data type.
-instance (GSizeOf f) => GSizeOf (D1 c f) where
-  gsizeOf i ver (M1 p) = gsizeOf i ver p
-
--- Single field, means size of field + 1 word.
-instance (SizeOf c) => GSizeOf (K1 i c) where
-  gsizeOf i ver (K1 c) = liftA2 (+) (sizeOf i ver c) (countBytes i wordSize)
-
--- No-argument constructors are always shared by ghc
--- so they don't really allocate.
--- However, this instance is used whenever we hit a leaf
--- that _does_ in fact allocate 1 word for the field itself.
--- 0-cost constructor `SizeOf` is caught by the `GSizeOf (C1 c U1)`
--- instance
-instance GSizeOf U1 where
-  gsizeOf i _ver U1 = countBytes i wordSize
-
 --- Pact-core instances
 -- Putting some of the more annoying GADTs here
 instance SizeOf (FQNameRef name) where
   sizeOf i ver c = do
-    headBytes <- countBytes i (headerCost + wordSize)
     tailBytes <- case c of
       FQParsed n -> sizeOf i ver n
       FQName fqn -> sizeOf i ver fqn
-    pure $ headBytes + tailBytes
+    pure $ tagOverhead + tailBytes
 
 instance SizeOf (TableSchema name) where
   sizeOf i ver c = do
-    headBytes <- countBytes i (headerCost + wordSize)
     tailBytes <- case c of
       DesugaredTable n -> sizeOf i ver n
       ResolvedTable fqn -> sizeOf i ver fqn
-    pure $ headBytes + tailBytes
+    pure $ tagOverhead + tailBytes
 
 instance SizeOf Literal where
-  sizeOf i ver literal = fmap (constructorCost 1 +) $ case literal of
-    LString s -> sizeOf i ver s
-    LInteger i' -> sizeOf i ver i'
-    LDecimal d -> sizeOf i ver d
-    LBool _b -> pure 0
-    LUnit -> pure 0
+  sizeOf i ver literal = do
+    -- Overhead of a tag + word
+    (tagOverhead +) <$> case literal of
+      LString s -> sizeOf i ver s
+      LInteger i' -> sizeOf i ver i'
+      LDecimal d -> sizeOf i ver d
+      LBool b -> sizeOf i ver b
+      LUnit -> countBytes i tagOverhead
 
 instance SizeOf LineInfo where
   sizeOf i ver (LineInfo li) = sizeOf i ver li
@@ -365,63 +275,250 @@ deriving newtype instance SizeOf Hash
 deriving newtype instance SizeOf Field
 deriving newtype instance SizeOf NamespaceName
 deriving newtype instance SizeOf BareName
-instance SizeOf ModuleHash
-instance SizeOf ModuleName
-instance SizeOf DynamicRef
-instance SizeOf NameKind
-instance SizeOf Name
-instance SizeOf QualifiedName
-instance SizeOf DynamicName
-instance SizeOf ParsedName
-instance SizeOf ParsedTyName
-instance SizeOf FullyQualifiedName
+deriving newtype instance SizeOf ModuleHash
 
--- Type
-instance SizeOf PrimType
-instance SizeOf Schema
-instance SizeOf Type
+instance SizeOf ModuleName where
+  sizeOf i ver (ModuleName mn nsn) = do
+    szm <- sizeOf i ver mn
+    szn <- sizeOf i ver nsn
+    pure (tagOverhead + szm + szn)
+
+instance SizeOf DynamicRef where
+  sizeOf i ver (DynamicRef a b) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    pure (tagOverhead + szm + szn)
+
+instance SizeOf NameKind where
+  sizeOf i ver nk = do
+    namesz <- case nk of
+      NBound b -> sizeOf i ver b
+      NTopLevel mn mh -> (+) <$> sizeOf i ver mn <*> sizeOf i ver mh
+      NModRef mn mns -> (+) <$> sizeOf i ver mn <*> sizeOf i ver mns
+      NDynRef dr -> sizeOf i ver dr
+    pure $ tagOverhead + namesz
+
+
+instance SizeOf Name where
+  sizeOf i ver (Name a b) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    pure (tagOverhead + szm + szn)
+
+
+instance SizeOf QualifiedName where
+  sizeOf i ver (QualifiedName a b) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    pure (tagOverhead + szm + szn)
+
+instance SizeOf DynamicName where
+  sizeOf i ver (DynamicName a b) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    pure (tagOverhead + szm + szn)
+
+instance SizeOf ParsedName where
+  sizeOf i ver pn = do
+    namesz <- case pn of
+      BN b -> sizeOf i ver b
+      QN n -> sizeOf i ver n
+      DN n -> sizeOf i ver n
+    pure $ tagOverhead + namesz
+
+instance SizeOf ParsedTyName where
+  sizeOf i ver pn = do
+    namesz <- case pn of
+      TBN b -> sizeOf i ver b
+      TQN n -> sizeOf i ver n
+    pure $ tagOverhead + namesz
+
+
+instance SizeOf FullyQualifiedName where
+  sizeOf i ver (FullyQualifiedName a b c) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    szc <- sizeOf i ver c
+    pure (tagOverhead + szm + szn + szc)
+
+-- Prim types are at most 2 bytes
+instance SizeOf PrimType where
+  sizeOf i _ver _ = countBytes i tagOverhead
+
+instance SizeOf Schema where
+  sizeOf i ver (Schema a b) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    pure (tagOverhead + szm + szn)
+
+instance SizeOf Type where
+  sizeOf i ver ty = do
+    namesz <- case ty of
+      TyPrim p -> sizeOf i ver p
+      TyList t -> sizeOf i ver t
+      TyAnyList -> pure tagOverhead
+      TyModRef mrs -> sizeOf i ver mrs
+      TyObject sc -> sizeOf i ver sc
+      TyAnyObject -> pure tagOverhead
+      TyTable sc -> sizeOf i ver sc
+      TyCapToken -> pure tagOverhead
+      TyAny -> pure tagOverhead
+    pure $ tagOverhead + namesz
 
 -- defpacts
 deriving newtype instance SizeOf DefPactId
-instance (SizeOf n, SizeOf v) => SizeOf (DefPactContinuation n v)
+
+instance (SizeOf n, SizeOf v) => SizeOf (DefPactContinuation n v) where
+  sizeOf i ver (DefPactContinuation a b) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    pure (tagOverhead + szm + szn)
+
 deriving newtype instance SizeOf ChainId
-instance SizeOf Provenance
-instance SizeOf Yield
-instance SizeOf DefPactExec
+
+instance SizeOf Provenance where
+  sizeOf i ver (Provenance a b) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    pure (tagOverhead + szm + szn)
+instance SizeOf Yield where
+  sizeOf i ver (Yield a b c) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    szc <- sizeOf i ver c
+    pure (tagOverhead + szm + szn + szc)
+
+instance SizeOf DefPactExec where
+  sizeOf i ver (DefPactExec a b c d e f g) = do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      szd <- sizeOf i ver d
+      sze <- sizeOf i ver e
+      szf <- sizeOf i ver f
+      szg <- sizeOf i ver g
+      pure (tagOverhead + sza + szb + szc + szd + sze + szf + szg)
 
 -- spaninfo
-instance SizeOf SpanInfo
+instance SizeOf SpanInfo where
+  sizeOf i ver (SpanInfo a b c d) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    szc <- sizeOf i ver c
+    szd <- sizeOf i ver d
+    pure (tagOverhead + szm + szn + szc + szd)
 
 -- builtins
-instance SizeOf CoreBuiltin
-instance SizeOf ReplOnlyBuiltin
-instance SizeOf b => SizeOf (ReplBuiltin b)
+instance SizeOf CoreBuiltin where
+  sizeOf _i _ver _ = pure (tagOverhead + 1)
+
+instance SizeOf ReplOnlyBuiltin where
+  sizeOf _i _ver _ = pure (tagOverhead + 1)
+
+instance SizeOf b => SizeOf (ReplBuiltin b) where
+
+  sizeOf i ver = fmap (+ tagOverhead) . \case
+    RBuiltinWrap b -> sizeOf i ver b
+    RBuiltinRepl r -> sizeOf i ver r
 
 
 -- Import
-instance SizeOf Import
+instance SizeOf Import where
+  sizeOf i ver (Import a b c) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    szc <- sizeOf i ver c
+    pure (tagOverhead + szm + szn + szc)
 
 -- guards
 deriving newtype instance SizeOf PublicKeyText
-instance SizeOf KeySetName
-instance (SizeOf name, SizeOf v) => SizeOf (UserGuard name v)
-instance (SizeOf name, SizeOf v) => SizeOf (CapabilityGuard name v)
-instance SizeOf KSPredicate
-instance SizeOf KeySet
-instance SizeOf ModuleGuard
-instance SizeOf DefPactGuard
-instance (SizeOf name, SizeOf v) => SizeOf (Guard name v)
+
+instance SizeOf KeySetName where
+  sizeOf i ver (KeySetName a b) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    pure (tagOverhead + szm + szn)
+
+instance (SizeOf name, SizeOf v) => SizeOf (UserGuard name v) where
+  sizeOf i ver (UserGuard a b) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    pure (tagOverhead + szm + szn)
+
+instance (SizeOf name, SizeOf v) => SizeOf (CapabilityGuard name v) where
+  sizeOf i ver (CapabilityGuard a b c) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    szc <- sizeOf i ver c
+    pure (tagOverhead + szm + szn + szc)
+
+instance SizeOf KSPredicate where
+  sizeOf i ver = \case
+    CustomPredicate pn -> sizeOf i ver pn
+    _ -> pure (tagOverhead + 1)
+
+instance SizeOf KeySet where
+  sizeOf i ver (KeySet a b) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    pure (tagOverhead + szm + szn)
+
+instance SizeOf ModuleGuard where
+  sizeOf i ver (ModuleGuard a b) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    pure (tagOverhead + szm + szn)
+
+instance SizeOf DefPactGuard where
+  sizeOf i ver (DefPactGuard a b) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    pure (tagOverhead + szm + szn)
+
+instance (SizeOf name, SizeOf v) => SizeOf (Guard name v) where
+  sizeOf i ver = fmap (+ tagOverhead) . \case
+    GKeyset d -> sizeOf i ver d
+    GKeySetRef d -> sizeOf i ver d
+    GUserGuard d -> sizeOf i ver d
+    GCapabilityGuard d -> sizeOf i ver d
+    GDefPactGuard d -> sizeOf i ver d
+    GModuleGuard d -> sizeOf i ver d
 
 -- Caps
-instance (SizeOf name, SizeOf v) => SizeOf (CapToken name v)
-instance SizeOf n => SizeOf (DefManagedMeta n)
-instance SizeOf n => SizeOf (DefCapMeta n)
-instance SizeOf n => SizeOf (Governance n)
+instance (SizeOf name, SizeOf v) => SizeOf (CapToken name v) where
+  sizeOf i ver (CapToken a b) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    pure (tagOverhead + szm + szn)
 
-instance SizeOf ModRef
+instance SizeOf n => SizeOf (DefManagedMeta n) where
+  sizeOf i ver = fmap (+ tagOverhead) . \case
+    DefManagedMeta a b -> do
+      szm <- sizeOf i ver a
+      szn <- sizeOf i ver b
+      pure (tagOverhead + szm + szn)
+    AutoManagedMeta -> pure tagOverhead
+
+instance SizeOf n => SizeOf (DefCapMeta n) where
+  sizeOf i ver = fmap (+ tagOverhead) . \case
+    DefEvent -> pure tagOverhead
+    DefManaged dm -> sizeOf i ver dm
+    Unmanaged -> pure tagOverhead
+
+instance SizeOf (Governance n) where
+  sizeOf i ver = fmap (+ tagOverhead) . \case
+    KeyGov kg -> sizeOf i ver kg
+    CapGov cg -> sizeOf i ver cg
+
+instance SizeOf ModRef where
+  sizeOf i ver (ModRef a b) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    pure (tagOverhead + szm + szn)
+
 
 instance SizeOf PactValue where
-  sizeOf i ver pactValue = fmap (constructorCost 1 +) $ case pactValue of
+  sizeOf i ver pactValue = fmap (+ tagOverhead) $ case pactValue of
     PLiteral l -> sizeOf i ver l
     PObject obj -> sizeOf i ver obj
     PList l -> sizeOf i ver l
@@ -431,26 +528,236 @@ instance SizeOf PactValue where
     PTime t -> sizeOf i ver t
 
 -- Modules and interfaces
-instance (SizeOf ty, SizeOf i) => SizeOf (Arg ty i)
-instance (SizeOf e) => SizeOf (BuiltinForm e)
-instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Term n t b i)
-instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Defun n t b i)
-instance (SizeOf term) => SizeOf (ConstVal term)
-instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (DefConst n t b i)
-instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (DefCap n t b i)
-instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Step n t b i)
-instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (DefPact n t b i)
-instance (SizeOf t, SizeOf i) => SizeOf (DefSchema t i)
-instance (SizeOf n, SizeOf i) => SizeOf (DefTable n i)
-instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Def n t b i)
+instance (SizeOf ty, SizeOf i) => SizeOf (Arg ty i) where
+  sizeOf i ver (Arg a b c) = do
+    szm <- sizeOf i ver a
+    szn <- sizeOf i ver b
+    szc <- sizeOf i ver c
+    pure (tagOverhead + szm + szn + szc)
 
-instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Module n t b i)
+instance (SizeOf e) => SizeOf (BuiltinForm e) where
+  sizeOf i ver = \case
+    CAnd a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (tagOverhead + sza + szb)
 
-instance (SizeOf t, SizeOf i) => SizeOf (IfDefun t i)
-instance (SizeOf t, SizeOf i) => SizeOf (IfDefPact t i)
-instance (SizeOf n, SizeOf t, SizeOf i) => SizeOf (IfDefCap n t i)
-instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (IfDef n t b i)
-instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Interface n t b i)
+    COr a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (tagOverhead + sza + szb)
 
-instance SizeOf Namespace
+    CIf a b c -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      pure (tagOverhead + sza + szb + szc)
+
+    CEnforce a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (tagOverhead + sza + szb)
+
+    CWithCapability a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (tagOverhead + sza + szb)
+
+    CCreateUserGuard a -> sizeOf i ver a
+
+    CEnforceOne a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (tagOverhead + sza + szb)
+
+    CTry a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (tagOverhead + sza + szb)
+
+instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Term n t b i) where
+  sizeOf i ver = \case
+    Var a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (tagOverhead + sza + szb)
+    Lam a b c -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      pure (tagOverhead + sza + szb + szc)
+    Let a b c d -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      szd <- sizeOf i ver d
+      pure (tagOverhead + sza + szb + szc + szd)
+    App a b c -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      pure (tagOverhead + sza + szb + szc)
+    BuiltinForm a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (tagOverhead + sza + szb)
+    Constant a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (tagOverhead + sza + szb)
+    Builtin a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (tagOverhead + sza + szb)
+    Sequence a b c -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      pure (tagOverhead + sza + szb + szc)
+    Nullary a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (tagOverhead + sza + szb)
+    ListLit a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (tagOverhead + sza + szb)
+    ObjectLit a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (tagOverhead + sza + szb)
+    InlineValue a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (tagOverhead + sza + szb)
+
+instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Defun n t b i) where
+  sizeOf i ver (Defun a b c d) = do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      szd <- sizeOf i ver d
+      pure (tagOverhead + sza + szb + szc + szd)
+
+instance (SizeOf term) => SizeOf (ConstVal term) where
+  sizeOf i ver = fmap (+ tagOverhead) . \case
+    EvaledConst cv -> sizeOf i ver cv
+    TermConst cv -> sizeOf i ver cv
+
+instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (DefConst n t b i) where
+  sizeOf i ver (DefConst a b c) = do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      pure (tagOverhead + sza + szb + szc)
+
+instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (DefCap n t b i) where
+  sizeOf i ver (DefCap a b c d e) = do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      szd <- sizeOf i ver d
+      sze <- sizeOf i ver e
+      pure (tagOverhead + sza + szb + szc + szd + sze)
+
+instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Step n t b i) where
+  sizeOf i ver = fmap (+ tagOverhead) . \case
+    Step term -> sizeOf i ver term
+    StepWithRollback a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (sza + szb)
+
+instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (DefPact n t b i) where
+  sizeOf i ver (DefPact a b c d) = do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      szd <- sizeOf i ver d
+      pure (tagOverhead + sza + szb + szc + szd)
+
+instance (SizeOf t, SizeOf i) => SizeOf (DefSchema t i) where
+  sizeOf i ver (DefSchema a b c) = do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      pure (tagOverhead + sza + szb + szc)
+
+instance (SizeOf i) => SizeOf (DefTable n i) where
+  sizeOf i ver (DefTable a b c) = do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      pure (tagOverhead + sza + szb + szc)
+
+instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Def n t b i) where
+  sizeOf i ver = fmap (+ tagOverhead) . \case
+   Dfun d -> sizeOf i ver d
+   DConst d -> sizeOf i ver d
+   DCap d -> sizeOf i ver d
+   DPact d -> sizeOf i ver d
+   DSchema d -> sizeOf i ver d
+   DTable d -> sizeOf i ver d
+
+instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Module n t b i) where
+  sizeOf i ver (Module a b c d e f g h i' j) = do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      szd <- sizeOf i ver d
+      sze <- sizeOf i ver e
+      szf <- sizeOf i ver f
+      szg <- sizeOf i ver g
+      szh <- sizeOf i ver h
+      szi' <- sizeOf i ver i'
+      szj <- sizeOf i ver j
+      pure (tagOverhead + sza + szb + szc + szd + sze + szf + szg + szh + szi' + szj)
+
+instance (SizeOf t, SizeOf i) => SizeOf (IfDefun t i) where
+  sizeOf i ver (IfDefun a b c) = do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      pure (tagOverhead + sza + szb + szc)
+
+instance (SizeOf t, SizeOf i) => SizeOf (IfDefPact t i) where
+  sizeOf i ver (IfDefPact a b c) = do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      pure (tagOverhead + sza + szb + szc)
+
+instance (SizeOf t, SizeOf i) => SizeOf (IfDefCap n t i) where
+  sizeOf i ver (IfDefCap a b c d) = do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      szd <- sizeOf i ver d
+      pure (tagOverhead + sza + szb + szc + szd)
+
+instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (IfDef n t b i) where
+  sizeOf i ver = fmap (+ tagOverhead) . \case
+    IfDfun d -> sizeOf i ver d
+    IfDCap d -> sizeOf i ver d
+    IfDConst d -> sizeOf i ver d
+    IfDSchema d -> sizeOf i ver d
+    IfDPact d -> sizeOf i ver d
+
+instance (SizeOf n, SizeOf t, SizeOf b, SizeOf i) => SizeOf (Interface n t b i) where
+  sizeOf i ver (Interface a b c d e f g) = do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      szd <- sizeOf i ver d
+      sze <- sizeOf i ver e
+      szf <- sizeOf i ver f
+      szg <- sizeOf i ver g
+      pure (tagOverhead + sza + szb + szc + szd + sze + szf + szg)
+
+instance SizeOf Namespace where
+  sizeOf i ver (Namespace a b c) = do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      szc <- sizeOf i ver c
+      pure (tagOverhead + sza + szb + szc)
 

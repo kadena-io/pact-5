@@ -253,9 +253,7 @@ data GasArgs b
   | GHyperlaneEncodeDecodeTokenMessage !Int
   -- ^ Cost of hyperlane-encode-token-message and hyperlane-decode-token-message
   --   on this size (in bytes) of the hyperlane TokenMessage base64-encoded string.
-  | GModuleLoad !Int
-  -- ^ The cost of loading a module, with its argument in its byte size
-  | GModuleDeps !Int !Int
+  | GModuleOp ModuleOp
   -- ^ The cost of integrating module deps, which is essentially a map union
   -- Map union is O(m*log(n/m+1)) where 0 < m <= n
   | GStrOp !StrOp
@@ -267,9 +265,12 @@ data GasArgs b
 
 data ModuleOp
   = MOpLoadModule !Int
-  | MOpLoadModuleDeps !Int !Int
-  | MOpDesugarModule !Int -- Size of tree
-  | MOp
+  -- ^ Cost of loading module, the first element is the size of the module, the second and third
+  -- arguments are:
+  | MOpMergeDeps Int Int
+  -- ^ Cost of adding deps to the symbol table
+  | MOpDesugarModule !Word64 -- Size of the tree
+  -- ^ the cost of module desugar
   deriving (Show, Generic, NFData)
 
 instance Show b => Pretty (GasArgs b) where
@@ -309,7 +310,6 @@ data ComparisonType
   | DecimalComparison !Decimal !Decimal
   -- ^ compare decimals with similar mantissas, of at most `n` bits
   -- | TimeCmp
-  -- ^ TODO: Comparisons gas for time.
   | ListComparison !Int
   -- ^ N comparisons constant time overhead
   | ObjComparison !Int
