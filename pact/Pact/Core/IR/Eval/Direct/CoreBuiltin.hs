@@ -676,7 +676,8 @@ coreAccess info b _env = \case
     case vec V.!? fromIntegral i of
       Just v -> return (VPactValue v)
       _ -> throwExecutionError info (ArrayOutOfBoundsException (V.length vec) (fromIntegral i))
-  [VString field, VObject o] ->
+  [VString field, VObject o] -> do
+    chargeGasArgs info (GObjOp (ObjOpLookup field (M.size o)))
     case M.lookup (Field field) o of
       Just v -> return (VPactValue v)
       Nothing ->
@@ -1489,30 +1490,37 @@ diffTime info b _env = \case
 minutes :: (IsBuiltin b) => NativeFunction e b i
 minutes info b _env = \case
   [VDecimal x] -> do
+    chargeGasArgs info (GIntegerOpCost PrimOpMul (decimalMantissa x) 60)
     let seconds = x * 60
     return $ VDecimal seconds
   [VInteger x] -> do
-    let seconds = fromIntegral x * 60
+    chargeGasArgs info (GIntegerOpCost PrimOpMul x 60)
+    let seconds = fromIntegral (x * 60)
     return $ VDecimal seconds
   args -> argsError info b args
 
 hours :: (IsBuiltin b) => NativeFunction e b i
 hours info b _env = \case
   [VDecimal x] -> do
+    chargeGasArgs info (GIntegerOpCost PrimOpMul (decimalMantissa x) 3600)
     let seconds = x * 60 * 60
     return $ VDecimal seconds
   [VInteger x] -> do
-    let seconds = fromIntegral x * 60 * 60
+    chargeGasArgs info (GIntegerOpCost PrimOpMul x 3600)
+    -- Note: multiplying as an integer is _much_ more efficient
+    let seconds = fromIntegral (x * 60 * 60)
     return $ VDecimal seconds
   args -> argsError info b args
 
 days :: (IsBuiltin b) => NativeFunction e b i
 days info b _env = \case
   [VDecimal x] -> do
+    chargeGasArgs info (GIntegerOpCost PrimOpMul (decimalMantissa x) (60*60*24))
     let seconds = x * 60 * 60 * 24
     return $ VDecimal seconds
   [VInteger x] -> do
-    let seconds = fromIntegral x * 60 * 60 * 24
+    chargeGasArgs info (GIntegerOpCost PrimOpMul x (60*60*24))
+    let seconds = fromIntegral (x * 60 * 60 * 24)
     return $ VDecimal seconds
   args -> argsError info b args
 

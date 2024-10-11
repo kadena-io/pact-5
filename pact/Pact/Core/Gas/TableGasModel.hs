@@ -18,7 +18,6 @@ module Pact.Core.Gas.TableGasModel
  where
 
 import Data.Word(Word64)
-import Data.Ratio((%))
 import qualified Data.Text as T
 import GHC.Num.Integer
 import qualified GHC.Integer.Logarithms as IntLog
@@ -276,10 +275,14 @@ runTableModel nativeTable = \case
     PointAdd g -> pointAddGas g
     ScalarMult g -> scalarMulGas g
     Pairing np -> pairingGas np
-  -- Todo: Gwrite needs benchmarking
-  GWrite bytes -> memoryCost bytes
+  -- Writes on average are about 50% slower than reads,
+  -- So we add a bit of a higher penalty to this, since this
+  -- costs us gas as well
+  GWrite bytes ->
+    let mgPerByte = 25
+    in MilliGas $ fromIntegral $ bytes * mgPerByte
   GRead bytes ->
-    let mgPerByte = 1
+    let mgPerByte = 10
     in MilliGas $ fromIntegral $ bytes * mgPerByte
     -- a string of 10⁶ chars (which is 2×10⁶ sizeof bytes) takes a little less than 2×10⁶ to write
   GMakeList len sz ->
@@ -342,7 +345,7 @@ runTableModel nativeTable = \case
       in MilliGas $ fromIntegral $ fmtLen * mgPerChar + 1
   GObjOp op -> case op of
     ObjOpLookup key objSize ->
-      let objSzLog = fromIntegral $ I# (IntLog.integerLog2# $ fromIntegral objSize) + 1
+      let objSzLog = fromIntegral $ numberOfBits (toInteger objSize)
       in MilliGas $ objSzLog * textCompareCost key
     ObjOpRemove key objSize ->
       -- an object with 10⁷ keys takes about 200 ms (≈10⁸ milligas) to remove a key of length 1,
@@ -360,6 +363,8 @@ runTableModel nativeTable = \case
   textCompareCost str = fromIntegral $ T.length str
   -- Running CountBytes costs 0.9 MilliGas, according to the analysis in bench/Bench.hs
 
+-- This is the minimum amount of gas we mean to charge to simply use the gas table.
+-- 25 milliGas = 62.5 nanoseconds, which is a negligible amount
 basicWorkGas :: SatWord
 basicWorkGas = 25
 
@@ -373,18 +378,9 @@ moduleMemoryCost :: Word64 -> MilliGas
 moduleMemoryCost sz = MilliGas $ ceiling (moduleMemFeePerByte * fromIntegral sz) + 60_000_000
 {-# INLINE moduleMemoryCost #-}
 
-perByteFactor :: Rational
-perByteFactor = 1%10
 
 applyLamCostPerArg :: SatWord
 applyLamCostPerArg = 25
-
-memoryCost :: Word64 -> MilliGas
-memoryCost !bytes = gasToMilliGas (Gas totalCost)
-  where
-  !sizeFrac = toRational bytes
-  !totalCost = ceiling (perByteFactor * sizeFrac)
-{-# INLINE memoryCost #-}
 
 
 -- | Our internal gas table for constant costs on natives
@@ -398,30 +394,30 @@ coreBuiltinGasCost = MilliGas . \case
   CoreMultiply -> basicWorkGas
   CoreDivide -> basicWorkGas
   --
-  CoreNegate -> 50
+  CoreNegate -> basicWorkGas
   --
-  CoreAbs -> 50
+  CoreAbs -> basicWorkGas
   -- Pow is also a special case of recursive multiplication, gas table is not enough.
-  CorePow -> 4_000
+  CorePow -> basicWorkGas
   --
   CoreNot -> basicWorkGas
-  -- Todo: ORD functions are special.
-  -- They require more in-depth analysis than currently is being done
-  CoreEq -> 1_000
-  CoreNeq -> 1_000
+  -- ValEqGassed handles EQ and NEQ
+  CoreEq -> basicWorkGas
+  CoreNeq -> basicWorkGas
+  -- Note: `litCmpGassed`
   CoreGT -> basicWorkGas
   CoreGEQ -> basicWorkGas
   CoreLT -> basicWorkGas
   CoreLEQ -> basicWorkGas
   -- All of the bitwise functions are quite fast, regardless of the size of the integer
   -- constant time gas is fine here
-  CoreBitwiseAnd -> 1_000
-  CoreBitwiseOr -> 1_000
-  CoreBitwiseXor -> 1_000
-  CoreBitwiseFlip -> 1_000
+  CoreBitwiseAnd -> 250
+  CoreBitwiseOr -> 250
+  CoreBitwiseXor -> 250
+  CoreBitwiseFlip -> 250
   -- Shift requires special handling
   -- given it can actually grow the number
-  CoreBitShift -> 1
+  CoreBitShift -> basicWorkGas
   -- Todo: rounding likely needs benchmarks, but
   CoreRound -> basicWorkGas
   CoreCeiling -> basicWorkGas
@@ -441,41 +437,40 @@ coreBuiltinGasCost = MilliGas . \case
   CoreTake -> basicWorkGas
   CoreDrop -> basicWorkGas
   -- concat
-  -- Todo: concat gas based on total length of text
-  CoreConcat -> 1
+  CoreConcat -> basicWorkGas
   -- Todo: reverse gas based on `n` elements
-  CoreReverse -> 1
+  CoreReverse -> basicWorkGas
   -- note: contains needs to be gassed based on the
   -- specific data structure, so flat gas won't do
-  CoreContains -> 1
-  -- Todo: sorting gas needs to be revisited
-  CoreSort -> 1
-  CoreSortObject -> 1
+  CoreContains -> basicWorkGas
+  -- Note: Sorting gas is handling in sort
+  CoreSort -> basicWorkGas
+  CoreSortObject -> basicWorkGas
   -- Todo: Delete is O(log n)
-  CoreRemove -> 1
+  CoreRemove -> basicWorkGas
   -- Modulo has the time time complexity as division
   CoreMod -> 1
   -- Map, filter, zip complexity only requires a list reverse, so the only cost
   -- we will charge is the cost of reverse
   CoreMap ->
     basicWorkGas
-  CoreFilter -> 1
-  CoreZip -> 1
+  CoreFilter -> basicWorkGas
+  CoreZip -> basicWorkGas
   -- The time complexity of fold is the time complexity of the uncons operation
   CoreFold -> basicWorkGas
   -- Todo: complexity of these
-  CoreIntToStr -> 1
-  CoreStrToInt -> 1
-  CoreStrToIntBase -> 1
+  CoreIntToStr -> basicWorkGas
+  CoreStrToInt -> basicWorkGas
+  CoreStrToIntBase -> basicWorkGas
   -- Todo: Distinct and format require
   -- special gas handling
-  CoreDistinct -> 1
-  CoreFormat -> 1
+  CoreDistinct -> basicWorkGas
+  CoreFormat -> basicWorkGas
   -- EnumerateN functions require more special gas handling as well
-  CoreEnumerate -> 1
-  CoreEnumerateStepN -> 1
+  CoreEnumerate -> basicWorkGas
+  CoreEnumerateStepN -> basicWorkGas
   -- Show also requires stringification
-  CoreShow -> 1
+  CoreShow -> basicWorkGas
   -- read-* functions no longer parse their input
   -- TODO: is this fine?
   CoreReadMsg -> basicWorkGas
@@ -486,36 +481,35 @@ coreBuiltinGasCost = MilliGas . \case
   CoreReadKeyset -> basicWorkGas
   -- Todo: Enforce functions should have variable gas
   -- based on the guard type
-  CoreEnforceGuard -> 8_000
-  CoreEnforceKeyset -> 8_000
-  CoreKeysetRefGuard -> 7_000
-  -- Todo: At-costs
-  -- depend on impl
-  CoreAt -> 1_000
+  CoreEnforceGuard -> 2_000
+  CoreEnforceKeyset -> 2_000
+  CoreKeysetRefGuard -> 2_000
+
+  CoreAt -> basicWorkGas
   -- Make-list is essentially replicate, so we just
   -- need the gas penalty
-  CoreMakeList -> 1
-  -- Todo: complexity of b64 encode/decode
-  CoreB64Encode -> 1_000
-  CoreB64Decode -> 1_000
+  CoreMakeList -> basicWorkGas
+  -- Note: this is gassed via `StrOpParse`
+  CoreB64Encode -> 250
+  CoreB64Decode -> 250
   -- Todo: str-to-list variable
   -- Str-to-list should be fast (it's essentially just a call to `unpack`)
   -- but should vary based on the length of the string
-  CoreStrToList -> 1_000
+  CoreStrToList -> 250
   -- Yield is essentially all constant-time ops
-  CoreYield -> 2_000
-  CoreYieldToChain -> 2_000
+  CoreYield -> basicWorkGas
+  CoreYieldToChain -> basicWorkGas
   -- Resume already will use applyLam gas
   -- and the rest of the operations are constant time
-  CoreResume -> 2_000
+  CoreResume -> 500
   -- Bind only applies a lambda
   CoreBind ->
     basicWorkGas
   -- Todo: cap function gas should depend on the work of eval-cap
   -- and the cap state
-  CoreRequireCapability -> 1_000
-  CoreComposeCapability -> 1_000
-  CoreInstallCapability -> 3_000
+  CoreRequireCapability -> 500
+  CoreComposeCapability -> 500
+  CoreInstallCapability -> 500
   -- emit-event is constant work
   CoreEmitEvent -> 1_000
   -- Create-capability-guard is constant time and fast, in core we are cheaper here
@@ -538,25 +532,25 @@ coreBuiltinGasCost = MilliGas . \case
   -- Registry functions
   -- both are constant-time work, but incur a db tx penalty
   CoreDefineKeySet ->
-    25_000
+    5_000
   CoreDefineKeysetData ->
-    25_000
+    5_000
   -- fold-db incurs currently a penalty on mainnet
   CoreFoldDb ->
     dbSelectPenalty
   -- Insert db overhead
   CoreInsert ->
-    100_000
+    dbWritePenalty
   -- Todo: keys gas needs to be revisited. We leave in the current penalty
   CoreKeys ->
     dbSelectPenalty
   -- read depends on bytes as well, 10 gas is a tx penalty
   CoreRead ->
-    10_000
+    dbReadPenalty
   CoreSelect ->
-    40_000_000
+    dbSelectPenalty
   CoreSelectWithFields ->
-    40_000_000
+    dbSelectPenalty
   -- Update same gas penalty as write and insert
   CoreUpdate -> 100_000
   -- note: with-default read and read
@@ -580,16 +574,24 @@ coreBuiltinGasCost = MilliGas . \case
   CoreHash -> basicWorkGas
   -- Continue in pact-core currently amounts to `id`
   CoreContinue -> basicWorkGas
-  -- Todo: Time functions complexity
-  CoreParseTime -> 2_000
-  CoreFormatTime -> 4_000
-  CoreTime ->
-    2_000
-  CoreAddTime -> 3_000
-  CoreDiffTime -> 8_000
-  CoreHours -> 4_000
-  CoreMinutes -> 4_000
-  CoreDays -> 4_000
+  -- Time functions complexity
+  -- is handled in the function itself
+  CoreParseTime -> 500
+  CoreFormatTime -> 500
+  -- Time parsing runs EXTREMELY quick
+  --
+  CoreTime -> 500
+
+  -- Add-time and diff-time are essentially constant time
+  -- time is a Word64
+  CoreAddTime -> 250
+  CoreDiffTime -> 250
+
+  -- These 3 functions cost a bit more
+  CoreHours -> 250
+  CoreMinutes -> 250
+  CoreDays -> 250
+
   -- Compose is constant time, and just evaluated in pact-core to
   -- some continuation manipulation
   CoreCompose ->
@@ -599,8 +601,8 @@ coreBuiltinGasCost = MilliGas . \case
   CoreIsPrincipal -> basicWorkGas
   CoreTypeOfPrincipal -> basicWorkGas
   -- note: validate-principal is essentially a constant time comparison on fixed-length strings.
-  -- Todo: benchmark validate-principal
-  CoreValidatePrincipal -> 1_000
+  -- The actual gassing of constructing the principal is done inside of it
+  CoreValidatePrincipal -> 250
   -- Namespace function is constant work
   CoreNamespace -> basicWorkGas
   -- define-namespace tx penalty
@@ -627,7 +629,7 @@ coreBuiltinGasCost = MilliGas . \case
   CoreHyperlaneDecodeMessage -> 2_000
   CoreHyperlaneEncodeMessage -> 2_000
   CoreAcquireModuleAdmin -> 20_000
-  CoreReadWithFields -> 10_000
+  CoreReadWithFields -> dbReadPenalty
   CoreListModules -> dbMetadataTxPenalty
 {-# INLINABLE runTableModel #-}
 
@@ -639,14 +641,15 @@ replNativeGasTable = \case
 
 
 
+-- Select penalty will be revisited @ a later date
 dbSelectPenalty :: SatWord
 dbSelectPenalty = 40_000_000
 
 dbWritePenalty :: SatWord
-dbWritePenalty = 100_000
+dbWritePenalty = 50_000
 
 dbReadPenalty :: SatWord
-dbReadPenalty = 10_000
+dbReadPenalty = 2_500
 
 dbMetadataTxPenalty :: SatWord
 dbMetadataTxPenalty = 100_000
