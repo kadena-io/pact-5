@@ -1434,10 +1434,14 @@ evalErrorToBoundedText = mkBoundedText . \case
     thsep ["Install capability failed. Capability is not declared as a managed capability and cannot be installed.", tFqn fqn]
   CapNotInstalled cap ->
     thsep
-      ["Capability " renderQualName (_ctName cap) was not installed. "
+      ["Capability"
+      , renderQualName (_ctName cap)
+      , "was not installed."
       , "Check the sigs field or the arguments to verify that the capability is specified correctly."]
   CapAlreadyInstalled cap ->
-    thsep ["Capability " renderQualName (_ctName cap) " already installed."]
+    thsep ["Capability"
+          , renderQualName (_ctName cap)
+          , "already installed."]
   ModuleMemberDoesNotExist fqn ->
     thsep ["Module member does not exist:", tFqn fqn]
   NoSuchKeySet ksn ->
