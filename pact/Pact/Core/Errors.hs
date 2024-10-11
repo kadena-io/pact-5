@@ -1582,8 +1582,8 @@ userRecoverableErrorToBoundedText = mkBoundedText . \case
   CapabilityPactGuardInvalidPactId currPid pgId ->
     thsep
       ["Pact guard failed because of an invalid pact id. Expected:"
-      , tDpId pgId
-      , ", but got:"
+      , tDpId pgId <> ","
+      , "but got:"
       , tDpId currPid]
   EnvReadFunctionFailure desc ->
     thsep [_natName desc, "failed. Invalid format or missing key."]
