@@ -17,7 +17,6 @@ module Pact.Core.Gas.TableGasModel
  )
  where
 
-import Data.Word(Word64)
 import qualified Data.Text as T
 import GHC.Num.Integer
 import qualified GHC.Integer.Logarithms as IntLog
@@ -279,10 +278,10 @@ runTableModel nativeTable = \case
   -- So we add a bit of a higher penalty to this, since this
   -- costs us gas as well
   GWrite bytes ->
-    let mgPerByte = 25
+    let mgPerByte = 100
     in MilliGas $ fromIntegral $ bytes * mgPerByte
   GRead bytes ->
-    let mgPerByte = 10
+    let mgPerByte = 25
     in MilliGas $ fromIntegral $ bytes * mgPerByte
     -- a string of 10⁶ chars (which is 2×10⁶ sizeof bytes) takes a little less than 2×10⁶ to write
   GMakeList len sz ->
@@ -320,7 +319,21 @@ runTableModel nativeTable = \case
      quadraticGasFactor, linearGasFactor :: SatWord
      quadraticGasFactor = 50_000
      linearGasFactor = 38_000
-  GModuleMemory bytes -> moduleMemoryCost bytes
+  GModuleOp op -> case op of
+    MOpLoadModule byteSize  ->
+      -- After some benchmarking, we can essentially say that the byte size of linear in
+      -- the size of the module.
+      -- We can cost module loads at approximately
+      -- y=0.005x+10
+      let !szCost = fromIntegral (byteSize `div` 200) + 10
+      in MilliGas szCost
+    MOpMergeDeps i i' ->
+      -- We can cost this quadratically, at 10mg per element merged
+      MilliGas $ fromIntegral (i * i') * 10
+    MOpDesugarModule sz ->
+      -- This is a pretty expensive traversal, so we will charge a bit more of a hefty price for it
+      let bytePenalty = 500
+      in MilliGas (fromIntegral sz * bytePenalty)
   GStrOp op -> case op of
     StrOpLength len ->
       let charsPerMg = 100
@@ -367,16 +380,6 @@ runTableModel nativeTable = \case
 -- 25 milliGas = 62.5 nanoseconds, which is a negligible amount
 basicWorkGas :: SatWord
 basicWorkGas = 25
-
--- Slope to costing function,
--- sets a 10mb practical limit on module sizes.
-moduleMemFeePerByte :: Rational
-moduleMemFeePerByte = 0.006
-
--- 0.01x+50000 linear costing funciton
-moduleMemoryCost :: Word64 -> MilliGas
-moduleMemoryCost sz = MilliGas $ ceiling (moduleMemFeePerByte * fromIntegral sz) + 60_000_000
-{-# INLINE moduleMemoryCost #-}
 
 
 applyLamCostPerArg :: SatWord

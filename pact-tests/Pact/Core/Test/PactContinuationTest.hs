@@ -120,7 +120,7 @@ testManagedCaps = do
     let allCmds = [sysModuleCmd,acctModuleCmd,createAcctCmd,managedPay,managedPayFails]
     allResults <- runAll allCmds
 
-    mhash <- mkModuleHash "bgU2grm5I7_Jyx6Hb93izSWhNDNWcxYlLYOPhNCdIDU"
+    mhash <- mkModuleHash "PkJ6B966fhCGDEWeTfbfP78btLEfM9SpjButLlA4Lj4"
 
     runResults allResults $ do
       sysModuleCmd `succeedsWith` (`shouldBe` textVal "system module loaded")
@@ -602,10 +602,10 @@ testPactYield = testGroup "pact yield"$ [
         mkFakeSPV testFlags
 
   ,testCase "testCrossChainYield:succeeds with blessed module" $
-    testCrossChainYield "(bless \"8vxjBWBZuWlMJTKfnsq2W6g89TpB2uoW9S1WLky_55Q\")" Nothing mkFakeSPV testFlags
+    testCrossChainYield "(bless \"kuBrddl82uCHbhV1ECaH7fMf00Pq9lc2mPShU4Us_Jg\")" Nothing mkFakeSPV testFlags
 
   ,testCase "testCrossChainYield:fails with a ContinuationError post-fork" $
-      testCrossChainYield "(bless \"8vxjBWBZuWlMJTKfnsq2W6g89TpB2uoW9S1WLky_55Q\")"
+      testCrossChainYield "(bless \"kuBrddl82uCHbhV1ECaH7fMf00Pq9lc2mPShU4Us_Jg\")"
         -- pact-5 --explain-error-code 0x0003390000000000
         -- Encountered failure in: PEExecutionError, caused by: ContinuationError
         (Just $ (`shouldBeErrorCode` ErrorCode 0x0003380000000000))
@@ -645,7 +645,7 @@ testNestedPactYield = testGroup "nested pact yield" $ [
       chain0Results <-
         runAll' [moduleCmd,executePactCmd] noSPVSupport nestedDefPactFlags
 
-      mhash <- mkModuleHash "VOunnloSfmscuulGcjOD9kwW8uZ17Thg-b2BZkjCuio"
+      mhash <- mkModuleHash "J7Ua1U7GmzmmoMpEz3mASyG5aYEPGT6zZAkDZn7bl9I"
 
       runResults chain0Results $ do
         succeeds moduleCmd
@@ -978,7 +978,7 @@ testCrossChainYield blessCode expectFailure mkSpvSupport spvFlags = step0
       chain0Results <-
         runAll' [moduleCmd,executePactCmd] noSPVSupport []
 
-      mhash <- mkModuleHash "8vxjBWBZuWlMJTKfnsq2W6g89TpB2uoW9S1WLky_55Q"
+      mhash <- mkModuleHash "kuBrddl82uCHbhV1ECaH7fMf00Pq9lc2mPShU4Us_Jg"
 
       runResults chain0Results $ do
         succeeds moduleCmd

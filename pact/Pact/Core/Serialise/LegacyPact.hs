@@ -599,6 +599,14 @@ fromLegacyTerm mh = \case
         [cond, b1, b2] -> pure (BuiltinForm (CIf cond b1 b2) ())
         _ -> throwError "invariant failure"
 
+      BuiltinForm CAnd{} _ -> traverse (fromLegacyTerm mh) args >>= \case
+        [b1, b2] -> pure (BuiltinForm (CAnd b1 b2) ())
+        _ -> throwError "invariant failure"
+
+      BuiltinForm COr{} _ -> traverse (fromLegacyTerm mh) args >>= \case
+        [b1, b2] -> pure (BuiltinForm (COr b1 b2) ())
+        _ -> throwError "invariant failure"
+
       BuiltinForm CWithCapability{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [t1, ListLit t2 _] -> case reverse t2 of
           [] -> error "invariant failure: with-cap empty body"

@@ -20,7 +20,7 @@
   )
 
 ; base case
-(check-hash-equivalent "m" "RuIkYQl_UACK7vQ6rHgPFLhHnetQEbcBLAPKnjNaRE8" (describe-module "m"))
+(check-hash-equivalent "m" "qKuZPdSFkGubaGD232KSyayEbUg1e9R47eiDqrpoghs" (describe-module "m"))
 
 (env-data {'k:2})
 (module m m-gov
@@ -40,7 +40,7 @@
 
 
 ; Defconst changed, ensure hash changed
-(check-hash-equivalent "m" "seyJxI0cLY3JQWROh9L05tNHsBRdL3c3_FJ1wYUmRTU" (describe-module "m"))
+(check-hash-equivalent "m" "auoL6ISoyHwxhzTs5dwvCZUZLP1r53ijK-3zVbJh50I" (describe-module "m"))
 
 (module m m-gov
   (defcap m-gov () true)
@@ -59,7 +59,7 @@
 
 
 ; Basic code changed: hash should change
-(check-hash-equivalent "m" "YCwKvDWrbTuUvkTsZrq45zT4ehQ7_VVC5iKD_EQ4RLA" (describe-module "m"))
+(check-hash-equivalent "m" "D0WKIRJUOzdT2S0dKD6WAY5VgWVSCDJMl_4pKTt_ZSM" (describe-module "m"))
 
 ; Modules, interfaces and deps
 (module n gg
@@ -72,7 +72,7 @@
 
   )
 
-(check-hash-equivalent "n" "LdTqx-VG_ON5G7G_xupDcR6qECKsPq7BuzLWLqnYtr0" (describe-module "n"))
+(check-hash-equivalent "n" "9qHMWe0If_hD55bZpThFQV1pM1Z6dlMU3s605r9CFJE" (describe-module "n"))
 
 ; Update dependent module, ensure hash changes
 (module m m-gov
@@ -102,7 +102,7 @@
   )
 
 ; m changed, hash should have changed
-(check-hash-equivalent "m" "gVEMVf08anI1tUjmiNEqYKF1sXeSIVYiRVw_KFEqZc0" (describe-module "m"))
+(check-hash-equivalent "m" "xx7zLkXzFusqgJwxPWLqqiqhqJGdIdyUQ3I6crkCblY" (describe-module "m"))
 
 ; n did not change, but the dependency hash changed, so it should also change the hash
-(check-hash-equivalent "n" "jnD3XcX4m8pfO-OS9ODvwaxEbMR_IHP7j1-pY1Vuu2M" (describe-module "n"))
+(check-hash-equivalent "n" "JN9dKCIoSGJEGDe6iZIWP_g7xm0XeaAqlZl9Se7iGJY" (describe-module "n"))

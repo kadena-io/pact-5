@@ -92,7 +92,7 @@
 
 ;; check events
 (expect "step 0 events"
- [{"module-hash": "rmN99MpBmJbapgVRV3GjII6I4UUkl8k5pBF7-k92Lt8"
+ [{"module-hash": "gespHYnxeUwtbQdazfmncIHsd3aN-aUy7HvFP5532sQ"
    ,"name": "pact.X_YIELD"
    ,"params": ["1" "yieldtest.cross-chain" ["emily"]]}]
  (env-events true))
@@ -106,7 +106,7 @@
 
 ;; check events
 (expect "step 1 events"
- [{"module-hash": "rmN99MpBmJbapgVRV3GjII6I4UUkl8k5pBF7-k92Lt8"
+ [{"module-hash": "gespHYnxeUwtbQdazfmncIHsd3aN-aUy7HvFP5532sQ"
     ,"name": "pact.X_RESUME"
     ,"params": ["0" "yieldtest.cross-chain" ["emily"]]}]
  (env-events true))

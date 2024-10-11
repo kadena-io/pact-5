@@ -65,6 +65,8 @@ import Pact.Core.Guards
 import Pact.Core.Imports
 import Pact.Core.Environment
 import Pact.Core.Namespace
+import Pact.Core.Gas
+import Pact.Core.SizeOf
 
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 
@@ -131,7 +133,7 @@ type RenamerM e b i =
   RenamerT b i (EvalM e b i)
 
 -- | A simple typeclass for resolving arity overloads
-class IsBuiltin b => DesugarBuiltin b where
+class (IsBuiltin b, SizeOf b) => DesugarBuiltin b where
   liftCoreBuiltin :: CoreBuiltin -> b
   desugarAppArity :: i -> b -> [Term n dt b i] -> Term n dt b i
 
@@ -1403,7 +1405,10 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash txh mc
   bindsWithImports <- foldlM (handleImport i) binds imports
   (defs'', _, _, _) <- over _1 reverse <$> foldlM (go mname) ([], S.empty, bindsWithImports, M.empty) defs'
   traverse_ (checkImplements i defs'' mname) implements
-  pure (Module mname mgov' defs'' blessed imports implements mhash txh mcode i)
+  let resolvedModule = Module mname mgov' defs'' blessed imports implements mhash txh mcode i
+  modSize <- lift $ sizeOf i SizeOfV0 (() <$ resolvedModule)
+  lift $ chargeGasArgs i (GModuleOp (MOpDesugarModule modSize))
+  pure resolvedModule
   where
   -- Our deps are acyclic, so we resolve all names
   go mname (!defns, !s, !m, !mlocals) defn = do
@@ -1527,7 +1532,10 @@ renameInterface (Interface unmangled defs imports ih txHash mcode info) = do
   binds <- view reBinds
   bindsWithImports <- foldlM (handleImport info) binds imports
   (defs'', _, _, _) <- over _1 reverse <$> foldlM (go ifn) ([], S.empty, bindsWithImports, S.empty) defs'
-  pure (Interface ifn defs'' imports ih txHash mcode info)
+  let resolvedIface = Interface ifn defs'' imports ih txHash mcode info
+  ifaceSize <- lift $ sizeOf info SizeOfV0 (() <$ resolvedIface)
+  lift $ chargeGasArgs info (GModuleOp (MOpDesugarModule ifaceSize))
+  pure resolvedIface
   where
   mkScc ifn dns def = (def, ifDefName def, S.toList (ifDefSCC ifn dns def))
   go ifn (ds, s, m, dfnSet) d = do

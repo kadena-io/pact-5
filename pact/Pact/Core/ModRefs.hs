@@ -11,7 +11,6 @@ import Control.Lens
 import Control.DeepSeq
 import Data.Set(Set)
 import GHC.Generics
-import qualified Data.Set as S
 
 import Pact.Core.Names
 import Pact.Core.Pretty
@@ -30,8 +29,7 @@ data ModRef
 instance NFData ModRef
 
 instance Pretty ModRef where
-  pretty (ModRef _mn imps) =
-    "module" <> braces (pretty (S.toList imps))
+  pretty (ModRef mn _) = pretty mn
 
 instance Eq ModRef where
   m1 == m2 = _mrModule m1 == _mrModule m2
