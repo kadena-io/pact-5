@@ -1225,12 +1225,12 @@ ensureBound msg = BoundedText (T.take (fromIntegral (natVal (Proxy @k))) msg)
 dbOpErrorToBoundedText' :: DbOpError -> Text
 dbOpErrorToBoundedText' = \case
     WriteError ->
-      "Database error: Writing " rk "in" tn " failed because of an error."
+      "Database error: Writing failed because of an error."
     RowReadDecodeFailure rk ->
       thsep ["Deserialization failed for the value at key:", abbrevText 10 rk]
     RowFoundError tn rk ->
       thsep
-        ["Insert failed because the value already exists in the table:" "
+        ["Insert failed because the value already exists in the table:"
         , renderTableName tn, "at key"
         , tdquotes $ abbrevRowKey rk]
     NoRowFound tn rk ->
@@ -1242,11 +1242,11 @@ dbOpErrorToBoundedText' = \case
     NoSuchTable tn ->
       thsep ["Insert/Update failed because table ", renderTableName tn, "was not found."]
     TableAlreadyExists tn ->
-      thsep [""Insert/Update failed because table", renderTableName tn, "already exists.""]
+      thsep ["Insert/Update failed because table", renderTableName tn, "already exists."]
     TxAlreadyBegun _ ->
       "Starting a new transaction failed because a transaction has already been initiated."
     NotInTx cmd ->
-      thsep ["Cannot execute " cmd "because no transaction is currently in progress."]
+      thsep ["Cannot execute", cmd, "because no transaction is currently in progress."]
     OpDisallowed ->
       "Operation is not allowed in read-only or system-only mode."
     MultipleRowsReturnedFromSingleWrite ->
