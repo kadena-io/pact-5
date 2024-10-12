@@ -563,8 +563,6 @@ coreBuiltinGasCost = MilliGas . \case
   -- Write penalty as well
   CoreWrite -> dbWritePenalty
   -- Tx-hash should be constant-time
-  -- Todo: benchmark. b64 url conversion is constant time since tx hashes
-  -- are of fixed size
   CoreTxHash ->
     basicWorkGas
   -- and? and co. should have essentially no penalty but whatever applyLam costs

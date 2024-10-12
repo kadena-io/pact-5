@@ -26,6 +26,7 @@ module Pact.Core.Evaluate
   , evalDirectInterpreter
   , evalInterpreter
   , EvalInput
+  , EnableGasLogs(..)
   ) where
 
 import Control.Lens
@@ -35,7 +36,6 @@ import Control.Exception.Safe
 import Data.ByteString (ByteString)
 import Data.Maybe (fromMaybe)
 import Data.Default
-import Data.Text (Text)
 import Data.Map.Strict(Map)
 import Data.IORef
 import Data.Set (Set)
@@ -77,6 +77,11 @@ type Eval = EvalM ExecRuntime CoreBuiltin Info
 type EvalBuiltinEnv = CEK.CoreBuiltinEnv Info
 type PactTxResult a =
   (Either (PactError Info) (a, [TxLog ByteString], Maybe TxId), EvalState CoreBuiltin Info)
+
+data EnableGasLogs
+  = GasLogsEnabled
+  | GasLogsDisabled
+  deriving (Eq, Show, Ord)
 
 evalInterpreter :: Interpreter ExecRuntime CoreBuiltin i
 evalInterpreter =
@@ -133,7 +138,7 @@ data EvalResult = EvalResult
     -- ^ Modules loaded, with flag indicating "newly loaded"
   , _erTxId :: !(Maybe TxId)
     -- ^ Transaction id, if executed transactionally
-  , _erLogGas :: Maybe [(Text, Gas)]
+  , _erLogGas :: Maybe [GasLogEntry CoreBuiltin Info]
     -- ^ Details on each gas consumed/charged
   , _erEvents :: [PactEvent PactValue]
     -- ^ emitted events
@@ -149,16 +154,18 @@ setupEvalEnv
   -> MsgData -- <- create at type for this
   -> Maybe Cont
   -> GasModel CoreBuiltin
+  -> EnableGasLogs
   -> NamespacePolicy
   -> SPVSupport
   -> PublicData
   -> S.Set ExecutionFlag
   -> IO (EvalEnv CoreBuiltin a)
-setupEvalEnv pdb mode msgData mCont gasModel' np spv pd efs = do
+setupEvalEnv pdb mode msgData mCont gasModel' gasLogsEnabled np spv pd efs = do
   gasRef <- newIORef mempty
+  gasLogs <- if gasLogsEnabled == GasLogsEnabled then Just <$> newIORef mempty else pure Nothing
   let gasEnv = GasEnv
         { _geGasRef = gasRef
-        , _geGasLog = Nothing
+        , _geGasLog = gasLogs
         , _geGasModel = gasModel'
         }
   pure $ EvalEnv
@@ -189,34 +196,41 @@ setupEvalEnv pdb mode msgData mCont gasModel' np spv pd efs = do
 
 evalExec
   :: RawCode -> ExecutionMode -> PactDb CoreBuiltin Info
-  -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
+  -> SPVSupport -> GasModel CoreBuiltin
+  -> EnableGasLogs
+  -> Set ExecutionFlag -> NamespacePolicy
   -> PublicData -> MsgData
   -> CapState QualifiedName PactValue
   -> [Lisp.TopLevel SpanInfo] -> IO (Either (PactError Info) EvalResult)
-evalExec code execMode db spv gasModel flags nsp publicData msgData capState terms = do
-  evalEnv <- setupEvalEnv db execMode msgData Nothing gasModel nsp spv publicData flags
+evalExec code execMode db spv gasModel gle flags nsp publicData msgData capState terms = do
+  evalEnv <- setupEvalEnv db execMode msgData Nothing gasModel gle nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   interpret code evalEnv evalState (Right terms)
 
 evalExecTerm
   :: ExecutionMode
   -> PactDb CoreBuiltin Info
-  -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
+  -> SPVSupport -> GasModel CoreBuiltin
+  -> EnableGasLogs
+  -> Set ExecutionFlag -> NamespacePolicy
   -> PublicData -> MsgData
   -> CapState QualifiedName PactValue
   -> Lisp.Expr SpanInfo -> IO (Either (PactError Info) EvalResult)
-evalExecTerm execMode db spv gasModel flags nsp publicData msgData capState term = do
-  evalEnv <- setupEvalEnv db execMode msgData Nothing gasModel nsp spv publicData flags
+evalExecTerm execMode db spv gasModel gle flags nsp publicData msgData capState term = do
+  evalEnv <- setupEvalEnv db execMode msgData Nothing gasModel gle nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   interpret (RawCode mempty) evalEnv evalState (Right [Lisp.TLTerm term])
 
 evalContinuation
-  :: ExecutionMode -> PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
+  :: ExecutionMode -> PactDb CoreBuiltin Info -> SPVSupport
+  -> GasModel CoreBuiltin
+  -> EnableGasLogs
+  -> Set ExecutionFlag -> NamespacePolicy
   -> PublicData -> MsgData
   -> CapState QualifiedName PactValue
   -> Cont -> IO (Either (PactError Info) EvalResult)
-evalContinuation execMode db spv gasModel flags nsp publicData msgData capState cont = do
-  evalEnv <- setupEvalEnv db execMode msgData (Just cont) gasModel nsp spv publicData flags
+evalContinuation execMode db spv gasModel gle flags nsp publicData msgData capState cont = do
+  evalEnv <- setupEvalEnv db execMode msgData (Just cont) gasModel gle nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   case _cProof cont of
     Nothing ->
@@ -236,12 +250,15 @@ evalContinuation execMode db spv gasModel flags nsp publicData msgData capState 
 
 evalGasPayerCap
   :: CapToken QualifiedName PactValue
-  -> PactDb CoreBuiltin Info -> SPVSupport -> GasModel CoreBuiltin -> Set ExecutionFlag -> NamespacePolicy
+  -> PactDb CoreBuiltin Info -> SPVSupport
+  -> GasModel CoreBuiltin
+  -> EnableGasLogs
+  -> Set ExecutionFlag -> NamespacePolicy
   -> PublicData -> MsgData
   -> CapState QualifiedName PactValue
   -> Lisp.Expr Info -> IO (Either (PactError Info) EvalResult)
-evalGasPayerCap capToken db spv gasModel flags nsp publicData msgData capState body = do
-  evalEnv <- setupEvalEnv db Transactional msgData Nothing gasModel nsp spv publicData flags
+evalGasPayerCap capToken db spv gasModel gle flags nsp publicData msgData capState body = do
+  evalEnv <- setupEvalEnv db Transactional msgData Nothing gasModel gle nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   interpretGasPayerTerm evalEnv evalState capToken body
 
@@ -255,6 +272,9 @@ interpret
 interpret code evalEnv evalSt evalInput = do
   (result, state) <- evalWithinTx code evalInput evalEnv evalSt
   gas <- readIORef (_geGasRef $ _eeGasEnv evalEnv)
+  gasLogs <- case _geGasLog $ _eeGasEnv evalEnv of
+    Nothing -> pure Nothing
+    Just gl -> Just <$> readIORef gl
   case result of
     Left err -> return $ Left err
     Right (rs, logs, txid) ->
@@ -265,7 +285,7 @@ interpret code evalEnv evalSt evalInput = do
         , _erGas = milliGasToGas gas
         , _erLoadedModules = _loModules $ _esLoaded state
         , _erTxId = txid
-        , _erLogGas = Nothing
+        , _erLogGas = gasLogs
         , _erEvents = reverse $ _esEvents state
         }
 
