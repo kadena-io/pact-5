@@ -294,4 +294,4 @@ renderDomain = \case
   DModules -> "SYS:Modules"
   DNamespaces -> "SYS:Namespaces"
   DDefPacts -> "SYS:Pacts"
-  DModuleSource -> "SYS:ModuleSource"
+  DModuleSource -> "SYS:ModuleSources"
