@@ -169,7 +169,7 @@ data ZKGroup
   -- ^ Group one, that is Fq in Pairing
   | ZKG2
   -- ^ Group two, that is, Fq2 Pairing
-  deriving (Show, Generic)
+  deriving (Show, Eq, Generic)
 
 instance NFData ZKGroup
 
@@ -180,7 +180,7 @@ data ZKArg
   -- ^ Scalar multiplication gas, group dependent
   | Pairing !Int
   -- ^ Pairing function gas, dependent on number of pairs
-  deriving (Show, Generic, NFData)
+  deriving (Show, Eq, Generic, NFData)
 
 data IntegerPrimOp
   = PrimOpAdd
@@ -261,7 +261,7 @@ data GasArgs b
   | GCapOp !CapOp
   | GCountBytes
   -- ^ Cost of computing SizeOf for N bytes.
-  deriving (Show, Generic, NFData)
+  deriving (Show, Eq, Generic, NFData)
 
 data ModuleOp
   = MOpLoadModule !Int
@@ -271,7 +271,7 @@ data ModuleOp
   -- ^ Cost of adding deps to the symbol table
   | MOpDesugarModule !Word64 -- Size of the tree
   -- ^ the cost of module desugar
-  deriving (Show, Generic, NFData)
+  deriving (Show, Eq, Generic, NFData)
 
 instance Show b => Pretty (GasArgs b) where
   pretty = pretty . show
@@ -279,24 +279,24 @@ instance Show b => Pretty (GasArgs b) where
 newtype GasTextLength
   = GasTextLength Int
   deriving Show
-  deriving newtype NFData
+  deriving newtype (Eq, NFData)
 
 newtype GasListLength
   = GasListLength Int
   deriving Show
-  deriving newtype NFData
+  deriving newtype (Eq, NFData)
 
 newtype GasObjectSize
   = GasObjectSize Int
   deriving Show
-  deriving newtype NFData
+  deriving newtype (Eq, NFData)
 
 data SearchType
   = SubstringSearch !Text !Text
   -- ^ searching `needle` in `hay`
   | FieldSearch !Int
   -- ^ checking if an object has a field
-  deriving (Show, Generic, NFData)
+  deriving (Show, Eq, Generic, NFData)
 
 data ComparisonType
   = TextComparison !Text
@@ -315,7 +315,7 @@ data ComparisonType
   | ObjComparison !Int
   -- ^ Compare objects of at most size `N`
   | SortComparisons !Word64 !Int
-  deriving (Show, Generic, NFData)
+  deriving (Show, Eq, Generic, NFData)
 
 data ConcatType
   = TextConcat !GasTextLength
@@ -326,7 +326,7 @@ data ConcatType
   -- ^ Final list length
   | ObjConcat !Int
   -- ^ Upper bound on max object size
-  deriving (Show, Generic, NFData)
+  deriving (Show, Eq, Generic, NFData)
 
 data SerializationCosts = SerializationCosts
   { objectKeyCostMilliGasOffset :: !SatWord
@@ -379,7 +379,7 @@ data GasLogEntry b i = GasLogEntry
   , _gleInfo :: i
   , _gleInfoStack :: [i]
   , _gleThisUsed :: !MilliGas
-  } deriving (Show, Generic, NFData)
+  } deriving (Show, Eq, Generic, NFData)
 
 data GasEnv b i
   = GasEnv
