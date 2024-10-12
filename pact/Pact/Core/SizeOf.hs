@@ -63,6 +63,7 @@ import Pact.Core.Literal
 import Pact.Core.PactValue
 import Pact.Core.Guards
 import Pact.Core.DefPacts.Types
+import Pact.Core.Persistence.Types
 import Pact.Core.Imports
 import Pact.Core.Info
 import Pact.Core.ModRefs
@@ -129,9 +130,8 @@ cborArraySize i ver v = do
   -- 1 byte for type tag (3 bits major type array, 5 bits for variable length)
   -- 4 bytes for length (this is actually a MAJOR overshoot, but this is fine)
   let arrayOverhead = 5
-  _ <- countBytes i arrayOverhead
   !elementSizes <- foldM (\count e -> (+ count) <$> sizeOf i ver e) 0 v
-  pure $ arrayOverhead + elementSizes
+  countBytes i $ arrayOverhead + elementSizes
 {-# INLINE cborArraySize #-}
 
 instance (SizeOf v) => SizeOf (Vector v) where
@@ -184,7 +184,7 @@ instance (SizeOf i) => SizeOf (DecimalRaw i) where
   sizeOf i ver (Decimal p m) = do
     pSize <- sizeOf i ver p
     mSize <- sizeOf i ver m
-    pure $ pSize + mSize
+    countBytes i $ tagOverhead + pSize + mSize
 
 instance SizeOf Int64 where
   sizeOf i _ver _ = countBytes i (tagOverhead + wordSize)
@@ -264,6 +264,7 @@ instance SizeOf Literal where
 
 instance SizeOf LineInfo where
   sizeOf i ver (LineInfo li) = sizeOf i ver li
+  {-# INLINE sizeOf #-}
 
 -- | Note: we will _not_ charge for the size of the module
 instance SizeOf ModuleCode where
@@ -411,6 +412,7 @@ instance SizeOf SpanInfo where
 -- builtins
 instance SizeOf CoreBuiltin where
   sizeOf _i _ver _ = pure (tagOverhead + 1)
+  {-# INLINE sizeOf #-}
 
 instance SizeOf ReplOnlyBuiltin where
   sizeOf _i _ver _ = pure (tagOverhead + 1)
@@ -761,3 +763,13 @@ instance SizeOf Namespace where
       szc <- sizeOf i ver c
       pure (tagOverhead + sza + szb + szc)
 
+instance (SizeOf b, SizeOf i) => SizeOf (ModuleData b i) where
+  sizeOf i ver = \case
+    ModuleData a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (tagOverhead + sza + szb)
+    InterfaceData a b -> do
+      sza <- sizeOf i ver a
+      szb <- sizeOf i ver b
+      pure (tagOverhead + sza + szb)

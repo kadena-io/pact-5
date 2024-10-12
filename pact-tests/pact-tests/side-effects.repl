@@ -53,11 +53,11 @@
 (env-gaslimit 100000)
 (env-gas 0)
 (acquire-module-admin m)
-(expect "Acquiring module admin gas cost evaluates enumerate" 45 (env-gas))
+(expect "Acquiring module admin gas cost evaluates enumerate" 63 (env-gas))
 (acquire-module-admin m)
 ; Note: The gas cost here is: the flat cost of acquire-module-admin
 ; as a native + the gas from the previous test. In other words:
 ; this is testing that the only gas consumed is from the flat native cost, which means
 ; we didn't evaluate the cap twice
-(expect "Acquiring module admin twice does not evaluate the cap twice" (+ 20 45) (env-gas))
+(expect "Acquiring module admin twice does not evaluate the cap twice" (+ 20 63) (env-gas))
 (commit-tx)
