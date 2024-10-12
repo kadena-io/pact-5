@@ -278,10 +278,10 @@ runTableModel nativeTable = \case
   -- So we add a bit of a higher penalty to this, since this
   -- costs us gas as well
   GWrite bytes ->
-    let mgPerByte = 100
+    let mgPerByte = 200
     in MilliGas $ fromIntegral $ bytes * mgPerByte
   GRead bytes ->
-    let mgPerByte = 25
+    let mgPerByte = 100
     in MilliGas $ fromIntegral $ bytes * mgPerByte
     -- a string of 10⁶ chars (which is 2×10⁶ sizeof bytes) takes a little less than 2×10⁶ to write
   GMakeList len sz ->
@@ -379,8 +379,7 @@ runTableModel nativeTable = \case
 -- This is the minimum amount of gas we mean to charge to simply use the gas table.
 -- 25 milliGas = 62.5 nanoseconds, which is a negligible amount
 basicWorkGas :: SatWord
-basicWorkGas = 25
-
+basicWorkGas = 200
 
 applyLamCostPerArg :: SatWord
 applyLamCostPerArg = 25
@@ -452,7 +451,7 @@ coreBuiltinGasCost = MilliGas . \case
   -- Todo: Delete is O(log n)
   CoreRemove -> basicWorkGas
   -- Modulo has the time time complexity as division
-  CoreMod -> 1
+  CoreMod -> basicWorkGas
   -- Map, filter, zip complexity only requires a list reverse, so the only cost
   -- we will charge is the cost of reverse
   CoreMap ->
@@ -652,7 +651,7 @@ dbWritePenalty :: SatWord
 dbWritePenalty = 50_000
 
 dbReadPenalty :: SatWord
-dbReadPenalty = 2_500
+dbReadPenalty = 4_500
 
 dbMetadataTxPenalty :: SatWord
 dbMetadataTxPenalty = 100_000

@@ -9,14 +9,14 @@
 (env-gaslog)
 (expect
   "Gas cost of loading fungible contract"
-  687 (env-gas))
+  879 (env-gas))
 
 (env-gas 0) (env-gaslog)
 (load "coin-v1/coin.pact")
 (env-gaslog)
 (expect
   "Gas cost of loading coin contract"
-  12118 (env-gas))
+  15901 (env-gas))
 (env-gas 0)
 (commit-tx)
 
@@ -50,7 +50,7 @@
 (env-gaslog)
 (expect
   "Gas cost of coin contract account creation"
-  57 (env-gas))
+  64 (env-gas))
 
 (create-account 'doug (read-keyset 'doug))
 
@@ -90,7 +90,7 @@
 (env-gaslog)
 (expect
   "Gas cost of querying an account's balance"
-  5 (env-gas))
+  11 (env-gas))
 
 ; account information checks out for new accounts
 (env-gas 0) (env-gaslog)
@@ -101,7 +101,7 @@
 (env-gaslog)
 (expect
   "Gas cost of querying the details of an account"
-  5 (env-gas))
+  12 (env-gas))
 
 (commit-tx)
 
@@ -127,7 +127,7 @@
 (env-gaslog)
 (expect
   "Gas cost of testing the DEBIT capability"
-  7 (env-gas))
+  13 (env-gas))
 
 ; debit tests
 (expect-failure
@@ -395,7 +395,7 @@
 (env-gaslog)
 (expect
   "Gas cost of transfer"
-  187 (env-gas))
+  232 (env-gas))
 
 (expect-failure "emily->doug capability used up"
   "TRANSFER exceeded"
@@ -432,7 +432,7 @@
   (transfer-create 'doug 'will (read-keyset 'will) 1.0))
 (env-gaslog)
 (expect
-  "Gas cost of transfer-create" 182 (env-gas))
+  "Gas cost of transfer-create" 216 (env-gas))
 
 (expect
   "doug now has 0.4 coins"

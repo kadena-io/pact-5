@@ -85,7 +85,7 @@ instance Pretty (CompileValue i) where
       "Loaded interface" <+> pretty mn <> ", hash" <+> pretty (moduleHashToText mh)
     InterpretValue v _ -> pretty v
     LoadedImports i ->
-      "Loaded imports from" <> pretty (_impModuleName i)
+      "Loaded imports from" <+> pretty (_impModuleName i)
 
 
 enforceNamespaceInstall
@@ -210,7 +210,7 @@ evalTopLevel interpreter (RawCode code) tlFinal deps = do
         CapGov _ -> pure ()
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = ModuleData m deps'
-      mSize <- sizeOf (_mInfo m) SizeOfV0 m
+      mSize <- sizeOf (_mInfo m) SizeOfV0 mdata
       chargeGasArgs (_mInfo m) (GWrite mSize)
       evalWrite (_mInfo m) pdb Write DModules (view mName m) mdata
       -- Write sliced modules to the pact db
@@ -228,7 +228,7 @@ evalTopLevel interpreter (RawCode code) tlFinal deps = do
     TLInterface iface -> do
       let deps' = M.filterWithKey (\k _ -> S.member (_fqModule k) deps) (_loAllLoaded lo0)
           mdata = InterfaceData iface deps'
-      ifaceSize <- sizeOf (_ifInfo iface) SizeOfV0 iface
+      ifaceSize <- sizeOf (_ifInfo iface) SizeOfV0 mdata
       chargeGasArgs (_ifInfo iface) (GWrite ifaceSize)
       evalWrite (_ifInfo iface) pdb Write DModules (view ifName iface) mdata
      -- Write sliced interface code to the pact db
