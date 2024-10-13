@@ -1,0 +1,54 @@
+(module some-module g
+  (defcap g () true)
+
+  (defschema some-guard a:guard)
+  (deftable my-guards:{some-guard})
+
+  (defcap CAPGUARD (a:integer b:integer) (+ a b))
+
+  (defun my-module-guard () (create-module-guard "beepboop"))
+
+  (defpact my-pact ()
+    (step
+      (let ((blah 1))
+      (write my-guards "g1" {"a":(create-pact-guard "1")})
+      (write my-guards "g2" {"a":(create-capability-pact-guard (CAPGUARD 1 23))})
+      )
+      )
+    (step 42069)
+  )
+  )
+
+
+(env-data
+  { "ks1":["robert"]
+  , "ks2":{"keys":["robert", "jose", "edmund", "chessai"], "pred":"keys-2"}}
+  )
+(create-table my-guards)
+(my-pact)
+
+
+;  (env-exec-config ['DisablePact44]) ; Uncomment to test with prod backcompat
+(define-keyset "my-ks" (read-keyset "ks2"))
+
+(expect "integer regression" "123" (format "{}" [123]))
+(expect "decimal regression 1" "123.0" (format "{}" [123.0]))
+(expect "decimal regression 2" "123.456" (format "{}" [123.456]))
+(expect "bool regression" "[true, false]" (format "{}" [[true, false]]))
+(expect "time regression" "\"2024-07-22T12:00:00Z\"" (format "{}" [(time "2024-07-22T12:00:00Z")]))
+(expect "object regression" "{\"goodbye\": \"bob\",\"hello\": 1}" (format "{}" [{"hello":1, "goodbye":"bob"}]))
+(expect "list regression" "[1, 2, 3, 4.567]" (format "{}" [[1 2 3 4.567]]))
+(expect "modref regression" "some-module" (format "{}" [some-module]))
+(expect "captoken regression" "CapToken(some-module.CAPGUARD 1 2)" (format "{}" [(CAPGUARD 1 2)])) ; Comment to test with prod
+
+; Guards regressions
+(expect "keyset-regression-1" "KeySet {keys: [robert],pred: keys-all}" (format "{}" [(read-keyset "ks1")]))
+(expect "keyset-regression-2" "KeySet {keys: [chessai, edmund, jose, robert],pred: keys-2}" (format "{}" [(read-keyset "ks2")]))
+(expect "capguard-regression-1" "CapabilityGuard {name: some-module.CAPGUARD,args: [2, 3],pactId: }" (format "{}" [(create-capability-guard (CAPGUARD 2 3))]))
+(expect "capguard-regression-2" "CapabilityGuard {name: some-module.CAPGUARD,args: [1, 23],pactId: DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g}" (format "{}" [(at "a" (read my-guards "g2"))]))
+(expect "modguard-regression-1" "ModuleGuard {module: some-module,name: beepboop}" (format "{}" [(my-module-guard)]))
+(expect "keyset ref guard regression" "'my-ks" (format "{}" [(keyset-ref-guard "my-ks")]))
+(expect "pact guard guard regression" "PactGuard {pactId: DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g,name: 1}" (format "{}" [(at "a" (read my-guards "g1"))]))
+
+
+

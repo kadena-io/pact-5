@@ -95,7 +95,6 @@ import Pact.Core.Capabilities
 import Pact.Core.Hash
 import Pact.Core.SizeOf
 import Pact.Core.StableEncoding
-import qualified Pact.Core.Pretty as Pretty
 import qualified Pact.Core.Principal as Pr
 
 emitReservedEvent :: Text -> [PactValue] -> ModuleHash -> EvalM e b i ()
@@ -517,7 +516,10 @@ readKeyset' info ksn = do
           parseObj d = do
             keys <- M.lookup (Field "keys") d
             keyText <- preview _PList keys >>= traverse (fmap PublicKeyText . preview (_PLiteral . _LString))
-            predRaw <- M.lookup (Field "pred") d
+            -- In prod if `pred` isn't present, then it defaults to `keys-all`.
+            -- We want to make the default a `PString` in case the value is present
+            -- but of the wrong format, so this can fail
+            let predRaw = maybe (PString "keys-all") id (M.lookup (Field "pred") d)
             p <- preview (_PLiteral . _LString) predRaw
             let ks = S.fromList (V.toList keyText)
             pure (ks, p)
@@ -541,7 +543,7 @@ renderPactValue :: i -> PactValue -> EvalM e b i Text
 renderPactValue info pv = do
   sz <- sizeOf info SizeOfV0 pv
   chargeGasArgs info $ GConcat $ TextConcat $ GasTextLength $ fromIntegral sz
-  pure $ Pretty.renderCompactText pv
+  pure $ pactValueToText pv -- Pretty.renderCompactText pv
 
 
 createPrincipalForGuard
