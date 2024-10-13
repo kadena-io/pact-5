@@ -130,7 +130,7 @@ instance NFData KSPredicate
 predicateToText ::  KSPredicate -> Text
 predicateToText = \case
     KeysAll -> "keys-all"
-    Keys2 -> "keys2"
+    Keys2 -> "keys-2"
     KeysAny -> "keys-any"
     CustomPredicate pn -> renderParsedTyName pn
 

@@ -28,13 +28,14 @@ module Pact.Core.PactValue
  , pattern PUnit
  , _PUnit
  , synthesizePvType
+ , pactValueToText
  ) where
 
 import Control.Lens
 import Data.Vector(Vector)
 import Data.Map.Strict(Map)
 import Data.Text(Text)
-import Data.Decimal(Decimal)
+import Data.Decimal
 
 import Control.DeepSeq
 import GHC.Generics
@@ -42,6 +43,8 @@ import GHC.Generics
 import qualified Data.Vector as V
 import qualified Data.Map.Strict as M
 import qualified Pact.Time as PactTime
+import qualified Data.Set as S
+import qualified Data.Text as T
 
 import Pact.Core.Type
 import Pact.Core.Names
@@ -96,6 +99,14 @@ _PUnit = _PLiteral . _LUnit
 
 type FQCapToken = CapToken FullyQualifiedName PactValue
 
+-- | ISO8601 Thyme format
+simpleISO8601 :: String
+simpleISO8601 = "%Y-%m-%dT%H:%M:%SZ"
+
+formatLTime :: PactTime.UTCTime -> Text
+formatLTime = T.pack . PactTime.formatTime simpleISO8601
+{-# INLINE formatLTime #-}
+
 instance Pretty PactValue where
   pretty = \case
     PLiteral lit -> pretty lit
@@ -105,7 +116,61 @@ instance Pretty PactValue where
     PModRef md -> pretty md
     PCapToken (CapToken fqn args) ->
       "CapToken" <> pretty (CapToken (fqnToQualName fqn) args)
-    PTime t -> pretty (PactTime.formatTime "%Y-%m-%d %H:%M:%S%Q %Z" t)
+    PTime t -> dquotes $ pretty (formatLTime t)
+
+
+pactValueToText :: PactValue -> Text
+pactValueToText = \case
+  PLiteral lit -> case lit of
+    LString s -> tdquotes s
+    LInteger i -> tshow i
+    LDecimal d ->
+      if roundTo 0 d == d then
+        tshow (roundTo 0 d) <> ".0"
+      else tshow d
+    LUnit -> "()"
+    LBool b -> if b then "true" else "false"
+  PList l -> let
+    l' = pactValueToText <$> V.toList l
+    in tlist l'
+  PGuard g -> case g of
+    GKeyset (KeySet ks f) -> let
+      keys = tlist (fmap _pubKey $ S.toList ks)
+      p = predicateToText f
+      in tcurly "KeySet" [("keys", keys), ("pred", p)]
+    GKeySetRef ksn -> T.concat ["'", renderKeySetName ksn]
+    GUserGuard (UserGuard f args) -> let
+      f' = renderQualName f
+      args' = tlist (pactValueToText <$> args)
+      in tcurly "UserGuard" [("fun", f'), ("args", args')]
+    GCapabilityGuard (CapabilityGuard n args pid) -> let
+      mpid = [("pactId", maybe mempty _defPactId pid)]
+      pvs = pactValueToText <$> args
+      elems = [("name", renderQualName n), ("args", tlist pvs)] ++ mpid
+      in tcurly "CapabilityGuard" elems
+    GModuleGuard (ModuleGuard mn n) ->
+      tcurly "ModuleGuard" [("module", renderModuleName mn), ("name", n)]
+    GDefPactGuard (DefPactGuard pid n) ->
+      tcurly "PactGuard" [("pactId", _defPactId pid), ("name", n)]
+  PObject o -> let
+    o' = fmap (\(Field f, pv) -> T.concat [tdquotes f, ": ", pactValueToText pv]) $ M.toList o
+    in T.concat ["{",T.intercalate "," o', "}"]
+  PModRef (ModRef mn _) ->
+    renderModuleName mn
+  PCapToken (CapToken qn args) -> let
+    args' = if null args then mempty else " " <> T.intercalate " " (pactValueToText <$> args)
+    qualName = fqnToQualName qn
+    in T.concat ["CapToken(", renderQualName qualName, args',")"] -- Todo: check
+  PTime t -> tdquotes $ formatLTime t
+  where
+    tdquotes x = T.concat ["\"",x,"\""]
+    tshow :: Show a => a -> Text
+    tshow = T.pack . show
+    tlist l = T.concat ["[",T.intercalate ", " l, "]"]
+    tcurly :: Text -> [(Text, Text)] -> Text
+    tcurly n l = let
+      l' = fmap (\(k, v) -> T.concat [k, ": ", v]) l
+      in T.concat [n, " {", T.intercalate "," l', "}"]
 
 synthesizePvType :: PactValue -> Type
 synthesizePvType = \case
