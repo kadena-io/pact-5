@@ -180,6 +180,48 @@ intDivCost !lop !rop
        else MilliGas $ fromIntegral (nbits * nbits `quot` 6400)
 {-# INLINE intDivCost #-}
 
+transExpCost :: Integer -> MilliGas
+transExpCost !power = MilliGas total
+  where
+  nDigitsBase, nDigitsPower, totalMults, k_const, operandSizeAverage :: SatWord
+  -- totalMults: Total number of multiplications (worst-case scenario)
+  -- For exponentiation by squaring, total multiplications T_m = 2L - 2
+  !totalMults = 2 * nDigitsPower - 2
+  -- n0: Number of bits in the base k
+  !nDigitsBase = fromIntegral (numberOfBits 3) -- (numberOfBits 2718281828459045090795598298427648842334747314453125)
+  !nDigitsPower = fromIntegral (numberOfBits power)
+  !k_const = 1 -- Our constant for karasuba mult per mul in terms of milligas
+  -- Constant for karasuba algorithm
+  alpha :: Double
+  alpha = 2.5
+  -- operandSizeAvg: Average operand size in bits (geometric mean)
+  -- operandSizeAvg = n0 * 2^((L - 1) / 2)
+  --
+  -- This calculation accounts for the exponential growth of operand sizes due to squaring.
+  -- The exponent (L - 1) / 2 represents the average number of squarings,
+  -- since operand size doubles with each squaring.
+  !operandSizeAverage =
+    nDigitsBase * (ceiling ((2 :: Double) ** (fromIntegral (nDigitsPower - 1) / 2)))
+  -- Note:
+  -- The exponential growth factor p^(alpha / 2) is already included in (operandSizeAvg ** alpha)
+  -- due to the properties of exponents:
+  --
+  --   (operandSizeAvg) ** alpha
+  -- = [n0 * 2^((L - 1) / 2)] ** alpha
+  -- = n0^alpha * 2^((L - 1) * alpha / 2)
+  --
+  -- Since 2^((L - 1) * alpha / 2) = [2^(L - 1)]^(alpha / 2)
+  -- and 2^(L - 1) ≈ p (when p is a power of 2),
+  -- we have:
+  --
+  --   2^((L - 1) * alpha / 2) = p^(alpha / 2)
+  --
+  -- Therefore, (operandSizeAvg ** alpha) includes the p^(alpha / 2) term,
+  -- and we do not need to multiply by it separately.
+  !total =
+    totalMults * k_const * ceiling (fromIntegral operandSizeAverage ** alpha)
+
+
 -- | Int shifting needs a bit of an adjustment.
 -- It's hilariously fast, but it can also create numbers of hilariously large sizes
 --
@@ -233,9 +275,9 @@ intPowCost !base !power = MilliGas total
   !nDigitsBase = fromIntegral (numberOfBits base)
   !nDigitsPower = fromIntegral (numberOfBits power)
   !k_const = 1 -- Our constant for karasuba mult per mul in terms of milligas
-  -- Constant for karasuba algorithm
+  -- Constant for multiplication in general
   alpha :: Double
-  alpha = 1.585
+  alpha = 2
   -- operandSizeAvg: Average operand size in bits (geometric mean)
   -- operandSizeAvg = n0 * 2^((L - 1) / 2)
   --
@@ -376,6 +418,31 @@ runTableModel nativeTable GasCostConfig{..} = \case
       -- and the execution time grows linearly, hence it's about 10 milligas per key/value pair in the object
       let objSizeFactor = 10
       in MilliGas $ fromIntegral $ objSize * textCompareCost key * objSizeFactor
+  GTranscendental top -> case top of
+    TransExp p -> transExpCost p
+    -- The estimated cost of computing log n is:
+    -- for some number with `n` bits, `log(2^n) = n (log 2)`
+    -- So computing `ln k` has a cost proportional to `n`.
+    -- Assuming the multiplication cost is `n log n * (log (log n))
+    -- for large
+    -- Note: p is nonzero
+    TransLn p -> MilliGas (cost_ln p)
+    TransLogBase base num ->
+      MilliGas (cost_ln base + cost_ln num)
+    -- For square root, we use the formula, for n bits:
+    -- n * log n * (log (log n))
+    TransSqrt p
+      | p > 0 ->
+      let !n = numberOfBits p
+          n_flt = (fromIntegral n :: Double)
+      in MilliGas $ fromIntegral n * ceiling (log n_flt) * ceiling (log (log n_flt))
+      | otherwise -> MilliGas 0
+    where
+    cost_ln :: Integer -> SatWord
+    cost_ln p =
+      let !n = numberOfBits p
+          !n_flt = (fromIntegral n :: Double)
+      in fromIntegral n * ceiling ((log n_flt) ** 2) * ceiling (log (log n_flt))
   GCapOp op -> case op of
     CapOpRequire cnt ->
       let mgPerCap = 100
@@ -434,10 +501,10 @@ coreBuiltinGasCost GasCostConfig{..} = MilliGas . \case
   CoreCeilingPrec -> _gcNativeBasicWork
   CoreFloorPrec -> _gcNativeBasicWork
   -- Todo: transcendental functions are definitely over_gassed
-  CoreExp -> 5_000
-  CoreLn -> 6_000
-  CoreSqrt -> 6_000
-  CoreLogBase -> 3_000
+  CoreExp -> 2_000
+  CoreLn -> 1_000
+  CoreSqrt -> 1_000
+  CoreLogBase -> 1_000
   -- note: length, take and drop are constant time
   -- for vector and string, but variable for maps
   CoreLength -> _gcNativeBasicWork

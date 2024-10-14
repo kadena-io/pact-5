@@ -13,10 +13,10 @@ import Pact.Core.GasModel.ModuleLoadBench as ModuleLoad
 main :: IO ()
 main = do
   C.defaultMain
-    [ ModuleLoad.benchmarks
-    , ContractBench.allBenchmarks
+    [ ContractBench.allBenchmarks
     , BuiltinsGas.benchmarks
     , Serialization.benchmarks
+    , ModuleLoad.benchmarks
     ]
 
 

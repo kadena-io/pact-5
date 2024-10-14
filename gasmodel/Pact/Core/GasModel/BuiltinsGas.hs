@@ -103,7 +103,7 @@ benchArithBinOp op pdb =
     [ runNativeBenchmark pdb title [text|($op $x $x.0)|] | (title, x) <- vals ]
   ]
   where
-  vals = take 3 $ enumExpText 1_000 1_000_000
+  vals = take 10 $ enumExpText 10 10
 
 benchPow :: BuiltinBenches
 benchPow pdb =
@@ -113,14 +113,14 @@ benchPow pdb =
     , (yTitle, y) <- take 3 $ enumExpText 1_000 100
     ]
   , C.bgroup "float"
-    [ runNativeBenchmark pdb title [text|(^ $x.0 $x.0)|] | (title, x) <- floatVals ]
+    [ runNativeBenchmark pdb title [text|(^ 2 $x.0)|] | (title, x) <- floatVals ]
   , C.bgroup "float_int"
-    [ runNativeBenchmark pdb title [text|(^ $x.0 $x)|] | (title, x) <- floatVals ]
+    [ runNativeBenchmark pdb title [text|(^ 2 $x)|] | (title, x) <- floatVals ]
   , C.bgroup "int_float"
-    [ runNativeBenchmark pdb title [text|(^ $x $x.0)|] | (title, x) <- floatVals ]
+    [ runNativeBenchmark pdb title [text|(^ 2 $x.0)|] | (title, x) <- floatVals ]
   ]
   where
-  floatVals = take 3 $ enumExpText 10 3
+  floatVals = take 10 $ enumExpText 10 10
 
 benchArithUnOp :: T.Text -> BuiltinBenches
 benchArithUnOp op pdb =
@@ -130,7 +130,7 @@ benchArithUnOp op pdb =
     [ runNativeBenchmark pdb title [text|($op $x.0)|] | (title, x) <- vals ]
   ]
   where
-  vals = take 3 $ enumExpText 1_000 1_000_000
+  vals = take 7 $ enumExpText 10 10
 
 benchAddNonArithOverloads :: BuiltinBenches
 benchAddNonArithOverloads pdb =
