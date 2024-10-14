@@ -223,7 +223,7 @@ rawPow info b _env = \case
     when (base == 0 && pow < 0) $
       throwExecutionError info (FloatingPointError "zero to a negative power is undefined")
     let integralPart = floor pow
-    chargeGasArgs info $ GIntegerOpCost PrimOpPow (decimalMantissa base) integralPart
+    chargeGasArgs info $ GIntegerOpCost PrimOpPow (floor base) integralPart
     result <- guardNanOrInf info $ MPFR.mpfr_pow base pow
     return (VLiteral (LDecimal (result)))
 
@@ -233,6 +233,7 @@ rawLogBase info b _env = \case
     checkArgs base n
     let base' = Decimal 0 base
         n' = Decimal 0 n
+    chargeGasArgs info (GTranscendental (TransLogBase base n))
     result <- guardNanOrInf info $ MPFR.mpfr_log base' n'
     return (VLiteral (LInteger (round result)))
   [VLiteral (LDecimal base), VLiteral (LDecimal arg)] -> do
@@ -245,6 +246,7 @@ rawLogBase info b _env = \case
   where
   decLogBase base arg = do
     checkArgs base arg
+    chargeGasArgs info (GTranscendental (TransLogBase (ceiling base) (ceiling arg)))
     result <- guardNanOrInf info $ MPFR.mpfr_log base arg
     return (VLiteral (LDecimal result))
   checkArgs :: (Num a, Ord a) => a -> a -> EvalM e b i ()
@@ -353,9 +355,11 @@ rawExp :: (IsBuiltin b) => NativeFunction e b i
 rawExp info b _env = \case
   [VLiteral (LInteger i)] -> do
     let i' = Decimal 0 i
+    chargeGasArgs info (GTranscendental (TransExp i))
     result <- guardNanOrInf info $ MPFR.mpfr_exp i'
     return (VLiteral (LDecimal result))
   [VLiteral (LDecimal e)] -> do
+    chargeGasArgs info (GTranscendental (TransExp (decimalMantissa e)))
     result <- guardNanOrInf info $ MPFR.mpfr_exp e
     return (VLiteral (LDecimal result))
   args -> argsError info b args
@@ -364,9 +368,11 @@ rawLn :: (IsBuiltin b) => NativeFunction e b i
 rawLn info b _env = \case
   [VLiteral (LInteger i)] -> do
     let i' = Decimal 0 i
+    chargeGasArgs info (GTranscendental (TransLn i))
     result <- checkArgAndCompute i'
     return (VLiteral (LDecimal result))
   [VLiteral (LDecimal e)] -> do
+    chargeGasArgs info (GTranscendental (TransLn (ceiling e)))
     result <- checkArgAndCompute e
     return (VLiteral (LDecimal result))
   args -> argsError info b args
@@ -380,10 +386,12 @@ rawSqrt info b _env = \case
   [VLiteral (LInteger i)] -> do
     when (i < 0) $ throwExecutionError info (ArithmeticException "Square root must be non-negative")
     let i' = Decimal 0 i
+    chargeGasArgs info (GTranscendental (TransSqrt i))
     result <- guardNanOrInf info $ MPFR.mpfr_sqrt i'
     return (VLiteral (LDecimal result))
   [VLiteral (LDecimal e)] -> do
     when (e < 0) $ throwExecutionError info (ArithmeticException "Square root must be non-negative")
+    chargeGasArgs info (GTranscendental (TransSqrt (decimalMantissa e)))
     result <- guardNanOrInf info $ MPFR.mpfr_sqrt e
     return (VLiteral (LDecimal result))
   args -> argsError info b args

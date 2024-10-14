@@ -54,6 +54,7 @@ module Pact.Core.Gas.Types
 
   , freeGasModel
   , GasCostConfig(..)
+  , TranscendentalCost(..)
   , module Pact.Core.SatWord
   ) where
 
@@ -305,10 +306,18 @@ data GasArgs b
   | GModuleOp ModuleOp
   -- ^ The cost of integrating module deps, which is essentially a map union
   -- Map union is O(m*log(n/m+1)) where 0 < m <= n
+  | GTranscendental !TranscendentalCost
   | GStrOp !StrOp
   | GObjOp !ObjOp
   | GCapOp !CapOp
   deriving (Show, Eq, Generic, NFData)
+
+data TranscendentalCost
+  = TransExp !Integer -- Exponent integral part will dominate the work
+  | TransSqrt !Integer -- Integer part of
+  | TransLn !Integer -- Integer part of ln
+  | TransLogBase !Integer !Integer -- We will compute this as Ln(num) / Ln(base)
+  deriving (Eq, Show, Generic, NFData)
 
 data ModuleOp
   = MOpLoadModule !Int

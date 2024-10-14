@@ -124,7 +124,7 @@ moduleDataName = \case
 
 benchmarks :: Benchmark
 benchmarks = C.env mkPdb $ \ ~(pdb) ->
-    C.bgroup "Module load benches" (runModuleLoadBench pdb <$> [1..100])
+    C.bgroup "Module load benches" (runModuleLoadBench pdb <$> [1..1])
   where
   mkPdb = do
     pdb <- mockPactDb serialisePact_lineinfo
