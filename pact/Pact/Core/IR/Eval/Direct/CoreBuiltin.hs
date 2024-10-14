@@ -613,7 +613,7 @@ zipList info b _env = \case
     VList <$> V.zipWithM go l r
     where
     go x y = do
-      chargeGasArgs info (GAConstant unconsWorkNodeGas)
+      chargeUnconsWork info
       enforcePactValue info =<< applyLam clo [VPactValue x, VPactValue y]
   args -> argsError info b args
 
@@ -623,7 +623,7 @@ coreMap info b _env = \case
     VList <$> traverse go li
     where
     go x = do
-      chargeGasArgs info (GAConstant unconsWorkNodeGas)
+      chargeUnconsWork info
       applyLam clo [VPactValue x] >>= enforcePactValue info
   args -> argsError info b args
 
@@ -633,7 +633,7 @@ coreFilter info b _env = \case
     VList <$> V.filterM go li
     where
     go e = do
-      chargeGasArgs info (GAConstant unconsWorkNodeGas)
+      chargeUnconsWork info
       applyLam clo [VPactValue e] >>= enforceBool info
   args -> argsError info b args
 
@@ -643,7 +643,7 @@ coreFold info b _env = \case
     VPactValue <$> foldlM go initElem li
     where
     go e inc = do
-      chargeGasArgs info (GAConstant unconsWorkNodeGas)
+      chargeUnconsWork info
       applyLam clo [VPactValue e, VPactValue inc] >>= enforcePactValue info
   args -> argsError info b args
 

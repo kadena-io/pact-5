@@ -253,7 +253,7 @@ evaluateTerm cont handler env (BuiltinForm c info) = case c of
   --   <Try c body, E, K, H>         <body, E, Mt, CEKHandler(E,c,K,_errState,H)>
   --   _errState - callstack,granted caps,events,gas
   CTry catchExpr rest -> do
-    chargeGasArgs info (GAConstant tryNodeGas)
+    chargeTryNodeWork info
     errState <- evalStateToErrorState <$> get
     let handler' = CEKHandler env catchExpr cont errState handler
     let env' = readOnlyEnv env
@@ -265,7 +265,7 @@ evaluateTerm cont handler env (BuiltinForm c info) = case c of
         returnCEK cont handler (VError [] (UserEnforceError "internal CEnforceOne error") info)
       x:xs -> do
         -- Todo: is this a bit too cheap??
-        chargeGasArgs info (GAConstant unconsWorkNodeGas)
+        chargeUnconsWork info
         errState <- evalStateToErrorState <$> get
         let env' = readOnlyEnv env
         let handler' = CEKEnforceOne env' info str xs cont errState handler
@@ -1033,7 +1033,7 @@ applyContToValue (CondC env info frame cont) handler v = do
         let acc' = if b then elem':acc else acc
         case rest of
           x:xs -> do
-            chargeGasArgs info (GAConstant unconsWorkNodeGas)
+            chargeUnconsWork info
             let cont' = CondC env info (FilterC clo x xs acc') cont
             applyLam clo [VPactValue x] cont' handler
           [] -> returnCEKValue cont handler (VList (V.fromList (reverse acc')))
@@ -1088,7 +1088,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         case rest of
           x:xs -> do
             let cont' = BuiltinC env info (MapC closure xs (v:acc)) cont
-            chargeGasArgs info (GAConstant unconsWorkNodeGas)
+            chargeUnconsWork info
             applyLam closure [VPactValue x] cont' handler
           [] ->
             returnCEKValue cont handler (VList (V.fromList (reverse (v:acc))))
@@ -1096,14 +1096,14 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
         case rest of
           x:xs -> do
             let cont' = BuiltinC env info (FoldC clo xs) cont
-            chargeGasArgs info (GAConstant unconsWorkNodeGas)
+            chargeUnconsWork info
             applyLam clo [VPactValue v, VPactValue x] cont' handler
           [] -> returnCEKValue cont handler cv
       ZipC clo (l, r) acc -> do
         case (l, r) of
           (x:xs, y:ys) -> do
             let cont' = BuiltinC env info (ZipC clo (xs, ys) (v:acc)) cont
-            chargeGasArgs info (GAConstant unconsWorkNodeGas)
+            chargeUnconsWork info
             applyLam clo [VPactValue x, VPactValue y] cont' handler
           (_, _) ->
             returnCEKValue cont handler (VList (V.fromList (reverse (v:acc))))

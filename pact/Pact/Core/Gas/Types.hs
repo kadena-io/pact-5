@@ -30,7 +30,6 @@ module Pact.Core.Gas.Types
 
   , GasModel(..)
   , GasArgs(..)
-  , SerializationCosts(..)
 
   , NodeType(..)
   , ZKGroup(..)
@@ -50,10 +49,11 @@ module Pact.Core.Gas.Types
   , gmGasLimit
   , gmDesc
   , gmName
-  , gmSerialize
+  , gmGasCostConfig
   , gmNativeTable
 
   , freeGasModel
+  , GasCostConfig(..)
   , module Pact.Core.SatWord
   ) where
 
@@ -62,7 +62,6 @@ import Control.DeepSeq
 import Control.Lens
 import Data.Decimal(Decimal)
 import Data.Monoid
-import Data.Word (Word64)
 import Data.Primitive hiding (sizeOf)
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -117,6 +116,56 @@ newtype GasPrice
   deriving newtype NFData
 
 makePrisms ''GasPrice
+
+-- | Our gas costs tuned for the pact language's gas model
+--   Note: All values are `SatWord`s, which are essentially
+--   costs in MilliGas
+data GasCostConfig
+  = GasCostConfig
+  { _gcNativeBasicWork :: !SatWord
+  -- ^ The minimal work our machine charges for
+  -- calling any native
+  , _gcFunctionArgumentCost :: !SatWord
+  -- ^ The flat cost per argument for
+  -- function calls. Note: Typechecking is costed separately
+  , _gcMachineTickCost :: !SatWord
+  -- ^ The flat cost for a state transition in our machine
+  , _gcUnconsWork :: !SatWord
+  -- ^ Flat cost for list unconsing, particularly for maps and
+  -- folds in natives
+  , _gcReadPenalty :: !SatWord
+  -- ^ Our flat penalty for reading from the database
+  , _gcWritePenalty :: !SatWord
+  -- ^ Our flat penalty for writing to the database
+  , _gcMetadataTxPenalty :: !SatWord
+  -- ^ Penalty for db metadata functions
+  , _gcSelectPenalty :: !SatWord
+  -- ^ Penalty for calling select
+  , _gcConcatFactor :: !SatWord
+  -- ^ Cost of element concatenation. Particularly for our
+  -- concatenation functions (+, concat)
+  , _gcPerByteWriteCost :: !SatWord
+  -- ^ The cost per byte on write for
+  -- entries to the database. This applies to all tables
+  , _gcPerByteReadCost :: !SatWord
+  -- ^ The cost per byte of reading from the database
+  , _gcSortBytePenaltyReduction :: !SatWord
+  -- ^ The sort penalty reduction
+  , _gcPoseidonQuadraticGasFactor :: !SatWord
+  -- ^ Poseidon hashing quadratic gas factor
+  , _gcPoseidonLinearGasFactor :: !SatWord
+  -- ^ Poseidon hashing linear gas factor
+  , _gcModuleLoadSlope :: !SatWord
+  -- ^ Module load cost function slope
+  , _gcModuleLoadIntercept :: !SatWord
+  -- ^ Module load cost function Intercept
+  , _gcDesugarBytePenalty :: !SatWord
+  -- ^ Module load desugaring byte penalty
+  , _gcSizeOfBytePenalty :: !SatWord
+  -- ^ Our `SizeOf` limit penalty
+  } deriving (Eq, Show, Generic)
+
+instance NFData GasCostConfig
 
 milliGasPerGas :: SatWord
 milliGasPerGas = 1000
@@ -232,13 +281,13 @@ data GasArgs b
   -- ^ The cost of concatenating two elements
   -- TODO: We actually reuse this cost for construction as well for objects/lists. Should we
   -- instead consider renaming the objcat and listcat constructors to be ListCatOrConstruction
-  | GMakeList !Integer !Word64
+  | GMakeList !Integer !SatWord
   -- ^ Cost of creating a list of `n` elements + some memory overhead per elem
   | GAZKArgs !ZKArg
   -- ^ Cost of ZK function
-  | GWrite !Word64
+  | GWrite !SatWord
   -- ^ Cost of writes, per bytes, roughly based on in-memory cost.
-  | GRead !Word64
+  | GRead !SatWord
   -- ^ Cost of reads, per bytes, roughly based on in-memory cost.
   | GComparison !ComparisonType
   -- ^ Gas costs for comparisons
@@ -259,8 +308,6 @@ data GasArgs b
   | GStrOp !StrOp
   | GObjOp !ObjOp
   | GCapOp !CapOp
-  | GCountBytes
-  -- ^ Cost of computing SizeOf for N bytes.
   deriving (Show, Eq, Generic, NFData)
 
 data ModuleOp
@@ -269,7 +316,7 @@ data ModuleOp
   -- arguments are:
   | MOpMergeDeps Int Int
   -- ^ Cost of adding deps to the symbol table
-  | MOpDesugarModule !Word64 -- Size of the tree
+  | MOpDesugarModule !SatWord -- Size of the tree
   -- ^ the cost of module desugar
   deriving (Show, Eq, Generic, NFData)
 
@@ -314,7 +361,7 @@ data ComparisonType
   -- ^ N comparisons constant time overhead
   | ObjComparison !Int
   -- ^ Compare objects of at most size `N`
-  | SortComparisons !Word64 !Int
+  | SortComparisons !SatWord !Int
   deriving (Show, Eq, Generic, NFData)
 
 data ConcatType
@@ -328,30 +375,49 @@ data ConcatType
   -- ^ Upper bound on max object size
   deriving (Show, Eq, Generic, NFData)
 
-data SerializationCosts = SerializationCosts
-  { objectKeyCostMilliGasOffset :: !SatWord
-  , objectKeyCostMilliGasPer1000Chars :: !SatWord
-  , boolMilliGasCost :: !SatWord
-  , unitMilliGasCost :: !SatWord
-  , integerCostMilliGasPerDigit :: !SatWord
-  , decimalCostMilliGasOffset :: !SatWord
-  , decimalCostMilliGasPerDigit :: !SatWord
-  , timeCostMilliGas :: !SatWord
+freeGasCostConfig :: GasCostConfig
+freeGasCostConfig = GasCostConfig
+  { _gcNativeBasicWork = 1
+  -- ^ The minimal work our machine charges for
+  -- calling any native
+  , _gcFunctionArgumentCost = 1
+  -- ^ The flat cost per argument for
+  -- function calls. Note: Typechecking is costed separately
+  , _gcMachineTickCost = 1
+  -- ^ The flat cost for a state transition in our machine
+  , _gcUnconsWork = 1
+  -- ^ Flat cost for list unconsing, particularly for maps and
+  -- folds in natives
+  , _gcReadPenalty = 1
+  -- ^ Our flat penalty for reading from the database
+  , _gcWritePenalty = 1
+  -- ^ Our flat penalty for writing to the database
+  , _gcMetadataTxPenalty = 1
+  -- ^ Penalty for db metadata functions
+  , _gcSelectPenalty = 1
+  -- ^ Penalty for calling select
+  , _gcConcatFactor = 1
+  -- ^ Cost of element concatenation. Particularly for our
+  -- concatenation functions (+, concat)
+  , _gcPerByteWriteCost = 1
+  -- ^ The cost per byte on write for
+  -- entries to the database. This applies to all tables
+  , _gcPerByteReadCost = 1
+  -- ^ The cost per byte of reading from the database
+  , _gcSortBytePenaltyReduction = 1
+  -- ^ The sort penalty reduction
+  , _gcPoseidonQuadraticGasFactor = 1
+  -- ^ Poseidon hashing quadratic gas factor
+  , _gcPoseidonLinearGasFactor = 1
+  -- ^ Poseidon hashing linear gas factor
+  , _gcModuleLoadSlope = 1
+  -- ^ Module load cost function slope
+  , _gcModuleLoadIntercept = 1
+  -- ^ Module load cost function Intercept
+  , _gcDesugarBytePenalty = 1
+  -- ^ Module load desugaring byte penalty
+  , _gcSizeOfBytePenalty = 1
   }
-  deriving (Show, Generic, NFData)
-
-freeSerializationCosts :: SerializationCosts
-freeSerializationCosts = SerializationCosts
-  { objectKeyCostMilliGasOffset = 0
-  , objectKeyCostMilliGasPer1000Chars = 0
-  , boolMilliGasCost = 0
-  , unitMilliGasCost = 0
-  , integerCostMilliGasPerDigit = 0
-  , decimalCostMilliGasOffset = 0
-  , decimalCostMilliGasPerDigit = 0
-  , timeCostMilliGas = 0
-  }
-
 
 
 data GasModel b
@@ -360,7 +426,7 @@ data GasModel b
   , _gmDesc :: !Text
   , _gmNativeTable :: !(b -> MilliGas)
   , _gmGasLimit :: !(Maybe MilliGasLimit)
-  , _gmSerialize :: !SerializationCosts
+  , _gmGasCostConfig :: !GasCostConfig
   } deriving (Generic, NFData)
 makeLenses ''GasModel
 
@@ -371,7 +437,7 @@ freeGasModel = GasModel
   , _gmDesc = "free gas model"
   , _gmNativeTable = \_ -> mempty
   , _gmGasLimit = Nothing
-  , _gmSerialize = freeSerializationCosts
+  , _gmGasCostConfig = freeGasCostConfig
   }
 
 data GasLogEntry b i = GasLogEntry

@@ -13,14 +13,12 @@ import Pact.Core.Guards
 import Pact.Core.StableEncoding
 
 import Pact.Core.Persistence.Types
-import Pact.Core.Persistence.Utils (ignoreGas)
-import Pact.Core.Serialise.CBOR_V1 (encodeRowDataNoGas, encodeRowData)
+import Pact.Core.Serialise.CBOR_V1 (encodeRowDataNoGas)
 
 benchmarks :: Benchmark
 benchmarks = C.bgroup "Encode/Decode benchmarks"
   [ benchJSONEncodeRowData
-  , benchCBOREncodeRowData
-  , benchCBOREncodeRowDataGas ]
+  , benchCBOREncodeRowData ]
 
 accountBalancePV :: RowData
 accountBalancePV =
@@ -38,7 +36,3 @@ benchJSONEncodeRowData =
 benchCBOREncodeRowData :: Benchmark
 benchCBOREncodeRowData =
   C.bench "encode row data cbor" (C.nf encodeRowDataNoGas accountBalancePV)
-
-benchCBOREncodeRowDataGas :: Benchmark
-benchCBOREncodeRowDataGas =
-  C.bench "encode row data cbor - gassed" (C.nfIO (ignoreGas () $ encodeRowData accountBalancePV))
