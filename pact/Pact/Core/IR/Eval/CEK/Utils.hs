@@ -8,9 +8,7 @@ module Pact.Core.IR.Eval.CEK.Utils
  , readOnlyEnv
  , envFromPurity
  , enforcePactValue
- , tryNodeGas
- , unconsWorkNodeGas
- , constantWorkNodeGas) where
+ ) where
 
 import Control.Lens
 
@@ -20,7 +18,6 @@ import Pact.Core.Type
 import Pact.Core.Errors
 import Pact.Core.Persistence
 import Pact.Core.Environment
-import Pact.Core.Gas
 import Pact.Core.IR.Eval.CEK.Types
 
 mkBuiltinFn

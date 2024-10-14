@@ -27,7 +27,7 @@ scalarMulMilliGas (MilliGas mg) i =
 chargeGasArgsM
   :: GasEnv b i -> i -> [StackFrame i] -> GasArgs b -> IO (Either (PactError i) ())
 chargeGasArgsM GasEnv{..} info stack gasArgs = do
-  let !milliGasCost = runTableModel (_gmNativeTable _geGasModel) gasArgs
+  let !milliGasCost = runTableModel (_gmNativeTable _geGasModel) (_gmGasCostConfig _geGasModel) gasArgs
   case _gmGasLimit _geGasModel of
     Just mgl@(MilliGasLimit milliGasLimit) -> do
       newGasTotal <- do

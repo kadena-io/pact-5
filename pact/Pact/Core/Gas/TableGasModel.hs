@@ -1,19 +1,15 @@
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Pact.Core.Gas.TableGasModel
  ( tableGasModel
  , replTableGasModel
  , runTableModel
-  --
  , pointAddGas
  , scalarMulGas
  , pairingGas
- , serializationCosts
- , constantWorkNodeGas
- , tryNodeGas
- , unconsWorkNodeGas
  )
  where
 
@@ -25,14 +21,38 @@ import Pact.Core.Gas.Types
 import Data.Decimal
 import GHC.Base
 
+
+tableGasCostConfig :: GasCostConfig
+tableGasCostConfig = GasCostConfig
+  { _gcNativeBasicWork = 200
+  , _gcFunctionArgumentCost = 25
+  , _gcMachineTickCost = 25
+  , _gcUnconsWork = 100
+  , _gcReadPenalty = 4_500
+  , _gcWritePenalty = 50_000
+  , _gcMetadataTxPenalty = 100_000
+  , _gcSelectPenalty = 40_000_000
+  , _gcConcatFactor = 100
+  , _gcPerByteWriteCost = 200
+  , _gcPerByteReadCost = 100
+  , _gcSortBytePenaltyReduction = 1000
+  , _gcPoseidonQuadraticGasFactor = 50_000
+  , _gcPoseidonLinearGasFactor = 38_000
+  , _gcModuleLoadSlope = 200
+  , _gcModuleLoadIntercept = 10
+  , _gcDesugarBytePenalty = 500
+  , _gcSizeOfBytePenalty = 5
+  }
+
+
 tableGasModel :: MilliGasLimit -> GasModel CoreBuiltin
 tableGasModel gl =
   GasModel
   { _gmName = "table"
   , _gmGasLimit = Just gl
   , _gmDesc = "table-based cost model"
-  , _gmNativeTable = coreBuiltinGasCost
-  , _gmSerialize = serializationCosts
+  , _gmNativeTable = coreBuiltinGasCost tableGasCostConfig
+  , _gmGasCostConfig = tableGasCostConfig
   }
 
 replTableGasModel :: Maybe MilliGasLimit -> GasModel ReplCoreBuiltin
@@ -42,7 +62,7 @@ replTableGasModel gl =
   , _gmGasLimit = gl
   , _gmDesc = "table-based cost model"
   , _gmNativeTable = replNativeGasTable
-  , _gmSerialize = serializationCosts
+  , _gmGasCostConfig = tableGasCostConfig
   }
 
 ------------------------------------------------
@@ -243,8 +263,8 @@ intPowCost !base !power = MilliGas total
   !total =
     totalMults * k_const * ceiling (fromIntegral operandSizeAverage ** alpha)
 
-runTableModel :: (b -> MilliGas) -> GasArgs b -> MilliGas
-runTableModel nativeTable = \case
+runTableModel :: (b -> MilliGas) -> GasCostConfig -> GasArgs b -> MilliGas
+runTableModel nativeTable GasCostConfig{..} = \case
   GNative b -> nativeTable b
   GAConstant !c -> c
   GIntegerOpCost !primOp lop rop -> case primOp of
@@ -258,18 +278,17 @@ runTableModel nativeTable = \case
   -- Todo: get actual metrics on list cat / text cat
   GConcat c -> case c of
     TextConcat (GasTextLength totalLen) ->
-      MilliGas (fromIntegral totalLen * 100)
+      MilliGas (fromIntegral totalLen * _gcConcatFactor)
     TextListConcat (GasTextLength totalCharSize) (GasListLength nElems) -> MilliGas $
-      fromIntegral totalCharSize * stringLenCost + fromIntegral nElems * listLenCost
+      fromIntegral totalCharSize * _gcConcatFactor + fromIntegral nElems * listLenCost
       where
-      stringLenCost,listLenCost :: SatWord
-      stringLenCost = 100
+      listLenCost :: SatWord
       listLenCost = 40
     ListConcat (GasListLength totalLen) ->
-      MilliGas (fromIntegral totalLen * 100)
+      MilliGas (fromIntegral totalLen * _gcConcatFactor)
     ObjConcat totalLen ->
-      MilliGas (fromIntegral totalLen * 100)
-  GAApplyLam _ !i -> MilliGas $ fromIntegral i * applyLamCostPerArg + 50
+      MilliGas (fromIntegral totalLen * _gcConcatFactor)
+  GAApplyLam _ !i -> MilliGas $ fromIntegral i * _gcFunctionArgumentCost + 50
   GAZKArgs zka -> case zka of
     PointAdd g -> pointAddGas g
     ScalarMult g -> scalarMulGas g
@@ -278,62 +297,54 @@ runTableModel nativeTable = \case
   -- So we add a bit of a higher penalty to this, since this
   -- costs us gas as well
   GWrite bytes ->
-    let mgPerByte = 200
-    in MilliGas $ fromIntegral $ bytes * mgPerByte
+    MilliGas $ bytes * _gcPerByteWriteCost
   GRead bytes ->
-    let mgPerByte = 100
-    in MilliGas $ fromIntegral $ bytes * mgPerByte
+    MilliGas $ bytes * _gcPerByteReadCost
     -- a string of 10⁶ chars (which is 2×10⁶ sizeof bytes) takes a little less than 2×10⁶ to write
   GMakeList len sz ->
     MilliGas $ fromIntegral len * fromIntegral sz
   GComparison cmpty -> case cmpty of
     TextComparison str ->
-      MilliGas $ textCompareCost str + basicWorkGas
+      MilliGas $ textCompareCost str + _gcNativeBasicWork
     IntComparison l r ->
-      MilliGas $ fromIntegral (max (integerBits l) (integerBits r)) + basicWorkGas
+      MilliGas $ fromIntegral (max (integerBits l) (integerBits r)) + _gcNativeBasicWork
     -- See [Decimal comparisons]
     DecimalComparison l r ->
       let !lmantissa = decimalMantissa l
           !rmantissa = decimalMantissa r
       in
-      intDivCost lmantissa rmantissa <> MilliGas (fromIntegral (max (integerBits lmantissa) (integerBits rmantissa)) + basicWorkGas)
+      intDivCost lmantissa rmantissa <> MilliGas (fromIntegral (max (integerBits lmantissa) (integerBits rmantissa)) + _gcNativeBasicWork)
     ListComparison maxSz ->
-      MilliGas $ fromIntegral maxSz * basicWorkGas
+      MilliGas $ fromIntegral maxSz * _gcNativeBasicWork
     ObjComparison i ->
-      MilliGas $ fromIntegral i * basicWorkGas
+      MilliGas $ fromIntegral i * _gcNativeBasicWork
     -- For sorting, what we do is essentially take the `sizeOf` number of bytes that we are comparing.
     -- Take that, have a cost of comparison proportional to the number of bytes,
     -- and charge for the _worst case_ O(n^2) number of comparisons.
     SortComparisons size len ->
       let !lenW = fromIntegral len
-          !bytePenaltyReduction = 1000
       -- Comparisons is 1 mg per byte, so we simply take the length^2 * size
-      in MilliGas $ (fromIntegral size * lenW * lenW) `div` bytePenaltyReduction
+      in MilliGas $ (fromIntegral size * lenW * lenW) `div` _gcSortBytePenaltyReduction
 
   GSearch sty -> case sty of
-    SubstringSearch needle hay -> MilliGas $ fromIntegral (T.length needle + T.length hay) + basicWorkGas
-    FieldSearch cnt -> MilliGas $ fromIntegral cnt + basicWorkGas
+    SubstringSearch needle hay -> MilliGas $ fromIntegral (T.length needle + T.length hay) + _gcNativeBasicWork
+    FieldSearch cnt -> MilliGas $ fromIntegral cnt + _gcNativeBasicWork
   GPoseidonHashHackAChain len ->
-    MilliGas $ fromIntegral (len * len) * quadraticGasFactor + fromIntegral len * linearGasFactor
-     where
-     quadraticGasFactor, linearGasFactor :: SatWord
-     quadraticGasFactor = 50_000
-     linearGasFactor = 38_000
+    MilliGas $ fromIntegral (len * len) * _gcPoseidonQuadraticGasFactor + fromIntegral len * _gcPoseidonLinearGasFactor
   GModuleOp op -> case op of
     MOpLoadModule byteSize  ->
       -- After some benchmarking, we can essentially say that the byte size of linear in
       -- the size of the module.
       -- We can cost module loads at approximately
       -- y=0.005x+10
-      let !szCost = fromIntegral (byteSize `div` 200) + 10
+      let !szCost = (fromIntegral byteSize `div` _gcModuleLoadSlope) + _gcModuleLoadIntercept
       in MilliGas szCost
     MOpMergeDeps i i' ->
       -- We can cost this quadratically, at 10mg per element merged
       MilliGas $ fromIntegral (i * i') * 10
     MOpDesugarModule sz ->
       -- This is a pretty expensive traversal, so we will charge a bit more of a hefty price for it
-      let bytePenalty = 500
-      in MilliGas (fromIntegral sz * bytePenalty)
+      MilliGas (fromIntegral sz * _gcDesugarBytePenalty)
   GStrOp op -> case op of
     StrOpLength len ->
       let charsPerMg = 100
@@ -369,7 +380,6 @@ runTableModel nativeTable = \case
     CapOpRequire cnt ->
       let mgPerCap = 100
       in MilliGas $ fromIntegral $ cnt * mgPerCap
-  GCountBytes -> MilliGas 1
   GHyperlaneMessageId m -> MilliGas $ fromIntegral m
   GHyperlaneEncodeDecodeTokenMessage m -> MilliGas $ fromIntegral m
   where
@@ -378,39 +388,35 @@ runTableModel nativeTable = \case
 
 -- This is the minimum amount of gas we mean to charge to simply use the gas table.
 -- 25 milliGas = 62.5 nanoseconds, which is a negligible amount
-basicWorkGas :: SatWord
-basicWorkGas = 200
-
-applyLamCostPerArg :: SatWord
-applyLamCostPerArg = 25
-
+-- _gcNativeBasicWork :: SatWord
+-- _gcNativeBasicWork = 200
 
 -- | Our internal gas table for constant costs on natives
-coreBuiltinGasCost :: CoreBuiltin -> MilliGas
-coreBuiltinGasCost = MilliGas . \case
+coreBuiltinGasCost :: GasCostConfig -> CoreBuiltin -> MilliGas
+coreBuiltinGasCost GasCostConfig{..} = MilliGas . \case
   -- Basic arithmetic
   -- note: add, sub, mul, div are special and are covered by
   -- special functions
-  CoreAdd -> basicWorkGas
-  CoreSub -> basicWorkGas
-  CoreMultiply -> basicWorkGas
-  CoreDivide -> basicWorkGas
+  CoreAdd -> _gcNativeBasicWork
+  CoreSub -> _gcNativeBasicWork
+  CoreMultiply -> _gcNativeBasicWork
+  CoreDivide -> _gcNativeBasicWork
   --
-  CoreNegate -> basicWorkGas
+  CoreNegate -> _gcNativeBasicWork
   --
-  CoreAbs -> basicWorkGas
+  CoreAbs -> _gcNativeBasicWork
   -- Pow is also a special case of recursive multiplication, gas table is not enough.
-  CorePow -> basicWorkGas
+  CorePow -> _gcNativeBasicWork
   --
-  CoreNot -> basicWorkGas
+  CoreNot -> _gcNativeBasicWork
   -- ValEqGassed handles EQ and NEQ
-  CoreEq -> basicWorkGas
-  CoreNeq -> basicWorkGas
+  CoreEq -> _gcNativeBasicWork
+  CoreNeq -> _gcNativeBasicWork
   -- Note: `litCmpGassed`
-  CoreGT -> basicWorkGas
-  CoreGEQ -> basicWorkGas
-  CoreLT -> basicWorkGas
-  CoreLEQ -> basicWorkGas
+  CoreGT -> _gcNativeBasicWork
+  CoreGEQ -> _gcNativeBasicWork
+  CoreLT -> _gcNativeBasicWork
+  CoreLEQ -> _gcNativeBasicWork
   -- All of the bitwise functions are quite fast, regardless of the size of the integer
   -- constant time gas is fine here
   CoreBitwiseAnd -> 250
@@ -419,14 +425,14 @@ coreBuiltinGasCost = MilliGas . \case
   CoreBitwiseFlip -> 250
   -- Shift requires special handling
   -- given it can actually grow the number
-  CoreBitShift -> basicWorkGas
+  CoreBitShift -> _gcNativeBasicWork
   -- Todo: rounding likely needs benchmarks, but
-  CoreRound -> basicWorkGas
-  CoreCeiling -> basicWorkGas
-  CoreFloor -> basicWorkGas
-  CoreRoundPrec -> basicWorkGas
-  CoreCeilingPrec -> basicWorkGas
-  CoreFloorPrec -> basicWorkGas
+  CoreRound -> _gcNativeBasicWork
+  CoreCeiling -> _gcNativeBasicWork
+  CoreFloor -> _gcNativeBasicWork
+  CoreRoundPrec -> _gcNativeBasicWork
+  CoreCeilingPrec -> _gcNativeBasicWork
+  CoreFloorPrec -> _gcNativeBasicWork
   -- Todo: transcendental functions are definitely over_gassed
   CoreExp -> 5_000
   CoreLn -> 6_000
@@ -434,63 +440,62 @@ coreBuiltinGasCost = MilliGas . \case
   CoreLogBase -> 3_000
   -- note: length, take and drop are constant time
   -- for vector and string, but variable for maps
-  -- Todo: gas take/drop on objects
-  CoreLength -> basicWorkGas
-  CoreTake -> basicWorkGas
-  CoreDrop -> basicWorkGas
-  -- concat
-  CoreConcat -> basicWorkGas
-  -- Todo: reverse gas based on `n` elements
-  CoreReverse -> basicWorkGas
+  CoreLength -> _gcNativeBasicWork
+  -- Note: take and drop are gassed at their callsites
+  CoreTake -> _gcNativeBasicWork
+  CoreDrop -> _gcNativeBasicWork
+  -- concat is gassed at its callsite
+  CoreConcat -> _gcNativeBasicWork
+  -- Note: reverse is gassed based on the number of elements
+  CoreReverse -> _gcNativeBasicWork
   -- note: contains needs to be gassed based on the
   -- specific data structure, so flat gas won't do
-  CoreContains -> basicWorkGas
+  CoreContains -> _gcNativeBasicWork
   -- Note: Sorting gas is handling in sort
-  CoreSort -> basicWorkGas
-  CoreSortObject -> basicWorkGas
-  -- Todo: Delete is O(log n)
-  CoreRemove -> basicWorkGas
+  CoreSort -> _gcNativeBasicWork
+  CoreSortObject -> _gcNativeBasicWork
+  -- Note: remove is gassed as its callsite
+  CoreRemove -> _gcNativeBasicWork
   -- Modulo has the time time complexity as division
-  CoreMod -> basicWorkGas
+  CoreMod -> _gcNativeBasicWork
   -- Map, filter, zip complexity only requires a list reverse, so the only cost
   -- we will charge is the cost of reverse
   CoreMap ->
-    basicWorkGas
-  CoreFilter -> basicWorkGas
-  CoreZip -> basicWorkGas
+    _gcNativeBasicWork
+  CoreFilter -> _gcNativeBasicWork
+  CoreZip -> _gcNativeBasicWork
   -- The time complexity of fold is the time complexity of the uncons operation
-  CoreFold -> basicWorkGas
-  -- Todo: complexity of these
-  CoreIntToStr -> basicWorkGas
-  CoreStrToInt -> basicWorkGas
-  CoreStrToIntBase -> basicWorkGas
-  -- Todo: Distinct and format require
-  -- special gas handling
-  CoreDistinct -> basicWorkGas
-  CoreFormat -> basicWorkGas
+  CoreFold -> _gcNativeBasicWork
+  -- Note: these following functions are gassed at their callsite
+  CoreIntToStr -> _gcNativeBasicWork
+  CoreStrToInt -> _gcNativeBasicWork
+  CoreStrToIntBase -> _gcNativeBasicWork
+  -- Note: Distinct has special gas handling
+  -- at its callsite
+  CoreDistinct -> _gcNativeBasicWork
+  CoreFormat -> _gcNativeBasicWork
   -- EnumerateN functions require more special gas handling as well
-  CoreEnumerate -> basicWorkGas
-  CoreEnumerateStepN -> basicWorkGas
+  CoreEnumerate -> _gcNativeBasicWork
+  CoreEnumerateStepN -> _gcNativeBasicWork
   -- Show also requires stringification
-  CoreShow -> basicWorkGas
+  CoreShow -> _gcNativeBasicWork
   -- read-* functions no longer parse their input
-  -- TODO: is this fine?
-  CoreReadMsg -> basicWorkGas
-  CoreReadMsgDefault -> basicWorkGas
-  CoreReadInteger -> basicWorkGas
-  CoreReadDecimal -> basicWorkGas
-  CoreReadString -> basicWorkGas
-  CoreReadKeyset -> basicWorkGas
+  CoreReadMsg -> _gcNativeBasicWork * 2
+  CoreReadMsgDefault -> _gcNativeBasicWork * 2
+  CoreReadInteger -> _gcNativeBasicWork * 2
+  CoreReadDecimal -> _gcNativeBasicWork * 2
+  CoreReadString -> _gcNativeBasicWork * 2
+  CoreReadKeyset -> _gcNativeBasicWork * 2
   -- Todo: Enforce functions should have variable gas
   -- based on the guard type
   CoreEnforceGuard -> 2_000
   CoreEnforceKeyset -> 2_000
   CoreKeysetRefGuard -> 2_000
 
-  CoreAt -> basicWorkGas
+  CoreAt -> _gcNativeBasicWork
   -- Make-list is essentially replicate, so we just
   -- need the gas penalty
-  CoreMakeList -> basicWorkGas
+  CoreMakeList -> _gcNativeBasicWork
   -- Note: this is gassed via `StrOpParse`
   CoreB64Encode -> 250
   CoreB64Decode -> 250
@@ -499,14 +504,14 @@ coreBuiltinGasCost = MilliGas . \case
   -- but should vary based on the length of the string
   CoreStrToList -> 250
   -- Yield is essentially all constant-time ops
-  CoreYield -> basicWorkGas
-  CoreYieldToChain -> basicWorkGas
+  CoreYield -> _gcNativeBasicWork
+  CoreYieldToChain -> _gcNativeBasicWork
   -- Resume already will use applyLam gas
   -- and the rest of the operations are constant time
   CoreResume -> 500
   -- Bind only applies a lambda
   CoreBind ->
-    basicWorkGas
+    _gcNativeBasicWork
   -- Todo: cap function gas should depend on the work of eval-cap
   -- and the cap state
   CoreRequireCapability -> 500
@@ -516,21 +521,21 @@ coreBuiltinGasCost = MilliGas . \case
   CoreEmitEvent -> 1_000
   -- Create-capability-guard is constant time and fast, in core we are cheaper here
   CoreCreateCapabilityGuard ->
-    basicWorkGas
+    _gcNativeBasicWork
   CoreCreateCapabilityPactGuard ->
-    basicWorkGas
+    _gcNativeBasicWork
   -- create-module-guard is a simple uncons
-  CoreCreateModuleGuard -> 2 * basicWorkGas
+  CoreCreateModuleGuard -> 2 * _gcNativeBasicWork
   -- create-pact-guard is a simple uncons
-  CoreCreateDefPactGuard -> 2 * basicWorkGas
+  CoreCreateDefPactGuard -> 2 * _gcNativeBasicWork
   -- Create-table depends heavily on the implementation, but
   -- should return within a reasonable time frame. We
   -- charge a penalty for using within a tx
   CoreCreateTable -> 250_000
   -- The following functions also incur a gas penalty
-  CoreDescribeKeyset -> dbMetadataTxPenalty
-  CoreDescribeModule -> dbMetadataTxPenalty
-  CoreDescribeTable -> dbMetadataTxPenalty
+  CoreDescribeKeyset -> _gcMetadataTxPenalty
+  CoreDescribeModule -> _gcMetadataTxPenalty
+  CoreDescribeTable -> _gcMetadataTxPenalty
   -- Registry functions
   -- both are constant-time work, but incur a db tx penalty
   CoreDefineKeySet ->
@@ -539,41 +544,41 @@ coreBuiltinGasCost = MilliGas . \case
     5_000
   -- fold-db incurs currently a penalty on mainnet
   CoreFoldDb ->
-    dbSelectPenalty
+    _gcSelectPenalty
   -- Insert db overhead
   CoreInsert ->
-    dbWritePenalty
+    _gcWritePenalty
   -- Todo: keys gas needs to be revisited. We leave in the current penalty
   CoreKeys ->
-    dbSelectPenalty
+    _gcSelectPenalty
   -- read depends on bytes as well, 10 gas is a tx penalty
   CoreRead ->
-    dbReadPenalty
+    _gcReadPenalty
   CoreSelect ->
-    dbSelectPenalty
+    _gcSelectPenalty
   CoreSelectWithFields ->
-    dbSelectPenalty
+    _gcSelectPenalty
   -- Update same gas penalty as write and insert
   CoreUpdate -> 100_000
   -- note: with-default read and read
   -- should cost the same.
   CoreWithDefaultRead ->
-    dbReadPenalty
-  CoreWithRead -> dbReadPenalty
+    _gcReadPenalty
+  CoreWithRead -> _gcReadPenalty
   -- Write penalty as well
-  CoreWrite -> dbWritePenalty
+  CoreWrite -> _gcWritePenalty
   -- Tx-hash should be constant-time
   CoreTxHash ->
-    basicWorkGas
+    _gcNativeBasicWork
   -- and? and co. should have essentially no penalty but whatever applyLam costs
-  CoreAndQ -> basicWorkGas
-  CoreOrQ -> basicWorkGas
-  CoreWhere -> basicWorkGas
-  CoreNotQ -> basicWorkGas
+  CoreAndQ -> _gcNativeBasicWork
+  CoreOrQ -> _gcNativeBasicWork
+  CoreWhere -> _gcNativeBasicWork
+  CoreNotQ -> _gcNativeBasicWork
   -- Todo: hashGas depends on input
-  CoreHash -> basicWorkGas
+  CoreHash -> _gcNativeBasicWork
   -- Continue in pact-core currently amounts to `id`
-  CoreContinue -> basicWorkGas
+  CoreContinue -> _gcNativeBasicWork
   -- Time functions complexity
   -- is handled in the function itself
   CoreParseTime -> 500
@@ -595,89 +600,49 @@ coreBuiltinGasCost = MilliGas . \case
   -- Compose is constant time, and just evaluated in pact-core to
   -- some continuation manipulation
   CoreCompose ->
-    basicWorkGas
+    _gcNativeBasicWork
   -- Note: create-principal is gassed via the principal creation functions
-  CoreCreatePrincipal -> basicWorkGas
-  CoreIsPrincipal -> basicWorkGas
-  CoreTypeOfPrincipal -> basicWorkGas
+  CoreCreatePrincipal -> _gcNativeBasicWork
+  CoreIsPrincipal -> _gcNativeBasicWork
+  CoreTypeOfPrincipal -> _gcNativeBasicWork
   -- note: validate-principal is essentially a constant time comparison on fixed-length strings.
   -- The actual gassing of constructing the principal is done inside of it
   CoreValidatePrincipal -> 250
   -- Namespace function is constant work
-  CoreNamespace -> basicWorkGas
+  CoreNamespace -> _gcNativeBasicWork
   -- define-namespace tx penalty
   CoreDefineNamespace -> 25_000
-  CoreDescribeNamespace -> dbMetadataTxPenalty
+  CoreDescribeNamespace -> _gcMetadataTxPenalty
   CoreChainData -> 500
   CoreIsCharset -> 500
-  CorePactId -> basicWorkGas
+  CorePactId -> _gcNativeBasicWork
   -- Note: pairing functions have custom gas
-  CoreZkPairingCheck -> basicWorkGas
-  CoreZKScalarMult -> basicWorkGas
-  CoreZkPointAdd -> basicWorkGas
+  CoreZkPairingCheck -> _gcNativeBasicWork
+  CoreZKScalarMult -> _gcNativeBasicWork
+  CoreZkPointAdd -> _gcNativeBasicWork
   CorePoseidonHashHackachain -> 124_000
   -- Note: type synthesis is constant time and very fast
-  CoreTypeOf -> basicWorkGas
+  CoreTypeOf -> _gcNativeBasicWork
   -- note: Dec requires less gas overall
   CoreDec ->
-    basicWorkGas
-  CoreCond -> basicWorkGas
-  CoreIdentity -> basicWorkGas
+    _gcNativeBasicWork
+  CoreCond -> _gcNativeBasicWork
+  CoreIdentity -> _gcNativeBasicWork
   CoreVerifySPV -> 100_000
   CoreEnforceVerifier -> 10_000
   CoreHyperlaneMessageId -> 2_000
   CoreHyperlaneDecodeMessage -> 2_000
   CoreHyperlaneEncodeMessage -> 2_000
   CoreAcquireModuleAdmin -> 20_000
-  CoreReadWithFields -> dbReadPenalty
-  CoreListModules -> dbMetadataTxPenalty
+  CoreReadWithFields -> _gcReadPenalty
+  CoreListModules -> _gcMetadataTxPenalty
 {-# INLINABLE runTableModel #-}
 
 
 replNativeGasTable :: ReplBuiltin CoreBuiltin -> MilliGas
 replNativeGasTable = \case
-  RBuiltinWrap bwrap -> coreBuiltinGasCost bwrap
+  RBuiltinWrap bwrap -> coreBuiltinGasCost tableGasCostConfig bwrap
   _ -> mempty
-
-
-
--- Select penalty will be revisited @ a later date
-dbSelectPenalty :: SatWord
-dbSelectPenalty = 40_000_000
-
-dbWritePenalty :: SatWord
-dbWritePenalty = 50_000
-
-dbReadPenalty :: SatWord
-dbReadPenalty = 4_500
-
-dbMetadataTxPenalty :: SatWord
-dbMetadataTxPenalty = 100_000
-
--- | The gas amount for a small constant amount of work
-constantWorkNodeGas :: MilliGas
-constantWorkNodeGas = (MilliGas 50)
-
-unconsWorkNodeGas :: MilliGas
-unconsWorkNodeGas = (MilliGas 100)
-
-tryNodeGas :: MilliGas
-tryNodeGas = (MilliGas 100)
-
-
--- PactValue serialization costs
-serializationCosts :: SerializationCosts
-serializationCosts = SerializationCosts
-  { objectKeyCostMilliGasOffset = 1
-  , objectKeyCostMilliGasPer1000Chars = 69
-  , boolMilliGasCost = 52
-  , unitMilliGasCost = 51
-  , integerCostMilliGasPerDigit = 2
-  , decimalCostMilliGasOffset = 59
-  , decimalCostMilliGasPerDigit = 2
-  , timeCostMilliGas = 184
-}
-
 
 
 -- [Decimal Comparisons]

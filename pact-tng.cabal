@@ -263,6 +263,7 @@ library
     Pact.Core.SPV
     Pact.Core.Repl
     Pact.Core.SizeOf
+    Pact.Core.SizeOf.Deriving
     Pact.Core.StackFrame
     Pact.Core.Legacy.LegacyCodec
     Pact.Core.Verifiers

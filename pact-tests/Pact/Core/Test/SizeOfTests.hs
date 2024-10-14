@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TemplateHaskell #-}
 -- | Tests for the sizes of various values.
 
 module Pact.Core.Test.SizeOfTests where
@@ -35,10 +36,12 @@ tests = testGroup "SizeOfTests" $
       assertEqual "size should be 5" 5 size
   , testCase "PactValue1" $ do
       Right size <- getSize SizeOfV0 (PInteger 1)
-      -- The size of the integer (at least 8 bytes) + the tag overhead of PLiteral (1 byte)
-      -- + tag overhead of PInteger (1 byte)
-      assertEqual "size should be 40" 10 size
-  , sizeOfSmallObject SizeOfV0 22
+      -- The size of a PLiteral (LInteger 1) should be
+      -- 2 bytes for the ADT of PactValue (header + tag)
+      -- 2 bytes for the ADT of Literal (header + tag)
+      -- The size of the integer (at least 8 bytes
+      assertEqual "size should be 40" 12 size
+  , sizeOfSmallObject SizeOfV0 25
   ]
 
 getSize :: SizeOf a => SizeOfVersion -> a -> IO (Either PactErrorI Bytes)
