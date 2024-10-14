@@ -55,6 +55,9 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , guardForModuleCall
  , guardTable
  , emitPactWarning
+ , chargeConstantWork
+ , chargeUnconsWork
+ , chargeTryNodeWork
  ) where
 
 import Control.Lens hiding (from, to)
@@ -183,6 +186,26 @@ typecheckArgument info pv ty = do
   c <- gassedRuntimeTypecheck info ty pv
   unless c $ throwExecutionError info (RunTimeTypecheckFailure (pvToArgTypeError pv) ty)
 
+chargeConstantFromConfig :: (GasCostConfig -> SatWord) -> i -> EvalM e b i ()
+chargeConstantFromConfig f i = do
+  gcc <- viewEvalEnv (eeGasEnv . geGasModel . gmGasCostConfig)
+  chargeGasArgs i (GAConstant (MilliGas (f gcc)))
+
+chargeConstantScalarMulFromConfig :: (GasCostConfig -> SatWord) -> SatWord -> i -> EvalM e b i ()
+chargeConstantScalarMulFromConfig f k i = do
+  gcc <- viewEvalEnv (eeGasEnv . geGasModel . gmGasCostConfig)
+  chargeGasArgs i (GAConstant (MilliGas (f gcc * k)))
+
+
+chargeConstantWork :: i -> EvalM e b i ()
+chargeConstantWork = chargeConstantFromConfig _gcMachineTickCost
+
+chargeTryNodeWork :: i -> EvalM e b i ()
+chargeTryNodeWork = chargeConstantFromConfig _gcUnconsWork
+
+chargeUnconsWork :: i -> EvalM e b i ()
+chargeUnconsWork = chargeConstantFromConfig _gcUnconsWork
+
 -- | Runtime typechecking. For "simple" non-recursive types,
 --   this is free. Otherwise, we will charge a small amount of gas per
 --   "layer" of typechecking
@@ -199,14 +222,14 @@ gassedRuntimeTypecheck i ty = \case
       | S.size ifs < 10 ->
         pure (mns `S.isSubsetOf` ifs)
       | otherwise -> do
-        chargeGasArgs i (GAConstant (scalarMulMilliGas constantWorkNodeGas (S.size ifs)))
+        chargeConstantScalarMulFromConfig _gcMachineTickCost (fromIntegral (S.size ifs)) i
         pure  (mns `S.isSubsetOf` ifs)
     _ -> pure False
   PList pli -> case ty of
     TyAnyList -> pure True
     TyList t -> do
       -- Note: length is O(1)
-      chargeGasArgs i (GAConstant (scalarMulMilliGas constantWorkNodeGas (V.length pli)))
+      chargeConstantScalarMulFromConfig _gcMachineTickCost (fromIntegral (V.length pli)) i
       vs <- traverse (gassedRuntimeTypecheck i t) pli
       pure (and vs)
     _ -> pure False
@@ -219,7 +242,7 @@ gassedRuntimeTypecheck i ty = \case
 gassedTypecheckObj :: i -> M.Map Field PactValue -> Schema -> EvalM e b i Bool
 gassedTypecheckObj i o (Schema _ sc)
   | M.size o == M.size sc = do
-    chargeGasArgs i (GAConstant (scalarMulMilliGas constantWorkNodeGas (M.size o)))
+    chargeConstantScalarMulFromConfig _gcMachineTickCost (fromIntegral (M.size o)) i
     go (M.toList o) (M.toList sc)
   | otherwise = pure False
   where
@@ -338,7 +361,7 @@ checkSchema = gassedTypecheckObj
 -- | Todo: revisit
 checkPartialSchema :: i -> M.Map Field PactValue -> Schema -> EvalM e b i Bool
 checkPartialSchema  info o (Schema q sc) = do
-  chargeGasArgs info (GAConstant (scalarMulMilliGas constantWorkNodeGas (M.size o)))
+  chargeConstantScalarMulFromConfig _gcMachineTickCost (fromIntegral (M.size o)) info
   let keys = M.keys o
   if all (`M.member` sc) keys then
     gassedTypecheckObj info o (Schema q (M.restrictKeys sc (S.fromList keys)))

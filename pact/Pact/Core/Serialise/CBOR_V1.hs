@@ -18,7 +18,7 @@ module Pact.Core.Serialise.CBOR_V1
   , encodeKeySet, decodeKeySet
   , encodeDefPactExec, decodeDefPactExec
   , encodeNamespace, decodeNamespace
-  , encodeRowData, decodeRowData
+  , decodeRowData
   , encodeRowDataNoGas
   -- only used for legacy translation
   , encodeModuleName
@@ -26,7 +26,6 @@ module Pact.Core.Serialise.CBOR_V1
   , SerialiseV1(..)
   ) where
 
-import Control.Lens
 import Codec.CBOR.Read (deserialiseFromBytes)
 import Codec.CBOR.Write (toStrictByteString)
 import Codec.Serialise
@@ -34,18 +33,12 @@ import Codec.CBOR.Encoding
 import Codec.CBOR.Decoding
 import Data.ByteString (ByteString, fromStrict)
 import Data.Decimal
-import Data.Foldable
 import Data.Coerce
-import qualified Data.Map as Map
-import qualified Data.Text as Text
-import qualified GHC.Integer.Logarithms as IntLog
-import GHC.Int(Int(..))
 
 import Pact.Core.Builtin
 import Pact.Core.Capabilities
 import Pact.Core.ChainData
 import Pact.Core.DefPacts.Types
-import Pact.Core.Gas
 import Pact.Core.Guards
 import Pact.Core.Hash
 import Pact.Core.Imports
@@ -57,7 +50,6 @@ import Pact.Core.Names
 import Pact.Core.Namespace
 import Pact.Core.PactValue
 import Pact.Core.Persistence
-import Pact.Core.Pretty
 import Pact.Core.Type
 import Pact.Time.Internal (UTCTime(..), NominalDiffTime(..))
 import qualified Data.Set as S
@@ -122,104 +114,9 @@ encodeNamespace = toStrictByteString . encodeS
 decodeNamespace :: ByteString -> Maybe Namespace
 decodeNamespace bs =either (const Nothing) (Just . snd) (deserialiseFromBytes decodeS (fromStrict bs))
 
-
-encodeRowData :: RowData -> GasM b i ByteString
-encodeRowData rd = do
-  gasSerializeRowData rd
-  pure . toStrictByteString $ encodeS rd
-
 encodeRowDataNoGas :: RowData -> ByteString
 encodeRowDataNoGas rd =
   toStrictByteString $ encodeS rd
-
-chargeGasMSerialize :: MilliGas -> GasM b i ()
-chargeGasMSerialize amount = do
-  chargeGasM (GAConstant amount)
-
-gasSerializeRowData :: forall i b. RowData -> GasM b i ()
-gasSerializeRowData (RowData fields) = do
-
-  -- Charge for keys
-  chargeGasMString $ Text.concat $ _field <$> Map.keys fields
-
-  -- Charge for values
-  traverse_ gasSerializePactValue fields
-
-  where
-
-    gasSerializePactValue :: PactValue -> GasM b i ()
-    gasSerializePactValue = \case
-      PLiteral l -> gasSerializeLiteral l
-      PList vs -> do
-        traverse_ gasSerializePactValue vs
-      PGuard g -> do
-        gasSerializeGuard g
-      PModRef modRef -> gasModRef modRef
-      PObject o -> do
-        chargeGasMString $ Text.concat $ _field <$> Map.keys o
-        traverse_ gasSerializePactValue o
-      PCapToken (CapToken name args) -> do
-        chargeGasMString (renderText name)
-        traverse_ gasSerializePactValue args
-      PTime _ -> do
-        SerializationCosts { timeCostMilliGas } <- view (_1 . geGasModel . gmSerialize)
-        chargeGasMSerialize $ MilliGas timeCostMilliGas
-
-    gasSerializeLiteral l = do
-      SerializationCosts {
-        boolMilliGasCost,
-        unitMilliGasCost,
-        integerCostMilliGasPerDigit,
-        decimalCostMilliGasOffset,
-        decimalCostMilliGasPerDigit} <- view (_1 . geGasModel . gmSerialize)
-      case l of
-        LString s ->
-          -- See the analysis in `Bench.hs` - `pact-string-2` for details.
-          chargeGasMString s
-        LInteger i ->
-          -- See the analysis in `Bench.hs` - `pact-ineger-2` for details.
-          chargeGasMSerialize $ MilliGas $ integerCostMilliGasPerDigit * fromIntegral (I# (IntLog.integerLogBase# 10 (abs i)))
-        LDecimal d ->
-          chargeGasMSerialize $ MilliGas $ decimalCostMilliGasOffset + decimalCostMilliGasPerDigit * fromIntegral (I# (IntLog.integerLogBase# 10 (decimalMantissa d)))
-        LBool _ -> chargeGasMSerialize $ MilliGas boolMilliGasCost
-        LUnit -> chargeGasMSerialize $ MilliGas unitMilliGasCost
-
-    gasSerializeGuard = \case
-
-      GKeyset keyset -> gasSerializeKeySet keyset
-      GKeySetRef keysetName -> chargeGasMString (renderText keysetName)
-      GUserGuard (UserGuard name term) -> do
-        chargeGasMString (renderText name)
-        traverse_ gasSerializePactValue term
-      GCapabilityGuard (CapabilityGuard name args defpactId) -> do
-        chargeGasMString (renderText name)
-        traverse_ gasSerializePactValue args
-        traverse_ (chargeGasMString . renderText) defpactId
-      GModuleGuard (ModuleGuard moduleName guardName) -> do
-        chargeGasMString (renderText moduleName)
-        chargeGasMString (renderText guardName)
-      GDefPactGuard (DefPactGuard defpactId name) -> do
-        chargeGasMString (renderText defpactId)
-        chargeGasMString (renderText name)
-
-    gasSerializeKeySet :: KeySet -> GasM b i ()
-    gasSerializeKeySet (KeySet keys pred') = do
-      -- See the analysis in `Bench.hs` - `pact-keyset-2` for details.
-      chargeGasMString (renderText pred')
-      traverse_ (chargeGasMString . renderText) keys
-
-    gasModRef :: ModRef -> GasM b i ()
-    gasModRef (ModRef name implemented) = do
-      chargeGasMString (renderText name)
-      traverse_ (chargeGasMString . renderText) implemented
-
-    chargeGasMString :: Text.Text -> GasM b i ()
-    chargeGasMString str = do
-      SerializationCosts {
-        objectKeyCostMilliGasOffset,
-        objectKeyCostMilliGasPer1000Chars
-        } <- view (_1 . geGasModel . gmSerialize)
-      chargeGasMSerialize $ MilliGas $ objectKeyCostMilliGasOffset + objectKeyCostMilliGasPer1000Chars * fromIntegral (Text.length str) `div` 1000
 
 
 decodeRowData :: ByteString -> Maybe RowData

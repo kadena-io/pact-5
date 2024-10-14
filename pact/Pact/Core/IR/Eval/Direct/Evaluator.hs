@@ -23,7 +23,6 @@ module Pact.Core.IR.Eval.Direct.Evaluator
  , interpretGuard
  , resumePact
  , applyPact
- , constantWorkNodeGas
  , applyLamUnsafe
  , evalCap
  , installCap
@@ -38,7 +37,6 @@ module Pact.Core.IR.Eval.Direct.Evaluator
  , enforceGuard
  , applyLam
  , evalWithinCap
- , unconsWorkNodeGas
  , enforceNotWithinDefcap
  , isKeysetInSigs
  , isKeysetNameInSigs
@@ -294,7 +292,7 @@ evaluate env = \case
       _ -> throwExecutionError info $ NativeExecutionError (NativeName "create-user-guard") $
           "create-user-guard: expected function application of a top-level function"
     CTry catchExpr tryExpr -> do
-      chargeGasArgs info (GAConstant tryNodeGas)
+      chargeTryNodeWork info
       let env' = readOnlyEnv env
       catchRecoverable (evaluate env' tryExpr) (\_ _ -> evaluate env catchExpr)
     CEnforceOne str (ListLit conds _) ->
@@ -302,7 +300,7 @@ evaluate env = \case
       where
       go (x:xs) = do
         cond <- catchRecoverable (enforceBool info =<< evaluate env x) (\_ _ -> pure False)
-        chargeGasArgs info (GAConstant unconsWorkNodeGas)
+        chargeUnconsWork info
         if cond then return (VBool True)
         else go xs
       go [] = do
