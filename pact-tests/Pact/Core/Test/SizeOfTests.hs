@@ -40,7 +40,7 @@ tests = testGroup "SizeOfTests" $
       -- 2 bytes for the ADT of PactValue (header + tag)
       -- 2 bytes for the ADT of Literal (header + tag)
       -- The size of the integer (at least 8 bytes
-      assertEqual "size should be 40" 12 size
+      assertEqual "size should be 12" 12 size
   , sizeOfSmallObject SizeOfV0 25
   ]
 
