@@ -31,16 +31,14 @@ module Pact.Core.Hash
 , moduleHashToText
 , parseHash
 , parseModuleHash
-  -- unsafe creating of a 'ModuleHash', only used in the
-  -- legacy translation process.
-, unsafeBsToModuleHash
+, hashToByteString
 ) where
 
 import Control.DeepSeq
 import Data.Aeson
 import Data.ByteString.Short (ShortByteString, fromShort, toShort)
 import Data.ByteString (ByteString)
-import Data.Hashable (Hashable)
+import Data.Hashable (Hashable, unhashed)
 import Data.Serialize (Serialize)
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
@@ -109,12 +107,8 @@ pactHashLength = 32
 unsafeBsToPactHash :: ByteString -> Hash
 unsafeBsToPactHash = Hash . toShort
 
-
--- | Creates a 'ModuleHash' value directly from a 'ByteString' without using the hashing functions.
--- This function is unsafe because it bypasses the hashing process and assumes the provided 'ByteString'
--- is a valid hash.
-unsafeBsToModuleHash :: ByteString -> ModuleHash
-unsafeBsToModuleHash = ModuleHash . unsafeBsToPactHash
+hashToByteString :: Hash -> ByteString
+hashToByteString = fromShort . unHash
 
 parseHash :: Text -> Maybe Hash
 parseHash t = case decodeBase64UrlUnpadded (T.encodeUtf8 t) of
