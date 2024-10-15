@@ -282,6 +282,7 @@
 (expect "exp 16.0" 8886110.520507872104644775390625 (exp 16.0))
 (expect "exp 15" 3269017.3724721106700599193572998046875 (exp 15))
 (expect "exp 15.0" 3269017.3724721106700599193572998046875 (exp 15.0))
+(expect-failure "exp produces +inf if the operand is too large" (exp (^ 420 420)))
 
 "===== math.pow"
 (expect "^ 0 0" 1 (^ 0 0))
