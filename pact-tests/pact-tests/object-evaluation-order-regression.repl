@@ -1,0 +1,29 @@
+;; Regression for https://github.com/kadena-io/pact-5/issues/260
+
+(module my-mod G
+  @doc "A simple module that manages a counter"
+  (defcap G() true)
+
+  (defschema counter-schema
+    cnt:integer)
+
+  (deftable counter-table:{counter-schema})
+
+  (defun init:string ()
+    @doc "Initialize the counter"
+    (insert counter-table "SINGLETON" {'cnt:0})
+  )
+
+  (defun increment:integer ()
+    @doc "Increment the counter and return the old value"
+    (with-read counter-table "SINGLETON" {'cnt:=old-value}
+      (update counter-table "SINGLETON" {'cnt:(+ 1 old-value)})
+      old-value)
+  )
+
+)
+; Init the counter
+(create-table counter-table)
+(my-mod.init)
+
+(expect "check evaluation order from left to right" {'a:(my-mod.increment), 'b:(my-mod.increment), 'c:(my-mod.increment)} {'a: 0, 'b:1, 'c:2})

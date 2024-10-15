@@ -434,7 +434,7 @@ Object :: { ParsedExpr }
   : '{' ObjectBody '}' { Object $2 (combineSpan (_ptInfo $1) (_ptInfo $3)) }
 
 ObjectBody :: { [(Field, ParsedExpr)] }
-  : FieldPairs { $1 }
+  : FieldPairs { reverse $1 }
 
 FieldPair :: { (Field, ParsedExpr) }
   : STR ':' Expr { (Field (getStr $1), $3) }
