@@ -920,6 +920,7 @@ benchesForBuiltin bn = case bn of
   CoreHyperlaneDecodeMessage -> todo
   CoreHyperlaneEncodeMessage -> todo
   CoreHyperlaneMessageId -> todo
+  CoreStaticRedeploy -> omittedDeliberately
   where
   omittedDeliberately = const []
   alreadyCovered = const []

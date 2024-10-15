@@ -1990,18 +1990,47 @@ coreListModules info b env = \case
     return $ VList $ V.fromList (PString . renderModuleName <$> mns)
   args -> argsError info b args
 
+coreStaticRedeploy :: (IsBuiltin b, SizeOf b, SizeOf i) => NativeFunction e b i
+coreStaticRedeploy info b env = \case
+  [VString m] -> do
+    enforceTopLevelOnly info b
+    case parseModuleName m of
+      Just mname -> do
+        mdata <- getModuleData info mname
+        let code@(ModuleCode mcode) = moduleDataCode mdata
+        let mdFqn = HashedModuleName mname (view mdModuleHash mdata)
+        -- Write the module code to SYS:ModuleSources
+        -- so we don't break tooling on redeploys, because we definitely won't write it out
+        -- to CBOR
+        if T.null mcode then pure ()
+        else do
+          wtSize <- sizeOf info SizeOfV0 (ModuleCode mcode)
+          chargeGasArgs info (GWrite wtSize)
+          evalWrite info (_cePactDb env) Write DModuleSource mdFqn code
+        msize <- sizeOf info SizeOfV0 mdata
+        chargeGasArgs info (GWrite msize)
+        evalWrite info (_cePactDb env) Write DModules mname mdata
+        -- There is no meaningful return value here
+        return VUnit
+      Nothing -> throwNativeExecutionError info b $ "invalid module name format"
+  args -> argsError info b args
+  where
+  moduleDataCode = \case
+    ModuleData m _ -> _mCode m
+    InterfaceData iface _ -> _ifCode iface
+
 -----------------------------------
 -- Builtin exports
 -----------------------------------
 
 
 coreBuiltinEnv
-  :: forall e i
-  . BuiltinEnv e CoreBuiltin i
+  :: forall e i.
+  (SizeOf i) => BuiltinEnv e CoreBuiltin i
 coreBuiltinEnv i b env = mkDirectBuiltinFn i b env (coreBuiltinRuntime b)
 
 coreBuiltinRuntime
-  :: (IsBuiltin b)
+  :: (IsBuiltin b, SizeOf b, SizeOf i)
   => CoreBuiltin
   -> NativeFunction e b i
 coreBuiltinRuntime =
@@ -2158,3 +2187,4 @@ coreBuiltinRuntime =
     CoreAcquireModuleAdmin -> coreAcquireModuleAdmin
     CoreReadWithFields -> dbRead
     CoreListModules -> coreListModules
+    CoreStaticRedeploy -> coreStaticRedeploy

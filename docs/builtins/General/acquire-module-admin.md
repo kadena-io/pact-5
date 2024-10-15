@@ -23,8 +23,6 @@ It will attempt to acquire the governance cap and if successful, it will grant m
 
 ### Arguments
 
-Use one of the following argument to define the value you want to retrieve using the `at` Pact function.
-
 | Argument | Type | Description
 | -------- | ---- | -----------
 | `ref` | modref | Specifies the module to acquire administrative capabilities for.

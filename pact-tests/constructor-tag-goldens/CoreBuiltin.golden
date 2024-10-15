@@ -133,4 +133,5 @@
 {"conName":"CoreHyperlaneEncodeMessage","conIndex":"84"}
 {"conName":"CoreReadWithFields","conIndex":"85"}
 {"conName":"CoreListModules","conIndex":"86"}
+{"conName":"CoreStaticRedeploy","conIndex":"87"}
 

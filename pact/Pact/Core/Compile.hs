@@ -163,7 +163,7 @@ compileDesugarOnly interpreter tl = do
   debugPrint (DPParser @b) tl
   (DesugarOutput ds deps) <- runDesugarTopLevel tl
   constEvaled <- ConstEval.evalTLConsts interpreter ds
-  let tlFinal = MHash.hashTopLevel constEvaled
+  tlFinal <- MHash.hashTopLevel constEvaled
   debugPrint DPDesugar ds
   pure (tlFinal, deps)
 
@@ -180,7 +180,7 @@ interpretTopLevel interpreter code tl = do
   debugPrint (DPParser @b) tl
   (DesugarOutput ds deps) <- runDesugarTopLevel tl
   constEvaled <- ConstEval.evalTLConsts interpreter ds
-  let tlFinal = MHash.hashTopLevel constEvaled
+  tlFinal <- MHash.hashTopLevel constEvaled
   debugPrint DPDesugar ds
   evalTopLevel interpreter code tlFinal deps
 

@@ -1,0 +1,9 @@
+(module m g
+  (defcap g () true)
+
+  (defun f () 1)
+
+  (defun gg () 2)
+  )
+
+(static-redeploy 'm)

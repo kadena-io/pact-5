@@ -83,7 +83,7 @@ data EnableGasLogs
   | GasLogsDisabled
   deriving (Eq, Show, Ord)
 
-evalInterpreter :: Interpreter ExecRuntime CoreBuiltin i
+evalInterpreter :: Interpreter ExecRuntime CoreBuiltin Info
 evalInterpreter =
   Interpreter runGuard runTerm resume evalWithCap
   where
@@ -93,10 +93,10 @@ evalInterpreter =
   evalWithCap info purity ct term =
     CEK.evalWithinCap info purity cekEnv ct term
 
-cekEnv :: CEK.BuiltinEnv ExecRuntime CoreBuiltin i
+cekEnv :: CEK.BuiltinEnv ExecRuntime CoreBuiltin Info
 cekEnv = coreBuiltinEnv @ExecRuntime
 
-evalDirectInterpreter :: Interpreter ExecRuntime CoreBuiltin i
+evalDirectInterpreter :: Interpreter ExecRuntime CoreBuiltin Info
 evalDirectInterpreter =
   Interpreter runGuard runTerm resume evalWithCap
   where

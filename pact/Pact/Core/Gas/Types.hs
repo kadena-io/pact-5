@@ -162,6 +162,8 @@ data GasCostConfig
   -- ^ Module load cost function Intercept
   , _gcDesugarBytePenalty :: !SatWord
   -- ^ Module load desugaring byte penalty
+  , _gcMHashBytePenalty :: !SatWord
+  -- ^ Module load hashing byte penalty
   , _gcSizeOfBytePenalty :: !SatWord
   -- ^ Our `SizeOf` limit penalty
   } deriving (Eq, Show, Generic)
@@ -327,6 +329,8 @@ data ModuleOp
   -- ^ Cost of adding deps to the symbol table
   | MOpDesugarModule !SatWord -- Size of the tree
   -- ^ the cost of module desugar
+  | MOpHashModule !SatWord -- Size of the tree
+  -- ^ the cost of module desugar
   deriving (Show, Eq, Generic, NFData)
 
 instance Show b => Pretty (GasArgs b) where
@@ -392,6 +396,7 @@ freeGasCostConfig = GasCostConfig
   , _gcFunctionArgumentCost = 1
   -- ^ The flat cost per argument for
   -- function calls. Note: Typechecking is costed separately
+  , _gcMHashBytePenalty = 1
   , _gcMachineTickCost = 1
   -- ^ The flat cost for a state transition in our machine
   , _gcUnconsWork = 1
