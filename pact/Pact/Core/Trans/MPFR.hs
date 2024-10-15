@@ -1,4 +1,4 @@
--- | 
+-- |
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -40,9 +40,9 @@ import System.IO.Unsafe (unsafePerformIO)
 
 data TransResult a
   = TransNumber !a
-  | TransNaN !a
-  | TransInf !a
-  | TransNegInf !a
+  | TransNaN
+  | TransInf
+  | TransNegInf
   deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 data MPZ = MPZ {
@@ -157,6 +157,17 @@ foreign import ccall "mpfr_exp"
 foreign import ccall "mpfr_sqrt"
   c'mpfr_sqrt :: Mpfr_t -> Mpfr_t -> CInt -> IO ()
 
+foreign import ccall "mpfr_number_p"
+  c'mpfr_number_p :: Mpfr_t -> IO CInt
+
+foreign import ccall "mpfr_inf_p"
+  c'mpfr_inf_p :: Mpfr_t -> IO CInt
+
+foreign import ccall "mpfr_nan_p"
+  c'mpfr_nan_p :: Mpfr_t -> IO CInt
+
+foreign import ccall "mpfr_sgn"
+  c'mpfr_sgn :: Mpfr_t -> IO CInt
 {-------------------------------------------------------------------------
  -- OPERATIONS
  -------------------------------------------------------------------------}
@@ -214,9 +225,9 @@ mpfr2Dec m =
   where
   readResultNumber :: String -> TransResult Decimal
   readResultNumber (' ':s) = readResultNumber s
-  readResultNumber "nan" = TransNaN 0
-  readResultNumber "inf" = TransInf 0
-  readResultNumber "-inf" = TransNegInf 0
+  readResultNumber "nan" = TransNaN
+  readResultNumber "inf" = TransInf
+  readResultNumber "-inf" = TransNegInf
   readResultNumber "0" = TransNumber 0
   readResultNumber n =
     TransNumber (fromRational (read (trimZeroes n) % 1))
@@ -235,7 +246,28 @@ mpfr_arity1 f x = unsafePerformIO $
   dec2Mpfr x $ \x' ->
   withTemp $ \y' -> do
     f y' x' rounding
-    mpfr2Dec y'
+    checkOutput y'
+
+checkOutput :: Mpfr_t -> IO (TransResult Decimal)
+checkOutput result = do
+    is_num <- c'mpfr_number_p result
+    if is_num == 1 then
+      mpfr2Dec result
+    else do
+      -- check for infinity
+      is_inf <- c'mpfr_inf_p result
+      if is_inf == 1 then do
+        -- check for sign
+        sgn <- c'mpfr_sgn result
+        if sgn > 0 then pure TransInf
+        else pure TransNegInf
+      else do
+        is_nan <- c'mpfr_nan_p result
+        if is_nan == 1 then pure $ TransNaN
+        -- The only remaining case is underflow, since overflows will go into +Inf
+        else pure $ TransNumber 0
+
+
 
 mpfr_arity2
   :: (Mpfr_t -> Mpfr_t -> Mpfr_t -> CInt -> IO ())
@@ -245,4 +277,4 @@ mpfr_arity2 f x y = unsafePerformIO $
   dec2Mpfr y $ \y' ->
   withTemp $ \z' -> do
     f z' x' y' rounding
-    mpfr2Dec z'
+    checkOutput z'
