@@ -1242,7 +1242,7 @@ dbOpErrorToBoundedText' = \case
     NoSuchTable tn ->
       thsep ["Insert/Update failed because table ", renderTableName tn, "was not found."]
     TableAlreadyExists tn ->
-      thsep ["Insert/Update failed because table", renderTableName tn, "already exists."]
+      thsep ["Creation of user table", renderTableName tn, "failed because the table already exists."]
     TxAlreadyBegun _ ->
       "Starting a new transaction failed because a transaction has already been initiated."
     NotInTx cmd ->
