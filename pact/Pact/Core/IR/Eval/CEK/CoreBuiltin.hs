@@ -219,8 +219,8 @@ rawPow info b cont handler _env = \case
   decPow base pow = do
     when (base == 0 && pow < 0) $
       throwExecutionError info (FloatingPointError "zero to a negative power is undefined")
-    let integralPart = floor pow
-    chargeGasArgs info $ GIntegerOpCost PrimOpPow (floor base) integralPart
+    let integralPart = ceiling pow
+    chargeGasArgs info $ GIntegerOpCost PrimOpPow (ceiling base) integralPart
     result <- guardNanOrInf info $ MPFR.mpfr_pow base pow
     returnCEKValue cont handler (VLiteral (LDecimal result))
 
