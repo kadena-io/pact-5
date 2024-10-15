@@ -1485,7 +1485,7 @@ evalErrorToBoundedText = mkBoundedText . \case
   ExpectedPactValue ->
     "Expected a Pact value, but got a closure or table reference."
   NotInDefPactExecution ->
-    "Attempt to fetch defpact data failed because there's no defpact execution currently being executed."
+    "Attempt to fetch defpact data failed because there's no defpact currently being executed."
   RootNamespaceInstallError ->
     "Namespace installation failed. Cannot install modules in the root namespace."
   PointNotOnCurve ->
