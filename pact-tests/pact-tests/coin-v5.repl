@@ -26,7 +26,7 @@
 (env-gaslog)
 (expect
   "Gas cost of loading coin contract"
-  20532
+  20539
   (env-gas))
 
 (create-table coin.coin-table)
@@ -407,7 +407,7 @@
 (env-gaslog)
 (expect
   "Gas cost of transfer"
-  235 (env-gas))
+  185 (env-gas))
 
 (expect-failure "emily->doug capability used up"
   "TRANSFER exceeded"
@@ -444,7 +444,7 @@
   (transfer-create 'doug 'will (read-keyset 'will) 1.0))
 (env-gaslog)
 (expect
-  "Gas cost of transfer-create" 221 (env-gas))
+  "Gas cost of transfer-create" 171 (env-gas))
 
 (expect
   "doug now has 0.4 coins"

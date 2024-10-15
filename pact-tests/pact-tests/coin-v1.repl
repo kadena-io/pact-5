@@ -395,7 +395,7 @@
 (env-gaslog)
 (expect
   "Gas cost of transfer"
-  235 (env-gas))
+  185 (env-gas))
 
 (expect-failure "emily->doug capability used up"
   "TRANSFER exceeded"
@@ -432,7 +432,7 @@
   (transfer-create 'doug 'will (read-keyset 'will) 1.0))
 (env-gaslog)
 (expect
-  "Gas cost of transfer-create" 218 (env-gas))
+  "Gas cost of transfer-create" 168 (env-gas))
 
 (expect
   "doug now has 0.4 coins"

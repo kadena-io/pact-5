@@ -40,7 +40,8 @@ tableGasCostConfig = GasCostConfig
   , _gcPoseidonLinearGasFactor = 38_000
   , _gcModuleLoadSlope = 200
   , _gcModuleLoadIntercept = 10
-  , _gcDesugarBytePenalty = 500
+  , _gcDesugarBytePenalty = 400
+  , _gcMHashBytePenalty = 100
   , _gcSizeOfBytePenalty = 5
   }
 
@@ -386,7 +387,9 @@ runTableModel nativeTable GasCostConfig{..} = \case
       MilliGas $ fromIntegral (i * i') * 10
     MOpDesugarModule sz ->
       -- This is a pretty expensive traversal, so we will charge a bit more of a hefty price for it
-      MilliGas (fromIntegral sz * _gcDesugarBytePenalty)
+      MilliGas (sz * _gcDesugarBytePenalty)
+    MOpHashModule w ->
+      MilliGas $ w * _gcMHashBytePenalty
   GStrOp op -> case op of
     StrOpLength len ->
       let charsPerMg = 100
@@ -626,7 +629,7 @@ coreBuiltinGasCost GasCostConfig{..} = MilliGas . \case
   CoreSelectWithFields ->
     _gcSelectPenalty
   -- Update same gas penalty as write and insert
-  CoreUpdate -> 100_000
+  CoreUpdate -> _gcWritePenalty
   -- note: with-default read and read
   -- should cost the same.
   CoreWithDefaultRead ->
@@ -703,6 +706,7 @@ coreBuiltinGasCost GasCostConfig{..} = MilliGas . \case
   CoreAcquireModuleAdmin -> 20_000
   CoreReadWithFields -> _gcReadPenalty
   CoreListModules -> _gcMetadataTxPenalty
+  CoreStaticRedeploy -> _gcNativeBasicWork
 {-# INLINABLE runTableModel #-}
 
 

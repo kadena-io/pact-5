@@ -236,6 +236,7 @@ data CoreBuiltin
   -- | BackCompat: read with filtering columns
   | CoreReadWithFields
   | CoreListModules
+  | CoreStaticRedeploy
   deriving (Eq, Show, Ord, Bounded, Enum, Generic)
 
 instance NFData CoreBuiltin
@@ -409,6 +410,7 @@ coreBuiltinToText = \case
   CoreHyperlaneEncodeMessage -> "hyperlane-encode-token-message"
   CoreReadWithFields -> "read-with-fields"
   CoreListModules -> "list-modules"
+  CoreStaticRedeploy -> "static-redeploy"
 
 -- | Our `CoreBuiltin` user-facing representation.
 -- note: `coreBuiltinToUserText` is primarily for pretty printing
@@ -560,6 +562,7 @@ coreBuiltinToUserText = \case
   CoreAcquireModuleAdmin -> "acquire-module-admin"
   CoreReadWithFields -> "read"
   CoreListModules -> "list-modules"
+  CoreStaticRedeploy -> "static-redeploy"
 
 instance IsBuiltin CoreBuiltin where
   builtinName = NativeName . coreBuiltinToText
@@ -714,6 +717,7 @@ instance IsBuiltin CoreBuiltin where
     CoreHyperlaneEncodeMessage -> 1
     CoreReadWithFields -> 3
     CoreListModules -> 0
+    CoreStaticRedeploy -> 1
 
 coreBuiltinNames :: [Text]
 coreBuiltinNames =

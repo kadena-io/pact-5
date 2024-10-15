@@ -21,30 +21,44 @@ import Pact.Core.Hash
 import Pact.Core.Names
 import Pact.Core.PactValue
 import Pact.Core.Serialise.CBOR_V1
+import Pact.Core.SizeOf
+import Pact.Core.Environment
+import Pact.Core.Gas
 import Data.Functor (void)
 
-hashTopLevel :: (Serialise (SerialiseV1 b)) => TopLevel Name Type b i -> TopLevel Name Type b i
+hashTopLevel :: (Serialise (SerialiseV1 b), SizeOf b) => TopLevel Name Type b i -> EvalM e b i (TopLevel Name Type b i)
 hashTopLevel = \case
-  TLTerm t -> TLTerm t
-  TLModule m -> TLModule $ hashModuleAndReplace m
-  TLInterface iface -> TLInterface $ hashInterfaceAndReplace iface
-  TLUse u i -> TLUse u i
+  TLTerm t -> pure $ TLTerm t
+  TLModule m -> TLModule <$> hashModuleAndReplace m
+  TLInterface iface -> TLInterface <$> hashInterfaceAndReplace iface
+  TLUse u i -> pure (TLUse u i)
 
-hashModuleAndReplace :: (Serialise (SerialiseV1 b)) => Module Name Type b i -> Module Name Type b i
-hashModuleAndReplace m@(Module mname mgov defs mblessed imports mimps _mh txh mcode info) =
-  let defs' = updateDefHashes mname newMhash <$> defs
-  in Module mname gov' defs' mblessed imports mimps newMhash txh mcode info
+hashModuleAndReplace :: (Serialise (SerialiseV1 b), SizeOf b) => Module Name Type b i -> EvalM e b i (Module Name Type b i)
+hashModuleAndReplace m@(Module mname mgov defs mblessed imports mimps _mh txh mcode info) = do
+  newMHash <- mkNewModuleHash
+  let defs' = updateDefHashes mname newMHash <$> defs
+  pure $ Module mname (gov' newMHash) defs' mblessed imports mimps newMHash txh mcode info
   where
-  newMhash = ModuleHash $ hash $ encodeModule m
-  gov' = case mgov of
+  mkNewModuleHash = do
+    let m' = void m
+    sz <- sizeOf info SizeOfV0 m'
+    chargeGasArgs info (GModuleOp (MOpHashModule sz))
+    pure $ ModuleHash $ hash $ encodeModule m'
+  gov' newMHash = case mgov of
     KeyGov n -> KeyGov n
-    CapGov (FQName fqn) -> CapGov $ FQName $ set fqHash newMhash fqn
+    CapGov (FQName fqn) -> CapGov $ FQName $ set fqHash newMHash fqn
 
-hashInterfaceAndReplace :: (Serialise (SerialiseV1 b)) => Interface Name Type b i -> Interface Name Type b i
-hashInterfaceAndReplace iface@(Interface ifn defs imps _mh txh mcode info) =
-  Interface ifn defs imps newMhash txh mcode info
+hashInterfaceAndReplace :: (Serialise (SerialiseV1 b), SizeOf b) => Interface Name Type b i -> EvalM e b i (Interface Name Type b i)
+hashInterfaceAndReplace iface@(Interface ifn defs imps _mh txh mcode info) = do
+  newMHash <- mkNewMhash
+  let defs' = updateIfDefHashes ifn newMHash <$> defs
+  pure $ Interface ifn defs' imps newMHash txh mcode info
   where
-  newMhash = ModuleHash $ hash $ encodeInterface iface
+  mkNewMhash = do
+    let iface' = void iface
+    sz <- sizeOf info SizeOfV0 iface'
+    chargeGasArgs info (GModuleOp (MOpHashModule sz))
+    pure $ ModuleHash $ hash $ encodeInterface iface'
 
 updateDefHashes :: ModuleName -> ModuleHash -> Def Name Type b i -> Def Name Type b i
 updateDefHashes mname mhash = \case
@@ -61,6 +75,17 @@ updateDefHashes mname mhash = \case
     in DPact $ over dpSteps (fmap updateStep) d
   DTable d -> DTable d
   DSchema s -> DSchema s
+
+updateIfDefHashes :: ModuleName -> ModuleHash -> IfDef Name Type b i -> IfDef Name Type b i
+updateIfDefHashes mname mhash = \case
+  IfDfun d -> IfDfun d
+  IfDConst d -> IfDConst $ case _dcTerm d of
+    TermConst t -> set dcTerm (TermConst (updateTermHashes mname mhash t)) d
+    EvaledConst v -> set dcTerm (EvaledConst (updatePactValueHash mname mhash v)) d
+  IfDCap d -> IfDCap d
+  IfDPact d -> IfDPact d
+  IfDSchema s -> IfDSchema s
+
 
 updateTermHashes :: ModuleName -> ModuleHash -> Term Name Type b i -> Term Name Type b i
 updateTermHashes mname mhash = transform $ \case
@@ -89,13 +114,13 @@ updatePactValueHash mname mhash = \case
     PCapToken $ CapToken (updateFqNameHash mname mhash ct) (updatePactValueHash mname mhash <$> pvs)
   PTime t -> PTime t
 
-encodeModule :: (Serialise (SerialiseV1 b)) => Module Name Type b i -> B.ByteString
-encodeModule (void -> Module mname mgov defs mblessed imports mimps _mh _txh _mcode _i) =
+encodeModule :: (Serialise (SerialiseV1 b)) => Module Name Type b () -> B.ByteString
+encodeModule (Module mname mgov defs mblessed imports mimps _mh _txh _mcode _i) =
   B.toStrict $ serialise (SerialiseV1 (Module mname mgov defs mblessed imports mimps (ModuleHash (Hash mempty)) (Hash mempty) _mcode ()))
-{-# SPECIALISE encodeModule :: Module Name Type CoreBuiltin i -> B.ByteString #-}
+{-# SPECIALISE encodeModule :: Module Name Type CoreBuiltin () -> B.ByteString #-}
 
-encodeInterface :: (Serialise (SerialiseV1 b)) => Interface Name Type b i -> B.ByteString
-encodeInterface (void -> Interface ifn defns imports _mh _txh mcode _i) =
+encodeInterface :: (Serialise (SerialiseV1 b)) => Interface Name Type b () -> B.ByteString
+encodeInterface (Interface ifn defns imports _mh _txh mcode _i) =
   B.toStrict $ serialise (SerialiseV1 (Interface ifn defns imports (ModuleHash (Hash mempty)) (Hash mempty) mcode ()))
-{-# SPECIALISE encodeInterface :: Interface Name Type CoreBuiltin i -> B.ByteString #-}
+{-# SPECIALISE encodeInterface :: Interface Name Type CoreBuiltin () -> B.ByteString #-}
 

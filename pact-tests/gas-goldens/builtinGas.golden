@@ -103,6 +103,7 @@ shift: 1286
 show: 1400
 sort: 1400
 sqrt: 2022
+static-redeploy: 298900
 str-to-int: 708
 str-to-list: 751
 take: 2200
@@ -110,7 +111,7 @@ time: 500
 tx-hash: 200
 typeof-principal: 997
 typeof: 200
-update: 634750
+update: 584750
 validate-principal: 4540
 where: 2340
 with-default-read: 540016
