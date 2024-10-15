@@ -120,7 +120,7 @@ testManagedCaps = do
     let allCmds = [sysModuleCmd,acctModuleCmd,createAcctCmd,managedPay,managedPayFails]
     allResults <- runAll allCmds
 
-    mhash <- mkModuleHash "PkJ6B966fhCGDEWeTfbfP78btLEfM9SpjButLlA4Lj4"
+    mhash <- mkModuleHash "xkYy5KYtEkV1WFZ791iCnZjRBx6um5FEe1aU-rPCOv8"
 
     runResults allResults $ do
       sysModuleCmd `succeedsWith` (`shouldBe` textVal "system module loaded")
