@@ -298,7 +298,8 @@ qualNameToFqn (QualifiedName name mn) mh =
   FullyQualifiedName mn name mh
 
 instance Pretty FullyQualifiedName where
-  pretty fq = pretty $ fqnToQualName fq
+  pretty (FullyQualifiedName mn n mh) =
+    pretty (QualifiedName n mn) <> ".{" <> pretty (_mhHash mh) <> "}"
 
 data TypeVar
   = TypeVar
