@@ -982,7 +982,7 @@ instance NFData UserRecoverableError
 instance Pretty UserRecoverableError where
   pretty = \case
     UserEnforceError t -> pretty t
-    OneShotCapAlreadyUsed -> "The managed capability has already been used."
+    OneShotCapAlreadyUsed -> "One-shot managed capability used more than once"
     CapabilityNotGranted ct ->
       "require-capability: not granted:" <+> parens (pretty (_ctName ct))
     NoSuchObjectInDb tn (RowKey rk) ->
