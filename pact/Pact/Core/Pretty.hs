@@ -16,11 +16,15 @@ module Pact.Core.Pretty
 , parensSep
 , bracesSep
 , PrettyLispApp(..)
+, AbbrevPretty(..)
+, prettyAbbrevText
+, prettyAbbrevText'
 ) where
 
 import Data.Text(Text)
 import Prettyprinter
 import qualified Prettyprinter as Pretty
+import qualified Data.Text as T
 import Prettyprinter.Render.String
 import Prettyprinter.Render.Text
 import Data.List.NonEmpty(NonEmpty)
@@ -57,6 +61,30 @@ commaBrackets = encloseSep "[" "]" ","
 bracketsSep   = brackets . sep
 parensSep     = parens   . sep
 bracesSep     = braces   . sep
+
+-- A useful type for "abbreviated"
+-- values
+newtype AbbrevPretty a
+  = AbbrevPretty a
+  deriving (Show)
+
+-- | Very inefficient, but useful for making pretty printed, abbreviated strings, to display
+-- things like long lists as [1, 2, ...]
+-- Invariant: `lim` should be at least > 3, otherwise you'll get an ugly string
+prettyAbbrevText :: Pretty a => Int -> a -> Doc ann
+prettyAbbrevText lim v =
+  let k = renderCompactText v
+  in if T.length k <= (lim - 3) then pretty k
+  else pretty (T.take (lim - 3) k <> "...")
+
+-- | Very inefficient, but useful for making pretty printed, abbreviated strings, to display
+-- things like long lists as [1, 2, ...]
+-- Invariant: `lim` should be at least > 3, otherwise you'll get an ugly string
+prettyAbbrevText' :: Int -> Doc ann -> Doc ann
+prettyAbbrevText' lim v =
+  let k = renderCompactText' v
+  in if T.length k <= (lim - 3) then pretty k
+  else pretty (T.take (lim - 3) k <> "...")
 
 data PrettyLispApp n arg
   = PrettyLispApp
