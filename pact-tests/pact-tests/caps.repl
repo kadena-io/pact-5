@@ -643,7 +643,7 @@
 
 (expect-failure
  "auto managed fails after first time"
- "Automanaged capability used more than once"
+ "The managed capability has already been used."
  (doA "auto-a"))
 
 (expect
