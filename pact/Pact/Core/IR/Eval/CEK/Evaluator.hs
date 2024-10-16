@@ -1272,7 +1272,7 @@ applyContToValue (DefPactStepC env info cont) handler v =
         chargeGasArgs info (GWrite sz)
         evalWrite info pdb Write DDefPacts (_psDefPactId ps)
             (if done then Nothing else Just pe)
-        emitXChainEvents (_psResume ps) pe
+        emitXChainEvents (_psResume =<< _ceDefPactStep env) pe
         returnCEKValue cont handler v
 
 applyContToValue (NestedDefPactStepC env info cont parentDefPactExec) handler v =
