@@ -1,0 +1,24 @@
+(begin-tx)
+
+(module m g
+  (defcap g ()
+    (enforce false "NON UPGRADABLE")
+  )
+
+  (defun f:decimal
+    (a:integer b:integer)
+    (ln (^ a b))
+    )
+  )
+
+(expect "Call to m.f works" 2536.90697873651379268267191946506500244140625 (m.f 420 420))
+(commit-tx)
+
+(begin-tx)
+(static-redeploy "m")
+(expect-failure "M is still non-upgradeable, and you cannot acquire admin despite the redeploy" (acquire-module-admin m))
+(commit-tx)
+
+(begin-tx)
+(expect "Call to m.f still works" 2536.90697873651379268267191946506500244140625 (m.f 420 420))
+(commit-tx)
