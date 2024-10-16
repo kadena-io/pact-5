@@ -795,7 +795,9 @@ fromLegacyType = \case
   Legacy.TySchema s ty _ -> fromLegacySchema s ty
   Legacy.TyFun _ -> throwError "invariant failure"
   Legacy.TyModule m -> fromLegacyTypeModule m
-  Legacy.TyUser t -> throwError $ "fromLegacyType: TyUser invariant: " <> show t
+  -- This specific case might cause a bit of semantic divergence, but
+  -- this can happen since pact 4 has some interesting bugs.
+  Legacy.TyUser _ -> pure TyAny
   Legacy.TyVar _ -> pure TyAny
 
 unTVar
