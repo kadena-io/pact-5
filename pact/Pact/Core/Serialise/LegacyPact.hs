@@ -615,7 +615,7 @@ fromLegacyTerm mh = \case
           d <- ask
           let injectedArg1 = (Var (Name "iArg1" (NBound 1), d + 2) () :: CorePreNormalizedTerm)
               injectedArg2 = (Var (Name "iArg2" (NBound 0), d + 2) () :: CorePreNormalizedTerm)
-          let containingLam e = Lam (pure (Arg "" Nothing ())) e ()
+          let containingLam e = Lam (Arg "iArg1" Nothing () :| [Arg "iArg2" Nothing ()]) e ()
           (mapOperator', mapOperands') <- local (+ 2) $ (,) <$> fromLegacyTerm mh mapOperator <*> traverse (fromLegacyTerm mh) mapOperands
           let body = containingLam (desugarApp mapOperator' (mapOperands' ++ [injectedArg1, injectedArg2]) ())
           xs' <- traverse (fromLegacyTerm mh) xs

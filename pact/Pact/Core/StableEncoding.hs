@@ -289,15 +289,15 @@ instance J.Encode (StableEncoding Yield) where
   build (StableEncoding (Yield data' provenance sourceChain)) = J.object
     [ "data" J..= (StableEncoding data')
     , "provenance" J..= fmap StableEncoding provenance
-    , "sourceChain" J..= fmap StableEncoding sourceChain
+    , "source" J..?= fmap StableEncoding sourceChain
     ]
   {-# INLINABLE build #-}
 
 instance JD.FromJSON (StableEncoding Yield) where
   parseJSON = JD.withObject "Yield" $ \o -> do
     data' <- fmap _stableEncoding <$> o JD..: "data"
-    provenance <- o JD..:? "provenance"
-    sourceChain <- o JD..:? "sourceChain"
+    provenance <- o JD..: "provenance"
+    sourceChain <- o JD..:? "source"
     pure $ StableEncoding (Yield data' (fmap _stableEncoding provenance) (_stableEncoding <$> sourceChain))
 
 instance J.Encode (StableEncoding Provenance) where
