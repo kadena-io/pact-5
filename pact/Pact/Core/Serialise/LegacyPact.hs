@@ -229,9 +229,10 @@ fromLegacyDef mh (Legacy.Def (Legacy.DefName n) _mn dt funty body meta) = do
     go mn ret args =
       case dt of
         Legacy.Defun -> do
+          bodyForm' <- fromLegacyBodyForm' mh args body
           -- Increment the depth by the number of arguments and fix the indices
           -- before converting the body to its new form.
-          body' <- local (+ fromIntegral (length args)) . fixTreeIndices =<< fromLegacyBodyForm' mh args body
+          body' <- local (+ fromIntegral (length args)) $ fixTreeIndices bodyForm'
           pure $ Dfun $ Defun
             (Arg n (Just ret) ())
             args
@@ -243,8 +244,9 @@ fromLegacyDef mh (Legacy.Def (Legacy.DefName n) _mn dt funty body meta) = do
           steps'' <- local (+ fromIntegral (length args)) $ (traversed.traverseDefPactStep) fixTreeIndices steps'
           pure $ DPact (DefPact (Arg n (Just ret) ()) args steps'' ())
         Legacy.Defcap -> do
+            bodyForm' <- fromLegacyBodyForm' mh args body
             -- Increment the depth by the number of argument and fix the indices
-            body' <- local (+ fromIntegral (length args)) . fixTreeIndices =<< fromLegacyBodyForm' mh args body
+            body' <- local (+ fromIntegral (length args)) $ fixTreeIndices bodyForm'
             meta' <- case meta of
               -- Note: Empty `meta` implies the cap is
               -- unmanaged.
@@ -439,6 +441,42 @@ fromLegacyPactValue = \case
     in pure (PModRef $ ModRef mn' imp)
 
 
+mkTwoArgLam :: (CorePreNormalizedTerm -> CorePreNormalizedTerm -> CorePreNormalizedTerm) -> TranslateM CorePreNormalizedTerm
+mkTwoArgLam f = do
+  depth <- ask
+  let arg1Name = "`lamArg1"
+      arg2Name = "`lamArg2"
+      arg1 = Arg arg1Name Nothing ()
+      arg2 = Arg arg2Name Nothing ()
+      arg1Var = Var (Name arg1Name (NBound 1), depth+2) ()
+      arg2Var = Var (Name arg2Name (NBound 0), depth+2) ()
+  pure $ Lam (arg1 :| [arg2]) (f arg1Var arg2Var) ()
+
+mkOneArgLam :: (CorePreNormalizedTerm -> CorePreNormalizedTerm) -> TranslateM CorePreNormalizedTerm
+mkOneArgLam f = do
+  depth <- ask
+  let arg1Name = "`lamArg1"
+      arg1 = Arg arg1Name Nothing ()
+      arg1Var = Var (Name arg1Name (NBound 1), depth+1) ()
+  pure $ Lam (arg1 :| []) (f arg1Var) ()
+
+-- mkThreeArgLam
+--   :: (CorePreNormalizedTerm -> CorePreNormalizedTerm -> CorePreNormalizedTerm -> CorePreNormalizedTerm)
+--   -> TranslateM CorePreNormalizedTerm
+-- mkThreeArgLam f = do
+--   depth <- ask
+--   let arg1Name = "`lamArg1"
+--       arg2Name = "`lamArg2"
+--       arg3Name = "`lamArg3"
+--       arg1 = Arg arg1Name Nothing ()
+--       arg2 = Arg arg2Name Nothing ()
+--       arg3 = Arg arg3Name Nothing ()
+--       arg1Var = Var (Name arg1Name (NBound 2), depth+3) ()
+--       arg2Var = Var (Name arg2Name (NBound 1), depth+3) ()
+--       arg3Var = Var (Name arg3Name (NBound 0), depth+3) ()
+--   pure $ Lam (arg1 :| [arg2, arg3]) (f arg1Var arg2Var arg3Var) ()
+
+
 fromLegacyPersistDirect
   :: Legacy.PersistDirect
   -> TranslateM CorePreNormalizedTerm
@@ -589,6 +627,7 @@ fromLegacyTerm mh = \case
 
       BuiltinForm CEnforce{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [t1,t2] -> pure (BuiltinForm (CEnforce t1 t2) ())
+        [t1] -> mkOneArgLam $ \x -> BuiltinForm (CEnforce t1 x) ()
         _ -> throwError "invariant failure"
 
       BuiltinForm CEnforceOne{} _ -> traverse (fromLegacyTerm mh) args >>= \case
@@ -597,15 +636,19 @@ fromLegacyTerm mh = \case
 
       BuiltinForm CIf{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [cond, b1, b2] -> pure (BuiltinForm (CIf cond b1 b2) ())
-        _ -> throwError "invariant failure"
+        _ -> throwError "invariant failure: if applied to too many args"
 
       BuiltinForm CAnd{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [b1, b2] -> pure (BuiltinForm (CAnd b1 b2) ())
-        _ -> throwError "invariant failure"
+        [b1] -> mkOneArgLam $ \x -> BuiltinForm (CAnd b1 x) ()
+        [] -> mkTwoArgLam $ \x y -> BuiltinForm (CAnd x y) ()
+        _ -> throwError "invariant failure: and applied to too many args"
 
       BuiltinForm COr{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [b1, b2] -> pure (BuiltinForm (COr b1 b2) ())
-        _ -> throwError "invariant failure"
+        [b1] -> mkOneArgLam $ \x -> BuiltinForm (COr b1 x) ()
+        [] -> mkTwoArgLam $ \x y -> BuiltinForm (COr x y) ()
+        _ -> throwError "invariant failure: or applied to too many args"
 
       BuiltinForm CWithCapability{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [t1, ListLit t2 _] -> case reverse t2 of

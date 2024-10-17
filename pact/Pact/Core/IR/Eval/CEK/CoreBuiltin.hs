@@ -1054,7 +1054,9 @@ dbRead info b cont handler env = \case
       Nothing ->
         returnCEKError info cont handler $
           NoSuchObjectInDb (_tvName tv) rowkey
-  [VTable tv, VString k, VList li] -> do
+  [tbl@(VTable tv), vs@(VString k), VList li]
+    | V.null li -> dbRead info b cont handler env [tbl, vs]
+    | otherwise -> do
     guardTable info tv GtRead
     li' <- traverse (fmap Field . asString info b) (V.toList li)
     let rowkey = RowKey k

@@ -1059,7 +1059,9 @@ dbRead info b env = \case
     bytes <- sizeOf info SizeOfV0 rdata
     chargeGasArgs info (GRead bytes)
     return (VObject rdata)
-  [VTable tv, VString rk, VList li] -> do
+  [tbl@(VTable tv), vs@(VString rk), VList li]
+    | V.null li -> dbRead info b env [tbl, vs]
+    | otherwise-> do
     guardTable info tv GtRead
     li' <- traverse (fmap Field . asString info b) (V.toList li)
     RowData rdata <- readUserTable info env tv (RowKey rk)

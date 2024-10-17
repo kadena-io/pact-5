@@ -487,11 +487,20 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
     Lam ne te _ ->
       parens ("lambda" <+> parens (fold (NE.intersperse " " (prettyLamArg <$> ne))) <+> pretty te)
     Let n te te' _ ->
-      parens $ "let" <+> parens (pretty n <+> pretty te) <+> pretty te'
+      let (args, out) = unrollLets te'
+          prettiedArgs = align $ vsep ((\(v, expr) -> parens (pretty v <+> pretty expr)) <$> (n, te):args)
+      in parens $ "let" <+> parens prettiedArgs <> nest 2 (line <> pretty out)
+      where
+      unrollLets = \case
+        Let name arg expr _ ->
+          let (acc, e) = unrollLets expr
+          in ((name, arg):acc, e)
+        expr -> ([], expr)
     App te ne _ ->
-      parens (pretty te <+> hsep (pretty <$> ne))
+      parens (pretty te <> if null ne then mempty else space <> hsep (pretty <$> ne))
     Sequence te te' _ ->
-      parens ("seq" <+> pretty te <+> pretty te')
+      let terms = te : unSeqTerm te'
+      in parens ("do" <+> nest 2 (line <> vsep (pretty <$> terms)))
     BuiltinForm o _ ->
       pretty o
     Builtin builtin _ -> pretty builtin
@@ -502,7 +511,7 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
     ListLit tes _ ->
       pretty tes
     ObjectLit n _ ->
-      braces (hsep $ punctuate "," $ fmap (\(f, t) -> pretty f <> ":" <> pretty t) n)
+      braces (hsep $ punctuate "," $ fmap (\(f, t) -> dquotes (pretty f) <> ":" <> pretty t) n)
     InlineValue pv _ ->
       -- Note: This term is only used for back compat. with Pact < 5
       pretty pv
@@ -511,28 +520,30 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Term name ty builti
     prettyLamArg (Arg n ty _) =
       pretty n <> prettyTyAnn ty
 
+unSeqTerm :: Term name ty builtin info -> [Term name ty builtin info]
+unSeqTerm (Sequence e1 e2 _) = e1 : unSeqTerm e2
+unSeqTerm e = [e]
+
 instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (TopLevel name ty builtin info) where
   pretty = \case
     TLTerm tm -> pretty tm
-    _ -> "todo: pretty defs/modules"
+    TLModule m -> pretty m
+    _ -> "todo: pretty interfaces"
 
-prettyDef :: Pretty ty => Doc ann -> Arg ty info -> info -> [Arg ty info] -> Doc ann
-prettyDef deftoken (Arg defname defRTy _) dInfo defArgs =
-  let dfNameArg = Arg defname defRTy dInfo
-      argList = parens (hsep (pretty <$> defArgs))
-  in parens $ deftoken <+> pretty dfNameArg <+> argList
+instance (Pretty name, Pretty ty, Pretty b) => Pretty (Defun name ty b i) where
+  pretty (Defun spec args e _) =
+    parens $ "defun" <+> pretty spec <+> parens (hsep (pretty <$> args)) <+> nest 2 (line <> pretty e)
 
-instance Pretty ty => Pretty (Defun name ty b i) where
-  pretty (Defun spec args _ i) =
-    prettyDef "defun" spec i args
+instance (Pretty name, Pretty ty, Pretty b) => Pretty (DefPact name ty b i) where
+  pretty (DefPact spec args e _) =
+    parens $ "defpact" <+> pretty spec <+> parens (hsep (pretty <$> args)) <+> nest 2 (line <> vsep (pretty <$> NE.toList e))
 
-instance Pretty ty => Pretty (DefPact name ty b i) where
-  pretty (DefPact spec args _ i) =
-    prettyDef "defpact" spec i args
-
-instance Pretty ty => Pretty (DefCap name ty b i) where
-  pretty (DefCap spec args _ _ i) =
-    prettyDef "defcap" spec i args
+instance (Pretty name, Pretty ty, Pretty b) => Pretty (DefCap name ty b i) where
+  pretty (DefCap spec args e mged _) = case mged of
+    Unmanaged ->
+      parens $ "defcap" <+> pretty spec <+> parens (hsep (pretty <$> args)) <+> nest 2 (line <> pretty e)
+    _ ->
+      parens $ "defun" <+> pretty spec <+> parens (hsep (pretty <$> args)) <+> nest 2 (line <> vsep [pretty mged, pretty e])
 
 instance Pretty ty => Pretty (DefSchema ty info) where
   pretty (DefSchema n schema i) =
@@ -570,6 +581,20 @@ instance (Pretty name, Pretty ty, Pretty b) => Pretty (Def name ty b i) where
     DSchema d -> pretty d
     DTable d -> pretty d
     DPact d -> pretty d
+
+instance (Pretty name, Pretty ty, Pretty b) => Pretty (Module name ty b i) where
+  pretty (Module mname gov defs _blessed imports implements mhash _mtxh _mcode _minfo) =
+    parens $
+      "module"
+      <+> pretty mname
+      <+> pretty gov
+      <> nest 2 (
+        line <>
+        "; HASH:" <+> dquotes (pretty mhash) <> line <>
+        if null imports then mempty else vsep (pretty <$> imports) <> line <>
+        if null implements then mempty else vsep ((\p -> parens ("implements" <+> pretty p)) <$> implements) <> line <>
+        vsep (pretty <$> defs)
+      )
 
 makeLenses ''Module
 makeLenses ''Interface
