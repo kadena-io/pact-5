@@ -70,7 +70,7 @@ instance Pretty o => Pretty (BuiltinForm o) where
     CEnforce o o' ->
       parens ("enforce" <+> pretty o <+> pretty o')
     CWithCapability o o' ->
-      parens ("with-capability" <+> pretty o <+> pretty o')
+      parens ("with-capability" <+> pretty o <+> (nest 2 (line <> pretty o')))
     CCreateUserGuard o ->
       parens ("create-user-guard" <+> pretty o)
     CTry o o' ->

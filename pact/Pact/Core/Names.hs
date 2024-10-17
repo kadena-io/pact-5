@@ -87,7 +87,7 @@ import qualified Text.Megaparsec.Char as MP
 import qualified Pact.JSON.Encode as J
 
 import Pact.Core.Hash
-import Pact.Core.Pretty(Pretty(..))
+import Pact.Core.Pretty hiding (dot)
 import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Short as SB
 import Data.String (IsString)
@@ -347,7 +347,7 @@ instance (Pretty b) => Pretty (OverloadedName b) where
 instance Pretty Name where
   pretty (Name n nk) = case nk of
     NBound dix -> pretty n <> "<" <> pretty dix <> ">"
-    NTopLevel mn _mh -> pretty mn <> "." <> pretty n
+    NTopLevel mn _mh -> pretty mn <> "." <> pretty n <> "." <> braces (pretty _mh)
     NModRef m _ -> pretty m
     NDynRef dr -> pretty n <> "::" <> pretty (_drNameArg dr)
 

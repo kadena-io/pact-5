@@ -11,7 +11,7 @@ import Data.Text(Text)
 import GHC.Generics
 import Pact.Core.Names
 import Pact.Core.Hash
-
+import Pact.Core.Pretty
 
 data Import
   = Import
@@ -21,3 +21,9 @@ data Import
   } deriving (Show, Eq, Generic)
 
 instance NFData Import
+
+instance Pretty Import where
+  pretty (Import mn mh mhs) =
+    parens $ "use" <+> pretty mn
+      <> maybe mempty (\m -> space <> dquotes (pretty m)) mh
+      <> maybe mempty (\m -> braces (hsep (pretty <$> m))) mhs

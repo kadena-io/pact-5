@@ -46,6 +46,13 @@ data DefCapMeta name
   | Unmanaged
   deriving (Show, Functor, Foldable, Traversable, Eq, Generic)
 
+instance Pretty name => Pretty (DefCapMeta name) where
+  pretty = \case
+    DefEvent -> "@event"
+    DefManaged (DefManagedMeta (_, n1) n2) -> "@managed" <+> pretty n1 <+> pretty n2
+    DefManaged AutoManagedMeta -> "@managed"
+    Unmanaged -> mempty
+
 dcMetaFqName :: Traversal' (DefCapMeta (FQNameRef Name)) FullyQualifiedName
 dcMetaFqName f = \case
   DefManaged (DefManagedMeta i (FQName fqn)) ->
