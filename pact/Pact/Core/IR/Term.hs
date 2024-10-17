@@ -591,8 +591,8 @@ instance (Pretty name, Pretty ty, Pretty b) => Pretty (Module name ty b i) where
       <> nest 2 (
         line <>
         "; HASH:" <+> dquotes (pretty mhash) <> line <>
-        if null imports then mempty else vsep (pretty <$> imports) <> line <>
-        if null implements then mempty else vsep ((\p -> parens ("implements" <+> pretty p)) <$> implements) <> line <>
+        (if null imports then mempty else vsep (pretty <$> imports) <> line) <>
+        (if null implements then mempty else vsep ((\p -> parens ("implements" <+> pretty p)) <$> implements) <> line) <>
         vsep (pretty <$> defs)
       )
 

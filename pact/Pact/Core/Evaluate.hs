@@ -71,6 +71,19 @@ import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Data.Text as T
 
+import qualified Data.ByteString as BS
+import Pact.Core.Serialise
+import Pact.Core.Pretty
+import Pact.Core.IR.Term
+
+_decodeModule :: FilePath -> IO ()
+_decodeModule fp = do
+  x <- BS.readFile fp
+  let (Just y) = _decodeModuleData serialisePact_lineinfo x
+  let (ModuleData m _) = view document y
+  putStrLn $ "LENGTH OF DEFS: " <> show (length (_mDefs m))
+  putStrLn $ show $ pretty m
+
 type Eval = EvalM ExecRuntime CoreBuiltin Info
 
 -- Our Builtin environment for evaluation in Chainweb prod
