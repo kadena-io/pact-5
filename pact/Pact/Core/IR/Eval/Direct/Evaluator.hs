@@ -1144,7 +1144,7 @@ applyPact i pc ps cenv nested = use esDefPactExec >>= \case
             sz <- sizeOf i SizeOfV0 resultExec
             chargeGasArgs i (GWrite sz)
             evalWrite i pdb Write DDefPacts (_psDefPactId ps') (if done then Nothing else Just resultExec)
-            emitXChainEvents (_psResume =<< _ceDefPactStep cenv) resultExec
+            emitXChainEvents (_psResume ps') resultExec
             return result
 
     (_, mh) -> failInvariant i (InvariantExpectedDefPact (qualNameToFqn (pc ^. pcName) mh))
