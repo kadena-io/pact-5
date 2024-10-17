@@ -27,13 +27,21 @@ The `enforce` function returns `true` if the specified `expression` is true. If 
 
 ### Examples
 
-The following example demonstrates how to use the `enforce` function to evaluate the expression `(+ 2 2) != 4`:
+The following example demonstrates how to use the `enforce` function to evaluate the expression `(+ 2 2) = 4`:
 
 ```pact
 pact> (enforce (= (+ 2 2) 4) "All is well")
 true
 ```
 
-Because the specified expression (`4 = 4`) is true, the function returns true and the transaction continues. 
+Because the specified expression (`2 + 2 = 4`) is true, the function returns true and the transaction continues. 
 
-If the expression were false, the transaction would fail with the error message "Chaos reigns". The `enforce` function provides a way to ensure conditions are met within a transaction.
+The following example demonstrates how to use the `enforce` function to evaluate the expression `(2 + 2) != 4`:
+
+```pact
+pact> (enforce (!= (+ 2 2) 4) "The expression is false")
+The expression is false
+ at <interactive>:0:0: (enforce (native `!=`  True if X does not equal Y.  Type: x... "The expression is false")
+```
+
+Because the expression is false, the transaction fails with the error message specified.
