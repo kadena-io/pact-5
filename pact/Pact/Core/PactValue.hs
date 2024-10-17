@@ -124,10 +124,9 @@ pactValueToText = \case
   PLiteral lit -> case lit of
     LString s -> tdquotes s
     LInteger i -> tshow i
-    LDecimal d ->
-      if roundTo 0 d == d then
-        tshow (roundTo 0 d) <> ".0"
-      else tshow d
+    LDecimal d@(Decimal e _)
+      | e == 0 -> tshow d <> ".0"
+      | otherwise -> tshow d
     LUnit -> "()"
     LBool b -> if b then "true" else "false"
   PList l -> let

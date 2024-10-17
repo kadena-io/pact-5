@@ -275,4 +275,15 @@
   [ {"key": "jose","value": {"a": 2,"b": 1}}
   , {"key": "robert","value": {"a": 3,"b": 1}} ]
   (m.all-elems))
+
+(commit-tx)
+
+; Regression for read with fields
+(begin-tx)
+(use m)
+(acquire-module-admin m)
+(expect "reading with a single field restricts the value to that field" {"a": 2} (read tbl "jose" ["a"]))
+(expect "reading with a no fields returns the full object" {"a": 2,"b": 1} (read tbl "jose" []))
+(expect "selecting with fields on empty fields" [{"a": 2} {"a": 3}] (select tbl ["a"] (constantly true)))
+(expect "selecting with fields with no fields results in empty objects" [{} {}] (select tbl [] (constantly true)))
 (commit-tx)
