@@ -7,7 +7,7 @@ When the capability is brought into scope, its management function is invoked to
 
 The management function takes the type of the managed parameter, executes the logic required to validate the requested capability or perform the managed operation, and returns the new managed value that results from the request.
 
-The type signature for the management function is `managed:<p> requested:<p> -> <p>`, where `<p>` indicates the type of the managed parameter. 
+The type signature for the management function is `managed:<type> requested:<type> -> <type>`, where `<type>` indicates the type of the managed parameter. 
 For example, assume you define a managed capability as: 
 
 ```pact
