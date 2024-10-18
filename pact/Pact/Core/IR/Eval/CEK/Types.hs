@@ -12,6 +12,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE DeriveTraversable #-}
 
 module Pact.Core.IR.Eval.CEK.Types
  ( CEKTLEnv
@@ -156,7 +157,7 @@ type BuiltinEnv (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
 data ClosureType i
   = NullaryClosure
   | ArgClosure !(NonEmpty (Arg Type i))
-  deriving (Show, Generic)
+  deriving (Show, Functor, Generic)
 
 instance NFData i => NFData (ClosureType i)
 

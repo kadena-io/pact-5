@@ -480,7 +480,7 @@ evalWithCapBody
   -> EvalTerm b i
   -> EvalM e b i (EvalValue e b i)
 evalWithCapBody info cappop mcap mevent env capbody = do
-  maybe (pure ()) emitEventUnsafe mevent
+  traverse_ (emitEventLegacyUnsafe info)  mevent
   case mcap of
     Nothing -> do
       v <- evaluate env capbody
