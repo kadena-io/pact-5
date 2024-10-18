@@ -1207,7 +1207,10 @@ coreEmitEvent info b cont handler _env = \case
       -- Todo: this code is repeated in the EmitEventFrame code
       d <- getDefCap info fqn
       enforceMeta (_dcapMeta d)
-      emitCapability info ct
+      isLegacyEventEmitted <- isExecutionFlagSet FlagEnableLegacyEventHashes
+      if isLegacyEventEmitted
+        then emitLegacyCapability info ct
+        else emitCapability info ct
       returnCEKValue cont handler (VBool True)
         where
         enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)

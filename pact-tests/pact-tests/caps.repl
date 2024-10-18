@@ -956,3 +956,58 @@
 (expect "managed capabilities compose correctly" 111 (run))
 (commit-tx)
 
+; Test legacy events
+(begin-tx)
+(module A g
+  (defcap g () true)
+  (defconst A_VERSION:integer 1)
+  (defcap A_EVENT (a:integer)
+   @event
+   1
+   )
+
+   (defun emit-a(a:integer) (emit-event (A_EVENT a))))
+
+
+(module B g
+ (defcap g () true)
+ (use A)
+ (defun call-a () (emit-a 420)))
+
+
+(call-a)
+(expect "Event is emitted"
+  [ {"module-hash": "u5uyUYRiplR4zAyB3F2GCVwzpw0XIoxcujkCgW3CVDg"
+    ,"name": "A.A_EVENT"
+    ,"params": [ 420 ]} ] (env-events true))
+
+(commit-tx)
+
+(begin-tx)
+ (module A g
+  (defcap g () true)
+  (defconst A_VERSION:integer 2)
+  (defcap A_EVENT (a:integer b:integer)
+   @event
+   1
+   )
+
+   (defun emit-a(a:integer) (emit-event (A_EVENT a a))))
+   
+
+(use B)
+(call-a)
+(expect "Without legacy events enabled, events are the same"
+  [ {"module-hash": "u5uyUYRiplR4zAyB3F2GCVwzpw0XIoxcujkCgW3CVDg"
+    ,"name": "A.A_EVENT"
+    ,"params": [ 420 ]} ] (env-events true))
+(commit-tx)
+
+(begin-tx)
+(env-exec-config ["EnableLegacyEventHashes"])
+(use B)
+(call-a)
+(expect "With legacy events, it always points to the latest module hash"
+[ {"module-hash": "8bdi-0ljmkBGMm06zxB4j4tziHY3qLT-d_UoUwxBDLw"
+  ,"name": "A.A_EVENT","params": [ 420 ]} ] (env-events true))
+(commit-tx)
