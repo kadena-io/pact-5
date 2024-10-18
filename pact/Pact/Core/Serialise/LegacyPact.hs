@@ -72,7 +72,7 @@ type CoreTerm = EvalTerm CoreBuiltin ()
 type CorePreNormalizedTerm = Term (Name, DeBruijn) Type CoreBuiltin ()
 type CoreDef = EvalDef CoreBuiltin ()
 
-type TranslateState = [CoreDef]
+type TranslateState = [(FullyQualifiedName, CoreDef)]
 
 
 type TranslateM = ReaderT DeBruijn (StateT TranslateState (Except String))
@@ -96,7 +96,8 @@ fromLegacyModuleData (Legacy.ModuleData md mref mdeps) = do
       let mh = fromLegacyModuleHash (Legacy._mHash m)
       deps <- fromLegacyDeps mh mdeps
       m' <- fromLegacyModule mh m mref
-      pure (ModuleData m' deps)
+      newDeps <- get
+      pure (ModuleData m' (deps <> M.fromList newDeps))
     Legacy.MDInterface i -> do
       let ifn = fromLegacyModuleName (Legacy._interfaceName i)
       let mh = ModuleHash $ pactHash $ T.encodeUtf8 (renderModuleName ifn)
@@ -731,13 +732,14 @@ fromLegacyTerm mh = \case
   Legacy.TDef d@(Legacy.Def n mn _dt (Legacy.FunType _args _) _body _) -> do
     let mn' = fromLegacyModuleName mn
         dn  = Legacy._unDefName n
-        h = CBOR.encodeModuleName mn' <> T.encodeUtf8 dn <> CBOR.encodeModuleHash mh
-        newHash = unsafeBsToModuleHash h
+        h = CBOR.encodeModuleName mn' <> T.encodeUtf8 dn <> hashToByteString (_mhHash mh)
+        newHash = ModuleHash (pactHash h)
         nk = NTopLevel mn' newHash
+        newFqn = FullyQualifiedName mn' dn newHash
         name = Name dn nk
 
     def <- fromLegacyDef mh d
-    modify' (def:)
+    modify' ((newFqn, def):)
     depth <- ask
     pure (Var (name, depth) ())
 
