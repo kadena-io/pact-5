@@ -1202,12 +1202,14 @@ installCapability info b env = \case
 coreEmitEvent :: (IsBuiltin b) => NativeFunction e b i
 coreEmitEvent info b _env = \case
   [VCapToken ct@(CapToken fqn _)] -> do
-    -- let cont' = BuiltinC env info (EmitEventC ct) cont
-    guardForModuleCall info (_fqModule fqn) $ return ()
-    d <- getDefCap info fqn
-    enforceMeta (_dcapMeta d)
-    emitCapability info ct
-    return (VBool True)
+    guardForModuleCall info (_fqModule fqn) $ do
+      d <- getDefCap info fqn
+      enforceMeta (_dcapMeta d)
+      isLegacyEventEmitted <- isExecutionFlagSet FlagEnableLegacyEventHashes
+      if isLegacyEventEmitted
+        then emitLegacyCapability info ct
+        else emitCapability info ct
+      return (VBool True)
     where
     enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)
     enforceMeta _ = pure ()

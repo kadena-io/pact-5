@@ -157,6 +157,8 @@ data ExecutionFlag
   | FlagRequireKeysetNs
   -- | Flag disabling return type checking
   | FlagDisableRuntimeRTC
+  -- | Flag Enable legacy events
+  | FlagEnableLegacyEventHashes
   deriving (Eq,Ord,Show,Enum,Bounded, Generic)
 
 instance NFData ExecutionFlag
