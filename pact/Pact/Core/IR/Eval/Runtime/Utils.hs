@@ -46,8 +46,10 @@ module Pact.Core.IR.Eval.Runtime.Utils
  , emitEvent
  , emitReservedEvent
  , emitCapability
+ , emitLegacyCapability
  , fqctToPactEvent
  , emitEventUnsafe
+ , emitEventLegacyUnsafe
  , readKeyset'
  , renderPactValue
  , createPrincipalForGuard
@@ -121,12 +123,34 @@ emitEventUnsafe pe =
   unlessExecutionFlagSet FlagDisablePactEvents $
     esEvents %= (pe:)
 
+emitEventLegacyUnsafe
+  :: i
+  -> PactEvent PactValue
+  -> EvalM e b i ()
+emitEventLegacyUnsafe info pe@(PactEvent _ _ originModule _) = do
+  isLegacyEventEmitted <- isExecutionFlagSet FlagEnableLegacyEventHashes
+  pe' <- if isLegacyEventEmitted then do
+            mdl <- getModule info originModule
+            pure pe{_peModuleHash = _mHash mdl}
+          else pure pe
+  unlessExecutionFlagSet FlagDisablePactEvents $
+    esEvents %= (pe':)
+
 emitCapability
   :: i
   -> CapToken FullyQualifiedName PactValue
   -> EvalM e b i ()
 emitCapability info tkn =
   emitEvent info (fqctToPactEvent tkn)
+
+emitLegacyCapability
+  :: i
+  -> CapToken FullyQualifiedName PactValue
+  -> EvalM e b i ()
+emitLegacyCapability info (CapToken fqn pv) = do
+  legacyMod <- getModule info (_fqModule fqn)
+  let fqn' = set fqHash (_mHash legacyMod) fqn
+  emitEvent info (fqctToPactEvent (CapToken fqn' pv))
 
 fqctToPactEvent :: CapToken FullyQualifiedName PactValue -> PactEvent PactValue
 fqctToPactEvent (CapToken fqn args) = PactEvent (_fqName fqn) args (_fqModule fqn) (_fqHash fqn)
