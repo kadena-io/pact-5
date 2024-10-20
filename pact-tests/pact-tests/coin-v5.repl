@@ -434,7 +434,7 @@
   (transfer 'emily 'doug 1.0))
 
 (expect-failure "No account for will"
-  "No value found in table coin:coin-table for key: will"
+  "No value found in table coin_coin-table for key: will"
   (get-balance 'will))
 
 (test-capability (TRANSFER 'doug 'will 1.0))
@@ -498,7 +498,7 @@
 (env-data { "miner2": ["miner2"] })
 
 (expect-failure "no account for miner2"
-  "No value found in table coin:coin-table for key: miner2"
+  "No value found in table coin_coin-table for key: miner2"
   (get-balance 'miner2))
 
 (test-capability (COINBASE))

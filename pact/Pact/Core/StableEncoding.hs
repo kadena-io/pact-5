@@ -238,6 +238,40 @@ instance JD.FromJSON (StableEncoding DefPactGuard) where
     name <- o JD..: "name"
     pure $ StableEncoding (DefPactGuard (_stableEncoding dpid) name)
 
+instance J.Encode (StableEncoding NestedDefPactExec) where
+  build (StableEncoding (NestedDefPactExec sc yield step defPactId continuation nestedDefPactExec)) = J.object
+    [ "nested" J..?= if M.null nestedDefPactExec then Nothing else Just (J.Object (convertMap nestedDefPactExec))
+    , "executed" J..= (Nothing :: Maybe Bool) -- compat field for prod
+    , "pactId" J..= StableEncoding defPactId
+    , "step" J..= J.Aeson step
+    , "yield" J..= fmap StableEncoding yield
+    , "continuation" J..= StableEncoding continuation
+    , "stepCount" J..= J.Aeson sc
+    ]
+    where convertMap :: Map DefPactId NestedDefPactExec -> Map T.Text (StableEncoding NestedDefPactExec)
+          convertMap = unsafeCoerce
+
+instance JD.FromJSON (StableEncoding NestedDefPactExec) where
+  parseJSON = JD.withObject "NestedDefPactExec" $ \o -> do
+    stepCount <- o JD..: "stepCount"
+    (_ :: Maybe Bool) <- o JD..: "executed"
+    yield <- o JD..:? "yield"
+    step <- o JD..: "step"
+    defPactId <- o JD..: "pactId"
+    continuation <- o JD..: "continuation"
+    nestedDefPactExec <- fromMaybe mempty <$> (o JD..:? "nested")
+    pure $ StableEncoding
+      (NestedDefPactExec
+        stepCount
+        (fmap _stableEncoding yield)
+        step
+        (_stableEncoding defPactId)
+        (_stableEncoding continuation)
+        (convertKeys nestedDefPactExec))
+      where
+        convertKeys :: Map T.Text (StableEncoding NestedDefPactExec) -> Map DefPactId NestedDefPactExec
+        convertKeys = Map.fromList . fmap (bimap DefPactId _stableEncoding) . Map.toList
+
 instance J.Encode (StableEncoding DefPactExec) where
   build (StableEncoding (DefPactExec sc yield step defPactId continuation stepHasRollback nestedDefPactExec)) = J.object
     [ "nested" J..?= if M.null nestedDefPactExec then Nothing else Just (J.Object (convertMap nestedDefPactExec))
@@ -249,7 +283,7 @@ instance J.Encode (StableEncoding DefPactExec) where
     , "continuation" J..= StableEncoding continuation
     , "stepCount" J..= J.Aeson sc
     ]
-    where convertMap :: Map DefPactId DefPactExec -> Map T.Text (StableEncoding DefPactExec)
+    where convertMap :: Map DefPactId NestedDefPactExec -> Map T.Text (StableEncoding NestedDefPactExec)
           convertMap = unsafeCoerce
 
 instance JD.FromJSON (StableEncoding DefPactExec) where
@@ -272,7 +306,7 @@ instance JD.FromJSON (StableEncoding DefPactExec) where
         stepHasRollback
         (convertKeys nestedDefPactExec))
       where
-        convertKeys :: Map T.Text (StableEncoding DefPactExec) -> Map DefPactId DefPactExec
+        convertKeys :: Map T.Text (StableEncoding NestedDefPactExec) -> Map DefPactId NestedDefPactExec
         convertKeys = Map.fromList . fmap (bimap DefPactId _stableEncoding) . Map.toList
 
 instance JD.FromJSON (StableEncoding (DefPactContinuation QualifiedName PactValue)) where

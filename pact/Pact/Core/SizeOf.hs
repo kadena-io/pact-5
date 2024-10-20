@@ -378,6 +378,7 @@ makeSizeOf ''ConstVal
 makeSizeOf ''DefConst
 makeSizeOf ''DefCap
 makeSizeOf ''Step
+makeSizeOf ''NestedDefPactExec
 makeSizeOf ''DefPactExec
 makeSizeOf ''DefPact
 makeSizeOf ''DefSchema

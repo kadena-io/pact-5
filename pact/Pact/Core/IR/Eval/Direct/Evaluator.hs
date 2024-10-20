@@ -480,7 +480,7 @@ evalWithCapBody
   -> EvalTerm b i
   -> EvalM e b i (EvalValue e b i)
 evalWithCapBody info cappop mcap mevent env capbody = do
-  traverse_ (emitEventLegacyUnsafe info)  mevent
+  traverse_ (emitEventUnsafe)  mevent
   case mcap of
     Nothing -> do
       v <- evaluate env capbody
@@ -1084,7 +1084,7 @@ initPact i pc cenv = do
 --   Nested step must be equal to the parent step after execution.
 nestedPactsNotAdvanced :: DefPactExec -> DefPactStep -> Bool
 nestedPactsNotAdvanced resultState ps =
-  any (\npe -> _peStep npe /= _psStep ps) (_peNestedDefPactExec resultState)
+  any (\npe -> _npeStep npe /= _psStep ps) (_peNestedDefPactExec resultState)
 {-# INLINE nestedPactsNotAdvanced #-}
 
 applyPact
@@ -1093,7 +1093,7 @@ applyPact
   -> DefPactContinuation QualifiedName PactValue
   -> DefPactStep
   -> DirectEnv e b i
-  -> M.Map DefPactId DefPactExec
+  -> M.Map DefPactId NestedDefPactExec
   -> EvalM e b i (EvalValue e b i)
 applyPact i pc ps cenv nested = use esDefPactExec >>= \case
   Just pe -> throwExecutionError i (MultipleOrNestedDefPactExecFound pe)
@@ -1188,10 +1188,10 @@ applyNestedPact i pc ps cenv = use esDefPactExec >>= \case
           | otherwise ->
             throwExecutionError i (NestedDefPactDoubleExecution ps)
         Just npe
-          | _psStep ps >= 0 && isRollback && _peStep npe == _psStep ps ->
-            pure (set peStepHasRollback isRollback npe)
-          | _psStep ps >  0 && _peStep npe + 1 == _psStep ps ->
-            pure (over peStep (+1) $ set peStepHasRollback isRollback npe)
+          | _psStep ps >= 0 && isRollback && _npeStep npe == _psStep ps ->
+            pure (fromNestedPactExec isRollback npe)
+          | _psStep ps >  0 && _npeStep npe + 1 == _psStep ps ->
+            pure (over peStep (+1) $ fromNestedPactExec isRollback npe)
           | otherwise ->
             throwExecutionError i (NestedDefPactNeverStarted ps)
 
@@ -1213,7 +1213,7 @@ applyNestedPact i pc ps cenv = use esDefPactExec >>= \case
         Just resultExec -> do
           when (nestedPactsNotAdvanced resultExec ps) $
             throwExecutionError i (NestedDefpactsNotAdvanced (_peDefPactId resultExec))
-          let npe = pe & peNestedDefPactExec %~ M.insert (_psDefPactId ps) resultExec
+          let npe = pe & peNestedDefPactExec %~ M.insert (_psDefPactId ps) (toNestedPactExec resultExec)
           esDefPactExec .= (Just npe)
           return result
     (_, mh) -> failInvariant i (InvariantExpectedDefPact (qualNameToFqn (pc ^. pcName) mh))

@@ -366,7 +366,7 @@ instance NFData TableName
 makeLenses ''TableName
 
 instance Pretty TableName where
-  pretty (TableName tn ns) = pretty ns <> pretty ':' <> pretty tn
+  pretty (TableName tn ns) = pretty ns <> pretty '_' <> pretty tn
 
 -- | Constants for resolving repl things
 replRawModuleName :: Text
