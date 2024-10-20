@@ -5,6 +5,7 @@
 
 module Pact.Core.Serialise.LegacyPact
   ( decodeModuleData
+  , decodeModuleData'
   , decodeKeySet
   , decodeDefPactExec
   , decodeNamespace
@@ -103,6 +104,11 @@ decodeModuleData bs = do
   case runTranslateM (fromLegacyModuleData obj) of
     Left _ -> Nothing
     Right v -> Just v
+
+decodeModuleData' :: ByteString -> Either String (ModuleData CoreBuiltin ())
+decodeModuleData' bs = do
+  obj <- maybe (Left "decodingError") Right $ JD.decodeStrict' bs
+  runTranslateM (fromLegacyModuleData obj)
 
 fromLegacyModuleData
   :: Legacy.ModuleData (Legacy.Ref' Legacy.PersistDirect)
@@ -529,21 +535,21 @@ mkOneArgLam f = do
       arg1Var = Var (Name arg1Name (NBound 1), depth+1) ()
   pure $ Lam (arg1 :| []) (f arg1Var) ()
 
--- mkThreeArgLam
---   :: (CorePreNormalizedTerm -> CorePreNormalizedTerm -> CorePreNormalizedTerm -> CorePreNormalizedTerm)
---   -> TranslateM CorePreNormalizedTerm
--- mkThreeArgLam f = do
---   depth <- ask
---   let arg1Name = "`lamArg1"
---       arg2Name = "`lamArg2"
---       arg3Name = "`lamArg3"
---       arg1 = Arg arg1Name Nothing ()
---       arg2 = Arg arg2Name Nothing ()
---       arg3 = Arg arg3Name Nothing ()
---       arg1Var = Var (Name arg1Name (NBound 2), depth+3) ()
---       arg2Var = Var (Name arg2Name (NBound 1), depth+3) ()
---       arg3Var = Var (Name arg3Name (NBound 0), depth+3) ()
---   pure $ Lam (arg1 :| [arg2, arg3]) (f arg1Var arg2Var arg3Var) ()
+mkThreeArgLam
+  :: (CorePreNormalizedTerm -> CorePreNormalizedTerm -> CorePreNormalizedTerm -> CorePreNormalizedTerm)
+  -> TranslateM CorePreNormalizedTerm
+mkThreeArgLam f = do
+  depth <- view teDepth
+  let arg1Name = "`lamArg1"
+      arg2Name = "`lamArg2"
+      arg3Name = "`lamArg3"
+      arg1 = Arg arg1Name Nothing ()
+      arg2 = Arg arg2Name Nothing ()
+      arg3 = Arg arg3Name Nothing ()
+      arg1Var = Var (Name arg1Name (NBound 2), depth+3) ()
+      arg2Var = Var (Name arg2Name (NBound 1), depth+3) ()
+      arg3Var = Var (Name arg3Name (NBound 0), depth+3) ()
+  pure $ Lam (arg1 :| [arg2, arg3]) (f arg1Var arg2Var arg3Var) ()
 
 
 fromLegacyPersistDirect
@@ -697,27 +703,37 @@ fromLegacyTerm mh = \case
       BuiltinForm CEnforce{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [t1,t2] -> pure (BuiltinForm (CEnforce t1 t2) ())
         [t1] -> mkOneArgLam $ \x -> BuiltinForm (CEnforce t1 x) ()
-        _ -> throwError "invariant failure"
+        args' -> do
+          lam <- mkTwoArgLam $ \x y -> BuiltinForm (CEnforce x y) ()
+          pure $ App lam args' ()
 
       BuiltinForm CEnforceOne{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [t1, t2] -> pure (BuiltinForm (CEnforceOne t1 t2) ())
-        _ -> throwError "invariant failure"
+        args' -> do
+          lam <- mkTwoArgLam $ \x y -> BuiltinForm (CEnforceOne x y) ()
+          pure $ App lam args' ()
 
       BuiltinForm CIf{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [cond, b1, b2] -> pure (BuiltinForm (CIf cond b1 b2) ())
-        _ -> throwError "invariant failure: if applied to too many args"
+        [cond, b1] -> mkOneArgLam $ \x -> BuiltinForm (CIf cond b1 x) ()
+        [cond] -> mkTwoArgLam $ \x y -> BuiltinForm (CIf cond x y) ()
+        args' -> do
+          lam <- mkThreeArgLam $ \x y z -> BuiltinForm (CIf x y z) ()
+          pure $ App lam args' ()
 
       BuiltinForm CAnd{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [b1, b2] -> pure (BuiltinForm (CAnd b1 b2) ())
         [b1] -> mkOneArgLam $ \x -> BuiltinForm (CAnd b1 x) ()
         [] -> mkTwoArgLam $ \x y -> BuiltinForm (CAnd x y) ()
-        _ -> throwError "invariant failure: and applied to too many args"
+        args' ->
+          pure $ App fn' args' ()
 
       BuiltinForm COr{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [b1, b2] -> pure (BuiltinForm (COr b1 b2) ())
         [b1] -> mkOneArgLam $ \x -> BuiltinForm (COr b1 x) ()
-        [] -> mkTwoArgLam $ \x y -> BuiltinForm (COr x y) ()
-        _ -> throwError "invariant failure: or applied to too many args"
+        args' -> do
+          lam <- mkTwoArgLam $ \x y -> BuiltinForm (COr x y) ()
+          pure $ App lam args' ()
 
       BuiltinForm CWithCapability{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [t1, ListLit t2 _] -> case reverse t2 of
@@ -725,17 +741,21 @@ fromLegacyTerm mh = \case
           x:xs -> do
             let body' = foldl' (\r l -> Sequence l r ()) x xs
             pure (BuiltinForm (CWithCapability t1 body') ())
-        _ -> throwError "invariant failure"
+        _ -> throwError "invariant failure: with-capability"
 
       BuiltinForm CCreateUserGuard{} _ ->
         traverse (fromLegacyTerm mh) args >>= \case
         [x] ->
           pure (BuiltinForm (CCreateUserGuard x) ())
-        _ -> throwError "invariant failure"
+        args' -> do
+          lam <- mkOneArgLam $ \x -> BuiltinForm (CCreateUserGuard x) ()
+          pure $ App lam args' ()
 
       BuiltinForm CTry{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [t1, t2] -> pure (BuiltinForm (CTry t1 t2) ())
-        _ -> throwError "invariant failure"
+        args' -> do
+          lam <- mkTwoArgLam $ \x y -> BuiltinForm (CTry x y) ()
+          pure $ App lam args' ()
 
       _ -> do
         args' <- traverse (fromLegacyTerm mh) args
@@ -926,7 +946,7 @@ fromLegacyType = \case
   Legacy.TyList t -> TyList <$> fromLegacyType t
   Legacy.TyPrim prim -> pure $ TyPrim (fromLegacyPrimType prim)
   Legacy.TySchema s ty _ -> fromLegacySchema s ty
-  Legacy.TyFun _ -> throwError "invariant failure"
+  Legacy.TyFun _ -> throwError "invariant failure: tyfun"
   Legacy.TyModule m -> fromLegacyTypeModule m
   -- This specific case might cause a bit of semantic divergence, but
   -- this can happen since pact 4 has some interesting bugs.
