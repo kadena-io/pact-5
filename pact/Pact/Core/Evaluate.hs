@@ -71,18 +71,19 @@ import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Data.Text as T
 
--- import qualified Data.ByteString as BS
--- import Pact.Core.Serialise
--- import Pact.Core.Pretty
--- import Pact.Core.IR.Term
+import qualified Data.ByteString as BS
+import qualified Pact.Core.Serialise.LegacyPact as Legacy
+import Pact.Core.Serialise
+import Pact.Core.Pretty
+import Pact.Core.IR.Term
 
--- _decodeModule :: FilePath -> IO ()
--- _decodeModule fp = do
---   x <- BS.readFile fp
---   let (Just y) = _decodeModuleData serialisePact_lineinfo x
---   let (ModuleData m _) = view document y
---   putStrLn $ "LENGTH OF DEFS: " <> show (length (_mDefs m))
---   putStrLn $ show $ pretty m
+_decodeModule :: FilePath -> IO ()
+_decodeModule fp = do
+  x <- BS.readFile fp
+  let y = either error id $ Legacy.decodeModuleData' x
+  let (ModuleData m _) = y --view document y
+  putStrLn $ "LENGTH OF DEFS: " <> show (length (_mDefs m))
+  putStrLn $ show $ pretty m
 
 type Eval = EvalM ExecRuntime CoreBuiltin Info
 
