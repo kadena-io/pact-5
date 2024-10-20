@@ -357,7 +357,7 @@ applyPact
   -> Cont e b i
   -> CEKErrorHandler e b i
   -> CEKEnv e b i
-  -> M.Map DefPactId DefPactExec
+  -> M.Map DefPactId NestedDefPactExec
   -> EvalM e b i (EvalResult e b i)
 applyPact i pc ps cont handler cenv nested = use esDefPactExec >>= \case
   Just pe -> throwExecutionError i (MultipleOrNestedDefPactExecFound pe)
@@ -457,10 +457,10 @@ applyNestedPact i pc ps cont handler cenv = use esDefPactExec >>= \case
           | otherwise ->
             throwExecutionError i (NestedDefPactDoubleExecution ps)
         Just npe
-          | _psStep ps >= 0 && isRollback && _peStep npe == _psStep ps ->
-            pure (set peStepHasRollback isRollback npe)
-          | _psStep ps >  0 && _peStep npe + 1 == _psStep ps ->
-            pure (over peStep (+1) $ set peStepHasRollback isRollback npe)
+          | _psStep ps >= 0 && isRollback && _npeStep npe == _psStep ps ->
+            pure (fromNestedPactExec isRollback npe)
+          | _psStep ps >  0 && _npeStep npe + 1 == _psStep ps ->
+            pure (over peStep (+1) $ fromNestedPactExec isRollback npe)
           | otherwise ->
             throwExecutionError i (NestedDefPactNeverStarted ps)
 
@@ -1282,7 +1282,7 @@ applyContToValue (NestedDefPactStepC env info cont parentDefPactExec) handler v 
       Just ps -> do
         when (nestedPactsNotAdvanced pe ps) $
           throwExecutionError info (NestedDefpactsNotAdvanced (_peDefPactId pe))
-        let npe = parentDefPactExec & peNestedDefPactExec %~ M.insert (_psDefPactId ps) pe
+        let npe = parentDefPactExec & peNestedDefPactExec %~ M.insert (_psDefPactId ps) (toNestedPactExec pe)
         esDefPactExec .= (Just npe)
         returnCEKValue cont handler v
 
@@ -1304,7 +1304,7 @@ applyContToValue (ModuleAdminC mn cont) handler v = do
 --   Nested step must be equal to the parent step after execution.
 nestedPactsNotAdvanced :: DefPactExec -> DefPactStep -> Bool
 nestedPactsNotAdvanced resultState ps =
-  any (\npe -> _peStep npe /= _psStep ps) (_peNestedDefPactExec resultState)
+  any (\npe -> _npeStep npe /= _psStep ps) (_peNestedDefPactExec resultState)
 {-# INLINE nestedPactsNotAdvanced #-}
 
 -- | Apply a closure to its arguments,

@@ -1052,12 +1052,26 @@ fromLegacyDefPactExec' (Legacy.PactExec sc y _ step pid cont rb nest) = do
   y' <- traverse fromLegacyYield y
   cont' <- fromLegacyContinuation cont
   nest' <- traverse
-    (\(k,v) -> (fromLegacyPactId k,) <$> fromLegacyDefPactExec' (fromNestedPactExec rb v))
+    (\(k,v) -> (fromLegacyPactId k,) <$> fromLegacyNestedDefPactExec' v)
     (M.toList nest)
   pure $
     DefPactExec sc y' step (fromLegacyPactId pid)
     cont'
     rb
+    (M.fromList nest')
+
+fromLegacyNestedDefPactExec'
+  :: Legacy.NestedPactExec
+  -> Either String NestedDefPactExec
+fromLegacyNestedDefPactExec' (Legacy.NestedPactExec sc y _ step pid cont nest) = do
+  y' <- traverse fromLegacyYield y
+  cont' <- fromLegacyContinuation cont
+  nest' <- traverse
+    (\(k,v) -> (fromLegacyPactId k,) <$> fromLegacyNestedDefPactExec' v)
+    (M.toList nest)
+  pure $
+    NestedDefPactExec sc y' step (fromLegacyPactId pid)
+    cont'
     (M.fromList nest')
 
 fromLegacyDefPactExec
@@ -1068,9 +1082,6 @@ fromLegacyDefPactExec = \case
   Just n -> Just <$> fromLegacyDefPactExec' n
 
 
-fromNestedPactExec :: Bool -> Legacy.NestedPactExec -> Legacy.PactExec
-fromNestedPactExec rollback (Legacy.NestedPactExec stepCount yield exec step pid cont nested) =
-  Legacy.PactExec stepCount yield exec step pid cont rollback nested
 
 fromLegacyContinuation
   :: Legacy.PactContinuation

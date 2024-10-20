@@ -7,11 +7,14 @@ module Pact.Core.DefPacts.Types
  , DefPactStep(..)
  , psStep, psRollback, psDefPactId, psResume
  , DefPactExec(..)
+ , NestedDefPactExec(..)
  , peStepCount, peYield, peStep, peContinuation, peStepHasRollback, peDefPactId
  , peNestedDefPactExec
  , Yield(..)
  , yData, yProvenance, ySourceChain
  , Provenance(..)
+ , toNestedPactExec
+ , fromNestedPactExec
  ) where
 
 -- Todo: yield
@@ -59,6 +62,17 @@ data Yield
 
 makeLenses ''Yield
 
+data NestedDefPactExec
+  = NestedDefPactExec
+  { _npeStepCount :: Int
+  , _npeYield :: Maybe Yield
+  , _npeStep :: Int
+  , _npeDefPactId :: DefPactId
+  , _npeContinuation :: DefPactContinuation QualifiedName PactValue
+  , _npeNestedDefPactExec :: Map DefPactId NestedDefPactExec
+  } deriving (Show, Eq, Generic)
+
+
 -- | Internal representation of pacts
 data DefPactExec
   = DefPactExec
@@ -68,10 +82,18 @@ data DefPactExec
   , _peDefPactId :: DefPactId
   , _peContinuation :: DefPactContinuation QualifiedName PactValue
   , _peStepHasRollback :: Bool
-  , _peNestedDefPactExec :: Map DefPactId DefPactExec
+  , _peNestedDefPactExec :: Map DefPactId NestedDefPactExec
   } deriving (Show, Eq, Generic)
 
 makeLenses ''DefPactExec
+
+toNestedPactExec :: DefPactExec -> NestedDefPactExec
+toNestedPactExec (DefPactExec stepCount yield step pid cont _ nested) =
+  NestedDefPactExec stepCount yield step pid cont nested
+
+fromNestedPactExec :: Bool -> NestedDefPactExec -> DefPactExec
+fromNestedPactExec rollback (NestedDefPactExec stepCount yield step pid cont nested) =
+  DefPactExec stepCount yield step pid cont rollback nested
 
 data DefPactStep = DefPactStep
   { _psStep :: !Int
@@ -86,6 +108,7 @@ instance NFData Provenance
 instance NFData Yield
 instance NFData DefPactStep
 instance (NFData name, NFData v) => NFData (DefPactContinuation name v)
+instance NFData NestedDefPactExec
 instance NFData DefPactExec
 
 instance (Pretty name, Pretty v) => Pretty (DefPactContinuation name v) where

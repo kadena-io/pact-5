@@ -1050,3 +1050,14 @@ instance Serialise (SerialiseV1 DefPactExec) where
     SerialiseV1 <$> (DefPactExec <$> decode <*> decodeS <*> decode <*> decodeS <*> decodeS <*> decode <*> (coerceMapFromSerialise <$> decode))
   {-# INLINE decode #-}
 
+instance Serialise (SerialiseV1 NestedDefPactExec) where
+  encode (SerialiseV1 (NestedDefPactExec sc y s dpid cont ndp)) =
+    encodeListLen 6 <>
+    encode sc <> encodeS y <> encode s <>
+    encodeS dpid <> encodeS cont <>
+    encode (coerceMapToSerialise ndp)
+  {-# INLINE encode #-}
+  decode = do
+    safeDecodeListLen 6 "DefPactExec"
+    SerialiseV1 <$> (NestedDefPactExec <$> decode <*> decodeS <*> decode <*> decodeS <*> decodeS <*> (coerceMapFromSerialise <$> decode))
+  {-# INLINE decode #-}
