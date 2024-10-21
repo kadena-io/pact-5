@@ -87,7 +87,7 @@ import qualified Text.Megaparsec.Char as MP
 import qualified Pact.JSON.Encode as J
 
 import Pact.Core.Hash
-import Pact.Core.Pretty(Pretty(..))
+import Pact.Core.Pretty hiding (dot)
 import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Short as SB
 import Data.String (IsString)
@@ -95,7 +95,7 @@ import Data.String (IsString)
 -- | Newtype wrapper over bare namespaces
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
   deriving (Generic)
-  deriving newtype (Eq, Ord, Show, NFData)
+  deriving newtype (Eq, Ord, Show, NFData, IsString)
 
 instance Pretty NamespaceName where
   pretty (NamespaceName n) = pretty n
@@ -298,7 +298,8 @@ qualNameToFqn (QualifiedName name mn) mh =
   FullyQualifiedName mn name mh
 
 instance Pretty FullyQualifiedName where
-  pretty fq = pretty $ fqnToQualName fq
+  pretty (FullyQualifiedName mn n mh) =
+    pretty (QualifiedName n mn) <> ".{" <> pretty (_mhHash mh) <> "}"
 
 data TypeVar
   = TypeVar
@@ -346,7 +347,7 @@ instance (Pretty b) => Pretty (OverloadedName b) where
 instance Pretty Name where
   pretty (Name n nk) = case nk of
     NBound dix -> pretty n <> "<" <> pretty dix <> ">"
-    NTopLevel mn _mh -> pretty mn <> "." <> pretty n
+    NTopLevel mn _mh -> pretty mn <> "." <> pretty n <> "." <> braces (pretty _mh)
     NModRef m _ -> pretty m
     NDynRef dr -> pretty n <> "::" <> pretty (_drNameArg dr)
 
@@ -365,7 +366,7 @@ instance NFData TableName
 makeLenses ''TableName
 
 instance Pretty TableName where
-  pretty (TableName tn ns) = pretty ns <> pretty ':' <> pretty tn
+  pretty (TableName tn ns) = pretty ns <> pretty '_' <> pretty tn
 
 -- | Constants for resolving repl things
 replRawModuleName :: Text

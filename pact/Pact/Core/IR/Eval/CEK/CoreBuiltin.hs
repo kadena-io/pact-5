@@ -123,8 +123,9 @@ roundingFn :: (IsBuiltin b) => (Rational -> Integer) -> NativeFunction e b i
 roundingFn op info b cont handler _env = \case
   [VLiteral (LDecimal d)] ->
     returnCEKValue cont handler (VLiteral (LInteger (truncate (roundTo' op 0 d))))
-  [VDecimal d, VInteger prec] ->
-    returnCEKValue cont handler (VLiteral (LDecimal (roundTo' op (fromIntegral prec) d)))
+  [VDecimal d, VInteger prec] -> do
+    let roundPrec = max 0 (fromIntegral prec)
+    returnCEKValue cont handler (VLiteral (LDecimal (roundTo' op roundPrec d)))
   args -> argsError info b args
 {-# INLINE roundingFn #-}
 
@@ -1054,7 +1055,9 @@ dbRead info b cont handler env = \case
       Nothing ->
         returnCEKError info cont handler $
           NoSuchObjectInDb (_tvName tv) rowkey
-  [VTable tv, VString k, VList li] -> do
+  [tbl@(VTable tv), vs@(VString k), VList li]
+    | V.null li -> dbRead info b cont handler env [tbl, vs]
+    | otherwise -> do
     guardTable info tv GtRead
     li' <- traverse (fmap Field . asString info b) (V.toList li)
     let rowkey = RowKey k
@@ -1205,7 +1208,10 @@ coreEmitEvent info b cont handler _env = \case
       -- Todo: this code is repeated in the EmitEventFrame code
       d <- getDefCap info fqn
       enforceMeta (_dcapMeta d)
-      emitCapability info ct
+      isLegacyEventEmitted <- isExecutionFlagSet FlagEnableLegacyEventHashes
+      if isLegacyEventEmitted
+        then emitLegacyCapability info ct
+        else emitCapability info ct
       returnCEKValue cont handler (VBool True)
         where
         enforceMeta Unmanaged = throwExecutionError info (InvalidEventCap fqn)

@@ -572,7 +572,22 @@ defPactExecGen = do
   where
     genNested = Gen.scale (`div` 2) $ do
       dpid <- defPactIdGen
-      pexec <- defPactExecGen
+      pexec <- nestedDefPactExecGen
+      pure (dpid, pexec)
+
+nestedDefPactExecGen :: Gen NestedDefPactExec
+nestedDefPactExecGen = do
+  sc <- Gen.int (Range.linear 1 16)
+  yield <- Gen.maybe yieldGen
+  step <- Gen.int (Range.linear 1 sc)
+  dpid <- defPactIdGen
+  cont <- defPactContinuationGen
+  nested <- Gen.map (Range.linear 0 3) genNested
+  pure (NestedDefPactExec sc yield step dpid cont nested)
+  where
+    genNested = Gen.scale (`div` 2) $ do
+      dpid <- defPactIdGen
+      pexec <- nestedDefPactExecGen
       pure (dpid, pexec)
 
 identGen :: Gen Text

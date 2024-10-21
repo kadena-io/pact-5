@@ -48,7 +48,7 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.State.Strict
 import Data.List.NonEmpty(NonEmpty(..))
-import Data.Foldable(find)
+import Data.Foldable(find, traverse_)
 import qualified Data.RAList as RAList
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -357,7 +357,7 @@ applyPact
   -> Cont e b i
   -> CEKErrorHandler e b i
   -> CEKEnv e b i
-  -> M.Map DefPactId DefPactExec
+  -> M.Map DefPactId NestedDefPactExec
   -> EvalM e b i (EvalResult e b i)
 applyPact i pc ps cont handler cenv nested = use esDefPactExec >>= \case
   Just pe -> throwExecutionError i (MultipleOrNestedDefPactExecFound pe)
@@ -457,10 +457,10 @@ applyNestedPact i pc ps cont handler cenv = use esDefPactExec >>= \case
           | otherwise ->
             throwExecutionError i (NestedDefPactDoubleExecution ps)
         Just npe
-          | _psStep ps >= 0 && isRollback && _peStep npe == _psStep ps ->
-            pure (set peStepHasRollback isRollback npe)
-          | _psStep ps >  0 && _peStep npe + 1 == _psStep ps ->
-            pure (over peStep (+1) $ set peStepHasRollback isRollback npe)
+          | _psStep ps >= 0 && isRollback && _npeStep npe == _psStep ps ->
+            pure (fromNestedPactExec isRollback npe)
+          | _psStep ps >  0 && _npeStep npe + 1 == _psStep ps ->
+            pure (over peStep (+1) $ fromNestedPactExec isRollback npe)
           | otherwise ->
             throwExecutionError i (NestedDefPactNeverStarted ps)
 
@@ -1187,8 +1187,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
     _ ->
       throwExecutionError info ExpectedPactValue
 applyContToValue (CapBodyC env info (CapBodyState cappop mcap mevent capbody) cont) handler _ = do
-  -- Todo: I think this requires some administrative check?
-  maybe (pure ()) emitEventUnsafe mevent
+  traverse_ (emitEventLegacyUnsafe info) mevent
   case mcap of
     Nothing -> do
       let cont' = CapPopC cappop info cont
@@ -1283,7 +1282,7 @@ applyContToValue (NestedDefPactStepC env info cont parentDefPactExec) handler v 
       Just ps -> do
         when (nestedPactsNotAdvanced pe ps) $
           throwExecutionError info (NestedDefpactsNotAdvanced (_peDefPactId pe))
-        let npe = parentDefPactExec & peNestedDefPactExec %~ M.insert (_psDefPactId ps) pe
+        let npe = parentDefPactExec & peNestedDefPactExec %~ M.insert (_psDefPactId ps) (toNestedPactExec pe)
         esDefPactExec .= (Just npe)
         returnCEKValue cont handler v
 
@@ -1305,7 +1304,7 @@ applyContToValue (ModuleAdminC mn cont) handler v = do
 --   Nested step must be equal to the parent step after execution.
 nestedPactsNotAdvanced :: DefPactExec -> DefPactStep -> Bool
 nestedPactsNotAdvanced resultState ps =
-  any (\npe -> _peStep npe /= _psStep ps) (_peNestedDefPactExec resultState)
+  any (\npe -> _npeStep npe /= _psStep ps) (_peNestedDefPactExec resultState)
 {-# INLINE nestedPactsNotAdvanced #-}
 
 -- | Apply a closure to its arguments,
@@ -1329,9 +1328,11 @@ applyLam vc@(C (Closure fqn ca arity term mty env cloi)) args cont handler
     NullaryClosure -> do
       let varEnv = mempty
       evalWithStackFrame cloi cont handler (set ceLocal varEnv env) mty (StackFrame fqn [] SFDefun cloi) term
-  | argLen > arity = throwExecutionError cloi ClosureAppliedToTooManyArgs
+  | argLen > arity =
+    throwExecutionError cloi ClosureAppliedToTooManyArgs
   | otherwise = case ca of
-    NullaryClosure -> throwExecutionError cloi ClosureAppliedToTooManyArgs
+    NullaryClosure ->
+      throwExecutionError cloi ClosureAppliedToTooManyArgs
     ArgClosure cloargs
       | null args ->
         returnCEKValue cont handler (VClosure vc)
@@ -1350,7 +1351,8 @@ applyLam vc@(C (Closure fqn ca arity term mty env cloi)) args cont handler
         -- Todo: fix partial SF args
         pclo = PartialClosure (Just (StackFrame fqn [] SFDefun cloi)) (ty :| tys) (length tys + 1) term mty env' cloi
     returnCEKValue cont handler (VPartialClosure pclo)
-  apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
+  apply' _ [] _ =
+    throwExecutionError cloi ClosureAppliedToTooManyArgs
 
 applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
   | arity == argLen = case ca of
@@ -1364,15 +1366,16 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
     NullaryClosure -> do
       let cont' = EnforcePactValueC cloi cont
       evalCEK cont' handler env term
-  | argLen > arity = throwExecutionError cloi ClosureAppliedToTooManyArgs
+  | argLen > arity = do
+    throwExecutionError cloi ClosureAppliedToTooManyArgs
   | otherwise = case ca of
-      NullaryClosure -> throwExecutionError cloi ClosureAppliedToTooManyArgs
+      NullaryClosure -> do
+        throwExecutionError cloi ClosureAppliedToTooManyArgs
       ArgClosure cloargs -> do
         chargeGasArgs cloi (GAApplyLam Nothing argLen)
         apply' (view ceLocal env) (NE.toList cloargs) args
   where
   argLen = length args
-  -- Todo: runtime TC here
   apply' e (Arg _ ty _:tys) (x:xs) = do
     x' <- enforcePactValue cloi x
     maybeTCType cloi ty x'
@@ -1382,7 +1385,8 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
   apply' e (ty:tys) [] =
     returnCEKValue cont handler
     (VPartialClosure (PartialClosure Nothing (ty :| tys) (length tys + 1) term mty (set ceLocal e env) cloi))
-  apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
+  apply' _ [] _ = do
+    throwExecutionError cloi ClosureAppliedToTooManyArgs
 
 applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args cont handler = do
   chargeGasArgs cloi (GAApplyLam (_sfName <$> li) (length args))
@@ -1402,13 +1406,15 @@ applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args cont handler =
   apply' e (ty:tys) [] = do
     let pclo = PartialClosure li (ty :| tys) (length tys + 1) term mty (set ceLocal e env) cloi
     returnCEKValue cont handler (VPartialClosure pclo)
-  apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
+  apply' _ [] _ = do
+    throwExecutionError cloi ClosureAppliedToTooManyArgs
 
 applyLam nclo@(N (NativeFn b env fn arity i)) args cont handler
   | arity == argLen = do
     chargeFlatNativeGas i b
     fn i b cont handler env args
-  | argLen > arity = throwExecutionError i ClosureAppliedToTooManyArgs
+  | argLen > arity = do
+    throwExecutionError i ClosureAppliedToTooManyArgs
   | null args = returnCEKValue cont handler (VClosure nclo)
   | otherwise =
     apply' arity [] args
@@ -1422,7 +1428,8 @@ applyLam (PN (PartialNativeFn b env fn arity pArgs i)) args cont handler
   | arity == argLen = do
     chargeFlatNativeGas i b
     fn i b cont handler env (reverse pArgs ++ args)
-  | argLen > arity = throwExecutionError i ClosureAppliedToTooManyArgs
+  | argLen > arity = do
+    throwExecutionError i ClosureAppliedToTooManyArgs
   | otherwise = apply' arity [] args
   where
   argLen = length args
@@ -1446,7 +1453,8 @@ applyLam (DPC (DefPactClosure fqn argtys arity env i)) args cont handler
           env' = set ceLocal mempty env
       -- Todo: defpact has much higher overhead, we must charge a bit more gas for this
       initPact i pc cont handler env'
-  | otherwise = throwExecutionError i ClosureAppliedToTooManyArgs
+  | otherwise = do
+    throwExecutionError i ClosureAppliedToTooManyArgs
   where
   argLen = length args
 applyLam (CT (CapTokenClosure fqn argtys arity i)) args cont handler
@@ -1455,7 +1463,8 @@ applyLam (CT (CapTokenClosure fqn argtys arity i)) args cont handler
     args' <- traverse (enforcePactValue i) args
     zipWithM_ (\arg ty -> maybeTCType i ty arg) args' argtys
     returnCEKValue cont handler (VPactValue (PCapToken (CapToken fqn args')))
-  | otherwise = throwExecutionError i ClosureAppliedToTooManyArgs
+  | otherwise = do
+    throwExecutionError i ClosureAppliedToTooManyArgs
   where
   argLen = length args
 

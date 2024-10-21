@@ -25,7 +25,7 @@ compose: 4460
 concat: 920
 cond: 1202
 contains: 605
-continue: 441650
+continue: 441250
 create-capability-guard: 227850
 create-capability-pact-guard: 246800
 create-module-guard: 188300

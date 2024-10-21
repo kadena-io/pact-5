@@ -217,7 +217,7 @@ instance SizeOf SBS.ShortByteString where
 
 instance SizeOf Text where
   estimateSize t =
-    -- We will
+    -- We will rock you
     countBytes $ fromIntegral (TU.lengthWord8 t + 4)
 
 instance SizeOf Integer where
@@ -378,6 +378,7 @@ makeSizeOf ''ConstVal
 makeSizeOf ''DefConst
 makeSizeOf ''DefCap
 makeSizeOf ''Step
+makeSizeOf ''NestedDefPactExec
 makeSizeOf ''DefPactExec
 makeSizeOf ''DefPact
 makeSizeOf ''DefSchema
