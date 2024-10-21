@@ -95,7 +95,7 @@ import Data.String (IsString)
 -- | Newtype wrapper over bare namespaces
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
   deriving (Generic)
-  deriving newtype (Eq, Ord, Show, NFData)
+  deriving newtype (Eq, Ord, Show, NFData, IsString)
 
 instance Pretty NamespaceName where
   pretty (NamespaceName n) = pretty n

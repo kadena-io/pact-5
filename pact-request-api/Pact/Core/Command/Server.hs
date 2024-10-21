@@ -303,7 +303,8 @@ computeResultAndUpdateState runtime requestKey cmd =
             , mdSigners = signer
             , mdVerifiers = maybe [] (fmap void) mverif
             }
-      evalExec (RawCode (_pcCode code)) Transactional (_srDbEnv runtime) (_srSPVSupport runtime) freeGasModel GasLogsDisabled mempty SimpleNamespacePolicy
+      ge <- mkFreeGasEnv GasLogsDisabled
+      evalExec (RawCode (_pcCode code)) Transactional (_srDbEnv runtime) (_srSPVSupport runtime) ge mempty SimpleNamespacePolicy
         def msgData def parsedCode >>= \case
         Left pe ->
           pure $ pactErrorToCommandResult requestKey pe (Gas 0)
@@ -323,7 +324,8 @@ computeResultAndUpdateState runtime requestKey cmd =
             , _cRollback = _cmRollback contMsg
             , _cProof = _cmProof contMsg
             }
-      evalContinuation Transactional (_srDbEnv runtime) (_srSPVSupport runtime) freeGasModel GasLogsDisabled mempty
+      ge <- mkFreeGasEnv GasLogsDisabled
+      evalContinuation Transactional (_srDbEnv runtime) (_srSPVSupport runtime) ge mempty
         SimpleNamespacePolicy def msgData def cont >>= \case
           Left pe ->
             pure $ pactErrorToCommandResult requestKey pe (Gas 0)

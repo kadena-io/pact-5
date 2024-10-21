@@ -163,25 +163,6 @@ fromLegacyDefRef mh = \case
   Legacy.Ref t -> throwError $ "fromLegacyDefRef: " <>  show t
   Legacy.Direct _d -> throwError "fromLegacyDefRef: invariant Direct"
 
--- legacyDefRefToQn :: ModuleName -> LegacyRef -> TranslateM QualifiedName
--- legacyDefRefToQn mn = \case
---   Legacy.Ref (Legacy.TDef d) ->
---     pure $ QualifiedName (Legacy._unDefName (Legacy._dDefName d)) mn
---     -- fromLegacyDef mh $ Right <$> d
-
---   Legacy.Ref (Legacy.TTable (Legacy.TableName tn) _ _ _) ->
---     pure $ QualifiedName tn mn
-
---   Legacy.Ref (Legacy.TSchema (Legacy.TypeName sn) _ _) ->
---     pure $ QualifiedName sn mn
-
---   Legacy.Ref (Legacy.TConst arg _ _) ->
---     pure $ QualifiedName (Legacy._aName arg) mn
-
---   Legacy.Ref t -> throwError $ "fromLegacyDefRef: " <>  show t
---   Legacy.Direct _d -> throwError "fromLegacyDefRef: invariant Direct"
-
-
 fromLegacyConstDef
   :: ModuleHash
   -> Legacy.Arg (Legacy.Term LegacyRef)
@@ -737,7 +718,7 @@ fromLegacyTerm mh = \case
 
       BuiltinForm CWithCapability{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [t1, ListLit t2 _] -> case reverse t2 of
-          [] -> error "invariant failure: with-cap empty body"
+          [] -> throwError "invariant failure: with-cap empty body"
           x:xs -> do
             let body' = foldl' (\r l -> Sequence l r ()) x xs
             pure (BuiltinForm (CWithCapability t1 body') ())
@@ -901,7 +882,7 @@ fromLegacyGuard mh = \case
       let qn = fromLegacyQualifiedName n'
       args <- traverse (extract <=< fromLegacyTerm mh) a
       pure (GUserGuard (UserGuard qn args))
-    _ -> error "invariant"
+    _ -> error "invariant: this cannot happen"
  where
   extract = \case
      InlineValue p _ -> pure p
@@ -1176,7 +1157,7 @@ fromLegacyGuard' = \case
       let qn = fromLegacyQualifiedName n'
       args <- traverse fromLegacyPactValue a
       pure (GUserGuard (UserGuard qn args))
-    _ -> error "todo: jose, other cases relevant?"
+    _ -> error "impossible: this cannot happen"
 
 decodeRowData :: ByteString -> Maybe RowData
 decodeRowData o = do

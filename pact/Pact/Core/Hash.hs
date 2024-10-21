@@ -130,6 +130,14 @@ verifyHash h b = if hashed == h
               " but our hashing resulted in " ++ renderCompactString hashed
   where hashed = hash b
 
+-- NOTE: This instance is unsafe, but _really_ useful for debugging pasted
+-- gas logs.
+-- Uncomment and import Data.String(IsString(..)) to enable.
+-- instance IsString Hash where
+--   fromString s = case (decodeBase64UrlUnpadded $ T.encodeUtf8 (T.pack s)) of
+--     Right h -> Hash $ toShort h
+--     Left _ -> error $ "Invalid hash string: " ++ s
+
 initialHash :: Hash
 initialHash = hash mempty
 

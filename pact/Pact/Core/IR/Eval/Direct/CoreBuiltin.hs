@@ -128,8 +128,9 @@ roundingFn :: (IsBuiltin b) => (Rational -> Integer) -> NativeFunction e b i
 roundingFn op info b _env = \case
   [VLiteral (LDecimal d)] ->
     return (VLiteral (LInteger (truncate (roundTo' op 0 d))))
-  [VDecimal d, VInteger prec] ->
-    return (VLiteral (LDecimal (roundTo' op (fromIntegral prec) d)))
+  [VDecimal d, VInteger prec] -> do
+    let roundPrec = max 0 (fromIntegral prec)
+    return (VLiteral (LDecimal (roundTo' op roundPrec d)))
   args -> argsError info b args
 {-# INLINE roundingFn #-}
 

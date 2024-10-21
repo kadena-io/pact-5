@@ -73,17 +73,25 @@ import qualified Data.Text as T
 
 import qualified Data.ByteString as BS
 import qualified Pact.Core.Serialise.LegacyPact as Legacy
-import Pact.Core.Serialise
 import Pact.Core.Pretty
 import Pact.Core.IR.Term
 
-_decodeModule :: FilePath -> IO ()
-_decodeModule fp = do
+-- | Function for debugging legacy serialized module data.
+--   feel free to delete after mainnet launch
+--   It's only useful for debugging some code paths in the legacy serialization.
+_decodeDbgModule :: FilePath -> IO ()
+_decodeDbgModule fp = do
   x <- BS.readFile fp
   let y = either error id $ Legacy.decodeModuleData' x
-  let (ModuleData m _) = y --view document y
-  putStrLn $ "LENGTH OF DEFS: " <> show (length (_mDefs m))
+  let m = unsafeAsModuleData y
+  let (ModuleCode code) = _mCode m
+  putStrLn $ T.unpack code
+  putStrLn "\n\nPRETTYIED REPR\n\n"
   putStrLn $ show $ pretty m
+  where
+  unsafeAsModuleData = \case
+    ModuleData m _ -> m
+    _ -> error "not a module data"
 
 type Eval = EvalM ExecRuntime CoreBuiltin Info
 
@@ -91,11 +99,6 @@ type Eval = EvalM ExecRuntime CoreBuiltin Info
 type EvalBuiltinEnv = CEK.CoreBuiltinEnv Info
 type PactTxResult a =
   (Either (PactError Info) (a, [TxLog ByteString], Maybe TxId), EvalState CoreBuiltin Info)
-
-data EnableGasLogs
-  = GasLogsEnabled
-  | GasLogsDisabled
-  deriving (Eq, Show, Ord)
 
 evalInterpreter :: Interpreter ExecRuntime CoreBuiltin Info
 evalInterpreter =
@@ -167,21 +170,13 @@ setupEvalEnv
   -> ExecutionMode -- <- we have this
   -> MsgData -- <- create at type for this
   -> Maybe Cont
-  -> GasModel CoreBuiltin
-  -> EnableGasLogs
+  -> GasEnv CoreBuiltin a
   -> NamespacePolicy
   -> SPVSupport
   -> PublicData
   -> S.Set ExecutionFlag
   -> IO (EvalEnv CoreBuiltin a)
-setupEvalEnv pdb mode msgData mCont gasModel' gasLogsEnabled np spv pd efs = do
-  gasRef <- newIORef mempty
-  gasLogs <- if gasLogsEnabled == GasLogsEnabled then Just <$> newIORef mempty else pure Nothing
-  let gasEnv = GasEnv
-        { _geGasRef = gasRef
-        , _geGasLog = gasLogs
-        , _geGasModel = gasModel'
-        }
+setupEvalEnv pdb mode msgData mCont gasEnv np spv pd efs = do
   pure $ EvalEnv
     { _eeMsgSigs = mkMsgSigs $ mdSigners msgData
     , _eeMsgVerifiers = mkMsgVerifiers $ mdVerifiers msgData
@@ -210,41 +205,38 @@ setupEvalEnv pdb mode msgData mCont gasModel' gasLogsEnabled np spv pd efs = do
 
 evalExec
   :: RawCode -> ExecutionMode -> PactDb CoreBuiltin Info
-  -> SPVSupport -> GasModel CoreBuiltin
-  -> EnableGasLogs
+  -> SPVSupport -> GasEnv CoreBuiltin Info
   -> Set ExecutionFlag -> NamespacePolicy
   -> PublicData -> MsgData
   -> CapState QualifiedName PactValue
   -> [Lisp.TopLevel SpanInfo] -> IO (Either (PactError Info) EvalResult)
-evalExec code execMode db spv gasModel gle flags nsp publicData msgData capState terms = do
-  evalEnv <- setupEvalEnv db execMode msgData Nothing gasModel gle nsp spv publicData flags
+evalExec code execMode db spv gasModel flags nsp publicData msgData capState terms = do
+  evalEnv <- setupEvalEnv db execMode msgData Nothing gasModel nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   interpret code evalEnv evalState (Right terms)
 
 evalExecTerm
   :: ExecutionMode
   -> PactDb CoreBuiltin Info
-  -> SPVSupport -> GasModel CoreBuiltin
-  -> EnableGasLogs
+  -> SPVSupport -> GasEnv CoreBuiltin Info
   -> Set ExecutionFlag -> NamespacePolicy
   -> PublicData -> MsgData
   -> CapState QualifiedName PactValue
   -> Lisp.Expr SpanInfo -> IO (Either (PactError Info) EvalResult)
-evalExecTerm execMode db spv gasModel gle flags nsp publicData msgData capState term = do
-  evalEnv <- setupEvalEnv db execMode msgData Nothing gasModel gle nsp spv publicData flags
+evalExecTerm execMode db spv gasModel flags nsp publicData msgData capState term = do
+  evalEnv <- setupEvalEnv db execMode msgData Nothing gasModel nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   interpret (RawCode mempty) evalEnv evalState (Right [Lisp.TLTerm term])
 
 evalContinuation
   :: ExecutionMode -> PactDb CoreBuiltin Info -> SPVSupport
-  -> GasModel CoreBuiltin
-  -> EnableGasLogs
+  -> GasEnv CoreBuiltin Info
   -> Set ExecutionFlag -> NamespacePolicy
   -> PublicData -> MsgData
   -> CapState QualifiedName PactValue
   -> Cont -> IO (Either (PactError Info) EvalResult)
-evalContinuation execMode db spv gasModel gle flags nsp publicData msgData capState cont = do
-  evalEnv <- setupEvalEnv db execMode msgData (Just cont) gasModel gle nsp spv publicData flags
+evalContinuation execMode db spv gasModel flags nsp publicData msgData capState cont = do
+  evalEnv <- setupEvalEnv db execMode msgData (Just cont) gasModel nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   case _cProof cont of
     Nothing ->
@@ -265,14 +257,13 @@ evalContinuation execMode db spv gasModel gle flags nsp publicData msgData capSt
 evalGasPayerCap
   :: CapToken QualifiedName PactValue
   -> PactDb CoreBuiltin Info -> SPVSupport
-  -> GasModel CoreBuiltin
-  -> EnableGasLogs
+  -> GasEnv CoreBuiltin Info
   -> Set ExecutionFlag -> NamespacePolicy
   -> PublicData -> MsgData
   -> CapState QualifiedName PactValue
   -> Lisp.Expr Info -> IO (Either (PactError Info) EvalResult)
-evalGasPayerCap capToken db spv gasModel gle flags nsp publicData msgData capState body = do
-  evalEnv <- setupEvalEnv db Transactional msgData Nothing gasModel gle nsp spv publicData flags
+evalGasPayerCap capToken db spv gasModel flags nsp publicData msgData capState body = do
+  evalEnv <- setupEvalEnv db Transactional msgData Nothing gasModel nsp spv publicData flags
   let evalState = def & esCaps .~ capState
   interpretGasPayerTerm evalEnv evalState capToken body
 
