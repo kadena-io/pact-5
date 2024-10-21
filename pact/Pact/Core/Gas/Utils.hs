@@ -5,6 +5,7 @@ module Pact.Core.Gas.Utils
   , chargeGasArgs
   , chargeFlatNativeGas
   , scalarMulMilliGas
+  , prettyGasLogs
   ) where
 
 import Control.Lens
@@ -17,6 +18,7 @@ import Pact.Core.Errors
 import Pact.Core.Gas.Types
 import Pact.Core.Gas.TableGasModel
 import Pact.Core.Environment
+import qualified Data.Text as T
 
 -- | Multiply Milligas by a scalar
 scalarMulMilliGas :: Integral a => MilliGas -> a -> MilliGas
@@ -60,3 +62,20 @@ chargeFlatNativeGas :: i -> b -> EvalM e b i ()
 chargeFlatNativeGas info nativeArg =
   chargeGasArgs info (GNative nativeArg)
 {-# INLINABLE chargeFlatNativeGas #-}
+
+-- this function assumes gas logs are in order
+prettyGasLogs :: Show b => GasModel b -> [GasArgs b] -> T.Text
+prettyGasLogs model = \case
+  [] -> "TOTAL: 0"
+  li -> let
+    (str, total) = foldl' go ([], MilliGas 0) li
+    in "TOTAL: " <> T.pack (show total) <> "\n" <> T.unlines (reverse str)
+  where
+  prettyLine (ga, used, amt) =
+    T.pack (show ga) <> " used: " <> T.pack (show used) <> ", total used: " <> T.pack (show amt)
+  go (li, acc) ga =
+    let used = runTableModel (_gmNativeTable model) (_gmGasCostConfig model) ga
+        line = prettyLine (ga, used, used <> acc)
+    in (line:li, used <> acc)
+{-# INLINE prettyGasLogs #-}
+

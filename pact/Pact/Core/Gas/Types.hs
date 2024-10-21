@@ -53,8 +53,11 @@ module Pact.Core.Gas.Types
   , gmNativeTable
 
   , freeGasModel
+  , mkGasEnv
+  , mkFreeGasEnv
   , GasCostConfig(..)
   , TranscendentalCost(..)
+  , EnableGasLogs(..)
   , module Pact.Core.SatWord
   ) where
 
@@ -433,6 +436,11 @@ freeGasCostConfig = GasCostConfig
   , _gcSizeOfBytePenalty = 1
   }
 
+data EnableGasLogs
+  = GasLogsEnabled
+  | GasLogsDisabled
+  deriving (Eq, Show, Ord)
+
 
 data GasModel b
   = GasModel
@@ -461,6 +469,7 @@ data GasLogEntry b i = GasLogEntry
   , _gleThisUsed :: !MilliGas
   } deriving (Show, Eq, Generic, NFData)
 
+
 data GasEnv b i
   = GasEnv
   { _geGasRef :: !(IORef MilliGas)
@@ -468,3 +477,16 @@ data GasEnv b i
   , _geGasModel :: !(GasModel b)
   } deriving (Generic, NFData)
 makeLenses ''GasEnv
+
+mkGasEnv :: EnableGasLogs -> GasModel b -> IO (GasEnv b i)
+mkGasEnv enabled model = do
+  gasRef <- newIORef mempty
+  glref <- if enabled == GasLogsEnabled then
+    Just <$> newIORef [] else
+    pure Nothing
+  pure (GasEnv gasRef glref model)
+{-# INLINE mkGasEnv #-}
+
+
+mkFreeGasEnv :: EnableGasLogs -> IO (GasEnv b i)
+mkFreeGasEnv enabled = mkGasEnv enabled freeGasModel
