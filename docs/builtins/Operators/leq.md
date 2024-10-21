@@ -1,4 +1,4 @@
-## less-than-equal (<=)
+## less-than-equal (`<=`)
 
 Use `<=` to return true if the first `oper1` argument is less than or equal to the second `oper2` argument.
 

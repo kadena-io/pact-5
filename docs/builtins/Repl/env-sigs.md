@@ -36,7 +36,9 @@ The following example demonstrates how to use the `env-sigs` function to set two
 
 The following example illustrates using the `env-sigs` function to grant "any" key the MINT capability:
 
+```pact
 (env-sigs [
     { 'key: 'any
      ,'caps: [(MINT (read-msg "token-id") (read-string 'account) 1.0)]}
    ])
+   ```

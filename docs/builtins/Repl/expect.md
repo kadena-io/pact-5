@@ -35,6 +35,7 @@ pact> (expect "Sanity prevails." 4 (+ 2 2))
 
 The following example illustrates using the `expect` function to verify that the information expected to be inserted into a table is the same as the result of the `get-token-info` function:
 
+```pact
 (expect "Token info is inserted into table"
     { "id": "t:YV6-cQBhE_EoIXAuNV08aGXLfcucBEGy0Gb1Pj6w_Oo"
      ,"supply": 0.0
@@ -44,3 +45,4 @@ The following example illustrates using the `expect` function to verify that the
     }
     (get-token-info "t:YV6-cQBhE_EoIXAuNV08aGXLfcucBEGy0Gb1Pj6w_Oo")
 )
+```
