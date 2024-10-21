@@ -41,7 +41,7 @@ import Pact.Core.Syntax.LexUtils
 %monad { ParserT }
 
 %error { parseError }
-%error.expected
+%errorhandlertype explist
 
 %token
   let        { PosToken TokenLet _ }

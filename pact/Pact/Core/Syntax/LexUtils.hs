@@ -226,8 +226,11 @@ objType i t p = case t of
   "table" -> pure (TyTable p)
   e -> throwParseError (InvalidBaseType e) i
 
-parseError :: [PosToken] -> [String] -> ParserT a
-parseError remaining exps =
+-- NOTE: UNCOMMENT AFTER HAPPY > 2 IS STABLE
+-- parseError :: [PosToken] -> [String] -> ParserT a
+-- parseError remaining exps =
+parseError :: ([PosToken], [String]) -> ParserT a
+parseError (remaining, exps) =
   case (remaining, exps) of
     (_, []) -> handleTooMuchInput remaining
     (x:_, _) -> handleWithLastToken (_ptInfo x)

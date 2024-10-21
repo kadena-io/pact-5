@@ -201,7 +201,7 @@ library
 
   build-tool-depends:
     , alex:alex
-    , happy:happy
+    , happy:happy < 2
 
   other-modules:
     -- TODO: Uncomment once this is finally fixed
