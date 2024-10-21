@@ -20,7 +20,7 @@ Use the following arguments to specify the field, application function, and valu
 | --- | --- | --- |
 | `field` | string | Specifies the field in the value to be evaluated. |
 | `app` | function | Specifies the application function to be applied to the field. |
-| `value` | object:<{row}> | Specifies the value containing the field to be evaluated. |
+| `value` | `object:<{row}>` | Specifies the value containing the field to be evaluated. |
 
 ### Return value
 
