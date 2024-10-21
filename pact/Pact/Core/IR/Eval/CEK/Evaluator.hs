@@ -1328,12 +1328,10 @@ applyLam vc@(C (Closure fqn ca arity term mty env cloi)) args cont handler
     NullaryClosure -> do
       let varEnv = mempty
       evalWithStackFrame cloi cont handler (set ceLocal varEnv env) mty (StackFrame fqn [] SFDefun cloi) term
-  | argLen > arity = do
-    -- liftIO $ putStrLn $ "CLO APPLIED TOO MANY AL: " <> show fqn
+  | argLen > arity =
     throwExecutionError cloi ClosureAppliedToTooManyArgs
   | otherwise = case ca of
-    NullaryClosure -> do
-      -- liftIO $ putStrLn $ "CLO APPLIED TOO MANY NULLARY: " <> show fqn
+    NullaryClosure ->
       throwExecutionError cloi ClosureAppliedToTooManyArgs
     ArgClosure cloargs
       | null args ->
@@ -1353,8 +1351,7 @@ applyLam vc@(C (Closure fqn ca arity term mty env cloi)) args cont handler
         -- Todo: fix partial SF args
         pclo = PartialClosure (Just (StackFrame fqn [] SFDefun cloi)) (ty :| tys) (length tys + 1) term mty env' cloi
     returnCEKValue cont handler (VPartialClosure pclo)
-  apply' _ [] _ = do
-    -- liftIO $ putStrLn $ "CLO APPLIED TOO MANY IMPOSSIBLE1: " <> show fqn
+  apply' _ [] _ =
     throwExecutionError cloi ClosureAppliedToTooManyArgs
 
 applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
@@ -1370,18 +1367,15 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
       let cont' = EnforcePactValueC cloi cont
       evalCEK cont' handler env term
   | argLen > arity = do
-    -- liftIO $ putStrLn $ "CLO APPLIED TOO MANY:LAM 42069: " <> show (() <$ ca)
     throwExecutionError cloi ClosureAppliedToTooManyArgs
   | otherwise = case ca of
       NullaryClosure -> do
-        -- liftIO $ putStrLn $ "CLO APPLIED TOO MANY:LAMNULLARY 42069: " <> show (() <$ ca)
         throwExecutionError cloi ClosureAppliedToTooManyArgs
       ArgClosure cloargs -> do
         chargeGasArgs cloi (GAApplyLam Nothing argLen)
         apply' (view ceLocal env) (NE.toList cloargs) args
   where
   argLen = length args
-  -- Todo: runtime TC here
   apply' e (Arg _ ty _:tys) (x:xs) = do
     x' <- enforcePactValue cloi x
     maybeTCType cloi ty x'
@@ -1392,7 +1386,6 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
     returnCEKValue cont handler
     (VPartialClosure (PartialClosure Nothing (ty :| tys) (length tys + 1) term mty (set ceLocal e env) cloi))
   apply' _ [] _ = do
-    -- liftIO $ putStrLn $ "CLO APPLIED TOO MANY:LAM 42069:IMPOSSIBLE2 " <> show (() <$ ca)
     throwExecutionError cloi ClosureAppliedToTooManyArgs
 
 applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args cont handler = do
@@ -1414,7 +1407,6 @@ applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args cont handler =
     let pclo = PartialClosure li (ty :| tys) (length tys + 1) term mty (set ceLocal e env) cloi
     returnCEKValue cont handler (VPartialClosure pclo)
   apply' _ [] _ = do
-    -- liftIO $ putStrLn $ "CLO APPLIED TOO MANY:IMPOSSIBLE3 " <> show ((fmap.fmap) (const ()) argtys)
     throwExecutionError cloi ClosureAppliedToTooManyArgs
 
 applyLam nclo@(N (NativeFn b env fn arity i)) args cont handler
@@ -1422,7 +1414,6 @@ applyLam nclo@(N (NativeFn b env fn arity i)) args cont handler
     chargeFlatNativeGas i b
     fn i b cont handler env args
   | argLen > arity = do
-    -- liftIO $ putStrLn $ "CLO APPLIED TOO MANY:NATIVE42069: " <> show args
     throwExecutionError i ClosureAppliedToTooManyArgs
   | null args = returnCEKValue cont handler (VClosure nclo)
   | otherwise =
@@ -1438,7 +1429,6 @@ applyLam (PN (PartialNativeFn b env fn arity pArgs i)) args cont handler
     chargeFlatNativeGas i b
     fn i b cont handler env (reverse pArgs ++ args)
   | argLen > arity = do
-    -- liftIO $ putStrLn $ "CLO APPLIED TOO MANY:PARTIALNATIVE42069: " <> show args
     throwExecutionError i ClosureAppliedToTooManyArgs
   | otherwise = apply' arity [] args
   where
@@ -1464,7 +1454,6 @@ applyLam (DPC (DefPactClosure fqn argtys arity env i)) args cont handler
       -- Todo: defpact has much higher overhead, we must charge a bit more gas for this
       initPact i pc cont handler env'
   | otherwise = do
-    -- liftIO $ putStrLn $ "CLO APPLIED TOO MANY:DPC42069: " <> show fqn
     throwExecutionError i ClosureAppliedToTooManyArgs
   where
   argLen = length args
@@ -1475,7 +1464,6 @@ applyLam (CT (CapTokenClosure fqn argtys arity i)) args cont handler
     zipWithM_ (\arg ty -> maybeTCType i ty arg) args' argtys
     returnCEKValue cont handler (VPactValue (PCapToken (CapToken fqn args')))
   | otherwise = do
-    -- liftIO $ putStrLn $ "CLO APPLIED TOO MANY:CAPTOKEN42069: " <> show fqn
     throwExecutionError i ClosureAppliedToTooManyArgs
   where
   argLen = length args

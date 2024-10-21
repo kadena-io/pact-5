@@ -10,6 +10,7 @@ module Pact.Core.Gas.TableGasModel
  , pointAddGas
  , scalarMulGas
  , pairingGas
+ , mkTableGasEnv
  )
  where
 
@@ -55,6 +56,9 @@ tableGasModel gl =
   , _gmNativeTable = coreBuiltinGasCost tableGasCostConfig
   , _gmGasCostConfig = tableGasCostConfig
   }
+
+mkTableGasEnv :: MilliGasLimit -> EnableGasLogs -> IO (GasEnv CoreBuiltin i)
+mkTableGasEnv mgl enabled = mkGasEnv enabled (tableGasModel mgl)
 
 replTableGasModel :: Maybe MilliGasLimit -> GasModel ReplCoreBuiltin
 replTableGasModel gl =
