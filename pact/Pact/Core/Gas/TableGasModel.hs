@@ -25,17 +25,24 @@ import GHC.Base
 
 tableGasCostConfig :: GasCostConfig
 tableGasCostConfig = GasCostConfig
-  { _gcNativeBasicWork = 200
+  -- The basic cost of entering the native table +
+  -- performing some work
+  { _gcNativeBasicWork = 100
   , _gcFunctionArgumentCost = 25
   , _gcMachineTickCost = 25
   , _gcUnconsWork = 100
-  , _gcReadPenalty = 4_500
-  , _gcWritePenalty = 50_000
+  , _gcReadPenalty = 2_500
+  , _gcWritePenalty = 25_000
   , _gcMetadataTxPenalty = 100_000
   , _gcSelectPenalty = 40_000_000
   , _gcConcatFactor = 100
-  , _gcPerByteWriteCost = 200
-  , _gcPerByteReadCost = 100
+  -- Note: on a _really_ slow hard disk, it writes about
+  -- 80 bytes per microsecond, or 1 byte = 5 milligas after conversions
+  -- (80 bytes / 1 microsecond) * (2.5 micros / 1000 milligas) = 0.2 milligas per byte or 1 byte = 5 milligas
+  -- We add some extra overhead here, because we need to serialize and perform other checks.
+  , _gcPerByteWriteCost = 100
+  -- Reads also tend to be about twice as fast as writes, so we charge a bit less
+  , _gcPerByteReadCost = 50
   , _gcSortBytePenaltyReduction = 1000
   , _gcPoseidonQuadraticGasFactor = 50_000
   , _gcPoseidonLinearGasFactor = 38_000
