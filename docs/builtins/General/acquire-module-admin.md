@@ -29,7 +29,7 @@ It will attempt to acquire the governance cap and if successful, it will grant m
 
 ### Return values
 
-Module admin acquisition will either fail, or return "Module admin for module `<my-module> `acquired"
+Module admin acquisition will either fail, or return "Module admin for module `<my-module>` acquired"
 
 ### Examples
 
