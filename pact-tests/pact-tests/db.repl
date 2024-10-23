@@ -64,35 +64,46 @@
 (env-exec-config []) ;; clear disable history flag except pre-4.2.0
 (begin-tx)
 (use dbtest)
+(expect-failure "module admin protected by admin-key" "Keyset failure (keys-all): [admin...]" (acquire-module-admin dbtest))
 (expect-failure
- "write protected by admin key" "Keyset failure"
+ "write protected by admin key"
+ "Module admin necessary for operation but has not been acquired:dbtest"
  (write persons "foo" ROW_A))
 (expect-failure
- "update protected by admin key" "Keyset failure"
+ "update protected by admin key"
+ "Module admin necessary for operation but has not been acquired:dbtest"
  (update persons "foo" ROW_A))
 (expect-failure
- "insert protected by admin key" "Keyset failure"
+ "insert protected by admin key"
+ "Module admin necessary for operation but has not been acquired:dbtest"
  (insert persons "foo" ROW_A))
 (expect-failure
- "keys protected by admin key" "Keyset failure"
+ "keys protected by admin key"
+ "Module admin necessary for operation but has not been acquired:dbtest"
  (keys persons))
 (expect-failure
- "read protected by admin key" "Keyset failure"
+ "read protected by admin key"
+ "Module admin necessary for operation but has not been acquired:dbtest"
  (read persons ID_A))
 (expect-failure
- "with-read protected by admin key" "Keyset failure"
+ "with-read protected by admin key"
+ "Module admin necessary for operation but has not been acquired:dbtest"
  (with-read persons ID_A { 'name:= name } name))
 (expect-failure
- "with-default-read protected by admin key" "Keyset failure"
+ "with-default-read protected by admin key"
+ "Module admin necessary for operation but has not been acquired:dbtest"
  (with-default-read persons ID_A { 'name: "stu" } { 'name:= name } name))
 (expect-failure
- "select protected by admin key" "Keyset failure"
+ "select protected by admin key"
+ "Module admin necessary for operation but has not been acquired:dbtest"
  (select persons (constantly true)))
 (expect-failure
- "keys protected by admin key" "Keyset failure"
+ "keys protected by admin key"
+ "Module admin necessary for operation but has not been acquired:dbtest"
  (keys persons))
 (expect-failure
- "create-table protected by admin key" "Keyset failure"
+ "create-table protected by admin key"
+ "Module admin necessary for operation but has not been acquired:dbtest"
  (create-table persons2))
 
 ;; just making sure this doesn't blow up, output is still TBD on better Term output in general
@@ -103,13 +114,16 @@
 (env-exec-config ["AllowReadInLocal"])
 (use dbtest)
 (expect-failure
- "write protected by admin key in local" "Keyset failure"
+ "write protected by admin key in local"
+ "Module admin necessary for operation but has not been acquired:dbtest"
  (write persons "foo" ROW_A))
 (expect-failure
- "update protected by admin key in local" "Keyset failure"
+ "update protected by admin key in local"
+ "Module admin necessary for operation but has not been acquired:dbtest"
  (update persons "foo" ROW_A))
 (expect-failure
- "insert protected by admin key in local" "Keyset failure"
+ "insert protected by admin key in local"
+ "Module admin necessary for operation but has not been acquired:dbtest"
  (insert persons "foo" ROW_A))
 (expect
  "keys allowed in local" [ID_A]
@@ -130,7 +144,8 @@
  "keys allowed in local" [ID_A]
  (keys persons))
 (expect-failure
- "create-table protected by admin key in local" "Keyset failure"
+ "create-table protected by admin key in local"
+ "Module admin necessary for operation but has not been acquired:dbtest"
  (create-table persons2))
 
 ;; test nested commits
@@ -286,4 +301,41 @@
 (expect "reading with a no fields returns the full object" {"a": 2,"b": 1} (read tbl "jose" []))
 (expect "selecting with fields on empty fields" [{"a": 2} {"a": 3}] (select tbl ["a"] (constantly true)))
 (expect "selecting with fields with no fields results in empty objects" [{} {}] (select tbl [] (constantly true)))
+(commit-tx)
+
+; DB regression
+(begin-tx)
+(module table-abstraction g (defcap g () true)
+  (defschema sc a:integer b:integer)
+  (defschema sc2 a:integer b:integer c:string)
+  (defschema sc3 a:integer b:integer)
+  (deftable tbl:{sc})
+  (deftable tbl2:{sc2})
+  (deftable tbl3:{sc3})
+  (deftable tbl4:{sc})
+
+  (defun write-to-table:unit (tv:table{sc} k:string v:object{sc})
+    (write tv k v)
+    ()
+  )
+
+  (defun read-from-tables:[object{sc}] (tvs:[table{sc}] k:string)
+    (map (lambda (tv) (read tv k)) tvs)
+  )
+
+)
+
+(create-table tbl)
+(create-table tbl2)
+(create-table tbl3)
+(create-table tbl4)
+
+(expect "can write to table tbl" () (write-to-table tbl "jose" {"a": 1, "b": 2}))
+(expect-failure "Cannot write to tbl2: different schema" "Runtime typecheck failure" (write-to-table tbl2 "jose" {"a": 2, "b": 2}))
+(expect "can write to table tbl4: same schema" () (write-to-table tbl4 "jose" {"a": 3, "b": 2}))
+(expect "can write to table tbl3: different schema, same structure" () (write-to-table tbl3 "jose" {"a": 4, "b": 2}))
+
+(expect "can read from tables with the same schema" [{"a": 1,"b": 2} {"a": 3,"b": 2} {"a": 4,"b": 2}]  (read-from-tables [tbl, tbl4, tbl3] "jose"))
+(expect-failure "Cannot read from tables with different schema" "Runtime typecheck failure" (read-from-tables [tbl, tbl2] "jose"))  
+
 (commit-tx)

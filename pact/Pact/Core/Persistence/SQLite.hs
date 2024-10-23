@@ -128,12 +128,15 @@ createSysTables db = do
   where
     mkTbl tbl = do
       SQL.exec db (cStmt tbl)
+      SQL.exec db (indexStmt tbl)
       mkTblStatement db tbl
     cStmt tbl = "CREATE TABLE IF NOT EXISTS \"" <> tbl <> "\" \
-                \ (txid UNSIGNED BIG INT, \
-                \  rowkey TEXT, \
-                \  rowdata BLOB, \
-                \  UNIQUE (txid, rowkey))"
+                \ (rowkey TEXT,  \
+                \  txid UNSIGNED BIGINT NOT NULL, \
+                \  rowdata BLOB NOT NULL, \
+                \  UNIQUE (txid, rowkey));"
+    indexStmt tbl =
+      "CREATE INDEX IF NOT EXISTS \"" <> tbl <> "_ix\"" <> " ON \"" <> tbl <> "\" (txid DESC);"
 
 data TblStatements
   = TblStatements

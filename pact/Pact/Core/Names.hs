@@ -66,6 +66,8 @@ module Pact.Core.Names
  , parseFullyQualifiedName
  , VerifierName(..)
  , renderTableName
+ , jsonSafeRenderTableName
+ , parseJsonSafeTableName
  , HashedModuleName(..)
  , renderHashedModuleName
  , parseHashedModuleName
@@ -454,6 +456,13 @@ moduleNameParser = do
     p1 <- identParser
     pure (ModuleName p1 (Just (NamespaceName ns)))
 
+jsonSafeTableNameParser :: Parser TableName
+jsonSafeTableNameParser = do
+  p <- moduleNameParser
+  _ <- MP.char ':'
+  ident <- identParser
+  pure (TableName ident p)
+
 hashedModuleNameParser :: Parser HashedModuleName
 hashedModuleNameParser = do
   mn <- moduleNameParser
@@ -557,3 +566,11 @@ renderTableName (TableName tbl mn) = renderModuleName mn <> "_" <> tbl
 renderHashedModuleName :: HashedModuleName -> Text
 renderHashedModuleName (HashedModuleName mn mh) =
   renderModuleName mn <> "{" <> moduleHashToText mh <> "}"
+
+-- | Map the user's table name into a set of names suitable for
+--   storage in the persistence backend.
+jsonSafeRenderTableName :: TableName -> Text
+jsonSafeRenderTableName (TableName tbl mn) = renderModuleName mn <> ":" <> tbl
+
+parseJsonSafeTableName :: Text -> Maybe TableName
+parseJsonSafeTableName = MP.parseMaybe (jsonSafeTableNameParser <* MP.eof)

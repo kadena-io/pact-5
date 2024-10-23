@@ -19,7 +19,7 @@
 (use defcap-module)
 
 (expect "should return 'step-0'" "step-0" (defpact-single-step))
-(expect-failure "should not executing step again" "not-step-0" (defpact-single-step))
+(expect-failure "should not executing step again" "defpact execution context already in the environment" (defpact-single-step))
 (commit-tx)
 
 
