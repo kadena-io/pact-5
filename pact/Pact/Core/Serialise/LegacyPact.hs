@@ -705,9 +705,9 @@ fromLegacyTerm mh = \case
       BuiltinForm CAnd{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [b1, b2] -> pure (BuiltinForm (CAnd b1 b2) ())
         [b1] -> mkOneArgLam $ \x -> BuiltinForm (CAnd b1 x) ()
-        [] -> mkTwoArgLam $ \x y -> BuiltinForm (CAnd x y) ()
-        args' ->
-          pure $ App fn' args' ()
+        args' -> do
+          lam <- mkTwoArgLam $ \x y -> BuiltinForm (CAnd x y) ()
+          pure $ App lam args' ()
 
       BuiltinForm COr{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [b1, b2] -> pure (BuiltinForm (COr b1 b2) ())

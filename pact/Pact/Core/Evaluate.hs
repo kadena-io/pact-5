@@ -261,11 +261,11 @@ evalGasPayerCap
   -> Set ExecutionFlag -> NamespacePolicy
   -> PublicData -> MsgData
   -> CapState QualifiedName PactValue
-  -> Lisp.Expr Info -> IO (Either (PactError Info) EvalResult)
+  -> Lisp.Expr SpanInfo -> IO (Either (PactError Info) EvalResult)
 evalGasPayerCap capToken db spv gasModel flags nsp publicData msgData capState body = do
   evalEnv <- setupEvalEnv db Transactional msgData Nothing gasModel nsp spv publicData flags
   let evalState = def & esCaps .~ capState
-  interpretGasPayerTerm evalEnv evalState capToken body
+  interpretGasPayerTerm evalEnv evalState capToken (def <$ body)
 
 
 interpret
