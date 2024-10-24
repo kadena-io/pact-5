@@ -30,6 +30,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import qualified Pact.JSON.Decode as JD
 import qualified Pact.JSON.Encode as J
+import qualified Pact.JSON.Legacy.Utils as J
 import Unsafe.Coerce (unsafeCoerce)
 
 import Pact.Core.Capabilities
@@ -389,9 +390,9 @@ instance J.Encode (StableEncoding KeySet) where
 
 -- | Stable encoding of `Map Field PactValue`
 instance J.Encode (StableEncoding v) => J.Encode (StableEncoding (Map Field v)) where
-  build (StableEncoding o) = J.build $ J.Object $ c (M.toList o)
+  build (StableEncoding o) = J.build $ J.legacyMap _field (c o)
     where
-    c :: [(Field, v)] -> [(T.Text, StableEncoding v)]
+    c :: Map k v -> Map k (StableEncoding v)
     c = coerce
   {-# INLINABLE build #-}
 

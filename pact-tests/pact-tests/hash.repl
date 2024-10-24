@@ -34,6 +34,8 @@
 (insert-hash "c" (hash [my-mod, {'a:my-mod}, (create-user-guard (f my-mod))]))
 (insert-hash "d" (hash [my-mod, {'a:my-mod}, (create-user-guard (f my-mod))]))
 
+(expect "Hash of objects with multiple values:" "JRdgzVN17Xy4-8dWegAKj_BPNv6ffNpbtT6YOCiUcY8" (hash (chain-data)))
+
 (let*
   ( (h1 (get-hash "a"))
     (h2 (get-hash "b"))
