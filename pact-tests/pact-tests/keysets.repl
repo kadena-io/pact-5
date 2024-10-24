@@ -78,18 +78,18 @@
 
 (expect-failure
   "Defining un-namespaced keys fails - env keys, name failure"
-  "Cannot define a keyset outside of a namespace"
+  "Cannot define keyset outside of a namespace"
   (define-keyset 'alice-keys))
 
 ;; Show failure on lookup for keys
 (expect-failure
   "Defining un-namespaced keys fails - actual keys, name failure"
-  "Cannot define a keyset outside of a namespace"
+  "Cannot define keyset outside of a namespace"
   (define-keyset 'alice (read-keyset 'alice-keys)))
 
 (expect-failure
   "Defining namespaced key fails - env keys, outside namespace"
-  "Cannot define a keyset outside of a namespace"
+  "Cannot define keyset outside of a namespace"
   (define-keyset "alice.alice-keys"))
 
 (namespace 'alice)
@@ -130,7 +130,7 @@
 
 (expect-failure
   "keyset definition parsing is not permissive post-pact-4.4 - define-keyset"
-  "Cannot define a keyset outside"
+  "Cannot define keyset outside"
   (define-keyset "TEST <2>."))
 
 (expect-failure
@@ -140,17 +140,17 @@
 (namespace 'alice)
 (expect-failure
   "keyset name format is not permissive post-pact-4.4 - empty-keyset - define-keyset"
-  "incorrect keyset name format"
+  "Invalid keyset name format"
   (define-keyset ""))
 
 (expect-failure
   "keyset name format is not permissive post-pact-4.4 - empty-keyset - enforce-keyset"
-  "incorrect keyset name format"
+  "Invalid keyset name format"
   (enforce-keyset ""))
 
 (expect-failure
   "keyset name format is not permissive post-pact-4.4 - empty keyset - enforce-guard - keyset ref"
-  "incorrect keyset name format"
+  "Invalid keyset name format"
   (enforce-guard (keyset-ref-guard "")))
 
 ;; admin/user guard differentiation in keyset

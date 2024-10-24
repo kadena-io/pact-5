@@ -50,7 +50,7 @@ toArgTypeError = \case
     PGuard _ -> ATEPrim PrimGuard
     PModRef _ -> ATEModRef
     PCapToken _ -> ATEClosure
-  VTable{} -> ATETable
+    PTable _ -> ATETable
   VClosure{} -> ATEClosure
 
 --------------------------

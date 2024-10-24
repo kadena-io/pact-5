@@ -25,6 +25,7 @@ import Data.IORef
 import Data.Text(Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import qualified Data.List as List
 
 import Pact.Core.Builtin
 import Pact.Core.Environment
@@ -63,10 +64,15 @@ runRepl = do
       putStrLn $ T.unpack $ replError (SourceCode "(interactive)" "") err
     _ -> pure ()
   where
-
   replSettings = Settings (replCompletion replCoreBuiltinNames) (Just ".pc-history") True
   displayOutput :: (Pretty a, MonadIO m) => a -> InputT m ()
-  displayOutput = outputStrLn . show . pretty
+  displayOutput v = do
+    let vout = show (pretty v)
+    if "FAILURE:" `List.isInfixOf` vout then do
+      outputStrLn ("\ESC[31m" <> vout <> "\ESC[0m")
+    else do
+      outputStrLn vout
+
   catch' ma = catchAny ma (\e -> outputStrLn (show e) *> loop)
   defaultSrc = SourceCode "(interactive)" mempty
   loop = do

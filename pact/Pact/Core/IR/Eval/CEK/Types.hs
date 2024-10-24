@@ -59,6 +59,7 @@ module Pact.Core.IR.Eval.CEK.Types
  , pattern VPartialNative
  , pattern VCapToken
  , pattern VTime
+ , pattern VTable
  , CapCont(..)
  , CapState(..)
  , csSlots, csManaged
@@ -242,8 +243,6 @@ instance (NFData b, NFData i) => NFData (CanApply e b i)
 data CEKValue (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
   = VPactValue !PactValue
   -- ^ PactValue(s), which contain no terms
-  | VTable !TableValue
-  -- ^ Table references, which despite being a syntactic
   -- value with
   | VClosure  !(CanApply e b i)
   -- ^ Closures, which may contain terms
@@ -254,11 +253,13 @@ instance (NFData b, NFData i) => NFData (CEKValue e b i)
 instance Show (CEKValue e b i) where
   show = \case
     VPactValue pv -> show pv
-    VTable vt -> "table" <> show (_tvName vt)
     VClosure _ -> "closure<>"
 
 pattern VLiteral :: Literal -> CEKValue e b i
 pattern VLiteral lit = VPactValue (PLiteral lit)
+
+pattern VTable :: TableValue -> CEKValue e b i
+pattern VTable tv = VPactValue (PTable tv)
 
 pattern VString :: Text -> CEKValue e b i
 pattern VString txt = VLiteral (LString txt)
@@ -575,7 +576,6 @@ instance (Pretty b, Show i, Show b) => Pretty (NativeFn e b i) where
 instance (Show i, Show b, Pretty b) => Pretty (CEKValue e b i) where
   pretty = \case
     VPactValue pv -> pretty pv
-    VTable tv -> "table" <> P.braces (pretty (_tvName tv))
     VClosure{} ->
       P.angles "closure#"
 

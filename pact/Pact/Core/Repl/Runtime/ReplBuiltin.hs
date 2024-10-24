@@ -125,9 +125,13 @@ coreExpectFailure info b cont handler _env = \case
           then returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
           else returnCEKValue cont handler $ VLiteral $ LString $
                "FAILURE: " <> desc <> ": expected error message '" <> toMatch <> "', got '" <> err <> "'"
-      Left _err -> do
+      Left errMsg -> do
         put es
-        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
+        let err = renderCompactText errMsg
+        if toMatch `T.isInfixOf` err
+          then returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
+          else returnCEKValue cont handler $ VLiteral $ LString $
+               "FAILURE: " <> desc <> ": expected error message '" <> toMatch <> "', got '" <> err <> "'"
       Right (EvalValue v) ->
         returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result: " <> prettyShowValue v
   args -> argsError info b args

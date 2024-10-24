@@ -79,5 +79,5 @@
 (expect-failure
  "gov not granted after install"
  "autonomous-ns-gov"
- (write user.ns-gov.t "a" { 's: "x" }))
+ (acquire-module-admin user.ns-gov))
 

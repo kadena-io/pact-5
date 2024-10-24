@@ -440,6 +440,7 @@ pactValueToArgTypeError = \case
   PGuard _ -> ATEPrim PrimGuard
   PModRef _ -> ATEModRef
   PCapToken _ -> ATEClosure
+  PTable _ -> ATETable
 
 typeToArgTypeError :: Type -> ArgTypeError
 typeToArgTypeError = \case
@@ -781,7 +782,7 @@ instance Pretty EvalError where
     NestedDefPactParentStepCountMismatch pid stepCount parentStepCount ->
       Pretty.hsep
       [ "Nested defpact execution failed, parameter mismatch:"
-      , "PacId: " <> pretty pid
+      , "PactId: " <> pretty pid
       , "step count: " <> pretty stepCount
       , "Parent step count: " <> pretty parentStepCount
       ]
@@ -825,7 +826,7 @@ instance Pretty EvalError where
     InvalidManagedCap fqn ->
       "Install capability error: capability is not managed and cannot be installed:" <+> pretty (fqnToQualName fqn)
     CapNotInstalled cap ->
-      "Capability not installed:" <+> pretty cap
+      "Managed capability not installed:" <+> pretty cap
     CapAlreadyInstalled cap ->
       "Capability already installed:" <+> pretty cap
     ModuleMemberDoesNotExist fqn ->
@@ -856,7 +857,7 @@ instance Pretty EvalError where
     NativeIsTopLevelOnly b ->
       "Top-level call used in module" <+> pretty b
     EventDoesNotMatchModule mn ->
-      "Emitted event does not match module" <+> pretty mn
+      "Emitted event does not match module:" <+> pretty mn
     InvalidEventCap fqn ->
       "Invalid event capability" <+> pretty fqn
     NestedDefpactsNotAdvanced dpid ->
@@ -1434,7 +1435,7 @@ evalErrorToBoundedText = mkBoundedText . \case
     thsep ["Install capability failed. Capability is not declared as a managed capability and cannot be installed.", tFqn fqn]
   CapNotInstalled cap ->
     thsep
-      ["Capability"
+      ["Managed capability"
       , renderQualName (_ctName cap)
       , "was not installed."
       , "Check the sigs field or the arguments to verify that the capability is specified correctly."]

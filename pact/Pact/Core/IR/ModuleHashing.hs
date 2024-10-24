@@ -113,6 +113,9 @@ updatePactValueHash mname mhash = \case
   PCapToken (CapToken ct pvs) ->
     PCapToken $ CapToken (updateFqNameHash mname mhash ct) (updatePactValueHash mname mhash <$> pvs)
   PTime t -> PTime t
+  PTable tv@(TableValue tn _ sc)
+    | _tableModuleName tn == mname -> PTable (TableValue tn mhash sc)
+    | otherwise -> PTable tv
 
 encodeModule :: (Serialise (SerialiseV1 b)) => Module Name Type b () -> B.ByteString
 encodeModule (Module mname mgov defs mblessed imports mimps _mh _txh _mcode _i) =

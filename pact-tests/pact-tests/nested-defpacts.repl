@@ -369,29 +369,29 @@
 ; Case 2 test
 (begin-tx)
 (expect "Case 2: step 0" ["hello1-nested" "hello1-nested" "hello1"] (parent.bad-parent))
-(expect-failure "Case 2: step 1" "Nested defpacts were not all advanced in prior step for pact" (continue-pact 1))
+(expect-failure "Case 2: step 1" "Nested defpact not advanced DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g" (continue-pact 1))
 (commit-tx)
 
 ; Case 3 test
 (begin-tx)
 (expect "Case 3: step 0" ["hello1-nested" "hello1-nested" "hello1"] (parent.bad1))
-(expect-failure "Case 3: step 1" "Nested defpacts were not all advanced in prior step for pact" (continue-pact 1))
+(expect-failure "Case 3: step 1" "Nested defpact not advanced 183L52xV0ivDcgsehtAOwvlOXTeLYmG00yIySUiXBAY" (continue-pact 1))
 (commit-tx)
 
 ; Case 4 test
 (begin-tx)
-(expect-failure "Case 4: step 0" "applyNestedPact: invalid nested defpact length, must be equal to length of parent" (parent.bad2))
+(expect-failure "Case 4: step 0" "Nested defpact execution failed, parameter mismatch: PactId: DldRwCblQ7Loqy6wYJnaodHl30d3j3eH-qtFzfEv46g step count: 2 Parent step count: 3" (parent.bad2))
 (commit-tx)
 
 ; Case 5 test
 (begin-tx)
-(expect-failure "Case 5: step 0" "applyNestedPact: invalid nested defpact length, must be equal to length of parent" (parent.bad3))
+(expect-failure "Case 5: step 0" "Nested defpact execution failed, parameter mismatch: PactId: 5I6koMWVHo7UQhUSpFjWBqxHKW5erkEzT9CuAmjbZ6U step count: 2 Parent step count: 3" (parent.bad3))
 (commit-tx)
 
 ; Case 6 test
 (begin-tx)
 (expect "Case 6: step 0" ["hello1-nested" "hello1-nested" "hello1"] (parent.bad4))
-(expect-failure "Case 6: step 1" "Attempting to continue a pact that was not nested" (continue-pact 1))
+(expect-failure "Case 6: step 1" "Requested nested defpact double execution: defpact id: z7mCQuEV5PzQ0A0jfOD9UV0W7InCocHSoJqno8xZNWw" (continue-pact 1))
 (commit-tx)
 
 ; Nested yields
