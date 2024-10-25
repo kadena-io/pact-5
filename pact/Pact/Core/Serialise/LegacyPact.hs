@@ -672,22 +672,17 @@ fromLegacyTerm mh = \case
         -- This eta expansion is necessary to
         _ | b `elem` higherOrder1Arg
           , Legacy.TApp (Legacy.App mapOperator mapOperands): xs <- args -> do
-          d <- view teDepth
-          let injectedArg = (Var (Name "iArg" (NBound 0), d + 1) () :: CorePreNormalizedTerm)
-          let containingLam e = Lam (pure (Arg "lArg" Nothing ())) e ()
-          (mapOperator', mapOperands') <- local (over teDepth (+ 1)) $ (,) <$> fromLegacyTerm mh mapOperator <*> traverse (fromLegacyTerm mh) mapOperands
-          let body = containingLam (desugarApp mapOperator' (mapOperands' ++ [injectedArg]) ())
+          (mapOperator', mapOperands') <- local (over teDepth (+ 1)) $
+            (,) <$> fromLegacyTerm mh mapOperator <*> traverse (fromLegacyTerm mh) mapOperands
+          body <- mkOneArgLam $ \x -> (desugarApp mapOperator' (mapOperands' ++ [x]) ())
           xs' <- traverse (fromLegacyTerm mh) xs
           pure (App fn' (body:xs') ())
 
         _ | b `elem` higherOrder2Arg
           , (Legacy.TApp (Legacy.App mapOperator mapOperands)): xs <- args -> do
-          d <- view teDepth
-          let injectedArg1 = (Var (Name "iArg1" (NBound 1), d + 2) () :: CorePreNormalizedTerm)
-              injectedArg2 = (Var (Name "iArg2" (NBound 0), d + 2) () :: CorePreNormalizedTerm)
-          let containingLam e = Lam (Arg "iArg1" Nothing () :| [Arg "iArg2" Nothing ()]) e ()
-          (mapOperator', mapOperands') <- local (over teDepth (+ 2)) $ (,) <$> fromLegacyTerm mh mapOperator <*> traverse (fromLegacyTerm mh) mapOperands
-          let body = containingLam (desugarApp mapOperator' (mapOperands' ++ [injectedArg1, injectedArg2]) ())
+          (mapOperator', mapOperands') <- local (over teDepth (+ 2)) $
+            (,) <$> fromLegacyTerm mh mapOperator <*> traverse (fromLegacyTerm mh) mapOperands
+          body <- mkTwoArgLam $ \x y -> (desugarApp mapOperator' (mapOperands' ++ [x, y]) ())
           xs' <- traverse (fromLegacyTerm mh) xs
           pure (App fn' (body:xs') ())
 
