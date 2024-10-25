@@ -540,14 +540,28 @@ fromLegacyPersistDirect = \case
   Legacy.PDValue v ->
     liftEither $ (`InlineValue` ()) <$> fromLegacyPactValue v
   Legacy.PDNative (Legacy.NativeDefName n)
-    | n == "enforce" -> pure (BuiltinForm (CEnforce unitValue unitValue) ())
-    | n == "enforce-one" -> pure (BuiltinForm (CEnforceOne unitValue unitValue) ())
-    | n == "if" -> pure (BuiltinForm (CIf unitValue unitValue unitValue) ())
-    | n == "and" -> pure (BuiltinForm (CAnd unitValue unitValue) ())
-    | n == "or" -> pure (BuiltinForm (COr unitValue unitValue) ())
-    | n == "with-capability" -> pure (BuiltinForm (CWithCapability unitValue unitValue) ())
-    | n == "create-user-guard" -> pure (BuiltinForm (CCreateUserGuard unitValue) ())
-    | n == "try" -> pure (BuiltinForm (CTry unitValue unitValue) ())
+    | n == "enforce" ->
+      mkTwoArgLam $ \x y -> BuiltinForm (CEnforce x y) ()
+      -- pure (BuiltinForm (CEnforce unitValue unitValue) ())
+    | n == "enforce-one" ->
+      mkTwoArgLam $ \x y -> BuiltinForm (CEnforceOne x y) ()
+      -- pure (BuiltinForm (CEnforceOne unitValue unitValue) ())
+    | n == "if" ->
+      mkThreeArgLam $ \x y z -> BuiltinForm (CIf x y z) ()
+      -- pure (BuiltinForm (CIf unitValue unitValue unitValue) ())
+    | n == "and" ->
+      mkTwoArgLam $ \x y -> BuiltinForm (CAnd x y) ()
+      -- pure (BuiltinForm (CAnd unitValue unitValue) ())
+    | n == "or" ->
+      mkTwoArgLam $ \x y -> BuiltinForm (COr x y) ()
+      -- pure (BuiltinForm (COr unitValue unitValue) ())
+    | n == "with-capability" ->
+      pure (BuiltinForm (CWithCapability unitValue unitValue) ())
+    | n == "create-user-guard" ->
+      mkOneArgLam $ \x -> BuiltinForm (CCreateUserGuard x) ()
+    | n == "try" ->
+      mkTwoArgLam $ \x y -> BuiltinForm (CTry x y) ()
+      -- pure (BuiltinForm (CTry unitValue unitValue) ())
     | n == "CHARSET_ASCII" -> pure (Constant (LInteger 0) ()) -- see Desugar.hs
     | n == "CHARSET_LATIN1" -> pure (Constant (LInteger 1) ())
     | n == "constantly" -> do
@@ -667,7 +681,7 @@ fromLegacyTerm mh = \case
           pure (App fn' (body:xs') ())
 
         _ | b `elem` higherOrder2Arg
-          , Legacy.TApp (Legacy.App mapOperator mapOperands): xs <- args -> do
+          , (Legacy.TApp (Legacy.App mapOperator mapOperands)): xs <- args -> do
           d <- view teDepth
           let injectedArg1 = (Var (Name "iArg1" (NBound 1), d + 2) () :: CorePreNormalizedTerm)
               injectedArg2 = (Var (Name "iArg2" (NBound 0), d + 2) () :: CorePreNormalizedTerm)
@@ -681,40 +695,59 @@ fromLegacyTerm mh = \case
           args' <- traverse (fromLegacyTerm mh) args
           pure (desugarAppArity () b args')
 
-      BuiltinForm CEnforce{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [t1,t2] -> pure (BuiltinForm (CEnforce t1 t2) ())
-        [t1] -> mkOneArgLam $ \x -> BuiltinForm (CEnforce t1 x) ()
-        args' -> do
-          lam <- mkTwoArgLam $ \x y -> BuiltinForm (CEnforce x y) ()
-          pure $ App lam args' ()
+      fnlam@(Lam _lamArgs (BuiltinForm bform _) _) -> case bform of
+        CEnforce{} -> traverse (fromLegacyTerm mh) args >>= \case
+          [t1,t2] -> pure (BuiltinForm (CEnforce t1 t2) ())
+          [t1] -> mkOneArgLam $ \x -> BuiltinForm (CEnforce t1 x) ()
+          args' -> do
+            lam <- mkTwoArgLam $ \x y -> BuiltinForm (CEnforce x y) ()
+            pure $ App lam args' ()
 
-      BuiltinForm CEnforceOne{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [t1, t2] -> pure (BuiltinForm (CEnforceOne t1 t2) ())
-        args' -> do
-          lam <- mkTwoArgLam $ \x y -> BuiltinForm (CEnforceOne x y) ()
-          pure $ App lam args' ()
+        CEnforceOne{} -> traverse (fromLegacyTerm mh) args >>= \case
+          [t1, t2] -> pure (BuiltinForm (CEnforceOne t1 t2) ())
+          args' -> do
+            lam <- mkTwoArgLam $ \x y -> BuiltinForm (CEnforceOne x y) ()
+            pure $ App lam args' ()
 
-      BuiltinForm CIf{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [cond, b1, b2] -> pure (BuiltinForm (CIf cond b1 b2) ())
-        [cond, b1] -> mkOneArgLam $ \x -> BuiltinForm (CIf cond b1 x) ()
-        [cond] -> mkTwoArgLam $ \x y -> BuiltinForm (CIf cond x y) ()
-        args' -> do
-          lam <- mkThreeArgLam $ \x y z -> BuiltinForm (CIf x y z) ()
-          pure $ App lam args' ()
+        CIf{}  -> traverse (fromLegacyTerm mh) args >>= \case
+          [cond, b1, b2] -> pure (BuiltinForm (CIf cond b1 b2) ())
+          [cond, b1] -> mkOneArgLam $ \x -> BuiltinForm (CIf cond b1 x) ()
+          [cond] -> mkTwoArgLam $ \x y -> BuiltinForm (CIf cond x y) ()
+          args' -> do
+            lam <- mkThreeArgLam $ \x y z -> BuiltinForm (CIf x y z) ()
+            pure $ App lam args' ()
 
-      BuiltinForm CAnd{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [b1, b2] -> pure (BuiltinForm (CAnd b1 b2) ())
-        [b1] -> mkOneArgLam $ \x -> BuiltinForm (CAnd b1 x) ()
-        args' -> do
-          lam <- mkTwoArgLam $ \x y -> BuiltinForm (CAnd x y) ()
-          pure $ App lam args' ()
+        CAnd{} -> traverse (fromLegacyTerm mh) args >>= \case
+          [b1, b2] -> pure (BuiltinForm (CAnd b1 b2) ())
+          [b1] -> mkOneArgLam $ \x -> BuiltinForm (CAnd b1 x) ()
+          args' -> do
+            lam <- mkTwoArgLam $ \x y -> BuiltinForm (CAnd x y) ()
+            pure $ App lam args' ()
 
-      BuiltinForm COr{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [b1, b2] -> pure (BuiltinForm (COr b1 b2) ())
-        [b1] -> mkOneArgLam $ \x -> BuiltinForm (COr b1 x) ()
-        args' -> do
-          lam <- mkTwoArgLam $ \x y -> BuiltinForm (COr x y) ()
-          pure $ App lam args' ()
+        COr{} -> traverse (fromLegacyTerm mh) args >>= \case
+          [b1, b2] -> pure (BuiltinForm (COr b1 b2) ())
+          [b1] -> mkOneArgLam $ \x -> BuiltinForm (COr b1 x) ()
+          args' -> do
+            lam <- mkTwoArgLam $ \x y -> BuiltinForm (COr x y) ()
+            pure $ App lam args' ()
+
+
+        CCreateUserGuard{}  ->
+          traverse (fromLegacyTerm mh) args >>= \case
+          [x] ->
+            pure (BuiltinForm (CCreateUserGuard x) ())
+          args' -> do
+            lam <- mkOneArgLam $ \x -> BuiltinForm (CCreateUserGuard x) ()
+            pure $ App lam args' ()
+
+        CTry{} -> traverse (fromLegacyTerm mh) args >>= \case
+          [t1, t2] -> pure (BuiltinForm (CTry t1 t2) ())
+          args' -> do
+            lam <- mkTwoArgLam $ \x y -> BuiltinForm (CTry x y) ()
+            pure $ App lam args' ()
+        _ -> do
+          args' <- traverse (fromLegacyTerm mh) args
+          pure (App fnlam args' ())
 
       BuiltinForm CWithCapability{} _ -> traverse (fromLegacyTerm mh) args >>= \case
         [t1, ListLit t2 _] -> case reverse t2 of
@@ -723,20 +756,6 @@ fromLegacyTerm mh = \case
             let body' = foldl' (\r l -> Sequence l r ()) x xs
             pure (BuiltinForm (CWithCapability t1 body') ())
         _ -> throwError "invariant failure: with-capability"
-
-      BuiltinForm CCreateUserGuard{} _ ->
-        traverse (fromLegacyTerm mh) args >>= \case
-        [x] ->
-          pure (BuiltinForm (CCreateUserGuard x) ())
-        args' -> do
-          lam <- mkOneArgLam $ \x -> BuiltinForm (CCreateUserGuard x) ()
-          pure $ App lam args' ()
-
-      BuiltinForm CTry{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [t1, t2] -> pure (BuiltinForm (CTry t1 t2) ())
-        args' -> do
-          lam <- mkTwoArgLam $ \x y -> BuiltinForm (CTry x y) ()
-          pure $ App lam args' ()
 
       _ -> do
         args' <- traverse (fromLegacyTerm mh) args
