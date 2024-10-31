@@ -63,7 +63,6 @@ runRepl = do
       putStrLn $ T.unpack $ replError (SourceCode "(interactive)" "") err
     _ -> pure ()
   where
-
   replSettings = Settings (replCompletion replCoreBuiltinNames) (Just ".pc-history") True
   displayOutput :: (Pretty a, MonadIO m) => a -> InputT m ()
   displayOutput = outputStrLn . show . pretty

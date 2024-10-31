@@ -752,12 +752,12 @@
 
 (expect-failure
  "emit-event: must be in module"
- "Unable to resolve current calling module"
+ "Emitted event does not match module: events"
  (emit-event (EV)))
 
 (expect-failure
  "emit-event: non-event"
- "must be managed or event defcap"
+ "Invalid event capability events.NON.{Pl17Zu2iMddv942W_ChGFDyPWN4zFVjtVvI8HP4_0AY}"
  (emit-non-event))
 
 (expect
@@ -993,7 +993,7 @@
    )
 
    (defun emit-a(a:integer) (emit-event (A_EVENT a a))))
-   
+
 
 (use B)
 (call-a)

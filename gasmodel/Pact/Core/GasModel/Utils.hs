@@ -24,7 +24,6 @@ import Pact.Core.Literal
 import Pact.Core.Type
 import Pact.Core.Capabilities
 import Pact.Core.IR.Desugar
-import Pact.Core.IR.Eval.Runtime
 import Pact.Core.IR.Eval.CEK.CoreBuiltin
 import Pact.Core.PactValue
 import Pact.Core.IR.Term

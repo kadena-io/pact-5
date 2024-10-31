@@ -49,6 +49,7 @@ import Pact.Core.PactValue
 import Pact.Time
 import Data.Maybe (fromMaybe)
 import Pact.Core.Namespace
+import Pact.Core.Type
 
 -- | JSON serialization for 'readInteger' and public meta info;
 -- accepts both a String version (parsed as a Pact integer),
@@ -396,6 +397,12 @@ instance J.Encode (StableEncoding v) => J.Encode (StableEncoding (Map Field v)) 
     c = coerce
   {-# INLINABLE build #-}
 
+instance JD.FromJSON (StableEncoding v) => JD.FromJSON (StableEncoding (Map Field v)) where
+  parseJSON = fmap (StableEncoding . c) . JD.parseJSON
+    where
+    c :: Map Text (StableEncoding v) -> Map Field v
+    c = unsafeCoerce
+
 -- | Stable encoding of `KSPredicate FullyQualifiedName`
 instance J.Encode (StableEncoding KSPredicate) where
   build (StableEncoding ksp) = case ksp of
@@ -486,6 +493,103 @@ instance J.Encode (StableEncoding UTCTime) where
   build (StableEncoding utc) = encoder timeCodec utc
   {-# INLINABLE build #-}
 
+instance J.Encode (StableEncoding PrimType) where
+  build (StableEncoding pt) = J.build (renderPrimType pt)
+  {-# INLINABLE build #-}
+
+instance JD.FromJSON (StableEncoding PrimType) where
+  parseJSON = JD.withText "PrimType" $ \t -> fmap StableEncoding $ case t of
+    "integer" -> pure PrimInt
+    "decimal" -> pure PrimDecimal
+    "string" -> pure PrimString
+    "bool" -> pure PrimBool
+    "time" -> pure PrimTime
+    "guard" -> pure PrimGuard
+    "unit" -> pure PrimUnit
+    _ -> fail "could not parse prim type"
+
+instance J.Encode (StableEncoding Type) where
+  build (StableEncoding t) = case t of
+    TyPrim p -> J.build (StableEncoding p)
+    TyAnyList -> J.build ("list" :: T.Text)
+    TyAnyObject -> J.build ("object" :: T.Text)
+    TyAny -> J.build ("*" :: T.Text)
+    TyCapToken -> J.build ("cap-token" :: T.Text)
+    TyList ty -> J.object [ "tylist" J..= StableEncoding ty ]
+    TyObject ty -> J.object [ "tyobject" J..= StableEncoding ty ]
+    TyModRef mr -> J.object [ "tymodref" J..= J.Array (StableEncoding <$> S.toList mr) ]
+    TyTable tn -> J.object [ "tytable" J..= StableEncoding tn ]
+
+instance JD.FromJSON (StableEncoding Type) where
+  parseJSON v =
+    parsePrim v
+    <|> parseSimple v
+    <|> parseTyList v
+    <|> parseTyObject v
+    <|> parseTyModRef v
+    <|> parseTyTable v
+    where
+    parsePrim = fmap (StableEncoding . TyPrim . _stableEncoding) . JD.parseJSON
+    parseSimple = JD.withText "Type" $ \t -> case t of
+      "list" -> pure $ StableEncoding TyAnyList
+      "object" -> pure $ StableEncoding TyAnyObject
+      "*" -> pure $ StableEncoding TyAny
+      "cap-token" -> pure $ StableEncoding TyCapToken
+      _ -> fail "could not parse simple type"
+    parseTyList = JD.withObject "TyList" $ \o -> do
+      ty <- o JD..: "tylist"
+      pure $ StableEncoding (TyList (_stableEncoding ty))
+    parseTyObject = JD.withObject "TyObject" $ \o -> do
+      ty <- o JD..: "tyobject"
+      pure $ StableEncoding (TyObject (_stableEncoding ty))
+    parseTyTable = JD.withObject "TyTable" $ \o -> do
+      tn <- o JD..: "tytable"
+      pure $ StableEncoding (TyTable (_stableEncoding tn))
+    parseTyModRef = JD.withObject "TyModRef" $ \o -> do
+      mr <- o JD..: "tymodref"
+      pure $ StableEncoding (TyModRef (S.fromList (fmap _stableEncoding mr)))
+
+instance J.Encode (StableEncoding Schema) where
+  build (StableEncoding (Schema qn fieldMap)) = J.object
+    [ "sc_name" J..= StableEncoding qn
+    , "sc_fields" J..= J.build (StableEncoding fieldMap)
+    ]
+  {-# INLINABLE build #-}
+
+instance JD.FromJSON (StableEncoding Schema) where
+  parseJSON = JD.withObject "Schema" $ \o -> do
+    qn <- o JD..: "sc_name"
+    fieldMap <- o JD..: "sc_fields"
+    pure $ StableEncoding (Schema (_stableEncoding qn) (_stableEncoding fieldMap))
+
+
+instance J.Encode (StableEncoding TableName) where
+  build (StableEncoding tn) =
+    J.build $ jsonSafeRenderTableName tn
+  {-# INLINABLE build #-}
+
+instance JD.FromJSON (StableEncoding TableName) where
+  parseJSON = JD.withText "TableName" $ \t -> case parseJsonSafeTableName t of
+    Just tn -> pure $ StableEncoding tn
+    _ -> fail "could not parse table name"
+
+instance J.Encode (StableEncoding TableValue) where
+  build (StableEncoding (TableValue tn mh sc)) = J.object
+    -- The colon here prevents this from being a valid field name
+    -- for a schema.
+    [ ":tableName" J..= StableEncoding tn
+    , ":moduleHash" J..= StableEncoding mh
+    , ":schema" J..= StableEncoding sc
+    ]
+  {-# INLINABLE build #-}
+
+instance JD.FromJSON (StableEncoding TableValue) where
+  parseJSON = JD.withObject "TableValue" $ \o -> do
+    tn <- o JD..: ":tableName"
+    mh <- o JD..: ":moduleHash"
+    sc <- o JD..: ":schema"
+    pure $ StableEncoding (TableValue (_stableEncoding tn) (_stableEncoding mh) (_stableEncoding sc))
+
 -- | Stable encoding of `PactValue`
 instance J.Encode (StableEncoding PactValue) where
   build (StableEncoding pv) = case pv of
@@ -496,6 +600,7 @@ instance J.Encode (StableEncoding PactValue) where
     PModRef mr -> J.build (StableEncoding mr)
     PCapToken ct -> J.build (StableEncoding ct)
     PTime pt -> J.build (StableEncoding pt)
+    PTable t -> J.build (StableEncoding t)
   {-# INLINABLE build #-}
 
 instance JD.FromJSON (StableEncoding PactValue) where
@@ -506,6 +611,7 @@ instance JD.FromJSON (StableEncoding PactValue) where
     (PModRef . _stableEncoding <$> JD.parseJSON v) <|>
     (PTime <$> decoder timeCodec v) <|>
     (PCapToken . _stableEncoding <$> JD.parseJSON v) <|>
+    (PTable . _stableEncoding <$> JD.parseJSON v) <|>
     (PObject . fmap _stableEncoding <$> JD.parseJSON v)
   {-# INLINABLE parseJSON #-}
 
@@ -698,6 +804,7 @@ instance J.Encode (StableEncoding RowDataValue) where
     PModRef mr -> buildTagged "m" $ J.build (StableEncoding mr)
     PCapToken ct -> buildTagged "ct" $ J.build (StableEncoding (RowDataValue <$> ct))
     PObject o -> buildTagged "o" $ J.build (StableEncoding (RowDataValue <$> o))
+    PTable t -> buildTagged "tv" $ J.build (StableEncoding t)
     where
     buildTagged :: Text -> J.Builder -> J.Builder
     buildTagged tag o = J.object
@@ -722,6 +829,7 @@ instance JD.FromJSON (StableEncoding RowDataValue) where
           "o" -> StableEncoding . RowDataValue . PObject . fmap (_unRowDataValue . _stableEncoding) <$> JD.parseJSON val
           "g" -> StableEncoding . RowDataValue . PGuard . fmap (_unRowDataValue) . _stableEncoding <$> JD.parseJSON val
           "ct" -> StableEncoding . RowDataValue . PCapToken . fmap (_unRowDataValue) . _stableEncoding <$> JD.parseJSON val
+          "tv" -> StableEncoding . RowDataValue . PTable . _stableEncoding <$> JD.parseJSON val
           "m" -> StableEncoding . RowDataValue . PModRef <$> parseMR val
           _ -> fail "tagged RowData"
       parseMR = JD.withObject "tagged ModRef" $ \o -> ModRef

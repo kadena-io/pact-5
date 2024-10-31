@@ -55,7 +55,6 @@ import qualified Pact.Time as PactTime
 
 
 import Pact.Core.IR.Eval.Runtime.Utils
-import Pact.Core.IR.Eval.Runtime.Types
 import Pact.Core.IR.Term
 import Pact.Core.Names
 import Pact.Core.Environment
@@ -797,7 +796,7 @@ coreEnforceGuard info b env = \case
   [VString s] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
     case parseAnyKeysetName s of
-      Left {} -> throwNativeExecutionError info b "incorrect keyset name format"
+      Left {} -> throwExecutionError info (InvalidKeysetNameFormat s)
       Right ksn ->
         VBool <$> isKeysetNameInSigs info env ksn
   args -> argsError info b args
@@ -807,7 +806,7 @@ keysetRefGuard info b env = \case
   [VString g] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length g
     case parseAnyKeysetName g of
-      Left {} -> throwNativeExecutionError info b "incorrect keyset name format"
+      Left {} -> throwExecutionError info (InvalidKeysetNameFormat g)
       Right ksn -> do
         let pdb = view cePactDb env
         liftGasM info (_pdbRead pdb DKeySets ksn) >>= \case
@@ -821,7 +820,6 @@ coreTypeOf info b _env = \case
     VPactValue pv ->
       return $ VString $ renderType $ synthesizePvType pv
     VClosure _ -> return $ VString "<<closure>>"
-    VTable tv -> return $ VString (renderType (TyTable (_tvSchema tv)))
   args -> argsError info b args
 
 coreDec :: (IsBuiltin b) => NativeFunction e b i
@@ -1596,7 +1594,7 @@ dbDescribeKeySet info b env = \case
           Nothing ->
             throwExecutionError info (NoSuchKeySet ksn)
       Left{} ->
-        throwNativeExecutionError info b  "incorrect keyset name format"
+        throwExecutionError info (InvalidKeysetNameFormat s)
   args -> argsError info b args
 
 coreCompose :: (IsBuiltin b) => NativeFunction e b i
