@@ -258,6 +258,7 @@ builtinFormGen b i = Gen.choice
   , CWithCapability <$> termGen b i <*> termGen b i
   , CTry <$> termGen b i <*> termGen b i
   , CCreateUserGuard <$> termGen b i
+  , CRunReadOnly <$> termGen b i
   ]
 
 termGen :: Gen b -> Gen i -> Gen (Term Name Type b i)

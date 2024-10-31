@@ -45,7 +45,6 @@ module Pact.Core.IR.Eval.Direct.Evaluator
 import Control.Lens hiding (op, from, to, parts)
 import Control.Monad
 import Control.Monad.Except
-import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Text(Text)
 import Data.Foldable
@@ -278,6 +277,9 @@ evaluate env = \case
       else do
         msg <- enforceString info =<< evaluate env str
         throwUserRecoverableError info (UserEnforceError msg)
+    CRunReadOnly e -> do
+      let env' = readOnlyEnv env
+      evaluate env' e
     CWithCapability cap body -> do
       enforceNotWithinDefcap info env "with-capability"
       rawCap <- enforceCapToken info =<< evaluate env cap
