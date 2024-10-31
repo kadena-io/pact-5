@@ -1,6 +1,6 @@
 ## fold-db
 
-Use `fold-db` to select rows from a specified `table` using a predicate `query` with both a key and avalue, and then accumulate the results of the query using a `consumer` function. 
+Use `fold-db` to select rows from a specified `table` using a predicate `query` with both a key and a value, and then accumulate the results of the query using a `consumer` function. 
 The output is sorted by the ordering of keys.
 
 ### Basic syntax
@@ -40,6 +40,6 @@ The following example demonstrates how to use the `fold-db` function:
 
 In this example:
 - `(qry (lambda (k obj) true))` is a predicate that selects all rows.
-- `(f (lambda (x) [(at 'firstName x), (at 'b x)]))` is a consumer function that selects the 'firstName' and 'b' fields from each row.
+- `(f (lambda (x) [(at 'firstName x), (at 'b x)]))` is a consumer function that selects the "firstName" and "b" fields from each row.
 
 The `fold-db` function is then used to select rows from the `people` table using the predicate `qry` and accumulate the results using the consumer function `f`. The result is a list of accumulated results based on the selected rows and the specified consumer function. The `fold-db` function is useful for iterating over rows in a table and performing operations in Pact contracts.

@@ -1,13 +1,13 @@
 ## txlog
 
-Use `txlog` to return all updates made to a specified table in a particular transaction identified by its transaction identifier.
+Use `txlog` to return all updates made to a specified `table` in a particular transaction identified by its transaction identifier.
 
 ### Basic syntax
 
 To retrieve all updates made to the specified `table` in a specific transaction identifier, use the following syntax:
 
 ```pact
-(txlog TABLE TXID)
+(txlog table txid)
 ```
 
 ### Arguments
@@ -17,7 +17,7 @@ Use the following arguments to specify the table and transaction identifier for 
 | Argument | Type | Description |
 | --- | --- | --- |
 | `table` | `table: <{row}>` | Specifies the table from which to retrieve updates. |
-| `txid` | integer | Specifies the transaction ID (TXID) for which updates are to be retrieved. |
+| `txid` | integer | Specifies the transaction identifier (TXID) for which updates are to be retrieved. |
 
 ### Return value
 
