@@ -805,7 +805,7 @@ coreEnforceGuard info b cont handler env = \case
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
     case parseAnyKeysetName s of
       Left {} ->
-        throwNativeExecutionError info b "incorrect keyset name format"
+        throwExecutionError info (InvalidKeysetNameFormat s)
       Right ksn -> isKeysetNameInSigs info cont handler env ksn
   args -> argsError info b args
 
@@ -814,7 +814,7 @@ keysetRefGuard info b cont handler env = \case
   [VString g] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length g
     case parseAnyKeysetName g of
-      Left {} -> throwNativeExecutionError info b "incorrect keyset name format"
+      Left {} -> throwExecutionError info (InvalidKeysetNameFormat g)
       Right ksn -> do
         let pdb = view cePactDb env
         liftGasM info (_pdbRead pdb DKeySets ksn) >>= \case
@@ -829,7 +829,6 @@ coreTypeOf info b cont handler _env = \case
     VPactValue pv ->
       returnCEKValue cont handler $ VString $ renderType $ synthesizePvType pv
     VClosure _ -> returnCEKValue cont handler $ VString "<<closure>>"
-    VTable tv -> returnCEKValue cont handler $ VString (renderType (TyTable (_tvSchema tv)))
   args -> argsError info b args
 
 coreDec :: (IsBuiltin b) => NativeFunction e b i
@@ -1603,7 +1602,7 @@ dbDescribeKeySet info b cont handler env = \case
           Nothing ->
             throwExecutionError info (NoSuchKeySet ksn)
       Left{} ->
-        throwNativeExecutionError info b  "incorrect keyset name format"
+        throwExecutionError info (InvalidKeysetNameFormat s)
   args -> argsError info b args
 
 coreCompose :: (IsBuiltin b) => NativeFunction e b i

@@ -1,3 +1,5 @@
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE PatternSynonyms #-}
 module Pact.Core.Test.LexerParserTests where
 
 import Test.Tasty
@@ -12,10 +14,8 @@ import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import qualified Data.Text as T
 
-import Pact.Core.Gen
-  (moduleHashGen, parsedTyNameGen, parsedNameGen
-  , moduleNameGen, identGen
-  , decimalGen)
+import Pact.Core.Gen hiding
+ (typeGen, argGen, defunGen, importGen, defGen, ifDefGen, stepGen)
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.LexUtils as Lisp
 import Pact.Core.Syntax.ParseTree as Lisp
@@ -25,6 +25,8 @@ import Pact.Core.Literal
 import Pact.Core.Pretty
 import Pact.Core.Hash
 import Pact.Core.Info
+import Data.Typeable
+import Pact.Core.Names
 
 showPretty :: Pretty a => a -> T.Text
 showPretty = T.pack . show . pretty
@@ -382,6 +384,38 @@ parserRoundtrip = property $ do
   res <- evalEither $ Lisp.parseProgram =<< Lisp.lexer (renderCompactText ptok)
   [ptok] === (void <$> res)
 
+data RenderTest =
+  forall a. (Eq a, Show a, Typeable a) => MkRenderTest
+  { _renderGen :: Gen a
+  , _renderText :: a -> Text
+  , _renderParse :: Text -> Maybe a
+  , _renderProxy :: Proxy a
+  }
+
+renderTest :: (Eq a, Typeable a, Show a) => Gen a -> (a -> Text) -> (Text -> Maybe a) -> RenderTest
+renderTest gen render parse = MkRenderTest gen render parse Proxy
+
+parseExprMaybe :: Text -> Maybe (Lisp.Expr ())
+parseExprMaybe = fmap void . either (const Nothing) Just . (Lisp.lexer >=> Lisp.parseExpr)
+
+runRenderTest :: RenderTest -> TestTree
+runRenderTest (MkRenderTest gen render parse prx) =
+  testProperty ("Render/parse test for: " <> show (typeRep prx)) $ withTests (1000 :: TestLimit) $
+    property $ do
+    v <- forAll gen
+    parse (render v) === Just v
+
+renderTests :: [RenderTest]
+renderTests =
+    -- Render test litmus using expr
+  [ renderTest exprGen renderCompactText parseExprMaybe
+  , renderTest fullyQualifiedNameGen renderFullyQualName parseFullyQualifiedName
+  , renderTest moduleNameGen renderModuleName parseModuleName
+  , renderTest tableNameGen jsonSafeRenderTableName parseJsonSafeTableName
+  , renderTest parsedTyNameGen renderParsedTyName parseParsedTyName
+  , renderTest hashedModuleNameGen renderHashedModuleName parseHashedModuleName
+  ]
+
 -- | Here we will test that slicing from generated source
 --   will produce accurate source locations
 --
@@ -400,7 +434,7 @@ sliceRoundtrip = property $ do
 tests :: TestTree
 tests = testGroup "Lexer and Parser Tests"
   [ testProperty "lexer roundtrip" lexerRoundtrip
-  , testProperty "parser roundtrips for exprs" $ withTests (1000 :: TestLimit) exprParserRoundtrip
   , testProperty "parser roundtrips for all toplevels" $ withTests (1000 :: TestLimit) parserRoundtrip
   , testProperty "source slices correspond with their source code locations" $ withTests (1000 :: TestLimit) sliceRoundtrip
+  , testGroup "Render/parse tests" $ runRenderTest <$> renderTests
   ]

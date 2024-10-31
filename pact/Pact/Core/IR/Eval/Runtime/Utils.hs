@@ -259,6 +259,36 @@ gassedRuntimeTypecheck i ty = \case
     TyAnyObject -> pure True
     TyObject sc -> gassedTypecheckObj i o sc
     _ -> pure False
+  PTable tv -> case ty of
+    TyTable sc ->
+      gassedTypecheckSchemas i (_tvSchema tv) sc
+    _ -> pure False
+
+gassedTypecheckSchemas :: forall e b i. i -> Schema -> Schema -> EvalM e b i Bool
+gassedTypecheckSchemas i (Schema _ fs) (Schema _ fs')
+  | M.size fs == M.size fs' = do
+    chargeConstantScalarMulFromConfig _gcMachineTickCost (fromIntegral (M.size fs)) i
+    tcFields (M.toList fs) (M.toList fs')
+  | otherwise = pure False
+  where
+  tcFields ((f, t):xs) ((f', t'):ys)
+    | f == f' = do
+      c <- gassedTypeEq t t'
+      if c then tcFields xs ys
+      else pure c
+    | otherwise = pure False
+  tcFields _ _ = pure True
+  gassedTypeEq :: Type -> Type -> EvalM e b i Bool
+  gassedTypeEq (TyPrim t) (TyPrim t') = pure $ t == t'
+  gassedTypeEq TyCapToken TyCapToken = pure True
+  gassedTypeEq (TyList t) (TyList t') = gassedTypeEq t t'
+  gassedTypeEq (TyObject sc) (TyObject sc') = gassedTypecheckSchemas i sc sc'
+  gassedTypeEq (TyTable sc) (TyTable sc') = gassedTypecheckSchemas i sc sc'
+  gassedTypeEq (TyModRef mrs) (TyModRef mrs') = pure $ mrs == mrs'
+  gassedTypeEq TyAny TyAny = pure True
+  gassedTypeEq TyAnyList TyAnyList = pure True
+  gassedTypeEq TyAnyObject TyAnyObject = pure True
+  gassedTypeEq _ _ = pure False
 
 -- | Typecheck an object against a schema, charge gas
 gassedTypecheckObj :: i -> M.Map Field PactValue -> Schema -> EvalM e b i Bool
@@ -292,6 +322,7 @@ pvToArgTypeError = \case
   PGuard _ -> ATEPrim PrimGuard
   PModRef _ -> ATEModRef
   PCapToken _ -> ATEClosure
+  PTable _ -> ATETable
 
 findCallingModule :: EvalM e b i (Maybe ModuleName)
 findCallingModule = do

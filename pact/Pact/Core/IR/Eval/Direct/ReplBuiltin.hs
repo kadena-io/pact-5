@@ -116,16 +116,13 @@ coreExpectFailure info b _env = \case
   [VString desc, VString toMatch, VClosure vclo] -> do
     es <- get
     tryError (applyLamUnsafe vclo []) >>= \case
-      Left (PEUserRecoverableError userErr _ _) -> do
+      Left userErr -> do
         put es
         let err = renderCompactText userErr
         if toMatch `T.isInfixOf` err
           then return $ VLiteral $ LString $ "Expect failure: Success: " <> desc
           else return $ VLiteral $ LString $
                "FAILURE: " <> desc <> ": expected error message '" <> toMatch <> "', got '" <> err <> "'"
-      Left _err -> do
-        put es
-        return $ VLiteral $ LString $ "Expect failure: Success: " <> desc
       Right v ->
         return $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result: " <> prettyShowValue v
   args -> argsError info b args

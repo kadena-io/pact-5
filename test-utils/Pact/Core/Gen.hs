@@ -125,6 +125,9 @@ parsedTyNameGen = Gen.choice
 hashGen :: Gen Hash
 hashGen = pactHash . encodeUtf8 <$> identGen
 
+hashedModuleNameGen :: Gen HashedModuleName
+hashedModuleNameGen = do
+  HashedModuleName <$> moduleNameGen <*> moduleHashGen
 
 -- | Generate a keyset, polymorphic over the custom
 -- predicate function `a`. This particular variant is
@@ -193,7 +196,7 @@ fieldGen = Field <$> identGen
 schemaGen :: Gen Schema
 schemaGen = do
   qual <- qualifiedNameGen
-  elems <- Gen.list (Range.linear 0 10) $ (,) <$> fieldGen <*> typeGen
+  elems <- Gen.list (Range.linear 1 10) $ (,) <$> fieldGen <*> typeGen
   pure (Schema qual (fromList elems))
 
 typeGen :: Gen Type
@@ -500,11 +503,24 @@ modRefGen =
     <$> moduleNameGen
     <*> (Set.fromList <$> Gen.list (Range.constant 0 5) moduleNameGen)
 
+tableNameGen :: Gen TableName
+tableNameGen = do
+  tname <- identGen
+  mname <- moduleNameGen
+  pure $ TableName tname mname
+
+tableValueGen :: Gen TableValue
+tableValueGen = do
+  tn <- tableNameGen
+  sc <- schemaGen
+  mh <- moduleHashGen
+  pure $ TableValue tn mh sc
 
 pactValueGen :: Gen PactValue
 pactValueGen = Gen.recursive Gen.choice
   [ PLiteral <$> literalGen
   , PTime <$> timeGen
+  , PTable <$> tableValueGen
   ]
   [ PList . Vec.fromList <$> Gen.list (Range.linear 1 5) pactValueGen
   , PObject <$> (Gen.map (Range.linear 1 5) ((,) <$> fieldGen <*> pactValueGen))

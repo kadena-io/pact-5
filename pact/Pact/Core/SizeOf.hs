@@ -366,6 +366,8 @@ makeSizeOf ''DefManagedMeta
 makeSizeOf ''DefCapMeta
 makeSizeOf ''Governance
 makeSizeOf ''ModRef
+makeSizeOf ''TableName
+makeSizeOf ''TableValue
 makeSizeOf ''PactValue
 makeSizeOf ''DefPactContinuation
 makeSizeOf ''Provenance

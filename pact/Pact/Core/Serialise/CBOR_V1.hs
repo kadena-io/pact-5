@@ -980,6 +980,24 @@ instance Serialise (SerialiseV1 name) => Serialise (SerialiseV1 (CapToken name P
     SerialiseV1 <$> (CapToken <$> decodeS <*> decodeS)
   {-# INLINE decode #-}
 
+instance Serialise (SerialiseV1 TableName) where
+  encode (SerialiseV1 (TableName tn mn)) =
+    encodeListLen 2 <> encode tn <> encodeS mn
+  {-# INLINE encode #-}
+  decode = do
+    safeDecodeListLen 2 "TableName"
+    SerialiseV1 <$> (TableName <$> decode <*> decodeS)
+  {-# INLINE decode #-}
+
+instance Serialise (SerialiseV1 TableValue) where
+  encode (SerialiseV1 (TableValue tn k v)) =
+    encodeListLen 3 <> encodeS tn <> encodeS k <> encodeS v
+  {-# INLINE encode #-}
+  decode = do
+    safeDecodeListLen 3 "TableValue"
+    SerialiseV1 <$> (TableValue <$> decodeS <*> decodeS <*> decodeS)
+  {-# INLINE decode #-}
+
 instance Serialise (SerialiseV1 PactValue) where
   encode (SerialiseV1 pv) =
     encodeListLen 2 <>
@@ -991,6 +1009,7 @@ instance Serialise (SerialiseV1 PactValue) where
       PModRef mr -> encodeWord 4 <> encodeS mr
       PCapToken ct -> encodeWord 5 <> encodeS ct
       PTime (UTCTime (NominalDiffTime pt)) -> encodeWord 6 <> encode pt
+      PTable t -> encodeWord 7 <> encodeS t
   {-# INLINE encode #-}
   decode = do
     safeDecodeListLen 2 "PactValue"
@@ -1002,6 +1021,7 @@ instance Serialise (SerialiseV1 PactValue) where
       4 -> PModRef <$> decodeS
       5 -> PCapToken <$> decodeS
       6 -> PTime . UTCTime . NominalDiffTime <$> decode
+      7 -> PTable <$> decodeS
       _ -> fail "unexpected decoding"
   {-# INLINE decode #-}
 

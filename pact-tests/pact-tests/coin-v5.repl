@@ -555,7 +555,7 @@
 ; using Pact40 error messages
 (expect-failure
   "create side of cross-chain transfer fails yield on wrong chain"
-  "yield provenance"
+  "Yield provenance does not match"
   (continue-pact 1 false (hash "burn-create")
     { "create-account": 'doug
     , "create-account-guard": (read-keyset 'doug)
@@ -573,7 +573,7 @@
 ; double spends are disallowed by construction
 (expect-failure
   "cross-chain transfer pact prevents double spends"
-  "pact completed"
+  "Requested defpact already completed:  defpact id:UT9N17TRzn2FmWlZdT_S7y-AC1A_yOugNbfRSz4VFPE"
   (continue-pact 1 false (hash "burn-create")))
 
 ; account guard rotation
@@ -779,7 +779,7 @@
 
 (expect-failure
  "account creation fails when no keyset corresponds with keyset ref"
- "no such keyset defined"
+ "Cannot find keyset in database: 'brandon"
  (create-allocation-account "brandon" (time "2020-10-31T00:00:00Z") "brandon" 200000.0))
 
 ; successful keyset refs require defined keyset
