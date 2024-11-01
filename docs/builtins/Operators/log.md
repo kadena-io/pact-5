@@ -1,6 +1,6 @@
 ## log
 
-Use `log` to compute the logarithm of the speified `value` with the specified `base`.
+Use `log` to compute the logarithm of the specified `value` with the specified `base`.
 
 ### Basic syntax
 
