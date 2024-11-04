@@ -9,6 +9,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 
 module Pact.Core.Repl.Utils
@@ -68,6 +69,7 @@ import Pact.Core.Environment
 import Pact.Core.Type
 import Pact.Core.Builtin
 import Pact.Core.PactValue
+import Pact.Core.Debug
 import qualified Pact.Core.IR.Term as Term
 
 import System.Console.Haskeline.Completion
@@ -246,3 +248,24 @@ replPrintLn' :: Text -> EvalM 'ReplRuntime b SpanInfo ()
 replPrintLn' p = do
   r <- getReplState
   _replOutputLine r p
+
+-- This orphan instance allows us to separate
+-- the repl declaration out, as ugly as it is
+instance DebugPrintable 'ReplRuntime (ReplBuiltin CoreBuiltin) where
+  debugPrint dp term =
+    ask >>= \case
+      ReplEnv _ -> do
+        case dp of
+          DPLexer -> whenReplFlagSet ReplDebugLexer $ liftIO $ do
+            putStrLn "----------- Lexer output -----------------"
+            print (pretty term)
+          DPParser -> whenReplFlagSet ReplDebugParser $
+              liftIO $ do
+                putStrLn "----------- Parser output ----------------"
+                print (pretty term)
+          DPDesugar -> whenReplFlagSet ReplDebugDesugar $ case term of
+            Term.TLTerm t ->
+              liftIO $ do
+                putStrLn "----------- Desugar output ---------------"
+                print (pretty t)
+            _ -> pure ()

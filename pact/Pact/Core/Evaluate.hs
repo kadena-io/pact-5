@@ -23,7 +23,6 @@ module Pact.Core.Evaluate
   , Eval
   , EvalBuiltinEnv
   , allModuleExports
-  , evalDirectInterpreter
   , evalInterpreter
   , EvalInput
   , EnableGasLogs(..)
@@ -64,8 +63,6 @@ import Pact.Core.Info
 import Pact.Core.Signer
 import Pact.Core.IR.Eval.CEK.CoreBuiltin
 import qualified Pact.Core.IR.Eval.CEK.Evaluator as CEK
-import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
-import qualified Pact.Core.IR.Eval.Direct.CoreBuiltin as Direct
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import qualified Pact.Core.Syntax.ParseTree as Lisp
@@ -117,17 +114,6 @@ evalInterpreter =
 
 cekEnv :: CEK.BuiltinEnv ExecRuntime CoreBuiltin Info
 cekEnv = coreBuiltinEnv @ExecRuntime
-
-evalDirectInterpreter :: Interpreter ExecRuntime CoreBuiltin Info
-evalDirectInterpreter =
-  Interpreter runGuard runTerm resume evalWithCap
-  where
-  runTerm purity term = Direct.eval purity env term
-  runGuard info g = Direct.interpretGuard info env g
-  resume info defPact = Direct.evalResumePact info env defPact
-  evalWithCap info purity ct term =
-    Direct.evalWithinCap info purity env ct term
-  env = Direct.coreBuiltinEnv
 
 -- | Transaction-payload related environment data.
 data MsgData = MsgData

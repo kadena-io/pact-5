@@ -1,22 +1,23 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FunctionalDependencies #-}
 
 module Pact.Core.Debug
  ( DebugFlag(..)
  , DebugPrint(..)
- , debugPrint
+ , DebugPrintable(..)
  ) where
 
-import Control.Monad.Reader
 import Pact.Core.Type
 import Pact.Core.Names
 import Pact.Core.Syntax.LexUtils(PosToken)
 import Pact.Core.Environment
 import qualified Pact.Core.Syntax.ParseTree as Syntax
 import qualified Pact.Core.IR.Term as Term
-import Pact.Core.Repl.Utils
-import Pact.Core.Pretty
+import Pact.Core.Builtin (CoreBuiltin)
 
 data DebugPrint b i term where
   DPLexer :: DebugPrint b i [PosToken]
@@ -29,23 +30,8 @@ data DebugFlag
   | DFDesugar
   deriving (Show, Eq, Ord, Enum, Bounded)
 
-debugPrint :: (Pretty b) => DebugPrint b i term -> term -> EvalM e b i ()
-debugPrint dp term =
-  ask >>= \case
-    ExecEnv _ -> pure ()
-    ReplEnv _ -> do
-      case dp of
-        DPLexer -> whenReplFlagSet ReplDebugLexer $ liftIO $ do
-          putStrLn "----------- Lexer output -----------------"
-          print (pretty term)
-        DPParser -> whenReplFlagSet ReplDebugParser $
-            liftIO $ do
-              putStrLn "----------- Parser output ----------------"
-              print (pretty term)
-        DPDesugar -> whenReplFlagSet ReplDebugDesugar $ case term of
-          Term.TLTerm t ->
-            liftIO $ do
-              putStrLn "----------- Desugar output ---------------"
-              print (pretty t)
-          _ -> pure ()
+class DebugPrintable (e :: RuntimeMode) b | e -> b where
+  debugPrint :: DebugPrint b i term -> term -> EvalM e b i ()
 
+instance DebugPrintable 'ExecRuntime CoreBuiltin where
+  debugPrint _ _ = pure ()
