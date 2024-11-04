@@ -73,24 +73,29 @@ import qualified Data.Text as T
 
 import qualified Data.ByteString as BS
 import qualified Pact.Core.Serialise.LegacyPact as Legacy
+import Pact.Core.Serialise
 import Pact.Core.Pretty
 import Pact.Core.IR.Term
 
 -- | Function for debugging legacy serialized module data.
 --   feel free to delete after mainnet launch
 --   It's only useful for debugging some code paths in the legacy serialization.
+
 _decodeDbgModule :: FilePath -> IO ()
 _decodeDbgModule fp = do
   x <- BS.readFile fp
   let y = either error id $ Legacy.decodeModuleData' x
-  let m = unsafeAsModuleData y
+  let (m, deps) = unsafeAsModuleData y
   let (ModuleCode code) = _mCode m
   putStrLn $ T.unpack code
   putStrLn "\n\nPRETTYIED REPR\n\n"
   putStrLn $ show $ pretty m
+  putStrLn $ "\n\nPRETTY DEPS\n\n"
+  () <$ traverse (putStrLn . show . pretty) (M.toList deps)
+  BS.writeFile (T.unpack (renderModuleName (_mName m))) $ _encodeModuleData serialisePact_lineinfo (def <$ (ModuleData m deps))
   where
   unsafeAsModuleData = \case
-    ModuleData m _ -> m
+    ModuleData m deps -> (m, deps)
     _ -> error "not a module data"
 
 type Eval = EvalM ExecRuntime CoreBuiltin Info

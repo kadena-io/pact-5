@@ -75,7 +75,6 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Map.Strict as M
 import qualified Data.Vector as V
 import qualified Data.Set as S
-import qualified Data.ByteString as BS
 
 import Pact.Core.Names
 import Pact.Core.PactValue
@@ -590,13 +589,14 @@ createPrincipalForGuard info = \case
     Pr.R ksn <$ chargeGas 1_000
   GModuleGuard (ModuleGuard mn n) ->
     Pr.M mn n <$ chargeGas 1_000
-  GUserGuard (UserGuard f args) -> do
+  GUserGuard ug@(UserGuard f args) -> do
+    sz <- sizeOf info SizeOfV0 ug
+    chargeGasArgs info (GHash sz)
     h <- mkHash $ map encodeStable args
     pure $ Pr.U (renderQualName f) (hashToText h)
-    -- TODO orig pact gets here ^^^^ a Name
-    -- which can be any of QualifiedName/BareName/DynamicName/FQN,
-    -- and uses the rendered string here. Need to double-check equivalence.
-  GCapabilityGuard (CapabilityGuard f args pid) -> do
+  GCapabilityGuard cg@(CapabilityGuard f args pid) -> do
+    sz <- sizeOf info SizeOfV0 cg
+    chargeGasArgs info (GHash sz)
     let args' = map encodeStable args
         f' = T.encodeUtf8 $ renderQualName f
         pid' = T.encodeUtf8 . renderDefPactId <$> pid
@@ -605,11 +605,7 @@ createPrincipalForGuard info = \case
   GDefPactGuard (DefPactGuard dpid name) -> Pr.P dpid name <$ chargeGas 1_000
   where
     chargeGas mg = chargeGasArgs info (GAConstant (MilliGas mg))
-    mkHash bss = do
-      let bs = mconcat bss
-          gasChargeAmt = 1_000 + fromIntegral (BS.length bs `quot` 64) * 1_000
-      chargeGas gasChargeAmt
-      pure $ pactHash bs
+    mkHash bss = pactHash (mconcat bss) <$ chargeGas 1_000
 
 createEnumerateList
   :: i

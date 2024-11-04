@@ -1431,9 +1431,13 @@ coreWhere info b _env = \case
 
 coreHash :: (IsBuiltin b) => NativeFunction e b i
 coreHash = \info b _env -> \case
-  [VString s] ->
-    return (go (T.encodeUtf8 s))
+  [VString s] -> do
+    let bytes = T.encodeUtf8 s
+    chargeGasArgs info $ GHash $ fromIntegral $ BS.length bytes
+    return (go bytes)
   [VPactValue pv] -> do
+    sz <- sizeOf info SizeOfV0 pv
+    chargeGasArgs info (GHash sz)
     return (go (encodeStable pv))
   args -> argsError info b args
   where

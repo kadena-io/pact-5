@@ -55,7 +55,7 @@ fold-db: 40453150
 fold: 1090
 format-time: 1041
 format: 1900
-hash: 300
+hash: 3500
 hours: 277
 hyperlane-decode-token-message: 2175
 hyperlane-encode-token-message: 2475
