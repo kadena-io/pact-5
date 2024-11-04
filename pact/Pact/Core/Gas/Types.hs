@@ -315,6 +315,8 @@ data GasArgs b
   | GStrOp !StrOp
   | GObjOp !ObjOp
   | GCapOp !CapOp
+  | GHash !SatWord
+  -- ^ The cost of Blake2b hashing a particular value in bytes
   deriving (Show, Eq, Generic, NFData)
 
 data TranscendentalCost
@@ -331,8 +333,6 @@ data ModuleOp
   | MOpMergeDeps Int Int
   -- ^ Cost of adding deps to the symbol table
   | MOpDesugarModule !SatWord -- Size of the tree
-  -- ^ the cost of module desugar
-  | MOpHashModule !SatWord -- Size of the tree
   -- ^ the cost of module desugar
   deriving (Show, Eq, Generic, NFData)
 

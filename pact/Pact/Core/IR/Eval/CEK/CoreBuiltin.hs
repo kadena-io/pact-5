@@ -1437,10 +1437,14 @@ coreWhere info b cont handler _env = \case
 
 coreHash :: (IsBuiltin b) => NativeFunction e b i
 coreHash = \info b cont handler _env -> \case
-  [VString s] ->
-    returnCEKValue cont handler (go (T.encodeUtf8 s))
+  [VString s] -> do
+    let bytes = T.encodeUtf8 s
+    chargeGasArgs info $ GHash $ fromIntegral $ BS.length bytes
+    returnCEKValue cont handler $ go bytes
   [VPactValue pv] -> do
-    returnCEKValue cont handler (go (encodeStable pv))
+    sz <- sizeOf info SizeOfV0 pv
+    chargeGasArgs info (GHash sz)
+    returnCEKValue cont handler $ go (encodeStable pv)
   args -> argsError info b args
   where
   go =  VString . hashToText . pactHash

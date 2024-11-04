@@ -184,7 +184,7 @@ instance Pretty (AbbrevPretty PactValue) where
       pretty (CapToken fqn (AbbrevPretty <$> args))
     PTime t -> pretty (PactTime.formatTime "%Y-%m-%d %H:%M:%S%Q %Z" t)
     PList l ->
-      brackets (prettyAbbrevText' 15 (hsep (pretty . AbbrevPretty <$> V.toList l)))
+      brackets (prettyAbbrevText' 15 (hsep (pretty . AbbrevPretty <$> V.toList (V.take 10 l))))
 
 synthesizePvType :: PactValue -> Type
 synthesizePvType = \case
