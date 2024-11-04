@@ -25,6 +25,7 @@ module Pact.Core.Errors
  , DbOpError(..)
  , HyperlaneError(..)
  , HyperlaneDecodeError(..)
+ , OwneraError(..)
  , peInfo
  , viewErrorStack
  , UserRecoverableError(..)
@@ -164,6 +165,7 @@ module Pact.Core.Errors
  , _InvalidCustomKeysetPredicate
  , _HyperlaneError
  , _HyperlaneDecodeError
+ , _OwneraError
  , _UnknownException
  , _UserEnforceError
  , _OneShotCapAlreadyUsed
@@ -717,6 +719,8 @@ data EvalError
   -- ^ Hyperlane error
   | HyperlaneDecodeError HyperlaneDecodeError
   -- ^ Hyperlane decoding error
+  | OwneraError OwneraError
+  -- ^ Ownera error
   | ModuleAdminNotAcquired ModuleName
   -- ^ Module admin was needed for a particular operation, but has not been acquired.
   | UnknownException Text
@@ -910,6 +914,7 @@ instance Pretty EvalError where
       "Invalid custom predicate for keyset" <+> pretty pn
     HyperlaneError he -> "Hyperlane native error:" <+> pretty he
     HyperlaneDecodeError he -> "Hyperlane decode error:" <+> pretty he
+    OwneraError oe -> "Ownera native error:" <+> pretty oe
     ModuleAdminNotAcquired mn ->
       "Module admin necessary for operation but has not been acquired:" <> pretty mn
     UnknownException msg ->
@@ -1053,6 +1058,25 @@ instance Pretty HyperlaneDecodeError where
     HyperlaneDecodeErrorInternal errmsg -> "Decoding error: " <> pretty errmsg
     HyperlaneDecodeErrorBinary -> "Decoding error: binary decoding failed"
     HyperlaneDecodeErrorParseRecipient -> "Could not parse recipient into a guard"
+
+
+
+
+data OwneraError
+  = OwneraErrorFailedToFindKey Field
+    -- ^ An expected key was not found.
+  | OwneraErrorFailedToFindHashGroup Field
+    -- ^ An expected key was not found.
+  deriving (Eq, Show, Generic)
+
+instance NFData OwneraError
+
+instance Pretty OwneraError where
+  pretty = \case
+    OwneraErrorFailedToFindKey key -> "Failed to find key in object: " <> pretty key
+    OwneraErrorFailedToFindHashGroup key -> "Failed to find hash group in object: " <> pretty key
+    
+
 
 data VerifierError
   = VerifierError { _verifierError :: Text }
@@ -1551,6 +1575,8 @@ evalErrorToBoundedText = mkBoundedText . \case
     thsep ["Hyperlane native error:", hyperlaneErrorToBoundedText' he]
   HyperlaneDecodeError he ->
     thsep ["Hyperlane decode error:", hyperlaneDecodeErrorToBoundedText' he]
+  OwneraError _ ->
+    thsep ["Ownera native error:", "todo"]
   ModuleAdminNotAcquired mn ->
     thsep
       ["Module admin is necessary for operation but has not been acquired:", renderModuleName mn]
@@ -1908,6 +1934,7 @@ makePrisms ''EvalError
 makePrisms ''UserRecoverableError
 makePrisms ''HyperlaneError
 makePrisms ''HyperlaneDecodeError
+makePrisms ''OwneraError
 
 -- | Legacy error type enums
 data LegacyPactErrorType

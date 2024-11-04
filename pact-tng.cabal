@@ -102,6 +102,7 @@ common pact-common
     , trifecta
     , hashable
     -- hyperlane deps
+    , secp256k1-haskell >= 1.4.0
     , binary
     , wide-word
     , ethereum
@@ -309,6 +310,10 @@ library
     -- Hyperlane
     Pact.Crypto.Hyperlane
 
+    -- Ownera
+    Pact.Crypto.Ownera
+
+    
   extra-libraries: mpfr
 
 library pact-lsp

@@ -233,6 +233,13 @@ data CoreBuiltin
   | CoreHyperlaneMessageId
   | CoreHyperlaneDecodeMessage
   | CoreHyperlaneEncodeMessage
+  -- Ownera
+  | OwneraVerifyDeposit
+  | OwneraVerifyPrimarySale
+  | OwneraVerifySecondarySale
+  | OwneraVerifyLoan
+  | OwneraVerifyRedeem
+  | OwneraVerifyWithdraw
   -- | BackCompat: read with filtering columns
   | CoreReadWithFields
   | CoreListModules
@@ -407,7 +414,13 @@ coreBuiltinToText = \case
   CoreEnforceVerifier -> "enforce-verifier"
   CoreHyperlaneMessageId -> "hyperlane-message-id"
   CoreHyperlaneDecodeMessage -> "hyperlane-decode-token-message"
-  CoreHyperlaneEncodeMessage -> "hyperlane-encode-token-message"
+  CoreHyperlaneEncodeMessage -> "hyperlane-encode-token-message"  
+  OwneraVerifyDeposit -> "ownera-verify-deposit"
+  OwneraVerifyPrimarySale -> "ownera-verify-primary-sale"
+  OwneraVerifySecondarySale -> "ownera-verify-secondary-sale"
+  OwneraVerifyLoan -> "ownera-verify-loan"
+  OwneraVerifyRedeem -> "ownera-verify-redeem" 
+  OwneraVerifyWithdraw -> "ownera-verify-withdraw" 
   CoreReadWithFields -> "read-with-fields"
   CoreListModules -> "list-modules"
   CoreStaticRedeploy -> "static-redeploy"
@@ -560,6 +573,12 @@ coreBuiltinToUserText = \case
   CoreHyperlaneDecodeMessage -> "hyperlane-decode-token-message"
   CoreHyperlaneEncodeMessage -> "hyperlane-encode-token-message"
   CoreAcquireModuleAdmin -> "acquire-module-admin"
+  OwneraVerifyDeposit -> "ownera-verify-deposit"
+  OwneraVerifyPrimarySale -> "ownera-verify-primary-sale"
+  OwneraVerifySecondarySale -> "ownera-verify-secondary-sale"
+  OwneraVerifyLoan -> "ownera-verify-loan"
+  OwneraVerifyRedeem -> "ownera-verify-redeem" 
+  OwneraVerifyWithdraw -> "ownera-verify-withdraw" 
   CoreReadWithFields -> "read"
   CoreListModules -> "list-modules"
   CoreStaticRedeploy -> "static-redeploy"
@@ -715,6 +734,12 @@ instance IsBuiltin CoreBuiltin where
     CoreHyperlaneMessageId -> 1
     CoreHyperlaneDecodeMessage -> 1
     CoreHyperlaneEncodeMessage -> 1
+    OwneraVerifyDeposit -> 3
+    OwneraVerifyPrimarySale -> 3
+    OwneraVerifySecondarySale -> 3
+    OwneraVerifyLoan -> 3
+    OwneraVerifyRedeem -> 3 
+    OwneraVerifyWithdraw -> 3 
     CoreReadWithFields -> 3
     CoreListModules -> 0
     CoreStaticRedeploy -> 1

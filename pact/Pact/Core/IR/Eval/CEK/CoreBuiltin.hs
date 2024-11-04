@@ -73,6 +73,7 @@ import Pact.Core.Crypto.Pairing
 import Pact.Core.Crypto.Hash.Poseidon
 #endif
 import Pact.Crypto.Hyperlane
+import Pact.Crypto.Ownera
 
 import Pact.Core.IR.Term
 import Pact.Core.IR.Eval.Runtime
@@ -1977,6 +1978,26 @@ coreHyperlaneEncodeTokenMessage info b cont handler _env = \case
         returnCEKValue cont handler (VString encoded)
   args -> argsError info b args
 
+verifyOwneraSchemaSignature :: (IsBuiltin b) =>  OwneraSchemaId -> NativeFunction e b i
+verifyOwneraSchemaSignature oSId info b _ _ _  = \case
+  [VObject o , VString _ , VString _] -> case verifyOwneraSchemaStructure oSId o of
+      Left e -> throwExecutionError info $ OwneraError e
+      Right _ -> do
+        undefined
+  args -> argsError info b args
+
+
+
+-- owneraVerifyPrimarySale :: (IsBuiltin b) => NativeFunction e b i
+-- owneraVerifyPrimarySale info b cont handler _env = \case
+--   [VObject o] -> case decodeHyperlaneTokenMessageObject o of
+--       Left e -> throwExecutionError info $ HyperlaneError e
+--       Right r -> do
+--         let encoded = T.decodeUtf8 $ encodeBase64UrlUnpadded $ BS.toStrict $ Bin.runPut $ Bin.putBuilder $ packTokenMessageERC20 r
+--         chargeGasArgs info $ GHyperlaneEncodeDecodeTokenMessage (T.length encoded)
+--         returnCEKValue cont handler (VString encoded)
+--   args -> argsError info b args
+
 coreAcquireModuleAdmin :: (IsBuiltin b) => NativeFunction e b i
 coreAcquireModuleAdmin info b cont handler env = \case
   [VModRef m] -> do
@@ -2180,6 +2201,14 @@ coreBuiltinRuntime = \case
   CoreHyperlaneMessageId -> coreHyperlaneMessageId
   CoreHyperlaneDecodeMessage -> coreHyperlaneDecodeTokenMessage
   CoreHyperlaneEncodeMessage -> coreHyperlaneEncodeTokenMessage
+  
+  OwneraVerifyDeposit -> verifyOwneraSchemaSignature Deposit
+  OwneraVerifyPrimarySale -> verifyOwneraSchemaSignature PrimarySale
+  OwneraVerifySecondarySale -> verifyOwneraSchemaSignature SecondarySale
+  OwneraVerifyLoan -> verifyOwneraSchemaSignature Loan
+  OwneraVerifyRedeem -> verifyOwneraSchemaSignature Redeem
+  OwneraVerifyWithdraw -> verifyOwneraSchemaSignature Withdraw
+  
   CoreAcquireModuleAdmin -> coreAcquireModuleAdmin
   CoreReadWithFields -> dbRead
   CoreListModules -> coreListModules

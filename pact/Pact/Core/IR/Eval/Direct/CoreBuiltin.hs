@@ -75,6 +75,7 @@ import Pact.Core.Gas
 import Pact.Core.StableEncoding
 import Pact.Core.SPV
 import Pact.Crypto.Hyperlane
+import Pact.Crypto.Ownera
 import Pact.Core.IR.Eval.Direct.Evaluator
 import qualified Data.Binary.Get as Bin
 import qualified Data.Binary.Put as Bin
@@ -1979,6 +1980,17 @@ coreHyperlaneEncodeTokenMessage info b _env = \case
       return (VString encoded)
   args -> argsError info b args
 
+-- OWNERA
+
+verifyOwneraSchemaSignature :: (IsBuiltin b) => OwneraSchemaId -> NativeFunction e b i
+verifyOwneraSchemaSignature oSId info b _env = \case
+  [VObject o , VString _ , VString _] -> case verifyOwneraSchemaStructure oSId o of
+      Left e -> throwExecutionError info $ OwneraError e
+      Right _ -> do
+        return (VString "ok")
+  args -> argsError info b args
+
+
 coreAcquireModuleAdmin :: (IsBuiltin b) => NativeFunction e b i
 coreAcquireModuleAdmin info b env = \case
   [VModRef m] -> do
@@ -2189,6 +2201,15 @@ coreBuiltinRuntime =
     CoreHyperlaneMessageId -> coreHyperlaneMessageId
     CoreHyperlaneDecodeMessage -> coreHyperlaneDecodeTokenMessage
     CoreHyperlaneEncodeMessage -> coreHyperlaneEncodeTokenMessage
+    
+    OwneraVerifyDeposit -> verifyOwneraSchemaSignature Deposit
+    OwneraVerifyPrimarySale -> verifyOwneraSchemaSignature PrimarySale
+    OwneraVerifySecondarySale -> verifyOwneraSchemaSignature SecondarySale
+    OwneraVerifyLoan -> verifyOwneraSchemaSignature Loan
+    OwneraVerifyRedeem -> verifyOwneraSchemaSignature Redeem
+    OwneraVerifyWithdraw -> verifyOwneraSchemaSignature Withdraw
+
+    
     CoreAcquireModuleAdmin -> coreAcquireModuleAdmin
     CoreReadWithFields -> dbRead
     CoreListModules -> coreListModules

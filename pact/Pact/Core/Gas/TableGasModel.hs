@@ -718,6 +718,12 @@ coreBuiltinGasCost GasCostConfig{..} = MilliGas . \case
   CoreReadWithFields -> _gcReadPenalty
   CoreListModules -> _gcMetadataTxPenalty
   CoreStaticRedeploy -> _gcNativeBasicWork
+  OwneraVerifyDeposit -> 10_000 -- Note: just a placehollder
+  OwneraVerifyPrimarySale -> 10_000 -- Note: just a placehollder
+  OwneraVerifySecondarySale -> 10_000 -- Note: just a placehollder
+  OwneraVerifyLoan -> 10_000 -- Note: just a placehollder
+  OwneraVerifyRedeem -> 10_000 -- Note: just a placehollder
+  OwneraVerifyWithdraw -> 10_000 -- Note: just a placehollder
 {-# INLINABLE runTableModel #-}
 
 
