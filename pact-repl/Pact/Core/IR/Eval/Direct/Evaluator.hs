@@ -675,7 +675,7 @@ applyLam
   -> EvalM e b i (EvalValue e b i)
 applyLam nclo@(N (NativeFn b env fn arity i)) args
   | arity == argLen = do
-    chargeFlatNativeGas i b
+    when (builtinChargesGas b) $ chargeFlatNativeGas i b
     fn i b env args
   | argLen > arity = throwExecutionError i ClosureAppliedToTooManyArgs
   | null args = return (VClosure nclo)

@@ -183,7 +183,7 @@ setupCoinTxs pdb = do
   putStrLn "Setting up the coin contract and the default funds"
   source <- T.readFile (contractsPath </> "coin-v5-create.pact")
   ee <- setupBenchEvalEnv pdb coinInitSigners coinInitData
-  () <$ runPactTxFromSource ee source evalDirectInterpreter
+  () <$ runPactTxFromSource ee source evalInterpreter
 
 
 _run :: IO ()
@@ -242,7 +242,7 @@ _testCoinTransfer = withSqlitePactDb serialisePact_lineinfo (T.pack benchmarkSql
     t <- liftEither $ compileOnlyTermLineInfo (RawCode termText)
     _dsOut <$> runDesugarTerm t
   term <- getRightIO eterm
-  (out, _) <- runEvalM (ExecEnv ee) es (eval evalDirectInterpreter PImpure term)
+  (out, _) <- runEvalM (ExecEnv ee) es (eval evalInterpreter PImpure term)
   print out
 
 unsafeModuleHash :: Text -> Hash
