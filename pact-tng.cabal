@@ -476,7 +476,6 @@ library test-utils
     , semirings
     , neat-interpolation
     , pact-tng:pact-request-api
-    , pact-tng:pact-lsp
     , pact-tng:unsafe
     , lsp-test >= 0.17
     , lsp-types
