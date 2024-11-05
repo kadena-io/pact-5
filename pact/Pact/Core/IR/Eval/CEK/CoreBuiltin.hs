@@ -1978,12 +1978,11 @@ coreHyperlaneEncodeTokenMessage info b cont handler _env = \case
         returnCEKValue cont handler (VString encoded)
   args -> argsError info b args
 
-verifyOwneraSchemaSignature :: (IsBuiltin b) =>  OwneraSchemaId -> NativeFunction e b i
-verifyOwneraSchemaSignature oSId info b _ _ _  = \case
-  [VObject o , VString _ , VString _] -> case verifyOwneraSchemaStructure oSId o of
+verifyOwneraSchemaSignature :: (IsBuiltin b) => NativeFunction e b i
+verifyOwneraSchemaSignature info b cont handler _  = \case
+  [ VObject o ] -> case verifyOwneraSchemaStructure o of
       Left e -> throwExecutionError info $ OwneraError e
-      Right _ -> do
-        undefined
+      Right v -> returnCEKValue cont handler (VPactValue v)
   args -> argsError info b args
 
 
@@ -2202,13 +2201,8 @@ coreBuiltinRuntime = \case
   CoreHyperlaneDecodeMessage -> coreHyperlaneDecodeTokenMessage
   CoreHyperlaneEncodeMessage -> coreHyperlaneEncodeTokenMessage
   
-  OwneraVerifyDeposit -> verifyOwneraSchemaSignature Deposit
-  OwneraVerifyPrimarySale -> verifyOwneraSchemaSignature PrimarySale
-  OwneraVerifySecondarySale -> verifyOwneraSchemaSignature SecondarySale
-  OwneraVerifyLoan -> verifyOwneraSchemaSignature Loan
-  OwneraVerifyRedeem -> verifyOwneraSchemaSignature Redeem
-  OwneraVerifyWithdraw -> verifyOwneraSchemaSignature Withdraw
-  
+  OwneraDecodeVerified -> verifyOwneraSchemaSignature
+
   CoreAcquireModuleAdmin -> coreAcquireModuleAdmin
   CoreReadWithFields -> dbRead
   CoreListModules -> coreListModules

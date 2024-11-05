@@ -11,7 +11,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE StrictData #-}
 
-
 module Pact.Core.Hash
 ( Hash(..)
 , ModuleHash(..)

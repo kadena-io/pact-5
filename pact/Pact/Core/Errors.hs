@@ -1067,6 +1067,7 @@ data OwneraError
     -- ^ An expected key was not found.
   | OwneraErrorFailedToFindHashGroup Field
     -- ^ An expected key was not found.
+  | OtherOwneraError Text
   deriving (Eq, Show, Generic)
 
 instance NFData OwneraError
@@ -1075,7 +1076,7 @@ instance Pretty OwneraError where
   pretty = \case
     OwneraErrorFailedToFindKey key -> "Failed to find key in object: " <> pretty key
     OwneraErrorFailedToFindHashGroup key -> "Failed to find hash group in object: " <> pretty key
-    
+    OtherOwneraError t -> pretty t -- temporary catchall error, to be split into proper error cases
 
 
 data VerifierError

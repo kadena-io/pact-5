@@ -920,12 +920,7 @@ benchesForBuiltin bn = case bn of
   CoreHyperlaneDecodeMessage -> todo
   CoreHyperlaneEncodeMessage -> todo
   CoreHyperlaneMessageId -> todo
-  OwneraVerifyDeposit -> todo
-  OwneraVerifyPrimarySale -> todo
-  OwneraVerifySecondarySale -> todo
-  OwneraVerifyLoan -> todo
-  OwneraVerifyRedeem -> todo
-  OwneraVerifyWithdraw -> todo
+  OwneraDecodeVerified -> todo
   CoreStaticRedeploy -> omittedDeliberately
   where
   omittedDeliberately = const []

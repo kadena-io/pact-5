@@ -1982,12 +1982,11 @@ coreHyperlaneEncodeTokenMessage info b _env = \case
 
 -- OWNERA
 
-verifyOwneraSchemaSignature :: (IsBuiltin b) => OwneraSchemaId -> NativeFunction e b i
-verifyOwneraSchemaSignature oSId info b _env = \case
-  [VObject o , VString _ , VString _] -> case verifyOwneraSchemaStructure oSId o of
+verifyOwneraSchemaSignature :: (IsBuiltin b) => NativeFunction e b i
+verifyOwneraSchemaSignature info b _env = \case
+  [VObject o] -> case verifyOwneraSchemaStructure o of
       Left e -> throwExecutionError info $ OwneraError e
-      Right _ -> do
-        return (VString "ok")
+      Right v -> return $ VPactValue v
   args -> argsError info b args
 
 
@@ -2202,13 +2201,7 @@ coreBuiltinRuntime =
     CoreHyperlaneDecodeMessage -> coreHyperlaneDecodeTokenMessage
     CoreHyperlaneEncodeMessage -> coreHyperlaneEncodeTokenMessage
     
-    OwneraVerifyDeposit -> verifyOwneraSchemaSignature Deposit
-    OwneraVerifyPrimarySale -> verifyOwneraSchemaSignature PrimarySale
-    OwneraVerifySecondarySale -> verifyOwneraSchemaSignature SecondarySale
-    OwneraVerifyLoan -> verifyOwneraSchemaSignature Loan
-    OwneraVerifyRedeem -> verifyOwneraSchemaSignature Redeem
-    OwneraVerifyWithdraw -> verifyOwneraSchemaSignature Withdraw
-
+    OwneraDecodeVerified -> verifyOwneraSchemaSignature
     
     CoreAcquireModuleAdmin -> coreAcquireModuleAdmin
     CoreReadWithFields -> dbRead
