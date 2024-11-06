@@ -1,4 +1,3 @@
-## install-capability
 
 Use `install-capability` to specify and provision a managed capability. 
 Managed capabilities are defined in `defcap` declarations that include the `@managed` keyword. The `@managed` keyword designates a single parameter to be managed by a specified management function.
@@ -20,7 +19,6 @@ The management function for this capability would be:
 (defun FOO-mgr:integer (managed:integer requested:integer) ...)
 ``` 
 
-
 Any capability that has static unmanaged parameters will invoke the management function with the current managed value and that of the requested capability. 
 The function should perform whatever logic, presumably linear, to validate the request, and return the new managed value representing the `balance` of the request.
 
@@ -28,7 +26,7 @@ Note that signatures scoped to a managed capability cause the capability to be a
 
 By convention, capabilities are defined using all uppercase letters.
 
-### Basic syntax
+## Basic syntax
 
 To specify and provision a managed capability, use the following syntax:
 
@@ -36,7 +34,7 @@ To specify and provision a managed capability, use the following syntax:
 (install-capability CAPABILITY)
 ```
 
-### Arguments
+## Arguments
 
 Use the following argument to specify the capability you want to install using the `install-capability` Pact function.
 
@@ -44,11 +42,11 @@ Use the following argument to specify the capability you want to install using t
 | --- | --- | --- |
 | `CAPABILITY` | any | Specifies the capability to be installed. |
 
-### Return value
+## Return value
 
 The `install-capability` function returns a boolean value indicating the success or failure of the installation, along with a string message providing additional information.
 
-### Examples
+## Examples
 
 The following example demonstrates how to use the `install-capability` to install a capability named `coin.TRANSFER` with specified parameters:
 
