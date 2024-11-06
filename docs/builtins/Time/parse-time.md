@@ -5,13 +5,12 @@ The following table provides a summary of common time formatting codes:
 
 | Format | Purpose |
 | --- | --- |
-| %Y | Year, no padding. |
+| %Y | Year with no padding. |
 | %m | Month of the year, zero-padded to two characters, "01"–"12" |
 | %d | Day of the month, zero-padded to two characters, "01"–"31" |
 | %H | Hour of the day using a 24-hour clock, zero-padded to two characters, "00"–"23" |
-| %M | Minute of of the hour, zero0-padded to two characters, "00"–"59" |
+| %M | Minute of of the hour, zero-padded to two characters, "00"–"59" |
 | %S | Second of the minute, zero-padded to two characters, "00"–"60" |
-| %N | ISO 8601 style numeric time zone (for example, "-06:00" or "+01:00")|
 
 There are many other formatting options.
 For example, you can replace the numeric representing the month of the year with the short or long name for the month.
