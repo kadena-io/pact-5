@@ -16,13 +16,13 @@ For more information about time formats and specifiers, see [Time formats](/pact
 
 ### Basic syntax
 
-To construct UTC time string from a input time that uses a specified format, use the following syntax:
+To construct a UTC time string from a input time that uses a specified format, use the following syntax:
 
 `(parse-time format input)`
 
 ### Arguments
 
-Use the following arguments to specify the format and UTC value for constructing time using the `parse-time` Pact function.
+Use the following arguments to specify the format and input time value for constructing time using the `parse-time` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |
