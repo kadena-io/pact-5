@@ -12,7 +12,7 @@ The following table provides a summary of common time formatting codes:
 | %M | Minute of of the hour, zero-padded to two characters, "00"–"59" |
 | %S | Second of the minute, zero-padded to two characters, "00"–"60" |
 
-For more information about time formats supported, see [Time formats](/pact-5/Time/time-functions#time-formats).
+For more information about time formats and specifiers, see [Time formats](/pact-5/Time/time-functions#time-formats).
 
 ### Basic syntax
 
