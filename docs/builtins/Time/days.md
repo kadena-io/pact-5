@@ -1,7 +1,7 @@
 ## days
 
 Use `days` to specify a number of days. 
-You can use this function in conjunctions with the `add-time` function to add days to a specified time.
+You can use this function in conjunction with the `add-time` function to add a specified number of days to a specified time.
 
 ### Basic syntax
 
