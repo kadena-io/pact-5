@@ -1,3 +1,4 @@
+## with-capability
 
 Use `with-capability` to apply the access to a specific capability to execute a body of code.
 This function ensures that an elevated privilege—defined as a capability using a `defcap` code block—is present during the execution of the provided body of code. 
@@ -9,7 +10,7 @@ Nested `with-capability` calls for the same permission token detect the presence
 
 By convention, capabilities are defined using all uppercase letters.
 
-## Basic syntax
+### Basic syntax
 
 To request the grant of an acquired `CAPABILITY`, use the following syntax:
 
@@ -17,7 +18,7 @@ To request the grant of an acquired `CAPABILITY`, use the following syntax:
 (with-capability CAPABILITY body)
 ```
 
-## Arguments
+### Arguments
 
 Use the following arguments to specify the name of the capability and the body of expressions to be executed using the `with-capability` Pact function.
 
@@ -26,11 +27,11 @@ Use the following arguments to specify the name of the capability and the body o
 | `CAPABILITY` | capability | Specifies the name of the capability to grant access to. |
 | `body` | any | Specifies the body of expressions to be executed using the granted capability. |
 
-## Return value
+### Return value
 
 The `with-capability` function returns the result of executing the provided body of code using the granted capability.
 
-## Examples
+### Examples
 
 The following example demonstrates how to use the `with-capability` function to request access to the `UPDATE-USERS` capability to execute the code that updates user information:
 

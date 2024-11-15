@@ -1,10 +1,11 @@
+## emit-event
 
 Use `emit-event` to emit a specified `CAPABILITY` as an event without evaluating the body of the capability. 
 This function fails if the specified `CAPABILITY` doesn't include the `@managed` or `@event` keyword in its declaration.
 
 By convention, capabilities are defined using all uppercase letters.
 
-## Basic syntax
+### Basic syntax
 
 To emit a `CAPABILITY` as an event without evaluating its body, use the following syntax:
 
@@ -12,7 +13,7 @@ To emit a `CAPABILITY` as an event without evaluating its body, use the followin
 (emit-event CAPABILITY)
 ```
 
-## Arguments
+### Arguments
 
 Use the following argument to specify the `CAPABILITY` for the `emit-event` Pact function.
 
@@ -20,11 +21,11 @@ Use the following argument to specify the `CAPABILITY` for the `emit-event` Pact
 |------------|------|---------------------------------------------------|
 | `CAPABILITY` | capability | Specifies the capability to emit as an event. |
 
-## Return values
+### Return values
 
 The `emit-event` function returns a boolean value indicating success or failure of emitting the event.
 
-## Examples
+### Examples
 
 The following example demonstrates how to use the `emit-event` function to emit an event for the `TRANSFER` capability with the parameters `"Bob"`, `"Alice"`, and `12.0`:
 
