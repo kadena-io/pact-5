@@ -431,10 +431,16 @@ rawSort info b cont handler _env = \case
     chargeGasArgs info (GComparison (SortComparisons maxSize (V.length vli)))
     vli' <- liftIO $ do
       v' <- V.thaw vli
-      V.sort v'
+      V.sortBy sortPv v'
       V.freeze v'
     returnCEKValue cont handler (VList vli')
   args -> argsError info b args
+  where
+  sortPv (PLiteral l) (PLiteral y) = l `compare` y
+  sortPv (PTime t) (PTime t') = t `compare` t'
+  sortPv (PLiteral _) (PTime _) = LT
+  sortPv (PTime _) (PLiteral _) = GT
+  sortPv _ _ = EQ
 
 coreRemove :: (IsBuiltin b) => NativeFunction e b i
 coreRemove info b cont handler _env = \case
