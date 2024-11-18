@@ -72,8 +72,11 @@ module Pact.Core.Environment.Types
  , replTx
  , replOutputLine
  , replTestResults
- , mkReplState
+ , replLoad
+ , replLoadedFiles
+ , replLogType
  , ReplM
+ , ReplOutput(..)
  , ReplDebugFlag(..)
  , SourceCode(..)
  , PactWarning(..)
@@ -353,34 +356,44 @@ data ReplTestStatus
 data ReplTestResult
   = ReplTestResult
   { _trName :: Text
-  , _trLoc :: SpanInfo
-  , _trSourceFile :: String
+  , _trLoc :: FileLocSpanInfo
   , _trResult :: ReplTestStatus
   } deriving (Show, Eq)
+
+data ReplOutput where
+  ReplStdOut :: ReplOutput
+  ReplLogOut :: IORef [Text] -> ReplOutput
 
 -- | Passed in repl environment
 data ReplState b
   = ReplState
   { _replFlags :: Set ReplDebugFlag
   -- ^ The currently enabled debug flags
-  , _replEvalEnv :: EvalEnv b SpanInfo
+  , _replEvalEnv :: EvalEnv b FileLocSpanInfo
   -- ^ The current eval environment
+  , _replLogType :: ReplOutput
+  -- ^ The repl log mode
   , _replCurrSource :: SourceCode
   -- ^ The current source code for source being evaluated
   , _replUserDocs :: Map QualifiedName Text
   -- ^ Used by Repl and LSP Server, reflects the user
   --   annotated @doc string.
-  , _replTLDefPos :: Map QualifiedName SpanInfo
+  , _replTLDefPos :: Map QualifiedName FileLocSpanInfo
   -- ^ Used by LSP Server, reflects the span information
   --   of the TL definitions for the qualified name.
   , _replTx :: Maybe (TxId, Maybe Text)
   -- ^ The current repl tx, if one has been initiated
   , _replNativesEnabled :: Bool
   -- ^ Are repl natives enabled in module code
-  , _replOutputLine :: !(Text -> EvalM 'ReplRuntime b SpanInfo ())
+  , _replOutputLine :: !(Text -> EvalM 'ReplRuntime b FileLocSpanInfo ())
   -- ^ The output line function, as an entry in the repl env
   --   to allow for custom output handling, e.g haskeline
+  , _replLoad :: !(FilePath -> Bool -> EvalM 'ReplRuntime b FileLocSpanInfo ())
+  -- ^ Our load function, which serves to tie a knot
+  , _replLoadedFiles :: Map FilePath SourceCode
+  -- ^ The files currently loaded in the repl
   , _replTestResults :: [ReplTestResult]
+  -- ^ The current repl tests results
   }
 
 data RuntimeMode
@@ -390,7 +403,7 @@ data RuntimeMode
 
 data EvalMEnv e b i where
   ExecEnv :: EvalEnv b i -> EvalMEnv ExecRuntime b i
-  ReplEnv :: IORef (ReplState b) -> EvalMEnv ReplRuntime b SpanInfo
+  ReplEnv :: IORef (ReplState b) -> EvalMEnv ReplRuntime b FileLocSpanInfo
 
 
 -- Todo: are we going to inject state as the reader monad here?
@@ -406,7 +419,7 @@ newtype EvalM e b i a =
     , MonadState (EvalState b i)
     , MonadError (PactError i))
 
-type ReplM b = EvalM ReplRuntime b SpanInfo
+type ReplM b = EvalM ReplRuntime b FileLocSpanInfo
 
 
 runEvalM
@@ -429,9 +442,3 @@ runEvalMResult env st (EvalM action) =
 
 makeLenses ''ReplState
 makePrisms ''ReplTestStatus
-
-mkReplState :: EvalEnv b SpanInfo -> (Text -> EvalM 'ReplRuntime b SpanInfo ()) -> ReplState b
-mkReplState ee printfn =
-  ReplState mempty ee defaultSrc mempty mempty Nothing False printfn []
-  where
-  defaultSrc = SourceCode "(interactive)" mempty

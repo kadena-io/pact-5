@@ -12,15 +12,16 @@
 module Pact.Core.Repl.Compile
  ( ReplCompileValue(..)
  , interpretReplProgramBigStep
- , loadFile
  , interpretReplProgramDirect
  , interpretEvalBigStep
  , interpretEvalDirect
  , interpretReplProgram
  , ReplInterpreter
  , isPactFile
- , ReplLoadFile(..)
- , topLevelIsReplLoad
+ , loadFile
+ , defaultLoadFile
+ , mkReplState
+ , mkReplState'
  ) where
 
 import Control.Lens
@@ -35,7 +36,6 @@ import System.FilePath.Posix
 
 
 import qualified Data.Map.Strict as M
-import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
 import Pact.Core.Persistence
@@ -49,12 +49,10 @@ import Pact.Core.Compile
 import Pact.Core.Type
 import Pact.Core.Environment
 import Pact.Core.Info
-import Pact.Core.PactValue
 import Pact.Core.Errors
 import Pact.Core.Interpreter
-import Pact.Core.Literal
 import Pact.Core.Pretty hiding (pipe)
-import Pact.Core.Serialise (serialisePact_repl_spaninfo)
+import Pact.Core.Serialise
 
 
 import Pact.Core.IR.Eval.Runtime
@@ -70,17 +68,62 @@ import qualified Pact.Core.IR.Eval.CEK.Evaluator as CEK
 import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
 import qualified Pact.Core.IR.Eval.Direct.ReplBuiltin as Direct
 
-type ReplInterpreter = Interpreter ReplRuntime ReplCoreBuiltin SpanInfo
+type ReplInterpreter = Interpreter ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 
 -- Small internal debugging function for playing with file loading within
 -- this module
 data ReplCompileValue
-  = RCompileValue (CompileValue SpanInfo)
+  = RCompileValue (CompileValue FileLocSpanInfo)
   | RLoadedDefun Text
   | RLoadedDefConst Text
   | RBuiltinDoc Text
-  | RUserDoc (EvalDef ReplCoreBuiltin SpanInfo) (Maybe Text)
+  | RUserDoc (EvalDef ReplCoreBuiltin FileLocSpanInfo) (Maybe Text)
   deriving Show
+
+mkReplState
+  :: EvalEnv b FileLocSpanInfo
+  -> (Text -> EvalM 'ReplRuntime b FileLocSpanInfo ())
+  -> (FilePath -> Bool -> EvalM 'ReplRuntime b FileLocSpanInfo ())
+  -> ReplState b
+mkReplState ee printfn loadFn =
+  ReplState
+    { _replFlags = mempty
+    , _replEvalEnv = ee
+    , _replLogType = ReplStdOut
+    , _replCurrSource = defaultSrc
+    , _replUserDocs = mempty
+    , _replTLDefPos = mempty
+    , _replTx = Nothing
+    , _replNativesEnabled = False
+    , _replOutputLine = printfn
+    , _replLoad = loadFn
+    , _replLoadedFiles = mempty
+    , _replTestResults = []
+    }
+  where
+  defaultSrc = SourceCode "(interactive)" mempty
+
+mkReplState'
+  :: EvalEnv ReplCoreBuiltin FileLocSpanInfo
+  -> (Text -> EvalM 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo ())
+  -> ReplState ReplCoreBuiltin
+mkReplState' ee printfn =
+  ReplState
+    { _replFlags = mempty
+    , _replEvalEnv = ee
+    , _replLogType = ReplStdOut
+    , _replCurrSource = defaultSrc
+    , _replUserDocs = mempty
+    , _replTLDefPos = mempty
+    , _replTx = Nothing
+    , _replNativesEnabled = False
+    , _replOutputLine = printfn
+    , _replLoad = \f reset -> void (loadFile interpretEvalDirect f reset)
+    , _replLoadedFiles = mempty
+    , _replTestResults = []
+    }
+  where
+  defaultSrc = SourceCode "(interactive)" mempty
 
 instance Pretty ReplCompileValue where
   pretty = \case
@@ -94,17 +137,6 @@ instance Pretty ReplCompileValue where
       vsep [pretty qn, "Docs:", maybe mempty pretty doc]
 
 
--- | Internal function for loading a file.
---   Exported because it is used in the tests.
-loadFile
-  :: FilePath
-  -> ReplInterpreter
-  -> ReplM ReplCoreBuiltin [ReplCompileValue]
-loadFile loc rEnv = do
-  source <- SourceCode loc <$> liftIO (T.readFile loc)
-  replCurrSource .== source
-  interpretReplProgram rEnv source
-
 
 interpretReplProgramBigStep
   :: SourceCode
@@ -117,7 +149,7 @@ interpretReplProgramDirect
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
 interpretReplProgramDirect = interpretReplProgram interpretEvalDirect
 
-checkReplNativesEnabled :: TopLevel n t (ReplBuiltin b) SpanInfo -> ReplM ReplCoreBuiltin ()
+checkReplNativesEnabled :: TopLevel n t (ReplBuiltin b) FileLocSpanInfo -> ReplM ReplCoreBuiltin ()
 checkReplNativesEnabled = \case
   TLModule m -> do
     flag <- useReplState replNativesEnabled
@@ -166,90 +198,71 @@ interpretEvalDirect =
 isPactFile :: FilePath -> Bool
 isPactFile f = takeExtension f == ".pact"
 
-pattern PReplLoadWithClear :: Text -> Bool -> i -> Lisp.ReplTopLevel i
-pattern PReplLoadWithClear file reset info <-
-  Lisp.RTLTopLevel (
-    Lisp.TLTerm (Lisp.App (Lisp.Var (BN (BareName "load")) _)
-    [ Lisp.Constant (LString file) _
-    , Lisp.Constant (LBool reset) _]
-    info)
-  )
 
-pattern PReplLoad :: Text -> i -> Lisp.ReplTopLevel i
-pattern PReplLoad file info <-
-  Lisp.RTLTopLevel (
-    Lisp.TLTerm (Lisp.App (Lisp.Var (BN (BareName "load")) _)
-    [ Lisp.Constant (LString file) _]
-    info)
-  )
+setBuiltinResolution :: SourceCode -> ReplM (ReplBuiltin CoreBuiltin) ()
+setBuiltinResolution (SourceCode fp _)
+  | sourceIsPactFile =
+    replEvalEnv . eeNatives .== replCoreBuiltinOnlyMap
+  | otherwise =
+    replEvalEnv . eeNatives .== replBuiltinMap
+  where
+  sourceIsPactFile = isPactFile fp
 
-data ReplLoadFile i
-  = ReplLoadFile
-  { _rlFile :: Text
-  , _rlReset :: Bool
-  , _rlInfo :: i
-  } deriving (Show)
+defaultLoadFile :: FilePath -> Bool -> EvalM ReplRuntime ReplCoreBuiltin FileLocSpanInfo ()
+defaultLoadFile f reset = () <$ loadFile interpretEvalDirect f reset
 
-topLevelIsReplLoad :: Lisp.ReplTopLevel i -> Either (Lisp.ReplTopLevel i) (ReplLoadFile i)
-topLevelIsReplLoad = \case
-  PReplLoad file i -> Right (ReplLoadFile file False i)
-  PReplLoadWithClear file reset i -> Right (ReplLoadFile file reset i)
-  t -> Left t
+loadFile :: ReplInterpreter -> FilePath -> Bool -> EvalM ReplRuntime ReplCoreBuiltin FileLocSpanInfo [ReplCompileValue]
+loadFile interpreter txt reset  = do
+  oldSrc <- useReplState replCurrSource
+  pactdb <- liftIO (mockPactDb serialisePact_repl_fileLocSpanInfo)
+  oldEE <- useReplState replEvalEnv
+  when reset $ do
+    ee <- liftIO (defaultEvalEnv pactdb replBuiltinMap)
+    put def
+    replEvalEnv .== ee
+  fp <- mangleFilePath txt
+  when (isPactFile fp) $ esLoaded . loToplevel .= mempty
+  source <- SourceCode fp <$> liftIO (T.readFile fp)
+  replCurrSource .== source
+  out <- interpretReplProgram interpreter source
+  replCurrSource .== oldSrc
+  unless reset $ do
+    replEvalEnv .== oldEE
+  setBuiltinResolution oldSrc
+  pure out
+
+mangleFilePath :: FilePath -> EvalM ReplRuntime b FileLocSpanInfo FilePath
+mangleFilePath fp = do
+  (SourceCode currFile _) <- useReplState replCurrSource
+  case currFile of
+    "(interactive)" -> pure fp
+    _ | isAbsolute fp -> pure fp
+      | takeFileName currFile == currFile -> pure fp
+      | otherwise -> pure $ combine (takeDirectory currFile) fp
 
 interpretReplProgram
   :: ReplInterpreter
   -> SourceCode
   -> ReplM ReplCoreBuiltin [ReplCompileValue]
-interpretReplProgram interpreter (SourceCode sourceFp source) = do
-  lexx <- liftEither (Lisp.lexer source)
+interpretReplProgram interpreter sc@(SourceCode sourceFp source) = do
+  replLoadedFiles %== M.insert sourceFp sc
+  lexx <- liftEither $ over _Left (fmap toFileLoc) (Lisp.lexer source)
   debugIfFlagSet ReplDebugLexer lexx
-  parsed <- parseSource lexx
-  setBuiltinResolution
-  concat <$> traverse pipe parsed
+  parsed <- liftEither $ bimap (fmap toFileLoc) ((fmap.fmap) toFileLoc) (parseSource lexx)
+  setBuiltinResolution sc
+  traverse pipe' parsed
   where
+  toFileLoc = FileLocSpanInfo sourceFp
   sourceIsPactFile = isPactFile sourceFp
   parseSource lexerOutput
-    | sourceIsPactFile = (fmap.fmap) (Lisp.RTLTopLevel) $ liftEither $ Lisp.parseProgram lexerOutput
-    | otherwise = liftEither $ Lisp.parseReplProgram lexerOutput
-  setBuiltinResolution
-    | sourceIsPactFile =
-      replEvalEnv . eeNatives .== replCoreBuiltinOnlyMap
-    | otherwise =
-      replEvalEnv . eeNatives .== replBuiltinMap
-  pipe t = case topLevelIsReplLoad t of
-    Left tl -> pure <$> pipe' tl
-    Right (ReplLoadFile file reset info) -> doLoadFile file reset info
+    | sourceIsPactFile = (fmap.fmap) (Lisp.RTLTopLevel) $ Lisp.parseProgram lexerOutput
+    | otherwise = Lisp.parseReplProgram lexerOutput
   displayValue p = p <$ replPrintLn p
   sliceCode = \case
     Lisp.TLModule{} -> sliceFromSource
     Lisp.TLInterface{} -> sliceFromSource
     Lisp.TLTerm{} -> \_ _ -> mempty
     Lisp.TLUse{} -> \_ _ -> mempty
-  doLoadFile txt reset i = do
-    let loading = RCompileValue (InterpretValue (PString ("Loading " <> txt <> "...")) i)
-    replPrintLn loading
-    oldSrc <- useReplState replCurrSource
-    pactdb <- liftIO (mockPactDb serialisePact_repl_spaninfo)
-    oldEE <- useReplState replEvalEnv
-    when reset $ do
-      ee <- liftIO (defaultEvalEnv pactdb replBuiltinMap)
-      put def
-      replEvalEnv .== ee
-    fp <- mangleFilePath (T.unpack txt)
-    when (isPactFile fp) $ esLoaded . loToplevel .= mempty
-    out <- loadFile fp interpreter
-    replCurrSource .== oldSrc
-    unless reset $ do
-      replEvalEnv .== oldEE
-    setBuiltinResolution
-    pure out
-  mangleFilePath fp = do
-    (SourceCode currFile _) <- useReplState replCurrSource
-    case currFile of
-      "(interactive)" -> pure fp
-      _ | isAbsolute fp -> pure fp
-        | takeFileName currFile == currFile -> pure fp
-        | otherwise -> pure $ combine (takeDirectory currFile) fp
   pipe' tl = case tl of
     Lisp.RTLTopLevel toplevel -> case topLevelHasDocs toplevel of
       Just doc -> displayValue $ RBuiltinDoc doc
@@ -268,7 +281,7 @@ interpretReplProgram interpreter (SourceCode sourceFp source) = do
               Nothing ->
                 throwExecutionError varI $ EvalError "repl invariant violated: resolved to a top level free variable without a binder"
           _ -> do
-            let sliced = sliceCode toplevel source (view Lisp.topLevelInfo toplevel)
+            let sliced = sliceCode toplevel source (view (Lisp.topLevelInfo.spanInfo) toplevel)
             v <- evalTopLevel interpreter (RawCode sliced) ds deps
             emitWarnings
             replPrintLn v

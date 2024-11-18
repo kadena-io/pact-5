@@ -235,7 +235,7 @@ evaluate env = \case
   App ufn uargs info -> do
     fn <- enforceUserAppClosure info =<< evaluate env ufn
     args <- traverse (evaluate env) uargs
-    applyLam fn args
+    applyLam info fn args
   Sequence e1 e2 info -> do
     v <- evaluate env e1
     enforceSaturatedApp info v
@@ -452,7 +452,7 @@ evalCap info env origToken@(CapToken fqn args) popType ecType contbody = do
       _ <- evalWithStackFrame info capStackFrame Nothing (evaluate inCapEnv capBody)
       (esCaps . csCapsBeingEvaluated) .= oldCapsBeingEvaluated
       when (ecType == NormalCapEval) $ do
-        updatedV <- enforcePactValue info =<< applyLam (C dfunClo) [VPactValue oldV, VPactValue newV]
+        updatedV <- enforcePactValue info =<< applyLam info (C dfunClo) [VPactValue oldV, VPactValue newV]
         let mcap' = unsafeUpdateManagedParam updatedV managedCap
         (esCaps . csManaged) %= S.insert mcap'
       evalWithCapBody info popType (Just qualCapToken) emitted env contbody
@@ -667,17 +667,19 @@ evalWithStackFrame info sf mty act = do
 
 applyLamUnsafe
   :: (IsBuiltin b)
-  => CanApply e b i
+  => i
+  -> CanApply e b i
   -> [EvalValue e b i]
   -> EvalM e b i (EvalValue e b i)
 applyLamUnsafe = applyLam
 
 applyLam
   :: (IsBuiltin b)
-  => CanApply e b i
+  => i
+  -> CanApply e b i
   -> [EvalValue e b i]
   -> EvalM e b i (EvalValue e b i)
-applyLam nclo@(N (NativeFn b env fn arity i)) args
+applyLam i nclo@(N (NativeFn b env fn arity _)) args
   | arity == argLen = do
     when (builtinChargesGas b) $ chargeFlatNativeGas i b
     fn i b env args
@@ -690,7 +692,7 @@ applyLam nclo@(N (NativeFn b env fn arity i)) args
   apply' !a pa (x:xs) = apply' (a - 1) (x:pa) xs
   apply' !a pa [] =
     return (VPartialNative (PartialNativeFn b env fn a pa i))
-applyLam (CT (CapTokenClosure fqn argtys arity i)) args
+applyLam i (CT (CapTokenClosure fqn argtys arity _)) args
   | arity == argLen = do
     chargeGasArgs i (GAApplyLam (Just fqn) (fromIntegral argLen))
     args' <- traverse (enforcePactValue i) args
@@ -699,7 +701,7 @@ applyLam (CT (CapTokenClosure fqn argtys arity i)) args
   | otherwise = throwExecutionError i ClosureAppliedToTooManyArgs
   where
   argLen = length args
-applyLam vc@(C (Closure fqn ca arity term mty env cloi)) args
+applyLam cloi vc@(C (Closure fqn ca arity term mty env _)) args
   | arity == argLen = case ca of
     ArgClosure cloargs -> do
       chargeGasArgs cloi (GAApplyLam (Just fqn) argLen)
@@ -733,7 +735,7 @@ applyLam vc@(C (Closure fqn ca arity term mty env cloi)) args
     return (VPartialClosure pclo)
   apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
 
-applyLam (LC (LamClosure ca arity term mty env cloi)) args
+applyLam cloi (LC (LamClosure ca arity term mty env _)) args
   | arity == argLen = case ca of
     ArgClosure _ -> do
       -- Todo: maybe lambda application should mangle some sort of name?
@@ -761,7 +763,7 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args
   apply' e (ty:tys) [] =
     return (VPartialClosure (PartialClosure Nothing (ty :| tys) argLen (length tys + 1) term mty (set ceLocal e env) cloi))
   apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
-applyLam (PC (PartialClosure li argtys nargs _ term mty env cloi)) args = do
+applyLam cloi (PC (PartialClosure li argtys nargs _ term mty env _)) args = do
   chargeGasArgs cloi (GAApplyLam (_sfName <$> li) (length args))
   apply' nargs (view ceLocal env) (NE.toList argtys) args
   where
@@ -780,7 +782,7 @@ applyLam (PC (PartialClosure li argtys nargs _ term mty env cloi)) args = do
     return (VPartialClosure pclo)
   apply' _ _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
 
-applyLam (PN (PartialNativeFn b env fn arity pArgs i)) args
+applyLam i (PN (PartialNativeFn b env fn arity pArgs _)) args
   | arity == argLen = do
     chargeFlatNativeGas i b
     fn i b env (reverse pArgs ++ args)
@@ -791,7 +793,7 @@ applyLam (PN (PartialNativeFn b env fn arity pArgs i)) args
   apply' !a pa (x:xs) = apply' (a - 1) (x:pa) xs
   apply' !a pa [] =
     return (VPartialNative (PartialNativeFn b env fn a pa i))
-applyLam (DPC (DefPactClosure fqn argtys arity env i)) args
+applyLam i (DPC (DefPactClosure fqn argtys arity env _)) args
   | arity == argLen = case argtys of
     ArgClosure cloargs -> do
       -- Todo: defpact has much higher overhead, we must charge a bit more gas for this
@@ -888,7 +890,7 @@ runUserGuard info env (UserGuard qn args) =
       let env' = sysOnlyEnv env
       clo <- mkDefunClosure d (qualNameToFqn qn mh) env'
       -- Todo: sys only here
-      True <$ (applyLam (C clo) (VPactValue <$> args) >>= enforcePactValue info)
+      True <$ (applyLam info (C clo) (VPactValue <$> args) >>= enforcePactValue info)
     (d, _) -> throwExecutionError info (UserGuardMustBeADefun qn (defKind (_qnModName qn) d))
 
 enforceCapGuard
@@ -939,7 +941,7 @@ isKeysetInSigs info env (KeySet kskeys ksPred) = do
       getModuleMemberWithHash info qn >>= \case
         (Dfun d, mh) -> do
           clo <- mkDefunClosure d (qualNameToFqn qn mh) env
-          p <- enforceBool info =<< applyLam (C clo) [VInteger (fromIntegral count), VInteger (fromIntegral matched)]
+          p <- enforceBool info =<< applyLam info (C clo) [VInteger (fromIntegral count), VInteger (fromIntegral matched)]
           unless p $ throwUserRecoverableError info $ KeysetPredicateFailure ksPred kskeys
           pure p
         _ -> throwExecutionError info (InvalidCustomKeysetPredicate "expected defun")
@@ -949,7 +951,7 @@ isKeysetInSigs info env (KeySet kskeys ksPred) = do
         Just b -> do
           let builtins = view ceBuiltins env
           let nativeclo = builtins info b env
-          p <- enforceBool info =<< applyLam (N nativeclo) [VInteger (fromIntegral count), VInteger (fromIntegral matched)]
+          p <- enforceBool info =<< applyLam info (N nativeclo) [VInteger (fromIntegral count), VInteger (fromIntegral matched)]
           unless p $ throwUserRecoverableError info $ KeysetPredicateFailure ksPred kskeys
           pure p
         Nothing ->

@@ -339,6 +339,11 @@ instance SizeOf (TableSchema name) where
 
 makeSizeOf ''SpanInfo
 
+-- Note: this is a pass through instance, since this is repl-only
+instance SizeOf FileLocSpanInfo where
+  estimateSize (FileLocSpanInfo _f s) =
+    estimateSize s
+
 -- builtins
 instance SizeOf CoreBuiltin where
   estimateSize _ = countBytes (tagOverhead + 1)

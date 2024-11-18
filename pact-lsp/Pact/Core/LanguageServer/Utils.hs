@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 -- |
 
 module Pact.Core.LanguageServer.Utils where
@@ -13,9 +14,10 @@ import Control.Lens hiding (inside)
 import Pact.Core.Imports
 
 termAt
-  :: Position
-  -> EvalTerm ReplCoreBuiltin SpanInfo
-  -> Maybe (EvalTerm ReplCoreBuiltin SpanInfo)
+  :: HasSpanInfo i
+  => Position
+  -> EvalTerm ReplCoreBuiltin i
+  -> Maybe (EvalTerm ReplCoreBuiltin i)
 termAt p term
   | p `inside` view termInfo term = case term of
       t@(Lam _ b _) -> termAt p b <|> Just t
@@ -55,9 +57,10 @@ data PositionMatch b i
   deriving Show
 
 topLevelTermAt
-  :: Position
-  -> EvalTopLevel ReplCoreBuiltin SpanInfo
-  -> Maybe (PositionMatch ReplCoreBuiltin SpanInfo)
+  :: HasSpanInfo i
+  => Position
+  -> EvalTopLevel ReplCoreBuiltin i
+  -> Maybe (PositionMatch ReplCoreBuiltin i)
 topLevelTermAt p = \case
   TLModule m -> goModule m
   TLInterface i -> goInterface i
@@ -77,7 +80,7 @@ topLevelTermAt p = \case
             -- otherwise, we follow as usual.
             case termAt p tm of
               Nothing -> Just (DefunMatch d)
-              Just tm' -> if i == view termInfo tm'
+              Just tm' -> if view spanInfo i == view (termInfo.spanInfo) tm'
                           then Just (DefunMatch d)
                           else TermMatch <$> termAt p tm
         | otherwise -> Nothing
@@ -108,8 +111,8 @@ topLevelTermAt p = \case
       _ -> Nothing
 
 -- | Check if a `Position` is contained within a `Span`
-inside :: Position -> SpanInfo -> Bool
-inside pos (SpanInfo sl sc el ec) = sPos <= pos && pos < ePos
+inside :: HasSpanInfo i => Position -> i -> Bool
+inside pos (view spanInfo -> SpanInfo sl sc el ec) = sPos <= pos && pos < ePos
   where
     sPos = Position (fromIntegral sl) (fromIntegral sc)
     ePos = Position (fromIntegral el) (fromIntegral ec)
