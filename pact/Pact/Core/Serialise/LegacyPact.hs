@@ -2,6 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Pact.Core.Serialise.LegacyPact
@@ -92,6 +93,9 @@ newtype TranslateEnv
 makeLenses ''TranslateEnv
 
 type TranslateM = ReaderT TranslateEnv (StateT TranslateState (Except String))
+
+pattern UnitVal :: Term name ty builtin info
+pattern UnitVal <- InlineValue (PLiteral LUnit) _
 
 runTranslateM :: TranslateM a -> Either String a
 runTranslateM a =
@@ -596,10 +600,63 @@ objBindingToLet mh bps scope = do
         pure $ Let larg accessTerm body ()
       _ -> throwError "fromLegacyBindPair: Invariant"
 
-desugarApp :: DesugarBuiltin b => Term n dt b i -> [Term n dt b i] -> i -> Term n dt b i
-desugarApp fn args i = case fn of
-  Builtin b _ -> desugarAppArity i b args
-  _ -> App fn args i
+desugarApp
+  :: Term (Name, DeBruijn) Type CoreBuiltin ()
+  -> [Term (Name, DeBruijn) Type CoreBuiltin ()]
+  -> TranslateM CorePreNormalizedTerm
+desugarApp fn args = case fn of
+  Builtin b _ -> pure $ desugarAppArity () b args
+  BuiltinForm c _ -> case c of
+    CEnforce UnitVal UnitVal -> case args of
+      [t1,t2] -> pure (BuiltinForm (CEnforce t1 t2) ())
+      [t1] -> mkOneArgLam $ \x -> BuiltinForm (CEnforce t1 x) ()
+      args' -> do
+        lam <- mkTwoArgLam $ \x y -> BuiltinForm (CEnforce x y) ()
+        pure $ App lam args' ()
+    CEnforceOne UnitVal UnitVal -> case args of
+      [t1, t2] -> pure (BuiltinForm (CEnforceOne t1 t2) ())
+      args' -> do
+        lam <- mkTwoArgLam $ \x y -> BuiltinForm (CEnforceOne x y) ()
+        pure $ App lam args' ()
+    CIf UnitVal UnitVal UnitVal -> case args of
+      [cond, b1, b2] -> pure (BuiltinForm (CIf cond b1 b2) ())
+      [cond, b1] -> mkOneArgLam $ \x -> BuiltinForm (CIf cond b1 x) ()
+      [cond] -> mkTwoArgLam $ \x y -> BuiltinForm (CIf cond x y) ()
+      args' -> do
+        lam <- mkThreeArgLam $ \x y z -> BuiltinForm (CIf x y z) ()
+        pure $ App lam args' ()
+    CAnd UnitVal UnitVal -> case args of
+        [b1, b2] -> pure (BuiltinForm (CAnd b1 b2) ())
+        [b1] -> mkOneArgLam $ \x -> BuiltinForm (CAnd b1 x) ()
+        args' -> do
+          lam <- mkTwoArgLam $ \x y -> BuiltinForm (CAnd x y) ()
+          pure $ App lam args' ()
+    COr UnitVal UnitVal -> case args of
+      [b1, b2] -> pure (BuiltinForm (COr b1 b2) ())
+      [b1] -> mkOneArgLam $ \x -> BuiltinForm (COr b1 x) ()
+      args' -> do
+        lam <- mkTwoArgLam $ \x y -> BuiltinForm (COr x y) ()
+        pure $ App lam args' ()
+    CWithCapability UnitVal UnitVal -> case args of
+      [t1, ListLit t2 _] -> case reverse t2 of
+        [] -> throwError "invariant failure: with-cap empty body"
+        x:xs -> do
+          let body' = foldl' (\r l -> Sequence l r ()) x xs
+          pure (BuiltinForm (CWithCapability t1 body') ())
+      _ -> throwError "invariant failure: with-capability"
+    CCreateUserGuard UnitVal -> case args of
+        [x] ->
+          pure (BuiltinForm (CCreateUserGuard x) ())
+        args' -> do
+          lam <- mkOneArgLam $ \x -> BuiltinForm (CCreateUserGuard x) ()
+          pure $ App lam args' ()
+    CTry UnitVal UnitVal -> case args of
+        [t1, t2] -> pure (BuiltinForm (CTry t1 t2) ())
+        args' -> do
+          lam <- mkTwoArgLam $ \x y -> BuiltinForm (CTry x y) ()
+          pure $ App lam args' ()
+    _ -> pure $ App fn args ()
+  _ -> pure $ App fn args ()
 
 higherOrder1Arg :: [CoreBuiltin]
 higherOrder1Arg = [CoreMap, CoreFilter]
@@ -621,119 +678,36 @@ fromLegacyTerm mh = \case
   Legacy.TApp (Legacy.App fn args) -> do
     fn' <- fromLegacyTerm mh fn
     case fn' of
-      Builtin b _ -> case b of
-        CoreBind | [bObj, Legacy.TBinding bps scope _] <- args -> do
-            bObj' <- fromLegacyTerm mh bObj
-            lam <- objBindingToLet mh bps scope
-            pure (App fn' [bObj', lam] ())
-
-        CoreWithRead | [tbl, rowkey, Legacy.TBinding bps scope _] <- args -> do
-            tbl' <- fromLegacyTerm mh tbl
-            rowkey' <- fromLegacyTerm mh rowkey
-            lam <- objBindingToLet mh bps scope
-            pure (App fn' [tbl', rowkey', lam] ())
-
-        CoreWithDefaultRead | [tbl, rowkey, defaultObj, Legacy.TBinding bps scope _] <- args -> do
-            tbl' <- fromLegacyTerm mh tbl
-            rowkey' <- fromLegacyTerm mh rowkey
-            defaultObj' <- fromLegacyTerm mh defaultObj
-            lam <- objBindingToLet mh bps scope
-            pure (App fn' [tbl', rowkey', defaultObj', lam] ())
-
-        CoreResume | [Legacy.TBinding bps scope _] <- args -> do
-            lam <- objBindingToLet mh bps scope
-            pure (App fn' [lam] ())
-
+      Builtin b _  | b `elem` higherOrder1Arg
+          , Legacy.TApp (Legacy.App mapOperator mapOperands): xs <- args -> do
         -- [HOF Translation]
         -- Note: The following sections of translation are explained as follows:
         -- we transform, for example `(map (+ k) other-arg)` into
         -- `(map (lambda (arg) (+ k arg)) other-arg)
         -- This eta expansion is necessary to
-        _ | b `elem` higherOrder1Arg
-          , Legacy.TApp (Legacy.App mapOperator mapOperands): xs <- args -> do
+
           d <- view teDepth
           let injectedArg = (Var (Name "iArg" (NBound 0), d + 1) () :: CorePreNormalizedTerm)
           let containingLam e = Lam (pure (Arg "lArg" Nothing ())) e ()
           (mapOperator', mapOperands') <- local (over teDepth (+ 1)) $ (,) <$> fromLegacyTerm mh mapOperator <*> traverse (fromLegacyTerm mh) mapOperands
-          let body = containingLam (desugarApp mapOperator' (mapOperands' ++ [injectedArg]) ())
+          body <- containingLam <$> desugarApp mapOperator' (mapOperands' ++ [injectedArg])
           xs' <- traverse (fromLegacyTerm mh) xs
           pure (App fn' (body:xs') ())
 
-        _ | b `elem` higherOrder2Arg
+      Builtin b _ | b `elem` higherOrder2Arg
           , Legacy.TApp (Legacy.App mapOperator mapOperands): xs <- args -> do
           d <- view teDepth
           let injectedArg1 = (Var (Name "iArg1" (NBound 1), d + 2) () :: CorePreNormalizedTerm)
               injectedArg2 = (Var (Name "iArg2" (NBound 0), d + 2) () :: CorePreNormalizedTerm)
           let containingLam e = Lam (Arg "iArg1" Nothing () :| [Arg "iArg2" Nothing ()]) e ()
           (mapOperator', mapOperands') <- local (over teDepth (+ 2)) $ (,) <$> fromLegacyTerm mh mapOperator <*> traverse (fromLegacyTerm mh) mapOperands
-          let body = containingLam (desugarApp mapOperator' (mapOperands' ++ [injectedArg1, injectedArg2]) ())
+          body <- containingLam <$> desugarApp mapOperator' (mapOperands' ++ [injectedArg1, injectedArg2])
           xs' <- traverse (fromLegacyTerm mh) xs
           pure (App fn' (body:xs') ())
-
-        _ -> do
-          args' <- traverse (fromLegacyTerm mh) args
-          pure (desugarAppArity () b args')
-
-      BuiltinForm CEnforce{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [t1,t2] -> pure (BuiltinForm (CEnforce t1 t2) ())
-        [t1] -> mkOneArgLam $ \x -> BuiltinForm (CEnforce t1 x) ()
-        args' -> do
-          lam <- mkTwoArgLam $ \x y -> BuiltinForm (CEnforce x y) ()
-          pure $ App lam args' ()
-
-      BuiltinForm CEnforceOne{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [t1, t2] -> pure (BuiltinForm (CEnforceOne t1 t2) ())
-        args' -> do
-          lam <- mkTwoArgLam $ \x y -> BuiltinForm (CEnforceOne x y) ()
-          pure $ App lam args' ()
-
-      BuiltinForm CIf{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [cond, b1, b2] -> pure (BuiltinForm (CIf cond b1 b2) ())
-        [cond, b1] -> mkOneArgLam $ \x -> BuiltinForm (CIf cond b1 x) ()
-        [cond] -> mkTwoArgLam $ \x y -> BuiltinForm (CIf cond x y) ()
-        args' -> do
-          lam <- mkThreeArgLam $ \x y z -> BuiltinForm (CIf x y z) ()
-          pure $ App lam args' ()
-
-      BuiltinForm CAnd{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [b1, b2] -> pure (BuiltinForm (CAnd b1 b2) ())
-        [b1] -> mkOneArgLam $ \x -> BuiltinForm (CAnd b1 x) ()
-        args' -> do
-          lam <- mkTwoArgLam $ \x y -> BuiltinForm (CAnd x y) ()
-          pure $ App lam args' ()
-
-      BuiltinForm COr{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [b1, b2] -> pure (BuiltinForm (COr b1 b2) ())
-        [b1] -> mkOneArgLam $ \x -> BuiltinForm (COr b1 x) ()
-        args' -> do
-          lam <- mkTwoArgLam $ \x y -> BuiltinForm (COr x y) ()
-          pure $ App lam args' ()
-
-      BuiltinForm CWithCapability{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [t1, ListLit t2 _] -> case reverse t2 of
-          [] -> throwError "invariant failure: with-cap empty body"
-          x:xs -> do
-            let body' = foldl' (\r l -> Sequence l r ()) x xs
-            pure (BuiltinForm (CWithCapability t1 body') ())
-        _ -> throwError "invariant failure: with-capability"
-
-      BuiltinForm CCreateUserGuard{} _ ->
-        traverse (fromLegacyTerm mh) args >>= \case
-        [x] ->
-          pure (BuiltinForm (CCreateUserGuard x) ())
-        args' -> do
-          lam <- mkOneArgLam $ \x -> BuiltinForm (CCreateUserGuard x) ()
-          pure $ App lam args' ()
-
-      BuiltinForm CTry{} _ -> traverse (fromLegacyTerm mh) args >>= \case
-        [t1, t2] -> pure (BuiltinForm (CTry t1 t2) ())
-        args' -> do
-          lam <- mkTwoArgLam $ \x y -> BuiltinForm (CTry x y) ()
-          pure $ App lam args' ()
-
+      
       _ -> do
         args' <- traverse (fromLegacyTerm mh) args
-        pure (App fn' args' ())
+        desugarApp fn' args'
 
 
   Legacy.TLam (Legacy.Lam _ (Legacy.FunType args _) body) -> do
@@ -759,13 +733,15 @@ fromLegacyTerm mh = \case
     Legacy.BindLet -> do
       args' <- traverse (fromLegacyArg . Legacy._bpArg) bps
       body' <- fromLegacyBodyForm' mh args' body
-      foldrM goLet body' bps
+      goLet (fromIntegral (length bps)) (reverse bps) body'
       where
-      goLet (Legacy.BindPair arg val) rest = do
+      goLet d (Legacy.BindPair arg val : xs) rest = do
         arg' <- fromLegacyArg arg
-        v' <- fromLegacyTerm mh val
-        pure $ Let arg' v' rest ()
-    _ -> throwError "unsupported: object binds outside of designated callsite"
+        v' <- local (over teDepth (+ (d - 1))) $ fromLegacyTerm mh val
+        goLet (d - 1) xs (Let arg' v' rest ())
+      goLet _ [] rest = pure rest
+    Legacy.BindSchema _ ->
+      objBindingToLet mh bps body
 
   Legacy.TObject (Legacy.Object o _ _) -> do
    let m = M.toList (Legacy._objectMap o)
