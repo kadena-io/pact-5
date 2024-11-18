@@ -14,6 +14,7 @@ module Pact.Core.Serialise.CBOR_V1
   ( encodeModuleData, decodeModuleData
   , encodeModuleData_repl_spaninfo, decodeModuleData_repl_spaninfo
   , encodeModuleData_raw_spaninfo, decodeModuleData_raw_spaninfo
+  , encodeModuleData_repl_flspaninfo, decodeModuleData_repl_flspaninfo
   , encodeModuleData_lineinfo, decodeModuleData_lineinfo
   , encodeKeySet, decodeKeySet
   , encodeDefPactExec, decodeDefPactExec
@@ -68,6 +69,9 @@ encodeModuleData = toStrictByteString . encodeS
 encodeModuleData_repl_spaninfo :: ModuleData ReplCoreBuiltin SpanInfo -> ByteString
 encodeModuleData_repl_spaninfo = toStrictByteString . encodeS
 
+encodeModuleData_repl_flspaninfo :: ModuleData ReplCoreBuiltin FileLocSpanInfo -> ByteString
+encodeModuleData_repl_flspaninfo = toStrictByteString . encodeS
+
 encodeModuleData_raw_spaninfo :: ModuleData CoreBuiltin SpanInfo -> ByteString
 encodeModuleData_raw_spaninfo = toStrictByteString . encodeS
 
@@ -88,6 +92,9 @@ decodeModuleData_raw_spaninfo bs = either (const Nothing) (Just . _getSV1) (dese
 
 decodeModuleData_lineinfo :: ByteString -> Maybe (ModuleData CoreBuiltin LineInfo)
 decodeModuleData_lineinfo bs = either (const Nothing) (Just . _getSV1) (deserialiseOrFail (fromStrict bs))
+
+decodeModuleData_repl_flspaninfo :: ByteString -> Maybe (ModuleData ReplCoreBuiltin FileLocSpanInfo)
+decodeModuleData_repl_flspaninfo bs = either (const Nothing) (Just . _getSV1) (deserialiseOrFail (fromStrict bs))
 
 encodeModuleName :: ModuleName -> ByteString
 encodeModuleName = toStrictByteString . encodeS
@@ -852,6 +859,15 @@ instance Serialise (SerialiseV1 SpanInfo) where
   decode = do
     safeDecodeListLen 4 "SpanInfo"
     SerialiseV1 <$> (SpanInfo <$> decode <*> decode <*> decode <*> decode)
+  {-# INLINE decode #-}
+
+instance Serialise (SerialiseV1 FileLocSpanInfo) where
+  encode (SerialiseV1 (FileLocSpanInfo f s)) =
+    encodeListLen 2 <> encode f <> encodeS s
+  {-# INLINE encode #-}
+  decode = do
+    safeDecodeListLen 2 "FileLocSpanInfo"
+    SerialiseV1 <$> (FileLocSpanInfo <$> decode <*> decodeS)
   {-# INLINE decode #-}
 
 instance Serialise (SerialiseV1 LineInfo) where

@@ -1,7 +1,9 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module Pact.Core.Info
  ( SpanInfo(..)
@@ -12,6 +14,8 @@ module Pact.Core.Info
  , sliceFromSourceLines
  , LineInfo(..)
  , spanInfoToLineInfo
+ , FileLocSpanInfo(..)
+ , HasSpanInfo(..)
  ) where
 
 import Control.Lens
@@ -71,6 +75,12 @@ instance Pretty SpanInfo where
 spanInfoToLineInfo :: SpanInfo -> LineInfo
 spanInfoToLineInfo = LineInfo . _liStartLine
 
+data FileLocSpanInfo
+  = FileLocSpanInfo
+  { _flsiFile :: !String
+  , _flsiSpan :: !SpanInfo
+  } deriving (Eq, Show, Generic, NFData)
+
 -- | Combine two Span infos
 --   and spit out how far down the expression spans.
 combineSpan :: SpanInfo -> SpanInfo -> SpanInfo
@@ -96,3 +106,14 @@ data Located i a
   { _locLocation :: i
   , _locElem :: a }
   deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
+
+makeClassy ''SpanInfo
+
+instance HasSpanInfo FileLocSpanInfo where
+  spanInfo = lens _flsiSpan (\s i -> s { _flsiSpan = i })
+
+instance Pretty FileLocSpanInfo where
+  pretty (FileLocSpanInfo f s) = pretty f <> " " <> pretty s
+
+instance Default FileLocSpanInfo where
+  def = FileLocSpanInfo "" def

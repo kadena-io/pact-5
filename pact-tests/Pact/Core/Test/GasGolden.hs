@@ -12,6 +12,7 @@ import Pact.Core.Builtin
 import Pact.Core.Environment
 import Pact.Core.Gas
 import Pact.Core.Persistence.MockPersistence
+import Pact.Core.Repl
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
 import Pact.Core.Serialise
@@ -29,15 +30,13 @@ import qualified Data.Text.IO as T
 import Data.List (sort)
 import Control.Lens
 
-type InterpretPact = SourceCode -> ReplM ReplCoreBuiltin [ReplCompileValue]
-
 tests :: IO TestTree
 tests = do
   cases <- gasTestFiles
   pure $ testGroup "Gas Goldens"
     [ testCase "Capture all builtins" $ captureBuiltins (fst <$> cases)
-    , goldenVsStringDiff "Gas Goldens: CEK" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases interpretReplProgramBigStep)
-    , goldenVsStringDiff "Gas Goldens: Direct" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases interpretReplProgramDirect)
+    , goldenVsStringDiff "Gas Goldens: CEK" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases interpretEvalBigStep)
+    , goldenVsStringDiff "Gas Goldens: Direct" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases interpretEvalDirect)
     ]
   where
   runDiff = \ref new -> ["diff", "-u", ref, new]
@@ -68,7 +67,7 @@ lookupOp :: Text -> Text
 lookupOp n = fromMaybe n (M.lookup n fileNameToOp)
 
 
-gasGoldenTests :: [(Text, FilePath)] -> InterpretPact -> IO BS.ByteString
+gasGoldenTests :: [(Text, FilePath)] -> ReplInterpreter -> IO BS.ByteString
 gasGoldenTests c interp = do
   gasOutputs <- forM c $ \(fn, fp) -> do
     mGas <- runGasTest (gasTestDir </> fp) interp
@@ -104,16 +103,16 @@ opToFileName = M.fromList
 fileNameToOp :: M.Map Text Text
 fileNameToOp = M.fromList [(v,k) | (k, v) <- M.toList opToFileName]
 
-runGasTest :: FilePath -> InterpretPact -> IO (Maybe MilliGas)
+runGasTest :: FilePath -> ReplInterpreter -> IO (Maybe MilliGas)
 runGasTest file interpret = do
   src <- T.readFile file
-  pdb <- mockPactDb serialisePact_repl_spaninfo
+  pdb <- mockPactDb serialisePact_repl_fileLocSpanInfo
   ee <- defaultEvalEnv pdb replBuiltinMap
   let ee' = ee & eeGasEnv . geGasModel .~ replTableGasModel (Just (maxBound :: MilliGasLimit))
       gasRef = ee' ^. eeGasEnv . geGasRef
   let source = SourceCode file src
-  let rstate = mkReplState ee' (const (pure ())) & replCurrSource .~ source
+  let rstate = mkReplState ee' (const (pure ())) (\f r -> void (loadFile interpret f r)) & replCurrSource .~ source
   stateRef <- newIORef rstate
-  evalReplM stateRef (interpret source) >>= \case
+  evalReplM stateRef (interpretReplProgram interpret source) >>= \case
     Left _ -> pure Nothing
     Right _ -> Just <$> readIORef gasRef

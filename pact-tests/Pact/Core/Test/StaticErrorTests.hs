@@ -10,6 +10,7 @@ import qualified Data.Text as T
 import Control.Lens
 import Data.IORef
 import Data.Text (Text)
+import Data.Functor (void)
 import NeatInterpolation (text)
 
 import Pact.Core.Builtin
@@ -18,26 +19,27 @@ import Pact.Core.Errors
 import Pact.Core.Persistence.MockPersistence (mockPactDb)
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
-import Pact.Core.Serialise (serialisePact_repl_spaninfo)
+import Pact.Core.Serialise
+import Pact.Core.Info
 
-isParseError :: Prism' ParseError a -> PactErrorI -> Bool
+isParseError :: Prism' ParseError a -> PactError FileLocSpanInfo -> Bool
 isParseError p s = has (_PEParseError . _1 . p) s
 
-isDesugarError :: Prism' DesugarError a -> PactErrorI -> Bool
+isDesugarError :: Prism' DesugarError a -> PactError FileLocSpanInfo -> Bool
 isDesugarError p s = has (_PEDesugarError . _1 . p) s
 
-isExecutionError :: Prism' EvalError a -> PactErrorI -> Bool
+isExecutionError :: Prism' EvalError a -> PactError FileLocSpanInfo -> Bool
 isExecutionError p s = has (_PEExecutionError . _1 . p) s
 
-isUserRecoverableError :: Prism' UserRecoverableError a -> PactErrorI -> Bool
+isUserRecoverableError :: Prism' UserRecoverableError a -> PactError FileLocSpanInfo -> Bool
 isUserRecoverableError p s = has (_PEUserRecoverableError . _1 . p) s
 
-runStaticTest :: String -> Text -> ReplInterpreter -> (PactErrorI -> Bool) -> Assertion
+runStaticTest :: String -> Text -> ReplInterpreter -> (PactError FileLocSpanInfo -> Bool) -> Assertion
 runStaticTest label src interp predicate = do
-  pdb <- mockPactDb serialisePact_repl_spaninfo
+  pdb <- mockPactDb serialisePact_repl_fileLocSpanInfo
   ee <- defaultEvalEnv pdb replBuiltinMap
   let source = SourceCode label src
-      rstate = mkReplState ee (const (pure ()))
+      rstate = mkReplState ee (const (pure ())) (\f reset -> void (loadFile interp f reset))
                 & replCurrSource .~ source
                 & replNativesEnabled .~ True
   stateRef <- newIORef rstate
@@ -47,7 +49,7 @@ runStaticTest label src interp predicate = do
       assertBool ("Expected Error to match predicate, but got " <> show err <> " instead") (predicate err)
     Right _v -> assertFailure ("Error: Static failure test succeeded for test: " <> label)
 
-parseTests :: [(String, PactErrorI -> Bool, Text)]
+parseTests :: [(String, PactError FileLocSpanInfo -> Bool, Text)]
 parseTests =
   [ ("defpact_empty", isParseError _ParsingError, [text|
       (module m g (defcap g () true)
@@ -64,7 +66,7 @@ parseTests =
       |])
   ]
 
-desugarTests :: [(String, PactErrorI -> Bool, Text)]
+desugarTests :: [(String, PactError FileLocSpanInfo -> Bool, Text)]
 desugarTests =
   [ ("no_bind_body", isDesugarError _EmptyBindingBody, [text|(bind {"a":1} {"a":=a})|])
   , ("defpact_last_step_rollback", isDesugarError _LastStepWithRollback, [text|
@@ -600,7 +602,7 @@ desugarTests =
     |])
   ]
 
-executionTests :: [(String, PactErrorI -> Bool, Text)]
+executionTests :: [(String, PactError FileLocSpanInfo -> Bool, Text)]
 executionTests =
   [ ("enforce_ns_install_module", isExecutionError _RootNamespaceInstallError, [text|
       (module m g (defcap g () true)
@@ -1105,7 +1107,7 @@ executionTests =
     |])
   ]
 
-builtinTests :: [(String, PactErrorI -> Bool, Text)]
+builtinTests :: [(String, PactError FileLocSpanInfo -> Bool, Text)]
 builtinTests =
   [ ("integer_pow_negative", isExecutionError _ArithmeticException, "(^ 0 -1)")
   , ("floating_pow_negative", isExecutionError _FloatingPointError, "(^ 0.0 -1.0)")

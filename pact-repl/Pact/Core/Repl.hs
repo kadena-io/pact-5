@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 
 
@@ -36,13 +37,15 @@ import Pact.Core.Repl.Utils
 import Pact.Core.Serialise
 import Pact.Core.Info
 import Pact.Core.Errors
+import Control.Lens
+import qualified Data.Map.Strict as M
 
-execScript :: Bool -> FilePath -> IO (Either (PactError SpanInfo) [ReplCompileValue], ReplState ReplCoreBuiltin)
+execScript :: Bool -> FilePath -> IO (Either (PactError FileLocSpanInfo) [ReplCompileValue], ReplState ReplCoreBuiltin)
 execScript dolog f = do
-  pdb <- mockPactDb serialisePact_repl_spaninfo
+  pdb <- mockPactDb serialisePact_repl_fileLocSpanInfo
   ee <- defaultEvalEnv pdb replBuiltinMap
-  ref <- newIORef (mkReplState ee logger)
-  v <- evalReplM ref $ loadFile f interpretEvalDirect
+  ref <- newIORef (mkReplState' ee logger)
+  v <- evalReplM ref $ loadFile interpretEvalDirect f True
   state <- readIORef ref
   pure (v, state)
   where
@@ -51,12 +54,13 @@ execScript dolog f = do
     | dolog = liftIO . T.putStrLn
     | otherwise = const (pure ())
 
+
 runRepl :: IO ()
 runRepl = do
-  pdb <- mockPactDb serialisePact_repl_spaninfo
+  pdb <- mockPactDb serialisePact_repl_fileLocSpanInfo
   ee <- defaultEvalEnv pdb replBuiltinMap
   let display' rcv = runInputT replSettings (displayOutput rcv)
-  ref <- newIORef (mkReplState ee display')
+  ref <- newIORef (mkReplState' ee display')
   evalReplM ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
@@ -79,7 +83,10 @@ runRepl = do
         case eout of
           Right _ -> pure ()
           Left err -> do
-            rs <- lift (useReplState replCurrSource)
+            let replInfo = view peInfo err
+            rs <- lift (usesReplState replLoadedFiles (M.lookup (_flsiFile replInfo))) >>= \case
+              Just sc -> pure sc
+              Nothing -> lift (useReplState replCurrSource)
             lift (replCurrSource .== defaultSrc)
             outputStrLn (T.unpack (replError rs err))
         loop
