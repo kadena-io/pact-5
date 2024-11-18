@@ -18,6 +18,7 @@ module Pact.Core.Serialise
   , serialisePact_raw_spaninfo
   , serialisePact_lineinfo
   , serialisePact_repl_spaninfo
+  , serialisePact_repl_flspaninfo
   , decodeVersion
   , encodeVersion
   , liftReplBuiltin
@@ -162,6 +163,18 @@ serialisePact_repl_spaninfo = serialisePact
         (LegacyDocument . fmap (\_ -> def) . liftReplBuiltin <$> LegacyPact.decodeModuleData bs)
         <|> docDecode bs (\case
                             V1_CBOR -> V1.decodeModuleData_repl_spaninfo
+                        )
+  , _encodeRowData = gEncodeRowData
+  }
+
+serialisePact_repl_flspaninfo :: PactSerialise ReplCoreBuiltin FileLocSpanInfo
+serialisePact_repl_flspaninfo = serialisePact
+  { _encodeModuleData = docEncode V1.encodeModuleData_repl_flspaninfo
+  , _decodeModuleData =
+      \bs ->
+        (LegacyDocument . fmap (\_ -> def) . liftReplBuiltin <$> LegacyPact.decodeModuleData bs)
+        <|> docDecode bs (\case
+                            V1_CBOR -> V1.decodeModuleData_repl_flspaninfo
                         )
   , _encodeRowData = gEncodeRowData
   }

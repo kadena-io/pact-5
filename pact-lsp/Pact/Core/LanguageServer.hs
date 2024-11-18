@@ -40,6 +40,8 @@ import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import System.Exit
 
+import Control.Monad
+import Control.Monad.State.Strict(put)
 import Control.Monad.Reader (ReaderT, runReaderT, ask)
 import Control.Monad.Trans (lift)
 import Control.Concurrent.MVar
@@ -49,6 +51,7 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 import qualified Pact.Core.Syntax.Lexer as Lisp
 import qualified Pact.Core.Syntax.Parser as Lisp
 import Pact.Core.IR.Term
+import Pact.Core.Persistence
 import Pact.Core.LanguageServer.Utils
 import Pact.Core.LanguageServer.Renaming
 import Pact.Core.Repl.BuiltinDocs
@@ -59,12 +62,13 @@ import qualified Pact.Core.IR.ModuleHashing as MHash
 import qualified Pact.Core.IR.ConstEval as ConstEval
 import qualified Pact.Core.Repl.Compile as Repl
 import Pact.Core.Interpreter
+import Data.Default
 
 data LSState =
   LSState
   { _lsReplState :: M.Map NormalizedUri (ReplState ReplCoreBuiltin)
   -- ^ Post-Compilation State for each opened file
-  , _lsTopLevel :: M.Map NormalizedUri [EvalTopLevel ReplCoreBuiltin SpanInfo]
+  , _lsTopLevel :: M.Map NormalizedUri [EvalTopLevel ReplCoreBuiltin FileLocSpanInfo]
   -- ^ Top-level terms for each opened file. Used to find the match of a
   --   particular (cursor) position inside the file.
   }
@@ -201,9 +205,9 @@ sendDiagnostics nuri mv content = liftIO (setupAndProcessFile nuri content) >>= 
     -- We emit an empty set of diagnostics
     publishDiagnostics 0  nuri mv $ partitionBySource []
   where
-    pactErrorToDiagnostic :: PactError SpanInfo -> Diagnostic
+    pactErrorToDiagnostic :: PactError FileLocSpanInfo -> Diagnostic
     pactErrorToDiagnostic err = Diagnostic
-      { _range = err ^. peInfo .to spanInfoToRange
+      { _range = err ^. peInfo . spanInfo . to spanInfoToRange
       , _severity = Just DiagnosticSeverity_Error
       , _code = Nothing -- We do not have any error code right now
       , _codeDescription = Nothing
@@ -226,11 +230,11 @@ sendDiagnostics nuri mv content = liftIO (setupAndProcessFile nuri content) >>= 
 setupAndProcessFile
   :: NormalizedUri
   -> Text
-  -> IO (Either (PactError SpanInfo)
+  -> IO (Either (PactError FileLocSpanInfo)
           (ReplState ReplCoreBuiltin
-          ,M.Map NormalizedUri  [EvalTopLevel ReplCoreBuiltin SpanInfo]))
+          ,M.Map NormalizedUri  [EvalTopLevel ReplCoreBuiltin FileLocSpanInfo]))
 setupAndProcessFile nuri content = do
-  pdb <- mockPactDb serialisePact_repl_spaninfo
+  pdb <- mockPactDb serialisePact_repl_flspaninfo
   let
     builtinMap = if isReplScript fp
                  then replBuiltinMap
@@ -250,11 +254,14 @@ setupAndProcessFile nuri content = do
           -- since there may be no way for us to set it for the LSP from pact directly.
           -- Once this is possible, we can set it to `False` as is the default
           , _replNativesEnabled = True
+          , _replLoad = doLoad
+          , _replLogType = ReplStdOut
+          , _replLoadedFiles = mempty
           , _replOutputLine = const (pure ())
           , _replTestResults = []
           }
   stateRef <- newIORef rstate
-  res <- evalReplM stateRef (processFile Repl.interpretEvalBigStep nuri content)
+  res <- evalReplM stateRef (processFile Repl.interpretEvalBigStep nuri src)
   st <- readIORef stateRef
   pure $ (st,) <$> res
   where
@@ -269,9 +276,10 @@ spanInfoToRange (SpanInfo sl sc el ec) = mkRange
 
 
 getMatch
-  :: Position
-  -> [EvalTopLevel ReplCoreBuiltin SpanInfo]
-  -> Maybe (PositionMatch ReplCoreBuiltin SpanInfo)
+  :: HasSpanInfo i
+  => Position
+  -> [EvalTopLevel ReplCoreBuiltin i]
+  -> Maybe (PositionMatch ReplCoreBuiltin i)
 getMatch pos tl = getAlt (foldMap (Alt . topLevelTermAt pos) tl)
 
 documentDefinitionRequestHandler :: Handlers LSM
@@ -291,7 +299,7 @@ documentDefinitionRequestHandler = requestHandler SMethod_TextDocumentDefinition
           pure Nothing
       _ -> pure Nothing
     debug $ "documentDefinition request: " <> renderText nuri
-    let loc = Location uri' . spanInfoToRange
+    let loc = Location uri' . spanInfoToRange . view spanInfo
     case loc <$> tlDefSpan of
       Just x -> resp (Right $ InL $ Definition (InL x))
       Nothing -> resp (Right $ InR $ InR Null)
@@ -310,7 +318,7 @@ documentHoverRequestHandler = requestHandler SMethod_TextDocumentHover $ \req re
                   (M.lookup (replCoreBuiltinToUserText builtin) builtinDocs)
 
                 mc = MarkupContent MarkupKind_Markdown (_markdownDoc docs)
-                range = spanInfoToRange i
+                range = spanInfoToRange (view spanInfo i)
                 hover = Hover (InL mc) (Just range)
                 in resp (Right (InL hover))
 
@@ -349,40 +357,61 @@ documentRenameRequestHandler = requestHandler SMethod_TextDocumentRename $ \req 
             we = WorkspaceEdit Nothing (Just [InL te]) Nothing
         resp (Right (InL we))
 
+doLoad :: FilePath -> Bool -> EvalM ReplRuntime ReplCoreBuiltin FileLocSpanInfo ()
+doLoad fp reset = do
+  oldSrc <- useReplState replCurrSource
+  fp' <- mangleFilePath fp
+  res <- liftIO $ E.try (T.readFile fp')
+  pactdb <- liftIO (mockPactDb serialisePact_repl_flspaninfo)
+  oldEE <- useReplState replEvalEnv
+  when reset $ do
+    ee <- liftIO (defaultEvalEnv pactdb replBuiltinMap)
+    put def
+    replEvalEnv .== ee
+  when (Repl.isPactFile fp) $ esLoaded . loToplevel .= mempty
+  _ <- case res of
+    Left (_e:: E.IOException) ->
+      throwExecutionError def $ EvalError $ "File not found: " <> T.pack fp
+    Right txt -> do
+      let source = SourceCode fp txt
+      replCurrSource .== source
+      let nfp = normalizedFilePathToUri (toNormalizedFilePath fp')
+      processFile Repl.interpretEvalBigStep nfp source
+  replCurrSource .== oldSrc
+  unless reset $ do
+    replEvalEnv .== oldEE
+  pure ()
+
+
+mangleFilePath :: FilePath -> EvalM ReplRuntime b FileLocSpanInfo FilePath
+mangleFilePath fp = do
+  (SourceCode currFile _) <- useReplState replCurrSource
+  case currFile of
+    "<local>" -> pure fp
+    _ | isAbsolute fp -> pure fp
+      | takeFileName currFile == currFile -> pure fp
+      | otherwise -> pure $ combine (takeDirectory currFile) fp
+
 processFile
-  :: Interpreter ReplRuntime ReplCoreBuiltin SpanInfo
+  :: Interpreter ReplRuntime ReplCoreBuiltin FileLocSpanInfo
   -> NormalizedUri
-  -> Text
-  -> ReplM ReplCoreBuiltin (M.Map NormalizedUri [EvalTopLevel ReplCoreBuiltin SpanInfo])
-processFile replEnv nuri source = do
-  lexx <- liftEither (Lisp.lexer source)
-  parsed <- liftEither $ Lisp.parseReplProgram lexx
+  -> SourceCode
+  -> ReplM ReplCoreBuiltin (M.Map NormalizedUri [EvalTopLevel ReplCoreBuiltin FileLocSpanInfo])
+processFile replEnv nuri (SourceCode f source) = do
+  lexx <- liftEither $ over _Left (fmap toFileLoc) (Lisp.lexer source)
+  parsed <- liftEither $ bimap (fmap toFileLoc) ((fmap.fmap) toFileLoc) $ Lisp.parseReplProgram lexx
   M.unionsWith (<>) <$> traverse pipe parsed
   where
-    currFile = maybe "<local>" fromNormalizedFilePath (uriToNormalizedFilePath nuri)
-    mangleFilePath fp = case currFile of
-        "<local>" -> pure fp
-        _ | isAbsolute fp -> pure fp
-          | takeFileName currFile == currFile -> pure fp
-          | otherwise -> pure $ combine (takeDirectory currFile) fp
-    pipe rtl = case Repl.topLevelIsReplLoad rtl of
-      Right (Repl.ReplLoadFile fp _ i) -> do
-          fp' <- mangleFilePath (T.unpack fp)
-          res <- liftIO $ E.try (T.readFile fp')
-          case res of
-             Left (_e:: E.IOException) ->
-               throwExecutionError i $ EvalError $ "File not found: " <> fp
-             Right txt -> do
-               let nfp = normalizedFilePathToUri (toNormalizedFilePath fp')
-               processFile replEnv nfp txt
-      Left (Lisp.RTLTopLevel tl) -> do
-        functionDocs tl
-        (ds, deps) <- compileDesugarOnly replEnv tl
-        constEvaled <- ConstEval.evalTLConsts replEnv ds
-        tlFinal <- MHash.hashTopLevel constEvaled
-        let act = M.singleton nuri [ds] <$ evalTopLevel replEnv (RawCode mempty) tlFinal deps
-        catchError act (const (pure mempty))
-      _ ->  pure mempty
+    toFileLoc = FileLocSpanInfo f
+    pipe (Lisp.RTLTopLevel tl) = do
+      functionDocs tl
+      (ds, deps) <- compileDesugarOnly replEnv tl
+      constEvaled <- ConstEval.evalTLConsts replEnv ds
+      tlFinal <- MHash.hashTopLevel constEvaled
+      let act = M.singleton nuri [ds] <$ evalTopLevel replEnv (RawCode mempty) tlFinal deps
+      catchError act (const (pure mempty))
+    pipe _ = pure mempty
+
 
 sshow :: Show a => a -> Text
 sshow = T.pack . show

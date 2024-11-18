@@ -58,11 +58,11 @@ legacyTests = do
       Nothing -> error "Reading existing modules failed"
       Just ms -> do
         modTests <- fmap concat $ forM repl $ \r -> do
-          sequence [runTest r interpretReplProgramBigStep "CEK", runTest r interpretReplProgramDirect "Direct"]
+          sequence [runTest r interpretEvalBigStep "CEK", runTest r interpretEvalDirect "Direct"]
         pure (testGroup p modTests)
         where
         runTest r interpreter interpName = do
-          pdb <- mockPactDb serialisePact_repl_spaninfo
+          pdb <- mockPactDb serialisePact_repl_flspaninfo
 
           -- add default spaninfo
           let ms' = (fmap.fmap) (const def) ms

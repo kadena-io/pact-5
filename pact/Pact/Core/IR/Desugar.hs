@@ -186,6 +186,8 @@ instance DesugarBuiltin (ReplBuiltin CoreBuiltin) where
   desugarAppArity i (RBuiltinWrap b) ne =
     desugarCoreBuiltinArity RBuiltinWrap i b ne
   -- (expect <description> <expected> <expression-to-eval>)
+  desugarAppArity i (RBuiltinRepl RLoad) [e1, e2] =
+    App (Builtin (RBuiltinRepl RLoadWithEnv) i) [e1, e2] i
   desugarAppArity i (RBuiltinRepl RExpect) ([e1, e2, e3]) | isn't _Nullary e3 =
     App (Builtin (RBuiltinRepl RExpect) i) ([e1, suspendTerm e2, suspendTerm e3]) i
   -- (expect-failure <arg1> <term>)

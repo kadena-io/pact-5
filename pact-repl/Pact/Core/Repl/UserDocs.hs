@@ -10,7 +10,7 @@ import qualified Pact.Core.Syntax.ParseTree as Lisp
 import Data.Foldable (traverse_)
 
 functionDocs
-  :: Lisp.TopLevel SpanInfo
+  :: Lisp.TopLevel FileLocSpanInfo
   -- The original module syntax
   -> ReplM ReplCoreBuiltin ()
 functionDocs = \case
