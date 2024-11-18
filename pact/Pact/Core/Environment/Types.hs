@@ -64,7 +64,6 @@ module Pact.Core.Environment.Types
  , EvalM(..)
  , RuntimeMode(..)
  , replFlags
- , replEvalLog
  , replEvalEnv
  , replUserDocs
  , replTLDefPos
@@ -72,7 +71,11 @@ module Pact.Core.Environment.Types
  , replCurrSource
  , replTx
  , replOutputLine
+ , replLoad
+ , replLoadedFiles
+ , replLogType
  , ReplM
+ , ReplOutput(..)
  , ReplDebugFlag(..)
  , SourceCode(..)
  , PactWarning(..)
@@ -340,23 +343,29 @@ defaultEvalEnv pdb m = do
     , _eeWarnings = Just warningRef
     }
 
+data ReplOutput where
+  ReplStdOut :: ReplOutput
+  ReplLogOut :: IORef [Text] -> ReplOutput
+
 -- | Passed in repl environment
 data ReplState b
   = ReplState
   { _replFlags :: Set ReplDebugFlag
-  , _replEvalEnv :: EvalEnv b SpanInfo
-  , _replEvalLog :: IORef (Maybe [(Text, Gas)])
+  , _replEvalEnv :: EvalEnv b FileLocSpanInfo
+  , _replLogType :: ReplOutput
   , _replCurrSource :: SourceCode
   , _replUserDocs :: Map QualifiedName Text
   -- ^ Used by Repl and LSP Server, reflects the user
   --   annotated @doc string.
-  , _replTLDefPos :: Map QualifiedName SpanInfo
+  , _replTLDefPos :: Map QualifiedName FileLocSpanInfo
   -- ^ Used by LSP Server, reflects the span information
   --   of the TL definitions for the qualified name.
   , _replTx :: Maybe (TxId, Maybe Text)
   , _replNativesEnabled :: Bool
   -- ^
-  , _replOutputLine :: !(Text -> EvalM 'ReplRuntime b SpanInfo ())
+  , _replOutputLine :: !(Text -> EvalM 'ReplRuntime b FileLocSpanInfo ())
+  , _replLoad :: !(FilePath -> Bool -> EvalM 'ReplRuntime b FileLocSpanInfo ())
+  , _replLoadedFiles :: Map FilePath SourceCode
   }
 
 data RuntimeMode
@@ -366,7 +375,7 @@ data RuntimeMode
 
 data EvalMEnv e b i where
   ExecEnv :: EvalEnv b i -> EvalMEnv ExecRuntime b i
-  ReplEnv :: IORef (ReplState b) -> EvalMEnv ReplRuntime b SpanInfo
+  ReplEnv :: IORef (ReplState b) -> EvalMEnv ReplRuntime b FileLocSpanInfo
 
 
 -- Todo: are we going to inject state as the reader monad here?
@@ -382,7 +391,7 @@ newtype EvalM e b i a =
     , MonadState (EvalState b i)
     , MonadError (PactError i))
 
-type ReplM b = EvalM ReplRuntime b SpanInfo
+type ReplM b = EvalM ReplRuntime b FileLocSpanInfo
 
 
 runEvalM

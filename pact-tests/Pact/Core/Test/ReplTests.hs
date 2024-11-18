@@ -24,7 +24,7 @@ import Pact.Core.Repl.Utils
 import Pact.Core.Persistence (PactDb)
 import Pact.Core.Persistence.SQLite (withSqlitePactDb)
 
-import Pact.Core.Info (SpanInfo)
+import Pact.Core.Info
 import Pact.Core.Compile
 import Pact.Core.Repl.Compile
 import Pact.Core.PactValue
@@ -58,7 +58,7 @@ replTestFiles = filter (\f -> isExtensionOf "repl" f || isExtensionOf "pact" f) 
 
 runFileReplTest :: Interpreter -> TestName -> TestTree
 runFileReplTest interp file = testCase file $ do
-  pdb <- mockPactDb serialisePact_repl_spaninfo
+  pdb <- mockPactDb serialisePact_repl_flspaninfo
   src <- T.readFile (defaultReplTestDir </> file)
   runReplTest (ReplSourceDir defaultReplTestDir) pdb file src interp
 
@@ -66,23 +66,41 @@ runFileReplTest interp file = testCase file $ do
 runFileReplTestSqlite :: Interpreter -> TestName -> TestTree
 runFileReplTestSqlite interp file = testCase file $ do
   ctnt <- T.readFile (defaultReplTestDir </> file)
-  withSqlitePactDb serialisePact_repl_spaninfo ":memory:" $ \pdb -> do
+  withSqlitePactDb serialisePact_repl_flspaninfo ":memory:" $ \pdb -> do
     runReplTest (ReplSourceDir defaultReplTestDir) pdb file ctnt interp
+
+-- replTestState = do
+--   pdb <- mockPactDb serialisePact_repl_flspaninfo
+--   ee <- defaultEvalEnv pdb replBuiltinMap
+--   let rstate = ReplState
+--           {_replLogType=ReplStdOut
+--           , _replUserDocs= mempty
+--           , _replTx = Nothing
+--           , _replTLDefPos = mempty
+--           , _replOutputLine = const (pure ())
+--           , _replNativesEnabled = False
+--           , _replLoadedFiles = mempty
+--           , _replLoad = defaultLoadFile
+--           , _replFlags = mempty
+--           , _replEvalEnv = ee
+--           , _replCurrSource = defaultSrc}
+--   pure (ref, rstate)
+--   where
+--   defaultSrc = SourceCode "(interactive)" mempty
 
 runReplTest
   :: ReplSourceDir
-  -> PactDb ReplCoreBuiltin SpanInfo
+  -> PactDb ReplCoreBuiltin FileLocSpanInfo
   -> FilePath
   -> T.Text
   -> Interpreter
   -> Assertion
 runReplTest (ReplSourceDir path) pdb file src interp = do
-  gasLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replBuiltinMap
+  outRef <- newIORef []
   let source = SourceCode (path </> file) src
   let rstate = ReplState
             { _replFlags = mempty
-            , _replEvalLog = gasLog
             , _replCurrSource = source
             , _replEvalEnv = ee
             , _replUserDocs = mempty
@@ -90,6 +108,9 @@ runReplTest (ReplSourceDir path) pdb file src interp = do
             , _replTx = Nothing
             , _replNativesEnabled = False
             , _replOutputLine = const (pure ())
+            , _replLoad = defaultLoadFile
+            , _replLogType = ReplLogOut outRef
+            , _replLoadedFiles = mempty
             }
   stateRef <- newIORef rstate
   runReplT stateRef (interp source) >>= \case
