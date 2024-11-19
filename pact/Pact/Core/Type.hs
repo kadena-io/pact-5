@@ -120,7 +120,9 @@ data Type
 instance NFData Type
 
 data Schema
-  = Schema QualifiedName (Map Field Type)
+  = Schema
+  { _scName :: QualifiedName
+  , _scFields :: Map Field Type }
   deriving (Eq, Show, Ord, Generic)
 
 instance NFData Schema
@@ -255,7 +257,7 @@ instance Pretty Type where
       "object" <> Pretty.braces (pretty n)
     TyTable (Schema n _sc) ->
       "table" <> Pretty.braces (pretty n)
-    TyCapToken -> "CAPTOKEN"
+    TyCapToken -> "cap-token"
     TyAnyList -> "list"
     TyAnyObject -> "object"
     TyAny -> "*"

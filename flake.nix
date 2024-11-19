@@ -50,6 +50,7 @@
                 z3
                 pkg-config
               ];
+              shell.withHoogle = false;
             };
         })
       ];

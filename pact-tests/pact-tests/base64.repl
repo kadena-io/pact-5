@@ -22,22 +22,22 @@
 
 (expect-failure
   "base64 decoding fails on non base64-encoded input"
-  "Could not decode string"
+  "Decoding error: invalid b64 encoding"
   (base64-decode "aGVsbG8gd29ybGQh%"))
 
 (expect-failure
   "base64 decoding fails on garbage input 1"
-  "Could not decode string"
+  "Decoding error: invalid b64 encoding"
   (base64-decode "aaa"))
 
 (expect-failure
   "base64 decoding fails on garbage input 2"
-  "Could not decode string"
+  "Decoding error: invalid b64 encoding"
   (base64-decode "asdflk"))
 
 (expect-failure
   "base64 decoding fails on garbage input 3"
-  "Could not decode string"
+  "Decoding error: invalid b64 encoding"
   (base64-decode "!@#$%&"))
 
 ; Todo: unicode escape codes?
@@ -53,5 +53,5 @@
 
 (expect-failure
   "base64 decoding fails on non-canonical encodings"
-  "Could not base64-decode string"
+  "Decoding error: invalid b64 encoding"
   (base64-decode "ZE=="))

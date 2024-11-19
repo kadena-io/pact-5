@@ -16,8 +16,8 @@ Use the following arguments to specify the `src` object and `bindings` for the `
 
 | Argument | Type | Description |
 | --- | --- | --- |
-| `src` | object:{row} | Specifies the source object to evaluate. |
-| `bindings` | binding:{row} | Specifies the bindings to apply to the `src` object. |
+| `src` | `object:{row}` | Specifies the source object to evaluate. |
+| `bindings` | `binding:{row}` | Specifies the bindings to apply to the `src` object. |
 
 ### Return values
 

@@ -46,6 +46,7 @@ module Pact.Core.IR.Eval.Direct.Types
  , pattern VLamClosure
  , pattern VPartialClosure
  , pattern VDefPactClosure
+ , pattern VTable
  , CapPopState(..)
  , NativeFunction
  , BuiltinEnv
@@ -81,7 +82,6 @@ import Pact.Core.DefPacts.Types
 import Pact.Core.Literal
 import Pact.Core.ModRefs
 import Pact.Core.Builtin
-import Pact.Core.IR.Eval.Runtime.Types
 
 data ClosureType i
   = NullaryClosure
@@ -200,8 +200,6 @@ instance (Show i, Show b) => Show (PartialNativeFn e b i) where
 data EvalValue e b i
   = VPactValue !PactValue
   -- ^ PactValue(s), which contain no terms
-  | VTable !TableValue
-  -- ^ Table references, which despite being a syntactic
   -- value with
   | VClosure  !(CanApply e b i)
   -- ^ Closures, which may contain terms
@@ -212,7 +210,6 @@ instance (NFData b, NFData i) => NFData (EvalValue e b i)
 instance Show (EvalValue e b i) where
   show = \case
     VPactValue pv -> show pv
-    VTable vt -> "table" <> show (_tvName vt)
     VClosure _ -> "closure<>"
 
 -- | Locally bound variables and
@@ -302,6 +299,9 @@ pattern VPartialClosure clo = VClosure (PC clo)
 pattern VDefPactClosure :: DefPactClosure e b i -> EvalValue e b i
 pattern VDefPactClosure clo = VClosure (DPC clo)
 
+pattern VTable :: TableValue -> EvalValue e b i
+pattern VTable tv = VPactValue (PTable tv)
+
 -- | What to do post-cap evaluation: do we pop the cap from the stack,
 -- or compose it within the capset
 data CapPopState
@@ -326,7 +326,7 @@ toArgTypeError = \case
     PGuard _ -> ATEPrim PrimGuard
     PModRef _ -> ATEModRef
     PCapToken _ -> ATEClosure
-  VTable{} -> ATETable
+    PTable _ -> ATETable
   VClosure{} -> ATEClosure
 
 argsError

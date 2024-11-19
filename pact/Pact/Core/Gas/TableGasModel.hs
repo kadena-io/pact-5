@@ -399,8 +399,6 @@ runTableModel nativeTable GasCostConfig{..} = \case
     MOpDesugarModule sz ->
       -- This is a pretty expensive traversal, so we will charge a bit more of a hefty price for it
       MilliGas (sz * _gcDesugarBytePenalty)
-    MOpHashModule w ->
-      MilliGas $ w * _gcMHashBytePenalty
   GStrOp op -> case op of
     StrOpLength len ->
       let charsPerMg = 100
@@ -457,6 +455,8 @@ runTableModel nativeTable GasCostConfig{..} = \case
       let !n = numberOfBits p
           !n_flt = (fromIntegral n :: Double)
       in fromIntegral n * ceiling ((log n_flt) ** 2) * ceiling (log (log n_flt))
+  GHash w ->
+    MilliGas $ w * _gcMHashBytePenalty
   GCapOp op -> case op of
     CapOpRequire cnt ->
       let mgPerCap = 100

@@ -432,10 +432,16 @@ rawSort info b cont handler _env = \case
     chargeGasArgs info (GComparison (SortComparisons maxSize (V.length vli)))
     vli' <- liftIO $ do
       v' <- V.thaw vli
-      V.sort v'
+      V.sortBy sortPv v'
       V.freeze v'
     returnCEKValue cont handler (VList vli')
   args -> argsError info b args
+  where
+  sortPv (PLiteral l) (PLiteral y) = l `compare` y
+  sortPv (PTime t) (PTime t') = t `compare` t'
+  sortPv (PLiteral _) (PTime _) = LT
+  sortPv (PTime _) (PLiteral _) = GT
+  sortPv _ _ = EQ
 
 coreRemove :: (IsBuiltin b) => NativeFunction e b i
 coreRemove info b cont handler _env = \case
@@ -806,7 +812,7 @@ coreEnforceGuard info b cont handler env = \case
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length s
     case parseAnyKeysetName s of
       Left {} ->
-        throwNativeExecutionError info b "incorrect keyset name format"
+        throwExecutionError info (InvalidKeysetNameFormat s)
       Right ksn -> isKeysetNameInSigs info cont handler env ksn
   args -> argsError info b args
 
@@ -815,7 +821,7 @@ keysetRefGuard info b cont handler env = \case
   [VString g] -> do
     chargeGasArgs info $ GStrOp $ StrOpParse $ T.length g
     case parseAnyKeysetName g of
-      Left {} -> throwNativeExecutionError info b "incorrect keyset name format"
+      Left {} -> throwExecutionError info (InvalidKeysetNameFormat g)
       Right ksn -> do
         let pdb = view cePactDb env
         liftGasM info (_pdbRead pdb DKeySets ksn) >>= \case
@@ -830,7 +836,6 @@ coreTypeOf info b cont handler _env = \case
     VPactValue pv ->
       returnCEKValue cont handler $ VString $ renderType $ synthesizePvType pv
     VClosure _ -> returnCEKValue cont handler $ VString "<<closure>>"
-    VTable tv -> returnCEKValue cont handler $ VString (renderType (TyTable (_tvSchema tv)))
   args -> argsError info b args
 
 coreDec :: (IsBuiltin b) => NativeFunction e b i
@@ -1438,10 +1443,14 @@ coreWhere info b cont handler _env = \case
 
 coreHash :: (IsBuiltin b) => NativeFunction e b i
 coreHash = \info b cont handler _env -> \case
-  [VString s] ->
-    returnCEKValue cont handler (go (T.encodeUtf8 s))
+  [VString s] -> do
+    let bytes = T.encodeUtf8 s
+    chargeGasArgs info $ GHash $ fromIntegral $ BS.length bytes
+    returnCEKValue cont handler $ go bytes
   [VPactValue pv] -> do
-    returnCEKValue cont handler (go (encodeStable pv))
+    sz <- sizeOf info SizeOfV0 pv
+    chargeGasArgs info (GHash sz)
+    returnCEKValue cont handler $ go (encodeStable pv)
   args -> argsError info b args
   where
   go =  VString . hashToText . pactHash
@@ -1600,7 +1609,7 @@ dbDescribeKeySet info b cont handler env = \case
           Nothing ->
             throwExecutionError info (NoSuchKeySet ksn)
       Left{} ->
-        throwNativeExecutionError info b  "incorrect keyset name format"
+        throwExecutionError info (InvalidKeysetNameFormat s)
   args -> argsError info b args
 
 coreCompose :: (IsBuiltin b) => NativeFunction e b i

@@ -1,13 +1,19 @@
 ## write
 
-Use `write` to write an entry in the specified table for a given key with the data provided in the object column.
+Use `write` to write the specified `{column:value}` object in the specified `table` for a given `key` row.
+The `write` function is similar to the `insert` and `update` functions, except that:
+
+- The `insert` function fails if data already exists for the specified `key` row.
+- The `update` function fails if data does not exist for the specified `key` row.
+
+In both of these cases, the `write` function can succeed and update the table without failing.
 
 ### Basic syntax
 
-To write an entry in a specified `table` for a specific `key` with the provided `object` column data, use the following syntax:
+To write an entry in a specified `table` for a specific `key` with the provided `object`, use the following syntax:
 
 ```pact
-(write TABLE KEY OBJECT)
+(write table key object)
 ```
 
 ### Arguments

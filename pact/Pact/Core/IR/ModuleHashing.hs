@@ -42,7 +42,7 @@ hashModuleAndReplace m@(Module mname mgov defs mblessed imports mimps _mh txh mc
   mkNewModuleHash = do
     let m' = void m
     sz <- sizeOf info SizeOfV0 m'
-    chargeGasArgs info (GModuleOp (MOpHashModule sz))
+    chargeGasArgs info (GHash sz)
     pure $ ModuleHash $ hash $ encodeModule m'
   gov' newMHash = case mgov of
     KeyGov n -> KeyGov n
@@ -57,7 +57,7 @@ hashInterfaceAndReplace iface@(Interface ifn defs imps _mh txh mcode info) = do
   mkNewMhash = do
     let iface' = void iface
     sz <- sizeOf info SizeOfV0 iface'
-    chargeGasArgs info (GModuleOp (MOpHashModule sz))
+    chargeGasArgs info (GHash sz)
     pure $ ModuleHash $ hash $ encodeInterface iface'
 
 updateDefHashes :: ModuleName -> ModuleHash -> Def Name Type b i -> Def Name Type b i
@@ -113,6 +113,9 @@ updatePactValueHash mname mhash = \case
   PCapToken (CapToken ct pvs) ->
     PCapToken $ CapToken (updateFqNameHash mname mhash ct) (updatePactValueHash mname mhash <$> pvs)
   PTime t -> PTime t
+  PTable tv@(TableValue tn _ sc)
+    | _tableModuleName tn == mname -> PTable (TableValue tn mhash sc)
+    | otherwise -> PTable tv
 
 encodeModule :: (Serialise (SerialiseV1 b)) => Module Name Type b () -> B.ByteString
 encodeModule (Module mname mgov defs mblessed imports mimps _mh _txh _mcode _i) =

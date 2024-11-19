@@ -18,7 +18,7 @@ Use the following arguments to specify the test expression and error message for
 
 | Argument | Type   | Description                                    |
 |----------|--------|------------------------------------------------|
-| `expression` | bool | Specifies the expression to evaluate.     |
+| expression | bool | Specifies the expression to evaluate.     |
 | `message` | string | Specifies the error message to display if the `expression` evaluates as false. |
 
 ### Return values
@@ -34,7 +34,7 @@ pact> (enforce (= (+ 2 2) 4) "All is well")
 true
 ```
 
-Because the specified expression (`2 + 2 = 4`) is true, the function returns true and the transaction continues. 
+Because the specified expression (`2 + 2 = 4`) is true, the function returns true and the transaction continues.
 
 The following example demonstrates how to use the `enforce` function to evaluate the expression `(2 + 2) != 4`:
 

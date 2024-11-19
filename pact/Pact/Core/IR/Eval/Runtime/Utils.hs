@@ -75,7 +75,6 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Map.Strict as M
 import qualified Data.Vector as V
 import qualified Data.Set as S
-import qualified Data.ByteString as BS
 
 import Pact.Core.Names
 import Pact.Core.PactValue
@@ -260,6 +259,36 @@ gassedRuntimeTypecheck i ty = \case
     TyAnyObject -> pure True
     TyObject sc -> gassedTypecheckObj i o sc
     _ -> pure False
+  PTable tv -> case ty of
+    TyTable sc ->
+      gassedTypecheckSchemas i (_tvSchema tv) sc
+    _ -> pure False
+
+gassedTypecheckSchemas :: forall e b i. i -> Schema -> Schema -> EvalM e b i Bool
+gassedTypecheckSchemas i (Schema _ fs) (Schema _ fs')
+  | M.size fs == M.size fs' = do
+    chargeConstantScalarMulFromConfig _gcMachineTickCost (fromIntegral (M.size fs)) i
+    tcFields (M.toList fs) (M.toList fs')
+  | otherwise = pure False
+  where
+  tcFields ((f, t):xs) ((f', t'):ys)
+    | f == f' = do
+      c <- gassedTypeEq t t'
+      if c then tcFields xs ys
+      else pure c
+    | otherwise = pure False
+  tcFields _ _ = pure True
+  gassedTypeEq :: Type -> Type -> EvalM e b i Bool
+  gassedTypeEq (TyPrim t) (TyPrim t') = pure $ t == t'
+  gassedTypeEq TyCapToken TyCapToken = pure True
+  gassedTypeEq (TyList t) (TyList t') = gassedTypeEq t t'
+  gassedTypeEq (TyObject sc) (TyObject sc') = gassedTypecheckSchemas i sc sc'
+  gassedTypeEq (TyTable sc) (TyTable sc') = gassedTypecheckSchemas i sc sc'
+  gassedTypeEq (TyModRef mrs) (TyModRef mrs') = pure $ mrs == mrs'
+  gassedTypeEq TyAny TyAny = pure True
+  gassedTypeEq TyAnyList TyAnyList = pure True
+  gassedTypeEq TyAnyObject TyAnyObject = pure True
+  gassedTypeEq _ _ = pure False
 
 -- | Typecheck an object against a schema, charge gas
 gassedTypecheckObj :: i -> M.Map Field PactValue -> Schema -> EvalM e b i Bool
@@ -293,6 +322,7 @@ pvToArgTypeError = \case
   PGuard _ -> ATEPrim PrimGuard
   PModRef _ -> ATEModRef
   PCapToken _ -> ATEClosure
+  PTable _ -> ATETable
 
 findCallingModule :: EvalM e b i (Maybe ModuleName)
 findCallingModule = do
@@ -590,13 +620,14 @@ createPrincipalForGuard info = \case
     Pr.R ksn <$ chargeGas 1_000
   GModuleGuard (ModuleGuard mn n) ->
     Pr.M mn n <$ chargeGas 1_000
-  GUserGuard (UserGuard f args) -> do
+  GUserGuard ug@(UserGuard f args) -> do
+    sz <- sizeOf info SizeOfV0 ug
+    chargeGasArgs info (GHash sz)
     h <- mkHash $ map encodeStable args
     pure $ Pr.U (renderQualName f) (hashToText h)
-    -- TODO orig pact gets here ^^^^ a Name
-    -- which can be any of QualifiedName/BareName/DynamicName/FQN,
-    -- and uses the rendered string here. Need to double-check equivalence.
-  GCapabilityGuard (CapabilityGuard f args pid) -> do
+  GCapabilityGuard cg@(CapabilityGuard f args pid) -> do
+    sz <- sizeOf info SizeOfV0 cg
+    chargeGasArgs info (GHash sz)
     let args' = map encodeStable args
         f' = T.encodeUtf8 $ renderQualName f
         pid' = T.encodeUtf8 . renderDefPactId <$> pid
@@ -605,11 +636,7 @@ createPrincipalForGuard info = \case
   GDefPactGuard (DefPactGuard dpid name) -> Pr.P dpid name <$ chargeGas 1_000
   where
     chargeGas mg = chargeGasArgs info (GAConstant (MilliGas mg))
-    mkHash bss = do
-      let bs = mconcat bss
-          gasChargeAmt = 1_000 + fromIntegral (BS.length bs `quot` 64) * 1_000
-      chargeGas gasChargeAmt
-      pure $ pactHash bs
+    mkHash bss = pactHash (mconcat bss) <$ chargeGas 1_000
 
 createEnumerateList
   :: i

@@ -1,4 +1,3 @@
-## compose-capability
 
 Use `compose-capability` to compose and grant capabilities in a nested structure to control the scope of how the capabilities are applied.
 By convention, capabilities are defined using all uppercase letters.
@@ -8,7 +7,7 @@ The function is only valid within the distinct `defcap` body of its outer capabi
 
 For example, if you call `(with-capability (OUTER-CAP) OUTER-BODY)` and the `OUTER-CAP` declaration includes the `(compose-capability (INNER-CAP))` function, the `INNER-CAP` capability is granted in the scope of the `OUTER-BODY` logic.
 
-### Basic syntax
+## Basic syntax
 
 To compose and grant a specified `CAPABILITY` within an outer capability body, use the following syntax:
 
@@ -16,7 +15,7 @@ To compose and grant a specified `CAPABILITY` within an outer capability body, u
 (compose-capability CAPABILITY)
 ```
 
-### Arguments
+## Arguments
 
 Use the following argument to specify the `CAPABILITY` for the `compose-capability` Pact function.
 
@@ -24,11 +23,11 @@ Use the following argument to specify the `CAPABILITY` for the `compose-capabili
 | --- | --- | --- |
 | `CAPABILITY` | capability | Specifies the capability to include in the scope of an outer capability. |
 
-### Return values
+## Return values
 
 The `compose-capability` function returns a boolean value to indicate success or failure in requesting the grant of the specified `CAPABILITY`.
 
-### Examples
+## Examples
 
 The following example demonstrates how to use the `compose-capability` function within the body of the `TRANSFER` capability and include the DEBIT and CREDIT capabilities when the `with-capability` function is called:
 

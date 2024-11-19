@@ -30,6 +30,7 @@ module Pact.Core.PactValue
  , _PUnit
  , synthesizePvType
  , pactValueToText
+ , TableValue(..)
  ) where
 
 import Control.Lens
@@ -54,7 +55,20 @@ import Pact.Core.Literal
 import Pact.Core.Pretty
 import Pact.Core.ModRefs
 import Pact.Core.Capabilities
+import Pact.Core.Hash
 
+
+data TableValue
+  = TableValue
+  { _tvName :: !TableName
+  , _tvHash :: !ModuleHash
+  , _tvSchema :: !Schema
+  } deriving (Show, Eq, Ord, Generic)
+
+instance Pretty TableValue where
+  pretty (TableValue n _ _) = pretty (renderTableName n)
+
+instance NFData TableValue
 
 data PactValue
   = PLiteral !Literal
@@ -63,6 +77,7 @@ data PactValue
   | PObject !(Map Field PactValue)
   | PModRef !ModRef
   | PCapToken !(CapToken FullyQualifiedName PactValue)
+  | PTable !TableValue
   | PTime !PactTime.UTCTime
   -- Note:
   -- This ord instance is dangerous. Be careful of comparisons with it
@@ -117,6 +132,7 @@ instance Pretty PactValue where
     PCapToken (CapToken fqn args) ->
       "CapToken" <> pretty (CapToken (fqnToQualName fqn) args)
     PTime t -> dquotes $ pretty (formatLTime t)
+    PTable t -> pretty t
 
 
 pactValueToText :: PactValue -> Text
@@ -161,6 +177,8 @@ pactValueToText = \case
     qualName = fqnToQualName qn
     in T.concat ["CapToken(", renderQualName qualName, args',")"] -- Todo: check
   PTime t -> tdquotes $ formatLTime t
+  PTable (TableValue tn _ _) ->
+    renderTableName tn
   where
     tdquotes x = T.concat ["\"",x,"\""]
     tshow :: Show a => a -> Text
@@ -184,7 +202,8 @@ instance Pretty (AbbrevPretty PactValue) where
       pretty (CapToken fqn (AbbrevPretty <$> args))
     PTime t -> pretty (PactTime.formatTime "%Y-%m-%d %H:%M:%S%Q %Z" t)
     PList l ->
-      brackets (prettyAbbrevText' 15 (hsep (pretty . AbbrevPretty <$> V.toList l)))
+      brackets (prettyAbbrevText' 15 (hsep (pretty . AbbrevPretty <$> V.toList (V.take 10 l))))
+    PTable t -> prettyAbbrevText' 20 (pretty t)
 
 synthesizePvType :: PactValue -> Type
 synthesizePvType = \case
@@ -195,6 +214,7 @@ synthesizePvType = \case
   PObject _ -> TyAnyObject
   PCapToken {} -> TyCapToken
   PTime _ -> TyTime
+  PTable sc -> TyTable (_tvSchema sc)
 
 
 

@@ -570,6 +570,7 @@ coreBuiltinToUserText = \case
 
 instance IsBuiltin CoreBuiltin where
   builtinName = NativeName . coreBuiltinToText
+  builtinChargesGas _ = True
   builtinArity = \case
     CoreAdd -> 2
     -- Num ->
@@ -788,6 +789,7 @@ data ReplOnlyBuiltin
 
 instance IsBuiltin ReplOnlyBuiltin where
   builtinName = NativeName . replBuiltinsToText
+  builtinChargesGas _ = False
   builtinArity = \case
     RExpect -> 3
     RExpectFailure -> 2
@@ -848,6 +850,9 @@ instance IsBuiltin b => IsBuiltin (ReplBuiltin b) where
   builtinArity = \case
     RBuiltinWrap b -> builtinArity b
     RBuiltinRepl b -> builtinArity b
+  builtinChargesGas = \case
+    RBuiltinWrap b -> builtinChargesGas b
+    RBuiltinRepl b -> builtinChargesGas b
 
     -- RLoad -> 1
 
@@ -966,6 +971,7 @@ replCoreBuiltinOnlyMap =
 class Show b => IsBuiltin b where
   builtinArity :: b -> Int
   builtinName :: b -> NativeName
+  builtinChargesGas :: b -> Bool
 
 
 instance Pretty CoreBuiltin where

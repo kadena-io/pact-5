@@ -41,6 +41,8 @@ import Pact.Core.Gas
 import Pact.Core.Namespace
 import Pact.Core.Serialise
 import Pact.Core.Persistence.MockPersistence
+import qualified Pact.Core.IR.Eval.Direct.Evaluator as Direct
+import qualified Pact.Core.IR.Eval.Direct.CoreBuiltin as Direct
 
 import Pact.Core.Errors
 import Pact.Core.Interpreter
@@ -59,7 +61,15 @@ interpretBigStep :: Interpreter ExecRuntime CoreBuiltin Info
 interpretBigStep = evalInterpreter
 
 interpretDirect :: Interpreter ExecRuntime CoreBuiltin Info
-interpretDirect = evalDirectInterpreter
+interpretDirect =
+  Interpreter runGuard runTerm resume evalWithCap
+  where
+  runTerm purity term = Direct.eval purity benv term
+  runGuard info g = Direct.interpretGuard info benv g
+  resume info defPact = Direct.evalResumePact info benv defPact
+  evalWithCap info purity ct term =
+    Direct.evalWithinCap info purity benv ct term
+  benv = Direct.coreBuiltinEnv
 
 
 data CoinBenchSenders
@@ -179,7 +189,7 @@ setupCoinTxs pdb = do
   putStrLn "Setting up the coin contract and the default funds"
   source <- T.readFile (contractsPath </> "coin-v5-create.pact")
   ee <- setupBenchEvalEnv pdb coinInitSigners coinInitData
-  () <$ runPactTxFromSource ee source evalDirectInterpreter
+  () <$ runPactTxFromSource ee source interpretDirect
 
 
 _run :: IO ()

@@ -1,6 +1,7 @@
 -- |
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Pact.Core.Serialise.LegacyPact
@@ -621,36 +622,28 @@ fromLegacyTerm mh = \case
     fn' <- fromLegacyTerm mh fn
     case fn' of
       Builtin b _ -> case b of
-        CoreBind -> case args of
-          [bObj, Legacy.TBinding bps scope _] -> do
+        CoreBind | [bObj, Legacy.TBinding bps scope _] <- args -> do
             bObj' <- fromLegacyTerm mh bObj
             lam <- objBindingToLet mh bps scope
             pure (App fn' [bObj', lam] ())
 
-          _ -> throwError $ "invariant failure: CoreBind"
-        CoreWithRead -> case args of
-          [tbl, rowkey, Legacy.TBinding bps scope _] -> do
+        CoreWithRead | [tbl, rowkey, Legacy.TBinding bps scope _] <- args -> do
             tbl' <- fromLegacyTerm mh tbl
             rowkey' <- fromLegacyTerm mh rowkey
             lam <- objBindingToLet mh bps scope
             pure (App fn' [tbl', rowkey', lam] ())
 
-          _ -> throwError "invariant failure: CoreWithRead"
-        CoreWithDefaultRead -> case args of
-          [tbl, rowkey, defaultObj, Legacy.TBinding bps scope _] -> do
+        CoreWithDefaultRead | [tbl, rowkey, defaultObj, Legacy.TBinding bps scope _] <- args -> do
             tbl' <- fromLegacyTerm mh tbl
             rowkey' <- fromLegacyTerm mh rowkey
             defaultObj' <- fromLegacyTerm mh defaultObj
             lam <- objBindingToLet mh bps scope
             pure (App fn' [tbl', rowkey', defaultObj', lam] ())
 
-          _ -> throwError "invariant failure: CoreWithDefaultRead"
-        CoreResume -> case args of
-          [Legacy.TBinding bps scope _] -> do
+        CoreResume | [Legacy.TBinding bps scope _] <- args -> do
             lam <- objBindingToLet mh bps scope
             pure (App fn' [lam] ())
 
-          _ -> throwError "invariant failure: CoreWithRead"
         -- [HOF Translation]
         -- Note: The following sections of translation are explained as follows:
         -- we transform, for example `(map (+ k) other-arg)` into

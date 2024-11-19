@@ -153,7 +153,7 @@ evalModuleGovernance interpreter tl = do
 
 compileDesugarOnly
   :: forall e b i
-  .  (HasCompileEnv b i)
+  .  (HasCompileEnv b i, DebugPrintable e b)
   => Interpreter e b i
   -> Lisp.TopLevel i
   -> EvalM e b i (EvalTopLevel b i, S.Set ModuleName)
@@ -169,7 +169,7 @@ compileDesugarOnly interpreter tl = do
 
 interpretTopLevel
   :: forall e b i
-  .  (HasCompileEnv b i)
+  .  (HasCompileEnv b i, DebugPrintable e b)
   => Interpreter e b i
   -> RawCode
   -> Lisp.TopLevel i

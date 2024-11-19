@@ -13,8 +13,7 @@
 {-# LANGUAGE InstanceSigs #-}
 
 module Pact.Core.IR.Eval.Runtime.Types
-  ( TableValue(..)
-  , ErrorState(..)
+  (ErrorState(..)
   , EvalCapType(..)) where
 
 
@@ -26,20 +25,9 @@ import Control.DeepSeq
 import Pact.Core.Names
 
 import Pact.Core.PactValue
-import Pact.Core.Hash
-import Pact.Core.Type
 import Pact.Core.Capabilities
 import Pact.Core.Environment
 
-
-data TableValue
-  = TableValue
-  { _tvName :: !TableName
-  , _tvHash :: !ModuleHash
-  , _tvSchema :: !Schema
-  } deriving (Show, Generic)
-
-instance NFData TableValue
 
 -- | State to preserve in the error handler
 data ErrorState i

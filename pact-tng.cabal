@@ -187,15 +187,6 @@ library
   import: pact-common
   hs-source-dirs: pact
 
-  if (flag(with-funcall-tracing))
-    cpp-options: -DWITH_FUNCALL_TRACING
-
-  if (flag(with-native-tracing))
-    cpp-options: -DWITH_NATIVE_TRACING
-
-  if (flag(with-native-tracing) || flag(with-funcall-tracing))
-    cpp-options: -DWITH_TRACING
-
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
   else
@@ -203,7 +194,7 @@ library
 
   build-tool-depends:
     , alex:alex
-    , happy:happy < 2
+    , happy:happy
 
   other-modules:
     -- TODO: Uncomment once this is finally fixed
@@ -248,7 +239,6 @@ library
     Pact.Core.Evaluate
     Pact.Core.Scheme
     Pact.Core.SPV
-    Pact.Core.Repl
     Pact.Core.SizeOf
     Pact.Core.SizeOf.Deriving
     Pact.Core.StackFrame
@@ -269,11 +259,6 @@ library
     Pact.Core.IR.Term
     Pact.Core.IR.Desugar
 
-    Pact.Core.IR.Eval.Direct.Evaluator
-    Pact.Core.IR.Eval.Direct.CoreBuiltin
-    Pact.Core.IR.Eval.Direct.ReplBuiltin
-    Pact.Core.IR.Eval.Direct.Types
-
     -- Core IR Evaluator modules
     Pact.Core.IR.Eval.Runtime
     Pact.Core.IR.Eval.Runtime.Types
@@ -287,14 +272,6 @@ library
 
     Pact.Core.Trans.MPFR
     Pact.Core.Version
-
-    -- Repl
-    Pact.Core.Repl.Utils
-    Pact.Core.Repl.Runtime.ReplBuiltin
-    Pact.Core.Repl.Compile
-    Pact.Core.Repl.BuiltinDocs
-    Pact.Core.Repl.BuiltinDocs.Internal
-    Pact.Core.Repl.UserDocs
 
     -- Serialization
     Pact.Core.Serialise
@@ -317,6 +294,44 @@ library
     
   extra-libraries: mpfr
 
+library pact-repl
+  import: pact-common
+  hs-source-dirs: pact-repl
+
+  if (flag(with-crypto))
+    build-depends: pact-tng:pact-crypto
+  else
+    cpp-options: -DWITHOUT_CRYPTO
+
+  if (flag(with-funcall-tracing))
+    cpp-options: -DWITH_FUNCALL_TRACING
+
+  if (flag(with-native-tracing))
+    cpp-options: -DWITH_NATIVE_TRACING
+
+  if (flag(with-native-tracing) || flag(with-funcall-tracing))
+    cpp-options: -DWITH_TRACING
+
+  exposed-modules:
+    Pact.Core.Repl
+    Pact.Core.Repl.Utils
+    Pact.Core.Repl.Runtime.ReplBuiltin
+    Pact.Core.Repl.Compile
+    Pact.Core.Repl.BuiltinDocs
+    Pact.Core.Repl.BuiltinDocs.Internal
+    Pact.Core.Repl.UserDocs
+
+    Pact.Core.IR.Eval.Direct.Evaluator
+    Pact.Core.IR.Eval.Direct.CoreBuiltin
+    Pact.Core.IR.Eval.Direct.ReplBuiltin
+    Pact.Core.IR.Eval.Direct.Types
+
+  build-depends:
+    , pact-tng
+    , pact-tng:pact-crypto
+    , filepath
+    , pandoc
+
 library pact-lsp
   import: pact-common
   hs-source-dirs: pact-lsp
@@ -328,6 +343,7 @@ library pact-lsp
 
   build-depends:
     , pact-tng
+    , pact-tng:pact-repl
     , lsp
     , lsp-types
     , filepath
@@ -340,6 +356,7 @@ executable gasmodel
 
   build-depends:
     , pact-tng
+    , pact-tng:pact-repl
     , criterion
     , terminal-progress-bar
     , neat-interpolation
@@ -375,10 +392,11 @@ executable profile-tx
 
 executable pact
   import: pact-common
-  main-is: repl/Main.hs
+  main-is: pact-repl/Main.hs
 
   build-depends: base
                , pact-tng
+               , pact-tng:pact-repl
                , pact-tng:pact-lsp
                , optparse-applicative
                , pact-tng:pact-request-api
@@ -464,7 +482,6 @@ library test-utils
     , semirings
     , neat-interpolation
     , pact-tng:pact-request-api
-    , pact-tng:pact-lsp
     , pact-tng:unsafe
     , lsp-test >= 0.17
     , lsp-types
@@ -529,6 +546,7 @@ test-suite core-tests
     , semirings
     , neat-interpolation
     , pact-tng:pact-request-api
+    , pact-tng:pact-repl
     , pact-tng:pact-lsp
     , pact-tng:test-utils
     , pact-tng:unsafe
@@ -574,22 +592,3 @@ test-suite core-tests
     , Pact.Core.Test.ServerUtils
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
-
-
--- -- tools
--- executable pact-server
---   import: pact-common
---   hs-source-dirs: pact-server
-
---   main-is: Pact/Server.hs
-
---   build-depends:
---     , pact-tng
---     , async
---     , fast-logger
---     , filepath
---     , servant
---     , servant-server
---   ghc-options:         -Wall -threaded -rtsopts -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
---   ghc-prof-options:    -fprof-auto -fprof-auto-calls
---   default-language:    Haskell2010
