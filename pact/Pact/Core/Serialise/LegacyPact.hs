@@ -704,7 +704,7 @@ fromLegacyTerm mh = \case
           body <- containingLam <$> desugarApp mapOperator' (mapOperands' ++ [injectedArg1, injectedArg2])
           xs' <- traverse (fromLegacyTerm mh) xs
           pure (App fn' (body:xs') ())
-      
+
       _ -> do
         args' <- traverse (fromLegacyTerm mh) args
         desugarApp fn' args'
@@ -721,9 +721,11 @@ fromLegacyTerm mh = \case
     l' <- traverse (fromLegacyTerm mh) (V.toList l)
     pure (ListLit l' ())
 
-  Legacy.TConst _args _module (Legacy.CVEval _ v) ->
-    fromLegacyTerm mh v
   -- Note: this use case may appear in the `TConst` constructor
+  Legacy.TConst _args _module cv -> case cv of
+    Legacy.CVEval _ v ->
+      fromLegacyTerm mh v
+    Legacy.CVRaw{} -> throwError "fromLegacyTerm: unevaluated TConst is not allowed in legacy deserialization"
 
   Legacy.TGuard g ->
     (\v -> InlineValue (PGuard v) ()) <$> fromLegacyGuard mh g
@@ -748,33 +750,36 @@ fromLegacyTerm mh = \case
    obj <- traverse (\(Legacy.FieldKey f, t) -> (Field f,) <$> fromLegacyTerm mh t) m
    pure (ObjectLit obj ())
 
-  -- Note: this does not show up in the prod database
-  -- Legacy.TNative{} -> throwError "fromLegacyTerm: invariant"
-
   Legacy.TLiteral l ->
     pure $ either (`Constant` ()) (`InlineValue` ()) $ fromLegacyLiteral l
 
   (Legacy.TTable tn@(Legacy.TableName tbl) mn mh' ty) -> do
     let mn' = fromLegacyModuleName mn
         qn = QualifiedName tbl mn'
+    let mh'' = fromLegacyModuleHash mh'
+        newFqn = FullyQualifiedName mn' tbl mh''
+        nk = NTopLevel mn' mh''
     uses tsGenerated (M.lookup qn) >>= \case
-      Just _ -> do
-        let mh'' = fromLegacyModuleHash mh'
-            nk = NTopLevel mn' mh''
-        pure (Var (Name tbl nk, 0) ())
+      Just fqn | _fqHash fqn == mh'' -> do
+        pure ()
+      Just _ -> insertIfFqnMissing newFqn
       Nothing -> do
-        let mh'' = fromLegacyModuleHash mh'
-            newFqn = FullyQualifiedName mn' tbl mh''
-            nk = NTopLevel mn' mh''
-        defn <- fromLegacyTableDef' tn mn mh' ty
         tsGenerated %= M.insert qn newFqn
-        tsDefns %= M.insert newFqn defn
-        pure (Var (Name tbl nk, 0) ())
+        insertIfFqnMissing newFqn
+    pure (Var (Name tbl nk, 0) ())
+      where
+      -- Insert the fully qualified name into the generated defs if missing
+      insertIfFqnMissing fqn = uses tsDefns (M.lookup fqn) >>= \case
+        Just _ -> do
+          pure ()
+        Nothing -> do
+          defn <- fromLegacyTableDef' tn mn mh' ty
+          tsDefns %= M.insert fqn defn
 
-  -- Note: impossible
+  -- Note: impossible via the pact 4 parser
   Legacy.TModule{} -> throwError "fromLegacyTerm: invariant"
 
-  -- Note: impossible
+  -- Note: impossible via the pact 4 parser
   Legacy.TStep{} -> throwError "fromLegacyTerm: invariant"
 
   -- Note: TDef may show up in some old modules
@@ -812,18 +817,30 @@ fromLegacyTerm mh = \case
         _ -> throwError "fromLegacyTerm: invariant not a TDEF"
       _ -> throwError "fromLegacyTerm: invariant"
 
-  -- Note: impossible
-  Legacy.TSchema{} -> throwError "fromLegacyTerm: invariant"
+  -- Note on TSchema:
+  -- A `TSchema` in a term position has no proper semantic meaning.
+  -- This is because a schema is a type-level construct, and should
+  -- be only found in type positions. However, Pact 4 has a very loose distinction between
+  -- terms and types at the AST level, and it was written such that Terms are found in types, but only certain terms
+  -- have meaning in type position. This is a legacy artifact that we must handle. The language is not dependently typed,
+  -- so a schema should not be able to be used first class.
+  --
+  -- However, we have an innumerable number of modules that may have schemas in term positions, so we can emit the unit value
+  -- instead of failing, that way the module can at least decode.
+  Legacy.TSchema (Legacy.TypeName sc) _ _ -> do
+    let msg = "Cannot use defschema " <> sc <> " in term variable position"
+    let msgTerm = Constant (LString msg) ()
+    let fls = Constant (LBool False) ()
+    pure $ BuiltinForm (CEnforce fls msgTerm) ()
 
   -- Note: impossible in terms
-  Legacy.TUse{} -> throwError "fromLegacyTerm: invariant"
+  Legacy.TUse{} -> throwError "fromLegacyTerm: TUse not allowed in term variable position"
 
   Legacy.TModRef (Legacy.ModRef mn mmn) -> let
     mn' = fromLegacyModuleName mn
     imp = S.fromList $ fmap fromLegacyModuleName (fromMaybe [] mmn)
     in pure (InlineValue (PModRef (ModRef mn' imp)) ())
 
-  _ -> throwError "fromLegacyTerm: invariant"
 
 fromLegacyGuard
   :: ModuleHash

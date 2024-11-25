@@ -360,7 +360,7 @@ desugarSpecial (bn@(BareName t), varInfo) dsArgs appInfo = case toSpecialForm t 
         BuiltinForm <$> (CTry <$> desugarLispTerm e1 <*> desugarLispTerm e2) <*> pure appInfo
       _ -> throwDesugarError (InvalidSyntax "try must take two arguments") appInfo
     SFCreateUserGuard -> case args of
-      [e] -> BuiltinForm <$> (CCreateUserGuard <$> desugarLispTerm e) <*> pure appInfo
+      [e@Lisp.App{}] -> BuiltinForm <$> (CCreateUserGuard <$> desugarLispTerm e) <*> pure appInfo
       _ -> throwDesugarError (InvalidSyntax "create-user-guard must take one argument, which must be an application") appInfo
     SFMap -> desugar1ArgHOF MapV args
     SFCond -> case reverse args of

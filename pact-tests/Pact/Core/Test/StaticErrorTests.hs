@@ -84,6 +84,10 @@ desugarTests =
           )
         )
       |])
+  , ("user_guard_no_app", isDesugarError _InvalidSyntax, [text|
+      (create-user-guard 1)
+      |])
+
   , ("empty_if", isDesugarError _InvalidSyntax, [text|
       (if)
       |])
@@ -617,10 +621,6 @@ executionTests =
     |])
   , ("enforce-one_no_list", isExecutionError _NativeExecutionError, [text|
       (enforce-one "asdf" 1)
-      |])
-
-  , ("user_guard_no_app", isExecutionError _NativeExecutionError, [text|
-      (create-user-guard 1)
       |])
 
   , ("enforce_ns_install_interface", isExecutionError _RootNamespaceInstallError, [text|
