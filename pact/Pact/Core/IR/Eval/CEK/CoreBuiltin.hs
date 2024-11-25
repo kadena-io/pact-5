@@ -1131,7 +1131,7 @@ dbKeys info b cont handler env = \case
   args -> argsError info b args
 
 defineKeySet'
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> Cont e b i
   -> CEKErrorHandler e b i
@@ -1364,7 +1364,7 @@ checkLen info txt =
       throwExecutionError info $ DecodeError "Invalid input, only up to 512 length supported"
 
 doBase
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> Cont e b i
   -> CEKErrorHandler e b i

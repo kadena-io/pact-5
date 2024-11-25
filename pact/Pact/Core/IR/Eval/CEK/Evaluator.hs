@@ -105,7 +105,8 @@ import Pact.Core.IR.Eval.CEK.Utils
   K=Mt and H=NoHandler and returns a semantic value, or an error
 -}
 evaluateTerm
-  :: Cont e b i
+  :: (IsBuiltin b)
+  => Cont e b i
   -> CEKErrorHandler e b i
   -> CEKEnv e b i
   -> EvalTerm b i
@@ -324,7 +325,7 @@ mkDefPactClosure info fqn dpact env = case _dpArgs dpact of
     in VDefPactClosure dpc
 
 initPact
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> DefPactContinuation QualifiedName PactValue
   -> Cont e b i
@@ -350,7 +351,7 @@ initPact i pc cont handler cenv = do
 
 
 applyPact
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> DefPactContinuation QualifiedName PactValue
   -> DefPactStep
@@ -417,7 +418,7 @@ emitXChainEvents mResume dpe = do
       mh
 
 applyNestedPact
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> DefPactContinuation QualifiedName PactValue
   -> DefPactStep
@@ -482,7 +483,7 @@ applyNestedPact i pc ps cont handler cenv = use esDefPactExec >>= \case
 
 
 resumePact
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> Cont e b i
   -> CEKErrorHandler e b i
@@ -559,7 +560,7 @@ resumePact i cont handler env crossChainContinuation = viewEvalEnv eeDefPactStep
 -- checking whether `esCaps . csModuleAdmin` for the particular
 -- module is in scope
 acquireModuleAdmin
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> Cont e b i
   -> CEKErrorHandler e b i
@@ -581,7 +582,7 @@ acquireModuleAdmin i cont handler env mdl = do
 
 -- | Evaluate a term with all the stack manipulation logic
 evalWithStackFrame
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> Cont e b i
   -> CEKErrorHandler e b i
@@ -629,7 +630,7 @@ pushStackFrame info cont mty sf = do
 --   - If the cap is managed, install the cap (If possible) then evaluate the body, and if
 --     the cap is user managed, ensure that the manager function run after the cap body
 evalCap
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> Cont e b i
   -> CEKErrorHandler e b i
@@ -762,7 +763,7 @@ evalCap info currCont handler env origToken@(CapToken fqn args) popType ecType c
     _ -> failInvariant info (InvariantInvalidManagedCapKind "expected automanaged, received user managed")
 
 returnCEKError
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> Cont e b i
   -> CEKErrorHandler e b i
@@ -782,7 +783,7 @@ enforceNotWithinDefcap info env form =
   when (_ceInCap env) $ throwExecutionError info (FormIllegalWithinDefcap form)
 
 requireCap
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> Cont e b i
   -> CEKErrorHandler e b i
@@ -806,7 +807,7 @@ isCapInStack' (CapToken fqn args) =
   isCapInStack (CapToken (fqnToQualName fqn) args)
 
 composeCap
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> Cont e b i
   -> CEKErrorHandler e b i
@@ -866,7 +867,7 @@ installCap info _env (CapToken fqn args) autonomous = do
 
 -- Todo: should we typecheck / arity check here?
 createUserGuard
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> Cont e b i
   -> CEKErrorHandler e b i
@@ -889,7 +890,7 @@ createUserGuard info cont handler fqn args = do
 
 
 applyCont
-  :: ()
+  :: (IsBuiltin b)
   => Cont e b i
   -> CEKErrorHandler e b i
   -> EvalResult e b i
@@ -940,7 +941,7 @@ applyCont cont handler v = case v of
 
 -- | if true then 1 else 2
 applyContToValue
-  :: forall e b i.()
+  :: forall e b i.(IsBuiltin b)
   => Cont e b i
   -> CEKErrorHandler e b i
   -> CEKValue e b i
@@ -1310,7 +1311,7 @@ nestedPactsNotAdvanced resultState ps =
 -- | Apply a closure to its arguments,
 --   dispatching based on closure type.
 applyLam
-  :: ()
+  :: (IsBuiltin b)
   => CanApply e b i
   -> [CEKValue e b i]
   -> Cont e b i
@@ -1469,23 +1470,23 @@ applyLam (CT (CapTokenClosure fqn argtys arity i)) args cont handler
   argLen = length args
 
 
-returnCEKValue :: Cont e b i -> CEKErrorHandler e b i -> CEKValue e b i -> EvalM e b i (EvalResult e b i)
+returnCEKValue :: IsBuiltin b => Cont e b i -> CEKErrorHandler e b i -> CEKValue e b i -> EvalM e b i (EvalResult e b i)
 returnCEKValue = applyContToValue
 {-# INLINE returnCEKValue #-}
 
-returnCEK :: Cont e b i -> CEKErrorHandler e b i -> EvalResult e b i -> EvalM e b i (EvalResult e b i)
+returnCEK :: IsBuiltin b => Cont e b i -> CEKErrorHandler e b i -> EvalResult e b i -> EvalM e b i (EvalResult e b i)
 returnCEK = applyCont
 {-# INLINE returnCEK #-}
 
-evalCEK :: Cont e b i -> CEKErrorHandler e b i -> CEKEnv e b i -> EvalTerm b i -> EvalM e b i (EvalResult e b i)
+evalCEK :: (IsBuiltin b) => Cont e b i -> CEKErrorHandler e b i -> CEKEnv e b i -> EvalTerm b i -> EvalM e b i (EvalResult e b i)
 evalCEK = evaluateTerm
 {-# INLINE evalCEK #-}
 
-applyLamUnsafe :: CanApply e b i -> [CEKValue e b i] -> Cont e b i -> CEKErrorHandler e b i -> EvalM e b i (EvalResult e b i)
+applyLamUnsafe :: IsBuiltin b => CanApply e b i -> [CEKValue e b i] -> Cont e b i -> CEKErrorHandler e b i -> EvalM e b i (EvalResult e b i)
 applyLamUnsafe = applyLam
 {-# INLINE applyLamUnsafe #-}
 
-evalNormalForm :: CEKEnv e b i -> EvalTerm b i -> EvalM e b i (EvalResult e b i)
+evalNormalForm :: (IsBuiltin b) => CEKEnv e b i -> EvalTerm b i -> EvalM e b i (EvalResult e b i)
 evalNormalForm = evaluateTerm Mt CEKNoHandler
 {-# INLINE evalNormalForm #-}
 
@@ -1495,7 +1496,7 @@ evalNormalForm = evaluateTerm Mt CEKNoHandler
 -- thus there's no need to wrap/unwrap the guard into a `VPactValue`,
 -- and moreover it does not need to take a `b` which it does not use anyway.
 enforceGuard
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> Cont e b i
   -> CEKErrorHandler e b i
@@ -1525,7 +1526,7 @@ enforceGuard info cont handler env g = case g of
          CapabilityPactGuardInvalidPactId curDpid dpid
 
 enforceCapGuard
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> Cont e b i
   -> CEKErrorHandler e b i
@@ -1547,7 +1548,7 @@ enforceCapGuard info cont handler cg@(CapabilityGuard qn args mpid) = case mpid 
 
 
 runUserGuard
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> Cont e b i
   -> CEKErrorHandler e b i
@@ -1567,7 +1568,7 @@ runUserGuard info cont handler env (UserGuard qn args) =
 
 eval
   :: forall e b i
-  .  ()
+  .  (IsBuiltin b)
   => Purity
   -> BuiltinEnv e b i
   -> EvalTerm b i
@@ -1586,7 +1587,7 @@ eval purity benv term = do
 
 evalWithinCap
   :: forall e b i
-  .  ()
+  .  (IsBuiltin b)
   => i
   -> Purity
   -> BuiltinEnv e b i
@@ -1610,7 +1611,7 @@ evalWithinCap info purity benv (CapToken qualName vs) term = do
 
 interpretGuard
   :: forall e b i
-  .  ()
+  .  (IsBuiltin b)
   => i
   -> BuiltinEnv e b i
   -> Guard QualifiedName PactValue
@@ -1629,7 +1630,7 @@ interpretGuard info bEnv g = do
 
 evalResumePact
   :: forall e b i
-  . ()
+  . (IsBuiltin b)
   => i
   -> BuiltinEnv e b i
   -> Maybe DefPactExec
@@ -1650,7 +1651,7 @@ evalResumePact info bEnv mdpe = do
 
 -- Keyset Code
 isKeysetInSigs
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> Cont e b i
   -> CEKErrorHandler e b i
@@ -1696,7 +1697,7 @@ isKeysetInSigs info cont handler env ks@(KeySet kskeys ksPred) = do
           throwExecutionError info (InvalidCustomKeysetPredicate "expected native")
 
 isKeysetNameInSigs
-  :: ()
+  :: (IsBuiltin b)
   => i
   -> Cont e b i
   -> CEKErrorHandler e b i
