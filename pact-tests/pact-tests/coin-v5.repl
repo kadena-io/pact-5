@@ -944,6 +944,16 @@
   (map (remove 'module-hash) (env-events true)))
 (rollback-tx)
 
+(begin-tx)
+(env-sigs
+  [{ 'key: 'keys2,
+     'caps: [(coin.TRANSFER 'doug 'emily 1.0),(coin.GAS)]}])
+(expect-failure
+  "You cannot install a capability twice which is already in the msg sigs"
+  "Capability already installed"
+  (install-capability (coin.TRANSFER 'doug 'emily 2.0)))
+(rollback-tx)
+
 ;; ======================================================
 ;; test xchain
 ;; ======================================================

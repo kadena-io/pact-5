@@ -1011,3 +1011,29 @@
 [ {"module-hash": "8bdi-0ljmkBGMm06zxB4j4tziHY3qLT-d_UoUwxBDLw"
   ,"name": "A.A_EVENT","params": [ 420 ]} ] (env-events true))
 (commit-tx)
+
+(begin-tx)
+(module m g (defcap g () true)
+
+  (defcap CAP (a:integer b:integer)
+    @managed b CAP-mgr
+    (+ a b)
+  )
+
+  (defun CAP-mgr (mgd:integer req:integer)
+    (enforce (>= mgd req) "not enough floogleblats")
+    (- mgd req)
+  )
+
+  (defun require-cap (a:integer b:integer)
+    (with-capability (CAP a b)
+      (require-capability (CAP a b))))
+)
+
+(env-sigs [{"key":"bob", "caps":[(CAP 1 2)]}])
+(expect-failure "You cannot install a capability twice which is already in the msg sigs"
+  "Capability already installed"
+  (install-capability (CAP 1 3))
+  )
+
+(commit-tx)

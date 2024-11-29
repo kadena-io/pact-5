@@ -837,7 +837,8 @@ installCap
   -> Bool
   -> EvalM e b i (ManagedCap QualifiedName PactValue)
 installCap info _env (CapToken fqn args) autonomous = do
-  let ct = CapToken (fqnToQualName fqn) args
+  let capQn = fqnToQualName fqn
+      ct = CapToken capQn args
   d <- getDefCap info fqn
   case _dcapMeta d of
     DefManaged m -> case m of
@@ -849,7 +850,11 @@ installCap info _env (CapToken fqn args) autonomous = do
         capAlreadyInstalled <- S.member mcap <$> use (esCaps . csManaged)
         when capAlreadyInstalled $ throwExecutionError info (CapAlreadyInstalled ct)
         (esCaps . csManaged) %= S.insert mcap
-        when autonomous $
+        when autonomous $ do
+          let matches (CapToken qn' capArgs') = qn' == capQn && filterIndex paramIx capArgs' == _ctArgs ctFiltered
+          providedCaps <- viewEvalEnv eeMsgSigs
+          forM_ (findOf (folded . folded) matches providedCaps) $ \_ ->
+            throwExecutionError info (CapAlreadyInstalled ct)
           (esCaps . csAutonomous) %= S.insert ct
         pure mcap
       AutoManagedMeta -> do
