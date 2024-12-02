@@ -52,7 +52,7 @@ data BuiltinForm o
   | CWithCapability o o
   | CCreateUserGuard o
   | CEnforceOne o o
-  | CRunReadOnly o
+  | CPure o
   | CTry o o
   deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
 
@@ -76,8 +76,8 @@ instance Pretty o => Pretty (BuiltinForm o) where
       parens ("create-user-guard" <+> pretty o)
     CTry o o' ->
       parens ("try" <+> pretty o <+> pretty o')
-    CRunReadOnly o ->
-      parens ("run-read-only" <+> pretty o)
+    CPure o ->
+      parens ("pure" <+> pretty o)
 
 -- | Our list of base-builtins to pact.
 data CoreBuiltin

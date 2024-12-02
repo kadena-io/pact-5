@@ -249,7 +249,7 @@ evaluateTerm cont handler env (BuiltinForm c info) = case c of
           evalCEK cont' handler env x
     _ -> throwExecutionError info $ NativeExecutionError (NativeName "create-user-guard") $
           "create-user-guard: expected function application of a top-level function"
-  CRunReadOnly term -> do
+  CPure term -> do
     let env' = readOnlyEnv env
     evalCEK cont handler env' term
   -- | ------ From --------------- | ------ To ------------------------ |

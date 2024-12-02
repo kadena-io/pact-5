@@ -277,7 +277,7 @@ evaluate env = \case
       else do
         msg <- enforceString info =<< evaluate env str
         throwUserRecoverableError info (UserEnforceError msg)
-    CRunReadOnly e -> do
+    CPure e -> do
       let env' = readOnlyEnv env
       evaluate env' e
     CWithCapability cap body -> do
