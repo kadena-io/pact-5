@@ -979,7 +979,7 @@ resolveInterfaceName i mn@(ModuleName name mNs) =
     getModName = \case
       ModuleData _ _ ->
         throwDesugarError (InvalidModuleReference mn) i
-      InterfaceData _ _ -> pure mn
+      InterfaceData ifn _ -> pure (_ifName ifn)
 
 
 -- | Resolve module data, fail if not found
@@ -1007,7 +1007,7 @@ renameType i = \case
   Lisp.TyList ty ->
     TyList <$> renameType i ty
   Lisp.TyModRef tmr ->
-    TyModRef (S.fromList tmr) <$ traverse (resolveInterfaceName i) tmr
+    TyModRef . S.fromList <$> traverse (resolveInterfaceName i) tmr
   Lisp.TyKeyset -> pure TyGuard
   Lisp.TyObject pn ->
     TyObject <$> resolveSchema pn
