@@ -1,0 +1,46 @@
+; Basic litmus test to ensure that let bindings are typechecked
+(expect "Let typechecking passes" 1 (let ((x:integer 1)) x))
+(expect-failure "Let typechecking fails with incorrect value" (let ((x:string 1)) x))
+
+; Complicated case to ensure that modules do the following:
+; - They typecheck module references correctly
+; - Module reference interfaces are properly mangled
+(begin-tx)
+(module m g (defcap g () true)
+
+  (defun allow () true)
+  (defun get-allow-guard () (create-user-guard (allow)))
+)
+
+(define-namespace "beepo" (get-allow-guard) (get-allow-guard))
+
+(namespace "beepo")
+(interface iface
+  (defun f:integer ())
+  )
+
+(module miface g (defcap g () true)
+  ; This Module ref is fully qualified
+  (implements beepo.iface)
+  (defun f:integer () 2)
+)
+
+(module miface2 g (defcap g () true)
+  ; This module ref is unqualified and should be mangled
+  (implements iface)
+  (defun f:integer () 2)
+)
+
+(commit-tx)
+(begin-tx)
+(namespace "beepo")
+(module typechecks g (defcap g () true)
+  (defschema beepo-schema a:module{iface})
+  ; BEEPO_LIST should have a mix of mangled and unmangled interface names,
+  ; but should typecheck if the module was deployed correctly.
+  (defun BEEPO_LIST:[object{beepo-schema}] () [{"a":miface} {"a":miface2}])
+)
+
+(expect "Beepo list typechecks" [{"a":miface}, {"a":miface2}] (BEEPO_LIST))
+
+(commit-tx)

@@ -245,8 +245,11 @@ evaluate env = \case
   Nullary body info -> do
     let clo = VLamClosure (LamClosure NullaryClosure 0 body Nothing env info)
     pure clo
-  Let _ e1 e2 _ -> do
+  Let arg e1 e2 i -> do
     e1val <- evaluate env e1
+    case e1val of
+      VPactValue pv -> maybeTCType i (_argType arg) pv
+      _ -> pure ()
     let newEnv = RAList.cons e1val (_ceLocal env)
     let env' = env {_ceLocal = newEnv }
     evaluate env' e2

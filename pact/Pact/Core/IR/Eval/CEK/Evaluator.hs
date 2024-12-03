@@ -186,9 +186,9 @@ evaluateTerm cont handler env (Nullary body info) = do
 -- | ------ From ---------- | ------ To ------ |
 --   <Let e1 e2, E, K, H>      <e1, E, LetC(E,e2,K), H>
 --
-evaluateTerm cont handler env (Let _ e1 e2 _info) = do
+evaluateTerm cont handler env (Let n e1 e2 info) = do
   -- chargeGasArgs _info (GAConstant constantWorkNodeGas)
-  let cont' = LetC env e2 cont
+  let cont' = LetC env info n e2 cont
   evalCEK cont' handler env e1
 -- | ------ From ---------- | ------ To ------ |
 --   <Lam args body, E, K, H>      <VLamClo(args, body, E), E, K, H>
@@ -999,7 +999,11 @@ applyContToValue (Fn fn env args vs cont) handler v = do
 -- | ------ From ------------ | ------ To ---------------- |
 --   <v, LetC(E, body, K), H>   <body, (cons v E), K, H>
 --
-applyContToValue (LetC env letbody cont) handler v = do
+applyContToValue (LetC env i arg letbody cont) handler v = do
+  case v of
+    VPactValue pv -> do
+      maybeTCType i (_argType arg) pv
+    _ -> pure ()
   evalCEK cont handler (over ceLocal (RAList.cons v) env) letbody
 -- | ------ From ------------ | ------ To ---------------- |
 --   <_, SeqC(E, e2, K), H>     <e2, E, K, H>
