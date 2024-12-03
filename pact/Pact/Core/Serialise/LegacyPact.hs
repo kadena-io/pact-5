@@ -559,7 +559,7 @@ fromLegacyPersistDirect = \case
         let c1 = Arg "#constantlyA1" Nothing ()
         let c2 = Arg "#constantlyA2" Nothing ()
         d <- view teDepth
-        pure $ Lam (c1 :| [c2]) (Var (Name "#constantlyA1" (NBound 1), d+1) ()) ()
+        pure $ Lam (c1 :| [c2]) (Var (Name "#constantlyA1" (NBound 1), d+2) ()) ()
 
     | otherwise -> case M.lookup n coreBuiltinMap of
         Just b -> pure (Builtin b ())
