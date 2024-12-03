@@ -1763,6 +1763,7 @@ coreChainData info b cont handler _env = \case
                  , (cdSender, PString sender)
                  , (cdGasLimit, PInteger (fromIntegral gasLimit))
                  , (cdGasPrice, PDecimal gasPrice)]
+    liftIO $ putStrLn $ "FIELDS" <> show fields
     returnCEKValue cont handler (VObject fields)
   args -> argsError info b args
 
