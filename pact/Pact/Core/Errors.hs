@@ -1122,15 +1122,15 @@ locatePactErrorInfo pe =
 
 instance J.Encode info => J.Encode (LocatedErrorInfo info) where
   build loc = J.object
-    [ "errorOrigin" J..= _leiOrigin loc
-    , "errorInfo" J..= _leiInfo loc
+    [ "origin" J..= _leiOrigin loc
+    , "info" J..= _leiInfo loc
     ]
 
 instance JD.FromJSON info => JD.FromJSON (LocatedErrorInfo info) where
   parseJSON = JD.withObject "LocatedErrorInfo" $ \o ->
     LocatedErrorInfo
-      <$> o JD..: "errorOrigin"
-      <*> o JD..: "errorInfo"
+      <$> o JD..: "origin"
+      <*> o JD..: "info"
 
 instance NFData info => NFData (PactError info)
 
@@ -1808,25 +1808,26 @@ errorCodeFromText t = do
 instance {-# OVERLAPPING #-} J.Encode (PactErrorCode NoInfo) where
   build (PactErrorCode ec msg _) = J.object
     [ "errorCode" J..= T.pack (show ec)
-    , "errorMsg" J..= msg
+    , "message" J..= msg
     ]
-
 
 instance {-# OVERLAPPING #-} JD.FromJSON (PactErrorCode NoInfo) where
   parseJSON = JD.withObject "PactErrorCode" $ \o -> do
     t <- o JD..: "errorCode"
     case errorCodeFromText t of
       Just a -> do
-        msg <- o JD..: "errorMsg"
+        msg <- o JD..: "message"
         pure $ PactErrorCode a msg NoInfo
       _ -> fail "failed to parse pact error code"
 
 instance J.Encode info => J.Encode (PactErrorCode info) where
   build (PactErrorCode ec msg info) = J.object
     -- Note: this is safe, the `Show` instance converts it to hex
+    -- chessai: But what if it stops doing that?
     [ "errorCode" J..= T.pack (show ec)
-    , "errorMsg" J..= msg
-    , "info" J..= info ]
+    , "message" J..= msg
+    , "info" J..= info
+    ]
 
 instance JD.FromJSON info => JD.FromJSON (PactErrorCode info) where
   parseJSON = JD.withObject "PactErrorCode" $ \o -> do
@@ -1834,7 +1835,7 @@ instance JD.FromJSON info => JD.FromJSON (PactErrorCode info) where
     case errorCodeFromText t of
       Just a -> do
         info <- o JD..: "info"
-        msg <- o JD..: "errorMsg"
+        msg <- o JD..: "message"
         pure $ PactErrorCode a msg info
       _ -> fail "failed to parse pact error code"
 
