@@ -1092,7 +1092,8 @@ dbWithDefaultRead info b cont handler env = \case
         bytes <- sizeOf info SizeOfV0 rdata
         chargeGasArgs info (GRead bytes)
         applyLam clo [VObject rdata] cont handler
-      Nothing -> applyLam clo [VObject defaultObj] cont handler
+      Nothing -> do
+        applyLam clo [VObject defaultObj] cont handler
   args -> argsError info b args
 
 -- | Todo: schema checking here? Or only on writes?
@@ -1763,7 +1764,6 @@ coreChainData info b cont handler _env = \case
                  , (cdSender, PString sender)
                  , (cdGasLimit, PInteger (fromIntegral gasLimit))
                  , (cdGasPrice, PDecimal gasPrice)]
-    liftIO $ putStrLn $ "FIELDS" <> show fields
     returnCEKValue cont handler (VObject fields)
   args -> argsError info b args
 

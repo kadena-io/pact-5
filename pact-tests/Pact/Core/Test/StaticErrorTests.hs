@@ -376,7 +376,7 @@ desugarTests =
         (implements nonexistent)
         )
       |])
-  , ("module_implements_module", isDesugarError _NoSuchInterface, [text|
+  , ("module_implements_module", isDesugarError _InvalidModuleReference, [text|
       (module notiface ng (defcap ng () true))
 
       (module m g (defcap g () true)

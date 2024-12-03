@@ -82,7 +82,7 @@ not: 364
 not?: 364
 or?: 364
 pact-id: 169750
-pairing-check: 11063933
+pairing-check: 11064258
 parse-time: 602
 point-add: 5500
 poseidon-hash-hack-a-chain: 6393700
@@ -94,7 +94,7 @@ read-string: 303
 read: 457650
 remove: 360
 require-capability: 304750
-resume: 380331
+resume: 380356
 reverse: 700
 round: 200
 scalar-mult: 360300
@@ -118,7 +118,7 @@ with-default-read: 460916
 with-read: 457833
 write: 452950
 xor: 500
-yield: 247650
+yield: 247675
 zip: 4320
 |: 500
 ~: 250

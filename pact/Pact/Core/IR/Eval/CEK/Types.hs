@@ -432,7 +432,7 @@ data Cont (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
   -- ^ Continuation which evaluates arguments for a function to apply
   | Args !(CEKEnv e b i) i ![EvalTerm b i] !(Cont e b i)
   -- ^ Continuation holding the arguments to evaluate in a function application
-  | LetC !(CEKEnv e b i) !(EvalTerm b i) !(Cont e b i)
+  | LetC !(CEKEnv e b i) i (Arg Type i) !(EvalTerm b i) !(Cont e b i)
   -- ^ Let single-variable pushing
   -- Optimization frame: Bypasses closure creation and thus less alloc
   -- Known as a single argument it will not construct a needless closure

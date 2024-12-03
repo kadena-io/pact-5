@@ -1389,7 +1389,7 @@ renameModule
   :: (DesugarBuiltin b)
   => Module ParsedName DesugarType b i
   -> RenamerM e b i (Module Name Type b i)
-renameModule (Module unmangled mgov defs blessed imports implements mhash txh mcode i) = do
+renameModule (Module unmangled mgov defs blessed imports imps mhash txh mcode i) = do
   rsDependencies .= mempty
   mname <- lift $ mangleNamespace unmangled
   mgov' <- resolveGov mname mgov
@@ -1403,15 +1403,16 @@ renameModule (Module unmangled mgov defs blessed imports implements mhash txh mc
       throwDesugarError (RecursionDetected mname (defName <$> d)) (defInfo (unsafeHead d))
   binds <- view reBinds
   bindsWithImports <- foldlM (handleImport i) binds imports
-  (defs'', _, _, _) <- over _1 reverse <$> foldlM (go mname) ([], S.empty, bindsWithImports, M.empty) defs'
-  traverse_ (checkImplements i defs'' mname) implements
-  let resolvedModule = Module mname mgov' defs'' blessed imports implements mhash txh mcode i
+  implements' <- traverse (resolveInterfaceName i) imps
+  (defs'', _, _, _) <- over _1 reverse <$> foldlM (go mname implements') ([], S.empty, bindsWithImports, M.empty) defs'
+  traverse_ (checkImplements i defs'' mname) implements'
+  let resolvedModule = Module mname mgov' defs'' blessed imports implements' mhash txh mcode i
   modSize <- lift $ sizeOf i SizeOfV0 (() <$ resolvedModule)
   lift $ chargeGasArgs i (GModuleOp (MOpDesugarModule modSize))
   pure resolvedModule
   where
   -- Our deps are acyclic, so we resolve all names
-  go mname (!defns, !s, !m, !mlocals) defn = do
+  go mname implements (!defns, !s, !m, !mlocals) defn = do
     when (S.member (defName defn) s) $ throwDesugarError (DuplicateDefinition (QualifiedName (defName defn) mname)) i
     let dn = defName defn
     defn' <- local (set reCurrModule (Just $ CurrModule mname implements MTModule) . set reCurrModuleTmpBinds mlocals)
