@@ -58,14 +58,14 @@ prettyShowValue = \case
   VTable (TableValue (TableName tn mn) _ _) -> "table{" <> renderModuleName mn <> "_" <> tn <> "}"
   VClosure _ -> "<#closure>"
 
-corePrint :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+corePrint :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 corePrint info b cont handler _env = \case
   [v] -> do
     liftIO $ putStrLn $ T.unpack (prettyShowValue v)
     returnCEKValue cont handler (VLiteral LUnit)
   args -> argsError info b args
 
-coreExpect :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+coreExpect :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 coreExpect info b cont handler _env = \case
   [VLiteral (LString msg), VClosure expected, VClosure provided] -> do
     es <- get
@@ -86,12 +86,10 @@ coreExpect info b cont handler _env = \case
         returnCEKError info cont handler $ UserEnforceError "FAILURE: expect expression did not return a pact value for comparison"
       Left err -> do
         put es
-        currSource <- useReplState replCurrSource
-        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> " evaluation of actual failed with error message:\n" <>
-          replError currSource err
+        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> " evaluation of actual failed with error message:\n" <> renderCompactText err
   args -> argsError info b args
 
-coreExpectThat :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+coreExpectThat :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 coreExpectThat info b cont handler _env = \case
   [VLiteral (LString msg), VClosure vclo, v] -> do
     applyLamUnsafe vclo [v] Mt CEKNoHandler >>= \case
@@ -102,7 +100,7 @@ coreExpectThat info b cont handler _env = \case
       ve@VError{} -> returnCEK cont handler ve
   args -> argsError info b args
 
-coreExpectFailure :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+coreExpectFailure :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 coreExpectFailure info b cont handler _env = \case
   [VString doc, VClosure vclo] -> do
     es <- get
@@ -137,7 +135,7 @@ coreExpectFailure info b cont handler _env = \case
   args -> argsError info b args
 
 
-continuePact :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+continuePact :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 continuePact info b cont handler env = \case
   [VInteger s] -> go s False Nothing Nothing
   [VInteger s, VBool r] -> go s r Nothing Nothing
@@ -169,7 +167,7 @@ continuePact info b cont handler env = \case
       v <- liftEither merr
       returnCEK cont handler v
 
-pactState :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+pactState :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 pactState info b cont handler _env = \case
   [] -> go False
   [VBool clear] -> go clear
@@ -190,14 +188,14 @@ pactState info b cont handler _env = \case
         returnCEKValue cont handler (VObject (M.fromList ps))
       Nothing -> returnCEKError info cont handler $ UserEnforceError "pact-state: no pact exec in context"
 
-coreplEvalEnvStackFrame :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+coreplEvalEnvStackFrame :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 coreplEvalEnvStackFrame info b cont handler _env = \case
   [] -> do
     sfs <- fmap (PString . T.pack . show) <$> use esStack
     returnCEKValue cont handler $ VList (V.fromList sfs)
   args -> argsError info b args
 
-envEvents :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envEvents :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envEvents info b cont handler _env = \case
   [VBool clear] -> do
     events <- reverse . fmap envToObj <$> use esEvents
@@ -213,7 +211,7 @@ envEvents info b cont handler _env = \case
         , ("module-hash", PString (hashToText (_mhHash mh)))]
   args -> argsError info b args
 
-envHash :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envHash :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envHash info b cont handler _env = \case
   [VString s] -> do
     case decodeBase64UrlUnpadded (T.encodeUtf8 s) of
@@ -223,7 +221,7 @@ envHash info b cont handler _env = \case
         returnCEKValue cont handler $ VString $ "Set tx hash to " <> s
   args -> argsError info b args
 
-envData :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envData :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envData info b cont handler _env = \case
   [VPactValue pv] -> do
     -- to mimic prod, we must roundtrip here
@@ -233,7 +231,7 @@ envData info b cont handler _env = \case
     returnCEKValue cont handler (VString "Setting transaction data")
   args -> argsError info b args
 
-envChainData :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envChainData :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envChainData info b cont handler _env = \case
   [VObject cdataObj] -> do
     pd <- viewEvalEnv eePublicData
@@ -263,7 +261,7 @@ envChainData info b cont handler _env = \case
       _ -> returnCEKError info cont handler $ UserEnforceError $ "envChainData: bad public metadata value for key: " <> _field k
   args -> argsError info b args
 
-envKeys :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envKeys :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envKeys info b cont handler _env = \case
   [VList ks] -> do
     keys <- traverse (asString info b) ks
@@ -271,7 +269,7 @@ envKeys info b cont handler _env = \case
     returnCEKValue cont handler (VString "Setting transaction keys")
   args -> argsError info b args
 
-envSigs :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envSigs :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envSigs info b cont handler _env = \case
   [VList ks] ->
     case traverse keyCapObj ks of
@@ -292,7 +290,7 @@ envSigs info b cont handler _env = \case
       _ -> Nothing
   args -> argsError info b args
 
-envVerifiers :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envVerifiers :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envVerifiers info b cont handler _env = \case
   [VList ks] ->
     case traverse verifCapObj ks of
@@ -314,7 +312,7 @@ envVerifiers info b cont handler _env = \case
       _ -> Nothing
   args -> argsError info b args
 
-beginTx :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+beginTx :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 beginTx info b cont handler _env = \case
   [VString s] -> begin' info (Just s) >>= returnCEK cont handler . renderTx info "Begin Tx"
   [] -> begin' info Nothing >>= returnCEK cont handler . renderTx info "Begin Tx"
@@ -325,7 +323,7 @@ renderTx _info start (Just (TxId tid, mt)) =
   EvalValue $ VString $ start <> " " <> T.pack (show tid) <> maybe mempty (" " <>) mt
 renderTx info start Nothing = VError [] (UserEnforceError ("tx-function failure " <> start)) info
 
-begin' :: SpanInfo -> Maybe Text -> ReplM b (Maybe (TxId, Maybe Text))
+begin' :: FileLocSpanInfo -> Maybe Text -> ReplM b (Maybe (TxId, Maybe Text))
 begin' info mt = do
   pdb <- useReplState (replEvalEnv . eePactDb)
   mode <- viewEvalEnv eeMode
@@ -345,7 +343,7 @@ emptyTxState = do
   put newEvalState
 
 
-commitTx :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+commitTx :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 commitTx info b cont handler _env = \case
   [] -> do
     pdb <- useReplState (replEvalEnv . eePactDb)
@@ -359,7 +357,7 @@ commitTx info b cont handler _env = \case
   args -> argsError info b args
 
 
-rollbackTx :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+rollbackTx :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 rollbackTx info b cont handler _env = \case
   [] -> do
     pdb <- useReplState (replEvalEnv . eePactDb)
@@ -372,7 +370,7 @@ rollbackTx info b cont handler _env = \case
       Nothing -> returnCEK cont handler (renderTx info "Rollback Tx" Nothing)
   args -> argsError info b args
 
-sigKeyset :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+sigKeyset :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 sigKeyset info b cont handler _env = \case
   [] -> do
     sigs <- S.fromList . M.keys <$> viewEvalEnv eeMsgSigs
@@ -380,7 +378,7 @@ sigKeyset info b cont handler _env = \case
   args -> argsError info b args
 
 
-testCapability :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+testCapability :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 testCapability info b cont handler env = \case
   [VCapToken origToken] -> do
     d <- getDefCap info (_ctName origToken)
@@ -395,7 +393,7 @@ testCapability info b cont handler env = \case
         installCap info env origToken False *> evalCap info cont' handler env origToken PopCapInvoke TestCapEval cBody
   args -> argsError info b args
 
-envExecConfig :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envExecConfig :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envExecConfig info b cont handler _env = \case
   [VList s] -> do
     s' <- traverse go (V.toList s)
@@ -412,7 +410,7 @@ envExecConfig info b cont handler _env = \case
 
   args -> argsError info b args
 
-envNamespacePolicy :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envNamespacePolicy :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envNamespacePolicy info b cont handler _env = \case
   [VBool allowRoot, VClosure (C clo)] -> do
     let qn = fqnToQualName (_cloFqName clo)
@@ -425,7 +423,7 @@ envNamespacePolicy info b cont handler _env = \case
       _ -> returnCEKError info cont handler $ UserEnforceError "invalid namespace manager function type"
   args -> argsError info b args
 
-envGas :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envGas :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envGas info b cont handler _env = \case
   [] -> do
     Gas gas <- milliGasToGas <$> getGas
@@ -435,7 +433,7 @@ envGas info b cont handler _env = \case
     returnCEKValue cont handler $ VString $ "Set gas to " <> T.pack (show g)
   args -> argsError info b args
 
-envMilliGas :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envMilliGas :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envMilliGas info b cont handler _env = \case
   [] -> do
     MilliGas gas <- getGas
@@ -445,14 +443,14 @@ envMilliGas info b cont handler _env = \case
     returnCEKValue cont handler $ VString $ "Set milligas to" <> T.pack (show g)
   args -> argsError info b args
 
-envGasLimit :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envGasLimit :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envGasLimit info b cont handler _env = \case
   [VInteger g] -> do
     (replEvalEnv . eeGasEnv . geGasModel . gmGasLimit) .== Just (MilliGasLimit (gasToMilliGas (Gas (fromInteger g))))
     returnCEKValue cont handler $ VString $ "Set gas limit to " <> T.pack (show g)
   args -> argsError info b args
 
-envGasLog :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envGasLog :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envGasLog info b cont handler _env = \case
   [] -> do
     (gasLogRef, logsJustEnabled) <- viewEvalEnv (eeGasEnv . geGasLog) >>= \case
@@ -472,7 +470,7 @@ envGasLog info b cont handler _env = \case
           returnCEKValue cont handler (VList $ V.fromList (totalLine:logLines))
   args -> argsError info b args
 
-envEnableReplNatives :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envEnableReplNatives :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envEnableReplNatives info b cont handler _env = \case
   [VBool enabled] -> do
     let s = if enabled then "enabled" else "disabled"
@@ -480,7 +478,7 @@ envEnableReplNatives info b cont handler _env = \case
     returnCEKValue cont handler $ VString $ "repl natives " <> s
   args -> argsError info b args
 
-envGasModel :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envGasModel :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envGasModel info b cont handler _env = \case
   [] -> do
     gm <- viewEvalEnv (eeGasEnv . geGasModel)
@@ -497,7 +495,7 @@ envGasModel info b cont handler _env = \case
   args -> argsError info b args
 
 
-envModuleAdmin :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envModuleAdmin :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envModuleAdmin info b cont handler _env = \case
   [VModRef modRef] -> do
     let modName = _mrModule modRef
@@ -517,7 +515,7 @@ coreVersion info b  cont handler _env = \case
     in returnCEKValue cont handler (VString v)
   args -> argsError info b args
 
-envSetDebug :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
+envSetDebug :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envSetDebug info b cont handler _env = \case
   [VString flag] -> do
     flags <- case T.strip flag of
@@ -563,16 +561,27 @@ coreEnforceVersion info b cont handler _env = \case
         Left _msg -> throwExecutionError info (EnforcePactVersionParseFailure s)
         Right li -> pure (V.makeVersion li)
 
+load :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
+load info b cont handler _env = \case
+  [VString s] -> load' s False
+  [VString s, VBool reset] -> load' s reset
+  args -> argsError info b args
+  where
+    load' sourceFile reset = do
+      replPrintLn $ PString $ "Loading " <> sourceFile <> "..."
+      fload <- useReplState replLoad
+      fload (T.unpack sourceFile) reset
+      returnCEKValue cont handler VUnit
 
 
 replBuiltinEnv
-  :: BuiltinEnv 'ReplRuntime (ReplBuiltin CoreBuiltin) SpanInfo
+  :: BuiltinEnv 'ReplRuntime (ReplBuiltin CoreBuiltin) FileLocSpanInfo
 replBuiltinEnv i b env =
   mkBuiltinFn i b env (replCoreBuiltinRuntime b)
 
 replCoreBuiltinRuntime
   :: ReplBuiltin CoreBuiltin
-  -> NativeFunction 'ReplRuntime (ReplBuiltin CoreBuiltin) SpanInfo
+  -> NativeFunction 'ReplRuntime (ReplBuiltin CoreBuiltin) FileLocSpanInfo
 replCoreBuiltinRuntime = \case
   RBuiltinWrap cb ->
     coreBuiltinRuntime cb
@@ -619,3 +628,5 @@ replCoreBuiltinRuntime = \case
     REnvModuleAdmin -> envModuleAdmin
     REnvVerifiers -> envVerifiers
     REnvSetDebugFlag -> envSetDebug
+    RLoad -> load
+    RLoadWithEnv -> load
