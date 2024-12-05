@@ -4,7 +4,7 @@ Use `diff-time` to compute the difference between `time1` and `time2` in seconds
 
 ### Basic syntax
 
-To compute the difference between two `tinme1` and `time2` in seconds, use the following syntax:
+To compute the difference between `time1` and `time2` in seconds, use the following syntax:
 
 ```pact
 (diff-time time1 time2)
