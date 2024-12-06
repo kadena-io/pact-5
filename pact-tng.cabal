@@ -477,8 +477,6 @@ library test-utils
     , neat-interpolation
     , pact-tng:pact-request-api
     , pact-tng:unsafe
-    , lsp-test >= 0.17
-    , lsp-types
     , pact-time
 
   exposed-modules:
