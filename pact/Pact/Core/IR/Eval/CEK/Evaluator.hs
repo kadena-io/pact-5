@@ -209,7 +209,7 @@ evaluateTerm cont handler env (Builtin b info) = do
 --
 evaluateTerm cont handler env (Sequence e1 e2 _info) = do
   -- chargeGasArgs info (GAConstant constantWorkNodeGas)
-  evalCEK (SeqC env e2 cont) handler env e1
+  evalCEK (SeqC env _info e2 cont) handler env e1
 -- | ------ From --------------- | ------ To ------------------------ |
 --   <CAnd e1 e2, E, K, H>         <e1, E, CondC(E, AndFrame(e2),K),H>
 --   <COr e1 e2, E, K, H>          <e1, E, CondC(E, OrFrame(e2),K),H>
@@ -1008,7 +1008,8 @@ applyContToValue (LetC env i arg letbody cont) handler v = do
 -- | ------ From ------------ | ------ To ---------------- |
 --   <_, SeqC(E, e2, K), H>     <e2, E, K, H>
 --
-applyContToValue (SeqC env e cont) handler _ =
+applyContToValue (SeqC env info e cont) handler v = do
+  enforceSaturatedApp info v
   evalCEK cont handler env e
 -- | ------ From ------------------------ | ------ To ---------------- |
 --   <VBool b, CondC(E, AndC(e2), K), H>   if b then <e2, E, EnforceBool(K), H>
@@ -1359,7 +1360,7 @@ applyLam vc@(C (Closure fqn ca arity term mty env cloi)) args cont handler
   apply' e (ty:tys) [] = do
     let env' = set ceLocal e env
         -- Todo: fix partial SF args
-        pclo = PartialClosure (Just (StackFrame fqn [] SFDefun cloi)) (ty :| tys) (length tys + 1) term mty env' cloi
+        pclo = PartialClosure (Just (StackFrame fqn [] SFDefun cloi)) (ty :| tys) argLen (length tys + 1) term mty env' cloi
     returnCEKValue cont handler (VPartialClosure pclo)
   apply' _ [] _ =
     throwExecutionError cloi ClosureAppliedToTooManyArgs
@@ -1394,29 +1395,29 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
     evalCEK cont handler (set ceLocal e env) term
   apply' e (ty:tys) [] =
     returnCEKValue cont handler
-    (VPartialClosure (PartialClosure Nothing (ty :| tys) (length tys + 1) term mty (set ceLocal e env) cloi))
+    (VPartialClosure (PartialClosure Nothing (ty :| tys) argLen (length tys + 1) term mty (set ceLocal e env) cloi))
   apply' _ [] _ = do
     throwExecutionError cloi ClosureAppliedToTooManyArgs
 
-applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args cont handler = do
+applyLam (PC (PartialClosure li argtys nargs _ term mty env cloi)) args cont handler = do
   chargeGasArgs cloi (GAApplyLam (_sfName <$> li) (length args))
-  apply' (view ceLocal env) (NE.toList argtys) args
+  apply' nargs (view ceLocal env) (NE.toList argtys) args
   where
-  apply' e (Arg _ ty _:tys) (x:xs) = do
+  apply' n e (Arg _ ty _:tys) (x:xs) = do
     x' <- enforcePactValue cloi x
     maybeTCType cloi ty x'
-    apply' (RAList.cons (VPactValue x') e) tys xs
-  apply' e [] [] = do
+    apply' (n + 1) (RAList.cons (VPactValue x') e) tys xs
+  apply' _ e [] [] = do
     case li of
       Just sf -> do
         evalWithStackFrame cloi cont handler (set ceLocal e env) mty sf term
       Nothing -> do
         let cont' = EnforcePactValueC cloi cont
         evalCEK cont' handler (set ceLocal e env) term
-  apply' e (ty:tys) [] = do
-    let pclo = PartialClosure li (ty :| tys) (length tys + 1) term mty (set ceLocal e env) cloi
+  apply' n e (ty:tys) [] = do
+    let pclo = PartialClosure li (ty :| tys) n (length tys + 1) term mty (set ceLocal e env) cloi
     returnCEKValue cont handler (VPartialClosure pclo)
-  apply' _ [] _ = do
+  apply' _ _ [] _ = do
     throwExecutionError cloi ClosureAppliedToTooManyArgs
 
 applyLam nclo@(N (NativeFn b env fn arity i)) args cont handler

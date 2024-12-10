@@ -38,6 +38,7 @@ module Pact.Core.Errors
  , LegacyPactErrorType(..)
  , PactErrorCompat(..)
  , VerifierError(..)
+ , ErrorClosureType(..)
  , _PELexerError
  , _PEParseError
  , _PEDesugarError
@@ -184,6 +185,7 @@ module Pact.Core.Errors
  , _HyperlaneDecodeErrorInternal
  , _HyperlaneDecodeErrorBinary
  , _HyperlaneDecodeErrorParseRecipient
+ , _InvalidNumArgs
  , toPrettyLegacyError
  , BoundedText
  , _boundedText
@@ -722,7 +724,22 @@ data EvalError
   -- ^ Module admin was needed for a particular operation, but has not been acquired.
   | UnknownException Text
   -- ^ An unknown exception was thrown and converted to text. Intentionally and crucially lazy.
+  | InvalidNumArgs ErrorClosureType Int Int
   deriving (Eq, Show, Generic)
+
+data ErrorClosureType
+  = ErrClosureUserFun FullyQualifiedName
+  | ErrClosureLambda
+  | ErrClosureNativeFun NativeName
+  deriving (Eq, Show, Generic)
+
+instance NFData ErrorClosureType
+
+instance Pretty ErrorClosureType where
+  pretty = \case
+    ErrClosureUserFun fqn -> "function" <+> pretty fqn
+    ErrClosureLambda -> "lambda"
+    ErrClosureNativeFun n -> "native function" <+> pretty n
 
 instance NFData EvalError
 
@@ -915,6 +932,13 @@ instance Pretty EvalError where
       "Module admin necessary for operation but has not been acquired:" <> pretty mn
     UnknownException msg ->
       "Unknown exception: " <> pretty msg
+    InvalidNumArgs errCloType expected actual ->
+      "Incorrect number of arguments"
+      <+> parens (pretty actual)
+      <+> "for"
+      <+> pretty errCloType
+      <+> "supplied; expected"
+      <+> parens (pretty expected)
 
 -- | Errors meant to be raised
 --   internally by a PactDb implementation
@@ -1558,6 +1582,20 @@ evalErrorToBoundedText = mkBoundedText . \case
   -- Maybe library dependent, do not serialise
   UnknownException _ ->
     thsep ["Unknown exception"]
+  InvalidNumArgs mfqn expected actual ->
+    thsep
+      [ "Incorrect number of arguments"
+      , tparens (tInt actual)
+      , "for"
+      , renderClosureType mfqn
+      , "supplied; expected"
+      , tInt expected]
+    where
+    renderClosureType = \case
+      ErrClosureLambda -> "lambda"
+      ErrClosureUserFun fqn -> thsep ["user function", tFqn fqn]
+      ErrClosureNativeFun b -> thsep ["native function", _natName b]
+
 
 -- | NOTE: Do _not_ change this function post mainnet release just to improve an error.
 --  This will fork the chain, these messages will make it into outputs.
@@ -1705,6 +1743,8 @@ thsep :: [Text] -> Text
 thsep = concatBounded (fromIntegral (natVal (Proxy @PactErrorMsgSize))) . intersperse " "
 tdquotes :: Text -> Text
 tdquotes x = T.concat ["\"", x, "\""]
+tparens :: Text -> Text
+tparens x = T.concat ["(", x, ")"]
 tInt :: Int -> Text
 tInt = T.pack . show
 tBool :: Bool -> Text

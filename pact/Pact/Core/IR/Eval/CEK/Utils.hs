@@ -8,6 +8,7 @@ module Pact.Core.IR.Eval.CEK.Utils
  , readOnlyEnv
  , envFromPurity
  , enforcePactValue
+ , enforceSaturatedApp
  ) where
 
 import Control.Lens
@@ -109,3 +110,24 @@ enforcePactValue :: i -> CEKValue e b i -> EvalM e b i PactValue
 enforcePactValue info = \case
   VPactValue pv -> pure pv
   _ -> throwExecutionError info ExpectedPactValue
+
+invalidArgs
+  :: i
+  -> ErrorClosureType
+  -> Int
+  -> Int
+  -> EvalM e b i a
+invalidArgs info mn expected actual =
+  throwExecutionError info $ InvalidNumArgs mn expected actual
+
+enforceSaturatedApp :: IsBuiltin b => i -> CEKValue e b i -> EvalM e b i ()
+enforceSaturatedApp info = \case
+  VPactValue _ -> pure ()
+  VClosure clo -> case clo of
+    PC pc ->
+      invalidArgs info (maybe ErrClosureLambda ErrClosureUserFun (_sfName <$> _pcloFrame pc)) (_pcloArity pc + _pcloNArgs pc) (_pcloNArgs pc)
+    PN pn ->
+      let nargs = length (_pNativeAppliedArgs pn)
+      in invalidArgs info (ErrClosureNativeFun (builtinName (_pNative pn))) (_pNativeArity pn + nargs) nargs
+    _ -> pure ()
+{-# INLINE enforceSaturatedApp #-}
