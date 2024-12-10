@@ -236,8 +236,9 @@ evaluate env = \case
     fn <- enforceUserAppClosure info =<< evaluate env ufn
     args <- traverse (evaluate env) uargs
     applyLam fn args
-  Sequence e1 e2 _ -> do
-    _ <- evaluate env e1
+  Sequence e1 e2 info -> do
+    v <- evaluate env e1
+    enforceSaturatedApp info v
     evaluate env e2
   Builtin b info -> do
     let builtins = _ceBuiltins env
@@ -728,7 +729,7 @@ applyLam vc@(C (Closure fqn ca arity term mty env cloi)) args
   apply' e (ty:tys) [] = do
     let env' = set ceLocal e env
         -- Todo: fix partial SF args
-        pclo = PartialClosure (Just (StackFrame fqn [] SFDefun cloi)) (ty :| tys) (length tys + 1) term mty env' cloi
+        pclo = PartialClosure (Just (StackFrame fqn [] SFDefun cloi)) (ty :| tys) argLen (length tys + 1) term mty env' cloi
     return (VPartialClosure pclo)
   apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
 
@@ -758,26 +759,26 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args
   apply' e [] [] = do
     evaluate (set ceLocal e env) term
   apply' e (ty:tys) [] =
-    return (VPartialClosure (PartialClosure Nothing (ty :| tys) (length tys + 1) term mty (set ceLocal e env) cloi))
+    return (VPartialClosure (PartialClosure Nothing (ty :| tys) argLen (length tys + 1) term mty (set ceLocal e env) cloi))
   apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
-applyLam (PC (PartialClosure li argtys _ term mty env cloi)) args = do
+applyLam (PC (PartialClosure li argtys nargs _ term mty env cloi)) args = do
   chargeGasArgs cloi (GAApplyLam (_sfName <$> li) (length args))
-  apply' (view ceLocal env) (NE.toList argtys) args
+  apply' nargs (view ceLocal env) (NE.toList argtys) args
   where
-  apply' e (Arg _ ty _:tys) (x:xs) = do
+  apply' n e (Arg _ ty _:tys) (x:xs) = do
     x' <- enforcePactValue cloi x
     maybeTCType cloi ty x'
-    apply' (RAList.cons (VPactValue x') e) tys xs
-  apply' e [] [] = do
+    apply' (n + 1) (RAList.cons (VPactValue x') e) tys xs
+  apply' _ e [] [] = do
     case li of
       Just sf -> do
         evalWithStackFrame cloi sf mty $ evaluate (set ceLocal e env) term
       Nothing -> do
         evaluate (set ceLocal e env) term >>= enforcePactValue' cloi
-  apply' e (ty:tys) [] = do
-    let pclo = PartialClosure li (ty :| tys) (length tys + 1) term mty (set ceLocal e env) cloi
+  apply' n e (ty:tys) [] = do
+    let pclo = PartialClosure li (ty :| tys) n (length tys + 1) term mty (set ceLocal e env) cloi
     return (VPartialClosure pclo)
-  apply' _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
+  apply' _ _ [] _ = throwExecutionError cloi ClosureAppliedToTooManyArgs
 
 applyLam (PN (PartialNativeFn b env fn arity pArgs i)) args
   | arity == argLen = do

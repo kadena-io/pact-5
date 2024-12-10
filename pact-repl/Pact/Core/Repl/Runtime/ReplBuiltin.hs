@@ -385,7 +385,7 @@ testCapability info b cont handler env = \case
   [VCapToken origToken] -> do
     d <- getDefCap info (_ctName origToken)
     let cBody = Constant LUnit info
-        cont' = SeqC env cBody cont
+        cont' = SeqC env info cBody cont
     case _dcapMeta d of
       Unmanaged ->
         evalCap info cont' handler env origToken PopCapInvoke TestCapEval cBody

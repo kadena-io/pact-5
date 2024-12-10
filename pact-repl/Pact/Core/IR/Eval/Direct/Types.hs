@@ -53,6 +53,7 @@ module Pact.Core.IR.Eval.Direct.Types
  , toArgTypeError
  , argsError
  , mkDirectBuiltinFn
+ , enforceSaturatedApp
  ) where
 
 import Control.Lens
@@ -124,6 +125,7 @@ data PartialClosure (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
   = PartialClosure
   { _pcloFrame :: !(Maybe (StackFrame i))
   , _pcloTypes :: !(NonEmpty (Arg Type i))
+  , _pcloNArgs :: !Int
   , _pcloArity :: !Int
   , _pcloTerm :: !(EvalTerm b i)
   , _pcloRType :: !(Maybe Type)
@@ -348,3 +350,24 @@ mkDirectBuiltinFn
 mkDirectBuiltinFn i b env fn =
   NativeFn b env fn (builtinArity b) i
 {-# INLINE mkDirectBuiltinFn #-}
+
+invalidArgs
+  :: i
+  -> ErrorClosureType
+  -> Int
+  -> Int
+  -> EvalM e b i a
+invalidArgs info mn expected actual =
+  throwExecutionError info $ InvalidNumArgs mn expected actual
+
+enforceSaturatedApp :: IsBuiltin b => i -> EvalValue e b i -> EvalM e b i ()
+enforceSaturatedApp info = \case
+  VPactValue _ -> pure ()
+  VClosure clo -> case clo of
+    PC pc ->
+      invalidArgs info (maybe ErrClosureLambda ErrClosureUserFun (_sfName <$> _pcloFrame pc)) (_pcloArity pc + _pcloNArgs pc) (_pcloNArgs pc)
+    PN pn ->
+      let nargs = length (_pNativeAppliedArgs pn)
+      in invalidArgs info (ErrClosureNativeFun (builtinName (_pNative pn))) (_pNativeArity pn + nargs) nargs
+    _ -> pure ()
+{-# INLINE enforceSaturatedApp #-}

@@ -73,4 +73,5 @@
 {"conName":"HyperlaneDecodeError","conIndex":"48"}
 {"conName":"ModuleAdminNotAcquired","conIndex":"49"}
 {"conName":"UnknownException","conIndex":"4a"}
+{"conName":"InvalidNumArgs","conIndex":"4b"}
 

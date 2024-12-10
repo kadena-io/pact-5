@@ -196,6 +196,7 @@ data PartialClosure (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
   = PartialClosure
   { _pcloFrame :: !(Maybe (StackFrame i))
   , _pcloTypes :: !(NonEmpty (Arg Type i))
+  , _pcloNArgs :: !Int
   , _pcloArity :: !Int
   , _pcloTerm :: !(EvalTerm b i)
   , _pcloRType :: !(Maybe Type)
@@ -436,7 +437,7 @@ data Cont (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
   -- ^ Let single-variable pushing
   -- Optimization frame: Bypasses closure creation and thus less alloc
   -- Known as a single argument it will not construct a needless closure
-  | SeqC (CEKEnv e b i) (EvalTerm b i) (Cont e b i)
+  | SeqC (CEKEnv e b i) i (EvalTerm b i) (Cont e b i)
   -- ^ Sequencing expression, holding the next term to evaluate
   | ListC (CEKEnv e b i) i [EvalTerm b i] [PactValue] (Cont e b i)
   -- ^ Continuation for list elements
