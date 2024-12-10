@@ -12,7 +12,7 @@ To add `seconds` to a `time`, use the following syntax:
 
 ### Arguments
 
-Use the following arguments to specify the *`time`* to which you want to add *`seconds`* using the `add-time` Pact function.
+Use the following arguments to specify the `time` to which you want to add `seconds` using the `add-time` Pact function.
 
 | Argument | Type | Description |
 | --- | --- | --- |

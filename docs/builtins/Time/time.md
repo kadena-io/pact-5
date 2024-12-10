@@ -1,5 +1,15 @@
 ## time
-The `time` function constructs a time object from a UTC value using the ISO8601 format `(%Y-%m-%dT%H:%M:%SZ)`.
+
+Use the `time` function to construct a time object from a UTC value using the ISO 8601 standard Universal Time Coordinated (UTC) date time format: 
+
+```text
+%Y-%m-%dT%H:%M:%SZ
+```
+
+This format is the default time format in Pact for all time-related functions.
+Internally, the time object supports up to microsecond resolution.
+However, the values returned from the Pact interpreter as JSON are be serialized using the default format. 
+If you need higher resolution, you can explicitly format times with the `%v` template and related codes.
 
 ### Basic syntax
 
