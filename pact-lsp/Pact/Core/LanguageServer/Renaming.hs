@@ -17,10 +17,10 @@ import Data.Maybe
 
 
 matchingDefs
-  :: [EvalTopLevel ReplCoreBuiltin SpanInfo]
+  :: [EvalTopLevel ReplCoreBuiltin i]
   -> ModuleName
   -> Text
-  -> (Maybe (EvalIfDef ReplCoreBuiltin SpanInfo), Maybe (EvalDef ReplCoreBuiltin SpanInfo))
+  -> (Maybe (EvalIfDef ReplCoreBuiltin i), Maybe (EvalDef ReplCoreBuiltin i))
 matchingDefs tls mn n = (interfaceDef, moduleDef)
   where
     interfaceDef = do
@@ -41,23 +41,25 @@ matchingDefs tls mn n = (interfaceDef, moduleDef)
 
 
 matchingTerms
-  :: (EvalTerm ReplCoreBuiltin SpanInfo -> Bool)
-  -> EvalTopLevel ReplCoreBuiltin SpanInfo
-  -> [EvalTerm ReplCoreBuiltin SpanInfo]
+  :: forall i. ()
+  => (EvalTerm ReplCoreBuiltin i -> Bool)
+  -> EvalTopLevel ReplCoreBuiltin i
+  -> [EvalTerm ReplCoreBuiltin i]
 matchingTerms predicate topLevel = let
   terms = toListOf topLevelTerms topLevel
   in concatMap (toListOf filteredTerms) terms
   where
   filteredTerms :: Traversal'
-    (EvalTerm ReplCoreBuiltin SpanInfo) (EvalTerm ReplCoreBuiltin SpanInfo)
+    (EvalTerm ReplCoreBuiltin i) (EvalTerm ReplCoreBuiltin i)
   filteredTerms = traverseTerm . filtered predicate
 
 
 
 
 getRenameSpanInfo
-  :: [EvalTopLevel ReplCoreBuiltin SpanInfo]
-  -> PositionMatch ReplCoreBuiltin SpanInfo
+  :: HasSpanInfo i
+  => [EvalTopLevel ReplCoreBuiltin i]
+  -> PositionMatch ReplCoreBuiltin i
   -> [SpanInfo]
 getRenameSpanInfo tls = \case
    TermMatch (Var (Name n vt) _) -> case vt of
@@ -68,13 +70,13 @@ getRenameSpanInfo tls = \case
              _ -> False
            termOccurences = toListOf (each . termInfo) $ concatMap (matchingTerms isSameVar) tls
            (mInterfPos, mDefPos) = bimap (fmap ifDefNameInfo) (fmap defNameInfo) (matchingDefs tls mn n)
-       concat [maybeToList mInterfPos, maybeToList mDefPos, termOccurences]
+       fmap (view spanInfo) $ concat [maybeToList mInterfPos, maybeToList mDefPos, termOccurences]
      _ -> mempty
    DefunMatch (Defun spec _args _body _) -> do
      let dName = _argName spec
          isSameVar = \case
            Var (Name n _) _ -> n == dName
            _ -> False
-         termOccurences = toListOf (each . termInfo) $ concatMap (matchingTerms isSameVar) tls
-     _argInfo spec : termOccurences
+         termOccurences = toListOf (each . termInfo . spanInfo) $ concatMap (matchingTerms isSameVar) tls
+     view spanInfo (_argInfo spec) : termOccurences
    _ -> mempty
