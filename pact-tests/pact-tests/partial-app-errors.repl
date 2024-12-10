@@ -1,0 +1,20 @@
+
+(expect-failure "Partial application error is thrown when trying to sequence a partial native app with a value"
+  "Incorrect number of arguments (1) for native function + supplied; expected (2)"
+  (do (+ 1) 1)
+)
+
+(module m g (defcap g () true)
+
+  (defun f:integer (a:integer b:integer c:string) (do a b))
+)
+
+(expect-failure "Partial application error is thrown when trying to sequence a partial user fun app with a value"
+  "Incorrect number of arguments (1) for function m.f.{nv2apbz7RTDv53cf46_3VX1msHQzBgTEqfxumYRGdf8} supplied; expected (3)"
+  (do (f 1) 1)
+)
+
+(expect-failure "Partial application error is thrown when trying to sequence a partial lambda app with a value"
+  "Incorrect number of arguments (1) for lambda supplied; expected (3)"
+  (do ((lambda (x y z) x) 1) 1)
+)
