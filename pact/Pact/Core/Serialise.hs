@@ -159,7 +159,7 @@ serialisePact_repl_spaninfo = serialisePact
   { _encodeModuleData = docEncode V1.encodeModuleData_repl_spaninfo
   , _decodeModuleData =
       \bs ->
-        (LegacyDocument . fmap def . liftReplBuiltin <$> LegacyPact.decodeModuleData bs)
+        (LegacyDocument . fmap (\_ -> def) . liftReplBuiltin <$> LegacyPact.decodeModuleData bs)
         <|> docDecode bs (\case
                             V1_CBOR -> V1.decodeModuleData_repl_spaninfo
                         )
@@ -181,7 +181,7 @@ serialisePact_raw_spaninfo = serialisePact
   { _encodeModuleData = docEncode V1.encodeModuleData_raw_spaninfo
   , _decodeModuleData =
       \bs ->
-        (LegacyDocument . fmap def <$> LegacyPact.decodeModuleData bs)
+        (LegacyDocument . fmap (\_ -> def) <$> LegacyPact.decodeModuleData bs)
         <|> docDecode bs (\case
                             V1_CBOR -> V1.decodeModuleData_raw_spaninfo
                         )
@@ -193,7 +193,7 @@ serialisePact_lineinfo = serialisePact
   { _encodeModuleData = docEncode V1.encodeModuleData_lineinfo
   , _decodeModuleData =
       \bs ->
-        (LegacyDocument . fmap def <$> LegacyPact.decodeModuleData bs)
+        (LegacyDocument . fmap (\_ -> def) <$> LegacyPact.decodeModuleData bs)
         <|> docDecode bs (\case
                             V1_CBOR -> V1.decodeModuleData_lineinfo
                         )
