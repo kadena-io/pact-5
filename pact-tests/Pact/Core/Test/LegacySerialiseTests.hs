@@ -62,7 +62,7 @@ legacyTests = do
         pure (testGroup p modTests)
         where
         runTest r interpreter interpName = do
-          pdb <- mockPactDb serialisePact_repl_spaninfo
+          pdb <- mockPactDb serialisePact_repl_flspaninfo
 
           -- add default spaninfo
           let ms' = (fmap.fmap) (const def) ms

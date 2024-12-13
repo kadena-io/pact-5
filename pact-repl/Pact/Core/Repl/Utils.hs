@@ -19,7 +19,6 @@ module Pact.Core.Repl.Utils
  , runReplT
  , ReplState(..)
  , replFlags
- , replEvalLog
  , replEvalEnv
  , replUserDocs
  , replTLDefPos
@@ -203,18 +202,19 @@ replCompletion natives =
     dns = defNames ems
     in fmap ((renderModuleName mn <> ".") <>) dns
 
-runReplT :: IORef (ReplState b) -> ReplM b a -> IO (Either (PactError SpanInfo) a)
+runReplT :: IORef (ReplState b) -> ReplM b a -> IO (Either (PactError FileLocSpanInfo) a)
 runReplT env st = runEvalMResult (ReplEnv env) def st
 
 
 replError
-  :: SourceCode
-  -> PactErrorI
+  :: (HasSpanInfo i, Pretty i)
+  => SourceCode
+  -> PactError i
   -> Text
 replError (SourceCode srcFile src) pe =
   let file = T.pack srcFile
       srcLines = T.lines src
-      pei = view peInfo pe
+      pei = view (peInfo.spanInfo) pe
       -- Note: The startline is 0-indexed, but we want our
       -- repl to output errors which are 1-indexed.
       start = _liStartLine pei
@@ -231,23 +231,28 @@ replError (SourceCode srcFile src) pe =
   where
   sfRender = case viewErrorStack pe of
     [] -> mempty
-    sfs -> renderText' $ vsep (("  at" <+>) . pretty <$> sfs)
+    sfs ->
+      let renderSf sf = "  at" <> pretty sf <> ":" <> pretty (_sfInfo sf)
+      in renderText' $ vsep (renderSf <$> sfs)
   padLeft t pad = T.replicate (pad - (T.length t)) " " <> t <> " "
   -- Zip the line number with the source text, and apply the number padding correctly
   withLine st pad lns = zipWith (\i e -> padLeft (T.pack (show i)) pad <> "| " <> e) [st+1..] lns
 
-gasLogEntrytoPactValue :: GasLogEntry (ReplBuiltin CoreBuiltin) SpanInfo -> PactValue
+gasLogEntrytoPactValue :: Pretty i => GasLogEntry (ReplBuiltin CoreBuiltin) i -> PactValue
 gasLogEntrytoPactValue entry = PString $ renderCompactText' $ n <> ": " <> pretty (_gleThisUsed entry)
   where
     n = pretty (_gleArgs entry) <+> pretty (_gleInfo entry)
 
-replPrintLn :: Pretty a => a -> EvalM 'ReplRuntime b SpanInfo ()
+replPrintLn :: Pretty a => a -> EvalM 'ReplRuntime b FileLocSpanInfo ()
 replPrintLn p = replPrintLn' (renderCompactText p)
 
-replPrintLn' :: Text -> EvalM 'ReplRuntime b SpanInfo ()
+replPrintLn' :: Text -> EvalM 'ReplRuntime b FileLocSpanInfo ()
 replPrintLn' p = do
   r <- getReplState
-  _replOutputLine r p
+  case _replLogType r of
+    ReplStdOut -> _replOutputLine r p
+    ReplLogOut v ->
+      liftIO (modifyIORef' v (p:))
 
 -- This orphan instance allows us to separate
 -- the repl declaration out, as ugly as it is

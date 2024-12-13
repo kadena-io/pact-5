@@ -624,7 +624,7 @@ zipList info b _env = \case
     where
     go x y = do
       chargeUnconsWork info
-      enforcePactValue info =<< applyLam clo [VPactValue x, VPactValue y]
+      enforcePactValue info =<< applyLam info clo [VPactValue x, VPactValue y]
   args -> argsError info b args
 
 coreMap :: (IsBuiltin b) => NativeFunction e b i
@@ -634,7 +634,7 @@ coreMap info b _env = \case
     where
     go x = do
       chargeUnconsWork info
-      applyLam clo [VPactValue x] >>= enforcePactValue info
+      applyLam info clo [VPactValue x] >>= enforcePactValue info
   args -> argsError info b args
 
 coreFilter :: (IsBuiltin b) => NativeFunction e b i
@@ -644,7 +644,7 @@ coreFilter info b _env = \case
     where
     go e = do
       chargeUnconsWork info
-      applyLam clo [VPactValue e] >>= enforceBool info
+      applyLam info clo [VPactValue e] >>= enforceBool info
   args -> argsError info b args
 
 coreFold :: (IsBuiltin b) => NativeFunction e b i
@@ -654,7 +654,7 @@ coreFold info b _env = \case
     where
     go e inc = do
       chargeUnconsWork info
-      applyLam clo [VPactValue e, VPactValue inc] >>= enforcePactValue info
+      applyLam info clo [VPactValue e, VPactValue inc] >>= enforcePactValue info
   args -> argsError info b args
 
 coreEnumerate :: (IsBuiltin b) => NativeFunction e b i
@@ -756,7 +756,7 @@ coreResume info b env = \case
         Nothing -> throwExecutionError info (NoYieldInDefPactStep pactStep)
         Just y@(Yield resumeObj _ _) -> do
           enforceYield info y
-          applyLam clo [VObject resumeObj]
+          applyLam info clo [VObject resumeObj]
   args -> argsError info b args
 
 -----------------------------------
@@ -978,7 +978,7 @@ coreReadKeyset info b _env = \case
 coreBind :: (IsBuiltin b) => NativeFunction e b i
 coreBind info b _env = \case
   [v@VObject{}, VClosure clo] ->
-    applyLam clo [v] >>= enforcePactValue' info
+    applyLam info clo [v] >>= enforcePactValue' info
   args -> argsError info b args
 
 
@@ -1016,7 +1016,7 @@ dbSelect info b env = \case
     go k =
       liftGasM info (_pdbRead pdb (tvToDomain tv) k) >>= \case
         Just (RowData r) -> do
-          cond <- enforceBool info =<< applyLam clo [VObject r]
+          cond <- enforceBool info =<< applyLam info clo [VObject r]
           if cond then pure $ Just r
           else pure Nothing
         Nothing -> failInvariant info (InvariantNoSuchKeyInTable (_tvName tv) k)
@@ -1033,9 +1033,9 @@ foldDb info b env = \case
     go rk@(RowKey raw) = do
       liftGasM info (_pdbRead pdb (tvToDomain tv) rk) >>= \case
         Just (RowData row) -> do
-          qryCond <- enforceBool info =<< applyLam queryClo [VString raw, VObject row]
+          qryCond <- enforceBool info =<< applyLam info queryClo [VString raw, VObject row]
           if qryCond then do
-            v <- enforcePactValue info =<< applyLam consumer [VString raw, VObject row]
+            v <- enforcePactValue info =<< applyLam info consumer [VString raw, VObject row]
             pure (Just v)
           else pure Nothing
         Nothing ->
@@ -1079,7 +1079,7 @@ dbWithRead :: (IsBuiltin b) => NativeFunction e b i
 dbWithRead info b env = \case
   [VTable tv, VString rk, VClosure clo] -> do
     v <- dbRead info b env [VTable tv, VString rk]
-    applyLam clo [v] >>= enforcePactValue' info
+    applyLam info clo [v] >>= enforcePactValue' info
   args -> argsError info b args
 
 dbWithDefaultRead :: (IsBuiltin b) => NativeFunction e b i
@@ -1090,9 +1090,9 @@ dbWithDefaultRead info b env = \case
       Just (RowData o) -> do
         bytes <- sizeOf info SizeOfV0 o
         chargeGasArgs info (GRead bytes)
-        applyLam clo [VObject o] >>= enforcePactValue' info
+        applyLam info clo [VObject o] >>= enforcePactValue' info
       Nothing ->
-         applyLam clo [VObject defaultObj] >>= enforcePactValue' info
+         applyLam info clo [VObject defaultObj] >>= enforcePactValue' info
   args -> argsError info b args
 
 -- | Todo: schema checking here? Or only on writes?
@@ -1402,23 +1402,23 @@ integerToBS v = BS.pack $ reverse $ go v
 coreAndQ :: (IsBuiltin b) => NativeFunction e b i
 coreAndQ info b _env = \case
   [VClosure l, VClosure r, VPactValue v] -> do
-    c1 <- enforceBool info =<< applyLam l [VPactValue v]
-    if c1 then applyLam r [VPactValue v] >>= enforceBool' info
+    c1 <- enforceBool info =<< applyLam info l [VPactValue v]
+    if c1 then applyLam info r [VPactValue v] >>= enforceBool' info
     else return (VBool False)
   args -> argsError info b args
 
 coreOrQ :: (IsBuiltin b) => NativeFunction e b i
 coreOrQ info b _env = \case
   [VClosure l, VClosure r, VPactValue v] -> do
-    c1 <- enforceBool info =<< applyLam l [VPactValue v]
+    c1 <- enforceBool info =<< applyLam info l [VPactValue v]
     if c1 then return (VBool True)
-    else applyLam r [VPactValue v] >>= enforceBool' info
+    else applyLam info r [VPactValue v] >>= enforceBool' info
   args -> argsError info b args
 
 coreNotQ :: (IsBuiltin b) => NativeFunction e b i
 coreNotQ info b _env = \case
   [VClosure clo, VPactValue v] -> do
-    c <- enforceBool info =<< applyLam clo [VPactValue v]
+    c <- enforceBool info =<< applyLam info clo [VPactValue v]
     return (VBool (not c))
   args -> argsError info b args
 
@@ -1428,7 +1428,7 @@ coreWhere info b _env = \case
     chargeGasArgs info (GObjOp (ObjOpLookup field (M.size o)))
     case M.lookup (Field field) o of
       Just v -> do
-        applyLam app [VPactValue v] >>= enforceBool' info
+        applyLam info app [VPactValue v] >>= enforceBool' info
       Nothing ->
         throwExecutionError info (ObjectIsMissingField (Field field) (ObjectData o))
   args -> argsError info b args
@@ -1606,8 +1606,8 @@ dbDescribeKeySet info b env = \case
 coreCompose :: (IsBuiltin b) => NativeFunction e b i
 coreCompose info b _env = \case
   [VClosure clo1, VClosure clo2, v] -> do
-    v' <- enforcePactValue info =<< applyLam clo1 [v]
-    applyLam clo2 [VPactValue v'] >>= enforcePactValue' info
+    v' <- enforcePactValue info =<< applyLam info clo1 [v]
+    applyLam info clo2 [VPactValue v'] >>= enforcePactValue' info
     -- let cont' = Fn clo2 env [] [] cont
     -- applyLam clo1 [v] cont' handler
   args -> argsError info b args
@@ -1648,7 +1648,7 @@ coreValidatePrincipal info b _env = \case
 coreCond :: (IsBuiltin b) => NativeFunction e b i
 coreCond info b _env = \case
   [VClosure clo] ->
-    applyLam clo [] >>= enforcePactValue' info
+    applyLam info clo [] >>= enforcePactValue' info
   args -> argsError info b args
 
 coreIdentity :: (IsBuiltin b) => NativeFunction e b i
@@ -1707,7 +1707,7 @@ coreDefineNamespace info b env = \case
         SmartNamespacePolicy _ fun -> getModuleMemberWithHash info fun >>= \case
           (Dfun d, mh) -> do
             clo <- mkDefunClosure d (qualNameToFqn fun mh) env
-            allow <- enforceBool info =<< applyLam (C clo) [VString n, VGuard adminG]
+            allow <- enforceBool info =<< applyLam info (C clo) [VString n, VGuard adminG]
             writeNs allow nsn ns
           _ -> throwNativeExecutionError info b $ "Fatal error: namespace manager function is not a defun"
   args -> argsError info b args

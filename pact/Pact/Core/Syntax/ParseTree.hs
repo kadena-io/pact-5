@@ -636,7 +636,7 @@ data ReplTopLevel i
   = RTLTopLevel (TopLevel i)
   | RTLDefun (Defun i)
   | RTLDefConst (DefConst i)
-  deriving (Show, Generic, NFData)
+  deriving (Show, Generic, NFData, Functor)
 
 pattern RTLModule :: Module i -> ReplTopLevel i
 pattern RTLModule m = RTLTopLevel (TLModule m)

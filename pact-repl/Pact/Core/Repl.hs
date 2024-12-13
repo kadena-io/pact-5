@@ -2,6 +2,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE DataKinds #-}
 
 
 -- |
@@ -14,7 +16,7 @@
 --
 
 
-module Pact.Core.Repl(runRepl, execScript) where
+module Pact.Core.Repl(runRepl, execScript, defaultReplState) where
 
 import Control.Monad.IO.Class
 import Control.Exception.Safe
@@ -35,28 +37,45 @@ import Pact.Core.Repl.Utils
 import Pact.Core.Serialise
 import Pact.Core.Info
 import Pact.Core.Errors
+import Control.Lens
+import qualified Data.Map.Strict as M
 
-execScript :: Bool -> FilePath -> IO (Either (PactError SpanInfo) [ReplCompileValue])
+execScript :: Bool -> FilePath -> IO (Either (PactError FileLocSpanInfo) [ReplCompileValue])
 execScript dolog f = do
-  pdb <- mockPactDb serialisePact_repl_spaninfo
-  evalLog <- newIORef Nothing
-  ee <- defaultEvalEnv pdb replBuiltinMap
-  ref <- newIORef (ReplState mempty ee evalLog defaultSrc mempty mempty Nothing False logger)
-  runReplT ref $ loadFile f interpretEvalDirect
+  ref <- newIORef =<< defaultReplState logger
+  runReplT ref $ loadFile interpretEvalDirect f True
   where
-  defaultSrc = SourceCode "(interactive)" mempty
   logger :: Text -> EvalM e b i ()
   logger
     | dolog = liftIO . T.putStrLn
     | otherwise = const (pure ())
 
+
+defaultReplState :: (forall b. Text -> EvalM 'ReplRuntime b FileLocSpanInfo ()) -> IO (ReplState ReplCoreBuiltin)
+defaultReplState dolog = do
+  pdb <- mockPactDb serialisePact_repl_flspaninfo
+  ee <- defaultEvalEnv pdb replBuiltinMap
+  let rstate = ReplState
+          { _replLogType = ReplStdOut
+          , _replUserDocs= mempty
+          , _replTx = Nothing
+          , _replTLDefPos = mempty
+          , _replOutputLine = dolog
+          , _replNativesEnabled = False
+          , _replLoadedFiles = mempty
+          , _replLoad = defaultLoadFile
+          , _replFlags = mempty
+          , _replEvalEnv = ee
+          , _replCurrSource = defaultSrc}
+  pure rstate
+  where
+  defaultSrc = SourceCode "(interactive)" mempty
+
+
 runRepl :: IO ()
 runRepl = do
-  pdb <- mockPactDb serialisePact_repl_spaninfo
-  evalLog <- newIORef Nothing
-  ee <- defaultEvalEnv pdb replBuiltinMap
   let display' rcv = runInputT replSettings (displayOutput rcv)
-  ref <- newIORef (ReplState mempty ee evalLog defaultSrc mempty mempty Nothing False display')
+  ref <- newIORef =<< defaultReplState display'
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
@@ -79,7 +98,10 @@ runRepl = do
         case eout of
           Right _ -> pure ()
           Left err -> do
-            rs <- lift (useReplState replCurrSource)
+            let replInfo = view peInfo err
+            rs <- lift (usesReplState replLoadedFiles (M.lookup (_flsiFile replInfo))) >>= \case
+              Just sc -> pure sc
+              Nothing -> lift (useReplState replCurrSource)
             lift (replCurrSource .== defaultSrc)
             outputStrLn (T.unpack (replError rs err))
         loop
