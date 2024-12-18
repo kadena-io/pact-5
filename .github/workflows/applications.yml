@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ["9.8.2", "9.10.1", '9.6.6']
+        ghc: ["9.8.2", "9.10.1"]
         cabal: ["3.12"]
         os: ["ubuntu-20.04", "ubuntu-22.04", "macos-14"]
         cabalcache: ["true"]
@@ -123,7 +123,7 @@ jobs:
         folder: "packages/${{ matrix.os }}"
         aws_access_key_id: "${{ secrets.kadena_cabal_cache_aws_access_key_id }}"
         aws_secret_access_key: "${{ secrets.kadena_cabal_cache_aws_secret_access_key }}"
-        
+
     - name: Build dependencies
       shell: bash
       run: cabal build --only-dependencies
