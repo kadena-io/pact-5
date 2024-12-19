@@ -25,6 +25,8 @@ module Pact.Core.Builtin
  , _CAnd, _COr, _CIf
  , _CEnforceOne, _CEnforce
  , _CWithCapability, _CCreateUserGuard
+ , _RBuiltinWrap
+ , _RBuiltinRepl
  )where
 
 import Control.Lens
@@ -980,3 +982,4 @@ instance (Pretty b) => Pretty (ReplBuiltin b) where
 deriveConstrInfo ''CoreBuiltin
 deriveConstrInfo ''ReplOnlyBuiltin
 makePrisms ''BuiltinForm
+makePrisms ''ReplBuiltin
