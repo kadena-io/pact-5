@@ -757,7 +757,7 @@
 
 (expect-failure
  "emit-event: non-event"
- "Invalid event capability events.NON.{Pl17Zu2iMddv942W_ChGFDyPWN4zFVjtVvI8HP4_0AY}"
+ "Invalid event capability events.NON.{F9iUeU_dKXOSaeZhmFY7g-LfMJ7SMBpG5BhNWhxhhxE}"
  (emit-non-event))
 
 (expect
@@ -977,7 +977,7 @@
 
 (call-a)
 (expect "Event is emitted"
-  [ {"module-hash": "u5uyUYRiplR4zAyB3F2GCVwzpw0XIoxcujkCgW3CVDg"
+  [ {"module-hash": "eUXxnKczPNGardQAz-nFnoIpp0e90I63XHq1mvQ0s7A"
     ,"name": "A.A_EVENT"
     ,"params": [ 420 ]} ] (env-events true))
 
@@ -998,7 +998,7 @@
 (use B)
 (call-a)
 (expect "Without legacy events enabled, events are the same"
-  [ {"module-hash": "u5uyUYRiplR4zAyB3F2GCVwzpw0XIoxcujkCgW3CVDg"
+  [ {"module-hash": "eUXxnKczPNGardQAz-nFnoIpp0e90I63XHq1mvQ0s7A"
     ,"name": "A.A_EVENT"
     ,"params": [ 420 ]} ] (env-events true))
 (commit-tx)
@@ -1008,7 +1008,7 @@
 (use B)
 (call-a)
 (expect "With legacy events, it always points to the latest module hash"
-[ {"module-hash": "8bdi-0ljmkBGMm06zxB4j4tziHY3qLT-d_UoUwxBDLw"
+[ {"module-hash": "YkqNXWA9pNH9cFhfOM4fwPvi427v5jjo29tb6mFNAXA"
   ,"name": "A.A_EVENT","params": [ 420 ]} ] (env-events true))
 (commit-tx)
 
