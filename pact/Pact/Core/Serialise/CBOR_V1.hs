@@ -854,6 +854,12 @@ instance Serialise (SerialiseV1 LineInfo) where
   decode = SerialiseV1 <$> (LineInfo <$> decode)
   {-# INLINE decode #-}
 
+coreBuiltinMax :: Word16
+coreBuiltinMax = fromIntegral $ fromEnum (maxBound :: CoreBuiltin)
+
+replCoreBuiltinMax :: Word16
+replCoreBuiltinMax = fromIntegral $ fromEnum (maxBound :: ReplCoreBuiltin)
+
 -- Note: this encoder/decoder relies on the derived `Enum` instance
 -- for `CoreBuiltin`. That said: we _do_ have a golden test in
 -- ConTagGolden.hs for ensuring that any constructor ordering changes
@@ -865,11 +871,9 @@ instance Serialise (SerialiseV1 CoreBuiltin) where
 
   decode = do
     d <- decodeWord16
-    if d <= cbMax then pure (SerialiseV1 (toEnum (fromIntegral d)))
+    if d <= coreBuiltinMax then pure (SerialiseV1 (toEnum (fromIntegral d)))
     else fail "unexpected decoding: CoreBuiltin"
-    where
-    cbMax :: Word16
-    cbMax = fromIntegral $ fromEnum $ (maxBound :: CoreBuiltin)
+
   {-# INLINE decode #-}
 
 
@@ -881,16 +885,15 @@ instance Serialise (SerialiseV1 ReplOnlyBuiltin) where
     pure $ SerialiseV1 (toEnum vInd)
   {-# INLINE decode #-}
 
+
 instance Serialise (SerialiseV1 ReplCoreBuiltin) where
-  encode (SerialiseV1 rb) = case rb of
-    RBuiltinWrap b -> encodeWord 0 <> encodeS b
-    RBuiltinRepl r -> encodeWord 1 <> encodeS r
+  encode (SerialiseV1 rb) = encodeWord16 $ fromIntegral (fromEnum rb)
   {-# INLINE encode #-}
 
-  decode = decodeWord >>= fmap SerialiseV1 . \case
-    0 -> RBuiltinWrap <$> decodeS
-    1 -> RBuiltinRepl <$> decodeS
-    _ -> fail "unexpected decoding"
+  decode = do
+    d <- decodeWord16
+    if d <= replCoreBuiltinMax then pure (SerialiseV1 (toEnum (fromIntegral d)))
+    else fail "unexpected decoding: ReplCoreBuiltin"
   {-# INLINE decode #-}
 
 

@@ -8,8 +8,12 @@ module Pact.Core.Test.ReplTests
 import Test.Tasty
 import Test.Tasty.HUnit
 
-import Control.Monad(when)
+import Control.Lens
+import Control.Monad
+import Control.Monad.IO.Class
+import Control.Monad.Trans.Maybe
 import Data.IORef
+import Data.Default
 import Data.Foldable(traverse_)
 import System.Directory
 import System.FilePath
@@ -21,7 +25,6 @@ import Pact.Core.Literal
 import Pact.Core.Persistence.MockPersistence
 
 import Pact.Core.Repl.Utils
-import Pact.Core.Persistence (PactDb)
 import Pact.Core.Persistence.SQLite (withSqlitePactDb)
 
 import Pact.Core.Info (SpanInfo)
@@ -32,6 +35,9 @@ import Pact.Core.Environment
 import Pact.Core.Builtin
 import Pact.Core.Errors
 import Pact.Core.Serialise
+import Pact.Core.Persistence
+import Pact.Core.IR.Term
+import qualified Pact.Core.IR.ModuleHashing as MH
 
 
 type Interpreter = SourceCode -> ReplM ReplCoreBuiltin [ReplCompileValue]
@@ -96,8 +102,21 @@ runReplTest (ReplSourceDir path) pdb file src interp = do
     Left e -> let
       rendered = replError (SourceCode file src) e
       in assertFailure (T.unpack rendered)
-    Right output -> traverse_ ensurePassing output
+    Right output -> do
+      traverse_ ensurePassing output
+      ensureModuleHashesMatch
   where
+  moduleHashMatches mn = void $ runMaybeT $ do
+    rawMod <- MaybeT $ ignoreGas def $ _pdbRead pdb DModules mn
+    case rawMod of
+      ModuleData rawModule _ -> do
+        modNoReplBuiltins <- hoistMaybe $ (traverseModuleTerm . termBuiltin) (preview _RBuiltinWrap) rawModule
+        liftIO $ assertEqual "Module hashes match if there's no repl builtins" (MH.hashModulePure modNoReplBuiltins) (MH.hashModulePure rawModule)
+      -- Note: Interfaces cannot have builtins in them.
+      _ -> mzero
+  ensureModuleHashesMatch = do
+    keys <- ignoreGas def $ _pdbKeys pdb DModules
+    traverse_ moduleHashMatches keys
   ensurePassing = \case
     RCompileValue (InterpretValue v i) -> case v of
       PLiteral (LString msg) -> do

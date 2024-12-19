@@ -4,6 +4,7 @@ module Pact.Core.IR.ModuleHashing
  ( hashInterfaceAndReplace
  , hashModuleAndReplace
  , hashTopLevel
+ , hashModulePure
  ) where
 
 import Control.Lens
@@ -127,3 +128,6 @@ encodeInterface (Interface ifn defns imports _mh _txh mcode _i) =
   B.toStrict $ serialise (SerialiseV1 (Interface ifn defns imports (ModuleHash (Hash mempty)) (Hash mempty) mcode ()))
 {-# SPECIALISE encodeInterface :: Interface Name Type CoreBuiltin () -> B.ByteString #-}
 
+hashModulePure :: (Serialise (SerialiseV1 b)) => Module Name Type b i -> ModuleHash
+hashModulePure = ModuleHash . hash . encodeModule . void
+{-# SPECIALISE hashModulePure :: Module Name Type CoreBuiltin i -> ModuleHash #-}
