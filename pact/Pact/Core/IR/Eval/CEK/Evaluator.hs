@@ -951,7 +951,7 @@ applyContToValue
   -> CEKErrorHandler e b i
   -> CEKValue e b i
   -> EvalM e b i (EvalResult e b i)
-applyContToValue Mt handler v =
+applyContToValue Mt handler !v =
   case handler of
     CEKNoHandler -> pure (EvalValue v)
     -- Assuming no error, the caps will have been popped naturally
@@ -966,7 +966,7 @@ applyContToValue Mt handler v =
 -- | ------ From ------------------------- | ------------ To -------------- |
 --   <VClosure c, Args(E, (x:xs), K), H>     <x, E, Fn(c, E, xs, K), H>
 --
-applyContToValue (Args env i args cont) handler fn = do
+applyContToValue (Args env i args cont) handler !fn = do
   c <- canApply fn
   -- Argument evaluation
   case args of
@@ -990,7 +990,7 @@ applyContToValue (Args env i args cont) handler fn = do
 --   <v, _, Fn(clo, E, (x:xs), acc, K), H>   <x, E, Fn(c, E, xs, (v:acc), K), H>
 --   <v, _, Fn(clo, E, [], K), H>            (apply clo (reverse (v:acc)) K H)
 --
-applyContToValue (Fn fn env args vs cont) handler v = do
+applyContToValue (Fn fn env args vs cont) handler !v = do
   case args of
     [] -> do
       applyLam fn (reverse (v:vs)) cont handler
@@ -999,7 +999,7 @@ applyContToValue (Fn fn env args vs cont) handler v = do
 -- | ------ From ------------ | ------ To ---------------- |
 --   <v, LetC(E, body, K), H>   <body, (cons v E), K, H>
 --
-applyContToValue (LetC env i arg letbody cont) handler v = do
+applyContToValue (LetC env i arg letbody cont) handler !v = do
   case v of
     VPactValue pv -> do
       maybeTCType i (_argType arg) pv
@@ -1008,7 +1008,7 @@ applyContToValue (LetC env i arg letbody cont) handler v = do
 -- | ------ From ------------ | ------ To ---------------- |
 --   <_, SeqC(E, e2, K), H>     <e2, E, K, H>
 --
-applyContToValue (SeqC env info e cont) handler v = do
+applyContToValue (SeqC env info e cont) handler !v = do
   enforceSaturatedApp info v
   evalCEK cont handler env e
 -- | ------ From ------------------------ | ------ To ---------------- |
@@ -1023,7 +1023,7 @@ applyContToValue (SeqC env info e cont) handler v = do
 --
 -- Note: we charge gas for this reduction here, as these are essentially natives
 -- that match and perform an uncons/match.
-applyContToValue (CondC env info frame cont) handler v = do
+applyContToValue (CondC env info frame cont) handler !v = do
   case v of
     VBool b -> case frame of
       AndC te ->
@@ -1064,7 +1064,7 @@ applyContToValue (CondC env info frame cont) handler v = do
     _ ->
       -- Note: a non-boolean value in these functions is non recoverable
       throwExecutionError info ExpectedPactValue
-applyContToValue (CapInvokeC env info cf cont) handler v = case cf of
+applyContToValue (CapInvokeC env info cf cont) handler !v = case cf of
   WithCapC body -> case v of
     VCapToken ct@(CapToken fqn _) -> do
       guardForModuleCall info (_fqModule fqn) $
@@ -1091,7 +1091,7 @@ applyContToValue (CapInvokeC env info cf cont) handler v = case cf of
       (esCaps . csManaged) %= S.insert mcap'
       returnCEKValue cont handler v
     _ -> throwExecutionError info ExpectedPactValue
-applyContToValue (BuiltinC env info frame cont) handler cv = do
+applyContToValue (BuiltinC env info frame cont) handler !cv = do
   let pdb = _cePactDb env
   case cv of
     VPactValue v -> case frame of
@@ -1197,7 +1197,7 @@ applyContToValue (BuiltinC env info frame cont) handler cv = do
             in returnCEKValue cont handler (VList (V.fromList acc'))
     _ ->
       throwExecutionError info ExpectedPactValue
-applyContToValue (CapBodyC env info (CapBodyState cappop mcap mevent capbody) cont) handler _ = do
+applyContToValue (CapBodyC env info (CapBodyState cappop mcap mevent capbody) cont) handler !_ = do
   traverse_ (emitEventLegacyUnsafe info) mevent
   case mcap of
     Nothing -> do
@@ -1211,7 +1211,7 @@ applyContToValue (CapBodyC env info (CapBodyState cappop mcap mevent capbody) co
         evalCEK cont' handler env capbody
       [] -> failInvariant info InvariantEmptyCapStackFailure
 
-applyContToValue (CapPopC st info cont) handler v = case st of
+applyContToValue (CapPopC st info cont) handler !v = case st of
   PopCurrCapEval oldSet -> do
     esCaps . csCapsBeingEvaluated .= oldSet
     returnCEKValue cont handler v
@@ -1227,7 +1227,7 @@ applyContToValue (CapPopC st info cont) handler v = case st of
         returnCEKValue cont handler v
       [] -> failInvariant info InvariantEmptyCapStackFailure
 
-applyContToValue (ListC env info args vals cont) handler v = do
+applyContToValue (ListC env info args vals cont) handler !v = do
   pv <- enforcePactValue info v
   case args of
     [] ->
@@ -1235,7 +1235,7 @@ applyContToValue (ListC env info args vals cont) handler v = do
     e:es ->
       evalCEK (ListC env info es (pv:vals) cont) handler env e
 
-applyContToValue (ObjC env info currfield fs vs cont) handler v = do
+applyContToValue (ObjC env info currfield fs vs cont) handler !v = do
   v' <- enforcePactValue info v
   let fields = (currfield,v'):vs
   case fs of
@@ -1245,16 +1245,16 @@ applyContToValue (ObjC env info currfield fs vs cont) handler v = do
     [] ->
       returnCEKValue cont handler (VObject (M.fromList (reverse fields)))
 
-applyContToValue (EnforceErrorC info _) handler v = case v of
+applyContToValue (EnforceErrorC info _) handler !v = case v of
   VString err ->
     returnCEKError info Mt handler $ UserEnforceError err
   VPactValue v' -> throwExecutionError info $ ExpectedStringValue v'
   _ -> throwExecutionError info $ ExpectedPactValue
 -- Discard the value of running a user guard, no error occured, so
-applyContToValue (IgnoreValueC v cont) handler _v =
+applyContToValue (IgnoreValueC v cont) handler !_v =
   returnCEKValue cont handler (VPactValue v)
 
-applyContToValue (StackPopC i mty cont) handler v = do
+applyContToValue (StackPopC i mty cont) handler !v = do
   v' <- enforcePactValue i v
   rtcEnabled <- isExecutionFlagSet FlagDisableRuntimeRTC
   unless rtcEnabled $ maybeTCType i mty v'
@@ -1266,7 +1266,7 @@ applyContToValue (StackPopC i mty cont) handler v = do
     top : rest -> top :| rest
     [] -> (RecursionCheck mempty) :| []
 
-applyContToValue (DefPactStepC env info cont) handler v =
+applyContToValue (DefPactStepC env info cont) handler !v =
   use esDefPactExec >>= \case
     Nothing -> failInvariant info $ InvariantPactExecNotInEnv Nothing
     Just pe -> case env ^. ceDefPactStep of
@@ -1285,7 +1285,7 @@ applyContToValue (DefPactStepC env info cont) handler v =
         emitXChainEvents (_psResume ps) pe
         returnCEKValue cont handler v
 
-applyContToValue (NestedDefPactStepC env info cont parentDefPactExec) handler v =
+applyContToValue (NestedDefPactStepC env info cont parentDefPactExec) handler !v =
   use esDefPactExec >>= \case
     Nothing -> failInvariant info $ InvariantPactExecNotInEnv Nothing
     Just pe ->  case env ^. ceDefPactStep of
@@ -1297,16 +1297,16 @@ applyContToValue (NestedDefPactStepC env info cont parentDefPactExec) handler v 
         esDefPactExec .= (Just npe)
         returnCEKValue cont handler v
 
-applyContToValue (EnforcePactValueC info cont) handler v = case v of
+applyContToValue (EnforcePactValueC info cont) handler !v = case v of
   VPactValue{} -> returnCEKValue cont handler v
   _ -> throwExecutionError info ExpectedPactValue
 
-applyContToValue (EnforceBoolC info cont) handler v = case v of
+applyContToValue (EnforceBoolC info cont) handler !v = case v of
   VBool{} -> returnCEKValue cont handler v
   VPactValue v' -> throwExecutionError info (ExpectedBoolValue v')
   _ -> throwExecutionError info ExpectedPactValue
 
-applyContToValue (ModuleAdminC mn cont) handler v = do
+applyContToValue (ModuleAdminC mn cont) handler !v = do
   (esCaps . csModuleAdmin) %= S.insert mn
   returnCEKValue cont handler v
 
