@@ -193,6 +193,8 @@ module Pact.Core.Errors
  , PactErrorOrigin(..)
  , LocatedErrorInfo(..)
  , pactErrorToLocatedErrorCode
+ , _PELegacyError
+ , _PEPact5Error
  ) where
 
 import Control.Lens hiding (ix)
@@ -2039,8 +2041,11 @@ instance JD.FromJSON LegacyPactError where
 --   codec that can understand both pact 4 and pact 5 errors
 data PactErrorCompat info
   = PEPact5Error (PactErrorCode info)
+  -- TODO: rename? we are using this for some errors even in the Pact 5 integration
   | PELegacyError LegacyPactError
   deriving (Eq, Show, Functor, Foldable, Traversable)
+
+makePrisms ''PactErrorCompat
 
 instance J.Encode info => J.Encode (PactErrorCompat info) where
   build = \case
@@ -2051,4 +2056,3 @@ instance JD.FromJSON info => JD.FromJSON (PactErrorCompat info) where
   parseJSON v =
     (PEPact5Error <$> JD.parseJSON v) <|>
     (PELegacyError <$> JD.parseJSON v)
-
