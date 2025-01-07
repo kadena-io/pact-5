@@ -1,0 +1,7 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-read-decimal ()
+    (read-decimal "foo")
+  )
+)

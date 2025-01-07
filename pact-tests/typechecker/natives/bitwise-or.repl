@@ -1,0 +1,8 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-bw-or (a:integer)
+    (| 1 a)
+  )
+
+  )

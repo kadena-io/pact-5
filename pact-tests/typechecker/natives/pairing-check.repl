@@ -1,0 +1,9 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-pairing-check ()
+    (pairing-check [{'x: 1, 'y: 2}] [{'x: [0 1], 'y: [0 1]}])
+  )
+
+  )

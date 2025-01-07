@@ -1,0 +1,9 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-keccak256()
+    (hash-keccak256 [""])
+  )
+
+  )

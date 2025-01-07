@@ -1,0 +1,8 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-filter ()
+    (filter (lambda (x) (> 3 x)) (enumerate 0 10))
+  )
+
+  )

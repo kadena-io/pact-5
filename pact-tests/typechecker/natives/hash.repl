@@ -1,0 +1,16 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-hash ()
+    (hash 1)
+    (hash 2.0)
+    (hash (time "foo"))
+    (hash (read-keyset "k"))
+    (hash ())
+    (hash true)
+    (hash ["Hello"])
+    (hash {"obj":1})
+  )
+
+  )

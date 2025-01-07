@@ -1,0 +1,7 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-insert(tbl o)
+    (insert tbl "k" o)
+  )
+  )

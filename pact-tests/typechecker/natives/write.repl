@@ -1,0 +1,20 @@
+(module tc g
+  (defcap g () true)
+
+  (defschema sc1
+    foo:integer
+    bar:bool
+    )
+
+
+  (deftable tbl1:{sc1})
+  (deftable tbl2:{sc1})
+
+  (defun use-write(tbl)
+    (write tbl "foo" {"foo":1, "bar":true})
+  )
+
+  (defun invoke-write()
+    (use-write tbl1)
+    (use-write tbl2)
+  ))

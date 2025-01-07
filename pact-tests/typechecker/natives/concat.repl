@@ -1,0 +1,8 @@
+(module tc g
+  (defcap g () true)
+
+  (defun concat-string (a:[string])
+    (concat a)
+  )
+
+  )

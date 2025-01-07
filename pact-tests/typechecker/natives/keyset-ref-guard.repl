@@ -1,0 +1,7 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-keyset-ref-guard (a)
+    (keyset-ref-guard a)
+  )
+  )

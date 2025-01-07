@@ -128,6 +128,7 @@ module Pact.Core.IR.Term
   , traverseIfDefTerm
   , traverseDefPactStep
   , traverseDefTerm
+  , topLevelInfo
   , _dfunRType
   -- ^ Misc traversals
   , getHashedModuleName
@@ -690,11 +691,18 @@ termInfo f = \case
   ObjectLit m i -> ObjectLit m <$> f i
   InlineValue v i -> InlineValue v <$> f i
 
+topLevelInfo :: Lens' (TopLevel name ty builtin info) info
+topLevelInfo f = \case
+  TLTerm t -> TLTerm <$> termInfo f t
+  TLModule t -> fmap (\i' -> TLModule (t{_mInfo=i'})) (f (_mInfo t))
+  TLInterface t -> fmap (\i' -> TLInterface (t{_ifInfo=i'})) (f (_ifInfo t))
+  TLUse t i -> TLUse t <$> f i
+
 -- TODO: add test cases for all traversal
 traverseTerm
   :: Traversal' (Term name ty builtin info)
                 (Term name ty builtin info)
-traverseTerm f x= case x of
+traverseTerm f x = case x of
   Var n i -> f (Var n i)
   Lam ne te i ->
     Lam ne <$> traverseTerm f te <*> pure i

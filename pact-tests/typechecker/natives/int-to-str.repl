@@ -1,0 +1,8 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-int-to-str (a b)
+    (int-to-str a b)
+  )
+
+  )

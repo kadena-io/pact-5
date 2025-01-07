@@ -1,0 +1,12 @@
+(module tc g
+  (defcap g () true)
+
+  (defun mult-integers (a:integer b:integer)
+    (* a b)
+  )
+
+  (defun mult-decimals (a:decimal b:decimal)
+    (* a b)
+  ))
+
+(typecheck "tc")

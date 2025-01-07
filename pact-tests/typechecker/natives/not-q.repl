@@ -1,0 +1,9 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-notq (p)
+    (not? (!= 2) p)
+  )
+
+  )

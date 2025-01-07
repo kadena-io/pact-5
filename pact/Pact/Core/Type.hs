@@ -2,7 +2,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -21,13 +20,6 @@ module Pact.Core.Type
  , pattern TyGuard
  , typeOfLit
  , literalPrim
- , Arg(..)
- , argName
- , argType
- , argInfo
- , TypedArg(..)
- , targName
- , targType
  , Schema(..)
  , DefKind(..)
  , renderType
@@ -35,7 +27,6 @@ module Pact.Core.Type
  , renderDefKind
  ) where
 
-import Control.Lens
 import Control.DeepSeq
 import Data.List
 import Data.Set(Set)
@@ -201,24 +192,6 @@ literalPrim = \case
 -- renderPred :: (Pretty n) => Pred n -> Text
 -- renderPred = T.pack . show . pretty
 
-data Arg ty i
-  = Arg
-  { _argName :: !Text
-  , _argType :: Maybe ty
-  , _argInfo :: i
-  } deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
-
-instance (NFData ty, NFData i) => NFData (Arg ty i)
-
-instance Pretty ty => Pretty (Arg ty i) where
-  pretty (Arg n ty _) =
-    pretty n <> maybe mempty ((":" <>) . pretty) ty
-
-data TypedArg ty
-  = TypedArg
-  { _targName :: !Text
-  , _targType :: ty
-  } deriving (Show, Eq, Functor, Foldable, Traversable)
 
 data DefKind
   = DKDefun
@@ -279,5 +252,3 @@ renderType = \case
   TyAnyList -> "list"
   TyAny -> "*"
 
-makeLenses ''Arg
-makeLenses ''TypedArg

@@ -1,0 +1,12 @@
+(module tc g
+  (defcap g () true)
+
+  (defun div-integers (a:integer b:integer)
+    (/ a b)
+  )
+
+  (defun div-decimals (a:decimal b:decimal)
+    (/ a b)
+  ))
+
+(typecheck "tc")

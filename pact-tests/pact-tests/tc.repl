@@ -1,0 +1,369 @@
+(env-data { "msgkeys": { "keys": ["k"], "pred": ">" } })
+(begin-tx)
+(define-keyset 'keyset (read-keyset "msgkeys"))
+
+(interface tctest-iface
+  (defun tcmodref-spec:bool (s:string)))
+
+(interface tctest-iface2
+  (defun tcmodref-spec2:bool (s:string)))
+
+(module tc-test-impl g
+  (defcap g () true)
+
+  (implements tctest-iface)
+
+  (defun tcmodref-spec:bool (s:string)
+    (impl-fun s))
+
+  (defun impl-fun:bool (s:string)
+    true)
+)
+
+
+(module tc-test-impl2 g
+  (defcap g () true)
+
+  (implements tctest-iface2)
+
+  (defun tcmodref-spec2:bool (s:string)
+    true)
+)
+
+(module tc-test-impl-both g
+  (defcap g () true)
+
+  (implements tctest-iface2)
+  (implements tctest-iface)
+
+  (defun tcmodref-spec2:bool (s:string)
+    true)
+
+  (defun tcmodref-spec:bool (s:string)
+    true)
+)
+
+;  (env-dynref tctest-iface tc-test-impl)
+(typecheck 'tc-test-impl)
+
+(module tctest 'keyset
+
+  (defschema person
+    name:string
+    age:integer
+    dob:time)
+
+  (defconst FOUR (+ 2 2))
+
+  (defconst LIST (enumerate 0 10))
+
+  (defconst MODREF tc-test-impl)
+
+  (defconst OBJ (tc-test-inner))
+
+  (defconst GUARD (keyset-ref-guard 'keyset))
+
+  (deftable persons:{person})
+
+  (defun tc-add-person (person)
+    (insert persons (at 'name person) person))
+
+  (defun tc-update-age (name age)
+    (update persons name { "age": age }))
+
+  (defun addToAll (i:integer vals:[integer]) (map (+ i) vals))
+
+  (defun tc-unconsumed-app-typevar ()
+    (if true "hello" "goodbye"))
+
+  (defschema account balance:integer)
+  (deftable accounts:{account})
+
+  (defun tc-will-overload-conflict (amount)
+    (>= 0 amount)
+    (- 0 amount)
+    (if true amount amount)
+    )
+
+  (defun tc-at-typed-object (person:object{person})
+    (at "age" person))
+
+  (defun tc-at-typed-list (vals:[integer])
+    (at 1 vals))
+
+  (defun tc-at-literal-typed-list-arg:integer (as:[integer])
+    (at 0 as))
+
+  (defun age-gt (age person)
+    (> age (tc-at-typed-object person)))
+
+  (defun tc-adults ()
+    (filter (age-gt 18) (map (read persons) (keys persons))))
+
+  (defun tc-filter-map ()
+    (filter (> 1) (tc-map1)))
+
+  (defun three-arg (a) (> a 1))
+
+  (defun filter-map12 ()
+    (filter three-arg [1 2 3]))
+
+  (defun tc-map1 ()
+    (map (mod 2) [1 2 3]))
+
+  (defun tc-str-to-list-concat-map ()
+    (concat (map (+ " ") (str-to-list "abcde"))))
+
+  (defun plus-int (x:integer y) (+ x y))
+
+  (defun tc-fold1 ()
+    (fold plus-int 1 [2 3 4]))
+
+  (defun tc-fold2 ()
+    (fold + 1 [2 3 4]))
+
+  (defun tc-select1 ()
+    (select persons ['name 'dob] (where "age" (<= 18)))
+    (select persons (where "age" (<= 18))))
+
+  (defun tc-select2 ()
+    (select persons (not? (and? (where "name" (= "Sam")) (where "age" (<= 18))))))
+
+
+  (defun tc-sort1 ()
+    (sort [3 1 2]))
+
+  (defun tc-sort2 ()
+    (sort ['age] (map (read persons) (keys persons))))
+
+  (defun tc-partials ()
+    (not? (= 10) 20)
+    (and? (= 10) (> 20) 10)
+    (or? (= 10) (> 20) 10)
+    (and? (not? (= 10)) (> 20) 10)
+    )
+
+
+  (defun checkWhere ()
+    (let ((sam:object{person} { 'name: "Sam", 'age: 23, 'dob: (parse-time "%F" "1996-12-31") }))
+      (where "age" (= 10) sam)))
+
+  (defun tc-twoStrings:bool ()
+    (enforce-keyset (+ "k" "s")))
+
+  (defschema inner
+    name:string)
+
+  (defschema wrapper
+    wrapped:object{inner})
+
+  (defun tc-test-inner:object{inner} ()
+    (let ((obj:object{wrapper} {"wrapped": {"name": "pact"}}))
+      (at "wrapped" obj)))
+
+  (defun tc-bind-obj:integer ()
+    (let ((acct:object{account} { "balance": 10 }))
+      (bind acct { "balance" := bal }
+        bal)))
+
+  (defun tc-obj-eq (a:object{account})
+    (= a a))
+
+  ;;not tc per se but runtime type enforce error
+  (defun rtc-empty-string-list:[string] (input:[string]) input)
+
+  (defun tc-at-literal-typed-list-literal:integer (a:integer)
+    (at 0 [a]))
+
+  (defun tc-format-heterogenous:string ()
+    (format "{} {} {}" [1 1.0 true]))
+
+
+
+  (defun tc-list-assumes-literal-type:[integer] ()
+    [1 2 3])
+
+  (defun tc-update-partial ()
+    "update allows partial schema"
+    (let ((partial { "name": "dave" }))
+      (update persons "foo" partial)
+      partial))
+
+
+
+
+  (defcap CAP () true)
+
+  (defschema schema-a a:integer)
+  (defschema schema-b b:integer)
+
+  (defpact tc-yield-resume-1 (foo:bool bar:bool x:integer)
+    (step (if foo
+              (let ((y:object{schema-a} {'a: x}))
+                (yield y))
+            (yield {'a: (+ x 1)})))
+    (step (if bar
+              (resume {'a := z}
+                (let ((y:object{schema-b} {'b: (+ z 1)}))
+                  (yield y)))
+            (resume {'a:= z} (yield {'b: z}))))
+    (step (resume {'b:= q} q))
+    )
+
+  (defun tc-chain-data ()
+    (+ (at "block-height" (chain-data)) 1))
+
+  (defschema public-chain-data
+    chain-id:string
+    block-height:integer
+    block-time:time
+    prev-block-hash:string
+    sender:string
+    gas-limit:integer
+    gas-price:decimal)
+
+  (defun tc-chain-data-2:object{public-chain-data} ()
+    (chain-data))
+
+
+
+
+  (defun native-const-references:bool ()
+    (and
+      (is-charset CHARSET_ASCII "emily")
+      (is-charset CHARSET_LATIN1 "stuart")))
+
+  ; defconst + user guards
+  (defun f () true)
+  (defconst USER_GUARD (create-user-guard (f)))
+
+
+  (defun rtc-guard-list (foo:[guard])
+    "for testing runtime tc on guard list"
+    true)
+
+  (defun tc-guard-list ()
+    (rtc-guard-list [USER_GUARD,USER_GUARD])
+    (rtc-guard-list [USER_GUARD,(keyset-ref-guard 'keyset)]))
+
+  (defun rtc-object-list (l:[object{schema-a}]) 1)
+
+  (defun tc-modref:bool (m:module{tctest-iface})
+    (m::tcmodref-spec "test"))
+
+  (defun tc-modref2:bool (m:module{tctest-iface, tctest-iface})
+    true)
+
+  (defun tc-call-modref:bool ()
+    (tc-modref tc-test-impl))
+
+  (defun tc-call-modref2:bool ()
+    (and
+      (tc-modref tc-test-impl-both)
+      (tc-modref2 tc-test-impl-both)))
+
+  (defun tc-eq-modref:bool (a:module{tctest-iface} b:module{tctest-iface})
+    (= a b))
+
+  (defun tc-cmp-modref-call:bool ()
+    "test compliant modrefs with varying impl lists"
+    (tc-eq-modref tc-test-impl tc-test-impl-both)
+    )
+
+  (defun tc-native-const:bool ()
+    "test handling of native consts"
+    (= 0 CHARSET_ASCII))
+
+  (defun tc-lambda-let:bool ()
+    "test let-bound lambdas"
+    (let ((lam (lambda (s:string) true)))
+      (lam "hello")))
+
+  (defun tc-lambda-anon:[bool] ()
+    "test anon lambdas"
+    (map (lambda (i) (> i 1)) [1 2 3]))
+
+  (defpact fail-steps-type-missmatch: integer ()
+    "test type missmatch of steps"
+    (step "missmatch")
+    (step 1))
+
+  (defpact tc-steps-type-pass: integer ()
+    "test type match of steps"
+    (step 1)
+    (step 1))
+
+)
+
+(create-table persons)
+
+(commit-tx)
+
+(use tctest)
+(expect-failure "missing fields" (tc-add-person { "name": "Mary" }))
+(expect-failure "bad field"
+                (tc-add-person { "name": "Mary",
+                            "age": 20,
+                            "dob": (parse-time "%F" "1996-12-31"),
+                            "handle": "@mary" }))
+(tc-add-person { "name": "Mary", "age": 20, "dob": (parse-time "%F" "1996-12-31") })
+(tc-update-age "Mary" 25)
+;  (expect-failure "bad update" (fails-update "Mary" "@mary123"))
+(expect "int list OK" [2 3 4] (addToAll 1 [1 2 3]))
+(expect-failure "bad int list" (addToAll 1 [1 2 3 "hi"]))
+
+(expect "native user type exercise works"
+        (tc-chain-data)
+        (+ (at "block-height" (tc-chain-data-2)) 1))
+
+(typecheck "tctest")
+
+(rtc-empty-string-list [])
+
+(env-exec-config [])
+
+(expect
+ "rtc doesn't die on guard lists"
+ true
+ (rtc-guard-list [USER_GUARD,USER_GUARD]))
+
+(expect
+ "rtc doesn't die on guard+keyset lists"
+ true
+ (rtc-guard-list [USER_GUARD,(keyset-ref-guard 'keyset)]))
+
+(expect-failure
+ "rtc fails on guard+non guard list"
+ "Runtime typecheck failure"
+ ;; "expected [guard], found [*]" <-- old error, will need compat check
+ (rtc-guard-list [USER_GUARD,1]))
+
+(expect
+ "rtc object lists"
+ 1
+ (rtc-object-list (let ((a {'a:1}) (b {'a: 2})) [a b])))
+
+;; A module with incorrect annotations for a function's return type.
+;; Runtime typechecking for function return types was added in
+;; pact-4.7.1 and guarded via `DisableRuntimeReturnTypeChecking`.
+
+(module tc-test-function-return-types g
+  (defcap g () true)
+  (defun f:string () (+ 1 2))
+)
+
+(expect-failure
+  "evaluating a function whose type signature conflits with its body should fail"
+  (tc-test-function-return-types.f)
+  )
+
+(expect-failure
+  "composing an ill-typed function with another function should not evaluate"
+  (tc-test-function-return-types.g (tc-test-function-return-types.f 1))
+  )
+
+(env-exec-config ["DisableRuntimeRTC"])
+(expect
+  "evaluating ill-typed function should succeed with pact-4.7 features disabled"
+  3
+  (tc-test-function-return-types.f))

@@ -1,0 +1,6 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-create-module-guard(a:string)
+    (create-module-guard a)
+  ))

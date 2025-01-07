@@ -1,0 +1,15 @@
+
+(module tc g
+  (defcap g () true)
+
+  (defschema person
+    name:string
+    age:integer
+    dob:time)
+
+  (deftable persons:{person})
+
+  (defun fails-write-partial ()
+    "will fail as write demands full schema"
+    (write persons "foo" { "name": "dave" }))
+  )

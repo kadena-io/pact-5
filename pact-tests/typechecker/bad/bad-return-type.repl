@@ -1,0 +1,7 @@
+(module tc g
+  (defcap g () true)
+
+  (defun fails-return-type:bool (x:integer)
+    (if (< x 10) 10 x))
+
+  )

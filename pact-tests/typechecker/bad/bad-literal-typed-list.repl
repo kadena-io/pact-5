@@ -1,0 +1,7 @@
+
+  (module tc g
+    (defcap g () true)
+
+    (defun fails-literal-typed-list:integer (a:integer)
+      (at 0 [a 1 true]))
+    )

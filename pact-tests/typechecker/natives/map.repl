@@ -1,0 +1,22 @@
+(interface foobar
+  (defun foo-call:integer (a:integer))
+  )
+
+(module m g
+  (defcap g () true)
+  (implements foobar)
+  (defun foo-call:integer (a:integer) (+ a 1))
+  )
+
+(module tc g
+  (defcap g () true)
+
+  (defconst FOO:integer 1)
+
+  (defun use-map ()
+    (map (+ 1) [1 2 3])
+    (map (lambda (x) x) ["foo" "bar" "baz"])
+    (map (lambda (m:module{foobar}) (m::foo-call FOO)) [m])
+  )
+
+  )

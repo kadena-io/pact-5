@@ -26,7 +26,7 @@ import Pact.Core.Pretty
 import Pact.Core.Hash
 import Pact.Core.Info
 import Data.Typeable
-import Pact.Core.Names
+import Pact.Core.Names hiding (Arg)
 
 showPretty :: Pretty a => a -> T.Text
 showPretty = T.pack . show . pretty

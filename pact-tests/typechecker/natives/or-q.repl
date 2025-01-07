@@ -1,0 +1,9 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-orq (p)
+    (or? (!= 2) (!= 3) p)
+  )
+
+  )

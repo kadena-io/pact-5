@@ -76,4 +76,5 @@
 {"conName":"InvalidNumArgs","conIndex":"4b"}
 {"conName":"EntityNotAllowedInDefPact","conIndex":"4c"}
 {"conName":"Keccak256Error","conIndex":"4d"}
+{"conName":"TypecheckingFailure","conIndex":"4e"}
 

@@ -1,0 +1,8 @@
+(module tc g
+  (defcap g () true)
+
+  (defcap FOO:bool (a:string) true)
+
+  (defun use-create-cap-guard(a:string)
+    (create-capability-guard (FOO a))
+  ))

@@ -1,0 +1,24 @@
+(interface foobar
+  (defun calls-foobar:integer ())
+  )
+
+(module tc g
+  (defcap g () true)
+
+  (defschema foo
+    m:module{foobar}
+    )
+  (deftable foo-tbl:{foo})
+
+  (defun use-distinct ()
+    (distinct [1 2 3])
+    (distinct [1.0 2.0 3.0])
+    (distinct ["A" "a" "b"])
+    (distinct [(time "foo")])
+    (distinct [(g) (g)])
+    (distinct [() ()])
+    (distinct [{"a":1} {"a":1}])
+    (distinct [(read-keyset "k")])
+    (distinct [(at "m" (read foo-tbl "m"))])
+    (distinct [[2] [1]])
+  ))

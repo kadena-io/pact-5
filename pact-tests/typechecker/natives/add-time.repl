@@ -1,0 +1,9 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-add-time ()
+    (add-time (time "foo") 1)
+    (add-time (time "foo") 1.0)
+  )
+  )

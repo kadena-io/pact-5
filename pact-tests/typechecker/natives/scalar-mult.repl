@@ -1,0 +1,10 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-scalar-mult ()
+    (pairing-check [(scalar-mult 'g1 {'x: 1, 'y: 2} 3)]
+               [(scalar-mult 'g2 {'x: [0 1], 'y: [0 1]} 3)])
+  )
+
+  )

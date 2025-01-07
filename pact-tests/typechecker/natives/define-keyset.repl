@@ -1,0 +1,7 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-define-keyset(s)
+    (define-keyset s (read-keyset "k"))
+  )
+  )

@@ -1,0 +1,24 @@
+(module tc g
+  (defcap g () true)
+
+  (defschema sc1
+    foo:integer
+    bar:bool
+    )
+
+  (defschema sc2
+    foo:integer
+    bar:string
+    )
+
+  (deftable tbl1:{sc1})
+  (deftable tbl2:{sc2})
+
+  (defun use-with-default-read(tbl default-obj)
+    (with-default-read tbl "k" default-obj {"foo" := foo} (+ foo 1))
+  )
+
+  (defun invoke-with-default-read()
+    (use-with-default-read tbl1 {"foo":1, "bar":true})
+    (use-with-default-read tbl2 {"foo":2, "bar":"hello"})
+  ))

@@ -1,0 +1,10 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-continue (p)
+    ; continue is just the identity function in pact 5
+    (continue p)
+  )
+
+  )

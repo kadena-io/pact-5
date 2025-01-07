@@ -27,6 +27,7 @@ import qualified Pact.Core.Test.PactContinuationTest as PactContinuationTests
 import qualified Pact.Core.Test.ClientTests as ClientTests
 import qualified Pact.Core.Test.Keccak256Tests as KeccakTests
 import qualified Pact.Core.Test.TransitiveDependencyTests as TransitiveDependencyTests
+import qualified Pact.Core.Test.TypecheckerTests as TypecheckerTests
 
 main :: IO ()
 main = do
@@ -36,6 +37,7 @@ main = do
   commandTests <- CommandTests.tests
   docsTests <- DocsTests.tests
   legacyDbRegression <- LegacyDbRegression.tests
+  tcTests <- TypecheckerTests.tests
   defaultMain $ testGroup "pactTests"
     [ replTests
     , LexerTests.tests
@@ -61,5 +63,6 @@ main = do
     , ClientTests.tests
     , KeccakTests.tests
     , TransitiveDependencyTests.tests
+    , tcTests
     ]
 

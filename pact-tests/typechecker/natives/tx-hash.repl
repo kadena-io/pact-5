@@ -1,0 +1,7 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-tx-hash:bool (p)
+    (= (tx-hash) p)
+  )
+  )

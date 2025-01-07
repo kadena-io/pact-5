@@ -2,7 +2,7 @@
 
 module Pact.Core.Test.ReplTests
  ( tests
- , runReplTest
+ , runReplTest'
  , ReplSourceDir(..))where
 
 import Test.Tasty
@@ -12,7 +12,6 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Maybe
-import Data.IORef
 import Data.Default
 import Data.Foldable(traverse_)
 import System.Directory
@@ -36,6 +35,7 @@ import Pact.Core.IR.Term
 import Pact.Core.Repl
 import Pact.Core.Repl.Compile
 import qualified Pact.Core.IR.ModuleHashing as MH
+import Pact.Core.Test.ReplTestUtils
 
 
 tests :: IO TestTree
@@ -48,9 +48,6 @@ tests = do
     , testGroup "sqlite db:direct" (runFileReplTestSqlite interpretEvalDirect <$> files)
     ]
 
-newtype ReplSourceDir
-  = ReplSourceDir FilePath
-
 defaultReplTestDir :: FilePath
 defaultReplTestDir = "pact-tests" </> "pact-tests"
 
@@ -62,34 +59,29 @@ runFileReplTest :: ReplInterpreter -> TestName -> TestTree
 runFileReplTest interp file = testCase file $ do
   pdb <- mockPactDb serialisePact_repl_fileLocSpanInfo
   src <- T.readFile (defaultReplTestDir </> file)
-  runReplTest (ReplSourceDir defaultReplTestDir) pdb file src interp
+  runReplTest' (ReplSourceDir defaultReplTestDir) pdb file src interp
 
 
 runFileReplTestSqlite :: ReplInterpreter -> TestName -> TestTree
 runFileReplTestSqlite interp file = testCase file $ do
   ctnt <- T.readFile (defaultReplTestDir </> file)
   withSqlitePactDb serialisePact_repl_fileLocSpanInfo ":memory:" $ \pdb -> do
-    runReplTest (ReplSourceDir defaultReplTestDir) pdb file ctnt interp
+    runReplTest' (ReplSourceDir defaultReplTestDir) pdb file ctnt interp
 
-runReplTest
+runReplTest'
   :: ReplSourceDir
   -> PactDb ReplCoreBuiltin FileLocSpanInfo
   -> FilePath
   -> T.Text
   -> ReplInterpreter
   -> Assertion
-runReplTest (ReplSourceDir path) pdb file src interp = do
-  ee <- defaultEvalEnv pdb replBuiltinMap
-  let source = SourceCode (path </> file) src
-  let rstate = mkReplState ee (const (const (pure ()))) (\f reset -> void (loadFile interp f reset)) & replCurrSource .~ source
-  stateRef <- newIORef rstate
-  evalReplM stateRef (interpretReplProgram interp source) >>= \case
-    Left e -> do
-      rstate' <- readIORef stateRef
+runReplTest' path pdb file src interp = do
+  runReplTest path pdb file src interp >>= \case
+    (Left e, rstate') -> do
       let rendered = renderLocatedPactErrorFromState rstate' e
       assertFailure (T.unpack rendered)
-    Right _ -> do
-      traverse_ ensurePassing . reverse . _replTestResults =<< readIORef stateRef
+    (Right _, rstate) -> do
+      traverse_ ensurePassing $ reverse $ _replTestResults rstate
       ensureModuleHashesMatch
   where
   moduleHashMatches mn = void $ runMaybeT $ do

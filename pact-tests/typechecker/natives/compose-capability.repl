@@ -1,0 +1,34 @@
+(module tc g
+  (defcap g () true)
+
+  (defcap FOO:bool (a:integer)
+    @managed a foo-mgr
+    (compose-capability (BAR))
+  )
+
+  (defcap BAR:bool ()
+    (emit-event (EMITTED "foo"))
+  )
+
+  (defcap EMITTED (s:string)
+    @event
+    true
+  )
+
+  (defun foo-mgr (a:integer b:integer)
+    (enforce (>= (- a b) 0) "ayy")
+    (- a b)
+  )
+
+  (defun use-foo(a:integer)
+    (install-capability (FOO 1))
+    (with-capability (FOO 1)
+      (needs-foo a)
+    )
+  )
+
+  (defun needs-foo(a:integer)
+    (require-capability (FOO a))
+    123
+  )
+  )

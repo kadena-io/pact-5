@@ -1,0 +1,7 @@
+(module tc g
+  (defcap g () true)
+
+  (defcap MOCK ()
+    (enforce-verifier "foo")
+  )
+  )

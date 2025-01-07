@@ -1,0 +1,10 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-point-add()
+    (pairing-check [(point-add 'g1 {'x: 1, 'y: 2} {'x: 1, 'y: 2})]
+      [(point-add 'g2 {'x: [0 1], 'y: [0 1]} {'x: [1 2], 'y: [2 3]})])
+  )
+
+  )

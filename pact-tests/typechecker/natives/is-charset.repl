@@ -1,0 +1,9 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-is-charset ()
+    (is-charset CHARSET_ASCII "asdf")
+  )
+
+  )
