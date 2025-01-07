@@ -27,6 +27,7 @@ module Pact.Core.Builtin
  , _CWithCapability, _CCreateUserGuard
  , _RBuiltinWrap
  , _RBuiltinRepl
+ , AsCoreBuiltin(..)
  )where
 
 import Control.Lens
@@ -1006,3 +1007,7 @@ deriveConstrInfo ''CoreBuiltin
 deriveConstrInfo ''ReplOnlyBuiltin
 makePrisms ''BuiltinForm
 makePrisms ''ReplBuiltin
+makeClassyPrisms ''CoreBuiltin
+
+instance AsCoreBuiltin b => AsCoreBuiltin (ReplBuiltin b) where
+  _CoreBuiltin = (_RBuiltinWrap . _CoreBuiltin)
