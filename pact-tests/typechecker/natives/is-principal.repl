@@ -1,0 +1,9 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-is-principal ()
+    (is-principal (create-principal (read-keyset "k")))
+  )
+
+  )

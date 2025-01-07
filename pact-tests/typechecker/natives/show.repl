@@ -1,0 +1,45 @@
+(interface foobar
+  (defun foo:integer (a:integer))
+  )
+
+(module tc g
+  (defcap g () true)
+
+  (defun show-integer (a:integer)
+    (show a)
+  )
+
+  (defun show-decimal (a:decimal)
+    (show a)
+  )
+
+  (defun show-string (a:string)
+    (show a)
+  )
+
+  (defun show-list (a:[integer])
+    (show a)
+  )
+
+  (defschema obj1 a:integer)
+
+  (defun show-obj (a:object{obj1})
+    (show a)
+  )
+
+  (defun show-modref(a:module{foobar})
+    (show a)
+    )
+
+  (defun show-table (a:table{obj1})
+    (show a)
+  )
+
+  (defun show-guard (a:guard)
+    (show a)
+  )
+
+  (defun show-unit (a:unit)
+    (show a)
+  )
+  )

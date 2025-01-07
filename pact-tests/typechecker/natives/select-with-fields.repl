@@ -1,0 +1,26 @@
+(module tc g
+  (defcap g () true)
+
+  (defschema sc1
+    foo:integer
+    bar:bool
+    )
+
+  (defschema sc2
+    foo:integer
+    bar:string
+    )
+
+  (deftable tbl1:{sc1})
+  (deftable tbl2:{sc2})
+
+  (defun use-select(tbl)
+    (select tbl ["bar"] (where "foo" (> 30)))
+  )
+
+  (defun invoke-select()
+    (use-select tbl1)
+    (use-select tbl2)
+    ()
+  )
+  )

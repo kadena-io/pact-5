@@ -1,0 +1,9 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-pact-id ()
+    (pact-id)
+  )
+
+  )

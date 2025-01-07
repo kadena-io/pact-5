@@ -1,0 +1,9 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-define-namespace (account)
+    (define-namespace account (read-keyset "k") (read-keyset "k"))
+  )
+
+  )

@@ -1,0 +1,9 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-typeof-principal ()
+    (typeof-principal (create-principal (read-keyset "k")))
+  )
+
+  )

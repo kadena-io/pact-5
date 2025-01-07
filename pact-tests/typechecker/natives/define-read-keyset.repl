@@ -1,0 +1,7 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-define-keyset-env-data(s)
+    (define-keyset s)
+  )
+  )

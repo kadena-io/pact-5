@@ -74,7 +74,7 @@ legacyTests = do
             _pdbWrite pdb Write DModules (view mdModuleName m) (liftReplBuiltin m)
 
           pure $ testCase (r <> " with interpreter (" <> interpName <> ")")
-            $ runReplTest (ReplSourceDir legacyTestDir) pdb filePath src interpreter
+            $ runReplTest' (ReplSourceDir legacyTestDir) pdb filePath src interpreter
 
   where
   toModuleData p fp =

@@ -1,0 +1,11 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-read-msg-default ()
+    (let
+      ((a:string (read-msg)))
+      ; read-msg can give us any value, we pretty much only care that it typechecks somehow
+      a
+      )
+  )
+)

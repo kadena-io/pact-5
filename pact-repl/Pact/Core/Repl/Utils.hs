@@ -47,6 +47,7 @@ module Pact.Core.Repl.Utils
  , recordTestSuccess
  , recordTestFailure
  , emptyTxState
+ , mkReplErrorLocSlice
  ) where
 
 import Control.Lens
@@ -72,7 +73,6 @@ import Pact.Core.Persistence
 import Pact.Core.Pretty
 import Pact.Core.Errors
 import Pact.Core.Environment
-import Pact.Core.Type
 import Pact.Core.Builtin
 import Pact.Core.PactValue
 import Pact.Core.Debug
@@ -225,6 +225,40 @@ replCompletion natives =
 evalReplM :: IORef (ReplState b) -> ReplM b a -> IO (Either (PactError FileLocSpanInfo) a)
 evalReplM env st = runEvalMResult (ReplEnv env) def st
 
+mkReplErrorLocSlice
+  :: FileLocSpanInfo
+  -> ReplM b Text
+mkReplErrorLocSlice (FileLocSpanInfo file loc) = do
+  src <- useReplState (replLoadedFiles . at file) >>= \case
+    Just src' -> pure src'
+    Nothing ->
+      useReplState replCurrSource
+  pure $ renderErrorSlice src loc
+
+renderErrorSlice
+  :: (HasSpanInfo i)
+  => SourceCode
+  -> i
+  -> Text
+renderErrorSlice (SourceCode _ src) pe =
+  let srcLines = T.lines src
+      pei = view spanInfo pe
+      -- Note: The startline is 0-indexed, but we want our
+      -- repl to output errors which are 1-indexed.
+      start = _liStartLine pei
+      spanLen = _liEndLine pei - _liStartLine pei
+      -- We want the padding to be the biggest line number we will show, which
+      -- is endLine + 1
+      maxPad = length (show (_liEndLine pei + 1)) + 1
+      slice = withLine start maxPad $ take (max 1 spanLen) $ drop start srcLines
+      -- Render ^^^ only in the column slice
+      colMarker = T.replicate (maxPad+1) " " <> "| " <> T.replicate (_liStartColumn pei) " " <> T.replicate (max 1 (_liEndColumn pei - _liStartColumn pei)) "^"
+  in T.unlines (slice ++ [colMarker])
+  where
+  padLeft t pad = T.replicate (pad - (T.length t)) " " <> t <> " "
+  -- Zip the line number with the source text, and apply the number padding correctly
+  withLine st pad lns = zipWith (\i e -> padLeft (T.pack (show i)) pad <> "| " <> e) [st+1..] lns
+
 replError
   :: (HasSpanInfo i, Pretty i)
   => SourceCode
@@ -315,9 +349,12 @@ instance DebugPrintable 'ReplRuntime (ReplBuiltin CoreBuiltin) where
               liftIO $ do
                 putStrLn "----------- Parser output ----------------"
                 print (pretty term)
-          DPDesugar -> whenReplFlagSet ReplDebugDesugar $ case term of
-            Term.TLTerm t ->
-              liftIO $ do
-                putStrLn "----------- Desugar output ---------------"
-                print (pretty t)
-            _ -> pure ()
+          DPDesugar -> whenReplFlagSet ReplDebugDesugar $ do
+            let info = view Term.topLevelInfo term
+            replTraceLn' info "----------- Desugar output ---------------"
+            case term of
+              Term.TLTerm t ->
+                replTraceLn info t
+              Term.TLModule m ->
+                replTraceLn info m
+              _ -> pure ()

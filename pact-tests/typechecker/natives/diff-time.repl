@@ -1,0 +1,10 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-diff-time ()
+    (diff-time (time "foo") (time "bar"))
+  )
+
+
+  )

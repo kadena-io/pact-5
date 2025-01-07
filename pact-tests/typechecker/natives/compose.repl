@@ -1,0 +1,8 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-compose ()
+    (compose (+ 1) (+ 2) 3)
+  )
+  )

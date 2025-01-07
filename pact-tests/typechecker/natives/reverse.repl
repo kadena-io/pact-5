@@ -1,0 +1,12 @@
+(module tc g
+  (defcap g () true)
+
+  (defun reverse-string (a:string)
+    (reverse a)
+  )
+
+  (defun reverse-list(a:[string])
+    (reverse a)
+  )
+
+  )

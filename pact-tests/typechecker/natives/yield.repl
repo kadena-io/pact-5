@@ -1,0 +1,23 @@
+(module tc g
+  (defcap g () true)
+
+  (defpact use-yield(a:string)
+    (step
+      (yield {"a":a} )
+      )
+    (step-with-rollback
+      (resume  {"a" := a }
+        (yield {"b":a} )
+        )
+      (resume  {"a" := a }
+        (yield {"b":a} )
+        )
+      )
+    (step
+      (resume {"b" := b}
+        (str-to-int b)
+        )
+
+      )
+  )
+  )

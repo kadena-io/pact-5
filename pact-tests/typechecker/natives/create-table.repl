@@ -1,0 +1,13 @@
+(module tc g
+  (defcap g () true)
+
+  (defschema foo-schema
+    a:integer
+    b:integer)
+
+  (deftable foo-tbl:{foo-schema})
+
+  (defun use-create-table()
+    (create-table foo-tbl)
+  )
+  )

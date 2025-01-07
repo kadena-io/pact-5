@@ -1,0 +1,9 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-hetm ()
+    (hyperlane-encode-token-message {"recipient": "eyJwcmVkIjogImtleXMtYWxsIiwgImtleXMiOlsiZGExYTMzOWJkODJkMmMyZTkxODA2MjZhMDBkYzA0MzI3NWRlYjNhYmFiYjI3YjU3MzhhYmY2YjlkY2VlOGRiNiJdfQ", "amount":123000000000000000.0, "chainId":"4"})
+  )
+
+  )

@@ -11,6 +11,7 @@ module Pact.Core.Persistence.Utils
   , lookupModuleData
   , getModuleData
   , getModule
+  , getModuleWithDependencies
   , getModuleMember
   , getModuleMemberWithHash
   , throwDbOpErrorGasM
@@ -101,6 +102,13 @@ lookupModuleData info mn = do
 getModule :: i -> ModuleName -> EvalM e b i (EvalModule b i)
 getModule info mn = lookupModule info mn >>= \case
   Just md -> pure md
+  Nothing -> throwExecutionError info (ModuleDoesNotExist mn)
+
+-- | getModuleData, but only for modules, no interfaces
+getModuleWithDependencies :: i -> ModuleName -> EvalM e b i (EvalModule b i, M.Map FullyQualifiedName (EvalDef b i))
+getModuleWithDependencies info mn = lookupModuleData info mn >>= \case
+  Just (ModuleData md deps) -> pure (md, deps)
+  Just _ -> throwExecutionError info (ExpectedModule mn)
   Nothing -> throwExecutionError info (ModuleDoesNotExist mn)
 
 -- | Get or load a module or interface based on the module name

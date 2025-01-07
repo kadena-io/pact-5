@@ -1,0 +1,18 @@
+
+(module tc g
+  (defcap g () true)
+
+  (defschema person
+    name:string
+    age:integer
+    dob:time)
+
+  (deftable persons:{person})
+
+  (defcap CAP () true)
+
+  (defun fails-with-capability-bad-object:object{person} ()
+    (with-capability (CAP)
+      { 'foo: 1 }))
+
+  )

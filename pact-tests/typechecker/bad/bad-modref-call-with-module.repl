@@ -1,0 +1,25 @@
+(interface tctest-iface
+  (defun tcmodref-spec:bool (s:string)))
+
+(interface tctest-iface2
+  (defun tcmodref-spec2:bool (s:string)))
+
+(module tc-test-impl2 g
+  (defcap g () true)
+
+  (implements tctest-iface2)
+
+  (defun tcmodref-spec2:bool (s:string)
+    true)
+)
+
+(module tc g
+  (defcap g () true)
+
+  (defun tc-modref:bool (m:module{tctest-iface})
+    (m::tcmodref-spec "test"))
+
+  (defun fails-tc-call-modref:bool ()
+    (tc-modref tc-test-impl2))
+
+  )

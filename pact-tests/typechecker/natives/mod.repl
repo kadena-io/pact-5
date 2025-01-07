@@ -1,0 +1,8 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-mod (a b)
+    (mod a b)
+  )
+
+  )

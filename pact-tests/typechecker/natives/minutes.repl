@@ -1,0 +1,8 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-minutes ()
+    (+ (minutes 2) (minutes 2.5))
+  )
+  )

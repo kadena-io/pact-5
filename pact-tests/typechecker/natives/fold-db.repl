@@ -1,0 +1,7 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-fold-db(tbl)
+    (fold-db tbl (lambda (k o) true) (lambda (k o) {"key":k, "object":o}))
+  )
+  )

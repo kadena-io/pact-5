@@ -1,0 +1,8 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-days ()
+    (+ (days 2) (days 2.5))
+  )
+  )

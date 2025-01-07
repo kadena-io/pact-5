@@ -1,0 +1,12 @@
+(module tc g
+  (defcap g () true)
+
+  (defun contains-string (a:string)
+    (contains "foo" a)
+  )
+
+  (defun contains-list(a b:[string])
+    (contains a b)
+  )
+
+  )

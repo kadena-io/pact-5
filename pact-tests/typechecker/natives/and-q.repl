@@ -1,0 +1,9 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-andq (p)
+    (and? (!= 2) (!= 3) p)
+  )
+
+  )

@@ -1,0 +1,11 @@
+(module tc g
+  (defcap g () true)
+
+  (defun exp-decimal (a:decimal)
+    (exp a)
+  )
+
+  (defun exp-integer (a:integer)
+    (exp a)
+  )
+  )

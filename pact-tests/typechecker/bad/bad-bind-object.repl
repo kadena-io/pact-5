@@ -1,0 +1,21 @@
+
+(module tc g
+  (defcap g () true)
+
+  (defschema person
+    name:string
+    age:integer
+    dob:time)
+
+  (deftable persons:{person})
+
+  (defun fails-bind-bad-object:object{person} ()
+    (let ((o:object{person}
+            { 'name: 's
+            , 'age: 1
+            , 'dob: (parse-time "%F" "1996-12-31")
+            } ))
+      (bind o { 'name:= name, 'age:= age }
+        { 'foo: name
+        , 'bar: age })))
+  )

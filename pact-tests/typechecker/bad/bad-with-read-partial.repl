@@ -1,0 +1,18 @@
+
+(module tc g
+  (defcap g () true)
+
+  (defschema person
+    name:string
+    age:integer
+    dob:time)
+
+  (deftable persons:{person})
+
+  (defun fails-with-read-partial-schema:object{person} ()
+     (with-read persons 'dave
+       { 'name:= name
+       , 'age:= age }
+       { 'name: name
+       , 'age: age }))
+  )

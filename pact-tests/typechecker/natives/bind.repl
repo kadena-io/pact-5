@@ -1,0 +1,10 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-bind(a:string)
+    (bind {"a":1, "b":a }
+      {"a" := a-val}
+      a-val
+    )
+  )
+  )

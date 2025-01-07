@@ -27,7 +27,6 @@ import Pact.Core.PactValue
 import Pact.Core.Persistence
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Serialise
-import Pact.Core.Type
 import Pact.Time
 
 import Pact.Core.GasModel.Utils

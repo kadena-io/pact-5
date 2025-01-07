@@ -1,0 +1,7 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-shift (a:integer)
+    (shift a 1)
+  )
+  )

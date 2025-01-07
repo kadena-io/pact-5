@@ -1,0 +1,6 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-create-pact-guard(a:string)
+    (create-pact-guard a)
+  ))

@@ -1,0 +1,12 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-cond ()
+    (cond
+      ((= 1 2) "Hello")
+      (do 1 2 3 "World")
+      )
+  )
+
+  )

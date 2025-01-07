@@ -1,0 +1,7 @@
+(module tc g
+  (defcap g () true)
+
+
+  (defun use-format-time (p t)
+    (format-time p t)
+  ))

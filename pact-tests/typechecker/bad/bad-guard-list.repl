@@ -1,0 +1,15 @@
+
+(module tc g
+  (defcap g () true)
+
+  (defun f () true)
+  (defconst USER_GUARD (create-user-guard (f)))
+
+  (defun rtc-guard-list (foo:[guard])
+    "for testing runtime tc on guard list"
+    true)
+
+  (defun fails-guard-list ()
+    (rtc-guard-list [USER_GUARD,1]))
+
+  )

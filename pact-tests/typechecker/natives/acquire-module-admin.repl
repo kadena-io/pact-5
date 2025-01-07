@@ -1,0 +1,11 @@
+(module foo g
+  (defcap g () true)
+  )
+
+(module tc g
+  (defcap g () true)
+
+  (defun use-acquire ()
+    (acquire-module-admin foo)
+  )
+  )

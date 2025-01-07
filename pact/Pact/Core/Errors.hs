@@ -732,6 +732,9 @@ data EvalError
   | EntityNotAllowedInDefPact QualifiedName
   -- ^ Entity field not allowed in defpact
   | Keccak256Error Keccak256Error
+  -- ^ Keccak256 failure
+  | TypecheckingFailure ModuleName Text
+  -- ^ Typechecking failure
   deriving (Eq, Show, Generic)
 
 data ErrorClosureType
@@ -955,6 +958,8 @@ instance Pretty EvalError where
         "Base64URL decode failed:" <+> pretty (T.pack msg)
       Keccak256OtherException msg ->
         "Exception when keccak256 hashing:" <+> pretty (T.pack msg)
+    TypecheckingFailure mn t ->
+      "static typechecking failed for" <+> pretty mn <> hardline <> pretty t
 
 -- | Errors meant to be raised
 --   internally by a PactDb implementation
@@ -1660,6 +1665,10 @@ evalErrorToBoundedText = mkBoundedText . \case
         "Base64URL decode failed"
       Keccak256OtherException _ ->
         "Unknown exception thrown during computation of keccak256"
+  TypecheckingFailure mn t ->
+    thsep ["static typechecking failed for"
+          , renderModuleName mn
+          , "\n" <> t]
 
 
 

@@ -1,0 +1,7 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-static-redeploy ()
+    (static-redeploy "foo")
+  )
+  )

@@ -1,0 +1,8 @@
+(module tc g
+  (defcap g () true)
+
+  (defun use-enforce-keyset ()
+    (enforce-keyset (read-keyset "foo"))
+    (enforce-keyset "foo")
+  )
+  )
