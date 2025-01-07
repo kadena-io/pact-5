@@ -388,11 +388,17 @@ applyPact i pc ps cont handler cenv nested = use esDefPactExec >>= \case
           contFqn = qualNameToFqn (pc ^. pcName) mh
           sf = StackFrame contFqn (pc ^. pcArgs) SFDefPact i
       case (ps ^. psRollback, step) of
-        (False, _) ->
-          evalWithStackFrame i cont' handler cenv Nothing sf (ordinaryDefPactStepExec step)
+        (False, _) -> case ordinaryDefPactStepExec step of
+          Just stepExpr ->
+            evalWithStackFrame i cont' handler cenv Nothing sf stepExpr
+          Nothing ->
+            throwExecutionError i (EntityNotAllowedInDefPact (_pcName pc))
         (True, StepWithRollback _ rollbackExpr) ->
           evalWithStackFrame i cont' handler cenv Nothing sf rollbackExpr
         (True, Step{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
+        (True, LegacyStepWithEntity{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
+        (True, LegacyStepWithRBEntity{}) ->
+          throwExecutionError i (EntityNotAllowedInDefPact (_pcName pc))
     (_, mh) -> failInvariant i (InvariantExpectedDefPact (qualNameToFqn (pc ^. pcName) mh))
 
 emitXChainEvents
@@ -474,11 +480,17 @@ applyNestedPact i pc ps cont handler cenv = use esDefPactExec >>= \case
         sf = StackFrame contFqn (pc ^. pcArgs) SFDefPact i
 
       case (ps ^. psRollback, step) of
-        (False, _) ->
-          evalWithStackFrame i cont' handler cenv' Nothing sf (ordinaryDefPactStepExec step)
+        (False, _) -> case ordinaryDefPactStepExec step of
+          Just stepExpr ->
+            evalWithStackFrame i cont' handler cenv' Nothing sf stepExpr
+          Nothing ->
+            throwExecutionError i (EntityNotAllowedInDefPact (_pcName pc))
         (True, StepWithRollback _ rollbackExpr) ->
           evalWithStackFrame i cont' handler cenv' Nothing sf rollbackExpr
         (True, Step{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
+        (True, LegacyStepWithEntity{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
+        (True, LegacyStepWithRBEntity{}) ->
+          throwExecutionError i (EntityNotAllowedInDefPact (_pcName pc))
     (_, mh) -> failInvariant i (InvariantExpectedDefPact (qualNameToFqn (pc ^. pcName) mh))
 
 

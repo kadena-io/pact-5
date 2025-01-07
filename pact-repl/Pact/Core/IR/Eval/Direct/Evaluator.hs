@@ -1130,12 +1130,18 @@ applyPact i pc ps cenv nested = use esDefPactExec >>= \case
       let sf = StackFrame (qualNameToFqn (pc ^. pcName) mh) (pc ^. pcArgs) SFDefPact i
 
       result <- case (ps ^. psRollback, step) of
-        (False, _) ->
-          evalWithStackFrame i sf Nothing $ evaluate cenv (ordinaryDefPactStepExec step)
+        (False, _) -> case ordinaryDefPactStepExec step of
+          Just stepExpr ->
+            evalWithStackFrame i sf Nothing $ evaluate cenv stepExpr
+          Nothing ->
+            throwExecutionError i (EntityNotAllowedInDefPact (_pcName pc))
         (True, StepWithRollback _ rollbackExpr) ->
           evalWithStackFrame i sf Nothing $ evaluate cenv rollbackExpr
         (True, Step{}) ->
           throwExecutionError i (DefPactStepHasNoRollback ps)
+        (True, LegacyStepWithEntity{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
+        (True, LegacyStepWithRBEntity{}) ->
+          throwExecutionError i (EntityNotAllowedInDefPact (_pcName pc))
 
       -- After evaluation, check the result state
       use esDefPactExec >>= \case
@@ -1210,11 +1216,17 @@ applyNestedPact i pc ps cenv = use esDefPactExec >>= \case
       let contFqn = qualNameToFqn (pc ^. pcName) mh
           sf = StackFrame contFqn (pc ^. pcArgs) SFDefPact i
       result <- case (ps ^. psRollback, step) of
-        (False, _) ->
-          evalWithStackFrame i sf Nothing $ evaluate cenv' (ordinaryDefPactStepExec step)
+        (False, _) -> case ordinaryDefPactStepExec step of
+          Just stepExpr ->
+            evalWithStackFrame i sf Nothing $ evaluate cenv' stepExpr
+          Nothing ->
+            throwExecutionError i (EntityNotAllowedInDefPact (_pcName pc))
         (True, StepWithRollback _ rollbackExpr) ->
           evalWithStackFrame i sf Nothing $ evaluate cenv' rollbackExpr
         (True, Step{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
+        (True, LegacyStepWithEntity{}) -> throwExecutionError i (DefPactStepHasNoRollback ps)
+        (True, LegacyStepWithRBEntity{}) ->
+          throwExecutionError i (EntityNotAllowedInDefPact (_pcName pc))
 
       use esDefPactExec >>= \case
         Nothing -> failInvariant i $ InvariantPactExecNotInEnv Nothing

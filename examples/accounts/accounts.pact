@@ -107,7 +107,7 @@
 
   (defpact payment (payer payer-entity payee payee-entity amount date)
     "Debit PAYER at PAYER-ENTITY then credit PAYEE at PAYEE-ENTITY for AMOUNT on DATE"
-    (step-with-rollback payer-entity
+    (step-with-rollback 
       (with-capability (TRANSFER)
         (debit payer amount date
           { "payee": payee
@@ -118,7 +118,7 @@
         (credit payer amount date
           { "ref": (pact-id), "note": "rollback" })))
 
-    (step payee-entity
+    (step
       (with-capability (TRANSFER)
         (credit payee amount date
           { "payer": payer

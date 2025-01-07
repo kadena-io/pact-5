@@ -285,17 +285,17 @@ instance Pretty (DefTable i) where
       <> maybe mempty (\d -> line <> pretty (uncurry (flip PactDoc) d)) docs
 
 data PactStep i
-  = Step (Expr i) (Maybe [PropertyExpr i])
-  | StepWithRollback (Expr i) (Expr i) (Maybe [PropertyExpr i])
+  = Step (Maybe (Expr i)) (Expr i) (Maybe [PropertyExpr i])
+  | StepWithRollback (Maybe (Expr i)) (Expr i) (Expr i) (Maybe [PropertyExpr i])
   deriving (Eq, Show, Functor, Generic, NFData)
 
 instance Pretty (PactStep i) where
   pretty = \case
-    Step e1 anns ->
+    Step _ e1 anns ->
       parens $
         "step" <+> pretty e1 <> nest 2
           (maybe mempty (\a -> line <> pretty (PactModel a)) anns)
-    StepWithRollback e1 e2 anns ->
+    StepWithRollback _ e1 e2 anns ->
       parens $
         "step-with-rollback" <+> pretty e1 <+> pretty e2 <> nest 2
           (maybe mempty (\a -> line <> pretty (PactModel a)) anns)

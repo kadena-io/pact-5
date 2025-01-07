@@ -73,6 +73,9 @@ updateDefHashes mname mhash = \case
   DPact d ->
     let updateStep (Step e1) = Step (updateTermHashes mname mhash e1)
         updateStep (StepWithRollback e1 e2) = StepWithRollback (updateTermHashes mname mhash e1) (updateTermHashes mname mhash e2)
+        -- Note: this last fallthrough case does not occur in the pact 5
+        -- module deploy execution path.
+        updateStep e = e
     in DPact $ over dpSteps (fmap updateStep) d
   DTable d -> DTable d
   DSchema s -> DSchema s

@@ -185,6 +185,7 @@ module Pact.Core.Errors
  , _HyperlaneDecodeErrorInternal
  , _HyperlaneDecodeErrorBinary
  , _HyperlaneDecodeErrorParseRecipient
+ , _EntityNotAllowedInDefPact
  , _InvalidNumArgs
  , toPrettyLegacyError
  , BoundedText
@@ -727,6 +728,9 @@ data EvalError
   | UnknownException Text
   -- ^ An unknown exception was thrown and converted to text. Intentionally and crucially lazy.
   | InvalidNumArgs ErrorClosureType Int Int
+  -- ^ Invalid number of arguments for a function
+  | EntityNotAllowedInDefPact QualifiedName
+  -- ^ Entity field not allowed in defpact
   deriving (Eq, Show, Generic)
 
 data ErrorClosureType
@@ -941,6 +945,8 @@ instance Pretty EvalError where
       <+> pretty errCloType
       <+> "supplied; expected"
       <+> parens (pretty expected)
+    EntityNotAllowedInDefPact qn ->
+      "Pact 5 does not support entity expressions in defpact" <+> pretty qn <> ". Please ensure your defpact steps have the correct number of expressions"
 
 -- | Errors meant to be raised
 --   internally by a PactDb implementation
@@ -1597,6 +1603,10 @@ evalErrorToBoundedText = mkBoundedText . \case
       ErrClosureLambda -> "lambda"
       ErrClosureUserFun fqn -> thsep ["user function", tFqn fqn]
       ErrClosureNativeFun b -> thsep ["native function", _natName b]
+  EntityNotAllowedInDefPact qn ->
+      thsep [ "Pact 5 does not support entity expressions in defpact"
+            , renderQualName qn <> "."
+            , " Please ensure your defpact steps have the correct number of expressions"]
 
 
 -- | NOTE: Do _not_ change this function post mainnet release just to improve an error.
