@@ -222,6 +222,8 @@ data Step name ty builtin info
   | StepWithRollback
     (Term name ty builtin info)
     (Term name ty builtin info)
+  | LegacyStepWithEntity (Term name ty builtin info) (Term name ty builtin info)
+  | LegacyStepWithRBEntity (Term name ty builtin info) (Term name ty builtin info) (Term name ty builtin info)
   deriving (Show, Functor, Eq, Generic)
 
 -- | (defpact <name>:<ret_ty> (arglist*) <steps>)
@@ -265,10 +267,13 @@ data DefSchema ty info
 hasRollback :: Step n t b i -> Bool
 hasRollback Step{} = False
 hasRollback StepWithRollback{} = True
+hasRollback LegacyStepWithEntity{} = False
+hasRollback LegacyStepWithRBEntity{} = True
 
-ordinaryDefPactStepExec :: Step name ty builtin info -> Term name ty builtin info
-ordinaryDefPactStepExec (Step expr) = expr
-ordinaryDefPactStepExec (StepWithRollback expr _) = expr
+ordinaryDefPactStepExec :: Step name ty builtin info -> Maybe (Term name ty builtin info)
+ordinaryDefPactStepExec (Step expr) = Just expr
+ordinaryDefPactStepExec (StepWithRollback expr _) = Just expr
+ordinaryDefPactStepExec _ = Nothing
 
 -- | The type of our desugared table schemas
 -- TODO: This GADT is unnecessarily complicated and only really necessary
@@ -567,6 +572,9 @@ instance (Pretty name, Pretty builtin, Pretty ty) => Pretty (Step name ty builti
   pretty = \case
     Step t -> parens ("step" <+> pretty t)
     StepWithRollback t1 t2 -> parens ("step-with-rollback" <+> pretty t1 <+> pretty t2)
+    LegacyStepWithEntity t1 t2 -> parens ("step" <+> pretty t1 <+> pretty t2)
+    LegacyStepWithRBEntity t1 t2 t3 ->
+      parens ("step-with-rollback" <+> pretty t1 <+> pretty t2 <+> pretty t3)
 
 
 instance (Pretty name, Pretty ty, Pretty b) => Pretty (DefConst name ty b i) where
@@ -759,6 +767,10 @@ traverseDefPactStep f = \case
   Step t -> Step <$> f t
   StepWithRollback a1 a2 ->
     StepWithRollback <$> f a1 <*> f a2
+  LegacyStepWithEntity e1 e2 ->
+    LegacyStepWithEntity <$> f e1 <*> f e2
+  LegacyStepWithRBEntity e1 e2 e3 ->
+    LegacyStepWithRBEntity <$> f e1 <*> f e2 <*> f e3
 
 traverseDefPactTerm
   :: Traversal (DefPact name ty builtin info)

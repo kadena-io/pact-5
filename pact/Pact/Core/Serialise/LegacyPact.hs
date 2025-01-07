@@ -436,12 +436,15 @@ fromLegacyStep
   :: ModuleHash
   -> Legacy.Step (Legacy.Term (Either CorePreNormalizedTerm LegacyRef))
   -> TranslateM (Step (Name, DeBruijn) Type CoreBuiltin ())
-fromLegacyStep mh (Legacy.Step _ t mrb) = do
+fromLegacyStep mh (Legacy.Step entity t mrb) = do
+  entity' <- traverse (fromLegacyTerm mh) entity
   t' <- fromLegacyTerm mh t
-  case mrb of
-    Nothing -> pure (Step t')
-    Just rb ->
-      StepWithRollback t' <$> fromLegacyTerm mh rb
+  mrb' <- traverse (fromLegacyTerm mh) mrb
+  case (entity', mrb') of
+    (Nothing, Nothing) -> pure (Step t')
+    (Nothing, Just rb) -> pure (StepWithRollback t' rb)
+    (Just e, Nothing) -> pure (LegacyStepWithEntity e t')
+    (Just e, Just rb) -> pure (LegacyStepWithRBEntity e t' rb)
 
 debruijnize
   :: DeBruijn

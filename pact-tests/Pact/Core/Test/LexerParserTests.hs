@@ -246,10 +246,10 @@ defpactGen =
     Gen.choice [regularStepGen, stepWithRbGen]
   regularStepGen =
     -- Todo: models
-    Step <$> exprGen <*> pure Nothing
+    Step <$> pure Nothing <*> exprGen <*> pure Nothing
   stepWithRbGen =
     -- todo: models
-    StepWithRollback <$> exprGen <*> exprGen <*> pure Nothing
+    StepWithRollback <$> pure Nothing <*> exprGen <*> exprGen <*> pure Nothing
 
 defschemaGen :: Gen (DefSchema ())
 defschemaGen =

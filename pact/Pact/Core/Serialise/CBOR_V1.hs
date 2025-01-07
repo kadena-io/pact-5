@@ -560,6 +560,10 @@ instance
       encodeListLen 2 <> encodeWord 0 <> encodeS t
     StepWithRollback t rb ->
       encodeListLen 3 <> encodeWord 1 <> encodeS t <> encodeS rb
+    LegacyStepWithEntity t e ->
+      encodeListLen 3 <> encodeWord 2 <> encodeS t <> encodeS e
+    LegacyStepWithRBEntity t e rb ->
+      encodeListLen 4 <> encodeWord 3 <> encodeS t <> encodeS e <> encodeS rb
   {-# INLINE encode #-}
 
   decode = do
@@ -567,6 +571,8 @@ instance
     decodeWord >>= fmap SerialiseV1 . \case
       0 -> Step <$> decodeS
       1 -> StepWithRollback <$> decodeS <*> decodeS
+      2 -> LegacyStepWithEntity <$> decodeS <*> decodeS
+      3 -> LegacyStepWithRBEntity <$> decodeS <*> decodeS <*> decodeS
       _ -> fail "unexpected decoding"
   {-# INLINE decode #-}
 

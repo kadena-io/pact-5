@@ -105,6 +105,7 @@ topLevelTermAt p = \case
     goStep = \case
       Step tm -> TermMatch <$> termAt p tm
       StepWithRollback tm1 tm2 -> TermMatch <$> (termAt p tm1 <|> termAt p tm2)
+      _ -> Nothing
 
 -- | Check if a `Position` is contained within a `Span`
 inside :: Position -> SpanInfo -> Bool

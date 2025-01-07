@@ -485,12 +485,16 @@ desugarDefPact mn (Lisp.DefPact spec@(Lisp.MArg dpname _ _) margs (step :| steps
   let args' = toArg <$> margs
       spec' = toArg spec
   steps' <- forM (step :| steps) \case
-    Lisp.Step s _ ->
+    Lisp.Step mentity s _ -> do
+      when (isJust mentity) $
+        lift $ throwExecutionError i (EntityNotAllowedInDefPact (QualifiedName dpname mn))
       Step <$> desugarLispTerm s
-    Lisp.StepWithRollback s rb _ ->
+    Lisp.StepWithRollback mentity s rb _ -> do
+      when (isJust mentity) $
+        lift $ throwExecutionError i (EntityNotAllowedInDefPact (QualifiedName dpname mn))
       StepWithRollback
-      <$> desugarLispTerm s
-      <*> desugarLispTerm rb
+        <$> desugarLispTerm s
+        <*> desugarLispTerm rb
 
   -- In DefPacts, last step is not allowed to rollback.
   when (hasRollback $ NE.last steps') $
@@ -807,6 +811,7 @@ defPactStepSCC mn cd = \case
   Step step -> termSCC mn cd step
   StepWithRollback step rollback ->
     S.unions $ [termSCC mn cd step, termSCC mn cd rollback]
+  _ -> mempty
 
 -- | Get the set of dependencies from a defun signature defn
 -- Note: names will show up in:
@@ -1119,6 +1124,10 @@ renamePactStep = \case
     Step <$> renameTerm step
   StepWithRollback step rollback ->
     StepWithRollback <$> renameTerm step <*> renameTerm rollback
+  LegacyStepWithEntity e1 e2 ->
+    LegacyStepWithEntity <$> renameTerm e1 <*> renameTerm e2
+  LegacyStepWithRBEntity e1 e2 e3 ->
+    LegacyStepWithRBEntity <$> renameTerm e1 <*> renameTerm e2 <*> renameTerm e3
 
 renameDefPact
   :: (DesugarBuiltin b)

@@ -1098,6 +1098,20 @@ executionTests =
         )
       (install-capability (c "meh"))
     |])
+  , ("entity_not_allowed", isExecutionError _EntityNotAllowedInDefPact, [text|
+      (module m g (defcap g () true)
+        (defpact tester ()
+          (step 1 2)
+        )
+        )
+    |])
+  , ("entity_not_allowed_rb", isExecutionError _EntityNotAllowedInDefPact, [text|
+      (module m g (defcap g () true)
+        (defpact tester ()
+          (step-with-rollback 1 2 3)
+        )
+        )
+    |])
   ]
 
 builtinTests :: [(String, PactErrorI -> Bool, Text)]
