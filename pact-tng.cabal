@@ -331,6 +331,10 @@ library pact-repl
     Pact.Core.IR.Eval.Direct.ReplBuiltin
     Pact.Core.IR.Eval.Direct.Types
 
+    Pact.Core.Typed.Term
+    Pact.Core.Typed.Type
+    Pact.Core.Typed.Infer
+
   build-depends:
     , pact-tng
     , pact-tng:pact-crypto

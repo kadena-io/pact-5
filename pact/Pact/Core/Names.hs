@@ -8,6 +8,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveTraversable #-}
 
 module Pact.Core.Names
  ( ModuleName(..)
@@ -25,18 +26,12 @@ module Pact.Core.Names
  , qnModName
  , renderQualName
  , renderModuleName
- , TypeVar(..)
  , Unique
- , tyVarName
- , tyVarUnique
- , tyname
- , tynameUnique
  , Supply
  , NamedDeBruijn(..)
  , ndIndex
  , ndName
  , DeBruijn
- , TypeName(..)
  , rawParsedName
  , ONameKind(..)
  , OverloadedName(..)
@@ -74,6 +69,14 @@ module Pact.Core.Names
  , HashedModuleName(..)
  , renderHashedModuleName
  , parseHashedModuleName
+ , Arg(..)
+ , argName
+ , argType
+ , argInfo
+ , TypedArg(..)
+ , targName
+ , targType
+ , targInfo
  ) where
 
 import Control.Lens
@@ -312,37 +315,11 @@ instance Pretty FullyQualifiedName where
   pretty (FullyQualifiedName mn n mh) =
     pretty (QualifiedName n mn) <> ".{" <> pretty (_mhHash mh) <> "}"
 
-data TypeVar
-  = TypeVar
-  { _tyVarName :: !Text
-  , _tyVarUnique :: !Unique }
-  | UnificationVar
-  { _tyVarName :: !Text
-  , _tyVarUnique :: !Unique }
-  deriving (Show)
-
-instance Eq TypeVar where
-  l == r = _tyVarUnique l == _tyVarUnique r
-
-instance Ord TypeVar where
-  l <= r = _tyVarUnique l <= _tyVarUnique r
-
-instance Pretty TypeVar where
-  pretty t = pretty (_tyVarName t)
-
-data TypeName
-  = TypeName
-  { _tyname :: !Text
-  , _tynameUnique :: !Unique }
-  deriving (Show, Eq)
-
 newtype NativeName
   = NativeName
   { _natName :: Text }
   deriving newtype (Show, Eq, Ord, NFData)
 
-makeLenses ''TypeVar
-makeLenses ''TypeName
 makeLenses ''NamedDeBruijn
 makeClassy ''NativeName
 
@@ -590,3 +567,33 @@ jsonSafeRenderTableName (TableName tbl mn) = renderModuleName mn <> ":" <> tbl
 
 parseJsonSafeTableName :: Text -> Maybe TableName
 parseJsonSafeTableName = MP.parseMaybe (jsonSafeTableNameParser <* MP.eof)
+
+-- | An `arg` is a name paired with an optional type annotation,
+--   as well as location info
+data Arg ty i
+  = Arg
+  { _argName :: !Text
+  , _argType :: Maybe ty
+  , _argInfo :: i
+  } deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
+
+instance (NFData ty, NFData i) => NFData (Arg ty i)
+
+instance Pretty ty => Pretty (Arg ty i) where
+  pretty (Arg n ty _) =
+    pretty n <> maybe mempty ((":" <>) . pretty) ty
+
+data TypedArg ty i
+  = TypedArg
+  { _targName :: !Text
+  , _targType :: ty
+  , _targInfo :: i
+  } deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
+
+instance Pretty ty => Pretty (TypedArg ty i) where
+  pretty (TypedArg n ty _) =
+    pretty n <> ":" <> pretty ty
+
+instance (NFData ty, NFData i) => NFData (TypedArg ty i)
+makeLenses ''Arg
+makeLenses ''TypedArg
