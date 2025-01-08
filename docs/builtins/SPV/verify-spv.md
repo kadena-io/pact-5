@@ -3,7 +3,7 @@
 Use `verify-spv` to perform a platform-specific simplified payment verification (SPV) proof of a specified type for the specified payload. 
 The format of the payload object and the returned object depends on the type of proof you specify. 
 For information about payload types and return values, see platform-specific documentation. 
-For Chainweb nodes, see the [Chainweb API](/reference/chainweb-ref) specification.
+For Chainweb nodes, see the [Chainweb API](/api/data-models) specification.
 
 ### Basic syntax
 

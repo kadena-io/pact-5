@@ -1,10 +1,10 @@
 ## namespace
 
-Use `namespace` to set the current working environment to the specified namespace value. 
-After you declare the namespace you want to work with, all of the modules and functions you define are contained within that namespace. 
+Use `namespace` to set the current working environment to the specified namespace value.
+After you declare the namespace you want to work with, all of the modules and functions you define are contained within that namespace.
 
 You can access the modules and functions in a namespace by using their fully qualified name.
-The fully-qualified name includes the namespace string as a prefix before the module name. 
+The fully-qualified name includes the namespace string as a prefix before the module name.
 For example, if you declare a principal namespace such as `n_14912521e87a6d387157d526b281bde8422371d1` for the module `my-calculator`, you can call functions in the module using a fully-qualified name similar to the following:
 
 `n_14912521e87a6d387157d526b281bde8422371d1.my-calculator.add`
@@ -13,7 +13,7 @@ If you call the `namespace` function after the initial declaration, Pact creates
 
 ### Prerequisites
 
-You must define a namespace before you can set your working context to use the `namespace` function. For information about defining a namespace, see [define-namespace](/reference/functions/general#define-namespace).
+You must define a namespace before you can set your working context to use the `namespace` function. For information about defining a namespace, see [define-namespace](/pact-5/general/define-namespace).
 
 ### Basic syntax
 

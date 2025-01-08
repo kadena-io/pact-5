@@ -12,7 +12,7 @@ To describe the namespace `namespace`, use the following syntax:
 ### Prerequisites
 
 You must define a namespace with the define-namespace function before you can use the `describe-namespace` function.
-For information about defining a namespace, see [define-namespace](/reference/functions/general#define-namespace).
+For information about defining a namespace, see [define-namespace](/pact-5/general/define-namespace).
 
 ### Arguments
 

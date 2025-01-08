@@ -2,7 +2,7 @@
 
 Use `create-principal` to create a principal account that unambiguously identifies a specified `guard` predicate function.
 
-For an introduction to principal accounts, see [Accounts, keys, and principals](/learn/accounts).
+For an introduction to principal accounts, see [Accounts, keys, and principals](/smart-contracts/accounts).
 
 ### Basic syntax
 
