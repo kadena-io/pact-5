@@ -21,7 +21,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Read as T
 import qualified Data.List.NonEmpty as NE
 
-import Pact.Core.Names
+import Pact.Core.Names hiding (Arg)
 import Pact.Core.Info
 import Pact.Core.Literal
 import Pact.Core.Builtin
