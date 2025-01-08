@@ -11,7 +11,6 @@
 
 module Pact.Core.Typed.Type where
 
-import Control.Lens
 import Control.DeepSeq
 import Data.Void
 import Data.Set(Set)
@@ -28,6 +27,7 @@ import Pact.Core.Pretty(Pretty(..), (<+>))
 import qualified Pact.Core.Type as CoreType
 
 import qualified Pact.Core.Pretty as Pretty
+import Control.Lens
 
 data PrimType
   = PrimInt
@@ -97,8 +97,8 @@ data Type n
   | TyFun (Type n) (Type n)
   | TyNullary (Type n)
   | TyList (Type n)
-  | TyObject (RowCtor n)
-  | TyTable (RowCtor n)
+  | TyObject (RowTy n)
+  | TyTable (RowTy n)
   | TyModRef (Set ModuleName)
   | TyCapToken (CapRef n)
   deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
@@ -108,7 +108,7 @@ data CapRef n
   | CapConcrete QualifiedName
   deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
 
-data RowCtor n
+data RowTy n
   = RowVar n
   | RowConcrete (Map Field (Type n))
   deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
@@ -153,7 +153,7 @@ instance Pretty n => Pretty (CapRef n) where
     CapVar n -> pretty n
     CapConcrete qn -> pretty qn
 
-instance Pretty n => Pretty (RowCtor n) where
+instance Pretty n => Pretty (RowTy n) where
   pretty = \case
     RowVar n -> pretty n
     RowConcrete m ->
@@ -184,24 +184,24 @@ instance Pretty n => Pretty (Type n) where
 
 
 -- Built in typeclasses
-data BuiltinTC ty
-  = Eq ty
-  | Ord ty
-  | Show ty
-  | Add ty
-  | Num ty
-  | ListLike ty
-  | Fractional ty
-  | EnforceRead ty
-  | IsValue ty
-  | EqRow ty
-  | RoseSubRow (RoseRow ty) (RoseRow ty)
-  | RoseRowEq (RoseRow ty) (RoseRow ty)
+data BuiltinTC n
+  = Eq (Type n)
+  | Ord (Type n)
+  | Show (Type n)
+  | Add (Type n)
+  | Num (Type n)
+  | ListLike (Type n)
+  | Fractional (Type n)
+  | EnforceRead (Type n)
+  | IsValue (Type n)
+  | EqRow (RowTy n)
+  | RoseSubRow (RoseRow n) (RoseRow n)
+  | RoseRowEq (RoseRow n) (RoseRow n)
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
-data RoseRow ty
-  = RoseRowTy ty
-  | RoseRowCat (RoseRow ty) (RoseRow ty)
+data RoseRow n
+  = RoseRowTy (RowTy n)
+  | RoseRowCat (RoseRow n) (RoseRow n)
   deriving (Show, Eq, Functor, Foldable, Traversable)
 
 instance Pretty ty => Pretty (RoseRow ty) where
@@ -210,21 +210,11 @@ instance Pretty ty => Pretty (RoseRow ty) where
     RoseRowCat l r ->
       Pretty.parens (pretty l <+> "⊙" <+> pretty r)
 
-pattern RoseConcrete :: Map Field (Type n) -> RoseRow (Type n)
-pattern RoseConcrete o = RoseRowTy (TyObject (RowConcrete o))
+pattern RoseConcrete :: Map Field (Type n) -> RoseRow n
+pattern RoseConcrete o = RoseRowTy (RowConcrete o)
 
-pattern RoseVar :: n -> RoseRow (Type n)
-pattern RoseVar v = (RoseRowTy (TyObject (RowVar v)))
-
--- data Arg ty
---   = Arg
---   { _argName :: !Text
---   , _argType :: Type ty
---   } deriving (Show, Eq, Functor, Foldable, Traversable, Generic)
-
--- instance Pretty ty => Pretty (Arg ty) where
---   pretty (Arg n ty) =
---     pretty n <> ":" <> pretty ty
+pattern RoseVar :: n -> RoseRow n
+pattern RoseVar v = (RoseRowTy (RowVar v))
 
 pattern TyInt :: Type n
 pattern TyInt = TyPrim PrimInt
@@ -279,7 +269,7 @@ instance Pretty ty => Pretty (Pred ty) where
 
 
 data TypeScheme tv =
-  TypeScheme [tv] [Pred (Type tv)]  (Type tv)
+  TypeScheme [tv] [Pred tv]  (Type tv)
   deriving Show
 
 instance Pretty ty => Pretty (TypeScheme ty) where
@@ -296,6 +286,31 @@ instance Pretty ty => Pretty (TypeScheme ty) where
 pattern NonGeneric :: Type tyname -> TypeScheme tyname
 pattern NonGeneric ty = TypeScheme [] [] ty
 
+traverseTCType :: Traversal (BuiltinTC ty) (BuiltinTC ty) (Type ty) (Type ty)
+traverseTCType f = \case
+  Eq t -> Eq <$> f t
+  Ord t -> Ord <$> f t
+  Show t -> Show <$> f t
+  Add t -> Add <$> f t
+  Num t -> Num <$> f t
+  ListLike t -> ListLike <$> f t
+  Fractional t -> Fractional <$> f t
+  EnforceRead t -> EnforceRead <$> f t
+  IsValue t -> IsValue <$> f t
+  EqRow t -> EqRow <$> traverseRowTy f t
+  RoseSubRow l r -> RoseSubRow <$> traverseRoseRowType f l <*> traverseRoseRowType f r
+  RoseRowEq l r -> RoseRowEq <$> traverseRoseRowType f l <*> traverseRoseRowType f r
+
+traverseRoseRowType :: Traversal (RoseRow n) (RoseRow n) (Type n) (Type n)
+traverseRoseRowType f = \case
+  RoseRowTy ty -> RoseRowTy <$> traverseRowTy f ty
+  RoseRowCat l r -> RoseRowCat <$> traverseRoseRowType f l <*> traverseRoseRowType f r
+
+traverseRowTy :: Traversal (RowTy n) (RowTy n) (Type n) (Type n)
+traverseRowTy f = \case
+  RowVar n -> pure (RowVar n)
+  RowConcrete m -> RowConcrete <$> traverse f m
+
 typeOfLit :: Literal -> Type n
 typeOfLit = TyPrim . literalPrim
 
@@ -308,7 +323,7 @@ literalPrim = \case
   LUnit -> PrimUnit
 
 instance NFData PrimType
-instance NFData ty => NFData (RowCtor ty)
+instance NFData ty => NFData (RowTy ty)
 instance NFData ty => NFData (CapRef ty)
 instance NFData ty => NFData (Type ty)
 -- instance NFData ty => NFData (Arg ty)

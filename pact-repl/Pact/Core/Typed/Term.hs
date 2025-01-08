@@ -91,7 +91,7 @@ data Term name tyname builtin info
   -- All lambdas, even anonymous ones, are named, for the sake of them adding a stack frame
   | App (Term name tyname builtin info) [Term name tyname builtin info] info
   -- let n = e1 in e2
-  | Let (Arg tyname info) (Term name tyname builtin info) (Term name tyname builtin info) info
+  | Let (TypedArg tyname info) (Term name tyname builtin info) (Term name tyname builtin info) info
   -- ^ (e_1 e_2 .. e_n)
   | Builtin builtin info
   -- ^ Built-in functions (or natives)
@@ -124,7 +124,7 @@ data Apply term i =
 data Defun name tyname builtin info
   = Defun
   { _dfunName :: Text
-  , _dfunArgs :: [Arg tyname info]
+  , _dfunArgs :: [TypedArg tyname info]
   , _dfunRType :: Type tyname
   , _dfunTerm :: Term name tyname builtin info
   , _dfunInfo :: info
