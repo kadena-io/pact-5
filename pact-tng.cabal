@@ -291,6 +291,7 @@ library
 library pact-repl
   import: pact-common
   hs-source-dirs: pact-repl
+  visibility: public
 
   if (flag(with-crypto))
     build-depends: pact-tng:pact-crypto
