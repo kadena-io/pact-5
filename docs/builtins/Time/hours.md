@@ -7,7 +7,9 @@ You can use this function in combination with the `add-time` function to add a s
 
 The syntax for the `hours` function is as follows:
 
-`(hours n)`
+```pact
+(hours n)
+```
 
 ### Arguments
 

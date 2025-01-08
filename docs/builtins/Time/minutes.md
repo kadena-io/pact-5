@@ -7,7 +7,9 @@ You can use this function in combination with the `add-time` function to add a s
 
 To represent a duration of N minutes, use the following syntax:
 
-`(minutes n)`
+```pact
+(minutes n)
+```
 
 ### Argument
 
