@@ -34,21 +34,12 @@ isUserRecoverableError p s = has (_PEUserRecoverableError . _1 . p) s
 
 runStaticTest :: String -> Text -> ReplInterpreter -> (PactErrorI -> Bool) -> Assertion
 runStaticTest label src interp predicate = do
-  gasLog <- newIORef Nothing
   pdb <- mockPactDb serialisePact_repl_spaninfo
   ee <- defaultEvalEnv pdb replBuiltinMap
   let source = SourceCode label src
-      rstate = ReplState
-            { _replFlags = mempty
-            , _replEvalLog = gasLog
-            , _replCurrSource = source
-            , _replEvalEnv = ee
-            , _replUserDocs = mempty
-            , _replTLDefPos = mempty
-            , _replTx = Nothing
-            , _replNativesEnabled = True
-            , _replOutputLine = const (pure ())
-            }
+      rstate = mkReplState ee (const (pure ()))
+                & replCurrSource .~ source
+                & replNativesEnabled .~ True
   stateRef <- newIORef rstate
   v <- runReplT stateRef (interpretReplProgram interp source)
   case v of

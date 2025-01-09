@@ -108,22 +108,11 @@ runGasTest :: FilePath -> InterpretPact -> IO (Maybe MilliGas)
 runGasTest file interpret = do
   src <- T.readFile file
   pdb <- mockPactDb serialisePact_repl_spaninfo
-  gasLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replBuiltinMap
   let ee' = ee & eeGasEnv . geGasModel .~ replTableGasModel (Just (maxBound :: MilliGasLimit))
       gasRef = ee' ^. eeGasEnv . geGasRef
   let source = SourceCode file src
-  let rstate = ReplState
-            { _replFlags = mempty
-            , _replEvalLog = gasLog
-            , _replCurrSource = source
-            , _replEvalEnv = ee'
-            , _replUserDocs = mempty
-            , _replTLDefPos = mempty
-            , _replTx = Nothing
-            , _replNativesEnabled = False
-            , _replOutputLine = const (pure ())
-            }
+  let rstate = mkReplState ee' (const (pure ())) & replCurrSource .~ source
   stateRef <- newIORef rstate
   runReplT stateRef (interpret source) >>= \case
     Left _ -> pure Nothing

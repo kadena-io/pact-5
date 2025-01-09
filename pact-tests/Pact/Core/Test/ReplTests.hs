@@ -21,16 +21,13 @@ import System.FilePath
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
-import Pact.Core.Literal
 import Pact.Core.Persistence.MockPersistence
 
 import Pact.Core.Repl.Utils
 import Pact.Core.Persistence.SQLite (withSqlitePactDb)
 
 import Pact.Core.Info (SpanInfo)
-import Pact.Core.Compile
 import Pact.Core.Repl.Compile
-import Pact.Core.PactValue
 import Pact.Core.Environment
 import Pact.Core.Builtin
 import Pact.Core.Errors
@@ -83,27 +80,16 @@ runReplTest
   -> Interpreter
   -> Assertion
 runReplTest (ReplSourceDir path) pdb file src interp = do
-  gasLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replBuiltinMap
   let source = SourceCode (path </> file) src
-  let rstate = ReplState
-            { _replFlags = mempty
-            , _replEvalLog = gasLog
-            , _replCurrSource = source
-            , _replEvalEnv = ee
-            , _replUserDocs = mempty
-            , _replTLDefPos = mempty
-            , _replTx = Nothing
-            , _replNativesEnabled = False
-            , _replOutputLine = const (pure ())
-            }
+  let rstate = mkReplState ee (const (pure ())) & replCurrSource .~ source
   stateRef <- newIORef rstate
   runReplT stateRef (interp source) >>= \case
     Left e -> let
       rendered = replError (SourceCode file src) e
       in assertFailure (T.unpack rendered)
-    Right output -> do
-      traverse_ ensurePassing output
+    Right _ -> do
+      traverse_ ensurePassing . _replTestResults =<< readIORef stateRef
       ensureModuleHashesMatch
   where
   moduleHashMatches mn = void $ runMaybeT $ do
@@ -117,10 +103,8 @@ runReplTest (ReplSourceDir path) pdb file src interp = do
   ensureModuleHashesMatch = do
     keys <- ignoreGas def $ _pdbKeys pdb DModules
     traverse_ moduleHashMatches keys
-  ensurePassing = \case
-    RCompileValue (InterpretValue v i) -> case v of
-      PLiteral (LString msg) -> do
-        let render = replError (SourceCode file src) (PEExecutionError (EvalError msg) [] i)
-        when (T.isPrefixOf "FAILURE:" msg) $ assertFailure (T.unpack render)
-      _ -> pure ()
-    _ -> pure ()
+  ensurePassing (ReplTestResult _testName loc _ res) = case res of
+    ReplTestPassed -> pure()
+    ReplTestFailed msg -> do
+      let render = replError (SourceCode file src) (PEExecutionError (EvalError msg) [] loc)
+      assertFailure (T.unpack render)

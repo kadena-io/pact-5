@@ -19,7 +19,6 @@ module Pact.Core.Repl.Utils
  , runReplT
  , ReplState(..)
  , replFlags
- , replEvalLog
  , replEvalEnv
  , replUserDocs
  , replTLDefPos
@@ -42,6 +41,8 @@ module Pact.Core.Repl.Utils
  , gasLogEntrytoPactValue
  , replPrintLn
  , replPrintLn'
+ , recordTestSuccess
+ , recordTestFailure
  ) where
 
 import Control.Lens
@@ -248,6 +249,24 @@ replPrintLn' :: Text -> EvalM 'ReplRuntime b SpanInfo ()
 replPrintLn' p = do
   r <- getReplState
   _replOutputLine r p
+
+recordTestResult
+  :: Text
+  -- ^ Test name
+  -> SpanInfo
+  -- ^ Test location
+  -> ReplTestStatus
+  -> ReplM b ()
+recordTestResult name loc status = do
+  SourceCode file _src <- useReplState replCurrSource
+  let testResult = ReplTestResult name loc file status
+  replTestResults %== (testResult :)
+
+recordTestSuccess :: Text -> SpanInfo -> ReplM b ()
+recordTestSuccess name loc = recordTestResult name loc ReplTestPassed
+
+recordTestFailure :: Text -> SpanInfo -> Text -> ReplM b ()
+recordTestFailure name loc failmsg = recordTestResult name loc (ReplTestFailed failmsg)
 
 -- This orphan instance allows us to separate
 -- the repl declaration out, as ugly as it is
