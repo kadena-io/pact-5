@@ -231,7 +231,6 @@ setupAndProcessFile
           ,M.Map NormalizedUri  [EvalTopLevel ReplCoreBuiltin SpanInfo]))
 setupAndProcessFile nuri content = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
-  gasLog <- newIORef Nothing
   let
     builtinMap = if isReplScript fp
                  then replBuiltinMap
@@ -242,7 +241,6 @@ setupAndProcessFile nuri content = do
       src = SourceCode (takeFileName fp) content
       rstate = ReplState
           { _replFlags = mempty
-          , _replEvalLog = gasLog
           , _replCurrSource = src
           , _replEvalEnv = ee
           , _replTx = Nothing
@@ -253,6 +251,7 @@ setupAndProcessFile nuri content = do
           -- Once this is possible, we can set it to `False` as is the default
           , _replNativesEnabled = True
           , _replOutputLine = const (pure ())
+          , _replTestResults = []
           }
   stateRef <- newIORef rstate
   res <- runReplT stateRef (processFile Repl.interpretEvalBigStep nuri content)

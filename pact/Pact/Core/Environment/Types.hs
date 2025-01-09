@@ -64,7 +64,6 @@ module Pact.Core.Environment.Types
  , EvalM(..)
  , RuntimeMode(..)
  , replFlags
- , replEvalLog
  , replEvalEnv
  , replUserDocs
  , replTLDefPos
@@ -72,6 +71,8 @@ module Pact.Core.Environment.Types
  , replCurrSource
  , replTx
  , replOutputLine
+ , replTestResults
+ , mkReplState
  , ReplM
  , ReplDebugFlag(..)
  , SourceCode(..)
@@ -81,6 +82,10 @@ module Pact.Core.Environment.Types
  , newDefaultWarningStack
  , pushWarning
  , getWarningStack
+ , ReplTestResult(..)
+ , ReplTestStatus(..)
+ , _ReplTestFailed
+ , _ReplTestPassed
  ) where
 
 
@@ -340,13 +345,28 @@ defaultEvalEnv pdb m = do
     , _eeWarnings = Just warningRef
     }
 
+data ReplTestStatus
+  = ReplTestPassed
+  | ReplTestFailed Text
+  deriving (Show, Eq)
+
+data ReplTestResult
+  = ReplTestResult
+  { _trName :: Text
+  , _trLoc :: SpanInfo
+  , _trSourceFile :: String
+  , _trResult :: ReplTestStatus
+  } deriving (Show, Eq)
+
 -- | Passed in repl environment
 data ReplState b
   = ReplState
   { _replFlags :: Set ReplDebugFlag
+  -- ^ The currently enabled debug flags
   , _replEvalEnv :: EvalEnv b SpanInfo
-  , _replEvalLog :: IORef (Maybe [(Text, Gas)])
+  -- ^ The current eval environment
   , _replCurrSource :: SourceCode
+  -- ^ The current source code for source being evaluated
   , _replUserDocs :: Map QualifiedName Text
   -- ^ Used by Repl and LSP Server, reflects the user
   --   annotated @doc string.
@@ -354,9 +374,13 @@ data ReplState b
   -- ^ Used by LSP Server, reflects the span information
   --   of the TL definitions for the qualified name.
   , _replTx :: Maybe (TxId, Maybe Text)
+  -- ^ The current repl tx, if one has been initiated
   , _replNativesEnabled :: Bool
-  -- ^
+  -- ^ Are repl natives enabled in module code
   , _replOutputLine :: !(Text -> EvalM 'ReplRuntime b SpanInfo ())
+  -- ^ The output line function, as an entry in the repl env
+  --   to allow for custom output handling, e.g haskeline
+  , _replTestResults :: [ReplTestResult]
   }
 
 data RuntimeMode
@@ -404,3 +428,10 @@ runEvalMResult env st (EvalM action) =
 {-# INLINEABLE runEvalMResult #-}
 
 makeLenses ''ReplState
+makePrisms ''ReplTestStatus
+
+mkReplState :: EvalEnv b SpanInfo -> (Text -> EvalM 'ReplRuntime b SpanInfo ()) -> ReplState b
+mkReplState ee printfn =
+  ReplState mempty ee defaultSrc mempty mempty Nothing False printfn []
+  where
+  defaultSrc = SourceCode "(interactive)" mempty

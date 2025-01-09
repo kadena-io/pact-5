@@ -65,75 +65,117 @@ corePrint info b cont handler _env = \case
     returnCEKValue cont handler (VLiteral LUnit)
   args -> argsError info b args
 
+returnTestFailure
+  :: IsBuiltin b
+  => SpanInfo
+  -> Text
+  -> Cont ReplRuntime b SpanInfo
+  -> CEKErrorHandler ReplRuntime b SpanInfo
+  -> Text
+  -> EvalM ReplRuntime b SpanInfo (EvalResult ReplRuntime b SpanInfo)
+returnTestFailure info testName cont handler msg = do
+  recordTestFailure testName info msg
+  returnCEKValue cont handler (VLiteral (LString msg))
+
+returnTestSuccess
+  :: IsBuiltin b
+  => SpanInfo
+  -> Text
+  -> Cont ReplRuntime b SpanInfo
+  -> CEKErrorHandler ReplRuntime b SpanInfo
+  -> Text
+  -> EvalM ReplRuntime b SpanInfo (EvalResult ReplRuntime b SpanInfo)
+returnTestSuccess info testName cont handler msg = do
+  recordTestSuccess testName info
+  returnCEKValue cont handler (VString msg)
+
+
 coreExpect :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
 coreExpect info b cont handler _env = \case
-  [VLiteral (LString msg), VClosure expected, VClosure provided] -> do
+  [VLiteral (LString testName), VClosure expected, VClosure provided] -> do
+    -- Get the state of execution before running the test
     es <- get
     tryError (applyLamUnsafe provided [] Mt CEKNoHandler) >>= \case
       Right (EvalValue (VPactValue v2)) -> do
         applyLamUnsafe expected [] Mt CEKNoHandler >>= \case
           EvalValue (VPactValue v1) -> do
+            -- If v1 /= v2, the test has failed
             if v1 /= v2 then do
                 let v1s = prettyShowValue (VPactValue v1)
                     v2s = prettyShowValue (VPactValue v2)
-                returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
-            else returnCEKValue cont handler (VLiteral (LString ("Expect: success " <> msg)))
-          _ -> returnCEKError info cont handler $ UserEnforceError "evaluation within expect did not return a pact value"
+                let failureMsg = "FAILURE: " <> testName <> " expected: " <> v1s <> ", received: " <> v2s
+                returnTestFailure info testName cont handler failureMsg
+            else returnTestSuccess info testName cont handler ("Expect: success " <> testName)
+          _ -> do
+            recordTestFailure testName info "FAILURE: expect expression did not return a pact value for comparison"
+            returnCEKError info cont handler $ UserEnforceError "evaluation within expect did not return a pact value"
       Right (VError _ errMsg _) -> do
+        -- Restore state on error, which resets things like cap grants, etc.
         put es
-        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> " evaluation of actual failed with error message: " <> renderCompactText errMsg
-      Right _v ->
+        let failureMsg = "FAILURE: " <> testName <> " evaluation of actual failed with error message: " <> renderCompactText errMsg
+        returnTestFailure info testName cont handler failureMsg
+      Right _v -> do
+        recordTestFailure testName info "FAILURE: expect expression did not return a pact value for comparison"
         returnCEKError info cont handler $ UserEnforceError "FAILURE: expect expression did not return a pact value for comparison"
       Left err -> do
         put es
         currSource <- useReplState replCurrSource
-        returnCEKValue cont handler $ VString $ "FAILURE: " <> msg <> " evaluation of actual failed with error message:\n" <>
-          replError currSource err
+        let failureMsg = "FAILURE: " <> testName <> " evaluation of actual failed with error message:\n" <> replError currSource err
+        returnTestFailure info testName cont handler failureMsg
   args -> argsError info b args
 
 coreExpectThat :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
 coreExpectThat info b cont handler _env = \case
-  [VLiteral (LString msg), VClosure vclo, v] -> do
+  [VLiteral (LString testName), VClosure vclo, v] -> do
     applyLamUnsafe vclo [v] Mt CEKNoHandler >>= \case
-      EvalValue (VLiteral (LBool c)) ->
-        if c then returnCEKValue cont handler (VLiteral (LString ("Expect-that: success " <> msg)))
-        else returnCEKValue cont handler  (VLiteral (LString ("FAILURE: Expect-that: Did not satisfy condition: " <> msg)))
-      EvalValue _ -> throwNativeExecutionError info b "Expect-that: condition did not return a boolean"
-      ve@VError{} -> returnCEK cont handler ve
+      EvalValue (VBool c) ->
+        if c then do
+          let successMsg = "Expect-that: success " <> testName
+          returnTestSuccess info testName cont handler successMsg
+        else do
+          let failureMsg = "FAILURE: Expect-that: Did not satisfy condition: " <> testName
+          returnTestFailure info testName cont handler failureMsg
+      EvalValue _ -> do
+        recordTestFailure testName info "FAILURE: expect-that expression did not return a boolean"
+        throwNativeExecutionError info b "Expect-that: condition did not return a boolean"
+      ve@(VError _ errMsg _) -> do
+        let failureMsg = "FAILURE: Expect-that: condition failed with error: " <> renderCompactText errMsg
+        recordTestFailure testName info failureMsg
+        returnCEK cont handler ve
   args -> argsError info b args
 
 coreExpectFailure :: NativeFunction 'ReplRuntime ReplCoreBuiltin SpanInfo
 coreExpectFailure info b cont handler _env = \case
-  [VString doc, VClosure vclo] -> do
+  [VString testName, VClosure vclo] -> do
     es <- get
     tryError (applyLamUnsafe vclo [] Mt CEKNoHandler) >>= \case
       Right (VError _ _ _) -> do
         put es
-        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> doc
+        returnTestSuccess info testName cont handler $ "Expect failure: Success: " <> testName
       Left _err -> do
         put es
-        returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> doc
+        returnTestSuccess info testName cont handler $ "Expect failure: Success: " <> testName
       Right _ ->
-        returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> doc <> ": expected failure, got result"
-  [VString desc, VString toMatch, VClosure vclo] -> do
+        returnTestFailure info testName cont handler $ "FAILURE: " <> testName <> ": expected failure, got result"
+  [VString testName, VString toMatch, VClosure vclo] -> do
     es <- get
     tryError (applyLamUnsafe vclo [] Mt CEKNoHandler) >>= \case
       Right (VError _ errMsg _) -> do
         put es
         let err = renderCompactText errMsg
         if toMatch `T.isInfixOf` err
-          then returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
-          else returnCEKValue cont handler $ VLiteral $ LString $
-               "FAILURE: " <> desc <> ": expected error message '" <> toMatch <> "', got '" <> err <> "'"
+          then returnTestSuccess info testName cont handler $ "Expect failure: Success: " <> testName
+          else returnTestFailure info testName cont handler $
+               "FAILURE: " <> testName <> ": expected error message '" <> toMatch <> "', got '" <> err <> "'"
       Left errMsg -> do
         put es
         let err = renderCompactText errMsg
         if toMatch `T.isInfixOf` err
-          then returnCEKValue cont handler $ VLiteral $ LString $ "Expect failure: Success: " <> desc
-          else returnCEKValue cont handler $ VLiteral $ LString $
-               "FAILURE: " <> desc <> ": expected error message '" <> toMatch <> "', got '" <> err <> "'"
+          then returnTestSuccess info testName cont handler $ "Expect failure: Success: " <> testName
+          else returnTestFailure info testName cont handler $
+               "FAILURE: " <> testName <> ": expected error message '" <> toMatch <> "', got '" <> err <> "'"
       Right (EvalValue v) ->
-        returnCEKValue cont handler $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result: " <> prettyShowValue v
+        returnTestFailure info testName cont handler $ "FAILURE: " <> toMatch <> ": expected failure, got result: " <> prettyShowValue v
   args -> argsError info b args
 
 

@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DataKinds #-}
 
 
 -- |
@@ -14,7 +15,7 @@
 --
 
 
-module Pact.Core.Repl(runRepl, execScript) where
+module Pact.Core.Repl(runRepl, execScript, mkReplState) where
 
 import Control.Monad.IO.Class
 import Control.Exception.Safe
@@ -39,12 +40,10 @@ import Pact.Core.Errors
 execScript :: Bool -> FilePath -> IO (Either (PactError SpanInfo) [ReplCompileValue])
 execScript dolog f = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
-  evalLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replBuiltinMap
-  ref <- newIORef (ReplState mempty ee evalLog defaultSrc mempty mempty Nothing False logger)
+  ref <- newIORef (mkReplState ee logger)
   runReplT ref $ loadFile f interpretEvalDirect
   where
-  defaultSrc = SourceCode "(interactive)" mempty
   logger :: Text -> EvalM e b i ()
   logger
     | dolog = liftIO . T.putStrLn
@@ -53,10 +52,9 @@ execScript dolog f = do
 runRepl :: IO ()
 runRepl = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
-  evalLog <- newIORef Nothing
   ee <- defaultEvalEnv pdb replBuiltinMap
   let display' rcv = runInputT replSettings (displayOutput rcv)
-  ref <- newIORef (ReplState mempty ee evalLog defaultSrc mempty mempty Nothing False display')
+  ref <- newIORef (mkReplState ee display')
   runReplT ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"

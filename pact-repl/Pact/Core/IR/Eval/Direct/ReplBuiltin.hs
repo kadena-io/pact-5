@@ -67,10 +67,27 @@ corePrint info b _env = \case
     return (VLiteral LUnit)
   args -> argsError info b args
 
+returnTestFailure
+  :: SpanInfo
+  -> Text
+  -> Text
+  -> EvalM ReplRuntime b SpanInfo (EvalValue ReplRuntime b SpanInfo)
+returnTestFailure info testName msg = do
+  recordTestFailure testName info msg
+  return (VLiteral (LString msg))
+
+returnTestSuccess
+  :: SpanInfo
+  -> Text
+  -> Text
+  -> EvalM ReplRuntime b SpanInfo (EvalValue ReplRuntime b SpanInfo)
+returnTestSuccess info testName msg = do
+  recordTestSuccess testName info
+  return (VString msg)
 
 coreExpect :: NativeFunction ReplRuntime ReplCoreBuiltin SpanInfo
 coreExpect info b _env = \case
-  [VLiteral (LString msg), VClosure expected, VClosure provided] -> do
+  [VLiteral (LString testName), VClosure expected, VClosure provided] -> do
     es <- get
     tryError (applyLamUnsafe provided []) >>= \case
       Right (VPactValue v2) -> do
@@ -79,52 +96,56 @@ coreExpect info b _env = \case
             if v1 /= v2 then do
                 let v1s = prettyShowValue (VPactValue v1)
                     v2s = prettyShowValue (VPactValue v2)
-                return $ VLiteral $ LString $ "FAILURE: " <> msg <> " expected: " <> v1s <> ", received: " <> v2s
-            else return (VLiteral (LString ("Expect: success " <> msg)))
-      Right _v ->
-        throwUserRecoverableError info $ UserEnforceError "FAILURE: expect expression did not return a pact value for comparison"
+                returnTestFailure info testName $ "FAILURE: " <> testName <> " expected: " <> v1s <> ", received: " <> v2s
+            else returnTestSuccess info testName ("Expect: success " <> testName)
+      Right _v -> do
+        let failureMsg = "FAILURE: expect expression did not return a pact value for comparison"
+        recordTestFailure testName info failureMsg
+        throwUserRecoverableError info $ UserEnforceError failureMsg
       Left err -> do
         put es
         currSource <- useReplState replCurrSource
-        return $ VString $ "FAILURE: " <> msg <> " evaluation of actual failed with error message:\n" <>
+        returnTestFailure info testName $ "FAILURE: " <> testName <> " evaluation of actual failed with error message:\n" <>
           replError currSource err
   args -> argsError info b args
 
 coreExpectThat :: NativeFunction ReplRuntime ReplCoreBuiltin SpanInfo
 coreExpectThat info b _env = \case
-  [VLiteral (LString msg), VClosure vclo, v] -> do
+  [VLiteral (LString testName), VClosure vclo, v] -> do
     applyLamUnsafe vclo [v] >>= \case
       VLiteral (LBool c) ->
-        if c then return (VLiteral (LString ("Expect-that: success " <> msg)))
-        else return (VLiteral (LString ("FAILURE: Expect-that: Did not satisfy condition: " <> msg)))
-      _ -> throwNativeExecutionError info b "Expect-that: condition did not return a boolean"
+        if c then returnTestSuccess info testName ("Expect-that: success " <> testName)
+        else returnTestFailure info testName ("FAILURE: Expect-that: Did not satisfy condition: " <> testName)
+      _ -> do
+        recordTestFailure testName info "FAILURE: expect-that expression did not return a boolean"
+        throwNativeExecutionError info b "Expect-that: condition did not return a boolean"
   args -> argsError info b args
 
 coreExpectFailure :: NativeFunction ReplRuntime ReplCoreBuiltin SpanInfo
 coreExpectFailure info b _env = \case
-  [VString doc, VClosure vclo] -> do
+  [VString testName, VClosure vclo] -> do
     es <- get
     tryError (applyLamUnsafe vclo []) >>= \case
       Left (PEUserRecoverableError _ _ _) -> do
         put es
-        return $ VLiteral $ LString $ "Expect failure: Success: " <> doc
+        returnTestSuccess info testName $ "Expect failure: Success: " <> testName
       Left _err -> do
         put es
-        return $ VLiteral $ LString $ "Expect failure: Success: " <> doc
+        returnTestSuccess info testName $ "Expect failure: Success: " <> testName
       Right _ ->
-        return $ VLiteral $ LString $ "FAILURE: " <> doc <> ": expected failure, got result"
-  [VString desc, VString toMatch, VClosure vclo] -> do
+        returnTestFailure info testName $ "FAILURE: " <> testName <> ": expected failure, got result"
+  [VString testName, VString toMatch, VClosure vclo] -> do
     es <- get
     tryError (applyLamUnsafe vclo []) >>= \case
       Left userErr -> do
         put es
         let err = renderCompactText userErr
         if toMatch `T.isInfixOf` err
-          then return $ VLiteral $ LString $ "Expect failure: Success: " <> desc
-          else return $ VLiteral $ LString $
-               "FAILURE: " <> desc <> ": expected error message '" <> toMatch <> "', got '" <> err <> "'"
+          then returnTestSuccess info testName $ "Expect failure: Success: " <> testName
+          else returnTestFailure info testName $
+               "FAILURE: " <> testName <> ": expected error message '" <> toMatch <> "', got '" <> err <> "'"
       Right v ->
-        return $ VLiteral $ LString $ "FAILURE: " <> toMatch <> ": expected failure, got result: " <> prettyShowValue v
+        returnTestFailure info testName $ "FAILURE: " <> toMatch <> ": expected failure, got result: " <> prettyShowValue v
   args -> argsError info b args
 
 

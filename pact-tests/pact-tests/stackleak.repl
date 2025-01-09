@@ -3,7 +3,7 @@
 ; our repl natives have to be able to bypass some stepwise mechanics to make their
 ; functionality work (E.g, running a suspended subexpression until it reduces to a value),
 ; so if they ever catch a thrown runtime error, it can leak the state of the stack.
-; this is a simple test taht ensures that despite thrown errors, we do not leak the stack
+; this is a simple test that ensures that despite thrown errors, we do not leak the stack
 (module stackleak g
   (defcap g () true)
 
@@ -12,8 +12,8 @@
   )
 
 (let*
-  ((unusedResult1 (expect "leaks stack frame" 1 (leaks-stack)))
-   (unusedResult2 (expect-failure "leaks stack frame" (leaks-stack)))
+  ((unusedResult1 (expect-failure "leaks stack frame" (leaks-stack)))
+   (unusedResult2 (expect-failure "leaks stack frame2" (leaks-stack)))
   )
   1
   )
