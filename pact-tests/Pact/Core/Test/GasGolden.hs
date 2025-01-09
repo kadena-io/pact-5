@@ -114,6 +114,6 @@ runGasTest file interpret = do
   let source = SourceCode file src
   let rstate = mkReplState ee' (const (pure ())) & replCurrSource .~ source
   stateRef <- newIORef rstate
-  runReplT stateRef (interpret source) >>= \case
+  evalReplM stateRef (interpret source) >>= \case
     Left _ -> pure Nothing
     Right _ -> Just <$> readIORef gasRef

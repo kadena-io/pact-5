@@ -84,7 +84,7 @@ runReplTest (ReplSourceDir path) pdb file src interp = do
   let source = SourceCode (path </> file) src
   let rstate = mkReplState ee (const (pure ())) & replCurrSource .~ source
   stateRef <- newIORef rstate
-  runReplT stateRef (interp source) >>= \case
+  evalReplM stateRef (interp source) >>= \case
     Left e -> let
       rendered = replError (SourceCode file src) e
       in assertFailure (T.unpack rendered)

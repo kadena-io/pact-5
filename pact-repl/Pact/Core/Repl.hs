@@ -37,12 +37,14 @@ import Pact.Core.Serialise
 import Pact.Core.Info
 import Pact.Core.Errors
 
-execScript :: Bool -> FilePath -> IO (Either (PactError SpanInfo) [ReplCompileValue])
+execScript :: Bool -> FilePath -> IO (Either (PactError SpanInfo) [ReplCompileValue], ReplState ReplCoreBuiltin)
 execScript dolog f = do
   pdb <- mockPactDb serialisePact_repl_spaninfo
   ee <- defaultEvalEnv pdb replBuiltinMap
   ref <- newIORef (mkReplState ee logger)
-  runReplT ref $ loadFile f interpretEvalDirect
+  v <- evalReplM ref $ loadFile f interpretEvalDirect
+  state <- readIORef ref
+  pure (v, state)
   where
   logger :: Text -> EvalM e b i ()
   logger
@@ -55,7 +57,7 @@ runRepl = do
   ee <- defaultEvalEnv pdb replBuiltinMap
   let display' rcv = runInputT replSettings (displayOutput rcv)
   ref <- newIORef (mkReplState ee display')
-  runReplT ref (runInputT replSettings loop) >>= \case
+  evalReplM ref (runInputT replSettings loop) >>= \case
     Left err -> do
       putStrLn "Exited repl session with error:"
       putStrLn $ T.unpack $ replError (SourceCode "(interactive)" "") err
