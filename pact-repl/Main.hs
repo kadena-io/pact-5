@@ -139,7 +139,7 @@ main = O.execParser argParser >>= \case
     exitEither _ Left {} = die "Load failed"
     exitEither m (Right t) = m t >> exitSuccess
     exitLoad = exitEither (\_ -> hPutStrLn stderr "Load successful" >> hFlush stderr)
-    runScript f dolog = execScript dolog f >>= exitLoad
+    runScript f dolog = execScript dolog f >>= exitLoad . fst
     printVersion = putStrLn ("pact version " <> showVersion PI.version)
     printBuiltins = traverse_ (\bi -> T.putStrLn $ "\"" <> bi <> "\"") replCoreBuiltinNames
 

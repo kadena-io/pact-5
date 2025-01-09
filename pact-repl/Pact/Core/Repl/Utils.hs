@@ -16,7 +16,7 @@ module Pact.Core.Repl.Utils
  ( ReplDebugFlag(..)
  , printDebug
  , replFlagSet
- , runReplT
+ , evalReplM
  , ReplState(..)
  , replFlags
  , replEvalEnv
@@ -204,9 +204,8 @@ replCompletion natives =
     dns = defNames ems
     in fmap ((renderModuleName mn <> ".") <>) dns
 
-runReplT :: IORef (ReplState b) -> ReplM b a -> IO (Either (PactError SpanInfo) a)
-runReplT env st = runEvalMResult (ReplEnv env) def st
-
+evalReplM :: IORef (ReplState b) -> ReplM b a -> IO (Either (PactError SpanInfo) a)
+evalReplM env st = runEvalMResult (ReplEnv env) def st
 
 replError
   :: SourceCode
