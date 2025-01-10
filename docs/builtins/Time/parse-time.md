@@ -3,6 +3,8 @@
 Use `parse-time` to construct a UTC formatted time string from an input time that uses the specified format.
 
 The `parse-time` function accepts format codes that are derived from the formatting time `strftime` function time templates.
+For information about all of the time formats and specifiers, see [Time formats](/pact-5/time/time-functions#time-formats).
+
 The following table provides a summary of the most common time formatting codes:
 
 | Format | Purpose |
@@ -13,8 +15,6 @@ The following table provides a summary of the most common time formatting codes:
 | %H | Hour of the day using a 24-hour clock, zero-padded to two characters, "00"–"23" |
 | %M | Minute of of the hour, zero-padded to two characters, "00"–"59" |
 | %S | Second of the minute, zero-padded to two characters, "00"–"60" |
-
-For more information about time formats and specifiers, see [Time formats](/pact-5/time/time-functions#time-formats).
 
 Note that two percentage characters (`%%`) are interpreted as a literal percentage sign (`%`), not a time formatting template.
 
