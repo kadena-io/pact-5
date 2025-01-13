@@ -429,7 +429,7 @@ instance (NFData b, NFData i) => NFData (CapBodyState b i)
 data Cont (e :: RuntimeMode) (b :: K.Type) (i :: K.Type)
   = Mt
   -- ^ Empty Continuation
-  | Fn !(CanApply e b i) !(CEKEnv e b i) ![EvalTerm b i] ![CEKValue e b i] !(Cont e b i)
+  | Fn !(CanApply e b i) i !(CEKEnv e b i) ![EvalTerm b i] ![CEKValue e b i] !(Cont e b i)
   -- ^ Continuation which evaluates arguments for a function to apply
   | Args !(CEKEnv e b i) i ![EvalTerm b i] !(Cont e b i)
   -- ^ Continuation holding the arguments to evaluate in a function application

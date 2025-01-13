@@ -95,9 +95,9 @@ coreExpect info b cont handler _env = \case
   [VLiteral (LString testName), VClosure expected, VClosure provided] -> do
     -- Get the state of execution before running the test
     es <- get
-    tryError (applyLamUnsafe provided [] Mt CEKNoHandler) >>= \case
+    tryError (applyLamUnsafe info provided [] Mt CEKNoHandler) >>= \case
       Right (EvalValue (VPactValue v2)) -> do
-        applyLamUnsafe expected [] Mt CEKNoHandler >>= \case
+        applyLamUnsafe info expected [] Mt CEKNoHandler >>= \case
           EvalValue (VPactValue v1) -> do
             -- If v1 /= v2, the test has failed
             if v1 /= v2 then do
@@ -126,7 +126,7 @@ coreExpect info b cont handler _env = \case
 coreExpectThat :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 coreExpectThat info b cont handler _env = \case
   [VLiteral (LString testName), VClosure vclo, v] -> do
-    applyLamUnsafe vclo [v] Mt CEKNoHandler >>= \case
+    applyLamUnsafe info vclo [v] Mt CEKNoHandler >>= \case
       EvalValue (VBool c) ->
         if c then do
           let successMsg = "Expect-that: success " <> testName
@@ -147,7 +147,7 @@ coreExpectFailure :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 coreExpectFailure info b cont handler _env = \case
   [VString testName, VClosure vclo] -> do
     es <- get
-    tryError (applyLamUnsafe vclo [] Mt CEKNoHandler) >>= \case
+    tryError (applyLamUnsafe info vclo [] Mt CEKNoHandler) >>= \case
       Right (VError _ _ _) -> do
         put es
         returnTestSuccess info testName cont handler $ "Expect failure: Success: " <> testName
@@ -158,7 +158,7 @@ coreExpectFailure info b cont handler _env = \case
         returnTestFailure info testName cont handler $ "FAILURE: " <> testName <> ": expected failure, got result"
   [VString testName, VString toMatch, VClosure vclo] -> do
     es <- get
-    tryError (applyLamUnsafe vclo [] Mt CEKNoHandler) >>= \case
+    tryError (applyLamUnsafe info vclo [] Mt CEKNoHandler) >>= \case
       Right (VError _ errMsg _) -> do
         put es
         let err = renderCompactText errMsg

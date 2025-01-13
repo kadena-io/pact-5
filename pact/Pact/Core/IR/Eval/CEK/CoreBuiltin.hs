@@ -626,7 +626,7 @@ zipList info b cont handler _env = \case
       (x:xs, y:ys) -> do
         chargeUnconsWork info
         let cont' = BuiltinC _env info (ZipC clo (xs, ys) []) cont
-        applyLam clo [VPactValue x, VPactValue y] cont' handler
+        applyLam info clo [VPactValue x, VPactValue y] cont' handler
       (_, _) -> returnCEKValue cont handler (VList mempty)
   args -> argsError info b args
 
@@ -636,7 +636,7 @@ coreMap info b cont handler env = \case
     x:xs -> do
       let cont' = BuiltinC env info (MapC clo xs []) cont
       chargeUnconsWork info
-      applyLam clo [VPactValue x] cont' handler
+      applyLam info clo [VPactValue x] cont' handler
     [] -> returnCEKValue cont handler (VList mempty)
   args -> argsError info b args
 
@@ -646,7 +646,7 @@ coreFilter info b cont handler _env = \case
     x:xs -> do
       chargeUnconsWork info
       let cont' = CondC _env info (FilterC clo x xs []) cont
-      applyLam clo [VPactValue x] cont' handler
+      applyLam info clo [VPactValue x] cont' handler
     [] -> returnCEKValue cont handler (VList mempty)
   args -> argsError info b args
 
@@ -657,7 +657,7 @@ coreFold info b cont handler _env = \case
       x:xs -> do
         chargeUnconsWork info
         let cont' = BuiltinC _env info (FoldC clo xs) cont
-        applyLam clo [VPactValue initElem, VPactValue x] cont' handler
+        applyLam info clo [VPactValue initElem, VPactValue x] cont' handler
       [] -> returnCEKValue cont handler (VPactValue initElem)
   args -> argsError info b args
 
@@ -764,7 +764,7 @@ coreResume info b cont handler env = \case
         Nothing -> throwExecutionError info (NoYieldInDefPactStep pactStep)
         Just y@(Yield resumeObj _ _) -> do
           enforceYield info y
-          applyLam clo [VObject resumeObj] cont handler
+          applyLam info clo [VObject resumeObj] cont handler
   args -> argsError info b args
 
 -----------------------------------
@@ -989,7 +989,7 @@ coreReadKeyset info b cont handler _env = \case
 coreBind :: (IsBuiltin b) => NativeFunction e b i
 coreBind info b cont handler _env = \case
   [v@VObject{}, VClosure clo] ->
-    applyLam clo [v] cont handler
+    applyLam info clo [v] cont handler
   args -> argsError info b args
 
 
@@ -1023,7 +1023,7 @@ dbSelect info b cont handler env = \case
           Just (RowData r) -> do
             let bf = SelectC tv clo (ObjectData r) ks [] mfields
                 cont' = BuiltinC env info bf cont
-            applyLam clo [VObject r] cont' handler
+            applyLam info clo [VObject r] cont' handler
           Nothing ->
             failInvariant info (InvariantNoSuchKeyInTable (_tvName tv) k)
       [] -> returnCEKValue cont handler (VList mempty)
@@ -1041,7 +1041,7 @@ foldDb info b cont handler env = \case
         Just (RowData row) -> do
           let rdf = FoldDbFilterC tv queryClo consumerClo (rk, ObjectData row) remaining' []
               cont' = BuiltinC env info rdf cont
-          applyLam queryClo [VString raw, VObject row] cont' handler
+          applyLam info queryClo [VString raw, VObject row] cont' handler
         Nothing ->
           failInvariant info (InvariantNoSuchKeyInTable (_tvName tv) rk)
       [] -> returnCEKValue cont handler (VList mempty)
@@ -1079,7 +1079,7 @@ dbRead info b cont handler env = \case
 dbWithRead :: (IsBuiltin b) => NativeFunction e b i
 dbWithRead info b cont handler env = \case
   [VTable tv, VString k, VClosure clo] -> do
-    let cont' = Fn clo env [] [] cont
+    let cont' = Fn clo info env [] [] cont
     dbRead info b cont' handler env [VTable tv, VString k]
   args -> argsError info b args
 
@@ -1091,9 +1091,9 @@ dbWithDefaultRead info b cont handler env = \case
       Just (RowData rdata) -> do
         bytes <- sizeOf info SizeOfV0 rdata
         chargeGasArgs info (GRead bytes)
-        applyLam clo [VObject rdata] cont handler
+        applyLam info clo [VObject rdata] cont handler
       Nothing -> do
-        applyLam clo [VObject defaultObj] cont handler
+        applyLam info clo [VObject defaultObj] cont handler
   args -> argsError info b args
 
 -- | Todo: schema checking here? Or only on writes?
@@ -1412,21 +1412,21 @@ coreAndQ :: (IsBuiltin b) => NativeFunction e b i
 coreAndQ info b cont handler env = \case
   [VClosure l, VClosure r, VPactValue v] -> do
     let cont' =  CondC env info (AndQC r v) cont
-    applyLam l [VPactValue v] cont' handler
+    applyLam info l [VPactValue v] cont' handler
   args -> argsError info b args
 
 coreOrQ :: (IsBuiltin b) => NativeFunction e b i
 coreOrQ info b cont handler env = \case
   [VClosure l, VClosure r, VPactValue v] -> do
     let cont' =  CondC env info (OrQC r v) cont
-    applyLam l [VPactValue v] cont' handler
+    applyLam info l [VPactValue v] cont' handler
   args -> argsError info b args
 
 coreNotQ :: (IsBuiltin b) => NativeFunction e b i
 coreNotQ info b cont handler env = \case
   [VClosure clo, VPactValue v] -> do
     let cont' = CondC env info NotQC cont
-    applyLam clo [VPactValue v] cont' handler
+    applyLam info clo [VPactValue v] cont' handler
   args -> argsError info b args
 
 coreWhere :: (IsBuiltin b) => NativeFunction e b i
@@ -1436,7 +1436,7 @@ coreWhere info b cont handler _env = \case
     case M.lookup (Field field) o of
       Just v -> do
         let cont' = EnforceBoolC info cont
-        applyLam app [VPactValue v] cont' handler
+        applyLam info app [VPactValue v] cont' handler
       Nothing ->
         throwExecutionError info (ObjectIsMissingField (Field field) (ObjectData o))
   args -> argsError info b args
@@ -1615,8 +1615,8 @@ dbDescribeKeySet info b cont handler env = \case
 coreCompose :: (IsBuiltin b) => NativeFunction e b i
 coreCompose info b cont handler env = \case
   [VClosure clo1, VClosure clo2, v] -> do
-    let cont' = Fn clo2 env [] [] cont
-    applyLam clo1 [v] cont' handler
+    let cont' = Fn clo2 info env [] [] cont
+    applyLam info clo1 [v] cont' handler
   args -> argsError info b args
 
 coreCreatePrincipal :: (IsBuiltin b) => NativeFunction e b i
@@ -1654,7 +1654,7 @@ coreValidatePrincipal info b cont handler _env = \case
 
 coreCond :: (IsBuiltin b) => NativeFunction e b i
 coreCond info b cont handler _env = \case
-  [VClosure clo] -> applyLam clo [] cont handler
+  [VClosure clo] -> applyLam info clo [] cont handler
   args -> argsError info b args
 
 
@@ -1717,7 +1717,7 @@ coreDefineNamespace info b cont handler env = \case
           (Dfun d, mh) -> do
             clo <- mkDefunClosure d (qualNameToFqn fun mh) env
             let cont' = BuiltinC env info (DefineNamespaceC ns) cont
-            applyLam (C clo) [VString n, VGuard adminG] cont' handler
+            applyLam info (C clo) [VString n, VGuard adminG] cont' handler
           _ -> throwNativeExecutionError info b $ "Fatal error: namespace manager function is not a defun"
   args -> argsError info b args
   where

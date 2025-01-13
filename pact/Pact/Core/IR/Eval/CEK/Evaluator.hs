@@ -982,9 +982,9 @@ applyContToValue (Args env i args cont) handler !fn = do
   c <- canApply fn
   -- Argument evaluation
   case args of
-    [] -> applyLam c [] cont handler
+    [] -> applyLam i c [] cont handler
     (x:xs) -> do
-      let cont' = Fn c env xs [] cont
+      let cont' = Fn c i env xs [] cont
       evalCEK cont' handler env x
   where
   canApply = \case
@@ -1002,12 +1002,12 @@ applyContToValue (Args env i args cont) handler !fn = do
 --   <v, _, Fn(clo, E, (x:xs), acc, K), H>   <x, E, Fn(c, E, xs, (v:acc), K), H>
 --   <v, _, Fn(clo, E, [], K), H>            (apply clo (reverse (v:acc)) K H)
 --
-applyContToValue (Fn fn env args vs cont) handler !v = do
+applyContToValue (Fn fn i env args vs cont) handler !v = do
   case args of
     [] -> do
-      applyLam fn (reverse (v:vs)) cont handler
+      applyLam i fn (reverse (v:vs)) cont handler
     x:xs ->
-      evalCEK (Fn fn env xs (v:vs) cont) handler env x
+      evalCEK (Fn fn i env xs (v:vs) cont) handler env x
 -- | ------ From ------------ | ------ To ---------------- |
 --   <v, LetC(E, body, K), H>   <body, (cons v E), K, H>
 --
@@ -1058,7 +1058,7 @@ applyContToValue (CondC env info frame cont) handler !v = do
           x:xs -> do
             chargeUnconsWork info
             let cont' = CondC env info (FilterC clo x xs acc') cont
-            applyLam clo [VPactValue x] cont' handler
+            applyLam info clo [VPactValue x] cont' handler
           [] -> returnCEKValue cont handler (VList (V.fromList (reverse acc')))
       EnforceOneC ->
         if b then returnCEKValue cont handler v
@@ -1066,10 +1066,10 @@ applyContToValue (CondC env info frame cont) handler !v = do
         -- Note: this will simply be re-thrown within EnforceErrorC, so we don't need anything fancy here
         returnCEK cont handler (VError [] (UserEnforceError "internal CEnforceOne error") info)
       AndQC clo pv ->
-        if b then applyLam clo [VPactValue pv] (EnforceBoolC info cont) handler
+        if b then applyLam info clo [VPactValue pv] (EnforceBoolC info cont) handler
         else returnCEKValue cont handler v
       OrQC clo pv ->
-        if not b then applyLam clo [VPactValue pv] (EnforceBoolC info cont) handler
+        if not b then applyLam info clo [VPactValue pv] (EnforceBoolC info cont) handler
         else returnCEKValue cont handler v
       NotQC -> returnCEKValue cont handler (VBool (not b))
     VPactValue v' -> throwExecutionError info (ExpectedBoolValue v')
@@ -1095,7 +1095,7 @@ applyContToValue (CapInvokeC env info cf cont) handler !v = case cf of
   ApplyMgrFunC mgdCap clo old new -> do
     -- Set the manager fun to update the current managed cap.
     let cont' = EnforcePactValueC info $ CapInvokeC env info (UpdateMgrFunC mgdCap) cont
-    applyLam (C clo) [VPactValue old, VPactValue new] cont' handler
+    applyLam info (C clo) [VPactValue old, VPactValue new] cont' handler
   -- note: typechecking should be handled by the manager function here.
   UpdateMgrFunC mcap -> case v of
     VPactValue v' -> do
@@ -1112,7 +1112,7 @@ applyContToValue (BuiltinC env info frame cont) handler !cv = do
           x:xs -> do
             let cont' = BuiltinC env info (MapC closure xs (v:acc)) cont
             chargeUnconsWork info
-            applyLam closure [VPactValue x] cont' handler
+            applyLam info closure [VPactValue x] cont' handler
           [] ->
             returnCEKValue cont handler (VList (V.fromList (reverse (v:acc))))
       FoldC clo rest -> do
@@ -1120,14 +1120,14 @@ applyContToValue (BuiltinC env info frame cont) handler !cv = do
           x:xs -> do
             let cont' = BuiltinC env info (FoldC clo xs) cont
             chargeUnconsWork info
-            applyLam clo [VPactValue v, VPactValue x] cont' handler
+            applyLam info clo [VPactValue v, VPactValue x] cont' handler
           [] -> returnCEKValue cont handler cv
       ZipC clo (l, r) acc -> do
         case (l, r) of
           (x:xs, y:ys) -> do
             let cont' = BuiltinC env info (ZipC clo (xs, ys) (v:acc)) cont
             chargeUnconsWork info
-            applyLam clo [VPactValue x, VPactValue y] cont' handler
+            applyLam info clo [VPactValue x, VPactValue y] cont' handler
           (_, _) ->
             returnCEKValue cont handler (VList (V.fromList (reverse (v:acc))))
       ---------------------------------------------------------
@@ -1149,7 +1149,7 @@ applyContToValue (BuiltinC env info frame cont) handler !cv = do
         (RowKey rk, pv):xs -> do
           let rdf = FoldDbMapC tv appClo xs (v:acc)
               cont' = BuiltinC env info rdf cont
-          applyLam appClo [VString rk, VPactValue pv] cont' handler
+          applyLam info appClo [VString rk, VPactValue pv] cont' handler
         [] -> returnCEKValue cont handler (VList (V.fromList (v:acc)))
       DefineKeysetC ksn newKs -> do
         newKsSize <- sizeOf info SizeOfV0 newKs
@@ -1183,21 +1183,21 @@ applyContToValue (BuiltinC env info frame cont) handler !cv = do
             Just (RowData row) -> do
               let rdf = FoldDbFilterC tv queryClo appClo (rk, ObjectData row) remaining' acc
                   cont' = BuiltinC env info rdf cont
-              applyLam queryClo [VString raw, VObject row] cont' handler
+              applyLam info queryClo [VString raw, VObject row] cont' handler
             Nothing ->
               failInvariant info (InvariantNoSuchKeyInTable (_tvName tv) rk)
           [] -> case acc of
             (RowKey rk, pv):xs -> do
               let rdf = FoldDbMapC tv appClo xs []
                   cont' = BuiltinC env info rdf cont
-              applyLam appClo [VString rk, VPactValue pv] cont' handler
+              applyLam info appClo [VString rk, VPactValue pv] cont' handler
             [] -> returnCEKValue cont handler (VList mempty)
       selectRead tv clo keys acc mf = case keys of
         k:ks -> liftGasM info (_pdbRead pdb (tvToDomain tv) k) >>= \case
           Just (RowData r) -> do
             let bf = SelectC tv clo (ObjectData r) ks acc mf
                 cont' = BuiltinC env info bf cont
-            applyLam clo [VObject r] cont' handler
+            applyLam info clo [VObject r] cont' handler
           Nothing ->
             failInvariant info (InvariantNoSuchKeyInTable (_tvName tv) k)
         [] -> case mf of
@@ -1334,12 +1334,13 @@ nestedPactsNotAdvanced resultState ps =
 --   dispatching based on closure type.
 applyLam
   :: (IsBuiltin b)
-  => CanApply e b i
+  => i
+  -> CanApply e b i
   -> [CEKValue e b i]
   -> Cont e b i
   -> CEKErrorHandler e b i
   -> EvalM e b i (EvalResult e b i)
-applyLam vc@(C (Closure fqn ca arity term mty env cloi)) args cont handler
+applyLam cloi vc@(C (Closure fqn ca arity term mty env _)) args cont handler
   -- Fully apply closure and evaluate
   | arity == argLen = case ca of
     ArgClosure cloargs -> do
@@ -1377,7 +1378,7 @@ applyLam vc@(C (Closure fqn ca arity term mty env cloi)) args cont handler
   apply' _ [] _ =
     throwExecutionError cloi ClosureAppliedToTooManyArgs
 
-applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
+applyLam cloi (LC (LamClosure ca arity term mty env _)) args cont handler
   | arity == argLen = case ca of
     ArgClosure _ -> do
       -- Todo: maybe lambda application should mangle some sort of name?
@@ -1411,7 +1412,7 @@ applyLam (LC (LamClosure ca arity term mty env cloi)) args cont handler
   apply' _ [] _ = do
     throwExecutionError cloi ClosureAppliedToTooManyArgs
 
-applyLam (PC (PartialClosure li argtys nargs _ term mty env cloi)) args cont handler = do
+applyLam cloi (PC (PartialClosure li argtys nargs _ term mty env _)) args cont handler = do
   chargeGasArgs cloi (GAApplyLam (_sfName <$> li) (length args))
   apply' nargs (view ceLocal env) (NE.toList argtys) args
   where
@@ -1432,7 +1433,7 @@ applyLam (PC (PartialClosure li argtys nargs _ term mty env cloi)) args cont han
   apply' _ _ [] _ = do
     throwExecutionError cloi ClosureAppliedToTooManyArgs
 
-applyLam nclo@(N (NativeFn b env fn arity i)) args cont handler
+applyLam i nclo@(N (NativeFn b env fn arity _)) args cont handler
   | arity == argLen = do
     chargeFlatNativeGas i b
     fn i b cont handler env args
@@ -1447,7 +1448,7 @@ applyLam nclo@(N (NativeFn b env fn arity i)) args cont handler
   apply' !a pa [] =
     returnCEKValue cont handler (VPartialNative (PartialNativeFn b env fn a pa i))
 
-applyLam (PN (PartialNativeFn b env fn arity pArgs i)) args cont handler
+applyLam i (PN (PartialNativeFn b env fn arity pArgs _)) args cont handler
   | arity == argLen = do
     chargeFlatNativeGas i b
     fn i b cont handler env (reverse pArgs ++ args)
@@ -1460,7 +1461,7 @@ applyLam (PN (PartialNativeFn b env fn arity pArgs i)) args cont handler
   apply' !a pa [] =
     returnCEKValue cont handler (VPartialNative (PartialNativeFn b env fn a pa i))
 
-applyLam (DPC (DefPactClosure fqn argtys arity env i)) args cont handler
+applyLam i (DPC (DefPactClosure fqn argtys arity env _)) args cont handler
   | arity == argLen = case argtys of
     ArgClosure cloargs -> do
       -- Todo: defpact has much higher overhead, we must charge a bit more gas for this
@@ -1480,7 +1481,7 @@ applyLam (DPC (DefPactClosure fqn argtys arity env i)) args cont handler
     throwExecutionError i ClosureAppliedToTooManyArgs
   where
   argLen = length args
-applyLam (CT (CapTokenClosure fqn argtys arity i)) args cont handler
+applyLam i (CT (CapTokenClosure fqn argtys arity _)) args cont handler
   | arity == argLen = do
     chargeGasArgs i (GAApplyLam (Just fqn) (fromIntegral argLen))
     args' <- traverse (enforcePactValue i) args
@@ -1504,7 +1505,7 @@ evalCEK :: (IsBuiltin b) => Cont e b i -> CEKErrorHandler e b i -> CEKEnv e b i 
 evalCEK = evaluateTerm
 {-# INLINE evalCEK #-}
 
-applyLamUnsafe :: IsBuiltin b => CanApply e b i -> [CEKValue e b i] -> Cont e b i -> CEKErrorHandler e b i -> EvalM e b i (EvalResult e b i)
+applyLamUnsafe :: IsBuiltin b => i -> CanApply e b i -> [CEKValue e b i] -> Cont e b i -> CEKErrorHandler e b i -> EvalM e b i (EvalResult e b i)
 applyLamUnsafe = applyLam
 {-# INLINE applyLamUnsafe #-}
 
@@ -1584,7 +1585,7 @@ runUserGuard info cont handler env (UserGuard qn args) =
       let env' = sysOnlyEnv env
       clo <- mkDefunClosure d (qualNameToFqn qn mh) env'
       -- Todo: sys only here
-      applyLam (C clo) (VPactValue <$> args) (IgnoreValueC (PBool True) cont) handler
+      applyLam info (C clo) (VPactValue <$> args) (IgnoreValueC (PBool True) cont) handler
     (d, _) -> throwExecutionError info (UserGuardMustBeADefun qn (defKind (_qnModName qn) d))
 
 
@@ -1704,7 +1705,7 @@ isKeysetInSigs info cont handler env ks@(KeySet kskeys ksPred) = do
         (Dfun d, mh) -> do
           clo <- mkDefunClosure d (qualNameToFqn qn mh) env
           let cont' = BuiltinC env info (RunKeysetPredC ks) cont
-          applyLam (C clo) [VInteger (fromIntegral count), VInteger (fromIntegral matched)] cont' handler
+          applyLam info (C clo) [VInteger (fromIntegral count), VInteger (fromIntegral matched)] cont' handler
         _ ->
           throwExecutionError info (InvalidCustomKeysetPredicate "expected defun")
     TBN (BareName bn) -> do
@@ -1714,7 +1715,7 @@ isKeysetInSigs info cont handler env ks@(KeySet kskeys ksPred) = do
           let builtins = view ceBuiltins env
           let nativeclo = builtins info b env
           let cont' = BuiltinC env info (RunKeysetPredC ks) cont
-          applyLam (N nativeclo) [VInteger (fromIntegral count), VInteger (fromIntegral matched)] cont' handler
+          applyLam info (N nativeclo) [VInteger (fromIntegral count), VInteger (fromIntegral matched)] cont' handler
         Nothing ->
           throwExecutionError info (InvalidCustomKeysetPredicate "expected native")
 
