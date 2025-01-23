@@ -7,6 +7,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module Pact.Core.Names
  ( ModuleName(..)
@@ -75,6 +76,7 @@ module Pact.Core.Names
 
 import Control.Lens
 import Data.Aeson
+import Data.Hashable
 import Data.Text(Text)
 import qualified Data.Text as T
 import Data.Word(Word64)
@@ -96,8 +98,9 @@ import Data.String (IsString)
 
 -- | Newtype wrapper over bare namespaces
 newtype NamespaceName = NamespaceName { _namespaceName :: Text }
-  deriving (Generic)
+  deriving stock (Generic)
   deriving newtype (Eq, Ord, Show, NFData, IsString)
+  deriving anyclass Hashable
 
 instance Pretty NamespaceName where
   pretty (NamespaceName n) = pretty n
@@ -107,7 +110,9 @@ instance Pretty NamespaceName where
 data ModuleName = ModuleName
   { _mnName      :: Text
   , _mnNamespace :: Maybe NamespaceName
-  } deriving (Eq, Ord, Show, Generic)
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving anyclass Hashable
 
 instance NFData ModuleName
 
@@ -115,7 +120,9 @@ data HashedModuleName
   = HashedModuleName
   { _hmName :: ModuleName
   , _hmHash :: ModuleHash
-  } deriving (Eq, Ord, Show, Generic)
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving anyclass Hashable
 
 instance Pretty ModuleName where
   pretty (ModuleName m mn) =
@@ -134,7 +141,7 @@ data QualifiedName =
   QualifiedName
   { _qnName :: Text
   , _qnModName :: ModuleName
-  } deriving (Show, Eq, Generic)
+  } deriving stock (Show, Eq, Generic)
 
 instance NFData QualifiedName
 
@@ -205,8 +212,8 @@ instance Pretty ParsedName where
 -- | Object and Schema row labels.
 -- So in Field "a" in {"a":v},
 newtype Field = Field { _field :: Text }
-  deriving (Eq, Ord, Show, Generic, FromJSONKey)
-  deriving newtype (IsString, NFData, Serialise)
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving newtype (IsString, NFData, FromJSONKey, Serialise)
 
 instance Pretty Field where
   pretty (Field f) = pretty f
@@ -361,7 +368,9 @@ data TableName
   = TableName
   { _tableName :: Text
   , _tableModuleName :: ModuleName
-  } deriving (Eq, Ord, Show, Generic)
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving anyclass Hashable
 
 instance NFData TableName
 
@@ -388,7 +397,7 @@ renderFullyQualName (FullyQualifiedName mn n mh) =
 -- | Newtype over text user keys
 newtype RowKey
   = RowKey { _rowKey :: Text }
-  deriving newtype (Eq, Ord, Show, NFData)
+  deriving newtype (Eq, Hashable, Ord, Show, NFData)
 
 makeLenses ''RowKey
 
@@ -430,7 +439,7 @@ makeLenses ''QualifiedName
 --   parent + the nested continuation
 newtype DefPactId
   = DefPactId { _defPactId :: Text }
-  deriving newtype (Eq,Ord,Show, NFData)
+  deriving newtype (Eq, Hashable, Ord, Show, NFData)
 
 instance Pretty DefPactId where
   pretty (DefPactId p) = pretty p

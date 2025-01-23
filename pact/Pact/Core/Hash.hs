@@ -164,7 +164,7 @@ fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
 
 newtype ModuleHash = ModuleHash { _mhHash :: Hash }
   deriving (Eq, Ord, Show, Generic)
-  deriving newtype (NFData, J.Encode, JD.FromJSON)
+  deriving newtype (Hashable, NFData, J.Encode, JD.FromJSON)
 
 instance Pretty ModuleHash where
   pretty (ModuleHash h) = pretty h
