@@ -4,6 +4,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 
 module Pact.Core.Guards
@@ -41,6 +42,7 @@ import Control.DeepSeq
 import Data.Attoparsec.Text
 import Data.ByteString (ByteString)
 import Data.Foldable
+import Data.Hashable
 import Data.Maybe (isJust)
 import Data.Text(Text)
 import GHC.Generics
@@ -74,7 +76,8 @@ renderPublicKeyText = _pubKey
 data KeySetName = KeySetName
   { _keysetName :: Text
   , _keysetNs :: Maybe NamespaceName
-  } deriving (Eq, Ord, Show, Generic)
+  } deriving stock (Eq, Ord, Show, Generic)
+  deriving anyclass Hashable
 
 instance NFData KeySetName
 
