@@ -28,7 +28,7 @@ jobs:
         additional_experimental_features: recursive-nix
 
     - name: Set up AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
+      uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-access-key-id: ${{ secrets.NIX_CACHE_AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.NIX_CACHE_AWS_SECRET_ACCESS_KEY }}
