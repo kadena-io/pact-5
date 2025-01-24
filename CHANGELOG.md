@@ -1,3 +1,16 @@
+5.0
+---
+### Features
+- [Introduced: `(do ...)` form for sequencing evaluation of terms](https://github.com/kadena-io/pact-5/pull/160)
+- Revamped gas model for more accurate gas charging and lower gas costs across the board (Several PRs: #270, #276, #257, #208, #175)
+- [New native `acquire-module-admin` introduced for acquiring admin-related priviledges for module operations (on the basis that the caller owns module governance)](https://github.com/kadena-io/pact-5/pull/208)
+- New native `static-redeploy` for roundtripping existing modules into our new CBOR format (https://github.com/kadena-io/pact-5/pull/264)
+- Improved execution efficiency: New interpreter and backend format yields improvements in execution from 2x to as high as 10x (Several PRs: #
+- `let` and `let*` are now equivalent in execution and scope.
+
+For details on migration, see [our migration guide](https://docs.kadena.io/smart-contracts/install/migrating-to-pact5).
+
+
 4.13.0
 ---
 ### Features
