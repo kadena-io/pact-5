@@ -1273,7 +1273,7 @@ dbOpErrorToBoundedText' = \case
         , "at key"
         , tdquotes $ abbrevRowKey rk ]
     NoSuchTable tn ->
-      thsep ["Insert/Update failed because table ", renderTableName tn, "was not found."]
+      thsep ["Insert/Update failed because table", renderTableName tn, "was not found."]
     TableAlreadyExists tn ->
       thsep ["Creation of user table", renderTableName tn, "failed because the table already exists."]
     TxAlreadyBegun _ ->
