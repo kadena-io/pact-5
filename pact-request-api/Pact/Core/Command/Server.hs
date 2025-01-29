@@ -89,7 +89,7 @@ instance Show ProcessResult where
     PEUnknownException _ -> "UnkownException"
 
 data ProcessMsg
-  = StoreMsg RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))) (MVar ProcessResult)
+  = StoreMsg RequestKey (CommandResult Hash PactOnChainError) (MVar ProcessResult)
 
 instance Show ProcessMsg where
   show = \case
@@ -115,7 +115,7 @@ instance JE.Encode PollRequest where
   build (PollRequest rks) = JE.object [ "requestKeys" JE..= JE.Array rks ]
 
 newtype PollResponse
-  = PollResponse (HM.HashMap RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))))
+  = PollResponse (HM.HashMap RequestKey (CommandResult Hash (PactOnChainError)))
   deriving newtype (Eq, Show)
 
 instance JE.Encode PollResponse where
@@ -138,7 +138,7 @@ instance JD.FromJSON ListenRequest where
     ListenRequest <$> o JD..: "listen"
 
 newtype ListenResponse
-  = ListenResponse (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))
+  = ListenResponse (CommandResult Hash (PactOnChainError))
   deriving newtype (Eq, Show)
 
 instance JD.FromJSON ListenResponse where
@@ -154,7 +154,7 @@ instance JE.Encode LocalRequest where
   build (LocalRequest cmd) = JE.build cmd
 
 newtype LocalResponse
-  = LocalResponse { _localResponse :: CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)) }
+  = LocalResponse { _localResponse :: CommandResult Hash (PactOnChainError) }
 
 instance JD.FromJSON LocalResponse where
   parseJSON v = LocalResponse <$> JD.parseJSON v
@@ -288,7 +288,7 @@ sendHandler runtime (SendRequest submitBatch) = do
         Left (_::SomeException)-> throwError err500
     pure $ SendResponse $ RequestKeys requestKeys
 
-computeResultAndUpdateState :: ServerRuntime -> RequestKey -> Command Text -> IO (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))
+computeResultAndUpdateState :: ServerRuntime -> RequestKey -> Command Text -> IO (CommandResult Hash (PactOnChainError))
 computeResultAndUpdateState runtime requestKey cmd =
   case verifyCommand @(StableEncoding PublicMeta) (fmap E.encodeUtf8 cmd) of
     ProcFail errStr -> do
@@ -331,7 +331,7 @@ computeResultAndUpdateState runtime requestKey cmd =
             pure $ pactErrorToCommandResult requestKey pe (Gas 0)
           Right evalResult -> pure $ evalResultToCommandResult requestKey evalResult
 
-evalResultToCommandResult :: RequestKey -> EvalResult -> CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))
+evalResultToCommandResult :: RequestKey -> EvalResult -> CommandResult Hash (PactOnChainError)
 evalResultToCommandResult requestKey (EvalResult out logs exec gas _lm txid _lgas ev) =
   CommandResult
   { _crReqKey = requestKey
@@ -344,11 +344,11 @@ evalResultToCommandResult requestKey (EvalResult out logs exec gas _lm txid _lga
   , _crMetaData = Nothing
   }
 
-pactErrorToCommandResult :: RequestKey -> PactError Info -> Gas -> CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))
+pactErrorToCommandResult :: RequestKey -> PactError Info -> Gas -> CommandResult Hash (PactOnChainError)
 pactErrorToCommandResult rk pe gas = CommandResult
   { _crReqKey = rk
   , _crTxId = Nothing
-  , _crResult = PactResultErr $ PEPact5Error $ pactErrorToLocatedErrorCode $ pe
+  , _crResult = PactResultErr $ pactErrorToOnChainError pe
   , _crGas = gas
   , _crLogs = Nothing
   , _crEvents = [] -- todo
@@ -357,10 +357,10 @@ pactErrorToCommandResult rk pe gas = CommandResult
   }
 
  -- TODO: once base-4.19 switch to L.unsnoc
-evalOutputToCommandResult :: [CompileValue Info] -> PactResult (PactErrorCompat (LocatedErrorInfo Info))
+evalOutputToCommandResult :: [CompileValue Info] -> PactResult (PactOnChainError)
 evalOutputToCommandResult li = case L.uncons $ L.reverse li of
   Just (v, _) -> PactResultOk (compileValueToPactValue v)
-  Nothing -> PactResultErr $ PEPact5Error $ pactErrorToErrorCode $ PEExecutionError (EvalError "empty input") [] def
+  Nothing -> PactResultErr $ pactErrorToOnChainError $ PEExecutionError (EvalError "empty input") [] def
 
 localHandler :: ServerRuntime -> LocalRequest -> Handler LocalResponse
 localHandler env (LocalRequest cmd) = do

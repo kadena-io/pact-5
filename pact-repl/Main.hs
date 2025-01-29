@@ -22,8 +22,6 @@ import Pact.Core.Command.Server
 import Pact.Core.Command.Util
 import Pact.Core.Repl.Compile
 import System.IO
-import Pact.Core.Errors
-import Pact.Core.Info
 import qualified Pact.Core.Version as PI
 import System.Directory
 import System.Exit(exitFailure, exitSuccess)
@@ -52,8 +50,6 @@ data ReplOpts
   | OServer FilePath
   -- Crypto
   | OGenKey
-  | OExplainErrorCode String
-  -- | OServer
   deriving (Eq, Show)
 
 replOpts :: O.Parser (Maybe ReplOpts)
@@ -64,7 +60,6 @@ replOpts = O.optional $
   <|> apiReqFlag
   <|> unsignedReqFlag
   <|> loadFlag
-  <|> explainErrorCodeFlag
   <|> OServer <$> O.strOption (O.metavar "CONFIG" <> O.short 's' <> O.long "server" <> O.help "Run Pact-Server")
 
 -- Todo: trace output and coverage?
@@ -91,11 +86,6 @@ apiReqFlag =
   <$> O.strOption (O.short 'a' <> O.long "apireq" <> O.metavar "REQ_YAML" <>
                   O.help "Format API request JSON using REQ_YAML file")
   <*> localFlag
-
-explainErrorCodeFlag :: O.Parser ReplOpts
-explainErrorCodeFlag =
-  OExplainErrorCode <$> O.strOption (O.long "explain-error-code" <> O.metavar "ERROR_CODE" <>
-                                     O.help "Describe the error code")
 
 unsignedReqFlag :: O.Parser ReplOpts
 unsignedReqFlag = OUnsignedReq
@@ -128,10 +118,6 @@ main = O.execParser argParser >>= \case
           Just s -> runScript s dbg
           Nothing -> runScript fp dbg
       | otherwise -> runScript fp dbg
-    OExplainErrorCode errCodeStr -> case errorCodeFromText $ T.pack errCodeStr of
-      Nothing -> putStrLn $ "Invalid error code format" -- todo enhance error
-      Just errCode -> let (PrettyErrorCode phase cause _ _) = prettyErrorCode $ PactErrorCode errCode "" NoInfo
-        in T.putStrLn ("Encountered failure in: " <> phase <> ", caused by: " <> cause)
     OServer configPath -> Y.decodeFileEither configPath >>= \case
       Left perr -> putStrLn $ Y.prettyPrintParseException perr
       Right config -> runServer config noSPVSupport

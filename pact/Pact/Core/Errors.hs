@@ -28,15 +28,11 @@ module Pact.Core.Errors
  , peInfo
  , viewErrorStack
  , UserRecoverableError(..)
- , ErrorCode(..)
- , PactErrorCode(..)
- , PrettyErrorCode(..)
- , pactErrorToErrorCode
- , prettyErrorCode
- , errorCodeFromText
+ , ErrorType(..)
+ , PactOnChainError(..)
+ , pactErrorToOnChainError
  , LegacyPactError(..)
  , LegacyPactErrorType(..)
- , PactErrorCompat(..)
  , VerifierError(..)
  , ErrorClosureType(..)
  , _PELexerError
@@ -193,31 +189,21 @@ module Pact.Core.Errors
  , mkBoundedText
  , PactErrorOrigin(..)
  , LocatedErrorInfo(..)
- , pactErrorToLocatedErrorCode
- , _PELegacyError
- , _PEPact5Error
  ) where
 
 import Control.Lens hiding (ix)
-import Control.Monad
 import Control.Applicative
-import Data.Bits
-import Data.Foldable(find)
 import Data.Proxy
 import Data.Text(Text)
 import Data.Typeable(Typeable)
 import Data.Set(Set)
-import Data.Word
 import Data.List(intersperse)
 import Data.Default
-import Numeric (showHex)
 import GHC.TypeLits
 import qualified Data.Version as V
 import qualified Pact.Core.Version as PI
 import qualified Data.Set as S
 import qualified Data.Text as T
-import qualified Data.Text.Read as T
-import qualified Data.Char as C
 import qualified Pact.JSON.Decode as JD
 import qualified Pact.JSON.Encode as J
 
@@ -238,6 +224,9 @@ import Pact.Core.DeriveConTag
 import Pact.Core.ChainData (ChainId(_chainId))
 import Data.String (IsString(..))
 import Pact.Core.Gas.Types
+import qualified Text.Megaparsec as MP
+import qualified Text.Megaparsec.Char as MP
+import Text.Read (readMaybe)
 
 -- A common type alias, as `PactErrorI`s come straight from running
 -- the lexer + parser
@@ -1120,7 +1109,9 @@ data PactError info
 data PactErrorOrigin
   = TopLevelErrorOrigin
   | FunctionErrorOrigin FullyQualifiedName
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
+
+instance NFData PactErrorOrigin
 
 instance J.Encode PactErrorOrigin where
   build = \case
@@ -1141,7 +1132,9 @@ data LocatedErrorInfo info
   = LocatedErrorInfo
   { _leiOrigin :: PactErrorOrigin
   , _leiInfo :: info
-  } deriving (Eq, Show, Functor, Foldable, Traversable)
+  } deriving (Eq, Show, Functor, Foldable, Traversable, Generic)
+
+instance NFData info => NFData (LocatedErrorInfo info)
 
 instance Default info => Default (LocatedErrorInfo info) where
   def = LocatedErrorInfo TopLevelErrorOrigin def
@@ -1152,11 +1145,40 @@ locatePactErrorInfo pe =
     sf:_ -> fmap (LocatedErrorInfo (FunctionErrorOrigin (_sfName sf))) pe
     [] -> fmap (LocatedErrorInfo TopLevelErrorOrigin) pe
 
+type Parser = MP.Parsec () Text
+
+locatedErrorInfoParser :: Parser (LocatedErrorInfo LineInfo)
+locatedErrorInfoParser = do
+  origin <- parseOrigin
+  _ <- MP.char ':'
+  digits <- some MP.digitChar
+  case readMaybe digits of
+    Just i -> pure (LocatedErrorInfo origin (LineInfo i))
+    Nothing -> fail "parsing located error info failed"
+  where
+  parseOrigin =
+    (TopLevelErrorOrigin <$ MP.chunk "<toplevel>") <|> (FunctionErrorOrigin <$> fullyQualNameParser)
+
+instance {-# OVERLAPPING #-} J.Encode (LocatedErrorInfo LineInfo) where
+  build (LocatedErrorInfo origin i) =
+    J.text (origin' <> ":" <> i')
+    where
+    i' = T.pack (show (_lineInfo i))
+    origin' = case origin of
+      TopLevelErrorOrigin -> "<toplevel>"
+      FunctionErrorOrigin fqn -> renderFullyQualName fqn
+
 instance J.Encode info => J.Encode (LocatedErrorInfo info) where
   build loc = J.object
     [ "origin" J..= _leiOrigin loc
     , "info" J..= _leiInfo loc
     ]
+
+
+instance {-# OVERLAPPING #-} JD.FromJSON (LocatedErrorInfo LineInfo) where
+  parseJSON = JD.withText "LocatedErrorInfo" $ \o -> case MP.parseMaybe (locatedErrorInfoParser <* MP.eof) o of
+    Just lei -> pure lei
+    Nothing -> fail "Invalid Located error info"
 
 instance JD.FromJSON info => JD.FromJSON (LocatedErrorInfo info) where
   parseJSON = JD.withObject "LocatedErrorInfo" $ \o ->
@@ -1213,7 +1235,7 @@ deriveConstrInfo ''PactError
 
 newtype BoundedText (k :: Nat)
   = BoundedText {_boundedText ::  Text }
-  deriving newtype (Eq, Show, JD.FromJSON, J.Encode)
+  deriving newtype (Eq, Show, JD.FromJSON, J.Encode, NFData)
 
 instance KnownNat k => IsString (BoundedText k) where
   fromString = ensureBound . T.pack
@@ -1829,129 +1851,61 @@ pactErrorToBoundedText = \case
 --       ------------------- Version
 -- Note [As of Jul 2 2024]: There are no error versions other than 0,
 --      so we don't have a versioning data type yet.
-newtype ErrorCode
-  = ErrorCode Word64
-  deriving (Eq, Ord)
+newtype ErrorType
+  = ErrorType Text
+  deriving newtype (Eq, Ord, NFData)
 
 -- | Note: This Show actually defined the error code's serialization.
 --   TODO: is this kosher? Or should we expose an `errorCodeToHexString` function?
-instance Show ErrorCode where
-  show (ErrorCode e) =
-    let h = showHex e ""
-        len = length h
-    in "0x" <> if len < 16 then replicate (16 - len) '0' <> h else h
+instance Show ErrorType where
+  show (ErrorType e) = show e
 
 -- | Our data type for presenting error codes alongside
 --   a span info
-data PactErrorCode info
-  = PactErrorCode
-  { _peCode :: ErrorCode
+data PactOnChainError
+  = PactOnChainError
+  { _peType :: ErrorType
   , _peMsg :: BoundedText PactErrorMsgSize
-  , _peInfo :: info
-  } deriving (Eq, Show, Functor, Foldable, Traversable)
+  , _peInfo :: LocatedErrorInfo LineInfo
+  } deriving (Eq, Show, Generic)
 
-errorCodeFromText :: Text -> Maybe ErrorCode
-errorCodeFromText t = do
-  guard (T.length t == 18 && T.all C.isHexDigit (T.drop 2 t))
-  case T.hexadecimal t of
-    Right (a, remaining) | T.null remaining -> pure $ ErrorCode a
-    _ -> Nothing
+instance NFData PactOnChainError
 
-instance {-# OVERLAPPING #-} J.Encode (PactErrorCode NoInfo) where
-  build (PactErrorCode ec msg _) = J.object
-    [ "errorCode" J..= T.pack (show ec)
-    , "message" J..= msg
-    ]
-
-instance {-# OVERLAPPING #-} JD.FromJSON (PactErrorCode NoInfo) where
-  parseJSON = JD.withObject "PactErrorCode" $ \o -> do
-    t <- o JD..: "errorCode"
-    case errorCodeFromText t of
-      Just a -> do
-        msg <- o JD..: "message"
-        pure $ PactErrorCode a msg NoInfo
-      _ -> fail "failed to parse pact error code"
-
-instance J.Encode info => J.Encode (PactErrorCode info) where
-  build (PactErrorCode ec msg info) = J.object
+instance J.Encode PactOnChainError where
+  build (PactOnChainError (ErrorType e) msg info) = J.object
     -- Note: this is safe, the `Show` instance converts it to hex
     -- chessai: But what if it stops doing that?
-    [ "errorCode" J..= T.pack (show ec)
+    [ "callStack" J..= J.Array(mempty :: [Text])
+    , "type" J..= J.text e
     , "message" J..= msg
     , "info" J..= info
     ]
 
-instance JD.FromJSON info => JD.FromJSON (PactErrorCode info) where
-  parseJSON = JD.withObject "PactErrorCode" $ \o -> do
-    t <- o JD..: "errorCode"
-    case errorCodeFromText t of
-      Just a -> do
-        info <- o JD..: "info"
-        msg <- o JD..: "message"
-        pure $ PactErrorCode a msg info
-      _ -> fail "failed to parse pact error code"
+instance JD.FromJSON PactOnChainError where
+  parseJSON = JD.withObject "PactOnChainError" $ \o -> do
+    t <- ErrorType <$>  o JD..: "type"
+    info <- o JD..: "info"
+    msg <- o JD..: "message"
+    pure $ PactOnChainError t msg info
 
-pactErrorToErrorCode :: PactError info -> PactErrorCode info
-pactErrorToErrorCode pe = let
-  info = view peInfo pe
+pactErrorToOnChainError :: PactError LineInfo -> PactOnChainError
+pactErrorToOnChainError pe = let
+  info = view peInfo (locatePactErrorInfo pe)
   -- Inner tag is
-  innerTag = shiftL (fromIntegral (innerConstrTag pe)) innerErrorShiftBits
-  outerTag = shiftL (fromIntegral (constrIndex pe)) outerErrorShiftBits
-  code = ErrorCode (innerTag .|. outerTag)
-  in PactErrorCode code (pactErrorToBoundedText pe) info
+  -- Drop the first 2 PE characters
+  -- NOTE: THIS WILL AFFECT REPLAY, DO NOT CHANGE WITHOUT A FORK
+  errType = toErrorType pe
+  in PactOnChainError (ErrorType errType) (pactErrorToBoundedText pe) info
   where
-  innerConstrTag = \case
-    PELexerError e _ -> constrIndex e
-    PEParseError e _ -> constrIndex e
-    PEDesugarError e _ -> constrIndex e
-    PEExecutionError e _ _ -> constrIndex e
-    PEUserRecoverableError e _ _ -> constrIndex e
-    PEVerifierError e _ -> constrIndex e
+  toErrorType = \case
+    PELexerError{} -> "SyntaxError"
+    PEParseError{} -> "SyntaxError"
+    PEExecutionError{} -> "ExecutionError"
+    PEUserRecoverableError{} -> "ExecutionError"
+    PEDesugarError{} -> "CompilationError"
+    PEVerifierError{} -> "VerifierError"
 
-pactErrorToLocatedErrorCode :: PactError info -> PactErrorCode (LocatedErrorInfo info)
-pactErrorToLocatedErrorCode = pactErrorToErrorCode . locatePactErrorInfo
 
-data PrettyErrorCode info
-  = PrettyErrorCode
-  { _pecFailurePhase :: Text
-  , _pecFailureCause :: Text
-  , _pecMsg :: Text
-  , _pecInfo :: info
-  } deriving Show
-
-_versionMask, outerErrorMask, innerErrorMask :: Word64
-_versionMask   = 0xFF_00_00_00_00_00_00_00
-outerErrorMask = 0x00_FF_00_00_00_00_00_00
-innerErrorMask = 0x00_00_FF_00_00_00_00_00
-
-_versionShiftBits, outerErrorShiftBits, innerErrorShiftBits :: Int
-_versionShiftBits = 56
-outerErrorShiftBits = 48
-innerErrorShiftBits = 40
-
--- | Get the inner and outer cause from an error code
-prettyErrorCode :: PactErrorCode info -> PrettyErrorCode info
-prettyErrorCode (PactErrorCode (ErrorCode ec) msg i) =
-  PrettyErrorCode phase cause (_boundedText msg) i
-  where
-  getCtorName ctorIx p =
-    case find ((== ctorIx) . _ciIndex) (allConstrInfos p) of
-      Just c -> _ciName c
-      Nothing -> "UNKNOWN_CODE"
-  phase =
-    let tagIx = (ec .&. outerErrorMask) `shiftR` outerErrorShiftBits
-    in getCtorName (fromIntegral tagIx) (Proxy :: Proxy (PactError ()))
-  causeTag :: Word8
-  causeTag =
-    fromIntegral ((ec .&. innerErrorMask) `shiftR` innerErrorShiftBits)
-  cause = case phase of
-    "PELexerError" -> getCtorName causeTag (Proxy :: Proxy LexerError)
-    "PEParseError" -> getCtorName causeTag (Proxy :: Proxy ParseError)
-    "PEDesugarError" -> getCtorName causeTag (Proxy :: Proxy DesugarError)
-    "PEExecutionError" -> getCtorName causeTag (Proxy :: Proxy EvalError)
-    "PEUserRecoverableError" -> getCtorName causeTag (Proxy :: Proxy UserRecoverableError)
-    "PEVerifierError" -> getCtorName causeTag (Proxy :: Proxy VerifierError)
-    _ -> "UNKNOWN_CODE"
 
 makePrisms ''PactError
 makePrisms ''InvariantError
@@ -2028,41 +1982,3 @@ toPrettyLegacyError pe =
   let stack = renderText <$> viewErrorStack pe
       info = renderText (view peInfo pe)
   in LegacyPactError (pactErrorToLegacyErrorType pe) info stack (renderText pe)
-
-instance J.Encode LegacyPactError where
-  build o = J.object
-    [ "callStack" J..= J.Array (_leCallStack o)
-    , "type" J..= _leType o
-    , "message" J..= _leMessage o
-    , "info" J..= _leInfo o
-    ]
-  {-# INLINE build #-}
-
-
-instance JD.FromJSON LegacyPactError where
-  parseJSON = JD.withObject "LegacyPactError" $ \o -> do
-    cs <- o JD..: "callStack"
-    ty <- o JD..: "type"
-    msg <- o JD..: "message"
-    info <- o JD..: "info"
-    pure (LegacyPactError ty info cs msg)
-
--- | PactErrorCompat exists to provide a
---   codec that can understand both pact 4 and pact 5 errors
-data PactErrorCompat info
-  = PEPact5Error (PactErrorCode info)
-  -- TODO: rename? we are using this for some errors even in the Pact 5 integration
-  | PELegacyError LegacyPactError
-  deriving (Eq, Show, Functor, Foldable, Traversable)
-
-makePrisms ''PactErrorCompat
-
-instance J.Encode info => J.Encode (PactErrorCompat info) where
-  build = \case
-    PEPact5Error err -> J.build err
-    PELegacyError err -> J.build err
-
-instance JD.FromJSON info => JD.FromJSON (PactErrorCompat info) where
-  parseJSON v =
-    (PEPact5Error <$> JD.parseJSON v) <|>
-    (PELegacyError <$> JD.parseJSON v)

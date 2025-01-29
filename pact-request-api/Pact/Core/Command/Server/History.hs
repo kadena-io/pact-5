@@ -28,7 +28,7 @@ import qualified Pact.JSON.Decode as J
 import Pact.Core.Persistence.SQLite
 import Pact.Core.Serialise
 
-type Cmd = CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))
+type Cmd = CommandResult Hash (PactOnChainError)
 
 data HistoryDb
   = HistoryDb

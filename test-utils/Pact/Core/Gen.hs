@@ -40,6 +40,7 @@ import Pact.Core.Namespace
 import Pact.Core.Gas
 import Pact.Core.ModRefs
 import Pact.Core.Hash
+import Pact.Core.Errors
 import Data.Ratio ((%), denominator)
 
 namespaceNameGen :: Gen NamespaceName
@@ -87,7 +88,20 @@ spanInfoGen =
 lineInfoGen :: Gen LineInfo
 lineInfoGen =
   LineInfo
-    <$> Gen.integral Range.constantBounded
+    <$> Gen.integral (Range.constant 0 maxBound)
+
+locatedErrorInfoGen :: Gen info -> Gen (LocatedErrorInfo info)
+locatedErrorInfoGen i =
+  LocatedErrorInfo <$> locGen <*> i
+  where
+  locGen = Gen.choice [pure TopLevelErrorOrigin, FunctionErrorOrigin <$> fullyQualifiedNameGen]
+
+pactOnChainErrorGen :: Gen PactOnChainError
+pactOnChainErrorGen =
+  PactOnChainError
+    <$> (ErrorType <$> identGen)
+    <*> (mkBoundedText <$> identGen)
+    <*> locatedErrorInfoGen lineInfoGen
 
 capTokenGen :: Gen name -> Gen v -> Gen (CapToken name v)
 capTokenGen n v =

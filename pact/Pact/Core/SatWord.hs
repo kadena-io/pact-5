@@ -24,7 +24,6 @@ import Data.Bits
 import Data.Primitive (Prim)
 import GHC.Base
 import GHC.Generics
-import GHC.Real
 import qualified Pact.Core.Pretty as P
 
 -- Note: real and integral instances cannot overflow
@@ -100,12 +99,7 @@ plusSW (SW (W# x#)) (SW (W# y#)) =
   case addWordC# x# y#  of
     (# r#, 0# #) -> SW (W# r#)
     -- Overflow
-    _ ->
-      if      isTrue# ((x# `gtWord#` 0##) `andI#` (y# `gtWord#` 0##)) then maxBound
-      else if isTrue# ((x# `ltWord#` 0##) `andI#` (y# `ltWord#` 0##)) then minBound
-      -- x and y have opposite signs, and yet we've overflowed, should
-      -- be impossible
-      else overflowError
+    _ -> maxBound
 
 {-# INLINE minusSW #-}
 minusSW :: SatWord -> SatWord -> SatWord
@@ -113,12 +107,7 @@ minusSW (SW (W# x#)) (SW (W# y#)) =
   case subWordC# x# y# of
     (# r#, 0# #) -> SW (W# r#)
     -- Overflow
-    _ ->
-      if      isTrue# ((x# `geWord#` 0##) `andI#` (y# `ltWord#` 0##)) then maxBound
-      else if isTrue# ((x# `leWord#` 0##) `andI#` (y# `gtWord#` 0##)) then minBound
-      -- x and y have the same sign, and yet we've overflowed, should
-      -- be impossible
-      else overflowError
+    _ -> minBound
 
 {-# INLINE timesSW #-}
 timesSW :: SatWord -> SatWord -> SatWord
@@ -126,14 +115,7 @@ timesSW (SW (W# x#)) (SW (W# y#)) =
   case timesWord2# x# y# of
       (# 0##, r# #) -> SW (W# r#)
       -- Overflow
-      _ ->
-          if      isTrue# ((x# `gtWord#` 0##) `andI#` (y# `gtWord#` 0##)) then maxBound
-          else if isTrue# ((x# `gtWord#` 0##) `andI#` (y# `ltWord#` 0##)) then minBound
-          else if isTrue# ((x# `ltWord#` 0##) `andI#` (y# `gtWord#` 0##)) then minBound
-          else if isTrue# ((x# `ltWord#` 0##) `andI#` (y# `ltWord#` 0##)) then maxBound
-          -- Logically unreachable unless x or y is 0, in which case
-          -- it should be impossible to overflow
-          else overflowError
+      _ -> maxBound
 
 -- Specialized versions of several functions. They're specialized for
 -- Int in the GHC base libraries. We try to get the same effect by
