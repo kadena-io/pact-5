@@ -1884,7 +1884,7 @@ instance J.Encode PactOnChainError where
 instance JD.FromJSON PactOnChainError where
   parseJSON = JD.withObject "PactOnChainError" $ \o -> do
     t <- ErrorType <$>  o JD..: "type"
-    info <- o JD..: "info"
+    info <- (o JD..: "info" <|> pure def)
     msg <- o JD..: "message"
     pure $ PactOnChainError t msg info
 
