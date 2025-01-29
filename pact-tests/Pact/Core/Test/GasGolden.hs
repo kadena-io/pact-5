@@ -111,7 +111,7 @@ runGasTest file interpret = do
   let ee' = ee & eeGasEnv . geGasModel .~ replTableGasModel (Just (maxBound :: MilliGasLimit))
       gasRef = ee' ^. eeGasEnv . geGasRef
   let source = SourceCode file src
-  let rstate = mkReplState ee' (const (pure ())) (\f r -> void (loadFile interpret f r)) & replCurrSource .~ source
+  let rstate = mkReplState ee' (const (const (pure ()))) (\f r -> void (loadFile interpret f r)) & replCurrSource .~ source
   stateRef <- newIORef rstate
   evalReplM stateRef (interpretReplProgram interpret source) >>= \case
     Left _ -> pure Nothing

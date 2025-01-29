@@ -356,7 +356,7 @@ envSetDebug info b _env = \case
         let flagsToSet = S.difference (S.union currFlags flags) (S.intersection currFlags flags)
         replFlags .== flagsToSet
         pure flagsToSet
-    replPrintLn' $ renderCompactText' $ "set debug flags to " <> pretty (S.toList flagsSet)
+    replPrintLn' info $ renderCompactText' $ "set debug flags to " <> pretty (S.toList flagsSet)
     return VUnit
   args -> argsError info b args
 
@@ -580,7 +580,7 @@ load info b _env = \case
   args -> argsError info b args
   where
     load' sourceFile reset = do
-      replPrintLn $ PString $ "Loading " <> sourceFile <> "..."
+      replPrintLn info $ PString $ "Loading " <> sourceFile <> "..."
       fload <- useReplState replLoad
       fload (T.unpack sourceFile) reset
       return VUnit

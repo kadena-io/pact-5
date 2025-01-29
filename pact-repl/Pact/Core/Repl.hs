@@ -53,10 +53,10 @@ execScript dolog f = do
   state <- readIORef ref
   pure (v, state)
   where
-  logger :: Text -> EvalM e b i ()
-  logger
-    | dolog = liftIO . T.putStrLn
-    | otherwise = const (pure ())
+  logger :: FileLocSpanInfo -> Text -> EvalM e b i ()
+  logger (FileLocSpanInfo file info) v
+    | dolog = liftIO $ T.putStrLn $ T.pack file <> ":" <> renderCompactText info <> ": " <> v
+    | otherwise = pure ()
 
 -- | Render a nice error
 renderLocatedPactErrorFromState :: ReplState b -> PactError FileLocSpanInfo -> Text
@@ -73,7 +73,7 @@ runRepl :: IO ()
 runRepl = do
   pdb <- mockPactDb serialisePact_repl_fileLocSpanInfo
   ee <- defaultEvalEnv pdb replBuiltinMap
-  let display' rcv = runInputT replSettings (displayOutput rcv)
+  let display' info rcv = runInputT replSettings (displayOutput info rcv)
   ref <- newIORef (mkReplState' ee display')
   evalReplM ref (runInputT replSettings loop) >>= \case
     Left err -> do
@@ -82,8 +82,8 @@ runRepl = do
     _ -> pure ()
   where
   replSettings = Settings (replCompletion replCoreBuiltinNames) (Just ".pc-history") True
-  displayOutput :: (Pretty a, MonadIO m) => a -> InputT m ()
-  displayOutput = outputStrLn . show . pretty
+  displayOutput :: (Pretty a, MonadIO m) => FileLocSpanInfo -> a -> InputT m ()
+  displayOutput _ = outputStrLn . show . pretty
   catch' ma = catchAny ma (\e -> outputStrLn (show e) *> loop)
   defaultSrc = SourceCode "(interactive)" mempty
   loop = do

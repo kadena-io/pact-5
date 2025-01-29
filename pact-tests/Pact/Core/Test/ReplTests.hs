@@ -80,7 +80,7 @@ runReplTest
 runReplTest (ReplSourceDir path) pdb file src interp = do
   ee <- defaultEvalEnv pdb replBuiltinMap
   let source = SourceCode (path </> file) src
-  let rstate = mkReplState ee (const (pure ())) (\f reset -> void (loadFile interp f reset)) & replCurrSource .~ source
+  let rstate = mkReplState ee (const (const (pure ()))) (\f reset -> void (loadFile interp f reset)) & replCurrSource .~ source
   stateRef <- newIORef rstate
   evalReplM stateRef (interpretReplProgram interp source) >>= \case
     Left e -> let
