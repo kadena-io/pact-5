@@ -43,7 +43,7 @@ tests = testGroup "Servant API client tests" [
       cmd <- simpleServerCmdWithPactErr
       res <- withTestPactServer "clientspec" $ \clientEnv -> do
         runClientM (localClient (LocalRequest cmd)) clientEnv
-      (_crResult . _localResponse <$> res) `shouldSatisfy` failWith (ErrorType "ExecutionError")
+      (_crResult . _localResponse <$> res) `shouldSatisfy` failWith (ErrorType "EvalError")
 
     , testCase "correctly runs a simple command publicly and listens to the result" $ do
       cmd <- simpleServerCmd
@@ -71,7 +71,7 @@ tests = testGroup "Servant API client tests" [
         Left _ -> assertFailure "client request failed"
         Right r -> case r of
           -- ListenTimeout _ -> assertFailure "timeout"
-          ListenResponse lr -> Right (_crResult lr) `shouldSatisfy` failWith (ErrorType "ExecutionError")
+          ListenResponse lr -> Right (_crResult lr) `shouldSatisfy` failWith (ErrorType "EvalError")
   ]
 
 failWith :: ErrorType -> Either ClientError (PactResult (PactOnChainError)) -> Bool

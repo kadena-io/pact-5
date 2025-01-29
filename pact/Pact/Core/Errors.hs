@@ -1900,10 +1900,10 @@ pactErrorToOnChainError pe = let
   toErrorType = \case
     PELexerError{} -> "SyntaxError"
     PEParseError{} -> "SyntaxError"
-    PEExecutionError{} -> "ExecutionError"
-    PEUserRecoverableError{} -> "ExecutionError"
-    PEDesugarError{} -> "CompilationError"
-    PEVerifierError{} -> "VerifierError"
+    PEExecutionError{} -> "EvalError"
+    PEUserRecoverableError{} -> "TxFailure"
+    PEDesugarError{} -> "EvalError"
+    PEVerifierError{} -> "EvalError"
 
 
 
