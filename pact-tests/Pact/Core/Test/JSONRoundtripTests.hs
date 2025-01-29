@@ -25,7 +25,7 @@ testJSONRoundtrip :: EncodingCase -> TestTree
 testJSONRoundtrip (EncodingCase gen) =
   testProperty testName $ property $ do
     v <- forAll gen
-    JD.decodeStrict (J.encodeStrict v) === Just v
+    Just v === JD.decodeStrict (J.encodeStrict v)
   where
   testName = "JSON roundtrips for: " <> show (typeNameOfGen gen)
 
@@ -40,7 +40,7 @@ testStableEncodingRoundtrip (StableEncodingCase gen) = do
   let testName = "JSON roundtrips for StableEncoding: " <> show (typeNameOfGen gen)
   testProperty testName $ property $ do
     v <- forAll gen
-    JD.decodeStrict (J.encodeStrict (StableEncoding v)) === Just (StableEncoding v)
+    Just (StableEncoding v) === JD.decodeStrict (J.encodeStrict (StableEncoding v))
 
 
 tests :: TestTree
@@ -70,4 +70,5 @@ tests = testGroup "JSON Roundtrips" $ stableEncodings ++ jsonRoundtrips
   jsonRoundtrips = fmap testJSONRoundtrip $
     [ EncodingCase signerGen
     , EncodingCase lineInfoGen
+    , EncodingCase pactOnChainErrorGen
     ]

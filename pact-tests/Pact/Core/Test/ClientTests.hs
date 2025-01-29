@@ -18,7 +18,6 @@ import Pact.Core.Command.Client
 
 import Pact.Core.Test.ServerUtils
 import Pact.Core.Errors
-import Pact.Core.Evaluate
 
 simpleServerCmd :: IO (Command Text)
 simpleServerCmd = do
@@ -44,7 +43,7 @@ tests = testGroup "Servant API client tests" [
       cmd <- simpleServerCmdWithPactErr
       res <- withTestPactServer "clientspec" $ \clientEnv -> do
         runClientM (localClient (LocalRequest cmd)) clientEnv
-      (_crResult . _localResponse <$> res) `shouldSatisfy` failWith (ErrorCode 0)
+      (_crResult . _localResponse <$> res) `shouldSatisfy` failWith (ErrorType "ExecutionError")
 
     , testCase "correctly runs a simple command publicly and listens to the result" $ do
       cmd <- simpleServerCmd
@@ -72,15 +71,13 @@ tests = testGroup "Servant API client tests" [
         Left _ -> assertFailure "client request failed"
         Right r -> case r of
           -- ListenTimeout _ -> assertFailure "timeout"
-          ListenResponse lr -> Right (_crResult lr) `shouldSatisfy` failWith (ErrorCode 0)
+          ListenResponse lr -> Right (_crResult lr) `shouldSatisfy` failWith (ErrorType "ExecutionError")
   ]
 
-failWith :: ErrorCode -> Either ClientError (PactResult (PactErrorCompat (LocatedErrorInfo Info))) -> Bool
+failWith :: ErrorType -> Either ClientError (PactResult (PactOnChainError)) -> Bool
 failWith errType res = case res of
   Left _ -> False
   Right r -> case r of
     PactResultOk _ -> False
-    PactResultErr r' -> case r' of
-      PELegacyError _ -> False
-      PEPact5Error pe -> _peCode pe == errType
+    PactResultErr pe -> _peType pe == errType
 

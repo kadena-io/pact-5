@@ -36,7 +36,6 @@ import Pact.Core.Command.Server
 import Pact.Core.Command.Types
 import Pact.Core.Environment.Types
 import Pact.Core.Errors
-import Pact.Core.Evaluate
 import Pact.Core.SPV
 import Pact.Core.StableEncoding
 import Pact.Core.Signer
@@ -52,6 +51,7 @@ import qualified Pact.JSON.Encode as JE
 
 import Pact.Core.Test.ServerUtils
 -- ---- TESTS -----
+-- TODO: test error messages are expected in subsequent PR
 
 tests :: TestTree
 tests = testGroup "PactContinuationTests"
@@ -134,7 +134,7 @@ testManagedCaps = do
           mhash]))
       -- PEUserRecoverableError (UserEnforceError "insufficient balance")
       -- Encountered failure in: PEUserRecoverableError, caused by: UserEnforceError
-      managedPayFails `failsWithCode` (ErrorCode 0x0004000000000000)
+      managedPayFails `failsWithCode` (ErrorType "ExecutionError")
 
 testOldNestedPacts :: TestTree
 testOldNestedPacts = do
@@ -150,7 +150,7 @@ testOldNestedPacts = do
       succeeds moduleCmd
       -- pact-5 --explain-error-code 0x00031a0000000000
       -- Encountered failure in: PEExecutionError, caused by: MultipleOrNestedDefPactExecFound
-      nestedExecPactCmd `failsWithCode` (ErrorCode 0x00031a0000000000)
+      nestedExecPactCmd `failsWithCode` (ErrorType "ExecutionError")
 
 
 -- CONTINUATIONS TESTS
@@ -203,7 +203,7 @@ testNestedPactContinuation = testGroup "test nested pact continuation" $ [
       testErrStep (errorStepNestedPactCode mname4) ("(" <> mname4 <> "-nested.nestedTester)") nestedDefPactFlags
   ]
 
-testSimpleServerCmd :: IO (Maybe (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))))
+testSimpleServerCmd :: IO (Maybe (CommandResult Hash (PactOnChainError)))
 testSimpleServerCmd = do
   simpleKeys <- DynEd25519KeyPair <$> generateEd25519KeyPair
   cmd <- mkExec  "(+ 1 2)" PUnit def [(simpleKeys,[])] [] Nothing (Just "test1")
@@ -230,7 +230,7 @@ testCorrectNextStep code command flags = do
     -- pact-5 --explain-error-code 0x00031f0000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactStepMismatch
     -- Fails with a `DefpactStepMismatch`, which is what we want.
-    checkStateCmd `failsWithCode` (ErrorCode 0x00031f0000000000)
+    checkStateCmd `failsWithCode` (ErrorType "ExecutionError")
 
 
 threeStepPactCode :: T.Text -> T.Text
@@ -324,7 +324,7 @@ testIncorrectNextStep code command flags = do
     -- We expect a step mismatch
     -- pact-5 --explain-error-code 0x00031f0000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactStepMismatch
-    incorrectStepCmd `failsWithCode` (ErrorCode 0x00031f0000000000)
+    incorrectStepCmd `failsWithCode` (ErrorType "ExecutionError")
     checkStateCmd `succeedsWith` (`shouldBe` textVal "step 1")
 
 
@@ -351,7 +351,7 @@ testLastStep code command flags = do
     -- We are expecting the pact was already completed here.
     -- pact-5 --explain-error-code 0x0003150000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactAlreadyCompleted
-    checkStateCmd `failsWithCode` (ErrorCode 0x0003150000000000)
+    checkStateCmd `failsWithCode` (ErrorType "ExecutionError")
 
 
 
@@ -375,7 +375,7 @@ testErrStep code command flags = do
     -- We expect a step mismatch
     -- pact-5 --explain-error-code 0x00031f0000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactStepMismatch
-    checkStateCmd `failsWithCode` (ErrorCode 0x00031f0000000000)
+    checkStateCmd `failsWithCode` (ErrorType "ExecutionError")
 
 
 errorStepPactCode :: T.Text -> T.Text
@@ -465,7 +465,7 @@ testCorrectRollbackStep = do
     -- We are expecting the pact was already completed here.
     -- pact-5 --explain-error-code 0x0003150000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactAlreadyCompleted
-    checkStateCmd `failsWithCode` (ErrorCode 0x0003150000000000)
+    checkStateCmd `failsWithCode` (ErrorType "ExecutionError")
 
 
 
@@ -504,7 +504,7 @@ testIncorrectRollbackStep = do
     contNextStepCmd `succeedsWith` (`shouldBe` textVal "step 1")
     -- pact-5 --explain-error-code 0x00031e0000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactRollbackMismatch
-    incorrectRbCmd `failsWithCode` (ErrorCode 0x00031e0000000000)
+    incorrectRbCmd `failsWithCode` (ErrorType "ExecutionError")
     checkStateCmd `succeedsWith` (`shouldBe` textVal "step 2")
 
 
@@ -568,7 +568,7 @@ testNoRollbackFunc = do
     contNextStepCmd `succeedsWith` (`shouldBe` textVal "step 1")
     -- ✗ pact-5 --explain-error-code 0x00031b0000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactStepHasNoRollback
-    noRollbackCmd `failsWithCode` (ErrorCode 0x00031b0000000000)
+    noRollbackCmd `failsWithCode` (ErrorType "ExecutionError")
     checkStateCmd `succeedsWith` (`shouldBe` textVal "step 2")
 
 
@@ -598,7 +598,7 @@ testPactYield = testGroup "pact yield"$ [
   -- the hash depends on the cbor encoding, so we bless some dummy hash
   ,testCase "testCrossChainYield:fails with different module" $
       testCrossChainYield "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1AA\")"
-        (Just (`shouldBeErrorCode` (ErrorCode 0x0003320000000000)))
+        (Just (`shouldBeErrorType` ErrorType "ExecutionError"))
         mkFakeSPV testFlags
 
   ,testCase "testCrossChainYield:succeeds with blessed module" $
@@ -608,7 +608,7 @@ testPactYield = testGroup "pact yield"$ [
       testCrossChainYield "(bless \"kuBrddl82uCHbhV1ECaH7fMf00Pq9lc2mPShU4Us_Jg\")"
         -- pact-5 --explain-error-code 0x0003390000000000
         -- Encountered failure in: PEExecutionError, caused by: ContinuationError
-        (Just $ (`shouldBeErrorCode` ErrorCode 0x0003380000000000))
+        (Just $ (`shouldBeErrorType` ErrorType "ExecutionError"))
         (const noSPVSupport) testFlags
   ]
 testNestedPactYield :: TestTree
@@ -709,7 +709,7 @@ testNestedPactYield = testGroup "nested pact yield" $ [
         -- we expect the defpact to already be completed here
         -- pact-5 --explain-error-code 0x0003150000000000
         -- Encountered failure in: PEExecutionError, caused by: DefPactAlreadyCompleted
-        chain1ContDupe `failsWithCode` (ErrorCode 0x0003150000000000)
+        chain1ContDupe `failsWithCode` (ErrorType "ExecutionError")
 
 
 testValidYield :: Text -> (Text -> Text) -> [ExecutionFlag] -> Assertion
@@ -733,7 +733,7 @@ testValidYield moduleName mkCode flags = do
     executePactCmd `succeedsWith` (`shouldBe` textVal "testing->Step0")
     resumeAndYieldCmd `succeedsWith` (`shouldBe` textVal "testing->Step0->Step1")
     resumeOnlyCmd `succeedsWith` (`shouldBe` textVal "testing->Step0->Step1->Step2")
-    checkStateCmd `failsWithCode` (ErrorCode 0x0003150000000000)
+    checkStateCmd `failsWithCode` (ErrorType "ExecutionError")
 
 
 pactWithYield :: T.Text -> T.Text
@@ -816,7 +816,7 @@ testNoYield moduleName mkCode flags = do
     executePactCmd `succeedsWith` (`shouldBe` textVal "testing->Step0")
     noYieldStepCmd `succeedsWith` (`shouldBe` textVal "step 1 has no yield")
     fails resumeErrCmd
-    checkStateCmd `failsWithCode` (ErrorCode 0x00031f0000000000)
+    checkStateCmd `failsWithCode` (ErrorType "ExecutionError")
 
 
 pactWithYieldErr :: T.Text -> T.Text
@@ -887,7 +887,7 @@ testResetYield moduleName mkCode flags = do
     executePactCmd `succeedsWith` (`shouldBe` textVal "step 0")
     yieldSameKeyCmd `succeedsWith` (`shouldBe` textVal "step 1")
     resumeStepCmd `succeedsWith` (`shouldBe` textVal "step 1")
-    checkStateCmd `failsWithCode` (ErrorCode 0x0003150000000000)
+    checkStateCmd `failsWithCode` (ErrorType "ExecutionError")
 
 
 
@@ -959,7 +959,7 @@ mkFakeSPV pe =
         return $ Left "Invalid proof"
   }
 
-testCrossChainYield :: T.Text -> Maybe (PactErrorCode (LocatedErrorInfo Info) -> Assertion) -> (DefPactExec -> SPVSupport) -> [ExecutionFlag] -> Assertion
+testCrossChainYield :: T.Text -> Maybe (PactOnChainError -> Assertion) -> (DefPactExec -> SPVSupport) -> [ExecutionFlag] -> Assertion
 testCrossChainYield blessCode expectFailure mkSpvSupport spvFlags = step0
   where
 
@@ -1036,7 +1036,7 @@ testCrossChainYield blessCode expectFailure mkSpvSupport spvFlags = step0
                    , PList $ V.fromList [ textVal "emily" ]]
                    (ModuleName "pact" Nothing)
                    mhash]))
-            chain1ContDupe `failsWithCode` (ErrorCode 0x0003150000000000)
+            chain1ContDupe `failsWithCode` (ErrorType "ExecutionError")
           Just expected ->
             chain1ContDupe `failsWith'` expected
 
@@ -1131,7 +1131,7 @@ testTwoPartyEscrow = testGroup "two party escrow" $ [
 
 twoPartyEscrow
   :: [Command Text]
-  -> (Hash -> ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ())
+  -> (Hash -> ReaderT (M.Map RequestKey (CommandResult Hash (PactOnChainError))) IO ())
   -> Assertion
 twoPartyEscrow testCmds act = do
   let setupPath = testDir ++ "cont-scripts/setup-"
@@ -1163,9 +1163,9 @@ decValue = PDecimal
 checkContHash
   :: HasCallStack
   => [ApiReqParts]
-  -> ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
+  -> ReaderT (M.Map RequestKey (CommandResult Hash (PactOnChainError))) IO ()
   -> Hash
-  -> ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
+  -> ReaderT (M.Map RequestKey (CommandResult Hash (PactOnChainError))) IO ()
 checkContHash reqs act hsh = forM_ reqs $ \req ->
   let desc = show $ view (_1 . to _ylNonce) req
   in case preview (_1 . to _ylPactTxHash . _Just) req of
@@ -1187,7 +1187,7 @@ testDebtorPreTimeoutCancel = do
     -- pact-5 --explain-error-code 0x0004000000000000
     -- Encountered failure in: PEUserRecoverableError, caused by: UserEnforceError
     -- Printed, it's PEUserRecoverableError (UserEnforceError "Cancel can only be effected by creditor, or debitor after timeout")
-    tryCancelCmd `failsWithCode` (ErrorCode 0x0004000000000000)
+    tryCancelCmd `failsWithCode` (ErrorType "ExecutionError")
     checkStillEscrowCmd `succeedsWith` (`shouldBe` decValue 98.00)
 
 
@@ -1236,9 +1236,9 @@ testFinishAlone = do
   twoPartyEscrow allCmds $ checkContHash [r1, r2] $ do
     -- PEUserRecoverableError (KeysetPredicateFailure KeysAll (fromList [PublicKeyText {_pubKey = "7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804"}]))
     -- [StackFrame {_sfName = FullyQualifiedName {_fqModule = ModuleName {_mnName = "accounts", _mnNamespace = Nothing}, _fqName = "USER_GUARD", _fqHash = ModuleHash {_mhHash = "bgU2grm5I7_Jyx6Hb93izSWhNDNWcxYlLYOPhNCdIDU"}},
-    tryCredAloneCmd `failsWithCode` (ErrorCode 0x0004040000000000)
+    tryCredAloneCmd `failsWithCode` (ErrorType "ExecutionError")
     -- PEUserRecoverableError (KeysetPredicateFailure KeysAll (fromList [PublicKeyText {_pubKey = "ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9"}]))
-    tryDebAloneCmd `failsWithCode` (ErrorCode 0x0004040000000000)
+    tryDebAloneCmd `failsWithCode` (ErrorType "ExecutionError")
 
 
 testPriceNegUp :: Assertion
@@ -1250,7 +1250,7 @@ testPriceNegUp = do
   -- Encountered failure in: PEUserRecoverableError, caused by: UserEnforceError
   -- PEUserRecoverableError (UserEnforceError "Price cannot negotiate up")
   twoPartyEscrow [tryNegUpCmd] $ checkContHash [req] $ do
-    tryNegUpCmd `failsWithCode` (ErrorCode 0x0004000000000000)
+    tryNegUpCmd `failsWithCode` (ErrorType "ExecutionError")
 
 
 testValidEscrowFinish :: Assertion
@@ -1276,7 +1276,7 @@ testPriceNegDownBadCaps = do
   -- PEUserRecoverableError (KeysetPredicateFailure KeysAll (fromList
   -- [PublicKeyText {_pubKey = "7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804"}]))
   twoPartyEscrow [tryNegUpCmd] $ checkContHash [req] $ do
-    tryNegUpCmd `failsWithCode` (ErrorCode 0x0004040000000000)
+    tryNegUpCmd `failsWithCode` (ErrorType "ExecutionError")
 
 testVerifiers :: TestTree
 testVerifiers = testGroup "using a verifier" $ [
@@ -1303,10 +1303,10 @@ shouldMatch
     :: HasCallStack
     => Command Text
     -> ExpectResult
-    -> ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
+    -> ReaderT (M.Map RequestKey (CommandResult Hash (PactOnChainError))) IO ()
 shouldMatch cmd er = ask >>= liftIO . shouldMatch' (makeCheck cmd er)
 
-shouldMatch' :: HasCallStack => CommandResultCheck -> M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))) -> Assertion
+shouldMatch' :: HasCallStack => CommandResultCheck -> M.Map RequestKey (CommandResult Hash (PactOnChainError)) -> Assertion
 shouldMatch' CommandResultCheck{..} results = checkResult _crcExpect apiRes
   where
     apiRes = M.lookup _crcReqKey results
@@ -1315,34 +1315,34 @@ shouldMatch' CommandResultCheck{..} results = checkResult _crcExpect apiRes
       Just cr -> crTest cr
 
 succeeds :: HasCallStack => Command Text ->
-                ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
+                ReaderT (M.Map RequestKey (CommandResult Hash (PactOnChainError))) IO ()
 succeeds cmd = cmd `succeedsWith` (\_ -> pure ())
 
 succeedsWith :: HasCallStack => Command Text -> (PactValue -> Assertion) ->
-                ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
+                ReaderT (M.Map RequestKey (CommandResult Hash (PactOnChainError))) IO ()
 succeedsWith cmd r = succeedsWith' cmd (\(pv,es) -> (es `shouldBe` []) *> r pv)
 
 succeedsWith' :: HasCallStack => Command Text -> ((PactValue,[PactEvent PactValue]) -> Assertion) ->
-                ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
+                ReaderT (M.Map RequestKey (CommandResult Hash (PactOnChainError))) IO ()
 succeedsWith' cmd r = shouldMatch cmd (resultShouldBe $ Right r)
 
 fails :: HasCallStack => Command Text ->
-         ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
+         ReaderT (M.Map RequestKey (CommandResult Hash (PactOnChainError))) IO ()
 fails cmd = cmd `failsWith` (\_ -> pure ())
 
-failsWith :: HasCallStack => Command Text -> (PactErrorCode (LocatedErrorInfo Info) -> Assertion) ->
-             ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
+failsWith :: HasCallStack => Command Text -> (PactOnChainError -> Assertion) ->
+             ReaderT (M.Map RequestKey (CommandResult Hash (PactOnChainError))) IO ()
 failsWith cmd r = failsWith' cmd (\e -> r e)
 
-failsWithCode :: HasCallStack => Command Text -> ErrorCode ->
-             ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
-failsWithCode cmd r = failsWith' cmd ((`shouldBe` r) . _peCode)
+failsWithCode :: HasCallStack => Command Text -> ErrorType ->
+             ReaderT (M.Map RequestKey (CommandResult Hash (PactOnChainError))) IO ()
+failsWithCode cmd r = failsWith' cmd ((`shouldBe` r) . _peType)
 
-shouldBeErrorCode :: HasCallStack => PactErrorCode info -> ErrorCode -> Assertion
-shouldBeErrorCode pe code = _peCode pe `shouldBe` code
+shouldBeErrorType :: HasCallStack => PactOnChainError -> ErrorType -> Assertion
+shouldBeErrorType pe code = _peType pe `shouldBe` code
 
-failsWith' :: HasCallStack => Command Text -> (PactErrorCode (LocatedErrorInfo Info) -> Assertion) ->
-             ReaderT (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)))) IO ()
+failsWith' :: HasCallStack => Command Text -> (PactOnChainError -> Assertion) ->
+             ReaderT (M.Map RequestKey (CommandResult Hash (PactOnChainError))) IO ()
 failsWith' cmd r = shouldMatch cmd (resultShouldBe $ Left r)
 
 
@@ -1401,7 +1401,7 @@ getDefPactId :: Command Text -> DefPactId
 getDefPactId cmd = DefPactId $ hashToText hsh
   where hsh = _cmdHash cmd
 
-newtype ExpectResult = ExpectResult (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info)) -> Assertion)
+newtype ExpectResult = ExpectResult (CommandResult Hash (PactOnChainError) -> Assertion)
     deriving (Semigroup)
 
 data CommandResultCheck = CommandResultCheck
@@ -1413,21 +1413,21 @@ data CommandResultCheck = CommandResultCheck
 makeCheck :: Command T.Text -> ExpectResult -> CommandResultCheck
 makeCheck c@Command{} expect = CommandResultCheck (cmdToRequestKey c) expect
 
-runAll :: [Command T.Text] -> IO (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))))
+runAll :: [Command T.Text] -> IO (M.Map RequestKey (CommandResult Hash (PactOnChainError)))
 runAll cmds = runAll' cmds noSPVSupport []
 
 runAll'
   :: [Command T.Text]
   -> SPVSupport
   -> [ExecutionFlag]
-  -> IO (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))))
+  -> IO (M.Map RequestKey (CommandResult Hash (PactOnChainError)))
 runAll' cmds spv flags =
   withTestPactServerWithSpv "continuationspec" flags spv $ \clientEnv ->
     run clientEnv cmds
 
 
 
-run :: ClientEnv -> [Command T.Text] -> IO (M.Map RequestKey (CommandResult Hash (PactErrorCompat (LocatedErrorInfo Info))))
+run :: ClientEnv -> [Command T.Text] -> IO (M.Map RequestKey (CommandResult Hash (PactOnChainError)))
 run clientEnv cmds = do
   sendResp <- doSend clientEnv . SendRequest . SubmitBatch $ NEL.fromList cmds
   case sendResp of
@@ -1455,13 +1455,11 @@ doPoll clientEnv req = runClientM (pollClient req) clientEnv
 
 resultShouldBe
     :: HasCallStack
-    => Either (PactErrorCode (LocatedErrorInfo Info) -> Assertion) ((PactValue,[PactEvent PactValue]) -> Assertion)
+    => Either (PactOnChainError -> Assertion) ((PactValue,[PactEvent PactValue]) -> Assertion)
     -> ExpectResult
 resultShouldBe expect = ExpectResult $ \cr ->
   case (expect, _crResult cr) of
-    (Left expErr, PactResultErr e) -> case e of
-      PEPact5Error err -> expErr err
-      _ -> error "case impossible: no compat errors are emitted by pact-5"
+    (Left expErr, PactResultErr e) -> expErr e
     (Right expVal, PactResultOk pv) -> expVal (pv, _crEvents cr)
     _ -> assertFailure $ unwords
       [ "Expected", either (\_ -> "PactError") (\_ -> "PactValue") expect, ", found", show cr ]

@@ -65,6 +65,7 @@ module Pact.Core.Names
  , parseParsedTyName
  , parseQualifiedName
  , parseFullyQualifiedName
+ , fullyQualNameParser
  , VerifierName(..)
  , renderTableName
  , jsonSafeRenderTableName
