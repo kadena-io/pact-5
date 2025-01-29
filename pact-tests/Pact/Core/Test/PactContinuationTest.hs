@@ -134,7 +134,7 @@ testManagedCaps = do
           mhash]))
       -- PEUserRecoverableError (UserEnforceError "insufficient balance")
       -- Encountered failure in: PEUserRecoverableError, caused by: UserEnforceError
-      managedPayFails `failsWithCode` (ErrorType "ExecutionError")
+      managedPayFails `failsWithCode` (ErrorType "TxFailure")
 
 testOldNestedPacts :: TestTree
 testOldNestedPacts = do
@@ -150,7 +150,7 @@ testOldNestedPacts = do
       succeeds moduleCmd
       -- pact-5 --explain-error-code 0x00031a0000000000
       -- Encountered failure in: PEExecutionError, caused by: MultipleOrNestedDefPactExecFound
-      nestedExecPactCmd `failsWithCode` (ErrorType "ExecutionError")
+      nestedExecPactCmd `failsWithCode` (ErrorType "EvalError")
 
 
 -- CONTINUATIONS TESTS
@@ -230,7 +230,7 @@ testCorrectNextStep code command flags = do
     -- pact-5 --explain-error-code 0x00031f0000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactStepMismatch
     -- Fails with a `DefpactStepMismatch`, which is what we want.
-    checkStateCmd `failsWithCode` (ErrorType "ExecutionError")
+    checkStateCmd `failsWithCode` (ErrorType "EvalError")
 
 
 threeStepPactCode :: T.Text -> T.Text
@@ -324,7 +324,7 @@ testIncorrectNextStep code command flags = do
     -- We expect a step mismatch
     -- pact-5 --explain-error-code 0x00031f0000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactStepMismatch
-    incorrectStepCmd `failsWithCode` (ErrorType "ExecutionError")
+    incorrectStepCmd `failsWithCode` (ErrorType "EvalError")
     checkStateCmd `succeedsWith` (`shouldBe` textVal "step 1")
 
 
@@ -351,7 +351,7 @@ testLastStep code command flags = do
     -- We are expecting the pact was already completed here.
     -- pact-5 --explain-error-code 0x0003150000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactAlreadyCompleted
-    checkStateCmd `failsWithCode` (ErrorType "ExecutionError")
+    checkStateCmd `failsWithCode` (ErrorType "EvalError")
 
 
 
@@ -375,7 +375,7 @@ testErrStep code command flags = do
     -- We expect a step mismatch
     -- pact-5 --explain-error-code 0x00031f0000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactStepMismatch
-    checkStateCmd `failsWithCode` (ErrorType "ExecutionError")
+    checkStateCmd `failsWithCode` (ErrorType "EvalError")
 
 
 errorStepPactCode :: T.Text -> T.Text
@@ -465,7 +465,7 @@ testCorrectRollbackStep = do
     -- We are expecting the pact was already completed here.
     -- pact-5 --explain-error-code 0x0003150000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactAlreadyCompleted
-    checkStateCmd `failsWithCode` (ErrorType "ExecutionError")
+    checkStateCmd `failsWithCode` (ErrorType "EvalError")
 
 
 
@@ -504,7 +504,7 @@ testIncorrectRollbackStep = do
     contNextStepCmd `succeedsWith` (`shouldBe` textVal "step 1")
     -- pact-5 --explain-error-code 0x00031e0000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactRollbackMismatch
-    incorrectRbCmd `failsWithCode` (ErrorType "ExecutionError")
+    incorrectRbCmd `failsWithCode` (ErrorType "EvalError")
     checkStateCmd `succeedsWith` (`shouldBe` textVal "step 2")
 
 
@@ -568,7 +568,7 @@ testNoRollbackFunc = do
     contNextStepCmd `succeedsWith` (`shouldBe` textVal "step 1")
     -- ✗ pact-5 --explain-error-code 0x00031b0000000000
     -- Encountered failure in: PEExecutionError, caused by: DefPactStepHasNoRollback
-    noRollbackCmd `failsWithCode` (ErrorType "ExecutionError")
+    noRollbackCmd `failsWithCode` (ErrorType "EvalError")
     checkStateCmd `succeedsWith` (`shouldBe` textVal "step 2")
 
 
@@ -598,7 +598,7 @@ testPactYield = testGroup "pact yield"$ [
   -- the hash depends on the cbor encoding, so we bless some dummy hash
   ,testCase "testCrossChainYield:fails with different module" $
       testCrossChainYield "(bless \"_9xPxvYomOU0iEqXpcrChvoA-E9qoaE1TqU460xN1AA\")"
-        (Just (`shouldBeErrorType` ErrorType "ExecutionError"))
+        (Just (`shouldBeErrorType` ErrorType "EvalError"))
         mkFakeSPV testFlags
 
   ,testCase "testCrossChainYield:succeeds with blessed module" $
@@ -608,7 +608,7 @@ testPactYield = testGroup "pact yield"$ [
       testCrossChainYield "(bless \"kuBrddl82uCHbhV1ECaH7fMf00Pq9lc2mPShU4Us_Jg\")"
         -- pact-5 --explain-error-code 0x0003390000000000
         -- Encountered failure in: PEExecutionError, caused by: ContinuationError
-        (Just $ (`shouldBeErrorType` ErrorType "ExecutionError"))
+        (Just $ (`shouldBeErrorType` ErrorType "EvalError"))
         (const noSPVSupport) testFlags
   ]
 testNestedPactYield :: TestTree
@@ -709,7 +709,7 @@ testNestedPactYield = testGroup "nested pact yield" $ [
         -- we expect the defpact to already be completed here
         -- pact-5 --explain-error-code 0x0003150000000000
         -- Encountered failure in: PEExecutionError, caused by: DefPactAlreadyCompleted
-        chain1ContDupe `failsWithCode` (ErrorType "ExecutionError")
+        chain1ContDupe `failsWithCode` (ErrorType "EvalError")
 
 
 testValidYield :: Text -> (Text -> Text) -> [ExecutionFlag] -> Assertion
@@ -733,7 +733,7 @@ testValidYield moduleName mkCode flags = do
     executePactCmd `succeedsWith` (`shouldBe` textVal "testing->Step0")
     resumeAndYieldCmd `succeedsWith` (`shouldBe` textVal "testing->Step0->Step1")
     resumeOnlyCmd `succeedsWith` (`shouldBe` textVal "testing->Step0->Step1->Step2")
-    checkStateCmd `failsWithCode` (ErrorType "ExecutionError")
+    checkStateCmd `failsWithCode` (ErrorType "EvalError")
 
 
 pactWithYield :: T.Text -> T.Text
@@ -816,7 +816,7 @@ testNoYield moduleName mkCode flags = do
     executePactCmd `succeedsWith` (`shouldBe` textVal "testing->Step0")
     noYieldStepCmd `succeedsWith` (`shouldBe` textVal "step 1 has no yield")
     fails resumeErrCmd
-    checkStateCmd `failsWithCode` (ErrorType "ExecutionError")
+    checkStateCmd `failsWithCode` (ErrorType "EvalError")
 
 
 pactWithYieldErr :: T.Text -> T.Text
@@ -887,7 +887,7 @@ testResetYield moduleName mkCode flags = do
     executePactCmd `succeedsWith` (`shouldBe` textVal "step 0")
     yieldSameKeyCmd `succeedsWith` (`shouldBe` textVal "step 1")
     resumeStepCmd `succeedsWith` (`shouldBe` textVal "step 1")
-    checkStateCmd `failsWithCode` (ErrorType "ExecutionError")
+    checkStateCmd `failsWithCode` (ErrorType "EvalError")
 
 
 
@@ -1036,7 +1036,7 @@ testCrossChainYield blessCode expectFailure mkSpvSupport spvFlags = step0
                    , PList $ V.fromList [ textVal "emily" ]]
                    (ModuleName "pact" Nothing)
                    mhash]))
-            chain1ContDupe `failsWithCode` (ErrorType "ExecutionError")
+            chain1ContDupe `failsWithCode` (ErrorType "EvalError")
           Just expected ->
             chain1ContDupe `failsWith'` expected
 
@@ -1187,7 +1187,7 @@ testDebtorPreTimeoutCancel = do
     -- pact-5 --explain-error-code 0x0004000000000000
     -- Encountered failure in: PEUserRecoverableError, caused by: UserEnforceError
     -- Printed, it's PEUserRecoverableError (UserEnforceError "Cancel can only be effected by creditor, or debitor after timeout")
-    tryCancelCmd `failsWithCode` (ErrorType "ExecutionError")
+    tryCancelCmd `failsWithCode` (ErrorType "TxFailure")
     checkStillEscrowCmd `succeedsWith` (`shouldBe` decValue 98.00)
 
 
@@ -1236,9 +1236,9 @@ testFinishAlone = do
   twoPartyEscrow allCmds $ checkContHash [r1, r2] $ do
     -- PEUserRecoverableError (KeysetPredicateFailure KeysAll (fromList [PublicKeyText {_pubKey = "7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804"}]))
     -- [StackFrame {_sfName = FullyQualifiedName {_fqModule = ModuleName {_mnName = "accounts", _mnNamespace = Nothing}, _fqName = "USER_GUARD", _fqHash = ModuleHash {_mhHash = "bgU2grm5I7_Jyx6Hb93izSWhNDNWcxYlLYOPhNCdIDU"}},
-    tryCredAloneCmd `failsWithCode` (ErrorType "ExecutionError")
+    tryCredAloneCmd `failsWithCode` (ErrorType "TxFailure")
     -- PEUserRecoverableError (KeysetPredicateFailure KeysAll (fromList [PublicKeyText {_pubKey = "ac69d9856821f11b8e6ca5cdd84a98ec3086493fd6407e74ea9038407ec9eba9"}]))
-    tryDebAloneCmd `failsWithCode` (ErrorType "ExecutionError")
+    tryDebAloneCmd `failsWithCode` (ErrorType "TxFailure")
 
 
 testPriceNegUp :: Assertion
@@ -1250,7 +1250,7 @@ testPriceNegUp = do
   -- Encountered failure in: PEUserRecoverableError, caused by: UserEnforceError
   -- PEUserRecoverableError (UserEnforceError "Price cannot negotiate up")
   twoPartyEscrow [tryNegUpCmd] $ checkContHash [req] $ do
-    tryNegUpCmd `failsWithCode` (ErrorType "ExecutionError")
+    tryNegUpCmd `failsWithCode` (ErrorType "TxFailure")
 
 
 testValidEscrowFinish :: Assertion
@@ -1276,7 +1276,7 @@ testPriceNegDownBadCaps = do
   -- PEUserRecoverableError (KeysetPredicateFailure KeysAll (fromList
   -- [PublicKeyText {_pubKey = "7d0c9ba189927df85c8c54f8b5c8acd76c1d27e923abbf25a957afdf25550804"}]))
   twoPartyEscrow [tryNegUpCmd] $ checkContHash [req] $ do
-    tryNegUpCmd `failsWithCode` (ErrorType "ExecutionError")
+    tryNegUpCmd `failsWithCode` (ErrorType "TxFailure")
 
 testVerifiers :: TestTree
 testVerifiers = testGroup "using a verifier" $ [
