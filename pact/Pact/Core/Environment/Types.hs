@@ -362,7 +362,7 @@ data ReplTestResult
 
 data ReplOutput where
   ReplStdOut :: ReplOutput
-  ReplLogOut :: IORef [Text] -> ReplOutput
+  ReplLogOut :: IORef [(Text, FileLocSpanInfo)] -> ReplOutput
 
 -- | Passed in repl environment
 data ReplState b
@@ -385,7 +385,7 @@ data ReplState b
   -- ^ The current repl tx, if one has been initiated
   , _replNativesEnabled :: Bool
   -- ^ Are repl natives enabled in module code
-  , _replOutputLine :: !(Text -> EvalM 'ReplRuntime b FileLocSpanInfo ())
+  , _replOutputLine :: !(FileLocSpanInfo -> Text -> EvalM 'ReplRuntime b FileLocSpanInfo ())
   -- ^ The output line function, as an entry in the repl env
   --   to allow for custom output handling, e.g haskeline
   , _replLoad :: !(FilePath -> Bool -> EvalM 'ReplRuntime b FileLocSpanInfo ())

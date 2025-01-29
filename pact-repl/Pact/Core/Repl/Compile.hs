@@ -82,7 +82,7 @@ data ReplCompileValue
 
 mkReplState
   :: EvalEnv b FileLocSpanInfo
-  -> (Text -> EvalM 'ReplRuntime b FileLocSpanInfo ())
+  -> (FileLocSpanInfo -> Text -> EvalM 'ReplRuntime b FileLocSpanInfo ())
   -> (FilePath -> Bool -> EvalM 'ReplRuntime b FileLocSpanInfo ())
   -> ReplState b
 mkReplState ee printfn loadFn =
@@ -105,7 +105,7 @@ mkReplState ee printfn loadFn =
 
 mkReplState'
   :: EvalEnv ReplCoreBuiltin FileLocSpanInfo
-  -> (Text -> EvalM 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo ())
+  -> (FileLocSpanInfo -> Text -> EvalM 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo ())
   -> ReplState ReplCoreBuiltin
 mkReplState' ee printfn =
   ReplState
@@ -257,7 +257,7 @@ interpretReplProgram interpreter sc@(SourceCode sourceFp source) = do
   parseSource lexerOutput
     | sourceIsPactFile = (fmap.fmap) (Lisp.RTLTopLevel) $ Lisp.parseProgram lexerOutput
     | otherwise = Lisp.parseReplProgram lexerOutput
-  displayValue p = p <$ replPrintLn p
+  displayValue info p = p <$ replPrintLn info p
   sliceCode = \case
     Lisp.TLModule{} -> sliceFromSource
     Lisp.TLInterface{} -> sliceFromSource
@@ -265,7 +265,7 @@ interpretReplProgram interpreter sc@(SourceCode sourceFp source) = do
     Lisp.TLUse{} -> \_ _ -> mempty
   pipe' tl = case tl of
     Lisp.RTLTopLevel toplevel -> case topLevelHasDocs toplevel of
-      Just doc -> displayValue $ RBuiltinDoc doc
+      Just doc -> displayValue tlInfo $ RBuiltinDoc doc
       Nothing -> do
         functionDocs toplevel
         (ds, deps) <- compileDesugarOnly interpreter toplevel
@@ -277,15 +277,17 @@ interpretReplProgram interpreter sc@(SourceCode sourceFp source) = do
               Just d -> do
                 let qn = QualifiedName n mn
                 docs <- usesReplState replUserDocs (M.lookup qn)
-                displayValue (RUserDoc d docs)
+                displayValue tlInfo (RUserDoc d docs)
               Nothing ->
                 throwExecutionError varI $ EvalError "repl invariant violated: resolved to a top level free variable without a binder"
           _ -> do
-            let sliced = sliceCode toplevel source (view (Lisp.topLevelInfo.spanInfo) toplevel)
+            let sliced = sliceCode toplevel source (view spanInfo tlInfo)
             v <- evalTopLevel interpreter (RawCode sliced) ds deps
             emitWarnings
-            replPrintLn v
+            replPrintLn tlInfo v
             pure (RCompileValue v)
+      where
+      tlInfo = view Lisp.topLevelInfo toplevel
     _ ->  do
       ds <- runDesugarReplTopLevel tl
       interpret ds
@@ -297,13 +299,13 @@ interpretReplProgram interpreter sc@(SourceCode sourceFp source) = do
           atomicModifyIORef' ref (\old -> (newDefaultWarningStack, getWarningStack old))
         -- Todo: print located line
         -- Note: warnings are pushed FIFO, so we reverse to get the right order
-        traverse_ (replPrintLn . _locElem) (reverse warnings)
+        traverse_ (\(Located loc e) -> replPrintLn loc e) (reverse warnings)
   interpret (DesugarOutput tl _deps) = do
     case tl of
       RTLDefun df -> do
         let fqn = FullyQualifiedName replModuleName (_argName $ _dfunSpec df) replModuleHash
         loaded . loAllLoaded %= M.insert fqn (Dfun df)
-        displayValue $ RLoadedDefun $ _argName $ _dfunSpec df
+        displayValue (_dfunInfo df)  $ RLoadedDefun $ _argName $ _dfunSpec df
       RTLDefConst dc -> case _dcTerm dc of
         TermConst term -> do
           pv <- eval interpreter PSysOnly term
@@ -312,8 +314,8 @@ interpretReplProgram interpreter sc@(SourceCode sourceFp source) = do
           let dc' = set dcTerm (EvaledConst pv) dc
           let fqn = FullyQualifiedName replModuleName (_argName $ _dcSpec dc) replModuleHash
           loaded . loAllLoaded %= M.insert fqn (DConst dc')
-          displayValue $ RLoadedDefConst $ _argName $ _dcSpec dc'
+          displayValue (_dcInfo dc) $ RLoadedDefConst $ _argName $ _dcSpec dc'
         EvaledConst _ -> do
           let fqn = FullyQualifiedName replModuleName (_argName $ _dcSpec dc) replModuleHash
           loaded . loAllLoaded %= M.insert fqn (DConst dc)
-          displayValue $ RLoadedDefConst $ _argName $ _dcSpec dc
+          displayValue (_dcInfo dc) $ RLoadedDefConst $ _argName $ _dcSpec dc

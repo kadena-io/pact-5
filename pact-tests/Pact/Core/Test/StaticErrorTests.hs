@@ -39,7 +39,7 @@ runStaticTest label src interp predicate = do
   pdb <- mockPactDb serialisePact_repl_fileLocSpanInfo
   ee <- defaultEvalEnv pdb replBuiltinMap
   let source = SourceCode label src
-      rstate = mkReplState ee (const (pure ())) (\f reset -> void (loadFile interp f reset))
+      rstate = mkReplState ee (const (const (pure ()))) (\f reset -> void (loadFile interp f reset))
                 & replCurrSource .~ source
                 & replNativesEnabled .~ True
   stateRef <- newIORef rstate

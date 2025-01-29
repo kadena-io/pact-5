@@ -245,16 +245,16 @@ gasLogEntrytoPactValue entry = PString $ renderCompactText' $ n <> ": " <> prett
   where
     n = pretty (_gleArgs entry) <+> pretty (_gleInfo entry)
 
-replPrintLn :: Pretty a => a -> EvalM 'ReplRuntime b FileLocSpanInfo ()
-replPrintLn p = replPrintLn' (renderCompactText p)
+replPrintLn :: Pretty a => FileLocSpanInfo -> a -> EvalM 'ReplRuntime b FileLocSpanInfo ()
+replPrintLn info p = replPrintLn' info (renderCompactText p)
 
-replPrintLn' :: Text -> EvalM 'ReplRuntime b FileLocSpanInfo ()
-replPrintLn' p = do
+replPrintLn' :: FileLocSpanInfo -> Text -> EvalM 'ReplRuntime b FileLocSpanInfo ()
+replPrintLn' info p = do
   r <- getReplState
   case _replLogType r of
-    ReplStdOut -> _replOutputLine r p
+    ReplStdOut -> _replOutputLine r info p
     ReplLogOut v ->
-      liftIO (modifyIORef' v (p:))
+      liftIO (modifyIORef' v ((p, info):))
 
 recordTestResult
   :: Text
