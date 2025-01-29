@@ -95,8 +95,11 @@ unsignedReqFlag = OUnsignedReq
 localFlag :: O.Parser Bool
 localFlag = O.flag False True (O.short 'l' <> O.long "local" <> O.help "Format for /local endpoint")
 
-die :: String -> IO b
-die msg = hPutStrLn stderr msg >> hFlush stderr >> exitFailure
+exitFailureWithMessage :: String -> IO b
+exitFailureWithMessage msg = hPutStrLn stderr msg >> hFlush stderr >> exitFailure
+
+exitSuccessWithMessage :: String -> IO b
+exitSuccessWithMessage msg = hPutStrLn stdout msg >> hFlush stdout >> exitSuccess
 
 main :: IO ()
 main = O.execParser argParser >>= \case
@@ -122,10 +125,11 @@ main = O.execParser argParser >>= \case
       Left perr -> putStrLn $ Y.prettyPrintParseException perr
       Right config -> runServer config noSPVSupport
   where
-    exitEither _ Left {} = die "Load failed"
-    exitEither m (Right t) = m t >> exitSuccess
-    exitLoad = exitEither (\_ -> hPutStrLn stderr "Load successful" >> hFlush stderr)
-    runScript f dolog = execScript dolog f >>= exitLoad . fst
+    runScript f dolog = execScript dolog f >>= \case
+      (Left pe, state) -> do
+        let renderedError = renderLocatedPactErrorFromState state pe
+        exitFailureWithMessage ((T.unpack renderedError) <> "\nLoad failed")
+      (Right _, _) -> exitSuccessWithMessage "Load successful"
     printVersion = putStrLn ("pact version " <> showVersion PI.version)
     printBuiltins = traverse_ (\bi -> T.putStrLn $ "\"" <> bi <> "\"") replCoreBuiltinNames
 
