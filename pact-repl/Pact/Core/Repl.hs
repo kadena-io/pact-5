@@ -16,8 +16,14 @@
 --
 
 
-module Pact.Core.Repl(runRepl, execScript, mkReplState) where
+module Pact.Core.Repl
+  ( runRepl
+  , execScript
+  , mkReplState
+  , renderLocatedPactErrorFromState)
+  where
 
+import Control.Lens
 import Control.Monad.IO.Class
 import Control.Exception.Safe
 import Control.Monad.Except
@@ -37,8 +43,6 @@ import Pact.Core.Repl.Utils
 import Pact.Core.Serialise
 import Pact.Core.Info
 import Pact.Core.Errors
-import Control.Lens
-import qualified Data.Map.Strict as M
 
 execScript :: Bool -> FilePath -> IO (Either (PactError FileLocSpanInfo) [ReplCompileValue], ReplState ReplCoreBuiltin)
 execScript dolog f = do
@@ -53,6 +57,16 @@ execScript dolog f = do
   logger
     | dolog = liftIO . T.putStrLn
     | otherwise = const (pure ())
+
+-- | Render a nice error
+renderLocatedPactErrorFromState :: ReplState b -> PactError FileLocSpanInfo -> Text
+renderLocatedPactErrorFromState rstate err = rendered
+  where
+  replInfo = view peInfo err
+  originFile = case rstate ^. replLoadedFiles . at (_flsiFile replInfo) of
+            Just sc -> sc
+            Nothing -> rstate ^. replCurrSource
+  rendered = replError originFile err
 
 
 runRepl :: IO ()
@@ -83,10 +97,8 @@ runRepl = do
         case eout of
           Right _ -> pure ()
           Left err -> do
-            let replInfo = view peInfo err
-            rs <- lift (usesReplState replLoadedFiles (M.lookup (_flsiFile replInfo))) >>= \case
-              Just sc -> pure sc
-              Nothing -> lift (useReplState replCurrSource)
+            rstate <- lift getReplState
+            let renderedError = renderLocatedPactErrorFromState rstate err
             lift (replCurrSource .== defaultSrc)
-            outputStrLn (T.unpack (replError rs err))
+            outputStrLn (T.unpack renderedError)
         loop

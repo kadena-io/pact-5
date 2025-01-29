@@ -34,6 +34,7 @@ module Pact.Core.Repl.Utils
  , renderReplFlag
  , replError
  , SourceCode(..)
+ , getReplState
  , useReplState
  , usesReplState
  , (.==)
