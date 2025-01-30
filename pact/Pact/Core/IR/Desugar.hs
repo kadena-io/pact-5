@@ -212,8 +212,6 @@ instance DesugarBuiltin (ReplBuiltin CoreBuiltin) where
       App (Builtin (RBuiltinRepl REnvGasSet) i) [e1] i
   desugarAppArity i (RBuiltinRepl REnvGasModel) [] =
       App (Builtin (RBuiltinRepl REnvAskGasModel) i) [] i
-  desugarAppArity i (RBuiltinRepl REnvGasModel) [e1, e2] =
-      App (Builtin (RBuiltinRepl REnvGasModelFixed) i) [e1, e2] i
   desugarAppArity i (RBuiltinRepl RBeginTx) [e1] =
       App (Builtin (RBuiltinRepl RBeginNamedTx) i) [e1] i
   desugarAppArity i (RBuiltinRepl REnforcePactVersionMin) [e1, e2] =

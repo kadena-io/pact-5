@@ -36,6 +36,7 @@ import System.FilePath.Posix
 
 
 import qualified Data.Map.Strict as M
+import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
 import Pact.Core.Persistence
@@ -252,6 +253,11 @@ interpretReplProgram interpreter sc@(SourceCode sourceFp source) = do
   setBuiltinResolution sc
   traverse pipe' parsed
   where
+  renderDoc info doc = liftIO (renderBuiltinDoc doc) >>= \case
+    Right d -> pure d
+    Left err -> do
+      let errMsg = "INTERNAL ERROR: Please report to the pact team: " <> T.pack (show err)
+      throwExecutionError info (UnknownException errMsg)
   toFileLoc = FileLocSpanInfo sourceFp
   sourceIsPactFile = isPactFile sourceFp
   parseSource lexerOutput
@@ -265,7 +271,9 @@ interpretReplProgram interpreter sc@(SourceCode sourceFp source) = do
     Lisp.TLUse{} -> \_ _ -> mempty
   pipe' tl = case tl of
     Lisp.RTLTopLevel toplevel -> case topLevelHasDocs toplevel of
-      Just doc -> displayValue tlInfo $ RBuiltinDoc doc
+      Just doc -> do
+        ansiDoc <- renderDoc tlInfo doc
+        displayValue tlInfo $ RBuiltinDoc ansiDoc
       Nothing -> do
         functionDocs toplevel
         (ds, deps) <- compileDesugarOnly interpreter toplevel

@@ -55,13 +55,12 @@ import Data.IORef
 prettyShowValue :: CEKValue b i m -> Text
 prettyShowValue = \case
   VPactValue p -> renderText p
-  VTable (TableValue (TableName tn mn) _ _) -> "table{" <> renderModuleName mn <> "_" <> tn <> "}"
   VClosure _ -> "<#closure>"
 
 corePrint :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 corePrint info b cont handler _env = \case
   [v] -> do
-    liftIO $ putStrLn $ T.unpack (prettyShowValue v)
+    replPrintLn' info (prettyShowValue v)
     returnCEKValue cont handler (VLiteral LUnit)
   args -> argsError info b args
 
@@ -483,7 +482,7 @@ envMilliGas info b cont handler _env = \case
     returnCEKValue cont handler (VInteger (fromIntegral gas))
   [VInteger g] -> do
     putGas (MilliGas (fromIntegral g))
-    returnCEKValue cont handler $ VString $ "Set milligas to" <> T.pack (show g)
+    returnCEKValue cont handler $ VString $ "Set milligas to " <> T.pack (show g)
   args -> argsError info b args
 
 envGasLimit :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
@@ -561,6 +560,7 @@ coreVersion info b  cont handler _env = \case
 envSetDebug :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envSetDebug info b cont handler _env = \case
   [VString flag] -> do
+    -- Note: if these change, please change `env-set-debug-flags.md`
     flags <- case T.strip flag of
         "lexer" -> pure $ S.singleton ReplDebugLexer
         "parser" -> pure $ S.singleton ReplDebugParser
@@ -663,7 +663,6 @@ replCoreBuiltinRuntime = \case
     REnvGasLog -> envGasLog
     REnvGasModel -> envGasModel
     REnvAskGasModel -> envGasModel
-    REnvGasModelFixed -> envGasModel
     RPactVersion -> coreVersion
     REnforcePactVersionMin -> coreEnforceVersion
     REnforcePactVersionRange -> coreEnforceVersion

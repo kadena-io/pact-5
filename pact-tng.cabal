@@ -558,6 +558,8 @@ test-suite core-tests
     , temporary
     , wai-logger
     , fast-logger
+    , property-matchers
+
   other-modules:
     , Pact.Core.Test.CommandTests
     , Pact.Core.Test.ReplTests

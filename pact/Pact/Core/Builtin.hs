@@ -764,7 +764,6 @@ data ReplOnlyBuiltin
   | REnvGasLog
   | REnvGasModel
   | REnvAskGasModel
-  | REnvGasModelFixed
   -- | REnvGasPrice
   -- | REnvGasRate
   -- Defpact
@@ -824,7 +823,6 @@ instance IsBuiltin ReplOnlyBuiltin where
     REnvGasLog -> 0
     REnvGasModel -> 1
     REnvAskGasModel -> 0
-    REnvGasModelFixed -> 1
     RPactVersion -> 0
     REnforcePactVersionMin -> 1
     REnforcePactVersionRange -> 2
@@ -909,7 +907,6 @@ replBuiltinsToText = \case
   REnvGasLog -> "env-gaslog"
   REnvGasModel -> "env-gasmodel"
   REnvAskGasModel -> "env-ask-gasmodel"
-  REnvGasModelFixed -> "env-gasmodel-fixed"
   RPactVersion -> "pact-version"
   REnforcePactVersionMin -> "enforce-pact-version"
   REnforcePactVersionRange -> "enforce-pact-version-range"
@@ -938,8 +935,23 @@ replCoreBuiltinNames :: [Text]
 replCoreBuiltinNames =
   [ txtRepr
   | b <- [minBound .. maxBound]
-  , b `notElem` (RBuiltinWrap <$> coreBuiltinOverloads)
+  , b `notElem` replBuiltinOverloads
   , let !txtRepr = replCoreBuiltinToText b]
+
+replBuiltinOverloads :: [ReplBuiltin CoreBuiltin]
+replBuiltinOverloads = (RBuiltinRepl <$> replOverloads) ++ (RBuiltinWrap <$> coreBuiltinOverloads)
+  where
+  replOverloads =
+    [ REnvAskGasModel
+    , REnvGasSet
+    , RLoadWithEnv
+    , RResetPactState
+    , RExpectFailureMatch
+    , RContinuePactRollback
+    , RContinuePactRollbackYield
+    , RContinuePactRollbackYieldObj
+    , RBeginNamedTx
+    , REnforcePactVersionRange]
 
 -- | A map from raw text name of a builtin
 --   to a `ReplBuiltin CoreBuiltin`

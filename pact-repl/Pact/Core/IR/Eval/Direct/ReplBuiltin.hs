@@ -57,13 +57,12 @@ import Data.IORef
 prettyShowValue :: EvalValue b i m -> Text
 prettyShowValue = \case
   VPactValue p -> renderText p
-  VTable (TableValue (TableName tn mn) _ _) -> "table{" <> renderModuleName mn <> "_" <> tn <> "}"
   VClosure _ -> "<#closure>"
 
 corePrint :: NativeFunction ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 corePrint info b _env = \case
   [v] -> do
-    liftIO $ putStrLn $ T.unpack (prettyShowValue v)
+    replPrintLn' info (prettyShowValue v)
     return (VLiteral LUnit)
   args -> argsError info b args
 
@@ -338,6 +337,7 @@ emptyTxState = do
 envSetDebug :: NativeFunction 'ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envSetDebug info b _env = \case
   [VString flag] -> do
+    -- Note: if these change, please change `env-set-debug-flags.md`
     flags <- case T.strip flag of
         "lexer" -> pure $ S.singleton ReplDebugLexer
         "parser" -> pure $ S.singleton ReplDebugParser
@@ -631,7 +631,6 @@ replCoreBuiltinRuntime = \case
     REnvGasLog -> envGasLog
     REnvGasModel -> envGasModel
     REnvAskGasModel -> envGasModel
-    REnvGasModelFixed -> envGasModel
     RPactVersion -> coreVersion
     REnforcePactVersionMin -> coreEnforceVersion
     REnforcePactVersionRange -> coreEnforceVersion
