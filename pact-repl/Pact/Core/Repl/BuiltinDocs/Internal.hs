@@ -9,14 +9,12 @@ import Language.Haskell.TH.Syntax
 import System.Directory
 import System.FilePath
 
-import Data.Default
 import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.Text.IO as T
 import qualified Data.Text as T
 import qualified Data.Map.Strict as M
 import Data.Functor
-import Text.Pandoc hiding (runIO)
 
 listBuiltinDocs :: IO [FilePath]
 listBuiltinDocs = do
@@ -44,20 +42,9 @@ mkBuiltinDocs = embedIO action
     files <- listBuiltinDocs
     cnt <- forM files $ \f -> do
       let bname = takeBaseName f
-      content <- runIOorExplode $
-        writeANSI writerOpts =<< readMarkdown readerOpts =<< liftIO (T.readFile f)
+      content <- liftIO (T.readFile f)
       pure (normalizedNameToBuiltin $ T.pack bname, MarkdownDoc content)
     pure $ M.fromList cnt
-
-readerOpts :: ReaderOptions
-readerOpts = def
-  { readerExtensions = pandocExtensions
-  }
-
-writerOpts :: WriterOptions
-writerOpts = def
-  { writerExtensions = pandocExtensions
-  }
 
 builtinToNormalizedName :: T.Text -> T.Text
 builtinToNormalizedName = \case

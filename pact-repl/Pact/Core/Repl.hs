@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 
@@ -86,8 +87,29 @@ runRepl = do
   displayOutput _ = outputStrLn . show . pretty
   catch' ma = catchAny ma (\e -> outputStrLn (show e) *> loop)
   defaultSrc = SourceCode "(interactive)" mempty
+  inputNeedsToBeConsumed err _input = case err of
+    PEParseError (ParsingError e) _info | e == "[')']" -> True
+    _ -> False
+  inputLoop accumulator = catch' $ do
+    minput <- fmap T.pack <$> getInputLine "....> "
+    case minput of
+      Nothing -> outputStrLn "goodbye"
+      Just input | T.null input -> inputLoop accumulator
+      Just rest -> catch' $ do
+        let src = accumulator <> "\n" <> rest
+        lift (replCurrSource .== defaultSrc{_scPayload=src})
+        eout <- lift (tryError (interpretReplProgramDirect (SourceCode "(interactive)" src)))
+        case eout of
+          Right _ -> pure ()
+          -- Expected a final `)` in our input, thus, continue chugging
+          Left err | inputNeedsToBeConsumed err src -> inputLoop src
+          Left err -> do
+            rstate <- lift getReplState
+            let renderedError = renderLocatedPactErrorFromState rstate err
+            lift (replCurrSource .== defaultSrc)
+            outputStrLn (T.unpack renderedError)
   loop = do
-    minput <- fmap T.pack <$> getInputLine "pact>"
+    minput <- fmap T.pack <$> getInputLine "pact> "
     case minput of
       Nothing -> outputStrLn "goodbye"
       Just input | T.null input -> loop
@@ -96,6 +118,8 @@ runRepl = do
         eout <- lift (tryError (interpretReplProgramDirect (SourceCode "(interactive)" src)))
         case eout of
           Right _ -> pure ()
+          -- Expected a final `)` in our input, thus, continue chugging
+          Left err | inputNeedsToBeConsumed err src -> inputLoop src
           Left err -> do
             rstate <- lift getReplState
             let renderedError = renderLocatedPactErrorFromState rstate err
