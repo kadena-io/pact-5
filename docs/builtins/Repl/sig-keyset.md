@@ -14,7 +14,7 @@ Convenience function to build a keyset from keys present in message signatures, 
 
 ### Return value
 
-Returns a keyset `guard` constructed from all the signatures present in the tx sigs (Generally set in the repl)/
+Returns a keyset `guard` constructed from all the signatures present in the tx sigs (Generally set in the repl)
 
 ### Example
 
