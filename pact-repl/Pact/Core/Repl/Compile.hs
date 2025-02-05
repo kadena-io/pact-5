@@ -53,6 +53,7 @@ import Pact.Core.Errors
 import Pact.Core.Interpreter
 import Pact.Core.Pretty hiding (pipe)
 import Pact.Core.Serialise
+import Pact.Core.PactValue
 
 
 import Pact.Core.IR.Eval.Runtime
@@ -257,6 +258,8 @@ interpretReplProgram interpreter sc@(SourceCode sourceFp source) = do
   parseSource lexerOutput
     | sourceIsPactFile = (fmap.fmap) (Lisp.RTLTopLevel) $ Lisp.parseProgram lexerOutput
     | otherwise = Lisp.parseReplProgram lexerOutput
+  displayValue :: FileLocSpanInfo -> ReplCompileValue -> ReplM ReplCoreBuiltin ReplCompileValue
+  displayValue _info v@(RCompileValue (InterpretValue PUnit _)) = pure v
   displayValue info p = p <$ replPrintLn info p
   sliceCode = \case
     Lisp.TLModule{} -> sliceFromSource
@@ -282,10 +285,9 @@ interpretReplProgram interpreter sc@(SourceCode sourceFp source) = do
                 throwExecutionError varI $ EvalError "repl invariant violated: resolved to a top level free variable without a binder"
           _ -> do
             let sliced = sliceCode toplevel source (view spanInfo tlInfo)
-            v <- evalTopLevel interpreter (RawCode sliced) ds deps
+            v <- RCompileValue <$> evalTopLevel interpreter (RawCode sliced) ds deps
             emitWarnings
-            replPrintLn tlInfo v
-            pure (RCompileValue v)
+            displayValue tlInfo v
       where
       tlInfo = view Lisp.topLevelInfo toplevel
     _ ->  do

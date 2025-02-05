@@ -68,7 +68,6 @@ renderLocatedPactErrorFromState rstate err = rendered
             Nothing -> rstate ^. replCurrSource
   rendered = replError originFile err
 
-
 runRepl :: IO ()
 runRepl = do
   pdb <- mockPactDb serialisePact_repl_fileLocSpanInfo
