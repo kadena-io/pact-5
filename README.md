@@ -14,12 +14,6 @@ Read the whitepaper:
 
 For additional information, press, and development inquiries, please refer to the Kadena [website](https://kadena.io)
 
-> [!IMPORTANT]
-> This repository hosts a rewrite of the Pact language and is not utilized by [chainweb-node](https://github.com/kadena-io/chainweb-node), 
-> serving primarily for local development and testing purposes. We detail the planned transition from Pact to Pact Core in [Section Roadmap](#roadmap).
-
-If you are looking for legacy Pact, see [github.com/kadena-io/pact](https://github.com/kadena-io/pact).
-
 ## Table of Contents
   - [Quickstart](#quickstart)
   - [Pact Core vs Pact](#pact-core-vs-pact)
@@ -46,30 +40,24 @@ If you are looking for legacy Pact, see [github.com/kadena-io/pact](https://gith
    ```
 4. Execute `pact` and have fun :-)
 
-## Pact Core vs Pact
-Pact Core is a redevelopment of the Pact language, focusing on enhancing scalability, maintainability, and performance in response to increasingly complex demands from users and partners.
-
-Pact Core enables sustainable growth of the Pact featureset within the Kadena ecosystem by offering a more modular and maintainable internals, enabling the community to further develop and propose enhancements to the language and components that rely on it.
-
-Pact Core maintains semantic equivalence to Pact, aside from minor differences for security and performance. Existing code will behave the same as code written in (legacy) Pact. Breaking modifications will be communicated using the [Kadena Improvement Process](https://github.com/kadena-io/kips) (KIP) process.
-
-### Roadmap
-> [!NOTE]
-> The current roadmap is being sketched by the Pact Team and will be updated.
+## Pact-5 vs Pact
+Pact-5 (initially referred to Pact Core) is a comprehensive rewrite of the Pact language, focusing on enhancing scalability, maintainability, and performance in response to increasingly complex demands from users and partners.
+This new implementation enables sustainable growth of the Pact featureset within the Kadena ecosystem through more modular and maintainable internals, empowering the community to further develop and propose enhancements to the language and its dependent components.
+Pact-5 maintains semantic equivalence to the original Pact implementation, with select modifications made to enhance security and performance. Existing code will continue to function as expected. Breaking modifications will be communicated using the [Kadena Improvement Process](https://github.com/kadena-io/kips) (KIP) process.
 
 ## Documentation
-The [Kadena Docs](https://docs.kadena.io/pact) site serves as the primary source of information about Pact.
+The [Kadena Docs](https://docs.kadena.io/) site serves as the primary source of information about Pact.
 You can find information about how to get started with the Pact language, how to execute already deployed contracts, and follow
-our step-by-step tutorials. 
+our step-by-step tutorials.
 
-We recommend that new users start with our [beginner`s guide](https://docs.kadena.io/pact/beginner), which provides an 
+We recommend that new users start with our [get started intro](https://docs.kadena.io/smart-contracts/get-started-intro), which provides an
 understanding of the fundamental concepts and terminology of the language.
 
 ## Installing Pact Core
 To install Pact Core on your infrastructure, you have the option to download a pre-built binary or compile it from the source.
 
 ### Binary Downloads
-You can obtain the latest released version of Pact from our GitHub releases page [here](https://github.com/kadena-io/pact-core/releases).
+You can obtain the latest released version of Pact from our GitHub releases page [here](https://github.com/kadena-io/pact-5/releases).
 Ensure to download the binary that corresponds to your specific architecture.
 
 ### Building from Source
