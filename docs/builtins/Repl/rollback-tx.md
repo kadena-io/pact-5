@@ -40,4 +40,4 @@ Note that you should only call the `rollback-tx` function after performing the n
 The `rollback-tx` function finalizes the transaction, and any changes made during the transaction are rolled back.
 
 It's important that you always call the `rollback-tx` function after `begin-tx` and after any other transaction-related operations to properly roll back the transaction.
-If `rollback-tx` is not called, the transaction remains open and may lead to unexpected behavior or inconsistencies in the system if you are expecting changes to be undone.
+If `rollback-tx` is not called, the transaction remains open and might result in unexpected behavior or inconsistencies if you are expecting changes to be undone.

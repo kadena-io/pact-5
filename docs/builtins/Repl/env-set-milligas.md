@@ -1,6 +1,7 @@
 ## env-set-milligas
 
-Use `env-milligas` to set the current gas state to a specific value in milligas, similar to `env-gas` but 1 gas = 1e3 milligas
+Use `env-milligas` to set the current gas state to a specific value in units of one one thousandth of a gas unit. 
+This function is similar to the `env-gas` function, except that one (1) unit of gas is equal to one thousand units of milligas.
 
 ### Basic syntax
 
@@ -16,11 +17,11 @@ Use the following argument to set the gas state when using the `env-set-milligas
 
 | Argument | Type    | Description |
 |----------|---------|-------------|
-| `milligas` | integer | Specifies the value to set the milligas state to |
+| `milligas` | integer | Specifies the value to set the milligas state to. |
 
 ### Return value
 
-When called with the `milligasgas` argument, the `env-set-milligas` function returns a string indicating that the gas state has been set to the specified value.
+When called with the `milligas` argument, the `env-set-milligas` function returns a string indicating that the gas state has been set to the specified value.
 
 ### Examples
 
