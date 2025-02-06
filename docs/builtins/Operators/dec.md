@@ -19,7 +19,7 @@ Use the following argument to specify the integer for the `dec` Pact function.
 | --- | --- | --- |
 | `value` | integer | Specifies the integer to cast to a decimal value. |
 
-### Return values
+### Return value
 
 The `dec` function returns the specified integer as a decimal value.
 

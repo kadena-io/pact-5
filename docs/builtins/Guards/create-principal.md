@@ -20,7 +20,7 @@ Use the following argument to specify the `guard` for the `create-principal` Pac
 | --- | --- | --- |
 | `guard` | guard | Specifies the guard for which to create a principal. |
 
-### Return values
+### Return value
 
 The `create-principal` function returns a string representing a principal that unambiguously identifies the specified `guard` predicate function.
 

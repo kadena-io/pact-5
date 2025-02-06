@@ -28,7 +28,7 @@ Use the following arguments to specify the functions and `value` for the `and?` 
 | `func2` | function x: `<a> -> bool` | Specifies the second function to apply the specified `value` to. The result of applying the specified value of type `<a>` returns a boolean value.|
 | `value` | `<a>` | Specifies the value to apply to both `func1` and `func2` functions. |
 
-### Return values
+### Return value
 
 The `and?` function returns a boolean value based on the result of applying `value` to `func1` and `func2` with the logical AND operation.
 

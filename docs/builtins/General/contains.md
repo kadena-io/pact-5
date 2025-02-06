@@ -35,7 +35,7 @@ Use the following arguments to specify the `value`, `list`, `key`, `object`, `st
 | `object` | object | Specifies the object to check for the specified `key`. |
 | `string` | string | Specifies the string to search for the specified `value`. |
 
-### Return values
+### Return value
 
 The `contains` function returns a boolean value indicating whether the specified `value` or the specified `key` was found.
 

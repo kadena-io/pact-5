@@ -27,7 +27,7 @@ Use the following arguments to specify the inputs for the `define-keyset` Pact f
 | `name` | string | Specifies the name of the keyset to define or read. |
 | `keyset` | string | Specifies the keyset to associate with the `name`. |
 
-### Return values
+### Return value
 
 The `define-keyset` function returns a string representing the result of defining the keyset.
 

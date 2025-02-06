@@ -26,7 +26,7 @@ Use the following argument to specify the module you want to redeploy using the 
 | -------- | ---- | -----------
 | `module` | string | Specifies the module to redeploy.
 
-### Return values
+### Return value
 
 The function returns the unit value `()` if redeployment is successful.
 

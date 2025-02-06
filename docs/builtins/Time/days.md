@@ -19,7 +19,7 @@ Use the following argument to specify the `n` number of days for the `days` Pact
 | --- | --- | --- |
 | `n` | decimal or integer | Specifies the number of days to add. |
 
-### Return values
+### Return value
 
 The `days` function returns the number of seconds in the given number of days as a decimal value.
 

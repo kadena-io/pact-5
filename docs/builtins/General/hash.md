@@ -22,7 +22,7 @@ Use the following argument to specify the value for the `hash` Pact function:
 |-----------|--------|-------------|
 | `value` | `<a>` | Specifies the value to be hashed. |
 
-### Return values
+### Return value
 
 The `hash` function returns a string representing the computed hash value.
 

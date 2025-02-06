@@ -26,7 +26,7 @@ Use the following arguments to specify the decimal value and precision for the `
 | `value` | decimal | Specifies the decimal value to round down. |
 | `precision` | integer | Specifies the precision to round down to for the resulting decimal value (optional). |
 
-### Return values
+### Return value
 
 The `floor` function returns the rounded-down value of the specified decimal:
 

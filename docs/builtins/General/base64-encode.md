@@ -18,7 +18,7 @@ Use the following argument to specify the `string` to encode using the `base64-e
 | --- | --- | --- |
 | `string` | string | Specifies the `string` to encode as unpadded base64. |
 
-### Return values
+### Return value
 
 The `base64-encode` function returns the unpadded base64 encoded `string`.
 

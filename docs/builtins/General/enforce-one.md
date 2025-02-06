@@ -20,7 +20,7 @@ Use the following arguments to specify the error message and tests for the `enfo
 | `msg`  | string | Specifies the error message if all tests fail. |
 | `tests` | bool | Specifies the list of tests to run in order. |
 
-### Return values
+### Return value
 
 The `enforce-one` function returns `true` if at least one test succeeds. 
 If all tests fail, the function fails the transaction with the specified error message.

@@ -20,7 +20,7 @@ Use the following argument to specify the `name` for the `create-module-guard` P
 | --- | --- | --- |
 | `name` | string | Specifies the name of the predicate function that guards administrative activity for the current module. |
 
-### Return values
+### Return value
 
 The `create-module-guard` function returns a guard with the specified `name`that enables the current module to perform administrative operations.
 

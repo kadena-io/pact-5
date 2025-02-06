@@ -18,7 +18,7 @@ Use the following argument to specify the `closure` for the `create-user-guard` 
 | --- | --- | --- |
 | `closure` | closure | Specifies the custom guard closure to define. The closure is a function that takes no arguments and returns a boolean value. |
 
-### Return values
+### Return value
 
 The `create-user-guard` function returns a guard that uses the specified custom `closure` function that returns a boolean value.
 

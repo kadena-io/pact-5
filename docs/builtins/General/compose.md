@@ -23,7 +23,7 @@ Use the following arguments to specify the functions `oper1` and `oper2` for com
 | `oper2` | function: `<b> -> <c>` | Specifies the second function to operate on the results of the `oper1` function. |
 | `value` | `<a>` | Specifies the value on which `oper1` operates. |
 
-### Return values
+### Return value
 
 The `compose` function returns the result of applying `oper2` to the result returned by `oper1` for the specified `value`.
 

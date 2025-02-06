@@ -21,7 +21,7 @@ Use the following argument to specify the `module` for the `describe-module` Pac
 |----------|--------|----------------------------------------------|
 | `module` | string | Specifies the name of the module to describe.|
 
-### Return values
+### Return value
 
 The `describe-module` function returns an object with metadata for the specified `module`.
 

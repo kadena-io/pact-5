@@ -19,7 +19,7 @@ Use the following arguments to specify the template string and variables for the
 | `template` | string | Specifies the template string with `{}` placeholders. |
 | `variables` | [any] | Specifies the variables to insert into the template placeholders. |
 
-### Return values
+### Return value
 
 The `format` function returns a new string with the values from the specified variables replacing the placeholder curly braces `{}` from the template string.
 

@@ -23,7 +23,7 @@ Use the following arguments to specify the function and list for the `filter` Pa
 | `apply`    | function | Specifies the function to apply to each element of the list. The return value for the function must be a Boolean (`true` or `false`) to identify elements to be included in the resulting list. |
 | `elements` | [any] | Specifies the list of elements to filter. The elements in the list can be any data type. |
 
-### Return values
+### Return value
 
 The `filter` function returns a new list containing elements from the original list for which the `apply` function returns `true`.
 

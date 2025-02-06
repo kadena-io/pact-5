@@ -18,7 +18,7 @@ Use the following argument to specify the `string` to decode using the `base64-d
 | --- | --- | --- |
 | `string` | string | Specifies the base64-encoded `string` to decode. |
 
-### Return values
+### Return value
 
 The `base64-decode` function returns the decoded `string`.
 

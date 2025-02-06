@@ -25,7 +25,7 @@ Use the following arguments to specify the `guard` or `keysetname` for the `enfo
 | `guard` | guard | Specifies the name of the guard to execute. |
 | `keysetname` | string | Specifies the name of the defined keyset to enforce.|
 
-### Return values
+### Return value
 
 The `enforce-guard` function returns a boolean value indicating whether the conditions specified in the predicate logic that the guard or keyset is there to enforce were met.
 

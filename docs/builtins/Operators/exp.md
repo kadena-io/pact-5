@@ -16,7 +16,7 @@ Use the following argument to specify the value for the `exp` Pact function:
 |----------|------------------|---------------------------------------------|
 | `value` | integer or decimal | Specifies the value for which to calculate the exponential function. |
 
-### Return values
+### Return value
 
 The `exp` function returns the exponential function of the specified value.
 
