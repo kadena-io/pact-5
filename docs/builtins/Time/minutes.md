@@ -11,7 +11,7 @@ To represent a duration of N minutes, use the following syntax:
 (minutes n)
 ```
 
-### Argument
+### Arguments
 
 Use the following argument to specify the number of minutes for the duration using the `minutes` Pact function.
 

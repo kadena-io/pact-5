@@ -7,7 +7,7 @@ To create a list from elements, use the following syntax:
 
 `(list elems)`
 
-### Argument
+### Arguments
 
 Use the following argument to specify the elements from which you want to create a list using the `list` Pact function.
 

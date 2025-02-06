@@ -23,7 +23,7 @@ To set the current `namespace` to a specified value, use the following syntax:
 (namespace namespace)
 ```
 
-### Argument
+### Arguments
 
 Use the following argument to specify the namespace to be set using the `namespace` Pact function.
 

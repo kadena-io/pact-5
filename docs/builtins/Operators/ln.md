@@ -10,7 +10,7 @@ To compute the natural logarithm of a value, use the following syntax:
 (ln value)
 ```
 
-### Argument
+### Arguments
 
 Use the following argument to specify the value for which you want to compute the natural logarithm using the `ln` Pact function.
 

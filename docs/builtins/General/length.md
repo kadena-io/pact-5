@@ -10,7 +10,7 @@ To compute the length of a list, string, or object, use the following syntax:
 (length arg)
 ```
 
-### Argument
+### Arguments
 
 Use the following argument to specify the value for which you want to compute the length using the `length` Pact function.
 

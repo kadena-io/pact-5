@@ -11,7 +11,7 @@ To determine the protocol type of a specified `principal` value, use the followi
 (typeof-principal principal)
 ```
 
-### Argument
+### Arguments
 
 Use the following argument to specify the `principal` value that you want to determine the protocol type for using the `typeof-principal` Pact function.
 
