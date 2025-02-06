@@ -1,26 +1,30 @@
 ## env-verifiers
 
-Set transaction verifier names and capabilities. VERIFIERS is a list of
-  objects with "name" specifying the verifier name, and "caps" specifying a list
-  of associated capabilities.
+Use `env-verifiers` to set transaction verifier names and capabilities. This function enables you to define a list of objects with the "name" key specifying the verifier name, and the "caps" key specifying a list of associated capabilities.
 
 ### Basic syntax
 
-To set the signature keys to set the transaction verifiers to mock out
+To set the signature keys for transaction verifiers, use the following syntax:
+
+```pact
+(env-verifiers [verifiers])
+```
+
+Each verifier is an object that consists of a verifier name and a list of capabilities in the following format:
 
 ```pact
 (env-verifiers [{"name":verifier_name, "caps":[capabilities]}])
 ```
 
-where `verifier_name` is the verifier to add to scope, and `caps` is the capabilities that the verifier is scoped to.
+For each object, the `verifier_name` is the verifier signature to add to scope, and `caps` is the list of capabilities that the `verifier_name` is scoped to.
 
 ### Arguments
 
-Use the following argument when using the `env-verifiers` Pact function.
+Use the following argument to set verifier information using the `env-verifiers` Pact function.
 
 | Argument | Type         | Description   |
 |----------|--------------|---------------|
-| `verifiers`  | [object] | Specifies the list verifier objects. Each object represents a verfier `name` and its associated `caps` capabilities. |
+| `verifiers`| [object] | Specifies the list verifier objects where each object represents a verifier `name` to add to scope and a list of associated capabilities that the verifier is scoped to.|
 
 ### Return value
 

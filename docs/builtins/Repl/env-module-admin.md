@@ -1,32 +1,33 @@
 ## env-module-admin
 
-Use `env-module-admin` to acquire module admin for any loaded module in the REPL, bypassing any checks. This is particularly useful to be able to do things like write to non-upgradeable module tables in the REPL.
+Use `env-module-admin` to acquire the module administrative rights for any module loaded in the REPL, bypassing any checks. 
+This function is particularly useful for writing tests that require administrative rights such as the ability to write to non-upgradeable module tables in the REPL.
 
 ### Basic syntax
 
-To acquire module admin for some module `m` use
+To acquire module administrative rights for the `module` specified, use the following syntax:
 
 ```pact
-(env-module-admin m)
+(env-module-admin module)
 ```
 
-Note that `m` must be passed in as a module reference
+Note that the `module` must be passed in as a module reference.
 
 ## Arguments
 
 Use the following argument when using the `env-module-admin` Pact function.
 
-| Argument | Type     | Description                                                  |
-|----------|----------|--------------------------------------------------------------|
-| module   | modref   | Specifies the module to grant admin from |
+| Argument | Type | Description |
+|----------|------|-------------|
+| `module` | modref | Specifies the module for which you want to acquire module administrative rights. |
 
 ### Return value
 
-On success, `env-module-admin` simply returns a string that indicates the module that was acquired.
+On success, the `env-module-admin` function returns a string that indicates the module administrative rights have been acquired.
 
 ### Example
 
-The following example demonstrates how to use the `env-module-admin` function to acquire module admin for a non upgradeable module.
+The following example demonstrates how to use the `env-module-admin` function to acquire the module administrative rights for a non upgradeable module.
 
 ```pact
 pact> (begin-tx)
