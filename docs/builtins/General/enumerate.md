@@ -38,7 +38,7 @@ Use the following option to define the increment to use between the beginning an
 | --- | --- | --- |
 | `inc` | `integer` | Specifies the increment to use between numbers in the sequence. The value can be a positive or negative integer. |
 
-### Return values
+### Return value
 
 The `enumerate` function returns the resulting sequence of numbers as a list.
 

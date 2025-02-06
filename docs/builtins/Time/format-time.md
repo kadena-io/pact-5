@@ -36,7 +36,7 @@ Use the following arguments to specify the format and time for the `format-time`
 | `format` | string | Specifies the format string for the time. |
 | `time` | time | Specifies the time value to format. |
 
-### Return values
+### Return value
 
 The `format-time` function returns a new string with the formatted time value.
 

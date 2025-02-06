@@ -19,7 +19,7 @@ Use the following arguments to specify the `time` to which you want to add `seco
 | `time` | time | Specifies the time to which you want to add `seconds`. |
 | `seconds` | decimal or integer | Specifies the number of seconds to add to the `time`. |
 
-### Return values
+### Return value
 
 The `add-time` function returns the resulting time after adding the specified number of `seconds` to the specified `time`.
 

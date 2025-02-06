@@ -19,7 +19,7 @@ Use the following arguments to specify the `value` to return and the `ignore` ar
 | `value` | any | Specifies the value to return. |
 | `ignore1, ignore2, ...` | any | Specifies the arguments to ignore. You can have multiple ignore arguments (optional). |
 
-### Return values
+### Return value
 
 The `constantly` function returns the specified `value`, ignoring any additional arguments.
 

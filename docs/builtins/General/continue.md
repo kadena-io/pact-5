@@ -20,7 +20,7 @@ Use the following argument to specify the `value` to continue the nested `defpac
 | --- | --- | --- |
 | `value` | `any` | Specifies the value to continue the nested `defpact`. |
 
-### Return values
+### Return value
 
 The `continue` function continues the execution of the nested `defpact` with the specified `value`.
 

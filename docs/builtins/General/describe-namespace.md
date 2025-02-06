@@ -23,7 +23,7 @@ Use the following argument to specify the `namespace` for the `describe-namespac
 |----------|--------|---------------------------------------------|
 | `namespace` | string | Specifies the name of the namespace to describe.|
 
-### Return values
+### Return value
 
 The `describe-namespace` function returns an object with detailed information about the specified `namespace`.
 

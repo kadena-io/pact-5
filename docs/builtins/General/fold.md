@@ -23,7 +23,7 @@ Use the following arguments to specify the function, initial value, and list for
 | `init` | `<a>` | Specifies the initial value for the reduction. |
 | `list` | [`<b>`] | Specifies the list to iterate over.               |
 
-### Return values
+### Return value
 
 The `fold` function returns the final result of the iterative reduction of the list.
 

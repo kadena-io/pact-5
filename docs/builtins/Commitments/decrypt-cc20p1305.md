@@ -20,7 +20,7 @@ Use the following arguments to specify the inputs for the `decrypt-cc20p1305` Pa
 | `public-key` | `string` | Specifies the base-16 Curve25519 public key.                |
 | `secret-key` | `string` | Specifies the base-16 Curve25519 secret key.                |
 
-### Return values
+### Return value
 
 The `decrypt-cc20p1305` function returns the decrypted plaintext as an unpadded base64URL string.
 

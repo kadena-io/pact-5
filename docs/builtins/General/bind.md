@@ -19,7 +19,7 @@ Use the following arguments to specify the `src` object and `bindings` for the `
 | `src` | `object:{row}` | Specifies the source object to evaluate. |
 | `bindings` | `binding:{row}` | Specifies the bindings to apply to the `src` object. |
 
-### Return values
+### Return value
 
 The `bind` returns the result of evaluating the `src` object with the specifies `bindings`.
 The data type depends on the data type of the field you specify for the `bindings` argument.

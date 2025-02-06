@@ -18,7 +18,7 @@ Use the following argument to specify the list of strings `str-list` for the `co
 | --- | --- | --- |
 | `str-list` | [string] | Specifies the list of strings to concatenate. |
 
-### Return values
+### Return value
 
 The `concat` function returns the resulting string after concatenating all the strings in the `str-list`.
 

@@ -16,7 +16,7 @@ To list all modules in `/local`, use
 
 None
 
-### Return values
+### Return value
 
 The `list-modules` function returns a list of all module names (including their namespace) stored on-chain
 

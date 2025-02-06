@@ -24,7 +24,7 @@ To retrieve the public metadata for a transaction using `chain-data`, use the fo
 
 You can use the `chain-data` function without arguments in code that identifies the transaction that you want to return metadata for.
 
-### Return values
+### Return value
 
 The `chain-data` function returns the public metadata for a transaction as an object with the following fields
 

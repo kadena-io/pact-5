@@ -25,7 +25,7 @@ Use the following arguments to specify the decimal `value` and optional `precisi
 | `value` | decimal | Specifies the decimal value to round up. |
 | `precision` | integer | Specifies the precision to round the specified `value` to (optional). |
 
-### Return values
+### Return value
 
 The `ceiling` function returns the rounded-up value as an integer or as a decimal based on the input and precision.
 

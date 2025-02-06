@@ -20,7 +20,7 @@ Use the following argument to specify the `CAPABILITY` for the `create-capabilit
 | --- | --- | --- |
 | `CAPABILITY` | capability | Specifies the capability that the predicate function guards. |
 
-### Return values
+### Return value
 
 The `create-capability-pact-guard` function returns a guard that enables the code associated with the specified `CAPABILITY` to be executed in the context of a `defpact` multi-step transaction.
 

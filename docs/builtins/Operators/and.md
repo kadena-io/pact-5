@@ -19,7 +19,7 @@ Use the following arguments to specify the boolean values for the `and` operatio
 | `oper1` | bool | Specifies the first boolean value for the AND operation. |
 | `oper2` | bool | Specifies the second boolean value for the AND operation. |
 
-### Return values
+### Return value
 
 The `and` function returns a boolean value based on the result of the AND operation between the input boolean values.
 

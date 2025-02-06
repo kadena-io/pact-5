@@ -26,7 +26,7 @@ Use the following arguments to specify the table, key, and optional columns when
 | `key` | string | Specifies the key of the row to read from the table. |
 | `columns` | [string] | Specifies one or more column names to return from the row. If not provided, the entire row is returned (optional). |
 
-### Return values
+### Return value
 
 The `read` function returns an object representing the requested row or columns from the specified table.
 

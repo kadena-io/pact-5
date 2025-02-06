@@ -21,7 +21,7 @@ Use the following arguments to specify the test expression and error message for
 | expression | bool | Specifies the expression to evaluate.     |
 | `message` | string | Specifies the error message to display if the `expression` evaluates as false. |
 
-### Return values
+### Return value
 
 The `enforce` function returns `true` if the specified `expression` is true. If the `expression` is false, the function fails the transaction with the specified error message.
 

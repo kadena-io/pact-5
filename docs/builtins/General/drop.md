@@ -28,7 +28,7 @@ Use the following arguments to specify the `count` and  `list` or `keys` and `ob
 | `keys`  | [string] | Specifies the keys to drop from the object. |
 | `object` | object | Specifies the object from which to drop entries with specified keys.|
 
-### Return values
+### Return value
 
 The `drop` function returns the modified list, string, or object after removing the specified number of values or specified keys.
 

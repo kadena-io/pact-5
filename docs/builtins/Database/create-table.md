@@ -23,7 +23,7 @@ Use the following argument to specify the `table` name you want to create using 
 | --- | --- | --- |
 | `table` | `table: <{row}>` | Specifies the table to create. |
 
-### Return values
+### Return value
 
 The `create-table` function returns a string representing the identifier of the created `table`.
 

@@ -20,7 +20,7 @@ Use the following argument to specify the `CAPABILITY` for the `create-capabilit
 | --- | --- | --- |
 | `CAPABILITY` | capability | Specifies the capability that the predicate function guards. |
 
-### Return values
+### Return value
 
 The `create-capability-guard` function returns a guard that enforces the acquisition of the specified `CAPABILITY`.
 

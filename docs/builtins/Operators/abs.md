@@ -18,7 +18,7 @@ Use the following argument to specify the `number` for which you want to calcula
 | --- | --- | --- |
 | `number` | decimal or integer | Specifies the number for which to calculate the absolute value. |
 
-### Return values
+### Return value
 
 The `abs` function returns the absolute value of the `number` as a `decimal` or `integer`, depending on the input type.
 

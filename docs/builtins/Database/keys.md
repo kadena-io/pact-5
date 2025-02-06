@@ -18,7 +18,7 @@ Use the following argument to specify the table from which to retrieve keys usin
 | --- | --- | --- |
 | `table` | `table: <{row}>` | Specifies the table from which to retrieve keys. In the table schema, a `row` represents the structure of each row in the table. |
 
-### Return values
+### Return value
 
 The `keys` function returns an array of strings, where each string represents a key in the specified table.
 

@@ -19,7 +19,7 @@ Use the following argument to specify the list of `VALUES` for the `distinct` Pa
 |----------|-------------|------------------------------------------------|
 | `values` | [any] | Specifies the list of values that includes duplicates. |
 
-### Return values
+### Return value
 
 The `distinct` function returns a list with duplicates removed from the specified list of `values`.
 

@@ -18,7 +18,7 @@ Use the following argument to specify the `verifier-name` for the `enforce-verif
 |-------------|--------|-------------------------------------------------|
 | `verifier-name` | string | Specifies the name of the verifier to enforce.  |
 
-### Return values
+### Return value
 
 The `enforce-verifier` function returns a boolean value indicating whether the specified verifier is in scope.
 

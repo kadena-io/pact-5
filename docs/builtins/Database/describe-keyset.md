@@ -20,7 +20,7 @@ Use the following argument to specify the keyset for which to retrieve metadata 
 | --- | --- | --- |
 | `keyset` | string | Specifies the name of the keyset that you want to retrieve metadata for. |
 
-### Return values
+### Return value
 
 The `describe-keyset` function returns a guard.
 

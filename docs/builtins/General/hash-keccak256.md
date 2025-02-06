@@ -17,7 +17,7 @@ Use the following argument to specify the list of inputs for the `hash-keccak256
 |-----------|------------|---------------------------------------------------|
 | `VALUES`  | `[string]`   | Specifies the list of unpadded base64url-encoded inputs. |
 
-### Return values
+### Return value
 
 The `hash-keccak256` function returns a string representing the computed hash value.
 

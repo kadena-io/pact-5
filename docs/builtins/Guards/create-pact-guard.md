@@ -21,7 +21,7 @@ Use the following argument to specify the `name` for the `create-pact-guard` Pac
 | --- | --- | --- |
 | `name` | string | Specifies the name of the predicate function that captures the `pact-id` for a `defpact` multi-step transaction. |
 
-### Return values
+### Return value
 
 The `create-pact-guard` function returns a guard with the specified `name` that captures the `pact-id'` for a `defpact` multi-step transaction.
 

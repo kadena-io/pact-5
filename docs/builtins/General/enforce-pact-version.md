@@ -22,7 +22,7 @@ Use the following arguments to specify the minimum and maximum Pact versions for
 | `min-version` | string | Specifies the minimum Pact version to enforce. |
 | `max-version` | string | Specifies the maximum Pact version to enforce (optional). |
 
-### Return values
+### Return value
 
 The `enforce-pact-version` function returns a boolean value indicating whether the runtime Pact version is within the specified range.
 

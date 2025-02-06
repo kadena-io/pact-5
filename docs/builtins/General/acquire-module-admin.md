@@ -27,7 +27,7 @@ It will attempt to acquire the governance cap and if successful, it will grant m
 | -------- | ---- | -----------
 | `ref` | modref | Specifies the module to acquire administrative capabilities for.
 
-### Return values
+### Return value
 
 Module admin acquisition will either fail, or return "Module admin for module `<my-module>` acquired"
 

@@ -21,7 +21,7 @@ Use the following argument to specify the `CAPABILITY` for the `emit-event` Pact
 |------------|------|---------------------------------------------------|
 | `CAPABILITY` | capability | Specifies the capability to emit as an event. |
 
-### Return values
+### Return value
 
 The `emit-event` function returns a boolean value indicating success or failure of emitting the event.
 

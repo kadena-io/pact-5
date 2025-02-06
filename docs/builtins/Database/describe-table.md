@@ -19,7 +19,7 @@ Use the following argument to specify the `table` for the `describe-table` Pact 
 |----------|---------------|----------------------------------------------|
 | `table` | `table: <{row}>` | Specifies the table to describe.             |
 
-### Return values
+### Return value
 
 The `describe-table` function returns an object with metadata for the specified `table`.
 

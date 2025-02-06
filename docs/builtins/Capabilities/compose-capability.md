@@ -24,7 +24,7 @@ Use the following argument to specify the `CAPABILITY` for the `compose-capabili
 | --- | --- | --- |
 | `CAPABILITY` | capability | Specifies the capability to include in the scope of an outer capability. |
 
-### Return values
+### Return value
 
 The `compose-capability` function returns a boolean value to indicate success or failure in requesting the grant of the specified `CAPABILITY`.
 
