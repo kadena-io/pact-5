@@ -10,7 +10,7 @@ To compute the boolean negation of the specified `value`, use the following synt
 (not value)
 ```
 
-### Argument
+### Arguments
 
 Use the following argument to specify the boolean value for which you want to compute the negation using the `not` Pact function.
 

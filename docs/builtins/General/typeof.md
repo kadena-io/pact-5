@@ -9,7 +9,7 @@ To determine the data type for a `value`, use the following syntax:
 
 `(typeof value)`
 
-### Argument
+### Arguments
 
 Use the following argument to specify the value for which to determine the type using the `typeof` Pact function.
 
