@@ -15,7 +15,7 @@ Read the whitepaper:
 For additional information, press, and development inquiries, please refer to the Kadena [website](https://kadena.io)
 
 > [!IMPORTANT]
-> This repository hosts a rewrite of the Pact language and is not utilized by [chainweb-node](https://github.com/kadena-io/chainweb-node), 
+> This repository hosts a rewrite of the Pact language and is not utilized by [chainweb-node](https://github.com/kadena-io/chainweb-node),
 > serving primarily for local development and testing purposes. We detail the planned transition from Pact to Pact Core in [Section Roadmap](#roadmap).
 
 If you are looking for legacy Pact, see [github.com/kadena-io/pact](https://github.com/kadena-io/pact).
@@ -58,12 +58,9 @@ Pact Core maintains semantic equivalence to Pact, aside from minor differences f
 > The current roadmap is being sketched by the Pact Team and will be updated.
 
 ## Documentation
-The [Kadena Docs](https://docs.kadena.io/pact) site serves as the primary source of information about Pact.
-You can find information about how to get started with the Pact language, how to execute already deployed contracts, and follow
-our step-by-step tutorials. 
+The [Kadena Docs](https://docs.kadena.io/smart-contract-dev) site serves as the primary source of information about Pact. You can find information about how to get started with the Pact language, how to execute already deployed contracts, and follow our step-by-step tutorials.
 
-We recommend that new users start with our [beginner`s guide](https://docs.kadena.io/pact/beginner), which provides an 
-understanding of the fundamental concepts and terminology of the language.
+We recommend that new users start with our [beginner`s guide](https://docs.kadena.io/smart-contracts/get-started-intro), which provides an understanding of the fundamental concepts and terminology of the language.
 
 ## Installing Pact Core
 To install Pact Core on your infrastructure, you have the option to download a pre-built binary or compile it from the source.
