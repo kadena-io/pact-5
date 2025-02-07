@@ -4,97 +4,133 @@
 
 <p>&nbsp;</p>
 
-# The Pact Programming Language
+# Pact: Smart Contract Programming Language
 
-[Pact](http://kadena.io/build) is an open-source, Turing-**in**complete smart contract language that has been purpose-built with blockchains first in mind. Pact focuses on facilitating transactional logic with the optimal mix of functionality in authorization, data management, and workflow.
+[Pact](http://kadena.io/build) is an open-source, smart contract language designed to execute transactional logic efficiently in a blockchain environment. 
+The Pact smart contract programming language is intentionally **Turing-incomplete** to prevent recursion and unbounded looping that could be exploited or disrupt the blockchain network. 
+The Pact language focuses on providing smart contract authors with the right set of features to optimize security, performance, and transparency while providing flexible methods for authorizing access to contract data and function, managing data storage, and designing application workflows.
 
-Read the whitepaper:
+For a historical perspective on the design of Pact, see [The Pact Smart Contract Language](https://d31d887a-c1e0-47c2-aa51-c69f9f998b07.filesusr.com/ugd/86a16f_442a542b64554cb2a4c1ae7f528ce4c3.pdf) whitepaper.
 
-- [The Pact Smart Contract Language](https://d31d887a-c1e0-47c2-aa51-c69f9f998b07.filesusr.com/ugd/86a16f_442a542b64554cb2a4c1ae7f528ce4c3.pdf)
+For additional information about Pact and development resources, visit the [Kadena website](https://kadena.io).
 
-For additional information, press, and development inquiries, please refer to the Kadena [website](https://kadena.io)
-
-## Table of Contents
-  - [Quickstart](#quickstart)
-  - [Pact Core vs Pact](#pact-core-vs-pact)
-    - [Roadmap](#roadmap)
+## Table of contents
+- [Pact: Smart Contract Programming Language](#pact-smart-contract-programming-language)
+  - [Table of contents](#table-of-contents)
+  - [Quick start](#quick-start)
+  - [Pact 5 and previous releases of Pact](#pact-5-and-previous-releases-of-pact)
   - [Documentation](#documentation)
-  - [Installing Pact Core](#installing-pact-core)
-    - [Binary Downloads](#binary-downloads)
-	- [Building from Source](#building-from-source)
-	  - [Using the Nix Infrastructure (recommend)](#using-the-nix-infrastructure)
-	  - [Using Cabal and GHC](#using-cabal-and-ghc)
-  - [Editor Integration (Language Server)](#editor-integration)
+  - [Installation options](#installation-options)
+    - [Build from source using Cabal and GHC](#build-from-source-using-cabal-and-ghc)
+    - [Build from source using Nix](#build-from-source-using-nix)
+  - [Editor integration](#editor-integration)
   - [License](#license)
 
-## Quickstart
+## Quick start
 
-1. Download the latest Pact binary from [Github Releases](https://github.com/kadena-io/pact-core/releases/latest).
-2. Extract the `pact` binary, make sure that you have the required permissions to execute it.
+To get started with Pact:
+
+1. Download the latest Pact binary for your operating system using Homebrew or from [Github Releases](https://github.com/kadena-io/pact-5/releases/tag/5.0).
+
+2. Extract the `pact` binary, if necessary, and make sure that you have permissions to execute it:
+   
    ```bash
    chmod +x /path/to/pact
    ```
-3. (Optional) Add the path to your `$PATH` environment variable or adding the line to your shell profile.
+
+3. (Optional) Add the path to your `$PATH` environment variable or add the following line to your shell profile:
+   
    ```bash
    export PATH=$PATH:/path/to/
    ```
-4. Execute `pact` and have fun :-)
 
-## Pact-5 vs Pact
-Pact-5 (initially referred to Pact Core) is a comprehensive rewrite of the Pact language, focusing on enhancing scalability, maintainability, and performance in response to increasingly complex demands from users and partners.
-This new implementation enables sustainable growth of the Pact featureset within the Kadena ecosystem through more modular and maintainable internals, empowering the community to further develop and propose enhancements to the language and its dependent components.
-Pact-5 maintains semantic equivalence to the original Pact implementation, with select modifications made to enhance security and performance. Existing code will continue to function as expected. Breaking modifications will be communicated using the [Kadena Improvement Process](https://github.com/kadena-io/kips) (KIP) process.
+4. Verify the installation by checking the Pact version:
+
+   ```bash
+   pact --version
+   ```
+
+5. View usage information by running the following command:
+   
+   ```bash
+   pact --help
+   ```
+
+For additional information about installing Pact on a specific operating system, see [Installation and setup]((https://docs.kadena.io/smart-contracts/install)).
+
+## Pact 5 and previous releases of Pact
+
+The Pact 5 release is a comprehensive rewrite of the core elements of the Pact language.
+This release of the Pact language retains functional parity with previous Pact releases, but with significant changes that enhance the scalability, maintainability, and performance of the language.
+With this update, Pact 5 is better positioned to handle increasingly complex demands from community builders and development partners.
+This new implementation also enables sustainable growth of the Pact feature set within the Kadena ecosystem.
+By offering more modular and maintainable internal structures, Pact 5 can now better support community participation and enhancements to the language and components that rely on it. 
+
+Although Pact 5 includes significant modifications and enhancements, it maintains semantic equivalence to previous Pact implementations.
+If you're upgrading from a previous release of Pact, your existing code will continue to function as expected. 
+If there are breaking changes in future releases, they will be communicated using the [Kadena Improvement Process](https://github.com/kadena-io/kips) (KIP) process.
 
 ## Documentation
-The [Kadena Docs](https://docs.kadena.io/) site serves as the primary source of information about Pact.
-You can find information about how to get started with the Pact language, how to execute already deployed contracts, and follow
-our step-by-step tutorials.
 
-We recommend that new users start with our [get started intro](https://docs.kadena.io/smart-contracts/get-started-intro), which provides an
-understanding of the fundamental concepts and terminology of the language.
+The [Kadena Docs](https://docs.kadena.io/) site serves as the primary source of information for learning about and developing with Pact.
+You can find information about how to get started with the Pact language, how to execute already deployed contracts, and how to perform common tasks
+in step-by-step tutorials.
+For a more guided approach to learning Pact, explore the [Zero to Pact](https://academy.kadena.io/kadena_course/zero-to-pact/) course in the [Kadena Academy](https://academy.kadena.io/).
 
-## Installing Pact Core
-To install Pact Core on your infrastructure, you have the option to download a pre-built binary or compile it from the source.
+For an introduction to fundamental concepts and terminology of the Pact language, see [Get started: An Introduction to Pact](https://docs.kadena.io/smart-contracts/get-started-intro).
 
-### Binary Downloads
-You can obtain the latest released version of Pact from our GitHub releases page [here](https://github.com/kadena-io/pact-5/releases).
-Ensure to download the binary that corresponds to your specific architecture.
+## Installation options
 
-### Building from Source
-Two methods are supported for building Pact Core: using bare Cabal and GHC or employing the Nix package manager.
+You can download and install the Pact programming language and command-line interpreter locally on your local computer from prebuilt platform-specific binaries or build Pact directly from its source code. 
+You can also run Pact in a browser in the development network if you set up a local node using the `kadena/devnet` Docker image.
 
-#### Using Cabal and GHC
+To download a pre-built binary get the latest released version of Pact from [GitHub releases](https://github.com/kadena-io/pact-5/releases).
+To build from source code, you can compile the code using Cabal and GHC or by using the Nix package manager.
 
-Building is a process comprising four steps:
+### Build from source using Cabal and GHC
+
+To build from the source code using Cabal and GHC:
+
 1. Install [GHCup](https://www.haskell.org/ghcup/)
+
 2. Set and ensure the versions specified below are correctly set:
+
    ```bash
    ghcup install ghc 9.6.3 && ghcup install-cabal
    ```
+
 3. Update Haskell packages:
+
    ```shell
    cabal update
    ```
+
 4. Build the Pact binary:
+
    ```shell
    cabal build exe:pact
    ```
 
-5. (Optional) You can either run `pact` directly:
+5. Run `pact` directly or add it to your $PATH environment variable.
+
+   To run `pact` directly:
+   
    ```shell
    cabal run exe:pact
    ```
-   or, if you prever to make the `pact` executable available in your `$PATH` environment, run:
+
+   To make the `pact` executable available in your `$PATH` environment:
    ```shell
    cabal install exe:pact
    ```
 
-#### Using the Nix Infrastructure
-Kadena offers a binary cache for all Nix builds, allowing users to accelerate their build times by utilizing our cache infrastructure.
-The specifics of setting up the cache depend on various factors and are beyond the scope of this instruction.
-A good starting point for configuring our cache is the Nix documentation on binary caches, available at: [NixOS Wiki on Binary Cache](https://nixos.wiki/wiki/Binary_Cache).
+### Build from source using Nix
 
-The binary cache is typically configured using the `nixConfig` attribute in our flake definition as follows:
+Kadena offers a binary cache for all Nix builds, allowing users to accelerate their build times by using the cache infrastructure.
+The specifics of setting up the cache depend on various factors and are beyond the scope of this instruction.
+A good starting point for configuring the cache is the Nix documentation on binary caches, available at: [NixOS Wiki on Binary Cache](https://nixos.wiki/wiki/Binary_Cache).
+
+The binary cache is typically configured using the `nixConfig` attribute in the flake definition as follows:
 
 ```
 nixConfig = {
@@ -103,26 +139,27 @@ nixConfig = {
   };
 ```
 
-Executing `nix build` within the root directory of this project will create a build under the `./result` symbolic link.
-This will contain the artifact within its `bin` directory.
+Executing `nix build` within the root directory of this project creates a build under the `./result` symbolic link.
+After building, the binary is located in `./result/bin` directory.
 
-Entering the developer shell using `nix develop` will bring all required dependencies into scope, enabling the use of
+Start a developer shell by running `nix develop` to bring all of the required dependencies into scope, enabling the use of
 `cabal build` to compile the final project.
 
+## Editor integration
 
-## Editor Integration
-
-We offer built-in integration with Microsoft's [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) (LSP).
-Check your editor's support for the LSP protocol and the specific setup instructions. The server itself can be initiated as follows.
+Pact includes built-in support for the Microsoft [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) (LSP).
+You should check your code editor for LSP support and editor-specific setup instructions. 
+The server itself can be initiated as follows:
 
 ```shell
 pact --lsp
 ```
 
-We currently support the following featureset:
+Pact currently supports the following LSP features:
+
 - Document diagnostics
-- Hover information (Builtins and user specified docs)
-- Jump to definition (Toplevel)
+- Hover information (Built-ins and user specified docs)
+- Jump to definition (Top-level)
 
 > [!NOTE]
 > We continue to add specifics on major editors such as Emacs, vim, and VSCode.
