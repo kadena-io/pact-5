@@ -24,6 +24,11 @@ on:
         type: boolean
         required: false
         default: false
+      release_to_brew:
+        description: "Release OSX build to homebrew"
+        type: boolean
+        required: false
+        default: true
   workflow_call:
     inputs:
       release_sha:
@@ -42,6 +47,11 @@ on:
         default: false
       prerelease:
         description: "set to true for nightly builds"
+        type: boolean
+        required: false
+        default: true
+      release_to_brew:
+        description: "Release OSX build to homebrew"
         type: boolean
         required: false
         default: true
@@ -178,6 +188,7 @@ jobs:
 
   release_to_brew:
     uses: kadena-io/homebrew-pact/.github/workflows/release-bump.yml@master
+    if: ${{ inputs.release_to_brew }}
     needs: release_to_github
     with:
       pact_arm: "${{ needs.release_to_github.outputs.OSX_RELEASE_URL }}"
