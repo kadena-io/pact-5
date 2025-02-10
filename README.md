@@ -10,7 +10,7 @@
 The Pact smart contract programming language is intentionally **Turing-incomplete** to prevent recursion and unbounded looping that could be exploited or disrupt the blockchain network. 
 The Pact language focuses on providing smart contract authors with the right set of features to optimize security, performance, and transparency while providing flexible methods for authorizing access to contract data and function, managing data storage, and designing application workflows.
 
-For a historical perspective on the design of Pact, see [The Pact Smart Contract Language](https://d31d887a-c1e0-47c2-aa51-c69f9f998b07.filesusr.com/ugd/86a16f_442a542b64554cb2a4c1ae7f528ce4c3.pdf) whitepaper.
+For a historical perspective on the design of Pact, see [The Pact Smart Contract Language](https://www.kadena.io/whitepapers) whitepaper.
 
 For additional information about Pact and development resources, visit the [Kadena website](https://kadena.io).
 
