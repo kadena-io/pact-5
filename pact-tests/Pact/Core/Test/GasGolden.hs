@@ -16,6 +16,7 @@ import Pact.Core.Repl
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
 import Pact.Core.Serialise
+import Pact.Core.Evaluate(versionedNatives)
 import System.Directory
 import System.FilePath
 import Test.Tasty
@@ -35,15 +36,21 @@ tests = do
   cases <- gasTestFiles
   pure $ testGroup "Gas Goldens"
     [ testCase "Capture all builtins" $ captureBuiltins (fst <$> cases)
-    , goldenVsStringDiff "Gas Goldens: CEK" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases interpretEvalBigStep)
-    , goldenVsStringDiff "Gas Goldens: Direct" runDiff (gasTestDir </> "builtinGas.golden") (gasGoldenTests cases interpretEvalDirect)
+    , goldenVsStringDiff "Gas Goldens, Pact 5.0: CEK" runDiff (gasGoldenOutputDir </> "builtinGas50.golden") (pact50Goldens cases interpretEvalBigStep)
+    , goldenVsStringDiff "Gas Goldens, Pact 5.0: Direct" runDiff (gasGoldenOutputDir </> "builtinGas50.golden") (pact50Goldens cases interpretEvalDirect)
+    , goldenVsStringDiff "Gas Goldens, Pact Latest: CEK" runDiff (gasGoldenOutputDir </> "builtinGas.golden") (gasGoldenTests cases interpretEvalBigStep)
+    , goldenVsStringDiff "Gas Goldens, Pact Latest: Direct" runDiff (gasGoldenOutputDir </> "builtinGas.golden") (gasGoldenTests cases interpretEvalDirect)
     ]
   where
+  pact50Goldens cases interp = gasGoldenTestsWithFlags (S.singleton FlagDisablePact51) cases interp
   runDiff = \ref new -> ["diff", "-u", ref, new]
 
 
 gasTestDir :: [Char]
 gasTestDir = "pact-tests" </> "gas-goldens"
+
+gasGoldenOutputDir :: [Char]
+gasGoldenOutputDir = "pact-tests" </> "gas-goldens" </> "goldens"
 
 
 gasTestFiles :: IO [(Text, FilePath)]
@@ -66,10 +73,17 @@ captureBuiltins b = let
 lookupOp :: Text -> Text
 lookupOp n = fromMaybe n (M.lookup n fileNameToOp)
 
+lookupFileNameOp :: Text -> Text
+lookupFileNameOp n = fromMaybe n (M.lookup n opToFileName)
 
 gasGoldenTests :: [(Text, FilePath)] -> ReplInterpreter -> IO BS.ByteString
-gasGoldenTests c interp = do
-  gasOutputs <- forM c $ \(fn, fp) -> do
+gasGoldenTests = gasGoldenTestsWithFlags mempty
+
+gasGoldenTestsWithFlags :: S.Set ExecutionFlag -> [(Text, FilePath)] -> ReplInterpreter -> IO BS.ByteString
+gasGoldenTestsWithFlags flags natives interp = do
+  let enabledNatives = S.fromList $ fmap lookupFileNameOp $ M.keys $ versionedNatives flags
+  let filteredTestsToRun = filter ((`S.member` enabledNatives) . fst) natives
+  gasOutputs <- forM filteredTestsToRun $ \(fn, fp) -> do
     mGas <- runGasTest (gasTestDir </> fp) interp
     case mGas of
       Nothing -> fail $ "Could not execute the gas tests for: " <> show fp

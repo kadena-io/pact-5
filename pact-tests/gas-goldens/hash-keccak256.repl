@@ -1,0 +1,5 @@
+(hash-keccak256 [(base64-encode "hello world")])
+(hash-keccak256 [(base64-encode "hello world") (base64-encode "foobar")])
+(hash-keccak256 [(base64-encode "hello world") (base64-encode "foobar") (base64-encode "bazby")])
+(hash-keccak256 [(base64-encode "hello world") (base64-encode "foobar") (base64-encode "bazby") (base64-encode "i am optimus prime")])
+(hash-keccak256 [(base64-encode "hello world") (base64-encode "foobar") (base64-encode "bazby") (base64-encode "i am optimus prime") (base64-encode "jose")])

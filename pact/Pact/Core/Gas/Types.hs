@@ -5,6 +5,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE InstanceSigs #-}
@@ -38,6 +39,7 @@ module Pact.Core.Gas.Types
   , StrOp(..)
   , ObjOp(..)
   , CapOp(..)
+  , HashOp(..)
   , ConcatType(..)
   , GasTextLength(..)
   , GasListLength(..)
@@ -59,6 +61,7 @@ module Pact.Core.Gas.Types
   , TranscendentalCost(..)
   , EnableGasLogs(..)
   , module Pact.Core.SatWord
+  , pattern GHash
   ) where
 
 
@@ -66,6 +69,7 @@ import Control.DeepSeq
 import Control.Lens
 import Data.Decimal(Decimal)
 import Data.Monoid
+import Data.Vector(Vector)
 import Data.Primitive hiding (sizeOf)
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -169,6 +173,10 @@ data GasCostConfig
   -- ^ Module load hashing byte penalty
   , _gcSizeOfBytePenalty :: !SatWord
   -- ^ Our `SizeOf` limit penalty
+  , _gc_keccak256GasPerOneHundredBytes :: !SatWord
+  -- ^ Cost of keccak gas per 100 bytes
+  , _gc_keccak256GasPerChunk :: SatWord
+  -- ^ Cost of keccak gas per chunk
   } deriving (Eq, Show, Generic)
 
 instance NFData GasCostConfig
@@ -272,7 +280,11 @@ data CapOp
   = CapOpRequire !Int
   deriving (Eq, Show, Ord, Generic, NFData)
 
-
+data HashOp
+  = GHashBlake !SatWord
+  | GHashPoseidon !Int
+  | GHashKeccak (Vector Int)
+  deriving (Eq, Show, Ord, Generic, NFData)
 
 data GasArgs b
   = GAConstant !MilliGas
@@ -299,8 +311,6 @@ data GasArgs b
   -- ^ Gas costs for comparisons
   | GSearch !SearchType
   -- ^ Gas costs for searches
-  | GPoseidonHashHackAChain !Int
-  -- ^ poseidon-hash-hack-a-chain costs.
   | GHyperlaneMessageId !Int
   -- ^ ^ Cost of the hyperlane-message-id on this size (in bytes) of the
   --   hyperlane Message Body, which is the only variable-length
@@ -315,7 +325,7 @@ data GasArgs b
   | GStrOp !StrOp
   | GObjOp !ObjOp
   | GCapOp !CapOp
-  | GHash !SatWord
+  | GHashOp !HashOp
   -- ^ The cost of Blake2b hashing a particular value in bytes
   deriving (Show, Eq, Generic, NFData)
 
@@ -434,6 +444,11 @@ freeGasCostConfig = GasCostConfig
   , _gcDesugarBytePenalty = 1
   -- ^ Module load desugaring byte penalty
   , _gcSizeOfBytePenalty = 1
+
+  , _gc_keccak256GasPerOneHundredBytes = 1
+  -- ^ Cost of keccak gas per 100 bytes
+  , _gc_keccak256GasPerChunk = 1
+  -- ^ Cost of keccak gas per chunk
   }
 
 data EnableGasLogs
@@ -490,3 +505,6 @@ mkGasEnv enabled model = do
 
 mkFreeGasEnv :: EnableGasLogs -> IO (GasEnv b i)
 mkFreeGasEnv enabled = mkGasEnv enabled freeGasModel
+
+pattern GHash :: SatWord -> GasArgs b
+pattern GHash w = GHashOp (GHashBlake w)

@@ -48,3 +48,27 @@
   (expect "hashes match post-fork - recursive case" true (enforce (= h1 h2) "boom"))
   )
 (commit-tx)
+
+; Keccak hash tests
+(begin-tx)
+
+(defun hash-keccak (arg)
+  (int-to-str 16 (str-to-int 64 (hash-keccak256 [(base64-encode arg)])))
+)
+
+(expect "keccak hash256 test vector: empty string"
+  "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+  (hash-keccak "")
+)
+
+(expect "keccak hash256 test vector: abc"
+  "4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45"
+  (hash-keccak "abc")
+)
+
+(expect "keccak hash256 test vector: the quick brown fox"
+  "4d741b6f1eb29cb2a9b9911c82f56fa8d73b04959d3d9d222895df6c0b28aa15"
+  (hash-keccak "The quick brown fox jumps over the lazy dog")
+)
+
+(commit-tx)

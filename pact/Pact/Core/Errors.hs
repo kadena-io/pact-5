@@ -224,6 +224,7 @@ import Pact.Core.DeriveConTag
 import Pact.Core.ChainData (ChainId(_chainId))
 import Data.String (IsString(..))
 import Pact.Core.Gas.Types
+import Pact.Core.Crypto.Hash.Keccak256
 import qualified Text.Megaparsec as MP
 import qualified Text.Megaparsec.Char as MP
 import Text.Read (readMaybe)
@@ -720,6 +721,7 @@ data EvalError
   -- ^ Invalid number of arguments for a function
   | EntityNotAllowedInDefPact QualifiedName
   -- ^ Entity field not allowed in defpact
+  | Keccak256Error Keccak256Error
   deriving (Eq, Show, Generic)
 
 data ErrorClosureType
@@ -936,6 +938,13 @@ instance Pretty EvalError where
       <+> parens (pretty expected)
     EntityNotAllowedInDefPact qn ->
       "Pact 5 does not support entity expressions in defpact" <+> pretty qn <> ". Please ensure your defpact steps have the correct number of expressions"
+    Keccak256Error err -> case err of
+      Keccak256OpenSslException msg ->
+        "OpenSSL error when keccak256 hashing:" <> pretty (T.pack msg)
+      Keccak256Base64Exception msg ->
+        "Base64URL decode failed:" <+> pretty (T.pack msg)
+      Keccak256OtherException msg ->
+        "Exception when keccak256 hashing:" <+> pretty (T.pack msg)
 
 -- | Errors meant to be raised
 --   internally by a PactDb implementation
@@ -1629,6 +1638,17 @@ evalErrorToBoundedText = mkBoundedText . \case
       thsep [ "Pact 5 does not support entity expressions in defpact"
             , renderQualName qn <> "."
             , " Please ensure your defpact steps have the correct number of expressions"]
+  Keccak256Error err ->
+    thsep ["Keccak256 Hashing failure:", failure]
+    where
+    failure = case err of
+      Keccak256OpenSslException _msg ->
+        "OpenSSL error"
+      Keccak256Base64Exception _msg ->
+        "Base64URL decode failed"
+      Keccak256OtherException _ ->
+        "Unknown exception thrown during computation of keccak256"
+
 
 
 -- | NOTE: Do _not_ change this function post mainnet release just to improve an error.

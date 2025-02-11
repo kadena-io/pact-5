@@ -1,6 +1,6 @@
 cabal-version:       3.8
 name:                pact-tng
-version:             5.0
+version:             5.1
 -- ^ 4 digit is prerelease, 3- or 2-digit for prod release
 synopsis:            Smart contract language library and REPL
 description:
@@ -138,9 +138,17 @@ library pact-crypto
     , semirings
     , deepseq
     , vector
+    , text
+    , base64-bytestring
+    , bytestring
+    , hashes >= 0.3
+    , safe-exceptions
+    , deepseq
 
   exposed-modules:
+    Pact.Core.Crypto.Base64
     Pact.Core.Crypto.Hash.Poseidon
+    Pact.Core.Crypto.Hash.Keccak256
     Pact.Core.Crypto.Pairing
     Pact.Core.Crypto.Pairing.Fields
   if !(flag(with-crypto))

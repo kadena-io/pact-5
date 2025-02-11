@@ -78,4 +78,4 @@ legacyTests = do
 
   where
   toModuleData p fp =
-    decodeModuleData <$> BS.readFile (legacyTestDir </> p </> fp)
+    decodeModuleData LegacyKeccakPatchDisabled <$> BS.readFile (legacyTestDir </> p </> fp)

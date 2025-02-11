@@ -239,6 +239,8 @@ data CoreBuiltin
   | CoreReadWithFields
   | CoreListModules
   | CoreStaticRedeploy
+  | CoreHashKeccak256
+  | CoreHashPoseidon
   deriving (Eq, Show, Ord, Bounded, Enum, Generic)
 
 instance NFData CoreBuiltin
@@ -413,6 +415,8 @@ coreBuiltinToText = \case
   CoreReadWithFields -> "read-with-fields"
   CoreListModules -> "list-modules"
   CoreStaticRedeploy -> "static-redeploy"
+  CoreHashKeccak256 -> "hash-keccak256"
+  CoreHashPoseidon -> "hash-poseidon"
 
 -- | Our `CoreBuiltin` user-facing representation.
 -- note: `coreBuiltinToUserText` is primarily for pretty printing
@@ -565,6 +569,8 @@ coreBuiltinToUserText = \case
   CoreReadWithFields -> "read"
   CoreListModules -> "list-modules"
   CoreStaticRedeploy -> "static-redeploy"
+  CoreHashKeccak256 -> "hash-keccak256"
+  CoreHashPoseidon -> "hash-poseidon"
 
 instance IsBuiltin CoreBuiltin where
   builtinName = NativeName . coreBuiltinToText
@@ -721,6 +727,8 @@ instance IsBuiltin CoreBuiltin where
     CoreReadWithFields -> 3
     CoreListModules -> 0
     CoreStaticRedeploy -> 1
+    CoreHashKeccak256 -> 1
+    CoreHashPoseidon -> 1
 
 coreBuiltinNames :: [Text]
 coreBuiltinNames =

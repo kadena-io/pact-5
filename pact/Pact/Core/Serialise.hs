@@ -16,7 +16,8 @@ module Pact.Core.Serialise
   , document
   , serialisePact
   , serialisePact_raw_spaninfo
-  , serialisePact_lineinfo
+  , serialisePact_lineinfo_pact50
+  , serialisePact_lineinfo_pact51
   , serialisePact_repl_spaninfo
   , serialisePact_repl_fileLocSpanInfo
   , decodeVersion
@@ -102,7 +103,7 @@ serialisePact :: PactSerialise CoreBuiltin ()
 serialisePact = PactSerialise
   { _encodeModuleData = docEncode V1.encodeModuleData
   , _decodeModuleData = \bs ->
-      LegacyDocument <$> LegacyPact.decodeModuleData bs
+      LegacyDocument <$> LegacyPact.decodeModuleData LegacyPact.LegacyKeccakPatchDisabled bs
       <|> docDecode bs (\case
                            V1_CBOR -> V1.decodeModuleData
                        )
@@ -160,7 +161,7 @@ serialisePact_repl_spaninfo = serialisePact
   { _encodeModuleData = docEncode V1.encodeModuleData_repl_spaninfo
   , _decodeModuleData =
       \bs ->
-        (LegacyDocument . fmap (\_ -> def) . liftReplBuiltin <$> LegacyPact.decodeModuleData bs)
+        (LegacyDocument . fmap (\_ -> def) . liftReplBuiltin <$> LegacyPact.decodeModuleData LegacyPact.LegacyKeccakPatchDisabled bs)
         <|> docDecode bs (\case
                             V1_CBOR -> V1.decodeModuleData_repl_spaninfo
                         )
@@ -172,7 +173,7 @@ serialisePact_repl_fileLocSpanInfo = serialisePact
   { _encodeModuleData = docEncode V1.encodeModuleData_repl_flspaninfo
   , _decodeModuleData =
       \bs ->
-        (LegacyDocument . fmap (\_ -> def) . liftReplBuiltin <$> LegacyPact.decodeModuleData bs)
+        (LegacyDocument . fmap (\_ -> def) . liftReplBuiltin <$> LegacyPact.decodeModuleData LegacyPact.LegacyKeccakPatchDisabled bs)
         <|> docDecode bs (\case
                             V1_CBOR -> V1.decodeModuleData_repl_flspaninfo
                         )
@@ -194,19 +195,31 @@ serialisePact_raw_spaninfo = serialisePact
   { _encodeModuleData = docEncode V1.encodeModuleData_raw_spaninfo
   , _decodeModuleData =
       \bs ->
-        (LegacyDocument . fmap (\_ -> def) <$> LegacyPact.decodeModuleData bs)
+        (LegacyDocument . fmap (\_ -> def) <$> LegacyPact.decodeModuleData LegacyPact.LegacyKeccakPatchDisabled bs)
         <|> docDecode bs (\case
                             V1_CBOR -> V1.decodeModuleData_raw_spaninfo
                         )
   , _encodeRowData = gEncodeRowData
   }
 
-serialisePact_lineinfo :: PactSerialise CoreBuiltin LineInfo
-serialisePact_lineinfo = serialisePact
+serialisePact_lineinfo_pact51 :: PactSerialise CoreBuiltin LineInfo
+serialisePact_lineinfo_pact51 = serialisePact
   { _encodeModuleData = docEncode V1.encodeModuleData_lineinfo
   , _decodeModuleData =
       \bs ->
-        (LegacyDocument . fmap (\_ -> def) <$> LegacyPact.decodeModuleData bs)
+        (LegacyDocument . fmap (\_ -> def) <$> LegacyPact.decodeModuleData LegacyPact.LegacyKeccakPatchDisabled bs)
+        <|> docDecode bs (\case
+                            V1_CBOR -> V1.decodeModuleData_lineinfo
+                        )
+  , _encodeRowData = gEncodeRowData
+  }
+
+serialisePact_lineinfo_pact50 :: PactSerialise CoreBuiltin LineInfo
+serialisePact_lineinfo_pact50 = serialisePact
+  { _encodeModuleData = docEncode V1.encodeModuleData_lineinfo
+  , _decodeModuleData =
+      \bs ->
+        (LegacyDocument . fmap (\_ -> def) <$> LegacyPact.decodeModuleData LegacyPact.LegacyKeccakPatchEnabled bs)
         <|> docDecode bs (\case
                             V1_CBOR -> V1.decodeModuleData_lineinfo
                         )

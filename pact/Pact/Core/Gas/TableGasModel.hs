@@ -2,6 +2,7 @@
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Pact.Core.Gas.TableGasModel
  ( tableGasModel
@@ -20,6 +21,7 @@ import qualified GHC.Integer.Logarithms as IntLog
 import Pact.Core.Builtin
 import Pact.Core.Gas.Types
 import Data.Decimal
+import qualified Data.Vector as V
 import GHC.Base
 
 
@@ -51,6 +53,8 @@ tableGasCostConfig = GasCostConfig
   , _gcDesugarBytePenalty = 400
   , _gcMHashBytePenalty = 100
   , _gcSizeOfBytePenalty = 5
+  , _gc_keccak256GasPerOneHundredBytes = 146
+  , _gc_keccak256GasPerChunk = 2_120
   }
 
 
@@ -383,8 +387,6 @@ runTableModel nativeTable GasCostConfig{..} = \case
   GSearch sty -> case sty of
     SubstringSearch needle hay -> MilliGas $ fromIntegral (T.length needle + T.length hay) + _gcNativeBasicWork
     FieldSearch cnt -> MilliGas $ fromIntegral cnt + _gcNativeBasicWork
-  GPoseidonHashHackAChain len ->
-    MilliGas $ fromIntegral (len * len) * _gcPoseidonQuadraticGasFactor + fromIntegral len * _gcPoseidonLinearGasFactor
   GModuleOp op -> case op of
     MOpLoadModule byteSize  ->
       -- After some benchmarking, we can essentially say that the byte size of linear in
@@ -455,14 +457,25 @@ runTableModel nativeTable GasCostConfig{..} = \case
       let !n = numberOfBits p
           !n_flt = (fromIntegral n :: Double)
       in fromIntegral n * ceiling ((log n_flt) ** 2) * ceiling (log (log n_flt))
-  GHash w ->
-    MilliGas $ w * _gcMHashBytePenalty
   GCapOp op -> case op of
     CapOpRequire cnt ->
       let mgPerCap = 100
       in MilliGas $ fromIntegral $ cnt * mgPerCap
   GHyperlaneMessageId m -> MilliGas $ fromIntegral m
   GHyperlaneEncodeDecodeTokenMessage m -> MilliGas $ fromIntegral m
+  GHashOp hashOp -> case hashOp of
+    GHashBlake w -> MilliGas $ w * _gcMHashBytePenalty
+    GHashPoseidon len ->
+      MilliGas $ fromIntegral (len * len) * _gcPoseidonQuadraticGasFactor + fromIntegral len * _gcPoseidonLinearGasFactor
+    GHashKeccak chunkBytes ->
+      let costPerOneHundredBytes = _gc_keccak256GasPerOneHundredBytes
+          costPerChunk = _gc_keccak256GasPerChunk
+
+              -- we need to use ceiling here, otherwise someone could cheat by
+              -- having as many bytes as they want, but in chunks of 99 bytes.
+          gasOne numBytesInChunk = costPerChunk + costPerOneHundredBytes * ceiling (fromIntegral @_ @Double numBytesInChunk / 100.0)
+
+      in MilliGas (V.sum (V.map gasOne chunkBytes))
   where
   textCompareCost str = fromIntegral $ T.length str
   -- Running CountBytes costs 0.9 MilliGas, according to the analysis in bench/Bench.hs
@@ -718,6 +731,8 @@ coreBuiltinGasCost GasCostConfig{..} = MilliGas . \case
   CoreReadWithFields -> _gcReadPenalty
   CoreListModules -> _gcMetadataTxPenalty
   CoreStaticRedeploy -> _gcNativeBasicWork
+  CoreHashKeccak256 -> 1_000
+  CoreHashPoseidon -> 124_000
 {-# INLINABLE runTableModel #-}
 
 

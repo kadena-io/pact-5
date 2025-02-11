@@ -167,6 +167,8 @@ data ExecutionFlag
   | FlagDisableRuntimeRTC
   -- | Flag Enable legacy events
   | FlagEnableLegacyEventHashes
+  -- | Flag to disable features from pact 5.1
+  | FlagDisablePact51
   deriving (Eq,Ord,Show,Enum,Bounded, Generic)
 
 instance NFData ExecutionFlag

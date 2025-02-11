@@ -83,6 +83,7 @@ import Pact.Core.Namespace
 #ifndef WITHOUT_CRYPTO
 import Pact.Core.Crypto.Pairing
 import Pact.Core.Crypto.Hash.Poseidon
+import Pact.Core.Crypto.Hash.Keccak256
 #endif
 import Pact.Core.SizeOf
 
@@ -1895,9 +1896,22 @@ poseidonHash info b _env = \case
   [VList as]
     | not (V.null as) && length as <= 8,
     Just intArgs <- traverse (preview (_PLiteral . _LInteger)) as -> do
-      chargeGasArgs info (GPoseidonHashHackAChain (length intArgs))
+      chargeGasArgs info (GHashOp (GHashPoseidon (length intArgs)))
       return $ VInteger (poseidon (V.toList intArgs))
   args -> argsError info b args
+
+coreHashKeccak256 :: (IsBuiltin b) => NativeFunction e b i
+coreHashKeccak256 info b _env = \case
+  [VList li] -> do
+    texts <- traverse (asString info b) li
+    let chunkBytes = V.map (BS.length . T.encodeUtf8) texts
+    chargeGasArgs info (GHashOp (GHashKeccak chunkBytes))
+    output <- case keccak256 texts of
+          Left keccakErr -> throwExecutionError info (Keccak256Error keccakErr)
+          Right output -> pure output
+    return (VString output)
+  args -> argsError info b args
+
 
 #else
 
@@ -1912,6 +1926,9 @@ zkPointAddition info _b _env _args = throwExecutionError info $ EvalError $ "cry
 
 poseidonHash :: (IsBuiltin b) => NativeFunction e b i
 poseidonHash info _b _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
+
+coreHashKeccak256 :: (IsBuiltin b) => NativeFunction e b i
+coreHashKeccak256 info _b _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
 #endif
 
@@ -2201,3 +2218,5 @@ coreBuiltinRuntime =
     CoreReadWithFields -> dbRead
     CoreListModules -> coreListModules
     CoreStaticRedeploy -> coreStaticRedeploy
+    CoreHashPoseidon -> poseidonHash
+    CoreHashKeccak256 -> coreHashKeccak256

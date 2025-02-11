@@ -194,7 +194,7 @@ setupCoinTxs pdb = do
 
 _run :: IO ()
 _run = do
-  pdb <- mockPactDb serialisePact_lineinfo
+  pdb <- mockPactDb serialisePact_lineinfo_pact51
   setupCoinTxs pdb >>= print
 
 coinTransferTxRaw :: Text -> Text -> Text
@@ -427,7 +427,7 @@ allBenchmarks = do
     -- , runPureBench "Let 10000" (deepLetTXRaw 10000) pdb interpretBigStep
     ]
   mkPactDb = do
-    pdb <- mockPactDb serialisePact_lineinfo
+    pdb <- mockPactDb serialisePact_lineinfo_pact51
     _ <- ignoreGas def $ _pdbBeginTx pdb Transactional
     _ <- setupCoinTxs pdb
     _ <- ignoreGas def $ _pdbCommitTx pdb
