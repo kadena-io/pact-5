@@ -20,6 +20,7 @@ module Pact.Core.Serialise.LegacyPact
   , fromLegacyNamespace
   , fromLegacyDefPactExec
   , runTranslateM
+  , IsLegacyPactKeccakPatchEnabled(..)
   ) where
 
 import Control.Lens
@@ -84,10 +85,15 @@ data TranslateState =
 
 makeLenses ''TranslateState
 
+data IsLegacyPactKeccakPatchEnabled
+  = LegacyKeccakPatchEnabled
+  | LegacyKeccakPatchDisabled
+  deriving (Show, Eq)
 
-newtype TranslateEnv
+data TranslateEnv
   = TranslateEnv
   { _teDepth :: DeBruijn
+  , _tePact5KeccakHashPatchEnabled :: IsLegacyPactKeccakPatchEnabled
   } deriving (Show, Eq)
 
 makeLenses ''TranslateEnv
@@ -97,23 +103,30 @@ type TranslateM = ReaderT TranslateEnv (StateT TranslateState (Except String))
 pattern UnitVal :: Term name ty builtin info
 pattern UnitVal <- InlineValue (PLiteral LUnit) _
 
-runTranslateM :: TranslateM a -> Either String a
-runTranslateM a =
-  let initialEnv = TranslateEnv 0
+runTranslateM :: IsLegacyPactKeccakPatchEnabled -> TranslateM a -> Either String a
+runTranslateM pact51Enabled a =
+  let initialEnv = TranslateEnv 0 pact51Enabled
       initialState = TranslateState mempty mempty
   in runExcept (evalStateT (runReaderT a initialEnv) initialState)
 
-decodeModuleData :: ByteString -> Maybe (ModuleData CoreBuiltin ())
-decodeModuleData bs = do
+decodeModuleData :: IsLegacyPactKeccakPatchEnabled -> ByteString -> Maybe (ModuleData CoreBuiltin ())
+decodeModuleData b bs = do
   obj <- JD.decodeStrict' bs
-  case runTranslateM (fromLegacyModuleData obj) of
+  case runTranslateM b (fromLegacyModuleData obj) of
     Left _ -> Nothing
     Right v -> Just v
 
 decodeModuleData' :: ByteString -> Either String (ModuleData CoreBuiltin ())
 decodeModuleData' bs = do
   obj <- maybe (Left "decodingError") Right $ JD.decodeStrict' bs
-  runTranslateM (fromLegacyModuleData obj)
+  runTranslateM LegacyKeccakPatchDisabled (fromLegacyModuleData obj)
+
+isLegacyKeccakPatchEnabled :: TranslateM Bool
+isLegacyKeccakPatchEnabled = views tePact5KeccakHashPatchEnabled (== LegacyKeccakPatchEnabled)
+
+legacyKeccakPatchNatives :: S.Set T.Text
+legacyKeccakPatchNatives =
+  S.fromList $ coreBuiltinToText <$> [CoreHashPoseidon, CoreHashKeccak256]
 
 fromLegacyModuleData
   :: Legacy.ModuleData (Legacy.Ref' Legacy.PersistDirect)
@@ -564,13 +577,19 @@ fromLegacyPersistDirect = \case
         d <- view teDepth
         pure $ Lam (c1 :| [c2]) (Var (Name "#constantlyA1" (NBound 1), d+2) ()) ()
 
-    | otherwise -> case M.lookup n coreBuiltinMap of
+    | otherwise ->  do
+      builtins <- getPatchedLookupMap
+      case M.lookup n builtins of
         Just b -> pure (Builtin b ())
         _ -> throwError $ "fromLegacyPersistDirect: invariant -> " <> show n
   Legacy.PDFreeVar fqn -> let
     fqn' = fromLegacyFullyQualifiedName fqn
     in pure $ Var (fqnToName fqn', 0) ()
   where
+    getPatchedLookupMap = do
+      isPatchEnabled <- isLegacyKeccakPatchEnabled
+      if isPatchEnabled then pure $ M.withoutKeys coreBuiltinMap legacyKeccakPatchNatives
+      else pure coreBuiltinMap
     -- Note: unit* is used as placeholder, which gets replaced in `fromLegacyTerm`
     unitValue = InlineValue PUnit ()
 

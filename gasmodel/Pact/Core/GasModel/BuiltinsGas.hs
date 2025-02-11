@@ -921,6 +921,11 @@ benchesForBuiltin bn = case bn of
   CoreHyperlaneEncodeMessage -> todo
   CoreHyperlaneMessageId -> todo
   CoreStaticRedeploy -> omittedDeliberately
+  -- Note: Hash-poseidon is an alias to the poseidon-hash-hackachain
+  -- function, so we don't need benches for it
+  CoreHashPoseidon -> omittedDeliberately
+  -- TODO: port keccak benchmarks
+  CoreHashKeccak256 -> omittedDeliberately
   where
   omittedDeliberately = const []
   alreadyCovered = const []
@@ -955,7 +960,7 @@ benchmarks = C.envWithCleanup mkPactDb cleanupPactDb $ \ ~(pdb, _, _) -> do
     ]
   where
   mkPactDb = do
-    (pdb, db, cache) <- unsafeCreateSqlitePactDb serialisePact_lineinfo ":memory:"
+    (pdb, db, cache) <- unsafeCreateSqlitePactDb serialisePact_lineinfo_pact51 ":memory:"
     pure (pdb, NoNf db, NoNf cache)
 
   cleanupPactDb (_, NoNf db, NoNf cache) = unsafeCloseSqlitePactDb db cache

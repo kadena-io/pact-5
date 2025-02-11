@@ -173,7 +173,9 @@ desugarCoreBuiltinArity f i CoreReadMsg [] =
 desugarCoreBuiltinArity f i CoreDefineKeySet [e1] =
   App (Builtin (f CoreDefineKeysetData) i) [e1] i
 desugarCoreBuiltinArity f i CorePoseidonHashHackachain li =
-  App (Builtin (f CorePoseidonHashHackachain) i )[(ListLit li i)] i
+  App (Builtin (f CorePoseidonHashHackachain) i) [(ListLit li i)] i
+desugarCoreBuiltinArity f i CoreHashPoseidon li =
+  App (Builtin (f CoreHashPoseidon) i) [ListLit li i] i
 desugarCoreBuiltinArity f i CoreYield [e1, e2] =
   App (Builtin (f CoreYieldToChain) i) [e1, e2] i
 desugarCoreBuiltinArity f i CoreRead [e1, e2, e3] =

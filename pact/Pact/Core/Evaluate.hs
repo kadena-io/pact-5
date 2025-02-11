@@ -26,6 +26,7 @@ module Pact.Core.Evaluate
   , evalInterpreter
   , EvalInput
   , EnableGasLogs(..)
+  , versionedNatives
   ) where
 
 import Control.Lens
@@ -33,6 +34,7 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Exception.Safe
 import Data.ByteString (ByteString)
+import Data.Foldable(foldl')
 import Data.Maybe (fromMaybe)
 import Data.Default
 import Data.Map.Strict(Map)
@@ -89,7 +91,7 @@ _decodeDbgModule fp = do
   putStrLn $ show $ pretty m
   putStrLn $ "\n\nPRETTY DEPS\n\n"
   () <$ traverse (putStrLn . show . pretty) (M.toList deps)
-  BS.writeFile (T.unpack (renderModuleName (_mName m))) $ _encodeModuleData serialisePact_lineinfo (def <$ (ModuleData m deps))
+  BS.writeFile (T.unpack (renderModuleName (_mName m))) $ _encodeModuleData serialisePact_lineinfo_pact51 (def <$ (ModuleData m deps))
   where
   unsafeAsModuleData = \case
     ModuleData m deps -> (m, deps)
@@ -156,6 +158,17 @@ data EvalResult = EvalResult
 
 type Info = LineInfo
 
+versionedNatives :: Set ExecutionFlag -> Map T.Text CoreBuiltin
+versionedNatives ec =
+  disablePactNatives FlagDisablePact51 pact51Natives coreBuiltinMap
+  where
+  disablePactNatives flag natives =
+    if S.member flag ec then
+      flip (foldl' (\m' k -> M.delete (coreBuiltinToText k) m')) natives
+    else id
+  pact51Natives = [CoreHashPoseidon, CoreHashKeccak256]
+
+
 setupEvalEnv
   :: PactDb CoreBuiltin a
   -> ExecutionMode -- <- we have this
@@ -178,7 +191,7 @@ setupEvalEnv pdb mode msgData mCont gasEnv np spv pd efs = do
     , _eeDefPactStep = contToPactStep <$> mCont
     , _eeMode = mode
     , _eeFlags = efs
-    , _eeNatives = coreBuiltinMap
+    , _eeNatives = versionedNatives efs
     , _eeNamespacePolicy = np
     , _eeGasEnv = gasEnv
     , _eeSPVSupport = spv

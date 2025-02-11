@@ -188,7 +188,7 @@ setupCoinTxs pdb = do
 
 _run :: IO ()
 _run = do
-  pdb <- mockPactDb serialisePact_lineinfo
+  pdb <- mockPactDb serialisePact_lineinfo_pact51
   setupCoinTxs pdb >>= print
 
 coinTransferTxRaw :: Text -> Text -> Text
@@ -229,7 +229,7 @@ transferSigners sender receiver =
   M.singleton (pubKeyFromSender sender) (S.singleton (transferCapFromSender sender receiver 200.0))
 
 _testCoinTransfer :: IO ()
-_testCoinTransfer = withSqlitePactDb serialisePact_lineinfo (T.pack benchmarkSqliteFile) $ \pdb -> do
+_testCoinTransfer = withSqlitePactDb serialisePact_lineinfo_pact51 (T.pack benchmarkSqliteFile) $ \pdb -> do
   _ <- ignoreGas def $ _pdbBeginTx pdb Transactional
   p <- setupCoinTxs pdb
   print p
@@ -280,7 +280,7 @@ mkCoinIdent :: Text -> Name
 mkCoinIdent n = Name n (NTopLevel (ModuleName "coin" Nothing) (ModuleHash {_mhHash = unsafeModuleHash "DFsR46Z3vJzwyd68i0MuxIF0JxZ_OJfIaMyFFgAyI4w"}))
 
 main :: IO ()
-main = withSqlitePactDb serialisePact_lineinfo (T.pack benchmarkSqliteFile) $ \pdb -> do
+main = withSqlitePactDb serialisePact_lineinfo_pact51 (T.pack benchmarkSqliteFile) $ \pdb -> do
   withTx pdb $ setupCoinTxs pdb
   withTx pdb $ prePopulateCoinEntries pdb
   runCoinXferDirect pdb

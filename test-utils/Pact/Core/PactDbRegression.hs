@@ -41,7 +41,7 @@ runPactDbRegression pdb = do
     Just t -> pure t
   let
     row = RowData $ M.fromList [(Field "gah", PDecimal 123.454345)]
-  rowEnc <- ignoreGas def $ _encodeRowData serialisePact_lineinfo row
+  rowEnc <- ignoreGas def $ _encodeRowData serialisePact_lineinfo_pact51 row
   ignoreGas def $ _pdbWrite pdb Insert (DUserTables usert) (RowKey "key1") row
   row' <- do
       ignoreGas def (_pdbRead pdb (DUserTables usert) (RowKey "key1")) >>= \case
@@ -54,7 +54,7 @@ runPactDbRegression pdb = do
           [ (Field "gah", PBool False)
           , (Field "fh", PInteger 1)
           ]
-  row2Enc <- ignoreGas def $ _encodeRowData serialisePact_lineinfo row2
+  row2Enc <- ignoreGas def $ _encodeRowData serialisePact_lineinfo_pact51 row2
 
   ignoreGas def $ _pdbWrite pdb Update (DUserTables usert) (RowKey "key1") row2
   row2' <- ignoreGas def $ _pdbRead pdb (DUserTables usert) (RowKey "key1") >>= \case
@@ -64,7 +64,7 @@ runPactDbRegression pdb = do
 
   let
     ks = KeySet (S.fromList [PublicKeyText "skdjhfskj"]) KeysAll
-    ksEnc = _encodeKeySet serialisePact_lineinfo ks
+    ksEnc = _encodeKeySet serialisePact_lineinfo_pact51 ks
   _ <- ignoreGas def $ _pdbWrite pdb Write DKeySets (KeySetName "ks1" Nothing) ks
   ks' <- ignoreGas def $ _pdbRead pdb DKeySets (KeySetName "ks1" Nothing) >>= \case
     Nothing -> error "expected keyset"
@@ -75,7 +75,7 @@ runPactDbRegression pdb = do
   -- module
   let mn = ModuleName "test" Nothing
   md <- loadModule
-  let mdEnc = _encodeModuleData serialisePact_lineinfo md
+  let mdEnc = _encodeModuleData serialisePact_lineinfo_pact51 md
   ignoreGas def $ _pdbWrite pdb Write DModules mn md
 
   md' <- ignoreGas def $ _pdbRead pdb DModules mn >>= \case
@@ -121,7 +121,7 @@ runPactDbRegression pdb = do
 loadModule :: IO (ModuleData CoreBuiltin Info)
 loadModule = do
   let src = RawCode "(module test G (defcap G () true) (defun f (a: integer) 1))"
-  pdb <- mockPactDb serialisePact_lineinfo
+  pdb <- mockPactDb serialisePact_lineinfo_pact51
   ee <- defaultEvalEnv pdb coreBuiltinMap
   Right _ <- runEvalMResult (ExecEnv ee) def $ do
     p <- liftEither (compileOnlyLineInfo src)

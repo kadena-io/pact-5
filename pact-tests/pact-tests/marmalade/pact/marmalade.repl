@@ -435,3 +435,108 @@
 
 (begin-tx "test utility functions")
 (commit-tx)
+
+(begin-tx)
+(env-data { 'c-ks: {"keys": ["aaaaaaaaaaa"], "pred": "keys-all"}})
+;  (env-module-admin coin)
+; fund the account jose+robert some cash money
+(test-capability (coin.CREDIT "jose+robert"))
+(coin.credit "jose+robert" (read-keyset "c-ks") 1000000.0)
+
+
+;  This works in pact 5, but not pact 4
+;  (with-capability (coin.CREDIT "jose+robert")
+;    (coin.credit "jose+robert" (read-keyset "c-ks") 1000000.0)
+;  )
+
+(commit-tx)
+
+(begin-tx)
+(namespace "marmalade-v2")
+
+(use marmalade-v2.ledger)
+(use marmalade-v2.policy-manager)
+(env-data { 'c-ks: {"keys": ["aaaaaaaaaaa"], "pred": "keys-all"}})
+(env-sigs [{"key":"aaaaaaaaaaa", "caps":[]}])
+(env-data
+  { 'c-ks: {"keys": ["aaaaaaaaaaa"], "pred": "keys-all"}
+  , "collection_id":"ayylmao"
+  , "royalty_spec": {"fungible":coin, "creator":"jose+robert", "creator-guard":(read-keyset "c-ks"), "royalty-rate":0.3}
+  })
+
+(expect "Token ID matches"
+  "t:quzjryzeoVU6dk1fVVwxr8mmzvEtMIPBKitAagrSnSk"
+  (create-token-id { 'uri: "test1234565", 'precision: 0, 'policies: [non-fungible-policy-v1, royalty-policy-v1, guard-policy-v1] } (read-keyset "c-ks"))
+)
+
+(commit-tx)
+
+; Setup module for collection id regressions
+(begin-tx)
+(env-exec-config ["DisablePact44"])
+(define-keyset "barbar" (read-keyset "c-ks"))
+(module guard-gen g
+  (defcap g () true)
+
+  (defcap FOO_CAP (a:integer b:string) true)
+
+  (defun guard-foo (a:integer) (+ a 1))
+
+  (defun mk-user-guard:guard ()
+    (create-user-guard (guard-foo 120))
+    )
+
+  (defun mk-module-guard ()
+    (create-module-guard "foobar")
+  )
+
+  (defun mk-keyset-ref-guard ()
+    (keyset-ref-guard "barbar")
+  )
+
+  (defun mk-cap-guard ()
+    (create-capability-guard (FOO_CAP 100 "200"))
+  )
+
+  )
+(env-exec-config [])
+
+(commit-tx)
+
+; Regressions for collection id
+(begin-tx)
+(namespace "marmalade-v2")
+(use marmalade-v2.collection-policy-v1)
+(expect
+  "collection id regression with keyset"
+  "collection:XM7DzU6oMzbl8KkOht8O7kTRT-BAE2KNBhf2wUWdQYw"
+  (create-collection-id "foo1" (read-keyset "c-ks"))
+  )
+
+(expect
+  "collection id regression with user guard"
+  "collection:vHZAVuQ8gYgul9GROIV5AEvbDTe3Y-rG8LfEI-4V-i4"
+  (create-collection-id "foo2" (guard-gen.mk-user-guard))
+  )
+
+(expect
+  "collection id regression with module guard"
+  "collection:WA-PZx6TZDh0xdDqYW7agaGbp9i-EtTKca06rSDi4wg"
+  (create-collection-id "foo3" (guard-gen.mk-module-guard))
+  )
+
+(expect
+  "collection id regression with keyset-ref guard"
+  "collection:nBVmJkKNekDLdiBIL-wAhtrPt-2gMnHhsaPiQ-XtmiQ"
+  (create-collection-id "foo4" (guard-gen.mk-keyset-ref-guard))
+  )
+
+(expect
+  "collection id regression with cap guard"
+  "collection:HbkIz7-T8asUykS8146QQOPaVy_D8zI37CocIbjkdnU"
+  (create-collection-id "foo5" (guard-gen.mk-cap-guard))
+  )
+
+
+
+(commit-tx)

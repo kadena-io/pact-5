@@ -112,7 +112,7 @@ namespaceRoundtrip serial builtins = property $ do
 --   contain the expected metadata.
 sqliteRegression :: TestTree
 sqliteRegression = withResource
-  (unsafeCreateSqlitePactDb serialisePact_lineinfo ":memory:")
+  (unsafeCreateSqlitePactDb serialisePact_lineinfo_pact51 ":memory:")
   (\(_, db, stmtcache) -> unsafeCloseSqlitePactDb db stmtcache)
   $ \db ->
   testCase "Sqlite Db regression"
@@ -120,4 +120,4 @@ sqliteRegression = withResource
 
 pureDbRegression :: TestTree
 pureDbRegression = testCase "PureDb regression"
-  (runPactDbRegression =<< mockPactDb serialisePact_lineinfo)
+  (runPactDbRegression =<< mockPactDb serialisePact_lineinfo_pact51)

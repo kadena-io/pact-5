@@ -71,6 +71,7 @@ import Pact.Core.Info
 #ifndef WITHOUT_CRYPTO
 import Pact.Core.Crypto.Pairing
 import Pact.Core.Crypto.Hash.Poseidon
+import Pact.Core.Crypto.Hash.Keccak256
 #endif
 import Pact.Crypto.Hyperlane
 
@@ -1898,8 +1899,20 @@ poseidonHash info b cont handler _env = \case
   [VList as]
     | not (V.null as) && length as <= 8,
     Just intArgs <- traverse (preview (_PLiteral . _LInteger)) as -> do
-      chargeGasArgs info (GPoseidonHashHackAChain (length intArgs))
+      chargeGasArgs info (GHashOp (GHashPoseidon (length intArgs)))
       returnCEKValue cont handler $ VInteger (poseidon (V.toList intArgs))
+  args -> argsError info b args
+
+coreHashKeccak256 :: (IsBuiltin b) => NativeFunction e b i
+coreHashKeccak256 info b cont handler _env = \case
+  [VList li] -> do
+    texts <- traverse (asString info b) li
+    let chunkBytes = V.map (BS.length . T.encodeUtf8) texts
+    chargeGasArgs info (GHashOp (GHashKeccak chunkBytes))
+    output <- case keccak256 texts of
+          Left keccakErr -> throwExecutionError info (Keccak256Error keccakErr)
+          Right output -> pure output
+    returnCEKValue cont handler (VString output)
   args -> argsError info b args
 
 #else
@@ -1915,6 +1928,9 @@ zkPointAddition info _b _cont _handler _env _args = throwExecutionError info $ E
 
 poseidonHash :: NativeFunction e b i
 poseidonHash info _b _cont _handler _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
+
+coreHashKeccak256 :: NativeFunction e b i
+coreHashKeccak256 info _b _cont _handler _env _args = throwExecutionError info $ EvalError $ "crypto disabled"
 
 #endif
 
@@ -2031,6 +2047,9 @@ coreStaticRedeploy info b cont handler env = \case
   moduleDataCode = \case
     ModuleData m _ -> _mCode m
     InterfaceData iface _ -> _ifCode iface
+
+
+
 
 -----------------------------------
 -- Builtin exports
@@ -2194,3 +2213,5 @@ coreBuiltinRuntime = \case
   CoreReadWithFields -> dbRead
   CoreListModules -> coreListModules
   CoreStaticRedeploy -> coreStaticRedeploy
+  CoreHashPoseidon -> poseidonHash
+  CoreHashKeccak256 -> coreHashKeccak256

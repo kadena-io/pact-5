@@ -134,4 +134,6 @@
 {"conName":"CoreReadWithFields","conIndex":"85"}
 {"conName":"CoreListModules","conIndex":"86"}
 {"conName":"CoreStaticRedeploy","conIndex":"87"}
+{"conName":"CoreHashKeccak256","conIndex":"88"}
+{"conName":"CoreHashPoseidon","conIndex":"89"}
 

@@ -73,7 +73,7 @@ tests =  withResource
     ]
   where
   mkEnv = do
-    (pdb,db,stmt) <- unsafeCreateSqlitePactDb serialisePact_lineinfo ":memory:"
+    (pdb,db,stmt) <- unsafeCreateSqlitePactDb serialisePact_lineinfo_pact51 ":memory:"
     (histDb, db') <- unsafeCreateHistoryDb ":memory:"
     chan <- newChan
     let

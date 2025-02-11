@@ -48,7 +48,7 @@ withSqliteAndHistoryDb path act =
   close (_, _, db, stmt) =
     liftIO $ unsafeCloseSqlitePactDb db stmt
   open = do
-    (pdb, db, stmt) <- unsafeCreateSqlitePactDb serialisePact_lineinfo path
+    (pdb, db, stmt) <- unsafeCreateSqlitePactDb serialisePact_lineinfo_pact51 path
     liftIO $ SQL.exec db createHistoryTblStmt
     pure (pdb, dbToHistDb db, db, stmt)
 

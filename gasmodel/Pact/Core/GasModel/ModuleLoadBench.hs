@@ -60,11 +60,11 @@ genModules w =
 sizeOfVsSize :: IO [(Int, Int)]
 sizeOfVsSize = do
   let modules = genModules 42020
-  pdb <- mockPactDb serialisePact_lineinfo
+  pdb <- mockPactDb serialisePact_lineinfo_pact51
   ee <- setupBenchEvalEnv pdb mempty PUnit
   out <- runEvalMResult (ExecEnv ee) def $ forM modules $ \m -> do
     sz <- sizeOfInternal m
-    let bs = _encodeModuleData serialisePact_lineinfo m
+    let bs = _encodeModuleData serialisePact_lineinfo_pact51 m
     pure (fromIntegral sz, B.length bs)
   either (error . show) pure out
   where
@@ -109,7 +109,7 @@ runModuleLoadBench pdb i =
   title bs =
     let bs' = T.pack (show bs)
     in T.unpack [text| Benching module of size (in bytes), ${bs'} |]
-  bytesize mdata = B.length $ _encodeModuleData serialisePact_lineinfo mdata
+  bytesize mdata = B.length $ _encodeModuleData serialisePact_lineinfo_pact51 mdata
   mkModule = do
     let mdata = genModule (42020 + fromIntegral i)
     _ <- ignoreGas def $ _pdbBeginTx pdb Transactional
@@ -127,7 +127,7 @@ benchmarks = C.env mkPdb $ \ ~(pdb) ->
     C.bgroup "Module load benches" (runModuleLoadBench pdb <$> [1..1])
   where
   mkPdb = do
-    pdb <- mockPactDb serialisePact_lineinfo
+    pdb <- mockPactDb serialisePact_lineinfo_pact51
     _ <- ignoreGas def $ _pdbBeginTx pdb Transactional
     _ <- ignoreGas def $ _pdbCommitTx pdb
     pure pdb
