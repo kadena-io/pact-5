@@ -1907,9 +1907,9 @@ coreHashKeccak256 :: (IsBuiltin b) => NativeFunction e b i
 coreHashKeccak256 info b cont handler _env = \case
   [VList li] -> do
     texts <- traverse (asString info b) li
-    let chunkBytes = V.map (BS.length . T.encodeUtf8) texts
-    chargeGasArgs info (GHashOp (GHashKeccak chunkBytes))
-    output <- case keccak256 texts of
+    let chunks = V.map T.encodeUtf8 texts
+    chargeGasArgs info (GHashOp (GHashKeccak (BS.length <$> chunks)))
+    output <- case keccak256 chunks of
           Left keccakErr -> throwExecutionError info (Keccak256Error keccakErr)
           Right output -> pure output
     returnCEKValue cont handler (VString output)

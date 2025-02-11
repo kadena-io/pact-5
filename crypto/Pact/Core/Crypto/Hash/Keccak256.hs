@@ -15,6 +15,7 @@ import Control.Exception (Exception(..), SomeException(..))
 import Control.Monad (forM_)
 import Control.Exception.Safe (throwM, try)
 import Control.DeepSeq
+import Data.ByteString(ByteString)
 import Data.ByteString.Short qualified as BSS
 import Data.Hash.Class.Mutable (initialize, finalize, updateByteString)
 import Data.Hash.Internal.OpenSSL (OpenSslException(..))
@@ -35,12 +36,12 @@ data Keccak256Error
 
 instance NFData Keccak256Error
 
-keccak256 :: Vector Text -> Either Keccak256Error Text
-keccak256 strings = unsafePerformIO $ do
+keccak256 :: Vector ByteString -> Either Keccak256Error Text
+keccak256 bytesArray = unsafePerformIO $ do
   e <- try @_ @SomeException $ do
     ctx <- initialize @Keccak256
-    forM_ strings $ \string -> do
-      case decodeBase64UrlUnpadded (Text.encodeUtf8 string) of
+    forM_ bytesArray $ \bytes -> do
+      case decodeBase64UrlUnpadded bytes of
         Left b64Err -> do
           throwM (Keccak256Base64Exception b64Err)
         Right bytes -> do

@@ -1396,6 +1396,8 @@ hyperlaneDecodeErrorToBoundedText' = \case
 
 -- | NOTE: Do _not_ change this function post mainnet release just to improve an error.
 --  This will fork the chain, these messages will make it into outputs.
+--  This function can be changed to add cases, but the contents of existing messages
+--  cannot be changed or it will fork replay.
 --  See [Bounded Text Errors]
 evalErrorToBoundedText :: EvalError -> BoundedText PactErrorMsgSize
 evalErrorToBoundedText = mkBoundedText . \case

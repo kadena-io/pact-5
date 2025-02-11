@@ -467,15 +467,13 @@ runTableModel nativeTable GasCostConfig{..} = \case
     GHashBlake w -> MilliGas $ w * _gcMHashBytePenalty
     GHashPoseidon len ->
       MilliGas $ fromIntegral (len * len) * _gcPoseidonQuadraticGasFactor + fromIntegral len * _gcPoseidonLinearGasFactor
-    GHashKeccak chunkBytes ->
-      let costPerOneHundredBytes = _gc_keccak256GasPerOneHundredBytes
-          costPerChunk = _gc_keccak256GasPerChunk
-
-              -- we need to use ceiling here, otherwise someone could cheat by
-              -- having as many bytes as they want, but in chunks of 99 bytes.
-          gasOne numBytesInChunk = costPerChunk + costPerOneHundredBytes * ceiling (fromIntegral @_ @Double numBytesInChunk / 100.0)
-
-      in MilliGas (V.sum (V.map gasOne chunkBytes))
+    GHashKeccak chunkSize ->
+      let (amt, remainder) = V.sum chunkSize `divMod` 100
+          -- Round up the number of chunks in case it's not easily divisible by 100
+          !totalHundredByteSegments = if remainder == 0 then amt else amt + 1
+          !totalByteCost = _gc_keccak256GasPerOneHundredBytes * fromIntegral totalHundredByteSegments
+      -- Return total cost per 100 chunks + number of chunks * cost per chunk
+      in MilliGas $ totalByteCost + _gc_keccak256GasPerChunk * fromIntegral (V.length chunkSize)
   where
   textCompareCost str = fromIntegral $ T.length str
   -- Running CountBytes costs 0.9 MilliGas, according to the analysis in bench/Bench.hs
