@@ -25,6 +25,7 @@ import qualified Pact.Core.Test.JSONRoundtripTests as JSONRoundtripTests
 import qualified Pact.Core.Test.LegacyDBRegression as LegacyDbRegression
 import qualified Pact.Core.Test.PactContinuationTest as PactContinuationTests
 import qualified Pact.Core.Test.ClientTests as ClientTests
+import qualified Pact.Core.Test.Keccak256Tests as KeccakTests
 
 main :: IO ()
 main = do
@@ -57,5 +58,6 @@ main = do
     , PactServerTests.tests
     , PactContinuationTests.tests
     , ClientTests.tests
+    , KeccakTests.tests
     ]
 
