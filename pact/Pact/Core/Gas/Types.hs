@@ -175,7 +175,7 @@ data GasCostConfig
   -- ^ Our `SizeOf` limit penalty
   , _gc_keccak256GasPerOneHundredBytes :: !SatWord
   -- ^ Cost of keccak gas per 100 bytes
-  , _gc_keccak256GasPerChunk :: SatWord
+  , _gc_keccak256GasPerChunk :: !SatWord
   -- ^ Cost of keccak gas per chunk
   } deriving (Eq, Show, Generic)
 

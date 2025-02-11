@@ -448,7 +448,6 @@ envExecConfig info b cont handler _env = \case
     go str = do
       str' <- asString info b str
       maybe (pure $ Right str') (pure . Left) (M.lookup str' flagReps)
-      --failInvariant info $ "Invalid flag, allowed: " <> T.pack (show (M.keys flagReps))
 
   args -> argsError info b args
 

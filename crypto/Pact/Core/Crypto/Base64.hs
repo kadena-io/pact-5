@@ -19,8 +19,7 @@ equalWord8 :: Word8
 equalWord8 = toEnum $ fromEnum '='
 
 decodeBase64UrlUnpadded :: ByteString -> Either String ByteString
-decodeBase64UrlUnpadded = B64URL.decode . pad
-  where pad t = let s = B.length t `mod` 4 in t <> B.replicate ((4 - s) `mod` 4) equalWord8
+decodeBase64UrlUnpadded = B64URL.decode
 
 fromB64UrlUnpaddedText :: ByteString -> Either String Text
 fromB64UrlUnpaddedText bs = case decodeBase64UrlUnpadded bs of
