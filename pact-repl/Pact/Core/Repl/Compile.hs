@@ -213,13 +213,21 @@ setBuiltinResolution (SourceCode fp _)
 defaultLoadFile :: FilePath -> Bool -> EvalM ReplRuntime ReplCoreBuiltin FileLocSpanInfo ()
 defaultLoadFile f reset = () <$ loadFile interpretEvalDirect f reset
 
+-- | Load a file onto the repl, optionally resetting all state.
 loadFile :: ReplInterpreter -> FilePath -> Bool -> EvalM ReplRuntime ReplCoreBuiltin FileLocSpanInfo [ReplCompileValue]
 loadFile interpreter txt reset  = do
+  -- loadFile may be called between expressions, so
+  -- we have to preserve some state before and after the call.
+
+  -- When the repl enters another file and finishes,
+  -- all other code executed must have a valid reference to the "current" source
   oldSrc <- useReplState replCurrSource
   pactdb <- liftIO (mockPactDb serialisePact_repl_fileLocSpanInfo)
+  -- Similarly, the eval env is preseved
   oldEE <- useReplState replEvalEnv
   when reset $ do
     ee <- liftIO (defaultEvalEnv pactdb replBuiltinMap)
+    -- Reset the eval state, so name resolution starts from scratch in the new file
     put def
     replEvalEnv .== ee
   fp <- mangleFilePath txt
@@ -228,9 +236,11 @@ loadFile interpreter txt reset  = do
   replCurrSource .== source
   out <- interpretReplProgram interpreter source
   replCurrSource .== oldSrc
-  unless reset $ do
-    replEvalEnv .== oldEE
-  setBuiltinResolution oldSrc
+
+  -- We reset our native resolution to be the one scoped to this file, for consistency.
+  -- We allow eval env changes to persist across files
+  replEvalEnv . eeNatives .== view eeNatives oldEE
+
   pure out
 
 mangleFilePath :: FilePath -> EvalM ReplRuntime b FileLocSpanInfo FilePath

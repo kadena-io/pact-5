@@ -55,7 +55,7 @@ fold-db: 40500850
 fold: 1090
 format-time: 1041
 format: 1900
-hash-keccak256: 3672
+hash-keccak256: 43465
 hash-poseidon: 6393700
 hash: 3500
 hours: 277

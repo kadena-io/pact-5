@@ -1262,6 +1262,18 @@ builtinTests =
     |])
   ]
 
+forkingNameResolutionTests :: [(String, PactError FileLocSpanInfo -> Bool, Text)]
+forkingNameResolutionTests =
+  [ ("pact51_hash-keccak_does_not_resolve", isDesugarError _NoSuchModule, [text|
+      (env-exec-config ["DisablePact51"])
+      (hash-keccak256 [""])
+      |])
+
+  , ("pact51_hash-poseidon_does_not_resolve", isDesugarError _NoSuchModule, [text|
+      (env-exec-config ["DisablePact51"])
+      (hash-poseidon 1 2 3)
+      |])]
+
 tests :: TestTree
 tests =
   testGroup "CoreStaticTests"
@@ -1269,5 +1281,5 @@ tests =
     , testGroup "CoreStaticTests:Direct" (go interpretEvalDirect <$> allTests)
     ]
   where
-  allTests = parseTests <> desugarTests <> executionTests <> builtinTests
+  allTests = parseTests <> desugarTests <> executionTests <> builtinTests <> forkingNameResolutionTests
   go interp (label, p, srcText) = testCase label $ runStaticTest label srcText interp p

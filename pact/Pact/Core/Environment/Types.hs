@@ -150,6 +150,10 @@ instance Pretty ReplDebugFlag where
 -- with an orientation towards some alteration of a default behavior.
 -- Thus, a flag should _not_ describe "normal behavior" (the default),
 -- but instead should enable some "unusual" option.
+--
+-- IMPORTANT:
+-- Whenever a new pact version is added that adds new natives, the natives enabled by that fork
+-- must be added to Pact.Core.Environment.Utils.nativesDisabledByFlag
 data ExecutionFlag
   -- | Disable user module install
   = FlagDisableModuleInstall
@@ -186,6 +190,7 @@ data PactWarning
   = DeprecatedNative NativeName Text
   -- ^ Deprecated natives
   | ModuleGuardEnforceDetected
+  | UnknownReplFlags [Text]
   deriving (Show, Eq, Ord)
 
 instance Pretty PactWarning where
@@ -194,6 +199,9 @@ instance Pretty PactWarning where
       "Using deprecated native" <+> pretty ndef <> ":" <+> pretty msg
     ModuleGuardEnforceDetected ->
       "Module guard enforce detected. Module guards are known to be unsafe, and will be removed in a future version of pact"
+    UnknownReplFlags flags ->
+      "Repl flags not recognized:" <+> commaSep flags
+
 
 -- | A simple stack of pact warnings,
 --   which appends up until a limit.
