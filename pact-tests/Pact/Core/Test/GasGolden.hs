@@ -16,7 +16,6 @@ import Pact.Core.Repl
 import Pact.Core.Repl.Compile
 import Pact.Core.Repl.Utils
 import Pact.Core.Serialise
-import Pact.Core.Evaluate(versionedNatives)
 import System.Directory
 import System.FilePath
 import Test.Tasty

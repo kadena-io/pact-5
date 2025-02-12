@@ -413,9 +413,12 @@ envExecConfig :: NativeFunction ReplRuntime ReplCoreBuiltin FileLocSpanInfo
 envExecConfig info b _env = \case
   [VList s] -> do
     s' <- traverse go (V.toList s)
-    let (knownFlags, _unkownFlags) = partitionEithers s'
-    -- TODO: Emit warnings of unkown flags
-    replEvalEnv . eeFlags .== S.fromList knownFlags
+    let (knownFlags, unknownFlags) = partitionEithers s'
+    -- Emit warning for unknown flags
+    emitPactWarning info $ UnknownReplFlags unknownFlags
+    let flagSet = S.fromList knownFlags
+    replEvalEnv . eeFlags .== flagSet
+    replEvalEnv . eeNatives .== versionedReplNatives flagSet
     let reps = PString . flagRep <$> knownFlags
     return (VList (V.fromList reps))
     where

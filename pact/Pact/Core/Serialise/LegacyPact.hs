@@ -86,8 +86,8 @@ data TranslateState =
 makeLenses ''TranslateState
 
 data IsLegacyPactKeccakPatchEnabled
-  = LegacyKeccakPatchEnabled
-  | LegacyKeccakPatchDisabled
+  = LegacyKeccakPatchDisabled
+  | LegacyKeccakPatchEnabled
   deriving (Show, Eq)
 
 data TranslateEnv
@@ -121,12 +121,15 @@ decodeModuleData' bs = do
   obj <- maybe (Left "decodingError") Right $ JD.decodeStrict' bs
   runTranslateM LegacyKeccakPatchDisabled (fromLegacyModuleData obj)
 
-isLegacyKeccakPatchEnabled :: TranslateM Bool
-isLegacyKeccakPatchEnabled = views tePact5KeccakHashPatchEnabled (== LegacyKeccakPatchEnabled)
+isLegacyPact412PatchEnabled :: TranslateM IsLegacyPactKeccakPatchEnabled
+isLegacyPact412PatchEnabled = view tePact5KeccakHashPatchEnabled
 
-legacyKeccakPatchNatives :: S.Set T.Text
-legacyKeccakPatchNatives =
+legacyPact412PatchNatives :: S.Set T.Text
+legacyPact412PatchNatives =
   S.fromList $ coreBuiltinToText <$> [CoreHashPoseidon, CoreHashKeccak256]
+
+patchedCoreBuiltinMap :: M.Map T.Text CoreBuiltin
+patchedCoreBuiltinMap = M.withoutKeys coreBuiltinMap legacyPact412PatchNatives
 
 fromLegacyModuleData
   :: Legacy.ModuleData (Legacy.Ref' Legacy.PersistDirect)
@@ -587,9 +590,9 @@ fromLegacyPersistDirect = \case
     in pure $ Var (fqnToName fqn', 0) ()
   where
     getPatchedLookupMap = do
-      isPatchEnabled <- isLegacyKeccakPatchEnabled
-      if isPatchEnabled then pure $ M.withoutKeys coreBuiltinMap legacyKeccakPatchNatives
-      else pure coreBuiltinMap
+      isLegacyPact412PatchEnabled >>= \case
+        LegacyKeccakPatchDisabled -> pure coreBuiltinMap
+        LegacyKeccakPatchEnabled -> pure patchedCoreBuiltinMap
     -- Note: unit* is used as placeholder, which gets replaced in `fromLegacyTerm`
     unitValue = InlineValue PUnit ()
 

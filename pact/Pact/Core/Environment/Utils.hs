@@ -20,10 +20,13 @@ module Pact.Core.Environment.Utils
  , throwUserRecoverableError
  , throwUserRecoverableError'
  , throwNativeExecutionError
+ , versionedNatives
+ , versionedReplNatives
  ) where
 
 import Control.Lens
 import Data.IORef
+import Data.Foldable
 import Control.Applicative((<|>))
 import Control.Monad.Except
 import Control.Monad.Reader hiding (MonadIO(..))
@@ -131,3 +134,24 @@ checkSigCaps sigs = do
   match allowEmpty granted sigCaps =
     (S.null sigCaps && allowEmpty) ||
     not (S.null (S.intersection granted sigCaps))
+
+-- | Natives enabled by the pact 5.1 fork
+pact51Natives :: S.Set Text
+pact51Natives = S.fromList $ ["hash-poseidon", "hash-keccak256"]
+
+-- | Get the natives disabled by a particular execution flag
+nativesDisabledByFlag :: ExecutionFlag -> Maybe (S.Set Text)
+nativesDisabledByFlag = \case
+  FlagDisablePact51 -> Just pact51Natives
+  _ -> Nothing
+
+versionNativesByFlag :: S.Set ExecutionFlag -> M.Map Text b -> M.Map Text b
+versionNativesByFlag ec m =
+  let nativesDisabled = foldl' (\s f -> maybe s (S.union s) (nativesDisabledByFlag f)) mempty ec
+  in M.withoutKeys m nativesDisabled
+
+versionedNatives :: S.Set ExecutionFlag -> M.Map Text CoreBuiltin
+versionedNatives ec = versionNativesByFlag ec coreBuiltinMap
+
+versionedReplNatives :: S.Set ExecutionFlag -> M.Map Text ReplCoreBuiltin
+versionedReplNatives ec = versionNativesByFlag ec replBuiltinMap
