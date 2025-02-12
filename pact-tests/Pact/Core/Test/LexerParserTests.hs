@@ -131,10 +131,9 @@ exprGen = Gen.recursive Gen.choice
       pure $ Lisp.Let LFLetNormal binders inner ()
 
     binderGen = do
-      name <- identGen
-      ty <- Gen.maybe typeGen
+      marg <- margGen
       expr <- Gen.subterm exprGen id
-      pure $ Lisp.Binder name ty expr
+      pure $ Lisp.Binder marg expr
 
 typeGen :: Gen Lisp.Type
 typeGen = Gen.recursive Gen.choice

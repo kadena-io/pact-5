@@ -1,6 +1,6 @@
 (define-keyset 'k (sig-keyset))
 
-(module mod 'k
+(module modl 'k
   @doc   "this defines mod"
   @model [(property (do (crazy stuff)))]
 

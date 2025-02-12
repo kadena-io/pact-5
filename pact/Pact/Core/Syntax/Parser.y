@@ -361,8 +361,8 @@ LetExpr :: { SpanInfo -> ParsedExpr }
 
 -- Binders are non-empty, this is safe
 Binders :: { [Binder SpanInfo] }
-  : Binders '(' IDENT MTypeAnn Expr ')' { (Binder (getIdent $3) $4 $5):$1 }
-  | '(' IDENT MTypeAnn Expr ')' { [Binder (getIdent $2) $3 $4] }
+  : Binders '(' IDENT MTypeAnn Expr ')' { (Binder (MArg (getIdent $3) $4 (_ptInfo $3)) $5):$1 }
+  | '(' IDENT MTypeAnn Expr ')' { [Binder (MArg (getIdent $2) $3 (_ptInfo $2)) $4] }
 
 GenAppExpr :: { SpanInfo -> ParsedExpr }
   : Expr AppBindList { \i -> App $1 (toAppExprList i (reverse $2)) i }
