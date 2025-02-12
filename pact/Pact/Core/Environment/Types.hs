@@ -353,12 +353,20 @@ data ReplTestStatus
   | ReplTestFailed Text
   deriving (Show, Eq)
 
+instance Pretty ReplTestStatus where
+  pretty ReplTestPassed = "Test passed"
+  pretty (ReplTestFailed failureMsg) = pretty failureMsg
+
 data ReplTestResult
   = ReplTestResult
   { _trName :: Text
   , _trLoc :: FileLocSpanInfo
   , _trResult :: ReplTestStatus
   } deriving (Show, Eq)
+
+instance Pretty ReplTestResult where
+  pretty (ReplTestResult _name loc res) =
+    pretty loc <> ":" <> pretty res
 
 data ReplOutput where
   ReplStdOut :: ReplOutput

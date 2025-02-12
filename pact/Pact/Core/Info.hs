@@ -113,7 +113,7 @@ instance HasSpanInfo FileLocSpanInfo where
   spanInfo = lens _flsiSpan (\s i -> s { _flsiSpan = i })
 
 instance Pretty FileLocSpanInfo where
-  pretty (FileLocSpanInfo f s) = pretty f <> " " <> pretty s
+  pretty (FileLocSpanInfo f s) = pretty f <> ":" <> pretty s
 
 instance Default FileLocSpanInfo where
   def = FileLocSpanInfo "" def
