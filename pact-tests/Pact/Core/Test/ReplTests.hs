@@ -33,6 +33,7 @@ import Pact.Core.Errors
 import Pact.Core.Serialise
 import Pact.Core.Persistence
 import Pact.Core.IR.Term
+import Pact.Core.Repl
 import Pact.Core.Repl.Compile
 import qualified Pact.Core.IR.ModuleHashing as MH
 
@@ -83,9 +84,10 @@ runReplTest (ReplSourceDir path) pdb file src interp = do
   let rstate = mkReplState ee (const (const (pure ()))) (\f reset -> void (loadFile interp f reset)) & replCurrSource .~ source
   stateRef <- newIORef rstate
   evalReplM stateRef (interpretReplProgram interp source) >>= \case
-    Left e -> let
-      rendered = replError (SourceCode file src) e
-      in assertFailure (T.unpack rendered)
+    Left e -> do
+      rstate' <- readIORef stateRef
+      let rendered = renderLocatedPactErrorFromState rstate' e
+      assertFailure (T.unpack rendered)
     Right _ -> do
       traverse_ ensurePassing . _replTestResults =<< readIORef stateRef
       ensureModuleHashesMatch

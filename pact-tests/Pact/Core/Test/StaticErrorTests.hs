@@ -162,15 +162,15 @@ desugarTests =
       iface
       |])
   , ("interface_instead_of_module", isDesugarError _InvalidModuleReference, [text|
-      (module mod G (defcap G () true))
+      (module modl G (defcap G () true))
 
       (module other-mod OG (defcap OG () true)
-        (defun foo:string (a:string b:module{mod}) a)
+        (defun foo:string (a:string b:module{modl}) a)
         )
       |])
   , ("interface_instead_of_module_same", isDesugarError _NoSuchModule, [text|
-      (module mod G (defcap G () true)
-        (defun foo:string (a:string b:module{mod}) a)
+      (module modl G (defcap G () true)
+        (defun foo:string (a:string b:module{modl}) a)
         )
       |])
   , ("import_unknown_module", isDesugarError _NoSuchModule, [text|
@@ -600,6 +600,144 @@ desugarTests =
           )
         )
     |])
+  , ("shadowing_disallowed_letbinds", isDesugarError _InvalidNativeShadowing, [text|
+    (let ((identity 1)) 1)
+  |])
+  , ("shadowing_disallowed_letbinds_nested", isDesugarError _InvalidNativeShadowing, [text|
+    (let ((i (let* ((identity 1)) 2))) 1)
+  |])
+  , ("shadowing_disallowed_lambdas", isDesugarError _InvalidNativeShadowing, [text|
+    (lambda (identity) identity)
+  |])
+  , ("shadowing_disallowed_module_name", isDesugarError _InvalidNativeShadowing, [text|
+    (module identity g
+      (defcap g () true)
+      (defun foo () 1)
+    )
+  |])
+  , ("shadowing_disallowed_defun_name", isDesugarError _InvalidNativeShadowing, [text|
+    (module m g
+      (defcap g () true)
+      (defun identity () 1)
+    )
+  |])
+  , ("shadowing_disallowed_defun_arg", isDesugarError _InvalidNativeShadowing, [text|
+    (module m g
+      (defcap g () true)
+      (defun f (identity:string) 1)
+    )
+  |])
+  , ("shadowing_disallowed_defun_inner_term", isDesugarError _InvalidNativeShadowing, [text|
+    (module m g
+      (defcap g () true)
+      (defun f (foo:string)
+        (let ((f (lambda (identity) 1))) 2)
+      )
+    )
+  |])
+  , ("shadowing_disallowed_defcap_name", isDesugarError _InvalidNativeShadowing, [text|
+    (module m g
+      (defcap g () true)
+      (defcap identity () 1)
+    )
+  |])
+  , ("shadowing_disallowed_defcap_arg", isDesugarError _InvalidNativeShadowing, [text|
+    (module m g
+      (defcap g () true)
+      (defcap f (identity:string) 1)
+    )
+  |])
+  , ("shadowing_disallowed_defcap_inner_term", isDesugarError _InvalidNativeShadowing, [text|
+    (module m g
+      (defcap g () true)
+      (defcap f (foo:string)
+        (let ((f (lambda (identity) 1))) 2)
+      )
+    )
+  |])
+  , ("shadowing_disallowed_defpact_name", isDesugarError _InvalidNativeShadowing, [text|
+    (module m g
+      (defcap g () true)
+      (defpact identity () (step 2))
+    )
+  |])
+  , ("shadowing_disallowed_defpact_arg", isDesugarError _InvalidNativeShadowing, [text|
+    (module m g
+      (defcap g () true)
+      (defpact f (identity:string) (step 1))
+    )
+  |])
+  , ("shadowing_disallowed_defpact_inner_term", isDesugarError _InvalidNativeShadowing, [text|
+    (module m g
+      (defcap g () true)
+      (defpact f (foo:string) (step (lambda (identity) 1)))
+    )
+  |])
+  , ("shadowing_disallowed_defconst", isDesugarError _InvalidNativeShadowing, [text|
+    (module m g
+      (defcap g () true)
+      (defconst identity 1)
+    )
+  |])
+  , ("shadowing_disallowed_defconst_term", isDesugarError _InvalidNativeShadowing, [text|
+    (module m g
+      (defcap g () true)
+      (defconst foo (let ((identity 1)) 2))
+    )
+  |])
+  , ("shadowing_disallowed_defschema", isDesugarError _InvalidNativeShadowing, [text|
+    (module m g
+      (defcap g () true)
+      (defschema identity a:integer)
+    )
+  |])
+  , ("shadowing_disallowed_deftable", isDesugarError _InvalidNativeShadowing, [text|
+    (module m g
+      (defcap g () true)
+      (defschema ident-schema a:integer)
+      (deftable identity:{ident-schema})
+    )
+  |])
+  , ("shadowing_disallowed_interface", isDesugarError _InvalidNativeShadowing, [text|
+    (interface identity
+     (defun foobar:integer (a:integer))
+    )
+  |])
+  , ("shadowing_disallowed_interface_defun_name", isDesugarError _InvalidNativeShadowing, [text|
+    (interface foobar
+     (defun identity:integer (a:integer))
+    )
+  |])
+  , ("shadowing_disallowed_interface_defun_arg", isDesugarError _InvalidNativeShadowing, [text|
+    (interface foointerface
+     (defun foobar:integer (identity:integer))
+    )
+  |])
+  , ("shadowing_disallowed_interface_defcap_name", isDesugarError _InvalidNativeShadowing, [text|
+    (interface foobar
+     (defcap identity:integer (a:integer))
+    )
+  |])
+  , ("shadowing_disallowed_interface_defcap_arg", isDesugarError _InvalidNativeShadowing, [text|
+    (interface foointerface
+     (defcap foobar:integer (identity:integer))
+    )
+  |])
+  , ("shadowing_disallowed_interface_defpact_name", isDesugarError _InvalidNativeShadowing, [text|
+    (interface foobar
+     (defpact identity:integer (a:integer))
+    )
+  |])
+  , ("shadowing_disallowed_interface_defpact_arg", isDesugarError _InvalidNativeShadowing, [text|
+    (interface foointerface
+     (defpact foobar:integer (identity:integer))
+    )
+  |])
+  , ("shadowing_disallowed_interface_defconst", isDesugarError _InvalidNativeShadowing, [text|
+    (interface foointerface
+     (defconst identity foobar)
+    )
+  |])
   ]
 
 executionTests :: [(String, PactError FileLocSpanInfo -> Bool, Text)]

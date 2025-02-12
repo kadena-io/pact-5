@@ -594,11 +594,11 @@ instance Pretty (MArg i) where
 
 
 data Binder i =
-  Binder Text (Maybe Type) (Expr i)
+  Binder (MArg i) (Expr i)
   deriving (Show, Eq, Functor, Generic, NFData)
 
 instance Pretty (Binder i) where
-  pretty (Binder ident ty e) =
+  pretty (Binder (MArg ident ty _) e) =
     parens $ pretty ident <> maybe mempty ((":" <>) . pretty) ty <+> pretty e
 
 data CapForm i
@@ -631,6 +631,27 @@ data Expr i
   | Object [(Field, Expr i)] i
   | Binding [(Field, MArg i)] [Expr i] i
   deriving (Show, Eq, Functor, Generic, NFData)
+
+instance Plated (Expr i) where
+  plate f = \case
+    Var pn i -> pure (Var pn i)
+    Let lf bndrs exprs i ->
+      Let lf <$> (traverse.traverseBinder) f bndrs <*> traverse f exprs <*> pure i
+    Lam margs e i ->
+      Lam margs <$> traverse f e <*> pure i
+    App l r i ->
+      App <$> f l <*> traverse f r <*> pure i
+    List li i ->
+      List <$> traverse f li <*> pure i
+    Constant l i -> pure (Constant l i)
+    Object fe i ->
+      Object <$> (traverse._2) f fe <*> pure i
+    Binding ma e i ->
+      Binding ma <$> traverse f e <*> pure i
+    where
+      traverseBinder f' (Binder marg e) =
+        Binder marg <$> f' e
+
 
 data ReplTopLevel i
   = RTLTopLevel (TopLevel i)

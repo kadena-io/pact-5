@@ -23,4 +23,5 @@
 {"conName":"InvalidDynamicInvoke","conIndex":"16"}
 {"conName":"DuplicateDefinition","conIndex":"17"}
 {"conName":"InvalidBlessedHash","conIndex":"18"}
+{"conName":"InvalidNativeShadowing","conIndex":"19"}
 

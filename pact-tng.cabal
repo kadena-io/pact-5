@@ -254,6 +254,7 @@ library
     Pact.Core.DeriveConTag
     Pact.Core.Signer
     Pact.Core.SatWord
+    Pact.Core.NativeShadowing
 
      -- Syntax modules
     Pact.Core.Syntax.ParseTree

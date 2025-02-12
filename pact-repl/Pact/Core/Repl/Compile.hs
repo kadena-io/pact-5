@@ -55,6 +55,7 @@ import Pact.Core.Interpreter
 import Pact.Core.Pretty hiding (pipe)
 import Pact.Core.Serialise
 import Pact.Core.PactValue
+import Pact.Core.NativeShadowing
 
 
 import Pact.Core.IR.Eval.Runtime
@@ -262,6 +263,7 @@ interpretReplProgram interpreter sc@(SourceCode sourceFp source) = do
   debugIfFlagSet ReplDebugLexer lexx
   parsed <- liftEither $ bimap (fmap toFileLoc) ((fmap.fmap) toFileLoc) (parseSource lexx)
   setBuiltinResolution sc
+  traverse_ (liftShadowsMEvalM . checkReplTopLevelShadows) parsed
   traverse pipe' parsed
   where
   renderDoc info doc = liftIO (renderBuiltinDoc doc) >>= \case

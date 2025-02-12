@@ -95,6 +95,7 @@ module Pact.Core.Errors
  , _GasExceeded
  , _FloatingPointError
  , _InvariantFailure
+ , _InvalidNativeShadowing
  , _EvalError
  , _NativeArgumentsError
  , _InvalidManagedCap
@@ -342,6 +343,7 @@ data DesugarError
   -- ^ Name was defined twice
   | InvalidBlessedHash Text
   -- ^ Blessed hash has invalid format
+  | InvalidNativeShadowing Text
   deriving (Eq, Show,  Generic)
 
 instance NFData DesugarError
@@ -411,6 +413,8 @@ instance Pretty DesugarError where
       "Duplicate definition:" <+> pretty qn
     InvalidBlessedHash hs ->
       "Invalid blessed hash, incorrect format:" <+> pretty hs
+    InvalidNativeShadowing t ->
+      "Variable" <+> pretty t <+> "shadows native with the same name"
 
 -- | Argument type mismatch meant for errors
 --   that does not force you to show the whole PactValue
@@ -1763,6 +1767,8 @@ desugarErrorToBoundedText = mkBoundedText . \case
       thsep ["Duplicate definition:", renderQualName qn]
     InvalidBlessedHash hs ->
       thsep ["Invalid blessed hash, incorrect format:", hs]
+    InvalidNativeShadowing t ->
+      thsep ["Variable", t, "shadows native with same name"]
 
 -- | NOTE: Do _not_ change this function post mainnet release just to improve an error.
 --  This will fork the chain, these messages will make it into outputs.
